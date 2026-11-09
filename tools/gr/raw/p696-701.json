@@ -1,0 +1,1443 @@
+[
+ {
+  "id": "GR6.290.3",
+  "gr": "6.290.3",
+  "page": 696,
+  "status": "ok",
+  "lhs": "Integrate[Erf[Sqrt[b - a]*x]*E^(-(a + mu)*x^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[b - a]/(2*(mu + a)*Sqrt[mu + b])"
+  ],
+  "conds": [
+   "Re[mu] > -a",
+   "-a > 0",
+   "b > a"
+  ],
+  "cite": "ME 27",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[Erf[Sqrt[b - a]*x]*E^(-(a + mu)*x^2)*x, {x, 0, Infinity}]",
+  "note": "The 7th edition prints no 6.290 heading and no items 1, 2: page 696 opens with item 3 directly after 6.289.2 on p.695."
+ },
+ {
+  "id": "GR6.291",
+  "gr": "6.291",
+  "page": 696,
+  "status": "ok",
+  "lhs": "Integrate[Erf[I*x]*E^(-(mu*x + x^2))*x, {x, 0, Infinity}]",
+  "rhs": [
+   "I/Sqrt[Pi]*(1/mu + mu/4*ExpIntegralEi[-mu^2/4])"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 37",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[Erf[I*x]*E^(-(mu*x + x^2))*x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.292",
+  "gr": "6.292",
+  "page": 696,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Erf[x])*E^(-mu^2*x^2)*x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*Sqrt[Pi])*(ArcTan[mu]/mu^3 - 1/(mu^2*(mu^2 + 1)))"
+  ],
+  "conds": [
+   "Abs[Arg[mu]] < Pi/4"
+  ],
+  "cite": "MI 37",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[(1 - Erf[x])*E^(-mu^2*x^2)*x^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.293a",
+  "gr": "6.293",
+  "page": 696,
+  "status": "ok",
+  "lhs": "Integrate[Erf[x]*E^(-mu*x^2)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[(Sqrt[mu + 1] + 1)/(Sqrt[mu + 1] - 1)]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 37a",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[Erf[x]*E^(-mu*x^2)/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.293b",
+  "gr": "6.293",
+  "page": 696,
+  "status": "ok",
+  "lhs": "Integrate[Erf[x]*E^(-mu*x^2)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "ArcCoth[Sqrt[mu + 1]]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 37a",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[Erf[x]*E^(-mu*x^2)/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.294.1",
+  "gr": "6.294.1",
+  "page": 696,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Erf[beta/x])*E^(-mu^2*x^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*mu^2)*Exp[-2*beta*mu]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi/4",
+   "Abs[Arg[mu]] < Pi/4"
+  ],
+  "cite": "ET I 177(11)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[(1 - Erf[beta/x])*E^(-mu^2*x^2)*x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.294.2",
+  "gr": "6.294.2",
+  "page": 696,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Erf[1/x])*E^(-mu^2*x^2)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-ExpIntegralEi[-2*mu]"
+  ],
+  "conds": [
+   "Abs[Arg[mu]] < Pi/4"
+  ],
+  "cite": "MI 37",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[(1 - Erf[1/x])*E^(-mu^2*x^2)/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.295.1",
+  "gr": "6.295.1",
+  "page": 696,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Erf[1/x])*Exp[-mu^2*x^2 + 1/x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(Sqrt[Pi]*mu)*(Sin[2*mu]*CosIntegral[2*mu] - Cos[2*mu]*(SinIntegral[2*mu] - Pi/2))"
+  ],
+  "conds": [
+   "Abs[Arg[mu]] < Pi/4"
+  ],
+  "cite": "MI 37",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[(1 - Erf[1/x])*Exp[-mu^2*x^2 + 1/x^2], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.295.2",
+  "gr": "6.295.2",
+  "page": 696,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Erf[1/x])*Exp[-mu^2*x^2 + 1/x^2]*x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*mu)*(StruveH[1, 2*mu] - BesselY[1, 2*mu]) - 1/mu^2"
+  ],
+  "conds": [
+   "Abs[Arg[mu]] < Pi/4"
+  ],
+  "cite": "MI 37",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[(1 - Erf[1/x])*Exp[-mu^2*x^2 + 1/x^2]*x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.295.3",
+  "gr": "6.295.3",
+  "page": 696,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Erf[1/x])*Exp[-mu^2*x^2 + 1/x^2]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(StruveH[0, 2*mu] - BesselY[0, 2*mu])"
+  ],
+  "conds": [
+   "Abs[Arg[mu]] < Pi/4"
+  ],
+  "cite": "MI 37",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[(1 - Erf[1/x])*Exp[-mu^2*x^2 + 1/x^2]/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.296",
+  "gr": "6.296",
+  "page": 696,
+  "status": "ok",
+  "lhs": "Integrate[((x^2 + a^2)*(1 - Erf[a/(Sqrt[2]*x)]) - Sqrt[2/Pi]*a*x*E^(-a^2/(2*x^2)))*E^(-mu^2*x^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*mu^4)*E^(-a*mu*Sqrt[2])"
+  ],
+  "conds": [
+   "Abs[Arg[mu]] < Pi/4",
+   "a > 0"
+  ],
+  "cite": "MI 38a",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[((x^2 + a^2)*(1 - Erf[a/(Sqrt[2]*x)]) - Sqrt[2/Pi]*a*x*E^(-a^2/(2*x^2)))*E^(-mu^2*x^2)*x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.297.1",
+  "gr": "6.297.1",
+  "page": 696,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Erf[gamma*x + beta/x])*E^((gamma^2 - mu)*x^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*Sqrt[mu]*(Sqrt[mu] + gamma))*Exp[-2*(beta*gamma + beta*Sqrt[mu])]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 177(12)a",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[(1 - Erf[gamma*x + beta/x])*E^((gamma^2 - mu)*x^2)*x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.297.2",
+  "gr": "6.297.2",
+  "page": 696,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Erf[(b + 2*a*x^2)/(2*x)])*Exp[-(mu^2 - a^2)*x^2 + a*b]*x, {x, 0, Infinity}]",
+  "rhs": [
+   "E^(-b*mu)/(2*mu*(mu + a))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 38",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[(1 - Erf[(b + 2*a*x^2)/(2*x)])*Exp[-(mu^2 - a^2)*x^2 + a*b]*x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.297.3",
+  "gr": "6.297.3",
+  "page": 697,
+  "status": "ok",
+  "lhs": "Integrate[((1 - Erf[(b - 2*a*x^2)/(2*x)])*E^(-a*b) + (1 - Erf[(b + 2*a*x^2)/(2*x)])*E^(a*b))*E^(-mu*x^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/mu*Exp[-b*Sqrt[a^2 + mu]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 38",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[((1 - Erf[(b - 2*a*x^2)/(2*x)])*E^(-a*b) + (1 - Erf[(b + 2*a*x^2)/(2*x)])*E^(a*b))*E^(-mu*x^2)*x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.298",
+  "gr": "6.298",
+  "page": 697,
+  "status": "ok",
+  "lhs": "Integrate[(2*Cosh[a*b] - E^(-a*b)*Erf[(b - 2*a*x^2)/(2*x)] - E^(a*b)*Erf[(b + 2*a*x^2)/(2*x)])*E^(-(mu - a^2)*x^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(mu - a^2)*Exp[-b*Sqrt[mu]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 38",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[(2*Cosh[a*b] - E^(-a*b)*Erf[(b - 2*a*x^2)/(2*x)] - E^(a*b)*Erf[(b + 2*a*x^2)/(2*x)])*E^(-(mu - a^2)*x^2)*x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.299",
+  "gr": "6.299",
+  "page": 697,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[2*nu*t]*Exp[(a*Cosh[t])^2]*(1 - Erf[a*Cosh[t]]), {t, 0, Infinity}]",
+  "rhs": [
+   "1/(2*Cos[nu*Pi])*Exp[a^2/2]*BesselK[nu, a^2/2]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "-1/2 < Re[nu] < 1/2"
+  ],
+  "cite": "ET II 308(10)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[Cosh[2*nu*t]*Exp[(a*Cosh[t])^2]*(1 - Erf[a*Cosh[t]]), {t, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.311",
+  "gr": "6.311",
+  "page": 697,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Erf[a*x])*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/b*(1 - E^(-b^2/(4*a^2)))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 96(4)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[(1 - Erf[a*x])*Sin[b*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.312",
+  "gr": "6.312",
+  "page": 697,
+  "status": "ok",
+  "lhs": "Integrate[Erf[a*x]*Sin[b*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*Sqrt[2*Pi*b])*(Log[(b + a^2 + a*Sqrt[2*b])/(b + a^2 - a*Sqrt[2*b])] + 2*ArcTan[a*Sqrt[2*b]/(b - a^2)])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 96(3)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[Erf[a*x]*Sin[b*x^2], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.313.1",
+  "gr": "6.313.1",
+  "page": 697,
+  "status": "ok",
+  "lhs": "Integrate[Sin[beta*x]*(1 - Erf[Sqrt[alpha*x]]), {x, 0, Infinity}]",
+  "rhs": [
+   "1/beta - ((alpha/2)/(alpha^2 + beta^2))^(1/2)*((alpha^2 + beta^2)^(1/2) - alpha)^(-1/2)"
+  ],
+  "conds": [
+   "Re[alpha] > Abs[Im[beta]]"
+  ],
+  "cite": "ET II 307(6)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[Sin[beta*x]*(1 - Erf[Sqrt[alpha*x]]), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.313.2",
+  "gr": "6.313.2",
+  "page": 697,
+  "status": "ok",
+  "lhs": "Integrate[Cos[beta*x]*(1 - Erf[Sqrt[alpha*x]]), {x, 0, Infinity}]",
+  "rhs": [
+   "((alpha/2)/(alpha^2 + beta^2))^(1/2)*((alpha^2 + beta^2)^(1/2) + alpha)^(-1/2)"
+  ],
+  "conds": [
+   "Re[alpha] > Abs[Im[beta]]"
+  ],
+  "cite": "ET II 307(7)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[Cos[beta*x]*(1 - Erf[Sqrt[alpha*x]]), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.314.1",
+  "gr": "6.314.1",
+  "page": 697,
+  "status": "ok",
+  "lhs": "Integrate[Sin[b*x]*(1 - Erf[Sqrt[a/x]]), {x, 0, Infinity}]",
+  "rhs": [
+   "b^(-1)*Exp[-(2*a*b)^(1/2)]*Cos[(2*a*b)^(1/2)]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 307(8)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[Sin[b*x]*(1 - Erf[Sqrt[a/x]]), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.314.2",
+  "gr": "6.314.2",
+  "page": 697,
+  "status": "ok",
+  "lhs": "Integrate[Cos[b*x]*(1 - Erf[Sqrt[a/x]]), {x, 0, Infinity}]",
+  "rhs": [
+   "-b^(-1)*Exp[-(2*a*b)^(1/2)]*Sin[(2*a*b)^(1/2)]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 307(9)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[Cos[b*x]*(1 - Erf[Sqrt[a/x]]), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.315.1",
+  "gr": "6.315.1",
+  "page": 697,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*Sin[beta*x]*(1 - Erf[alpha*x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1 + nu/2]*beta/(Sqrt[Pi]*(nu + 1)*alpha^(nu + 1))*HypergeometricPFQ[{(nu + 1)/2, nu/2 + 1}, {3/2, (nu + 3)/2}, -beta^2/(4*alpha^2)]"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 307(3)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[x^(nu - 1)*Sin[beta*x]*(1 - Erf[alpha*x]), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.315.2",
+  "gr": "6.315.2",
+  "page": 697,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*Cos[beta*x]*(1 - Erf[alpha*x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1/2 + nu/2]/(Sqrt[Pi]*nu*alpha^nu)*HypergeometricPFQ[{nu/2, (nu + 1)/2}, {1/2, nu/2 + 1}, -beta^2/(4*alpha^2)]"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 307(4)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[x^(nu - 1)*Cos[beta*x]*(1 - Erf[alpha*x]), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.315.3",
+  "gr": "6.315.3",
+  "page": 698,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Erf[a*x])*Cos[b*x]*x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*a^2)*Exp[-b^2/(4*a^2)] - 1/b^2*(1 - Exp[-b^2/(4*a^2)])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 40(5)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[(1 - Erf[a*x])*Cos[b*x]*x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.315.4",
+  "gr": "6.315.4",
+  "page": 698,
+  "status": "ok",
+  "lhs": "Integrate[(Erf[a*x] - Erf[b*x])*Cos[p*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*(ExpIntegralEi[-p^2/(4*b^2)] - ExpIntegralEi[-p^2/(4*a^2)])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "p > 0"
+  ],
+  "cite": "ET I 40(6)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[(Erf[a*x] - Erf[b*x])*Cos[p*x]/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.315.5",
+  "gr": "6.315.5",
+  "page": 698,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1/2)*Erf[a*Sqrt[x]]*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*Sqrt[2*Pi*b])*(Log[(b + a*Sqrt[2*b] + a^2)/(b - a*Sqrt[2*b] + a^2)] + 2*ArcTan[a*Sqrt[2*b]/(b - a^2)])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 96(3)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[x^(-1/2)*Erf[a*Sqrt[x]]*Sin[b*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.316",
+  "gr": "6.316",
+  "page": 698,
+  "status": "ok",
+  "lhs": "Integrate[E^(x^2/2)*(1 - Erf[x/Sqrt[2]])*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*E^(b^2/2)*(1 - Erf[b/Sqrt[2]])"
+  ],
+  "conds": [
+   "b > 0"
+  ],
+  "cite": "ET I 96(5)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[E^(x^2/2)*(1 - Erf[x/Sqrt[2]])*Sin[b*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.317",
+  "gr": "6.317",
+  "page": 698,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a^2*x^2)*Erf[I*a*x]*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "I/a*Sqrt[Pi]/2*E^(-b^2/(4*a^2))"
+  ],
+  "conds": [
+   "b > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 96(2)",
+  "edition_note": "6",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[E^(-a^2*x^2)*Erf[I*a*x]*Sin[b*x], {x, 0, Infinity}]",
+  "note": "a > 0 added (book states only b > 0)."
+ },
+ {
+  "id": "GR6.318",
+  "gr": "6.318",
+  "page": 698,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Erf[x])*(SinIntegral[2*p*x] - Pi/2), {x, 0, Infinity}]",
+  "rhs": [
+   "2/(Pi*p)*(1 - E^(-p^2)) - 2/Sqrt[Pi]*(1 - Erf[p])",
+   "-(1 - E^(-p^2))/(2*p) - Sqrt[Pi]/2*(1 - Erf[p])"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "NT 61(13)a",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "Integrate[(1 - Erf[x])*(SinIntegral[2*p*x] - Pi/2), {x, 0, Infinity}]",
+  "note": "Suspected misprint: as printed the p -> 0 limit is -2/Sqrt[Pi], but si(0) = -Pi/2 and Integrate[Erfc[x],{x,0,Infinity}] = 1/Sqrt[Pi] give -Sqrt[Pi]/2. Second candidate derived from 6.311 via si(y) = -Integrate[Sin[y u]/u, {u,1,Infinity}]."
+ },
+ {
+  "id": "GR6.321.1",
+  "gr": "6.321.1",
+  "page": 698,
+  "status": "ok",
+  "lhs": "Integrate[(1/2 - FresnelS[Sqrt[2/Pi]*(p*x)])*x^(2*q - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2]*Gamma[q + 1/2]*Sin[(2*q + 1)/4*Pi]/(4*Sqrt[Pi]*q*p^(2*q))"
+  ],
+  "conds": [
+   "0 < Re[q] < 3/2",
+   "p > 0"
+  ],
+  "cite": "NT 56(14)a",
+  "edition_note": "",
+  "section": "6.32 Fresnel integrals",
+  "tex": "Integrate[(1/2 - FresnelS[Sqrt[2/Pi]*(p*x)])*x^(2*q - 1), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.321.2",
+  "gr": "6.321.2",
+  "page": 698,
+  "status": "ok",
+  "lhs": "Integrate[(1/2 - FresnelC[Sqrt[2/Pi]*(p*x)])*x^(2*q - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2]*Gamma[q + 1/2]*Cos[(2*q + 1)/4*Pi]/(4*Sqrt[Pi]*q*p^(2*q))"
+  ],
+  "conds": [
+   "0 < Re[q] < 3/2",
+   "p > 0"
+  ],
+  "cite": "NT 56(13)a",
+  "edition_note": "",
+  "section": "6.32 Fresnel integrals",
+  "tex": "Integrate[(1/2 - FresnelC[Sqrt[2/Pi]*(p*x)])*x^(2*q - 1), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.322.1",
+  "gr": "6.322.1",
+  "page": 698,
+  "status": "ok",
+  "lhs": "Integrate[FresnelS[Sqrt[2/Pi]*(t)]*E^(-p*t), {t, 0, Infinity}]",
+  "rhs": [
+   "1/p*(Cos[p^2/4]*(1/2 - FresnelC[Sqrt[2/Pi]*(p/2)]) + Sin[p^2/4]*(1/2 - FresnelS[Sqrt[2/Pi]*(p/2)]))"
+  ],
+  "conds": [
+   "Re[p] > 0"
+  ],
+  "cite": "MO 173a",
+  "edition_note": "",
+  "section": "6.32 Fresnel integrals",
+  "tex": "Integrate[FresnelS[Sqrt[2/Pi]*(t)]*E^(-p*t), {t, 0, Infinity}]",
+  "note": "Re[p] > 0 added (Laplace transform; book gives no condition)."
+ },
+ {
+  "id": "GR6.322.2",
+  "gr": "6.322.2",
+  "page": 698,
+  "status": "ok",
+  "lhs": "Integrate[FresnelC[Sqrt[2/Pi]*(t)]*E^(-p*t), {t, 0, Infinity}]",
+  "rhs": [
+   "1/p*(Cos[p^2/4]*(1/2 - FresnelS[Sqrt[2/Pi]*(p/2)]) - Sin[p^2/4]*(1/2 - FresnelC[Sqrt[2/Pi]*(p/2)]))"
+  ],
+  "conds": [
+   "Re[p] > 0"
+  ],
+  "cite": "MO 172a",
+  "edition_note": "",
+  "section": "6.32 Fresnel integrals",
+  "tex": "Integrate[FresnelC[Sqrt[2/Pi]*(t)]*E^(-p*t), {t, 0, Infinity}]",
+  "note": "Re[p] > 0 added (Laplace transform; book gives no condition)."
+ },
+ {
+  "id": "GR6.323.1",
+  "gr": "6.323.1",
+  "page": 698,
+  "status": "ok",
+  "lhs": "Integrate[FresnelS[Sqrt[2/Pi]*(Sqrt[t])]*E^(-p*t), {t, 0, Infinity}]",
+  "rhs": [
+   "(Sqrt[p^2 + 1] - p)^(1/2)/(2*p*Sqrt[p^2 + 1])"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "EF 122(58)a",
+  "edition_note": "",
+  "section": "6.32 Fresnel integrals",
+  "tex": "Integrate[FresnelS[Sqrt[2/Pi]*(Sqrt[t])]*E^(-p*t), {t, 0, Infinity}]",
+  "note": "Book writes dx for dt. p > 0 added (no condition printed)."
+ },
+ {
+  "id": "GR6.323.2",
+  "gr": "6.323.2",
+  "page": 699,
+  "status": "ok",
+  "lhs": "Integrate[FresnelC[Sqrt[2/Pi]*(Sqrt[t])]*E^(-p*t), {t, 0, Infinity}]",
+  "rhs": [
+   "(Sqrt[p^2 + 1] + p)^(1/2)/(2*p*Sqrt[p^2 + 1])"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "EF 122(58)a",
+  "edition_note": "",
+  "section": "6.32 Fresnel integrals",
+  "tex": "Integrate[FresnelC[Sqrt[2/Pi]*(Sqrt[t])]*E^(-p*t), {t, 0, Infinity}]",
+  "note": "p > 0 added (no condition printed)."
+ },
+ {
+  "id": "GR6.324.1",
+  "gr": "6.324.1",
+  "page": 699,
+  "status": "ok",
+  "lhs": "Integrate[(1/2 - FresnelS[Sqrt[2/Pi]*(x)])*Sin[2*p*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(1 + Sin[p^2] - Cos[p^2])/(4*p)"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "NT 61(12)a",
+  "edition_note": "",
+  "section": "6.32 Fresnel integrals",
+  "tex": "Integrate[(1/2 - FresnelS[Sqrt[2/Pi]*(x)])*Sin[2*p*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.324.2",
+  "gr": "6.324.2",
+  "page": 699,
+  "status": "ok",
+  "lhs": "Integrate[(1/2 - FresnelC[Sqrt[2/Pi]*(x)])*Sin[2*p*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(1 - Sin[p^2] - Cos[p^2])/(4*p)"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "NT 61(11)a",
+  "edition_note": "",
+  "section": "6.32 Fresnel integrals",
+  "tex": "Integrate[(1/2 - FresnelC[Sqrt[2/Pi]*(x)])*Sin[2*p*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.325.1a",
+  "gr": "6.325.1",
+  "page": 699,
+  "status": "ok",
+  "lhs": "Integrate[FresnelS[Sqrt[2/Pi]*(x)]*Sin[b^2*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/b*2^(-5/2)"
+  ],
+  "conds": [
+   "0 < b < 1"
+  ],
+  "cite": "ET I 98(21)a",
+  "edition_note": "",
+  "section": "6.32 Fresnel integrals",
+  "tex": "Integrate[FresnelS[Sqrt[2/Pi]*(x)]*Sin[b^2*x^2], {x, 0, Infinity}]",
+  "note": "Book condition 0 < b^2 < 1; b > 0 taken (value has 1/b)."
+ },
+ {
+  "id": "GR6.325.1b",
+  "gr": "6.325.1",
+  "page": 699,
+  "status": "ok",
+  "lhs": "Integrate[FresnelS[Sqrt[2/Pi]*(x)]*Sin[b^2*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "b > 1"
+  ],
+  "cite": "ET I 98(21)a",
+  "edition_note": "",
+  "section": "6.32 Fresnel integrals",
+  "tex": "Integrate[FresnelS[Sqrt[2/Pi]*(x)]*Sin[b^2*x^2], {x, 0, Infinity}]",
+  "note": "Book condition b^2 > 1; b > 0 taken."
+ },
+ {
+  "id": "GR6.325.2a",
+  "gr": "6.325.2",
+  "page": 699,
+  "status": "ok",
+  "lhs": "Integrate[FresnelC[Sqrt[2/Pi]*(x)]*Cos[b^2*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/b*2^(-5/2)"
+  ],
+  "conds": [
+   "0 < b < 1"
+  ],
+  "cite": "ET I 42(22)",
+  "edition_note": "",
+  "section": "6.32 Fresnel integrals",
+  "tex": "Integrate[FresnelC[Sqrt[2/Pi]*(x)]*Cos[b^2*x^2], {x, 0, Infinity}]",
+  "note": "Book condition 0 < b^2 < 1; b > 0 taken (value has 1/b)."
+ },
+ {
+  "id": "GR6.325.2b",
+  "gr": "6.325.2",
+  "page": 699,
+  "status": "ok",
+  "lhs": "Integrate[FresnelC[Sqrt[2/Pi]*(x)]*Cos[b^2*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "b > 1"
+  ],
+  "cite": "ET I 42(22)",
+  "edition_note": "",
+  "section": "6.32 Fresnel integrals",
+  "tex": "Integrate[FresnelC[Sqrt[2/Pi]*(x)]*Cos[b^2*x^2], {x, 0, Infinity}]",
+  "note": "Book condition b^2 > 1; b > 0 taken."
+ },
+ {
+  "id": "GR6.326.1",
+  "gr": "6.326.1",
+  "page": 699,
+  "status": "ok",
+  "lhs": "Integrate[(1/2 - FresnelS[Sqrt[2/Pi]*(x)])*(SinIntegral[2*p*x] - Pi/2), {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/8)^(1/2)*(FresnelS[Sqrt[2/Pi]*(p)] + FresnelC[Sqrt[2/Pi]*(p)] - 1) - (1 + Sin[p^2] - Cos[p^2])/(4*p)"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "NT 61(15)a",
+  "edition_note": "",
+  "section": "6.32 Fresnel integrals",
+  "tex": "Integrate[(1/2 - FresnelS[Sqrt[2/Pi]*(x)])*(SinIntegral[2*p*x] - Pi/2), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.326.2",
+  "gr": "6.326.2",
+  "page": 699,
+  "status": "ok",
+  "lhs": "Integrate[(1/2 - FresnelC[Sqrt[2/Pi]*(x)])*(SinIntegral[2*p*x] - Pi/2), {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/8)^(1/2)*(FresnelS[Sqrt[2/Pi]*(p)] - FresnelC[Sqrt[2/Pi]*(p)]) - (1 - Sin[p^2] - Cos[p^2])/(4*p)"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "NT 61(14)a",
+  "edition_note": "",
+  "section": "6.32 Fresnel integrals",
+  "tex": "Integrate[(1/2 - FresnelC[Sqrt[2/Pi]*(x)])*(SinIntegral[2*p*x] - Pi/2), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.411a",
+  "gr": "6.411",
+  "page": 699,
+  "status": "ok",
+  "lhs": "Integrate[Gamma[alpha + x]*Gamma[beta - x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-I*Pi*2^(1 - alpha - beta)*Gamma[alpha + beta]"
+  ],
+  "conds": [
+   "Re[alpha + beta] < 1",
+   "Im[alpha] < 0",
+   "Im[beta] > 0"
+  ],
+  "cite": "ET II 297(1)",
+  "edition_note": "11",
+  "section": "6.41 The gamma function",
+  "tex": "Integrate[Gamma[alpha + x]*Gamma[beta - x], {x, -Infinity, Infinity}]",
+  "note": "Disjunctive condition: other branch Im beta < 0 < Im alpha."
+ },
+ {
+  "id": "GR6.411b",
+  "gr": "6.411",
+  "page": 699,
+  "status": "ok",
+  "lhs": "Integrate[Gamma[alpha + x]*Gamma[beta - x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "I*Pi*2^(1 - alpha - beta)*Gamma[alpha + beta]"
+  ],
+  "conds": [
+   "Re[alpha + beta] < 1",
+   "Im[alpha] < 0",
+   "Im[beta] < 0"
+  ],
+  "cite": "ET II 297(2)",
+  "edition_note": "11",
+  "section": "6.41 The gamma function",
+  "tex": "Integrate[Gamma[alpha + x]*Gamma[beta - x], {x, -Infinity, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.411c",
+  "gr": "6.411",
+  "page": 699,
+  "status": "ok",
+  "lhs": "Integrate[Gamma[alpha + x]*Gamma[beta - x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Re[alpha + beta] < 1",
+   "Im[alpha] > 0",
+   "Im[beta] > 0"
+  ],
+  "cite": "ET II 297(3)",
+  "edition_note": "11",
+  "section": "6.41 The gamma function",
+  "tex": "Integrate[Gamma[alpha + x]*Gamma[beta - x], {x, -Infinity, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.412",
+  "gr": "6.412",
+  "page": 700,
+  "status": "SKIP-CONTOUR",
+  "lhs": "Integrate[Gamma[alpha + s]*Gamma[beta + s]*Gamma[gamma - s]*Gamma[delta - s], {s, -I*Infinity, I*Infinity}]",
+  "rhs": [
+   "2*Pi*I*Gamma[alpha + gamma]*Gamma[alpha + delta]*Gamma[beta + gamma]*Gamma[beta + delta]/Gamma[alpha + beta + gamma + delta]"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Re[beta] > 0",
+   "Re[gamma] > 0",
+   "Re[delta] > 0"
+  ],
+  "cite": "ET II 302(32)",
+  "edition_note": "",
+  "section": "6.41 The gamma function",
+  "tex": "Integrate[Gamma[alpha + s]*Gamma[beta + s]*Gamma[gamma - s]*Gamma[delta - s], {s, -I*Infinity, I*Infinity}]",
+  "note": "",
+  "reason": "integral along the imaginary axis (Barnes)"
+ },
+ {
+  "id": "GR6.413.1",
+  "gr": "6.413.1",
+  "page": 700,
+  "status": "ok",
+  "lhs": "Integrate[Abs[Gamma[a + I*x]*Gamma[b + I*x]]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*Gamma[a]*Gamma[a + 1/2]*Gamma[b]*Gamma[b + 1/2]*Gamma[a + b]/(2*Gamma[a + b + 1/2])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 302(27)",
+  "edition_note": "",
+  "section": "6.41 The gamma function",
+  "tex": "Integrate[Abs[Gamma[a + I*x]*Gamma[b + I*x]]^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.413.2",
+  "gr": "6.413.2",
+  "page": 700,
+  "status": "ok",
+  "lhs": "Integrate[Abs[Gamma[a + I*x]/Gamma[b + I*x]]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*Gamma[a]*Gamma[a + 1/2]*Gamma[b - a - 1/2]/(2*Gamma[b]*Gamma[b - 1/2]*Gamma[b - a])"
+  ],
+  "conds": [
+   "0 < a < b - 1/2"
+  ],
+  "cite": "ET II 302(28)",
+  "edition_note": "",
+  "section": "6.41 The gamma function",
+  "tex": "Integrate[Abs[Gamma[a + I*x]/Gamma[b + I*x]]^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.414.1",
+  "gr": "6.414.1",
+  "page": 700,
+  "status": "ok",
+  "lhs": "Integrate[Gamma[alpha + x]/Gamma[beta + x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Im[alpha] != 0",
+   "Re[alpha - beta] < -1"
+  ],
+  "cite": "ET II 297(4)",
+  "edition_note": "",
+  "section": "6.41 The gamma function",
+  "tex": "Integrate[Gamma[alpha + x]/Gamma[beta + x], {x, -Infinity, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.414.2",
+  "gr": "6.414.2",
+  "page": 700,
+  "status": "ok",
+  "lhs": "Integrate[1/(Gamma[alpha + x]*Gamma[beta - x]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2^(alpha + beta - 2)/Gamma[alpha + beta - 1]"
+  ],
+  "conds": [
+   "Re[alpha + beta] > 1"
+  ],
+  "cite": "ET II 297(5)",
+  "edition_note": "",
+  "section": "6.41 The gamma function",
+  "tex": "Integrate[1/(Gamma[alpha + x]*Gamma[beta - x]), {x, -Infinity, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.414.3",
+  "gr": "6.414.3",
+  "page": 700,
+  "status": "ok",
+  "lhs": "Integrate[Gamma[gamma + x]*Gamma[delta + x]/(Gamma[alpha + x]*Gamma[beta + x]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Re[alpha + beta - gamma - delta] > 1",
+   "Im[gamma] > 0",
+   "Im[delta] > 0"
+  ],
+  "cite": "ET II 299(18)",
+  "edition_note": "",
+  "section": "6.41 The gamma function",
+  "tex": "Integrate[Gamma[gamma + x]*Gamma[delta + x]/(Gamma[alpha + x]*Gamma[beta + x]), {x, -Infinity, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.414.4a",
+  "gr": "6.414.4",
+  "page": 700,
+  "status": "ok",
+  "lhs": "Integrate[Gamma[gamma + x]*Gamma[delta + x]/(Gamma[alpha + x]*Gamma[beta + x]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2*Pi^2*I*Gamma[alpha + beta - gamma - delta - 1]/(Sin[Pi*(gamma - delta)]*Gamma[alpha - gamma]*Gamma[alpha - delta]*Gamma[beta - gamma]*Gamma[beta - delta])"
+  ],
+  "conds": [
+   "Re[alpha + beta - gamma - delta] > 1",
+   "Im[gamma] < 0",
+   "Im[delta] < 0",
+   "Im[gamma] > Im[delta]"
+  ],
+  "cite": "ET II 300(19)",
+  "edition_note": "",
+  "section": "6.41 The gamma function",
+  "tex": "Integrate[Gamma[gamma + x]*Gamma[delta + x]/(Gamma[alpha + x]*Gamma[beta + x]), {x, -Infinity, Infinity}]",
+  "note": "Plus sign of the printed +- (Im gamma > Im delta)."
+ },
+ {
+  "id": "GR6.414.4b",
+  "gr": "6.414.4",
+  "page": 700,
+  "status": "ok",
+  "lhs": "Integrate[Gamma[gamma + x]*Gamma[delta + x]/(Gamma[alpha + x]*Gamma[beta + x]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-2*Pi^2*I*Gamma[alpha + beta - gamma - delta - 1]/(Sin[Pi*(gamma - delta)]*Gamma[alpha - gamma]*Gamma[alpha - delta]*Gamma[beta - gamma]*Gamma[beta - delta])"
+  ],
+  "conds": [
+   "Re[alpha + beta - gamma - delta] > 1",
+   "Im[gamma] < 0",
+   "Im[delta] < 0",
+   "Im[gamma] < Im[delta]"
+  ],
+  "cite": "ET II 300(19)",
+  "edition_note": "",
+  "section": "6.41 The gamma function",
+  "tex": "Integrate[Gamma[gamma + x]*Gamma[delta + x]/(Gamma[alpha + x]*Gamma[beta + x]), {x, -Infinity, Infinity}]",
+  "note": "Minus sign of the printed +- (Im gamma < Im delta)."
+ },
+ {
+  "id": "GR6.414.5a",
+  "gr": "6.414.5",
+  "page": 700,
+  "status": "ok",
+  "lhs": "Integrate[Gamma[alpha - beta - gamma + x + 1]/(Gamma[alpha + x]*Gamma[beta - x]*Gamma[gamma + x]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*Exp[1/2*Pi*((alpha - beta - gamma + 1) - gamma)*I]/(Gamma[beta + gamma - 1]*Gamma[(alpha + beta)/2]*Gamma[(gamma - (alpha - beta - gamma + 1) + 1)/2])"
+  ],
+  "conds": [
+   "Re[beta + gamma] > 1",
+   "Im[alpha - beta - gamma] > 0"
+  ],
+  "cite": "ET II 300(20)",
+  "edition_note": "",
+  "section": "6.41 The gamma function",
+  "tex": "Integrate[Gamma[alpha - beta - gamma + x + 1]/(Gamma[alpha + x]*Gamma[beta - x]*Gamma[gamma + x]), {x, -Infinity, Infinity}]",
+  "note": "delta = alpha - beta - gamma + 1 substituted; plus sign for Im delta > 0."
+ },
+ {
+  "id": "GR6.414.5b",
+  "gr": "6.414.5",
+  "page": 700,
+  "status": "ok",
+  "lhs": "Integrate[Gamma[alpha - beta - gamma + x + 1]/(Gamma[alpha + x]*Gamma[beta - x]*Gamma[gamma + x]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*Exp[-1/2*Pi*((alpha - beta - gamma + 1) - gamma)*I]/(Gamma[beta + gamma - 1]*Gamma[(alpha + beta)/2]*Gamma[(gamma - (alpha - beta - gamma + 1) + 1)/2])"
+  ],
+  "conds": [
+   "Re[beta + gamma] > 1",
+   "Im[alpha - beta - gamma] < 0"
+  ],
+  "cite": "ET II 300(20)",
+  "edition_note": "",
+  "section": "6.41 The gamma function",
+  "tex": "Integrate[Gamma[alpha - beta - gamma + x + 1]/(Gamma[alpha + x]*Gamma[beta - x]*Gamma[gamma + x]), {x, -Infinity, Infinity}]",
+  "note": "delta = alpha - beta - gamma + 1 substituted; minus sign for Im delta < 0."
+ },
+ {
+  "id": "GR6.414.6",
+  "gr": "6.414.6",
+  "page": 700,
+  "status": "ok",
+  "lhs": "Integrate[1/(Gamma[alpha + x]*Gamma[beta - x]*Gamma[gamma + x]*Gamma[delta - x]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Gamma[alpha + beta + gamma + delta - 3]/(Gamma[alpha + beta - 1]*Gamma[beta + gamma - 1]*Gamma[gamma + delta - 1]*Gamma[delta + alpha - 1])"
+  ],
+  "conds": [
+   "Re[alpha + beta + gamma + delta] > 3"
+  ],
+  "cite": "ET II 300(21)",
+  "edition_note": "",
+  "section": "6.41 The gamma function",
+  "tex": "Integrate[1/(Gamma[alpha + x]*Gamma[beta - x]*Gamma[gamma + x]*Gamma[delta - x]), {x, -Infinity, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.415.1",
+  "gr": "6.415.1",
+  "page": 700,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[R[x]/(Gamma[alpha + x]*Gamma[beta - x]*Gamma[gamma + x]*Gamma[delta - x]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Gamma[alpha + beta + gamma + delta - 3]/(Gamma[alpha + beta - 1]*Gamma[beta + gamma - 1]*Gamma[gamma + delta - 1]*Gamma[delta + alpha - 1])*Integrate[R[t], {t, 0, 1}]"
+  ],
+  "conds": [
+   "Re[alpha + beta + gamma + delta] > 3"
+  ],
+  "cite": "ET II 301(24)",
+  "edition_note": "",
+  "section": "6.41 The gamma function",
+  "tex": "Integrate[R[x]/(Gamma[alpha + x]*Gamma[beta - x]*Gamma[gamma + x]*Gamma[delta - x]), {x, -Infinity, Infinity}]",
+  "note": "Upper limit printed as -Infinity (misprint for Infinity).",
+  "reason": "arbitrary periodic function R(x+1) = R(x)"
+ },
+ {
+  "id": "GR6.415.2",
+  "gr": "6.415.2",
+  "page": 701,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[R[x]/(Gamma[alpha + x]*Gamma[beta - x]*Gamma[gamma + x]*Gamma[delta - x]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Integrate[R[t]*Cos[1/2*Pi*(2*t + alpha - beta)], {t, 0, 1}]/(Gamma[(alpha + beta)/2]*Gamma[(gamma + delta)/2]*Gamma[alpha + delta - 1])"
+  ],
+  "conds": [
+   "Re[alpha + beta + gamma + delta] > 2"
+  ],
+  "cite": "ET II 301(25)",
+  "edition_note": "",
+  "section": "6.41 The gamma function",
+  "tex": "Integrate[R[x]/(Gamma[alpha + x]*Gamma[beta - x]*Gamma[gamma + x]*Gamma[delta - x]), {x, -Infinity, Infinity}]",
+  "note": "Condition alpha + delta = beta + gamma.",
+  "reason": "arbitrary antiperiodic function R(x+1) = -R(x)"
+ },
+ {
+  "id": "GR6.421.1",
+  "gr": "6.421.1",
+  "page": 701,
+  "status": "ok",
+  "lhs": "Integrate[Gamma[alpha + x]*Gamma[beta - x]*Exp[2*(Pi*n + theta)*x*I], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2*Pi*I*Gamma[alpha + beta]*(2*Cos[theta])^(-alpha - beta)*Exp[(beta - alpha)*I*theta]*(Piecewise[{{0, (1/2 - n)*Im[beta] > 0}, {Sign[1/2 - n], (1/2 - n)*Im[beta] < 0}}]*Exp[2*n*Pi*beta*I] - Piecewise[{{0, (1/2 - n)*Im[-alpha] > 0}, {Sign[1/2 - n], (1/2 - n)*Im[-alpha] < 0}}]*Exp[-2*n*Pi*alpha*I])"
+  ],
+  "conds": [
+   "Re[alpha + beta] < 1",
+   "-Pi/2 < theta < Pi/2",
+   "Element[n, Integers]"
+  ],
+  "cite": "ET II 298(7)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "Integrate[Gamma[alpha + x]*Gamma[beta - x]*Exp[2*(Pi*n + theta)*x*I], {x, -Infinity, Infinity}]",
+  "note": "eta_n(xi) = 0 if (1/2 - n) Im xi > 0, Sign[1/2 - n] if (1/2 - n) Im xi < 0, substituted."
+ },
+ {
+  "id": "GR6.421.2",
+  "gr": "6.421.2",
+  "page": 701,
+  "status": "ok",
+  "lhs": "Integrate[E^(Pi*I*c*x)/(Gamma[alpha + x]*Gamma[beta - x]*Gamma[gamma + k*x]*Gamma[delta - k*x]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Re[alpha + beta + gamma + delta] > 2",
+   "Element[c, Reals]",
+   "Element[k, Reals]",
+   "Abs[c] > Abs[k] + 1"
+  ],
+  "cite": "ET II 301(26)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "Integrate[E^(Pi*I*c*x)/(Gamma[alpha + x]*Gamma[beta - x]*Gamma[gamma + k*x]*Gamma[delta - k*x]), {x, -Infinity, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.421.3",
+  "gr": "6.421.3",
+  "page": 701,
+  "status": "ok",
+  "lhs": "Integrate[Gamma[alpha + x]/Gamma[beta + x]*Exp[(2*Pi*n + Pi - 2*theta)*x*I], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2*Pi*I*Sign[n + 1/2]*(2*Cos[theta])^(beta - alpha - 1)/Gamma[beta - alpha]*Exp[-(2*Pi*n + Pi - theta)*alpha*I + theta*I*(beta - 1)]"
+  ],
+  "conds": [
+   "Re[beta - alpha] > 0",
+   "-Pi/2 < theta < Pi/2",
+   "Element[n, Integers]",
+   "(n + 1/2)*Im[alpha] < 0"
+  ],
+  "cite": "ET II 298(8)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "Integrate[Gamma[alpha + x]/Gamma[beta + x]*Exp[(2*Pi*n + Pi - 2*theta)*x*I], {x, -Infinity, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.421.4",
+  "gr": "6.421.4",
+  "page": 701,
+  "status": "ok",
+  "lhs": "Integrate[Gamma[alpha + x]/Gamma[beta + x]*Exp[(2*Pi*n + Pi - 2*theta)*x*I], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Re[beta - alpha] > 0",
+   "-Pi/2 < theta < Pi/2",
+   "Element[n, Integers]",
+   "(n + 1/2)*Im[alpha] > 0"
+  ],
+  "cite": "ET II 297(6)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "Integrate[Gamma[alpha + x]/Gamma[beta + x]*Exp[(2*Pi*n + Pi - 2*theta)*x*I], {x, -Infinity, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.422.1",
+  "gr": "6.422.1",
+  "page": 701,
+  "status": "SKIP-CONTOUR",
+  "cite": "ET II 302(29)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-i inf}^{i inf} Gamma(s-k-lam) Gamma(lam+mu-s+1/2) Gamma(lam-mu-s+1/2) z^s ds = 2 pi i Gamma(1/2-k-mu) Gamma(1/2-k+mu) z^lam e^{z/2} W_{k,mu}(z)",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ },
+ {
+  "id": "GR6.422.2",
+  "gr": "6.422.2",
+  "page": 701,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH I 256(5)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{gamma-i inf}^{gamma+i inf} Gamma(alpha+s) Gamma(-s) Gamma(1-c-s) x^s ds = 2 pi i Gamma(alpha) Gamma(alpha-c+1) Psi(alpha,c;x)",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ },
+ {
+  "id": "GR6.422.3",
+  "gr": "6.422.3",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH I 256, BU 75",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{gamma-i inf}^{gamma+i inf} Gamma(-s) Gamma(beta+s) t^s ds = 2 pi i Gamma(beta) (1+t)^(-beta)",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ },
+ {
+  "id": "GR6.422.4",
+  "gr": "6.422.4",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "WH",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-inf i}^{inf i} Gamma((t-p)/2) Gamma(-t) (sqrt2)^(t-p-2) z^t dt = 2 pi i e^{z^2/4} Gamma(-p) D_p(z)",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ },
+ {
+  "id": "GR6.422.5",
+  "gr": "6.422.5",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH II 120",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-i inf}^{i inf} Gamma(s) Gamma(nu/2+1/4-s) Gamma(nu/2-1/4-s) (z^2/2)^s ds = 2 pi i 2^{1/4-nu/2} z^{-1/2} e^{z^2/4} Gamma(nu/2+1/4) Gamma(nu/2-1/4) D_nu(z)",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ },
+ {
+  "id": "GR6.422.6",
+  "gr": "6.422.6",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH II 21(34)",
+  "edition_note": "3",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{c-i inf}^{c+i inf} (x/2)^(-s) Gamma(nu/2+s/2) [Gamma(1+nu/2-s/2)]^(-1) ds = 4 pi i J_nu(x)",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ },
+ {
+  "id": "GR6.422.7",
+  "gr": "6.422.7",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH II 83(34)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-c-i inf}^{-c+i inf} Gamma(-nu-s) Gamma(-s) (-iz/2)^(nu+2s) ds = -2 pi^2 e^{i nu pi/2} H1_nu(z)",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ },
+ {
+  "id": "GR6.422.8",
+  "gr": "6.422.8",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH II 83(35)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-c-i inf}^{-c+i inf} Gamma(-nu-s) Gamma(-s) (iz/2)^(nu+2s) ds = 2 pi^2 e^{-i nu pi/2} H2_nu(z)",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ },
+ {
+  "id": "GR6.422.9",
+  "gr": "6.422.9",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH II 83(36)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-i inf}^{i inf} Gamma(-s) (x/2)^(nu+2s)/Gamma(nu+s+1) ds = 2 pi i J_nu(x)",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ },
+ {
+  "id": "GR6.422.10",
+  "gr": "6.422.10",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH II 83(37)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-i inf}^{i inf} Gamma(-s) Gamma(-2nu-s) Gamma(nu+s+1/2) (-2iz)^s ds = -pi^{5/2} e^{-i(z-nu pi)} sec(nu pi) (2z)^(-nu) H1_nu(z)",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ },
+ {
+  "id": "GR6.422.11",
+  "gr": "6.422.11",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH II 84(38)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-i inf}^{i inf} Gamma(-s) Gamma(-2nu-s) Gamma(nu+s+1/2) (2iz)^s ds = pi^{5/2} e^{i(z-nu pi)} sec(nu pi) (2z)^(-nu) H2_nu(z)",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ },
+ {
+  "id": "GR6.422.12",
+  "gr": "6.422.12",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH II 84(39)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-i inf}^{i inf} Gamma(s) Gamma(1/2-s-nu) Gamma(1/2-s+nu) (2z)^s ds = 2^{3/2} pi^{3/2} i z^{1/2} e^z sec(nu pi) K_nu(z)",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ },
+ {
+  "id": "GR6.422.13",
+  "gr": "6.422.13",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "MO 41",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-1/2-i inf}^{-1/2+i inf} Gamma(-s)/(s Gamma(1+s)) x^{2s} ds = 4 pi int_{2x}^inf J_0(t)/t dt",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ },
+ {
+  "id": "GR6.422.14",
+  "gr": "6.422.14",
+  "page": 703,
+  "status": "SKIP-CONTOUR",
+  "cite": "",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-i inf}^{i inf} Gamma(alpha+s) Gamma(beta+s) Gamma(-s)/Gamma(gamma+s) (-z)^s ds = 2 pi i Gamma(alpha) Gamma(beta)/Gamma(gamma) F(alpha,beta;gamma;z)",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ },
+ {
+  "id": "GR6.422.15",
+  "gr": "6.422.15",
+  "page": 703,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH I 62(15), EH I 256(4)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{delta-i inf}^{delta+i inf} Gamma(alpha+s) Gamma(-s)/Gamma(gamma+s) (-z)^s ds = 2 pi i Gamma(alpha)/Gamma(gamma) 1F1(alpha;gamma;z)",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ },
+ {
+  "id": "GR6.422.16",
+  "gr": "6.422.16",
+  "page": 703,
+  "status": "SKIP-CONTOUR",
+  "cite": "ET II 303(33)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-i inf}^{i inf} [Gamma(1/2-s)/Gamma(s)]^2 z^s ds = 2 pi i z^{1/2} [2 pi^{-1} K_0(4 z^{1/4}) - Y_0(4 z^{1/4})]",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ },
+ {
+  "id": "GR6.422.17",
+  "gr": "6.422.17",
+  "page": 703,
+  "status": "SKIP-CONTOUR",
+  "cite": "ET II 302(30)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-i inf}^{i inf} Gamma(lam+mu-s+1/2) Gamma(lam-mu-s+1/2)/Gamma(lam-k-s+1) z^s ds = 2 pi i z^lam e^{-z/2} W_{k,mu}(z)",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ },
+ {
+  "id": "GR6.422.18",
+  "gr": "6.422.18",
+  "page": 703,
+  "status": "SKIP-CONTOUR",
+  "cite": "ET II 302(31)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-i inf}^{i inf} Gamma(k-lam+s) Gamma(lam+mu-s+1/2)/Gamma(mu-lam+s+1/2) z^s ds = 2 pi i Gamma(k+mu+1/2)/Gamma(2mu+1) z^lam e^{-z/2} M_{k,mu}(z)",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ },
+ {
+  "id": "GR6.422.19",
+  "gr": "6.422.19",
+  "page": 703,
+  "status": "SKIP-CONTOUR",
+  "cite": "ET II 303(34)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-i inf}^{i inf} prod Gamma(b_j - s) prod Gamma(1-a_j+s) / (prod Gamma(1-b_j+s) prod Gamma(a_j-s)) z^s ds = 2 pi i G^{mn}_{pq}(z | a; b)",
+  "note": "Item 6.422 starts on p.701 and runs to p.703.",
+  "reason": "Mellin-Barnes contour integral along a vertical line in the complex plane"
+ }
+]

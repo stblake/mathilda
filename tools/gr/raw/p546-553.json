@@ -1,0 +1,1733 @@
+[
+ {
+  "id": "GR3.937.4",
+  "gr": "3.937.4",
+  "page": 546,
+  "status": "ok",
+  "lhs": "Integrate[Exp[p*Cos[x] + q*Sin[x]]*Cos[q*Cos[x] - p*Sin[x] + m*x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi/m!*(p^2 + q^2)^(m/2)*Cos[m*ArcTan[q/p]]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "p > 0"
+  ],
+  "cite": "GW (337)(12)",
+  "edition_note": "",
+  "section": "3.93 Trigonometric and exponential functions of trigonometric functions",
+  "tex": "int_0^2pi exp(p cos x + q sin x) cos(q cos x - p sin x + m x) dx = 2pi/m! (p^2+q^2)^(m/2) cos(m arctan(q/p))",
+  "note": "m = 0,1,2,... from the 3.937 notation; p > 0 added for the arctan branch"
+ },
+ {
+  "id": "GR3.938.1",
+  "gr": "3.938.1",
+  "page": 546,
+  "status": "ok",
+  "lhs": "Integrate[E^(r*(Cos[p*x] + Cos[q*x]))*Sin[r*Sin[p*x]]*Sin[r*Sin[q*x]], {x, 0, Pi}]",
+  "rhs": [
+   "Pi/2*Sum[r^((p + q)*k)/(Gamma[p*k + 1]*Gamma[q*k + 1]), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "Element[p, Integers] && p > 0",
+   "Element[q, Integers] && q > 0"
+  ],
+  "cite": "BI (277)(14)",
+  "edition_note": "",
+  "section": "3.93 Trigonometric and exponential functions of trigonometric functions",
+  "tex": "int_0^pi e^(r(cos px + cos qx)) sin(r sin px) sin(r sin qx) dx = pi/2 sum_{k>=1} r^((p+q)k)/(Gamma(pk+1)Gamma(qk+1))",
+  "note": "no conditions printed; p, q positive integers assumed (orthogonality)"
+ },
+ {
+  "id": "GR3.938.2",
+  "gr": "3.938.2",
+  "page": 546,
+  "status": "ok",
+  "lhs": "Integrate[E^(r*(Cos[p*x] + Cos[q*x]))*Cos[r*Sin[p*x]]*Cos[r*Sin[q*x]], {x, 0, Pi}]",
+  "rhs": [
+   "Pi/2*(2 + Sum[r^((p + q)*k)/(Gamma[p*k + 1]*Gamma[q*k + 1]), {k, 1, Infinity}])"
+  ],
+  "conds": [
+   "Element[p, Integers] && p > 0",
+   "Element[q, Integers] && q > 0"
+  ],
+  "cite": "BI (277)(15)",
+  "edition_note": "",
+  "section": "3.93 Trigonometric and exponential functions of trigonometric functions",
+  "tex": "int_0^pi e^(r(cos px + cos qx)) cos(r sin px) cos(r sin qx) dx = pi/2 (2 + sum ...)",
+  "note": "no conditions printed; p, q positive integers assumed (orthogonality)"
+ },
+ {
+  "id": "GR3.939.1",
+  "gr": "3.939.1",
+  "page": 546,
+  "status": "ok",
+  "lhs": "Integrate[E^(q*Cos[x])*Sin[r*x]/(1 - 2*p^r*Cos[r*x] + p^(2*r))*Sin[q*Sin[x]], {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(2*p^r)*Sum[(p*q)^(k*r)/Gamma[k*r + 1], {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "Element[r, Integers] && r > 0",
+   "0 < p < 1"
+  ],
+  "cite": "BI (278)(15)",
+  "edition_note": "",
+  "section": "3.93 Trigonometric and exponential functions of trigonometric functions",
+  "tex": "int_0^pi e^(q cos x) sin rx/(1-2p^r cos rx+p^(2r)) sin(q sin x) dx = pi/(2p^r) sum (pq)^(kr)/Gamma(kr+1)",
+  "note": "book prints r > 0; r must be a positive integer for the formula (orthogonality)"
+ },
+ {
+  "id": "GR3.939.2",
+  "gr": "3.939.2",
+  "page": 546,
+  "status": "ok",
+  "lhs": "Integrate[E^(q*Cos[x])*(1 - p^r*Cos[r*x])/(1 - 2*p^r*Cos[r*x] + p^(2*r))*Cos[q*Sin[x]], {x, 0, Pi}]",
+  "rhs": [
+   "Pi/2*(2 + Sum[(p*q)^(k*r)/Gamma[k*r + 1], {k, 1, Infinity}])"
+  ],
+  "conds": [
+   "Element[r, Integers] && r > 0",
+   "0 < p < 1"
+  ],
+  "cite": "BI (278)(16)",
+  "edition_note": "3",
+  "section": "3.93 Trigonometric and exponential functions of trigonometric functions",
+  "tex": "int_0^pi e^(q cos x)(1-p^r cos rx)/(1-2p^r cos rx+p^(2r)) cos(q sin x) dx = pi/2 [2 + sum (pq)^(kr)/Gamma(kr+1)]",
+  "note": "book prints r > 0; r must be a positive integer for the formula"
+ },
+ {
+  "id": "GR3.939.3",
+  "gr": "3.939.3",
+  "page": 546,
+  "status": "ok",
+  "lhs": "Integrate[E^(p*Cos[2*x])*Cos[p*Sin[2*x]]/(Cos[x]^2 + q^2*Sin[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*q)*Exp[p*(q - 1)/(q + 1)]"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "BI (273)(8)",
+  "edition_note": "",
+  "section": "3.93 Trigonometric and exponential functions of trigonometric functions",
+  "tex": "int_0^(pi/2) e^(p cos 2x) cos(p sin 2x)/(cos^2 x + q^2 sin^2 x) dx = pi/(2q) exp(p (q-1)/(q+1))",
+  "note": "q > 0 implied by the result"
+ },
+ {
+  "id": "GR3.941.1",
+  "gr": "3.941.1",
+  "page": 546,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Sin[q*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "ArcTan[q/p]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (365)(1)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-px) sin qx dx/x = arctan(q/p)",
+  "note": ""
+ },
+ {
+  "id": "GR3.941.2",
+  "gr": "3.941.2",
+  "page": 546,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[E^(-p*x)*Cos[q*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Infinity"
+  ],
+  "conds": [],
+  "cite": "BI (365)(2)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-px) cos qx dx/x = inf",
+  "note": "",
+  "reason": "divergent"
+ },
+ {
+  "id": "GR3.942.1",
+  "gr": "3.942.1",
+  "page": 546,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Cos[p*x]*x/(b^4 + x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*b^2)*Exp[-b*p*Sqrt[2]]"
+  ],
+  "conds": [
+   "p > 0",
+   "b > 0"
+  ],
+  "cite": "BI (386)(6)a",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-px) cos px x dx/(b^4+x^4) = pi/(4b^2) exp(-bp sqrt2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.942.2",
+  "gr": "3.942.2",
+  "page": 546,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[E^(-p*x)*Cos[p*x]*x/(b^4 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*b^2)*E^(-b*p)*Sin[b*p]"
+  ],
+  "conds": [
+   "p > 0",
+   "b > 0"
+  ],
+  "cite": "BI (386)(7)a",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-px) cos px x dx/(b^4-x^4) = pi/(4b^2) e^(-bp) sin bp",
+  "note": "implied PV",
+  "reason": "pole at x = b on the path (not marked PV)"
+ },
+ {
+  "id": "GR3.943",
+  "gr": "3.943",
+  "page": 546,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*(1 - Cos[a*x])/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[(a^2 + beta^2)/beta^2]/2"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "BI (367)(6)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-beta x)(1-cos ax) dx/x = 1/2 ln((a^2+beta^2)/beta^2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.944.1",
+  "gr": "3.944.1",
+  "page": 546,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-beta*x)*Sin[delta*x], {x, 0, u}]",
+  "rhs": [
+   "I/2*(beta + I*delta)^(-mu)*Gamma[mu, 0, (beta + I*delta)*u] - I/2*(beta - I*delta)^(-mu)*Gamma[mu, 0, (beta - I*delta)*u]"
+  ],
+  "conds": [
+   "Re[mu] > -1",
+   "u > 0"
+  ],
+  "cite": "ET I 318(8)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^u x^(mu-1) e^(-beta x) sin(delta x) dx = i/2 (beta+i delta)^(-mu) gamma(mu,(beta+i delta)u) - i/2 (beta-i delta)^(-mu) gamma(mu,(beta-i delta)u)",
+  "note": "u > 0 added"
+ },
+ {
+  "id": "GR3.944.2",
+  "gr": "3.944.2",
+  "page": 547,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-beta*x)*Sin[delta*x], {x, u, Infinity}]",
+  "rhs": [
+   "I/2*(beta + I*delta)^(-mu)*Gamma[mu, (beta + I*delta)*u] - I/2*(beta - I*delta)^(-mu)*Gamma[mu, (beta - I*delta)*u]"
+  ],
+  "conds": [
+   "Re[beta] > Abs[Im[delta]]",
+   "u > 0"
+  ],
+  "cite": "ET I 318(9)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_u^inf x^(mu-1) e^(-beta x) sin(delta x) dx = i/2 (beta+i delta)^(-mu) Gamma(mu,(beta+i delta)u) - i/2 (...)",
+  "note": "u > 0 added"
+ },
+ {
+  "id": "GR3.944.3",
+  "gr": "3.944.3",
+  "page": 547,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-beta*x)*Cos[delta*x], {x, 0, u}]",
+  "rhs": [
+   "1/2*(beta + I*delta)^(-mu)*Gamma[mu, 0, (beta + I*delta)*u] + 1/2*(beta - I*delta)^(-mu)*Gamma[mu, 0, (beta - I*delta)*u]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "u > 0"
+  ],
+  "cite": "ET I 320(28)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^u x^(mu-1) e^(-beta x) cos(delta x) dx = 1/2 (beta+i delta)^(-mu) gamma(mu,(beta+i delta)u) + 1/2 (...)",
+  "note": "u > 0 added"
+ },
+ {
+  "id": "GR3.944.4",
+  "gr": "3.944.4",
+  "page": 547,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-beta*x)*Cos[delta*x], {x, u, Infinity}]",
+  "rhs": [
+   "1/2*(beta + I*delta)^(-mu)*Gamma[mu, (beta + I*delta)*u] + 1/2*(beta - I*delta)^(-mu)*Gamma[mu, (beta - I*delta)*u]"
+  ],
+  "conds": [
+   "Re[beta] > Abs[Im[delta]]",
+   "u > 0"
+  ],
+  "cite": "ET I 320(29)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_u^inf x^(mu-1) e^(-beta x) cos(delta x) dx = 1/2 (beta+i delta)^(-mu) Gamma(mu,(beta+i delta)u) + 1/2 (...)",
+  "note": "u > 0 added"
+ },
+ {
+  "id": "GR3.944.5",
+  "gr": "3.944.5",
+  "page": 547,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-beta*x)*Sin[delta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu]/(beta^2 + delta^2)^(mu/2)*Sin[mu*ArcTan[delta/beta]]"
+  ],
+  "conds": [
+   "Re[mu] > -1",
+   "Re[beta] > Abs[Im[delta]]"
+  ],
+  "cite": "FI II 812, BI (361)(9)",
+  "edition_note": "11",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(mu-1) e^(-beta x) sin(delta x) dx = Gamma(mu)/(beta^2+delta^2)^(mu/2) sin(mu arctan(delta/beta))",
+  "note": ""
+ },
+ {
+  "id": "GR3.944.6",
+  "gr": "3.944.6",
+  "page": 547,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-beta*x)*Cos[delta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu]/(delta^2 + beta^2)^(mu/2)*Cos[mu*ArcTan[delta/beta]]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[beta] > Abs[Im[delta]]"
+  ],
+  "cite": "FI II 812, BI (361)(10)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(mu-1) e^(-beta x) cos(delta x) dx = Gamma(mu)/(delta^2+beta^2)^(mu/2) cos(mu arctan(delta/beta))",
+  "note": ""
+ },
+ {
+  "id": "GR3.944.7",
+  "gr": "3.944.7",
+  "page": 547,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Exp[-a*x*Cos[t]]*Sin[a*x*Sin[t]], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu]*a^(-mu)*Sin[mu*t]"
+  ],
+  "conds": [
+   "Re[mu] > -1",
+   "a > 0",
+   "Abs[t] < Pi/2"
+  ],
+  "cite": "EH I 13(36)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(mu-1) exp(-ax cos t) sin(ax sin t) dx = Gamma(mu) a^(-mu) sin(mu t)",
+  "note": ""
+ },
+ {
+  "id": "GR3.944.8",
+  "gr": "3.944.8",
+  "page": 547,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Exp[-a*x*Cos[t]]*Cos[a*x*Sin[t]], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu]*a^(-mu)*Cos[mu*t]"
+  ],
+  "conds": [
+   "Re[mu] > -1",
+   "a > 0",
+   "Abs[t] < Pi/2"
+  ],
+  "cite": "EH I 13(35)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(mu-1) exp(-ax cos t) cos(ax sin t) dx = Gamma(mu) a^(-mu) cos(mu t)",
+  "note": "book prints Re mu > -1; convergence at 0 needs Re mu > 0 for the cosine (likely misprint in the condition)"
+ },
+ {
+  "id": "GR3.944.9",
+  "gr": "3.944.9",
+  "page": 547,
+  "status": "ok",
+  "lhs": "Integrate[x^(p - 1)*E^(-q*x)*Sin[q*x*Tan[t]], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[p]*Cos[t]^p*Sin[p*t]/q^p"
+  ],
+  "conds": [
+   "Abs[t] < Pi/2",
+   "q > 0",
+   "Re[p] > -1"
+  ],
+  "cite": "LO V 288(16)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(p-1) e^(-qx) sin(qx tan t) dx = Gamma(p) cos^p t sin(pt)/q^p",
+  "note": "Re p > -1 added (convergence at 0)"
+ },
+ {
+  "id": "GR3.944.10",
+  "gr": "3.944.10",
+  "page": 547,
+  "status": "ok",
+  "lhs": "Integrate[x^(p - 1)*E^(-q*x)*Cos[q*x*Tan[t]], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[p]*Cos[t]^p*Cos[p*t]/q^p"
+  ],
+  "conds": [
+   "Abs[t] < Pi/2",
+   "q > 0",
+   "Re[p] > 0"
+  ],
+  "cite": "LO V 288(15)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(p-1) e^(-qx) cos(qx tan t) dx = Gamma(p) cos^p(t) cos(pt)/q^p",
+  "note": "Re p > 0 added (convergence at 0)"
+ },
+ {
+  "id": "GR3.944.11a",
+  "gr": "3.944.11a",
+  "page": 547,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(-beta*x)*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "n!*(beta/(beta^2 + b^2))^(n + 1)*Sum[(-1)^k*Binomial[n + 1, 2*k + 1]*(b/beta)^(2*k + 1), {k, 0, Floor[n/2]}]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (336)(3), ET I 72(3)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^n e^(-beta x) sin bx dx = n! (beta/(beta^2+b^2))^(n+1) sum_{0<=2k<=n} (-1)^k C(n+1,2k+1) (b/beta)^(2k+1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.944.11b",
+  "gr": "3.944.11b",
+  "page": 547,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(-beta*x)*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*D[b/(b^2 + beta^2), {beta, n}]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (336)(3), ET I 72(3)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^n e^(-beta x) sin bx dx = (-1)^n d^n/dbeta^n (b/(b^2+beta^2))",
+  "note": ""
+ },
+ {
+  "id": "GR3.944.12a",
+  "gr": "3.944.12a",
+  "page": 548,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(-beta*x)*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "n!*(beta/(beta^2 + b^2))^(n + 1)*Sum[(-1)^k*Binomial[n + 1, 2*k]*(b/beta)^(2*k), {k, 0, Floor[(n + 1)/2]}]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (336)(4), ET I 14(5)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^n e^(-beta x) cos bx dx = n! (beta/(beta^2+b^2))^(n+1) sum_{0<=2k<=n+1} (-1)^k C(n+1,2k) (b/beta)^(2k)",
+  "note": ""
+ },
+ {
+  "id": "GR3.944.12b",
+  "gr": "3.944.12b",
+  "page": 548,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(-beta*x)*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*D[beta/(b^2 + beta^2), {beta, n}]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (336)(4), ET I 14(5)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^n e^(-beta x) cos bx dx = (-1)^n d^n/dbeta^n (beta/(b^2+beta^2))",
+  "note": ""
+ },
+ {
+  "id": "GR3.944.13",
+  "gr": "3.944.13",
+  "page": 548,
+  "status": "ok",
+  "lhs": "Integrate[x^(n - 1/2)*E^(-beta*x)*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*Sqrt[Pi/2]*D[Sqrt[Sqrt[beta^2 + b^2] - beta]/Sqrt[beta^2 + b^2], {beta, n}]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 72(6)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(n-1/2) e^(-beta x) sin bx dx = (-1)^n sqrt(pi/2) d^n/dbeta^n (sqrt(sqrt(beta^2+b^2)-beta)/sqrt(beta^2+b^2))",
+  "note": "n = 0,1,2,... implied"
+ },
+ {
+  "id": "GR3.944.14",
+  "gr": "3.944.14",
+  "page": 548,
+  "status": "ok",
+  "lhs": "Integrate[x^(n - 1/2)*E^(-beta*x)*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*Sqrt[Pi/2]*D[Sqrt[Sqrt[beta^2 + b^2] + beta]/Sqrt[beta^2 + b^2], {beta, n}]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 15(6)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(n-1/2) e^(-beta x) cos bx dx = (-1)^n sqrt(pi/2) d^n/dbeta^n (sqrt(sqrt(beta^2+b^2)+beta)/sqrt(beta^2+b^2))",
+  "note": "n = 0,1,2,... implied"
+ },
+ {
+  "id": "GR3.945.1",
+  "gr": "3.945.1",
+  "page": 548,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-beta*x)*Sin[a*x] - E^(-gamma*x)*Sin[b*x])/x^r, {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1 - r]*((b^2 + gamma^2)^((r - 1)/2)*Sin[(r - 1)*ArcTan[b/gamma]] - (a^2 + beta^2)^((r - 1)/2)*Sin[(r - 1)*ArcTan[a/beta]])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[gamma] > 0",
+   "r < 2",
+   "r != 1"
+  ],
+  "cite": "BI (371)(6)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf (e^(-beta x) sin ax - e^(-gamma x) sin bx) dx/x^r = Gamma(1-r){(b^2+gamma^2)^((r-1)/2) sin[(r-1)arctan(b/gamma)] - (a^2+beta^2)^((r-1)/2) sin[(r-1)arctan(a/beta)]}",
+  "note": ""
+ },
+ {
+  "id": "GR3.945.2",
+  "gr": "3.945.2",
+  "page": 548,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-beta*x)*Cos[a*x] - E^(-gamma*x)*Cos[b*x])/x^r, {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1 - r]*((a^2 + beta^2)^((r - 1)/2)*Cos[(r - 1)*ArcTan[a/beta]] - (b^2 + gamma^2)^((r - 1)/2)*Cos[(r - 1)*ArcTan[b/gamma]])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[gamma] > 0",
+   "r < 2",
+   "r != 1"
+  ],
+  "cite": "BI (371)(7)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf (e^(-beta x) cos ax - e^(-gamma x) cos bx) dx/x^r = Gamma(1-r){(a^2+beta^2)^((r-1)/2) cos[(r-1)arctan(a/beta)] - (b^2+gamma^2)^((r-1)/2) cos[(r-1)arctan(b/gamma)]}",
+  "note": ""
+ },
+ {
+  "id": "GR3.945.3",
+  "gr": "3.945.3",
+  "page": 548,
+  "status": "ok",
+  "lhs": "Integrate[(a*E^(-beta*x)*Sin[b*x] - b*E^(-gamma*x)*Sin[a*x])/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "a*b*(Log[(a^2 + gamma^2)/(b^2 + beta^2)]/2 + gamma/a*ArcCot[gamma/a] - beta/b*ArcCot[beta/b])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[gamma] > 0"
+  ],
+  "cite": "BI (368)(22)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf (a e^(-beta x) sin bx - b e^(-gamma x) sin ax) dx/x^2 = ab[1/2 ln((a^2+gamma^2)/(b^2+beta^2)) + gamma/a arccot(gamma/a) - beta/b arccot(beta/b)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.946.1",
+  "gr": "3.946.1",
+  "page": 548,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Sin[a*x]^(2*m + 1)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^m/2^(2*m)*Sum[(-1)^k*Binomial[2*m + 1, k]*ArcTan[(2*m - 2*k + 1)*a/p], {k, 0, m}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "p > 0"
+  ],
+  "cite": "GW (336)(9a)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-px) sin^(2m+1) ax dx/x = (-1)^m/2^(2m) sum_{k=0}^m (-1)^k C(2m+1,k) arctan((2m-2k+1)a/p)",
+  "note": ""
+ },
+ {
+  "id": "GR3.946.2",
+  "gr": "3.946.2",
+  "page": 548,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Sin[a*x]^(2*m)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(m + 1)/2^(2*m)*Sum[(-1)^k*Binomial[2*m, k]*Log[p^2 + (2*m - 2*k)^2*a^2], {k, 0, m - 1}] - Binomial[2*m, m]/2^(2*m)*Log[p]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1",
+   "p > 0"
+  ],
+  "cite": "GW (336)(9b)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-px) sin^(2m) ax dx/x = (-1)^(m+1)/2^(2m) sum_{k=0}^{m-1} (-1)^k C(2m,k) ln[p^2+(2m-2k)^2 a^2] - C(2m,m)/2^(2m) ln p",
+  "note": ""
+ },
+ {
+  "id": "GR3.947.1",
+  "gr": "3.947.1",
+  "page": 548,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*Sin[gamma*x]*Sin[a*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[(beta^2 + (a + gamma)^2)/(beta^2 + (a - gamma)^2)]/4"
+  ],
+  "conds": [
+   "Re[beta] > Abs[Im[gamma]]",
+   "a > 0"
+  ],
+  "cite": "BI (365)(5)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-beta x) sin(gamma x) sin(ax) dx/x = 1/4 ln((beta^2+(a+gamma)^2)/(beta^2+(a-gamma)^2))",
+  "note": ""
+ },
+ {
+  "id": "GR3.947.2",
+  "gr": "3.947.2",
+  "page": 549,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Sin[a*x]*Sin[b*x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Abs[a + b]/2*ArcTan[Abs[a + b]/p] - Abs[a - b]/2*ArcTan[Abs[a - b]/p] + p/4*Log[(p^2 + (a - b)^2)/(p^2 + (a + b)^2)]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (368)(1), FI II 744",
+  "edition_note": "11",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-px) sin ax sin bx dx/x^2 = |a+b|/2 arctan(|a+b|/p) - |a-b|/2 arctan(|a-b|/p) + p/4 ln((p^2+(a-b)^2)/(p^2+(a+b)^2))",
+  "note": "for p = 0 see 3.741.3"
+ },
+ {
+  "id": "GR3.947.3",
+  "gr": "3.947.3",
+  "page": 549,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Sin[a*x]*Cos[b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "ArcTan[(a + b)/p] + ArcTan[(a - b)/p]",
+   "(ArcTan[(a + b)/p] + ArcTan[(a - b)/p])/2"
+  ],
+  "conds": [
+   "a >= 0",
+   "p > 0"
+  ],
+  "cite": "GW (336)(10b)",
+  "edition_note": "11",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-px) sin ax cos bx dx/x = arctan((a+b)/p) + arctan((a-b)/p)",
+  "note": "suspected misprint: sin ax cos bx = (sin(a+b)x + sin(a-b)x)/2 gives a factor 1/2; corrected candidate second"
+ },
+ {
+  "id": "GR3.948.1",
+  "gr": "3.948.1",
+  "page": 549,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*(Sin[a*x] - Sin[b*x])/x, {x, 0, Infinity}]",
+  "rhs": [
+   "ArcTan[a/beta] - ArcTan[b*r/beta]",
+   "ArcTan[a/beta] - ArcTan[b/beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "BI (367)(7)",
+  "edition_note": "11",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-beta x)(sin ax - sin bx) dx/x = arctan(a/beta) - arctan(br/beta)",
+  "note": "misprint: stray r in arctan(br/beta) (absent from the integral); corrected candidate second. cf. 3.951.2"
+ },
+ {
+  "id": "GR3.948.2",
+  "gr": "3.948.2",
+  "page": 549,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*(Cos[a*x] - Cos[b*x])/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[(b^2 + beta^2)/(a^2 + beta^2)]/2"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "BI (367)(8), FI II 748a",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-beta x)(cos ax - cos bx) dx/x = 1/2 ln((b^2+beta^2)/(a^2+beta^2))",
+  "note": "cf. 3.951.3"
+ },
+ {
+  "id": "GR3.948.3",
+  "gr": "3.948.3",
+  "page": 549,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*(Cos[a*x] - Cos[b*x])/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "beta/2*Log[(a^2 + beta^2)/(b^2 + beta^2)] + b*ArcTan[b/beta] - a*ArcTan[a/beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "BI (368)(20)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-beta x)(cos ax - cos bx) dx/x^2 = beta/2 ln((a^2+beta^2)/(b^2+beta^2)) + b arctan(b/beta) - a arctan(a/beta)",
+  "note": "book prints the condition as Re p > 0 (misprint for Re beta > 0)"
+ },
+ {
+  "id": "GR3.948.4",
+  "gr": "3.948.4",
+  "page": 549,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*(Sin[a*x]^2 - Sin[b*x]^2)/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "a*ArcTan[2*a/p] - b*ArcTan[2*b/p] - p/4*Log[(p^2 + 4*a^2)/(p^2 + 4*b^2)]",
+   "a*ArcTan[2*a/beta] - b*ArcTan[2*b/beta] - beta/4*Log[(beta^2 + 4*a^2)/(beta^2 + 4*b^2)]"
+  ],
+  "conds": [
+   "beta > 0"
+  ],
+  "cite": "BI (368)(25)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-beta x)(sin^2 ax - sin^2 bx) dx/x^2 = a arctan(2a/p) - b arctan(2b/p) - p/4 ln((p^2+4a^2)/(p^2+4b^2)) [p > 0]",
+  "note": "misprint: integrand has e^(-beta x) but value/condition use p; corrected candidate (p -> beta) second; condition p > 0 written as beta > 0"
+ },
+ {
+  "id": "GR3.948.5",
+  "gr": "3.948.5",
+  "page": 549,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*(Cos[a*x]^2 - Cos[b*x]^2)/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "-a*ArcTan[2*a/p] + b*ArcTan[2*b/p] + p/4*Log[(p^2 + 4*a^2)/(p^2 + 4*b^2)]",
+   "-a*ArcTan[2*a/beta] + b*ArcTan[2*b/beta] + beta/4*Log[(beta^2 + 4*a^2)/(beta^2 + 4*b^2)]"
+  ],
+  "conds": [
+   "beta > 0"
+  ],
+  "cite": "BI (368)(26)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-beta x)(cos^2 ax - cos^2 bx) dx/x^2 = -a arctan(2a/p) + b arctan(2b/p) + p/4 ln((p^2+4a^2)/(p^2+4b^2)) [p > 0]",
+  "note": "misprint: integrand has e^(-beta x) but value/condition use p; corrected candidate (p -> beta) second; condition p > 0 written as beta > 0"
+ },
+ {
+  "id": "GR3.949.1",
+  "gr": "3.949.1",
+  "page": 549,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Sin[a*x]*Sin[b*x]*Sin[c*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-ArcTan[(a + b + c)/p]/4 + ArcTan[(a + b - c)/p]/4 + ArcTan[(a - b + c)/p]/4 + ArcTan[(-a + b + c)/p]/4"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (365)(11)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-px) sin ax sin bx sin cx dx/x = -1/4 arctan((a+b+c)/p) + 1/4 arctan((a+b-c)/p) + 1/4 arctan((a-b+c)/p) + 1/4 arctan((-a+b+c)/p)",
+  "note": ""
+ },
+ {
+  "id": "GR3.949.2",
+  "gr": "3.949.2",
+  "page": 549,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Sin[a*x]^2*Sin[b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "ArcTan[b/p]/2 - (ArcTan[2*p*b/(p^2 + 4*a^2 - b^2)]/2 + Piecewise[{{1, p^2 + 4*a^2 - b^2 < 0}}, 0]*Pi/2)/2"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (365)(8)",
+  "edition_note": "8",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-px) sin^2 ax sin bx dx/x = 1/2 arctan(b/p) - 1/2[1/2 arctan(2pb/(p^2+4a^2-b^2)) + s pi/2], s = 1 if p^2+4a^2-b^2<0 else 0",
+  "note": "s substituted as Piecewise; p > 0 added"
+ },
+ {
+  "id": "GR3.949.3",
+  "gr": "3.949.3",
+  "page": 549,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Sin[a*x]^2*Cos[b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[(p^2 + (2*a + b)^2)*(p^2 + (2*a - b)^2)/(p^2 + b^2)^2]/8"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (365)(9)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-px) sin^2 ax cos bx dx/x = 1/8 ln([p^2+(2a+b)^2][p^2+(2a-b)^2]/(p^2+b^2)^2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.949.4",
+  "gr": "3.949.4",
+  "page": 550,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Sin[a*x]*Cos[b*x]^2/x, {x, 0, Infinity}]",
+  "rhs": [
+   "ArcTan[a/p]/2 + (ArcTan[2*p*a/(p^2 + 4*b^2 - a^2)]/2 + Piecewise[{{1, p^2 + 4*b^2 - a^2 < 0}}, 0]*Pi/2)/2"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (365)(10)",
+  "edition_note": "8",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-px) sin ax cos^2 bx dx/x = 1/2 arctan(a/p) + 1/2[1/2 arctan(2pa/(p^2+4b^2-a^2)) + s pi/2], s = 1 if p^2+4b^2-a^2<0 else 0",
+  "note": "s substituted as Piecewise; p > 0 added"
+ },
+ {
+  "id": "GR3.949.5",
+  "gr": "3.949.5",
+  "page": 550,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Sin[a*x]^2*Sin[b*x]*Sin[c*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[(p^2 + (b + c)^2)/(p^2 + (b - c)^2)]/8 + Log[(p^2 + (2*a - b + c)^2)*(p^2 + (2*a + b - c)^2)/((p^2 + (2*a + b + c)^2)*(p^2 + (2*a - b - c)^2))]/16"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (365)(15)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-px) sin^2 ax sin bx sin cx dx/x = 1/8 ln((p^2+(b+c)^2)/(p^2+(b-c)^2)) + 1/16 ln([p^2+(2a-b+c)^2][p^2+(2a+b-c)^2]/([p^2+(2a+b+c)^2][p^2+(2a-b-c)^2]))",
+  "note": ""
+ },
+ {
+  "id": "GR3.951.1",
+  "gr": "3.951.1",
+  "page": 550,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-x))*Cos[x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Sqrt[2]]"
+  ],
+  "conds": [],
+  "cite": "FI II 745",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf (1-e^(-x)) cos x dx/x = ln sqrt2",
+  "note": ""
+ },
+ {
+  "id": "GR3.951.2",
+  "gr": "3.951.2",
+  "page": 550,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-gamma*x) - E^(-beta*x))/x*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "ArcTan[(beta - gamma)*b/(b^2 + beta*gamma)]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[gamma] >= 0"
+  ],
+  "cite": "BI (367)(3)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf (e^(-gamma x)-e^(-beta x))/x sin bx dx = arctan((beta-gamma)b/(b^2+beta gamma))",
+  "note": ""
+ },
+ {
+  "id": "GR3.951.3",
+  "gr": "3.951.3",
+  "page": 550,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-gamma*x) - E^(-beta*x))/x*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Log[(b^2 + beta^2)/(b^2 + gamma^2)]/2"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[gamma] >= 0"
+  ],
+  "cite": "BI (367)(4)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf (e^(-gamma x)-e^(-beta x))/x cos bx dx = 1/2 ln((b^2+beta^2)/(b^2+gamma^2))",
+  "note": ""
+ },
+ {
+  "id": "GR3.951.4",
+  "gr": "3.951.4",
+  "page": 550,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-gamma*x) - E^(-beta*x))/x^2*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b/2*Log[(b^2 + beta^2)/(b^2 + gamma^2)] + beta*ArcTan[b/beta] - gamma*ArcTan[b/gamma]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[gamma] > 0"
+  ],
+  "cite": "BI (368)(21)a",
+  "edition_note": "11",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf (e^(-gamma x)-e^(-beta x))/x^2 sin bx dx = b/2 ln((b^2+beta^2)/(b^2+gamma^2)) + beta arctan(b/beta) - gamma arctan(b/gamma)",
+  "note": ""
+ },
+ {
+  "id": "GR3.951.5",
+  "gr": "3.951.5",
+  "page": 550,
+  "status": "ok",
+  "lhs": "Integrate[x/(E^(beta*x) - 1)*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*b^2) - Pi^2/(2*beta^2)*Csch[b*Pi/beta]^2"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 15(18)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x/(e^(beta x)-1) cos bx dx = 1/(2b^2) - pi^2/(2beta^2) cosech^2(b pi/beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.951.6",
+  "gr": "3.951.6",
+  "page": 550,
+  "status": "ok",
+  "lhs": "Integrate[(1/(E^x - 1) - 1/x)*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Log[b] - (PolyGamma[I*b] + PolyGamma[-I*b])/2"
+  ],
+  "conds": [
+   "b > 0"
+  ],
+  "cite": "ET I 15(9)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf (1/(e^x-1) - 1/x) cos bx dx = ln b - 1/2[psi(ib) + psi(-ib)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.951.7",
+  "gr": "3.951.7",
+  "page": 550,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Cos[a*x])/(E^(2*Pi*x) - 1)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "a/4 + Log[(1 - E^(-a))/a]/2"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (387)(10)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf (1-cos ax)/(e^(2pi x)-1) dx/x = a/4 + 1/2 ln((1-e^(-a))/a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.951.8",
+  "gr": "3.951.8",
+  "page": 550,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-beta*x) - E^(-gamma*x)*Cos[a*x])/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[(a^2 + gamma^2)/beta^2]/2"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[gamma] > 0"
+  ],
+  "cite": "BI (367)(10)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf (e^(-beta x) - e^(-gamma x) cos ax) dx/x = 1/2 ln((a^2+gamma^2)/beta^2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.951.9",
+  "gr": "3.951.9",
+  "page": 550,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[p*x] - E^(-p*x))/((b^4 + x^4)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b^4)*Exp[-b*p*Sqrt[2]/2]*Sin[b*p*Sqrt[2]/2]"
+  ],
+  "conds": [
+   "p > 0",
+   "b > 0"
+  ],
+  "cite": "BI (390)(6)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf (cos px - e^(-px))/(b^4+x^4) dx/x = pi/(2b^4) exp(-1/2 bp sqrt2) sin(1/2 bp sqrt2)",
+  "note": "b > 0 added"
+ },
+ {
+  "id": "GR3.951.10",
+  "gr": "3.951.10",
+  "page": 550,
+  "status": "ok",
+  "lhs": "Integrate[1/(E^x - 1) - Cos[x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "EulerGamma"
+  ],
+  "conds": [],
+  "cite": "NT 65(8)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf (1/(e^x-1) - cos x/x) dx = C",
+  "note": ""
+ },
+ {
+  "id": "GR3.951.11",
+  "gr": "3.951.11",
+  "page": 550,
+  "status": "ok",
+  "lhs": "Integrate[(a*E^(-p*x) - E^(-q*x)/x*Sin[a*x])/x, {x, 0, Infinity}]",
+  "rhs": [
+   "a/2*Log[(a^2 + q^2)/p^2] + q*ArcTan[a/q] - a"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (368)(24)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf (a e^(-px) - e^(-qx)/x sin ax) dx/x = a/2 ln((a^2+q^2)/p^2) + q arctan(a/q) - a",
+  "note": ""
+ },
+ {
+  "id": "GR3.951.12",
+  "gr": "3.951.12",
+  "page": 551,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m)*Sin[b*x]/(E^x - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^m*D[Pi/2*Coth[b*Pi] - 1/(2*b), {b, 2*m}]"
+  ],
+  "conds": [
+   "b > 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "GW (336)(15a)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(2m) sin bx/(e^x-1) dx = (-1)^m d^(2m)/db^(2m) [pi/2 coth(b pi) - 1/(2b)]",
+  "note": "m = 0,1,2,... implied"
+ },
+ {
+  "id": "GR3.951.13",
+  "gr": "3.951.13",
+  "page": 551,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m + 1)*Cos[b*x]/(E^x - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^m*D[Pi/2*Coth[b*Pi] - 1/(2*b), {b, 2*m + 1}]"
+  ],
+  "conds": [
+   "b > 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "GW (336)(15b)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(2m+1) cos bx/(e^x-1) dx = (-1)^m d^(2m+1)/db^(2m+1) [pi/2 coth(b pi) - 1/(2b)]",
+  "note": "m = 0,1,2,... implied"
+ },
+ {
+  "id": "GR3.951.14",
+  "gr": "3.951.14",
+  "page": 551,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m)*Sin[b*x]/(E^((2*n + 1)*c*x) - E^((2*n - 1)*c*x)), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^m*D[Pi/(4*c)*Tanh[b*Pi/(2*c)] - Sum[b/(b^2 + (2*k - 1)^2*c^2), {k, 1, n}], {b, 2*m}]"
+  ],
+  "conds": [
+   "b > 0",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 1",
+   "c > 0"
+  ],
+  "cite": "GW (336)(14a)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(2m) sin bx dx/(e^((2n+1)cx) - e^((2n-1)cx)) = (-1)^m d^(2m)/db^(2m)[pi/(4c) tanh(b pi/(2c)) - sum_{k=1}^n b/(b^2+(2k-1)^2c^2)]",
+  "note": "m >= 0, n >= 1 integers and c > 0 implied"
+ },
+ {
+  "id": "GR3.951.15",
+  "gr": "3.951.15",
+  "page": 551,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m + 1)*Cos[b*x]/(E^((2*n + 1)*c*x) - E^((2*n - 1)*c*x)), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^m*D[Pi/(4*c)*Tanh[b*Pi/(2*c)] - Sum[b/(b^2 + (2*k - 1)^2*c^2), {k, 1, n}], {b, 2*m + 1}]"
+  ],
+  "conds": [
+   "b > 0",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 1",
+   "c > 0"
+  ],
+  "cite": "GW (336)(14b)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(2m+1) cos bx dx/(e^((2n+1)cx) - e^((2n-1)cx)) = (-1)^m d^(2m+1)/db^(2m+1)[pi/(4c) tanh(b pi/(2c)) - sum_{k=1}^n b/(b^2+(2k-1)^2c^2)]",
+  "note": "m >= 0, n >= 1 integers and c > 0 implied"
+ },
+ {
+  "id": "GR3.951.16",
+  "gr": "3.951.16",
+  "page": 551,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m)*Sin[b*x]/(E^(2*n*c*x) - E^((2*n - 2)*c*x)), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^m*D[Pi/(4*c)*Coth[b*Pi/(2*c)] - 1/(2*b) - Sum[b/(b^2 + (2*k)^2*c^2), {k, 1, n - 1}], {b, 2*m}]"
+  ],
+  "conds": [
+   "b > 0",
+   "c > 0",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (336)(14c)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(2m) sin bx dx/e^((2n-2)cx) [sic] = (-1)^m d^(2m)/db^(2m)[pi/(4c) coth(b pi/(2c)) - 1/(2b) - sum_{k=1}^{n-1} b/(b^2+(2k)^2c^2)]",
+  "note": "misprint: book prints the denominator as e^((2n-2)cx) only; the term e^(2ncx) - is missing (cf. 3.951.17); lhs uses the corrected denominator"
+ },
+ {
+  "id": "GR3.951.17",
+  "gr": "3.951.17",
+  "page": 551,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m + 1)*Cos[b*x]/(E^(2*n*c*x) - E^((2*n - 2)*c*x)), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^m*D[Pi/(4*c)*Coth[b*Pi/(2*c)] - 1/(2*b) - Sum[b/(b^2 + (2*k)^2*c^2), {k, 1, n - 1}], {b, 2*m + 1}]"
+  ],
+  "conds": [
+   "b > 0",
+   "c > 0",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (336)(14d)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(2m+1) cos bx dx/(e^(2ncx) - e^((2n-2)cx)) = (-1)^m d^(2m+1)/db^(2m+1)[pi/(4c) coth(b pi/(2c)) - 1/(2b) - sum_{k=1}^{n-1} b/(b^2+(2k)^2c^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.951.18",
+  "gr": "3.951.18",
+  "page": 551,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[a*x] - Cos[b*x])/(E^((2*m + 1)*p*x) - E^((2*m - 1)*p*x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Cosh[b*Pi/(2*p)]/Cosh[a*Pi/(2*p)]]/2 - Sum[Log[(b^2 + (2*k - 1)^2*p^2)/(a^2 + (2*k - 1)^2*p^2)], {k, 1, m}]/2"
+  ],
+  "conds": [
+   "p > 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "GW (336)(16a)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf (cos ax - cos bx)/(e^((2m+1)px) - e^((2m-1)px)) dx/x = 1/2 ln(cosh(b pi/2p)/cosh(a pi/2p)) - 1/2 sum_{k=1}^m ln((b^2+(2k-1)^2p^2)/(a^2+(2k-1)^2p^2))",
+  "note": "m integer implied"
+ },
+ {
+  "id": "GR3.951.19",
+  "gr": "3.951.19",
+  "page": 551,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[a*x] - Cos[b*x])/(E^(2*m*p*x) - E^((2*m - 2)*p*x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[a*Sinh[b*Pi/(2*p)]/(b*Sinh[a*Pi/(2*p)])]/2 - Sum[Log[(b^2 + 4*k^2*p^2)/(a^2 + 4*k^2*p^2)], {k, 1, m - 1}]/2"
+  ],
+  "conds": [
+   "p > 0",
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "GW (336)(16b)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf (cos ax - cos bx)/(e^(2mpx) - e^((2m-2)px)) dx/x = 1/2 ln(a sinh(b pi/2p)/(b sinh(a pi/2p))) - 1/2 sum_{k=1}^{m-1} ln((b^2+4k^2p^2)/(a^2+4k^2p^2))",
+  "note": "m >= 1 integer implied"
+ },
+ {
+  "id": "GR3.951.20",
+  "gr": "3.951.20",
+  "page": 551,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Sin[b*x]/(1 - E^x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[(b + 1)*Sinh[(b - 1)*Pi]/((b - 1)*Sinh[(b + 1)*Pi])]/4"
+  ],
+  "conds": [
+   "b^2 != 1"
+  ],
+  "cite": "LO V 305",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf sin x sin bx/(1-e^x) dx/x = 1/4 ln((b+1) sinh[(b-1)pi]/((b-1) sinh[(b+1)pi]))",
+  "note": ""
+ },
+ {
+  "id": "GR3.951.21",
+  "gr": "3.951.21",
+  "page": 551,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2/(1 - E^x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[2*a*Pi/Sinh[2*a*Pi]]/4"
+  ],
+  "conds": [],
+  "cite": "LO V 306, BI (387)(5)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf sin^2 ax/(1-e^x) dx/x = 1/4 ln(2a pi/sinh(2a pi))",
+  "note": ""
+ },
+ {
+  "id": "GR3.952.1",
+  "gr": "3.952.1",
+  "page": 551,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-p^2*x^2)*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "a*Sqrt[Pi]/(4*p^3)*Exp[-a^2/(4*p^2)]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (362)(1)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x e^(-p^2x^2) sin ax dx = a sqrt(pi)/(4p^3) exp(-a^2/(4p^2))",
+  "note": "p > 0 added"
+ },
+ {
+  "id": "GR3.952.2",
+  "gr": "3.952.2",
+  "page": 551,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-p^2*x^2)*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*p^2) - a/(4*p^3)*Sum[(-1)^k*k!/(2*k + 1)!*(a/p)^(2*k + 1), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "a > 0",
+   "p > 0"
+  ],
+  "cite": "BI (362)(2)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x e^(-p^2x^2) cos ax dx = 1/(2p^2) - a/(4p^3) sum_{k>=0} (-1)^k k!/(2k+1)! (a/p)^(2k+1)",
+  "note": "p > 0 added"
+ },
+ {
+  "id": "GR3.952.3",
+  "gr": "3.952.3",
+  "page": 552,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-p^2*x^2)*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "a/(4*p^4) + (2*p^2 - a^2)/(8*p^5)*Sum[(-1)^k*k!/(2*k + 1)!*(a/p)^(2*k + 1), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "a > 0",
+   "p > 0"
+  ],
+  "cite": "BI (362)(4)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^2 e^(-p^2x^2) sin ax dx = a/(4p^4) + (2p^2-a^2)/(8p^5) sum_{k>=0} (-1)^k k!/(2k+1)! (a/p)^(2k+1)",
+  "note": "p > 0 added"
+ },
+ {
+  "id": "GR3.952.4",
+  "gr": "3.952.4",
+  "page": 552,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-p^2*x^2)*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*(2*p^2 - a^2)/(8*p^5)*Exp[-a^2/(4*p^2)]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (362)(5)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^2 e^(-p^2x^2) cos ax dx = sqrt(pi)(2p^2-a^2)/(8p^5) exp(-a^2/(4p^2))",
+  "note": "p > 0 added"
+ },
+ {
+  "id": "GR3.952.5",
+  "gr": "3.952.5",
+  "page": 552,
+  "status": "ok",
+  "lhs": "Integrate[x^3*E^(-p^2*x^2)*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*(6*a*p^2 - a^3)/(16*p^7)*Exp[-a^2/(4*p^2)]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (362)(6)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^3 e^(-p^2x^2) sin ax dx = sqrt(pi)(6ap^2-a^3)/(16p^7) exp(-a^2/(4p^2))",
+  "note": "p > 0 added"
+ },
+ {
+  "id": "GR3.952.6a",
+  "gr": "3.952.6a",
+  "page": 552,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p^2*x^2)*Sin[a*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "a*Sqrt[Pi]/(2*p)*Sum[(-1)^k/(k!*(2*k + 1))*(a/(2*p))^(2*k), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (365)(21)",
+  "edition_note": "3",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-p^2x^2) sin ax dx/x = a sqrt(pi)/(2p) sum_{k>=0} (-1)^k/(k!(2k+1)) (a/(2p))^(2k)",
+  "note": "p > 0 added"
+ },
+ {
+  "id": "GR3.952.6b",
+  "gr": "3.952.6b",
+  "page": 552,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p^2*x^2)*Sin[a*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Erf[a/(2*p)]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (365)(21)",
+  "edition_note": "3",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-p^2x^2) sin ax dx/x = pi/2 Phi(a/(2p))",
+  "note": "p > 0 added"
+ },
+ {
+  "id": "GR3.952.7",
+  "gr": "3.952.7",
+  "page": 552,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-beta*x^2)*Sin[gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "gamma*E^(-gamma^2/(4*beta))/(2*beta^((1 + mu)/2))*Gamma[(1 + mu)/2]*Hypergeometric1F1[1 - mu/2, 3/2, gamma^2/(4*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[mu] > -1"
+  ],
+  "cite": "ET I 318(10)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(mu-1) e^(-beta x^2) sin(gamma x) dx = gamma e^(-gamma^2/(4beta))/(2 beta^((1+mu)/2)) Gamma((1+mu)/2) 1F1(1-mu/2; 3/2; gamma^2/(4beta))",
+  "note": ""
+ },
+ {
+  "id": "GR3.952.8",
+  "gr": "3.952.8",
+  "page": 552,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-beta*x^2)*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "beta^(-mu/2)/2*Gamma[mu/2]*E^(-a^2/(4*beta))*Hypergeometric1F1[-mu/2 + 1/2, 1/2, a^2/(4*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[mu] > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 320(30)",
+  "edition_note": "10",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(mu-1) e^(-beta x^2) cos ax dx = 1/2 beta^(-mu/2) Gamma(mu/2) e^(-a^2/(4beta)) 1F1(-mu/2+1/2; 1/2; a^2/(4beta))",
+  "note": ""
+ },
+ {
+  "id": "GR3.952.9a",
+  "gr": "3.952.9a",
+  "page": 552,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n)*E^(-beta^2*x^2)*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*Sqrt[Pi]/(2^(n + 1)*beta^(2*n + 1))*Exp[-a^2/(8*beta^2)]*ParabolicCylinderD[2*n, a/(beta*Sqrt[2])]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi/4",
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "WH, ET I 15(13)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(2n) e^(-beta^2x^2) cos ax dx = (-1)^n sqrt(pi)/(2^(n+1) beta^(2n+1)) exp(-a^2/(8beta^2)) D_2n(a/(beta sqrt2))",
+  "note": "n = 0,1,2,... implied"
+ },
+ {
+  "id": "GR3.952.9b",
+  "gr": "3.952.9b",
+  "page": 552,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n)*E^(-beta^2*x^2)*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*Sqrt[Pi]/(2*beta)^(2*n + 1)*Exp[-a^2/(4*beta^2)]*HermiteH[2*n, a/(2*beta)]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi/4",
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "WH, ET I 15(13)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(2n) e^(-beta^2x^2) cos ax dx = (-1)^n sqrt(pi)/(2beta)^(2n+1) exp(-a^2/(4beta^2)) H_2n(a/(2beta))",
+  "note": "n = 0,1,2,... implied"
+ },
+ {
+  "id": "GR3.952.10a",
+  "gr": "3.952.10a",
+  "page": 552,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n + 1)*E^(-beta^2*x^2)*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*Sqrt[Pi]/(2^(n + 3/2)*beta^(2*n + 2))*Exp[-a^2/(8*beta^2)]*ParabolicCylinderD[2*n + 1, a/(beta*Sqrt[2])]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi/4",
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "WH, ET I 74(23)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(2n+1) e^(-beta^2x^2) sin ax dx = (-1)^n sqrt(pi)/(2^(n+3/2) beta^(2n+2)) exp(-a^2/(8beta^2)) D_(2n+1)(a/(beta sqrt2))",
+  "note": "n = 0,1,2,... implied"
+ },
+ {
+  "id": "GR3.952.10b",
+  "gr": "3.952.10b",
+  "page": 552,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n + 1)*E^(-beta^2*x^2)*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*Sqrt[Pi]/(2*beta)^(2*n + 2)*Exp[-a^2/(4*beta^2)]*HermiteH[2*n + 1, a/(2*beta)]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi/4",
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "WH, ET I 74(23)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(2n+1) e^(-beta^2x^2) sin ax dx = (-1)^n sqrt(pi)/(2beta)^(2n+2) exp(-a^2/(4beta^2)) H_(2n+1)(a/(2beta))",
+  "note": "n = 0,1,2,... implied"
+ },
+ {
+  "id": "GR3.953.1",
+  "gr": "3.953.1",
+  "page": 552,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-gamma*x - beta*x^2)*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-I/(2*(2*beta)^(mu/2))*Exp[(gamma^2 - a^2)/(8*beta)]*Gamma[mu]*(Exp[-I*a*gamma/(4*beta)]*ParabolicCylinderD[-mu, (gamma - I*a)/Sqrt[2*beta]] - Exp[I*a*gamma/(4*beta)]*ParabolicCylinderD[-mu, (gamma + I*a)/Sqrt[2*beta]])"
+  ],
+  "conds": [
+   "Re[mu] > -1",
+   "Re[beta] > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 318(11)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(mu-1) e^(-gamma x - beta x^2) sin ax dx = -i/(2(2beta)^(mu/2)) exp((gamma^2-a^2)/(8beta)) Gamma(mu){exp(-ia gamma/(4beta)) D_-mu((gamma-ia)/sqrt(2beta)) - exp(ia gamma/(4beta)) D_-mu((gamma+ia)/sqrt(2beta))}",
+  "note": ""
+ },
+ {
+  "id": "GR3.953.2",
+  "gr": "3.953.2",
+  "page": 552,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-gamma*x - beta*x^2)*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*(2*beta)^(mu/2))*Exp[(gamma^2 - a^2)/(8*beta)]*Gamma[mu]*(Exp[-I*a*gamma/(4*beta)]*ParabolicCylinderD[-mu, (gamma - I*a)/Sqrt[2*beta]] + Exp[I*a*gamma/(4*beta)]*ParabolicCylinderD[-mu, (gamma + I*a)/Sqrt[2*beta]])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[beta] > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 16(18)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(mu-1) e^(-gamma x - beta x^2) cos ax dx = 1/(2(2beta)^(mu/2)) exp((gamma^2-a^2)/(8beta)) Gamma(mu){exp(-ia gamma/(4beta)) D_-mu(...) + exp(ia gamma/(4beta)) D_-mu(...)}",
+  "note": ""
+ },
+ {
+  "id": "GR3.953.3",
+  "gr": "3.953.3",
+  "page": 553,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-gamma*x - beta*x^2)*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "I*Sqrt[Pi]/(8*Sqrt[beta^3])*((gamma - I*a)*Exp[-(gamma - I*a)^2/(4*beta)]*(1 - Erf[(gamma - I*a)/(2*Sqrt[beta])]) - (gamma + I*a)*Exp[-(gamma + I*a)^2/(4*beta)]*(1 - Erf[(gamma + I*a)/(2*Sqrt[beta])]))",
+   "I*Sqrt[Pi]/(8*Sqrt[beta^3])*((gamma - I*a)*Exp[(gamma - I*a)^2/(4*beta)]*(1 - Erf[(gamma - I*a)/(2*Sqrt[beta])]) - (gamma + I*a)*Exp[(gamma + I*a)^2/(4*beta)]*(1 - Erf[(gamma + I*a)/(2*Sqrt[beta])]))"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 74(28)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x e^(-gamma x - beta x^2) sin ax dx = i sqrt(pi)/(8 sqrt(beta^3)){(gamma-ia) exp[-(gamma-ia)^2/(4beta)][1-Phi((gamma-ia)/(2sqrt beta))] - (gamma+ia) exp[-(gamma+ia)^2/(4beta)][1-Phi(...)]}",
+  "note": "suspected misprint: the exponents exp[-(gamma +- ia)^2/(4beta)] should be exp[+(gamma +- ia)^2/(4beta)] (cf. 3.953.4); corrected candidate second"
+ },
+ {
+  "id": "GR3.953.4",
+  "gr": "3.953.4",
+  "page": 553,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-gamma*x - beta*x^2)*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-Sqrt[Pi]/(8*Sqrt[beta^3])*((gamma - I*a)*Exp[(gamma - I*a)^2/(4*beta)]*(1 - Erf[(gamma - I*a)/(2*Sqrt[beta])]) + (gamma + I*a)*Exp[(gamma + I*a)^2/(4*beta)]*(1 - Erf[(gamma + I*a)/(2*Sqrt[beta])])) + 1/(2*beta)"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 16(17)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x e^(-gamma x - beta x^2) cos ax dx = -sqrt(pi)/(8 sqrt(beta^3)){(gamma-ia) exp((gamma-ia)^2/(4beta))[1-Phi(...)] + (gamma+ia) exp((gamma+ia)^2/(4beta))[1-Phi(...)]} + 1/(2beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.954.1",
+  "gr": "3.954.1",
+  "page": 553,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x^2)*Sin[a*x]*x/(gamma^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/4*E^(beta*gamma^2)*(2*Sinh[a*gamma] + E^(-gamma*a)*Erf[gamma*Sqrt[beta] - a/(2*Sqrt[beta])] - E^(gamma*a)*Erf[gamma*Sqrt[beta] + a/(2*Sqrt[beta])])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[gamma] > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 74(26)a",
+  "edition_note": "11",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-beta x^2) sin ax x dx/(gamma^2+x^2) = -pi/4 e^(beta gamma^2)[2 sinh(a gamma) + e^(-gamma a) Phi(gamma sqrt beta - a/(2 sqrt beta)) - e^(gamma a) Phi(gamma sqrt beta + a/(2 sqrt beta))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.954.2",
+  "gr": "3.954.2",
+  "page": 553,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x^2)*Cos[a*x]/(gamma^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*gamma)*E^(beta*gamma^2)*(2*Cosh[a*gamma] - E^(-gamma*a)*Erf[gamma*Sqrt[beta] - a/(2*Sqrt[beta])] - E^(gamma*a)*Erf[gamma*Sqrt[beta] + a/(2*Sqrt[beta])])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[gamma] > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 15(15)",
+  "edition_note": "11",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-beta x^2) cos ax dx/(gamma^2+x^2) = pi/(4gamma) e^(beta gamma^2)[2 cosh(a gamma) - e^(-gamma a) Phi(gamma sqrt beta - a/(2 sqrt beta)) - e^(gamma a) Phi(gamma sqrt beta + a/(2 sqrt beta))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.955",
+  "gr": "3.955",
+  "page": 553,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*E^(-x^2/2)*Cos[beta*x - nu*Pi/2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*E^(-beta^2/4)*ParabolicCylinderD[nu, beta]"
+  ],
+  "conds": [
+   "Re[nu] > -1"
+  ],
+  "cite": "EH II 120(4)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^nu e^(-x^2/2) cos(beta x - nu pi/2) dx = sqrt(pi/2) e^(-beta^2/4) D_nu(beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.956",
+  "gr": "3.956",
+  "page": 553,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2)*(2*x*Cos[x] - Sin[x])*Sin[x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*(E - 1)/(2*E)"
+  ],
+  "conds": [],
+  "cite": "BI (369)(19)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-x^2)(2x cos x - sin x) sin x dx/x^2 = sqrt(pi)(e-1)/(2e)",
+  "note": ""
+ },
+ {
+  "id": "GR3.957.1",
+  "gr": "3.957.1",
+  "page": 553,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Exp[-beta^2/(4*x)]*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "I/2^mu*beta^mu*a^(-mu/2)*(Exp[-I*mu*Pi/4]*BesselK[mu, beta*E^(Pi*I/4)*Sqrt[a]] - Exp[I*mu*Pi/4]*BesselK[mu, beta*E^(-Pi*I/4)*Sqrt[a]])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[mu] < 1",
+   "a > 0"
+  ],
+  "cite": "ET I 318(12)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(mu-1) exp(-beta^2/(4x)) sin ax dx = i/2^mu beta^mu a^(-mu/2)[exp(-i mu pi/4) K_mu(beta e^(pi i/4) sqrt a) - exp(i mu pi/4) K_mu(beta e^(-pi i/4) sqrt a)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.957.2",
+  "gr": "3.957.2",
+  "page": 553,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Exp[-beta^2/(4*x)]*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2^mu*beta^mu*a^(-mu/2)*(Exp[-I*mu*Pi/4]*BesselK[mu, beta*E^(Pi*I/4)*Sqrt[a]] + Exp[I*mu*Pi/4]*BesselK[mu, beta*E^(-Pi*I/4)*Sqrt[a]])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[mu] < 1",
+   "a > 0"
+  ],
+  "cite": "ET I 320(32)a",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_0^inf x^(mu-1) exp(-beta^2/(4x)) cos ax dx = 1/2^mu beta^mu a^(-mu/2)[exp(-i mu pi/4) K_mu(beta e^(pi i/4) sqrt a) + exp(i mu pi/4) K_mu(beta e^(-pi i/4) sqrt a)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.958.1",
+  "gr": "3.958.1",
+  "page": 553,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(-(a*x^2 + b*x + c))*Sin[p*x + q], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-(-1/(2*a))^n*Sqrt[Pi/a]*Exp[(b^2 - p^2)/(4*a) - c]*Sum[n!/((n - 2*k)!*k!)*a^k*Sum[Binomial[n - 2*k, j]*b^(n - 2*k - j)*p^j*Sin[p*b/(2*a) - q + Pi/2*j], {j, 0, n - 2*k}], {k, 0, Floor[n/2]}]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (37)(1b)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_-inf^inf x^n e^(-(ax^2+bx+c)) sin(px+q) dx = -(-1/(2a))^n sqrt(pi/a) exp((b^2-p^2)/(4a) - c) sum_{k=0}^{[n/2]} n!/((n-2k)!k!) a^k sum_{j=0}^{n-2k} C(n-2k,j) b^(n-2k-j) p^j sin(pb/(2a) - q + pi j/2)",
+  "note": "n = 0,1,2,... implied"
+ },
+ {
+  "id": "GR3.958.2",
+  "gr": "3.958.2",
+  "page": 554,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(-(a*x^2 + b*x + c))*Cos[p*x + q], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(-1/(2*a))^n*Sqrt[Pi/a]*Exp[(b^2 - p^2)/(4*a) - c]*Sum[n!/((n - 2*k)!*k!)*a^k*Sum[Binomial[n - 2*k, j]*p^j*Cos[p*b/(2*a) - q + Pi/2*j], {j, 0, n - 2*k}], {k, 0, Floor[n/2]}]",
+   "(-1/(2*a))^n*Sqrt[Pi/a]*Exp[(b^2 - p^2)/(4*a) - c]*Sum[n!/((n - 2*k)!*k!)*a^k*Sum[Binomial[n - 2*k, j]*b^(n - 2*k - j)*p^j*Cos[p*b/(2*a) - q + Pi/2*j], {j, 0, n - 2*k}], {k, 0, Floor[n/2]}]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (37)(1a)",
+  "edition_note": "",
+  "section": "3.94-3.97 Combinations involving trigonometric functions, exponentials, and powers",
+  "tex": "int_-inf^inf x^n e^(-(ax^2+bx+c)) cos(px+q) dx = (-1/(2a))^n sqrt(pi/a) exp((b^2-p^2)/(4a) - c) sum_k n!/((n-2k)!k!) a^k sum_j C(n-2k,j) p^j cos(pb/(2a) - q + pi j/2)",
+  "note": "printed on PDF p554 (item starts on 553). suspected misprint: the factor b^(n-2k-j) present in 3.958.1 is missing; corrected candidate second"
+ }
+]

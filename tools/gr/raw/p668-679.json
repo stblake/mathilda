@@ -1,0 +1,2525 @@
+[
+ {
+  "id": "GR5.111.1",
+  "gr": "5.111.1",
+  "page": 668,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[MatharK[k]*k^(2*p + 3), k]",
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (610.04)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "int K(k) k^(2p+3) dk = 1/(2p+3)^2 {4(p+1)^2 int K(k) k^(2p+1) dk + k^(2p+2)[E(k) - (2p+3) K(k) k'^2]}",
+  "note": "",
+  "reason": "reduction formula: integral on right-hand side"
+ },
+ {
+  "id": "GR5.111.2",
+  "gr": "5.111.2",
+  "page": 668,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[MatharE[k]*k^(2*p + 3), k]",
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (611.04)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "int E(k) k^(2p+3) dk = 1/(4p^2+16p+15){4(p+1)^2 int E(k) k^(2p+1) dk - E(k) k^(2p+2)[(2p+3)k'^2 - 2] - k^(2p+2) k'^2 K(k)}",
+  "note": "",
+  "reason": "reduction formula: integral on right-hand side"
+ },
+ {
+  "id": "GR5.112.1",
+  "gr": "5.112.1",
+  "page": 668,
+  "status": "ok",
+  "lhs": "Integrate[MatharK[k], k]",
+  "rhs": [
+   "Pi*k/2*(1 + Sum[((2*j)!)^2*k^(2*j)/((2*j + 1)*2^(4*j)*(j!)^4), {j, 1, Infinity}])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (610.00)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[MatharK[k], k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.112.2",
+  "gr": "5.112.2",
+  "page": 668,
+  "status": "ok",
+  "lhs": "Integrate[MatharE[k], k]",
+  "rhs": [
+   "Pi*k/2*(1 - Sum[((2*j)!)^2*k^(2*j)/((4*j^2 - 1)*2^(4*j)*(j!)^4), {j, 1, Infinity}])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (611.00)",
+  "edition_note": "6",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[MatharE[k], k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.112.3",
+  "gr": "5.112.3",
+  "page": 668,
+  "status": "ok",
+  "lhs": "Integrate[MatharK[k]*k, k]",
+  "rhs": [
+   "MatharE[k] - (1 - k^2)*MatharK[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (610.01)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[MatharK[k]*k, k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.112.4",
+  "gr": "5.112.4",
+  "page": 668,
+  "status": "ok",
+  "lhs": "Integrate[MatharE[k]*k, k]",
+  "rhs": [
+   "((1 + k^2)*MatharE[k] - (1 - k^2)*MatharK[k])/3"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (611.01)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[MatharE[k]*k, k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.112.5",
+  "gr": "5.112.5",
+  "page": 668,
+  "status": "ok",
+  "lhs": "Integrate[MatharK[k]*k^3, k]",
+  "rhs": [
+   "((4 + k^2)*MatharE[k] - (1 - k^2)*(4 + 3*k^2)*MatharK[k])/9"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (610.02)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[MatharK[k]*k^3, k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.112.6",
+  "gr": "5.112.6",
+  "page": 669,
+  "status": "ok",
+  "lhs": "Integrate[MatharE[k]*k^3, k]",
+  "rhs": [
+   "((4 + k^2 + 9*k^4)*MatharE[k] - (1 - k^2)*(4 + 3*k^2)*MatharK[k])/45"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY 611.02",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[MatharE[k]*k^3, k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.112.7",
+  "gr": "5.112.7",
+  "page": 669,
+  "status": "ok",
+  "lhs": "Integrate[MatharK[k]*k^5, k]",
+  "rhs": [
+   "((64 + 16*k^2 + 9*k^4)*MatharE[k] - (1 - k^2)*(64 + 48*k^2 + 45*k^4)*MatharK[k])/225"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (610.03)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[MatharK[k]*k^5, k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.112.8",
+  "gr": "5.112.8",
+  "page": 669,
+  "status": "ok",
+  "lhs": "Integrate[MatharE[k]*k^5, k]",
+  "rhs": [
+   "((64 + 16*k^2 + 9*k^4 + 225*k^6)*MatharE[k] - (1 - k^2)*(64 + 48*k^2 + 45*k^4)*MatharK[k])/1575"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (611.03)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[MatharE[k]*k^5, k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.112.9",
+  "gr": "5.112.9",
+  "page": 669,
+  "status": "ok",
+  "lhs": "Integrate[MatharK[k]/k^2, k]",
+  "rhs": [
+   "-MatharE[k]/k"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (612.05)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[MatharK[k]/k^2, k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.112.10",
+  "gr": "5.112.10",
+  "page": 669,
+  "status": "ok",
+  "lhs": "Integrate[MatharE[k]/k^2, k]",
+  "rhs": [
+   "((1 - k^2)*MatharK[k] - 2*MatharE[k])/k"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (612.02)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[MatharE[k]/k^2, k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.112.11",
+  "gr": "5.112.11",
+  "page": 669,
+  "status": "ok",
+  "lhs": "Integrate[MatharE[k]/(1 - k^2), k]",
+  "rhs": [
+   "k*MatharK[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (612.01)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[MatharE[k]/(1 - k^2), k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.112.12",
+  "gr": "5.112.12",
+  "page": 669,
+  "status": "ok",
+  "lhs": "Integrate[MatharE[k]/k^4, k]",
+  "rhs": [
+   "(2*(k^2 - 2)*MatharE[k] + (1 - k^2)*MatharK[k])/(9*k^3)"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (612.03)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[MatharE[k]/k^4, k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.112.13",
+  "gr": "5.112.13",
+  "page": 669,
+  "status": "ok",
+  "lhs": "Integrate[k*MatharE[k]/(1 - k^2), k]",
+  "rhs": [
+   "MatharK[k] - MatharE[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (612.04)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[k*MatharE[k]/(1 - k^2), k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.113.1",
+  "gr": "5.113.1",
+  "page": 669,
+  "status": "ok",
+  "lhs": "Integrate[(MatharK[k] - MatharE[k])/k, k]",
+  "rhs": [
+   "-MatharE[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (612.06)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[(MatharK[k] - MatharE[k])/k, k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.113.2",
+  "gr": "5.113.2",
+  "page": 669,
+  "status": "ok",
+  "lhs": "Integrate[(MatharE[k] - (1 - k^2)*MatharK[k])/k, k]",
+  "rhs": [
+   "2*MatharE[k] - (1 - k^2)*MatharK[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (612.09)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[(MatharE[k] - (1 - k^2)*MatharK[k])/k, k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.113.3",
+  "gr": "5.113.3",
+  "page": 669,
+  "status": "ok",
+  "lhs": "Integrate[((1 + k^2)*MatharK[k] - MatharE[k])/k, k]",
+  "rhs": [
+   "-(1 - k^2)*MatharK[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (612.12)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[((1 + k^2)*MatharK[k] - MatharE[k])/k, k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.113.4",
+  "gr": "5.113.4",
+  "page": 669,
+  "status": "ok",
+  "lhs": "Integrate[(MatharK[k] - MatharE[k])/k^2, k]",
+  "rhs": [
+   "(MatharE[k] - (1 - k^2)*MatharK[k])/k"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (612.07)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[(MatharK[k] - MatharE[k])/k^2, k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.113.5",
+  "gr": "5.113.5",
+  "page": 669,
+  "status": "ok",
+  "lhs": "Integrate[(MatharE[k] - (1 - k^2)*MatharK[k])/(k^2*(1 - k^2)), k]",
+  "rhs": [
+   "(MatharK[k] - MatharE[k])/k"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[(MatharE[k] - (1 - k^2)*MatharK[k])/(k^2*(1 - k^2)), k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.113.6",
+  "gr": "5.113.6",
+  "page": 669,
+  "status": "ok",
+  "lhs": "Integrate[((1 + k^2)*MatharE[k] - (1 - k^2)*MatharK[k])/(k*(1 - k^2)^2), k]",
+  "rhs": [
+   "MatharE[k]/(1 - k^2)"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (612.13)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[((1 + k^2)*MatharE[k] - (1 - k^2)*MatharK[k])/(k*(1 - k^2)^2), k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.114",
+  "gr": "5.114",
+  "page": 669,
+  "status": "ok",
+  "lhs": "Integrate[k*MatharK[k]/(MatharE[k] - (1 - k^2)*MatharK[k])^2, k]",
+  "rhs": [
+   "1/((1 - k^2)*MatharK[k] - MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (612.11)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[k*MatharK[k]/(MatharE[k] - (1 - k^2)*MatharK[k])^2, k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.115.1",
+  "gr": "5.115.1",
+  "page": 669,
+  "status": "ok",
+  "lhs": "Integrate[MatharPi[r^2, k]*k, k]",
+  "rhs": [
+   "(k^2 - r^2)*MatharPi[r^2, k] - MatharK[k] + MatharE[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (612.14)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[MatharPi[r^2, k]*k, k]",
+  "note": "Pi(pi/2, r^2, k) is the complete third-kind integral, MatharPi[r^2, k]"
+ },
+ {
+  "id": "GR5.115.2",
+  "gr": "5.115.2",
+  "page": 669,
+  "status": "ok",
+  "lhs": "Integrate[(MatharK[k] - MatharPi[r^2, k])*k, k]",
+  "rhs": [
+   "k^2*MatharK[k] - (k^2 - r^2)*MatharPi[r^2, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (612.15)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[(MatharK[k] - MatharPi[r^2, k])*k, k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.115.3",
+  "gr": "5.115.3",
+  "page": 669,
+  "status": "ok",
+  "lhs": "Integrate[(MatharE[k]/(1 - k^2) + MatharPi[r^2, k])*k, k]",
+  "rhs": [
+   "(k^2 - r^2)*MatharPi[r^2, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (612.16)",
+  "edition_note": "",
+  "section": "5.11 Complete elliptic integrals",
+  "tex": "Integrate[(MatharE[k]/(1 - k^2) + MatharPi[r^2, k])*k, k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.121",
+  "gr": "5.121",
+  "page": 670,
+  "status": "ok",
+  "lhs": "Integrate[MatharF2[t, k]/Sqrt[1 - k^2*Sin[t]^2], {t, 0, x}]",
+  "rhs": [
+   "MatharF2[x, k]^2/2"
+  ],
+  "conds": [
+   "0 < x <= Pi/2",
+   "0 < k < 1"
+  ],
+  "cite": "BY (630.01)",
+  "edition_note": "",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[MatharF2[t, k]/Sqrt[1 - k^2*Sin[t]^2], {t, 0, x}]",
+  "note": ""
+ },
+ {
+  "id": "GR5.122",
+  "gr": "5.122",
+  "page": 670,
+  "status": "ok",
+  "lhs": "Integrate[MatharE2[t, k]*Sqrt[1 - k^2*Sin[t]^2], {t, 0, x}]",
+  "rhs": [
+   "MatharE2[x, k]^2/2"
+  ],
+  "conds": [
+   "0 < x <= Pi/2",
+   "0 < k < 1"
+  ],
+  "cite": "BY (630.32)",
+  "edition_note": "11",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[MatharE2[t, k]*Sqrt[1 - k^2*Sin[t]^2], {t, 0, x}]",
+  "note": ""
+ },
+ {
+  "id": "GR5.123.1",
+  "gr": "5.123.1",
+  "page": 670,
+  "status": "ok",
+  "lhs": "Integrate[MatharF2[t, k]*Sin[t], {t, 0, x}]",
+  "rhs": [
+   "-Cos[x]*MatharF2[x, k] + ArcSin[k*Sin[x]]/k"
+  ],
+  "conds": [
+   "0 < x <= Pi/2",
+   "0 < k < 1"
+  ],
+  "cite": "BY (630.11)",
+  "edition_note": "",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[MatharF2[t, k]*Sin[t], {t, 0, x}]",
+  "note": ""
+ },
+ {
+  "id": "GR5.123.2",
+  "gr": "5.123.2",
+  "page": 670,
+  "status": "ok",
+  "lhs": "Integrate[MatharF2[t, k]*Cos[t], {t, 0, x}]",
+  "rhs": [
+   "Sin[x]*MatharF2[x, k] + ArcCosh[Sqrt[(1 - k^2*Sin[x]^2)/(1 - k^2)]]/k - ArcCosh[1/Sqrt[1 - k^2]]/k"
+  ],
+  "conds": [
+   "0 < x <= Pi/2",
+   "0 < k < 1"
+  ],
+  "cite": "BY (630.21)",
+  "edition_note": "",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[MatharF2[t, k]*Cos[t], {t, 0, x}]",
+  "note": ""
+ },
+ {
+  "id": "GR5.124.1",
+  "gr": "5.124.1",
+  "page": 670,
+  "status": "ok",
+  "lhs": "Integrate[MatharE2[t, k]*Sin[t], {t, 0, x}]",
+  "rhs": [
+   "-Cos[x]*MatharE2[x, k] + (k*Sin[x]*Sqrt[1 - k^2*Sin[x]^2] + ArcSin[k*Sin[x]])/(2*k)"
+  ],
+  "conds": [
+   "0 < x <= Pi/2",
+   "0 < k < 1"
+  ],
+  "cite": "BY (630.12)",
+  "edition_note": "",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[MatharE2[t, k]*Sin[t], {t, 0, x}]",
+  "note": ""
+ },
+ {
+  "id": "GR5.124.2",
+  "gr": "5.124.2",
+  "page": 670,
+  "status": "ok",
+  "lhs": "Integrate[MatharE2[t, k]*Cos[t], {t, 0, x}]",
+  "rhs": [
+   "Sin[x]*MatharE2[x, k] + (k*Cos[x]*Sqrt[1 - k^2*Sin[x]^2] - (1 - k^2)*ArcCosh[Sqrt[(1 - k^2*Sin[x]^2)/(1 - k^2)]] - k + (1 - k^2)*ArcCosh[1/Sqrt[1 - k^2]])/(2*k)"
+  ],
+  "conds": [
+   "0 < x <= Pi/2",
+   "0 < k < 1"
+  ],
+  "cite": "BY (630.22)",
+  "edition_note": "",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[MatharE2[t, k]*Cos[t], {t, 0, x}]",
+  "note": ""
+ },
+ {
+  "id": "GR5.124.3",
+  "gr": "5.124.3",
+  "page": 670,
+  "status": "ok",
+  "lhs": "Integrate[x*MatharE[x]/(((1 - k^2) + k^2*x^2)^2*Sqrt[a^2 - x^2]), {x, 0, a}]",
+  "rhs": [
+   "Pi/4*(a*Sqrt[1 - a^2]/((1 - k^2)*((1 - k^2) + k^2*a^2)) + a^2*MatharE2[ArcSin[a/Sqrt[(1 - k^2) + k^2*a^2]], k]/((1 - k^2)*((1 - k^2) + k^2*a^2)^(3/2)) + (1 - a^2)*MatharF2[ArcSin[a/Sqrt[(1 - k^2) + k^2*a^2]], k]/((1 - k^2) + k^2*a^2)^(3/2))"
+  ],
+  "conds": [
+   "0 < a < 1",
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[x*MatharE[x]/(((1 - k^2) + k^2*x^2)^2*Sqrt[a^2 - x^2]), {x, 0, a}]",
+  "note": "lambda = arcsin(a/sqrt(k'^2 + k^2 a^2)) substituted; bold E(x) is the complete integral of modulus x"
+ },
+ {
+  "id": "GR5.124.4",
+  "gr": "5.124.4",
+  "page": 670,
+  "status": "ok",
+  "lhs": "Integrate[x*MatharE[x]/((k^2 - x^2)^2*Sqrt[a^2 - x^2]), {x, 0, a}]",
+  "rhs": [
+   "Pi/4*(a*Sqrt[1 - a^2]/(k^2*(k^2 - a^2)) + MatharF2[ArcSin[a/k], k]/(k^2*Sqrt[k^2 - a^2]) + a^2*MatharE2[ArcSin[a/k], k]/(k^2*(k^2 - a^2)^(3/2)))"
+  ],
+  "conds": [
+   "0 < a < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[x*MatharE[x]/((k^2 - x^2)^2*Sqrt[a^2 - x^2]), {x, 0, a}]",
+  "note": "phi = arcsin(a/k) substituted"
+ },
+ {
+  "id": "GR5.124.5",
+  "gr": "5.124.5",
+  "page": 670,
+  "status": "ok",
+  "lhs": "Integrate[MatharE2[x, Sqrt[1 - k^2]]*Sin[x]*Cos[x]/((1 - (1 - k^2)*Cosh[v]^2*Sin[x]^2)*Sqrt[1 - (1 - k^2)*Sin[x]^2]), {x, 0, Pi/2}]",
+  "rhs": [
+   "1/((1 - k^2)*Sinh[v]*Cosh[v])*(MatharE1[k]*ArcTanh[Tanh[v]/k] - Pi*Tanh[v]/2 - Pi/2*(MatharF2[ArcSin[Tanh[v]/k], k] - MatharE2[ArcSin[Tanh[v]/k], k]))"
+  ],
+  "conds": [
+   "0 < Tanh[v] < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[MatharE2[x, Sqrt[1 - k^2]]*Sin[x]*Cos[x]/((1 - (1 - k^2)*Cosh[v]^2*Sin[x]^2)*Sqrt[1 - (1 - k^2)*Sin[x]^2]), {x, 0, Pi/2}]",
+  "note": "phi = arcsin(tanh v / k) substituted"
+ },
+ {
+  "id": "GR5.124.6",
+  "gr": "5.124.6",
+  "page": 671,
+  "status": "ok",
+  "lhs": "Integrate[MatharE2[x, k]*Sin[x]*Cos[x]/((1 - k^2*Cos[psi]^2*Sin[x]^2)*Sqrt[1 - k^2*Sin[x]^2]), {x, 0, Pi/2}]",
+  "rhs": [
+   "1/(k^2*Sin[psi]*Cos[psi])*(MatharE[k]*ArcTan[Tan[psi]/Sqrt[1 - k^2]] - Pi/2*MatharE2[ArcTan[Tan[psi]/k], k] + Pi/2*Tan[psi]/Sqrt[1 - k^2*Cos[psi]^2]*(1 - Sqrt[1 - k^2*Cos[psi]^2]))",
+   "1/(k^2*Sin[psi]*Cos[psi])*(MatharE[k]*ArcTan[Tan[psi]/Sqrt[1 - k^2]] - Pi/2*MatharE2[ArcTan[Tan[psi]/Sqrt[1 - k^2]], k] + Pi/2*Tan[psi]/Sqrt[1 - k^2*Cos[psi]^2]*(1 - Sqrt[1 - k^2*Cos[psi]^2]))"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "0 < psi < Pi/2"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[MatharE2[x, k]*Sin[x]*Cos[x]/((1 - k^2*Cos[psi]^2*Sin[x]^2)*Sqrt[1 - k^2*Sin[x]^2]), {x, 0, Pi/2}]",
+  "note": "beta = arctan(tan psi / k) substituted as printed; second rhs uses beta = arctan(tan psi / k') (the psi -> 0 limit of the integral, (E - pi/2)/(k^2 k'), requires beta'(0) = 1/k')"
+ },
+ {
+  "id": "GR5.124.7",
+  "gr": "5.124.7",
+  "page": 671,
+  "status": "ok",
+  "lhs": "Integrate[MatharE2[x, Sqrt[1 - k^2]]*Sin[x]*Cos[x]/((1 + (1 - k^2)*Sinh[mu]^2*Sin[x]^2)*Sqrt[1 - (1 - k^2)*Sin[x]^2]), {x, 0, Pi/2}]",
+  "rhs": [
+   "-1/((1 - k^2)*Sinh[mu]*Cosh[mu])*(MatharE1[k]*ArcTanh[k*Tanh[mu]] - Pi/2*(MatharF2[ArcSin[Tanh[mu]], k] - MatharE2[ArcSin[Tanh[mu]], k] + Tanh[mu]*Sqrt[1 + (1 - k^2)*Sinh[mu]^2]) - Pi/2*Coth[mu]*(1 - Sqrt[1 + (1 - k^2)*Sinh[mu]^2]))"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "mu > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[MatharE2[x, Sqrt[1 - k^2]]*Sin[x]*Cos[x]/((1 + (1 - k^2)*Sinh[mu]^2*Sin[x]^2)*Sqrt[1 - (1 - k^2)*Sin[x]^2]), {x, 0, Pi/2}]",
+  "note": "phi = arcsin(tanh mu) substituted; book condition 0 < tanh mu < 1 written mu > 0"
+ },
+ {
+  "id": "GR5.124.8",
+  "gr": "5.124.8",
+  "page": 671,
+  "status": "ok",
+  "lhs": "Integrate[MatharF2[x, Sqrt[1 - k^2]]*Sin[x]*Cos[x]/((1 + (1 - k^2)*Sinh[mu]^2*Sin[x]^2)*Sqrt[1 - (1 - k^2)*Sin[x]^2]), {x, 0, Pi/2}]",
+  "rhs": [
+   "-1/((1 - k^2)*Sinh[mu]*Cosh[mu])*(MatharK1[k]*ArcTanh[k*Tanh[mu]] - Pi/2*MatharF2[ArcSin[Tanh[mu]], k])"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "mu > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[MatharF2[x, Sqrt[1 - k^2]]*Sin[x]*Cos[x]/((1 + (1 - k^2)*Sinh[mu]^2*Sin[x]^2)*Sqrt[1 - (1 - k^2)*Sin[x]^2]), {x, 0, Pi/2}]",
+  "note": "phi = arcsin(tanh mu) substituted; book condition 0 < tanh mu < 1 written mu > 0"
+ },
+ {
+  "id": "GR5.124.9",
+  "gr": "5.124.9",
+  "page": 671,
+  "status": "ok",
+  "lhs": "Integrate[MatharF2[x, Sqrt[1 - k^2]]*Sin[x]*Cos[x]/((1 - (1 - k^2)*Cosh[nu]^2*Sin[x]^2)*Sqrt[1 - (1 - k^2)*Sin[x]^2]), {x, 0, Pi/2}]",
+  "rhs": [
+   "1/((1 - k^2)*Sinh[nu]*Cosh[nu])*(MatharK1[k]*ArcTanh[Tanh[nu]/k] - Pi/2*MatharF2[ArcSin[Tanh[nu]/k], k])"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "nu > 0",
+   "Tanh[nu] < k"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[MatharF2[x, Sqrt[1 - k^2]]*Sin[x]*Cos[x]/((1 - (1 - k^2)*Cosh[nu]^2*Sin[x]^2)*Sqrt[1 - (1 - k^2)*Sin[x]^2]), {x, 0, Pi/2}]",
+  "note": "phi = arcsin(tanh nu / k) substituted; book prints [0<k<1, 0<tanh nu<1]; tanh nu < k added (implied by phi real)"
+ },
+ {
+  "id": "GR5.124.10",
+  "gr": "5.124.10",
+  "page": 671,
+  "status": "ok",
+  "lhs": "Integrate[MatharF2[x, k]*Sin[x]*Cos[x]/((1 - k^2*Cos[psi]^2*Sin[x]^2)*Sqrt[1 - k^2*Sin[x]^2]), {x, 0, Pi/2}]",
+  "rhs": [
+   "1/(k^2*Sin[psi]*Cos[psi])*(MatharK1[k]*ArcTanh[Tan[psi]/Sqrt[1 - k^2]] - Pi/2*MatharF2[ArcTan[Tan[psi]/Sqrt[1 - k^2]], k])",
+   "1/(k^2*Sin[psi]*Cos[psi])*(MatharK[k]*ArcTan[Tan[psi]/Sqrt[1 - k^2]] - Pi/2*MatharF2[ArcTan[Tan[psi]/Sqrt[1 - k^2]], k])"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "0 < psi < 1"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[MatharF2[x, k]*Sin[x]*Cos[x]/((1 - k^2*Cos[psi]^2*Sin[x]^2)*Sqrt[1 - k^2*Sin[x]^2]), {x, 0, Pi/2}]",
+  "note": "beta = arctan(tan psi / k') substituted. As printed: K(k') arctanh(tan psi/k'); second rhs: K(k) arctan(tan psi/k') (bracket must vanish as psi -> pi/2, and psi -> 0 limit (K - pi/2)/(k^2 k') matches)"
+ },
+ {
+  "id": "GR5.124.11",
+  "gr": "5.124.11",
+  "page": 671,
+  "status": "ok",
+  "lhs": "Integrate[Log[(epsilon + x)/(epsilon - x)]*x^2/Sqrt[(x^2 - a^2)*(b^2 - x^2)], {x, a, b}]",
+  "rhs": [
+   "Pi/epsilon*(epsilon^2 - Sqrt[(epsilon^2 - a^2)*(epsilon^2 - b^2)]) + Pi*beta*(MatharF2[ArcSin[beta/epsilon], a/b] - MatharE2[ArcSin[beta/epsilon], a/b])",
+   "Pi/epsilon*(epsilon^2 - Sqrt[(epsilon^2 - a^2)*(epsilon^2 - b^2)]) + Pi*b*(MatharF2[ArcSin[b/epsilon], a/b] - MatharE2[ArcSin[b/epsilon], a/b])"
+  ],
+  "conds": [
+   "0 < a < b < epsilon"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[Log[(epsilon + x)/(epsilon - x)]*x^2/Sqrt[(x^2 - a^2)*(b^2 - x^2)], {x, a, b}]",
+  "note": "k = a/b, phi = arcsin(beta/epsilon) substituted; beta is undefined in the book (likely misprint for b); second rhs uses b"
+ },
+ {
+  "id": "GR5.125.1a",
+  "gr": "5.125.1a",
+  "page": 672,
+  "status": "ok",
+  "lhs": "Integrate[EllipticPi[alpha^2, t, k^2]*Sin[t], {t, 0, x}]",
+  "rhs": [
+   "-Cos[x]*EllipticPi[alpha^2, x, k^2] + ArcTan[Sqrt[(k^2 - alpha^2)/(1 - k^2*Sin[x]^2)]*Sin[x]]/Sqrt[k^2 - alpha^2]"
+  ],
+  "conds": [
+   "0 < alpha < k < 1",
+   "0 < x < Pi/2"
+  ],
+  "cite": "BY (630.13)",
+  "edition_note": "",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[EllipticPi[alpha^2, t, k^2]*Sin[t], {t, 0, x}]",
+  "note": "case alpha^2 < k^2"
+ },
+ {
+  "id": "GR5.125.1b",
+  "gr": "5.125.1b",
+  "page": 672,
+  "status": "ok",
+  "lhs": "Integrate[EllipticPi[alpha^2, t, k^2]*Sin[t], {t, 0, x}]",
+  "rhs": [
+   "-Cos[x]*EllipticPi[alpha^2, x, k^2] + ArcTanh[Sqrt[(alpha^2 - k^2)/(1 - k^2*Sin[x]^2)]*Sin[x]]/Sqrt[alpha^2 - k^2]"
+  ],
+  "conds": [
+   "0 < k < alpha < 1",
+   "0 < x < Pi/2"
+  ],
+  "cite": "BY (630.13)",
+  "edition_note": "",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[EllipticPi[alpha^2, t, k^2]*Sin[t], {t, 0, x}]",
+  "note": "case alpha^2 > k^2; alpha < 1 added to keep Pi off its pole"
+ },
+ {
+  "id": "GR5.125.2a",
+  "gr": "5.125.2a",
+  "page": 672,
+  "status": "ok",
+  "lhs": "Integrate[EllipticPi[alpha^2, t, k^2]*Cos[t], {t, 0, x}]",
+  "rhs": [
+   "Sin[x]*EllipticPi[alpha^2, x, k^2] - (ArcTan[(2*(1 - alpha^2)*(alpha^2 - k^2) + (1 - alpha^2*Sin[x]^2)*(2*k^2 - alpha^2 - alpha^2*k^2))/(2*alpha^2*Sqrt[(1 - alpha^2)*(alpha^2 - k^2)]*Cos[x]*Sqrt[1 - k^2*Sin[x]^2])]/(2*Sqrt[(1 - alpha^2)*(alpha^2 - k^2)])) + (ArcTan[(2*(1 - alpha^2)*(alpha^2 - k^2) + (1 - alpha^2*Sin[0]^2)*(2*k^2 - alpha^2 - alpha^2*k^2))/(2*alpha^2*Sqrt[(1 - alpha^2)*(alpha^2 - k^2)]*Cos[0]*Sqrt[1 - k^2*Sin[0]^2])]/(2*Sqrt[(1 - alpha^2)*(alpha^2 - k^2)]))"
+  ],
+  "conds": [
+   "0 < k < alpha < 1",
+   "0 < x < Pi/2"
+  ],
+  "cite": "BY (630.23)",
+  "edition_note": "",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[EllipticPi[alpha^2, t, k^2]*Cos[t], {t, 0, x}]",
+  "note": "f for (1-alpha^2)(alpha^2-k^2) > 0; f0 = f at x = 0 substituted"
+ },
+ {
+  "id": "GR5.125.2b",
+  "gr": "5.125.2b",
+  "page": 672,
+  "status": "ok",
+  "lhs": "Integrate[EllipticPi[alpha^2, t, k^2]*Cos[t], {t, 0, x}]",
+  "rhs": [
+   "Sin[x]*EllipticPi[alpha^2, x, k^2] - (Log[(2*(alpha^2 - 1)*(alpha^2 - k^2) + (1 - alpha^2*Sin[x]^2)*(alpha^2 + alpha^2*k^2 - 2*k^2))/(1 - alpha^2*Sin[x]^2) + 2*alpha^2*Sqrt[(alpha^2 - 1)*(alpha^2 - k^2)]*Cos[x]*Sqrt[1 - k^2*Sin[x]^2]/(1 - alpha^2*Sin[x]^2)]/(2*Sqrt[(alpha^2 - 1)*(alpha^2 - k^2)])) + (Log[(2*(alpha^2 - 1)*(alpha^2 - k^2) + (1 - alpha^2*Sin[0]^2)*(alpha^2 + alpha^2*k^2 - 2*k^2))/(1 - alpha^2*Sin[0]^2) + 2*alpha^2*Sqrt[(alpha^2 - 1)*(alpha^2 - k^2)]*Cos[0]*Sqrt[1 - k^2*Sin[0]^2]/(1 - alpha^2*Sin[0]^2)]/(2*Sqrt[(alpha^2 - 1)*(alpha^2 - k^2)]))"
+  ],
+  "conds": [
+   "0 < alpha < k < 1",
+   "0 < x < Pi/2"
+  ],
+  "cite": "BY (630.23)",
+  "edition_note": "",
+  "section": "5.12 Elliptic integrals",
+  "tex": "Integrate[EllipticPi[alpha^2, t, k^2]*Cos[t], {t, 0, x}]",
+  "note": "f for (1-alpha^2)(alpha^2-k^2) < 0 (branch alpha^2 < k^2 chosen; alpha^2 > 1 is the other); f0 = f at x = 0 substituted"
+ },
+ {
+  "id": "GR5.126",
+  "gr": "5.126",
+  "page": 672,
+  "status": "ok",
+  "lhs": "Integrate[MatharF2[x, k]*k, k]",
+  "rhs": [
+   "MatharE2[x, k] - (1 - k^2)*MatharF2[x, k] + (Sqrt[1 - k^2*Sin[x]^2] - 1)*Cot[x]"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "0 < x < Pi/2"
+  ],
+  "cite": "BY (613.01)",
+  "edition_note": "",
+  "section": "5.12 Elliptic integrals: integration with respect to the modulus",
+  "tex": "Integrate[MatharF2[x, k]*k, k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.127",
+  "gr": "5.127",
+  "page": 672,
+  "status": "ok",
+  "lhs": "Integrate[MatharE2[x, k]*k, k]",
+  "rhs": [
+   "((1 + k^2)*MatharE2[x, k] - (1 - k^2)*MatharF2[x, k] + (Sqrt[1 - k^2*Sin[x]^2] - 1)*Cot[x])/3"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "0 < x < Pi/2"
+  ],
+  "cite": "BY (613.02)",
+  "edition_note": "",
+  "section": "5.12 Elliptic integrals: integration with respect to the modulus",
+  "tex": "Integrate[MatharE2[x, k]*k, k]",
+  "note": ""
+ },
+ {
+  "id": "GR5.128",
+  "gr": "5.128",
+  "page": 672,
+  "status": "ok",
+  "lhs": "Integrate[EllipticPi[r^2, x, k^2]*k, k]",
+  "rhs": [
+   "(k^2 - r^2)*EllipticPi[r^2, x, k^2] - MatharF2[x, k] + MatharE2[x, k] + (Sqrt[1 - k^2*Sin[x]^2] - 1)*Cot[x]"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "0 < x < Pi/2",
+   "0 < r < 1"
+  ],
+  "cite": "BY (613.03)",
+  "edition_note": "",
+  "section": "5.12 Elliptic integrals: integration with respect to the modulus",
+  "tex": "Integrate[EllipticPi[r^2, x, k^2]*k, k]",
+  "note": "r < 1 added to keep Pi off its pole"
+ },
+ {
+  "id": "GR5.131.1",
+  "gr": "5.131.1",
+  "page": 672,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[JacobiSN[u, k^2]^m, u]",
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "SI 259, PE(567)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "int sn^m u du = 1/(m+1)[sn^(m+1) cn dn + (m+2)(1+k^2) int sn^(m+2) - (m+3)k^2 int sn^(m+4)]",
+  "note": "",
+  "reason": "reduction formula: integrals on right-hand side"
+ },
+ {
+  "id": "GR5.131.2",
+  "gr": "5.131.2",
+  "page": 673,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[JacobiCN[u, k^2]^m, u]",
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "PE (568)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "int cn^m u du = 1/((m+1)k'^2)[-cn^(m+1) sn dn + (m+2)(1-2k^2) int cn^(m+2) + (m+3)k^2 int cn^(m+4)]",
+  "note": "",
+  "reason": "reduction formula: integrals on right-hand side"
+ },
+ {
+  "id": "GR5.131.3",
+  "gr": "5.131.3",
+  "page": 673,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[JacobiDN[u, k^2]^m, u]",
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "PE (569)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "int dn^m u du = 1/((m+1)k'^2)[k^2 dn^(m+1) sn cn + (m+2)(2-k^2) int dn^(m+2) - (m+3) int dn^(m+4)]",
+  "note": "",
+  "reason": "reduction formula: integrals on right-hand side"
+ },
+ {
+  "id": "GR5.132.1a",
+  "gr": "5.132.1a",
+  "page": 673,
+  "status": "ok",
+  "lhs": "Integrate[1/JacobiSN[u, k^2], u]",
+  "rhs": [
+   "Log[JacobiSN[u, k^2]/(JacobiCN[u, k^2] + JacobiDN[u, k^2])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 87(164)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[1/JacobiSN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.132.1b",
+  "gr": "5.132.1b",
+  "page": 673,
+  "status": "ok",
+  "lhs": "Integrate[1/JacobiSN[u, k^2], u]",
+  "rhs": [
+   "Log[(JacobiDN[u, k^2] - JacobiCN[u, k^2])/JacobiSN[u, k^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "SI 266(4)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[1/JacobiSN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.132.2",
+  "gr": "5.132.2",
+  "page": 673,
+  "status": "ok",
+  "lhs": "Integrate[1/JacobiCN[u, k^2], u]",
+  "rhs": [
+   "Log[(Sqrt[1 - k^2]*JacobiSN[u, k^2] + JacobiDN[u, k^2])/JacobiCN[u, k^2]]/Sqrt[1 - k^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "SI 266(5)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[1/JacobiCN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.132.3a",
+  "gr": "5.132.3a",
+  "page": 673,
+  "status": "ok",
+  "lhs": "Integrate[1/JacobiDN[u, k^2], u]",
+  "rhs": [
+   "ArcTan[(Sqrt[1 - k^2]*JacobiSN[u, k^2] - JacobiCN[u, k^2])/(Sqrt[1 - k^2]*JacobiSN[u, k^2] + JacobiCN[u, k^2])]/Sqrt[1 - k^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 88(166)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[1/JacobiDN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.132.3b",
+  "gr": "5.132.3b",
+  "page": 673,
+  "status": "ok",
+  "lhs": "Integrate[1/JacobiDN[u, k^2], u]",
+  "rhs": [
+   "ArcCos[JacobiCN[u, k^2]/JacobiDN[u, k^2]]/Sqrt[1 - k^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "JA",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[1/JacobiDN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.132.3c",
+  "gr": "5.132.3c",
+  "page": 673,
+  "status": "ok",
+  "lhs": "Integrate[1/JacobiDN[u, k^2], u]",
+  "rhs": [
+   "Log[(JacobiCN[u, k^2] + I*Sqrt[1 - k^2]*JacobiSN[u, k^2])/JacobiDN[u, k^2]]/(I*Sqrt[1 - k^2])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "SI 266(6)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[1/JacobiDN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.132.3d",
+  "gr": "5.132.3d",
+  "page": 673,
+  "status": "ok",
+  "lhs": "Integrate[1/JacobiDN[u, k^2], u]",
+  "rhs": [
+   "ArcSin[Sqrt[1 - k^2]*JacobiSN[u, k^2]/JacobiDN[u, k^2]]/Sqrt[1 - k^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "JA",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[1/JacobiDN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.133.1a",
+  "gr": "5.133.1a",
+  "page": 673,
+  "status": "ok",
+  "lhs": "Integrate[JacobiSN[u, k^2], u]",
+  "rhs": [
+   "Log[JacobiDN[u, k^2] - k*JacobiCN[u, k^2]]/k"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 87(161)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiSN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.133.1b",
+  "gr": "5.133.1b",
+  "page": 673,
+  "status": "ok",
+  "lhs": "Integrate[JacobiSN[u, k^2], u]",
+  "rhs": [
+   "ArcCosh[(JacobiDN[u, k^2] - k^2*JacobiCN[u, k^2])/(1 - k^2)]/k"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "JA",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiSN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.133.1c",
+  "gr": "5.133.1c",
+  "page": 673,
+  "status": "ok",
+  "lhs": "Integrate[JacobiSN[u, k^2], u]",
+  "rhs": [
+   "ArcSinh[k*(JacobiDN[u, k^2] - JacobiCN[u, k^2])/(1 - k^2)]/k"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "JA",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiSN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.133.1d",
+  "gr": "5.133.1d",
+  "page": 673,
+  "status": "ok",
+  "lhs": "Integrate[JacobiSN[u, k^2], u]",
+  "rhs": [
+   "-Log[JacobiDN[u, k^2] + k*JacobiCN[u, k^2]]/k"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "SI 365(1)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiSN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.133.2a",
+  "gr": "5.133.2a",
+  "page": 673,
+  "status": "ok",
+  "lhs": "Integrate[JacobiCN[u, k^2], u]",
+  "rhs": [
+   "ArcCos[JacobiDN[u, k^2]]/k"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 87(162)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiCN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.133.2b",
+  "gr": "5.133.2b",
+  "page": 673,
+  "status": "ok",
+  "lhs": "Integrate[JacobiCN[u, k^2], u]",
+  "rhs": [
+   "I/k*Log[JacobiDN[u, k^2] - I*k*JacobiSN[u, k^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "SI 265(2)a, ZH 87(162)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiCN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.133.2c",
+  "gr": "5.133.2c",
+  "page": 673,
+  "status": "ok",
+  "lhs": "Integrate[JacobiCN[u, k^2], u]",
+  "rhs": [
+   "ArcSin[k*JacobiSN[u, k^2]]/k"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "JA",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiCN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.133.3a",
+  "gr": "5.133.3a",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiDN[u, k^2], u]",
+  "rhs": [
+   "ArcSin[JacobiSN[u, k^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 87(163)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiDN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.133.3b",
+  "gr": "5.133.3b",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiDN[u, k^2], u]",
+  "rhs": [
+   "JacobiAmplitude[u, k^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "SI 266(3), ZH 87(163)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiDN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.133.3c",
+  "gr": "5.133.3c",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiDN[u, k^2], u]",
+  "rhs": [
+   "I*Log[JacobiCN[u, k^2] - I*JacobiSN[u, k^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "SI 266(3), ZH 87(163)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiDN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.134.1",
+  "gr": "5.134.1",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiSN[u, k^2]^2, u]",
+  "rhs": [
+   "(u - MatharE2[JacobiAmplitude[u, k^2], k])/k^2"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "PE (564)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiSN[u, k^2]^2, u]",
+  "note": "E(am u, k) is the incomplete second-kind integral"
+ },
+ {
+  "id": "GR5.134.2",
+  "gr": "5.134.2",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiCN[u, k^2]^2, u]",
+  "rhs": [
+   "(MatharE2[JacobiAmplitude[u, k^2], k] - (1 - k^2)*u)/k^2"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "PE (565)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiCN[u, k^2]^2, u]",
+  "note": "E(am u, k) is the incomplete second-kind integral"
+ },
+ {
+  "id": "GR5.134.3",
+  "gr": "5.134.3",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiDN[u, k^2]^2, u]",
+  "rhs": [
+   "MatharE2[JacobiAmplitude[u, k^2], k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "PE (566)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiDN[u, k^2]^2, u]",
+  "note": "E(am u, k) is the incomplete second-kind integral"
+ },
+ {
+  "id": "GR5.135.1a",
+  "gr": "5.135.1a",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiSN[u, k^2]/JacobiCN[u, k^2], u]",
+  "rhs": [
+   "Log[(JacobiDN[u, k^2] + Sqrt[1 - k^2])/JacobiCN[u, k^2]]/Sqrt[1 - k^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "SI 266(7)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiSN[u, k^2]/JacobiCN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.135.1b",
+  "gr": "5.135.1b",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiSN[u, k^2]/JacobiCN[u, k^2], u]",
+  "rhs": [
+   "Log[(JacobiDN[u, k^2] + Sqrt[1 - k^2])/(JacobiDN[u, k^2] - Sqrt[1 - k^2])]/(2*Sqrt[1 - k^2])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 88(167)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiSN[u, k^2]/JacobiCN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.135.2a",
+  "gr": "5.135.2a",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiSN[u, k^2]/JacobiDN[u, k^2], u]",
+  "rhs": [
+   "I/(k*Sqrt[1 - k^2])*Log[(I*Sqrt[1 - k^2] - k*JacobiCN[u, k^2])/JacobiDN[u, k^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "SI 266(8)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiSN[u, k^2]/JacobiDN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.135.2b",
+  "gr": "5.135.2b",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiSN[u, k^2]/JacobiDN[u, k^2], u]",
+  "rhs": [
+   "ArcCot[k*JacobiCN[u, k^2]/Sqrt[1 - k^2]]/(k*Sqrt[1 - k^2])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiSN[u, k^2]/JacobiDN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.135.3a",
+  "gr": "5.135.3a",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiCN[u, k^2]/JacobiSN[u, k^2], u]",
+  "rhs": [
+   "Log[(1 - JacobiDN[u, k^2])/JacobiSN[u, k^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "SI 266(10)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiCN[u, k^2]/JacobiSN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.135.3b",
+  "gr": "5.135.3b",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiCN[u, k^2]/JacobiSN[u, k^2], u]",
+  "rhs": [
+   "Log[(1 - JacobiDN[u, k^2])/(1 + JacobiDN[u, k^2])]/2"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 88(168)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiCN[u, k^2]/JacobiSN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.135.4a",
+  "gr": "5.135.4a",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiCN[u, k^2]/JacobiDN[u, k^2], u]",
+  "rhs": [
+   "-Log[(1 - k*JacobiSN[u, k^2])/JacobiDN[u, k^2]]/k"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "SI 266(9)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiCN[u, k^2]/JacobiDN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.135.4b",
+  "gr": "5.135.4b",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiCN[u, k^2]/JacobiDN[u, k^2], u]",
+  "rhs": [
+   "Log[(1 + k*JacobiSN[u, k^2])/(1 - k*JacobiSN[u, k^2])]/(2*k)"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "SI 266(9)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiCN[u, k^2]/JacobiDN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.135.5a",
+  "gr": "5.135.5a",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiDN[u, k^2]/JacobiCN[u, k^2], u]",
+  "rhs": [
+   "Log[(1 + JacobiSN[u, k^2])/(1 - JacobiSN[u, k^2])]/2"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 88(172)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiDN[u, k^2]/JacobiCN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.135.5b",
+  "gr": "5.135.5b",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiDN[u, k^2]/JacobiCN[u, k^2], u]",
+  "rhs": [
+   "Log[(1 + JacobiSN[u, k^2])/JacobiCN[u, k^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "JA",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiDN[u, k^2]/JacobiCN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.135.6",
+  "gr": "5.135.6",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiDN[u, k^2]/JacobiSN[u, k^2], u]",
+  "rhs": [
+   "Log[(1 - JacobiCN[u, k^2])/(1 + JacobiCN[u, k^2])]/2"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 87(170)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiDN[u, k^2]/JacobiSN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.136.1",
+  "gr": "5.136.1",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiSN[u, k^2]*JacobiCN[u, k^2], u]",
+  "rhs": [
+   "-JacobiDN[u, k^2]/k^2"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiSN[u, k^2]*JacobiCN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.136.2",
+  "gr": "5.136.2",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiSN[u, k^2]*JacobiDN[u, k^2], u]",
+  "rhs": [
+   "-JacobiCN[u, k^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiSN[u, k^2]*JacobiDN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.136.3",
+  "gr": "5.136.3",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiCN[u, k^2]*JacobiDN[u, k^2], u]",
+  "rhs": [
+   "JacobiSN[u, k^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiCN[u, k^2]*JacobiDN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.137.1",
+  "gr": "5.137.1",
+  "page": 674,
+  "status": "ok",
+  "lhs": "Integrate[JacobiSN[u, k^2]/JacobiCN[u, k^2]^2, u]",
+  "rhs": [
+   "JacobiDN[u, k^2]/((1 - k^2)*JacobiCN[u, k^2])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 88(173)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiSN[u, k^2]/JacobiCN[u, k^2]^2, u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.137.2",
+  "gr": "5.137.2",
+  "page": 675,
+  "status": "ok",
+  "lhs": "Integrate[JacobiSN[u, k^2]/JacobiDN[u, k^2]^2, u]",
+  "rhs": [
+   "-JacobiCN[u, k^2]/((1 - k^2)*JacobiDN[u, k^2])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 88(175)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiSN[u, k^2]/JacobiDN[u, k^2]^2, u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.137.3",
+  "gr": "5.137.3",
+  "page": 675,
+  "status": "ok",
+  "lhs": "Integrate[JacobiCN[u, k^2]/JacobiSN[u, k^2]^2, u]",
+  "rhs": [
+   "-JacobiDN[u, k^2]/JacobiSN[u, k^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 88(174)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiCN[u, k^2]/JacobiSN[u, k^2]^2, u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.137.4",
+  "gr": "5.137.4",
+  "page": 675,
+  "status": "ok",
+  "lhs": "Integrate[JacobiCN[u, k^2]/JacobiDN[u, k^2]^2, u]",
+  "rhs": [
+   "JacobiSN[u, k^2]/JacobiDN[u, k^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 88(177)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiCN[u, k^2]/JacobiDN[u, k^2]^2, u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.137.5",
+  "gr": "5.137.5",
+  "page": 675,
+  "status": "ok",
+  "lhs": "Integrate[JacobiDN[u, k^2]/JacobiSN[u, k^2]^2, u]",
+  "rhs": [
+   "-JacobiCN[u, k^2]/JacobiSN[u, k^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 88(176)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiDN[u, k^2]/JacobiSN[u, k^2]^2, u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.137.6",
+  "gr": "5.137.6",
+  "page": 675,
+  "status": "ok",
+  "lhs": "Integrate[JacobiDN[u, k^2]/JacobiCN[u, k^2]^2, u]",
+  "rhs": [
+   "JacobiSN[u, k^2]/JacobiCN[u, k^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 88(178)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiDN[u, k^2]/JacobiCN[u, k^2]^2, u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.138.1",
+  "gr": "5.138.1",
+  "page": 675,
+  "status": "ok",
+  "lhs": "Integrate[JacobiCN[u, k^2]/(JacobiSN[u, k^2]*JacobiDN[u, k^2]), u]",
+  "rhs": [
+   "Log[JacobiSN[u, k^2]/JacobiDN[u, k^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 88(183)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiCN[u, k^2]/(JacobiSN[u, k^2]*JacobiDN[u, k^2]), u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.138.2",
+  "gr": "5.138.2",
+  "page": 675,
+  "status": "ok",
+  "lhs": "Integrate[JacobiSN[u, k^2]/(JacobiCN[u, k^2]*JacobiDN[u, k^2]), u]",
+  "rhs": [
+   "Log[JacobiDN[u, k^2]/JacobiCN[u, k^2]]/(1 - k^2)"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 88(182)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiSN[u, k^2]/(JacobiCN[u, k^2]*JacobiDN[u, k^2]), u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.138.3",
+  "gr": "5.138.3",
+  "page": 675,
+  "status": "ok",
+  "lhs": "Integrate[JacobiDN[u, k^2]/(JacobiSN[u, k^2]*JacobiCN[u, k^2]), u]",
+  "rhs": [
+   "Log[JacobiSN[u, k^2]/JacobiCN[u, k^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 88(184)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiDN[u, k^2]/(JacobiSN[u, k^2]*JacobiCN[u, k^2]), u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.139.1",
+  "gr": "5.139.1",
+  "page": 675,
+  "status": "ok",
+  "lhs": "Integrate[JacobiCN[u, k^2]*JacobiDN[u, k^2]/JacobiSN[u, k^2], u]",
+  "rhs": [
+   "Log[JacobiSN[u, k^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 88(179)",
+  "edition_note": "11",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiCN[u, k^2]*JacobiDN[u, k^2]/JacobiSN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.139.2",
+  "gr": "5.139.2",
+  "page": 675,
+  "status": "ok",
+  "lhs": "Integrate[JacobiSN[u, k^2]*JacobiDN[u, k^2]/JacobiCN[u, k^2], u]",
+  "rhs": [
+   "Log[1/JacobiCN[u, k^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 88(180)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiSN[u, k^2]*JacobiDN[u, k^2]/JacobiCN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.139.3",
+  "gr": "5.139.3",
+  "page": 675,
+  "status": "ok",
+  "lhs": "Integrate[JacobiSN[u, k^2]*JacobiCN[u, k^2]/JacobiDN[u, k^2], u]",
+  "rhs": [
+   "-Log[JacobiDN[u, k^2]]/k^2"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "H 88(181)",
+  "edition_note": "",
+  "section": "5.13 Jacobian elliptic functions",
+  "tex": "Integrate[JacobiSN[u, k^2]*JacobiCN[u, k^2]/JacobiDN[u, k^2], u]",
+  "note": ""
+ },
+ {
+  "id": "GR5.141.1",
+  "gr": "5.141.1",
+  "page": 675,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[WeierstrassP[u, {g2, g3}], u]",
+  "rhs": [
+   "-WeierstrassZeta[u, {g2, g3}]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "5.14 Weierstrass elliptic functions",
+  "tex": "Integrate[WeierstrassP[u, {g2, g3}], u]",
+  "note": "",
+  "reason": "Mathilda has no Weierstrass elliptic function heads (WeierstrassP/PPrime/Zeta/Sigma)"
+ },
+ {
+  "id": "GR5.141.2",
+  "gr": "5.141.2",
+  "page": 675,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[WeierstrassP[u, {g2, g3}]^2, u]",
+  "rhs": [
+   "WeierstrassPPrime[u, {g2, g3}]/6 + g2*u/12"
+  ],
+  "conds": [],
+  "cite": "H 120(192)",
+  "edition_note": "",
+  "section": "5.14 Weierstrass elliptic functions",
+  "tex": "Integrate[WeierstrassP[u, {g2, g3}]^2, u]",
+  "note": "",
+  "reason": "Mathilda has no Weierstrass elliptic function heads (WeierstrassP/PPrime/Zeta/Sigma)"
+ },
+ {
+  "id": "GR5.141.3",
+  "gr": "5.141.3",
+  "page": 675,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[WeierstrassP[u, {g2, g3}]^3, u]",
+  "rhs": [
+   "12*WeierstrassP[u, {g2, g3}]*WeierstrassPPrime[u, {g2, g3}]/120 - 3*g2*WeierstrassZeta[u, {g2, g3}]/20 + g3*u/10"
+  ],
+  "conds": [],
+  "cite": "H 120(193)",
+  "edition_note": "",
+  "section": "5.14 Weierstrass elliptic functions",
+  "tex": "Integrate[WeierstrassP[u, {g2, g3}]^3, u]",
+  "note": "wp'''(u) = 12 wp(u) wp'(u) substituted",
+  "reason": "Mathilda has no Weierstrass elliptic function heads (WeierstrassP/PPrime/Zeta/Sigma)"
+ },
+ {
+  "id": "GR5.141.4",
+  "gr": "5.141.4",
+  "page": 675,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[1/(WeierstrassP[u, {g2, g3}] - WeierstrassP[v, {g2, g3}]), u]",
+  "rhs": [
+   "(2*u*WeierstrassZeta[v, {g2, g3}] + Log[WeierstrassSigma[u - v, {g2, g3}]/WeierstrassSigma[u + v, {g2, g3}]])/WeierstrassPPrime[v, {g2, g3}]"
+  ],
+  "conds": [],
+  "cite": "H 120(194)",
+  "edition_note": "8",
+  "section": "5.14 Weierstrass elliptic functions",
+  "tex": "Integrate[1/(WeierstrassP[u, {g2, g3}] - WeierstrassP[v, {g2, g3}]), u]",
+  "note": "wp(v) != e1, e2, e3 (see 8.162)",
+  "reason": "Mathilda has no Weierstrass elliptic function heads (WeierstrassP/PPrime/Zeta/Sigma)"
+ },
+ {
+  "id": "GR5.141.5",
+  "gr": "5.141.5",
+  "page": 675,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[(alpha*WeierstrassP[u, {g2, g3}] + beta)/(gamma*WeierstrassP[u, {g2, g3}] - gamma*WeierstrassP[v, {g2, g3}]), u]",
+  "rhs": [
+   "alpha*u/gamma + (-alpha*gamma*WeierstrassP[v, {g2, g3}] - beta*gamma)/(gamma^2*WeierstrassPPrime[v, {g2, g3}])*(Log[WeierstrassSigma[u + v, {g2, g3}]/WeierstrassSigma[u - v, {g2, g3}]] - 2*u*WeierstrassZeta[v, {g2, g3}])"
+  ],
+  "conds": [],
+  "cite": "H 120(195)",
+  "edition_note": "",
+  "section": "5.14 Weierstrass elliptic functions",
+  "tex": "Integrate[(alpha*WeierstrassP[u, {g2, g3}] + beta)/(gamma*WeierstrassP[u, {g2, g3}] - gamma*WeierstrassP[v, {g2, g3}]), u]",
+  "note": "v = wp^(-1)(-delta/gamma) eliminated by substituting delta = -gamma wp(v)",
+  "reason": "Mathilda has no Weierstrass elliptic function heads (WeierstrassP/PPrime/Zeta/Sigma)"
+ },
+ {
+  "id": "GR5.211",
+  "gr": "5.211",
+  "page": 676,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-beta*t]*ExpIntegralEi[-gamma*t], {t, x, Infinity}]",
+  "rhs": [
+   "(1/beta + 1/gamma)*ExpIntegralEi[-(beta + gamma)*x] - x*ExpIntegralEi[-beta*x]*ExpIntegralEi[-gamma*x] - E^(-beta*x)/beta*ExpIntegralEi[-gamma*x] - E^(-gamma*x)/gamma*ExpIntegralEi[-beta*x]"
+  ],
+  "conds": [
+   "Re[beta + gamma] > 0",
+   "x > 0"
+  ],
+  "cite": "NT 53(2)",
+  "edition_note": "",
+  "section": "5.21 The exponential integral function",
+  "tex": "Integrate[ExpIntegralEi[-beta*t]*ExpIntegralEi[-gamma*t], {t, x, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR5.221.1",
+  "gr": "5.221.1",
+  "page": 676,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[ExpIntegralEi[-a*(t + b)]/t^(n + 1), {t, x, Infinity}]",
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "NT 52(3)",
+  "edition_note": "",
+  "section": "5.22 Combinations of the exponential integral function and powers",
+  "tex": "int_x^inf Ei[-a(x+b)]/x^(n+1) dx = [1/x^n - (-1)^n/b^n] Ei[-a(x+b)]/n + e^(-ab)/n sum_{k=0}^{n-1} (-1)^(n-k-1)/b^(n-k) int_x^inf e^(-ax)/x^(k+1) dx",
+  "note": "",
+  "reason": "value contains integrals int_x^inf e^(-ax)/x^(k+1) dx"
+ },
+ {
+  "id": "GR5.221.2",
+  "gr": "5.221.2",
+  "page": 676,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-a*(t + b)]/t^2, {t, x, Infinity}]",
+  "rhs": [
+   "(1/x + 1/b)*ExpIntegralEi[-a*(x + b)] - E^(-a*b)*ExpIntegralEi[-a*x]/b"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "x > 0"
+  ],
+  "cite": "NT 52(4)",
+  "edition_note": "",
+  "section": "5.22 Combinations of the exponential integral function and powers",
+  "tex": "Integrate[ExpIntegralEi[-a*(t + b)]/t^2, {t, x, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR5.221.3",
+  "gr": "5.221.3",
+  "page": 676,
+  "status": "ok",
+  "lhs": "Integrate[x*ExpIntegralEi[-a*x], x]",
+  "rhs": [
+   "x^2/2*ExpIntegralEi[-a*x] + E^(-a*x)/(2*a^2) + x*E^(-a*x)/(2*a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "5.22 Combinations of the exponential integral function and powers",
+  "tex": "Integrate[x*ExpIntegralEi[-a*x], x]",
+  "note": ""
+ },
+ {
+  "id": "GR5.221.4",
+  "gr": "5.221.4",
+  "page": 676,
+  "status": "ok",
+  "lhs": "Integrate[x^n*ExpIntegralEi[-a*x], x]",
+  "rhs": [
+   "x^(n + 1)/(n + 1)*ExpIntegralEi[-a*x] + n!*E^(-a*x)/((n + 1)*a^(n + 1))*Sum[(a*x)^k/k!, {k, 0, Infinity}]",
+   "x^(n + 1)/(n + 1)*ExpIntegralEi[-a*x] + n!*E^(-a*x)/((n + 1)*a^(n + 1))*Sum[(a*x)^k/k!, {k, 0, n}]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "5.22 Combinations of the exponential integral function and powers",
+  "tex": "Integrate[x^n*ExpIntegralEi[-a*x], x]",
+  "note": "book sums k = 0..Infinity (makes the term constant); second rhs sums k = 0..n"
+ },
+ {
+  "id": "GR5.221.5",
+  "gr": "5.221.5",
+  "page": 676,
+  "status": "ok",
+  "lhs": "Integrate[x*ExpIntegralEi[-a*x]*E^(-b*x), x]",
+  "rhs": [
+   "ExpIntegralEi[-(a + b)*x]/b^2 - ExpIntegralEi[-a*x]*E^(-b*x)/b^2 - x/b*ExpIntegralEi[-a*x]*E^(-b*x) - E^(-(a + b)*x)/(b*(a + b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "5.22 Combinations of the exponential integral function and powers",
+  "tex": "Integrate[x*ExpIntegralEi[-a*x]*E^(-b*x), x]",
+  "note": ""
+ },
+ {
+  "id": "GR5.221.6",
+  "gr": "5.221.6",
+  "page": 676,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-a*x]^2, x]",
+  "rhs": [
+   "x*ExpIntegralEi[-a*x]^2 + 2/a*(ExpIntegralEi[-a*x]*E^(-a*x) - ExpIntegralEi[-2*a*x])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "5.22 Combinations of the exponential integral function and powers",
+  "tex": "Integrate[ExpIntegralEi[-a*x]^2, x]",
+  "note": ""
+ },
+ {
+  "id": "GR5.221.7",
+  "gr": "5.221.7",
+  "page": 676,
+  "status": "ok",
+  "lhs": "Integrate[x*ExpIntegralEi[-a*x]^2, x]",
+  "rhs": [
+   "x^2/2*ExpIntegralEi[-a*x]^2 + (1/a^2 + x/a)*ExpIntegralEi[-a*x]*E^(-a*x) - ExpIntegralEi[-2*a*x]/a^2 + E^(-2*a*x)/a^2",
+   "x^2/2*ExpIntegralEi[-a*x]^2 + (1/a^2 + x/a)*ExpIntegralEi[-a*x]*E^(-a*x) - ExpIntegralEi[-2*a*x]/a^2 + E^(-2*a*x)/(2*a^2)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "5.22 Combinations of the exponential integral function and powers",
+  "tex": "Integrate[x*ExpIntegralEi[-a*x]^2, x]",
+  "note": "last term printed e^(-2ax)/a^2; differentiation requires e^(-2ax)/(2a^2) (second rhs)"
+ },
+ {
+  "id": "GR5.221.8",
+  "gr": "5.221.8",
+  "page": 676,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-a*x], {x, 0, u}]",
+  "rhs": [
+   "u*ExpIntegralEi[-a*u] + (E^(-a*u) - 1)/a"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "5.22 Combinations of the exponential integral function and powers",
+  "tex": "Integrate[ExpIntegralEi[-a*x], {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR5.221.9",
+  "gr": "5.221.9",
+  "page": 676,
+  "status": "ok",
+  "lhs": "Integrate[x*ExpIntegralEi[-x/a]*ExpIntegralEi[-x/b], {x, 0, Infinity}]",
+  "rhs": [
+   "(a^2 + b^2)/2*Log[a + b] - a^2/2*Log[a] - b^2/2*Log[b] - a*b/2"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "5.22 Combinations of the exponential integral function and powers",
+  "tex": "Integrate[x*ExpIntegralEi[-x/a]*ExpIntegralEi[-x/b], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR5.221.10",
+  "gr": "5.221.10",
+  "page": 677,
+  "status": "ok",
+  "lhs": "Integrate[x^2*ExpIntegralEi[-x/a]*ExpIntegralEi[-x/b], {x, 0, Infinity}]",
+  "rhs": [
+   "2/3*((a^3 + b^3)*Log[a + b] - a^3*Log[a] - b^3*Log[b] - a*b/(a + b)*(a^2 - a*b + b^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "5.22 Combinations of the exponential integral function and powers",
+  "tex": "Integrate[x^2*ExpIntegralEi[-x/a]*ExpIntegralEi[-x/b], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR5.231.1",
+  "gr": "5.231.1",
+  "page": 677,
+  "status": "ok",
+  "lhs": "Integrate[E^t*ExpIntegralEi[-t], {t, 0, x}]",
+  "rhs": [
+   "-Log[x] - EulerGamma + E^x*ExpIntegralEi[-x]"
+  ],
+  "conds": [
+   "x > 0"
+  ],
+  "cite": "ET II 308(11)",
+  "edition_note": "",
+  "section": "5.23 Combinations of the exponential integral and the exponential",
+  "tex": "Integrate[E^t*ExpIntegralEi[-t], {t, 0, x}]",
+  "note": ""
+ },
+ {
+  "id": "GR5.231.2",
+  "gr": "5.231.2",
+  "page": 677,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*t)*ExpIntegralEi[-alpha*t], {t, 0, x}]",
+  "rhs": [
+   "-1/beta*(E^(-beta*x)*ExpIntegralEi[-alpha*x] + Log[1 + beta/alpha] - ExpIntegralEi[-(alpha + beta)*x])"
+  ],
+  "conds": [
+   "x > 0",
+   "alpha > 0",
+   "beta > 0"
+  ],
+  "cite": "ET II 308(12)",
+  "edition_note": "",
+  "section": "5.23 Combinations of the exponential integral and the exponential",
+  "tex": "Integrate[E^(-beta*t)*ExpIntegralEi[-alpha*t], {t, 0, x}]",
+  "note": "book labels this item '1.' a second time; numbered 2 here. alpha, beta > 0 assumed (no conditions printed)"
+ },
+ {
+  "id": "GR5.31.1",
+  "gr": "5.31.1",
+  "page": 677,
+  "status": "ok",
+  "lhs": "Integrate[Cos[alpha*x]*CosIntegral[beta*x], x]",
+  "rhs": [
+   "Sin[alpha*x]*CosIntegral[beta*x]/alpha - ((SinIntegral[alpha*x + beta*x] - Pi/2) + (SinIntegral[alpha*x - beta*x] - Pi/2))/(2*alpha)"
+  ],
+  "conds": [
+   "alpha > 0",
+   "beta > 0"
+  ],
+  "cite": "NT 49(1)",
+  "edition_note": "",
+  "section": "5.3 The Sine Integral and the Cosine Integral",
+  "tex": "Integrate[Cos[alpha*x]*CosIntegral[beta*x], x]",
+  "note": ""
+ },
+ {
+  "id": "GR5.31.2",
+  "gr": "5.31.2",
+  "page": 677,
+  "status": "ok",
+  "lhs": "Integrate[Sin[alpha*x]*CosIntegral[beta*x], x]",
+  "rhs": [
+   "-Cos[alpha*x]*CosIntegral[beta*x]/alpha + (CosIntegral[alpha*x + beta*x] + CosIntegral[alpha*x - beta*x])/(2*alpha)"
+  ],
+  "conds": [
+   "alpha > 0",
+   "beta > 0"
+  ],
+  "cite": "NT 49(2)",
+  "edition_note": "",
+  "section": "5.3 The Sine Integral and the Cosine Integral",
+  "tex": "Integrate[Sin[alpha*x]*CosIntegral[beta*x], x]",
+  "note": ""
+ },
+ {
+  "id": "GR5.32.1",
+  "gr": "5.32.1",
+  "page": 677,
+  "status": "ok",
+  "lhs": "Integrate[Cos[alpha*x]*(SinIntegral[beta*x] - Pi/2), x]",
+  "rhs": [
+   "Sin[alpha*x]*(SinIntegral[beta*x] - Pi/2)/alpha + (CosIntegral[alpha*x + beta*x] - CosIntegral[alpha*x - beta*x])/(2*alpha)"
+  ],
+  "conds": [
+   "alpha > 0",
+   "beta > 0"
+  ],
+  "cite": "NT 49(3)",
+  "edition_note": "",
+  "section": "5.3 The Sine Integral and the Cosine Integral",
+  "tex": "Integrate[Cos[alpha*x]*(SinIntegral[beta*x] - Pi/2), x]",
+  "note": ""
+ },
+ {
+  "id": "GR5.32.2",
+  "gr": "5.32.2",
+  "page": 677,
+  "status": "ok",
+  "lhs": "Integrate[Sin[alpha*x]*(SinIntegral[beta*x] - Pi/2), x]",
+  "rhs": [
+   "-Cos[alpha*x]*(SinIntegral[beta*x] - Pi/2)/alpha + ((SinIntegral[alpha*x + beta*x] - Pi/2) - (SinIntegral[alpha*x - beta*x] - Pi/2))/(2*alpha)"
+  ],
+  "conds": [
+   "alpha > 0",
+   "beta > 0"
+  ],
+  "cite": "NT 49(4)",
+  "edition_note": "",
+  "section": "5.3 The Sine Integral and the Cosine Integral",
+  "tex": "Integrate[Sin[alpha*x]*(SinIntegral[beta*x] - Pi/2), x]",
+  "note": ""
+ },
+ {
+  "id": "GR5.33.1",
+  "gr": "5.33.1",
+  "page": 677,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[alpha*x]*CosIntegral[beta*x], x]",
+  "rhs": [
+   "x*CosIntegral[alpha*x]*CosIntegral[beta*x] + ((SinIntegral[alpha*x + beta*x] - Pi/2) + (SinIntegral[alpha*x - beta*x] - Pi/2))/(2*alpha) + ((SinIntegral[alpha*x + beta*x] - Pi/2) + (SinIntegral[beta*x - alpha*x] - Pi/2))/(2*beta) - Sin[alpha*x]*CosIntegral[beta*x]/alpha - Sin[beta*x]*CosIntegral[alpha*x]/beta"
+  ],
+  "conds": [
+   "alpha > 0",
+   "beta > 0"
+  ],
+  "cite": "NT 53(5)",
+  "edition_note": "",
+  "section": "5.3 The Sine Integral and the Cosine Integral",
+  "tex": "Integrate[CosIntegral[alpha*x]*CosIntegral[beta*x], x]",
+  "note": ""
+ },
+ {
+  "id": "GR5.33.2",
+  "gr": "5.33.2",
+  "page": 677,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[alpha*x] - Pi/2)*(SinIntegral[beta*x] - Pi/2), x]",
+  "rhs": [
+   "x*(SinIntegral[alpha*x] - Pi/2)*(SinIntegral[beta*x] - Pi/2) - ((SinIntegral[alpha*x + beta*x] - Pi/2) + (SinIntegral[alpha*x - beta*x] - Pi/2))/(2*beta) - ((SinIntegral[alpha*x + beta*x] - Pi/2) + (SinIntegral[beta*x + alpha*x] - Pi/2))/(2*alpha) + Cos[alpha*x]*(SinIntegral[beta*x] - Pi/2)/alpha + Cos[beta*x]*(SinIntegral[alpha*x] - Pi/2)/beta",
+   "x*(SinIntegral[alpha*x] - Pi/2)*(SinIntegral[beta*x] - Pi/2) - ((SinIntegral[alpha*x + beta*x] - Pi/2) + (SinIntegral[alpha*x - beta*x] - Pi/2))/(2*beta) - ((SinIntegral[alpha*x + beta*x] - Pi/2) + (SinIntegral[beta*x - alpha*x] - Pi/2))/(2*alpha) + Cos[alpha*x]*(SinIntegral[beta*x] - Pi/2)/alpha + Cos[beta*x]*(SinIntegral[alpha*x] - Pi/2)/beta"
+  ],
+  "conds": [
+   "alpha > 0",
+   "beta > 0"
+  ],
+  "cite": "NT 54(6)",
+  "edition_note": "",
+  "section": "5.3 The Sine Integral and the Cosine Integral",
+  "tex": "Integrate[(SinIntegral[alpha*x] - Pi/2)*(SinIntegral[beta*x] - Pi/2), x]",
+  "note": "book prints si(beta x + alpha x) in the 1/(2 alpha) term; second rhs uses si(beta x - alpha x) (by parts from 5.32.2)"
+ },
+ {
+  "id": "GR5.33.3",
+  "gr": "5.33.3",
+  "page": 677,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[alpha*x] - Pi/2)*CosIntegral[beta*x], x]",
+  "rhs": [
+   "x*(SinIntegral[alpha*x] - Pi/2)*CosIntegral[beta*x] + Cos[alpha*x]*CosIntegral[beta*x]/alpha - Sin[beta*x]*(SinIntegral[alpha*x] - Pi/2)/beta - (1/(2*alpha) + 1/(2*beta))*CosIntegral[alpha*x + beta*x] - (1/(2*alpha) - 1/(2*beta))*CosIntegral[alpha*x - beta*x]"
+  ],
+  "conds": [
+   "alpha > 0",
+   "beta > 0"
+  ],
+  "cite": "NT 54(10)",
+  "edition_note": "",
+  "section": "5.3 The Sine Integral and the Cosine Integral",
+  "tex": "Integrate[(SinIntegral[alpha*x] - Pi/2)*CosIntegral[beta*x], x]",
+  "note": ""
+ },
+ {
+  "id": "GR5.34.1",
+  "gr": "5.34.1",
+  "page": 678,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[a*(t + b)] - Pi/2)/t^2, {t, x, Infinity}]",
+  "rhs": [
+   "(1/x + 1/b)*(SinIntegral[a*(x + b)] - Pi/2) - (Cos[a*b]*(SinIntegral[a*x] - Pi/2) + Sin[a*b]*CosIntegral[a*x])/b"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "x > 0"
+  ],
+  "cite": "NT 52(6)",
+  "edition_note": "",
+  "section": "5.3 The Sine Integral and the Cosine Integral",
+  "tex": "Integrate[(SinIntegral[a*(t + b)] - Pi/2)/t^2, {t, x, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR5.34.2",
+  "gr": "5.34.2",
+  "page": 678,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[a*(t + b)]/t^2, {t, x, Infinity}]",
+  "rhs": [
+   "(1/x + 1/b)*CosIntegral[a*(x + b)] + (Sin[a*b]*(SinIntegral[a*x] - Pi/2) - Cos[a*b]*CosIntegral[a*x])/b"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "x > 0"
+  ],
+  "cite": "NT 52(5)",
+  "edition_note": "",
+  "section": "5.3 The Sine Integral and the Cosine Integral",
+  "tex": "Integrate[CosIntegral[a*(t + b)]/t^2, {t, x, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR5.41",
+  "gr": "5.41",
+  "page": 678,
+  "status": "ok",
+  "lhs": "Integrate[Erf[alpha*x], x]",
+  "rhs": [
+   "x*Erf[alpha*x] + E^(-alpha^2*x^2)/(alpha*Sqrt[Pi])"
+  ],
+  "conds": [
+   "alpha > 0"
+  ],
+  "cite": "NT 12(20)a",
+  "edition_note": "11",
+  "section": "5.4 The Probability Integral and Fresnel Integrals",
+  "tex": "Integrate[Erf[alpha*x], x]",
+  "note": ""
+ },
+ {
+  "id": "GR5.42",
+  "gr": "5.42",
+  "page": 678,
+  "status": "ok",
+  "lhs": "Integrate[FresnelS[Sqrt[2/Pi]*alpha*x], x]",
+  "rhs": [
+   "x*FresnelS[Sqrt[2/Pi]*alpha*x] + Cos[alpha^2*x^2]/(alpha*Sqrt[2*Pi])",
+   "x*FresnelS[Sqrt[2/Pi]*alpha*x] + Cos[alpha*x^2]^2/(alpha*Sqrt[2*Pi])"
+  ],
+  "conds": [
+   "alpha > 0"
+  ],
+  "cite": "NT 12(22)a",
+  "edition_note": "",
+  "section": "5.4 The Probability Integral and Fresnel Integrals",
+  "tex": "Integrate[FresnelS[Sqrt[2/Pi]*alpha*x], x]",
+  "note": "superscript placement in 'cos^2 alpha x^2' ambiguous; first reading cos(alpha^2 x^2)"
+ },
+ {
+  "id": "GR5.43",
+  "gr": "5.43",
+  "page": 678,
+  "status": "ok",
+  "lhs": "Integrate[FresnelC[Sqrt[2/Pi]*alpha*x], x]",
+  "rhs": [
+   "x*FresnelC[Sqrt[2/Pi]*alpha*x] - Sin[alpha^2*x^2]/(alpha*Sqrt[2*Pi])",
+   "x*FresnelC[Sqrt[2/Pi]*alpha*x] - Sin[alpha*x^2]^2/(alpha*Sqrt[2*Pi])"
+  ],
+  "conds": [
+   "alpha > 0"
+  ],
+  "cite": "NT 12(21)a",
+  "edition_note": "",
+  "section": "5.4 The Probability Integral and Fresnel Integrals",
+  "tex": "Integrate[FresnelC[Sqrt[2/Pi]*alpha*x], x]",
+  "note": "superscript placement in 'sin^2 alpha x^2' ambiguous; first reading sin(alpha^2 x^2)"
+ },
+ {
+  "id": "GR5.51",
+  "gr": "5.51",
+  "page": 678,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[p, x], x]",
+  "rhs": [
+   "2*Sum[BesselJ[p + 2*k + 1, x], {k, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "JA, MO 30",
+  "edition_note": "",
+  "section": "5.5 Bessel Functions",
+  "tex": "Integrate[BesselJ[p, x], x]",
+  "note": ""
+ },
+ {
+  "id": "GR5.52.1",
+  "gr": "5.52.1",
+  "page": 678,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[x^(p + 1)*BesselJ[p, x], x]",
+  "rhs": [
+   "x^(p + 1)*BesselJ[p + 1, x]"
+  ],
+  "conds": [],
+  "cite": "WA 132(1)",
+  "edition_note": "",
+  "section": "5.5 Bessel Functions",
+  "tex": "Integrate[x^(p + 1)*BesselJ[p, x], x]",
+  "note": "Z, 3 are arbitrary cylinder functions (any of J, N, H1, H2); lhs/rhs instantiated with Z = BesselJ, 3 = BesselY",
+  "reason": "generic cylinder function Z_p"
+ },
+ {
+  "id": "GR5.52.2",
+  "gr": "5.52.2",
+  "page": 678,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[x^(-p)*BesselJ[p + 1, x], x]",
+  "rhs": [
+   "-x^(-p)*BesselJ[p, x]"
+  ],
+  "conds": [],
+  "cite": "WA 132(2)",
+  "edition_note": "11",
+  "section": "5.5 Bessel Functions",
+  "tex": "Integrate[x^(-p)*BesselJ[p + 1, x], x]",
+  "note": "Z, 3 are arbitrary cylinder functions (any of J, N, H1, H2); lhs/rhs instantiated with Z = BesselJ, 3 = BesselY",
+  "reason": "generic cylinder function Z_p"
+ },
+ {
+  "id": "GR5.53a",
+  "gr": "5.53a",
+  "page": 678,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[((alpha^2 - beta^2)*x - (p^2 - q^2)/x)*BesselJ[p, alpha*x]*BesselY[q, beta*x], x]",
+  "rhs": [
+   "alpha*x*BesselJ[p + 1, alpha*x]*BesselY[q, beta*x] - beta*x*BesselJ[p, alpha*x]*BesselY[q + 1, beta*x] - (p - q)*BesselJ[p, alpha*x]*BesselY[q, beta*x]"
+  ],
+  "conds": [],
+  "cite": "JA, MO 30, WA 134(7)",
+  "edition_note": "10",
+  "section": "5.5 Bessel Functions",
+  "tex": "Integrate[((alpha^2 - beta^2)*x - (p^2 - q^2)/x)*BesselJ[p, alpha*x]*BesselY[q, beta*x], x]",
+  "note": "Z, 3 are arbitrary cylinder functions (any of J, N, H1, H2); lhs/rhs instantiated with Z = BesselJ, 3 = BesselY",
+  "reason": "generic cylinder function Z_p"
+ },
+ {
+  "id": "GR5.53b",
+  "gr": "5.53b",
+  "page": 678,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[((alpha^2 - beta^2)*x - (p^2 - q^2)/x)*BesselJ[p, alpha*x]*BesselY[q, beta*x], x]",
+  "rhs": [
+   "beta*x*BesselJ[p, alpha*x]*BesselY[q - 1, beta*x] - alpha*x*BesselJ[p - 1, alpha*x]*BesselY[q, beta*x] + (p - q)*BesselJ[p, alpha*x]*BesselY[q, beta*x]"
+  ],
+  "conds": [],
+  "cite": "JA, MO 30, WA 134(7)",
+  "edition_note": "10",
+  "section": "5.5 Bessel Functions",
+  "tex": "Integrate[((alpha^2 - beta^2)*x - (p^2 - q^2)/x)*BesselJ[p, alpha*x]*BesselY[q, beta*x], x]",
+  "note": "Z, 3 are arbitrary cylinder functions (any of J, N, H1, H2); lhs/rhs instantiated with Z = BesselJ, 3 = BesselY",
+  "reason": "generic cylinder function Z_p"
+ },
+ {
+  "id": "GR5.54.1a",
+  "gr": "5.54.1a",
+  "page": 678,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[x*BesselJ[p, alpha*x]*BesselY[p, beta*x], x]",
+  "rhs": [
+   "(alpha*x*BesselJ[p + 1, alpha*x]*BesselY[p, beta*x] - beta*x*BesselJ[p, alpha*x]*BesselY[p + 1, beta*x])/(alpha^2 - beta^2)"
+  ],
+  "conds": [],
+  "cite": "WA 134(8)",
+  "edition_note": "10",
+  "section": "5.5 Bessel Functions",
+  "tex": "Integrate[x*BesselJ[p, alpha*x]*BesselY[p, beta*x], x]",
+  "note": "Z, 3 are arbitrary cylinder functions (any of J, N, H1, H2); lhs/rhs instantiated with Z = BesselJ, 3 = BesselY",
+  "reason": "generic cylinder function Z_p"
+ },
+ {
+  "id": "GR5.54.1b",
+  "gr": "5.54.1b",
+  "page": 678,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[x*BesselJ[p, alpha*x]*BesselY[p, beta*x], x]",
+  "rhs": [
+   "(beta*x*BesselJ[p, alpha*x]*BesselY[p - 1, beta*x] - alpha*x*BesselJ[p - 1, alpha*x]*BesselY[p, beta*x])/(alpha^2 - beta^2)"
+  ],
+  "conds": [],
+  "cite": "WA 134(8)",
+  "edition_note": "10",
+  "section": "5.5 Bessel Functions",
+  "tex": "Integrate[x*BesselJ[p, alpha*x]*BesselY[p, beta*x], x]",
+  "note": "Z, 3 are arbitrary cylinder functions (any of J, N, H1, H2); lhs/rhs instantiated with Z = BesselJ, 3 = BesselY",
+  "reason": "generic cylinder function Z_p"
+ },
+ {
+  "id": "GR5.54.2",
+  "gr": "5.54.2",
+  "page": 678,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[x*BesselJ[p, alpha*x]^2, x]",
+  "rhs": [
+   "x^2/2*(BesselJ[p, alpha*x]^2 - BesselJ[p - 1, alpha*x]*BesselJ[p + 1, alpha*x])"
+  ],
+  "conds": [],
+  "cite": "WA 135(11)",
+  "edition_note": "",
+  "section": "5.5 Bessel Functions",
+  "tex": "Integrate[x*BesselJ[p, alpha*x]^2, x]",
+  "note": "Z, 3 are arbitrary cylinder functions (any of J, N, H1, H2); lhs/rhs instantiated with Z = BesselJ, 3 = BesselY",
+  "reason": "generic cylinder function Z_p"
+ },
+ {
+  "id": "GR5.54.3",
+  "gr": "5.54.3",
+  "page": 679,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[x*BesselJ[p, a*x]*BesselY[p, a*x], x]",
+  "rhs": [
+   "x^4/4*(2*BesselJ[p, a*x]*BesselY[p, a*x] - BesselJ[p - 1, a*x]*BesselY[p + 1, a*x] - BesselJ[p + 1, a*x]*BesselY[p - 1, a*x])",
+   "x^2/4*(2*BesselJ[p, a*x]*BesselY[p, a*x] - BesselJ[p - 1, a*x]*BesselY[p + 1, a*x] - BesselJ[p + 1, a*x]*BesselY[p - 1, a*x])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "*",
+  "section": "5.5 Bessel Functions",
+  "tex": "Integrate[x*BesselJ[p, a*x]*BesselY[p, a*x], x]",
+  "note": "Z, 3 are arbitrary cylinder functions (any of J, N, H1, H2); lhs/rhs instantiated with Z = BesselJ, 3 = BesselY; book prints x^4/4, dimensionally x^2/4 (second rhs)",
+  "reason": "generic cylinder function Z_p"
+ },
+ {
+  "id": "GR5.55a",
+  "gr": "5.55a",
+  "page": 679,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[BesselJ[p, alpha*x]*BesselY[q, alpha*x]/x, x]",
+  "rhs": [
+   "alpha*x*(BesselJ[p, alpha*x]*BesselY[q + 1, alpha*x] - BesselJ[p + 1, alpha*x]*BesselY[q, alpha*x])/(p^2 - q^2) + BesselJ[p, alpha*x]*BesselY[q, alpha*x]/(p + q)"
+  ],
+  "conds": [],
+  "cite": "WA 135(13)",
+  "edition_note": "10",
+  "section": "5.5 Bessel Functions",
+  "tex": "Integrate[BesselJ[p, alpha*x]*BesselY[q, alpha*x]/x, x]",
+  "note": "Z, 3 are arbitrary cylinder functions (any of J, N, H1, H2); lhs/rhs instantiated with Z = BesselJ, 3 = BesselY",
+  "reason": "generic cylinder function Z_p"
+ },
+ {
+  "id": "GR5.55b",
+  "gr": "5.55b",
+  "page": 679,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[BesselJ[p, alpha*x]*BesselY[q, alpha*x]/x, x]",
+  "rhs": [
+   "alpha*x*(BesselJ[p - 1, alpha*x]*BesselY[q, alpha*x] - BesselJ[p, alpha*x]*BesselY[q - 1, alpha*x])/(p^2 - q^2) - BesselJ[p, alpha*x]*BesselY[q, alpha*x]/(p + q)"
+  ],
+  "conds": [],
+  "cite": "WA 135(13)",
+  "edition_note": "10",
+  "section": "5.5 Bessel Functions",
+  "tex": "Integrate[BesselJ[p, alpha*x]*BesselY[q, alpha*x]/x, x]",
+  "note": "Z, 3 are arbitrary cylinder functions (any of J, N, H1, H2); lhs/rhs instantiated with Z = BesselJ, 3 = BesselY",
+  "reason": "generic cylinder function Z_p"
+ },
+ {
+  "id": "GR5.56.1",
+  "gr": "5.56.1",
+  "page": 679,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[BesselJ[1, x], x]",
+  "rhs": [
+   "-BesselJ[0, x]"
+  ],
+  "conds": [],
+  "cite": "JA",
+  "edition_note": "",
+  "section": "5.5 Bessel Functions",
+  "tex": "Integrate[BesselJ[1, x], x]",
+  "note": "Z, 3 are arbitrary cylinder functions (any of J, N, H1, H2); lhs/rhs instantiated with Z = BesselJ, 3 = BesselY",
+  "reason": "generic cylinder function Z_p"
+ },
+ {
+  "id": "GR5.56.2",
+  "gr": "5.56.2",
+  "page": 679,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[x*BesselJ[0, x], x]",
+  "rhs": [
+   "x*BesselJ[1, x]"
+  ],
+  "conds": [],
+  "cite": "JA",
+  "edition_note": "",
+  "section": "5.5 Bessel Functions",
+  "tex": "Integrate[x*BesselJ[0, x], x]",
+  "note": "Z, 3 are arbitrary cylinder functions (any of J, N, H1, H2); lhs/rhs instantiated with Z = BesselJ, 3 = BesselY",
+  "reason": "generic cylinder function Z_p"
+ }
+]

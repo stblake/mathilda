@@ -1,0 +1,1705 @@
+[
+ {
+  "id": "GR7.184.7",
+  "gr": "7.184.7",
+  "page": 834,
+  "status": "ok",
+  "lhs": "Integrate[x^(-nu)*(x^2 + a^2)^(1/4 - nu/2)*LegendreQ[-1/2, 1/2 - nu, 3, 1 + 2*a^2*x^(-2)]*BesselK[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "I*E^(-I*Pi*nu)*Pi^(3/2)*2^(-nu - 3)*a^(1/2 - nu)*y^(nu - 1)*Gamma[1 - nu]^2*(BesselJ[nu - 1/2, a*y/2]^2 + BesselY[nu - 1/2, a*y/2]^2)"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[y] > 0",
+   "Re[nu] < 1"
+  ],
+  "cite": "ET II 136(12)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf x^-nu (x^2+a^2)^(1/4-nu/2) Q^{1/2-nu}_{-1/2}(1+2a^2/x^2) K_nu(xy) dx = i e^{-i pi nu} pi^{3/2} 2^{-nu-3} a^{1/2-nu} y^{nu-1} Gamma(1-nu)^2 {J_{nu-1/2}(ay/2)^2 + Y_{nu-1/2}(ay/2)^2}",
+  "note": ""
+ },
+ {
+  "id": "GR7.185",
+  "gr": "7.185",
+  "page": 834,
+  "status": "ok",
+  "lhs": "Integrate[x^(1/2)*LegendreQ[nu - 1/2, 0, 3, (a^2 + x^2)/x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-1/2)*Pi*y^(-1)*Exp[-(a^2 - 1/4)^(1/2)*y]*BesselJ[nu, y/2]"
+  ],
+  "conds": [
+   "Re[nu] > -1/2",
+   "y > 0",
+   "a > 1/2"
+  ],
+  "cite": "ET II 46(10)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf x^{1/2} Q_{nu-1/2}[(a^2+x^2)/x] J_nu(xy) dx = 2^{-1/2} pi y^-1 exp[-(a^2-1/4)^{1/2} y] J_nu(y/2)",
+  "note": "a > 1/2 added (not printed): keeps the Q argument off the cut and the square root real"
+ },
+ {
+  "id": "GR7.186",
+  "gr": "7.186",
+  "page": 834,
+  "status": "ok",
+  "lhs": "Integrate[x*(1 + x^2)^(-nu - 1)*LegendreP[nu, (1 - x^2)/(1 + x^2)]*BesselJ[0, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "y^(2*nu)*(2^nu*Gamma[nu + 1])^(-2)*BesselK[0, y]"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "y > 0"
+  ],
+  "cite": "ET II 13(10)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf x (1+x^2)^{-nu-1} P_nu((1-x^2)/(1+x^2)) J_0(xy) dx = y^{2nu} [2^nu Gamma(nu+1)]^-2 K_0(y)",
+  "note": "y > 0 added (implied by K_0(y))"
+ },
+ {
+  "id": "GR7.187.1",
+  "gr": "7.187.1",
+  "page": 834,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x*LegendreP[mu, nu, 3, Sqrt[1 + x^2]]*BesselK[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "y^(-3/2)*LommelS2[nu + 1/2, mu + 1/2, y]"
+  ],
+  "conds": [
+   "Re[nu] < 1",
+   "Re[y] > 0"
+  ],
+  "cite": "ET II 137(14)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf x P^nu_mu(sqrt(1+x^2)) K_nu(xy) dx = y^{-3/2} S_{nu+1/2,mu+1/2}(y)",
+  "note": "",
+  "reason": "Lommel S_{mu,nu}"
+ },
+ {
+  "id": "GR7.187.2",
+  "gr": "7.187.2",
+  "page": 834,
+  "status": "ok",
+  "lhs": "Integrate[x*LegendreP[lam - 1/2, 0, 3, Sqrt[1 + a^2*x^2]]^2*BesselJ[0, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi^(-2)*y^(-1)*a^(-1)*Cos[lam*Pi]*BesselK[lam, y/(2*a)]^2"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Abs[Re[lam]] < 1/4",
+   "y > 0"
+  ],
+  "cite": "ET II 13(11)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf x [P_{lam-1/2}(sqrt(1+a^2x^2))]^2 J_0(xy) dx = 2 pi^-2 y^-1 a^-1 cos(lam pi) [K_lam(y/2a)]^2",
+  "note": ""
+ },
+ {
+  "id": "GR7.187.3",
+  "gr": "7.187.3",
+  "page": 834,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x*(1 + x^2)^(-1/2)*LegendreP[mu, nu, 3, Sqrt[1 + x^2]]*BesselK[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "y^(-1/2)*LommelS2[nu - 1/2, mu + 1/2, y]"
+  ],
+  "conds": [
+   "Re[nu] < 1",
+   "Re[y] > 0"
+  ],
+  "cite": "ET II 137(15)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf x (1+x^2)^{-1/2} P^nu_mu(sqrt(1+x^2)) K_nu(xy) dx = y^{-1/2} S_{nu-1/2,mu+1/2}(y)",
+  "note": "",
+  "reason": "Lommel S_{mu,nu}"
+ },
+ {
+  "id": "GR7.187.4",
+  "gr": "7.187.4",
+  "page": 834,
+  "status": "ok",
+  "lhs": "Integrate[x*LegendreP[mu, -nu/2, 3, Sqrt[1 + a^2*x^2]]*LegendreQ[mu, -nu/2, 3, Sqrt[1 + a^2*x^2]]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "y^(-1)*E^(-nu*Pi*I/2)*Gamma[1 + mu + nu/2]/(a*Gamma[1 + mu - nu/2])*BesselI[mu + 1/2, y/(2*a)]*BesselK[mu + 1/2, y/(2*a)]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "y > 0",
+   "Re[mu] > -3/4",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 47(16)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf x P^{-nu/2}_mu(sqrt(1+a^2x^2)) Q^{-nu/2}_mu(sqrt(1+a^2x^2)) J_nu(xy) dx = y^-1 e^{-nu pi i/2} Gamma(1+mu+nu/2)/(a Gamma(1+mu-nu/2)) I_{mu+1/2}(y/2a) K_{mu+1/2}(y/2a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.187.5",
+  "gr": "7.187.5",
+  "page": 834,
+  "status": "ok",
+  "lhs": "Integrate[x*LegendreP[sigma - 1/2, mu, 3, Sqrt[1 + a^2*x^2]]*LegendreQ[sigma - 1/2, mu, 3, Sqrt[1 + a^2*x^2]]*BesselJ[0, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "y^(-2)*E^(mu*Pi*I)*Gamma[1/2 + sigma - mu]/Gamma[1 + 2*sigma]*WhittakerW[mu, sigma, y/a]*WhittakerM[-mu, sigma, y/a]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "y > 0",
+   "Re[sigma] > -1/4",
+   "Re[mu] < 1"
+  ],
+  "cite": "ET II 14(15)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf x P^mu_{sigma-1/2}(sqrt(1+a^2x^2)) Q^mu_{sigma-1/2}(sqrt(1+a^2x^2)) J_0(xy) dx = y^-2 e^{mu pi i} Gamma(1/2+sigma-mu)/Gamma(1+2sigma) W_{mu,sigma}(y/a) M_{-mu,sigma}(y/a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.187.6",
+  "gr": "7.187.6",
+  "page": 834,
+  "status": "ok",
+  "lhs": "Integrate[x*LegendreP[sigma - 1/2, mu, 3, Sqrt[1 + a^2*x^2]]*LegendreP[sigma - 1/2, -mu, 3, Sqrt[1 + a^2*x^2]]*BesselJ[0, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi^(-1)*y^(-2)*Cos[sigma*Pi]*WhittakerW[mu, sigma, y/a]*WhittakerW[-mu, sigma, y/a]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "y > 0",
+   "Abs[Re[sigma]] < 1/4"
+  ],
+  "cite": "ET II 14(14)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf x P^mu_{sigma-1/2}(..) P^{-mu}_{sigma-1/2}(sqrt(1+a^2x^2)) J_0(xy) dx = 2 pi^-1 y^-2 cos(sigma pi) W_{mu,sigma}(y/a) W_{-mu,sigma}(y/a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.187.7",
+  "gr": "7.187.7",
+  "page": 834,
+  "status": "ok",
+  "lhs": "Integrate[x*LegendreP[sigma - 1/2, mu, 3, Sqrt[1 + a^2*x^2]]^2*BesselJ[0, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "-I*Pi^(-1)*y^(-2)*WhittakerW[mu, sigma, y/a]*(WhittakerW[mu, sigma, E^(Pi*I)*y/a] - WhittakerW[mu, sigma, E^(-Pi*I)*y/a])",
+   "2*Cos[sigma*Pi]/(Pi*y^2)*WhittakerW[mu, sigma, y/a]*(Gamma[-2*sigma]/Gamma[1/2 - sigma - mu]*WhittakerM[-mu, sigma, y/a] + Gamma[2*sigma]/Gamma[1/2 + sigma - mu]*WhittakerM[-mu, -sigma, y/a])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "y > 0",
+   "Abs[Re[sigma]] < 1/4",
+   "Re[mu] < 1"
+  ],
+  "cite": "ET II 14(13)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf x {P^mu_{sigma-1/2}(sqrt(1+a^2x^2))}^2 J_0(xy) dx = -i pi^-1 y^-2 W_{mu,sigma}(y/a)[W_{mu,sigma}(e^{pi i} y/a) - W_{mu,sigma}(e^{-pi i} y/a)]",
+  "note": "As printed the arguments e^{+-pi i} y/a are on opposite sides of the cut; evaluating E^(Pi I) = -1 collapses the difference to 0. Second rhs rewrites the difference by W = Gamma(-2s)/Gamma(1/2-s-k) M_{k,s} + Gamma(2s)/Gamma(1/2+s-k) M_{k,-s} and M_{k,s}(z e^{+-pi i}) = +-i e^{+-s pi i} M_{-k,s}(z) (DLMF 13.14.10)"
+ },
+ {
+  "id": "GR7.187.8",
+  "gr": "7.187.8",
+  "page": 835,
+  "status": "ok",
+  "lhs": "Integrate[x*(1 + a^2*x^2)^(-1/2)*LegendreP[mu, -1/2 - nu/2, 3, Sqrt[1 + a^2*x^2]]*LegendreP[mu, 1/2 - nu/2, 3, Sqrt[1 + a^2*x^2]]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "BesselK[mu + 1/2, y/(2*a)]^2/(Pi*a^2*Gamma[nu/2 + mu + 3/2]*Gamma[nu/2 - mu + 1/2])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "y > 0",
+   "-5/4 < Re[mu] < 1/4"
+  ],
+  "cite": "ET II 46(9)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf x (1+a^2x^2)^-1/2 P^{-1/2-nu/2}_mu(..) P^{1/2-nu/2}_mu(sqrt(1+a^2x^2)) J_nu(xy) dx = [K_{mu+1/2}(y/2a)]^2/(pi a^2 Gamma(nu/2+mu+3/2) Gamma(nu/2-mu+1/2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.187.9",
+  "gr": "7.187.9",
+  "page": 835,
+  "status": "ok",
+  "lhs": "Integrate[x*LegendreP[mu, -nu/2, 3, Sqrt[1 + a^2*x^2]]^2*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2*BesselK[mu + 1/2, y/(2*a)]^2*y^(-1)/(Pi*a*Gamma[1 + mu + nu/2]*Gamma[nu/2 - mu])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "y > 0",
+   "-3/4 < Re[mu] < -1/4",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 45(7)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf x {P^{-nu/2}_mu(sqrt(1+a^2x^2))}^2 J_nu(xy) dx = 2[K_{mu+1/2}(y/2a)]^2 y^-1/(pi a Gamma(1+mu+nu/2) Gamma(nu/2-mu))",
+  "note": ""
+ },
+ {
+  "id": "GR7.187.10",
+  "gr": "7.187.10",
+  "page": 835,
+  "status": "ok",
+  "lhs": "Integrate[x*(1 + a^2*x^2)^(-1/2)*LegendreP[mu, -nu/2, 3, Sqrt[1 + a^2*x^2]]*LegendreP[mu + 1, -nu/2, 3, Sqrt[1 + a^2*x^2]]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "BesselK[mu + 1/2, y/(2*a)]*BesselK[mu + 3/2, y/(2*a)]/(Pi*a^2*Gamma[2 + nu/2 + mu]*Gamma[nu/2 - mu])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "y > 0",
+   "-7/4 < Re[mu] < -1/4"
+  ],
+  "cite": "ET II 45(8)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf x (1+a^2x^2)^-1/2 P^{-nu/2}_mu P^{-nu/2}_{mu+1}(sqrt(1+a^2x^2)) J_nu(xy) dx = K_{mu+1/2}(y/2a) K_{mu+3/2}(y/2a)/(pi a^2 Gamma(2+nu/2+mu) Gamma(nu/2-mu))",
+  "note": ""
+ },
+ {
+  "id": "GR7.188.1",
+  "gr": "7.188.1",
+  "page": 835,
+  "status": "ok",
+  "lhs": "Integrate[x*(a^2 + x^2)^(-mu/2)*LegendreP[mu - 1, -nu, a/Sqrt[a^2 + x^2]]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "y^(mu - 2)*E^(-a*y)/Gamma[mu + nu]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "y > 0",
+   "Re[nu] > -1",
+   "Re[mu] > 1/2"
+  ],
+  "cite": "ET II 45(4)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf x (a^2+x^2)^{-mu/2} P^{-nu}_{mu-1}[a/sqrt(a^2+x^2)] J_nu(xy) dx = y^{mu-2} e^{-ay}/Gamma(mu+nu)",
+  "note": ""
+ },
+ {
+  "id": "GR7.188.2",
+  "gr": "7.188.2",
+  "page": 835,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*(x^2 + a^2)^(nu/2)*LegendreP[nu, 0, 3, (x^2 + 2*a^2)/(2*a*Sqrt[x^2 + a^2])]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*a)^(nu + 1)*y^(-nu - 1)/(Pi*Gamma[-nu])*BesselK[nu + 1/2, y*a/2]^2"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "-1 < Re[nu] < 0",
+   "y > 0"
+  ],
+  "cite": "ET II 45(5)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf x^{nu+1} (x^2+a^2)^{nu/2} P_nu((x^2+2a^2)/(2a sqrt(x^2+a^2))) J_nu(xy) dx = (2a)^{nu+1} y^{-nu-1}/(pi Gamma(-nu)) [K_{nu+1/2}(ya/2)]^2",
+  "note": ""
+ },
+ {
+  "id": "GR7.188.3",
+  "gr": "7.188.3",
+  "page": 835,
+  "status": "ok",
+  "lhs": "Integrate[x^(1 - nu)*(x^2 + a^2)^(-nu/2)*LegendreP[nu - 1, 0, 3, (x^2 + 2*a^2)/(2*a*Sqrt[x^2 + a^2])]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*a)^(1 - nu)*y^(nu - 1)/Gamma[nu]*BesselI[nu - 1/2, a*y/2]*BesselK[nu - 1/2, a*y/2]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "y > 0",
+   "0 < Re[nu] < 1"
+  ],
+  "cite": "ET II 45(6)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf x^{1-nu} (x^2+a^2)^{-nu/2} P_{nu-1}((x^2+2a^2)/(2a sqrt(x^2+a^2))) J_nu(xy) dx = (2a)^{1-nu} y^{nu-1}/Gamma(nu) I_{nu-1/2}(ay/2) K_{nu-1/2}(ay/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.189.1",
+  "gr": "7.189.1",
+  "page": 835,
+  "status": "ok",
+  "lhs": "Integrate[(a + x)^mu*E^(-x)*LegendreP[nu, -2*mu, 3, 1 + 2*x/a]*BesselI[mu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "-1/2 < Re[mu] < 0",
+   "-1/2 + Re[mu] < Re[nu] < -1/2 - Re[mu]",
+   "a > 0"
+  ],
+  "cite": "ET II 366(18)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf (a+x)^mu e^-x P^{-2mu}_nu(1+2x/a) I_mu(x) dx = 0",
+  "note": "a > 0 added (not printed)"
+ },
+ {
+  "id": "GR7.189.2",
+  "gr": "7.189.2",
+  "page": 835,
+  "status": "ok",
+  "lhs": "Integrate[(x + a)^(-mu)*E^(-x)*LegendreP[nu, -2*mu, 3, 1 + 2*x/a]*BesselI[mu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(mu - 1)*Gamma[mu + nu + 1/2]*Gamma[mu - nu - 1/2]*E^a/(Pi^(1/2)*Gamma[2*mu + nu + 1]*Gamma[2*mu - nu])*WhittakerW[1/2 - mu, 1/2 + nu, 2*a]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[mu] > Abs[Re[nu] + 1/2]"
+  ],
+  "cite": "ET II 367(19)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf (x+a)^-mu e^-x P^{-2mu}_nu(1+2x/a) I_mu(x) dx = 2^{mu-1} Gamma(mu+nu+1/2) Gamma(mu-nu-1/2) e^a/(pi^{1/2} Gamma(2mu+nu+1) Gamma(2mu-nu)) W_{1/2-mu,1/2+nu}(2a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.189.3",
+  "gr": "7.189.3",
+  "page": 836,
+  "status": "ok",
+  "lhs": "Integrate[x^(-mu)*E^x*LegendreP[nu, 2*mu, 3, 1 + 2*x/a]*BesselK[mu, x + a], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^(-1/2)*2^(mu - 1)*Cos[mu*Pi]*Gamma[mu + nu + 1/2]*Gamma[mu - nu + 1/2]*WhittakerW[1/2 - mu, 1/2 + nu, 2*a]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[mu] > Abs[Re[nu] + 1/2]"
+  ],
+  "cite": "ET II 373(11)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf x^-mu e^x P^{2mu}_nu(1+2x/a) K_mu(x+a) dx = pi^{-1/2} 2^{mu-1} cos(mu pi) Gamma(mu+nu+1/2) Gamma(mu-nu+1/2) W_{1/2-mu,1/2+nu}(2a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.189.4",
+  "gr": "7.189.4",
+  "page": 836,
+  "status": "ok",
+  "lhs": "Integrate[x^(-mu/2)*(x + a)^(-1/2)*E^(-x)*LegendreP[nu - 1/2, mu, (a - x)/(a + x)]*BesselK[nu, a + x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*a^(-mu/2)*Gamma[mu, 2*a]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] < 1"
+  ],
+  "cite": "ET II 374(12)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf x^{-mu/2} (x+a)^{-1/2} e^-x P^mu_{nu-1/2}((a-x)/(a+x)) K_nu(a+x) dx = sqrt(pi/2) a^{-mu/2} Gamma(mu,2a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.189.5",
+  "gr": "7.189.5",
+  "page": 836,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]^(mu + 1)*Cosh[x]^(-2*mu - 3/2)*LegendreP[nu, -mu, 3, Cosh[2*x]]*BesselI[mu - 1/2, a*Sech[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(mu - 1/2)*Gamma[mu - nu]*Gamma[mu + nu + 1]/(Pi^(1/2)*a^(mu + 3/2)*Gamma[mu + 1]^2)*WhittakerM[nu + 1/2, mu, a]*WhittakerM[-nu - 1/2, mu, a]"
+  ],
+  "conds": [
+   "Re[mu] > Re[nu]",
+   "Re[mu] > -Re[nu] - 1"
+  ],
+  "cite": "ET II 378(44)",
+  "edition_note": "",
+  "section": "7.18 Associated Legendre and Bessel functions",
+  "tex": "int_0^inf (sinh x)^{mu+1} (cosh x)^{-2mu-3/2} P^{-mu}_nu[cosh 2x] I_{mu-1/2}(a sech x) dx = 2^{mu-1/2} Gamma(mu-nu) Gamma(mu+nu+1)/(pi^{1/2} a^{mu+3/2} [Gamma(mu+1)]^2) M_{nu+1/2,mu}(a) M_{-nu-1/2,mu}(a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.191.1",
+  "gr": "7.191.1",
+  "page": 836,
+  "status": "ok",
+  "lhs": "Integrate[x^(1/2)*(x^2 - a^2)^(-1/4 - nu/2)*LegendreP[mu, nu + 1/2, 3, 2*x^2*a^(-2) - 1]*(StruveH[nu, x] - BesselY[nu, x]), {x, a, Infinity}]",
+  "rhs": [
+   "2^(-nu - 2)*Pi^(1/2)*a*Csc[mu*Pi]*Cos[nu*Pi]*(BesselY[nu, a/2]^2 - BesselJ[nu, a/2]^2)"
+  ],
+  "conds": [
+   "-1 < Re[mu] < 0",
+   "Re[nu] < 1/2",
+   "a > 0"
+  ],
+  "cite": "ET II 384(6)",
+  "edition_note": "",
+  "section": "7.19 Combinations of associated Legendre functions and functions generated by Bessel functions",
+  "tex": "int_a^inf x^{1/2} (x^2-a^2)^{-1/4-nu/2} P^{nu+1/2}_mu(2x^2/a^2-1) [H_nu(x) - Y_nu(x)] dx = 2^{-nu-2} pi^{1/2} a cosec(mu pi) cos(nu pi) {[Y_nu(a/2)]^2 - [J_nu(a/2)]^2}",
+  "note": "a > 0 added (not printed)"
+ },
+ {
+  "id": "GR7.191.2",
+  "gr": "7.191.2",
+  "page": 836,
+  "status": "ok",
+  "lhs": "Integrate[x^(1/2)*(x^2 - a^2)^(-1/4 - nu/2)*LegendreP[mu, nu + 1/2, 3, 2*x^2*a^(-2) - 1]*(BesselI[-nu, x] - StruveL[nu, x]), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-nu - 1)*Pi^(1/2)*a*Csc[2*mu*Pi]*Cos[nu*Pi]*(BesselI[nu, a/2]^2 - BesselI[-nu, a/2]^2)"
+  ],
+  "conds": [
+   "-1 < Re[mu] < 0",
+   "Re[nu] < 1/2",
+   "a > 0"
+  ],
+  "cite": "ET II 385(15)",
+  "edition_note": "",
+  "section": "7.19 Combinations of associated Legendre functions and functions generated by Bessel functions",
+  "tex": "int_0^inf x^{1/2} (x^2-a^2)^{-1/4-nu/2} P^{nu+1/2}_mu(2x^2/a^2-1) [I_{-nu}(x) - L_nu(x)] dx = 2^{-nu-1} pi^{1/2} a cosec(2 mu pi) cos(nu pi) {[I_nu(a/2)]^2 - [I_{-nu}(a/2)]^2}",
+  "note": "as printed (lower limit 0); a > 0 added (not printed)"
+ },
+ {
+  "id": "GR7.191.2b",
+  "gr": "7.191.2b",
+  "page": 836,
+  "status": "ok",
+  "lhs": "Integrate[x^(1/2)*(x^2 - a^2)^(-1/4 - nu/2)*LegendreP[mu, nu + 1/2, 3, 2*x^2*a^(-2) - 1]*(BesselI[-nu, x] - StruveL[nu, x]), {x, a, Infinity}]",
+  "rhs": [
+   "2^(-nu - 1)*Pi^(1/2)*a*Csc[2*mu*Pi]*Cos[nu*Pi]*(BesselI[nu, a/2]^2 - BesselI[-nu, a/2]^2)"
+  ],
+  "conds": [
+   "-1 < Re[mu] < 0",
+   "Re[nu] < 1/2",
+   "a > 0"
+  ],
+  "cite": "ET II 385(15)",
+  "edition_note": "",
+  "section": "7.19 Combinations of associated Legendre functions and functions generated by Bessel functions",
+  "tex": "int_0^inf x^{1/2} (x^2-a^2)^{-1/4-nu/2} P^{nu+1/2}_mu(2x^2/a^2-1) [I_{-nu}(x) - L_nu(x)] dx = 2^{-nu-1} pi^{1/2} a cosec(2 mu pi) cos(nu pi) {[I_nu(a/2)]^2 - [I_{-nu}(a/2)]^2}",
+  "note": "corrected integrand: lower limit a (as in 7.191.1; (x^2-a^2) is negative on (0,a)); a > 0 added"
+ },
+ {
+  "id": "GR7.192.1",
+  "gr": "7.192.1",
+  "page": 836,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^((nu - mu - 1)/2)*(1 - x^2)^((nu - mu - 2)/4)*LegendreP[nu - 1/2, (mu - nu + 2)/2, x]*LommelS2[mu, nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "2^(mu - 3/2)*Pi^(1/2)*a^(-(nu - mu - 1)/2)*Gamma[(mu + nu + 3)/4]*Gamma[(mu - 3*nu + 3)/4]*Cos[(mu - nu)*Pi/2]*(BesselJ[nu, a/2]*BesselY[-(mu - nu + 1)/2, a/2] - BesselY[nu, a/2]*BesselJ[-(mu - nu + 1)/2, a/2])"
+  ],
+  "conds": [
+   "Re[mu - nu] < 0",
+   "a > 0",
+   "Abs[Re[mu + nu]] < 1",
+   "Re[mu - 3*nu] < 1"
+  ],
+  "cite": "ET II 387(24)a",
+  "edition_note": "",
+  "section": "7.19 Combinations of associated Legendre functions and functions generated by Bessel functions",
+  "tex": "int_0^1 x^{(nu-mu-1)/2} (1-x^2)^{(nu-mu-2)/4} P^{(mu-nu+2)/2}_{nu-1/2}(x) S_{mu,nu}(ax) dx = 2^{mu-3/2} pi^{1/2} a^{-(nu-mu-1)/2} Gamma((mu+nu+3)/4) Gamma((mu-3nu+3)/4) cos((mu-nu)pi/2) [J_nu(a/2) Y_{-(mu-nu+1)/2}(a/2) - Y_nu(a/2) J_{-(mu-nu+1)/2}(a/2)]",
+  "note": "",
+  "reason": "Lommel S_{mu,nu}"
+ },
+ {
+  "id": "GR7.192.2",
+  "gr": "7.192.2",
+  "page": 837,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(1/2)*(x^2 - 1)^(-beta/2)*LegendreP[nu, beta, 3, x]*LommelS2[mu, 1/2, a*x], {x, 1, Infinity}]",
+  "rhs": [
+   "2^(-3/2 + beta - mu)*a^(beta - 1)*Gamma[(beta - mu + nu)/2 + 1/4]*Gamma[(beta - mu - nu)/2 - 1/4]/(Pi^(1/2)*Gamma[1/2 - mu])*LommelS2[mu - beta + 1, nu + 1/2, a]"
+  ],
+  "conds": [
+   "Re[beta] < 1",
+   "a > 0",
+   "Re[mu + nu - beta] < -1/2",
+   "Re[mu - nu - beta] < 1/2"
+  ],
+  "cite": "ET II 387(25)a",
+  "edition_note": "",
+  "section": "7.19 Combinations of associated Legendre functions and functions generated by Bessel functions",
+  "tex": "int_1^inf x^{1/2} (x^2-1)^{-beta/2} P^beta_nu(x) S_{mu,1/2}(ax) dx = 2^{-3/2+beta-mu} a^{beta-1} Gamma((beta-mu+nu)/2+1/4) Gamma((beta-mu-nu)/2-1/4)/(pi^{1/2} Gamma(1/2-mu)) S_{mu-beta+1,nu+1/2}(a)",
+  "note": "",
+  "reason": "Lommel S_{mu,nu}"
+ },
+ {
+  "id": "GR7.193.1",
+  "gr": "7.193.1",
+  "page": 837,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(-nu)*(x^2 - 1)^(1/4 - nu/2)*LegendreP[mu/2 - nu/2, nu - 1/2, 2*x^(-2) - 1]*LommelS2[mu, nu, a*x], {x, 1, Infinity}]",
+  "rhs": [
+   "2^(mu - nu)*a^(nu - 2)*Pi^(1/2)*Gamma[(3*nu - mu - 1)/2]/Gamma[(1 + nu - mu)/2]*WhittakerW[(mu + 1 - nu)/2, nu - 1/2, a*E^(I*Pi/2)]*WhittakerW[(mu + 1 - nu)/2, nu - 1/2, a*E^(-I*Pi/2)]"
+  ],
+  "conds": [
+   "Re[mu - nu] < 0",
+   "a > 0",
+   "Re[nu] < 3/2",
+   "Re[3*nu - mu] > 1"
+  ],
+  "cite": "ET II 387(27)a",
+  "edition_note": "",
+  "section": "7.19 Combinations of associated Legendre functions and functions generated by Bessel functions",
+  "tex": "int_1^inf x^-nu (x^2-1)^{1/4-nu/2} P^{nu-1/2}_{mu/2-nu/2}(2x^-2-1) S_{mu,nu}(ax) dx = 2^{mu-nu} a^{nu-2} pi^{1/2} Gamma((3nu-mu-1)/2)/Gamma((1+nu-mu)/2) W_{rho,sigma}(a e^{i pi/2}) W_{rho,sigma}(a e^{-i pi/2}); rho=(mu+1-nu)/2, sigma=nu-1/2",
+  "note": "rho = (mu+1-nu)/2 and sigma = nu-1/2 substituted",
+  "reason": "Lommel S_{mu,nu}"
+ },
+ {
+  "id": "GR7.193.2",
+  "gr": "7.193.2",
+  "page": 837,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x*(x^2 - 1)^(-nu/2)*LegendreP[lam, nu, 3, 2*x^2 - 1]*LommelS2[mu, nu, a*x], {x, 1, Infinity}]",
+  "rhs": [
+   "a^(nu - 1)*Gamma[(nu - mu + 1)/2 + lam]*Gamma[(nu - mu - 1)/2 - lam]/(2*Gamma[(1 - mu - nu)/2]*Gamma[(1 - mu + nu)/2])*LommelS2[mu - nu + 1, 2*lam + 1, a]"
+  ],
+  "conds": [
+   "Re[nu] < 1",
+   "a > 0",
+   "Re[mu - nu + lam] < -1",
+   "Re[mu - nu + lam] < 0"
+  ],
+  "cite": "ET II 387(26)a",
+  "edition_note": "",
+  "section": "7.19 Combinations of associated Legendre functions and functions generated by Bessel functions",
+  "tex": "int_1^inf x (x^2-1)^{-nu/2} P^nu_lam(2x^2-1) S_{mu,nu}(ax) dx = a^{nu-1} Gamma((nu-mu+1)/2+lam) Gamma((nu-mu-1)/2-lam)/(2 Gamma((1-mu-nu)/2) Gamma((1-mu+nu)/2)) S_{mu-nu+1,2lam+1}(a)",
+  "note": "conditions as printed; the pair Re(mu-nu+lam) < -1, Re(mu-nu+lam) < 0 is redundant and probably misprinted (convergence at infinity suggests Re(mu-nu+2lam) < -1 and Re(mu-nu-2lam) < 1)",
+  "reason": "Lommel S_{mu,nu}"
+ },
+ {
+  "id": "GR7.211.1",
+  "gr": "7.211.1",
+  "page": 837,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[-x - 1/2, Cos[theta]], {x, 0, Infinity}]",
+  "rhs": [
+   "Csc[theta/2]/2"
+  ],
+  "conds": [
+   "0 < theta < Pi"
+  ],
+  "cite": "ET II 329(19)",
+  "edition_note": "",
+  "section": "7.21 Integration of associated Legendre functions with respect to the order",
+  "tex": "int_0^inf P_{-x-1/2}(cos theta) dx = (1/2) cosec(theta/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.211.2",
+  "gr": "7.211.2",
+  "page": 837,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[x, Cos[theta]], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Csc[theta/2]"
+  ],
+  "conds": [
+   "0 < theta < Pi"
+  ],
+  "cite": "ET II 329(20)",
+  "edition_note": "",
+  "section": "7.21 Integration of associated Legendre functions with respect to the order",
+  "tex": "int_-inf^inf P_x(cos theta) dx = cosec(theta/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.212",
+  "gr": "7.212",
+  "page": 837,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1)*Tanh[Pi*x]*LegendreP[-1/2 + I*x, 0, 3, Cosh[a]], {x, 0, Infinity}]",
+  "rhs": [
+   "2*E^(-a/2)*MatharK[E^(-a)]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 330(22)",
+  "edition_note": "",
+  "section": "7.21 Integration of associated Legendre functions with respect to the order",
+  "tex": "int_0^inf x^-1 tanh(pi x) P_{-1/2+ix}(cosh a) dx = 2 e^{-a/2} K(e^-a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.213",
+  "gr": "7.213",
+  "page": 837,
+  "status": "ok",
+  "lhs": "Integrate[x*Tanh[Pi*x]/(a^2 + x^2)*LegendreP[-1/2 + I*x, 0, 3, Cosh[b]], {x, 0, Infinity}]",
+  "rhs": [
+   "LegendreQ[a - 1/2, 0, 3, Cosh[b]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 387(23)",
+  "edition_note": "",
+  "section": "7.21 Integration of associated Legendre functions with respect to the order",
+  "tex": "int_0^inf x tanh(pi x)/(a^2+x^2) P_{-1/2+ix}(cosh b) dx = Q_{a-1/2}(cosh b)",
+  "note": "b > 0 added (not printed)"
+ },
+ {
+  "id": "GR7.214",
+  "gr": "7.214",
+  "page": 837,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[Pi*x]*Cos[a*x]*LegendreP[-1/2 + I*x, b], {x, 0, Infinity}]",
+  "rhs": [
+   "1/Sqrt[2*(b + Cosh[a])]"
+  ],
+  "conds": [
+   "a > 0",
+   "Abs[b] < 1"
+  ],
+  "cite": "ET I 42(27)",
+  "edition_note": "",
+  "section": "7.21 Integration of associated Legendre functions with respect to the order",
+  "tex": "int_0^inf sinh(pi x) cos(ax) P_{-1/2+ix}(b) dx = 1/sqrt(2(b + cosh a))",
+  "note": ""
+ },
+ {
+  "id": "GR7.215a",
+  "gr": "7.215a",
+  "page": 837,
+  "status": "ok",
+  "lhs": "Integrate[Cos[b*x]*LegendreP[-1/2 + I*x, mu, 3, Cosh[a]], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < a < b"
+  ],
+  "cite": "ET II 330(21)",
+  "edition_note": "",
+  "section": "7.21 Integration of associated Legendre functions with respect to the order",
+  "tex": "int_0^inf cos(bx) P^mu_{-1/2+ix}(cosh a) dx = 0 [0<a<b]",
+  "note": ""
+ },
+ {
+  "id": "GR7.215b",
+  "gr": "7.215b",
+  "page": 837,
+  "status": "ok",
+  "lhs": "Integrate[Cos[b*x]*LegendreP[-1/2 + I*x, mu, 3, Cosh[a]], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*Sinh[a]^mu/(Gamma[1/2 - mu]*(Cosh[a] - Cosh[b])^(mu + 1/2))"
+  ],
+  "conds": [
+   "0 < b < a"
+  ],
+  "cite": "ET II 330(21)",
+  "edition_note": "",
+  "section": "7.21 Integration of associated Legendre functions with respect to the order",
+  "tex": "int_0^inf cos(bx) P^mu_{-1/2+ix}(cosh a) dx = sqrt(pi/2) (sinh a)^mu/(Gamma(1/2-mu) (cosh a - cosh b)^{mu+1/2}) [0<b<a]",
+  "note": ""
+ },
+ {
+  "id": "GR7.216",
+  "gr": "7.216",
+  "page": 838,
+  "status": "ok",
+  "lhs": "Integrate[Cos[b*x]*Gamma[mu + I*x]*Gamma[mu - I*x]*LegendreP[-1/2 + I*x, 1/2 - mu, 3, Cosh[a]], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*Gamma[mu]*Sinh[a]^(mu - 1/2)/(Cosh[a] + Cosh[b])^mu"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET II 330(24)",
+  "edition_note": "",
+  "section": "7.21 Integration of associated Legendre functions with respect to the order",
+  "tex": "int_0^inf cos(bx) Gamma(mu+ix) Gamma(mu-ix) P^{1/2-mu}_{-1/2+ix}(cosh a) dx = sqrt(pi/2) Gamma(mu) (sinh a)^{mu-1/2}/(cosh a + cosh b)^mu",
+  "note": ""
+ },
+ {
+  "id": "GR7.217.1",
+  "gr": "7.217.1",
+  "page": 838,
+  "status": "ok",
+  "lhs": "Integrate[(nu - 1/2 + I*x)*Gamma[1/2 - I*x]*Gamma[2*nu - 1/2 + I*x]*LegendreP[nu + I*x - 1, 1/2 - nu, Cos[theta]]*BesselI[nu - 1/2 + I*x, a]*BesselK[nu - 1/2 + I*x, b], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi]*Sin[theta]^(nu - 1/2)*(a*b/(a^2 + b^2 + 2*a*b*Cos[theta])^(1/2))^nu*BesselK[nu, (a^2 + b^2 + 2*a*b*Cos[theta])^(1/2)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "0 < theta < Pi"
+  ],
+  "cite": "ET II 383(29)",
+  "edition_note": "",
+  "section": "7.21 Integration of associated Legendre functions with respect to the order",
+  "tex": "int_-inf^inf (nu-1/2+ix) Gamma(1/2-ix) Gamma(2nu-1/2+ix) P^{1/2-nu}_{nu+ix-1}(cos theta) I_{nu-1/2+ix}(a) K_{nu-1/2+ix}(b) dx = sqrt(2pi) (sin theta)^{nu-1/2} (ab/omega)^nu K_nu(omega), omega=(a^2+b^2+2ab cos theta)^{1/2}",
+  "note": "omega substituted; a > 0, b > 0, 0 < theta < Pi added (no conditions printed)"
+ },
+ {
+  "id": "GR7.217.2",
+  "gr": "7.217.2",
+  "page": 838,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(Pi*x)*Tanh[Pi*x]*LegendreP[-1/2 + I*x, -Cos[theta]]*HankelH2[I*x, k*a]*HankelH2[I*x, k*b], {x, 0, Infinity}]",
+  "rhs": [
+   "-2*(a*b)^(1/2)/(Pi*(a^2 + b^2 - 2*a*b*Cos[theta])^(1/2))*E^(-I*k*(a^2 + b^2 - 2*a*b*Cos[theta])^(1/2))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "0 < theta < Pi",
+   "Im[k] <= 0"
+  ],
+  "cite": "ET II 381(17)",
+  "edition_note": "",
+  "section": "7.21 Integration of associated Legendre functions with respect to the order",
+  "tex": "int_0^inf x e^{pi x} tanh(pi x) P_{-1/2+ix}(-cos theta) H2_{ix}(ka) H2_{ix}(kb) dx = -2(ab)^{1/2}/(pi R) e^{-ikR}, R=(a^2+b^2-2ab cos theta)^{1/2}",
+  "note": "R substituted"
+ },
+ {
+  "id": "GR7.217.3",
+  "gr": "7.217.3",
+  "page": 838,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(Pi*x)*Sinh[Pi*x]*Gamma[nu + I*x]*Gamma[nu - I*x]*LegendreP[-1/2 + I*x, 1/2 - nu, -Cos[theta]]*HankelH2[I*x, a]*HankelH2[I*x, b], {x, 0, Infinity}]",
+  "rhs": [
+   "I*(2*Pi)^(1/2)*Sin[theta]^(nu - 1/2)*(a*b/(a^2 + b^2 - 2*a*b*Cos[theta])^(1/2))^nu*HankelH2[nu, (a^2 + b^2 - 2*a*b*Cos[theta])^(1/2)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "0 < theta < Pi",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 381(18)",
+  "edition_note": "",
+  "section": "7.21 Integration of associated Legendre functions with respect to the order",
+  "tex": "int_0^inf x e^{pi x} sinh(pi x) Gamma(nu+ix) Gamma(nu-ix) P^{1/2-nu}_{-1/2+ix}(-cos theta) H2_{ix}(a) H2_{ix}(b) dx = i(2pi)^{1/2} (sin theta)^{nu-1/2} (ab/R)^nu H2_nu(R)",
+  "note": "R substituted"
+ },
+ {
+  "id": "GR7.217.4",
+  "gr": "7.217.4",
+  "page": 838,
+  "status": "ok",
+  "lhs": "Integrate[x*Sinh[Pi*x]*Gamma[lam + I*x]*Gamma[lam - I*x]*BesselK[I*x, a]*BesselK[I*x, b]*LegendreP[-1/2 + I*x, 1/2 - lam, 3, beta], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^(1/2)/Sqrt[2]*(a*b/Sqrt[a^2 + b^2 + 2*a*b*beta])^lam*(beta^2 - 1)^(lam/2 - 1/4)*BesselK[lam, Sqrt[a^2 + b^2 + 2*a*b*beta]]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi/2",
+   "Abs[Arg[b]] < Pi/2",
+   "Abs[Arg[beta - 1]] < Pi",
+   "Re[lam] > 0"
+  ],
+  "cite": "ET II 177(16)",
+  "edition_note": "",
+  "section": "7.21 Integration of associated Legendre functions with respect to the order",
+  "tex": "int_0^inf x sinh(pi x) Gamma(lam+ix) Gamma(lam-ix) K_ix(a) K_ix(b) P^{1/2-lam}_{-1/2+ix}(beta) dx = pi^{1/2}/sqrt2 (ab/z)^lam (beta^2-1)^{lam/2-1/4} K_lam(z), z=sqrt(a^2+b^2+2ab beta)",
+  "note": "z substituted; |arg b| < pi/2 added (only |arg a| printed)"
+ },
+ {
+  "id": "GR7.221.1a",
+  "gr": "7.221.1a",
+  "page": 838,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[n, x]*LegendreP[m, x], {x, -1, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m != n"
+  ],
+  "cite": "WH, EH I 170(8, 10)",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 P_n P_m dx = 0 [m != n]",
+  "note": ""
+ },
+ {
+  "id": "GR7.221.1b",
+  "gr": "7.221.1b",
+  "page": 838,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[n, x]^2, {x, -1, 1}]",
+  "rhs": [
+   "2/(2*n + 1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "WH, EH I 170(8, 10)",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 P_n P_m dx = 2/(2n+1) [m = n]",
+  "note": "m = n substituted"
+ },
+ {
+  "id": "GR7.221.2a",
+  "gr": "7.221.2a",
+  "page": 838,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[n, x]^2, {x, 0, 1}]",
+  "rhs": [
+   "1/(2*n + 1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "WH",
+  "edition_note": "6",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_0^1 P_n P_m dx = 1/(2n+1) [m = n]",
+  "note": "m = n substituted"
+ },
+ {
+  "id": "GR7.221.2b",
+  "gr": "7.221.2b",
+  "page": 838,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[n, x]*LegendreP[m, x], {x, 0, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "Element[(n - m)/2, Integers]",
+   "m != n"
+  ],
+  "cite": "WH",
+  "edition_note": "6",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_0^1 P_n P_m dx = 0 [n-m even, m != n]",
+  "note": ""
+ },
+ {
+  "id": "GR7.221.2c",
+  "gr": "7.221.2c",
+  "page": 838,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[n, x]*LegendreP[m, x], {x, 0, 1}]",
+  "rhs": [
+   "(-1)^((m + n - 1)/2)*m!*n!/(2^(m + n - 1)*(m - n)*(n + m + 1)*((n/2)!*((m - 1)/2)!)^2)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "Element[n/2, Integers]",
+   "Element[(m - 1)/2, Integers]"
+  ],
+  "cite": "WH",
+  "edition_note": "6",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_0^1 P_n P_m dx = (-1)^{(m+n-1)/2} m! n!/(2^{m+n-1}(m-n)(n+m+1)[(n/2)!((m-1)/2)!]^2) [n even, m odd]",
+  "note": ""
+ },
+ {
+  "id": "GR7.221.3",
+  "gr": "7.221.3",
+  "page": 838,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[2*n, Cos[phi]], {phi, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi*(Binomial[2*n, n]*2^(-2*n))^2"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MO 70, EH II 183(50)",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_0^{2pi} P_2n(cos phi) dphi = 2pi [binom(2n,n) 2^-2n]^2",
+  "note": ""
+ },
+ {
+  "id": "GR7.222.1",
+  "gr": "7.222.1",
+  "page": 839,
+  "status": "ok",
+  "lhs": "Integrate[x^m*LegendreP[n, x], {x, -1, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m < n"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 x^m P_n(x) dx = 0 [m < n]",
+  "note": ""
+ },
+ {
+  "id": "GR7.222.2",
+  "gr": "7.222.2",
+  "page": 839,
+  "status": "ok",
+  "lhs": "Integrate[(1 + x)^(m + n)*LegendreP[m, x]*LegendreP[n, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(m + n + 1)*((m + n)!)^4/((m!*n!)^2*(2*m + 2*n + 1)!)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "ET II 277(15)",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 (1+x)^{m+n} P_m P_n dx = 2^{m+n+1}[(m+n)!]^4/((m!n!)^2 (2m+2n+1)!)",
+  "note": ""
+ },
+ {
+  "id": "GR7.222.3",
+  "gr": "7.222.3",
+  "page": 839,
+  "status": "ok",
+  "lhs": "Integrate[(1 + x)^(m - n - 1)*LegendreP[m, x]*LegendreP[n, x], {x, -1, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m > n"
+  ],
+  "cite": "ET II 278(16)",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 (1+x)^{m-n-1} P_m P_n dx = 0 [m > n]",
+  "note": ""
+ },
+ {
+  "id": "GR7.222.4",
+  "gr": "7.222.4",
+  "page": 839,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[(1 - x^2)^n*LegendreP[2*m, x], {x, -1, 1}]",
+  "rhs": [
+   "2*n^2/((n - m)*(2*m + 2*n + 1))*Integrate[(1 - x^2)^(n - 1)*LegendreP[2*m, x], {x, -1, 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m < n"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 (1-x^2)^n P_2m dx = 2n^2/((n-m)(2m+2n+1)) int_-1^1 (1-x^2)^{n-1} P_2m dx [m<n]",
+  "note": "",
+  "reason": "reduction formula: integral on the right-hand side"
+ },
+ {
+  "id": "GR7.222.5",
+  "gr": "7.222.5",
+  "page": 839,
+  "status": "ok",
+  "lhs": "Integrate[x^2*LegendreP[n + 1, x]*LegendreP[n - 1, x], {x, 0, 1}]",
+  "rhs": [
+   "n*(n + 1)/((2*n - 1)*(2*n + 1)*(2*n + 3))"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_0^1 x^2 P_{n+1} P_{n-1} dx = n(n+1)/((2n-1)(2n+1)(2n+3))",
+  "note": ""
+ },
+ {
+  "id": "GR7.223",
+  "gr": "7.223",
+  "page": 839,
+  "status": "ok",
+  "lhs": "Integrate[(LegendreP[n, x]*LegendreP[n - 1, z] - LegendreP[n - 1, x]*LegendreP[n, z])/(z - x), {x, -1, 1}]",
+  "rhs": [
+   "-2/n"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 1/(z-x) {P_n(x) P_{n-1}(z) - P_{n-1}(x) P_n(z)} dx = -2/n",
+  "note": "integrand is a polynomial in x and z, so z is unrestricted"
+ },
+ {
+  "id": "GR7.224.1",
+  "gr": "7.224.1",
+  "page": 839,
+  "status": "ok",
+  "lhs": "Integrate[(z - x)^(-1)*LegendreP[n, x], {x, -1, 1}]",
+  "rhs": [
+   "2*LegendreQ[n, 0, 3, z]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "z > 1"
+  ],
+  "cite": "ET II 277(7)",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 (z-x)^-1 P_n(x) dx = 2 Q_n(z)",
+  "note": "z off [-1,1] (cut); z > 1 used for sampling"
+ },
+ {
+  "id": "GR7.224.2",
+  "gr": "7.224.2",
+  "page": 839,
+  "status": "ok",
+  "lhs": "Integrate[x*(z - x)^(-1)*LegendreP[0, x], {x, -1, 1}]",
+  "rhs": [
+   "2*LegendreQ[1, 0, 3, z]"
+  ],
+  "conds": [
+   "z > 1"
+  ],
+  "cite": "ET II 277(8)",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 x(z-x)^-1 P_0(x) dx = 2 Q_1(z)",
+  "note": "z off [-1,1] (cut); z > 1 used for sampling"
+ },
+ {
+  "id": "GR7.224.3",
+  "gr": "7.224.3",
+  "page": 839,
+  "status": "ok",
+  "lhs": "Integrate[x^(n + 1)*(z - x)^(-1)*LegendreP[n, x], {x, -1, 1}]",
+  "rhs": [
+   "2*z^(n + 1)*LegendreQ[n, 0, 3, z] - 2^(n + 1)*(n!)^2/(2*n + 1)!"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "z > 1"
+  ],
+  "cite": "ET II 277(9)",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 x^{n+1}(z-x)^-1 P_n dx = 2z^{n+1} Q_n(z) - 2^{n+1}(n!)^2/(2n+1)!",
+  "note": "z off [-1,1] (cut); z > 1 used for sampling"
+ },
+ {
+  "id": "GR7.224.4",
+  "gr": "7.224.4",
+  "page": 839,
+  "status": "ok",
+  "lhs": "Integrate[x^m*(z - x)^(-1)*LegendreP[n, x], {x, -1, 1}]",
+  "rhs": [
+   "2*z^m*LegendreQ[n, 0, 3, z]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m <= n",
+   "z > 1"
+  ],
+  "cite": "ET II 277(10)a",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 x^m (z-x)^-1 P_n dx = 2 z^m Q_n(z) [m <= n]",
+  "note": "z off [-1,1] (cut); z > 1 used for sampling"
+ },
+ {
+  "id": "GR7.224.5",
+  "gr": "7.224.5",
+  "page": 839,
+  "status": "ok",
+  "lhs": "Integrate[(z - x)^(-1)*LegendreP[m, x]*LegendreP[n, x], {x, -1, 1}]",
+  "rhs": [
+   "2*LegendreP[m, z]*LegendreQ[n, 0, 3, z]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m <= n",
+   "z > 1"
+  ],
+  "cite": "ET II 278(18)a",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 (z-x)^-1 P_m P_n dx = 2 P_m(z) Q_n(z) [m <= n]",
+  "note": "z off [-1,1] (cut); z > 1 used for sampling"
+ },
+ {
+  "id": "GR7.224.6",
+  "gr": "7.224.6",
+  "page": 839,
+  "status": "ok",
+  "lhs": "Integrate[(z - x)^(-1)*LegendreP[n, x]*LegendreP[n + 1, x], {x, -1, 1}]",
+  "rhs": [
+   "2*LegendreP[n + 1, z]*LegendreQ[n, 0, 3, z] - 2/(n + 1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "z > 1"
+  ],
+  "cite": "ET II 278(19)",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 (z-x)^-1 P_n P_{n+1} dx = 2 P_{n+1}(z) Q_n(z) - 2/(n+1)",
+  "note": "z off [-1,1] (cut); z > 1 used for sampling"
+ },
+ {
+  "id": "GR7.224.7",
+  "gr": "7.224.7",
+  "page": 839,
+  "status": "ok",
+  "lhs": "Integrate[x*(z - x)^(-1)*LegendreP[m, x]*LegendreP[n, x], {x, -1, 1}]",
+  "rhs": [
+   "2*z*LegendreP[m, z]*LegendreQ[n, 0, 3, z]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m < n",
+   "z > 1"
+  ],
+  "cite": "ET II 278(21)",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 x(z-x)^-1 P_m P_n dx = 2z P_m(z) Q_n(z) [m < n]",
+  "note": "z off [-1,1] (cut); z > 1 used for sampling"
+ },
+ {
+  "id": "GR7.224.8",
+  "gr": "7.224.8",
+  "page": 839,
+  "status": "ok",
+  "lhs": "Integrate[x*(z - x)^(-1)*LegendreP[n, x]^2, {x, -1, 1}]",
+  "rhs": [
+   "2*z*LegendreP[n, z]*LegendreQ[n, 0, 3, z] - 2/(2*n + 1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "z > 1"
+  ],
+  "cite": "ET II 278(20)",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 x(z-x)^-1 [P_n]^2 dx = 2z P_n(z) Q_n(z) - 2/(2n+1)",
+  "note": "z off [-1,1] (cut); z > 1 used for sampling"
+ },
+ {
+  "id": "GR7.225.1",
+  "gr": "7.225.1",
+  "page": 839,
+  "status": "ok",
+  "lhs": "Integrate[(x - t)^(-1/2)*LegendreP[n, t], {t, -1, x}]",
+  "rhs": [
+   "(n + 1/2)^(-1)*(1 + x)^(-1/2)*(ChebyshevT[n, x] + ChebyshevT[n + 1, x])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "-1 < x < 1"
+  ],
+  "cite": "EH II 187(43)",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^x (x-t)^{-1/2} P_n(t) dt = (n+1/2)^-1 (1+x)^{-1/2} [T_n(x) + T_{n+1}(x)]",
+  "note": ""
+ },
+ {
+  "id": "GR7.225.2",
+  "gr": "7.225.2",
+  "page": 839,
+  "status": "ok",
+  "lhs": "Integrate[(t - x)^(-1/2)*P^(-1/2)*LegendreP[n, t], {t, x, 1}]",
+  "rhs": [
+   "(n + 1/2)^(-1)*(1 - x)^(-1/2)*(ChebyshevT[n, x] - ChebyshevT[n + 1, x])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "-1 < x < 1"
+  ],
+  "cite": "EH II 187(44)",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_x^1 (t-x)^{-1/2} P^{-1/2} P_n(t) dt = (n+1/2)^-1 (1-x)^{-1/2} [T_n(x) - T_{n+1}(x)]",
+  "note": "as printed: integrand carries a stray factor P^{-1/2}"
+ },
+ {
+  "id": "GR7.225.2b",
+  "gr": "7.225.2b",
+  "page": 839,
+  "status": "ok",
+  "lhs": "Integrate[(t - x)^(-1/2)*LegendreP[n, t], {t, x, 1}]",
+  "rhs": [
+   "(n + 1/2)^(-1)*(1 - x)^(-1/2)*(ChebyshevT[n, x] - ChebyshevT[n + 1, x])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "-1 < x < 1"
+  ],
+  "cite": "EH II 187(44)",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_x^1 (t-x)^{-1/2} P_n(t) dt = (n+1/2)^-1 (1-x)^{-1/2} [T_n(x) - T_{n+1}(x)]",
+  "note": "corrected integrand: stray factor P^{-1/2} dropped (n = 0 check: both sides 2 sqrt(1-x))"
+ },
+ {
+  "id": "GR7.225.3",
+  "gr": "7.225.3",
+  "page": 840,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(-1/2)*LegendreP[n, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(3/2)/(2*n + 1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "EH II 183(49)",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 (1-x)^{-1/2} P_n dx = 2^{3/2}/(2n+1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.225.4",
+  "gr": "7.225.4",
+  "page": 840,
+  "status": "ok",
+  "lhs": "Integrate[(Cosh[2*p] - x)^(-1/2)*LegendreP[n, x], {x, -1, 1}]",
+  "rhs": [
+   "2*Sqrt[2]/(2*n + 1)*Exp[-(2*n + 1)*p]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "p > 0"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 (cosh 2p - x)^{-1/2} P_n dx = 2 sqrt2/(2n+1) exp[-(2n+1)p]",
+  "note": ""
+ },
+ {
+  "id": "GR7.225.5a",
+  "gr": "7.225.5a",
+  "page": 840,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[l, z]/Sqrt[(x*y - z)^2 - (x^2 - 1)*(y^2 - 1)], {z, -1, 1}]/2",
+  "rhs": [
+   "LegendreP[l, x]*LegendreQ[l, 0, 3, y]"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 0",
+   "1 < x < y"
+  ],
+  "cite": "",
+  "edition_note": "10",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "(1/2) int_-1^1 P_l(z) dz / sqrt((xy-z)^2 - (x^2-1)(y^2-1)) = P_l(x) Q_l(y) [1 < x <= y]",
+  "note": "l a non-negative integer (implied); x = y boundary dropped for sampling"
+ },
+ {
+  "id": "GR7.225.5b",
+  "gr": "7.225.5b",
+  "page": 840,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[l, z]/Sqrt[(x*y - z)^2 - (x^2 - 1)*(y^2 - 1)], {z, -1, 1}]/2",
+  "rhs": [
+   "LegendreP[l, y]*LegendreQ[l, 0, 3, x]"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 0",
+   "1 < y < x"
+  ],
+  "cite": "",
+  "edition_note": "10",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "(1/2) int_-1^1 P_l(z) dz / sqrt(...) = P_l(y) Q_l(x) [1 < y <= x]",
+  "note": "l a non-negative integer (implied); x = y boundary dropped for sampling"
+ },
+ {
+  "id": "GR7.226.1",
+  "gr": "7.226.1",
+  "page": 840,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^(-1/2)*LegendreP[2*m, x], {x, -1, 1}]",
+  "rhs": [
+   "(Gamma[1/2 + m]/m!)^2"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "ET II 276(4)",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 (1-x^2)^{-1/2} P_2m dx = [Gamma(1/2+m)/m!]^2",
+  "note": ""
+ },
+ {
+  "id": "GR7.226.2",
+  "gr": "7.226.2",
+  "page": 840,
+  "status": "ok",
+  "lhs": "Integrate[x*(1 - x^2)^(-1/2)*LegendreP[2*m + 1, x], {x, -1, 1}]",
+  "rhs": [
+   "Gamma[1/2 + m]*Gamma[3/2 + m]/(m!*(m + 1)!)"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "ET II 276(5)",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 x(1-x^2)^{-1/2} P_{2m+1} dx = Gamma(1/2+m) Gamma(3/2+m)/(m!(m+1)!)",
+  "note": ""
+ },
+ {
+  "id": "GR7.226.3",
+  "gr": "7.226.3",
+  "page": 840,
+  "status": "ok",
+  "lhs": "Integrate[(1 + p*x^2)^(-m - 3/2)*LegendreP[2*m, x], {x, -1, 1}]",
+  "rhs": [
+   "2/(2*m + 1)*(-p)^m*(1 + p)^(-m - 1/2)"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Abs[p] < 1"
+  ],
+  "cite": "MO 71",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_-1^1 (1+px^2)^{-m-3/2} P_2m dx = 2/(2m+1) (-p)^m (1+p)^{-m-1/2}",
+  "note": ""
+ },
+ {
+  "id": "GR7.227",
+  "gr": "7.227",
+  "page": 840,
+  "status": "ok",
+  "lhs": "Integrate[x*(a^2 + x^2)^(-1/2)*LegendreP[n, 1 - 2*x^2], {x, 0, 1}]",
+  "rhs": [
+   "(a + (a^2 + 1)^(1/2))^(-2*n - 1)/(2*n + 1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[a] > 0"
+  ],
+  "cite": "ET II 278(23)",
+  "edition_note": "",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "int_0^1 x (a^2+x^2)^{-1/2} P_n(1-2x^2) dx = [a + (a^2+1)^{1/2}]^{-2n-1}/(2n+1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.228",
+  "gr": "7.228",
+  "page": 840,
+  "status": "ok",
+  "lhs": "Gamma[1 + mu]/2*Integrate[LegendreP[l, x]*(z - x)^(-mu - 1), {x, -1, 1}]",
+  "rhs": [
+   "(z^2 - 1)^(-mu/2)*E^(-I*Pi*mu)*LegendreQ[l, mu, 3, z]"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 0",
+   "Abs[Arg[z - 1]] < Pi",
+   "z > 1"
+  ],
+  "cite": "",
+  "edition_note": "6",
+  "section": "7.22 Combinations of Legendre polynomials, rational functions, and algebraic functions",
+  "tex": "(1/2) Gamma(1+mu) int_-1^1 P_l(x) (z-x)^{-mu-1} dx = (z^2-1)^{-mu/2} e^{-i pi mu} Q^mu_l(z)",
+  "note": "z > 1 added for sampling (z must avoid the cut [-1,1])"
+ },
+ {
+  "id": "GR7.231.1",
+  "gr": "7.231.1",
+  "page": 840,
+  "status": "ok",
+  "lhs": "Integrate[x^lam*LegendreP[2*m, x], {x, 0, 1}]",
+  "rhs": [
+   "(-1)^m*Gamma[m - lam/2]*Gamma[1/2 + lam/2]/(2*Gamma[-lam/2]*Gamma[m + 3/2 + lam/2])"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Re[lam] > -1"
+  ],
+  "cite": "EH II 183(51)",
+  "edition_note": "",
+  "section": "7.23 Combinations of Legendre polynomials and powers",
+  "tex": "int_0^1 x^lam P_2m dx = (-1)^m Gamma(m-lam/2) Gamma(1/2+lam/2)/(2 Gamma(-lam/2) Gamma(m+3/2+lam/2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.231.2",
+  "gr": "7.231.2",
+  "page": 840,
+  "status": "ok",
+  "lhs": "Integrate[x^lam*LegendreP[2*m + 1, x], {x, 0, 1}]",
+  "rhs": [
+   "(-1)^m*Gamma[m + 1/2 - lam/2]*Gamma[1 + lam/2]/(2*Gamma[1/2 - lam/2]*Gamma[m + 2 + lam/2])"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Re[lam] > -2"
+  ],
+  "cite": "EH II 183(52)",
+  "edition_note": "6",
+  "section": "7.23 Combinations of Legendre polynomials and powers",
+  "tex": "int_0^1 x^lam P_{2m+1} dx = (-1)^m Gamma(m+1/2-lam/2) Gamma(1+lam/2)/(2 Gamma(1/2-lam/2) Gamma(m+2+lam/2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.232.1",
+  "gr": "7.232.1",
+  "page": 840,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(a - 1)*LegendreP[m, x]*LegendreP[n, x], {x, -1, 1}]",
+  "rhs": [
+   "2^a*Gamma[a]*Gamma[n - a + 1]/(Gamma[1 - a]*Gamma[n + a + 1])*HypergeometricPFQ[{-m, m + 1, a, a}, {1, a + n + 1, a - n}, 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "Re[a] > 0"
+  ],
+  "cite": "ET II 278(17)",
+  "edition_note": "",
+  "section": "7.23 Combinations of Legendre polynomials and powers",
+  "tex": "int_-1^1 (1-x)^{a-1} P_m P_n dx = 2^a Gamma(a) Gamma(n-a+1)/(Gamma(1-a) Gamma(n+a+1)) 4F3(-m,m+1,a,a;1,a+n+1,a-n;1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.232.2",
+  "gr": "7.232.2",
+  "page": 841,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(a - 1)*(1 + x)^(b - 1)*LegendreP[n, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(a + b - 1)*Gamma[a]*Gamma[b]/Gamma[a + b]*HypergeometricPFQ[{-n, 1 + n, a}, {1, a + b}, 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[a] > 0",
+   "Re[b] > 0"
+  ],
+  "cite": "ET II 276(6)",
+  "edition_note": "",
+  "section": "7.23 Combinations of Legendre polynomials and powers",
+  "tex": "int_-1^1 (1-x)^{a-1}(1+x)^{b-1} P_n dx = 2^{a+b-1} Gamma(a) Gamma(b)/Gamma(a+b) 3F2(-n,1+n,a;1,a+b;1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.232.3",
+  "gr": "7.232.3",
+  "page": 841,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(mu - 1)*LegendreP[n, 1 - gamma*x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[mu]*n!/Gamma[mu + n + 1]*JacobiP[n, mu, -mu, 1 - gamma]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET II 190(37)a",
+  "edition_note": "",
+  "section": "7.23 Combinations of Legendre polynomials and powers",
+  "tex": "int_0^1 (1-x)^{mu-1} P_n(1-gamma x) dx = Gamma(mu) n!/Gamma(mu+n+1) P_n^{(mu,-mu)}(1-gamma)",
+  "note": ""
+ },
+ {
+  "id": "GR7.232.4",
+  "gr": "7.232.4",
+  "page": 841,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(mu - 1)*x^(nu - 1)*LegendreP[n, 1 - gamma*x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[mu]*Gamma[nu]/Gamma[mu + nu]*HypergeometricPFQ[{-n, n + 1, nu}, {1, mu + nu}, gamma/2]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 190(38)",
+  "edition_note": "",
+  "section": "7.23 Combinations of Legendre polynomials and powers",
+  "tex": "int_0^1 (1-x)^{mu-1} x^{nu-1} P_n(1-gamma x) dx = Gamma(mu) Gamma(nu)/Gamma(mu+nu) 3F2(-n,n+1,nu;1,mu+nu;gamma/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.233",
+  "gr": "7.233",
+  "page": 841,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*mu - 1)*LegendreP[n, 1 - 2*x^2], {x, 0, 1}]",
+  "rhs": [
+   "(-1)^n*Gamma[mu]^2/(2*Gamma[mu + n + 1]*Gamma[mu - n])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET II 278(22)",
+  "edition_note": "",
+  "section": "7.23 Combinations of Legendre polynomials and powers",
+  "tex": "int_0^1 x^{2mu-1} P_n(1-2x^2) dx = (-1)^n [Gamma(mu)]^2/(2 Gamma(mu+n+1) Gamma(mu-n))",
+  "note": ""
+ },
+ {
+  "id": "GR7.241a",
+  "gr": "7.241a",
+  "page": 841,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[n, 1 - x]*E^(-a*x), {x, 0, Infinity}]",
+  "rhs": [
+   "E^(-a)*a^n*Nest[(D[#, a]/a) &, E^a/a, n]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[a] > 0"
+  ],
+  "cite": "ET I 171(2)",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_0^inf P_n(1-x) e^{-ax} dx = e^-a a^n (1/a d/da)^n (e^a/a)",
+  "note": "operator power (1/a d/da)^n encoded with Nest; a is the differentiation variable"
+ },
+ {
+  "id": "GR7.241b",
+  "gr": "7.241b",
+  "page": 841,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[n, 1 - x]*E^(-a*x), {x, 0, Infinity}]",
+  "rhs": [
+   "a^n*Nest[(# + D[#, a]/2) &, a^(-n - 1), n]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[a] > 0"
+  ],
+  "cite": "ET I 171(2)",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_0^inf P_n(1-x) e^{-ax} dx = a^n (1 + (1/2) d/da)^n (1/a^{n+1})",
+  "note": "operator power (1 + (1/2) d/da)^n encoded with Nest"
+ },
+ {
+  "id": "GR7.242",
+  "gr": "7.242",
+  "page": 841,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[n, E^(-x)]*E^(-a*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Product[a - k, {k, 1, n - 1}]/Product[a + n - 2*j, {j, 0, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 2",
+   "Re[a] > 0"
+  ],
+  "cite": "ET I 171(3)",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_0^inf P_n(e^-x) e^{-ax} dx = (a-1)(a-2)...(a-n+1)/((a+n)(a+n-2)...(a-n+2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.243.1",
+  "gr": "7.243.1",
+  "page": 841,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[2*n, Cosh[x]]*E^(-a*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Product[a^2 - (2*k - 1)^2, {k, 1, n}]/(a*Product[a^2 - (2*k)^2, {k, 1, n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[a] > 2*n"
+  ],
+  "cite": "ET I 171(6)",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_0^inf P_2n(cosh x) e^{-ax} dx = (a^2-1^2)(a^2-3^2)...[a^2-(2n-1)^2]/(a(a^2-2^2)...[a^2-(2n)^2])",
+  "note": ""
+ },
+ {
+  "id": "GR7.243.2",
+  "gr": "7.243.2",
+  "page": 841,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[2*n + 1, Cosh[x]]*E^(-a*x), {x, 0, Infinity}]",
+  "rhs": [
+   "a*Product[a^2 - (2*k)^2, {k, 1, n}]/Product[a^2 - (2*k - 1)^2, {k, 1, n + 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[a] > 2*n + 1"
+  ],
+  "cite": "ET I 171(7)",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_0^inf P_{2n+1}(cosh x) e^{-ax} dx = a(a^2-2^2)...[a^2-(2n)^2]/((a^2-1)(a^2-3^2)...[a^2-(2n+1)^2])",
+  "note": ""
+ },
+ {
+  "id": "GR7.243.3",
+  "gr": "7.243.3",
+  "page": 841,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[2*n, Cos[x]]*E^(-a*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Product[a^2 + (2*k - 1)^2, {k, 1, n}]/(a*Product[a^2 + (2*k)^2, {k, 1, n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[a] > 0"
+  ],
+  "cite": "ET I 171(4)",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_0^inf P_2n(cos x) e^{-ax} dx = (a^2+1^2)(a^2+3^2)...[a^2+(2n-1)^2]/(a(a^2+2^2)...[a^2+(2n)^2])",
+  "note": ""
+ },
+ {
+  "id": "GR7.243.4",
+  "gr": "7.243.4",
+  "page": 841,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[2*n + 1, Cos[x]]*E^(-a*x), {x, 0, Infinity}]",
+  "rhs": [
+   "a*Product[a^2 + (2*k)^2, {k, 1, n}]/Product[a^2 + (2*k - 1)^2, {k, 1, n + 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[a] > 0"
+  ],
+  "cite": "ET I 171(5)",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_0^inf P_{2n+1}(cos x) e^{-ax} dx = a(a^2+2^2)...[a^2+(2n)^2]/((a^2+1^2)(a^2+3^2)...[a^2+(2n+1)^2])",
+  "note": ""
+ },
+ {
+  "id": "GR7.243.5",
+  "gr": "7.243.5",
+  "page": 841,
+  "status": "ok",
+  "lhs": "Integrate[E^(I*x*alpha)*LegendreP[n, x], {x, -1, 1}]",
+  "rhs": [
+   "I^n*Sqrt[2*Pi/alpha]*BesselJ[n + 1/2, alpha]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "alpha > 0"
+  ],
+  "cite": "GH2 24 (171.10)",
+  "edition_note": "11",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_-1^1 e^{i x alpha} P_n(x) dx = i^n sqrt(2pi/alpha) J_{n+1/2}(alpha)",
+  "note": "condition printed as a > 0; the parameter is alpha (misprinted condition)"
+ }
+]

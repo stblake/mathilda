@@ -1,0 +1,1418 @@
+[
+ {
+  "id": "GR7.111",
+  "gr": "7.111",
+  "page": 818,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[nu, x], {x, Cos[phi], 1}]",
+  "rhs": [
+   "Sin[phi]*LegendreP[nu, -1, Cos[phi]]"
+  ],
+  "conds": [
+   "0 < phi < Pi"
+  ],
+  "cite": "MO 90",
+  "edition_note": "",
+  "section": "7.11 Associated Legendre functions",
+  "tex": "int_{cos phi}^1 P_nu(x) dx = sin phi P_nu^{-1}(cos phi)",
+  "note": ""
+ },
+ {
+  "id": "GR7.112.1a",
+  "gr": "7.112.1a",
+  "page": 818,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[n, m, x]*LegendreP[k, m, x], {x, -1, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[k, Integers] && k >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m <= n",
+   "m <= k",
+   "n != k"
+  ],
+  "cite": "SM III 185, WH",
+  "edition_note": "",
+  "section": "7.11 Associated Legendre functions",
+  "tex": "int_{-1}^1 P_n^m P_k^m dx = 0 [n != k]",
+  "note": ""
+ },
+ {
+  "id": "GR7.112.1b",
+  "gr": "7.112.1b",
+  "page": 818,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[n, m, x]^2, {x, -1, 1}]",
+  "rhs": [
+   "2/(2*n + 1)*(n + m)!/(n - m)!"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m <= n"
+  ],
+  "cite": "SM III 185, WH",
+  "edition_note": "",
+  "section": "7.11 Associated Legendre functions",
+  "tex": "int_{-1}^1 (P_n^m)^2 dx = 2/(2n+1) (n+m)!/(n-m)! [n = k, k substituted]",
+  "note": "n = k substituted"
+ },
+ {
+  "id": "GR7.112.2",
+  "gr": "7.112.2",
+  "page": 818,
+  "status": "ok",
+  "lhs": "Integrate[LegendreQ[n, m, x]*LegendreP[k, m, x], {x, -1, 1}]",
+  "rhs": [
+   "(-1)^m*(1 - (-1)^(n + k))*(n + m)!/((k - n)*(k + n + 1)*(n - m)!)",
+   "(-1)^m*(1 - (-1)^(n + k)*(n + m)!)/((k - n)*(k + n + 1)*(n - m)!)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[k, Integers] && k >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m <= n",
+   "m <= k",
+   "n != k"
+  ],
+  "cite": "EH I 171(18)",
+  "edition_note": "",
+  "section": "7.11 Associated Legendre functions",
+  "tex": "int_{-1}^1 Q_n^m P_k^m dx = (-1)^m (1-(-1)^{n+k}(n+m)!)/((k-n)(k+n+1)(n-m)!)",
+  "note": "numerator printed '1-(-1)^{n+k}(n+m)!' without grouping; first candidate groups (1-(-1)^{n+k})(n+m)!; second is literal reading. Conditions not printed; integer/ordering conditions added."
+ },
+ {
+  "id": "GR7.112.3a",
+  "gr": "7.112.3a",
+  "page": 818,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[nu, x]*LegendreP[sigma, x], {x, -1, 1}]",
+  "rhs": [
+   "(2*Pi*Sin[Pi*(sigma - nu)] + 4*Sin[Pi*nu]*Sin[Pi*sigma]*(PolyGamma[nu + 1] - PolyGamma[sigma + 1]))/(Pi^2*(sigma - nu)*(sigma + nu + 1))"
+  ],
+  "conds": [
+   "sigma + nu + 1 != 0",
+   "sigma != nu"
+  ],
+  "cite": "EH I 170(7)",
+  "edition_note": "",
+  "section": "7.11 Associated Legendre functions",
+  "tex": "int_{-1}^1 P_nu P_sigma dx = [2pi sin pi(sigma-nu) + 4 sin(pi nu) sin(pi sigma)(psi(nu+1)-psi(sigma+1))]/(pi^2 (sigma-nu)(sigma+nu+1))",
+  "note": ""
+ },
+ {
+  "id": "GR7.112.3b",
+  "gr": "7.112.3b",
+  "page": 818,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[nu, x]^2, {x, -1, 1}]",
+  "rhs": [
+   "(Pi^2 - 2*Sin[Pi*nu]^2*PolyGamma[1, nu + 1])/(Pi^2*(nu + 1/2))"
+  ],
+  "conds": [],
+  "cite": "EH I 170(9)a",
+  "edition_note": "",
+  "section": "7.11 Associated Legendre functions",
+  "tex": "int_{-1}^1 P_nu^2 dx = (pi^2 - 2 sin^2(pi nu) psi'(nu+1))/(pi^2 (nu+1/2)) [sigma = nu]",
+  "note": "sigma = nu substituted"
+ },
+ {
+  "id": "GR7.112.4a",
+  "gr": "7.112.4a",
+  "page": 818,
+  "status": "ok",
+  "lhs": "Integrate[LegendreQ[nu, x]*LegendreQ[sigma, x], {x, -1, 1}]",
+  "rhs": [
+   "((PolyGamma[nu + 1] - PolyGamma[sigma + 1])*(1 + Cos[Pi*sigma]*Cos[Pi*nu]) - Pi/2*Sin[Pi*(nu - sigma)])/((sigma - nu)*(sigma + nu + 1))"
+  ],
+  "conds": [
+   "sigma + nu + 1 != 0",
+   "sigma != nu"
+  ],
+  "cite": "EH I 170(11)",
+  "edition_note": "",
+  "section": "7.11 Associated Legendre functions",
+  "tex": "int_{-1}^1 Q_nu Q_sigma dx = [(psi(nu+1)-psi(sigma+1))(1+cos pi sigma cos pi nu) - pi/2 sin pi(nu-sigma)]/((sigma-nu)(sigma+nu+1))",
+  "note": "nu, sigma != -1, -2, -3, ..."
+ },
+ {
+  "id": "GR7.112.4b",
+  "gr": "7.112.4b",
+  "page": 818,
+  "status": "ok",
+  "lhs": "Integrate[LegendreQ[nu, x]^2, {x, -1, 1}]",
+  "rhs": [
+   "(Pi^2/2 - PolyGamma[1, nu + 1]*(1 + Cos[nu*Pi]^2))/(2*nu + 1)"
+  ],
+  "conds": [],
+  "cite": "EH I 170(12)",
+  "edition_note": "",
+  "section": "7.11 Associated Legendre functions",
+  "tex": "int_{-1}^1 Q_nu^2 dx = (pi^2/2 - psi'(nu+1)(1+cos^2 nu pi))/(2nu+1) [nu = sigma]",
+  "note": "sigma = nu substituted; nu != -1, -2, -3, ..."
+ },
+ {
+  "id": "GR7.112.5a",
+  "gr": "7.112.5a",
+  "page": 818,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[nu, x]*LegendreQ[sigma, x], {x, -1, 1}]",
+  "rhs": [
+   "(1 - Cos[Pi*(sigma - nu)] - 2/Pi*Sin[Pi*nu]*Cos[Pi*sigma]*(PolyGamma[nu + 1] - PolyGamma[sigma + 1]))/((nu - sigma)*(nu + sigma + 1))"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "Re[sigma] > 0",
+   "sigma != nu"
+  ],
+  "cite": "EH I 170(13)",
+  "edition_note": "",
+  "section": "7.11 Associated Legendre functions",
+  "tex": "int_{-1}^1 P_nu Q_sigma dx = [1 - cos pi(sigma-nu) - 2/pi sin(pi nu) cos(pi sigma)(psi(nu+1)-psi(sigma+1))]/((nu-sigma)(nu+sigma+1))",
+  "note": ""
+ },
+ {
+  "id": "GR7.112.5b",
+  "gr": "7.112.5b",
+  "page": 818,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[nu, x]*LegendreQ[nu, x], {x, -1, 1}]",
+  "rhs": [
+   "-Sin[2*nu*Pi]*PolyGamma[1, nu + 1]/(Pi*(2*nu + 1))"
+  ],
+  "conds": [
+   "Re[nu] > 0"
+  ],
+  "cite": "EH I 171(14)",
+  "edition_note": "",
+  "section": "7.11 Associated Legendre functions",
+  "tex": "int_{-1}^1 P_nu Q_nu dx = -sin(2 nu pi) psi'(nu+1)/(pi(2nu+1)) [sigma = nu]",
+  "note": "sigma = nu substituted"
+ },
+ {
+  "id": "GR7.113.1",
+  "gr": "7.113.1",
+  "page": 818,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[nu, x]*LegendreP[sigma, x], {x, 0, 1}]",
+  "rhs": [
+   "((Gamma[1/2 + nu/2]*Gamma[1 + sigma/2]/(Gamma[1/2 + sigma/2]*Gamma[1 + nu/2]))*Sin[Pi*sigma/2]*Cos[Pi*nu/2] - Sin[Pi*nu/2]*Cos[Pi*sigma/2]/(Gamma[1/2 + nu/2]*Gamma[1 + sigma/2]/(Gamma[1/2 + sigma/2]*Gamma[1 + nu/2])))/(Pi/2*(sigma - nu)*(sigma + nu + 1))"
+  ],
+  "conds": [
+   "sigma != nu"
+  ],
+  "cite": "EH I 171(15)",
+  "edition_note": "",
+  "section": "7.11 Associated Legendre functions",
+  "tex": "int_0^1 P_nu P_sigma dx = (A sin(pi sigma/2) cos(pi nu/2) - A^{-1} sin(pi nu/2) cos(pi sigma/2))/(pi/2 (sigma-nu)(sigma+nu+1)), A = G(1/2+nu/2)G(1+sigma/2)/(G(1/2+sigma/2)G(1+nu/2))",
+  "note": "notation A of 7.113 substituted"
+ },
+ {
+  "id": "GR7.113.2",
+  "gr": "7.113.2",
+  "page": 819,
+  "status": "ok",
+  "lhs": "Integrate[LegendreQ[nu, x]*LegendreQ[sigma, x], {x, 0, 1}]",
+  "rhs": [
+   "(PolyGamma[nu + 1] - PolyGamma[sigma + 1] - Pi/2*(((Gamma[1/2 + nu/2]*Gamma[1 + sigma/2]/(Gamma[1/2 + sigma/2]*Gamma[1 + nu/2])) - 1/(Gamma[1/2 + nu/2]*Gamma[1 + sigma/2]/(Gamma[1/2 + sigma/2]*Gamma[1 + nu/2])))*Sin[Pi*(sigma + nu)/2]*((Gamma[1/2 + nu/2]*Gamma[1 + sigma/2]/(Gamma[1/2 + sigma/2]*Gamma[1 + nu/2])) + 1/(Gamma[1/2 + nu/2]*Gamma[1 + sigma/2]/(Gamma[1/2 + sigma/2]*Gamma[1 + nu/2])))*Sin[Pi*(sigma - nu)/2]))/((sigma - nu)*(sigma + nu + 1))",
+   "(PolyGamma[nu + 1] - PolyGamma[sigma + 1] - Pi/2*(((Gamma[1/2 + nu/2]*Gamma[1 + sigma/2]/(Gamma[1/2 + sigma/2]*Gamma[1 + nu/2])) - 1/(Gamma[1/2 + nu/2]*Gamma[1 + sigma/2]/(Gamma[1/2 + sigma/2]*Gamma[1 + nu/2])))*Sin[Pi*(sigma + nu)/2] + ((Gamma[1/2 + nu/2]*Gamma[1 + sigma/2]/(Gamma[1/2 + sigma/2]*Gamma[1 + nu/2])) + 1/(Gamma[1/2 + nu/2]*Gamma[1 + sigma/2]/(Gamma[1/2 + sigma/2]*Gamma[1 + nu/2])))*Sin[Pi*(sigma - nu)/2]))/((sigma - nu)*(sigma + nu + 1))",
+   "(PolyGamma[nu + 1] - PolyGamma[sigma + 1] - Pi/2*(((Gamma[1/2 + nu/2]*Gamma[1 + sigma/2]/(Gamma[1/2 + sigma/2]*Gamma[1 + nu/2])) - 1/(Gamma[1/2 + nu/2]*Gamma[1 + sigma/2]/(Gamma[1/2 + sigma/2]*Gamma[1 + nu/2])))*Sin[Pi*(sigma + nu)/2] - ((Gamma[1/2 + nu/2]*Gamma[1 + sigma/2]/(Gamma[1/2 + sigma/2]*Gamma[1 + nu/2])) + 1/(Gamma[1/2 + nu/2]*Gamma[1 + sigma/2]/(Gamma[1/2 + sigma/2]*Gamma[1 + nu/2])))*Sin[Pi*(sigma - nu)/2]))/((sigma - nu)*(sigma + nu + 1))"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "Re[sigma] > 0",
+   "sigma != nu"
+  ],
+  "cite": "EH I 171(16)",
+  "edition_note": "",
+  "section": "7.11 Associated Legendre functions",
+  "tex": "int_0^1 Q_nu Q_sigma dx = [psi(nu+1)-psi(sigma+1) - pi/2 [(A-A^{-1}) sin(pi(sigma+nu)/2) (A+A^{-1}) sin(pi(sigma-nu)/2)]]/((sigma-nu)(sigma+nu+1))",
+  "note": "notation A of 7.113 substituted. Book prints no operator between the two products inside the bracket (literal product = first candidate); '+' and '-' offered as corrected candidates."
+ },
+ {
+  "id": "GR7.113.3",
+  "gr": "7.113.3",
+  "page": 819,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[nu, x]*LegendreQ[sigma, x], {x, 0, 1}]",
+  "rhs": [
+   "(Cos[Pi*(nu - sigma)/2]/(Gamma[1/2 + nu/2]*Gamma[1 + sigma/2]/(Gamma[1/2 + sigma/2]*Gamma[1 + nu/2])) - 1)/((sigma - nu)*(sigma + nu + 1))"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "Re[sigma] > 0",
+   "sigma != nu"
+  ],
+  "cite": "EH I 171(17)",
+  "edition_note": "",
+  "section": "7.11 Associated Legendre functions",
+  "tex": "int_0^1 P_nu Q_sigma dx = (A^{-1} cos(pi(nu-sigma)/2) - 1)/((sigma-nu)(sigma+nu+1))",
+  "note": "notation A of 7.113 substituted"
+ },
+ {
+  "id": "GR7.114.1",
+  "gr": "7.114.1",
+  "page": 819,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[nu, 0, 3, x]*LegendreQ[sigma, 0, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "1/((sigma - nu)*(sigma + nu + 1))"
+  ],
+  "conds": [
+   "Re[sigma - nu] > 0",
+   "Re[sigma + nu] > -1"
+  ],
+  "cite": "ET II 324(19)",
+  "edition_note": "",
+  "section": "7.11 Associated Legendre functions",
+  "tex": "int_1^inf P_nu Q_sigma dx = 1/((sigma-nu)(sigma+nu+1))",
+  "note": ""
+ },
+ {
+  "id": "GR7.114.2",
+  "gr": "7.114.2",
+  "page": 819,
+  "status": "ok",
+  "lhs": "Integrate[LegendreQ[nu, 0, 3, x]*LegendreQ[sigma, 0, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "(PolyGamma[sigma + 1] - PolyGamma[nu + 1])/((sigma - nu)*(sigma + nu + 1))"
+  ],
+  "conds": [
+   "Re[nu + sigma] > -1",
+   "sigma != nu"
+  ],
+  "cite": "EH I 170(5)",
+  "edition_note": "",
+  "section": "7.11 Associated Legendre functions",
+  "tex": "int_1^inf Q_nu Q_sigma dx = (psi(sigma+1)-psi(nu+1))/((sigma-nu)(sigma+nu+1))",
+  "note": "sigma, nu != -1, -2, -3, ..."
+ },
+ {
+  "id": "GR7.114.3",
+  "gr": "7.114.3",
+  "page": 819,
+  "status": "ok",
+  "lhs": "Integrate[LegendreQ[nu, 0, 3, x]^2, {x, 1, Infinity}]",
+  "rhs": [
+   "PolyGamma[1, nu + 1]/(2*nu + 1)"
+  ],
+  "conds": [
+   "Re[nu] > -1/2"
+  ],
+  "cite": "EH I 170(6)",
+  "edition_note": "",
+  "section": "7.11 Associated Legendre functions",
+  "tex": "int_1^inf Q_nu^2 dx = psi'(nu+1)/(2nu+1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.115",
+  "gr": "7.115",
+  "page": 819,
+  "status": "ok",
+  "lhs": "Integrate[LegendreQ[nu, 0, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "1/(nu*(nu + 1))"
+  ],
+  "conds": [
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 324(18)",
+  "edition_note": "",
+  "section": "7.11 Associated Legendre functions",
+  "tex": "int_1^inf Q_nu dx = 1/(nu(nu+1))",
+  "note": ""
+ },
+ {
+  "id": "GR7.121",
+  "gr": "7.121",
+  "page": 819,
+  "status": "ok",
+  "lhs": "Integrate[x*LegendreP[nu, x], {x, Cos[phi], 1}]",
+  "rhs": [
+   "-Sin[phi]/((nu - 1)*(nu + 2))*(Sin[phi]*LegendreP[nu, Cos[phi]] + Cos[phi]*LegendreP[nu, 1, Cos[phi]])"
+  ],
+  "conds": [
+   "0 < phi < Pi"
+  ],
+  "cite": "MO 90",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_{cos phi}^1 x P_nu dx = -sin phi/((nu-1)(nu+2)) [sin phi P_nu(cos phi) + cos phi P_nu^1(cos phi)]",
+  "note": ""
+ },
+ {
+  "id": "GR7.122.1",
+  "gr": "7.122.1",
+  "page": 819,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[n, m, x]^2/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "1/(2*m)*(n + m)!/(n - m)!"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers]",
+   "0 < m <= n"
+  ],
+  "cite": "MO 74",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^1 (P_n^m)^2/(1-x^2) dx = (n+m)!/(2m (n-m)!)",
+  "note": ""
+ },
+ {
+  "id": "GR7.122.2",
+  "gr": "7.122.2",
+  "page": 819,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[n - mu, mu, x]^2/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "-Gamma[1 + n]/(2*mu*Gamma[1 - 2*mu + n])"
+  ],
+  "conds": [
+   "Re[mu] < 0",
+   "Element[n, Integers] && n > 0"
+  ],
+  "cite": "EH I 172(26)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^1 (P_nu^mu)^2/(1-x^2) dx = -Gamma(1+mu+nu)/(2 mu Gamma(1-mu+nu)) [Re mu < 0, nu+mu positive integer]",
+  "note": "condition nu + mu = n (positive integer) substituted: nu -> n - mu"
+ },
+ {
+  "id": "GR7.122.3",
+  "gr": "7.122.3",
+  "page": 819,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[nu, n - nu, x]^2/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "-n!/(2*(n - nu)*Gamma[1 - n + 2*nu])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[nu] > n"
+  ],
+  "cite": "ET II 315(9)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^1 (P_nu^{n-nu})^2/(1-x^2) dx = -n!/(2(n-nu)Gamma(1-n+2nu))",
+  "note": ""
+ },
+ {
+  "id": "GR7.123",
+  "gr": "7.123",
+  "page": 819,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[n, m, x]*LegendreP[n, k, x]/(1 - x^2), {x, -1, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "Element[k, Integers] && k >= 0",
+   "m <= n",
+   "k <= n",
+   "m != k"
+  ],
+  "cite": "MO 74",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_{-1}^1 P_n^m P_n^k/(1-x^2) dx = 0 [m != k]",
+  "note": ""
+ },
+ {
+  "id": "GR7.124",
+  "gr": "7.124",
+  "page": 819,
+  "status": "ok",
+  "lhs": "Integrate[x^k*(z - x)^(-1)*(1 - x^2)^(m/2)*LegendreP[n, m, x], {x, -1, 1}]",
+  "rhs": [
+   "(-2)^m*(z^2 - 1)^(m/2)*LegendreQ[n, m, 3, z]*z^k"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "Element[k, Integers] && k >= 0",
+   "m <= n",
+   "k <= n - m",
+   "z > 1"
+  ],
+  "cite": "ET II 279(26)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_{-1}^1 x^k (z-x)^{-1}(1-x^2)^{m/2} P_n^m dx = (-2)^m (z^2-1)^{m/2} Q_n^m(z) z^k",
+  "note": "z in complex plane cut along (-1,1); sampled on z > 1"
+ },
+ {
+  "id": "GR7.125",
+  "gr": "7.125",
+  "page": 820,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^(m/2)*LegendreP[k, m, x]*LegendreP[l, m, x]*LegendreP[n, m, x], {x, -1, 1}]",
+  "rhs": [
+   "(-1)^m*Pi^(-3/2)*(k + m)!*(l + m)!*(n + m)!*((k + l + n + m)/2 - m)!/((k - m)!*(l - m)!*(n - m)!*((k + l + n + m)/2 - k)!)*Gamma[m + 1/2]*Gamma[(k + l - n - m)/2 - k + 1/2]*Gamma[(k + l - n - m)/2 - l + 1/2]*Gamma[(k + l - n - m)/2 - n + 1/2]/(((k + l + n + m)/2 - l)!*((k + l + n + m)/2 - n)!*Gamma[(k + l + n + m)/2 + 3/2])"
+  ],
+  "conds": [
+   "Element[k, Integers] && k >= 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "Element[(k + l + n + m)/2, Integers]",
+   "m <= l",
+   "m <= k",
+   "m <= n",
+   "n <= k + l",
+   "Abs[k - l] <= n"
+  ],
+  "cite": "ET II 280(32)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_{-1}^1 (1-x^2)^{m/2} P_k^m P_l^m P_n^m dx = (-1)^m pi^{-3/2} (k+m)!(l+m)!(n+m)!(s-m)!/((k-m)!(l-m)!(n-m)!(s-k)!) Gamma(m+1/2)Gamma(t-k+1/2)Gamma(t-l+1/2)Gamma(t-n+1/2)/((s-l)!(s-n)!Gamma(s+3/2))",
+  "note": "s = (k+l+n+m)/2, t = (k+l-n-m)/2 substituted. Printed conditions: '2s = k+l+n+m and 2t = k+l-n-m are both even; l >= m, m <= k-l-m <= n <= k+l+m' (garbled); conds use a sampleable triangle-type reading (s integer, m <= k,l,n, |k-l| <= n <= k+l)."
+ },
+ {
+  "id": "GR7.126.1",
+  "gr": "7.126.1",
+  "page": 820,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[nu, x]*x^sigma, {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi]*2^(-sigma - 1)*Gamma[1 + sigma]/(Gamma[1 + sigma/2 - nu/2]*Gamma[sigma/2 + nu/2 + 3/2])"
+  ],
+  "conds": [
+   "Re[sigma] > -1"
+  ],
+  "cite": "EH I 171(23)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^1 P_nu x^sigma dx = sqrt(pi) 2^{-sigma-1} Gamma(1+sigma)/(Gamma(1+sigma/2-nu/2)Gamma(sigma/2+nu/2+3/2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.126.2",
+  "gr": "7.126.2",
+  "page": 820,
+  "status": "ok",
+  "lhs": "Integrate[x^sigma*LegendreP[nu, m, x], {x, 0, 1}]",
+  "rhs": [
+   "(-1)^m*Pi^(1/2)*2^(-2*m - 1)*Gamma[(1 + sigma)/2]*Gamma[1 + m + nu]/(Gamma[1/2 + m/2]*Gamma[3/2 + sigma/2 + m/2]*Gamma[1 - m + nu])*HypergeometricPFQ[{(m + nu + 1)/2, (m - nu)/2, m/2 + 1}, {m + 1, (3 + sigma + m)/2}, 1]"
+  ],
+  "conds": [
+   "Re[sigma] > -1",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "ET II 313(2)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^1 x^sigma P_nu^m dx = (-1)^m pi^{1/2} 2^{-2m-1} Gamma((1+sigma)/2)Gamma(1+m+nu)/(Gamma(1/2+m/2)Gamma(3/2+sigma/2+m/2)Gamma(1-m+nu)) 3F2((m+nu+1)/2,(m-nu)/2,m/2+1; m+1,(3+sigma+m)/2; 1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.126.3",
+  "gr": "7.126.3",
+  "page": 820,
+  "status": "ok",
+  "lhs": "Integrate[x^sigma*LegendreP[nu, mu, x], {x, 0, 1}]",
+  "rhs": [
+   "Pi^(1/2)*2^(2*mu - 1)*Gamma[(1 + sigma)/2]/(Gamma[(1 - mu)/2]*Gamma[(3 + sigma - mu)/2])*HypergeometricPFQ[{(nu - mu + 1)/2, -(mu + nu)/2, 1 - mu/2}, {1 - mu, (3 + sigma - mu)/2}, 1]"
+  ],
+  "conds": [
+   "Re[sigma] > -1",
+   "Re[mu] < 2"
+  ],
+  "cite": "ET II 313(3)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^1 x^sigma P_nu^mu dx = pi^{1/2} 2^{2mu-1} Gamma((1+sigma)/2)/(Gamma((1-mu)/2)Gamma((3+sigma-mu)/2)) 3F2((nu-mu+1)/2,-(mu+nu)/2,1-mu/2; 1-mu,(3+sigma-mu)/2; 1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.126.4",
+  "gr": "7.126.4",
+  "page": 820,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*LegendreQ[nu, 0, 3, a*x], {x, 1, Infinity}]",
+  "rhs": [
+   "E^(mu*Pi*I)*Gamma[mu]*a^(-mu)*(a^2 - 1)^(mu/2)*LegendreQ[nu, -mu, 3, a]"
+  ],
+  "conds": [
+   "a > 1",
+   "Re[mu] > 0",
+   "Re[nu - mu] > -1"
+  ],
+  "cite": "ET II 325(26)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_1^inf x^{mu-1} Q_nu(ax) dx = e^{mu pi i} Gamma(mu) a^{-mu}(a^2-1)^{mu/2} Q_nu^{-mu}(a)",
+  "note": "printed |arg(a-1)| < pi; sampled on a > 1"
+ },
+ {
+  "id": "GR7.127",
+  "gr": "7.127",
+  "page": 820,
+  "status": "ok",
+  "lhs": "Integrate[(1 + x)^sigma*LegendreP[nu, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(sigma + 1)*Gamma[sigma + 1]^2/(Gamma[sigma + nu + 2]*Gamma[1 + sigma - nu])"
+  ],
+  "conds": [
+   "Re[sigma] > -1"
+  ],
+  "cite": "ET II 316(15)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_{-1}^1 (1+x)^sigma P_nu dx = 2^{sigma+1}Gamma(sigma+1)^2/(Gamma(sigma+nu+2)Gamma(1+sigma-nu))",
+  "note": ""
+ },
+ {
+  "id": "GR7.128.1",
+  "gr": "7.128.1",
+  "page": 820,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(-mu/2)*(1 + x)^(mu/2 - 1/2)*(z + x)^(mu - 3/2)*LegendreP[nu, mu, x], {x, -1, 1}]",
+  "rhs": [
+   "-Gamma[mu - 1/2]*(z - 1)^(mu - 1/2)*(z + 1)^(-1/2)/(Pi^(1/2)*E^(2*mu*Pi*I)*Gamma[mu + nu]*Gamma[mu - nu - 1])*(LegendreQ[nu, mu, 3, Sqrt[(1 + z)/2]]*LegendreQ[-nu - 1, mu - 1, 3, Sqrt[(1 + z)/2]] + LegendreQ[nu, mu - 1, 3, Sqrt[(1 + z)/2]]*LegendreQ[-nu - 1, mu, 3, Sqrt[(1 + z)/2]])"
+  ],
+  "conds": [
+   "-1/2 < Re[mu] < 1",
+   "z > 1"
+  ],
+  "cite": "ET II 317(20)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_{-1}^1 (1-x)^{-mu/2}(1+x)^{mu/2-1/2}(z+x)^{mu-3/2} P_nu^mu dx = -Gamma(mu-1/2)(z-1)^{mu-1/2}(z+1)^{-1/2}/(pi^{1/2}e^{2mu pi i}Gamma(mu+nu)Gamma(mu-nu-1)) {Q_nu^mu Q_{-nu-1}^{mu-1} + Q_nu^{mu-1} Q_{-nu-1}^mu}[sqrt((1+z)/2)]",
+  "note": "z in complex plane cut along (-1,1); sampled on z > 1"
+ },
+ {
+  "id": "GR7.128.2",
+  "gr": "7.128.2",
+  "page": 820,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(-mu/2)*(1 + x)^(mu/2 - 1/2)*(z + x)^(mu - 1/2)*LegendreP[nu, mu, x], {x, -1, 1}]",
+  "rhs": [
+   "2*E^(-2*mu*Pi*I)*Gamma[1/2 + mu]/(Pi^(1/2)*Gamma[mu - nu]*Gamma[mu + nu + 1])*(z - 1)^mu*LegendreQ[nu, mu, 3, Sqrt[(1 + z)/2]]*LegendreQ[-nu - 1, mu, 3, Sqrt[(1 + z)/2]]"
+  ],
+  "conds": [
+   "-1/2 < Re[mu] < 1",
+   "z > 1"
+  ],
+  "cite": "ET II 316(18)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_{-1}^1 (1-x)^{-mu/2}(1+x)^{mu/2-1/2}(z+x)^{mu-1/2} P_nu^mu dx = 2e^{-2mu pi i}Gamma(1/2+mu)/(pi^{1/2}Gamma(mu-nu)Gamma(mu+nu+1)) (z-1)^mu Q_nu^mu Q_{-nu-1}^mu [sqrt((1+z)/2)]",
+  "note": "z in complex plane cut along (-1,1); sampled on z > 1"
+ },
+ {
+  "id": "GR7.129",
+  "gr": "7.129",
+  "page": 821,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[nu, x]*LegendreP[lam, x]*(1 + x)^(lam + nu), {x, -1, 1}]",
+  "rhs": [
+   "2^(lam + nu + 1)*Gamma[lam + nu + 1]^4/((Gamma[lam + 1]*Gamma[nu + 1])^2*Gamma[2*lam + 2*nu + 2])"
+  ],
+  "conds": [
+   "Re[nu + lam + 1] > 0"
+  ],
+  "cite": "EH I 172(30)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_{-1}^1 P_nu P_lam (1+x)^{lam+nu} dx = 2^{lam+nu+1}Gamma(lam+nu+1)^4/([Gamma(lam+1)Gamma(nu+1)]^2 Gamma(2lam+2nu+2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.131.1",
+  "gr": "7.131.1",
+  "page": 821,
+  "status": "ok",
+  "lhs": "Integrate[(x - 1)^(-mu/2)*(x + 1)^(mu/2 - 1/2)*(z + x)^(mu - 1/2)*LegendreP[nu, mu, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "Pi^(1/2)*Gamma[-mu - nu]*Gamma[1 - mu + nu]/Gamma[1/2 - mu]*(z - 1)^mu*LegendreP[nu, mu, 3, Sqrt[(1 + z)/2]]^2"
+  ],
+  "conds": [
+   "Re[mu + nu] < 0",
+   "Re[mu - nu] < 1",
+   "z > 1"
+  ],
+  "cite": "ET II 321(6)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_1^inf (x-1)^{-mu/2}(x+1)^{mu/2-1/2}(z+x)^{mu-1/2} P_nu^mu dx = pi^{1/2}Gamma(-mu-nu)Gamma(1-mu+nu)/Gamma(1/2-mu) (z-1)^mu {P_nu^mu[sqrt((1+z)/2)]}^2",
+  "note": "printed |arg(z+1)| < pi; sampled on z > 1"
+ },
+ {
+  "id": "GR7.131.2",
+  "gr": "7.131.2",
+  "page": 821,
+  "status": "ok",
+  "lhs": "Integrate[(x - 1)^(-mu/2)*(x + 1)^(mu/2 - 1/2)*(z + x)^(mu - 3/2)*LegendreP[nu, mu, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "Pi^(1/2)*Gamma[1 - mu - nu]*Gamma[2 - mu + nu]*(z - 1)^(mu - 1/2)*(z + 1)^(-1/2)/Gamma[3/2 - mu]*LegendreP[nu, mu, 3, Sqrt[(1 + z)/2]]*LegendreP[nu, mu - 1, 3, Sqrt[(1 + z)/2]]"
+  ],
+  "conds": [
+   "Re[mu] < 1",
+   "Re[mu + nu] < 1",
+   "Re[mu - nu] < 2",
+   "z > 1"
+  ],
+  "cite": "ET II 321(7)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_1^inf (x-1)^{-mu/2}(x+1)^{mu/2-1/2}(z+x)^{mu-3/2} P_nu^mu dx = pi^{1/2}Gamma(1-mu-nu)Gamma(2-mu+nu)(z-1)^{mu-1/2}(z+1)^{-1/2}/Gamma(3/2-mu) P_nu^mu P_nu^{mu-1}[sqrt((1+z)/2)]",
+  "note": "printed |arg(1+z)| < pi; sampled on z > 1"
+ },
+ {
+  "id": "GR7.132.1",
+  "gr": "7.132.1",
+  "page": 821,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^(lam - 1)*LegendreP[nu, mu, x], {x, -1, 1}]",
+  "rhs": [
+   "Pi*2^mu*Gamma[lam + mu/2]*Gamma[lam - mu/2]/(Gamma[lam + nu/2 + 1/2]*Gamma[lam - nu/2]*Gamma[-mu/2 + nu/2 + 1]*Gamma[-mu/2 - nu/2 + 1/2])"
+  ],
+  "conds": [
+   "2*Re[lam] > Abs[Re[mu]]"
+  ],
+  "cite": "ET II 316(16)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_{-1}^1 (1-x^2)^{lam-1} P_nu^mu dx = pi 2^mu Gamma(lam+mu/2)Gamma(lam-mu/2)/(Gamma(lam+nu/2+1/2)Gamma(lam-nu/2)Gamma(-mu/2+nu/2+1)Gamma(-mu/2-nu/2+1/2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.132.2a",
+  "gr": "7.132.2a",
+  "page": 821,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 - 1)^(lam - 1)*LegendreP[n, mu, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "2^(mu - 1)*Gamma[lam - mu/2]*Gamma[1 - lam + nu/2]*Gamma[1/2 - lam - nu/2]/(Gamma[1 - mu/2 + nu/2]*Gamma[1/2 - mu/2 - nu/2]*Gamma[1 - lam - mu/2])"
+  ],
+  "conds": [
+   "2*Re[lam] > Re[mu]",
+   "Re[1 - 2*lam - nu] > 0",
+   "Re[2 - 2*lam + nu] > 0"
+  ],
+  "cite": "ET II 320(2)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_1^inf (x^2-1)^{lam-1} P_n^mu(x) dx = 2^{mu-1}Gamma(lam-mu/2)Gamma(1-lam+nu/2)Gamma(1/2-lam-nu/2)/(Gamma(1-mu/2+nu/2)Gamma(1/2-mu/2-nu/2)Gamma(1-lam-mu/2))",
+  "note": "as printed: integrand has P_n^mu while value uses nu (misprint). Printed condition 'Re lam > Re mu'; corrected to Re lam > Re mu/2 (convergence at x=1, Gamma(lam-mu/2))."
+ },
+ {
+  "id": "GR7.132.2b",
+  "gr": "7.132.2b",
+  "page": 821,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 - 1)^(lam - 1)*LegendreP[nu, mu, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "2^(mu - 1)*Gamma[lam - mu/2]*Gamma[1 - lam + nu/2]*Gamma[1/2 - lam - nu/2]/(Gamma[1 - mu/2 + nu/2]*Gamma[1/2 - mu/2 - nu/2]*Gamma[1 - lam - mu/2])"
+  ],
+  "conds": [
+   "2*Re[lam] > Re[mu]",
+   "Re[1 - 2*lam - nu] > 0",
+   "Re[2 - 2*lam + nu] > 0"
+  ],
+  "cite": "ET II 320(2)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_1^inf (x^2-1)^{lam-1} P_n^mu(x) dx = 2^{mu-1}Gamma(lam-mu/2)Gamma(1-lam+nu/2)Gamma(1/2-lam-nu/2)/(Gamma(1-mu/2+nu/2)Gamma(1/2-mu/2-nu/2)Gamma(1-lam-mu/2))",
+  "note": "corrected integrand: P_n^mu -> P_nu^mu. Printed condition 'Re lam > Re mu'; corrected to Re lam > Re mu/2."
+ },
+ {
+  "id": "GR7.132.3",
+  "gr": "7.132.3",
+  "page": 821,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 - 1)^(lam - 1)*LegendreQ[nu, mu, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "E^(mu*Pi*I)*Gamma[1/2 + nu/2 + mu/2]*Gamma[1 - lam + nu/2]*Gamma[lam + mu/2]*Gamma[lam - mu/2]/(2^(2 - mu)*Gamma[1 + nu/2 - mu/2]*Gamma[1/2 + lam + nu/2])"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 2*Re[lam]",
+   "2*Re[lam] < Re[nu] + 2"
+  ],
+  "cite": "ET II 324(23)",
+  "edition_note": "9",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_1^inf (x^2-1)^{lam-1} Q_nu^mu dx = e^{mu pi i}Gamma(1/2+nu/2+mu/2)Gamma(1-lam+nu/2)Gamma(lam+mu/2)Gamma(lam-mu/2)/(2^{2-mu}Gamma(1+nu/2-mu/2)Gamma(1/2+lam+nu/2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.132.4",
+  "gr": "7.132.4",
+  "page": 821,
+  "status": "ok",
+  "lhs": "Integrate[x^sigma*(1 - x^2)^(-mu/2)*LegendreP[nu, mu, x], {x, 0, 1}]",
+  "rhs": [
+   "2^(mu - 1)*Gamma[1/2 + sigma/2]*Gamma[1 + sigma/2]/(Gamma[1 + sigma/2 - nu/2 - mu/2]*Gamma[sigma/2 + nu/2 - mu/2 + 3/2])"
+  ],
+  "conds": [
+   "Re[mu] < 1",
+   "Re[sigma] > -1"
+  ],
+  "cite": "EH I 172(24)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^1 x^sigma (1-x^2)^{-mu/2} P_nu^mu dx = 2^{mu-1}Gamma(1/2+sigma/2)Gamma(1+sigma/2)/(Gamma(1+sigma/2-nu/2-mu/2)Gamma(sigma/2+nu/2-mu/2+3/2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.132.5",
+  "gr": "7.132.5",
+  "page": 821,
+  "status": "ok",
+  "lhs": "Integrate[x^sigma*(1 - x^2)^(m/2)*LegendreP[nu, m, x], {x, 0, 1}]",
+  "rhs": [
+   "(-1)^m*2^(-m - 1)*Gamma[1/2 + sigma/2]*Gamma[1 + sigma/2]*Gamma[1 + m + nu]/(Gamma[1 - m + nu]*Gamma[1 + sigma/2 + m/2 - nu/2]*Gamma[3/2 + sigma/2 + m/2 + nu/2])"
+  ],
+  "conds": [
+   "Re[sigma] > -1",
+   "Element[m, Integers] && m > 0"
+  ],
+  "cite": "EH I 172(25), ET II 313(4)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^1 x^sigma (1-x^2)^{m/2} P_nu^m dx = (-1)^m 2^{-m-1}Gamma(1/2+sigma/2)Gamma(1+sigma/2)Gamma(1+m+nu)/(Gamma(1-m+nu)Gamma(1+sigma/2+m/2-nu/2)Gamma(3/2+sigma/2+m/2+nu/2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.132.6a",
+  "gr": "7.132.6a",
+  "page": 821,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^eta*LegendreP[nu, mu, x], {x, 0, 1}]",
+  "rhs": [
+   "2^(mu - 1)*Gamma[1 + eta - mu/2]*Gamma[1/2 + sigma/2]/(Gamma[1 - mu]*Gamma[3/2 + eta + sigma/2 - mu/2])*HypergeometricPFQ[{(nu - mu + 1)/2, -(mu + nu)/2, 1 + eta - mu/2}, {1 - mu, (3 + sigma - mu)/2 + eta}, 1]"
+  ],
+  "conds": [
+   "Re[eta - mu/2] > -1",
+   "Re[sigma] > -1"
+  ],
+  "cite": "ET II 314(6)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^1 (1-x^2)^eta P_nu^mu dx = 2^{mu-1}Gamma(1+eta-mu/2)Gamma(1/2+sigma/2)/(Gamma(1-mu)Gamma(3/2+eta+sigma/2-mu/2)) 3F2((nu-mu+1)/2,-(mu+nu)/2,1+eta-mu/2; 1-mu,(3+sigma-mu)/2+eta; 1)",
+  "note": "as printed: sigma appears in value and condition but not in integrand (factor x^sigma missing)"
+ },
+ {
+  "id": "GR7.132.6b",
+  "gr": "7.132.6b",
+  "page": 821,
+  "status": "ok",
+  "lhs": "Integrate[x^sigma*(1 - x^2)^eta*LegendreP[nu, mu, x], {x, 0, 1}]",
+  "rhs": [
+   "2^(mu - 1)*Gamma[1 + eta - mu/2]*Gamma[1/2 + sigma/2]/(Gamma[1 - mu]*Gamma[3/2 + eta + sigma/2 - mu/2])*HypergeometricPFQ[{(nu - mu + 1)/2, -(mu + nu)/2, 1 + eta - mu/2}, {1 - mu, (3 + sigma - mu)/2 + eta}, 1]"
+  ],
+  "conds": [
+   "Re[eta - mu/2] > -1",
+   "Re[sigma] > -1"
+  ],
+  "cite": "ET II 314(6)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^1 (1-x^2)^eta P_nu^mu dx = 2^{mu-1}Gamma(1+eta-mu/2)Gamma(1/2+sigma/2)/(Gamma(1-mu)Gamma(3/2+eta+sigma/2-mu/2)) 3F2((nu-mu+1)/2,-(mu+nu)/2,1+eta-mu/2; 1-mu,(3+sigma-mu)/2+eta; 1)",
+  "note": "corrected integrand: factor x^sigma restored (sigma appears in value and condition)"
+ },
+ {
+  "id": "GR7.132.7",
+  "gr": "7.132.7",
+  "page": 822,
+  "status": "ok",
+  "lhs": "Integrate[x^(-rho)*(x^2 - 1)^(-mu/2)*LegendreP[nu, mu, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "2^(rho + mu - 2)*Gamma[(rho + mu + nu)/2]*Gamma[(rho + mu - nu - 1)/2]/(Sqrt[Pi]*Gamma[rho])"
+  ],
+  "conds": [
+   "Re[mu] < 1",
+   "Re[rho + mu + nu] > 0",
+   "Re[rho + mu - nu] > 1"
+  ],
+  "cite": "ET II 320(3)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_1^inf x^{-rho}(x^2-1)^{-mu/2} P_nu^mu dx = 2^{rho+mu-2}Gamma((rho+mu+nu)/2)Gamma((rho+mu-nu-1)/2)/(sqrt(pi)Gamma(rho))",
+  "note": ""
+ },
+ {
+  "id": "GR7.133.1",
+  "gr": "7.133.1",
+  "page": 822,
+  "status": "ok",
+  "lhs": "Integrate[LegendreQ[nu, 0, 3, x]*(x - u)^(mu - 1), {x, u, Infinity}]",
+  "rhs": [
+   "Gamma[mu]*E^(mu*Pi*I)*(u^2 - 1)^(mu/2)*LegendreQ[nu, -mu, 3, u]"
+  ],
+  "conds": [
+   "u > 1",
+   "0 < Re[mu]",
+   "Re[mu] < 1 + Re[nu]"
+  ],
+  "cite": "MO 90a",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_u^inf Q_nu (x-u)^{mu-1} dx = Gamma(mu)e^{mu pi i}(u^2-1)^{mu/2} Q_nu^{-mu}(u)",
+  "note": "printed |arg(u-1)| < pi; sampled on u > 1"
+ },
+ {
+  "id": "GR7.133.2",
+  "gr": "7.133.2",
+  "page": 822,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 - 1)^(lam/2)*LegendreQ[nu, -lam, 3, x]*(x - u)^(mu - 1), {x, u, Infinity}]",
+  "rhs": [
+   "Gamma[mu]*E^(mu*Pi*I)*(u^2 - 1)^(lam/2 + mu/2)*LegendreQ[nu, -lam - mu, 3, u]"
+  ],
+  "conds": [
+   "u > 1",
+   "0 < Re[mu]",
+   "Re[mu] < 1 + Re[nu - lam]"
+  ],
+  "cite": "ET II 204(30)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_u^inf (x^2-1)^{lam/2} Q_nu^{-lam}(x)(x-u)^{mu-1} dx = Gamma(mu)e^{mu pi i}(u^2-1)^{lam/2+mu/2} Q_nu^{-lam-mu}(u)",
+  "note": "printed |arg(u-1)| < pi; sampled on u > 1"
+ },
+ {
+  "id": "GR7.134.1",
+  "gr": "7.134.1",
+  "page": 822,
+  "status": "ok",
+  "lhs": "Integrate[(x - 1)^(lam - 1)*(x^2 - 1)^(mu/2)*LegendreP[nu, mu, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "2^(lam + mu)*Gamma[lam]*Gamma[-lam - mu - nu]*Gamma[1 - lam - mu + nu]/(Gamma[1 - mu + nu]*Gamma[-mu - nu]*Gamma[1 - lam - mu])"
+  ],
+  "conds": [
+   "Re[lam] > 0",
+   "Re[lam + mu + nu] < 0",
+   "Re[lam + mu - nu] < 1"
+  ],
+  "cite": "ET II 321(4)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_1^inf (x-1)^{lam-1}(x^2-1)^{mu/2} P_nu^mu dx = 2^{lam+mu}Gamma(lam)Gamma(-lam-mu-nu)Gamma(1-lam-mu+nu)/(Gamma(1-mu+nu)Gamma(-mu-nu)Gamma(1-lam-mu))",
+  "note": ""
+ },
+ {
+  "id": "GR7.134.2",
+  "gr": "7.134.2",
+  "page": 822,
+  "status": "ok",
+  "lhs": "Integrate[(x - 1)^(lam - 1)*(x^2 - 1)^(-mu/2)*LegendreP[nu, mu, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "-2^(lam - mu)*Sin[Pi*nu]*Gamma[lam - mu]*Gamma[-lam + mu - nu]*Gamma[1 - lam + mu + nu]/(Pi*Gamma[1 - lam])"
+  ],
+  "conds": [
+   "Re[lam - mu] > 0",
+   "Re[mu - lam - nu] > 0",
+   "Re[mu - lam + nu] > -1"
+  ],
+  "cite": "ET II 321(5)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_1^inf (x-1)^{lam-1}(x^2-1)^{-mu/2} P_nu^mu dx = -2^{lam-mu} sin(pi nu)Gamma(lam-mu)Gamma(-lam+mu-nu)Gamma(1-lam+mu+nu)/(pi Gamma(1-lam))",
+  "note": ""
+ },
+ {
+  "id": "GR7.135.1",
+  "gr": "7.135.1",
+  "page": 822,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^(-mu/2)*(z - x)^(-1)*LegendreP[mu + n, mu, x], {x, -1, 1}]",
+  "rhs": [
+   "2*E^(-I*mu*Pi)*(z^2 - 1)^(-mu/2)*LegendreQ[mu + n, mu, 3, z]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[mu] + n > -1",
+   "z > 1"
+  ],
+  "cite": "ET II 316(17)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_{-1}^1 (1-x^2)^{-mu/2}(z-x)^{-1} P_{mu+n}^mu dx = 2e^{-i mu pi}(z^2-1)^{-mu/2} Q_{mu+n}^mu(z)",
+  "note": "z in complex plane cut along (-1,1); sampled on z > 1"
+ },
+ {
+  "id": "GR7.135.2",
+  "gr": "7.135.2",
+  "page": 822,
+  "status": "ok",
+  "lhs": "Integrate[(x - 1)^(lam - 1)*(x^2 - 1)^(mu/2)*(x + z)^(-rho)*LegendreP[nu, mu, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "2^(lam + mu - rho)*Gamma[lam - rho]*Gamma[rho - lam - mu - nu]*Gamma[rho - lam - mu + nu + 1]/(Gamma[1 - mu + nu]*Gamma[-mu - nu]*Gamma[1 + rho - lam - mu])*HypergeometricPFQ[{rho, rho - lam - mu - nu, rho - lam - mu + nu + 1}, {rho - lam + 1, rho - lam - mu + 1}, (1 + z)/2] + Gamma[rho - lam]*Gamma[lam]/(Gamma[rho]*Gamma[1 - mu])*2^mu*(z + 1)^(lam - rho)*HypergeometricPFQ[{lam, -mu - nu, 1 - mu + nu}, {1 - mu, 1 - rho + lam}, (1 + z)/2]"
+  ],
+  "conds": [
+   "Re[lam] > 0",
+   "Re[rho - lam - mu - nu] > 0",
+   "Re[rho - lam - mu + nu + 1] > 0",
+   "-1 < z < 1"
+  ],
+  "cite": "ET II 322(9)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_1^inf (x-1)^{lam-1}(x^2-1)^{mu/2}(x+z)^{-rho} P_nu^mu dx = 2^{lam+mu-rho}Gamma(lam-rho)Gamma(rho-lam-mu-nu)Gamma(rho-lam-mu+nu+1)/(Gamma(1-mu+nu)Gamma(-mu-nu)Gamma(1+rho-lam-mu)) 3F2(...;(1+z)/2) + Gamma(rho-lam)Gamma(lam)/(Gamma(rho)Gamma(1-mu)) 2^mu (z+1)^{lam-rho} 3F2(lam,-mu-nu,1-mu+nu;1-mu,1-rho+lam;(1+z)/2)",
+  "note": "printed |arg(z+1)| < pi; sampled on -1 < z < 1 where the 3F2 series at (1+z)/2 converge"
+ },
+ {
+  "id": "GR7.135.3",
+  "gr": "7.135.3",
+  "page": 823,
+  "status": "ok",
+  "lhs": "Integrate[(x - 1)^(lam - 1)*(x^2 - 1)^(-mu/2)*(x + z)^(-rho)*LegendreP[nu, mu, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "-Sin[nu*Pi]*Gamma[lam - mu - rho]*Gamma[rho - lam + mu - nu]*Gamma[rho - lam + mu + nu + 1]/(2^(rho - lam + mu)*Pi*Gamma[1 + rho - lam])*HypergeometricPFQ[{rho, rho - lam + mu - nu, rho - lam + mu + nu + 1}, {1 + rho - lam, 1 + rho - lam + mu}, (1 + z)/2] + Gamma[lam - mu]*Gamma[rho - lam + mu]/(Gamma[rho]*Gamma[1 - mu])*(z + 1)^(lam - rho - mu)*HypergeometricPFQ[{lam - mu, -nu, nu + 1}, {1 + lam - mu - rho, 1 - mu}, (1 + z)/2]"
+  ],
+  "conds": [
+   "Re[lam - mu] > 0",
+   "Re[rho - lam + mu - nu] > 0",
+   "Re[rho - lam + mu + nu + 1] > 0",
+   "-1 < z < 1"
+  ],
+  "cite": "ET II 322(10)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_1^inf (x-1)^{lam-1}(x^2-1)^{-mu/2}(x+z)^{-rho} P_nu^mu dx = -sin(nu pi)Gamma(lam-mu-rho)Gamma(rho-lam+mu-nu)Gamma(rho-lam+mu+nu+1)/(2^{rho-lam+mu} pi Gamma(1+rho-lam)) 3F2(...;(1+z)/2) + Gamma(lam-mu)Gamma(rho-lam+mu)/(Gamma(rho)Gamma(1-mu)) (z+1)^{lam-rho-mu} 3F2(lam-mu,-nu,nu+1;1+lam-mu-rho,1-mu;(1+z)/2)",
+  "note": "printed |arg(z+1)| < pi; sampled on -1 < z < 1 where the 3F2 series at (1+z)/2 converge"
+ },
+ {
+  "id": "GR7.136.1",
+  "gr": "7.136.1",
+  "page": 823,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^(lam - 1)*(1 - a^2*x^2)^(mu/2)*LegendreP[nu, mu, a*x], {x, -1, 1}]",
+  "rhs": [
+   "Pi*2^mu*Gamma[lam]/(Gamma[1/2 + lam]*Gamma[1/2 - mu/2 - nu/2]*Gamma[1 - mu/2 + nu/2])*Hypergeometric2F1[-(mu + nu)/2, (1 - mu + nu)/2, 1/2 + lam, a^2]"
+  ],
+  "conds": [
+   "Re[lam] > 0",
+   "-1 < a < 1"
+  ],
+  "cite": "ET II 318(31)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_{-1}^1 (1-x^2)^{lam-1}(1-a^2x^2)^{mu/2} P_nu^mu(ax) dx = pi 2^mu Gamma(lam)/(Gamma(1/2+lam)Gamma(1/2-mu/2-nu/2)Gamma(1-mu/2+nu/2)) 2F1(-(mu+nu)/2,(1-mu+nu)/2;1/2+lam;a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.136.2",
+  "gr": "7.136.2",
+  "page": 823,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 - 1)^(lam - 1)*(a^2*x^2 - 1)^(mu/2)*LegendreP[nu, mu, 3, a*x], {x, 1, Infinity}]",
+  "rhs": [
+   "Gamma[lam]*Gamma[1 - lam - mu/2 + nu/2]*Gamma[1/2 - lam - mu/2 - nu/2]/(Gamma[1 - mu/2 + nu/2]*Gamma[1/2 - nu/2 - mu/2]*Gamma[1 - lam - mu])*2^(mu - 1)*a^(mu - nu - 1)*Hypergeometric2F1[(1 - mu + nu)/2, 1 - lam - (mu - nu)/2, 1 - lam - mu, 1 - 1/a^2]"
+  ],
+  "conds": [
+   "a > 1",
+   "Re[lam] > 0",
+   "Re[nu - mu - 2*lam] > -2",
+   "Re[2*lam + mu + nu] < 1"
+  ],
+  "cite": "ET II 325(25)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_1^inf (x^2-1)^{lam-1}(a^2x^2-1)^{mu/2} P_nu^mu(ax) dx = Gamma(lam)Gamma(1-lam-mu/2+nu/2)Gamma(1/2-lam-mu/2-nu/2)/(Gamma(1-mu/2+nu/2)Gamma(1/2-nu/2-mu/2)Gamma(1-lam-mu)) 2^{mu-1}a^{mu-nu-1} 2F1((1-mu+nu)/2,1-lam-(mu-nu)/2;1-lam-mu;1-1/a^2)",
+  "note": "printed Re a > 0; sampled on a > 1 so that ax stays off the cut"
+ },
+ {
+  "id": "GR7.136.3",
+  "gr": "7.136.3",
+  "page": 823,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 - 1)^(lam - 1)*(a^2*x^2 - 1)^(-mu/2)*LegendreQ[nu, mu, 3, a*x], {x, 1, Infinity}]",
+  "rhs": [
+   "Gamma[(mu + nu + 1)/2]*Gamma[lam]*Gamma[1 - lam + (mu + nu)/2]*2^(mu - 2)*E^(mu*Pi*I)*a^(-mu - nu - 1)/Gamma[nu + 3/2]*Hypergeometric2F1[(mu + nu + 1)/2, 1 - lam + (mu + nu)/2, nu + 3/2, a^(-2)]"
+  ],
+  "conds": [
+   "a > 1",
+   "Re[lam] > 0",
+   "Re[2*lam - mu - nu] < 2"
+  ],
+  "cite": "ET II 325(27)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_1^inf (x^2-1)^{lam-1}(a^2x^2-1)^{-mu/2} Q_nu^mu(ax) dx = Gamma((mu+nu+1)/2)Gamma(lam)Gamma(1-lam+(mu+nu)/2)2^{mu-2}e^{mu pi i}a^{-mu-nu-1}/Gamma(nu+3/2) 2F1((mu+nu+1)/2,1-lam+(mu+nu)/2;nu+3/2;a^{-2})",
+  "note": "printed |arg(a-1)| < pi; sampled on a > 1"
+ },
+ {
+  "id": "GR7.137.1",
+  "gr": "7.137.1",
+  "page": 823,
+  "status": "ok",
+  "lhs": "Integrate[x^(-mu/2 - 1/2)*(x - 1)^(-mu - 1/2)*(1 + a*x)^(mu/2)*LegendreQ[nu, mu, 3, 1 + 2*a*x], {x, 1, Infinity}]",
+  "rhs": [
+   "Pi^(-1/2)*E^(-mu*Pi*I)*Gamma[1/2 - mu]*a^(mu/2)*LegendreQ[nu, mu, 3, Sqrt[1 + a]]^2"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] < 1/2",
+   "Re[mu + nu] > -1"
+  ],
+  "cite": "ET II 325(28)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_1^inf x^{-mu/2-1/2}(x-1)^{-mu-1/2}(1+ax)^{mu/2} Q_nu^mu(1+2ax) dx = pi^{-1/2}e^{-mu pi i}Gamma(1/2-mu)a^{mu/2}{Q_nu^mu[(1+a)^{1/2}]}^2",
+  "note": "printed |arg a| < pi; sampled on a > 0"
+ },
+ {
+  "id": "GR7.137.2",
+  "gr": "7.137.2",
+  "page": 823,
+  "status": "ok",
+  "lhs": "Integrate[x^(-mu/2 - 1/2)*(x - 1)^(-mu - 3/2)*(1 + a*x)^(mu/2)*LegendreQ[nu, mu, 3, 1 + 2*a*x], {x, 1, Infinity}]",
+  "rhs": [
+   "-Pi^(-1/2)*E^(-mu*Pi*I)*Gamma[-mu - 1/2]*a^(mu/2 + 1/2)*(1 + a^2)^(-1/2)*LegendreQ[nu, mu + 1, 3, Sqrt[1 + a]]*LegendreQ[nu, mu, 3, Sqrt[1 + a]]",
+   "-Pi^(-1/2)*E^(-mu*Pi*I)*Gamma[-mu - 1/2]*a^(mu/2 + 1/2)*(1 + a)^(-1/2)*LegendreQ[nu, mu + 1, 3, Sqrt[1 + a]]*LegendreQ[nu, mu, 3, Sqrt[1 + a]]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] < -1/2",
+   "Re[mu + nu + 2] > 0"
+  ],
+  "cite": "ET II 326(29)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_1^inf x^{-mu/2-1/2}(x-1)^{-mu-3/2}(1+ax)^{mu/2} Q_nu^mu(1+2ax) dx = -pi^{-1/2}e^{-mu pi i}Gamma(-mu-1/2)a^{mu/2+1/2}(1+a^2)^{-1/2} Q_nu^{mu+1}[(1+a)^{1/2}] Q_nu^mu[(1+a)^{1/2}]",
+  "note": "printed |arg a| < pi; sampled on a > 0. Second candidate: (1+a^2)^{-1/2} -> (1+a)^{-1/2} (cf. 7.137.8)"
+ },
+ {
+  "id": "GR7.137.3",
+  "gr": "7.137.3",
+  "page": 824,
+  "status": "ok",
+  "lhs": "Integrate[x^(-mu/2 - 1/2)*(1 - x)^(-mu - 1/2)*(1 + a*x)^(mu/2)*LegendreP[nu, mu, 3, 1 + 2*a*x], {x, 0, 1}]",
+  "rhs": [
+   "Pi^(1/2)*Gamma[1/2 - mu]*a^(mu/2)*LegendreP[nu, mu, 3, Sqrt[1 + a]]^2"
+  ],
+  "conds": [
+   "Re[mu] < 1/2",
+   "a > 0"
+  ],
+  "cite": "ET II 319(32)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^1 x^{-mu/2-1/2}(1-x)^{-mu-1/2}(1+ax)^{mu/2} P_nu^mu(1+2ax) dx = pi^{1/2}Gamma(1/2-mu)a^{mu/2}{P_nu^mu[(1+a)^{1/2}]}^2",
+  "note": "printed |arg a| < pi; sampled on a > 0"
+ },
+ {
+  "id": "GR7.137.4",
+  "gr": "7.137.4",
+  "page": 824,
+  "status": "ok",
+  "lhs": "Integrate[x^(-mu/2 - 1/2)*(1 - x)^(-mu - 3/2)*(1 + a*x)^(mu/2)*LegendreP[nu, mu, 3, 1 + 2*a*x], {x, 0, 1}]",
+  "rhs": [
+   "Pi^(1/2)*Gamma[-1/2 - mu]*a^(mu/2 + 1/2)*LegendreP[nu, mu + 1, 3, Sqrt[1 + a]]*LegendreP[nu, mu, 3, (1 + a)^2]",
+   "Pi^(1/2)*Gamma[-1/2 - mu]*a^(mu/2 + 1/2)*LegendreP[nu, mu + 1, 3, Sqrt[1 + a]]*LegendreP[nu, mu, 3, Sqrt[1 + a]]"
+  ],
+  "conds": [
+   "Re[mu] < -1/2",
+   "a > 0"
+  ],
+  "cite": "ET II 319(33)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^1 x^{-mu/2-1/2}(1-x)^{-mu-3/2}(1+ax)^{mu/2} P_nu^mu(1+2ax) dx = pi^{1/2}Gamma(-1/2-mu)a^{mu/2+1/2} P_nu^{mu+1}[(1+a)^{1/2}] P_nu^mu[(1+a)^2]",
+  "note": "printed |arg a| < pi; sampled on a > 0. Second candidate: P_nu^mu[(1+a)^2] -> P_nu^mu[(1+a)^{1/2}] (likely misprint)"
+ },
+ {
+  "id": "GR7.137.5",
+  "gr": "7.137.5",
+  "page": 824,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu/2 - 1/2)*(1 - x)^(mu - 1/2)*(1 + a*x)^(-mu/2)*LegendreP[nu, mu, 3, 1 + 2*a*x], {x, 0, 1}]",
+  "rhs": [
+   "Pi^(1/2)*Gamma[1/2 + mu]*a^(-mu/2)*LegendreP[nu, mu, 3, Sqrt[1 + a]]*LegendreP[nu, -mu, 3, Sqrt[1 + a]]"
+  ],
+  "conds": [
+   "Re[mu] > -1/2",
+   "a > 0"
+  ],
+  "cite": "ET II 319(34)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^1 x^{mu/2-1/2}(1-x)^{mu-1/2}(1+ax)^{-mu/2} P_nu^mu(1+2ax) dx = pi^{1/2}Gamma(1/2+mu)a^{-mu/2} P_nu^mu[(1+a)^{1/2}] P_nu^{-mu}[(1+a)^{1/2}]",
+  "note": "printed |arg a| < pi; sampled on a > 0"
+ },
+ {
+  "id": "GR7.137.6",
+  "gr": "7.137.6",
+  "page": 824,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu/2 - 1/2)*(1 - x)^(mu - 3/2)*(1 + a*x)^(-mu/2)*LegendreP[nu, mu, 3, 1 + 2*a*x], {x, 0, 1}]",
+  "rhs": [
+   "1/2*Pi^(1/2)*Gamma[mu - 1/2]*a^(1/2 - mu/2)*(1 + a)^(-1/2)*(LegendreP[nu, 1 - mu, 3, Sqrt[1 + a]]*LegendreP[nu, mu, 3, Sqrt[1 + a]] + (mu + nu)*(1 - mu + nu)*LegendreP[nu, -mu, 3, Sqrt[1 + a]]*LegendreP[nu, mu, 3, Sqrt[1 + a]])"
+  ],
+  "conds": [
+   "Re[mu] > 1/2",
+   "a > 0"
+  ],
+  "cite": "ET II 319(35)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^1 x^{mu/2-1/2}(1-x)^{mu-3/2}(1+ax)^{-mu/2} P_nu^mu(1+2ax) dx = 1/2 pi^{1/2}Gamma(mu-1/2)a^{1/2-mu/2}(1+a)^{-1/2}{P_nu^{1-mu}P_nu^mu + (mu+nu)(1-mu+nu)P_nu^{-mu}P_nu^mu}[(1+a)^{1/2}]",
+  "note": "printed |arg a| < pi; sampled on a > 0"
+ },
+ {
+  "id": "GR7.137.7",
+  "gr": "7.137.7",
+  "page": 824,
+  "status": "ok",
+  "lhs": "Integrate[x^(-mu/2 - 1/2)*(1 - x)^(-mu - 1/2)*(1 + a*x)^(mu/2)*LegendreQ[nu, mu, 3, 1 + 2*a*x], {x, 0, 1}]",
+  "rhs": [
+   "Pi^(1/2)*Gamma[1/2 - mu]*a^(mu/2)*LegendreP[nu, mu, 3, Sqrt[1 + a]]*LegendreQ[nu, mu, 3, Sqrt[1 + a]]"
+  ],
+  "conds": [
+   "Re[mu] < 1/2",
+   "a > 0"
+  ],
+  "cite": "ET II 320(38)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^1 x^{-mu/2-1/2}(1-x)^{-mu-1/2}(1+ax)^{mu/2} Q_nu^mu(1+2ax) dx = pi^{1/2}Gamma(1/2-mu)a^{mu/2} P_nu^mu[(1+a)^{1/2}] Q_nu^mu[(1+a)^{1/2}]",
+  "note": "printed |arg a| < pi; sampled on a > 0"
+ },
+ {
+  "id": "GR7.137.8",
+  "gr": "7.137.8",
+  "page": 824,
+  "status": "ok",
+  "lhs": "Integrate[x^(-mu/2 - 1/2)*(1 - x)^(-mu - 3/2)*(1 + a*x)^(mu/2)*LegendreQ[nu, mu, 3, 1 + 2*a*x], {x, 0, 1}]",
+  "rhs": [
+   "1/2*Pi^(1/2)*Gamma[-mu - 1/2]*(1 + a)^(-1/2)*a^(mu/2 + 1/2)*(LegendreP[nu, mu + 1, 3, Sqrt[1 + a]]*LegendreQ[nu, mu, 3, Sqrt[1 + a]] + LegendreP[nu, mu, 3, Sqrt[1 + a]]*LegendreQ[nu, mu + 1, 3, Sqrt[1 + a]])"
+  ],
+  "conds": [
+   "Re[mu] < -1/2",
+   "a > 0"
+  ],
+  "cite": "ET II 320(39)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^1 x^{-mu/2-1/2}(1-x)^{-mu-3/2}(1+ax)^{mu/2} Q_nu^mu(1+2ax) dx = 1/2 pi^{1/2}Gamma(-mu-1/2)(1+a)^{-1/2}a^{mu/2+1/2}{P_nu^{mu+1}Q_nu^mu + P_nu^mu Q_nu^{mu+1}}[(1+a)^{1/2}]",
+  "note": "printed |arg a| < pi; sampled on a > 0"
+ },
+ {
+  "id": "GR7.137.9",
+  "gr": "7.137.9",
+  "page": 824,
+  "status": "ok",
+  "lhs": "Integrate[(y - x)^(mu - 1)*(x*(1 + gamma*x/2))^(-lam/2)*LegendreP[nu, lam, 3, 1 + gamma*x], {x, 0, y}]",
+  "rhs": [
+   "Gamma[mu]*(2/gamma)^(mu/2)*(y*(1 + gamma*y/2))^(mu/2 - lam/2)*LegendreP[nu, lam - mu, 3, 1 + gamma*y]"
+  ],
+  "conds": [
+   "Re[lam] < 1",
+   "Re[mu] > 0",
+   "gamma > 0",
+   "y > 0"
+  ],
+  "cite": "ET II 193(52)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^y (y-x)^{mu-1}[x(1+gamma x/2)]^{-lam/2} P_nu^lam(1+gamma x) dx = Gamma(mu)(2/gamma)^{mu/2}[y(1+gamma y/2)]^{mu/2-lam/2} P_nu^{lam-mu}(1+gamma y)",
+  "note": "printed |arg gamma y| < pi; sampled on gamma > 0, y > 0"
+ },
+ {
+  "id": "GR7.137.10",
+  "gr": "7.137.10",
+  "page": 824,
+  "status": "ok",
+  "lhs": "Integrate[(y - x)^(mu - 1)*x^(sigma + lam/2 - 1)*(1 + gamma*x/2)^(-lam/2)*LegendreP[nu, lam, 3, 1 + gamma*x], {x, 0, y}]",
+  "rhs": [
+   "(gamma/2)^(-lam/2)*Gamma[sigma]*Gamma[mu]*y^(sigma + mu - 1)/(Gamma[1 - lam]*Gamma[sigma + mu])*HypergeometricPFQ[{-nu, 1 + nu, sigma}, {1 - lam, sigma + mu}, -gamma*y/2]"
+  ],
+  "conds": [
+   "Re[sigma] > 0",
+   "Re[mu] > 0",
+   "gamma > 0",
+   "y > 0",
+   "gamma*y < 1"
+  ],
+  "cite": "ET II 193(53)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^y (y-x)^{mu-1}x^{sigma+lam/2-1}(1+gamma x/2)^{-lam/2} P_nu^lam(1+gamma x) dx = (gamma/2)^{-lam/2}Gamma(sigma)Gamma(mu)y^{sigma+mu-1}/(Gamma(1-lam)Gamma(sigma+mu)) 3F2(-nu,1+nu,sigma;1-lam,sigma+mu;-gamma y/2)",
+  "note": "printed |gamma y| < 1; sampled on gamma > 0, y > 0"
+ },
+ {
+  "id": "GR7.137.11",
+  "gr": "7.137.11",
+  "page": 825,
+  "status": "ok",
+  "lhs": "Integrate[(y - x)^(mu - 1)*(x*(1 - x))^(-lam/2)*LegendreP[nu, lam, 1 - 2*x], {x, 0, y}]",
+  "rhs": [
+   "Gamma[mu]*(y*(1 - y))^(mu/2 - lam/2)*LegendreP[nu, lam - mu, 1 - 2*y]"
+  ],
+  "conds": [
+   "Re[lam] < 1",
+   "Re[mu] > 0",
+   "0 < y < 1"
+  ],
+  "cite": "ET II 193(54)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^y (y-x)^{mu-1}[x(1-x)]^{-lam/2} P_nu^lam(1-2x) dx = Gamma(mu)[y(1-y)]^{mu/2-lam/2} P_nu^{lam-mu}(1-2y)",
+  "note": ""
+ },
+ {
+  "id": "GR7.137.12",
+  "gr": "7.137.12",
+  "page": 825,
+  "status": "ok",
+  "lhs": "Integrate[(y - x)^(mu - 1)*x^(sigma + lam/2 - 1)*(1 - x)^(-lam/2)*LegendreP[nu, lam, 1 - 2*x], {x, 0, y}]",
+  "rhs": [
+   "Gamma[mu]*Gamma[sigma]*y^(sigma + mu - 1)/(Gamma[sigma + mu]*Gamma[1 - lam])*HypergeometricPFQ[{-nu, 1 + nu, sigma}, {1 - lam, sigma + mu}, y]"
+  ],
+  "conds": [
+   "Re[sigma] > 0",
+   "Re[mu] > 0",
+   "0 < y <= 1"
+  ],
+  "cite": "ET II 193(155)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^y (y-x)^{mu-1}x^{sigma+lam/2-1}(1-x)^{-lam/2} P_nu^lam(1-2x) dx = Gamma(mu)Gamma(sigma)y^{sigma+mu-1}/(Gamma(sigma+mu)Gamma(1-lam)) 3F2(-nu,1+nu,sigma;1-lam,sigma+mu;y)",
+  "note": ""
+ },
+ {
+  "id": "GR7.138",
+  "gr": "7.138",
+  "page": 825,
+  "status": "ok",
+  "lhs": "Integrate[(a + x)^(-mu - nu - 2)*LegendreP[mu, (a - x)/(a + x)]*LegendreP[nu, (a - x)/(a + x)], {x, 0, Infinity}]",
+  "rhs": [
+   "a^(-mu - nu - 1)*Gamma[mu + nu + 1]^4/((Gamma[mu + 1]*Gamma[nu + 1])^2*Gamma[2*mu + 2*nu + 2])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu + nu] > -1"
+  ],
+  "cite": "ET II 326(3)",
+  "edition_note": "",
+  "section": "7.12-7.13 Combinations of associated Legendre functions and powers",
+  "tex": "int_0^inf (a+x)^{-mu-nu-2} P_mu((a-x)/(a+x)) P_nu((a-x)/(a+x)) dx = a^{-mu-nu-1}Gamma(mu+nu+1)^4/([Gamma(mu+1)Gamma(nu+1)]^2 Gamma(2mu+2nu+2))",
+  "note": "printed |arg a| < pi; sampled on a > 0"
+ },
+ {
+  "id": "GR7.141.1",
+  "gr": "7.141.1",
+  "page": 825,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*(x - 1)^(lam - 1)*(x^2 - 1)^(mu/2)*LegendreP[nu, mu, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "a^(-lam - mu)*E^(-a)/(Gamma[1 - mu + nu]*Gamma[-mu - nu])*MeijerG[{{1 + mu}, {1}}, {{lam + mu, -nu, 1 + nu}, {}}, 2*a]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[lam] > 0"
+  ],
+  "cite": "ET II 323(13)",
+  "edition_note": "",
+  "section": "7.14 Combinations of associated Legendre functions, exponentials, and powers",
+  "tex": "int_1^inf e^{-ax}(x-1)^{lam-1}(x^2-1)^{mu/2} P_nu^mu dx = a^{-lam-mu}e^{-a}/(Gamma(1-mu+nu)Gamma(-mu-nu)) G^{31}_{23}(2a | 1+mu,1; lam+mu,-nu,1+nu)",
+  "note": ""
+ },
+ {
+  "id": "GR7.141.2",
+  "gr": "7.141.2",
+  "page": 825,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*(x - 1)^(lam - 1)*(x^2 - 1)^(mu/2)*LegendreQ[nu, mu, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "Gamma[nu + mu + 1]*E^(mu*Pi*I)/(2*Gamma[nu - mu + 1])*a^(-lam - mu)*E^(-a)*MeijerG[{{1 + mu, 1}, {}}, {{lam + mu, nu + 1}, {-nu}}, 2*a]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[lam] > 0",
+   "Re[lam + mu] > 0"
+  ],
+  "cite": "ET II 325(24)",
+  "edition_note": "",
+  "section": "7.14 Combinations of associated Legendre functions, exponentials, and powers",
+  "tex": "int_1^inf e^{-ax}(x-1)^{lam-1}(x^2-1)^{mu/2} Q_nu^mu dx = Gamma(nu+mu+1)e^{mu pi i}/(2Gamma(nu-mu+1)) a^{-lam-mu}e^{-a} G^{22}_{23}(2a | 1+mu,1; lam+mu,nu+1,-nu)",
+  "note": ""
+ },
+ {
+  "id": "GR7.141.3",
+  "gr": "7.141.3",
+  "page": 825,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*(x - 1)^(lam - 1)*(x^2 - 1)^(-mu/2)*LegendreP[nu, mu, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "-Pi^(-1)*Sin[nu*Pi]*a^(mu - lam)*E^(-a)*MeijerG[{{1}, {1 - mu}}, {{lam - mu, 1 + nu, -nu}, {}}, 2*a]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[lam - mu] > 0"
+  ],
+  "cite": "ET II 323(15)",
+  "edition_note": "",
+  "section": "7.14 Combinations of associated Legendre functions, exponentials, and powers",
+  "tex": "int_1^inf e^{-ax}(x-1)^{lam-1}(x^2-1)^{-mu/2} P_nu^mu dx = -pi^{-1} sin(nu pi) a^{mu-lam}e^{-a} G^{31}_{23}(2a | 1,1-mu; lam-mu,1+nu,-nu)",
+  "note": ""
+ },
+ {
+  "id": "GR7.141.4",
+  "gr": "7.141.4",
+  "page": 825,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*(x - 1)^(lam - 1)*(x^2 - 1)^(-mu/2)*LegendreQ[nu, mu, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "1/2*E^(mu*Pi*I)*a^(mu - lam)*E^(-a)*MeijerG[{{1 - mu, 1}, {}}, {{lam - mu, nu + 1}, {-nu}}, 2*a]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[lam] > 0",
+   "Re[lam - mu] > 0"
+  ],
+  "cite": "ET II 323(14)",
+  "edition_note": "",
+  "section": "7.14 Combinations of associated Legendre functions, exponentials, and powers",
+  "tex": "int_1^inf e^{-ax}(x-1)^{lam-1}(x^2-1)^{-mu/2} Q_nu^mu dx = 1/2 e^{mu pi i}a^{mu-lam}e^{-a} G^{22}_{23}(2a | 1-mu,1; lam-mu,nu+1,-nu)",
+  "note": ""
+ },
+ {
+  "id": "GR7.141.5",
+  "gr": "7.141.5",
+  "page": 825,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*(x^2 - 1)^(-mu/2)*LegendreP[nu, mu, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "2^(1/2)*Pi^(-1/2)*a^(mu - 1/2)*BesselK[nu + 1/2, a]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[mu] < 1"
+  ],
+  "cite": "ET II 323(11), MO 90",
+  "edition_note": "",
+  "section": "7.14 Combinations of associated Legendre functions, exponentials, and powers",
+  "tex": "int_1^inf e^{-ax}(x^2-1)^{-mu/2} P_nu^mu dx = 2^{1/2}pi^{-1/2}a^{mu-1/2}K_{nu+1/2}(a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.142",
+  "gr": "7.142",
+  "page": 825,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x/2)*((x + 1)/(x - 1))^(mu/2)*LegendreP[nu - 1/2, mu, 3, x], {x, 1, Infinity}]",
+  "rhs": [
+   "2/a*WhittakerW[mu, nu, a]"
+  ],
+  "conds": [
+   "Re[mu] < 1",
+   "Re[a] > 0"
+  ],
+  "cite": "BU 79(34), MO 118",
+  "edition_note": "",
+  "section": "7.14 Combinations of associated Legendre functions, exponentials, and powers",
+  "tex": "int_1^inf e^{-ax/2}((x+1)/(x-1))^{mu/2} P_{nu-1/2}^mu dx = (2/a) W_{mu,nu}(a)",
+  "note": "printed condition nu - 1/2 != 0, +-1, +-2, ...; Re a > 0 added (convergence)"
+ }
+]

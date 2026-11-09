@@ -1,0 +1,1749 @@
+[
+ {
+  "id": "GR7.346",
+  "gr": "7.346",
+  "page": 850,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*ChebyshevT[n, x]/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "Pi/(s*2^s*Beta[1/2 + s/2 + n/2, 1/2 + s/2 - n/2])"
+  ],
+  "conds": [
+   "Re[s] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 324(2)",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "int_0^1 x^(s-1) T_n(x) dx/sqrt(1-x^2) = pi/(s 2^s B(1/2+s/2+n/2, 1/2+s/2-n/2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.347.1",
+  "gr": "7.347.1",
+  "page": 850,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^alpha*(1 + x)^beta*ChebyshevT[n, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(alpha + beta + 2*n + 1)*(n!)^2*Gamma[alpha + 1]*Gamma[beta + 1]/((2*n)!*Gamma[alpha + beta + 2])*HypergeometricPFQ[{-n, n, alpha + 1}, {1/2, alpha + beta + 2}, 1]",
+   "2^(alpha + beta + 1)*Gamma[alpha + 1]*Gamma[beta + 1]/Gamma[alpha + beta + 2]*HypergeometricPFQ[{-n, n, alpha + 1}, {1/2, alpha + beta + 2}, 1]"
+  ],
+  "conds": [
+   "Re[alpha] > -1",
+   "Re[beta] > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 271(2)",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "int_-1^1 (1-x)^alpha (1+x)^beta T_n(x) dx = 2^(alpha+beta+2n+1)(n!)^2 G(alpha+1)G(beta+1)/((2n)! G(alpha+beta+2)) 3F2(-n,n,alpha+1;1/2,alpha+beta+2;1)",
+  "note": "second rhs: candidate without the factor 2^(2n)(n!)^2/(2n)! (from T_n = 2F1(-n,n;1/2;(1-x)/2)); possible normalisation misprint"
+ },
+ {
+  "id": "GR7.347.2",
+  "gr": "7.347.2",
+  "page": 850,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^alpha*(1 + x)^beta*ChebyshevU[n, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(alpha + beta + 2*n + 2)*((n + 1)!)^2*Gamma[alpha + 1]*Gamma[beta + 1]/((2*n + 2)!*Gamma[alpha + beta + 2])*HypergeometricPFQ[{-n, n + 1, alpha + 1}, {3/2, alpha + beta + 2}, 1]",
+   "(n + 1)*2^(alpha + beta + 1)*Gamma[alpha + 1]*Gamma[beta + 1]/Gamma[alpha + beta + 2]*HypergeometricPFQ[{-n, n + 2, alpha + 1}, {3/2, alpha + beta + 2}, 1]"
+  ],
+  "conds": [
+   "Re[alpha] > -1",
+   "Re[beta] > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 273(22)",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "int_-1^1 (1-x)^alpha (1+x)^beta U_n(x) dx = 2^(alpha+beta+2n+2)[(n+1)!]^2 G(alpha+1)G(beta+1)/((2n+2)! G(alpha+beta+2)) 3F2(-n,n+1,alpha+1;3/2,alpha+beta+2;1)",
+  "note": "no condition printed; convergence conditions added. Second rhs: candidate from U_n = (n+1) 2F1(-n,n+2;3/2;(1-x)/2)"
+ },
+ {
+  "id": "GR7.348",
+  "gr": "7.348",
+  "page": 850,
+  "status": "ok",
+  "lhs": "Integrate[ChebyshevU[2*n, x*z]/Sqrt[1 - x^2], {x, -1, 1}]",
+  "rhs": [
+   "Pi*LegendreP[n, 2*z^2 - 1]"
+  ],
+  "conds": [
+   "-1 < z < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 275(33)",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "int_-1^1 (1-x^2)^(-1/2) U_2n(xz) dx = pi P_n(2z^2-1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.349",
+  "gr": "7.349",
+  "page": 850,
+  "status": "ok",
+  "lhs": "Integrate[ChebyshevT[n, 1 - x^2*y]/Sqrt[1 - x^2], {x, -1, 1}]",
+  "rhs": [
+   "Pi/2*(LegendreP[n, 1 - y] + LegendreP[n - 1, 1 - y])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "ET II 222(14)",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "int_-1^1 (1-x^2)^(-1/2) T_n(1-x^2 y) dx = pi/2 [P_n(1-y) + P_(n-1)(1-y)]",
+  "note": "n >= 1 added (P_(n-1))"
+ },
+ {
+  "id": "GR7.351",
+  "gr": "7.351",
+  "page": 851,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1/2)*(1 - x^2)^(-1/2)*E^(-2*a/x)*ChebyshevT[n, x], {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi]*ParabolicCylinderD[n - 1/2, 2*Sqrt[a]]*ParabolicCylinderD[-n - 1/2, 2*Sqrt[a]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 272(13)",
+  "edition_note": "",
+  "section": "7.35 Combinations of Chebyshev polynomials and elementary functions",
+  "tex": "int_0^1 x^(-1/2)(1-x^2)^(-1/2) e^(-2a/x) T_n(x) dx = pi^(1/2) D_(n-1/2)(2a^(1/2)) D_(-n-1/2)(2a^(1/2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.352.1",
+  "gr": "7.352.1",
+  "page": 851,
+  "status": "ok",
+  "lhs": "Integrate[x*ChebyshevU[n, a*(a^2 + x^2)^(-1/2)]/((a^2 + x^2)^(n/2 + 1)*(E^(Pi*x) + 1)), {x, 0, Infinity}]",
+  "rhs": [
+   "a^(-n)/(2*n) - 2^(-n - 1)*HurwitzZeta[n + 1, (a + 1)/2]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "ET II 275(39)",
+  "edition_note": "",
+  "section": "7.35 Combinations of Chebyshev polynomials and elementary functions",
+  "tex": "int_0^inf x U_n[a(a^2+x^2)^(-1/2)] / ((a^2+x^2)^(n/2+1)(e^(pi x)+1)) dx = a^(-n)/(2n) - 2^(-n-1) zeta(n+1,(a+1)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.352.2",
+  "gr": "7.352.2",
+  "page": 851,
+  "status": "ok",
+  "lhs": "Integrate[x*ChebyshevU[n, a*(a^2 + x^2)^(-1/2)]/((a^2 + x^2)^(n/2 + 1)*(E^(2*Pi*x) - 1)), {x, 0, Infinity}]",
+  "rhs": [
+   "HurwitzZeta[n + 1, a]/2 - a^(-n - 1)/4 - a^(-n)/(2*n)"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "ET II 276(40)",
+  "edition_note": "",
+  "section": "7.35 Combinations of Chebyshev polynomials and elementary functions",
+  "tex": "int_0^inf x U_n[a(a^2+x^2)^(-1/2)] / ((a^2+x^2)^(n/2+1)(e^(2pi x)-1)) dx = zeta(n+1,a)/2 - a^(-n-1)/4 - a^(-n)/(2n)",
+  "note": ""
+ },
+ {
+  "id": "GR7.353.1a",
+  "gr": "7.353.1a",
+  "page": 851,
+  "status": "ok",
+  "lhs": "Integrate[(a^2 + x^2)^(-n/2)*Sech[Pi*x/2]*ChebyshevT[n, a*(a^2 + x^2)^(-1/2)], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(1 - 2*n)*(HurwitzZeta[n, (a + 1)/4] - HurwitzZeta[n, (a + 3)/4])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 273(19)",
+  "edition_note": "",
+  "section": "7.35 Combinations of Chebyshev polynomials and elementary functions",
+  "tex": "int_0^inf (a^2+x^2)^(-n/2) sech(pi x/2) T_n[a(a^2+x^2)^(-1/2)] dx = 2^(1-2n)[zeta(n,(a+1)/4) - zeta(n,(a+3)/4)]",
+  "note": ""
+ },
+ {
+  "id": "GR7.353.1b",
+  "gr": "7.353.1b",
+  "page": 851,
+  "status": "ok",
+  "lhs": "Integrate[(a^2 + x^2)^(-n/2)*Sech[Pi*x/2]*ChebyshevT[n, a*(a^2 + x^2)^(-1/2)], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(1 - n)*LerchPhi[-1, n, (a + 1)/2]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 273(19)",
+  "edition_note": "",
+  "section": "7.35 Combinations of Chebyshev polynomials and elementary functions",
+  "tex": "... = 2^(1-n) Phi(-1, n, (a+1)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.353.2",
+  "gr": "7.353.2",
+  "page": 851,
+  "status": "ok",
+  "lhs": "Integrate[(a^2 + x^2)^(-n/2)*Cosh[Pi*x/2]^(-2)*ChebyshevT[n, a*(a^2 + x^2)^(-1/2)], {x, 0, Infinity}]",
+  "rhs": [
+   "n*2^(1 - n)/Pi*HurwitzZeta[n + 1, (a + 1)/2]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "ET II 273(20)",
+  "edition_note": "",
+  "section": "7.35 Combinations of Chebyshev polynomials and elementary functions",
+  "tex": "int_0^inf (a^2+x^2)^(-n/2) [cosh(pi x/2)]^(-2) T_n[a(a^2+x^2)^(-1/2)] dx = pi^(-1) n 2^(1-n) zeta(n+1,(a+1)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.354.1",
+  "gr": "7.354.1",
+  "page": 851,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x*y*z]*Cos[(1 - x^2)^(1/2)*(1 - y^2)^(1/2)*z]*ChebyshevT[2*n + 1, x], {x, -1, 1}]",
+  "rhs": [
+   "(-1)^n*Pi*ChebyshevT[2*n + 1, y]*BesselJ[2*n + 1, x]",
+   "(-1)^n*Pi*ChebyshevT[2*n + 1, y]*BesselJ[2*n + 1, z]"
+  ],
+  "conds": [
+   "-1 < y < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 271(4)",
+  "edition_note": "",
+  "section": "7.35 Combinations of Chebyshev polynomials and elementary functions",
+  "tex": "int_-1^1 sin(xyz) cos[(1-x^2)^(1/2)(1-y^2)^(1/2) z] T_(2n+1)(x) dx = (-1)^n pi T_(2n+1)(y) J_(2n+1)(x)",
+  "note": "printed J_(2n+1)(x) contains the integration variable; second rhs J_(2n+1)(z) (misprint). -1<y<1 added"
+ },
+ {
+  "id": "GR7.354.2",
+  "gr": "7.354.2",
+  "page": 851,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x*y*z]*Sin[(1 - x^2)^(1/2)*(1 - y^2)^(1/2)*z]*ChebyshevU[2*n + 1, x], {x, -1, 1}]",
+  "rhs": [
+   "(-1)^n*Pi*(1 - y^2)^(1/2)*ChebyshevU[2*n + 1, y]*BesselJ[2*n + 2, z]"
+  ],
+  "conds": [
+   "-1 < y < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 274(25)",
+  "edition_note": "",
+  "section": "7.35 Combinations of Chebyshev polynomials and elementary functions",
+  "tex": "int_-1^1 sin(xyz) sin[(1-x^2)^(1/2)(1-y^2)^(1/2) z] U_(2n+1)(x) dx = (-1)^n pi (1-y^2)^(1/2) U_(2n+1)(y) J_(2n+2)(z)",
+  "note": "-1<y<1 added"
+ },
+ {
+  "id": "GR7.354.3",
+  "gr": "7.354.3",
+  "page": 851,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x*y*z]*Cos[(1 - x^2)^(1/2)*(1 - y^2)^(1/2)*z]*ChebyshevT[2*n, x], {x, -1, 1}]",
+  "rhs": [
+   "(-1)^n*Pi*ChebyshevT[2*n, y]*BesselJ[2*n, z]"
+  ],
+  "conds": [
+   "-1 < y < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 271(5)",
+  "edition_note": "",
+  "section": "7.35 Combinations of Chebyshev polynomials and elementary functions",
+  "tex": "int_-1^1 cos(xyz) cos[(1-x^2)^(1/2)(1-y^2)^(1/2) z] T_2n(x) dx = (-1)^n pi T_2n(y) J_2n(z)",
+  "note": "-1<y<1 added"
+ },
+ {
+  "id": "GR7.354.4",
+  "gr": "7.354.4",
+  "page": 851,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x*y*z]*Sin[(1 - x^2)^(1/2)*(1 - y^2)^(1/2)*z]*ChebyshevU[2*n, x], {x, -1, 1}]",
+  "rhs": [
+   "(-1)^n*Pi*(1 - y^2)^(1/2)*ChebyshevU[2*n, y]*BesselJ[2*n + 1, z]"
+  ],
+  "conds": [
+   "-1 < y < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 274(24)",
+  "edition_note": "",
+  "section": "7.35 Combinations of Chebyshev polynomials and elementary functions",
+  "tex": "int_-1^1 cos(xyz) sin[(1-x^2)^(1/2)(1-y^2)^(1/2) z] U_2n(x) dx = (-1)^n pi (1-y^2)^(1/2) U_2n(y) J_(2n+1)(z)",
+  "note": "-1<y<1 added"
+ },
+ {
+  "id": "GR7.355.1",
+  "gr": "7.355.1",
+  "page": 851,
+  "status": "ok",
+  "lhs": "Integrate[ChebyshevT[2*n + 1, x]*Sin[a*x]/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "(-1)^n*Pi/2*BesselJ[2*n + 1, a]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 94(3)a",
+  "edition_note": "",
+  "section": "7.35 Combinations of Chebyshev polynomials and elementary functions",
+  "tex": "int_0^1 T_(2n+1)(x) sin(ax) dx/sqrt(1-x^2) = (-1)^n pi/2 J_(2n+1)(a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.355.2",
+  "gr": "7.355.2",
+  "page": 851,
+  "status": "ok",
+  "lhs": "Integrate[ChebyshevT[2*n, x]*Cos[a*x]/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "(-1)^n*Pi/2*BesselJ[2*n, a]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 38(2)a",
+  "edition_note": "",
+  "section": "7.35 Combinations of Chebyshev polynomials and elementary functions",
+  "tex": "int_0^1 T_2n(x) cos(ax) dx/sqrt(1-x^2) = (-1)^n pi/2 J_2n(a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.361",
+  "gr": "7.361",
+  "page": 852,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^(-1/2)*ChebyshevT[n, x]*BesselJ[nu, x*y], {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*BesselJ[(nu + n)/2, y/2]*BesselJ[(nu - n)/2, y/2]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -n - 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 42(1)",
+  "edition_note": "",
+  "section": "7.36 Combinations of Chebyshev polynomials and Bessel functions",
+  "tex": "int_0^1 (1-x^2)^(-1/2) T_n(x) J_nu(xy) dx = pi/2 J_((nu+n)/2)(y/2) J_((nu-n)/2)(y/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.362",
+  "gr": "7.362",
+  "page": 852,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 - 1)^(-1/2)*ChebyshevT[n, 1/x]*BesselK[2*mu, a*x], {x, 1, Infinity}]",
+  "rhs": [
+   "Pi/(2*a)*WhittakerW[n/2, mu, a]*WhittakerW[-n/2, mu, a]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 366(17)a",
+  "edition_note": "",
+  "section": "7.36 Combinations of Chebyshev polynomials and Bessel functions",
+  "tex": "int_1^inf (x^2-1)^(-1/2) T_n(1/x) K_(2mu)(ax) dx = pi/(2a) W_(n/2,mu)(a) W_(-n/2,mu)(a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.371",
+  "gr": "7.371",
+  "page": 852,
+  "status": "ok",
+  "lhs": "Integrate[HermiteH[n, y], {y, 0, x}]",
+  "rhs": [
+   "(HermiteH[n + 1, x] - HermiteH[n + 1, 0])/(2*(n + 1))"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "EH II 194(27)",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^x H_n(y) dy = [2(n+1)]^(-1) [H_(n+1)(x) - H_(n+1)(0)]",
+  "note": ""
+ },
+ {
+  "id": "GR7.372",
+  "gr": "7.372",
+  "page": 852,
+  "status": "ok",
+  "lhs": "Integrate[(1 - t^2)^(alpha - 1/2)*HermiteH[2*n, Sqrt[x]*t], {t, -1, 1}]",
+  "rhs": [
+   "(-1)^n*Pi^(1/2)*(2*n)!*Gamma[alpha + 1/2]*LaguerreL[n, alpha, x]/Gamma[n + alpha + 1]"
+  ],
+  "conds": [
+   "Re[alpha] > -1/2",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "EH II 195(34)",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-1^1 (1-t^2)^(alpha-1/2) H_2n(sqrt(x) t) dx = (-1)^n pi^(1/2)(2n)! G(alpha+1/2) L_n^alpha(x)/G(n+alpha+1)",
+  "note": "printed differential 'dx' read as dt (integration variable t); printed condition 'Re a > -1/2' read as Re alpha > -1/2"
+ },
+ {
+  "id": "GR7.373.1",
+  "gr": "7.373.1",
+  "page": 852,
+  "status": "ok",
+  "lhs": "Integrate[E^(-y^2)*HermiteH[n, y], {y, 0, x}]",
+  "rhs": [
+   "HermiteH[n - 1, 0] - E^(-x^2)*HermiteH[n - 1, x]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "EH II 194(26)",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^x e^(-y^2) H_n(y) dy = H_(n-1)(0) - e^(-x^2) H_(n-1)(x)  [see 8.956]",
+  "note": "n >= 1 added"
+ },
+ {
+  "id": "GR7.373.2",
+  "gr": "7.373.2",
+  "page": 852,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2)*HermiteH[2*m, x*y], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*(2*m)!/m!*(y^2 - 1)^m"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "EH II 195(28)",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf e^(-x^2) H_2m(xy) dx = sqrt(pi) (2m)!/m! (y^2-1)^m",
+  "note": ""
+ },
+ {
+  "id": "GR7.374.1a",
+  "gr": "7.374.1a",
+  "page": 852,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2)*HermiteH[n, x]*HermiteH[m, x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m != n"
+  ],
+  "cite": "SM II 567",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf e^(-x^2) H_n(x) H_m(x) dx = 0 [m != n]",
+  "note": ""
+ },
+ {
+  "id": "GR7.374.1b",
+  "gr": "7.374.1b",
+  "page": 852,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2)*HermiteH[n, x]^2, {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2^n*n!*Sqrt[Pi]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "SM II 568",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf e^(-x^2) H_n(x)^2 dx = 2^n n! sqrt(pi) [m = n]",
+  "note": "case m = n substituted"
+ },
+ {
+  "id": "GR7.374.2a",
+  "gr": "7.374.2a",
+  "page": 852,
+  "status": "ok",
+  "lhs": "Integrate[E^(-2*x^2)*HermiteH[m, x]*HermiteH[n, x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(-1)^(Floor[m/2] + Floor[n/2])*2^((m + n - 1)/2)*Gamma[(m + n + 1)/2]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0",
+   "Element[(m + n)/2, Integers]"
+  ],
+  "cite": "ET II 289(10)a",
+  "edition_note": "11",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf e^(-2x^2) H_m(x) H_n(x) dx = (-1)^([m/2]+[n/2]) 2^((m+n-1)/2) G((m+n+1)/2) [m+n even]",
+  "note": ""
+ },
+ {
+  "id": "GR7.374.2b",
+  "gr": "7.374.2b",
+  "page": 852,
+  "status": "ok",
+  "lhs": "Integrate[E^(-2*x^2)*HermiteH[m, x]*HermiteH[n, x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0",
+   "Element[(m + n - 1)/2, Integers]"
+  ],
+  "cite": "ET II 289(10)a",
+  "edition_note": "11",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "... = 0 [m+n odd]",
+  "note": ""
+ },
+ {
+  "id": "GR7.374.3",
+  "gr": "7.374.3",
+  "page": 852,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2)*HermiteH[m, a*x]*HermiteH[n, x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0",
+   "m < n"
+  ],
+  "cite": "ET II 290(20)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf e^(-x^2) H_m(ax) H_n(x) dx = 0 [m < n]",
+  "note": ""
+ },
+ {
+  "id": "GR7.374.4",
+  "gr": "7.374.4",
+  "page": 852,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2)*HermiteH[2*m + n, a*x]*HermiteH[n, x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*2^n*(2*m + n)!/m!*(a^2 - 1)^m*a^n"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 291(21)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf e^(-x^2) H_(2m+n)(ax) H_n(x) dx = sqrt(pi) 2^n (2m+n)!/m! (a^2-1)^m a^n",
+  "note": ""
+ },
+ {
+  "id": "GR7.374.5",
+  "gr": "7.374.5",
+  "page": 852,
+  "status": "ok",
+  "lhs": "Integrate[E^(-2*alpha^2*x^2)*HermiteH[m, x]*HermiteH[n, x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2^((m + n - 1)/2)*alpha^(-m - n - 1)*(1 - 2*alpha^2)^((m + n)/2)*Gamma[(m + n + 1)/2]*Hypergeometric2F1[-m, n, (1 - m - n)/2, alpha^2/(2*alpha^2 - 1)]",
+   "2^((m + n - 1)/2)*alpha^(-m - n - 1)*(1 - 2*alpha^2)^((m + n)/2)*Gamma[(m + n + 1)/2]*Hypergeometric2F1[-m, -n, (1 - m - n)/2, alpha^2/(2*alpha^2 - 1)]"
+  ],
+  "conds": [
+   "Re[alpha^2] > 0",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0",
+   "Element[(m + n)/2, Integers]"
+  ],
+  "cite": "ET II 289(12)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf e^(-2 alpha^2 x^2) H_m(x) H_n(x) dx = 2^((m+n-1)/2) alpha^(-m-n-1) (1-2alpha^2)^((m+n)/2) G((m+n+1)/2) 2F1(-m,n;(1-m-n)/2; alpha^2/(2alpha^2-1))",
+  "note": "condition alpha^2 != 1/2 omitted (unsampleable). Second rhs: 2F1(-m,-n;...) — printed '-m, n' is not symmetric in m,n; suspected misprint"
+ },
+ {
+  "id": "GR7.374.6",
+  "gr": "7.374.6",
+  "page": 852,
+  "status": "ok",
+  "lhs": "Integrate[E^(-(x - y)^2)*HermiteH[n, x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi^(1/2)*y^n*2^n"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 288(2)a, EH II 195(31)",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf e^(-(x-y)^2) H_n(x) dx = pi^(1/2) y^n 2^n",
+  "note": ""
+ },
+ {
+  "id": "GR7.374.7",
+  "gr": "7.374.7",
+  "page": 853,
+  "status": "ok",
+  "lhs": "Integrate[E^(-(x - y)^2)*HermiteH[m, x]*HermiteH[n, x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2^n*Pi^(1/2)*m!*y^(n - m)*LaguerreL[m, n - m, -2*y^2]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0",
+   "m <= n"
+  ],
+  "cite": "BU 148(15), ET II 289(13)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf e^(-(x-y)^2) H_m(x) H_n(x) dx = 2^n pi^(1/2) m! y^(n-m) L_m^(n-m)(-2y^2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.374.8",
+  "gr": "7.374.8",
+  "page": 853,
+  "status": "ok",
+  "lhs": "Integrate[E^(-(x - y)^2)*HermiteH[n, alpha*x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi^(1/2)*(1 - alpha^2)^(n/2)*HermiteH[n, alpha*y/(1 - alpha^2)^(1/2)]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "0 < alpha < 1"
+  ],
+  "cite": "ET II 290(17)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf e^(-(x-y)^2) H_n(alpha x) dx = pi^(1/2)(1-alpha^2)^(n/2) H_n[alpha y/(1-alpha^2)^(1/2)]",
+  "note": "no condition printed; 0<alpha<1 added to keep the radical real"
+ },
+ {
+  "id": "GR7.374.9",
+  "gr": "7.374.9",
+  "page": 853,
+  "status": "ok",
+  "lhs": "Integrate[E^(-(x - y)^2)*HermiteH[m, alpha*x]*HermiteH[n, alpha*x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi^(1/2)*Sum[2^k*k!*Binomial[m, k]*Binomial[n, k]*(1 - alpha^2)^((m + n)/2 - k)*HermiteH[m + n - 2*k, alpha*y/(1 - alpha^2)^(1/2)], {k, 0, Min[m, n]}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0",
+   "0 < alpha < 1"
+  ],
+  "cite": "ET II 291(26)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf e^(-(x-y)^2) H_m(alpha x) H_n(alpha x) dx = pi^(1/2) sum_(k=0)^min(m,n) 2^k k! C(m,k) C(n,k) (1-alpha^2)^((m+n)/2-k) H_(m+n-2k)[alpha y/(1-alpha^2)^(1/2)]",
+  "note": "no condition printed; 0<alpha<1 added to keep the radical real"
+ },
+ {
+  "id": "GR7.374.10",
+  "gr": "7.374.10",
+  "page": 853,
+  "status": "ok",
+  "lhs": "Integrate[E^(-(x - y)^2/(2*u))*HermiteH[n, x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2*Pi*u)^(1/2)*(1 - 2*u)^(n/2)*HermiteH[n, y*(1 - 2*u)^(-1/2)]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "0 < u < 1/2"
+  ],
+  "cite": "EH II 195(30)",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf e^(-(x-y)^2/(2u)) H_n(x) dx = (2 pi u)^(1/2)(1-2u)^(n/2) H_n[y(1-2u)^(-1/2)]",
+  "note": "printed 0 <= u < 1/2; u = 0 excluded (degenerate)"
+ },
+ {
+  "id": "GR7.375.1",
+  "gr": "7.375.1",
+  "page": 853,
+  "status": "ok",
+  "lhs": "Integrate[E^(-2*x^2)*HermiteH[k, x]*HermiteH[m, x]*HermiteH[n, x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi^(-1)*2^((m + n + k - 1)/2)*Gamma[(m + n + 1 - k)/2]*Gamma[(k + n + 1 - m)/2]*Gamma[(k + m + 1 - n)/2]"
+  ],
+  "conds": [
+   "Element[k, Integers] && k >= 0",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0",
+   "Element[(k + m + n)/2, Integers]"
+  ],
+  "cite": "ET II 290(14)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf e^(-2x^2) H_k H_m H_n dx = pi^(-1) 2^((m+n+k-1)/2) G(s-k) G(s-m) G(s-n), 2s = k+m+n+1 [k+m+n even]",
+  "note": "s = (k+m+n+1)/2 substituted"
+ },
+ {
+  "id": "GR7.375.2",
+  "gr": "7.375.2",
+  "page": 853,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2)*HermiteH[k, x]*HermiteH[m, x]*HermiteH[n, x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2^((m + n + k)/2)*Pi^(1/2)*k!*m!*n!/(((m + n - k)/2)!*((k + n - m)/2)!*((k + m - n)/2)!)"
+  ],
+  "conds": [
+   "Element[k, Integers] && k >= 0",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0",
+   "Element[(k + m + n)/2, Integers]"
+  ],
+  "cite": "ET II 290(15)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf e^(-x^2) H_k H_m H_n dx = 2^((m+n+k)/2) pi^(1/2) k! m! n!/((s-k)!(s-m)!(s-n)!), 2s = m+n+k [k+m+n even]",
+  "note": "s = (k+m+n)/2 substituted"
+ },
+ {
+  "id": "GR7.376.1",
+  "gr": "7.376.1",
+  "page": 853,
+  "status": "ok",
+  "lhs": "Integrate[E^(I*x*y)*E^(-x^2/2)*HermiteH[n, x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2*Pi)^(1/2)*E^(-y^2/2)*HermiteH[n, y]*I^n"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MO 165a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf e^(ixy) e^(-x^2/2) H_n(x) dx = (2pi)^(1/2) e^(-y^2/2) H_n(y) i^n",
+  "note": ""
+ },
+ {
+  "id": "GR7.376.2",
+  "gr": "7.376.2",
+  "page": 853,
+  "status": "ok",
+  "lhs": "Integrate[E^(-2*alpha*x^2)*x^nu*HermiteH[2*n, x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*2^(2*n - 3/2 - nu/2)*Gamma[(nu + 1)/2]*Gamma[n + 1/2]/(Sqrt[Pi]*alpha^((nu + 1)/2))*Hypergeometric2F1[-n, (nu + 1)/2, 1/2, 1/(2*alpha)]"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Re[nu] > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BU 150(18a)",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf e^(-2 alpha x^2) x^nu H_2n(x) dx = (-1)^n 2^(2n-3/2-nu/2) G((nu+1)/2) G(n+1/2)/(sqrt(pi) alpha^((nu+1)/2)) F(-n,(nu+1)/2;1/2;1/(2alpha))",
+  "note": ""
+ },
+ {
+  "id": "GR7.376.3",
+  "gr": "7.376.3",
+  "page": 853,
+  "status": "ok",
+  "lhs": "Integrate[E^(-2*alpha*x^2)*x^nu*HermiteH[2*n + 1, x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*2^(2*n - nu/2)*Gamma[nu/2 + 1]*Gamma[n + 3/2]/(Sqrt[Pi]*alpha^(nu/2 + 1))*Hypergeometric2F1[-n, nu/2 + 1, 3/2, 1/(2*alpha)]"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Re[nu] > -2",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BU 150(18b)",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf e^(-2 alpha x^2) x^nu H_(2n+1)(x) dx = (-1)^n 2^(2n-nu/2) G(nu/2+1) G(n+3/2)/(sqrt(pi) alpha^(nu/2+1)) F(-n,nu/2+1;3/2;1/(2alpha))",
+  "note": ""
+ },
+ {
+  "id": "GR7.377",
+  "gr": "7.377",
+  "page": 853,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2)*HermiteH[m, x + y]*HermiteH[n, x + z], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2^n*Pi^(1/2)*m!*z^(n - m)*LaguerreL[m, n - m, -2*y*z]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0",
+   "m <= n"
+  ],
+  "cite": "ET II 292(30)a",
+  "edition_note": "8",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf e^(-x^2) H_m(x+y) H_n(x+z) dx = 2^n pi^(1/2) m! z^(n-m) L_m^(n-m)(-2yz)",
+  "note": ""
+ },
+ {
+  "id": "GR7.378",
+  "gr": "7.378",
+  "page": 853,
+  "status": "ok",
+  "lhs": "Integrate[x^(alpha - 1)*E^(-beta*x)*HermiteH[n, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^n*Sum[n!*Gamma[alpha + n - 2*m]/(m!*(n - 2*m)!)*(-1)^m*2^(-2*m)*beta^(2*m - alpha - n), {m, 0, Floor[n/2]}]"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Re[beta] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 172(11)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf x^(alpha-1) e^(-beta x) H_n(x) dx = 2^n sum_(m=0)^[n/2] n! G(alpha+n-2m)/(m!(n-2m)!) (-1)^m 2^(-2m) beta^(2m-alpha-n)",
+  "note": "printed: Re alpha > 0 if n even, Re alpha > -1 if n odd; the stronger Re alpha > 0 kept"
+ },
+ {
+  "id": "GR7.379.1",
+  "gr": "7.379.1",
+  "page": 854,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-x^2)*HermiteH[2*m + 1, x*y], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi^(1/2)*(2*m + 1)!/m!*y*(y^2 - 1)^m"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "EH II 195(28)",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf x e^(-x^2) H_(2m+1)(xy) dx = pi^(1/2) (2m+1)!/m! y (y^2-1)^m",
+  "note": ""
+ },
+ {
+  "id": "GR7.379.2",
+  "gr": "7.379.2",
+  "page": 854,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(-x^2)*HermiteH[n, x*y], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi^(1/2)*n!*LegendreP[n, y]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "EH II 195(29)",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf x^n e^(-x^2) H_n(xy) dx = pi^(1/2) n! P_n(y)",
+  "note": ""
+ },
+ {
+  "id": "GR7.381a",
+  "gr": "7.381a",
+  "page": 854,
+  "status": "ok",
+  "lhs": "Integrate[(x + I*c)^nu*E^(-x^2)*HermiteH[n, x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2^(n - 1 - nu)*Pi^(1/2)*Gamma[(n - nu)/2]/Gamma[-nu]*E^(Pi*(nu + n)*I/2)"
+  ],
+  "conds": [
+   "c > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 288(3)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf (x + ic)^nu e^(-x^2) H_n(x) dx = 2^(n-1-nu) pi^(1/2) G((n-nu)/2)/G(-nu) exp[+pi(nu+n)i/2]",
+  "note": "upper sign of +-"
+ },
+ {
+  "id": "GR7.381b",
+  "gr": "7.381b",
+  "page": 854,
+  "status": "ok",
+  "lhs": "Integrate[(x - I*c)^nu*E^(-x^2)*HermiteH[n, x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2^(n - 1 - nu)*Pi^(1/2)*Gamma[(n - nu)/2]/Gamma[-nu]*E^(-Pi*(nu + n)*I/2)"
+  ],
+  "conds": [
+   "c > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 288(3)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_-inf^inf (x - ic)^nu e^(-x^2) H_n(x) dx = 2^(n-1-nu) pi^(1/2) G((n-nu)/2)/G(-nu) exp[-pi(nu+n)i/2]",
+  "note": "lower sign of +-"
+ },
+ {
+  "id": "GR7.382",
+  "gr": "7.382",
+  "page": 854,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1)*(x^2 + a^2)^(-1)*E^(-x^2)*HermiteH[2*n + 1, x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-2)^n*Pi^(1/2)*a^(-2)*(2^nu*n! - (2*n + 1)!*E^(a^2/2)*ParabolicCylinderD[-2*n - 2, a*Sqrt[2]])",
+   "(-2)^n*Pi^(1/2)*a^(-2)*(2^n*n! - (2*n + 1)!*E^(a^2/2)*ParabolicCylinderD[-2*n - 2, a*Sqrt[2]])"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 288(4)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf x^(-1)(x^2+a^2)^(-1) e^(-x^2) H_(2n+1)(x) dx = (-2)^n pi^(1/2) a^(-2)[2^nu n! - (2n+1)! e^(a^2/2) D_(-2n-2)(a sqrt2)]",
+  "note": "printed 2^nu: nu absent from the integral; second rhs reads it as 2^n. No condition printed; a > 0 added"
+ },
+ {
+  "id": "GR7.383.1",
+  "gr": "7.383.1",
+  "page": 854,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x*p)*HermiteH[2*n + 1, Sqrt[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*2^n*(2*n + 1)!!*Pi^(1/2)*(p - 1)^n*p^(-n - 3/2)"
+  ],
+  "conds": [
+   "Re[p] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "EF 151(261)a, ET I 172(12)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf e^(-xp) H_(2n+1)(sqrt x) dx = (-1)^n 2^n (2n+1)!! pi^(1/2)(p-1)^n p^(-n-3/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.383.2",
+  "gr": "7.383.2",
+  "page": 854,
+  "status": "ok",
+  "lhs": "Integrate[E^(-(b - beta)*x)*HermiteH[2*n + 1, Sqrt[(alpha - beta)*x]], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*Sqrt[Pi]*Sqrt[alpha - beta]*(2*n + 1)!/n!*(b - alpha)^n/(b - beta)^(n + 3/2)"
+  ],
+  "conds": [
+   "Re[b - beta] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 172(15)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf e^(-(b-beta)x) H_(2n+1)(sqrt((alpha-beta)x)) dx = (-1)^n sqrt(pi) sqrt(alpha-beta) (2n+1)!/n! (b-alpha)^n/(b-beta)^(n+3/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.383.3",
+  "gr": "7.383.3",
+  "page": 854,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1/2)*E^(-(b - beta)*x)*HermiteH[2*n, Sqrt[(alpha - beta)*x]], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*Sqrt[Pi]*(2*n)!/n!*(b - alpha)^n/(b - beta)^(n + 1/2)"
+  ],
+  "conds": [
+   "Re[b - beta] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 172(16)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf x^(-1/2) e^(-(b-beta)x) H_2n(sqrt((alpha-beta)x)) dx = (-1)^n sqrt(pi) (2n)!/n! (b-alpha)^n/(b-beta)^(n+1/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.383.4",
+  "gr": "7.383.4",
+  "page": 854,
+  "status": "ok",
+  "lhs": "Integrate[x^(a - n/2 - 1)*E^(-b*x)*HermiteH[n, Sqrt[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "2^n*Gamma[a]*b^(-a)*Hypergeometric2F1[-n/2, 1/2 - n/2, 1 - a, b]"
+  ],
+  "conds": [
+   "Re[a] > n/2",
+   "Re[b] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 172(14)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf x^(a-n/2-1) e^(-bx) H_n(sqrt x) dx = 2^n G(a) b^(-a) 2F1(-n/2, 1/2-n/2; 1-a; b)",
+  "note": "printed: Re a > n/2 if n even, Re a > n/2 - 1/2 if n odd; the stronger Re a > n/2 kept. If a is an integer, only the first 1+[n/2] terms of the 2F1 series are kept"
+ },
+ {
+  "id": "GR7.383.5",
+  "gr": "7.383.5",
+  "page": 854,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1/2)*E^(-p*x)*HermiteH[2*n, Sqrt[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*2^n*(2*n - 1)!!*Pi^(1/2)*(p - 1)^n*p^(-n - 1/2)"
+  ],
+  "conds": [
+   "Re[p] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MO 177a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf x^(-1/2) e^(-px) H_2n(sqrt x) dx = (-1)^n 2^n (2n-1)!! pi^(1/2)(p-1)^n p^(-n-1/2)",
+  "note": "no condition printed; Re p > 0 added"
+ },
+ {
+  "id": "GR7.384",
+  "gr": "7.384",
+  "page": 854,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1/2)*E^(-b*x)*(HermiteH[n, (alpha + Sqrt[x])/lam] + HermiteH[n, (a - Sqrt[x])/lam]), {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi/b]*(1 - lam^(-2)*b^(-1))^(n/2)*HermiteH[n, alpha/Sqrt[lam^2 - 1/b]]",
+   "2*Sqrt[Pi/b]*(1 - lam^(-2)*b^(-1))^(n/2)*HermiteH[n, alpha/Sqrt[lam^2 - 1/b]]"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 173(17)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf x^(-1/2) e^(-bx) [H_n((alpha+sqrt x)/lam) + H_n((a - sqrt x)/lam)] dx = sqrt(2pi/b)(1-lam^(-2)b^(-1))^(n/2) H_n(alpha/sqrt(lam^2-1/b))",
+  "note": "as printed (second argument has 'a', first has alpha). Second rhs: 2 sqrt(pi/b) prefactor candidate"
+ },
+ {
+  "id": "GR7.384b",
+  "gr": "7.384b",
+  "page": 854,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1/2)*E^(-b*x)*(HermiteH[n, (alpha + Sqrt[x])/lam] + HermiteH[n, (alpha - Sqrt[x])/lam]), {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi/b]*(1 - lam^(-2)*b^(-1))^(n/2)*HermiteH[n, alpha/Sqrt[lam^2 - 1/b]]",
+   "2*Sqrt[Pi/b]*(1 - lam^(-2)*b^(-1))^(n/2)*HermiteH[n, alpha/Sqrt[lam^2 - 1/b]]"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 173(17)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "same with (alpha - sqrt x)/lam in the second H_n",
+  "note": "corrected integrand: printed 'a' in the second H_n argument read as alpha. Second rhs: 2 sqrt(pi/b) prefactor candidate"
+ },
+ {
+  "id": "GR7.385.1",
+  "gr": "7.385.1",
+  "page": 854,
+  "status": "ok",
+  "lhs": "Integrate[E^(-b*x)/Sqrt[E^x - 1]*HermiteH[2*n, Sqrt[s*(1 - E^(-x))]], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*2^(2*n)*Sqrt[Pi]*(2*n)!*Gamma[b + 1/2]/Gamma[n + b + 1]*LaguerreL[n, b, s]"
+  ],
+  "conds": [
+   "Re[b] > -1/2",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 174(23)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf e^(-bx)/sqrt(e^x-1) H_2n[sqrt(s(1-e^(-x)))] dx = (-1)^n 2^(2n) sqrt(pi) (2n)! G(b+1/2)/G(n+b+1) L_n^b(s)",
+  "note": ""
+ },
+ {
+  "id": "GR7.385.2",
+  "gr": "7.385.2",
+  "page": 855,
+  "status": "ok",
+  "lhs": "Integrate[E^(-b*x)*HermiteH[2*n + 1, Sqrt[s]*Sqrt[1 - E^(-x)]], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*2^(2*n)*Sqrt[Pi*s]*(2*n + 1)!*Gamma[b]/Gamma[n + b + 3/2]*LaguerreL[n, b, s]"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "s > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 174(24)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf e^(-bx) H_(2n+1)[sqrt(s) sqrt(1-e^(-x))] dx = (-1)^n 2^(2n) sqrt(pi s) (2n+1)! G(b)/G(n+b+3/2) L_n^b(s)",
+  "note": "s > 0 added"
+ },
+ {
+  "id": "GR7.386",
+  "gr": "7.386",
+  "page": 855,
+  "status": "ok",
+  "lhs": "Integrate[x^(-(n + 1)/2)*E^(-q^2/(4*x))*HermiteH[n, q/(2*Sqrt[x])]*E^(-p*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2^n*Pi^(1/2)*p^((n - 1)/2)*E^(-q*Sqrt[p])"
+  ],
+  "conds": [
+   "Re[p] > 0",
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "EF 129(117)",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf x^(-(n+1)/2) e^(-q^2/(4x)) H_n(q/(2 sqrt x)) e^(-px) dx = 2^n pi^(1/2) p^((n-1)/2) e^(-q sqrt p)",
+  "note": "no condition printed; Re p > 0, q > 0 added"
+ },
+ {
+  "id": "GR7.387.1",
+  "gr": "7.387.1",
+  "page": 855,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2)*Sinh[Sqrt[2]*beta*x]*HermiteH[2*n + 1, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(n - 1/2)*Pi^(1/2)*beta^(2*n + 1)*E^(beta^2/2)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 289(7)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf e^(-x^2) sinh(sqrt2 beta x) H_(2n+1)(x) dx = 2^(n-1/2) pi^(1/2) beta^(2n+1) e^(beta^2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.387.2",
+  "gr": "7.387.2",
+  "page": 855,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2)*Cosh[Sqrt[2]*beta*x]*HermiteH[2*n, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(n - 1)*Pi^(1/2)*beta^(2*n)*E^(beta^2/2)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 289(8)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf e^(-x^2) cosh(sqrt2 beta x) H_2n(x) dx = 2^(n-1) pi^(1/2) beta^(2n) e^(beta^2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.388.1",
+  "gr": "7.388.1",
+  "page": 855,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2)*Sin[Sqrt[2]*beta*x]*HermiteH[2*n + 1, x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*2^(n - 1/2)*Pi^(1/2)*beta^(2*n + 1)*E^(-beta^2/2)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 288(5)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf e^(-x^2) sin(sqrt2 beta x) H_(2n+1)(x) dx = (-1)^n 2^(n-1/2) pi^(1/2) beta^(2n+1) e^(-beta^2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.388.2",
+  "gr": "7.388.2",
+  "page": 855,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2)*Sin[Sqrt[2]*beta*x]*HermiteH[2*n + 1, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*2^(-1)*Pi^(1/2)*(a^2 - 1)^(n + 1/2)*E^(-beta^2/2)*HermiteH[2*n + 1, a*beta/(Sqrt[2]*(a^2 - 1)^(1/2))]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 290(18)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf e^(-x^2) sin(sqrt2 beta x) H_(2n+1)(ax) dx = (-1)^n 2^(-1) pi^(1/2)(a^2-1)^(n+1/2) e^(-beta^2/2) H_(2n+1)(a beta/(sqrt2 (a^2-1)^(1/2)))",
+  "note": ""
+ },
+ {
+  "id": "GR7.388.3",
+  "gr": "7.388.3",
+  "page": 855,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2)*Cos[Sqrt[2]*beta*x]*HermiteH[2*n, x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*2^(n - 1)*Pi^(1/2)*beta^(2*n)*E^(-beta^2/2)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 289(6)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf e^(-x^2) cos(sqrt2 beta x) H_2n(x) dx = (-1)^n 2^(n-1) pi^(1/2) beta^(2n) e^(-beta^2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.388.4",
+  "gr": "7.388.4",
+  "page": 855,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2)*Cos[Sqrt[2]*beta*x]*HermiteH[2*n, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-1)*Pi^(1/2)*(1 - a^2)^n*E^(-beta^2/2)*HermiteH[2*n, a*beta/(Sqrt[2]*(a^2 - 1)^(1/2))]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 290(19)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf e^(-x^2) cos(sqrt2 beta x) H_2n(ax) dx = 2^(-1) pi^(1/2)(1-a^2)^n e^(-beta^2/2) H_2n[a beta/(sqrt2 (a^2-1)^(1/2))]",
+  "note": ""
+ },
+ {
+  "id": "GR7.388.5",
+  "gr": "7.388.5",
+  "page": 855,
+  "status": "ok",
+  "lhs": "Integrate[E^(-y^2)*HermiteH[n, y]^2*Cos[Sqrt[2]*beta*y], {y, 0, Infinity}]",
+  "rhs": [
+   "Pi^(1/2)*2^(n - 1)*n!*E^(-beta^2/2)*LaguerreL[n, beta^2]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "EH II 195(33)",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf e^(-y^2) [H_n(y)]^2 cos(sqrt2 beta y) dy = pi^(1/2) 2^(n-1) n! e^(-beta^2/2) L_n(beta^2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.388.6",
+  "gr": "7.388.6",
+  "page": 855,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2)*Sin[b*x]*HermiteH[n, x]*HermiteH[n + 2*m + 1, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(n - 1)*(-1)^m*Sqrt[Pi]*n!*b^(2*m + 1)*E^(-b^2/4)*LaguerreL[n, 2*m + 1, b^2/2]"
+  ],
+  "conds": [
+   "b > 0",
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "ET I 39(11)a",
+  "edition_note": "11",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf e^(-x^2) sin(bx) H_n(x) H_(n+2m+1)(x) dx = 2^(n-1)(-1)^m sqrt(pi) n! b^(2m+1) e^(-b^2/4) L_n^(2m+1)(b^2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.388.7",
+  "gr": "7.388.7",
+  "page": 855,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2)*Cos[b*x]*HermiteH[n, x]*HermiteH[n + 2*m, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(n - 1/2)*Sqrt[Pi/2]*n!*(-1)^m*b^(2*m)*E^(-b^2/4)*LaguerreL[n, 2*m, b^2/2]"
+  ],
+  "conds": [
+   "b > 0",
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "ET I 39(11)a",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^inf e^(-x^2) cos(bx) H_n(x) H_(n+2m)(x) dx = 2^(n-1/2) sqrt(pi/2) n! (-1)^m b^(2m) e^(-b^2/4) L_n^(2m)(b^2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.389",
+  "gr": "7.389",
+  "page": 855,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^n*HermiteH[2*n, a*(1 - Sec[x])^(1/2)], {x, 0, Pi}]",
+  "rhs": [
+   "2^(-n)*(-1)^n*Pi*(2*n)!/(n!)^2*HermiteH[n, a]^2"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 292(31)",
+  "edition_note": "",
+  "section": "7.37-7.38 Hermite polynomials",
+  "tex": "int_0^pi (cos x)^n H_2n[a(1 - sec x)^(1/2)] dx = 2^(-n)(-1)^n pi (2n)!/(n!)^2 [H_n(a)]^2",
+  "note": ""
+ },
+ {
+  "id": "GR7.391.1a",
+  "gr": "7.391.1a",
+  "page": 855,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^alpha*(1 + x)^beta*JacobiP[n, alpha, beta, x]*JacobiP[m, alpha, beta, x], {x, -1, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Re[alpha] > -1",
+   "Re[beta] > -1",
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m != n"
+  ],
+  "cite": "ET II 285(5, 9)",
+  "edition_note": "",
+  "section": "7.39 Jacobi polynomials",
+  "tex": "int_-1^1 (1-x)^alpha (1+x)^beta P_n^(alpha,beta)(x) P_m^(alpha,beta)(x) dx = 0 [m != n]",
+  "note": ""
+ },
+ {
+  "id": "GR7.391.1b",
+  "gr": "7.391.1b",
+  "page": 855,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^alpha*(1 + x)^beta*JacobiP[n, alpha, beta, x]^2, {x, -1, 1}]",
+  "rhs": [
+   "2^(alpha + beta + 1)*Gamma[alpha + n + 1]*Gamma[beta + n + 1]/(n!*(alpha + beta + 1 + 2*n)*Gamma[alpha + beta + n + 1])"
+  ],
+  "conds": [
+   "Re[alpha] > -1",
+   "Re[beta] > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 285(5, 9)",
+  "edition_note": "",
+  "section": "7.39 Jacobi polynomials",
+  "tex": "... = 2^(alpha+beta+1) G(alpha+n+1) G(beta+n+1)/(n!(alpha+beta+1+2n) G(alpha+beta+n+1)) [m = n]",
+  "note": "case m = n substituted"
+ },
+ {
+  "id": "GR7.391.2",
+  "gr": "7.391.2",
+  "page": 856,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^rho*(1 + x)^sigma*JacobiP[n, alpha, beta, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(rho + sigma + 1)*Gamma[rho + 1]*Gamma[sigma + 1]*Gamma[n + 1 + alpha]/(n!*Gamma[rho + sigma + 2]*Gamma[1 + alpha])*HypergeometricPFQ[{-n, alpha + beta + n + 1, rho + 1}, {alpha + 1, rho + sigma + 2}, 1]"
+  ],
+  "conds": [
+   "Re[rho] > -1",
+   "Re[sigma] > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 284(3)",
+  "edition_note": "",
+  "section": "7.39 Jacobi polynomials",
+  "tex": "int_-1^1 (1-x)^rho (1+x)^sigma P_n^(alpha,beta)(x) dx = 2^(rho+sigma+1) G(rho+1)G(sigma+1)G(n+1+alpha)/(n! G(rho+sigma+2)G(1+alpha)) 3F2(-n,alpha+beta+n+1,rho+1;alpha+1,rho+sigma+2;1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.391.3",
+  "gr": "7.391.3",
+  "page": 856,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^alpha*(1 + x)^sigma*JacobiP[n, alpha, beta, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(alpha + sigma + 1)*Gamma[sigma + 1]*Gamma[alpha + n + 1]*Gamma[sigma - beta + 1]/(n!*Gamma[sigma - beta - n + 1]*Gamma[alpha + sigma + n + 2])"
+  ],
+  "conds": [
+   "Re[alpha] > -1",
+   "Re[sigma] > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 284(1)",
+  "edition_note": "6",
+  "section": "7.39 Jacobi polynomials",
+  "tex": "int_-1^1 (1-x)^alpha (1+x)^sigma P_n^(alpha,beta)(x) dx = 2^(alpha+sigma+1) G(sigma+1)G(alpha+n+1)G(sigma-beta+1)/(n! G(sigma-beta-n+1) G(alpha+sigma+n+2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.391.4",
+  "gr": "7.391.4",
+  "page": 856,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^rho*(1 + x)^beta*JacobiP[n, alpha, beta, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(beta + rho + 1)*Gamma[rho + 1]*Gamma[beta + n + 1]*Gamma[alpha - rho + n]/(n!*Gamma[alpha - rho]*Gamma[beta + rho + n + 2])"
+  ],
+  "conds": [
+   "Re[rho] > -1",
+   "Re[beta] > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 284(2)",
+  "edition_note": "",
+  "section": "7.39 Jacobi polynomials",
+  "tex": "int_-1^1 (1-x)^rho (1+x)^beta P_n^(alpha,beta)(x) dx = 2^(beta+rho+1) G(rho+1)G(beta+n+1)G(alpha-rho+n)/(n! G(alpha-rho)G(beta+rho+n+2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.391.5",
+  "gr": "7.391.5",
+  "page": 856,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(alpha - 1)*(1 + x)^beta*JacobiP[n, alpha, beta, x]^2, {x, -1, 1}]",
+  "rhs": [
+   "2^(alpha + beta)*Gamma[alpha + n + 1]*Gamma[beta + n + 1]/(n!*alpha*Gamma[alpha + beta + n + 1])"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Re[beta] > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 285(6)",
+  "edition_note": "",
+  "section": "7.39 Jacobi polynomials",
+  "tex": "int_-1^1 (1-x)^(alpha-1)(1+x)^beta [P_n^(alpha,beta)(x)]^2 dx = 2^(alpha+beta) G(alpha+n+1)G(beta+n+1)/(n! alpha G(alpha+beta+n+1))",
+  "note": ""
+ },
+ {
+  "id": "GR7.391.6",
+  "gr": "7.391.6",
+  "page": 856,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(2*alpha)*(1 + x)^beta*JacobiP[n, alpha, beta, x]^2, {x, -1, 1}]",
+  "rhs": [
+   "2^(4*alpha + beta + 1)*Gamma[alpha + 1/2]*Gamma[alpha + n + 1]^2*Gamma[beta + 2*n + 1]/(Sqrt[Pi]*(n!)^2*Gamma[alpha + 1]*Gamma[2*alpha + beta + 2*n + 2])"
+  ],
+  "conds": [
+   "Re[alpha] > -1/2",
+   "Re[beta] > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 285(7)",
+  "edition_note": "",
+  "section": "7.39 Jacobi polynomials",
+  "tex": "int_-1^1 (1-x)^(2alpha)(1+x)^beta [P_n^(alpha,beta)(x)]^2 dx = 2^(4alpha+beta+1) G(alpha+1/2)[G(alpha+n+1)]^2 G(beta+2n+1)/(sqrt(pi)(n!)^2 G(alpha+1) G(2alpha+beta+2n+2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.391.7",
+  "gr": "7.391.7",
+  "page": 856,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^rho*(1 + x)^beta*JacobiP[n, alpha, beta, x]*JacobiP[n, rho, beta, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(rho + beta + 1)*Gamma[rho + n + 1]*Gamma[beta + n + 1]*Gamma[alpha + beta + 2*n + 1]/(n!*Gamma[beta + rho + 2*n + 2]*Gamma[alpha + beta + n + 1])"
+  ],
+  "conds": [
+   "Re[rho] > -1",
+   "Re[beta] > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 285(10)",
+  "edition_note": "",
+  "section": "7.39 Jacobi polynomials",
+  "tex": "int_-1^1 (1-x)^rho (1+x)^beta P_n^(alpha,beta) P_n^(rho,beta) dx = 2^(rho+beta+1) G(rho+n+1)G(beta+n+1)G(alpha+beta+2n+1)/(n! G(beta+rho+2n+2) G(alpha+beta+n+1))",
+  "note": ""
+ },
+ {
+  "id": "GR7.391.8",
+  "gr": "7.391.8",
+  "page": 856,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(rho - 1)*(1 + x)^beta*JacobiP[n, alpha, beta, x]*JacobiP[n, rho, beta, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(rho + beta)*Gamma[alpha + n + 1]*Gamma[beta + n + 1]*Gamma[rho]/(n!*Gamma[alpha + 1]*Gamma[rho + beta + n + 1])"
+  ],
+  "conds": [
+   "Re[beta] > -1",
+   "Re[rho] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 286(11)",
+  "edition_note": "",
+  "section": "7.39 Jacobi polynomials",
+  "tex": "int_-1^1 (1-x)^(rho-1)(1+x)^beta P_n^(alpha,beta) P_n^(rho,beta) dx = 2^(rho+beta) G(alpha+n+1)G(beta+n+1)G(rho)/(n! G(alpha+1) G(rho+beta+n+1))",
+  "note": ""
+ },
+ {
+  "id": "GR7.391.9",
+  "gr": "7.391.9",
+  "page": 856,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^alpha*(1 + x)^sigma*JacobiP[n, alpha, beta, x]*JacobiP[m, alpha, sigma, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(alpha + sigma + 1)*Gamma[alpha + n + 1]*Gamma[alpha + beta + m + n + 1]*Gamma[sigma + m + 1]*Gamma[sigma - beta + 1]/(m!*(n - m)!*Gamma[alpha + beta + n + 1]*Gamma[alpha + sigma + m + n + 2]*Gamma[alpha - beta + m - n + 1])",
+   "2^(alpha + sigma + 1)*Gamma[alpha + n + 1]*Gamma[alpha + beta + m + n + 1]*Gamma[sigma + m + 1]*Gamma[sigma - beta + 1]/(m!*(n - m)!*Gamma[alpha + beta + n + 1]*Gamma[alpha + sigma + m + n + 2]*Gamma[sigma - beta + m - n + 1])"
+  ],
+  "conds": [
+   "Re[alpha] > -1",
+   "Re[sigma] > -1",
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m <= n"
+  ],
+  "cite": "ET II 286(12)",
+  "edition_note": "7",
+  "section": "7.39 Jacobi polynomials",
+  "tex": "int_-1^1 (1-x)^alpha (1+x)^sigma P_n^(alpha,beta) P_m^(alpha,sigma) dx = 2^(alpha+sigma+1) G(alpha+n+1)G(alpha+beta+m+n+1)G(sigma+m+1)G(sigma-beta+1)/(m!(n-m)! G(alpha+beta+n+1)G(alpha+sigma+m+n+2)G(alpha-beta+m-n+1))",
+  "note": "m <= n added ((n-m)!). Second rhs: last Gamma read as G(sigma-beta+m-n+1) (m=n=0 consistency); suspected misprint"
+ },
+ {
+  "id": "GR7.391.10",
+  "gr": "7.391.10",
+  "page": 856,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^rho*(1 + x)^beta*JacobiP[n, alpha, beta, x]*JacobiP[m, rho, beta, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(beta + rho + 1)*Gamma[alpha + beta + m + n + 1]*Gamma[beta + n + 1]*Gamma[rho + m + 1]*Gamma[alpha - rho - m + n]/(m!*(n - m)!*Gamma[alpha + beta + n + 1]*Gamma[beta + rho + m + n + 2]*Gamma[alpha - rho])"
+  ],
+  "conds": [
+   "Re[beta] > -1",
+   "Re[rho] > -1",
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m <= n"
+  ],
+  "cite": "ET II 287(16)",
+  "edition_note": "6",
+  "section": "7.39 Jacobi polynomials",
+  "tex": "int_-1^1 (1-x)^rho (1+x)^beta P_n^(alpha,beta) P_m^(rho,beta) dx = 2^(beta+rho+1) G(alpha+beta+m+n+1)G(beta+n+1)G(rho+m+1)/(m!(n-m)! G(alpha+beta+n+1)G(beta+rho+m+n+2)) G(alpha-rho-m+n)/G(alpha-rho)",
+  "note": "m <= n added ((n-m)!)"
+ },
+ {
+  "id": "GR7.391.11",
+  "gr": "7.391.11",
+  "page": 856,
+  "status": "ok",
+  "lhs": "Integrate[(1 - y)^alpha*(1 + y)^beta*JacobiP[n, alpha, beta, y], {y, 0, x}]",
+  "rhs": [
+   "1/(2*n)*(JacobiP[n - 1, alpha + 1, beta + 1, 0] - (1 - x)^(alpha + 1)*(1 + x)^(beta + 1)*JacobiP[n - 1, alpha + 1, beta + 1, x])"
+  ],
+  "conds": [
+   "-1 < x < 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "EH II 173(38)",
+  "edition_note": "",
+  "section": "7.39 Jacobi polynomials",
+  "tex": "int_0^x (1-y)^alpha (1+y)^beta P_n^(alpha,beta)(y) dy = 1/(2n)[P_(n-1)^(alpha+1,beta+1)(0) - (1-x)^(alpha+1)(1+x)^(beta+1) P_(n-1)^(alpha+1,beta+1)(x)]",
+  "note": "-1<x<1 and n >= 1 added"
+ },
+ {
+  "id": "GR7.392.1",
+  "gr": "7.392.1",
+  "page": 857,
+  "status": "ok",
+  "lhs": "Integrate[x^(lam - 1)*(1 - x)^(mu - 1)*JacobiP[n, alpha, beta, 1 - gamma*x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[alpha + n + 1]*Gamma[lam]*Gamma[mu]/(n!*Gamma[alpha + 1]*Gamma[lam + mu])*HypergeometricPFQ[{-n, n + alpha + beta + 1, lam}, {alpha + 1, lam + mu}, gamma/2]"
+  ],
+  "conds": [
+   "Re[lam] > 0",
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 192(46)a",
+  "edition_note": "",
+  "section": "7.39 Jacobi polynomials",
+  "tex": "int_0^1 x^(lam-1)(1-x)^(mu-1) P_n^(alpha,beta)(1-gamma x) dx = G(alpha+n+1)G(lam)G(mu)/(n! G(alpha+1)G(lam+mu)) 3F2(-n,n+alpha+beta+1,lam;alpha+1,lam+mu;gamma/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.392.2",
+  "gr": "7.392.2",
+  "page": 857,
+  "status": "ok",
+  "lhs": "Integrate[x^(lam - 1)*(1 - x)^(mu - 1)*JacobiP[n, alpha, beta, gamma*x - 1], {x, 0, 1}]",
+  "rhs": [
+   "(-1)^n*Gamma[beta + n + 1]*Gamma[lam]*Gamma[mu]/(n!*Gamma[beta + 1]*Gamma[lam + mu])*HypergeometricPFQ[{-n, n + alpha + beta + 1, lam}, {beta + 1, lam + mu}, gamma/2]*a",
+   "(-1)^n*Gamma[beta + n + 1]*Gamma[lam]*Gamma[mu]/(n!*Gamma[beta + 1]*Gamma[lam + mu])*HypergeometricPFQ[{-n, n + alpha + beta + 1, lam}, {beta + 1, lam + mu}, gamma/2]"
+  ],
+  "conds": [
+   "Re[lam] > 0",
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 192(47)a",
+  "edition_note": "",
+  "section": "7.39 Jacobi polynomials",
+  "tex": "int_0^1 x^(lam-1)(1-x)^(mu-1) P_n^(alpha,beta)(gamma x - 1) dx = (-1)^n G(beta+n+1)G(lam)G(mu)/(n! G(beta+1)G(lam+mu)) 3F2(-n,n+alpha+beta+1,lam;beta+1,lam+mu;gamma/2) a",
+  "note": "printed trailing factor 'a' is absent from the integral; second rhs drops it"
+ },
+ {
+  "id": "GR7.392.3",
+  "gr": "7.392.3",
+  "page": 857,
+  "status": "ok",
+  "lhs": "Integrate[x^alpha*(1 - x)^(mu - 1)*JacobiP[n, alpha, beta, 1 - gamma*x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[alpha + n + 1]*Gamma[mu]/Gamma[alpha + mu + n + 1]*JacobiP[n, alpha + mu, beta - mu, 1 - gamma]"
+  ],
+  "conds": [
+   "Re[alpha] > -1",
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 191(43)a",
+  "edition_note": "",
+  "section": "7.39 Jacobi polynomials",
+  "tex": "int_0^1 x^alpha (1-x)^(mu-1) P_n^(alpha,beta)(1-gamma x) dx = G(alpha+n+1)G(mu)/G(alpha+mu+n+1) P_n^(alpha+mu,beta-mu)(1-gamma)",
+  "note": "printed condition 'Re a > -1' read as Re alpha > -1"
+ },
+ {
+  "id": "GR7.392.4",
+  "gr": "7.392.4",
+  "page": 857,
+  "status": "ok",
+  "lhs": "Integrate[x^beta*(1 - x)^(mu - 1)*JacobiP[n, alpha, beta, gamma*x - 1], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[beta + n + 1]*Gamma[mu]/Gamma[beta + mu + n + 1]*JacobiP[n, alpha - mu, beta + mu, gamma - 1]"
+  ],
+  "conds": [
+   "Re[beta] > -1",
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 191(44)a",
+  "edition_note": "",
+  "section": "7.39 Jacobi polynomials",
+  "tex": "int_0^1 x^beta (1-x)^(mu-1) P_n^(alpha,beta)(gamma x - 1) dx = G(beta+n+1)G(mu)/G(beta+mu+n+1) P_n^(alpha-mu,beta+mu)(gamma-1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.393.1",
+  "gr": "7.393.1",
+  "page": 857,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^nu*Sin[b*x]*JacobiP[2*n + 1, nu, nu, x], {x, 0, 1}]",
+  "rhs": [
+   "(-1)^n*Sqrt[Pi]*Gamma[2*n + nu + 2]*BesselJ[2*n + nu + 3/2, b]/(2^(1/2 - nu)*(2*n + 1)!*b^(nu + 1/2))"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[nu] > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 94(5)",
+  "edition_note": "",
+  "section": "7.39 Jacobi polynomials",
+  "tex": "int_0^1 (1-x^2)^nu sin(bx) P_(2n+1)^(nu,nu)(x) dx = (-1)^n sqrt(pi) G(2n+nu+2) J_(2n+nu+3/2)(b)/(2^(1/2-nu)(2n+1)! b^(nu+1/2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.393.2",
+  "gr": "7.393.2",
+  "page": 857,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^nu*Cos[b*x]*JacobiP[2*n, nu, nu, x], {x, 0, 1}]",
+  "rhs": [
+   "(-1)^n*2^(nu - 1/2)*Sqrt[Pi]*Gamma[2*n + nu + 1]*BesselJ[2*n + nu + 1/2, b]/((2*n)!*b^(nu + 1/2))"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[nu] > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 38(4)",
+  "edition_note": "",
+  "section": "7.39 Jacobi polynomials",
+  "tex": "int_0^1 (1-x^2)^nu cos(bx) P_2n^(nu,nu)(x) dx = (-1)^n 2^(nu-1/2) sqrt(pi) G(2n+nu+1) J_(2n+nu+1/2)(b)/((2n)! b^(nu+1/2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.411.1",
+  "gr": "7.411.1",
+  "page": 857,
+  "status": "ok",
+  "lhs": "Integrate[LaguerreL[n, x], {x, 0, t}]",
+  "rhs": [
+   "LaguerreL[n, t] - LaguerreL[n + 1, t]/(n + 1)",
+   "LaguerreL[n, t] - LaguerreL[n + 1, t]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MO 110",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^t L_n(x) dx = L_n(t) - L_(n+1)(t)/(n+1)",
+  "note": "second rhs drops the /(n+1) (L_n' - L_(n+1)' = L_n); suspected misprint"
+ },
+ {
+  "id": "GR7.411.2",
+  "gr": "7.411.2",
+  "page": 857,
+  "status": "ok",
+  "lhs": "Integrate[LaguerreL[n, alpha, x], {x, 0, t}]",
+  "rhs": [
+   "LaguerreL[n, alpha, t] - LaguerreL[n + 1, alpha, t] - Binomial[n + alpha, n] + Binomial[n + 1 + alpha, n + 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "EH II 189(16)a",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^t L_n^alpha(x) dx = L_n^alpha(t) - L_(n+1)^alpha(t) - C(n+alpha,n) + C(n+1+alpha,n+1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.411.3",
+  "gr": "7.411.3",
+  "page": 857,
+  "status": "ok",
+  "lhs": "Integrate[LaguerreL[n - 1, alpha + 1, x], {x, 0, t}]",
+  "rhs": [
+   "-LaguerreL[n, alpha, t] + Binomial[n + alpha, n]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "EH II 189(15)a",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^t L_(n-1)^(alpha+1)(x) dx = -L_n^alpha(t) + C(n+alpha,n)",
+  "note": "n >= 1 added"
+ },
+ {
+  "id": "GR7.411.4",
+  "gr": "7.411.4",
+  "page": 857,
+  "status": "ok",
+  "lhs": "Integrate[LaguerreL[m, x]*LaguerreL[n, t - x], {x, 0, t}]",
+  "rhs": [
+   "LaguerreL[m + n, t] - LaguerreL[m + n + 1, t]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "EH II 191(31)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^t L_m(x) L_n(t-x) dx = L_(m+n)(t) - L_(m+n+1)(t)",
+  "note": ""
+ },
+ {
+  "id": "GR7.411.5",
+  "gr": "7.411.5",
+  "page": 857,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Sum[Integrate[LaguerreL[k, x]/k!, {x, 0, t}]^2, {k, 0, Infinity}]",
+  "rhs": [
+   "E^t - 1"
+  ],
+  "conds": [
+   "t >= 0"
+  ],
+  "cite": "MO 110",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "sum_(k=0)^inf [int_0^t L_k(x)/k! dx]^2 = e^t - 1",
+  "note": "infinite sum of squared integrals; not a single integral",
+  "reason": "series identity over integrals, not a single closed-form integral"
+ }
+]

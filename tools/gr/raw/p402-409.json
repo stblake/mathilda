@@ -1,0 +1,1941 @@
+[
+ {
+  "id": "GR3.395.1",
+  "gr": "3.395.1",
+  "page": 402,
+  "status": "ok",
+  "lhs": "Integrate[((Sqrt[x^2 - 1] + x)^nu + (Sqrt[x^2 - 1] + x)^(-nu))/Sqrt[x^2 - 1]*E^(-mu*x), {x, 1, Infinity}]",
+  "rhs": [
+   "2*BesselK[nu, mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 140(29)",
+  "edition_note": "",
+  "section": "3.38-3.39 Combinations of exponentials and arbitrary powers",
+  "tex": "int_1^inf [(sqrt(x^2-1)+x)^nu + (sqrt(x^2-1)+x)^(-nu)]/sqrt(x^2-1) e^(-mu x) dx = 2 K_nu(mu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.395.2",
+  "gr": "3.395.2",
+  "page": 402,
+  "status": "ok",
+  "lhs": "Integrate[((x + Sqrt[x^2 - 1])^(2*nu) + (x - Sqrt[x^2 - 1])^(2*nu))/Sqrt[x*(x^2 - 1)]*E^(-mu*x), {x, 1, Infinity}]",
+  "rhs": [
+   "Sqrt[2*mu/Pi]*BesselK[nu + 1/4, mu/2]*BesselK[nu - 1/4, mu/2]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 140(34)",
+  "edition_note": "",
+  "section": "3.38-3.39 Combinations of exponentials and arbitrary powers",
+  "tex": "int_1^inf [(x+sqrt(x^2-1))^(2nu)+(x-sqrt(x^2-1))^(2nu)]/sqrt(x(x^2-1)) e^(-mu x) dx = sqrt(2mu/pi) K_{nu+1/4}(mu/2) K_{nu-1/4}(mu/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.395.3",
+  "gr": "3.395.3",
+  "page": 402,
+  "status": "ok",
+  "lhs": "Integrate[((x + Sqrt[x^2 + 1])^nu + Cos[nu*Pi]*(x + Sqrt[x^2 + 1])^(-nu))/Sqrt[x^2 + 1]*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*(WeberE[nu, mu] + BesselY[nu, mu])"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "EH II 35(34)",
+  "edition_note": "",
+  "section": "3.38-3.39 Combinations of exponentials and arbitrary powers",
+  "tex": "int_0^inf [(x+sqrt(x^2+1))^nu + cos(nu pi)(x+sqrt(x^2+1))^(-nu)]/sqrt(x^2+1) e^(-mu x) dx = -pi [E_nu(mu) + Y_nu(mu)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.1",
+  "gr": "3.411.1",
+  "page": 402,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)/(E^(mu*x) - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]*Zeta[nu]/mu^nu"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 1"
+  ],
+  "cite": "FI II 792a",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^(nu-1)/(e^(mu x)-1) dx = Gamma(nu) zeta(nu)/mu^nu",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.2",
+  "gr": "3.411.2",
+  "page": 402,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n - 1)/(E^(p*x) - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n - 1)*(2*Pi/p)^(2*n)*BernoulliB[2*n]/(4*n)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "p > 0"
+  ],
+  "cite": "FI II 721a",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^(2n-1)/(e^(px)-1) dx = (-1)^(n-1) (2pi/p)^(2n) B_{2n}/(4n)",
+  "note": "p > 0 added (convergence)"
+ },
+ {
+  "id": "GR3.411.3",
+  "gr": "3.411.3",
+  "page": 402,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)/(E^(mu*x) + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(1 - 2^(1 - nu))*Gamma[nu]*Zeta[nu]/mu^nu"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "FI II 792a, WH",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^(nu-1)/(e^(mu x)+1) dx = (1-2^(1-nu)) Gamma(nu) zeta(nu)/mu^nu",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.4",
+  "gr": "3.411.4",
+  "page": 402,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n - 1)/(E^(p*x) + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(1 - 2^(1 - 2*n))*(2*Pi/p)^(2*n)*Abs[BernoulliB[2*n]]/(4*n)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "p > 0"
+  ],
+  "cite": "BI(83)(2), EH I 39(25)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^(2n-1)/(e^(px)+1) dx = (1-2^(1-2n)) (2pi/p)^(2n) |B_{2n}|/(4n)",
+  "note": "p > 0 added (convergence)"
+ },
+ {
+  "id": "GR3.411.5",
+  "gr": "3.411.5",
+  "page": 402,
+  "status": "ok",
+  "lhs": "Integrate[x/(1 - E^(-x)), {x, 0, Log[2]}]",
+  "rhs": [
+   "Pi^2/12"
+  ],
+  "conds": [],
+  "cite": "BI (104)(5)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^ln2 x/(1-e^(-x)) dx = pi^2/12",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.6a",
+  "gr": "3.411.6",
+  "page": 402,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*E^(-mu*x)/(1 - beta*E^(-x)), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]*Sum[(mu + k)^(-nu)*beta^k, {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Abs[beta] < 1",
+   "Re[nu] > 0"
+  ],
+  "cite": "EH I 27(3)",
+  "edition_note": "8",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^(nu-1) e^(-mu x)/(1-beta e^(-x)) dx = Gamma(nu) sum_{n>=0} (mu+n)^(-nu) beta^n",
+  "note": "book: Re mu > 0 and either |beta| <= 1, beta != 1, Re nu > 0; or beta = 1, Re nu > 1. Generic branch |beta| < 1 kept as conds; summation index renamed n -> k"
+ },
+ {
+  "id": "GR3.411.6b",
+  "gr": "3.411.6",
+  "page": 402,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*E^(-mu*x)/(1 - beta*E^(-x)), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]*LerchPhi[beta, nu, mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Abs[beta] < 1",
+   "Re[nu] > 0"
+  ],
+  "cite": "EH I 27(3)",
+  "edition_note": "8",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^(nu-1) e^(-mu x)/(1-beta e^(-x)) dx = Gamma(nu) Phi(beta, nu, mu)",
+  "note": "book: Re mu > 0 and either |beta| <= 1, beta != 1, Re nu > 0; or beta = 1, Re nu > 1. Generic branch |beta| < 1 kept as conds"
+ },
+ {
+  "id": "GR3.411.7",
+  "gr": "3.411.7",
+  "page": 402,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*E^(-mu*x)/(1 - E^(-beta*x)), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]*HurwitzZeta[nu, mu/beta]/beta^nu"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[mu] > 0",
+   "Re[nu] > 1"
+  ],
+  "cite": "ET I 144(10)",
+  "edition_note": "11",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^(nu-1) e^(-mu x)/(1-e^(-beta x)) dx = Gamma(nu) zeta(nu, mu/beta)/beta^nu",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.8",
+  "gr": "3.411.8",
+  "page": 402,
+  "status": "ok",
+  "lhs": "Integrate[x^(n - 1)*E^(-p*x)/(1 + E^x), {x, 0, Infinity}]",
+  "rhs": [
+   "(n - 1)!*Sum[(-1)^(k - 1)/(p + k)^n, {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "p > -1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (83)(9)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^(n-1) e^(-px)/(1+e^x) dx = (n-1)! sum_{k>=1} (-1)^(k-1)/(p+k)^n",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.9",
+  "gr": "3.411.9",
+  "page": 402,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-x)/(E^x - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/6 - 1"
+  ],
+  "conds": [],
+  "cite": "BI (82)(1)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x e^(-x)/(e^x-1) dx = pi^2/6 - 1",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.10",
+  "gr": "3.411.10",
+  "page": 402,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-2*x)/(E^(-x) + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "1 - Pi^2/12"
+  ],
+  "conds": [],
+  "cite": "BI (82)(2)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x e^(-2x)/(e^(-x)+1) dx = 1 - pi^2/12",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.11",
+  "gr": "3.411.11",
+  "page": 403,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-3*x)/(E^(-x) + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/12 - 3/4"
+  ],
+  "conds": [],
+  "cite": "BI (82)(3)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x e^(-3x)/(e^(-x)+1) dx = pi^2/12 - 3/4",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.12",
+  "gr": "3.411.12",
+  "page": 403,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-(2*n - 1)*x)/(1 + E^x), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi^2/12 + Sum[(-1)^(k - 1)/k^2, {k, 1, 2*n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (82)(5)",
+  "edition_note": "11",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x e^(-(2n-1)x)/(1+e^x) dx = -pi^2/12 + sum_{k=1}^{2n-1} (-1)^(k-1)/k^2",
+  "note": "n positive integer implied by the finite sum (no condition printed)"
+ },
+ {
+  "id": "GR3.411.13",
+  "gr": "3.411.13",
+  "page": 403,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-2*n*x)/(1 + E^x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/12 + Sum[(-1)^k/k^2, {k, 1, 2*n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (82)(4)",
+  "edition_note": "11",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x e^(-2nx)/(1+e^x) dx = pi^2/12 + sum_{k=1}^{2n} (-1)^k/k^2",
+  "note": "n positive integer implied by the finite sum (no condition printed)"
+ },
+ {
+  "id": "GR3.411.14a",
+  "gr": "3.411.14",
+  "page": 403,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-n*x)/(1 - E^(-x)), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Sum[1/k^3, {k, n, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (82)(9)",
+  "edition_note": "7",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^2 e^(-nx)/(1-e^(-x)) dx = 2 sum_{k=n}^inf 1/k^3",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.14b",
+  "gr": "3.411.14",
+  "page": 403,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-n*x)/(1 - E^(-x)), {x, 0, Infinity}]",
+  "rhs": [
+   "2*(Zeta[3] - Sum[1/k^3, {k, 1, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (82)(9)",
+  "edition_note": "7",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^2 e^(-nx)/(1-e^(-x)) dx = 2(zeta(3) - sum_{k=1}^{n-1} 1/k^3)",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.15a",
+  "gr": "3.411.15",
+  "page": 403,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-n*x)/(1 + E^(-x)), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Sum[(-1)^(n + k)/k^3, {k, n, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (82)(10)",
+  "edition_note": "7",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^2 e^(-nx)/(1+e^(-x)) dx = 2 sum_{k=n}^inf (-1)^(n+k)/k^3",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.15b",
+  "gr": "3.411.15",
+  "page": 403,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-n*x)/(1 + E^(-x)), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n + 1)*(3/2*Zeta[3] + 2*Sum[(-1)^k/k^3, {k, 1, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (82)(10)",
+  "edition_note": "7",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^2 e^(-nx)/(1+e^(-x)) dx = (-1)^(n+1) (3/2 zeta(3) + 2 sum_{k=1}^{n-1} (-1)^k/k^3)",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.16",
+  "gr": "3.411.16",
+  "page": 403,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-mu*x)/(1 + E^(-x)), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi^3*Csc[mu*Pi]^3*(2 - Sin[mu*Pi]^2)"
+  ],
+  "conds": [
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "ET I 120(17)a",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf x^2 e^(-mu x)/(1+e^(-x)) dx = pi^3 csc^3(mu pi) (2 - sin^2(mu pi))",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.17",
+  "gr": "3.411.17",
+  "page": 403,
+  "status": "ok",
+  "lhs": "Integrate[x^3*E^(-n*x)/(1 - E^(-x)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^4/15 - 6*Sum[1/k^4, {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (82)(12)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^3 e^(-nx)/(1-e^(-x)) dx = pi^4/15 - 6 sum_{k=1}^{n-1} 1/k^4",
+  "note": "n positive integer implied by the finite sum (no condition printed)"
+ },
+ {
+  "id": "GR3.411.18a",
+  "gr": "3.411.18",
+  "page": 403,
+  "status": "ok",
+  "lhs": "Integrate[x^3*E^(-n*x)/(1 + E^(-x)), {x, 0, Infinity}]",
+  "rhs": [
+   "6*Sum[(-1)^(n + k)/k^4, {k, n, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (82)(13)",
+  "edition_note": "11",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^3 e^(-nx)/(1+e^(-x)) dx = 6 sum_{k=n}^inf (-1)^(n+k)/k^4",
+  "note": "n positive integer implied (no condition printed)"
+ },
+ {
+  "id": "GR3.411.18b",
+  "gr": "3.411.18",
+  "page": 403,
+  "status": "ok",
+  "lhs": "Integrate[x^3*E^(-n*x)/(1 + E^(-x)), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n + 1)*(7/120*Pi^4 + 6*Sum[(-1)^k/k^4, {k, 1, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (82)(13)",
+  "edition_note": "11",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^3 e^(-nx)/(1+e^(-x)) dx = (-1)^(n+1) (7/120 pi^4 + 6 sum_{k=1}^{n-1} (-1)^k/k^4)",
+  "note": "n positive integer implied (no condition printed)"
+ },
+ {
+  "id": "GR3.411.19",
+  "gr": "3.411.19",
+  "page": 403,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*(E^(-x) - 1)^n/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-Sum[(-1)^k*Binomial[n, k]*Log[p + n - k], {k, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "p > 0"
+  ],
+  "cite": "LI (89)(10)",
+  "edition_note": "9",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf e^(-px)(e^(-x)-1)^n dx/x = -sum_{k=0}^n (-1)^k C(n,k) ln(p+n-k)",
+  "note": "no condition printed; n >= 1 integer and p > 0 added for convergence"
+ },
+ {
+  "id": "GR3.411.20",
+  "gr": "3.411.20",
+  "page": 403,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*(E^(-x) - 1)^n/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Sum[(-1)^k*Binomial[n, k]*(p + n - k)*Log[p + n - k], {k, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 2",
+   "p > 0"
+  ],
+  "cite": "LI (89)(15)",
+  "edition_note": "9",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf e^(-px)(e^(-x)-1)^n dx/x^2 = sum_{k=0}^n (-1)^k C(n,k)(p+n-k) ln(p+n-k)",
+  "note": "no condition printed; n >= 2 integer and p > 0 added for convergence"
+ },
+ {
+  "id": "GR3.411.21",
+  "gr": "3.411.21",
+  "page": 403,
+  "status": "ok",
+  "lhs": "Integrate[x^(n - 1)*(1 - E^(-m*x))/(1 - E^x), {x, 0, Infinity}]",
+  "rhs": [
+   "(n - 1)!*Sum[1/k^n, {k, 1, m}]",
+   "-(n - 1)!*Sum[1/k^n, {k, 1, m}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "LI (83)(8)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^(n-1) (1-e^(-mx))/(1-e^x) dx = (n-1)! sum_{k=1}^m 1/k^n",
+  "note": "as printed the integrand is negative for x > 0 but the value is positive; second rhs is the sign-corrected value (equivalently the denominator should be e^x - 1). n, m positive integers added (no condition printed)"
+ },
+ {
+  "id": "GR3.411.22a",
+  "gr": "3.411.22",
+  "page": 403,
+  "status": "ok",
+  "lhs": "Integrate[x^(p - 1)/(E^(r*x) - q), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(q*r^p)*Gamma[p]*Sum[q^k/k^p, {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "p > 0",
+   "r > 0",
+   "-1 < q < 1"
+  ],
+  "cite": "BI (83)(5)",
+  "edition_note": "7",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^(p-1)/(e^(rx)-q) dx = Gamma(p)/(q r^p) sum_{k>=1} q^k/k^p",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.22b",
+  "gr": "3.411.22",
+  "page": 403,
+  "status": "ok",
+  "lhs": "Integrate[x^(p - 1)/(E^(r*x) - q), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[p]*r^(-p)*LerchPhi[q, p, 1]"
+  ],
+  "conds": [
+   "p > 0",
+   "r > 0",
+   "-1 < q < 1"
+  ],
+  "cite": "BI (83)(5)",
+  "edition_note": "7",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^(p-1)/(e^(rx)-q) dx = Gamma(p) r^(-p) Phi(q, p, 1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.23",
+  "gr": "3.411.23",
+  "page": 403,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(mu*x)/(beta + E^x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*beta^(mu - 1)*Csc[mu*Pi]*(Log[beta] - Pi*Cot[mu*Pi])"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "BI (101)(5), ET I 120(16)a",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf x e^(mu x)/(beta+e^x) dx = pi beta^(mu-1) cosec(mu pi) [ln beta - pi cot(mu pi)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.24",
+  "gr": "3.411.24",
+  "page": 403,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(mu*x)/(E^(nu*x) - 1), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(Pi/nu*Csc[mu*Pi/nu])^2"
+  ],
+  "conds": [
+   "Re[nu] > Re[mu] > 0"
+  ],
+  "cite": "LI (101)(3)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf x e^(mu x)/(e^(nu x)-1) dx = (pi/nu cosec(mu pi/nu))^2",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.25",
+  "gr": "3.411.25",
+  "page": 404,
+  "status": "ok",
+  "lhs": "Integrate[x*(1 + E^(-x))/(E^x - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/3 - 1"
+  ],
+  "conds": [],
+  "cite": "BI (82)(6)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x (1+e^(-x))/(e^x-1) dx = pi^2/3 - 1",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.26",
+  "gr": "3.411.26",
+  "page": 404,
+  "status": "ok",
+  "lhs": "Integrate[x*(1 - E^(-x))/(1 + E^(-3*x))*E^(-x), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi^2/27"
+  ],
+  "conds": [],
+  "cite": "LI (82)(7)a",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x (1-e^(-x))/(1+e^(-3x)) e^(-x) dx = 2pi^2/27",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.27",
+  "gr": "3.411.27",
+  "page": 404,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-mu*x))/(1 + E^x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Gamma[mu/2 + 1]/Gamma[(mu + 1)/2]*Sqrt[Pi]]"
+  ],
+  "conds": [
+   "Re[mu] > -1"
+  ],
+  "cite": "BI (93)(4)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (1-e^(-mu x))/(1+e^x) dx/x = ln[Gamma(mu/2+1)/Gamma((mu+1)/2) sqrt(pi)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.28",
+  "gr": "3.411.28",
+  "page": 404,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-nu*x) - E^(-mu*x))/(E^(-x) + 1)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Gamma[nu/2]*Gamma[(mu + 1)/2]/(Gamma[mu/2]*Gamma[(nu + 1)/2])]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "BI (93)(6)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (e^(-nu x)-e^(-mu x))/(e^(-x)+1) dx/x = ln[Gamma(nu/2)Gamma((mu+1)/2)/(Gamma(mu/2)Gamma((nu+1)/2))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.29",
+  "gr": "3.411.29",
+  "page": 404,
+  "status": "ok",
+  "lhs": "Integrate[(E^(p*x) - E^(q*x))/(1 + E^(r*x))/x, {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Log[Tan[p*Pi/(2*r)]*Cot[q*Pi/(2*r)]]"
+  ],
+  "conds": [
+   "Abs[r] > Abs[p]",
+   "Abs[r] > Abs[q]",
+   "r*p > 0",
+   "r*q > 0"
+  ],
+  "cite": "BI (103)(3)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf (e^(px)-e^(qx))/(1+e^(rx)) dx/x = ln[tan(p pi/(2r)) cot(q pi/(2r))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.30",
+  "gr": "3.411.30",
+  "page": 404,
+  "status": "ok",
+  "lhs": "Integrate[(E^(p*x) - E^(q*x))/(1 - E^(r*x))/x, {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Log[Sin[p*Pi/r]*Csc[q*Pi/r]]"
+  ],
+  "conds": [
+   "Abs[r] > Abs[p]",
+   "Abs[r] > Abs[q]",
+   "r*p > 0",
+   "r*q > 0"
+  ],
+  "cite": "BI (103)(4)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf (e^(px)-e^(qx))/(1-e^(rx)) dx/x = ln[sin(p pi/r) cosec(q pi/r)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.31",
+  "gr": "3.411.31",
+  "page": 404,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-q*x) + E^((q - p)*x))/(1 - E^(-p*x))*x, {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/p*Csc[q*Pi/p])^2"
+  ],
+  "conds": [
+   "0 < q < p"
+  ],
+  "cite": "BI (82)(8)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (e^(-qx)+e^((q-p)x))/(1-e^(-px)) x dx = (pi/p cosec(q pi/p))^2",
+  "note": ""
+ },
+ {
+  "id": "GR3.411.32",
+  "gr": "3.411.32",
+  "page": 404,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-p*x) - E^((p - q)*x))/(E^(-q*x) + 1)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Cot[p*Pi/(2*q)]]"
+  ],
+  "conds": [
+   "0 < p < q"
+  ],
+  "cite": "BI (93)(7)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (e^(-px)-e^((p-q)x))/(e^(-qx)+1) dx/x = ln cot(p pi/(2q))",
+  "note": ""
+ },
+ {
+  "id": "GR3.412",
+  "gr": "3.412",
+  "page": 404,
+  "status": "ok",
+  "lhs": "Integrate[((a + b*E^(-p*x))/(c*E^(p*x) + g + h*E^(-p*x)) - (a + b*E^(-q*x))/(c*E^(q*x) + g + h*E^(-q*x)))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(a + b)/(c + g + h)*Log[p/q]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "c > 0",
+   "g > 0",
+   "h > 0"
+  ],
+  "cite": "BI (96)(7)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf {(a+b e^(-px))/(c e^(px)+g+h e^(-px)) - (a+b e^(-qx))/(c e^(qx)+g+h e^(-qx))} dx/x = (a+b)/(c+g+h) ln(p/q)",
+  "note": "only p > 0, q > 0 printed; c, g, h > 0 added so the denominators cannot vanish"
+ },
+ {
+  "id": "GR3.413.1",
+  "gr": "3.413.1",
+  "page": 404,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-beta*x))*(1 - E^(-gamma*x))*E^(-mu*x)/(1 - E^(-x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Gamma[mu]*Gamma[beta + gamma + mu]/(Gamma[mu + beta]*Gamma[mu + gamma])]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[mu] > -Re[beta]",
+   "Re[mu] > -Re[gamma]",
+   "Re[mu] > -Re[beta + gamma]"
+  ],
+  "cite": "BI (93)(13)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (1-e^(-beta x))(1-e^(-gamma x)) e^(-mu x)/(1-e^(-x)) dx/x = ln[Gamma(mu)Gamma(beta+gamma+mu)/(Gamma(mu+beta)Gamma(mu+gamma))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.413.2",
+  "gr": "3.413.2",
+  "page": 404,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^((q - p)*x))^2/(E^(q*x) - E^((q - 2*p)*x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Csc[q*Pi/(2*p)]]"
+  ],
+  "conds": [
+   "0 < q < p"
+  ],
+  "cite": "BI (95)(6)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf {1-e^((q-p)x)}^2/(e^(qx)-e^((q-2p)x)) dx/x = ln cosec(q pi/(2p))",
+  "note": ""
+ },
+ {
+  "id": "GR3.413.3",
+  "gr": "3.413.3",
+  "page": 404,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-p*x) - E^(-q*x))/(1 + E^(-x))*(1 + E^(-(2*n + 1)*x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[(Product[q + 2*k, {k, 0, n}]*Product[p + 2*k - 1, {k, 1, n}])/(Product[p + 2*k, {k, 0, n}]*Product[q + 2*k - 1, {k, 1, n}])]"
+  ],
+  "conds": [
+   "Re[p] > -2*n",
+   "Re[q] > -2*n",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (93)(11)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (e^(-px)-e^(-qx))/(1+e^(-x)) (1+e^(-(2n+1)x))/x dx = ln{q(q+2)...(q+2n)(p+1)(p+3)...(p+2n-1)/[p(p+2)...(p+2n)(q+1)(q+3)...(q+2n-1)]}",
+  "note": "n nonnegative integer implied by the finite products (not printed)"
+ },
+ {
+  "id": "GR3.414",
+  "gr": "3.414",
+  "page": 404,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-beta*x))*(1 - E^(-gamma*x))*(1 - E^(-delta*x))*E^(-mu*x)/(1 - E^(-x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Gamma[mu]*Gamma[mu + beta + gamma]*Gamma[mu + beta + delta]*Gamma[mu + gamma + delta]/(Gamma[mu + beta]*Gamma[mu + gamma]*Gamma[mu + delta]*Gamma[mu + beta + gamma + delta])]"
+  ],
+  "conds": [
+   "2*Re[mu] > Abs[Re[beta]] + Abs[Re[gamma]] + Abs[Re[delta]]"
+  ],
+  "cite": "BI (93)(14), ET I 145(17)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (1-e^(-beta x))(1-e^(-gamma x))(1-e^(-delta x)) e^(-mu x)/(1-e^(-x)) dx/x = ln[Gamma(mu)Gamma(mu+beta+gamma)Gamma(mu+beta+delta)Gamma(mu+gamma+delta)/(Gamma(mu+beta)Gamma(mu+gamma)Gamma(mu+delta)Gamma(mu+beta+gamma+delta))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.415.1",
+  "gr": "3.415.1",
+  "page": 405,
+  "status": "ok",
+  "lhs": "Integrate[x/((x^2 + beta^2)*(E^(mu*x) - 1)), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*(Log[beta*mu/(2*Pi)] - Pi/(beta*mu) - PolyGamma[beta*mu/(2*Pi)])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (97)(20), EH I 18(27)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x dx/((x^2+beta^2)(e^(mu x)-1)) = 1/2[ln(beta mu/(2pi)) - pi/(beta mu) - psi(beta mu/(2pi))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.415.2",
+  "gr": "3.415.2",
+  "page": 405,
+  "status": "ok",
+  "lhs": "Integrate[x/((x^2 + beta^2)^2*(E^(2*Pi*x) - 1)), {x, 0, Infinity}]",
+  "rhs": [
+   "-1/(8*beta^3) - 1/(4*beta^2) + 1/(4*beta)*PolyGamma[1, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "BI(97)(22), EH I 22(12)",
+  "edition_note": "11",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x dx/((x^2+beta^2)^2 (e^(2pi x)-1)) = -1/(8beta^3) - 1/(4beta^2) + psi'(beta)/(4beta) ~ 1/(4beta^4) sum |B_{2k+2}|/beta^(2k)",
+  "note": "the trailing asymptotic expansion (valid for Re beta > 0) is not transcribed; condition Re beta > 0 taken from it"
+ },
+ {
+  "id": "GR3.415.3",
+  "gr": "3.415.3",
+  "page": 405,
+  "status": "ok",
+  "lhs": "Integrate[x/((x^2 + beta^2)*(E^(mu*x) + 1)), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*(PolyGamma[beta*mu/(2*Pi) + 1/2] - Log[beta*mu/(2*Pi)])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x dx/((x^2+beta^2)(e^(mu x)+1)) = 1/2[psi(beta mu/(2pi)+1/2) - ln(beta mu/(2pi))]",
+  "note": "no citation printed"
+ },
+ {
+  "id": "GR3.415.4",
+  "gr": "3.415.4",
+  "page": 405,
+  "status": "ok",
+  "lhs": "Integrate[x/((x^2 + beta^2)^2*(E^(2*Pi*x) + 1)), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*beta^2) - 1/(4*beta)*PolyGamma[1, beta + 1/2]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x dx/((x^2+beta^2)^2 (e^(2pi x)+1)) = 1/(4beta^2) - psi'(beta+1/2)/(4beta)",
+  "note": "book also lists Re mu > 0 although mu does not occur; dropped. No citation printed"
+ },
+ {
+  "id": "GR3.416.1",
+  "gr": "3.416.1",
+  "page": 405,
+  "status": "ok",
+  "lhs": "Integrate[((1 + I*x)^(2*n) - (1 - I*x)^(2*n))/I/(E^(2*Pi*x) - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*(2*n - 1)/(2*n + 1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (88)(4)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf [(1+ix)^(2n)-(1-ix)^(2n)]/i dx/(e^(2pi x)-1) = 1/2 (2n-1)/(2n+1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.416.2",
+  "gr": "3.416.2",
+  "page": 405,
+  "status": "ok",
+  "lhs": "Integrate[((1 + I*x)^(2*n) - (1 - I*x)^(2*n))/I/(E^(Pi*x) + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*n + 1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (87)(1)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf [(1+ix)^(2n)-(1-ix)^(2n)]/i dx/(e^(pi x)+1) = 1/(2n+1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.416.3",
+  "gr": "3.416.3",
+  "page": 405,
+  "status": "ok",
+  "lhs": "Integrate[((1 + I*x)^(2*n - 1) - (1 - I*x)^(2*n - 1))/I/(E^(Pi*x) + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*n)*(1 - 2^(2^n)*BernoulliB[2*n])",
+   "1/(2*n)*(1 - 2^(2*n)*BernoulliB[2*n])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (87)(2)",
+  "edition_note": "8",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf [(1+ix)^(2n-1)-(1-ix)^(2n-1)]/i dx/(e^(pi x)+1) = 1/(2n)[1 - 2^(2^n) B_{2n}]",
+  "note": "exponent printed as 2^{2^n} (nested superscript); 2^(2n) given as the likely intended alternative"
+ },
+ {
+  "id": "GR3.417.1",
+  "gr": "3.417.1",
+  "page": 405,
+  "status": "ok",
+  "lhs": "Integrate[x/(a^2*E^x + b^2*E^(-x)), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi/(2*a*b)*Log[b/a]"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (101)(1)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf x dx/(a^2 e^x + b^2 e^(-x)) = pi/(2ab) ln(b/a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.417.2",
+  "gr": "3.417.2",
+  "page": 405,
+  "status": "ok",
+  "lhs": "Integrate[x/(a^2*E^x - b^2*E^(-x)), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi^2/(4*a*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "LI (101)(2)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf x dx/(a^2 e^x - b^2 e^(-x)) = pi^2/(4ab)",
+  "note": "no condition printed (a, b > 0 added); integrand has a simple pole at x = Log[b/a] on the path, so the value is presumably a principal value though not marked PV"
+ },
+ {
+  "id": "GR3.418.1",
+  "gr": "3.418.1",
+  "page": 405,
+  "status": "ok",
+  "lhs": "Integrate[x/(E^x + E^(-x) - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "1/3*(PolyGamma[1, 1/3] - 2/3*Pi^2)"
+  ],
+  "conds": [],
+  "cite": "LI (88)(1)",
+  "edition_note": "6",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x dx/(e^x+e^(-x)-1) = 1/3[psi'(1/3) - 2/3 pi^2] = 1.1719536193...",
+  "note": "book also gives the numeric value 1.1719536193..."
+ },
+ {
+  "id": "GR3.418.2",
+  "gr": "3.418.2",
+  "page": 405,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-x)/(E^x + E^(-x) - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "1/6*(PolyGamma[1, 1/3] - 5/6*Pi^2)"
+  ],
+  "conds": [],
+  "cite": "LI (88)(2)",
+  "edition_note": "6",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x e^(-x) dx/(e^x+e^(-x)-1) = 1/6[psi'(1/3) - 5/6 pi^2] = 0.3118211319...",
+  "note": "book also gives the numeric value 0.3118211319..."
+ },
+ {
+  "id": "GR3.418.3",
+  "gr": "3.418.3",
+  "page": 405,
+  "status": "ok",
+  "lhs": "Integrate[x/(E^x + 2*E^(-x) - 2), {x, 0, Log[2]}]",
+  "rhs": [
+   "Pi/8*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (104)(7)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^ln2 x dx/(e^x+2e^(-x)-2) = pi/8 ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR3.419.1",
+  "gr": "3.419.1",
+  "page": 406,
+  "status": "ok",
+  "lhs": "Integrate[x/((beta + E^x)*(1 + E^(-x))), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Log[beta]^2/(2*(beta - 1))"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi"
+  ],
+  "cite": "BI (101)(16)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf x dx/((beta+e^x)(1+e^(-x))) = (ln beta)^2/(2(beta-1))",
+  "note": ""
+ },
+ {
+  "id": "GR3.419.2",
+  "gr": "3.419.2",
+  "page": 406,
+  "status": "ok",
+  "lhs": "Integrate[x/((beta + E^x)*(1 - E^(-x))), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(Pi^2 + Log[beta]^2)/(2*(beta + 1))"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi"
+  ],
+  "cite": "BI (101)(17)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf x dx/((beta+e^x)(1-e^(-x))) = [pi^2+(ln beta)^2]/(2(beta+1))",
+  "note": ""
+ },
+ {
+  "id": "GR3.419.3",
+  "gr": "3.419.3",
+  "page": 406,
+  "status": "ok",
+  "lhs": "Integrate[x^2/((beta + E^x)*(1 - E^(-x))), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(Pi^2 + Log[beta]^2)*Log[beta]/(3*(beta + 1))"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi"
+  ],
+  "cite": "BI (102)(6)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf x^2 dx/((beta+e^x)(1-e^(-x))) = [pi^2+(ln beta)^2] ln beta/(3(beta+1))",
+  "note": ""
+ },
+ {
+  "id": "GR3.419.4",
+  "gr": "3.419.4",
+  "page": 406,
+  "status": "ok",
+  "lhs": "Integrate[x^3/((beta + E^x)*(1 - E^(-x))), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(Pi^2 + Log[beta]^2)^2/(4*(beta + 1))"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi"
+  ],
+  "cite": "BI (102)(9)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf x^3 dx/((beta+e^x)(1-e^(-x))) = [pi^2+(ln beta)^2]^2/(4(beta+1))",
+  "note": ""
+ },
+ {
+  "id": "GR3.419.5",
+  "gr": "3.419.5",
+  "page": 406,
+  "status": "ok",
+  "lhs": "Integrate[x^4/((beta + E^x)*(1 - E^(-x))), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(Pi^2 + Log[beta]^2)^2/(15*(beta + 1))*(7*Pi^2 + 3*Log[beta]^2)*Log[beta]",
+   "(Pi^2 + Log[beta]^2)/(15*(beta + 1))*(7*Pi^2 + 3*Log[beta]^2)*Log[beta]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi"
+  ],
+  "cite": "BI (102)(10)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf x^4 dx/((beta+e^x)(1-e^(-x))) = [pi^2+(ln beta)^2]^2/(15(beta+1)) [7pi^2+3(ln beta)^2] ln beta",
+  "note": "no condition printed (|arg beta| < pi taken from siblings). Printed value has degree 7 in (pi, ln beta) where degree 5 is expected; second rhs drops the square"
+ },
+ {
+  "id": "GR3.419.6",
+  "gr": "3.419.6",
+  "page": 406,
+  "status": "ok",
+  "lhs": "Integrate[x^5/((beta + E^x)*(1 - E^(-x))), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(Pi^2 + Log[beta]^2)^2/(6*(beta + 1))*(3*Pi^2 + Log[beta]^2)"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi"
+  ],
+  "cite": "BI (102)(11)",
+  "edition_note": "11",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf x^5 dx/((beta+e^x)(1-e^(-x))) = [pi^2+(ln beta)^2]^2/(6(beta+1)) [3pi^2+(ln beta)^2]",
+  "note": "no condition printed (|arg beta| < pi taken from siblings)"
+ },
+ {
+  "id": "GR3.419.7",
+  "gr": "3.419.7",
+  "page": 406,
+  "status": "ok",
+  "lhs": "Integrate[(x - Log[beta])*x/((beta - E^x)*(1 - E^(-x))), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-(4*Pi^2 + Log[beta]^2)*Log[beta]/(6*(beta - 1))"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi"
+  ],
+  "cite": "BI (102)(7)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf (x - ln beta) x dx/((beta-e^x)(1-e^(-x))) = -[4pi^2+(ln beta)^2] ln beta/(6(beta-1))",
+  "note": ""
+ },
+ {
+  "id": "GR3.421.1",
+  "gr": "3.421.1",
+  "page": 406,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-nu*x) - 1)^n*(E^(-rho*x) - 1)^m*E^(-mu*x)/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Sum[(-1)^k*Binomial[n, k]*Sum[(-1)^l*Binomial[m, l]*((m - l)*rho + (n - k)*nu + mu)*Log[(m - l)*rho + (n - k)*nu + mu], {l, 0, m}], {k, 0, n}]"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "Re[mu] > 0",
+   "Re[rho] > 0",
+   "Element[n, Integers] && n >= 1",
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "BI (89)(17)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (e^(-nu x)-1)^n (e^(-rho x)-1)^m e^(-mu x) dx/x^2 = sum_k (-1)^k C(n,k) sum_l (-1)^l C(m,l) {(m-l)rho+(n-k)nu+mu} ln[(m-l)rho+(n-k)nu+mu]",
+  "note": "n, m positive integers implied by the finite sums (n + m >= 2 needed for convergence at 0)"
+ },
+ {
+  "id": "GR3.421.2",
+  "gr": "3.421.2",
+  "page": 406,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-nu*x))^n*(1 - E^(-rho*x))*E^(-x)/x^3, {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sum[(-1)^k*Binomial[n, k]*(rho + k*nu + 1)^2*Log[rho + k*nu + 1], {k, 0, n}] + 1/2*Sum[(-1)^(k - 1)*Binomial[n, k]*(k*nu + 1)^2*Log[k*nu + 1], {k, 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 2",
+   "Re[nu] > 0",
+   "Re[rho] > 0"
+  ],
+  "cite": "BI (89)(31)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (1-e^(-nu x))^n (1-e^(-rho x)) e^(-x) dx/x^3 = 1/2 sum_{k=0}^n (-1)^k C(n,k)(rho+k nu+1)^2 ln(rho+k nu+1) + 1/2 sum_{k=1}^n (-1)^(k-1) C(n,k)(k nu+1)^2 ln(k nu+1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.421.3",
+  "gr": "3.421.3",
+  "page": 407,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-mu*x)/((beta + E^(-x))*(gamma + E^(-x))), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*(beta^(mu - 1)*Log[beta] - gamma^(mu - 1)*Log[gamma])/((beta - gamma)*Sin[mu*Pi]) + Pi^2*(beta^(mu - 1) - gamma^(mu - 1))*Cos[mu*Pi]/((gamma - beta)*Sin[mu*Pi]^2)"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "Abs[Arg[gamma]] < Pi",
+   "0 < Re[mu] < 2"
+  ],
+  "cite": "ET I 120(19)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf x e^(-mu x) dx/((beta+e^(-x))(gamma+e^(-x))) = pi(beta^(mu-1) ln beta - gamma^(mu-1) ln gamma)/((beta-gamma) sin mu pi) + pi^2(beta^(mu-1)-gamma^(mu-1)) cos mu pi/((gamma-beta) sin^2 mu pi)",
+  "note": "book also has beta != gamma (not sampleable as a condition)"
+ },
+ {
+  "id": "GR3.421.4",
+  "gr": "3.421.4",
+  "page": 407,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-p*x) - E^(-q*x))*(E^(-r*x) - E^(-s*x))*E^(-x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[(p + s + 1)*(q + r + 1)/((p + r + 1)*(q + s + 1))]"
+  ],
+  "conds": [
+   "p + s > -1",
+   "p + r > -1",
+   "q > p"
+  ],
+  "cite": "BI (89)(11)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (e^(-px)-e^(-qx))(e^(-rx)-e^(-sx)) e^(-x) dx/x = ln[(p+s+1)(q+r+1)/((p+r+1)(q+s+1))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.421.5",
+  "gr": "3.421.5",
+  "page": 407,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-p*x))*(1 - E^(-q*x))*(1 - E^(-r*x))*E^(-x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(p + q + 1)*Log[p + q + 1] + (p + r + 1)*Log[p + r + 1] + (q + r + 1)*Log[q + r + 1] - (p + 1)*Log[p + 1] - (q + 1)*Log[q + 1] - (r + 1)*Log[r + 1] - (p + q + r)*Log[p + q + r]",
+   "Log[(p + 1)*(q + 1)*(r + 1)*(p + q + r + 1)/((p + q + 1)*(p + r + 1)*(q + r + 1))]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "r > 0"
+  ],
+  "cite": "BI (89)(14)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (1-e^(-px))(1-e^(-qx))(1-e^(-rx)) e^(-x) dx/x = (p+q+1)ln(p+q+1)+(p+r+1)ln(p+r+1)+(q+r+1)ln(q+r+1)-(p+1)ln(p+1)-(q+1)ln(q+1)-(r+1)ln(r+1)-(p+q+r)ln(p+q+r)",
+  "note": "printed value has the a*ln(a) shape of the dx/x^2 integral (and then the last term would be (p+q+r+1)ln(p+q+r+1)); for dx/x as printed, Frullani gives the second rhs"
+ },
+ {
+  "id": "GR3.422",
+  "gr": "3.422",
+  "page": 407,
+  "status": "ok",
+  "lhs": "Integrate[x*(x - a)*E^(mu*x)/((E^a - E^x)*(1 - E^(-x))), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-Pi^2/(E^a - 1)*Csc[mu*Pi]^2*((E^(a*mu) + 1)*Log[mu] - 2*Pi*Cot[mu*Pi]*(E^(a*mu) - 1))",
+   "-Pi^2/(E^a - 1)*Csc[mu*Pi]^2*((E^(a*mu) + 1)*a - 2*Pi*Cot[mu*Pi]*(E^(a*mu) - 1))"
+  ],
+  "conds": [
+   "a > 0",
+   "Abs[Re[mu]] < 1"
+  ],
+  "cite": "BI (102)(8)a",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf x(x-a) e^(mu x) dx/((beta-e^x)(1-e^(-x))) = -pi^2/(e^a-1) cosec^2(mu pi) [(e^(a mu)+1) ln mu - 2pi cot(mu pi)(e^(a mu)-1)]",
+  "note": "beta does not occur in the value; the factor (x - a) only cancels the pole at x = ln beta when beta = e^a, so beta = E^a substituted (book cond |arg beta| < pi then holds). Second rhs replaces the suspicious ln mu by ln beta = a"
+ },
+ {
+  "id": "GR3.423.1",
+  "gr": "3.423.1",
+  "page": 407,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)/(E^x - 1)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]*(Zeta[nu - 1] - Zeta[nu])"
+  ],
+  "conds": [
+   "Re[nu] > 2"
+  ],
+  "cite": "ET I 313(10)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^(nu-1)/(e^x-1)^2 dx = Gamma(nu)[zeta(nu-1) - zeta(nu)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.423.2",
+  "gr": "3.423.2",
+  "page": 407,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*E^(-mu*x)/(E^x - 1)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]*(HurwitzZeta[nu - 1, mu + 2] - (mu + 1)*HurwitzZeta[nu, mu + 2])"
+  ],
+  "conds": [
+   "Re[mu] > -2",
+   "Re[nu] > 2"
+  ],
+  "cite": "ET I 313(11)",
+  "edition_note": "6",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^(nu-1) e^(-mu x)/(e^x-1)^2 dx = Gamma(nu)[zeta(nu-1, mu+2) - (mu+1) zeta(nu, mu+2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.423.3",
+  "gr": "3.423.3",
+  "page": 407,
+  "status": "ok",
+  "lhs": "Integrate[x^q*E^(-p*x)/(1 - a*E^(-p*x))^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[q + 1]/(a*p^(q + 1))*Sum[a^k/k^q, {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "a < 1",
+   "a > -1",
+   "q > -1",
+   "p > 0"
+  ],
+  "cite": "BI (85)(13)",
+  "edition_note": "8",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^q e^(-px) dx/(1-a e^(-px))^2 = Gamma(q+1)/(a p^(q+1)) sum_{k>=1} a^k/k^q",
+  "note": "book prints only a < 1; a > -1 added for convergence of the series"
+ },
+ {
+  "id": "GR3.423.4",
+  "gr": "3.423.4",
+  "page": 407,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*E^(-mu*x)/(1 - beta*E^(-x))^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]*(LerchPhi[beta, nu - 1, mu] - (mu - 1)*LerchPhi[beta, nu, mu])"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "Re[mu] > 0",
+   "Abs[Arg[1 - beta]] < Pi"
+  ],
+  "cite": "ET I 313(12)",
+  "edition_note": "7",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^(nu-1) e^(-mu x)/(1-beta e^(-x))^2 dx = Gamma(nu)[Phi(beta; nu-1; mu) - (mu-1) Phi(beta; nu; mu)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.423.5",
+  "gr": "3.423.5",
+  "page": 407,
+  "status": "ok",
+  "lhs": "Integrate[x*E^x/(beta + E^x)^2, {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Log[beta]/beta"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi"
+  ],
+  "cite": "BI (101)(10)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf x e^x dx/(beta+e^x)^2 = ln(beta)/beta",
+  "note": ""
+ },
+ {
+  "id": "GR3.423.6a",
+  "gr": "3.423.6",
+  "page": 407,
+  "status": "ok",
+  "lhs": "Integrate[x^5*E^(-x)/(1 - E^(-x))^2, {x, 0, t}]",
+  "rhs": [
+   "120*Zeta[5] - Sum[E^(-k*t)/k^5*((k*t)^5 + 5*(k*t)^4 + 20*(k*t)^3 + 60*(k*t)^2 + 120*k*t + 120), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "t > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^t x^5 e^(-x)/(1-e^(-x))^2 dx = 120 zeta(5) - sum_k e^(-kt)/k^5 (y^5+5y^4+20y^3+60y^2+120y+120), y = kt",
+  "note": "y = k t substituted; t > 0 added; no citation printed"
+ },
+ {
+  "id": "GR3.423.6b",
+  "gr": "3.423.6",
+  "page": 407,
+  "status": "ok",
+  "lhs": "Integrate[x^5*E^(-x)/(1 - E^(-x))^2, {x, 0, t}]",
+  "rhs": [
+   "120*Zeta[5] - t^5*E^(-t/2)/(2*Sinh[t/2]) - 5*Sum[E^(-k*t)/k^5*((k*t)^4 + 4*(k*t)^3 + 12*(k*t)^2 + 24*k*t + 24), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "t > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "= 120 zeta(5) - t^5 e^(-t/2)/(2 sinh(t/2)) - 5 sum_k e^(-kt)/k^5 (y^4+4y^3+12y^2+24y+24), y = kt",
+  "note": "y = k t substituted; t > 0 added; no citation printed"
+ },
+ {
+  "id": "GR3.424.1",
+  "gr": "3.424.1",
+  "page": 408,
+  "status": "ok",
+  "lhs": "Integrate[((1 + a)*E^x - a)/(1 - E^x)^2*E^(-a*x)*x^n, {x, 0, Infinity}]",
+  "rhs": [
+   "n!*HurwitzZeta[n, a]"
+  ],
+  "conds": [
+   "a > -1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (85)(15)",
+  "edition_note": "7",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf [(1+a)e^x - a]/(1-e^x)^2 e^(-ax) x^n dx = n! zeta(n, a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.424.2",
+  "gr": "3.424.2",
+  "page": 408,
+  "status": "ok",
+  "lhs": "Integrate[((1 + a)*E^x + a)/(1 + E^x)^2*E^(-a*x)*x^n, {x, 0, Infinity}]",
+  "rhs": [
+   "n!*Sum[(-1)^k/(a + k)^n, {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "a > -1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (85)(14)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf [(1+a)e^x + a]/(1+e^x)^2 e^(-ax) x^n dx = n! sum_{k>=1} (-1)^k/(a+k)^n",
+  "note": ""
+ },
+ {
+  "id": "GR3.424.3",
+  "gr": "3.424.3",
+  "page": 408,
+  "status": "ok",
+  "lhs": "Integrate[(a^2*E^x + b^2*E^(-x))/(a^2*E^x - b^2*E^(-x))^2*x^2, {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi^2/(2*a*b)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (102)(3)a",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf (a^2 e^x + b^2 e^(-x))/(a^2 e^x - b^2 e^(-x))^2 x^2 dx = pi^2/(2ab)",
+  "note": "integrand has a double pole at x = Log[b/a] on the path (Log[b/a] != 0 unless a = b); value presumably a regularised/finite-part integral"
+ },
+ {
+  "id": "GR3.424.4",
+  "gr": "3.424.4",
+  "page": 408,
+  "status": "ok",
+  "lhs": "Integrate[(a^2*E^x - b^2*E^(-x))/(a^2*E^x + b^2*E^(-x))^2*x^2, {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi/(a*b)*Log[b/a]"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (102)(1)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf (a^2 e^x - b^2 e^(-x))/(a^2 e^x + b^2 e^(-x))^2 x^2 dx = pi/(ab) ln(b/a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.424.5",
+  "gr": "3.424.5",
+  "page": 408,
+  "status": "ok",
+  "lhs": "Integrate[(E^x - E^(-x) + 2)/(E^x - 1)^2*x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2/3*Pi^2 - 2"
+  ],
+  "conds": [],
+  "cite": "BI (85)(7)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (e^x - e^(-x) + 2)/(e^x-1)^2 x^2 dx = 2/3 pi^2 - 2",
+  "note": ""
+ },
+ {
+  "id": "GR3.425.1",
+  "gr": "3.425.1",
+  "page": 408,
+  "status": "ok",
+  "lhs": "Integrate[x*E^x/(a^2 + b^2*E^(2*x))^n, {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*Gamma[n - 1/2]/(4*a^(2*n - 1)*b*Gamma[n])*(2*Log[a/(2*b)] - EulerGamma - PolyGamma[n - 1/2])"
+  ],
+  "conds": [
+   "a*b > 0",
+   "n > 0"
+  ],
+  "cite": "BI(101)(13), LI(101)(13)",
+  "edition_note": "7",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf x e^x dx/(a^2+b^2 e^(2x))^n = sqrt(pi) Gamma(n-1/2)/(4 a^(2n-1) b Gamma(n)) [2 ln(a/(2b)) - C - psi(n-1/2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.425.2",
+  "gr": "3.425.2",
+  "page": 408,
+  "status": "ok",
+  "lhs": "Integrate[(a^2*E^x - E^(-x))*x^2/(a^2*E^x + E^(-x))^(p + 1), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-1/a^(p + 1)*Beta[p/2, p/2]*Log[a]"
+  ],
+  "conds": [
+   "a > 0",
+   "p > 0"
+  ],
+  "cite": "BI (102)(5)",
+  "edition_note": "7",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf (a^2 e^x - e^(-x)) x^2 dx/(a^2 e^x + e^(-x))^(p+1) = -1/a^(p+1) B(p/2, p/2) ln a",
+  "note": ""
+ },
+ {
+  "id": "GR3.426.1",
+  "gr": "3.426.1",
+  "page": 408,
+  "status": "ok",
+  "lhs": "Integrate[(E^x - a*E^(-x))*x^2/((a + E^x)^2*(1 + E^(-x))^2), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Log[a]^2/(a - 1)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (102)(12)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf (e^x - a e^(-x)) x^2 dx/((a+e^x)^2 (1+e^(-x))^2) = (ln a)^2/(a-1)",
+  "note": "no condition printed; a > 0 added"
+ },
+ {
+  "id": "GR3.426.2",
+  "gr": "3.426.2",
+  "page": 408,
+  "status": "ok",
+  "lhs": "Integrate[(E^x - a*E^(-x))*x^2/((a + E^x)^2*(1 - E^(-x))^2), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(Pi^2 + Log[a]^2)/(a + 1)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (102)(13)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_-inf^inf (e^x - a e^(-x)) x^2 dx/((a+e^x)^2 (1-e^(-x))^2) = [pi^2+(ln a)^2]/(a+1)",
+  "note": "no condition printed; a > 0 added"
+ },
+ {
+  "id": "GR3.427.1",
+  "gr": "3.427.1",
+  "page": 408,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x)/x + E^(-mu*x)/(E^(-x) - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "PolyGamma[mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (e^(-x)/x + e^(-mu x)/(e^(-x)-1)) dx = psi(mu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.427.2",
+  "gr": "3.427.2",
+  "page": 408,
+  "status": "ok",
+  "lhs": "Integrate[(1/(1 - E^(-x)) - 1/x)*E^(-x), {x, 0, Infinity}]",
+  "rhs": [
+   "EulerGamma"
+  ],
+  "conds": [],
+  "cite": "BI (94)(1)",
+  "edition_note": "7",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (1/(1-e^(-x)) - 1/x) e^(-x) dx = C",
+  "note": ""
+ },
+ {
+  "id": "GR3.427.3",
+  "gr": "3.427.3",
+  "page": 408,
+  "status": "ok",
+  "lhs": "Integrate[(1/2 - 1/(1 + E^(-x)))*E^(-2*x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[Pi/4]"
+  ],
+  "conds": [],
+  "cite": "BI (94)(5)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (1/2 - 1/(1+e^(-x))) e^(-2x)/x dx = 1/2 ln(pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR3.427.4",
+  "gr": "3.427.4",
+  "page": 408,
+  "status": "ok",
+  "lhs": "Integrate[(1/2 - 1/x + 1/(E^x - 1))*E^(-mu*x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Gamma[mu]] - (mu - 1/2)*Log[mu] + mu - 1/2*Log[2*Pi]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (1/2 - 1/x + 1/(e^x-1)) e^(-mu x)/x dx = ln Gamma(mu) - (mu-1/2) ln mu + mu - 1/2 ln(2pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.427.5",
+  "gr": "3.427.5",
+  "page": 408,
+  "status": "ok",
+  "lhs": "Integrate[(1/2*E^(-2*x) - 1/(E^x + 1))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-1/2*Log[Pi]"
+  ],
+  "conds": [],
+  "cite": "BI (94)(6)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (1/2 e^(-2x) - 1/(e^x+1)) dx/x = -1/2 ln pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.427.6",
+  "gr": "3.427.6",
+  "page": 408,
+  "status": "ok",
+  "lhs": "Integrate[((E^(mu*x) - 1)/(1 - E^(-x)) - mu)*E^(-x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-Log[Gamma[mu]] - Log[Sin[Pi*mu]] + Log[Pi]"
+  ],
+  "conds": [
+   "Re[mu] < 1"
+  ],
+  "cite": "EH I 21(6)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf ((e^(mu x)-1)/(1-e^(-x)) - mu) e^(-x)/x dx = -ln Gamma(mu) - ln sin(pi mu) + ln pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.427.7",
+  "gr": "3.427.7",
+  "page": 409,
+  "status": "ok",
+  "lhs": "Integrate[E^(-nu*x)/(1 - E^(-x)) - E^(-mu*x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[mu] - PolyGamma[nu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "BI (94)(3)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (e^(-nu x)/(1-e^(-x)) - e^(-mu x)/x) dx = ln mu - psi(nu)",
+  "note": "no condition printed; Re mu > 0, Re nu > 0 added"
+ },
+ {
+  "id": "GR3.427.8",
+  "gr": "3.427.8",
+  "page": 409,
+  "status": "ok",
+  "lhs": "Integrate[(n/x - E^(-mu*x)/(1 - E^(-x/n)))*E^(-x), {x, 0, Infinity}]",
+  "rhs": [
+   "n*PolyGamma[n*mu + n] - n*Log[n]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (94)(4)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (n/x - e^(-mu x)/(1-e^(-x/n))) e^(-x) dx = n psi(n mu + n) - n ln n",
+  "note": ""
+ },
+ {
+  "id": "GR3.427.9",
+  "gr": "3.427.9",
+  "page": 409,
+  "status": "ok",
+  "lhs": "Integrate[(mu - (1 - E^(-mu*x))/(1 - E^(-x)))*E^(-x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Gamma[mu + 1]]"
+  ],
+  "conds": [
+   "Re[mu] > -1"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (mu - (1-e^(-mu x))/(1-e^(-x))) e^(-x)/x dx = ln Gamma(mu+1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.427.10",
+  "gr": "3.427.10",
+  "page": 409,
+  "status": "ok",
+  "lhs": "Integrate[(nu*E^(-x) - (E^(-mu*x) - E^(-(mu + nu)*x))/(E^x - 1))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Gamma[mu + nu + 1]/Gamma[mu + 1]]"
+  ],
+  "conds": [
+   "Re[mu] > -1",
+   "Re[nu] > 0"
+  ],
+  "cite": "BI (94)(8)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (nu e^(-x) - (e^(-mu x) - e^(-(mu+nu)x))/(e^x-1)) dx/x = ln[Gamma(mu+nu+1)/Gamma(mu+1)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.427.11",
+  "gr": "3.427.11",
+  "page": 409,
+  "status": "ok",
+  "lhs": "Integrate[((1 - E^x)^(-1) + x^(-1) - 1)*E^(-x*z), {x, 0, Infinity}]",
+  "rhs": [
+   "PolyGamma[z] - Log[z]"
+  ],
+  "conds": [
+   "Re[z] > 0"
+  ],
+  "cite": "EH I 18(24)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf [(1-e^x)^(-1) + x^(-1) - 1] e^(-xz) dx = psi(z) - ln z",
+  "note": "z is a free parameter here, not an abbreviation"
+ },
+ {
+  "id": "GR3.428.1",
+  "gr": "3.428.1",
+  "page": 409,
+  "status": "ok",
+  "lhs": "Integrate[(nu*E^(-mu*x) - 1/mu*E^(-x) - 1/mu*(E^(-1) - E^(-mu*nu*x))/(1 - E^(-x)))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/mu*Log[Gamma[mu*nu]] - nu*Log[mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "BI (94)(18)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (nu e^(-mu x) - 1/mu e^(-x) - 1/mu (e^(-1) - e^(-mu nu x))/(1-e^(-x))) dx/x = 1/mu ln Gamma(mu nu) - nu ln mu",
+  "note": "printed numerator e^{-1} - e^{-mu nu x} makes the integral diverge at 0; e^{-x} - e^{-mu nu x} is presumably intended (lhs kept as printed)"
+ },
+ {
+  "id": "GR3.428.2",
+  "gr": "3.428.2",
+  "page": 409,
+  "status": "ok",
+  "lhs": "Integrate[((n - 1)/2 + (n - 1)/(1 - E^(-x)) + E^((1 - mu)*x)/(1 - E^(x/n)) + E^(-n*mu*x)/(1 - E^(-x)))*E^(-x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(n - 1)/2*Log[2*Pi] - (n*mu + 1/2)*Log[n]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (94)(14)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf ((n-1)/2 + (n-1)/(1-e^(-x)) + e^((1-mu)x)/(1-e^(x/n)) + e^(-n mu x)/(1-e^(-x))) e^(-x) dx/x = (n-1)/2 ln 2pi - (n mu + 1/2) ln n",
+  "note": "transcribed as printed (denominator 1 - e^{x/n}); the formula looks garbled"
+ },
+ {
+  "id": "GR3.428.3",
+  "gr": "3.428.3",
+  "page": 409,
+  "status": "ok",
+  "lhs": "Integrate[(n*mu - (n - 1)/2 - n/(1 - E^(-x)) - E^((1 - mu)*x)/(1 - E^(x/n)))*E^(-x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Sum[Log[Gamma[mu - k/n + 1]], {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (94)(13)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (n mu - (n-1)/2 - n/(1-e^(-x)) - e^((1-mu)x)/(1-e^(x/n))) e^(-x)/x dx = sum_{k=0}^{n-1} ln Gamma(mu - k/n + 1)",
+  "note": "transcribed as printed (denominator 1 - e^{x/n})"
+ },
+ {
+  "id": "GR3.428.4",
+  "gr": "3.428.4",
+  "page": 409,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-nu*x)/(1 - E^x) - E^(-mu*nu*x)/(1 - E^(mu*x)) - E^x/(1 - E^x) + E^(mu*x)/(1 - E^(mu*x)))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "nu*Log[mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "LI (94)(15)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (e^(-nu x)/(1-e^x) - e^(-mu nu x)/(1-e^(mu x)) - e^x/(1-e^x) + e^(mu x)/(1-e^(mu x))) dx/x = nu ln mu",
+  "note": ""
+ },
+ {
+  "id": "GR3.428.5",
+  "gr": "3.428.5",
+  "page": 409,
+  "status": "ok",
+  "lhs": "Integrate[(1/(E^x - 1) - mu*E^(-mu*x)/(1 - E^(-mu*x)) + (a*mu - (mu + 1)/2)*E^(-mu*x) + (1 - a*mu)*E^(-x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(mu - 1)/2*Log[2*Pi] + (1/2 - a*mu)*Log[mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (94)(16)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf [1/(e^x-1) - mu e^(-mu x)/(1-e^(-mu x)) + (a mu - (mu+1)/2) e^(-mu x) + (1 - a mu) e^(-x)] dx/x = (mu-1)/2 ln(2pi) + (1/2 - a mu) ln mu",
+  "note": ""
+ },
+ {
+  "id": "GR3.428.6",
+  "gr": "3.428.6",
+  "page": 409,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-nu*x)/(1 - E^(-x)) - E^(-mu*nu*x)/(1 - E^(-mu*x)) - (mu - 1)*E^(-mu*x)/(1 - E^(-mu*x)) - (mu - 1)/2*E^(-mu*x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(mu - 1)/2*Log[2*Pi] + (1/2 - mu*nu)*Log[mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "BI (94)(17)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf [e^(-nu x)/(1-e^(-x)) - e^(-mu nu x)/(1-e^(-mu x)) - (mu-1)e^(-mu x)/(1-e^(-mu x)) - (mu-1)/2 e^(-mu x)] dx/x = (mu-1)/2 ln(2pi) + (1/2 - mu nu) ln mu",
+  "note": ""
+ },
+ {
+  "id": "GR3.428.7",
+  "gr": "3.428.7",
+  "page": 409,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-x) - (1 - E^(-nu*x))*(1 - E^(-mu*x))/(1 - E^(-x)))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Beta[mu, nu]]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "BI (94)(12)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf [1 - e^(-x) - (1-e^(-nu x))(1-e^(-mu x))/(1-e^(-x))] dx/x = ln B(mu, nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.429",
+  "gr": "3.429",
+  "page": 409,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-x) - (1 + x)^(-mu))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "PolyGamma[mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "NH 184(7)",
+  "edition_note": "",
+  "section": "3.41-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf [e^(-x) - (1+x)^(-mu)] dx/x = psi(mu)",
+  "note": ""
+ }
+]

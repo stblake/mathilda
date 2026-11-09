@@ -1,0 +1,2158 @@
+[
+ {
+  "id": "GR3.431.1",
+  "gr": "3.431.1",
+  "page": 410,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-mu*x) - 1 + mu*x - mu^2*x^2/2)*x^(nu - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "-Gamma[nu + 3]/(nu*(nu + 1)*(nu + 2)*mu^nu)"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "-2 > Re[nu] > -3"
+  ],
+  "cite": "LI (90)(5)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (e^(-mu x)-1+mu x-mu^2x^2/2) x^(nu-1) dx = -Gamma(nu+3)/(nu(nu+1)(nu+2)mu^nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.431.2",
+  "gr": "3.431.2",
+  "page": 410,
+  "status": "ok",
+  "lhs": "Integrate[(1/x - (x + 2)*(1 - E^(-x))/(2*x^2))*E^(-p*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-1 + (p + 1/2)*Log[1 + 1/p]"
+  ],
+  "conds": [
+   "Re[p] > 0"
+  ],
+  "cite": "ET I 144(6)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf [1/x - (x+2)(1-e^-x)/(2x^2)] e^(-px) dx = -1+(p+1/2)ln(1+1/p)",
+  "note": ""
+ },
+ {
+  "id": "GR3.432.1",
+  "gr": "3.432.1",
+  "page": 410,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*E^(-m*x)*(E^(-x) - 1)^n, {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]*Sum[(-1)^k*Binomial[n, k]/(n + m - k)^nu, {k, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[nu] > 0",
+   "Re[m] > 0"
+  ],
+  "cite": "LI (90)(10)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^(nu-1)e^(-mx)(e^-x-1)^n dx = Gamma(nu) sum_{k=0}^n (-1)^k C(n,k)/(n+m-k)^nu",
+  "note": "Re m > 0 added (needed for convergence, not printed)"
+ },
+ {
+  "id": "GR3.432.2",
+  "gr": "3.432.2",
+  "page": 410,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*E^(-x) - E^(-mu*x)*(1 - E^(-x))^(nu - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu] - Gamma[mu]/Gamma[mu + nu]",
+   "Gamma[nu] - Gamma[mu]*Gamma[nu]/Gamma[mu + nu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "LI (81)(14)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf [x^(nu-1)e^-x - e^(-mu x)(1-e^-x)^(nu-1)] dx = Gamma(nu) - Gamma(mu)/Gamma(mu+nu)",
+  "note": "printed value lacks a factor Gamma(nu) in the second term (int e^(-mu x)(1-e^-x)^(nu-1) = B(mu,nu)); corrected candidate added"
+ },
+ {
+  "id": "GR3.433",
+  "gr": "3.433",
+  "page": 410,
+  "status": "ok",
+  "lhs": "Integrate[x^(p - 1)*(E^(-x) + Sum[(-1)^k*x^(k - 1)/(k - 1)!, {k, 1, n}]), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[p]"
+  ],
+  "conds": [
+   "-n < p < -n + 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "FI II 805",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf x^(p-1)[e^-x + sum_{k=1}^n (-1)^k x^(k-1)/(k-1)!] dx = Gamma(p) [-n<p<-n+1]",
+  "note": ""
+ },
+ {
+  "id": "GR3.434.1",
+  "gr": "3.434.1",
+  "page": 410,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-nu*x) - E^(-mu*x))/x^(rho + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(mu^rho - nu^rho)/rho*Gamma[1 - rho]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0",
+   "Re[rho] < 1"
+  ],
+  "cite": "BI (90)(6)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (e^(-nu x)-e^(-mu x))/x^(rho+1) dx = (mu^rho-nu^rho)/rho Gamma(1-rho)",
+  "note": ""
+ },
+ {
+  "id": "GR3.434.2",
+  "gr": "3.434.2",
+  "page": 410,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-mu*x) - E^(-nu*x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[nu/mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "FI II 634",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (e^(-mu x)-e^(-nu x))/x dx = ln(nu/mu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.435.1",
+  "gr": "3.435.1",
+  "page": 410,
+  "status": "ok",
+  "lhs": "Integrate[((x + 1)*E^(-x) - E^(-x/2))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "1 - Log[2]"
+  ],
+  "conds": [],
+  "cite": "LI (89)(19)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf {(x+1)e^-x - e^(-x/2)} dx/x = 1 - ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR3.435.2",
+  "gr": "3.435.2",
+  "page": 410,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-mu*x))/(x*(x + beta)), {x, 0, Infinity}]",
+  "rhs": [
+   "(Log[beta*mu] + EulerGamma - E^(beta*mu)*ExpIntegralEi[-beta*mu])/beta"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET II 217 (18)",
+  "edition_note": "11",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (1-e^(-mu x))/(x(x+beta)) dx = [ln(beta mu)+C-e^(beta mu)Ei(-beta mu)]/beta",
+  "note": ""
+ },
+ {
+  "id": "GR3.435.3",
+  "gr": "3.435.3",
+  "page": 410,
+  "status": "ok",
+  "lhs": "Integrate[(1/(1 + x) - E^(-x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "EulerGamma"
+  ],
+  "conds": [],
+  "cite": "FI II 795, 802",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (1/(1+x) - e^-x) dx/x = C",
+  "note": ""
+ },
+ {
+  "id": "GR3.435.4",
+  "gr": "3.435.4",
+  "page": 410,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-mu*x) - 1/(1 + a*x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[a/mu] - EulerGamma"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (92)(10)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (e^(-mu x) - 1/(1+ax)) dx/x = ln(a/mu) - C",
+  "note": ""
+ },
+ {
+  "id": "GR3.436",
+  "gr": "3.436",
+  "page": 410,
+  "status": "ok",
+  "lhs": "Integrate[((E^(-n*p*x) - E^(-n*q*x))/n - (E^(-m*p*x) - E^(-m*q*x))/m)/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(q - p)*Log[m/n]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "m > 0",
+   "n > 0"
+  ],
+  "cite": "BI (89)(28)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf {(e^(-npx)-e^(-nqx))/n - (e^(-mpx)-e^(-mqx))/m} dx/x^2 = (q-p) ln(m/n)",
+  "note": "m > 0, n > 0 added (not printed)"
+ },
+ {
+  "id": "GR3.437",
+  "gr": "3.437",
+  "page": 410,
+  "status": "ok",
+  "lhs": "Integrate[(p*E^(-x) - (1 - E^(-p*x))/x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "p*Log[p] - p"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (89)(24)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf {p e^-x - (1-e^(-px))/x} dx/x = p ln p - p",
+  "note": ""
+ },
+ {
+  "id": "GR3.438.1",
+  "gr": "3.438.1",
+  "page": 411,
+  "status": "ok",
+  "lhs": "Integrate[((1/2 + 1/x)*E^(-x) - E^(-x/2)/x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(Log[2] - 1)/2"
+  ],
+  "conds": [],
+  "cite": "BI (89)(19)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf {(1/2+1/x)e^-x - (1/x)e^(-x/2)} dx/x = (ln2-1)/2",
+  "note": ""
+ },
+ {
+  "id": "GR3.438.2",
+  "gr": "3.438.2",
+  "page": 411,
+  "status": "ok",
+  "lhs": "Integrate[(p^3/6*E^(-x) - p^2/(2*x) + p/x^2 - (1 - E^(-p*x))/x^3)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "p^2/6*Log[p] - 11/36*p^3",
+   "-p^3/6*Log[p] + 11/36*p^3",
+   "-p^3/6*Log[p] - 11/36*p^3"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (89)(33)",
+  "edition_note": "7",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf {p^2/6 e^-x - p^2/(2x) - p/x^2 - (1-e^(-px))/x^3} dx/x = p^2/6 ln p - 11/36 p^3",
+  "note": "as printed ({p^2/6 e^-x - p^2/(2x) - p/x^2 - (1-e^(-px))/x^3}/x) the integrand diverges at x=0 (1/x^3 and 1/x terms do not cancel). lhs is a guessed correction: p^3/6 e^-x and +p/x^2, which makes it converge; scaling x->x/p then gives value -p^3/6 ln p + c p^3. First rhs is the printed value; others are candidates for the corrected lhs. Low confidence."
+ },
+ {
+  "id": "GR3.438.3",
+  "gr": "3.438.3",
+  "page": 411,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-x)/x - E^(-2*x) - E^(-2*x)/x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "1 - Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (89)(25)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (e^-x - e^(-2x) - (1/x)e^(-2x)) dx/x = 1 - ln 2",
+  "note": "as printed (e^-x - e^-2x - e^-2x/x)/x diverges at 0; lhs corrected to (e^-x/x - e^-2x - e^-2x/x)/x, which is -2 x 3.438.1 after x->2x and gives 1 - ln 2"
+ },
+ {
+  "id": "GR3.438.4",
+  "gr": "3.438.4",
+  "page": 411,
+  "status": "ok",
+  "lhs": "Integrate[((p - 1/2)*E^(-x) + (x + 2)/(2*x)*(E^(-p*x) - E^(-x/2)))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(p - 1/2)*(Log[p] - 1)"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (89)(22)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf {(p-1/2)e^-x + (x+2)/(2x) (e^(-px)-e^(-x/2))} dx/x = (p-1/2)(ln p - 1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.439",
+  "gr": "3.439",
+  "page": 411,
+  "status": "ok",
+  "lhs": "Integrate[((p - q)*E^(-r*x) + (E^(-m*p*x) - E^(-m*q*x))/(m*x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "p*Log[p] - q*Log[q] - (p - q)*(1 + Log[r/m])"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "r > 0",
+   "m > 0"
+  ],
+  "cite": "LI(89)(26), LI(89)(27)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf {(p-q)e^(-rx) + (e^(-mpx)-e^(-mqx))/(mx)} dx/x = p ln p - q ln q - (p-q)(1+ln(r/m))",
+  "note": "m > 0 added (not printed)"
+ },
+ {
+  "id": "GR3.441",
+  "gr": "3.441",
+  "page": 411,
+  "status": "ok",
+  "lhs": "Integrate[((p - r)*E^(-q*x) + (r - q)*E^(-p*x) + (q - p)*E^(-r*x))/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(r - q)*p*Log[p] + (p - r)*q*Log[q] + (q - p)*r*Log[r]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "r > 0"
+  ],
+  "cite": "BI (89)(18)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf {(p-r)e^(-qx)+(r-q)e^(-px)+(q-p)e^(-rx)} dx/x^2 = (r-q)p ln p + (p-r) q ln q + (q-p) r ln r",
+  "note": ""
+ },
+ {
+  "id": "GR3.442.1",
+  "gr": "3.442.1",
+  "page": 411,
+  "status": "ok",
+  "lhs": "Integrate[(1 - (x + 2)/(2*x)*(1 - E^(-x)))*E^(-q*x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-1 + (q + 1/2)*Log[(q + 1)/q]"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "BI (89)(23)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf {1 - (x+2)/(2x)(1-e^-x)} e^(-qx) dx/x = -1 + (q+1/2) ln((q+1)/q)",
+  "note": ""
+ },
+ {
+  "id": "GR3.442.2",
+  "gr": "3.442.2",
+  "page": 411,
+  "status": "ok",
+  "lhs": "Integrate[((E^(-x) - 1)/x + 1/(1 + x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "EulerGamma - 1"
+  ],
+  "conds": [],
+  "cite": "BI (92)(16)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf ((e^-x-1)/x + 1/(1+x)) dx/x = C - 1",
+  "note": ""
+ },
+ {
+  "id": "GR3.442.3",
+  "gr": "3.442.3",
+  "page": 411,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-p*x) - 1/(1 + a^2*x^2))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-EulerGamma + Log[a/p]"
+  ],
+  "conds": [
+   "p > 0",
+   "a > 0"
+  ],
+  "cite": "BI (92)(11)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (e^(-px) - 1/(1+a^2x^2)) dx/x = -C + ln(a/p)",
+  "note": "a > 0 added (not printed)"
+ },
+ {
+  "id": "GR3.443.1",
+  "gr": "3.443.1",
+  "page": 411,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-x)*p^2/2 - p/x + (1 - E^(-p*x))/x^2)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "p^2/2*Log[p] - 3/4*p^2"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (89)(32)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf {e^-x p^2/2 - p/x + (1-e^(-px))/x^2} dx/x = p^2/2 ln p - 3/4 p^2",
+  "note": ""
+ },
+ {
+  "id": "GR3.443.2",
+  "gr": "3.443.2",
+  "page": 411,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-p*x))^n*E^(-q*x)/x^3, {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sum[(-1)^(k - 1)*Binomial[n, k]*(q + k*p)^2*Log[q + k*p], {k, 2, n}]",
+   "1/2*Sum[(-1)^(k - 1)*Binomial[n, k]*(q + k*p)^2*Log[q + k*p], {k, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n > 2",
+   "q > 0",
+   "p*n + q > 0"
+  ],
+  "cite": "BI (89)(30)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (1-e^(-px))^n e^(-qx) dx/x^3 = 1/2 sum_{k=2}^n (-1)^(k-1) C(n,k)(q+kp)^2 ln(q+kp)",
+  "note": "printed sum starts at k=2; expanding the binomial the sum should run from k=0 (corrected candidate). n integer assumed. (cf. 4.268 4)"
+ },
+ {
+  "id": "GR3.443.3",
+  "gr": "3.443.3",
+  "page": 411,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-p*x))^2*E^(-q*x)/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(2*p + q)*Log[2*p + q] - 2*(p + q)*Log[p + q] + q*Log[q]"
+  ],
+  "conds": [
+   "q > 0",
+   "2*p > -q"
+  ],
+  "cite": "BI (89)(13)",
+  "edition_note": "",
+  "section": "3.43-3.44 Combinations of rational functions of powers and exponentials",
+  "tex": "int_0^inf (1-e^(-px))^2 e^(-qx) dx/x^2 = (2p+q)ln(2p+q) - 2(p+q)ln(p+q) + q ln q",
+  "note": "(cf. 4.268 2)"
+ },
+ {
+  "id": "GR3.451.1",
+  "gr": "3.451.1",
+  "page": 412,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-x)*Sqrt[1 - E^(-x)], {x, 0, Infinity}]",
+  "rhs": [
+   "4/3*(4/3 - Log[2])"
+  ],
+  "conds": [],
+  "cite": "BI (99)(1)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_0^inf x e^-x sqrt(1-e^-x) dx = 4/3(4/3 - ln 2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.451.2",
+  "gr": "3.451.2",
+  "page": 412,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-x)*Sqrt[1 - E^(-2*x)], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*(1/2 + Log[2])"
+  ],
+  "conds": [],
+  "cite": "BI (99)(2)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_0^inf x e^-x sqrt(1-e^(-2x)) dx = pi/4 (1/2 + ln 2)",
+  "note": "(cf. 4.241 9)"
+ },
+ {
+  "id": "GR3.452.1",
+  "gr": "3.452.1",
+  "page": 412,
+  "status": "ok",
+  "lhs": "Integrate[x/Sqrt[E^x - 1], {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi*Log[2]"
+  ],
+  "conds": [],
+  "cite": "FI II 643a, BI (99)(4)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_0^inf x dx/sqrt(e^x-1) = 2 pi ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR3.452.2",
+  "gr": "3.452.2",
+  "page": 412,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[E^x - 1], {x, 0, Infinity}]",
+  "rhs": [
+   "4*Pi*(Log[2]^2 + Pi^2/12)"
+  ],
+  "conds": [],
+  "cite": "BI (99)(5)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_0^inf x^2 dx/sqrt(e^x-1) = 4pi{(ln2)^2 + pi^2/12}",
+  "note": ""
+ },
+ {
+  "id": "GR3.452.3",
+  "gr": "3.452.3",
+  "page": 412,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-x)/Sqrt[E^x - 1], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(2*Log[2] - 1)"
+  ],
+  "conds": [],
+  "cite": "BI (99)(6)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_0^inf x e^-x dx/sqrt(e^x-1) = pi/2 [2 ln2 - 1]",
+  "note": ""
+ },
+ {
+  "id": "GR3.452.4",
+  "gr": "3.452.4",
+  "page": 412,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-x)/Sqrt[E^(2*x) - 1], {x, 0, Infinity}]",
+  "rhs": [
+   "1 - Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (99)(8)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_0^inf x e^-x dx/sqrt(e^(2x)-1) = 1 - ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR3.452.5",
+  "gr": "3.452.5",
+  "page": 412,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-2*x)/Sqrt[E^x - 1], {x, 0, Infinity}]",
+  "rhs": [
+   "3/4*Pi*(Log[2] - 7/12)"
+  ],
+  "conds": [],
+  "cite": "BI (99)(7)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_0^inf x e^(-2x) dx/sqrt(e^x-1) = 3/4 pi (ln2 - 7/12)",
+  "note": ""
+ },
+ {
+  "id": "GR3.453.1",
+  "gr": "3.453.1",
+  "page": 412,
+  "status": "ok",
+  "lhs": "Integrate[x*E^x/((a^2*E^x - (a^2 - b^2))*Sqrt[E^x - 1]), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi/(a*b)*Log[1 + b/a]"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (99)(16)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_0^inf x e^x/(a^2e^x-(a^2-b^2)) dx/sqrt(e^x-1) = 2pi/(ab) ln(1+b/a)",
+  "note": "(cf. 4.298 17)"
+ },
+ {
+  "id": "GR3.453.2",
+  "gr": "3.453.2",
+  "page": 412,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*E^x/((a^2*E^x - (a^2 + b^2))*Sqrt[E^x - 1]), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi/(a*b)*ArcTan[b/a]"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (99)(17)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_0^inf x e^x dx/([a^2e^x-(a^2+b^2)] sqrt(e^x-1)) = 2pi/(ab) arctan(b/a)",
+  "note": "(cf. 4.298 18)",
+  "reason": "denominator vanishes at x = log(1+b^2/a^2) inside the range (non-integrable simple pole); the stated value is the principal value though the book does not mark it PV"
+ },
+ {
+  "id": "GR3.454.1",
+  "gr": "3.454.1",
+  "page": 412,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-2*n*x)/Sqrt[E^(2*x) - 1], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*n - 1)!!/(2*n)!!*Pi/2*(Log[2] + Sum[(-1)^k/k, {k, 1, 2*n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "LI (99)(10)",
+  "edition_note": "11",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_0^inf x e^(-2nx) dx/sqrt(e^(2x)-1) = (2n-1)!!/(2n)!! pi/2 {ln2 + sum_{k=1}^{2n} (-1)^k/k}",
+  "note": "n nonnegative integer assumed"
+ },
+ {
+  "id": "GR3.454.2",
+  "gr": "3.454.2",
+  "page": 412,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-(2*n - 1)*x)/Sqrt[E^(2*x) - 1], {x, 0, Infinity}]",
+  "rhs": [
+   "-(2*n - 2)!!/(2*n - 1)!!*(Log[2] + Sum[(-1)^k/k, {k, 1, 2*n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (99)(9)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_0^inf x e^(-(2n-1)x) dx/sqrt(e^(2x)-1) = -(2n-2)!!/(2n-1)!! {ln2 + sum_{k=1}^{2n-1} (-1)^k/k}",
+  "note": "n positive integer assumed"
+ },
+ {
+  "id": "GR3.455.1",
+  "gr": "3.455.1",
+  "page": 412,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^x/(E^x - 1)^(3/2), {x, 0, Infinity}]",
+  "rhs": [
+   "8*Pi*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (99)(11)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_0^inf x^2 e^x dx/sqrt((e^x-1)^3) = 8 pi ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR3.455.2",
+  "gr": "3.455.2",
+  "page": 412,
+  "status": "ok",
+  "lhs": "Integrate[x^3*E^x/(E^x - 1)^(3/2), {x, 0, Infinity}]",
+  "rhs": [
+   "24*Pi*(Log[2]^2 + Pi^2/12)"
+  ],
+  "conds": [],
+  "cite": "BI (99)(12)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_0^inf x^3 e^x dx/sqrt((e^x-1)^3) = 24 pi [(ln2)^2 + pi^2/12]",
+  "note": ""
+ },
+ {
+  "id": "GR3.456.1",
+  "gr": "3.456.1",
+  "page": 412,
+  "status": "ok",
+  "lhs": "Integrate[x/(E^(3*x) - 1)^(1/3), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(3*Sqrt[3])*(Log[3] + Pi/(3*Sqrt[3]))"
+  ],
+  "conds": [],
+  "cite": "BI (99)(13)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_0^inf x dx/cbrt(e^(3x)-1) = pi/(3sqrt3)[ln3 + pi/(3sqrt3)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.456.2",
+  "gr": "3.456.2",
+  "page": 413,
+  "status": "ok",
+  "lhs": "Integrate[x/(E^(3*x) - 1)^(2/3), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(3*Sqrt[3])*(Log[3] - Pi/(3*Sqrt[3]))"
+  ],
+  "conds": [],
+  "cite": "BI (99)(14)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_0^inf x dx/cbrt((e^(3x)-1)^2) = pi/(3sqrt3)[ln3 - pi/(3sqrt3)]",
+  "note": "(cf. 4.244 3)"
+ },
+ {
+  "id": "GR3.457.1",
+  "gr": "3.457.1",
+  "page": 413,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-x)*(1 - E^(-2*x))^(n - 1/2), {x, 0, Infinity}]",
+  "rhs": [
+   "(2*n - 1)!!/(4*(2*n)!!)*Pi*(EulerGamma + PolyGamma[n + 1] + 2*Log[2])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (99)(3)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_0^inf x e^-x (1-e^(-2x))^(n-1/2) dx = (2n-1)!!/(4(2n)!!) pi [C + psi(n+1) + 2 ln 2]",
+  "note": "n nonnegative integer assumed. (cf. 4.241 5)"
+ },
+ {
+  "id": "GR3.457.2",
+  "gr": "3.457.2",
+  "page": 413,
+  "status": "ok",
+  "lhs": "Integrate[x*E^x/(a + E^x)^(n + 3/2), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2/((2*n + 1)*a^(n + 1/2))*(Log[4*a] - 3*EulerGamma - 2*PolyGamma[2*n] - PolyGamma[n])",
+   "2/((2*n + 1)*a^(n + 1/2))*(Log[4*a] - EulerGamma - 2*PolyGamma[2*n] + PolyGamma[n])"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (101)(12)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_-inf^inf x e^x dx/(a+e^x)^(n+3/2) = 2/((2n+1)a^(n+1/2)) [ln(4a) - 3C - 2psi(2n) - psi(n)]",
+  "note": "no conditions printed; a > 0 and positive integer n added. Second rhs: value from int_0^inf ln t/(a+t)^(s+1) dt = (ln a - C - psi(s))/(s a^s) with s=n+1/2 (cf. 3.458.2), which differs from the printed bracket"
+ },
+ {
+  "id": "GR3.457.3",
+  "gr": "3.457.3",
+  "page": 413,
+  "status": "ok",
+  "lhs": "Integrate[x/(a^2*E^x + E^(-x))^mu, {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-1/(2*a^mu)*Beta[mu/2, mu/2]*Log[a]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (101)(14)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_-inf^inf x dx/(a^2e^x+e^-x)^mu = -1/(2a^mu) B(mu/2,mu/2) ln a",
+  "note": ""
+ },
+ {
+  "id": "GR3.458.1",
+  "gr": "3.458.1",
+  "page": 413,
+  "status": "ok",
+  "lhs": "Integrate[x*E^x*(E^x - 1)^(p - 1), {x, 0, Log[2]}]",
+  "rhs": [
+   "1/p*(Log[2] + Sum[(-1)^(k - 1)/(p + k + 1), {k, 0, Infinity}])"
+  ],
+  "conds": [
+   "Re[p] > 0"
+  ],
+  "cite": "BI (104)(4)",
+  "edition_note": "7",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_0^ln2 x e^x (e^x-1)^(p-1) dx = 1/p [ln2 + sum_{k=0}^inf (-1)^(k-1)/(p+k+1)]",
+  "note": "Re p > 0 added (not printed)"
+ },
+ {
+  "id": "GR3.458.2a",
+  "gr": "3.458.2",
+  "page": 413,
+  "status": "ok",
+  "lhs": "Integrate[x*E^x/(a + E^x)^(nu + 1), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "1/(nu*a^nu)*(Log[a] - EulerGamma - PolyGamma[nu])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "BI (101)(11)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "int_-inf^inf x e^x dx/(a+e^x)^(nu+1) = 1/(nu a^nu)[ln a - C - psi(nu)]",
+  "note": "Re nu > 0 added (not printed)"
+ },
+ {
+  "id": "GR3.458.2b",
+  "gr": "3.458.2",
+  "page": 413,
+  "status": "ok",
+  "lhs": "Integrate[x*E^x/(a + E^x)^(nu + 1), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "1/(nu*a^nu)*(Log[a] - Sum[1/k, {k, 1, nu - 1}])"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[nu, Integers] && nu >= 1"
+  ],
+  "cite": "BI (101)(11)",
+  "edition_note": "",
+  "section": "3.45 Combinations of powers and algebraic functions of exponentials",
+  "tex": "= 1/(nu a^nu)[ln a - sum_{k=1}^{nu-1} 1/k] [nu=1,2,...]",
+  "note": ""
+ },
+ {
+  "id": "GR3.461.1",
+  "gr": "3.461.1",
+  "page": 413,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p^2*x^2)/x^(2*n), {x, u, Infinity}]",
+  "rhs": [
+   "(-1)^n*2^(n - 1)*p^(2*n - 1)*Sqrt[Pi]/(2*n - 1)!!*(1 - Erf[p*u]) + E^(-p^2*u^2)/(2*u^(2*n - 1))*Sum[(-1)^k*2^(k + 1)*(p*u)^(2*k)/Product[2*n - 2*j - 1, {j, 0, k}], {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "p > 0",
+   "u > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "NT 21(4)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_u^inf e^(-p^2x^2)/x^(2n) dx = (-1)^n 2^(n-1) p^(2n-1) sqrt(pi)/(2n-1)!! [1-Phi(pu)] + e^(-p^2u^2)/(2u^(2n-1)) sum_{k=0}^{n-1} (-1)^k 2^(k+1)(pu)^(2k)/((2n-1)(2n-3)...(2n-2k-1))",
+  "note": "u > 0 and positive integer n added (not printed)"
+ },
+ {
+  "id": "GR3.461.2",
+  "gr": "3.461.2",
+  "page": 413,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n)*E^(-p*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "(2*n - 1)!!/(2*(2*p)^n)*Sqrt[Pi/p]"
+  ],
+  "conds": [
+   "p > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "FI II 743",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^(2n) e^(-px^2) dx = (2n-1)!!/(2(2p)^n) sqrt(pi/p)",
+  "note": ""
+ },
+ {
+  "id": "GR3.461.3",
+  "gr": "3.461.3",
+  "page": 413,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n + 1)*E^(-p*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "n!/(2*p^(n + 1))"
+  ],
+  "conds": [
+   "p > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (81)(7)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^(2n+1) e^(-px^2) dx = n!/(2p^(n+1))",
+  "note": "n nonnegative integer assumed"
+ },
+ {
+  "id": "GR3.461.4",
+  "gr": "3.461.4",
+  "page": 413,
+  "status": "ok",
+  "lhs": "Integrate[(x + a*I)^(2*n)*E^(-x^2), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2*n - 1)!!/2^n*Sqrt[Pi]*Sum[(-1)^k*(2*a)^(2*k)*n!/((2*k)!*(n - k)!), {k, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (100)(12)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_-inf^inf (x+ai)^(2n) e^(-x^2) dx = (2n-1)!!/2^n sqrt(pi) sum_{k=0}^n (-1)^k (2a)^(2k) n!/((2k)!(n-k)!)",
+  "note": "n nonnegative integer assumed"
+ },
+ {
+  "id": "GR3.461.5",
+  "gr": "3.461.5",
+  "page": 413,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x^2)/x^2, {x, u, Infinity}]",
+  "rhs": [
+   "E^(-mu*u^2)/u - Sqrt[mu*Pi]*(1 - Erf[u*Sqrt[mu]])"
+  ],
+  "conds": [
+   "Abs[Arg[mu]] < Pi/2",
+   "u > 0"
+  ],
+  "cite": "ET I 135(19)a",
+  "edition_note": "11",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_u^inf e^(-mu x^2) dx/x^2 = e^(-mu u^2)/u - sqrt(mu pi)[1 - Phi(u sqrt mu)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.461.6",
+  "gr": "3.461.6",
+  "page": 413,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-a*Sqrt[x^2 + b^2]], {x, 0, Infinity}]",
+  "rhs": [
+   "b*BesselK[1, a*b]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf exp(-a sqrt(x^2+b^2)) dx = b K_1(ab)",
+  "note": ""
+ },
+ {
+  "id": "GR3.461.7",
+  "gr": "3.461.7",
+  "page": 414,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Exp[-a*Sqrt[x^2 + b^2]], {x, 0, Infinity}]",
+  "rhs": [
+   "2*b/a^2*BesselK[1, a*b] + b^2/a*BesselK[0, a*b]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^2 exp(-a sqrt(x^2+b^2)) dx = 2b/a^2 K_1(ab) + b^2/a K_0(ab)",
+  "note": ""
+ },
+ {
+  "id": "GR3.461.8",
+  "gr": "3.461.8",
+  "page": 414,
+  "status": "ok",
+  "lhs": "Integrate[x^4*Exp[-a*Sqrt[x^2 + b^2]], {x, 0, Infinity}]",
+  "rhs": [
+   "12*b^2/a^3*BesselK[2, a*b] + 3*b^3/a^2*BesselK[1, a*b]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^4 exp(-a sqrt(x^2+b^2)) dx = 12b^2/a^3 K_2(ab) + 3b^3/a^2 K_1(ab)",
+  "note": ""
+ },
+ {
+  "id": "GR3.461.9",
+  "gr": "3.461.9",
+  "page": 414,
+  "status": "ok",
+  "lhs": "Integrate[x^6*Exp[-a*Sqrt[x^2 + b^2]], {x, 0, Infinity}]",
+  "rhs": [
+   "90*b^3/a^4*BesselK[3, a*b] + 15*b^4/a^3*BesselK[2, a*b]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^6 exp(-a sqrt(x^2+b^2)) dx = 90b^3/a^4 K_3(ab) + 15b^4/a^3 K_2(ab)",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.1",
+  "gr": "3.462.1",
+  "page": 414,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*E^(-beta*x^2 - gamma*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(2*beta)^(-nu/2)*Gamma[nu]*Exp[gamma^2/(8*beta)]*ParabolicCylinderD[-nu, gamma/Sqrt[2*beta]]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "EH II 119(3)a, ET I 313(13)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^(nu-1) e^(-beta x^2 - gamma x) dx = (2beta)^(-nu/2) Gamma(nu) exp(gamma^2/(8beta)) D_{-nu}(gamma/sqrt(2beta))",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.2a",
+  "gr": "3.462.2",
+  "page": 414,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(-p*x^2 + 2*q*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "1/(2^(n - 1)*p)*Sqrt[Pi/p]*D[q*E^(q^2/p), {q, n - 1}]"
+  ],
+  "conds": [
+   "p > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (100)(8)",
+  "edition_note": "8",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_-inf^inf x^n e^(-px^2+2qx) dx = 1/(2^(n-1)p) sqrt(pi/p) d^(n-1)/dq^(n-1) (q e^(q^2/p))",
+  "note": "n positive integer assumed"
+ },
+ {
+  "id": "GR3.462.2b",
+  "gr": "3.462.2",
+  "page": 414,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(-p*x^2 + 2*q*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "n!*E^(q^2/p)*Sqrt[Pi/p]*(q/p)^n*Sum[1/((n - 2*k)!*k!)*(p/(4*q^2))^k, {k, 0, Floor[n/2]}]"
+  ],
+  "conds": [
+   "p > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "LI (100)(8)",
+  "edition_note": "8",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "= n! e^(q^2/p) sqrt(pi/p) (q/p)^n sum_{k=0}^{[n/2]} 1/((n-2k)! k!) (p/(4q^2))^k",
+  "note": "n nonnegative integer assumed"
+ },
+ {
+  "id": "GR3.462.3",
+  "gr": "3.462.3",
+  "page": 414,
+  "status": "ok",
+  "lhs": "Integrate[(I*x)^nu*E^(-beta^2*x^2 - I*q*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2^(-nu/2)*Sqrt[Pi]*beta^(-nu - 1)*Exp[-q^2/(8*beta^2)]*ParabolicCylinderD[nu, q/(beta*Sqrt[2])]"
+  ],
+  "conds": [
+   "Re[beta^2] > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET I 121(23)",
+  "edition_note": "11",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_-inf^inf (ix)^nu e^(-beta^2x^2 - iqx) dx = 2^(-nu/2) sqrt(pi) beta^(-nu-1) exp(-q^2/(8beta^2)) D_nu(q/(beta sqrt2))",
+  "note": "branch convention: arg(ix) = pi/2 sign x"
+ },
+ {
+  "id": "GR3.462.4",
+  "gr": "3.462.4",
+  "page": 414,
+  "status": "ok",
+  "lhs": "Integrate[x^n*Exp[-(x - beta)^2], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2*I)^(-n)*Sqrt[Pi]*HermiteH[n, I*beta]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "EH II 195(31)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_-inf^inf x^n exp[-(x-beta)^2] dx = (2i)^(-n) sqrt(pi) H_n(i beta)",
+  "note": "n nonnegative integer assumed"
+ },
+ {
+  "id": "GR3.462.5",
+  "gr": "3.462.5",
+  "page": 414,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-mu*x^2 - 2*nu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*mu) - nu/(2*mu)*Sqrt[Pi/mu]*E^(nu^2/mu)*(1 - Erf[nu/Sqrt[mu]])"
+  ],
+  "conds": [
+   "Abs[Arg[nu]] < Pi/2",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 146(31)a",
+  "edition_note": "11",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x e^(-mu x^2 - 2nu x) dx = 1/(2mu) - nu/(2mu) sqrt(pi/mu) e^(nu^2/mu)[1 - erf(nu/sqrt mu)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.6",
+  "gr": "3.462.6",
+  "page": 414,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-p*x^2 + 2*q*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "q/p*Sqrt[Pi/p]*Exp[q^2/p]"
+  ],
+  "conds": [
+   "Re[p] > 0"
+  ],
+  "cite": "BI (100)(7)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_-inf^inf x e^(-px^2+2qx) dx = q/p sqrt(pi/p) exp(q^2/p)",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.7",
+  "gr": "3.462.7",
+  "page": 414,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-mu*x^2 - 2*nu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-nu/(2*mu^2) + Sqrt[Pi/mu^5]*(2*nu^2 + mu)/4*E^(nu^2/mu)*(1 - Erf[nu/Sqrt[mu]])"
+  ],
+  "conds": [
+   "Abs[Arg[nu]] < Pi/2",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 146(32)",
+  "edition_note": "11",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^2 e^(-mu x^2 - 2nu x) dx = -nu/(2mu^2) + sqrt(pi/mu^5)(2nu^2+mu)/4 e^(nu^2/mu)[1 - erf(nu/sqrt mu)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.8",
+  "gr": "3.462.8",
+  "page": 414,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-mu*x^2 + 2*nu*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "1/(2*mu)*Sqrt[Pi/mu]*(1 + 2*nu^2/mu)*E^(nu^2/mu)"
+  ],
+  "conds": [
+   "Abs[Arg[nu]] < Pi",
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (100)(8)a",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_-inf^inf x^2 e^(-mu x^2 + 2nu x) dx = 1/(2mu) sqrt(pi/mu)(1 + 2nu^2/mu) e^(nu^2/mu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.9a",
+  "gr": "3.462.9",
+  "page": 414,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x^n + a), {x, 0, Infinity}]",
+  "rhs": [
+   "E^(a)/(n*beta^(1/n))*Gamma[1/n]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[n] > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf e^(-beta x^n + a) dx = e^(+ a)/(n beta^(1/n)) Gamma(1/n)",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.9b",
+  "gr": "3.462.9",
+  "page": 414,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x^n + -a), {x, 0, Infinity}]",
+  "rhs": [
+   "E^(-a)/(n*beta^(1/n))*Gamma[1/n]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[n] > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf e^(-beta x^n - a) dx = e^(- a)/(n beta^(1/n)) Gamma(1/n)",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.10",
+  "gr": "3.462.10",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[(x - a)*E^(-beta*(x - a)), {x, 0, Infinity}]",
+  "rhs": [
+   "E^(a*beta)*(1 - a*beta)/beta^2"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf (x-a)e^(-beta(x-a)) dx = e^(a beta)(1-a beta)/beta^2",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.11",
+  "gr": "3.462.11",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[(x - a)*E^(-beta*(x + a)), {x, 0, Infinity}]",
+  "rhs": [
+   "E^(-a*beta)*(1 - a*beta)/beta^2"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf (x-a)e^(-beta(x+a)) dx = e^(-a beta)(1-a beta)/beta^2",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.12a",
+  "gr": "3.462.12",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[(a*x + b)^m*E^(-p*x), {x, 0, Infinity}]",
+  "rhs": [
+   "a^m*E^(p*b/a)/p^(m + 1)*Gamma[m + 1, p*b/a]"
+  ],
+  "conds": [
+   "p > 0",
+   "Abs[Arg[b/a]] < Pi"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf (ax + b)^m e^(-px) dx = a^m e^(pb/a)/p^(m+1) Gamma(m+1, pb/a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.13a",
+  "gr": "3.462.13",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[(a*x + b)^m*E^(-p*x), {x, u, Infinity}]",
+  "rhs": [
+   "a^m*E^(p*b/a)/p^(m + 1)*Gamma[m + 1, p*u + p*b/a]"
+  ],
+  "conds": [
+   "p > 0",
+   "Abs[Arg[b/a + u]] < Pi"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_u^inf (ax + b)^m e^(-px) dx = a^m e^(pb/a)/p^(m+1) Gamma(m+1, pu + pb/a)",
+  "note": "condition printed as |arg(b/a +- u)| < pi"
+ },
+ {
+  "id": "GR3.462.14a",
+  "gr": "3.462.14",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[(a*x + b)^m*E^(-p*x), {x, 0, u}]",
+  "rhs": [
+   "a^m*E^(p*b/a)/p^(m + 1)*(Gamma[m + 1, p*b/a] - Gamma[m + 1, p*u + p*b/a])"
+  ],
+  "conds": [
+   "u > 0",
+   "p > 0",
+   "Abs[Arg[b/a + u]] < Pi"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^u (ax + b)^m e^(-px) dx = a^m e^(pb/a)/p^(m+1)[Gamma(m+1,pb/a) - Gamma(m+1, pu + pb/a)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.15a",
+  "gr": "3.462.15",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)/(a*x + b)^n, {x, 0, Infinity}]",
+  "rhs": [
+   "p^(n - 1)*E^(p*b/a)/a^n*Gamma[-n + 1, p*b/a]"
+  ],
+  "conds": [
+   "p > 0",
+   "Abs[Arg[b/a]] < Pi"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf e^(-px)/(ax + b)^n dx = p^(n-1) e^(pb/a)/a^n Gamma(-n+1, pb/a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.16a",
+  "gr": "3.462.16",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)/(a*x + b)^n, {x, u, Infinity}]",
+  "rhs": [
+   "p^(n - 1)*E^(p*b/a)/a^n*Gamma[-n + 1, p*u + p*b/a]"
+  ],
+  "conds": [
+   "u > 0",
+   "p > 0",
+   "Abs[Arg[b/a + u]] < Pi"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_u^inf e^(-px)/(ax + b)^n dx = p^(n-1) e^(pb/a)/a^n Gamma(-n+1, pu + pb/a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.17a",
+  "gr": "3.462.17",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)/(a*x + b)^n, {x, 0, u}]",
+  "rhs": [
+   "p^(n - 1)*E^(p*b/a)/a^n*(Gamma[-n + 1, p*b/a] - Gamma[-n + 1, p*u + p*b/a])"
+  ],
+  "conds": [
+   "u > 0",
+   "p > 0",
+   "Abs[Arg[b/a + u]] < Pi"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^u e^(-px)/(ax + b)^n dx = p^(n-1) e^(pb/a)/a^n [Gamma(-n+1,pb/a) - Gamma(-n+1, pu + pb/a)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.12b",
+  "gr": "3.462.12",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[(a*x - b)^m*E^(-p*x), {x, 0, Infinity}]",
+  "rhs": [
+   "a^m*E^(-p*b/a)/p^(m + 1)*Gamma[m + 1, -p*b/a]"
+  ],
+  "conds": [
+   "p > 0",
+   "Abs[Arg[b/a]] < Pi"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf (ax - b)^m e^(-px) dx = a^m e^(-pb/a)/p^(m+1) Gamma(m+1, -pb/a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.13b",
+  "gr": "3.462.13",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[(a*x - b)^m*E^(-p*x), {x, u, Infinity}]",
+  "rhs": [
+   "a^m*E^(-p*b/a)/p^(m + 1)*Gamma[m + 1, p*u - p*b/a]"
+  ],
+  "conds": [
+   "p > 0",
+   "Abs[Arg[b/a - u]] < Pi"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_u^inf (ax - b)^m e^(-px) dx = a^m e^(-pb/a)/p^(m+1) Gamma(m+1, pu - pb/a)",
+  "note": "condition printed as |arg(b/a +- u)| < pi"
+ },
+ {
+  "id": "GR3.462.14b",
+  "gr": "3.462.14",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[(a*x - b)^m*E^(-p*x), {x, 0, u}]",
+  "rhs": [
+   "a^m*E^(-p*b/a)/p^(m + 1)*(Gamma[m + 1, -p*b/a] - Gamma[m + 1, p*u - p*b/a])"
+  ],
+  "conds": [
+   "u > 0",
+   "p > 0",
+   "Abs[Arg[b/a - u]] < Pi"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^u (ax - b)^m e^(-px) dx = a^m e^(-pb/a)/p^(m+1)[Gamma(m+1,-pb/a) - Gamma(m+1, pu - pb/a)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.15b",
+  "gr": "3.462.15",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)/(a*x - b)^n, {x, 0, Infinity}]",
+  "rhs": [
+   "p^(n - 1)*E^(-p*b/a)/a^n*Gamma[-n + 1, -p*b/a]"
+  ],
+  "conds": [
+   "p > 0",
+   "Abs[Arg[b/a]] < Pi"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf e^(-px)/(ax - b)^n dx = p^(n-1) e^(-pb/a)/a^n Gamma(-n+1, -pb/a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.16b",
+  "gr": "3.462.16",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)/(a*x - b)^n, {x, u, Infinity}]",
+  "rhs": [
+   "p^(n - 1)*E^(-p*b/a)/a^n*Gamma[-n + 1, p*u - p*b/a]"
+  ],
+  "conds": [
+   "u > 0",
+   "p > 0",
+   "Abs[Arg[b/a - u]] < Pi"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_u^inf e^(-px)/(ax - b)^n dx = p^(n-1) e^(-pb/a)/a^n Gamma(-n+1, pu - pb/a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.17b",
+  "gr": "3.462.17",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)/(a*x - b)^n, {x, 0, u}]",
+  "rhs": [
+   "p^(n - 1)*E^(-p*b/a)/a^n*(Gamma[-n + 1, -p*b/a] - Gamma[-n + 1, p*u - p*b/a])"
+  ],
+  "conds": [
+   "u > 0",
+   "p > 0",
+   "Abs[Arg[b/a - u]] < Pi"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^u e^(-px)/(ax - b)^n dx = p^(n-1) e^(-pb/a)/a^n [Gamma(-n+1,-pb/a) - Gamma(-n+1, pu - pb/a)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.462.18",
+  "gr": "3.462.18",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[((x - a)/b)^j*Exp[-beta*((x - a)/b)^k], {x, 0, Infinity}]",
+  "rhs": [
+   "b*Gamma[(j + 1)/k, beta*(-a/b)^k]/(k*beta^((j + 1)/k))"
+  ],
+  "conds": [
+   "-a/b > 0",
+   "Re[b] > 0",
+   "Re[beta] > 0",
+   "Re[k] > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf ((x-a)/b)^j exp(-beta((x-a)/b)^k) dx = b Gamma((j+1)/k, beta(-a/b)^k)/(k beta^((j+1)/k))",
+  "note": "condition printed 'arg(-a/b) > 0'; read as -a/b > 0"
+ },
+ {
+  "id": "GR3.462.19",
+  "gr": "3.462.19",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x^n)/x^m, {x, u, Infinity}]",
+  "rhs": [
+   "Gamma[(1 - m)/n, beta*u^n]/(n*beta^((1 - m)/n))"
+  ],
+  "conds": [
+   "u > 0",
+   "Re[beta] > 0",
+   "Re[n] > 0",
+   "Re[(1 - m)/n] > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_u^inf e^(-beta x^n)/x^m dx = Gamma(z, beta u^n)/(n beta^z), z = (1-m)/n",
+  "note": "abbreviation z = (1-m)/n substituted"
+ },
+ {
+  "id": "GR3.462.20",
+  "gr": "3.462.20",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-a*Sqrt[x^2 + b^2]]/Sqrt[x^2 + b^2], {x, 0, Infinity}]",
+  "rhs": [
+   "BesselK[0, a*b]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf exp(-a sqrt(x+b^2))/sqrt(x^2+b^2) dx = K_0(ab)",
+  "note": "book prints sqrt(x + b^2) inside the exponential; misprint for sqrt(x^2 + b^2) (cf. 3.461.6), lhs corrected"
+ },
+ {
+  "id": "GR3.462.21",
+  "gr": "3.462.21",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Exp[-a*Sqrt[x^2 + b^2]]/Sqrt[x^2 + b^2], {x, 0, Infinity}]",
+  "rhs": [
+   "b/a*BesselK[1, a*b]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^2 exp(-a sqrt(x+b^2))/sqrt(x^2+b^2) dx = b/a K_1(ab)",
+  "note": "book prints sqrt(x + b^2) inside the exponential; misprint for sqrt(x^2 + b^2), lhs corrected"
+ },
+ {
+  "id": "GR3.462.22",
+  "gr": "3.462.22",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[x^4*Exp[-a*Sqrt[x^2 + b^2]]/Sqrt[x^2 + b^2], {x, 0, Infinity}]",
+  "rhs": [
+   "3*b^2/a^2*BesselK[1, a*b]",
+   "3*b^2/a^2*BesselK[2, a*b]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^4 exp(-a sqrt(x+b^2))/sqrt(x^2+b^2) dx = 3b^2/a^2 K_1(ab)",
+  "note": "book prints sqrt(x + b^2) inside the exponential; misprint for sqrt(x^2 + b^2), lhs corrected. Printed K_1; the family (3.462.24, n=2) gives K_2 (second candidate)"
+ },
+ {
+  "id": "GR3.462.23",
+  "gr": "3.462.23",
+  "page": 415,
+  "status": "ok",
+  "lhs": "Integrate[x^6*Exp[-a*Sqrt[x^2 + b^2]]/Sqrt[x^2 + b^2], {x, 0, Infinity}]",
+  "rhs": [
+   "15*b^3/a^3*BesselK[3, a*b]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^6 exp(-a sqrt(x+b^2))/sqrt(x^2+b^2) dx = 15b^3/a^3 K_3(ab)",
+  "note": "book prints sqrt(x + b^2) inside the exponential; misprint for sqrt(x^2 + b^2), lhs corrected"
+ },
+ {
+  "id": "GR3.462.24",
+  "gr": "3.462.24",
+  "page": 416,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n)*Exp[-a*Sqrt[x^2 + b^2]]/Sqrt[x^2 + b^2], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*n - 1)!!*(b/a)^n*BesselK[n, a*b]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^(2n) exp(-a sqrt(x+b^2))/sqrt(x^2+b^2) dx = (2n-1)!! (b/a)^n K_n(ab)",
+  "note": "book prints sqrt(x + b^2) inside the exponential; misprint for sqrt(x^2 + b^2), lhs corrected. n nonnegative integer assumed"
+ },
+ {
+  "id": "GR3.462.25",
+  "gr": "3.462.25",
+  "page": 416,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-p*x^2]/Sqrt[a^2 + x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Exp[a^2*p/2]*BesselK[0, a^2*p/2]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[p] > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf exp(-px^2)/sqrt(a^2+x^2) dx = 1/2 exp(a^2p/2) K_0(a^2p/2)",
+  "note": "conditions printed [Re a > 0, Re b > 0]; b does not occur, read as Re p > 0"
+ },
+ {
+  "id": "GR3.463",
+  "gr": "3.463",
+  "page": 416,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-x^2) - E^(-x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "EulerGamma/2"
+  ],
+  "conds": [],
+  "cite": "BI (89)(5)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf (e^(-x^2) - e^-x) dx/x = C/2",
+  "note": ""
+ },
+ {
+  "id": "GR3.464",
+  "gr": "3.464",
+  "page": 416,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-mu*x^2) - E^(-nu*x^2))/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*(Sqrt[nu] - Sqrt[mu])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "FI II 645",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf (e^(-mu x^2) - e^(-nu x^2)) dx/x^2 = sqrt(pi)(sqrt nu - sqrt mu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.465",
+  "gr": "3.465",
+  "page": 416,
+  "status": "ok",
+  "lhs": "Integrate[(1 + 2*beta*x^2)*E^(-mu*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "(mu + beta)/2*Sqrt[Pi/mu^3]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 136(24)a",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf (1+2beta x^2) e^(-mu x^2) dx = (mu+beta)/2 sqrt(pi/mu^3)",
+  "note": ""
+ },
+ {
+  "id": "GR3.466.1",
+  "gr": "3.466.1",
+  "page": 416,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu^2*x^2)/(x^2 + beta^2), {x, 0, Infinity}]",
+  "rhs": [
+   "(1 - Erf[beta*mu])*Pi/(2*beta)*E^(beta^2*mu^2)"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Abs[Arg[mu]] < Pi/4"
+  ],
+  "cite": "NT 19(13)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf e^(-mu^2x^2)/(x^2+beta^2) dx = [1-Phi(beta mu)] pi/(2beta) e^(beta^2mu^2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.466.2",
+  "gr": "3.466.2",
+  "page": 416,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-mu^2*x^2)/(x^2 + beta^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/(2*mu) - Pi*beta/2*E^(mu^2*beta^2)*(1 - Erf[beta*mu])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Abs[Arg[mu]] < Pi/4"
+  ],
+  "cite": "ET II 217(16)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^2 e^(-mu^2x^2)/(x^2+beta^2) dx = sqrt(pi)/(2mu) - pi beta/2 e^(mu^2beta^2)[1-Phi(beta mu)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.466.3",
+  "gr": "3.466.3",
+  "page": 416,
+  "status": "ok",
+  "lhs": "Integrate[(E^(x^2) - 1)/x^2, {x, 0, 1}]",
+  "rhs": [
+   "Sum[1/(k!*(2*k - 1)), {k, 1, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "FI II 683",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^1 (e^(x^2)-1)/x^2 dx = sum_{k=1}^inf 1/(k!(2k-1))",
+  "note": ""
+ },
+ {
+  "id": "GR3.467",
+  "gr": "3.467",
+  "page": 416,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-x^2) - 1/(1 + x^2))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-EulerGamma/2"
+  ],
+  "conds": [],
+  "cite": "BI (92)(12)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf (e^(-x^2) - 1/(1+x^2)) dx/x = -C/2",
+  "note": ""
+ },
+ {
+  "id": "GR3.468.1",
+  "gr": "3.468.1",
+  "page": 416,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2)/(x*Sqrt[x^2 - u^2]), {x, u*Sqrt[2], Infinity}]",
+  "rhs": [
+   "Pi/(4*u)*(1 - Erf[u])^2"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "NT 33(17)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_{u sqrt2}^inf e^(-x^2)/sqrt(x^2-u^2) dx/x = pi/(4u)[1-Phi(u)]^2",
+  "note": ""
+ },
+ {
+  "id": "GR3.468.2",
+  "gr": "3.468.2",
+  "page": 416,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-mu*x^2)/Sqrt[a^2 + x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sqrt[Pi/mu]*E^(a^2*mu)*(1 - Erf[a*Sqrt[mu]])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "a > 0"
+  ],
+  "cite": "NT 19(11)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x e^(-mu x^2)/sqrt(a^2+x^2) dx = 1/2 sqrt(pi/mu) e^(a^2 mu)[1-Phi(a sqrt mu)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.469.1",
+  "gr": "3.469.1",
+  "page": 416,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x^4 - 2*nu*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Sqrt[2*nu/mu]*Exp[nu^2/(2*mu)]*BesselK[1/4, nu^2/(2*mu)]"
+  ],
+  "conds": [
+   "Re[mu] >= 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET I 146(23)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf e^(-mu x^4 - 2nu x^2) dx = 1/4 sqrt(2nu/mu) exp(nu^2/(2mu)) K_{1/4}(nu^2/(2mu))",
+  "note": "only Re mu >= 0 printed; Re nu > 0 added (needed for this branch of the value)"
+ },
+ {
+  "id": "GR3.469.2",
+  "gr": "3.469.2",
+  "page": 416,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-x^4) - E^(-x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "3/4*EulerGamma"
+  ],
+  "conds": [],
+  "cite": "BI (89)(7)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf (e^(-x^4) - e^-x) dx/x = 3/4 C",
+  "note": ""
+ },
+ {
+  "id": "GR3.469.3",
+  "gr": "3.469.3",
+  "page": 416,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-x^4) - E^(-x^2))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "EulerGamma/4"
+  ],
+  "conds": [],
+  "cite": "BI (89)(6)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf (e^(-x^4) - e^(-x^2)) dx/x = 1/4 C",
+  "note": ""
+ },
+ {
+  "id": "GR3.471.1",
+  "gr": "3.471.1",
+  "page": 416,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta/x]/x^2, {x, 0, u}]",
+  "rhs": [
+   "1/beta*Exp[-beta/u]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "u > 0"
+  ],
+  "cite": "ET II 188(22)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^u exp(-beta/x) dx/x^2 = 1/beta exp(-beta/u)",
+  "note": "conditions not printed; Re beta > 0, u > 0 added"
+ },
+ {
+  "id": "GR3.471.2",
+  "gr": "3.471.2",
+  "page": 416,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*(u - x)^(mu - 1)*E^(-beta/x), {x, 0, u}]",
+  "rhs": [
+   "beta^((nu - 1)/2)*u^((2*mu + nu - 1)/2)*Exp[-beta/(2*u)]*Gamma[mu]*WhittakerW[(1 - 2*mu - nu)/2, nu/2, beta/u]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[beta] > 0",
+   "u > 0"
+  ],
+  "cite": "ET II 187(18)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^u x^(nu-1)(u-x)^(mu-1) e^(-beta/x) dx = beta^((nu-1)/2) u^((2mu+nu-1)/2) exp(-beta/(2u)) Gamma(mu) W_{(1-2mu-nu)/2, nu/2}(beta/u)",
+  "note": ""
+ },
+ {
+  "id": "GR3.471.3",
+  "gr": "3.471.3",
+  "page": 417,
+  "status": "ok",
+  "lhs": "Integrate[x^(-mu - 1)*(u - x)^(mu - 1)*E^(-beta/x), {x, 0, u}]",
+  "rhs": [
+   "beta^(-mu)*u^(mu - 1)*Gamma[mu]*Exp[-beta/u]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "u > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET II 187(16)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^u x^(-mu-1)(u-x)^(mu-1) e^(-beta/x) dx = beta^(-mu) u^(mu-1) Gamma(mu) exp(-beta/u)",
+  "note": "Re beta > 0 added (not printed)"
+ },
+ {
+  "id": "GR3.471.4",
+  "gr": "3.471.4",
+  "page": 417,
+  "status": "ok",
+  "lhs": "Integrate[x^(-2*mu)*(u - x)^(mu - 1)*E^(-beta/x), {x, 0, u}]",
+  "rhs": [
+   "1/Sqrt[Pi*u]*beta^(1/2 - mu)*E^(-beta/(2*u))*Gamma[mu]*BesselK[mu - 1/2, beta/(2*u)]"
+  ],
+  "conds": [
+   "u > 0",
+   "Re[beta] > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET II 187(17)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^u x^(-2mu)(u-x)^(mu-1) e^(-beta/x) dx = 1/sqrt(pi u) beta^(1/2-mu) e^(-beta/(2u)) Gamma(mu) K_{mu-1/2}(beta/(2u))",
+  "note": ""
+ },
+ {
+  "id": "GR3.471.5",
+  "gr": "3.471.5",
+  "page": 417,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*(x - u)^(mu - 1)*E^(beta/x), {x, u, Infinity}]",
+  "rhs": [
+   "Beta[1 - mu - nu, mu]*u^(mu + nu - 1)*Hypergeometric1F1[1 - mu - nu, 1 - nu, beta/u]"
+  ],
+  "conds": [
+   "0 < Re[mu]",
+   "Re[mu] < Re[1 - nu]",
+   "u > 0"
+  ],
+  "cite": "ET II 203(15)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_u^inf x^(nu-1)(x-u)^(mu-1) e^(beta/x) dx = B(1-mu-nu, mu) u^(mu+nu-1) 1F1(1-mu-nu; 1-nu; beta/u)",
+  "note": ""
+ },
+ {
+  "id": "GR3.471.6",
+  "gr": "3.471.6",
+  "page": 417,
+  "status": "ok",
+  "lhs": "Integrate[x^(-2*mu)*(x - u)^(mu - 1)*E^(beta/x), {x, u, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/u]*beta^(1/2 - mu)*Gamma[mu]*Exp[beta/(2*u)]*BesselI[mu - 1/2, beta/(2*u)]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "u > 0"
+  ],
+  "cite": "ET II 202(14)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_u^inf x^(-2mu)(x-u)^(mu-1) e^(beta/x) dx = sqrt(pi/u) beta^(1/2-mu) Gamma(mu) exp(beta/(2u)) I_{mu-1/2}(beta/(2u))",
+  "note": ""
+ },
+ {
+  "id": "GR3.471.7",
+  "gr": "3.471.7",
+  "page": 417,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*(x + gamma)^(mu - 1)*E^(-beta/x), {x, 0, Infinity}]",
+  "rhs": [
+   "beta^((nu - 1)/2)*gamma^((nu - 1)/2 + mu)*Gamma[1 - mu - nu]*E^(beta/(2*gamma))*WhittakerW[(nu - 1)/2 + mu, -nu/2, beta/gamma]"
+  ],
+  "conds": [
+   "Abs[Arg[gamma]] < Pi",
+   "Re[1 - mu] > Re[nu] > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET II 234(13)a",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^(nu-1)(x+gamma)^(mu-1) e^(-beta/x) dx = beta^((nu-1)/2) gamma^((nu-1)/2+mu) Gamma(1-mu-nu) e^(beta/(2gamma)) W_{(nu-1)/2+mu, -nu/2}(beta/gamma)",
+  "note": "Re beta > 0 added (not printed)"
+ },
+ {
+  "id": "GR3.471.8",
+  "gr": "3.471.8",
+  "page": 417,
+  "status": "ok",
+  "lhs": "Integrate[x^(-2*mu)*(u^2 - x^2)^(mu - 1)*E^(-beta/x), {x, 0, u}]",
+  "rhs": [
+   "1/Sqrt[Pi]*(2/beta)^(mu - 1/2)*u^(mu - 3/2)*Gamma[mu]*BesselK[mu - 1/2, beta/u]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "u > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET II 188(23)a",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^u x^(-2mu)(u^2-x^2)^(mu-1) e^(-beta/x) dx = 1/sqrt(pi) (2/beta)^(mu-1/2) u^(mu-3/2) Gamma(mu) K_{mu-1/2}(beta/u)",
+  "note": ""
+ },
+ {
+  "id": "GR3.471.9",
+  "gr": "3.471.9",
+  "page": 417,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*E^(-beta/x - gamma*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2*(beta/gamma)^(nu/2)*BesselK[nu, 2*Sqrt[beta*gamma]]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[gamma] > 0"
+  ],
+  "cite": "ET II 82(23)a, LET I 146(29)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^(nu-1) e^(-beta/x - gamma x) dx = 2(beta/gamma)^(nu/2) K_nu(2 sqrt(beta gamma))",
+  "note": ""
+ },
+ {
+  "id": "GR3.471.10",
+  "gr": "3.471.10",
+  "page": 417,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*Exp[I*mu/2*(x - beta^2/x)], {x, 0, Infinity}]",
+  "rhs": [
+   "2*beta^nu*E^(I*nu*Pi/2)*BesselK[-nu, beta*mu]"
+  ],
+  "conds": [
+   "Im[mu] > 0",
+   "Im[beta^2*mu] < 0"
+  ],
+  "cite": "EH II 82(24)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^(nu-1) exp[i mu/2 (x - beta^2/x)] dx = 2 beta^nu e^(i nu pi/2) K_{-nu}(beta mu)",
+  "note": "book notes K_{-nu} = K_nu"
+ },
+ {
+  "id": "GR3.471.11",
+  "gr": "3.471.11",
+  "page": 417,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*Exp[I*mu/2*(x + beta^2/x)], {x, 0, Infinity}]",
+  "rhs": [
+   "I*Pi*beta^nu*E^(-I*nu*Pi/2)*HankelH1[-nu, beta*mu]"
+  ],
+  "conds": [
+   "Im[mu] > 0",
+   "Im[beta^2*mu] > 0"
+  ],
+  "cite": "EH II 21(33)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^(nu-1) exp[i mu/2 (x + beta^2/x)] dx = i pi beta^nu e^(-i nu pi/2) H^(1)_{-nu}(beta mu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.471.12",
+  "gr": "3.471.12",
+  "page": 417,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*Exp[-x - mu^2/(4*x)], {x, 0, Infinity}]",
+  "rhs": [
+   "2*(mu/2)^nu*BesselK[-nu, mu]"
+  ],
+  "conds": [
+   "Abs[Arg[mu]] < Pi/2",
+   "Re[mu^2] > 0"
+  ],
+  "cite": "WA 203(15)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^(nu-1) exp(-x - mu^2/(4x)) dx = 2 (mu/2)^nu K_{-nu}(mu)",
+  "note": "book notes K_{-nu} = K_nu"
+ },
+ {
+  "id": "GR3.471.13",
+  "gr": "3.471.13",
+  "page": 417,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*E^(-beta/x)/(x + gamma), {x, 0, Infinity}]",
+  "rhs": [
+   "gamma^(nu - 1)*E^(beta/gamma)*Gamma[1 - nu]*Gamma[nu, beta/gamma]"
+  ],
+  "conds": [
+   "Abs[Arg[gamma]] < Pi",
+   "Re[beta] > 0",
+   "Re[nu] < 1"
+  ],
+  "cite": "ET II 218(19)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^(nu-1) e^(-beta/x)/(x+gamma) dx = gamma^(nu-1) e^(beta/gamma) Gamma(1-nu) Gamma(nu, beta/gamma)",
+  "note": ""
+ },
+ {
+  "id": "GR3.471.14",
+  "gr": "3.471.14",
+  "page": 418,
+  "status": "ok",
+  "lhs": "Integrate[(Exp[1 - 1/x] - x^nu)/(x*(1 - x)), {x, 0, 1}]",
+  "rhs": [
+   "PolyGamma[nu]"
+  ],
+  "conds": [
+   "Re[nu] > 0"
+  ],
+  "cite": "BI (80)(7)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^1 (exp(1-1/x) - x^nu)/(x(1-x)) dx = psi(nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.471.15",
+  "gr": "3.471.15",
+  "page": 418,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1/2)*E^(-gamma*x - beta/x), {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/gamma]*E^(-2*Sqrt[beta*gamma])"
+  ],
+  "conds": [
+   "Re[beta] >= 0",
+   "Re[gamma] > 0"
+  ],
+  "cite": "ET 245 (5.6.1)",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^(-1/2) e^(-gamma x - beta/x) dx = sqrt(pi/gamma) e^(-2 sqrt(beta gamma))",
+  "note": ""
+ },
+ {
+  "id": "GR3.471.16",
+  "gr": "3.471.16",
+  "page": 418,
+  "status": "ok",
+  "lhs": "Integrate[x^(n - 1/2)*E^(-p*x - q/x), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*Sqrt[Pi]*D[p^(-1/2)*E^(-2*Sqrt[p*q]), {p, n}]"
+  ],
+  "conds": [
+   "Re[p] > 0",
+   "Re[q] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "PBM 344 (2.3.16(2))",
+  "edition_note": "",
+  "section": "3.46-3.48 Combinations of exponentials of more complicated arguments and powers",
+  "tex": "int_0^inf x^(n-1/2) e^(-px - q/x) dx = (-1)^n sqrt(pi) d^n/dp^n (p^(-1/2) e^(-2 sqrt(pq)))",
+  "note": "n nonnegative integer assumed"
+ }
+]

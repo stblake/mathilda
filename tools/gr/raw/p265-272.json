@@ -1,0 +1,1480 @@
+[
+ {
+  "id": "GR2.633.4",
+  "gr": "2.633.4",
+  "page": 265,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n + 1)*Sin[x], x]",
+  "rhs": [
+   "(2*n + 1)!*(Sum[(-1)^(k + 1)*x^(2*n - 2*k + 1)/(2*n - 2*k + 1)!, {k, 0, n}]*Cos[x] + Sum[(-1)^k*x^(2*n - 2*k)/(2*n - 2*k)!, {k, 0, n}]*Sin[x])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^(2n+1) sin x dx = (2n+1)! {sum ... cos x + sum ... sin x}",
+  "note": ""
+ },
+ {
+  "id": "GR2.633.5",
+  "gr": "2.633.5",
+  "page": 265,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n)*Cos[x], x]",
+  "rhs": [
+   "(2*n)!*(Sum[(-1)^k*x^(2*n - 2*k)/(2*n - 2*k)!, {k, 0, n}]*Sin[x] + Sum[(-1)^k*x^(2*n - 2*k - 1)/(2*n - 2*k - 1)!, {k, 0, n - 1}]*Cos[x])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^(2n) cos x dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.633.6",
+  "gr": "2.633.6",
+  "page": 265,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n + 1)*Cos[x], x]",
+  "rhs": [
+   "(2*n + 1)!*(Sum[(-1)^k*x^(2*n - 2*k + 1)/(2*n - 2*k + 1)!, {k, 0, n}]*Sin[x] + Sum[(-1)^k*x^(2*n - 2*k)/(2*n - 2*k)!, {k, 0, n}]*Cos[x])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^(2n+1) cos x dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.634.1",
+  "gr": "2.634.1",
+  "page": 265,
+  "status": "SKIP-GENERIC",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int P_n(x) sin mx dx = -cos mx/m sum (-1)^k P^(2k)/m^(2k) + sin mx/m sum (-1)^(k-1) P^(2k-1)/m^(2k-1)",
+  "note": "",
+  "reason": "P_n(x) is an arbitrary polynomial"
+ },
+ {
+  "id": "GR2.634.2",
+  "gr": "2.634.2",
+  "page": 265,
+  "status": "SKIP-GENERIC",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int P_n(x) cos mx dx = sin mx/m sum (-1)^k P^(2k)/m^(2k) + cos mx/m sum (-1)^(k-1) P^(2k-1)/m^(2k-1)",
+  "note": "",
+  "reason": "P_n(x) is an arbitrary polynomial"
+ },
+ {
+  "id": "GR2.635.1",
+  "gr": "2.635.1",
+  "page": 265,
+  "status": "ok",
+  "lhs": "Integrate[(a + b*x)*Sin[k*x], x]",
+  "rhs": [
+   "-1/k*(a + b*x)*Cos[k*x] + b/k^2*Sin[k*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int z1^1 sin kx dx",
+  "note": "z1 = a + b*x substituted"
+ },
+ {
+  "id": "GR2.635.2",
+  "gr": "2.635.2",
+  "page": 265,
+  "status": "ok",
+  "lhs": "Integrate[(a + b*x)*Cos[k*x], x]",
+  "rhs": [
+   "1/k*(a + b*x)*Sin[k*x] + b/k^2*Cos[k*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int z1^1 cos kx dx",
+  "note": "z1 = a + b*x substituted"
+ },
+ {
+  "id": "GR2.635.3",
+  "gr": "2.635.3",
+  "page": 265,
+  "status": "ok",
+  "lhs": "Integrate[(a + b*x)^2*Sin[k*x], x]",
+  "rhs": [
+   "1/k*(2*b^2/k^2 - (a + b*x)^2)*Cos[k*x] + 2*b*(a + b*x)/k^2*Sin[k*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int z1^2 sin kx dx",
+  "note": "z1 = a + b*x substituted"
+ },
+ {
+  "id": "GR2.635.4",
+  "gr": "2.635.4",
+  "page": 265,
+  "status": "ok",
+  "lhs": "Integrate[(a + b*x)^2*Cos[k*x], x]",
+  "rhs": [
+   "1/k*((a + b*x)^2 - 2*b^2/k^2)*Sin[k*x] + 2*b*(a + b*x)/k^2*Cos[k*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int z1^2 cos kx dx",
+  "note": "z1 = a + b*x substituted"
+ },
+ {
+  "id": "GR2.635.5",
+  "gr": "2.635.5",
+  "page": 265,
+  "status": "ok",
+  "lhs": "Integrate[(a + b*x)^3*Sin[k*x], x]",
+  "rhs": [
+   "(a + b*x)/k*(6*b^2/k^2 - (a + b*x)^2)*Cos[k*x] + 3*b/k^2*((a + b*x)^2 - 2*b^2/k^2)*Sin[k*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int z1^3 sin kx dx",
+  "note": "z1 = a + b*x substituted"
+ },
+ {
+  "id": "GR2.635.6",
+  "gr": "2.635.6",
+  "page": 265,
+  "status": "ok",
+  "lhs": "Integrate[(a + b*x)^3*Cos[k*x], x]",
+  "rhs": [
+   "(a + b*x)/k*((a + b*x)^2 - 6*b^2/k^2)*Sin[k*x] + 3*b/k^2*((a + b*x)^2 - 2*b^2/k^2)*Cos[k*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int z1^3 cos kx dx",
+  "note": "z1 = a + b*x substituted"
+ },
+ {
+  "id": "GR2.635.7",
+  "gr": "2.635.7",
+  "page": 265,
+  "status": "ok",
+  "lhs": "Integrate[(a + b*x)^4*Sin[k*x], x]",
+  "rhs": [
+   "-1/k*((a + b*x)^4 - 12*b^2/k^2*(a + b*x)^2 + 24*b^4/k^4)*Cos[k*x] + 4*b*(a + b*x)/k^2*((a + b*x)^2 - 6*b^2/k^2)*Sin[k*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int z1^4 sin kx dx",
+  "note": "z1 = a + b*x substituted"
+ },
+ {
+  "id": "GR2.635.8",
+  "gr": "2.635.8",
+  "page": 265,
+  "status": "ok",
+  "lhs": "Integrate[(a + b*x)^4*Cos[k*x], x]",
+  "rhs": [
+   "1/k*((a + b*x)^4 - 12*b^2/k^2*(a + b*x)^2 + 24*b^4/k^4)*Sin[k*x] + 4*b*(a + b*x)/k^2*((a + b*x)^2 - 6*b^2/k^2)*Cos[k*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int z1^4 cos kx dx",
+  "note": "z1 = a + b*x substituted"
+ },
+ {
+  "id": "GR2.635.9",
+  "gr": "2.635.9",
+  "page": 265,
+  "status": "ok",
+  "lhs": "Integrate[(a + b*x)^5*Sin[k*x], x]",
+  "rhs": [
+   "5*b/k^2*((a + b*x)^4 - 12*b^2/k^2*(a + b*x)^2 + 24*b^4/k^4)*Sin[k*x] - (a + b*x)/k*((a + b*x)^4 - 20*b^2/k^2*(a + b*x)^2 + 120*b^4/k^4)*Cos[k*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int z1^5 sin kx dx",
+  "note": "z1 = a + b*x substituted"
+ },
+ {
+  "id": "GR2.635.10",
+  "gr": "2.635.10",
+  "page": 265,
+  "status": "ok",
+  "lhs": "Integrate[(a + b*x)^5*Cos[k*x], x]",
+  "rhs": [
+   "5*b/k^2*((a + b*x)^4 - 12*b^2/k^2*(a + b*x)^2 + 24*b^4/k^4)*Cos[k*x] + (a + b*x)/k*((a + b*x)^4 - 20*b^2/k^2*(a + b*x)^2 + 120*b^4/k^4)*Sin[k*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int z1^5 cos kx dx",
+  "note": "z1 = a + b*x substituted"
+ },
+ {
+  "id": "GR2.635.11",
+  "gr": "2.635.11",
+  "page": 266,
+  "status": "ok",
+  "lhs": "Integrate[(a + b*x)^6*Sin[k*x], x]",
+  "rhs": [
+   "6*b*(a + b*x)/k^2*((a + b*x)^4 - 20*b^2/k^2*(a + b*x)^2 + 120*b^4/k^4)*Sin[k*x] - 1/k*((a + b*x)^6 - 30*b^2/k^2*(a + b*x)^4 + 360*b^4/k^4*(a + b*x)^2 - 720*b^6/k^6)*Cos[k*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int z1^6 sin kx dx",
+  "note": "z1 = a + b*x substituted"
+ },
+ {
+  "id": "GR2.635.12",
+  "gr": "2.635.12",
+  "page": 266,
+  "status": "ok",
+  "lhs": "Integrate[(a + b*x)^6*Cos[k*x], x]",
+  "rhs": [
+   "6*b*(a + b*x)/k^2*((a + b*x)^4 - 20*b^2/k^2*(a + b*x)^2 + 120*b^4/k^4)*Cos[k*x] + 1/k*((a + b*x)^6 - 30*b^2/k^2*(a + b*x)^4 + 360*b^4/k^4*(a + b*x)^2 - 720*b^6/k^6)*Sin[k*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int z1^6 cos kx dx",
+  "note": "z1 = a + b*x substituted"
+ },
+ {
+  "id": "GR2.636.1",
+  "gr": "2.636.1",
+  "page": 266,
+  "status": "ok",
+  "lhs": "Integrate[x^n*Sin[x]^2, x]",
+  "rhs": [
+   "x^(n + 1)/(2*(n + 1)) + n!/4*(Sum[(-1)^(k + 1)*x^(n - 2*k)/(2^(2*k)*(n - 2*k)!), {k, 0, Floor[n/2]}]*Sin[2*x] + Sum[(-1)^(k + 1)*x^(n - 2*k - 1)/(2^(2*k + 1)*(n - 2*k - 1)!), {k, 0, Floor[(n - 1)/2]}]*Cos[2*x])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GU (333)(2e)",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^n sin^2 x dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.636.2",
+  "gr": "2.636.2",
+  "page": 266,
+  "status": "ok",
+  "lhs": "Integrate[x^n*Cos[x]^2, x]",
+  "rhs": [
+   "x^(n + 1)/(2*(n + 1)) - n!/4*(Sum[(-1)^(k + 1)*x^(n - 2*k)/(2^(2*k)*(n - 2*k)!), {k, 0, Floor[n/2]}]*Sin[2*x] + Sum[(-1)^(k + 1)*x^(n - 2*k - 1)/(2^(2*k + 1)*(n - 2*k - 1)!), {k, 0, Floor[(n - 1)/2]}]*Cos[2*x])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GU (333)(3e)",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^n cos^2 x dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.636.3",
+  "gr": "2.636.3",
+  "page": 266,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]^2, x]",
+  "rhs": [
+   "x^2/4 - x/4*Sin[2*x] - Cos[2*x]/8"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int x sin^2 x",
+  "note": ""
+ },
+ {
+  "id": "GR2.636.4",
+  "gr": "2.636.4",
+  "page": 266,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Sin[x]^2, x]",
+  "rhs": [
+   "x^3/6 - x/4*Cos[2*x] - 1/4*(x^2 - 1/2)*Sin[2*x]"
+  ],
+  "conds": [],
+  "cite": "MZ 241",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^2 sin^2 x",
+  "note": ""
+ },
+ {
+  "id": "GR2.636.5",
+  "gr": "2.636.5",
+  "page": 266,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[x]^2, x]",
+  "rhs": [
+   "x^2/4 + x/4*Sin[2*x] + Cos[2*x]/8"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int x cos^2 x",
+  "note": ""
+ },
+ {
+  "id": "GR2.636.6",
+  "gr": "2.636.6",
+  "page": 266,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Cos[x]^2, x]",
+  "rhs": [
+   "x^3/6 + x/4*Cos[2*x] + 1/4*(x^2 - 1/2)*Sin[2*x]"
+  ],
+  "conds": [],
+  "cite": "MZ 245",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^2 cos^2 x",
+  "note": ""
+ },
+ {
+  "id": "GR2.637.1",
+  "gr": "2.637.1",
+  "page": 266,
+  "status": "ok",
+  "lhs": "Integrate[x^n*Sin[x]^3, x]",
+  "rhs": [
+   "n!/4*(Sum[(-1)^k*x^(n - 2*k)/(n - 2*k)!*(Cos[3*x]/3^(2*k + 1) - 3*Cos[x]), {k, 0, Floor[n/2]}] - Sum[(-1)^k*x^(n - 2*k - 1)/(n - 2*k - 1)!*(Sin[3*x]/3^(2*k + 2) - 3*Sin[x]), {k, 0, Floor[(n - 1)/2]}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GU(333)(2f)",
+  "edition_note": "11",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^n sin^3 x dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.637.2",
+  "gr": "2.637.2",
+  "page": 267,
+  "status": "ok",
+  "lhs": "Integrate[x^n*Cos[x]^3, x]",
+  "rhs": [
+   "n!/4*(Sum[(-1)^k*x^(n - 2*k)/(n - 2*k)!*(Sin[3*x]/3^(2*k + 1) + 3*Sin[x]), {k, 0, Floor[n/2]}] + Sum[(-1)^k*x^(n - 2*k - 1)/(n - 2*k - 1)!*(Cos[3*x]/3^(2*k + 2) + 3*Cos[x]), {k, 0, Floor[(n - 1)/2]}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GU(333)(3f)",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^n cos^3 x dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.637.3",
+  "gr": "2.637.3",
+  "page": 267,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]^3, x]",
+  "rhs": [
+   "3/4*Sin[x] - 1/36*Sin[3*x] - 3/4*x*Cos[x] + x/12*Cos[3*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int x sin^3 x",
+  "note": ""
+ },
+ {
+  "id": "GR2.637.4",
+  "gr": "2.637.4",
+  "page": 267,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Sin[x]^3, x]",
+  "rhs": [
+   "-(3/4*x^2 + 3/2)*Cos[x] + (x^2/12 + 1/54)*Cos[3*x] + 3/2*x*Sin[x] - x/18*Sin[3*x]",
+   "-(3/4*x^2 - 3/2)*Cos[x] + (x^2/12 - 1/54)*Cos[3*x] + 3/2*x*Sin[x] - x/18*Sin[3*x]"
+  ],
+  "conds": [],
+  "cite": "MZ 241",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^2 sin^3 x",
+  "note": "As printed: -(3/4 x^2 + 3/2) cos x + (x^2/12 + 1/54) cos 3x; the constants' signs look misprinted (2.637.1 at n=2 and differentiation give -3/2 -> +3/2 inside, i.e. (3/4 x^2 - 3/2) and (x^2/12 - 1/54)); corrected second candidate"
+ },
+ {
+  "id": "GR2.637.5",
+  "gr": "2.637.5",
+  "page": 267,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[x]^3, x]",
+  "rhs": [
+   "3/4*Cos[x] + 1/36*Cos[3*x] + 3/4*x*Sin[x] + x/12*Sin[3*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int x cos^3 x",
+  "note": ""
+ },
+ {
+  "id": "GR2.637.6",
+  "gr": "2.637.6",
+  "page": 267,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Cos[x]^3, x]",
+  "rhs": [
+   "(3/4*x^2 - 3/2)*Sin[x] + (x^2/12 - 1/54)*Sin[3*x] + 3/2*x*Cos[x] + x/18*Cos[3*x]"
+  ],
+  "conds": [],
+  "cite": "MZ 245, 246",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^2 cos^3 x",
+  "note": ""
+ },
+ {
+  "id": "GR2.638.1",
+  "gr": "2.638.1",
+  "page": 267,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "TI (496)",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int sin^q x/x^p = ... - q^2/((p-1)(p-2)) int sin^q/x^(p-2) + ... int sin^(q-2)/x^(p-2)",
+  "note": "",
+  "reason": "reduction formula"
+ },
+ {
+  "id": "GR2.638.2",
+  "gr": "2.638.2",
+  "page": 267,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "TI (495)",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int cos^q x/x^p = ... int cos^q/x^(p-2) + ... int cos^(q-2)/x^(p-2)",
+  "note": "",
+  "reason": "reduction formula"
+ },
+ {
+  "id": "GR2.638.3a",
+  "gr": "2.638.3a",
+  "page": 267,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "TI (492)",
+  "edition_note": "6",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int sin x/x^p = -sin x/((p-1)x^(p-1)) + 1/(p-1) int cos x/x^(p-1)",
+  "note": "",
+  "reason": "reduction formula"
+ },
+ {
+  "id": "GR2.638.3b",
+  "gr": "2.638.3b",
+  "page": 267,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "TI (492)",
+  "edition_note": "6",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int sin x/x^p = -sin/((p-1)x^(p-1)) - cos/((p-1)(p-2)x^(p-2)) - 1/((p-1)(p-2)) int sin x/x^(p-2) [p>2]",
+  "note": "",
+  "reason": "reduction formula"
+ },
+ {
+  "id": "GR2.638.4a",
+  "gr": "2.638.4a",
+  "page": 267,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "TI (491)",
+  "edition_note": "6",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int cos x/x^p = -cos x/((p-1)x^(p-1)) - 1/(p-1) int sin x/x^(p-1)",
+  "note": "",
+  "reason": "reduction formula"
+ },
+ {
+  "id": "GR2.638.4b",
+  "gr": "2.638.4b",
+  "page": 267,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "TI (491)",
+  "edition_note": "6",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int cos x/x^p = -cos/((p-1)x^(p-1)) + sin/((p-1)(p-2)x^(p-2)) - 1/((p-1)(p-2)) int cos x/x^(p-2) [p>2]",
+  "note": "",
+  "reason": "reduction formula"
+ },
+ {
+  "id": "GR2.639.1",
+  "gr": "2.639.1",
+  "page": 268,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/x^(2*n), x]",
+  "rhs": [
+   "(-1)^(n + 1)/(x*(2*n - 1)!)*(Sum[(-1)^k*(2*k + 1)!/x^(2*k + 1), {k, 0, n - 2}]*Cos[x] + Sum[(-1)^(k + 1)*(2*k)!/x^(2*k), {k, 0, n - 1}]*Sin[x]) + (-1)^(n + 1)/(2*n - 1)!*CosIntegral[x]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (333)(6b)a",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int sin x/x^(2n) dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.639.2",
+  "gr": "2.639.2",
+  "page": 268,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/x^(2*n + 1), x]",
+  "rhs": [
+   "(-1)^(n + 1)/(x*(2*n)!)*(Sum[(-1)^(k + 1)*(2*k)!/x^(2*k), {k, 0, n - 1}]*Cos[x] + Sum[(-1)^(k + 1)*(2*k + 1)!/x^(2*k + 1), {k, 0, n - 1}]*Sin[x]) + (-1)^n/(2*n)!*(SinIntegral[x] - Pi/2)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (333)(6b)a",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int sin x/x^(2n+1) dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.639.3",
+  "gr": "2.639.3",
+  "page": 268,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/x^(2*n), x]",
+  "rhs": [
+   "(-1)^(n + 1)/(x*(2*n - 1)!)*(Sum[(-1)^(k + 1)*(2*k)!/x^(2*k), {k, 0, n - 1}]*Cos[x] - Sum[(-1)^k*(2*k + 1)!/x^(2*k + 1), {k, 0, n - 2}]*Sin[x]) + (-1)^n/(2*n - 1)!*(SinIntegral[x] - Pi/2)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (333)(7b)",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int cos x/x^(2n) dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.639.4",
+  "gr": "2.639.4",
+  "page": 268,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/x^(2*n + 1), x]",
+  "rhs": [
+   "(-1)^(n + 1)/(x*(2*n)!)*(Sum[(-1)^(k + 1)*(2*k + 1)!/x^(2*k + 1), {k, 0, n - 1}]*Cos[x] - Sum[(-1)^(k + 1)*(2*k)!/x^(2*k), {k, 0, n - 1}]*Sin[x]) + (-1)^n/(2*n)!*CosIntegral[x]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (333)(7b)",
+  "edition_note": "",
+  "section": "2.63 Powers of trigonometric functions combined with other powers",
+  "tex": "int cos x/x^(2n+1) dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.641.1",
+  "gr": "2.641.1",
+  "page": 268,
+  "status": "ok",
+  "lhs": "Integrate[Sin[k*x]/(a + b*x), x]",
+  "rhs": [
+   "1/b*(Cos[k*a/b]*(SinIntegral[k*(a + b*x)/b] - Pi/2) - Sin[k*a/b]*CosIntegral[k*(a + b*x)/b])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int sin kx/(a+bx) dx = 1/b[cos(ka/b) si(u) - sin(ka/b) ci(u)], u = k(a+bx)/b",
+  "note": "u = k/b (a + b x) substituted"
+ },
+ {
+  "id": "GR2.641.2",
+  "gr": "2.641.2",
+  "page": 268,
+  "status": "ok",
+  "lhs": "Integrate[Cos[k*x]/(a + b*x), x]",
+  "rhs": [
+   "1/b*(Cos[k*a/b]*CosIntegral[k*(a + b*x)/b] + Sin[k*a/b]*(SinIntegral[k*(a + b*x)/b] - Pi/2))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int cos kx/(a+bx) dx = 1/b[cos(ka/b) ci(u) + sin(ka/b) si(u)]",
+  "note": "u = k/b (a + b x) substituted"
+ },
+ {
+  "id": "GR2.641.3",
+  "gr": "2.641.3",
+  "page": 268,
+  "status": "ok",
+  "lhs": "Integrate[Sin[k*x]/(a + b*x)^2, x]",
+  "rhs": [
+   "-1/b*Sin[k*x]/(a + b*x) + k/b*(1/b*(Cos[k*a/b]*CosIntegral[k*(a + b*x)/b] + Sin[k*a/b]*(SinIntegral[k*(a + b*x)/b] - Pi/2)))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int sin kx/(a+bx)^2 dx (see 2.641 2)",
+  "note": "remaining int cos kx/(a+bx) dx replaced by its closed form 2.641.2 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.641.4",
+  "gr": "2.641.4",
+  "page": 268,
+  "status": "ok",
+  "lhs": "Integrate[Cos[k*x]/(a + b*x)^2, x]",
+  "rhs": [
+   "-1/b*Cos[k*x]/(a + b*x) - k/b*(1/b*(Cos[k*a/b]*(SinIntegral[k*(a + b*x)/b] - Pi/2) - Sin[k*a/b]*CosIntegral[k*(a + b*x)/b]))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int cos kx/(a+bx)^2 dx (see 2.641 1)",
+  "note": "remaining int sin kx/(a+bx) dx replaced by its closed form 2.641.1 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.641.5",
+  "gr": "2.641.5",
+  "page": 268,
+  "status": "ok",
+  "lhs": "Integrate[Sin[k*x]/(a + b*x)^3, x]",
+  "rhs": [
+   "-Sin[k*x]/(2*b*(a + b*x)^2) - k*Cos[k*x]/(2*b^2*(a + b*x)) - k^2/(2*b^2)*(1/b*(Cos[k*a/b]*(SinIntegral[k*(a + b*x)/b] - Pi/2) - Sin[k*a/b]*CosIntegral[k*(a + b*x)/b]))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int sin kx/(a+bx)^3 dx (see 2.641 1)",
+  "note": "remaining int sin kx/(a+bx) dx replaced by its closed form 2.641.1 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.641.6",
+  "gr": "2.641.6",
+  "page": 269,
+  "status": "ok",
+  "lhs": "Integrate[Cos[k*x]/(a + b*x)^3, x]",
+  "rhs": [
+   "-Cos[k*x]/(2*b*(a + b*x)^2) + k*Sin[k*x]/(2*b^2*(a + b*x)) - k^2/(2*b^2)*(1/b*(Cos[k*a/b]*CosIntegral[k*(a + b*x)/b] + Sin[k*a/b]*(SinIntegral[k*(a + b*x)/b] - Pi/2)))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int cos kx/(a+bx)^3 dx (see 2.641 2)",
+  "note": "remaining int cos kx/(a+bx) dx replaced by its closed form 2.641.2 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.641.7",
+  "gr": "2.641.7",
+  "page": 269,
+  "status": "ok",
+  "lhs": "Integrate[Sin[k*x]/(a + b*x)^4, x]",
+  "rhs": [
+   "-Sin[k*x]/(3*b*(a + b*x)^3) - k*Cos[k*x]/(6*b^2*(a + b*x)^2) + k^2*Sin[k*x]/(6*b^3*(a + b*x)) - k^3/(6*b^3)*(1/b*(Cos[k*a/b]*CosIntegral[k*(a + b*x)/b] + Sin[k*a/b]*(SinIntegral[k*(a + b*x)/b] - Pi/2)))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int sin kx/(a+bx)^4 dx (see 2.641 2)",
+  "note": "remaining int cos kx/(a+bx) dx replaced by its closed form 2.641.2 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.641.8",
+  "gr": "2.641.8",
+  "page": 269,
+  "status": "ok",
+  "lhs": "Integrate[Cos[k*x]/(a + b*x)^4, x]",
+  "rhs": [
+   "-Cos[k*x]/(3*b*(a + b*x)^3) + k*Sin[k*x]/(6*b^2*(a + b*x)^2) + k^2*Cos[k*x]/(6*b^3*(a + b*x)) + k^3/(6*b^3)*(1/b*(Cos[k*a/b]*(SinIntegral[k*(a + b*x)/b] - Pi/2) - Sin[k*a/b]*CosIntegral[k*(a + b*x)/b]))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int cos kx/(a+bx)^4 dx (see 2.641 1)",
+  "note": "remaining int sin kx/(a+bx) dx replaced by its closed form 2.641.1 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.641.9",
+  "gr": "2.641.9",
+  "page": 269,
+  "status": "ok",
+  "lhs": "Integrate[Sin[k*x]/(a + b*x)^5, x]",
+  "rhs": [
+   "-Sin[k*x]/(4*b*(a + b*x)^4) - k*Cos[k*x]/(12*b^2*(a + b*x)^3) + k^2*Sin[k*x]/(24*b^3*(a + b*x)^2) + k^3*Cos[k*x]/(24*b^4*(a + b*x)) + k^4/(24*b^4)*(1/b*(Cos[k*a/b]*(SinIntegral[k*(a + b*x)/b] - Pi/2) - Sin[k*a/b]*CosIntegral[k*(a + b*x)/b]))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int sin kx/(a+bx)^5 dx (see 2.641 1)",
+  "note": "remaining int sin kx/(a+bx) dx replaced by its closed form 2.641.1 (u = k(a+bx)/b); book prints '... k^3 cos kx/(24 b^4 (a+bx)) k^4/(24 b^4) int' with the operator before the last term missing, read as '+' (it is what the reduction gives)"
+ },
+ {
+  "id": "GR2.641.10",
+  "gr": "2.641.10",
+  "page": 269,
+  "status": "ok",
+  "lhs": "Integrate[Cos[k*x]/(a + b*x)^5, x]",
+  "rhs": [
+   "-Cos[k*x]/(4*b*(a + b*x)^4) + k*Sin[k*x]/(12*b^2*(a + b*x)^3) + k^2*Cos[k*x]/(24*b^3*(a + b*x)^2) - k^3*Sin[k*x]/(24*b^4*(a + b*x)) + k^4/(24*b^4)*(1/b*(Cos[k*a/b]*CosIntegral[k*(a + b*x)/b] + Sin[k*a/b]*(SinIntegral[k*(a + b*x)/b] - Pi/2)))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int cos kx/(a+bx)^5 dx (see 2.641 2)",
+  "note": "remaining int cos kx/(a+bx) dx replaced by its closed form 2.641.2 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.641.11",
+  "gr": "2.641.11",
+  "page": 269,
+  "status": "ok",
+  "lhs": "Integrate[Sin[k*x]/(a + b*x)^6, x]",
+  "rhs": [
+   "-Sin[k*x]/(5*b*(a + b*x)^5) - k*Cos[k*x]/(20*b^2*(a + b*x)^4) + k^2*Sin[k*x]/(60*b^3*(a + b*x)^3) + k^3*Cos[k*x]/(120*b^4*(a + b*x)^2) - k^4*Sin[k*x]/(120*b^5*(a + b*x)) + k^5/(120*b^5)*(1/b*(Cos[k*a/b]*CosIntegral[k*(a + b*x)/b] + Sin[k*a/b]*(SinIntegral[k*(a + b*x)/b] - Pi/2)))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int sin kx/(a+bx)^6 dx (see 2.641 2)",
+  "note": "remaining int cos kx/(a+bx) dx replaced by its closed form 2.641.2 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.641.12",
+  "gr": "2.641.12",
+  "page": 269,
+  "status": "ok",
+  "lhs": "Integrate[Cos[k*x]/(a + b*x)^6, x]",
+  "rhs": [
+   "-Cos[k*x]/(5*b*(a + b*x)^5) + k*Sin[k*x]/(20*b^2*(a + b*x)^4) + k^2*Cos[k*x]/(60*b^3*(a + b*x)^3) - k^3*Sin[k*x]/(120*b^4*(a + b*x)^2) - k^4*Cos[k*x]/(120*b^5*(a + b*x)) - k^5/(120*b^5)*(1/b*(Cos[k*a/b]*(SinIntegral[k*(a + b*x)/b] - Pi/2) - Sin[k*a/b]*CosIntegral[k*(a + b*x)/b]))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int cos kx/(a+bx)^6 dx (see 2.641 1)",
+  "note": "remaining int sin kx/(a+bx) dx replaced by its closed form 2.641.1 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.642.1",
+  "gr": "2.642.1",
+  "page": 269,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*m)/x, x]",
+  "rhs": [
+   "Binomial[2*m, m]*Log[x]/2^(2*m) + (-1)^m/2^(2*m - 1)*Sum[(-1)^k*Binomial[2*m, k]*CosIntegral[(2*m - 2*k)*x], {k, 0, m - 1}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int sin^(2m) x/x dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.642.2",
+  "gr": "2.642.2",
+  "page": 269,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*m + 1)/x, x]",
+  "rhs": [
+   "(-1)^m/2^(2*m)*Sum[(-1)^k*Binomial[2*m + 1, k]*(SinIntegral[(2*m - 2*k + 1)*x] - Pi/2), {k, 0, m}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int sin^(2m+1) x/x dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.642.3",
+  "gr": "2.642.3",
+  "page": 269,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*m)/x, x]",
+  "rhs": [
+   "Binomial[2*m, m]*Log[x]/2^(2*m) + 1/2^(2*m - 1)*Sum[Binomial[2*m, k]*CosIntegral[(2*m - 2*k)*x], {k, 0, m - 1}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int cos^(2m) x/x dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.642.4",
+  "gr": "2.642.4",
+  "page": 269,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*m + 1)/x, x]",
+  "rhs": [
+   "1/2^(2*m)*Sum[Binomial[2*m + 1, k]*CosIntegral[(2*m - 2*k + 1)*x], {k, 0, m}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int cos^(2m+1) x/x dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.642.5",
+  "gr": "2.642.5",
+  "page": 270,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*m)/x^2, x]",
+  "rhs": [
+   "-Binomial[2*m, m]/(2^(2*m)*x) + (-1)^m/2^(2*m - 1)*Sum[(-1)^(k + 1)*Binomial[2*m, k]*(Cos[(2*m - 2*k)*x]/x + (2*m - 2*k)*(SinIntegral[(2*m - 2*k)*x] - Pi/2)), {k, 0, m - 1}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int sin^(2m) x/x^2 dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.642.6",
+  "gr": "2.642.6",
+  "page": 270,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*m + 1)/x^2, x]",
+  "rhs": [
+   "(-1)^m/2^(2*m)*Sum[(-1)^(k + 1)*Binomial[2*m + 1, k]*(Sin[(2*m - 2*k + 1)*x]/x - (2*m - 2*k + 1)*CosIntegral[(2*m - 2*k + 1)*x]), {k, 0, m}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int sin^(2m+1) x/x^2 dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.642.7",
+  "gr": "2.642.7",
+  "page": 270,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*m)/x^2, x]",
+  "rhs": [
+   "-Binomial[2*m, m]/(2^(2*m)*x) - 1/2^(2*m - 1)*Sum[Binomial[2*m, k]*(Cos[(2*m - 2*k)*x]/x + (2*m - 2*k)*(SinIntegral[(2*m - 2*k)*x] - Pi/2)), {k, 0, m - 1}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int cos^(2m) x/x^2 dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.642.8",
+  "gr": "2.642.8",
+  "page": 270,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*m + 1)/x^2, x]",
+  "rhs": [
+   "-1/2^(2*m)*Sum[Binomial[2*m + 1, k]*(Cos[(2*m - 2*k + 1)*x]/x + (2*m - 2*k + 1)*(SinIntegral[(2*m - 2*k + 1)*x] - Pi/2)), {k, 0, m}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int cos^(2m+1) x/x^2 dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.643.1",
+  "gr": "2.643.1",
+  "page": 270,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^p/sin^q x = -x^(p-1)[p sin x + (q-2) x cos x]/((q-1)(q-2) sin^(q-1)) + (q-2)/(q-1) int x^p/sin^(q-2) + p(p-1)/((q-1)(q-2)) int x^(p-2)/sin^(q-2)",
+  "note": "",
+  "reason": "reduction formula"
+ },
+ {
+  "id": "GR2.643.2",
+  "gr": "2.643.2",
+  "page": 270,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^p/cos^q x = -x^(p-1)[p cos x - (q-2) x sin x]/((q-1)(q-2) cos^(q-1)) + (q-2)/(q-1) int x^p/cos^(q-2) + p(p-1)/((q-1)(q-2)) int x^(p-2)/cos^(q-2)",
+  "note": "",
+  "reason": "reduction formula"
+ },
+ {
+  "id": "GR2.643.3",
+  "gr": "2.643.3",
+  "page": 270,
+  "status": "ok",
+  "lhs": "Integrate[x^n/Sin[x], x]",
+  "rhs": [
+   "x^n/n + Sum[(-1)^(k + 1)*2*(2^(2*k - 1) - 1)/((n + 2*k)*(2*k)!)*BernoulliB[2*k]*x^(n + 2*k), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "n > 0"
+  ],
+  "cite": "TU (333)(8b)",
+  "edition_note": "4",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^n/sin x dx = x^n/n + sum_{k>=1} ...",
+  "note": "|x| < pi is a condition on the integration variable"
+ },
+ {
+  "id": "GR2.643.4",
+  "gr": "2.643.4",
+  "page": 270,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^n*Sin[x]), x]",
+  "rhs": [
+   "-1/(n*x^n) - (1 + (-1)^n)*(-1)^(n/2)*(2^(n - 1) - 1)/n!*BernoulliB[n]*Log[x] - Sum[If[2*k == n, 0, (-1)^k*2*(2^(2*n) - 1)/((2*k - n)*(2*k)!)*BernoulliB[2*k]*x^(2*k - n)], {k, 1, Infinity}]",
+   "-1/(n*x^n) - (1 + (-1)^n)*(-1)^(n/2)*(2^(n - 1) - 1)/n!*BernoulliB[n]*Log[x] - Sum[If[2*k == n, 0, (-1)^k*2*(2^(2*k - 1) - 1)/((2*k - n)*(2*k)!)*BernoulliB[2*k]*x^(2*k - n)], {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "n > 1",
+   "Element[n, Integers]"
+  ],
+  "cite": "GU (333)(9b)",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int dx/(x^n sin x) = -1/(n x^n) - [1+(-1)^n](-1)^(n/2)(2^(n-1)-1)/n! B_n ln x - sum_{k>=1, k!=n/2} (-1)^k 2(2^(2n)-1)/((2k-n)(2k)!) B_2k x^(2k-n)",
+  "note": "book prints condition |x| > pi (a condition on the integration variable; presumably misprint for |x| < pi). Book prints 2(2^(2n) - 1) in the sum; the cosecant series (cf. 2.643.3) gives 2(2^(2k-1) - 1): corrected second candidate. Excluded term k = n/2 written with If; n integer implied by the exclusion"
+ },
+ {
+  "id": "GR2.643.5",
+  "gr": "2.643.5",
+  "page": 270,
+  "status": "ok",
+  "lhs": "Integrate[x^n/Cos[x], x]",
+  "rhs": [
+   "Sum[Abs[EulerE[2*k]]*x^(n + 2*k + 1)/((n + 2*k + 1)*(2*k)!), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "n > 0"
+  ],
+  "cite": "GU (333)(10b)",
+  "edition_note": "8",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^n/cos x dx = sum |E_2k| x^(n+2k+1)/((n+2k+1)(2k)!)",
+  "note": "|x| < pi/2 is a condition on the integration variable"
+ },
+ {
+  "id": "GR2.643.6",
+  "gr": "2.643.6",
+  "page": 270,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^n*Cos[x]), x]",
+  "rhs": [
+   "1/2*(1 - (-1)^n)*Abs[EulerE[n - 1]]/(n - 1)!*Log[x] + Sum[If[2*k == n - 1, 0, Abs[EulerE[2*k]]*x^(2*k - n + 1)/((2*k - n + 1)*(2*k)!)], {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (333)(11b)",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int dx/(x^n cos x) = 1/2[1-(-1)^n] |E_(n-1)|/(n-1)! ln x + sum_{k>=0, k!=(n-1)/2} |E_2k| x^(2k-n+1)/((2k-n+1)(2k)!)",
+  "note": "|x| < pi/2 is a condition on the integration variable; excluded term k = (n-1)/2 written with If; n positive integer implied by (n-1)! and the exclusion"
+ },
+ {
+  "id": "GR2.643.7",
+  "gr": "2.643.7",
+  "page": 271,
+  "status": "ok",
+  "lhs": "Integrate[x^n/Sin[x]^2, x]",
+  "rhs": [
+   "-x^n*Cot[x] + n/(n - 1)*x^(n - 1) + n*Sum[(-1)^k*2^(2*k)*x^(n + 2*k - 1)/((n + 2*k - 1)*(2*k)!)*BernoulliB[2*k], {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "n > 1"
+  ],
+  "cite": "GU (333)(8c)",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^n/sin^2 x dx",
+  "note": "|x| < pi is a condition on the integration variable"
+ },
+ {
+  "id": "GR2.643.8",
+  "gr": "2.643.8",
+  "page": 271,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^n*Sin[x]^2), x]",
+  "rhs": [
+   "-Cot[x]/x^n + n/((n + 1)*x^(n + 1)) - (1 - (-1)^n)*(-1)^((n + 1)/2)*2^n*n/(n + 1)!*BernoulliB[n + 1]*Log[x] - n/2^(n + 1)*Sum[If[2*k == n + 1, 0, (-1)^k*(2*x)^(2*k)/((2*k - n - 1)*(2*k)!)*BernoulliB[2*k]], {k, 1, Infinity}]",
+   "-Cot[x]/x^n + n/((n + 1)*x^(n + 1)) - (1 - (-1)^n)*(-1)^((n + 1)/2)*2^n*n/(n + 1)!*BernoulliB[n + 1]*Log[x] - n/x^(n + 1)*Sum[If[2*k == n + 1, 0, (-1)^k*(2*x)^(2*k)/((2*k - n - 1)*(2*k)!)*BernoulliB[2*k]], {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (333)(9c)",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int dx/(x^n sin^2 x) = -cot x/x^n + n/((n+1)x^(n+1)) - [1-(-1)^n](-1)^((n+1)/2) 2^n n/(n+1)! B_(n+1) ln x - n/2^(n+1) sum_{k>=1,k!=(n+1)/2} (-1)^k (2x)^(2k)/((2k-n-1)(2k)!) B_2k",
+  "note": "|x| < pi is a condition on the integration variable. Book prints the prefactor n/2^(n+1) before the sum; integrating -n cot x/x^(n+1) gives n/x^(n+1) (compare 2.643.10): corrected second candidate. Excluded term written with If; n integer implied"
+ },
+ {
+  "id": "GR2.643.9",
+  "gr": "2.643.9",
+  "page": 271,
+  "status": "ok",
+  "lhs": "Integrate[x^n/Cos[x]^2, x]",
+  "rhs": [
+   "x^n*Tan[x] + n*Sum[(-1)^k*2^(2*k)*(2^(2*k) - 1)*x^(n + 2*k - 1)/((n + 2*k - 1)*(2*k)!)*BernoulliB[2*k], {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "n > 1"
+  ],
+  "cite": "GU (333)(10c)",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^n/cos^2 x dx",
+  "note": "|x| < pi/2 is a condition on the integration variable"
+ },
+ {
+  "id": "GR2.643.10",
+  "gr": "2.643.10",
+  "page": 271,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^n*Cos[x]^2), x]",
+  "rhs": [
+   "Tan[x]/x^n - (1 - (-1)^n)*(-1)^((n + 1)/2)*2^n*n/(n + 1)!*(2^(n + 1) - 1)*BernoulliB[n + 1]*Log[x] - n/x^(n + 1)*Sum[If[2*k == n + 1, 0, (-1)^k*(2^(2*k) - 1)*(2*x)^(2*k)/((2*k - n - 1)*(2*k)!)*BernoulliB[2*k]], {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (333)(11c)",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int dx/(x^n cos^2 x) = tan x/x^n - [1-(-1)^n](-1)^((n+1)/2) 2^n n/(n+1)! (2^(n+1)-1) B_(n+1) ln x - n/x^(n+1) sum ...",
+  "note": "|x| < pi/2 is a condition on the integration variable; excluded term k = (n+1)/2 written with If; n integer implied"
+ },
+ {
+  "id": "GR2.644.1",
+  "gr": "2.644.1",
+  "page": 271,
+  "status": "ok",
+  "lhs": "Integrate[x/Sin[x]^(2*n), x]",
+  "rhs": [
+   "-Sum[Product[2*n - 2*j, {j, 1, k - 1}]/Product[2*n - 2*j + 1, {j, 1, k - 1}]*(Sin[x] + (2*n - 2*k)*x*Cos[x])/((2*n - 2*k + 1)*(2*n - 2*k)*Sin[x]^(2*n - 2*k + 1)), {k, 0, n - 1}] + 2^(n - 1)*(n - 1)!/(2*n - 1)!!*(Log[Sin[x]] - x*Cot[x])",
+   "-Sum[Product[2*n - 2*j, {j, 1, k - 1}]/Product[2*n - 2*j + 1, {j, 1, k - 1}]*(Sin[x] + (2*n - 2*k)*x*Cos[x])/((2*n - 2*k + 1)*(2*n - 2*k)*Sin[x]^(2*n - 2*k + 1)), {k, 1, n - 1}] + 2^(n - 1)*(n - 1)!/(2*n - 1)!!*(Log[Sin[x]] - x*Cot[x])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x/sin^(2n) x dx = -sum_{k=0}^{n-1} (2n-2)(2n-4)..(2n-2k+2)/((2n-1)(2n-3)..(2n-2k+3)) (sin x + (2n-2k) x cos x)/((2n-2k+1)(2n-2k) sin^(2n-2k+1) x) + 2^(n-1)(n-1)!/(2n-1)!! (ln sin x - x cot x)",
+  "note": "products read as having k-1 factors (empty at k=0,1). As printed the k = 0 term is the reduction step for sin^(2n+2), not sin^(2n): the sum should start at k = 1 (corrected second candidate)"
+ },
+ {
+  "id": "GR2.644.3",
+  "gr": "2.644.3",
+  "page": 271,
+  "status": "ok",
+  "lhs": "Integrate[x/Cos[x]^(2*n), x]",
+  "rhs": [
+   "Sum[Product[2*n - 2*j, {j, 1, k - 1}]/Product[2*n - 2*j + 1, {j, 1, k - 1}]*((2*n - 2*k)*x*Sin[x] - Cos[x])/((2*n - 2*k + 1)*(2*n - 2*k)*Cos[x]^(2*n - 2*k + 1)), {k, 0, n - 1}] + 2^(n - 1)*(n - 1)!/(2*n - 1)!!*(x*Tan[x] + Log[Cos[x]])",
+   "Sum[Product[2*n - 2*j, {j, 1, k - 1}]/Product[2*n - 2*j + 1, {j, 1, k - 1}]*((2*n - 2*k)*x*Sin[x] - Cos[x])/((2*n - 2*k + 1)*(2*n - 2*k)*Cos[x]^(2*n - 2*k + 1)), {k, 1, n - 1}] + 2^(n - 1)*(n - 1)!/(2*n - 1)!!*(x*Tan[x] + Log[Cos[x]])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x/cos^(2n) x dx = sum_{k=0}^{n-1} (2n-2)..(2n-2k+2)/((2n-1)..(2n-2k+3)) ((2n-2k) x sin x - cos x)/((2n-2k+1)(2n-2k) cos^(2n-2k+1) x) + 2^(n-1)(n-1)!/(2n-1)!! (x tan x + ln cos x)",
+  "note": "products read as having k-1 factors (empty at k=0,1). As printed the k = 0 term is the reduction step for cos^(2n+2): the sum should start at k = 1 (corrected second candidate)"
+ },
+ {
+  "id": "GR2.644.2",
+  "gr": "2.644.2",
+  "page": 271,
+  "status": "ok",
+  "lhs": "Integrate[x/Sin[x]^(2*n + 1), x]",
+  "rhs": [
+   "-Sum[Product[2*n - 2*j + 1, {j, 1, k}]/Product[2*n - 2*j + 2, {j, 1, k}]*(Sin[x] + (2*n - 2*k - 1)*x*Cos[x])/((2*n - 2*k)*(2*n - 2*k - 1)*Sin[x]^(2*n - 2*k)), {k, 0, n - 1}] + (2*n - 1)!!/(2^n*n!)*(x + Sum[(-1)^(j + 1)*2*(2^(2*j - 1) - 1)/(2*j + 1)!*BernoulliB[2*j]*x^(2*j + 1), {j, 1, Infinity}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x/sin^(2n+1) x dx = -sum_{k=0}^{n-1} (2n-1)(2n-3)..(2n-2k+1)/(2n(2n-2)..(2n-2k+2)) (sin x + (2n-2k-1) x cos x)/((2n-2k)(2n-2k-1) sin^(2n-2k) x) + (2n-1)!!/(2^n n!) int x/sin x (see 2.644.5)",
+  "note": "products read as having k factors (empty at k=0); remaining int x/sin x dx replaced by the series 2.644.5 (valid |x| < pi; a condition on the integration variable)"
+ },
+ {
+  "id": "GR2.644.4",
+  "gr": "2.644.4",
+  "page": 271,
+  "status": "ok",
+  "lhs": "Integrate[x/Cos[x]^(2*n + 1), x]",
+  "rhs": [
+   "Sum[Product[2*n - 2*j + 1, {j, 1, k}]/Product[2*n - 2*j + 2, {j, 1, k}]*((2*n - 2*k + 1)*x*Sin[x] - Cos[x])/((2*n - 2*k)*(2*n - 2*k - 1)*Cos[x]^(2*n - 2*k)), {k, 0, n - 1}] + (2*n - 1)!!/(2^n*n!)*Sum[Abs[EulerE[2*j]]*x^(2*j + 2)/((2*j + 2)*(2*j)!), {j, 0, Infinity}]",
+   "Sum[Product[2*n - 2*j + 1, {j, 1, k}]/Product[2*n - 2*j + 2, {j, 1, k}]*((2*n - 2*k - 1)*x*Sin[x] - Cos[x])/((2*n - 2*k)*(2*n - 2*k - 1)*Cos[x]^(2*n - 2*k)), {k, 0, n - 1}] + (2*n - 1)!!/(2^n*n!)*Sum[Abs[EulerE[2*j]]*x^(2*j + 2)/((2*j + 2)*(2*j)!), {j, 0, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x/cos^(2n+1) x dx = sum_{k=0}^{n-1} (2n-1)..(2n-2k+1)/(2n(2n-2)..(2n-2k+2)) ((2n-2k+1) x sin x - cos x)/((2n-2k)(2n-2k-1) cos^(2n-2k) x) + (2n-1)!!/(2^n n!) int x/cos x (see 2.644.6)",
+  "note": "products read as having k factors (empty at k=0); remaining int x/cos x dx replaced by the series 2.644.6 (valid |x| < pi/2; a condition on the integration variable). Book prints (2n-2k+1) x sin x in the numerator; the reduction step for cos^(2n-2k+1) (and the sine analogue 2.644.2) gives (2n-2k-1): corrected second candidate"
+ },
+ {
+  "id": "GR2.644.5",
+  "gr": "2.644.5",
+  "page": 272,
+  "status": "ok",
+  "lhs": "Integrate[x/Sin[x], x]",
+  "rhs": [
+   "x + Sum[(-1)^(k + 1)*2*(2^(2*k - 1) - 1)/(2*k + 1)!*BernoulliB[2*k]*x^(2*k + 1), {k, 1, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x/sin x dx = x + sum_{k>=1} (-1)^(k+1) 2(2^(2k-1)-1)/(2k+1)! B_2k x^(2k+1)",
+  "note": "|x| < pi is a condition on the integration variable (none printed)"
+ },
+ {
+  "id": "GR2.644.6",
+  "gr": "2.644.6",
+  "page": 272,
+  "status": "ok",
+  "lhs": "Integrate[x/Cos[x], x]",
+  "rhs": [
+   "Sum[Abs[EulerE[2*k]]*x^(2*k + 2)/((2*k + 2)*(2*k)!), {k, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x/cos x dx = sum_{k>=0} |E_2k| x^(2k+2)/((2k+2)(2k)!)",
+  "note": "|x| < pi/2 is a condition on the integration variable (none printed)"
+ },
+ {
+  "id": "GR2.644.7",
+  "gr": "2.644.7",
+  "page": 272,
+  "status": "ok",
+  "lhs": "Integrate[x/Sin[x]^2, x]",
+  "rhs": [
+   "-x*Cot[x] + Log[Sin[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x/sin^2 x = -x cot x + ln sin x",
+  "note": ""
+ },
+ {
+  "id": "GR2.644.8",
+  "gr": "2.644.8",
+  "page": 272,
+  "status": "ok",
+  "lhs": "Integrate[x/Cos[x]^2, x]",
+  "rhs": [
+   "x*Tan[x] + Log[Cos[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x/cos^2 x = x tan x + ln cos x",
+  "note": ""
+ },
+ {
+  "id": "GR2.644.9",
+  "gr": "2.644.9",
+  "page": 272,
+  "status": "ok",
+  "lhs": "Integrate[x/Sin[x]^3, x]",
+  "rhs": [
+   "-(Sin[x] + x*Cos[x])/(2*Sin[x]^2) + 1/2*(x + Sum[(-1)^(j + 1)*2*(2^(2*j - 1) - 1)/(2*j + 1)!*BernoulliB[2*j]*x^(2*j + 1), {j, 1, Infinity}])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x/sin^3 x = -(sin x + x cos x)/(2 sin^2 x) + 1/2 int x/sin x (see 2.644.5)",
+  "note": "remaining int x/sin x dx replaced by the series 2.644.5 (valid |x| < pi; a condition on the integration variable)"
+ },
+ {
+  "id": "GR2.644.10",
+  "gr": "2.644.10",
+  "page": 272,
+  "status": "ok",
+  "lhs": "Integrate[x/Cos[x]^3, x]",
+  "rhs": [
+   "(x*Sin[x] - Cos[x])/(2*Cos[x]^2) + 1/2*Sum[Abs[EulerE[2*j]]*x^(2*j + 2)/((2*j + 2)*(2*j)!), {j, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x/cos^3 x = (x sin x - cos x)/(2 cos^2 x) + 1/2 int x/cos x (see 2.644.6)",
+  "note": "remaining int x/cos x dx replaced by the series 2.644.6 (valid |x| < pi/2; a condition on the integration variable)"
+ },
+ {
+  "id": "GR2.644.11",
+  "gr": "2.644.11",
+  "page": 272,
+  "status": "ok",
+  "lhs": "Integrate[x/Sin[x]^4, x]",
+  "rhs": [
+   "-x*Cos[x]/(3*Sin[x]^3) - 1/(6*Sin[x]^2) - 2/3*x*Cot[x] + 2/3*Log[Sin[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x/sin^4 x",
+  "note": ""
+ },
+ {
+  "id": "GR2.644.12",
+  "gr": "2.644.12",
+  "page": 272,
+  "status": "ok",
+  "lhs": "Integrate[x/Cos[x]^4, x]",
+  "rhs": [
+   "x*Sin[x]/(3*Cos[x]^3) - 1/(6*Cos[x]^2) + 2/3*x*Tan[x] - 2/3*Log[Cos[x]]",
+   "x*Sin[x]/(3*Cos[x]^3) - 1/(6*Cos[x]^2) + 2/3*x*Tan[x] + 2/3*Log[Cos[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x/cos^4 x",
+  "note": "Book prints - 2/3 ln(cos x); the reduction (compare 2.644.8 and 2.644.3) gives + 2/3 ln(cos x): corrected second candidate"
+ },
+ {
+  "id": "GR2.644.13",
+  "gr": "2.644.13",
+  "page": 272,
+  "status": "ok",
+  "lhs": "Integrate[x/Sin[x]^5, x]",
+  "rhs": [
+   "-x*Cos[x]/(4*Sin[x]^4) - 1/(12*Sin[x]^3) - 3*x*Cos[x]/(8*Sin[x]^2) - 3/(8*Sin[x]) + 3/8*(x + Sum[(-1)^(j + 1)*2*(2^(2*j - 1) - 1)/(2*j + 1)!*BernoulliB[2*j]*x^(2*j + 1), {j, 1, Infinity}])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x/sin^5 x (see 2.644.5)",
+  "note": "remaining int x/sin x dx replaced by the series 2.644.5 (valid |x| < pi; a condition on the integration variable)"
+ },
+ {
+  "id": "GR2.644.14",
+  "gr": "2.644.14",
+  "page": 272,
+  "status": "ok",
+  "lhs": "Integrate[x/Cos[x]^5, x]",
+  "rhs": [
+   "x*Sin[x]/(4*Cos[x]^4) - 1/(12*Cos[x]^3) + 3*x*Sin[x]/(8*Cos[x]^2) - 3/(8*Cos[x]) + 3/8*Sum[Abs[EulerE[2*j]]*x^(2*j + 2)/((2*j + 2)*(2*j)!), {j, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x/cos^5 x (see 2.644.6)",
+  "note": "remaining int x/cos x dx replaced by the series 2.644.6 (valid |x| < pi/2; a condition on the integration variable)"
+ },
+ {
+  "id": "GR2.645.1",
+  "gr": "2.645.1",
+  "page": 272,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^p sin^(2m) x/cos^n x = sum_k (-1)^k C(m,k) int x^p/cos^(n-2k) x",
+  "note": "",
+  "reason": "value is a sum of integrals (see 2.643.2)"
+ },
+ {
+  "id": "GR2.645.2",
+  "gr": "2.645.2",
+  "page": 272,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^p sin^(2m+1) x/cos^n x = sum_k (-1)^k C(m,k) int x^p sin x/cos^(n-2k) x",
+  "note": "",
+  "reason": "value is a sum of integrals (see 2.645.3)"
+ },
+ {
+  "id": "GR2.645.3",
+  "gr": "2.645.3",
+  "page": 272,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "GU (333)(12)",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^p sin x/cos^n x = x^p/((n-1)cos^(n-1)) - p/(n-1) int x^(p-1)/cos^(n-1) [n>1]",
+  "note": "",
+  "reason": "reduction formula"
+ },
+ {
+  "id": "GR2.645.4",
+  "gr": "2.645.4",
+  "page": 272,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^p cos^(2m) x/sin^n x = sum_k (-1)^k C(m,k) int x^p/sin^(n-2k) x",
+  "note": "",
+  "reason": "value is a sum of integrals (see 2.643.1)"
+ },
+ {
+  "id": "GR2.645.5",
+  "gr": "2.645.5",
+  "page": 272,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^p cos^(2m+1) x/sin^n x = sum_k (-1)^k C(m,k) int x^p cos x/sin^(n-2k) x",
+  "note": "",
+  "reason": "value is a sum of integrals (see 2.645.6)"
+ },
+ {
+  "id": "GR2.645.6",
+  "gr": "2.645.6",
+  "page": 272,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "GU (333)(13)",
+  "edition_note": "",
+  "section": "2.64 Powers of trigonometric functions combined with other powers",
+  "tex": "int x^p cos x/sin^n x = -x^p/((n-1) sin^(n-1)) + p/(n-1) int x^(p-1)/sin^(n-1) [n>1]",
+  "note": "",
+  "reason": "reduction formula"
+ }
+]

@@ -1,0 +1,1740 @@
+[
+ {
+  "id": "GR4.121.1",
+  "gr": "4.121.1",
+  "page": 570,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[a*x] - Sin[b*x])/Cosh[beta*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "2*ArcTan[(Exp[a*Pi/(2*beta)] - Exp[b*Pi/(2*beta)])/(1 + Exp[(a + b)*Pi/(2*beta)])]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "GW (336)(19b)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^inf (sin ax - sin bx)/cosh(beta x) dx/x = 2 arctan[(exp(a pi/2beta) - exp(b pi/2beta))/(1+exp((a+b)pi/2beta))]",
+  "note": ""
+ },
+ {
+  "id": "GR4.121.2",
+  "gr": "4.121.2",
+  "page": 570,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[a*x] - Cos[b*x])/Sinh[beta*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Cosh[b*Pi/(2*beta)]/Cosh[a*Pi/(2*beta)]]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "GW (336)(19a)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^inf (cos ax - cos bx)/sinh(beta x) dx/x = ln[cosh(b pi/2beta)/cosh(a pi/2beta)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.122.1",
+  "gr": "4.122.1",
+  "page": 570,
+  "status": "ok",
+  "lhs": "Integrate[Cos[beta*x]*Sin[gamma*x]/Cosh[delta*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "ArcTan[Sinh[gamma*Pi/(2*delta)]/Cosh[beta*Pi/(2*delta)]]"
+  ],
+  "conds": [
+   "Re[delta] > Abs[Im[beta]] + Abs[Im[gamma]]"
+  ],
+  "cite": "ET I 93(46)a",
+  "edition_note": "6",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^inf cos(beta x) sin(gamma x)/cosh(delta x) dx/x = arctan[sinh(gamma pi/2delta)/cosh(beta pi/2delta)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.122.2",
+  "gr": "4.122.2",
+  "page": 570,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2*Cosh[beta*x]/Sinh[x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Log[(Cosh[2*a*Pi] + Cos[beta*Pi])/(1 + Cos[beta*Pi])]"
+  ],
+  "conds": [
+   "Abs[Re[beta]] < 1"
+  ],
+  "cite": "BI (387)(7)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^inf sin^2(ax) cosh(beta x)/sinh x dx/x = 1/4 ln[(cosh 2a pi + cos beta pi)/(1 + cos beta pi)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.123.1",
+  "gr": "4.123.1",
+  "page": 570,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/(Cosh[a*x] + Cos[x])*x/(x^2 - Pi^2), {x, 0, Infinity}]",
+  "rhs": [
+   "ArcTan[1/a] - 1/a"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (390)(1)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^inf sin x/(cosh ax + cos x) x dx/(x^2 - pi^2) = arctan(1/a) - 1/a",
+  "note": "a > 0 implied (not printed); zero of x^2 - pi^2 at x = pi is cancelled by sin x"
+ },
+ {
+  "id": "GR4.123.2",
+  "gr": "4.123.2",
+  "page": 570,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/(Cosh[a*x] - Cos[x])*x/(x^2 - Pi^2), {x, 0, Infinity}]",
+  "rhs": [
+   "a/(1 + a^2) - ArcTan[1/a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (390)(2)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^inf sin x/(cosh ax - cos x) x dx/(x^2 - pi^2) = a/(1+a^2) - arctan(1/a)",
+  "note": "a > 0 implied (not printed)"
+ },
+ {
+  "id": "GR4.123.3",
+  "gr": "4.123.3",
+  "page": 570,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*x]/(Cosh[2*a*x] - Cos[2*x])*x/(x^2 - Pi^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*a)*(1 + 2*a^2)/(1 + a^2) - ArcTan[1/a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (390)(4)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^inf sin 2x/(cosh 2ax - cos 2x) x dx/(x^2 - pi^2) = 1/(2a) (1+2a^2)/(1+a^2) - arctan(1/a)",
+  "note": "a > 0 implied (not printed)"
+ },
+ {
+  "id": "GR4.123.4",
+  "gr": "4.123.4",
+  "page": 570,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[a*x]*Sin[x]/(Cosh[2*a*x] - Cos[2*x])*x/(x^2 - Pi^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-1/(2*a*(1 + a^2))"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "LI (390)(3)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^inf cosh ax sin x/(cosh 2ax - cos 2x) x dx/(x^2 - pi^2) = -1/(2a(1+a^2))",
+  "note": "a > 0 implied (not printed)"
+ },
+ {
+  "id": "GR4.123.5",
+  "gr": "4.123.5",
+  "page": 570,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/(Cosh[Pi*x] + Cos[Pi*beta])/(x^2 + gamma^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Exp[-a*gamma]/(2*gamma*(Cos[gamma*Pi] + Cos[beta*Pi])) + 1/Sinh[beta*Pi]*Sum[Exp[-(2*k + 1 - beta)*a]/(gamma^2 - (2*k + 1 - beta)^2) - Exp[-(2*k + 1 + beta)*a]/(gamma^2 - (2*k + 1 + beta)^2), {k, 0, Infinity}]",
+   "Pi*Exp[-a*gamma]/(2*gamma*(Cos[gamma*Pi] + Cos[beta*Pi])) + 1/Sin[beta*Pi]*Sum[Exp[-(2*k + 1 - beta)*a]/(gamma^2 - (2*k + 1 - beta)^2) - Exp[-(2*k + 1 + beta)*a]/(gamma^2 - (2*k + 1 + beta)^2), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "0 < Re[beta] < 1",
+   "Re[gamma] > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 33(27)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^inf cos ax/(cosh pi x + cos pi beta) dx/(x^2+gamma^2) = pi e^(-a gamma)/(2gamma(cos gamma pi + cos beta pi)) + 1/sinh(beta pi) Sum_k {...}",
+  "note": "printed 1/sinh(beta pi); residues at x = i(2k+1 -+ beta) give 1/sin(beta pi): corrected candidate second"
+ },
+ {
+  "id": "GR4.123.6",
+  "gr": "4.123.6",
+  "page": 570,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sinh[b*x]/(Cos[2*a*x] + Cosh[2*b*x])*x^(p - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[p]/(a^2 + b^2)^(p/2)*Sin[p*ArcTan[a/b]]*Sum[(-1)^k/(2*k + 1)^p, {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "p > 0",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (364)(8)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^inf sin ax sinh bx/(cos 2ax + cosh 2bx) x^(p-1) dx = Gamma(p)/(a^2+b^2)^(p/2) sin(p arctan(a/b)) Sum (-1)^k/(2k+1)^p",
+  "note": "a > 0, b > 0 implied (only p > 0 printed)"
+ },
+ {
+  "id": "GR4.123.7",
+  "gr": "4.123.7",
+  "page": 570,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[a*x^2]*Sin[Pi*x/2]*Sinh[Pi*x/2]/(Cos[Pi*x] + Cosh[Pi*x])*x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Derivative[0, 1, 0][ThetaN][1, 0, Exp[-2*a]]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET I 93(49)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^inf sin(ax^2) sin(pi x/2) sinh(pi x/2)/(cos pi x + cosh pi x) x dx = 1/4 [d theta_1(z|q)/dz]_(z=0, q=e^(-2a))",
+  "note": "theta_1'(0|q) = 2 q^(1/4) Prod (1-q^(2n))^3 in the nome convention",
+  "reason": "z-derivative of Jacobi theta function theta_1(z|q) at z=0, q=e^(-2a)"
+ },
+ {
+  "id": "GR4.124.1",
+  "gr": "4.124.1",
+  "page": 571,
+  "status": "ok",
+  "lhs": "Integrate[Cos[p*x]*Cosh[q*Sqrt[1 - x^2]]/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*BesselJ[0, Sqrt[p^2 - q^2]]"
+  ],
+  "conds": [],
+  "cite": "MO (40)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^1 cos px cosh(q sqrt(1-x^2))/sqrt(1-x^2) dx = pi/2 J_0(sqrt(p^2-q^2))",
+  "note": ""
+ },
+ {
+  "id": "GR4.124.2a",
+  "gr": "4.124.2",
+  "page": 571,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]*Cosh[Sqrt[beta*(u^2 - x^2)]]/Sqrt[u^2 - x^2], {x, u, Infinity}]",
+  "rhs": [
+   "Pi/2*BesselJ[0, u/Sqrt[a^2 - beta^2]]",
+   "Pi/2*BesselJ[0, u*Sqrt[a^2 - beta]]"
+  ],
+  "conds": [
+   "u > 0",
+   "a > 0",
+   "beta > 0"
+  ],
+  "cite": "ET I 34(38)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_u^inf cos ax cosh sqrt(beta(u^2-x^2)) dx/sqrt(u^2-x^2) = pi/2 J_0(u/sqrt(a^2-beta^2))",
+  "note": "transcribed as printed (no conditions printed; u, a, beta > 0 added); as printed the integrand is complex on (u, inf). Probable original is int_0^u cos ax cosh(beta sqrt(u^2-x^2))/sqrt(u^2-x^2) dx = pi/2 J_0(u sqrt(a^2-beta^2)); that guessed correction is record 4.124.2b"
+ },
+ {
+  "id": "GR4.124.2b",
+  "gr": "4.124.2",
+  "page": 571,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]*Cosh[beta*Sqrt[u^2 - x^2]]/Sqrt[u^2 - x^2], {x, 0, u}]",
+  "rhs": [
+   "Pi/2*BesselJ[0, u*Sqrt[a^2 - beta^2]]"
+  ],
+  "conds": [
+   "u > 0",
+   "a > 0",
+   "beta > 0"
+  ],
+  "cite": "ET I 34(38)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "(guessed correction of 4.124.2) int_0^u cos ax cosh(beta sqrt(u^2-x^2)) dx/sqrt(u^2-x^2) = pi/2 J_0(u sqrt(a^2-beta^2))",
+  "note": "guessed correction of the printed 4.124.2 (limits 0..u, cosh(beta sqrt(u^2-x^2)), J_0 argument u sqrt(a^2-beta^2)); low confidence; cf. 4.124.1"
+ },
+ {
+  "id": "GR4.125.1",
+  "gr": "4.125.1",
+  "page": 571,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*Sin[x]]*Cos[a*Cos[x]]*Sin[x]*Sin[2*n*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n - 1)*a^(2*n - 1)/(2*n - 1)!*Pi/8*(1 + a^2/(2*n*(2*n + 1)))"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (367)(14)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^inf sinh(a sin x) cos(a cos x) sin x sin 2nx dx/x = (-1)^(n-1) a^(2n-1)/(2n-1)! pi/8 [1 + a^2/(2n(2n+1))]",
+  "note": "n = 1, 2, ... implied (not printed)"
+ },
+ {
+  "id": "GR4.125.2",
+  "gr": "4.125.2",
+  "page": 571,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[a*Sin[x]]*Cos[a*Cos[x]]*Sin[x]*Cos[(2*n - 1)*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n - 1)*a^(2*(n - 1))/(2*(n - 1))!*Pi/8*(1 - a^2/(2*n*(2*n - 1)))"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (367)(15)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^inf cosh(a sin x) cos(a cos x) sin x cos(2n-1)x dx/x = (-1)^(n-1) a^(2(n-1))/[2(n-1)]! pi/8 [1 - a^2/(2n(2n-1))]",
+  "note": "n = 1, 2, ... implied (not printed)"
+ },
+ {
+  "id": "GR4.125.3",
+  "gr": "4.125.3",
+  "page": 571,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*Sin[x]]*Cos[a*Cos[x]]*Cos[x]*Cos[2*n*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Sum[(-1)^k*a^(2*k + 1)/(2*k + 1)!, {k, n + 1, Infinity}] + (-1)^n*a^(2*n + 1)/(2*n + 1)!*3*Pi/8 + (-1)^(n - 1)*a^(2*n - 1)/(2*n - 1)!*Pi/8"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (367)(21)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^inf sinh(a sin x) cos(a cos x) cos x cos 2nx dx/x = pi/2 Sum_{k=n+1}^inf (-1)^k a^(2k+1)/(2k+1)! + (-1)^n a^(2n+1)/(2n+1)! 3pi/8 + (-1)^(n-1) a^(2n-1)/(2n-1)! pi/8",
+  "note": "n = 1, 2, ... implied (not printed)"
+ },
+ {
+  "id": "GR4.126.1",
+  "gr": "4.126.1",
+  "page": 571,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*Cos[b*x]]*Sinh[a*Sin[b*x]]*x/(c^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(Cos[a*Cos[b*c]]*Cosh[a*Sin[b*c]] - 1)"
+  ],
+  "conds": [
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "BI (381)(2)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^inf sin(a cos bx) sinh(a sin bx) x dx/(c^2-x^2) = pi/2 [cos(a cos bc) cosh(a sin bc) - 1]",
+  "note": "pole at x = c on the path (c > 0); implied principal value; c > 0 added",
+  "reason": "implied principal value (pole at x = c)"
+ },
+ {
+  "id": "GR4.126.2",
+  "gr": "4.126.2",
+  "page": 571,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*Cos[b*x]]*Cosh[a*Sin[b*x]]/(c^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*c)*Cos[a*Cos[b*c]]*Sinh[a*Sin[b*c]]"
+  ],
+  "conds": [
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "BI (381)(1)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^inf sin(a cos bx) cosh(a sin bx) dx/(c^2-x^2) = pi/(2c) cos(a cos bc) sinh(a sin bc)",
+  "note": "pole at x = c on the path (c > 0); implied principal value",
+  "reason": "implied principal value (pole at x = c)"
+ },
+ {
+  "id": "GR4.126.3",
+  "gr": "4.126.3",
+  "page": 571,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[a*Cos[b*x]]*Sinh[a*Sin[b*x]]*x/(c^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(a*Cos[b*c] - Sin[a*Cos[b*c]]*Cosh[a*Sin[b*c]])"
+  ],
+  "conds": [
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "BI (381)(4)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^inf cos(a cos bx) sinh(a sin bx) x dx/(c^2-x^2) = pi/2 [a cos bc - sin(a cos bc) cosh(a sin bc)]",
+  "note": "pole at x = c on the path (c > 0); implied principal value; c > 0 added",
+  "reason": "implied principal value (pole at x = c)"
+ },
+ {
+  "id": "GR4.126.4",
+  "gr": "4.126.4",
+  "page": 571,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[a*Cos[b*x]]*Cosh[a*Sin[b*x]]/(c^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/(2*c)*Sin[a*Cos[b*c]]*Sinh[a*Sin[b*c]]"
+  ],
+  "conds": [
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "BI (381)(3)",
+  "edition_note": "",
+  "section": "4.12 Combinations of trigonometric and hyperbolic functions and powers",
+  "tex": "int_0^inf cos(a cos bx) cosh(a sin bx) dx/(c^2-x^2) = -pi/(2c) sin(a cos bc) sinh(a sin bc)",
+  "note": "pole at x = c on the path (c > 0); implied principal value; c > 0 added",
+  "reason": "implied principal value (pole at x = c)"
+ },
+ {
+  "id": "GR4.131.1",
+  "gr": "4.131.1",
+  "page": 571,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sinh[gamma*x]^nu*Exp[-beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-I*Gamma[nu + 1]/(2^(nu + 2)*gamma)*(Gamma[(beta - nu*gamma - a*I)/(2*gamma)]/Gamma[(beta + nu*gamma - a*I)/(2*gamma) + 1] - Gamma[(beta - nu*gamma + a*I)/(2*gamma)]/Gamma[(beta + nu*gamma + a*I)/(2*gamma) + 1])"
+  ],
+  "conds": [
+   "Re[nu] > -2",
+   "Re[gamma] > 0",
+   "Abs[Re[gamma*nu]] < Re[beta]"
+  ],
+  "cite": "ET I 91(30)a",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf sin ax sinh^nu(gamma x) e^(-beta x) dx = -i Gamma(nu+1)/(2^(nu+2) gamma) {Gamma((beta-nu gamma-ai)/2gamma)/Gamma((beta+nu gamma-ai)/2gamma+1) - (a -> -a)}",
+  "note": ""
+ },
+ {
+  "id": "GR4.131.2",
+  "gr": "4.131.2",
+  "page": 572,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]*Sinh[gamma*x]^nu*Exp[-beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu + 1]/(2^(nu + 2)*gamma)*(Gamma[(beta - nu*gamma - a*I)/(2*gamma)]/Gamma[(beta + nu*gamma - a*I)/(2*gamma) + 1] - Gamma[(beta - nu*gamma + a*I)/(2*gamma)]/Gamma[(beta + nu*gamma + a*I)/(2*gamma) + 1])",
+   "Gamma[nu + 1]/(2^(nu + 2)*gamma)*(Gamma[(beta - nu*gamma - a*I)/(2*gamma)]/Gamma[(beta + nu*gamma - a*I)/(2*gamma) + 1] + Gamma[(beta - nu*gamma + a*I)/(2*gamma)]/Gamma[(beta + nu*gamma + a*I)/(2*gamma) + 1])"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "Re[gamma] > 0",
+   "Abs[Re[gamma*nu]] < Re[beta]"
+  ],
+  "cite": "ET I 34(40)a",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf cos ax sinh^nu(gamma x) e^(-beta x) dx = Gamma(nu+1)/(2^(nu+2) gamma) {Gamma((beta-nu gamma-ai)/2gamma)/Gamma((beta+gamma nu-ai)/2gamma+1) - (a -> -a)}",
+  "note": "printed with '-' between the braces' terms, which makes the value odd in a although the integral is even in a; '+' candidate second"
+ },
+ {
+  "id": "GR4.131.3a",
+  "gr": "4.131.3",
+  "page": 572,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*x]*Sin[a*x]/Sinh[gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sum[2*a/(a^2 + (beta + (2*k - 1)*gamma)^2), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "Re[beta] > Abs[Re[gamma]]",
+   "Re[gamma] > 0"
+  ],
+  "cite": "BI (264)(9)a",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf e^(-beta x) sin ax/sinh(gamma x) dx = Sum_{k>=1} 2a/(a^2 + [beta + (2k-1)gamma]^2)",
+  "note": "condition printed once for the chained equality; Re gamma > 0 added for the series form"
+ },
+ {
+  "id": "GR4.131.3b",
+  "gr": "4.131.3",
+  "page": 572,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*x]*Sin[a*x]/Sinh[gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*gamma*I)*(PolyGamma[(beta + gamma + I*a)/(2*gamma)] - PolyGamma[(beta + gamma - I*a)/(2*gamma)])"
+  ],
+  "conds": [
+   "Re[beta] > Abs[Re[gamma]]"
+  ],
+  "cite": "ET I 91(28)",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf e^(-beta x) sin ax/sinh(gamma x) dx = 1/(2 gamma i)[psi((beta+gamma+ia)/2gamma) - psi((beta+gamma-ia)/2gamma)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.131.4",
+  "gr": "4.131.4",
+  "page": 572,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-x]*Sin[a*x]/Sinh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Coth[a*Pi/2] - 1/a"
+  ],
+  "conds": [],
+  "cite": "ET I 91(29)",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf e^(-x) sin ax/sinh x dx = pi/2 coth(a pi/2) - 1/a",
+  "note": ""
+ },
+ {
+  "id": "GR4.132.1",
+  "gr": "4.132.1",
+  "page": 572,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sinh[beta*x]/(Exp[gamma*x] - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "-a/(2*(a^2 + beta^2)) + Pi/(2*gamma)*Sinh[2*Pi*a/gamma]/(Cosh[2*Pi*a/gamma] - Cos[2*Pi*beta/gamma]) + I/(2*gamma)*(PolyGamma[beta/gamma + I*a/gamma + 1] - PolyGamma[beta/gamma - I*a/gamma + 1])"
+  ],
+  "conds": [
+   "Re[gamma] > Abs[Re[beta]]",
+   "a > 0"
+  ],
+  "cite": "ET I 92(33)",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf sin ax sinh(beta x)/(e^(gamma x)-1) dx = -a/(2(a^2+beta^2)) + pi/(2gamma) sinh(2pi a/gamma)/(cosh(2pi a/gamma) - cos(2pi beta/gamma)) + i/(2gamma)[psi(beta/gamma + ia/gamma + 1) - psi(beta/gamma - ia/gamma + 1)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.132.2",
+  "gr": "4.132.2",
+  "page": 572,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Cosh[beta*x]/(Exp[gamma*x] - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "-a/(2*(a^2 + beta^2)) + Pi/(2*gamma)*Sinh[2*Pi*a/gamma]/(Cosh[2*Pi*a/gamma] - Cos[2*Pi*beta/gamma])"
+  ],
+  "conds": [
+   "Re[gamma] > Abs[Re[beta]]"
+  ],
+  "cite": "BI (265)(5)a, ET I 92(34)",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf sin ax cosh(beta x)/(e^(gamma x)-1) dx = -a/(2(a^2+beta^2)) + pi/(2gamma) sinh(2pi a/gamma)/(cosh(2pi a/gamma) - cos(2pi beta/gamma))",
+  "note": ""
+ },
+ {
+  "id": "GR4.132.3",
+  "gr": "4.132.3",
+  "page": 572,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Cosh[beta*x]/(Exp[gamma*x] + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "a/(2*(a^2 + beta^2)) - Pi/gamma*Sinh[a*Pi/gamma]*Cos[beta*Pi/gamma]/(Cosh[2*a*Pi/gamma] - Cos[2*beta*Pi/gamma])"
+  ],
+  "conds": [
+   "Re[gamma] > Abs[Re[beta]]"
+  ],
+  "cite": "ET I 92(35)",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf sin ax cosh(beta x)/(e^(gamma x)+1) dx = a/(2(a^2+beta^2)) - pi/gamma sinh(a pi/gamma) cos(beta pi/gamma)/(cosh(2a pi/gamma) - cos(2 beta pi/gamma))",
+  "note": ""
+ },
+ {
+  "id": "GR4.132.4",
+  "gr": "4.132.4",
+  "page": 572,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]*Sinh[beta*x]/(Exp[gamma*x] - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "beta/(2*(a^2 + beta^2)) - Pi/(2*gamma)*Sin[2*Pi*beta/gamma]/(Cosh[2*a*Pi/gamma] - Cos[2*beta*Pi/gamma])"
+  ],
+  "conds": [
+   "Re[gamma] > Abs[Re[beta]]"
+  ],
+  "cite": "LI (265)(8)",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf cos ax sinh(beta x)/(e^(gamma x)-1) dx = beta/(2(a^2+beta^2)) - pi/(2gamma) sin(2pi beta/gamma)/(cosh(2a pi/gamma) - cos(2 beta pi/gamma))",
+  "note": ""
+ },
+ {
+  "id": "GR4.132.5",
+  "gr": "4.132.5",
+  "page": 572,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]*Sinh[beta*x]/(Exp[gamma*x] + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "-beta/(2*(a^2 + beta^2)) + Pi/gamma*Sin[Pi*beta/gamma]*Cosh[Pi*a/gamma]/(Cosh[2*a*Pi/gamma] - Cos[2*beta*Pi/gamma])"
+  ],
+  "conds": [
+   "Re[gamma] > Abs[Re[beta]]"
+  ],
+  "cite": "ET I 34(39)",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf cos ax sinh(beta x)/(e^(gamma x)+1) dx = -beta/(2(a^2+beta^2)) + pi/gamma sin(pi beta/gamma) cosh(pi a/gamma)/(cosh(2a pi/gamma) - cos(2 beta pi/gamma))",
+  "note": ""
+ },
+ {
+  "id": "GR4.133.1",
+  "gr": "4.133.1",
+  "page": 572,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sinh[beta*x]*Exp[-x^2/(4*gamma)], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi*gamma]*Exp[gamma*(beta^2 - a^2)]*Sin[2*a*beta*gamma]"
+  ],
+  "conds": [
+   "Re[gamma] > 0"
+  ],
+  "cite": "ET I 92(37)",
+  "edition_note": "11",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf sin ax sinh(beta x) exp(-x^2/(4gamma)) dx = sqrt(pi gamma) exp[gamma(beta^2-a^2)] sin(2a beta gamma)",
+  "note": ""
+ },
+ {
+  "id": "GR4.133.2",
+  "gr": "4.133.2",
+  "page": 572,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]*Cosh[beta*x]*Exp[-x^2/(4*gamma)], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi*gamma]*Exp[gamma*(beta^2 - a^2)]*Cos[2*a*beta*gamma]"
+  ],
+  "conds": [
+   "Re[gamma] > 0"
+  ],
+  "cite": "ET I 35(41)",
+  "edition_note": "11",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf cos ax cosh(beta x) exp(-x^2/(4gamma)) dx = sqrt(pi gamma) exp[gamma(beta^2-a^2)] cos(2a beta gamma)",
+  "note": ""
+ },
+ {
+  "id": "GR4.134.1",
+  "gr": "4.134.1",
+  "page": 573,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*x^2]*(Cosh[x] - Cos[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/beta]*Cosh[1/(4*beta)]",
+   "Sqrt[Pi/beta]*Sinh[1/(4*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 24",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf e^(-beta x^2)(cosh x - cos x) dx = sqrt(pi/beta) cosh(1/(4beta))",
+  "note": "printed with (cosh x - cos x), identical to 4.134.2's integrand; the value cosh(1/4beta) belongs to (cosh x + cos x). Sinh candidate (correct for the printed integrand) second"
+ },
+ {
+  "id": "GR4.134.2",
+  "gr": "4.134.2",
+  "page": 573,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*x^2]*(Cosh[x] - Cos[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/beta]*Sinh[1/(4*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 24",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf e^(-beta x^2)(cosh x - cos x) dx = sqrt(pi/beta) sinh(1/(4beta))",
+  "note": ""
+ },
+ {
+  "id": "GR4.135.1",
+  "gr": "4.135.1",
+  "page": 573,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x^2]*Cosh[2*gamma*x]*Exp[-beta*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*(Pi^2/(a^2 + beta^2))^(1/4)*Exp[-beta*gamma^2/(a^2 + beta^2)]*Sin[a*gamma^2/(a^2 + beta^2) + 1/2*ArcTan[a/beta]]",
+   "1/2*(Pi^2/(a^2 + beta^2))^(1/4)*Exp[beta*gamma^2/(a^2 + beta^2)]*Sin[a*gamma^2/(a^2 + beta^2) + 1/2*ArcTan[a/beta]]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "LI (268)(7)",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf sin(ax^2) cosh(2gamma x) e^(-beta x^2) dx = 1/2 (pi^2/(a^2+beta^2))^(1/4) exp(-beta gamma^2/(a^2+beta^2)) sin(a gamma^2/(a^2+beta^2) + 1/2 arctan(a/beta))",
+  "note": "with cosh(2 gamma x) the Gaussian factor is exp(+gamma^2/(beta - i a)), so exp(+beta gamma^2/(a^2+beta^2)) candidate second"
+ },
+ {
+  "id": "GR4.135.2",
+  "gr": "4.135.2",
+  "page": 573,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x^2]*Cosh[2*gamma*x]*Exp[-beta*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*(Pi^2/(a^2 + beta^2))^(1/4)*Exp[-beta*gamma^2/(a^2 + beta^2)]*Cos[a*gamma^2/(a^2 + beta^2) + 1/2*ArcTan[a/beta]]",
+   "1/2*(Pi^2/(a^2 + beta^2))^(1/4)*Exp[beta*gamma^2/(a^2 + beta^2)]*Cos[a*gamma^2/(a^2 + beta^2) + 1/2*ArcTan[a/beta]]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "LI (268)(8)",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf cos(ax^2) cosh(2gamma x) e^(-beta x^2) dx = 1/2 (pi^2/(a^2+beta^2))^(1/4) exp(-beta gamma^2/(a^2+beta^2)) cos(a gamma^2/(a^2+beta^2) + 1/2 arctan(a/beta))",
+  "note": "see 4.135.1: exp(+beta gamma^2/(a^2+beta^2)) candidate second"
+ },
+ {
+  "id": "GR4.136.1a",
+  "gr": "4.136.1",
+  "page": 573,
+  "status": "ok",
+  "lhs": "Integrate[(Sinh[x]^2 + Sin[x^2])*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2]*Pi/(4*Sqrt[beta])*BesselI[1/4, 1/(8*beta)]*Cosh[1/(8*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 24",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf (Sinh[x]^2 + Sin[x^2]) e^(-beta x^4) dx = sqrt2 pi/(4 sqrt beta) I_(1/4)(1/(8beta)) cosh(1/(8beta))",
+  "note": "as printed: first term is Sinh[x]^2 (square of a function of x); the Bessel I_(+-1/4)(1/(8beta)) value fits the substitution t = x^2, i.e. Sinh[x^2] + Sin[x^2]: probable misprint in the integrand; corrected-integrand record 4.136.1b"
+ },
+ {
+  "id": "GR4.136.1b",
+  "gr": "4.136.1",
+  "page": 573,
+  "status": "ok",
+  "lhs": "Integrate[(Sinh[x^2] + Sin[x^2])*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2]*Pi/(4*Sqrt[beta])*BesselI[1/4, 1/(8*beta)]*Cosh[1/(8*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 24",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "(corrected integrand) int_0^inf (Sinh[x^2] + Sin[x^2]) e^(-beta x^4) dx = sqrt2 pi/(4 sqrt beta) I_(1/4)(1/(8beta)) cosh(1/(8beta))",
+  "note": "probable correction of the printed integrand of 4.136.1 (function of x^2 instead of square of function of x); substitution t = x^2 gives Bessel I_(+-1/4)(1/(8beta))"
+ },
+ {
+  "id": "GR4.136.2a",
+  "gr": "4.136.2",
+  "page": 573,
+  "status": "ok",
+  "lhs": "Integrate[(Sinh[x]^2 - Sin[x^2])*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2]*Pi/(4*Sqrt[beta])*BesselI[1/4, 1/(8*beta)]*Sinh[1/(8*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 24",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf (Sinh[x]^2 - Sin[x^2]) e^(-beta x^4) dx = sqrt2 pi/(4 sqrt beta) I_(1/4)(1/(8beta)) sinh(1/(8beta))",
+  "note": "as printed: first term is Sinh[x]^2 (square of a function of x); the Bessel I_(+-1/4)(1/(8beta)) value fits the substitution t = x^2, i.e. Sinh[x^2] - Sin[x^2]: probable misprint in the integrand; corrected-integrand record 4.136.2b"
+ },
+ {
+  "id": "GR4.136.2b",
+  "gr": "4.136.2",
+  "page": 573,
+  "status": "ok",
+  "lhs": "Integrate[(Sinh[x^2] - Sin[x^2])*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2]*Pi/(4*Sqrt[beta])*BesselI[1/4, 1/(8*beta)]*Sinh[1/(8*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 24",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "(corrected integrand) int_0^inf (Sinh[x^2] - Sin[x^2]) e^(-beta x^4) dx = sqrt2 pi/(4 sqrt beta) I_(1/4)(1/(8beta)) sinh(1/(8beta))",
+  "note": "probable correction of the printed integrand of 4.136.2 (function of x^2 instead of square of function of x); substitution t = x^2 gives Bessel I_(+-1/4)(1/(8beta))"
+ },
+ {
+  "id": "GR4.136.3a",
+  "gr": "4.136.3",
+  "page": 573,
+  "status": "ok",
+  "lhs": "Integrate[(Cosh[x]^2 + Cos[x^2])*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2]*Pi/(4*Sqrt[beta])*BesselI[-1/4, 1/(8*beta)]*Cosh[1/(8*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 24",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf (Cosh[x]^2 + Cos[x^2]) e^(-beta x^4) dx = sqrt2 pi/(4 sqrt beta) I_(-1/4)(1/(8beta)) cosh(1/(8beta))",
+  "note": "as printed: first term is Cosh[x]^2 (square of a function of x); the Bessel I_(+-1/4)(1/(8beta)) value fits the substitution t = x^2, i.e. Cosh[x^2] + Cos[x^2]: probable misprint in the integrand; corrected-integrand record 4.136.3b"
+ },
+ {
+  "id": "GR4.136.3b",
+  "gr": "4.136.3",
+  "page": 573,
+  "status": "ok",
+  "lhs": "Integrate[(Cosh[x^2] + Cos[x^2])*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2]*Pi/(4*Sqrt[beta])*BesselI[-1/4, 1/(8*beta)]*Cosh[1/(8*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 24",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "(corrected integrand) int_0^inf (Cosh[x^2] + Cos[x^2]) e^(-beta x^4) dx = sqrt2 pi/(4 sqrt beta) I_(-1/4)(1/(8beta)) cosh(1/(8beta))",
+  "note": "probable correction of the printed integrand of 4.136.3 (function of x^2 instead of square of function of x); substitution t = x^2 gives Bessel I_(+-1/4)(1/(8beta))"
+ },
+ {
+  "id": "GR4.136.4a",
+  "gr": "4.136.4",
+  "page": 573,
+  "status": "ok",
+  "lhs": "Integrate[(Cosh[x]^2 - Cos[x^2])*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2]*Pi/(4*Sqrt[beta])*BesselI[-1/4, 1/(8*beta)]*Sinh[1/(8*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 24",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf (Cosh[x]^2 - Cos[x^2]) e^(-beta x^4) dx = sqrt2 pi/(4 sqrt beta) I_(-1/4)(1/(8beta)) sinh(1/(8beta))",
+  "note": "as printed: first term is Cosh[x]^2 (square of a function of x); the Bessel I_(+-1/4)(1/(8beta)) value fits the substitution t = x^2, i.e. Cosh[x^2] - Cos[x^2]: probable misprint in the integrand; corrected-integrand record 4.136.4b"
+ },
+ {
+  "id": "GR4.136.4b",
+  "gr": "4.136.4",
+  "page": 573,
+  "status": "ok",
+  "lhs": "Integrate[(Cosh[x^2] - Cos[x^2])*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2]*Pi/(4*Sqrt[beta])*BesselI[-1/4, 1/(8*beta)]*Sinh[1/(8*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 24",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "(corrected integrand) int_0^inf (Cosh[x^2] - Cos[x^2]) e^(-beta x^4) dx = sqrt2 pi/(4 sqrt beta) I_(-1/4)(1/(8beta)) sinh(1/(8beta))",
+  "note": "probable correction of the printed integrand of 4.136.4 (function of x^2 instead of square of function of x); substitution t = x^2 gives Bessel I_(+-1/4)(1/(8beta))"
+ },
+ {
+  "id": "GR4.137.1",
+  "gr": "4.137.1",
+  "page": 573,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*x^2]*Sinh[2*x^2]*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(128*beta^2)^(1/4)*BesselJ[-1/4, 1/beta]*Cos[1/beta + Pi/4]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 32",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf sin 2x^2 sinh 2x^2 e^(-beta x^4) dx = pi/(128 beta^2)^(1/4) J_(-1/4)(1/beta) cos(1/beta + pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR4.137.2",
+  "gr": "4.137.2",
+  "page": 573,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*x^2]*Cosh[2*x^2]*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(128*beta^2)^(1/4)*BesselJ[1/4, 1/beta]*Cos[1/beta - Pi/4]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 32",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf sin 2x^2 cosh 2x^2 e^(-beta x^4) dx = pi/(128 beta^2)^(1/4) J_(1/4)(1/beta) cos(1/beta - pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR4.137.3",
+  "gr": "4.137.3",
+  "page": 573,
+  "status": "ok",
+  "lhs": "Integrate[Cos[2*x^2]*Sinh[2*x^2]*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/(128*beta^2)^(1/4)*BesselJ[1/4, 1/beta]*Sin[1/beta - Pi/4]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 32",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf cos 2x^2 sinh 2x^2 e^(-beta x^4) dx = -pi/(128 beta^2)^(1/4) J_(1/4)(1/beta) sin(1/beta - pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR4.137.4",
+  "gr": "4.137.4",
+  "page": 574,
+  "status": "ok",
+  "lhs": "Integrate[Cos[2*x^2]*Cosh[2*x^2]*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(128*beta^2)^(1/4)*BesselJ[-1/4, 1/beta]*Sin[1/beta + Pi/4]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 32",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf cos 2x^2 cosh 2x^2 e^(-beta x^4) dx = pi/(128 beta^2)^(1/4) J_(-1/4)(1/beta) sin(1/beta + pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR4.138.1a",
+  "gr": "4.138.1",
+  "page": 574,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[2*x]^2*Cosh[2*x^2] + Cos[2*x^2]*Sinh[2*x^2])*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(32*beta^2)^(1/4)*BesselJ[1/4, 1/beta]*Cos[1/beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 32",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf (Sin[2*x]^2*Cosh[2*x^2] + Cos[2*x^2]*Sinh[2*x^2]) e^(-beta x^4) dx = pi/(32 beta^2)^(1/4) J_(1/4)(1/beta) cos(1/beta)",
+  "note": "as printed (first factor sin^2 2x / cos^2 2x); 4.137.2 +- 4.137.3 (resp. 4.137.4 +- 4.137.1) reproduce the value only with sin 2x^2 / cos 2x^2, so a misprint in the integrand is likely; corrected-integrand record 4.138.1b"
+ },
+ {
+  "id": "GR4.138.1b",
+  "gr": "4.138.1",
+  "page": 574,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[2*x^2]*Cosh[2*x^2] + Cos[2*x^2]*Sinh[2*x^2])*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(32*beta^2)^(1/4)*BesselJ[1/4, 1/beta]*Cos[1/beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 32",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "(corrected integrand) int_0^inf (Sin[2*x^2]*Cosh[2*x^2] + Cos[2*x^2]*Sinh[2*x^2]) e^(-beta x^4) dx = pi/(32 beta^2)^(1/4) J_(1/4)(1/beta) cos(1/beta)",
+  "note": "probable correction of the printed integrand of 4.138.1 (sin 2x^2 / cos 2x^2 for the printed sin^2 2x / cos^2 2x); follows from 4.137"
+ },
+ {
+  "id": "GR4.138.2a",
+  "gr": "4.138.2",
+  "page": 574,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[2*x]^2*Cosh[2*x^2] - Cos[2*x^2]*Sinh[2*x^2])*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(32*beta^2)^(1/4)*BesselJ[1/4, 1/beta]*Sin[1/beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 32",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf (Sin[2*x]^2*Cosh[2*x^2] - Cos[2*x^2]*Sinh[2*x^2]) e^(-beta x^4) dx = pi/(32 beta^2)^(1/4) J_(1/4)(1/beta) sin(1/beta)",
+  "note": "as printed (first factor sin^2 2x / cos^2 2x); 4.137.2 +- 4.137.3 (resp. 4.137.4 +- 4.137.1) reproduce the value only with sin 2x^2 / cos 2x^2, so a misprint in the integrand is likely; corrected-integrand record 4.138.2b"
+ },
+ {
+  "id": "GR4.138.2b",
+  "gr": "4.138.2",
+  "page": 574,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[2*x^2]*Cosh[2*x^2] - Cos[2*x^2]*Sinh[2*x^2])*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(32*beta^2)^(1/4)*BesselJ[1/4, 1/beta]*Sin[1/beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 32",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "(corrected integrand) int_0^inf (Sin[2*x^2]*Cosh[2*x^2] - Cos[2*x^2]*Sinh[2*x^2]) e^(-beta x^4) dx = pi/(32 beta^2)^(1/4) J_(1/4)(1/beta) sin(1/beta)",
+  "note": "probable correction of the printed integrand of 4.138.2 (sin 2x^2 / cos 2x^2 for the printed sin^2 2x / cos^2 2x); follows from 4.137"
+ },
+ {
+  "id": "GR4.138.3a",
+  "gr": "4.138.3",
+  "page": 574,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[2*x]^2*Cosh[2*x^2] + Sin[2*x^2]*Sinh[2*x^2])*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(32*beta^2)^(1/4)*BesselJ[-1/4, 1/beta]*Cos[1/beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 32",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf (Cos[2*x]^2*Cosh[2*x^2] + Sin[2*x^2]*Sinh[2*x^2]) e^(-beta x^4) dx = pi/(32 beta^2)^(1/4) J_(-1/4)(1/beta) cos(1/beta)",
+  "note": "as printed (first factor sin^2 2x / cos^2 2x); 4.137.2 +- 4.137.3 (resp. 4.137.4 +- 4.137.1) reproduce the value only with sin 2x^2 / cos 2x^2, so a misprint in the integrand is likely; corrected-integrand record 4.138.3b"
+ },
+ {
+  "id": "GR4.138.3b",
+  "gr": "4.138.3",
+  "page": 574,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[2*x^2]*Cosh[2*x^2] + Sin[2*x^2]*Sinh[2*x^2])*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(32*beta^2)^(1/4)*BesselJ[-1/4, 1/beta]*Cos[1/beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 32",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "(corrected integrand) int_0^inf (Cos[2*x^2]*Cosh[2*x^2] + Sin[2*x^2]*Sinh[2*x^2]) e^(-beta x^4) dx = pi/(32 beta^2)^(1/4) J_(-1/4)(1/beta) cos(1/beta)",
+  "note": "probable correction of the printed integrand of 4.138.3 (sin 2x^2 / cos 2x^2 for the printed sin^2 2x / cos^2 2x); follows from 4.137"
+ },
+ {
+  "id": "GR4.138.4a",
+  "gr": "4.138.4",
+  "page": 574,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[2*x]^2*Cosh[2*x^2] - Sin[2*x^2]*Sinh[2*x^2])*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(32*beta^2)^(1/4)*BesselJ[-1/4, 1/beta]*Sin[1/beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 32",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "int_0^inf (Cos[2*x]^2*Cosh[2*x^2] - Sin[2*x^2]*Sinh[2*x^2]) e^(-beta x^4) dx = pi/(32 beta^2)^(1/4) J_(-1/4)(1/beta) sin(1/beta)",
+  "note": "as printed (first factor sin^2 2x / cos^2 2x); 4.137.2 +- 4.137.3 (resp. 4.137.4 +- 4.137.1) reproduce the value only with sin 2x^2 / cos 2x^2, so a misprint in the integrand is likely; corrected-integrand record 4.138.4b"
+ },
+ {
+  "id": "GR4.138.4b",
+  "gr": "4.138.4",
+  "page": 574,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[2*x^2]*Cosh[2*x^2] - Sin[2*x^2]*Sinh[2*x^2])*Exp[-beta*x^4], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(32*beta^2)^(1/4)*BesselJ[-1/4, 1/beta]*Sin[1/beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 32",
+  "edition_note": "",
+  "section": "4.13 Combinations of trigonometric and hyperbolic functions and exponentials",
+  "tex": "(corrected integrand) int_0^inf (Cos[2*x^2]*Cosh[2*x^2] - Sin[2*x^2]*Sinh[2*x^2]) e^(-beta x^4) dx = pi/(32 beta^2)^(1/4) J_(-1/4)(1/beta) sin(1/beta)",
+  "note": "probable correction of the printed integrand of 4.138.4 (sin 2x^2 / cos 2x^2 for the printed sin^2 2x / cos^2 2x); follows from 4.137"
+ },
+ {
+  "id": "GR4.141.1",
+  "gr": "4.141.1",
+  "page": 574,
+  "status": "ok",
+  "lhs": "Integrate[x*Exp[-beta*x^2]*Cosh[x]*Sin[x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Sqrt[Pi/beta^3]*(Cos[1/(2*beta)] + Sin[1/(2*beta)])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 32",
+  "edition_note": "",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf x e^(-beta x^2) cosh x sin x dx = 1/4 sqrt(pi/beta^3)(cos(1/2beta) + sin(1/2beta))",
+  "note": ""
+ },
+ {
+  "id": "GR4.141.2",
+  "gr": "4.141.2",
+  "page": 574,
+  "status": "ok",
+  "lhs": "Integrate[x*Exp[-beta*x^2]*Sinh[x]*Cos[x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Sqrt[Pi/beta^3]*(Cos[1/(2*beta)] - Sin[1/(2*beta)])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 32",
+  "edition_note": "",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf x e^(-beta x^2) sinh x cos x dx = 1/4 sqrt(pi/beta^3)(cos(1/2beta) - sin(1/2beta))",
+  "note": ""
+ },
+ {
+  "id": "GR4.141.3",
+  "gr": "4.141.3",
+  "page": 574,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Exp[-beta*x^2]*Cosh[x]*Cos[x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Sqrt[Pi/beta^3]*(Cos[1/(2*beta)] - 1/beta*Sin[1/(2*beta)])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 32",
+  "edition_note": "",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf x^2 e^(-beta x^2) cosh x cos x dx = 1/4 sqrt(pi/beta^3)(cos(1/2beta) - 1/beta sin(1/2beta))",
+  "note": ""
+ },
+ {
+  "id": "GR4.141.4",
+  "gr": "4.141.4",
+  "page": 574,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Exp[-beta*x^2]*Sinh[x]*Sin[x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Sqrt[Pi/beta^3]*(Sin[1/(2*beta)] + 1/beta*Cos[1/(2*beta)])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 32",
+  "edition_note": "",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf x^2 e^(-beta x^2) sinh x sin x dx = 1/4 sqrt(pi/beta^3)(sin(1/2beta) + 1/beta cos(1/2beta))",
+  "note": ""
+ },
+ {
+  "id": "GR4.142.1",
+  "gr": "4.142.1",
+  "page": 575,
+  "status": "ok",
+  "lhs": "Integrate[x*Exp[-beta*x^2]*(Sinh[x] + Sin[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sqrt[Pi/beta^3]*Cosh[1/(4*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 24",
+  "edition_note": "",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf x e^(-beta x^2)(sinh x + sin x) dx = 1/2 sqrt(pi/beta^3) cosh(1/4beta)",
+  "note": ""
+ },
+ {
+  "id": "GR4.142.2",
+  "gr": "4.142.2",
+  "page": 575,
+  "status": "ok",
+  "lhs": "Integrate[x*Exp[-beta*x^2]*(Sinh[x] - Sin[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sqrt[Pi/beta^3]*Sinh[1/(4*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 24",
+  "edition_note": "",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf x e^(-beta x^2)(sinh x - sin x) dx = 1/2 sqrt(pi/beta^3) sinh(1/4beta)",
+  "note": ""
+ },
+ {
+  "id": "GR4.142.3",
+  "gr": "4.142.3",
+  "page": 575,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Exp[-beta*x^2]*(Cosh[x] + Cos[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sqrt[Pi/beta^3]*(Cosh[1/(4*beta)] + 1/(2*beta)*Sinh[1/(4*beta)])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 24",
+  "edition_note": "",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf x^2 e^(-beta x^2)(cosh x + cos x) dx = 1/2 sqrt(pi/beta^3)(cosh(1/4beta) + 1/(2beta) sinh(1/4beta))",
+  "note": ""
+ },
+ {
+  "id": "GR4.142.4",
+  "gr": "4.142.4",
+  "page": 575,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Exp[-beta*x^2]*(Cosh[x] - Cos[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sqrt[Pi/beta^3]*(Sinh[1/(4*beta)] + 1/(2*beta)*Cosh[1/(4*beta)])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 24",
+  "edition_note": "",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf x^2 e^(-beta x^2)(cosh x - cos x) dx = 1/2 sqrt(pi/beta^3)(sinh(1/4beta) + 1/(2beta) cosh(1/4beta))",
+  "note": ""
+ },
+ {
+  "id": "GR4.143.1",
+  "gr": "4.143.1",
+  "page": 575,
+  "status": "ok",
+  "lhs": "Integrate[x*Exp[-beta*x^2]*(Cosh[x]*Sin[x] + Sinh[x]*Cos[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*beta)*Sqrt[Pi/beta]*Cos[1/(2*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 32",
+  "edition_note": "",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf x e^(-beta x^2)(cosh x sin x + sinh x cos x) dx = 1/(2beta) sqrt(pi/beta) cos(1/2beta)",
+  "note": ""
+ },
+ {
+  "id": "GR4.143.2",
+  "gr": "4.143.2",
+  "page": 575,
+  "status": "ok",
+  "lhs": "Integrate[x*Exp[-beta*x^2]*(Cosh[x]*Sin[x] - Sinh[x]*Cos[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*beta)*Sqrt[Pi/beta]*Sin[1/(2*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 32",
+  "edition_note": "",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf x e^(-beta x^2)(cosh x sin x - sinh x cos x) dx = 1/(2beta) sqrt(pi/beta) sin(1/2beta)",
+  "note": ""
+ },
+ {
+  "id": "GR4.144",
+  "gr": "4.144",
+  "page": 575,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-x^2]*Sinh[x^2]*Cos[a*x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*Exp[-a^2/8] - Pi*a/4*(1 - Erf[a/Sqrt[8]])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET I 35(44)",
+  "edition_note": "",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-x^2) sinh x^2 cos ax dx/x^2 = sqrt(pi/2) e^(-a^2/8) - pi a/4 [1 - Phi(a/sqrt 8)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.145.1",
+  "gr": "4.145.1",
+  "page": 575,
+  "status": "ok",
+  "lhs": "Integrate[x*Exp[-beta*x^2]*Cosh[2*a*x*Sin[t]]*Sin[2*a*x*Cos[t]], {x, 0, Infinity}]",
+  "rhs": [
+   "a/2*Sqrt[Pi/beta^3]*Exp[-a^2/beta*Cos[2*t]]*Cos[t - a^2/beta*Sin[2*t]]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "BI (363)(5)",
+  "edition_note": "",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf x e^(-beta x^2) cosh(2ax sin t) sin(2ax cos t) dx = a/2 sqrt(pi/beta^3) exp(-a^2/beta cos 2t) cos(t - a^2/beta sin 2t)",
+  "note": ""
+ },
+ {
+  "id": "GR4.145.2",
+  "gr": "4.145.2",
+  "page": 575,
+  "status": "ok",
+  "lhs": "Integrate[x*Exp[-beta*x^2]*Sinh[2*a*x*Sin[t]]*Cos[2*a*x*Cos[t]], {x, 0, Infinity}]",
+  "rhs": [
+   "a/2*Sqrt[Pi/beta^3]*Exp[-a^2/beta*Cos[2*t]]*Sin[t - a^2/beta*Sin[2*t]]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "BI (363)(6)",
+  "edition_note": "",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf x e^(-beta x^2) sinh(2ax sin t) cos(2ax cos t) dx = a/2 sqrt(pi/beta^3) exp(-a^2/beta cos 2t) sin(t - a^2/beta sin 2t)",
+  "note": ""
+ },
+ {
+  "id": "GR4.146.1",
+  "gr": "4.146.1",
+  "page": 575,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*x^2]*Sinh[a*x]*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sqrt[Pi/beta]*Exp[(a^2 - b^2)/(4*beta)]*Sin[a*b/(2*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-beta x^2) sinh ax sin bx dx = 1/2 sqrt(pi/beta) exp((a^2-b^2)/4beta) sin(ab/2beta)",
+  "note": "edition superscript 10 on item 4.146"
+ },
+ {
+  "id": "GR4.146.2",
+  "gr": "4.146.2",
+  "page": 575,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*x^2]*Cosh[a*x]*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sqrt[Pi/beta]*Exp[(a^2 - b^2)/(4*beta)]*Cos[a*b/(2*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-beta x^2) cosh ax cos bx dx = 1/2 sqrt(pi/beta) exp((a^2-b^2)/4beta) cos(ab/2beta)",
+  "note": "edition superscript 10 on item 4.146"
+ },
+ {
+  "id": "GR4.146.3",
+  "gr": "4.146.3",
+  "page": 576,
+  "status": "ok",
+  "lhs": "Integrate[x*Exp[-beta*x^2]*Cosh[a*x]*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "a/(4*beta)*Sqrt[Pi/beta]*(Cos[a^2/(2*beta)] + Sin[a^2/(2*beta)])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf x e^(-beta x^2) cosh ax sin ax dx = a/(4beta) sqrt(pi/beta)(cos(a^2/2beta) + sin(a^2/2beta))",
+  "note": "edition superscript 10 on item 4.146"
+ },
+ {
+  "id": "GR4.146.4",
+  "gr": "4.146.4",
+  "page": 576,
+  "status": "ok",
+  "lhs": "Integrate[x*Exp[-beta*x^2]*Sinh[a*x]*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "a/(4*beta)*Sqrt[Pi/beta]*(Cos[a^2/(2*beta)] - Sin[a^2/(2*beta)])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf x e^(-beta x^2) sinh ax cos ax dx = a/(4beta) sqrt(pi/beta)(cos(a^2/2beta) - sin(a^2/2beta))",
+  "note": "edition superscript 10 on item 4.146"
+ },
+ {
+  "id": "GR4.146.5",
+  "gr": "4.146.5",
+  "page": 576,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Exp[-beta*x^2]*Cosh[a*x]*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Sqrt[Pi/beta^3]*(Sin[a^2/(2*beta)] + a^2/beta*Cos[a^2/(2*beta)])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf x^2 e^(-beta x^2) cosh ax sin ax dx = 1/4 sqrt(pi/beta^3)(sin(a^2/2beta) + a^2/beta cos(a^2/2beta))",
+  "note": "edition superscript 10 on item 4.146"
+ },
+ {
+  "id": "GR4.146.6",
+  "gr": "4.146.6",
+  "page": 576,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Exp[-beta*x^2]*Cosh[a*x]*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Sqrt[Pi/beta^3]*(Cos[a^2/(2*beta)] - a^2/beta*Sin[a^2/(2*beta)])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "4.14 Combinations of trigonometric and hyperbolic functions, exponentials, and powers",
+  "tex": "int_0^inf x^2 e^(-beta x^2) cosh ax cos ax dx = 1/4 sqrt(pi/beta^3)(cos(a^2/2beta) - a^2/beta sin(a^2/2beta))",
+  "note": "edition superscript 10 on item 4.146"
+ },
+ {
+  "id": "GR4.211.1",
+  "gr": "4.211.1",
+  "page": 576,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[1/Log[1/x], {x, E, Infinity}]",
+  "rhs": [
+   "-Infinity"
+  ],
+  "conds": [],
+  "cite": "BI (33)(9)",
+  "edition_note": "",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_e^inf dx/ln(1/x) = -inf",
+  "note": "",
+  "reason": "divergent"
+ },
+ {
+  "id": "GR4.211.2",
+  "gr": "4.211.2",
+  "page": 576,
+  "status": "ok",
+  "lhs": "Integrate[1/Log[x], {x, 0, u}]",
+  "rhs": [
+   "LogIntegral[u]"
+  ],
+  "conds": [
+   "0 < u < 1"
+  ],
+  "cite": "FI III 653, FI II 606",
+  "edition_note": "",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_0^u dx/ln x = li u",
+  "note": "no condition printed; for u > 1 the integral is a principal value at x = 1 (li u defined as PV), so 0 < u < 1 kept"
+ },
+ {
+  "id": "GR4.212.1",
+  "gr": "4.212.1",
+  "page": 576,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[1/(a + Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Exp[-a]*ExpIntegralEi[a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (31)(4)",
+  "edition_note": "7",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_0^1 dx/(a + ln x) = e^(-a) Ei(a)",
+  "note": "integrand has a pole at x = e^(-a) in (0,1); implied PV",
+  "reason": "implied principal value (integrand has a pole at x = e^(-a) in (0,1))"
+ },
+ {
+  "id": "GR4.212.2",
+  "gr": "4.212.2",
+  "page": 576,
+  "status": "ok",
+  "lhs": "Integrate[1/(a - Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "-Exp[a]*ExpIntegralEi[-a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (31)(5)",
+  "edition_note": "",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_0^1 dx/(a - ln x) = -e^a Ei(-a)",
+  "note": ""
+ },
+ {
+  "id": "GR4.212.3",
+  "gr": "4.212.3",
+  "page": 576,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[1/(a + Log[x])^2, {x, 0, 1}]",
+  "rhs": [
+   "-1/a + Exp[-a]*ExpIntegralEi[a]"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "BI (31)(14)",
+  "edition_note": "7",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_0^1 dx/(a + ln x)^2 = -1/a + e^(-a) Ei(a)",
+  "note": "book: divergent, valid only as the PV/derivative-of-PV regularisation stated after 4.212.9 (integrand has a pole at x = e^(-a) in (0,1))",
+  "reason": "divergent; regularised by PV derivative (book note after 4.212.9)"
+ },
+ {
+  "id": "GR4.212.4",
+  "gr": "4.212.4",
+  "page": 576,
+  "status": "ok",
+  "lhs": "Integrate[1/(a - Log[x])^2, {x, 0, 1}]",
+  "rhs": [
+   "1/a + Exp[a]*ExpIntegralEi[-a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (31)(16)",
+  "edition_note": "",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_0^1 dx/(a - ln x)^2 = 1/a + e^a Ei(-a)",
+  "note": ""
+ },
+ {
+  "id": "GR4.212.5",
+  "gr": "4.212.5",
+  "page": 576,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[x]/(a + Log[x])^2, {x, 0, 1}]",
+  "rhs": [
+   "1 + (1 - a)*Exp[-a]*ExpIntegralEi[a]"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "BI (31)(15)",
+  "edition_note": "8",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_0^1 ln x dx/(a + ln x)^2 = 1 + (1-a) e^(-a) Ei(a)",
+  "note": "book: divergent, valid only as the PV/derivative-of-PV regularisation stated after 4.212.9 (integrand has a pole at x = e^(-a) in (0,1))",
+  "reason": "divergent; regularised by PV derivative (book note after 4.212.9)"
+ },
+ {
+  "id": "GR4.212.6",
+  "gr": "4.212.6",
+  "page": 576,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(a - Log[x])^2, {x, 0, 1}]",
+  "rhs": [
+   "1 + (1 + a)*Exp[a]*ExpIntegralEi[-a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (31)(17)",
+  "edition_note": "",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_0^1 ln x dx/(a - ln x)^2 = 1 + (1+a) e^a Ei(-a)",
+  "note": ""
+ },
+ {
+  "id": "GR4.212.7",
+  "gr": "4.212.7",
+  "page": 576,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(1 + Log[x])^2, {x, 1, E}]",
+  "rhs": [
+   "E/2 - 1"
+  ],
+  "conds": [],
+  "cite": "BI (33)(10)",
+  "edition_note": "",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_1^e ln x dx/(1 + ln x)^2 = e/2 - 1",
+  "note": ""
+ },
+ {
+  "id": "GR4.212.8",
+  "gr": "4.212.8",
+  "page": 577,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[1/(a + Log[x])^n, {x, 0, 1}]",
+  "rhs": [
+   "1/(n - 1)!*Exp[-a]*ExpIntegralEi[a] - 1/(n - 1)!*Sum[(n - k - 1)!*a^(k - n), {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "a >= 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (31)(22)",
+  "edition_note": "7",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_0^1 dx/(a + ln x)^n = 1/(n-1)! e^(-a) Ei(a) - 1/(n-1)! Sum_{k=1}^{n-1} (n-k-1)! a^(k-n)",
+  "note": "book: divergent, valid only as the PV/derivative-of-PV regularisation stated after 4.212.9 (integrand has a pole at x = e^(-a) in (0,1)); n = 1, 2, ... implied; cite printed 'BI (31))(22)'",
+  "reason": "divergent for n > 1, PV for n = 1; regularised (book note after 4.212.9)"
+ },
+ {
+  "id": "GR4.212.9",
+  "gr": "4.212.9",
+  "page": 577,
+  "status": "ok",
+  "lhs": "Integrate[1/(a - Log[x])^n, {x, 0, 1}]",
+  "rhs": [
+   "(-1)^n/(n - 1)!*Exp[a]*ExpIntegralEi[-a] + (-1)^(n - 1)/(n - 1)!*Sum[(n - k - 1)!*(-a)^(k - n), {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[(n - 1)/2, Integers] && n >= 1"
+  ],
+  "cite": "BI (31)(23)",
+  "edition_note": "",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_0^1 dx/(a - ln x)^n = (-1)^n/(n-1)! e^a Ei(-a) + (-1)^(n-1)/(n-1)! Sum_{k=1}^{n-1} (n-k-1)! (-a)^(k-n)",
+  "note": "printed condition 'n odd'"
+ },
+ {
+  "id": "GR4.213.1",
+  "gr": "4.213.1",
+  "page": 577,
+  "status": "ok",
+  "lhs": "Integrate[1/(a^2 + Log[x]^2), {x, 0, 1}]",
+  "rhs": [
+   "1/a*(CosIntegral[a]*Sin[a] - (SinIntegral[a] - Pi/2)*Cos[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (31)(6)",
+  "edition_note": "",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_0^1 dx/(a^2 + ln^2 x) = 1/a [ci(a) sin a - si(a) cos a]",
+  "note": ""
+ },
+ {
+  "id": "GR4.213.2",
+  "gr": "4.213.2",
+  "page": 577,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[1/(a^2 - Log[x]^2), {x, 0, 1}]",
+  "rhs": [
+   "1/(2*a)*(Exp[-a]*ExpIntegralEi[a] - Exp[a]*ExpIntegralEi[-a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (31)(8)",
+  "edition_note": "7",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_0^1 dx/(a^2 - ln^2 x) = 1/(2a)[e^(-a) Ei-bar(a) - e^a Ei(-a)]",
+  "note": "integrand has a pole at x = e^(-a) in (0,1); barred Ei (PV exponential integral of positive argument) -> ExpIntegralEi; cf. 4.212.1 and 2",
+  "reason": "implied principal value (pole at x = e^(-a))"
+ },
+ {
+  "id": "GR4.213.3",
+  "gr": "4.213.3",
+  "page": 577,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(a^2 + Log[x]^2), {x, 0, 1}]",
+  "rhs": [
+   "CosIntegral[a]*Cos[a] + (SinIntegral[a] - Pi/2)*Sin[a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (31)(7)",
+  "edition_note": "",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_0^1 ln x dx/(a^2 + ln^2 x) = ci(a) cos a + si(a) sin a",
+  "note": ""
+ },
+ {
+  "id": "GR4.213.4",
+  "gr": "4.213.4",
+  "page": 577,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[x]/(a^2 - Log[x]^2), {x, 0, 1}]",
+  "rhs": [
+   "-1/2*(Exp[-a]*ExpIntegralEi[a] + Exp[a]*ExpIntegralEi[-a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (31)(9)",
+  "edition_note": "7",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_0^1 ln x dx/(a^2 - ln^2 x) = -1/2[e^(-a) Ei-bar(a) + e^a Ei(-a)]",
+  "note": "integrand has a pole at x = e^(-a) in (0,1); barred Ei (PV exponential integral of positive argument) -> ExpIntegralEi; cf. 4.212.1 and 2",
+  "reason": "implied principal value (pole at x = e^(-a))"
+ },
+ {
+  "id": "GR4.213.5",
+  "gr": "4.213.5",
+  "page": 577,
+  "status": "ok",
+  "lhs": "Integrate[1/(a^2 + Log[x]^2)^2, {x, 0, 1}]",
+  "rhs": [
+   "1/(2*a^3)*(CosIntegral[a]*Sin[a] - (SinIntegral[a] - Pi/2)*Cos[a]) - 1/(2*a^2)*(CosIntegral[a]*Cos[a] + (SinIntegral[a] - Pi/2)*Sin[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "LI (31)(18)",
+  "edition_note": "",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_0^1 dx/[a^2 + ln^2 x]^2 = 1/(2a^3)[ci(a) sin a - si(a) cos a] - 1/(2a^2)[ci(a) cos a + si(a) sin a]",
+  "note": ""
+ },
+ {
+  "id": "GR4.213.6",
+  "gr": "4.213.6",
+  "page": 577,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[1/(a^2 - Log[x]^2)^2, {x, 0, 1}]",
+  "rhs": [
+   "Infinity"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "8",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_0^1 dx/[a^2 - ln^2 x]^2 is divergent",
+  "note": "",
+  "reason": "divergent"
+ },
+ {
+  "id": "GR4.213.7",
+  "gr": "4.213.7",
+  "page": 577,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(a^2 + Log[x]^2)^2, {x, 0, 1}]",
+  "rhs": [
+   "1/(2*a)*(CosIntegral[a]*Sin[a] - (SinIntegral[a] - Pi/2)*Cos[a]) - 1/(2*a^2)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (31)(19)",
+  "edition_note": "",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_0^1 ln x dx/[a^2 + ln^2 x]^2 = 1/(2a)[ci(a) sin a - si(a) cos a] - 1/(2a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.213.8",
+  "gr": "4.213.8",
+  "page": 577,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[Log[x]/(a^2 - Log[x]^2)^2, {x, 0, 1}]",
+  "rhs": [
+   "Infinity"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "8",
+  "section": "4.21 Logarithmic functions",
+  "tex": "int_0^1 ln x dx/[a^2 - ln^2 x]^2 is divergent",
+  "note": "",
+  "reason": "divergent"
+ }
+]

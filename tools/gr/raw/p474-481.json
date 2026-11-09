@@ -1,0 +1,1983 @@
+[
+ {
+  "id": "GR3.723.12",
+  "gr": "3.723.12",
+  "page": 474,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*x]/(x*(x - b)), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*(Cos[a*b] - 1)/b"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 252(44)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]/(x*(x - b)), {x, -Infinity, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.724.1",
+  "gr": "3.724.1",
+  "page": 474,
+  "status": "ok",
+  "lhs": "Integrate[(b + c*x)/(p + 2*q*x + x^2)*Sin[a*x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "((c*q - b)/Sqrt[p - q^2]*Sin[a*q] + c*Cos[a*q])*Pi*E^(-a*Sqrt[p - q^2])"
+  ],
+  "conds": [
+   "a > 0",
+   "p > q^2"
+  ],
+  "cite": "BI (202)(12)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[(b + c*x)/(p + 2*q*x + x^2)*Sin[a*x], {x, -Infinity, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.724.2",
+  "gr": "3.724.2",
+  "page": 474,
+  "status": "ok",
+  "lhs": "Integrate[(b + c*x)/(p + 2*q*x + x^2)*Cos[a*x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "((b - c*q)/Sqrt[p - q^2]*Cos[a*q] + c*Sin[a*q])*Pi*E^(-a*Sqrt[p - q^2])"
+  ],
+  "conds": [
+   "a > 0",
+   "p > q^2"
+  ],
+  "cite": "BI (202)(13)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[(b + c*x)/(p + 2*q*x + x^2)*Cos[a*x], {x, -Infinity, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.724.3",
+  "gr": "3.724.3",
+  "page": 474,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[(b - 1)*t] - x*Cos[b*t])/(1 - 2*x*Cos[t] + x^2)*Cos[a*x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*E^(-a*Sin[t])*Sin[b*t + a*Cos[t]]"
+  ],
+  "conds": [
+   "a > 0",
+   "t^2 < Pi^2"
+  ],
+  "cite": "BI (202)(14)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[(Cos[(b - 1)*t] - x*Cos[b*t])/(1 - 2*x*Cos[t] + x^2)*Cos[a*x], {x, -Infinity, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.725.1",
+  "gr": "3.725.1",
+  "page": 474,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/(x*(beta^2 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*beta^2)*(1 - E^(-a*beta))"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "a > 0"
+  ],
+  "cite": "BI (172)(1)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]/(x*(beta^2 + x^2)), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.725.2",
+  "gr": "3.725.2",
+  "page": 474,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*x]/(x*(b^2 - x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b^2)*(1 - Cos[a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (172)(4)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]/(x*(b^2 - x^2)), {x, 0, Infinity}]",
+  "note": "b > 0 added",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.725.3a",
+  "gr": "3.725.3",
+  "page": 474,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Cos[b*x]/(x*(x^2 + beta^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*beta^2)*E^(-beta*b)*Sinh[a*beta]"
+  ],
+  "conds": [
+   "0 < a < b",
+   "beta > 0"
+  ],
+  "cite": "ET I 19(4)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]*Cos[b*x]/(x*(x^2 + beta^2)), {x, 0, Infinity}]",
+  "note": "beta > 0 added (not printed)"
+ },
+ {
+  "id": "GR3.725.3b",
+  "gr": "3.725.3",
+  "page": 474,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Cos[b*x]/(x*(x^2 + beta^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/(2*beta^2)*E^(-a*beta)*Cosh[b*beta] + Pi/(2*beta^2)"
+  ],
+  "conds": [
+   "a > b > 0",
+   "beta > 0"
+  ],
+  "cite": "ET I 19(4)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]*Cos[b*x]/(x*(x^2 + beta^2)), {x, 0, Infinity}]",
+  "note": "beta > 0 added (not printed)"
+ },
+ {
+  "id": "GR3.726.1a",
+  "gr": "3.726.1",
+  "page": 474,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x]/(b^3 + b^2*x + b*x^2 + x^3), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*b)*(E^(-a*b)*ExpIntegralEi[a*b] - E^(a*b)*ExpIntegralEi[-a*b] - 2*CosIntegral[a*b]*Sin[a*b] + 2*Cos[a*b]*SinIntegral[a*b]) + (Pi*E^(-a*b) - Pi*Cos[a*b])/(4*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 65(21)a, BI(176)(10, 13)",
+  "edition_note": "11",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]/(b^3 + b^2*x + b*x^2 + x^3), {x, 0, Infinity}]",
+  "note": "upper sign; Ei-bar(ab) -> ExpIntegralEi[a*b]; si(ab)+Pi/2 -> SinIntegral[a*b]"
+ },
+ {
+  "id": "GR3.726.1b",
+  "gr": "3.726.1",
+  "page": 474,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*Sin[a*x]/(b^3 - b^2*x + b*x^2 - x^3), {x, 0, Infinity}]",
+  "rhs": [
+   "-1/(4*b)*(E^(-a*b)*ExpIntegralEi[a*b] - E^(a*b)*ExpIntegralEi[-a*b] - 2*CosIntegral[a*b]*Sin[a*b] + 2*Cos[a*b]*SinIntegral[a*b]) + (Pi*E^(-a*b) - Pi*Cos[a*b])/(4*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 65(21)a, BI(176)(10, 13)",
+  "edition_note": "11",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]/(b^3 - b^2*x + b*x^2 - x^3), {x, 0, Infinity}]",
+  "note": "lower sign: book says principal value",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.726.2a",
+  "gr": "3.726.2",
+  "page": 474,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Sin[a*x]/(b^3 + b^2*x + b*x^2 + x^3), {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*(E^(a*b)*ExpIntegralEi[-a*b] - E^(-a*b)*ExpIntegralEi[a*b] + 2*CosIntegral[a*b]*Sin[a*b] - 2*Cos[a*b]*SinIntegral[a*b]) + Pi*(E^(-a*b) + Cos[a*b])",
+   "1/4*((E^(a*b)*ExpIntegralEi[-a*b] - E^(-a*b)*ExpIntegralEi[a*b] + 2*CosIntegral[a*b]*Sin[a*b] - 2*Cos[a*b]*SinIntegral[a*b]) + Pi*(E^(-a*b) + Cos[a*b]))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 66(22), BI(176)(11, 14)",
+  "edition_note": "7",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^2*Sin[a*x]/(b^3 + b^2*x + b*x^2 + x^3), {x, 0, Infinity}]",
+  "note": "upper sign; layout ambiguous whether the +-Pi(...) line is inside the 1/4 factor: both readings given"
+ },
+ {
+  "id": "GR3.726.2b",
+  "gr": "3.726.2",
+  "page": 474,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^2*Sin[a*x]/(b^3 - b^2*x + b*x^2 - x^3), {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*(E^(a*b)*ExpIntegralEi[-a*b] - E^(-a*b)*ExpIntegralEi[a*b] + 2*CosIntegral[a*b]*Sin[a*b] - 2*Cos[a*b]*SinIntegral[a*b]) - Pi*(E^(-a*b) + Cos[a*b])",
+   "1/4*((E^(a*b)*ExpIntegralEi[-a*b] - E^(-a*b)*ExpIntegralEi[a*b] + 2*CosIntegral[a*b]*Sin[a*b] - 2*Cos[a*b]*SinIntegral[a*b]) - Pi*(E^(-a*b) + Cos[a*b]))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 66(22), BI(176)(11, 14)",
+  "edition_note": "7",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^2*Sin[a*x]/(b^3 - b^2*x + b*x^2 - x^3), {x, 0, Infinity}]",
+  "note": "lower sign: book says principal value; layout ambiguous whether the +-Pi(...) line is inside the 1/4 factor: both readings given",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.727.1",
+  "gr": "3.727.1",
+  "page": 475,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/(b^4 + x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Sqrt[2]/(4*b^3)*E^(-a*b/Sqrt[2])*(Cos[a*b/Sqrt[2]] + Sin[a*b/Sqrt[2]])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI(160)(25)a, ET I 9(19)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Cos[a*x]/(b^4 + x^4), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.727.2",
+  "gr": "3.727.2",
+  "page": 475,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*x]/(b^4 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*b^3)*(2*Sin[a*b]*CosIntegral[a*b] - 2*Cos[a*b]*SinIntegral[a*b] + E^(-a*b)*ExpIntegralEi[a*b] - E^(a*b)*ExpIntegralEi[-a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (161)(12)",
+  "edition_note": "8",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]/(b^4 - x^4), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.727.3",
+  "gr": "3.727.3",
+  "page": 475,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[a*x]/(b^4 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*b^3)*(E^(-a*b) + Sin[a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (161)(16)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Cos[a*x]/(b^4 - x^4), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.727.4",
+  "gr": "3.727.4",
+  "page": 475,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x]/(b^4 + x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b^2)*E^(-a*b/Sqrt[2])*Sin[a*b/Sqrt[2]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (160)(23)a",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]/(b^4 + x^4), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.727.5",
+  "gr": "3.727.5",
+  "page": 475,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*Sin[a*x]/(b^4 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*b^2)*(E^(-a*b) - Cos[a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (161)(13)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]/(b^4 - x^4), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.727.6",
+  "gr": "3.727.6",
+  "page": 475,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*Cos[a*x]/(b^4 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*b^2)*(2*Cos[a*b]*CosIntegral[a*b] + 2*Sin[a*b]*SinIntegral[a*b] - E^(-a*b)*ExpIntegralEi[a*b] - E^(a*b)*ExpIntegralEi[-a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (161)(17)",
+  "edition_note": "11",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Cos[a*x]/(b^4 - x^4), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.727.7",
+  "gr": "3.727.7",
+  "page": 475,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Cos[a*x]/(b^4 + x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Sqrt[2]/(4*b)*E^(-a*b/Sqrt[2])*(Cos[a*b/Sqrt[2]] - Sin[a*b/Sqrt[2]])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (160)(26)a",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^2*Cos[a*x]/(b^4 + x^4), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.727.8",
+  "gr": "3.727.8",
+  "page": 475,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^2*Sin[a*x]/(b^4 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*b)*(2*Sin[a*b]*CosIntegral[a*b] - 2*Cos[a*b]*SinIntegral[a*b] - E^(-a*b)*ExpIntegralEi[a*b] + E^(a*b)*ExpIntegralEi[-a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (161)(14)",
+  "edition_note": "11",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^2*Sin[a*x]/(b^4 - x^4), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.727.9",
+  "gr": "3.727.9",
+  "page": 475,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^2*Cos[a*x]/(b^4 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*b)*(Sin[a*b] - E^(-a*b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (161)(18)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^2*Cos[a*x]/(b^4 - x^4), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.727.10",
+  "gr": "3.727.10",
+  "page": 475,
+  "status": "ok",
+  "lhs": "Integrate[x^3*Sin[a*x]/(b^4 + x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*E^(-a*b/Sqrt[2])*Cos[a*b/Sqrt[2]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (160)(24)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^3*Sin[a*x]/(b^4 + x^4), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.727.11",
+  "gr": "3.727.11",
+  "page": 475,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^3*Sin[a*x]/(b^4 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/4*(E^(-a*b) - Cos[a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (161)(15)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^3*Sin[a*x]/(b^4 - x^4), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.727.12",
+  "gr": "3.727.12",
+  "page": 475,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^3*Cos[a*x]/(b^4 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*(2*Cos[a*b]*CosIntegral[a*b] + 2*Sin[a*b]*SinIntegral[a*b] + E^(-a*b)*ExpIntegralEi[a*b] + E^(a*b)*ExpIntegralEi[-a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI(161)(19)",
+  "edition_note": "7",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^3*Cos[a*x]/(b^4 - x^4), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.727.13",
+  "gr": "3.727.13",
+  "page": 476,
+  "status": "ok",
+  "lhs": "Integrate[x^3*Sin[a*x]/(x^2 + b^2)^3, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*E^(-a*b)/(16*b)*(3*a - b*a^2)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^3*Sin[a*x]/(x^2 + b^2)^3, {x, 0, Infinity}]",
+  "note": "no conditions printed; a > 0, b > 0 added"
+ },
+ {
+  "id": "GR3.727.14",
+  "gr": "3.727.14",
+  "page": 476,
+  "status": "ok",
+  "lhs": "Integrate[x^3*Sin[a*x]/(x^2 + b^2)^4, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*E^(-a*b)*a/(96*b^3)*(3 + 3*a*b - a^2*b^2)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^3*Sin[a*x]/(x^2 + b^2)^4, {x, 0, Infinity}]",
+  "note": "no conditions printed; a > 0, b > 0 added"
+ },
+ {
+  "id": "GR3.728.1",
+  "gr": "3.728.1",
+  "page": 476,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/((beta^2 + x^2)*(gamma^2 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(beta*E^(-a*gamma) - gamma*E^(-a*beta))/(2*beta*gamma*(beta^2 - gamma^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[gamma] > 0"
+  ],
+  "cite": "BI (175)(1)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Cos[a*x]/((beta^2 + x^2)*(gamma^2 + x^2)), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.728.2",
+  "gr": "3.728.2",
+  "page": 476,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x]/((beta^2 + x^2)*(gamma^2 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(E^(-a*beta) - E^(-a*gamma))/(2*(gamma^2 - beta^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[gamma] > 0"
+  ],
+  "cite": "BI (174)(1)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]/((beta^2 + x^2)*(gamma^2 + x^2)), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.728.3",
+  "gr": "3.728.3",
+  "page": 476,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Cos[a*x]/((beta^2 + x^2)*(gamma^2 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(beta*E^(-a*beta) - gamma*E^(-a*gamma))/(2*(beta^2 - gamma^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[gamma] > 0"
+  ],
+  "cite": "BI (175)(2)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^2*Cos[a*x]/((beta^2 + x^2)*(gamma^2 + x^2)), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.728.4",
+  "gr": "3.728.4",
+  "page": 476,
+  "status": "ok",
+  "lhs": "Integrate[x^3*Sin[a*x]/((beta^2 + x^2)*(gamma^2 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(beta^2*E^(-a*beta) - gamma^2*E^(-a*gamma))/(2*(beta^2 - gamma^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[gamma] > 0"
+  ],
+  "cite": "BI (174)(2)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^3*Sin[a*x]/((beta^2 + x^2)*(gamma^2 + x^2)), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.728.5",
+  "gr": "3.728.5",
+  "page": 476,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[a*x]/((b^2 - x^2)*(c^2 - x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(b*Sin[a*c] - c*Sin[a*b])/(2*b*c*(b^2 - c^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "BI (175)(3)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Cos[a*x]/((b^2 - x^2)*(c^2 - x^2)), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.728.6",
+  "gr": "3.728.6",
+  "page": 476,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*Sin[a*x]/((b^2 - x^2)*(c^2 - x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(Cos[a*b] - Cos[a*c])/(2*(b^2 - c^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "BI (174)(3)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]/((b^2 - x^2)*(c^2 - x^2)), {x, 0, Infinity}]",
+  "note": "b > 0, c > 0 added",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.728.7",
+  "gr": "3.728.7",
+  "page": 476,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^2*Cos[a*x]/((b^2 - x^2)*(c^2 - x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(c*Sin[a*c] - b*Sin[a*b])/(2*(b^2 - c^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "BI (175)(4)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^2*Cos[a*x]/((b^2 - x^2)*(c^2 - x^2)), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.728.8",
+  "gr": "3.728.8",
+  "page": 476,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^3*Sin[a*x]/((b^2 - x^2)*(c^2 - x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(b^2*Cos[a*b] - c^2*Cos[a*c])/(2*(b^2 - c^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "BI (174)(4)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^3*Sin[a*x]/((b^2 - x^2)*(c^2 - x^2)), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.728.9",
+  "gr": "3.728.9",
+  "page": 476,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*Sin[a*x]/((b^2 - x^2)*(c^2 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(E^(-a*c) - Cos[b*a])/(a^2 + c^2)",
+   "Pi/2*(E^(-a*c) - Cos[b*a])/(b^2 + c^2)"
+  ],
+  "conds": [
+   "a > 0",
+   "c > 0",
+   "b > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]/((b^2 - x^2)*(c^2 + x^2)), {x, 0, Infinity}]",
+  "note": "book: 'b real'; b > 0 used. Denominator a^2 + c^2 is likely a misprint for b^2 + c^2 (partial fractions); corrected candidate second",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.729.1",
+  "gr": "3.729.1",
+  "page": 476,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/(b^2 + x^2)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*b^3)*(1 + a*b)*E^(-a*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (170)(7)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Cos[a*x]/(b^2 + x^2)^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.729.2",
+  "gr": "3.729.2",
+  "page": 476,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x]/(b^2 + x^2)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*b)*a*E^(-a*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (170)(3)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]/(b^2 + x^2)^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.729.3",
+  "gr": "3.729.3",
+  "page": 476,
+  "status": "ok",
+  "lhs": "Integrate[Cos[p*x]*(1 - x^2)/(1 + x^2)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*p/2*E^(-p)"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (43)(10)a",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Cos[p*x]*(1 - x^2)/(1 + x^2)^2, {x, 0, Infinity}]",
+  "note": "no conditions printed; p > 0 added"
+ },
+ {
+  "id": "GR3.729.4",
+  "gr": "3.729.4",
+  "page": 476,
+  "status": "ok",
+  "lhs": "Integrate[x^3*Sin[a*x]/(b^2 + x^2)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*(2 - a*b)*E^(-a*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (170)(4)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^3*Sin[a*x]/(b^2 + x^2)^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.731.1",
+  "gr": "3.731.1",
+  "page": 477,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/((x^2 + b^2)^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*c)*E^(-a*Sqrt[(Sqrt[b^4 + c^2] + b^2)/2])*(Sqrt[(Sqrt[b^4 + c^2] - b^2)/2]*Cos[a*Sqrt[(Sqrt[b^4 + c^2] - b^2)/2]] + Sqrt[(Sqrt[b^4 + c^2] + b^2)/2]*Sin[a*Sqrt[(Sqrt[b^4 + c^2] - b^2)/2]])/Sqrt[b^4 + c^2]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "BI (176)(3)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Cos[a*x]/((x^2 + b^2)^2 + c^2), {x, 0, Infinity}]",
+  "note": "notation 2A^2 = Sqrt[b^4+c^2] + b^2, 2B^2 = Sqrt[b^4+c^2] - b^2 substituted"
+ },
+ {
+  "id": "GR3.731.2",
+  "gr": "3.731.2",
+  "page": 477,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x]/((x^2 + b^2)^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*c)*E^(-a*Sqrt[(Sqrt[b^4 + c^2] + b^2)/2])*Sin[a*Sqrt[(Sqrt[b^4 + c^2] - b^2)/2]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "BI (176)(1)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]/((x^2 + b^2)^2 + c^2), {x, 0, Infinity}]",
+  "note": "notation 2A^2 = Sqrt[b^4+c^2] + b^2, 2B^2 = Sqrt[b^4+c^2] - b^2 substituted"
+ },
+ {
+  "id": "GR3.731.3",
+  "gr": "3.731.3",
+  "page": 477,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 + b^2)*Cos[a*x]/((x^2 + b^2)^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*E^(-a*Sqrt[(Sqrt[b^4 + c^2] + b^2)/2])*(Sqrt[(Sqrt[b^4 + c^2] + b^2)/2]*Cos[a*Sqrt[(Sqrt[b^4 + c^2] - b^2)/2]] - Sqrt[(Sqrt[b^4 + c^2] - b^2)/2]*Sin[a*Sqrt[(Sqrt[b^4 + c^2] - b^2)/2]])/Sqrt[b^4 + c^2]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "BI (176)(4)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[(x^2 + b^2)*Cos[a*x]/((x^2 + b^2)^2 + c^2), {x, 0, Infinity}]",
+  "note": "notation 2A^2 = Sqrt[b^4+c^2] + b^2, 2B^2 = Sqrt[b^4+c^2] - b^2 substituted"
+ },
+ {
+  "id": "GR3.731.4",
+  "gr": "3.731.4",
+  "page": 477,
+  "status": "ok",
+  "lhs": "Integrate[x*(x^2 + b^2)*Sin[a*x]/((x^2 + b^2)^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*E^(-a*Sqrt[(Sqrt[b^4 + c^2] + b^2)/2])*Cos[a*Sqrt[(Sqrt[b^4 + c^2] - b^2)/2]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "BI (176)(2)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*(x^2 + b^2)*Sin[a*x]/((x^2 + b^2)^2 + c^2), {x, 0, Infinity}]",
+  "note": "notation 2A^2 = Sqrt[b^4+c^2] + b^2, 2B^2 = Sqrt[b^4+c^2] - b^2 substituted"
+ },
+ {
+  "id": "GR3.732.1",
+  "gr": "3.732.1",
+  "page": 477,
+  "status": "ok",
+  "lhs": "Integrate[(1/(beta^2 + (gamma - x)^2) - 1/(beta^2 + (gamma + x)^2))*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/beta*E^(-a*beta)*Sin[a*gamma]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 65(16)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[(1/(beta^2 + (gamma - x)^2) - 1/(beta^2 + (gamma + x)^2))*Sin[a*x], {x, 0, Infinity}]",
+  "note": "condition 'gamma + I*beta is not real' moved to note (automatic for real gamma, Re beta > 0)"
+ },
+ {
+  "id": "GR3.732.2",
+  "gr": "3.732.2",
+  "page": 477,
+  "status": "ok",
+  "lhs": "Integrate[(1/(beta^2 + (gamma - x)^2) + 1/(beta^2 + (gamma + x)^2))*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/beta*E^(-a*beta)*Cos[a*gamma]"
+  ],
+  "conds": [
+   "a > 0",
+   "Abs[Im[gamma]] < Re[beta]"
+  ],
+  "cite": "ET I 8(13)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[(1/(beta^2 + (gamma - x)^2) + 1/(beta^2 + (gamma + x)^2))*Cos[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.732.3",
+  "gr": "3.732.3",
+  "page": 477,
+  "status": "ok",
+  "lhs": "Integrate[((gamma + x)/(beta^2 + (gamma + x)^2) - (gamma - x)/(beta^2 + (gamma - x)^2))*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*E^(-a*beta)*Cos[a*gamma]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "LI (175)(17)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[((gamma + x)/(beta^2 + (gamma + x)^2) - (gamma - x)/(beta^2 + (gamma - x)^2))*Sin[a*x], {x, 0, Infinity}]",
+  "note": "condition 'gamma + I*beta is not real' moved to note (automatic for real gamma, Re beta > 0)"
+ },
+ {
+  "id": "GR3.732.4",
+  "gr": "3.732.4",
+  "page": 477,
+  "status": "ok",
+  "lhs": "Integrate[((gamma + x)/(beta^2 + (gamma + x)^2) + (gamma - x)/(beta^2 + (gamma - x)^2))*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*E^(-a*beta)*Sin[a*gamma]"
+  ],
+  "conds": [
+   "a > 0",
+   "Abs[Im[gamma]] < Re[beta]"
+  ],
+  "cite": "LI (176)(21)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[((gamma + x)/(beta^2 + (gamma + x)^2) + (gamma - x)/(beta^2 + (gamma - x)^2))*Cos[a*x], {x, 0, Infinity}]",
+  "note": "book prints |Im a| < Re beta, almost certainly a misprint for |Im gamma| (cf. 3.732.2); corrected condition used"
+ },
+ {
+  "id": "GR3.733.1",
+  "gr": "3.733.1",
+  "page": 477,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/(x^4 + 2*b^2*x^2*Cos[2*t] + b^4), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b^3)*E^(-a*b*Cos[t])*Sin[t + a*b*Sin[t]]/Sin[2*t]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Abs[t] < Pi/2"
+  ],
+  "cite": "BI (176)(7)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Cos[a*x]/(x^4 + 2*b^2*x^2*Cos[2*t] + b^4), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.733.2",
+  "gr": "3.733.2",
+  "page": 477,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x]/(x^4 + 2*b^2*x^2*Cos[2*t] + b^4), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b^2)*E^(-a*b*Cos[t])*Sin[a*b*Sin[t]]/Sin[2*t]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Abs[t] < Pi/2"
+  ],
+  "cite": "BI(176)(5), ET I 66(23)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]/(x^4 + 2*b^2*x^2*Cos[2*t] + b^4), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.733.3",
+  "gr": "3.733.3",
+  "page": 477,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Cos[a*x]/(x^4 + 2*b^2*x^2*Cos[2*t] + b^4), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b)*E^(-a*b*Cos[t])*Sin[t - a*b*Sin[t]]/Sin[2*t]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Abs[t] < Pi/2"
+  ],
+  "cite": "BI (176)(8)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^2*Cos[a*x]/(x^4 + 2*b^2*x^2*Cos[2*t] + b^4), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.733.4",
+  "gr": "3.733.4",
+  "page": 478,
+  "status": "ok",
+  "lhs": "Integrate[x^3*Sin[a*x]/(x^4 + 2*b^2*x^2*Cos[2*t] + b^4), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*E^(-a*b*Cos[t])*Sin[2*t - a*b*Sin[t]]/Sin[2*t]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Abs[t] < Pi/2"
+  ],
+  "cite": "BI (176)(6)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^3*Sin[a*x]/(x^4 + 2*b^2*x^2*Cos[2*t] + b^4), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.733.5",
+  "gr": "3.733.5",
+  "page": 478,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/(x*(x^4 + 2*b^2*x^2*Cos[2*t] + b^4)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b^4)*(1 - E^(-a*b*Cos[t])*Sin[2*t + a*b*Sin[t]]/Sin[2*t])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Abs[t] < Pi/2"
+  ],
+  "cite": "BI (176)(22)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]/(x*(x^4 + 2*b^2*x^2*Cos[2*t] + b^4)), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.734.1",
+  "gr": "3.734.1",
+  "page": 478,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/(x*(b^4 + x^4)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b^4)*(1 - E^(-a*b/Sqrt[2])*Cos[a*b/Sqrt[2]])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (172)(7)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]/(x*(b^4 + x^4)), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.734.2",
+  "gr": "3.734.2",
+  "page": 478,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*x]/(x*(b^4 - x^4)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*b^4)*(2 - E^(-a*b) - Cos[a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (172)(10)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]/(x*(b^4 - x^4)), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.735",
+  "gr": "3.735",
+  "page": 478,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/(x*(b^2 + x^2)^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b^4)*(1 - 1/2*E^(-a*b)*(2 + a*b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "WH, BI (172)(22)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]/(x*(b^2 + x^2)^2), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.736.1",
+  "gr": "3.736.1",
+  "page": 478,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[a*x]/((b^2 + x^2)*(b^4 - x^4)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(8*b^5)*(Sin[a*b] + (2 + a*b)*E^(-a*b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (176)(5)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Cos[a*x]/((b^2 + x^2)*(b^4 - x^4)), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.736.2",
+  "gr": "3.736.2",
+  "page": 478,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*Sin[a*x]/((b^2 + x^2)*(b^4 - x^4)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(8*b^4)*((1 + a*b)*E^(-a*b) - Cos[a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (174)(5)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]/((b^2 + x^2)*(b^4 - x^4)), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.736.3",
+  "gr": "3.736.3",
+  "page": 478,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^2*Cos[a*x]/((b^2 + x^2)*(b^4 - x^4)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(8*b^3)*(Sin[a*b] - a*b*E^(-a*b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (175)(6)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^2*Cos[a*x]/((b^2 + x^2)*(b^4 - x^4)), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.736.4",
+  "gr": "3.736.4",
+  "page": 478,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^3*Sin[a*x]/((b^2 + x^2)*(b^4 - x^4)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(8*b^2)*((1 - a*b)*E^(-a*b) - Cos[a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (174)(6)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^3*Sin[a*x]/((b^2 + x^2)*(b^4 - x^4)), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.736.5",
+  "gr": "3.736.5",
+  "page": 478,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^4*Cos[a*x]/((b^2 + x^2)*(b^4 - x^4)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(8*b)*(Sin[a*b] + (a*b - 2)*E^(-a*b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (175)(7)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^4*Cos[a*x]/((b^2 + x^2)*(b^4 - x^4)), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.736.6",
+  "gr": "3.736.6",
+  "page": 478,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^5*Sin[a*x]/((b^2 + x^2)*(b^4 - x^4)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/8*((a*b - 3)*E^(-a*b) - Cos[a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (174)(7)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^5*Sin[a*x]/((b^2 + x^2)*(b^4 - x^4)), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.737.1a",
+  "gr": "3.737.1",
+  "page": 479,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/(b^2 + x^2)^n, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*E^(-a*b)/((2*b)^(2*n - 1)*(n - 1)!)*Sum[(2*n - k - 2)!*(2*a*b)^k/(k!*(n - k - 1)!), {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW(333)(67b), WA 209, WA 192",
+  "edition_note": "8",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Cos[a*x]/(b^2 + x^2)^n, {x, 0, Infinity}]",
+  "note": "n positive integer (implied)"
+ },
+ {
+  "id": "GR3.737.1b",
+  "gr": "3.737.1",
+  "page": 479,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/(b^2 + x^2)^n, {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n - 1)*Pi/(2*b^(2*n - 1)*(n - 1)!)*Derivative[n - 1][Function[p, E^(-a*b*Sqrt[p])/Sqrt[p]]][1]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW(333)(67b), WA 209, WA 192",
+  "edition_note": "8",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Cos[a*x]/(b^2 + x^2)^n, {x, 0, Infinity}]",
+  "note": "p is a dummy differentiation variable evaluated at p = 1"
+ },
+ {
+  "id": "GR3.737.1c",
+  "gr": "3.737.1",
+  "page": 479,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/(b^2 + x^2)^n, {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n - 1)*Pi/(2*b^(2*n - 1)*(n - 1)!)*Derivative[n - 1][Function[p, E^(-a*b*p)/(1 + p)^n]][1]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW(333)(67b), WA 209, WA 192",
+  "edition_note": "8",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Cos[a*x]/(b^2 + x^2)^n, {x, 0, Infinity}]",
+  "note": "p is a dummy differentiation variable evaluated at p = 1"
+ },
+ {
+  "id": "GR3.737.2a",
+  "gr": "3.737.2",
+  "page": 479,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x]/(x^2 + beta^2)^(n + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*a*E^(-a*beta)/(2^(2*n)*n!*beta^(2*n - 1))*Sum[(2*n - k - 2)!*(2*a*beta)^k/(k!*(n - k - 1)!), {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (333)(66c)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]/(x^2 + beta^2)^(n + 1), {x, 0, Infinity}]",
+  "note": "n positive integer (implied)"
+ },
+ {
+  "id": "GR3.737.2b",
+  "gr": "3.737.2",
+  "page": 479,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x]/(x^2 + beta^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*E^(-a*beta)"
+  ],
+  "conds": [
+   "a > 0",
+   "beta > 0"
+  ],
+  "cite": "GW (333)(66c)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]/(x^2 + beta^2), {x, 0, Infinity}]",
+  "note": "n = 0 substituted"
+ },
+ {
+  "id": "GR3.737.3",
+  "gr": "3.737.3",
+  "page": 479,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/(x*(beta^2 + x^2)^(n + 1)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*beta^(2*n + 2))*(1 - E^(-a*beta)/(2^n*n!)*(Fold[Expand[(zz + 2*#2)*#1 - zz*D[#1, zz]] &, 1, Range[n]] /. zz -> a*beta))"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (333)(66e)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]/(x*(beta^2 + x^2)^(n + 1)), {x, 0, Infinity}]",
+  "note": "F_n(z) defined by F_0 = 1, F_n(z) = (z + 2n) F_{n-1}(z) - z F'_{n-1}(z); encoded with Fold over dummy zz"
+ },
+ {
+  "id": "GR3.737.4",
+  "gr": "3.737.4",
+  "page": 479,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x]/(b^2 + x^2)^3, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*a/(16*b^3)*(1 + a*b)*E^(-a*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI(170)(5), ET I 67(35)a",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]/(b^2 + x^2)^3, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.737.5",
+  "gr": "3.737.5",
+  "page": 479,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x]/(b^2 + x^2)^4, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*a/(96*b^5)*(3 + 3*a*b + a^2*b^2)*E^(-a*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI(170)(6), ET I 67(35)a",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]/(b^2 + x^2)^4, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.737.6",
+  "gr": "3.737.6",
+  "page": 479,
+  "status": "ok",
+  "lhs": "Integrate[x^3*Sin[a*x]/(x^2 + beta^2)^(n + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*E^(-a*beta)/(2^(2*n)*n!*beta^(2*n - 2))*(2^(n - 1)*(2*n - 3)!!*(2 - beta*a) - Sum[(2*n - k - 2)!*2^k*(beta*a)^(k - 1)/(k!*(n - k - 1)!)*(k*(k + 1) - 2*(k + 1)*beta*a + beta^2*a^2), {k, 1, n - 1}])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^3*Sin[a*x]/(x^2 + beta^2)^(n + 1), {x, 0, Infinity}]",
+  "note": "no conditions printed; a > 0, Re beta > 0, n positive integer added"
+ },
+ {
+  "id": "GR3.738.1",
+  "gr": "3.738.1",
+  "page": 479,
+  "status": "ok",
+  "lhs": "Integrate[x^(m - 1)*Sin[a*x]/(x^(2*n) + beta^(2*n)), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*beta^(m - 2*n)/(2*n)*Sum[E^(-a*beta*Sin[(2*k - 1)*Pi/(2*n)])*Cos[(2*k - 1)*m*Pi/(2*n) + a*beta*Cos[(2*k - 1)*Pi/(2*n)]], {k, 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[m/2, Integers]",
+   "a > 0",
+   "Abs[Arg[beta]] < Pi/(2*n)",
+   "0 < m <= 2*n"
+  ],
+  "cite": "ET I 67(38)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^(m - 1)*Sin[a*x]/(x^(2*n) + beta^(2*n)), {x, 0, Infinity}]",
+  "note": "m even"
+ },
+ {
+  "id": "GR3.738.2",
+  "gr": "3.738.2",
+  "page": 479,
+  "status": "ok",
+  "lhs": "Integrate[x^(m - 1)*Cos[a*x]/(x^(2*n) + beta^(2*n)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*beta^(m - 2*n)/(2*n)*Sum[E^(-a*beta*Sin[(2*k - 1)*Pi/(2*n)])*Sin[(2*k - 1)*m*Pi/(2*n) + a*beta*Cos[(2*k - 1)*Pi/(2*n)]], {k, 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[(m - 1)/2, Integers]",
+   "a > 0",
+   "Abs[Arg[beta]] < Pi/(2*n)",
+   "0 < m < 2*n + 1"
+  ],
+  "cite": "BI(160)(29)a, ET I 10(29)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x^(m - 1)*Cos[a*x]/(x^(2*n) + beta^(2*n)), {x, 0, Infinity}]",
+  "note": "m odd"
+ },
+ {
+  "id": "GR3.739.1",
+  "gr": "3.739.1",
+  "page": 480,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/(x*Product[x^2 + (2*j)^2, {j, 1, n}]), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(-1)^n/((2*n)!*2^(2*n + 1))*(2*Sum[(-1)^k*Binomial[2*n, k]*E^(2*(k - n)*a), {k, 0, n - 1}] + (-1)^n*Binomial[2*n, n])"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "LI(174)(8)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]/(x*Product[x^2 + (2*j)^2, {j, 1, n}]), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.739.2a",
+  "gr": "3.739.2",
+  "page": 480,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/Product[x^2 + (2*j + 1)^2, {j, 0, n}], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n/(2*n + 1)!*Pi/2^(2*n + 1)*Sum[(-1)^k*Binomial[2*n + 1, k]*E^((2*k - 2*n - 1)*a), {k, 0, n}]"
+  ],
+  "conds": [
+   "a >= 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI(175)(8)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Cos[a*x]/Product[x^2 + (2*j + 1)^2, {j, 0, n}], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.739.2b",
+  "gr": "3.739.2",
+  "page": 480,
+  "status": "ok",
+  "lhs": "Integrate[1/Product[x^2 + (2*j + 1)^2, {j, 0, n}], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*2^(-2*n - 1)/((2*n + 1)*(n!)^2)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI(175)(8)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[1/Product[x^2 + (2*j + 1)^2, {j, 0, n}], {x, 0, Infinity}]",
+  "note": "a = 0 substituted"
+ },
+ {
+  "id": "GR3.739.3",
+  "gr": "3.739.3",
+  "page": 480,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x]/Product[x^2 + (2*j + 1)^2, {j, 0, n}], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(-1)^n/((2*n + 1)!*2^(2*n + 1))*Sum[(-1)^k*Binomial[2*n + 1, k]*(2*n - 2*k + 1)*E^((2*k - 2*n - 1)*a), {k, 0, n}]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "LI (174)(9)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]/Product[x^2 + (2*j + 1)^2, {j, 0, n}], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.739.4",
+  "gr": "3.739.4",
+  "page": 480,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/Product[x^2 + (2*j)^2, {j, 1, n}], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*2^(1 - 2*n)/(2*n)!*Sum[(-1)^k*k*Binomial[2*n, n - k]*E^(-2*a*k), {k, 1, n}]",
+   "Pi*2^(1 - 2*n)/(2*n)!*Sum[(-1)^(k + 1)*k*Binomial[2*n, n - k]*E^(-2*a*k), {k, 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "a >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Cos[a*x]/Product[x^2 + (2*j)^2, {j, 1, n}], {x, 0, Infinity}]",
+  "note": "as printed the n = 1 case gives -Pi/4 E^(-2a) (wrong sign); corrected candidate with (-1)^(k+1) second (checked by hand for n = 1, 2)"
+ },
+ {
+  "id": "GR3.741.1",
+  "gr": "3.741.1",
+  "page": 480,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sin[b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Log[((a + b)/(a - b))^2]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "a != b"
+  ],
+  "cite": "FI II 647",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]*Sin[b*x]/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.741.2a",
+  "gr": "3.741.2",
+  "page": 480,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Cos[b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2"
+  ],
+  "conds": [
+   "a > b >= 0"
+  ],
+  "cite": "FI II 645",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]*Cos[b*x]/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.741.2b",
+  "gr": "3.741.2",
+  "page": 480,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Cos[a*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "FI II 645",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]*Cos[a*x]/x, {x, 0, Infinity}]",
+  "note": "a = b substituted"
+ },
+ {
+  "id": "GR3.741.2c",
+  "gr": "3.741.2",
+  "page": 480,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Cos[b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "b > a >= 0"
+  ],
+  "cite": "FI II 645",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]*Cos[b*x]/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.741.3a",
+  "gr": "3.741.3",
+  "page": 480,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sin[b*x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "a*Pi/2"
+  ],
+  "conds": [
+   "0 < a <= b"
+  ],
+  "cite": "BI (157)(1)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]*Sin[b*x]/x^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.741.3b",
+  "gr": "3.741.3",
+  "page": 480,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sin[b*x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "b*Pi/2"
+  ],
+  "conds": [
+   "0 < b <= a"
+  ],
+  "cite": "BI (157)(1)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]*Sin[b*x]/x^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.742.1a",
+  "gr": "3.742.1",
+  "page": 481,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sin[b*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*beta)*(E^(-Abs[a - b]*beta) - E^(-(a + b)*beta))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "BI(162)(1)a, GW(333)(71a)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]*Sin[b*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.742.1b",
+  "gr": "3.742.1",
+  "page": 481,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sin[b*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*beta)*E^(-a*beta)*Sinh[b*beta]"
+  ],
+  "conds": [
+   "beta > 0",
+   "a >= b >= 0"
+  ],
+  "cite": "BI(162)(1)a, GW(333)(71a)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]*Sin[b*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.742.1c",
+  "gr": "3.742.1",
+  "page": 481,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sin[b*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*beta)*E^(-b*beta)*Sinh[a*beta]"
+  ],
+  "conds": [
+   "beta > 0",
+   "b >= a >= 0"
+  ],
+  "cite": "BI(162)(1)a, GW(333)(71a)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]*Sin[b*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.742.2",
+  "gr": "3.742.2",
+  "page": 481,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Cos[b*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*beta)*E^(-a*beta)*(E^(b*beta)*ExpIntegralEi[beta*(a - b)] + E^(-b*beta)*ExpIntegralEi[beta*(a + b)]) - 1/(4*beta)*E^(a*beta)*(E^(b*beta)*ExpIntegralEi[-beta*(a + b)] + E^(-b*beta)*ExpIntegralEi[beta*(b - a)])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "beta > 0",
+   "a != b"
+  ],
+  "cite": "BI (162)(3)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]*Cos[b*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "note": "no conditions printed; a > 0, b > 0, beta > 0, a != b added"
+ },
+ {
+  "id": "GR3.742.3a",
+  "gr": "3.742.3",
+  "page": 481,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]*Cos[b*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*beta)*(E^(-Abs[a - b]*beta) + E^(-(a + b)*beta))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "BI(163)(1)a, GW(333)(71c)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Cos[a*x]*Cos[b*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.742.3b",
+  "gr": "3.742.3",
+  "page": 481,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]*Cos[b*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*beta)*E^(-a*beta)*Cosh[b*beta]"
+  ],
+  "conds": [
+   "beta > 0",
+   "a >= b >= 0"
+  ],
+  "cite": "BI(163)(1)a, GW(333)(71c)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Cos[a*x]*Cos[b*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.742.3c",
+  "gr": "3.742.3",
+  "page": 481,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]*Cos[b*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*beta)*E^(-b*beta)*Cosh[a*beta]"
+  ],
+  "conds": [
+   "beta > 0",
+   "b >= a >= 0"
+  ],
+  "cite": "BI(163)(1)a, GW(333)(71c)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Cos[a*x]*Cos[b*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.742.4a",
+  "gr": "3.742.4",
+  "page": 481,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[a*x]*Cos[b*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-1/4*E^(a*beta)*(E^(b*beta)*ExpIntegralEi[-beta*(a + b)] + E^(-b*beta)*ExpIntegralEi[beta*(b - a)]) - 1/4*E^(-a*beta)*(E^(b*beta)*ExpIntegralEi[beta*(a - b)] + E^(-b*beta)*ExpIntegralEi[beta*(a + b)])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "beta > 0",
+   "a != b"
+  ],
+  "cite": "BI (163)(2)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Cos[a*x]*Cos[b*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "note": "a > 0, b > 0, beta > 0 added"
+ },
+ {
+  "id": "GR3.742.4b",
+  "gr": "3.742.4",
+  "page": 481,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[x*Cos[a*x]^2/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Infinity"
+  ],
+  "conds": [],
+  "cite": "BI (163)(2)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Cos[a*x]^2/(beta^2 + x^2), {x, 0, Infinity}]",
+  "note": "a = b",
+  "reason": "divergent"
+ },
+ {
+  "id": "GR3.742.5a",
+  "gr": "3.742.5",
+  "page": 481,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x]*Cos[b*x]/(x^2 + beta^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*E^(-a*beta)*Cosh[b*beta]"
+  ],
+  "conds": [
+   "0 < b < a",
+   "beta > 0"
+  ],
+  "cite": "BI (162)(4)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]*Cos[b*x]/(x^2 + beta^2), {x, 0, Infinity}]",
+  "note": "beta > 0 added"
+ },
+ {
+  "id": "GR3.742.5b",
+  "gr": "3.742.5",
+  "page": 481,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x]*Cos[a*x]/(x^2 + beta^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*E^(-2*a*beta)"
+  ],
+  "conds": [
+   "a > 0",
+   "beta > 0"
+  ],
+  "cite": "BI (162)(4)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]*Cos[a*x]/(x^2 + beta^2), {x, 0, Infinity}]",
+  "note": "b = a substituted; beta > 0 added"
+ },
+ {
+  "id": "GR3.742.5c",
+  "gr": "3.742.5",
+  "page": 481,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x]*Cos[b*x]/(x^2 + beta^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/2*E^(-b*beta)*Sinh[a*beta]"
+  ],
+  "conds": [
+   "0 < a < b",
+   "beta > 0"
+  ],
+  "cite": "BI (162)(4)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[x*Sin[a*x]*Cos[b*x]/(x^2 + beta^2), {x, 0, Infinity}]",
+  "note": "beta > 0 added"
+ },
+ {
+  "id": "GR3.742.6a",
+  "gr": "3.742.6",
+  "page": 481,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*x]*Sin[b*x]/(p^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/(2*p)*Cos[a*p]*Sin[b*p]"
+  ],
+  "conds": [
+   "a > b > 0",
+   "p > 0"
+  ],
+  "cite": "BI (166)(1)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]*Sin[b*x]/(p^2 - x^2), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.742.6b",
+  "gr": "3.742.6",
+  "page": 481,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*x]^2/(p^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/(4*p)*Sin[2*a*p]"
+  ],
+  "conds": [
+   "a > 0",
+   "p > 0"
+  ],
+  "cite": "BI (166)(1)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]^2/(p^2 - x^2), {x, 0, Infinity}]",
+  "note": "a = b substituted",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.742.6c",
+  "gr": "3.742.6",
+  "page": 481,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*x]*Sin[b*x]/(p^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/(2*p)*Sin[a*p]*Cos[b*p]"
+  ],
+  "conds": [
+   "b > a > 0",
+   "p > 0"
+  ],
+  "cite": "BI (166)(1)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]*Sin[b*x]/(p^2 - x^2), {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.742.7a",
+  "gr": "3.742.7",
+  "page": 481,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*x]*Cos[b*x]/(p^2 - x^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/2*Cos[a*p]*Cos[b*p]"
+  ],
+  "conds": [
+   "a > b > 0",
+   "p > 0"
+  ],
+  "cite": "BI (166)(2)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]*Cos[b*x]/(p^2 - x^2)*x, {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.742.7b",
+  "gr": "3.742.7",
+  "page": 481,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*x]*Cos[a*x]/(p^2 - x^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/4*Cos[2*a*p]"
+  ],
+  "conds": [
+   "a > 0",
+   "p > 0"
+  ],
+  "cite": "BI (166)(2)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]*Cos[a*x]/(p^2 - x^2)*x, {x, 0, Infinity}]",
+  "note": "a = b substituted",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.742.7c",
+  "gr": "3.742.7",
+  "page": 481,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*x]*Cos[b*x]/(p^2 - x^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Sin[a*p]*Sin[b*p]"
+  ],
+  "conds": [
+   "b > a > 0",
+   "p > 0"
+  ],
+  "cite": "BI (166)(2)",
+  "edition_note": "",
+  "section": "3.72-3.74 Trigonometric and rational functions",
+  "tex": "Integrate[Sin[a*x]*Cos[b*x]/(p^2 - x^2)*x, {x, 0, Infinity}]",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ }
+]

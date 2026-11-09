@@ -1,0 +1,1722 @@
+[
+ {
+  "id": "GR2.449.2a",
+  "gr": "2.449.2",
+  "page": 177,
+  "status": "ok",
+  "lhs": "Integrate[1/(a*Cosh[x] + b*Sinh[x]), x]",
+  "rhs": [
+   "ArcTan[Abs[Sinh[x + ArcTanh[b/a]]]]/Sqrt[a^2 - b^2]",
+   "ArcTan[Sinh[x + ArcTanh[b/a]]]/Sqrt[a^2 - b^2]"
+  ],
+  "conds": [
+   "a > Abs[b]"
+  ],
+  "cite": "MZ 214",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int dx/(a cosh x + b sinh x) = 1/sqrt(a^2-b^2) arctan|sinh(x+artanh(b/a))|",
+  "note": "printed with absolute-value bars inside arctan; second candidate drops them"
+ },
+ {
+  "id": "GR2.449.2b",
+  "gr": "2.449.2",
+  "page": 177,
+  "status": "ok",
+  "lhs": "Integrate[1/(a*Cosh[x] + b*Sinh[x]), x]",
+  "rhs": [
+   "Log[Abs[Tanh[(x + ArcTanh[a/b])/2]]]/Sqrt[b^2 - a^2]"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "MZ 214",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= 1/sqrt(b^2-a^2) ln|tanh((x+artanh(a/b))/2)|",
+  "note": ""
+ },
+ {
+  "id": "GR2.449.3a",
+  "gr": "2.449.3",
+  "page": 177,
+  "status": "ok",
+  "lhs": "Integrate[1/(Cosh[x] + Sinh[x]), x]",
+  "rhs": [
+   "-E^(-x)"
+  ],
+  "conds": [],
+  "cite": "MZ 214",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int dx/(cosh x + sinh x) = -e^-x",
+  "note": "book prints 'ax' for 'dx' in the integrand (misprint)"
+ },
+ {
+  "id": "GR2.449.3b",
+  "gr": "2.449.3",
+  "page": 177,
+  "status": "ok",
+  "lhs": "Integrate[1/(Cosh[x] + Sinh[x]), x]",
+  "rhs": [
+   "Sinh[x] - Cosh[x]"
+  ],
+  "conds": [],
+  "cite": "MZ 214",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= sinh x - cosh x",
+  "note": "book prints 'ax' for 'dx' in the integrand (misprint)"
+ },
+ {
+  "id": "GR2.449.4a",
+  "gr": "2.449.4",
+  "page": 177,
+  "status": "ok",
+  "lhs": "Integrate[1/(Cosh[x] - Sinh[x]), x]",
+  "rhs": [
+   "E^x"
+  ],
+  "conds": [],
+  "cite": "MZ 214",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int dx/(cosh x - sinh x) = e^x",
+  "note": ""
+ },
+ {
+  "id": "GR2.449.4b",
+  "gr": "2.449.4",
+  "page": 177,
+  "status": "ok",
+  "lhs": "Integrate[1/(Cosh[x] - Sinh[x]), x]",
+  "rhs": [
+   "Sinh[x] + Cosh[x]"
+  ],
+  "conds": [],
+  "cite": "MZ 214",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= sinh x + cosh x",
+  "note": ""
+ },
+ {
+  "id": "GR2.451.1a",
+  "gr": "2.451.1a",
+  "page": 177,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B cosh+C sinh)/(a+b cosh+c sinh)^n dx = ... + int ...^(n-1) dx [a^2+c^2 != b^2]",
+  "reason": "reduction formula: integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions"
+ },
+ {
+  "id": "GR2.451.1b",
+  "gr": "2.451.1",
+  "page": 177,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cosh[x] + CC*Sinh[x])/(a + Sqrt[a^2 + c^2]*Cosh[x] + c*Sinh[x])^n, x]",
+  "rhs": [
+   "(B*c - CC*Sqrt[a^2 + c^2] - CC*a*Cosh[x] - B*a*Sinh[x])/((n - 1)*a*(a + Sqrt[a^2 + c^2]*Cosh[x] + c*Sinh[x])^n) + (A/a + n*(B*Sqrt[a^2 + c^2] - CC*c)/((n - 1)*a^2))*(c*Cosh[x] + Sqrt[a^2 + c^2]*Sinh[x])*((n - 1)!/(2*n - 1)!!)*Sum[(2*n - 2*k - 3)!!/((n - k - 1)!*a^k)/(a + Sqrt[a^2 + c^2]*Cosh[x] + c*Sinh[x])^(n - k), {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int (A+B cosh+C sinh)/(a+b cosh+c sinh)^n = (Bc-Cb-Ca cosh-Ba sinh)/((n-1)a(...)^n) + [A/a + n(Bb-Cc)/((n-1)a^2)](c cosh+b sinh)(n-1)!/(2n-1)!! Sum_{k=0}^{n-1} (2n-2k-3)!!/((n-k-1)! a^k) 1/(...)^(n-k)  [a^2+c^2=b^2]",
+  "note": "condition a^2+c^2 = b^2 substituted as b = Sqrt[a^2 + c^2]; parameter C renamed CC"
+ },
+ {
+  "id": "GR2.451.2",
+  "gr": "2.451.2",
+  "page": 177,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B cosh+C sinh)/(a+b cosh+c sinh) dx = (Cb-Bc)/(b^2-c^2) ln(...) + ... + int dx/(a+b cosh+c sinh)",
+  "reason": "integral on right-hand side (see 2.451.4)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions"
+ },
+ {
+  "id": "GR2.451.3a",
+  "gr": "2.451.3",
+  "page": 177,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cosh[x] + CC*Sinh[x])/(a + b*Cosh[x] + b*Sinh[x]), x]",
+  "rhs": [
+   "(CC - B)/(2*a)*(Cosh[x] - Sinh[x]) + (A/a - (B - CC)*b/(2*a^2))*x + ((CC + B)/(2*b) + A/a - (CC - B)*b/(2*a^2))*Log[(a + b*Cosh[x] + b*Sinh[x])]",
+   "(CC - B)/(2*a)*(Cosh[x] - Sinh[x]) + (A/a - (B - CC)*b/(2*a^2))*x + ((CC + B)/(2*b) - A/a - (CC - B)*b/(2*a^2))*Log[(a + b*Cosh[x] + b*Sinh[x])]"
+  ],
+  "conds": [
+   "a*b != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int (A+B cosh+C sinh)/(a+b cosh +- b sinh) = (C-+B)/(2a)(cosh-+sinh) + [A/a - (B-+C)b/(2a^2)]x + [(C+-B)/(2b) +- A/a - (C-+B)b/(2a^2)] ln(a+b cosh+-b sinh)",
+  "note": "upper sign; second candidate flips the sign of the A/a term in the log coefficient (direct integration gives -+A/a); parameter C renamed CC"
+ },
+ {
+  "id": "GR2.451.3b",
+  "gr": "2.451.3",
+  "page": 177,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cosh[x] + CC*Sinh[x])/(a + b*Cosh[x] - b*Sinh[x]), x]",
+  "rhs": [
+   "(CC + B)/(2*a)*(Cosh[x] + Sinh[x]) + (A/a - (B + CC)*b/(2*a^2))*x + ((CC - B)/(2*b) - A/a - (CC + B)*b/(2*a^2))*Log[(a + b*Cosh[x] - b*Sinh[x])]",
+   "(CC + B)/(2*a)*(Cosh[x] + Sinh[x]) + (A/a - (B + CC)*b/(2*a^2))*x + ((CC - B)/(2*b) + A/a - (CC + B)*b/(2*a^2))*Log[(a + b*Cosh[x] - b*Sinh[x])]"
+  ],
+  "conds": [
+   "a*b != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int (A+B cosh+C sinh)/(a+b cosh +- b sinh) = (C-+B)/(2a)(cosh-+sinh) + [A/a - (B-+C)b/(2a^2)]x + [(C+-B)/(2b) +- A/a - (C-+B)b/(2a^2)] ln(a+b cosh+-b sinh)",
+  "note": "lower sign; second candidate flips the sign of the A/a term in the log coefficient (direct integration gives -+A/a); parameter C renamed CC"
+ },
+ {
+  "id": "GR2.451.4a",
+  "gr": "2.451.4",
+  "page": 178,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cosh[x] + c*Sinh[x]), x]",
+  "rhs": [
+   "2/Sqrt[b^2 - a^2 - c^2]*ArcTan[((b - a)*Tanh[x/2] + c)/Sqrt[b^2 - a^2 - c^2]]"
+  ],
+  "conds": [
+   "b^2 > a^2 + c^2",
+   "a != b"
+  ],
+  "cite": "GU (351)(18)",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int dx/(a+b cosh+c sinh) = 2/sqrt(b^2-a^2-c^2) arctan(((b-a)tanh(x/2)+c)/sqrt(b^2-a^2-c^2))",
+  "note": ""
+ },
+ {
+  "id": "GR2.451.4b",
+  "gr": "2.451.4",
+  "page": 178,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cosh[x] + c*Sinh[x]), x]",
+  "rhs": [
+   "1/Sqrt[a^2 - b^2 + c^2]*Log[((a - b)*Tanh[x/2] - c + Sqrt[a^2 - b^2 + c^2])/((a - b)*Tanh[x/2] - c - Sqrt[a^2 - b^2 + c^2])]",
+   "1/Sqrt[a^2 - b^2 + c^2]*Log[Abs[((a - b)*Tanh[x/2] - c + Sqrt[a^2 - b^2 + c^2])/((a - b)*Tanh[x/2] - c - Sqrt[a^2 - b^2 + c^2])]]"
+  ],
+  "conds": [
+   "b^2 < a^2 + c^2",
+   "a != b"
+  ],
+  "cite": "GU (351)(18)",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= 1/sqrt(a^2-b^2+c^2) ln(((a-b)tanh(x/2)-c+sqrt)/((a-b)tanh(x/2)-c-sqrt))",
+  "note": ""
+ },
+ {
+  "id": "GR2.451.4c",
+  "gr": "2.451.4",
+  "page": 178,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + a*Cosh[x] + c*Sinh[x]), x]",
+  "rhs": [
+   "Log[a + c*Tanh[x/2]]/c",
+   "Log[Abs[a + c*Tanh[x/2]]]/c"
+  ],
+  "conds": [
+   "c != 0"
+  ],
+  "cite": "GU (351)(18)",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= (1/c) ln(a + c tanh(x/2)) [a=b, c!=0]",
+  "note": "condition a = b substituted into the integrand"
+ },
+ {
+  "id": "GR2.451.4d",
+  "gr": "2.451.4",
+  "page": 178,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + Sqrt[a^2 + c^2]*Cosh[x] + c*Sinh[x]), x]",
+  "rhs": [
+   "2/((a - Sqrt[a^2 + c^2])*Tanh[x/2] + c)"
+  ],
+  "conds": [],
+  "cite": "GU (351)(18)",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= 2/((a-b)tanh(x/2)+c) [b^2=a^2+c^2]",
+  "note": "condition b^2 = a^2 + c^2 substituted as b = Sqrt[a^2 + c^2]"
+ },
+ {
+  "id": "GR2.452.1",
+  "gr": "2.452.1",
+  "page": 178,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B cosh+C sinh)/((a1+b1 cosh+c1 sinh)(a2+b2 cosh+c2 sinh)) = A0 ln(...) + A1 int dx/(...) + A2 int dx/(...)",
+  "reason": "integrals on right-hand side",
+  "cite": "GU (351)(19)",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions"
+ },
+ {
+  "id": "GR2.452.2a",
+  "gr": "2.452.2",
+  "page": 178,
+  "status": "ok",
+  "lhs": "Integrate[(A*Cosh[x]^2 + 2*B*Sinh[x]*Cosh[x] + CC*Sinh[x]^2)/(a*Cosh[x]^2 + 2*b*Sinh[x]*Cosh[x] + c*Sinh[x]^2), x]",
+  "rhs": [
+   "1/(4*b^2 - (a + c)^2)*((4*B*b - (A + CC)*(a + c))*x + ((A + CC)*b - B*(a + c))*Log[(a*Cosh[x]^2 + 2*b*Sinh[x]*Cosh[x] + c*Sinh[x]^2)] + (2*(A - CC)*b^2 - 2*B*b*(a - c) + (CC*a - A*c)*(a + c))*(1/(2*Sqrt[b^2 - a*c])*Log[(c*Tanh[x] + b - Sqrt[b^2 - a*c])/(c*Tanh[x] + b + Sqrt[b^2 - a*c])]))"
+  ],
+  "conds": [
+   "b^2 > a*c"
+  ],
+  "cite": "GU (351)(24)",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int (A cosh^2+2B sinh cosh+C sinh^2)/(a cosh^2+2b sinh cosh+c sinh^2) = 1/(4b^2-(a+c)^2){[4Bb-(A+C)(a+c)]x + [(A+C)b-B(a+c)] ln(...) + [2(A-C)b^2-2Bb(a-c)+(Ca-Ac)(a+c)] f(x)}; f = 1/(2 sqrt(b^2-ac)) ln((c tanh+b-sqrt)/(c tanh+b+sqrt))",
+  "note": "f(x) substituted (b^2 > ac case); parameter C renamed CC"
+ },
+ {
+  "id": "GR2.452.2b",
+  "gr": "2.452.2",
+  "page": 178,
+  "status": "ok",
+  "lhs": "Integrate[(A*Cosh[x]^2 + 2*B*Sinh[x]*Cosh[x] + CC*Sinh[x]^2)/(a*Cosh[x]^2 + 2*b*Sinh[x]*Cosh[x] + c*Sinh[x]^2), x]",
+  "rhs": [
+   "1/(4*b^2 - (a + c)^2)*((4*B*b - (A + CC)*(a + c))*x + ((A + CC)*b - B*(a + c))*Log[(a*Cosh[x]^2 + 2*b*Sinh[x]*Cosh[x] + c*Sinh[x]^2)] + (2*(A - CC)*b^2 - 2*B*b*(a - c) + (CC*a - A*c)*(a + c))*(1/Sqrt[a*c - b^2]*ArcTan[(c*Tanh[x] + b)/Sqrt[a*c - b^2]]))"
+  ],
+  "conds": [
+   "b^2 < a*c"
+  ],
+  "cite": "GU (351)(24)",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int (A cosh^2+2B sinh cosh+C sinh^2)/(a cosh^2+2b sinh cosh+c sinh^2) = 1/(4b^2-(a+c)^2){[4Bb-(A+C)(a+c)]x + [(A+C)b-B(a+c)] ln(...) + [2(A-C)b^2-2Bb(a-c)+(Ca-Ac)(a+c)] f(x)}; f = 1/sqrt(ac-b^2) arctan((c tanh+b)/sqrt(ac-b^2))",
+  "note": "f(x) substituted (b^2 < ac case); parameter C renamed CC"
+ },
+ {
+  "id": "GR2.452.2c",
+  "gr": "2.452.2",
+  "page": 178,
+  "status": "ok",
+  "lhs": "Integrate[(A*Cosh[x]^2 + 2*B*Sinh[x]*Cosh[x] + CC*Sinh[x]^2)/(a*Cosh[x]^2 + 2*b*Sinh[x]*Cosh[x] + (b^2/a)*Sinh[x]^2), x]",
+  "rhs": [
+   "1/(4*b^2 - (a + (b^2/a))^2)*((4*B*b - (A + CC)*(a + (b^2/a)))*x + ((A + CC)*b - B*(a + (b^2/a)))*Log[(a*Cosh[x]^2 + 2*b*Sinh[x]*Cosh[x] + (b^2/a)*Sinh[x]^2)] + (2*(A - CC)*b^2 - 2*B*b*(a - (b^2/a)) + (CC*a - A*(b^2/a))*(a + (b^2/a)))*(-1/((b^2/a)*Tanh[x] + b)))"
+  ],
+  "conds": [],
+  "cite": "GU (351)(24)",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int (A cosh^2+2B sinh cosh+C sinh^2)/(a cosh^2+2b sinh cosh+c sinh^2) = 1/(4b^2-(a+c)^2){[4Bb-(A+C)(a+c)]x + [(A+C)b-B(a+c)] ln(...) + [2(A-C)b^2-2Bb(a-c)+(Ca-Ac)(a+c)] f(x)}; f = -1/(c tanh x + b) [b^2=ac]",
+  "note": "f(x) substituted (b^2 = ac case) with c = b^2/a; parameter C renamed CC"
+ },
+ {
+  "id": "GR2.453.1",
+  "gr": "2.453.1",
+  "page": 179,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B sinh)/(sinh(a+b sinh)) = 1/a[A ln|tanh x/2| + (aB-bA) int dx/(a+b sinh)]",
+  "reason": "integral on right-hand side (see 2.441.3)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions"
+ },
+ {
+  "id": "GR2.453.2",
+  "gr": "2.453.2",
+  "page": 179,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B sinh)/(sinh(a+b cosh)) = A/(a^2-b^2)(a ln|tanh x/2| + b ln|(a+b cosh)/sinh|) + B int dx/(a+b cosh)",
+  "reason": "integral on right-hand side (see 2.443.3)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions"
+ },
+ {
+  "id": "GR2.453.3",
+  "gr": "2.453.3",
+  "page": 179,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sinh[x])/(Sinh[x]*(1 + Cosh[x])), x]",
+  "rhs": [
+   "A/2*(Log[Abs[Tanh[x/2]]] - Tanh[x/2]^2/2) + B*Tanh[x/2]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int (A+B sinh)/(sinh(1+cosh)) = A/2(ln|tanh x/2| - 1/2 tanh^2 x/2) + B tanh x/2",
+  "note": ""
+ },
+ {
+  "id": "GR2.453.4",
+  "gr": "2.453.4",
+  "page": 179,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sinh[x])/(Sinh[x]*(1 - Cosh[x])), x]",
+  "rhs": [
+   "A/2*(-Log[Abs[Coth[x/2]]] + Coth[x/2]^2/2) + B*Coth[x/2]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int (A+B sinh)/(sinh(1-cosh)) = A/2(-ln|coth x/2| + 1/2 coth^2 x/2) + B coth x/2",
+  "note": ""
+ },
+ {
+  "id": "GR2.454.1",
+  "gr": "2.454.1",
+  "page": 179,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sinh[x])/(Cosh[x]*(a + b*Sinh[x])), x]",
+  "rhs": [
+   "1/(a^2 + b^2)*((A*a + B*b)*ArcTan[Sinh[x]] + (A*b - B*a)*Log[Abs[(a + b*Sinh[x])/Cosh[x]]])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int (A+B sinh)/(cosh(a+b sinh)) = 1/(a^2+b^2)[(Aa+Bb) arctan(sinh x) + (Ab-Ba) ln|(a+b sinh)/cosh|]",
+  "note": ""
+ },
+ {
+  "id": "GR2.454.2",
+  "gr": "2.454.2",
+  "page": 179,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B cosh)/(sinh(a+b sinh)) = 1/a(A ln|tanh x/2| + B ln|sinh/(a+b sinh)| - Ab int dx/(a+b sinh))",
+  "reason": "integral on right-hand side (see 2.441.3)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions"
+ },
+ {
+  "id": "GR2.455.1",
+  "gr": "2.455.1",
+  "page": 179,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cosh[x])/(Sinh[x]*(a + b*Cosh[x])), x]",
+  "rhs": [
+   "1/(a^2 - b^2)*((A*a + B*b)*Log[Abs[Tanh[x/2]]] + (A*b - B*a)*Log[Abs[(a + b*Cosh[x])/Sinh[x]]])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int (A+B cosh)/(sinh(a+b cosh)) = 1/(a^2-b^2)[(Aa+Bb) ln|tanh x/2| + (Ab-Ba) ln|(a+b cosh)/sinh|]",
+  "note": ""
+ },
+ {
+  "id": "GR2.455.2",
+  "gr": "2.455.2",
+  "page": 179,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cosh[x])/(Sinh[x]*(1 + Cosh[x])), x]",
+  "rhs": [
+   "(A + B)/2*Log[Abs[Tanh[x/2]]] - (A - B)/4*Tanh[x/2]^2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= (A+B)/2 ln|tanh x/2| - (A-B)/4 tanh^2 x/2",
+  "note": ""
+ },
+ {
+  "id": "GR2.455.3",
+  "gr": "2.455.3",
+  "page": 179,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cosh[x])/(Sinh[x]*(1 - Cosh[x])), x]",
+  "rhs": [
+   "(A + B)/4*Coth[x/2]^2 - (A - B)/2*Log[Coth[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= (A+B)/4 coth^2 x/2 - (A-B)/2 ln coth x/2",
+  "note": ""
+ },
+ {
+  "id": "GR2.456",
+  "gr": "2.456",
+  "page": 179,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B cosh)/(cosh(a+b sinh)) = A/(a^2+b^2)[a arctan(sinh) + b ln|(a+b sinh)/cosh|] + B int dx/(a+b sinh)",
+  "reason": "integral on right-hand side (see 2.441.3)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions"
+ },
+ {
+  "id": "GR2.457.1",
+  "gr": "2.457.1",
+  "page": 180,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B cosh)/(cosh(a+b cosh)) = 1/a[A arctan sinh - (Ab-Ba) int dx/(a+b cosh)]",
+  "reason": "integral on right-hand side (see 2.443.3)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions"
+ },
+ {
+  "id": "GR2.458.1a",
+  "gr": "2.458.1",
+  "page": 180,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Sinh[x]^2), x]",
+  "rhs": [
+   "1/Sqrt[a*(b - a)]*ArcTan[Sqrt[b/a - 1]*Tanh[x]]"
+  ],
+  "conds": [
+   "b/a > 1"
+  ],
+  "cite": "MZ 195",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= 1/sqrt(a(b-a)) arctan(sqrt(b/a-1) tanh x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.458.1b",
+  "gr": "2.458.1",
+  "page": 180,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Sinh[x]^2), x]",
+  "rhs": [
+   "1/Sqrt[a*(a - b)]*ArcTanh[Sqrt[1 - b/a]*Tanh[x]]"
+  ],
+  "conds": [
+   "0 < b/a < 1"
+  ],
+  "cite": "MZ 195",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= 1/sqrt(a(a-b)) artanh(sqrt(1-b/a) tanh x) [0<b/a<1 or b/a<0 and sinh^2 x < -a/b]",
+  "note": "alternative condition 'b/a < 0 and sinh^2 x < -a/b' depends on x; only the parameter branch kept in conds"
+ },
+ {
+  "id": "GR2.458.1c",
+  "gr": "2.458.1",
+  "page": 180,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Sinh[x]^2), x]",
+  "rhs": [
+   "1/Sqrt[a*(a - b)]*ArcCoth[Sqrt[1 - b/a]*Tanh[x]]"
+  ],
+  "conds": [
+   "b/a < 0"
+  ],
+  "cite": "MZ 195",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= 1/sqrt(a(a-b)) arcoth(sqrt(1-b/a) tanh x) [b/a<0 and sinh^2 x > -a/b]",
+  "note": "x-dependent condition sinh^2 x > -a/b moved to note"
+ },
+ {
+  "id": "GR2.458.2a",
+  "gr": "2.458.2",
+  "page": 180,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cosh[x]^2), x]",
+  "rhs": [
+   "1/Sqrt[-a*(a + b)]*ArcTan[Sqrt[-(1 + b/a)]*Coth[x]]"
+  ],
+  "conds": [
+   "b/a < -1"
+  ],
+  "cite": "MZ 202",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= 1/sqrt(-a(a+b)) arctan(sqrt(-(1+b/a)) coth x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.458.2b",
+  "gr": "2.458.2",
+  "page": 180,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cosh[x]^2), x]",
+  "rhs": [
+   "1/Sqrt[a*(a + b)]*ArcTanh[Sqrt[1 + b/a]*Coth[x]]"
+  ],
+  "conds": [
+   "-1 < b/a < 0"
+  ],
+  "cite": "MZ 202",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= 1/sqrt(a(a+b)) artanh(sqrt(1+b/a) coth x) [-1<b/a<0 and cosh^2 x > -a/b]",
+  "note": "x-dependent condition cosh^2 x > -a/b moved to note"
+ },
+ {
+  "id": "GR2.458.2c",
+  "gr": "2.458.2",
+  "page": 180,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cosh[x]^2), x]",
+  "rhs": [
+   "1/Sqrt[a*(a + b)]*ArcCoth[Sqrt[1 + b/a]*Coth[x]]"
+  ],
+  "conds": [
+   "b/a > 0"
+  ],
+  "cite": "MZ 202",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= 1/sqrt(a(a+b)) arcoth(sqrt(1+b/a) coth x) [b/a>0 or -1<b/a<0 and cosh^2 x < -a/b]",
+  "note": "alternative x-dependent branch omitted from conds"
+ },
+ {
+  "id": "GR2.458.3",
+  "gr": "2.458.3",
+  "page": 180,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 + Sinh[x]^2), x]",
+  "rhs": [
+   "Tanh[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int dx/(1+sinh^2 x) = tanh x",
+  "note": ""
+ },
+ {
+  "id": "GR2.458.4a",
+  "gr": "2.458.4",
+  "page": 180,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 - Sinh[x]^2), x]",
+  "rhs": [
+   "ArcTanh[Sqrt[2]*Tanh[x]]/Sqrt[2]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= 1/sqrt2 artanh(sqrt2 tanh x) [sinh^2 x < 1]",
+  "note": "condition sinh^2 x < 1 (x-dependent)"
+ },
+ {
+  "id": "GR2.458.4b",
+  "gr": "2.458.4",
+  "page": 180,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 - Sinh[x]^2), x]",
+  "rhs": [
+   "ArcCoth[Sqrt[2]*Tanh[x]]/Sqrt[2]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= 1/sqrt2 arcoth(sqrt2 tanh x) [sinh^2 x > 1]",
+  "note": "condition sinh^2 x > 1 (x-dependent)"
+ },
+ {
+  "id": "GR2.458.5",
+  "gr": "2.458.5",
+  "page": 180,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 + Cosh[x]^2), x]",
+  "rhs": [
+   "ArcCoth[Sqrt[2]*Coth[x]]/Sqrt[2]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int dx/(1+cosh^2 x) = 1/sqrt2 arcoth(sqrt2 coth x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.458.6",
+  "gr": "2.458.6",
+  "page": 180,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 - Cosh[x]^2), x]",
+  "rhs": [
+   "Coth[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int dx/(1-cosh^2 x) = coth x",
+  "note": ""
+ },
+ {
+  "id": "GR2.459.1",
+  "gr": "2.459.1",
+  "page": 180,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(a+b sinh^2)^2 = 1/(2a(b-a))[b sinh cosh/(a+b sinh^2) + (b-2a) int dx/(a+b sinh^2)]",
+  "reason": "integral on right-hand side (see 2.458.1)",
+  "cite": "MZ 196",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions"
+ },
+ {
+  "id": "GR2.459.2",
+  "gr": "2.459.2",
+  "page": 181,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(a+b cosh^2)^2 = 1/(2a(a+b))[-b sinh cosh/(a+b cosh^2) + (2a+b) int dx/(a+b cosh^2)]",
+  "reason": "integral on right-hand side (see 2.458.2)",
+  "cite": "MZ 203",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions"
+ },
+ {
+  "id": "GR2.459.3a",
+  "gr": "2.459.3",
+  "page": 181,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Sinh[x]^2)^3, x]",
+  "rhs": [
+   "1/(8*(Sqrt[b/a - 1])*a^3)*((3 - 2/(Sqrt[b/a - 1])^2 + 3/(Sqrt[b/a - 1])^4)*ArcTan[Sqrt[b/a - 1]*Tanh[x]] + (3 - 2/(Sqrt[b/a - 1])^2 - 3/(Sqrt[b/a - 1])^4)*(Sqrt[b/a - 1])*Tanh[x]/(1 + (Sqrt[b/a - 1])^2*Tanh[x]^2) + (1 + 2/(Sqrt[b/a - 1])^2 - 1/(Sqrt[b/a - 1])^2*Tanh[x]^2)*2*(Sqrt[b/a - 1])*Tanh[x]/(1 + (Sqrt[b/a - 1])^2*Tanh[x]^2)^2)"
+  ],
+  "conds": [
+   "b/a - 1 > 0"
+  ],
+  "cite": "MZ 196",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int dx/(a+b sinh^2)^3 = 1/(8pa^3)[(3-2/p^2+3/p^4) arctan(p tanh) + (3-2/p^2-3/p^4) p tanh/(1+p^2 tanh^2) + (1+2/p^2-1/p^2 tanh^2) 2p tanh/(1+p^2 tanh^2)^2], p^2=b/a-1",
+  "note": "abbreviation p = Sqrt[b/a - 1] substituted"
+ },
+ {
+  "id": "GR2.459.3b",
+  "gr": "2.459.3",
+  "page": 181,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Sinh[x]^2)^3, x]",
+  "rhs": [
+   "1/(8*(Sqrt[1 - b/a])*a^3)*((3 + 2/(Sqrt[1 - b/a])^2 + 3/(Sqrt[1 - b/a])^4)*ArcTanh[Sqrt[1 - b/a]*Tanh[x]] + (3 + 2/(Sqrt[1 - b/a])^2 - 3/(Sqrt[1 - b/a])^4)*(Sqrt[1 - b/a])*Tanh[x]/(1 - (Sqrt[1 - b/a])^2*Tanh[x]^2) + (1 - 2/(Sqrt[1 - b/a])^2 + 1/(Sqrt[1 - b/a])^2*Tanh[x]^2)*2*(Sqrt[1 - b/a])*Tanh[x]/(1 - (Sqrt[1 - b/a])^2*Tanh[x]^2)^2)"
+  ],
+  "conds": [
+   "1 - b/a > 0"
+  ],
+  "cite": "MZ 196",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= 1/(8qa^3)[(3+2/q^2+3/q^4) artanh(q tanh) + (3+2/q^2-3/q^4) q tanh/(1-q^2 tanh^2) + (1-2/q^2+1/q^2 tanh^2) 2q tanh/(1-q^2 tanh^2)^2], q^2=1-b/a",
+  "note": "abbreviation q = Sqrt[1 - b/a] substituted"
+ },
+ {
+  "id": "GR2.459.4a",
+  "gr": "2.459.4",
+  "page": 181,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cosh[x]^2)^3, x]",
+  "rhs": [
+   "1/(8*(Sqrt[-1 - b/a])*a^3)*((3 - 2/(Sqrt[-1 - b/a])^2 + 3/(Sqrt[-1 - b/a])^4)*ArcTan[Sqrt[-1 - b/a]*Coth[x]] + (3 - 2/(Sqrt[-1 - b/a])^2 - 3/(Sqrt[-1 - b/a])^4)*(Sqrt[-1 - b/a])*Coth[x]/(1 + (Sqrt[-1 - b/a])^2*Coth[x]^2) + (1 + 2/(Sqrt[-1 - b/a])^2 - 1/(Sqrt[-1 - b/a])^2*Coth[x]^2)*2*(Sqrt[-1 - b/a])*Coth[x]/(1 + (Sqrt[-1 - b/a])^2*Coth[x]^2)^2)"
+  ],
+  "conds": [
+   "-1 - b/a > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int dx/(a+b cosh^2)^3 = 1/(8pa^3)[(3-2/p^2+3/p^4) arctan(p coth) + (3-2/p^2-3/p^4) p coth/(1+p^2 coth^2) + (1+2/p^2-1/p^2 coth^2) 2p coth/(1+p^2 coth^2)^2], p^2=-1-b/a",
+  "note": "abbreviation p = Sqrt[-1 - b/a] substituted"
+ },
+ {
+  "id": "GR2.459.4b",
+  "gr": "2.459.4",
+  "page": 181,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cosh[x]^2)^3, x]",
+  "rhs": [
+   "1/(8*(Sqrt[1 + b/a])*a^3)*((3 + 2/(Sqrt[1 + b/a])^2 + 3/(Sqrt[1 + b/a])^4)*ArcTanh[Sqrt[1 + b/a]*Coth[x]] + (3 + 2/(Sqrt[1 + b/a])^2 - 3/(Sqrt[1 + b/a])^4)*(Sqrt[1 + b/a])*Coth[x]/(1 - (Sqrt[1 + b/a])^2*Coth[x]^2) + (1 - 2/(Sqrt[1 + b/a])^2 + 1/(Sqrt[1 + b/a])^2*Coth[x]^2)*2*(Sqrt[1 + b/a])*Coth[x]/(1 - (Sqrt[1 + b/a])^2*Coth[x]^2)^2)"
+  ],
+  "conds": [
+   "1 + b/a > 0",
+   "b/a < 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= 1/(8qa^3)[(3+2/q^2+3/q^4) phi(x) + (3+2/q^2-3/q^4) q coth/(1-q^2 coth^2) + (1-2/q^2+1/q^2 coth^2) 2q coth/(1-q^2 coth^2)^2], q^2=1+b/a; phi = artanh(q coth x) if b/a<0 and cosh^2 x > -a/b",
+  "note": "q = Sqrt[1 + b/a] substituted; footnote: phi(x) = artanh(q coth x) when b/a<0 and cosh^2 x > -a/b (x-dependent part in note)"
+ },
+ {
+  "id": "GR2.459.4c",
+  "gr": "2.459.4",
+  "page": 181,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cosh[x]^2)^3, x]",
+  "rhs": [
+   "1/(8*(Sqrt[1 + b/a])*a^3)*((3 + 2/(Sqrt[1 + b/a])^2 + 3/(Sqrt[1 + b/a])^4)*ArcCoth[Sqrt[1 + b/a]*Coth[x]] + (3 + 2/(Sqrt[1 + b/a])^2 - 3/(Sqrt[1 + b/a])^4)*(Sqrt[1 + b/a])*Coth[x]/(1 - (Sqrt[1 + b/a])^2*Coth[x]^2) + (1 - 2/(Sqrt[1 + b/a])^2 + 1/(Sqrt[1 + b/a])^2*Coth[x]^2)*2*(Sqrt[1 + b/a])*Coth[x]/(1 - (Sqrt[1 + b/a])^2*Coth[x]^2)^2)"
+  ],
+  "conds": [
+   "b/a > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "same as 2.459.4b with phi(x) = arcoth(q coth x) [b/a>0, or b/a<0 and cosh^2 x < -a/b]",
+  "note": "q = Sqrt[1 + b/a] substituted; footnote branch phi(x) = arcoth(q coth x)"
+ },
+ {
+  "id": "GR2.461.1",
+  "gr": "2.461.1",
+  "page": 181,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[Tanh[x]], x]",
+  "rhs": [
+   "ArcTanh[Sqrt[Tanh[x]]] - ArcTan[Sqrt[Tanh[x]]]"
+  ],
+  "conds": [],
+  "cite": "MZ 221",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int sqrt(tanh x) = artanh sqrt(tanh x) - arctan sqrt(tanh x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.461.2",
+  "gr": "2.461.2",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[Coth[x]], x]",
+  "rhs": [
+   "ArcCoth[Sqrt[Coth[x]]] - ArcTan[Sqrt[Coth[x]]]"
+  ],
+  "conds": [],
+  "cite": "MZ 222",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int sqrt(coth x) = arcoth sqrt(coth x) - arctan sqrt(coth x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.462.1a",
+  "gr": "2.462.1",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]/Sqrt[a^2 + Sinh[x]^2], x]",
+  "rhs": [
+   "ArcSinh[Cosh[x]/Sqrt[a^2 - 1]]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "MZ 199",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int sinh/sqrt(a^2+sinh^2) = arsinh(cosh/sqrt(a^2-1)) [a^2>1]",
+  "note": ""
+ },
+ {
+  "id": "GR2.462.1b",
+  "gr": "2.462.1",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]/Sqrt[a^2 + Sinh[x]^2], x]",
+  "rhs": [
+   "Log[Cosh[x] + Sqrt[a^2 + Sinh[x]^2]]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "MZ 199",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "= ln(cosh x + sqrt(a^2+sinh^2 x)) [a^2>1]",
+  "note": ""
+ },
+ {
+  "id": "GR2.462.1c",
+  "gr": "2.462.1",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]/Sqrt[a^2 + Sinh[x]^2], x]",
+  "rhs": [
+   "ArcCosh[Cosh[x]/Sqrt[1 - a^2]]"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "MZ 199",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "= arcosh(cosh/sqrt(1-a^2)) [a^2<1]",
+  "note": ""
+ },
+ {
+  "id": "GR2.462.1d",
+  "gr": "2.462.1",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]/Sqrt[a^2 + Sinh[x]^2], x]",
+  "rhs": [
+   "Log[Cosh[x] + Sqrt[a^2 + Sinh[x]^2]]"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "MZ 199",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "= ln(cosh x + sqrt(a^2+sinh^2 x)) [a^2<1]",
+  "note": ""
+ },
+ {
+  "id": "GR2.462.1e",
+  "gr": "2.462.1",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]/Sqrt[1 + Sinh[x]^2], x]",
+  "rhs": [
+   "Log[Cosh[x]]"
+  ],
+  "conds": [],
+  "cite": "MZ 199",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "= ln cosh x [a^2=1]",
+  "note": "condition a^2 = 1 substituted (a = 1)"
+ },
+ {
+  "id": "GR2.462.2",
+  "gr": "2.462.2",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]/Sqrt[a^2 - Sinh[x]^2], x]",
+  "rhs": [
+   "ArcSin[Cosh[x]/Sqrt[a^2 + 1]]"
+  ],
+  "conds": [],
+  "cite": "MZ 199",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int sinh/sqrt(a^2-sinh^2) = arcsin(cosh/sqrt(a^2+1)) [sinh^2 x < a^2]",
+  "note": "x-dependent condition sinh^2 x < a^2"
+ },
+ {
+  "id": "GR2.462.3a",
+  "gr": "2.462.3",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]/Sqrt[Sinh[x]^2 - a^2], x]",
+  "rhs": [
+   "ArcCosh[Cosh[x]/Sqrt[a^2 + 1]]"
+  ],
+  "conds": [],
+  "cite": "MZ 199",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int sinh/sqrt(sinh^2-a^2) = arcosh(cosh/sqrt(a^2+1)) [sinh^2 x > a^2]",
+  "note": "x-dependent condition sinh^2 x > a^2"
+ },
+ {
+  "id": "GR2.462.3b",
+  "gr": "2.462.3",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]/Sqrt[Sinh[x]^2 - a^2], x]",
+  "rhs": [
+   "Log[Cosh[x] + Sqrt[Sinh[x]^2 - a^2]]"
+  ],
+  "conds": [],
+  "cite": "MZ 199",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "= ln(cosh x + sqrt(sinh^2 x - a^2)) [sinh^2 x > a^2]",
+  "note": "x-dependent condition sinh^2 x > a^2"
+ },
+ {
+  "id": "GR2.462.4a",
+  "gr": "2.462.4",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]/Sqrt[a^2 + Sinh[x]^2], x]",
+  "rhs": [
+   "ArcSinh[Sinh[x]/a]"
+  ],
+  "conds": [],
+  "cite": "MZ 215, 216",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int cosh/sqrt(a^2+sinh^2) = arsinh(sinh x/a)",
+  "note": ""
+ },
+ {
+  "id": "GR2.462.4b",
+  "gr": "2.462.4",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]/Sqrt[a^2 + Sinh[x]^2], x]",
+  "rhs": [
+   "Log[Sinh[x] + Sqrt[a^2 + Sinh[x]^2]]"
+  ],
+  "conds": [],
+  "cite": "MZ 215, 216",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "= ln(sinh x + sqrt(a^2+sinh^2 x))",
+  "note": ""
+ },
+ {
+  "id": "GR2.462.5",
+  "gr": "2.462.5",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]/Sqrt[a^2 - Sinh[x]^2], x]",
+  "rhs": [
+   "ArcSin[Sinh[x]/a]"
+  ],
+  "conds": [],
+  "cite": "MZ 215, 216",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int cosh/sqrt(a^2-sinh^2) = arcsin(sinh x/a) [sinh^2 x < a^2]",
+  "note": "x-dependent condition sinh^2 x < a^2"
+ },
+ {
+  "id": "GR2.462.6a",
+  "gr": "2.462.6",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]/Sqrt[Sinh[x]^2 - a^2], x]",
+  "rhs": [
+   "ArcCosh[Sinh[x]/a]"
+  ],
+  "conds": [],
+  "cite": "MZ 215, 216",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int cosh/sqrt(sinh^2-a^2) = arcosh(sinh x/a) [sinh^2 x > a^2]",
+  "note": "x-dependent condition sinh^2 x > a^2"
+ },
+ {
+  "id": "GR2.462.6b",
+  "gr": "2.462.6",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]/Sqrt[Sinh[x]^2 - a^2], x]",
+  "rhs": [
+   "Log[Sinh[x] + Sqrt[Sinh[x]^2 - a^2]]"
+  ],
+  "conds": [],
+  "cite": "MZ 215, 216",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "= ln(sinh x + sqrt(sinh^2 x - a^2)) [sinh^2 x > a^2]",
+  "note": "x-dependent condition sinh^2 x > a^2"
+ },
+ {
+  "id": "GR2.462.7a",
+  "gr": "2.462.7",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]/Sqrt[a^2 + Cosh[x]^2], x]",
+  "rhs": [
+   "ArcSinh[Cosh[x]/a]"
+  ],
+  "conds": [],
+  "cite": "MZ 215, 216",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int sinh/sqrt(a^2+cosh^2) = arsinh(cosh x/a)",
+  "note": ""
+ },
+ {
+  "id": "GR2.462.7b",
+  "gr": "2.462.7",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]/Sqrt[a^2 + Cosh[x]^2], x]",
+  "rhs": [
+   "Log[Cosh[x] + Sqrt[a^2 + Cosh[x]^2]]"
+  ],
+  "conds": [],
+  "cite": "MZ 215, 216",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "= ln(cosh x + sqrt(a^2+cosh^2 x))",
+  "note": ""
+ },
+ {
+  "id": "GR2.462.8",
+  "gr": "2.462.8",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]/Sqrt[a^2 - Cosh[x]^2], x]",
+  "rhs": [
+   "ArcSin[Cosh[x]/a]"
+  ],
+  "conds": [],
+  "cite": "MZ 215, 216",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int sinh/sqrt(a^2-cosh^2) = arcsin(cosh x/a) [cosh^2 x < a^2]",
+  "note": "x-dependent condition cosh^2 x < a^2"
+ },
+ {
+  "id": "GR2.462.9a",
+  "gr": "2.462.9",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]/Sqrt[Cosh[x]^2 - a^2], x]",
+  "rhs": [
+   "ArcCosh[Cosh[x]/a]"
+  ],
+  "conds": [],
+  "cite": "MZ 215, 216",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int sinh/sqrt(cosh^2-a^2) = arcosh(cosh x/a) [cosh^2 x > a^2]",
+  "note": "x-dependent condition cosh^2 x > a^2"
+ },
+ {
+  "id": "GR2.462.9b",
+  "gr": "2.462.9",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]/Sqrt[Cosh[x]^2 - a^2], x]",
+  "rhs": [
+   "Log[Cosh[x] + Sqrt[Cosh[x]^2 - a^2]]"
+  ],
+  "conds": [],
+  "cite": "MZ 215, 216",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "= ln(cosh x + sqrt(cosh^2 x - a^2)) [cosh^2 x > a^2]",
+  "note": "x-dependent condition cosh^2 x > a^2"
+ },
+ {
+  "id": "GR2.462.10a",
+  "gr": "2.462.10",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]/Sqrt[a^2 + Cosh[x]^2], x]",
+  "rhs": [
+   "ArcSinh[Sinh[x]/Sqrt[a^2 + 1]]"
+  ],
+  "conds": [],
+  "cite": "MZ 206",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int cosh/sqrt(a^2+cosh^2) = arsinh(sinh x/sqrt(a^2+1))",
+  "note": ""
+ },
+ {
+  "id": "GR2.462.10b",
+  "gr": "2.462.10",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]/Sqrt[a^2 + Cosh[x]^2], x]",
+  "rhs": [
+   "Log[Sinh[x] + Sqrt[a^2 + Cosh[x]^2]]"
+  ],
+  "conds": [],
+  "cite": "MZ 206",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "= ln(sinh x + sqrt(a^2+cosh^2 x))",
+  "note": ""
+ },
+ {
+  "id": "GR2.462.11",
+  "gr": "2.462.11",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]/Sqrt[a^2 - Cosh[x]^2], x]",
+  "rhs": [
+   "ArcSin[Sinh[x]/Sqrt[a^2 - 1]]"
+  ],
+  "conds": [],
+  "cite": "MZ 206",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int cosh/sqrt(a^2-cosh^2) = arcsin(sinh x/sqrt(a^2-1)) [cosh^2 x < a^2]",
+  "note": "x-dependent condition cosh^2 x < a^2"
+ },
+ {
+  "id": "GR2.462.12a",
+  "gr": "2.462.12",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]/Sqrt[Cosh[x]^2 - a^2], x]",
+  "rhs": [
+   "ArcCosh[Sinh[x]/Sqrt[a^2 - 1]]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "MZ 206",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int cosh/sqrt(cosh^2-a^2) = arcosh(sinh x/sqrt(a^2-1)) [a^2>1]",
+  "note": ""
+ },
+ {
+  "id": "GR2.462.12b",
+  "gr": "2.462.12",
+  "page": 182,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]/Sqrt[Cosh[x]^2 - 1], x]",
+  "rhs": [
+   "Log[Sinh[x]]"
+  ],
+  "conds": [],
+  "cite": "MZ 206",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "= ln sinh x [a^2=1]",
+  "note": "condition a^2 = 1 substituted (a = 1)"
+ },
+ {
+  "id": "GR2.462.13a",
+  "gr": "2.462.13",
+  "page": 183,
+  "status": "ok",
+  "lhs": "Integrate[Coth[x]/Sqrt[a + b*Sinh[x]], x]",
+  "rhs": [
+   "2*Sqrt[a]*ArcCoth[Sqrt[1 + b/a*Sinh[x]]]",
+   "-2/Sqrt[a]*ArcCoth[Sqrt[1 + b/a*Sinh[x]]]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "MZ 220, 221",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int coth[x]/sqrt(a+b sinh x) = 2 sqrt(a) arcoth sqrt(1+(b/a)sinh x) [b sinh x>0, a>0]",
+  "note": "x-dependent condition b sinh x > 0 in note; second candidate -2/Sqrt[a] is the coefficient direct differentiation suggests"
+ },
+ {
+  "id": "GR2.462.13b",
+  "gr": "2.462.13",
+  "page": 183,
+  "status": "ok",
+  "lhs": "Integrate[Coth[x]/Sqrt[a + b*Sinh[x]], x]",
+  "rhs": [
+   "2*Sqrt[a]*ArcTanh[Sqrt[1 + b/a*Sinh[x]]]",
+   "-2/Sqrt[a]*ArcTanh[Sqrt[1 + b/a*Sinh[x]]]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "MZ 220, 221",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "= 2 sqrt(a) artanh sqrt(1+(b/a)sinh x) [b sinh x<0, a>0]",
+  "note": "x-dependent condition b sinh x < 0 in note; second candidate -2/Sqrt[a] coefficient"
+ },
+ {
+  "id": "GR2.462.13c",
+  "gr": "2.462.13",
+  "page": 183,
+  "status": "ok",
+  "lhs": "Integrate[Coth[x]/Sqrt[a + b*Sinh[x]], x]",
+  "rhs": [
+   "2*Sqrt[-a]*ArcTanh[Sqrt[-(1 + b/a*Sinh[x])]]",
+   "2/Sqrt[-a]*ArcTan[Sqrt[-(1 + b/a*Sinh[x])]]"
+  ],
+  "conds": [
+   "a < 0"
+  ],
+  "cite": "MZ 220, 221",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "= 2 sqrt(-a) artanh sqrt(-(1+(b/a)sinh x)) [a<0]",
+  "note": "second candidate 2/Sqrt[-a] arctan is what direct differentiation suggests"
+ },
+ {
+  "id": "GR2.462.14a",
+  "gr": "2.462.14",
+  "page": 183,
+  "status": "ok",
+  "lhs": "Integrate[Tanh[x]/Sqrt[a + b*Cosh[x]], x]",
+  "rhs": [
+   "2*Sqrt[a]*ArcCoth[Sqrt[1 + b/a*Cosh[x]]]",
+   "-2/Sqrt[a]*ArcCoth[Sqrt[1 + b/a*Cosh[x]]]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "MZ 220, 221",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int tanh[x]/sqrt(a+b cosh x) = 2 sqrt(a) arcoth sqrt(1+(b/a)cosh x) [b cosh x>0, a>0]",
+  "note": "x-dependent condition b cosh x > 0 in note; second candidate -2/Sqrt[a] is the coefficient direct differentiation suggests"
+ },
+ {
+  "id": "GR2.462.14b",
+  "gr": "2.462.14",
+  "page": 183,
+  "status": "ok",
+  "lhs": "Integrate[Tanh[x]/Sqrt[a + b*Cosh[x]], x]",
+  "rhs": [
+   "2*Sqrt[a]*ArcTanh[Sqrt[1 + b/a*Cosh[x]]]",
+   "-2/Sqrt[a]*ArcTanh[Sqrt[1 + b/a*Cosh[x]]]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "MZ 220, 221",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "= 2 sqrt(a) artanh sqrt(1+(b/a)cosh x) [b cosh x<0, a>0]",
+  "note": "x-dependent condition b cosh x < 0 in note; second candidate -2/Sqrt[a] coefficient"
+ },
+ {
+  "id": "GR2.462.14c",
+  "gr": "2.462.14",
+  "page": 183,
+  "status": "ok",
+  "lhs": "Integrate[Tanh[x]/Sqrt[a + b*Cosh[x]], x]",
+  "rhs": [
+   "2*Sqrt[-a]*ArcTanh[Sqrt[-(1 + b/a*Cosh[x])]]",
+   "2/Sqrt[-a]*ArcTan[Sqrt[-(1 + b/a*Cosh[x])]]"
+  ],
+  "conds": [
+   "a < 0"
+  ],
+  "cite": "MZ 220, 221",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "= 2 sqrt(-a) artanh sqrt(-(1+(b/a)cosh x)) [a<0]",
+  "note": "second candidate 2/Sqrt[-a] arctan is what direct differentiation suggests"
+ },
+ {
+  "id": "GR2.463.1a",
+  "gr": "2.463.1",
+  "page": 183,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]*Sqrt[a + b*Cosh[x]]/(p + q*Cosh[x]), x]",
+  "rhs": [
+   "2*Sqrt[(a*q - b*p)/q]*ArcCoth[Sqrt[q*(a + b*Cosh[x])/(a*q - b*p)]]",
+   "2*Sqrt[(a + b*Cosh[x])]/q - 2/q*Sqrt[(a*q - b*p)/q]*ArcCoth[Sqrt[q*(a + b*Cosh[x])/(a*q - b*p)]]"
+  ],
+  "conds": [
+   "(a*q - b*p)/q > 0"
+  ],
+  "cite": "MZ 220",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int sinh x sqrt(a+b cosh x)/(p+q cosh x) = 2 sqrt((aq-bp)/q) arccoth sqrt(q(a+b cosh x)/(aq-bp)) [b cosh x > 0, (aq-bp)/q>0]",
+  "note": "x-dependent condition b cosh x > 0 in note; second candidate adds the 2 sqrt(a+b cosh x)/q term and the -1/q factor that direct integration (s = sqrt(a+b cosh x)) gives"
+ },
+ {
+  "id": "GR2.463.1b",
+  "gr": "2.463.1",
+  "page": 183,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]*Sqrt[a + b*Cosh[x]]/(p + q*Cosh[x]), x]",
+  "rhs": [
+   "2*Sqrt[(a*q - b*p)/q]*ArcTanh[Sqrt[q*(a + b*Cosh[x])/(a*q - b*p)]]",
+   "2*Sqrt[(a + b*Cosh[x])]/q - 2/q*Sqrt[(a*q - b*p)/q]*ArcTanh[Sqrt[q*(a + b*Cosh[x])/(a*q - b*p)]]"
+  ],
+  "conds": [
+   "(a*q - b*p)/q > 0"
+  ],
+  "cite": "MZ 220",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int sinh x sqrt(a+b cosh x)/(p+q cosh x) = 2 sqrt((aq-bp)/q) arctanh sqrt(q(a+b cosh x)/(aq-bp)) [b cosh x < 0, (aq-bp)/q>0]",
+  "note": "x-dependent condition b cosh x < 0 in note; second candidate adds the 2 sqrt(a+b cosh x)/q term and the -1/q factor that direct integration (s = sqrt(a+b cosh x)) gives"
+ },
+ {
+  "id": "GR2.463.1c",
+  "gr": "2.463.1",
+  "page": 183,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]*Sqrt[a + b*Cosh[x]]/(p + q*Cosh[x]), x]",
+  "rhs": [
+   "2*Sqrt[(b*p - a*q)/q]*ArcTanh[Sqrt[q*(a + b*Cosh[x])/(b*p - a*q)]]",
+   "2*Sqrt[(a + b*Cosh[x])]/q - 2/q*Sqrt[(b*p - a*q)/q]*ArcTan[Sqrt[q*(a + b*Cosh[x])/(b*p - a*q)]]"
+  ],
+  "conds": [
+   "(a*q - b*p)/q < 0"
+  ],
+  "cite": "MZ 220",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int sinh x sqrt(a+b cosh x)/(p+q cosh x) = 2 sqrt((bp-aq)/q) artanh sqrt(q(a+b cosh x)/(bp-aq)) [(aq-bp)/q<0]",
+  "note": "second candidate from direct integration (arctan form plus 2 sqrt(a+b cosh x)/q)"
+ },
+ {
+  "id": "GR2.463.2a",
+  "gr": "2.463.2",
+  "page": 183,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]*Sqrt[a + b*Sinh[x]]/(p + q*Sinh[x]), x]",
+  "rhs": [
+   "2*Sqrt[(a*q - b*p)/q]*ArcCoth[Sqrt[q*(a + b*Sinh[x])/(a*q - b*p)]]",
+   "2*Sqrt[(a + b*Sinh[x])]/q - 2/q*Sqrt[(a*q - b*p)/q]*ArcCoth[Sqrt[q*(a + b*Sinh[x])/(a*q - b*p)]]"
+  ],
+  "conds": [
+   "(a*q - b*p)/q > 0"
+  ],
+  "cite": "MZ 221",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int cosh x sqrt(a+b sinh x)/(p+q sinh x) = 2 sqrt((aq-bp)/q) arccoth sqrt(q(a+b sinh x)/(aq-bp)) [b sinh x > 0, (aq-bp)/q>0]",
+  "note": "x-dependent condition b sinh x > 0 in note; second candidate adds the 2 sqrt(a+b sinh x)/q term and the -1/q factor that direct integration (s = sqrt(a+b sinh x)) gives"
+ },
+ {
+  "id": "GR2.463.2b",
+  "gr": "2.463.2",
+  "page": 183,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]*Sqrt[a + b*Sinh[x]]/(p + q*Sinh[x]), x]",
+  "rhs": [
+   "2*Sqrt[(a*q - b*p)/q]*ArcTanh[Sqrt[q*(a + b*Sinh[x])/(a*q - b*p)]]",
+   "2*Sqrt[(a + b*Sinh[x])]/q - 2/q*Sqrt[(a*q - b*p)/q]*ArcTanh[Sqrt[q*(a + b*Sinh[x])/(a*q - b*p)]]"
+  ],
+  "conds": [
+   "(a*q - b*p)/q > 0"
+  ],
+  "cite": "MZ 221",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int cosh x sqrt(a+b sinh x)/(p+q sinh x) = 2 sqrt((aq-bp)/q) arctanh sqrt(q(a+b sinh x)/(aq-bp)) [b sinh x < 0, (aq-bp)/q>0]",
+  "note": "x-dependent condition b sinh x < 0 in note; second candidate adds the 2 sqrt(a+b sinh x)/q term and the -1/q factor that direct integration (s = sqrt(a+b sinh x)) gives"
+ },
+ {
+  "id": "GR2.463.2c",
+  "gr": "2.463.2",
+  "page": 183,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]*Sqrt[a + b*Sinh[x]]/(p + q*Sinh[x]), x]",
+  "rhs": [
+   "2*Sqrt[(b*p - a*q)/q]*ArcTanh[Sqrt[q*(a + b*Sinh[x])/(b*p - a*q)]]",
+   "2*Sqrt[(a + b*Sinh[x])]/q - 2/q*Sqrt[(b*p - a*q)/q]*ArcTan[Sqrt[q*(a + b*Sinh[x])/(b*p - a*q)]]"
+  ],
+  "conds": [
+   "(a*q - b*p)/q < 0"
+  ],
+  "cite": "MZ 221",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int cosh x sqrt(a+b sinh x)/(p+q sinh x) = 2 sqrt((bp-aq)/q) artanh sqrt(q(a+b sinh x)/(bp-aq)) [(aq-bp)/q<0]",
+  "note": "second candidate from direct integration (arctan form plus 2 sqrt(a+b sinh x)/q)"
+ },
+ {
+  "id": "GR2.464.1a",
+  "gr": "2.464.1",
+  "page": 183,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[k^2 + (1 - k^2)*Cosh[x]^2], x]",
+  "rhs": [
+   "MatharF2[ArcSin[Tanh[x]], k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (295.00)(295.10)",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int dx/sqrt(k^2+k'^2 cosh^2 x) = F(arcsin(tanh x), k) [x>0]",
+  "note": "k'^2 = 1 - k^2; condition x > 0; 0<k<1 implied"
+ },
+ {
+  "id": "GR2.464.1b",
+  "gr": "2.464.1",
+  "page": 183,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[1 + (1 - k^2)*Sinh[x]^2], x]",
+  "rhs": [
+   "MatharF2[ArcSin[Tanh[x]], k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (295.00)(295.10)",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int dx/sqrt(1+k'^2 sinh^2 x) = F(arcsin(tanh x), k) [x>0]",
+  "note": "k'^2 = 1 - k^2; condition x > 0"
+ },
+ {
+  "id": "GR2.464.2a",
+  "gr": "2.464.2",
+  "page": 183,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[Cosh[x]^2 - k^2], x]",
+  "rhs": [
+   "MatharF2[ArcSin[1/Cosh[x]], k]",
+   "-MatharF2[ArcSin[1/Cosh[x]], k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (295.40)(295.30)",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int dx/sqrt(cosh^2 x - k^2) = F(arcsin(1/cosh x), k) [x>0]",
+  "note": "condition x > 0; arcsin(sech x) decreases while the integrand is positive, so a negated candidate is added"
+ },
+ {
+  "id": "GR2.464.2b",
+  "gr": "2.464.2",
+  "page": 183,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[Sinh[x]^2 + (1 - k^2)], x]",
+  "rhs": [
+   "MatharF2[ArcSin[1/Cosh[x]], k]",
+   "-MatharF2[ArcSin[1/Cosh[x]], k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (295.40)(295.30)",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int dx/sqrt(sinh^2 x + k'^2) = F(arcsin(1/cosh x), k) [x>0]",
+  "note": "k'^2 = 1 - k^2; condition x > 0; negated candidate added"
+ },
+ {
+  "id": "GR2.464.3",
+  "gr": "2.464.3",
+  "page": 184,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[1 - (1 - k^2)*Cosh[x]^2], x]",
+  "rhs": [
+   "MatharF2[ArcSin[Tanh[x]/k], k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BY (295.20)",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int dx/sqrt(1-k'^2 cosh^2 x) = F(arcsin(tanh x/k), k) [0 < x < arccosh(1/k')]",
+  "note": "k'^2 = 1 - k^2; x-range condition 0 < x < arccosh(1/k') in note"
+ },
+ {
+  "id": "GR2.464.4",
+  "gr": "2.464.4",
+  "page": 184,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[Sinh[2*a*x]], x]",
+  "rhs": [
+   "1/(2*a)*MatharF2[ArcCos[(1 - Sinh[2*a*x])/(1 + Sinh[2*a*x])], 1/Sqrt[2]]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BY (296.50)",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int dx/sqrt(sinh 2ax) = F(alpha,r)/(2a)",
+  "note": "notation alpha = arccos((1-sinh 2ax)/(1+sinh 2ax)), r = 1/sqrt2 substituted; [ax>0]"
+ },
+ {
+  "id": "GR2.464.5",
+  "gr": "2.464.5",
+  "page": 184,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[Sinh[2*a*x]], x]",
+  "rhs": [
+   "1/(2*a)*(MatharF2[ArcCos[(1 - Sinh[2*a*x])/(1 + Sinh[2*a*x])], 1/Sqrt[2]] - 2*MatharE2[ArcCos[(1 - Sinh[2*a*x])/(1 + Sinh[2*a*x])], 1/Sqrt[2]]) + 1/a*Sqrt[Sinh[2*a*x]*(1 + Sinh[2*a*x]^2)]/(1 + Sinh[2*a*x])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BY (296.53)",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int sqrt(sinh 2ax) = [F-2E]/(2a) + (1/a) sqrt(sinh 2ax (1+sinh^2 2ax))/(1+sinh 2ax)",
+  "note": "notation alpha = arccos((1-sinh 2ax)/(1+sinh 2ax)), r = 1/sqrt2 substituted; [ax>0]"
+ },
+ {
+  "id": "GR2.464.6",
+  "gr": "2.464.6",
+  "page": 184,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[2*a*x]^2/((1 + Sinh[2*a*x])^2*Sqrt[Sinh[2*a*x]]), x]",
+  "rhs": [
+   "1/(2*a)*MatharE2[ArcCos[(1 - Sinh[2*a*x])/(1 + Sinh[2*a*x])], 1/Sqrt[2]]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BY (296.51)",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int cosh^2 2ax/((1+sinh 2ax)^2 sqrt(sinh 2ax)) = E(alpha,r)/(2a)",
+  "note": "notation alpha = arccos((1-sinh 2ax)/(1+sinh 2ax)), r = 1/sqrt2 substituted; [ax>0]"
+ },
+ {
+  "id": "GR2.464.7",
+  "gr": "2.464.7",
+  "page": 184,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Sinh[2*a*x])^2/((1 + Sinh[2*a*x])^2*Sqrt[Sinh[2*a*x]]), x]",
+  "rhs": [
+   "1/(2*a)*(2*MatharE2[ArcCos[(1 - Sinh[2*a*x])/(1 + Sinh[2*a*x])], 1/Sqrt[2]] - MatharF2[ArcCos[(1 - Sinh[2*a*x])/(1 + Sinh[2*a*x])], 1/Sqrt[2]])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BY (296.55)",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "= [2E - F]/(2a)",
+  "note": "notation alpha = arccos((1-sinh 2ax)/(1+sinh 2ax)), r = 1/sqrt2 substituted; [ax>0]"
+ },
+ {
+  "id": "GR2.464.8",
+  "gr": "2.464.8",
+  "page": 184,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[Sinh[2*a*x]]/(1 + Sinh[2*a*x])^2, x]",
+  "rhs": [
+   "1/(4*a)*(MatharF2[ArcCos[(1 - Sinh[2*a*x])/(1 + Sinh[2*a*x])], 1/Sqrt[2]] - MatharE2[ArcCos[(1 - Sinh[2*a*x])/(1 + Sinh[2*a*x])], 1/Sqrt[2]])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BY (296.54)",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int sqrt(sinh 2ax)/(1+sinh 2ax)^2 = [F-E]/(4a)",
+  "note": "notation alpha = arccos((1-sinh 2ax)/(1+sinh 2ax)), r = 1/sqrt2 substituted; [ax>0]"
+ },
+ {
+  "id": "GR2.464.9",
+  "gr": "2.464.9",
+  "page": 184,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[Cosh[2*a*x]], x]",
+  "rhs": [
+   "1/(a*Sqrt[2])*MatharF2[ArcSin[Sqrt[(Cosh[2*a*x] - 1)/Cosh[2*a*x]]], 1/Sqrt[2]]"
+  ],
+  "conds": [],
+  "cite": "BY (296.00)",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int dx/sqrt(cosh 2ax) = F(alpha,r)/(a sqrt2)",
+  "note": "notation alpha = arcsin sqrt((cosh 2ax - 1)/cosh 2ax), r = 1/sqrt2 substituted; [x != 0]"
+ },
+ {
+  "id": "GR2.464.10",
+  "gr": "2.464.10",
+  "page": 184,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[Cosh[2*a*x]], x]",
+  "rhs": [
+   "1/(a*Sqrt[2])*(MatharF2[ArcSin[Sqrt[(Cosh[2*a*x] - 1)/Cosh[2*a*x]]], 1/Sqrt[2]] - 2*MatharE2[ArcSin[Sqrt[(Cosh[2*a*x] - 1)/Cosh[2*a*x]]], 1/Sqrt[2]]) + Sinh[2*a*x]/(a*Sqrt[Cosh[2*a*x]])"
+  ],
+  "conds": [],
+  "cite": "BY (296.03)",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int sqrt(cosh 2ax) = [F-2E]/(a sqrt2) + sinh 2ax/(a sqrt(cosh 2ax))",
+  "note": "notation alpha = arcsin sqrt((cosh 2ax - 1)/cosh 2ax), r = 1/sqrt2 substituted; [x != 0]"
+ },
+ {
+  "id": "GR2.464.11",
+  "gr": "2.464.11",
+  "page": 184,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[Cosh[2*a*x]^3], x]",
+  "rhs": [
+   "1/(a*Sqrt[2])*(2*MatharE2[ArcSin[Sqrt[(Cosh[2*a*x] - 1)/Cosh[2*a*x]]], 1/Sqrt[2]] - MatharF2[ArcSin[Sqrt[(Cosh[2*a*x] - 1)/Cosh[2*a*x]]], 1/Sqrt[2]])"
+  ],
+  "conds": [],
+  "cite": "BY (296.04)",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int dx/sqrt(cosh^3 2ax) = [2E-F]/(a sqrt2)",
+  "note": "notation alpha = arcsin sqrt((cosh 2ax - 1)/cosh 2ax), r = 1/sqrt2 substituted; [x != 0]"
+ },
+ {
+  "id": "GR2.464.12",
+  "gr": "2.464.12",
+  "page": 184,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[Cosh[2*a*x]^5], x]",
+  "rhs": [
+   "1/(3*Sqrt[2]*a)*MatharF2[ArcSin[Sqrt[(Cosh[2*a*x] - 1)/Cosh[2*a*x]]], 1/Sqrt[2]] + Tanh[2*a*x]/(3*a*Sqrt[Cosh[2*a*x]])"
+  ],
+  "conds": [],
+  "cite": "BY (296.04)",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int dx/sqrt(cosh^5 2ax) = F/(3 sqrt2 a) + tanh 2ax/(3a sqrt(cosh 2ax))",
+  "note": "notation alpha = arcsin sqrt((cosh 2ax - 1)/cosh 2ax), r = 1/sqrt2 substituted; [x != 0]"
+ },
+ {
+  "id": "GR2.464.13",
+  "gr": "2.464.13",
+  "page": 184,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[2*a*x]^2/Sqrt[Cosh[2*a*x]], x]",
+  "rhs": [
+   "-Sqrt[2]/(3*a)*MatharF2[ArcSin[Sqrt[(Cosh[2*a*x] - 1)/Cosh[2*a*x]]], 1/Sqrt[2]] + 1/(3*a)*Sinh[2*a*x]*Sqrt[Cosh[2*a*x]]"
+  ],
+  "conds": [],
+  "cite": "BY (296.07)",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int sinh^2 2ax/sqrt(cosh 2ax) = -sqrt2/(3a) F + sinh 2ax sqrt(cosh 2ax)/(3a)",
+  "note": "notation alpha = arcsin sqrt((cosh 2ax - 1)/cosh 2ax), r = 1/sqrt2 substituted; [x != 0]"
+ },
+ {
+  "id": "GR2.464.14",
+  "gr": "2.464.14",
+  "page": 184,
+  "status": "ok",
+  "lhs": "Integrate[Tanh[2*a*x]^2/Sqrt[Cosh[2*a*x]], x]",
+  "rhs": [
+   "Sqrt[2]/(3*a)*MatharF2[ArcSin[Sqrt[(Cosh[2*a*x] - 1)/Cosh[2*a*x]]], 1/Sqrt[2]] - Tanh[2*a*x]/(3*a*Sqrt[Cosh[2*a*x]])"
+  ],
+  "conds": [],
+  "cite": "BY (296.05)",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int tanh^2 2ax/sqrt(cosh 2ax) = sqrt2/(3a) F - tanh 2ax/(3a sqrt(cosh 2ax))",
+  "note": "notation alpha = arcsin sqrt((cosh 2ax - 1)/cosh 2ax), r = 1/sqrt2 substituted; [x != 0]"
+ },
+ {
+  "id": "GR2.464.15",
+  "gr": "2.464.15",
+  "page": 184,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[Cosh[2*a*x]]/(p^2 + (1 - p^2)*Cosh[2*a*x]), x]",
+  "rhs": [
+   "1/(a*Sqrt[2])*EllipticPi[p^2, ArcSin[Sqrt[(Cosh[2*a*x] - 1)/Cosh[2*a*x]]], 1/2]",
+   "1/(a*Sqrt[2])*EllipticPi[-p^2, ArcSin[Sqrt[(Cosh[2*a*x] - 1)/Cosh[2*a*x]]], 1/2]"
+  ],
+  "conds": [],
+  "cite": "BY (296.02)",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int sqrt(cosh 2ax)/(p^2+(1-p^2)cosh 2ax) = Pi(alpha, p^2, r)/(a sqrt2)",
+  "note": "notation alpha = arcsin sqrt((cosh 2ax - 1)/cosh 2ax), r = 1/sqrt2 substituted; [x != 0]; Pi(alpha,p^2,r) -> EllipticPi[p^2, alpha, r^2]; second candidate with -p^2"
+ },
+ {
+  "id": "GR2.464.16",
+  "gr": "2.464.16",
+  "page": 184,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[a + b*Sinh[x]], x]",
+  "rhs": [
+   "1/(a^2 + b^2)^(1/4)*MatharF2[ArcCos[(Sqrt[a^2 + b^2] - a - b*Sinh[x])/(Sqrt[a^2 + b^2] + a + b*Sinh[x])], Sqrt[(a + Sqrt[a^2 + b^2])/(2*Sqrt[a^2 + b^2])]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BY (298.00)",
+  "edition_note": "",
+  "section": "2.46 Algebraic functions of hyperbolic functions",
+  "tex": "int dx/sqrt(a+b sinh x) = F(alpha,r)/(a^2+b^2)^(1/4)",
+  "note": "notation alpha = arccos((sqrt(a^2+b^2)-a-b sinh x)/(sqrt(a^2+b^2)+a+b sinh x)), r = sqrt((a+sqrt(a^2+b^2))/(2 sqrt(a^2+b^2))) substituted; [a>0, b>0, x > -arcsinh(a/b)]"
+ }
+]

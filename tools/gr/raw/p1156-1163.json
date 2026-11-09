@@ -1,0 +1,1657 @@
+[
+ {
+  "id": "GR17.11",
+  "gr": "17.11",
+  "page": 1156,
+  "status": "SKIP-REFERENCE",
+  "tex": "F(s) = int_0^inf f(x) e^(-sx) dx, Re s > 0",
+  "reason": "definition of the Laplace transform (generic f)",
+  "cite": "SN 30",
+  "edition_note": "",
+  "section": "17.11 Laplace transform"
+ },
+ {
+  "id": "GR17.12.1",
+  "gr": "17.12.1",
+  "page": 1156,
+  "status": "SKIP-GENERIC",
+  "tex": "L[a f + b g] = a F + b G",
+  "reason": "linearity, generic f, g",
+  "cite": "",
+  "edition_note": "8",
+  "section": "17.12 Basic properties of the Laplace transform"
+ },
+ {
+  "id": "GR17.12.2",
+  "gr": "17.12.2",
+  "page": 1156,
+  "status": "SKIP-GENERIC",
+  "tex": "L[f^(n)] = s^n F - s^(n-1) f(0) - ...",
+  "reason": "transform of a derivative, generic f",
+  "cite": "SN 32",
+  "edition_note": "",
+  "section": "17.12 Basic properties of the Laplace transform"
+ },
+ {
+  "id": "GR17.12.3",
+  "gr": "17.12.3",
+  "page": 1157,
+  "status": "SKIP-GENERIC",
+  "tex": "L[int_0^x f] = F(s)/s",
+  "reason": "transform of an integral, generic f",
+  "cite": "SN 37",
+  "edition_note": "11",
+  "section": "17.12 Basic properties of the Laplace transform"
+ },
+ {
+  "id": "GR17.12.4",
+  "gr": "17.12.4",
+  "page": 1157,
+  "status": "SKIP-GENERIC",
+  "tex": "L[e^(-ax) f] = F(s+a)",
+  "reason": "shift theorem, generic f",
+  "cite": "SU 143",
+  "edition_note": "",
+  "section": "17.12 Basic properties of the Laplace transform"
+ },
+ {
+  "id": "GR17.12.5",
+  "gr": "17.12.5",
+  "page": 1157,
+  "status": "SKIP-GENERIC",
+  "tex": "L[f*g] = F G",
+  "reason": "convolution theorem, generic f, g",
+  "cite": "SN 30",
+  "edition_note": "",
+  "section": "17.12 Basic properties of the Laplace transform"
+ },
+ {
+  "id": "GR17.13.1",
+  "gr": "17.13.1",
+  "page": 1157,
+  "status": "ok",
+  "lhs": "Integrate[(1)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/s"
+  ],
+  "conds": [
+   "Re[s] > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[1] = 1/s",
+  "note": "Re s > 0 implied"
+ },
+ {
+  "id": "GR17.13.2",
+  "gr": "17.13.2",
+  "page": 1157,
+  "status": "ok",
+  "lhs": "Integrate[(x^n)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "n!/s^(n + 1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 133(3)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x^n] = n!/s^(n + 1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.3",
+  "gr": "17.13.3",
+  "page": 1157,
+  "status": "ok",
+  "lhs": "Integrate[(x^nu)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu + 1]/s^(nu + 1)"
+  ],
+  "conds": [
+   "nu > -1",
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 137(1)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x^nu] = Gamma[nu + 1]/s^(nu + 1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.4",
+  "gr": "17.13.4",
+  "page": 1157,
+  "status": "ok",
+  "lhs": "Integrate[(x^(n - 1/2))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[n + 1/2]/s^(n + 1/2)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 135(17)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x^(n - 1/2)] = Gamma[n + 1/2]/s^(n + 1/2)",
+  "note": "n = 0,1,2,... not printed; implied by notation"
+ },
+ {
+  "id": "GR17.13.5",
+  "gr": "17.13.5",
+  "page": 1157,
+  "status": "ok",
+  "lhs": "Integrate[(x^(-1/2)*(x + a)^(-1))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*a^(-1/2)*E^(a*s)*Erfc[a^(1/2)*s^(1/2)]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[s] >= 0"
+  ],
+  "cite": "ET I 136(25)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x^(-1/2)*(x + a)^(-1)] = Pi*a^(-1/2)*E^(a*s)*Erfc[a^(1/2)*s^(1/2)]",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.6",
+  "gr": "17.13.6",
+  "page": 1157,
+  "status": "ok",
+  "lhs": "Integrate[(Min[x, 1])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(1 - E^(-s))/s^2"
+  ],
+  "conds": [
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 142(14)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Min[x, 1]] = (1 - E^(-s))/s^2",
+  "note": "f = x for 0<x<1, 1 for x>1, written Min[x, 1]"
+ },
+ {
+  "id": "GR17.13.7",
+  "gr": "17.13.7",
+  "page": 1157,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-a*x))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(s + a)"
+  ],
+  "conds": [
+   "Re[s] > -Re[a]"
+  ],
+  "cite": "ET I 143(1)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[E^(-a*x)] = 1/(s + a)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.8",
+  "gr": "17.13.8",
+  "page": 1157,
+  "status": "ok",
+  "lhs": "Integrate[(x*E^(-a*x))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(s + a)^2"
+  ],
+  "conds": [
+   "Re[s] > -Re[a]"
+  ],
+  "cite": "ET I 144(2)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x*E^(-a*x)] = 1/(s + a)^2",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.9a",
+  "gr": "17.13.9a",
+  "page": 1157,
+  "status": "ok",
+  "lhs": "Integrate[((E^(-a*x) - E^(-b*x))/(b - a))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(s + a)^(-1)*(s + b)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > -Re[a]",
+   "Re[s] > -Re[b]"
+  ],
+  "cite": "AS 1022(29.3.12)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(E^(-a*x) - E^(-b*x))/(b - a)] = (s + a)^(-1)*(s + b)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.9b",
+  "gr": "17.13.9b",
+  "page": 1158,
+  "status": "ok",
+  "lhs": "Integrate[(((c - b)*E^(-a*x) + (a - c)*E^(-b*x) + (b - a)*E^(-c*x))/((a - b)*(b - c)*(c - a)))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(s + a)^(-1)*(s + b)^(-1)*(s + c)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > -Re[a]",
+   "Re[s] > -Re[b]",
+   "Re[s] > -Re[c]"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[((c - b)*E^(-a*x) + (a - c)*E^(-b*x) + (b - a)*E^(-c*x))/((a - b)*(b - c)*(c - a))] = (s + a)^(-1)*(s + b)^(-1)*(s + c)^(-1)",
+  "note": "alpha = c-b, beta = a-c, gamma = b-a substituted; a, b, c distinct"
+ },
+ {
+  "id": "GR17.13.10",
+  "gr": "17.13.10",
+  "page": 1158,
+  "status": "ok",
+  "lhs": "Integrate[((a*E^(-a*x) - b*E^(-b*x))/(b - a))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s*(s + a)^(-1)*(s + b)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > -Re[a]",
+   "Re[s] > -Re[b]"
+  ],
+  "cite": "AS 1022(29.3.13)",
+  "edition_note": "11",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(a*E^(-a*x) - b*E^(-b*x))/(b - a)] = s*(s + a)^(-1)*(s + b)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.11",
+  "gr": "17.13.11",
+  "page": 1158,
+  "status": "ok",
+  "lhs": "Integrate[((E^(a*x) - 1)/a)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-1)*(s - a)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Re[a]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(E^(a*x) - 1)/a] = s^(-1)*(s - a)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.12",
+  "gr": "17.13.12",
+  "page": 1158,
+  "status": "ok",
+  "lhs": "Integrate[((E^(a*x) - a*x - 1)/a^2)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-2)*(s - a)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Re[a]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(E^(a*x) - a*x - 1)/a^2] = s^(-2)*(s - a)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.13",
+  "gr": "17.13.13",
+  "page": 1158,
+  "status": "ok",
+  "lhs": "Integrate[((E^(a*x) - a^2*x^2/2 - a*x - 1)/a^3)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-3)*(s - a)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Re[a]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(E^(a*x) - a^2*x^2/2 - a*x - 1)/a^3] = s^(-3)*(s - a)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.14",
+  "gr": "17.13.14",
+  "page": 1158,
+  "status": "ok",
+  "lhs": "Integrate[((1 + a*x)*E^(a*x))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s/(s - a)^2"
+  ],
+  "conds": [
+   "Re[s] > Re[a]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(1 + a*x)*E^(a*x)] = s/(s - a)^2",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.15",
+  "gr": "17.13.15",
+  "page": 1158,
+  "status": "ok",
+  "lhs": "Integrate[((1 + (a*x - 1)*E^(a*x))/a^2)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-1)*(s - a)^(-2)"
+  ],
+  "conds": [
+   "Re[s] > Re[a]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(1 + (a*x - 1)*E^(a*x))/a^2] = s^(-1)*(s - a)^(-2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.16",
+  "gr": "17.13.16",
+  "page": 1158,
+  "status": "ok",
+  "lhs": "Integrate[((2 + a*x + (a*x - 2)*E^(a*x))/a^3)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-2)*(s - a)^(-2)"
+  ],
+  "conds": [
+   "Re[s] > Re[a]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(2 + a*x + (a*x - 2)*E^(a*x))/a^3] = s^(-2)*(s - a)^(-2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.17",
+  "gr": "17.13.17",
+  "page": 1158,
+  "status": "ok",
+  "lhs": "Integrate[(x^n*E^(a*x))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "n!*(s - a)^(-(n + 1))"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[s] > Re[a]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x^n*E^(a*x)] = n!*(s - a)^(-(n + 1))",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.18",
+  "gr": "17.13.18",
+  "page": 1158,
+  "status": "ok",
+  "lhs": "Integrate[((x + a*x^2/2)*E^(a*x))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s/(s - a)^3"
+  ],
+  "conds": [
+   "Re[s] > Re[a]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(x + a*x^2/2)*E^(a*x)] = s/(s - a)^3",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.19",
+  "gr": "17.13.19",
+  "page": 1158,
+  "status": "ok",
+  "lhs": "Integrate[((1 + 2*a*x + a^2*x^2/2)*E^(a*x))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^2/(s - a)^3"
+  ],
+  "conds": [
+   "Re[s] > Re[a]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(1 + 2*a*x + a^2*x^2/2)*E^(a*x)] = s^2/(s - a)^3",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.20",
+  "gr": "17.13.20",
+  "page": 1158,
+  "status": "ok",
+  "lhs": "Integrate[(x^3*E^(a*x)/6)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(s - a)^(-4)"
+  ],
+  "conds": [
+   "Re[s] > Re[a]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x^3*E^(a*x)/6] = (s - a)^(-4)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.21",
+  "gr": "17.13.21",
+  "page": 1158,
+  "status": "ok",
+  "lhs": "Integrate[((x^2/2 + a*x^3/6)*E^(a*x))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s/(s - a)^4"
+  ],
+  "conds": [
+   "Re[s] > Re[a]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(x^2/2 + a*x^3/6)*E^(a*x)] = s/(s - a)^4",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.22",
+  "gr": "17.13.22",
+  "page": 1158,
+  "status": "ok",
+  "lhs": "Integrate[((x + a*x^2 + a^2*x^3/6)*E^(a*x))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^2*(s - a)^(-4)"
+  ],
+  "conds": [
+   "Re[s] > Re[a]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(x + a*x^2 + a^2*x^3/6)*E^(a*x)] = s^2*(s - a)^(-4)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.23",
+  "gr": "17.13.23",
+  "page": 1159,
+  "status": "ok",
+  "lhs": "Integrate[((1 + 3*a*x + 3*a^2*x^2/2 + a^3*x^3/6)*E^(a*x))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^3*(s - a)^(-4)"
+  ],
+  "conds": [
+   "Re[s] > Re[a]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(1 + 3*a*x + 3*a^2*x^2/2 + a^3*x^3/6)*E^(a*x)] = s^3*(s - a)^(-4)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.24",
+  "gr": "17.13.24",
+  "page": 1159,
+  "status": "ok",
+  "lhs": "Integrate[((a*E^(a*x) - b*E^(b*x))/(a - b))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s*(s - a)^(-1)*(s - b)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Re[a]",
+   "Re[s] > Re[b]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(a*E^(a*x) - b*E^(b*x))/(a - b)] = s*(s - a)^(-1)*(s - b)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.25",
+  "gr": "17.13.25",
+  "page": 1159,
+  "status": "ok",
+  "lhs": "Integrate[((E^(a*x)/a - E^(b*x)/b + 1/b - 1/a)/(a - b))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-1)*(s - a)^(-1)*(s - b)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Re[a]",
+   "Re[s] > Re[b]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(E^(a*x)/a - E^(b*x)/b + 1/b - 1/a)/(a - b)] = s^(-1)*(s - a)^(-1)*(s - b)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.26",
+  "gr": "17.13.26",
+  "page": 1159,
+  "status": "ok",
+  "lhs": "Integrate[(x^(nu - 1)*E^(-a*x))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]*(s + a)^(-nu)"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "Re[s] > -Re[a]"
+  ],
+  "cite": "ET I 144(3)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x^(nu - 1)*E^(-a*x)] = Gamma[nu]*(s + a)^(-nu)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.27",
+  "gr": "17.13.27",
+  "page": 1159,
+  "status": "ok",
+  "lhs": "Integrate[(x*E^(-x^2/(4*a)))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2*a - 2*Pi^(1/2)*a^(3/2)*s*E^(a*s^2)*Erfc[s*a^(1/2)]"
+  ],
+  "conds": [
+   "Re[a] > 0"
+  ],
+  "cite": "ET I 146(22)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x*E^(-x^2/(4*a))] = 2*a - 2*Pi^(1/2)*a^(3/2)*s*E^(a*s^2)*Erfc[s*a^(1/2)]",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.28",
+  "gr": "17.13.28",
+  "page": 1159,
+  "status": "ok",
+  "lhs": "Integrate[(Exp[-a*E^x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "a^s*Gamma[-s, a]"
+  ],
+  "conds": [
+   "Re[a] > 0"
+  ],
+  "cite": "ET I 147(37)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Exp[-a*E^x]] = a^s*Gamma[-s, a]",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.29",
+  "gr": "17.13.29",
+  "page": 1159,
+  "status": "ok",
+  "lhs": "Integrate[(x^(1/2)*E^(-a/(4*x)))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^(1/2)*s^(-3/2)*(1 + a^(1/2)*s^(1/2))*Exp[(-a*s)^(1/2)]/2",
+   "Pi^(1/2)*s^(-3/2)*(1 + a^(1/2)*s^(1/2))*Exp[-(a*s)^(1/2)]/2"
+  ],
+  "conds": [
+   "Re[a] >= 0",
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 146(26)",
+  "edition_note": "8",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x^(1/2)*E^(-a/(4*x))] = Pi^(1/2)*s^(-3/2)*(1 + a^(1/2)*s^(1/2))*Exp[(-a*s)^(1/2)]/2",
+  "note": "book prints exp[(-as)^(1/2)]; second candidate exp[-(as)^(1/2)]"
+ },
+ {
+  "id": "GR17.13.30",
+  "gr": "17.13.30",
+  "page": 1159,
+  "status": "ok",
+  "lhs": "Integrate[(x^(-1/2)*E^(-a/(4*x)))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^(1/2)*s^(-1/2)*Exp[(-a*s)^(1/2)]",
+   "Pi^(1/2)*s^(-1/2)*Exp[-(a*s)^(1/2)]"
+  ],
+  "conds": [
+   "Re[a] >= 0",
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 146(27)",
+  "edition_note": "8",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x^(-1/2)*E^(-a/(4*x))] = Pi^(1/2)*s^(-1/2)*Exp[(-a*s)^(1/2)]",
+  "note": "book prints exp[(-as)^(1/2)]; second candidate exp[-(as)^(1/2)]"
+ },
+ {
+  "id": "GR17.13.31",
+  "gr": "17.13.31",
+  "page": 1159,
+  "status": "ok",
+  "lhs": "Integrate[(x^(-3/2)*E^(-a/(4*x)))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi^(1/2)*a^(-1/2)*Exp[(-a*s)^(1/2)]",
+   "2*Pi^(1/2)*a^(-1/2)*Exp[-(a*s)^(1/2)]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[s] >= 0"
+  ],
+  "cite": "ET I 146(28)",
+  "edition_note": "8",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x^(-3/2)*E^(-a/(4*x))] = 2*Pi^(1/2)*a^(-1/2)*Exp[(-a*s)^(1/2)]",
+  "note": "book prints exp[(-as)^(1/2)]; second candidate exp[-(as)^(1/2)]"
+ },
+ {
+  "id": "GR17.13.32",
+  "gr": "17.13.32",
+  "page": 1159,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "a*(s^2 + a^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "ET I 150(1)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Sin[a*x]] = a*(s^2 + a^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.33",
+  "gr": "17.13.33",
+  "page": 1159,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s*(s^2 + a^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "ET I 154(3)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Cos[a*x]] = s*(s^2 + a^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.34",
+  "gr": "17.13.34",
+  "page": 1159,
+  "status": "ok",
+  "lhs": "Integrate[(Abs[Sin[a*x]])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "a*(s^2 + a^2)^(-1)*Coth[Pi*s/(2*a)]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 150(2)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Abs[Sin[a*x]]] = a*(s^2 + a^2)^(-1)*Coth[Pi*s/(2*a)]",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.35",
+  "gr": "17.13.35",
+  "page": 1160,
+  "status": "ok",
+  "lhs": "Integrate[(Abs[Cos[a*x]])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(s^2 + a^2)^(-1)*(s + a*Csch[Pi*s/(2*a)])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 155(44)",
+  "edition_note": "11",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Abs[Cos[a*x]]] = (s^2 + a^2)^(-1)*(s + a*Csch[Pi*s/(2*a)])",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.36",
+  "gr": "17.13.36",
+  "page": 1160,
+  "status": "ok",
+  "lhs": "Integrate[((1 - Cos[a*x])/a^2)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-1)*(s^2 + a^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "AS 1022(29.3.19)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(1 - Cos[a*x])/a^2] = s^(-1)*(s^2 + a^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.37",
+  "gr": "17.13.37",
+  "page": 1160,
+  "status": "ok",
+  "lhs": "Integrate[((a*x - Sin[a*x])/a^3)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-2)*(s^2 + a^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "AS 1022(29.3.20)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(a*x - Sin[a*x])/a^3] = s^(-2)*(s^2 + a^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.38",
+  "gr": "17.13.38",
+  "page": 1160,
+  "status": "ok",
+  "lhs": "Integrate[((Sin[a*x] - a*x*Cos[a*x])/(2*a^3))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(s^2 + a^2)^(-2)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "AS 1022(29.3.21)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(Sin[a*x] - a*x*Cos[a*x])/(2*a^3)] = (s^2 + a^2)^(-2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.39",
+  "gr": "17.13.39",
+  "page": 1160,
+  "status": "ok",
+  "lhs": "Integrate[(x*Sin[a*x]/(2*a))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s*(s^2 + a^2)^(-2)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "ET I 152(14)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x*Sin[a*x]/(2*a)] = s*(s^2 + a^2)^(-2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.40",
+  "gr": "17.13.40",
+  "page": 1160,
+  "status": "ok",
+  "lhs": "Integrate[((Sin[a*x] + a*x*Cos[a*x])/(2*a))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^2*(s^2 + a^2)^(-2)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "AS 1023(29.3.23)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(Sin[a*x] + a*x*Cos[a*x])/(2*a)] = s^2*(s^2 + a^2)^(-2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.41",
+  "gr": "17.13.41",
+  "page": 1160,
+  "status": "ok",
+  "lhs": "Integrate[(x*Cos[a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(s^2 - a^2)*(s^2 + a^2)^(-2)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "ET I 157(57)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x*Cos[a*x]] = (s^2 - a^2)*(s^2 + a^2)^(-2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.42",
+  "gr": "17.13.42",
+  "page": 1160,
+  "status": "ok",
+  "lhs": "Integrate[((Cos[a*x] - Cos[b*x])/(b^2 - a^2))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s*(s^2 + a^2)^(-1)*(s^2 + b^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]",
+   "Re[s] > Abs[Im[b]]"
+  ],
+  "cite": "AS 1023(29.3.25)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(Cos[a*x] - Cos[b*x])/(b^2 - a^2)] = s*(s^2 + a^2)^(-1)*(s^2 + b^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.43",
+  "gr": "17.13.43",
+  "page": 1160,
+  "status": "ok",
+  "lhs": "Integrate[((a^2*x^2/2 - 1 + Cos[a*x])/a^4)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-3)*(s^2 + a^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(a^2*x^2/2 - 1 + Cos[a*x])/a^4] = s^(-3)*(s^2 + a^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.44",
+  "gr": "17.13.44",
+  "page": 1160,
+  "status": "ok",
+  "lhs": "Integrate[((1 - Cos[a*x] - a*x*Sin[a*x]/2)/a^4)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-1)*(s^2 + a^2)^(-2)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(1 - Cos[a*x] - a*x*Sin[a*x]/2)/a^4] = s^(-1)*(s^2 + a^2)^(-2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.45",
+  "gr": "17.13.45",
+  "page": 1160,
+  "status": "ok",
+  "lhs": "Integrate[((Sin[b*x]/b - Sin[a*x]/a)/(a^2 - b^2))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(s^2 + a^2)^(-1)*(s^2 + b^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]",
+   "Re[s] > Abs[Im[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(Sin[b*x]/b - Sin[a*x]/a)/(a^2 - b^2)] = (s^2 + a^2)^(-1)*(s^2 + b^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.46",
+  "gr": "17.13.46",
+  "page": 1160,
+  "status": "ok",
+  "lhs": "Integrate[((1 - Cos[a*x] + a*x*Sin[a*x]/2)/a^2)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-1)*(s^2 + a^2)^(-2)*(2*s^2 + a^2)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(1 - Cos[a*x] + a*x*Sin[a*x]/2)/a^2] = s^(-1)*(s^2 + a^2)^(-2)*(2*s^2 + a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.47",
+  "gr": "17.13.47",
+  "page": 1161,
+  "status": "ok",
+  "lhs": "Integrate[((a*Sin[a*x] - b*Sin[b*x])/(a^2 - b^2))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^2*(s^2 + a^2)^(-1)*(s^2 + b^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]",
+   "Re[s] > Abs[Im[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(a*Sin[a*x] - b*Sin[b*x])/(a^2 - b^2)] = s^2*(s^2 + a^2)^(-1)*(s^2 + b^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.48",
+  "gr": "17.13.48",
+  "page": 1161,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[a + b*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(s*Sin[a] + b*Cos[a])*(s^2 + b^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Sin[a + b*x]] = (s*Sin[a] + b*Cos[a])*(s^2 + b^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.49",
+  "gr": "17.13.49",
+  "page": 1161,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[a + b*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(s*Cos[a] - b*Sin[a])*(s^2 + b^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Cos[a + b*x]] = (s*Cos[a] - b*Sin[a])*(s^2 + b^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.50",
+  "gr": "17.13.50",
+  "page": 1161,
+  "status": "ok",
+  "lhs": "Integrate[((Sinh[a*x]/a - Sin[b*x]/b)/(a^2 + b^2))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(s^2 - a^2)^(-1)*(s^2 + b^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]",
+   "Re[s] > Abs[Im[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(Sinh[a*x]/a - Sin[b*x]/b)/(a^2 + b^2)] = (s^2 - a^2)^(-1)*(s^2 + b^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.51",
+  "gr": "17.13.51",
+  "page": 1161,
+  "status": "ok",
+  "lhs": "Integrate[((Cosh[a*x] - Cos[b*x])/(a^2 + b^2))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s*(s^2 - a^2)^(-1)*(s^2 + b^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]",
+   "Re[s] > Abs[Im[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(Cosh[a*x] - Cos[b*x])/(a^2 + b^2)] = s*(s^2 - a^2)^(-1)*(s^2 + b^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.52",
+  "gr": "17.13.52",
+  "page": 1161,
+  "status": "ok",
+  "lhs": "Integrate[((a*Sinh[a*x] + b*Sin[b*x])/(a^2 + b^2))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^2*(s^2 - a^2)^(-1)*(s^2 + b^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]",
+   "Re[s] > Abs[Im[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(a*Sinh[a*x] + b*Sin[b*x])/(a^2 + b^2)] = s^2*(s^2 - a^2)^(-1)*(s^2 + b^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.53",
+  "gr": "17.13.53",
+  "page": 1161,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[a*x]*Sin[b*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2*a*b*s*(s^2 + (a - b)^2)^(-1)*(s^2 + (a + b)^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]",
+   "Re[s] > Abs[Im[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Sin[a*x]*Sin[b*x]] = 2*a*b*s*(s^2 + (a - b)^2)^(-1)*(s^2 + (a + b)^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.54",
+  "gr": "17.13.54",
+  "page": 1161,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[a*x]*Cos[b*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s*(s^2 + a^2 + b^2)*(s^2 + (a - b)^2)^(-1)*(s^2 + (a + b)^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]",
+   "Re[s] > Abs[Im[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Cos[a*x]*Cos[b*x]] = s*(s^2 + a^2 + b^2)*(s^2 + (a - b)^2)^(-1)*(s^2 + (a + b)^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.55",
+  "gr": "17.13.55",
+  "page": 1161,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[a*x]*Cos[b*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "a*(s^2 + a^2 - b^2)*(s^2 + (a - b)^2)^(-1)*(s^2 + (a + b)^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]",
+   "Re[s] > Abs[Im[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Sin[a*x]*Cos[b*x]] = a*(s^2 + a^2 - b^2)*(s^2 + (a - b)^2)^(-1)*(s^2 + (a + b)^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.56",
+  "gr": "17.13.56",
+  "page": 1161,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[a*x]^2)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2*a^2*s^(-1)*(s^2 + 4*a^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Sin[a*x]^2] = 2*a^2*s^(-1)*(s^2 + 4*a^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.57",
+  "gr": "17.13.57",
+  "page": 1161,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[a*x]^2)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(s^2 + 2*a^2)*s^(-1)*(s^2 + 4*a^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Cos[a*x]^2] = (s^2 + 2*a^2)*s^(-1)*(s^2 + 4*a^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.58",
+  "gr": "17.13.58",
+  "page": 1161,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[a*x]*Cos[a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "a*(s^2 + 4*a^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Sin[a*x]*Cos[a*x]] = a*(s^2 + 4*a^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.59",
+  "gr": "17.13.59",
+  "page": 1161,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-a*x)*Sin[b*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "b*((s + a)^2 + b^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > -Re[a]",
+   "Re[s] > Abs[Im[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[E^(-a*x)*Sin[b*x]] = b*((s + a)^2 + b^2)^(-1)",
+  "note": "book's set condition Re s > {-Re a, |Im b|}; strictly Re s > -Re a + |Im b|"
+ },
+ {
+  "id": "GR17.13.60",
+  "gr": "17.13.60",
+  "page": 1162,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-a*x)*Cos[b*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(s + a)*((s + a)^2 + b^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > -Re[a]",
+   "Re[s] > Abs[Im[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[E^(-a*x)*Cos[b*x]] = (s + a)*((s + a)^2 + b^2)^(-1)",
+  "note": "book's set condition Re s > {-Re a, |Im b|}; strictly Re s > -Re a + |Im b|"
+ },
+ {
+  "id": "GR17.13.61",
+  "gr": "17.13.61",
+  "page": 1162,
+  "status": "ok",
+  "lhs": "Integrate[(x^(-1)*Sin[a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "ArcTan[a/s]"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "ET I 152(16)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x^(-1)*Sin[a*x]] = ArcTan[a/s]",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.62",
+  "gr": "17.13.62",
+  "page": 1162,
+  "status": "ok",
+  "lhs": "Integrate[(x^(-1)*(1 - Cos[a*x]))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Log[1 + a^2/s^2]/2"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "ET I 157(59)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x^(-1)*(1 - Cos[a*x])] = Log[1 + a^2/s^2]/2",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.63",
+  "gr": "17.13.63",
+  "page": 1162,
+  "status": "ok",
+  "lhs": "Integrate[(Sinh[a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "a*(s^2 - a^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "ET I 162(1)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Sinh[a*x]] = a*(s^2 - a^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.64",
+  "gr": "17.13.64",
+  "page": 1162,
+  "status": "ok",
+  "lhs": "Integrate[(Cosh[a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s*(s^2 - a^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "ET I 162(2)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Cosh[a*x]] = s*(s^2 - a^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.65",
+  "gr": "17.13.65",
+  "page": 1162,
+  "status": "ok",
+  "lhs": "Integrate[(x^(nu - 1)*Sinh[a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]*((s - a)^(-nu) - (s + a)^(-nu))/2"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "ET I 164(18)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x^(nu - 1)*Sinh[a*x]] = Gamma[nu]*((s - a)^(-nu) - (s + a)^(-nu))/2",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.66",
+  "gr": "17.13.66",
+  "page": 1162,
+  "status": "ok",
+  "lhs": "Integrate[(x^(nu - 1)*Cosh[a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]*((s - a)^(-nu) + (s + a)^(-nu))/2"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "ET I 164(19)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x^(nu - 1)*Cosh[a*x]] = Gamma[nu]*((s - a)^(-nu) + (s + a)^(-nu))/2",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.67",
+  "gr": "17.13.67",
+  "page": 1162,
+  "status": "ok",
+  "lhs": "Integrate[(x*Sinh[a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2*a*s*(s^2 - a^2)^(-2)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x*Sinh[a*x]] = 2*a*s*(s^2 - a^2)^(-2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.68",
+  "gr": "17.13.68",
+  "page": 1162,
+  "status": "ok",
+  "lhs": "Integrate[(x*Cosh[a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(s^2 + a^2)*(s^2 - a^2)^(-2)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x*Cosh[a*x]] = (s^2 + a^2)*(s^2 - a^2)^(-2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.69",
+  "gr": "17.13.69",
+  "page": 1162,
+  "status": "ok",
+  "lhs": "Integrate[(Sinh[a*x] - Sin[a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2*a^3*(s^4 - a^4)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]",
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "AS 1023(29.3.31)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Sinh[a*x] - Sin[a*x]] = 2*a^3*(s^4 - a^4)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.70",
+  "gr": "17.13.70",
+  "page": 1162,
+  "status": "ok",
+  "lhs": "Integrate[(Cosh[a*x] - Cos[a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2*a^2*s*(s^4 - a^4)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]",
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "AS 1023(29.3.32)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Cosh[a*x] - Cos[a*x]] = 2*a^2*s*(s^4 - a^4)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.71",
+  "gr": "17.13.71",
+  "page": 1162,
+  "status": "ok",
+  "lhs": "Integrate[(Sinh[a*x] + a*x*Cosh[a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2*a*s^2*(a^2 - s^2)^(-2)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Sinh[a*x] + a*x*Cosh[a*x]] = 2*a*s^2*(a^2 - s^2)^(-2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.72",
+  "gr": "17.13.72",
+  "page": 1162,
+  "status": "ok",
+  "lhs": "Integrate[(a*x*Cosh[a*x] - Sinh[a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2*a^3*(a^2 - s^2)^(-2)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[a*x*Cosh[a*x] - Sinh[a*x]] = 2*a^3*(a^2 - s^2)^(-2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.73",
+  "gr": "17.13.73",
+  "page": 1163,
+  "status": "ok",
+  "lhs": "Integrate[(x*Sinh[a*x] - Cosh[a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s*(a^2 + 2*a - s^2)*(a^2 - s^2)^(-2)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[x*Sinh[a*x] - Cosh[a*x]] = s*(a^2 + 2*a - s^2)*(a^2 - s^2)^(-2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.74",
+  "gr": "17.13.74",
+  "page": 1163,
+  "status": "ok",
+  "lhs": "Integrate[((Sinh[a*x]/a - Sinh[b*x]/b)/(a^2 - b^2))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(a^2 - s^2)^(-1)*(b^2 - s^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]",
+   "Re[s] > Abs[Re[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(Sinh[a*x]/a - Sinh[b*x]/b)/(a^2 - b^2)] = (a^2 - s^2)^(-1)*(b^2 - s^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.75",
+  "gr": "17.13.75",
+  "page": 1163,
+  "status": "ok",
+  "lhs": "Integrate[((Cosh[a*x] - Cosh[b*x])/(a^2 - b^2))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s*(s^2 - a^2)^(-1)*(s^2 - b^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]",
+   "Re[s] > Abs[Re[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(Cosh[a*x] - Cosh[b*x])/(a^2 - b^2)] = s*(s^2 - a^2)^(-1)*(s^2 - b^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.76",
+  "gr": "17.13.76",
+  "page": 1163,
+  "status": "ok",
+  "lhs": "Integrate[((a*Sinh[a*x] - b*Sinh[b*x])/(a^2 - b^2))*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^2*(s^2 - a^2)^(-1)*(s^2 - b^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]",
+   "Re[s] > Abs[Re[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(a*Sinh[a*x] - b*Sinh[b*x])/(a^2 - b^2)] = s^2*(s^2 - a^2)^(-1)*(s^2 - b^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.77",
+  "gr": "17.13.77",
+  "page": 1163,
+  "status": "ok",
+  "lhs": "Integrate[(Sinh[a + b*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(b*Cosh[a] + s*Sinh[a])*(s^2 - b^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Sinh[a + b*x]] = (b*Cosh[a] + s*Sinh[a])*(s^2 - b^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.78",
+  "gr": "17.13.78",
+  "page": 1163,
+  "status": "ok",
+  "lhs": "Integrate[(Cosh[a + b*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(s*Cosh[a] + b*Sinh[a])*(s^2 - b^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Cosh[a + b*x]] = (s*Cosh[a] + b*Sinh[a])*(s^2 - b^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.79",
+  "gr": "17.13.79",
+  "page": 1163,
+  "status": "ok",
+  "lhs": "Integrate[(Sinh[a*x]*Sinh[b*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2*a*b*s*(s^2 - (a + b)^2)^(-1)*(s^2 - (a - b)^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]",
+   "Re[s] > Abs[Re[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Sinh[a*x]*Sinh[b*x]] = 2*a*b*s*(s^2 - (a + b)^2)^(-1)*(s^2 - (a - b)^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.80",
+  "gr": "17.13.80",
+  "page": 1163,
+  "status": "ok",
+  "lhs": "Integrate[(Cosh[a*x]*Cosh[b*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s*(s^2 - a^2 - b^2)*(s^2 - (a + b)^2)^(-1)*(s^2 - (a - b)^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]",
+   "Re[s] > Abs[Re[b]]"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Cosh[a*x]*Cosh[b*x]] = s*(s^2 - a^2 - b^2)*(s^2 - (a + b)^2)^(-1)*(s^2 - (a - b)^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.81",
+  "gr": "17.13.81",
+  "page": 1163,
+  "status": "ok",
+  "lhs": "Integrate[(Sinh[a*x]*Cosh[b*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "a*(s^2 - a^2 + b^2)*(s^2 - (a + b)^2)^(-1)*(s^2 - (a - b)^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]",
+   "Re[s] > Abs[Re[b]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Sinh[a*x]*Cosh[b*x]] = a*(s^2 - a^2 + b^2)*(s^2 - (a + b)^2)^(-1)*(s^2 - (a - b)^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.82",
+  "gr": "17.13.82",
+  "page": 1163,
+  "status": "ok",
+  "lhs": "Integrate[(Sinh[a*x]^2)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2*a^2*s^(-1)*(s^2 - 4*a^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Sinh[a*x]^2] = 2*a^2*s^(-1)*(s^2 - 4*a^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.83",
+  "gr": "17.13.83",
+  "page": 1163,
+  "status": "ok",
+  "lhs": "Integrate[(Cosh[a*x]^2)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(s^2 - 2*a^2)*s^(-1)*(s^2 - 4*a^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Cosh[a*x]^2] = (s^2 - 2*a^2)*s^(-1)*(s^2 - 4*a^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.84",
+  "gr": "17.13.84",
+  "page": 1163,
+  "status": "ok",
+  "lhs": "Integrate[(Sinh[a*x]*Cosh[a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "a*(s^2 - 4*a^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[Sinh[a*x]*Cosh[a*x]] = a*(s^2 - 4*a^2)^(-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.85",
+  "gr": "17.13.85",
+  "page": 1163,
+  "status": "ok",
+  "lhs": "Integrate[((Cosh[a*x] - 1)/a^2)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-1)*(s^2 - a^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "L[(Cosh[a*x] - 1)/a^2] = s^(-1)*(s^2 - a^2)^(-1)",
+  "note": ""
+ }
+]

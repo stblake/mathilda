@@ -1,0 +1,1103 @@
+[
+ {
+  "id": "GR3.020",
+  "gr": "3.020",
+  "page": 297,
+  "status": "SKIP-GENERIC",
+  "tex": "int_alpha^beta f(x) dx = int_phi^psi f[g(t)] g'(t) dt, x=g(t)",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "",
+  "edition_note": "",
+  "section": "3.02 Change of variable in a definite integral"
+ },
+ {
+  "id": "GR3.021.1",
+  "gr": "3.021.1",
+  "page": 297,
+  "status": "SKIP-GENERIC",
+  "tex": "int_alpha^beta f(x)dx = (beta-alpha)/(psi-phi) int_phi^psi f(linear subst) dt",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "",
+  "edition_note": "",
+  "section": "3.02 Change of variable in a definite integral"
+ },
+ {
+  "id": "GR3.021.2",
+  "gr": "3.021.2",
+  "page": 298,
+  "status": "SKIP-GENERIC",
+  "tex": "int_alpha^beta f(x)dx = (beta-alpha) int_0^1 f((beta-alpha)t+alpha) dt",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "",
+  "edition_note": "",
+  "section": "3.02 Change of variable in a definite integral"
+ },
+ {
+  "id": "GR3.021.3",
+  "gr": "3.021.3",
+  "page": 298,
+  "status": "SKIP-GENERIC",
+  "tex": "int_alpha^beta f(x)dx = (beta-alpha) int_0^inf f((alpha+beta t)/(1+t)) dt/(1+t)^2",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "",
+  "edition_note": "",
+  "section": "3.02 Change of variable in a definite integral"
+ },
+ {
+  "id": "GR3.022.1",
+  "gr": "3.022.1",
+  "page": 298,
+  "status": "SKIP-GENERIC",
+  "tex": "int_alpha^beta f(x)dx = int_alpha^beta f(alpha+beta-x)dx",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "",
+  "edition_note": "",
+  "section": "3.02 Change of variable in a definite integral"
+ },
+ {
+  "id": "GR3.022.2",
+  "gr": "3.022.2",
+  "page": 298,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^beta f(x)dx = int_0^beta f(beta-x)dx",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "",
+  "edition_note": "",
+  "section": "3.02 Change of variable in a definite integral"
+ },
+ {
+  "id": "GR3.022.3",
+  "gr": "3.022.3",
+  "page": 298,
+  "status": "SKIP-GENERIC",
+  "tex": "int_-alpha^alpha f(x)dx = int_-alpha^alpha f(-x)dx",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "",
+  "edition_note": "",
+  "section": "3.02 Change of variable in a definite integral"
+ },
+ {
+  "id": "GR3.031.1",
+  "gr": "3.031.1",
+  "page": 298,
+  "status": "SKIP-GENERIC",
+  "tex": "even f: int_-p^p f = 2 int_0^p f",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "FI II 159",
+  "edition_note": "",
+  "section": "3.03 General formulas"
+ },
+ {
+  "id": "GR3.031.2",
+  "gr": "3.031.2",
+  "page": 298,
+  "status": "SKIP-GENERIC",
+  "tex": "odd f: int_-p^p f = 0",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "FI II 159",
+  "edition_note": "",
+  "section": "3.03 General formulas"
+ },
+ {
+  "id": "GR3.032.1",
+  "gr": "3.032.1",
+  "page": 298,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^(pi/2) f(sin x) dx = int_0^(pi/2) f(cos x) dx",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "FI II 159",
+  "edition_note": "",
+  "section": "3.03 General formulas"
+ },
+ {
+  "id": "GR3.032.2",
+  "gr": "3.032.2",
+  "page": 298,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^(2pi) f(p cos x + q sin x) dx = 2 int_0^pi f(sqrt(p^2+q^2) cos x) dx",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "FI II 160",
+  "edition_note": "",
+  "section": "3.03 General formulas"
+ },
+ {
+  "id": "GR3.032.3",
+  "gr": "3.032.3",
+  "page": 298,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^(pi/2) f(sin 2x) cos x dx = int_0^(pi/2) f(cos^2 x) cos x dx",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "FI II 161",
+  "edition_note": "",
+  "section": "3.03 General formulas"
+ },
+ {
+  "id": "GR3.033.1",
+  "gr": "3.033.1",
+  "page": 298,
+  "status": "SKIP-GENERIC",
+  "tex": "f(x+pi)=f(x), f(-x)=f(x): int_0^inf f(x) sin x/x dx = int_0^(pi/2) f(x) dx",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "LO V 277(3)",
+  "edition_note": "",
+  "section": "3.03 General formulas"
+ },
+ {
+  "id": "GR3.033.2",
+  "gr": "3.033.2",
+  "page": 299,
+  "status": "SKIP-GENERIC",
+  "tex": "f(x+pi)=-f(x), f(-x)=f(x): int_0^inf f(x) sin x/x dx = int_0^(pi/2) f(x) cos x dx",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "LO V 279(4)",
+  "edition_note": "",
+  "section": "3.03 General formulas"
+ },
+ {
+  "id": "GR3.034",
+  "gr": "3.034",
+  "page": 299,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf (f(px)-f(qx))/x dx = [f(0)-f(+inf)] ln(q/p) (Frullani)",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "FI II 633",
+  "edition_note": "",
+  "section": "3.03 General formulas"
+ },
+ {
+  "id": "GR3.035.1",
+  "gr": "3.035.1",
+  "page": 299,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^pi (f(alpha+e^(ix))+f(alpha+e^(-ix)))/(1+2p cos x+p^2) dx = 2pi/(1-p^2) f(alpha+p) [|p|<1]",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "LA 230(16)",
+  "edition_note": "",
+  "section": "3.03 General formulas"
+ },
+ {
+  "id": "GR3.035.2",
+  "gr": "3.035.2",
+  "page": 299,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^pi (1-p cos x)/(1-2p cos x+p^2) {f(alpha+e^(xi))+f(alpha+e^(-xi))} dx = pi{f(alpha+p)+f(alpha)} [|p|<1]",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "BE 169",
+  "edition_note": "",
+  "section": "3.03 General formulas"
+ },
+ {
+  "id": "GR3.035.3",
+  "gr": "3.035.3",
+  "page": 299,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^pi (f(alpha+e^(-xi))-f(alpha+e^(xi)))/(1-2p cos x+p^2) sin x dx = (pi/pi?){f(alpha+p)-f(alpha)} [|p|<1]",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "BE 169",
+  "edition_note": "",
+  "section": "3.03 General formulas"
+ },
+ {
+  "id": "GR3.036.1",
+  "gr": "3.036.1",
+  "page": 299,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^pi f(sin^2 x/(1+2p cos x+p^2)) dx = int_0^pi f(sin^2 x) dx [p^2<1] = int_0^pi f(sin^2 x/p^2) dx [p^2>=1]",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "LA 228(6)",
+  "edition_note": "11",
+  "section": "3.03 General formulas"
+ },
+ {
+  "id": "GR3.036.2",
+  "gr": "3.036.2",
+  "page": 299,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^pi F^(n)(cos x) sin^(2n) x dx = (2n-1)!! int_0^pi F(cos x) cos nx dx",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "B 174",
+  "edition_note": "",
+  "section": "3.03 General formulas"
+ },
+ {
+  "id": "GR3.037.1",
+  "gr": "3.037.1",
+  "page": 299,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf f1(r,x)/(p^2+x^2) dx = pi/(2p) f(r e^(-p))",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "LA 230(19)",
+  "edition_note": "",
+  "section": "3.03 General formulas"
+ },
+ {
+  "id": "GR3.037.2",
+  "gr": "3.037.2",
+  "page": 299,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf f2(r,x) x/(p^2+x^2) dx = pi/2 [f(r e^(-p)) - f(0)]",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "LA 230(20)",
+  "edition_note": "",
+  "section": "3.03 General formulas"
+ },
+ {
+  "id": "GR3.037.3",
+  "gr": "3.037.3",
+  "page": 299,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf f2(r,x)/x dx = pi/2 [f(r)-f(0)]",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "LA 230(21)",
+  "edition_note": "",
+  "section": "3.03 General formulas"
+ },
+ {
+  "id": "GR3.037.4",
+  "gr": "3.037.4",
+  "page": 300,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf f2(r,x)/(x(p^2+x^2)) dx = pi/(2p^2) [f(r) - f(r e^(-p))]",
+  "reason": "integrand contains an unspecified function f",
+  "cite": "LA 230(22)",
+  "edition_note": "",
+  "section": "3.03 General formulas"
+ },
+ {
+  "id": "GR3.038",
+  "gr": "3.038",
+  "page": 300,
+  "status": "SKIP-GENERIC",
+  "tex": "int_-inf^inf x/sqrt(1+x^2) F(qx+p sqrt(1+x^2)) dx = int_-inf^inf F(p cosh x + q sinh x) sinh x dx = 2q int_0^inf F'(sign p sqrt(p^2-q^2) cosh x) sinh^2 x dx",
+  "reason": "integrand contains an unspecified function F",
+  "cite": "",
+  "edition_note": "",
+  "section": "3.03 General formulas"
+ },
+ {
+  "id": "GR3.041",
+  "gr": "3.041",
+  "page": 300,
+  "status": "SKIP-REFERENCE",
+  "tex": "definition: int_p^inf f = lim_{P->inf} int_p^P f",
+  "reason": "definition or theorem, no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "3.04 Improper integrals"
+ },
+ {
+  "id": "GR3.042",
+  "gr": "3.042",
+  "page": 300,
+  "status": "SKIP-REFERENCE",
+  "tex": "definition of improper integral at singular point q",
+  "reason": "definition or theorem, no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "3.04 Improper integrals"
+ },
+ {
+  "id": "GR3.043",
+  "gr": "3.043",
+  "page": 300,
+  "status": "SKIP-REFERENCE",
+  "tex": "definition of absolute convergence",
+  "reason": "definition or theorem, no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "3.04 Improper integrals"
+ },
+ {
+  "id": "GR3.044",
+  "gr": "3.044",
+  "page": 300,
+  "status": "SKIP-REFERENCE",
+  "tex": "convergence test lim x^alpha |f(x)|",
+  "reason": "definition or theorem, no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "3.04 Improper integrals"
+ },
+ {
+  "id": "GR3.045",
+  "gr": "3.045",
+  "page": 300,
+  "status": "SKIP-REFERENCE",
+  "tex": "convergence test at singular point (q-x)^alpha |f(x)|",
+  "reason": "definition or theorem, no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "3.04 Improper integrals"
+ },
+ {
+  "id": "GR3.046",
+  "gr": "3.046",
+  "page": 301,
+  "status": "SKIP-REFERENCE",
+  "tex": "Dirichlet test: int_p^inf f(x) g(x) dx converges",
+  "reason": "definition or theorem, no closed value",
+  "cite": "FI II 577",
+  "edition_note": "",
+  "section": "3.04 Improper integrals"
+ },
+ {
+  "id": "GR3.051",
+  "gr": "3.051",
+  "page": 301,
+  "status": "SKIP-REFERENCE",
+  "tex": "definition of principal value at interior singular point",
+  "reason": "definition or theorem, no closed value",
+  "cite": "FI II 603",
+  "edition_note": "",
+  "section": "3.05 The principal values of improper integrals"
+ },
+ {
+  "id": "GR3.052",
+  "gr": "3.052",
+  "page": 301,
+  "status": "SKIP-REFERENCE",
+  "tex": "int_p^q dx/f(x) diverges but exists as PV when f has simple zero",
+  "reason": "definition or theorem, no closed value",
+  "cite": "FI II 605",
+  "edition_note": "",
+  "section": "3.05 The principal values of improper integrals"
+ },
+ {
+  "id": "GR3.053",
+  "gr": "3.053",
+  "page": 301,
+  "status": "SKIP-REFERENCE",
+  "tex": "divergent integral of positive function has no PV",
+  "reason": "definition or theorem, no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "3.05 The principal values of improper integrals"
+ },
+ {
+  "id": "GR3.054",
+  "gr": "3.054",
+  "page": 301,
+  "status": "SKIP-REFERENCE",
+  "tex": "definition of PV at infinity",
+  "reason": "definition or theorem, no closed value",
+  "cite": "FI II 607",
+  "edition_note": "",
+  "section": "3.05 The principal values of improper integrals"
+ },
+ {
+  "id": "GR3.055",
+  "gr": "3.055",
+  "page": 301,
+  "status": "SKIP-REFERENCE",
+  "tex": "PV of even function exists only if convergent",
+  "reason": "definition or theorem, no closed value",
+  "cite": "FI II 607",
+  "edition_note": "",
+  "section": "3.05 The principal values of improper integrals"
+ },
+ {
+  "id": "GR3.111",
+  "gr": "3.111",
+  "page": 302,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[(p + q*x)/(r^2 + 2*r*x*Cos[lam] + x^2), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi/(r*Sin[lam])*(p - q*r*Cos[lam])"
+  ],
+  "conds": [],
+  "cite": "BI (22)(14)",
+  "edition_note": "",
+  "section": "3.11 Rational functions",
+  "tex": "int_-inf^inf (p+qx)/(r^2+2rx cos lam + x^2) dx = pi/(r sin lam)(p - qr cos lam) (principal value)",
+  "note": "marked principal value; item printed as '1.' under 3.11 heading, taken to be 3.111"
+ },
+ {
+  "id": "GR3.112.1",
+  "gr": "3.112.1",
+  "page": 302,
+  "status": "SKIP-GENERIC",
+  "tex": "int_-inf^inf g_n(x)/(h_n(x)h_n(-x)) dx = pi i M_n/(a0 Delta_n), determinants",
+  "reason": "indexed parameter family",
+  "cite": "JE",
+  "edition_note": "11",
+  "section": "3.11 Rational functions"
+ },
+ {
+  "id": "GR3.112.2",
+  "gr": "3.112.2",
+  "page": 302,
+  "status": "ok",
+  "lhs": "Integrate[(b0)/((a0*(x) + a1)*(a0*(-x) + a1)), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*I*b0/(a0*a1)"
+  ],
+  "conds": [
+   "AllTrue[x /. Solve[(a0*(x) + a1) == 0, x], Im[#] > 0 &]"
+  ],
+  "cite": "JE",
+  "edition_note": "",
+  "section": "3.11 Rational functions",
+  "tex": "int_-inf^inf g1(x)/(h1(x)h1(-x)) dx, g_n=b0 x^(2n-2)+...+b_(n-1), h_n=a0 x^n+...+a_n",
+  "note": "all roots of h_n(x) lie in the upper half-plane (cond expresses this); g_n, h_n substituted"
+ },
+ {
+  "id": "GR3.112.3",
+  "gr": "3.112.3",
+  "page": 302,
+  "status": "ok",
+  "lhs": "Integrate[(b0*x^2 + b1)/((a0*(x)^2 + a1*(x) + a2)*(a0*(-x)^2 + a1*(-x) + a2)), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*I*(-b0 + a0*b1/a2)/(a0*a1)"
+  ],
+  "conds": [
+   "AllTrue[x /. Solve[(a0*(x)^2 + a1*(x) + a2) == 0, x], Im[#] > 0 &]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.11 Rational functions",
+  "tex": "int_-inf^inf g2(x)/(h2(x)h2(-x)) dx, g_n=b0 x^(2n-2)+...+b_(n-1), h_n=a0 x^n+...+a_n",
+  "note": "all roots of h_n(x) lie in the upper half-plane (cond expresses this); g_n, h_n substituted"
+ },
+ {
+  "id": "GR3.112.4",
+  "gr": "3.112.4",
+  "page": 302,
+  "status": "ok",
+  "lhs": "Integrate[(b0*x^4 + b1*x^2 + b2)/((a0*(x)^3 + a1*(x)^2 + a2*(x) + a3)*(a0*(-x)^3 + a1*(-x)^2 + a2*(-x) + a3)), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*I*(-a2*b0 + a0*b1 - a0*a1*b2/a3)/(a0*(a0*a3 - a1*a2))"
+  ],
+  "conds": [
+   "AllTrue[x /. Solve[(a0*(x)^3 + a1*(x)^2 + a2*(x) + a3) == 0, x], Im[#] > 0 &]"
+  ],
+  "cite": "JE",
+  "edition_note": "8",
+  "section": "3.11 Rational functions",
+  "tex": "int_-inf^inf g3(x)/(h3(x)h3(-x)) dx, g_n=b0 x^(2n-2)+...+b_(n-1), h_n=a0 x^n+...+a_n",
+  "note": "all roots of h_n(x) lie in the upper half-plane (cond expresses this); g_n, h_n substituted"
+ },
+ {
+  "id": "GR3.112.5",
+  "gr": "3.112.5",
+  "page": 302,
+  "status": "ok",
+  "lhs": "Integrate[(b0*x^6 + b1*x^4 + b2*x^2 + b3)/((a0*(x)^4 + a1*(x)^3 + a2*(x)^2 + a3*(x) + a4)*(a0*(-x)^4 + a1*(-x)^3 + a2*(-x)^2 + a3*(-x) + a4)), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*I*(b0*(-a1*a4 + a2*a3) - a0*a3*b1 + a0*a1*b2 + a0*b3/a4*(a0*a3 - a1*a2))/(a0*(a0*a3^2 + a1^2*a4 - a1*a2*a3))"
+  ],
+  "conds": [
+   "AllTrue[x /. Solve[(a0*(x)^4 + a1*(x)^3 + a2*(x)^2 + a3*(x) + a4) == 0, x], Im[#] > 0 &]"
+  ],
+  "cite": "JE",
+  "edition_note": "11",
+  "section": "3.11 Rational functions",
+  "tex": "int_-inf^inf g4(x)/(h4(x)h4(-x)) dx, g_n=b0 x^(2n-2)+...+b_(n-1), h_n=a0 x^n+...+a_n",
+  "note": "all roots of h_n(x) lie in the upper half-plane (cond expresses this); g_n, h_n substituted"
+ },
+ {
+  "id": "GR3.112.6",
+  "gr": "3.112.6",
+  "page": 302,
+  "status": "ok",
+  "lhs": "Integrate[(b0*x^8 + b1*x^6 + b2*x^4 + b3*x^2 + b4)/((a0*(x)^5 + a1*(x)^4 + a2*(x)^3 + a3*(x)^2 + a4*(x) + a5)*(a0*(-x)^5 + a1*(-x)^4 + a2*(-x)^3 + a3*(-x)^2 + a4*(-x) + a5)), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*I*(b0*(-a0*a4*a5 + a1*a4^2 + a2^2*a5 - a2*a3*a4) + a0*b1*(-a2*a5 + a3*a4) + a0*b2*(a0*a5 - a1*a4) + a0*b3*(-a0*a3 + a1*a2) + a0*b4/a5*(-a0*a1*a5 + a0*a3^2 + a1^2*a4 - a1*a2*a3))/(a0*(a0^2*a5^2 - 2*a0*a1*a4*a5 - a0*a2*a3*a5 + a0*a3^2*a4 + a1^2*a4^2 + a1*a2^2*a5 - a1*a2*a3*a4))"
+  ],
+  "conds": [
+   "AllTrue[x /. Solve[(a0*(x)^5 + a1*(x)^4 + a2*(x)^3 + a3*(x)^2 + a4*(x) + a5) == 0, x], Im[#] > 0 &]"
+  ],
+  "cite": "JE",
+  "edition_note": "",
+  "section": "3.11 Rational functions",
+  "tex": "int_-inf^inf g5(x)/(h5(x)h5(-x)) dx, g_n=b0 x^(2n-2)+...+b_(n-1), h_n=a0 x^n+...+a_n",
+  "note": "all roots of h_n(x) lie in the upper half-plane (cond expresses this); g_n, h_n substituted; M5, Delta5 substituted"
+ },
+ {
+  "id": "GR3.121.1",
+  "gr": "3.121.1",
+  "page": 303,
+  "status": "ok",
+  "lhs": "Integrate[1/((1 - 2*x*Cos[lam] + x^2)*Sqrt[x]), {x, 0, 1}]",
+  "rhs": [
+   "2*Csc[lam]*Sum[Sin[k*lam]/(2*k - 1), {k, 1, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "BI (10)(17)",
+  "edition_note": "",
+  "section": "3.12 Products of rational functions and expressions that can be reduced to square roots of first- and second-degree polynomials",
+  "tex": "int_0^1 1/(1-2x cos lam+x^2) dx/sqrt x = 2 cosec lam sum_{k>=1} sin(k lam)/(2k-1)",
+  "note": "no condition printed; presumably 0 < lam < Pi"
+ },
+ {
+  "id": "GR3.121.2",
+  "gr": "3.121.2",
+  "page": 303,
+  "status": "ok",
+  "lhs": "Integrate[1/((q - p*x)*Sqrt[x*(1 - x)]), {x, 0, 1}]",
+  "rhs": [
+   "Pi/Sqrt[q*(q - p)]"
+  ],
+  "conds": [
+   "0 < p < q"
+  ],
+  "cite": "BI (10)(9)",
+  "edition_note": "",
+  "section": "3.12 Products of rational functions and expressions that can be reduced to square roots of first- and second-degree polynomials",
+  "tex": "int_0^1 1/(q-px) dx/sqrt(x(1-x)) = pi/sqrt(q(q-p))",
+  "note": ""
+ },
+ {
+  "id": "GR3.121.3a",
+  "gr": "3.121.3",
+  "page": 303,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(1 - x)/(1 + x)]/(1 - 2*r*x + r^2), {x, 0, 1}]",
+  "rhs": [
+   "Pi/(4*r) - (1/r)*(1 - r)/(1 + r)*ArcTan[(1 + r)/(1 - r)]"
+  ],
+  "conds": [],
+  "cite": "LI (14)(5, 16)",
+  "edition_note": "",
+  "section": "3.12 Products of rational functions and expressions that can be reduced to square roots of first- and second-degree polynomials",
+  "tex": "int_0^1 dx/(1-2rx+r^2) sqrt((1-x)/(1+x)) = pi/(4r) - (1/r)(1-r)/(1+r) arctan((1+r)/(1-r))",
+  "note": "upper signs of the +- pair; no condition printed (presumably 0<r<1)"
+ },
+ {
+  "id": "GR3.121.3b",
+  "gr": "3.121.3",
+  "page": 303,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(1 + x)/(1 - x)]/(1 - 2*r*x + r^2), {x, 0, 1}]",
+  "rhs": [
+   "-Pi/(4*r) + (1/r)*(1 + r)/(1 - r)*ArcTan[(1 + r)/(1 - r)]"
+  ],
+  "conds": [],
+  "cite": "LI (14)(5, 16)",
+  "edition_note": "",
+  "section": "3.12 Products of rational functions and expressions that can be reduced to square roots of first- and second-degree polynomials",
+  "tex": "int_0^1 dx/(1-2rx+r^2) sqrt((1+x)/(1-x)) = -pi/(4r) + (1/r)(1+r)/(1-r) arctan((1+r)/(1-r))",
+  "note": "lower signs of the +- pair; no condition printed (presumably 0<r<1)"
+ },
+ {
+  "id": "GR3.131.1",
+  "gr": "3.131.1",
+  "page": 303,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)*(c - x)], {x, -Infinity, u}]",
+  "rhs": [
+   "2/Sqrt[a - c]*MatharF2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]]"
+  ],
+  "conds": [
+   "a > b > c >= u"
+  ],
+  "cite": "BY (231.00)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_-Infinity^u dx/sqrt((a - x)*(b - x)*(c - x)) = 2/sqrt(a-c) F(alpha,p)",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.131.2",
+  "gr": "3.131.2",
+  "page": 303,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)*(c - x)], {x, u, c}]",
+  "rhs": [
+   "2/Sqrt[a - c]*MatharF2[ArcSin[Sqrt[(c - u)/(b - u)]], Sqrt[(a - b)/(a - c)]]"
+  ],
+  "conds": [
+   "a > b > c > u"
+  ],
+  "cite": "BY (232.00)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^c dx/sqrt((a - x)*(b - x)*(c - x)) = 2/sqrt(a-c) F(beta,p)",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.131.3",
+  "gr": "3.131.3",
+  "page": 303,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)*(x - c)], {x, c, u}]",
+  "rhs": [
+   "2/Sqrt[a - c]*MatharF2[ArcSin[Sqrt[(u - c)/(b - c)]], Sqrt[(b - c)/(a - c)]]"
+  ],
+  "conds": [
+   "a > b >= u > c"
+  ],
+  "cite": "BY (233.00)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_c^u dx/sqrt((a - x)*(b - x)*(x - c)) = 2/sqrt(a-c) F(gamma,q)",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.131.4",
+  "gr": "3.131.4",
+  "page": 303,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)*(x - c)], {x, u, b}]",
+  "rhs": [
+   "2/Sqrt[a - c]*MatharF2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[(b - c)/(a - c)]]"
+  ],
+  "conds": [
+   "a > b > u >= c"
+  ],
+  "cite": "BY (234.00)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b dx/sqrt((a - x)*(b - x)*(x - c)) = 2/sqrt(a-c) F(delta,q)",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.131.5",
+  "gr": "3.131.5",
+  "page": 303,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(x - b)*(x - c)], {x, b, u}]",
+  "rhs": [
+   "2/Sqrt[a - c]*MatharF2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[(a - b)/(a - c)]]"
+  ],
+  "conds": [
+   "a >= u > b > c"
+  ],
+  "cite": "BY (235.00)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u dx/sqrt((a - x)*(x - b)*(x - c)) = 2/sqrt(a-c) F(kappa,p)",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.131.6",
+  "gr": "3.131.6",
+  "page": 303,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(x - b)*(x - c)], {x, u, a}]",
+  "rhs": [
+   "2/Sqrt[a - c]*MatharF2[ArcSin[Sqrt[(a - u)/(a - b)]], Sqrt[(a - b)/(a - c)]]"
+  ],
+  "conds": [
+   "a > u >= b > c"
+  ],
+  "cite": "BY (236.00)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^a dx/sqrt((a - x)*(x - b)*(x - c)) = 2/sqrt(a-c) F(lam,p)",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.131.7",
+  "gr": "3.131.7",
+  "page": 303,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)*(x - b)*(x - c)], {x, a, u}]",
+  "rhs": [
+   "2/Sqrt[a - c]*MatharF2[ArcSin[Sqrt[(u - a)/(u - b)]], Sqrt[(b - c)/(a - c)]]"
+  ],
+  "conds": [
+   "u > a > b > c"
+  ],
+  "cite": "BY (237.00)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_a^u dx/sqrt((x - a)*(x - b)*(x - c)) = 2/sqrt(a-c) F(mu,q)",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.131.8",
+  "gr": "3.131.8",
+  "page": 304,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)*(x - b)*(x - c)], {x, u, Infinity}]",
+  "rhs": [
+   "2/Sqrt[a - c]*MatharF2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]]"
+  ],
+  "conds": [
+   "u >= a > b > c"
+  ],
+  "cite": "BY (238.00)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^Infinity dx/sqrt((x - a)*(x - b)*(x - c)) = 2/sqrt(a-c) F(nu,q)",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.132.1",
+  "gr": "3.132.1",
+  "page": 304,
+  "status": "ok",
+  "lhs": "Integrate[x/Sqrt[(a - x)*(b - x)*(c - x)], {x, u, c}]",
+  "rhs": [
+   "2/Sqrt[a - c]*(c*MatharF2[ArcSin[Sqrt[(c - u)/(b - u)]], Sqrt[(a - b)/(a - c)]] + (a - c)*MatharE2[ArcSin[Sqrt[(c - u)/(b - u)]], Sqrt[(a - b)/(a - c)]]) - 2*Sqrt[(a - u)*(c - u)/(b - u)]"
+  ],
+  "conds": [
+   "a > b > c > u"
+  ],
+  "cite": "BY (232.19)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^c x dx/sqrt((a-x)(b-x)(c-x)) = 2/sqrt(a-c)[c F(beta,p)+(a-c)E(beta,p)] - 2 sqrt((a-u)(c-u)/(b-u))",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.132.2",
+  "gr": "3.132.2",
+  "page": 304,
+  "status": "ok",
+  "lhs": "Integrate[x/Sqrt[(a - x)*(b - x)*(x - c)], {x, c, u}]",
+  "rhs": [
+   "2*a/Sqrt[a - c]*MatharF2[ArcSin[Sqrt[(u - c)/(b - c)]], Sqrt[(b - c)/(a - c)]] - 2*Sqrt[a - c]*MatharE2[ArcSin[Sqrt[(u - c)/(b - c)]], Sqrt[(b - c)/(a - c)]]"
+  ],
+  "conds": [
+   "a > b >= u > c"
+  ],
+  "cite": "BY (233.17)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_c^u x dx/sqrt((a-x)(b-x)(x-c)) = 2a/sqrt(a-c) F(gamma,q) - 2 sqrt(a-c) E(gamma,q)",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.132.3",
+  "gr": "3.132.3",
+  "page": 304,
+  "status": "ok",
+  "lhs": "Integrate[x/Sqrt[(a - x)*(b - x)*(x - c)], {x, u, b}]",
+  "rhs": [
+   "2/Sqrt[a - c]*((b - a)*EllipticPi[Sqrt[(b - c)/(a - c)]^2, ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[(b - c)/(a - c)]^2] + a*MatharF2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[(b - c)/(a - c)]])"
+  ],
+  "conds": [
+   "a > b > u >= c"
+  ],
+  "cite": "BY (234.16)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b x dx/sqrt((a-x)(b-x)(x-c)) = 2/sqrt(a-c)[(b-a) Pi(delta,q^2,q) + a F(delta,q)]",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q; Pi(phi,n,k) -> EllipticPi[n, phi, k^2]"
+ },
+ {
+  "id": "GR3.132.4",
+  "gr": "3.132.4",
+  "page": 304,
+  "status": "ok",
+  "lhs": "Integrate[x/Sqrt[(a - x)*(x - b)*(x - c)], {x, b, u}]",
+  "rhs": [
+   "2/Sqrt[a - c]*((b - c)*EllipticPi[Sqrt[(a - b)/(a - c)]^2, ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[(a - b)/(a - c)]^2] + c*MatharF2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[(a - b)/(a - c)]])"
+  ],
+  "conds": [
+   "a >= u > b > c"
+  ],
+  "cite": "BY (235.16)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u x dx/sqrt((a-x)(x-b)(x-c)) = 2/sqrt(a-c)[(b-c) Pi(kappa,p^2,p) + c F(kappa,p)]",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q; Pi(phi,n,k) -> EllipticPi[n, phi, k^2]"
+ },
+ {
+  "id": "GR3.132.5",
+  "gr": "3.132.5",
+  "page": 304,
+  "status": "ok",
+  "lhs": "Integrate[x/Sqrt[(a - x)*(x - b)*(x - c)], {x, u, a}]",
+  "rhs": [
+   "2*c/Sqrt[a - c]*MatharF2[ArcSin[Sqrt[(a - u)/(a - b)]], Sqrt[(a - b)/(a - c)]] + 2*Sqrt[a - c]*MatharE2[ArcSin[Sqrt[(a - u)/(a - b)]], Sqrt[(a - b)/(a - c)]]"
+  ],
+  "conds": [
+   "a > u >= b > c"
+  ],
+  "cite": "BY (236.16)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^a x dx/sqrt((a-x)(x-b)(x-c)) = 2c/sqrt(a-c) F(lam,p) + 2 sqrt(a-c) E(lam,p)",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.132.6",
+  "gr": "3.132.6",
+  "page": 304,
+  "status": "ok",
+  "lhs": "Integrate[x/Sqrt[(x - a)*(x - b)*(x - c)], {x, a, u}]",
+  "rhs": [
+   "2/(b*Sqrt[a - c])*(a*(a - b)*EllipticPi[1, ArcSin[Sqrt[(u - a)/(u - b)]], Sqrt[(b - c)/(a - c)]^2] + b^2*MatharF2[ArcSin[Sqrt[(u - a)/(u - b)]], Sqrt[(b - c)/(a - c)]])"
+  ],
+  "conds": [
+   "u > a > b > c"
+  ],
+  "cite": "BY (237.16)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_a^u x dx/sqrt((x-a)(x-b)(x-c)) = 2/(b sqrt(a-c))[a(a-b) Pi(mu,1,q) + b^2 F(mu,q)]",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q; Pi(phi,n,k) -> EllipticPi[n, phi, k^2]"
+ },
+ {
+  "id": "GR3.133.1",
+  "gr": "3.133.1",
+  "page": 304,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)^3*(b - x)*(c - x)], {x, -Infinity, u}]",
+  "rhs": [
+   "2/((a - b)*Sqrt[a - c])*(MatharF2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]] - MatharE2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]])"
+  ],
+  "conds": [
+   "a > b > c >= u"
+  ],
+  "cite": "BY (231.08)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_-inf^u dx/sqrt((a-x)^3(b-x)(c-x)) = 2/((a-b)sqrt(a-c))[F(alpha,p)-E(alpha,p)]",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.133.2",
+  "gr": "3.133.2",
+  "page": 304,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)^3*(b - x)*(c - x)], {x, u, c}]",
+  "rhs": [
+   "2/((a - b)*Sqrt[a - c])*(MatharF2[ArcSin[Sqrt[(c - u)/(b - u)]], Sqrt[(a - b)/(a - c)]] - MatharE2[ArcSin[Sqrt[(c - u)/(b - u)]], Sqrt[(a - b)/(a - c)]]) + 2/(a - c)*Sqrt[(c - u)/((a - u)*(b - u))]"
+  ],
+  "conds": [
+   "a > b > c > u"
+  ],
+  "cite": "BY (232.13)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^c dx/sqrt((a-x)^3(b-x)(c-x)) = 2/((a-b)sqrt(a-c))[F(beta,p)-E(beta,p)] + 2/(a-c) sqrt((c-u)/((a-u)(b-u)))",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.133.3",
+  "gr": "3.133.3",
+  "page": 304,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)^3*(b - x)*(x - c)], {x, c, u}]",
+  "rhs": [
+   "2/((a - b)*Sqrt[a - c])*MatharE2[ArcSin[Sqrt[(u - c)/(b - c)]], Sqrt[(b - c)/(a - c)]] - 2/((a - b)*(a - c))*Sqrt[(b - u)*(u - c)/(a - u)]"
+  ],
+  "conds": [
+   "a > b >= u > c"
+  ],
+  "cite": "BY (233.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_c^u dx/sqrt((a-x)^3(b-x)(x-c)) = 2/((a-b)sqrt(a-c)) E(gamma,q) - 2/((a-b)(a-c)) sqrt((b-u)(u-c)/(a-u))",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.133.4",
+  "gr": "3.133.4",
+  "page": 304,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)^3*(b - x)*(x - c)], {x, u, b}]",
+  "rhs": [
+   "2/((a - b)*Sqrt[a - c])*MatharE2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[(b - c)/(a - c)]]"
+  ],
+  "conds": [
+   "a > b > u >= c"
+  ],
+  "cite": "BY (234.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b dx/sqrt((a-x)^3(b-x)(x-c)) = 2/((a-b)sqrt(a-c)) E(delta,q)",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.133.5",
+  "gr": "3.133.5",
+  "page": 304,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)^3*(x - b)*(x - c)], {x, b, u}]",
+  "rhs": [
+   "2/((a - b)*Sqrt[a - c])*(MatharF2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[(a - b)/(a - c)]] - MatharE2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[(a - b)/(a - c)]]) + 2/(a - b)*Sqrt[(u - b)/((a - u)*(u - c))]"
+  ],
+  "conds": [
+   "a > u > b > c"
+  ],
+  "cite": "BY (235.04)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u dx/sqrt((a-x)^3(x-b)(x-c)) = 2/((a-b)sqrt(a-c))[F(kappa,p)-E(kappa,p)] + 2/(a-b) sqrt((u-b)/((a-u)(u-c)))",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.133.6",
+  "gr": "3.133.6",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)^3*(x - b)*(x - c)], {x, u, Infinity}]",
+  "rhs": [
+   "2/((b - a)*Sqrt[a - c])*MatharE2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]] + 2/(a - b)*Sqrt[(u - b)/((u - a)*(u - c))]"
+  ],
+  "conds": [
+   "u > a > b > c"
+  ],
+  "cite": "BY (238.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf dx/sqrt((x-a)^3(x-b)(x-c)) = 2/((b-a)sqrt(a-c)) E(nu,q) + 2/(a-b) sqrt((u-b)/((u-a)(u-c)))",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.133.7",
+  "gr": "3.133.7",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)^3*(c - x)], {x, -Infinity, u}]",
+  "rhs": [
+   "2*Sqrt[a - c]/((a - b)*(b - c))*MatharE2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]] - 2/((a - b)*Sqrt[a - c])*MatharF2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]] - 2/(b - c)*Sqrt[(c - u)/((a - u)*(b - u))]"
+  ],
+  "conds": [
+   "a > b > c >= u"
+  ],
+  "cite": "BY (231.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_-inf^u dx/sqrt((a-x)(b-x)^3(c-x)) = 2sqrt(a-c)/((a-b)(b-c)) E(alpha,p) - 2/((a-b)sqrt(a-c)) F(alpha,p) - 2/(b-c) sqrt((c-u)/((a-u)(b-u)))",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.133.8",
+  "gr": "3.133.8",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)^3*(c - x)], {x, u, c}]",
+  "rhs": [
+   "2*Sqrt[a - c]/((a - b)*(b - c))*MatharE2[ArcSin[Sqrt[(c - u)/(b - u)]], Sqrt[(a - b)/(a - c)]] - 2/((a - b)*Sqrt[a - c])*MatharF2[ArcSin[Sqrt[(c - u)/(b - u)]], Sqrt[(a - b)/(a - c)]]"
+  ],
+  "conds": [
+   "a > b > c > u"
+  ],
+  "cite": "BY (232.14)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^c dx/sqrt((a-x)(b-x)^3(c-x)) = 2sqrt(a-c)/((a-b)(b-c)) E(beta,p) - 2/((a-b)sqrt(a-c)) F(beta,p)",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.133.9",
+  "gr": "3.133.9",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)^3*(x - c)], {x, c, u}]",
+  "rhs": [
+   "2/((b - c)*Sqrt[a - c])*MatharF2[ArcSin[Sqrt[(u - c)/(b - c)]], Sqrt[(b - c)/(a - c)]] - 2*Sqrt[a - c]/((a - b)*(b - c))*MatharE2[ArcSin[Sqrt[(u - c)/(b - c)]], Sqrt[(b - c)/(a - c)]] + 2/((a - b)*(b - c))*Sqrt[(a - u)*(u - c)/(b - u)]"
+  ],
+  "conds": [
+   "a > b > u > c"
+  ],
+  "cite": "BY (233.10)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_c^u dx/sqrt((a-x)(b-x)^3(x-c)) = 2/((b-c)sqrt(a-c)) F(gamma,q) - 2sqrt(a-c)/((a-b)(b-c)) E(gamma,q) + 2/((a-b)(b-c)) sqrt((a-u)(u-c)/(b-u))",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.133.10",
+  "gr": "3.133.10",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(x - b)^3*(x - c)], {x, u, a}]",
+  "rhs": [
+   "2/((a - b)*Sqrt[a - c])*MatharF2[ArcSin[Sqrt[(a - u)/(a - b)]], Sqrt[(a - b)/(a - c)]] - 2*Sqrt[a - c]/((a - b)*(b - c))*MatharE2[ArcSin[Sqrt[(a - u)/(a - b)]], Sqrt[(a - b)/(a - c)]] + 2/((a - b)*(b - c))*Sqrt[(a - u)*(u - c)/(u - b)]"
+  ],
+  "conds": [
+   "a > u > b > c"
+  ],
+  "cite": "BY (236.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^a dx/sqrt((a-x)(x-b)^3(x-c)) = 2/((a-b)sqrt(a-c)) F(lam,p) - 2sqrt(a-c)/((a-b)(b-c)) E(lam,p) + 2/((a-b)(b-c)) sqrt((a-u)(u-c)/(u-b))",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.133.11",
+  "gr": "3.133.11",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)*(x - b)^3*(x - c)], {x, a, u}]",
+  "rhs": [
+   "2*Sqrt[a - c]/((a - b)*(b - c))*MatharE2[ArcSin[Sqrt[(u - a)/(u - b)]], Sqrt[(b - c)/(a - c)]] - 2/((b - c)*Sqrt[a - c])*MatharF2[ArcSin[Sqrt[(u - a)/(u - b)]], Sqrt[(b - c)/(a - c)]]"
+  ],
+  "conds": [
+   "u > a > b > c"
+  ],
+  "cite": "BY (237.12)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_a^u dx/sqrt((x-a)(x-b)^3(x-c)) = 2sqrt(a-c)/((a-b)(b-c)) E(mu,q) - 2/((b-c)sqrt(a-c)) F(mu,q)",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.133.12",
+  "gr": "3.133.12",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)*(x - b)^3*(x - c)], {x, u, Infinity}]",
+  "rhs": [
+   "2*Sqrt[a - c]/((a - b)*(b - c))*MatharE2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]] - 2/((b - c)*Sqrt[a - c])*MatharF2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]] - 2/(a - b)*Sqrt[(u - a)/((u - b)*(u - c))]"
+  ],
+  "conds": [
+   "u >= a > b > c"
+  ],
+  "cite": "BY (238.04)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf dx/sqrt((x-a)(x-b)^3(x-c)) = 2sqrt(a-c)/((a-b)(b-c)) E(nu,q) - 2/((b-c)sqrt(a-c)) F(nu,q) - 2/(a-b) sqrt((u-a)/((u-b)(u-c)))",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.133.13",
+  "gr": "3.133.13",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)*(c - x)^3], {x, -Infinity, u}]",
+  "rhs": [
+   "2/((c - b)*Sqrt[a - c])*MatharE2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]] + 2/(b - c)*Sqrt[(b - u)/((a - u)*(c - u))]"
+  ],
+  "conds": [
+   "a > b > c > u"
+  ],
+  "cite": "BY (231.10)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_-inf^u dx/sqrt((a-x)(b-x)(c-x)^3) = 2/((c-b)sqrt(a-c)) E(alpha,p) + 2/(b-c) sqrt((b-u)/((a-u)(c-u)))",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.133.14",
+  "gr": "3.133.14",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)*(x - c)^3], {x, u, b}]",
+  "rhs": [
+   "2/((b - c)*Sqrt[a - c])*(MatharF2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[(b - c)/(a - c)]] - MatharE2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[(b - c)/(a - c)]]) + 2/(b - c)*Sqrt[(b - u)/((a - u)*(u - c))]"
+  ],
+  "conds": [
+   "a > b > u > c"
+  ],
+  "cite": "BY (234.04)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b dx/sqrt((a-x)(b-x)(x-c)^3) = 2/((b-c)sqrt(a-c))[F(delta,q)-E(delta,q)] + 2/(b-c) sqrt((b-u)/((a-u)(u-c)))",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ },
+ {
+  "id": "GR3.133.15",
+  "gr": "3.133.15",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(x - b)*(x - c)^3], {x, b, u}]",
+  "rhs": [
+   "2/((b - c)*Sqrt[a - c])*MatharE2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[(a - b)/(a - c)]]"
+  ],
+  "conds": [
+   "a >= u > b > c"
+  ],
+  "cite": "BY (235.01)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u dx/sqrt((a-x)(x-b)(x-c)^3) = 2/((b-c)sqrt(a-c)) E(kappa,p)",
+  "note": "G&R abbreviations alpha..nu, p, q (3.131-3.137 notation) substituted; F, E incomplete elliptic integrals of modulus p/q"
+ }
+]

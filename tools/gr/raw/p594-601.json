@@ -1,0 +1,1980 @@
+[
+ {
+  "id": "GR4.264.3",
+  "gr": "4.264.3",
+  "page": 594,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^5/((x - 1)*(x + a)), {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi^2 + Log[a]^2)^2*(3*Pi^2 + Log[a]^2)/(6*(1 + a))"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (141)(4)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^inf (ln x)^5 dx/((x-1)(x+a)) = [pi^2+ln^2 a]^2 [3pi^2+ln^2 a]/(6(1+a))",
+  "note": ""
+ },
+ {
+  "id": "GR4.265",
+  "gr": "4.265",
+  "page": 594,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^6/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "61*Pi^7/256"
+  ],
+  "conds": [],
+  "cite": "BI (109)(25)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln x)^6 dx/(1+x^2) = 61 pi^7/256",
+  "note": ""
+ },
+ {
+  "id": "GR4.266.1",
+  "gr": "4.266.1",
+  "page": 594,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^7/(1 + x), {x, 0, 1}]",
+  "rhs": [
+   "-127*Pi^8/240"
+  ],
+  "conds": [],
+  "cite": "BI (109)(28)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln x)^7 dx/(1+x) = -127 pi^8/240",
+  "note": ""
+ },
+ {
+  "id": "GR4.266.2",
+  "gr": "4.266.2",
+  "page": 594,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^7/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "-8*Pi^8/15"
+  ],
+  "conds": [],
+  "cite": "BI (109)(29)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln x)^7 dx/(1-x) = -8 pi^8/15",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.1",
+  "gr": "4.267.1",
+  "page": 594,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)/((1 + x)*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[2/Pi]"
+  ],
+  "conds": [],
+  "cite": "BI (127)(3)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x)/(1+x) dx/ln x = ln(2/pi)",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.2",
+  "gr": "4.267.2",
+  "page": 594,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^2/((1 + x^2)*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[Pi/4]"
+  ],
+  "conds": [],
+  "cite": "BI (128)(2)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x)^2/(1+x^2) dx/ln x = ln(pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.3a",
+  "gr": "4.267.3",
+  "page": 594,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^2/((1 + 2*x*Cos[m*Pi/n] + x^2)*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "1/Sin[m*Pi/n]*Sum[(-1)^k*Sin[k*m*Pi/n]*Log[Gamma[(n + k + 1)/(2*n)]^2*Gamma[(k + 2)/(2*n)]*Gamma[k/(2*n)]/(Gamma[(k + 1)/(2*n)]^2*Gamma[(n + k)/(2*n)]*Gamma[(n + k + 2)/(2*n)])], {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1",
+   "Element[n, Integers] && n >= 2",
+   "m < n",
+   "Element[(m + n - 1)/2, Integers]"
+  ],
+  "cite": "BI (130)(3)",
+  "edition_note": "8",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x)^2/(1+2x cos(m pi/n)+x^2) dx/ln x = 1/sin(m pi/n) sum_{k=1}^{n-1} (-1)^k sin(k m pi/n) ln[...2n...]  [m+n odd]",
+  "note": "case m+n odd; m, n positive integers implied"
+ },
+ {
+  "id": "GR4.267.3b",
+  "gr": "4.267.3",
+  "page": 594,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^2/((1 + 2*x*Cos[m*Pi/n] + x^2)*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "1/Sin[m*Pi/n]*Sum[(-1)^k*Sin[k*m*Pi/n]*Log[Gamma[(n - k + 1)/n]^2*Gamma[(k + 2)/n]*Gamma[k/n]/(Gamma[(k + 1)/n]^2*Gamma[(n - k)/n]*Gamma[(n - k + 2)/n])], {k, 1, Floor[(n - 1)/2]}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1",
+   "Element[n, Integers] && n >= 2",
+   "m < n",
+   "Element[(m + n)/2, Integers]"
+  ],
+  "cite": "BI (130)(3)",
+  "edition_note": "8",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "... = 1/sin(m pi/n) sum_{k=1}^{floor((n-1)/2)} (-1)^k sin(k m pi/n) ln[{Gamma((n-k+1)/n)}^2 Gamma((k+2)/n)Gamma(k/n)/({Gamma((k+1)/n)}^2 Gamma((n-k)/n)Gamma((n-k+2)/n))]  [m+n even]",
+  "note": "case m+n even; m, n positive integers implied"
+ },
+ {
+  "id": "GR4.267.4",
+  "gr": "4.267.4",
+  "page": 594,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)/((1 + x)*(1 + x^2)*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "-Log[2]/2"
+  ],
+  "conds": [],
+  "cite": "BI (130)(16)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x)/(1+x) 1/(1+x^2) dx/ln x = -ln2/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.5",
+  "gr": "4.267.5",
+  "page": 594,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)*x^2/((1 + x)*(1 + x^2)*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[2*Sqrt[2]/Pi]"
+  ],
+  "conds": [],
+  "cite": "BI (130)(17)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x)/(1+x) x^2/(1+x^2) dx/ln x = ln(2 sqrt2/pi)",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.6",
+  "gr": "4.267.6",
+  "page": 594,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^p/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Sum[(-1)^k*Binomial[p, k]*Log[1 + k], {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "p >= 1"
+  ],
+  "cite": "BI (123)(2)",
+  "edition_note": "11",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x)^p dx/ln x = sum_{k=1}^inf (-1)^k C(p,k) ln(1+k)",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.7",
+  "gr": "4.267.7",
+  "page": 594,
+  "status": "ok",
+  "lhs": "Integrate[((1 - x^p)/(1 - x) - p)/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Log[Gamma[p + 1]]"
+  ],
+  "conds": [],
+  "cite": "GW (326)(10)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 ((1-x^p)/(1-x) - p) dx/ln x = ln Gamma(p+1)",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.8",
+  "gr": "4.267.8",
+  "page": 594,
+  "status": "ok",
+  "lhs": "Integrate[(x^(p - 1) - x^(q - 1))/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Log[p/q]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "FI II 647",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (x^(p-1)-x^(q-1))/ln x dx = ln(p/q)",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.9",
+  "gr": "4.267.9",
+  "page": 594,
+  "status": "ok",
+  "lhs": "Integrate[(x^(p - 1) - x^(q - 1))/(Log[x]*(1 + x)), {x, 0, 1}]",
+  "rhs": [
+   "Log[Gamma[q/2]*Gamma[(p + 1)/2]/(Gamma[p/2]*Gamma[(q + 1)/2])]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "FI II 186",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (x^(p-1)-x^(q-1))/ln x dx/(1+x) = ln[Gamma(q/2)Gamma((p+1)/2)/(Gamma(p/2)Gamma((q+1)/2))]",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.10a",
+  "gr": "4.267.10",
+  "page": 594,
+  "status": "ok",
+  "lhs": "Integrate[(x^(p - 1) - x^(-p))/((1 + x)*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[Tan[p*Pi/2]]"
+  ],
+  "conds": [
+   "0 < p < 1"
+  ],
+  "cite": "FI II 816",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (x^(p-1)-x^(-p))/((1+x)ln x) dx = ln(tan(p pi/2))",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.10b",
+  "gr": "4.267.10",
+  "page": 594,
+  "status": "ok",
+  "lhs": "1/2*Integrate[(x^(p - 1) - x^(-p))/((1 + x)*Log[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Tan[p*Pi/2]]"
+  ],
+  "conds": [
+   "0 < p < 1"
+  ],
+  "cite": "FI II 816",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "1/2 int_0^inf (x^(p-1)-x^(-p))/((1+x)ln x) dx = ln(tan(p pi/2))",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.11",
+  "gr": "4.267.11",
+  "page": 595,
+  "status": "ok",
+  "lhs": "Integrate[(x^p - x^q)*x^(r - 1)/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Log[(p + r)/(r + q)]"
+  ],
+  "conds": [
+   "r > 0",
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "LI (123)(5)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (x^p-x^q) x^(r-1) dx/ln x = ln((p+r)/(r+q))",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.12",
+  "gr": "4.267.12",
+  "page": 595,
+  "status": "ok",
+  "lhs": "Integrate[(x^p - x^q)/((1 - a*x)^n*x*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Sum[Binomial[n + k - 1, k]*a^k*Log[(p + k)/(q + k)], {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "a^2 < 1"
+  ],
+  "cite": "BI (130)(15)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (x^p-x^q)/(1-ax)^n dx/(x ln x) = sum_{k=0}^inf C(n+k-1,k) a^k ln((p+k)/(q+k))",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.13",
+  "gr": "4.267.13",
+  "page": 595,
+  "status": "ok",
+  "lhs": "Integrate[(x^p - 1)*(x^q - 1)/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Log[(p + q + 1)/((p + 1)*(q + 1))]"
+  ],
+  "conds": [
+   "p > -1",
+   "q > -1",
+   "p + q > -1"
+  ],
+  "cite": "GW (324)(19b)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (x^p-1)(x^q-1) dx/ln x = ln((p+q+1)/((p+1)(q+1)))",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.14",
+  "gr": "4.267.14",
+  "page": 595,
+  "status": "ok",
+  "lhs": "Integrate[(x^p - x^q)*(1 + x^(2*n + 1))/((1 + x)*x*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[Gamma[p/2 + n + 1]*Gamma[(q + 1)/2 + n]*Gamma[(p + 1)/2]*Gamma[q/2]/(Gamma[q/2 + n + 1]*Gamma[(p + 1)/2 + n]*Gamma[(q + 1)/2]*Gamma[p/2])]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (127)(7)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (x^p-x^q)/(1+x) (1+x^(2n+1))/(x ln x) dx = ln[Gamma(p/2+n+1)Gamma((q+1)/2+n)Gamma((p+1)/2)Gamma(q/2)/(Gamma(q/2+n+1)Gamma((p+1)/2+n)Gamma((q+1)/2)Gamma(p/2))]",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR4.267.15",
+  "gr": "4.267.15",
+  "page": 595,
+  "status": "ok",
+  "lhs": "Integrate[(x^p - x^q)*(1 - x^r)/((1 - x)*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[Gamma[q + 1]*Gamma[p + r + 1]/(Gamma[p + 1]*Gamma[q + r + 1])]"
+  ],
+  "conds": [
+   "p > -1",
+   "q > -1",
+   "p + r > -1",
+   "q + r > -1"
+  ],
+  "cite": "GW (324)(23)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (x^p-x^q)/(1-x) (1-x^r)/ln x dx = ln[Gamma(q+1)Gamma(p+r+1)/(Gamma(p+1)Gamma(q+r+1))]",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.16",
+  "gr": "4.267.16",
+  "page": 595,
+  "status": "ok",
+  "lhs": "Integrate[(x^(p - 1) - x^(q - 1))/((1 + x^r)*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[Gamma[(p + r)/(2*r)]*Gamma[q/(2*r)]/(Gamma[(q + r)/(2*r)]*Gamma[p/(2*r)])]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "r > 0"
+  ],
+  "cite": "GW (324)(21)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (x^(p-1)-x^(q-1))/((1+x^r)ln x) dx = ln[Gamma((p+r)/2r)Gamma(q/2r)/(Gamma((q+r)/2r)Gamma(p/2r))]",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.17",
+  "gr": "4.267.17",
+  "page": 595,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^(2*p - 2*q))*x^(q - 1)/((1 + x^(2*p))*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[Tan[q*Pi/(4*p)]]"
+  ],
+  "conds": [
+   "0 < q < p"
+  ],
+  "cite": "BI (128)(6)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x^(2p-2q))/(1+x^(2p)) x^(q-1) dx/ln x = ln tan(q pi/4p)",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.18",
+  "gr": "4.267.18",
+  "page": 595,
+  "status": "ok",
+  "lhs": "Integrate[(x^(p - 1) - x^(q - 1))/((1 + x^r)*Log[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Tan[p*Pi/(2*r)]*Cot[q*Pi/(2*r)]]"
+  ],
+  "conds": [
+   "0 < p < r",
+   "0 < q < r"
+  ],
+  "cite": "GW (324)(22), BI (143)(2)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^inf (x^(p-1)-x^(q-1))/((1+x^r)ln x) dx = ln(tan(p pi/2r) cot(q pi/2r))",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.19",
+  "gr": "4.267.19",
+  "page": 595,
+  "status": "ok",
+  "lhs": "Integrate[(x^(p - 1) - x^(q - 1))/((1 - x^r)*Log[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Sin[p*Pi/r]/Sin[q*Pi/r]]"
+  ],
+  "conds": [
+   "0 < p < r",
+   "0 < q < r"
+  ],
+  "cite": "BI (143)(4)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^inf (x^(p-1)-x^(q-1))/((1-x^r)ln x) dx = ln(sin(p pi/r)/sin(q pi/r))",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.20",
+  "gr": "4.267.20",
+  "page": 595,
+  "status": "ok",
+  "lhs": "Integrate[(x^(p - 1) - x^(q - 1))*(1 - x^2)/((1 - x^(2*n))*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[Gamma[(p + 2)/(2*n)]*Gamma[q/(2*n)]/(Gamma[(q + 2)/(2*n)]*Gamma[p/(2*n)])]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (128)(11)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (x^(p-1)-x^(q-1))/(1-x^(2n)) (1-x^2)/ln x dx = ln[Gamma((p+2)/2n)Gamma(q/2n)/(Gamma((q+2)/2n)Gamma(p/2n))]",
+  "note": "n positive integer implied"
+ },
+ {
+  "id": "GR4.267.21",
+  "gr": "4.267.21",
+  "page": 595,
+  "status": "ok",
+  "lhs": "Integrate[(x^(p - 1) - x^(q - 1))*(1 + x^2)/((1 + x^(2*(2*n + 1)))*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[Gamma[(p + 4*n + 4)/(4*(2*n + 1))]*Gamma[(q + 2)/(4*(2*n + 1))]*Gamma[(p + 4*n + 2)/(4*(2*n + 1))]*Gamma[q/(4*(2*n + 1))]/(Gamma[(q + 4*n + 4)/(4*(2*n + 1))]*Gamma[(p + 2)/(4*(2*n + 1))]*Gamma[(q + 4*n + 2)/(4*(2*n + 1))]*Gamma[p/(4*(2*n + 1))])]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (128)(7)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (x^(p-1)-x^(q-1))/(1+x^(2(2n+1))) (1+x^2)/ln x dx = ln[Gamma((p+4n+4)/4(2n+1)) Gamma((q+2)/4(2n+1)) Gamma((p+4n+2)/4(2n+1)) Gamma(q/4(2n+1)) / (same with p<->q)]",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR4.267.22",
+  "gr": "4.267.22",
+  "page": 595,
+  "status": "ok",
+  "lhs": "Integrate[(x^(p - 1) - x^(q - 1))*(1 + x^2)/((1 + x^(2*(2*n + 1)))*Log[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Tan[p*Pi/(4*(2*n + 1))]*Tan[(p + 2)*Pi/(4*(2*n + 1))]*Cot[q*Pi/(4*(2*n + 1))]*Cot[(q + 2)*Pi/(4*(2*n + 1))]]"
+  ],
+  "conds": [
+   "0 < p < 4*n",
+   "0 < q < 4*n",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (143)(5)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^inf (x^(p-1)-x^(q-1))/(1+x^(2(2n+1))) (1+x^2)/ln x dx = ln{tan(p pi/4(2n+1)) tan((p+2)pi/4(2n+1)) cot(q pi/4(2n+1)) cot((q+2)pi/4(2n+1))}",
+  "note": "n positive integer implied"
+ },
+ {
+  "id": "GR4.267.23",
+  "gr": "4.267.23",
+  "page": 596,
+  "status": "ok",
+  "lhs": "Integrate[(x^(p - 1) - x^(q - 1))*(1 - x^2)/((1 - x^(2*n))*Log[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Sin[p*Pi/(2*n)]*Sin[(q + 2)*Pi/(2*n)]/(Sin[q*Pi/(2*n)]*Sin[(p + 2)*Pi/(2*n)])]"
+  ],
+  "conds": [
+   "0 < p < 2*n",
+   "0 < q < 2*n",
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "BI (143)(6)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^inf (x^(p-1)-x^(q-1))/(1-x^(2n)) (1-x^2)/ln x dx = ln[sin(p pi/2n) sin((q+2)pi/2n)/(sin(q pi/2n) sin((p+2)pi/2n))]",
+  "note": "n positive integer implied"
+ },
+ {
+  "id": "GR4.267.24",
+  "gr": "4.267.24",
+  "page": 596,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^p)*(1 - x^q)*x^(r - 1)/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Log[(p + q + r)*r/((p + r)*(q + r))]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "r > 0"
+  ],
+  "cite": "BI (123)(8)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x^p)(1-x^q) x^(r-1) dx/ln x = ln((p+q+r)r/((p+r)(q+r)))",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.25",
+  "gr": "4.267.25",
+  "page": 596,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^p)*(1 - x^q)*x^(r - 1)/((1 - x)*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[Gamma[p + r]*Gamma[q + r]/(Gamma[p + q + r]*Gamma[r])]"
+  ],
+  "conds": [
+   "r > 0",
+   "r + p > 0",
+   "r + q > 0",
+   "r + p + q > 0"
+  ],
+  "cite": "FI II 815a",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x^p)(1-x^q) x^(r-1) dx/((1-x)ln x) = ln[Gamma(p+r)Gamma(q+r)/(Gamma(p+q+r)Gamma(r))]",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.26",
+  "gr": "4.267.26",
+  "page": 596,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^p)*(1 - x^q)*(1 - x^r)/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Log[(p + q + 1)*(q + r + 1)*(r + p + 1)/((p + q + r + 1)*(p + 1)*(q + 1)*(r + 1))]"
+  ],
+  "conds": [
+   "p > -1",
+   "q > -1",
+   "r > -1",
+   "p + q > -1",
+   "p + r > -1",
+   "q + r > -1",
+   "p + q + r > -1"
+  ],
+  "cite": "GW (324)(19c)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x^p)(1-x^q)(1-x^r) dx/ln x = ln[(p+q+1)(q+r+1)(r+p+1)/((p+q+r+1)(p+1)(q+1)(r+1))]",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.27",
+  "gr": "4.267.27",
+  "page": 596,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^p)*(1 - x^q)*(1 - x^r)/((1 - x)*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[Gamma[p + 1]*Gamma[q + 1]*Gamma[r + 1]*Gamma[p + q + r + 1]/(Gamma[p + q + 1]*Gamma[p + r + 1]*Gamma[q + r + 1])]"
+  ],
+  "conds": [
+   "p > -1",
+   "q > -1",
+   "r > -1",
+   "p + q > -1",
+   "p + r > -1",
+   "q + r > -1",
+   "p + q + r > -1"
+  ],
+  "cite": "FI II 815",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x^p)(1-x^q)(1-x^r) dx/((1-x)ln x) = ln[G(p+1)G(q+1)G(r+1)G(p+q+r+1)/(G(p+q+1)G(p+r+1)G(q+r+1))]",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.28",
+  "gr": "4.267.28",
+  "page": 596,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^p)*(1 - x^q)*(1 - x^r)*x^(s - 1)/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Log[(p + q + s)*(p + r + s)*(q + r + s)*s/((p + s)*(q + s)*(r + s)*(p + q + r + s))]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "r > 0",
+   "s > 0"
+  ],
+  "cite": "BI (123)(10)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x^p)(1-x^q)(1-x^r) x^(s-1) dx/ln x = ln[(p+q+s)(p+r+s)(q+r+s)s/((p+s)(q+s)(r+s)(p+q+r+s))]",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.29",
+  "gr": "4.267.29",
+  "page": 596,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^p)*(1 - x^q)*x^(s - 1)/((1 - x^r)*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[Gamma[(p + s)/r]*Gamma[(q + s)/r]/(Gamma[s/r]*Gamma[(p + q + s)/r])]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "r > 0",
+   "s > 0"
+  ],
+  "cite": "GW (324)(23a)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x^p)(1-x^q) x^(s-1) dx/((1-x^r)ln x) = ln[G((p+s)/r)G((q+s)/r)/(G(s/r)G((p+q+s)/r))]",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.30a",
+  "gr": "4.267.30",
+  "page": 596,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^p)*(1 - x^q)*x^(s - 1)/((1 - x^(p + q + 2*s))*Log[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Log[Sin[s*Pi/(p + q + 2*s)]*Csc[(p + s)*Pi/(p + q + 2*s)]]"
+  ],
+  "conds": [
+   "s > 0",
+   "s + p > 0",
+   "s + p + q > 0"
+  ],
+  "cite": "GW (324)(23b)a",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^inf (1-x^p)(1-x^q) x^(s-1) dx/((1-x^(p+q+2s))ln x) = 2 ln(sin(s pi/(p+q+2s)) cosec((p+s)pi/(p+q+2s)))",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.30b",
+  "gr": "4.267.30",
+  "page": 596,
+  "status": "ok",
+  "lhs": "2*Integrate[(1 - x^p)*(1 - x^q)*x^(s - 1)/((1 - x^(p + q + 2*s))*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "2*Log[Sin[s*Pi/(p + q + 2*s)]*Csc[(p + s)*Pi/(p + q + 2*s)]]"
+  ],
+  "conds": [
+   "s > 0",
+   "s + p > 0",
+   "s + p + q > 0"
+  ],
+  "cite": "GW (324)(23b)a",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "2 int_0^1 (1-x^p)(1-x^q) x^(s-1) dx/((1-x^(p+q+2s))ln x) = 2 ln(sin(s pi/(p+q+2s)) cosec((p+s)pi/(p+q+2s)))",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.31",
+  "gr": "4.267.31",
+  "page": 596,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^p)*(1 - x^q)*(1 - x^r)*x^(s - 1)/((1 - x)*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[Gamma[p + s]*Gamma[q + s]*Gamma[r + s]*Gamma[p + q + r + s]/(Gamma[p + q + s]*4*Gamma[p + r + s]*Gamma[q + r + s]*Gamma[s])]",
+   "Log[Gamma[p + s]*Gamma[q + s]*Gamma[r + s]*Gamma[p + q + r + s]/(Gamma[p + q + s]*Gamma[p + r + s]*Gamma[q + r + s]*Gamma[s])]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "r > 0",
+   "s > 0"
+  ],
+  "cite": "BI (127)(11)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x^p)(1-x^q)(1-x^r) x^(s-1) dx/((1-x)ln x) = ln[G(p+s)G(q+s)G(r+s)G(p+q+r+s)/(G(p+q+s) 4 G(p+r+s)G(q+r+s)G(s))]",
+  "note": "printed denominator has a stray factor 4 between Gamma(p+q+s) and Gamma(p+r+s); second rhs drops it. Footnote: conditions may be weakened to s>0, p+s>0, q+s>0, r+s>0, p+q+s>0, p+r+s>0, q+r+s>0, p+q+r+s>0"
+ },
+ {
+  "id": "GR4.267.32",
+  "gr": "4.267.32",
+  "page": 596,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^p)*(1 - x^q)*(1 - x^r)*x^(s - 1)/((1 - x^t)*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[Gamma[(p + s)/t]*Gamma[(q + s)/t]*Gamma[(r + s)/t]*Gamma[(p + q + r + s)/t]/(Gamma[(p + q + s)/t]*Gamma[(q + r + s)/t]*Gamma[(p + r + s)/t]*Gamma[s/t])]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "r > 0",
+   "s > 0",
+   "t > 0"
+  ],
+  "cite": "GW (324)(23b)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x^p)(1-x^q)(1-x^r) x^(s-1) dx/((1-x^t)ln x) = ln[G((p+s)/t)G((q+s)/t)G((r+s)/t)G((p+q+r+s)/t)/(G((p+q+s)/t)G((q+r+s)/t)G((p+r+s)/t)G(s/t))]",
+  "note": "footnote: conditions may be weakened as for 4.267.31"
+ },
+ {
+  "id": "GR4.267.33",
+  "gr": "4.267.33",
+  "page": 597,
+  "status": "ok",
+  "lhs": "Integrate[((x^p - x^(p + q))/(1 - x) - q)/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Log[Gamma[p + q + 1]/Gamma[p + 1]]"
+  ],
+  "conds": [
+   "p > -1",
+   "p + q > -1"
+  ],
+  "cite": "BI (127)(19)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 {(x^p-x^(p+q))/(1-x) - q} dx/ln x = ln[Gamma(p+q+1)/Gamma(p+1)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.34",
+  "gr": "4.267.34",
+  "page": 597,
+  "status": "ok",
+  "lhs": "Integrate[((x^mu - x)/(x - 1) - x*(mu - 1))/(x*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[Gamma[mu]]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "WH, BI (127)(18)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 {(x^mu-x)/(x-1) - x(mu-1)} dx/(x ln x) = ln Gamma(mu)",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.35",
+  "gr": "4.267.35",
+  "page": 597,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x - (1 - x^p)*(1 - x^q)/(1 - x))/(x*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "-Log[Beta[p, q]]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (130)(18)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 {1 - x - (1-x^p)(1-x^q)/(1-x)} dx/(x ln x) = -ln B(p,q)",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.36",
+  "gr": "4.267.36",
+  "page": 597,
+  "status": "ok",
+  "lhs": "Integrate[(x^(p - 1)/(1 - x) - x^(p*q - 1)/(1 - x^q) - 1/(x*(1 - x)) + 1/(x*(1 - x^q)))/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "q*Log[p]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (130)(20)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 {x^(p-1)/(1-x) - x^(pq-1)/(1-x^q) - 1/(x(1-x)) + 1/(x(1-x^q))} dx/ln x = q ln p",
+  "note": "book gives only p > 0; q > 0 added (needed for convergence at x -> 0)"
+ },
+ {
+  "id": "GR4.267.37",
+  "gr": "4.267.37",
+  "page": 597,
+  "status": "ok",
+  "lhs": "Integrate[(x^(q - 1)/(1 - x) - x^(p*q - 1)/(1 - x^p) - (p - 1)/(1 - x^p)*x^(p - 1) - (p - 1)/2*x^(p - 1))/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "(1 - p)/2*Log[2*Pi] + (p*q - 1/2)*Log[p]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (130)(22)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 {x^(q-1)/(1-x) - x^(pq-1)/(1-x^p) - (p-1)/(1-x^p) x^(p-1) - (p-1)/2 x^(p-1)} dx/ln x = (1-p)/2 ln(2pi) + (pq - 1/2) ln p",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.38",
+  "gr": "4.267.38",
+  "page": 597,
+  "status": "ok",
+  "lhs": "Integrate[((1 - x^p)*(1 - x^q) - (1 - x)^2)/(x*(1 - x)*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[Beta[p, q]]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "GW (324)(24)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 [(1-x^p)(1-x^q) - (1-x)^2]/(x(1-x)ln x) dx = ln B(p,q)",
+  "note": ""
+ },
+ {
+  "id": "GR4.267.39",
+  "gr": "4.267.39",
+  "page": 597,
+  "status": "ok",
+  "lhs": "Integrate[(x^p - 1)^n/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Sum[Binomial[n, n - k]*(-1)^(n - k)*Log[p*k + 1], {k, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "p*n > -1"
+  ],
+  "cite": "GW (324)(19d), BI (123)(12)a",
+  "edition_note": "6",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (x^p-1)^n dx/ln x = sum_{k=0}^n C(n,n-k)(-1)^(n-k) ln(pk+1)",
+  "note": "n integer implied"
+ },
+ {
+  "id": "GR4.267.40",
+  "gr": "4.267.40",
+  "page": 597,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^p)^n/((1 - x)*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Sum[(-1)^(k - 1)*Log[Gamma[(n - k)*p + 1]], {k, 0, n}]",
+   "Sum[(-1)^(n - k + 1)*Binomial[n, k]*Log[Gamma[(n - k)*p + 1]], {k, 0, n}]",
+   "Sum[(-1)^(k - 1)*Binomial[n, k]*Log[Gamma[(n - k)*p + 1]], {k, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 2",
+   "p*n > -1"
+  ],
+  "cite": "BI (127)(12)",
+  "edition_note": "6",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x^p)^n/(1-x) dx/ln x = sum_{k=0}^n (-1)^(k-1) ln Gamma[(n-k)p+1]",
+  "note": "printed sum lacks the binomial C(n,k); expanding (1-x^p)^n gives sum (-1)^(n-k+1) C(n,k) ln Gamma((n-k)p+1) (2nd rhs); n integer implied"
+ },
+ {
+  "id": "GR4.267.41",
+  "gr": "4.267.41",
+  "page": 597,
+  "status": "ok",
+  "lhs": "Integrate[(x^p - 1)^n*x^(q - 1)/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Sum[(-1)^k*Binomial[n, k]*Log[q + (n - k)*p], {k, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "q > 0",
+   "p*n > -q"
+  ],
+  "cite": "BI (123)(12)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (x^p-1)^n x^(q-1) dx/ln x = sum_{k=0}^n (-1)^k C(n,k) ln[q+(n-k)p]",
+  "note": "n integer implied"
+ },
+ {
+  "id": "GR4.267.42",
+  "gr": "4.267.42",
+  "page": 597,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^p)^n*x^(q - 1)/((1 - x)*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Sum[(-1)^(k - 1)*Log[Gamma[(n - k)*p + q]], {k, 0, n}]",
+   "Sum[(-1)^(n - k + 1)*Binomial[n, k]*Log[Gamma[(n - k)*p + q]], {k, 0, n}]",
+   "Sum[(-1)^(k - 1)*Binomial[n, k]*Log[Gamma[(n - k)*p + q]], {k, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 2",
+   "q > 0",
+   "p*n > -q"
+  ],
+  "cite": "BI (127)(13)",
+  "edition_note": "6",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x^p)^n x^(q-1) dx/((1-x)ln x) = sum_{k=0}^n (-1)^(k-1) ln Gamma[(n-k)p+q]",
+  "note": "printed sum lacks the binomial C(n,k); expansion gives sum (-1)^(n-k+1) C(n,k) ln Gamma((n-k)p+q) (2nd rhs); n integer implied"
+ },
+ {
+  "id": "GR4.267.43",
+  "gr": "4.267.43",
+  "page": 597,
+  "status": "ok",
+  "lhs": "Integrate[(x^p - 1)^n*(x^q - 1)^m*x^(r - 1)/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Sum[(-1)^j*Binomial[n, j]*Sum[(-1)^k*Binomial[m, k]*Log[r + (m - k)*q + (n - j)*p], {k, 0, m}], {j, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "n + m > 0",
+   "r > 0",
+   "p*n + q*m + r > 0"
+  ],
+  "cite": "BI (123)(16)",
+  "edition_note": "10",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (x^p-1)^n (x^q-1)^m x^(r-1) dx/ln x = sum_j (-1)^j C(n,j) sum_k (-1)^k C(m,k) ln[r+(m-k)q+(n-j)p]",
+  "note": "n, m integers implied"
+ },
+ {
+  "id": "GR4.268.1",
+  "gr": "4.268.1",
+  "page": 597,
+  "status": "ok",
+  "lhs": "Integrate[(x^p - x^q)*(1 - x^r)/Log[x]^2, {x, 0, 1}]",
+  "rhs": [
+   "(p + 1)*Log[p + 1] - (q + 1)*Log[q + 1] - (p + r + 1)*Log[p + r + 1] + (q + r + 1)*Log[q + r + 1]"
+  ],
+  "conds": [
+   "p > -1",
+   "q > -1",
+   "p + r > -1",
+   "q + r > -1"
+  ],
+  "cite": "GW (324)(26)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (x^p-x^q)(1-x^r)/(ln x)^2 dx = (p+1)ln(p+1) - (q+1)ln(q+1) - (p+r+1)ln(p+r+1) + (q+r+1)ln(q+r+1)",
+  "note": ""
+ },
+ {
+  "id": "GR4.268.2",
+  "gr": "4.268.2",
+  "page": 598,
+  "status": "ok",
+  "lhs": "Integrate[(x^p - x^q)^2/Log[x]^2, {x, 0, 1}]",
+  "rhs": [
+   "(2*p + 1)*Log[2*p + 1] + (2*q + 1)*Log[2*q + 1] - 2*(p + q + 1)*Log[p + q + 1]"
+  ],
+  "conds": [
+   "p > -1/2",
+   "q > -1/2"
+  ],
+  "cite": "GW (324)(26a)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (x^p-x^q)^2 dx/(ln x)^2 = (2p+1)ln(2p+1) + (2q+1)ln(2q+1) - 2(p+q+1)ln(p+q+1)",
+  "note": ""
+ },
+ {
+  "id": "GR4.268.3",
+  "gr": "4.268.3",
+  "page": 598,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^p)*(1 - x^q)*(1 - x^r)/Log[x]^2, {x, 0, 1}]",
+  "rhs": [
+   "(p + q + 1)*Log[p + q + 1] + (q + r + 1)*Log[q + r + 1] + (p + r + 1)*Log[p + r + 1] - (p + 1)*Log[p + 1] - (q + 1)*Log[q + 1] - (r + 1)*Log[r + 1] - (p + q + r)*Log[p + q + r]",
+   "(p + q + 1)*Log[p + q + 1] + (q + r + 1)*Log[q + r + 1] + (p + r + 1)*Log[p + r + 1] - (p + 1)*Log[p + 1] - (q + 1)*Log[q + 1] - (r + 1)*Log[r + 1] - (p + q + r + 1)*Log[p + q + r + 1]"
+  ],
+  "conds": [
+   "p > -1",
+   "q > -1",
+   "r > -1",
+   "p + q > -1",
+   "p + r > -1",
+   "q + r > -1",
+   "p + q + r > 0"
+  ],
+  "cite": "BI (124)(4)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x^p)(1-x^q)(1-x^r) dx/(ln x)^2 = (p+q+1)ln(p+q+1)+(q+r+1)ln(q+r+1)+(p+r+1)ln(p+r+1)-(p+1)ln(p+1)-(q+1)ln(q+1)-(r+1)ln(r+1)-(p+q+r)ln(p+q+r)",
+  "note": "last term printed (p+q+r)ln(p+q+r); expansion of the product gives (p+q+r+1)ln(p+q+r+1) (2nd rhs); printed condition p+q+r>0 likely meant > -1"
+ },
+ {
+  "id": "GR4.268.4",
+  "gr": "4.268.4",
+  "page": 598,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^p)^n*x^(q - 1)/Log[x]^2, {x, 0, 1}]",
+  "rhs": [
+   "1/2*Sum[(-1)^k*Binomial[n, k]*(p*k + q)^2*Log[p*k + q], {k, 0, n}]",
+   "Sum[(-1)^k*Binomial[n, k]*(p*k + q)*Log[p*k + q], {k, 0, n}]"
+  ],
+  "conds": [
+   "q > 0",
+   "p > -q/n",
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "BI (124)(14)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x^p)^n x^(q-1) dx/(ln x)^2 = 1/2 sum_{k=0}^n (-1)^k C(n,k)(pk+q)^2 ln(pk+q)",
+  "note": "printed value (a^2/2 ln a kernel) fits (ln x)^3, not (ln x)^2; for (ln x)^2 the kernel is a ln a (2nd rhs); n integer >= 2 implied"
+ },
+ {
+  "id": "GR4.268.5",
+  "gr": "4.268.5",
+  "page": 598,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^p)^n*(1 - x^q)^m*x^(r - 1)/Log[x]^2, {x, 0, 1}]",
+  "rhs": [
+   "Sum[(-1)^j*Binomial[n, j]*Sum[(-1)^k*Binomial[m, k]*((m - k)*q + (n - j)*p + r)*Log[((m - k)*q + (n - j)*p + r)], {k, 0, m}], {j, 0, n}]",
+   "(-1)^(n + m)*Sum[(-1)^j*Binomial[n, j]*Sum[(-1)^k*Binomial[m, k]*((m - k)*q + (n - j)*p + r)*Log[((m - k)*q + (n - j)*p + r)], {k, 0, m}], {j, 0, n}]"
+  ],
+  "conds": [
+   "r > 0",
+   "m*q + r > 0",
+   "n*p + r > 0",
+   "m*q + n*p + r > 0",
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "n + m >= 2"
+  ],
+  "cite": "BI (124)(8)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (1-x^p)^n (1-x^q)^m x^(r-1) dx/(ln x)^2 = (sum_j (-1)^j C(n,j))(sum_k (-1)^k C(m,k)) x [(m-k)q+(n-j)p+r] ln[(m-k)q+(n-j)p+r]",
+  "note": "printed as product of two sums times a bracket depending on j,k; read as a double sum. The exponents (n-j)p,(m-k)q fit (x^p-1)^n(x^q-1)^m, so 2nd rhs carries (-1)^(n+m); n, m integers and n+m>=2 implied"
+ },
+ {
+  "id": "GR4.268.6",
+  "gr": "4.268.6",
+  "page": 598,
+  "status": "ok",
+  "lhs": "Integrate[((q - r)*x^(p - 1) + (r - p)*x^(q - 1) + (p - q)*x^(r - 1))/Log[x]^2, {x, 0, 1}]",
+  "rhs": [
+   "(q - r)*p*Log[p] + (r - p)*q*Log[q] + (p - q)*r*Log[r]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "r > 0"
+  ],
+  "cite": "BI (124)(9)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 [(q-r)x^(p-1)+(r-p)x^(q-1)+(p-q)x^(r-1)] dx/(ln x)^2 = (q-r)p ln p + (r-p)q ln q + (p-q)r ln r",
+  "note": ""
+ },
+ {
+  "id": "GR4.268.7",
+  "gr": "4.268.7",
+  "page": 598,
+  "status": "ok",
+  "lhs": "Integrate[(x^(p - 1)/((p - q)*(p - r)*(p - s)) + x^(q - 1)/((q - p)*(q - r)*(q - s)) + x^(r - 1)/((r - p)*(r - q)*(r - s)) + x^(s - 1)/((s - p)*(s - q)*(s - r)))/Log[x]^2, {x, 0, 1}]",
+  "rhs": [
+   "1/2*(p^2*Log[p]/((p - q)*(p - r)*(p - s)) + q^2*Log[q]/((q - p)*(q - r)*(q - s)) + r^2*Log[r]/((r - p)*(r - q)*(r - s)) + s^2*Log[s]/((s - p)*(s - q)*(s - r)))",
+   "p*Log[p]/((p - q)*(p - r)*(p - s)) + q*Log[q]/((q - p)*(q - r)*(q - s)) + r*Log[r]/((r - p)*(r - q)*(r - s)) + s*Log[s]/((s - p)*(s - q)*(s - r))"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "r > 0",
+   "s > 0"
+  ],
+  "cite": "BI (124)(16)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 [sum over a in {p,q,r,s} of x^(a-1)/prod(a-b)] dx/(ln x)^2 = 1/2 [sum a^2 ln a/prod(a-b)]",
+  "note": "printed value (a^2/2 ln a kernel) fits (ln x)^3; with (ln x)^2 the value is sum a ln a/prod(a-b) (2nd rhs)"
+ },
+ {
+  "id": "GR4.269.1",
+  "gr": "4.269.1",
+  "page": 598,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[Log[1/x]]/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi]/2*Sum[(-1)^k/Sqrt[(2*k + 1)^3], {k, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "BI (115)(33)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 sqrt(ln 1/x) dx/(1+x^2) = sqrt(pi)/2 sum_{k>=0} (-1)^k/sqrt((2k+1)^3)",
+  "note": ""
+ },
+ {
+  "id": "GR4.269.2",
+  "gr": "4.269.2",
+  "page": 598,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sqrt[Log[1/x]]*(1 + x^2)), {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi]*Sum[(-1)^k/Sqrt[2*k + 1], {k, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "BI (133)(2)",
+  "edition_note": "11",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 dx/(sqrt(ln 1/x)(1+x^2)) = sqrt(pi) sum_{k>=0} (-1)^k/sqrt(2k+1)",
+  "note": ""
+ },
+ {
+  "id": "GR4.269.3",
+  "gr": "4.269.3",
+  "page": 599,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[Log[1/x]]*x^(p - 1), {x, 0, 1}]",
+  "rhs": [
+   "1/2*Sqrt[Pi/p^3]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "GW (324)(1c)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 sqrt(ln 1/x) x^(p-1) dx = 1/2 sqrt(pi/p^3)",
+  "note": ""
+ },
+ {
+  "id": "GR4.269.4",
+  "gr": "4.269.4",
+  "page": 599,
+  "status": "ok",
+  "lhs": "Integrate[x^(p - 1)/Sqrt[Log[1/x]], {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi/p]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (133)(1)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 x^(p-1)/sqrt(ln 1/x) dx = sqrt(pi/p)",
+  "note": ""
+ },
+ {
+  "id": "GR4.269.5",
+  "gr": "4.269.5",
+  "page": 599,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[t] - x^n*Sin[(n + 1)*t] + x^(n + 1)*Sin[n*t])/((1 - 2*x*Cos[t] + x^2)*Sqrt[Log[1/x]]), {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi]*Sum[Sin[k*t]/Sqrt[k], {k, 1, n}]"
+  ],
+  "conds": [
+   "Abs[t] < Pi",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (133)(5)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (sin t - x^n sin[(n+1)t] + x^(n+1) sin nt)/(1-2x cos t+x^2) dx/sqrt(ln 1/x) = sqrt(pi) sum_{k=1}^n sin kt/sqrt k",
+  "note": "n positive integer implied"
+ },
+ {
+  "id": "GR4.269.6",
+  "gr": "4.269.6",
+  "page": 599,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[t] - x - x^(n - 1)*Cos[n*t] + x^n*Cos[(n - 1)*t])/((1 - 2*x*Cos[t] + x^2)*Sqrt[Log[1/x]]), {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi]*Sum[Cos[k*t]/Sqrt[k], {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "Abs[t] < Pi",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (133)(6)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (cos t - x - x^(n-1) cos nt + x^n cos[(n-1)t])/(1-2x cos t+x^2) dx/sqrt(ln 1/x) = sqrt(pi) sum_{k=1}^{n-1} cos kt/sqrt k",
+  "note": "n positive integer implied"
+ },
+ {
+  "id": "GR4.269.7",
+  "gr": "4.269.7",
+  "page": 599,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*Sqrt[Log[x/u]*Log[v/x]]), {x, u, v}]",
+  "rhs": [
+   "Pi"
+  ],
+  "conds": [
+   "u*v > 0",
+   "v > u"
+  ],
+  "cite": "BI (145)(37)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_u^v dx/(x sqrt(ln(x/u) ln(v/x))) = pi",
+  "note": "v > u added (orientation of the path)"
+ },
+ {
+  "id": "GR4.271.1",
+  "gr": "4.271.1",
+  "page": 599,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^(2*n)/(1 + x), {x, 0, 1}]",
+  "rhs": [
+   "(2^(2*n) - 1)/2^(2*n)*(2*n)!*Zeta[2*n + 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (110)(1)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln x)^(2n) dx/(1+x) = (2^(2n)-1)/2^(2n) (2n)! zeta(2n+1)",
+  "note": "n positive integer implied"
+ },
+ {
+  "id": "GR4.271.2",
+  "gr": "4.271.2",
+  "page": 599,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^(2*n - 1)/(1 + x), {x, 0, 1}]",
+  "rhs": [
+   "(1 - 2^(2*n - 1))/(2*n)*Pi^(2*n)*Abs[BernoulliB[2*n]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (110)(2)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln x)^(2n-1) dx/(1+x) = (1-2^(2n-1))/(2n) pi^(2n) |B_2n|",
+  "note": ""
+ },
+ {
+  "id": "GR4.271.3",
+  "gr": "4.271.3",
+  "page": 599,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^(2*n - 1)/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "-1/n*2^(2*n - 2)*Pi^(2*n)*Abs[BernoulliB[2*n]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (110)(5), GW(324)(9a)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln x)^(2n-1) dx/(1-x) = -1/n 2^(2n-2) pi^(2n) |B_2n|",
+  "note": ""
+ },
+ {
+  "id": "GR4.271.4",
+  "gr": "4.271.4",
+  "page": 599,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^(p - 1)/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "E^(I*(p - 1)*Pi)*Gamma[p]*Zeta[p]"
+  ],
+  "conds": [
+   "p > 1"
+  ],
+  "cite": "GW (324)(9b)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln x)^(p-1) dx/(1-x) = e^(i(p-1)pi) Gamma(p) zeta(p)",
+  "note": "(ln x)^(p-1) on the principal branch, ln x < 0"
+ },
+ {
+  "id": "GR4.271.5",
+  "gr": "4.271.5",
+  "page": 599,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^n/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "(-1)^n*n!*Sum[(-1)^k/(2*k + 1)^(n + 1), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (110)(11)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln x)^n dx/(1+x^2) = (-1)^n n! sum_{k>=0} (-1)^k/(2k+1)^(n+1)",
+  "note": "n integer implied"
+ },
+ {
+  "id": "GR4.271.6a",
+  "gr": "4.271.6",
+  "page": 599,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^(2*n)/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "Pi^(2*n + 1)/2^(2*n + 2)*Abs[EulerE[2*n]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (324)(10)a",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln x)^(2n) dx/(1+x^2) = pi^(2n+1)/2^(2n+2) |E_2n|",
+  "note": "n integer implied"
+ },
+ {
+  "id": "GR4.271.6b",
+  "gr": "4.271.6",
+  "page": 599,
+  "status": "ok",
+  "lhs": "1/2*Integrate[Log[x]^(2*n)/(1 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^(2*n + 1)/2^(2*n + 2)*Abs[EulerE[2*n]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (324)(10)a",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "1/2 int_0^inf (ln x)^(2n) dx/(1+x^2) = pi^(2n+1)/2^(2n+2) |E_2n|",
+  "note": "n integer implied"
+ },
+ {
+  "id": "GR4.271.7",
+  "gr": "4.271.7",
+  "page": 599,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^(2*n + 1)/(1 + b*x + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Abs[b] < 2",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (135)(2)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^inf (ln x)^(2n+1)/(1+bx+x^2) dx = 0",
+  "note": "n integer implied"
+ },
+ {
+  "id": "GR4.271.8",
+  "gr": "4.271.8",
+  "page": 599,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^(2*n)/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "(2^(2*n + 1) - 1)/2^(2*n + 1)*(2*n)!*Zeta[2*n + 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (110)(12)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln x)^(2n) dx/(1-x^2) = (2^(2n+1)-1)/2^(2n+1) (2n)! zeta(2n+1)",
+  "note": ""
+ },
+ {
+  "id": "GR4.271.9",
+  "gr": "4.271.9",
+  "page": 599,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^(2*n)/(1 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (312)(7)a",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^inf (ln x)^(2n) dx/(1-x^2) = 0",
+  "note": "n positive integer implied"
+ },
+ {
+  "id": "GR4.271.10a",
+  "gr": "4.271.10",
+  "page": 599,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^(2*n - 1)/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "(1 - 2^(2*n))/(4*n)*Pi^(2*n)*Abs[BernoulliB[2*n]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (290)(17)a, BI(312)(6)a",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln x)^(2n-1) dx/(1-x^2) = (1-2^(2n))/(4n) pi^(2n) |B_2n|",
+  "note": ""
+ },
+ {
+  "id": "GR4.271.10b",
+  "gr": "4.271.10",
+  "page": 599,
+  "status": "ok",
+  "lhs": "1/2*Integrate[Log[x]^(2*n - 1)/(1 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "(1 - 2^(2*n))/(4*n)*Pi^(2*n)*Abs[BernoulliB[2*n]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (290)(17)a, BI(312)(6)a",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "1/2 int_0^inf (ln x)^(2n-1) dx/(1-x^2) = (1-2^(2n))/(4n) pi^(2n) |B_2n|",
+  "note": ""
+ },
+ {
+  "id": "GR4.271.11",
+  "gr": "4.271.11",
+  "page": 600,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^(2*n - 1)*x/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "-1/(4*n)*Pi^(2*n)*Abs[BernoulliB[2*n]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (290)(19)a",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln x)^(2n-1) x dx/(1-x^2) = -1/(4n) pi^(2n) |B_2n|",
+  "note": ""
+ },
+ {
+  "id": "GR4.271.12",
+  "gr": "4.271.12",
+  "page": 600,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^(2*n)*(1 + x^2)/(1 - x^2)^2, {x, 0, 1}]",
+  "rhs": [
+   "(2^(2*n) - 1)/2*Pi^(2*n)*Abs[BernoulliB[2*n]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (296)(17)a",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln x)^(2n) (1+x^2)/(1-x^2)^2 dx = (2^(2n)-1)/2 pi^(2n) |B_2n|",
+  "note": ""
+ },
+ {
+  "id": "GR4.271.13",
+  "gr": "4.271.13",
+  "page": 600,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^(2*n + 1)*(Cos[2*a*Pi] - x)/(1 - 2*x*Cos[2*a*Pi] + x^2), {x, 0, 1}]",
+  "rhs": [
+   "-(2*n + 1)!*Sum[Cos[2*a*k*Pi]/k^(2*n + 2), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "LI (113)(10)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln x)^(2n+1) (cos 2a pi - x) dx/(1-2x cos 2a pi+x^2) = -(2n+1)! sum_{k>=1} cos 2ak pi/k^(2n+2)",
+  "note": "a is not an integer; n integer implied"
+ },
+ {
+  "id": "GR4.271.14",
+  "gr": "4.271.14",
+  "page": 600,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^n*x^(nu - 1)/(a^2 + 2*a*x*Cos[t] + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*Csc[t]*D[a^(nu - 2)*Sin[(nu - 1)*t]/Sin[nu*Pi], {nu, n}]"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < Re[nu] < 2",
+   "0 < Abs[t] < Pi",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 315(12)",
+  "edition_note": "6",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^inf (ln x)^n x^(nu-1) dx/(a^2+2ax cos t+x^2) = -pi cosec t d^n/dnu^n [a^(nu-2) sin((nu-1)t)/sin(nu pi)]",
+  "note": "n integer implied"
+ },
+ {
+  "id": "GR4.271.15",
+  "gr": "4.271.15",
+  "page": 600,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^n*x^(p - 1)/(1 - x^q), {x, 0, 1}]",
+  "rhs": [
+   "-1/q^(n + 1)*PolyGamma[n, p/q]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (324)(9)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln x)^n x^(p-1) dx/(1-x^q) = -1/q^(n+1) psi^(n)(p/q)",
+  "note": "n positive integer implied"
+ },
+ {
+  "id": "GR4.271.16",
+  "gr": "4.271.16",
+  "page": 600,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^n*x^(p - 1)/(1 + x^q), {x, 0, 1}]",
+  "rhs": [
+   "1/q^(n + 1)*(PolyGamma[n, (p/q + 1)/2] - PolyGamma[n, p/(2*q)])/2^(n + 1)"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (324)(10)",
+  "edition_note": "3",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln x)^n x^(p-1) dx/(1+x^q) = 1/q^(n+1) beta^(n)(p/q)",
+  "note": "beta^(n)(z) = (psi^(n)((z+1)/2) - psi^(n)(z/2))/2^(n+1) from 8.370; n integer implied"
+ },
+ {
+  "id": "GR4.272.1",
+  "gr": "4.272.1",
+  "page": 600,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^(q - 1)/(1 + 2*x*Cos[t] + x^2), {x, 0, 1}]",
+  "rhs": [
+   "Csc[t]*Gamma[q]*Sum[(-1)^(k - 1)*Sin[k*t]/k^q, {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "Abs[t] < Pi",
+   "q < 1",
+   "q > 0"
+  ],
+  "cite": "LI (130)(1)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 [ln(1/x)]^(q-1) dx/(1+2x cos t+x^2) = cosec t Gamma(q) sum_{k>=1} (-1)^(k-1) sin kt/k^q",
+  "note": "q > 0 added (convergence at x = 1)"
+ },
+ {
+  "id": "GR4.272.2",
+  "gr": "4.272.2",
+  "page": 600,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^(q - 1)*(1 + x)/(1 + 2*x*Cos[t] + x^2), {x, 0, 1}]",
+  "rhs": [
+   "Sec[t/2]*Gamma[q]*Sum[(-1)^(k - 1)*Cos[(k - 1/2)*t]/k^q, {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "Abs[t] < Pi",
+   "q < 1/2",
+   "q > 0"
+  ],
+  "cite": "LI (130)(5)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln 1/x)^(q-1) (1+x) dx/(1+2x cos t+x^2) = sec(t/2) Gamma(q) sum (-1)^(k-1) cos[(k-1/2)t]/k^q",
+  "note": "q > 0 added (convergence at x = 1)"
+ },
+ {
+  "id": "GR4.272.3",
+  "gr": "4.272.3",
+  "page": 600,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^mu*x^(nu - 1)/(1 - 2*a*x*Cos[t] + x^2*a^2), {x, 0, 1}]",
+  "rhs": [
+   "Gamma[mu + 1]/(a*Sin[t])*Sum[a^k*Sin[k*t]/(nu + k - 1)^(mu + 1), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "a > 0",
+   "a < 1",
+   "Re[mu] > 0",
+   "Re[nu] > 0",
+   "-Pi < t < Pi"
+  ],
+  "cite": "BI (140)(14)a",
+  "edition_note": "9",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 [ln(1/x)]^mu x^(nu-1) dx/(1-2ax cos t+x^2a^2) = Gamma(mu+1)/(a sin t) sum a^k sin kt/(nu+k-1)^(mu+1)",
+  "note": "a < 1 added (convergence of the series)"
+ },
+ {
+  "id": "GR4.272.4",
+  "gr": "4.272.4",
+  "page": 600,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^(r - 1)*(Cos[lam] - p*x)*x^(q - 1)/(1 + p^2*x^2 - 2*p*x*Cos[lam]), {x, 0, 1}]",
+  "rhs": [
+   "Gamma[r]*Sum[p^(k - 1)*Cos[k*lam]/(q + k - 1)^r, {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "r > 0",
+   "q > 0",
+   "Abs[p] < 1"
+  ],
+  "cite": "BI (113)(11)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln 1/x)^(r-1) (cos lam - px)/(1+p^2x^2-2px cos lam) x^(q-1) dx = Gamma(r) sum p^(k-1) cos k lam/(q+k-1)^r",
+  "note": "|p| < 1 added (convergence of the series)"
+ },
+ {
+  "id": "GR4.272.5",
+  "gr": "4.272.5",
+  "page": 600,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^p/x^2, {x, 1, Infinity}]",
+  "rhs": [
+   "Gamma[1 + p]"
+  ],
+  "conds": [
+   "p > -1"
+  ],
+  "cite": "BI (149)(1)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_1^inf (ln x)^p dx/x^2 = Gamma(1+p)",
+  "note": ""
+ },
+ {
+  "id": "GR4.272.6",
+  "gr": "4.272.6",
+  "page": 600,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^(mu - 1)*x^(nu - 1), {x, 0, 1}]",
+  "rhs": [
+   "Gamma[mu]/nu^mu"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "BI (107)(3)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln 1/x)^(mu-1) x^(nu-1) dx = Gamma(mu)/nu^mu",
+  "note": ""
+ },
+ {
+  "id": "GR4.272.7",
+  "gr": "4.272.7",
+  "page": 600,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^(n - 1/2)*x^(nu - 1), {x, 0, 1}]",
+  "rhs": [
+   "(2*n - 1)!!/(2*nu)^n*Sqrt[Pi/nu]"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (107)(2)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln 1/x)^(n-1/2) x^(nu-1) dx = (2n-1)!!/(2nu)^n sqrt(pi/nu)",
+  "note": "n integer implied"
+ },
+ {
+  "id": "GR4.272.8",
+  "gr": "4.272.8",
+  "page": 601,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^(n - 1)*x^(nu - 1)/(1 + x), {x, 0, 1}]",
+  "rhs": [
+   "Gamma[3 - 1/n]*(p^(1/n - 3) - q^(1/n - 3))",
+   "(n - 1)!*(HurwitzZeta[n, nu/2] - HurwitzZeta[n, (nu + 1)/2])/2^n"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (110)(4)",
+  "edition_note": "11",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln 1/x)^(n-1) x^(nu-1)/(1+x) dx = Gamma(3-1/n)(p^(1/n-3) - q^(1/n-3))",
+  "note": "BOOK ERROR: printed value contains p, q absent from the integrand (it is the value of 4.272.18's integral). 2nd rhs = (n-1)! sum (-1)^k/(nu+k)^n; n integer implied"
+ },
+ {
+  "id": "GR4.272.9",
+  "gr": "4.272.9",
+  "page": 601,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^(n - 1)*x^(nu - 1)/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "(n - 1)!*HurwitzZeta[n, nu]"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "BI (110)(7)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln 1/x)^(n-1) x^(nu-1)/(1-x) dx = (n-1)! zeta(n,nu)",
+  "note": "n integer >= 2 implied"
+ },
+ {
+  "id": "GR4.272.10",
+  "gr": "4.272.10",
+  "page": 601,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^(mu - 1)*(x - 1)^n*(a + n*x/(x - 1))*x^(a - 1), {x, 0, 1}]",
+  "rhs": [
+   "Gamma[mu]*Sum[(-1)^k*Binomial[n, k]/(a + n - k)^(mu - 1), {k, 0, n}]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "LI (110)(10)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln 1/x)^(mu-1) (x-1)^n (a + nx/(x-1)) x^(a-1) dx = Gamma(mu) sum_{k=0}^n (-1)^k n(n-1)...(n-k+1)/((a+n-k)^(mu-1) k!)",
+  "note": "n(n-1)...(n-k+1)/k! written as Binomial[n, k]; a > 0 and n integer implied"
+ },
+ {
+  "id": "GR4.272.11",
+  "gr": "4.272.11",
+  "page": 601,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^(n - 1)*(1 - x^m)/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "(n - 1)!*Sum[1/k^n, {k, 1, m}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "LI (110)(9)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln 1/x)^(n-1) (1-x^m)/(1-x) dx = (n-1)! sum_{k=1}^m 1/k^n",
+  "note": "n, m positive integers implied"
+ },
+ {
+  "id": "GR4.272.12a",
+  "gr": "4.272.12",
+  "page": 601,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^(mu - 1)*x^(nu - 1)/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "Gamma[mu]*Sum[1/(nu + 2*k)^mu, {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[mu] > 1",
+   "Re[nu] > 0"
+  ],
+  "cite": "BI (110)(13)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln 1/x)^(mu-1) x^(nu-1)/(1-x^2) dx = Gamma(mu) sum_{k>=0} 1/(nu+2k)^mu",
+  "note": "book gives Re mu > 0; the integral (and series) converge only for Re mu > 1"
+ },
+ {
+  "id": "GR4.272.12b",
+  "gr": "4.272.12",
+  "page": 601,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^(mu - 1)*x^(nu - 1)/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "1/2^mu*Gamma[mu]*HurwitzZeta[mu, nu/2]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[mu] > 1",
+   "Re[nu] > 0"
+  ],
+  "cite": "BI (110)(13)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "... = 1/2^mu Gamma(mu) zeta(mu, nu/2)",
+  "note": "book gives Re mu > 0; the integral converges only for Re mu > 1"
+ },
+ {
+  "id": "GR4.272.13",
+  "gr": "4.272.13",
+  "page": 601,
+  "status": "ok",
+  "lhs": "Integrate[(x^q - x^(-q))/(1 - x^2)*Log[1/x]^p, {x, 0, 1}]",
+  "rhs": [
+   "Gamma[p + 1]*Sum[1/(2*k + q - 1)^(p + 1) - 1/(2*k - q - 1)^(p + 1), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "p > -1",
+   "q^2 < 1"
+  ],
+  "cite": "LI (326)(12)a",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (x^q-x^(-q))/(1-x^2) (ln 1/x)^p dx = Gamma(p+1) sum_{k>=1} {1/(2k+q-1)^(p+1) - 1/(2k-q-1)^(p+1)}",
+  "note": ""
+ },
+ {
+  "id": "GR4.272.14",
+  "gr": "4.272.14",
+  "page": 601,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^(r - 1)*x^(p - 1)/(1 + x^q)^s, {x, 0, 1}]",
+  "rhs": [
+   "Gamma[r]*Sum[Binomial[-s, k]/(p + k*q)^r, {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "r > 0",
+   "0 < s < r + 2"
+  ],
+  "cite": "GW (324)(11)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln 1/x)^(r-1) x^(p-1)/(1+x^q)^s dx = Gamma(r) sum_{k>=0} C(-s,k)/(p+kq)^r",
+  "note": ""
+ },
+ {
+  "id": "GR4.272.15",
+  "gr": "4.272.15",
+  "page": 601,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^n*(1 + x^q)^m*x^(p - 1), {x, 0, 1}]",
+  "rhs": [
+   "n!*Sum[Binomial[m, k]/(p + k*q)^(n + 1), {k, 0, m}]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (107)(6)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln 1/x)^n (1+x^q)^m x^(p-1) dx = n! sum_{k=0}^m C(m,k)/(p+kq)^(n+1)",
+  "note": "n, m integers implied"
+ },
+ {
+  "id": "GR4.272.16",
+  "gr": "4.272.16",
+  "page": 601,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^n*(1 - x^q)^m*x^(p - 1), {x, 0, 1}]",
+  "rhs": [
+   "n!*Sum[Binomial[m, k]*(-1)^k/(p + k*q)^(n + 1), {k, 0, m}]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (107)(7)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln 1/x)^n (1-x^q)^m x^(p-1) dx = n! sum_{k=0}^m C(m,k)(-1)^k/(p+kq)^(n+1)",
+  "note": "n, m integers implied"
+ },
+ {
+  "id": "GR4.272.17",
+  "gr": "4.272.17",
+  "page": 601,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^(p - 1)*x^(q - 1)/(1 - a*x^q), {x, 0, 1}]",
+  "rhs": [
+   "1/(a*q^p)*Gamma[p]*Sum[a^k/k^p, {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "a < 1"
+  ],
+  "cite": "LI (110)(8)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln 1/x)^(p-1) x^(q-1)/(1-ax^q) dx = 1/(a q^p) Gamma(p) sum_{k>=1} a^k/k^p",
+  "note": "series converges for |a| <= 1; for a < -1 the sum is meant as its continuation PolyLog[p, a]"
+ },
+ {
+  "id": "GR4.272.18",
+  "gr": "4.272.18",
+  "page": 601,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^(2 - 1/n)*(x^(p - 1) - x^(q - 1)), {x, 0, 1}]",
+  "rhs": [
+   "n/(n - 1)*Gamma[1/n]*(q^(1 - 1/n) - p^(1 - 1/n))",
+   "Gamma[3 - 1/n]*(p^(1/n - 3) - q^(1/n - 3))"
+  ],
+  "conds": [
+   "q > p > 0",
+   "n > 1"
+  ],
+  "cite": "BI (133)(4)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln 1/x)^(2-1/n) (x^(p-1)-x^(q-1)) dx = n/(n-1) Gamma(1/n)(q^(1-1/n) - p^(1-1/n))",
+  "note": "BOOK ERROR suspected: int (ln 1/x)^s x^(p-1) = Gamma(s+1)/p^(s+1) gives Gamma(3-1/n)(p^(1/n-3) - q^(1/n-3)) (2nd rhs), which is the value printed under 4.272.8; n > 1 implied by n/(n-1)"
+ },
+ {
+  "id": "GR4.272.19",
+  "gr": "4.272.19",
+  "page": 601,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^(2*n - 1)*(x^p - x^(-p))/(1 - x^q)*x^(q - 1), {x, 0, 1}]",
+  "rhs": [
+   "1/p^(2*n)*Sum[(2*p*Pi/q)^k*Abs[BernoulliB[2*k]]/(2*k*(2*k - 2*n)!), {k, n, Infinity}]",
+   "1/p^(2*n)*Sum[(2*p*Pi/q)^(2*k)*Abs[BernoulliB[2*k]]/(2*k*(2*k - 2*n)!), {k, n, Infinity}]"
+  ],
+  "conds": [
+   "p < q/2",
+   "q > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (110)(16)",
+  "edition_note": "",
+  "section": "4.26-4.27 Powers and logarithms",
+  "tex": "int_0^1 (ln 1/x)^(2n-1) (x^p-x^(-p))/(1-x^q) x^(q-1) dx = 1/p^(2n) sum_{k=n}^inf (2p pi/q)^k |B_2k|/(2k (2k-2n)!)",
+  "note": "exponent of (2p pi/q) printed k; 2k (2nd rhs) matches the B_2k growth; q > 0 and n positive integer implied"
+ }
+]

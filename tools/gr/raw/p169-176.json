@@ -1,0 +1,1410 @@
+[
+ {
+  "id": "GR2.424.5a",
+  "gr": "2.424.5",
+  "page": 169,
+  "status": "ok",
+  "lhs": "Integrate[Coth[x]^(2*n + 1), x]",
+  "rhs": [
+   "-Sum[1/(2*n)*Binomial[n, k]/Sinh[x]^(2*k), {k, 1, n}] + Log[Sinh[x]]",
+   "-Sum[1/(2*k)*Binomial[n, k]/Sinh[x]^(2*k), {k, 1, n}] + Log[Sinh[x]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions",
+  "tex": "int coth^(2n+1) x dx = -sum_{k=1}^n 1/(2n) C(n,k) 1/sinh^(2k) x + ln sinh x",
+  "note": "book prints 1/(2n) inside the sum; derivation (and 2.424.2 analogue) gives 1/(2k): second candidate"
+ },
+ {
+  "id": "GR2.424.5b",
+  "gr": "2.424.5",
+  "page": 169,
+  "status": "ok",
+  "lhs": "Integrate[Coth[x]^(2*n + 1), x]",
+  "rhs": [
+   "-Sum[Coth[x]^(2*n - 2*k + 2)/(2*n - 2*k + 2), {k, 1, n}] + Log[Sinh[x]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions",
+  "tex": "= -sum_{k=1}^n coth^(2n-2k+2) x/(2n-2k+2) + ln sinh x",
+  "note": ""
+ },
+ {
+  "id": "GR2.424.6",
+  "gr": "2.424.6",
+  "page": 169,
+  "status": "ok",
+  "lhs": "Integrate[Coth[x]^(2*n), x]",
+  "rhs": [
+   "-Sum[Coth[x]^(2*n - 2*k + 1)/(2*n - 2*k + 1), {k, 1, n}] + x"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (351)(14)",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions",
+  "tex": "int coth^(2n) x dx = -sum_{k=1}^n coth^(2n-2k+1) x/(2n-2k+1) + x",
+  "note": ""
+ },
+ {
+  "id": "GR2.425.1",
+  "gr": "2.425.1",
+  "page": 169,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x + b]*Sinh[c*x + d], x]",
+  "rhs": [
+   "Sinh[(a + c)*x + b + d]/(2*(a + c)) - Sinh[(a - c)*x + b - d]/(2*(a - c))"
+  ],
+  "conds": [
+   "a^2 != c^2"
+  ],
+  "cite": "GU (352)(2a)",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int sinh(ax+b) sinh(cx+d) dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.425.2",
+  "gr": "2.425.2",
+  "page": 169,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x + b]*Cosh[c*x + d], x]",
+  "rhs": [
+   "Cosh[(a + c)*x + b + d]/(2*(a + c)) + Cosh[(a - c)*x + b - d]/(2*(a - c))"
+  ],
+  "conds": [
+   "a^2 != c^2"
+  ],
+  "cite": "GU (352)(2c)",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int sinh(ax+b) cosh(cx+d) dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.425.3",
+  "gr": "2.425.3",
+  "page": 169,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[a*x + b]*Cosh[c*x + d], x]",
+  "rhs": [
+   "Sinh[(a + c)*x + b + d]/(2*(a + c)) + Sinh[(a - c)*x + b - d]/(2*(a - c))"
+  ],
+  "conds": [
+   "a^2 != c^2"
+  ],
+  "cite": "GU (352)(2b)",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int cosh(ax+b) cosh(cx+d) dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.425.4",
+  "gr": "2.425.4",
+  "page": 169,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x + b]*Sinh[a*x + d], x]",
+  "rhs": [
+   "-(x/2)*Cosh[b - d] + Sinh[2*a*x + b + d]/(4*a)"
+  ],
+  "conds": [],
+  "cite": "GU (352)(3a)",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int sinh(ax+b) sinh(ax+d) dx = -x/2 cosh(b-d) + 1/(4a) sinh(2ax+b+d)",
+  "note": ""
+ },
+ {
+  "id": "GR2.425.5",
+  "gr": "2.425.5",
+  "page": 169,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x + b]*Cosh[a*x + d], x]",
+  "rhs": [
+   "(x/2)*Sinh[b - d] + Cosh[2*a*x + b + d]/(4*a)"
+  ],
+  "conds": [],
+  "cite": "GU (352)(3c)",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int sinh(ax+b) cosh(ax+d) dx = x/2 sinh(b-d) + 1/(4a) cosh(2ax+b+d)",
+  "note": ""
+ },
+ {
+  "id": "GR2.425.6",
+  "gr": "2.425.6",
+  "page": 169,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[a*x + b]*Cosh[a*x + d], x]",
+  "rhs": [
+   "(x/2)*Cosh[b - d] + Sinh[2*a*x + b + d]/(4*a)"
+  ],
+  "conds": [],
+  "cite": "GU (352)(3b)",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int cosh(ax+b) cosh(ax+d) dx = x/2 cosh(b-d) + 1/(4a) sinh(2ax+b+d)",
+  "note": ""
+ },
+ {
+  "id": "GR2.426.1",
+  "gr": "2.426.1",
+  "page": 169,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x]*Sinh[b*x]*Sinh[c*x], x]",
+  "rhs": [
+   "Cosh[(a + b + c)*x]/(4*(a + b + c)) - Cosh[(-a + b + c)*x]/(4*(-a + b + c)) - Cosh[(a - b + c)*x]/(4*(a - b + c)) - Cosh[(a + b - c)*x]/(4*(a + b - c))"
+  ],
+  "conds": [],
+  "cite": "GU (352)(4a)",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int sinh ax sinh bx sinh cx dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.426.2",
+  "gr": "2.426.2",
+  "page": 170,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x]*Sinh[b*x]*Cosh[c*x], x]",
+  "rhs": [
+   "Sinh[(a + b + c)*x]/(4*(a + b + c)) - Sinh[(-a + b + c)*x]/(4*(-a + b + c)) - Sinh[(a - b + c)*x]/(4*(a - b + c)) + Sinh[(a + b - c)*x]/(4*(a + b - c))"
+  ],
+  "conds": [],
+  "cite": "GU (352)(4b)",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int sinh ax sinh bx cosh cx dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.426.3",
+  "gr": "2.426.3",
+  "page": 170,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x]*Cosh[b*x]*Cosh[c*x], x]",
+  "rhs": [
+   "Cosh[(a + b + c)*x]/(4*(a + b + c)) - Cosh[(-a + b + c)*x]/(4*(-a + b + c)) + Cosh[(a - b + c)*x]/(4*(a - b + c)) + Cosh[(a + b - c)*x]/(4*(a + b - c))"
+  ],
+  "conds": [],
+  "cite": "GU (352)(4c)",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int sinh ax cosh bx cosh cx dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.426.4",
+  "gr": "2.426.4",
+  "page": 170,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[a*x]*Cosh[b*x]*Cosh[c*x], x]",
+  "rhs": [
+   "Sinh[(a + b + c)*x]/(4*(a + b + c)) + Sinh[(-a + b + c)*x]/(4*(-a + b + c)) + Sinh[(a - b + c)*x]/(4*(a - b + c)) + Sinh[(a + b - c)*x]/(4*(a + b - c))"
+  ],
+  "conds": [],
+  "cite": "GU (352)(4d)",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int cosh ax cosh bx cosh cx dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.427.1",
+  "gr": "2.427.1",
+  "page": 170,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sinh^p x sinh ax dx = 1/(p+a){sinh^p x cosh ax - p int sinh^(p-1) x cosh(a-1)x dx}",
+  "reason": "integral on right-hand side (reduction formula)",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "cite": "",
+  "edition_note": "",
+  "lhs": "Integrate[Sinh[x]^p*Sinh[a*x], x]"
+ },
+ {
+  "id": "GR2.427.2",
+  "gr": "2.427.2",
+  "page": 170,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sinh^p x sinh(2n+1)x dx = ... + ... int sinh^(p-2n) x sinh x dx",
+  "reason": "integral on right-hand side (reduction formula)",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "cite": "",
+  "edition_note": "",
+  "lhs": "Integrate[Sinh[x]^p*Sinh[(2*n + 1)*x], x]"
+ },
+ {
+  "id": "GR2.427.3",
+  "gr": "2.427.3",
+  "page": 170,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]^p*Sinh[2*n*x], x]",
+  "rhs": [
+   "Gamma[p + 1]/Gamma[p/2 + n + 1]*Sum[Gamma[p/2 + n - 2*k]/(2^(2*k + 1)*Gamma[p - 2*k + 1])*Sinh[x]^(p - 2*k)*Cosh[(2*n - 2*k)*x] - Gamma[p/2 + n - 2*k - 1]/(2^(2*k + 2)*Gamma[p - 2*k])*Sinh[x]^(p - 2*k - 1)*Sinh[(2*n - 2*k - 1)*x], {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (352)(5)a",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int sinh^p x sinh 2nx dx = Gamma(p+1)/Gamma(p/2+n+1) sum_{k=0}^{n-1}[...]",
+  "note": "[p is not a negative integer]. As printed there is no remainder integral (compare 2.428.3); likely valid only when the sum terminates, the oracle decides"
+ },
+ {
+  "id": "GR2.428.1",
+  "gr": "2.428.1",
+  "page": 170,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sinh^p x cosh ax dx = 1/(p+a){sinh^p x sinh ax - p int sinh^(p-1) x sinh(a-1)x dx}",
+  "reason": "integral on right-hand side (reduction formula)",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "cite": "",
+  "edition_note": "",
+  "lhs": "Integrate[Sinh[x]^p*Cosh[a*x], x]"
+ },
+ {
+  "id": "GR2.428.2",
+  "gr": "2.428.2",
+  "page": 171,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sinh^p x cosh(2n+1)x dx = ... + ... int sinh^(p-2n) x cosh x dx",
+  "reason": "integral on right-hand side (reduction formula)",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "cite": "",
+  "edition_note": "",
+  "lhs": "Integrate[Sinh[x]^p*Cosh[(2*n + 1)*x], x]"
+ },
+ {
+  "id": "GR2.428.3",
+  "gr": "2.428.3",
+  "page": 171,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sinh^p x cosh 2nx dx = ... + ... int sinh^(p-2n) x dx",
+  "reason": "integral on right-hand side (reduction formula)",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "cite": "GU (352)(6)a",
+  "edition_note": "",
+  "lhs": "Integrate[Sinh[x]^p*Cosh[2*n*x], x]"
+ },
+ {
+  "id": "GR2.429.1",
+  "gr": "2.429.1",
+  "page": 171,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cosh^p x sinh ax dx = 1/(p+a){cosh^p x cosh ax + p int cosh^(p-1) x sinh(a-1)x dx}",
+  "reason": "integral on right-hand side (reduction formula)",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "cite": "",
+  "edition_note": "",
+  "lhs": "Integrate[Cosh[x]^p*Sinh[a*x], x]"
+ },
+ {
+  "id": "GR2.429.2",
+  "gr": "2.429.2",
+  "page": 171,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cosh^p x sinh(2n+1)x dx = ... + ... int cosh^(p-n) x sinh(n+1)x dx",
+  "reason": "integral on right-hand side (reduction formula)",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "cite": "",
+  "edition_note": "",
+  "lhs": "Integrate[Cosh[x]^p*Sinh[(2*n + 1)*x], x]"
+ },
+ {
+  "id": "GR2.429.3",
+  "gr": "2.429.3",
+  "page": 171,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cosh^p x sinh 2nx dx = ... + ... int cosh^(p-n) x sinh nx dx",
+  "reason": "integral on right-hand side (reduction formula)",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "cite": "GU (352)(7)a",
+  "edition_note": "",
+  "lhs": "Integrate[Cosh[x]^p*Sinh[2*n*x], x]"
+ },
+ {
+  "id": "GR2.431.1",
+  "gr": "2.431.1",
+  "page": 172,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cosh^p x cosh ax dx = 1/(p+a){cosh^p x sinh ax + p int cosh^(p-1) x cosh(a-1)x dx}",
+  "reason": "integral on right-hand side (reduction formula)",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "cite": "",
+  "edition_note": "",
+  "lhs": "Integrate[Cosh[x]^p*Cosh[a*x], x]"
+ },
+ {
+  "id": "GR2.431.2",
+  "gr": "2.431.2",
+  "page": 172,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cosh^p x cosh(2n+1)x dx = ... + ... int cosh^(p-n) x cosh(n+1)x dx",
+  "reason": "integral on right-hand side (reduction formula)",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "cite": "",
+  "edition_note": "",
+  "lhs": "Integrate[Cosh[x]^p*Cosh[(2*n + 1)*x], x]"
+ },
+ {
+  "id": "GR2.431.3",
+  "gr": "2.431.3",
+  "page": 172,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cosh^p x cosh 2nx dx = ... + Gamma(p/2+1)/(2^n Gamma(p-n+1)) cosh^(p-n) x cosh nx dx",
+  "reason": "integral on right-hand side (reduction formula); book omits the integral sign before the last term (misprint)",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "cite": "GU (352)(8)a",
+  "edition_note": "",
+  "lhs": "Integrate[Cosh[x]^p*Cosh[2*n*x], x]"
+ },
+ {
+  "id": "GR2.432.1",
+  "gr": "2.432.1",
+  "page": 172,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[(n + 1)*x]*Sinh[x]^(n - 1), x]",
+  "rhs": [
+   "Sinh[x]^n*Sinh[n*x]/n"
+  ],
+  "conds": [
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int sinh(n+1)x sinh^(n-1) x dx = 1/n sinh^n x sinh nx",
+  "note": ""
+ },
+ {
+  "id": "GR2.432.2",
+  "gr": "2.432.2",
+  "page": 172,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[(n + 1)*x]*Cosh[x]^(n - 1), x]",
+  "rhs": [
+   "Cosh[x]^n*Cosh[n*x]/n"
+  ],
+  "conds": [
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int sinh(n+1)x cosh^(n-1) x dx = 1/n cosh^n x cosh nx",
+  "note": ""
+ },
+ {
+  "id": "GR2.432.3",
+  "gr": "2.432.3",
+  "page": 172,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[(n + 1)*x]*Sinh[x]^(n - 1), x]",
+  "rhs": [
+   "Sinh[x]^n*Cosh[n*x]/n"
+  ],
+  "conds": [
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int cosh(n+1)x sinh^(n-1) x dx = 1/n sinh^n x cosh nx",
+  "note": ""
+ },
+ {
+  "id": "GR2.432.4",
+  "gr": "2.432.4",
+  "page": 172,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[(n + 1)*x]*Cosh[x]^(n - 1), x]",
+  "rhs": [
+   "Cosh[x]^n*Sinh[n*x]/n"
+  ],
+  "conds": [
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int cosh(n+1)x cosh^(n-1) x dx = 1/n cosh^n x sinh nx",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.1",
+  "gr": "2.433.1",
+  "page": 172,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[(2*n + 1)*x]/Sinh[x], x]",
+  "rhs": [
+   "2*Sum[Sinh[(2*n - 2*k)*x]/(2*n - 2*k), {k, 0, n - 1}] + x"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int sinh(2n+1)x/sinh x dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.2",
+  "gr": "2.433.2",
+  "page": 172,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[2*n*x]/Sinh[x], x]",
+  "rhs": [
+   "2*Sum[Sinh[(2*n - 2*k - 1)*x]/(2*n - 2*k - 1), {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (352)(5d)",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int sinh 2nx/sinh x dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.3",
+  "gr": "2.433.3",
+  "page": 172,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[(2*n + 1)*x]/Sinh[x], x]",
+  "rhs": [
+   "2*Sum[Cosh[(2*n - 2*k)*x]/(2*n - 2*k), {k, 0, n - 1}] + Log[Sinh[x]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int cosh(2n+1)x/sinh x dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.4",
+  "gr": "2.433.4",
+  "page": 172,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[2*n*x]/Sinh[x], x]",
+  "rhs": [
+   "2*Sum[Cosh[(2*n - 2*k - 1)*x]/(2*n - 2*k - 1), {k, 0, n - 1}] + Log[Tanh[x/2]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (352)(6d)",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int cosh 2nx/sinh x dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.5",
+  "gr": "2.433.5",
+  "page": 172,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[(2*n + 1)*x]/Cosh[x], x]",
+  "rhs": [
+   "2*Sum[(-1)^k*Cosh[(2*n - 2*k)*x]/(2*n - 2*k), {k, 0, n - 1}] + (-1)^n*Log[Cosh[x]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int sinh(2n+1)x/cosh x dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.6",
+  "gr": "2.433.6",
+  "page": 173,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[2*n*x]/Cosh[x], x]",
+  "rhs": [
+   "2*Sum[(-1)^k*Cosh[(2*n - 2*k - 1)*x]/(2*n - 2*k - 1), {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (352)(7d)",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int sinh 2nx/cosh x dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.7",
+  "gr": "2.433.7",
+  "page": 173,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[(2*n + 1)*x]/Cosh[x], x]",
+  "rhs": [
+   "2*Sum[(-1)^k*Sinh[(2*n - 2*k)*x]/(2*n - 2*k), {k, 0, n - 1}] + (-1)^n*x"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int cosh(2n+1)x/cosh x dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.8",
+  "gr": "2.433.8",
+  "page": 173,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[2*n*x]/Cosh[x], x]",
+  "rhs": [
+   "2*Sum[(-1)^k*Sinh[(2*n - 2*k - 1)*x]/(2*n - 2*k - 1), {k, 0, n - 1}] + (-1)^n*ArcSin[Tanh[x]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (352)(8d)",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int cosh 2nx/cosh x dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.9",
+  "gr": "2.433.9",
+  "page": 173,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[2*x]/Sinh[x]^n, x]",
+  "rhs": [
+   "-2/((n - 2)*Sinh[x]^(n - 2))"
+  ],
+  "conds": [
+   "n != 2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Sinh[2*x]/Sinh[x]^n dx = -2/((n - 2)*Sinh[x]^(n - 2))",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.10",
+  "gr": "2.433.10",
+  "page": 173,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[2*x]/Sinh[x]^2, x]",
+  "rhs": [
+   "2*Log[Sinh[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Sinh[2*x]/Sinh[x]^2 dx = 2*Log[Sinh[x]]",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.11",
+  "gr": "2.433.11",
+  "page": 173,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[2*x]/Cosh[x]^n, x]",
+  "rhs": [
+   "2/((2 - n)*Cosh[x]^(n - 2))"
+  ],
+  "conds": [
+   "n != 2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Sinh[2*x]/Cosh[x]^n dx = 2/((2 - n)*Cosh[x]^(n - 2))",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.12",
+  "gr": "2.433.12",
+  "page": 173,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[2*x]/Cosh[x]^2, x]",
+  "rhs": [
+   "2*Log[Cosh[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Sinh[2*x]/Cosh[x]^2 dx = 2*Log[Cosh[x]]",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.13",
+  "gr": "2.433.13",
+  "page": 173,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[2*x]/Sinh[x], x]",
+  "rhs": [
+   "2*Cosh[x] + Log[Tanh[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Cosh[2*x]/Sinh[x] dx = 2*Cosh[x] + Log[Tanh[x/2]]",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.14",
+  "gr": "2.433.14",
+  "page": 173,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[2*x]/Sinh[x]^2, x]",
+  "rhs": [
+   "-Coth[x] + 2*x"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Cosh[2*x]/Sinh[x]^2 dx = -Coth[x] + 2*x",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.15",
+  "gr": "2.433.15",
+  "page": 173,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[2*x]/Sinh[x]^3, x]",
+  "rhs": [
+   "-Cosh[x]/(2*Sinh[x]^2) + (3/2)*Log[Tanh[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Cosh[2*x]/Sinh[x]^3 dx = -Cosh[x]/(2*Sinh[x]^2) + (3/2)*Log[Tanh[x/2]]",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.16",
+  "gr": "2.433.16",
+  "page": 173,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[2*x]/Cosh[x], x]",
+  "rhs": [
+   "2*Sinh[x] - ArcSin[Tanh[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Cosh[2*x]/Cosh[x] dx = 2*Sinh[x] - ArcSin[Tanh[x]]",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.17",
+  "gr": "2.433.17",
+  "page": 173,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[2*x]/Cosh[x]^2, x]",
+  "rhs": [
+   "-Tanh[x] + 2*x"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Cosh[2*x]/Cosh[x]^2 dx = -Tanh[x] + 2*x",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.18",
+  "gr": "2.433.18",
+  "page": 173,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[2*x]/Cosh[x]^3, x]",
+  "rhs": [
+   "-Sinh[x]/(2*Cosh[x]^2) + (3/2)*ArcSin[Tanh[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Cosh[2*x]/Cosh[x]^3 dx = -Sinh[x]/(2*Cosh[x]^2) + (3/2)*ArcSin[Tanh[x]]",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.19",
+  "gr": "2.433.19",
+  "page": 173,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[3*x]/Sinh[x], x]",
+  "rhs": [
+   "x + Sinh[2*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Sinh[3*x]/Sinh[x] dx = x + Sinh[2*x]",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.20",
+  "gr": "2.433.20",
+  "page": 173,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[3*x]/Sinh[x]^2, x]",
+  "rhs": [
+   "3*Log[Tanh[x/2]] + 4*Cosh[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Sinh[3*x]/Sinh[x]^2 dx = 3*Log[Tanh[x/2]] + 4*Cosh[x]",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.21",
+  "gr": "2.433.21",
+  "page": 173,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[3*x]/Sinh[x]^3, x]",
+  "rhs": [
+   "-3*Coth[x] + 4*x"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Sinh[3*x]/Sinh[x]^3 dx = -3*Coth[x] + 4*x",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.22",
+  "gr": "2.433.22",
+  "page": 173,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[3*x]/Cosh[x]^n, x]",
+  "rhs": [
+   "4/((3 - n)*Cosh[x]^(n - 3)) - 1/((1 - n)*Cosh[x]^(n - 1))"
+  ],
+  "conds": [
+   "n != 1",
+   "n != 3"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Sinh[3*x]/Cosh[x]^n dx = 4/((3 - n)*Cosh[x]^(n - 3)) - 1/((1 - n)*Cosh[x]^(n - 1))",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.23",
+  "gr": "2.433.23",
+  "page": 173,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[3*x]/Cosh[x], x]",
+  "rhs": [
+   "2*Sinh[x]^2 - Log[Cosh[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Sinh[3*x]/Cosh[x] dx = 2*Sinh[x]^2 - Log[Cosh[x]]",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.24",
+  "gr": "2.433.24",
+  "page": 174,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[3*x]/Cosh[x]^3, x]",
+  "rhs": [
+   "1/(2*Cosh[x]^2) + 4*Log[Cosh[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Sinh[3*x]/Cosh[x]^3 dx = 1/(2*Cosh[x]^2) + 4*Log[Cosh[x]]",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.25",
+  "gr": "2.433.25",
+  "page": 174,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[3*x]/Sinh[x]^n, x]",
+  "rhs": [
+   "4/((3 - n)*Sinh[x]^(n - 3)) + 1/((1 - n)*Sinh[x]^(n - 1))"
+  ],
+  "conds": [
+   "n != 1",
+   "n != 3"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Cosh[3*x]/Sinh[x]^n dx = 4/((3 - n)*Sinh[x]^(n - 3)) + 1/((1 - n)*Sinh[x]^(n - 1))",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.26",
+  "gr": "2.433.26",
+  "page": 174,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[3*x]/Sinh[x], x]",
+  "rhs": [
+   "2*Sinh[x]^2 + Log[Sinh[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Cosh[3*x]/Sinh[x] dx = 2*Sinh[x]^2 + Log[Sinh[x]]",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.27",
+  "gr": "2.433.27",
+  "page": 174,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[3*x]/Sinh[x]^3, x]",
+  "rhs": [
+   "-1/(2*Sinh[x]^2) + 4*Log[Sinh[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Cosh[3*x]/Sinh[x]^3 dx = -1/(2*Sinh[x]^2) + 4*Log[Sinh[x]]",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.28",
+  "gr": "2.433.28",
+  "page": 174,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[3*x]/Cosh[x], x]",
+  "rhs": [
+   "Sinh[2*x] - x"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Cosh[3*x]/Cosh[x] dx = Sinh[2*x] - x",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.29",
+  "gr": "2.433.29",
+  "page": 174,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[3*x]/Cosh[x]^2, x]",
+  "rhs": [
+   "4*Sinh[x] - 3*ArcSin[Tanh[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Cosh[3*x]/Cosh[x]^2 dx = 4*Sinh[x] - 3*ArcSin[Tanh[x]]",
+  "note": ""
+ },
+ {
+  "id": "GR2.433.30",
+  "gr": "2.433.30",
+  "page": 174,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[3*x]/Cosh[x]^3, x]",
+  "rhs": [
+   "4*x - 3*Tanh[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.42 Powers of hyperbolic functions and hyperbolic functions of linear functions of the argument",
+  "tex": "int Cosh[3*x]/Cosh[x]^3 dx = 4*x - 3*Tanh[x]",
+  "note": ""
+ },
+ {
+  "id": "GR2.441.1",
+  "gr": "2.441.1",
+  "page": 174,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B sinh x)/(a+b sinh x)^n dx = ... + int ((n-1)(aA+bB)+(n-2)(aB-bA) sinh x)/(a+b sinh x)^(n-1) dx",
+  "reason": "integral on right-hand side (reduction formula)",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "cite": "",
+  "edition_note": "",
+  "lhs": "Integrate[(A + B*Sinh[x])/(a + b*Sinh[x])^n, x]"
+ },
+ {
+  "id": "GR2.441.2",
+  "gr": "2.441.2",
+  "page": 174,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B sinh x)/(a+b sinh x) dx = B/b x - (aB-bA)/b int dx/(a+b sinh x)",
+  "reason": "integral on right-hand side (reduction formula) (see 2.441.3)",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "cite": "",
+  "edition_note": "",
+  "lhs": "Integrate[(A + B*Sinh[x])/(a + b*Sinh[x]), x]"
+ },
+ {
+  "id": "GR2.441.3a",
+  "gr": "2.441.3",
+  "page": 174,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Sinh[x]), x]",
+  "rhs": [
+   "1/Sqrt[a^2 + b^2]*Log[(a*Tanh[x/2] - b + Sqrt[a^2 + b^2])/(a*Tanh[x/2] - b - Sqrt[a^2 + b^2])]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int dx/(a+b sinh x) = 1/sqrt(a^2+b^2) ln[(a tanh(x/2) - b + sqrt(a^2+b^2))/(a tanh(x/2) - b - sqrt(a^2+b^2))]",
+  "note": ""
+ },
+ {
+  "id": "GR2.441.3b",
+  "gr": "2.441.3",
+  "page": 174,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Sinh[x]), x]",
+  "rhs": [
+   "2/Sqrt[a^2 + b^2]*ArcTanh[(a*Tanh[x/2] - b)/Sqrt[a^2 + b^2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= 2/sqrt(a^2+b^2) arctanh[(a tanh(x/2) - b)/sqrt(a^2+b^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR2.442.1",
+  "gr": "2.442.1",
+  "page": 174,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B cosh x)/(a+b sinh x)^n dx = -B/((n-1)b(a+b sinh x)^(n-1)) + A int dx/(a+b sinh x)^n",
+  "reason": "integral on right-hand side (reduction formula)",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "cite": "",
+  "edition_note": "",
+  "lhs": "Integrate[(A + B*Cosh[x])/(a + b*Sinh[x])^n, x]"
+ },
+ {
+  "id": "GR2.442.2",
+  "gr": "2.442.2",
+  "page": 174,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B cosh x)/(a+b sinh x) dx = B/b ln(a+b sinh x) + A int dx/(a+b sinh x)",
+  "reason": "integral on right-hand side (reduction formula) (see 2.441.3)",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "cite": "",
+  "edition_note": "",
+  "lhs": "Integrate[(A + B*Cosh[x])/(a + b*Sinh[x]), x]"
+ },
+ {
+  "id": "GR2.443.1",
+  "gr": "2.443.1",
+  "page": 175,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B cosh x)/(a+b cosh x)^n dx = ... + int ((n-1)(aA-bB)+(n-2)(aB-bA) cosh x)/(a+b cosh x)^(n-1) dx",
+  "reason": "integral on right-hand side (reduction formula)",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "cite": "",
+  "edition_note": "",
+  "lhs": "Integrate[(A + B*Cosh[x])/(a + b*Cosh[x])^n, x]"
+ },
+ {
+  "id": "GR2.443.2",
+  "gr": "2.443.2",
+  "page": 175,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B cosh x)/(a+b cosh x) dx = B/b x - (aB-bA)/b int dx/(a+b cosh x)",
+  "reason": "integral on right-hand side (reduction formula) (see 2.443.3)",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "cite": "",
+  "edition_note": "",
+  "lhs": "Integrate[(A + B*Cosh[x])/(a + b*Cosh[x]), x]"
+ },
+ {
+  "id": "GR2.443.3a",
+  "gr": "2.443.3",
+  "page": 175,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cosh[x]), x]",
+  "rhs": [
+   "1/Sqrt[b^2 - a^2]*ArcSin[(b + a*Cosh[x])/(a + b*Cosh[x])]"
+  ],
+  "conds": [
+   "b^2 > a^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int dx/(a+b cosh x) = 1/sqrt(b^2-a^2) arcsin((b+a cosh x)/(a+b cosh x)) [b^2>a^2, x<0]",
+  "note": "valid for x < 0 (book condition on the integration variable)"
+ },
+ {
+  "id": "GR2.443.3b",
+  "gr": "2.443.3",
+  "page": 175,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cosh[x]), x]",
+  "rhs": [
+   "-1/Sqrt[b^2 - a^2]*ArcSin[(b + a*Cosh[x])/(a + b*Cosh[x])]"
+  ],
+  "conds": [
+   "b^2 > a^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= -1/sqrt(b^2-a^2) arcsin((b+a cosh x)/(a+b cosh x)) [b^2>a^2, x>0]",
+  "note": "valid for x > 0 (book condition on the integration variable)"
+ },
+ {
+  "id": "GR2.443.3c",
+  "gr": "2.443.3",
+  "page": 175,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cosh[x]), x]",
+  "rhs": [
+   "1/Sqrt[a^2 - b^2]*Log[(a + b + Sqrt[a^2 - b^2]*Tanh[x/2])/(a + b - Sqrt[a^2 - b^2]*Tanh[x/2])]"
+  ],
+  "conds": [
+   "a^2 > b^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= 1/sqrt(a^2-b^2) ln[(a+b+sqrt(a^2-b^2) tanh(x/2))/(a+b-sqrt(a^2-b^2) tanh(x/2))]",
+  "note": ""
+ },
+ {
+  "id": "GR2.444.1a",
+  "gr": "2.444.1",
+  "page": 175,
+  "status": "ok",
+  "lhs": "Integrate[1/(Cosh[a] + Cosh[x]), x]",
+  "rhs": [
+   "Csch[a]*(Log[Cosh[(x + a)/2]] - Log[Cosh[(x - a)/2]])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int dx/(cosh a + cosh x) = cosech a [ln cosh((x+a)/2) - ln cosh((x-a)/2)]",
+  "note": ""
+ },
+ {
+  "id": "GR2.444.1b",
+  "gr": "2.444.1",
+  "page": 175,
+  "status": "ok",
+  "lhs": "Integrate[1/(Cosh[a] + Cosh[x]), x]",
+  "rhs": [
+   "2*Csch[a]*ArcTanh[Tanh[x/2]*Tanh[a/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= 2 cosech a arctanh(tanh(x/2) tanh(a/2))",
+  "note": ""
+ },
+ {
+  "id": "GR2.444.2",
+  "gr": "2.444.2",
+  "page": 175,
+  "status": "ok",
+  "lhs": "Integrate[1/(Cos[a] + Cosh[x]), x]",
+  "rhs": [
+   "2*Csc[a]*ArcTan[Tanh[x/2]*Tan[a/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "11",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int dx/(cos a + cosh x) = 2 cosec a arctan(tanh(x/2) tan(a/2))",
+  "note": ""
+ },
+ {
+  "id": "GR2.445.1",
+  "gr": "2.445.1",
+  "page": 175,
+  "status": "ok",
+  "lhs": "Integrate[B*Sinh[x]/(a + b*Cosh[x])^n, x]",
+  "rhs": [
+   "-B/((n - 1)*b*(a + b*Cosh[x])^(n - 1))"
+  ],
+  "conds": [
+   "n != 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int B sinh x/(a+b cosh x)^n dx = -B/((n-1)b(a+b cosh x)^(n-1))",
+  "note": ""
+ },
+ {
+  "id": "GR2.445.2",
+  "gr": "2.445.2",
+  "page": 175,
+  "status": "ok",
+  "lhs": "Integrate[B*Sinh[x]/(a + b*Cosh[x]), x]",
+  "rhs": [
+   "B/b*Log[a + b*Cosh[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int B sinh x/(a+b cosh x) dx = B/b ln(a+b cosh x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.446.1a",
+  "gr": "2.446.1",
+  "page": 176,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cosh[x])/(1 + Cosh[x])^n, x]",
+  "rhs": [
+   "B*Sinh[x]/((1 - n)*(1 + Cosh[x])^n) + ((1)*A + n/(n - 1)*B)*(n - 1)!/(2*n - 1)!!*Sinh[x]*Sum[(2*n - 2*k - 3)!!/(n - k - 1)!*(1)^h/(1 + Cosh[x])^(n - k), {k, 0, n - 1}]",
+   "B*Sinh[x]/((1 - n)*(1 + Cosh[x])^n) + ((1)*A + n/(n - 1)*B)*(n - 1)!/(2*n - 1)!!*Sinh[x]*Sum[(2*n - 2*k - 3)!!/(n - k - 1)!*(1)^k/(1 + Cosh[x])^(n - k), {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int (A+B cosh x)/(eps+cosh x)^n dx, eps=1: B sinh x/((1-n)(eps+cosh x)^n) + (eps A + n/(n-1) B)(n-1)!/(2n-1)!! sinh x sum_{k=0}^{n-1} (2n-2k-3)!!/(n-k-1)! eps^h/(eps+cosh x)^(n-k)",
+  "note": "book condition eps = +-1; this record eps = 1. Book prints eps^h (h undefined), presumably eps^k: second candidate"
+ },
+ {
+  "id": "GR2.446.2a",
+  "gr": "2.446.2",
+  "page": 176,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cosh[x])/(1 + Cosh[x]), x]",
+  "rhs": [
+   "B*x + ((1)*A - B)*(Cosh[x] - (1))/Sinh[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int (A+B cosh x)/(eps+cosh x) dx = Bx + (eps A - B)(cosh x - eps)/sinh x, eps=1",
+  "note": "book condition eps = +-1; this record eps = 1"
+ },
+ {
+  "id": "GR2.446.1b",
+  "gr": "2.446.1",
+  "page": 176,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cosh[x])/(-1 + Cosh[x])^n, x]",
+  "rhs": [
+   "B*Sinh[x]/((1 - n)*(-1 + Cosh[x])^n) + ((-1)*A + n/(n - 1)*B)*(n - 1)!/(2*n - 1)!!*Sinh[x]*Sum[(2*n - 2*k - 3)!!/(n - k - 1)!*(-1)^h/(-1 + Cosh[x])^(n - k), {k, 0, n - 1}]",
+   "B*Sinh[x]/((1 - n)*(-1 + Cosh[x])^n) + ((-1)*A + n/(n - 1)*B)*(n - 1)!/(2*n - 1)!!*Sinh[x]*Sum[(2*n - 2*k - 3)!!/(n - k - 1)!*(-1)^k/(-1 + Cosh[x])^(n - k), {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int (A+B cosh x)/(eps+cosh x)^n dx, eps=-1: B sinh x/((1-n)(eps+cosh x)^n) + (eps A + n/(n-1) B)(n-1)!/(2n-1)!! sinh x sum_{k=0}^{n-1} (2n-2k-3)!!/(n-k-1)! eps^h/(eps+cosh x)^(n-k)",
+  "note": "book condition eps = +-1; this record eps = -1. Book prints eps^h (h undefined), presumably eps^k: second candidate"
+ },
+ {
+  "id": "GR2.446.2b",
+  "gr": "2.446.2",
+  "page": 176,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cosh[x])/(-1 + Cosh[x]), x]",
+  "rhs": [
+   "B*x + ((-1)*A - B)*(Cosh[x] - (-1))/Sinh[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int (A+B cosh x)/(eps+cosh x) dx = Bx + (eps A - B)(cosh x - eps)/sinh x, eps=-1",
+  "note": "book condition eps = +-1; this record eps = -1"
+ },
+ {
+  "id": "GR2.447.1a",
+  "gr": "2.447.1",
+  "page": 176,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]/(a*Cosh[x] + b*Sinh[x]), x]",
+  "rhs": [
+   "(a*Log[Cosh[x + ArcTanh[b/a]]] - b*x)/(a^2 - b^2)",
+   "(a*Log[Cosh[x + ArcTanh[b/a]]] + b*x)/(a^2 - b^2)"
+  ],
+  "conds": [
+   "a > Abs[b]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int sinh x dx/(a cosh x + b sinh x) = (a ln cosh(x + arctanh(b/a)) [?] bx)/(a^2-b^2)",
+  "note": "book omits the operator between the log term and bx; '-' (derivation, and consistent with second form) first, '+' second"
+ },
+ {
+  "id": "GR2.447.1b",
+  "gr": "2.447.1",
+  "page": 176,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]/(a*Cosh[x] + b*Sinh[x]), x]",
+  "rhs": [
+   "(b*x - a*Log[Sinh[x + ArcTanh[a/b]]])/(b^2 - a^2)"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "MZ 215",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= (bx - a ln sinh(x + arctanh(a/b)))/(b^2-a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.447.2",
+  "gr": "2.447.2",
+  "page": 176,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]/(Cosh[x] + Sinh[x]), x]",
+  "rhs": [
+   "x/2 + E^(-2*x)/4"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int sinh x/(cosh x + sinh x) dx = x/2 + e^(-2x)/4",
+  "note": ""
+ },
+ {
+  "id": "GR2.447.3",
+  "gr": "2.447.3",
+  "page": 176,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]/(Cosh[x] - Sinh[x]), x]",
+  "rhs": [
+   "-x/2 + E^(2*x)/4"
+  ],
+  "conds": [],
+  "cite": "MZ 215",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int sinh x/(cosh x - sinh x) dx = -x/2 + e^(2x)/4",
+  "note": ""
+ },
+ {
+  "id": "GR2.448.1a",
+  "gr": "2.448.1",
+  "page": 176,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]/(a*Cosh[x] + b*Sinh[x]), x]",
+  "rhs": [
+   "(a*x - b*Log[Cosh[x + ArcTanh[b/a]]])/(a^2 - b^2)"
+  ],
+  "conds": [
+   "a > Abs[b]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int cosh x dx/(a cosh x + b sinh x) = (ax - b ln cosh(x + arctanh(b/a)))/(a^2-b^2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.448.1b",
+  "gr": "2.448.1",
+  "page": 176,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]/(a*Cosh[x] + b*Sinh[x]), x]",
+  "rhs": [
+   "(-a*x + b*Log[Sinh[x + ArcTanh[a/b]]])/(b^2 - a^2)"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "= (-ax + b ln sinh(x + arctanh(a/b)))/(b^2-a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.448.2",
+  "gr": "2.448.2",
+  "page": 176,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]/(Cosh[x] + Sinh[x]), x]",
+  "rhs": [
+   "x/2 - E^(-2*x)/4"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int cosh x/(cosh x + sinh x) dx = x/2 - e^(-2x)/4",
+  "note": ""
+ },
+ {
+  "id": "GR2.448.3",
+  "gr": "2.448.3",
+  "page": 176,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]/(Cosh[x] - Sinh[x]), x]",
+  "rhs": [
+   "x/2 + E^(2*x)/4"
+  ],
+  "conds": [],
+  "cite": "MZ 214, 215",
+  "edition_note": "",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "tex": "int cosh x/(cosh x - sinh x) dx = x/2 + e^(2x)/4",
+  "note": ""
+ },
+ {
+  "id": "GR2.449.1",
+  "gr": "2.449.1",
+  "page": 176,
+  "status": "SKIP-REFERENCE",
+  "tex": "int dx/(a cosh x + b sinh x)^n = 1/sqrt((a^2-b^2)^n) int dx/sinh^n(x + arctanh(b/a)) [a>|b|] = 1/sqrt((b^2-a^2)^n) int dx/cosh^n(x+arctanh(a/b)) [b>|a|]",
+  "reason": "substitution rule: right-hand side is another integral (book prints sinh^n in the a>|b| form, presumably cosh^n)",
+  "section": "2.44-2.45 Rational functions of hyperbolic functions",
+  "cite": "",
+  "edition_note": "6",
+  "lhs": "Integrate[1/(a*Cosh[x] + b*Sinh[x])^n, x]"
+ }
+]

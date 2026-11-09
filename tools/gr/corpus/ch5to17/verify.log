@@ -1,0 +1,2 @@
+verify: 2491 records, 0 cached, 2491 to run
+verified 2491 records: {'BADEXPR': 8, 'CRASH': 7, 'MISMATCH': 157, 'NOCONV': 231, 'NOHEAD': 210, 'NOOUTPUT': 2, 'TIMEOUT': 160, 'VERIFIED': 1436, 'VERIFIED-loose': 244, 'VERIFIED1': 21, 'VERIFIED1-loose': 15}

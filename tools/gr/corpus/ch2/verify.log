@@ -1,0 +1,2 @@
+verify: 1803 records, 0 cached, 1803 to run
+verified 1803 records: {'BADEXPR': 1, 'MISMATCH': 64, 'NOCONV': 49, 'TIMEOUT': 3, 'VERIFIED': 1664, 'VERIFIED1': 22}

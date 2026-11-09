@@ -1,0 +1,2492 @@
+==> Mathar corpus /private/tmp/claude-501/-Users-user-Mathilda-dev-Mathilda/1feb6491-0f69-4c0a-93bb-b020f4197048/scratchpad/gr/ch2/out/GR2IntegralsCorpus.m: 1621 records, modes SN, 8 jobs, 30s timeout
+Integrate::nonelem: The integrand x^n (a + b x^k)^m has no antiderivative elementary in x.
+Integrate::nonelem: The integrand 1/(1 + x^n) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand 1/(1 + x^n) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand 1/(1 - x^n) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand 1/(1 - x^n) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand x^(-1 + m)/(1 + x^(2 n)) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand x^(-1 + m)/(1 + x^(1 + 2 n)) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand x^(-1 + m)/(1 - x^(2 n)) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand x^(-1 + m)/(1 - x^(1 + 2 n)) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand x^n ((a + b x)^(f + l m))^(1/l) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand (1 - x^2)^(-n) has no antiderivative elementary in x.
+  GR2.148.4 S TIMEOUT     30s  
+  GR2.220  N TIMEOUT     30s  
+  GR2.221  S TIMEOUT     30s  
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+  GR2.246c S NONNUMERIC  0s  (2 Sqrt[16 alpha b beta - 16 a beta^2] ArcTan[(4 beta Sqrt[a + b x])/Sqrt[16 alpha b beta - 16 a beta^2]])/(4 alpha b beta - 4 a beta^2)
+  GR2.231.1 S TIMEOUT     30s  
+  GR2.231.2 S TIMEOUT     30s  
+  GR2.231.3 S TIMEOUT     30s  
+Integrate`exquo::remainder failed to produce a zero remainder.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+  GR2.267.6b N NONNUMERIC  0s  Indeterminate
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.Power::infy: 
+Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+  GR2.231.4 S TIMEOUT     30s  
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Integrate`exquo::remainder failed to produce a zero remainder.
+  GR2.269.6b N NONNUMERIC  0s  Indeterminate
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Integrate`exquo::remainder failed to produce a zero remainder.
+  GR2.263.4 N NONNUMERIC  2s  Indeterminate
+Integrate`exquo::remainder failed to produce a zero remainder.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Integrate`exquo::remainder failed to produce a zero remainder.
+  GR2.269.6a N NONNUMERIC  1s  Indeterminate
+  GR2.267.6a N NONNUMERIC  1s  Indeterminate
+Integrate`exquo::remainder failed to produce a zero remainder.
+  GR2.241.2 S TIMEOUT     30s  
+Integrate::nonelem: The integrand (a + c x^2)^(1/2 (-1 - 2 n))/x has no antiderivative elementary in x.
+Integrate::nonelem: The integrand (a + c x^2)^(1/2 (-1 - 2 n))/x has no antiderivative elementary in x.
+  GR2.263.4 S TIMEOUT     30s  
+  GR2.269.4a N TIMEOUT     30s  
+  GR2.284a S TIMEOUT     30s  
+  GR2.325.8 S TIMEOUT     30s  
+  GR2.325.9 S TIMEOUT     30s  
+  GR2.325.10 S TIMEOUT     30s  
+  GR2.325.11 S TIMEOUT     30s  
+  GR2.33.5 S TIMEOUT     30s  
+  GR2.33.7 S TIMEOUT     30s  
+  GR2.33.8 S TIMEOUT     30s  
+  GR2.33.9 S TIMEOUT     30s  
+  GR2.33.10a S TIMEOUT     30s  
+  GR2.33.11 S TIMEOUT     30s  
+  GR2.33.13 S TIMEOUT     30s  
+  GR2.33.14 S TIMEOUT     30s  
+  GR2.33.15 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sinh[x]^(2 m) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sinh[x]^(1 + 2 m) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sinh[x]^(1 + 2 m) has no antiderivative elementary in x.
+  GR2.33.17a S TIMEOUT     30s  
+  GR2.33.19 S TIMEOUT     30s  
+  GR2.33.20 S TIMEOUT     30s  
+  GR2.33.21 S TIMEOUT     30s  
+  GR2.33.22 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sinh[x]^(-2 m) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sinh[x]^(-1 - 2 m) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sech[x] Sinh[x]^(1 + 2 m) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sech[x] Sinh[x]^(1 + 2 m) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sech[x] Sinh[x]^(2 m) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sech[x] Sinh[x]^(-1 - 2 m) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sech[x]/Sinh[x]^(2 m) has no antiderivative elementary in x.
+  GR2.412.4 S TIMEOUT     30s  
+  GR2.413.2 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Cosh[x]^(2 m) Csch[x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cosh[x]^(1 + 2 m) Csch[x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cosh[x]^(1 + 2 m) Csch[x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Csch[x]/Cosh[x]^(2 m) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cosh[x]^(-1 - 2 m) Csch[x] has no antiderivative elementary in x.
+  GR2.413.3a S TIMEOUT     30s  
+  GR2.413.3b S TIMEOUT     30s  
+  GR2.413.4 S TIMEOUT     30s  
+  GR2.416.2 N TIMEOUT     30s  
+  GR2.418.2 S TIMEOUT     30s  
+  GR2.418.3 S TIMEOUT     30s  
+  GR2.418.3 N TIMEOUT     30s  
+  GR2.421.1 S TIMEOUT     30s  
+  GR2.421.2 S TIMEOUT     30s  
+  GR2.422.1 S TIMEOUT     30s  
+  GR2.422.1 N TIMEOUT     30s  
+  GR2.422.2 S TIMEOUT     30s  
+  GR2.423.5 S TIMEOUT     30s  
+  GR2.423.5 N TIMEOUT     30s  
+  GR2.423.6a S TIMEOUT     30s  
+  GR2.423.6a N TIMEOUT     30s  
+  GR2.423.6b S TIMEOUT     30s  
+  GR2.423.6b N TIMEOUT     30s  
+  GR2.423.7 S TIMEOUT     30s  
+  GR2.423.7 N TIMEOUT     30s  
+  GR2.423.13 S TIMEOUT     30s  
+  GR2.423.13 N TIMEOUT     30s  
+  GR2.423.14a S TIMEOUT     30s  
+  GR2.423.14a N TIMEOUT     30s  
+  GR2.423.14b S TIMEOUT     30s  
+  GR2.423.14b N TIMEOUT     30s  
+  GR2.423.39 N WRONG       1s  (2 - 3 Coth[x]^2 + Coth[x]^4)/((-1 + Coth[x])^(3/2) (1 + Coth[x])^(3/2))
+  GR2.423.39 S WRONG       1s  (2 - 3 Coth[x]^2 + Coth[x]^4)/((-1 + Coth[x])^(3/2) (1 + Coth[x])^(3/2))
+  GR2.423.15 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Tanh[x]^(1 + 2 n) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Tanh[x]^(1 + 2 n) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Tanh[x]^(2 n) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Coth[x]^(1 + 2 n) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Coth[x]^(1 + 2 n) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Coth[x]^(2 n) has no antiderivative elementary in x.
+  GR2.423.15 N TIMEOUT     30s  
+Integrate::nonelem: The integrand Csch[x] Sinh[(1 + 2 n) x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Csch[x] Sinh[2 n x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cosh[(1 + 2 n) x] Csch[x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cosh[2 n x] Csch[x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sech[x] Sinh[(1 + 2 n) x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sech[x] Sinh[2 n x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cosh[(1 + 2 n) x] Sech[x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cosh[2 n x] Sech[x] has no antiderivative elementary in x.
+  GR2.423.64 S TIMEOUT     30s  
+  GR2.423.64 N TIMEOUT     30s  
+  GR2.427.3 S TIMEOUT     30s  
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+  GR2.445.2 S NONNUMERIC  0s  -(B Log[-1 + Tanh[1/2 x]^2])/b - (2 B Log[-a - b + a Tanh[1/2 x]^2 - b Tanh[1/2 x]^2])/(2 a - 2 b) + (2 a B Log[-a - b + a Tanh[1/2 x]^2 - b Tanh[1/2 x]^2])/((2
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+  GR2.451.3a S NONNUMERIC  0s  -(B Log[-1 + Tanh[1/2 x]])/(2 b) - (CC Log[-1 + Tanh[1/2 x]])/(2 b) + (A Log[1 + Tanh[1/2 x]])/a - (b B Log[1 + Tanh[1/2 x]])/(2 a^2) + (b CC Log[1 + Tanh[1/2 x
+  GR2.432.1 S TIMEOUT     30s  
+  GR2.432.2 S TIMEOUT     30s  
+  GR2.432.3 S TIMEOUT     30s  
+  GR2.432.4 S TIMEOUT     30s  
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+  GR2.452.2b S NONNUMERIC  3s  (2 Sqrt[-64 a^4 b^2 + 256 a^2 b^4 - 256 b^6 + 64 a^5 c - 384 a^3 b^2 c + 512 a b^4 c + 128 a^4 c^2 - 320 a^2 b^2 c^2 + 64 a^3 c^3] CC ArcTan[(8 a^2 b - 16 b^3 +
+  GR2.462.3b N WRONG       0s  1/2 Log[-33 + 32 Sinh[x]^2 - (8 (-49 - 33 Sinh[x]^2 + 16 Sinh[x]^4))/(Sqrt[-7 + 4 Sinh[x]] Sqrt[7 + 4 Sinh[x]] Sqrt[1 + Sinh[x]^2])]
+  GR2.462.10a N WRONG       1s  1/2 Log[33 + 32 Cosh[x]^2 - (8 (-49 + 33 Cosh[x]^2 + 16 Cosh[x]^4))/(Sqrt[-1 + Cosh[x]^2] Sqrt[49 + 16 Cosh[x]^2])]
+  GR2.462.10b N WRONG       1s  1/2 Log[-55 + 128 Cosh[x]^2 - (16 (-9 - 55 Cosh[x]^2 + 64 Cosh[x]^4))/(Sqrt[-1 + Cosh[x]^2] Sqrt[9 + 64 Cosh[x]^2])]
+Integrate::nonelem: The integrand (A + B Cosh[x])/(-1 + Cosh[x])^n has no antiderivative elementary in x.
+Integrate::nonelem: The integrand (A + B Cosh[x])/(1 + Cosh[x])^n has no antiderivative elementary in x.
+  GR2.451.1b S TIMEOUT     30s  
+  GR2.464.1a S TIMEOUT     30s  
+  GR2.464.2a S TIMEOUT     30s  
+  GR2.464.2b S TIMEOUT     30s  
+  GR2.464.3 S TIMEOUT     30s  
+  GR2.464.5 S TIMEOUT     30s  
+  GR2.464.6 S TIMEOUT     30s  
+  GR2.464.7 S TIMEOUT     30s  
+  GR2.464.7 N TIMEOUT     30s  
+  GR2.464.8 S TIMEOUT     30s  
+  GR2.464.13 N TIMEOUT     30s  
+  GR2.464.14 N TIMEOUT     30s  
+  GR2.464.15 S TIMEOUT     30s  
+  GR2.464.15 N TIMEOUT     30s  
+  GR2.464.19 S TIMEOUT     30s  
+  GR2.464.19 N TIMEOUT     30s  
+  GR2.464.24 S TIMEOUT     30s  
+  GR2.464.25 S TIMEOUT     30s  
+  GR2.464.26 S TIMEOUT     30s  
+  GR2.464.27 S TIMEOUT     30s  
+  GR2.464.28 S TIMEOUT     30s  
+  GR2.464.29 S TIMEOUT     30s  
+  GR2.464.30 S TIMEOUT     30s  
+  GR2.464.31 S TIMEOUT     30s  
+  GR2.464.31 N TIMEOUT     30s  
+  GR2.464.44 S TIMEOUT     30s  
+  GR2.464.46 S TIMEOUT     30s  
+  GR2.464.46 N TIMEOUT     30s  
+  GR2.464.47 S TIMEOUT     30s  
+  GR2.464.47 N TIMEOUT     30s  
+  GR2.464.50 S TIMEOUT     30s  
+  GR2.464.51 S TIMEOUT     30s  
+  GR2.464.52 S TIMEOUT     30s  
+  GR2.464.54 S TIMEOUT     30s  
+  GR2.464.56 S TIMEOUT     30s  
+  GR2.464.57 S TIMEOUT     30s  
+  GR2.464.58 S TIMEOUT     30s  
+  GR2.464.59 S TIMEOUT     30s  
+  GR2.464.60 S TIMEOUT     31s  
+  GR2.464.60 N TIMEOUT     30s  
+  GR2.472.3 S TIMEOUT     30s  
+  GR2.472.4 S TIMEOUT     30s  
+  GR2.472.5 S TIMEOUT     31s  
+  GR2.472.6 S TIMEOUT     30s  
+  GR2.474.1 S TIMEOUT     30s  
+  GR2.474.2 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sinh[x]^(2 m)/x has no antiderivative elementary in x.
+  GR2.474.7 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sinh[x]^(1 + 2 m)/x has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cosh[x]^(2 m)/x has no antiderivative elementary in x.
+  GR2.474.8 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Cosh[x]^(1 + 2 m)/x has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sinh[x]^(2 m)/x^2 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sinh[x]^(1 + 2 m)/x^2 has no antiderivative elementary in x.
+  GR2.475.3 S TIMEOUT     31s  
+Integrate::nonelem: The integrand Cosh[x]^(2 m)/x^2 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cosh[x]^(1 + 2 m)/x^2 has no antiderivative elementary in x.
+  GR2.475.4 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sinh[4 x]/(5/6 + 5/4 x)^2 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sinh[k x]/(a + b x) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cosh[2 x]/(7/3 + 1/5 x)^2 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sinh[k x]/(a + b x) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cosh[k x]/(a + b x) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sinh[x]/(3 + 5/8 x)^3 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cosh[k x]/(a + b x) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cosh[x]/(1/5 + 7/3 x)^3 has no antiderivative elementary in x.
+  GR2.475.5 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sinh[3 x]/(3 + 5/4 x)^4 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cosh[x]/(7/3 + 5/4 x)^4 has no antiderivative elementary in x.
+  GR2.475.6 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sinh[2 x]/(5/4 + 1/5 x)^5 has no antiderivative elementary in x.
+  GR2.476.3 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Cosh[2 x]/(5/6 + 3/8 x)^5 has no antiderivative elementary in x.
+  GR2.476.4 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sinh[x]/(5/6 + 7/4 x)^6 has no antiderivative elementary in x.
+  GR2.476.5 S TIMEOUT     30s  
+  GR2.476.6 S TIMEOUT     31s  
+  GR2.476.7 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Cosh[3 x]/(1/5 + 3/8 x)^6 has no antiderivative elementary in x.
+  GR2.476.8 S TIMEOUT     30s  
+  GR2.476.9 S TIMEOUT     30s  
+  GR2.476.10 S TIMEOUT     30s  
+Integrate::nonelem: The integrand x/Sinh[x]^(2 n) has no antiderivative elementary in x.
+  GR2.476.11 S TIMEOUT     30s  
+  GR2.476.12 S TIMEOUT     30s  
+  GR2.477.13 S TIMEOUT     30s  
+  GR2.482.1 S TIMEOUT     30s  
+  GR2.482.2 S TIMEOUT     30s  
+Integrate::nonelem: The integrand (E^(a x) Sinh[b x])/x has no antiderivative elementary in x.
+Integrate::nonelem: The integrand (E^(a x) Cosh[b x])/x has no antiderivative elementary in x.
+Integrate::nonelem: The integrand (E^(a x) Sinh[b x])/x^2 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand (E^(a x) Cosh[b x])/x^2 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand (E^(a x) Sinh[a x])/x has no antiderivative elementary in x.
+Integrate::nonelem: The integrand (E^(7/3 x) Sinh[7/3 x])/x has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sinh[a x]/(E^(a x) x) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sinh[3 x]/(E^(3 x) x) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand (E^(a x) Cosh[a x])/x has no antiderivative elementary in x.
+Integrate::nonelem: The integrand (E^(1/5 x) Cosh[1/5 x])/x has no antiderivative elementary in x.
+Integrate::nonelem: The integrand (E^(a x) Sinh[a x])/x^2 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sinh[a x]/(E^(a x) x^2) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand (E^(a x) Cosh[a x])/x^2 has no antiderivative elementary in x.
+  GR2.482.3 S TIMEOUT     30s  
+  GR2.482.4 S TIMEOUT     30s  
+  GR2.482.5 S TIMEOUT     30s  
+  GR2.511.2 S TIMEOUT     30s  
+  GR2.511.3 S TIMEOUT     30s  
+  GR2.511.4 S TIMEOUT     31s  
+  GR2.512.2 S TIMEOUT     30s  
+  GR2.512.3 S TIMEOUT     30s  
+  GR2.512.4 S TIMEOUT     30s  
+  GR2.513.1 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sec[x] Sin[x]^(1 + 2 l) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sec[x] Sin[x]^(2 l) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sec[x] Sin[x]^(-1 - 2 m) has no antiderivative elementary in x.
+  GR2.513.2 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sec[x]/Sin[x]^(2 m) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[x]^(1 + 2 l) Csc[x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[x]^(2 l) Csc[x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[x]^(-1 - 2 m) Csc[x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Csc[x]/Cos[x]^(2 m) has no antiderivative elementary in x.
+  GR2.513.3 S TIMEOUT     30s  
+  GR2.513.4 S TIMEOUT     30s  
+  GR2.515.1 S TIMEOUT     30s  
+  GR2.515.2 S TIMEOUT     30s  
+  GR2.519.1 S TIMEOUT     30s  
+  GR2.519.2 S TIMEOUT     30s  
+  GR2.524.1 S TIMEOUT     30s  
+  GR2.525.1 S TIMEOUT     30s  
+  GR2.525.1 N TIMEOUT     30s  
+  GR2.525.2 S TIMEOUT     30s  
+  GR2.526.56 S TIMEOUT     30s  
+  GR2.526.56 N TIMEOUT     30s  
+  GR2.526.62 S TIMEOUT     30s  
+  GR2.526.62 N TIMEOUT     30s  
+  GR2.526.64 S TIMEOUT     30s  
+  GR2.526.64 N TIMEOUT     30s  
+Integrate::nonelem: The integrand Tan[x]^(1 + 2 n) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Tan[x]^(1 + 2 n) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Tan[x]^(2 n) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cot[x]^(2 n) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Csc[x] Sin[(1 + 2 n) x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Csc[x] Sin[2 n x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cot[x]^(1 + 2 n) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[(1 + 2 n) x] Csc[x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cot[x]^(1 + 2 n) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[2 n x] Csc[x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sec[x] Sin[(1 + 2 n) x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sec[x] Sin[2 n x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[(1 + 2 n) x] Sec[x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[2 n x] Sec[x] has no antiderivative elementary in x.
+  GR2.535.3a S TIMEOUT     30s  
+  GR2.536.2a S TIMEOUT     30s  
+  GR2.537.2a S TIMEOUT     30s  
+  GR2.537.3a S TIMEOUT     30s  
+Integrate::nonelem: The integrand Csc[(1 + 2 n) x] Sin[x]^m has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Csc[2 n x] Sin[x]^(2 m) has no antiderivative elementary in x.
+  GR2.541.1 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Csc[2 n x] Sin[x]^(1 + 2 m) has no antiderivative elementary in x.
+  GR2.541.2 S TIMEOUT     30s  
+  GR2.541.3 S TIMEOUT     30s  
+  GR2.541.4 S TIMEOUT     30s  
+  GR2.541.5 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sec[(1 + 2 n) x] Sin[x]^(2 m) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sec[(1 + 2 n) x] Sin[x]^(1 + 2 m) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sec[2 n x] Sin[x]^m has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[x]^(1 + 2 m) Csc[(1 + 2 n) x] has no antiderivative elementary in x.
+  GR2.541.6 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Cos[x]^(2 m) Csc[(1 + 2 n) x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[x]^(1 + 2 m) Csc[2 n x] has no antiderivative elementary in x.
+  GR2.548.2 N TIMEOUT     30s  
+Integrate::nonelem: The integrand Cos[x]^(2 m) Csc[2 n x] has no antiderivative elementary in x.
+  GR2.548.3 N TIMEOUT     30s  
+  GR2.548.4 N TIMEOUT     30s  
+  GR2.548.5 N TIMEOUT     30s  
+Integrate::nonelem: The integrand Cos[x]^m Sec[n x] has no antiderivative elementary in x.
+  GR2.548.6 N TIMEOUT     30s  
+  GR2.548.7 N TIMEOUT     30s  
+  GR2.548.8 N TIMEOUT     30s  
+  GR2.548.9 N TIMEOUT     30s  
+Integrate::nonelem: The integrand Sin[c + 2 b x + a x^2] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[c + 2 b x + a x^2] has no antiderivative elementary in x.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.
+  GR2.558.4d S WRONG       0s  0
+  GR2.548.10 N TIMEOUT     30s  
+  GR2.548.11 N TIMEOUT     30s  
+  GR2.555.1b S TIMEOUT     30s  
+  GR2.555.2a S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/Sqrt[5/6 + 5/8 Sin[x]] has no antiderivative elementary in x.
+  GR2.555.2b S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/Sqrt[1/5 + 3/8 Sin[x]] has no antiderivative elementary in x.
+  GR2.558.1b S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sin[x]/Sqrt[7/3 + 7/4 Sin[x]] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sin[x]/Sqrt[5/8 + 7/4 Sin[x]] has no antiderivative elementary in x.
+  GR2.571.1a S TIMEOUT     30s  
+  GR2.571.1b S TIMEOUT     30s  
+  GR2.571.2a S TIMEOUT     30s  
+  GR2.571.2b S TIMEOUT     30s  
+  GR2.571.3a S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/Sqrt[7/4 + 5/8 Cos[x]] has no antiderivative elementary in x.
+  GR2.571.3a N TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/Sqrt[3/8 + 5/6 Cos[x]] has no antiderivative elementary in x.
+  GR2.571.3b S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/Sqrt[5/8 - 3/8 Cos[x]] has no antiderivative elementary in x.
+  GR2.571.3b N TIMEOUT     30s  
+Integrate::nonelem: The integrand Cos[x]/Sqrt[3 + 5/4 Cos[x]] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[x]/Sqrt[1/5 + 5/4 Cos[x]] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[x]/Sqrt[3 - 1/5 Cos[x]] has no antiderivative elementary in x.
+  GR2.571.4a S TIMEOUT     30s  
+  GR2.571.4b S TIMEOUT     30s  
+  GR2.571.5 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Cos[x]^2/Sqrt[5/6 + 3/8 Cos[x]] has no antiderivative elementary in x.
+  GR2.571.6a S TIMEOUT     30s  
+  GR2.571.6b S TIMEOUT     30s  
+  GR2.571.7 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Cos[x]^2/Sqrt[3 - 5/8 Cos[x]] has no antiderivative elementary in x.
+  GR2.571.8a S TIMEOUT     30s  
+Integrate::nonelem: The integrand Tan[x]^2/Sqrt[3/8 + 1/5 Sin[x]] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Tan[x]^2/Sqrt[3/8 + 7/3 Sin[x]] has no antiderivative elementary in x.
+  GR2.571.8b S TIMEOUT     30s  
+  GR2.571.9 S TIMEOUT     30s  
+  GR2.572a S TIMEOUT     30s  
+  GR2.572b S TIMEOUT     30s  
+  GR2.573.1 S TIMEOUT     30s  
+  GR2.573.1 N TIMEOUT     30s  
+  GR2.573.2 S TIMEOUT     30s  
+  GR2.573.2 N TIMEOUT     30s  
+  GR2.574.2 S TIMEOUT     30s  
+  GR2.574.2 N TIMEOUT     31s  
+Integrate::nonelem: The integrand 1/Sqrt[(7/3 + 1/5 Sin[x])^3] has no antiderivative elementary in x.
+  GR2.574.3 S TIMEOUT     30s  
+  GR2.574.3 N TIMEOUT     30s  
+  GR2.574.4 S TIMEOUT     30s  
+  GR2.574.4 N TIMEOUT     30s  
+  GR2.575.1a S TIMEOUT     30s  
+  GR2.575.2a S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/Sqrt[(7/3 - 1/5 Cos[x])^3] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand 1/Sqrt[(7/4 + 3/8 Cos[x])^3] has no antiderivative elementary in x.
+  GR2.575.2a N TIMEOUT     30s  
+  GR2.575.2b S TIMEOUT     30s  
+  GR2.575.2b N TIMEOUT     30s  
+  GR2.575.3a S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sqrt[3 + 5/4 Cos[x]] has no antiderivative elementary in x.
+  GR2.575.4 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sqrt[1/5 + 5/4 Cos[x]] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sqrt[3 - 1/5 Cos[x]] has no antiderivative elementary in x.
+  GR2.575.5a S TIMEOUT     30s  
+  GR2.575.5a N TIMEOUT     30s  
+  GR2.576.1a S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sqrt[1 - 9/64 Sin[x]^2] has no antiderivative elementary in x.
+  GR2.576.1b S TIMEOUT     30s  
+  GR2.576.2 S TIMEOUT     30s  
+  GR2.583.1 S TIMEOUT     30s  
+  GR2.583.4 S TIMEOUT     30s  
+  GR2.583.4 N TIMEOUT     30s  
+  GR2.583.6 N TIMEOUT     30s  
+  GR2.583.6 S TIMEOUT     30s  
+  GR2.583.7 S TIMEOUT     30s  
+  GR2.583.7 N TIMEOUT     30s  
+  GR2.583.8 S TIMEOUT     30s  
+  GR2.583.8 N TIMEOUT     30s  
+  GR2.583.9 S TIMEOUT     30s  
+  GR2.583.9 N TIMEOUT     30s  
+  GR2.583.10 S TIMEOUT     30s  
+  GR2.583.10 N TIMEOUT     30s  
+  GR2.583.11 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sin[x]^4 Sqrt[1 - 25/36 Sin[x]^2] has no antiderivative elementary in x.
+  GR2.583.13 S TIMEOUT     30s  
+  GR2.583.13 N TIMEOUT     30s  
+  GR2.583.15 N TIMEOUT     30s  
+  GR2.583.15 S TIMEOUT     30s  
+  GR2.583.16 S TIMEOUT     30s  
+  GR2.583.16 N TIMEOUT     30s  
+  GR2.583.17 S TIMEOUT     30s  
+  GR2.583.17 N TIMEOUT     30s  
+  GR2.583.18 S TIMEOUT     30s  
+  GR2.583.19 S TIMEOUT     30s  
+  GR2.583.19 N TIMEOUT     30s  
+  GR2.583.20 S TIMEOUT     30s  
+Integrate::nonelem: The integrand (1 - 25/64 Sin[x]^2)^(3/2) has no antiderivative elementary in x.
+  GR2.583.21 S TIMEOUT     30s  
+  GR2.583.21 N TIMEOUT     30s  
+  GR2.583.22 S TIMEOUT     30s  
+  GR2.583.25 S TIMEOUT     30s  
+  GR2.583.25 N TIMEOUT     30s  
+  GR2.583.28 S TIMEOUT     30s  
+  GR2.583.28 N TIMEOUT     30s  
+  GR2.583.29 S TIMEOUT     30s  
+  GR2.583.29 N TIMEOUT     30s  
+  GR2.583.30 S TIMEOUT     30s  
+  GR2.583.30 N TIMEOUT     30s  
+Integrate::nonelem: The integrand Csc[x]^2 Sqrt[1 - 25/64 Sin[x]^2] has no antiderivative elementary in x.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+  GR2.583.31 S TIMEOUT     30s  
+  GR2.583.31 N TIMEOUT     30s  
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+  GR2.583.33 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sec[x]^2 Sqrt[1 - 25/36 Sin[x]^2] has no antiderivative elementary in x.
+  GR2.583.34 S TIMEOUT     30s  
+  GR2.583.36 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Csc[x]^4 Sqrt[1 - 25/64 Sin[x]^2] has no antiderivative elementary in x.
+  GR2.583.42 S TIMEOUT     30s  
+  GR2.583.44 S TIMEOUT     30s  
+  GR2.583.45 S TIMEOUT     30s  
+  GR2.583.47 S TIMEOUT     30s  
+  GR2.583.50 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sec[x]^4 Sqrt[1 - 9/64 Sin[x]^2] has no antiderivative elementary in x.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+  GR2.583.51 S TIMEOUT     30s  
+Power::infy: Infinite expression 1/0 encountered.
+  GR2.583.54 S TIMEOUT     30s  
+  GR2.583.54 N TIMEOUT     30s  
+  GR2.583.55 S TIMEOUT     30s  
+Power::infy: Infinite expression 1/0 encountered.
+  GR2.583.55 N TIMEOUT     30s  
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+  GR2.583.59 S TIMEOUT     30s  
+  GR2.583.61 S TIMEOUT     30s  
+  GR2.583.63 S TIMEOUT     30s  
+  GR2.583.65 S TIMEOUT     30s  
+  GR2.583.66 S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/Sqrt[1 - 9/64 Sin[x]^2] has no antiderivative elementary in x.
+  GR2.583.66 N TIMEOUT     30s  
+  GR2.583.68 S TIMEOUT     30s  
+  GR2.583.68 N TIMEOUT     30s  
+  GR2.583.69 S TIMEOUT     30s  
+  GR2.583.70 S TIMEOUT     30s  
+  GR2.584.1 S TIMEOUT     30s  
+  GR2.584.4 S TIMEOUT     30s  
+  GR2.584.4 N TIMEOUT     30s  
+  GR2.584.6 S TIMEOUT     30s  
+  GR2.584.6 N TIMEOUT     30s  
+  GR2.584.7 S TIMEOUT     30s  
+  GR2.584.8 S TIMEOUT     30s  
+  GR2.584.9 S TIMEOUT     30s  
+  GR2.584.10 S TIMEOUT     30s  
+  GR2.584.11 S TIMEOUT     30s  
+  GR2.584.11 N TIMEOUT     30s  
+  GR2.584.13 S TIMEOUT     30s  
+  GR2.584.13 N TIMEOUT     30s  
+  GR2.584.15 S TIMEOUT     30s  
+  GR2.584.15 N TIMEOUT     30s  
+  GR2.584.16 S TIMEOUT     30s  
+  GR2.584.17 S TIMEOUT     30s  
+  GR2.584.18 S TIMEOUT     30s  
+  GR2.584.19 S TIMEOUT     30s  
+  GR2.584.20 S TIMEOUT     30s  
+  GR2.584.21 S TIMEOUT     30s  
+  GR2.584.22 S TIMEOUT     30s  
+  GR2.584.22 N TIMEOUT     30s  
+  GR2.584.24 S TIMEOUT     30s  
+  GR2.584.24 N TIMEOUT     30s  
+  GR2.584.26 S TIMEOUT     30s  
+  GR2.584.26 N TIMEOUT     30s  
+  GR2.584.28 S TIMEOUT     30s  
+  GR2.584.28 N TIMEOUT     30s  
+Integrate`exquo::remainder failed to produce a zero remainder.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Integrate`exquo::remainder failed to produce a zero remainder.
+Integrate`exquo::remainder failed to produce a zero remainder.
+  GR2.584.29 S TIMEOUT     30s  
+  GR2.584.30 S TIMEOUT     30s  
+  GR2.584.31 S TIMEOUT     30s  
+  GR2.584.32 S TIMEOUT     30s  
+  GR2.584.34 S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/(1 - 25/64 Sin[x]^2)^(3/2) has no antiderivative elementary in x.
+  GR2.584.35 S TIMEOUT     30s  
+  GR2.584.36 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sin[x]^2/(1 - 1/25 Sin[x]^2)^(3/2) has no antiderivative elementary in x.
+  GR2.584.37 S TIMEOUT     30s  
+  GR2.584.40 S TIMEOUT     30s  
+  GR2.584.42 N TIMEOUT     30s  
+  GR2.584.42 S TIMEOUT     30s  
+  GR2.584.43 S TIMEOUT     30s  
+  GR2.584.43 N TIMEOUT     31s  
+  GR2.584.44 S TIMEOUT     30s  
+  GR2.584.44 N TIMEOUT     30s  
+  GR2.584.45 S TIMEOUT     30s  
+  GR2.584.45 N TIMEOUT     30s  
+  GR2.584.46 S TIMEOUT     30s  
+  GR2.584.46 N TIMEOUT     30s  
+  GR2.584.47 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sin[x]^4/(1 - 25/64 Sin[x]^2)^(3/2) has no antiderivative elementary in x.
+  GR2.584.49 S TIMEOUT     30s  
+  GR2.584.49 N TIMEOUT     30s  
+  GR2.584.51 S TIMEOUT     30s  
+  GR2.584.51 N TIMEOUT     30s  
+  GR2.584.52 S TIMEOUT     30s  
+  GR2.584.52 N TIMEOUT     30s  
+  GR2.584.53 S TIMEOUT     30s  
+  GR2.584.53 N TIMEOUT     30s  
+  GR2.584.55 S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/(1 - 1/25 Sin[x]^2)^(5/2) has no antiderivative elementary in x.
+  GR2.584.55 N TIMEOUT     30s  
+  GR2.584.56 S TIMEOUT     31s  
+  GR2.584.56 N TIMEOUT     30s  
+  GR2.584.57 N TIMEOUT     30s  
+  GR2.584.57 S TIMEOUT     30s  
+  GR2.584.58 S TIMEOUT     30s  
+  GR2.584.59 S TIMEOUT     30s  
+  GR2.584.61 S TIMEOUT     30s  
+  GR2.584.61 N TIMEOUT     30s  
+  GR2.584.63 S TIMEOUT     30s  
+  GR2.584.63 N TIMEOUT     30s  
+  GR2.584.64 S TIMEOUT     30s  
+  GR2.584.64 N TIMEOUT     30s  
+  GR2.584.65 S TIMEOUT     30s  
+  GR2.584.65 N TIMEOUT     30s  
+Integrate::nonelem: The integrand Csc[x]^2/Sqrt[1 - 9/64 Sin[x]^2] has no antiderivative elementary in x.
+  GR2.584.66 S TIMEOUT     30s  
+  GR2.584.66 N TIMEOUT     30s  
+  GR2.584.67 S TIMEOUT     30s  
+  GR2.584.67 N TIMEOUT     30s  
+  GR2.584.69 S TIMEOUT     30s  
+  GR2.584.70a S TIMEOUT     30s  
+Integrate::nonelem: The integrand (1 + Cot[x]^2)/Sqrt[1 - 25/64 Sin[x]^2] has no antiderivative elementary in x.
+  GR2.584.70b S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sec[x]^2/Sqrt[1 - 1/25 Sin[x]^2] has no antiderivative elementary in x.
+  GR2.584.72a S TIMEOUT     30s  
+  GR2.584.72b S TIMEOUT     30s  
+  GR2.584.72b N TIMEOUT     30s  
+Integrate::nonelem: The integrand Csc[x]^4/Sqrt[1 - 25/64 Sin[x]^2] has no antiderivative elementary in x.
+  GR2.584.76 S TIMEOUT     30s  
+  GR2.584.78 S TIMEOUT     30s  
+Integrate::nonelem: The integrand (Csc[x]^2 Sec[x]^2)/Sqrt[1 - 1/25 Sin[x]^2] has no antiderivative elementary in x.
+  GR2.584.81 S TIMEOUT     30s  
+  GR2.584.83 S TIMEOUT     30s  
+  GR2.584.85a S TIMEOUT     30s  
+  GR2.584.85b S TIMEOUT     30s  
+  GR2.584.85b N TIMEOUT     30s  
+  GR2.584.87 S TIMEOUT     30s  
+  GR2.584.87 N TIMEOUT     30s  
+  GR2.584.90a S TIMEOUT     30s  
+  GR2.584.90a N TIMEOUT     30s  
+  GR2.584.90b S TIMEOUT     30s  
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+  GR2.584.92 S NONNUMERIC  2s  -(3 Sqrt[-64 + 64 k^2] ArcTan[(4 Sqrt[2] Sqrt[2 - k^2 + k^2 Cos[2 x]])/Sqrt[-64 + 64 k^2]])/(2 (-16 + 16 k^2)) - (4 Sqrt[1 - k] Sqrt[1 + k] Sqrt[256 (1 - k) k^4
+  GR2.584.90b N TIMEOUT     30s  
+  GR2.584.91a S TIMEOUT     30s  
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Power::infy: Infinite expression 1/0 encountered.
+Infinity::indet: Indeterminate expression involving ComplexInfinity encountered.
+  GR2.584.96 S NONNUMERIC  5s  (2 k^6 Sqrt[-64 k^2 + 128 k^4 - 64 k^6 + 64 (1 - k) k^2 (1 + k) - 64 (1 - k) k^4 (1 + k)] ArcTan[(4 Sqrt[1 - k] Sqrt[1 + k] Sec[x])/Sqrt[-64 k^2 + 128 k^4 - 64 
+  GR2.584.91a N TIMEOUT     31s  
+  GR2.584.91b S TIMEOUT     30s  
+  GR2.584.91b N TIMEOUT     30s  
+  GR2.584.95 S TIMEOUT     30s  
+  GR2.584.97 S TIMEOUT     30s  
+  GR2.584.99 S TIMEOUT     30s  
+  GR2.584.101 S TIMEOUT     30s  
+  GR2.584.102 S TIMEOUT     30s  
+  GR2.584.104 S TIMEOUT     30s  
+  GR2.584.104 N TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/((5/6 + Sin[x]) Sqrt[1 - 25/64 Sin[x]^2]) has no antiderivative elementary in x.
+  GR2.584.105 S TIMEOUT     30s  
+Integrate::nonelem: The integrand (5/4 + Sin[x])/Sqrt[1 - 25/36 Sin[x]^2] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand (3/8 + Sin[x])^2/Sqrt[1 - 1/25 Sin[x]^2] has no antiderivative elementary in x.
+  GR2.584.106 S TIMEOUT     30s  
+  GR2.585.2 S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/((1 + Sin[x]) Sqrt[1 - 25/36 Sin[x]^2]) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand 1/((1 - Sin[x]) Sqrt[1 - 25/36 Sin[x]^2]) has no antiderivative elementary in x.
+  GR2.585.3 S TIMEOUT     30s  
+  GR2.585.4 S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/((1 + Sin[x])^2 Sqrt[1 - 25/36 Sin[x]^2]) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand 1/((1 - Sin[x])^2 Sqrt[1 - 1/25 Sin[x]^2]) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand 1/((1 + 1/5 Sin[x]) Sqrt[1 - 1/25 Sin[x]^2]) has no antiderivative elementary in x.
+  GR2.585.5 S TIMEOUT     30s  
+  GR2.586.5a S TIMEOUT     30s  
+  GR2.586.5b S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/((1 - 3/8 Sin[x]) Sqrt[1 - 9/64 Sin[x]^2]) has no antiderivative elementary in x.
+  GR2.586.6a S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/((1 + 3/8 Sin[x])^2 Sqrt[1 - 9/64 Sin[x]^2]) has no antiderivative elementary in x.
+  GR2.586.6b S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/((1 - 1/5 Sin[x])^2 Sqrt[1 - 1/25 Sin[x]^2]) has no antiderivative elementary in x.
+  GR2.586.8a S TIMEOUT     30s  
+  GR2.586.8b S TIMEOUT     30s  
+  GR2.586.9a S TIMEOUT     30s  
+  GR2.586.9b S TIMEOUT     30s  
+  GR2.587.2 S TIMEOUT     30s  
+  GR2.587.2 N TIMEOUT     30s  
+  GR2.587.3 S TIMEOUT     30s  
+  GR2.587.3 N TIMEOUT     30s  
+  GR2.589.2 S TIMEOUT     30s  
+  GR2.589.2 N TIMEOUT     30s  
+  GR2.589.3 S TIMEOUT     30s  
+  GR2.589.4 S TIMEOUT     30s  
+  GR2.589.4 N TIMEOUT     30s  
+  GR2.592.4 S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/Sqrt[1 - 25/16 Sin[x]^2] has no antiderivative elementary in x.
+  GR2.592.4 N TIMEOUT     30s  
+  GR2.593.4 S TIMEOUT     30s  
+  GR2.593.4 N TIMEOUT     30s  
+Integrate::nonelem: The integrand Sqrt[1 - 49/9 Sin[x]^2] has no antiderivative elementary in x.
+  GR2.594.4 S TIMEOUT     30s  
+  GR2.594.4 N TIMEOUT     30s  
+  GR2.595.1 S TIMEOUT     30s  
+  GR2.595.2 S TIMEOUT     30s  
+  GR2.595.3 S TIMEOUT     30s  
+  GR2.595.3 N TIMEOUT     30s  
+  GR2.596.1a S TIMEOUT     30s  
+  GR2.596.1a N TIMEOUT     30s  
+  GR2.596.1b S TIMEOUT     30s  
+  GR2.596.1b N TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/(1 - 25/16 Sin[x]^2)^(3/2) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sec[x]^2 Sqrt[1 - 25/16 Sin[x]^2] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand 1/(1 - 25/16 Sin[x]^2)^(3/2) has no antiderivative elementary in x.
+  GR2.596.2a S TIMEOUT     30s  
+  GR2.596.2a N TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/Sqrt[1 + 9 Sin[x]^2] has no antiderivative elementary in x.
+  GR2.596.2b S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sqrt[1 + 1/25 Sin[x]^2] has no antiderivative elementary in x.
+  GR2.596.3a S TIMEOUT     30s  
+  GR2.596.3b S TIMEOUT     30s  
+  GR2.597.1 S TIMEOUT     30s  
+  GR2.597.2 S TIMEOUT     30s  
+  GR2.597.3 S TIMEOUT     30s  
+  GR2.597.3 N TIMEOUT     30s  
+  GR2.597.6 S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/(1 + 9 Sin[x]^2)^(3/2) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand 1/Sqrt[-1 + 9 Sin[x]^2] has no antiderivative elementary in x.
+  GR2.598.1a S TIMEOUT     30s  
+  GR2.598.1a N TIMEOUT     30s  
+Integrate::nonelem: The integrand Sqrt[-1 + 49/9 Sin[x]^2] has no antiderivative elementary in x.
+  GR2.598.1b S TIMEOUT     30s  
+  GR2.598.1b N TIMEOUT     30s  
+  GR2.598.2 S TIMEOUT     30s  
+  GR2.599.1 S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/(-1 + 9 Sin[x]^2)^(5/2) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sin[x]^2/Sqrt[-1 + 49/9 Sin[x]^2] has no antiderivative elementary in x.
+  GR2.599.2 S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/Sqrt[1 - 25/64 Cos[x]^2] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sqrt[1 - 9/64 Cos[x]^2] has no antiderivative elementary in x.
+  GR2.611.1 S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/Sqrt[1 - 49/16 Cos[x]^2] has no antiderivative elementary in x.
+  GR2.611.2 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sqrt[1 - 49/16 Cos[x]^2] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand 1/Sqrt[1 + 49/16 Cos[x]^2] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand 1/Sqrt[-1 + 25/16 Cos[x]^2] has no antiderivative elementary in x.
+  GR2.612.2 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sqrt[1 + 9/64 Cos[x]^2] has no antiderivative elementary in x.
+  GR2.613.1 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sqrt[-1 + 49/16 Cos[x]^2] has no antiderivative elementary in x.
+  GR2.613.2 S TIMEOUT     30s  
+Integrate::nonelem: The integrand 1/Sqrt[(1 - 25/36 Sin[x]^2) (1 - 25/64 Sin[x]^2)] has no antiderivative elementary in x.
+  GR2.614.1 S TIMEOUT     30s  
+  GR2.614.2 S TIMEOUT     30s  
+  GR2.615.1 S TIMEOUT     31s  
+  GR2.615.2 S TIMEOUT     30s  
+  GR2.616.1 S TIMEOUT     30s  
+  GR2.616.2 S TIMEOUT     30s  
+  GR2.616.2 N TIMEOUT     30s  
+  GR2.616.4 S TIMEOUT     30s  
+  GR2.616.4 N TIMEOUT     30s  
+  GR2.616.5 S TIMEOUT     31s  
+  GR2.616.5 N TIMEOUT     30s  
+Integrate::nonelem: The integrand Sqrt[(1 - 9/64 Sin[x]^2)/(1 - 25/64 Sin[x]^2)^3] has no antiderivative elementary in x.
+  GR2.616.6 S TIMEOUT     30s  
+  GR2.616.6 N TIMEOUT     30s  
+  GR2.616.7 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sqrt[(1 - 25/36 Sin[x]^2)/(1 - 25/64 Sin[x]^2)]/(1 - 25/64 Sin[x]^2) has no antiderivative elementary in x.
+  GR2.616.8 S TIMEOUT     30s  
+  GR2.616.9 S TIMEOUT     30s  
+  GR2.619.1 N WRONG       5s  (8/3*I) EllipticF[ArcSin[Tan[3/8 x]], -1]
+  GR2.616.9 N TIMEOUT     30s  
+  GR2.617.3 S TIMEOUT     30s  
+  GR2.618.3 S TIMEOUT     30s  
+  GR2.618.12 S TIMEOUT     30s  
+  GR2.619.2 N WRONG       20s  (4/5*I) EllipticE[ArcSin[Tan[5/8 x]], -1] - (4 Tan[5/8 x] Sqrt[-1 + Tan[5/8 x]^4])/(5 + 5 Tan[5/8 x]^2)
+  GR2.619.2 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sin[7/4 x]/((1 + Cos[7/4 x] + Sin[7/4 x]) Sqrt[Sin[7/2 x]]) has no antiderivative elementary in x.
+  GR2.619.11 N WRONG       10s  (-6/5*I) EllipticE[ArcSin[Tan[5/6 x]], -1] + (6/5*I) EllipticF[ArcSin[Tan[5/6 x]], -1] + (6 Tan[5/6 x] Sqrt[-1 + Tan[5/6 x]^4])/(5 + 5 Tan[5/6 x]^2)
+Integrate::nonelem: The integrand Sin[3/8 x]/((1 + Cos[3/8 x] - Sin[3/8 x]) Sqrt[Sin[3/4 x]]) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand (1 + Cos[7/4 x])/((1 + Cos[7/4 x] + Sin[7/4 x]) Sqrt[Sin[7/2 x]]) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand 1/((1 - 98/9 Cos[1/5 x]^2) Sqrt[-Cos[2/5 x]]) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand (1 + Cos[5/8 x] - Sin[5/8 x])/((1 + Cos[5/8 x] + Sin[5/8 x]) Sqrt[Sin[5/4 x]]) has no antiderivative elementary in x.
+  GR2.619.4 S TIMEOUT     30s  
+Integrate::nonelem: The integrand (1 + Cos[3/8 x] + Sin[3/8 x])/((1 + Cos[3/8 x] + 23/25 Sin[3/8 x]) Sqrt[Sin[3/4 x]]) has no antiderivative elementary in x.
+  GR2.619.7 S TIMEOUT     30s  
+  GR2.632.1 S TIMEOUT     30s  
+  GR2.632.2 S TIMEOUT     30s  
+  GR2.632.3 S TIMEOUT     30s  
+  GR2.632.4 S TIMEOUT     30s  
+  GR2.633.1 S TIMEOUT     30s  
+  GR2.633.2 S TIMEOUT     30s  
+  GR2.633.3 S TIMEOUT     30s  
+  GR2.633.4 S TIMEOUT     30s  
+  GR2.633.5 S TIMEOUT     30s  
+  GR2.633.6 S TIMEOUT     30s  
+  GR2.636.1 S TIMEOUT     30s  
+  GR2.636.2 S TIMEOUT     30s  
+  GR2.637.1 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sin[k x]/(a + b x) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sin[k x]/(a + b x)^2 has no antiderivative elementary in x.
+  GR2.637.2 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Cos[k x]/(a + b x) has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sin[4 x]/(7/4 + 5/8 x)^2 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[k x]/(a + b x)^2 has no antiderivative elementary in x.
+  GR2.639.1 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sin[k x]/(a + b x)^3 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[k x]/(a + b x)^3 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[4 x]/(3/8 + 1/5 x)^3 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sin[4 x]/(5/8 + 3/8 x)^4 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sin[k x]/(a + b x)^4 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[3 x]/(5/4 + 5/6 x)^4 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[k x]/(a + b x)^4 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sin[4 x]/(5/6 + 5/4 x)^5 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sin[k x]/(a + b x)^5 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[2 x]/(7/3 + 7/4 x)^5 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[k x]/(a + b x)^5 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sin[k x]/(a + b x)^6 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sin[3 x]/(1/5 + 3 x)^6 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[2 x]/(7/3 + 1/5 x)^6 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[k x]/(a + b x)^6 has no antiderivative elementary in x.
+  GR2.639.2 S TIMEOUT     30s  
+Integrate::nonelem: The integrand Sin[x]^(2 m)/x has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sin[x]^(1 + 2 m)/x has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[x]^(2 m)/x has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sin[x]^(2 m)/x^2 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[x]^(1 + 2 m)/x has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Sin[x]^(1 + 2 m)/x^2 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[x]^(2 m)/x^2 has no antiderivative elementary in x.
+Integrate::nonelem: The integrand Cos[x]^(1 + 2 m)/x^2 has no antiderivative elementary in x.
+  GR2.639.3 S TIMEOUT     30s  
+  GR2.639.4 S TIMEOUT     30s  
+  GR2.644.1 S TIMEOUT     30s  
+  GR2.644.3 S TIMEOUT     30s  
+  GR2.644.1 N TIMEOUT     30s  
+  GR2.644.3 N TIMEOUT     30s  
+  GR2.644.11 S TIMEOUT     30s  
+  GR2.644.11 N TIMEOUT     30s  
+  GR2.644.12 S TIMEOUT     30s  
+  GR2.644.12 N TIMEOUT     30s  
+  GR2.654.1 S TIMEOUT     30s  
+  GR2.654.3 S TIMEOUT     30s  
+  GR2.654.4 S TIMEOUT     30s  
+  GR2.654.6 S TIMEOUT     30s  
+  GR2.654.7 S TIMEOUT     30s  
+  GR2.654.8 S TIMEOUT     30s  
+  GR2.662.3a S TIMEOUT     30s  
+  GR2.662.3b S TIMEOUT     30s  
+  GR2.662.4a S TIMEOUT     30s  
+  GR2.662.4b S TIMEOUT     30s  
+  GR2.662.5a S TIMEOUT     30s  
+  GR2.662.5b S TIMEOUT     30s  
+  GR2.662.6a S TIMEOUT     30s  
+  GR2.662.6b S TIMEOUT     30s  
+  GR2.667.3 S TIMEOUT     30s  
+  GR2.667.4 S TIMEOUT     30s  
+  GR2.673.1 S TIMEOUT     30s  
+  GR2.673.2 S TIMEOUT     30s  
+  GR2.673.3 S TIMEOUT     30s  
+  GR2.673.4 S TIMEOUT     31s  
+  GR2.673.4 N TIMEOUT     30s  
+  GR2.673.5 S TIMEOUT     30s  
+  GR2.673.6 S TIMEOUT     30s  
+  GR2.673.7 S TIMEOUT     30s  
+  GR2.673.8 S TIMEOUT     30s  
+  GR2.673.8 N TIMEOUT     30s  
+  GR2.673.9 S TIMEOUT     30s  
+  GR2.673.9 N TIMEOUT     30s  
+  GR2.673.10 S TIMEOUT     30s  
+  GR2.673.11 S TIMEOUT     30s  
+  GR2.673.12 S TIMEOUT     30s  
+  GR2.673.13 S TIMEOUT     30s  
+  GR2.673.14 S TIMEOUT     30s  
+  GR2.673.14 N TIMEOUT     30s  
+Integrate::nonelem: The integrand x^n/Log[x] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand (a + b x)^m Log[x] has no antiderivative elementary in x.
+  GR2.673.15 S TIMEOUT     30s  
+Integrate::nonelem: The integrand x^(2 n) Log[Abs[-a^2 + x^2]] has no antiderivative elementary in x.
+  GR2.673.15 N TIMEOUT     30s  
+Integrate::nonelem: The integrand x^(1 + 2 n) Log[Abs[-a^2 + x^2]] has no antiderivative elementary in x.
+Integrate::nonelem: The integrand x^m Log[a + b x] has no antiderivative elementary in x.
+  GR2.673.16 S TIMEOUT     30s  
+  GR2.673.16 N TIMEOUT     30s  
+  GR2.722  S TIMEOUT     30s  
+  GR2.731  S TIMEOUT     30s  
+  GR2.732  S TIMEOUT     30s  
+  GR2.811  S TIMEOUT     30s  
+  GR2.812  S TIMEOUT     30s  
+  GR2.855  N TIMEOUT     30s  
+  GR2.856.4 S TIMEOUT     30s  
+  GR2.856.4 N TIMEOUT     30s  
+  GR2.857  S TIMEOUT     30s  
+  GR2.858  S TIMEOUT     30s  
+  GR2.858  N TIMEOUT     30s  
+
+=== Mathar corpus result (/private/tmp/claude-501/-Users-user-Mathilda-dev-Mathilda/1feb6491-0f69-4c0a-93bb-b020f4197048/scratchpad/gr/ch2/out/GR2IntegralsCorpus.m) ===
+  [symbolic] total 1621: CORRECT 1027 (63.4%), WRONG 2, NONNUMERIC 6, UNEVALUATED 172, TIMEOUT 414, CRASH 0, KNOWN-CRASH 0
+  [instance] total 1621: CORRECT 1314 (81.1%), WRONG 7, NONNUMERIC 5, UNEVALUATED 160, TIMEOUT 135, CRASH 0, KNOWN-CRASH 0
+  malformed records: 0
+FAIL: 9 WRONG answer(s) (baseline 0)
+FAIL: 11 NONNUMERIC result(s) (baseline 0)

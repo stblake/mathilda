@@ -1,0 +1,2255 @@
+[
+ {
+  "id": "GR4.386.3",
+  "gr": "4.386.3",
+  "page": 634,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]/Sqrt[1 - k^2*Sin[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "-(1/2)*MatharK[k]*Log[k] - (Pi/4)*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (322)(3)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x dx/sqrt(1-k^2 sin^2 x) = -1/2 K(k) ln k - pi/4 K(k')",
+  "note": ""
+ },
+ {
+  "id": "GR4.386.4",
+  "gr": "4.386.4",
+  "page": 634,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]/Sqrt[1 - k^2*Sin[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "(1/2)*MatharK[k]*Log[Sqrt[1 - k^2]/k] - (Pi/4)*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (322)(9)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln cos x dx/sqrt(1-k^2 sin^2 x) = 1/2 K(k) ln(k'/k) - pi/4 K(k')",
+  "note": ""
+ },
+ {
+  "id": "GR4.387.1a",
+  "gr": "4.387.1",
+  "page": 634,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Sin[x]^mu*Cos[x]^nu, {x, 0, Pi/2}]",
+  "rhs": [
+   "(1/4)*Beta[(mu + 1)/2, (nu + 1)/2]*(PolyGamma[(mu + 1)/2] - PolyGamma[(mu + nu + 2)/2])"
+  ],
+  "conds": [
+   "Re[mu] > -1",
+   "Re[nu] > -1"
+  ],
+  "cite": "GW (338)(6c)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x sin^mu x cos^nu x dx = 1/4 B((mu+1)/2,(nu+1)/2)[psi((mu+1)/2)-psi((mu+nu+2)/2)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.387.1b",
+  "gr": "4.387.1",
+  "page": 634,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]*Cos[x]^mu*Sin[x]^nu, {x, 0, Pi/2}]",
+  "rhs": [
+   "(1/4)*Beta[(mu + 1)/2, (nu + 1)/2]*(PolyGamma[(mu + 1)/2] - PolyGamma[(mu + nu + 2)/2])"
+  ],
+  "conds": [
+   "Re[mu] > -1",
+   "Re[nu] > -1"
+  ],
+  "cite": "GW (338)(6c)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln cos x cos^mu x sin^nu x dx = same",
+  "note": ""
+ },
+ {
+  "id": "GR4.387.2",
+  "gr": "4.387.2",
+  "page": 634,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Sin[x]^(mu - 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "Sqrt[Pi]*Gamma[mu/2]/(4*Gamma[(mu + 1)/2])*(PolyGamma[mu/2] - PolyGamma[(mu + 1)/2])"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "GW (338)(6a)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x sin^(mu-1) x dx = sqrt(pi) Gamma(mu/2)/(4 Gamma((mu+1)/2)) [psi(mu/2)-psi((mu+1)/2)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.387.3",
+  "gr": "4.387.3",
+  "page": 634,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Cos[x]^(nu - 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "Sqrt[Pi]*Gamma[nu/2]/(4*Gamma[(nu + 1)/2])*(PolyGamma[nu/2] - PolyGamma[(nu + 1)/2])",
+   "Sqrt[Pi]*Gamma[nu/2]/(4*Gamma[(nu + 1)/2])*(PolyGamma[1/2] - PolyGamma[(nu + 1)/2])"
+  ],
+  "conds": [
+   "Re[nu] > 0"
+  ],
+  "cite": "GW (338)(6b)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x cos^(nu-1) x dx = sqrt(pi) Gamma(nu/2)/(4 Gamma((nu+1)/2)) [psi(nu/2)-psi((nu+1)/2)]",
+  "note": "Probable misprint: 4.387.1 with mu=0 gives psi(1/2) in place of psi(nu/2); corrected candidate second"
+ },
+ {
+  "id": "GR4.387.4",
+  "gr": "4.387.4",
+  "page": 634,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Sin[x]^(2*n), {x, 0, Pi/2}]",
+  "rhs": [
+   "(2*n - 1)!!/(2*n)!!*(Pi/2)*(Sum[(-1)^(k + 1)/k, {k, 1, 2*n}] - Log[2])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "FI II 811",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x sin^(2n) x dx = (2n-1)!!/(2n)!! pi/2 {sum_{k=1}^{2n} (-1)^(k+1)/k - ln 2}",
+  "note": ""
+ },
+ {
+  "id": "GR4.387.5",
+  "gr": "4.387.5",
+  "page": 634,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Sin[x]^(2*n + 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "(2*n)!!/(2*n + 1)!!*(Sum[(-1)^k/k, {k, 1, 2*n + 1}] + Log[2])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (305)(13)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x sin^(2n+1) x dx = (2n)!!/(2n+1)!! {sum_{k=1}^{2n+1} (-1)^k/k + ln 2}",
+  "note": ""
+ },
+ {
+  "id": "GR4.387.6a",
+  "gr": "4.387.6",
+  "page": 634,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Cos[x]^(2*n), {x, 0, Pi/2}]",
+  "rhs": [
+   "-(2*n - 1)!!/(2*n)!!*(Pi/4)*(Sum[1/k, {k, 1, n}] + Log[4])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (305)(14)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x cos^(2n) x dx = -(2n-1)!!/(2n)!! pi/4 [sum_{k=1}^n 1/k + ln 4]",
+  "note": ""
+ },
+ {
+  "id": "GR4.387.6b",
+  "gr": "4.387.6",
+  "page": 634,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Cos[x]^(2*n), {x, 0, Pi/2}]",
+  "rhs": [
+   "-(2*n - 1)!!/(2*n)!!*(Pi/4)*(EulerGamma + PolyGamma[n + 1] + Log[4])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (305)(14)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "= -(2n-1)!!/(2n)!! pi/4 [C + psi(n+1) + ln 4]",
+  "note": ""
+ },
+ {
+  "id": "GR4.387.7a",
+  "gr": "4.387.7",
+  "page": 634,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Cos[x]^(2*n + 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "-(2*n)!!/(2*n + 1)!!*Sum[1/(2*k + 1), {k, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (338)(7b)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x cos^(2n+1) x dx = -(2n)!!/(2n+1)!! sum_{k=0}^n 1/(2k+1)",
+  "note": ""
+ },
+ {
+  "id": "GR4.387.7b",
+  "gr": "4.387.7",
+  "page": 634,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Cos[x]^(2*n + 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "-(2*n)!!/(2*(2*n + 1)!!)*(PolyGamma[n + 3/2] - PolyGamma[1/2])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (338)(7b)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "= -(2n)!!/(2(2n+1)!!) [psi(n+3/2) - psi(1/2)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.387.8",
+  "gr": "4.387.8",
+  "page": 634,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]*Sin[x]^(2*n), {x, 0, Pi/2}]",
+  "rhs": [
+   "-(2*n - 1)!!/(2^(n + 1)*n!)*(Pi/2)*(EulerGamma + 2*Log[2] + PolyGamma[n + 1])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (306)(8)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln cos x sin^(2n) x dx = -(2n-1)!!/(2^(n+1) n!) pi/2 {C + 2 ln 2 + psi(n+1)}",
+  "note": ""
+ },
+ {
+  "id": "GR4.387.9",
+  "gr": "4.387.9",
+  "page": 635,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]*Cos[x]^(2*n), {x, 0, Pi/2}]",
+  "rhs": [
+   "-(2*n - 1)!!/(2^n*n!)*(Pi/2)*(Log[2] + Sum[(-1)^k/k, {k, 1, 2*n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (306)(10)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln cos x cos^(2n) x dx = -(2n-1)!!/(2^n n!) pi/2 (ln 2 + sum_{k=1}^{2n} (-1)^k/k)",
+  "note": ""
+ },
+ {
+  "id": "GR4.387.10",
+  "gr": "4.387.10",
+  "page": 635,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]*Cos[x]^(2*n - 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "2^(n - 1)*(n - 1)!/(2*n - 1)!!*(Log[2] + Sum[(-1)^k/k, {k, 1, 2*n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (306)(9)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln cos x cos^(2n-1) x dx = 2^(n-1)(n-1)!/(2n-1)!! [ln 2 + sum_{k=1}^{2n-1} (-1)^k/k]",
+  "note": ""
+ },
+ {
+  "id": "GR4.388.1",
+  "gr": "4.388.1",
+  "page": 635,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Sin[x]^(2*n)/Cos[x]^(2*n + 2), {x, 0, Pi/4}]",
+  "rhs": [
+   "1/(2*n + 1)*((1/2)*Log[2] + (-1)^n*Pi/4 + Sum[(-1)^k/(2*n - 2*k - 1), {k, 0, n - 1}])",
+   "-1/(2*n + 1)*((1/2)*Log[2] + (-1)^n*Pi/4 + Sum[(-1)^k/(2*n - 2*k - 1), {k, 0, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (288)(1)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln sin x sin^(2n)x/cos^(2n+2)x dx = 1/(2n+1)[1/2 ln 2 + (-1)^n pi/4 + sum_{k=0}^{n-1} (-1)^k/(2n-2k-1)]",
+  "note": "Probable overall sign misprint: n=0 by parts gives -ln2/2 - pi/4 (and n=1 also the negative); negated candidate second"
+ },
+ {
+  "id": "GR4.388.2",
+  "gr": "4.388.2",
+  "page": 635,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Sin[x]^(2*n - 1)/Cos[x]^(2*n + 1), {x, 0, Pi/4}]",
+  "rhs": [
+   "1/(4*n)*(-Log[2] + (-1)^n*Log[2] + Sum[(-1)^k/(n - k), {k, 1, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (288)(2)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln sin x sin^(2n-1)x/cos^(2n+1)x dx = 1/(4n)[-ln 2 + (-1)^n ln 2 + sum_{k=1}^{n-1} (-1)^k/(n-k)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.388.3",
+  "gr": "4.388.3",
+  "page": 635,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]*Sin[x]^(2*n)/Cos[x]^(2*n + 2), {x, 0, Pi/4}]",
+  "rhs": [
+   "1/(2*n + 1)*(-(1/2)*Log[2] + (-1)^(n + 1)*Pi/4 + Sum[(-1)^(k - 1)/(2*n - 2*k + 1), {k, 0, n}])",
+   "1/(2*n + 1)*(-(1/2)*Log[2] + (-1)^(n + 1)*Pi/4 + Sum[(-1)^k/(2*n - 2*k + 1), {k, 0, n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (288)(10)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln cos x sin^(2n)x/cos^(2n+2)x dx = 1/(2n+1)[-1/2 ln 2 + (-1)^(n+1) pi/4 + sum_{k=0}^n (-1)^(k-1)/(2n-2k+1)]",
+  "note": "Probable sign misprint in the sum: n=0 by parts gives -ln2/2 - pi/4 + 1; candidate with (-1)^k second (consistent with 4.392.1)"
+ },
+ {
+  "id": "GR4.388.4",
+  "gr": "4.388.4",
+  "page": 635,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]*Sin[x]^(2*n - 1)/Cos[x]^(2*n + 1), {x, 0, Pi/4}]",
+  "rhs": [
+   "1/(4*n)*(-Log[2] + (-1)^n*Log[2] + Sum[(-1)^k/(n - k), {k, 1, n - 1}])",
+   "1/(4*n)*(-Log[2] + (-1)^n*Log[2] + Sum[(-1)^k/(n - k), {k, 0, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (288)(11)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln cos x sin^(2n-1)x/cos^(2n+1)x dx = 1/(4n)[-ln 2 + (-1)^n ln 2 + sum_{k=1}^{n-1} (-1)^k/(n-k)]",
+  "note": "Printed identical to 4.388.2; by parts n=1 gives 1/4 - ln2/2, so the sum should start at k=0 (candidate second; consistent with 4.392.2)"
+ },
+ {
+  "id": "GR4.388.5",
+  "gr": "4.388.5",
+  "page": 635,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Sin[x]^(p - 1)/Cos[x]^(p + 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "-(Pi/(2*p))*Csc[p*Pi/2]"
+  ],
+  "conds": [
+   "0 < p < 2"
+  ],
+  "cite": "BI (310)(4)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x sin^(p-1)x/cos^(p+1)x dx = -pi/(2p) cosec(p pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.388.6",
+  "gr": "4.388.6",
+  "page": 635,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]/(Tan[x]^(p - 1)*Sin[2*x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "(1/4)*(Pi/(p - 1))*Sec[p*Pi/2]"
+  ],
+  "conds": [
+   "p^2 < 1"
+  ],
+  "cite": "BI (310)(3)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x dx/(tan^(p-1)x sin 2x) = 1/4 pi/(p-1) sec(p pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.389.1",
+  "gr": "4.389.1",
+  "page": 635,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Sin[2*x]^(2*n)*Cos[2*x], {x, 0, Pi}]",
+  "rhs": [
+   "-(2*n - 1)!!/(2*n)!!*Pi/(4*n + 2)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (330)(9)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln sin x sin^(2n) 2x cos 2x dx = -(2n-1)!!/(2n)!! pi/(4n+2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.389.2",
+  "gr": "4.389.2",
+  "page": 635,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Cos[2*x]^n*Sin[2*x], {x, 0, Pi/4}]",
+  "rhs": [
+   "-1/(4*(n + 1))*(EulerGamma + PolyGamma[n + 2] + Log[2])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (285)(2)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln sin x cos^n 2x sin 2x dx = -1/(4(n+1)) {C + psi(n+2) + ln 2}",
+  "note": "No condition printed on n; integer n >= 0 assumed (likely valid for n > -1)"
+ },
+ {
+  "id": "GR4.389.3",
+  "gr": "4.389.3",
+  "page": 635,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]*Cos[2*x]^(mu - 1)*Tan[2*x], {x, 0, Pi/4}]",
+  "rhs": [
+   "1/(4*(1 - mu))*((PolyGamma[(mu + 1)/2] - PolyGamma[(mu)/2])/2)"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (286)(2)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln cos x cos^(mu-1) 2x tan 2x dx = 1/(4(1-mu)) beta(mu)",
+  "note": "beta(x) per G&R 8.370 substituted"
+ },
+ {
+  "id": "GR4.389.4a",
+  "gr": "4.389.4",
+  "page": 635,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Sin[x]^(mu - 1)*Cos[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "-1/mu^2"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (306)(11)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x sin^(mu-1)x cos x dx = -1/mu^2",
+  "note": ""
+ },
+ {
+  "id": "GR4.389.4b",
+  "gr": "4.389.4",
+  "page": 635,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]*Cos[x]^(mu - 1)*Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "-1/mu^2"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (306)(11)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln cos x cos^(mu-1)x sin x dx = -1/mu^2",
+  "note": ""
+ },
+ {
+  "id": "GR4.389.5",
+  "gr": "4.389.5",
+  "page": 635,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]*Cos[x]^p*Cos[p*x], {x, -Pi/2, Pi/2}]",
+  "rhs": [
+   "Pi/2^(p + 1)*(EulerGamma + PolyGamma[p + 1] - 2*Log[2])"
+  ],
+  "conds": [
+   "p > -1"
+  ],
+  "cite": "",
+  "edition_note": "3",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_{-pi/2}^{pi/2} ln cos x cos^p x cos px dx = pi/2^(p+1) [C + psi(p+1) - 2 ln 2]",
+  "note": ""
+ },
+ {
+  "id": "GR4.389.6",
+  "gr": "4.389.6",
+  "page": 635,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]*Cos[x]^(p - 1)*Sin[p*x]*Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2^(p + 2)*(EulerGamma + PolyGamma[p] - 1/p - 2*Log[2])"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (306)(12)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln cos x cos^(p-1)x sin px sin x dx = pi/2^(p+2) [C + psi(p) - 1/p - 2 ln 2]",
+  "note": ""
+ },
+ {
+  "id": "GR4.391.1a",
+  "gr": "4.391.1",
+  "page": 636,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[2*x]]^n*Cos[2*x]^(p - 1)*Tan[x], {x, 0, Pi/4}]",
+  "rhs": [
+   "(1/2)*((PolyGamma[n, (p + 1)/2] - PolyGamma[n, p/2])/2^(n + 1))"
+  ],
+  "conds": [
+   "p > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (286)(10), BI (285)(18)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) (ln cos 2x)^n cos^(p-1) 2x tan x dx = 1/2 beta^(n)(p)",
+  "note": "beta^(n)(p) = n-th derivative of G&R 8.370 beta, substituted as (psi^(n)((p+1)/2) - psi^(n)(p/2))/2^(n+1); n integer assumed"
+ },
+ {
+  "id": "GR4.391.1b",
+  "gr": "4.391.1",
+  "page": 636,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[2*x]]^n*Sin[2*x]^(p - 1)*Tan[Pi/4 - x], {x, 0, Pi/4}]",
+  "rhs": [
+   "(1/2)*((PolyGamma[n, (p + 1)/2] - PolyGamma[n, p/2])/2^(n + 1))"
+  ],
+  "conds": [
+   "p > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (286)(10), BI (285)(18)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) (ln sin 2x)^n sin^(p-1) 2x tan(pi/4 - x) dx = 1/2 beta^(n)(p)",
+  "note": "beta^(n) substituted as in 4.391.1a"
+ },
+ {
+  "id": "GR4.391.2",
+  "gr": "4.391.2",
+  "page": 636,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[2*x]]^n*Sin[2*x]^(p - 1)*Tan[Pi/4 + x], {x, 0, Pi/4}]",
+  "rhs": [
+   "(-1)^n*n!/2*HurwitzZeta[n + 1, p]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "p > 0"
+  ],
+  "cite": "BI (285)(17)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) (ln sin 2x)^n sin^(p-1) 2x tan(pi/4 + x) dx = (-1)^n n!/2 zeta(n+1, p)",
+  "note": "No conditions printed; n >= 1 (convergence at pi/4) and p > 0 added"
+ },
+ {
+  "id": "GR4.391.3",
+  "gr": "4.391.3",
+  "page": 636,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[2*x]]^(2*n - 1)*Tan[x], {x, 0, Pi/4}]",
+  "rhs": [
+   "(1 - 2^(2*n - 1))/(4*n)*Pi^(2*n)*Abs[BernoulliB[2*n]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (286)(7)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) (ln cos 2x)^(2n-1) tan x dx = (1 - 2^(2n-1))/(4n) pi^(2n) |B_2n|",
+  "note": ""
+ },
+ {
+  "id": "GR4.391.4",
+  "gr": "4.391.4",
+  "page": 636,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[2*x]]^(2*n)*Tan[x], {x, 0, Pi/4}]",
+  "rhs": [
+   "2^(2*n)/2^(2*n + 1)*(2*n)!*Zeta[2*n + 1]",
+   "(2^(2*n) - 1)/2^(2*n + 1)*(2*n)!*Zeta[2*n + 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (286)(8)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) (ln cos 2x)^(2n) tan x dx = (2^(2n) 1)/2^(2n+1) (2n)! zeta(2n+1)",
+  "note": "Numerator printed '2^{2n} 1' (operator lost); candidate (2^(2n) - 1) second. n >= 1 added (zeta(1) at n=0)"
+ },
+ {
+  "id": "GR4.392.1",
+  "gr": "4.392.1",
+  "page": 636,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]*Cos[x]]*Sin[x]^(2*n)/Cos[x]^(2*n + 2), {x, 0, Pi/4}]",
+  "rhs": [
+   "1/(2*n + 1)*((-1)^(n + 1)*Pi/2 - Log[2] + 1/(2*n + 1) + 2*Sum[(-1)^(k - 1)/(2*n - 2*k - 1), {k, 0, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (294)(8)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln(sin x cos x) sin^(2n)x/cos^(2n+2)x dx = 1/(2n+1)[(-1)^(n+1) pi/2 - ln 2 + 1/(2n+1) + 2 sum_{k=0}^{n-1} (-1)^(k-1)/(2n-2k-1)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.392.2",
+  "gr": "4.392.2",
+  "page": 636,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]*Cos[x]]*Sin[x]^(2*n - 1)/Cos[x]^(2*n + 1), {x, 0, Pi/4}]",
+  "rhs": [
+   "1/(2*n)*((-1)^n*Log[2] - Log[2] + 1/(2*n) + (-1)^n*Sum[(-1)^k/k, {k, 1, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (294)(9)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln(sin x cos x) sin^(2n-1)x/cos^(2n+1)x dx = 1/(2n)[(-1)^n ln 2 - ln 2 + 1/(2n) + (-1)^n sum_{k=1}^{n-1} (-1)^k/k]",
+  "note": ""
+ },
+ {
+  "id": "GR4.393.1",
+  "gr": "4.393.1",
+  "page": 636,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]*Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (307)(3)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln tan x sin x dx = ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR4.393.2",
+  "gr": "4.393.2",
+  "page": 636,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]*Cos[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (307)(4)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln tan x cos x dx = -ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR4.393.3a",
+  "gr": "4.393.3",
+  "page": 636,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]*Sin[x]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4"
+  ],
+  "conds": [],
+  "cite": "BI (307)(5, 6)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln tan x sin^2 x dx = pi/4",
+  "note": ""
+ },
+ {
+  "id": "GR4.393.3b",
+  "gr": "4.393.3",
+  "page": 636,
+  "status": "ok",
+  "lhs": "-Integrate[Log[Tan[x]]*Cos[x]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4"
+  ],
+  "conds": [],
+  "cite": "BI (307)(5, 6)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "-int_0^(pi/2) ln tan x cos^2 x dx = pi/4",
+  "note": ""
+ },
+ {
+  "id": "GR4.393.4",
+  "gr": "4.393.4",
+  "page": 636,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]/Cos[2*x], {x, 0, Pi/4}]",
+  "rhs": [
+   "-Pi^2/8"
+  ],
+  "conds": [],
+  "cite": "GW (338)(10b)a",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln tan x/cos 2x dx = -pi^2/8",
+  "note": ""
+ },
+ {
+  "id": "GR4.393.5",
+  "gr": "4.393.5",
+  "page": 636,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Log[Cot[x/2]], {x, 0, Pi/2}]",
+  "rhs": [
+   "Log[2]"
+  ],
+  "conds": [],
+  "cite": "LO III 290",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) sin x ln cot(x/2) dx = ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR4.394.1a",
+  "gr": "4.394.1",
+  "page": 636,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*(1 - a^2))*Log[(1 - a)/(1 + a)]"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "BI (321)(15)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln tan x dx/(1-2a cos 2x+a^2) = pi/(2(1-a^2)) ln((1-a)/(1+a)) [a^2<1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.394.1b",
+  "gr": "4.394.1",
+  "page": 636,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*(a^2 - 1))*Log[(a - 1)/(a + 1)]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "BI (321)(15)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "= pi/(2(a^2-1)) ln((a-1)/(a+1)) [a^2>1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.394.2a",
+  "gr": "4.394.2",
+  "page": 636,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]*Cos[2*x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(4*a)*(1 + a^2)/(1 - a^2)*Log[(1 - a)/(1 + a)]"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "BI (321)(16)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln tan x cos 2x dx/(1-2a cos 2x+a^2) = pi/(4a) (1+a^2)/(1-a^2) ln((1-a)/(1+a)) [a^2<1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.394.2b",
+  "gr": "4.394.2",
+  "page": 636,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]*Cos[2*x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(4*a)*(a^2 + 1)/(a^2 - 1)*Log[(a - 1)/(a + 1)]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "BI (321)(16)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "= pi/(4a) (a^2+1)/(a^2-1) ln((a-1)/(a+1)) [a^2>1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.394.3",
+  "gr": "4.394.3",
+  "page": 637,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[b*x]]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(1 - a^2)*Log[(1 - a^b)/(1 + a^b)]"
+  ],
+  "conds": [
+   "0 < a < 1",
+   "b > 0"
+  ],
+  "cite": "BI (331)(24)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln tan bx dx/(1-2a cos 2x+a^2) = pi/(1-a^2) ln((1-a^b)/(1+a^b))",
+  "note": "tan bx is negative on parts of (0, pi): Log is complex there; the source likely intends ln|tan bx| and/or integer b"
+ },
+ {
+  "id": "GR4.394.4",
+  "gr": "4.394.4",
+  "page": 637,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[b*x]]*Cos[x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < a < 1"
+  ],
+  "cite": "BI (331)(25)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln tan bx cos x dx/(1-2a cos 2x+a^2) = 0",
+  "note": "b unconstrained in the book; see 4.394.3 on ln tan bx"
+ },
+ {
+  "id": "GR4.394.5",
+  "gr": "4.394.5",
+  "page": 637,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]*Cos[2*x]/(1 - a*Sin[2*x]), {x, 0, Pi/4}]",
+  "rhs": [
+   "-ArcSin[a]/(4*a)*(Pi + ArcSin[a])"
+  ],
+  "conds": [
+   "a^2 <= 1"
+  ],
+  "cite": "BI (291)(2,3)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln tan x cos 2x dx/(1 - a sin 2x) = -arcsin a/(4a) (pi + arcsin a)",
+  "note": ""
+ },
+ {
+  "id": "GR4.394.6",
+  "gr": "4.394.6",
+  "page": 637,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]*Cos[2*x]/(1 - a^2*Sin[2*x]^2), {x, 0, Pi/4}]",
+  "rhs": [
+   "-(Pi/(4*a))*ArcSin[a]"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "BI (291)(9)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln tan x cos 2x dx/(1 - a^2 sin^2 2x) = -pi/(4a) arcsin a",
+  "note": ""
+ },
+ {
+  "id": "GR4.394.7a",
+  "gr": "4.394.7",
+  "page": 637,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]*Cos[2*x]/(1 + a^2*Sin[2*x]^2), {x, 0, Pi/4}]",
+  "rhs": [
+   "-(Pi/(4*a))*ArcSinh[a]"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "BI (291)(10)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln tan x cos 2x dx/(1 + a^2 sin^2 2x) = -pi/(4a) arcsinh a",
+  "note": ""
+ },
+ {
+  "id": "GR4.394.7b",
+  "gr": "4.394.7",
+  "page": 637,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]*Cos[2*x]/(1 + a^2*Sin[2*x]^2), {x, 0, Pi/4}]",
+  "rhs": [
+   "-(Pi/(4*a))*Log[a + Sqrt[1 + a^2]]"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "BI (291)(10)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "= -pi/(4a) ln(a + sqrt(1+a^2))",
+  "note": ""
+ },
+ {
+  "id": "GR4.394.8",
+  "gr": "4.394.8",
+  "page": 637,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[x]*Log[Cot[x/2]]/(1 - Cos[alpha]^2*Sin[x]^2), {x, 0, u}]",
+  "rhs": [
+   "Csc[2*alpha]*((Pi/2)*Log[2] + LobachevskyL[ArcTan[Cot[alpha]*Cos[u]] - alpha] - LobachevskyL[ArcTan[Cot[alpha]*Cos[u]] + alpha] - LobachevskyL[Pi/2 - 2*alpha])"
+  ],
+  "conds": [
+   "0 < u < Pi"
+  ],
+  "cite": "LO III 290",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^u sin x ln cot(x/2)/(1 - cos^2 alpha sin^2 x) dx = cosec 2alpha {pi/2 ln 2 + L(phi-alpha) - L(phi+alpha) - L(pi/2 - 2alpha)}, tan phi = cot alpha cos u",
+  "note": "tan phi = cot alpha cos u substituted as phi = ArcTan[Cot[alpha]*Cos[u]]",
+  "reason": "Lobachevsky L"
+ },
+ {
+  "id": "GR4.394.9",
+  "gr": "4.394.9",
+  "page": 637,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Log[Tan[x]]*Sin[2*x]/(1 - Cos[t]^2*Sin[2*x]^2), {x, 0, Pi/4}]",
+  "rhs": [
+   "Csc[2*t]*(LobachevskyL[Pi/2 - t] - (Pi/2 - t)*Log[2])"
+  ],
+  "conds": [],
+  "cite": "LO III 290a",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln tan x sin 2x dx/(1 - cos^2 t sin^2 2x) = cosec 2t [L(pi/2 - t) - (pi/2 - t) ln 2]",
+  "note": "",
+  "reason": "Lobachevsky L"
+ },
+ {
+  "id": "GR4.395.1",
+  "gr": "4.395.1",
+  "page": 637,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]/Sqrt[1 - k^2*Sin[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Log[Sqrt[1 - k^2]]*MatharK[k]",
+   "-(1/2)*Log[Sqrt[1 - k^2]]*MatharK[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (322)(11)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln tan x dx/sqrt(1-k^2 sin^2 x) = -ln k' K(k)",
+  "note": "4.386.3 minus 4.386.4 gives -1/2 ln k' K(k); halved candidate second"
+ },
+ {
+  "id": "GR4.395.2",
+  "gr": "4.395.2",
+  "page": 637,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]*Sin[4*x]/((Sin[u]^2 + Tan[v]^2*Sin[2*x]^2)*Sqrt[Sin[2*x]^2 - Sin[u]^2]), {x, u, Pi/4}]",
+  "rhs": [
+   "-(Pi/2)*Cos[v]^2/(Sin[u]*Sin[v])*Log[(Sin[v] + Sqrt[1 - Cos[u]^2*Cos[v]^2])/(Sin[u]*(1 + Sin[v]))]"
+  ],
+  "conds": [
+   "0 < u < Pi/2",
+   "0 < v < Pi/2"
+  ],
+  "cite": "LO III 285a",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_u^(pi/4) ln tan x sin 4x dx/((sin^2 u + tan^2 v sin^2 2x) sqrt(sin^2 2x - sin^2 u)) = -pi/2 cos^2 v/(sin u sin v) ln((sin v + sqrt(1 - cos^2 u cos^2 v))/(sin u (1 + sin v)))",
+  "note": "upsilon written v. The radicand sin^2 2x - sin^2 u vanishes at x = u/2, so the printed lower limit u looks like a misprint for u/2 (see 4.395.2b)"
+ },
+ {
+  "id": "GR4.395.2b",
+  "gr": "4.395.2",
+  "page": 637,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]*Sin[4*x]/((Sin[u]^2 + Tan[v]^2*Sin[2*x]^2)*Sqrt[Sin[2*x]^2 - Sin[u]^2]), {x, u/2, Pi/4}]",
+  "rhs": [
+   "-(Pi/2)*Cos[v]^2/(Sin[u]*Sin[v])*Log[(Sin[v] + Sqrt[1 - Cos[u]^2*Cos[v]^2])/(Sin[u]*(1 + Sin[v]))]"
+  ],
+  "conds": [
+   "0 < u < Pi/2",
+   "0 < v < Pi/2"
+  ],
+  "cite": "LO III 285a",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "same with lower limit u/2",
+  "note": "corrected integrand: lower limit u/2 (zero of the radicand) in place of printed u; upsilon written v"
+ },
+ {
+  "id": "GR4.396.1",
+  "gr": "4.396.1",
+  "page": 637,
+  "status": "ok",
+  "lhs": "Integrate[Log[a*Tan[x]]*Sin[2*x]^(mu - 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "2^(mu - 2)*Log[a]*Gamma[mu/2]^2/Gamma[mu]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "LI (307)(8)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(a tan x) sin^(mu-1) 2x dx = 2^(mu-2) ln a Gamma(mu/2)^2/Gamma(mu)",
+  "note": ""
+ },
+ {
+  "id": "GR4.396.2",
+  "gr": "4.396.2",
+  "page": 637,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]*Cos[x]^(2*(mu - 1)), {x, 0, Pi/2}]",
+  "rhs": [
+   "-(Sqrt[Pi]/4)*Gamma[u - 1/2]/Gamma[mu]*(EulerGamma + PolyGamma[(2*mu - 1)/2] + Log[4])",
+   "-(Sqrt[Pi]/4)*Gamma[mu - 1/2]/Gamma[mu]*(EulerGamma + PolyGamma[(2*mu - 1)/2] + Log[4])"
+  ],
+  "conds": [
+   "Re[mu] > 1/2"
+  ],
+  "cite": "BI (307)(9)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln tan x cos^(2(mu-1)) x dx = -sqrt(pi)/4 Gamma(u - 1/2)/Gamma(mu) [C + psi((2mu-1)/2) + ln 4]",
+  "note": "Printed Gamma(u - 1/2): u is a misprint for mu (candidate second). Exponent printed as cos^{2(mu-1)x}; read as cos^(2(mu-1)) x"
+ },
+ {
+  "id": "GR4.396.3",
+  "gr": "4.396.3",
+  "page": 637,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]*Cos[x]^(q - 1)*Cot[x]*Sin[(q + 1)*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "-(Pi/2)*(EulerGamma + PolyGamma[q + 1])"
+  ],
+  "conds": [
+   "q > -1"
+  ],
+  "cite": "BI (307)(11)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln tan x cos^(q-1)x cot x sin[(q+1)x] dx = -pi/2 [C + psi(q+1)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.396.4",
+  "gr": "4.396.4",
+  "page": 637,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]*Cos[x]^(q - 1)*Cos[(q + 1)*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi/(2*q)"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "BI (307)(10)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln tan x cos^(q-1)x cos[(q+1)x] dx = -pi/(2q)",
+  "note": ""
+ },
+ {
+  "id": "GR4.396.5",
+  "gr": "4.396.5",
+  "page": 637,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]^n*Tan[x]^p, {x, 0, Pi/4}]",
+  "rhs": [
+   "1/2^(n + 1)*((PolyGamma[n, (p + 3)/4] - PolyGamma[n, (p + 1)/4])/2^(n + 1))"
+  ],
+  "conds": [
+   "p > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "LI (286)(22)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) (ln tan x)^n tan^p x dx = 1/2^(n+1) beta^(n)((p+1)/2)",
+  "note": "Printed B^(n); read as beta^(n) (G&R 8.370), substituted as beta^(n)(z) = (psi^(n)((z+1)/2) - psi^(n)(z/2))/2^(n+1) at z=(p+1)/2; n integer assumed"
+ },
+ {
+  "id": "GR4.396.6",
+  "gr": "4.396.6",
+  "page": 638,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]^(2*n - 1)/Cos[2*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "(1 - 2^(2*n))/(2*n)*Pi^(2*n)*Abs[BernoulliB[2*n]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (312)(6)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) (ln tan x)^(2n-1) dx/cos 2x = (1-2^(2n))/(2n) pi^(2n) |B_2n|",
+  "note": ""
+ },
+ {
+  "id": "GR4.396.7",
+  "gr": "4.396.7",
+  "page": 638,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]*Tan[x]^(2*n + 1), {x, 0, Pi/4}]",
+  "rhs": [
+   "(-1)^(n + 1)/4*(Pi^2/12 + Sum[(-1)^k/k^2, {k, 1, n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (338)(8a)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln tan x tan^(2n+1) x dx = (-1)^(n+1)/4 [pi^2/12 + sum_{k=1}^n (-1)^k/k^2]",
+  "note": ""
+ },
+ {
+  "id": "GR4.397.1",
+  "gr": "4.397.1",
+  "page": 638,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + p*Sin[x]]/Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi^2/8 - (1/2)*ArcCos[p^2]",
+   "Pi^2/8 - (1/2)*ArcCos[p]^2"
+  ],
+  "conds": [
+   "p^2 < 1"
+  ],
+  "cite": "BI (313)(1)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(1 + p sin x) dx/sin x = pi^2/8 - 1/2 (arccos p^2)",
+  "note": "Printed (arccos p^2); 4.397.2 has (arccos p)^2, candidate second"
+ },
+ {
+  "id": "GR4.397.2",
+  "gr": "4.397.2",
+  "page": 638,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + p*Cos[x]]/Cos[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi^2/8 - (1/2)*ArcCos[p]^2"
+  ],
+  "conds": [
+   "p^2 < 1"
+  ],
+  "cite": "BI (313)(8)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(1 + p cos x) dx/cos x = pi^2/8 - 1/2 (arccos p)^2",
+  "note": ""
+ },
+ {
+  "id": "GR4.397.3",
+  "gr": "4.397.3",
+  "page": 638,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + p*Cos[x]]/Cos[x], {x, 0, Pi}]",
+  "rhs": [
+   "Pi*ArcSin[p]"
+  ],
+  "conds": [
+   "p^2 < 1"
+  ],
+  "cite": "BI (331)(1)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln(1 + p cos x) dx/cos x = pi arcsin p",
+  "note": ""
+ },
+ {
+  "id": "GR4.397.4",
+  "gr": "4.397.4",
+  "page": 638,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[x]*Log[1 + Cos[alpha]*Cos[x]]/(1 - Cos[alpha]^2*Cos[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "(LobachevskyL[Pi/2 - alpha] - alpha*Log[Sin[alpha]])/(Sin[alpha]*Cos[alpha])"
+  ],
+  "conds": [
+   "0 < alpha < Pi/2"
+  ],
+  "cite": "LO III 291",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) cos x ln(1 + cos alpha cos x)/(1 - cos^2 alpha cos^2 x) dx = [L(pi/2 - alpha) - alpha ln sin alpha]/(sin alpha cos alpha)",
+  "note": "",
+  "reason": "Lobachevsky L"
+ },
+ {
+  "id": "GR4.397.5",
+  "gr": "4.397.5",
+  "page": 638,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[x]*Log[1 - Cos[alpha]*Cos[x]]/(1 - Cos[alpha]^2*Cos[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "(LobachevskyL[Pi/2 - alpha] + (Pi - alpha)*Log[Sin[alpha]])/(Sin[alpha]*Cos[alpha])"
+  ],
+  "conds": [
+   "0 < alpha < Pi/2"
+  ],
+  "cite": "LO III 291",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) cos x ln(1 - cos alpha cos x)/(1 - cos^2 alpha cos^2 x) dx = [L(pi/2 - alpha) + (pi - alpha) ln sin alpha]/(sin alpha cos alpha)",
+  "note": "",
+  "reason": "Lobachevsky L"
+ },
+ {
+  "id": "GR4.397.6a",
+  "gr": "4.397.6",
+  "page": 638,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - 2*a*Cos[x] + a^2]*Cos[n*x], {x, 0, Pi}]",
+  "rhs": [
+   "-(Pi/n)*a^n"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (330)(11), BI (332)(5)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln(1-2a cos x+a^2) cos nx dx = -pi/n a^n [a^2<1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.397.6b",
+  "gr": "4.397.6",
+  "page": 638,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - 2*a*Cos[x] + a^2]*Cos[n*x], {x, 0, Pi}]",
+  "rhs": [
+   "-Pi/(n*a^n)"
+  ],
+  "conds": [
+   "a^2 > 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (338)(13a)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "= -pi/(n a^n) [a^2>1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.397.6c",
+  "gr": "4.397.6",
+  "page": 638,
+  "status": "ok",
+  "lhs": "(1/2)*Integrate[Log[1 - 2*a*Cos[x] + a^2]*Cos[n*x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "-(Pi/n)*a^n"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (330)(11), BI (332)(5)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "1/2 int_0^(2pi) ln(1-2a cos x+a^2) cos nx dx = -pi/n a^n [a^2<1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.397.6d",
+  "gr": "4.397.6",
+  "page": 638,
+  "status": "ok",
+  "lhs": "(1/2)*Integrate[Log[1 - 2*a*Cos[x] + a^2]*Cos[n*x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "-Pi/(n*a^n)"
+  ],
+  "conds": [
+   "a^2 > 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (338)(13a)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "1/2 int_0^(2pi) ... = -pi/(n a^n) [a^2>1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.397.7a",
+  "gr": "4.397.7",
+  "page": 638,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - 2*a*Cos[x] + a^2]*Sin[n*x]*Sin[x], {x, 0, Pi}]",
+  "rhs": [
+   "(Pi/2)*(a^(n + 1)/(n + 1) - a^(n - 1)/(n - 1))"
+  ],
+  "conds": [
+   "a^2 > 1",
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "BI (330)(10), BI (332)(4)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln(1-2a cos x+a^2) sin nx sin x dx = pi/2 (a^(n+1)/(n+1) - a^(n-1)/(n-1)) [a^2>1]",
+  "note": "As printed [a^2 > 1]; the value is the a^2 < 1 result (cf. 4.397.6a), see 4.397.7c"
+ },
+ {
+  "id": "GR4.397.7b",
+  "gr": "4.397.7",
+  "page": 638,
+  "status": "ok",
+  "lhs": "(1/2)*Integrate[Log[1 - 2*a*Cos[x] + a^2]*Sin[n*x]*Sin[x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "(Pi/2)*(a^(n + 1)/(n + 1) - a^(n - 1)/(n - 1))"
+  ],
+  "conds": [
+   "a^2 > 1",
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "BI (330)(10), BI (332)(4)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "1/2 int_0^(2pi) ln(1-2a cos x+a^2) sin nx sin x dx = same [a^2>1]",
+  "note": "As printed [a^2 > 1]; see 4.397.7d"
+ },
+ {
+  "id": "GR4.397.7c",
+  "gr": "4.397.7",
+  "page": 638,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - 2*a*Cos[x] + a^2]*Sin[n*x]*Sin[x], {x, 0, Pi}]",
+  "rhs": [
+   "(Pi/2)*(a^(n + 1)/(n + 1) - a^(n - 1)/(n - 1))"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "BI (330)(10), BI (332)(4)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "same as 7a with condition a^2 < 1",
+  "note": "corrected condition: printed a^2 > 1, but from 4.397.6a the value holds for a^2 < 1"
+ },
+ {
+  "id": "GR4.397.7d",
+  "gr": "4.397.7",
+  "page": 638,
+  "status": "ok",
+  "lhs": "(1/2)*Integrate[Log[1 - 2*a*Cos[x] + a^2]*Sin[n*x]*Sin[x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "(Pi/2)*(a^(n + 1)/(n + 1) - a^(n - 1)/(n - 1))"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "BI (330)(10), BI (332)(4)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "same as 7b with condition a^2 < 1",
+  "note": "corrected condition (see 4.397.7c)"
+ },
+ {
+  "id": "GR4.397.8a",
+  "gr": "4.397.8",
+  "page": 638,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - 2*a*Cos[x] + a^2]*Sin[n*x]*Sin[x], {x, 0, Pi}]",
+  "rhs": [
+   "-(Pi/2)*(a^(n + 1)/(n + 1) + a^(n - 1)/(n - 1))"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "BI (330)(12), BI (332)(6)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln(1-2a cos x+a^2) sin nx sin x dx = -pi/2 (a^(n+1)/(n+1) + a^(n-1)/(n-1))",
+  "note": "As printed: lhs repeats 4.397.7 (sin nx sin x) while the 2pi form has cos nx cos x; see 4.397.8c. No condition printed; a^2 < 1 added (value form)"
+ },
+ {
+  "id": "GR4.397.8b",
+  "gr": "4.397.8",
+  "page": 638,
+  "status": "ok",
+  "lhs": "(1/2)*Integrate[Log[1 - 2*a*Cos[x] + a^2]*Cos[n*x]*Cos[x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "-(Pi/2)*(a^(n + 1)/(n + 1) + a^(n - 1)/(n - 1))"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "BI (330)(12), BI (332)(6)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "1/2 int_0^(2pi) ln(1-2a cos x+a^2) cos nx cos x dx = -pi/2 (a^(n+1)/(n+1) + a^(n-1)/(n-1))",
+  "note": "a^2 < 1 added (not printed)"
+ },
+ {
+  "id": "GR4.397.8c",
+  "gr": "4.397.8",
+  "page": 638,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - 2*a*Cos[x] + a^2]*Cos[n*x]*Cos[x], {x, 0, Pi}]",
+  "rhs": [
+   "-(Pi/2)*(a^(n + 1)/(n + 1) + a^(n - 1)/(n - 1))"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "BI (330)(12), BI (332)(6)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln(1-2a cos x+a^2) cos nx cos x dx = -pi/2 (...)",
+  "note": "corrected integrand: cos nx cos x (as in the printed 2pi form) in place of sin nx sin x"
+ },
+ {
+  "id": "GR4.397.9",
+  "gr": "4.397.9",
+  "page": 639,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - 2*a*Cos[2*x] + a^2]*Cos[(2*n - 1)*x], {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (330)(15)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln(1-2a cos 2x+a^2) cos(2n-1)x dx = 0",
+  "note": ""
+ },
+ {
+  "id": "GR4.397.10",
+  "gr": "4.397.10",
+  "page": 639,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - 2*a*Cos[2*x] + a^2]*Sin[2*n*x]*Sin[x], {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (330)(13)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln(1-2a cos 2x+a^2) sin 2nx sin x dx = 0",
+  "note": ""
+ },
+ {
+  "id": "GR4.397.11",
+  "gr": "4.397.11",
+  "page": 639,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - 2*a*Cos[2*x] + a^2]*Sin[(2*n - 1)*x]*Sin[x], {x, 0, Pi}]",
+  "rhs": [
+   "(Pi/2)*(a^n/n - a^(n - 1)/(n - 1))"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "BI (330)(14)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln(1-2a cos 2x+a^2) sin(2n-1)x sin x dx = pi/2 (a^n/n - a^(n-1)/(n-1))",
+  "note": ""
+ },
+ {
+  "id": "GR4.397.12",
+  "gr": "4.397.12",
+  "page": 639,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - 2*a*Cos[2*x] + a^2]*Cos[2*n*x]*Cos[x], {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (330)(16)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln(1-2a cos 2x+a^2) cos 2nx cos x dx = 0",
+  "note": ""
+ },
+ {
+  "id": "GR4.397.13",
+  "gr": "4.397.13",
+  "page": 639,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - 2*a*Cos[2*x] + a^2]*Cos[(2*n - 1)*x]*Cos[x], {x, 0, Pi}]",
+  "rhs": [
+   "-(Pi/2)*(a^n/n + a^(n - 1)/(n - 1))"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "BI (330)(17)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln(1-2a cos 2x+a^2) cos(2n-1)x cos x dx = -pi/2 (a^n/n + a^(n-1)/(n-1))",
+  "note": ""
+ },
+ {
+  "id": "GR4.397.14a",
+  "gr": "4.397.14",
+  "page": 639,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + 2*a*Cos[2*x] + a^2]*Sin[x]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "-a*Pi/4"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "BI (309)(22), LI (309)(22)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(1+2a cos 2x+a^2) sin^2 x dx = -a pi/4 [a^2<1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.397.14b",
+  "gr": "4.397.14",
+  "page": 639,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + 2*a*Cos[2*x] + a^2]*Sin[x]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Log[a^2]/4 - Pi/(4*a)"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "BI (309)(22), LI (309)(22)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "= pi ln a^2/4 - pi/(4a) [a^2>1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.397.15a",
+  "gr": "4.397.15",
+  "page": 639,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + 2*a*Cos[2*x] + a^2]*Cos[x]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "a*Pi/4"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "BI (309)(23), LI (309)(23)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(1+2a cos 2x+a^2) cos^2 x dx = a pi/4 [a^2<1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.397.15b",
+  "gr": "4.397.15",
+  "page": 639,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + 2*a*Cos[2*x] + a^2]*Cos[x]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Log[a^2]/4 + Pi/(4*a)"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "BI (309)(23), LI (309)(23)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "= pi ln a^2/4 + pi/(4a) [a^2>1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.397.16",
+  "gr": "4.397.16",
+  "page": 639,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - 2*a*Cos[x] + a^2]/(1 - 2*b*Cos[x] + b^2), {x, 0, Pi}]",
+  "rhs": [
+   "2*Pi*Log[1 - a*b]/(1 - b^2)"
+  ],
+  "conds": [
+   "a^2 <= 1",
+   "b^2 < 1"
+  ],
+  "cite": "BI (331)(26)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln(1-2a cos x+a^2)/(1-2b cos x+b^2) dx = 2pi ln(1-ab)/(1-b^2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.398.1",
+  "gr": "4.398.1",
+  "page": 639,
+  "status": "ok",
+  "lhs": "Integrate[Log[(1 + 2*a*Cos[x] + a^2)/(1 - 2*a*Cos[x] + a^2)]*Sin[(2*n + 1)*x], {x, 0, Pi}]",
+  "rhs": [
+   "(-1)^n*2*Pi*a^(2*n + 1)/(2*n + 1)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (330)(18)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln((1+2a cos x+a^2)/(1-2a cos x+a^2)) sin(2n+1)x dx = (-1)^n 2pi a^(2n+1)/(2n+1)",
+  "note": ""
+ },
+ {
+  "id": "GR4.398.2a",
+  "gr": "4.398.2",
+  "page": 639,
+  "status": "ok",
+  "lhs": "Integrate[Log[(1 - 2*a*Cos[x] + a^2)/(1 - 2*a*Cos[n*x] + a^2)]*Cos[m*x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi*((n/m)*a^(m/n) - a^m/m)"
+  ],
+  "conds": [
+   "a^2 <= 1",
+   "Element[n, Integers] && n >= 1",
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "BI (332)(9)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(2pi) ln((1-2a cos x+a^2)/(1-2a cos nx+a^2)) cos mx dx = 2pi (n/m a^(m/n) - a^m/m) [a^2<=1]",
+  "note": "n, m positive integers assumed (not printed); the a^(m/n) term presumably needs n | m"
+ },
+ {
+  "id": "GR4.398.2b",
+  "gr": "4.398.2",
+  "page": 639,
+  "status": "ok",
+  "lhs": "Integrate[Log[(1 - 2*a*Cos[x] + a^2)/(1 - 2*a*Cos[n*x] + a^2)]*Cos[m*x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi*((n/m)*a^(-m/n) - a^(-m)/m)"
+  ],
+  "conds": [
+   "a^2 >= 1",
+   "Element[n, Integers] && n >= 1",
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "BI (332)(9)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "= 2pi (n/m a^(-m/n) - a^(-m)/m) [a^2>=1]",
+  "note": "n, m positive integers assumed (not printed)"
+ },
+ {
+  "id": "GR4.398.3",
+  "gr": "4.398.3",
+  "page": 639,
+  "status": "ok",
+  "lhs": "Integrate[Log[(1 + 2*a*Cos[2*x] + a^2)/(1 + 2*a*Cos[2*n*x] + a^2)]*Cot[x], {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (331)(5), LI(331)(5)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln((1+2a cos 2x+a^2)/(1+2a cos 2nx+a^2)) cot x dx = 0",
+  "note": "No conditions printed; n positive integer assumed"
+ },
+ {
+  "id": "GR4.399.1",
+  "gr": "4.399.1",
+  "page": 639,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + a*Sin[x]^2]*Sin[x]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "(Pi/2)*(Log[(1 + Sqrt[1 + a])/2] - (1/2)*(1 - Sqrt[1 + a])/(1 + Sqrt[1 + a]))"
+  ],
+  "conds": [
+   "a > -1"
+  ],
+  "cite": "BI (309)(14)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(1 + a sin^2 x) sin^2 x dx = pi/2 (ln((1+sqrt(1+a))/2) - 1/2 (1-sqrt(1+a))/(1+sqrt(1+a)))",
+  "note": ""
+ },
+ {
+  "id": "GR4.399.2",
+  "gr": "4.399.2",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + a*Sin[x]^2]*Cos[x]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "(Pi/2)*(Log[(1 + Sqrt[1 + a])/2] + (1/2)*(1 - Sqrt[1 + a])/(1 + Sqrt[1 + a]))"
+  ],
+  "conds": [
+   "a > -1"
+  ],
+  "cite": "BI (309)(15)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(1 + a sin^2 x) cos^2 x dx = pi/2 (ln((1+sqrt(1+a))/2) + 1/2 (1-sqrt(1+a))/(1+sqrt(1+a)))",
+  "note": ""
+ },
+ {
+  "id": "GR4.399.3",
+  "gr": "4.399.3",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - Cos[beta]^2*Cos[x]^2]/(1 - Cos[alpha]^2*Cos[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "-(Pi/Sin[alpha])*Log[(1 + Sin[alpha])/(Sin[alpha] + Sin[beta])]"
+  ],
+  "conds": [
+   "0 < beta < Pi/2",
+   "0 < alpha < Pi/2"
+  ],
+  "cite": "LO III 285",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(1 - cos^2 beta cos^2 x)/(1 - cos^2 alpha cos^2 x) dx = -pi/sin alpha ln((1+sin alpha)/(sin alpha + sin beta))",
+  "note": ""
+ },
+ {
+  "id": "GR4.411.1",
+  "gr": "4.411.1",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Log[(1 + Sin[x])/(1 + Cos[lam]*Sin[x])]/Sin[x], {x, 0, Pi}]",
+  "rhs": [
+   "lam^2"
+  ],
+  "conds": [
+   "lam^2 < Pi^2"
+  ],
+  "cite": "BI (331)(2)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln((1+sin x)/(1+cos lambda sin x)) dx/sin x = lambda^2",
+  "note": ""
+ },
+ {
+  "id": "GR4.411.2a",
+  "gr": "4.411.2",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Log[(p + q*Sin[a*x])/(p - q*Sin[a*x])]/Sin[a*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*ArcSin[q/p]"
+  ],
+  "conds": [
+   "p > q > 0"
+  ],
+  "cite": "FI II 695a, BI (315)(5, 13,17)a",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln((p + q sin ax)/(p - q sin ax)) dx/sin ax = pi arcsin(q/p)",
+  "note": "Value is independent of a as printed; it is the a = 1 result (a not constrained in the book)"
+ },
+ {
+  "id": "GR4.411.2b",
+  "gr": "4.411.2",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Log[(p + q*Cos[a*x])/(p - q*Cos[a*x])]/Cos[a*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*ArcSin[q/p]"
+  ],
+  "conds": [
+   "p > q > 0"
+  ],
+  "cite": "FI II 695a, BI (315)(5, 13,17)a",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln((p + q cos ax)/(p - q cos ax)) dx/cos ax = pi arcsin(q/p)",
+  "note": "Value is independent of a as printed; it is the a = 1 result (a not constrained in the book)"
+ },
+ {
+  "id": "GR4.411.2c",
+  "gr": "4.411.2",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Log[(p + q*Tan[a*x])/(p - q*Tan[a*x])]/Tan[a*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*ArcSin[q/p]"
+  ],
+  "conds": [
+   "p > q > 0"
+  ],
+  "cite": "FI II 695a, BI (315)(5, 13,17)a",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln((p + q tan ax)/(p - q tan ax)) dx/tan ax = pi arcsin(q/p)",
+  "note": "Value is independent of a as printed; it is the a = 1 result (a not constrained in the book)"
+ },
+ {
+  "id": "GR4.411.3",
+  "gr": "4.411.3",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/(1 - Cos[alpha]^2*Cos[x]^2)*Log[(1 + Cos[beta]*Cos[x])/(1 - Cos[beta]*Cos[x])], {x, 0, Pi/2}]",
+  "rhs": [
+   "2*Pi/Sin[2*alpha]*Log[Cos[(alpha - beta)/2]/Sin[(alpha + beta)/2]]"
+  ],
+  "conds": [
+   "0 <= alpha <= beta < Pi/2"
+  ],
+  "cite": "LO III 284",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) cos x/(1 - cos^2 alpha cos^2 x) ln((1+cos beta cos x)/(1-cos beta cos x)) dx = 2pi/sin 2alpha ln(cos((alpha-beta)/2)/sin((alpha+beta)/2))",
+  "note": ""
+ },
+ {
+  "id": "GR4.412.1a",
+  "gr": "4.412.1",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[Pi/4 + x]]/Sin[2*x], {x, 0, Pi/4}]",
+  "rhs": [
+   "Pi^2/8"
+  ],
+  "conds": [],
+  "cite": "BI (293)(1)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln tan(pi/4 + x) dx/sin 2x = pi^2/8",
+  "note": ""
+ },
+ {
+  "id": "GR4.412.2a",
+  "gr": "4.412.2",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[Pi/4 + x]]/Tan[2*x], {x, 0, Pi/4}]",
+  "rhs": [
+   "Pi^2/16"
+  ],
+  "conds": [],
+  "cite": "BI (293)(2)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln tan(pi/4 + x) dx/tan 2x = pi^2/16",
+  "note": ""
+ },
+ {
+  "id": "GR4.412.3a",
+  "gr": "4.412.3",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[Pi/4 + x]]*Log[Tan[x]]^(2*n)/Sin[2*x], {x, 0, Pi/4}]",
+  "rhs": [
+   "(2^(2*n + 2) - 1)/(4*(n + 1)*(2*n + 1))*Pi^(2*n + 2)*Abs[BernoulliB[2*n + 2]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (294)(24)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln tan(pi/4 + x) (ln tan x)^(2n) dx/sin 2x = (2^(2n+2)-1)/(4(n+1)(2n+1)) pi^(2n+2) |B_(2n+2)|",
+  "note": ""
+ },
+ {
+  "id": "GR4.412.4a",
+  "gr": "4.412.4",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[Pi/4 + x]]*Log[Tan[x]]^(2*n - 1)/Sin[2*x], {x, 0, Pi/4}]",
+  "rhs": [
+   "(1 - 2^(2*n + 1))/(2^(2*n + 2)*n)*(2*n)!*Zeta[2*n + 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (294)(25)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln tan(pi/4 + x) (ln tan x)^(2n-1) dx/sin 2x = (1-2^(2n+1))/(2^(2n+2) n) (2n)! zeta(2n+1)",
+  "note": ""
+ },
+ {
+  "id": "GR4.412.1b",
+  "gr": "4.412.1",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[Pi/4 - x]]/Sin[2*x], {x, 0, Pi/4}]",
+  "rhs": [
+   "-Pi^2/8"
+  ],
+  "conds": [],
+  "cite": "BI (293)(1)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln tan(pi/4 - x) dx/sin 2x = -pi^2/8",
+  "note": ""
+ },
+ {
+  "id": "GR4.412.2b",
+  "gr": "4.412.2",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[Pi/4 - x]]/Tan[2*x], {x, 0, Pi/4}]",
+  "rhs": [
+   "-Pi^2/16"
+  ],
+  "conds": [],
+  "cite": "BI (293)(2)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln tan(pi/4 - x) dx/tan 2x = -pi^2/16",
+  "note": ""
+ },
+ {
+  "id": "GR4.412.3b",
+  "gr": "4.412.3",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[Pi/4 - x]]*Log[Tan[x]]^(2*n)/Sin[2*x], {x, 0, Pi/4}]",
+  "rhs": [
+   "-(2^(2*n + 2) - 1)/(4*(n + 1)*(2*n + 1))*Pi^(2*n + 2)*Abs[BernoulliB[2*n + 2]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (294)(24)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln tan(pi/4 - x) (ln tan x)^(2n) dx/sin 2x = -(2^(2n+2)-1)/(4(n+1)(2n+1)) pi^(2n+2) |B_(2n+2)|",
+  "note": ""
+ },
+ {
+  "id": "GR4.412.4b",
+  "gr": "4.412.4",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[Pi/4 - x]]*Log[Tan[x]]^(2*n - 1)/Sin[2*x], {x, 0, Pi/4}]",
+  "rhs": [
+   "-(1 - 2^(2*n + 1))/(2^(2*n + 2)*n)*(2*n)!*Zeta[2*n + 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (294)(25)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln tan(pi/4 - x) (ln tan x)^(2n-1) dx/sin 2x = -(1-2^(2n+1))/(2^(2n+2) n) (2n)! zeta(2n+1)",
+  "note": ""
+ },
+ {
+  "id": "GR4.412.5a",
+  "gr": "4.412.5",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[Pi/4 + x]]*Log[Sin[2*x]]^(n - 1)/Tan[2*x], {x, 0, Pi/4}]",
+  "rhs": [
+   "(-1)^(n - 1)/2*(n - 1)!*Zeta[n + 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (294)(20)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln tan(pi/4 + x) (ln sin 2x)^(n-1) dx/tan 2x = (-1)^(n-1)/2 (n-1)! zeta(n+1)",
+  "note": ""
+ },
+ {
+  "id": "GR4.412.5b",
+  "gr": "4.412.5",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[Pi/4 - x]]*Log[Sin[2*x]]^(n - 1)/Tan[2*x], {x, 0, Pi/4}]",
+  "rhs": [
+   "(-1)^(n - 1)/2*(n - 1)!*Zeta[n + 1]",
+   "-(-1)^(n - 1)/2*(n - 1)!*Zeta[n + 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (294)(20)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln tan(pi/4 - x) (ln sin 2x)^(n-1) dx/tan 2x = (-1)^(n-1)/2 (n-1)! zeta(n+1)",
+  "note": "The lhs carries +/- but the printed value has no +/-; ln tan(pi/4 - x) = -ln tan(pi/4 + x), so negated candidate second"
+ },
+ {
+  "id": "GR4.413.1",
+  "gr": "4.413.1",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Log[p^2 + q^2*Tan[x]^2]/(a^2*Sin[x]^2 + b^2*Cos[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(a*b)*Log[(a*p + b*q)/a]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (318)(1-4)a",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(p^2 + q^2 tan^2 x) dx/(a^2 sin^2 x + b^2 cos^2 x) = pi/(ab) ln((ap+bq)/a)",
+  "note": ""
+ },
+ {
+  "id": "GR4.413.2",
+  "gr": "4.413.2",
+  "page": 640,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + q^2*Tan[x]^2]/((p^2*Sin[x]^2 + r^2*Cos[x]^2)*(s^2*Sin[x]^2 + t^2*Cos[x]^2)), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(p^2*t^2 - s^2*r^2)*((p^2 - r^2)/(p*r)*Log[1 + q*r/p] + (t^2 - s^2)/(s*t)*Log[1 + q*t/s])"
+  ],
+  "conds": [
+   "q > 0",
+   "p > 0",
+   "r > 0",
+   "s > 0",
+   "t > 0"
+  ],
+  "cite": "BI (320)(18)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(1+q^2 tan^2 x) dx/((p^2 sin^2+r^2 cos^2)(s^2 sin^2+t^2 cos^2)) = pi/(p^2t^2-s^2r^2){(p^2-r^2)/(pr) ln(1+qr/p) + (t^2-s^2)/(st) ln(1+qt/s)}",
+  "note": ""
+ },
+ {
+  "id": "GR4.413.3",
+  "gr": "4.413.3",
+  "page": 641,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + q^2*Tan[x]^2]*Sin[x]^2/((p^2*Sin[x]^2 + r^2*Cos[x]^2)*(s^2*Sin[x]^2 + t^2*Cos[x]^2)), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(p^2*t^2 - s^2*r^2)*((t/s)*Log[1 + q*r/p] - (r/p)*Log[1 + q*t/s])"
+  ],
+  "conds": [
+   "q > 0",
+   "p > 0",
+   "r > 0",
+   "s > 0",
+   "t > 0"
+  ],
+  "cite": "BI (320)(20)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(1+q^2 tan^2 x) sin^2 x dx/(...) = pi/(p^2t^2-s^2r^2){t/s ln(1+qr/p) - r/p ln(1+qt/s)}",
+  "note": ""
+ },
+ {
+  "id": "GR4.413.4",
+  "gr": "4.413.4",
+  "page": 641,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + q^2*Tan[x]^2]*Cos[x]^2/((p^2*Sin[x]^2 + r^2*Cos[x]^2)*(s^2*Sin[x]^2 + t^2*Cos[x]^2)), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(p^2*t^2 - s^2*r^2)*((p/r)*Log[1 + q*r/p] - (s/t)*Log[1 + q*t/s])"
+  ],
+  "conds": [
+   "q > 0",
+   "p > 0",
+   "r > 0",
+   "s > 0",
+   "t > 0"
+  ],
+  "cite": "BI (320)(21)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(1+q^2 tan^2 x) cos^2 x dx/(...) = pi/(p^2t^2-s^2r^2){p/r ln(1+qr/p) - s/t ln(1+qt/s)}",
+  "note": ""
+ },
+ {
+  "id": "GR4.413.5",
+  "gr": "4.413.5",
+  "page": 641,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[r*x]]/(1 - 2*p*Cos[x] + p^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(1 - p^2)*Log[(1 - p^(2*r))/(1 + p^(2*r))]"
+  ],
+  "conds": [
+   "p^2 < 1"
+  ],
+  "cite": "BI (331)(12)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln tan rx dx/(1-2p cos x+p^2) = pi/(1-p^2) ln((1-p^(2r))/(1+p^(2r)))",
+  "note": "tan rx negative on parts of (0, pi): Log complex there; source likely intends ln|tan rx| and/or restricted r (cf. 4.394.3)"
+ },
+ {
+  "id": "GR4.414.1",
+  "gr": "4.414.1",
+  "page": 641,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]/Sqrt[1 - k^2*Sin[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "Log[Sqrt[1 - k^2]]*MatharK[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (323)(1)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(1-k^2 sin^2 x) dx/sqrt(1-k^2 sin^2 x) = ln k' K(k)",
+  "note": ""
+ },
+ {
+  "id": "GR4.414.2",
+  "gr": "4.414.2",
+  "page": 641,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Sin[x]^2/Sqrt[1 - k^2*Sin[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "1/k^2*((k^2 - 2 + Log[Sqrt[1 - k^2]])*MatharK[k] + (2 - Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (323)(3)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(1-k^2 sin^2 x) sin^2 x dx/sqrt(1-k^2 sin^2 x) = 1/k^2 {(k^2 - 2 + ln k')K + (2 - ln k')E}",
+  "note": ""
+ },
+ {
+  "id": "GR4.414.3",
+  "gr": "4.414.3",
+  "page": 641,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Cos[x]^2/Sqrt[1 - k^2*Sin[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "1/k^2*((1 + (1 - k^2) - (1 - k^2)*Log[Sqrt[1 - k^2]])*MatharK[k] - (2 - Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (323)(6)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(1-k^2 sin^2 x) cos^2 x/dx sqrt(1-k^2 sin^2 x) = 1/k^2 [(1 + k'^2 - k'^2 ln k')K - (2 - ln k')E]",
+  "note": "Printed with 'dx' as a denominator next to sqrt(...): read as cos^2 x dx/sqrt(1-k^2 sin^2 x) (small-k expansion agrees)"
+ },
+ {
+  "id": "GR4.414.4",
+  "gr": "4.414.4",
+  "page": 641,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]/(1 - k^2*Sin[x]^2)^(3/2), {x, 0, Pi/2}]",
+  "rhs": [
+   "1/(1 - k^2)*((k^2 - 2)*MatharK[k] + (2 + Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (323)(9)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(1-k^2 sin^2 x) dx/sqrt((1-k^2 sin^2 x)^3) = 1/k'^2 [(k^2-2)K + (2 + ln k')E]",
+  "note": ""
+ },
+ {
+  "id": "GR4.414.5",
+  "gr": "4.414.5",
+  "page": 641,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Sin[x]^2/(1 - k^2*Sin[x]^2)^(3/2), {x, 0, Pi/2}]",
+  "rhs": [
+   "1/(k^2*(1 - k^2))*((2 + Log[Sqrt[1 - k^2]])*MatharE[k] - (1 + (1 - k^2) + (1 - k^2)*Log[Sqrt[1 - k^2]])*MatharK[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (323)(10)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(1-k^2 sin^2 x) sin^2 x/dx sqrt((1-k^2 sin^2 x)^3) = 1/(k^2 k'^2) [(2 + ln k')E - (1 + k'^2 + k'^2 ln k')K]",
+  "note": "Printed with 'dx' as a denominator next to sqrt((...)^3): read as sin^2 x dx/sqrt((1-k^2 sin^2 x)^3)"
+ },
+ {
+  "id": "GR4.414.6",
+  "gr": "4.414.6",
+  "page": 641,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Cos[x]^2/(1 - k^2*Sin[x]^2)^(3/2), {x, 0, Pi/2}]",
+  "rhs": [
+   "1/k^2*((1 + (1 - k^2) + Log[Sqrt[1 - k^2]])*MatharK[k] - (2 + Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (323)(16)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(1-k^2 sin^2 x) cos^2 x dx/sqrt((1-k^2 sin^2 x)^3) = 1/k^2 [(1 + k'^2 + ln k')K - (2 + ln k')E]",
+  "note": ""
+ },
+ {
+  "id": "GR4.414.7",
+  "gr": "4.414.7",
+  "page": 641,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Sqrt[1 - k^2*Sin[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "(1 + (1 - k^2))*MatharK[k] - (2 - Log[Sqrt[1 - k^2]])*MatharE[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (324)(18)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(1-k^2 sin^2 x) sqrt(1-k^2 sin^2 x) dx = (1 + k'^2)K - (2 - ln k')E",
+  "note": ""
+ }
+]

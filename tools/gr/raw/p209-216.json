@@ -1,0 +1,1156 @@
+[
+ {
+  "id": "GR2.526.45",
+  "gr": "2.526.45",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/Sin[x]^4, x]",
+  "rhs": [
+   "-1/(3*Sin[x]^3)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "cos x/sin^4 x = -1/(3 sin^3 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.46",
+  "gr": "2.526.46",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^2/Sin[x]^4, x]",
+  "rhs": [
+   "-Cot[x]^3/3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "cos^2/sin^4 = -1/3 cot^3 x",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.47",
+  "gr": "2.526.47",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^3/Sin[x]^4, x]",
+  "rhs": [
+   "1/Sin[x] - 1/(3*Sin[x]^3)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "cos^3/sin^4 = 1/sin x - 1/(3 sin^3 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.48",
+  "gr": "2.526.48",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^4/Sin[x]^4, x]",
+  "rhs": [
+   "-Cot[x]^3/3 + Cot[x] + x"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "cos^4/sin^4 = -1/3 cot^3 x + cot x + x",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.49",
+  "gr": "2.526.49",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]*Cos[x]), x]",
+  "rhs": [
+   "Log[Tan[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "dx/(sin x cos x) = ln tan x",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.50",
+  "gr": "2.526.50",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]*Cos[x]^2), x]",
+  "rhs": [
+   "1/Cos[x] + Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "dx/(sin cos^2) = 1/cos x + ln tan(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.51",
+  "gr": "2.526.51",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]*Cos[x]^3), x]",
+  "rhs": [
+   "1/(2*Cos[x]^2) + Log[Tan[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "dx/(sin cos^3) = 1/(2cos^2 x) + ln tan x",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.52",
+  "gr": "2.526.52",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]*Cos[x]^4), x]",
+  "rhs": [
+   "1/Cos[x] + 1/(3*Cos[x]^3) + Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "dx/(sin cos^4) = 1/cos x + 1/(3cos^3 x) + ln tan(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.53",
+  "gr": "2.526.53",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^2*Cos[x]), x]",
+  "rhs": [
+   "Log[Tan[Pi/4 + x/2]] - Csc[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "dx/(sin^2 cos) = ln tan(pi/4+x/2) - cosec x",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.54",
+  "gr": "2.526.54",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^2*Cos[x]^2), x]",
+  "rhs": [
+   "-2*Cot[2*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "dx/(sin^2 cos^2) = -2 cot 2x",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.55",
+  "gr": "2.526.55",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^2*Cos[x]^3), x]",
+  "rhs": [
+   "(1/(2*Cos[x]^2) - 3/2)/Sin[x] + (3/2)*Log[Tan[Pi/4 + x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "dx/(sin^2 cos^3) = (1/(2cos^2 x) - 3/2)/sin x + 3/2 ln tan(pi/4+x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.56",
+  "gr": "2.526.56",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^2*Cos[x]^4), x]",
+  "rhs": [
+   "1/(3*Sin[x]*Cos[x]^3) - (8/3)*Cot[2*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "dx/(sin^2 cos^4) = 1/(3 sin x cos^3 x) - 8/3 cot 2x",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.57",
+  "gr": "2.526.57",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^3*Cos[x]), x]",
+  "rhs": [
+   "-1/(2*Sin[x]^2) + Log[Tan[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "dx/(sin^3 cos) = -1/(2sin^2 x) + ln tan x",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.58",
+  "gr": "2.526.58",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^3*Cos[x]^2), x]",
+  "rhs": [
+   "-(1/Cos[x])*(1/(2*Sin[x]^2) - 3/2) + (3/2)*Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "dx/(sin^3 cos^2) = -1/cos x (1/(2sin^2 x) - 3/2) + 3/2 ln tan(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.59",
+  "gr": "2.526.59",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^3*Cos[x]^3), x]",
+  "rhs": [
+   "-2*Cos[2*x]/Sin[2*x]^2 + 2*Log[Tan[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "dx/(sin^3 cos^3) = -2cos2x/sin^2 2x + 2 ln tan x",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.60",
+  "gr": "2.526.60",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^3*Cos[x]^4), x]",
+  "rhs": [
+   "2/Cos[x] + 1/(3*Cos[x]^3) - Cos[x]/(2*Sin[x]^2) + (5/2)*Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "dx/(sin^3 cos^4) = 2/cos x + 1/(3cos^3 x) - cos x/(2 sin^2 x) + 5/2 ln tan(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.61",
+  "gr": "2.526.61",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^4*Cos[x]), x]",
+  "rhs": [
+   "-1/Sin[x] - 1/(3*Sin[x]^3) + Log[Tan[x/2 + Pi/4]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "dx/(sin^4 cos) = -1/sin x - 1/(3sin^3 x) + ln tan(x/2+pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.62",
+  "gr": "2.526.62",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^4*Cos[x]^2), x]",
+  "rhs": [
+   "-1/(3*Cos[x]*Sin[x]^3) - (8/3)*Cot[2*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "dx/(sin^4 cos^2) = -1/(3 cos x sin^3 x) - 8/3 cot 2x",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.63",
+  "gr": "2.526.63",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^4*Cos[x]^3), x]",
+  "rhs": [
+   "-2/Sin[x] - 1/(3*Sin[x]^3) + Sin[x]/(2*Cos[x]^2) + (5/2)*Log[Tan[x/2 + Pi/4]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "dx/(sin^4 cos^3) = -2/sin x - 1/(3sin^3 x) + sin x/(2cos^2 x) + 5/2 ln tan(x/2+pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.64",
+  "gr": "2.526.64",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^4*Cos[x]^4), x]",
+  "rhs": [
+   "-8*Cot[2*x] - (8/3)*Cot[2*x]^3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "dx/(sin^4 cos^4) = -8 cot 2x - 8/3 cot^3 2x",
+  "note": ""
+ },
+ {
+  "id": "GR2.527.1",
+  "gr": "2.527.1",
+  "page": 210,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int tan^p x = tan^(p-1) x/(p-1) - int tan^(p-2) x",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "note": ""
+ },
+ {
+  "id": "GR2.527.2a",
+  "gr": "2.527.2",
+  "page": 210,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(2*n + 1), x]",
+  "rhs": [
+   "Sum[(-1)^(n + k)*Binomial[n, k]/(2*k*Cos[x]^(2*k)), {k, 1, n}] - (-1)^n*Log[Cos[x]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int tan^(2n+1) x = sum_{k=1}^n (-1)^(n+k) C(n,k) 1/(2k cos^(2k) x) - (-1)^n ln cos x",
+  "note": ""
+ },
+ {
+  "id": "GR2.527.2b",
+  "gr": "2.527.2",
+  "page": 210,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(2*n + 1), x]",
+  "rhs": [
+   "Sum[(-1)^(k - 1)*Tan[x]^(2*n - 2*k + 2)/(2*n - 2*k + 2), {k, 1, n}] - (-1)^n*Log[Cos[x]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int tan^(2n+1) x = sum_{k=1}^n (-1)^(k-1) tan^(2n-2k+2) x/(2n-2k+2) - (-1)^n ln cos x",
+  "note": ""
+ },
+ {
+  "id": "GR2.527.3",
+  "gr": "2.527.3",
+  "page": 210,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(2*n), x]",
+  "rhs": [
+   "Sum[(-1)^(k - 1)*Tan[x]^(2*n - 2*k + 1)/(2*n - 2*k + 1), {k, 1, n}] + (-1)^n*x"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (331)(12)",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int tan^(2n) x = sum_{k=1}^n (-1)^(k-1) tan^(2n-2k+1) x/(2n-2k+1) + (-1)^n x",
+  "note": ""
+ },
+ {
+  "id": "GR2.527.4",
+  "gr": "2.527.4",
+  "page": 210,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cot^p x = -cot^(p-1) x/(p-1) - int cot^(p-2) x",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "note": ""
+ },
+ {
+  "id": "GR2.527.5a",
+  "gr": "2.527.5",
+  "page": 210,
+  "status": "ok",
+  "lhs": "Integrate[Cot[x]^(2*n + 1), x]",
+  "rhs": [
+   "Sum[(-1)^(n + k + 1)*Binomial[n, k]/(2*k*Sin[x]^(2*k)), {k, 1, n}] + (-1)^n*Log[Sin[x]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cot^(2n+1) x = sum_{k=1}^n (-1)^(n+k+1) C(n,k) 1/(2k sin^(2k) x) + (-1)^n ln sin x",
+  "note": ""
+ },
+ {
+  "id": "GR2.527.5b",
+  "gr": "2.527.5",
+  "page": 210,
+  "status": "ok",
+  "lhs": "Integrate[Cot[x]^(2*n + 1), x]",
+  "rhs": [
+   "Sum[(-1)^k*Cot[x]^(2*n - 2*k + 2)/(2*n - 2*k + 2), {k, 1, n}] + (-1)^n*Log[Sin[x]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cot^(2n+1) x = sum_{k=1}^n (-1)^k cot^(2n-2k+2) x/(2n-2k+2) + (-1)^n ln sin x",
+  "note": ""
+ },
+ {
+  "id": "GR2.527.6",
+  "gr": "2.527.6",
+  "page": 210,
+  "status": "ok",
+  "lhs": "Integrate[Cot[x]^(2*n), x]",
+  "rhs": [
+   "Sum[(-1)^k*Cot[x]^(2*n - 2*k + 1)/(2*n - 2*k + 1), {k, 1, n}] + (-1)^n*x"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (331)(14)",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cot^(2n) x = sum_{k=1}^n (-1)^k cot^(2n-2k+1) x/(2n-2k+1) + (-1)^n x",
+  "note": ""
+ },
+ {
+  "id": "GR2.531.1",
+  "gr": "2.531.1",
+  "page": 210,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x + b], x]",
+  "rhs": [
+   "-Cos[a*x + b]/a"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "int sin(ax+b) = -1/a cos(ax+b)",
+  "note": ""
+ },
+ {
+  "id": "GR2.531.2",
+  "gr": "2.531.2",
+  "page": 210,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x + b], x]",
+  "rhs": [
+   "-Sin[a*x + b]/a",
+   "Sin[a*x + b]/a"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "int cos(ax+b) = -1/a sin(ax+b) [as printed]",
+  "note": "book prints a minus sign (misprint); second rhs is the corrected +1/a sin(ax+b)"
+ },
+ {
+  "id": "GR2.532.1",
+  "gr": "2.532.1",
+  "page": 210,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x + b]*Sin[c*x + d], x]",
+  "rhs": [
+   "Sin[(a - c)*x + b - d]/(2*(a - c)) - Sin[(a + c)*x + b + d]/(2*(a + c))"
+  ],
+  "conds": [
+   "a^2 != c^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "int sin(ax+b) sin(cx+d) = sin[(a-c)x+b-d]/(2(a-c)) - sin[(a+c)x+b+d]/(2(a+c))",
+  "note": ""
+ },
+ {
+  "id": "GR2.532.2",
+  "gr": "2.532.2",
+  "page": 210,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x + b]*Cos[c*x + d], x]",
+  "rhs": [
+   "-Cos[(a - c)*x + b - d]/(2*(a - c)) - Cos[(a + c)*x + b + d]/(2*(a + c))"
+  ],
+  "conds": [
+   "a^2 != c^2"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "int sin(ax+b) cos(cx+d) = -cos[(a-c)x+b-d]/(2(a-c)) - cos[(a+c)x+b+d]/(2(a+c))",
+  "note": ""
+ },
+ {
+  "id": "GR2.532.3",
+  "gr": "2.532.3",
+  "page": 211,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x + b]*Cos[c*x + d], x]",
+  "rhs": [
+   "Sin[(a - c)*x + b - d]/(2*(a - c)) + Sin[(a + c)*x + b + d]/(2*(a + c))"
+  ],
+  "conds": [
+   "a^2 != c^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "int cos(ax+b) cos(cx+d) = sin[(a-c)x+b-d]/(2(a-c)) + sin[(a+c)x+b+d]/(2(a+c))",
+  "note": ""
+ },
+ {
+  "id": "GR2.532.4",
+  "gr": "2.532.4",
+  "page": 211,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x + b]*Sin[a*x + d], x]",
+  "rhs": [
+   "(x/2)*Cos[b - d] - Sin[2*a*x + b + d]/(4*a)"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "c=a: int sin(ax+b) sin(ax+d) = x/2 cos(b-d) - sin(2ax+b+d)/(4a)",
+  "note": "case c = a of 2.532.1"
+ },
+ {
+  "id": "GR2.532.5",
+  "gr": "2.532.5",
+  "page": 211,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x + b]*Cos[a*x + d], x]",
+  "rhs": [
+   "(x/2)*Sin[b - d] - Cos[2*a*x + b + d]/(4*a)"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "c=a: int sin(ax+b) cos(ax+d) = x/2 sin(b-d) - cos(2ax+b+d)/(4a)",
+  "note": "case c = a of 2.532.2"
+ },
+ {
+  "id": "GR2.532.6",
+  "gr": "2.532.6",
+  "page": 211,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x + b]*Cos[a*x + d], x]",
+  "rhs": [
+   "(x/2)*Cos[b - d] + Sin[2*a*x + b + d]/(4*a)"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "GU (332)(3)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "c=a: int cos(ax+b) cos(ax+d) = x/2 cos(b-d) + sin(2ax+b+d)/(4a)",
+  "note": "case c = a of 2.532.3"
+ },
+ {
+  "id": "GR2.533.1",
+  "gr": "2.533.1",
+  "page": 211,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Cos[b*x], x]",
+  "rhs": [
+   "-Cos[(a + b)*x]/(2*(a + b)) - Cos[(a - b)*x]/(2*(a - b))"
+  ],
+  "conds": [
+   "a^2 != b^2"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "int sin ax cos bx = -cos(a+b)x/(2(a+b)) - cos(a-b)x/(2(a-b))",
+  "note": ""
+ },
+ {
+  "id": "GR2.533.2",
+  "gr": "2.533.2",
+  "page": 211,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sin[b*x]*Sin[c*x], x]",
+  "rhs": [
+   "-(1/4)*(Cos[(a - b + c)*x]/(a - b + c) + Cos[(b + c - a)*x]/(b + c - a) + Cos[(a + b - c)*x]/(a + b - c) - Cos[(a + b + c)*x]/(a + b + c))"
+  ],
+  "conds": [],
+  "cite": "PE (376)",
+  "edition_note": "8",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "int sin ax sin bx sin cx = -1/4 {cos(a-b+c)x/(a-b+c) + cos(b+c-a)x/(b+c-a) + cos(a+b-c)x/(a+b-c) - cos(a+b+c)x/(a+b+c)}",
+  "note": "implicitly a-b+c, b+c-a, a+b-c, a+b+c nonzero"
+ },
+ {
+  "id": "GR2.533.3",
+  "gr": "2.533.3",
+  "page": 211,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Cos[b*x]*Cos[c*x], x]",
+  "rhs": [
+   "-(1/4)*(Cos[(a + b + c)*x]/(a + b + c) - Cos[(b + c - a)*x]/(b + c - a) + Cos[(a + b - c)*x]/(a + b - c) + Cos[(a + c - b)*x]/(a + c - b))"
+  ],
+  "conds": [],
+  "cite": "PE (378)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "int sin ax cos bx cos cx = -1/4 {cos(a+b+c)x/(a+b+c) - cos(b+c-a)x/(b+c-a) + cos(a+b-c)x/(a+b-c) + cos(a+c-b)x/(a+c-b)}",
+  "note": ""
+ },
+ {
+  "id": "GR2.533.4",
+  "gr": "2.533.4",
+  "page": 211,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]*Sin[b*x]*Sin[c*x], x]",
+  "rhs": [
+   "(1/4)*(Sin[(a + b - c)*x]/(a + b - c) + Sin[(a + c - b)*x]/(a + c - b) - Sin[(a + b + c)*x]/(a + b + c) - Sin[(b + c - a)*x]/(b + c - a))"
+  ],
+  "conds": [],
+  "cite": "PE (379)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "int cos ax sin bx sin cx = 1/4 {sin(a+b-c)x/(a+b-c) + sin(a+c-b)x/(a+c-b) - sin(a+b+c)x/(a+b+c) - sin(b+c-a)x/(b+c-a)}",
+  "note": ""
+ },
+ {
+  "id": "GR2.533.5",
+  "gr": "2.533.5",
+  "page": 211,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]*Cos[b*x]*Cos[c*x], x]",
+  "rhs": [
+   "(1/4)*(Sin[(a + b + c)*x]/(a + b + c) + Sin[(b + c - a)*x]/(b + c - a) + Sin[(a + c - b)*x]/(a + c - b) + Sin[(a + b - c)*x]/(a + b - c))"
+  ],
+  "conds": [],
+  "cite": "PE (377)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "int cos ax cos bx cos cx = 1/4 {sin(a+b+c)x/(a+b+c) + sin(b+c-a)x/(b+c-a) + sin(a+c-b)x/(a+c-b) + sin(a+b-c)x/(a+b-c)}",
+  "note": ""
+ },
+ {
+  "id": "GR2.534.1",
+  "gr": "2.534.1",
+  "page": 212,
+  "status": "SKIP-REFERENCE",
+  "tex": "int (cos px + i sin px)/sin nx dx = -2 int z^(p+n-1)/(1-z^(2n)) dz, z = cos x + i sin x",
+  "reason": "substitution rule; value left as an integral in z",
+  "cite": "Pe (374)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "note": ""
+ },
+ {
+  "id": "GR2.534.2",
+  "gr": "2.534.2",
+  "page": 212,
+  "status": "SKIP-REFERENCE",
+  "tex": "int (cos px + i sin px)/cos nx dx = -2i int z^(p+n-1)/(1-z^(2n)) dz, z = cos x + i sin x",
+  "reason": "substitution rule; value left as an integral in z",
+  "cite": "Pe (373)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "note": ""
+ },
+ {
+  "id": "GR2.535.1",
+  "gr": "2.535.1",
+  "page": 212,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^p x sin ax = 1/(p+a){-sin^p x cos ax + p int sin^(p-1) x cos(a-1)x}",
+  "reason": "integral appears on the right-hand side",
+  "cite": "GU (332)(5a)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "note": ""
+ },
+ {
+  "id": "GR2.535.2a",
+  "gr": "2.535.2",
+  "page": 212,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^p x sin(2n+1)x = (2n+1){int sin^(p+1) x + sum_{k=1}^n (-1)^k [(2n+1)^2-1^2]...[(2n+1)^2-(2k-1)^2]/(2k+1)! int sin^(2k+p+1) x}",
+  "reason": "integral appears on the right-hand side",
+  "cite": "TI (299)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "note": ""
+ },
+ {
+  "id": "GR2.535.2b",
+  "gr": "2.535.2",
+  "page": 212,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^p x sin(2n+1)x = Gamma(p+1)/Gamma((p+3)/2+n) {sum_{k=0}^{n-1}[...] + (-1)^n Gamma((p+3)/2-n)/(2^(2n) Gamma(p-2n+1)) int sin^(p-2n+1) x}",
+  "reason": "integral appears on the right-hand side",
+  "cite": "GU (332)(5c)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "note": ""
+ },
+ {
+  "id": "GR2.535.3a",
+  "gr": "2.535.3",
+  "page": 213,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^p*Sin[2*n*x], x]",
+  "rhs": [
+   "2*n*(Sin[x]^(p + 2)/(p + 2) + Sum[(-1)^k*Product[4*n^2 - (2*j)^2, {j, 1, k}]/((2*k + 1)!*(2*k + p + 2))*Sin[x]^(2*k + p + 2), {k, 1, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "TI (303)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "int sin^p x sin 2nx = 2n{sin^(p+2) x/(p+2) + sum_{k=1}^{n-1} (-1)^k (4n^2-2^2)(4n^2-4^2)...[4n^2-(2k)^2]/((2k+1)!(2k+p+2)) sin^(2k+p+2) x}",
+  "note": "p is not equal to -2, -4, ..., -2n; product (4n^2-2^2)...(4n^2-(2k)^2) written as Product over j"
+ },
+ {
+  "id": "GR2.535.3b",
+  "gr": "2.535.3",
+  "page": 213,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^p*Sin[2*n*x], x]",
+  "rhs": [
+   "Gamma[p + 1]/Gamma[p/2 + n + 1]*Sum[(-1)^(k - 1)*Gamma[p/2 + n - 2*k]/(2^(2*k + 1)*Gamma[p - 2*k + 1])*Sin[x]^(p - 2*k)*Cos[(2*n - 2*k)*x] - (-1)^k*Gamma[p/2 + n - 2*k - 1]/(2^(2*k + 2)*Gamma[p - 2*k])*Sin[x]^(p - 2*k - 1)*Sin[(2*n - 2*k - 1)*x], {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (332)(5c)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "int sin^p x sin 2nx = Gamma(p+1)/Gamma(p/2+n+1) {sum_{k=0}^{n-1} (-1)^(k-1) Gamma(p/2+n-2k)/(2^(2k+1) Gamma(p-2k+1)) sin^(p-2k) x cos(2n-2k)x - (-1)^k Gamma(p/2+n-2k-1)/(2^(2k+2) Gamma(p-2k)) sin^(p-2k-1) x sin(2n-2k-1)x}",
+  "note": "p is not equal to -2, -4, ..., -2n; book prints no bracket around the summand, second term read as inside the sum (it depends on k)"
+ },
+ {
+  "id": "GR2.536.1",
+  "gr": "2.536.1",
+  "page": 213,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^p x cos ax = 1/(p+1){sin^p x sin ax - p int sin^(p-1) x sin(a-1)x}",
+  "reason": "integral appears on the right-hand side",
+  "cite": "GU (332)(6a)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "note": "book prints 1/(p+1); by analogy with 2.535.1 likely 1/(p+a)"
+ },
+ {
+  "id": "GR2.536.2a",
+  "gr": "2.536.2",
+  "page": 213,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^p*Cos[(2*n + 1)*x], x]",
+  "rhs": [
+   "Sin[x]^(p + 1)/(p + 1) + Sum[(-1)^k*Product[(2*n + 1)^2 - (2*j - 1)^2, {j, 1, k}]/((2*k)!*(2*k + p + 1))*Sin[x]^(2*k + p + 1), {k, 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "TI (301)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "int sin^p x cos(2n+1)x = sin^(p+1) x/(p+1) + sum_{k=1}^n (-1)^k [(2n+1)^2-1^2][(2n+1)^2-3^2]...[(2n+1)^2-(2k-1)^2]/((2k)!(2k+p+1)) sin^(2k+p+1) x",
+  "note": "p is not equal to -3, -5, ..., -(2n+1) (also -1)"
+ },
+ {
+  "id": "GR2.536.2b",
+  "gr": "2.536.2",
+  "page": 213,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^p x cos(2n+1)x = Gamma(p+1)/Gamma((p+3)/2+n){sum_{k=0}^{n-1}[...] + (-1)^n Gamma((p+3)/2-n)/(2^(2n) Gamma(p-2n+1)) int sin^(p-2n) x cos x}",
+  "reason": "integral appears on the right-hand side",
+  "cite": "GU (332)(6c)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "note": ""
+ },
+ {
+  "id": "GR2.536.3a",
+  "gr": "2.536.3",
+  "page": 214,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^p x cos 2nx = int sin^p x + sum_{k=1}^n (-1)^k 4n^2(4n^2-2^2)...[4n^2-(2k-2)^2]/(2k)! int sin^(2k+p) x",
+  "reason": "integral appears on the right-hand side",
+  "cite": "TI (300)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "note": ""
+ },
+ {
+  "id": "GR2.536.3b",
+  "gr": "2.536.3",
+  "page": 214,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^p x cos 2nx = Gamma(p+1)/Gamma(p/2+n+1){sum_{k=0}^{n-1}[...] + (-1)^n Gamma(p/2-n+1)/(2^(2n) Gamma(p-2n+1)) int sin^(p-2n) x}",
+  "reason": "integral appears on the right-hand side",
+  "cite": "GU (332)(6c)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "note": ""
+ },
+ {
+  "id": "GR2.537.1",
+  "gr": "2.537.1",
+  "page": 214,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cos^p x sin ax = 1/(p+a){-cos^p x cos ax + p int cos^(p-1) x sin(a-1)x}",
+  "reason": "integral appears on the right-hand side",
+  "cite": "GU (332)(7a)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "note": ""
+ },
+ {
+  "id": "GR2.537.2a",
+  "gr": "2.537.2",
+  "page": 214,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^p*Sin[(2*n + 1)*x], x]",
+  "rhs": [
+   "(-1)^(n + 1)*(Cos[x]^(p + 1)/(p + 1) + Sum[(-1)^k*Product[(2*n + 1)^2 - (2*j - 1)^2, {j, 1, k}]/((2*k)!*(2*k + p + 1))*Cos[x]^(2*k + p + 1), {k, 1, n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "TI (295)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "int cos^p x sin(2n+1)x = (-1)^(n+1){cos^(p+1) x/(p+1) + sum_{k=1}^n (-1)^k [(2n+1)^2-1^2]...[(2n+1)^2-(2k-1)^2]/((2k)!(2k+p+1)) cos^(2k+p+1) x}",
+  "note": "p is not equal to -3, -5, ..., -(2n+1) (also -1)"
+ },
+ {
+  "id": "GR2.537.2b",
+  "gr": "2.537.2",
+  "page": 214,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cos^p x sin(2n+1)x = Gamma(p+1)/Gamma((p+3)/2+n){-sum_{k=0}^{n-1} Gamma((p+1)/2+n-k)/(2^(2k+1) Gamma(p-2k+1)) cos^(p-k) x cos(2n-k+1)x + Gamma((p+3)/2)/(2^n Gamma(p-n+1)) int cos^(p-n) x sin(n+1)x}",
+  "reason": "integral appears on the right-hand side",
+  "cite": "GU (332)(7b)a",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "note": ""
+ },
+ {
+  "id": "GR2.537.3a",
+  "gr": "2.537.3",
+  "page": 215,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^p*Sin[2*n*x], x]",
+  "rhs": [
+   "(-1)^n*(Cos[x]^(p + 2)/(p + 2) + Sum[(-1)^k*Product[4*n^2 - (2*j)^2, {j, 1, k}]/((2*k + 1)!*(2*k + p + 2))*Cos[x]^(2*k + p + 2), {k, 1, n - 1}])",
+   "(-1)^n*2*n*(Cos[x]^(p + 2)/(p + 2) + Sum[(-1)^k*Product[4*n^2 - (2*j)^2, {j, 1, k}]/((2*k + 1)!*(2*k + p + 2))*Cos[x]^(2*k + p + 2), {k, 1, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "TI (297)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "int cos^p x sin 2nx = (-1)^n{cos^(p+2) x/(p+2) + sum_{k=1}^{n-1} (-1)^k (4n^2-2^2)(4n^2-4^2)...[4n^2-(2k)^2]/((2k+1)!(2k+p+2)) cos^(2k+p+2) x}",
+  "note": "p is not equal to -2, -4, ..., -2n. As printed there is no factor 2n (cf. 2.535.3, which has 2n); at n=1 the printed value is half the integral. Second rhs inserts the factor 2n"
+ },
+ {
+  "id": "GR2.537.3b",
+  "gr": "2.537.3",
+  "page": 215,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cos^p x sin 2nx = Gamma(p+1)/Gamma(p/2+n+1){-sum_{k=0}^{n-1} Gamma(p/2+n-k)/(2^(k+1) Gamma(p-k+1)) cos^(p-k) x cos(2n-k)x + Gamma(p/2+1)/(2^n Gamma(p-n+1)) int cos^(p-n) x sin nx}",
+  "reason": "integral appears on the right-hand side",
+  "cite": "GU (332)(7b)a",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "note": ""
+ },
+ {
+  "id": "GR2.538.1",
+  "gr": "2.538.1",
+  "page": 215,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cos^p x cos ax = 1/(p+a){cos^p x sin ax + p int cos^(p-1) x cos(a-1)x}",
+  "reason": "integral appears on the right-hand side",
+  "cite": "GU (332)(8a)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "note": ""
+ },
+ {
+  "id": "GR2.538.2a",
+  "gr": "2.538.2",
+  "page": 215,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cos^p x cos(2n+1)x = (-1)^n(2n+1){int cos^(p+1) x + sum_{k=1}^n (-1)^k [(2n+1)^2-1^2]...[(2n+1)^2-(2k-1)^2]/(2k+1)! int cos^(2k+p+1) x}",
+  "reason": "integral appears on the right-hand side",
+  "cite": "TI (293)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "note": ""
+ },
+ {
+  "id": "GR2.538.2b",
+  "gr": "2.538.2",
+  "page": 215,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cos^p x cos(2n+1)x = Gamma(p+1)/Gamma((p+3)/2+n){sum_{k=0}^{n-1} Gamma((p+1)/2+n-k)/(2^(k+1) Gamma(p-k+1)) cos^(p-k) x sin(2n-k+1)x + Gamma((p+3)/2)/(2^n Gamma(p-n+1)) int cos^(p-n) x cos(n+1)x}",
+  "reason": "integral appears on the right-hand side",
+  "cite": "GU (332)(8b)a",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "note": ""
+ },
+ {
+  "id": "GR2.538.3a",
+  "gr": "2.538.3",
+  "page": 216,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cos^p x cos 2nx = (-1)^n{int cos^p x + sum_{k=1}^n (-1)^k 4n^2[4n^2-2^2]...[4n^2-(2k-2)^2]/(2k)! int cos^(2k+p) x}",
+  "reason": "integral appears on the right-hand side",
+  "cite": "TI (294)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "note": ""
+ },
+ {
+  "id": "GR2.538.3b",
+  "gr": "2.538.3",
+  "page": 216,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cos^p x cos 2nx = Gamma(p+1)/Gamma(p/2+n+1){sum_{k=0}^{n-1} Gamma(p/2+n-k)/(2^(k+1) Gamma(p-k+1)) cos^(p-k) x sin(2n-k)x + Gamma(p/2+1)/(2^n Gamma(p-n+1)) int cos^(p-n) x cos nx}",
+  "reason": "integral appears on the right-hand side",
+  "cite": "GU (332)(8b)a",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "note": ""
+ },
+ {
+  "id": "GR2.539.1",
+  "gr": "2.539.1",
+  "page": 216,
+  "status": "ok",
+  "lhs": "Integrate[Sin[(2*n + 1)*x]/Sin[x], x]",
+  "rhs": [
+   "2*Sum[Sin[2*k*x]/(2*k), {k, 1, n}] + x"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "sin(2n+1)x/sin x = 2 sum sin 2kx/(2k) + x",
+  "note": ""
+ },
+ {
+  "id": "GR2.539.2",
+  "gr": "2.539.2",
+  "page": 216,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*n*x]/Sin[x], x]",
+  "rhs": [
+   "2*Sum[Sin[(2*k - 1)*x]/(2*k - 1), {k, 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (332)(5e)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "sin 2nx/sin x = 2 sum sin(2k-1)x/(2k-1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.539.3",
+  "gr": "2.539.3",
+  "page": 216,
+  "status": "ok",
+  "lhs": "Integrate[Cos[(2*n + 1)*x]/Sin[x], x]",
+  "rhs": [
+   "2*Sum[Cos[2*k*x]/(2*k), {k, 1, n}] + Log[Sin[x]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "cos(2n+1)x/sin x = 2 sum cos 2kx/(2k) + ln sin x",
+  "note": ""
+ },
+ {
+  "id": "GR2.539.4",
+  "gr": "2.539.4",
+  "page": 216,
+  "status": "ok",
+  "lhs": "Integrate[Cos[2*n*x]/Sin[x], x]",
+  "rhs": [
+   "2*Sum[Cos[(2*k - 1)*x]/(2*k - 1), {k, 1, n}] + Log[Tan[x/2]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GI (332)(6e)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "cos 2nx/sin x = 2 sum cos(2k-1)x/(2k-1) + ln tan(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.539.5",
+  "gr": "2.539.5",
+  "page": 216,
+  "status": "ok",
+  "lhs": "Integrate[Sin[(2*n + 1)*x]/Cos[x], x]",
+  "rhs": [
+   "2*Sum[(-1)^(n - k + 1)*Cos[2*k*x]/(2*k), {k, 1, n}] + (-1)^(n + 1)*Log[Cos[x]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "sin(2n+1)x/cos x = 2 sum (-1)^(n-k+1) cos 2kx/(2k) + (-1)^(n+1) ln cos x",
+  "note": ""
+ },
+ {
+  "id": "GR2.539.6",
+  "gr": "2.539.6",
+  "page": 216,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*n*x]/Cos[x], x]",
+  "rhs": [
+   "2*Sum[(-1)^(n - k + 1)*Cos[(2*k - 1)*x]/(2*k - 1), {k, 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (332)(7d)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "sin 2nx/cos x = 2 sum (-1)^(n-k+1) cos(2k-1)x/(2k-1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.539.7",
+  "gr": "2.539.7",
+  "page": 216,
+  "status": "ok",
+  "lhs": "Integrate[Cos[(2*n + 1)*x]/Cos[x], x]",
+  "rhs": [
+   "2*Sum[(-1)^(n - k)*Sin[2*k*x]/(2*k), {k, 1, n}] + (-1)^n*x"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "cos(2n+1)x/cos x = 2 sum (-1)^(n-k) sin 2kx/(2k) + (-1)^n x",
+  "note": ""
+ },
+ {
+  "id": "GR2.539.8",
+  "gr": "2.539.8",
+  "page": 216,
+  "status": "ok",
+  "lhs": "Integrate[Cos[2*n*x]/Cos[x], x]",
+  "rhs": [
+   "2*Sum[(-1)^(n - k)*Sin[(2*k - 1)*x]/(2*k - 1), {k, 1, n}] + (-1)^n*Log[Tan[Pi/4 + x/2]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (332)(8d)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "cos 2nx/cos x = 2 sum (-1)^(n-k) sin(2k-1)x/(2k-1) + (-1)^n ln tan(pi/4+x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.541.1",
+  "gr": "2.541.1",
+  "page": 216,
+  "status": "ok",
+  "lhs": "Integrate[Sin[(n + 1)*x]*Sin[x]^(n - 1), x]",
+  "rhs": [
+   "Sin[x]^n*Sin[n*x]/n"
+  ],
+  "conds": [
+   "n != 0"
+  ],
+  "cite": "BI (71)(1)a",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "int sin(n+1)x sin^(n-1) x = 1/n sin^n x sin nx",
+  "note": ""
+ },
+ {
+  "id": "GR2.541.2",
+  "gr": "2.541.2",
+  "page": 216,
+  "status": "ok",
+  "lhs": "Integrate[Sin[(n + 1)*x]*Cos[x]^(n - 1), x]",
+  "rhs": [
+   "-Cos[x]^n*Cos[n*x]/n"
+  ],
+  "conds": [
+   "n != 0"
+  ],
+  "cite": "BI (71)(2)a",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of linear and more complicated functions of the argument",
+  "tex": "int sin(n+1)x cos^(n-1) x = -1/n cos^n x cos nx",
+  "note": ""
+ }
+]

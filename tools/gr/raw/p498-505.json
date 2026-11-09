@@ -1,0 +1,2403 @@
+[
+ {
+  "id": "GR3.791.4a",
+  "gr": "3.791.4a",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[(Pi/2 - x)*Cos[x]/(1 - Sin[x]), {x, 0, Pi}]",
+  "rhs": [
+   "Pi*Log[2] + 4*Catalan"
+  ],
+  "conds": [],
+  "cite": "BI(207)(3), GW(333)(56c)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^pi (pi/2-x)cos x/(1-sin x) = pi ln2 + 4G",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.4b",
+  "gr": "3.791.4b",
+  "page": 498,
+  "status": "ok",
+  "lhs": "2*Integrate[(Pi/2 - x)*Cos[x]/(1 - Sin[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Log[2] + 4*Catalan"
+  ],
+  "conds": [],
+  "cite": "BI(207)(3), GW(333)(56c)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "2 int_0^(pi/2) (pi/2-x)cos x/(1-sin x) = pi ln2 + 4G",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.5",
+  "gr": "3.791.5",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x^2/(1 - Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi^2/4 + Pi*Log[2] + 4*Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (207)(3)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) x^2/(1-cos x) = -pi^2/4 + pi ln2 + 4G",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.6",
+  "gr": "3.791.6",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x^2/(1 - Cos[x]), {x, 0, Pi}]",
+  "rhs": [
+   "4*Pi*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (219)(1)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^pi x^2/(1-cos x) = 4 pi ln2",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.7",
+  "gr": "3.791.7",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x^(p + 1)/(1 - Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "-(Pi/2)^(p + 1) + (Pi/2)^p*(p + 1)*(2/p - Sum[Zeta[2*k]/(4^(2*k - 1)*(p + 2*k)), {k, 1, Infinity}])"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "LI (207)(4)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) x^(p+1)/(1-cos x) = -(pi/2)^(p+1) + (pi/2)^p (p+1){2/p - sum_k zeta(2k)/(4^(2k-1)(p+2k))}",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.8",
+  "gr": "3.791.8",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x/(1 + Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2 - Log[2]"
+  ],
+  "conds": [],
+  "cite": "GW (333)(55a)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) x/(1+cos x) = pi/2 - ln2",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.9",
+  "gr": "3.791.9",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/(1 - Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Log[2] + 2*Catalan"
+  ],
+  "conds": [],
+  "cite": "GW (333)(56a)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) x sin x/(1-cos x) = pi/2 ln2 + 2G",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.10",
+  "gr": "3.791.10",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/(1 - Cos[x]), {x, 0, Pi}]",
+  "rhs": [
+   "2*Pi*Log[2]"
+  ],
+  "conds": [],
+  "cite": "GW (333)(56b)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^pi x sin x/(1-cos x) = 2 pi ln2",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.11a",
+  "gr": "3.791.11a",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[(x - Sin[x])/(1 - Cos[x]), {x, 0, Pi}]",
+  "rhs": [
+   "2"
+  ],
+  "conds": [],
+  "cite": "GW (333)(57a)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^pi (x-sin x)/(1-cos x) = 2",
+  "note": "chained equality int_0^pi = pi/2 + int_0^(pi/2) = 2; this is the first form"
+ },
+ {
+  "id": "GR3.791.11b",
+  "gr": "3.791.11b",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Pi/2 + Integrate[(x - Sin[x])/(1 - Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "2"
+  ],
+  "conds": [],
+  "cite": "GW (333)(57a)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "pi/2 + int_0^(pi/2) (x-sin x)/(1-cos x) = 2",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.12",
+  "gr": "3.791.12",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/(1 + Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi/2*Log[2] + 2*Catalan"
+  ],
+  "conds": [],
+  "cite": "GW (333)(55b)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) x sin x/(1+cos x) = -pi/2 ln2 + 2G",
+  "note": ""
+ },
+ {
+  "id": "GR3.792.1",
+  "gr": "3.792.1",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 - 2*a*Cos[x] + a^2), {x, -Pi, Pi}]",
+  "rhs": [
+   "2*Pi/(1 - a^2)"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "FI II 485",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_-pi^pi dx/(1-2a cos x+a^2) = 2pi/(1-a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.792.2",
+  "gr": "3.792.2",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[x]/(1 + 2*a*Sin[x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*a)*Log[1 + a] - Sum[(-1)^k*a^(2*k)/(2*k + 1)^2, {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "LI (241)(2)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) x cos x/(1+2a sin x+a^2) = pi/(2a) ln(1+a) - sum (-1)^k a^(2k)/(2k+1)^2",
+  "note": "a != 0 implied by 1/a"
+ },
+ {
+  "id": "GR3.792.3a",
+  "gr": "3.792.3a",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/a*Log[1 + a]"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "a != 0"
+  ],
+  "cite": "BI (221)(2)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^pi x sin x/(1-2a cos x+a^2) = pi/a ln(1+a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.792.3b",
+  "gr": "3.792.3b",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/a*Log[1 + 1/a]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "BI (221)(2)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^pi x sin x/(1-2a cos x+a^2) = pi/a ln(1+1/a)",
+  "note": "book misprint: condition printed as [a^2 < 1]; the second form is the a^2 > 1 branch (cf. 3.792.4), so a^2 > 1 is used"
+ },
+ {
+  "id": "GR3.792.4a",
+  "gr": "3.792.4a",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/(1 - 2*a*Cos[x] + a^2), {x, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi/a*Log[1 - a]"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "a != 0"
+  ],
+  "cite": "BI (223)(4)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(2pi) x sin x/(1-2a cos x+a^2) = 2pi/a ln(1-a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.792.4b",
+  "gr": "3.792.4b",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/(1 - 2*a*Cos[x] + a^2), {x, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi/a*Log[1 - 1/a]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "BI (223)(4)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(2pi) x sin x/(1-2a cos x+a^2) = 2pi/a ln(1-1/a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.792.5",
+  "gr": "3.792.5",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[n*x]/(1 - 2*a*Cos[x] + a^2), {x, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi/(1 - a^2)*((a^(-n) - a^n)*Log[1 - a] + Sum[(a^(-k) - a^k)/(n - k), {k, 1, n - 1}])"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "a != 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (223)(5)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(2pi) x sin nx/(1-2a cos x+a^2) = 2pi/(1-a^2)[(a^-n - a^n) ln(1-a) + sum_{k=1}^{n-1} (a^-k - a^k)/(n-k)]",
+  "note": "n a positive integer implied by the finite sum"
+ },
+ {
+  "id": "GR3.792.6",
+  "gr": "3.792.6",
+  "page": 499,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/((1 - 2*a*Cos[x] + a^2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*a)*(Abs[(1 + a)/(1 - a)] - 1)"
+  ],
+  "conds": [
+   "Element[a, Reals]",
+   "a != 0",
+   "a != 1"
+  ],
+  "cite": "GW (333)(62b)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf sin x/(1-2a cos x+a^2) dx/x = pi/(4a)[|(1+a)/(1-a)| - 1]",
+  "note": ""
+ },
+ {
+  "id": "GR3.792.7a",
+  "gr": "3.792.7a",
+  "page": 499,
+  "status": "ok",
+  "lhs": "Integrate[Sin[b*x]/((1 - 2*a*Cos[x] + a^2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(1 + a - 2*a^(Floor[b] + 1))/((1 - a^2)*(1 - a))"
+  ],
+  "conds": [
+   "0 < a < 1",
+   "b > 0"
+  ],
+  "cite": "ET I 81(26)",
+  "edition_note": "8",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf sin bx/(1-2a cos x+a^2) dx/x = pi/2 (1+a-2a^([b]+1))/((1-a^2)(1-a)) [b != 0,1,2,...]",
+  "note": "b not a nonnegative integer; b > 0 assumed (book: b != 0,1,2,...)"
+ },
+ {
+  "id": "GR3.792.7b",
+  "gr": "3.792.7b",
+  "page": 499,
+  "status": "ok",
+  "lhs": "Integrate[Sin[b*x]/((1 - 2*a*Cos[x] + a^2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(1 + a - a^b - a^(b + 1))/((1 - a^2)*(1 - a))"
+  ],
+  "conds": [
+   "0 < a < 1",
+   "Element[b, Integers] && b >= 1"
+  ],
+  "cite": "ET I 81(26)",
+  "edition_note": "8",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "... = pi/2 (1+a-a^b-a^(b+1))/((1-a^2)(1-a)) [b = 1,2,...]",
+  "note": ""
+ },
+ {
+  "id": "GR3.792.8a",
+  "gr": "3.792.8a",
+  "page": 499,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[b*x]/((1 - 2*a*Cos[x] + a^2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*(1 - a))*a^Floor[b]"
+  ],
+  "conds": [
+   "0 < a < 1",
+   "b > 0"
+  ],
+  "cite": "ET I 19(5)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf sin x cos bx/(1-2a cos x+a^2) dx/x = pi/(2(1-a)) a^[b] [b != 0,1,2,...]",
+  "note": "b not an integer (book: b != 0,1,2,...); for b = 0 see 3.792.6"
+ },
+ {
+  "id": "GR3.792.8b",
+  "gr": "3.792.8b",
+  "page": 499,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[b*x]/((1 - 2*a*Cos[x] + a^2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*(1 - a))*a^b + Pi/4*a^(b - 1)"
+  ],
+  "conds": [
+   "0 < a < 1",
+   "Element[b, Integers] && b >= 1"
+  ],
+  "cite": "ET I 19(5)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "... = pi/(2(1-a)) a^b + pi/4 a^(b-1) [b = 1,2,3,...]",
+  "note": ""
+ },
+ {
+  "id": "GR3.792.9a",
+  "gr": "3.792.9a",
+  "page": 499,
+  "status": "ok",
+  "lhs": "Integrate[(1 - a*Cos[x])*Sin[b*x]/((1 - 2*a*Cos[x] + a^2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(1 - a^(Floor[b] + 1))/(1 - a)"
+  ],
+  "conds": [
+   "0 < a < 1",
+   "b > 0"
+  ],
+  "cite": "ET I 82(33)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf (1-a cos x) sin bx/(1-2a cos x+a^2) dx/x = pi/2 (1-a^([b]+1))/(1-a) [b != 1,2,3,...]",
+  "note": "b not a positive integer (book: b != 1,2,3,...)"
+ },
+ {
+  "id": "GR3.792.9b",
+  "gr": "3.792.9b",
+  "page": 499,
+  "status": "ok",
+  "lhs": "Integrate[(1 - a*Cos[x])*Sin[b*x]/((1 - 2*a*Cos[x] + a^2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(1 - a^b)/(1 - a) + Pi*a^b/4"
+  ],
+  "conds": [
+   "0 < a < 1",
+   "Element[b, Integers] && b >= 1"
+  ],
+  "cite": "ET I 82(33)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "... = pi/2 (1-a^b)/(1-a) + pi a^b/4 [b = 1,2,3,...]",
+  "note": ""
+ },
+ {
+  "id": "GR3.792.10",
+  "gr": "3.792.10",
+  "page": 499,
+  "status": "ok",
+  "lhs": "Integrate[1/((1 - 2*a*Cos[b*x] + a^2)*(beta^2 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*beta*(1 - a^2))*(1 + a*E^(-b*beta))/(1 - a*E^(-b*beta))"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "b >= 0",
+   "beta > 0"
+  ],
+  "cite": "BI (192)(1)",
+  "edition_note": "3",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf 1/(1-2a cos bx+a^2) dx/(beta^2+x^2) = pi/(2beta(1-a^2)) (1+a e^(-b beta))/(1-a e^(-b beta))",
+  "note": "beta > 0 not printed; implied"
+ },
+ {
+  "id": "GR3.792.11",
+  "gr": "3.792.11",
+  "page": 499,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[1/((1 - 2*a*Cos[b*x] + a^2)*(beta^2 - x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "a*Pi/(beta*(1 - a^2))*Sin[b*beta]/(1 - 2*a*Cos[b*beta] + a^2)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "b > 0",
+   "beta > 0"
+  ],
+  "cite": "BI (193)(1)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf 1/(1-2a cos bx+a^2) dx/(beta^2-x^2) = a pi/(beta(1-a^2)) sin b beta/(1-2a cos b beta+a^2)",
+  "note": "",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.792.12",
+  "gr": "3.792.12",
+  "page": 499,
+  "status": "ok",
+  "lhs": "Integrate[Sin[b*c*x]*x/((1 - 2*a*Cos[b*x] + a^2)*(beta^2 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(E^(-beta*b*c) - a^c)/((1 - a*E^(-b*beta))*(1 - a*E^(b*beta)))"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "b > 0",
+   "c > 0",
+   "beta > 0"
+  ],
+  "cite": "BI (192)(8)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf sin bcx/(1-2a cos bx+a^2) x dx/(beta^2+x^2) = pi/2 (e^(-beta bc) - a^c)/((1-a e^(-b beta))(1-a e^(b beta)))",
+  "note": "beta > 0 not printed; c is probably a positive integer (a^c), printed only as c > 0"
+ },
+ {
+  "id": "GR3.792.13a",
+  "gr": "3.792.13a",
+  "page": 499,
+  "status": "ok",
+  "lhs": "Integrate[Sin[b*x]*x/((1 - 2*a*Cos[b*x] + a^2)*(beta^2 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*1/(E^(b*beta) - a)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "b > 0",
+   "beta > 0"
+  ],
+  "cite": "BI (192)(2)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf sin bx/(1-2a cos bx+a^2) x dx/(beta^2+x^2) = pi/2 1/(e^(b beta) - a)",
+  "note": "beta > 0 implied"
+ },
+ {
+  "id": "GR3.792.13b",
+  "gr": "3.792.13b",
+  "page": 499,
+  "status": "ok",
+  "lhs": "Integrate[Sin[b*x]*x/((1 - 2*a*Cos[b*x] + a^2)*(beta^2 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a)*1/(a*E^(b*beta) - 1)"
+  ],
+  "conds": [
+   "a^2 > 1",
+   "b > 0",
+   "beta > 0"
+  ],
+  "cite": "BI (192)(2)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "... = pi/(2a) 1/(a e^(b beta) - 1)",
+  "note": "beta > 0 implied"
+ },
+ {
+  "id": "GR3.792.14",
+  "gr": "3.792.14",
+  "page": 499,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[b*c*x]*x/((1 - 2*a*Cos[b*x] + a^2)*(beta^2 - x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(a^c - Cos[beta*b*c])/(1 - 2*a*Cos[beta*b] + a^2)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "b > 0",
+   "c > 0",
+   "beta > 0"
+  ],
+  "cite": "BI (193)(5)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf sin bcx/(1-2a cos bx+a^2) x dx/(beta^2-x^2) = pi/2 (a^c - cos beta bc)/(1-2a cos beta b+a^2)",
+  "note": "",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.792.15",
+  "gr": "3.792.15",
+  "page": 499,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[b*c*x]/((1 - 2*a*Cos[b*x] + a^2)*(beta^2 - x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*beta*(1 - a^2))*((1 - a^2)*Sin[beta*b*c] + 2*a^(c + 1)*Sin[beta*b])/(1 - 2*a*Cos[beta*b] + a^2)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "b > 0",
+   "c > 0",
+   "beta > 0"
+  ],
+  "cite": "BI (193)(9)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf cos bcx/(1-2a cos bx+a^2) dx/(beta^2-x^2) = pi/(2beta(1-a^2)) ((1-a^2) sin beta bc + 2a^(c+1) sin beta b)/(1-2a cos beta b+a^2)",
+  "note": "",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.792.16",
+  "gr": "3.792.16",
+  "page": 499,
+  "status": "ok",
+  "lhs": "Integrate[(1 - a*Cos[b*x])/((1 - 2*a*Cos[b*x] + a^2)*(1 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*E^b/(E^b - a)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "b > 0"
+  ],
+  "cite": "FI II 719",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf (1-a cos bx)/(1-2a cos bx+a^2) dx/(1+x^2) = pi/2 e^b/(e^b - a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.792.17",
+  "gr": "3.792.17",
+  "page": 500,
+  "status": "ok",
+  "lhs": "Integrate[Cos[b*x]/((1 - 2*a*Cos[x] + a^2)*(x^2 + beta^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(E^(beta - beta*b) + a*E^(beta*b))/(2*beta*(1 - a^2)*(E^beta - a))"
+  ],
+  "conds": [
+   "0 <= b < 1",
+   "Abs[a] < 1",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 21(21)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf cos bx/(1-2a cos x+a^2) dx/(x^2+beta^2) = pi(e^(beta-beta b) + a e^(beta b))/(2beta(1-a^2)(e^beta - a))",
+  "note": ""
+ },
+ {
+  "id": "GR3.792.18a",
+  "gr": "3.792.18a",
+  "page": 500,
+  "status": "ok",
+  "lhs": "Integrate[Sin[b*x]*Sin[x]/((1 - 2*a*Cos[x] + a^2)*(x^2 + beta^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*beta)*Sinh[b*beta]/(E^beta - a)"
+  ],
+  "conds": [
+   "0 <= b < 1",
+   "0 < a < 1",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 81(27)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf sin bx sin x/(1-2a cos x+a^2) dx/(x^2+beta^2) = pi/(2beta) sinh(b beta)/(e^beta - a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.792.18b",
+  "gr": "3.792.18b",
+  "page": 500,
+  "status": "ok",
+  "lhs": "Integrate[Sin[b*x]*Sin[x]/((1 - 2*a*Cos[x] + a^2)*(x^2 + beta^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*beta*(a*E^beta - 1))*(a^m*E^(beta*(m + 1 - b)) - E^((1 - b)*beta)) - Pi/(4*beta*(a*E^(-beta) - 1))*(a^m*E^(-(m + 1 - b)*beta) - E^(-(1 - b)*beta))"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "m <= b <= m + 1",
+   "0 < a < 1",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 81(27)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "... = pi/(4beta(a e^beta - 1))[a^m e^(beta(m+1-b)) - e^((1-b)beta)] - pi/(4beta(a e^-beta - 1))[a^m e^(-(m+1-b)beta) - e^(-(1-b)beta)] [m <= b <= m+1]",
+  "note": "m a nonnegative integer assumed; as printed this form vanishes at m = 0, unlike 18a -- possible misprint"
+ },
+ {
+  "id": "GR3.792.19",
+  "gr": "3.792.19",
+  "page": 500,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[x] - a)*Cos[b*x]/((1 - 2*a*Cos[x] + a^2)*(x^2 + beta^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Cosh[beta*b]/(2*beta*(E^beta - a))"
+  ],
+  "conds": [
+   "0 <= b < 1",
+   "Abs[a] < 1",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 21(23)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf (cos x - a) cos bx/(1-2a cos x+a^2) dx/(x^2+beta^2) = pi cosh(beta b)/(2beta(e^beta - a))",
+  "note": ""
+ },
+ {
+  "id": "GR3.792.20a",
+  "gr": "3.792.20a",
+  "page": 500,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/((1 - 2*a*Cos[2*x] + a^2)^(n + 1)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*(1 - a^2)^(2*n + 1))*Sum[Binomial[n, k]^2*a^(2*k), {k, 0, n}]"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (187)(14)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf sin x/(1-2a cos 2x+a^2)^(n+1) dx/x = pi/(2(1-a^2)^(2n+1)) sum_k binom(n,k)^2 a^(2k)",
+  "note": "conditions not printed; a^2 < 1 and n = 0,1,2,... inferred"
+ },
+ {
+  "id": "GR3.792.20b",
+  "gr": "3.792.20b",
+  "page": 500,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Tan[x]/((1 - 2*a*Cos[2*x] + a^2)^(n + 1)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*(1 - a^2)^(2*n + 1))*Sum[Binomial[n, k]^2*a^(2*k), {k, 0, n}]"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (187)(14)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf tan x/(1-2a cos 2x+a^2)^(n+1) dx/x = same",
+  "note": "conditions not printed; a^2 < 1 and n = 0,1,2,... inferred",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.792.20c",
+  "gr": "3.792.20c",
+  "page": 500,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Tan[x]/((1 - 2*a*Cos[4*x] + a^2)^(n + 1)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*(1 - a^2)^(2*n + 1))*Sum[Binomial[n, k]^2*a^(2*k), {k, 0, n}]"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (187)(14)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf tan x/(1-2a cos 4x+a^2)^(n+1) dx/x = same",
+  "note": "conditions not printed; a^2 < 1 and n = 0,1,2,... inferred",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.793.1",
+  "gr": "3.793.1",
+  "page": 500,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[n*x] - a*Sin[(n + 1)*x])*x/(1 - 2*a*Cos[x] + a^2), {x, 0, 2*Pi}]",
+  "rhs": [
+   "-2*Pi*a^n*(Log[1 - a] + Sum[1/(k*a^k), {k, 1, n}])"
+  ],
+  "conds": [
+   "Abs[a] < 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (223)(9)",
+  "edition_note": "3",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(2pi) (sin nx - a sin(n+1)x)/(1-2a cos x+a^2) x dx = -2pi a^n [ln(1-a) + sum_{k=1}^n 1/(k a^k)]",
+  "note": "n positive integer implied"
+ },
+ {
+  "id": "GR3.793.2",
+  "gr": "3.793.2",
+  "page": 500,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[n*x] - a*Cos[(n + 1)*x])*x/(1 - 2*a*Cos[x] + a^2), {x, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi*a^n"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (223)(13)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(2pi) (cos nx - a cos(n+1)x)/(1-2a cos x+a^2) x dx = 2pi a^n",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR3.794.1",
+  "gr": "3.794.1",
+  "page": 500,
+  "status": "ok",
+  "lhs": "Integrate[x/(1 + a^2 + 2*a*Cos[x]), {x, 0, Pi}]",
+  "rhs": [
+   "Pi^2/(2*(1 - a^2)) + 4/(1 - a^2)*Sum[a^(2*k + 1)/(2*k + 1)^2, {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "",
+  "edition_note": "3",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^pi x/(1+a^2+2a cos x) = pi^2/(2(1-a^2)) + 4/(1-a^2) sum a^(2k+1)/(2k+1)^2",
+  "note": ""
+ },
+ {
+  "id": "GR3.794.2a",
+  "gr": "3.794.2a",
+  "page": 500,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[n*x]/(1 + a*Cos[x]), {x, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi/Sqrt[1 - a^2]*((-1)^n*((1 + Sqrt[1 - a^2])^n - (1 - Sqrt[1 - a^2])^n)/a^n*Log[2*Sqrt[1 + a]/(Sqrt[1 + a] + Sqrt[1 - a])] + Sum[(-1)^k/(n - k)*((1 + Sqrt[1 - a^2])^k - (1 - Sqrt[1 - a^2])^k)/a^k, {k, 0, n - 1}])"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "a != 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (223)(2)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(2pi) x sin nx/(1 + a cos x) = 2pi/sqrt(1-a^2)[(-1)^n((1+s)^n-(1-s)^n)/a^n ln(2sqrt(1+a)/(sqrt(1+a)+sqrt(1-a))) + sum_(k=0)^(n-1) (-1)^k/(n-k) ((1+s)^k-(1-s)^k)/a^k]",
+  "note": "upper sign of the +- pair; n positive integer implied"
+ },
+ {
+  "id": "GR3.794.3a",
+  "gr": "3.794.3a",
+  "page": 500,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[n*x]/(1 + a*Cos[x]), {x, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi^2/Sqrt[1 - a^2]*((1 - Sqrt[1 - a^2])/(-a))^n"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "a != 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (223)(3)",
+  "edition_note": "3",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(2pi) x cos nx/(1 + a cos x) = 2pi^2/sqrt(1-a^2) ((1-sqrt(1-a^2))/(-a))^n",
+  "note": "upper sign of the +- pair; n nonnegative integer implied"
+ },
+ {
+  "id": "GR3.794.2b",
+  "gr": "3.794.2b",
+  "page": 500,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[n*x]/(1 - a*Cos[x]), {x, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi/Sqrt[1 - a^2]*((1)^n*((1 + Sqrt[1 - a^2])^n - (1 - Sqrt[1 - a^2])^n)/a^n*Log[2*Sqrt[1 - a]/(Sqrt[1 + a] + Sqrt[1 - a])] + Sum[(1)^k/(n - k)*((1 + Sqrt[1 - a^2])^k - (1 - Sqrt[1 - a^2])^k)/a^k, {k, 0, n - 1}])"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "a != 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (223)(2)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(2pi) x sin nx/(1 - a cos x) = 2pi/sqrt(1-a^2)[(1)^n((1+s)^n-(1-s)^n)/a^n ln(2sqrt(1-a)/(sqrt(1+a)+sqrt(1-a))) + sum_(k=0)^(n-1) (1)^k/(n-k) ((1+s)^k-(1-s)^k)/a^k]",
+  "note": "lower sign of the +- pair; n positive integer implied"
+ },
+ {
+  "id": "GR3.794.3b",
+  "gr": "3.794.3b",
+  "page": 500,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[n*x]/(1 - a*Cos[x]), {x, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi^2/Sqrt[1 - a^2]*((1 - Sqrt[1 - a^2])/(a))^n"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "a != 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (223)(3)",
+  "edition_note": "3",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(2pi) x cos nx/(1 - a cos x) = 2pi^2/sqrt(1-a^2) ((1-sqrt(1-a^2))/(+a))^n",
+  "note": "lower sign of the +- pair; n nonnegative integer implied"
+ },
+ {
+  "id": "GR3.794.4",
+  "gr": "3.794.4",
+  "page": 501,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/(a + b*Cos[x]), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/b*Log[(a + Sqrt[a^2 - b^2])/(2*(a - b))]"
+  ],
+  "conds": [
+   "a > Abs[b] > 0"
+  ],
+  "cite": "GW (333)(53a)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^pi x sin x/(a+b cos x) = pi/b ln((a+sqrt(a^2-b^2))/(2(a-b)))",
+  "note": ""
+ },
+ {
+  "id": "GR3.794.5",
+  "gr": "3.794.5",
+  "page": 501,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/(a + b*Cos[x]), {x, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi/b*Log[(a + Sqrt[a^2 - b^2])/(2*(a + b))]"
+  ],
+  "conds": [
+   "a > Abs[b] > 0"
+  ],
+  "cite": "GW (333)(53b)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(2pi) x sin x/(a+b cos x) = 2pi/b ln((a+sqrt(a^2-b^2))/(2(a+b)))",
+  "note": ""
+ },
+ {
+  "id": "GR3.794.6a",
+  "gr": "3.794.6a",
+  "page": 501,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/((a + b*Cos[2*x])*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*Sqrt[a^2 - b^2])"
+  ],
+  "conds": [
+   "a^2 > b^2",
+   "a > 0"
+  ],
+  "cite": "BI (181)(1)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf sin x/(a + b cos 2x) dx/x = pi/(2 sqrt(a^2-b^2)) [a^2 > b^2]",
+  "note": "upper sign; a > 0 added (the value is positive)"
+ },
+ {
+  "id": "GR3.794.6b",
+  "gr": "3.794.6b",
+  "page": 501,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/((a - b*Cos[2*x])*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*Sqrt[a^2 - b^2])"
+  ],
+  "conds": [
+   "a^2 > b^2",
+   "a > 0"
+  ],
+  "cite": "BI (181)(1)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf sin x/(a - b cos 2x) dx/x = pi/(2 sqrt(a^2-b^2)) [a^2 > b^2]",
+  "note": "lower sign; a > 0 added (the value is positive)"
+ },
+ {
+  "id": "GR3.794.6c",
+  "gr": "3.794.6c",
+  "page": 501,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[x]/((a + b*Cos[2*x])*x), {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a^2 < b^2"
+  ],
+  "cite": "BI (181)(1)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf sin x/(a + b cos 2x) dx/x = 0 [a^2 < b^2]",
+  "note": "upper sign",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.794.6d",
+  "gr": "3.794.6d",
+  "page": 501,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[x]/((a - b*Cos[2*x])*x), {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a^2 < b^2"
+  ],
+  "cite": "BI (181)(1)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf sin x/(a - b cos 2x) dx/x = 0 [a^2 < b^2]",
+  "note": "lower sign",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.795a",
+  "gr": "3.795a",
+  "page": 501,
+  "status": "ok",
+  "lhs": "Integrate[((b^2 + c^2 + x^2)*x*Sin[a*x] - (b^2 - c^2 - x^2)*c*Sinh[a*c])/((x^2 + (b - c)^2)*(x^2 + (b + c)^2)*(Cos[a*x] + Cosh[a*c])), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi"
+  ],
+  "conds": [
+   "c > b > 0",
+   "a > 0"
+  ],
+  "cite": "BI (202)(18)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_-inf^inf ((b^2+c^2+x^2) x sin ax - (b^2-c^2-x^2) c sinh ac)/([x^2+(b-c)^2][x^2+(b+c)^2](cos ax + cosh ac)) = pi [c > b > 0]",
+  "note": ""
+ },
+ {
+  "id": "GR3.795b",
+  "gr": "3.795b",
+  "page": 501,
+  "status": "ok",
+  "lhs": "Integrate[((b^2 + c^2 + x^2)*x*Sin[a*x] - (b^2 - c^2 - x^2)*c*Sinh[a*c])/((x^2 + (b - c)^2)*(x^2 + (b + c)^2)*(Cos[a*x] + Cosh[a*c])), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2*Pi/(E^(a*b) + 1)"
+  ],
+  "conds": [
+   "b > c > 0",
+   "a > 0"
+  ],
+  "cite": "BI (202)(18)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "... = 2pi/(e^(ab) + 1) [b > c > 0]",
+  "note": ""
+ },
+ {
+  "id": "GR3.796.1a",
+  "gr": "3.796.1a",
+  "page": 501,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[(Cos[x] + Sin[x])/(Cos[x] - Sin[x])*x, {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi/4*Log[2] - Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (207)(8, 9)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) (cos x + sin x)/(cos x - sin x) x dx = -pi/4 ln2 - G",
+  "note": "upper sign; pole at x = pi/4",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.796.1b",
+  "gr": "3.796.1b",
+  "page": 501,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[x] - Sin[x])/(Cos[x] + Sin[x])*x, {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4*Log[2] - Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (207)(8, 9)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) (cos x - sin x)/(cos x + sin x) x dx = pi/4 ln2 - G",
+  "note": "lower sign"
+ },
+ {
+  "id": "GR3.796.2",
+  "gr": "3.796.2",
+  "page": 501,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[x] - Sin[x])/(Cos[x] + Sin[x])*x, {x, 0, Pi/4}]",
+  "rhs": [
+   "Pi/4*Log[2] - Catalan/2"
+  ],
+  "conds": [],
+  "cite": "BI (204)(23)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(pi/4) (cos x - sin x)/(cos x + sin x) x dx = pi/4 ln2 - G/2",
+  "note": ""
+ },
+ {
+  "id": "GR3.797.1",
+  "gr": "3.797.1",
+  "page": 501,
+  "status": "ok",
+  "lhs": "Integrate[(Pi/4 - x*Tan[x])*Tan[x], {x, 0, Pi/4}]",
+  "rhs": [
+   "Log[2]/2 + Pi^2/32 - Pi/4 + Pi/8*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (204)(8)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(pi/4) (pi/4 - x tan x) tan x = 1/2 ln2 + pi^2/32 - pi/4 + pi/8 ln2",
+  "note": ""
+ },
+ {
+  "id": "GR3.797.2",
+  "gr": "3.797.2",
+  "page": 501,
+  "status": "ok",
+  "lhs": "Integrate[(Pi/4 - x)*Tan[x]/Cos[2*x], {x, 0, Pi/4}]",
+  "rhs": [
+   "-Pi/8*Log[2] + Catalan/2"
+  ],
+  "conds": [],
+  "cite": "BI (204)(19)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(pi/4) (pi/4 - x) tan x/cos 2x = -pi/8 ln2 + G/2",
+  "note": ""
+ },
+ {
+  "id": "GR3.797.3",
+  "gr": "3.797.3",
+  "page": 501,
+  "status": "ok",
+  "lhs": "Integrate[(Pi/4 - x*Tan[x])/Cos[2*x], {x, 0, Pi/4}]",
+  "rhs": [
+   "Pi/8*Log[2] + Catalan/2"
+  ],
+  "conds": [],
+  "cite": "BI (204)(20)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(pi/4) (pi/4 - x tan x)/cos 2x = pi/8 ln2 + G/2",
+  "note": ""
+ },
+ {
+  "id": "GR3.798.1a",
+  "gr": "3.798.1a",
+  "page": 501,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Tan[x]/((a + b*Cos[2*x])*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*Sqrt[a^2 - b^2])"
+  ],
+  "conds": [
+   "0 < b < a"
+  ],
+  "cite": "BI (181)(2)",
+  "edition_note": "8",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf tan x/(a + b cos 2x) dx/x = pi/(2 sqrt(a^2-b^2)) [0<b<a]",
+  "note": "tan x has poles on the path",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.798.1b",
+  "gr": "3.798.1b",
+  "page": 501,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Tan[x]/((a + b*Cos[2*x])*x), {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < a < b"
+  ],
+  "cite": "BI (181)(2)",
+  "edition_note": "8",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf tan x/(a + b cos 2x) dx/x = 0 [0<a<b]",
+  "note": "tan x has poles on the path",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.798.2a",
+  "gr": "3.798.2a",
+  "page": 501,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Tan[x]/((a + b*Cos[4*x])*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*Sqrt[a^2 - b^2])"
+  ],
+  "conds": [
+   "0 < b < a"
+  ],
+  "cite": "BI (181)(3)",
+  "edition_note": "8",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf tan x/(a + b cos 4x) dx/x = pi/(2 sqrt(a^2-b^2)) [0<b<a]",
+  "note": "tan x has poles on the path",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.798.2b",
+  "gr": "3.798.2b",
+  "page": 501,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Tan[x]/((a + b*Cos[4*x])*x), {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < a < b"
+  ],
+  "cite": "BI (181)(3)",
+  "edition_note": "8",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^inf tan x/(a + b cos 4x) dx/x = 0 [0<a<b]",
+  "note": "tan x has poles on the path",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.799.1",
+  "gr": "3.799.1",
+  "page": 501,
+  "status": "ok",
+  "lhs": "Integrate[x/(Sin[x] + a*Cos[x])^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "a/(1 + a^2)*Pi/2 - Log[a]/(1 + a^2)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (208)(5)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) x/(sin x + a cos x)^2 = a/(1+a^2) pi/2 - ln a/(1+a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.799.2",
+  "gr": "3.799.2",
+  "page": 502,
+  "status": "ok",
+  "lhs": "Integrate[x/(Cos[x] + a*Sin[x])^2, {x, 0, Pi/4}]",
+  "rhs": [
+   "1/(1 + a^2)*Log[(1 + a)/Sqrt[2]] + Pi/4*(1 - a)/((1 + a)*(1 + a^2))"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (204)(24)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^(pi/4) x/(cos x + a sin x)^2 = 1/(1+a^2) ln((1+a)/sqrt2) + pi/4 (1-a)/((1+a)(1+a^2))",
+  "note": ""
+ },
+ {
+  "id": "GR3.799.3",
+  "gr": "3.799.3",
+  "page": 502,
+  "status": "ok",
+  "lhs": "Integrate[(a*Cos[x] + b)/(a + b*Cos[x])^2*x^2, {x, 0, Pi}]",
+  "rhs": [
+   "2*Pi/b*Log[2*(a - b)/(a + Sqrt[a^2 - b^2])]"
+  ],
+  "conds": [
+   "a > Abs[b] > 0"
+  ],
+  "cite": "GW (333)(58a)",
+  "edition_note": "",
+  "section": "3.79 Rational and trigonometric functions",
+  "tex": "int_0^pi (a cos x + b)/(a + b cos x)^2 x^2 = 2pi/b ln(2(a-b)/(a+sqrt(a^2-b^2)))",
+  "note": ""
+ },
+ {
+  "id": "GR3.811.1",
+  "gr": "3.811.1",
+  "page": 502,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/(1 - Cos[t1]*Cos[x])*x/(1 - Cos[t2]*Cos[x]), {x, 0, Pi}]",
+  "rhs": [
+   "Pi*Csc[(t1 + t2)/2]*Csc[(t1 - t2)/2]*Log[(1 + Tan[t1/2])/(1 + Tan[t2/2])]"
+  ],
+  "conds": [
+   "0 < t1 < Pi",
+   "0 < t2 < Pi",
+   "t1 != t2"
+  ],
+  "cite": "BI (222)(5)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^pi sin x/(1 - cos t1 cos x) x/(1 - cos t2 cos x) = pi cosec((t1+t2)/2) cosec((t1-t2)/2) ln((1+tan(t1/2))/(1+tan(t2/2)))",
+  "note": "no conditions printed; 0 < t1, t2 < pi, t1 != t2 inferred (cf. 3.794.4)"
+ },
+ {
+  "id": "GR3.811.2a",
+  "gr": "3.811.2a",
+  "page": 502,
+  "status": "ok",
+  "lhs": "Integrate[x/((Cos[x] + Sin[x])*Sin[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4*Log[2] + Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (208)(16, 17)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) x/((cos x + sin x) sin x) = pi/4 ln2 + G",
+  "note": "upper sign"
+ },
+ {
+  "id": "GR3.811.2b",
+  "gr": "3.811.2b",
+  "page": 502,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x/((Cos[x] - Sin[x])*Sin[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4*Log[2] + Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (208)(16, 17)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) x/((cos x - sin x) sin x) = pi/4 ln2 + G",
+  "note": "lower sign; pole at x = pi/4",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.811.3",
+  "gr": "3.811.3",
+  "page": 502,
+  "status": "ok",
+  "lhs": "Integrate[x/((Cos[x] + Sin[x])*Sin[x]), {x, 0, Pi/4}]",
+  "rhs": [
+   "-Pi/8*Log[2] + Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (204)(29)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^(pi/4) x/((cos x + sin x) sin x) = -pi/8 ln2 + G",
+  "note": ""
+ },
+ {
+  "id": "GR3.811.4",
+  "gr": "3.811.4",
+  "page": 502,
+  "status": "ok",
+  "lhs": "Integrate[x/((Cos[x] + Sin[x])*Cos[x]), {x, 0, Pi/4}]",
+  "rhs": [
+   "Pi/8*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (204)(28)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^(pi/4) x/((cos x + sin x) cos x) = pi/8 ln2",
+  "note": ""
+ },
+ {
+  "id": "GR3.811.5",
+  "gr": "3.811.5",
+  "page": 502,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/(Sin[x] + Cos[x])*x/Cos[x]^2, {x, 0, Pi/4}]",
+  "rhs": [
+   "-Pi/8*Log[2] + Pi/4 - Log[2]/2"
+  ],
+  "conds": [],
+  "cite": "BI (204)(30)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^(pi/4) sin x/(sin x + cos x) x/cos^2 x = -pi/8 ln2 + pi/4 - 1/2 ln2",
+  "note": ""
+ },
+ {
+  "id": "GR3.812.1a",
+  "gr": "3.812.1a",
+  "page": 502,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/(a + b*Cos[x]^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/Sqrt[a*b]*ArcTan[Sqrt[b/a]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (333)(60a)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^pi x sin x/(a + b cos^2 x) = pi/sqrt(ab) arctan sqrt(b/a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.812.1b",
+  "gr": "3.812.1b",
+  "page": 502,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/(a + b*Cos[x]^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(2*Sqrt[-a*b])*Log[(Sqrt[a] + Sqrt[-b])/(Sqrt[a] - Sqrt[-b])]"
+  ],
+  "conds": [
+   "a > -b > 0"
+  ],
+  "cite": "GW (333)(60a)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "... = pi/(2 sqrt(-ab)) ln((sqrt a + sqrt(-b))/(sqrt a - sqrt(-b))) [a > -b > 0]",
+  "note": ""
+ },
+ {
+  "id": "GR3.812.2",
+  "gr": "3.812.2",
+  "page": 502,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[2*x]/(1 + a*Cos[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/a*Log[(1 + Sqrt[1 + a])/2]"
+  ],
+  "conds": [
+   "a > -1",
+   "a != 0"
+  ],
+  "cite": "BI (207)(10)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) x sin 2x/(1 + a cos^2 x) = pi/a ln((1+sqrt(1+a))/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.812.3",
+  "gr": "3.812.3",
+  "page": 502,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[2*x]/(1 + a*Sin[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/a*Log[2*(1 + a - Sqrt[1 + a])/2]",
+   "Pi/a*Log[2*(1 + a - Sqrt[1 + a])/a]"
+  ],
+  "conds": [
+   "a > -1",
+   "a != 0"
+  ],
+  "cite": "BI (207)(2)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) x sin 2x/(1 + a sin^2 x) = pi/a ln(2(1+a-sqrt(1+a))/2)",
+  "note": "probable misprint: denominator 2 should be a (x -> pi/2 - x with 3.812.2 gives pi/a ln(2(1+a-sqrt(1+a))/a)); second rhs is the corrected candidate"
+ },
+ {
+  "id": "GR3.812.4a",
+  "gr": "3.812.4a",
+  "page": 502,
+  "status": "ok",
+  "lhs": "Integrate[x/(a^2 - Cos[x]^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi^2/(2*a*Sqrt[a^2 - 1])"
+  ],
+  "conds": [
+   "a > 1"
+  ],
+  "cite": "BI (219)(10)",
+  "edition_note": "11",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^pi x/(a^2 - cos^2 x) = pi^2/(2a sqrt(a^2-1)) [a^2 > 1]",
+  "note": "book condition a^2 > 1; a > 1 used (the value is odd in a while the integral is even; a < -1 branch would need -)"
+ },
+ {
+  "id": "GR3.812.4b",
+  "gr": "3.812.4b",
+  "page": 502,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x/(a^2 - Cos[x]^2), {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < a^2 < 1"
+  ],
+  "cite": "BI (219)(10)",
+  "edition_note": "11",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^pi x/(a^2 - cos^2 x) = 0 [principal value for 0 < a^2 < 1]",
+  "note": "",
+  "reason": "marked principal value"
+ },
+ {
+  "id": "GR3.812.4c",
+  "gr": "3.812.4c",
+  "page": 502,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[x/(a^2 - Cos[x]^2), {x, 0, Pi}]",
+  "rhs": [],
+  "conds": [],
+  "cite": "BI (219)(10)",
+  "edition_note": "11",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^pi x/(a^2 - cos^2 x) = divergent [a = 0]",
+  "note": "",
+  "reason": "divergent"
+ },
+ {
+  "id": "GR3.812.5",
+  "gr": "3.812.5",
+  "page": 502,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*Sin[x]/(a^2 - Cos[x]^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(2*a)*Log[Abs[(1 + a)/(1 - a)]]"
+  ],
+  "conds": [
+   "0 < a < 1"
+  ],
+  "cite": "BI (219)(13)",
+  "edition_note": "7",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^pi x sin x/(a^2 - cos^2 x) = pi/(2a) ln|(1+a)/(1-a)| [0<a<1]; divergent if a = 0",
+  "note": "poles at cos x = +-a",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.812.6a",
+  "gr": "3.812.6a",
+  "page": 503,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*Sin[2*x]/(a^2 - Cos[x]^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi*Log[4*(1 - a^2)]"
+  ],
+  "conds": [
+   "0 < a^2 < 1"
+  ],
+  "cite": "BI (219)(19)",
+  "edition_note": "11",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^pi x sin 2x/(a^2 - cos^2 x) = pi ln(4(1-a^2)) [principal value for 0 <= a^2 < 1]",
+  "note": "",
+  "reason": "marked principal value"
+ },
+ {
+  "id": "GR3.812.6b",
+  "gr": "3.812.6b",
+  "page": 503,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[2*x]/(a^2 - Cos[x]^2), {x, 0, Pi}]",
+  "rhs": [
+   "2*Pi*Log[2*(1 - a^2 + a*Sqrt[a^2 - 1])]"
+  ],
+  "conds": [
+   "a > 1"
+  ],
+  "cite": "BI (219)(19)",
+  "edition_note": "11",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "... = 2pi ln[2(1 - a^2 + a sqrt(a^2-1))] [a^2 > 1]",
+  "note": "book condition a^2 > 1; a > 1 used since the value is not even in a"
+ },
+ {
+  "id": "GR3.812.6c",
+  "gr": "3.812.6c",
+  "page": 503,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[x*Sin[2*x]/(a^2 - Cos[x]^2), {x, 0, Pi}]",
+  "rhs": [],
+  "conds": [],
+  "cite": "BI (219)(19)",
+  "edition_note": "11",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "... = divergent [|a| = 1]",
+  "note": "",
+  "reason": "divergent"
+ },
+ {
+  "id": "GR3.812.7",
+  "gr": "3.812.7",
+  "page": 503,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*Sin[x]/(Cos[t]^2 - Sin[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "-2*Csc[t]*Sum[Sin[(2*k + 1)*t]/(2*k + 1)^2, {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "0 < t < Pi/2"
+  ],
+  "cite": "BI (207)(1)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) x sin x/(cos^2 t - sin^2 x) = -2 cosec t sum sin(2k+1)t/(2k+1)^2",
+  "note": "no conditions printed; pole at x = pi/2 - t",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.812.8",
+  "gr": "3.812.8",
+  "page": 503,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/(1 - Cos[t]^2*Sin[x]^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi*(Pi - 2*t)*Csc[2*t]"
+  ],
+  "conds": [
+   "0 < t < Pi/2"
+  ],
+  "cite": "BI (219)(12)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^pi x sin x/(1 - cos^2 t sin^2 x) = pi(pi - 2t) cosec 2t",
+  "note": "no conditions printed; 0 < t < pi/2 inferred"
+ },
+ {
+  "id": "GR3.812.9",
+  "gr": "3.812.9",
+  "page": 503,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*Cos[x]/(Cos[t]^2 - Cos[x]^2), {x, 0, Pi}]",
+  "rhs": [
+   "4*Csc[t]*Sum[Sin[(2*k + 1)*t]/(2*k + 1)^2, {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "0 < t < Pi/2"
+  ],
+  "cite": "BI (219)(17)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^pi x cos x/(cos^2 t - cos^2 x) = 4 cosec t sum sin(2k+1)t/(2k+1)^2",
+  "note": "no conditions printed; poles at x = t, pi - t",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.812.10",
+  "gr": "3.812.10",
+  "page": 503,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/(Tan[t]^2 + Cos[x]^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/2*(Pi - 2*t)*Cot[t]"
+  ],
+  "conds": [
+   "0 < t < Pi/2"
+  ],
+  "cite": "BI (219)(14)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^pi x sin x/(tan^2 t + cos^2 x) = pi/2 (pi - 2t) cot t",
+  "note": "no conditions printed; 0 < t < pi/2 inferred"
+ },
+ {
+  "id": "GR3.812.11",
+  "gr": "3.812.11",
+  "page": 503,
+  "status": "ok",
+  "lhs": "Integrate[x*(a*Cos[x] + b)*Sin[x]/(Cot[t]^2 + Cos[x]^2), {x, 0, Infinity}]",
+  "rhs": [
+   "2*a*Pi*Log[Cos[t/2]] + Pi*b*t*Tan[t]"
+  ],
+  "conds": [
+   "0 < t < Pi/2"
+  ],
+  "cite": "BI (219)(18)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf x(a cos x + b) sin x/(cot^2 t + cos^2 x) = 2a pi ln cos(t/2) + pi b t tan t",
+  "note": "as printed the upper limit is infinity and the integral diverges; probable misprint for upper limit pi (BI (219) is the [0,pi] table). No conditions printed; 0 < t < pi/2 assumed"
+ },
+ {
+  "id": "GR3.812.12",
+  "gr": "3.812.12",
+  "page": 503,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]*Cos[x]/(a - Sin[x]^2), {x, 0, Pi}]",
+  "rhs": [
+   "-Pi*Log[2] + Log[1 + Sqrt[(a - 1)/a]]",
+   "-Pi*Log[2] + Pi*Log[1 + Sqrt[(a - 1)/a]]"
+  ],
+  "conds": [
+   "a > 1"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^pi x sin x cos x/(a - sin^2 x) = -pi ln2 + ln[1 + sqrt((a-1)/a)]",
+  "note": "probable misprint: a -> infinity the integral -> 0 but the printed value -> (1-pi) ln2; second rhs multiplies the log by pi"
+ },
+ {
+  "id": "GR3.812.13",
+  "gr": "3.812.13",
+  "page": 503,
+  "status": "ok",
+  "lhs": "Integrate[Log[a - Sin[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi*Log[2] + I*Pi*Log[ArcCos[Sqrt[a]]]",
+   "-Pi*Log[2] + I*Pi*ArcCos[Sqrt[a]]"
+  ],
+  "conds": [
+   "0 < a < 1"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(a - sin^2 x) = -pi ln2 + i pi ln arccos sqrt(a)",
+  "note": "probable misprint: imaginary part of the principal log is pi*(measure where sin^2 x > a) = pi arccos sqrt(a), so the ln is spurious; second rhs drops it"
+ },
+ {
+  "id": "GR3.812.14",
+  "gr": "3.812.14",
+  "page": 503,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[Abs[a - Sin[x]^2]], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi*Log[2]"
+  ],
+  "conds": [
+   "0 < a < 1"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "PV int_0^(pi/2) ln|a - sin^2 x| = -pi ln2",
+  "note": "",
+  "reason": "marked PV"
+ },
+ {
+  "id": "GR3.812.15",
+  "gr": "3.812.15",
+  "page": 503,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[Abs[a - Cos[x]^2]], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi*Log[2]"
+  ],
+  "conds": [
+   "0 < a < 1"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "PV int_0^(pi/2) ln|a - cos^2 x| = -pi ln2",
+  "note": "",
+  "reason": "marked PV"
+ },
+ {
+  "id": "GR3.813.1a",
+  "gr": "3.813.1a",
+  "page": 503,
+  "status": "ok",
+  "lhs": "Integrate[x/(a^2*Cos[x]^2 + b^2*Sin[x]^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi^2/(2*a*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (333)(36)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^pi x/(a^2 cos^2 x + b^2 sin^2 x) = pi^2/(2ab)",
+  "note": ""
+ },
+ {
+  "id": "GR3.813.1b",
+  "gr": "3.813.1b",
+  "page": 503,
+  "status": "ok",
+  "lhs": "1/4*Integrate[x/(a^2*Cos[x]^2 + b^2*Sin[x]^2), {x, 0, 2*Pi}]",
+  "rhs": [
+   "Pi^2/(2*a*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (333)(36)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "1/4 int_0^(2pi) x/(a^2 cos^2 x + b^2 sin^2 x) = pi^2/(2ab)",
+  "note": ""
+ },
+ {
+  "id": "GR3.813.2",
+  "gr": "3.813.2",
+  "page": 503,
+  "status": "ok",
+  "lhs": "Integrate[1/((beta^2*Sin[a*x]^2 + gamma^2*Cos[a*x]^2)*(x^2 + delta^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Sinh[2*a*delta]/(4*delta*(beta^2*Sinh[a*delta]^2 - gamma^2*Cosh[a*delta]^2))*(beta/gamma - gamma/beta - 2/Sinh[2*a*delta])"
+  ],
+  "conds": [
+   "Abs[Arg[beta/gamma]] < Pi",
+   "Re[delta] > 0",
+   "a > 0"
+  ],
+  "cite": "GW(333)(81), ET II 222(63)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf 1/(beta^2 sin^2 ax + gamma^2 cos^2 ax) dx/(x^2+delta^2) = pi sinh(2a delta)/(4delta(beta^2 sinh^2(a delta) - gamma^2 cosh^2(a delta)))[beta/gamma - gamma/beta - 2/sinh(2a delta)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.813.3",
+  "gr": "3.813.3",
+  "page": 503,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/(x*(a^2*Sin[x]^2 + b^2*Cos[x]^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a*b)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (181)(8)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf sin x/(x(a^2 sin^2 x + b^2 cos^2 x)) = pi/(2ab)",
+  "note": ""
+ },
+ {
+  "id": "GR3.813.4",
+  "gr": "3.813.4",
+  "page": 503,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2/(x*(a^2*Cos[x]^2 + b^2*Sin[x]^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b*(a + b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (181)(11)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf sin^2 x/(x(a^2 cos^2 x + b^2 sin^2 x)) = pi/(2b(a+b))",
+  "note": "as printed the integrand ~ periodic/x and the integral diverges; probable misprint for sin^3 x (cf. 3.813.9-11)"
+ },
+ {
+  "id": "GR3.813.5",
+  "gr": "3.813.5",
+  "page": 504,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[2*x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(a^2 - b^2)*Log[(a + b)/(2*b)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "a != b"
+  ],
+  "cite": "GW (333)(52a)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) x sin 2x/(a^2 cos^2 x + b^2 sin^2 x) = pi/(a^2-b^2) ln((a+b)/(2b))",
+  "note": ""
+ },
+ {
+  "id": "GR3.813.6",
+  "gr": "3.813.6",
+  "page": 504,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[2*x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2), {x, 0, Pi}]",
+  "rhs": [
+   "2*Pi/(a^2 - b^2)*Log[(a + b)/(2*a)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "a != b"
+  ],
+  "cite": "GW (333)(52b)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^pi x sin 2x/(a^2 cos^2 x + b^2 sin^2 x) = 2pi/(a^2-b^2) ln((a+b)/(2a))",
+  "note": ""
+ },
+ {
+  "id": "GR3.813.7",
+  "gr": "3.813.7",
+  "page": 504,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*x]/((a^2*Cos[x]^2 + b^2*Sin[x]^2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(a*(a + b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (182)(3)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf sin 2x/(a^2 cos^2 x + b^2 sin^2 x) dx/x = pi/(a(a+b))",
+  "note": ""
+ },
+ {
+  "id": "GR3.813.8",
+  "gr": "3.813.8",
+  "page": 504,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*a*x]/(beta^2*Sin[a*x]^2 + gamma^2*Cos[a*x]^2)*x/(x^2 + delta^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*(beta^2*Sinh[a*delta]^2 - gamma^2*Cosh[a*delta]^2))*((beta - gamma)/(beta + gamma) - E^(-2*a*delta))"
+  ],
+  "conds": [
+   "a > 0",
+   "Abs[Arg[beta/gamma]] < Pi",
+   "Re[delta] > 0"
+  ],
+  "cite": "ET II 222(64), GW(333)(80)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf sin 2ax/(beta^2 sin^2 ax + gamma^2 cos^2 ax) x dx/(x^2+delta^2) = pi/(2(beta^2 sinh^2(a delta) - gamma^2 cosh^2(a delta)))[(beta-gamma)/(beta+gamma) - e^(-2a delta)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.813.9",
+  "gr": "3.813.9",
+  "page": 504,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Cos[x])*Sin[x]/((a^2*Cos[x]^2 + b^2*Sin[x]^2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b*(a + b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (182)(7)a",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf (1 - cos x) sin x/(a^2 cos^2 x + b^2 sin^2 x) dx/x = pi/(2b(a+b))",
+  "note": ""
+ },
+ {
+  "id": "GR3.813.10",
+  "gr": "3.813.10",
+  "page": 504,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]^2/((a^2*Cos[x]^2 + b^2*Sin[x]^2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a*(a + b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (182)(4)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf sin x cos^2 x/(a^2 cos^2 x + b^2 sin^2 x) dx/x = pi/(2a(a+b))",
+  "note": ""
+ },
+ {
+  "id": "GR3.813.11",
+  "gr": "3.813.11",
+  "page": 504,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3/((a^2*Cos[x]^2 + b^2*Sin[x]^2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b)*2/(a + b)",
+   "Pi/(2*b*(a + b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (182)(1)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf sin^3 x/(a^2 cos^2 x + b^2 sin^2 x) dx/x = pi/(2b) 2/(a+b)",
+  "note": "probable misprint: sin x = sin x cos^2 x + sin^3 x with 3.813.3 and 3.813.10 requires pi/(2b(a+b)); second rhs is that candidate"
+ },
+ {
+  "id": "GR3.814.1",
+  "gr": "3.814.1",
+  "page": 504,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x*Cot[x])/Sin[x]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4"
+  ],
+  "conds": [],
+  "cite": "BI (206)(9)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) (1 - x cot x)/sin^2 x = pi/4",
+  "note": ""
+ },
+ {
+  "id": "GR3.814.2",
+  "gr": "3.814.2",
+  "page": 504,
+  "status": "ok",
+  "lhs": "Integrate[x*Tan[x]/((Sin[x] + Cos[x])*Cos[x]), {x, 0, Pi/4}]",
+  "rhs": [
+   "-Pi/8*Log[2] + Pi/4 - Log[2]/2"
+  ],
+  "conds": [],
+  "cite": "BI (204)(30)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^(pi/4) x tan x/((sin x + cos x) cos x) = -pi/8 ln2 + pi/4 - 1/2 ln2",
+  "note": ""
+ },
+ {
+  "id": "GR3.814.3",
+  "gr": "3.814.3",
+  "page": 504,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Tan[x]/((a^2*Cos[x]^2 + b^2*Sin[x]^2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (181)(9)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf tan x/(a^2 cos^2 x + b^2 sin^2 x) dx/x = pi/(2ab)",
+  "note": "tan x has poles on the path",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.814.4",
+  "gr": "3.814.4",
+  "page": 504,
+  "status": "ok",
+  "lhs": "Integrate[x*Cot[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*a^2)*Log[(a + b)/b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "LI (208)(20)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) x cot x/(a^2 cos^2 x + b^2 sin^2 x) = pi/(2a^2) ln((a+b)/b)",
+  "note": ""
+ },
+ {
+  "id": "GR3.814.5a",
+  "gr": "3.814.5a",
+  "page": 504,
+  "status": "ok",
+  "lhs": "Integrate[(Pi/2 - x)*Tan[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*b^2)*Log[(a + b)/a]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (333)(59)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) (pi/2 - x) tan x/(a^2 cos^2 x + b^2 sin^2 x) = pi/(2b^2) ln((a+b)/a)",
+  "note": "chained equality; first form"
+ },
+ {
+  "id": "GR3.814.5b",
+  "gr": "3.814.5b",
+  "page": 504,
+  "status": "ok",
+  "lhs": "1/2*Integrate[(Pi/2 - x)*Tan[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(2*b^2)*Log[(a + b)/a]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (333)(59)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "1/2 int_0^pi (pi/2 - x) tan x/(a^2 cos^2 x + b^2 sin^2 x) = pi/(2b^2) ln((a+b)/a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.814.6",
+  "gr": "3.814.6",
+  "page": 504,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[x]^2*Tan[x]/((a^2*Cos[x]^2 + b^2*Sin[x]^2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b*(a + b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (182)(6)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf sin^2 x tan x/(a^2 cos^2 x + b^2 sin^2 x) dx/x = pi/(2b(a+b))",
+  "note": "tan x has poles on the path",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.814.7",
+  "gr": "3.814.7",
+  "page": 504,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Tan[x]/((a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (181)(10)a",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf tan x/(a^2 cos^2 2x + b^2 sin^2 2x) dx/x = pi/(2ab)",
+  "note": "tan x has poles on the path",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.814.8",
+  "gr": "3.814.8",
+  "page": 504,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*x]^2*Tan[x]/((a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b)*1/(a + b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (182)(2)a",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf sin^2 2x tan x/(a^2 cos^2 2x + b^2 sin^2 2x) dx/x = pi/(2b) 1/(a+b)",
+  "note": ""
+ },
+ {
+  "id": "GR3.814.9",
+  "gr": "3.814.9",
+  "page": 504,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[2*x]^2*Tan[x]/((a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a)*1/(a + b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (182)(5)a",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf cos^2 2x tan x/(a^2 cos^2 2x + b^2 sin^2 2x) dx/x = pi/(2a) 1/(a+b)",
+  "note": "tan x has poles on the path",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.814.10",
+  "gr": "3.814.10",
+  "page": 505,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[x]^2*Cos[x]/((a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)*x*Cos[4*x]), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/(8*b)*a/(a^2 + b^2)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (186)(12)a",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf sin^2 x cos x/(a^2 cos^2 2x + b^2 sin^2 2x) dx/(x cos 4x) = -pi/(8b) a/(a^2+b^2)",
+  "note": "1/cos 4x has poles on the path",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.814.11",
+  "gr": "3.814.11",
+  "page": 505,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[x]/((a^2*Cos[x]^2 + b^2*Sin[x]^2)*x*Cos[2*x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a*b)*(b^2 - a^2)/(b^2 + a^2)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (186)(4)a",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf sin x /(a^2 cos^2 x + b^2 sin^2 x) dx/(x cos 2x) = pi/(2ab) (b^2-a^2)/(b^2+a^2)",
+  "note": "1/cos 2x has poles on the path",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.814.12",
+  "gr": "3.814.12",
+  "page": 505,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[x]*Cos[x]/((a^2*Cos[x]^2 + b^2*Sin[x]^2)*x*Cos[2*x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a)*b/(a^2 + b^2)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (186)(7)a",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf sin x cos x /(a^2 cos^2 x + b^2 sin^2 x) dx/(x cos 2x) = pi/(2a) b/(a^2+b^2)",
+  "note": "1/cos 2x has poles on the path",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.814.13",
+  "gr": "3.814.13",
+  "page": 505,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[x]*Cos[x]^2/((a^2*Cos[x]^2 + b^2*Sin[x]^2)*x*Cos[2*x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a*b)*b^2/(a^2 + b^2)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (186)(8)a",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf sin x cos^2 x /(a^2 cos^2 x + b^2 sin^2 x) dx/(x cos 2x) = pi/(2ab) b^2/(a^2+b^2)",
+  "note": "1/cos 2x has poles on the path",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.814.14",
+  "gr": "3.814.14",
+  "page": 505,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[x]^3/((a^2*Cos[x]^2 + b^2*Sin[x]^2)*x*Cos[2*x]), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/(2*b)*a/(a^2 + b^2)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (186)(10)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf sin^3 x /(a^2 cos^2 x + b^2 sin^2 x) dx/(x cos 2x) = -pi/(2b) a/(a^2+b^2)",
+  "note": "1/cos 2x has poles on the path",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.814.15",
+  "gr": "3.814.15",
+  "page": 505,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[(1 - Cos[x])/((a^2*Cos[x]^2 + b^2*Sin[x]^2)*x*Sin[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (186)(3)a",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^inf (1 - cos x)/(a^2 cos^2 x + b^2 sin^2 x) dx/(x sin x) = pi/(2ab)",
+  "note": "1/sin x has poles at odd multiples of pi",
+  "reason": "pole on the integration path not marked PV: principal value implied"
+ },
+ {
+  "id": "GR3.815.1",
+  "gr": "3.815.1",
+  "page": 505,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[2*x]/((1 + a*Sin[x]^2)*(1 + b*Sin[x]^2)), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(a - b)*Log[(1 + Sqrt[1 + b])/(1 + Sqrt[1 + a])*Sqrt[1 + a]/Sqrt[1 + b]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "a != b"
+  ],
+  "cite": "BI (208)(22)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) x sin 2x/((1 + a sin^2 x)(1 + b sin^2 x)) = pi/(a-b) ln{(1+sqrt(1+b))/(1+sqrt(1+a)) sqrt(1+a)/sqrt(1+b)}",
+  "note": "a != b implied by 1/(a-b)"
+ },
+ {
+  "id": "GR3.815.2",
+  "gr": "3.815.2",
+  "page": 505,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[2*x]/((1 + a*Sin[x]^2)*(1 + b*Cos[x]^2)), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(a + a*b + b)*Log[(1 + Sqrt[1 + n])*Sqrt[1 + a]/(1 + Sqrt[1 + a])]",
+   "Pi/(a + a*b + b)*Log[(1 + Sqrt[1 + b])*Sqrt[1 + a]/(1 + Sqrt[1 + a])]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (208)(24)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) x sin 2x/((1 + a sin^2 x)(1 + b cos^2 x)) = pi/(a+ab+b) ln((1+sqrt(1+n)) sqrt(1+a)/(1+sqrt(1+a)))",
+  "note": "misprint: n in the value is absent from the integral; second rhs reads n as b"
+ },
+ {
+  "id": "GR3.815.3",
+  "gr": "3.815.3",
+  "page": 505,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[2*x]/((1 + a*Cos[x]^2)*(1 + b*Cos[x]^2)), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(a - b)*Log[(1 + Sqrt[1 + a])/(1 + Sqrt[1 + b])]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "a != b"
+  ],
+  "cite": "BI (208)(23)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) x sin 2x/((1 + a cos^2 x)(1 + b cos^2 x)) = pi/(a-b) ln((1+sqrt(1+a))/(1+sqrt(1+b)))",
+  "note": "a != b implied by 1/(a-b)"
+ },
+ {
+  "id": "GR3.815.4",
+  "gr": "3.815.4",
+  "page": 505,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[2*x]/((1 - Sin[t1]^2*Cos[x]^2)*(1 - Sin[t2]^2*Cos[x]^2)), {x, 0, Pi/2}]",
+  "rhs": [
+   "2*Pi/(Cos[t1]^2 - Cos[t2]^2)*Log[Cos[t1/2]/Cos[t2/2]]"
+  ],
+  "conds": [
+   "-Pi < t1 < Pi",
+   "-Pi < t2 < Pi"
+  ],
+  "cite": "BI (208)(21)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^(pi/2) x sin 2x/((1 - sin^2 t1 cos^2 x)(1 - sin^2 t2 cos^2 x)) = 2pi/(cos^2 t1 - cos^2 t2) ln(cos(t1/2)/cos(t2/2))",
+  "note": "cos^2 t1 != cos^2 t2 implied"
+ },
+ {
+  "id": "GR3.816.1",
+  "gr": "3.816.1",
+  "page": 505,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Sin[2*x]/(a^2 - Cos[x]^2)^2, {x, 0, Pi}]",
+  "rhs": [
+   "Pi^2*(Sqrt[a^2 - 1] - a)/(a*(a^2 - 1))"
+  ],
+  "conds": [
+   "a > 1"
+  ],
+  "cite": "LI (220)(9)",
+  "edition_note": "",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^pi x^2 sin 2x/(a^2 - cos^2 x)^2 = pi^2 (sqrt(a^2-1) - a)/(a(a^2-1))",
+  "note": ""
+ },
+ {
+  "id": "GR3.816.2",
+  "gr": "3.816.2",
+  "page": 505,
+  "status": "ok",
+  "lhs": "Integrate[(a^2 - 1 - Sin[x]^2)*Cos[x]/(a^2 - Cos[x]^2)^2*x^2, {x, 0, Pi}]",
+  "rhs": [
+   "Pi/2*Log[Abs[(1 - a)/(1 + a)]]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "BI (220)(12)",
+  "edition_note": "7",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^pi (a^2 - 1 - sin^2 x) cos x/(a^2 - cos^2 x)^2 x^2 = pi/2 ln|(1-a)/(1+a)| (cf. 3.812 5)",
+  "note": ""
+ },
+ {
+  "id": "GR3.816.3",
+  "gr": "3.816.3",
+  "page": 505,
+  "status": "ok",
+  "lhs": "Integrate[(a*Cos[2*x] - Sin[x]^2)/(a + Sin[x]^2)^2*x^2, {x, 0, Pi}]",
+  "rhs": [
+   "-2*Pi*Log[2*(-a + Sqrt[a]*Sqrt[a + 1])]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "LI (220)(10)",
+  "edition_note": "11",
+  "section": "3.81 Rational and trigonometric functions",
+  "tex": "int_0^pi (a cos 2x - sin^2 x)/(a + sin^2 x)^2 x^2 = -2pi ln[2(-a + sqrt(a) sqrt(a+1))]",
+  "note": "disjunctive condition [a < -1 and a > 0] (i.e. either); a > 0 branch kept, a < -1 branch omitted"
+ }
+]

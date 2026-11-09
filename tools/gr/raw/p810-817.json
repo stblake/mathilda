@@ -1,0 +1,1981 @@
+[
+ {
+  "id": "GR6.867.1",
+  "gr": "6.867.1",
+  "page": 810,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[2*mu*x]*LommelS2[2*mu - 1, 2*nu, a*Cos[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*2^(2*mu - 3)*a^(2*mu)*Csc[2*nu*Pi]/(Gamma[1 - mu - nu]*Gamma[1 - mu + nu])*(BesselJ[mu + nu, a/2]*BesselY[mu - nu, a/2] - BesselJ[mu - nu, a/2]*BesselY[mu + nu, a/2])"
+  ],
+  "conds": [
+   "Re[mu] > -2",
+   "Abs[Re[nu]] < 1"
+  ],
+  "cite": "ET II 388(29)",
+  "edition_note": "",
+  "section": "6.86 Lommel functions",
+  "tex": "int_0^{pi/2} cos(2mu x) S_{2mu-1,2nu}(a cos x) dx = pi 2^{2mu-3} a^{2mu} cosec(2nu pi)/(G(1-mu-nu)G(1-mu+nu)) [J_{mu+nu}Y_{mu-nu} - J_{mu-nu}Y_{mu+nu}](a/2)",
+  "note": "",
+  "reason": "Lommel function"
+ },
+ {
+  "id": "GR6.867.2",
+  "gr": "6.867.2",
+  "page": 810,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[(mu + 1)*x]*LommelS1[mu, nu, a*Cos[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "2^(mu - 2)*Pi*Gamma[(mu + nu + 1)/2]*Gamma[(mu - nu + 1)/2]*BesselJ[(mu + nu + 1)/2, a/2]*BesselJ[(mu - nu + 1)/2, a/2]"
+  ],
+  "conds": [
+   "Re[mu] > -2"
+  ],
+  "cite": "ET II 386(21)",
+  "edition_note": "",
+  "section": "6.86 Lommel functions",
+  "tex": "int_0^{pi/2} cos[(mu+1)x] s_{mu,nu}(a cos x) dx = 2^{mu-2} pi G(rho)G(sigma) J_rho(a/2) J_sigma(a/2), 2rho=mu+nu+1, 2sigma=mu-nu+1",
+  "note": "substituted 2*rho = mu + nu + 1, 2*sigma = mu - nu + 1",
+  "reason": "Lommel function"
+ },
+ {
+  "id": "GR6.868",
+  "gr": "6.868",
+  "page": 810,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[2*mu*x]/Cos[x]*LommelS2[2*mu, 2*nu, a*Sec[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*2^(2*mu - 1)/a*WhittakerW[mu, nu, a*E^(I*Pi/2)]*WhittakerW[mu, nu, a*E^(-I*Pi/2)]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[mu] < 1"
+  ],
+  "cite": "ET II 388(30)",
+  "edition_note": "",
+  "section": "6.86 Lommel functions",
+  "tex": "int_0^{pi/2} cos(2mu x)/cos x S_{2mu,2nu}(a sec x) dx = pi 2^{2mu-1}/a W_{mu,nu}(a e^{i pi/2}) W_{mu,nu}(a e^{-i pi/2})",
+  "note": "",
+  "reason": "Lommel function"
+ },
+ {
+  "id": "GR6.869.1",
+  "gr": "6.869.1",
+  "page": 810,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(1 - mu - nu)*BesselJ[nu, a*x]*LommelS2[mu, -mu - 2*nu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*a^(nu - 1)*Gamma[1 - mu - nu]/(2^(mu + 2*nu)*Gamma[nu + 1/2])*(a^2 - 1)^((mu + nu - 1)/2)*LegendreP[mu + nu, mu + nu - 1, 3, a]"
+  ],
+  "conds": [
+   "a > 1",
+   "Re[nu] > -1/2",
+   "Re[mu + nu] < 1"
+  ],
+  "cite": "ET II 388(28)",
+  "edition_note": "",
+  "section": "6.86 Lommel functions",
+  "tex": "int_0^inf x^{1-mu-nu} J_nu(ax) S_{mu,-mu-2nu}(x) dx = sqrt(pi) a^{nu-1} G(1-mu-nu)/(2^{mu+2nu} G(nu+1/2)) (a^2-1)^{(mu+nu-1)/2} P^{mu+nu-1}_{mu+nu}(a)",
+  "note": "",
+  "reason": "Lommel function"
+ },
+ {
+  "id": "GR6.869.2a",
+  "gr": "6.869.2",
+  "page": 810,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(-mu)*BesselJ[nu, a*x]*LommelS1[nu + mu, -nu + mu + 1, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(nu - 1)*Gamma[nu]*a^(-nu)*(1 - a^2)^mu"
+  ],
+  "conds": [
+   "0 < a < 1",
+   "Re[mu] > -1",
+   "-1 < Re[nu] < 3/2"
+  ],
+  "cite": "ET II 388(28)",
+  "edition_note": "",
+  "section": "6.86 Lommel functions",
+  "tex": "int_0^inf x^{-mu} J_nu(ax) s_{nu+mu,-nu+mu+1}(x) dx = 2^{nu-1} G(nu) a^{-nu} (1-a^2)^mu [0<a<1]",
+  "note": "condition misprinted in book as -1e < Re nu < 3/2; read as -1 < Re nu < 3/2",
+  "reason": "Lommel function"
+ },
+ {
+  "id": "GR6.869.2b",
+  "gr": "6.869.2",
+  "page": 810,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(-mu)*BesselJ[nu, a*x]*LommelS1[nu + mu, -nu + mu + 1, x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a > 1",
+   "Re[mu] > -1",
+   "-1 < Re[nu] < 3/2"
+  ],
+  "cite": "ET II 388(28)",
+  "edition_note": "",
+  "section": "6.86 Lommel functions",
+  "tex": "int_0^inf x^{-mu} J_nu(ax) s_{nu+mu,-nu+mu+1}(x) dx = 0 [1<a]",
+  "note": "",
+  "reason": "Lommel function"
+ },
+ {
+  "id": "GR6.869.3",
+  "gr": "6.869.3",
+  "page": 810,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x*BesselK[nu, b*x]*LommelS1[mu, nu/2, a*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*a)*Gamma[mu + nu/2 + 1]*Gamma[mu - nu/2 + 1]*LommelS2[-mu - 1, nu/2, b^2/(4*a)]"
+  ],
+  "conds": [
+   "Re[mu] > Abs[Re[nu]]/2 - 2",
+   "a > 0",
+   "Re[b] > 0"
+  ],
+  "cite": "ET II 151(78)",
+  "edition_note": "",
+  "section": "6.86 Lommel functions",
+  "tex": "int_0^inf x K_nu(bx) s_{mu,nu/2}(a x^2) dx = 1/(4a) G(mu+nu/2+1) G(mu-nu/2+1) S_{-mu-1,nu/2}(b^2/(4a))",
+  "note": "",
+  "reason": "Lommel function"
+ },
+ {
+  "id": "GR6.871.1",
+  "gr": "6.871.1",
+  "page": 810,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*KelvinBer[0, x], {x, 0, Infinity}]",
+  "rhs": [
+   "(Sqrt[beta^4 + 1] + beta^2)^(1/2)/Sqrt[2*(beta^4 + 1)]"
+  ],
+  "conds": [
+   "beta > 1/Sqrt[2]"
+  ],
+  "cite": "ME 40",
+  "edition_note": "",
+  "section": "6.87 Thomson functions",
+  "tex": "int_0^inf e^{-beta x} ber x dx = (sqrt(beta^4+1)+beta^2)^{1/2}/sqrt(2(beta^4+1))",
+  "note": "convergence condition beta > 1/Sqrt[2] added (ber x ~ e^{x/sqrt2}); none printed"
+ },
+ {
+  "id": "GR6.871.2",
+  "gr": "6.871.2",
+  "page": 810,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*KelvinBei[0, x], {x, 0, Infinity}]",
+  "rhs": [
+   "(Sqrt[beta^4 + 1] - beta^2)^(1/2)/Sqrt[2*(beta^4 + 1)]"
+  ],
+  "conds": [
+   "beta > 1/Sqrt[2]"
+  ],
+  "cite": "ME 40",
+  "edition_note": "",
+  "section": "6.87 Thomson functions",
+  "tex": "int_0^inf e^{-beta x} bei x dx = (sqrt(beta^4+1)-beta^2)^{1/2}/sqrt(2(beta^4+1))",
+  "note": "convergence condition beta > 1/Sqrt[2] added; none printed"
+ },
+ {
+  "id": "GR6.872.1",
+  "gr": "6.872.1",
+  "page": 811,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*KelvinBer[nu, 2*Sqrt[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*beta)*Sqrt[Pi/beta]*(BesselJ[(nu - 1)/2, 1/(2*beta)]*Cos[1/(2*beta) + 3*nu*Pi/4] - BesselJ[(nu + 1)/2, 1/(2*beta)]*Cos[1/(2*beta) + (3*nu + 6)*Pi/4])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "MI 49",
+  "edition_note": "",
+  "section": "6.87 Thomson functions",
+  "tex": "int_0^inf e^{-beta x} ber_nu(2 sqrt x) dx = 1/(2beta) sqrt(pi/beta)[J_{(nu-1)/2}(1/(2beta)) cos(1/(2beta)+3nu pi/4) - J_{(nu+1)/2}(1/(2beta)) cos(1/(2beta)+(3nu+6)pi/4)]",
+  "note": "conditions not printed; Re beta > 0, Re nu > -1 added for convergence"
+ },
+ {
+  "id": "GR6.872.2",
+  "gr": "6.872.2",
+  "page": 811,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*KelvinBei[nu, 2*Sqrt[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*beta)*Sqrt[Pi/beta]*(BesselJ[(nu - 1)/2, 1/(2*beta)]*Sin[1/(2*beta) + 3*nu*Pi/4] - BesselJ[(nu + 1)/2, 1/(2*beta)]*Sin[1/(2*beta) + (3*nu + 6)*Pi/4])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "MI 49",
+  "edition_note": "",
+  "section": "6.87 Thomson functions",
+  "tex": "int_0^inf e^{-beta x} bei_nu(2 sqrt x) dx = 1/(2beta) sqrt(pi/beta)[J_{(nu-1)/2}(1/(2beta)) sin(1/(2beta)+3nu pi/4) - J_{(nu+1)/2}(1/(2beta)) sin(1/(2beta)+(3nu+6)pi/4)]",
+  "note": "conditions not printed; Re beta > 0, Re nu > -1 added for convergence"
+ },
+ {
+  "id": "GR6.872.3",
+  "gr": "6.872.3",
+  "page": 811,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*KelvinBer[0, 2*Sqrt[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "1/beta*Cos[1/beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 40",
+  "edition_note": "",
+  "section": "6.87 Thomson functions",
+  "tex": "int_0^inf e^{-beta x} ber(2 sqrt x) dx = (1/beta) cos(1/beta)",
+  "note": ""
+ },
+ {
+  "id": "GR6.872.4",
+  "gr": "6.872.4",
+  "page": 811,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*KelvinBei[0, 2*Sqrt[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "1/beta*Sin[1/beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 40",
+  "edition_note": "",
+  "section": "6.87 Thomson functions",
+  "tex": "int_0^inf e^{-beta x} bei(2 sqrt x) dx = (1/beta) sin(1/beta)",
+  "note": ""
+ },
+ {
+  "id": "GR6.872.5",
+  "gr": "6.872.5",
+  "page": 811,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*KelvinKer[0, 2*Sqrt[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "-1/(2*beta)*(Cos[1/beta]*CosIntegral[1/beta] + Sin[1/beta]*(SinIntegral[1/beta] - Pi/2))"
+  ],
+  "conds": [
+   "beta > 0"
+  ],
+  "cite": "MI 50",
+  "edition_note": "",
+  "section": "6.87 Thomson functions",
+  "tex": "int_0^inf e^{-beta x} ker(2 sqrt x) dx = -1/(2beta)[cos(1/beta) ci(1/beta) + sin(1/beta) si(1/beta)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.872.6",
+  "gr": "6.872.6",
+  "page": 811,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*KelvinKei[0, 2*Sqrt[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "-1/(2*beta)*(Sin[1/beta]*CosIntegral[1/beta] - Cos[1/beta]*(SinIntegral[1/beta] - Pi/2))"
+  ],
+  "conds": [
+   "beta > 0"
+  ],
+  "cite": "MI 50",
+  "edition_note": "",
+  "section": "6.87 Thomson functions",
+  "tex": "int_0^inf e^{-beta x} kei(2 sqrt x) dx = -1/(2beta)[sin(1/beta) ci(1/beta) - cos(1/beta) si(1/beta)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.872.7",
+  "gr": "6.872.7",
+  "page": 811,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*KelvinBer[nu, 2*Sqrt[x]]*KelvinBei[nu, 2*Sqrt[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*beta)*BesselJ[nu, 2/beta]*Sin[2/beta + 3*nu*Pi/2]"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 49",
+  "edition_note": "",
+  "section": "6.87 Thomson functions",
+  "tex": "int_0^inf e^{-beta x} ber_nu(2 sqrt x) bei_nu(2 sqrt x) dx = 1/(2beta) J_nu(2/beta) sin(2/beta + 3nu pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.873",
+  "gr": "6.873",
+  "page": 811,
+  "status": "ok",
+  "lhs": "Integrate[(KelvinBer[nu, 2*Sqrt[x]]^2 + KelvinBei[nu, 2*Sqrt[x]]^2)*E^(-beta*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/beta*BesselI[nu, 2/beta]"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 40",
+  "edition_note": "",
+  "section": "6.87 Thomson functions",
+  "tex": "int_0^inf [ber_nu^2(2 sqrt x) + bei_nu^2(2 sqrt x)] e^{-beta x} dx = (1/beta) I_nu(2/beta)",
+  "note": ""
+ },
+ {
+  "id": "GR6.874.1",
+  "gr": "6.874.1",
+  "page": 811,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)/Sqrt[x]*KelvinBer[2*nu, 2*Sqrt[2*x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/beta]*BesselJ[nu, 1/beta]*Cos[1/beta - 3*Pi/4 + 3*nu*Pi/2]"
+  ],
+  "conds": [
+   "Re[nu] > -1/2",
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 49",
+  "edition_note": "",
+  "section": "6.87 Thomson functions",
+  "tex": "int_0^inf e^{-beta x}/sqrt x ber_{2nu}(2 sqrt(2x)) dx = sqrt(pi/beta) J_nu(1/beta) cos(1/beta - 3pi/4 + 3nu pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.874.2",
+  "gr": "6.874.2",
+  "page": 811,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)/Sqrt[x]*KelvinBei[2*nu, 2*Sqrt[2*x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/beta]*BesselJ[nu, 1/beta]*Sin[1/beta - 3*Pi/4 + 3*nu*Pi/2]"
+  ],
+  "conds": [
+   "Re[nu] > -1/2",
+   "Re[beta] > 0"
+  ],
+  "cite": "MI 49",
+  "edition_note": "",
+  "section": "6.87 Thomson functions",
+  "tex": "int_0^inf e^{-beta x}/sqrt x bei_{2nu}(2 sqrt(2x)) dx = sqrt(pi/beta) J_nu(1/beta) sin(1/beta - 3pi/4 + 3nu pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.874.3",
+  "gr": "6.874.3",
+  "page": 811,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu/2)*KelvinBer[nu, Sqrt[x]]*E^(-beta*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-nu)/beta^(1 + nu)*Cos[1/(4*beta) + 3*nu*Pi/4]"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 40",
+  "edition_note": "",
+  "section": "6.87 Thomson functions",
+  "tex": "int_0^inf x^{nu/2} ber_nu(sqrt x) e^{-beta x} dx = 2^{-nu}/beta^{1+nu} cos(1/(4beta) + 3nu pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR6.874.4",
+  "gr": "6.874.4",
+  "page": 811,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu/2)*KelvinBei[nu, Sqrt[x]]*E^(-beta*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-nu)/beta^(1 + nu)*Sin[1/(4*beta) + 3*nu*Pi/4]"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "Re[beta] > 0"
+  ],
+  "cite": "ME 40",
+  "edition_note": "",
+  "section": "6.87 Thomson functions",
+  "tex": "int_0^inf x^{nu/2} bei_nu(sqrt x) e^{-beta x} dx = 2^{-nu}/beta^{1+nu} sin(1/(4beta) + 3nu pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR6.875.1",
+  "gr": "6.875.1",
+  "page": 812,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*(KelvinKer[0, 2*Sqrt[x]] - Log[x]/2*KelvinBer[0, 2*Sqrt[x]]), {x, 0, Infinity}]",
+  "rhs": [
+   "1/beta*(Log[beta]*Cos[1/beta] + Pi/4*Sin[1/beta])"
+  ],
+  "conds": [
+   "beta > 0"
+  ],
+  "cite": "MI 50",
+  "edition_note": "",
+  "section": "6.87 Thomson functions",
+  "tex": "int_0^inf e^{-beta x}[ker(2 sqrt x) - (1/2) ln x ber(2 sqrt x)] dx = (1/beta)[ln beta cos(1/beta) + (pi/4) sin(1/beta)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.875.2",
+  "gr": "6.875.2",
+  "page": 812,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*(KelvinKei[0, 2*Sqrt[x]] - Log[x]/2*KelvinBei[0, 2*Sqrt[x]]), {x, 0, Infinity}]",
+  "rhs": [
+   "1/beta*(Log[beta]*Sin[1/beta] - Pi/4*Cos[1/beta])"
+  ],
+  "conds": [
+   "beta > 0"
+  ],
+  "cite": "MI 50",
+  "edition_note": "",
+  "section": "6.87 Thomson functions",
+  "tex": "int_0^inf e^{-beta x}[kei(2 sqrt x) - (1/2) ln x bei(2 sqrt x)] dx = (1/beta)[ln beta sin(1/beta) - (pi/4) cos(1/beta)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.876.1",
+  "gr": "6.876.1",
+  "page": 812,
+  "status": "ok",
+  "lhs": "Integrate[x*KelvinKei[0, x]*BesselJ[1, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-1/(2*a)*ArcTan[a^2]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 21(32)",
+  "edition_note": "",
+  "section": "6.87 Thomson functions",
+  "tex": "int_0^inf x kei x J_1(ax) dx = -(1/(2a)) arctan a^2",
+  "note": ""
+ },
+ {
+  "id": "GR6.876.2",
+  "gr": "6.876.2",
+  "page": 812,
+  "status": "ok",
+  "lhs": "Integrate[x*KelvinKer[0, x]*BesselJ[1, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*a)*Log[Sqrt[1 + a^4]]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 21(33)",
+  "edition_note": "",
+  "section": "6.87 Thomson functions",
+  "tex": "int_0^inf x ker x J_1(ax) dx = (1/(2a)) ln sqrt(1+a^4)",
+  "note": ""
+ },
+ {
+  "id": "GR6.911.1",
+  "gr": "6.911.1",
+  "page": 812,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[MathieuCe[m, z, q]*MathieuCe[p, z, q], {z, 0, 2*Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[p, Integers] && p >= 0",
+   "m != p"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.91 Mathieu functions",
+  "tex": "int_0^{2pi} ce_m ce_p dz = 0 [m != p]",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.911.2a",
+  "gr": "6.911.2",
+  "page": 812,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[MathieuCe[2*n, z, q]^2, {z, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi*MathieuA[2*n, 0, q]^2 + Pi*Sum[MathieuA[2*n, 2*r, q]^2, {r, 1, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.91 Mathieu functions",
+  "tex": "int_0^{2pi} [ce_{2n}]^2 dz = 2pi [A_0^{(2n)}]^2 + pi sum_{r>=1} [A_{2r}^{(2n)}]^2",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.911.2b",
+  "gr": "6.911.2",
+  "page": 812,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[MathieuCe[2*n, z, q]^2, {z, 0, 2*Pi}]",
+  "rhs": [
+   "Pi"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.91 Mathieu functions",
+  "tex": "int_0^{2pi} [ce_{2n}]^2 dz = pi",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.911.3a",
+  "gr": "6.911.3",
+  "page": 812,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[MathieuCe[2*n + 1, z, q]^2, {z, 0, 2*Pi}]",
+  "rhs": [
+   "Pi*Sum[MathieuA[2*n + 1, 2*r + 1, q]^2, {r, 0, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.91 Mathieu functions",
+  "tex": "int_0^{2pi} [ce_{2n+1}]^2 dz = pi sum_{r>=0} [A_{2r+1}^{(2n+1)}]^2",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.911.3b",
+  "gr": "6.911.3",
+  "page": 812,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[MathieuCe[2*n + 1, z, q]^2, {z, 0, 2*Pi}]",
+  "rhs": [
+   "Pi"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.91 Mathieu functions",
+  "tex": "int_0^{2pi} [ce_{2n+1}]^2 dz = pi",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.911.4",
+  "gr": "6.911.4",
+  "page": 812,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[MathieuSe[m, z, q]*MathieuSe[p, z, q], {z, 0, 2*Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1",
+   "Element[p, Integers] && p >= 1",
+   "m != p"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.91 Mathieu functions",
+  "tex": "int_0^{2pi} se_m se_p dz = 0 [m != p]",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.911.5a",
+  "gr": "6.911.5",
+  "page": 812,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[MathieuSe[2*n + 1, z, q]^2, {z, 0, 2*Pi}]",
+  "rhs": [
+   "Pi*Sum[MathieuB[2*n + 1, 2*r + 1, q]^2, {r, 0, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.91 Mathieu functions",
+  "tex": "int_0^{2pi} [se_{2n+1}]^2 dz = pi sum_{r>=0} [B_{2r+1}^{(2n+1)}]^2",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.911.5b",
+  "gr": "6.911.5",
+  "page": 812,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[MathieuSe[2*n + 1, z, q]^2, {z, 0, 2*Pi}]",
+  "rhs": [
+   "Pi"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.91 Mathieu functions",
+  "tex": "int_0^{2pi} [se_{2n+1}]^2 dz = pi",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.911.6a",
+  "gr": "6.911.6",
+  "page": 812,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[MathieuSe[2*n + 2, z, q]^2, {z, 0, 2*Pi}]",
+  "rhs": [
+   "Pi*Sum[MathieuB[2*n + 2, 2*r + 2, q]^2, {r, 0, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.91 Mathieu functions",
+  "tex": "int_0^{2pi} [se_{2n+2}]^2 dz = pi sum_{r>=0} [B_{2r+2}^{(2n+2)}]^2",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.911.6b",
+  "gr": "6.911.6",
+  "page": 812,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[MathieuSe[2*n + 2, z, q]^2, {z, 0, 2*Pi}]",
+  "rhs": [
+   "Pi"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.91 Mathieu functions",
+  "tex": "int_0^{2pi} [se_{2n+2}]^2 dz = pi",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.911.7",
+  "gr": "6.911.7",
+  "page": 812,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[MathieuSe[m, z, q]*MathieuCe[p, z, q], {z, 0, 2*Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1",
+   "Element[p, Integers] && p >= 1"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.91 Mathieu functions",
+  "tex": "int_0^{2pi} se_m ce_p dz = 0 [m,p = 1,2,...]",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.921.1",
+  "gr": "6.921.1",
+  "page": 812,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cosh[2*Sqrt[q]*Cos[u]*Sinh[z]]*MathieuCe[2*n, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "Pi*MathieuA[2*n, 0, q]/MathieuCe[2*n, Pi/2, q]*(-1)^n*MathieuCe[2*n, I*(z), -q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi cosh(2k cos u sinh z) ce_{2n}(u,q) du = pi A_0^{(2n)}/ce_{2n}(pi/2,q) (-1)^n Ce_{2n}(z,-q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.921.2",
+  "gr": "6.921.2",
+  "page": 813,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cosh[2*Sqrt[q]*Sin[u]*Cosh[z]]*MathieuCe[2*n, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "Pi*MathieuA[2*n, 0, q]/MathieuCe[2*n, 0, q]*(-1)^n*MathieuCe[2*n, I*(z), -q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi cosh(2k sin u cosh z) ce_{2n}(u,q) du = pi A_0^{(2n)}/ce_{2n}(0,q) (-1)^n Ce_{2n}(z,-q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.921.3",
+  "gr": "6.921.3",
+  "page": 813,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sinh[2*Sqrt[q]*Sin[u]*Cosh[z]]*MathieuSe[2*n + 1, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "Pi*Sqrt[q]*MathieuB[2*n + 1, 1, q]/Derivative[0, 1, 0][MathieuSe][2*n + 1, 0, q]*(-1)^n*MathieuCe[2*n + 1, I*(z), -q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi sinh(2k sin u cosh z) se_{2n+1}(u,q) du = pi k B_1^{(2n+1)}/se'_{2n+1}(0,q) (-1)^n Ce_{2n+1}(z,-q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.921.4",
+  "gr": "6.921.4",
+  "page": 813,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sinh[2*Sqrt[q]*Cos[u]*Sinh[z]]*MathieuCe[2*n + 1, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "Pi*Sqrt[q]*MathieuA[2*n + 1, 1, q]/Derivative[0, 1, 0][MathieuCe][2*n + 1, Pi/2, q]*(-1)^(n + 1)*(-I*MathieuSe[2*n + 1, I*(z), -q])"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi sinh(2k cos u sinh z) ce_{2n+1}(u,q) du = pi k A_1^{(2n+1)}/ce'_{2n+1}(pi/2,q) (-1)^{n+1} Se_{2n+1}(z,-q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.921.5",
+  "gr": "6.921.5",
+  "page": 813,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sinh[2*Sqrt[q]*Sin[u]*Sin[z]]*MathieuSe[2*n + 1, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "Pi*Sqrt[q]*MathieuB[2*n + 1, 1, q]/Derivative[0, 1, 0][MathieuSe][2*n + 1, 0, q]*MathieuSe[2*n + 1, z, q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi sinh(2k sin u sin z) se_{2n+1}(u,q) du = pi k B_1^{(2n+1)}/se'_{2n+1}(0,q) se_{2n+1}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.922.1",
+  "gr": "6.922.1",
+  "page": 813,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[u]*Cosh[z]*Cos[2*Sqrt[q]*Sin[u]*Sinh[z]]*MathieuCe[2*n + 1, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "Pi*MathieuA[2*n + 1, 1, q]/(2*MathieuCe[2*n + 1, 0, q])*MathieuCe[2*n + 1, I*(z), q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi cos u cosh z cos(2k sin u sinh z) ce_{2n+1}(u,q) du = pi A_1^{(2n+1)}/(2 ce_{2n+1}(0,q)) Ce_{2n+1}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.922.2",
+  "gr": "6.922.2",
+  "page": 813,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[u]*Sinh[z]*Cos[2*Sqrt[q]*Cos[u]*Cosh[z]]*MathieuSe[2*n + 1, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "Pi*MathieuB[2*n + 1, 1, q]/(2*MathieuSe[2*n + 1, Pi/2, q])*(-I*MathieuSe[2*n + 1, I*(z), q])"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi sin u sinh z cos(2k cos u cosh z) se_{2n+1}(u,q) du = pi B_1^{(2n+1)}/(2 se_{2n+1}(pi/2,q)) Se_{2n+1}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.922.3",
+  "gr": "6.922.3",
+  "page": 813,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[u]*Sinh[z]*Sin[2*Sqrt[q]*Cos[u]*Cosh[z]]*MathieuSe[2*n + 2, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "-Pi*Sqrt[q]*MathieuB[2*n + 2, 2, q]/(2*Derivative[0, 1, 0][MathieuSe][2*n + 2, Pi/2, q])*(-I*MathieuSe[2*n + 2, I*(z), q])"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi sin u sinh z sin(2k cos u cosh z) se_{2n+2}(u,q) du = -pi k B_2^{(2n+2)}/(2 se'_{2n+2}(pi/2,q)) Se_{2n+2}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.922.4",
+  "gr": "6.922.4",
+  "page": 813,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[u]*Cosh[z]*Sin[2*Sqrt[q]*Sin[u]*Sinh[z]]*MathieuSe[2*n + 2, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "Pi*Sqrt[q]*MathieuB[2*n + 2, 2, q]/(2*Derivative[0, 1, 0][MathieuSe][2*n + 2, 0, q])*(-I*MathieuSe[2*n + 2, I*(z), q])"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi cos u cosh z sin(2k sin u sinh z) se_{2n+2}(u,q) du = pi k B_2^{(2n+2)}/(2 se'_{2n+2}(0,q)) Se_{2n+2}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.922.5",
+  "gr": "6.922.5",
+  "page": 813,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[u]*Cosh[z]*Cosh[2*Sqrt[q]*Cos[u]*Sinh[z]]*MathieuSe[2*n + 1, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "Pi*MathieuB[2*n + 1, 1, q]/(2*MathieuSe[2*n + 1, Pi/2, q])*(-1)^n*MathieuCe[2*n + 1, I*(z), -q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi sin u cosh z cosh(2k cos u sinh z) se_{2n+1}(u,q) du = pi B_1^{(2n+1)}/(2 se_{2n+1}(pi/2,q)) (-1)^n Ce_{2n+1}(z,-q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.922.6",
+  "gr": "6.922.6",
+  "page": 813,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[u]*Sinh[z]*Cosh[2*Sqrt[q]*Sin[u]*Cosh[z]]*MathieuCe[2*n + 1, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "Pi*MathieuA[2*n + 1, 1, q]/(2*MathieuCe[2*n + 1, 0, q])*(-1)^n*(-I*MathieuSe[2*n + 1, I*(z), -q])"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi cos u sinh z cosh(2k sin u cosh z) ce_{2n+1}(u,q) du = pi A_1^{(2n+1)}/(2 ce_{2n+1}(0,q)) (-1)^n Se_{2n+1}(z,-q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.922.7",
+  "gr": "6.922.7",
+  "page": 813,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[u]*Cosh[z]*Sinh[2*Sqrt[q]*Cos[u]*Sinh[z]]*MathieuSe[2*n + 2, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "Pi*Sqrt[q]*MathieuB[2*n + 2, 2, q]/(2*Derivative[0, 1, 0][MathieuSe][2*n + 2, Pi/2, q])*(-1)^(n + 1)*(-I*MathieuSe[2*n + 2, I*(z), -q])"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi sin u cosh z sinh(2k cos u sinh z) se_{2n+2}(u,q) du = pi k B_2^{(2n+2)}/(2 se'_{2n+2}(pi/2,q)) (-1)^{n+1} Se_{2n+2}(z,-q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.922.8",
+  "gr": "6.922.8",
+  "page": 814,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[u]*Sinh[z]*Sinh[2*Sqrt[q]*Sin[u]*Cosh[z]]*MathieuSe[2*n + 2, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "Pi*Sqrt[q]*MathieuB[2*n + 2, 2, q]/(2*Derivative[0, 1, 0][MathieuSe][2*n + 2, 0, q])*(-1)^n*(-I*MathieuSe[2*n + 2, I*(z), -q])"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi cos u sinh z sinh(2k sin u cosh z) se_{2n+2}(u,q) du = pi k B_2^{(2n+2)}/(2 se'_{2n+2}(0,q)) (-1)^n Se_{2n+2}(z,-q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.923.1",
+  "gr": "6.923.1",
+  "page": 814,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[2*Sqrt[q]*Cosh[z]*Cosh[u]]*Sinh[z]*Sinh[u]*(-I*MathieuSe[2*n + 1, I*(u), q]), {u, 0, Infinity}]",
+  "rhs": [
+   "-Pi*MathieuB[2*n + 1, 1, q]/(4*MathieuSe[2*n + 1, Pi/2, q])*(-I*MathieuSe[2*n + 1, I*(z), q])"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^inf sin(2k cosh z cosh u) sinh z sinh u Se_{2n+1}(u,q) du = -pi B_1^{(2n+1)}/(4 se_{2n+1}(pi/2,q)) Se_{2n+1}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.923.2",
+  "gr": "6.923.2",
+  "page": 814,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[2*Sqrt[q]*Cosh[z]*Cosh[u]]*Sinh[z]*Sinh[u]*(-I*MathieuSe[2*n + 1, I*(u), q]), {u, 0, Infinity}]",
+  "rhs": [
+   "-Pi*MathieuB[2*n + 1, 1, q]/(4*MathieuSe[2*n + 1, Pi/2, q])*MathieuGey[2*n + 1, z, q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^inf cos(2k cosh z cosh u) sinh z sinh u Se_{2n+1}(u,q) du = -pi B_1^{(2n+1)}/(4 se_{2n+1}(pi/2,q)) Gey_{2n+1}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.923.3",
+  "gr": "6.923.3",
+  "page": 814,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[2*Sqrt[q]*Cosh[z]*Cosh[u]]*Sinh[z]*Sinh[u]*(-I*MathieuSe[2*n + 2, I*(u), q]), {u, 0, Infinity}]",
+  "rhs": [
+   "-Sqrt[q]*Pi*MathieuB[2*n + 2, 2, q]/(4*Derivative[0, 1, 0][MathieuSe][2*n + 2, Pi/2, q])*MathieuGey[2*n + 2, z, q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^inf sin(2k cosh z cosh u) sinh z sinh u Se_{2n+2}(u,q) du = -k pi B_2^{(2n+2)}/(4 se'_{2n+2}(pi/2,q)) Gey_{2n+2}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.923.4",
+  "gr": "6.923.4",
+  "page": 814,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[2*Sqrt[q]*Cosh[z]*Cosh[u]]*Sinh[z]*Sinh[u]*(-I*MathieuSe[2*n + 2, I*(u), q]), {u, 0, Infinity}]",
+  "rhs": [
+   "-Sqrt[q]*Pi*MathieuB[2*n + 2, 2, q]/(4*MathieuSe[2*n + 2, Pi/2, q])*(-I*MathieuSe[2*n + 2, I*(z), q])"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^inf cos(2k cosh z cosh u) sinh z sinh u Se_{2n+2}(u,q) du = -k pi B_2^{(2n+2)}/(4 se_{2n+2}(pi/2,q)) Se_{2n+2}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.923.5",
+  "gr": "6.923.5",
+  "page": 814,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[2*Sqrt[q]*Cosh[z]*Cosh[u]]*MathieuCe[2*n, I*(u), q], {u, 0, Infinity}]",
+  "rhs": [
+   "Pi*MathieuA[2*n, 0, q]/(2*MathieuCe[2*n, Pi/2, q])*MathieuCe[2*n, I*(z), q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^inf sin(2k cosh z cosh u) Ce_{2n}(u,q) du = pi A_0^{(2n)}/(2 ce_{2n}(pi/2,q)) Ce_{2n}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.923.6",
+  "gr": "6.923.6",
+  "page": 814,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[2*Sqrt[q]*Cosh[z]*Cosh[u]]*MathieuCe[2*n, I*(u), q], {u, 0, Infinity}]",
+  "rhs": [
+   "-Pi*MathieuA[2*n, 0, q]/(2*MathieuCe[2*n, Pi/2, q])*MathieuFey[2*n, z, q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^inf cos(2k cosh z cosh u) Ce_{2n}(u,q) du = -pi A_0^{(2n)}/(2 ce_{2n}(pi/2,q)) Fey_{2n}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.923.7",
+  "gr": "6.923.7",
+  "page": 814,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[2*Sqrt[q]*Cosh[z]*Cosh[u]]*MathieuCe[2*n + 1, I*(u), q], {u, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[q]*Pi*MathieuA[2*n + 1, 1, q]/(2*Derivative[0, 1, 0][MathieuCe][2*n + 1, Pi/2, q])*MathieuFey[2*n + 1, z, q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^inf sin(2k cosh z cosh u) Ce_{2n+1}(u,q) du = k pi A_1^{(2n+1)}/(2 ce'_{2n+1}(pi/2,q)) Fey_{2n+1}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.923.8",
+  "gr": "6.923.8",
+  "page": 814,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[2*Sqrt[q]*Cosh[z]*Cosh[u]]*MathieuCe[2*n + 1, I*(u), q], {u, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[q]*Pi*MathieuA[2*n + 1, 1, q]/(2*Derivative[0, 1, 0][MathieuCe][2*n + 1, Pi/2, q])*MathieuCe[2*n + 1, I*(z), q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^inf cos(2k cosh z cosh u) Ce_{2n+1}(u,q) du = k pi A_1^{(2n+1)}/(2 ce'_{2n+1}(pi/2,q)) Ce_{2n+1}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.924.1",
+  "gr": "6.924.1",
+  "page": 814,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[2*Sqrt[q]*Cos[u]*Cos[z]]*MathieuCe[2*n, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "Pi*MathieuA[2*n, 0, q]/MathieuCe[2*n, Pi/2, q]*MathieuCe[2*n, z, q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi cos(2k cos u cos z) ce_{2n}(u,q) du = pi A_0^{(2n)}/ce_{2n}(pi/2,q) ce_{2n}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.924.2",
+  "gr": "6.924.2",
+  "page": 814,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[2*Sqrt[q]*Cos[u]*Cos[z]]*MathieuCe[2*n + 1, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "-Pi*Sqrt[q]*MathieuA[2*n + 1, 1, q]/Derivative[0, 1, 0][MathieuCe][2*n + 1, Pi/2, q]*MathieuCe[2*n + 1, z, q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi sin(2k cos u cos z) ce_{2n+1}(u,q) du = -pi k A_1^{(2n+1)}/ce'_{2n+1}(pi/2,q) ce_{2n+1}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.924.3",
+  "gr": "6.924.3",
+  "page": 815,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[2*Sqrt[q]*Cos[u]*Cosh[z]]*MathieuCe[2*n, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "Pi*MathieuA[2*n, 0, q]/MathieuCe[2*n, Pi/2, q]*MathieuCe[2*n, I*(z), q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi cos(2k cos u cosh z) ce_{2n}(u,q) du = pi A_0^{(2n)}/ce_{2n}(pi/2,q) Ce_{2n}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.924.4",
+  "gr": "6.924.4",
+  "page": 815,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[2*Sqrt[q]*Sin[u]*Sinh[z]]*MathieuCe[2*n, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "Pi*MathieuA[2*n, 0, q]/MathieuCe[2*n, 0, q]*MathieuCe[2*n, I*(z), q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi cos(2k sin u sinh z) ce_{2n}(u,q) du = pi A_0^{(2n)}/ce_{2n}(0,q) Ce_{2n}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.924.5",
+  "gr": "6.924.5",
+  "page": 815,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[2*Sqrt[q]*Cos[u]*Cosh[z]]*MathieuCe[2*n + 1, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "-Pi*Sqrt[q]*MathieuA[2*n + 1, 1, q]/Derivative[0, 1, 0][MathieuCe][2*n + 1, Pi/2, q]*MathieuCe[2*n + 1, I*(z), q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi sin(2k cos u cosh z) ce_{2n+1}(u,q) du = -pi k A_1^{(2n+1)}/ce'_{2n+1}(pi/2,q) Ce_{2n+1}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.924.6",
+  "gr": "6.924.6",
+  "page": 815,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[2*Sqrt[q]*Sin[u]*Sinh[z]]*MathieuSe[2*n + 1, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "Pi*Sqrt[q]*MathieuB[2*n + 1, 1, q]/Derivative[0, 2, 0][MathieuSe][2*n + 1, 0, q]*(-I*MathieuSe[2*n + 1, I*(z), q])",
+   "Pi*Sqrt[q]*MathieuB[2*n + 1, 1, q]/Derivative[0, 1, 0][MathieuSe][2*n + 1, 0, q]*(-I*MathieuSe[2*n + 1, I*(z), q])"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi sin(2k sin u sinh z) se_{2n+1}(u,q) du = pi k B_1^{(2n+1)}/se''_{2n+1}(0,q) Se_{2n+1}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q); book prints se''_{2n+1}(0,q) in the denominator; second rhs uses se' (likely misprint, cf. 6.921.5)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.925.1",
+  "gr": "6.925.1",
+  "page": 815,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[2*Sqrt[q]*Sqrt[Cosh[xi]^2 - Sin[eta]^2]*Cos[theta - ArcTan[Tanh[xi]*Tan[eta]]]]*MathieuCe[2*n, theta, q], {theta, 0, 2*Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^{2pi} sin[z1 cos(theta-alpha)] ce_{2n}(theta,q) dtheta = 0",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q); z1 = 2k Sqrt[cosh^2 xi - sin^2 eta], alpha = arctan(tanh xi tan eta) substituted",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.925.2",
+  "gr": "6.925.2",
+  "page": 815,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[2*Sqrt[q]*Sqrt[Cosh[xi]^2 - Sin[eta]^2]*Cos[theta - ArcTan[Tanh[xi]*Tan[eta]]]]*MathieuCe[2*n, theta, q], {theta, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi*MathieuA[2*n, 0, q]/(MathieuCe[2*n, 0, q]*MathieuCe[2*n, Pi/2, q])*MathieuCe[2*n, I*(xi), q]*MathieuCe[2*n, eta, q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^{2pi} cos[z1 cos(theta-alpha)] ce_{2n} dtheta = 2pi A_0^{(2n)}/(ce_{2n}(0,q) ce_{2n}(pi/2,q)) Ce_{2n}(xi,q) ce_{2n}(eta,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q); z1 = 2k Sqrt[cosh^2 xi - sin^2 eta], alpha = arctan(tanh xi tan eta) substituted",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.925.3",
+  "gr": "6.925.3",
+  "page": 815,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[2*Sqrt[q]*Sqrt[Cosh[xi]^2 - Sin[eta]^2]*Cos[theta - ArcTan[Tanh[xi]*Tan[eta]]]]*MathieuCe[2*n + 1, theta, q], {theta, 0, 2*Pi}]",
+  "rhs": [
+   "-2*Pi*Sqrt[q]*MathieuA[2*n + 1, 1, q]/(MathieuCe[2*n + 1, 0, q]*Derivative[0, 1, 0][MathieuCe][2*n + 1, Pi/2, q])*MathieuCe[2*n + 1, I*(xi), q]*MathieuCe[2*n + 1, eta, q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^{2pi} sin[z1 cos(theta-alpha)] ce_{2n+1} dtheta = -2pi k A_1^{(2n+1)}/(ce_{2n+1}(0,q) ce'_{2n+1}(pi/2,q)) Ce_{2n+1}(xi,q) ce_{2n+1}(eta,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q); z1 = 2k Sqrt[cosh^2 xi - sin^2 eta], alpha = arctan(tanh xi tan eta) substituted",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.925.4",
+  "gr": "6.925.4",
+  "page": 815,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[2*Sqrt[q]*Sqrt[Cosh[xi]^2 - Sin[eta]^2]*Cos[theta - ArcTan[Tanh[xi]*Tan[eta]]]]*MathieuCe[2*n + 1, theta, q], {theta, 0, 2*Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^{2pi} cos[z1 cos(theta-alpha)] ce_{2n+1} dtheta = 0",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q); z1 = 2k Sqrt[cosh^2 xi - sin^2 eta], alpha = arctan(tanh xi tan eta) substituted",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.925.5",
+  "gr": "6.925.5",
+  "page": 815,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[2*Sqrt[q]*Sqrt[Cosh[xi]^2 - Sin[eta]^2]*Cos[theta - ArcTan[Tanh[xi]*Tan[eta]]]]*MathieuSe[2*n + 1, theta, q], {theta, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi*Sqrt[q]*MathieuB[2*n + 1, 1, q]/(MathieuSe[2*n + 1, 0, q]*MathieuSe[2*n + 1, Pi/2, q])*(-I*MathieuSe[2*n + 1, I*(xi), q])*MathieuSe[2*n + 1, eta, q]",
+   "2*Pi*Sqrt[q]*MathieuB[2*n + 1, 1, q]/(Derivative[0, 1, 0][MathieuSe][2*n + 1, 0, q]*MathieuSe[2*n + 1, Pi/2, q])*(-I*MathieuSe[2*n + 1, I*(xi), q])*MathieuSe[2*n + 1, eta, q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^{2pi} sin[z1 cos(theta-alpha)] se_{2n+1} dtheta = 2pi k B_1^{(2n+1)}/(se_{2n+1}(0,q) se_{2n+1}(pi/2,q)) Se_{2n+1}(xi,q) se_{2n+1}(eta,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q); z1 = 2k Sqrt[cosh^2 xi - sin^2 eta], alpha = arctan(tanh xi tan eta) substituted; book prints se_{2n+1}(0,q) in the denominator, which vanishes; second rhs uses se'_{2n+1}(0,q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.925.6",
+  "gr": "6.925.6",
+  "page": 815,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[2*Sqrt[q]*Sqrt[Cosh[xi]^2 - Sin[eta]^2]*Cos[theta - ArcTan[Tanh[xi]*Tan[eta]]]]*MathieuSe[2*n + 1, theta, q], {theta, 0, 2*Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^{2pi} cos[z1 cos(theta-alpha)] se_{2n+1} dtheta = 0",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q); z1 = 2k Sqrt[cosh^2 xi - sin^2 eta], alpha = arctan(tanh xi tan eta) substituted",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.925.7",
+  "gr": "6.925.7",
+  "page": 815,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[2*Sqrt[q]*Sqrt[Cosh[xi]^2 - Sin[eta]^2]*Cos[theta - ArcTan[Tanh[xi]*Tan[eta]]]]*MathieuSe[2*n + 2, theta, q], {theta, 0, 2*Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^{2pi} sin[z1 cos(theta-alpha)] se_{2n+2} dtheta = 0",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q); z1 = 2k Sqrt[cosh^2 xi - sin^2 eta], alpha = arctan(tanh xi tan eta) substituted",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.925.8",
+  "gr": "6.925.8",
+  "page": 815,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[2*Sqrt[q]*Sqrt[Cosh[xi]^2 - Sin[eta]^2]*Cos[theta - ArcTan[Tanh[xi]*Tan[eta]]]]*MathieuSe[2*n + 2, theta, q], {theta, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi*q*MathieuB[2*n + 2, 2, q]/(Derivative[0, 1, 0][MathieuSe][2*n + 2, 0, q]*Derivative[0, 1, 0][MathieuSe][2*n + 2, Pi/2, q])*(-I*MathieuSe[2*n + 2, I*(xi), q])*MathieuSe[2*n + 2, eta, q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^{2pi} cos[z1 cos(theta-alpha)] se_{2n+2} dtheta = 2pi k^2 B_2^{(2n+2)}/(se'_{2n+2}(0,q) se'_{2n+2}(pi/2,q)) Se_{2n+2}(xi,q) se_{2n+2}(eta,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q); z1 = 2k Sqrt[cosh^2 xi - sin^2 eta], alpha = arctan(tanh xi tan eta) substituted",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.926",
+  "gr": "6.926",
+  "page": 815,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[u]*Sin[z]*Sin[2*Sqrt[q]*Cos[u]*Cos[z]]*MathieuSe[2*n + 2, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "-Pi*Sqrt[q]*MathieuB[2*n + 2, 2, q]/(2*Derivative[0, 1, 0][MathieuSe][2*n + 2, Pi/2, q])*MathieuSe[2*n + 2, z, q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.92 Combinations of Mathieu, hyperbolic, and trigonometric functions",
+  "tex": "int_0^pi sin u sin z sin(2k cos u cos z) se_{2n+2}(u,q) du = -pi k B_2^{(2n+2)}/(2 se'_{2n+2}(pi/2,q)) se_{2n+2}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.931.1",
+  "gr": "6.931.1",
+  "page": 816,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[BesselJ[0, Sqrt[q]*(2*(Cos[2*u] + Cos[2*z]))^(1/2)]*MathieuCe[2*n, u, q], {u, 0, Pi}]",
+  "rhs": [
+   "Pi*MathieuA[2*n, 0, q]^2/(MathieuCe[2*n, 0, q]*MathieuCe[2*n, Pi/2, q])*MathieuCe[2*n, z, q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.93 Combinations of Mathieu and Bessel functions",
+  "tex": "int_0^pi J_0{k[2(cos 2u + cos 2z)]^{1/2}} ce_{2n}(u,q) du = pi [A_0^{(2n)}]^2/(ce_{2n}(0,q) ce_{2n}(pi/2,q)) ce_{2n}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.931.2",
+  "gr": "6.931.2",
+  "page": 816,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[BesselY[0, Sqrt[q]*(2*(Cos[2*u] + Cosh[2*z]))^(1/2)]*MathieuCe[2*n, u, q], {u, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi*MathieuA[2*n, 0, q]^2/(MathieuCe[2*n, 0, q]*MathieuCe[2*n, Pi/2, q])*MathieuFey[2*n, z, q]"
+  ],
+  "conds": [
+   "q > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MA",
+  "edition_note": "",
+  "section": "6.93 Combinations of Mathieu and Bessel functions",
+  "tex": "int_0^{2pi} Y_0{k[2(cos 2u + cosh 2z)]^{1/2}} ce_{2n}(u,q) du = 2pi [A_0^{(2n)}]^2/(ce_{2n}(0,q) ce_{2n}(pi/2,q)) Fey_{2n}(z,q)",
+  "note": "Mathieu placeholders: ce_n(z,q) -> MathieuCe[n, z, q], se_n -> MathieuSe; Ce_n(z,q) = ce_n(I z, q) -> MathieuCe[n, I*z, q], Se_n(z,q) = -I se_n(I z, q) -> -I*MathieuSe[n, I*z, q] (MA definitions); Fey/Gey -> MathieuFey/MathieuGey[n, z, q]; coefficient A_p^(m) -> MathieuA[m, p, q], B_p^(m) -> MathieuB[m, p, q]; k = Sqrt[q] substituted (notation k^2 = q)",
+  "reason": "Mathieu functions"
+ },
+ {
+  "id": "GR6.941.1a",
+  "gr": "6.941.1",
+  "page": 816,
+  "status": "ok",
+  "lhs": "Integrate[E^(I*rho*z)*BesselJ[m, rho*Sqrt[k^2 - rho^2]]*LegendreP[l, m, p/k], {p, -k, k}]",
+  "rhs": [
+   "I^(l - m)*Sqrt[2*Pi*k/Sqrt[rho^2 + z^2]]*BesselJ[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]]"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "int_{-k}^{k} e^{i rho z} J_m(rho sqrt(k^2-rho^2)) P_l^m(p/k) dp = i^{l-m} sqrt(2 pi k/r) J_{l+1/2}(kr) P_l^m(z/r)",
+  "note": "as printed (book writes rho for the integration variable p in the exponent and Bessel argument); notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.1b",
+  "gr": "6.941.1",
+  "page": 816,
+  "status": "ok",
+  "lhs": "Integrate[E^(I*p*z)*BesselJ[m, rho*Sqrt[k^2 - p^2]]*LegendreP[l, m, p/k], {p, -k, k}]",
+  "rhs": [
+   "I^(l - m)*Sqrt[2*Pi*k/Sqrt[rho^2 + z^2]]*BesselJ[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]]"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "int_{-k}^{k} e^{ipz} J_m(rho sqrt(k^2-p^2)) P_l^m(p/k) dp = i^{l-m} sqrt(2 pi k/r) J_{l+1/2}(kr) P_l^m(z/r)",
+  "note": "corrected integrand: integration variable p restored in exponent and Bessel argument; notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.2a",
+  "gr": "6.941.2",
+  "page": 816,
+  "status": "ok",
+  "lhs": "Integrate[E^(-I*rho*z)*BesselJ[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]], {z, -Infinity, Infinity}]",
+  "rhs": [
+   "I^(m - l)*Sqrt[2*Pi*Sqrt[rho^2 + z^2]/k]*BesselJ[m, rho*Sqrt[k^2 - rho^2]]*LegendreP[l, m, rho/k]"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "int_{-inf}^{inf} e^{-i rho z} J_{l+1/2}(kr) P_l^m(z/r) dz = i^{m-l} sqrt(2 pi r/k) J_m(rho sqrt(k^2-rho^2)) P_l^m(rho/k)",
+  "note": "as printed: value contains r = Sqrt[rho^2 + z^2] (depends on the integration variable z) and rho is used for both the radius and the Fourier variable; notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.2b",
+  "gr": "6.941.2",
+  "page": 816,
+  "status": "ok",
+  "lhs": "Integrate[E^(-I*p*z)*BesselJ[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]]/Sqrt[Sqrt[rho^2 + z^2]], {z, -Infinity, Infinity}]",
+  "rhs": [
+   "I^(m - l)*Sqrt[2*Pi/k]*BesselJ[m, rho*Sqrt[k^2 - p^2]]*LegendreP[l, m, p/k]"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0",
+   "p^2 < k^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "int e^{-ipz} J_{l+1/2}(kr) P_l^m(z/r) r^{-1/2} dz = i^{m-l} sqrt(2pi/k) J_m(rho sqrt(k^2-p^2)) P_l^m(p/k)",
+  "note": "corrected integrand: Fourier inverse of 6.941.1 (factor r^{-1/2} moved into the integrand, Fourier variable p); notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.3a",
+  "gr": "6.941.3",
+  "page": 816,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[m, Sqrt[x^2 + y^2]*kt]*Cos[kx*x + m*ArcSin[x/Sqrt[x^2 + y^2]]], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^m/Sqrt[kt^2 - kx^2]*Cos[y*Sqrt[kt^2 - kx^2] + m*ArcCos[kx/kt]]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "kt > 0",
+   "y > 0",
+   "kx^2 < kt^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "int_0^inf J_m(rho k_t) cos[k_x x + m arcsin(x/rho)] dx = (-1)^m/sqrt(k_t^2-k_x^2) cos[y sqrt(k_t^2-k_x^2) + m arccos(k_x/k_t)]",
+  "note": "rho = Sqrt[x^2 + y^2] substituted (cylindrical radius); kt > 0, y > 0 assumed"
+ },
+ {
+  "id": "GR6.941.3b",
+  "gr": "6.941.3",
+  "page": 816,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[m, Sqrt[x^2 + y^2]*kt]*Cos[kx*x + m*ArcSin[x/Sqrt[x^2 + y^2]]], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "kt > 0",
+   "y > 0",
+   "kx^2 > kt^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "same integral = 0 [k_x^2 > k_t^2]",
+  "note": "rho = Sqrt[x^2 + y^2] substituted; kt > 0, y > 0 assumed"
+ },
+ {
+  "id": "GR6.941.4a",
+  "gr": "6.941.4",
+  "page": 817,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[m, Sqrt[x^2 + y^2]*kt]*Cos[kx*x + m*ArcSin[x/Sqrt[x^2 + y^2]]], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^m/Sqrt[kt^2 - kx^2]*Sin[y*Sqrt[kt^2 - kx^2] + m*ArcCos[kx/kt]]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "kt > 0",
+   "y > 0",
+   "kx^2 < kt^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "int_0^inf Y_m(rho k_t) cos[k_x x + m arcsin(x/rho)] dx = (-1)^m/sqrt(k_t^2-k_x^2) sin[y sqrt(k_t^2-k_x^2) + m arccos(k_x/k_t)]",
+  "note": "rho = Sqrt[x^2 + y^2] substituted; kt > 0, y > 0 assumed"
+ },
+ {
+  "id": "GR6.941.4b",
+  "gr": "6.941.4",
+  "page": 817,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[m, Sqrt[x^2 + y^2]*kt]*Cos[kx*x + m*ArcSin[x/Sqrt[x^2 + y^2]]], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^m/Sqrt[kx^2 - kt^2]*Exp[-y*Sqrt[kx^2 - kt^2] - m*Sign[kx]*ArcCosh[Abs[kx]/kt]]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "kt > 0",
+   "y > 0",
+   "kx^2 > kt^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "= (-1)^m/sqrt(k_x^2-k_t^2) exp[-y sqrt(k_x^2-k_t^2) - m sign(k_x) arccosh(|k_x|/k_t)] [k_x^2 > k_t^2]",
+  "note": "rho = Sqrt[x^2 + y^2] substituted; kt > 0, y > 0 assumed"
+ },
+ {
+  "id": "GR6.941.5a",
+  "gr": "6.941.5",
+  "page": 817,
+  "status": "ok",
+  "lhs": "Integrate[HankelH1[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]]*E^(-I*kz*z), {z, -Infinity, Infinity}]",
+  "rhs": [
+   "I^(m - l)*Sqrt[2*Pi*Sqrt[rho^2 + z^2]/k]*HankelH1[m, rho*Sqrt[k^2 - kz^2]]*LegendreP[l, m, kz/k]"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "int_{-inf}^{inf} H^(1)_{l+1/2}(kr) P_l^m(z/r) e^{-i k_z z} dx = i^{m-l} sqrt(2 pi r/k) H^(1)_m(rho sqrt(k^2-k_z^2)) P_l^m(k_z/k)",
+  "note": "as printed (j = 1; book prints dx for dz; value contains r = Sqrt[rho^2 + z^2], which depends on the integration variable z); result stated for j=1 if pi > arg Sqrt[k^2-kz^2] >= 0, j=2 if -pi < arg <= 0; notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.5b",
+  "gr": "6.941.5",
+  "page": 817,
+  "status": "ok",
+  "lhs": "Integrate[HankelH1[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]]*E^(-I*kz*z)/Sqrt[Sqrt[rho^2 + z^2]], {z, -Infinity, Infinity}]",
+  "rhs": [
+   "I^(m - l)*Sqrt[2*Pi/k]*HankelH1[m, rho*Sqrt[k^2 - kz^2]]*LegendreP[l, m, kz/k]"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "int H^(1)_{l+1/2}(kr) P_l^m(z/r) r^{-1/2} e^{-i k_z z} dz = i^{m-l} sqrt(2pi/k) H^(1)_m(rho sqrt(k^2-k_z^2)) P_l^m(k_z/k)",
+  "note": "corrected integrand (j = 1): factor r^(-1/2) moved into the integrand, as the Fourier inverse of 6.941.6; notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.5c",
+  "gr": "6.941.5",
+  "page": 817,
+  "status": "ok",
+  "lhs": "Integrate[HankelH2[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]]*E^(-I*kz*z), {z, -Infinity, Infinity}]",
+  "rhs": [
+   "I^(m - l)*Sqrt[2*Pi*Sqrt[rho^2 + z^2]/k]*HankelH2[m, rho*Sqrt[k^2 - kz^2]]*LegendreP[l, m, kz/k]"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0",
+   "kz^2 < k^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "int_{-inf}^{inf} H^(2)_{l+1/2}(kr) P_l^m(z/r) e^{-i k_z z} dx = i^{m-l} sqrt(2 pi r/k) H^(2)_m(rho sqrt(k^2-k_z^2)) P_l^m(k_z/k)",
+  "note": "as printed (j = 2; book prints dx for dz; value contains r = Sqrt[rho^2 + z^2], which depends on the integration variable z); result stated for j=1 if pi > arg Sqrt[k^2-kz^2] >= 0, j=2 if -pi < arg <= 0; notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.5d",
+  "gr": "6.941.5",
+  "page": 817,
+  "status": "ok",
+  "lhs": "Integrate[HankelH2[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]]*E^(-I*kz*z)/Sqrt[Sqrt[rho^2 + z^2]], {z, -Infinity, Infinity}]",
+  "rhs": [
+   "I^(m - l)*Sqrt[2*Pi/k]*HankelH2[m, rho*Sqrt[k^2 - kz^2]]*LegendreP[l, m, kz/k]"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0",
+   "kz^2 < k^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "int H^(2)_{l+1/2}(kr) P_l^m(z/r) r^{-1/2} e^{-i k_z z} dz = i^{m-l} sqrt(2pi/k) H^(2)_m(rho sqrt(k^2-k_z^2)) P_l^m(k_z/k)",
+  "note": "corrected integrand (j = 2): factor r^(-1/2) moved into the integrand, as the Fourier inverse of 6.941.6; notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.6a",
+  "gr": "6.941.6",
+  "page": 817,
+  "status": "ok",
+  "lhs": "Integrate[HankelH1[m, rho*Sqrt[k^2 - kz^2]]*LegendreP[l, m, kz/k]*E^(I*kz*z), {kz, -Infinity, Infinity}]",
+  "rhs": [
+   "I^(l - m)*Sqrt[2*Pi*k/Sqrt[rho^2 + z^2]]*HankelH1[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]]"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "int_{-inf}^{inf} H^(1)_m(rho sqrt(k^2-k_z^2)) P_l^m(k_z/k) e^{i k_z z} dk_z = i^{l-m} sqrt(2 pi k/r) H^(1)_{l+1/2}(kr) P_l^m(z/r)",
+  "note": "j = 1 (pi > arg Sqrt[k^2-kz^2] >= 0: principal root); P_l^m(kz/k) for |kz| > k is off the cut, Ferrers form kept as printed; notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.6b",
+  "gr": "6.941.6",
+  "page": 817,
+  "status": "ok",
+  "lhs": "Integrate[HankelH2[m, rho*Conjugate[Sqrt[k^2 - kz^2]]]*LegendreP[l, m, kz/k]*E^(I*kz*z), {kz, -Infinity, Infinity}]",
+  "rhs": [
+   "I^(l - m)*Sqrt[2*Pi*k/Sqrt[rho^2 + z^2]]*HankelH2[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]]"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "same with j = 2: H^(2), -pi < arg sqrt(k^2-k_z^2) <= 0",
+  "note": "j = 2 requires -pi < arg Sqrt[k^2-kz^2] <= 0, written as Conjugate of the principal root for real kz; P_l^m(kz/k) for |kz| > k off the cut, Ferrers form kept; notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.7a",
+  "gr": "6.941.7",
+  "page": 817,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]]*E^(-I*kz*z), {z, -Infinity, Infinity}]",
+  "rhs": [
+   "I^(m - l)*Sqrt[2*Pi*Sqrt[rho^2 + z^2]/k]*BesselJ[m, rho*Sqrt[k^2 - kz^2]]*LegendreP[l, m, kz/k]"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0",
+   "kz^2 < k^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "int_{-inf}^{inf} J_{l+1/2}(kr) P_l^m(z/r) e^{-i k_z z} dz = i^{m-l} sqrt(2 pi r/k) J_m(rho sqrt(k^2-k_z^2)) P_l^m(k_z/k) [k_z^2 < k^2]",
+  "note": "as printed: value contains r = Sqrt[rho^2 + z^2], which depends on the integration variable z; notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.7b",
+  "gr": "6.941.7",
+  "page": 817,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]]*E^(-I*kz*z), {z, -Infinity, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0",
+   "kz^2 > k^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "same integral = 0 [k_z^2 > k^2]",
+  "note": "as printed; notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.7c",
+  "gr": "6.941.7",
+  "page": 817,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]]*E^(-I*kz*z)/Sqrt[Sqrt[rho^2 + z^2]], {z, -Infinity, Infinity}]",
+  "rhs": [
+   "I^(m - l)*Sqrt[2*Pi/k]*BesselJ[m, rho*Sqrt[k^2 - kz^2]]*LegendreP[l, m, kz/k]"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0",
+   "kz^2 < k^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "int J_{l+1/2}(kr) P_l^m(z/r) r^{-1/2} e^{-i k_z z} dz = i^{m-l} sqrt(2pi/k) J_m(rho sqrt(k^2-k_z^2)) P_l^m(k_z/k)",
+  "note": "corrected integrand: factor r^(-1/2) moved into the integrand (Fourier inverse of 6.941.8); notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.7d",
+  "gr": "6.941.7",
+  "page": 817,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]]*E^(-I*kz*z)/Sqrt[Sqrt[rho^2 + z^2]], {z, -Infinity, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0",
+   "kz^2 > k^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "corrected integral = 0 [k_z^2 > k^2]",
+  "note": "corrected integrand (r^(-1/2) factor), zero branch; notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.8",
+  "gr": "6.941.8",
+  "page": 817,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[m, rho*Sqrt[k^2 - kz^2]]*LegendreP[l, m, kz/k]*E^(I*kz*z), {kz, -k, k}]",
+  "rhs": [
+   "I^(l - m)*Sqrt[2*Pi*k/Sqrt[rho^2 + z^2]]*BesselJ[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]]"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "int_{-k}^{k} J_m(rho sqrt(k^2-k_z^2)) P_l^m(k_z/k) e^{i k_z z} dk_z = i^{l-m} sqrt(2 pi k/r) J_{l+1/2}(kr) P_l^m(z/r)",
+  "note": "notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.9a",
+  "gr": "6.941.9",
+  "page": 817,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]]*E^(-I*kz*z), {z, -Infinity, Infinity}]",
+  "rhs": [
+   "I^(m - l)*Sqrt[2*Pi*Sqrt[rho^2 + z^2]/k]*BesselY[m, rho*Sqrt[k^2 - kz^2]]*LegendreP[l, m, kz/k]"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0",
+   "kz^2 < k^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "int_{-inf}^{inf} Y_{l+1/2}(kr) P_l^m(z/r) e^{-i k_z z} dz = i^{m-l} sqrt(2 pi r/k) Y_m(rho sqrt(k^2-k_z^2)) P_l^m(k_z/k) [k_z^2 < k^2]",
+  "note": "as printed: value contains r = Sqrt[rho^2 + z^2], which depends on the integration variable z; notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.9b",
+  "gr": "6.941.9",
+  "page": 817,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]]*E^(-I*kz*z), {z, -Infinity, Infinity}]",
+  "rhs": [
+   "-2*I^(m - l)*Sqrt[2*Sqrt[rho^2 + z^2]/(k*Pi)]*BesselK[m, rho*Sqrt[kz^2 - k^2]]*LegendreP[l, m, kz/k]"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0",
+   "kz^2 > k^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "= -2 i^{m-l} sqrt(2r/(k pi)) K_m(rho sqrt(k_z^2-k^2)) P_l^m(k_z/k) [k_z^2 > k^2]",
+  "note": "as printed (value contains r); P_l^m(kz/k) off the cut, Ferrers form kept; notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.9c",
+  "gr": "6.941.9",
+  "page": 817,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]]*E^(-I*kz*z)/Sqrt[Sqrt[rho^2 + z^2]], {z, -Infinity, Infinity}]",
+  "rhs": [
+   "I^(m - l)*Sqrt[2*Pi/k]*BesselY[m, rho*Sqrt[k^2 - kz^2]]*LegendreP[l, m, kz/k]"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0",
+   "kz^2 < k^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "int Y_{l+1/2}(kr) P_l^m(z/r) r^{-1/2} e^{-i k_z z} dz = i^{m-l} sqrt(2pi/k) Y_m(rho sqrt(k^2-k_z^2)) P_l^m(k_z/k)",
+  "note": "corrected integrand: factor r^(-1/2) moved into the integrand; notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.9d",
+  "gr": "6.941.9",
+  "page": 817,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[l + 1/2, k*Sqrt[rho^2 + z^2]]*LegendreP[l, m, z/Sqrt[rho^2 + z^2]]*E^(-I*kz*z)/Sqrt[Sqrt[rho^2 + z^2]], {z, -Infinity, Infinity}]",
+  "rhs": [
+   "-2*I^(m - l)*Sqrt[2/(k*Pi)]*BesselK[m, rho*Sqrt[kz^2 - k^2]]*LegendreP[l, m, kz/k]"
+  ],
+  "conds": [
+   "rho > 0",
+   "Element[l, Integers] && l >= 0",
+   "Element[m, Integers] && m >= 0",
+   "l >= m",
+   "k > 0",
+   "kz^2 > k^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "corrected: = -2 i^{m-l} sqrt(2/(k pi)) K_m(rho sqrt(k_z^2-k^2)) P_l^m(k_z/k)",
+  "note": "corrected integrand (r^(-1/2) factor); P_l^m(kz/k) off the cut, Ferrers form kept; notation r = Sqrt[rho^2 + z^2] substituted; P_l^m read as Ferrers LegendreP[l, m, x]"
+ },
+ {
+  "id": "GR6.941.10",
+  "gr": "6.941.10",
+  "page": 817,
+  "status": "SKIP-REFERENCE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.94 Relationships between eigenfunctions of the Helmholtz equation in different coordinate systems",
+  "tex": "i^{l-m} int_{-k}^{k} Y_m(rho sqrt(k^2-k_z^2)) P_l^m(k_z/k) e^{i k_z z} dk_z - (4/pi) int_k^inf cos[k_z z + pi(m-l)/2] P_l^m(k_z/k) K_m(rho sqrt(k_z^2-k^2)) e^{i k_z z} dk_z = sqrt(2 pi k/r) Y_{l+1/2}(kr) P_l^m(z/r)",
+  "note": "left side is a combination of two different integrals (the second also carries both cos and e^{i k_z z}, possibly a misprint); cannot be written with one Integrate",
+  "reason": "combination of two integrals"
+ }
+]

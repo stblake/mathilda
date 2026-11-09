@@ -1,0 +1,1756 @@
+[
+ {
+  "id": "GR7.244.1",
+  "gr": "7.244.1",
+  "page": 842,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[n, 1 - 2*x^2]*Sin[a*x], {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*(BesselJ[n + 1/2, a/2])^2"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a > 0"
+  ],
+  "cite": "ET I 94(2)",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_0^1 P_n(1-2x^2) sin ax dx = pi/2 [J_{n+1/2}(a/2)]^2",
+  "note": ""
+ },
+ {
+  "id": "GR7.244.2",
+  "gr": "7.244.2",
+  "page": 842,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[n, 1 - 2*x^2]*Cos[a*x], {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*(-1)^n*BesselJ[n + 1/2, a/2]*BesselJ[-n - 1/2, a/2]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a > 0"
+  ],
+  "cite": "ET I 38(1)",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_0^1 P_n(1-2x^2) cos ax dx = pi/2 (-1)^n J_{n+1/2}(a/2) J_{-n-1/2}(a/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.245.1",
+  "gr": "7.245.1",
+  "page": 842,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[2*m + 1, Cos[theta]]*Cos[theta], {theta, 0, 2*Pi}]",
+  "rhs": [
+   "Pi/2^(4*m + 1)*Binomial[2*m, m]*Binomial[2*m + 2, m + 1]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "MO 70, EH II 183(5)",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_0^{2pi} P_{2m+1}(cos t) cos t dt = pi/2^{4m+1} C(2m,m) C(2m+2,m+1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.245.2a",
+  "gr": "7.245.2a",
+  "page": 842,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[m, Cos[theta]]*Sin[n*theta], {theta, 0, Pi}]",
+  "rhs": [
+   "2*Product[n - m + 1 + 2*k, {k, 0, m - 1}]/Product[n - m + 2*k, {k, 0, m}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers]",
+   "n > m",
+   "Element[(n + m - 1)/2, Integers]"
+  ],
+  "cite": "MO 71",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_0^pi P_m(cos t) sin nt dt = 2(n-m+1)(n-m+3)...(n+m-1)/((n-m)(n-m+2)...(n+m)) [n>m, n+m odd]",
+  "note": "products written as Product over k"
+ },
+ {
+  "id": "GR7.245.2b",
+  "gr": "7.245.2b",
+  "page": 842,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[m, Cos[theta]]*Sin[n*theta], {theta, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 1",
+   "Element[(n + m)/2, Integers]"
+  ],
+  "cite": "MO 71",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "= 0 [n <= m or n+m even]",
+  "note": "disjunctive condition: kept branch n+m even; other branch n <= m"
+ },
+ {
+  "id": "GR7.245.3",
+  "gr": "7.245.3",
+  "page": 842,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[2*n + 1, Sin[alpha]*Sin[phi]]*Sin[phi], {phi, 0, 2*Pi}]",
+  "rhs": [
+   "(-1)^(n + 1)*2*Sqrt[Pi]*Gamma[n + 3/2]/((2*n + 1)*Gamma[n + 2])*LegendreP[2*n + 1, 1, Cos[alpha]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "10",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_0^{2pi} P_{2n+1}(sin a sin phi) sin phi dphi = (-1)^{n+1} 2 sqrt(pi) Gamma(n+3/2)/((2n+1)Gamma(n+2)) P^1_{2n+1}(cos a)",
+  "note": "condition alpha != (2n+1)pi/2 not sampled; P^1 with argument cos(alpha) in (-1,1) is Ferrers"
+ },
+ {
+  "id": "GR7.245.4a",
+  "gr": "7.245.4a",
+  "page": 842,
+  "status": "ok",
+  "lhs": "Integrate[Cos[alpha*x]*LegendreP[n, x], {x, -1, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[(n - 1)/2, Integers] && n >= 1"
+  ],
+  "cite": "GH2 24 (171.10a)",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_{-1}^1 cos(alpha x) P_n(x) dx = 0 [n odd]",
+  "note": ""
+ },
+ {
+  "id": "GR7.245.4b",
+  "gr": "7.245.4b",
+  "page": 842,
+  "status": "ok",
+  "lhs": "Integrate[Cos[alpha*x]*LegendreP[2*v, x], {x, -1, 1}]",
+  "rhs": [
+   "(-1)^v*Sqrt[2*Pi/alpha]*BesselJ[2*v + 1/2, alpha]"
+  ],
+  "conds": [
+   "Element[v, Integers] && v >= 0",
+   "alpha > 0"
+  ],
+  "cite": "GH2 24 (171.10a)",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "= (-1)^v sqrt(2pi/alpha) J_{2v+1/2}(alpha) [n=2v even]",
+  "note": "n = 2v substituted"
+ },
+ {
+  "id": "GR7.246",
+  "gr": "7.246",
+  "page": 842,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[n, 1 - 2*Sin[x]^2*Sin[theta]^2]*Sin[x], {x, 0, Pi}]",
+  "rhs": [
+   "2*Sin[(2*n + 1)*theta]/((2*n + 1)*Sin[theta])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MO 71",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_0^pi P_n(1 - 2 sin^2x sin^2 theta) sin x dx = 2 sin(2n+1)theta/((2n+1) sin theta)",
+  "note": ""
+ },
+ {
+  "id": "GR7.247",
+  "gr": "7.247",
+  "page": 842,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[2*n + 1, x]*Sin[a*x]/Sqrt[x], {x, 0, 1}]",
+  "rhs": [
+   "(-1)^(n + 1)*Sqrt[Pi/(2*a)]*BesselJ[2*n + 3/2, a]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a > 0"
+  ],
+  "cite": "ET I 94(1)",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_0^1 P_{2n+1}(x) sin ax dx/sqrt x = (-1)^{n+1} sqrt(pi/(2a)) J_{2n+3/2}(a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.248.1",
+  "gr": "7.248.1",
+  "page": 842,
+  "status": "ok",
+  "lhs": "Integrate[(a^2 + b^2 - 2*a*b*x)^(-1/2)*Sin[lam*(a^2 + b^2 - 2*a*b*x)^(1/2)]*LegendreP[n, x], {x, -1, 1}]",
+  "rhs": [
+   "Pi*(a*b)^(-1/2)*BesselJ[n + 1/2, a*lam]*BesselJ[n + 1/2, b*lam]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 277(11)",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_{-1}^1 R^{-1/2} sin[lam R^{1/2}] P_n(x) dx = pi (ab)^{-1/2} J_{n+1/2}(a lam) J_{n+1/2}(b lam), R=a^2+b^2-2abx",
+  "note": ""
+ },
+ {
+  "id": "GR7.248.2",
+  "gr": "7.248.2",
+  "page": 842,
+  "status": "ok",
+  "lhs": "Integrate[(a^2 + b^2 - 2*a*b*x)^(-1/2)*Cos[lam*(a^2 + b^2 - 2*a*b*x)^(1/2)]*LegendreP[n, x], {x, -1, 1}]",
+  "rhs": [
+   "-Pi*(a*b)^(-1/2)*BesselJ[n + 1/2, a*lam]*BesselY[n + 1/2, b*lam]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "0 < a <= b",
+   "lam > 0"
+  ],
+  "cite": "ET II 277(12)",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_{-1}^1 R^{-1/2} cos[lam R^{1/2}] P_n(x) dx = -pi (ab)^{-1/2} J_{n+1/2}(a lam) Y_{n+1/2}(b lam) [0 <= a <= b]",
+  "note": "printed 0 <= a <= b; a > 0 needed by (ab)^(-1/2); lam > 0 added for real Y"
+ },
+ {
+  "id": "GR7.249.1a",
+  "gr": "7.249.1a",
+  "page": 842,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[n, x]*ArcSin[x], {x, -1, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n/2, Integers] && n >= 0"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "int_{-1}^1 P_n(x) arcsin x dx = 0 [n even]",
+  "note": ""
+ },
+ {
+  "id": "GR7.249.1b",
+  "gr": "7.249.1b",
+  "page": 842,
+  "status": "ok",
+  "lhs": "Integrate[LegendreP[n, x]*ArcSin[x], {x, -1, 1}]",
+  "rhs": [
+   "Pi*((n - 2)!!/(2^((n + 1)/2)*((n + 1)/2)!))^2"
+  ],
+  "conds": [
+   "Element[(n - 1)/2, Integers] && n >= 1"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "= pi {(n-2)!!/(2^{(n+1)/2} ((n+1)/2)!)}^2 [n odd]",
+  "note": ""
+ },
+ {
+  "id": "GR7.249.2",
+  "gr": "7.249.2",
+  "page": 842,
+  "status": "SKIP-REFERENCE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "7.24 Combinations of Legendre polynomials and other elementary functions",
+  "tex": "P_n(x) = (1/t) sum_{r=0}^{t-1} (x + sqrt(x^2-1) cos(2 pi r/t))^n [t > n]",
+  "note": "printed on p.843 top; summation index printed as t=0 (misprint for r=0)",
+  "reason": "representation of P_n, not an integral"
+ },
+ {
+  "id": "GR7.251.1",
+  "gr": "7.251.1",
+  "page": 843,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x*LegendreP[n, 1 - 2*x^2]*BesselY[nu, x*y], {x, 0, 1}]",
+  "rhs": [
+   "Pi^(-1)*y^(-1)*(SchlaefliS[2*n + 1, y] + Pi*BesselY[2*n + 1, y])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "y > 0",
+   "nu > 0"
+  ],
+  "cite": "ET II 108(1)",
+  "edition_note": "",
+  "section": "7.25 Combinations of Legendre polynomials and Bessel functions",
+  "tex": "int_0^1 x P_n(1-2x^2) Y_nu(xy) dx = pi^{-1} y^{-1} [S_{2n+1}(y) + pi Y_{2n+1}(y)]",
+  "note": "as printed; nu absent from the value: integrand presumably Y_0 (see 7.251.1b)",
+  "reason": "Schlaefli polynomial S_n"
+ },
+ {
+  "id": "GR7.251.1b",
+  "gr": "7.251.1b",
+  "page": 843,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x*LegendreP[n, 1 - 2*x^2]*BesselY[0, x*y], {x, 0, 1}]",
+  "rhs": [
+   "Pi^(-1)*y^(-1)*(SchlaefliS[2*n + 1, y] + Pi*BesselY[2*n + 1, y])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "y > 0"
+  ],
+  "cite": "ET II 108(1)",
+  "edition_note": "",
+  "section": "7.25 Combinations of Legendre polynomials and Bessel functions",
+  "tex": "int_0^1 x P_n(1-2x^2) Y_0(xy) dx = pi^{-1} y^{-1} [S_{2n+1}(y) + pi Y_{2n+1}(y)]",
+  "note": "corrected integrand: Y_nu -> Y_0 (value independent of nu)",
+  "reason": "Schlaefli polynomial S_n"
+ },
+ {
+  "id": "GR7.251.2",
+  "gr": "7.251.2",
+  "page": 843,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x*LegendreP[n, 1 - 2*x^2]*BesselK[0, x*y], {x, 0, 1}]",
+  "rhs": [
+   "y^(-1)*((-1)^(n + 1)*BesselK[2*n + 1, y] + I/2*SchlaefliS[2*n + 1, I*y])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "y > 0"
+  ],
+  "cite": "ET II 134(1)",
+  "edition_note": "",
+  "section": "7.25 Combinations of Legendre polynomials and Bessel functions",
+  "tex": "int_0^1 x P_n(1-2x^2) K_0(xy) dx = y^{-1}[(-1)^{n+1} K_{2n+1}(y) + (i/2) S_{2n+1}(iy)]",
+  "note": "",
+  "reason": "Schlaefli polynomial S_n"
+ },
+ {
+  "id": "GR7.251.3",
+  "gr": "7.251.3",
+  "page": 843,
+  "status": "ok",
+  "lhs": "Integrate[x*LegendreP[n, 1 - 2*x^2]*BesselJ[0, x*y], {x, 0, 1}]",
+  "rhs": [
+   "y^(-1)*BesselJ[2*n + 1, y]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "y > 0"
+  ],
+  "cite": "ET II 13(1)",
+  "edition_note": "",
+  "section": "7.25 Combinations of Legendre polynomials and Bessel functions",
+  "tex": "int_0^1 x P_n(1-2x^2) J_0(xy) dx = y^{-1} J_{2n+1}(y)",
+  "note": ""
+ },
+ {
+  "id": "GR7.251.4",
+  "gr": "7.251.4",
+  "page": 843,
+  "status": "ok",
+  "lhs": "Integrate[x*LegendreP[n, 1 - 2*x^2]*BesselJ[0, a*x]^2, {x, 0, 1}]",
+  "rhs": [
+   "1/(2*(2*n + 1))*(BesselJ[n, a]^2 + BesselJ[n + 1, a]^2)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a > 0"
+  ],
+  "cite": "ET II 338(39)a",
+  "edition_note": "",
+  "section": "7.25 Combinations of Legendre polynomials and Bessel functions",
+  "tex": "int_0^1 x P_n(1-2x^2) [J_0(ax)]^2 dx = 1/(2(2n+1)) {[J_n(a)]^2 + [J_{n+1}(a)]^2}",
+  "note": ""
+ },
+ {
+  "id": "GR7.251.5",
+  "gr": "7.251.5",
+  "page": 843,
+  "status": "ok",
+  "lhs": "Integrate[x*LegendreP[n, 1 - 2*x^2]*BesselJ[0, a*x]*BesselY[0, a*x], {x, 0, 1}]",
+  "rhs": [
+   "1/(2*(2*n + 1))*(BesselJ[n, a]*BesselY[n, a] + BesselJ[n + 1, a]*BesselY[n + 1, a])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a > 0"
+  ],
+  "cite": "ET II 339(48)a",
+  "edition_note": "",
+  "section": "7.25 Combinations of Legendre polynomials and Bessel functions",
+  "tex": "int_0^1 x P_n(1-2x^2) J_0(ax) Y_0(ax) dx = 1/(2(2n+1)) [J_n Y_n + J_{n+1} Y_{n+1}](a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.251.6",
+  "gr": "7.251.6",
+  "page": 843,
+  "status": "ok",
+  "lhs": "Integrate[x^2*LegendreP[n, 1 - 2*x^2]*BesselJ[1, x*y], {x, 0, 1}]",
+  "rhs": [
+   "y^(-1)*(2*n + 1)^(-1)*((n + 1)*BesselJ[2*n + 2, y] - n*BesselJ[2*n, y])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "y > 0"
+  ],
+  "cite": "ET II 20(23)",
+  "edition_note": "",
+  "section": "7.25 Combinations of Legendre polynomials and Bessel functions",
+  "tex": "int_0^1 x^2 P_n(1-2x^2) J_1(xy) dx = y^{-1}(2n+1)^{-1}[(n+1)J_{2n+2}(y) - n J_{2n}(y)]",
+  "note": ""
+ },
+ {
+  "id": "GR7.251.7",
+  "gr": "7.251.7",
+  "page": 843,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*LegendreP[n, 2*x^2 - 1]*BesselJ[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "2^(-nu - 1)*a^nu*Gamma[mu/2 + nu/2]^2/(Gamma[nu + 1]*Gamma[mu/2 + nu/2 + n + 1]*Gamma[1/2 + nu/2 - n])*HypergeometricPFQ[{(mu + nu)/2, (mu + nu)/2}, {nu + 1, (mu + nu)/2 + n + 1, (mu + nu)/2 - n}, -a^2/4]",
+   "2^(-nu - 1)*a^nu*Gamma[mu/2 + nu/2]^2/(Gamma[nu + 1]*Gamma[mu/2 + nu/2 + n + 1]*Gamma[mu/2 + nu/2 - n])*HypergeometricPFQ[{(mu + nu)/2, (mu + nu)/2}, {nu + 1, (mu + nu)/2 + n + 1, (mu + nu)/2 - n}, -a^2/4]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a > 0",
+   "Re[mu + nu] > 0"
+  ],
+  "cite": "ET II 337(32)a",
+  "edition_note": "",
+  "section": "7.25 Combinations of Legendre polynomials and Bessel functions",
+  "tex": "int_0^1 x^{mu-1} P_n(2x^2-1) J_nu(ax) dx = 2^{-nu-1} a^nu [Gamma((mu+nu)/2)]^2/(Gamma(nu+1)Gamma((mu+nu)/2+n+1)Gamma(1/2+nu/2-n)) 2F3(...)",
+  "note": "printed Gamma(1/2 + nu/2 - n) in denominator; second candidate Gamma(mu/2 + nu/2 - n) (a=0 limit requires it, matching the 2F3 lower parameter)"
+ },
+ {
+  "id": "GR7.252",
+  "gr": "7.252",
+  "page": 843,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*LegendreP[n, 1 - 2*x]*BesselI[0, a*x], {x, 0, 1}]",
+  "rhs": [
+   "E^(-a)/(2*n + 1)*(BesselI[n, a] + BesselI[n + 1, a])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a > 0"
+  ],
+  "cite": "ET II 366(11)a",
+  "edition_note": "",
+  "section": "7.25 Combinations of Legendre polynomials and Bessel functions",
+  "tex": "int_0^1 e^{-ax} P_n(1-2x) I_0(ax) dx = e^{-a}/(2n+1) [I_n(a) + I_{n+1}(a)]",
+  "note": ""
+ },
+ {
+  "id": "GR7.253",
+  "gr": "7.253",
+  "page": 843,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*x]*LegendreP[n, Cos[2*x]]*BesselJ[0, a*Sin[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "a^(-1)*BesselJ[2*n + 1, a]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a > 0"
+  ],
+  "cite": "ET II 361(20)",
+  "edition_note": "",
+  "section": "7.25 Combinations of Legendre polynomials and Bessel functions",
+  "tex": "int_0^{pi/2} sin 2x P_n(cos 2x) J_0(a sin x) dx = a^{-1} J_{2n+1}(a)",
+  "note": "a > 0 added"
+ },
+ {
+  "id": "GR7.254",
+  "gr": "7.254",
+  "page": 843,
+  "status": "ok",
+  "lhs": "Integrate[x*LegendreP[n, 1 - 2*x^2]*(BesselI[0, a*x] - StruveL[0, a*x]), {x, 0, 1}]",
+  "rhs": [
+   "(-1)^n*(BesselI[2*n + 1, a] - StruveL[2*n + 1, a])",
+   "(-1)^n/a*(BesselI[2*n + 1, a] - StruveL[2*n + 1, a])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a > 0"
+  ],
+  "cite": "ET II 385(14)a",
+  "edition_note": "",
+  "section": "7.25 Combinations of Legendre polynomials and Bessel functions",
+  "tex": "int_0^1 x P_n(1-2x^2)[I_0(ax) - L_0(ax)] dx = (-1)^n [I_{2n+1}(a) - L_{2n+1}(a)]",
+  "note": "as printed first; second candidate adds factor 1/a (a->0, n=0 limit of lhs is 1/2)"
+ },
+ {
+  "id": "GR7.311.1",
+  "gr": "7.311.1",
+  "page": 844,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^(nu - 1/2)*GegenbauerC[n, nu, x], {x, -1, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 280(1)",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int_{-1}^1 (1-x^2)^{nu-1/2} C^nu_n(x) dx = 0",
+  "note": ""
+ },
+ {
+  "id": "GR7.311.2",
+  "gr": "7.311.2",
+  "page": 844,
+  "status": "ok",
+  "lhs": "Integrate[x^(n + 2*rho)*(1 - x^2)^(nu - 1/2)*GegenbauerC[n, nu, x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[2*nu + n]*Gamma[2*rho + n + 1]*Gamma[nu + 1/2]*Gamma[rho + 1/2]/(2^(n + 1)*Gamma[2*nu]*Gamma[2*rho + 1]*n!*Gamma[n + nu + rho + 1])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[rho] > -1/2",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 280(2)",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int_0^1 x^{n+2rho}(1-x^2)^{nu-1/2} C^nu_n(x) dx = Gamma(2nu+n)Gamma(2rho+n+1)Gamma(nu+1/2)Gamma(rho+1/2)/(2^{n+1}Gamma(2nu)Gamma(2rho+1)n!Gamma(n+nu+rho+1))",
+  "note": ""
+ },
+ {
+  "id": "GR7.311.3",
+  "gr": "7.311.3",
+  "page": 844,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(nu - 1/2)*(1 + x)^beta*GegenbauerC[n, nu, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(beta + nu + 1/2)*Gamma[beta + 1]*Gamma[nu + 1/2]*Gamma[2*nu + n]*Gamma[beta - nu + 3/2]/(n!*Gamma[2*nu]*Gamma[beta - nu - n + 3/2]*Gamma[beta + nu + n + 3/2])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[beta] > -1",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 280(3)",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int_{-1}^1 (1-x)^{nu-1/2}(1+x)^beta C^nu_n(x) dx = ...",
+  "note": ""
+ },
+ {
+  "id": "GR7.311.4",
+  "gr": "7.311.4",
+  "page": 844,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^alpha*(1 + x)^beta*GegenbauerC[n, nu, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(alpha + beta + 1)*Gamma[alpha + 1]*Gamma[beta + 1]*Gamma[n + 2*nu]/(n!*Gamma[2*nu]*Gamma[alpha + beta + 2])*HypergeometricPFQ[{-n, n + 2*nu, alpha + 1}, {nu + 1/2, alpha + beta + 2}, 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[alpha] > -1",
+   "Re[beta] > -1"
+  ],
+  "cite": "ET II 281(4)",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int_{-1}^1 (1-x)^alpha (1+x)^beta C^nu_n(x) dx = ... 3F2(-n, n+2nu, alpha+1; nu+1/2, alpha+beta+2; 1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.312.1",
+  "gr": "7.312.1",
+  "page": 844,
+  "status": "ok",
+  "lhs": "Integrate[x^m*(z - x)^(-1)*(1 - x^2)^(nu - 1/2)*GegenbauerC[n, nu, x], {x, -1, 1}]",
+  "rhs": [
+   "Pi^(1/2)*2^(3/2 - nu)/Gamma[nu]*E^(-(nu - 1/2)*Pi*I)*z^m*(z^2 - 1)^(nu/2 - 1/4)*LegendreQ[n + nu - 1/2, nu - 1/2, 3, z]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m <= n",
+   "Re[nu] > -1/2",
+   "z > 1"
+  ],
+  "cite": "ET II 281(5)",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int_{-1}^1 x^m (z-x)^{-1}(1-x^2)^{nu-1/2} C^nu_n(x) dx = pi^{1/2}2^{3/2-nu}/Gamma(nu) e^{-(nu-1/2)pi i} z^m (z^2-1)^{nu/2-1/4} Q^{nu-1/2}_{n+nu-1/2}(z)",
+  "note": "z off the cut [-1,1] in the book; sampled on z > 1; Q is type 3"
+ },
+ {
+  "id": "GR7.312.2",
+  "gr": "7.312.2",
+  "page": 844,
+  "status": "ok",
+  "lhs": "Integrate[x^(n + 1)*(z - x)^(-1)*(1 - x^2)^(nu - 1/2)*GegenbauerC[n, nu, x], {x, -1, 1}]",
+  "rhs": [
+   "Pi^(1/2)*2^(3/2 - nu)/Gamma[nu]*E^(-(nu - 1/2)*Pi*I)*z^(n + 1)*(z^2 - 1)^(nu/2 - 1/4)*LegendreQ[n + nu - 1/2, nu - 1/2, 3, z] - Pi*2^(1 - 2*nu - n)*n!/(Gamma[nu]*Gamma[nu + n + 1])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[nu] > -1/2",
+   "z > 1"
+  ],
+  "cite": "ET II 281(6)",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int_{-1}^1 x^{n+1}(z-x)^{-1}(1-x^2)^{nu-1/2} C^nu_n dx = ... z^{n+1} ... Q - pi 2^{1-2nu-n} n!/(Gamma(nu)Gamma(nu+n+1))",
+  "note": "z off the cut [-1,1] in the book; sampled on z > 1; Q is type 3"
+ },
+ {
+  "id": "GR7.312.3",
+  "gr": "7.312.3",
+  "page": 844,
+  "status": "ok",
+  "lhs": "Integrate[(z - x)^(-1)*(1 - x^2)^(nu - 1/2)*GegenbauerC[m, nu, x]*GegenbauerC[n, nu, x], {x, -1, 1}]",
+  "rhs": [
+   "Pi^(1/2)*2^(3/2 - nu)/Gamma[nu]*E^(-(nu - 1/2)*Pi*I)*(z^2 - 1)^(nu/2 - 1/4)*GegenbauerC[m, nu, z]*LegendreQ[n + nu - 1/2, nu - 1/2, 3, z]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m <= n",
+   "Re[nu] > -1/2",
+   "z > 1"
+  ],
+  "cite": "ET II 283(17)",
+  "edition_note": "6",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int_{-1}^1 (z-x)^{-1}(1-x^2)^{nu-1/2} C^nu_m C^nu_n dx = ... (z^2-1)^{nu/2-1/4} C^nu_m(z) Q^{nu-1/2}_{n+nu-1/2}(z)",
+  "note": "z off the cut [-1,1] in the book; sampled on z > 1; Q is type 3"
+ },
+ {
+  "id": "GR7.313.1",
+  "gr": "7.313.1",
+  "page": 844,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^(nu - 1/2)*GegenbauerC[m, nu, x]*GegenbauerC[n, nu, x], {x, -1, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m != n",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 282(12), MO 98a, EH I 177(16)",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int_{-1}^1 (1-x^2)^{nu-1/2} C^nu_m C^nu_n dx = 0 [m != n]",
+  "note": ""
+ },
+ {
+  "id": "GR7.313.2",
+  "gr": "7.313.2",
+  "page": 844,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^(nu - 1/2)*GegenbauerC[n, nu, x]^2, {x, -1, 1}]",
+  "rhs": [
+   "Pi*2^(1 - 2*nu)*Gamma[2*nu + n]/(n!*(n + nu)*Gamma[nu]^2)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 281(8), MO 98a, EH I 177(17)",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int_{-1}^1 (1-x^2)^{nu-1/2}[C^nu_n]^2 dx = pi 2^{1-2nu} Gamma(2nu+n)/(n!(n+nu)[Gamma(nu)]^2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.314.1",
+  "gr": "7.314.1",
+  "page": 845,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(nu - 3/2)*(1 + x)^(nu - 1/2)*GegenbauerC[n, nu, x]^2, {x, -1, 1}]",
+  "rhs": [
+   "Pi^(1/2)*Gamma[nu - 1/2]*Gamma[2*nu + n]/(n!*Gamma[nu]*Gamma[2*nu])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[nu] > 1/2"
+  ],
+  "cite": "ET II 281(9)",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int (1-x)^{nu-3/2}(1+x)^{nu-1/2}[C^nu_n]^2 dx",
+  "note": ""
+ },
+ {
+  "id": "GR7.314.2",
+  "gr": "7.314.2",
+  "page": 845,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(nu - 1/2)*(1 + x)^(2*nu - 1)*GegenbauerC[n, nu, x]^2, {x, -1, 1}]",
+  "rhs": [
+   "2^(3*nu - 1/2)*Gamma[2*nu + n]^2*Gamma[2*n + nu + 1/2]/((n!)^2*Gamma[2*nu]*Gamma[3*nu + 2*n + 1/2])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 282(10)",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int (1-x)^{nu-1/2}(1+x)^{2nu-1}[C^nu_n]^2 dx",
+  "note": ""
+ },
+ {
+  "id": "GR7.314.3",
+  "gr": "7.314.3",
+  "page": 845,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(3*nu + 2*n - 3/2)*(1 + x)^(nu - 1/2)*GegenbauerC[n, nu, x]^2, {x, -1, 1}]",
+  "rhs": [
+   "Pi^(1/2)*Gamma[nu + 1/2]^2*Gamma[nu + 2*n + 1/2]*Gamma[2*nu + 2*n]*Gamma[3*nu + 2*n - 1/2]/(2^(2*nu + 2*n)*(n!*Gamma[nu + n + 1/2]*Gamma[2*nu])^2*Gamma[2*nu + 2*n + 1/2])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[nu] > 1/6"
+  ],
+  "cite": "ET II 282(11)",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int (1-x)^{3nu+2n-3/2}(1+x)^{nu-1/2}[C^nu_n]^2 dx",
+  "note": ""
+ },
+ {
+  "id": "GR7.314.4",
+  "gr": "7.314.4",
+  "page": 845,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(nu - 1/2)*(1 + x)^(nu + m - n - 3/2)*GegenbauerC[m, nu, x]*GegenbauerC[n, nu, x], {x, -1, 1}]",
+  "rhs": [
+   "(-1)^m*2^(2 - 2*nu - m + n)*Pi^(3/2)*Gamma[2*nu + n]/(m!*(n - m)!*Gamma[nu]^2*Gamma[1/2 + nu + m])*Gamma[nu - 1/2 + m - n]*Gamma[1/2 - nu + m - n]/(Gamma[1/2 - nu - n]*Gamma[1/2 + m - n])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "Re[nu] > -1/2",
+   "n >= m"
+  ],
+  "cite": "ET II 282(13)a",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int (1-x)^{nu-1/2}(1+x)^{nu+m-n-3/2} C^nu_m C^nu_n dx",
+  "note": ""
+ },
+ {
+  "id": "GR7.314.5",
+  "gr": "7.314.5",
+  "page": 845,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(2*nu - 1)*(1 + x)^(nu - 1/2)*GegenbauerC[m, nu, x]*GegenbauerC[n, nu, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(3*nu - 1/2)*Gamma[nu + 1/2]*Gamma[2*nu + m]*Gamma[2*nu + n]/(m!*n!*Gamma[2*nu]*Gamma[1/2 - nu])*Gamma[nu + 1/2 + m + n]*Gamma[1/2 - nu + n - m]/(Gamma[nu + 1/2 + n - m]*Gamma[3*nu + 1/2 + m + n])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 282(14)",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int (1-x)^{2nu-1}(1+x)^{nu-1/2} C^nu_m C^nu_n dx",
+  "note": ""
+ },
+ {
+  "id": "GR7.314.6",
+  "gr": "7.314.6",
+  "page": 845,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(nu - 1/2)*(1 + x)^(3*nu + m + n - 3/2)*GegenbauerC[m, nu, x]*GegenbauerC[n, nu, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(4*nu + m + n - 1)*(Gamma[nu + 1/2]*Gamma[2*nu + m + n])^2/(Gamma[nu + m + 1/2]*Gamma[nu + n + 1/2]*Gamma[2*nu + m])*Gamma[nu + m + n + 1/2]*Gamma[3*nu + m + n - 1/2]/(Gamma[2*nu + n]*Gamma[4*nu + 2*m + 2*n])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "Re[nu] > 1/6"
+  ],
+  "cite": "ET II 282(15)",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int (1-x)^{nu-1/2}(1+x)^{3nu+m+n-3/2} C^nu_m C^nu_n dx",
+  "note": ""
+ },
+ {
+  "id": "GR7.314.7",
+  "gr": "7.314.7",
+  "page": 845,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^alpha*(1 + x)^(nu - 1/2)*GegenbauerC[m, mu, x]*GegenbauerC[n, nu, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(alpha + nu + 1/2)*Gamma[alpha + 1]*Gamma[nu + 1/2]*Gamma[nu - alpha + n - 1/2]/(m!*n!*Gamma[nu - alpha - 1/2]*Gamma[nu - alpha + n + 3/2])*Gamma[2*mu + m]*Gamma[2*nu + n]/(Gamma[2*mu]*Gamma[2*nu])*HypergeometricPFQ[{-m, m + 2*mu, alpha + 1, alpha - nu + 3/2}, {mu + 1/2, nu + alpha + n + 3/2, alpha - nu - n + 3/2}, 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "Re[alpha] > -1",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 283(16)",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int (1-x)^alpha (1+x)^{nu-1/2} C^mu_m C^nu_n dx = ... 4F3(-m, m+2mu, alpha+1, alpha-nu+3/2; mu+1/2, nu+alpha+n+3/2, alpha-nu-n+3/2; 1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.315",
+  "gr": "7.315",
+  "page": 845,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^(nu/2 - 1)*GegenbauerC[2*n, nu, a*x], {x, -1, 1}]",
+  "rhs": [
+   "Pi^(1/2)*Gamma[nu/2]/Gamma[nu/2 + 1/2]*GegenbauerC[n, nu/2, 2*a^2 - 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 283(19)",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int_{-1}^1 (1-x^2)^{nu/2-1} C^nu_{2n}(ax) dx = pi^{1/2}Gamma(nu/2)/Gamma(nu/2+1/2) C^{nu/2}_n(2a^2-1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.316",
+  "gr": "7.316",
+  "page": 846,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^(nu - 1)*GegenbauerC[n, nu, Cos[alpha]*Cos[beta] + x*Sin[alpha]*Sin[beta]], {x, -1, 1}]",
+  "rhs": [
+   "2^(2*nu - 1)*n!*Gamma[nu]^2/Gamma[2*nu + n]*GegenbauerC[n, nu, Cos[alpha]]*GegenbauerC[n, nu, Cos[beta]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 283(20)",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int_{-1}^1 (1-x^2)^{nu-1} C^nu_n(cos a cos b + x sin a sin b) dx = 2^{2nu-1} n! Gamma(nu)^2/Gamma(2nu+n) C^nu_n(cos a) C^nu_n(cos b)",
+  "note": ""
+ },
+ {
+  "id": "GR7.317.1",
+  "gr": "7.317.1",
+  "page": 846,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(mu - 1)*x^(lam - 1/2)*GegenbauerC[n, lam, 1 - gamma*x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[2*lam + n]*Gamma[lam + 1/2]*Gamma[mu]/(Gamma[2*lam]*Gamma[lam + mu + n + 1/2])*JacobiP[n, lam + mu - 1/2, lam - mu - 1/2, 1 - gamma]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[lam] > -1/2",
+   "lam != 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET II 190(39)a",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int_0^1 (1-x)^{mu-1} x^{lam-1/2} C^lam_n(1-gamma x) dx = Gamma(2lam+n)Gamma(lam+1/2)Gamma(mu)/(Gamma(2lam)Gamma(lam+mu+n+1/2)) P^{(alpha,beta)}_n(1-gamma), alpha=lam+mu-1/2, beta=lam-mu-1/2",
+  "note": "printed Re lam > -1, lam != 0, -1/2; convergence at x=0 needs Re lam > -1/2; alpha, beta substituted"
+ },
+ {
+  "id": "GR7.317.2",
+  "gr": "7.317.2",
+  "page": 846,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(mu - 1)*x^(nu - 1)*GegenbauerC[n, lam, 1 - gamma*x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[2*lam + n]*Gamma[mu]*Gamma[nu]/(n!*Gamma[2*lam]*Gamma[mu + nu])*HypergeometricPFQ[{-n, n + 2*lam, nu}, {lam + 1/2, mu + nu}, gamma/2]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 191(40)a",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int_0^1 (1-x)^{mu-1} x^{nu-1} C^lam_n(1-gamma x) dx = ... 3F2(-n, n+2lam, nu; lam+1/2, mu+nu; gamma/2)",
+  "note": "condition 2 lam != 0, -1, -2, ... not sampled"
+ },
+ {
+  "id": "GR7.318",
+  "gr": "7.318",
+  "page": 846,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*nu)*(1 - x^2)^(sigma - 1)*GegenbauerC[n, nu, 1 - 2*x^2*y], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[2*nu + n]*Gamma[nu + 1/2]*Gamma[sigma]/(2*Gamma[2*nu]*Gamma[n + nu + sigma + 1/2])*JacobiP[n, nu + sigma - 1/2, nu - sigma - 1/2, 1 - y]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[nu] > -1/2",
+   "Re[sigma] > 0"
+  ],
+  "cite": "ET II 283(21)",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int_0^1 x^{2nu}(1-x^2)^{sigma-1} C^nu_n(1-2x^2 y) dx = ... P^{(alpha,beta)}_n(1-y), alpha=nu+sigma-1/2, beta=nu-sigma-1/2",
+  "note": "alpha, beta substituted"
+ },
+ {
+  "id": "GR7.319.1",
+  "gr": "7.319.1",
+  "page": 846,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(mu - 1)*x^(nu - 1)*GegenbauerC[2*n, lam, gamma*x^(1/2)], {x, 0, 1}]",
+  "rhs": [
+   "(-1)^n*Gamma[lam + n]*Gamma[mu]*Gamma[nu]/(n!*Gamma[lam]*Gamma[mu + nu])*HypergeometricPFQ[{-n, n + lam, nu}, {1/2, mu + nu}, gamma^2]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 191(41)a",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int_0^1 (1-x)^{mu-1}x^{nu-1} C^lam_{2n}(gamma x^{1/2}) dx = (-1)^n ... 3F2(-n, n+lam, nu; 1/2, mu+nu; gamma^2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.319.2",
+  "gr": "7.319.2",
+  "page": 846,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(mu - 1)*x^(nu - 1)*GegenbauerC[2*n + 1, lam, gamma*x^(1/2)], {x, 0, 1}]",
+  "rhs": [
+   "(-1)^n*2*gamma*Gamma[mu]*Gamma[lam + n + 1]*Gamma[nu + 1/2]/(n!*Gamma[lam]*Gamma[mu + nu + 1/2])*HypergeometricPFQ[{-n, n + lam + 1, nu + 1/2}, {3/2, mu + nu + 1/2}, gamma^2]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[mu] > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 191(42)",
+  "edition_note": "",
+  "section": "7.31 Combinations of Gegenbauer polynomials and powers",
+  "tex": "int_0^1 (1-x)^{mu-1}x^{nu-1} C^lam_{2n+1}(gamma x^{1/2}) dx = (-1)^n 2 gamma ... 3F2(-n, n+lam+1, nu+1/2; 3/2, mu+nu+1/2; gamma^2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.321",
+  "gr": "7.321",
+  "page": 846,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^(nu - 1/2)*E^(I*a*x)*GegenbauerC[n, nu, x], {x, -1, 1}]",
+  "rhs": [
+   "Pi*2^(1 - nu)*I^n*Gamma[2*nu + n]/(n!*Gamma[nu])*a^(-nu)*BesselJ[nu + n, a]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[nu] > -1/2",
+   "a > 0"
+  ],
+  "cite": "ET II 281(7), MO 99a",
+  "edition_note": "",
+  "section": "7.32 Combinations of Gegenbauer polynomials and elementary functions",
+  "tex": "int_{-1}^1 (1-x^2)^{nu-1/2} e^{iax} C^nu_n(x) dx = pi 2^{1-nu} i^n Gamma(2nu+n)/(n! Gamma(nu)) a^{-nu} J_{nu+n}(a)",
+  "note": "a > 0 added"
+ },
+ {
+  "id": "GR7.322",
+  "gr": "7.322",
+  "page": 846,
+  "status": "ok",
+  "lhs": "Integrate[(x*(2*a - x))^(nu - 1/2)*GegenbauerC[n, nu, x/a - 1]*E^(-b*x), {x, 0, 2*a}]",
+  "rhs": [
+   "(-1)^n*Pi*Gamma[2*nu + n]/(n!*Gamma[nu])*(a/(2*b))^nu*E^(-a*b)*BesselI[nu + n, a*b]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[nu] > -1/2",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 171(9)",
+  "edition_note": "",
+  "section": "7.32 Combinations of Gegenbauer polynomials and elementary functions",
+  "tex": "int_0^{2a} [x(2a-x)]^{nu-1/2} C^nu_n(x/a - 1) e^{-bx} dx = (-1)^n pi Gamma(2nu+n)/(n!Gamma(nu)) (a/2b)^nu e^{-ab} I_{nu+n}(ab)",
+  "note": "a > 0, b > 0 added"
+ },
+ {
+  "id": "GR7.323.1a",
+  "gr": "7.323.1a",
+  "page": 846,
+  "status": "ok",
+  "lhs": "Integrate[GegenbauerC[n, nu, Cos[phi]]*Sin[phi]^(2*nu), {phi, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "EH I 177(18)",
+  "edition_note": "",
+  "section": "7.32 Combinations of Gegenbauer polynomials and elementary functions",
+  "tex": "int_0^pi C^nu_n(cos phi)(sin phi)^{2nu} dphi = 0 [n=1,2,3,...]",
+  "note": "Re nu > -1/2 added for convergence"
+ },
+ {
+  "id": "GR7.323.1b",
+  "gr": "7.323.1b",
+  "page": 846,
+  "status": "ok",
+  "lhs": "Integrate[GegenbauerC[0, nu, Cos[phi]]*Sin[phi]^(2*nu), {phi, 0, Pi}]",
+  "rhs": [
+   "2^(-2*nu)*Pi*Gamma[2*nu + 1]*Gamma[1 + nu]^(-2)"
+  ],
+  "conds": [
+   "Re[nu] > -1/2"
+  ],
+  "cite": "EH I 177(18)",
+  "edition_note": "",
+  "section": "7.32 Combinations of Gegenbauer polynomials and elementary functions",
+  "tex": "= 2^{-2nu} pi Gamma(2nu+1)[Gamma(1+nu)]^{-2} [n=0]",
+  "note": "n = 0 substituted"
+ },
+ {
+  "id": "GR7.323.2",
+  "gr": "7.323.2",
+  "page": 847,
+  "status": "ok",
+  "lhs": "Integrate[GegenbauerC[n, nu, Cos[psi]*Cos[psi1] + Sin[psi]*Sin[psi1]*Cos[phi]]*Sin[phi]^(2*nu - 1), {phi, 0, Pi}]",
+  "rhs": [
+   "2^(2*nu - 1)*n!*Gamma[nu]^2*GegenbauerC[n, nu, Cos[psi]]*GegenbauerC[n, nu, Cos[psi1]]*Gamma[2*nu + n]^(-1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "EH I 177(20)",
+  "edition_note": "11",
+  "section": "7.32 Combinations of Gegenbauer polynomials and elementary functions",
+  "tex": "int_0^pi C^nu_n(cos psi cos psi' + sin psi sin psi' cos phi)(sin phi)^{2nu-1} dphi = 2^{2nu-1} n! [Gamma(nu)]^2 C^nu_n(cos psi) C^nu_n(cos psi') [Gamma(2nu+n)]^{-1}",
+  "note": "psi' written psi1"
+ },
+ {
+  "id": "GR7.324.1",
+  "gr": "7.324.1",
+  "page": 847,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^(nu - 1/2)*GegenbauerC[2*n + 1, nu, x]*Sin[a*x], {x, 0, 1}]",
+  "rhs": [
+   "(-1)^n*Pi*Gamma[2*n + 2*nu + 1]*BesselJ[2*n + nu + 1, a]/((2*n + 1)!*Gamma[nu]*(2*a)^nu)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[nu] > -1/2",
+   "a > 0"
+  ],
+  "cite": "ET I 94(4)",
+  "edition_note": "",
+  "section": "7.32 Combinations of Gegenbauer polynomials and elementary functions",
+  "tex": "int_0^1 (1-x^2)^{nu-1/2} C^nu_{2n+1}(x) sin ax dx = (-1)^n pi Gamma(2n+2nu+1) J_{2n+nu+1}(a)/((2n+1)! Gamma(nu)(2a)^nu)",
+  "note": ""
+ },
+ {
+  "id": "GR7.324.2",
+  "gr": "7.324.2",
+  "page": 847,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^(nu - 1/2)*GegenbauerC[2*n, nu, x]*Cos[a*x], {x, 0, 1}]",
+  "rhs": [
+   "(-1)^n*Pi*Gamma[2*n + 2*nu]*BesselJ[nu + 2*n, a]/((2*n)!*Gamma[nu]*(2*a)^nu)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[nu] > -1/2",
+   "a > 0"
+  ],
+  "cite": "ET I 38(3)a",
+  "edition_note": "",
+  "section": "7.32 Combinations of Gegenbauer polynomials and elementary functions",
+  "tex": "int_0^1 (1-x^2)^{nu-1/2} C^nu_{2n}(x) cos ax dx = (-1)^n pi Gamma(2n+2nu) J_{nu+2n}(a)/((2n)! Gamma(nu)(2a)^nu)",
+  "note": ""
+ },
+ {
+  "id": "GR7.325.1a",
+  "gr": "7.325.1a",
+  "page": 847,
+  "status": "ok",
+  "lhs": "Integrate[(-1)^Floor[2*(2*p + 1)*2^e*x]*(-1)^Floor[2*(2*q + 1)*2^e*x], {x, 0, 1}]",
+  "rhs": [
+   "GCD[(2*p + 1)*2^e, (2*q + 1)*2^e]/LCM[(2*p + 1)*2^e, (2*q + 1)*2^e]"
+  ],
+  "conds": [
+   "Element[p, Integers] && p >= 0",
+   "Element[q, Integers] && q >= 0",
+   "Element[e, Integers] && e >= 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "7.325 Complete system of orthogonal step functions",
+  "tex": "int_0^1 s_j(x) s_k(x) dx = (j,k)/[j,k] if j/odd(j) = k/odd(k)",
+  "note": "s_j(x) = (-1)^floor(2jx), c_j(x) = (-1)^floor(2jx+1/2); j/odd(j) = k/odd(k) means equal 2-adic valuation: substituted j = (2p+1) 2^e, k = (2q+1) 2^e"
+ },
+ {
+  "id": "GR7.325.1b",
+  "gr": "7.325.1b",
+  "page": 847,
+  "status": "ok",
+  "lhs": "Integrate[(-1)^Floor[2*(2*p + 1)*2^e*x]*(-1)^Floor[2*(2*q + 1)*2^(e + f + 1)*x], {x, 0, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[p, Integers] && p >= 0",
+   "Element[q, Integers] && q >= 0",
+   "Element[e, Integers] && e >= 0",
+   "Element[f, Integers] && f >= 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "7.325 Complete system of orthogonal step functions",
+  "tex": "int_0^1 s_j s_k dx = 0 otherwise",
+  "note": "'otherwise' branch: k given strictly larger 2-adic valuation, j = (2p+1)2^e, k = (2q+1)2^(e+f+1)"
+ },
+ {
+  "id": "GR7.325.2a",
+  "gr": "7.325.2a",
+  "page": 847,
+  "status": "ok",
+  "lhs": "Integrate[(-1)^Floor[2*(2*p + 1)*2^e*x + 1/2]*(-1)^Floor[2*(2*q + 1)*2^e*x + 1/2], {x, 0, 1}]",
+  "rhs": [
+   "(-1)^(((2*p + 1)*2^e + (2*q + 1)*2^e)/2 + 1)*GCD[(2*p + 1)*2^e, (2*q + 1)*2^e]/LCM[(2*p + 1)*2^e, (2*q + 1)*2^e]"
+  ],
+  "conds": [
+   "Element[p, Integers] && p >= 0",
+   "Element[q, Integers] && q >= 0",
+   "Element[e, Integers] && e >= 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "7.325 Complete system of orthogonal step functions",
+  "tex": "int_0^1 c_j(x) c_k(x) dx = (-1)^{(j+k)/2+1} (j,k)/[j,k] if j/odd(j) = k/odd(k)",
+  "note": "s_j(x) = (-1)^floor(2jx), c_j(x) = (-1)^floor(2jx+1/2); j/odd(j) = k/odd(k) means equal 2-adic valuation: substituted j = (2p+1) 2^e, k = (2q+1) 2^e; j, k >= 1"
+ },
+ {
+  "id": "GR7.325.2b",
+  "gr": "7.325.2b",
+  "page": 847,
+  "status": "ok",
+  "lhs": "Integrate[(-1)^Floor[2*(2*p + 1)*2^e*x + 1/2]*(-1)^Floor[2*(2*q + 1)*2^(e + f + 1)*x + 1/2], {x, 0, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[p, Integers] && p >= 0",
+   "Element[q, Integers] && q >= 0",
+   "Element[e, Integers] && e >= 0",
+   "Element[f, Integers] && f >= 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "7.325 Complete system of orthogonal step functions",
+  "tex": "int_0^1 c_j c_k dx = 0 otherwise",
+  "note": "'otherwise' branch: k given strictly larger 2-adic valuation; j = 0 case not covered"
+ },
+ {
+  "id": "GR7.331.1",
+  "gr": "7.331.1",
+  "page": 847,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n + 1 - nu)*(x^2 - 1)^(nu - 2*n - 1/2)*GegenbauerC[2*n, nu - 2*n, 1/x]*BesselJ[nu, x*y], {x, 1, Infinity}]",
+  "rhs": [
+   "(-1)^n*2^(2*n - nu + 1)*y^(-nu + 2*n - 1)*((2*n)!)^(-1)*Gamma[2*nu - 2*n]*Gamma[nu - 2*n]^(-1)*Cos[y]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "y > 0",
+   "2*n - 1/2 < Re[nu] < 2*n + 1/2"
+  ],
+  "cite": "ET II 44(10)a",
+  "edition_note": "",
+  "section": "7.33 Combinations of Gegenbauer polynomials and Bessel functions; integration with respect to the index",
+  "tex": "int_1^inf x^{2n+1-nu}(x^2-1)^{nu-2n-1/2} C^{nu-2n}_{2n}(1/x) J_nu(xy) dx = (-1)^n 2^{2n-nu+1} y^{-nu+2n-1}[(2n)!]^{-1} Gamma(2nu-2n)[Gamma(nu-2n)]^{-1} cos y",
+  "note": ""
+ },
+ {
+  "id": "GR7.332.1a",
+  "gr": "7.332.1a",
+  "page": 848,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*(x^2 + beta^2)^(-nu/2 - 3/4)*GegenbauerC[2*n + 1, nu + 1/2, beta*(x^2 + beta^2)^(-1/2)]*BesselJ[nu + 3/2 + 2*n, (x^2 + beta^2)^(1/2)*a]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*2^(1/2)*Pi^(-1/2)*a^(1/2 - nu)*y^nu*(a^2 - y^2)^(-1/2)*Sin[beta*(a^2 - y^2)^(1/2)]*GegenbauerC[2*n + 1, nu + 1/2, (1 - y^2/a^2)^(1/2)]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[nu] > -1",
+   "0 < y < a"
+  ],
+  "cite": "ET II 59(23)",
+  "edition_note": "",
+  "section": "7.33 Combinations of Gegenbauer polynomials and Bessel functions; integration with respect to the index",
+  "tex": "int_0^inf x^{nu+1}(x^2+b^2)^{-nu/2-3/4} C^{nu+1/2}_{2*n + 1}[b (x^2+b^2)^{-1/2}] J_{nu + 3/2 + 2*n}[(x^2+b^2)^{1/2} a] J_nu(xy) dx = ... sin[b (a^2-y^2)^{1/2}] ... [0<y<a]",
+  "note": ""
+ },
+ {
+  "id": "GR7.332.1b",
+  "gr": "7.332.1b",
+  "page": 848,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*(x^2 + beta^2)^(-nu/2 - 3/4)*GegenbauerC[2*n + 1, nu + 1/2, beta*(x^2 + beta^2)^(-1/2)]*BesselJ[nu + 3/2 + 2*n, (x^2 + beta^2)^(1/2)*a]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[nu] > -1",
+   "y > a"
+  ],
+  "cite": "ET II 59(23)",
+  "edition_note": "",
+  "section": "7.33 Combinations of Gegenbauer polynomials and Bessel functions; integration with respect to the index",
+  "tex": "= 0 [a < y < inf]",
+  "note": ""
+ },
+ {
+  "id": "GR7.332.2a",
+  "gr": "7.332.2a",
+  "page": 848,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*(x^2 + beta^2)^(-nu/2 - 3/4)*GegenbauerC[2*n, nu + 1/2, beta*(x^2 + beta^2)^(-1/2)]*BesselJ[nu + 1/2 + 2*n, (x^2 + beta^2)^(1/2)*a]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*2^(1/2)*Pi^(-1/2)*a^(1/2 - nu)*y^nu*(a^2 - y^2)^(-1/2)*Cos[beta*(a^2 - y^2)^(1/2)]*GegenbauerC[2*n, nu + 1/2, (1 - y^2/a^2)^(1/2)]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[nu] > -1",
+   "0 < y < a"
+  ],
+  "cite": "ET II 59(24)",
+  "edition_note": "",
+  "section": "7.33 Combinations of Gegenbauer polynomials and Bessel functions; integration with respect to the index",
+  "tex": "int_0^inf x^{nu+1}(x^2+b^2)^{-nu/2-3/4} C^{nu+1/2}_{2*n}[b (x^2+b^2)^{-1/2}] J_{nu + 1/2 + 2*n}[(x^2+b^2)^{1/2} a] J_nu(xy) dx = ... cos[b (a^2-y^2)^{1/2}] ... [0<y<a]",
+  "note": ""
+ },
+ {
+  "id": "GR7.332.2b",
+  "gr": "7.332.2b",
+  "page": 848,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*(x^2 + beta^2)^(-nu/2 - 3/4)*GegenbauerC[2*n, nu + 1/2, beta*(x^2 + beta^2)^(-1/2)]*BesselJ[nu + 1/2 + 2*n, (x^2 + beta^2)^(1/2)*a]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[nu] > -1",
+   "y > a"
+  ],
+  "cite": "ET II 59(24)",
+  "edition_note": "",
+  "section": "7.33 Combinations of Gegenbauer polynomials and Bessel functions; integration with respect to the index",
+  "tex": "= 0 [a < y < inf]",
+  "note": ""
+ },
+ {
+  "id": "GR7.333.1a",
+  "gr": "7.333.1a",
+  "page": 848,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(nu + 1)*Cos[a*Cos[theta]*Cos[x]]*GegenbauerC[n, nu + 1/2, Cos[x]]*BesselJ[nu, a*Sin[theta]*Sin[x]], {x, 0, Pi}]",
+  "rhs": [
+   "(-1)^(n/2)*(2*Pi/a)^(1/2)*Sin[theta]^nu*GegenbauerC[n, nu + 1/2, Cos[theta]]*BesselJ[nu + 1/2 + n, a]"
+  ],
+  "conds": [
+   "Element[n/2, Integers] && n >= 0",
+   "Re[nu] > -1",
+   "a > 0"
+  ],
+  "cite": "WA 414(2)a",
+  "edition_note": "",
+  "section": "7.33 Combinations of Gegenbauer polynomials and Bessel functions; integration with respect to the index",
+  "tex": "int_0^pi (sin x)^{nu+1} cos(a cos t cos x) C^{nu+1/2}_n(cos x) J_nu(a sin t sin x) dx = (-1)^{n/2}(2pi/a)^{1/2}(sin t)^nu C^{nu+1/2}_n(cos t) J_{nu+1/2+n}(a) [n even]",
+  "note": "a > 0 added"
+ },
+ {
+  "id": "GR7.333.1b",
+  "gr": "7.333.1b",
+  "page": 848,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(nu + 1)*Cos[a*Cos[theta]*Cos[x]]*GegenbauerC[n, nu + 1/2, Cos[x]]*BesselJ[nu, a*Sin[theta]*Sin[x]], {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[(n - 1)/2, Integers] && n >= 1",
+   "Re[nu] > -1",
+   "a > 0"
+  ],
+  "cite": "WA 414(2)a",
+  "edition_note": "",
+  "section": "7.33 Combinations of Gegenbauer polynomials and Bessel functions; integration with respect to the index",
+  "tex": "= 0 [n odd]",
+  "note": ""
+ },
+ {
+  "id": "GR7.333.2a",
+  "gr": "7.333.2a",
+  "page": 848,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(nu + 1)*Sin[a*Cos[theta]*Cos[x]]*GegenbauerC[n, nu + 1/2, Cos[x]]*BesselJ[nu, a*Sin[theta]*Sin[x]], {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n/2, Integers] && n >= 0",
+   "Re[nu] > -1",
+   "a > 0"
+  ],
+  "cite": "WA 414(3)a",
+  "edition_note": "",
+  "section": "7.33 Combinations of Gegenbauer polynomials and Bessel functions; integration with respect to the index",
+  "tex": "sin version = 0 [n even]",
+  "note": ""
+ },
+ {
+  "id": "GR7.333.2b",
+  "gr": "7.333.2b",
+  "page": 848,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(nu + 1)*Sin[a*Cos[theta]*Cos[x]]*GegenbauerC[n, nu + 1/2, Cos[x]]*BesselJ[nu, a*Sin[theta]*Sin[x]], {x, 0, Pi}]",
+  "rhs": [
+   "(-1)^((n - 1)/2)*(2*Pi/a)^(1/2)*Sin[theta]^nu*GegenbauerC[n, nu + 1/2, Cos[theta]]*BesselJ[nu + 1/2 + n, a]"
+  ],
+  "conds": [
+   "Element[(n - 1)/2, Integers] && n >= 1",
+   "Re[nu] > -1",
+   "a > 0"
+  ],
+  "cite": "WA 414(3)a",
+  "edition_note": "",
+  "section": "7.33 Combinations of Gegenbauer polynomials and Bessel functions; integration with respect to the index",
+  "tex": "sin version = (-1)^{(n-1)/2}(2pi/a)^{1/2}(sin t)^nu C^{nu+1/2}_n(cos t) J_{nu+1/2+n}(a) [n odd]",
+  "note": "a > 0 added"
+ },
+ {
+  "id": "GR7.334.1",
+  "gr": "7.334.1",
+  "page": 848,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*nu)*GegenbauerC[n, nu, Cos[x]]*BesselJ[nu, (alpha^2 + beta^2 - 2*alpha*beta*Cos[x])^(1/2)]/((alpha^2 + beta^2 - 2*alpha*beta*Cos[x])^(1/2))^nu, {x, 0, Pi}]",
+  "rhs": [
+   "Pi*Gamma[2*nu + n]/(2^(nu - 1)*n!*Gamma[nu])*BesselJ[nu + n, alpha]/alpha^nu*BesselJ[nu + n, beta]/beta^nu"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 362(29)",
+  "edition_note": "",
+  "section": "7.33 Combinations of Gegenbauer polynomials and Bessel functions; integration with respect to the index",
+  "tex": "int_0^pi (sin x)^{2nu} C^nu_n(cos x) J_nu(w)/w^nu dx = pi Gamma(2nu+n)/(2^{nu-1} n! Gamma(nu)) J_{nu+n}(alpha)/alpha^nu J_{nu+n}(beta)/beta^nu, w=(alpha^2+beta^2-2 alpha beta cos x)^{1/2}",
+  "note": "w substituted"
+ },
+ {
+  "id": "GR7.334.2",
+  "gr": "7.334.2",
+  "page": 848,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*nu)*GegenbauerC[n, nu, Cos[x]]*BesselY[nu, (alpha^2 + beta^2 - 2*alpha*beta*Cos[x])^(1/2)]/((alpha^2 + beta^2 - 2*alpha*beta*Cos[x])^(1/2))^nu, {x, 0, Pi}]",
+  "rhs": [
+   "Pi*Gamma[2*nu + n]/(2^(nu - 1)*n!*Gamma[nu])*BesselJ[nu + n, alpha]/alpha^nu*BesselY[nu + n, beta]/beta^nu"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Abs[alpha] < Abs[beta]",
+   "alpha > 0",
+   "beta > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 362(30)",
+  "edition_note": "",
+  "section": "7.33 Combinations of Gegenbauer polynomials and Bessel functions; integration with respect to the index",
+  "tex": "same with Y_nu(w)/w^nu = ... J_{nu+n}(alpha)/alpha^nu Y_{nu+n}(beta)/beta^nu [|alpha| < |beta|]",
+  "note": "printed condition 'Re nu - 1/2' (misprint, missing '>'); corrected to Re nu > -1/2. w substituted; alpha, beta > 0 added for a real Y branch"
+ },
+ {
+  "id": "GR7.335",
+  "gr": "7.335",
+  "page": 849,
+  "status": "SKIP-CONTOUR",
+  "lhs": "Integrate[Sin[alpha*Pi]^(-1)*t^alpha*GegenbauerC[alpha, nu, z], {alpha, c - I*Infinity, c + I*Infinity}]",
+  "rhs": [
+   "-2*I*(1 + 2*t*z + t^2)^(-nu)"
+  ],
+  "conds": [
+   "-2 < Re[nu] < c < 0",
+   "Abs[Arg[z + 1]] < Pi",
+   "Abs[Arg[z - 1]] < Pi"
+  ],
+  "cite": "EH I 178(25)",
+  "edition_note": "",
+  "section": "7.33 Combinations of Gegenbauer polynomials and Bessel functions; integration with respect to the index",
+  "tex": "int_{c-i inf}^{c+i inf} [sin(alpha pi)]^{-1} t^alpha C^nu_alpha(z) d alpha = -2i (1+2tz+t^2)^{-nu}",
+  "note": "",
+  "reason": "Mellin-Barnes integral along vertical line"
+ },
+ {
+  "id": "GR7.336",
+  "gr": "7.336",
+  "page": 849,
+  "status": "ok",
+  "lhs": "Integrate[Sech[Pi*x]*(nu - 1/2 + I*x)*BesselK[nu - 1/2 + I*x, a]*BesselI[nu - 1/2 + I*x, b]*GegenbauerC[-1/2 + I*x, nu, -Cos[phi]], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2^(-nu + 1)*(a*b)^nu/Gamma[nu]*(Sqrt[a^2 + b^2 - 2*a*b*Cos[phi]])^(-nu)*BesselK[nu, Sqrt[a^2 + b^2 - 2*a*b*Cos[phi]]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "0 < phi < Pi",
+   "Re[nu] > 0"
+  ],
+  "cite": "EH II 55(45)",
+  "edition_note": "",
+  "section": "7.33 Combinations of Gegenbauer polynomials and Bessel functions; integration with respect to the index",
+  "tex": "int_{-inf}^inf sech(pi x)(nu-1/2+ix) K_{nu-1/2+ix}(a) I_{nu-1/2+ix}(b) C^nu_{-1/2+ix}(-cos phi) dx = 2^{-nu+1}(ab)^nu/Gamma(nu) w^{-nu} K_nu(w), w = sqrt(a^2+b^2-2ab cos phi)",
+  "note": "no conditions printed; a, b > 0, 0 < phi < Pi, Re nu > 0 added; Gegenbauer function of non-integer degree; w substituted"
+ },
+ {
+  "id": "GR7.341",
+  "gr": "7.341",
+  "page": 849,
+  "status": "ok",
+  "lhs": "Integrate[ChebyshevT[n, x]^2, {x, -1, 1}]",
+  "rhs": [
+   "1 - (4*n^2 - 1)^(-1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 271(6)",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "int_{-1}^1 [T_n(x)]^2 dx = 1 - (4n^2-1)^{-1}",
+  "note": ""
+ },
+ {
+  "id": "GR7.342",
+  "gr": "7.342",
+  "page": 849,
+  "status": "ok",
+  "lhs": "Integrate[ChebyshevU[n, x*(1 - y^2)^(1/2)*(1 - z^2)^(1/2) + y*z], {x, -1, 1}]",
+  "rhs": [
+   "2/(n + 1)*ChebyshevU[n, y]*ChebyshevU[n, z]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Abs[y] < 1",
+   "Abs[z] < 1"
+  ],
+  "cite": "ET II 275(34)",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "int_{-1}^1 U_n[x(1-y^2)^{1/2}(1-z^2)^{1/2} + yz] dx = 2/(n+1) U_n(y) U_n(z)",
+  "note": ""
+ },
+ {
+  "id": "GR7.343.1a",
+  "gr": "7.343.1a",
+  "page": 849,
+  "status": "ok",
+  "lhs": "Integrate[ChebyshevT[n, x]*ChebyshevT[m, x]/Sqrt[1 - x^2], {x, -1, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m != n"
+  ],
+  "cite": "MO 104",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "int_{-1}^1 T_n T_m dx/sqrt(1-x^2) = 0 [m != n]",
+  "note": ""
+ },
+ {
+  "id": "GR7.343.1b",
+  "gr": "7.343.1b",
+  "page": 849,
+  "status": "ok",
+  "lhs": "Integrate[ChebyshevT[n, x]^2/Sqrt[1 - x^2], {x, -1, 1}]",
+  "rhs": [
+   "Pi/2"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "MO 104",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "= pi/2 [m = n != 0]",
+  "note": "m = n substituted"
+ },
+ {
+  "id": "GR7.343.1c",
+  "gr": "7.343.1c",
+  "page": 849,
+  "status": "ok",
+  "lhs": "Integrate[ChebyshevT[0, x]^2/Sqrt[1 - x^2], {x, -1, 1}]",
+  "rhs": [
+   "Pi"
+  ],
+  "conds": [],
+  "cite": "MO 104",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "= pi [m = n = 0]",
+  "note": "m = n = 0 substituted"
+ },
+ {
+  "id": "GR7.343.2a",
+  "gr": "7.343.2a",
+  "page": 849,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - x^2]*ChebyshevU[n, x]*ChebyshevU[m, x], {x, -1, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m != n"
+  ],
+  "cite": "ET II 274(28)",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "int_{-1}^1 sqrt(1-x^2) U_n U_m dx = 0 [m != n]",
+  "note": ""
+ },
+ {
+  "id": "GR7.343.2b",
+  "gr": "7.343.2b",
+  "page": 849,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - x^2]*ChebyshevU[n, x]^2, {x, -1, 1}]",
+  "rhs": [
+   "Pi/2"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 274(27), MO 105a",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "= pi/2 [m = n]",
+  "note": "m = n substituted"
+ },
+ {
+  "id": "GR7.344.1",
+  "gr": "7.344.1",
+  "page": 849,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[(y - x)^(-1)*(1 - y^2)^(-1/2)*ChebyshevT[n, y], {y, -1, 1}]",
+  "rhs": [
+   "Pi*ChebyshevU[n - 1, x]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "-1 < x < 1"
+  ],
+  "cite": "EH II 187(47)",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "int_{-1}^1 (y-x)^{-1}(1-y^2)^{-1/2} T_n(y) dy = pi U_{n-1}(x)",
+  "note": "x is a parameter in (-1,1)",
+  "reason": "pole at y = x on the path; implied principal value"
+ },
+ {
+  "id": "GR7.344.2",
+  "gr": "7.344.2",
+  "page": 849,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[(y - x)^(-1)*(1 - y^2)^(1/2)*ChebyshevU[n - 1, y], {y, -1, 1}]",
+  "rhs": [
+   "-Pi*ChebyshevT[n, x]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "-1 < x < 1"
+  ],
+  "cite": "EH II 187(48)",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "int_{-1}^1 (y-x)^{-1}(1-y^2)^{1/2} U_{n-1}(y) dy = -pi T_n(x)",
+  "note": "x is a parameter in (-1,1)",
+  "reason": "pole at y = x on the path; implied principal value"
+ },
+ {
+  "id": "GR7.345.1",
+  "gr": "7.345.1",
+  "page": 849,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(-1/2)*(1 + x)^(m - n - 3/2)*ChebyshevT[m, x]*ChebyshevT[n, x], {x, -1, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m > n"
+  ],
+  "cite": "ET II 272(10)",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "int (1-x)^{-1/2}(1+x)^{m-n-3/2} T_m T_n dx = 0 [m > n]",
+  "note": ""
+ },
+ {
+  "id": "GR7.345.2",
+  "gr": "7.345.2",
+  "page": 849,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(-1/2)*(1 + x)^(m + n - 3/2)*ChebyshevT[m, x]*ChebyshevT[n, x], {x, -1, 1}]",
+  "rhs": [
+   "Pi*(2*m + 2*n - 2)!/(2^(m + n)*(2*m - 1)!*(2*n - 1)!)"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "ET II 272(11)",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "int (1-x)^{-1/2}(1+x)^{m+n-3/2} T_m T_n dx = pi(2m+2n-2)!/(2^{m+n}(2m-1)!(2n-1)!) [m+n != 0]",
+  "note": "printed m + n != 0; value has (2m-1)!, (2n-1)! so m, n >= 1 used"
+ },
+ {
+  "id": "GR7.345.3",
+  "gr": "7.345.3",
+  "page": 850,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(1/2)*(1 + x)^(m + n + 3/2)*ChebyshevU[m, x]*ChebyshevU[n, x], {x, -1, 1}]",
+  "rhs": [
+   "Pi*(2*m + 2*n + 2)!/(2^(m + n + 2)*(2*m + 1)!*(2*n + 1)!)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "ET II 274(31)",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "int (1-x)^{1/2}(1+x)^{m+n+3/2} U_m U_n dx = pi(2m+2n+2)!/(2^{m+n+2}(2m+1)!(2n+1)!)",
+  "note": ""
+ },
+ {
+  "id": "GR7.345.4",
+  "gr": "7.345.4",
+  "page": 850,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(1/2)*(1 + x)^(m - n - 1/2)*ChebyshevU[m, x]*ChebyshevU[n, x], {x, -1, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m > n"
+  ],
+  "cite": "ET II 274(30)",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "int (1-x)^{1/2}(1+x)^{m-n-1/2} U_m U_n dx = 0 [m > n]",
+  "note": ""
+ },
+ {
+  "id": "GR7.345.5",
+  "gr": "7.345.5",
+  "page": 850,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)*(1 + x)^(1/2)*ChebyshevU[m, x]*ChebyshevU[n, x], {x, -1, 1}]",
+  "rhs": [
+   "2^(5/2)*(m + 1)*(n + 1)/((m + n + 3/2)*(m + n + 5/2)*(1 - 4*(m - n)^2))"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "ET II 274(29)",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "int (1-x)(1+x)^{1/2} U_m U_n dx = 2^{5/2}(m+1)(n+1)/((m+n+3/2)(m+n+5/2)[1-4(m-n)^2])",
+  "note": ""
+ },
+ {
+  "id": "GR7.345.6",
+  "gr": "7.345.6",
+  "page": 850,
+  "status": "ok",
+  "lhs": "Integrate[(1 + x)^(-1/2)*(1 - x)^(alpha - 1)*ChebyshevT[m, x]*ChebyshevT[n, x], {x, -1, 1}]",
+  "rhs": [
+   "Pi^(1/2)*2^(alpha - 1/2)*Gamma[alpha]*Gamma[n - alpha + 1/2]/(Gamma[1/2 - alpha]*Gamma[alpha + n + 1/2])*HypergeometricPFQ[{-m, m, alpha, alpha + 1/2}, {1/2, alpha + n + 1/2, alpha - n + 1/2}, 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "Re[alpha] > 0"
+  ],
+  "cite": "ET II 272(12)",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "int (1+x)^{-1/2}(1-x)^{alpha-1} T_m T_n dx = ... 4F3(-m, m, alpha, alpha+1/2; 1/2, alpha+n+1/2, alpha-n+1/2; 1)",
+  "note": "printed on p.850"
+ },
+ {
+  "id": "GR7.345.7",
+  "gr": "7.345.7",
+  "page": 850,
+  "status": "ok",
+  "lhs": "Integrate[(1 + x)^(1/2)*(1 - x)^(alpha - 1)*ChebyshevU[m, x]*ChebyshevU[n, x], {x, -1, 1}]",
+  "rhs": [
+   "Pi^(1/2)*2^(alpha - 1/2)*(m + 1)*(n + 1)*Gamma[alpha]*Gamma[n - alpha + 3/2]/(Gamma[3/2 - alpha]*Gamma[3/2 + alpha + n])*HypergeometricPFQ[{-m, m + 2, alpha, alpha - 1/2}, {3/2, alpha + n + 3/2, alpha - n - 1/2}, 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "Re[alpha] > 0"
+  ],
+  "cite": "ET II 275(32)",
+  "edition_note": "",
+  "section": "7.34 Combinations of Chebyshev polynomials and powers",
+  "tex": "int (1+x)^{1/2}(1-x)^{alpha-1} U_m U_n dx = ... 4F3(-m, m+2, alpha, alpha-1/2; 3/2, alpha+n+3/2, alpha-n-1/2; 1)",
+  "note": "printed on p.850"
+ }
+]

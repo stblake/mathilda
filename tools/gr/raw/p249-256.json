@@ -1,0 +1,964 @@
+[
+ {
+  "id": "GR2.589.2",
+  "gr": "2.589.2",
+  "page": 249,
+  "status": "ok",
+  "lhs": "Integrate[(c + Tan[x])/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "c*MatharF2[x, k] + 1/(2*Sqrt[1 - k^2])*Log[(Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2])/(Sqrt[1 - k^2*Sin[x]^2] - Sqrt[1 - k^2])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int (c+tan x)/Delta = c F(x,k) + 1/(2k') ln((Delta+k')/(Delta-k'))",
+  "note": "Delta = sqrt(1 - k^2 sin^2 x), k' = sqrt(1 - k^2) substituted"
+ },
+ {
+  "id": "GR2.589.3",
+  "gr": "2.589.3",
+  "page": 249,
+  "status": "ok",
+  "lhs": "Integrate[(c + Tan[x])^2/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "1/(1 - k^2)*Tan[x]*Sqrt[1 - k^2*Sin[x]^2] + c^2*MatharF2[x, k] - 1/(1 - k^2)*MatharE2[x, k] + c/Sqrt[1 - k^2]*Log[(Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2])/(Sqrt[1 - k^2*Sin[x]^2] - Sqrt[1 - k^2])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int (c+tan x)^2/Delta = tan x Delta/k'^2 + c^2 F - E/k'^2 + c/k' ln((Delta+k')/(Delta-k'))",
+  "note": "Delta = sqrt(1 - k^2 sin^2 x), k' = sqrt(1 - k^2) substituted"
+ },
+ {
+  "id": "GR2.589.4",
+  "gr": "2.589.4",
+  "page": 249,
+  "status": "ok",
+  "lhs": "Integrate[1/((c + Tan[x])*Sqrt[1 - k^2*Sin[x]^2]), x]",
+  "rhs": [
+   "c/(1 + c^2)*MatharF2[x, k] + 1/(c*(1 + c^2))*EllipticPi[(1 + c^2)/c^2, x, k^2] - (1/(2*Sqrt[(1 + c^2)*(1 + c^2*(1 - k^2))])*Log[(Sqrt[1 + c^2*(1 - k^2)] + Sqrt[1 + c^2]*Sqrt[1 - k^2*Sin[x]^2])/(Sqrt[1 + c^2*(1 - k^2)] - Sqrt[1 + c^2]*Sqrt[1 - k^2*Sin[x]^2])])",
+   "c/(1 + c^2)*MatharF2[x, k] + 1/(c*(1 + c^2))*EllipticPi[-(1 + c^2)/c^2, x, k^2] - (1/(2*Sqrt[(1 + c^2)*(1 + c^2*(1 - k^2))])*Log[(Sqrt[1 + c^2*(1 - k^2)] + Sqrt[1 + c^2]*Sqrt[1 - k^2*Sin[x]^2])/(Sqrt[1 + c^2*(1 - k^2)] - Sqrt[1 + c^2]*Sqrt[1 - k^2*Sin[x]^2])])"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "c > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int dx/((c+tan x)Delta) = c/(1+c^2) F + 1/(c(1+c^2)) Pi(x, -(1+c^2)/c^2, k) - int sin x cos x dx/([c^2-(1+c^2)sin^2 x]Delta) (2.589.5)",
+  "note": "Delta = sqrt(1 - k^2 sin^2 x), k' = sqrt(1 - k^2) substituted; trailing integral replaced by its value from 2.589.5; G&R 2.58x uses Pi(x,n,k) = int dx/((1 + n sin^2 x) Delta) (consistent with 2.592.4, 2.593.4, 2.594.4), so book n -> EllipticPi[-n, x, k^2]; second rhs uses the 8.111.4 (1 - n sin^2) reading; c > 0 added for sampling"
+ },
+ {
+  "id": "GR2.589.5",
+  "gr": "2.589.5",
+  "page": 249,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]/((c^2 - (1 + c^2)*Sin[x]^2)*Sqrt[1 - k^2*Sin[x]^2]), x]",
+  "rhs": [
+   "1/(2*Sqrt[(1 + c^2)*(1 + c^2*(1 - k^2))])*Log[(Sqrt[1 + c^2*(1 - k^2)] + Sqrt[1 + c^2]*Sqrt[1 - k^2*Sin[x]^2])/(Sqrt[1 + c^2*(1 - k^2)] - Sqrt[1 + c^2]*Sqrt[1 - k^2*Sin[x]^2])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int sin x cos x/([c^2-(1+c^2)sin^2 x]Delta) = 1/(2 sqrt((1+c^2)(1+c^2k'^2))) ln((sqrt(1+c^2k'^2)+sqrt(1+c^2)Delta)/(sqrt(1+c^2k'^2)-sqrt(1+c^2)Delta))",
+  "note": "Delta = sqrt(1 - k^2 sin^2 x), k' = sqrt(1 - k^2) substituted"
+ },
+ {
+  "id": "GR2.591.1",
+  "gr": "2.591.1",
+  "page": 249,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/((c+tan x)^n Delta) reduction formula",
+  "reason": "integrals on rhs",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.591.2",
+  "gr": "2.591.2",
+  "page": 249,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/((c+tan x)^2 Delta) in terms of other integrals (see 2.589 2,3,4)",
+  "reason": "integrals on rhs",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.591.3",
+  "gr": "2.591.3",
+  "page": 249,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/((c+tan x)^3 Delta) in terms of other integrals (see 2.591 2, 2.589 4)",
+  "reason": "integrals on rhs",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.592.1",
+  "gr": "2.592.1",
+  "page": 250,
+  "status": "SKIP-RECURRENCE",
+  "tex": "P_n = int (a+sin^2 x)^n/Delta dx, recursion formula for P_{n+1}",
+  "reason": "recursion formula",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.592.2",
+  "gr": "2.592.2",
+  "page": 250,
+  "status": "SKIP-REFERENCE",
+  "tex": "P_1 (see 2.584 1 and 2.584 4)",
+  "reason": "reference only",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.592.3",
+  "gr": "2.592.3",
+  "page": 250,
+  "status": "SKIP-REFERENCE",
+  "tex": "P_0 (see 2.584 1)",
+  "reason": "reference only",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.592.4",
+  "gr": "2.592.4",
+  "page": 250,
+  "status": "ok",
+  "lhs": "Integrate[1/((a + Sin[x]^2)*Sqrt[1 - k^2*Sin[x]^2]), x]",
+  "rhs": [
+   "1/a*EllipticPi[-1/a, x, k^2]",
+   "1/a*EllipticPi[1/a, x, k^2]"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "P_{-1} = int dx/((a+sin^2 x)Delta) = (1/a) Pi(x, 1/a, k)",
+  "note": "Delta = sqrt(1 - k^2 sin^2 x), k' = sqrt(1 - k^2) substituted; G&R 2.58x uses Pi(x,n,k) = int dx/((1 + n sin^2 x) Delta) (consistent with 2.592.4, 2.593.4, 2.594.4), so book n -> EllipticPi[-n, x, k^2]; second rhs uses the 8.111.4 (1 - n sin^2) reading; a > 0 added for sampling"
+ },
+ {
+  "id": "GR2.592.5",
+  "gr": "2.592.5",
+  "page": 250,
+  "status": "SKIP-REFERENCE",
+  "tex": "int dx/(sin^2 x Delta) (see 2.584 70), case a = 0",
+  "reason": "reference only",
+  "cite": "H (124)a",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.592.6",
+  "gr": "2.592.6",
+  "page": 250,
+  "status": "SKIP-RECURRENCE",
+  "tex": "T_n = int dx/((h+g sin^2 x)^n Delta), recursion formula for T_{n-3}",
+  "reason": "recursion formula",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.593.1",
+  "gr": "2.593.1",
+  "page": 250,
+  "status": "SKIP-RECURRENCE",
+  "tex": "Q_n = int (b+cos^2 x)^n/Delta dx, recursion formula for Q_{n+2}",
+  "reason": "recursion formula",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.593.2",
+  "gr": "2.593.2",
+  "page": 250,
+  "status": "SKIP-REFERENCE",
+  "tex": "Q_1 (see 2.584 1 and 2.584 6)",
+  "reason": "reference only",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.593.3",
+  "gr": "2.593.3",
+  "page": 250,
+  "status": "SKIP-REFERENCE",
+  "tex": "Q_0 (see 2.584 1)",
+  "reason": "reference only",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.593.4",
+  "gr": "2.593.4",
+  "page": 251,
+  "status": "ok",
+  "lhs": "Integrate[1/((b + Cos[x]^2)*Sqrt[1 - k^2*Sin[x]^2]), x]",
+  "rhs": [
+   "1/(b + 1)*EllipticPi[1/(b + 1), x, k^2]",
+   "1/(b + 1)*EllipticPi[-1/(b + 1), x, k^2]"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "b > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "Q_{-1} = int dx/((b+cos^2 x)Delta) = 1/(b+1) Pi(x, -1/(b+1), k)",
+  "note": "Delta = sqrt(1 - k^2 sin^2 x), k' = sqrt(1 - k^2) substituted; G&R 2.58x uses Pi(x,n,k) = int dx/((1 + n sin^2 x) Delta) (consistent with 2.592.4, 2.593.4, 2.594.4), so book n -> EllipticPi[-n, x, k^2]; second rhs uses the 8.111.4 (1 - n sin^2) reading; b > 0 added for sampling"
+ },
+ {
+  "id": "GR2.593.5",
+  "gr": "2.593.5",
+  "page": 251,
+  "status": "SKIP-REFERENCE",
+  "tex": "int dx/(cos^2 x Delta) (see 2.584 72), case b = 0",
+  "reason": "reference only",
+  "cite": "H (123)",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.594.1",
+  "gr": "2.594.1",
+  "page": 251,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R_n = int (c+tan^2 x)^n/Delta dx, recursion formula for R_{n+2}",
+  "reason": "recursion formula",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.594.2",
+  "gr": "2.594.2",
+  "page": 251,
+  "status": "SKIP-REFERENCE",
+  "tex": "R_1 (see 2.584 1 and 2.584 90)",
+  "reason": "reference only",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.594.3",
+  "gr": "2.594.3",
+  "page": 251,
+  "status": "SKIP-REFERENCE",
+  "tex": "R_0 (see 2.584 1)",
+  "reason": "reference only",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.594.4",
+  "gr": "2.594.4",
+  "page": 251,
+  "status": "ok",
+  "lhs": "Integrate[1/((c + Tan[x]^2)*Sqrt[1 - k^2*Sin[x]^2]), x]",
+  "rhs": [
+   "1/(c - 1)*MatharF2[x, k] + 1/(c*(1 - c))*EllipticPi[(c - 1)/c, x, k^2]",
+   "1/(c - 1)*MatharF2[x, k] + 1/(c*(1 - c))*EllipticPi[(1 - c)/c, x, k^2]"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "c > 0",
+   "c != 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "R_{-1} = int dx/((c+tan^2 x)Delta) = F/(c-1) + 1/(c(1-c)) Pi(x, (1-c)/c, k)",
+  "note": "Delta = sqrt(1 - k^2 sin^2 x), k' = sqrt(1 - k^2) substituted; G&R 2.58x uses Pi(x,n,k) = int dx/((1 + n sin^2 x) Delta) (consistent with 2.592.4, 2.593.4, 2.594.4), so book n -> EllipticPi[-n, x, k^2]; second rhs uses the 8.111.4 (1 - n sin^2) reading; c > 0 added for sampling"
+ },
+ {
+  "id": "GR2.595.1",
+  "gr": "2.595.1",
+  "page": 251,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[1 - p^2*Sin[x]^2], x]",
+  "rhs": [
+   "1/p*MatharF2[ArcSin[p*Sin[x]], 1/p]"
+  ],
+  "conds": [
+   "p^2 > 1"
+  ],
+  "cite": "BY (283.00)",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int dx/sqrt(1-p^2 sin^2 x) = (1/p) F(alpha, 1/p)",
+  "note": "alpha = arcsin(p sin x) substituted; real only where p|sin x| < 1"
+ },
+ {
+  "id": "GR2.595.2",
+  "gr": "2.595.2",
+  "page": 251,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - p^2*Sin[x]^2], x]",
+  "rhs": [
+   "p*MatharE2[ArcSin[p*Sin[x]], 1/p] - (p^2 - 1)/p*MatharF2[ArcSin[p*Sin[x]], 1/p]"
+  ],
+  "conds": [
+   "p^2 > 1"
+  ],
+  "cite": "BY (283.03)",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int sqrt(1-p^2 sin^2 x) = p E(alpha,1/p) - (p^2-1)/p F(alpha,1/p)",
+  "note": "alpha = arcsin(p sin x) substituted; real only where p|sin x| < 1"
+ },
+ {
+  "id": "GR2.595.3",
+  "gr": "2.595.3",
+  "page": 251,
+  "status": "ok",
+  "lhs": "Integrate[1/((1 - r^2*Sin[x]^2)*Sqrt[1 - p^2*Sin[x]^2]), x]",
+  "rhs": [
+   "1/p*EllipticPi[r^2/p^2, ArcSin[p*Sin[x]], 1/p^2]",
+   "1/p*EllipticPi[-r^2/p^2, ArcSin[p*Sin[x]], 1/p^2]"
+  ],
+  "conds": [
+   "p^2 > 1"
+  ],
+  "cite": "BY (283.02)",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int dx/((1-r^2 sin^2 x) sqrt(1-p^2 sin^2 x)) = (1/p) Pi(alpha, r^2/p^2, 1/p)",
+  "note": "alpha = arcsin(p sin x) substituted; real only where p|sin x| < 1; BY convention Pi(phi,n,k) with (1 - n sin^2) (follows from the substitution); second rhs the opposite sign"
+ },
+ {
+  "id": "GR2.596.1a",
+  "gr": "2.596.1a",
+  "page": 252,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^4/Sqrt[1 - p^2*Sin[x]^2], x]",
+  "rhs": [
+   "Sin[x]*Cos[x]*Sqrt[1 - p^2*Sin[x]^2]/(3*p^2) + (4*p^2 - 2)/(3*p^4)*(p*MatharE2[ArcSin[p*Sin[x]], 1/p] - (p^2 - 1)/p*MatharF2[ArcSin[p*Sin[x]], 1/p]) + (2 - 5*p^2 + 3*p^4)/(3*p^4)*(1/p)*MatharF2[ArcSin[p*Sin[x]], 1/p]"
+  ],
+  "conds": [
+   "p^2 > 1"
+  ],
+  "cite": "",
+  "edition_note": "10",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int cos^4 x/sqrt(1-p^2 sin^2 x) = sin x cos x sqrt(..)/(3p^2) + (4p^2-2)/(3p^4)[pE - (p^2-1)/p F] + (2-5p^2+3p^4)/(3p^4) (1/p) F",
+  "note": "alpha = arcsin(p sin x) substituted; real only where p|sin x| < 1"
+ },
+ {
+  "id": "GR2.596.1b",
+  "gr": "2.596.1b",
+  "page": 252,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^4/Sqrt[1 - p^2*Sin[x]^2], x]",
+  "rhs": [
+   "Sin[x]*Cos[x]*Sqrt[1 - p^2*Sin[x]^2]/(3*p^2) - (p^2 - 1)/(3*p^3)*MatharF2[ArcSin[p*Sin[x]], 1/p] + (4*p^2 - 2)/(3*p^3)*MatharE2[ArcSin[p*Sin[x]], 1/p]"
+  ],
+  "conds": [
+   "p^2 > 1"
+  ],
+  "cite": "",
+  "edition_note": "10",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "= sin x cos x sqrt(..)/(3p^2) - (p^2-1)/(3p^3) F + (4p^2-2)/(3p^3) E",
+  "note": "alpha = arcsin(p sin x) substituted; real only where p|sin x| < 1"
+ },
+ {
+  "id": "GR2.596.2a",
+  "gr": "2.596.2a",
+  "page": 252,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - p^2*Sin[x]^2]/Cos[x]^2, x]",
+  "rhs": [
+   "Tan[x]*Sqrt[1 - p^2*Sin[x]^2] + 1/p*MatharF2[ArcSin[p*Sin[x]], 1/p] - (p*MatharE2[ArcSin[p*Sin[x]], 1/p] - (p^2 - 1)/p*MatharF2[ArcSin[p*Sin[x]], 1/p])"
+  ],
+  "conds": [
+   "p^2 > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int sqrt(1-p^2 sin^2 x)/cos^2 x = tan x sqrt(..) + F/p - [pE - (p^2-1)/p F]",
+  "note": "alpha = arcsin(p sin x) substituted; real only where p|sin x| < 1"
+ },
+ {
+  "id": "GR2.596.2b",
+  "gr": "2.596.2b",
+  "page": 252,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - p^2*Sin[x]^2]/Cos[x]^2, x]",
+  "rhs": [
+   "p*(MatharF2[ArcSin[p*Sin[x]], 1/p] - MatharE2[ArcSin[p*Sin[x]], 1/p]) + Tan[x]*Sqrt[1 - p^2*Sin[x]^2]"
+  ],
+  "conds": [
+   "p^2 > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "= p[F - E] + tan x sqrt(..)",
+  "note": "alpha = arcsin(p sin x) substituted; real only where p|sin x| < 1"
+ },
+ {
+  "id": "GR2.596.3a",
+  "gr": "2.596.3a",
+  "page": 252,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sqrt[1 - p^2*Sin[x]^2])^3, x]",
+  "rhs": [
+   "-1/(p^2 - 1)*(p*MatharE2[ArcSin[p*Sin[x]], 1/p] - (p^2 - 1)/p*MatharF2[ArcSin[p*Sin[x]], 1/p]) - p^2/(1 - p^2)*Sin[x]*Cos[x]/Sqrt[1 - p^2*Sin[x]^2]"
+  ],
+  "conds": [
+   "p^2 > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int dx/(1-p^2 sin^2 x)^(3/2) = -1/(p^2-1)[pE - (p^2-1)/p F] - p^2/(1-p^2) sin x cos x/sqrt(..)",
+  "note": "alpha = arcsin(p sin x) substituted; real only where p|sin x| < 1"
+ },
+ {
+  "id": "GR2.596.3b",
+  "gr": "2.596.3b",
+  "page": 252,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sqrt[1 - p^2*Sin[x]^2])^3, x]",
+  "rhs": [
+   "p^2/(p^2 - 1)*Sin[x]*Cos[x]/Sqrt[1 - p^2*Sin[x]^2] + 1/p*MatharF2[ArcSin[p*Sin[x]], 1/p] - p/(p^2 - 1)*MatharE2[ArcSin[p*Sin[x]], 1/p]"
+  ],
+  "conds": [
+   "p^2 > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "= p^2/(p^2-1) sin x cos x/sqrt(..) + F/p - p/(p^2-1) E",
+  "note": "alpha = arcsin(p sin x) substituted; real only where p|sin x| < 1"
+ },
+ {
+  "id": "GR2.597.1",
+  "gr": "2.597.1",
+  "page": 252,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[1 + p^2*Sin[x]^2], x]",
+  "rhs": [
+   "1/Sqrt[1 + p^2]*MatharF2[ArcSin[Sqrt[1 + p^2]*Sin[x]/Sqrt[1 + p^2*Sin[x]^2]], p/Sqrt[1 + p^2]]"
+  ],
+  "conds": [],
+  "cite": "BY (282.00)",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int dx/sqrt(1+p^2 sin^2 x) = F(alpha, p/sqrt(1+p^2))/sqrt(1+p^2)",
+  "note": "alpha = arcsin(sqrt(1+p^2) sin x/sqrt(1+p^2 sin^2 x)) substituted"
+ },
+ {
+  "id": "GR2.597.2",
+  "gr": "2.597.2",
+  "page": 252,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 + p^2*Sin[x]^2], x]",
+  "rhs": [
+   "Sqrt[1 + p^2]*MatharE2[ArcSin[Sqrt[1 + p^2]*Sin[x]/Sqrt[1 + p^2*Sin[x]^2]], p/Sqrt[1 + p^2]] - p^2*Sin[x]*Cos[x]/Sqrt[1 + p^2*Sin[x]^2]"
+  ],
+  "conds": [],
+  "cite": "BY (282.03)",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int sqrt(1+p^2 sin^2 x) = sqrt(1+p^2) E(alpha, p/sqrt(1+p^2)) - p^2 sin x cos x/sqrt(1+p^2 sin^2 x)",
+  "note": "alpha = arcsin(sqrt(1+p^2) sin x/sqrt(1+p^2 sin^2 x)) substituted"
+ },
+ {
+  "id": "GR2.597.3",
+  "gr": "2.597.3",
+  "page": 253,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 + p^2*Sin[x]^2]/(1 + (p^2 - r^2*p^2 - r^2)*Sin[x]^2), x]",
+  "rhs": [
+   "1/Sqrt[1 + p^2]*EllipticPi[r^2, ArcSin[Sqrt[1 + p^2]*Sin[x]/Sqrt[1 + p^2*Sin[x]^2]], p^2/(1 + p^2)]",
+   "1/Sqrt[1 + p^2]*EllipticPi[-r^2, ArcSin[Sqrt[1 + p^2]*Sin[x]/Sqrt[1 + p^2*Sin[x]^2]], p^2/(1 + p^2)]"
+  ],
+  "conds": [],
+  "cite": "BY (282.02)",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "[int] sqrt(1+p^2 sin^2 x) dx/(1+(p^2-r^2p^2-r^2) sin^2 x) = Pi(alpha, r^2, p/sqrt(1+p^2))/sqrt(1+p^2)",
+  "note": "alpha = arcsin(sqrt(1+p^2) sin x/sqrt(1+p^2 sin^2 x)) substituted; integral sign missing in the book; BY convention Pi with (1 - n sin^2) (follows from the substitution); second rhs opposite sign"
+ },
+ {
+  "id": "GR2.597.4",
+  "gr": "2.597.4",
+  "page": 253,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/Sqrt[1 + p^2*Sin[x]^2], x]",
+  "rhs": [
+   "-1/p*ArcSin[p*Cos[x]/Sqrt[1 + p^2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int sin x/sqrt(1+p^2 sin^2 x) = -(1/p) arcsin(p cos x/sqrt(1+p^2))",
+  "note": ""
+ },
+ {
+  "id": "GR2.597.5",
+  "gr": "2.597.5",
+  "page": 253,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/Sqrt[1 + p^2*Sin[x]^2], x]",
+  "rhs": [
+   "1/p*Log[p*Sin[x] + Sqrt[1 + p^2*Sin[x]^2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int cos x/sqrt(1+p^2 sin^2 x) = (1/p) ln(p sin x + sqrt(1+p^2 sin^2 x))",
+  "note": ""
+ },
+ {
+  "id": "GR2.597.6",
+  "gr": "2.597.6",
+  "page": 253,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]*Sqrt[1 + p^2*Sin[x]^2]), x]",
+  "rhs": [
+   "1/2*Log[(Sqrt[1 + p^2*Sin[x]^2] - Cos[x])/(Sqrt[1 + p^2*Sin[x]^2] + Cos[x])]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int dx/(sin x sqrt(..)) = (1/2) ln((sqrt(..) - cos x)/(sqrt(..) + cos x))",
+  "note": ""
+ },
+ {
+  "id": "GR2.597.7",
+  "gr": "2.597.7",
+  "page": 253,
+  "status": "ok",
+  "lhs": "Integrate[1/(Cos[x]*Sqrt[1 + p^2*Sin[x]^2]), x]",
+  "rhs": [
+   "1/(2*Sqrt[1 + p^2])*Log[(Sqrt[1 + p^2*Sin[x]^2] + Sqrt[1 + p^2]*Sin[x])/(Sqrt[1 + p^2*Sin[x]^2] - Sqrt[1 + p^2]*Sin[x])]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int dx/(cos x sqrt(..)) = 1/(2 sqrt(1+p^2)) ln((sqrt(..)+sqrt(1+p^2) sin x)/(sqrt(..)-sqrt(1+p^2) sin x))",
+  "note": ""
+ },
+ {
+  "id": "GR2.597.8",
+  "gr": "2.597.8",
+  "page": 253,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]/Sqrt[1 + p^2*Sin[x]^2], x]",
+  "rhs": [
+   "1/(2*Sqrt[1 + p^2])*Log[(Sqrt[1 + p^2*Sin[x]^2] + Sqrt[1 + p^2])/(Sqrt[1 + p^2*Sin[x]^2] - Sqrt[1 + p^2])]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int tan x/sqrt(..) = 1/(2 sqrt(1+p^2)) ln((sqrt(..)+sqrt(1+p^2))/(sqrt(..)-sqrt(1+p^2)))",
+  "note": ""
+ },
+ {
+  "id": "GR2.597.9",
+  "gr": "2.597.9",
+  "page": 253,
+  "status": "ok",
+  "lhs": "Integrate[Cot[x]/Sqrt[1 + p^2*Sin[x]^2], x]",
+  "rhs": [
+   "1/2*Log[(1 - Sqrt[1 + p^2*Sin[x]^2])/(1 + Sqrt[1 + p^2*Sin[x]^2])]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int cot x/sqrt(..) = (1/2) ln((1 - sqrt(..))/(1 + sqrt(..)))",
+  "note": ""
+ },
+ {
+  "id": "GR2.598.1a",
+  "gr": "2.598.1a",
+  "page": 253,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^2/Sqrt[1 + p^2*Sin[x]^2], x]",
+  "rhs": [
+   "1/(1 + p^2)*(Tan[x]*Sqrt[1 + p^2*Sin[x]^2] - Sqrt[1 + p^2]*MatharE2[ArcSin[Sqrt[1 + p^2]*Sin[x]/Sqrt[1 + p^2*Sin[x]^2]], p/Sqrt[1 + p^2]] + p^2*Sin[x]*Cos[x]/Sqrt[1 + p^2*Sin[x]^2])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int tan^2 x/sqrt(1+p^2 sin^2 x) = 1/(1+p^2)[tan x sqrt(..) - sqrt(1+p^2) E(alpha, p/sqrt(1+p^2)) + p^2 sin x cos x/sqrt(..)]",
+  "note": "alpha = arcsin(sqrt(1+p^2) sin x/sqrt(1+p^2 sin^2 x)) substituted"
+ },
+ {
+  "id": "GR2.598.1b",
+  "gr": "2.598.1b",
+  "page": 253,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^2/Sqrt[1 + p^2*Sin[x]^2], x]",
+  "rhs": [
+   "-1/Sqrt[1 + p^2]*MatharE2[ArcSin[Sqrt[1 + p^2]*Sin[x]/Sqrt[1 + p^2*Sin[x]^2]], p/Sqrt[1 + p^2]] + Tan[x]/Sqrt[1 + p^2*Sin[x]^2]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "= -E(alpha, p/sqrt(1+p^2))/sqrt(1+p^2) + tan x/sqrt(..)",
+  "note": "alpha = arcsin(sqrt(1+p^2) sin x/sqrt(1+p^2 sin^2 x)) substituted"
+ },
+ {
+  "id": "GR2.598.2",
+  "gr": "2.598.2",
+  "page": 254,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sqrt[1 + p^2*Sin[x]^2])^3, x]",
+  "rhs": [
+   "1/Sqrt[1 + p^2]*MatharE2[ArcSin[Sqrt[1 + p^2]*Sin[x]/Sqrt[1 + p^2*Sin[x]^2]], p/Sqrt[1 + p^2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int dx/(1+p^2 sin^2 x)^(3/2) = E(alpha, p/sqrt(1+p^2))/sqrt(1+p^2)",
+  "note": "alpha = arcsin(sqrt(1+p^2) sin x/sqrt(1+p^2 sin^2 x)) substituted"
+ },
+ {
+  "id": "GR2.599.1",
+  "gr": "2.599.1",
+  "page": 254,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[a^2*Sin[x]^2 - 1], x]",
+  "rhs": [
+   "-1/a*MatharF2[ArcSin[a*Cos[x]/Sqrt[a^2 - 1]], Sqrt[a^2 - 1]/a]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "BY (285.00)a",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int dx/sqrt(a^2 sin^2 x - 1) = -(1/a) F(alpha, sqrt(a^2-1)/a)",
+  "note": "alpha = arcsin(a cos x/sqrt(a^2-1)) substituted; real only where a^2 sin^2 x > 1"
+ },
+ {
+  "id": "GR2.599.2",
+  "gr": "2.599.2",
+  "page": 254,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a^2*Sin[x]^2 - 1], x]",
+  "rhs": [
+   "1/a*MatharF2[ArcSin[a*Cos[x]/Sqrt[a^2 - 1]], Sqrt[a^2 - 1]/a] - a*MatharE2[ArcSin[a*Cos[x]/Sqrt[a^2 - 1]], Sqrt[a^2 - 1]/a]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "BY (285.06)a",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int sqrt(a^2 sin^2 x - 1) = (1/a) F - a E",
+  "note": "alpha = arcsin(a cos x/sqrt(a^2-1)) substituted; real only where a^2 sin^2 x > 1"
+ },
+ {
+  "id": "GR2.599.3",
+  "gr": "2.599.3",
+  "page": 254,
+  "status": "ok",
+  "lhs": "Integrate[1/((1 - r^2*Sin[x]^2)*Sqrt[a^2*Sin[x]^2 - 1]), x]",
+  "rhs": [
+   "1/(a*(r^2 - 1))*EllipticPi[r^2*(a^2 - 1)/(a^2*(r^2 - 1)), ArcSin[a*Cos[x]/Sqrt[a^2 - 1]], (a^2 - 1)/a^2]",
+   "1/(a*(r^2 - 1))*EllipticPi[-r^2*(a^2 - 1)/(a^2*(r^2 - 1)), ArcSin[a*Cos[x]/Sqrt[a^2 - 1]], (a^2 - 1)/a^2]"
+  ],
+  "conds": [
+   "a^2 > 1",
+   "r^2 > 1"
+  ],
+  "cite": "BY (285.02)a",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int dx/((1-r^2 sin^2 x) sqrt(a^2 sin^2 x - 1)) = 1/(a(r^2-1)) Pi(alpha, r^2(a^2-1)/(a^2(r^2-1)), sqrt(a^2-1)/a)",
+  "note": "alpha = arcsin(a cos x/sqrt(a^2-1)) substituted; real only where a^2 sin^2 x > 1; BY convention Pi with (1 - n sin^2) (follows from the substitution); second rhs opposite sign"
+ },
+ {
+  "id": "GR2.599.4",
+  "gr": "2.599.4",
+  "page": 254,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/Sqrt[a^2*Sin[x]^2 - 1], x]",
+  "rhs": [
+   "-ArcSin[a*Cos[x]/Sqrt[a^2 - 1]]/a"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int sin x/sqrt(..) = -alpha/a",
+  "note": "alpha = arcsin(a cos x/sqrt(a^2-1)) substituted; real only where a^2 sin^2 x > 1"
+ },
+ {
+  "id": "GR2.599.5",
+  "gr": "2.599.5",
+  "page": 254,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/Sqrt[a^2*Sin[x]^2 - 1], x]",
+  "rhs": [
+   "1/a*Log[a*Sin[x] + Sqrt[a^2*Sin[x]^2 - 1]]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int cos x/sqrt(..) = (1/a) ln(a sin x + sqrt(a^2 sin^2 x - 1))",
+  "note": "real only where a^2 sin^2 x > 1"
+ },
+ {
+  "id": "GR2.599.6",
+  "gr": "2.599.6",
+  "page": 254,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]*Sqrt[a^2*Sin[x]^2 - 1]), x]",
+  "rhs": [
+   "-ArcTan[Cos[x]/Sqrt[a^2*Sin[x]^2 - 1]]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int dx/(sin x sqrt(..)) = -arctan(cos x/sqrt(..))",
+  "note": "real only where a^2 sin^2 x > 1"
+ },
+ {
+  "id": "GR2.599.7",
+  "gr": "2.599.7",
+  "page": 254,
+  "status": "ok",
+  "lhs": "Integrate[1/(Cos[x]*Sqrt[a^2*Sin[x]^2 - 1]), x]",
+  "rhs": [
+   "1/(2*Sqrt[a^2 - 2])*Log[(Sqrt[a^2 - 1]*Sin[x] + Sqrt[a^2*Sin[x]^2 - 1])/(Sqrt[a^2 - 1]*Sin[x] - Sqrt[a^2*Sin[x]^2 - 1])]",
+   "1/(2*Sqrt[a^2 - 1])*Log[(Sqrt[a^2 - 1]*Sin[x] + Sqrt[a^2*Sin[x]^2 - 1])/(Sqrt[a^2 - 1]*Sin[x] - Sqrt[a^2*Sin[x]^2 - 1])]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int dx/(cos x sqrt(..)) = 1/(2 sqrt(a^2-2)) ln((sqrt(a^2-1) sin x + sqrt(..))/(sqrt(a^2-1) sin x - sqrt(..)))",
+  "note": "real only where a^2 sin^2 x > 1; book prints 1/(2 sqrt(a^2-2)), likely misprint for 1/(2 sqrt(a^2-1)) (second rhs)"
+ },
+ {
+  "id": "GR2.599.8",
+  "gr": "2.599.8",
+  "page": 254,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]/Sqrt[a^2*Sin[x]^2 - 1], x]",
+  "rhs": [
+   "1/(2*Sqrt[a^2 - 1])*Log[(Sqrt[a^2 - 1] + Sqrt[a^2*Sin[x]^2 - 1])/(Sqrt[a^2 - 1] - Sqrt[a^2*Sin[x]^2 - 1])]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int tan x/sqrt(..) = 1/(2 sqrt(a^2-1)) ln((sqrt(a^2-1)+sqrt(..))/(sqrt(a^2-1)-sqrt(..)))",
+  "note": "real only where a^2 sin^2 x > 1"
+ },
+ {
+  "id": "GR2.599.9",
+  "gr": "2.599.9",
+  "page": 254,
+  "status": "ok",
+  "lhs": "Integrate[Cot[x]/Sqrt[a^2*Sin[x]^2 - 1], x]",
+  "rhs": [
+   "-ArcSin[1/(a*Sin[x])]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int cot x/sqrt(..) = -arcsin(1/(a sin x))",
+  "note": "real only where a^2 sin^2 x > 1"
+ },
+ {
+  "id": "GR2.611.1",
+  "gr": "2.611.1",
+  "page": 255,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2/Sqrt[a^2*Sin[x]^2 - 1], x]",
+  "rhs": [
+   "-1/a*MatharE2[ArcSin[a*Cos[x]/Sqrt[a^2 - 1]], Sqrt[a^2 - 1]/a]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "Example 1: int sin^2 x/sqrt(a^2 sin^2 x - 1) = (1/a^2){int dx/sqrt(..) + int sqrt(..)} = -(1/a) E(alpha, sqrt(a^2-1)/a)",
+  "note": "alpha = arcsin(a cos x/sqrt(a^2-1)) substituted; real only where a^2 sin^2 x > 1; numbered example 1 under 2.611 (final value only)"
+ },
+ {
+  "id": "GR2.611.2",
+  "gr": "2.611.2",
+  "page": 255,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sqrt[a^2*Sin[x]^2 - 1])^5, x]",
+  "rhs": [
+   "(2*a^4*(a^2 - 2)*Sin[x]^2 - (3*a^2 - 5)*a^2)/(3*(1 - a^2)^2*(Sqrt[a^2*Sin[x]^2 - 1])^3)*Sin[x]*Cos[x] + 1/(3*(1 - a^2)^2*a)*((a^2 - 3)*MatharF2[ArcSin[a*Cos[x]/Sqrt[a^2 - 1]], Sqrt[a^2 - 1]/a] - 2*a^2*(a^2 - 2)*MatharE2[ArcSin[a*Cos[x]/Sqrt[a^2 - 1]], Sqrt[a^2 - 1]/a])"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "Example 2: int dx/(a^2 sin^2 x - 1)^(5/2) = [2a^4(a^2-2) sin^2 x - (3a^2-5)a^2]/(3(1-a^2)^2 (..)^(3/2)) sin x cos x + 1/(3(1-a^2)^2 a){(a^2-3)F - 2a^2(a^2-2)E}",
+  "note": "alpha = arcsin(a cos x/sqrt(a^2-1)) substituted; real only where a^2 sin^2 x > 1; numbered example 2 under 2.611 (final value, page 256)"
+ },
+ {
+  "id": "GR2.611.3",
+  "gr": "2.611.3",
+  "page": 256,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]*Cos[x]*Sqrt[a^2*Sin[x]^2 - 1]), x]",
+  "rhs": [
+   "1/(2*Sqrt[a^2 - 1])*Log[(Sqrt[a^2 - 1] + Sqrt[a^2*Sin[x]^2 - 1])/(Sqrt[a^2 - 1] - Sqrt[a^2*Sin[x]^2 - 1])] - ArcSin[1/(a*Sin[x])]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "Example 3: int dx/(sin x cos x sqrt(a^2 sin^2 x - 1)) = 1/(2 sqrt(a^2-1)) ln((sqrt(a^2-1)+sqrt(..))/(sqrt(a^2-1)-sqrt(..))) - arcsin(1/(a sin x))",
+  "note": "numbered example 3 under 2.611 (final value); real only where a^2 sin^2 x > 1"
+ },
+ {
+  "id": "GR2.612.1",
+  "gr": "2.612.1",
+  "page": 256,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[1 - k^2*Cos[x]^2], x]",
+  "rhs": [
+   "MatharF2[ArcSin[Sin[x]/Sqrt[1 - k^2*Cos[x]^2]], k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int dx/sqrt(1-k^2 cos^2 x) = F(arcsin(sin x/sqrt(1-k^2 cos^2 x)), k)",
+  "note": "0 < k < 1 (modulus) added"
+ },
+ {
+  "id": "GR2.612.2",
+  "gr": "2.612.2",
+  "page": 256,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Cos[x]^2], x]",
+  "rhs": [
+   "MatharE2[ArcSin[Sin[x]/Sqrt[1 - k^2*Cos[x]^2]], k] - k^2*Sin[x]*Cos[x]/Sqrt[1 - k^2*Cos[x]^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int sqrt(1-k^2 cos^2 x) = E(arcsin(sin x/sqrt(..)), k) - k^2 sin x cos x/sqrt(..)",
+  "note": "0 < k < 1 (modulus) added"
+ },
+ {
+  "id": "GR2.613.1",
+  "gr": "2.613.1",
+  "page": 257,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[1 - p^2*Cos[x]^2], x]",
+  "rhs": [
+   "-1/p*MatharF2[ArcSin[p*Cos[x]], 1/p]"
+  ],
+  "conds": [
+   "p > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int dx/sqrt(1-p^2 cos^2 x) = -(1/p) F(arcsin(p cos x), 1/p)",
+  "note": "real only where p|cos x| < 1"
+ },
+ {
+  "id": "GR2.613.2",
+  "gr": "2.613.2",
+  "page": 257,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - p^2*Cos[x]^2], x]",
+  "rhs": [
+   "(p^2 - 1)/p*MatharF2[ArcSin[p*Cos[x]], 1/p] - p*MatharE2[ArcSin[p*Cos[x]], 1/p]"
+  ],
+  "conds": [
+   "p > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Elliptic and pseudo-elliptic integrals",
+  "tex": "int sqrt(1-p^2 cos^2 x) = (p^2-1)/p F(arcsin(p cos x),1/p) - p E(arcsin(p cos x),1/p)",
+  "note": "real only where p|cos x| < 1"
+ }
+]

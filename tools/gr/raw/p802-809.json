@@ -1,0 +1,1547 @@
+[
+ {
+  "id": "GR6.797.3",
+  "gr": "6.797.3",
+  "page": 802,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(Pi*x)*Sinh[Pi*x]*Gamma[(nu + I*x)/2]*Gamma[(nu - I*x)/2]*HankelH2[I*x, a]*HankelH2[I*x, b], {x, 0, Infinity}]",
+  "rhs": [
+   "I*Pi*2^(2 - nu)*(a*b)^nu*(a^2 + b^2)^(-nu/2)*HankelH2[nu, Sqrt[a^2 + b^2]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 381(16)",
+  "edition_note": "",
+  "section": "6.79 Integration of Bessel functions with respect to the order",
+  "tex": "int_0^inf x e^(pi x) sinh(pi x) Gamma((nu+ix)/2) Gamma((nu-ix)/2) H2_ix(a) H2_ix(b) dx = i pi 2^(2-nu) (ab)^nu (a^2+b^2)^(-nu/2) H2_nu(sqrt(a^2+b^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.797.4",
+  "gr": "6.797.4",
+  "page": 802,
+  "status": "ok",
+  "lhs": "Integrate[x*Sinh[Pi*x]*Gamma[lam + I*x]*Gamma[lam - I*x]*BesselK[I*x, a]*BesselK[I*x, b], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(lam - 1)*Pi^(3/2)*(a*b)^lam*(a + b)^(-lam)*Gamma[lam + 1/2]*BesselK[lam, a + b]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[lam] > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 176(12)",
+  "edition_note": "11",
+  "section": "6.79 Integration of Bessel functions with respect to the order",
+  "tex": "int_0^inf x sinh(pi x) Gamma(lam+ix) Gamma(lam-ix) K_ix(a) K_ix(b) dx = 2^(lam-1) pi^(3/2) (ab)^lam (a+b)^(-lam) Gamma(lam+1/2) K_lam(a+b)",
+  "note": ""
+ },
+ {
+  "id": "GR6.797.5",
+  "gr": "6.797.5",
+  "page": 802,
+  "status": "ok",
+  "lhs": "Integrate[x*Sinh[2*Pi*x]*Gamma[lam + I*x]*Gamma[lam - I*x]*BesselK[I*x, a]*BesselK[I*x, b], {x, 0, Infinity}]",
+  "rhs": [
+   "2^lam*Pi^(5/2)/Gamma[1/2 - lam]*(a*b/Abs[b - a])^lam*BesselK[lam, Abs[b - a]]"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < Re[lam] < 1/2",
+   "b > 0"
+  ],
+  "cite": "ET II 176(13)",
+  "edition_note": "",
+  "section": "6.79 Integration of Bessel functions with respect to the order",
+  "tex": "int_0^inf x sinh(2 pi x) Gamma(lam+ix) Gamma(lam-ix) K_ix(a) K_ix(b) dx = 2^lam pi^(5/2)/Gamma(1/2-lam) (ab/|b-a|)^lam K_lam(|b-a|)",
+  "note": "a != b implied"
+ },
+ {
+  "id": "GR6.797.6",
+  "gr": "6.797.6",
+  "page": 802,
+  "status": "ok",
+  "lhs": "Integrate[x*Sinh[Pi*x]*Gamma[lam + I*x/2]*Gamma[lam - I*x/2]*BesselK[I*x, a]*BesselK[I*x, b], {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi^2*(a*b/(2*Sqrt[a^2 + b^2]))*BesselK[2*lam, Sqrt[a^2 + b^2]]",
+   "2*Pi^2*(a*b/(2*Sqrt[a^2 + b^2]))^(2*lam)*BesselK[2*lam, Sqrt[a^2 + b^2]]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi/2",
+   "Re[lam] > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 177(14)",
+  "edition_note": "",
+  "section": "6.79 Integration of Bessel functions with respect to the order",
+  "tex": "int_0^inf x sinh(pi x) Gamma(lam+ix/2) Gamma(lam-ix/2) K_ix(a) K_ix(b) dx = 2 pi^2 (ab/(2 sqrt(a^2+b^2))) K_2lam(sqrt(a^2+b^2))",
+  "note": "Printed factor (ab/(2 sqrt(a^2+b^2))) carries no exponent; second rhs candidate supplies the likely missing exponent 2*lam."
+ },
+ {
+  "id": "GR6.797.7",
+  "gr": "6.797.7",
+  "page": 802,
+  "status": "ok",
+  "lhs": "Integrate[x*Tanh[Pi*x]*BesselK[I*x, a]*BesselK[I*x, b]/(Gamma[3/4 + I*x/2]*Gamma[3/4 - I*x/2]), {x, 0, Infinity}]",
+  "rhs": [
+   "(1/2)*Sqrt[Pi*a*b/(a^2 + b^2)]*E^(-Sqrt[a^2 + b^2])"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi/2",
+   "b > 0"
+  ],
+  "cite": "ET II 177(15)",
+  "edition_note": "",
+  "section": "6.79 Integration of Bessel functions with respect to the order",
+  "tex": "int_0^inf x tanh(pi x) K_ix(a) K_ix(b)/(Gamma(3/4+ix/2) Gamma(3/4-ix/2)) dx = 1/2 sqrt(pi ab/(a^2+b^2)) exp(-sqrt(a^2+b^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.811.1",
+  "gr": "6.811.1",
+  "page": 802,
+  "status": "ok",
+  "lhs": "Integrate[StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-Cot[nu*Pi/2]/b"
+  ],
+  "conds": [
+   "-2 < Re[nu] < 0",
+   "b > 0"
+  ],
+  "cite": "ET II 158(1)",
+  "edition_note": "",
+  "section": "6.81 Struve functions",
+  "tex": "int_0^inf H_nu(bx) dx = -cot(nu pi/2)/b",
+  "note": ""
+ },
+ {
+  "id": "GR6.811.2",
+  "gr": "6.811.2",
+  "page": 802,
+  "status": "ok",
+  "lhs": "Integrate[StruveH[nu, a^2/x]*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-BesselJ[2*nu, 2*a*Sqrt[b]]/b"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[nu] > -3/2"
+  ],
+  "cite": "ET II 170(37)",
+  "edition_note": "",
+  "section": "6.81 Struve functions",
+  "tex": "int_0^inf H_nu(a^2/x) H_nu(bx) dx = -J_2nu(2a sqrt b)/b",
+  "note": ""
+ },
+ {
+  "id": "GR6.811.3",
+  "gr": "6.811.3",
+  "page": 802,
+  "status": "ok",
+  "lhs": "Integrate[StruveH[nu - 1, a^2/x]*StruveH[nu, b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-BesselJ[2*nu - 1, 2*a*Sqrt[b]]/(a*Sqrt[b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 170(38)",
+  "edition_note": "",
+  "section": "6.81 Struve functions",
+  "tex": "int_0^inf H_(nu-1)(a^2/x) H_nu(bx) dx/x = -1/(a sqrt b) J_(2nu-1)(2a sqrt b)",
+  "note": ""
+ },
+ {
+  "id": "GR6.812.1",
+  "gr": "6.812.1",
+  "page": 802,
+  "status": "ok",
+  "lhs": "Integrate[StruveH[1, b*x]/(x^2 + a^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a)*(BesselI[1, a*b] - StruveL[1, a*b])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 158(6)",
+  "edition_note": "",
+  "section": "6.81 Struve functions",
+  "tex": "int_0^inf H_1(bx)/(x^2+a^2) dx = pi/(2a) [I_1(ab) - L_1(ab)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.812.2",
+  "gr": "6.812.2",
+  "page": 803,
+  "status": "ok",
+  "lhs": "Integrate[StruveH[nu, b*x]/(x^2 + a^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/(2*a*Sin[nu*Pi/2])*StruveL[nu, a*b] + b*Cot[nu*Pi/2]/(1 - nu^2)*HypergeometricPFQ[{1}, {(3 - nu)/2, (3 + nu)/2}, a^2*b^2/2]",
+   "-Pi/(2*a*Sin[nu*Pi/2])*StruveL[nu, a*b] + b*Cot[nu*Pi/2]/(1 - nu^2)*HypergeometricPFQ[{1}, {(3 - nu)/2, (3 + nu)/2}, a^2*b^2/4]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Abs[Re[nu]] < 2"
+  ],
+  "cite": "ET II 159(7)",
+  "edition_note": "",
+  "section": "6.81 Struve functions",
+  "tex": "int_0^inf H_nu(bx)/(x^2+a^2) dx = -pi/(2a sin(nu pi/2)) L_nu(ab) + b cot(nu pi/2)/(1-nu^2) 1F2(1;(3-nu)/2,(3+nu)/2;a^2b^2/2)",
+  "note": "Second candidate: 1F2 argument a^2 b^2/4 (suspected misprint /2)."
+ },
+ {
+  "id": "GR6.813.1",
+  "gr": "6.813.1",
+  "page": 803,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*StruveH[nu, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(s - 1)*Gamma[(s + nu)/2]/(a^s*Gamma[nu/2 - s/2 + 1])*Tan[(s + nu)*Pi/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "-1 - Re[nu] < Re[s]",
+   "Re[s] < 3/2",
+   "Re[s] < 1 - Re[nu]"
+  ],
+  "cite": "WA 429(2), ET I 335(52)",
+  "edition_note": "",
+  "section": "6.81 Struve functions",
+  "tex": "int_0^inf x^(s-1) H_nu(ax) dx = 2^(s-1) Gamma((s+nu)/2)/(a^s Gamma(nu/2-s/2+1)) tan((s+nu) pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.813.2",
+  "gr": "6.813.2",
+  "page": 803,
+  "status": "ok",
+  "lhs": "Integrate[x^(-nu - 1)*StruveH[nu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-nu - 1)*Pi/Gamma[nu + 1]"
+  ],
+  "conds": [
+   "Re[nu] > -3/2"
+  ],
+  "cite": "ET II 383(2)",
+  "edition_note": "",
+  "section": "6.81 Struve functions",
+  "tex": "int_0^inf x^(-nu-1) H_nu(x) dx = 2^(-nu-1) pi/Gamma(nu+1)",
+  "note": ""
+ },
+ {
+  "id": "GR6.813.3",
+  "gr": "6.813.3",
+  "page": 803,
+  "status": "ok",
+  "lhs": "Integrate[x^(-mu - nu)*StruveH[mu, x]*StruveH[nu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-mu - nu)*Sqrt[Pi]*Gamma[mu + nu]/(Gamma[mu + 1/2]*Gamma[nu + 1/2]*Gamma[mu + nu + 1/2])"
+  ],
+  "conds": [
+   "Re[mu + nu] > 0"
+  ],
+  "cite": "WA 435(2), ET II 384(8)",
+  "edition_note": "",
+  "section": "6.81 Struve functions",
+  "tex": "int_0^inf x^(-mu-nu) H_mu(x) H_nu(x) dx = 2^(-mu-nu) sqrt(pi) Gamma(mu+nu)/(Gamma(mu+1/2) Gamma(nu+1/2) Gamma(mu+nu+1/2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.813.4",
+  "gr": "6.813.4",
+  "page": 803,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*StruveH[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "StruveH[nu + 1, a]/a"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[nu] > -3/2"
+  ],
+  "cite": "ET II 158(2)a",
+  "edition_note": "",
+  "section": "6.81 Struve functions",
+  "tex": "int_0^1 x^(nu+1) H_nu(ax) dx = H_(nu+1)(a)/a",
+  "note": ""
+ },
+ {
+  "id": "GR6.813.5",
+  "gr": "6.813.5",
+  "page": 803,
+  "status": "ok",
+  "lhs": "Integrate[x^(1 - nu)*StruveH[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "a^(nu - 1)/(2^(nu - 1)*Sqrt[Pi]*Gamma[nu + 1/2]) - StruveH[nu - 1, a]/a"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 158(3)a",
+  "edition_note": "",
+  "section": "6.81 Struve functions",
+  "tex": "int_0^1 x^(1-nu) H_nu(ax) dx = a^(nu-1)/(2^(nu-1) sqrt(pi) Gamma(nu+1/2)) - H_(nu-1)(a)/a",
+  "note": ""
+ },
+ {
+  "id": "GR6.814.1",
+  "gr": "6.814.1",
+  "page": 803,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*StruveH[nu, b*x]/(x^2 + a^2)^(1 - mu), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(mu - 1)*Pi*a^(mu + nu)*b^(-mu)/(Gamma[1 - mu]*Cos[(mu + nu)*Pi])*(BesselI[-mu - nu, a*b] - StruveL[mu + nu, a*b])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Re[nu] > -3/2",
+   "Re[mu + nu] < 1/2",
+   "Re[2*mu + nu] < 3/2"
+  ],
+  "cite": "ET II 159(8)",
+  "edition_note": "",
+  "section": "6.81 Struve functions",
+  "tex": "int_0^inf x^(nu+1) H_nu(bx)/(x^2+a^2)^(1-mu) dx = 2^(mu-1) pi a^(mu+nu) b^(-mu)/(Gamma(1-mu) cos((mu+nu)pi)) [I_(-mu-nu)(ab) - L_(mu+nu)(ab)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.815.1",
+  "gr": "6.815.1",
+  "page": 803,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu/2)*(1 - x)^(mu - 1)*StruveH[nu, a*Sqrt[x]], {x, 0, 1}]",
+  "rhs": [
+   "2^mu*a^(-mu)*Gamma[mu]*StruveH[mu + nu, a]"
+  ],
+  "conds": [
+   "Re[nu] > -3/2",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET II 199(88)a",
+  "edition_note": "",
+  "section": "6.81 Struve functions",
+  "tex": "int_0^1 x^(nu/2) (1-x)^(mu-1) H_nu(a sqrt x) dx = 2^mu a^(-mu) Gamma(mu) H_(mu+nu)(a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.815.2",
+  "gr": "6.815.2",
+  "page": 803,
+  "status": "ok",
+  "lhs": "Integrate[x^(lam - nu/2 - 3/2)*(1 - x)^(mu - 1)*StruveH[nu, a*Sqrt[x]], {x, 0, 1}]",
+  "rhs": [
+   "Beta[lam, mu]*a^(nu + 1)/(2^nu*Sqrt[Pi]*Gamma[nu + 3/2])*HypergeometricPFQ[{1, lam}, {3/2, nu + 3/2, lam + mu}, -a^2/4]"
+  ],
+  "conds": [
+   "Re[lam] > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET II 199(89)a",
+  "edition_note": "",
+  "section": "6.81 Struve functions",
+  "tex": "int_0^1 x^(lam-nu/2-3/2) (1-x)^(mu-1) H_nu(a sqrt x) dx = B(lam,mu) a^(nu+1)/(2^nu sqrt(pi) Gamma(nu+3/2)) 2F3(1,lam;3/2,nu+3/2,lam+mu;-a^2/4)",
+  "note": ""
+ },
+ {
+  "id": "GR6.821.1",
+  "gr": "6.821.1",
+  "page": 803,
+  "status": "ok",
+  "lhs": "Integrate[E^(-alpha*x)*StruveH[-n - 1/2, beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*beta^(n + 1/2)*(alpha + Sqrt[alpha^2 + beta^2])^(-n - 1/2)/Sqrt[alpha^2 + beta^2]"
+  ],
+  "conds": [
+   "Re[alpha] > Abs[Im[beta]]",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 206(6)",
+  "edition_note": "6",
+  "section": "6.82 Combinations of Struve functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-alpha x) H_(-n-1/2)(beta x) dx = (-1)^n beta^(n+1/2) (alpha+sqrt(alpha^2+beta^2))^(-n-1/2)/sqrt(alpha^2+beta^2)",
+  "note": "n = 0,1,2,... implied by (-1)^n (not printed)"
+ },
+ {
+  "id": "GR6.821.2",
+  "gr": "6.821.2",
+  "page": 804,
+  "status": "ok",
+  "lhs": "Integrate[E^(-alpha*x)*StruveL[-n - 1/2, beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "beta^(n + 1/2)*(alpha + Sqrt[alpha^2 - beta^2])^(-n - 1/2)/Sqrt[alpha^2 - beta^2]"
+  ],
+  "conds": [
+   "Re[alpha] > Abs[Re[beta]]",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 208(26)",
+  "edition_note": "6",
+  "section": "6.82 Combinations of Struve functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-alpha x) L_(-n-1/2)(beta x) dx = beta^(n+1/2) (alpha+sqrt(alpha^2-beta^2))^(-n-1/2)/sqrt(alpha^2-beta^2)",
+  "note": "n = 0,1,2,... assumed (not printed), as in 6.821.1"
+ },
+ {
+  "id": "GR6.821.3",
+  "gr": "6.821.3",
+  "page": 804,
+  "status": "ok",
+  "lhs": "Integrate[E^(-alpha*x)*StruveH[0, beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2/Pi*Log[(Sqrt[alpha^2 + beta^2] + beta)/alpha]/Sqrt[alpha^2 + beta^2]"
+  ],
+  "conds": [
+   "Re[alpha] > Abs[Im[beta]]"
+  ],
+  "cite": "ET II 205(1)",
+  "edition_note": "",
+  "section": "6.82 Combinations of Struve functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-alpha x) H_0(beta x) dx = 2/pi ln((sqrt(alpha^2+beta^2)+beta)/alpha)/sqrt(alpha^2+beta^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.821.4",
+  "gr": "6.821.4",
+  "page": 804,
+  "status": "ok",
+  "lhs": "Integrate[E^(-alpha*x)*StruveL[0, beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2/Pi*ArcSin[beta/alpha]/Sqrt[alpha^2 + beta^2]",
+   "2/Pi*ArcSin[beta/alpha]/Sqrt[alpha^2 - beta^2]"
+  ],
+  "conds": [
+   "Re[alpha] > Abs[Re[beta]]"
+  ],
+  "cite": "ET II 207(18)",
+  "edition_note": "",
+  "section": "6.82 Combinations of Struve functions, exponentials, and powers",
+  "tex": "int_0^inf e^(-alpha x) L_0(beta x) dx = 2/pi arcsin(beta/alpha)/sqrt(alpha^2+beta^2)",
+  "note": "Second candidate: sqrt(alpha^2 - beta^2) in the denominator (suspected sign misprint)."
+ },
+ {
+  "id": "GR6.822",
+  "gr": "6.822",
+  "page": 804,
+  "status": "ok",
+  "lhs": "Integrate[E^((nu + 1)*x)*StruveH[nu, a*Sinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/a]*Csc[nu*Pi]*(Sinh[a/2]*BesselI[nu + 1/2, a/2] - Cosh[a/2]*BesselI[-nu - 1/2, a/2])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "-2 < Re[nu] < 0"
+  ],
+  "cite": "ET II 385(11)",
+  "edition_note": "",
+  "section": "6.82 Combinations of Struve functions, exponentials, and powers",
+  "tex": "int_0^inf e^((nu+1)x) H_nu(a sinh x) dx = sqrt(pi/a) cosec(nu pi) [sinh(a/2) I_(nu+1/2)(a/2) - cosh(a/2) I_(-nu-1/2)(a/2)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.823.1",
+  "gr": "6.823.1",
+  "page": 804,
+  "status": "ok",
+  "lhs": "Integrate[x^lam*E^(-alpha*x)*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b^(nu + 1)*Gamma[lam + nu + 2]/(2^nu*a^(lam + nu + 2)*Sqrt[Pi]*Gamma[nu + 3/2])*HypergeometricPFQ[{1, (lam + nu)/2 + 1, (lam + nu + 3)/2}, {3/2, nu + 3/2}, -b^2/a^2]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Re[lam + nu] > -2"
+  ],
+  "cite": "ET II 161(19)",
+  "edition_note": "",
+  "section": "6.82 Combinations of Struve functions, exponentials, and powers",
+  "tex": "int_0^inf x^lam e^(-alpha x) H_nu(bx) dx = b^(nu+1) Gamma(lam+nu+2)/(2^nu a^(lam+nu+2) sqrt(pi) Gamma(nu+3/2)) 3F2(1,(lam+nu)/2+1,(lam+nu+3)/2;3/2,nu+3/2;-b^2/a^2)",
+  "note": "As printed: integrand has e^(-alpha x) but value and conditions use a; see 6.823.1b."
+ },
+ {
+  "id": "GR6.823.1b",
+  "gr": "6.823.1b",
+  "page": 804,
+  "status": "ok",
+  "lhs": "Integrate[x^lam*E^(-a*x)*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b^(nu + 1)*Gamma[lam + nu + 2]/(2^nu*a^(lam + nu + 2)*Sqrt[Pi]*Gamma[nu + 3/2])*HypergeometricPFQ[{1, (lam + nu)/2 + 1, (lam + nu + 3)/2}, {3/2, nu + 3/2}, -b^2/a^2]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Re[lam + nu] > -2"
+  ],
+  "cite": "ET II 161(19)",
+  "edition_note": "",
+  "section": "6.82 Combinations of Struve functions, exponentials, and powers",
+  "tex": "int_0^inf x^lam e^(-alpha x) H_nu(bx) dx = b^(nu+1) Gamma(lam+nu+2)/(2^nu a^(lam+nu+2) sqrt(pi) Gamma(nu+3/2)) 3F2(1,(lam+nu)/2+1,(lam+nu+3)/2;3/2,nu+3/2;-b^2/a^2)",
+  "note": "corrected integrand: alpha -> a to match value and conditions"
+ },
+ {
+  "id": "GR6.823.2",
+  "gr": "6.823.2",
+  "page": 804,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*E^(-alpha*x)*StruveL[nu, beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*beta)^nu*Gamma[nu + 1/2]/(Sqrt[Pi]*Sqrt[alpha^2 - beta^2]^(2*nu + 1)) - Gamma[2*nu + 1]*(beta/alpha)^nu/(Sqrt[Pi/2]*alpha*(beta^2 - alpha^2)^(nu/2 + 1/4))*LegendreP[-nu - 1/2, -nu - 1/2, beta/alpha]",
+   "(2*beta)^nu*Gamma[nu + 1/2]/(Sqrt[Pi]*Sqrt[alpha^2 - beta^2]^(2*nu + 1)) - Gamma[2*nu + 1]*(beta/alpha)^nu/(Sqrt[Pi/2]*alpha*(alpha^2 - beta^2)^(nu/2 + 1/4))*LegendreP[-nu - 1/2, -nu - 1/2, beta/alpha]"
+  ],
+  "conds": [
+   "Re[alpha] > Abs[Re[beta]]",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET I 209(35)a",
+  "edition_note": "",
+  "section": "6.82 Combinations of Struve functions, exponentials, and powers",
+  "tex": "int_0^inf x^nu e^(-alpha x) L_nu(beta x) dx = (2beta)^nu Gamma(nu+1/2)/(sqrt(pi) (sqrt(alpha^2-beta^2))^(2nu+1)) - Gamma(2nu+1)(beta/alpha)^nu/(sqrt(pi/2) alpha (beta^2-alpha^2)^(nu/2+1/4)) P^(-nu-1/2)_(-nu-1/2)(beta/alpha)",
+  "note": "P taken as Ferrers (argument beta/alpha in (-1,1)). Second candidate uses (alpha^2-beta^2) in place of the printed (beta^2-alpha^2)."
+ },
+ {
+  "id": "GR6.824.1",
+  "gr": "6.824.1",
+  "page": 804,
+  "status": "ok",
+  "lhs": "Integrate[t^nu*E^(-a*t)*StruveL[2*nu, 2*Sqrt[t]], {t, 0, Infinity}]",
+  "rhs": [
+   "E^(1/a)*Erf[1/Sqrt[a]]/a^(2*nu + 1)"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "MI 51",
+  "edition_note": "",
+  "section": "6.82 Combinations of Struve functions, exponentials, and powers",
+  "tex": "int_0^inf t^nu e^(-at) L_2nu(2 sqrt t) dt = e^(1/a) Phi(1/sqrt a)/a^(2nu+1)",
+  "note": "No conditions printed; a > 0 and Re nu > -1/2 assumed for convergence."
+ },
+ {
+  "id": "GR6.824.2",
+  "gr": "6.824.2",
+  "page": 804,
+  "status": "ok",
+  "lhs": "Integrate[t^nu*E^(-a*t)*StruveL[-2*nu, Sqrt[t]], {t, 0, Infinity}]",
+  "rhs": [
+   "E^(1/a)*Gamma[1/2 - 2*nu, 0, 1/a]/(Gamma[1/2 - 2*nu]*a^(2*nu + 1))"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[nu] < 1/4"
+  ],
+  "cite": "MI 51",
+  "edition_note": "",
+  "section": "6.82 Combinations of Struve functions, exponentials, and powers",
+  "tex": "int_0^inf t^nu e^(-at) L_(-2nu)(sqrt t) dt = e^(1/a) gamma(1/2-2nu,1/a)/(Gamma(1/2-2nu) a^(2nu+1))",
+  "note": "No conditions printed; a > 0 and Re nu < 1/4 assumed."
+ },
+ {
+  "id": "GR6.825",
+  "gr": "6.825",
+  "page": 804,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*E^(-alpha^2*x^2)*StruveH[nu, beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "beta^(nu + 1)*Gamma[1/2 + s/2 + nu/2]/(2^(nu + 1)*Sqrt[Pi]*alpha^(nu + s + 1)*Gamma[nu + 3/2])*HypergeometricPFQ[{1, (nu + s + 1)/2}, {3/2, nu + 3/2}, -beta^2/(4*alpha^2)]"
+  ],
+  "conds": [
+   "Re[s] > -Re[nu] - 1",
+   "Abs[Arg[alpha]] < Pi/4"
+  ],
+  "cite": "ET I 335(51)a, ET II 162(20)",
+  "edition_note": "",
+  "section": "6.82 Combinations of Struve functions, exponentials, and powers",
+  "tex": "int_0^inf x^(s-1) e^(-alpha^2 x^2) H_nu(beta x) dx = beta^(nu+1) Gamma(1/2+s/2+nu/2)/(2^(nu+1) sqrt(pi) alpha^(nu+s+1) Gamma(nu+3/2)) 2F2(1,(nu+s+1)/2;3/2,nu+3/2;-beta^2/(4alpha^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.831a",
+  "gr": "6.831a",
+  "page": 804,
+  "status": "ok",
+  "lhs": "Integrate[x^(-nu)*Sin[a*x]*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < b < a",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 162(21)",
+  "edition_note": "",
+  "section": "6.83 Combinations of Struve and trigonometric functions",
+  "tex": "int_0^inf x^(-nu) sin(ax) H_nu(bx) dx = 0 [0<b<a]",
+  "note": ""
+ },
+ {
+  "id": "GR6.831b",
+  "gr": "6.831b",
+  "page": 804,
+  "status": "ok",
+  "lhs": "Integrate[x^(-nu)*Sin[a*x]*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*2^(-nu)*b^(-nu)*(b^2 - a^2)^(nu - 1/2)/Gamma[nu + 1/2]"
+  ],
+  "conds": [
+   "0 < a < b",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 162(21)",
+  "edition_note": "",
+  "section": "6.83 Combinations of Struve and trigonometric functions",
+  "tex": "int_0^inf x^(-nu) sin(ax) H_nu(bx) dx = sqrt(pi) 2^(-nu) b^(-nu) (b^2-a^2)^(nu-1/2)/Gamma(nu+1/2) [0<a<b]",
+  "note": ""
+ },
+ {
+  "id": "GR6.832",
+  "gr": "6.832",
+  "page": 805,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[x]*Sin[a*x]*StruveH[1/4, b^2*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "-2^(-3/2)*Sqrt[Pi]*Sqrt[a]/b^2*BesselY[1/4, a^2/(4*b^2)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 109(14)",
+  "edition_note": "",
+  "section": "6.83 Combinations of Struve and trigonometric functions",
+  "tex": "int_0^inf sqrt(x) sin(ax) H_(1/4)(b^2x^2) dx = -2^(-3/2) sqrt(pi) sqrt(a)/b^2 Y_(1/4)(a^2/(4b^2))",
+  "note": "b > 0 added (not printed)"
+ },
+ {
+  "id": "GR6.841a",
+  "gr": "6.841a",
+  "page": 805,
+  "status": "ok",
+  "lhs": "Integrate[StruveH[nu - 1, a*x]*BesselY[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-a^(nu - 1)*b^(-nu)"
+  ],
+  "conds": [
+   "0 < b < a",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 114(36)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf H_(nu-1)(ax) Y_nu(bx) dx = -a^(nu-1) b^(-nu) [0<b<a]",
+  "note": ""
+ },
+ {
+  "id": "GR6.841b",
+  "gr": "6.841b",
+  "page": 805,
+  "status": "ok",
+  "lhs": "Integrate[StruveH[nu - 1, a*x]*BesselY[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < a < b",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 114(36)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf H_(nu-1)(ax) Y_nu(bx) dx = 0 [0<a<b]",
+  "note": ""
+ },
+ {
+  "id": "GR6.842",
+  "gr": "6.842",
+  "page": 805,
+  "status": "ok",
+  "lhs": "Integrate[(StruveH[0, a*x] - BesselY[0, a*x])*BesselJ[0, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "4/(Pi*(a + b))*MatharK[Abs[a - b]/(a + b)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 15(22)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf [H_0(ax) - Y_0(ax)] J_0(bx) dx = 4/(pi(a+b)) K(|a-b|/(a+b))",
+  "note": ""
+ },
+ {
+  "id": "GR6.843.1",
+  "gr": "6.843.1",
+  "page": 805,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[2*nu, a*Sqrt[x]]*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-BesselY[nu, a^2/(4*b)]/b"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "-1 < Re[nu] < 5/4"
+  ],
+  "cite": "ET II 164(10)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf J_2nu(a sqrt x) H_nu(bx) dx = -Y_nu(a^2/(4b))/b",
+  "note": ""
+ },
+ {
+  "id": "GR6.843.2",
+  "gr": "6.843.2",
+  "page": 805,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[BesselK[2*nu, 2*a*Sqrt[x]]*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^nu/(Pi*b)*Gamma[nu + 1]*LommelS2[-nu - 1, nu, a^2/b]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 168(27)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf K_2nu(2a sqrt x) H_nu(bx) dx = 2^nu/(pi b) Gamma(nu+1) S_(-nu-1,nu)(a^2/b)",
+  "note": "",
+  "reason": "Lommel S_{mu,nu} (LommelS2)"
+ },
+ {
+  "id": "GR6.844",
+  "gr": "6.844",
+  "page": 805,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[(mu - nu)*Pi/2]*BesselJ[mu, a*Sqrt[x]] - Sin[(mu - nu)*Pi/2]*BesselY[mu, a*Sqrt[x]])*BesselK[mu, a*Sqrt[x]]*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "WhittakerW[nu/2, mu/2, a^2/(2*b)]*WhittakerW[-nu/2, mu/2, a^2/(2*b)]/a^2"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi/4",
+   "b > 0",
+   "Re[nu] > Abs[Re[mu]] - 2"
+  ],
+  "cite": "ET II 169(35)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf [cos((mu-nu)pi/2) J_mu(a sqrt x) - sin((mu-nu)pi/2) Y_mu(a sqrt x)] K_mu(a sqrt x) H_nu(bx) dx = W_(nu/2,mu/2)(a^2/(2b)) W_(-nu/2,mu/2)(a^2/(2b))/a^2",
+  "note": ""
+ },
+ {
+  "id": "GR6.845.1",
+  "gr": "6.845.1",
+  "page": 805,
+  "status": "ok",
+  "lhs": "Integrate[(StruveH[-nu, a/x] - BesselY[-nu, a/x])*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "4/(Pi*b)*Cos[nu*Pi]*BesselK[2*nu, 2*Sqrt[a*b]]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "b > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 73(7)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf [H_(-nu)(a/x) - Y_(-nu)(a/x)] J_nu(bx) dx = 4/(pi b) cos(nu pi) K_2nu(2 sqrt(ab))",
+  "note": ""
+ },
+ {
+  "id": "GR6.845.2",
+  "gr": "6.845.2",
+  "page": 805,
+  "status": "ok",
+  "lhs": "Integrate[(BesselJ[-nu, a^2/x] + Sin[nu*Pi]*StruveH[nu, a^2/x])*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2/Pi*BesselK[2*nu, 2*a*Sqrt[b]] - BesselY[2*nu, 2*a*Sqrt[b]])/b"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "-3/2 < Re[nu] < 0"
+  ],
+  "cite": "ET II 170(39)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf [J_(-nu)(a^2/x) + sin(nu pi) H_nu(a^2/x)] H_nu(bx) dx = (1/b)[2/pi K_2nu(2a sqrt b) - Y_2nu(2a sqrt b)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.846",
+  "gr": "6.846",
+  "page": 805,
+  "status": "ok",
+  "lhs": "Integrate[(2/Pi*BesselK[2*nu, 2*a*Sqrt[x]] + BesselY[2*nu, 2*a*Sqrt[x]])*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "BesselJ[nu, a^2/b]/b"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 169(30)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf [2/pi K_2nu(2a sqrt x) + Y_2nu(2a sqrt x)] H_nu(bx) dx = J_nu(a^2/b)/b",
+  "note": ""
+ },
+ {
+  "id": "GR6.847",
+  "gr": "6.847",
+  "page": 805,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[nu*Pi/2]*BesselJ[nu, a*x] + Sin[nu*Pi/2]*StruveH[nu, a*x])/(x^2 + k^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*k)*(BesselI[nu, a*k] - StruveL[nu, a*k])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[k] > 0",
+   "-1/2 < Re[nu] < 2"
+  ],
+  "cite": "ET II 384(5)a, WA 467(8)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf [cos(nu pi/2) J_nu(ax) + sin(nu pi/2) H_nu(ax)] dx/(x^2+k^2) = pi/(2k) [I_nu(ak) - L_nu(ak)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.848.1",
+  "gr": "6.848.1",
+  "page": 806,
+  "status": "ok",
+  "lhs": "Integrate[x*(BesselI[nu, a*x] - StruveL[-nu, a*x])*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2/Pi*(a/b)^(nu - 1)*Cos[nu*Pi]/(a^2 + b^2)"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "-1 < Re[nu] < -1/2"
+  ],
+  "cite": "ET II 74(12)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x [I_nu(ax) - L_(-nu)(ax)] J_nu(bx) dx = 2/pi (a/b)^(nu-1) cos(nu pi)/(a^2+b^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.848.2",
+  "gr": "6.848.2",
+  "page": 806,
+  "status": "ok",
+  "lhs": "Integrate[x*(StruveH[-nu, a*x] - BesselY[-nu, a*x])*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*Cos[nu*Pi]/(a^nu*Pi)*b^(nu - 1)/(a + b)"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "-1/2 < Re[nu]",
+   "b > 0"
+  ],
+  "cite": "ET II 73(5)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x [H_(-nu)(ax) - Y_(-nu)(ax)] J_nu(bx) dx = 2 cos(nu pi)/(a^nu pi) b^(nu-1)/(a+b)",
+  "note": ""
+ },
+ {
+  "id": "GR6.849.1",
+  "gr": "6.849.1",
+  "page": 806,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselK[nu, a*x]*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "a^(-nu - 1)*b^(nu + 1)/(a^2 + b^2)"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Re[nu] > -3/2"
+  ],
+  "cite": "ET II 164(12)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x K_nu(ax) H_nu(bx) dx = a^(-nu-1) b^(nu+1)/(a^2+b^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.849.2",
+  "gr": "6.849.2",
+  "page": 806,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselK[mu, a*x]^2*StruveH[0, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-2^(-mu - 1)*Pi*a^(-2*mu)*((Sqrt[4*a^2 + b^2] + b)^(2*mu) + (Sqrt[4*a^2 + b^2] - b)^(2*mu))/(b*Sqrt[4*a^2 + b^2])*Sec[mu*Pi]",
+   "2^(-mu - 1)*Pi*a^(-2*mu)*((Sqrt[4*a^2 + b^2] + b)^(2*mu) + (Sqrt[4*a^2 + b^2] - b)^(2*mu))/(b*Sqrt[4*a^2 + b^2])*Sec[mu*Pi]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Abs[Re[mu]] < 3/2"
+  ],
+  "cite": "ET II 166(18)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x [K_mu(ax)]^2 H_0(bx) dx = -2^(-mu-1) pi a^(-2mu) [(z+b)^(2mu)+(z-b)^(2mu)]/(bz) sec(mu pi), z = sqrt(4a^2+b^2)",
+  "note": "z = sqrt(4a^2+b^2) substituted. Second candidate flips the overall sign: at mu=0, a,b>0 the integrand is positive but the printed value is negative."
+ },
+ {
+  "id": "GR6.851.1a",
+  "gr": "6.851.1a",
+  "page": 806,
+  "status": "ok",
+  "lhs": "Integrate[x*(BesselJ[nu/2, a*x]^2 - BesselY[nu/2, a*x]^2)*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < b < 2*a",
+   "-3/2 < Re[nu] < 0"
+  ],
+  "cite": "ET II 164(7)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x {[J_(nu/2)(ax)]^2 - [Y_(nu/2)(ax)]^2} H_nu(bx) dx = 0 [0<b<2a]",
+  "note": ""
+ },
+ {
+  "id": "GR6.851.1b",
+  "gr": "6.851.1b",
+  "page": 806,
+  "status": "ok",
+  "lhs": "Integrate[x*(BesselJ[nu/2, a*x]^2 - BesselY[nu/2, a*x]^2)*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "4/(Pi*b)/Sqrt[b^2 - 4*a^2]"
+  ],
+  "conds": [
+   "0 < 2*a < b",
+   "-3/2 < Re[nu] < 0"
+  ],
+  "cite": "ET II 164(7)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x {[J_(nu/2)(ax)]^2 - [Y_(nu/2)(ax)]^2} H_nu(bx) dx = 4/(pi b) 1/sqrt(b^2-4a^2) [0<2a<b]",
+  "note": ""
+ },
+ {
+  "id": "GR6.851.2a",
+  "gr": "6.851.2a",
+  "page": 806,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*(BesselJ[nu, a*x]^2 - BesselY[nu, a*x]^2)*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < b < 2*a",
+   "-3/4 < Re[nu] < 0"
+  ],
+  "cite": "ET II 163(6)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x^(nu+1) {[J_nu(ax)]^2 - [Y_nu(ax)]^2} H_nu(bx) dx = 0 [0<b<2a]",
+  "note": ""
+ },
+ {
+  "id": "GR6.851.2b",
+  "gr": "6.851.2b",
+  "page": 806,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*(BesselJ[nu, a*x]^2 - BesselY[nu, a*x]^2)*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(3*nu + 2)*a^(2*nu)*b^(-nu - 1)/(Sqrt[Pi]*Gamma[1/2 - nu])*(b^2 - 4*a^2)^(-nu - 1/2)"
+  ],
+  "conds": [
+   "0 < 2*a < b",
+   "-3/4 < Re[nu] < 0"
+  ],
+  "cite": "ET II 163(6)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x^(nu+1) {[J_nu(ax)]^2 - [Y_nu(ax)]^2} H_nu(bx) dx = 2^(3nu+2) a^(2nu) b^(-nu-1)/(sqrt(pi) Gamma(1/2-nu)) (b^2-4a^2)^(-nu-1/2) [0<2a<b]",
+  "note": ""
+ },
+ {
+  "id": "GR6.852.1",
+  "gr": "6.852.1",
+  "page": 806,
+  "status": "ok",
+  "lhs": "Integrate[x^(1 - mu - nu)*BesselJ[nu, x]*StruveH[mu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*nu - 1)*2^(-mu - nu)/((mu + nu - 1)*Gamma[mu + 1/2]*Gamma[nu + 1/2])"
+  ],
+  "conds": [
+   "Re[nu] > 1/2",
+   "Re[mu + nu] > 1"
+  ],
+  "cite": "ET II 383(4)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x^(1-mu-nu) J_nu(x) H_mu(x) dx = (2nu-1) 2^(-mu-nu)/((mu+nu-1) Gamma(mu+1/2) Gamma(nu+1/2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.852.2a",
+  "gr": "6.852.2a",
+  "page": 806,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - nu + 1)*BesselY[mu, a*x]*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < b < a",
+   "Re[nu - mu] > 0",
+   "-3/2 < Re[mu] < 1/2"
+  ],
+  "cite": "ET II 163(3)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x^(mu-nu+1) Y_mu(ax) H_nu(bx) dx = 0 [0<b<a]",
+  "note": ""
+ },
+ {
+  "id": "GR6.852.2b",
+  "gr": "6.852.2b",
+  "page": 806,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - nu + 1)*BesselY[mu, a*x]*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(1 + mu - nu)*a^mu*b^(-nu)/Gamma[nu - mu]*(b^2 - a^2)^(nu - mu - 1)"
+  ],
+  "conds": [
+   "0 < a < b",
+   "Re[nu - mu] > 0",
+   "-3/2 < Re[mu] < 1/2"
+  ],
+  "cite": "ET II 163(3)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x^(mu-nu+1) Y_mu(ax) H_nu(bx) dx = 2^(1+mu-nu) a^mu b^(-nu)/Gamma(nu-mu) (b^2-a^2)^(nu-mu-1) [0<a<b]",
+  "note": ""
+ },
+ {
+  "id": "GR6.852.3",
+  "gr": "6.852.3",
+  "page": 807,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu + nu + 1)*BesselK[mu, a*x]*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(mu + nu + 1)*b^(nu + 1)/(Sqrt[Pi]*a^(mu + 2*nu + 3))*Gamma[mu + nu + 3/2]*Hypergeometric2F1[1, mu + nu + 3/2, 3/2, -b^2/a^2]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Re[nu] > -3/2",
+   "Re[mu + nu] > -3/2"
+  ],
+  "cite": "ET II 165(13)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x^(mu+nu+1) K_mu(ax) H_nu(bx) dx = 2^(mu+nu+1) b^(nu+1)/(sqrt(pi) a^(mu+2nu+3)) Gamma(mu+nu+3/2) F(1,mu+nu+3/2;3/2;-b^2/a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.853.1a",
+  "gr": "6.853.1a",
+  "page": 807,
+  "status": "ok",
+  "lhs": "Integrate[x^(1 - mu)*(Sin[mu*Pi]*BesselJ[mu + nu, a*x] + Cos[mu*Pi]*BesselY[mu + nu, a*x])*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < b < a",
+   "1 < Re[mu] < 3/2",
+   "Re[nu] > -3/2",
+   "Re[nu - mu] < 1/2"
+  ],
+  "cite": "ET II 163(4)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x^(1-mu) [sin(mu pi) J_(mu+nu)(ax) + cos(mu pi) Y_(mu+nu)(ax)] H_nu(bx) dx = 0 [0<b<a]",
+  "note": ""
+ },
+ {
+  "id": "GR6.853.1b",
+  "gr": "6.853.1b",
+  "page": 807,
+  "status": "ok",
+  "lhs": "Integrate[x^(1 - mu)*(Sin[mu*Pi]*BesselJ[mu + nu, a*x] + Cos[mu*Pi]*BesselY[mu + nu, a*x])*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b^nu*(b^2 - a^2)^(mu - 1)/(2^(mu - 1)*a^(mu + nu)*Gamma[mu])"
+  ],
+  "conds": [
+   "0 < a < b",
+   "1 < Re[mu] < 3/2",
+   "Re[nu] > -3/2",
+   "Re[nu - mu] < 1/2"
+  ],
+  "cite": "ET II 163(4)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x^(1-mu) [sin(mu pi) J_(mu+nu)(ax) + cos(mu pi) Y_(mu+nu)(ax)] H_nu(bx) dx = b^nu (b^2-a^2)^(mu-1)/(2^(mu-1) a^(mu+nu) Gamma(mu)) [0<a<b]",
+  "note": ""
+ },
+ {
+  "id": "GR6.853.2",
+  "gr": "6.853.2",
+  "page": 807,
+  "status": "ok",
+  "lhs": "Integrate[x^(lam + 1/2)*(BesselI[mu, a*x] - StruveL[-mu, a*x])*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(lam + 1/2)*Cos[mu*Pi]/Pi*b^(-lam - 3/2)*MeijerG[{{(1 + mu)/2, 1 - mu/2}, {1 + mu/2}}, {{3/4 + (lam + nu)/2, (1 + mu)/2}, {3/4 + (lam - nu)/2}}, b^2/a^2]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Re[mu + nu + lam] > -3/2",
+   "-Re[nu] - 5/2 < Re[lam - mu]",
+   "Re[lam - mu] < 1"
+  ],
+  "cite": "ET II 76(21)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x^(lam+1/2) [I_mu(ax) - L_(-mu)(ax)] J_nu(bx) dx = 2^(lam+1/2) cos(mu pi)/pi b^(-lam-3/2) G^22_33(b^2/a^2 | (1+mu)/2,1-mu/2,1+mu/2; 3/4+(lam+nu)/2,(1+mu)/2,3/4+(lam-nu)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.853.3",
+  "gr": "6.853.3",
+  "page": 807,
+  "status": "ok",
+  "lhs": "Integrate[x^(lam + 1/2)*(StruveH[mu, a*x] - BesselY[mu, a*x])*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(lam + 1/2)*Cos[mu*Pi]/Pi^2*b^(-lam - 3/2)*MeijerG[{{(1 - mu)/2, 1 - mu/2, 1 + mu/2}, {}}, {{3/4 + (lam + nu)/2, (1 - mu)/2}, {3/4 + (lam - nu)/2}}, b^2/a^2]"
+  ],
+  "conds": [
+   "b > 0",
+   "Abs[Arg[a]] < Pi",
+   "Re[lam + mu] < 1",
+   "Re[lam + nu] + 3/2 > Abs[Re[mu]]"
+  ],
+  "cite": "ET II 73(6)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x^(lam+1/2) [H_mu(ax) - Y_mu(ax)] J_nu(bx) dx = 2^(lam+1/2) cos(mu pi)/pi^2 b^(-lam-3/2) G^23_33(b^2/a^2 | (1-mu)/2,1-mu/2,1+mu/2; 3/4+(lam+nu)/2,(1-mu)/2,3/4+(lam-nu)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.853.4",
+  "gr": "6.853.4",
+  "page": 807,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[x]*(BesselI[nu - 1/2, a*x] - StruveL[nu - 1/2, a*x])*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]*a^(nu - 1/2)*b^(-nu)/Sqrt[a^2 + b^2]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 74(11)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf sqrt(x) [I_(nu-1/2)(ax) - L_(nu-1/2)(ax)] J_nu(bx) dx = sqrt(2/pi) a^(nu-1/2) b^(-nu)/sqrt(a^2+b^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.853.5",
+  "gr": "6.853.5",
+  "page": 807,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - nu + 1)*(BesselI[mu, a*x] - StruveL[mu, a*x])*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(mu - nu + 1)*a^(mu - 1)*b^(nu - 2*mu - 1)/(Sqrt[Pi]*Gamma[nu - mu + 1/2])*Hypergeometric2F1[1, 1/2, nu - mu + 1/2, -b^2/a^2]"
+  ],
+  "conds": [
+   "-1 < 2*Re[mu] + 1",
+   "2*Re[mu] + 1 < Re[nu] + 1/2",
+   "Re[a] > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 74(13)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x^(mu-nu+1) [I_mu(ax) - L_mu(ax)] J_nu(bx) dx = 2^(mu-nu+1) a^(mu-1) b^(nu-2mu-1)/(sqrt(pi) Gamma(nu-mu+1/2)) F(1,1/2;nu-mu+1/2;-b^2/a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.853.6",
+  "gr": "6.853.6",
+  "page": 807,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - nu + 1)*(BesselI[mu, a*x] - StruveL[-mu, a*x])*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(mu - nu + 1)*a^(-mu - 1)*b^(nu - 1)/(Gamma[1/2 - mu]*Gamma[1/2 + nu])*Hypergeometric2F1[1, 1/2 + mu, 1/2 + nu, -b^2/a^2]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[nu] > -1/2",
+   "Re[mu] > -1",
+   "b > 0"
+  ],
+  "cite": "ET II 75(18)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x^(mu-nu+1) [I_mu(ax) - L_(-mu)(ax)] J_nu(bx) dx = 2^(mu-nu+1) a^(-mu-1) b^(nu-1)/(Gamma(1/2-mu) Gamma(1/2+nu)) F(1,1/2+mu;1/2+nu;-b^2/a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.854.1",
+  "gr": "6.854.1",
+  "page": 807,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x*StruveH[nu/2, a*x^2]*BesselK[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu/2 + 1]/(2^(1 - nu/2)*a*Pi)*LommelS2[-nu/2 - 1, nu/2, b^2/(4*a)]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[b] > 0",
+   "Re[nu] > -2"
+  ],
+  "cite": "ET II 150(75)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x H_(nu/2)(ax^2) K_nu(bx) dx = Gamma(nu/2+1)/(2^(1-nu/2) a pi) S_(-nu/2-1,nu/2)(b^2/(4a))",
+  "note": "",
+  "reason": "Lommel S_{mu,nu} (LommelS2)"
+ },
+ {
+  "id": "GR6.854.2",
+  "gr": "6.854.2",
+  "page": 808,
+  "status": "ok",
+  "lhs": "Integrate[x*StruveH[nu/2, a*x^2]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-BesselY[nu/2, b^2/(4*a)]/(2*a)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "-2 < Re[nu] < 3/2"
+  ],
+  "cite": "ET II 73(3)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x H_(nu/2)(ax^2) J_nu(bx) dx = -Y_(nu/2)(b^2/(4a))/(2a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.855.1",
+  "gr": "6.855.1",
+  "page": 808,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*nu + 1/2)*(BesselI[nu + 1/2, a/x] - StruveL[nu + 1/2, a/x])*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(3/2)*a^(nu + 1/2)/(Sqrt[Pi]*b^(nu + 1))*BesselJ[2*nu + 1, Sqrt[2*a*b]]*BesselK[2*nu + 1, Sqrt[2*a*b]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "-1 < Re[nu] < 1/2"
+  ],
+  "cite": "ET II 76(22)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x^(2nu+1/2) [I_(nu+1/2)(a/x) - L_(nu+1/2)(a/x)] J_nu(bx) dx = 2^(3/2) a^(nu+1/2)/(sqrt(pi) b^(nu+1)) J_(2nu+1)(sqrt(2ab)) K_(2nu+1)(sqrt(2ab))",
+  "note": ""
+ },
+ {
+  "id": "GR6.855.2",
+  "gr": "6.855.2",
+  "page": 808,
+  "status": "ok",
+  "lhs": "Integrate[(StruveH[-nu - 1, a/x] - BesselY[-nu - 1, a/x])*BesselJ[nu, b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-4/(Pi*Sqrt[a*b])*Cos[nu*Pi]*BesselK[-2*nu - 1, 2*Sqrt[a*b]]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "b > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 74(8)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf [H_(-nu-1)(a/x) - Y_(-nu-1)(a/x)] J_nu(bx) dx/x = -4/(pi sqrt(ab)) cos(nu pi) K_(-2nu-1)(2 sqrt(ab))",
+  "note": ""
+ },
+ {
+  "id": "GR6.855.3",
+  "gr": "6.855.3",
+  "page": 808,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*nu + 1/2)*(StruveH[nu + 1/2, a/x] - BesselY[nu + 1/2, a/x])*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-2^(5/2)*Pi^(-3/2)*a^(nu + 1/2)*b^(-nu - 1)*Sin[nu*Pi]*BesselK[2*nu + 1, Sqrt[2*a*b]*E^(I*Pi/4)]*BesselK[2*nu + 1, Sqrt[2*a*b]*E^(-I*Pi/4)]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "b > 0",
+   "-1 < Re[nu] < -1/6"
+  ],
+  "cite": "ET II 74(9)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x^(2nu+1/2) [H_(nu+1/2)(a/x) - Y_(nu+1/2)(a/x)] J_nu(bx) dx = -2^(5/2) pi^(-3/2) a^(nu+1/2) b^(-nu-1) sin(nu pi) K_(2nu+1)(sqrt(2ab) e^(i pi/4)) K_(2nu+1)(sqrt(2ab) e^(-i pi/4))",
+  "note": ""
+ },
+ {
+  "id": "GR6.856",
+  "gr": "6.856",
+  "page": 808,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselY[nu, a*Sqrt[x]]*BesselK[nu, a*Sqrt[x]]*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "E^(-a^2/(2*b))/(2*b^2)"
+  ],
+  "conds": [
+   "b > 0",
+   "Abs[Arg[a]] < Pi/4",
+   "Re[nu] > -3/2"
+  ],
+  "cite": "ET II 169(32)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x Y_nu(a sqrt x) K_nu(a sqrt x) H_nu(bx) dx = exp(-a^2/(2b))/(2b^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.857.1",
+  "gr": "6.857.1",
+  "page": 808,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(a^2*x^2/8)*BesselK[nu/2, a^2*x^2/8]*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2/Sqrt[Pi]*a^(-nu/2 - 1)*b^(nu/2 - 1)*Cos[nu*Pi/2]*Gamma[-nu/2]*E^(b^2/(2*a^2))*WhittakerW[nu/4, 1/2 + nu/4, b^2/a^2]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < 3*Pi/4",
+   "b > 0",
+   "-3/2 < Re[nu] < 0"
+  ],
+  "cite": "ET II 167(24)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x exp(a^2x^2/8) K_(nu/2)(a^2x^2/8) H_nu(bx) dx = 2/sqrt(pi) a^(-nu/2-1) b^(nu/2-1) cos(nu pi/2) Gamma(-nu/2) exp(b^2/(2a^2)) W_(k,m)(b^2/a^2), k=nu/4, m=1/2+nu/4",
+  "note": "k = nu/4, m = 1/2 + nu/4 substituted"
+ },
+ {
+  "id": "GR6.857.2",
+  "gr": "6.857.2",
+  "page": 808,
+  "status": "ok",
+  "lhs": "Integrate[x^(sigma - 2)*E^(-a^2*x^2/2)*BesselK[mu, a^2*x^2/2]*StruveH[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/2^(nu + 2)*a^(-nu - sigma)*b^(nu + 1)*Gamma[(nu + sigma)/2 + mu]*Gamma[(nu + sigma)/2 - mu]/(Gamma[3/2]*Gamma[nu + 3/2]*Gamma[(nu + sigma)/2])*HypergeometricPFQ[{1, (nu + sigma)/2 + mu, (nu + sigma)/2 - mu}, {3/2, nu + 3/2, (nu + sigma)/2}, -b^2/(4*a^2)]"
+  ],
+  "conds": [
+   "b > 0",
+   "Abs[Arg[a]] < Pi/4",
+   "Re[sigma + nu] > 2*Abs[Re[mu]]"
+  ],
+  "cite": "ET II 167(23)",
+  "edition_note": "",
+  "section": "6.84-6.85 Combinations of Struve and Bessel functions",
+  "tex": "int_0^inf x^(sigma-2) exp(-a^2x^2/2) K_mu(a^2x^2/2) H_nu(bx) dx = sqrt(pi)/2^(nu+2) a^(-nu-sigma) b^(nu+1) Gamma((nu+sigma)/2+mu) Gamma((nu+sigma)/2-mu)/(Gamma(3/2) Gamma(nu+3/2) Gamma((nu+sigma)/2)) 3F3(1,(nu+sigma)/2+mu,(nu+sigma)/2-mu;3/2,nu+3/2,(nu+sigma)/2;-b^2/(4a^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.861.1",
+  "gr": "6.861.1",
+  "page": 809,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(lam - 1)*LommelS2[mu, nu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[(1 + lam + mu)/2]*Gamma[(1 - lam - mu)/2]*Gamma[(1 + mu + nu)/2]*Gamma[(1 + mu - nu)/2]/(2^(2 - lam - mu)*Gamma[(nu - lam)/2 + 1]*Gamma[1 - (lam + nu)/2])"
+  ],
+  "conds": [
+   "-Re[mu] < Re[lam] + 1",
+   "Re[lam] + 1 < 5/2"
+  ],
+  "cite": "ET II 385(17)",
+  "edition_note": "",
+  "section": "6.86 Lommel functions",
+  "tex": "int_0^inf x^(lam-1) S_(mu,nu)(x) dx = Gamma((1+lam+mu)/2) Gamma((1-lam-mu)/2) Gamma((1+mu+nu)/2) Gamma((1+mu-nu)/2)/(2^(2-lam-mu) Gamma((nu-lam)/2+1) Gamma(1-(lam+nu)/2))",
+  "note": "",
+  "reason": "Lommel s_{mu,nu}/S_{mu,nu} (LommelS1/LommelS2)"
+ },
+ {
+  "id": "GR6.862.1",
+  "gr": "6.862.1",
+  "page": 809,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(lam - mu/2 - 1/2)*(u - x)^(sigma - 1)*LommelS1[mu, nu, a*Sqrt[x]], {x, 0, u}]",
+  "rhs": [
+   "Gamma[sigma]*a^(mu + 1)*u^(lam + sigma)*Gamma[lam + 1]/((mu - nu + 1)*(mu + nu + 1)*Gamma[lam + sigma + 1])*HypergeometricPFQ[{1, 1 + lam}, {(mu - nu + 3)/2, (mu + nu + 3)/2, lam + sigma + 1}, -a^2*u/4]"
+  ],
+  "conds": [
+   "Re[lam] > -1",
+   "Re[sigma] > 0",
+   "u > 0"
+  ],
+  "cite": "ET II 199(92)",
+  "edition_note": "",
+  "section": "6.86 Lommel functions",
+  "tex": "int_0^u x^(lam-mu/2-1/2) (u-x)^(sigma-1) s_(mu,nu)(a sqrt x) dx = Gamma(sigma) a^(mu+1) u^(lam+sigma) Gamma(lam+1)/((mu-nu+1)(mu+nu+1) Gamma(lam+sigma+1)) 2F3(1,1+lam;(mu-nu+3)/2,(mu+nu+3)/2,lam+sigma+1;-a^2u/4)",
+  "note": "u > 0 implied by the limits",
+  "reason": "Lommel s_{mu,nu}/S_{mu,nu} (LommelS1/LommelS2)"
+ },
+ {
+  "id": "GR6.862.2",
+  "gr": "6.862.2",
+  "page": 809,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(nu/2)*(x - u)^(mu - 1)*LommelS1[lam, nu, a*Sqrt[x]], {x, u, Infinity}]",
+  "rhs": [
+   "Beta[mu, (1 - lam - nu)/2 - mu]*u^(mu/2 + nu/2)/a^mu*LommelS2[lam + mu, mu + nu, a*Sqrt[u]]"
+  ],
+  "conds": [
+   "Abs[Arg[a*Sqrt[u]]] < Pi",
+   "0 < 2*Re[mu]",
+   "2*Re[mu] < 1 - Re[lam + nu]",
+   "u > 0"
+  ],
+  "cite": "ET II 211(71)",
+  "edition_note": "",
+  "section": "6.86 Lommel functions",
+  "tex": "int_u^inf x^(nu/2) (x-u)^(mu-1) s_(lam,nu)(a sqrt x) dx = B(mu,(1-lam-nu)/2-mu) u^(mu/2+nu/2)/a^mu S_(lam+mu,mu+nu)(a sqrt u)",
+  "note": "u > 0 implied by the limits",
+  "reason": "Lommel s_{mu,nu}/S_{mu,nu} (LommelS1/LommelS2)"
+ },
+ {
+  "id": "GR6.863",
+  "gr": "6.863",
+  "page": 809,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sqrt[x]*E^(-alpha*x)*LommelS1[mu, 1/4, x^2/2], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-2*mu - 1)*Sqrt[alpha]*Gamma[2*mu + 3/2]*LommelS2[-mu - 1, 1/4, alpha^2/2]"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Re[mu] > -3/4"
+  ],
+  "cite": "ET I 209(38)",
+  "edition_note": "",
+  "section": "6.86 Lommel functions",
+  "tex": "int_0^inf sqrt(x) e^(-alpha x) s_(mu,1/4)(x^2/2) dx = 2^(-2mu-1) sqrt(alpha) Gamma(2mu+3/2) S_(-mu-1,1/4)(alpha^2/2)",
+  "note": "",
+  "reason": "Lommel s_{mu,nu}/S_{mu,nu} (LommelS1/LommelS2)"
+ },
+ {
+  "id": "GR6.864",
+  "gr": "6.864",
+  "page": 809,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^((mu + 1)*x)*LommelS1[mu, nu, a*Sinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(mu - 2)*Pi*Csc[mu*Pi]*Gamma[(mu + nu + 1)/2]*Gamma[(mu - nu + 1)/2]*(BesselI[(mu + nu + 1)/2, a/2]*BesselI[(mu - nu + 1)/2, a/2] - BesselI[-(mu + nu + 1)/2, a/2]*BesselI[-(mu - nu + 1)/2, a/2])"
+  ],
+  "conds": [
+   "a > 0",
+   "-2 < Re[mu] < 0"
+  ],
+  "cite": "ET II 386(22)",
+  "edition_note": "",
+  "section": "6.86 Lommel functions",
+  "tex": "int_0^inf exp((mu+1)x) s_(mu,nu)(a sinh x) dx = 2^(mu-2) pi cosec(mu pi) Gamma(rho) Gamma(sigma) [I_rho(a/2) I_sigma(a/2) - I_(-rho)(a/2) I_(-sigma)(a/2)], 2rho = mu+nu+1, 2sigma = mu-nu+1",
+  "note": "rho = (mu+nu+1)/2, sigma = (mu-nu+1)/2 substituted",
+  "reason": "Lommel s_{mu,nu}/S_{mu,nu} (LommelS1/LommelS2)"
+ },
+ {
+  "id": "GR6.865",
+  "gr": "6.865",
+  "page": 809,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sqrt[Sinh[x]]*Cosh[nu*x]*LommelS2[mu, 1/2, a*Cosh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Beta[1/4 - (mu + nu)/2, 1/4 - (mu - nu)/2]/(Sqrt[a]*2^(mu + 3/2))*LommelS2[mu + 1/2, nu, a]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[mu] + Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 388(31)",
+  "edition_note": "",
+  "section": "6.86 Lommel functions",
+  "tex": "int_0^inf sqrt(sinh x) cosh(nu x) S_(mu,1/2)(a cosh x) dx = B(1/4-(mu+nu)/2, 1/4-(mu-nu)/2)/(sqrt(a) 2^(mu+3/2)) S_(mu+1/2,nu)(a)",
+  "note": "",
+  "reason": "Lommel s_{mu,nu}/S_{mu,nu} (LommelS1/LommelS2)"
+ },
+ {
+  "id": "GR6.866.1a",
+  "gr": "6.866.1a",
+  "page": 809,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(-mu - 1)*Cos[a*x]*LommelS1[mu, nu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a > 1"
+  ],
+  "cite": "ET II 386(18)",
+  "edition_note": "",
+  "section": "6.86 Lommel functions",
+  "tex": "int_0^inf x^(-mu-1) cos(ax) s_(mu,nu)(x) dx = 0 [a>1]",
+  "note": "",
+  "reason": "Lommel s_{mu,nu}/S_{mu,nu} (LommelS1/LommelS2)"
+ },
+ {
+  "id": "GR6.866.1b",
+  "gr": "6.866.1b",
+  "page": 809,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(-mu - 1)*Cos[a*x]*LommelS1[mu, nu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(mu - 1/2)*Sqrt[Pi]*Gamma[(mu + nu + 1)/2]*Gamma[(mu - nu + 1)/2]*(1 - a^2)^(mu/2 + 1/4)*LegendreP[nu - 1/2, mu - 1/2, a]"
+  ],
+  "conds": [
+   "0 < a < 1"
+  ],
+  "cite": "ET II 386(18)",
+  "edition_note": "",
+  "section": "6.86 Lommel functions",
+  "tex": "int_0^inf x^(-mu-1) cos(ax) s_(mu,nu)(x) dx = 2^(mu-1/2) sqrt(pi) Gamma((mu+nu+1)/2) Gamma((mu-nu+1)/2) (1-a^2)^(mu/2+1/4) P^(mu-1/2)_(nu-1/2)(a) [0<a<1]",
+  "note": "P is Ferrers (0 < a < 1)",
+  "reason": "Lommel s_{mu,nu}/S_{mu,nu} (LommelS1/LommelS2)"
+ },
+ {
+  "id": "GR6.866.2",
+  "gr": "6.866.2",
+  "page": 809,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(-mu)*Sin[a*x]*LommelS2[mu, nu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-mu - 1/2)*Sqrt[Pi]*Gamma[1 - (mu + nu)/2]*Gamma[1 - (mu - nu)/2]*(a^2 - 1)^(mu/2 - 1/4)*LegendreP[nu - 1/2, mu - 1/2, 3, a]"
+  ],
+  "conds": [
+   "a > 1",
+   "Re[mu] < 1 - Abs[Re[nu]]"
+  ],
+  "cite": "ET II 387(23)",
+  "edition_note": "",
+  "section": "6.86 Lommel functions",
+  "tex": "int_0^inf x^(-mu) sin(ax) S_(mu,nu)(x) dx = 2^(-mu-1/2) sqrt(pi) Gamma(1-(mu+nu)/2) Gamma(1-(mu-nu)/2) (a^2-1)^(mu/2-1/4) P^(mu-1/2)_(nu-1/2)(a)",
+  "note": "P is type 3 (a > 1)",
+  "reason": "Lommel s_{mu,nu}/S_{mu,nu} (LommelS1/LommelS2)"
+ }
+]

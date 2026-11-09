@@ -1,0 +1,1530 @@
+[
+ {
+  "id": "GR6.541.3",
+  "gr": "6.541.3",
+  "page": 722,
+  "status": "ok",
+  "lhs": "Integrate[x^(alpha - 1)/(x^2 + z^2)^rho*BesselJ[mu, c*x]*BesselJ[nu, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(1/2)*(c/2)^(2*rho - alpha)*Gamma[(mu + nu + alpha)/2 - rho]*Gamma[1 + 2*rho - alpha]/(Gamma[(mu - nu - alpha)/2 + rho + 1]*Gamma[(mu + nu - alpha)/2 + rho + 1]*Gamma[(nu - mu - alpha)/2 + rho + 1])*HypergeometricPFQ[{(1 - alpha)/2 + rho, 1 - alpha/2 + rho, rho}, {rho + 1 - (mu + nu + alpha)/2, rho + 1 + (mu - nu - alpha)/2, rho + 1 + (mu + nu - alpha)/2, rho + 1 + (nu - mu - alpha)/2}, c^2*z^2] + z^(alpha - 2*rho)/2*(c*z/2)^(mu + nu)*Gamma[rho - (alpha + mu + nu)/2]*Gamma[(alpha + mu + nu)/2]/(Gamma[rho]*Gamma[mu + 1]*Gamma[nu + 1])*HypergeometricPFQ[{(1 + mu + nu)/2, 1 + (mu + nu)/2, (alpha + mu + nu)/2}, {1 - rho + (alpha + mu + nu)/2, mu + 1, nu + 1, mu + nu + 1}, c^2*z^2]"
+  ],
+  "conds": [
+   "c > 0",
+   "Re[z] > 0",
+   "Re[alpha + mu + nu] > 0",
+   "Re[alpha - 2*rho] < 1"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int_0^inf x^(alpha-1)/(x^2+z^2)^rho J_mu(cx) J_nu(cx) dx = 1/2 (c/2)^(2rho-alpha) Gamma[...] 3F4(...;c^2z^2) + z^(alpha-2rho)/2 (cz/2)^(mu+nu) Gamma[...] 3F4(...;c^2z^2)",
+  "note": "Book prints condition Re(alpha - 2 rho) > 1; convergence at infinity (non-oscillatory part of J_mu J_nu ~ 1/x) requires Re(alpha - 2 rho) < 1, used here (misprint in condition). No cite printed."
+ },
+ {
+  "id": "GR6.542",
+  "gr": "6.542",
+  "page": 722,
+  "status": "ok",
+  "lhs": "Integrate[(BesselJ[nu, a*x]*BesselY[nu, b*x] - BesselJ[nu, b*x]*BesselY[nu, a*x])/(x*(BesselJ[nu, b*x]^2 + BesselY[nu, b*x]^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "-(Pi/2)*(b/a)^nu"
+  ],
+  "conds": [
+   "0 < b < a"
+  ],
+  "cite": "ET II 352(16)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int_0^inf [J_nu(ax)Y_nu(bx) - J_nu(bx)Y_nu(ax)] / (x {J_nu(bx)^2 + Y_nu(bx)^2}) dx = -pi/2 (b/a)^nu",
+  "note": ""
+ },
+ {
+  "id": "GR6.543",
+  "gr": "6.543",
+  "page": 722,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[mu, b*x]*(Cos[(nu - mu)*Pi/2]*BesselJ[nu, a*x] - Sin[(nu - mu)*Pi/2]*BesselY[nu, a*x])*x/(x^2 + r^2), {x, 0, Infinity}]",
+  "rhs": [
+   "BesselI[mu, b*r]*BesselK[nu, a*r]"
+  ],
+  "conds": [
+   "Re[r] > 0",
+   "a >= b > 0",
+   "Re[mu] > Abs[Re[nu]] - 2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int_0^inf J_mu(bx) {cos[(nu-mu)pi/2] J_nu(ax) - sin[(nu-mu)pi/2] Y_nu(ax)} x dx/(x^2+r^2) = I_mu(br) K_nu(ar)",
+  "note": ""
+ },
+ {
+  "id": "GR6.544.1",
+  "gr": "6.544.1",
+  "page": 722,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, a/x]*BesselY[nu, x/b]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "-(1/a)*((2/Pi)*BesselK[2*nu, 2*Sqrt[a]/Sqrt[b]] - BesselY[2*nu, 2*Sqrt[a]/Sqrt[b]])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "EI II 357(47)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int_0^inf J_nu(a/x) Y_nu(x/b) dx/x^2 = -1/a [2/pi K_2nu(2 sqrt(a)/sqrt(b)) - Y_2nu(2 sqrt(a)/sqrt(b))]",
+  "note": "Cite printed as 'EI II 357(47)' (probably ET)."
+ },
+ {
+  "id": "GR6.544.2",
+  "gr": "6.544.2",
+  "page": 722,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, a/x]*BesselJ[nu, x/b]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(1/a)*BesselJ[2*nu, 2*Sqrt[a]/Sqrt[b]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 57(10)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int_0^inf J_nu(a/x) J_nu(x/b) dx/x^2 = 1/a J_2nu(2 sqrt(a/b))",
+  "note": ""
+ },
+ {
+  "id": "GR6.544.3",
+  "gr": "6.544.3",
+  "page": 722,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, a/x]*BesselK[nu, x/b]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(1/a)*E^(I*nu*Pi/2)*BesselK[2*nu, 2*Sqrt[a]/Sqrt[b]*E^(I*Pi/4)] + (1/a)*E^(-I*nu*Pi/2)*BesselK[2*nu, 2*Sqrt[a]/Sqrt[b]*E^(-I*Pi/4)]"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "a > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 142(32)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int_0^inf J_nu(a/x) K_nu(x/b) dx/x^2 = 1/a e^(i nu pi/2) K_2nu(2sqrt(a/b) e^(i pi/4)) + 1/a e^(-i nu pi/2) K_2nu(2sqrt(a/b) e^(-i pi/4))",
+  "note": ""
+ },
+ {
+  "id": "GR6.544.4",
+  "gr": "6.544.4",
+  "page": 722,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[nu, a/x]*BesselJ[nu, x/b]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2/(a*Pi)*(BesselK[2*nu, 2*Sqrt[a]/Sqrt[b]] + (Pi/2)*BesselY[2*nu, 2*Sqrt[a]/Sqrt[b]])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 62(38)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int_0^inf Y_nu(a/x) J_nu(x/b) dx/x^2 = 2/(a pi) [K_2nu(2sqrt(a/b)) + pi/2 Y_2nu(2sqrt(a/b))]",
+  "note": ""
+ },
+ {
+  "id": "GR6.544.5",
+  "gr": "6.544.5",
+  "page": 722,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[nu, a/x]*BesselK[nu, x/b]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(4/a)*(E^(I*(nu + 1)*Pi/2)*BesselK[2*nu, 2*Sqrt[a]/Sqrt[b]*E^(I*Pi/4)] + E^(-I*(nu + 1)*Pi/2)*BesselK[2*nu, 2*Sqrt[a]/Sqrt[b]*E^(-I*Pi/4)])",
+   "(1/a)*(E^(I*(nu + 1)*Pi/2)*BesselK[2*nu, 2*Sqrt[a]/Sqrt[b]*E^(I*Pi/4)] + E^(-I*(nu + 1)*Pi/2)*BesselK[2*nu, 2*Sqrt[a]/Sqrt[b]*E^(-I*Pi/4)])"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "a > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 143(38)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int_0^inf Y_nu(a/x) K_nu(x/b) dx/x^2 = 4/a [e^(i(nu+1)pi/2) K_2nu(2sqrt(a/b)e^(i pi/4)) + e^(-i(nu+1)pi/2) K_2nu(2sqrt(a/b)e^(-i pi/4))]",
+  "note": "Prefactor printed 4/a; writing Y_nu = (J_nu cos nu pi - J_-nu)/sin nu pi in 6.544.3 gives 1/a (second candidate)."
+ },
+ {
+  "id": "GR6.544.6",
+  "gr": "6.544.6",
+  "page": 723,
+  "status": "ok",
+  "lhs": "Integrate[BesselK[nu, a/x]*BesselJ[nu, x/b]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(I/a)*(E^(I*nu*Pi/2)*BesselK[2*nu, E^(I*Pi/4)*2*Sqrt[a]/Sqrt[b]] - E^(-I*nu*Pi/2)*BesselK[2*nu, E^(-I*Pi/4)*2*Sqrt[a]/Sqrt[b]])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Abs[Re[nu]] < 5/2"
+  ],
+  "cite": "ET II 70(19)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int_0^inf K_nu(a/x) J_nu(x/b) dx/x^2 = i/a [e^(i nu pi/2) K_2nu(e^(i pi/4) 2sqrt(a/b)) - e^(-i nu pi/2) K_2nu(e^(-i pi/4) 2sqrt(a/b))]",
+  "note": ""
+ },
+ {
+  "id": "GR6.544.7",
+  "gr": "6.544.7",
+  "page": 723,
+  "status": "ok",
+  "lhs": "Integrate[BesselK[nu, a/x]*BesselY[nu, x/b]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(2/a)*(Sin[3*nu*Pi/2]*KelvinKei[2*nu, 2*Sqrt[a]/Sqrt[b]] - Cos[3*nu*Pi/2]*KelvinKer[2*nu, 2*Sqrt[a]/Sqrt[b]])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Abs[Re[nu]] < 5/2"
+  ],
+  "cite": "ET II 113(29)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int_0^inf K_nu(a/x) Y_nu(x/b) dx/x^2 = 2/a [sin(3 nu pi/2) kei_2nu(2sqrt(a/b)) - cos(3 nu pi/2) ker_2nu(2sqrt(a/b))]",
+  "note": ""
+ },
+ {
+  "id": "GR6.544.8",
+  "gr": "6.544.8",
+  "page": 723,
+  "status": "ok",
+  "lhs": "Integrate[BesselK[nu, a/x]*BesselK[nu, x/b]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/a)*BesselK[2*nu, 2*Sqrt[a]/Sqrt[b]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0"
+  ],
+  "cite": "ET II 146(55)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int_0^inf K_nu(a/x) K_nu(x/b) dx/x^2 = pi/a K_2nu(2sqrt(a/b))",
+  "note": ""
+ },
+ {
+  "id": "GR6.551.1",
+  "gr": "6.551.1",
+  "page": 723,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(1/2)*BesselJ[nu, x*y], {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[2]*y^(-3/2)*Gamma[3/4 + nu/2]/Gamma[1/4 + nu/2] + y^(-1/2)*((nu - 1/2)*BesselJ[nu, y]*LommelS2[-1/2, nu - 1, y] - BesselJ[nu - 1, y]*LommelS2[1/2, nu, y])"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -3/2"
+  ],
+  "cite": "ET II 21(1)",
+  "edition_note": "10",
+  "section": "6.55 Combinations of Bessel functions and algebraic functions",
+  "tex": "int_0^1 x^(1/2) J_nu(xy) dx = sqrt2 y^(-3/2) Gamma(3/4+nu/2)/Gamma(1/4+nu/2) + y^(-1/2)[(nu-1/2) J_nu(y) S_{-1/2,nu-1}(y) - J_{nu-1}(y) S_{1/2,nu}(y)]",
+  "note": "",
+  "reason": "Lommel function S_{mu,nu}"
+ },
+ {
+  "id": "GR6.551.2",
+  "gr": "6.551.2",
+  "page": 723,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(1/2)*BesselJ[nu, x*y], {x, 1, Infinity}]",
+  "rhs": [
+   "y^(-1/2)*(BesselJ[nu - 1, y]*LommelS2[1/2, nu, y] + (1/2 - nu)*BesselJ[nu, y]*LommelS2[-1/2, nu - 1, y])"
+  ],
+  "conds": [
+   "y > 0"
+  ],
+  "cite": "ET II 22(2)",
+  "edition_note": "10",
+  "section": "6.55 Combinations of Bessel functions and algebraic functions",
+  "tex": "int_1^inf x^(1/2) J_nu(xy) dx = y^(-1/2)[J_{nu-1}(y) S_{1/2,nu}(y) + (1/2-nu) J_nu(y) S_{-1/2,nu-1}(y)]",
+  "note": "Integral is not absolutely convergent (x^(1/2) J_nu ~ cos); Abel/limit sense.",
+  "reason": "Lommel function S_{mu,nu}"
+ },
+ {
+  "id": "GR6.552.1",
+  "gr": "6.552.1",
+  "page": 723,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, x*y]/(x^2 + a^2)^(1/2), {x, 0, Infinity}]",
+  "rhs": [
+   "BesselI[nu/2, a*y/2]*BesselK[nu/2, a*y/2]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "y > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 23(11), WA 477(3), MO 44",
+  "edition_note": "",
+  "section": "6.55 Combinations of Bessel functions and algebraic functions",
+  "tex": "int_0^inf J_nu(xy) dx/sqrt(x^2+a^2) = I_{nu/2}(ay/2) K_{nu/2}(ay/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.552.2",
+  "gr": "6.552.2",
+  "page": 723,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[nu, x*y]/(x^2 + a^2)^(1/2), {x, 0, Infinity}]",
+  "rhs": [
+   "-(1/Pi)*Sec[nu*Pi/2]*BesselK[nu/2, a*y/2]*(BesselK[nu/2, a*y/2] + Pi*Sin[nu*Pi/2]*BesselI[nu/2, a*y/2])"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[a] > 0",
+   "Abs[Re[nu]] < 1"
+  ],
+  "cite": "ET II 100(18)",
+  "edition_note": "",
+  "section": "6.55 Combinations of Bessel functions and algebraic functions",
+  "tex": "int_0^inf Y_nu(xy) dx/sqrt(x^2+a^2) = -1/pi sec(nu pi/2) K_{nu/2}(ay/2)[K_{nu/2}(ay/2) + pi sin(nu pi/2) I_{nu/2}(ay/2)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.552.3",
+  "gr": "6.552.3",
+  "page": 723,
+  "status": "ok",
+  "lhs": "Integrate[BesselK[nu, x*y]/(x^2 + a^2)^(1/2), {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi^2/8)*Sec[nu*Pi/2]*(BesselJ[nu/2, a*y/2]^2 + BesselY[nu/2, a*y/2]^2)"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[y] > 0",
+   "Abs[Re[nu]] < 1"
+  ],
+  "cite": "ET II 128(6)",
+  "edition_note": "",
+  "section": "6.55 Combinations of Bessel functions and algebraic functions",
+  "tex": "int_0^inf K_nu(xy) dx/sqrt(x^2+a^2) = pi^2/8 sec(nu pi/2) {J_{nu/2}(ay/2)^2 + Y_{nu/2}(ay/2)^2}",
+  "note": ""
+ },
+ {
+  "id": "GR6.552.4",
+  "gr": "6.552.4",
+  "page": 723,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, x*y]/(1 - x^2)^(1/2), {x, 0, 1}]",
+  "rhs": [
+   "(Pi/2)*BesselJ[nu/2, y/2]^2"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 24(22)a",
+  "edition_note": "",
+  "section": "6.55 Combinations of Bessel functions and algebraic functions",
+  "tex": "int_0^1 J_nu(xy) dx/sqrt(1-x^2) = pi/2 J_{nu/2}(y/2)^2",
+  "note": ""
+ },
+ {
+  "id": "GR6.552.5",
+  "gr": "6.552.5",
+  "page": 723,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[0, x*y]/(1 - x^2)^(1/2), {x, 0, 1}]",
+  "rhs": [
+   "(Pi/2)*BesselJ[0, y/2]*BesselY[0, y/2]"
+  ],
+  "conds": [
+   "y > 0"
+  ],
+  "cite": "ET II 102(26)a",
+  "edition_note": "",
+  "section": "6.55 Combinations of Bessel functions and algebraic functions",
+  "tex": "int_0^1 Y_0(xy) dx/sqrt(1-x^2) = pi/2 J_0(y/2) Y_0(y/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.552.6",
+  "gr": "6.552.6",
+  "page": 723,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, x*y]/(x^2 - 1)^(1/2), {x, 1, Infinity}]",
+  "rhs": [
+   "-(Pi/2)*BesselJ[nu/2, y/2]*BesselY[nu/2, y/2]"
+  ],
+  "conds": [
+   "y > 0"
+  ],
+  "cite": "ET II 24(23)a",
+  "edition_note": "",
+  "section": "6.55 Combinations of Bessel functions and algebraic functions",
+  "tex": "int_1^inf J_nu(xy) dx/sqrt(x^2-1) = -pi/2 J_{nu/2}(y/2) Y_{nu/2}(y/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.552.7",
+  "gr": "6.552.7",
+  "page": 724,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[nu, x*y]/(x^2 - 1)^(1/2), {x, 1, Infinity}]",
+  "rhs": [
+   "(Pi/4)*(BesselJ[nu/2, y/2]^2 - BesselY[nu/2, y/2]^2)"
+  ],
+  "conds": [
+   "y > 0"
+  ],
+  "cite": "ET II 102(27)",
+  "edition_note": "",
+  "section": "6.55 Combinations of Bessel functions and algebraic functions",
+  "tex": "int_1^inf Y_nu(xy) dx/sqrt(x^2-1) = pi/4 {J_{nu/2}(y/2)^2 - Y_{nu/2}(y/2)^2}",
+  "note": ""
+ },
+ {
+  "id": "GR6.553",
+  "gr": "6.553",
+  "page": 724,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1/2)*BesselI[nu, x]*BesselK[nu, x]*BesselK[mu, 2*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1/4 + mu/2]*Gamma[1/4 - mu/2]*Gamma[1/4 + nu + mu/2]*Gamma[1/4 + nu - mu/2]/(4*Gamma[3/4 + nu + mu/2]*Gamma[3/4 + nu - mu/2])"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1/2",
+   "2*Re[nu] > Abs[Re[mu]] - 1/2"
+  ],
+  "cite": "ET II 372(2)",
+  "edition_note": "",
+  "section": "6.55 Combinations of Bessel functions and algebraic functions",
+  "tex": "int_0^inf x^(-1/2) I_nu(x) K_nu(x) K_mu(2x) dx = Gamma(1/4+mu/2)Gamma(1/4-mu/2)Gamma(1/4+nu+mu/2)Gamma(1/4+nu-mu/2)/(4 Gamma(3/4+nu+mu/2)Gamma(3/4+nu-mu/2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.554.1",
+  "gr": "6.554.1",
+  "page": 724,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[0, x*y]/(a^2 + x^2)^(1/2), {x, 0, Infinity}]",
+  "rhs": [
+   "y^(-1)*E^(-a*y)"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[a] > 0"
+  ],
+  "cite": "ET II 7(4)",
+  "edition_note": "",
+  "section": "6.55 Combinations of Bessel functions and algebraic functions",
+  "tex": "int_0^inf x J_0(xy) dx/sqrt(a^2+x^2) = e^(-ay)/y",
+  "note": ""
+ },
+ {
+  "id": "GR6.554.2",
+  "gr": "6.554.2",
+  "page": 724,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[0, x*y]/(1 - x^2)^(1/2), {x, 0, 1}]",
+  "rhs": [
+   "y^(-1)*Sin[y]"
+  ],
+  "conds": [
+   "y > 0"
+  ],
+  "cite": "ET II 7(5)a",
+  "edition_note": "",
+  "section": "6.55 Combinations of Bessel functions and algebraic functions",
+  "tex": "int_0^1 x J_0(xy) dx/sqrt(1-x^2) = sin(y)/y",
+  "note": ""
+ },
+ {
+  "id": "GR6.554.3",
+  "gr": "6.554.3",
+  "page": 724,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[0, x*y]/(x^2 - 1)^(1/2), {x, 1, Infinity}]",
+  "rhs": [
+   "y^(-1)*Cos[y]"
+  ],
+  "conds": [
+   "y > 0"
+  ],
+  "cite": "ET II 7(6)a",
+  "edition_note": "",
+  "section": "6.55 Combinations of Bessel functions and algebraic functions",
+  "tex": "int_1^inf x J_0(xy) dx/sqrt(x^2-1) = cos(y)/y",
+  "note": ""
+ },
+ {
+  "id": "GR6.554.4",
+  "gr": "6.554.4",
+  "page": 724,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[0, x*y]/(x^2 + a^2)^(3/2), {x, 0, Infinity}]",
+  "rhs": [
+   "a^(-1)*E^(-a*y)"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[a] > 0"
+  ],
+  "cite": "ET II 7(7)a",
+  "edition_note": "",
+  "section": "6.55 Combinations of Bessel functions and algebraic functions",
+  "tex": "int_0^inf x J_0(xy) dx/(x^2+a^2)^(3/2) = e^(-ay)/a",
+  "note": ""
+ },
+ {
+  "id": "GR6.554.5",
+  "gr": "6.554.5",
+  "page": 724,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*BesselJ[nu, a*x]/(x^4 + 4*k^4)^(nu + 1/2), {x, 0, Infinity}]",
+  "rhs": [
+   "(a/2)^nu*Sqrt[Pi]/((2*k)^(2*nu)*Gamma[nu + 1/2])*BesselJ[nu, a*k]*BesselK[nu, a*k]"
+  ],
+  "conds": [
+   "a > 0",
+   "Abs[Arg[k]] < Pi/4",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "WA 473(1)",
+  "edition_note": "11",
+  "section": "6.55 Combinations of Bessel functions and algebraic functions",
+  "tex": "int_0^inf x^(nu+1) J_nu(ax)/(x^4+4k^4)^(nu+1/2) dx = (a/2)^nu sqrt(pi)/((2k)^(2nu) Gamma(nu+1/2)) J_nu(ak) K_nu(ak)",
+  "note": "Book prints |arg k| > pi/4; with that x^4 + 4k^4 can vanish on the path, so |arg k| < pi/4 is used (misprint in condition)."
+ },
+ {
+  "id": "GR6.555",
+  "gr": "6.555",
+  "page": 724,
+  "status": "ok",
+  "lhs": "Integrate[x^(1/2)*BesselJ[2*nu - 1, a*x^(1/2)]*BesselY[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "-(a/(2*y^2))*StruveH[nu - 1, a^2/(4*y)]"
+  ],
+  "conds": [
+   "a > 0",
+   "y > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 111(17)",
+  "edition_note": "",
+  "section": "6.55 Combinations of Bessel functions and algebraic functions",
+  "tex": "int_0^inf x^(1/2) J_{2nu-1}(a x^(1/2)) Y_nu(xy) dx = -a/(2y^2) H_{nu-1}(a^2/(4y))",
+  "note": ""
+ },
+ {
+  "id": "GR6.556",
+  "gr": "6.556",
+  "page": 724,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, a*(x^2 + 1)^(1/2)]/Sqrt[x^2 + 1], {x, 0, Infinity}]",
+  "rhs": [
+   "-(Pi/2)*BesselJ[nu/2, a/2]*BesselY[nu/2, a/2]"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "a > 0"
+  ],
+  "cite": "MO 46",
+  "edition_note": "",
+  "section": "6.55 Combinations of Bessel functions and algebraic functions",
+  "tex": "int_0^inf J_nu(a sqrt(x^2+1)) dx/sqrt(x^2+1) = -pi/2 J_{nu/2}(a/2) Y_{nu/2}(a/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.561.1",
+  "gr": "6.561.1",
+  "page": 724,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*BesselJ[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "2^(nu - 1)*a^(-nu)*Pi^(1/2)*Gamma[nu + 1/2]*(BesselJ[nu, a]*StruveH[nu - 1, a] - StruveH[nu, a]*BesselJ[nu - 1, a])"
+  ],
+  "conds": [
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 333(2)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^nu J_nu(ax) dx = 2^(nu-1) a^-nu sqrt(pi) Gamma(nu+1/2)[J_nu(a) H_{nu-1}(a) - H_nu(a) J_{nu-1}(a)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.561.2",
+  "gr": "6.561.2",
+  "page": 724,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*BesselY[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "2^(nu - 1)*a^(-nu)*Pi^(1/2)*Gamma[nu + 1/2]*(BesselY[nu, a]*StruveH[nu - 1, a] - StruveH[nu, a]*BesselY[nu - 1, a])"
+  ],
+  "conds": [
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 338(43)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^nu Y_nu(ax) dx = 2^(nu-1) a^-nu sqrt(pi) Gamma(nu+1/2)[Y_nu(a) H_{nu-1}(a) - H_nu(a) Y_{nu-1}(a)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.561.3",
+  "gr": "6.561.3",
+  "page": 724,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*BesselI[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "2^(nu - 1)*a^(-nu)*Pi^(1/2)*Gamma[nu + 1/2]*(BesselI[nu, a]*StruveL[nu - 1, a] - StruveL[nu, a]*BesselI[nu - 1, a])"
+  ],
+  "conds": [
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 364(2)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^nu I_nu(ax) dx = 2^(nu-1) a^-nu sqrt(pi) Gamma(nu+1/2)[I_nu(a) L_{nu-1}(a) - L_nu(a) I_{nu-1}(a)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.561.4",
+  "gr": "6.561.4",
+  "page": 725,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*BesselK[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "2^(nu - 1)*a^(-nu)*Pi^(1/2)*Gamma[nu + 1/2]*(BesselK[nu, a]*StruveL[nu - 1, a] + StruveL[nu, a]*BesselK[nu - 1, a])"
+  ],
+  "conds": [
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 367(21)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^nu K_nu(ax) dx = 2^(nu-1) a^-nu sqrt(pi) Gamma(nu+1/2)[K_nu(a) L_{nu-1}(a) + L_nu(a) K_{nu-1}(a)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.561.5",
+  "gr": "6.561.5",
+  "page": 725,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*BesselJ[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "a^(-1)*BesselJ[nu + 1, a]"
+  ],
+  "conds": [
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 333(3)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^(nu+1) J_nu(ax) dx = J_{nu+1}(a)/a",
+  "note": ""
+ },
+ {
+  "id": "GR6.561.6",
+  "gr": "6.561.6",
+  "page": 725,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*BesselY[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "a^(-1)*BesselY[nu + 1, a] + 2^(nu + 1)*a^(-nu - 2)*Pi^(-1)*Gamma[nu + 1]"
+  ],
+  "conds": [
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 339(44)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^(nu+1) Y_nu(ax) dx = Y_{nu+1}(a)/a + 2^(nu+1) a^(-nu-2) Gamma(nu+1)/pi",
+  "note": ""
+ },
+ {
+  "id": "GR6.561.7",
+  "gr": "6.561.7",
+  "page": 725,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*BesselI[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "a^(-1)*BesselI[nu + 1, a]"
+  ],
+  "conds": [
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 365(3)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^(nu+1) I_nu(ax) dx = I_{nu+1}(a)/a",
+  "note": ""
+ },
+ {
+  "id": "GR6.561.8",
+  "gr": "6.561.8",
+  "page": 725,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*BesselK[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "2^nu*a^(-nu - 2)*Gamma[nu + 1] - a^(-1)*BesselK[nu + 1, a]"
+  ],
+  "conds": [
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 367(22)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^(nu+1) K_nu(ax) dx = 2^nu a^(-nu-2) Gamma(nu+1) - K_{nu+1}(a)/a",
+  "note": ""
+ },
+ {
+  "id": "GR6.561.9",
+  "gr": "6.561.9",
+  "page": 725,
+  "status": "ok",
+  "lhs": "Integrate[x^(1 - nu)*BesselJ[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "a^(nu - 2)/(2^(nu - 1)*Gamma[nu]) - a^(-1)*BesselJ[nu - 1, a]"
+  ],
+  "conds": [],
+  "cite": "ET II 333(4)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^(1-nu) J_nu(ax) dx = a^(nu-2)/(2^(nu-1) Gamma(nu)) - J_{nu-1}(a)/a",
+  "note": ""
+ },
+ {
+  "id": "GR6.561.10",
+  "gr": "6.561.10",
+  "page": 725,
+  "status": "ok",
+  "lhs": "Integrate[x^(1 - nu)*BesselY[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "a^(nu - 2)*Cot[nu*Pi]/(2^(nu - 1)*Gamma[nu]) - a^(-1)*BesselY[nu - 1, a]"
+  ],
+  "conds": [
+   "Re[nu] < 1"
+  ],
+  "cite": "ET II 339(45)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^(1-nu) Y_nu(ax) dx = a^(nu-2) cot(nu pi)/(2^(nu-1) Gamma(nu)) - Y_{nu-1}(a)/a",
+  "note": ""
+ },
+ {
+  "id": "GR6.561.11",
+  "gr": "6.561.11",
+  "page": 725,
+  "status": "ok",
+  "lhs": "Integrate[x^(1 - nu)*BesselI[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "a^(-1)*BesselI[nu - 1, a] - a^(nu - 2)/(2^(nu - 1)*Gamma[nu])"
+  ],
+  "conds": [],
+  "cite": "ET II 365(4)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^(1-nu) I_nu(ax) dx = I_{nu-1}(a)/a - a^(nu-2)/(2^(nu-1) Gamma(nu))",
+  "note": ""
+ },
+ {
+  "id": "GR6.561.12",
+  "gr": "6.561.12",
+  "page": 725,
+  "status": "ok",
+  "lhs": "Integrate[x^(1 - nu)*BesselK[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "2^(-nu)*a^(nu - 2)*Gamma[1 - nu] - a^(-1)*BesselK[nu - 1, a]"
+  ],
+  "conds": [
+   "Re[nu] < 1"
+  ],
+  "cite": "ET II 367(23)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^(1-nu) K_nu(ax) dx = 2^-nu a^(nu-2) Gamma(1-nu) - K_{nu-1}(a)/a",
+  "note": ""
+ },
+ {
+  "id": "GR6.561.13",
+  "gr": "6.561.13",
+  "page": 725,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^mu*BesselJ[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "2^mu*Gamma[(nu + mu + 1)/2]/(a^(mu + 1)*Gamma[(nu - mu + 1)/2]) + a^(-mu)*((mu + nu - 1)*BesselJ[nu, a]*LommelS2[mu - 1, nu - 1, a] - BesselJ[nu - 1, a]*LommelS2[mu, nu, a])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu + nu] > -1"
+  ],
+  "cite": "ET II 22(8)a",
+  "edition_note": "7",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^mu J_nu(ax) dx = 2^mu Gamma((nu+mu+1)/2)/(a^(mu+1) Gamma((nu-mu+1)/2)) + a^-mu {(mu+nu-1) J_nu(a) S_{mu-1,nu-1}(a) - J_{nu-1}(a) S_{mu,nu}(a)}",
+  "note": "",
+  "reason": "Lommel function S_{mu,nu}"
+ },
+ {
+  "id": "GR6.561.14",
+  "gr": "6.561.14",
+  "page": 725,
+  "status": "ok",
+  "lhs": "Integrate[x^mu*BesselJ[nu, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^mu*a^(-mu - 1)*Gamma[1/2 + nu/2 + mu/2]/Gamma[1/2 + nu/2 - mu/2]"
+  ],
+  "conds": [
+   "-Re[nu] - 1 < Re[mu] < 1/2",
+   "a > 0"
+  ],
+  "cite": "EH II 49(19)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^mu J_nu(ax) dx = 2^mu a^(-mu-1) Gamma(1/2+nu/2+mu/2)/Gamma(1/2+nu/2-mu/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.561.15",
+  "gr": "6.561.15",
+  "page": 725,
+  "status": "ok",
+  "lhs": "Integrate[x^mu*BesselY[nu, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^mu*Cot[(nu + 1 - mu)*Pi/2]*a^(-mu - 1)*Gamma[1/2 + nu/2 + mu/2]/Gamma[1/2 + nu/2 - mu/2]"
+  ],
+  "conds": [
+   "Abs[Re[nu]] - 1 < Re[mu] < 1/2",
+   "a > 0"
+  ],
+  "cite": "ET II 97(3)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^mu Y_nu(ax) dx = 2^mu cot[(nu+1-mu)pi/2] a^(-mu-1) Gamma(1/2+nu/2+mu/2)/Gamma(1/2+nu/2-mu/2)",
+  "note": "Book writes |Re nu| - 1 < mu < 1/2 (mu without Re)."
+ },
+ {
+  "id": "GR6.561.16",
+  "gr": "6.561.16",
+  "page": 725,
+  "status": "ok",
+  "lhs": "Integrate[x^mu*BesselK[nu, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(mu - 1)*a^(-mu - 1)*Gamma[(1 + mu + nu)/2]*Gamma[(1 + mu - nu)/2]"
+  ],
+  "conds": [
+   "Re[mu + 1 + nu] > 0",
+   "Re[mu + 1 - nu] > 0",
+   "Re[a] > 0"
+  ],
+  "cite": "EH II 51(27)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^mu K_nu(ax) dx = 2^(mu-1) a^(-mu-1) Gamma((1+mu+nu)/2) Gamma((1+mu-nu)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.561.17",
+  "gr": "6.561.17",
+  "page": 726,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, a*x]/x^(nu - q), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[q/2 + 1/2]/(2^(nu - q)*a^(q - nu + 1)*Gamma[nu - q/2 + 1/2])"
+  ],
+  "conds": [
+   "-1 < Re[q] < Re[nu] - 1/2",
+   "a > 0"
+  ],
+  "cite": "WA 428(1), KU 144(5)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf J_nu(ax)/x^(nu-q) dx = Gamma(q/2+1/2)/(2^(nu-q) a^(q-nu+1) Gamma(nu-q/2+1/2))",
+  "note": "a > 0 not printed; added (implied)."
+ },
+ {
+  "id": "GR6.561.18",
+  "gr": "6.561.18",
+  "page": 726,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[nu, x]/x^(nu - mu), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1/2 + mu/2]*Gamma[1/2 + mu/2 - nu]*Sin[(mu/2 - nu)*Pi]/(2^(nu - mu)*Pi)"
+  ],
+  "conds": [
+   "Abs[Re[nu]] < Re[1 + mu - nu] < 3/2"
+  ],
+  "cite": "WA 430(5)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf Y_nu(x)/x^(nu-mu) dx = Gamma(1/2+mu/2) Gamma(1/2+mu/2-nu) sin((mu/2-nu)pi)/(2^(nu-mu) pi)",
+  "note": ""
+ },
+ {
+  "id": "GR6.561.19",
+  "gr": "6.561.19",
+  "page": 726,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m + n + 1/2)*BesselK[n + 1/2, alpha*x], {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi/2]*Sum[(n + k)!/(k!*(n - k)!)*Gamma[2*m + n - k + 1, 0, alpha]/(alpha^(2*m + n + 3/2)*2^k), {k, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "alpha > 0"
+  ],
+  "cite": "STR",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^(2m+n+1/2) K_{n+1/2}(alpha x) dx = sqrt(pi/2) sum_{k=0}^n (n+k)!/(k!(n-k)!) gamma(2m+n-k+1,alpha)/(alpha^(2m+n+3/2) 2^k)",
+  "note": "No conditions printed; m, n nonnegative integers and alpha > 0 assumed."
+ },
+ {
+  "id": "GR6.562.1",
+  "gr": "6.562.1",
+  "page": 726,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^mu*BesselY[nu, b*x]/(x + a), {x, 0, Infinity}]",
+  "rhs": [
+   "(2*a)^mu*Pi^(-1)*(Sin[Pi*(mu - nu)/2]*Gamma[(mu + nu + 1)/2]*Gamma[(1 + mu - nu)/2]*LommelS2[-mu, nu, a*b] - 2*Cos[Pi*(mu - nu)/2]*Gamma[1 + mu/2 + nu/2]*Gamma[1 + mu/2 - nu/2]*LommelS2[-mu - 1, nu, a*b])"
+  ],
+  "conds": [
+   "b > 0",
+   "Abs[Arg[a]] < Pi",
+   "Re[mu + nu] > -1",
+   "Re[mu - nu] > -1",
+   "Re[mu] < 3/2"
+  ],
+  "cite": "ET II 98(8)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^mu Y_nu(bx) dx/(x+a) = (2a)^mu/pi {sin[pi(mu-nu)/2] Gamma((mu+nu+1)/2) Gamma((1+mu-nu)/2) S_{-mu,nu}(ab) - 2cos[pi(mu-nu)/2] Gamma(1+mu/2+nu/2) Gamma(1+mu/2-nu/2) S_{-mu-1,nu}(ab)}",
+  "note": "",
+  "reason": "Lommel function S_{mu,nu}"
+ },
+ {
+  "id": "GR6.562.2",
+  "gr": "6.562.2",
+  "page": 726,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*BesselJ[nu, a*x]/(x + k), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*k^nu/(2*Cos[nu*Pi])*(StruveH[-nu, a*k] - BesselY[-nu, a*k])"
+  ],
+  "conds": [
+   "-1/2 < Re[nu] < 3/2",
+   "a > 0",
+   "Abs[Arg[k]] < Pi"
+  ],
+  "cite": "WA 479(7)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^nu J_nu(ax) dx/(x+k) = pi k^nu/(2 cos nu pi) [H_-nu(ak) - Y_-nu(ak)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.562.3",
+  "gr": "6.562.3",
+  "page": 726,
+  "status": "ok",
+  "lhs": "Integrate[x^mu*BesselK[nu, b*x]/(x + a), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(mu - 2)*Gamma[(mu + nu)/2]*Gamma[(mu - nu)/2]*b^(-mu)*HypergeometricPFQ[{1}, {1 - (mu + nu)/2, 1 - (mu - nu)/2}, a^2*b^2/4] - 2^(mu - 3)*Gamma[(mu - nu - 1)/2]*Gamma[(mu + nu - 1)/2]*a*b^(1 - mu)*HypergeometricPFQ[{1}, {(3 - mu - nu)/2, (3 - mu + nu)/2}, a^2*b^2/4] - Pi*a^mu*Csc[Pi*(mu - nu)]*(BesselK[nu, a*b] + Pi*Cos[mu*Pi]*Csc[Pi*(nu + mu)]*BesselI[nu, a*b])"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "Abs[Arg[a]] < Pi",
+   "Re[mu] > Abs[Re[nu]] - 1"
+  ],
+  "cite": "ET II 127(4)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^mu K_nu(bx) dx/(x+a) = 2^(mu-2) Gamma((mu+nu)/2) Gamma((mu-nu)/2) b^-mu 1F2(1;1-(mu+nu)/2,1-(mu-nu)/2;a^2b^2/4) - 2^(mu-3) Gamma((mu-nu-1)/2) Gamma((mu+nu-1)/2) a b^(1-mu) 1F2(1;(3-mu-nu)/2,(3-mu+nu)/2;a^2b^2/4) - pi a^mu csc[pi(mu-nu)] {K_nu(ab) + pi cos(mu pi) csc[pi(nu+mu)] I_nu(ab)}",
+  "note": ""
+ },
+ {
+  "id": "GR6.563",
+  "gr": "6.563",
+  "page": 726,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*BesselJ[nu, b*x]/(x + a)^(1 + mu), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*a^(rho - mu - 1)/(Sin[(rho + nu - mu)*Pi]*Gamma[mu + 1])*(Sum[(-1)^m*(a*b/2)^(nu + 2*m)*Gamma[rho + nu + 2*m]/(m!*Gamma[nu + m + 1]*Gamma[rho + nu - mu + 2*m]), {m, 0, Infinity}] - Sum[(a*b/2)^(mu + 1 - rho + m)*Gamma[mu + m + 1]*Sin[(rho + nu - mu - m)*Pi/2]/(m!*Gamma[(mu + nu - rho + m + 3)/2]*Gamma[(mu - nu - rho + m + 3)/2]), {m, 0, Infinity}])"
+  ],
+  "conds": [
+   "b > 0",
+   "Abs[Arg[a]] < Pi",
+   "Re[rho + nu] > 0",
+   "Re[rho - mu] < 5/2"
+  ],
+  "cite": "ET II 23(10), WA 479",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^(rho-1) J_nu(bx) dx/(x+a)^(1+mu) = pi a^(rho-mu-1)/(sin[(rho+nu-mu)pi] Gamma(mu+1)) {sum_m (-1)^m (ab/2)^(nu+2m) Gamma(rho+nu+2m)/(m! Gamma(nu+m+1) Gamma(rho+nu-mu+2m)) - sum_m (ab/2)^(mu+1-rho+m) Gamma(mu+m+1) sin[(rho+nu-mu-m)pi/2]/(m! Gamma((mu+nu-rho+m+3)/2) Gamma((mu-nu-rho+m+3)/2))}",
+  "note": ""
+ },
+ {
+  "id": "GR6.564.1",
+  "gr": "6.564.1",
+  "page": 726,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*BesselJ[nu, b*x]/Sqrt[x^2 + a^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/(Pi*b)]*a^(nu + 1/2)*BesselK[nu + 1/2, a*b]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "-1 < Re[nu] < 1/2"
+  ],
+  "cite": "ET II 23(15)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^(nu+1) J_nu(bx) dx/sqrt(x^2+a^2) = sqrt(2/(pi b)) a^(nu+1/2) K_{nu+1/2}(ab)",
+  "note": ""
+ },
+ {
+  "id": "GR6.564.2",
+  "gr": "6.564.2",
+  "page": 727,
+  "status": "ok",
+  "lhs": "Integrate[x^(1 - nu)*BesselJ[nu, b*x]/Sqrt[x^2 + a^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/(2*b)]*a^(1/2 - nu)*(BesselI[nu - 1/2, a*b] - StruveL[nu - 1/2, a*b])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 23(16)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^(1-nu) J_nu(bx) dx/sqrt(x^2+a^2) = sqrt(pi/(2b)) a^(1/2-nu) [I_{nu-1/2}(ab) - L_{nu-1/2}(ab)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.565.1",
+  "gr": "6.565.1",
+  "page": 727,
+  "status": "ok",
+  "lhs": "Integrate[x^(-nu)*(x^2 + a^2)^(-nu - 1/2)*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^nu*a^(-2*nu)*b^nu*Gamma[nu + 1]/Gamma[2*nu + 1]*BesselI[nu, a*b/2]*BesselK[nu, a*b/2]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "WA 477(4), ET II 23(17)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^-nu (x^2+a^2)^(-nu-1/2) J_nu(bx) dx = 2^nu a^(-2nu) b^nu Gamma(nu+1)/Gamma(2nu+1) I_nu(ab/2) K_nu(ab/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.565.2",
+  "gr": "6.565.2",
+  "page": 727,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*(x^2 + a^2)^(-nu - 1/2)*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*b^(nu - 1)/(2^nu*E^(a*b)*Gamma[nu + 1/2])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 24(18)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^(nu+1) (x^2+a^2)^(-nu-1/2) J_nu(bx) dx = sqrt(pi) b^(nu-1)/(2^nu e^(ab) Gamma(nu+1/2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.565.3",
+  "gr": "6.565.3",
+  "page": 727,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*(x^2 + a^2)^(-nu - 3/2)*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b^nu*Sqrt[Pi]/(2^(nu + 1)*a*E^(a*b)*Gamma[nu + 3/2])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 24(19)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^(nu+1) (x^2+a^2)^(-nu-3/2) J_nu(bx) dx = b^nu sqrt(pi)/(2^(nu+1) a e^(ab) Gamma(nu+3/2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.565.4",
+  "gr": "6.565.4",
+  "page": 727,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, b*x]*x^(nu + 1)/(x^2 + a^2)^(mu + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "a^(nu - mu)*b^mu/(2^mu*Gamma[mu + 1])*BesselK[nu - mu, a*b]"
+  ],
+  "conds": [
+   "-1 < Re[nu] < Re[2*mu + 3/2]",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "MO 43",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf J_nu(bx) x^(nu+1)/(x^2+a^2)^(mu+1) dx = a^(nu-mu) b^mu/(2^mu Gamma(mu+1)) K_{nu-mu}(ab)",
+  "note": ""
+ },
+ {
+  "id": "GR6.565.5",
+  "gr": "6.565.5",
+  "page": 727,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*(x^2 + a^2)^mu*BesselY[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(nu - 1)*Pi^(-1)*a^(2*mu + 2)*(1 + mu)^(-1)*Gamma[nu]*b^(-nu)*HypergeometricPFQ[{1}, {1 - nu, 2 + mu}, a^2*b^2/4] - 2^mu*a^(mu + nu + 1)*Sin[nu*Pi]^(-1)*Gamma[mu + 1]*b^(-1 - mu)*(BesselI[mu + nu + 1, a*b] - 2*Cos[mu*Pi]*BesselK[mu + nu + 1, a*b])"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[a] > 0",
+   "-1 < Re[nu] < -2*Re[mu]"
+  ],
+  "cite": "ET II 100(19)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^(nu+1) (x^2+a^2)^mu Y_nu(bx) dx = 2^(nu-1) a^(2mu+2) Gamma(nu) b^-nu/(pi(1+mu)) 1F2(1;1-nu,2+mu;a^2b^2/4) - 2^mu a^(mu+nu+1) Gamma(mu+1) b^(-1-mu)/sin(nu pi) [I_{mu+nu+1}(ab) - 2cos(mu pi) K_{mu+nu+1}(ab)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.565.6",
+  "gr": "6.565.6",
+  "page": 727,
+  "status": "ok",
+  "lhs": "Integrate[x^(1 - nu)*(x^2 + a^2)^mu*BesselY[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^mu*a^(1 + mu - nu)*b^(-1 - mu)*Pi/Gamma[-mu]*BesselI[-1 - mu + nu, a*b]*Cot[Pi*(mu - nu)]*Csc[Pi*mu] - 2^mu*a^(1 + mu - nu)*b^(-1 - mu)*Pi/Gamma[-mu]*BesselI[1 + mu - nu, a*b]*Csc[Pi*(mu - nu)]*Csc[Pi*nu] + 2^(-1 - nu)*a^(2 + 2*mu)*b^nu/((1 + mu)*Pi)*Cos[Pi*nu]*Gamma[-nu]*HypergeometricPFQ[{1}, {2 + mu, 1 + nu}, a^2*b^2/4]"
+  ],
+  "conds": [
+   "Re[nu] < 1",
+   "Re[nu - 2*mu] > -3",
+   "Re[a] > 0",
+   "b > 0"
+  ],
+  "cite": "MC",
+  "edition_note": "10",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^(1-nu) (x^2+a^2)^mu Y_nu(bx) dx = 2^mu a^(1+mu-nu) b^(-1-mu) pi/Gamma(-mu) I_{-1-mu+nu}(ab) cot[pi(mu-nu)] csc(pi mu) - 2^mu a^(1+mu-nu) b^(-1-mu) pi/Gamma(-mu) I_{1+mu-nu}(ab) csc[pi(mu-nu)] csc(pi nu) + 2^(-1-nu) a^(2+2mu) b^nu/((1+mu)pi) cos(pi nu) Gamma(-nu) 1F2(1;2+mu,1+nu;a^2b^2/4)",
+  "note": "Book condition arg a^2 != pi; sampled as Re[a] > 0."
+ },
+ {
+  "id": "GR6.565.7",
+  "gr": "6.565.7",
+  "page": 727,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(1 + nu)*(x^2 + a^2)^mu*BesselK[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^nu*Gamma[nu + 1]*a^(nu + mu + 1)*b^(-1 - mu)*LommelS2[mu - nu, mu + nu + 1, a*b]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 128(8)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^(1+nu) (x^2+a^2)^mu K_nu(bx) dx = 2^nu Gamma(nu+1) a^(nu+mu+1) b^(-1-mu) S_{mu-nu,mu+nu+1}(ab)",
+  "note": "",
+  "reason": "Lommel function S_{mu,nu}"
+ },
+ {
+  "id": "GR6.565.8",
+  "gr": "6.565.8",
+  "page": 728,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*BesselJ[nu, a*x]/(x^2 + k^2)^(mu + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "a^nu*k^(rho + nu - 2*mu - 2)*Gamma[rho/2 + nu/2]*Gamma[mu + 1 - rho/2 - nu/2]/(2^(nu + 1)*Gamma[mu + 1]*Gamma[nu + 1])*HypergeometricPFQ[{(rho + nu)/2}, {(rho + nu)/2 - mu, nu + 1}, a^2*k^2/4] + a^(2*mu + 2 - rho)*Gamma[nu/2 + rho/2 - mu - 1]/(2^(2*mu + 3 - rho)*Gamma[mu + 2 + nu/2 - rho/2])*HypergeometricPFQ[{mu + 1}, {mu + 2 + (nu - rho)/2, mu + 2 - (nu + rho)/2}, a^2*k^2/4]"
+  ],
+  "conds": [
+   "a > 0",
+   "-Re[nu] < Re[rho] < 2*Re[mu] + 7/2",
+   "Re[k] > 0"
+  ],
+  "cite": "WA 477(1)",
+  "edition_note": "11",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^(rho-1) J_nu(ax)/(x^2+k^2)^(mu+1) dx = a^nu k^(rho+nu-2mu-2) Gamma(rho/2+nu/2) Gamma(mu+1-rho/2-nu/2)/(2^(nu+1) Gamma(mu+1) Gamma(nu+1)) 1F2((rho+nu)/2;(rho+nu)/2-mu,nu+1;a^2k^2/4) + a^(2mu+2-rho) Gamma(nu/2+rho/2-mu-1)/(2^(2mu+3-rho) Gamma(mu+2+nu/2-rho/2)) 1F2(mu+1;mu+2+(nu-rho)/2,mu+2-(nu+rho)/2;a^2k^2/4)",
+  "note": ""
+ },
+ {
+  "id": "GR6.566.1",
+  "gr": "6.566.1",
+  "page": 728,
+  "status": "ok",
+  "lhs": "Integrate[x^mu*BesselY[nu, b*x]/(x^2 + a^2), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(mu - 2)*Pi^(-1)*b^(1 - mu)*Cos[(Pi/2)*(mu - nu + 1)]*Gamma[mu/2 + nu/2 - 1/2]*Gamma[mu/2 - nu/2 - 1/2]*HypergeometricPFQ[{1}, {2 - (mu + 1 + nu)/2, 2 - (mu + 1 - nu)/2}, a^2*b^2/4] - (1/2)*Pi*a^(mu - 1)*Csc[(Pi/2)*(mu + nu + 1)]*Cot[(Pi/2)*(mu - nu + 1)]*BesselI[nu, a*b] - a^(mu - 1)*Csc[(Pi/2)*(mu - nu + 1)]*BesselK[nu, a*b]"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[a] > 0",
+   "Abs[Re[nu]] - 1 < Re[mu] < 5/2"
+  ],
+  "cite": "ET II 100(17)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^mu Y_nu(bx) dx/(x^2+a^2) = 2^(mu-2)/pi b^(1-mu) cos[pi/2(mu-nu+1)] Gamma(mu/2+nu/2-1/2) Gamma(mu/2-nu/2-1/2) 1F2(1;2-(mu+1+nu)/2,2-(mu+1-nu)/2;a^2b^2/4) - 1/2 pi a^(mu-1) csc[pi/2(mu+nu+1)] cot[pi/2(mu-nu+1)] I_nu(ab) - a^(mu-1) csc[pi/2(mu-nu+1)] K_nu(ab)",
+  "note": ""
+ },
+ {
+  "id": "GR6.566.2",
+  "gr": "6.566.2",
+  "page": 728,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*BesselJ[nu, a*x]/(x^2 + b^2), {x, 0, Infinity}]",
+  "rhs": [
+   "b^nu*BesselK[nu, a*b]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[b] > 0",
+   "-1 < Re[nu] < 3/2"
+  ],
+  "cite": "EH II 96(58)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^(nu+1) J_nu(ax) dx/(x^2+b^2) = b^nu K_nu(ab)",
+  "note": ""
+ },
+ {
+  "id": "GR6.566.3",
+  "gr": "6.566.3",
+  "page": 728,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*BesselK[nu, a*x]/(x^2 + b^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2*b^(nu - 1)/(4*Cos[nu*Pi])*(StruveH[-nu, a*b] - BesselY[-nu, a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[b] > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "WA 468(9)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^nu K_nu(ax) dx/(x^2+b^2) = pi^2 b^(nu-1)/(4 cos nu pi) [H_-nu(ab) - Y_-nu(ab)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.566.4",
+  "gr": "6.566.4",
+  "page": 728,
+  "status": "ok",
+  "lhs": "Integrate[x^(-nu)*BesselK[nu, a*x]/(x^2 + b^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/(4*b^(nu + 1)*Cos[nu*Pi])*(StruveH[nu, a*b] - BesselY[nu, a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[b] > 0",
+   "Re[nu] < 1/2"
+  ],
+  "cite": "WA 468(10)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^-nu K_nu(ax) dx/(x^2+b^2) = pi^2/(4 b^(nu+1) cos nu pi) [H_nu(ab) - Y_nu(ab)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.566.5",
+  "gr": "6.566.5",
+  "page": 728,
+  "status": "ok",
+  "lhs": "Integrate[x^(-nu)*BesselJ[nu, a*x]/(x^2 + b^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b^(nu + 1))*(BesselI[nu, a*b] - StruveL[nu, a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[b] > 0",
+   "Re[nu] > -5/2"
+  ],
+  "cite": "WA 468(11)",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^inf x^-nu J_nu(ax) dx/(x^2+b^2) = pi/(2 b^(nu+1)) [I_nu(ab) - L_nu(ab)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.567.1",
+  "gr": "6.567.1",
+  "page": 728,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*(1 - x^2)^mu*BesselJ[nu, b*x], {x, 0, 1}]",
+  "rhs": [
+   "2^mu*Gamma[mu + 1]*b^(-(mu + 1))*BesselJ[nu + mu + 1, b]"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[nu] > -1",
+   "Re[mu] > -1"
+  ],
+  "cite": "ET II 26(33)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^(nu+1) (1-x^2)^mu J_nu(bx) dx = 2^mu Gamma(mu+1) b^-(mu+1) J_{nu+mu+1}(b)",
+  "note": ""
+ },
+ {
+  "id": "GR6.567.2",
+  "gr": "6.567.2",
+  "page": 729,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(nu + 1)*(1 - x^2)^mu*BesselY[nu, b*x], {x, 0, 1}]",
+  "rhs": [
+   "b^(-(mu + 1))*(2^mu*Gamma[mu + 1]*BesselY[mu + nu + 1, b] + 2^(nu + 1)*Pi^(-1)*Gamma[nu + 1]*LommelS2[mu - nu, mu + nu + 1, b])"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[mu] > -1",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 103(35)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^(nu+1) (1-x^2)^mu Y_nu(bx) dx = b^-(mu+1) [2^mu Gamma(mu+1) Y_{mu+nu+1}(b) + 2^(nu+1)/pi Gamma(nu+1) S_{mu-nu,mu+nu+1}(b)]",
+  "note": "",
+  "reason": "Lommel function S_{mu,nu}"
+ },
+ {
+  "id": "GR6.567.3",
+  "gr": "6.567.3",
+  "page": 729,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(1 - nu)*(1 - x^2)^mu*BesselJ[nu, b*x], {x, 0, 1}]",
+  "rhs": [
+   "2^(1 - nu)*LommelS2[nu + mu, mu - nu + 1, b]/(b^(mu + 1)*Gamma[nu])",
+   "2^(1 - nu)*LommelS1[nu + mu, mu - nu + 1, b]/(b^(mu + 1)*Gamma[nu])"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[mu] > -1"
+  ],
+  "cite": "ET II 25(31)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^(1-nu) (1-x^2)^mu J_nu(bx) dx = 2^(1-nu) S_{nu+mu,mu-nu+1}(b)/(b^(mu+1) Gamma(nu))",
+  "note": "Printed as capital S; integral is entire in b, which suggests lowercase s (second candidate).",
+  "reason": "Lommel function S_{mu,nu}"
+ },
+ {
+  "id": "GR6.567.4",
+  "gr": "6.567.4",
+  "page": 729,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(1 - nu)*(1 - x^2)^mu*BesselY[nu, b*x], {x, 0, 1}]",
+  "rhs": [
+   "b^(-(mu + 1))*(2^(1 - nu)*Pi^(-1)*Cos[nu*Pi]*Gamma[1 - nu]*LommelS2[mu + nu, mu - nu + 1, b] - 2^mu*Csc[nu*Pi]*Gamma[mu + 1]*BesselJ[-nu + mu + 1, b])"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[mu] > -1",
+   "Re[nu] < 1"
+  ],
+  "cite": "ET II 104(37)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^(1-nu) (1-x^2)^mu Y_nu(bx) dx = b^-(mu+1) [2^(1-nu)/pi cos(nu pi) Gamma(1-nu) S_{mu+nu,mu-nu+1}(b) - 2^mu csc(nu pi) Gamma(mu+1) J_{-nu+mu+1}(b)]",
+  "note": "",
+  "reason": "Lommel function S_{mu,nu}"
+ },
+ {
+  "id": "GR6.567.5",
+  "gr": "6.567.5",
+  "page": 729,
+  "status": "ok",
+  "lhs": "Integrate[x^(1 - nu)*(1 - x^2)^mu*BesselK[nu, b*x], {x, 0, 1}]",
+  "rhs": [
+   "2^(-nu - 2)*b^nu*(mu + 1)^(-1)*Gamma[-nu]*HypergeometricPFQ[{1}, {nu + 1, mu + 2}, b^2/4] + Pi*2^(mu - 1)*b^(-(mu + 1))*Csc[nu*Pi]*Gamma[mu + 1]*BesselI[mu - nu + 1, b]"
+  ],
+  "conds": [
+   "Re[mu] > -1",
+   "Re[nu] < 1"
+  ],
+  "cite": "ET II 129(12)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^(1-nu) (1-x^2)^mu K_nu(bx) dx = 2^(-nu-2) b^nu Gamma(-nu)/(mu+1) 1F2(1;nu+1,mu+2;b^2/4) + pi 2^(mu-1) b^-(mu+1) csc(nu pi) Gamma(mu+1) I_{mu-nu+1}(b)",
+  "note": ""
+ },
+ {
+  "id": "GR6.567.6",
+  "gr": "6.567.6",
+  "page": 729,
+  "status": "ok",
+  "lhs": "Integrate[x^(1 - nu)*BesselJ[nu, b*x]/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi/(2*b)]*StruveH[nu - 1/2, b]"
+  ],
+  "conds": [
+   "b > 0"
+  ],
+  "cite": "ET II 24(24)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^(1-nu) J_nu(bx) dx/sqrt(1-x^2) = sqrt(pi/(2b)) H_{nu-1/2}(b)",
+  "note": ""
+ },
+ {
+  "id": "GR6.567.7",
+  "gr": "6.567.7",
+  "page": 729,
+  "status": "ok",
+  "lhs": "Integrate[x^(1 + nu)*BesselY[nu, b*x]/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi/(2*b)]*Csc[nu*Pi]*(Cos[nu*Pi]*BesselJ[nu + 1/2, b] - StruveH[-nu - 1/2, b])"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 102(28)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^(1+nu) Y_nu(bx) dx/sqrt(1-x^2) = sqrt(pi/(2b)) csc(nu pi)[cos(nu pi) J_{nu+1/2}(b) - H_{-nu-1/2}(b)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.567.8",
+  "gr": "6.567.8",
+  "page": 729,
+  "status": "ok",
+  "lhs": "Integrate[x^(1 - nu)*BesselY[nu, b*x]/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi/(2*b)]*(Cot[nu*Pi]*(StruveH[nu - 1/2, b] - BesselY[nu - 1/2, b]) - BesselJ[nu - 1/2, b])"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[nu] < 1"
+  ],
+  "cite": "ET II 102(30)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^(1-nu) Y_nu(bx) dx/sqrt(1-x^2) = sqrt(pi/(2b)) {cot(nu pi)[H_{nu-1/2}(b) - Y_{nu-1/2}(b)] - J_{nu-1/2}(b)}",
+  "note": ""
+ },
+ {
+  "id": "GR6.567.9",
+  "gr": "6.567.9",
+  "page": 729,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*(1 - x^2)^(nu - 1/2)*BesselJ[nu, b*x], {x, 0, 1}]",
+  "rhs": [
+   "2^(nu - 1)*Sqrt[Pi]*b^(-nu)*Gamma[nu + 1/2]*BesselJ[nu, b/2]^2"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 24(25)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^nu (1-x^2)^(nu-1/2) J_nu(bx) dx = 2^(nu-1) sqrt(pi) b^-nu Gamma(nu+1/2) J_nu(b/2)^2",
+  "note": ""
+ },
+ {
+  "id": "GR6.567.10",
+  "gr": "6.567.10",
+  "page": 729,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*(1 - x^2)^(nu - 1/2)*BesselY[nu, b*x], {x, 0, 1}]",
+  "rhs": [
+   "2^(nu - 1)*Sqrt[Pi]*b^(-nu)*Gamma[nu + 1/2]*BesselJ[nu, b/2]*BesselY[nu, b/2]"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 102(31)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^nu (1-x^2)^(nu-1/2) Y_nu(bx) dx = 2^(nu-1) sqrt(pi) b^-nu Gamma(nu+1/2) J_nu(b/2) Y_nu(b/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.567.11",
+  "gr": "6.567.11",
+  "page": 729,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*(1 - x^2)^(nu - 1/2)*BesselK[nu, b*x], {x, 0, 1}]",
+  "rhs": [
+   "2^(nu - 1)*Sqrt[Pi]*b^(-nu)*Gamma[nu + 1/2]*BesselI[nu, b/2]*BesselK[nu, b/2]"
+  ],
+  "conds": [
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 129(10)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^nu (1-x^2)^(nu-1/2) K_nu(bx) dx = 2^(nu-1) sqrt(pi) b^-nu Gamma(nu+1/2) I_nu(b/2) K_nu(b/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.567.12",
+  "gr": "6.567.12",
+  "page": 729,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*(1 - x^2)^(nu - 1/2)*BesselI[nu, b*x], {x, 0, 1}]",
+  "rhs": [
+   "2^(-nu - 1)*Sqrt[Pi]*b^(-nu)*Gamma[nu + 1/2]*BesselI[nu, b/2]^2",
+   "2^(nu - 1)*Sqrt[Pi]*b^(-nu)*Gamma[nu + 1/2]*BesselI[nu, b/2]^2"
+  ],
+  "conds": [
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 365(5)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^nu (1-x^2)^(nu-1/2) I_nu(bx) dx = 2^(-nu-1) sqrt(pi) b^-nu Gamma(nu+1/2) I_nu(b/2)^2",
+  "note": "Prefactor printed 2^(-nu-1); continuing 6.567.9 to b -> i b gives 2^(nu-1) (second candidate). No conditions printed; Re nu > -1/2 added for convergence."
+ },
+ {
+  "id": "GR6.567.13",
+  "gr": "6.567.13",
+  "page": 729,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*(1 - x^2)^(-nu - 1/2)*BesselJ[nu, b*x], {x, 0, 1}]",
+  "rhs": [
+   "2^(-nu)*b^(nu - 1)/Sqrt[Pi]*Gamma[1/2 - nu]*Sin[b]"
+  ],
+  "conds": [
+   "b > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 25(27)a",
+  "edition_note": "",
+  "section": "6.56-6.58 Combinations of Bessel functions and powers",
+  "tex": "int_0^1 x^(nu+1) (1-x^2)^(-nu-1/2) J_nu(bx) dx = 2^-nu b^(nu-1)/sqrt(pi) Gamma(1/2-nu) sin b",
+  "note": ""
+ }
+]

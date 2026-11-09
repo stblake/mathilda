@@ -1,0 +1,2084 @@
+[
+ {
+  "id": "GR4.414.8",
+  "gr": "4.414.8",
+  "page": 642,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Sin[x]^2*(1 - k^2*Sin[x]^2)^(1/2), {x, 0, Pi/2}]",
+  "rhs": [
+   "1/(9*k^2)*((-2 + 11*k^2 - 6*k^4 + 3*(1 - k^2)*Log[Sqrt[1 - k^2]])*MatharK[k] + (2 - 10*k^2 - 3*(1 - 2*k^2)*Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (324)(20)",
+  "edition_note": "",
+  "section": "4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^{pi/2} ln(1-k^2 sin^2x) sin^2x sqrt(1-k^2 sin^2x) dx",
+  "note": "0<k<1 added; k'=sqrt(1-k^2)"
+ },
+ {
+  "id": "GR4.414.9",
+  "gr": "4.414.9",
+  "page": 642,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Cos[x]^2*(1 - k^2*Sin[x]^2)^(1/2), {x, 0, Pi/2}]",
+  "rhs": [
+   "1/(9*k^2)*((2 + 7*k^2 - 3*k^4 - 3*(1 - k^2)*Log[Sqrt[1 - k^2]])*MatharK[k] - (2 + 8*k^2 - 3*(1 + k^2)*Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (324)(21), LI (324)(21)",
+  "edition_note": "",
+  "section": "4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^{pi/2} ln(1-k^2 sin^2x) cos^2x sqrt(1-k^2 sin^2x) dx",
+  "note": "0<k<1 added; k'=sqrt(1-k^2)"
+ },
+ {
+  "id": "GR4.414.10",
+  "gr": "4.414.10",
+  "page": 642,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Sin[x]*Cos[x]/(1 - k^2*Sin[x]^2)^((2*n + 1)/2), {x, 0, Pi/2}]",
+  "rhs": [
+   "2/((2*n - 1)^2*k^2)*((1 + (2*n - 1)*Log[Sqrt[1 - k^2]])*Sqrt[1 - k^2]^(1 - 2*n) - 1)"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (324)(17)",
+  "edition_note": "",
+  "section": "4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^{pi/2} ln(1-k^2 sin^2x) sinx cosx/sqrt((1-k^2 sin^2x)^(2n+1)) dx",
+  "note": "0<k<1 added; n != 1/2 implied"
+ },
+ {
+  "id": "GR4.415.1",
+  "gr": "4.415.1",
+  "page": 642,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Sin[a*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "-1/4*Sqrt[Pi/(2*a)]*(Log[4*a] + EulerGamma - Pi/2)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "GW (338)(19)",
+  "edition_note": "",
+  "section": "4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^inf ln x sin(ax^2) dx = -1/4 sqrt(pi/2a)(ln 4a + C - pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.415.2",
+  "gr": "4.415.2",
+  "page": 642,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Cos[a*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "-1/4*Sqrt[Pi/(2*a)]*(Log[4*a] + EulerGamma - Pi/2)",
+   "-1/4*Sqrt[Pi/(2*a)]*(Log[4*a] + EulerGamma + Pi/2)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "GW (338)(19)",
+  "edition_note": "",
+  "section": "4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^inf ln x cos(ax^2) dx = -1/4 sqrt(pi/2a)(ln 4a + C - pi/2)",
+  "note": "misprint suspected: book prints -pi/2 as in 4.415.1; Mellin derivative gives +pi/2 for cos (second rhs)"
+ },
+ {
+  "id": "GR4.416.1",
+  "gr": "4.416.1",
+  "page": 642,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[x]*Log[1 + Sqrt[Sin[beta]^2 - Cos[beta]^2*Tan[alpha]^2*Sin[x]^2]]/(1 - Sin[alpha]^2*Cos[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Csc[2*alpha]*((2*alpha + 2*ArcCos[Sin[alpha]/Sin[beta]] - Pi)*Log[Cos[beta]] + 2*LobachevskyL[alpha] - 2*LobachevskyL[ArcCos[Sin[alpha]/Sin[beta]]] + LobachevskyL[alpha + ArcCos[Sin[alpha]/Sin[beta]]] - LobachevskyL[alpha - ArcCos[Sin[alpha]/Sin[beta]]])"
+  ],
+  "conds": [
+   "0 < alpha < beta < Pi/2"
+  ],
+  "cite": "LO III 291",
+  "edition_note": "",
+  "section": "4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^{pi/2} cos x ln(1+sqrt(sin^2b - cos^2b tan^2a sin^2x))/(1-sin^2a cos^2x) dx",
+  "note": "cos gamma = sin alpha/sin beta substituted (gamma = ArcCos[...]); L = Lobachevsky function",
+  "reason": "Lobachevsky function L"
+ },
+ {
+  "id": "GR4.416.2",
+  "gr": "4.416.2",
+  "page": 642,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[x]*Log[1 - Sqrt[Sin[beta]^2 - Cos[beta]^2*Tan[alpha]^2*Sin[x]^2]]/(1 - Sin[alpha]^2*Cos[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Csc[2*alpha]*((Pi + 2*alpha - 2*ArcCos[Sin[alpha]/Sin[beta]])*Log[Cos[beta]] + 2*LobachevskyL[alpha] + 2*LobachevskyL[ArcCos[Sin[alpha]/Sin[beta]]] - LobachevskyL[alpha + ArcCos[Sin[alpha]/Sin[beta]]] + LobachevskyL[alpha - ArcCos[Sin[alpha]/Sin[beta]]])"
+  ],
+  "conds": [
+   "0 < alpha < beta < Pi/2"
+  ],
+  "cite": "LO III 291",
+  "edition_note": "",
+  "section": "4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^{pi/2} cos x ln(1-sqrt(sin^2b - cos^2b tan^2a sin^2x))/(1-sin^2a cos^2x) dx",
+  "note": "cos gamma = sin alpha/sin beta substituted (gamma = ArcCos[...]); L = Lobachevsky function",
+  "reason": "Lobachevsky function L"
+ },
+ {
+  "id": "GR4.416.3",
+  "gr": "4.416.3",
+  "page": 642,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x] + Sqrt[Sin[x]^2 - Sin[beta]^2]]/(1 - Cos[alpha]^2*Cos[x]^2), {x, beta, Pi/2}]",
+  "rhs": [
+   "-Csc[alpha]*(ArcTan[Tan[beta]/Sin[alpha]]*Log[Sin[beta]] + Pi/2*Log[(1 + Sin[alpha])/(Sin[alpha] + Sqrt[1 - Cos[alpha]^2*Cos[beta]^2])])"
+  ],
+  "conds": [
+   "0 < alpha < Pi",
+   "0 < beta < Pi/2"
+  ],
+  "cite": "LO III 285",
+  "edition_note": "",
+  "section": "4.41 Logarithms and trigonometric functions",
+  "tex": "int_beta^{pi/2} ln(sin x + sqrt(sin^2x - sin^2 beta))/(1-cos^2a cos^2x) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.416.4",
+  "gr": "4.416.4",
+  "page": 642,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]*Log[Cos[2*x]]^(n - 1)*Tan[2*x], {x, 0, Pi/4}]",
+  "rhs": [
+   "1/2*(-1)^n*(n - 1)!*(1 - 2^(-(n + 1)))*Zeta[n + 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (287)(20)",
+  "edition_note": "7",
+  "section": "4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^{pi/4} ln tan x (ln cos 2x)^(n-1) tan 2x dx",
+  "note": "n positive integer assumed (not printed)"
+ },
+ {
+  "id": "GR4.421.1",
+  "gr": "4.421.1",
+  "page": 643,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Sin[a*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/2*(EulerGamma + Log[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "FI II 810a",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln x sin ax dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.421.2",
+  "gr": "4.421.2",
+  "page": 643,
+  "status": "ok",
+  "lhs": "Integrate[Log[a*x]*Sin[b*x]*x/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*E^(-b*Abs[beta])*Log[a*Abs[beta]] - Pi/4*(E^(b*Abs[beta])*ExpIntegralEi[-b*Abs[beta]] + E^(-b*Abs[beta])*ExpIntegralEi[b*Abs[beta]])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Element[beta, Reals]"
+  ],
+  "cite": "ET I 76(5), NT 27(10)a",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln ax sin bx x/(beta^2+x^2) dx",
+  "note": "beta' = beta sign beta substituted as Abs[beta]; beta real added"
+ },
+ {
+  "id": "GR4.421.3",
+  "gr": "4.421.3",
+  "page": 643,
+  "status": "ok",
+  "lhs": "Integrate[Log[a*x]*Cos[b*x]*Abs[beta]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*E^(-b*Abs[beta])*Log[a*Abs[beta]] + Pi/4*(E^(b*Abs[beta])*ExpIntegralEi[-b*Abs[beta]] - E^(-b*Abs[beta])*ExpIntegralEi[b*Abs[beta]])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Element[beta, Reals]"
+  ],
+  "cite": "ET I 17(3), NT 27(11)a",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln ax cos bx beta'/(beta^2+x^2) dx",
+  "note": "beta' = beta sign beta substituted as Abs[beta]; beta real added"
+ },
+ {
+  "id": "GR4.421.4",
+  "gr": "4.421.4",
+  "page": 643,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[a*x]*Sin[b*x]*x/(x^2 - c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(-(SinIntegral[b*c] - Pi/2)*Sin[b*c] + Cos[b*c]*(Log[a*c] - CosIntegral[b*c]))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "BI (422)(5)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln ax sin bx x/(x^2-c^2) dx",
+  "note": "implied PV: pole at x = c",
+  "reason": "implied principal value"
+ },
+ {
+  "id": "GR4.421.5",
+  "gr": "4.421.5",
+  "page": 643,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[a*x]*Cos[b*x]/(x^2 - c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*c)*(Sin[b*c]*(CosIntegral[b*c] - Log[a*c]) - Cos[b*c]*(SinIntegral[b*c] - Pi/2))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "BI (422)(6)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln ax cos bx/(x^2-c^2) dx",
+  "note": "implied PV: pole at x = c",
+  "reason": "implied principal value"
+ },
+ {
+  "id": "GR4.422.1",
+  "gr": "4.422.1",
+  "page": 643,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Sin[a*x]*x^(mu - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu]/a^mu*Sin[mu*Pi/2]*(PolyGamma[mu] - Log[a] + Pi/2*Cot[mu*Pi/2])"
+  ],
+  "conds": [
+   "a > 0",
+   "Abs[Re[mu]] < 1"
+  ],
+  "cite": "BI (411)(5)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln x sin ax x^(mu-1) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.422.2",
+  "gr": "4.422.2",
+  "page": 643,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Cos[a*x]*x^(mu - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu]/a^mu*Cos[mu*Pi/2]*(PolyGamma[mu] - Log[a] - Pi/2*Tan[mu*Pi/2])"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "BI (411)(6)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln x cos ax x^(mu-1) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.423.1",
+  "gr": "4.423.1",
+  "page": 643,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*(Cos[a*x] - Cos[b*x])/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[a/b]*(EulerGamma + 1/2*Log[a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (338)(21a)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln x (cos ax - cos bx)/x dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.423.2",
+  "gr": "4.423.2",
+  "page": 643,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*(Cos[a*x] - Cos[b*x])/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*((a - b)*(EulerGamma - 1) + a*Log[a] - b*Log[b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (338)(21b)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln x (cos ax - cos bx)/x^2 dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.423.3",
+  "gr": "4.423.3",
+  "page": 643,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Sin[a*x]^2/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "-a*Pi/2*(EulerGamma + Log[2*a] - 1)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "GW (338)(20b)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln x sin^2(ax)/x^2 dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.424.1",
+  "gr": "4.424.1",
+  "page": 643,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^2*Sin[a*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*EulerGamma^2 + Pi^3/24 + Pi*EulerGamma*Log[a] + Pi/2*Log[a]^2"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET I 77(9), FI II 810a",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf (ln x)^2 sin ax dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.424.2",
+  "gr": "4.424.2",
+  "page": 644,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^2*Sin[a*x]*x^(mu - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu]/a^mu*Sin[mu*Pi/2]*(PolyGamma[1, mu] + PolyGamma[mu]^2 + Pi*PolyGamma[mu]*Cot[mu*Pi/2] - 2*PolyGamma[mu]*Log[a] - Pi*Log[a]*Cot[mu*Pi/2] + Log[a]^2 - 1/4*Pi^2)"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "ET I 77(10)",
+  "edition_note": "6",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf (ln x)^2 sin ax x^(mu-1) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.425.1",
+  "gr": "4.425.1",
+  "page": 644,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]*Cos[a*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*((SinIntegral[a] - Pi/2)^2 + CosIntegral[a]^2)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET I 18(8)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1+x) cos ax dx/x = 1/2 (si(a)^2 + ci(a)^2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.425.2",
+  "gr": "4.425.2",
+  "page": 644,
+  "status": "ok",
+  "lhs": "Integrate[Log[(b + x)/(b - x)]^2*Cos[a*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-2*Pi*(SinIntegral[a*b] - Pi/2)"
+  ],
+  "conds": [
+   "a >= 0",
+   "b > 0"
+  ],
+  "cite": "ET I 18(11)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln^2((b+x)/(b-x)) cos ax dx/x = -2 pi si(ab)",
+  "note": "as printed; log argument negative for x > b (see 4.425.2b)"
+ },
+ {
+  "id": "GR4.425.2b",
+  "gr": "4.425.2",
+  "page": 644,
+  "status": "ok",
+  "lhs": "Integrate[Log[Abs[(b + x)/(b - x)]]^2*Cos[a*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-2*Pi*(SinIntegral[a*b] - Pi/2)"
+  ],
+  "conds": [
+   "a >= 0",
+   "b > 0"
+  ],
+  "cite": "ET I 18(11)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln^2|(b+x)/(b-x)| cos ax dx/x",
+  "note": "corrected integrand: absolute value inside the log (real integrand for x > b)"
+ },
+ {
+  "id": "GR4.425.3",
+  "gr": "4.425.3",
+  "page": 644,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + b^2*x^2]*Sin[a*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*ExpIntegralEi[-a/b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (338)(24), ET I 77(14)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1+b^2x^2) sin ax dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.425.4",
+  "gr": "4.425.4",
+  "page": 644,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - x^2]*Cos[p*Log[x]]/x, {x, 0, 1}]",
+  "rhs": [
+   "1/(2*p^2) + Pi/(2*p)*Coth[p*Pi/2]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "LI (309)(1)a",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^1 ln(1-x^2) cos(p ln x) dx/x",
+  "note": "p > 0 added"
+ },
+ {
+  "id": "GR4.426.1",
+  "gr": "4.426.1",
+  "page": 644,
+  "status": "ok",
+  "lhs": "Integrate[x*Log[(b^2 + x^2)/(c^2 + x^2)]*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/a^2*((1 + a*c)*E^(-a*c) - (1 + a*b)*E^(-a*b))"
+  ],
+  "conds": [
+   "b >= 0",
+   "c >= 0",
+   "a > 0"
+  ],
+  "cite": "GW (338)(23)",
+  "edition_note": "11",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf x ln((b^2+x^2)/(c^2+x^2)) sin ax dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.426.2",
+  "gr": "4.426.2",
+  "page": 644,
+  "status": "ok",
+  "lhs": "Integrate[Log[(b^2*x^2 + p^2)/(c^2*x^2 + p^2)]*Sin[a*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(ExpIntegralEi[-a*p/c] - ExpIntegralEi[-a*p/b])"
+  ],
+  "conds": [
+   "b > 0",
+   "c > 0",
+   "p > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 77(15)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln((b^2x^2+p^2)/(c^2x^2+p^2)) sin ax dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.427",
+  "gr": "4.427",
+  "page": 644,
+  "status": "ok",
+  "lhs": "Integrate[Log[x + Sqrt[beta^2 + x^2]]*Sin[a*x]/Sqrt[beta^2 + x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*BesselK[0, a*beta] + Pi/2*Log[beta]*(BesselI[0, a*beta] - StruveL[0, a*beta])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 77(16)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(x+sqrt(beta^2+x^2)) sin ax/sqrt(beta^2+x^2) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.428.1",
+  "gr": "4.428.1",
+  "page": 644,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[a*x]^2]*Cos[b*x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*b*Log[2] - a*Pi"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 22(29)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln cos^2(ax) cos bx/x^2 dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.428.2",
+  "gr": "4.428.2",
+  "page": 644,
+  "status": "ok",
+  "lhs": "Integrate[Log[4*Cos[a*x]^2]*Cos[b*x]/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/c*Cosh[b*c]*Log[1 + E^(-2*a*c)]"
+  ],
+  "conds": [
+   "a < b < 2*a < Pi/c",
+   "a > 0",
+   "c > 0"
+  ],
+  "cite": "ET I 22(30)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(4cos^2 ax) cos bx/(x^2+c^2) dx",
+  "note": "printed condition [a < b < 2a < pi/c]; a > 0, c > 0 added"
+ },
+ {
+  "id": "GR4.428.3",
+  "gr": "4.428.3",
+  "page": 644,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[a*x]^2]*Sin[b*x]/(x*(1 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Log[1 + E^(-2*a)]*Sinh[b] - Pi*Log[2]*(1 - E^(-b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 82(36)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln cos^2(ax) sin bx/(x(1+x^2)) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.428.4",
+  "gr": "4.428.4",
+  "page": 644,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[a*x]^2]*Cos[b*x]/(x^2*(1 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*Log[1 + E^(-2*a)]*Cosh[b] + (b + E^(-b))*Pi*Log[2] - a*Pi"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 22(31)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln cos^2(ax) cos bx/(x^2(1+x^2)) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.429",
+  "gr": "4.429",
+  "page": 644,
+  "status": "ok",
+  "lhs": "Integrate[(1 + x)*x/Log[x]*Sin[Log[x]], {x, 0, 1}]",
+  "rhs": [
+   "Pi/4"
+  ],
+  "conds": [],
+  "cite": "BI (326)(2)a",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^1 (1+x)x/ln x sin(ln x) dx = pi/4",
+  "note": ""
+ },
+ {
+  "id": "GR4.431.1a",
+  "gr": "4.431.1",
+  "page": 645,
+  "status": "ok",
+  "lhs": "Integrate[Log[2 + 2*Cos[x]]*Sin[b*x]/(x^2 + c^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*Sinh[b*c]*Log[1 + E^(-c)]"
+  ],
+  "conds": [
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "ET I 22(32)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(2+2cos x) sin bx x/(x^2+c^2) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.431.1b",
+  "gr": "4.431.1",
+  "page": 645,
+  "status": "ok",
+  "lhs": "Integrate[Log[2 - 2*Cos[x]]*Sin[b*x]/(x^2 + c^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*Sinh[b*c]*Log[1 - E^(-c)]"
+  ],
+  "conds": [
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "ET I 22(32)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(2-2cos x) sin bx x/(x^2+c^2) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.431.2a",
+  "gr": "4.431.2",
+  "page": 645,
+  "status": "ok",
+  "lhs": "Integrate[Log[2 + 2*Cos[x]]*Cos[b*x]/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/c*Cosh[b*c]*Log[1 + E^(-c)]"
+  ],
+  "conds": [
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "ET I 22(32)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(2+2cos x) cos bx/(x^2+c^2) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.431.2b",
+  "gr": "4.431.2",
+  "page": 645,
+  "status": "ok",
+  "lhs": "Integrate[Log[2 - 2*Cos[x]]*Cos[b*x]/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/c*Cosh[b*c]*Log[1 - E^(-c)]"
+  ],
+  "conds": [
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "ET I 22(32)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(2-2cos x) cos bx/(x^2+c^2) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.431.3",
+  "gr": "4.431.3",
+  "page": 645,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + 2*a*Cos[x] + a^2]*Sin[b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/2*Sum[(-a)^k/k*(1 + Sign[b - k]), {k, 1, Floor[b]}]"
+  ],
+  "conds": [
+   "0 < a < 1",
+   "b > 0"
+  ],
+  "cite": "ET I 82(25)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1+2a cos x+a^2) sin bx/x dx = -pi/2 sum_{k=1}^{[b]} (-a)^k/k [1+sign(b-k)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.431.4",
+  "gr": "4.431.4",
+  "page": 645,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - 2*a*Cos[x] + a^2]*Cos[b*x]/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/c*Log[1 - a*E^(-c)]*Cosh[b*c] + Pi/c*Sum[a^k/k*Sinh[c*(b - k)], {k, 1, Floor[b]}]"
+  ],
+  "conds": [
+   "Abs[a] < 1",
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "ET I 22(33)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-2a cos x+a^2) cos bx/(x^2+c^2) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.1a",
+  "gr": "4.432.1",
+  "page": 645,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Sin[x]/((1 - k^2*Sin[x]^2)^(1/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Sqrt[1 - k^2]]*MatharK[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI ((412, 414))(4)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2sin^2x) sinx/sqrt(1-k^2sin^2x) dx/x = ln k' K(k)",
+  "note": "0<k<1 added"
+ },
+ {
+  "id": "GR4.432.1b",
+  "gr": "4.432.1",
+  "page": 645,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Cos[x]^2]*Sin[x]/((1 - k^2*Cos[x]^2)^(1/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Sqrt[1 - k^2]]*MatharK[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI ((412, 414))(4)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2cos^2x) sinx/sqrt(1-k^2cos^2x) dx/x = ln k' K(k)",
+  "note": "0<k<1 added"
+ },
+ {
+  "id": "GR4.432.2",
+  "gr": "4.432.2",
+  "page": 645,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Sin[x]*Cos[x]/(1 - k^2*Sin[x]^2)^(1/2)*x, {x, 0, Pi/2}]",
+  "rhs": [
+   "1/k^2*(Pi*Sqrt[1 - k^2]*(1 - Log[Sqrt[1 - k^2]]) + (2 - k^2)*MatharK[k] - (4 - Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (426)(3)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^{pi/2} ln(1-k^2sin^2x) sinx cosx x/sqrt(1-k^2sin^2x) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.3",
+  "gr": "4.432.3",
+  "page": 645,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Cos[x]^2]*Sin[x]*Cos[x]/(1 - k^2*Cos[x]^2)^(1/2)*x, {x, 0, Pi/2}]",
+  "rhs": [
+   "1/k^2*(-Pi - (2 - k^2)*MatharK[k] + (4 - Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (426)(6)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^{pi/2} ln(1-k^2cos^2x) sinx cosx x/sqrt(1-k^2cos^2x) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.4",
+  "gr": "4.432.4",
+  "page": 645,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Sin[x]*Cos[x]/((1 - k^2*Sin[x]^2)^(1/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/k^2*((2 - k^2 - (1 - k^2)*Log[Sqrt[1 - k^2]])*MatharK[k] - (2 - Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (412)(5)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2sin^2x) sinx cosx/sqrt(1-k^2sin^2x) dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.5",
+  "gr": "4.432.5",
+  "page": 645,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Cos[x]^2]*Sin[x]*Cos[x]/((1 - k^2*Cos[x]^2)^(1/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/k^2*((k^2 - 2 + Log[Sqrt[1 - k^2]])*MatharK[k] + (2 - Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (414)(5)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2cos^2x) sinx cosx/sqrt(1-k^2cos^2x) dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.6a",
+  "gr": "4.432.6",
+  "page": 646,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + k*Sin[x]^2]*Sin[x]/(Sqrt[1 - k^2*Sin[x]^2]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[2*(1 + k)/Sqrt[k]]*MatharK[k] - Pi/8*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (413)(1-6), BI (415)(1-6)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1+k sin^2x) sinx/sqrt(1-k^2sin^2x) dx/x = 1/2 ln(2(1±k)/sqrt k) K(k) - pi/8 K(k')",
+  "note": "plus sign of ±; 0<k<1 added"
+ },
+ {
+  "id": "GR4.432.6b",
+  "gr": "4.432.6",
+  "page": 646,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + k*Cos[x]^2]*Sin[x]/(Sqrt[1 - k^2*Cos[x]^2]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[2*(1 + k)/Sqrt[k]]*MatharK[k] - Pi/8*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (413)(1-6), BI (415)(1-6)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1+k cos^2x) sinx/sqrt(1-k^2cos^2x) dx/x = 1/2 ln(2(1±k)/sqrt k) K(k) - pi/8 K(k')",
+  "note": "plus sign of ±; 0<k<1 added"
+ },
+ {
+  "id": "GR4.432.6c",
+  "gr": "4.432.6",
+  "page": 646,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[1 + k*Sin[x]^2]*Tan[x]/(Sqrt[1 - k^2*Sin[x]^2]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[2*(1 + k)/Sqrt[k]]*MatharK[k] - Pi/8*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (413)(1-6), BI (415)(1-6)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1+k sin^2x) tanx/sqrt(1-k^2sin^2x) dx/x = 1/2 ln(2(1±k)/sqrt k) K(k) - pi/8 K(k')",
+  "note": "implied PV: tan x/x pole at x = Pi/2 with nonvanishing log factor; plus sign of ±; 0<k<1 added",
+  "reason": "implied principal value"
+ },
+ {
+  "id": "GR4.432.6d",
+  "gr": "4.432.6",
+  "page": 646,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + k*Cos[x]^2]*Tan[x]/(Sqrt[1 - k^2*Cos[x]^2]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[2*(1 + k)/Sqrt[k]]*MatharK[k] - Pi/8*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (413)(1-6), BI (415)(1-6)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1+k cos^2x) tanx/sqrt(1-k^2cos^2x) dx/x = 1/2 ln(2(1±k)/sqrt k) K(k) - pi/8 K(k')",
+  "note": "plus sign of ±; 0<k<1 added"
+ },
+ {
+  "id": "GR4.432.6e",
+  "gr": "4.432.6",
+  "page": 646,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + k*Sin[2*x]^2]*Tan[x]/(Sqrt[1 - k^2*Sin[2*x]^2]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[2*(1 + k)/Sqrt[k]]*MatharK[k] - Pi/8*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (413)(1-6), BI (415)(1-6)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1+k sin^2 2x) tanx/sqrt(1-k^2sin^2 2x) dx/x = 1/2 ln(2(1±k)/sqrt k) K(k) - pi/8 K(k')",
+  "note": "plus sign of ±; 0<k<1 added"
+ },
+ {
+  "id": "GR4.432.6f",
+  "gr": "4.432.6",
+  "page": 646,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[1 + k^2*Cos[2*x]^2]*Tan[x]/(Sqrt[1 - k^2*Cos[2*x]^2]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[2*(1 + k)/Sqrt[k]]*MatharK[k] - Pi/8*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (413)(1-6), BI (415)(1-6)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1+k^2 cos^2 2x) tanx/sqrt(1-k^2cos^2 2x) dx/x = 1/2 ln(2(1±k)/sqrt k) K(k) - pi/8 K(k')",
+  "note": "implied PV: tan x/x pole at x = Pi/2 with nonvanishing log factor; plus sign of ±; 0<k<1 added; as printed k^2 in the log (other forms have k); see corrected-integrand record",
+  "reason": "implied principal value"
+ },
+ {
+  "id": "GR4.432.6g",
+  "gr": "4.432.6",
+  "page": 646,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k*Sin[x]^2]*Sin[x]/(Sqrt[1 - k^2*Sin[x]^2]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[2*(1 - k)/Sqrt[k]]*MatharK[k] - Pi/8*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (413)(1-6), BI (415)(1-6)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k sin^2x) sinx/sqrt(1-k^2sin^2x) dx/x = 1/2 ln(2(1±k)/sqrt k) K(k) - pi/8 K(k')",
+  "note": "minus sign of ±; 0<k<1 added"
+ },
+ {
+  "id": "GR4.432.6h",
+  "gr": "4.432.6",
+  "page": 646,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k*Cos[x]^2]*Sin[x]/(Sqrt[1 - k^2*Cos[x]^2]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[2*(1 - k)/Sqrt[k]]*MatharK[k] - Pi/8*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (413)(1-6), BI (415)(1-6)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k cos^2x) sinx/sqrt(1-k^2cos^2x) dx/x = 1/2 ln(2(1±k)/sqrt k) K(k) - pi/8 K(k')",
+  "note": "minus sign of ±; 0<k<1 added"
+ },
+ {
+  "id": "GR4.432.6i",
+  "gr": "4.432.6",
+  "page": 646,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[1 - k*Sin[x]^2]*Tan[x]/(Sqrt[1 - k^2*Sin[x]^2]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[2*(1 - k)/Sqrt[k]]*MatharK[k] - Pi/8*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (413)(1-6), BI (415)(1-6)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k sin^2x) tanx/sqrt(1-k^2sin^2x) dx/x = 1/2 ln(2(1±k)/sqrt k) K(k) - pi/8 K(k')",
+  "note": "implied PV: tan x/x pole at x = Pi/2 with nonvanishing log factor; minus sign of ±; 0<k<1 added",
+  "reason": "implied principal value"
+ },
+ {
+  "id": "GR4.432.6j",
+  "gr": "4.432.6",
+  "page": 646,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k*Cos[x]^2]*Tan[x]/(Sqrt[1 - k^2*Cos[x]^2]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[2*(1 - k)/Sqrt[k]]*MatharK[k] - Pi/8*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (413)(1-6), BI (415)(1-6)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k cos^2x) tanx/sqrt(1-k^2cos^2x) dx/x = 1/2 ln(2(1±k)/sqrt k) K(k) - pi/8 K(k')",
+  "note": "minus sign of ±; 0<k<1 added"
+ },
+ {
+  "id": "GR4.432.6k",
+  "gr": "4.432.6",
+  "page": 646,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k*Sin[2*x]^2]*Tan[x]/(Sqrt[1 - k^2*Sin[2*x]^2]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[2*(1 - k)/Sqrt[k]]*MatharK[k] - Pi/8*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (413)(1-6), BI (415)(1-6)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k sin^2 2x) tanx/sqrt(1-k^2sin^2 2x) dx/x = 1/2 ln(2(1±k)/sqrt k) K(k) - pi/8 K(k')",
+  "note": "minus sign of ±; 0<k<1 added"
+ },
+ {
+  "id": "GR4.432.6l",
+  "gr": "4.432.6",
+  "page": 646,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[1 - k^2*Cos[2*x]^2]*Tan[x]/(Sqrt[1 - k^2*Cos[2*x]^2]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[2*(1 - k)/Sqrt[k]]*MatharK[k] - Pi/8*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (413)(1-6), BI (415)(1-6)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2 cos^2 2x) tanx/sqrt(1-k^2cos^2 2x) dx/x = 1/2 ln(2(1±k)/sqrt k) K(k) - pi/8 K(k')",
+  "note": "implied PV: tan x/x pole at x = Pi/2 with nonvanishing log factor; minus sign of ±; 0<k<1 added; as printed k^2 in the log (other forms have k); see corrected-integrand record",
+  "reason": "implied principal value"
+ },
+ {
+  "id": "GR4.432.6m",
+  "gr": "4.432.6",
+  "page": 646,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[1 + k*Cos[2*x]^2]*Tan[x]/(Sqrt[1 - k^2*Cos[2*x]^2]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[2*(1 + k)/Sqrt[k]]*MatharK[k] - Pi/8*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (413)(1-6), BI (415)(1-6)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1+k cos^2 2x) tanx/sqrt(1-k^2cos^2 2x) dx/x",
+  "note": "corrected integrand: k instead of printed k^2 in the log (form f, plus); implied PV: pole at x = Pi/2",
+  "reason": "implied principal value"
+ },
+ {
+  "id": "GR4.432.6n",
+  "gr": "4.432.6",
+  "page": 646,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[1 - k*Cos[2*x]^2]*Tan[x]/(Sqrt[1 - k^2*Cos[2*x]^2]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[2*(1 - k)/Sqrt[k]]*MatharK[k] - Pi/8*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (413)(1-6), BI (415)(1-6)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k cos^2 2x) tanx/sqrt(1-k^2cos^2 2x) dx/x",
+  "note": "corrected integrand: k instead of printed k^2 in the log (form f, minus); implied PV: pole at x = Pi/2",
+  "reason": "implied principal value"
+ },
+ {
+  "id": "GR4.432.7",
+  "gr": "4.432.7",
+  "page": 646,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Sin[x]^3/((1 - k^2*Sin[x]^2)^(1/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/k^2*((k^2 - 2 + Log[Sqrt[1 - k^2]])*MatharK[k] + (2 - Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (412)(6)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2sin^2x) sin^3x/sqrt(1-k^2sin^2x) dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.8",
+  "gr": "4.432.8",
+  "page": 646,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Cos[x]^2]*Sin[x]^3/((1 - k^2*Cos[x]^2)^(1/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/k^2*((2 - k^2 - (1 - k^2)*Log[Sqrt[1 - k^2]])*MatharK[k] - (2 - Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (414)(6)a",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2cos^2x) sin^3x/sqrt(1-k^2cos^2x) dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.9",
+  "gr": "4.432.9",
+  "page": 646,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Sin[x]*Cos[x]^2/((1 - k^2*Sin[x]^2)^(1/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/k^2*((2 - k^2 - (1 - k^2)*Log[Sqrt[1 - k^2]])*MatharK[k] - (2 - Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (412)(7)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2sin^2x) sinx cos^2x/sqrt(1-k^2sin^2x) dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.10",
+  "gr": "4.432.10",
+  "page": 646,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Cos[x]^2]*Sin[x]*Cos[x]^2/((1 - k^2*Cos[x]^2)^(1/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/k^2*((k^2 - 2 + Log[Sqrt[1 - k^2]])*MatharK[k] + (2 - Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (414)(7)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2cos^2x) sinx cos^2x/sqrt(1-k^2cos^2x) dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.11a",
+  "gr": "4.432.11",
+  "page": 646,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Tan[x]/((1 - k^2*Sin[x]^2)^(1/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Sqrt[1 - k^2]]*MatharK[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI ((412, 414))(9)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2sin^2x) tanx/sqrt(1-k^2sin^2x) dx/x = ln k' K",
+  "note": "implied PV: tan x poles at x = Pi/2 + n Pi with nonvanishing log factor; 0<k<1 added",
+  "reason": "implied principal value"
+ },
+ {
+  "id": "GR4.432.11b",
+  "gr": "4.432.11",
+  "page": 646,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Cos[x]^2]*Tan[x]/((1 - k^2*Cos[x]^2)^(1/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Sqrt[1 - k^2]]*MatharK[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI ((412, 414))(9)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2cos^2x) tanx/sqrt(1-k^2cos^2x) dx/x = ln k' K",
+  "note": "0<k<1 added; log factor vanishes at the tan poles (integrand finite)"
+ },
+ {
+  "id": "GR4.432.12",
+  "gr": "4.432.12",
+  "page": 646,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Sin[x]^2*Tan[x]/((1 - k^2*Sin[x]^2)^(1/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/k^2*((k^2 - 2 + Log[Sqrt[1 - k^2]])*MatharK[k] + (2 - Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (412)(8)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2sin^2x) sin^2x tanx/sqrt(1-k^2sin^2x) dx/x",
+  "note": "implied PV: tan x poles at x = Pi/2 + n Pi; 0<k<1 added",
+  "reason": "implied principal value"
+ },
+ {
+  "id": "GR4.432.13",
+  "gr": "4.432.13",
+  "page": 646,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Cos[x]^2]*Sin[x]^2*Tan[x]/((1 - k^2*Cos[x]^2)^(1/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/k^2*((2 - k^2 - (1 - k^2)*Log[Sqrt[1 - k^2]])*MatharK[k] - (2 - Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (414)(8)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2cos^2x) sin^2x tanx/sqrt(1-k^2cos^2x) dx/x",
+  "note": "0<k<1 added"
+ },
+ {
+  "id": "GR4.432.14a",
+  "gr": "4.432.14",
+  "page": 646,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Sin[x]^2/((1 - k^2*Sin[x]^2)^(3/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(1 - k^2)*((k^2 - 2)*MatharK[k] + (2 + Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI ((412, 414))(13)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2sin^2x) sin^2x/sqrt((1-k^2sin^2x)^3) dx/x",
+  "note": "as printed sin^2 x; integrand ~ nonzero mean/x, divergent; see 4.432.14c"
+ },
+ {
+  "id": "GR4.432.14b",
+  "gr": "4.432.14",
+  "page": 646,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Cos[x]^2]*Sin[x]/((1 - k^2*Cos[x]^2)^(3/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(1 - k^2)*((k^2 - 2)*MatharK[k] + (2 + Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI ((412, 414))(13)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2cos^2x) sinx/sqrt((1-k^2cos^2x)^3) dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.14c",
+  "gr": "4.432.14",
+  "page": 646,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Sin[x]/((1 - k^2*Sin[x]^2)^(3/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(1 - k^2)*((k^2 - 2)*MatharK[k] + (2 + Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI ((412, 414))(13)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2sin^2x) sinx/sqrt((1-k^2sin^2x)^3) dx/x",
+  "note": "corrected integrand: sin x instead of printed sin^2 x (matches the cos^2 form and 4.432.21)"
+ },
+ {
+  "id": "GR4.432.15",
+  "gr": "4.432.15",
+  "page": 647,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Sin[x]*Cos[x]/(1 - k^2*Sin[x]^2)^(3/2)*x, {x, 0, Pi/2}]",
+  "rhs": [
+   "1/k^2*((1 + Log[Sqrt[1 - k^2]])*Pi/Sqrt[1 - k^2] - (2 + Log[Sqrt[1 - k^2]])*MatharK[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (426)(9)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^{pi/2} ln(1-k^2sin^2x) sinx cosx x/sqrt((1-k^2sin^2x)^3) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.16",
+  "gr": "4.432.16",
+  "page": 647,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Cos[x]^2]*Sin[x]*Cos[x]/(1 - k^2*Cos[x]^2)^(3/2)*x, {x, 0, Pi/2}]",
+  "rhs": [
+   "1/k^2*(-Pi + (2 + Log[Sqrt[1 - k^2]])*MatharK[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (426)(15)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^{pi/2} ln(1-k^2cos^2x) sinx cosx x/sqrt((1-k^2cos^2x)^3) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.17a",
+  "gr": "4.432.17",
+  "page": 647,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Sin[x]*Cos[x]/((1 - k^2*Sin[x]^2)^(3/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/k^2*((2 - k^2 + Log[Sqrt[1 - k^2]])*MatharK[k] - (2 + Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (412)(14), BI (414)(15)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2sin^2x) sinx cosx/(1-k^2sin^2x)^(3/2) dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.17b",
+  "gr": "4.432.17",
+  "page": 647,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Cos[x]^2]*Sin[x]^3/((1 - k^2*Cos[x]^2)^(3/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/k^2*((2 - k^2 + Log[Sqrt[1 - k^2]])*MatharK[k] - (2 + Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (412)(14), BI (414)(15)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2cos^2x) sin^3x/(1-k^2cos^2x)^(3/2) dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.18a",
+  "gr": "4.432.18",
+  "page": 647,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Sin[x]^3/((1 - k^2*Sin[x]^2)^(3/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(k^2*(1 - k^2))*((2 + Log[Sqrt[1 - k^2]])*MatharE[k] - (2 - k^2 + (1 - k^2)*Log[Sqrt[1 - k^2]])*MatharK[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (412)(15), BI (414)(14)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2sin^2x) sin^3x/(1-k^2sin^2x)^(3/2) dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.18b",
+  "gr": "4.432.18",
+  "page": 647,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Cos[x]^2]*Sin[x]*Cos[x]/((1 - k^2*Cos[x]^2)^(3/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(k^2*(1 - k^2))*((2 + Log[Sqrt[1 - k^2]])*MatharE[k] - (2 - k^2 + (1 - k^2)*Log[Sqrt[1 - k^2]])*MatharK[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (412)(15), BI (414)(14)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2cos^2x) sinx cosx/(1-k^2cos^2x)^(3/2) dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.19a",
+  "gr": "4.432.19",
+  "page": 647,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Sin[x]*Cos[x]^2/((1 - k^2*Sin[x]^2)^(3/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/k^2*((2 - k^2 + Log[Sqrt[1 - k^2]])*MatharK[k] - (2 + Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (412)(16), BI (414)(17)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2sin^2x) sinx cos^2x/(1-k^2sin^2x)^(3/2) dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.19b",
+  "gr": "4.432.19",
+  "page": 647,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Cos[x]^2]*Sin[x]^2*Tan[x]/((1 - k^2*Cos[x]^2)^(3/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/k^2*((2 - k^2 + Log[Sqrt[1 - k^2]])*MatharK[k] - (2 + Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (412)(16), BI (414)(17)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2cos^2x) sin^2x tanx/(1-k^2cos^2x)^(3/2) dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.20a",
+  "gr": "4.432.20",
+  "page": 647,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Sin[x]^2*Tan[x]/((1 - k^2*Sin[x]^2)^(3/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(k^2*(1 - k^2))*((2 + Log[Sqrt[1 - k^2]])*MatharE[k] - (2 - k^2 + (1 - k^2)*Log[Sqrt[1 - k^2]])*MatharK[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (412)(17), BI (414)(16)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2sin^2x) sin^2x tanx/(1-k^2sin^2x)^(3/2) dx/x",
+  "note": "implied PV: tan x poles at x = Pi/2 + n Pi; 0<k<1 added",
+  "reason": "implied principal value"
+ },
+ {
+  "id": "GR4.432.20b",
+  "gr": "4.432.20",
+  "page": 647,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Cos[x]^2]*Sin[x]*Cos[x]^2/((1 - k^2*Cos[x]^2)^(3/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(k^2*(1 - k^2))*((2 + Log[Sqrt[1 - k^2]])*MatharE[k] - (2 - k^2 + (1 - k^2)*Log[Sqrt[1 - k^2]])*MatharK[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (412)(17), BI (414)(16)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2cos^2x) sinx cos^2x/(1-k^2cos^2x)^(3/2) dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.21a",
+  "gr": "4.432.21",
+  "page": 647,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*Tan[x]/((1 - k^2*Sin[x]^2)^(3/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(1 - k^2)*((k^2 - 2)*MatharK[k] + (2 + Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI ((412, 414))(18)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2sin^2x) tanx/(1-k^2sin^2x)^(3/2) dx/x",
+  "note": "implied PV: tan x poles at x = Pi/2 + n Pi; 0<k<1 added",
+  "reason": "implied principal value"
+ },
+ {
+  "id": "GR4.432.21b",
+  "gr": "4.432.21",
+  "page": 647,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Cos[x]^2]*Tan[x]/((1 - k^2*Cos[x]^2)^(3/2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(1 - k^2)*((k^2 - 2)*MatharK[k] + (2 + Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI ((412, 414))(18)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2cos^2x) tanx/(1-k^2cos^2x)^(3/2) dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.22a",
+  "gr": "4.432.22",
+  "page": 647,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*(1 - k^2*Sin[x]^2)^(1/2)*Sin[x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(2 - k^2)*MatharK[k] - (2 - Log[Sqrt[1 - k^2]])*MatharE[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI ((412, 414))(1)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2sin^2x) sqrt(1-k^2sin^2x) sinx dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.22b",
+  "gr": "4.432.22",
+  "page": 647,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Cos[x]^2]*(1 - k^2*Cos[x]^2)^(1/2)*Sin[x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(2 - k^2)*MatharK[k] - (2 - Log[Sqrt[1 - k^2]])*MatharE[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI ((412, 414))(1)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2cos^2x) sqrt(1-k^2cos^2x) sinx dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.23",
+  "gr": "4.432.23",
+  "page": 648,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*(1 - k^2*Sin[x]^2)^(1/2)*Sin[x]*Cos[x]*x, {x, 0, Pi/2}]",
+  "rhs": [
+   "1/(27*k^2)*(3*Pi*Sqrt[1 - k^2]^3*(1 - 3*Log[Sqrt[1 - k^2]]) + (22*(1 - k^2) + 6*k^4 - 3*(1 - k^2)*Log[Sqrt[1 - k^2]])*MatharK[k]) - (2 - k^2)*(14 - 6*Log[Sqrt[1 - k^2]])*MatharE[k]",
+   "1/(27*k^2)*(3*Pi*Sqrt[1 - k^2]^3*(1 - 3*Log[Sqrt[1 - k^2]]) + (22*(1 - k^2) + 6*k^4 - 3*(1 - k^2)*Log[Sqrt[1 - k^2]])*MatharK[k] - (2 - k^2)*(14 - 6*Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (426)(1)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^{pi/2} ln(1-k^2sin^2x) sqrt(1-k^2sin^2x) sinx cosx x dx",
+  "note": "as printed the E(k) term stands outside the 1/(27k^2) brace; second rhs puts it inside (cf. 4.432.24)"
+ },
+ {
+  "id": "GR4.432.24",
+  "gr": "4.432.24",
+  "page": 648,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Cos[x]^2]*(1 - k^2*Cos[x]^2)^(1/2)*Sin[x]*Cos[x]*x, {x, 0, Pi/2}]",
+  "rhs": [
+   "1/(27*k^2)*(-3*Pi - (22*(1 - k^2) + 6*k^4 - 3*(1 - k^2)*Log[Sqrt[1 - k^2]])*MatharK[k] + (2 - k^2)*(14 - 6*Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (426)(2)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^{pi/2} ln(1-k^2cos^2x) sqrt(1-k^2cos^2x) sinx cosx x dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.25a",
+  "gr": "4.432.25",
+  "page": 648,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[1 - k^2*Sin[x]^2]*(1 - k^2*Sin[x]^2)^(1/2)*Tan[x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(2 - k^2)*MatharK[k] - (2 - Log[Sqrt[1 - k^2]])*MatharE[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "(412,414)(2)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2sin^2x) sqrt(1-k^2sin^2x) tanx dx/x",
+  "note": "implied PV: tan x poles at x = Pi/2 + n Pi; 0<k<1 added",
+  "reason": "implied principal value"
+ },
+ {
+  "id": "GR4.432.25b",
+  "gr": "4.432.25",
+  "page": 648,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - k^2*Cos[x]^2]*(1 - k^2*Cos[x]^2)^(1/2)*Tan[x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(2 - k^2)*MatharK[k] - (2 - Log[Sqrt[1 - k^2]])*MatharE[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "(412,414)(2)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(1-k^2cos^2x) sqrt(1-k^2cos^2x) tanx dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.26a",
+  "gr": "4.432.26",
+  "page": 648,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]^2 + Sqrt[1 - k^2]*Cos[x]^2]*Sin[x]/(Sqrt[1 - k^2*Cos[x]^2]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[2*Sqrt[1 - k^2]^(3/2)/(1 + Sqrt[1 - k^2])]*MatharK[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (415)(19-21)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(sin^2x + k' cos^2x) sinx/sqrt(1-k^2cos^2x) dx/x = 1/2 ln(2 (sqrt k')^3/(1+k')) K(k)",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.26b",
+  "gr": "4.432.26",
+  "page": 648,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]^2 + Sqrt[1 - k^2]*Cos[x]^2]*Tan[x]/(Sqrt[1 - k^2*Cos[x]^2]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[2*Sqrt[1 - k^2]^(3/2)/(1 + Sqrt[1 - k^2])]*MatharK[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (415)(19-21)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(sin^2x + k' cos^2x) tanx/sqrt(1-k^2cos^2x) dx/x",
+  "note": ""
+ },
+ {
+  "id": "GR4.432.26c",
+  "gr": "4.432.26",
+  "page": 648,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[Sin[2*x]^2 + Sqrt[1 - k^2]*Cos[2*x]^2]*Tan[x]/(Sqrt[1 - k^2*Cos[2*x]^2]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[2*Sqrt[1 - k^2]^(3/2)/(1 + Sqrt[1 - k^2])]*MatharK[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (415)(19-21)",
+  "edition_note": "",
+  "section": "4.42-4.43 Combinations of logarithms, trigonometric functions, and powers",
+  "tex": "int_0^inf ln(sin^2 2x + k' cos^2 2x) tanx/sqrt(1-k^2cos^2 2x) dx/x",
+  "note": "implied PV: tan x poles at x = Pi/2 + n Pi (log factor -> ln k'); 0<k<1 added",
+  "reason": "implied principal value"
+ },
+ {
+  "id": "GR4.441.1",
+  "gr": "4.441.1",
+  "page": 648,
+  "status": "ok",
+  "lhs": "Integrate[E^(-q*x)*Sin[p*x]*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(p^2 + q^2)*(q*ArcTan[p/q] - p*EulerGamma - p/c*Log[p^2 - q^2])",
+   "1/(p^2 + q^2)*(q*ArcTan[p/q] - p*EulerGamma - p/2*Log[p^2 + q^2])"
+  ],
+  "conds": [
+   "q > 0",
+   "p > 0"
+  ],
+  "cite": "BI (467)(1)",
+  "edition_note": "7",
+  "section": "4.44 Combinations of logarithms, trigonometric functions, and exponentials",
+  "tex": "int_0^inf e^(-qx) sin px ln x dx = 1/(p^2+q^2)[q arctan(p/q) - pC - p/c ln(p^2-q^2)]",
+  "note": "misprint: printed p/c ln(p^2 - q^2) (stray c); second rhs p/2 ln(p^2 + q^2), consistent with 4.441.2"
+ },
+ {
+  "id": "GR4.441.2",
+  "gr": "4.441.2",
+  "page": 648,
+  "status": "ok",
+  "lhs": "Integrate[E^(-q*x)*Cos[p*x]*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "-1/(p^2 + q^2)*(q/2*Log[p^2 + q^2] + p*ArcTan[p/q] + q*EulerGamma)"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "BI (467)(2)",
+  "edition_note": "",
+  "section": "4.44 Combinations of logarithms, trigonometric functions, and exponentials",
+  "tex": "int_0^inf e^(-qx) cos px ln x dx",
+  "note": "p real assumed"
+ },
+ {
+  "id": "GR4.442",
+  "gr": "4.442",
+  "page": 648,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*Tan[x])*Log[Cos[x]]/(Sin[x]*Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "-1/2*CosIntegral[p]^2 + 1/2*(SinIntegral[p] - Pi/2)^2"
+  ],
+  "conds": [
+   "Re[p] > 0"
+  ],
+  "cite": "NT 32(11)",
+  "edition_note": "",
+  "section": "4.44 Combinations of logarithms, trigonometric functions, and exponentials",
+  "tex": "int_0^{pi/2} e^(-p tan x) ln cos x/(sin x cos x) dx = -1/2 ci(p)^2 + 1/2 si(p)^2",
+  "note": ""
+ },
+ {
+  "id": "GR4.511",
+  "gr": "4.511",
+  "page": 648,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[p*x]*ArcCot[q*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(1/p*Log[1 + p/q] + 1/q*Log[1 + q/p])"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (77)(8)",
+  "edition_note": "",
+  "section": "4.51 Inverse trigonometric functions",
+  "tex": "int_0^inf arccot px arccot qx dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.512",
+  "gr": "4.512",
+  "page": 649,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[Cos[x]], {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [],
+  "cite": "BI (345)(1)",
+  "edition_note": "",
+  "section": "4.51 Inverse trigonometric functions",
+  "tex": "int_0^pi arctan(cos x) dx = 0",
+  "note": ""
+ },
+ {
+  "id": "GR4.521.1",
+  "gr": "4.521.1",
+  "page": 649,
+  "status": "ok",
+  "lhs": "Integrate[ArcSin[x]/x, {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*Log[2]"
+  ],
+  "conds": [],
+  "cite": "FI II 614, 623",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 arcsin x/x dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.521.2a",
+  "gr": "4.521.2",
+  "page": 649,
+  "status": "ok",
+  "lhs": "Integrate[ArcCos[x]/(1 + x), {x, 0, 1}]",
+  "rhs": [
+   "-Pi/2*Log[2] + 2*Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (231)(7, 8)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 arccos x/(1+x) dx = -pi/2 ln2 + 2G",
+  "note": ""
+ },
+ {
+  "id": "GR4.521.2b",
+  "gr": "4.521.2",
+  "page": 649,
+  "status": "ok",
+  "lhs": "Integrate[ArcCos[x]/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*Log[2] + 2*Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (231)(7, 8)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 arccos x/(1-x) dx = pi/2 ln2 + 2G",
+  "note": ""
+ },
+ {
+  "id": "GR4.521.3",
+  "gr": "4.521.3",
+  "page": 649,
+  "status": "ok",
+  "lhs": "Integrate[ArcSin[x]*x/(1 + q*x^2), {x, 0, 1}]",
+  "rhs": [
+   "Pi/(2*q)*Log[2*Sqrt[1 + q]/(1 + Sqrt[1 + q])]"
+  ],
+  "conds": [
+   "q > -1"
+  ],
+  "cite": "BI (231)(1)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 arcsin x x/(1+qx^2) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.521.4",
+  "gr": "4.521.4",
+  "page": 649,
+  "status": "ok",
+  "lhs": "Integrate[ArcSin[x]*x/(1 - p^2*x^2), {x, 0, 1}]",
+  "rhs": [
+   "Pi/(2*p^2)*Log[(1 + Sqrt[1 - p^2])/(2*Sqrt[1 - p^2])]"
+  ],
+  "conds": [
+   "p^2 < 1"
+  ],
+  "cite": "LI (231)(3)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 arcsin x x/(1-p^2x^2) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.521.5",
+  "gr": "4.521.5",
+  "page": 649,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[ArcCos[x]/(Sin[lam]^2 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "2*Csc[lam]*Sum[Sin[(2*k + 1)*lam]/(2*k + 1)^2, {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "0 < lam < Pi/2"
+  ],
+  "cite": "BI (231)(10)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 arccos x/(sin^2 lam - x^2) dx",
+  "note": "implied PV: pole at x = sin lam in (0,1); 0 < lam < Pi/2 added",
+  "reason": "implied principal value"
+ },
+ {
+  "id": "GR4.521.6",
+  "gr": "4.521.6",
+  "page": 649,
+  "status": "ok",
+  "lhs": "Integrate[ArcSin[x]/(x*(1 + q*x^2)), {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*Log[(1 + Sqrt[1 + q])/Sqrt[1 + q]]"
+  ],
+  "conds": [
+   "q > -1"
+  ],
+  "cite": "BI (235)(10)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 arcsin x/(x(1+qx^2)) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.521.7",
+  "gr": "4.521.7",
+  "page": 649,
+  "status": "ok",
+  "lhs": "Integrate[ArcSin[x]*x/(1 + q*x^2)^2, {x, 0, 1}]",
+  "rhs": [
+   "Pi/(4*q)*(Sqrt[1 + q] - 1)/(1 + q)"
+  ],
+  "conds": [
+   "q > -1"
+  ],
+  "cite": "BI (234)(2)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 arcsin x x/(1+qx^2)^2 dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.521.8",
+  "gr": "4.521.8",
+  "page": 649,
+  "status": "ok",
+  "lhs": "Integrate[ArcCos[x]*x/(1 + q*x^2)^2, {x, 0, 1}]",
+  "rhs": [
+   "Pi/(4*q)*(Sqrt[1 + q] - 1)/(1 + q)",
+   "Pi/(4*q)*(Sqrt[1 + q] - 1)/Sqrt[1 + q]"
+  ],
+  "conds": [
+   "q > -1"
+  ],
+  "cite": "BI (234)(4)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 arccos x x/(1+qx^2)^2 dx",
+  "note": "printed value identical to 4.521.7; arccos = pi/2 - arcsin gives denominator Sqrt[1+q] (second rhs)"
+ },
+ {
+  "id": "GR4.522.1",
+  "gr": "4.522.1",
+  "page": 649,
+  "status": "ok",
+  "lhs": "Integrate[x*Sqrt[1 - k^2*x^2]*ArcCos[x], {x, 0, 1}]",
+  "rhs": [
+   "1/(9*k^2)*(3/2*Pi + (1 - k^2)*MatharK[k] - 2*(1 + (1 - k^2))*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (236)(9)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 x sqrt(1-k^2x^2) arccos x dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.522.2",
+  "gr": "4.522.2",
+  "page": 649,
+  "status": "ok",
+  "lhs": "Integrate[x*Sqrt[1 - k^2*x^2]*ArcSin[x], {x, 0, 1}]",
+  "rhs": [
+   "1/(9*k^2)*(-3/2*Pi*Sqrt[1 - k^2]^3 - (1 - k^2)*MatharK[k] + 2*(1 + (1 - k^2))*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (236)(1)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 x sqrt(1-k^2x^2) arcsin x dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.522.3",
+  "gr": "4.522.3",
+  "page": 649,
+  "status": "ok",
+  "lhs": "Integrate[x*Sqrt[1 - k^2 + k^2*x^2]*ArcSin[x], {x, 0, 1}]",
+  "rhs": [
+   "1/(9*k^2)*(3/2*Pi + (1 - k^2)*MatharK[k] - 2*(1 + (1 - k^2))*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (236)(5)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 x sqrt(k'^2+k^2x^2) arcsin x dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.522.4",
+  "gr": "4.522.4",
+  "page": 649,
+  "status": "ok",
+  "lhs": "Integrate[x*ArcSin[x]/Sqrt[1 - k^2*x^2], {x, 0, 1}]",
+  "rhs": [
+   "1/k^2*(-Pi/2*Sqrt[1 - k^2] + MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (237)(1)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 x arcsin x/sqrt(1-k^2x^2) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.522.5",
+  "gr": "4.522.5",
+  "page": 649,
+  "status": "ok",
+  "lhs": "Integrate[x*ArcCos[x]/Sqrt[1 - k^2*x^2], {x, 0, 1}]",
+  "rhs": [
+   "1/k^2*(Pi/2 - MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (240)(1)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 x arccos x/sqrt(1-k^2x^2) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.522.6",
+  "gr": "4.522.6",
+  "page": 649,
+  "status": "ok",
+  "lhs": "Integrate[x*ArcSin[x]/Sqrt[1 - k^2 + k^2*x^2], {x, 0, 1}]",
+  "rhs": [
+   "1/k^2*(Pi/2 - MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (238)(1)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 x arcsin x/sqrt(k'^2+k^2x^2) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.522.7",
+  "gr": "4.522.7",
+  "page": 649,
+  "status": "ok",
+  "lhs": "Integrate[x*ArcCos[x]/Sqrt[1 - k^2 + k^2*x^2], {x, 0, 1}]",
+  "rhs": [
+   "1/k^2*(-Pi/2*Sqrt[1 - k^2] + MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (241)(1)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 x arccos x/sqrt(k'^2+k^2x^2) dx",
+  "note": ""
+ }
+]

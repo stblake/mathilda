@@ -1,0 +1,1997 @@
+[
+ {
+  "id": "GR2.580.1",
+  "gr": "2.580.1",
+  "page": 233,
+  "status": "SKIP-REFERENCE",
+  "tex": "int dphi/sqrt(a+b cos phi+c sin phi) = 2 int dpsi/sqrt(a-p+2p cos^2 psi) [phi=2psi+alpha, tan alpha=c/b, p=sqrt(b^2+c^2)]",
+  "reason": "substitution rule; integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals"
+ },
+ {
+  "id": "GR2.580.2",
+  "gr": "2.580.2",
+  "page": 233,
+  "status": "SKIP-REFERENCE",
+  "tex": "int dphi/sqrt(a+b cos+c sin+d cos^2+e sin cos+f sin^2) = 2 int dx/sqrt(A+Bx+Cx^2-Dx^3+Ex^4) [tan(phi/2)=x, ...]",
+  "reason": "substitution rule; integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals"
+ },
+ {
+  "id": "GR2.581.1a",
+  "gr": "2.581.1a",
+  "page": 233,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^m cos^n Delta^r = 1/((m+n+r)k^2){sin^(m-3)cos^(n+1)Delta^(r+2)+... int ...} [m+n+r!=0]",
+  "reason": "reduction formula: integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals"
+ },
+ {
+  "id": "GR2.581.1b",
+  "gr": "2.581.1b",
+  "page": 233,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^m cos^n Delta^r = 1/((m+n+r)k^2){sin^(m+1)cos^(n-3)Delta^(r+2)+... int ...} [m+n+r!=0]",
+  "reason": "reduction formula: integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals"
+ },
+ {
+  "id": "GR2.581.2",
+  "gr": "2.581.2",
+  "page": 233,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^m cos^n/Delta^3 = sin^(m-1)cos^(n-1)/(k^2 Delta) - (m-1)/k^2 int ... + (n-1)/k^2 int ...",
+  "reason": "reduction formula: integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals"
+ },
+ {
+  "id": "GR2.581.3",
+  "gr": "2.581.3",
+  "page": 233,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^m cos^n/Delta^5 = sin^(m-1)cos^(n-1)/(3k^2 Delta^3) - ... int ...",
+  "reason": "reduction formula: integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals"
+ },
+ {
+  "id": "GR2.581.4",
+  "gr": "2.581.4",
+  "page": 233,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin cos^n Delta^r = -cos^(n-1)Delta^(r+2)/((n+r+1)k^2) - (n-1)k'^2/((n+r+1)k^2) int cos^(n-2) sin Delta^r",
+  "reason": "reduction formula: integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals"
+ },
+ {
+  "id": "GR2.581.5",
+  "gr": "2.581.5",
+  "page": 233,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^m cos Delta^r = -sin^(m-1)Delta^(r+2)/((m+r+1)k^2) + (m-1)/((m+r+1)k^2) int sin^(m-2) cos Delta^r",
+  "reason": "reduction formula: integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals"
+ },
+ {
+  "id": "GR2.581.6",
+  "gr": "2.581.6",
+  "page": 234,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^3 cos^n Delta^r = ... cos^(n-1)Delta^(r+2) - ... int cos^(n-2) sin Delta^r",
+  "reason": "reduction formula: integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals"
+ },
+ {
+  "id": "GR2.581.7",
+  "gr": "2.581.7",
+  "page": 234,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^m cos^3 Delta^r = ... sin^(m-1) x n^(m-1) x Delta^(r+2) + ... int sin^(m-2) cos Delta^r (book misprint 'xn^(m-1)x', presumably cos^(m-1)?)",
+  "reason": "reduction formula: integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals"
+ },
+ {
+  "id": "GR2.582.1",
+  "gr": "2.582.1",
+  "page": 234,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int Delta^n = (n-1)/n(2-k^2) int Delta^(n-2) - (n-2)/n(1-k^2) int Delta^(n-4) + k^2/n sin cos Delta^(n-2)",
+  "reason": "reduction formula: integral on right-hand side",
+  "cite": "LA (316)(1)a",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals"
+ },
+ {
+  "id": "GR2.582.2",
+  "gr": "2.582.2",
+  "page": 234,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/Delta^(n+1) = -k^2 sin cos/((n-1)k'^2 Delta^(n-1)) + ... int dx/Delta^(n-1) - ... int dx/Delta^(n-3)",
+  "reason": "reduction formula: integral on right-hand side",
+  "cite": "LA 317(8)a",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals"
+ },
+ {
+  "id": "GR2.582.3",
+  "gr": "2.582.3",
+  "page": 234,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^n/Delta = sin^(n-3) cos Delta/((n-1)k^2) + ... int sin^(n-2)/Delta - ... int sin^(n-4)/Delta",
+  "reason": "reduction formula: integral on right-hand side",
+  "cite": "LA 316(1)a",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals"
+ },
+ {
+  "id": "GR2.582.4",
+  "gr": "2.582.4",
+  "page": 234,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cos^n/Delta = cos^(n-3) sin Delta/((n-1)k^2) + ... int cos^(n-2)/Delta + ... int cos^(n-4)/Delta",
+  "reason": "reduction formula: integral on right-hand side",
+  "cite": "LA 316(2)a",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals"
+ },
+ {
+  "id": "GR2.582.5",
+  "gr": "2.582.5",
+  "page": 234,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int tan^n/Delta = tan^(n-3) Delta/((n-1)k'^2 cos^2) - ... int tan^(n-2)/Delta - ... int tan^(n-4)/Delta",
+  "reason": "reduction formula: integral on right-hand side",
+  "cite": "LA 317(3)",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals"
+ },
+ {
+  "id": "GR2.582.6",
+  "gr": "2.582.6",
+  "page": 234,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cot^n/Delta = -cot^(n-1) Delta/((n-1)cos^2) - ... int cot^(n-2)/Delta - ... int cot^(n-4)/Delta",
+  "reason": "reduction formula: integral on right-hand side",
+  "cite": "LA 317(6)",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals"
+ },
+ {
+  "id": "GR2.583.1",
+  "gr": "2.583.1",
+  "page": 234,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "MatharE2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.2",
+  "gr": "2.583.2",
+  "page": 235,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Sin[x], x]",
+  "rhs": [
+   "-(Sqrt[1 - k^2*Sin[x]^2]*Cos[x])/2 - (1 - k^2)/(2*k)*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*S dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.3",
+  "gr": "2.583.3",
+  "page": 235,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Cos[x], x]",
+  "rhs": [
+   "Sqrt[1 - k^2*Sin[x]^2]*Sin[x]/2 + 1/(2*k)*ArcSin[k*Sin[x]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*C dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.4",
+  "gr": "2.583.4",
+  "page": 235,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Sin[x]^2, x]",
+  "rhs": [
+   "-(Sqrt[1 - k^2*Sin[x]^2]/3)*Sin[x]*Cos[x] + (1 - k^2)/(3*k^2)*MatharF2[x, k] + (2*k^2 - 1)/(3*k^2)*MatharE2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*S^2 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.5",
+  "gr": "2.583.5",
+  "page": 235,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Sin[x]*Cos[x], x]",
+  "rhs": [
+   "-(Sqrt[1 - k^2*Sin[x]^2]^3)/(3*k^2)"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*S*C dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.6",
+  "gr": "2.583.6",
+  "page": 235,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Cos[x]^2, x]",
+  "rhs": [
+   "(Sqrt[1 - k^2*Sin[x]^2]/3)*Sin[x]*Cos[x] - (1 - k^2)/(3*k^2)*MatharF2[x, k] + (k^2 + 1)/(3*k^2)*MatharE2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*C^2 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.7",
+  "gr": "2.583.7",
+  "page": 235,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Sin[x]^3, x]",
+  "rhs": [
+   "-(2*k^2*Sin[x]^2 + 3*k^2 - 1)/(8*k^2)*Sqrt[1 - k^2*Sin[x]^2]*Cos[x] + (3*k^4 - 2*k^2 - 1)/(8*k^3)*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*S^3 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.8",
+  "gr": "2.583.8",
+  "page": 235,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Sin[x]^2*Cos[x], x]",
+  "rhs": [
+   "(2*k^2*Sin[x]^2 - 1)/(8*k^2)*Sqrt[1 - k^2*Sin[x]^2]*Sin[x] + 1/(8*k^3)*ArcSin[k*Sin[x]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*S^2*C dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.9",
+  "gr": "2.583.9",
+  "page": 235,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Sin[x]*Cos[x]^2, x]",
+  "rhs": [
+   "-(2*k^2*Cos[x]^2 + (1 - k^2))/(8*k^2)*Sqrt[1 - k^2*Sin[x]^2]*Cos[x] + (1 - k^2)^2/(8*k^3)*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*S*C^2 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.10",
+  "gr": "2.583.10",
+  "page": 235,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Cos[x]^3, x]",
+  "rhs": [
+   "(2*k^2*Cos[x]^2 + 2*k^2 + 1)/(8*k^2)*Sqrt[1 - k^2*Sin[x]^2]*Sin[x] + (4*k^2 - 1)/(8*k^3)*ArcSin[k*Sin[x]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*C^3 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.11",
+  "gr": "2.583.11",
+  "page": 235,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Sin[x]^4, x]",
+  "rhs": [
+   "-(3*k^2*Sin[x]^2 + 4*k^2 - 1)/(15*k^2)*Sqrt[1 - k^2*Sin[x]^2]*Sin[x]*Cos[x] - 2*(2*k^4 - k^2 - 1)/(15*k^4)*MatharF2[x, k] + (8*k^4 - 3*k^2 - 2)/(15*k^4)*MatharE2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*S^4 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.12",
+  "gr": "2.583.12",
+  "page": 235,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Sin[x]^3*Cos[x], x]",
+  "rhs": [
+   "(3*k^4*Sin[x]^4 - k^2*Sin[x]^2 - 2)/(15*k^4)*Sqrt[1 - k^2*Sin[x]^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*S^3*C dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.13",
+  "gr": "2.583.13",
+  "page": 235,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Sin[x]^2*Cos[x]^2, x]",
+  "rhs": [
+   "-(3*k^2*Cos[x]^2 - 2*k^2 + 1)/(15*k^2)*Sqrt[1 - k^2*Sin[x]^2]*Sin[x]*Cos[x] - (1 - k^2)*(1 + (1 - k^2))/(15*k^4)*MatharF2[x, k] + 2*(k^4 - k^2 + 1)/(15*k^4)*MatharE2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*S^2*C^2 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.14",
+  "gr": "2.583.14",
+  "page": 235,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Sin[x]*Cos[x]^3, x]",
+  "rhs": [
+   "-(3*k^4*Sin[x]^4 - k^2*(5*k^2 + 1)*Sin[x]^2 + 5*k^2 - 2)/(15*k^4)*Sqrt[1 - k^2*Sin[x]^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*S*C^3 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.15",
+  "gr": "2.583.15",
+  "page": 235,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Cos[x]^4, x]",
+  "rhs": [
+   "(3*k^2*Cos[x]^2 + 3*k^2 + 1)/(15*k^2)*Sqrt[1 - k^2*Sin[x]^2]*Sin[x]*Cos[x] + 2*(1 - k^2)*((1 - k^2) - 2*k^2)/(15*k^4)*MatharF2[x, k] + (3*k^4 + 7*k^2 - 2)/(15*k^4)*MatharE2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*C^4 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.16",
+  "gr": "2.583.16",
+  "page": 235,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Sin[x]^5, x]",
+  "rhs": [
+   "(-8*k^4*Sin[x]^4 - 2*k^2*(5*k^2 - 1)*Sin[x]^2 - 15*k^4 + 4*k^2 + 3)/(48*k^4)*Sqrt[1 - k^2*Sin[x]^2]*Cos[x] + (5*k^6 - 3*k^4 - k^2 - 1)/(16*k^5)*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*S^5 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.17",
+  "gr": "2.583.17",
+  "page": 235,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Sin[x]^4*Cos[x], x]",
+  "rhs": [
+   "(8*k^4*Sin[x]^4 - 2*k^2*Sin[x]^2 - 3)/(48*k^4)*Sqrt[1 - k^2*Sin[x]^2]*Sin[x] + 1/(16*k^5)*ArcSin[k*Sin[x]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*S^4*C dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.18",
+  "gr": "2.583.18",
+  "page": 236,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Sin[x]^3*Cos[x]^2, x]",
+  "rhs": [
+   "(8*k^4*Sin[x]^4 - 2*k^2*(k^2 + 1)*Sin[x]^2 - 3*k^4 + 2*k^2 - 3)/(48*k^4)*Sqrt[1 - k^2*Sin[x]^2]*Cos[x] + (1 - k^2)^2*(k^2 + 1)/(16*k^5)*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*S^3*C^2 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.19",
+  "gr": "2.583.19",
+  "page": 236,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Sin[x]^2*Cos[x]^3, x]",
+  "rhs": [
+   "(-8*k^4*Sin[x]^4 + 2*k^2*(6*k^2 + 1)*Sin[x]^2 - 6*k^2 + 3)/(48*k^4)*Sqrt[1 - k^2*Sin[x]^2]*Sin[x] + (2*k^2 - 1)/(16*k^5)*ArcSin[k*Sin[x]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*S^2*C^3 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.20",
+  "gr": "2.583.20",
+  "page": 236,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Sin[x]*Cos[x]^4, x]",
+  "rhs": [
+   "(-8*k^4*Sin[x]^4 + 2*k^2*(7*k^2 + 1)*Sin[x]^2 - 3*k^4 - 8*k^2 + 3)/(48*k^4)*Sqrt[1 - k^2*Sin[x]^2]*Cos[x] - (1 - k^2)^3/(16*k^5)*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*S*C^4 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.21",
+  "gr": "2.583.21",
+  "page": 236,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Cos[x]^5, x]",
+  "rhs": [
+   "(8*k^4*Sin[x]^4 - 2*k^2*(12*k^2 + 1)*Sin[x]^2 + 24*k^4 + 12*k^2 - 3)/(48*k^4)*Sqrt[1 - k^2*Sin[x]^2]*Sin[x] + (8*k^4 - 4*k^2 + 1)/(16*k^5)*ArcSin[k*Sin[x]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*C^5 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.22",
+  "gr": "2.583.22",
+  "page": 236,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]^3, x]",
+  "rhs": [
+   "(2/3)*(1 + (1 - k^2))*MatharE2[x, k] - (1 - k^2)/3*MatharF2[x, F] + k^2/3*Sqrt[1 - k^2*Sin[x]^2]*Sin[x]*Cos[x]",
+   "(2/3)*(1 + (1 - k^2))*MatharE2[x, k] - (1 - k^2)/3*MatharF2[x, k] + k^2/3*Sqrt[1 - k^2*Sin[x]^2]*Sin[x]*Cos[x]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD^3 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": "Book prints F(x,F) (misprint); second candidate uses F(x,k)."
+ },
+ {
+  "id": "GR2.583.23",
+  "gr": "2.583.23",
+  "page": 236,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]^3*Sin[x], x]",
+  "rhs": [
+   "(2*k^2*Sin[x]^2 + 3*k^2 - 5)/8*Sqrt[1 - k^2*Sin[x]^2]*Cos[x] - 3*(1 - k^2)^2/(8*k)*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD^3*S dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.24",
+  "gr": "2.583.24",
+  "page": 236,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]^3*Cos[x], x]",
+  "rhs": [
+   "(-2*k^2*Sin[x]^2 + 5)/8*Sqrt[1 - k^2*Sin[x]^2]*Sin[x] + 3/(8*k)*ArcSin[k*Sin[x]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD^3*C dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.25",
+  "gr": "2.583.25",
+  "page": 236,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]^3*Sin[x]^2, x]",
+  "rhs": [
+   "(3*k^2*Sin[x]^2 + 4*k^2 - 6)/15*Sqrt[1 - k^2*Sin[x]^2]*Sin[x]*Cos[x] + (1 - k^2)*(3 - 4*k^2)/(15*k^2)*MatharF2[x, k] - (8*k^4 - 13*k^2 + 3)/(15*k^2)*MatharE2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD^3*S^2 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.26",
+  "gr": "2.583.26",
+  "page": 236,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]^3*Sin[x]*Cos[x], x]",
+  "rhs": [
+   "-(Sqrt[1 - k^2*Sin[x]^2]^5)/(5*k^2)"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD^3*S*C dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.27",
+  "gr": "2.583.27",
+  "page": 236,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]^3*Cos[x]^2, x]",
+  "rhs": [
+   "(-3*k^2*Sin[x]^2 + k^2 + 5)/15*Sqrt[1 - k^2*Sin[x]^2]*Sin[x]*Cos[x] - (1 - k^2)*(k^2 + 3)/(15*k^2)*MatharF2[x, k] - (2*k^4 - 7*k^2 - 3)/(15*k^2)*MatharE2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD^3*C^2 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.28",
+  "gr": "2.583.28",
+  "page": 236,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]^3*Sin[x]^3, x]",
+  "rhs": [
+   "(8*k^4*Sin[x]^4 + 2*k^2*(5*k^2 - 7)*Sin[x]^2 + 15*k^4 - 22*k^2 + 3)/(48*k^2)*Sqrt[1 - k^2*Sin[x]^2]*Cos[x] - (5*k^6 - 9*k^4 + 3*k^2 + 1)/(16*k^3)*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD^3*S^3 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.29",
+  "gr": "2.583.29",
+  "page": 236,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]^3*Sin[x]^2*Cos[x], x]",
+  "rhs": [
+   "(-8*k^4*Sin[x]^4 + 14*k^2*Sin[x]^2 - 3)/(48*k^2)*Sqrt[1 - k^2*Sin[x]^2]*Sin[x] + 1/(16*k^3)*ArcSin[k*Sin[x]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD^3*S^2*C dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.30",
+  "gr": "2.583.30",
+  "page": 237,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]^3*Sin[x]*Cos[x]^2, x]",
+  "rhs": [
+   "(-8*k^4*Sin[x]^4 + 2*k^2*(k^2 + 7)*Sin[x]^2 + 3*k^4 - 8*k^2 - 3)/(48*k^2)*Sqrt[1 - k^2*Sin[x]^2]*Cos[x] + (1 - k^2)^3/(16*k^3)*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD^3*S*C^2 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.31",
+  "gr": "2.583.31",
+  "page": 237,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]^3*Cos[x]^3, x]",
+  "rhs": [
+   "(8*k^4*Sin[x]^4 - 2*k^2*(6*k^2 + 7)*Sin[x]^2 + 30*k^2 + 3)/(48*k^2)*Sqrt[1 - k^2*Sin[x]^2]*Sin[x] + (6*k^2 - 1)/(16*k^3)*ArcSin[k*Sin[x]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD^3*C^3 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.32",
+  "gr": "2.583.32",
+  "page": 237,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/Sin[x], x]",
+  "rhs": [
+   "-(1/2)*Log[(Sqrt[1 - k^2*Sin[x]^2] + Cos[x])/(Sqrt[1 - k^2*Sin[x]^2] - Cos[x])] + k*Log[k*(k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/S dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": "Book prints 'k ln k (k cos x + Delta)'; read as k*Log[k*(k cos x + Delta)] (differs from k*Log[k cos x + Delta] by a constant)."
+ },
+ {
+  "id": "GR2.583.33",
+  "gr": "2.583.33",
+  "page": 237,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/Cos[x], x]",
+  "rhs": [
+   "Sqrt[1 - k^2]/2*Log[(Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2]*Sin[x])/(Sqrt[1 - k^2*Sin[x]^2] - Sqrt[1 - k^2]*Sin[x])] + k*ArcSin[k*Sin[x]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/C dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.34",
+  "gr": "2.583.34",
+  "page": 237,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/Sin[x]^2, x]",
+  "rhs": [
+   "(1 - k^2)*MatharF2[x, k] - MatharE2[x, k] - Sqrt[1 - k^2*Sin[x]^2]*Cot[x]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/S^2 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.35",
+  "gr": "2.583.35",
+  "page": 237,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/(Sin[x]*Cos[x]), x]",
+  "rhs": [
+   "(1/2)*Log[(1 - Sqrt[1 - k^2*Sin[x]^2])/(1 + Sqrt[1 - k^2*Sin[x]^2])] + Sqrt[1 - k^2]/2*Log[(Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2])/(Sqrt[1 - k^2*Sin[x]^2] - Sqrt[1 - k^2])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/(S*C) dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.36",
+  "gr": "2.583.36",
+  "page": 237,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/Cos[x]^2, x]",
+  "rhs": [
+   "MatharF2[x, k] - MatharE2[x, k] + Sqrt[1 - k^2*Sin[x]^2]*Tan[x]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/C^2 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.37",
+  "gr": "2.583.37",
+  "page": 237,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Sin[x]/Cos[x], x]",
+  "rhs": [
+   "-Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2]/2*Log[(Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2])/(Sqrt[1 - k^2*Sin[x]^2] - Sqrt[1 - k^2])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*S/C dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": "Chained lhs in book: int sin/cos Delta = int Delta tan x (same integrand)."
+ },
+ {
+  "id": "GR2.583.38",
+  "gr": "2.583.38",
+  "page": 237,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Cos[x]/Sin[x], x]",
+  "rhs": [
+   "Sqrt[1 - k^2*Sin[x]^2] + (1/2)*Log[(1 - Sqrt[1 - k^2*Sin[x]^2])/(1 + Sqrt[1 - k^2*Sin[x]^2])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*C/S dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": "Chained lhs in book: int cos/sin Delta = int Delta cot x (same integrand)."
+ },
+ {
+  "id": "GR2.583.39",
+  "gr": "2.583.39",
+  "page": 237,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/Sin[x]^3, x]",
+  "rhs": [
+   "-(Sqrt[1 - k^2*Sin[x]^2]*Cos[x])/(2*Sin[x]^2) + (1 - k^2)/4*Log[(Sqrt[1 - k^2*Sin[x]^2] + Cos[x])/(Sqrt[1 - k^2*Sin[x]^2] - Cos[x])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/S^3 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.40",
+  "gr": "2.583.40",
+  "page": 237,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/(Sin[x]^2*Cos[x]), x]",
+  "rhs": [
+   "-Sqrt[1 - k^2*Sin[x]^2]/Sin[x] - (1 + k^2)/(2*Sqrt[1 - k^2])*Log[(Sqrt[1 - k^2*Sin[x]^2] - Sqrt[1 - k^2]*Sin[x])/(Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2]*Sin[x])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/(S^2*C) dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.41",
+  "gr": "2.583.41",
+  "page": 237,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/(Sin[x]*Cos[x]^2), x]",
+  "rhs": [
+   "Sqrt[1 - k^2*Sin[x]^2]/Cos[x] + (1/2)*Log[(Sqrt[1 - k^2*Sin[x]^2] + Cos[x])/(Sqrt[1 - k^2*Sin[x]^2] - Cos[x])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/(S*C^2) dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.42",
+  "gr": "2.583.42",
+  "page": 237,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/Cos[x]^3, x]",
+  "rhs": [
+   "(Sqrt[1 - k^2*Sin[x]^2]*Sin[x])/(2*Cos[x]^2) + 1/(4*Sqrt[1 - k^2])*Log[(Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2]*Sin[x])/(Sqrt[1 - k^2*Sin[x]^2] - Sqrt[1 - k^2]*Sin[x])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/C^3 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.43",
+  "gr": "2.583.43",
+  "page": 237,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Sin[x]/Cos[x]^2, x]",
+  "rhs": [
+   "Sqrt[1 - k^2*Sin[x]^2]/Cos[x] - k*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*S/C^2 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.44",
+  "gr": "2.583.44",
+  "page": 237,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Cos[x]/Sin[x]^2, x]",
+  "rhs": [
+   "-Sqrt[1 - k^2*Sin[x]^2]/Sin[x] - k*ArcSin[k*Sin[x]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*C/S^2 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.45",
+  "gr": "2.583.45",
+  "page": 237,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Sin[x]^2/Cos[x], x]",
+  "rhs": [
+   "-(Sqrt[1 - k^2*Sin[x]^2]*Sin[x])/2 + (2*k^2 - 1)/(2*k)*ArcSin[k*Sin[x]] + Sqrt[1 - k^2]/2*Log[(Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2]*Sin[x])/(Sqrt[1 - k^2*Sin[x]^2] - Sqrt[1 - k^2]*Sin[x])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*S^2/C dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.46",
+  "gr": "2.583.46",
+  "page": 237,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]*Cos[x]^2/Sin[x], x]",
+  "rhs": [
+   "(Sqrt[1 - k^2*Sin[x]^2]*Cos[x])/2 + (k^2 + 1)/(2*k)*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]] + (1/2)*Log[(Sqrt[1 - k^2*Sin[x]^2] + Cos[x])/(Sqrt[1 - k^2*Sin[x]^2] - Cos[x])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD*C^2/S dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.47",
+  "gr": "2.583.47",
+  "page": 237,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/Sin[x]^4, x]",
+  "rhs": [
+   "(1/3)*(-Sqrt[1 - k^2*Sin[x]^2]*Cot[x]^3 + (k^2 - 3)*Sqrt[1 - k^2*Sin[x]^2]*Cot[x] + 2*(1 - k^2)*MatharF2[x, k] + (k^2 - 2)*MatharE2[x, k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/S^4 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.48",
+  "gr": "2.583.48",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/(Sin[x]^3*Cos[x]), x]",
+  "rhs": [
+   "-Sqrt[1 - k^2*Sin[x]^2]/(2*Sin[x]^2) + Sqrt[1 - k^2]/2*Log[(Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2])/(Sqrt[1 - k^2*Sin[x]^2] - Sqrt[1 - k^2])] + (k^2 - 2)/4*Log[(1 + Sqrt[1 - k^2*Sin[x]^2])/(1 - Sqrt[1 - k^2*Sin[x]^2])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/(S^3*C) dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.49",
+  "gr": "2.583.49",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/(Sin[x]^2*Cos[x]^2), x]",
+  "rhs": [
+   "(Tan[x]/(1 - k^2) - Cot[x])*Sqrt[1 - k^2*Sin[x]^2] + 2*MatharF2[x, k] - (1 + (1 - k^2))/(1 - k^2)*MatharE2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/(S^2*C^2) dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.50",
+  "gr": "2.583.50",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/(Sin[x]*Cos[x]^3), x]",
+  "rhs": [
+   "Sqrt[1 - k^2*Sin[x]^2]/(2*Cos[x]^2) - (1/2)*Log[(1 + Sqrt[1 - k^2*Sin[x]^2])/(1 - Sqrt[1 - k^2*Sin[x]^2])] + (2 - k^2)/(4*Sqrt[1 - k^2])*Log[(Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2])/(Sqrt[1 - k^2*Sin[x]^2] - Sqrt[1 - k^2])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/(S*C^3) dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.51",
+  "gr": "2.583.51",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/Cos[x]^4, x]",
+  "rhs": [
+   "1/(3*(1 - k^2))*(((1 - k^2)*Tan[x]^2 - (2*k^2 - 3))*Tan[x]*Sqrt[1 - k^2*Sin[x]^2] + 2*(1 - k^2)*MatharF2[x, k] + (k^2 - 2)*MatharE2[x, k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/C^4 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.52",
+  "gr": "2.583.52",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/Cos[x]^3*Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "Sqrt[1 - k^2*Sin[x]^2]/(2*Cos[x]^2) + k^2/(4*Sqrt[1 - k^2])*Log[(Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2])/(Sqrt[1 - k^2*Sin[x]^2] - Sqrt[1 - k^2])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S/C^3*DD dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.53",
+  "gr": "2.583.53",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/Sin[x]^3*Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-Sqrt[1 - k^2*Sin[x]^2]/(2*Sin[x]^2) + k^2/4*Log[(1 + Sqrt[1 - k^2*Sin[x]^2])/(1 - Sqrt[1 - k^2*Sin[x]^2])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int C/S^3*DD dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.54",
+  "gr": "2.583.54",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2/Cos[x]^2*Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "Sqrt[1 - k^2*Sin[x]^2]*Tan[x] + MatharF2[x, k] - 2*MatharE2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^2/C^2*DD dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": "Chained lhs in book: = int tan^2 x Delta (same integrand)."
+ },
+ {
+  "id": "GR2.583.55",
+  "gr": "2.583.55",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^2/Sin[x]^2*Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-Sqrt[1 - k^2*Sin[x]^2]*Cot[x] + (1 - k^2)*MatharF2[x, k] - 2*MatharE2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int C^2/S^2*DD dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": "Chained lhs in book: = int cot^2 x Delta (same integrand)."
+ },
+ {
+  "id": "GR2.583.56",
+  "gr": "2.583.56",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3/Cos[x]*Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-(k^2*Sin[x]^2 + 3*k^2 - 1)/(3*k^2)*Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2]/2*Log[(Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2])/(Sqrt[1 - k^2*Sin[x]^2] - Sqrt[1 - k^2])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^3/C*DD dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.57",
+  "gr": "2.583.57",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^3/Sin[x]*Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-(k^2*Sin[x]^2 - 3*k^2 - 1)/(3*k^2)*Sqrt[1 - k^2*Sin[x]^2] + (1/2)*Log[(1 - Sqrt[1 - k^2*Sin[x]^2])/(1 + Sqrt[1 - k^2*Sin[x]^2])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int C^3/S*DD dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.58",
+  "gr": "2.583.58",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/Sin[x]^5, x]",
+  "rhs": [
+   "((k^2 - 3)*Sin[x]^2 + 2)/(8*Sin[x]^4)*Cos[x]*Sqrt[1 - k^2*Sin[x]^2] + (1 - k^2)*(k^2 + 3)/16*Log[(Sqrt[1 - k^2*Sin[x]^2] + Cos[x])/(Sqrt[1 - k^2*Sin[x]^2] - Cos[x])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/S^5 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.59",
+  "gr": "2.583.59",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/(Sin[x]^4*Cos[x]), x]",
+  "rhs": [
+   "-((3 - k^2)*Sin[x]^2 + 1)/(3*Sin[x]^3)*Sqrt[1 - k^2*Sin[x]^2] - Sqrt[1 - k^2]/2*Log[(Sqrt[1 - k^2*Sin[x]^2] - Sqrt[1 - k^2]*Sin[x])/(Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2]*Sin[x])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/(S^4*C) dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.60",
+  "gr": "2.583.60",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/(Sin[x]^3*Cos[x]^2), x]",
+  "rhs": [
+   "(3*Sin[x]^2 - 1)/(2*Sin[x]^2*Cos[x])*Sqrt[1 - k^2*Sin[x]^2] + (k^2 - 3)/4*Log[(Sqrt[1 - k^2*Sin[x]^2] - Cos[x])/(Sqrt[1 - k^2*Sin[x]^2] + Cos[x])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/(S^3*C^2) dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.61",
+  "gr": "2.583.61",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/(Sin[x]^2*Cos[x]^3), x]",
+  "rhs": [
+   "(3*Sin[x]^2 - 2)/(2*Sin[x]*Cos[x]^2)*Sqrt[1 - k^2*Sin[x]^2] - (2*k^2 - 3)/(4*Sqrt[1 - k^2])*Log[(Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2]*Sin[x])/(Sqrt[1 - k^2*Sin[x]^2] - Sqrt[1 - k^2]*Sin[x])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/(S^2*C^3) dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.62",
+  "gr": "2.583.62",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/(Sin[x]*Cos[x]^4), x]",
+  "rhs": [
+   "((2*k^2 - 3)*Sin[x]^2 - 3*k^2 + 4)/(3*(1 - k^2)*Cos[x]^3)*Sqrt[1 - k^2*Sin[x]^2] + (1/2)*Log[(Sqrt[1 - k^2*Sin[x]^2] + Cos[x])/(Sqrt[1 - k^2*Sin[x]^2] - Cos[x])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/(S*C^4) dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.63",
+  "gr": "2.583.63",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - k^2*Sin[x]^2]/Cos[x]^5, x]",
+  "rhs": [
+   "((2*k^2 - 3)*Sin[x]^2 - 4*k^2 + 5)/(8*(1 - k^2)*Cos[x]^4)*Sin[x]*Sqrt[1 - k^2*Sin[x]^2] - (4*k^2 - 3)/(16*Sqrt[1 - k^2]^3)*Log[(Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2]*Sin[x])/(Sqrt[1 - k^2*Sin[x]^2] - Sqrt[1 - k^2]*Sin[x])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int DD/C^5 dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.64",
+  "gr": "2.583.64",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/Cos[x]^4*Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "(-(2*k^2 + 1)*k^2*Sin[x]^2 + 3*k^4 - k^2 + 1)/(3*(1 - k^2)*Cos[x]^3)*Sqrt[1 - k^2*Sin[x]^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S/C^4*DD dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.65",
+  "gr": "2.583.65",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/Sin[x]^4*Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-(Sqrt[1 - k^2*Sin[x]^2]^3)/(3*Sin[x]^3)"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int C/S^4*DD dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.66",
+  "gr": "2.583.66",
+  "page": 238,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2/Cos[x]^3*Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "Sin[x]/(2*Cos[x]^2)*Sqrt[1 - k^2*Sin[x]^2] + (2*k^2 - 1)/(4*Sqrt[1 - k^2])*Log[(Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2]*Sin[x])/(Sqrt[1 - k^2*Sin[x]^2] - Sqrt[1 - k^2]*Sin[x])] - k*ArcSin[k*Sin[x]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^2/C^3*DD dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.67",
+  "gr": "2.583.67",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^2/Sin[x]^3*Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-Cos[x]/(2*Sin[x]^2)*Sqrt[1 - k^2*Sin[x]^2] - (k^2 + 1)/4*Log[(Sqrt[1 - k^2*Sin[x]^2] + Cos[x])/(Sqrt[1 - k^2*Sin[x]^2] - Cos[x])] - k*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int C^2/S^3*DD dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.68",
+  "gr": "2.583.68",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3/Cos[x]^2*Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-(Sin[x]^2 - 3)/(2*Cos[x])*Sqrt[1 - k^2*Sin[x]^2] - (3*k^2 - 1)/(2*k)*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^3/C^2*DD dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.69",
+  "gr": "2.583.69",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^3/Sin[x]^2*Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-(Sin[x]^2 + 2)/(2*Sin[x])*Sqrt[1 - k^2*Sin[x]^2] - (2*k^2 + 1)/(2*k)*ArcSin[k*Sin[x]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int C^3/S^2*DD dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.70",
+  "gr": "2.583.70",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^4/Cos[x]*Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-(2*k^2*Sin[x]^2 + 4*k^2 - 1)/(8*k^2)*Sqrt[1 - k^2*Sin[x]^2]*Sin[x] + (8*k^4 - 4*k^2 - 1)/(8*k^3)*ArcSin[k*Sin[x]] + Sqrt[1 - k^2]/2*Log[(Sqrt[1 - k^2*Sin[x]^2] + Sqrt[1 - k^2]*Sin[x])/(Sqrt[1 - k^2*Sin[x]^2] - Sqrt[1 - k^2]*Sin[x])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^4/C*DD dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.583.71",
+  "gr": "2.583.71",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^4/Sin[x]*Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "(-2*k^2*Sin[x]^2 + 5*k^2 + 1)/(8*k^2)*Sqrt[1 - k^2*Sin[x]^2]*Cos[x] + (1/2)*Log[(Sqrt[1 - k^2*Sin[x]^2] + Cos[x])/(Sqrt[1 - k^2*Sin[x]^2] - Cos[x])] + (3*k^4 + 6*k^2 - 1)/(8*k^3)*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int C^4/S*DD dx, DD=Delta=sqrt(1-k^2 sin^2 x), KP=k'",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.1",
+  "gr": "2.584.1",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "MatharF2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int 1/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.2a",
+  "gr": "2.584.2a",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "1/(2*k)*Log[(Sqrt[1 - k^2*Sin[x]^2] - k*Cos[x])/(Sqrt[1 - k^2*Sin[x]^2] + k*Cos[x])]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.2b",
+  "gr": "2.584.2b",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-(1/k)*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.3a",
+  "gr": "2.584.3a",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "(1/k)*ArcSin[k*Sin[x]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int C/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.3b",
+  "gr": "2.584.3b",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "(1/k)*ArcTan[k*Sin[x]/Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int C/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.4",
+  "gr": "2.584.4",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "MatharF2[x, k]/k^2 - MatharE2[x, k]/k^2"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^2/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.5",
+  "gr": "2.584.5",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-Sqrt[1 - k^2*Sin[x]^2]/k^2"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S*C/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.6",
+  "gr": "2.584.6",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^2/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "MatharE2[x, k]/k^2 - (1 - k^2)/k^2*MatharF2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int C^2/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.7",
+  "gr": "2.584.7",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "Cos[x]*Sqrt[1 - k^2*Sin[x]^2]/(2*k^2) - (1 + k^2)/(2*k^3)*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^3/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.8",
+  "gr": "2.584.8",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2*Cos[x]/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-(Sin[x]*Sqrt[1 - k^2*Sin[x]^2])/(2*k^2) + ArcSin[k*Sin[x]]/(2*k^3)"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^2*C/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.9",
+  "gr": "2.584.9",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]^2/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-(Cos[x]*Sqrt[1 - k^2*Sin[x]^2])/(2*k^2) + (1 - k^2)/(2*k^3)*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S*C^2/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.10",
+  "gr": "2.584.10",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^3/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "Sin[x]*Sqrt[1 - k^2*Sin[x]^2]/(2*k^2) + (2*k^2 - 1)/(2*k^3)*ArcSin[k*Sin[x]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int C^3/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.11",
+  "gr": "2.584.11",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^4/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "Sin[x]*Cos[x]*Sqrt[1 - k^2*Sin[x]^2]/(3*k^2) + (2 + k^2)/(3*k^4)*MatharF2[x, k] - 2*(1 + k^2)/(3*k^4)*MatharE2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^4/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.12",
+  "gr": "2.584.12",
+  "page": 239,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3*Cos[x]/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-1/(3*k^4)*(2 + k^2*Sin[x]^2)*Sqrt[1 - k^2*Sin[x]^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^3*C/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.13",
+  "gr": "2.584.13",
+  "page": 240,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2*Cos[x]^2/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-(Sin[x]*Cos[x]*Sqrt[1 - k^2*Sin[x]^2])/(3*k^2) + (2 - k^2)/(3*k^4)*MatharE2[x, k] + (2*k^2 - 2)/(3*k^4)*MatharF2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^2*C^2/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.14",
+  "gr": "2.584.14",
+  "page": 240,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]^3/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-1/(3*k^4)*(k^2*Cos[x]^2 - 2*(1 - k^2))*Sqrt[1 - k^2*Sin[x]^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S*C^3/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.15",
+  "gr": "2.584.15",
+  "page": 240,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^4/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "Sin[x]*Cos[x]*Sqrt[1 - k^2*Sin[x]^2]/(3*k^2) + (4*k^2 - 2)/(3*k^4)*MatharE2[x, k] + (3*k^4 - 5*k^2 + 2)/(3*k^4)*MatharF2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int C^4/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.16",
+  "gr": "2.584.16",
+  "page": 240,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^5/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "(2*k^2*Sin[x]^2 + 3*k^2 + 3)/(8*k^4)*Cos[x]*Sqrt[1 - k^2*Sin[x]^2] - (3 + 2*k^2 + 3*k^4)/(8*k^5)*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^5/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.17",
+  "gr": "2.584.17",
+  "page": 240,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^4*Cos[x]/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-(2*k^2*Sin[x]^2 + 3)/(8*k^4)*Sin[x]*Sqrt[1 - k^2*Sin[x]^2] + 3/(8*k^5)*ArcSin[k*Sin[x]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^4*C/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.18",
+  "gr": "2.584.18",
+  "page": 240,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3*Cos[x]^2/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "(2*k^2*Cos[x]^2 - k^2 - 3)/(8*k^4)*Cos[x]*Sqrt[1 - k^2*Sin[x]^2] - (k^4 + 2*k^2 - 3)/(8*k^5)*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^3*C^2/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.19",
+  "gr": "2.584.19",
+  "page": 240,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2*Cos[x]^3/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-(2*k^2*Cos[x]^2 + 2*k^2 - 3)/(8*k^4)*Sin[x]*Sqrt[1 - k^2*Sin[x]^2] + (4*k^2 - 3)/(8*k^5)*ArcSin[k*Sin[x]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^2*C^3/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.20",
+  "gr": "2.584.20",
+  "page": 240,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]^4/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "(3 - 5*k^2 + 2*k^2*Sin[x]^2)/(8*k^4)*Cos[x]*Sqrt[1 - k^2*Sin[x]^2] - (3*k^4 - 6*k^2 + 3)/(8*k^5)*Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S*C^4/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.21",
+  "gr": "2.584.21",
+  "page": 240,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^5/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "(2*k^2*Cos[x]^2 + 6*k^2 - 3)/(8*k^4)*Sin[x]*Sqrt[1 - k^2*Sin[x]^2] + (8*k^4 - 8*k^2 + 3)/(8*k^5)*ArcSin[k*Sin[x]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int C^5/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.22",
+  "gr": "2.584.22",
+  "page": 240,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^6/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "(3*k^2*Sin[x]^2 + 4*k^2 + 4)/(15*k^4)*Sin[x]*Cos[x]*Sqrt[1 - k^2*Sin[x]^2] + (4*k^4 + 3*k^2 + 8)/(15*k^6)*MatharF2[x, k] - (8*k^4 + 7*k^2 + 8)/(15*k^6)*MatharE2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^6/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.23",
+  "gr": "2.584.23",
+  "page": 240,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^5*Cos[x]/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-(3*k^4*Sin[x]^4 + 4*k^2*Sin[x]^2 + 8)/(15*k^6)*Sqrt[1 - k^2*Sin[x]^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^5*C/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.24",
+  "gr": "2.584.24",
+  "page": 240,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^4*Cos[x]^2/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "(3*k^2*Cos[x]^2 - 2*k^2 - 4)/(15*k^4)*Sin[x]*Cos[x]*Sqrt[1 - k^2*Sin[x]^2] + (k^4 + 7*k^2 - 8)/(15*k^6)*MatharF2[x, k] - (2*k^4 + 3*k^2 - 8)/(15*k^6)*MatharE2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^4*C^2/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.25",
+  "gr": "2.584.25",
+  "page": 240,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3*Cos[x]^3/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "(3*k^4*Sin[x]^4 - (5*k^4 - 4*k^2)*Sin[x]^2 - 10*k^2 + 8)/(15*k^6)*Sqrt[1 - k^2*Sin[x]^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^3*C^3/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.26",
+  "gr": "2.584.26",
+  "page": 240,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2*Cos[x]^4/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-(3*k^2*Cos[x]^2 + 3*k^2 - 4)/(15*k^4)*Sin[x]*Cos[x]*Sqrt[1 - k^2*Sin[x]^2] + (9*k^4 - 17*k^2 + 8)/(15*k^6)*MatharF2[x, k] - (3*k^4 - 13*k^2 + 8)/(15*k^6)*MatharE2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S^2*C^4/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.27",
+  "gr": "2.584.27",
+  "page": 240,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]^5/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "(-3*k^4*Cos[x]^4 + 4*k^2*(1 - k^2)*Cos[x]^2 - 8*k^4 + 16*k^2 - 8)/(15*k^6)*Sqrt[1 - k^2*Sin[x]^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int S*C^5/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.584.28",
+  "gr": "2.584.28",
+  "page": 240,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^6/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "(3*k^2*Cos[x]^2 + 8*k^2 - 4)/(15*k^4)*Sin[x]*Cos[x]*Sqrt[1 - k^2*Sin[x]^2] + (15*k^6 - 34*k^4 + 27*k^2 - 8)/(15*k^6)*MatharF2[x, k] + (23*k^4 - 23*k^2 + 8)/(15*k^6)*MatharE2[x, k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.58-2.62 Integrals reducible to elliptic and pseudo-elliptic integrals",
+  "tex": "int C^6/DD dx, DD=Delta=sqrt(1-k^2 sin^2 x)",
+  "note": ""
+ }
+]

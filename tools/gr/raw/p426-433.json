@@ -1,0 +1,2136 @@
+[
+ {
+  "id": "GR3.524.3",
+  "gr": "3.524.3",
+  "page": 426,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x]/(Sinh[b*x]*x^p), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1 - p]*Sum[1/(b*(2*k + 1) - a)^(1 - p) - 1/(b*(2*k + 1) + a)^(1 - p), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "b > Abs[a]",
+   "p < 1"
+  ],
+  "cite": "BI (131)(2)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "int_0^inf sinh ax/sinh bx dx/x^p = Gamma(1-p) sum_k {[b(2k+1)-a]^(p-1) - [b(2k+1)+a]^(p-1)}",
+  "note": ""
+ },
+ {
+  "id": "GR3.524.4",
+  "gr": "3.524.4",
+  "page": 426,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m + 1)*Sinh[a*x]/Cosh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b)*D[Sec[a*Pi/(2*b)], {a, 2*m + 1}]"
+  ],
+  "conds": [
+   "b > Abs[a]",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (112)(18)a",
+  "edition_note": "11",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "int_0^inf x^(2m+1) sinh ax/cosh bx = pi/(2b) d^(2m+1)/da^(2m+1) sec(a pi/2b)",
+  "note": "m = 0,1,2,... assumed (not printed)"
+ },
+ {
+  "id": "GR3.524.5",
+  "gr": "3.524.5",
+  "page": 426,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Cosh[beta*x]/Sinh[gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu]/(2*gamma)^mu*(HurwitzZeta[mu, (1 - beta/gamma)/2] + HurwitzZeta[mu, (1 + beta/gamma)/2])"
+  ],
+  "conds": [
+   "Re[gamma] > Abs[Re[beta]]",
+   "Re[mu] > 1"
+  ],
+  "cite": "ET I 323(12)",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "int_0^inf x^(mu-1) cosh beta x/sinh gamma x = Gamma(mu)/(2gamma)^mu {zeta[mu,(1-beta/gamma)/2] + zeta[mu,(1+beta/gamma)/2]}",
+  "note": ""
+ },
+ {
+  "id": "GR3.524.6",
+  "gr": "3.524.6",
+  "page": 426,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m)*Cosh[a*x]/Cosh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b)*D[Sec[a*Pi/(2*b)], {a, 2*m}]"
+  ],
+  "conds": [
+   "b > Abs[a]",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI(112)(17)",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "int_0^inf x^(2m) cosh ax/cosh bx = pi/(2b) d^(2m)/da^(2m) sec(a pi/2b)",
+  "note": "m = 0,1,2,... assumed"
+ },
+ {
+  "id": "GR3.524.7",
+  "gr": "3.524.7",
+  "page": 426,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[a*x]/(Cosh[b*x]*x^p), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1 - p]*Sum[(-1)^k*(1/(b*(2*k + 1) - a)^(1 - p) + 1/(b*(2*k + 1) + a)^(1 - p)), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "b > Abs[a]",
+   "p < 1"
+  ],
+  "cite": "BI(131)(1)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "int_0^inf cosh ax/cosh bx dx/x^p = Gamma(1-p) sum (-1)^k {...+...}",
+  "note": ""
+ },
+ {
+  "id": "GR3.524.8",
+  "gr": "3.524.8",
+  "page": 426,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m + 1)*Cosh[a*x]/Sinh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b)*D[Tan[a*Pi/(2*b)], {a, 2*m + 1}]"
+  ],
+  "conds": [
+   "b > Abs[a]",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (112)(19)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "int_0^inf x^(2m+1) cosh ax/sinh bx = pi/(2b) d^(2m+1)/da^(2m+1) tan(a pi/2b)",
+  "note": "m = 0,1,2,... assumed"
+ },
+ {
+  "id": "GR3.524.9",
+  "gr": "3.524.9",
+  "page": 426,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Sinh[a*x]/Sinh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^3/(4*b^3)*Sin[a*Pi/(2*b)]*Sec[a*Pi/(2*b)]^3"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "BI (84)(18)",
+  "edition_note": "8",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "int_0^inf x^2 sinh ax/sinh bx = pi^3/(4b^3) sin(a pi/2b) sec^3(a pi/2b)",
+  "note": ""
+ },
+ {
+  "id": "GR3.524.10",
+  "gr": "3.524.10",
+  "page": 426,
+  "status": "ok",
+  "lhs": "Integrate[x^4*Sinh[a*x]/Sinh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "8*(Pi/(2*b)*Sec[a*Pi/(2*b)])^5*Sin[a*Pi/(2*b)]*(2 + Sin[a*Pi/(2*b)]^2)"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "BI (82)(17)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^4 sinh/sinh = 8 (pi/2b sec)^5 sin (2 + sin^2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.524.11",
+  "gr": "3.524.11",
+  "page": 426,
+  "status": "ok",
+  "lhs": "Integrate[x^6*Sinh[a*x]/Sinh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "16*(Pi/(2*b)*Sec[a*Pi/(2*b)])^7*Sin[a*Pi/(2*b)]*(45 - 30*Cos[a*Pi/(2*b)]^2 + 2*Cos[a*Pi/(2*b)]^4)"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "BI (82)(21)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^6 sinh/sinh = 16 (pi/2b sec)^7 sin (45 - 30cos^2 + 2cos^4)",
+  "note": ""
+ },
+ {
+  "id": "GR3.524.12",
+  "gr": "3.524.12",
+  "page": 426,
+  "status": "ok",
+  "lhs": "Integrate[x*Sinh[a*x]/Cosh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/(4*b^2)*Sin[a*Pi/(2*b)]*Sec[a*Pi/(2*b)]^2"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "BI (84)(15)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x sinh/cosh = pi^2/(4b^2) sin sec^2",
+  "note": ""
+ },
+ {
+  "id": "GR3.524.13",
+  "gr": "3.524.13",
+  "page": 426,
+  "status": "ok",
+  "lhs": "Integrate[x^3*Sinh[a*x]/Cosh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/(2*b)*Sec[a*Pi/(2*b)])^4*Sin[a*Pi/(2*b)]*(6 - Cos[a*Pi/(2*b)]^2)"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "BI (82)(14)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^3 sinh/cosh = (pi/2b sec)^4 sin (6 - cos^2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.524.14",
+  "gr": "3.524.14",
+  "page": 426,
+  "status": "ok",
+  "lhs": "Integrate[x^5*Sinh[a*x]/Cosh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/(2*b)*Sec[a*Pi/(2*b)])^6*Sin[a*Pi/(2*b)]*(120 - 60*Cos[a*Pi/(2*b)]^2 + Cos[a*Pi/(2*b)]^4)"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "BI (82)(18)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^5 sinh/cosh = (pi/2b sec)^6 sin (120 - 60cos^2 + cos^4)",
+  "note": ""
+ },
+ {
+  "id": "GR3.524.15",
+  "gr": "3.524.15",
+  "page": 426,
+  "status": "ok",
+  "lhs": "Integrate[x^7*Sinh[a*x]/Cosh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/(2*b)*Sec[a*Pi/(2*b)])^8*Sin[a*Pi/(2*b)]*(5040 - 4200*Cos[a*Pi/(2*b)]^2 + 546*Cos[a*Pi/(2*b)]^4 - Cos[a*Pi/(2*b)]^6)"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "BI (82)(22)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^7 sinh/cosh = (pi/2b sec)^8 sin (5040 - 4200cos^2 + 546cos^4 - cos^6)",
+  "note": ""
+ },
+ {
+  "id": "GR3.524.16",
+  "gr": "3.524.16",
+  "page": 426,
+  "status": "ok",
+  "lhs": "Integrate[x*Cosh[a*x]/Sinh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/(2*b)*Sec[a*Pi/(2*b)])^2"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "BI (84)(16)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x cosh/sinh = (pi/2b sec)^2",
+  "note": ""
+ },
+ {
+  "id": "GR3.524.17",
+  "gr": "3.524.17",
+  "page": 427,
+  "status": "ok",
+  "lhs": "Integrate[x^3*Cosh[a*x]/Sinh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*(Pi/(2*b)*Sec[a*Pi/(2*b)])^4*(1 + 2*Sin[a*Pi/(2*b)]^2)"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "BI (82)(15)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^3 cosh/sinh = 2 (pi/2b sec)^4 (1 + 2 sin^2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.524.18",
+  "gr": "3.524.18",
+  "page": 427,
+  "status": "ok",
+  "lhs": "Integrate[x^5*Cosh[a*x]/Sinh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "8*(Pi/(2*b)*Sec[a*Pi/(2*b)])^6*(15 - 15*Cos[a*Pi/(2*b)]^2 + 2*Cos[a*Pi/(2*b)]^4)"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "BI (82)(19)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^5 cosh/sinh = 8 (pi/2b sec)^6 (15 - 15cos^2 + 2cos^4)",
+  "note": ""
+ },
+ {
+  "id": "GR3.524.19",
+  "gr": "3.524.19",
+  "page": 427,
+  "status": "ok",
+  "lhs": "Integrate[x^7*Cosh[a*x]/Sinh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "16*(Pi/(2*b)*Sec[a*Pi/(2*b)])^8*(315 - 420*Cos[a*Pi/(2*b)]^2 + 126*Cos[a*Pi/(2*b)]^4 - 4*Cos[a*Pi/(2*b)]^6)"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "BI(82)(23)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^7 cosh/sinh = 16 (pi/2b sec)^8 (315 - 420cos^2 + 126cos^4 - 4cos^6)",
+  "note": ""
+ },
+ {
+  "id": "GR3.524.20",
+  "gr": "3.524.20",
+  "page": 427,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Cosh[a*x]/Cosh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^3/(8*b^3)*(2*Sec[a*Pi/(2*b)]^3 - Sec[a*Pi/(2*b)])"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "BI (84)(17)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^2 cosh/cosh = pi^3/(8b^3) (2 sec^3 - sec)",
+  "note": ""
+ },
+ {
+  "id": "GR3.524.21",
+  "gr": "3.524.21",
+  "page": 427,
+  "status": "ok",
+  "lhs": "Integrate[x^4*Cosh[a*x]/Cosh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/(2*b)*Sec[a*Pi/(2*b)])^5*(24 - 20*Cos[a*Pi/(2*b)]^2 + Cos[a*Pi/(2*b)]^4)"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "BI (82)(16)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^4 cosh/cosh = (pi/2b sec)^5 (24 - 20cos^2 + cos^4)",
+  "note": ""
+ },
+ {
+  "id": "GR3.524.22",
+  "gr": "3.524.22",
+  "page": 427,
+  "status": "ok",
+  "lhs": "Integrate[x^6*Cosh[a*x]/Cosh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/(2*b)*Sec[a*Pi/(2*b)])^7*(720 - 840*Cos[a*Pi/(2*b)]^2 + 182*Cos[a*Pi/(2*b)]^4 - Cos[a*Pi/(2*b)]^6)"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "BI (82)(20)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^6 cosh/cosh = (pi/2b sec)^7 (720 - 840cos^2 + 182cos^4 - cos^6)",
+  "note": ""
+ },
+ {
+  "id": "GR3.524.23",
+  "gr": "3.524.23",
+  "page": 427,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x]/(Cosh[b*x]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Tan[a*Pi/(4*b) + Pi/4]]"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "BI (95)(3)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "int_0^inf sinh ax/cosh bx dx/x = ln tan(a pi/4b + pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR3.525.1",
+  "gr": "3.525.1",
+  "page": 427,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x]/(Sinh[Pi*x]*(1 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "-a/2*Cos[a] + 1/2*Sin[a]*Log[2*(1 + Cos[a])]"
+  ],
+  "conds": [
+   "Pi >= Abs[a]"
+  ],
+  "cite": "BI (97)(10)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "sinh ax/sinh pi x /(1+x^2) = -a/2 cos a + 1/2 sin a ln[2(1+cos a)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.525.2",
+  "gr": "3.525.2",
+  "page": 427,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x]/(Sinh[Pi*x/2]*(1 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Sin[a] + 1/2*Cos[a]*Log[(1 - Sin[a])/(1 + Sin[a])]"
+  ],
+  "conds": [
+   "Pi >= 2*Abs[a]"
+  ],
+  "cite": "BI (97)(11)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "sinh ax/sinh(pi x/2)/(1+x^2) = pi/2 sin a + 1/2 cos a ln((1-sin a)/(1+sin a))",
+  "note": ""
+ },
+ {
+  "id": "GR3.525.3",
+  "gr": "3.525.3",
+  "page": 427,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[a*x]/Sinh[Pi*x]*x/(1 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*(a*Sin[a] - 1) + 1/2*Cos[a]*Log[2*(1 + Cos[a])]"
+  ],
+  "conds": [
+   "Pi > Abs[a]"
+  ],
+  "cite": "BI (97)(12)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "cosh ax/sinh pi x * x/(1+x^2) = (a sin a - 1)/2 + 1/2 cos a ln[2(1+cos a)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.525.4",
+  "gr": "3.525.4",
+  "page": 427,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[a*x]/Sinh[Pi*x/2]*x/(1 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Cos[a] - 1 + 1/2*Sin[a]*Log[(1 + Sin[a])/(1 - Sin[a])]"
+  ],
+  "conds": [
+   "Pi/2 > Abs[a]"
+  ],
+  "cite": "BI (97)(13)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "cosh ax/sinh(pi x/2) * x/(1+x^2) = pi/2 cos a - 1 + 1/2 sin a ln((1+sin a)/(1-sin a))",
+  "note": ""
+ },
+ {
+  "id": "GR3.525.5",
+  "gr": "3.525.5",
+  "page": 427,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x]/Cosh[Pi*x]*x/(1 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-2*Sin[a/2] + Pi/2*Sin[a] - Cos[a]*Log[Tan[(a + Pi)/4]]"
+  ],
+  "conds": [
+   "Pi > Abs[a]"
+  ],
+  "cite": "GW (352)(12)",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "sinh ax/cosh pi x * x/(1+x^2) = -2 sin(a/2) + pi/2 sin a - cos a ln tan((a+pi)/4)",
+  "note": ""
+ },
+ {
+  "id": "GR3.525.6",
+  "gr": "3.525.6",
+  "page": 427,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[a*x]/(Cosh[Pi*x]*(1 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Cos[a/2] - Pi/2*Cos[a] - Sin[a]*Log[Tan[(a + Pi)/4]]"
+  ],
+  "conds": [
+   "Pi > Abs[a]"
+  ],
+  "cite": "GW (352)(11)",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "cosh ax/cosh pi x /(1+x^2) = 2 cos(a/2) - pi/2 cos a - sin a ln tan((a+pi)/4)",
+  "note": ""
+ },
+ {
+  "id": "GR3.525.7",
+  "gr": "3.525.7",
+  "page": 428,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x]/(Sinh[b*x]*(c^2 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/c*Sum[Sin[k*(b - a)*Pi/b]/(b*c + k*Pi), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "b >= Abs[a]",
+   "c > 0"
+  ],
+  "cite": "BI (97)(18)",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "sinh ax/sinh bx /(c^2+x^2) = pi/c sum_{k>=1} sin(k(b-a)pi/b)/(bc + k pi)",
+  "note": "c > 0 added (implied)"
+ },
+ {
+  "id": "GR3.525.8",
+  "gr": "3.525.8",
+  "page": 428,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[a*x]/Sinh[b*x]*x/(c^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b*c) + Pi*Sum[Cos[k*(b - a)*Pi/b]/(b*c + k*Pi), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "b > Abs[a]",
+   "c > 0"
+  ],
+  "cite": "BI (97)(19)",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "cosh ax/sinh bx * x/(c^2+x^2) = pi/(2bc) + pi sum cos(k(b-a)pi/b)/(bc+k pi)",
+  "note": "c > 0 added (implied)"
+ },
+ {
+  "id": "GR3.526.1",
+  "gr": "3.526.1",
+  "page": 428,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x]*Cosh[b*x]/(Cosh[c*x]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[Tan[(a + b + c)*Pi/(4*c)]*Cot[(b + c - a)*Pi/(4*c)]]"
+  ],
+  "conds": [
+   "c > Abs[a] + Abs[b]"
+  ],
+  "cite": "BI (93)(10)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "sinh ax cosh bx/cosh cx dx/x = 1/2 ln{tan((a+b+c)pi/4c) cot((b+c-a)pi/4c)}",
+  "note": ""
+ },
+ {
+  "id": "GR3.526.2",
+  "gr": "3.526.2",
+  "page": 428,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x]^2/(Sinh[b*x]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[Sec[a*Pi/b]]"
+  ],
+  "conds": [
+   "b > Abs[2*a]"
+  ],
+  "cite": "BI (95)(5)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "sinh^2 ax/sinh bx dx/x = 1/2 ln sec(a pi/b)",
+  "note": ""
+ },
+ {
+  "id": "GR3.526.3",
+  "gr": "3.526.3",
+  "page": 428,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/(Sinh[beta*x]*Cosh[gamma*x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu]/(2*gamma)^mu*(LerchPhi[-1, mu, (1 + beta/gamma)/2] + LerchPhi[-1, mu, (1 - beta/gamma)/2])"
+  ],
+  "conds": [
+   "Re[gamma] > Abs[Re[beta]]",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 323(11)",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "int_0^inf x^(mu-1)/(sinh beta x cosh gamma x) dx = Gamma(mu)/(2gamma)^mu {Phi[-1,mu,(1+beta/gamma)/2] + Phi[-1,mu,(1-beta/gamma)/2]}",
+  "note": "Transcribed as printed. Likely misprint: the integrand should be x^(mu-1) cosh(beta x)/cosh(gamma x) (ET I 323(11)); as printed the integral diverges at 0 for Re mu <= 1 and the value is even in beta."
+ },
+ {
+  "id": "GR3.527.1",
+  "gr": "3.527.1",
+  "page": 428,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/Sinh[a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "4/(2*a)^mu*Gamma[mu]*Zeta[mu - 1]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[mu] > 2"
+  ],
+  "cite": "BI (86)(7)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^(mu-1)/sinh^2 ax = 4/(2a)^mu Gamma(mu) zeta(mu-1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.527.2",
+  "gr": "3.527.2",
+  "page": 428,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m)/Sinh[a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^(2*m)/a^(2*m + 1)*Abs[BernoulliB[2*m]]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "BI(86)(5)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^(2m)/sinh^2 ax = pi^(2m)/a^(2m+1) |B_2m|",
+  "note": ""
+ },
+ {
+  "id": "GR3.527.3a",
+  "gr": "3.527.3a",
+  "page": 428,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/Cosh[a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "4/(2*a)^mu*(1 - 2^(2 - mu))*Gamma[mu]*Zeta[mu - 1]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[mu] > 0",
+   "mu != 2"
+  ],
+  "cite": "BI (86)(6)a",
+  "edition_note": "6",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^(mu-1)/cosh^2 ax = 4/(2a)^mu (1-2^(2-mu)) Gamma(mu) zeta(mu-1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.527.3b",
+  "gr": "3.527.3b",
+  "page": 428,
+  "status": "ok",
+  "lhs": "Integrate[x/Cosh[a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/a^2*Log[2]"
+  ],
+  "conds": [
+   "Re[a] > 0"
+  ],
+  "cite": "BI (86)(6)a",
+  "edition_note": "6",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^(mu-1)/cosh^2 ax at mu = 2: = ln2/a^2",
+  "note": "mu = 2 substituted"
+ },
+ {
+  "id": "GR3.527.4",
+  "gr": "3.527.4",
+  "page": 428,
+  "status": "ok",
+  "lhs": "Integrate[x/Cosh[a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[2]/a^2"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "LO III 396",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x/cosh^2 ax = ln2/a^2",
+  "note": ""
+ },
+ {
+  "id": "GR3.527.5",
+  "gr": "3.527.5",
+  "page": 428,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m)/Cosh[a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(2^(2*m) - 2)*Pi^(2*m)/((2*a)^(2*m)*a)*Abs[BernoulliB[2*m]]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "BI(86)(2)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^(2m)/cosh^2 ax = (2^(2m)-2) pi^(2m)/((2a)^(2m) a) |B_2m|",
+  "note": ""
+ },
+ {
+  "id": "GR3.527.6",
+  "gr": "3.527.6",
+  "page": 428,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Sinh[a*x]/Cosh[a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2*Gamma[mu]/a^mu*Sum[(-1)^k/(2*k + 1)^(mu - 1), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "Re[mu] > 1",
+   "a > 0"
+  ],
+  "cite": "BI (86)(15)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^(mu-1) sinh ax/cosh^2 ax = 2Gamma(mu)/a^mu sum (-1)^k/(2k+1)^(mu-1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.527.7",
+  "gr": "3.527.7",
+  "page": 428,
+  "status": "ok",
+  "lhs": "Integrate[x*Sinh[a*x]/Cosh[a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a^2)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (86)(8)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x sinh ax/cosh^2 ax = pi/(2a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.527.8",
+  "gr": "3.527.8",
+  "page": 428,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m + 1)*Sinh[a*x]/Cosh[a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(2*m + 1)/a*(Pi/(2*a))^(2*m + 1)*Abs[EulerE[2*m]]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (86)(12)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^(2m+1) sinh ax/cosh^2 ax = (2m+1)/a (pi/2a)^(2m+1) |E_2m|",
+  "note": ""
+ },
+ {
+  "id": "GR3.527.9",
+  "gr": "3.527.9",
+  "page": 428,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m + 1)*Cosh[a*x]/Sinh[a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(2^(2*m + 1) - 1)/(a^2*(2*a)^(2*m))*(2*m + 1)!*Zeta[2*m + 1]"
+  ],
+  "conds": [
+   "a != 0",
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "BI (86)(13)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^(2m+1) cosh ax/sinh^2 ax = (2^(2m+1)-1)/(a^2 (2a)^(2m)) (2m+1)! zeta(2m+1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.527.10",
+  "gr": "3.527.10",
+  "page": 429,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m)*Cosh[a*x]/Sinh[a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(2^(2*m) - 1)/a*(Pi/a)^(2*m)*Abs[BernoulliB[2*m]]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "BI (86)(14)a",
+  "edition_note": "11",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^(2m) cosh ax/sinh^2 ax = (2^(2m)-1)/a (pi/a)^(2m) |B_2m|",
+  "note": ""
+ },
+ {
+  "id": "GR3.527.11",
+  "gr": "3.527.11",
+  "page": 429,
+  "status": "ok",
+  "lhs": "Integrate[x*Sinh[a*x]/Cosh[a*x]^(2*mu + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/(4*mu*a^2)*Gamma[mu]/Gamma[mu + 1/2]"
+  ],
+  "conds": [
+   "mu > 0",
+   "a > 0"
+  ],
+  "cite": "LI (86)(9)",
+  "edition_note": "8",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x sinh ax/cosh^(2mu+1) ax = sqrt(pi)/(4 mu a^2) Gamma(mu)/Gamma(mu+1/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.527.12",
+  "gr": "3.527.12",
+  "page": 429,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sinh[x]^2, {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi^2/3"
+  ],
+  "conds": [],
+  "cite": "BI (102)(2)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "int_-inf^inf x^2/sinh^2 x = pi^2/3",
+  "note": ""
+ },
+ {
+  "id": "GR3.527.13",
+  "gr": "3.527.13",
+  "page": 429,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Cosh[a*x]/Sinh[a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/(2*a^3)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (86)(11)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^2 cosh ax/sinh^2 ax = pi^2/(2a^3)",
+  "note": ""
+ },
+ {
+  "id": "GR3.527.14",
+  "gr": "3.527.14",
+  "page": 429,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Sinh[x]/Cosh[x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "4*Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (86)(10)a",
+  "edition_note": "11",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^2 sinh x/cosh^2 x = 4G",
+  "note": "Book prints condition [a != 0] although a does not appear; dropped."
+ },
+ {
+  "id": "GR3.527.15",
+  "gr": "3.527.15",
+  "page": 429,
+  "status": "ok",
+  "lhs": "Integrate[Tanh[x/2]/Cosh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (93)(17)a",
+  "edition_note": "10",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "tanh(x/2)/cosh x = ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR3.527.16",
+  "gr": "3.527.16",
+  "page": 429,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Cosh[a*x]/Sinh[a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2*Gamma[mu]*Zeta[mu - 1]/a^mu*(1 - 2^(1 - mu))"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > 2"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^(mu-1) cosh ax/sinh^2 ax = 2 Gamma(mu) zeta(mu-1)/a^mu (1-2^(1-mu))",
+  "note": "No conditions printed; a > 0, Re mu > 2 added (convergence)."
+ },
+ {
+  "id": "GR3.528.1",
+  "gr": "3.528.1",
+  "page": 429,
+  "status": "ok",
+  "lhs": "Integrate[((1 + x*I)^(2*n - 1) - (1 - x*I)^(2*n - 1))/(I*Sinh[Pi*x/2]), {x, 0, Infinity}]",
+  "rhs": [
+   "2"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (87)(8)",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "[(1+xi)^(2n-1) - (1-xi)^(2n-1)]/(i sinh(pi x/2)) = 2",
+  "note": "n = 1,2,... assumed (not printed)"
+ },
+ {
+  "id": "GR3.528.2",
+  "gr": "3.528.2",
+  "page": 429,
+  "status": "ok",
+  "lhs": "Integrate[((1 + x*I)^(2*n) - (1 - x*I)^(2*n))/(I*Sinh[Pi*x/2]), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n + 1)*2*Abs[EulerE[2*n]] + 2"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (87)(7)",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "[(1+xi)^(2n) - (1-xi)^(2n)]/(i sinh(pi x/2)) = (-1)^(n+1) 2|E_2n| + 2",
+  "note": ""
+ },
+ {
+  "id": "GR3.529.1",
+  "gr": "3.529.1",
+  "page": 429,
+  "status": "ok",
+  "lhs": "Integrate[(1/Sinh[x] - 1/x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (94)(10)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "(1/sinh x - 1/x) dx/x = -ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR3.529.2",
+  "gr": "3.529.2",
+  "page": 429,
+  "status": "ok",
+  "lhs": "Integrate[(Cosh[a*x] - 1)/(Sinh[b*x]*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-Log[Cos[a*Pi/(2*b)]]"
+  ],
+  "conds": [
+   "b > Abs[a]"
+  ],
+  "cite": "GW (352)(66)",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "(cosh ax - 1)/sinh bx dx/x = -ln cos(a pi/2b)",
+  "note": ""
+ },
+ {
+  "id": "GR3.529.3",
+  "gr": "3.529.3",
+  "page": 429,
+  "status": "ok",
+  "lhs": "Integrate[(a/Sinh[a*x] - b/Sinh[b*x])/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(b - a)*Log[2]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (94)(11)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "(a/sinh ax - b/sinh bx) dx/x = (b-a) ln 2",
+  "note": "a > 0, b > 0 added (not printed)"
+ },
+ {
+  "id": "GR3.531.1a",
+  "gr": "3.531.1a",
+  "page": 429,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x/(2*Cosh[x] - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "4/Sqrt[3]*(Pi/3*Log[2] - LobachevskyL[Pi/3])"
+  ],
+  "conds": [],
+  "cite": "LI (88)(1)",
+  "edition_note": "7",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x/(2cosh x - 1) = 4/sqrt3 [pi/3 ln2 - L(pi/3)]",
+  "note": "",
+  "reason": "Lobachevsky function L(x) (8.26)"
+ },
+ {
+  "id": "GR3.531.1b",
+  "gr": "3.531.1b",
+  "page": 429,
+  "status": "ok",
+  "lhs": "Integrate[x/(2*Cosh[x] - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "1.1719536193"
+  ],
+  "conds": [],
+  "cite": "LI (88)(1)",
+  "edition_note": "7",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x/(2cosh x - 1) = 1.1719536193...",
+  "note": "numeric value printed to 10 decimals"
+ },
+ {
+  "id": "GR3.531.2",
+  "gr": "3.531.2",
+  "page": 429,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x/(Cosh[2*x] + Cos[2*t]), {x, 0, Infinity}]",
+  "rhs": [
+   "(t*Log[2] - LobachevskyL[t])/Sin[2*t]"
+  ],
+  "conds": [
+   "0 < t < Pi/2"
+  ],
+  "cite": "LO III 402",
+  "edition_note": "10",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x/(cosh2x + cos2t) = (t ln2 - L(t))/sin 2t",
+  "note": "no condition printed; 0 < t < pi/2 added",
+  "reason": "Lobachevsky function L(x)"
+ },
+ {
+  "id": "GR3.531.3",
+  "gr": "3.531.3",
+  "page": 429,
+  "status": "ok",
+  "lhs": "Integrate[x^2/(Cosh[x] + Cos[t]), {x, 0, Infinity}]",
+  "rhs": [
+   "t/3*(Pi^2 - t^2)/Sin[t]"
+  ],
+  "conds": [
+   "0 < t < Pi"
+  ],
+  "cite": "BI (88)(3)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^2/(cosh x + cos t) = t/3 (pi^2-t^2)/sin t",
+  "note": ""
+ },
+ {
+  "id": "GR3.531.4",
+  "gr": "3.531.4",
+  "page": 429,
+  "status": "ok",
+  "lhs": "Integrate[x^4/(Cosh[x] + Cos[t]), {x, 0, Infinity}]",
+  "rhs": [
+   "t/15*(Pi^2 - t^2)*(7*Pi^2 - 3*t^2)/Sin[t]"
+  ],
+  "conds": [
+   "0 < t < Pi"
+  ],
+  "cite": "BI (88)(4)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^4/(cosh x + cos t) = t/15 (pi^2-t^2)(7pi^2-3t^2)/sin t",
+  "note": ""
+ },
+ {
+  "id": "GR3.531.5a",
+  "gr": "3.531.5a",
+  "page": 430,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m)/(Cosh[x] - Cos[2*a*Pi]), {x, 0, Infinity}]",
+  "rhs": [
+   "2*(2*m)!*Csc[2*a*Pi]*Sum[Sin[2*k*a*Pi]/k^(2*m + 1), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "0 < a < 1",
+   "a != 1/2",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (88)(5)a",
+  "edition_note": "3",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^(2m)/(cosh x - cos 2a pi) = 2(2m)! cosec 2a pi sum sin(2k a pi)/k^(2m+1)",
+  "note": "m nonnegative integer assumed"
+ },
+ {
+  "id": "GR3.531.5b",
+  "gr": "3.531.5b",
+  "page": 430,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m)/(Cosh[x] + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "2*(2^(2*m - 1) - 1)*Pi^(2*m)*Abs[BernoulliB[2*m]]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "BI (88)(5)a",
+  "edition_note": "3",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "a = 1/2: x^(2m)/(cosh x + 1) = 2(2^(2m-1)-1) pi^(2m) |B_2m|",
+  "note": "a = 1/2 substituted (cos(2a pi) = -1); m >= 1 assumed"
+ },
+ {
+  "id": "GR3.531.6a",
+  "gr": "3.531.6a",
+  "page": 430,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/(Cosh[x] - Cos[t]), {x, 0, Infinity}]",
+  "rhs": [
+   "I*Gamma[mu]/Sin[t]*(E^(-I*t)*LerchPhi[E^(-I*t), mu, 1] - E^(I*t)*LerchPhi[E^(I*t), mu, 1])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "0 < t < 2*Pi",
+   "t != Pi"
+  ],
+  "cite": "ET I 323(5)",
+  "edition_note": "3",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^(mu-1)/(cosh x - cos t) = i Gamma(mu)/sin t [e^(-it) Phi(e^(-it),mu,1) - e^(it) Phi(e^(it),mu,1)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.531.6b",
+  "gr": "3.531.6b",
+  "page": 430,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/(Cosh[x] + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(2 - 2^(3 - mu))*Gamma[mu]*Zeta[mu - 1]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "mu != 2"
+  ],
+  "cite": "ET I 323(5)",
+  "edition_note": "3",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "t = pi: = (2 - 2^(3-mu)) Gamma(mu) zeta(mu-1)",
+  "note": "t = pi substituted"
+ },
+ {
+  "id": "GR3.531.6c",
+  "gr": "3.531.6c",
+  "page": 430,
+  "status": "ok",
+  "lhs": "Integrate[x/(Cosh[x] + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Log[2]"
+  ],
+  "conds": [],
+  "cite": "ET I 323(5)",
+  "edition_note": "3",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "mu = 2, t = pi: = 2 ln 2",
+  "note": "mu = 2, t = pi substituted"
+ },
+ {
+  "id": "GR3.531.7",
+  "gr": "3.531.7",
+  "page": 430,
+  "status": "ok",
+  "lhs": "Integrate[x^mu/(Cosh[x] + Cos[t]), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Gamma[mu + 1]/Sin[t]*Sum[(-1)^(k - 1)*Sin[k*t]/k^(mu + 1), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "mu > -1",
+   "0 < t < Pi"
+  ],
+  "cite": "BII (96)(14)a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^mu/(cosh x + cos t) = 2Gamma(mu+1)/sin t sum (-1)^(k-1) sin kt/k^(mu+1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.531.8",
+  "gr": "3.531.8",
+  "page": 430,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x/(Cosh[2*x] - Cos[2*t]), {x, 0, u}]",
+  "rhs": [
+   "1/2*Csc[2*t]*(LobachevskyL[ArcTan[Tanh[u]*Cot[t]] + t] - LobachevskyL[ArcTan[Tanh[u]*Cot[t]] - t] - 2*LobachevskyL[t])"
+  ],
+  "conds": [
+   "u > 0",
+   "0 < t < Pi/2"
+  ],
+  "cite": "LO III 402",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "int_0^u x/(cosh2x - cos2t) = 1/2 cosec 2t [L(theta+t) - L(theta-t) - 2L(t)], theta = arctan(tanh u cot t)",
+  "note": "theta substituted; t != n pi; u > 0 and 0 < t < pi/2 chosen for sampling",
+  "reason": "Lobachevsky function L(x)"
+ },
+ {
+  "id": "GR3.532.1",
+  "gr": "3.532.1",
+  "page": 430,
+  "status": "ok",
+  "lhs": "Integrate[x^n/(a*Cosh[x] + b*Sinh[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "2*n!/(a + b)*Sum[1/(2*k + 1)^(n + 1)*((b - a)/(b + a))^k, {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "n > -1"
+  ],
+  "cite": "GW (352)(5)",
+  "edition_note": "11",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^n/(a cosh x + b sinh x) = 2 n!/(a+b) sum (2k+1)^(-n-1) ((b-a)/(b+a))^k",
+  "note": ""
+ },
+ {
+  "id": "GR3.532.2",
+  "gr": "3.532.2",
+  "page": 430,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x*Cosh[x]/(Cosh[2*x] - Cos[2*t]), {x, 0, u}]",
+  "rhs": [
+   "1/2*Csc[t]*(LobachevskyL[(2*ArcTan[Tanh[u/2]*Cot[t/2]] + t)/2] - LobachevskyL[(2*ArcTan[Tanh[u/2]*Cot[t/2]] - t)/2] + LobachevskyL[Pi - (2*ArcTan[Coth[u/2]*Cot[t/2]] + t)/2] + LobachevskyL[(2*ArcTan[Coth[u/2]*Cot[t/2]] - t)/2] - 2*LobachevskyL[t/2] - 2*LobachevskyL[(Pi - t)/2])"
+  ],
+  "conds": [
+   "u > 0",
+   "0 < t < Pi"
+  ],
+  "cite": "LO III 288a",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "int_0^u x cosh x/(cosh2x - cos2t) = 1/2 cosec t {L((th+t)/2) - L((th-t)/2) + L(pi-(psi+t)/2) + L((psi-t)/2) - 2L(t/2) - 2L((pi-t)/2)}",
+  "note": "tan(theta/2) = tanh(u/2) cot(t/2), tan(psi/2) = coth(u/2) cot(t/2) substituted; t != n pi",
+  "reason": "Lobachevsky function L(x)"
+ },
+ {
+  "id": "GR3.533.1",
+  "gr": "3.533.1",
+  "page": 430,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x*Cosh[x]/(Cosh[2*x] - Cos[2*t]), {x, 0, Infinity}]",
+  "rhs": [
+   "Csc[t]*(Pi/2*Log[2] - LobachevskyL[t/2] - LobachevskyL[(Pi - t)/2])"
+  ],
+  "conds": [
+   "0 < t < Pi"
+  ],
+  "cite": "LO III 403",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x cosh x/(cosh2x - cos2t) = cosec t [pi/2 ln2 - L(t/2) - L((pi-t)/2)]",
+  "note": "t != m pi; 0 < t < pi chosen",
+  "reason": "Lobachevsky function L(x)"
+ },
+ {
+  "id": "GR3.533.2",
+  "gr": "3.533.2",
+  "page": 430,
+  "status": "ok",
+  "lhs": "Integrate[x*Sinh[a*x]/(Cosh[a*x] - Cos[t])^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi - t)/a^2*Csc[t]"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < t < Pi"
+  ],
+  "cite": "BI (88)(11)a",
+  "edition_note": "6",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x sinh ax/(cosh ax - cos t)^2 = (pi-t)/a^2 cosec t",
+  "note": ""
+ },
+ {
+  "id": "GR3.533.3",
+  "gr": "3.533.3",
+  "page": 430,
+  "status": "ok",
+  "lhs": "Integrate[x^3*Sinh[x]/(Cosh[x] + Cos[t])^2, {x, 0, Infinity}]",
+  "rhs": [
+   "t*(Pi^2 - t^2)/Sin[t]"
+  ],
+  "conds": [
+   "0 < t < Pi"
+  ],
+  "cite": "BI (88)(13)",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^3 sinh x/(cosh x + cos t)^2 = t(pi^2-t^2)/sin t",
+  "note": ""
+ },
+ {
+  "id": "GR3.533.4a",
+  "gr": "3.533.4a",
+  "page": 431,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m + 1)*Sinh[x]/(Cosh[x] - Cos[2*a*Pi])^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2*(2*m + 1)!*Csc[2*a*Pi]*Sum[Sin[2*k*a*Pi]/k^(2*m + 1), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "0 < a < 1",
+   "a != 1/2",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (88)(14)",
+  "edition_note": "11",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^(2m+1) sinh x/(cosh x - cos 2a pi)^2 = 2(2m+1)! cosec 2a pi sum sin 2ka pi/k^(2m+1)",
+  "note": "m nonnegative integer assumed"
+ },
+ {
+  "id": "GR3.533.4b",
+  "gr": "3.533.4b",
+  "page": 431,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m + 1)*Sinh[x]/(Cosh[x] + 1)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2*(2*m + 1)*(2^(2*m - 1) - 1)*Pi^(2*m)*Abs[BernoulliB[2*m]]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "BI (88)(14)",
+  "edition_note": "11",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "a = 1/2: = 2(2m+1)(2^(2m-1)-1) pi^(2m) |B_2m|",
+  "note": "a = 1/2 substituted; m >= 1 assumed"
+ },
+ {
+  "id": "GR3.534.1",
+  "gr": "3.534.1",
+  "page": 431,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[1 - x^2]*Cosh[a*x], {x, 0, 1}]",
+  "rhs": [
+   "Pi/(2*a)*BesselI[1, a]"
+  ],
+  "conds": [],
+  "cite": "WA 94(9)",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "int_0^1 sqrt(1-x^2) cosh ax = pi/(2a) I_1(a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.534.2",
+  "gr": "3.534.2",
+  "page": 431,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[a*x]/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*BesselI[0, a]"
+  ],
+  "conds": [],
+  "cite": "WA 94(9)",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "int_0^1 cosh ax/sqrt(1-x^2) = pi/2 I_0(a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.535",
+  "gr": "3.535",
+  "page": 431,
+  "status": "ok",
+  "lhs": "Integrate[x/Sqrt[Cosh[2*a] - Cosh[2*a*x]]/Sinh[a*x], {x, 0, 1}]",
+  "rhs": [
+   "Pi/(2*Sqrt[2]*a^2)*ArcSin[Tanh[a]]/Sinh[a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (80)(11)",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "int_0^1 x/sqrt(cosh 2a - cosh 2ax) dx/sinh ax = pi/(2 sqrt2 a^2) arcsin(tanh a)/sinh a",
+  "note": ""
+ },
+ {
+  "id": "GR3.536.1",
+  "gr": "3.536.1",
+  "page": 431,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Cosh[x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/12"
+  ],
+  "conds": [],
+  "cite": "BI (98)(7)",
+  "edition_note": "11",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^2/cosh^2 x = pi^2/12",
+  "note": ""
+ },
+ {
+  "id": "GR3.536.2",
+  "gr": "3.536.2",
+  "page": 431,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Tanh[x^2]/Cosh[x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/2*Sum[(-1)^k/Sqrt[2*k + 1], {k, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "BI (98)(8)",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "x^2 tanh x^2/cosh^2 x = sqrt(pi)/2 sum (-1)^k/sqrt(2k+1)",
+  "note": "Transcribed as printed. Likely misprint: denominator should be cosh(x^2) (integrate by parts against 3.523.12 with x -> x^2 gives exactly this value)."
+ },
+ {
+  "id": "GR3.536.3",
+  "gr": "3.536.3",
+  "page": 431,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[nu*ArcSinh[x]]*x^(mu - 1)/Sqrt[1 + x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sin[mu*Pi/2]*Sin[nu*Pi/2]/(2^mu*Pi)*Gamma[mu]*Gamma[(1 - mu - nu)/2]*Gamma[(1 - mu + nu)/2]"
+  ],
+  "conds": [
+   "-1 < Re[mu]",
+   "Re[mu] < 1 - Abs[Re[nu]]"
+  ],
+  "cite": "ET I 324(14)",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "sinh(nu arcsinh x) x^(mu-1)/sqrt(1+x^2) = sin(mu pi/2) sin(nu pi/2)/(2^mu pi) Gamma(mu) Gamma((1-mu-nu)/2) Gamma((1-mu+nu)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.536.4",
+  "gr": "3.536.4",
+  "page": 431,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[nu*ArcCosh[x]]*x^(mu - 1)/Sqrt[1 + x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Cos[mu*Pi/2]*Cos[nu*Pi/2]/(2^mu*Pi)*Gamma[mu]*Gamma[(1 - mu - nu)/2]*Gamma[(1 - mu + nu)/2]"
+  ],
+  "conds": [
+   "0 < Re[mu]",
+   "Re[mu] < 1 - Abs[Re[nu]]"
+  ],
+  "cite": "ET I 324(15)",
+  "edition_note": "",
+  "section": "3.52-3.53 Combinations of hyperbolic functions and algebraic functions",
+  "tex": "cosh(nu arccosh x) x^(mu-1)/sqrt(1+x^2) = cos(mu pi/2) cos(nu pi/2)/(2^mu pi) Gamma(mu) Gamma((1-mu-nu)/2) Gamma((1-mu+nu)/2)",
+  "note": "Transcribed as printed (arccosh). Likely misprint for arcsinh (cf. 3.536.3, ET I 324(15)); arccosh x is complex on (0,1)."
+ },
+ {
+  "id": "GR3.541.1",
+  "gr": "3.541.1",
+  "page": 431,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Sinh[beta*x]^nu, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2^(nu + 1)*beta)*Beta[mu/(2*beta) - nu/2, nu + 1]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[nu] > -1",
+   "Re[mu] > Re[beta*nu]"
+  ],
+  "cite": "EH I 11(25), ET I 163(5)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "e^(-mu x) sinh^nu beta x = 1/(2^(nu+1) beta) B(mu/(2beta) - nu/2, nu+1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.541.2",
+  "gr": "3.541.2",
+  "page": 431,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Sinh[beta*x]/Sinh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*b)*(PolyGamma[1/2 + (mu + beta)/(2*b)] - PolyGamma[1/2 + (mu - beta)/(2*b)])"
+  ],
+  "conds": [
+   "Re[mu + b + beta] > 0",
+   "Re[mu + b - beta] > 0"
+  ],
+  "cite": "EH I 16(14)a",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "e^(-mu x) sinh beta x/sinh bx = 1/(2b)[psi(1/2+(mu+beta)/2b) - psi(1/2+(mu-beta)/2b)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.541.3",
+  "gr": "3.541.3",
+  "page": 431,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Sinh[mu*x]/Sinh[beta*x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi/(2*beta)*Tan[mu*Pi/beta]"
+  ],
+  "conds": [
+   "Re[beta] > 2*Abs[Re[mu]]"
+  ],
+  "cite": "BI (18)(6)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "int_-inf^inf e^(-mu x) sinh mu x/sinh beta x = pi/(2beta) tan(mu pi/beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.541.4",
+  "gr": "3.541.4",
+  "page": 431,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x)*Sinh[a*x]/Sinh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/a - Pi/2*Cot[a*Pi/2]"
+  ],
+  "conds": [
+   "0 < a < 2"
+  ],
+  "cite": "BI (4)(3)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "e^(-x) sinh ax/sinh x = 1/a - pi/2 cot(a pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.541.5",
+  "gr": "3.541.5",
+  "page": 431,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)/Cosh[p*x]^(2*q + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(2*q - 2)/p*Beta[q, q] - 1/(2*q*p)"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "LI (27)(19)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "e^(-px)/(cosh px)^(2q+1) = 2^(2q-2)/p B(q,q) - 1/(2qp)",
+  "note": ""
+ },
+ {
+  "id": "GR3.541.6",
+  "gr": "3.541.6",
+  "page": 432,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/Cosh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "(PolyGamma[(((mu + 1)/2) + 1)/2] - PolyGamma[((mu + 1)/2)/2])/2"
+  ],
+  "conds": [
+   "Re[mu] > -1"
+  ],
+  "cite": "ET I 163(7)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "e^(-mu x)/cosh x = beta((mu+1)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.541.7",
+  "gr": "3.541.7",
+  "page": 432,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Tanh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "(PolyGamma[((mu/2) + 1)/2] - PolyGamma[(mu/2)/2])/2 - 1/mu"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 163(9)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "e^(-mu x) tanh x = beta(mu/2) - 1/mu",
+  "note": ""
+ },
+ {
+  "id": "GR3.541.8",
+  "gr": "3.541.8",
+  "page": 432,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/Cosh[x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "mu*(PolyGamma[((mu/2) + 1)/2] - PolyGamma[(mu/2)/2])/2 - 1"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 163(8)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "e^(-mu x)/cosh^2 x = mu beta(mu/2) - 1",
+  "note": ""
+ },
+ {
+  "id": "GR3.541.9",
+  "gr": "3.541.9",
+  "page": 432,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Sinh[mu*x]/Cosh[mu*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/mu*(1 - Log[2])"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "LI (27)(15)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "e^(-mu x) sinh mu x/cosh^2 mu x = (1 - ln2)/mu",
+  "note": ""
+ },
+ {
+  "id": "GR3.541.10",
+  "gr": "3.541.10",
+  "page": 432,
+  "status": "ok",
+  "lhs": "Integrate[E^(-q*x)*Sinh[p*x]/Sinh[q*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/p - Pi/(2*q)*Cot[p*Pi/(2*q)]"
+  ],
+  "conds": [
+   "0 < p < 2*q"
+  ],
+  "cite": "BI (27)(9)a",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "e^(-qx) sinh px/sinh qx = 1/p - pi/(2q) cot(p pi/2q)",
+  "note": ""
+ },
+ {
+  "id": "GR3.542.1",
+  "gr": "3.542.1",
+  "page": 432,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*(Cosh[beta*x] - 1)^nu, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2^nu*beta)*Beta[mu/beta - nu, 2*nu + 1]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[nu] > -1/2",
+   "Re[mu] > Re[beta*nu]"
+  ],
+  "cite": "ET I 163(6)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "e^(-mu x)(cosh beta x - 1)^nu = 1/(2^nu beta) B(mu/beta - nu, 2nu+1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.542.2",
+  "gr": "3.542.2",
+  "page": 432,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*(Cosh[x] - Cosh[u])^(nu - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "-I*Sqrt[2/Pi]*E^(I*Pi*nu)*Gamma[nu]*Sinh[u]^(nu - 1/2)*LegendreQ[mu - 1/2, 1/2 - nu, 3, Cosh[u]]"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "Re[mu] > Re[nu] - 1",
+   "u > 0"
+  ],
+  "cite": "EH I 155(4), ET I 164(23)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "e^(-mu x)(cosh x - cosh u)^(nu-1) = -i sqrt(2/pi) e^(i pi nu) Gamma(nu) sinh^(nu-1/2) u Q^(1/2-nu)_(mu-1/2)(cosh u)",
+  "note": "u > 0 added; lower limit 0 as printed (integrand complex on (0,u)); possibly the lower limit should be u"
+ },
+ {
+  "id": "GR3.543.1",
+  "gr": "3.543.1",
+  "page": 432,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[E^(-I*b*x)/(Sinh[x] + Sinh[t]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-(I*Pi*E^(I*t*b))/(Sinh[Pi*b]*Cosh[t])*(Cosh[Pi*b] - E^(-2*I*t*b))"
+  ],
+  "conds": [
+   "t > 0"
+  ],
+  "cite": "ET I 121(30)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "int_-inf^inf e^(-ibx)/(sinh x + sinh t) = -i pi e^(itb)/(sinh pi b cosh t) (cosh pi b - e^(-2itb))",
+  "note": "",
+  "reason": "pole at x = -t on the integration path"
+ },
+ {
+  "id": "GR3.543.2",
+  "gr": "3.543.2",
+  "page": 432,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/(Cosh[x] - Cos[t]), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Csc[t]*Sum[Sin[k*t]/(mu + k), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "Re[mu] > -1",
+   "0 < t < 2*Pi"
+  ],
+  "cite": "BI (6)(10)a",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "e^(-mu x)/(cosh x - cos t) = 2 cosec t sum sin kt/(mu+k)",
+  "note": "t != 2 n pi; 0 < t < 2 pi chosen"
+ },
+ {
+  "id": "GR3.543.3",
+  "gr": "3.543.3",
+  "page": 432,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-x)*Cos[t])/(Cosh[x] - Cos[t])*E^(-(mu - 1)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Sum[Cos[k*t]/(mu + k), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "0 < t < 2*Pi"
+  ],
+  "cite": "BI (6)(9)a",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "(1 - e^(-x) cos t)/(cosh x - cos t) e^(-(mu-1)x) = 2 sum_{k>=0} cos kt/(mu+k)",
+  "note": "t != 2 n pi; 0 < t < 2 pi chosen"
+ },
+ {
+  "id": "GR3.543.4",
+  "gr": "3.543.4",
+  "page": 432,
+  "status": "ok",
+  "lhs": "Integrate[(E^(p*x) - Cos[t])/(Cosh[p*x] + Cos[t])^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/p*(t*Csc[t] + 1/(1 + Cos[t]))"
+  ],
+  "conds": [
+   "p > 0",
+   "0 < t < Pi"
+  ],
+  "cite": "BI (27)(26)a",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "(e^(px) - cos t)/(cosh px + cos t)^2 = 1/p (t cosec t + 1/(1+cos t))",
+  "note": "0 < t < pi added (not printed)"
+ },
+ {
+  "id": "GR3.544",
+  "gr": "3.544",
+  "page": 432,
+  "status": "ok",
+  "lhs": "Integrate[E^(-(n + 1/2)*x)/Sqrt[2*(Cosh[x] - Cosh[u])], {x, u, Infinity}]",
+  "rhs": [
+   "LegendreQ[n, 0, 3, Cosh[u]]"
+  ],
+  "conds": [
+   "u > 0",
+   "n > -1"
+  ],
+  "cite": "EH II 181(33)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "int_u^inf exp[-(n+1/2)x]/sqrt(2(cosh x - cosh u)) = Q_n(cosh u)",
+  "note": "n > -1 added (convergence)"
+ },
+ {
+  "id": "GR3.545.1",
+  "gr": "3.545.1",
+  "page": 432,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x]/(E^(p*x) + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*p)*Csc[a*Pi/p] - 1/(2*a)"
+  ],
+  "conds": [
+   "p > a",
+   "p > 0"
+  ],
+  "cite": "BI (27)(3)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "sinh ax/(e^(px)+1) = pi/(2p) cosec(a pi/p) - 1/(2a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.545.2",
+  "gr": "3.545.2",
+  "page": 432,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x]/(E^(p*x) - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*a) - Pi/(2*p)*Cot[a*Pi/p]"
+  ],
+  "conds": [
+   "p > a",
+   "p > 0"
+  ],
+  "cite": "BI (27)(9)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "sinh ax/(e^(px)-1) = 1/(2a) - pi/(2p) cot(a pi/p)",
+  "note": ""
+ },
+ {
+  "id": "GR3.546.1",
+  "gr": "3.546.1",
+  "page": 433,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x^2)*Sinh[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sqrt[Pi]/Sqrt[beta]*Exp[a^2/(4*beta)]*Erf[a/(2*Sqrt[beta])]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I166(38)a",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "e^(-beta x^2) sinh ax = 1/2 sqrt(pi/beta) exp(a^2/4beta) Phi(a/(2 sqrt beta))",
+  "note": ""
+ },
+ {
+  "id": "GR3.546.2",
+  "gr": "3.546.2",
+  "page": 433,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x^2)*Cosh[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sqrt[Pi/beta]*Exp[a^2/(4*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "FI II 720a",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "e^(-beta x^2) cosh ax = 1/2 sqrt(pi/beta) exp(a^2/4beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.546.3",
+  "gr": "3.546.3",
+  "page": 433,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x^2)*Sinh[a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Sqrt[Pi/beta]*(Exp[a^2/beta] - 1)"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 166(40)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "e^(-beta x^2) sinh^2 ax = 1/4 sqrt(pi/beta)(exp(a^2/beta) - 1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.546.4",
+  "gr": "3.546.4",
+  "page": 433,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x^2)*Cosh[a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Sqrt[Pi/beta]*(Exp[a^2/beta] + 1)"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 166(41)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "e^(-beta x^2) cosh^2 ax = 1/4 sqrt(pi/beta)(exp(a^2/beta) + 1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.547.1a",
+  "gr": "3.547.1a",
+  "page": 433,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*Sinh[x]]*Sinh[gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Cot[gamma*Pi/2]*(BesselJ[gamma, beta] - AngerJ[gamma, beta]) - Pi/2*(WeberE[gamma, beta] + BesselY[gamma, beta])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "WA 341(5), ET I 168(14)a",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "exp(-beta sinh x) sinh gamma x = pi/2 cot(gamma pi/2)[J_g(b) - AngerJ_g(b)] - pi/2 [WeberE_g(b) + Y_g(b)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.547.1b",
+  "gr": "3.547.1b",
+  "page": 433,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Exp[-beta*Sinh[x]]*Sinh[gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "gamma*LommelS2[-1, gamma, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "WA 341(5), ET I 168(14)a",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "exp(-beta sinh x) sinh gamma x = gamma S_{-1,gamma}(beta)",
+  "note": "",
+  "reason": "Lommel function S_{mu,nu}"
+ },
+ {
+  "id": "GR3.547.2",
+  "gr": "3.547.2",
+  "page": 433,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*Cosh[x]]*Sinh[gamma*x]*Sinh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "gamma/beta*BesselK[gamma, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "exp(-beta cosh x) sinh gamma x sinh x = gamma/beta K_gamma(beta)",
+  "note": "Re beta > 0 added (not printed)"
+ },
+ {
+  "id": "GR3.547.3a",
+  "gr": "3.547.3a",
+  "page": 433,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*Sinh[x]]*Cosh[gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Tan[Pi*gamma/2]*(AngerJ[gamma, beta] - BesselJ[gamma, beta]) - Pi/2*(WeberE[gamma, beta] + BesselY[gamma, beta])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 168(16)a, WA 341(4), EH II 84(50)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "exp(-beta sinh x) cosh gamma x = pi/2 tan(pi gamma/2)[AngerJ_g(b) - J_g(b)] - pi/2 [WeberE_g(b) + Y_g(b)]",
+  "note": "gamma not an integer"
+ },
+ {
+  "id": "GR3.547.3b",
+  "gr": "3.547.3b",
+  "page": 433,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Exp[-beta*Sinh[x]]*Cosh[gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "LommelS2[0, gamma, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 168(16)a, WA 341(4), EH II 84(50)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "= S_{0,gamma}(beta)",
+  "note": "gamma not an integer",
+  "reason": "Lommel function S_{mu,nu}"
+ },
+ {
+  "id": "GR3.547.4",
+  "gr": "3.547.4",
+  "page": 433,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*Cosh[x]]*Cosh[gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "BesselK[gamma, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 168(16)a, WA 201(5)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "exp(-beta cosh x) cosh gamma x = K_gamma(beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.547.5",
+  "gr": "3.547.5",
+  "page": 433,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Exp[-beta*Sinh[x]]*Sinh[gamma*x]*Cosh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "gamma/beta*LommelS2[0, gamma, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 168(7), EH II 85(51)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "exp(-beta sinh x) sinh gamma x cosh x = gamma/beta S_{0,gamma}(beta)",
+  "note": "",
+  "reason": "Lommel function S_{mu,nu}"
+ },
+ {
+  "id": "GR3.547.6",
+  "gr": "3.547.6",
+  "page": 433,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Exp[-beta*Sinh[x]]*Sinh[(2*n + 1)*x]*Cosh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "NeumannO[2*n + 1, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 167(5)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "exp(-beta sinh x) sinh[(2n+1)x] cosh x = O_{2n+1}(beta)",
+  "note": "",
+  "reason": "Neumann polynomial O_n"
+ },
+ {
+  "id": "GR3.547.7",
+  "gr": "3.547.7",
+  "page": 433,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Exp[-beta*Sinh[x]]*Cosh[gamma*x]*Cosh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/beta*LommelS2[1, gamma, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "exp(-beta sinh x) cosh gamma x cosh x = 1/beta S_{1,gamma}(beta)",
+  "note": "",
+  "reason": "Lommel function S_{mu,nu}"
+ },
+ {
+  "id": "GR3.547.8",
+  "gr": "3.547.8",
+  "page": 433,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Exp[-beta*Sinh[x]]*Cosh[2*n*x]*Cosh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "NeumannO[2*n, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 168(6)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "exp(-beta sinh x) cosh 2nx cosh x = O_{2n}(beta)",
+  "note": "",
+  "reason": "Neumann polynomial O_n"
+ },
+ {
+  "id": "GR3.547.9",
+  "gr": "3.547.9",
+  "page": 433,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*Cosh[x]]*Sinh[x]^(2*nu), {x, 0, Infinity}]",
+  "rhs": [
+   "1/Sqrt[Pi]*(2/beta)^nu*Gamma[nu + 1/2]*BesselK[nu, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "EH II 82(20)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "exp(-beta cosh x) sinh^(2nu) x = 1/sqrt(pi) (2/beta)^nu Gamma(nu+1/2) K_nu(beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.547.10",
+  "gr": "3.547.10",
+  "page": 433,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-2*(beta*Coth[x] + mu*x)]*Sinh[x]^(2*nu), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*beta^nu*Gamma[mu - nu]*WhittakerW[-mu, nu - 1/2, 4*beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[mu] > Re[nu]"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "exp[-2(beta coth x + mu x)] sinh^(2nu) x = 1/2 beta^nu Gamma(mu-nu) W_{-mu,nu-1/2}(4beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.547.11",
+  "gr": "3.547.11",
+  "page": 433,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta^2/2*Sinh[x]]*Sinh[x]^(nu - 1)*Cosh[x]^nu, {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*ParabolicCylinderD[nu, beta*E^(I*Pi/4)]*ParabolicCylinderD[nu, beta*E^(-I*Pi/4)]",
+   "Gamma[nu]*ParabolicCylinderD[-nu, beta*E^(I*Pi/4)]*ParabolicCylinderD[-nu, beta*E^(-I*Pi/4)]"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "Abs[Arg[beta]] <= Pi/4"
+  ],
+  "cite": "EH II 120(10)",
+  "edition_note": "",
+  "section": "3.54 Combinations of hyperbolic functions and exponentials",
+  "tex": "exp(-beta^2/2 sinh x) sinh^(nu-1) x cosh^nu x = -pi D_nu(beta e^(i pi/4)) D_nu(beta e^(-i pi/4))",
+  "note": "As printed the value is negative for real beta while the integrand is positive: likely misprint. Second rhs is a speculative corrected candidate (D_{-nu}, Gamma(nu)), unverified."
+ }
+]

@@ -1,0 +1,1841 @@
+[
+ {
+  "id": "GR6.521.2",
+  "gr": "6.521.2",
+  "page": 714,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselK[nu, a*x]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b^nu/(a^nu*(b^2 + a^2))"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 63(2)",
+  "edition_note": "10",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x K_nu(ax) J_nu(bx) = b^nu/(a^nu (b^2+a^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.521.3",
+  "gr": "6.521.3",
+  "page": 714,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselK[nu, a*x]*BesselK[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(a*b)^(-nu)*(a^(2*nu) - b^(2*nu))/(2*Sin[nu*Pi]*(a^2 - b^2))"
+  ],
+  "conds": [
+   "Abs[Re[nu]] < 1",
+   "Re[a + b] > 0"
+  ],
+  "cite": "ET II 145(48)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x K_nu(ax) K_nu(bx) = pi (ab)^-nu (a^2nu-b^2nu)/(2 sin(nu pi)(a^2-b^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.521.4",
+  "gr": "6.521.4",
+  "page": 714,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[nu, lam*x]*BesselK[nu, mu*x], {x, 0, a}]",
+  "rhs": [
+   "(mu^2 + lam^2)^(-1)*((lam/mu)^nu + lam*a*BesselJ[nu + 1, lam*a]*BesselK[nu, mu*a] - mu*a*BesselJ[nu, lam*a]*BesselK[nu + 1, mu*a])"
+  ],
+  "conds": [
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 367(26)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int_0^a x J_nu(lam x) K_nu(mu x) = (mu^2+lam^2)^-1 [(lam/mu)^nu + lam a J_{nu+1}(lam a)K_nu(mu a) - mu a J_nu(lam a) K_{nu+1}(mu a)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.521.5",
+  "gr": "6.521.5",
+  "page": 714,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselK[1, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a^2)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int_0^inf x K_1(ax) = pi/(2a^2)",
+  "note": "book omits dx"
+ },
+ {
+  "id": "GR6.521.6",
+  "gr": "6.521.6",
+  "page": 714,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselK[0, a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*a^2)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int_0^inf x K_0^2(ax) = 1/(2a^2)",
+  "note": "book omits dx"
+ },
+ {
+  "id": "GR6.521.7",
+  "gr": "6.521.7",
+  "page": 714,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselK[1, a*x]*BesselJ[1, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b/(a*(a^2 + b^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int_0^inf x K_1(ax) J_1(bx) = b/(a(a^2+b^2))",
+  "note": "book omits dx"
+ },
+ {
+  "id": "GR6.521.8",
+  "gr": "6.521.8",
+  "page": 714,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselK[0, a*x]*BesselI[0, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(a^2 - b^2)"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int_0^inf x K_0(ax) I_0(bx) = 1/(a^2-b^2)",
+  "note": "book omits dx"
+ },
+ {
+  "id": "GR6.521.9",
+  "gr": "6.521.9",
+  "page": 714,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselK[1, a*x]*BesselI[1, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b/(a*(a^2 - b^2))"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int_0^inf x K_1(ax) I_1(bx) = b/(a(a^2-b^2))",
+  "note": "book omits dx"
+ },
+ {
+  "id": "GR6.521.10",
+  "gr": "6.521.10",
+  "page": 714,
+  "status": "ok",
+  "lhs": "Integrate[x^2*BesselK[0, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a^3)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int_0^inf x^2 K_0(ax) = pi/(2a^3)",
+  "note": "book omits dx"
+ },
+ {
+  "id": "GR6.521.11",
+  "gr": "6.521.11",
+  "page": 714,
+  "status": "ok",
+  "lhs": "Integrate[x^2*BesselK[1, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2/a^3"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int_0^inf x^2 K_1(ax) = 2/a^3",
+  "note": "book omits dx"
+ },
+ {
+  "id": "GR6.521.12",
+  "gr": "6.521.12",
+  "page": 714,
+  "status": "ok",
+  "lhs": "Integrate[x^2*BesselK[0, a*x]*BesselJ[1, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*b/(a^2 + b^2)^2"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int_0^inf x^2 K_0(ax) J_1(bx) = 2b/(a^2+b^2)^2",
+  "note": "book omits dx"
+ },
+ {
+  "id": "GR6.521.13",
+  "gr": "6.521.13",
+  "page": 714,
+  "status": "ok",
+  "lhs": "Integrate[x^2*BesselK[1, a*x]*BesselJ[0, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*a/(a^2 + b^2)^2"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int_0^inf x^2 K_1(ax) J_0(bx) = 2a/(a^2+b^2)^2",
+  "note": "book omits dx"
+ },
+ {
+  "id": "GR6.521.14",
+  "gr": "6.521.14",
+  "page": 714,
+  "status": "ok",
+  "lhs": "Integrate[x^2*BesselK[0, a*x]*BesselI[1, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*b/(a^2 - b^2)^2"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int_0^inf x^2 K_0(ax) I_1(bx) = 2b/(a^2-b^2)^2",
+  "note": "book omits dx"
+ },
+ {
+  "id": "GR6.521.15",
+  "gr": "6.521.15",
+  "page": 714,
+  "status": "ok",
+  "lhs": "Integrate[x^2*BesselK[1, a*x]*BesselI[0, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*a/(a^2 - b^2)^2"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int_0^inf x^2 K_1(ax) I_0(bx) = 2a/(a^2-b^2)^2",
+  "note": "book omits dx"
+ },
+ {
+  "id": "GR6.522.1",
+  "gr": "6.522.1",
+  "page": 714,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[mu, a*x]^2*BesselK[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu + nu/2 + 1]*Gamma[mu - nu/2 + 1]*b^(-2)*(1 + 4*a^2*b^(-2))^(-1/2)*LegendreP[nu/2, -mu, 3, Sqrt[1 + 4*a^2*b^(-2)]]*LegendreP[-nu/2, -mu, 3, Sqrt[1 + 4*a^2*b^(-2)]]"
+  ],
+  "conds": [
+   "Re[b] > 2*Abs[Im[a]]",
+   "2*Re[mu] > Abs[Re[nu]] - 2"
+  ],
+  "cite": "ET II 138(19)",
+  "edition_note": "8",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x [J_mu(ax)]^2 K_nu(bx) = Gamma(mu+nu/2+1)Gamma(mu-nu/2+1) b^-2 (1+4a^2/b^2)^-1/2 P^-mu_{nu/2}[sqrt(1+4a^2/b^2)] P^-mu_{-nu/2}[...]",
+  "note": "6.522 notation l1,l2 defined but unused here; Legendre argument > 1 so type 3"
+ },
+ {
+  "id": "GR6.522.2",
+  "gr": "6.522.2",
+  "page": 715,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselK[mu, a*x]^2*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*E^(2*mu*Pi*I)*Gamma[1 + nu/2 + mu]/(b*(4*a^2 + b^2)^(1/2)*Gamma[nu/2 - mu])*LegendreQ[nu/2, -mu, 3, Sqrt[1 + 4*a^2*b^(-2)]]*LegendreQ[nu/2 - 1, -mu, 3, Sqrt[1 + 4*a^2*b^(-2)]]"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[a] > 0",
+   "Re[nu/2 + mu] > -1",
+   "Re[nu/2 - mu] > -1"
+  ],
+  "cite": "ET II 66(27)a",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x [K_mu(ax)]^2 J_nu(bx) = 2e^{2 mu pi i} Gamma(1+nu/2+mu)/(b(4a^2+b^2)^1/2 Gamma(nu/2-mu)) Q^-mu_{nu/2}(sqrt(1+4a^2b^-2)) Q^-mu_{nu/2-1}(...)",
+  "note": ""
+ },
+ {
+  "id": "GR6.522.3a",
+  "gr": "6.522.3a",
+  "page": 715,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselK[0, a*x]*BesselJ[nu, b*x]*BesselJ[nu, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[a^2 + (b - c)^2]^(-1)*Sqrt[a^2 + (b + c)^2]^(-1)*(Sqrt[a^2 + (b + c)^2] - Sqrt[a^2 + (b - c)^2])^nu*(Sqrt[a^2 + (b + c)^2] - Sqrt[a^2 + (b - c)^2])^(-nu)",
+   "Sqrt[a^2 + (b - c)^2]^(-1)*Sqrt[a^2 + (b + c)^2]^(-1)*(Sqrt[a^2 + (b + c)^2] - Sqrt[a^2 + (b - c)^2])^nu*(Sqrt[a^2 + (b + c)^2] + Sqrt[a^2 + (b - c)^2])^(-nu)"
+  ],
+  "conds": [
+   "c > 0",
+   "Re[nu] > -1",
+   "Re[a] > Abs[Im[b]]"
+  ],
+  "cite": "ET II 63(6)",
+  "edition_note": "11",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x K_0(ax) J_nu(bx) J_nu(cx) = r1^-1 r2^-1 (r2-r1)^nu (r2-r1)^-nu, r1=sqrt(a^2+(b-c)^2), r2=sqrt(a^2+(b+c)^2)",
+  "note": "book prints (r2-r1)^-nu (misprint, the factors cancel); second rhs uses (r2+r1)^-nu, consistent with the l1/l2 form 3b"
+ },
+ {
+  "id": "GR6.522.3b",
+  "gr": "6.522.3b",
+  "page": 715,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselK[0, a*x]*BesselJ[nu, b*x]*BesselJ[nu, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "((Sqrt[(b + c)^2 + a^2] - Sqrt[(b - c)^2 + a^2])/2)^nu/(((Sqrt[(b + c)^2 + a^2] + Sqrt[(b - c)^2 + a^2])/2)^nu*(((Sqrt[(b + c)^2 + a^2] + Sqrt[(b - c)^2 + a^2])/2)^2 - ((Sqrt[(b + c)^2 + a^2] - Sqrt[(b - c)^2 + a^2])/2)^2))"
+  ],
+  "conds": [
+   "c > 0",
+   "Re[nu] > -1",
+   "Re[a] > Abs[Im[b]]"
+  ],
+  "cite": "ET II 63(6)",
+  "edition_note": "11",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "= l1^nu/(l2^nu (l2^2-l1^2))",
+  "note": "l1, l2 from 6.522 notation substituted"
+ },
+ {
+  "id": "GR6.522.4a",
+  "gr": "6.522.4a",
+  "page": 715,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselI[0, a*x]*BesselK[0, b*x]*BesselJ[0, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(a^4 + b^4 + c^4 - 2*a^2*b^2 + 2*a^2*c^2 + 2*b^2*c^2)^(-1/2)"
+  ],
+  "conds": [
+   "Re[b] > Re[a]",
+   "c > 0"
+  ],
+  "cite": "ET II 16(27)",
+  "edition_note": "10",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x I_0(ax) K_0(bx) J_0(cx) = (a^4+b^4+c^4-2a^2b^2+2a^2c^2+2b^2c^2)^-1/2",
+  "note": ""
+ },
+ {
+  "id": "GR6.522.4b",
+  "gr": "6.522.4b",
+  "page": 715,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselI[0, c*x]*BesselK[0, b*x]*BesselJ[0, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(((Sqrt[(b + c)^2 + a^2] + Sqrt[(b - c)^2 + a^2])/2)^2 - ((Sqrt[(b + c)^2 + a^2] - Sqrt[(b - c)^2 + a^2])/2)^2)"
+  ],
+  "conds": [
+   "Re[b] > Re[c]",
+   "a > 0"
+  ],
+  "cite": "ET II 16(27)",
+  "edition_note": "10",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "alternatively a<->c: int x I_0(cx) K_0(bx) J_0(ax) = 1/(l2^2-l1^2)",
+  "note": "l1, l2 from 6.522 notation substituted"
+ },
+ {
+  "id": "GR6.522.5a",
+  "gr": "6.522.5a",
+  "page": 715,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[0, a*x]*BesselK[0, b*x]*BesselJ[0, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(a^4 + b^4 + c^4 - 2*a^2*c^2 + 2*a^2*b^2 + 2*b^2*c^2)^(-1/2)"
+  ],
+  "conds": [
+   "Re[b] > Abs[Im[a]]",
+   "c > 0"
+  ],
+  "cite": "ET II 15(25)",
+  "edition_note": "10",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x J_0(ax) K_0(bx) J_0(cx) = (a^4+b^4+c^4-2a^2c^2+2a^2b^2+2b^2c^2)^-1/2",
+  "note": ""
+ },
+ {
+  "id": "GR6.522.5b",
+  "gr": "6.522.5b",
+  "page": 715,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[0, b*x]*BesselK[0, a*x]*BesselJ[0, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(((Sqrt[(b + c)^2 + a^2] + Sqrt[(b - c)^2 + a^2])/2)^2 - ((Sqrt[(b + c)^2 + a^2] - Sqrt[(b - c)^2 + a^2])/2)^2)"
+  ],
+  "conds": [
+   "Re[a] > Abs[Im[b]]",
+   "c > 0"
+  ],
+  "cite": "ET II 15(25)",
+  "edition_note": "10",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "alternatively a<->b: int x J_0(bx) K_0(ax) J_0(cx) = 1/(l2^2-l1^2)",
+  "note": "l1, l2 from 6.522 notation substituted"
+ },
+ {
+  "id": "GR6.522.6a",
+  "gr": "6.522.6a",
+  "page": 715,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[0, a*x]*BesselY[0, a*x]*BesselJ[0, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < b < 2*a"
+  ],
+  "cite": "ET II 15(21)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x J_0(ax) Y_0(ax) J_0(bx) = 0",
+  "note": ""
+ },
+ {
+  "id": "GR6.522.6b",
+  "gr": "6.522.6b",
+  "page": 715,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[0, a*x]*BesselY[0, a*x]*BesselJ[0, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-2*Pi^(-1)*b^(-1)*(b^2 - 4*a^2)^(-1/2)"
+  ],
+  "conds": [
+   "0 < 2*a < b"
+  ],
+  "cite": "ET II 15(21)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "= -2/pi b^-1 (b^2-4a^2)^-1/2",
+  "note": ""
+ },
+ {
+  "id": "GR6.522.7",
+  "gr": "6.522.7",
+  "page": 715,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[mu, a*x]*BesselJ[mu + 1, a*x]*BesselK[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu + (3 + nu)/2]*Gamma[mu + (3 - nu)/2]*b^(-2)*(1 + 4*a^2*b^(-2))^(-1/2)*LegendreP[-mu, nu/2 - 1/2, 3, Sqrt[1 + 4*a^2*b^(-2)]]*LegendreP[-mu - 1, nu/2 - 1/2, 3, Sqrt[1 + 4*a^2*b^(-2)]]"
+  ],
+  "conds": [
+   "Re[b] > 2*Abs[Im[a]]",
+   "2*Re[mu] > Abs[Re[nu]] - 3"
+  ],
+  "cite": "ET II 138(20)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x J_mu(ax) J_{mu+1}(ax) K_nu(bx) = Gamma(mu+(3+nu)/2)Gamma(mu+(3-nu)/2) b^-2 (1+4a^2b^-2)^-1/2 P^{nu/2-1/2}_{-mu}[...] P^{nu/2-1/2}_{-mu-1}[...]",
+  "note": ""
+ },
+ {
+  "id": "GR6.522.8",
+  "gr": "6.522.8",
+  "page": 715,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselK[mu - 1/2, a*x]*BesselK[mu + 1/2, a*x]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-2*E^(2*mu*Pi*I)*Gamma[nu/2 + mu + 1]/(b*Gamma[nu/2 - mu]*(b^2 + 4*a^2)^(1/2))*LegendreQ[nu/2 - 1/2, -mu + 1/2, 3, Sqrt[1 + 4*a^2*b^(-2)]]*LegendreQ[nu/2 - 1/2, -mu - 1/2, 3, Sqrt[1 + 4*a^2*b^(-2)]]"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[a] > 0",
+   "Re[nu] > -1",
+   "Abs[Re[mu]] < 1 + Re[nu]/2"
+  ],
+  "cite": "ET II 67(29)a",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x K_{mu-1/2}(ax) K_{mu+1/2}(ax) J_nu(bx) = -2e^{2mu pi i}Gamma(nu/2+mu+1)/(b Gamma(nu/2-mu)(b^2+4a^2)^1/2) Q^{-mu+1/2}_{nu/2-1/2}[...] Q^{-mu-1/2}_{nu/2-1/2}[...]",
+  "note": ""
+ },
+ {
+  "id": "GR6.522.9",
+  "gr": "6.522.9",
+  "page": 715,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselI[nu/2, a*x]*BesselK[nu/2, a*x]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b^(-1)*(b^2 + 4*a^2)^(-1/2)"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[a] > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 65(16)",
+  "edition_note": "8",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x I_{nu/2}(ax) K_{nu/2}(ax) J_nu(bx) = b^-1 (b^2+4a^2)^-1/2",
+  "note": ""
+ },
+ {
+  "id": "GR6.522.10a",
+  "gr": "6.522.10a",
+  "page": 716,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[nu/2, a*x]*BesselY[nu/2, a*x]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[nu] > -1",
+   "0 < b < 2*a"
+  ],
+  "cite": "ET II 55(48)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x J_{nu/2}(ax) Y_{nu/2}(ax) J_nu(bx) = 0",
+  "note": ""
+ },
+ {
+  "id": "GR6.522.10b",
+  "gr": "6.522.10b",
+  "page": 716,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[nu/2, a*x]*BesselY[nu/2, a*x]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-2*Pi^(-1)*b^(-1)*(b^2 - 4*a^2)^(-1/2)"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[nu] > -1",
+   "2*a < b"
+  ],
+  "cite": "ET II 55(48)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "= -2/pi b^-1 (b^2-4a^2)^-1/2",
+  "note": ""
+ },
+ {
+  "id": "GR6.522.11a",
+  "gr": "6.522.11a",
+  "page": 716,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[(nu + n)/2, a*x]*BesselJ[(nu - n)/2, a*x]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi^(-1)*b^(-1)*(4*a^2 - b^2)^(-1/2)*ChebyshevT[n, b/(2*a)]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[nu] > -1",
+   "0 < b < 2*a",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 52(32)",
+  "edition_note": "8",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x J_{(nu+n)/2}(ax) J_{(nu-n)/2}(ax) J_nu(bx) = 2/pi b^-1 (4a^2-b^2)^-1/2 T_n(b/2a)",
+  "note": "n integer implied by T_n; not stated in book"
+ },
+ {
+  "id": "GR6.522.11b",
+  "gr": "6.522.11b",
+  "page": 716,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[(nu + n)/2, a*x]*BesselJ[(nu - n)/2, a*x]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[nu] > -1",
+   "2*a < b",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 52(32)",
+  "edition_note": "8",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "= 0 [2a<b]",
+  "note": "n integer implied by T_n in 11a; not stated in book"
+ },
+ {
+  "id": "GR6.522.12",
+  "gr": "6.522.12",
+  "page": 716,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselI[(nu - mu)/2, a*x]*BesselK[(nu + mu)/2, a*x]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-mu)*a^(-mu)*b^(-1)*(b^2 + 4*a^2)^(-1/2)*(b + (b^2 + 4*a^2)^(1/2))^mu"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[a] > 0",
+   "Re[nu] > -1",
+   "Re[nu - mu] > -2"
+  ],
+  "cite": "ET II 66(23)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x I_{(nu-mu)/2}(ax) K_{(nu+mu)/2}(ax) J_nu(bx) = 2^-mu a^-mu b^-1 (b^2+4a^2)^-1/2 [b+(b^2+4a^2)^1/2]^mu",
+  "note": ""
+ },
+ {
+  "id": "GR6.522.13",
+  "gr": "6.522.13",
+  "page": 716,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[mu, x*a*Sin[phi]]*BesselK[nu - mu, a*x*Cos[phi]*Cos[psi]]*BesselJ[nu, x*a*Sin[psi]], {x, 0, Infinity}]",
+  "rhs": [
+   "Sin[phi]^mu*Sin[psi]^nu*Cos[phi]^(nu - mu)*Cos[psi]^(mu - nu)/(a^2*(1 - Sin[phi]^2*Sin[psi]^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < phi < Pi/2",
+   "0 < psi < Pi/2",
+   "Re[mu] > -1",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 64(10)",
+  "edition_note": "8",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x J_mu(xa sin phi) K_{nu-mu}(ax cos phi cos psi) J_nu(xa sin psi) = (sin phi)^mu (sin psi)^nu (cos phi)^{nu-mu} (cos psi)^{mu-nu}/(a^2(1-sin^2 phi sin^2 psi))",
+  "note": ""
+ },
+ {
+  "id": "GR6.522.14",
+  "gr": "6.522.14",
+  "page": 716,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[mu, x*a*Sin[phi]*Cos[psi]]*BesselJ[nu - mu, a*x]*BesselJ[nu, x*a*Cos[phi]*Sin[psi]], {x, 0, Infinity}]",
+  "rhs": [
+   "-2*Pi^(-1)*a^(-2)*Sin[mu*Pi]*Sin[phi]^mu*Sin[psi]^nu*Cos[phi]^(-nu)*Cos[psi]^(-mu)*(Cos[phi + psi]*Cos[phi - psi])^(-1)"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < phi < Pi/2",
+   "0 < psi < Pi/2",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 54(39)",
+  "edition_note": "8",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x J_mu(xa sin phi cos psi) J_{nu-mu}(ax) J_nu(xa cos phi sin psi) = -2/pi a^-2 sin(mu pi)(sin phi)^mu (sin psi)^nu (cos phi)^-nu (cos psi)^-mu [cos(phi+psi)cos(phi-psi)]^-1",
+  "note": ""
+ },
+ {
+  "id": "GR6.522.15",
+  "gr": "6.522.15",
+  "page": 716,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*BesselJ[nu, b*x]*BesselK[nu, a*x]*BesselJ[nu, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(3*nu)*(a*b*c)^nu*Gamma[nu + 1/2]/(Sqrt[Pi]*(((Sqrt[(b + c)^2 + a^2] + Sqrt[(b - c)^2 + a^2])/2)^2 - ((Sqrt[(b + c)^2 + a^2] - Sqrt[(b - c)^2 + a^2])/2)^2)^(2*nu + 1))"
+  ],
+  "conds": [
+   "Re[a] > Abs[Im[b]]",
+   "c > 0"
+  ],
+  "cite": "",
+  "edition_note": "10",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x^{nu+1} J_nu(bx) K_nu(ax) J_nu(cx) = 2^{3nu}(abc)^nu Gamma(nu+1/2)/(sqrt(pi)(l2^2-l1^2)^{2nu+1})",
+  "note": "l1, l2 from 6.522 notation substituted"
+ },
+ {
+  "id": "GR6.522.16",
+  "gr": "6.522.16",
+  "page": 716,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*BesselI[nu, c*x]*BesselK[nu, b*x]*BesselJ[nu, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(3*nu)*(a*b*c)^nu*Gamma[nu + 1/2]/(Sqrt[Pi]*(((Sqrt[(b + c)^2 + a^2] + Sqrt[(b - c)^2 + a^2])/2)^2 - ((Sqrt[(b + c)^2 + a^2] - Sqrt[(b - c)^2 + a^2])/2)^2)^(2*nu + 1))"
+  ],
+  "conds": [
+   "Re[b] > Abs[Im[a]] + Abs[Im[c]]"
+  ],
+  "cite": "",
+  "edition_note": "10",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x^{nu+1} I_nu(cx) K_nu(bx) J_nu(ax) = 2^{3nu}(abc)^nu Gamma(nu+1/2)/(sqrt(pi)(l2^2-l1^2)^{2nu+1})",
+  "note": "l1, l2 from 6.522 notation substituted"
+ },
+ {
+  "id": "GR6.522.17",
+  "gr": "6.522.17",
+  "page": 716,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[t^(nu - mu - rho + 1)*BesselJ[mu, c*t]*BesselJ[nu, b*t]*BesselK[rho, a*t], {t, 0, Infinity}]",
+  "rhs": [
+   "2^(1 + nu - mu - rho)/(c^mu*b^nu*a^rho*Gamma[mu - nu + rho])*Integrate[x^(1 + 2*nu - 2*rho)*((((Sqrt[(b + c)^2 + a^2] - Sqrt[(b - c)^2 + a^2])/2)^2 - x^2)*(((Sqrt[(b + c)^2 + a^2] + Sqrt[(b - c)^2 + a^2])/2)^2 - x^2))^(mu - nu + rho - 1)/(b^2 - x^2)^(mu - nu), {x, 0, (Sqrt[(b + c)^2 + a^2] - Sqrt[(b - c)^2 + a^2])/2}]"
+  ],
+  "conds": [
+   "Re[a] > Abs[Im[b]]",
+   "c > 0"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int t^{nu-mu-rho+1} J_mu(ct) J_nu(bt) K_rho(at) dt = 2^{1+nu-mu-rho}/(c^mu b^nu a^rho Gamma(mu-nu+rho)) int_0^l1 x^{1+2nu-2rho}[(l1^2-x^2)(l2^2-x^2)]^{mu-nu+rho-1}/(b^2-x^2)^{mu-nu} dx",
+  "note": "l1, l2 substituted",
+  "reason": "value is another (finite) integral"
+ },
+ {
+  "id": "GR6.522.18",
+  "gr": "6.522.18",
+  "page": 717,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[t^(mu - nu + rho + 1)*BesselJ[mu, c*t]*BesselJ[nu, b*t]*BesselK[rho, a*t], {t, 0, Infinity}]",
+  "rhs": [
+   "2^(1 + mu - nu + rho)*a^rho/(c^mu*b^nu*Gamma[nu - mu - rho])*Integrate[x^(1 + 2*mu + 2*rho)*((((Sqrt[(b + c)^2 + a^2] - Sqrt[(b - c)^2 + a^2])/2)^2 - x^2)*(((Sqrt[(b + c)^2 + a^2] + Sqrt[(b - c)^2 + a^2])/2)^2 - x^2))^(nu - mu - rho - 1)/(c^2 - x^2)^(nu - mu), {x, 0, (Sqrt[(b + c)^2 + a^2] - Sqrt[(b - c)^2 + a^2])/2}]"
+  ],
+  "conds": [
+   "Re[a] > Abs[Im[b]]",
+   "c > 0"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int t^{mu-nu+rho+1} J_mu(ct) J_nu(bt) K_rho(at) dt = 2^{1+mu-nu+rho} a^rho/(c^mu b^nu Gamma(nu-mu-rho)) int_0^l1 x^{1+2mu+2rho}[(l1^2-x^2)(l2^2-x^2)]^{nu-mu-rho-1}/(c^2-x^2)^{nu-mu} dx",
+  "note": "l1, l2 substituted",
+  "reason": "value is another (finite) integral"
+ },
+ {
+  "id": "GR6.523",
+  "gr": "6.523",
+  "page": 717,
+  "status": "ok",
+  "lhs": "Integrate[x*(2*Pi^(-1)*BesselK[0, a*x] - BesselY[0, a*x])*BesselK[0, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi^(-1)*((a^2 + b^2)^(-1) + (b^2 - a^2)^(-1))*Log[b/a]"
+  ],
+  "conds": [
+   "Re[b] > Abs[Im[a]]",
+   "Re[a + b] > 0"
+  ],
+  "cite": "ET II 145(50)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x [2/pi K_0(ax) - Y_0(ax)] K_0(bx) = 2/pi [(a^2+b^2)^-1 + (b^2-a^2)^-1] ln(b/a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.524.1a",
+  "gr": "6.524.1a",
+  "page": 717,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[nu, a*x]^2*BesselJ[nu, b*x]*BesselY[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < a < b",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 352(14)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x J_nu^2(ax) J_nu(bx) Y_nu(bx) = 0",
+  "note": ""
+ },
+ {
+  "id": "GR6.524.1b",
+  "gr": "6.524.1b",
+  "page": 717,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[nu, a*x]^2*BesselJ[nu, b*x]*BesselY[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-(2*Pi*a*b)^(-1)"
+  ],
+  "conds": [
+   "0 < b < a",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 352(14)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "= -(2 pi ab)^-1",
+  "note": ""
+ },
+ {
+  "id": "GR6.524.2",
+  "gr": "6.524.2",
+  "page": 717,
+  "status": "ok",
+  "lhs": "Integrate[x*(BesselJ[0, a*x]*BesselK[0, b*x])^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(8*a*b) - 1/(4*a*b)*ArcSin[(b^2 - a^2)/(b^2 + a^2)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 373(9)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x [J_0(ax) K_0(bx)]^2 = pi/(8ab) - 1/(4ab) arcsin((b^2-a^2)/(b^2+a^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.525.1a",
+  "gr": "6.525.1a",
+  "page": 717,
+  "status": "ok",
+  "lhs": "Integrate[x^2*BesselJ[1, a*x]*BesselK[0, b*x]*BesselJ[0, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*a*(a^2 + b^2 - c^2)*((a^2 + b^2 + c^2)^2 - 4*a^2*c^2)^(-3/2)"
+  ],
+  "conds": [
+   "c > 0",
+   "Re[b] >= Abs[Im[a]]",
+   "Re[a] > 0"
+  ],
+  "cite": "ET II 15(26)",
+  "edition_note": "10",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x^2 J_1(ax) K_0(bx) J_0(cx) = 2a(a^2+b^2-c^2)[(a^2+b^2+c^2)^2-4a^2c^2]^-3/2",
+  "note": ""
+ },
+ {
+  "id": "GR6.525.1b",
+  "gr": "6.525.1b",
+  "page": 717,
+  "status": "ok",
+  "lhs": "Integrate[x^2*BesselJ[1, b*x]*BesselK[0, a*x]*BesselJ[0, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*b*(a^2 + b^2 - c^2)/(((Sqrt[(b + c)^2 + a^2] + Sqrt[(b - c)^2 + a^2])/2)^2 - ((Sqrt[(b + c)^2 + a^2] - Sqrt[(b - c)^2 + a^2])/2)^2)^3"
+  ],
+  "conds": [
+   "Re[a] > Abs[Im[b]]",
+   "Re[b] > 0",
+   "c > 0"
+  ],
+  "cite": "ET II 15(26)",
+  "edition_note": "10",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "alternatively a<->b: int x^2 J_1(bx) K_0(ax) J_0(cx) = 2b(a^2+b^2-c^2)/(l2^2-l1^2)^3",
+  "note": "l1, l2 from 6.525 notation substituted"
+ },
+ {
+  "id": "GR6.525.2",
+  "gr": "6.525.2",
+  "page": 717,
+  "status": "ok",
+  "lhs": "Integrate[x^2*BesselI[0, a*x]*BesselK[1, b*x]*BesselJ[0, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*b*(b^2 + c^2 - a^2)*((a^2 + b^2 + c^2)^2 - 4*a^2*b^2)^(-3/2)"
+  ],
+  "conds": [
+   "Re[b] > Abs[Re[a]]",
+   "c > 0"
+  ],
+  "cite": "ET II 16(28)",
+  "edition_note": "10",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x^2 I_0(ax) K_1(bx) J_0(cx) = 2b(b^2+c^2-a^2)[(a^2+b^2+c^2)^2-4a^2b^2]^-3/2",
+  "note": ""
+ },
+ {
+  "id": "GR6.525.3",
+  "gr": "6.525.3",
+  "page": 717,
+  "status": "ok",
+  "lhs": "Integrate[x^2*BesselI[0, c*x]*BesselK[0, b*x]*BesselJ[0, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*b*(a^2 + b^2 - c^2)/(((Sqrt[(b + c)^2 + a^2] + Sqrt[(b - c)^2 + a^2])/2)^2 - ((Sqrt[(b + c)^2 + a^2] - Sqrt[(b - c)^2 + a^2])/2)^2)^3"
+  ],
+  "conds": [
+   "Re[a] > Abs[Im[b]]",
+   "c > 0"
+  ],
+  "cite": "",
+  "edition_note": "10",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x^2 I_0(cx) K_0(bx) J_0(ax) = 2b(a^2+b^2-c^2)/(l2^2-l1^2)^3",
+  "note": "as printed; l1, l2 substituted. Likely misprint K_0 -> K_1 (a<->c interchange of 6.525.2); see 6.525.3b"
+ },
+ {
+  "id": "GR6.525.3b",
+  "gr": "6.525.3",
+  "page": 717,
+  "status": "ok",
+  "lhs": "Integrate[x^2*BesselI[0, c*x]*BesselK[1, b*x]*BesselJ[0, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*b*(a^2 + b^2 - c^2)/(((Sqrt[(b + c)^2 + a^2] + Sqrt[(b - c)^2 + a^2])/2)^2 - ((Sqrt[(b + c)^2 + a^2] - Sqrt[(b - c)^2 + a^2])/2)^2)^3"
+  ],
+  "conds": [
+   "Re[b] > Abs[Re[c]]",
+   "c > 0",
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "10",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "corrected: int x^2 I_0(cx) K_1(bx) J_0(ax) = 2b(a^2+b^2-c^2)/(l2^2-l1^2)^3",
+  "note": "corrected integrand: K_0(bx) -> K_1(bx), the a<->c interchange of 6.525.2 (which matches the value since (l2^2-l1^2)^2 = (a^2+b^2+c^2)^2-4b^2c^2); conditions taken from 6.525.2 with a->c plus a>0"
+ },
+ {
+  "id": "GR6.526.1",
+  "gr": "6.526.1",
+  "page": 717,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[nu/2, a*x^2]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*a)^(-1)*BesselJ[nu/2, b^2/(4*a)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 56(1)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x J_{nu/2}(ax^2) J_nu(bx) = (2a)^-1 J_{nu/2}(b^2/4a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.526.2",
+  "gr": "6.526.2",
+  "page": 718,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[nu/2, a*x^2]*BesselY[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(4*a)^(-1)*(BesselY[nu/2, b^2/(4*a)] - Tan[nu*Pi/2]*BesselJ[nu/2, b^2/(4*a)] + Sec[nu*Pi/2]*StruveH[-nu/2, b^2/(4*a)])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 109(9)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x J_{nu/2}(ax^2) Y_nu(bx) = (4a)^-1 [Y_{nu/2}(b^2/4a) - tan(nu pi/2) J_{nu/2} + sec(nu pi/2) H_{-nu/2}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.526.3",
+  "gr": "6.526.3",
+  "page": 718,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[nu/2, a*x^2]*BesselK[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(8*a*Cos[nu*Pi/2])*(StruveH[-nu/2, b^2/(4*a)] - BesselY[-nu/2, b^2/(4*a)])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[b] > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 140(27)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x J_{nu/2}(ax^2) K_nu(bx) = pi/(8a cos(nu pi/2)) [H_{-nu/2}(b^2/4a) - Y_{-nu/2}(b^2/4a)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.526.4",
+  "gr": "6.526.4",
+  "page": 718,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselY[nu/2, a*x^2]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-(2*a)^(-1)*StruveH[nu/2, b^2/(4*a)]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[b] > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 61(35)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x Y_{nu/2}(ax^2) J_nu(bx) = -(2a)^-1 H_{nu/2}(b^2/4a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.526.5",
+  "gr": "6.526.5",
+  "page": 718,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselY[nu/2, a*x^2]*BesselK[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*a*Sin[nu*Pi])*(Cos[nu*Pi/2]*StruveH[-nu/2, b^2/(4*a)] - Sin[nu*Pi/2]*BesselJ[-nu/2, b^2/(4*a)] - StruveH[nu/2, b^2/(4*a)])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[b] > 0",
+   "Abs[Re[nu]] < 1"
+  ],
+  "cite": "ET II 141(28)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x Y_{nu/2}(ax^2) K_nu(bx) = pi/(4a sin(nu pi)) [cos(nu pi/2) H_{-nu/2} - sin(nu pi/2) J_{-nu/2} - H_{nu/2}](b^2/4a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.526.6",
+  "gr": "6.526.6",
+  "page": 718,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselK[nu/2, a*x^2]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*a)*(BesselI[nu/2, b^2/(4*a)] - StruveL[nu/2, b^2/(4*a)])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 68(9)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x K_{nu/2}(ax^2) J_nu(bx) = pi/(4a)[I_{nu/2} - L_{nu/2}](b^2/4a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.526.7",
+  "gr": "6.526.7",
+  "page": 718,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselK[nu/2, a*x^2]*BesselY[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*a)*(Csc[nu*Pi]*StruveL[-nu/2, b^2/(4*a)] - Cot[nu*Pi]*StruveL[nu/2, b^2/(4*a)] - Tan[nu*Pi/2]*BesselI[nu/2, b^2/(4*a)] - (1/Pi)*Sec[nu*Pi/2]*BesselK[nu/2, b^2/(4*a)])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Abs[Re[nu]] < 1"
+  ],
+  "cite": "ET II 112(25)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x K_{nu/2}(ax^2) Y_nu(bx) = pi/(4a)[cosec(nu pi) L_{-nu/2} - cot(nu pi) L_{nu/2} - tan(nu pi/2) I_{nu/2} - (1/pi) sec(nu pi/2) K_{nu/2}](b^2/4a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.526.8",
+  "gr": "6.526.8",
+  "page": 718,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselK[nu/2, a*x^2]*BesselK[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(8*a)*(Sec[nu*Pi/2]*BesselK[nu/2, b^2/(4*a)] + Pi*Csc[nu*Pi]*(StruveL[-nu/2, b^2/(4*a)] - StruveL[nu/2, b^2/(4*a)]))"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Abs[Re[nu]] < 1"
+  ],
+  "cite": "ET II 146(52)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x K_{nu/2}(ax^2) K_nu(bx) = pi/(8a){sec(nu pi/2) K_{nu/2}(b^2/4a) + pi cosec(nu pi)[L_{-nu/2} - L_{nu/2}]}",
+  "note": "book states no condition on b; Re[b] > 0 needed for convergence (not added)"
+ },
+ {
+  "id": "GR6.527.1",
+  "gr": "6.527.1",
+  "page": 718,
+  "status": "ok",
+  "lhs": "Integrate[x^2*BesselJ[2*nu, 2*a*x]*BesselJ[nu - 1/2, x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "a/2*BesselJ[nu + 1/2, a^2]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 355(33)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x^2 J_{2nu}(2ax) J_{nu-1/2}(x^2) = a/2 J_{nu+1/2}(a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.527.2",
+  "gr": "6.527.2",
+  "page": 718,
+  "status": "ok",
+  "lhs": "Integrate[x^2*BesselJ[2*nu, 2*a*x]*BesselJ[nu + 1/2, x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "a/2*BesselJ[nu - 1/2, a^2]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[nu] > -2"
+  ],
+  "cite": "ET II 355(35)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x^2 J_{2nu}(2ax) J_{nu+1/2}(x^2) = a/2 J_{nu-1/2}(a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.527.3",
+  "gr": "6.527.3",
+  "page": 718,
+  "status": "ok",
+  "lhs": "Integrate[x^2*BesselJ[2*nu, 2*a*x]*BesselY[nu + 1/2, x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "-a/2*StruveH[nu - 1/2, a^2]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[nu] > -2"
+  ],
+  "cite": "ET II 355(36)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x^2 J_{2nu}(2ax) Y_{nu+1/2}(x^2) = -a/2 H_{nu-1/2}(a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.528",
+  "gr": "6.528",
+  "page": 719,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselK[nu/4, x^2/4]*BesselI[nu/4, x^2/4]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "BesselK[nu/4, x^2/4]*BesselI[nu/4, b^2/4]",
+   "BesselK[nu/4, b^2/4]*BesselI[nu/4, b^2/4]"
+  ],
+  "conds": [
+   "b > 0",
+   "nu > -1"
+  ],
+  "cite": "MO 183a",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x K_{nu/4}(x^2/4) I_{nu/4}(x^2/4) J_nu(bx) = K_{nu/4}(x^2/4) I_{nu/4}(b^2/4)",
+  "note": "book prints K_{nu/4}(x^2/4) in the value (integration variable in result: misprint); second rhs uses b^2/4"
+ },
+ {
+  "id": "GR6.529.1",
+  "gr": "6.529.1",
+  "page": 719,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[nu, 2*Sqrt[a*x]]*BesselK[nu, 2*Sqrt[a*x]]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*b^(-2)*E^(-2*a/b)"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 70(23)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int x J_nu(2 sqrt(ax)) K_nu(2 sqrt(ax)) J_nu(bx) = 1/2 b^-2 e^{-2a/b}",
+  "note": ""
+ },
+ {
+  "id": "GR6.529.2",
+  "gr": "6.529.2",
+  "page": 719,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[lam, 2*a]*BesselI[lam, 2*x]*BesselJ[mu, 2*Sqrt[a^2 - x^2]]*BesselI[mu, 2*Sqrt[a^2 - x^2]], {x, 0, a}]",
+  "rhs": [
+   "a^(2*lam + 2*mu + 2)/(2*Gamma[lam + 1]*Gamma[mu + 1]*Gamma[lam + mu + 2])*HypergeometricPFQ[{(lam + mu + 1)/2}, {lam + 1, mu + 1, lam + mu + 1, (lam + mu + 3)/2}, -a^4]"
+  ],
+  "conds": [
+   "Re[lam] > -1",
+   "Re[mu] > -1"
+  ],
+  "cite": "ET II 376(31)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int_0^a x J_lam(2a) I_lam(2x) J_mu(2 sqrt(a^2-x^2)) I_mu(2 sqrt(a^2-x^2)) = a^{2lam+2mu+2}/(2 Gamma(lam+1)Gamma(mu+1)Gamma(lam+mu+2)) 1F4((lam+mu+1)/2; lam+1, mu+1, lam+mu+1, (lam+mu+3)/2; -a^4)",
+  "note": "as printed, J_lam(2a); likely misprint for J_lam(2x), see 6.529.2b"
+ },
+ {
+  "id": "GR6.529.2b",
+  "gr": "6.529.2",
+  "page": 719,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[lam, 2*x]*BesselI[lam, 2*x]*BesselJ[mu, 2*Sqrt[a^2 - x^2]]*BesselI[mu, 2*Sqrt[a^2 - x^2]], {x, 0, a}]",
+  "rhs": [
+   "a^(2*lam + 2*mu + 2)/(2*Gamma[lam + 1]*Gamma[mu + 1]*Gamma[lam + mu + 2])*HypergeometricPFQ[{(lam + mu + 1)/2}, {lam + 1, mu + 1, lam + mu + 1, (lam + mu + 3)/2}, -a^4]"
+  ],
+  "conds": [
+   "Re[lam] > -1",
+   "Re[mu] > -1"
+  ],
+  "cite": "ET II 376(31)",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "corrected: J_lam(2x) in place of J_lam(2a)",
+  "note": "corrected integrand: J_lam(2a) -> J_lam(2x); the small-a leading term of the value matches this form"
+ },
+ {
+  "id": "GR6.531.1",
+  "gr": "6.531.1",
+  "page": 719,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[nu, b*x]/(x + a), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*BesselJ[nu, a*b]*Cot[Pi*nu]*Csc[Pi*nu] - Pi*BesselJ[-nu, a*b]*Csc[Pi*nu]^2 + (1/nu)*Cot[Pi*nu/2]*HypergeometricPFQ[{1}, {(2 - nu)/2, (2 + nu)/2}, -a^2*b^2/4] + a*b/(nu^2 - 1)*HypergeometricPFQ[{1}, {(3 - nu)/2, (3 + nu)/2}, -a^2*b^2/4]*Tan[Pi*nu/2]"
+  ],
+  "conds": [
+   "Re[nu] < 1",
+   "Abs[Arg[a]] < Pi",
+   "b > 0"
+  ],
+  "cite": "MC",
+  "edition_note": "10",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int Y_nu(bx)/(x+a) = -pi J_nu(ab) cot(pi nu) cosec(pi nu) - pi J_{-nu}(ab) cosec^2(pi nu) + 1/nu cot(pi nu/2) 1F2(1;(2-nu)/2,(2+nu)/2;-a^2b^2/4) + ab/(nu^2-1) 1F2(1;(3-nu)/2,(3+nu)/2;-a^2b^2/4) tan(pi nu/2)",
+  "note": "arg a != pi written as |arg a| < pi; Re nu > -1 likely also needed"
+ },
+ {
+  "id": "GR6.531.2",
+  "gr": "6.531.2",
+  "page": 719,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[BesselY[nu, b*x]/(x - a), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(Cot[nu*Pi]*(BesselY[nu, a*b] + WeberE[nu, a*b]) + AngerJ[nu, a*b] + 2*Cot[nu*Pi]^2*(AngerJ[nu, a*b] - BesselJ[nu, a*b]))"
+  ],
+  "conds": [
+   "b > 0",
+   "a > 0",
+   "Abs[Re[nu]] < 1"
+  ],
+  "cite": "ET II 98(9)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int Y_nu(bx)/(x-a) = pi{cot(nu pi)[Y_nu(ab) + E_nu(ab)] + bold J_nu(ab) + 2[cot(nu pi)]^2 [bold J_nu(ab) - J_nu(ab)]}",
+  "note": "",
+  "reason": "pole at x = a on the path (implied PV)"
+ },
+ {
+  "id": "GR6.531.3",
+  "gr": "6.531.3",
+  "page": 719,
+  "status": "ok",
+  "lhs": "Integrate[BesselK[nu, b*x]/(x + a), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/2*Csc[nu*Pi]^2*(BesselI[nu, a*b] + BesselI[-nu, a*b] - E^(-I*nu*Pi/2)*AngerJ[nu, I*a*b] - E^(I*nu*Pi/2)*AngerJ[-nu, I*a*b])"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "Abs[Arg[a]] < Pi",
+   "Abs[Re[nu]] < 1"
+  ],
+  "cite": "ET II 128(5)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int K_nu(bx)/(x+a) = pi^2/2 [cosec(nu pi)]^2 [I_nu(ab) + I_{-nu}(ab) - e^{-i nu pi/2} bold J_nu(iab) - e^{i nu pi/2} bold J_{-nu}(iab)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.532.1a",
+  "gr": "6.532.1a",
+  "page": 719,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[BesselJ[nu, x]/(x^2 + a^2), {x, 0, Infinity}]",
+  "rhs": [
+   "I/a*(LommelS2[0, nu, I*a] - E^(-I*nu*Pi/2)*BesselK[nu, a])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int J_nu(x)/(x^2+a^2) = i/a [S_{0,nu}(ia) - e^{-i nu pi/2} K_nu(a)]",
+  "note": "",
+  "reason": "Lommel S_{0,nu}"
+ },
+ {
+  "id": "GR6.532.1b",
+  "gr": "6.532.1b",
+  "page": 719,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[BesselJ[nu, x]/(x^2 + a^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/a*(I*LommelS1[0, nu, I*a] + Pi/2*Sec[nu*Pi/2]*BesselI[nu, a])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "= 1/a [i s_{0,nu}(ia) + pi/2 sec(nu pi/2) I_nu(a)]",
+  "note": "",
+  "reason": "Lommel s_{0,nu}"
+ },
+ {
+  "id": "GR6.532.2",
+  "gr": "6.532.2",
+  "page": 720,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[nu, x]/(x^2 + a^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/Cos[nu*Pi/2]*(-Pi/(2*a)*Tan[nu*Pi/2]*BesselI[nu, a*b] - (1/a)*BesselK[nu, a*b] + b*Sin[nu*Pi/2]/(1 - nu^2)*HypergeometricPFQ[{1}, {(3 - nu)/2, (3 + nu)/2}, a^2*b^2/4])"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[a] > 0",
+   "Abs[Re[nu]] < 1"
+  ],
+  "cite": "ET II 99(13)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int Y_nu(x)/(x^2+a^2) = 1/cos(nu pi/2) [-pi/(2a) tan(nu pi/2) I_nu(ab) - 1/a K_nu(ab) + b sin(nu pi/2)/(1-nu^2) 1F2(1;(3-nu)/2,(3+nu)/2;a^2b^2/4)]",
+  "note": "as printed: integrand Y_nu(x) but value depends on b; see 6.532.2b"
+ },
+ {
+  "id": "GR6.532.2b",
+  "gr": "6.532.2",
+  "page": 720,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[nu, b*x]/(x^2 + a^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/Cos[nu*Pi/2]*(-Pi/(2*a)*Tan[nu*Pi/2]*BesselI[nu, a*b] - (1/a)*BesselK[nu, a*b] + b*Sin[nu*Pi/2]/(1 - nu^2)*HypergeometricPFQ[{1}, {(3 - nu)/2, (3 + nu)/2}, a^2*b^2/4])"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[a] > 0",
+   "Abs[Re[nu]] < 1"
+  ],
+  "cite": "ET II 99(13)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "corrected: Y_nu(bx) in the integrand",
+  "note": "corrected integrand: Y_nu(x) -> Y_nu(bx), as the value depends on b"
+ },
+ {
+  "id": "GR6.532.3",
+  "gr": "6.532.3",
+  "page": 720,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[BesselY[nu, b*x]/(x^2 - a^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a)*(BesselJ[nu, a*b] + Tan[nu*Pi/2]*(Tan[nu*Pi/2]*(AngerJ[nu, a*b] - BesselJ[nu, a*b]) - WeberE[nu, a*b] - BesselY[nu, a*b]))"
+  ],
+  "conds": [
+   "b > 0",
+   "a > 0",
+   "Abs[Re[nu]] < 1"
+  ],
+  "cite": "ET II 101(21)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int Y_nu(bx)/(x^2-a^2) = pi/(2a){J_nu(ab) + tan(nu pi/2){tan(nu pi/2)[bold J_nu(ab) - J_nu(ab)] - E_nu(ab) - Y_nu(ab)}}",
+  "note": "",
+  "reason": "pole at x = a on the path (implied PV)"
+ },
+ {
+  "id": "GR6.532.4",
+  "gr": "6.532.4",
+  "page": 720,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[0, a*x]/(x^2 + k^2), {x, 0, Infinity}]",
+  "rhs": [
+   "BesselK[0, a*k]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[k] > 0"
+  ],
+  "cite": "WA 466(5)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int x J_0(ax)/(x^2+k^2) = K_0(ak)",
+  "note": ""
+ },
+ {
+  "id": "GR6.532.5",
+  "gr": "6.532.5",
+  "page": 720,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[0, a*x]/(x^2 + k^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-BesselK[0, a*k]/k"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[k] > 0"
+  ],
+  "cite": "WA 466(6)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int Y_0(ax)/(x^2+k^2) = -K_0(ak)/k",
+  "note": ""
+ },
+ {
+  "id": "GR6.532.6",
+  "gr": "6.532.6",
+  "page": 720,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[0, a*x]/(x^2 + k^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*k)*(BesselI[0, a*k] - StruveL[0, a*k])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[k] > 0"
+  ],
+  "cite": "WA 467(7)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int J_0(ax)/(x^2+k^2) = pi/(2k)[I_0(ak) - L_0(ak)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.533.1",
+  "gr": "6.533.1",
+  "page": 720,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[p, x]*BesselJ[q, z - x]/x, {x, 0, z}]",
+  "rhs": [
+   "BesselJ[p + q, z]/p"
+  ],
+  "conds": [
+   "Re[p] > 0",
+   "Re[q] > -1"
+  ],
+  "cite": "WA 415(3)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int_0^z J_p(x) J_q(z-x) dx/x = J_{p+q}(z)/p",
+  "note": ""
+ },
+ {
+  "id": "GR6.533.2",
+  "gr": "6.533.2",
+  "page": 720,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[p, x]/x*BesselJ[q, z - x]/(z - x), {x, 0, z}]",
+  "rhs": [
+   "(1/p + 1/q)*BesselJ[p + q, z]/z"
+  ],
+  "conds": [
+   "Re[p] > 0",
+   "Re[q] > 0"
+  ],
+  "cite": "WA 415(5)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int_0^z J_p(x)/x J_q(z-x)/(z-x) dx = (1/p+1/q) J_{p+q}(z)/z",
+  "note": ""
+ },
+ {
+  "id": "GR6.533.3a",
+  "gr": "6.533.3",
+  "page": 720,
+  "status": "ok",
+  "lhs": "Integrate[(BesselJ[0, a*x] - 1)*BesselJ[1, b*x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "-b/4*(1 + 2*Log[a/b])"
+  ],
+  "conds": [
+   "0 < b < a"
+  ],
+  "cite": "ET II 21(28)a",
+  "edition_note": "11",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int [J_0(ax)-1] J_1(bx) dx/x^2 = -b/4 [1 + 2 ln(a/b)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.533.3b",
+  "gr": "6.533.3",
+  "page": 720,
+  "status": "ok",
+  "lhs": "Integrate[(BesselJ[0, a*x] - 1)*BesselJ[1, b*x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "-a^2/(4*b)"
+  ],
+  "conds": [
+   "0 < a < b"
+  ],
+  "cite": "ET II 21(28)a",
+  "edition_note": "11",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "= -a^2/(4b)",
+  "note": "second form of book item 3 (not the book's separate item '3b', which is GR6.533.3ba/3bb)"
+ },
+ {
+  "id": "GR6.533.3ba",
+  "gr": "6.533.3b",
+  "page": 720,
+  "status": "ok",
+  "lhs": "Integrate[(BesselJ[0, a*x] - 1)*BesselJ[1, b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "b/(2*a)*Hypergeometric2F1[1/2, 1/2, 2, b^2/a^2] - 1"
+  ],
+  "conds": [
+   "0 < b < a"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "book item 3b: int [J_0(ax)-1] J_1(bx) dx/x = b/(2a) 2F1(1/2,1/2;2;b^2/a^2) - 1",
+  "note": ""
+ },
+ {
+  "id": "GR6.533.3bb",
+  "gr": "6.533.3b",
+  "page": 720,
+  "status": "ok",
+  "lhs": "Integrate[(BesselJ[0, a*x] - 1)*BesselJ[1, b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "2/Pi*MatharE[b^2/a^2] - 1",
+   "2/Pi*MatharE[a/b] - 1"
+  ],
+  "conds": [
+   "0 < a < b"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "book item 3b: = 2/pi E(b^2/a^2) - 1 [0<a<b]",
+  "note": "book prints E(b^2/a^2) with b>a (modulus > 1); likely means modulus a/b (parameter a^2/b^2), given as second rhs"
+ },
+ {
+  "id": "GR6.533.4a",
+  "gr": "6.533.4a",
+  "page": 720,
+  "status": "ok",
+  "lhs": "Integrate[(1 - BesselJ[0, a*x])*BesselJ[0, b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < a < b"
+  ],
+  "cite": "ET II 14(16)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int [1-J_0(ax)] J_0(bx) dx/x = 0",
+  "note": ""
+ },
+ {
+  "id": "GR6.533.4b",
+  "gr": "6.533.4b",
+  "page": 720,
+  "status": "ok",
+  "lhs": "Integrate[(1 - BesselJ[0, a*x])*BesselJ[0, b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[a/b]"
+  ],
+  "conds": [
+   "0 < b < a"
+  ],
+  "cite": "ET II 14(16)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "= ln(a/b)",
+  "note": ""
+ },
+ {
+  "id": "GR6.534",
+  "gr": "6.534",
+  "page": 720,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^3*BesselJ[0, x]/(x^4 - a^4), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*BesselK[0, a] - 1/4*Pi*BesselY[0, a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 340(5)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int x^3 J_0(x)/(x^4-a^4) = 1/2 K_0(a) - 1/4 pi Y_0(a)",
+  "note": "",
+  "reason": "pole at x = a on the path (implied PV)"
+ },
+ {
+  "id": "GR6.535",
+  "gr": "6.535",
+  "page": 720,
+  "status": "ok",
+  "lhs": "Integrate[x/(x^2 + a^2)*BesselJ[nu, x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "BesselI[nu, a]*BesselK[nu, a]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 342(26)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int x/(x^2+a^2) [J_nu(x)]^2 = I_nu(a) K_nu(a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.536",
+  "gr": "6.536",
+  "page": 720,
+  "status": "ok",
+  "lhs": "Integrate[x^3*BesselJ[0, b*x]/(x^4 + a^4), {x, 0, Infinity}]",
+  "rhs": [
+   "KelvinKer[0, a*b]"
+  ],
+  "conds": [
+   "b > 0",
+   "Abs[Arg[a]] < Pi/4"
+  ],
+  "cite": "ET II 8(9), MO 46a",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int x^3 J_0(bx)/(x^4+a^4) = ker(ab)",
+  "note": ""
+ },
+ {
+  "id": "GR6.537",
+  "gr": "6.537",
+  "page": 721,
+  "status": "ok",
+  "lhs": "Integrate[x^2*BesselJ[0, b*x]/(x^4 + a^4), {x, 0, Infinity}]",
+  "rhs": [
+   "-1/a^2*KelvinKei[0, a*b]"
+  ],
+  "conds": [
+   "b > 0",
+   "Abs[Arg[a]] < Pi/4"
+  ],
+  "cite": "MO 46a",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int x^2 J_0(bx)/(x^4+a^4) = -1/a^2 kei(ab)",
+  "note": ""
+ },
+ {
+  "id": "GR6.538.1",
+  "gr": "6.538.1",
+  "page": 721,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[1, a*x]*BesselJ[1, b*x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(a + b)/Pi*(MatharE[2*I*Sqrt[a*b]/Abs[b - a]] - MatharK[2*I*Sqrt[a*b]/Abs[b - a]])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 21(30)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int J_1(ax) J_1(bx) dx/x^2 = (a+b)/pi [E(2i sqrt(ab)/|b-a|) - K(2i sqrt(ab)/|b-a|)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.538.2a",
+  "gr": "6.538.2a",
+  "page": 721,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1)*BesselJ[nu + 2*n + 1, x]*BesselJ[nu + 2*m + 1, x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0",
+   "m != n",
+   "nu > -1"
+  ],
+  "cite": "EH II 64",
+  "edition_note": "8",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int x^-1 J_{nu+2n+1}(x) J_{nu+2m+1}(x) = 0 [m != n integers]",
+  "note": "book says m, n integers; nonnegativity added so the orders stay > -1"
+ },
+ {
+  "id": "GR6.538.2b",
+  "gr": "6.538.2b",
+  "page": 721,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1)*BesselJ[nu + 2*n + 1, x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(4*n + 2*nu + 2)^(-1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "nu > -1"
+  ],
+  "cite": "EH II 64",
+  "edition_note": "8",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "= (4n+2nu+2)^-1 [m = n]",
+  "note": "m = n substituted; n >= 0 added"
+ },
+ {
+  "id": "GR6.539.1",
+  "gr": "6.539.1",
+  "page": 721,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*BesselJ[nu, x]^2), {x, a, b}]",
+  "rhs": [
+   "Pi/2*(BesselY[nu, b]/BesselJ[nu, b] - BesselY[nu, a]/BesselJ[nu, a])"
+  ],
+  "conds": [
+   "0 < a < b"
+  ],
+  "cite": "ET II 338(41)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int_a^b dx/(x [J_nu(x)]^2) = pi/2 [Y_nu(b)/J_nu(b) - Y_nu(a)/J_nu(a)]",
+  "note": "condition J_nu(x) != 0 for x in [a,b] (on the integration variable); 0<a<b added for a real path"
+ },
+ {
+  "id": "GR6.539.2",
+  "gr": "6.539.2",
+  "page": 721,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*BesselY[nu, x]^2), {x, a, b}]",
+  "rhs": [
+   "Pi/2*(BesselJ[nu, a]/BesselY[nu, a] - BesselJ[nu, b]/BesselY[nu, b])"
+  ],
+  "conds": [
+   "0 < a < b"
+  ],
+  "cite": "ET II 339(49)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int_a^b dx/(x [Y_nu(x)]^2) = pi/2 [J_nu(a)/Y_nu(a) - J_nu(b)/Y_nu(b)]",
+  "note": "condition Y_nu(x) != 0 for x in [a,b] (on the integration variable); 0<a<b added for a real path"
+ },
+ {
+  "id": "GR6.539.3",
+  "gr": "6.539.3",
+  "page": 721,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*BesselJ[nu, x]*BesselY[nu, x]), {x, a, b}]",
+  "rhs": [
+   "Pi/2*Log[BesselJ[nu, a]*BesselY[nu, b]/(BesselJ[nu, b]*BesselY[nu, a])]"
+  ],
+  "conds": [
+   "0 < a < b"
+  ],
+  "cite": "ET II 339(50)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int_a^b dx/(x J_nu(x) Y_nu(x)) = pi/2 ln[J_nu(a) Y_nu(b)/(J_nu(b) Y_nu(a))]",
+  "note": "implicitly J_nu, Y_nu nonzero on [a,b] (integration variable); 0<a<b added"
+ },
+ {
+  "id": "GR6.541.1a",
+  "gr": "6.541.1a",
+  "page": 721,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[nu, a*x]*BesselJ[nu, b*x]/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "BesselI[nu, b*c]*BesselK[nu, a*c]"
+  ],
+  "conds": [
+   "0 < b < a",
+   "Re[c] > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 49(10)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int x J_nu(ax) J_nu(bx)/(x^2+c^2) = I_nu(bc) K_nu(ac)",
+  "note": ""
+ },
+ {
+  "id": "GR6.541.1b",
+  "gr": "6.541.1b",
+  "page": 721,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[nu, a*x]*BesselJ[nu, b*x]/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "BesselI[nu, a*c]*BesselK[nu, b*c]"
+  ],
+  "conds": [
+   "0 < a < b",
+   "Re[c] > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 49(10)",
+  "edition_note": "",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "= I_nu(ac) K_nu(bc)",
+  "note": ""
+ },
+ {
+  "id": "GR6.541.2a",
+  "gr": "6.541.2a",
+  "page": 721,
+  "status": "ok",
+  "lhs": "Integrate[x^(1 - 2*n)*BesselJ[nu, a*x]*BesselJ[nu, b*x]/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1/c^2)^n*(BesselI[nu, b*c]*BesselK[nu, a*c] - 1/2*(b/a)^nu*Pi/Sin[Pi*nu]*Sum[(a^2*c^2/4)^p/(p!*Gamma[1 - nu + p])*Sum[(b^2*c^2/4)^k/(k!*Gamma[1 - nu + k]), {k, 0, n - 1 - p}], {p, 0, n - 1}])",
+   "(-1/c^2)^n*(BesselI[nu, b*c]*BesselK[nu, a*c] - 1/2*(b/a)^nu*Pi/Sin[Pi*nu]*Sum[(a^2*c^2/4)^p/(p!*Gamma[1 - nu + p])*Sum[(b^2*c^2/4)^k/(k!*Gamma[1 + nu + k]), {k, 0, n - 1 - p}], {p, 0, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Re[nu] > n - 1",
+   "Re[c] > 0",
+   "0 < b < a"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "int x^{1-2n} J_nu(ax) J_nu(bx)/(x^2+c^2) = (-1/c^2)^n [I_nu(bc)K_nu(ac) - 1/2 (b/a)^nu pi/sin(pi nu) sum_p (a^2c^2/4)^p/(p! Gamma(1-nu+p)) sum_k (b^2c^2/4)^k/(k! Gamma(1-nu+k))]",
+  "note": "as printed the inner sum has Gamma(1-nu+k); second rhs uses Gamma(1+nu+k), which makes it agree with form 2b. Conditions printed after form 2b apply to both"
+ },
+ {
+  "id": "GR6.541.2b",
+  "gr": "6.541.2b",
+  "page": 721,
+  "status": "ok",
+  "lhs": "Integrate[x^(1 - 2*n)*BesselJ[nu, a*x]*BesselJ[nu, b*x]/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1/c^2)^n*(BesselI[nu, b*c]*BesselK[nu, a*c] - 1/(2*nu)*(b/a)^nu*Sum[(a^2*c^2/4)^p/(p!*Pochhammer[1 - nu, p])*Sum[(b^2*c^2/4)^k/(k!*Pochhammer[1 + nu, k]), {k, 0, n - 1 - p}], {p, 0, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Re[nu] > n - 1",
+   "Re[c] > 0",
+   "0 < b < a"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "6.53-6.54 Combinations of Bessel functions and rational functions",
+  "tex": "= (-1/c^2)^n [I_nu(bc)K_nu(ac) - 1/(2nu) (b/a)^nu sum_p (a^2c^2/4)^p/(p!(1-nu)_p) sum_k (b^2c^2/4)^k/(k!(1+nu)_k)]",
+  "note": ""
+ }
+]

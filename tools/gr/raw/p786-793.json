@@ -1,0 +1,1593 @@
+[
+ {
+  "id": "GR6.724.1",
+  "gr": "6.724.1",
+  "page": 786,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*lam)*BesselJ[2*nu, a/x]*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*a^(2*nu)*Gamma[lam - nu + 1]*b^(2*nu - 2*lam - 1)/(4^(2*nu - lam)*Gamma[2*nu + 1]*Gamma[nu - lam + 1/2])*HypergeometricPFQ[{}, {2*nu + 1, nu - lam, nu - lam + 1/2}, a^2*b^2/16] + a^(2*lam + 2)*Gamma[nu - lam - 1]*b/(2^(2*lam + 3)*Gamma[nu + lam + 2])*HypergeometricPFQ[{}, {3/2, lam - nu + 2, lam + nu + 2}, a^2*b^2/16]"
+  ],
+  "conds": [
+   "-5/4 < Re[lam] < Re[nu]",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 109(15)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int_0^inf x^(2lam) J_2nu(a/x) sin(bx) dx = ... 0F3 + ... 0F3",
+  "note": ""
+ },
+ {
+  "id": "GR6.724.2",
+  "gr": "6.724.2",
+  "page": 786,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*lam)*BesselJ[2*nu, a/x]*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "4^(lam - 2*nu)*Sqrt[Pi]*a^(2*nu)*b^(2*nu - 2*lam - 1)*Gamma[lam - nu + 1/2]/(Gamma[2*nu + 1]*Gamma[nu - lam])*HypergeometricPFQ[{}, {2*nu + 1, nu - lam + 1/2, nu - lam}, a^2*b^2/16] + 4^(-lam - 1)*a^(2*lam + 1)*Gamma[nu - lam - 1/2]/Gamma[nu + lam + 3/2]*HypergeometricPFQ[{}, {1/2, lam - nu + 3/2, nu + lam + 3/2}, a^2*b^2/16]"
+  ],
+  "conds": [
+   "-3/4 < Re[lam] < Re[nu] - 1/2",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 53(14)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int_0^inf x^(2lam) J_2nu(a/x) cos(bx) dx = ... 0F3 + ... 0F3",
+  "note": ""
+ },
+ {
+  "id": "GR6.725.1",
+  "gr": "6.725.1",
+  "page": 786,
+  "status": "ok",
+  "lhs": "Integrate[Sin[b*x]/Sqrt[x]*BesselJ[nu, a*Sqrt[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "-Sqrt[Pi/b]*Sin[a^2/(8*b) - nu*Pi/4 - Pi/4]*BesselJ[nu/2, a^2/(8*b)]"
+  ],
+  "conds": [
+   "Re[nu] > -3",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 110(27)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int sin(bx)/sqrt x J_nu(a sqrt x) = -sqrt(pi/b) sin(a^2/8b - nu pi/4 - pi/4) J_{nu/2}(a^2/8b)",
+  "note": ""
+ },
+ {
+  "id": "GR6.725.2",
+  "gr": "6.725.2",
+  "page": 786,
+  "status": "ok",
+  "lhs": "Integrate[Cos[b*x]/Sqrt[x]*BesselJ[nu, a*Sqrt[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/b]*Cos[a^2/(8*b) - nu*Pi/4 - Pi/4]*BesselJ[nu/2, a^2/(8*b)]"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 54(25)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int cos(bx)/sqrt x J_nu(a sqrt x) = sqrt(pi/b) cos(...) J_{nu/2}(a^2/8b)",
+  "note": ""
+ },
+ {
+  "id": "GR6.725.3",
+  "gr": "6.725.3",
+  "page": 786,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu/2)*BesselJ[nu, a*Sqrt[x]]*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-nu)*a^nu*b^(-nu - 1)*Cos[a^2/(4*b) - nu*Pi/2]"
+  ],
+  "conds": [
+   "-2 < Re[nu] < 1/2",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 110(28)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x^(nu/2) J_nu(a sqrt x) sin(bx) = 2^-nu a^nu b^(-nu-1) cos(a^2/4b - nu pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.725.4",
+  "gr": "6.725.4",
+  "page": 786,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu/2)*BesselJ[nu, a*Sqrt[x]]*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-nu)*b^(-nu - 1)*a^nu*Sin[a^2/(4*b) - nu*Pi/2]"
+  ],
+  "conds": [
+   "-1 < Re[nu] < 1/2",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 54(26)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x^(nu/2) J_nu(a sqrt x) cos(bx) = 2^-nu b^(-nu-1) a^nu sin(a^2/4b - nu pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.726.1a",
+  "gr": "6.726.1a",
+  "page": 786,
+  "status": "ok",
+  "lhs": "Integrate[x*(x^2 + b^2)^(-nu/2)*BesselJ[nu, a*Sqrt[x^2 + b^2]]*Sin[c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*a^(-nu)*b^(-nu + 3/2)*c*(a^2 - c^2)^(nu/2 - 3/4)*BesselJ[nu - 3/2, b*Sqrt[a^2 - c^2]]"
+  ],
+  "conds": [
+   "0 < c < a",
+   "Re[nu] > 1/2",
+   "b > 0"
+  ],
+  "cite": "ET I 111(37)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x (x^2+b^2)^(-nu/2) J_nu(a sqrt(x^2+b^2)) sin(cx) = sqrt(pi/2) a^-nu b^(3/2-nu) c (a^2-c^2)^(nu/2-3/4) J_{nu-3/2}(b sqrt(a^2-c^2))",
+  "note": "b > 0 added (not printed)"
+ },
+ {
+  "id": "GR6.726.1b",
+  "gr": "6.726.1b",
+  "page": 786,
+  "status": "ok",
+  "lhs": "Integrate[x*(x^2 + b^2)^(-nu/2)*BesselJ[nu, a*Sqrt[x^2 + b^2]]*Sin[c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < a < c",
+   "Re[nu] > 1/2",
+   "b > 0"
+  ],
+  "cite": "ET I 111(37)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "same integral = 0 for 0<a<c",
+  "note": "b > 0 added (not printed)"
+ },
+ {
+  "id": "GR6.726.2a",
+  "gr": "6.726.2a",
+  "page": 787,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 + b^2)^(-nu/2)*BesselJ[nu, a*Sqrt[x^2 + b^2]]*Cos[c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*a^(-nu)*b^(-nu + 1/2)*(a^2 - c^2)^(nu/2 - 1/4)*BesselJ[nu - 1/2, b*Sqrt[a^2 - c^2]]"
+  ],
+  "conds": [
+   "0 < c < a",
+   "b > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET I 55(37)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int (x^2+b^2)^(-nu/2) J_nu(a sqrt(x^2+b^2)) cos(cx) = sqrt(pi/2) a^-nu b^(1/2-nu) (a^2-c^2)^(nu/2-1/4) J_{nu-1/2}(b sqrt(a^2-c^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.726.2b",
+  "gr": "6.726.2b",
+  "page": 787,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 + b^2)^(-nu/2)*BesselJ[nu, a*Sqrt[x^2 + b^2]]*Cos[c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < a < c",
+   "b > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET I 55(37)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "same = 0 for 0<a<c",
+  "note": ""
+ },
+ {
+  "id": "GR6.726.3a",
+  "gr": "6.726.3a",
+  "page": 787,
+  "status": "ok",
+  "lhs": "Integrate[x*(x^2 + b^2)^(nu/2)*BesselK[nu, a*Sqrt[x^2 + b^2]]*Sin[c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*a^nu*b^(nu + 3/2)*c*(a^2 + c^2)^(-nu/2 - 3/4)*BesselK[-nu - 3/2, b*Sqrt[a^2 + c^2]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0",
+   "c > 0"
+  ],
+  "cite": "ET I 113(45)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x (x^2+b^2)^(nu/2) K_{+-nu}(a sqrt(x^2+b^2)) sin(cx) = sqrt(pi/2) a^nu b^(nu+3/2) c (a^2+c^2)^(-nu/2-3/4) K_{-nu-3/2}(b sqrt(a^2+c^2))",
+  "note": "K_{+-nu}: upper sign (K_{-nu} = K_nu)"
+ },
+ {
+  "id": "GR6.726.3b",
+  "gr": "6.726.3b",
+  "page": 787,
+  "status": "ok",
+  "lhs": "Integrate[x*(x^2 + b^2)^(nu/2)*BesselK[-nu, a*Sqrt[x^2 + b^2]]*Sin[c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*a^nu*b^(nu + 3/2)*c*(a^2 + c^2)^(-nu/2 - 3/4)*BesselK[-nu - 3/2, b*Sqrt[a^2 + c^2]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0",
+   "c > 0"
+  ],
+  "cite": "ET I 113(45)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x (x^2+b^2)^(nu/2) K_{+-nu}(a sqrt(x^2+b^2)) sin(cx) = sqrt(pi/2) a^nu b^(nu+3/2) c (a^2+c^2)^(-nu/2-3/4) K_{-nu-3/2}(b sqrt(a^2+c^2))",
+  "note": "K_{+-nu}: lower sign (K_{-nu} = K_nu)"
+ },
+ {
+  "id": "GR6.726.4a",
+  "gr": "6.726.4a",
+  "page": 787,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 + b^2)^(-nu/2)*BesselK[nu, a*Sqrt[x^2 + b^2]]*Cos[c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*a^(-nu)*b^(1/2 - nu)*(a^2 + c^2)^(nu/2 - 1/4)*BesselK[nu - 1/2, b*Sqrt[a^2 + c^2]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0",
+   "Element[c, Reals]"
+  ],
+  "cite": "ET I 56(45)",
+  "edition_note": "11",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int (x^2+b^2)^(-nu/2) K_nu(a sqrt(x^2+b^2)) cos(cx) = sqrt(pi/2) a^-nu b^(1/2-nu) (a^2+c^2)^(nu/2-1/4) K_{nu-1/2}(b sqrt(a^2+c^2))",
+  "note": "upper signs of the -+/+- pair"
+ },
+ {
+  "id": "GR6.726.4b",
+  "gr": "6.726.4b",
+  "page": 787,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 + b^2)^(nu/2)*BesselK[nu, a*Sqrt[x^2 + b^2]]*Cos[c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*a^nu*b^(1/2 + nu)*(a^2 + c^2)^(-nu/2 - 1/4)*BesselK[-nu - 1/2, b*Sqrt[a^2 + c^2]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0",
+   "Element[c, Reals]"
+  ],
+  "cite": "ET I 56(45)",
+  "edition_note": "11",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "lower signs: (x^2+b^2)^(nu/2) ... = sqrt(pi/2) a^nu b^(1/2+nu) (a^2+c^2)^(-nu/2-1/4) K_{-nu-1/2}",
+  "note": "lower signs of the -+/+- pair"
+ },
+ {
+  "id": "GR6.726.5a",
+  "gr": "6.726.5a",
+  "page": 787,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 + a^2)^(-nu/2)*BesselY[nu, b*Sqrt[x^2 + a^2]]*Cos[c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[a*Pi/2]*(a*b)^(-nu)*(b^2 - c^2)^(nu/2 - 1/4)*BesselY[nu - 1/2, a*Sqrt[b^2 - c^2]]"
+  ],
+  "conds": [
+   "0 < c < b",
+   "a > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET I 56(41)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int (x^2+a^2)^(-nu/2) Y_nu(b sqrt(x^2+a^2)) cos(cx) = sqrt(a pi/2)(ab)^-nu (b^2-c^2)^(nu/2-1/4) Y_{nu-1/2}(a sqrt(b^2-c^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.726.5b",
+  "gr": "6.726.5b",
+  "page": 787,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 + a^2)^(-nu/2)*BesselY[nu, b*Sqrt[x^2 + a^2]]*Cos[c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-Sqrt[2*a/Pi]*(a*b)^(-nu)*(c^2 - b^2)^(nu/2 - 1/4)*BesselK[nu - 1/2, a*Sqrt[c^2 - b^2]]"
+  ],
+  "conds": [
+   "0 < b < c",
+   "a > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET I 56(41)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "= -sqrt(2a/pi)(ab)^-nu (c^2-b^2)^(nu/2-1/4) K_{nu-1/2}(a sqrt(c^2-b^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.727.1",
+  "gr": "6.727.1",
+  "page": 787,
+  "status": "ok",
+  "lhs": "Integrate[Cos[c*x]/Sqrt[a^2 - x^2]*BesselJ[nu, b*Sqrt[a^2 - x^2]], {x, 0, a}]",
+  "rhs": [
+   "Pi/2*BesselJ[nu/2, a/2*(Sqrt[b^2 + c^2] - c)]*BesselJ[nu/2, a/2*(Sqrt[b^2 + c^2] + c)]"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "c > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 113(48)",
+  "edition_note": "9",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int_0^a cos(cx)/sqrt(a^2-x^2) J_nu(b sqrt(a^2-x^2)) = pi/2 J_{nu/2}[a/2(sqrt(b^2+c^2)-c)] J_{nu/2}[a/2(sqrt(b^2+c^2)+c)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.727.2",
+  "gr": "6.727.2",
+  "page": 787,
+  "status": "ok",
+  "lhs": "Integrate[Sin[c*x]/Sqrt[x^2 - a^2]*BesselJ[nu, b*Sqrt[x^2 - a^2]], {x, a, Infinity}]",
+  "rhs": [
+   "Pi/2*BesselJ[nu/2, a/2*(c - Sqrt[c^2 + b^2])]*BesselJ[-nu/2, a/2*(c + Sqrt[c^2 + b^2])]",
+   "Pi/2*BesselJ[nu/2, a/2*(c - Sqrt[c^2 - b^2])]*BesselJ[-nu/2, a/2*(c + Sqrt[c^2 - b^2])]"
+  ],
+  "conds": [
+   "0 < b < c",
+   "a > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET I 113(49)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int_a^inf sin(cx)/sqrt(x^2-a^2) J_nu(b sqrt(x^2-a^2)) = pi/2 J_{nu/2}[a/2(c - sqrt(c^2+b^2))] J_{-nu/2}[a/2(c + sqrt(c^2+b^2))]",
+  "note": "Printed sqrt(c^2+b^2); second rhs candidate uses sqrt(c^2-b^2), consistent with condition 0<b<c and with 6.727.3/6.737.1 (suspected misprint)"
+ },
+ {
+  "id": "GR6.727.3",
+  "gr": "6.727.3",
+  "page": 787,
+  "status": "ok",
+  "lhs": "Integrate[Cos[c*x]/Sqrt[x^2 - a^2]*BesselJ[nu, b*Sqrt[x^2 - a^2]], {x, a, Infinity}]",
+  "rhs": [
+   "-Pi/2*BesselJ[nu/2, a/2*(c - Sqrt[c^2 - b^2])]*BesselY[-nu/2, a/2*(c + Sqrt[c^2 - b^2])]"
+  ],
+  "conds": [
+   "0 < b < c",
+   "a > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET I 58(54)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int_a^inf cos(cx)/sqrt(x^2-a^2) J_nu(b sqrt(x^2-a^2)) = -pi/2 J_{nu/2}[a/2(c-sqrt(c^2-b^2))] Y_{-nu/2}[a/2(c+sqrt(c^2-b^2))]",
+  "note": ""
+ },
+ {
+  "id": "GR6.727.4",
+  "gr": "6.727.4",
+  "page": 787,
+  "status": "ok",
+  "lhs": "Integrate[(a^2 - x^2)^(nu/2)*Cos[x]*BesselI[nu, Sqrt[a^2 - x^2]], {x, 0, a}]",
+  "rhs": [
+   "Sqrt[Pi]*a^(2*nu + 1)/(2^(nu + 1)*Gamma[nu + 3/2])"
+  ],
+  "conds": [
+   "Re[nu] > -1/2",
+   "a > 0"
+  ],
+  "cite": "WA 409(2)",
+  "edition_note": "8",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int_0^a (a^2-x^2)^(nu/2) cos x I_nu(sqrt(a^2-x^2)) = sqrt(pi) a^(2nu+1)/(2^(nu+1) Gamma(nu+3/2))",
+  "note": "a > 0 added"
+ },
+ {
+  "id": "GR6.728.1",
+  "gr": "6.728.1",
+  "page": 788,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x^2]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*b/(8*a^(3/2))*(Cos[(b^2/(8*a) - nu*Pi/4)]*BesselJ[nu/2 - 1/2, b^2/(8*a)] - Sin[(b^2/(8*a) - nu*Pi/4)]*BesselJ[nu/2 + 1/2, b^2/(8*a)])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[nu] > -4"
+  ],
+  "cite": "ET II 34(14)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x sin(ax^2) J_nu(bx) = sqrt(pi) b/(8a^(3/2)) [cos(b^2/8a - nu pi/4) J_{nu/2-1/2} - sin(..) J_{nu/2+1/2}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.728.2",
+  "gr": "6.728.2",
+  "page": 788,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[a*x^2]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*b/(8*a^(3/2))*(Cos[(b^2/(8*a) - nu*Pi/4)]*BesselJ[nu/2 + 1/2, b^2/(8*a)] + Sin[(b^2/(8*a) - nu*Pi/4)]*BesselJ[nu/2 - 1/2, b^2/(8*a)])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[nu] > -2"
+  ],
+  "cite": "ET II 38(39)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x cos(ax^2) J_nu(bx) = sqrt(pi) b/(8a^(3/2)) [cos(..) J_{nu/2+1/2} + sin(..) J_{nu/2-1/2}]",
+  "note": ""
+ },
+ {
+  "id": "GR6.728.3",
+  "gr": "6.728.3",
+  "page": 788,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[0, beta*x]*Sin[alpha*x^2]*x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*alpha)*Cos[beta^2/(4*alpha)]"
+  ],
+  "conds": [
+   "alpha > 0",
+   "beta > 0"
+  ],
+  "cite": "MO 47",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int J0(beta x) sin(alpha x^2) x = 1/(2 alpha) cos(beta^2/4alpha)",
+  "note": ""
+ },
+ {
+  "id": "GR6.728.4",
+  "gr": "6.728.4",
+  "page": 788,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[0, beta*x]*Cos[alpha*x^2]*x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*alpha)*Sin[beta^2/(4*alpha)]"
+  ],
+  "conds": [
+   "alpha > 0",
+   "beta > 0"
+  ],
+  "cite": "MO 47",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int J0(beta x) cos(alpha x^2) x = 1/(2 alpha) sin(beta^2/4alpha)",
+  "note": ""
+ },
+ {
+  "id": "GR6.728.5",
+  "gr": "6.728.5",
+  "page": 788,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*Sin[a*x^2]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b^nu/(2^(nu + 1)*a^(nu + 1))*Cos[b^2/(4*a) - nu*Pi/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "-2 < Re[nu] < 1/2"
+  ],
+  "cite": "ET II 34(15)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x^(nu+1) sin(ax^2) J_nu(bx) = b^nu/(2^(nu+1)a^(nu+1)) cos(b^2/4a - nu pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.728.6",
+  "gr": "6.728.6",
+  "page": 788,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*Cos[a*x^2]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b^nu/(2^(nu + 1)*a^(nu + 1))*Sin[b^2/(4*a) - nu*Pi/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "-1 < Re[nu] < 1/2"
+  ],
+  "cite": "ET II 38(40)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x^(nu+1) cos(ax^2) J_nu(bx) = b^nu/(2^(nu+1)a^(nu+1)) sin(b^2/4a - nu pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.729.1",
+  "gr": "6.729.1",
+  "page": 788,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x^2]*BesselJ[nu, b*x]*BesselJ[nu, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*a)*Cos[(b^2 + c^2)/(4*a) - nu*Pi/2]*BesselJ[nu, b*c/(2*a)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0",
+   "Re[nu] > -2"
+  ],
+  "cite": "ET II 51(26)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x sin(ax^2) J_nu(bx) J_nu(cx) = 1/2a cos((b^2+c^2)/4a - nu pi/2) J_nu(bc/2a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.729.2",
+  "gr": "6.729.2",
+  "page": 788,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[a*x^2]*BesselJ[nu, b*x]*BesselJ[nu, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*a)*Sin[(b^2 + c^2)/(4*a) - nu*Pi/2]*BesselJ[nu, b*c/(2*a)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 51(27)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x cos(ax^2) J_nu(bx) J_nu(cx) = 1/2a sin(...) J_nu(bc/2a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.731.1a",
+  "gr": "6.731.1a",
+  "page": 788,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x^2]*BesselJ[nu, b*x^2]*BesselJ[2*nu, 2*c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*Sqrt[b^2 - a^2])*Sin[a*c^2/(b^2 - a^2)]*BesselJ[nu, b*c^2/(b^2 - a^2)]"
+  ],
+  "conds": [
+   "0 < a < b",
+   "Re[nu] > -1",
+   "c > 0"
+  ],
+  "cite": "ET II 356(41)a",
+  "edition_note": "11",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x sin(ax^2) J_nu(bx^2) J_2nu(2cx) = 1/(2 sqrt(b^2-a^2)) sin(ac^2/(b^2-a^2)) J_nu(bc^2/(b^2-a^2))",
+  "note": "c > 0 added"
+ },
+ {
+  "id": "GR6.731.1b",
+  "gr": "6.731.1b",
+  "page": 788,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x^2]*BesselJ[nu, b*x^2]*BesselJ[2*nu, 2*c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*Sqrt[a^2 - b^2])*Cos[a*c^2/(a^2 - b^2)]*BesselJ[nu, b*c^2/(a^2 - b^2)]"
+  ],
+  "conds": [
+   "0 < b < a",
+   "Re[nu] > -1",
+   "c > 0"
+  ],
+  "cite": "ET II 356(41)a",
+  "edition_note": "11",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "= 1/(2 sqrt(a^2-b^2)) cos(ac^2/(a^2-b^2)) J_nu(bc^2/(a^2-b^2))",
+  "note": "c > 0 added"
+ },
+ {
+  "id": "GR6.731.2a",
+  "gr": "6.731.2a",
+  "page": 789,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[a*x^2]*BesselJ[nu, b*x^2]*BesselJ[2*nu, 2*c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*Sqrt[b^2 - a^2])*Cos[a*c^2/(b^2 - a^2)]*BesselJ[nu, b*c^2/(b^2 - a^2)]"
+  ],
+  "conds": [
+   "0 < a < b",
+   "Re[nu] > -1/2",
+   "c > 0"
+  ],
+  "cite": "ET II 356(42)a",
+  "edition_note": "10",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x cos(ax^2) J_nu(bx^2) J_2nu(2cx) = 1/(2 sqrt(b^2-a^2)) cos(ac^2/(b^2-a^2)) J_nu(...)",
+  "note": "c > 0 added"
+ },
+ {
+  "id": "GR6.731.2b",
+  "gr": "6.731.2b",
+  "page": 789,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[a*x^2]*BesselJ[nu, b*x^2]*BesselJ[2*nu, 2*c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*Sqrt[a^2 - b^2])*Sin[a*c^2/(a^2 - b^2)]*BesselJ[nu, b*c^2/(a^2 - b^2)]"
+  ],
+  "conds": [
+   "0 < b < a",
+   "Re[nu] > -1/2",
+   "c > 0"
+  ],
+  "cite": "ET II 356(42)a",
+  "edition_note": "10",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "= 1/(2 sqrt(a^2-b^2)) sin(ac^2/(a^2-b^2)) J_nu(...)",
+  "note": "c > 0 added"
+ },
+ {
+  "id": "GR6.732",
+  "gr": "6.732",
+  "page": 789,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Cos[x^2/(2*a)]*BesselY[1, x]*BesselK[1, x], {x, 0, Infinity}]",
+  "rhs": [
+   "-a^3*BesselK[0, a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 371(52)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x^2 cos(x^2/2a) Y1(x) K1(x) = -a^3 K0(a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.733.1",
+  "gr": "6.733.1",
+  "page": 789,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a/(2*x)]*(Sin[x]*BesselJ[0, x] + Cos[x]*BesselY[0, x])/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*BesselJ[0, Sqrt[a]]*BesselY[0, Sqrt[a]]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 346(51)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int sin(a/2x)[sin x J0 + cos x Y0] dx/x = pi J0(sqrt a) Y0(sqrt a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.733.2",
+  "gr": "6.733.2",
+  "page": 789,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a/(2*x)]*(Sin[x]*BesselY[0, x] - Cos[x]*BesselJ[0, x])/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*BesselJ[0, Sqrt[a]]*BesselY[0, Sqrt[a]]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 347(52)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int cos(a/2x)[sin x Y0 - cos x J0] dx/x = pi J0(sqrt a) Y0(sqrt a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.733.3",
+  "gr": "6.733.3",
+  "page": 789,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a/(2*x)]*BesselK[0, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*a/2*BesselJ[1, Sqrt[a]]*BesselK[1, Sqrt[a]]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 368(34)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x sin(a/2x) K0(x) = pi a/2 J1(sqrt a) K1(sqrt a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.733.4",
+  "gr": "6.733.4",
+  "page": 789,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[a/(2*x)]*BesselK[0, x], {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*a/2*BesselY[1, Sqrt[a]]*BesselK[1, Sqrt[a]]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 369(35)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x cos(a/2x) K0(x) = -pi a/2 Y1(sqrt a) K1(sqrt a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.734",
+  "gr": "6.734",
+  "page": 789,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*Sqrt[x]]*BesselK[nu, b*x]/Sqrt[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*Sqrt[b])*Sec[nu*Pi]*(ParabolicCylinderD[nu - 1/2, a/Sqrt[2*b]]*ParabolicCylinderD[-nu - 1/2, -a/Sqrt[2*b]] + ParabolicCylinderD[nu - 1/2, -a/Sqrt[2*b]]*ParabolicCylinderD[-nu - 1/2, a/Sqrt[2*b]])"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 132(27)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int cos(a sqrt x) K_nu(bx) dx/sqrt x = pi/(2 sqrt b) sec(nu pi)[D_{nu-1/2}(a/sqrt(2b)) D_{-nu-1/2}(-a/sqrt(2b)) + D_{nu-1/2}(-..) D_{-nu-1/2}(..)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.735.1",
+  "gr": "6.735.1",
+  "page": 789,
+  "status": "ok",
+  "lhs": "Integrate[x^(1/4)*Sin[2*a*Sqrt[x]]*BesselJ[-1/4, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*a^(3/2)*BesselJ[3/4, a^2]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 341(10)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x^(1/4) sin(2a sqrt x) J_{-1/4}(x) = sqrt(pi) a^(3/2) J_{3/4}(a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.735.2",
+  "gr": "6.735.2",
+  "page": 789,
+  "status": "ok",
+  "lhs": "Integrate[x^(1/4)*Cos[2*a*Sqrt[x]]*BesselJ[1/4, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*a^(3/2)*BesselJ[-3/4, a^2]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 341(12)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x^(1/4) cos(2a sqrt x) J_{1/4}(x) = sqrt(pi) a^(3/2) J_{-3/4}(a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.735.3",
+  "gr": "6.735.3",
+  "page": 789,
+  "status": "ok",
+  "lhs": "Integrate[x^(1/4)*Sin[2*a*Sqrt[x]]*BesselJ[3/4, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*a^(3/2)*BesselJ[-1/4, a^2]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 341(11)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x^(1/4) sin(2a sqrt x) J_{3/4}(x) = sqrt(pi) a^(3/2) J_{-1/4}(a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.735.4",
+  "gr": "6.735.4",
+  "page": 789,
+  "status": "ok",
+  "lhs": "Integrate[x^(1/4)*Cos[2*a*Sqrt[x]]*BesselJ[-3/4, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*a^(3/2)*BesselJ[1/4, a^2]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 341(13)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x^(1/4) cos(2a sqrt x) J_{-3/4}(x) = sqrt(pi) a^(3/2) J_{1/4}(a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.736.1",
+  "gr": "6.736.1",
+  "page": 789,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1/2)*Sin[x]*Cos[4*a*Sqrt[x]]*BesselJ[0, x], {x, 0, Infinity}]",
+  "rhs": [
+   "-2^(-3/2)*Sqrt[Pi]*(Cos[(a^2 - Pi/4)]*BesselJ[0, a^2] - Sin[(a^2 - Pi/4)]*BesselY[0, a^2])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 341(18)",
+  "edition_note": "11",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x^-1/2 sin x cos(4a sqrt x) J0(x) = -2^(-3/2) sqrt(pi)[cos(a^2-pi/4) J0(a^2) - sin(a^2-pi/4) Y0(a^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.736.2",
+  "gr": "6.736.2",
+  "page": 789,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1/2)*Cos[x]*Cos[4*a*Sqrt[x]]*BesselJ[0, x], {x, 0, Infinity}]",
+  "rhs": [
+   "-2^(-3/2)*Sqrt[Pi]*(Sin[(a^2 - Pi/4)]*BesselJ[0, a^2] + Cos[(a^2 - Pi/4)]*BesselY[0, a^2])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 342(22)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x^-1/2 cos x cos(4a sqrt x) J0(x) = -2^(-3/2) sqrt(pi)[sin(a^2-pi/4) J0 + cos(a^2-pi/4) Y0]",
+  "note": ""
+ },
+ {
+  "id": "GR6.736.3",
+  "gr": "6.736.3",
+  "page": 790,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1/2)*Sin[x]*Sin[4*a*Sqrt[x]]*BesselJ[0, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*Cos[a^2 + Pi/4]*BesselJ[0, a^2]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 341(16)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x^-1/2 sin x sin(4a sqrt x) J0(x) = sqrt(pi/2) cos(a^2+pi/4) J0(a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.736.4",
+  "gr": "6.736.4",
+  "page": 790,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1/2)*Cos[x]*Sin[4*a*Sqrt[x]]*BesselJ[0, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*Cos[a^2 - Pi/4]*BesselJ[0, a^2]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 342(20)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x^-1/2 cos x sin(4a sqrt x) J0(x) = sqrt(pi/2) cos(a^2-pi/4) J0(a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.736.5",
+  "gr": "6.736.5",
+  "page": 790,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1/2)*Sin[x]*Cos[4*a*Sqrt[x]]*BesselY[0, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-3/2)*Sqrt[Pi]*(3*Sin[(a^2 - Pi/4)]*BesselJ[0, a^2] - Cos[(a^2 - Pi/4)]*BesselY[0, a^2])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 347(55)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x^-1/2 sin x cos(4a sqrt x) Y0(x) = 2^(-3/2) sqrt(pi)[3 sin(a^2-pi/4) J0 - cos(a^2-pi/4) Y0]",
+  "note": ""
+ },
+ {
+  "id": "GR6.736.6",
+  "gr": "6.736.6",
+  "page": 790,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1/2)*Cos[x]*Cos[4*a*Sqrt[x]]*BesselY[0, x], {x, 0, Infinity}]",
+  "rhs": [
+   "-2^(-3/2)*Sqrt[Pi]*(3*Cos[(a^2 - Pi/4)]*BesselJ[0, a^2] + Sin[(a^2 - Pi/4)]*BesselY[0, a^2])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 347(56)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x^-1/2 cos x cos(4a sqrt x) Y0(x) = -2^(-3/2) sqrt(pi)[3 cos(a^2-pi/4) J0 + sin(a^2-pi/4) Y0]",
+  "note": ""
+ },
+ {
+  "id": "GR6.737.1",
+  "gr": "6.737.1",
+  "page": 790,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Sqrt[x^2 + b^2]]/Sqrt[x^2 + b^2]*BesselJ[nu, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*BesselJ[nu/2, b/2*(a - Sqrt[a^2 - c^2])]*BesselJ[-nu/2, b/2*(a + Sqrt[a^2 - c^2])]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[b] > 0",
+   "c > 0",
+   "a > c",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 35(19)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int sin(a sqrt(x^2+b^2))/sqrt(x^2+b^2) J_nu(cx) = pi/2 J_{nu/2}[b/2(a-sqrt(a^2-c^2))] J_{-nu/2}[b/2(a+sqrt(a^2-c^2))]",
+  "note": ""
+ },
+ {
+  "id": "GR6.737.2",
+  "gr": "6.737.2",
+  "page": 790,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*Sqrt[x^2 + b^2]]/Sqrt[x^2 + b^2]*BesselJ[nu, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/2*BesselJ[nu/2, b/2*(a - Sqrt[a^2 - c^2])]*BesselY[-nu/2, b/2*(a + Sqrt[a^2 - c^2])]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[b] > 0",
+   "c > 0",
+   "a > c",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 39(44)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int cos(a sqrt(x^2+b^2))/sqrt(x^2+b^2) J_nu(cx) = -pi/2 J_{nu/2}[..] Y_{-nu/2}[..]",
+  "note": ""
+ },
+ {
+  "id": "GR6.737.3",
+  "gr": "6.737.3",
+  "page": 790,
+  "status": "ok",
+  "lhs": "Integrate[Cos[b*Sqrt[a^2 - x^2]]/Sqrt[a^2 - x^2]*BesselJ[nu, c*x], {x, 0, a}]",
+  "rhs": [
+   "Pi/2*BesselJ[nu/2, a/2*(Sqrt[b^2 + c^2] - b)]*BesselJ[nu/2, a/2*(Sqrt[b^2 + c^2] + b)]"
+  ],
+  "conds": [
+   "c > 0",
+   "Re[nu] > -1",
+   "a > 0"
+  ],
+  "cite": "ET II 39(47)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int_0^a cos(b sqrt(a^2-x^2))/sqrt(a^2-x^2) J_nu(cx) = pi/2 J_{nu/2}[a/2(sqrt(b^2+c^2)-b)] J_{nu/2}[a/2(sqrt(b^2+c^2)+b)]",
+  "note": "a > 0 added"
+ },
+ {
+  "id": "GR6.737.4",
+  "gr": "6.737.4",
+  "page": 790,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*Cos[Sqrt[a^2 - x^2]]/Sqrt[a^2 - x^2]*BesselI[nu, x], {x, 0, a}]",
+  "rhs": [
+   "Sqrt[Pi]*a^(2*nu + 1)/(2^(nu + 1)*Gamma[nu + 3/2])"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "a > 0"
+  ],
+  "cite": "ET II 365(9)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int_0^a x^(nu+1) cos(sqrt(a^2-x^2))/sqrt(a^2-x^2) I_nu(x) = sqrt(pi) a^(2nu+1)/(2^(nu+1) Gamma(nu+3/2))",
+  "note": "a > 0 added"
+ },
+ {
+  "id": "GR6.737.5a",
+  "gr": "6.737.5a",
+  "page": 790,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*Sin[a*Sqrt[b^2 + x^2]]/Sqrt[b^2 + x^2]*BesselJ[nu, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*b^(1/2 + nu)*c^nu*(a^2 - c^2)^(-1/4 - nu/2)*BesselJ[-nu - 1/2, b*Sqrt[a^2 - c^2]]"
+  ],
+  "conds": [
+   "0 < c < a",
+   "Re[b] > 0",
+   "-1 < Re[nu] < 1/2"
+  ],
+  "cite": "ET II 35(20)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x^(nu+1) sin(a sqrt(b^2+x^2))/sqrt(b^2+x^2) J_nu(cx) = sqrt(pi/2) b^(1/2+nu) c^nu (a^2-c^2)^(-1/4-nu/2) J_{-nu-1/2}(b sqrt(a^2-c^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.737.5b",
+  "gr": "6.737.5b",
+  "page": 790,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*Sin[a*Sqrt[b^2 + x^2]]/Sqrt[b^2 + x^2]*BesselJ[nu, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < a < c",
+   "Re[b] > 0",
+   "-1 < Re[nu] < 1/2"
+  ],
+  "cite": "ET II 35(20)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "= 0 for 0<a<c",
+  "note": ""
+ },
+ {
+  "id": "GR6.737.6a",
+  "gr": "6.737.6a",
+  "page": 791,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*Cos[a*Sqrt[x^2 + b^2]]/Sqrt[x^2 + b^2]*BesselJ[nu, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-Sqrt[Pi/2]*b^(1/2 + nu)*c^nu*(a^2 - c^2)^(-1/4 - nu/2)*BesselY[-nu - 1/2, b*Sqrt[a^2 - c^2]]"
+  ],
+  "conds": [
+   "0 < c < a",
+   "Re[b] > 0",
+   "-1 < Re[nu] < 1/2"
+  ],
+  "cite": "ET II 39(45)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x^(nu+1) cos(a sqrt(x^2+b^2))/sqrt(x^2+b^2) J_nu(cx) = -sqrt(pi/2) b^(1/2+nu) c^nu (a^2-c^2)^(-1/4-nu/2) Y_{-nu-1/2}(b sqrt(a^2-c^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.737.6b",
+  "gr": "6.737.6b",
+  "page": 791,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*Cos[a*Sqrt[x^2 + b^2]]/Sqrt[x^2 + b^2]*BesselJ[nu, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]*b^(1/2 + nu)*c^nu*(c^2 - a^2)^(-1/4 - nu/2)*BesselK[nu + 1/2, b*Sqrt[c^2 - a^2]]"
+  ],
+  "conds": [
+   "0 < a < c",
+   "Re[b] > 0",
+   "-1 < Re[nu] < 1/2"
+  ],
+  "cite": "ET II 39(45)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "= sqrt(2/pi) b^(1/2+nu) c^nu (c^2-a^2)^(-1/4-nu/2) K_{nu+1/2}(b sqrt(c^2-a^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.738.1",
+  "gr": "6.738.1",
+  "page": 791,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*Sin[b*Sqrt[a^2 - x^2]]*BesselJ[nu, x], {x, 0, a}]",
+  "rhs": [
+   "Sqrt[Pi/2]*a^(nu + 3/2)*b*(1 + b^2)^(-nu/2 - 3/4)*BesselJ[nu + 3/2, a*Sqrt[1 + b^2]]"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "a > 0"
+  ],
+  "cite": "ET II 335(19)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int_0^a x^(nu+1) sin(b sqrt(a^2-x^2)) J_nu(x) = sqrt(pi/2) a^(nu+3/2) b (1+b^2)^(-nu/2-3/4) J_{nu+3/2}(a sqrt(1+b^2))",
+  "note": "a > 0 added"
+ },
+ {
+  "id": "GR6.738.2a",
+  "gr": "6.738.2a",
+  "page": 791,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*Cos[a*Sqrt[x^2 + b^2]]*BesselJ[nu, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*a*b^(nu + 3/2)*c^nu*(a^2 - c^2)^(-nu/2 - 3/4)*(Cos[Pi*nu]*BesselJ[nu + 3/2, b*Sqrt[a^2 - c^2]] - Sin[Pi*nu]*BesselY[nu + 3/2, b*Sqrt[a^2 - c^2]])"
+  ],
+  "conds": [
+   "0 < c < a",
+   "Re[b] > 0",
+   "-1 < Re[nu] < -1/2"
+  ],
+  "cite": "ET II 39(43)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int x^(nu+1) cos(a sqrt(x^2+b^2)) J_nu(cx) = sqrt(pi/2) a b^(nu+3/2) c^nu (a^2-c^2)^(-nu/2-3/4)[cos(pi nu) J_{nu+3/2} - sin(pi nu) Y_{nu+3/2}](b sqrt(a^2-c^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.738.2b",
+  "gr": "6.738.2b",
+  "page": 791,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*Cos[a*Sqrt[x^2 + b^2]]*BesselJ[nu, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < a < c",
+   "Re[b] > 0",
+   "-1 < Re[nu] < -1/2"
+  ],
+  "cite": "ET II 39(43)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "= 0 for 0<a<c",
+  "note": ""
+ },
+ {
+  "id": "GR6.739",
+  "gr": "6.739",
+  "page": 791,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1/2)*Cos[b*Sqrt[t - x]]/Sqrt[t - x]*BesselJ[2*nu, a*Sqrt[x]], {x, 0, t}]",
+  "rhs": [
+   "Pi*BesselJ[nu, Sqrt[t]/2*(Sqrt[a^2 + b^2] + b)]*BesselJ[nu, Sqrt[t]/2*(Sqrt[a^2 + b^2] - b)]"
+  ],
+  "conds": [
+   "Re[nu] > -1/2",
+   "t > 0"
+  ],
+  "cite": "EH II 47(7)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int_0^t x^-1/2 cos(b sqrt(t-x))/sqrt(t-x) J_2nu(a sqrt x) = pi J_nu[sqrt t/2(sqrt(a^2+b^2)+b)] J_nu[sqrt t/2(sqrt(a^2+b^2)-b)]",
+  "note": "t > 0 added"
+ },
+ {
+  "id": "GR6.741.1",
+  "gr": "6.741.1",
+  "page": 791,
+  "status": "ok",
+  "lhs": "Integrate[Cos[mu*ArcCos[x]]/Sqrt[1 - x^2]*BesselJ[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*BesselJ[(mu + nu)/2, a/2]*BesselJ[(nu - mu)/2, a/2]"
+  ],
+  "conds": [
+   "Re[mu + nu] > -1",
+   "a > 0"
+  ],
+  "cite": "ET II 41(54)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int_0^1 cos(mu arccos x)/sqrt(1-x^2) J_nu(ax) = pi/2 J_{(mu+nu)/2}(a/2) J_{(nu-mu)/2}(a/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.741.2",
+  "gr": "6.741.2",
+  "page": 791,
+  "status": "ok",
+  "lhs": "Integrate[Cos[(nu + 1)*ArcCos[x]]/Sqrt[1 - x^2]*BesselJ[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi/a]*Cos[a/2]*BesselJ[nu + 1/2, a/2]"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "a > 0"
+  ],
+  "cite": "ET II 40(53)",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int_0^1 cos((nu+1) arccos x)/sqrt(1-x^2) J_nu(ax) = sqrt(pi/a) cos(a/2) J_{nu+1/2}(a/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.741.3",
+  "gr": "6.741.3",
+  "page": 791,
+  "status": "ok",
+  "lhs": "Integrate[Cos[(nu - 1)*ArcCos[x]]/Sqrt[1 - x^2]*BesselJ[nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi/a]*Sin[a/2]*BesselJ[nu - 1/2, a/2]"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "a > 0"
+  ],
+  "cite": "ET II 40(52)a",
+  "edition_note": "",
+  "section": "6.72-6.74 Bessel and trigonometric functions and powers",
+  "tex": "int_0^1 cos((nu-1) arccos x)/sqrt(1-x^2) J_nu(ax) = sqrt(pi/a) sin(a/2) J_{nu-1/2}(a/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.751.1",
+  "gr": "6.751.1",
+  "page": 792,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x/2)*Sin[b*x]*BesselI[0, a*x/2], {x, 0, Infinity}]",
+  "rhs": [
+   "1/Sqrt[2*b]*1/Sqrt[b^2 + a^2]*Sqrt[b + Sqrt[b^2 + a^2]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 105(44)",
+  "edition_note": "",
+  "section": "6.75 Combinations of Bessel, trigonometric, and exponential functions and powers",
+  "tex": "int e^(-ax/2) sin(bx) I0(ax/2) = 1/sqrt(2b) 1/sqrt(b^2+a^2) sqrt(b+sqrt(b^2+a^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.751.2",
+  "gr": "6.751.2",
+  "page": 792,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x/2)*Cos[b*x]*BesselI[0, a*x/2], {x, 0, Infinity}]",
+  "rhs": [
+   "a/Sqrt[2*b]*1/(Sqrt[a^2 + b^2]*Sqrt[b + Sqrt[a^2 + b^2]])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 48(38)",
+  "edition_note": "",
+  "section": "6.75 Combinations of Bessel, trigonometric, and exponential functions and powers",
+  "tex": "int e^(-ax/2) cos(bx) I0(ax/2) = a/sqrt(2b) 1/(sqrt(a^2+b^2) sqrt(b+sqrt(a^2+b^2)))",
+  "note": ""
+ },
+ {
+  "id": "GR6.751.3a",
+  "gr": "6.751.3a",
+  "page": 792,
+  "status": "ok",
+  "lhs": "Integrate[E^(-b*x)*Cos[a*x]*BesselJ[0, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Sqrt[(b^2 + c^2 - a^2)^2 + 4*a^2*b^2] + b^2 + c^2 - a^2]/(Sqrt[2]*Sqrt[(b^2 + c^2 - a^2)^2 + 4*a^2*b^2])"
+  ],
+  "conds": [
+   "c > 0",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 11(46)",
+  "edition_note": "10",
+  "section": "6.75 Combinations of Bessel, trigonometric, and exponential functions and powers",
+  "tex": "int e^(-bx) cos(ax) J0(cx) = [sqrt((b^2+c^2-a^2)^2+4a^2b^2)+b^2+c^2-a^2]^(1/2)/(sqrt2 sqrt((b^2+c^2-a^2)^2+4a^2b^2))",
+  "note": "a > 0, b > 0 added (convergence)"
+ },
+ {
+  "id": "GR6.751.3b",
+  "gr": "6.751.3b",
+  "page": 792,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*Cos[b*x]*BesselJ[0, c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[((Sqrt[(b + c)^2 + a^2] + Sqrt[(b - c)^2 + a^2])/2)^2 - b^2]/(((Sqrt[(b + c)^2 + a^2] + Sqrt[(b - c)^2 + a^2])/2)^2 - ((Sqrt[(b + c)^2 + a^2] - Sqrt[(b - c)^2 + a^2])/2)^2)"
+  ],
+  "conds": [
+   "c > 0",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 11(46)",
+  "edition_note": "10",
+  "section": "6.75 Combinations of Bessel, trigonometric, and exponential functions and powers",
+  "tex": "alternatively, a and b interchanged: int e^(-ax) cos(bx) J0(cx) = sqrt(l2^2-b^2)/(l2^2-l1^2)",
+  "note": "l1, l2 from 6.751 notation substituted; a > 0, b > 0 added"
+ },
+ {
+  "id": "GR6.752.1a",
+  "gr": "6.752.1a",
+  "page": 792,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*BesselJ[0, b*x]*Sin[c*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "ArcSin[2*c/(Sqrt[a^2 + (c + b)^2] + Sqrt[a^2 + (c - b)^2])]"
+  ],
+  "conds": [
+   "Re[a] > Abs[Im[b]]",
+   "c > 0"
+  ],
+  "cite": "ET I 101(17)",
+  "edition_note": "10",
+  "section": "6.75 Combinations of Bessel, trigonometric, and exponential functions and powers",
+  "tex": "int e^(-ax) J0(bx) sin(cx) dx/x = arcsin(2c/(sqrt(a^2+(c+b)^2)+sqrt(a^2+(c-b)^2)))",
+  "note": ""
+ },
+ {
+  "id": "GR6.752.1b",
+  "gr": "6.752.1b",
+  "page": 792,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*BesselJ[0, b*x]*Sin[c*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "ArcSin[c/((Sqrt[(b + c)^2 + a^2] + Sqrt[(b - c)^2 + a^2])/2)]"
+  ],
+  "conds": [
+   "Re[a] > Abs[Im[b]]",
+   "c > 0"
+  ],
+  "cite": "ET I 101(17)",
+  "edition_note": "10",
+  "section": "6.75 Combinations of Bessel, trigonometric, and exponential functions and powers",
+  "tex": "= arcsin(c/l2)",
+  "note": "l2 from 6.751 notation substituted"
+ },
+ {
+  "id": "GR6.752.2a",
+  "gr": "6.752.2a",
+  "page": 792,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*BesselJ[1, c*x]*Sin[b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "b/c*(1 - Sqrt[(Sqrt[(a^2 + c^2 - b^2)^2 + 4*a^2*b^2] - (a^2 + c^2 - b^2))/(2*b^2)])"
+  ],
+  "conds": [
+   "c > 0",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 19(15)",
+  "edition_note": "10",
+  "section": "6.75 Combinations of Bessel, trigonometric, and exponential functions and powers",
+  "tex": "int e^(-ax) J1(cx) sin(bx) dx/x = b/c (1-r), b^2 = c^2/(1-r^2) - a^2/r^2",
+  "note": "r eliminated: r^2 is the positive root of b^2 s^2 + (a^2+c^2-b^2) s - a^2 = 0; a > 0, b > 0 added"
+ },
+ {
+  "id": "GR6.752.2b",
+  "gr": "6.752.2b",
+  "page": 792,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*BesselJ[1, c*x]*Sin[b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(b - Sqrt[b^2 - ((Sqrt[(b + c)^2 + a^2] - Sqrt[(b - c)^2 + a^2])/2)^2])/c"
+  ],
+  "conds": [
+   "c > 0",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 19(15)",
+  "edition_note": "10",
+  "section": "6.75 Combinations of Bessel, trigonometric, and exponential functions and powers",
+  "tex": "= (b - sqrt(b^2 - l1^2))/c",
+  "note": "l1 from 6.751 notation substituted; a > 0, b > 0 added"
+ },
+ {
+  "id": "GR6.752.3a",
+  "gr": "6.752.3a",
+  "page": 792,
+  "status": "ok",
+  "lhs": "Sqrt[Pi/2]*Integrate[E^(-z*x)*BesselJ[nu + 1/2, a*x]*BesselJ[nu + 1/2, rho*x]*Sqrt[x], {x, 0, Infinity}]",
+  "rhs": [
+   "a^(-nu - 3/2)*rho^(-nu - 1)*((Sqrt[(a + rho)^2 + z^2] - Sqrt[(a - rho)^2 + z^2])/2)^(2*nu + 2)/Sqrt[rho^2 - ((Sqrt[(a + rho)^2 + z^2] - Sqrt[(a - rho)^2 + z^2])/2)^2]*a*(rho^2 - ((Sqrt[(a + rho)^2 + z^2] - Sqrt[(a - rho)^2 + z^2])/2)^2)/(((Sqrt[(a + rho)^2 + z^2] - Sqrt[(a - rho)^2 + z^2])/2)*(((Sqrt[(a + rho)^2 + z^2] + Sqrt[(a - rho)^2 + z^2])/2)^2 - ((Sqrt[(a + rho)^2 + z^2] - Sqrt[(a - rho)^2 + z^2])/2)^2))"
+  ],
+  "conds": [
+   "Re[z] > Abs[Im[a]] + Abs[Im[rho]]",
+   "a > 0",
+   "rho > 0",
+   "z > 0"
+  ],
+  "cite": "",
+  "edition_note": "10",
+  "section": "6.75 Combinations of Bessel, trigonometric, and exponential functions and powers",
+  "tex": "sqrt(pi/2) int e^(-zx) J_{nu+1/2}(ax) J_{nu+1/2}(rho x) sqrt x = a^(-nu-3/2) rho^(-nu-1) l1^(2nu+2)/sqrt(rho^2-l1^2) * a(rho^2-l1^2)/(l1(l2^2-l1^2))",
+  "note": "l1, l2 = l1(a,rho,z), l2(a,rho,z) of the 6.752 notation substituted (book prints l2(a) == l1(a,rho,z), a typo for l2); a, rho, z > 0 from the notation's a,rho,z >= 0"
+ },
+ {
+  "id": "GR6.752.3b",
+  "gr": "6.752.3b",
+  "page": 792,
+  "status": "ok",
+  "lhs": "Sqrt[Pi/2]*Integrate[E^(-z*x)*BesselJ[nu + 1/2, a*x]*BesselJ[nu + 1/2, rho*x]*Sqrt[x], {x, 0, Infinity}]",
+  "rhs": [
+   "a^(nu + 1/2)*rho^(nu + 1)/((Sqrt[(a + rho)^2 + z^2] + Sqrt[(a - rho)^2 + z^2])/2)^(2*nu + 2)*Sqrt[((Sqrt[(a + rho)^2 + z^2] + Sqrt[(a - rho)^2 + z^2])/2)^2 - a^2]/(((Sqrt[(a + rho)^2 + z^2] + Sqrt[(a - rho)^2 + z^2])/2)^2 - ((Sqrt[(a + rho)^2 + z^2] - Sqrt[(a - rho)^2 + z^2])/2)^2)"
+  ],
+  "conds": [
+   "Re[z] > Abs[Im[a]] + Abs[Im[rho]]",
+   "a > 0",
+   "rho > 0",
+   "z > 0"
+  ],
+  "cite": "",
+  "edition_note": "10",
+  "section": "6.75 Combinations of Bessel, trigonometric, and exponential functions and powers",
+  "tex": "= a^(nu+1/2) rho^(nu+1)/l2^(2nu+2) sqrt(l2^2-a^2)/(l2^2-l1^2)",
+  "note": "l1, l2 = l1(a,rho,z), l2(a,rho,z) of the 6.752 notation substituted (book prints l2(a) == l1(a,rho,z), a typo for l2); a, rho, z > 0 from the notation's a,rho,z >= 0"
+ },
+ {
+  "id": "GR6.752.4a",
+  "gr": "6.752.4a",
+  "page": 793,
+  "status": "ok",
+  "lhs": "Sqrt[Pi/2]*Integrate[E^(-z*x)*BesselJ[nu + 1/2, a*x]*BesselJ[nu, rho*x]/Sqrt[x], {x, 0, Infinity}]",
+  "rhs": [
+   "a^(nu + 1/2)*rho^nu*(1/((Sqrt[(a + rho)^2 + z^2] + Sqrt[(a - rho)^2 + z^2])/2))^(2*nu + 1)/(2*nu + 1)*Hypergeometric2F1[1/2, nu + 1/2, nu + 3/2, a^2/((Sqrt[(a + rho)^2 + z^2] + Sqrt[(a - rho)^2 + z^2])/2)^2]"
+  ],
+  "conds": [
+   "nu > -1/2",
+   "Re[z] > Abs[Im[a]] + Abs[Im[rho]]",
+   "a > 0",
+   "rho > 0",
+   "z > 0"
+  ],
+  "cite": "",
+  "edition_note": "10",
+  "section": "6.75 Combinations of Bessel, trigonometric, and exponential functions and powers",
+  "tex": "sqrt(pi/2) int e^(-zx) J_{nu+1/2}(ax) J_nu(rho x) dx/sqrt x = a^(nu+1/2) rho^nu int_0^{1/l2} u^(2nu)/sqrt(1-a^2 u^2) du",
+  "note": "l1, l2 = l1(a,rho,z), l2(a,rho,z) of the 6.752 notation substituted (book prints l2(a) == l1(a,rho,z), a typo for l2); a, rho, z > 0 from the notation's a,rho,z >= 0; the residual integral int_0^{1/l2} u^(2nu)(1-a^2u^2)^(-1/2) du (book writes it with l2 as variable) evaluated in closed form via 2F1"
+ },
+ {
+  "id": "GR6.752.4b",
+  "gr": "6.752.4b",
+  "page": 793,
+  "status": "ok",
+  "lhs": "Sqrt[Pi/2]*Integrate[E^(-z*x)*BesselJ[nu + 1/2, a*x]*BesselJ[nu, rho*x]/Sqrt[x], {x, 0, Infinity}]",
+  "rhs": [
+   "a^(-nu - 1/2)*rho^nu*(a/((Sqrt[(a + rho)^2 + z^2] + Sqrt[(a - rho)^2 + z^2])/2))^(2*nu + 1)/(2*nu + 1)*Hypergeometric2F1[1/2, nu + 1/2, nu + 3/2, a^2/((Sqrt[(a + rho)^2 + z^2] + Sqrt[(a - rho)^2 + z^2])/2)^2]"
+  ],
+  "conds": [
+   "nu > -1/2",
+   "Re[z] > Abs[Im[a]] + Abs[Im[rho]]",
+   "a > 0",
+   "rho > 0",
+   "z > 0"
+  ],
+  "cite": "",
+  "edition_note": "10",
+  "section": "6.75 Combinations of Bessel, trigonometric, and exponential functions and powers",
+  "tex": "= a^(-nu-1/2) rho^nu int_0^{a/l2} x^(2nu)/sqrt(1-x^2) dx",
+  "note": "l1, l2 = l1(a,rho,z), l2(a,rho,z) of the 6.752 notation substituted (book prints l2(a) == l1(a,rho,z), a typo for l2); a, rho, z > 0 from the notation's a,rho,z >= 0; residual int_0^{a/l2} x^(2nu)/sqrt(1-x^2) dx evaluated via 2F1"
+ },
+ {
+  "id": "GR6.752.5",
+  "gr": "6.752.5",
+  "page": 793,
+  "status": "ok",
+  "lhs": "Integrate[E^(-z*x)*Sin[a*x]*BesselJ[1, rho*x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[((Sqrt[(a + rho)^2 + z^2] + Sqrt[(a - rho)^2 + z^2])/2)^2 - a^2]*(a - Sqrt[a^2 - ((Sqrt[(a + rho)^2 + z^2] - Sqrt[(a - rho)^2 + z^2])/2)^2])^2/(2*a*rho) + rho/2*ArcSin[a/((Sqrt[(a + rho)^2 + z^2] + Sqrt[(a - rho)^2 + z^2])/2)]"
+  ],
+  "conds": [
+   "Re[z] > Abs[Im[a]] + Abs[Im[rho]]",
+   "a > 0",
+   "rho > 0",
+   "z > 0"
+  ],
+  "cite": "",
+  "edition_note": "10",
+  "section": "6.75 Combinations of Bessel, trigonometric, and exponential functions and powers",
+  "tex": "int e^(-zx) sin(ax) J1(rho x) dx/x^2 = sqrt(l2^2-a^2)(a - sqrt(a^2-l1^2))^2/(2 a rho) + rho/2 arcsin(a/l2)",
+  "note": "l1, l2 = l1(a,rho,z), l2(a,rho,z) of the 6.752 notation substituted (book prints l2(a) == l1(a,rho,z), a typo for l2); a, rho, z > 0 from the notation's a,rho,z >= 0"
+ },
+ {
+  "id": "GR6.753.1",
+  "gr": "6.753.1",
+  "page": 793,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x*a*Sin[psi]]/x*E^(-x*a*Cos[phi]*Cos[psi])*BesselJ[nu, x*a*Sin[phi]], {x, 0, Infinity}]",
+  "rhs": [
+   "nu^(-1)*Tan[phi/2]^nu*Sin[nu*psi]"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "a > 0",
+   "0 < phi < Pi/2",
+   "0 < psi < Pi/2"
+  ],
+  "cite": "ET II 33(10)",
+  "edition_note": "8",
+  "section": "6.75 Combinations of Bessel, trigonometric, and exponential functions and powers",
+  "tex": "int sin(xa sin psi)/x e^(-xa cos phi cos psi) J_nu(xa sin phi) = nu^-1 tan^nu(phi/2) sin(nu psi)",
+  "note": ""
+ },
+ {
+  "id": "GR6.753.2",
+  "gr": "6.753.2",
+  "page": 793,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x*a*Sin[psi]]/x*E^(-x*a*Cos[phi]*Cos[psi])*BesselJ[nu, x*a*Sin[phi]], {x, 0, Infinity}]",
+  "rhs": [
+   "nu^(-1)*Tan[phi/2]^nu*Cos[nu*psi]"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "a > 0",
+   "0 < phi < Pi/2",
+   "0 < psi < Pi/2"
+  ],
+  "cite": "ET II 38(35)",
+  "edition_note": "",
+  "section": "6.75 Combinations of Bessel, trigonometric, and exponential functions and powers",
+  "tex": "int cos(xa sin psi)/x e^(-xa cos phi cos psi) J_nu(xa sin phi) = nu^-1 tan^nu(phi/2) cos(nu psi)",
+  "note": "printed '0 < phi, psi < pi/2' read as both in (0, pi/2)"
+ },
+ {
+  "id": "GR6.753.3",
+  "gr": "6.753.3",
+  "page": 793,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*E^(-s*x)*Sin[b*x]*BesselJ[nu, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-2*(2*a)^nu/Sqrt[Pi]*Gamma[nu + 3/2]*(((s^2 + a^2 - b^2)^2 + 4*b^2*s^2)^(1/4))^(-2*nu - 3)*(b*Cos[(nu + 3/2)*Arg[s^2 + a^2 - b^2 - 2*I*b*s]] + s*Sin[(nu + 3/2)*Arg[s^2 + a^2 - b^2 - 2*I*b*s]])"
+  ],
+  "conds": [
+   "Re[nu] > -3/2",
+   "Re[s] > Abs[Im[a]] + Abs[Im[b]]"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "6.75 Combinations of Bessel, trigonometric, and exponential functions and powers",
+  "tex": "int x^(nu+1) e^(-sx) sin(bx) J_nu(ax) = -2(2a)^nu/sqrt(pi) Gamma(nu+3/2) R^(-2nu-3)[b cos((nu+3/2)phi) + s sin((nu+3/2)phi)], R^4=(s^2+a^2-b^2)^2+4b^2s^2, phi=arg(s^2+a^2-b^2-2ibs)",
+  "note": "R and phi substituted"
+ },
+ {
+  "id": "GR6.753.4",
+  "gr": "6.753.4",
+  "page": 793,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*E^(-s*x)*Cos[b*x]*BesselJ[nu, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*(2*a)^nu/Sqrt[Pi]*Gamma[nu + 3/2]*(((s^2 + a^2 - b^2)^2 + 4*b^2*s^2)^(1/4))^(-2*nu - 3)*(s*Cos[(nu + 3/2)*Arg[s^2 + a^2 - b^2 - 2*I*b*s]] - b*Sin[(nu + 3/2)*Arg[s^2 + a^2 - b^2 - 2*I*b*s]])"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "Re[s] > Abs[Im[a]] + Abs[Im[b]]"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "6.75 Combinations of Bessel, trigonometric, and exponential functions and powers",
+  "tex": "int x^(nu+1) e^(-sx) cos(bx) J_nu(ax) = 2(2a)^nu/sqrt(pi) Gamma(nu+3/2) R^(-2nu-3)[s cos((nu+3/2)phi) - b sin((nu+3/2)phi)]",
+  "note": "R and phi substituted"
+ },
+ {
+  "id": "GR6.753.5",
+  "gr": "6.753.5",
+  "page": 793,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*E^(-a*x*Cos[phi]*Cos[psi])*Sin[a*x*Sin[psi]]*BesselJ[nu, a*x*Sin[phi]], {x, 0, Infinity}]",
+  "rhs": [
+   "2^nu*Gamma[nu + 1/2]/Sqrt[Pi]*a^(-nu - 1)*Sin[phi]^nu*(Cos[psi]^2 + Sin[psi]^2*Cos[phi]^2)^(-nu - 1/2)*Sin[(nu + 1/2)*(2*ArcTan[Tan[psi]*Cos[phi]])]"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < phi < Pi/2",
+   "0 < psi < Pi/2",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 34(12)",
+  "edition_note": "10",
+  "section": "6.75 Combinations of Bessel, trigonometric, and exponential functions and powers",
+  "tex": "int x^nu e^(-ax cos phi cos psi) sin(ax sin psi) J_nu(ax sin phi) = 2^nu Gamma(nu+1/2)/sqrt(pi) a^(-nu-1) sin^nu phi (cos^2 psi + sin^2 psi cos^2 phi)^(-nu-1/2) sin((nu+1/2) beta), tan(beta/2) = tan psi cos phi",
+  "note": "beta = 2 ArcTan[Tan[psi] Cos[phi]] substituted"
+ }
+]

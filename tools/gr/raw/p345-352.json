@@ -1,0 +1,1498 @@
+[
+ {
+  "id": "GR3.166.9",
+  "gr": "3.166.9",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 + 1)^2/(((x^2 + 1)^2 - 4*p^2*x^2)*Sqrt[x^4 + 1]), {x, u, Infinity}]",
+  "rhs": [
+   "1/2*EllipticPi[p^2, ArcCos[(u^2 - 1)/(u^2 + 1)], (Sqrt[2]/2)^2]"
+  ],
+  "conds": [
+   "u >= 0"
+  ],
+  "cite": "BY (263.52)",
+  "edition_note": "",
+  "section": "3.166 Square roots of polynomials (notation 3.166)",
+  "tex": "int_u^inf (x^2+1)^2 dx/([(x^2+1)^2-4p^2x^2] sqrt(x^4+1)) = 1/2 Pi(alpha,p^2,r)",
+  "note": "G&R 3.166 notation (alpha, beta, gamma, delta, epsilon, r = Sqrt[2]/2, q = 2 Sqrt[3 Sqrt[2] - 4]) substituted"
+ },
+ {
+  "id": "GR3.166.10",
+  "gr": "3.166.10",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x^4 + 1], {x, 0, u}]",
+  "rhs": [
+   "1/2*MatharF2[ArcCos[(1 - u^2)/(1 + u^2)], Sqrt[2]/2]"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "H 66(288)",
+  "edition_note": "",
+  "section": "3.166 Square roots of polynomials (notation 3.166)",
+  "tex": "int_0^u dx/sqrt(x^4+1) = 1/2 F(epsilon,r)",
+  "note": "G&R 3.166 notation (alpha, beta, gamma, delta, epsilon, r = Sqrt[2]/2, q = 2 Sqrt[3 Sqrt[2] - 4]) substituted; u > 0 added (no condition printed; epsilon branch)"
+ },
+ {
+  "id": "GR3.166.11",
+  "gr": "3.166.11",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x^4 + 1], {x, u, 1}]",
+  "rhs": [
+   "(2 - Sqrt[2])*MatharF2[ArcTan[(1 + Sqrt[2])*(1 - u)/(1 + u)], 2*Sqrt[3*Sqrt[2] - 4]]"
+  ],
+  "conds": [
+   "0 <= u < 1"
+  ],
+  "cite": "BY (264.50)",
+  "edition_note": "",
+  "section": "3.166 Square roots of polynomials (notation 3.166)",
+  "tex": "int_u^1 dx/sqrt(x^4+1) = (2-sqrt2) F(beta,q)",
+  "note": "G&R 3.166 notation (alpha, beta, gamma, delta, epsilon, r = Sqrt[2]/2, q = 2 Sqrt[3 Sqrt[2] - 4]) substituted"
+ },
+ {
+  "id": "GR3.166.12",
+  "gr": "3.166.12",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 + x*Sqrt[2] + 1)/((x^2 - x*Sqrt[2] + 1)*Sqrt[x^4 + 1]), {x, u, 1}]",
+  "rhs": [
+   "(2 + Sqrt[2])*MatharE2[ArcTan[(1 + Sqrt[2])*(1 - u)/(1 + u)], 2*Sqrt[3*Sqrt[2] - 4]]"
+  ],
+  "conds": [
+   "0 <= u < 1"
+  ],
+  "cite": "BY (264.51)",
+  "edition_note": "",
+  "section": "3.166 Square roots of polynomials (notation 3.166)",
+  "tex": "int_u^1 (x^2+x sqrt2+1)dx/((x^2-x sqrt2+1)sqrt(x^4+1)) = (2+sqrt2) E(beta,q)",
+  "note": "G&R 3.166 notation (alpha, beta, gamma, delta, epsilon, r = Sqrt[2]/2, q = 2 Sqrt[3 Sqrt[2] - 4]) substituted"
+ },
+ {
+  "id": "GR3.166.13",
+  "gr": "3.166.13",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^2/((x^2 - x*Sqrt[2] + 1)*Sqrt[x^4 + 1]), {x, u, 1}]",
+  "rhs": [
+   "1/Sqrt[2]*(MatharF2[ArcTan[(1 + Sqrt[2])*(1 - u)/(1 + u)], 2*Sqrt[3*Sqrt[2] - 4]] - MatharE2[ArcTan[(1 + Sqrt[2])*(1 - u)/(1 + u)], 2*Sqrt[3*Sqrt[2] - 4]])"
+  ],
+  "conds": [
+   "0 <= u < 1"
+  ],
+  "cite": "BY (264.55)",
+  "edition_note": "",
+  "section": "3.166 Square roots of polynomials (notation 3.166)",
+  "tex": "int_u^1 (1-x)^2 dx/((x^2-x sqrt2+1)sqrt(x^4+1)) = 1/sqrt2 [F(beta,q)-E(beta,q)]",
+  "note": "G&R 3.166 notation (alpha, beta, gamma, delta, epsilon, r = Sqrt[2]/2, q = 2 Sqrt[3 Sqrt[2] - 4]) substituted"
+ },
+ {
+  "id": "GR3.166.14",
+  "gr": "3.166.14",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[(1 + x)^2/((x^2 - x*Sqrt[2] + 1)*Sqrt[x^4 + 1]), {x, u, 1}]",
+  "rhs": [
+   "(3*Sqrt[2] + 4)/2*MatharE2[ArcTan[(1 + Sqrt[2])*(1 - u)/(1 + u)], 2*Sqrt[3*Sqrt[2] - 4]] - (3*Sqrt[2] - 4)/2*MatharF2[ArcTan[(1 + Sqrt[2])*(1 - u)/(1 + u)], 2*Sqrt[3*Sqrt[2] - 4]]"
+  ],
+  "conds": [
+   "0 <= u < 1"
+  ],
+  "cite": "BY (264.56)",
+  "edition_note": "",
+  "section": "3.166 Square roots of polynomials (notation 3.166)",
+  "tex": "int_u^1 (1+x)^2 dx/((x^2-x sqrt2+1)sqrt(x^4+1)) = (3sqrt2+4)/2 E(beta,q) - (3sqrt2-4)/2 F(beta,q)",
+  "note": "G&R 3.166 notation (alpha, beta, gamma, delta, epsilon, r = Sqrt[2]/2, q = 2 Sqrt[3 Sqrt[2] - 4]) substituted"
+ },
+ {
+  "id": "GR3.166.15",
+  "gr": "3.166.15",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[1 - x^4], {x, u, 1}]",
+  "rhs": [
+   "1/Sqrt[2]*MatharF2[ArcCos[u], Sqrt[2]/2]"
+  ],
+  "conds": [
+   "u < 1",
+   "u > -1"
+  ],
+  "cite": "H 66 (290), BY (259.75)",
+  "edition_note": "",
+  "section": "3.166 Square roots of polynomials (notation 3.166)",
+  "tex": "int_u^1 dx/sqrt(1-x^4) = 1/sqrt2 F(gamma,r)",
+  "note": "G&R 3.166 notation (alpha, beta, gamma, delta, epsilon, r = Sqrt[2]/2, q = 2 Sqrt[3 Sqrt[2] - 4]) substituted; u > -1 added (gamma = arccos u real)"
+ },
+ {
+  "id": "GR3.166.16",
+  "gr": "3.166.16",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[1 - x^4], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[1/4]^2/(4*Sqrt[2*Pi])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.166 Square roots of polynomials (notation 3.166)",
+  "tex": "int_0^1 dx/sqrt(1-x^4) = Gamma(1/4)^2/(4 sqrt(2pi))",
+  "note": ""
+ },
+ {
+  "id": "GR3.166.17",
+  "gr": "3.166.17",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x^4 - 1], {x, 1, u}]",
+  "rhs": [
+   "1/Sqrt[2]*MatharF2[ArcCos[1/u], Sqrt[2]/2]"
+  ],
+  "conds": [
+   "u > 1"
+  ],
+  "cite": "H 66 (289), BY (260.75)",
+  "edition_note": "",
+  "section": "3.166 Square roots of polynomials (notation 3.166)",
+  "tex": "int_1^u dx/sqrt(x^4-1) = 1/sqrt2 F(delta,r)",
+  "note": "G&R 3.166 notation (alpha, beta, gamma, delta, epsilon, r = Sqrt[2]/2, q = 2 Sqrt[3 Sqrt[2] - 4]) substituted"
+ },
+ {
+  "id": "GR3.166.18a",
+  "gr": "3.166.18",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[1 - x^4], {x, u, 1}]",
+  "rhs": [
+   "Sqrt[2]*MatharE2[ArcCos[u], Sqrt[2]/2] - 1/Sqrt[2]*MatharF2[ArcCos[u], Sqrt[2]/2]"
+  ],
+  "conds": [
+   "u < 1",
+   "u > -1"
+  ],
+  "cite": "BY (259.76)",
+  "edition_note": "8",
+  "section": "3.166 Square roots of polynomials (notation 3.166)",
+  "tex": "int_u^1 x^2 dx/sqrt(1-x^4) = sqrt2 E(gamma,r) - 1/sqrt2 F(gamma,r)",
+  "note": "G&R 3.166 notation (alpha, beta, gamma, delta, epsilon, r = Sqrt[2]/2, q = 2 Sqrt[3 Sqrt[2] - 4]) substituted; u > -1 added (gamma = arccos u real)"
+ },
+ {
+  "id": "GR3.166.18b",
+  "gr": "3.166.18",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[1 - x^4], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[3/4]^2/Sqrt[2*Pi]"
+  ],
+  "conds": [],
+  "cite": "BY (259.76)",
+  "edition_note": "8",
+  "section": "3.166 Square roots of polynomials (notation 3.166)",
+  "tex": "int_0^1 x^2 dx/sqrt(1-x^4) = Gamma(3/4)^2/sqrt(2pi)",
+  "note": "second form, u = 0 substituted"
+ },
+ {
+  "id": "GR3.166.19",
+  "gr": "3.166.19",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[x^4 - 1], {x, 1, u}]",
+  "rhs": [
+   "1/Sqrt[2]*MatharF2[ArcCos[1/u], Sqrt[2]/2] - Sqrt[2]*MatharE2[ArcCos[1/u], Sqrt[2]/2] + 1/u*Sqrt[u^4 - 1]"
+  ],
+  "conds": [
+   "u > 1"
+  ],
+  "cite": "BY (260.77)",
+  "edition_note": "",
+  "section": "3.166 Square roots of polynomials (notation 3.166)",
+  "tex": "int_1^u x^2 dx/sqrt(x^4-1) = 1/sqrt2 F(delta,r) - sqrt2 E(delta,r) + (1/u) sqrt(u^4-1)",
+  "note": "G&R 3.166 notation (alpha, beta, gamma, delta, epsilon, r = Sqrt[2]/2, q = 2 Sqrt[3 Sqrt[2] - 4]) substituted"
+ },
+ {
+  "id": "GR3.166.20",
+  "gr": "3.166.20",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[1 - x^4], {x, u, 1}]",
+  "rhs": [
+   "1/(3*Sqrt[2])*MatharF2[ArcCos[u], Sqrt[2]/2] + u/3*Sqrt[1 - u^4]"
+  ],
+  "conds": [
+   "u < 1",
+   "u > -1"
+  ],
+  "cite": "BY (259.76)",
+  "edition_note": "",
+  "section": "3.166 Square roots of polynomials (notation 3.166)",
+  "tex": "int_u^1 x^4 dx/sqrt(1-x^4) = 1/(3sqrt2) F(gamma,r) + (u/3) sqrt(1-u^4)",
+  "note": "G&R 3.166 notation (alpha, beta, gamma, delta, epsilon, r = Sqrt[2]/2, q = 2 Sqrt[3 Sqrt[2] - 4]) substituted; u > -1 added (gamma = arccos u real)"
+ },
+ {
+  "id": "GR3.166.21",
+  "gr": "3.166.21",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[x^4 - 1], {x, 1, u}]",
+  "rhs": [
+   "1/(3*Sqrt[2])*MatharF2[ArcCos[1/u], Sqrt[2]/2] + 1/3*u*Sqrt[u^4 - 1]"
+  ],
+  "conds": [
+   "u > 1"
+  ],
+  "cite": "BY (260.77)",
+  "edition_note": "3",
+  "section": "3.166 Square roots of polynomials (notation 3.166)",
+  "tex": "int_1^u x^4 dx/sqrt(x^4-1) = 1/(3sqrt2) F(delta,r) + (1/3) u sqrt(u^4-1)",
+  "note": "G&R 3.166 notation (alpha, beta, gamma, delta, epsilon, r = Sqrt[2]/2, q = 2 Sqrt[3 Sqrt[2] - 4]) substituted"
+ },
+ {
+  "id": "GR3.166.22",
+  "gr": "3.166.22",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x*(1 + x^3)], {x, 0, u}]",
+  "rhs": [
+   "1/3^(1/4)*MatharF2[ArcCos[(1 + (1 - Sqrt[3])*u)/(1 + (1 + Sqrt[3])*u)], Sqrt[2 + Sqrt[3]]/2]"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "BY (260.50)",
+  "edition_note": "",
+  "section": "3.166 Square roots of polynomials (notation 3.166)",
+  "tex": "int_0^u dx/sqrt(x(1+x^3)) = 3^(-1/4) F(arccos[(1+(1-sqrt3)u)/(1+(1+sqrt3)u)], sqrt(2+sqrt3)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.166.23",
+  "gr": "3.166.23",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x*(1 - x^3)], {x, 0, u}]",
+  "rhs": [
+   "1/3^(1/4)*MatharF2[ArcCos[(1 - (1 + Sqrt[3])*u)/(1 + (Sqrt[3] - 1)*u)], Sqrt[2 - Sqrt[3]]/2]"
+  ],
+  "conds": [
+   "1 >= u > 0"
+  ],
+  "cite": "BY (259.50)",
+  "edition_note": "",
+  "section": "3.166 Square roots of polynomials (notation 3.166)",
+  "tex": "int_0^u dx/sqrt(x(1-x^3)) = 3^(-1/4) F(arccos[(1-(1+sqrt3)u)/(1+(sqrt3-1)u)], sqrt(2-sqrt3)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.167.1",
+  "gr": "3.167.1",
+  "page": 346,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(d - x)/((a - x)*(b - x)*(c - x))], {x, u, d}]",
+  "rhs": [
+   "2*(c - d)/Sqrt[(a - c)*(b - d)]*(EllipticPi[(a - d)/(a - c), ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]], (Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])^2] - MatharF2[ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > b > c > d > u"
+  ],
+  "cite": "BY (251.05)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^d sqrt((d - x)/((a - x)*(b - x)*(c - x))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.2",
+  "gr": "3.167.2",
+  "page": 346,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)*(b - x)*(c - x))], {x, d, u}]",
+  "rhs": [
+   "2*(d - a)/Sqrt[(a - c)*(b - d)]*(EllipticPi[(d - c)/(a - c), ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]], (Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])^2] - MatharF2[ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > b > c >= u > d"
+  ],
+  "cite": "BY (252.14)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_d^u sqrt((x - d)/((a - x)*(b - x)*(c - x))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.3",
+  "gr": "3.167.3",
+  "page": 346,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)*(b - x)*(c - x))], {x, u, c}]",
+  "rhs": [
+   "2/Sqrt[(a - c)*(b - d)]*((c - b)*EllipticPi[(c - d)/(b - d), ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]], (Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])^2] + (b - d)*MatharF2[ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > b > c > u >= d"
+  ],
+  "cite": "BY (253.14)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^c sqrt((x - d)/((a - x)*(b - x)*(c - x))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.4",
+  "gr": "3.167.4",
+  "page": 346,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)*(b - x)*(x - c))], {x, c, u}]",
+  "rhs": [
+   "2*(c - d)/Sqrt[(a - c)*(b - d)]*EllipticPi[(b - c)/(b - d), ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]], (Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])^2]"
+  ],
+  "conds": [
+   "a > b >= u > c > d"
+  ],
+  "cite": "BY (254.02)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_c^u sqrt((x - d)/((a - x)*(b - x)*(x - c))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.5",
+  "gr": "3.167.5",
+  "page": 346,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)*(b - x)*(x - c))], {x, u, b}]",
+  "rhs": [
+   "2/Sqrt[(a - c)*(b - d)]*((b - a)*EllipticPi[(b - c)/(a - c), ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], (Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])^2] + (a - d)*MatharF2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > b > u >= c > d"
+  ],
+  "cite": "BY (255.20)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^b sqrt((x - d)/((a - x)*(b - x)*(x - c))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.6",
+  "gr": "3.167.6",
+  "page": 346,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)*(x - b)*(x - c))], {x, b, u}]",
+  "rhs": [
+   "2/Sqrt[(a - c)*(b - d)]*((b - c)*EllipticPi[(a - b)/(a - c), ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], (Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])^2] + (c - d)*MatharF2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a >= u > b > c > d"
+  ],
+  "cite": "BY (256.13)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_b^u sqrt((x - d)/((a - x)*(x - b)*(x - c))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.7",
+  "gr": "3.167.7",
+  "page": 346,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)*(x - b)*(x - c))], {x, u, a}]",
+  "rhs": [
+   "2*(a - d)/Sqrt[(a - c)*(b - d)]*EllipticPi[(b - a)/(b - d), ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]], (Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])^2]"
+  ],
+  "conds": [
+   "a > u >= b > c > d"
+  ],
+  "cite": "BY (257.02)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^a sqrt((x - d)/((a - x)*(x - b)*(x - c))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.8",
+  "gr": "3.167.8",
+  "page": 347,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((x - a)*(x - b)*(x - c))], {x, a, u}]",
+  "rhs": [
+   "2/Sqrt[(a - c)*(b - d)]*((a - b)*EllipticPi[(a - d)/(b - d), ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]], (Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])^2] + (b - d)*MatharF2[ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "u > a > b > c > d"
+  ],
+  "cite": "BY (258.14)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_a^u sqrt((x - d)/((x - a)*(x - b)*(x - c))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.9",
+  "gr": "3.167.9",
+  "page": 347,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(c - x)/((a - x)*(b - x)*(d - x))], {x, u, d}]",
+  "rhs": [
+   "2*(c - d)/Sqrt[(a - c)*(b - d)]*EllipticPi[(a - d)/(a - c), ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]], (Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])^2]"
+  ],
+  "conds": [
+   "a > b > c > d > u"
+  ],
+  "cite": "BY (251.02)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^d sqrt((c - x)/((a - x)*(b - x)*(d - x))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.10",
+  "gr": "3.167.10",
+  "page": 347,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(c - x)/((a - x)*(b - x)*(x - d))], {x, d, u}]",
+  "rhs": [
+   "2/Sqrt[(a - c)*(b - d)]*((a - d)*EllipticPi[(d - c)/(a - c), ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]], (Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])^2] - (a - c)*MatharF2[ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > b > c >= u > d"
+  ],
+  "cite": "BY (252.13)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_d^u sqrt((c - x)/((a - x)*(b - x)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.11",
+  "gr": "3.167.11",
+  "page": 347,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(c - x)/((a - x)*(b - x)*(x - d))], {x, u, c}]",
+  "rhs": [
+   "2*(b - c)/Sqrt[(a - c)*(b - d)]*(EllipticPi[(c - d)/(b - d), ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]], (Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])^2] - MatharF2[ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > b > c > u >= d"
+  ],
+  "cite": "BY (253.13)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^c sqrt((c - x)/((a - x)*(b - x)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.12",
+  "gr": "3.167.12",
+  "page": 347,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - c)/((a - x)*(b - x)*(x - d))], {x, c, u}]",
+  "rhs": [
+   "2*(c - d)/Sqrt[(a - c)*(b - d)]*(EllipticPi[(b - c)/(b - d), ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]], (Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])^2] - MatharF2[ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > b >= u > c > d"
+  ],
+  "cite": "BY (254.12)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_c^u sqrt((x - c)/((a - x)*(b - x)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.13",
+  "gr": "3.167.13",
+  "page": 347,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - c)/((a - x)*(b - x)*(x - d))], {x, u, b}]",
+  "rhs": [
+   "2/Sqrt[(a - c)*(b - d)]*((b - a)*EllipticPi[(b - c)/(a - c), ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], (Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])^2] + (a - c)*MatharF2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > b > u >= c > d"
+  ],
+  "cite": "BY (259.19)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^b sqrt((x - c)/((a - x)*(b - x)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.14",
+  "gr": "3.167.14",
+  "page": 347,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - c)/((a - x)*(x - b)*(x - d))], {x, b, u}]",
+  "rhs": [
+   "2*(b - c)/Sqrt[(a - c)*(b - d)]*EllipticPi[(a - b)/(a - c), ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], (Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])^2]"
+  ],
+  "conds": [
+   "a >= u > b > c > d"
+  ],
+  "cite": "BY (256.02)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_b^u sqrt((x - c)/((a - x)*(x - b)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.15",
+  "gr": "3.167.15",
+  "page": 347,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - c)/((a - x)*(x - b)*(x - d))], {x, u, a}]",
+  "rhs": [
+   "2/Sqrt[(a - c)*(b - d)]*((a - d)*EllipticPi[(b - a)/(b - d), ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]], (Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])^2] + (d - c)*MatharF2[ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > u >= b > c > d"
+  ],
+  "cite": "BY (257.13)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^a sqrt((x - c)/((a - x)*(x - b)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.16",
+  "gr": "3.167.16",
+  "page": 347,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - c)/((x - a)*(x - b)*(x - d))], {x, a, u}]",
+  "rhs": [
+   "2/Sqrt[(a - c)*(b - d)]*((a - b)*EllipticPi[(a - d)/(b - d), ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]], (Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])^2] + (b - c)*MatharF2[ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "u > a > b > c > d"
+  ],
+  "cite": "BY (258.13)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_a^u sqrt((x - c)/((x - a)*(x - b)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.17",
+  "gr": "3.167.17",
+  "page": 347,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b - x)/((a - x)*(c - x)*(d - x))], {x, u, d}]",
+  "rhs": [
+   "2/Sqrt[(a - c)*(b - d)]*((c - d)*EllipticPi[(a - d)/(a - c), ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]], (Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])^2] + (b - c)*MatharF2[ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > b > c > d > u"
+  ],
+  "cite": "BY (251.07)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^d sqrt((b - x)/((a - x)*(c - x)*(d - x))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.18",
+  "gr": "3.167.18",
+  "page": 347,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b - x)/((a - x)*(c - x)*(x - d))], {x, d, u}]",
+  "rhs": [
+   "2/Sqrt[(a - c)*(b - d)]*((a - d)*EllipticPi[(d - c)/(a - c), ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]], (Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])^2] - (a - b)*MatharF2[ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > b > c >= u > d"
+  ],
+  "cite": "BY (252.15)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_d^u sqrt((b - x)/((a - x)*(c - x)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.19",
+  "gr": "3.167.19",
+  "page": 348,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b - x)/((a - x)*(c - x)*(x - d))], {x, u, c}]",
+  "rhs": [
+   "2*(b - c)/Sqrt[(a - c)*(b - d)]*EllipticPi[(c - d)/(b - d), ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]], (Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])^2]"
+  ],
+  "conds": [
+   "a > b > c > u >= d"
+  ],
+  "cite": "BY (253.02)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^c sqrt((b - x)/((a - x)*(c - x)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.20",
+  "gr": "3.167.20",
+  "page": 348,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b - x)/((a - x)*(x - c)*(x - d))], {x, c, u}]",
+  "rhs": [
+   "2/Sqrt[(a - c)*(b - d)]*((d - c)*EllipticPi[(b - c)/(b - d), ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]], (Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])^2] + (b - d)*MatharF2[ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > b >= u > c > d"
+  ],
+  "cite": "BY (254.14)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_c^u sqrt((b - x)/((a - x)*(x - c)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.21",
+  "gr": "3.167.21",
+  "page": 348,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b - x)/((a - x)*(x - c)*(x - d))], {x, u, b}]",
+  "rhs": [
+   "2*(a - b)/Sqrt[(a - c)*(b - d)]*(EllipticPi[(b - c)/(a - c), ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], (Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])^2] - MatharF2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > b > u >= c > d"
+  ],
+  "cite": "BY (255.21)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^b sqrt((b - x)/((a - x)*(x - c)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.22",
+  "gr": "3.167.22",
+  "page": 348,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - b)/((a - x)*(x - c)*(x - d))], {x, b, u}]",
+  "rhs": [
+   "2*(b - c)/Sqrt[(a - c)*(b - d)]*(EllipticPi[(a - b)/(a - c), ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], (Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])^2] - MatharF2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a >= u > b > c > d"
+  ],
+  "cite": "BY (256.15)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_b^u sqrt((x - b)/((a - x)*(x - c)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.23",
+  "gr": "3.167.23",
+  "page": 348,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - b)/((a - x)*(x - c)*(x - d))], {x, u, a}]",
+  "rhs": [
+   "2/Sqrt[(a - c)*(b - d)]*((a - d)*EllipticPi[(b - a)/(b - d), ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]], (Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])^2] - (b - d)*MatharF2[ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > u >= b > c > d"
+  ],
+  "cite": "BY (257.15)",
+  "edition_note": "8",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^a sqrt((x - b)/((a - x)*(x - c)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.24",
+  "gr": "3.167.24",
+  "page": 348,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - b)/((x - a)*(x - c)*(x - d))], {x, a, u}]",
+  "rhs": [
+   "2*(a - b)/Sqrt[(a - c)*(b - d)]*EllipticPi[(a - d)/(b - d), ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]], (Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])^2]"
+  ],
+  "conds": [
+   "u > a > b > c > d"
+  ],
+  "cite": "BY (258.02)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_a^u sqrt((x - b)/((x - a)*(x - c)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.25",
+  "gr": "3.167.25",
+  "page": 348,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((b - x)*(c - x)*(d - x))], {x, u, d}]",
+  "rhs": [
+   "2/Sqrt[(a - c)*(b - d)]*((c - d)*EllipticPi[(a - d)/(a - c), ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]], (Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])^2] + (a - c)*MatharF2[ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > b > c > d > u"
+  ],
+  "cite": "BY (251.06)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^d sqrt((a - x)/((b - x)*(c - x)*(d - x))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.26",
+  "gr": "3.167.26",
+  "page": 348,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((b - x)*(c - x)*(x - d))], {x, d, u}]",
+  "rhs": [
+   "2*(a - d)/Sqrt[(a - c)*(b - d)]*EllipticPi[(d - c)/(a - c), ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]], (Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])^2]"
+  ],
+  "conds": [
+   "a > b > c >= u > d"
+  ],
+  "cite": "BY (252.02)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_d^u sqrt((a - x)/((b - x)*(c - x)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.27",
+  "gr": "3.167.27",
+  "page": 348,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((b - x)*(c - x)*(x - d))], {x, u, c}]",
+  "rhs": [
+   "2/Sqrt[(a - c)*(b - d)]*((b - c)*EllipticPi[(c - d)/(b - d), ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]], (Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])^2] + (a - b)*MatharF2[ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > b > c > u >= d"
+  ],
+  "cite": "BY (253.15)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^c sqrt((a - x)/((b - x)*(c - x)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.28",
+  "gr": "3.167.28",
+  "page": 348,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((b - x)*(x - c)*(x - d))], {x, c, u}]",
+  "rhs": [
+   "2/Sqrt[(a - c)*(b - d)]*((d - c)*EllipticPi[(b - c)/(b - d), ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]], (Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])^2] + (a - d)*MatharF2[ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > b >= u > c > d"
+  ],
+  "cite": "BY (254.13)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_c^u sqrt((a - x)/((b - x)*(x - c)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.29",
+  "gr": "3.167.29",
+  "page": 348,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((b - x)*(x - c)*(x - d))], {x, u, b}]",
+  "rhs": [
+   "2*(a - b)/Sqrt[(a - c)*(b - d)]*EllipticPi[(b - c)/(a - c), ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], (Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])^2]"
+  ],
+  "conds": [
+   "a > b > u >= c > d"
+  ],
+  "cite": "BY (255.02)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^b sqrt((a - x)/((b - x)*(x - c)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.30",
+  "gr": "3.167.30",
+  "page": 349,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((x - b)*(x - c)*(x - d))], {x, b, u}]",
+  "rhs": [
+   "2/Sqrt[(a - c)*(b - d)]*((c - b)*EllipticPi[(a - b)/(a - c), ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], (Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])^2] + (a - c)*MatharF2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a >= u > b > c > d"
+  ],
+  "cite": "BY (256.14)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_b^u sqrt((a - x)/((x - b)*(x - c)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.31",
+  "gr": "3.167.31",
+  "page": 349,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((x - b)*(x - c)*(x - d))], {x, u, a}]",
+  "rhs": [
+   "2*(d - a)/Sqrt[(a - c)*(b - d)]*(EllipticPi[(b - a)/(b - d), ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]], (Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])^2] - MatharF2[ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > u >= b > c > d"
+  ],
+  "cite": "BY (257.14)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^a sqrt((a - x)/((x - b)*(x - c)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.167.32",
+  "gr": "3.167.32",
+  "page": 349,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - a)/((x - b)*(x - c)*(x - d))], {x, a, u}]",
+  "rhs": [
+   "2*(a - b)/Sqrt[(a - c)*(b - d)]*(EllipticPi[(a - d)/(b - d), ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]], (Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])^2] - MatharF2[ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "u > a > b > c > d"
+  ],
+  "cite": "BY (258.15)",
+  "edition_note": "",
+  "section": "3.167 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_a^u sqrt((x - a)/((x - b)*(x - c)*(x - d))) dx = ... (Pi, F of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.1",
+  "gr": "3.168.1",
+  "page": 349,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(c - x)/((a - x)*(b - x)*(x - d)^3)], {x, u, c}]",
+  "rhs": [
+   "2/(d - a)*(Sqrt[(a - c)/(b - d)]*MatharE2[ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]] - Sqrt[((a - u)*(c - u))/((b - u)*(u - d))])"
+  ],
+  "conds": [
+   "a > b > c > u > d"
+  ],
+  "cite": "BY (253.06)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^c sqrt((c - x)/((a - x)*(b - x)*(x - d)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.2",
+  "gr": "3.168.2",
+  "page": 349,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - c)/((a - x)*(b - x)*(x - d)^3)], {x, c, u}]",
+  "rhs": [
+   "2/(a - d)*Sqrt[(a - c)/(b - d)]*(MatharF2[ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] - MatharE2[ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > b >= u > c > d"
+  ],
+  "cite": "BY (254.04)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_c^u sqrt((x - c)/((a - x)*(b - x)*(x - d)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.3",
+  "gr": "3.168.3",
+  "page": 349,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - c)/((a - x)*(b - x)*(x - d)^3)], {x, u, b}]",
+  "rhs": [
+   "2/(a - d)*Sqrt[(a - c)/(b - d)]*(MatharF2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] - MatharE2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]]) + 2/(b - d)*Sqrt[((b - u)*(u - c))/((a - u)*(u - d))]"
+  ],
+  "conds": [
+   "a > b > u >= c > d"
+  ],
+  "cite": "BY (255.09)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^b sqrt((x - c)/((a - x)*(b - x)*(x - d)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.4",
+  "gr": "3.168.4",
+  "page": 349,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - c)/((a - x)*(x - b)*(x - d)^3)], {x, b, u}]",
+  "rhs": [
+   "2/(a - d)*(Sqrt[(a - c)/(b - d)]*MatharE2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]] - (c - d)/(b - d)*Sqrt[((a - u)*(u - b))/((u - c)*(u - d))])"
+  ],
+  "conds": [
+   "a >= u > b > c > d"
+  ],
+  "cite": "BY (256.06)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_b^u sqrt((x - c)/((a - x)*(x - b)*(x - d)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.5",
+  "gr": "3.168.5",
+  "page": 349,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - c)/((a - x)*(x - b)*(x - d)^3)], {x, u, a}]",
+  "rhs": [
+   "2/(a - d)*Sqrt[(a - c)/(b - d)]*MatharE2[ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]]"
+  ],
+  "conds": [
+   "a > u >= b > c > d"
+  ],
+  "cite": "BY (257.01)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^a sqrt((x - c)/((a - x)*(x - b)*(x - d)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.6",
+  "gr": "3.168.6",
+  "page": 349,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - c)/((x - a)*(x - b)*(x - d)^3)], {x, a, u}]",
+  "rhs": [
+   "2/(a - d)*Sqrt[(a - c)/(b - d)]*(MatharF2[ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] - MatharE2[ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]]) + 2/(a - d)*Sqrt[((u - a)*(u - c))/((u - b)*(u - d))]"
+  ],
+  "conds": [
+   "u > a > b > c > d"
+  ],
+  "cite": "BY (258.10)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_a^u sqrt((x - c)/((x - a)*(x - b)*(x - d)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.7",
+  "gr": "3.168.7",
+  "page": 349,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b - x)/((a - x)*(c - x)*(x - d)^3)], {x, u, c}]",
+  "rhs": [
+   "2/((a - d)*(c - d)*Sqrt[(a - c)*(b - d)])*((b - c)*(a - d)*MatharF2[ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]] - (a - c)*(b - d)*MatharE2[ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]]) + 2*(b - d)/((a - d)*(c - d))*Sqrt[((a - u)*(c - u))/((b - u)*(u - d))]"
+  ],
+  "conds": [
+   "a > b > c > u > d"
+  ],
+  "cite": "BY (253.03)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^c sqrt((b - x)/((a - x)*(c - x)*(x - d)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.8",
+  "gr": "3.168.8",
+  "page": 350,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b - x)/((a - x)*(x - c)*(x - d)^3)], {x, c, u}]",
+  "rhs": [
+   "2/((a - d)*(c - d)*Sqrt[(a - c)*(b - d)])*((a - c)*(b - d)*MatharE2[ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] - (a - b)*(c - d)*MatharF2[ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > b >= u > c > d"
+  ],
+  "cite": "BY (254.15)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_c^u sqrt((b - x)/((a - x)*(x - c)*(x - d)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.9",
+  "gr": "3.168.9",
+  "page": 350,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b - x)/((a - x)*(x - c)*(x - d)^3)], {x, u, b}]",
+  "rhs": [
+   "2/((a - d)*(c - d)*Sqrt[(a - c)*(b - d)])*((a - c)*(b - d)*MatharE2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] - (a - b)*(c - d)*MatharF2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]]) - 2/(c - d)*Sqrt[((b - u)*(u - c))/((a - u)*(u - d))]"
+  ],
+  "conds": [
+   "a > b > u >= c > d"
+  ],
+  "cite": "BY (255.06)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^b sqrt((b - x)/((a - x)*(x - c)*(x - d)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.10",
+  "gr": "3.168.10",
+  "page": 350,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - b)/((a - x)*(x - c)*(x - d)^3)], {x, b, u}]",
+  "rhs": [
+   "2/((a - d)*(c - d)*Sqrt[(a - c)*(b - d)])*((a - c)*(b - d)*MatharE2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]] - (a - d)*(b - c)*MatharF2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]]) - 2/(a - d)*Sqrt[((a - u)*(u - b))/((u - c)*(u - d))]"
+  ],
+  "conds": [
+   "a >= u > b > c > d"
+  ],
+  "cite": "BY (256.03)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_b^u sqrt((x - b)/((a - x)*(x - c)*(x - d)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.11",
+  "gr": "3.168.11",
+  "page": 350,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - b)/((a - x)*(x - c)*(x - d)^3)], {x, u, a}]",
+  "rhs": [
+   "2*Sqrt[(a - c)*(b - d)]/((a - d)*(c - d))*MatharE2[ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]] - 2*(b - c)/((c - d)*Sqrt[(a - c)*(b - d)])*MatharF2[ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]]"
+  ],
+  "conds": [
+   "a > u >= b > c > d"
+  ],
+  "cite": "BY (257.09)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^a sqrt((x - b)/((a - x)*(x - c)*(x - d)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.12",
+  "gr": "3.168.12",
+  "page": 350,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - b)/((x - a)*(x - c)*(x - d)^3)], {x, a, u}]",
+  "rhs": [
+   "2*(b - d)/((a - d)*(c - d))*Sqrt[((u - a)*(u - c))/((u - b)*(u - d))] + 2*(a - b)/((a - d)*Sqrt[(a - c)*(b - d)])*MatharF2[ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] + 2*Sqrt[(a - c)*(b - d)]/((a - d)*(c - d))*MatharE2[ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]]"
+  ],
+  "conds": [
+   "u > a > b > c > d"
+  ],
+  "cite": "BY (258.09)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_a^u sqrt((x - b)/((x - a)*(x - c)*(x - d)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.13",
+  "gr": "3.168.13",
+  "page": 350,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((b - x)*(c - x)*(x - d)^3)], {x, u, c}]",
+  "rhs": [
+   "2/(c - d)*Sqrt[(a - c)/(b - d)]*(MatharF2[ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]] - MatharE2[ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]]) + 2/(c - d)*Sqrt[((a - u)*(c - u))/((b - u)*(u - d))]"
+  ],
+  "conds": [
+   "a > b > c > u > d"
+  ],
+  "cite": "BY (253.04)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^c sqrt((a - x)/((b - x)*(c - x)*(x - d)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.14",
+  "gr": "3.168.14",
+  "page": 350,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((b - x)*(x - c)*(x - d)^3)], {x, c, u}]",
+  "rhs": [
+   "2/(c - d)*Sqrt[(a - c)/(b - d)]*MatharE2[ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]]"
+  ],
+  "conds": [
+   "a > b >= u > c > d"
+  ],
+  "cite": "BY (254.01)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_c^u sqrt((a - x)/((b - x)*(x - c)*(x - d)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.15",
+  "gr": "3.168.15",
+  "page": 351,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((b - x)*(x - c)*(x - d)^3)], {x, u, b}]",
+  "rhs": [
+   "2/(c - d)*Sqrt[(a - c)/(b - d)]*MatharE2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] - 2*(a - d)/((b - d)*(c - d))*Sqrt[((b - u)*(u - c))/((a - u)*(u - d))]"
+  ],
+  "conds": [
+   "a > b > u >= c > d"
+  ],
+  "cite": "BY (255.08)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^b sqrt((a - x)/((b - x)*(x - c)*(x - d)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.16",
+  "gr": "3.168.16",
+  "page": 351,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((x - b)*(x - c)*(x - d)^3)], {x, b, u}]",
+  "rhs": [
+   "2/(c - d)*Sqrt[(a - c)/(b - d)]*(MatharF2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]] - MatharE2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]]) + 2/(b - d)*Sqrt[((a - u)*(u - b))/((u - c)*(u - d))]"
+  ],
+  "conds": [
+   "a >= u > b > c > d"
+  ],
+  "cite": "BY (256.05)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_b^u sqrt((a - x)/((x - b)*(x - c)*(x - d)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.17",
+  "gr": "3.168.17",
+  "page": 351,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((x - b)*(x - c)*(x - d)^3)], {x, u, a}]",
+  "rhs": [
+   "2/(c - d)*Sqrt[(a - c)/(b - d)]*(MatharF2[ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]] - MatharE2[ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > u >= b > c > d"
+  ],
+  "cite": "BY (257.06)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^a sqrt((a - x)/((x - b)*(x - c)*(x - d)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.18",
+  "gr": "3.168.18",
+  "page": 351,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - a)/((x - b)*(x - c)*(x - d)^3)], {x, a, u}]",
+  "rhs": [
+   "-2/(c - d)*Sqrt[(a - c)/(b - d)]*MatharE2[ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] + 2/(c - d)*Sqrt[((u - a)*(u - c))/((u - b)*(u - d))]"
+  ],
+  "conds": [
+   "u > a > b > c > d"
+  ],
+  "cite": "BY (258.05)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_a^u sqrt((x - a)/((x - b)*(x - c)*(x - d)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.19",
+  "gr": "3.168.19",
+  "page": 351,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(d - x)/((a - x)*(b - x)*(c - x)^3)], {x, u, d}]",
+  "rhs": [
+   "2/(b - c)*Sqrt[(b - d)/(a - c)]*(MatharF2[ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] - MatharE2[ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a > b > c > d > u"
+  ],
+  "cite": "BY (251.01)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^d sqrt((d - x)/((a - x)*(b - x)*(c - x)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.20",
+  "gr": "3.168.20",
+  "page": 351,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)*(b - x)*(c - x)^3)], {x, d, u}]",
+  "rhs": [
+   "-2/(b - c)*Sqrt[(b - d)/(a - c)]*MatharE2[ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]] + 2/(b - c)*Sqrt[((b - u)*(u - d))/((a - u)*(c - u))]"
+  ],
+  "conds": [
+   "a > b > c >= u > d"
+  ],
+  "cite": "BY (252.06)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_d^u sqrt((x - d)/((a - x)*(b - x)*(c - x)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.21",
+  "gr": "3.168.21",
+  "page": 351,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)*(b - x)*(x - c)^3)], {x, u, b}]",
+  "rhs": [
+   "2/(b - c)*Sqrt[(b - d)/(a - c)]*(MatharF2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] - MatharE2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]]) + 2/(b - c)*Sqrt[((b - u)*(u - d))/((a - u)*(u - c))]"
+  ],
+  "conds": [
+   "a > b > u > c > d"
+  ],
+  "cite": "BY (255.05)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^b sqrt((x - d)/((a - x)*(b - x)*(x - c)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.22",
+  "gr": "3.168.22",
+  "page": 351,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)*(x - b)*(x - c)^3)], {x, b, u}]",
+  "rhs": [
+   "2/(b - c)*Sqrt[(b - d)/(a - c)]*MatharE2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]]"
+  ],
+  "conds": [
+   "a >= u > b > c > d"
+  ],
+  "cite": "BY (256.01)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_b^u sqrt((x - d)/((a - x)*(x - b)*(x - c)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.23",
+  "gr": "3.168.23",
+  "page": 351,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)*(x - b)*(x - c)^3)], {x, u, a}]",
+  "rhs": [
+   "2/(b - c)*Sqrt[(b - d)/(a - c)]*MatharE2[ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]] - 2*(c - d)/((a - c)*(b - c))*Sqrt[((a - u)*(u - b))/((u - c)*(u - d))]"
+  ],
+  "conds": [
+   "a > u >= b > c > d"
+  ],
+  "cite": "BY (257.06)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^a sqrt((x - d)/((a - x)*(x - b)*(x - c)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.24",
+  "gr": "3.168.24",
+  "page": 351,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((x - a)*(x - b)*(x - c)^3)], {x, a, u}]",
+  "rhs": [
+   "2/(b - c)*Sqrt[(b - d)/(a - c)]*(MatharF2[ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] - MatharE2[ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]]) + 2/(a - c)*Sqrt[((u - a)*(u - d))/((u - b)*(u - c))]"
+  ],
+  "conds": [
+   "u > a > b > c > d"
+  ],
+  "cite": "BY (258.06)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_a^u sqrt((x - d)/((x - a)*(x - b)*(x - c)^3)) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.25",
+  "gr": "3.168.25",
+  "page": 351,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b - x)/((a - x)*(c - x)^3*(d - x))], {x, u, d}]",
+  "rhs": [
+   "2/(c - d)*Sqrt[(b - d)/(a - c)]*MatharE2[ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]]"
+  ],
+  "conds": [
+   "a > b > c > d > u"
+  ],
+  "cite": "BY (251.01)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^d sqrt((b - x)/((a - x)*(c - x)^3*(d - x))) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals; cite printed BY (251.01), same as 3.168.19"
+ },
+ {
+  "id": "GR3.168.26",
+  "gr": "3.168.26",
+  "page": 352,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b - x)/((a - x)*(c - x)^3*(x - d))], {x, d, u}]",
+  "rhs": [
+   "2/(c - d)*Sqrt[(b - d)/(a - c)]*(MatharF2[ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]] - MatharE2[ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]]) + 2/(c - d)*Sqrt[((b - u)*(u - d))/((a - u)*(c - u))]"
+  ],
+  "conds": [
+   "a > b > c > u > d"
+  ],
+  "cite": "BY (252.03)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_d^u sqrt((b - x)/((a - x)*(c - x)^3*(x - d))) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.27",
+  "gr": "3.168.27",
+  "page": 352,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b - x)/((a - x)*(x - c)^3*(x - d))], {x, u, b}]",
+  "rhs": [
+   "2/(d - c)*Sqrt[(b - d)/(a - c)]*MatharE2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] + 2/(c - d)*Sqrt[((b - u)*(u - d))/((a - u)*(u - c))]"
+  ],
+  "conds": [
+   "a > b > u > c > d"
+  ],
+  "cite": "BY (255.03)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^b sqrt((b - x)/((a - x)*(x - c)^3*(x - d))) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.28",
+  "gr": "3.168.28",
+  "page": 352,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - b)/((a - x)*(x - c)^3*(x - d))], {x, b, u}]",
+  "rhs": [
+   "2/(c - d)*Sqrt[(b - d)/(a - c)]*(MatharF2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]] - MatharE2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]])"
+  ],
+  "conds": [
+   "a >= u > b > c > d"
+  ],
+  "cite": "BY (256.08)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_b^u sqrt((x - b)/((a - x)*(x - c)^3*(x - d))) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.29",
+  "gr": "3.168.29",
+  "page": 352,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - b)/((a - x)*(x - c)^3*(x - d))], {x, u, a}]",
+  "rhs": [
+   "2/(c - d)*Sqrt[(b - d)/(a - c)]*(MatharF2[ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]] - MatharE2[ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]]) + 2/(a - c)*Sqrt[((a - u)*(u - b))/((u - c)*(u - d))]"
+  ],
+  "conds": [
+   "a > u >= b > c > d"
+  ],
+  "cite": "BY (257.03)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^a sqrt((x - b)/((a - x)*(x - c)^3*(x - d))) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.30",
+  "gr": "3.168.30",
+  "page": 352,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - b)/((x - a)*(x - c)^3*(x - d))], {x, a, u}]",
+  "rhs": [
+   "2/(c - d)*Sqrt[(b - d)/(a - c)]*MatharE2[ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] - 2*(b - c)/((a - c)*(c - d))*Sqrt[((u - a)*(u - d))/((u - b)*(u - c))]"
+  ],
+  "conds": [
+   "u > a > b > c > d"
+  ],
+  "cite": "BY (258.03)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_a^u sqrt((x - b)/((x - a)*(x - c)^3*(x - d))) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.31",
+  "gr": "3.168.31",
+  "page": 352,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((b - x)*(c - x)^3*(d - x))], {x, u, d}]",
+  "rhs": [
+   "2*Sqrt[(a - c)*(b - d)]/((b - c)*(c - d))*MatharE2[ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] - (a - b)/(b - c)*2/Sqrt[(a - c)*(b - d)]*MatharF2[ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]]"
+  ],
+  "conds": [
+   "a > b > c > d > u"
+  ],
+  "cite": "BY (251.08)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^d sqrt((a - x)/((b - x)*(c - x)^3*(d - x))) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.32",
+  "gr": "3.168.32",
+  "page": 352,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((b - x)*(c - x)^3*(x - d))], {x, d, u}]",
+  "rhs": [
+   "2*(a - d)/((c - d)*Sqrt[(a - c)*(b - d)])*MatharF2[ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]] - 2*Sqrt[(a - c)*(b - d)]/((b - c)*(c - d))*MatharE2[ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]] + 2*(a - c)/((b - c)*(c - d))*Sqrt[((b - u)*(u - d))/((a - u)*(c - u))]"
+  ],
+  "conds": [
+   "a > b > c > u > d"
+  ],
+  "cite": "BY (252.04)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_d^u sqrt((a - x)/((b - x)*(c - x)^3*(x - d))) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.33",
+  "gr": "3.168.33",
+  "page": 352,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((b - x)*(x - c)^3*(x - d))], {x, u, b}]",
+  "rhs": [
+   "2*(a - b)/((b - c)*Sqrt[(a - c)*(b - c)])*MatharF2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] - 2*Sqrt[((a - c)*(b - d))/((b - c)*(c - d))]*MatharE2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] + 2*(a - c)/((b - c)*(c - d))*Sqrt[((b - u)*(u - d))/((a - u)*(u - c))]",
+   "2*(a - b)/((b - c)*Sqrt[(a - c)*(b - d)])*MatharF2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] - 2*Sqrt[(a - c)*(b - d)]/((b - c)*(c - d))*MatharE2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] + 2*(a - c)/((b - c)*(c - d))*Sqrt[((b - u)*(u - d))/((a - u)*(u - c))]",
+   "2*(a - b)/((b - c)*Sqrt[(a - c)*(b - c)])*MatharF2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] - 2*Sqrt[(a - c)*(b - d)]/((b - c)*(c - d))*MatharE2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] + 2*(a - c)/((b - c)*(c - d))*Sqrt[((b - u)*(u - d))/((a - u)*(u - c))]",
+   "2*(a - b)/((b - c)*Sqrt[(a - c)*(b - d)])*MatharF2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] - 2*Sqrt[((a - c)*(b - d))/((b - c)*(c - d))]*MatharE2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[((b - c)*(a - d))/((a - c)*(b - d))]] + 2*(a - c)/((b - c)*(c - d))*Sqrt[((b - u)*(u - d))/((a - u)*(u - c))]"
+  ],
+  "conds": [
+   "a > b > u > c > d"
+  ],
+  "cite": "BY (255.04)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^b sqrt((a - x)/((b - x)*(x - c)^3*(x - d))) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals; printed E coefficient 2 Sqrt[(a-c)(b-d)/((b-c)(c-d))] is dimensionless (others are 1/length) and the F coefficient has Sqrt[(a-c)(b-c)] where its siblings (3.168.32/34) have Sqrt[(a-c)(b-d)]: rhs[0] as printed, rhs[1] both corrected to the sibling pattern, rhs[2]/rhs[3] one correction each"
+ },
+ {
+  "id": "GR3.168.34",
+  "gr": "3.168.34",
+  "page": 352,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((x - b)*(x - c)^3*(x - d))], {x, b, u}]",
+  "rhs": [
+   "2*Sqrt[(a - c)*(b - d)]/((b - c)*(c - d))*MatharE2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]] - 2*(a - d)/((c - d)*Sqrt[(a - c)*(b - d)])*MatharF2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]]"
+  ],
+  "conds": [
+   "a >= u > b > c > d"
+  ],
+  "cite": "BY (256.09)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_b^u sqrt((a - x)/((x - b)*(x - c)^3*(x - d))) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ },
+ {
+  "id": "GR3.168.35",
+  "gr": "3.168.35",
+  "page": 352,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((x - b)*(x - c)^3*(x - d))], {x, u, a}]",
+  "rhs": [
+   "2*Sqrt[(a - c)*(b - d)]/((b - c)*(c - d))*MatharE2[ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]] - 2*(a - d)/((c - d)*Sqrt[(a - c)*(b - d)])*MatharF2[ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]], Sqrt[((a - b)*(c - d))/((a - c)*(b - d))]] - 2/(b - c)*Sqrt[((a - u)*(u - b))/((u - c)*(u - d))]"
+  ],
+  "conds": [
+   "a > u >= b > c > d"
+  ],
+  "cite": "BY (257.04)",
+  "edition_note": "",
+  "section": "3.168 Square roots of polynomials (notation 3.167/3.168)",
+  "tex": "int_u^a sqrt((a - x)/((x - b)*(x - c)^3*(x - d))) dx = ... (F, E of 3.167 notation)",
+  "note": "G&R 3.167 notation (alpha..nu amplitudes, q, r moduli) substituted; F, E, Pi incomplete elliptic integrals"
+ }
+]

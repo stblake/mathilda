@@ -1,0 +1,1561 @@
+[
+ {
+  "id": "GR17.33.8",
+  "gr": "17.33.8",
+  "page": 1172,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(1/(x^2 + a^2))*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*Pi)^(-1/2)/a*(E^(-a*xi)*ExpIntegralEi[a*xi] - E^(a*xi)*ExpIntegralEi[-a*xi])"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 65(14)",
+  "edition_note": "7",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "1/(x^2+a^2) -> (2pi)^(-1/2) a^-1 [e^(-a xi) Ei(a xi) - e^(a xi) Ei(-a xi)]",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.9",
+  "gr": "17.33.9",
+  "page": 1172,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x*(x^2 + a^2)^(-3/2))*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]*xi*BesselK[0, a*xi]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 66(27)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "x(x^2+a^2)^(-3/2) -> (2/pi)^(1/2) xi K0(a xi)",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.10",
+  "gr": "17.33.10",
+  "page": 1172,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x^(-1/2)*(x^2 + a^2)^(-1/2))*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "xi^(1/2)*BesselI[1/4, a*xi/2]*BesselK[1/4, a*xi/2]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 66(28)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "x^(-1/2)(x^2+a^2)^(-1/2) -> xi^(1/2) I_{1/4}(a xi/2) K_{1/4}(a xi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.11",
+  "gr": "17.33.11",
+  "page": 1172,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x*(x^2 + a^2)^(-nu - 3/2))*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "xi^(nu + 1)/(Sqrt[2]*(2*a)^nu*Gamma[nu + 3/2])*BesselK[nu, a*xi]"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "",
+  "edition_note": "7",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "x(x^2+a^2)^(-nu-3/2) -> xi^(nu+1)/(sqrt2 (2a)^nu Gamma(nu+3/2)) K_nu(a xi)",
+  "note": "no cite printed"
+ },
+ {
+  "id": "GR17.33.12",
+  "gr": "17.33.12",
+  "page": 1172,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x/(a^2 + x^2))*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*E^(-a*xi)"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 65(15)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "x/(a^2+x^2) -> (pi/2)^(1/2) e^(-a xi)",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.13",
+  "gr": "17.33.13",
+  "page": 1172,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x/(a^2 + x^2)^2)*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/8]/a*xi*E^(-a*xi)"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 67(35)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "x/(a^2+x^2)^2 -> sqrt(pi/8) a^-1 xi e^(-a xi)",
+  "note": "Re a > 0 not printed; added"
+ },
+ {
+  "id": "GR17.33.14",
+  "gr": "17.33.14",
+  "page": 1172,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x^(-1)*(x^2 + a^2)^(-1))*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]/a^2*(1 - E^(-a*xi))"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 65(20)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "x^-1(x^2+a^2)^-1 -> sqrt(pi/2)/a^2 (1-e^(-a xi))",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.15",
+  "gr": "17.33.15",
+  "page": 1172,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x^(-1)*E^(-a*x))*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]*ArcTan[xi/a]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 72(2)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "x^-1 e^(-ax) -> (2/pi)^(1/2) arctan(xi/a)",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.16",
+  "gr": "17.33.16",
+  "page": 1172,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x^(nu - 1)*E^(-a*x))*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]*Gamma[nu]*(a^2 + xi^2)^(-nu/2)*Sin[nu*ArcTan[xi/a]]"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 72(7)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "x^(nu-1) e^(-ax) -> (2/pi)^(1/2) Gamma(nu)(a^2+xi^2)^(-nu/2) sin[nu arctan(xi/a)]",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.17",
+  "gr": "17.33.17",
+  "page": 1172,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(E^(-a*x))*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]*xi/(a^2 + xi^2)"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 72(1)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "e^(-ax) -> sqrt(2/pi) xi/(a^2+xi^2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.18",
+  "gr": "17.33.18",
+  "page": 1172,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x*E^(-a*x))*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]*2*a*xi/(a^2 + xi^2)^2"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 72(3)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "x e^(-ax) -> (2/pi)^(1/2) 2a xi/(a^2+xi^2)^2",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.19",
+  "gr": "17.33.19",
+  "page": 1172,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x*E^(-a*x^2))*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*a)^(-3/2)*xi*Exp[-xi^2/(4*a)]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi/2",
+   "xi > 0"
+  ],
+  "cite": "ET I 73(19)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "x e^(-a x^2) -> (2a)^(-3/2) xi exp(-xi^2/(4a))",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.20",
+  "gr": "17.33.20",
+  "page": 1172,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sin[a*x]/x)*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*Pi)^(-1/2)*Log[Abs[(xi + a)/(xi - a)]]"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 78(1)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "sin(ax)/x -> (2pi)^(-1/2) ln|(xi+a)/(xi-a)|",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.21a",
+  "gr": "17.33.21",
+  "page": 1172,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sin[a*x]/x^2)*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "xi*Sqrt[Pi/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < xi < a"
+  ],
+  "cite": "ET I 78(2)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "sin(ax)/x^2 -> xi (pi/2)^(1/2), 0<xi<a",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.21b",
+  "gr": "17.33.21",
+  "page": 1172,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sin[a*x]/x^2)*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "a*Sqrt[Pi/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > a"
+  ],
+  "cite": "ET I 78(2)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "sin(ax)/x^2 -> a (pi/2)^(1/2), a<xi",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.22",
+  "gr": "17.33.22",
+  "page": 1173,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sin[a^2/x])*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "a*Sqrt[Pi/2]*xi^(-1/2)*BesselJ[1, 2*a*xi^(1/2)]"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 83(6)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "sin(a^2/x) -> a (pi/2)^(1/2) xi^(-1/2) J1(2a xi^(1/2))",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.23",
+  "gr": "17.33.23",
+  "page": 1173,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x^(-1)*Sin[a^2/x])*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*BesselY[0, 2*a*xi^(1/2)] + Sqrt[2/Pi]*BesselK[0, 2*a*xi^(1/2)]"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 83(7)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "x^-1 sin(a^2/x) -> (pi/2)^(1/2) Y0(2a xi^(1/2)) + (2/pi)^(1/2) K0(2a xi^(1/2))",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.24",
+  "gr": "17.33.24",
+  "page": 1173,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x^(-2)*Sin[a^2/x])*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]/a*xi^(1/2)*BesselJ[1, 2*a*xi^(1/2)]"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 83(8)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "x^-2 sin(a^2/x) -> (pi/2)^(1/2) a^-1 xi^(1/2) J1(2a xi^(1/2))",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.25",
+  "gr": "17.33.25",
+  "page": 1173,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Csch[a*x])*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]/a*Tanh[Pi*xi/(2*a)]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 88(2)",
+  "edition_note": "10",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "cosech(ax) -> (pi/2)^(1/2) a^-1 tanh(pi xi/(2a))",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.26",
+  "gr": "17.33.26",
+  "page": 1173,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Coth[a*x/2] - 1)*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi]/a*Coth[Pi*xi/a] - xi",
+   "Sqrt[2*Pi]/a*Coth[Pi*xi/a] - Sqrt[2/Pi]/xi"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 88(3)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "coth(ax/2)-1 -> (2pi)^(1/2) a^-1 coth(pi xi/a) - xi",
+  "note": "as printed '- xi' is dimensionally wrong; 2nd candidate -(2/pi)^(1/2)/xi from ET (pi/a coth(pi y/a) - 1/y)"
+ },
+ {
+  "id": "GR17.33.27a",
+  "gr": "17.33.27",
+  "page": 1173,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sin[Pi*x]/(1 - x^2))*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]*Sin[xi]",
+   "Sqrt[Pi/2]*Sin[xi]"
+  ],
+  "conds": [
+   "0 < xi < Pi"
+  ],
+  "cite": "ET I 78(4)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "(1-x^2)^-1 sin(pi x) -> (2/pi)^(1/2) sin xi for 0<=xi<=pi",
+  "note": "removable singularity at x=1; 2nd candidate sqrt(pi/2) from ET (pi/2) sin y times sqrt(2/pi)"
+ },
+ {
+  "id": "GR17.33.27b",
+  "gr": "17.33.27",
+  "page": 1173,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sin[Pi*x]/(1 - x^2))*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "xi > Pi"
+  ],
+  "cite": "ET I 78(4)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "(1-x^2)^-1 sin(pi x) -> 0 for xi>pi",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.28",
+  "gr": "17.33.28",
+  "page": 1173,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(E^(-a*x^2)*Sin[b*x])*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*a)^(-1/2)*Exp[-(xi^2 + b^2)/(4*a)]*Sinh[b*xi/(2*a)]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 78(7)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "e^(-a x^2) sin(bx) -> (2a)^(-1/2) exp[-(xi^2+b^2)/(4a)] sinh(b xi/2a)",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.29a",
+  "gr": "17.33.29",
+  "page": 1173,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sin[a*x]^2/x)*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*2^(-3/2)"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < xi < 2*a"
+  ],
+  "cite": "ET I 78(8)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "sin^2(ax)/x -> pi^(1/2) 2^(-3/2), 0<xi<2a",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.29b",
+  "gr": "17.33.29",
+  "page": 1173,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sin[a*x]^2/x)*Sin[2*a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*2^(-5/2)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET I 78(8)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "sin^2(ax)/x -> pi^(1/2) 2^(-5/2), xi=2a",
+  "note": "xi = 2a substituted"
+ },
+ {
+  "id": "GR17.33.29c",
+  "gr": "17.33.29",
+  "page": 1173,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sin[a*x]^2/x)*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 2*a"
+  ],
+  "cite": "ET I 78(8)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "sin^2(ax)/x -> 0, xi>2a",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.30",
+  "gr": "17.33.30",
+  "page": 1173,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sin[a*x^2])*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "a^(-1/2)*(Cos[xi^2/(4*a)]*FresnelC[Sqrt[2/Pi]*(2*Pi*a)^(-1/2)*xi] + Sin[xi^2/(4*a)]*FresnelS[Sqrt[2/Pi]*(2*Pi*a)^(-1/2)*xi])",
+   "a^(-1/2)*(Cos[xi^2/(4*a)]*FresnelC[(2*Pi*a)^(-1/2)*xi] + Sin[xi^2/(4*a)]*FresnelS[(2*Pi*a)^(-1/2)*xi])"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 82(1)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "sin(a x^2) -> a^(-1/2){cos(xi^2/4a) C[(2 pi a)^(-1/2) xi] + sin(xi^2/4a) S[(2 pi a)^(-1/2) xi]}",
+  "note": "1st candidate uses G&R 8.251 C,S; 2nd uses C(z)=int_0^z cos(pi t^2/2) (Mathilda FresnelC). Brace placement ambiguous; a^(-1/2) taken to multiply both terms"
+ },
+ {
+  "id": "GR17.33.31",
+  "gr": "17.33.31",
+  "page": 1173,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Cos[a*x^2])*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "a^(-1/2)*(Sin[xi^2/(4*a)]*FresnelC[Sqrt[2/Pi]*(2*Pi*a)^(-1/2)*xi] - Cos[xi^2/(4*a)]*FresnelS[Sqrt[2/Pi]*(2*Pi*a)^(-1/2)*xi])",
+   "a^(-1/2)*(Sin[xi^2/(4*a)]*FresnelC[(2*Pi*a)^(-1/2)*xi] - Cos[xi^2/(4*a)]*FresnelS[(2*Pi*a)^(-1/2)*xi])"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "cos(a x^2) -> a^(-1/2){sin(xi^2/4a) C[(2 pi a)^(-1/2) xi] - cos(xi^2/4a) S[(2 pi a)^(-1/2) xi]}",
+  "note": "no cite printed; Fresnel normalisation candidates as in 17.33.30"
+ },
+ {
+  "id": "GR17.33.32",
+  "gr": "17.33.32",
+  "page": 1174,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(ArcTan[x/a])*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]/xi*E^(-a*xi)"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 87(3)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "arctan(x/a) -> (pi/2)^(1/2) xi^-1 e^(-a xi)",
+  "note": "integral converges only in Abel sense"
+ },
+ {
+  "id": "GR17.33.33",
+  "gr": "17.33.33",
+  "page": 1174,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(ArcTan[2*a/x])*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*Pi)^(-1/2)*E^(-a*xi)*Sinh[a*xi]",
+   "Sqrt[2*Pi]/xi*E^(-a*xi)*Sinh[a*xi]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 87(8)",
+  "edition_note": "7",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "arctan(2a/x) -> (2pi)^(-1/2) e^(-a xi) sinh(a xi)",
+  "note": "2nd candidate: ET pi e^(-ay) sinh(ay)/y times sqrt(2/pi)"
+ },
+ {
+  "id": "GR17.33.34",
+  "gr": "17.33.34",
+  "page": 1174,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Log[x]/x)*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-Sqrt[Pi/2]*(EulerGamma + Log[xi])"
+  ],
+  "conds": [
+   "xi > 0"
+  ],
+  "cite": "ET I 76(2)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "ln x/x -> -(pi/2)^(1/2)(C + ln xi)",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.35",
+  "gr": "17.33.35",
+  "page": 1174,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Log[Abs[(x + a)/(x - a)]])*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi]/xi*Sin[a*xi]"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 77(11)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "ln|(x+a)/(x-a)| -> (2pi)^(1/2) xi^-1 sin(a xi)",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.36",
+  "gr": "17.33.36",
+  "page": 1174,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Log[1 + a^2*x^2]/x)*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-Sqrt[2*Pi]*ExpIntegralEi[-xi/a]"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 77(14)",
+  "edition_note": "7",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "ln(1+a^2x^2)/x -> -(2pi)^(1/2) Ei(-xi/a)",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.37a",
+  "gr": "17.33.37",
+  "page": 1174,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(BesselJ[0, a*x])*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < xi < a"
+  ],
+  "cite": "ET I 99(1)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "J0(ax) -> 0, 0<xi<a",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.37b",
+  "gr": "17.33.37",
+  "page": 1174,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(BesselJ[0, a*x])*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]*(xi^2 - a^2)^(-1/2)"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > a"
+  ],
+  "cite": "ET I 99(1)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "J0(ax) -> (2/pi)^(1/2)(xi^2-a^2)^(-1/2), a<xi",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.38a",
+  "gr": "17.33.38",
+  "page": 1174,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(BesselJ[nu, a*x])*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]*(a^2 - xi^2)^(-1/2)*Sin[nu*ArcSin[xi/a]]"
+  ],
+  "conds": [
+   "Re[nu] > -2",
+   "a > 0",
+   "0 < xi < a"
+  ],
+  "cite": "ET I 99(3)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "J_nu(ax) -> (2/pi)^(1/2)(a^2-xi^2)^(-1/2) sin[nu arcsin(xi/a)], 0<xi<a",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.38b",
+  "gr": "17.33.38",
+  "page": 1174,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(BesselJ[nu, a*x])*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "a^nu*Cos[nu*Pi/2]/((xi^2 - a^2)^(1/2)*(xi + (xi^2 - a^2)^(1/2))^nu)",
+   "Sqrt[2/Pi]*a^nu*Cos[nu*Pi/2]/((xi^2 - a^2)^(1/2)*(xi + (xi^2 - a^2)^(1/2))^nu)"
+  ],
+  "conds": [
+   "Re[nu] > -2",
+   "a > 0",
+   "xi > a"
+  ],
+  "cite": "ET I 99(3)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "J_nu(ax) -> a^nu cos(nu pi/2)/((xi^2-a^2)^(1/2)[xi+(xi^2-a^2)^(1/2)]^nu), a<xi",
+  "note": "book omits the (2/pi)^(1/2) normalisation factor in this branch; 2nd candidate restores it"
+ },
+ {
+  "id": "GR17.33.39a",
+  "gr": "17.33.39",
+  "page": 1174,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(BesselJ[0, a*x]/x)*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]*ArcSin[xi/a]"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < xi < a"
+  ],
+  "cite": "ET I 99(4)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "J0(ax)/x -> (2/pi)^(1/2) arcsin(xi/a), 0<xi<a",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.39b",
+  "gr": "17.33.39",
+  "page": 1174,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(BesselJ[0, a*x]/x)*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > a"
+  ],
+  "cite": "ET I 99(4)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "J0(ax)/x -> (pi/2)^(1/2), a<xi",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.40",
+  "gr": "17.33.40",
+  "page": 1174,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[((x^2 + b^2)^(-1)*BesselJ[0, a*x])*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]*Sinh[b*xi]*BesselK[0, a*b]/b"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[b] > 0",
+   "0 < xi < a"
+  ],
+  "cite": "ET I 100(12)",
+  "edition_note": "7",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "(x^2+b^2)^-1 J0(ax) -> (2/pi)^(1/2) sinh(b xi) K0(ab)/b, 0<xi<a",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.41",
+  "gr": "17.33.41",
+  "page": 1174,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x*(x^2 + b^2)^(-1)*BesselJ[0, a*x])*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*E^(-b*xi)*BesselI[0, a*b]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[b] > 0",
+   "xi > a"
+  ],
+  "cite": "ET I 100(13)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "x(x^2+b^2)^-1 J0(ax) -> (pi/2)^(1/2) e^(-b xi) I0(ab), a<xi",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.1",
+  "gr": "17.34.1",
+  "page": 1175,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x^(-nu))*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]/Gamma[nu]*Sec[nu*Pi/2]*xi^(nu - 1)"
+  ],
+  "conds": [
+   "0 < Re[nu] < 1",
+   "xi > 0"
+  ],
+  "cite": "ET I 10(1)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "x^-nu -> (pi/2)^(1/2)[Gamma(nu)]^-1 sec(nu pi/2) xi^(nu-1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.2",
+  "gr": "17.34.2",
+  "page": 1175,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(1)*Cos[xi*x], {x, 0, a}]",
+  "rhs": [
+   "Sqrt[2/Pi]*Sin[a*xi]/xi"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 7(1)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "1 on (0,a), 0 for x>a -> (2/pi)^(1/2) sin(a xi)/xi",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.3",
+  "gr": "17.34.3",
+  "page": 1175,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(1/x)*Cos[xi*x], {x, a, Infinity}]",
+  "rhs": [
+   "-Sqrt[2/Pi]*CosIntegral[a*xi]"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 8(3)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "1/x for x>a, 0 on (0,a) -> -(2/pi)^(1/2) Ci(a xi)",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.4",
+  "gr": "17.34.4",
+  "page": 1175,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x^(-1/2))*Cos[xi*x], {x, 0, a}]",
+  "rhs": [
+   "2*xi^(-1/2)*FresnelC[Sqrt[2/Pi]*a*xi]",
+   "2*xi^(-1/2)*FresnelC[Sqrt[2*a*xi/Pi]]"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 8(5)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "x^(-1/2) on (0,a) -> 2 xi^(-1/2) C(a xi)",
+  "note": "1st candidate: G&R 8.251 C; 2nd: ET-normalised C(z) = (2pi)^(-1/2) int_0^z t^(-1/2) cos t dt = FresnelC[Sqrt[2 z/Pi]]"
+ },
+ {
+  "id": "GR17.34.5",
+  "gr": "17.34.5",
+  "page": 1175,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x^(-1/2))*Cos[xi*x], {x, a, Infinity}]",
+  "rhs": [
+   "2*xi^(-1/2)*(1/2 - FresnelC[Sqrt[2/Pi]*a*xi])",
+   "2*xi^(-1/2)*(1/2 - FresnelC[Sqrt[2*a*xi/Pi]])"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 8(6)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "x^(-1/2) for x>a -> 2 xi^(-1/2)[1/2 - C(a xi)]",
+  "note": "1st candidate: G&R 8.251 C; 2nd: ET-normalised C(z) = (2pi)^(-1/2) int_0^z t^(-1/2) cos t dt = FresnelC[Sqrt[2 z/Pi]]"
+ },
+ {
+  "id": "GR17.34.6",
+  "gr": "17.34.6",
+  "page": 1175,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x^(nu - 1))*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]*Gamma[nu]*xi^(-nu)*Cos[nu*Pi/2]"
+  ],
+  "conds": [
+   "0 < nu < 1",
+   "xi > 0"
+  ],
+  "cite": "ET I 10(1)",
+  "edition_note": "9",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "x^(nu-1) -> (2/pi)^(1/2) Gamma(nu) xi^-nu cos(nu pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.7",
+  "gr": "17.34.7",
+  "page": 1175,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(1/(x^2 + a^2))*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*E^(-a*xi)/a"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 11(7)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "1/(x^2+a^2) -> (pi/2)^(1/2) e^(-a xi)/a",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.8",
+  "gr": "17.34.8",
+  "page": 1175,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(1/(x^2 + a^2)^2)*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*(1 + a*xi)*E^(-a*xi)/(2*a^3)"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 11(7)",
+  "edition_note": "11",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "1/(x^2+a^2)^2 -> (pi/2)^(1/2)(1+a xi) e^(-a xi)/(2a^3)",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.9",
+  "gr": "17.34.9",
+  "page": 1175,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[((x^2 + a^2)^(-nu - 1/2))*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2]*(xi/(2*a))^nu*BesselK[nu, a*xi]/Gamma[nu + 1/2]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[nu] > -1/2",
+   "xi > 0"
+  ],
+  "cite": "ET I 11(7)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "(x^2+a^2)^(-nu-1/2) -> sqrt2 (xi/2a)^nu K_nu(a xi)/Gamma(nu+1/2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.10",
+  "gr": "17.34.10",
+  "page": 1175,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[((a^2 - x^2)^nu)*Cos[xi*x], {x, 0, a}]",
+  "rhs": [
+   "2^nu*Gamma[nu + 1]*(a/xi)^(nu + 1/2)*BesselJ[nu + 1/2, a*xi]"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 11(8)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "(a^2-x^2)^nu on (0,a) -> 2^nu Gamma(nu+1)(a/xi)^(nu+1/2) J_{nu+1/2}(a xi)",
+  "note": "a > 0 implied by the piecewise definition"
+ },
+ {
+  "id": "GR17.34.11",
+  "gr": "17.34.11",
+  "page": 1175,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[((x^2 - a^2)^(-nu - 1/2))*Cos[xi*x], {x, a, Infinity}]",
+  "rhs": [
+   "-2^(-(nu + 1/2))*Gamma[1/2 - nu]*(xi/a)^nu*BesselY[nu, a*xi]"
+  ],
+  "conds": [
+   "-1/2 < Re[nu] < 1/2",
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 11(9)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "(x^2-a^2)^(-nu-1/2) for x>a -> -2^(-(nu+1/2)) Gamma(1/2-nu)(xi/a)^nu Y_nu(a xi)",
+  "note": "a > 0 implied by the piecewise definition"
+ },
+ {
+  "id": "GR17.34.12",
+  "gr": "17.34.12",
+  "page": 1175,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(E^(-a*x))*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]*a*(a^2 + xi^2)^(-1)"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 14(1)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "e^(-ax) -> (2/pi)^(1/2) a (a^2+xi^2)^-1",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.13",
+  "gr": "17.34.13",
+  "page": 1176,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x*E^(-a*x))*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]*(a^2 - xi^2)*(a^2 + xi^2)^(-2)"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 15(7)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "x e^(-ax) -> (2/pi)^(1/2)(a^2-xi^2)(a^2+xi^2)^-2",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.14",
+  "gr": "17.34.14",
+  "page": 1176,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x^(nu - 1)*E^(-a*x))*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]*Gamma[nu]*(a^2 + xi^2)^(-nu/2)*Cos[nu*ArcTan[xi/a]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[nu] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 15(7)",
+  "edition_note": "7",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "x^(nu-1) e^(-ax) -> (2/pi)^(1/2) Gamma(nu)(a^2+xi^2)^(-nu/2) cos[nu arctan(xi/a)]",
+  "note": "book prints condition 'Re nu > a' (misprint); Re nu > 0 used"
+ },
+ {
+  "id": "GR17.34.15",
+  "gr": "17.34.15",
+  "page": 1176,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x^(-1/2)*E^(-a*x))*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(a^2 + xi^2)^(-1/2)*((a^2 + xi^2)^(1/2) + a)^(1/2)"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 14(4)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "x^(-1/2) e^(-ax) -> (a^2+xi^2)^(-1/2)[(a^2+xi^2)^(1/2)+a]^(1/2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.16",
+  "gr": "17.34.16",
+  "page": 1176,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(E^(-a^2*x^2))*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-1/2)*Abs[a]^(-1)*E^(-xi^2/(4*a^2))",
+   "2^(-1/2)*a^(-1)*E^(-xi^2/(4*a^2))"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 15(11)",
+  "edition_note": "7",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "e^(-a^2x^2) -> 2^(-1/2)|a|^-1 e^(-xi^2/4a^2)",
+  "note": "|a| as printed is only right for real a; 2nd candidate a^-1 for complex a with Re a > 0"
+ },
+ {
+  "id": "GR17.34.17",
+  "gr": "17.34.17",
+  "page": 1176,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x^(-1)*E^(-x)*Sin[x])*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*Pi)^(-1/2)*ArcTan[2/xi^2]"
+  ],
+  "conds": [
+   "xi > 0"
+  ],
+  "cite": "ET I 19(7)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "x^-1 e^-x sin x -> (2pi)^(-1/2) arctan(2/xi^2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.18",
+  "gr": "17.34.18",
+  "page": 1176,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sin[a*x^2])*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*Sqrt[a])*(Cos[xi^2/(4*a)] - Sin[xi^2/(4*a)])"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 23(1)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "sin(a x^2) -> 1/(2 sqrt a)[cos(xi^2/4a) - sin(xi^2/4a)]",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.19",
+  "gr": "17.34.19",
+  "page": 1176,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Cos[a*x^2])*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*Sqrt[a])*(Cos[xi^2/(4*a)] + Sin[xi^2/(4*a)])"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 24(7)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "cos(a x^2) -> 1/(2 sqrt a)[cos(xi^2/4a) + sin(xi^2/4a)]",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.20a",
+  "gr": "17.34.20",
+  "page": 1176,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sin[a*x]/x)*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < xi < a"
+  ],
+  "cite": "ET I 18(1)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "sin(ax)/x -> (pi/2)^(1/2), xi<a",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.20b",
+  "gr": "17.34.20",
+  "page": 1176,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sin[a*x]/x)*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]/2"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET I 18(1)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "sin(ax)/x -> (1/2)(pi/2)^(1/2), xi=a",
+  "note": "xi = a substituted"
+ },
+ {
+  "id": "GR17.34.20c",
+  "gr": "17.34.20",
+  "page": 1176,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sin[a*x]/x)*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > a"
+  ],
+  "cite": "ET I 18(1)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "sin(ax)/x -> 0, xi>a",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.21a",
+  "gr": "17.34.21",
+  "page": 1176,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sin[a*x]^2/x^2)*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*(a - xi/2)"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < xi < 2*a"
+  ],
+  "cite": "ET I 19(8)",
+  "edition_note": "7",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "sin^2(ax)/x^2 -> (pi/2)^(1/2)(a - xi/2), xi<2a",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.21b",
+  "gr": "17.34.21",
+  "page": 1176,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sin[a*x]^2/x^2)*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 2*a"
+  ],
+  "cite": "ET I 19(8)",
+  "edition_note": "7",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "sin^2(ax)/x^2 -> 0, 2a<xi",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.22",
+  "gr": "17.34.22",
+  "page": 1176,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(E^(-b*x)*Sin[a*x])*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*Pi)^(-1/2)*((a + xi)/(b^2 + (a + xi)^2) + (a - xi)/(b^2 + (a - xi)^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[b] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 19(6)",
+  "edition_note": "7",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "e^(-bx) sin(ax) -> (2pi)^(-1/2)[(a+xi)/(b^2+(a+xi)^2) + (a-xi)/(b^2+(a-xi)^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.23",
+  "gr": "17.34.23",
+  "page": 1176,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sin[b*(x^2 + a^2)^(1/2)]/(x^2 + a^2)^2)*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(b/a)*Sqrt[Pi/2]*E^(-a*xi)"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 26(29)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "sin[b(x^2+a^2)^(1/2)]/(x^2+a^2)^2 -> (b/a)(pi/2)^(1/2) e^(-a xi)",
+  "note": "as printed; no condition on b vs xi printed (the ET source likely needs b < xi)"
+ },
+ {
+  "id": "GR17.34.24a",
+  "gr": "17.34.24",
+  "page": 1176,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[((x^2 + a^2)^(-1/2)*Sin[b*(x^2 + a^2)^(1/2)])*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*BesselJ[0, a*(b^2 - xi^2)^(1/2)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "0 < xi < b"
+  ],
+  "cite": "ET I 26(30)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "(x^2+a^2)^(-1/2) sin[b(x^2+a^2)^(1/2)] -> (pi/2)^(1/2) J0[a(b^2-xi^2)^(1/2)], 0<xi<b",
+  "note": "b > 0 implied by 0<xi<b"
+ },
+ {
+  "id": "GR17.34.24b",
+  "gr": "17.34.24",
+  "page": 1176,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[((x^2 + a^2)^(-1/2)*Sin[b*(x^2 + a^2)^(1/2)])*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "xi > b"
+  ],
+  "cite": "ET I 26(30)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "(x^2+a^2)^(-1/2) sin[b(x^2+a^2)^(1/2)] -> 0, b<xi",
+  "note": "b > 0 implied by 0<xi<b"
+ },
+ {
+  "id": "GR17.34.25a",
+  "gr": "17.34.25",
+  "page": 1177,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[((1 - Cos[a*x])/x^2)*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*(a - xi)"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < xi < a"
+  ],
+  "cite": "ET I 20(16)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "(1-cos(ax))/x^2 -> (pi/2)^(1/2)(a - xi), xi<a",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.25b",
+  "gr": "17.34.25",
+  "page": 1177,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[((1 - Cos[a*x])/x^2)*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > a"
+  ],
+  "cite": "ET I 20(16)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "(1-cos(ax))/x^2 -> 0, a<xi",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.26",
+  "gr": "17.34.26",
+  "page": 1177,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(E^(-a*x^2)*Sin[b*x^2])*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-1/2)*(a^2 + b^2)^(-1/4)*Exp[-a*xi^2/(4*(a^2 + b^2))]*Sin[ArcTan[b/a]/2 - b*xi^2/(4*(a^2 + b^2))]"
+  ],
+  "conds": [
+   "Re[a] > Abs[Im[b]]",
+   "xi > 0"
+  ],
+  "cite": "ET I 23(5)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "e^(-a x^2) sin(b x^2) -> 2^(-1/2)(a^2+b^2)^(-1/4) exp{-a xi^2/[4(a^2+b^2)]} sin[(1/2)arctan(b/a) - (1/4) b xi^2 (a^2+b^2)^-1]",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.27",
+  "gr": "17.34.27",
+  "page": 1177,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(E^(-a*x^2)*Cos[b*x^2])*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-1/2)*(a^2 + b^2)^(-1/4)*Exp[-a*xi^2/(4*(a^2 + b^2))]*Cos[b*xi^2/(4*(a^2 + b^2)) - ArcTan[b/a]/2]"
+  ],
+  "conds": [
+   "Re[a] > Abs[Im[b]]",
+   "xi > 0"
+  ],
+  "cite": "ET I 24(6)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "e^(-a x^2) cos(b x^2) -> 2^(-1/2)(a^2+b^2)^(-1/4) exp{-a xi^2/[4(a^2+b^2)]} cos[(1/4) b xi^2 (a^2+b^2)^-1 - (1/2)arctan(b/a)]",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.28",
+  "gr": "17.34.28",
+  "page": 1177,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sinh[a*x]/Sinh[b*x])*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*Sin[Pi*a/b]/(b*(Cosh[Pi*xi/b] + Cos[Pi*a/b]))"
+  ],
+  "conds": [
+   "Abs[Re[a]] < Re[b]",
+   "xi > 0"
+  ],
+  "cite": "ET I 31(14)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "sinh(ax)/sinh(bx) -> (pi/2)^(1/2) sin(pi a/b)/(b[cosh(pi xi/b)+cos(pi a/b)])",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.29",
+  "gr": "17.34.29",
+  "page": 1177,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Cosh[a*x]/Cosh[b*x])*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi]*Cos[Pi*a/(2*b)]*Cosh[Pi*xi/(2*b)]/(b*(Cosh[Pi*xi/b] + Cos[Pi*a/b]))"
+  ],
+  "conds": [
+   "Abs[Re[a]] < Re[b]",
+   "xi > 0"
+  ],
+  "cite": "ET I 31(12)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "cosh(ax)/cosh(bx) -> (2pi)^(1/2) cos(pi a/2b) cosh(pi xi/2b)/(b[cosh(pi xi/b)+cos(pi a/b)])",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.30",
+  "gr": "17.34.30",
+  "page": 1177,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Sech[a*x])*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]/a*Sech[Pi*xi/(2*a)]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 30(1)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "sech(ax) -> a^-1 (pi/2)^(1/2) sech(pi xi/2a)",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.31",
+  "gr": "17.34.31",
+  "page": 1177,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[((x^2 + a^2)*Sech[Pi*x/(2*a)])*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*Sqrt[2/Pi]*a^3*Sech[a*xi]^3"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 32(19)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "(x^2+a^2) sech(pi x/2a) -> 2(2/pi)^(1/2) a^3 sech^3(a xi)",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.32",
+  "gr": "17.34.32",
+  "page": 1177,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Log[1 + a^2/x^2])*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi]/xi*(1 - E^(-a*xi))"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 18(10)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "ln(1+a^2/x^2) -> (2pi)^(1/2) xi^-1 (1-e^(-a xi))",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.33",
+  "gr": "17.34.33",
+  "page": 1177,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(Log[(a^2 + x^2)/(b^2 + x^2)])*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi]*(E^(-b*xi) - E^(-a*xi))",
+   "Sqrt[2*Pi]/xi*(E^(-b*xi) - E^(-a*xi))"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 18(12)",
+  "edition_note": "7",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "ln((a^2+x^2)/(b^2+x^2)) -> (2pi)^(1/2)(e^(-b xi) - e^(-a xi))",
+  "note": "factor xi^-1 apparently dropped (cf. 17.34.32); 2nd candidate restores it"
+ },
+ {
+  "id": "GR17.34.34",
+  "gr": "17.34.34",
+  "page": 1177,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[((x^2 + b^2)^(-1)*BesselJ[0, a*x])*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]/b*E^(-b*xi)*BesselI[0, a*b]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[b] > 0",
+   "xi > a"
+  ],
+  "cite": "ET I 45(14)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "(x^2+b^2)^-1 J0(ax) -> (pi/2)^(1/2) b^-1 e^(-b xi) I0(ab), a<xi",
+  "note": ""
+ },
+ {
+  "id": "GR17.34.35",
+  "gr": "17.34.35",
+  "page": 1178,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x*(x^2 + b^2)^(-1)*BesselJ[0, a*x])*Cos[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]*Cosh[b*xi]*BesselK[0, a*b]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[b] > 0",
+   "0 < xi < a"
+  ],
+  "cite": "ET I 45(15)",
+  "edition_note": "",
+  "section": "17.34 Table of Fourier cosine transforms",
+  "tex": "x(x^2+b^2)^-1 J0(ax) -> (2/pi)^(1/2) cosh(b xi) K0(ab), 0<xi<a",
+  "note": ""
+ }
+]

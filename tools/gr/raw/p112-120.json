@@ -1,0 +1,1866 @@
+[
+ {
+  "id": "GR2.00a",
+  "gr": "2.00",
+  "page": 112,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 + x^2), x]",
+  "rhs": [
+   "ArcTan[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.00 General remarks",
+  "tex": "int dx/(1+x^2) = arctan x",
+  "note": "example in prose (same as 2.01.15)"
+ },
+ {
+  "id": "GR2.00b",
+  "gr": "2.00",
+  "page": 112,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 + x^2), x]",
+  "rhs": [
+   "-ArcCot[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.00 General remarks",
+  "tex": "int dx/(1+x^2) = -arccot x",
+  "note": "example in prose; differs from arctan by a constant"
+ },
+ {
+  "id": "GR2.00c",
+  "gr": "2.00",
+  "page": 112,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[1 + x^2], x]",
+  "rhs": [
+   "Log[x + Sqrt[1 + x^2]]",
+   "Log[Abs[x + Sqrt[1 + x^2]]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.00 General remarks",
+  "tex": "int dx/sqrt(1+x^2) = ln|x+sqrt(1+x^2)|",
+  "note": "example in prose"
+ },
+ {
+  "id": "GR2.01.1",
+  "gr": "2.01.1",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[x^n, x]",
+  "rhs": [
+   "x^(n + 1)/(n + 1)"
+  ],
+  "conds": [
+   "n != -1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int x^n dx = x^(n + 1)/(n + 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.2",
+  "gr": "2.01.2",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/x, x]",
+  "rhs": [
+   "Log[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/x dx = Log[x]",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.3",
+  "gr": "2.01.3",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[E^x, x]",
+  "rhs": [
+   "E^x"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int E^x dx = E^x",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.4",
+  "gr": "2.01.4",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[a^x, x]",
+  "rhs": [
+   "a^x/Log[a]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int a^x dx = a^x/Log[a]",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.5",
+  "gr": "2.01.5",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x], x]",
+  "rhs": [
+   "-Cos[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int Sin[x] dx = -Cos[x]",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.6",
+  "gr": "2.01.6",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x], x]",
+  "rhs": [
+   "Sin[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "11",
+  "section": "2.01 The basic integrals",
+  "tex": "int Cos[x] dx = Sin[x]",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.7",
+  "gr": "2.01.7",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/Sin[x]^2, x]",
+  "rhs": [
+   "-Cot[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/Sin[x]^2 dx = -Cot[x]",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.8",
+  "gr": "2.01.8",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/Cos[x]^2, x]",
+  "rhs": [
+   "Tan[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "11",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/Cos[x]^2 dx = Tan[x]",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.9",
+  "gr": "2.01.9",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/Cos[x]^2, x]",
+  "rhs": [
+   "Sec[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int Sin[x]/Cos[x]^2 dx = Sec[x]",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.10",
+  "gr": "2.01.10",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/Sin[x]^2, x]",
+  "rhs": [
+   "-Csc[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int Cos[x]/Sin[x]^2 dx = -Csc[x]",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.11",
+  "gr": "2.01.11",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x], x]",
+  "rhs": [
+   "-Log[Cos[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int Tan[x] dx = -Log[Cos[x]]",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.12",
+  "gr": "2.01.12",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[Cot[x], x]",
+  "rhs": [
+   "Log[Sin[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int Cot[x] dx = Log[Sin[x]]",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.13",
+  "gr": "2.01.13",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/Sin[x], x]",
+  "rhs": [
+   "Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/Sin[x] dx = Log[Tan[x/2]]",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.14a",
+  "gr": "2.01.14",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/Cos[x], x]",
+  "rhs": [
+   "Log[Tan[Pi/4 + x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/Cos[x] dx = Log[Tan[Pi/4 + x/2]]",
+  "note": "chained equality in the book; one record per form"
+ },
+ {
+  "id": "GR2.01.14b",
+  "gr": "2.01.14",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/Cos[x], x]",
+  "rhs": [
+   "Log[Sec[x] + Tan[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/Cos[x] dx = Log[Sec[x] + Tan[x]]",
+  "note": "chained equality in the book; one record per form"
+ },
+ {
+  "id": "GR2.01.15a",
+  "gr": "2.01.15",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 + x^2), x]",
+  "rhs": [
+   "ArcTan[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/(1 + x^2) dx = ArcTan[x]",
+  "note": "chained equality in the book; one record per form"
+ },
+ {
+  "id": "GR2.01.15b",
+  "gr": "2.01.15",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 + x^2), x]",
+  "rhs": [
+   "Pi/2 - ArcCot[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/(1 + x^2) dx = Pi/2 - ArcCot[x]",
+  "note": "chained equality in the book; one record per form"
+ },
+ {
+  "id": "GR2.01.16a",
+  "gr": "2.01.16",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 - x^2), x]",
+  "rhs": [
+   "ArcTanh[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/(1 - x^2) dx = ArcTanh[x]",
+  "note": "chained equality in the book; one record per form"
+ },
+ {
+  "id": "GR2.01.16b",
+  "gr": "2.01.16",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 - x^2), x]",
+  "rhs": [
+   "Log[(1 + x)/(1 - x)]/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/(1 - x^2) dx = Log[(1 + x)/(1 - x)]/2",
+  "note": "chained equality in the book; one record per form"
+ },
+ {
+  "id": "GR2.01.17a",
+  "gr": "2.01.17",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[1 - x^2], x]",
+  "rhs": [
+   "ArcSin[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/Sqrt[1 - x^2] dx = ArcSin[x]",
+  "note": "chained equality in the book; one record per form"
+ },
+ {
+  "id": "GR2.01.17b",
+  "gr": "2.01.17",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[1 - x^2], x]",
+  "rhs": [
+   "-ArcCos[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/Sqrt[1 - x^2] dx = -ArcCos[x]",
+  "note": "chained equality in the book; one record per form"
+ },
+ {
+  "id": "GR2.01.18a",
+  "gr": "2.01.18",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x^2 + 1], x]",
+  "rhs": [
+   "ArcSinh[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/Sqrt[x^2 + 1] dx = ArcSinh[x]",
+  "note": "chained equality in the book; one record per form"
+ },
+ {
+  "id": "GR2.01.18b",
+  "gr": "2.01.18",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x^2 + 1], x]",
+  "rhs": [
+   "Log[x + Sqrt[x^2 + 1]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/Sqrt[x^2 + 1] dx = Log[x + Sqrt[x^2 + 1]]",
+  "note": "chained equality in the book; one record per form"
+ },
+ {
+  "id": "GR2.01.19a",
+  "gr": "2.01.19",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x^2 - 1], x]",
+  "rhs": [
+   "ArcCosh[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/Sqrt[x^2 - 1] dx = ArcCosh[x]",
+  "note": "chained equality in the book; one record per form"
+ },
+ {
+  "id": "GR2.01.19b",
+  "gr": "2.01.19",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x^2 - 1], x]",
+  "rhs": [
+   "Log[x + Sqrt[x^2 - 1]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/Sqrt[x^2 - 1] dx = Log[x + Sqrt[x^2 - 1]]",
+  "note": "chained equality in the book; one record per form"
+ },
+ {
+  "id": "GR2.01.20",
+  "gr": "2.01.20",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x], x]",
+  "rhs": [
+   "Cosh[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int Sinh[x] dx = Cosh[x]",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.21",
+  "gr": "2.01.21",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x], x]",
+  "rhs": [
+   "Sinh[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int Cosh[x] dx = Sinh[x]",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.22",
+  "gr": "2.01.22",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/Sinh[x]^2, x]",
+  "rhs": [
+   "-Coth[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "11",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/Sinh[x]^2 dx = -Coth[x]",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.23",
+  "gr": "2.01.23",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/Cosh[x]^2, x]",
+  "rhs": [
+   "Tanh[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/Cosh[x]^2 dx = Tanh[x]",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.24",
+  "gr": "2.01.24",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[Tanh[x], x]",
+  "rhs": [
+   "Log[Cosh[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int Tanh[x] dx = Log[Cosh[x]]",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.25",
+  "gr": "2.01.25",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[Coth[x], x]",
+  "rhs": [
+   "Log[Sinh[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int Coth[x] dx = Log[Sinh[x]]",
+  "note": ""
+ },
+ {
+  "id": "GR2.01.26",
+  "gr": "2.01.26",
+  "page": 113,
+  "status": "ok",
+  "lhs": "Integrate[1/Sinh[x], x]",
+  "rhs": [
+   "Log[Tanh[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.01 The basic integrals",
+  "tex": "int 1/Sinh[x] dx = Log[Tanh[x/2]]",
+  "note": ""
+ },
+ {
+  "id": "GR2.02.1",
+  "gr": "2.02.1",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "int a f dx = a int f dx",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.2",
+  "gr": "2.02.2",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "int [a f +- b phi +- c psi ...] dx = a int f dx +- ...",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.3",
+  "gr": "2.02.3",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "d/dx int f dx = f",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.4",
+  "gr": "2.02.4",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "int f' dx = f",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.5",
+  "gr": "2.02.5",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "int f' phi dx = f phi - int f phi' dx (integration by parts)",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.6",
+  "gr": "2.02.6",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "int f^(n+1) phi dx = phi f^(n) - phi' f^(n-1) + ... + (-1)^(n+1) int phi^(n+1) f dx",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.7",
+  "gr": "2.02.7",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "int f(x) dx = int f[phi(y)] phi'(y) dy  [x = phi(y)]",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.8a",
+  "gr": "2.02.8",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "int f^n f' dx = f^(n+1)/(n+1) [n != -1]",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "11",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.8b",
+  "gr": "2.02.8",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "int f' dx/f = ln f (n = -1)",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "11",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.9",
+  "gr": "2.02.9",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "int (a f + b)^n f' dx = (a f + b)^(n+1)/(a(n+1))",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.10",
+  "gr": "2.02.10",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "int f' dx/sqrt(a f + b) = 2 sqrt(a f + b)/a",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.11",
+  "gr": "2.02.11",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "int (f' phi - phi' f)/phi^2 dx = f/phi",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.12",
+  "gr": "2.02.12",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "int (f' phi - phi' f)/(f phi) dx = ln(f/phi)",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.13",
+  "gr": "2.02.13",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "int dx/(f(f +- phi)) = +- int dx/(f phi) -+ int dx/(phi(f +- phi))",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.14",
+  "gr": "2.02.14",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "int f' dx/sqrt(f^2 + a) = ln(f + sqrt(f^2 + a))",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.15a",
+  "gr": "2.02.15",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "int f dx/((f+a)(f+b)) = a/(a-b) int dx/(f+a) - b/(a-b) int dx/(f+b)",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.15b",
+  "gr": "2.02.15",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "a = b: int f dx/(f+a)^2 = int dx/(f+a) - a int dx/(f+a)^2",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.16",
+  "gr": "2.02.16",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "int f dx/(f+phi)^n = int dx/(f+phi)^(n-1) - int phi dx/(f+phi)^n",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.17",
+  "gr": "2.02.17",
+  "page": 114,
+  "status": "SKIP-GENERIC",
+  "tex": "int f' dx/(p^2 + q^2 f^2) = 1/(pq) arctan(q f/p)",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.18",
+  "gr": "2.02.18",
+  "page": 115,
+  "status": "SKIP-GENERIC",
+  "tex": "int f' dx/(q^2 f^2 - p^2) = 1/(2pq) ln((q f - p)/(q f + p))",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.19",
+  "gr": "2.02.19",
+  "page": 115,
+  "status": "SKIP-GENERIC",
+  "tex": "int f dx/(1 - f) = -x + int dx/(1 - f)",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.20",
+  "gr": "2.02.20",
+  "page": 115,
+  "status": "SKIP-GENERIC",
+  "tex": "int f^2 dx/(f^2 - a^2) = 1/2 int f dx/(f - a) + 1/2 int f dx/(f + a)",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.21",
+  "gr": "2.02.21",
+  "page": 115,
+  "status": "SKIP-GENERIC",
+  "tex": "int f' dx/sqrt(a^2 - f^2) = arcsin(f/a)",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.22",
+  "gr": "2.02.22",
+  "page": 115,
+  "status": "SKIP-GENERIC",
+  "tex": "int f' dx/(a f^2 + b f) = 1/b ln(f/(a f + b))",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.23",
+  "gr": "2.02.23",
+  "page": 115,
+  "status": "SKIP-GENERIC",
+  "tex": "int f' dx/(f sqrt(f^2 - a^2)) = 1/a arcsec(f/a)",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.24",
+  "gr": "2.02.24",
+  "page": 115,
+  "status": "SKIP-GENERIC",
+  "tex": "int (f' phi - f phi') dx/(f^2 + phi^2) = arctan(f/phi)",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.02.25",
+  "gr": "2.02.25",
+  "page": 115,
+  "status": "SKIP-GENERIC",
+  "tex": "int (f' phi - f phi') dx/(f^2 - phi^2) = 1/2 ln((f - phi)/(f + phi))",
+  "reason": "integrand contains unspecified functions f, phi",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.02 General formulas"
+ },
+ {
+  "id": "GR2.101",
+  "gr": "2.101",
+  "page": 115,
+  "status": "SKIP-GENERIC",
+  "tex": "int F(x)/f(x) dx = int E(x) dx + int phi(x)/f(x) dx",
+  "reason": "generic rational function F/f; separation of integral part",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.10 General integration rules"
+ },
+ {
+  "id": "GR2.102",
+  "gr": "2.102",
+  "page": 115,
+  "status": "SKIP-REFERENCE",
+  "tex": "partial fraction decomposition of phi(x)/f(x); A_(alpha-k+1) = psi1^(k-1)(a)/(k-1)! ...",
+  "reason": "partial-fraction rule, no integral",
+  "cite": "TI 51a",
+  "edition_note": "",
+  "section": "2.10 General integration rules"
+ },
+ {
+  "id": "GR2.103.1",
+  "gr": "2.103.1",
+  "page": 116,
+  "status": "ok",
+  "lhs": "Integrate[g/(x - a)^alpha, x]",
+  "rhs": [
+   "-g/((alpha - 1)*(x - a)^(alpha - 1))"
+  ],
+  "conds": [
+   "alpha != 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.10 General integration rules",
+  "tex": "int g dx/(x-a)^alpha = g int d(x-a)/(x-a)^alpha = -g/((alpha-1)(x-a)^(alpha-1))",
+  "note": ""
+ },
+ {
+  "id": "GR2.103.2",
+  "gr": "2.103.2",
+  "page": 116,
+  "status": "ok",
+  "lhs": "Integrate[g/(x - a), x]",
+  "rhs": [
+   "g*Log[x - a]",
+   "g*Log[Abs[x - a]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.10 General integration rules",
+  "tex": "int g dx/(x-a) = g ln|x-a|",
+  "note": "book prints ln|x - a|"
+ },
+ {
+  "id": "GR2.103.3",
+  "gr": "2.103.3",
+  "page": 116,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (Mx+N)/(A+2Bx+Cx^2)^p dx = (NB-MA+(NC-MB)x)/(2(p-1)(AC-B^2)(A+2Bx+Cx^2)^(p-1)) + (2p-3)(NC-MB)/(2(p-1)(AC-B^2)) int dx/(A+2Bx+Cx^2)^(p-1)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.10 General integration rules"
+ },
+ {
+  "id": "GR2.103.4a",
+  "gr": "2.103.4",
+  "page": 116,
+  "status": "ok",
+  "lhs": "Integrate[1/(AA + 2*BB*x + CC*x^2), x]",
+  "rhs": [
+   "1/Sqrt[AA*CC - BB^2]*ArcTan[(CC*x + BB)/Sqrt[AA*CC - BB^2]]"
+  ],
+  "conds": [
+   "AA*CC > BB^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.10 General integration rules",
+  "tex": "int dx/(A+2Bx+Cx^2) = 1/sqrt(AC-B^2) arctan((Cx+B)/sqrt(Ac-B^2)) [AC>B^2]",
+  "note": "A,B,C renamed AA,BB,CC; book prints 'sqrt(Ac - B^2)' in the arctan denominator, read as AC"
+ },
+ {
+  "id": "GR2.103.4b",
+  "gr": "2.103.4",
+  "page": 116,
+  "status": "ok",
+  "lhs": "Integrate[1/(AA + 2*BB*x + CC*x^2), x]",
+  "rhs": [
+   "1/(2*Sqrt[BB^2 - AA*CC])*Log[(CC*x + BB - Sqrt[BB^2 - AA*CC])/(CC*x + BB + Sqrt[BB^2 - AA*CC])]",
+   "1/(2*Sqrt[BB^2 - AA*CC])*Log[Abs[(CC*x + BB - Sqrt[BB^2 - AA*CC])/(CC*x + BB + Sqrt[BB^2 - AA*CC])]]"
+  ],
+  "conds": [
+   "AA*CC < BB^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.10 General integration rules",
+  "tex": "= 1/(2 sqrt(B^2-AC)) ln|(Cx+B-sqrt(B^2-AC))/(Cx+B+sqrt(B^2-AC))| [AC<B^2]",
+  "note": "A,B,C renamed AA,BB,CC"
+ },
+ {
+  "id": "GR2.103.5a",
+  "gr": "2.103.5",
+  "page": 116,
+  "status": "ok",
+  "lhs": "Integrate[(M*x + NN)/(AA + 2*BB*x + CC*x^2), x]",
+  "rhs": [
+   "M/(2*CC)*Log[AA + 2*BB*x + CC*x^2] + (NN*CC - M*BB)/(CC*Sqrt[AA*CC - BB^2])*ArcTan[(CC*x + BB)/Sqrt[AA*CC - BB^2]]",
+   "M/(2*CC)*Log[Abs[AA + 2*BB*x + CC*x^2]] + (NN*CC - M*BB)/(CC*Sqrt[AA*CC - BB^2])*ArcTan[(CC*x + BB)/Sqrt[AA*CC - BB^2]]"
+  ],
+  "conds": [
+   "AA*CC > BB^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.10 General integration rules",
+  "tex": "int (Mx+N)dx/(A+2Bx+Cx^2) = M/(2C) ln|A+2Bx+Cx^2| + (NC-MB)/(C sqrt(AC-B^2)) arctan((Cx+B)/sqrt(AC-B^2)) [AC>B^2]",
+  "note": "A,B,C,N renamed AA,BB,CC,NN"
+ },
+ {
+  "id": "GR2.103.5b",
+  "gr": "2.103.5",
+  "page": 116,
+  "status": "ok",
+  "lhs": "Integrate[(M*x + NN)/(AA + 2*BB*x + CC*x^2), x]",
+  "rhs": [
+   "M/(2*CC)*Log[AA + 2*BB*x + CC*x^2] + (NN*CC - M*BB)/(2*CC*Sqrt[BB^2 - AA*CC])*Log[(CC*x + BB - Sqrt[BB^2 - AA*CC])/(CC*x + BB + Sqrt[BB^2 - AA*CC])]",
+   "M/(2*CC)*Log[Abs[AA + 2*BB*x + CC*x^2]] + (NN*CC - M*BB)/(2*CC*Sqrt[BB^2 - AA*CC])*Log[Abs[(CC*x + BB - Sqrt[BB^2 - AA*CC])/(CC*x + BB + Sqrt[BB^2 - AA*CC])]]"
+  ],
+  "conds": [
+   "AA*CC < BB^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.10 General integration rules",
+  "tex": "= M/(2C) ln|A+2Bx+Cx^2| + (NC-MB)/(2C sqrt(B^2-AC)) ln|(Cx+B-sqrt(B^2-AC))/(Cx+B+sqrt(B^2-AC))| [AC<B^2]",
+  "note": "A,B,C,N renamed AA,BB,CC,NN"
+ },
+ {
+  "id": "GR2.104",
+  "gr": "2.104",
+  "page": 117,
+  "status": "SKIP-GENERIC",
+  "tex": "Ostrogradskiy-Hermite: int phi(x)/f(x) dx = M/D + int N dx/Q",
+  "reason": "generic rational function; method description",
+  "cite": "FI II 49",
+  "edition_note": "",
+  "section": "2.10 General integration rules"
+ },
+ {
+  "id": "GR2.110.1a",
+  "gr": "2.110.1",
+  "page": 117,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^n z_k^m dx = x^(n+1) z_k^m/(km+n+1) + amk/(km+n+1) int x^n z_k^(m-1) dx  (z_k = a + b x^k)",
+  "reason": "integral on right-hand side",
+  "cite": "LA 126(4)",
+  "edition_note": "",
+  "section": "2.11-2.13 Forms containing the binomial a + bx^k"
+ },
+ {
+  "id": "GR2.110.1b",
+  "gr": "2.110.1",
+  "page": 117,
+  "status": "SKIP-RECURRENCE",
+  "tex": "= x^(n+1)/(m+1) Sum_{s=0}^p (ak)^s (m+1)m(m-1)...(m-s+1) z_k^(m-s)/([mk+n+1][(m-1)k+n+1]...[(m-s)k+n+1]) + (ak)^(p+1) m(m-1)...(m-p) /(...) int x^n z_k^(m-p-1) dx  (z_k = a + b x^k)",
+  "reason": "integral on right-hand side",
+  "cite": "LA 126(4)",
+  "edition_note": "",
+  "section": "2.11-2.13 Forms containing the binomial a + bx^k"
+ },
+ {
+  "id": "GR2.110.2",
+  "gr": "2.110.2",
+  "page": 117,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^n z_k^m dx = -x^(n+1) z_k^(m+1)/(ak(m+1)) + (km+k+n+1)/(ak(m+1)) int x^n z_k^(m+1) dx  (z_k = a + b x^k)",
+  "reason": "integral on right-hand side",
+  "cite": "LA 126 (6)",
+  "edition_note": "",
+  "section": "2.11-2.13 Forms containing the binomial a + bx^k"
+ },
+ {
+  "id": "GR2.110.3",
+  "gr": "2.110.3",
+  "page": 117,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^n z_k^m dx = x^(n+1) z_k^m/(n+1) - bkm/(n+1) int x^(n+k) z_k^(m-1) dx  (z_k = a + b x^k)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.11-2.13 Forms containing the binomial a + bx^k"
+ },
+ {
+  "id": "GR2.110.4",
+  "gr": "2.110.4",
+  "page": 117,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^n z_k^m dx = x^(n+1-k) z_k^(m+1)/(bk(m+1)) - (n+1-k)/(bk(m+1)) int x^(n-k) z_k^(m+1) dx  (z_k = a + b x^k)",
+  "reason": "integral on right-hand side",
+  "cite": "LA 125 (2)",
+  "edition_note": "",
+  "section": "2.11-2.13 Forms containing the binomial a + bx^k"
+ },
+ {
+  "id": "GR2.110.5",
+  "gr": "2.110.5",
+  "page": 117,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^n z_k^m dx = x^(n+1-k) z_k^(m+1)/(b(km+n+1)) - a(n+1-k)/(b(km+n+1)) int x^(n-k) z_k^m dx  (z_k = a + b x^k)",
+  "reason": "integral on right-hand side",
+  "cite": "LA 126 (3)",
+  "edition_note": "",
+  "section": "2.11-2.13 Forms containing the binomial a + bx^k"
+ },
+ {
+  "id": "GR2.110.6",
+  "gr": "2.110.6",
+  "page": 117,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^n z_k^m dx = x^(n+1) z_k^(m+1)/(a(n+1)) - b(km+k+n+1)/(a(n+1)) int x^(n+k) z_k^m dx  (z_k = a + b x^k)",
+  "reason": "integral on right-hand side",
+  "cite": "LA 126 (5)",
+  "edition_note": "",
+  "section": "2.11-2.13 Forms containing the binomial a + bx^k"
+ },
+ {
+  "id": "GR2.110.7",
+  "gr": "2.110.7",
+  "page": 117,
+  "status": "ok",
+  "lhs": "Integrate[x^n*(n*x^b + c)^k, x]",
+  "rhs": [
+   "n^k/b*Sum[(-1)^i*k!*Gamma[(a + 1)/b]*(n^b + c/n)^(k - i)/((k - i)!*Gamma[(a + 1)/b + i + 1])*x^(a + 1 + i*b), {i, 0, k}]"
+  ],
+  "conds": [
+   "Element[a, Integers] && a >= 0",
+   "Element[b, Integers] && b >= 0",
+   "Element[k, Integers] && k >= 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.11-2.13 Forms containing the binomial a + bx^k",
+  "tex": "int x^n (n x^b + c)^k dx = n^k/b Sum_{i=0}^k (-1)^i k! Gamma((a+1)/b) (n^b + c/n)^(k-i) / ((k-i)! Gamma((a+1)/b + i + 1)) x^(a+1+ib)  [a,b,k>=0 integers]",
+  "note": "transcribed as printed; the formula mixes n and a (integrand exponent n, result exponent a+1+ib) and looks garbled in the book itself. Asterisk marks a 7th-ed addition."
+ },
+ {
+  "id": "GR2.110.8",
+  "gr": "2.110.8",
+  "page": 117,
+  "status": "ok",
+  "lhs": "Integrate[x^n*(a + b*x^k)^m, x]",
+  "rhs": [
+   "b^m/k*Sum[(-1)^i*m!*((n + 1)/k - 1)!*(x^k + a/b)^(m - i)*x^(k*((n + 1)/k + i))/((m - i)!*((n + 1)/k + i)!), {i, 0, m}]"
+  ],
+  "conds": [
+   "Element[{a, b, k, m, n}, Reals]",
+   "k != 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.11-2.13 Forms containing the binomial a + bx^k",
+  "tex": "int x^n z_k^m dx = b^m/k Sum_{i=0}^m (-1)^i m! J! (x^k + a/b)^(m-i) x^(k(J+i+1)) / ((m-i)! (J+i+1)!), J = (n+1)/k - 1",
+  "note": "J = (n+1)/k - 1 substituted (J+i+1 = (n+1)/k + i); J! with non-integer J means Gamma[J+1]"
+ },
+ {
+  "id": "GR2.111.1a",
+  "gr": "2.111.1",
+  "page": 118,
+  "status": "ok",
+  "lhs": "Integrate[(a + b*x)^m, x]",
+  "rhs": [
+   "(a + b*x)^(m + 1)/(b*(m + 1))"
+  ],
+  "conds": [
+   "m != -1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int z1^m dx = z1^(m+1)/(b(m+1))",
+  "note": ""
+ },
+ {
+  "id": "GR2.111.1b",
+  "gr": "2.111.1",
+  "page": 118,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*x), x]",
+  "rhs": [
+   "1/b*Log[a + b*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "m=-1: int dx/z1 = 1/b ln z1",
+  "note": ""
+ },
+ {
+  "id": "GR2.111.2",
+  "gr": "2.111.2",
+  "page": 118,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^n dx/z1^m = x^n/(z1^(m-1)(n+1-m)b) - na/((n+1-m)b) int x^(n-1) dx/z1^m",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx"
+ },
+ {
+  "id": "GR2.111.3a",
+  "gr": "2.111.3",
+  "page": 118,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^(m-1) dx/z1^m = -x^(m-1)/(z1^(m-1)(m-1)b) + 1/b int x^(m-2) dx/z1^(m-1)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "8",
+  "section": "Forms containing the binomial z1 = a + bx"
+ },
+ {
+  "id": "GR2.111.3b",
+  "gr": "2.111.3",
+  "page": 118,
+  "status": "ok",
+  "lhs": "Integrate[x^n/(a + b*x), x]",
+  "rhs": [
+   "Sum[(-1)^(k - 1)*a^(k - 1)*x^(n - k + 1)/((n - k + 1)*b^k), {k, 1, n}] + (-1)^n*a^n/b^(n + 1)*Log[a + b*x]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "m=1: int x^n dx/z1 = x^n/(nb) - a x^(n-1)/((n-1)b^2) + a^2 x^(n-2)/((n-2)b^3) - ... + (-1)^(n-1) a^(n-1) x/(1 b^n) + (-1)^n a^n/b^(n+1) ln z1",
+  "note": "the written-out series rewritten as a Sum over k = 1..n"
+ },
+ {
+  "id": "GR2.111.4",
+  "gr": "2.111.4",
+  "page": 118,
+  "status": "ok",
+  "lhs": "Integrate[x^n/(a + b*x)^2, x]",
+  "rhs": [
+   "Sum[(-1)^(k - 1)*k*a^(k - 1)*x^(n - k)/((n - k)*b^(k + 1)), {k, 1, n - 1}] + (-1)^(n - 1)*a^n/(b^(n + 1)*(a + b*x)) + (-1)^(n + 1)*n*a^(n - 1)/b^(n + 1)*Log[a + b*x]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int x^n dx/z1^2 = Sum_{k=1}^{n-1} (-1)^(k-1) k a^(k-1) x^(n-k)/((n-k) b^(k+1)) + (-1)^(n-1) a^n/(b^(n+1) z1) + (-1)^(n+1) n a^(n-1)/b^(n+1) ln z1",
+  "note": ""
+ },
+ {
+  "id": "GR2.111.5",
+  "gr": "2.111.5",
+  "page": 118,
+  "status": "ok",
+  "lhs": "Integrate[x/(a + b*x), x]",
+  "rhs": [
+   "x/b - a/b^2*Log[a + b*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int x dx/z1 = x/b - a/b^2 ln z1",
+  "note": ""
+ },
+ {
+  "id": "GR2.111.6",
+  "gr": "2.111.6",
+  "page": 118,
+  "status": "ok",
+  "lhs": "Integrate[x^2/(a + b*x), x]",
+  "rhs": [
+   "x^2/(2*b) - a*x/b^2 + a^2/b^3*Log[a + b*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int x^2 dx/z1 = x^2/(2b) - ax/b^2 + a^2/b^3 ln z1",
+  "note": ""
+ },
+ {
+  "id": "GR2.113.1",
+  "gr": "2.113.1",
+  "page": 118,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*x)^2, x]",
+  "rhs": [
+   "-1/(b*(a + b*x))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/z1^2 = -1/(b z1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.113.2a",
+  "gr": "2.113.2",
+  "page": 118,
+  "status": "ok",
+  "lhs": "Integrate[x/(a + b*x)^2, x]",
+  "rhs": [
+   "-x/(b*(a + b*x)) + 1/b^2*Log[a + b*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int x dx/z1^2 = -x/(b z1) + 1/b^2 ln z1",
+  "note": ""
+ },
+ {
+  "id": "GR2.113.2b",
+  "gr": "2.113.2",
+  "page": 118,
+  "status": "ok",
+  "lhs": "Integrate[x/(a + b*x)^2, x]",
+  "rhs": [
+   "a/(b^2*(a + b*x)) + 1/b^2*Log[a + b*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "= a/(b^2 z1) + 1/b^2 ln z1",
+  "note": ""
+ },
+ {
+  "id": "GR2.113.3",
+  "gr": "2.113.3",
+  "page": 118,
+  "status": "ok",
+  "lhs": "Integrate[x^2/(a + b*x)^2, x]",
+  "rhs": [
+   "x/b^2 - a^2/(b^3*(a + b*x)) - 2*a/b^3*Log[a + b*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int x^2 dx/z1^2 = x/b^2 - a^2/(b^3 z1) - 2a/b^3 ln z1",
+  "note": ""
+ },
+ {
+  "id": "GR2.114.1",
+  "gr": "2.114.1",
+  "page": 118,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*x)^3, x]",
+  "rhs": [
+   "-1/(2*b*(a + b*x)^2)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/z1^3 = -1/(2b z1^2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.114.2",
+  "gr": "2.114.2",
+  "page": 118,
+  "status": "ok",
+  "lhs": "Integrate[x/(a + b*x)^3, x]",
+  "rhs": [
+   "-(x/b + a/(2*b^2))/(a + b*x)^2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int x dx/z1^3 = -[x/b + a/(2b^2)] 1/z1^2",
+  "note": ""
+ },
+ {
+  "id": "GR2.114.3",
+  "gr": "2.114.3",
+  "page": 118,
+  "status": "ok",
+  "lhs": "Integrate[x^2/(a + b*x)^3, x]",
+  "rhs": [
+   "(2*a*x/b^2 + 3*a^2/(2*b^3))/(a + b*x)^2 + 1/b^3*Log[a + b*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int x^2 dx/z1^3 = [2ax/b^2 + 3a^2/(2b^3)] 1/z1^2 + 1/b^3 ln z1",
+  "note": ""
+ },
+ {
+  "id": "GR2.114.4",
+  "gr": "2.114.4",
+  "page": 118,
+  "status": "ok",
+  "lhs": "Integrate[x^3/(a + b*x)^3, x]",
+  "rhs": [
+   "(x^3/b + 2*a/b^2*x^2 - 2*a^2/b^3*x - 5/2*a^3/b^4)/(a + b*x)^2 - 3*a/b^4*Log[a + b*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "6",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int x^3 dx/z1^3 = [x^3/b + 2a x^2/b^2 - 2a^2 x/b^3 - 5/2 a^3/b^4] 1/z1^2 - 3a/b^4 ln z1",
+  "note": ""
+ },
+ {
+  "id": "GR2.115.1",
+  "gr": "2.115.1",
+  "page": 119,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*x)^4, x]",
+  "rhs": [
+   "-1/(3*b*(a + b*x)^3)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/z1^4 = -1/(3b z1^3)",
+  "note": ""
+ },
+ {
+  "id": "GR2.115.2",
+  "gr": "2.115.2",
+  "page": 119,
+  "status": "ok",
+  "lhs": "Integrate[x/(a + b*x)^4, x]",
+  "rhs": [
+   "-(x/(2*b) + a/(6*b^2))/(a + b*x)^3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int x dx/z1^4 = -[x/(2b) + a/(6b^2)] 1/z1^3",
+  "note": ""
+ },
+ {
+  "id": "GR2.115.3",
+  "gr": "2.115.3",
+  "page": 119,
+  "status": "ok",
+  "lhs": "Integrate[x^2/(a + b*x)^4, x]",
+  "rhs": [
+   "-(x^2/b + a*x/b^2 + a^2/(3*b^3))/(a + b*x)^3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int x^2 dx/z1^4 = -[x^2/b + ax/b^2 + a^2/(3b^3)] 1/z1^3",
+  "note": ""
+ },
+ {
+  "id": "GR2.115.4",
+  "gr": "2.115.4",
+  "page": 119,
+  "status": "ok",
+  "lhs": "Integrate[x^3/(a + b*x)^4, x]",
+  "rhs": [
+   "(3*a*x^2/b^2 + 9*a^2*x/(2*b^2) + 11*a^3/(6*b^4))/(a + b*x)^3 + 1/b^4*Log[a + b*x]",
+   "(3*a*x^2/b^3 + 9*a^2*x/(2*b^3) + 11*a^3/(6*b^4))/(a + b*x)^3 + 1/b^4*Log[a + b*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int x^3 dx/z1^4 = [3ax^2/b^2 + 9a^2x/(2b^2) + 11a^3/(6b^4)] 1/z1^3 + 1/b^4 ln z1",
+  "note": "as printed the b-powers are dimensionally inconsistent (b^2 where b^3 expected); second candidate uses b^3"
+ },
+ {
+  "id": "GR2.116.1",
+  "gr": "2.116.1",
+  "page": 119,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*x)^5, x]",
+  "rhs": [
+   "-1/(4*b*(a + b*x)^4)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/z1^5 = -1/(4b z1^4)",
+  "note": ""
+ },
+ {
+  "id": "GR2.116.2",
+  "gr": "2.116.2",
+  "page": 119,
+  "status": "ok",
+  "lhs": "Integrate[x/(a + b*x)^5, x]",
+  "rhs": [
+   "-(x/(3*b) + a/(12*b^2))/(a + b*x)^4"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int x dx/z1^5 = -[x/(3b) + a/(12b^2)] 1/z1^4",
+  "note": ""
+ },
+ {
+  "id": "GR2.116.3",
+  "gr": "2.116.3",
+  "page": 119,
+  "status": "ok",
+  "lhs": "Integrate[x^2/(a + b*x)^5, x]",
+  "rhs": [
+   "-(x^2/(2*b) + a*x/(3*b^2) + a^2/(12*b^3))/(a + b*x)^4"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int x^2 dx/z1^5 = -[x^2/(2b) + ax/(3b^2) + a^2/(12b^3)] 1/z1^4",
+  "note": ""
+ },
+ {
+  "id": "GR2.116.4",
+  "gr": "2.116.4",
+  "page": 119,
+  "status": "ok",
+  "lhs": "Integrate[x^3/(a + b*x)^5, x]",
+  "rhs": [
+   "-(x^3/b + 3*a*x^2/(2*b^2) + a^2*x/b^3 + a^3/(4*b^4))/(a + b*x)^4"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int x^3 dx/z1^5 = -[x^3/b + 3ax^2/(2b^2) + a^2x/b^3 + a^3/(4b^4)] 1/z1^4",
+  "note": ""
+ },
+ {
+  "id": "GR2.117.1",
+  "gr": "2.117.1",
+  "page": 119,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(x^n z1^m) = -1/((n-1) a x^(n-1) z1^(m-1)) + b(2-n-m)/(a(n-1)) int dx/(x^(n-1) z1^m)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx"
+ },
+ {
+  "id": "GR2.117.2",
+  "gr": "2.117.2",
+  "page": 119,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*x)^m, x]",
+  "rhs": [
+   "-1/((m - 1)*b*(a + b*x)^(m - 1))"
+  ],
+  "conds": [
+   "m != 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/z1^m = -1/((m-1) b z1^(m-1))",
+  "note": ""
+ },
+ {
+  "id": "GR2.117.3",
+  "gr": "2.117.3",
+  "page": 119,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(x z1^m) = 1/(z1^(m-1) a(m-1)) + 1/a int dx/(x z1^(m-1))",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx"
+ },
+ {
+  "id": "GR2.117.4",
+  "gr": "2.117.4",
+  "page": 119,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^n*(a + b*x)), x]",
+  "rhs": [
+   "Sum[(-1)^k*b^(k - 1)/((n - k)*a^k*x^(n - k)), {k, 1, n - 1}] + (-1)^n*b^(n - 1)/a^n*Log[(a + b*x)/x]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/(x^n z1) = Sum_{k=1}^{n-1} (-1)^k b^(k-1)/((n-k) a^k x^(n-k)) + (-1)^n b^(n-1)/a^n ln(z1/x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.118.1",
+  "gr": "2.118.1",
+  "page": 119,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*(a + b*x)), x]",
+  "rhs": [
+   "-1/a*Log[(a + b*x)/x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/(x z1) = -1/a ln(z1/x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.118.2",
+  "gr": "2.118.2",
+  "page": 119,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*(a + b*x)), x]",
+  "rhs": [
+   "-1/(a*x) + b/a^2*Log[(a + b*x)/x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/(x^2 z1) = -1/(ax) + b/a^2 ln(z1/x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.118.3",
+  "gr": "2.118.3",
+  "page": 119,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^3*(a + b*x)), x]",
+  "rhs": [
+   "-1/(2*a*x^2) + b/(a^2*x) - b^2/a^3*Log[(a + b*x)/x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/(x^3 z1) = -1/(2ax^2) + b/(a^2 x) - b^2/a^3 ln(z1/x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.119.1",
+  "gr": "2.119.1",
+  "page": 119,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*(a + b*x)^2), x]",
+  "rhs": [
+   "1/(a*(a + b*x)) - 1/a^2*Log[(a + b*x)/x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/(x z1^2) = 1/(a z1) - 1/a^2 ln(z1/x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.119.2",
+  "gr": "2.119.2",
+  "page": 120,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*(a + b*x)^2), x]",
+  "rhs": [
+   "-(1/(a*x) + 2*b/a^2)/(a + b*x) + 2*b/a^3*Log[(a + b*x)/x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/(x^2 z1^2) = -[1/(ax) + 2b/a^2] 1/z1 + 2b/a^3 ln(z1/x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.119.3",
+  "gr": "2.119.3",
+  "page": 120,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^3*(a + b*x)^2), x]",
+  "rhs": [
+   "(-1/(2*a*x^2) + 3*b/(2*a^2*x) + 3*b^2/a^3)/(a + b*x) - 3*b^2/a^4*Log[(a + b*x)/x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/(x^3 z1^2) = [-1/(2ax^2) + 3b/(2a^2x) + 3b^2/a^3] 1/z1 - 3b^2/a^4 ln(z1/x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.121.1",
+  "gr": "2.121.1",
+  "page": 120,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*(a + b*x)^3), x]",
+  "rhs": [
+   "(3/(2*a) + b*x/a^2)/(a + b*x)^2 - 1/a^3*Log[(a + b*x)/x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/(x z1^3) = [3/(2a) + bx/a^2] 1/z1^2 - 1/a^3 ln(z1/x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.121.2",
+  "gr": "2.121.2",
+  "page": 120,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*(a + b*x)^3), x]",
+  "rhs": [
+   "-(1/(a*x) + 9*b/(2*a^2) + 3*b^2*x/a^3)/(a + b*x)^2 + 3*b/a^4*Log[(a + b*x)/x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/(x^2 z1^3) = -[1/(ax) + 9b/(2a^2) + 3b^2x/a^3] 1/z1^2 + 3b/a^4 ln(z1/x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.121.3",
+  "gr": "2.121.3",
+  "page": 120,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^3*(a + b*x)^3), x]",
+  "rhs": [
+   "(-1/(2*a*x^2) + 2*b/(a^2*x) + 9*b^2/a^3 + 6*b^3*x/a^4)/(a + b*x)^2 - 6*b^2/a^5*Log[(a + b*x)/x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/(x^3 z1^3) = [-1/(2ax^2) + 2b/(a^2x) + 9b^2/a^3 + 6b^3x/a^4] 1/z1^2 - 6b^2/a^5 ln(z1/x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.122.1",
+  "gr": "2.122.1",
+  "page": 120,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*(a + b*x)^4), x]",
+  "rhs": [
+   "(11/(6*a) + 5*b*x/(2*a^2) + b^2*x^2/a^3)/(a + b*x)^3 - 1/a^4*Log[(a + b*x)/x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/(x z1^4) = [11/(6a) + 5bx/(2a^2) + b^2x^2/a^3] 1/z1^3 - 1/a^4 ln(z1/x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.122.2",
+  "gr": "2.122.2",
+  "page": 120,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*(a + b*x)^4), x]",
+  "rhs": [
+   "-(1/(a*x) + 22*b/(3*a^2) + 10*b^2*x/a^3 + 4*b^3*x^2/a^4)/(a + b*x)^3 + 4*b/a^5*Log[(a + b*x)/x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/(x^2 z1^4) = -[1/(ax) + 22b/(3a^2) + 10b^2x/a^3 + 4b^3x^2/a^4] 1/z1^3 + 4b/a^5 ln(z1/x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.122.3",
+  "gr": "2.122.3",
+  "page": 120,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^3*(a + b*x)^4), x]",
+  "rhs": [
+   "(-1/(2*a*x^2) + 5*b/(2*a^2*x) + 55*b^2/(3*a^3) + 25*b^3*x/a^4 + 10*b^4*x^2/a^5)/(a + b*x)^3 - 10*b^2/a^6*Log[(a + b*x)/x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/(x^3 z1^4) = [-1/(2ax^2) + 5b/(2a^2x) + 55b^2/(3a^3) + 25b^3x/a^4 + 10b^4x^2/a^5] 1/z1^3 - 10b^2/a^6 ln(z1/x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.123.1",
+  "gr": "2.123.1",
+  "page": 120,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*(a + b*x)^5), x]",
+  "rhs": [
+   "(25/(12*a) + 13*b*x/(3*a^2) + 7*b^2*x^2/(2*a^3) + b^3*x^3/a^4)/(a + b*x)^4 - 1/a^5*Log[(a + b*x)/x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "11",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/(x z1^5) = [25/(12a) + 13bx/(3a^2) + 7b^2x^2/(2a^3) + b^3x^3/a^4] 1/z1^4 - 1/a^5 ln(z1/x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.123.2",
+  "gr": "2.123.2",
+  "page": 120,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*(a + b*x)^5), x]",
+  "rhs": [
+   "(-1/(a*x) - 125*b/(12*a^2) - 65*b^2*x/(3*a^3) - 35*b^3*x^2/(2*a^4) - 5*b^4*x^3/a^5)/(a + b*x)^4 + 5*b/a^6*Log[(a + b*x)/x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/(x^2 z1^5) = [-1/(ax) - 125b/(12a^2) - 65b^2x/(3a^3) - 35b^3x^2/(2a^4) - 5b^4x^3/a^5] 1/z1^4 + 5b/a^6 ln(z1/x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.123.3",
+  "gr": "2.123.3",
+  "page": 120,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^3*(a + b*x)^5), x]",
+  "rhs": [
+   "(-1/(2*a*x^2) + 3*b/(a^2*x) + 125*b^2/(4*a^3) + 65*b^3*x/a^4 + 105*b^4*x^2/(2*a^5) + 15*b^5*x^3/a^6)/(a + b*x)^4 - 15*b^2/a^7*Log[(a + b*x)/x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "Forms containing the binomial z1 = a + bx",
+  "tex": "int dx/(x^3 z1^5) = [-1/(2ax^2) + 3b/(a^2x) + 125b^2/(4a^3) + 65b^3x/a^4 + 105b^4x^2/(2a^5) + 15b^5x^3/a^6] 1/z1^4 - 15b^2/a^7 ln(z1/x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.124.1a",
+  "gr": "2.124.1",
+  "page": 120,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*x^2), x]",
+  "rhs": [
+   "1/Sqrt[a*b]*ArcTan[x*Sqrt[b/a]]"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.124 Forms containing the binomial z2 = a + bx^2",
+  "tex": "int dx/z2 = 1/sqrt(ab) arctan(x sqrt(b/a)) [ab>0]",
+  "note": "see also 2.141 2"
+ },
+ {
+  "id": "GR2.124.1b",
+  "gr": "2.124.1",
+  "page": 120,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*x^2), x]",
+  "rhs": [
+   "1/(2*I*Sqrt[a*b])*Log[(a + x*I*Sqrt[a*b])/(a - x*I*Sqrt[a*b])]"
+  ],
+  "conds": [
+   "a*b < 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.124 Forms containing the binomial z2 = a + bx^2",
+  "tex": "= 1/(2i sqrt(ab)) ln((a + x i sqrt(ab))/(a - x i sqrt(ab))) [ab<0]",
+  "note": "see also 2.143 2 and 2.143 3"
+ },
+ {
+  "id": "GR2.124.2",
+  "gr": "2.124.2",
+  "page": 120,
+  "status": "ok",
+  "lhs": "Integrate[x/(a + b*x^2)^m, x]",
+  "rhs": [
+   "-1/(2*b*(m - 1)*(a + b*x^2)^(m - 1))"
+  ],
+  "conds": [
+   "m != 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.124 Forms containing the binomial z2 = a + bx^2",
+  "tex": "int x dx/z2^m = -1/(2b(m-1) z2^(m-1))",
+  "note": "see also 2.145 2, 2.145 6, and 2.18"
+ }
+]

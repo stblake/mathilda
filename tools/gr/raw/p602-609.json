@@ -1,0 +1,2186 @@
+[
+ {
+  "id": "GR4.273",
+  "gr": "4.273",
+  "page": 602,
+  "status": "ok",
+  "lhs": "Integrate[Log[x/u]^(p - 1)*Log[v/x]^(q - 1)/x, {x, u, v}]",
+  "rhs": [
+   "Beta[p, q]*Log[v/u]^(p + q - 1)"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "u*v > 0",
+   "v > u > 0"
+  ],
+  "cite": "BI (145)(36)",
+  "edition_note": "",
+  "section": "4.27 Combinations of logarithms and powers",
+  "tex": "int_u^v (ln x/u)^(p-1)(ln v/x)^(q-1) dx/x = B(p,q)(ln v/u)^(p+q-1)",
+  "note": "v > u > 0 added (orientation of the path)"
+ },
+ {
+  "id": "GR4.274",
+  "gr": "4.274",
+  "page": 602,
+  "status": "ok",
+  "lhs": "Integrate[x^(1/q)/(x*Sqrt[-(1 + Log[x])]), {x, 0, 1/E}]",
+  "rhs": [
+   "Sqrt[q*Pi]/E^(1/q)"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "BI (145)(4)",
+  "edition_note": "",
+  "section": "4.27 Combinations of logarithms and powers",
+  "tex": "int_0^(1/e) x^(1/q) dx/(x sqrt(-(1+ln x))) = sqrt(q pi)/e^(1/q)",
+  "note": ""
+ },
+ {
+  "id": "GR4.275.1",
+  "gr": "4.275.1",
+  "page": 602,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^(q - 1) - x^(p - 1)*(1 - x)^(q - 1), {x, 0, 1}]",
+  "rhs": [
+   "Gamma[q]/Gamma[p + q]*(Gamma[p + q] - Gamma[p])"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (107)(8)",
+  "edition_note": "",
+  "section": "4.27 Combinations of logarithms and powers",
+  "tex": "int_0^1 [(ln 1/x)^(q-1) - x^(p-1)(1-x)^(q-1)] dx = Gamma(q)/Gamma(p+q)[Gamma(p+q)-Gamma(p)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.275.2",
+  "gr": "4.275.2",
+  "page": 602,
+  "status": "ok",
+  "lhs": "Integrate[(x - (1/(1 - Log[x]))^q)/(x*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "-PolyGamma[q]"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "BI (126)(5)",
+  "edition_note": "",
+  "section": "4.27 Combinations of logarithms and powers",
+  "tex": "int_0^1 [x - (1/(1-ln x))^q] dx/(x ln x) = -psi(q)",
+  "note": ""
+ },
+ {
+  "id": "GR4.281.1",
+  "gr": "4.281.1",
+  "page": 602,
+  "status": "ok",
+  "lhs": "Integrate[1/Log[x] + 1/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "EulerGamma"
+  ],
+  "conds": [],
+  "cite": "BI (127)(15)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 [1/ln x + 1/(1-x)] dx = C",
+  "note": ""
+ },
+ {
+  "id": "GR4.281.2",
+  "gr": "4.281.2",
+  "page": 602,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*(Log[p] - Log[x])), {x, 1, Infinity}]",
+  "rhs": [
+   "LogIntegral[p]/p"
+  ],
+  "conds": [
+   "0 < p < 1"
+  ],
+  "cite": "LA 281(30)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_1^inf dx/(x^2 (ln p - ln x)) = li(p)/p",
+  "note": "no condition printed; 0<p<1 added so the integrand has no pole (p>1 gives an implied PV)"
+ },
+ {
+  "id": "GR4.281.3a",
+  "gr": "4.281.3",
+  "page": 602,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^(p - 1)/(q + Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "E^(-p*q)*ExpIntegralEi[p*q]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "LI (144)(11,12)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 x^(p-1) dx/(q + ln x) = e^(-pq) Ei(pq)",
+  "note": "",
+  "reason": "pole at x = e^(-q) inside (0,1); implied PV"
+ },
+ {
+  "id": "GR4.281.3b",
+  "gr": "4.281.3",
+  "page": 602,
+  "status": "ok",
+  "lhs": "Integrate[x^(p - 1)/(q - Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "-E^(p*q)*ExpIntegralEi[-p*q]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "LI (144)(11,12)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 x^(p-1) dx/(q - ln x) = -e^(pq) Ei(-pq)",
+  "note": ""
+ },
+ {
+  "id": "GR4.281.4",
+  "gr": "4.281.4",
+  "page": 602,
+  "status": "ok",
+  "lhs": "Integrate[1/Log[x] + x^(mu - 1)/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "-PolyGamma[mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 [1/ln x + x^(mu-1)/(1-x)] dx = -psi(mu)",
+  "note": ""
+ },
+ {
+  "id": "GR4.281.5",
+  "gr": "4.281.5",
+  "page": 602,
+  "status": "ok",
+  "lhs": "Integrate[x^(p - 1)/Log[x] + x^(q - 1)/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "Log[p] - PolyGamma[q]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (127)(17)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 [x^(p-1)/ln x + x^(q-1)/(1-x)] dx = ln p - psi(q)",
+  "note": ""
+ },
+ {
+  "id": "GR4.281.6",
+  "gr": "4.281.6",
+  "page": 602,
+  "status": "ok",
+  "lhs": "Integrate[(1/(1 - x^2) + 1/(2*x*Log[x]))/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Log[2]/2"
+  ],
+  "conds": [],
+  "cite": "LI (130)(19)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 [1/(1-x^2) + 1/(2x ln x)] dx/ln x = ln2/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.281.7",
+  "gr": "4.281.7",
+  "page": 602,
+  "status": "ok",
+  "lhs": "Integrate[(q - 1/2 + ((1 - x)*(1 + q*Log[x]) + x*Log[x])/(1 - x)^2*x^(q - 1))/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "1/2 - q - LogGamma[q] + Log[2*Pi]/2"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "BI (128)(15)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 [q - 1/2 + ((1-x)(1+q ln x) + x ln x)/(1-x)^2 x^(q-1)] dx/ln x = 1/2 - q - ln Gamma(q) + ln(2pi)/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.282.1",
+  "gr": "4.282.1",
+  "page": 602,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(4*Pi^2 + Log[x]^2)/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "1/4 - EulerGamma/2"
+  ],
+  "conds": [],
+  "cite": "BI (129)(1)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 ln x/(4pi^2+ln^2 x) dx/(1-x) = 1/4 - C/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.282.2",
+  "gr": "4.282.2",
+  "page": 602,
+  "status": "ok",
+  "lhs": "Integrate[1/(a^2 + Log[x]^2)/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "1/(2*a)*((PolyGamma[(((2*a + Pi)/(4*Pi)) + 1)/2] - PolyGamma[((2*a + Pi)/(4*Pi))/2])/2)",
+   "1/(2*Abs[a])*((PolyGamma[(((2*Abs[a] + Pi)/(4*Pi)) + 1)/2] - PolyGamma[((2*Abs[a] + Pi)/(4*Pi))/2])/2)"
+  ],
+  "conds": [
+   "a > -Pi/2"
+  ],
+  "cite": "BI (129)(9)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 1/(a^2+ln^2 x) dx/(1+x^2) = (1/(2a)) beta((2a+pi)/(4pi))",
+  "note": "condition printed a > -pi/2; integrand even in a while value is odd, so for a<0 the value needs |a| (second rhs); likely a>0 intended"
+ },
+ {
+  "id": "GR4.282.3",
+  "gr": "4.282.3",
+  "page": 602,
+  "status": "ok",
+  "lhs": "Integrate[1/(Pi^2 + Log[x]^2)/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "(4 - Pi)/(4*Pi)"
+  ],
+  "conds": [],
+  "cite": "BI (129)(6)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 1/(pi^2+ln^2 x) dx/(1+x^2) = (4-pi)/(4pi)",
+  "note": ""
+ },
+ {
+  "id": "GR4.282.4",
+  "gr": "4.282.4",
+  "page": 602,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(Pi^2 + Log[x]^2)/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "(1/2 - Log[2])/2"
+  ],
+  "conds": [],
+  "cite": "BI (129)(10)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 ln x/(pi^2+ln^2 x) dx/(1-x^2) = (1/2)(1/2 - ln2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.282.5",
+  "gr": "4.282.5",
+  "page": 603,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(a^2 + Log[x]^2)*x/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "(Pi/(2*a) + Log[Pi/a] + PolyGamma[a/Pi])/2"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (129)(14)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 ln x/(a^2+ln^2 x) x dx/(1-x^2) = (1/2)[pi/(2a) + ln(pi/a) + psi(a/pi)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.282.6",
+  "gr": "4.282.6",
+  "page": 603,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(Pi^2 + Log[x]^2)*x/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "(1/2 - EulerGamma)/2"
+  ],
+  "conds": [],
+  "cite": "BI (129)(13)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 ln x/(pi^2+ln^2 x) x dx/(1-x^2) = (1/2)(1/2 - C)",
+  "note": ""
+ },
+ {
+  "id": "GR4.282.7",
+  "gr": "4.282.7",
+  "page": 603,
+  "status": "ok",
+  "lhs": "Integrate[1/(Pi^2 + 4*Log[x]^2)/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "Log[2]/(4*Pi)"
+  ],
+  "conds": [],
+  "cite": "BI (129)(7)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 1/(pi^2+4ln^2 x) dx/(1+x^2) = ln2/(4pi)",
+  "note": ""
+ },
+ {
+  "id": "GR4.282.8",
+  "gr": "4.282.8",
+  "page": 603,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(Pi^2 + 4*Log[x]^2)/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "(2 - Pi)/16"
+  ],
+  "conds": [],
+  "cite": "BI (129)(11)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 ln x/(pi^2+4ln^2 x) dx/(1-x^2) = (2-pi)/16",
+  "note": ""
+ },
+ {
+  "id": "GR4.282.9",
+  "gr": "4.282.9",
+  "page": 603,
+  "status": "ok",
+  "lhs": "Integrate[1/(Pi^2 + 16*Log[x]^2)/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "(Pi + 2*Log[Sqrt[2] - 1])/(8*Pi*Sqrt[2])"
+  ],
+  "conds": [],
+  "cite": "BI (129)(8)",
+  "edition_note": "10",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 1/(pi^2+16ln^2 x) dx/(1+x^2) = [pi + 2ln(sqrt2-1)]/(8 pi sqrt2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.282.10",
+  "gr": "4.282.10",
+  "page": 603,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(Pi^2 + 16*Log[x]^2)/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "-Pi/(32*Sqrt[2]) + 1/16 + Log[Sqrt[2] - 1]/(16*Sqrt[2])"
+  ],
+  "conds": [],
+  "cite": "BI (129)(12)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 ln x/(pi^2+16ln^2 x) dx/(1-x^2) = -pi/(32sqrt2) + 1/16 + ln(sqrt2-1)/(16sqrt2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.282.11",
+  "gr": "4.282.11",
+  "page": 603,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(a^2 + Log[x]^2)^2/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "-Pi^2/a^4*Sum[Abs[BernoulliB[2*k]]*(2*Pi/a)^(2*k - 2), {k, 1, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "BI (129)(4)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 ln x/(a^2+ln^2 x)^2 dx/(1-x) = -(pi^2/a^4) sum_{k>=1} |B_2k| (2pi/a)^(2k-2)",
+  "note": "series is divergent (asymptotic) for every a, as printed"
+ },
+ {
+  "id": "GR4.282.12",
+  "gr": "4.282.12",
+  "page": 603,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(a^2 + Log[x]^2)^2*x/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "-Pi^2/(4*a^4)*Sum[Abs[BernoulliB[2*k]]*(Pi/a)^(2*k - 2), {k, 1, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "BI (129)(16)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 ln x/(a^2+ln^2 x)^2 x dx/(1-x^2) = -(pi^2/(4a^4)) sum |B_2k| (pi/a)^(2k-2)",
+  "note": "series is divergent (asymptotic) for every a, as printed"
+ },
+ {
+  "id": "GR4.282.13",
+  "gr": "4.282.13",
+  "page": 603,
+  "status": "ok",
+  "lhs": "Integrate[(x^p - x^(-p))/(x^2 - 1)/(q^2 + Log[x]^2), {x, 0, 1}]",
+  "rhs": [
+   "2*Pi/q*Sum[(-1)^(k - 1)*Sin[k*p*Pi]/(2*q + k*Pi), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "p^2 < 1",
+   "q > 0"
+  ],
+  "cite": "BI (132)(13)a",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 (x^p - x^-p)/(x^2-1) dx/(q^2+ln^2 x) = (2pi/q) sum (-1)^(k-1) sin(kp pi)/(2q + k pi)",
+  "note": "q > 0 added"
+ },
+ {
+  "id": "GR4.283.1",
+  "gr": "4.283.1",
+  "page": 603,
+  "status": "ok",
+  "lhs": "Integrate[((x - 1)/Log[x] - x)/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Log[2] - 1"
+  ],
+  "conds": [],
+  "cite": "BI (132)(17)a",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 ((x-1)/ln x - x) dx/ln x = ln2 - 1",
+  "note": ""
+ },
+ {
+  "id": "GR4.283.2",
+  "gr": "4.283.2",
+  "page": 603,
+  "status": "ok",
+  "lhs": "Integrate[(1/Log[x] + 1/(1 - x) - 1/2)/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Log[2*Pi]/2 - 1"
+  ],
+  "conds": [],
+  "cite": "BI (127)(20)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 (1/ln x + 1/(1-x) - 1/2) dx/ln x = ln(2pi)/2 - 1",
+  "note": ""
+ },
+ {
+  "id": "GR4.283.3",
+  "gr": "4.283.3",
+  "page": 603,
+  "status": "ok",
+  "lhs": "Integrate[(1/Log[x] + x/(1 - x) + x/2)/(x*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[2*Pi]/2"
+  ],
+  "conds": [],
+  "cite": "BI (127)(23)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 (1/ln x + x/(1-x) + x/2) dx/(x ln x) = ln(2pi)/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.283.4",
+  "gr": "4.283.4",
+  "page": 603,
+  "status": "ok",
+  "lhs": "Integrate[1/Log[x]^2 - x/(1 - x)^2, {x, 0, 1}]",
+  "rhs": [
+   "EulerGamma - 1/2"
+  ],
+  "conds": [],
+  "cite": "GW (326)(8a)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 [1/ln^2 x - x/(1-x)^2] dx = C - 1/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.283.5",
+  "gr": "4.283.5",
+  "page": 603,
+  "status": "ok",
+  "lhs": "Integrate[(1/(1 - x^2) + 1/(2*Log[x]) - 1/2)/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "(Log[2] - 1)/2"
+  ],
+  "conds": [],
+  "cite": "BI (128)(14)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 (1/(1-x^2) + 1/(2 ln x) - 1/2) dx/ln x = (ln2 - 1)/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.283.6",
+  "gr": "4.283.6",
+  "page": 603,
+  "status": "ok",
+  "lhs": "Integrate[(1/Log[x] + (1 + x)/(2*(1 - x)) - Log[x])/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Log[2*Pi]/2"
+  ],
+  "conds": [],
+  "cite": "BI (127)(22)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 (1/ln x + (1/2)(1+x)/(1-x) - ln x) dx/ln x = ln(2pi)/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.283.7",
+  "gr": "4.283.7",
+  "page": 603,
+  "status": "ok",
+  "lhs": "Integrate[(1/(1 - Log[x]) - x)/(x*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "-EulerGamma"
+  ],
+  "conds": [],
+  "cite": "GW (326)(11a)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 [1/(1-ln x) - x] dx/(x ln x) = -C",
+  "note": ""
+ },
+ {
+  "id": "GR4.283.8",
+  "gr": "4.283.8",
+  "page": 603,
+  "status": "ok",
+  "lhs": "Integrate[(x^q - 1)/(x*Log[x]^2) - q/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "q*Log[q] - q"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "BI (126)(2)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 [(x^q-1)/(x ln^2 x) - q/ln x] dx = q ln q - q",
+  "note": ""
+ },
+ {
+  "id": "GR4.283.9",
+  "gr": "4.283.9",
+  "page": 604,
+  "status": "ok",
+  "lhs": "Integrate[(x + 1/(a*Log[x] - 1))/(x*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "Log[a/q] + EulerGamma",
+   "-Log[a] + EulerGamma",
+   "Log[q/a] + EulerGamma"
+  ],
+  "conds": [
+   "a > 0",
+   "q > 0"
+  ],
+  "cite": "BI (126)(8)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 [x + 1/(a ln x - 1)] dx/(x ln x) = ln(a/q) + C",
+  "note": "misprint: q absent from integrand. With x as printed the value works out to -ln a + C (2nd rhs); with x^q in place of x it is ln(q/a) + C (3rd rhs)"
+ },
+ {
+  "id": "GR4.283.10",
+  "gr": "4.283.10",
+  "page": 604,
+  "status": "ok",
+  "lhs": "Integrate[(1/Log[x] + (1 + x)/(2*(1 - x)))*x^(p - 1)/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "-LogGamma[p] + (p - 1/2)*Log[p] - p + Log[2*Pi]/2"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "GW (326)(9)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 [1/ln x + (1+x)/(2(1-x))] x^(p-1) dx/ln x = -ln Gamma(p) + (p-1/2) ln p - p + ln(2pi)/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.283.11",
+  "gr": "4.283.11",
+  "page": 604,
+  "status": "ok",
+  "lhs": "Integrate[(p - 1 - 1/(1 - x) + (1/2 - 1/Log[x])*x^(p - 1))/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "(1/2 - p)*Log[p] + p - Log[2*Pi]/2"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (127)(25)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 [p - 1 - 1/(1-x) + (1/2 - 1/ln x) x^(p-1)] dx/ln x = (1/2-p) ln p + p - ln(2pi)/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.283.12",
+  "gr": "4.283.12",
+  "page": 604,
+  "status": "ok",
+  "lhs": "Integrate[-1/Log[x]^2 + ((p - 2)*x^p - (p - 1)*x^(p - 1))/(1 - x)^2, {x, 0, 1}]",
+  "rhs": [
+   "-PolyGamma[p] + p - 3/2"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "GW (326)(8)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 [-1/ln^2 x + ((p-2)x^p - (p-1)x^(p-1))/(1-x)^2] dx = -psi(p) + p - 3/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.283.13",
+  "gr": "4.283.13",
+  "page": 604,
+  "status": "ok",
+  "lhs": "Integrate[((p - 1/2)*x^3 + (1 - 1/Log[x])*(x^(2*p - 1) - 1)/2)/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "(1/2 - p)*(Log[p] - 1)"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (132)(23)a",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 [(p-1/2)x^3 + (1/2)(1 - 1/ln x)(x^(2p-1) - 1)] dx/ln x = (1/2-p)(ln p - 1)",
+  "note": ""
+ },
+ {
+  "id": "GR4.283.14",
+  "gr": "4.283.14",
+  "page": 604,
+  "status": "ok",
+  "lhs": "Integrate[((q - 1/2)*(x^(p - 1) - x^(r - 1))/Log[x] + p*x^(p*q - 1)/(1 - x^p) - r*x^(r*q - 1)/(1 - x^r))/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "(p - r)*(1/2 - q - LogGamma[q] + Log[2*Pi]/2)"
+  ],
+  "conds": [
+   "q > 0",
+   "p > 0",
+   "r > 0"
+  ],
+  "cite": "BI (132)(13)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 [(q-1/2)(x^(p-1)-x^(r-1))/ln x + p x^(pq-1)/(1-x^p) - r x^(rq-1)/(1-x^r)] dx/ln x = (p-r)[1/2 - q - ln Gamma(q) + ln(2pi)/2]",
+  "note": "p > 0, r > 0 added"
+ },
+ {
+  "id": "GR4.284.1",
+  "gr": "4.284.1",
+  "page": 604,
+  "status": "ok",
+  "lhs": "Integrate[(x^q - 1)/(x*Log[x]^3) - q/(x*Log[x]^2) - q^2/(2*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "q^2/2*Log[q] - 3*q^2/4"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "BI (126)(3)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 [(x^q-1)/(x ln^3 x) - q/(x ln^2 x) - q^2/(2 ln x)] dx = (q^2/2) ln q - (3/4) q^2",
+  "note": ""
+ },
+ {
+  "id": "GR4.284.2",
+  "gr": "4.284.2",
+  "page": 604,
+  "status": "ok",
+  "lhs": "Integrate[(x^q - 1)/(x*Log[x]^4) - q/(x*Log[x]^3) - q^2/(2*x*Log[x]^2) - q^3/(6*Log[x]), {x, 0, 1}]",
+  "rhs": [
+   "q^3/6*Log[q] - 11*q^3/36"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "BI (126)(4)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 [(x^q-1)/(x ln^4 x) - q/(x ln^3 x) - q^2/(2x ln^2 x) - q^3/(6 ln x)] dx = (q^3/6) ln q - (11/36) q^3",
+  "note": ""
+ },
+ {
+  "id": "GR4.285",
+  "gr": "4.285",
+  "page": 604,
+  "status": "ok",
+  "lhs": "Integrate[x^(p - 1)/(q + Log[x])^n, {x, 0, 1}]",
+  "rhs": [
+   "p^(n - 1)/(n - 1)!*E^(-p*q)*ExpIntegralEi[p*q] - 1/((n - 1)!*q^(n - 1))*Sum[(n - k - 1)!*(p*q)^(k - 1), {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "p > 0",
+   "q < 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (125)(21)",
+  "edition_note": "",
+  "section": "4.28 Combinations of rational functions of ln x and powers",
+  "tex": "int_0^1 x^(p-1) dx/(q + ln x)^n = p^(n-1)/(n-1)! e^(-pq) Ei(pq) - 1/((n-1)! q^(n-1)) sum_{k=1}^{n-1} (n-k-1)!(pq)^(k-1)",
+  "note": "n positive integer implied"
+ },
+ {
+  "id": "GR4.291.1",
+  "gr": "4.291.1",
+  "page": 604,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]/x, {x, 0, 1}]",
+  "rhs": [
+   "Pi^2/12"
+  ],
+  "conds": [],
+  "cite": "FI II 483",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+x)/x dx = pi^2/12",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.2",
+  "gr": "4.291.2",
+  "page": 605,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - x]/x, {x, 0, 1}]",
+  "rhs": [
+   "-Pi^2/6"
+  ],
+  "conds": [],
+  "cite": "FI II 714",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1-x)/x dx = -pi^2/6",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.3",
+  "gr": "4.291.3",
+  "page": 605,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - x]/x, {x, 0, 1/2}]",
+  "rhs": [
+   "Log[2]^2/2 - Pi^2/12"
+  ],
+  "conds": [],
+  "cite": "BI (145)(2)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^(1/2) ln(1-x)/x dx = (ln2)^2/2 - pi^2/12",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.4",
+  "gr": "4.291.4",
+  "page": 605,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - x/2]/x, {x, 0, 1}]",
+  "rhs": [
+   "Log[2]^2/2 - Pi^2/12"
+  ],
+  "conds": [],
+  "cite": "BI (114)(18)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1-x/2) dx/x = (ln2)^2/2 - pi^2/12",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.5",
+  "gr": "4.291.5",
+  "page": 605,
+  "status": "ok",
+  "lhs": "Integrate[Log[(1 + x)/2]/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "Log[2]^2/2 - Pi^2/12"
+  ],
+  "conds": [],
+  "cite": "BI (115)(1)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln((1+x)/2)/(1-x) dx = (ln2)^2/2 - pi^2/12",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.6",
+  "gr": "4.291.6",
+  "page": 605,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]/(1 + x), {x, 0, 1}]",
+  "rhs": [
+   "Log[2]^2/2"
+  ],
+  "conds": [],
+  "cite": "BI (114)(14)a",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+x)/(1+x) dx = (ln2)^2/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.7",
+  "gr": "4.291.7",
+  "page": 605,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[Log[1 + a*x]/(1 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*Log[1 + a^2] - Integrate[Log[u]/(1 + u^2), {u, 0, a}]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "GI II (2209)",
+  "edition_note": "7",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf ln(1+ax)/(1+x^2) dx = (pi/4) ln(1+a^2) - int_0^a ln u du/(1+u^2)",
+  "note": "",
+  "reason": "value contains a different integral int_0^a ln u/(1+u^2) du"
+ },
+ {
+  "id": "GR4.291.8",
+  "gr": "4.291.8",
+  "page": 605,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "Pi/8*Log[2]"
+  ],
+  "conds": [],
+  "cite": "FI II 157",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+x)/(1+x^2) dx = (pi/8) ln2",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.9",
+  "gr": "4.291.9",
+  "page": 605,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]/(1 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*Log[2] + Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (136)(1)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf ln(1+x)/(1+x^2) dx = (pi/4) ln2 + G",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.10",
+  "gr": "4.291.10",
+  "page": 605,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - x]/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "Pi/8*Log[2] - Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (114)(17)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1-x)/(1+x^2) dx = (pi/8) ln2 - G",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.11",
+  "gr": "4.291.11",
+  "page": 605,
+  "status": "ok",
+  "lhs": "Integrate[Log[x - 1]/(1 + x^2), {x, 1, Infinity}]",
+  "rhs": [
+   "Pi/8*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (144)(4)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_1^inf ln(x-1)/(1+x^2) dx = (pi/8) ln2",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.12",
+  "gr": "4.291.12",
+  "page": 605,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]/(x*(1 + x)), {x, 0, 1}]",
+  "rhs": [
+   "Pi^2/12 - Log[2]^2/2"
+  ],
+  "conds": [],
+  "cite": "BI (144)(4)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+x)/(x(1+x)) dx = pi^2/12 - (ln2)^2/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.13",
+  "gr": "4.291.13",
+  "page": 605,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]/(x*(1 + x)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/6"
+  ],
+  "conds": [],
+  "cite": "BI (141)(9)a",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf ln(1+x)/(x(1+x)) dx = pi^2/6",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.14a",
+  "gr": "4.291.14",
+  "page": 605,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]/(a*x + b)^2, {x, 0, 1}]",
+  "rhs": [
+   "1/(a*(a - b))*Log[(a + b)/b] + 2*Log[2]/(b^2 - a^2)"
+  ],
+  "conds": [
+   "Unequal[a, b]",
+   "a*b > 0"
+  ],
+  "cite": "LI (114)(5)a",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+x)/(ax+b)^2 dx = ln((a+b)/b)/(a(a-b)) + 2ln2/(b^2-a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.14b",
+  "gr": "4.291.14",
+  "page": 605,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]/(a*x + a)^2, {x, 0, 1}]",
+  "rhs": [
+   "(1 - Log[2])/(2*a^2)"
+  ],
+  "conds": [],
+  "cite": "LI (114)(5)a",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "[a = b] int_0^1 ln(1+x)/(ax+a)^2 dx = (1 - ln2)/(2a^2)",
+  "note": "equality condition a = b substituted (b -> a)"
+ },
+ {
+  "id": "GR4.291.15",
+  "gr": "4.291.15",
+  "page": 605,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]/(a*x + b)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[a/b]/(a*(a - b))"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (139)(5)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf ln(1+x)/(ax+b)^2 dx = ln(a/b)/(a(a-b))",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.16",
+  "gr": "4.291.16",
+  "page": 605,
+  "status": "ok",
+  "lhs": "Integrate[Log[a + x]/(a + x^2), {x, 0, 1}]",
+  "rhs": [
+   "1/(2*Sqrt[a])*ArcCot[Sqrt[a]]*Log[(1 + a)*a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (114)(20)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(a+x) dx/(a+x^2) = arccot(sqrt a) ln[(1+a)a]/(2 sqrt a)",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.17",
+  "gr": "4.291.17",
+  "page": 605,
+  "status": "ok",
+  "lhs": "Integrate[Log[a + x]/(b + x)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(a*Log[a] - b*Log[b])/(b*(a - b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Unequal[a, b]"
+  ],
+  "cite": "LI (139)(6)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf ln(a+x) dx/(b+x)^2 = (a ln a - b ln b)/(b(a-b))",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.18",
+  "gr": "4.291.18",
+  "page": 605,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + a*x]/(1 + x^2), {x, 0, a}]",
+  "rhs": [
+   "ArcTan[a]*Log[1 + a^2]/2"
+  ],
+  "conds": [],
+  "cite": "GI II (2195)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^a ln(1+ax)/(1+x^2) dx = (1/2) arctan a ln(1+a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.19",
+  "gr": "4.291.19",
+  "page": 606,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + a*x]/(1 + a*x^2), {x, 0, 1}]",
+  "rhs": [
+   "1/(2*Sqrt[a])*ArcTan[Sqrt[a]]*Log[1 + a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (114)(21)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+ax)/(1+ax^2) dx = arctan(sqrt a) ln(1+a)/(2 sqrt a)",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.20",
+  "gr": "4.291.20",
+  "page": 606,
+  "status": "ok",
+  "lhs": "Integrate[Log[a*x + b]/(1 + x)^2, {x, 0, 1}]",
+  "rhs": [
+   "1/(a - b)*((a + b)*Log[a + b]/2 - b*Log[b] - a*Log[2])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Unequal[a, b]"
+  ],
+  "cite": "BI (114)(22)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(ax+b)/(1+x)^2 dx = [(a+b)ln(a+b)/2 - b ln b - a ln2]/(a-b)",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.21",
+  "gr": "4.291.21",
+  "page": 606,
+  "status": "ok",
+  "lhs": "Integrate[Log[a*x + b]/(1 + x)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(a*Log[a] - b*Log[b])/(a - b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (139)(8)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf ln(ax+b)/(1+x)^2 dx = (a ln a - b ln b)/(a-b)",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.22",
+  "gr": "4.291.22",
+  "page": 606,
+  "status": "ok",
+  "lhs": "Integrate[Log[a + x]*x/(b^2 + x^2)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*(a^2 + b^2))*(Log[b] + a*Pi/(2*b) + a^2/b^2*Log[a])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (139)(9)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf ln(a+x) x dx/(b^2+x^2)^2 = (ln b + a pi/(2b) + (a^2/b^2) ln a)/(2(a^2+b^2))",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.23",
+  "gr": "4.291.23",
+  "page": 606,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]*(1 + x^2)/(1 + x)^4, {x, 0, 1}]",
+  "rhs": [
+   "-Log[2]/3 + 23/72"
+  ],
+  "conds": [],
+  "cite": "LI (114)(12)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+x)(1+x^2)/(1+x)^4 dx = -ln2/3 + 23/72",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.24",
+  "gr": "4.291.24",
+  "page": 606,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]*(1 + x^2)/(a^2 + x^2)/(1 + a^2*x^2), {x, 0, 1}]",
+  "rhs": [
+   "1/(2*a*(1 + a^2))*(Pi/2*Log[1 + a^2] - 2*ArcTan[a]*Log[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "LI (114)(11)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+x)(1+x^2)/(a^2+x^2) dx/(1+a^2x^2) = [(pi/2)ln(1+a^2) - 2 arctan a ln a]/(2a(1+a^2))",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.25",
+  "gr": "4.291.25",
+  "page": 606,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]*(1 - x^2)/(a*x + b)^2/(b*x + a)^2, {x, 0, 1}]",
+  "rhs": [
+   "1/(a^2 - b^2)*(1/(a - b)*((a + b)/(a*b)*Log[a + b] - Log[b]/a - Log[a]/b) + 4*Log[2]/(b^2 - a^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Unequal[a^2, b^2]"
+  ],
+  "cite": "LI (114)(13)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+x)(1-x^2)/((ax+b)^2(bx+a)^2) dx = {[(a+b)/(ab) ln(a+b) - ln b/a - ln a/b]/(a-b) + 4ln2/(b^2-a^2)}/(a^2-b^2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.26",
+  "gr": "4.291.26",
+  "page": 606,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]*(1 - x^2)/(a*x + b)^2/(b*x + a)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[b/a]/(a*b*(a^2 - b^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "LI (139)(14)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf ln(1+x)(1-x^2)/((ax+b)^2(bx+a)^2) dx = ln(b/a)/(ab(a^2-b^2))",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.27",
+  "gr": "4.291.27",
+  "page": 606,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + a*x]*(1 - x^2)/(1 + x^2)^2, {x, 0, 1}]",
+  "rhs": [
+   "(1 + a)^2/(2*(1 + a^2))*Log[1 + a] - a/(2*(1 + a^2))*Log[2] - Pi/4*a^2/(1 + a^2)"
+  ],
+  "conds": [
+   "a > -1"
+  ],
+  "cite": "BI (114)(23)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+ax)(1-x^2)/(1+x^2)^2 dx = (1+a)^2 ln(1+a)/(2(1+a^2)) - a ln2/(2(1+a^2)) - (pi/4) a^2/(1+a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.28",
+  "gr": "4.291.28",
+  "page": 606,
+  "status": "ok",
+  "lhs": "Integrate[Log[a + x]*(b^2 - x^2)/(b^2 + x^2)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(a*Log[b/a] - b*Pi/2)/(a^2 + b^2)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (139)(11)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf ln(a+x)(b^2-x^2)/(b^2+x^2)^2 dx = (a ln(b/a) - b pi/2)/(a^2+b^2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.291.29",
+  "gr": "4.291.29",
+  "page": 606,
+  "status": "ok",
+  "lhs": "Integrate[Log[(a - x)^2]*(b^2 - x^2)/(b^2 + x^2)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2/(a^2 + b^2)*(a*Log[a/b] - b*Pi/2)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (139)(12)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf ln^2(a-x)(b^2-x^2)/(b^2+x^2)^2 dx = 2(a ln(a/b) - b pi/2)/(a^2+b^2)",
+  "note": "book's ln^2(a-x) read as ln((a-x)^2) = 2 ln|a-x| (consistent with 4.291.28 and 4.293.7; (ln)^2 would be complex past x=a)"
+ },
+ {
+  "id": "GR4.291.30",
+  "gr": "4.291.30",
+  "page": 606,
+  "status": "ok",
+  "lhs": "Integrate[Log[(a - x)^2]*x/(b^2 + x^2)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(a^2 + b^2)*(Log[b] - a*Pi/(2*b) + a^2/b^2*Log[a])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (139)(10)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf ln^2(a-x) x dx/(b^2+x^2)^2 = (ln b - a pi/(2b) + (a^2/b^2) ln a)/(a^2+b^2)",
+  "note": "book's ln^2(a-x) read as ln((a-x)^2) = 2 ln|a-x| (consistent with 4.291.22)"
+ },
+ {
+  "id": "GR4.292.1a",
+  "gr": "4.292.1",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "-Pi/2*Log[2] + 2*Catalan"
+  ],
+  "conds": [],
+  "cite": "GW (325)(20)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+x)/sqrt(1-x^2) dx = -(pi/2) ln2 + 2G",
+  "note": ""
+ },
+ {
+  "id": "GR4.292.1b",
+  "gr": "4.292.1",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - x]/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "-Pi/2*Log[2] - 2*Catalan"
+  ],
+  "conds": [],
+  "cite": "GW (325)(20)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1-x)/sqrt(1-x^2) dx = -(pi/2) ln2 - 2G",
+  "note": ""
+ },
+ {
+  "id": "GR4.292.2a",
+  "gr": "4.292.2",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[x*Log[1 + x]/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "-1 + Pi/2"
+  ],
+  "conds": [],
+  "cite": "GW (325)(22c)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 x ln(1+x)/sqrt(1-x^2) dx = -1 + pi/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.292.2b",
+  "gr": "4.292.2",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[x*Log[1 - x]/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "-1 - Pi/2"
+  ],
+  "conds": [],
+  "cite": "GW (325)(22c)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 x ln(1-x)/sqrt(1-x^2) dx = -1 - pi/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.292.3",
+  "gr": "4.292.3",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + b*x]/Sqrt[a^2 - x^2], {x, -a, a}]",
+  "rhs": [
+   "Pi*Log[(1 + Sqrt[1 - a^2*b^2])/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "Abs[b] <= 1/a"
+  ],
+  "cite": "BI (145)(16, 17)a, GW (325)(21e)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_{-a}^a ln(1+bx)/sqrt(a^2-x^2) dx = pi ln((1+sqrt(1-a^2b^2))/2)",
+  "note": "a > 0 added"
+ },
+ {
+  "id": "GR4.292.4a",
+  "gr": "4.292.4",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[x*Log[1 + a*x]/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "-1 + Pi/2*(1 - Sqrt[1 - a^2])/a + Sqrt[1 - a^2]/a*ArcSin[a]"
+  ],
+  "conds": [
+   "Abs[a] <= 1"
+  ],
+  "cite": "GW (325)(22)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 x ln(1+ax)/sqrt(1-x^2) dx = -1 + (pi/2)(1-sqrt(1-a^2))/a + sqrt(1-a^2) arcsin(a)/a",
+  "note": ""
+ },
+ {
+  "id": "GR4.292.4b",
+  "gr": "4.292.4",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[x*Log[1 + a*x]/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "-1 + Pi/(2*a) + Sqrt[a^2 - 1]/a*Log[a + Sqrt[a^2 - 1]]"
+  ],
+  "conds": [
+   "a >= 1"
+  ],
+  "cite": "GW (325)(22)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 x ln(1+ax)/sqrt(1-x^2) dx = -1 + pi/(2a) + sqrt(a^2-1) ln(a+sqrt(a^2-1))/a  [a>=1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.292.5a",
+  "gr": "4.292.5",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + a*x]/(x*Sqrt[1 - x^2]), {x, 0, 1}]",
+  "rhs": [
+   "ArcSin[a]*(Pi - ArcSin[a])/2"
+  ],
+  "conds": [
+   "Abs[a] <= 1"
+  ],
+  "cite": "BI (120)(4), GW (325)(21a)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+ax)/(x sqrt(1-x^2)) dx = (1/2) arcsin a (pi - arcsin a)",
+  "note": ""
+ },
+ {
+  "id": "GR4.292.5b",
+  "gr": "4.292.5",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + a*x]/(x*Sqrt[1 - x^2]), {x, 0, 1}]",
+  "rhs": [
+   "Pi^2/8 - ArcCos[a]^2/2"
+  ],
+  "conds": [
+   "Abs[a] <= 1"
+  ],
+  "cite": "BI (120)(4), GW (325)(21a)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+ax)/(x sqrt(1-x^2)) dx = pi^2/8 - (arccos a)^2/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.293.1",
+  "gr": "4.293.1",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Log[1 + x], {x, 0, 1}]",
+  "rhs": [
+   "(Log[2] - ((PolyGamma[((mu + 1) + 1)/2] - PolyGamma[(mu + 1)/2])/2))/mu"
+  ],
+  "conds": [
+   "Re[mu] > -1"
+  ],
+  "cite": "BI (106)(4)a",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 x^(mu-1) ln(1+x) dx = [ln2 - beta(mu+1)]/mu",
+  "note": ""
+ },
+ {
+  "id": "GR4.293.2",
+  "gr": "4.293.2",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Log[1 + x], {x, 1, Infinity}]",
+  "rhs": [
+   "-1/mu*(((PolyGamma[((-mu) + 1)/2] - PolyGamma[(-mu)/2])/2) + Log[2])"
+  ],
+  "conds": [
+   "Re[mu] < 0"
+  ],
+  "cite": "ET I 315(17)",
+  "edition_note": "6",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_1^inf x^(mu-1) ln(1+x) dx = -(1/mu)[beta(-mu) + ln2]",
+  "note": ""
+ },
+ {
+  "id": "GR4.293.3",
+  "gr": "4.293.3",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Log[1 + x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(mu*Sin[mu*Pi])"
+  ],
+  "conds": [
+   "-1 < Re[mu] < 0"
+  ],
+  "cite": "GW (325)(3)a",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf x^(mu-1) ln(1+x) dx = pi/(mu sin(mu pi))",
+  "note": ""
+ },
+ {
+  "id": "GR4.293.4",
+  "gr": "4.293.4",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n - 1)*Log[1 + x], {x, 0, 1}]",
+  "rhs": [
+   "1/(2*n)*Sum[(-1)^(k - 1)/k, {k, 1, 2*n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (325)(2b)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 x^(2n-1) ln(1+x) dx = (1/(2n)) sum_{k=1}^{2n} (-1)^(k-1)/k",
+  "note": "n positive integer implied"
+ },
+ {
+  "id": "GR4.293.5",
+  "gr": "4.293.5",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n)*Log[1 + x], {x, 0, 1}]",
+  "rhs": [
+   "1/(2*n + 1)*(Log[4] + Sum[(-1)^k/k, {k, 1, 2*n + 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (325)(2c)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 x^(2n) ln(1+x) dx = [ln4 + sum_{k=1}^{2n+1} (-1)^k/k]/(2n+1)",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR4.293.6",
+  "gr": "4.293.6",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[x^(n - 1/2)*Log[1 + x], {x, 0, 1}]",
+  "rhs": [
+   "2*Log[2]/(2*n + 1) + (-1)^n*4/(2*n + 1)*(Pi/4 - Sum[(-1)^k/(2*k + 1), {k, 0, n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (325)(2f)",
+  "edition_note": "11",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 x^(n-1/2) ln(1+x) dx = 2ln2/(2n+1) + ((-1)^n 4/(2n+1))[pi/4 - sum_{k=0}^n (-1)^k/(2k+1)]",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR4.293.7",
+  "gr": "4.293.7",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Log[Abs[1 - x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/mu*Cot[mu*Pi]"
+  ],
+  "conds": [
+   "-1 < Re[mu] < 0"
+  ],
+  "cite": "BI (134)(4), ET I 315(18)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf x^(mu-1) ln|1-x| dx = (pi/mu) cot(mu pi)",
+  "note": ""
+ },
+ {
+  "id": "GR4.293.8a",
+  "gr": "4.293.8",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Log[1 - x], {x, 0, 1}]",
+  "rhs": [
+   "-1/mu*(PolyGamma[mu + 1] - PolyGamma[1])"
+  ],
+  "conds": [
+   "Re[mu] > -1"
+  ],
+  "cite": "ET I 316(19)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 x^(mu-1) ln(1-x) dx = -(1/mu)[psi(mu+1) - psi(1)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.293.8b",
+  "gr": "4.293.8",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Log[1 - x], {x, 0, 1}]",
+  "rhs": [
+   "-1/mu*(PolyGamma[mu + 1] + EulerGamma)"
+  ],
+  "conds": [
+   "Re[mu] > -1"
+  ],
+  "cite": "ET I 316(19)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 x^(mu-1) ln(1-x) dx = -(1/mu)[psi(mu+1) + C]",
+  "note": ""
+ },
+ {
+  "id": "GR4.293.9",
+  "gr": "4.293.9",
+  "page": 607,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Log[x - 1], {x, 1, Infinity}]",
+  "rhs": [
+   "1/mu*(Pi*Cot[mu*Pi] + PolyGamma[mu + 1] + EulerGamma)"
+  ],
+  "conds": [
+   "Re[mu] < 0"
+  ],
+  "cite": "ET I 316(20)",
+  "edition_note": "7",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_1^inf x^(mu-1) ln(x-1) dx = (1/mu)[pi cot(mu pi) + psi(mu+1) + C]",
+  "note": ""
+ },
+ {
+  "id": "GR4.293.10",
+  "gr": "4.293.10",
+  "page": 608,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Log[1 + gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(mu*gamma^mu*Sin[mu*Pi])"
+  ],
+  "conds": [
+   "-1 < Re[mu] < 0",
+   "Abs[Arg[gamma]] < Pi"
+  ],
+  "cite": "BI (134)(3)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf x^(mu-1) ln(1+gamma x) dx = pi/(mu gamma^mu sin(mu pi))",
+  "note": ""
+ },
+ {
+  "id": "GR4.293.11",
+  "gr": "4.293.11",
+  "page": 608,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Log[1 + x]/(1 + x), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/Sin[mu*Pi]*(EulerGamma + PolyGamma[1 - mu])"
+  ],
+  "conds": [
+   "-1 < Re[mu] < 1"
+  ],
+  "cite": "ET I 316(21)",
+  "edition_note": "11",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf x^(mu-1) ln(1+x)/(1+x) dx = -(pi/sin(mu pi))[C + psi(1-mu)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.293.12",
+  "gr": "4.293.12",
+  "page": 608,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]/(1 + x)^(mu + 1), {x, 0, 1}]",
+  "rhs": [
+   "-Log[2]/(2^mu*mu) + (2^mu - 1)/(2^mu*mu^2)"
+  ],
+  "conds": [],
+  "cite": "BI (114)(6)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+x)/(1+x)^(mu+1) dx = -ln2/(2^mu mu) + (2^mu - 1)/(2^mu mu^2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.293.13",
+  "gr": "4.293.13",
+  "page": 608,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Log[1 - x]/(1 - x)^(1 - nu), {x, 0, 1}]",
+  "rhs": [
+   "Beta[mu, nu]*(PolyGamma[nu] - PolyGamma[mu + nu])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET I 316(122)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 x^(mu-1) ln(1-x)/(1-x)^(1-nu) dx = B(mu,nu)[psi(nu) - psi(mu+nu)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.293.14",
+  "gr": "4.293.14",
+  "page": 608,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Log[gamma + x]/(gamma + x)^nu, {x, 0, Infinity}]",
+  "rhs": [
+   "gamma^(mu - nu)*Beta[mu, nu - mu]*(PolyGamma[nu] - PolyGamma[nu - mu] + Log[gamma])"
+  ],
+  "conds": [
+   "0 < Re[mu] < Re[nu]",
+   "gamma > 0"
+  ],
+  "cite": "ET I 316(23)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf x^(mu-1) ln(gamma+x)/(gamma+x)^nu dx = gamma^(mu-nu) B(mu,nu-mu)[psi(nu) - psi(nu-mu) + ln gamma]",
+  "note": "gamma > 0 added (book gives no condition on gamma)"
+ },
+ {
+  "id": "GR4.294.1",
+  "gr": "4.294.1",
+  "page": 608,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]*((p - 1)*x^(p - 1) - p*x^(-p))/x, {x, 0, 1}]",
+  "rhs": [
+   "2*Log[2] - Pi/Sin[p*Pi]"
+  ],
+  "conds": [
+   "0 < p < 1"
+  ],
+  "cite": "BI (114)(2)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+x)((p-1)x^(p-1) - p x^(-p))/x dx = 2ln2 - pi/sin(p pi)",
+  "note": ""
+ },
+ {
+  "id": "GR4.294.2",
+  "gr": "4.294.2",
+  "page": 608,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]*(1 + x^(2*n + 1))/(1 + x), {x, 0, 1}]",
+  "rhs": [
+   "2*Log[2]*Sum[1/(2*k + 1), {k, 0, n}] - Sum[1/j*Sum[(-1)^(k - 1)/k, {k, 1, j}], {j, 1, 2*n + 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (114)(7)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+x)(1+x^(2n+1))/(1+x) dx = 2ln2 sum_{k=0}^n 1/(2k+1) - sum_{j=1}^{2n+1} (1/j) sum_{k=1}^j (-1)^(k-1)/k",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR4.294.3",
+  "gr": "4.294.3",
+  "page": 608,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]*(1 - x^(2*n))/(1 + x), {x, 0, 1}]",
+  "rhs": [
+   "2*Log[2]*Sum[1/(2*k + 1), {k, 0, n - 1}] - Sum[1/j*Sum[(-1)^(k - 1)/k, {k, 1, j}], {j, 1, 2*n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (114)(8)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+x)(1-x^(2n))/(1+x) dx = 2ln2 sum_{k=0}^{n-1} 1/(2k+1) - sum_{j=1}^{2n} (1/j) sum_{k=1}^j (-1)^(k-1)/k",
+  "note": "n positive integer implied"
+ },
+ {
+  "id": "GR4.294.4",
+  "gr": "4.294.4",
+  "page": 608,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]*(1 - x^(2*n))/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "2*Log[2]*Sum[1/(2*k + 1), {k, 0, n - 1}] + Sum[(-1)^j/j*Sum[(-1)^(k - 1)/k, {k, 1, j}], {j, 1, 2*n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (114)(9)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+x)(1-x^(2n))/(1-x) dx = 2ln2 sum_{k=0}^{n-1} 1/(2k+1) + sum_{i=1}^{2n} ((-1)^j/j) sum_{k=1}^j (-1)^(k-1)/k",
+  "note": "outer summation index printed as i but body uses j; read as j. n positive integer implied"
+ },
+ {
+  "id": "GR4.294.5",
+  "gr": "4.294.5",
+  "page": 608,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]*(1 - x^(2*n + 1))/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "2*Log[2]*Sum[1/(2*k + 1), {k, 0, n}] + Sum[(-1)^j/j*Sum[(-1)^(k - 1)/k, {k, 1, j}], {j, 1, 2*n + 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (114)(10)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+x)(1-x^(2n+1))/(1-x) dx = 2ln2 sum_{k=0}^n 1/(2k+1) + sum_{j=1}^{2n+1} ((-1)^j/j) sum_{k=1}^j (-1)^(k-1)/k",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR4.294.6",
+  "gr": "4.294.6",
+  "page": 608,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - x]*(1 - (-1)^n*x^n)/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "Sum[(-1)^j/j*Sum[1/k, {k, 1, j}], {j, 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (114)(15)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1-x)(1-(-1)^n x^n)/(1-x) dx = sum_{j=1}^n ((-1)^j/j) sum_{k=1}^j 1/k",
+  "note": "MISPRINT in integrand: as printed it diverges at x=1 for odd n, and for even n equals 4.294.7's value. The RHS matches denominator (1+x): int_0^1 ln(1-x)(1-(-1)^n x^n)/(1+x) dx = sum_j (-1)^j H_j/j. n positive integer implied"
+ },
+ {
+  "id": "GR4.294.7",
+  "gr": "4.294.7",
+  "page": 608,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - x]*(1 - x^n)/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "-Sum[1/j*Sum[1/k, {k, 1, j}], {j, 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (114)(16)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1-x)(1-x^n)/(1-x) dx = -sum_{j=1}^n (1/j) sum_{k=1}^j 1/k",
+  "note": "n positive integer implied"
+ },
+ {
+  "id": "GR4.294.8",
+  "gr": "4.294.8",
+  "page": 608,
+  "status": "ok",
+  "lhs": "Integrate[Log[(1 - x)^2]*x^p, {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi/(p + 1)*Cot[p*Pi]"
+  ],
+  "conds": [
+   "-2 < p < -1"
+  ],
+  "cite": "BI (134)(13)a",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf ln^2(1-x) x^p dx = (2pi/(p+1)) cot(p pi)",
+  "note": "book's ln^2(1-x) read as ln((1-x)^2) = 2 ln|1-x| (consistent with 4.293.7 at mu = p+1)"
+ },
+ {
+  "id": "GR4.294.9",
+  "gr": "4.294.9",
+  "page": 608,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x]^n*(1 + x)^r, {x, 0, 1}]",
+  "rhs": [
+   "(-1)^(n - 1)*n!/(r + 1)^(n + 1) + 2^(r + 1)*Sum[(-1)^k*n!*Log[2]^(n - k)/((n - k)!*(r + 1)^(k + 1)), {k, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Unequal[r, -1]"
+  ],
+  "cite": "LI (106)(34)a",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 [ln(1+x)]^n (1+x)^r dx = (-1)^(n-1) n!/(r+1)^(n+1) + 2^(r+1) sum_{k=0}^n (-1)^k n! (ln2)^(n-k)/((n-k)!(r+1)^(k+1))",
+  "note": "no conditions printed; n nonnegative integer and r != -1 implied"
+ },
+ {
+  "id": "GR4.294.10",
+  "gr": "4.294.10",
+  "page": 608,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - x]^n*(1 - x)^r, {x, 0, 1}]",
+  "rhs": [
+   "(-1)^n*n!/(r + 1)^(n + 1)"
+  ],
+  "conds": [
+   "r > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (106)(35)a",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 [ln(1-x)]^n (1-x)^r dx = (-1)^n n!/(r+1)^(n+1)",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR4.294.11",
+  "gr": "4.294.11",
+  "page": 609,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/(1 - x^2)]^n*x^(2*q - 1), {x, 0, 1}]",
+  "rhs": [
+   "n!/2*HurwitzZeta[n + 1, q + 1]"
+  ],
+  "conds": [
+   "-1 < q < 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (311)(15)a",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 (ln 1/(1-x^2))^n x^(2q-1) dx = (n!/2) zeta(n+1, q+1)",
+  "note": "n positive integer implied"
+ },
+ {
+  "id": "GR4.294.12",
+  "gr": "4.294.12",
+  "page": 609,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]^(2*n)*Log[1 - x^2]/x, {x, 0, 1}]",
+  "rhs": [
+   "-Pi^(2*n + 2)/(2*(n + 1)*(2*n + 1))*Abs[BernoulliB[2*n + 2]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (309)(5)a",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 (ln x)^(2n) ln(1-x^2) dx/x = -pi^(2n+2)|B_(2n+2)|/(2(n+1)(2n+1))",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR4.294.13",
+  "gr": "4.294.13",
+  "page": 609,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^m*Log[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "-Sum[Gamma[m + 1]/(n*(2*n + 1)^(m + 1)), {n, 1, Infinity}]"
+  ],
+  "conds": [
+   "m + 1 > 0"
+  ],
+  "cite": "",
+  "edition_note": "6",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 [ln 1/x]^m ln(1-x^2) dx = -sum_{n>=1} Gamma(m+1)/(n(2n+1)^(m+1))",
+  "note": "printed condition also has n+1 > 0, but n is the summation index; dropped"
+ },
+ {
+  "id": "GR4.295.1",
+  "gr": "4.295.1",
+  "page": 609,
+  "status": "ok",
+  "lhs": "Integrate[Log[mu*x^2 + beta]/(gamma + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/Sqrt[gamma]*Log[Sqrt[mu*gamma] + Sqrt[beta]]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[mu] > 0",
+   "Abs[Arg[gamma]] < Pi"
+  ],
+  "cite": "ET II 218(27)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf ln(mu x^2 + beta) dx/(gamma + x^2) = (pi/sqrt gamma) ln(sqrt(mu gamma) + sqrt beta)",
+  "note": ""
+ },
+ {
+  "id": "GR4.295.2",
+  "gr": "4.295.2",
+  "page": 609,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x^2]/x^2, {x, 0, 1}]",
+  "rhs": [
+   "Pi/2 - Log[2]"
+  ],
+  "conds": [],
+  "cite": "GW (325)(2g)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+x^2) dx/x^2 = pi/2 - ln2",
+  "note": ""
+ },
+ {
+  "id": "GR4.295.3",
+  "gr": "4.295.3",
+  "page": 609,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x^2]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi"
+  ],
+  "conds": [],
+  "cite": "GW (325)(4c)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf ln(1+x^2) dx/x^2 = pi",
+  "note": ""
+ },
+ {
+  "id": "GR4.295.4",
+  "gr": "4.295.4",
+  "page": 609,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x^2]/(a + x)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2*a/(1 + a^2)*(Pi/(2*a) + Log[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (319)(6)a",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf ln(1+x^2) dx/(a+x)^2 = (2a/(1+a^2))(pi/(2a) + ln a)",
+  "note": ""
+ },
+ {
+  "id": "GR4.295.5",
+  "gr": "4.295.5",
+  "page": 609,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x^2]/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*Log[2] - Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (114)(24)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1+x^2) dx/(1+x^2) = (pi/2) ln2 - G",
+  "note": ""
+ },
+ {
+  "id": "GR4.295.6",
+  "gr": "4.295.6",
+  "page": 609,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x^2]/(1 + x^2), {x, 1, Infinity}]",
+  "rhs": [
+   "Pi/2*Log[2] + Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (114)(5)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_1^inf ln(1+x^2) dx/(1+x^2) = (pi/2) ln2 + G",
+  "note": ""
+ },
+ {
+  "id": "GR4.295.7",
+  "gr": "4.295.7",
+  "page": 609,
+  "status": "ok",
+  "lhs": "Integrate[Log[a^2 + b^2*x^2]/(c^2 + g^2*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(c*g)*Log[(a*g + b*c)/g]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0",
+   "g > 0"
+  ],
+  "cite": "BI (136)(11-14)a",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf ln(a^2+b^2x^2) dx/(c^2+g^2x^2) = (pi/(cg)) ln((ag+bc)/g)",
+  "note": ""
+ },
+ {
+  "id": "GR4.295.8",
+  "gr": "4.295.8",
+  "page": 609,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[a^2 + b^2*x^2]/(c^2 - g^2*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/(c*g)*ArcTan[b*c/(a*g)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0",
+   "g > 0"
+  ],
+  "cite": "BI (136)(15)a",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf ln(a^2+b^2x^2) dx/(c^2-g^2x^2) = -(pi/(cg)) arctan(bc/(ag))",
+  "note": "",
+  "reason": "pole at x = c/g on the path; implied PV"
+ },
+ {
+  "id": "GR4.295.9",
+  "gr": "4.295.9",
+  "page": 609,
+  "status": "ok",
+  "lhs": "Integrate[(Log[1 + p^2*x^2] - Log[1 + q^2*x^2])/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(p - q)"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "FI II 645",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf [ln(1+p^2x^2) - ln(1+q^2x^2)]/x^2 dx = pi(p-q)",
+  "note": ""
+ },
+ {
+  "id": "GR4.295.10",
+  "gr": "4.295.10",
+  "page": 609,
+  "status": "ok",
+  "lhs": "Integrate[Log[(1 + a^2*x^2)/(1 + a^2)]/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "-ArcTan[a]^2"
+  ],
+  "conds": [],
+  "cite": "BI (115)(2)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln((1+a^2x^2)/(1+a^2)) dx/(1-x^2) = -(arctan a)^2",
+  "note": ""
+ },
+ {
+  "id": "GR4.295.11",
+  "gr": "4.295.11",
+  "page": 609,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - x^2]/x, {x, 0, 1}]",
+  "rhs": [
+   "-Pi^2/12"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1-x^2) dx/x = -pi^2/12",
+  "note": ""
+ },
+ {
+  "id": "GR4.295.12",
+  "gr": "4.295.12",
+  "page": 609,
+  "status": "ok",
+  "lhs": "Integrate[Log[(1 - x^2)^2]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [],
+  "cite": "BI (142)(9)a",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^inf ln^2(1-x^2) dx/x^2 = 0",
+  "note": "book's ln^2(1-x^2) read as ln((1-x^2)^2) = 2 ln|1-x^2|; (ln)^2 would give a positive value"
+ },
+ {
+  "id": "GR4.295.13",
+  "gr": "4.295.13",
+  "page": 609,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - x^2]/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "Pi/4*Log[2] - Catalan"
+  ],
+  "conds": [],
+  "cite": "GW (325)(17)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_0^1 ln(1-x^2) dx/(1+x^2) = (pi/4) ln2 - G",
+  "note": ""
+ },
+ {
+  "id": "GR4.295.14",
+  "gr": "4.295.14",
+  "page": 609,
+  "status": "ok",
+  "lhs": "Integrate[Log[x^2 - 1]/(1 + x^2), {x, 1, Infinity}]",
+  "rhs": [
+   "Pi/4*Log[2] + Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (144)(6)",
+  "edition_note": "",
+  "section": "4.29-4.32 Combinations of logarithmic functions of more complicated arguments and powers",
+  "tex": "int_1^inf ln(x^2-1) dx/(1+x^2) = (pi/4) ln2 + G",
+  "note": ""
+ }
+]

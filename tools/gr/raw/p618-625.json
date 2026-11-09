@@ -1,0 +1,1960 @@
+[
+ {
+  "id": "GR4.322.3",
+  "gr": "4.322.3",
+  "page": 618,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[a*x]^2]/(b^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/b*Log[(1 + E^(-2*a*b))/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (338)(28a)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^inf ln cos^2(ax)/(b^2+x^2) dx = pi/b ln((1+e^(-2ab))/2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.322.4",
+  "gr": "4.322.4",
+  "page": 618,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[Sin[a*x]^2]/(b^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi^2/(2*b) + a*Pi"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (418)(1)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^inf ln sin^2(ax)/(b^2-x^2) dx = -pi^2/(2b) + a pi",
+  "note": "",
+  "reason": "pole at x=b on the path; implied principal value"
+ },
+ {
+  "id": "GR4.322.5",
+  "gr": "4.322.5",
+  "page": 618,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[Log[Cos[a*x]^2]/(b^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Infinity"
+  ],
+  "conds": [],
+  "cite": "BI (418)(2)",
+  "edition_note": "11",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^inf ln cos^2(ax)/(b^2-x^2) dx = inf",
+  "note": "",
+  "reason": "divergent"
+ },
+ {
+  "id": "GR4.322.6",
+  "gr": "4.322.6",
+  "page": 618,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]^2]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi"
+  ],
+  "conds": [],
+  "cite": "FI II 686",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^inf ln cos^2 x / x^2 dx = -pi",
+  "note": ""
+ },
+ {
+  "id": "GR4.322.7",
+  "gr": "4.322.7",
+  "page": 618,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*x^(mu - 1), {x, 0, Pi/4}]",
+  "rhs": [
+   "-1/(2*mu)*(Pi/4)^mu*(Log[2] + 2/mu - Sum[Zeta[2*k]/(4^(2*k - 1)*(mu + 2*k)), {k, 1, Infinity}])"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "LI (425)(1)",
+  "edition_note": "7",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^(pi/4) ln sin x x^(mu-1) dx = -1/(2mu)(pi/4)^mu[ln2 + 2/mu - sum zeta(2k)/(4^(2k-1)(mu+2k))]",
+  "note": ""
+ },
+ {
+  "id": "GR4.322.8",
+  "gr": "4.322.8",
+  "page": 618,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*x^(mu - 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "-1/mu*(Pi/2)^mu*(1/mu - 2*Sum[Zeta[2*k]/(4^k*(mu + 2*k)), {k, 1, Infinity}])"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "LI (430)(1)",
+  "edition_note": "7",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x x^(mu-1) dx = -1/mu (pi/2)^mu [1/mu - 2 sum zeta(2k)/(4^k(mu+2k))]",
+  "note": ""
+ },
+ {
+  "id": "GR4.322.9",
+  "gr": "4.322.9",
+  "page": 618,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - Cos[x]]*x^(mu - 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "-1/mu*(Pi/2)^mu*(2/mu - Sum[Zeta[2*k]/(4^(2*k - 1)*(mu + 2*k)), {k, 1, Infinity}])"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "LI (430)(2)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln(1-cos x) x^(mu-1) dx = -1/mu (pi/2)^mu [2/mu - sum zeta(2k)/(4^(2k-1)(mu+2k))]",
+  "note": ""
+ },
+ {
+  "id": "GR4.322.10a",
+  "gr": "4.322.10a",
+  "page": 618,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + 2*p*Cos[beta*x] + p^2]/(q^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/q*Log[1 + p*E^(-beta*q)]"
+  ],
+  "conds": [
+   "p^2 < 1",
+   "q > 0",
+   "beta > 0"
+  ],
+  "cite": "FI II 718a",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^inf ln(1 + 2p cos(beta x) + p^2) dx/(q^2+x^2)",
+  "note": "q > 0, beta > 0 implied"
+ },
+ {
+  "id": "GR4.322.10b",
+  "gr": "4.322.10b",
+  "page": 618,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - 2*p*Cos[beta*x] + p^2]/(q^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/q*Log[1 - p*E^(-beta*q)]"
+  ],
+  "conds": [
+   "p^2 < 1",
+   "q > 0",
+   "beta > 0"
+  ],
+  "cite": "FI II 718a",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^inf ln(1 - 2p cos(beta x) + p^2) dx/(q^2+x^2)",
+  "note": "q > 0, beta > 0 implied"
+ },
+ {
+  "id": "GR4.322.10c",
+  "gr": "4.322.10c",
+  "page": 618,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + 2*p*Cos[beta*x] + p^2]/(q^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/q*Log[p + E^(-beta*q)]"
+  ],
+  "conds": [
+   "p > 1",
+   "q > 0",
+   "beta > 0"
+  ],
+  "cite": "FI II 718a",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^inf ln(1 + 2p cos(beta x) + p^2) dx/(q^2+x^2)",
+  "note": "printed condition p^2 > 1; branch p < -1 dropped (log of a negative there); q > 0, beta > 0 implied"
+ },
+ {
+  "id": "GR4.322.10d",
+  "gr": "4.322.10d",
+  "page": 618,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - 2*p*Cos[beta*x] + p^2]/(q^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/q*Log[p - E^(-beta*q)]"
+  ],
+  "conds": [
+   "p > 1",
+   "q > 0",
+   "beta > 0"
+  ],
+  "cite": "FI II 718a",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^inf ln(1 - 2p cos(beta x) + p^2) dx/(q^2+x^2)",
+  "note": "printed condition p^2 > 1; branch p < -1 dropped (log of a negative there); q > 0, beta > 0 implied"
+ },
+ {
+  "id": "GR4.323.1",
+  "gr": "4.323.1",
+  "page": 618,
+  "status": "ok",
+  "lhs": "Integrate[x*Log[Tan[x]^2], {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [],
+  "cite": "BI (432)(3)",
+  "edition_note": "11",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^pi x ln tan^2 x dx = 0",
+  "note": ""
+ },
+ {
+  "id": "GR4.323.2",
+  "gr": "4.323.2",
+  "page": 618,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[a*x]^2]/(b^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/b*Log[Tanh[a*b]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (338)(28c)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^inf ln tan^2(ax)/(b^2+x^2) dx = pi/b ln tanh(ab)",
+  "note": ""
+ },
+ {
+  "id": "GR4.323.3",
+  "gr": "4.323.3",
+  "page": 618,
+  "status": "ok",
+  "lhs": "Integrate[Log[((1 + Tan[x])/(1 - Tan[x]))^2]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/2"
+  ],
+  "conds": [],
+  "cite": "GW (338)(26)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^inf ln((1+tan x)/(1-tan x))^2 dx/x = pi^2/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.324.1",
+  "gr": "4.324.1",
+  "page": 618,
+  "status": "ok",
+  "lhs": "Integrate[Log[((1 + Sin[x])/(1 - Sin[x]))^2]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2"
+  ],
+  "conds": [],
+  "cite": "GW (338)(25)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^inf ln((1+sin x)/(1-sin x))^2 dx/x = pi^2",
+  "note": ""
+ },
+ {
+  "id": "GR4.324.2a",
+  "gr": "4.324.2a",
+  "page": 618,
+  "status": "ok",
+  "lhs": "Integrate[Log[(1 + 2*a*Cos[p*x] + a^2)/(1 + 2*a*Cos[q*x] + a^2)]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[1 + a]*Log[q^2/p^2]"
+  ],
+  "conds": [
+   "-1 < a < 1",
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "GW (338)(27)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "... = ln(1+a) ln(q^2/p^2) [-1<a<=1]",
+  "note": "printed -1 < a <= 1; p, q > 0 implied"
+ },
+ {
+  "id": "GR4.324.2b",
+  "gr": "4.324.2b",
+  "page": 618,
+  "status": "ok",
+  "lhs": "Integrate[Log[(1 + 2*a*Cos[p*x] + a^2)/(1 + 2*a*Cos[q*x] + a^2)]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[1 + 1/a]*Log[q^2/p^2]"
+  ],
+  "conds": [
+   "a > 1",
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "GW (338)(27)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "... = ln(1+1/a) ln(q^2/p^2) [a<-1 or a>=1]",
+  "note": "printed a < -1 or a >= 1; branch a < -1 not sampled"
+ },
+ {
+  "id": "GR4.324.3",
+  "gr": "4.324.3",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[a^2*Sin[p*x]^2 + b^2*Cos[p*x]^2]/(c^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/c*(Log[a*Sinh[c*p] + b*Cosh[c*p]] - c*p)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0",
+   "p > 0"
+  ],
+  "cite": "GW (338)(29)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^inf ln(a^2 sin^2 px + b^2 cos^2 px) dx/(c^2+x^2) = pi/c[ln(a sinh cp + b cosh cp) - cp]",
+  "note": ""
+ },
+ {
+  "id": "GR4.325.1a",
+  "gr": "4.325.1a",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[1/x]]/(1 + x), {x, 0, 1}]",
+  "rhs": [
+   "-EulerGamma*Log[2] + Sum[(-1)^k*Log[k]/k, {k, 2, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "GW (325)(25a)",
+  "edition_note": "3",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^1 lnln(1/x) dx/(1+x) = -C ln2 + sum_{k>=2} (-1)^k ln k/k",
+  "note": ""
+ },
+ {
+  "id": "GR4.325.1b",
+  "gr": "4.325.1b",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[1/x]]/(1 + x), {x, 0, 1}]",
+  "rhs": [
+   "-EulerGamma*Log[2] + 0.159868905"
+  ],
+  "conds": [],
+  "cite": "GW (325)(25a)",
+  "edition_note": "3",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "= -C ln 2 + 0.159868905...",
+  "note": "truncated decimal value"
+ },
+ {
+  "id": "GR4.325.1c",
+  "gr": "4.325.1c",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[1/x]]/(1 + x), {x, 0, 1}]",
+  "rhs": [
+   "-Log[2]^2/2"
+  ],
+  "conds": [],
+  "cite": "GW (325)(25a)",
+  "edition_note": "3",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "= -1/2 (ln 2)^2",
+  "note": ""
+ },
+ {
+  "id": "GR4.325.2",
+  "gr": "4.325.2",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[1/x]]/(x + E^(I*lam)), {x, 0, 1}]",
+  "rhs": [
+   "Sum[(-1)^k/k*E^(-I*k*lam)*(EulerGamma + Log[k]), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "-Pi < lam < Pi"
+  ],
+  "cite": "GW (325)(26)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^1 lnln(1/x) dx/(x+e^(i lam)) = sum (-1)^k/k e^(-ik lam)(C + ln k)",
+  "note": "lam real, |lam| < pi implied (pole on path at lam = pi)"
+ },
+ {
+  "id": "GR4.325.3a",
+  "gr": "4.325.3a",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[1/x]]*1/(1 + x)^2, {x, 0, 1}]",
+  "rhs": [
+   "(PolyGamma[1/2] + Log[2*Pi])/2"
+  ],
+  "conds": [],
+  "cite": "BI (147)(7)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^1 lnln(1/x) 1/(1 + x)^2 dx = (PolyGamma[1/2] + Log[2*Pi])/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.325.3b",
+  "gr": "4.325.3b",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[1/x]]/(1 + x)^2, {x, 0, 1}]",
+  "rhs": [
+   "(Log[Pi/2] - EulerGamma)/2"
+  ],
+  "conds": [],
+  "cite": "BI (147)(7)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "= 1/2(ln(pi/2) - C)",
+  "note": ""
+ },
+ {
+  "id": "GR4.325.3c",
+  "gr": "4.325.3c",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[x]]/(1 + x)^2, {x, 1, Infinity}]",
+  "rhs": [
+   "(Log[Pi/2] - EulerGamma)/2"
+  ],
+  "conds": [],
+  "cite": "BI (147)(7)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_1^inf lnln x dx/(1+x)^2 = 1/2(ln(pi/2) - C)",
+  "note": ""
+ },
+ {
+  "id": "GR4.325.4a",
+  "gr": "4.325.4a",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[1/x]]*1/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*Log[Sqrt[2*Pi]*Gamma[3/4]/Gamma[1/4]]"
+  ],
+  "conds": [],
+  "cite": "BI (148)(1)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^1 lnln(1/x) 1/(1 + x^2) dx = Pi/2*Log[Sqrt[2*Pi]*Gamma[3/4]/Gamma[1/4]]",
+  "note": ""
+ },
+ {
+  "id": "GR4.325.4b",
+  "gr": "4.325.4b",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[x]]*1/(1 + x^2), {x, 1, Infinity}]",
+  "rhs": [
+   "Pi/2*Log[Sqrt[2*Pi]*Gamma[3/4]/Gamma[1/4]]"
+  ],
+  "conds": [],
+  "cite": "BI (148)(1)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_1^inf lnln x 1/(1 + x^2) dx = Pi/2*Log[Sqrt[2*Pi]*Gamma[3/4]/Gamma[1/4]]",
+  "note": ""
+ },
+ {
+  "id": "GR4.325.5a",
+  "gr": "4.325.5a",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[1/x]]*1/(1 + x + x^2), {x, 0, 1}]",
+  "rhs": [
+   "Pi/Sqrt[3]*Log[(2*Pi)^(1/3)*Gamma[2/3]/Gamma[1/3]]"
+  ],
+  "conds": [],
+  "cite": "BI (148)(2)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^1 lnln(1/x) 1/(1 + x + x^2) dx = Pi/Sqrt[3]*Log[(2*Pi)^(1/3)*Gamma[2/3]/Gamma[1/3]]",
+  "note": ""
+ },
+ {
+  "id": "GR4.325.5b",
+  "gr": "4.325.5b",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[x]]*1/(1 + x + x^2), {x, 1, Infinity}]",
+  "rhs": [
+   "Pi/Sqrt[3]*Log[(2*Pi)^(1/3)*Gamma[2/3]/Gamma[1/3]]"
+  ],
+  "conds": [],
+  "cite": "BI (148)(2)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_1^inf lnln x 1/(1 + x + x^2) dx = Pi/Sqrt[3]*Log[(2*Pi)^(1/3)*Gamma[2/3]/Gamma[1/3]]",
+  "note": ""
+ },
+ {
+  "id": "GR4.325.6a",
+  "gr": "4.325.6a",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[1/x]]*1/(1 - x + x^2), {x, 0, 1}]",
+  "rhs": [
+   "2*Pi/Sqrt[3]*(5/6*Log[2*Pi] - Log[Gamma[1/6]])"
+  ],
+  "conds": [],
+  "cite": "BI (148)(5)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^1 lnln(1/x) 1/(1 - x + x^2) dx = 2*Pi/Sqrt[3]*(5/6*Log[2*Pi] - Log[Gamma[1/6]])",
+  "note": ""
+ },
+ {
+  "id": "GR4.325.6b",
+  "gr": "4.325.6b",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[x]]*1/(1 - x + x^2), {x, 1, Infinity}]",
+  "rhs": [
+   "2*Pi/Sqrt[3]*(5/6*Log[2*Pi] - Log[Gamma[1/6]])"
+  ],
+  "conds": [],
+  "cite": "BI (148)(5)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_1^inf lnln x 1/(1 - x + x^2) dx = 2*Pi/Sqrt[3]*(5/6*Log[2*Pi] - Log[Gamma[1/6]])",
+  "note": ""
+ },
+ {
+  "id": "GR4.325.7a",
+  "gr": "4.325.7a",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[1/x]]*1/(1 + 2*x*Cos[t] + x^2), {x, 0, 1}]",
+  "rhs": [
+   "Pi/(2*Sin[t])*Log[(2*Pi)^(t/Pi)*Gamma[1/2 + t/(2*Pi)]/Gamma[1/2 - t/(2*Pi)]]"
+  ],
+  "conds": [
+   "0 < t < Pi"
+  ],
+  "cite": "BI (147)(9)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^1 lnln(1/x) 1/(1 + 2*x*Cos[t] + x^2) dx = Pi/(2*Sin[t])*Log[(2*Pi)^(t/Pi)*Gamma[1/2 + t/(2*Pi)]/Gamma[1/2 - t/(2*Pi)]]",
+  "note": "0 < t < pi implied"
+ },
+ {
+  "id": "GR4.325.7b",
+  "gr": "4.325.7b",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[x]]*1/(1 + 2*x*Cos[t] + x^2), {x, 1, Infinity}]",
+  "rhs": [
+   "Pi/(2*Sin[t])*Log[(2*Pi)^(t/Pi)*Gamma[1/2 + t/(2*Pi)]/Gamma[1/2 - t/(2*Pi)]]"
+  ],
+  "conds": [
+   "0 < t < Pi"
+  ],
+  "cite": "BI (147)(9)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_1^inf lnln x 1/(1 + 2*x*Cos[t] + x^2) dx = Pi/(2*Sin[t])*Log[(2*Pi)^(t/Pi)*Gamma[1/2 + t/(2*Pi)]/Gamma[1/2 - t/(2*Pi)]]",
+  "note": "0 < t < pi implied"
+ },
+ {
+  "id": "GR4.325.8",
+  "gr": "4.325.8",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[1/x]]*x^(mu - 1), {x, 0, 1}]",
+  "rhs": [
+   "-(EulerGamma + Log[mu])/mu"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (147)(1)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^1 lnln(1/x) x^(mu-1) dx = -1/mu (C + ln mu)",
+  "note": ""
+ },
+ {
+  "id": "GR4.325.9a",
+  "gr": "4.325.9a",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[x]]*x^(n - 2)*(x^2 - 1)/(x^(2*n) - 1), {x, 1, Infinity}]",
+  "rhs": [
+   "Pi/(2*n)*Tan[Pi/(2*n)]*Log[2*Pi] + Pi/n*Sum[(-1)^(k - 1)*Sin[k*Pi/n]*Log[Gamma[(n + k)/(2*n)]/Gamma[k/(2*n)]], {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "Element[n/2, Integers] && n >= 2"
+  ],
+  "cite": "BI (148)(4)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_1^inf lnln x x^(n-2)/(1+x^2+...+x^(2n-2)) dx, n even",
+  "note": "1+x^2+...+x^(2n-2) written as (x^(2n)-1)/(x^2-1)"
+ },
+ {
+  "id": "GR4.325.9b",
+  "gr": "4.325.9b",
+  "page": 619,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[x]]*x^(n - 2)*(x^2 - 1)/(x^(2*n) - 1), {x, 1, Infinity}]",
+  "rhs": [
+   "Pi/(2*n)*Tan[Pi/(2*n)]*Log[Pi] + Pi/n*Sum[(-1)^(k - 1)*Sin[k*Pi/n]*Log[Gamma[(n - k)/n]/Gamma[k/n]], {k, 1, (n - 1)/2}]"
+  ],
+  "conds": [
+   "Element[(n - 1)/2, Integers] && n >= 3"
+  ],
+  "cite": "BI (148)(4)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "same, n odd",
+  "note": "1+x^2+...+x^(2n-2) written as (x^(2n)-1)/(x^2-1); n = 1 diverges"
+ },
+ {
+  "id": "GR4.325.10a",
+  "gr": "4.325.10a",
+  "page": 620,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[1/x]]*1/((1 + x^2)*Sqrt[Log[1/x]]), {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi]*Sum[(-1)^(k + 1)/Sqrt[2*k + 1]*(Log[2*k + 1] + 2*Log[2] + EulerGamma), {k, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "BI (147)(4)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^1 lnln(1/x) dx/((1+x^2) sqrt(ln 1/x)) = sqrt(pi) sum (-1)^(k+1)/sqrt(2k+1)[ln(2k+1)+2ln2+C]",
+  "note": ""
+ },
+ {
+  "id": "GR4.325.10b",
+  "gr": "4.325.10b",
+  "page": 620,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[x]]/((1 + x^2)*Sqrt[Log[x]]), {x, 1, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*Sum[(-1)^(k + 1)/Sqrt[2*k + 1]*(Log[2*k + 1] + 2*Log[2] + EulerGamma), {k, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "BI (147)(4)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_1^inf lnln x dx/((1+x^2) sqrt(ln x)) = same",
+  "note": ""
+ },
+ {
+  "id": "GR4.325.11",
+  "gr": "4.325.11",
+  "page": 620,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[1/x]]*x^(mu - 1)/Sqrt[Log[1/x]], {x, 0, 1}]",
+  "rhs": [
+   "-(EulerGamma + Log[4*mu])*Sqrt[Pi/mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (147)(3)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^1 lnln(1/x) x^(mu-1)/sqrt(ln 1/x) dx = -(C + ln 4mu) sqrt(pi/mu)",
+  "note": ""
+ },
+ {
+  "id": "GR4.325.12",
+  "gr": "4.325.12",
+  "page": 620,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[1/x]]*Log[1/x]^(mu - 1)*x^(nu - 1), {x, 0, 1}]",
+  "rhs": [
+   "Gamma[mu]/nu^mu*(PolyGamma[mu] - Log[nu])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "BI (147)(2)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^1 lnln(1/x)(ln 1/x)^(mu-1) x^(nu-1) dx = Gamma(mu)/nu^mu [psi(mu) - ln nu]",
+  "note": ""
+ },
+ {
+  "id": "GR4.326.1",
+  "gr": "4.326.1",
+  "page": 620,
+  "status": "ok",
+  "lhs": "Integrate[Log[a - Log[x]]*x^(mu - 1), {x, 0, 1}]",
+  "rhs": [
+   "(Log[a] - E^(a*mu)*ExpIntegralEi[-a*mu])/mu"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "a > 0"
+  ],
+  "cite": "BI (107)(23)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^1 ln(a - ln x) x^(mu-1) dx = 1/mu[ln a - e^(a mu) Ei(-a mu)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.326.2",
+  "gr": "4.326.2",
+  "page": 620,
+  "status": "ok",
+  "lhs": "Integrate[Log[2*Log[1/x] - 1]*x^(2*mu - 1)/Log[x], {x, 0, 1/E}]",
+  "rhs": [
+   "-ExpIntegralEi[-mu]^2/2"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (145)(5)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^(1/e) ln(2 ln(1/x) - 1) x^(2mu-1)/ln x dx = -1/2 [Ei(-mu)]^2",
+  "note": ""
+ },
+ {
+  "id": "GR4.327.1",
+  "gr": "4.327.1",
+  "page": 620,
+  "status": "ok",
+  "lhs": "Integrate[Log[a^2 + Log[x]^2]/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "Pi*Log[2*Gamma[(2*a + 3*Pi)/(4*Pi)]/Gamma[(2*a + Pi)/(4*Pi)]] + Pi/2*Log[Pi/2]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (147)(10)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^1 ln[a^2 + (ln x)^2] dx/(1+x^2) = pi ln(2 Gamma((2a+3pi)/(4pi))/Gamma((2a+pi)/(4pi))) + pi/2 ln(pi/2)",
+  "note": "printed condition a > -pi/2; lhs is even in a but rhs is not, so sampled on a > 0 only"
+ },
+ {
+  "id": "GR4.327.2",
+  "gr": "4.327.2",
+  "page": 620,
+  "status": "ok",
+  "lhs": "Integrate[Log[a^2 + 4*Log[x]^2]/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "Pi*Log[2*Gamma[(a + 3*Pi)/(4*Pi)]/Gamma[(a + Pi)/(4*Pi)]] + Pi/2*Log[Pi]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (147)(16)a",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^1 ln[a^2 + 4(ln x)^2] dx/(1+x^2) = pi ln(2 Gamma((a+3pi)/(4pi))/Gamma((a+pi)/(4pi))) + pi/2 ln pi",
+  "note": "printed condition a > -pi; lhs is even in a but rhs is not, so sampled on a > 0 only"
+ },
+ {
+  "id": "GR4.327.3",
+  "gr": "4.327.3",
+  "page": 620,
+  "status": "ok",
+  "lhs": "Integrate[Log[a^2 + Log[x]^2]*x^(mu - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "2/mu*(-Cos[a*mu]*CosIntegral[a*mu] - Sin[a*mu]*(SinIntegral[a*mu] - Pi/2) + Log[a])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "GW (325)(28)",
+  "edition_note": "",
+  "section": "4.32 Combinations of logarithms and trigonometric functions",
+  "tex": "int_0^inf ln[a^2+(ln x)^2] x^(mu-1) dx = 2/mu[-cos(a mu) ci(a mu) - sin(a mu) si(a mu) + ln a]",
+  "note": "As printed the upper limit is infinity, where the integral diverges for Re mu > 0; the value matches the integral over (0,1) (likely misprint of the upper limit)."
+ },
+ {
+  "id": "GR4.331.1",
+  "gr": "4.331.1",
+  "page": 620,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "-(EulerGamma + Log[mu])/mu"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (256)(2)",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf e^(-mu x) ln x dx = -1/mu (C + ln mu)",
+  "note": ""
+ },
+ {
+  "id": "GR4.331.2",
+  "gr": "4.331.2",
+  "page": 620,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[x], {x, 1, Infinity}]",
+  "rhs": [
+   "-ExpIntegralEi[-mu]/mu"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (260)(5)",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_1^inf e^(-mu x) ln x dx = -1/mu Ei(-mu)",
+  "note": ""
+ },
+ {
+  "id": "GR4.331.3",
+  "gr": "4.331.3",
+  "page": 621,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[E^(mu*x)*Log[x], {x, 0, 1}]",
+  "rhs": [
+   "-1/mu*Integrate[(E^(mu*t) - 1)/t, {t, 0, 1}]"
+  ],
+  "conds": [
+   "mu != 0"
+  ],
+  "cite": "GW (324)(81a)",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^1 e^(mu x) ln x dx = -1/mu int_0^1 (e^(mu x)-1)/x dx",
+  "note": "",
+  "reason": "value is another integral"
+ },
+ {
+  "id": "GR4.332.1",
+  "gr": "4.332.1",
+  "page": 621,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(E^x + E^(-x) - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi/Sqrt[3]*(5/6*Log[2*Pi] - Log[Gamma[1/6]])"
+  ],
+  "conds": [],
+  "cite": "BI (257)(6)",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf ln x dx/(e^x+e^-x-1) = 2pi/sqrt3 [5/6 ln 2pi - ln Gamma(1/6)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.332.2",
+  "gr": "4.332.2",
+  "page": 621,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(E^x + E^(-x) + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/Sqrt[3]*Log[Gamma[2/3]/Gamma[1/3]*(2*Pi)^(1/3)]"
+  ],
+  "conds": [],
+  "cite": "BI (257)(7)a, LI (260)(3)",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf ln x dx/(e^x+e^-x+1) = pi/sqrt3 ln[Gamma(2/3)/Gamma(1/3) (2pi)^(1/3)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.333",
+  "gr": "4.333",
+  "page": 621,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x^2)*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "-(EulerGamma + Log[4*mu])*Sqrt[Pi/mu]/4"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (256)(8), FI II 807a",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf e^(-mu x^2) ln x dx = -1/4 (C + ln 4mu) sqrt(pi/mu)",
+  "note": ""
+ },
+ {
+  "id": "GR4.334",
+  "gr": "4.334",
+  "page": 621,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(E^(x^2) + 1 + E^(-x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/3]/2*Sum[(-1)^k*(EulerGamma + Log[4*k])/Sqrt[k]*Sin[k*Pi/3], {k, 1, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "BI (357)(13)",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf ln x dx/(e^(x^2)+1+e^(-x^2)) = 1/2 sqrt(pi/3) sum (-1)^k (C + ln 4k)/sqrt k sin(k pi/3)",
+  "note": ""
+ },
+ {
+  "id": "GR4.335.1",
+  "gr": "4.335.1",
+  "page": 621,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi^2/6 + (EulerGamma + Log[mu])^2)/mu"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 149(13)",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf e^(-mu x)(ln x)^2 dx = 1/mu[pi^2/6 + (C + ln mu)^2]",
+  "note": ""
+ },
+ {
+  "id": "GR4.335.2",
+  "gr": "4.335.2",
+  "page": 621,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2)*Log[x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/8*((EulerGamma + 2*Log[2])^2 + Pi^2/2)"
+  ],
+  "conds": [],
+  "cite": "FI II 808",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf e^(-x^2)(ln x)^2 dx = sqrt(pi)/8[(C + 2ln2)^2 + pi^2/2]",
+  "note": ""
+ },
+ {
+  "id": "GR4.335.3",
+  "gr": "4.335.3",
+  "page": 621,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[x]^3, {x, 0, Infinity}]",
+  "rhs": [
+   "-((EulerGamma + Log[mu])^3 + Pi^2/2*(EulerGamma + Log[mu]) - PolyGamma[2, 1])/mu"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 26",
+  "edition_note": "7",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf e^(-mu x)(ln x)^3 dx = -1/mu[(C+ln mu)^3 + pi^2/2 (C + ln mu) - psi''(1)]",
+  "note": "Re mu > 0 not printed; implied"
+ },
+ {
+  "id": "GR4.336.1",
+  "gr": "4.336.1",
+  "page": 621,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[E^(-x)/Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "-0.154479567"
+  ],
+  "conds": [],
+  "cite": "BI (260)(9)",
+  "edition_note": "7",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "PV int_0^inf e^(-x)/ln x dx = -0.154479567",
+  "note": "",
+  "reason": "marked PV"
+ },
+ {
+  "id": "GR4.336.2",
+  "gr": "4.336.2",
+  "page": 621,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^(-mu*x)/(Pi^2 + Log[x]^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Derivative[1][VolterraNu][mu] - E^mu"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 26",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf e^(-mu x) dx/(pi^2 + (ln x)^2) = nu'(mu) - e^mu",
+  "note": "",
+  "reason": "G&R nu(x) = int_0^inf x^t/Gamma(t+1) dt (9.640) has no Mathilda head; placeholder VolterraNu"
+ },
+ {
+  "id": "GR4.337.1",
+  "gr": "4.337.1",
+  "page": 621,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[beta + x], {x, 0, Infinity}]",
+  "rhs": [
+   "(Log[beta] - E^(mu*beta)*ExpIntegralEi[-beta*mu])/mu"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (256)(3)",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf e^(-mu x) ln(beta+x) dx = 1/mu[ln beta - e^(mu beta) Ei(-beta mu)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.337.2",
+  "gr": "4.337.2",
+  "page": 621,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[1 + beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-E^(mu/beta)*ExpIntegralEi[-mu/beta]/mu"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 148(4)",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf e^(-mu x) ln(1+beta x) dx = -1/mu e^(mu/beta) Ei(-mu/beta)",
+  "note": ""
+ },
+ {
+  "id": "GR4.337.3",
+  "gr": "4.337.3",
+  "page": 621,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[Abs[a - x]], {x, 0, Infinity}]",
+  "rhs": [
+   "(Log[a] - E^(-a*mu)*ExpIntegralEi[a*mu])/mu"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (256)(4)",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf e^(-mu x) ln|a-x| dx = 1/mu[ln a - e^(-a mu) Ei(a mu)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.337.4",
+  "gr": "4.337.4",
+  "page": 621,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[Abs[beta/(beta - x)]], {x, 0, Infinity}]",
+  "rhs": [
+   "E^(-beta*mu)*ExpIntegralEi[beta*mu]/mu"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "beta > 0"
+  ],
+  "cite": "MI 26",
+  "edition_note": "7",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf e^(-mu x) ln|beta/(beta-x)| dx = 1/mu e^(-beta mu) Ei(beta mu)",
+  "note": "beta > 0 implied"
+ },
+ {
+  "id": "GR4.337.5",
+  "gr": "4.337.5",
+  "page": 621,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + a*x]*x^zeta*E^(-x), {x, 0, Infinity}]",
+  "rhs": [
+   "Sum[zeta!/(zeta - mu)!*((-1)^(zeta - mu - 1)/a^(zeta - mu)*E^(1/a)*ExpIntegralEi[-1/a] + Sum[(k - 1)!*(-1/a)^(zeta - mu - k), {k, 1, zeta - mu}]), {mu, 0, zeta}]"
+  ],
+  "conds": [
+   "Element[zeta, Integers] && zeta >= 0",
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf ln(1+ax) x^zeta e^-x dx = sum_{mu=0}^zeta zeta!/(zeta-mu)! [(-1)^(zeta-mu-1)/a^(zeta-mu) e^(1/a) Ei(-1/a) + sum_{k=1}^{zeta-mu} (k-1)! (-1/a)^(zeta-mu-k)]",
+  "note": "no conditions printed; zeta nonnegative integer and a > 0 implied; no cite printed"
+ },
+ {
+  "id": "GR4.338.1",
+  "gr": "4.338.1",
+  "page": 621,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[beta^2 + x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "2/mu*(Log[beta] - CosIntegral[beta*mu]*Cos[beta*mu] - (SinIntegral[beta*mu] - Pi/2)*Sin[beta*mu])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (256)(6)",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf e^(-mu x) ln(beta^2+x^2) dx = 2/mu[ln beta - ci(beta mu)cos(beta mu) - si(beta mu) sin(beta mu)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.338.2",
+  "gr": "4.338.2",
+  "page": 622,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[x^2 - beta^2]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2/mu*(Log[beta]^2 - E^(beta*mu)*ExpIntegralEi[-beta*mu] - E^(beta*mu)*ExpIntegralEi[beta*mu])",
+   "2/mu*(Log[beta]^2 - E^(beta*mu)*ExpIntegralEi[-beta*mu] - E^(-beta*mu)*ExpIntegralEi[beta*mu])"
+  ],
+  "conds": [
+   "Im[beta] > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (256)(5)",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf e^(-mu x) ln^2(x^2-beta^2) dx = 2/mu[ln^2 beta - e^(beta mu) Ei(-beta mu) - e^(beta mu) Ei(beta mu)]",
+  "note": "Printed as transcribed (ln^2 on both sides, e^(beta mu) twice). Second rhs: e^(-beta mu) on the Ei(beta mu) term. The structure suggests the source may be a first-power log (4.337.1 gives 1/mu[ln beta + ln(-beta) - e^(beta mu)Ei(-beta mu) - e^(-beta mu)Ei(beta mu)] for ln(x^2-beta^2)); likely misprinted."
+ },
+ {
+  "id": "GR4.339",
+  "gr": "4.339",
+  "page": 622,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[Abs[(x + 1)/(x - 1)]], {x, 0, Infinity}]",
+  "rhs": [
+   "(E^(-mu)*(Log[2*mu] + EulerGamma) - E^mu*ExpIntegralEi[-2*mu])/mu"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 27",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf e^(-mu x) ln|(x+1)/(x-1)| dx = 1/mu[e^(-mu)(ln 2mu + gamma) - e^mu Ei(-2mu)]",
+  "note": "book writes gamma; read as Euler's constant"
+ },
+ {
+  "id": "GR4.341",
+  "gr": "4.341",
+  "page": 622,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[(Sqrt[x + a*I] + Sqrt[x - a*I])/Sqrt[2*a]], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*mu)*(StruveH[0, a*mu] - BesselY[0, a*mu])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 149(20)",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf e^(-mu x) ln[(sqrt(x+ai)+sqrt(x-ai))/sqrt(2a)] dx = pi/(4mu)[H_0(a mu) - Y_0(a mu)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.342.1",
+  "gr": "4.342.1",
+  "page": 622,
+  "status": "ok",
+  "lhs": "Integrate[E^(-2*n*x)*Log[Sinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "(1/n + Log[2] - 2*((PolyGamma[((2*n + 1) + 1)/2] - PolyGamma[(2*n + 1)/2])/2))/(2*n)"
+  ],
+  "conds": [
+   "n > 0"
+  ],
+  "cite": "BI (256)(17)",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf e^(-2nx) ln sinh x dx = 1/(2n)[1/n + ln2 - 2 beta(2n+1)]",
+  "note": "n > 0 implied"
+ },
+ {
+  "id": "GR4.342.2",
+  "gr": "4.342.2",
+  "page": 622,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[Cosh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "(((PolyGamma[((mu/2) + 1)/2] - PolyGamma[(mu/2)/2])/2) - 1/mu)/mu"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 165(32)",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf e^(-mu x) ln cosh x dx = 1/mu[beta(mu/2) - 1/mu]",
+  "note": ""
+ },
+ {
+  "id": "GR4.342.3",
+  "gr": "4.342.3",
+  "page": 622,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*(Log[Sinh[x]] - Log[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "(Log[mu/2] - 1/mu - PolyGamma[mu/2])/mu"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 165(33)",
+  "edition_note": "11",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^inf e^(-mu x)[ln sinh x - ln x] dx = 1/mu[ln(mu/2) - 1/mu - psi(mu/2)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.343",
+  "gr": "4.343",
+  "page": 622,
+  "status": "ok",
+  "lhs": "Integrate[E^(mu*Cos[x])*(Log[2*mu*Sin[x]^2] + EulerGamma), {x, 0, Pi}]",
+  "rhs": [
+   "-Pi*BesselK[0, mu]"
+  ],
+  "conds": [
+   "mu > 0"
+  ],
+  "cite": "WA 95(16)",
+  "edition_note": "",
+  "section": "4.33-4.34 Combinations of logarithms and exponentials",
+  "tex": "int_0^pi e^(mu cos x)[ln(2 mu sin^2 x) + C] dx = -pi K_0(mu)",
+  "note": "mu > 0 implied"
+ },
+ {
+  "id": "GR4.351.1",
+  "gr": "4.351.1",
+  "page": 622,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)*E^(-x)*Log[x], {x, 0, 1}]",
+  "rhs": [
+   "(1 - E)/E"
+  ],
+  "conds": [],
+  "cite": "BI (352)(1)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^1 (1-x)e^-x ln x dx = (1-e)/e",
+  "note": ""
+ },
+ {
+  "id": "GR4.351.2",
+  "gr": "4.351.2",
+  "page": 622,
+  "status": "ok",
+  "lhs": "Integrate[E^(mu*x)*(mu*x^2 + 2*x)*Log[x], {x, 0, 1}]",
+  "rhs": [
+   "((1 - mu)*E^mu - 1)/mu^2"
+  ],
+  "conds": [],
+  "cite": "BI (352)(2)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^1 e^(mu x)(mu x^2+2x) ln x dx = 1/mu^2[(1-mu)e^mu - 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.351.3",
+  "gr": "4.351.3",
+  "page": 622,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[x]/(1 + x), {x, 1, Infinity}]",
+  "rhs": [
+   "E^mu*ExpIntegralEi[-mu]^2/2"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "NT 32(10)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_1^inf e^(-mu x) ln x/(1+x) dx = 1/2 e^mu [Ei(-mu)]^2",
+  "note": ""
+ },
+ {
+  "id": "GR4.352.1",
+  "gr": "4.352.1",
+  "page": 622,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*E^(-mu*x)*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]/mu^nu*(PolyGamma[nu] - Log[mu])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "BI (353)(3), ET I 315(10)a",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf x^(nu-1) e^(-mu x) ln x dx = Gamma(nu)/mu^nu [psi(nu) - ln mu]",
+  "note": ""
+ },
+ {
+  "id": "GR4.352.2",
+  "gr": "4.352.2",
+  "page": 622,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(-mu*x)*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "n!/mu^(n + 1)*(Sum[1/k, {k, 1, n}] - EulerGamma - Log[mu])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 148(7)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf x^n e^(-mu x) ln x dx = n!/mu^(n+1)[1 + 1/2 + ... + 1/n - C - ln mu]",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR4.352.3",
+  "gr": "4.352.3",
+  "page": 622,
+  "status": "ok",
+  "lhs": "Integrate[x^(n - 1/2)*E^(-mu*x)*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*(2*n - 1)!!/(2^n*mu^(n + 1/2))*(2*Sum[1/(2*k - 1), {k, 1, n}] - EulerGamma - Log[4*mu])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 148(10)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf x^(n-1/2) e^(-mu x) ln x dx = sqrt(pi)(2n-1)!!/(2^n mu^(n+1/2))[2(1+1/3+...+1/(2n-1)) - C - ln 4mu]",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR4.352.4",
+  "gr": "4.352.4",
+  "page": 623,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-x)*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Derivative[1][Gamma][mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "GW (324)(83a)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf x^(mu-1) e^-x ln x dx = Gamma'(mu)",
+  "note": ""
+ },
+ {
+  "id": "GR4.353.1",
+  "gr": "4.353.1",
+  "page": 623,
+  "status": "ok",
+  "lhs": "Integrate[(x - nu)*x^(nu - 1)*E^(-x)*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]"
+  ],
+  "conds": [
+   "Re[nu] > 0"
+  ],
+  "cite": "GW (324)(84)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf (x-nu) x^(nu-1) e^-x ln x dx = Gamma(nu)",
+  "note": ""
+ },
+ {
+  "id": "GR4.353.2",
+  "gr": "4.353.2",
+  "page": 623,
+  "status": "ok",
+  "lhs": "Integrate[(mu*x - n - 1/2)*x^(n - 1/2)*E^(-mu*x)*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*n - 1)!!/(2*mu)^n*Sqrt[Pi/mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (357)(2)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf (mu x - n - 1/2) x^(n-1/2) e^(-mu x) ln x dx = (2n-1)!!/(2mu)^n sqrt(pi/mu)",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR4.353.3",
+  "gr": "4.353.3",
+  "page": 623,
+  "status": "ok",
+  "lhs": "Integrate[(mu*x + n + 1)*x^n*E^(mu*x)*Log[x], {x, 0, 1}]",
+  "rhs": [
+   "E^mu*Sum[(-1)^(k - 1)*n!/((n - k)!*mu^(k + 1)), {k, 0, n}] + (-1)^n*n!/mu^(n + 1)"
+  ],
+  "conds": [
+   "mu != 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (324)(82)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^1 (mu x + n + 1) x^n e^(mu x) ln x dx = e^mu sum_{k=0}^n (-1)^(k-1) n!/((n-k)! mu^(k+1)) + (-1)^n n!/mu^(n+1)",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR4.354.1a",
+  "gr": "4.354.1a",
+  "page": 623,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*Log[x]/(E^x + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]*Sum[(-1)^(k - 1)/k^nu*(PolyGamma[nu] - Log[k]), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "Re[nu] > 0"
+  ],
+  "cite": "GW (324)(86a)",
+  "edition_note": "6",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf x^(nu-1) ln x/(e^x+1) dx = Gamma(nu) sum (-1)^(k-1)/k^nu [psi(nu) - ln k]",
+  "note": ""
+ },
+ {
+  "id": "GR4.354.1b",
+  "gr": "4.354.1b",
+  "page": 623,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(E^x + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "-Log[2]^2/2"
+  ],
+  "conds": [],
+  "cite": "GW (324)(86a)",
+  "edition_note": "6",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "nu = 1: = -1/2 (ln 2)^2",
+  "note": "nu = 1 substituted"
+ },
+ {
+  "id": "GR4.354.2",
+  "gr": "4.354.2",
+  "page": 623,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*Log[x]/(E^x + 1)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]*Sum[(-1)^k*(k - 1)/k^nu*(PolyGamma[nu] - Log[k]), {k, 2, Infinity}]"
+  ],
+  "conds": [
+   "Re[nu] > 1"
+  ],
+  "cite": "GW (324)(86b)",
+  "edition_note": "7",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf x^(nu-1) ln x/(e^x+1)^2 dx = Gamma(nu) sum_{k>=2} (-1)^k (k-1)/k^nu [psi(nu) - ln k]",
+  "note": ""
+ },
+ {
+  "id": "GR4.354.3",
+  "gr": "4.354.3",
+  "page": 623,
+  "status": "ok",
+  "lhs": "Integrate[((x - nu)*E^x - nu)/(E^x + 1)^2*x^(nu - 1)*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]*Sum[(-1)^(k - 1)/k^nu, {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "Re[nu] > 0"
+  ],
+  "cite": "GW (324)(87a)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf ((x-nu)e^x - nu)/(e^x+1)^2 x^(nu-1) ln x dx = Gamma(nu) sum (-1)^(k-1)/k^nu",
+  "note": ""
+ },
+ {
+  "id": "GR4.354.4",
+  "gr": "4.354.4",
+  "page": 623,
+  "status": "ok",
+  "lhs": "Integrate[((x - 2*n)*E^x - 2*n)/(E^x + 1)^2*x^(2*n - 1)*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2^(2*n - 1) - 1)/(2*n)*Pi^(2*n)*Abs[BernoulliB[2*n]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (324)(87b)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf ((x-2n)e^x - 2n)/(e^x+1)^2 x^(2n-1) ln x dx = (2^(2n-1)-1)/(2n) pi^(2n) |B_2n|",
+  "note": ""
+ },
+ {
+  "id": "GR4.354.5",
+  "gr": "4.354.5",
+  "page": 623,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*Log[x]/(E^x + 1)^n, {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*Gamma[nu]/(n - 1)!*Sum[(-1)^k*(k - 1)!/((k - n)!*k^nu)*(PolyGamma[nu] - Log[k]), {k, n, Infinity}]"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (324)(86c)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf x^(nu-1) ln x/(e^x+1)^n dx = (-1)^n Gamma(nu)/(n-1)! sum_{k>=n} (-1)^k (k-1)!/((k-n)! k^nu)[psi(nu) - ln k]",
+  "note": "n positive integer implied"
+ },
+ {
+  "id": "GR4.355.1",
+  "gr": "4.355.1",
+  "page": 623,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-mu*x^2)*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2 - Log[4*mu] - EulerGamma)/(8*mu)*Sqrt[Pi/mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (357)(1)a",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf x^2 e^(-mu x^2) ln x dx = 1/(8mu)(2 - ln 4mu - C) sqrt(pi/mu)",
+  "note": ""
+ },
+ {
+  "id": "GR4.355.2",
+  "gr": "4.355.2",
+  "page": 623,
+  "status": "ok",
+  "lhs": "Integrate[x*(mu*x^2 - nu*x - 1)*E^(-mu*x^2 + 2*nu*x)*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*mu) + nu/(4*mu)*Sqrt[Pi/mu]*Exp[nu^2/mu]*(1 + Erf[nu/Sqrt[mu]])"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (358)(1)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf x(mu x^2 - nu x - 1) e^(-mu x^2 + 2 nu x) ln x dx = 1/(4mu) + nu/(4mu) sqrt(pi/mu) exp(nu^2/mu)[1 + Phi(nu/sqrt mu)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.355.3",
+  "gr": "4.355.3",
+  "page": 623,
+  "status": "ok",
+  "lhs": "Integrate[(mu*x^2 - n)*x^(2*n - 1)*E^(-mu*x^2)*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "(n - 1)!/(4*mu^n)"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (353)(4)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf (mu x^2 - n) x^(2n-1) e^(-mu x^2) ln x dx = (n-1)!/(4 mu^n)",
+  "note": "n positive integer implied"
+ },
+ {
+  "id": "GR4.355.4",
+  "gr": "4.355.4",
+  "page": 624,
+  "status": "ok",
+  "lhs": "Integrate[(2*mu*x^2 - 2*n - 1)*x^(2*n)*E^(-mu*x^2)*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*n - 1)!!/(2*(2*mu)^n)*Sqrt[Pi/mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (353)(5)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf (2mu x^2 - 2n - 1) x^(2n) e^(-mu x^2) ln x dx = (2n-1)!!/(2(2mu)^n) sqrt(pi/mu)",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR4.356.1",
+  "gr": "4.356.1",
+  "page": 624,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-mu*(x/a + a/x)]*Log[x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "2*Log[a]*BesselK[0, 2*mu]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "GW (324)(91)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf exp[-mu(x/a + a/x)] ln x dx/x = 2 ln a K_0(2mu)",
+  "note": ""
+ },
+ {
+  "id": "GR4.356.2",
+  "gr": "4.356.2",
+  "page": 624,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-a*x - b/x]*Log[x]*(2*a*x^2 - (2*n + 1)*x - 2*b)*x^(n - 1/2), {x, 0, Infinity}]",
+  "rhs": [
+   "2*(b/a)^(n/2)*Sqrt[Pi/a]*E^(-2*Sqrt[a*b])*Sum[(n + k)!/((n - k)!*(2*k)!!*(2*Sqrt[a*b])^k), {k, 0, Infinity}]",
+   "2*(b/a)^(n/2)*Sqrt[Pi/a]*E^(-2*Sqrt[a*b])*Sum[(n + k)!/((n - k)!*(2*k)!!*(2*Sqrt[a*b])^k), {k, 0, n}]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (357)(4)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf exp(-ax-b/x) ln x [2ax^2 - (2n+1)x - 2b] x^(n-1/2) dx = 2(b/a)^(n/2) sqrt(pi/a) e^(-2sqrt(ab)) sum_{k=0}^inf (n+k)!/((n-k)!(2k)!!(2sqrt(ab))^k)",
+  "note": "n nonnegative integer implied; second rhs truncates the sum at k = n (terms with (n-k)! of a negative integer vanish). Compare 4.356.8, which has the same value with x^(n-3/2)."
+ },
+ {
+  "id": "GR4.356.3",
+  "gr": "4.356.3",
+  "page": 624,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-a*x - b/x]*Log[x]*(2*a*x^2 + (2*n - 1)*x - 2*b)/x^(n + 3/2), {x, 0, Infinity}]",
+  "rhs": [
+   "2*(a/b)^(n/2)*Sqrt[Pi/a]*E^(-2*Sqrt[a*b])*Sum[(n + k - 1)!/((n - k - 1)!*(2*k)!!*(2*Sqrt[a*b])^k), {k, 0, Infinity}]",
+   "2*(a/b)^(n/2)*Sqrt[Pi/a]*E^(-2*Sqrt[a*b])*Sum[(n + k - 1)!/((n - k - 1)!*(2*k)!!*(2*Sqrt[a*b])^k), {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (357)(11)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf exp(-ax-b/x) ln x [2ax^2 + (2n-1)x - 2b] dx/x^(n+3/2) = 2(a/b)^(n/2) sqrt(pi/a) e^(-2sqrt(ab)) sum (n+k-1)!/((n-k-1)!(2k)!!(2sqrt(ab))^k)",
+  "note": "n positive integer implied; second rhs truncates the sum at k = n-1"
+ },
+ {
+  "id": "GR4.356.4",
+  "gr": "4.356.4",
+  "page": 624,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-a*x - a/x]*Log[x]*(a*x^2 - b)/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2*BesselK[0, 2*Sqrt[a*b]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (324)(92c)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "(n = 1/2) int_0^inf exp(-ax - a/x) ln x (ax^2-b)/x^2 dx = 2 K_0(2 sqrt(ab))",
+  "note": "Printed exp(-ax - a/x); almost certainly a misprint for exp(-ax - b/x) (then d/dx of the exponential gives the stated value). Lhs kept as printed."
+ },
+ {
+  "id": "GR4.356.5",
+  "gr": "4.356.5",
+  "page": 624,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-a*x - b/x]*Log[x]*(2*a*x^2 - x - 2*b)/(x*Sqrt[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Sqrt[Pi/a]*E^(-2*Sqrt[a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (357)(7), GW(324)(92a)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "(n = 0) int_0^inf exp(-ax-b/x) ln x (2ax^2 - x - 2b)/(x sqrt x) dx = 2 sqrt(pi/a) e^(-2 sqrt(ab))",
+  "note": ""
+ },
+ {
+  "id": "GR4.356.6",
+  "gr": "4.356.6",
+  "page": 624,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-a*x - b/x]*Log[x]*(2*a*x^2 - 3*x - 2*b)/Sqrt[x], {x, 0, Infinity}]",
+  "rhs": [
+   "(1 + 2*Sqrt[a*b])/a*Sqrt[Pi/a]*E^(-2*Sqrt[a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "LI (357)(6), GW (324)(92b)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "(n = -1) int_0^inf exp(-ax-b/x) ln x (2ax^2 - 3x - 2b)/sqrt x dx = (1+2sqrt(ab))/a sqrt(pi/a) e^(-2sqrt(ab))",
+  "note": ""
+ },
+ {
+  "id": "GR4.356.7",
+  "gr": "4.356.7",
+  "page": 624,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-a*x - b/x]*Log[x]*(a - b/x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "BesselK[0, 2*Sqrt[a*b]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "",
+  "edition_note": "9",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf exp(-ax-b/x) ln x (a - b/x^2) dx = K_0(2 sqrt(ab))",
+  "note": ""
+ },
+ {
+  "id": "GR4.356.8a",
+  "gr": "4.356.8a",
+  "page": 625,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-a*x - b/x]*Log[x]*(2*a*x^2 - (2*n + 1)*x - 2*b)*x^(n - 3/2), {x, 0, Infinity}]",
+  "rhs": [
+   "4*(b/a)^((2*n + 1)/4)*BesselK[n + 1/2, 2*Sqrt[a*b]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "",
+  "edition_note": "9",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf exp(-ax-b/x) ln x [2ax^2-(2n+1)x-2b] x^(n-3/2) dx = 4(b/a)^((2n+1)/4) K_(n+1/2)(2sqrt(ab))",
+  "note": ""
+ },
+ {
+  "id": "GR4.356.8b",
+  "gr": "4.356.8b",
+  "page": 625,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-a*x - b/x]*Log[x]*(2*a*x^2 - (2*n + 1)*x - 2*b)*x^(n - 3/2), {x, 0, Infinity}]",
+  "rhs": [
+   "2*(b/a)^(n/2)*Sqrt[Pi/a]*E^(-2*Sqrt[a*b])*Sum[(n + k)!/((n - k)!*(2*k)!!*(2*Sqrt[a*b])^k), {k, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "",
+  "edition_note": "9",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "= 2(b/a)^(n/2) sqrt(pi/a) e^(-2sqrt(ab)) sum_{k=0}^n (n+k)!/((n-k)!(2k)!!(2sqrt(ab))^k)",
+  "note": ""
+ },
+ {
+  "id": "GR4.356.9",
+  "gr": "4.356.9",
+  "page": 625,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-a*x - b/x]*Log[x]*((a*x^2 - b)*Cos[alpha*Log[x]] + alpha*x*Sin[alpha*Log[x]])/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2*Cos[alpha*Log[Sqrt[b/a]]]*BesselK[I*alpha, 2*Sqrt[a*b]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Element[alpha, Reals]"
+  ],
+  "cite": "",
+  "edition_note": "9",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf exp(-ax-b/x) ln[x]... [(ax^2-b)cos(alpha ln x) + alpha x sin(alpha ln x)] dx/x^2 = 2cos(alpha ln sqrt(b/a)) K_(i alpha)(2sqrt(ab))",
+  "note": "book writes ln[ ... ] with the bracket spanning the trig combination; read as ln x times the bracket (analogous to 4.356.7)"
+ },
+ {
+  "id": "GR4.356.10",
+  "gr": "4.356.10",
+  "page": 625,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-a*x - b/x]*Log[x]*((a*x^2 - b)*Sin[alpha*Log[x]] - alpha*x*Cos[alpha*Log[x]])/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2*Sin[alpha*Log[Sqrt[b/a]]]*BesselK[I*alpha, 2*Sqrt[a*b]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Element[alpha, Reals]"
+  ],
+  "cite": "",
+  "edition_note": "9",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf exp(-ax-b/x) ln x [(ax^2-b) sin(alpha ln x) - alpha x cos(alpha ln x)] dx/x^2 = 2 sin(alpha ln sqrt(b/a)) K_(i alpha)(2sqrt(ab))",
+  "note": "see 4.356.9 on the ln[...] reading"
+ },
+ {
+  "id": "GR4.356.11",
+  "gr": "4.356.11",
+  "page": 625,
+  "status": "ok",
+  "lhs": "Integrate[x^alpha*Log[x]*(a - alpha/x - b/x^2)*Exp[-a*x - b/x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*(b/a)^(alpha/2)*BesselK[alpha, 2*Sqrt[a*b]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Element[alpha, Reals]"
+  ],
+  "cite": "",
+  "edition_note": "9",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "q int_0^inf x^alpha ln x [a - alpha/x - b/x^2] exp(-ax-b/x) dx = 2(b/a)^(alpha/2) K_alpha(2sqrt(ab))",
+  "note": "A stray 'q' precedes the integral sign in print; treated as a typesetting artifact and dropped (with it, integrating by parts gives exactly the stated value)."
+ },
+ {
+  "id": "GR4.357.1",
+  "gr": "4.357.1",
+  "page": 625,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-(1 + x^4)/(2*a*x^2)]*Log[x]*(1 + a*x^2 - x^4)/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "-Sqrt[2*a^3*Pi]/(2*E^(1/4))"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (357)(8)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf exp(-(1+x^4)/(2ax^2)) ln x (1+ax^2-x^4)/x^2 dx = -sqrt(2a^3 pi)/(2 e^(1/4))",
+  "note": ""
+ },
+ {
+  "id": "GR4.357.2",
+  "gr": "4.357.2",
+  "page": 625,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-(1 + x^4)/(2*a*x^2)]*Log[x]*(x^4 + a*x^2 - 1)/x^4, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2*a^3*Pi]/(2*E^(1/4))"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (357)(9)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "... (x^4+ax^2-1)/x^4 dx = sqrt(2a^3 pi)/(2 e^(1/4))",
+  "note": ""
+ },
+ {
+  "id": "GR4.357.3",
+  "gr": "4.357.3",
+  "page": 625,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-(1 + x^4)/(2*a*x^2)]*Log[x]*(x^4 + 3*a*x - 1)/x^6, {x, 0, Infinity}]",
+  "rhs": [
+   "(1 + a)*Sqrt[2*a^3*Pi]/(2*E^(1/4))"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (357)(10)",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "... (x^4+3ax-1)/x^6 dx = (1+a) sqrt(2a^3 pi)/(2 e^(1/4))",
+  "note": "printed 3ax (possibly 3ax^2)"
+ },
+ {
+  "id": "GR4.358.1",
+  "gr": "4.358.1",
+  "page": 625,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*E^(-mu*x)*Log[x]^m, {x, 1, Infinity}]",
+  "rhs": [
+   "D[mu^(-nu)*Gamma[nu, mu], {nu, m}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "MI 26",
+  "edition_note": "6",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_1^inf x^(nu-1) e^(-mu x)(ln x)^m dx = d^m/dnu^m {mu^-nu Gamma(nu,mu)}",
+  "note": ""
+ },
+ {
+  "id": "GR4.358.2",
+  "gr": "4.358.2",
+  "page": 625,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*E^(-mu*x)*Log[x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]/mu^nu*((PolyGamma[nu] - Log[mu])^2 + HurwitzZeta[2, nu])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "MI 26",
+  "edition_note": "",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf x^(nu-1) e^(-mu x)(ln x)^2 dx = Gamma(nu)/mu^nu {[psi(nu)-ln mu]^2 + zeta(2,nu)}",
+  "note": ""
+ },
+ {
+  "id": "GR4.358.3",
+  "gr": "4.358.3",
+  "page": 625,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*E^(-mu*x)*Log[x]^3, {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]/mu^nu*((PolyGamma[nu] - Log[mu])^3 + 3*HurwitzZeta[2, nu]*(PolyGamma[nu] - Log[mu]) - 2*HurwitzZeta[3, nu])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "MI 26",
+  "edition_note": "9",
+  "section": "4.35-4.36 Combinations of logarithms, exponentials, and powers",
+  "tex": "int_0^inf x^(nu-1) e^(-mu x)(ln x)^3 dx = Gamma(nu)/mu^nu {[psi-ln mu]^3 + 3 zeta(2,nu)[psi-ln mu] - 2 zeta(3,nu)}",
+  "note": ""
+ }
+]

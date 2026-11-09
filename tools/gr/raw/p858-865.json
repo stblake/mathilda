@@ -1,0 +1,1597 @@
+[
+ {
+  "id": "GR7.412.1",
+  "gr": "7.412.1",
+  "page": 858,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(mu - 1)*x^alpha*LaguerreL[n, alpha, a*x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[alpha + n + 1]*Gamma[mu]/Gamma[alpha + mu + n + 1]*LaguerreL[n, alpha + mu, a]"
+  ],
+  "conds": [
+   "Re[alpha] > -1",
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "EH II 191(30)a, BU 129(14c)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^1 (1-x)^(mu-1) x^alpha L_n^alpha(ax) dx = G(alpha+n+1)G(mu)/G(alpha+mu+n+1) L_n^(alpha+mu)(a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.412.2",
+  "gr": "7.412.2",
+  "page": 858,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(mu - 1)*x^(lam - 1)*LaguerreL[n, alpha, beta*x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[alpha + n + 1]*Gamma[lam]*Gamma[mu]/(n!*Gamma[alpha + 1]*Gamma[lam + mu])*HypergeometricPFQ[{-n, lam}, {alpha + 1, lam + mu}, beta]"
+  ],
+  "conds": [
+   "Re[lam] > 0",
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 192(50)a",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^1 (1-x)^(mu-1) x^(lam-1) L_n^alpha(beta x) dx = G(alpha+n+1)G(lam)G(mu)/(n! G(alpha+1)G(lam+mu)) 2F2(-n,lam;alpha+1,lam+mu;beta)",
+  "note": ""
+ },
+ {
+  "id": "GR7.413",
+  "gr": "7.413",
+  "page": 858,
+  "status": "ok",
+  "lhs": "Integrate[x^alpha*(1 - x)^beta*LaguerreL[m, alpha, x*y]*LaguerreL[n, beta, (1 - x)*y], {x, 0, 1}]",
+  "rhs": [
+   "(m + n)!*Gamma[alpha + m + 1]*Gamma[beta + n + 1]/(m!*n!*Gamma[alpha + beta + m + n + 2])*LaguerreL[m + n, alpha + beta + 1, y]"
+  ],
+  "conds": [
+   "Re[alpha] > -1",
+   "Re[beta] > -1",
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "ET II 293(7)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^1 x^alpha (1-x)^beta L_m^alpha(xy) L_n^beta((1-x)y) dx = (m+n)! G(alpha+m+1)G(beta+n+1)/(m!n!G(alpha+beta+m+n+2)) L_(m+n)^(alpha+beta+1)(y)",
+  "note": ""
+ },
+ {
+  "id": "GR7.414.1",
+  "gr": "7.414.1",
+  "page": 858,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x)*LaguerreL[n, alpha, x], {x, y, Infinity}]",
+  "rhs": [
+   "E^(-y)*(LaguerreL[n, alpha, y] - LaguerreL[n - 1, alpha, y])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "EH II 191(29)",
+  "edition_note": "11",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_y^inf e^-x L_n^alpha(x) dx = e^-y [L_n^alpha(y) - L_(n-1)^alpha(y)]",
+  "note": "n >= 1 so that L_(n-1) is a polynomial (n = 0 with L_(-1) = 0 also holds)"
+ },
+ {
+  "id": "GR7.414.2",
+  "gr": "7.414.2",
+  "page": 858,
+  "status": "ok",
+  "lhs": "Integrate[E^(-b*x)*LaguerreL[n, lam*x]*LaguerreL[n, mu*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(b - lam - mu)^n/b^(n + 1)*LegendreP[n, (b^2 - (lam + mu)*b + 2*lam*mu)/(b*(b - lam - mu))]"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 175(34)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^(-bx) L_n(lam x) L_n(mu x) dx = (b-lam-mu)^n/b^(n+1) P_n[(b^2-(lam+mu)b+2 lam mu)/(b(b-lam-mu))]",
+  "note": "integer-order Legendre polynomial; argument may lie off (-1,1) but P_n is a polynomial"
+ },
+ {
+  "id": "GR7.414.3a",
+  "gr": "7.414.3",
+  "page": 858,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x)*x^alpha*LaguerreL[n, alpha, x]*LaguerreL[m, alpha, x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "m != n",
+   "Re[alpha] > -1",
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BU 115(8), ET II 293(3)",
+  "edition_note": "8",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^-x x^alpha L_n^alpha L_m^alpha dx = 0 [m != n]",
+  "note": ""
+ },
+ {
+  "id": "GR7.414.3b",
+  "gr": "7.414.3",
+  "page": 858,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x)*x^alpha*LaguerreL[n, alpha, x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[alpha + n + 1]/n!"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BU 115(8), ET II 292(2)",
+  "edition_note": "8",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^-x x^alpha [L_n^alpha]^2 dx = G(alpha+n+1)/n! [m = n]",
+  "note": "m = n substituted; book prints Re alpha > 0 (holds for Re alpha > -1)"
+ },
+ {
+  "id": "GR7.414.4",
+  "gr": "7.414.4",
+  "page": 858,
+  "status": "ok",
+  "lhs": "Integrate[E^(-b*x)*x^alpha*LaguerreL[n, alpha, lam*x]*LaguerreL[m, alpha, mu*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[m + n + alpha + 1]/(m!*n!)*(b - lam)^n*(b - mu)^m/b^(m + n + alpha + 1)*Hypergeometric2F1[-m, -n, -m - n - alpha, b*(b - lam - mu)/((b - lam)*(b - mu))]"
+  ],
+  "conds": [
+   "Re[alpha] > -1",
+   "Re[b] > 0",
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "ET I 175(35)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^(-bx) x^alpha L_n^alpha(lam x) L_m^alpha(mu x) dx = G(m+n+alpha+1)/(m!n!) (b-lam)^n (b-mu)^m/b^(m+n+alpha+1) F[-m,-n;-m-n-alpha; b(b-lam-mu)/((b-lam)(b-mu))]",
+  "note": ""
+ },
+ {
+  "id": "GR7.414.4(1)",
+  "gr": "7.414.4(1)",
+  "page": 858,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x)*x^(alpha + 1/2)*LaguerreL[n, alpha, x]*LaguerreL[m, alpha, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[alpha + n + 1]^2*Gamma[alpha + m + 1]*Gamma[alpha + 3/2]*Gamma[m - 1/2]/(n!*m!*Gamma[alpha + 1]*Gamma[-1/2])*HypergeometricPFQ[{-n, alpha + 3/2, 3/2}, {alpha + 1, 3/2 - m}, 1]",
+   "Gamma[alpha + n + 1]*Gamma[alpha + 3/2]*Gamma[m - 1/2]/(n!*m!*Gamma[alpha + 1]*Gamma[-1/2])*HypergeometricPFQ[{-n, alpha + 3/2, 3/2}, {alpha + 1, 3/2 - m}, 1]"
+  ],
+  "conds": [
+   "Re[alpha] > -3/2",
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "",
+  "edition_note": "9",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^-x x^(alpha+1/2) L_n^alpha L_m^alpha dx = G(alpha+n+1)^2 G(alpha+m+1) G(alpha+3/2) G(m-1/2)/(n!m!G(alpha+1)G(-1/2)) 3F2(-n,alpha+3/2,3/2;alpha+1,3/2-m;1)",
+  "note": "no conditions printed; Re alpha > -3/2 added for convergence. Printed prefactor G(alpha+n+1)^2 G(alpha+m+1) fails n=m=0 (must give G(alpha+3/2)); second rhs drops the factor G(alpha+n+1) G(alpha+m+1) (hand-checked for (n,m) = (0,0),(1,0),(0,1),(1,1))"
+ },
+ {
+  "id": "GR7.414.5",
+  "gr": "7.414.5",
+  "page": 858,
+  "status": "ok",
+  "lhs": "Integrate[E^(-b*x)*LaguerreL[n, a, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sum[Binomial[a + m - 1, m]*(b - 1)^(n - m)/b^(n - m + 1), {m, 0, n}]"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 174(27)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^(-bx) L_n^a(x) dx = sum_(m=0)^n binom(a+m-1,m) (b-1)^(n-m)/b^(n-m+1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.414.6",
+  "gr": "7.414.6",
+  "page": 858,
+  "status": "ok",
+  "lhs": "Integrate[E^(-b*x)*LaguerreL[n, x], {x, 0, Infinity}]",
+  "rhs": [
+   "(b - 1)^n*b^(-n - 1)"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 174(25)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^(-bx) L_n(x) dx = (b-1)^n b^(-n-1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.414.7",
+  "gr": "7.414.7",
+  "page": 858,
+  "status": "ok",
+  "lhs": "Integrate[E^(-s*t)*t^beta*LaguerreL[n, alpha, t], {t, 0, Infinity}]",
+  "rhs": [
+   "Gamma[beta + 1]*Gamma[alpha + n + 1]/(n!*Gamma[alpha + 1])*s^(-beta - 1)*Hypergeometric2F1[-n, beta + 1, alpha + 1, 1/s]"
+  ],
+  "conds": [
+   "Re[beta] > -1",
+   "Re[s] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BU 119(4b), EH II 191(133)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^(-st) t^beta L_n^alpha(t) dt = G(beta+1)G(alpha+n+1)/(n!G(alpha+1)) s^(-beta-1) F(-n,beta+1;alpha+1;1/s)",
+  "note": ""
+ },
+ {
+  "id": "GR7.414.8",
+  "gr": "7.414.8",
+  "page": 858,
+  "status": "ok",
+  "lhs": "Integrate[E^(-s*t)*t^alpha*LaguerreL[n, alpha, t], {t, 0, Infinity}]",
+  "rhs": [
+   "Gamma[alpha + n + 1]*(s - 1)^n/(n!*s^(alpha + n + 1))"
+  ],
+  "conds": [
+   "Re[alpha] > -1",
+   "Re[s] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "EH II 191(32), MO 176a",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^(-st) t^alpha L_n^alpha(t) dt = G(alpha+n+1)(s-1)^n/(n! s^(alpha+n+1))",
+  "note": ""
+ },
+ {
+  "id": "GR7.414.9",
+  "gr": "7.414.9",
+  "page": 859,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x)*x^(alpha + beta)*LaguerreL[m, alpha, x]*LaguerreL[n, beta, x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(m + n)*Gamma[alpha + beta + 1]*Binomial[alpha + m, n]*Binomial[beta + n, m]"
+  ],
+  "conds": [
+   "Re[alpha + beta] > -1",
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "ET II 293(4)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^-x x^(alpha+beta) L_m^alpha L_n^beta dx = (-1)^(m+n) (alpha+beta)! binom(alpha+m,n) binom(beta+n,m)",
+  "note": "(alpha+beta)! written as Gamma[alpha + beta + 1]"
+ },
+ {
+  "id": "GR7.414.10",
+  "gr": "7.414.10",
+  "page": 859,
+  "status": "ok",
+  "lhs": "Integrate[E^(-b*x)*x^(2*a)*LaguerreL[n, a, x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2^(2*a)*Gamma[a + 1/2]*Gamma[n + 1/2]/(Pi*(n!)^2*b^(2*a + 1))*Hypergeometric2F1[-n, a + 1/2, 1/2 - n, (1 - 2/b)^2]*Gamma[a + n + 1]"
+  ],
+  "conds": [
+   "Re[a] > -1/2",
+   "Re[b] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 174(30)",
+  "edition_note": "6",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^(-bx) x^(2a) [L_n^a(x)]^2 dx = 2^(2a) G(a+1/2)G(n+1/2)/(pi (n!)^2 b^(2a+1)) F(-n,a+1/2;1/2-n;(1-2/b)^2) G(a+n+1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.414.11",
+  "gr": "7.414.11",
+  "page": 859,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x)*x^(gamma - 1)*LaguerreL[n, mu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[gamma]*Gamma[1 + mu + n - gamma]/(n!*Gamma[1 + mu - gamma])"
+  ],
+  "conds": [
+   "Re[gamma] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BU 120(4b)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^-x x^(gamma-1) L_n^mu(x) dx = G(gamma)G(1+mu+n-gamma)/(n! G(1+mu-gamma))",
+  "note": ""
+ },
+ {
+  "id": "GR7.414.12",
+  "gr": "7.414.12",
+  "page": 859,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x*(s + (a1 + a2)/2))*x^(mu + beta)*LaguerreL[k, mu, a1*x]*LaguerreL[k, mu, a2*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1 + mu + beta]*Gamma[1 + mu + k]/(k!*k!*Gamma[1 + mu])*(D[Hypergeometric2F1[(1 + mu + beta)/2, 1 + (mu + beta)/2, 1 + mu, (4*a1*a2*h/(1 - h)^2)/(s + (a1 + a2)/2*(1 + h)/(1 - h))^2]/((1 - h)^(1 + mu)*(s + (a1 + a2)/2*(1 + h)/(1 - h))^(1 + mu + beta)), {h, k}] /. h -> 0)"
+  ],
+  "conds": [
+   "Re[s + (a1 + a2)/2] > 0",
+   "a1 > 0",
+   "a2 > 0",
+   "Re[mu + beta] > -1",
+   "Element[k, Integers] && k >= 0"
+  ],
+  "cite": "BU 142(19)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^(-x(s+(a1+a2)/2)) x^(mu+beta) L_k^mu(a1 x) L_k^mu(a2 x) dx = G(1+mu+beta)G(1+mu+k)/(k!k!G(1+mu)) {d^k/dh^k [F((1+mu+beta)/2,1+(mu+beta)/2;1+mu;A^2/B^2)/((1-h)^(1+mu) B^(1+mu+beta))]}_(h=0), A^2=4a1a2h/(1-h)^2, B=s+(a1+a2)/2 (1+h)/(1-h)",
+  "note": "abbreviations A^2 and B substituted; h is the differentiation variable, set to 0 after k-fold derivative"
+ },
+ {
+  "id": "GR7.414.13",
+  "gr": "7.414.13",
+  "page": 859,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x*(s + (a1 + a2)/2))*x^mu*LaguerreL[k, mu, a1*x]*LaguerreL[k, mu, a2*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1 + mu + k]/(s + (a1 + a2)/2)^(1 + mu + k)*(s + (a1 + a2)/2)^k/k!*JacobiP[k, mu, 0, ((s + (a1 + a2)/2)*(s - (a1 + a2)/2) + 2*a1*a2)/((s + (a1 + a2)/2)*(s - (a1 + a2)/2))]"
+  ],
+  "conds": [
+   "Re[mu] > -1",
+   "Re[s + (a1 + a2)/2] > 0",
+   "Element[k, Integers] && k >= 0"
+  ],
+  "cite": "BU 144(22)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf exp[-x(s+(a1+a2)/2)] x^mu L_k^mu(a1x) L_k^mu(a2x) dx = G(1+mu+k)/b0^(1+mu+k) b0^k/k! P_k^(mu,0)(b1^2/(b0 b2)), b0=s+(a1+a2)/2, b1^2=b0b2+2a1a2, b2=s-(a1+a2)/2",
+  "note": "b0, b1^2, b2 substituted"
+ },
+ {
+  "id": "GR7.415",
+  "gr": "7.415",
+  "page": 859,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(mu - 1)*x^(lam - 1)*E^(-beta*x)*LaguerreL[n, alpha, beta*x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[alpha + n + 1]/(n!*Gamma[alpha + 1])*Beta[lam, mu]*HypergeometricPFQ[{alpha + n + 1, lam}, {alpha + 1, lam + mu}, -beta]"
+  ],
+  "conds": [
+   "Re[lam] > 0",
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 193(51)a",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^1 (1-x)^(mu-1) x^(lam-1) e^(-beta x) L_n^alpha(beta x) dx = G(alpha+n+1)/(n!G(alpha+1)) B(lam,mu) 2F2(alpha+n+1,lam;alpha+1,lam+mu;-beta)",
+  "note": ""
+ },
+ {
+  "id": "GR7.416",
+  "gr": "7.416",
+  "page": 859,
+  "status": "ok",
+  "lhs": "Integrate[x^(m - n)*E^(-(x - y)^2/2)*LaguerreL[n, m - n, x^2], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2*Pi)^(1/2)/n!*I^(n - m)*2^(-(n + m)/2)*HermiteH[n, I*y/Sqrt[2]]*HermiteH[m, I*y/Sqrt[2]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= n"
+  ],
+  "cite": "BU 149(15b), ET II 293(8)a",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_-inf^inf x^(m-n) exp[-(x-y)^2/2] L_n^(m-n)(x^2) dx = (2pi)^(1/2)/n! i^(n-m) 2^(-(n+m)/2) H_n(iy/sqrt2) H_m(iy/sqrt2)",
+  "note": "no conditions printed; m >= n integers added so x^(m-n) is a polynomial"
+ },
+ {
+  "id": "GR7.417.1",
+  "gr": "7.417.1",
+  "page": 859,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 2*n - 1)*E^(-a*x)*Sin[b*x]*LaguerreL[2*n, nu - 2*n - 1, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*I*Gamma[nu]*b^(2*n)*((a - I*b)^(-nu) - (a + I*b)^(-nu))/(2*(2*n)!)"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[a] > 0",
+   "Re[nu] > 2*n",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 95(12)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf x^(nu-2n-1) e^(-ax) sin(bx) L_(2n)^(nu-2n-1)(ax) dx = (-1)^n i G(nu) b^(2n)[(a-ib)^-nu - (a+ib)^-nu]/(2(2n)!)",
+  "note": ""
+ },
+ {
+  "id": "GR7.417.2",
+  "gr": "7.417.2",
+  "page": 859,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 2*n - 2)*E^(-a*x)*Sin[b*x]*LaguerreL[2*n + 1, nu - 2*n - 2, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n + 1)*Gamma[nu]*b^(2*n + 1)*((a + I*b)^(-nu) + (a - I*b)^(-nu))/(2*(2*n + 1)!)"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[a] > 0",
+   "Re[nu] > 2*n + 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 95(13)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf x^(nu-2n-2) e^(-ax) sin(bx) L_(2n+1)^(nu-2n-2)(ax) dx = (-1)^(n+1) G(nu) b^(2n+1)[(a+ib)^-nu + (a-ib)^-nu]/(2(2n+1)!)",
+  "note": ""
+ },
+ {
+  "id": "GR7.417.3a",
+  "gr": "7.417.3",
+  "page": 860,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 2*n)*E^(-a*x)*Cos[b*x]*LaguerreL[nu - 2*n, 2*n - 1, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "I*(-1)^(n + 1)*Gamma[nu]*b^(2*n - 1)*((a - I*b)^(-nu) - (a + I*b)^(-nu))/(2*(2*n - 1)!)"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[a] > 0",
+   "Re[nu] > 2*n - 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "ET I 39(12)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf x^(nu-2n) e^(-ax) cos(bx) L_(nu-2n)^(2n-1)(ax) dx = i(-1)^(n+1) G(nu) b^(2n-1)[(a-ib)^-nu - (a+ib)^-nu]/(2(2n-1)!)",
+  "note": "as printed: L^(2n-1)_(nu-2n) (degree and order apparently swapped)"
+ },
+ {
+  "id": "GR7.417.3b",
+  "gr": "7.417.3",
+  "page": 860,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 2*n)*E^(-a*x)*Cos[b*x]*LaguerreL[2*n - 1, nu - 2*n, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "I*(-1)^(n + 1)*Gamma[nu]*b^(2*n - 1)*((a - I*b)^(-nu) - (a + I*b)^(-nu))/(2*(2*n - 1)!)"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[a] > 0",
+   "Re[nu] > 2*n - 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "ET I 39(12)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf x^(nu-2n) e^(-ax) cos(bx) L_(nu-2n)^(2n-1)(ax) dx = i(-1)^(n+1) G(nu) b^(2n-1)[(a-ib)^-nu - (a+ib)^-nu]/(2(2n-1)!)",
+  "note": "corrected integrand: L_(2n-1)^(nu-2n)(ax), matching the pattern of 7.417.1/2/4"
+ },
+ {
+  "id": "GR7.417.4",
+  "gr": "7.417.4",
+  "page": 860,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 2*n - 1)*E^(-a*x)*Cos[b*x]*LaguerreL[2*n, nu - 2*n - 1, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*Gamma[nu]*b^(2*n)*((a + I*b)^(-nu) + (a - I*b)^(-nu))/(2*(2*n)!)"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[nu] > 2*n",
+   "Re[a] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 39(13)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf x^(nu-2n-1) e^(-ax) cos(bx) L_(2n)^(nu-2n-1)(ax) dx = (-1)^n G(nu) b^(2n)[(a+ib)^-nu + (a-ib)^-nu]/(2(2n)!)",
+  "note": ""
+ },
+ {
+  "id": "GR7.418.1",
+  "gr": "7.418.1",
+  "page": 860,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2/2)*Sin[b*x]*LaguerreL[n, x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*(I/2)*n!*(1/Sqrt[2*Pi])*(ParabolicCylinderD[-n - 1, I*b]^2 - ParabolicCylinderD[-n - 1, -I*b]^2)"
+  ],
+  "conds": [
+   "b > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 95(14)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^(-x^2/2) sin(bx) L_n(x^2) dx = (-1)^n (i/2) n! (2pi)^(-1/2) {[D_(-n-1)(ib)]^2 - [D_(-n-1)(-ib)]^2}",
+  "note": ""
+ },
+ {
+  "id": "GR7.418.2",
+  "gr": "7.418.2",
+  "page": 860,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2/2)*Cos[b*x]*LaguerreL[n, x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*(n!)^(-1)*E^(-b^2/2)*2^(-n)*HermiteH[n, b/Sqrt[2]]^2"
+  ],
+  "conds": [
+   "b > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 39(14)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^(-x^2/2) cos(bx) L_n(x^2) dx = sqrt(pi/2) (n!)^-1 e^(-b^2/2) 2^-n [H_n(b/sqrt2)]^2",
+  "note": ""
+ },
+ {
+  "id": "GR7.418.3",
+  "gr": "7.418.3",
+  "page": 860,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n + 1)*E^(-x^2/2)*Sin[b*x]*LaguerreL[n, n + 1/2, x^2/2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*b^(2*n + 1)*E^(-b^2/2)*LaguerreL[n, n + 1/2, b^2/2]"
+  ],
+  "conds": [
+   "b > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 95(15)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf x^(2n+1) e^(-x^2/2) sin(bx) L_n^(n+1/2)(x^2/2) dx = sqrt(pi/2) b^(2n+1) e^(-b^2/2) L_n^(n+1/2)(b^2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.418.4",
+  "gr": "7.418.4",
+  "page": 860,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n)*E^(-x^2/2)*Cos[b*x]*LaguerreL[n, n - 1/2, x^2/2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*b^(2*n)*E^(-b^2/2)*LaguerreL[n, n + 1/2, b^2/2]",
+   "Sqrt[Pi/2]*b^(2*n)*E^(-b^2/2)*LaguerreL[n, n - 1/2, b^2/2]"
+  ],
+  "conds": [
+   "b > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 39(16)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf x^(2n) e^(-x^2/2) cos(bx) L_n^(n-1/2)(x^2/2) dx = sqrt(pi/2) b^(2n) e^(-b^2/2) L_n^(n+1/2)(b^2/2)",
+  "note": "value prints L_n^(n+1/2); hand check at n=1 gives L_n^(n-1/2)(b^2/2) (second rhs)"
+ },
+ {
+  "id": "GR7.418.5",
+  "gr": "7.418.5",
+  "page": 860,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-x^2/2)*LaguerreL[n, alpha, x^2/2]*LaguerreL[n, 1/2 - alpha, x^2/2]*Sin[x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/2)^(1/2)*y*E^(-y^2/2)*LaguerreL[n, alpha, y^2/2]*LaguerreL[n, 1/2 - alpha, y^2/2]"
+  ],
+  "conds": [
+   "y > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 294(11)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf x e^(-x^2/2) L_n^alpha(x^2/2) L_n^(1/2-alpha)(x^2/2) sin(xy) dx = (pi/2)^(1/2) y e^(-y^2/2) L_n^alpha(y^2/2) L_n^(1/2-alpha)(y^2/2)",
+  "note": "no conditions printed; y > 0 added"
+ },
+ {
+  "id": "GR7.418.6",
+  "gr": "7.418.6",
+  "page": 860,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2/2)*LaguerreL[n, alpha, x^2/2]*LaguerreL[n, -1/2 - alpha, x^2/2]*Cos[x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/2)^(1/2)*E^(-y^2/2)*LaguerreL[n, alpha, y^2/2]*LaguerreL[n, -alpha - 1/2, y^2/2]"
+  ],
+  "conds": [
+   "y > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 294(12)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^(-x^2/2) L_n^alpha(x^2/2) L_n^(-1/2-alpha)(x^2/2) cos(xy) dx = (pi/2)^(1/2) e^(-y^2/2) L_n^alpha(y^2/2) L_n^(-alpha-1/2)(y^2/2)",
+  "note": "no conditions printed; y > 0 added"
+ },
+ {
+  "id": "GR7.419",
+  "gr": "7.419",
+  "page": 860,
+  "status": "ok",
+  "lhs": "Integrate[x^(n + 2*nu - 1/2)*E^(-(1 + a)*x)*LaguerreL[n, 2*nu, a*x]*BesselK[nu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^(1/2)*Gamma[n + nu + 1/2]*Gamma[n + 3*nu + 1/2]/(2^(n + 2*nu + 1/2)*n!*Gamma[2*nu + 1])*Hypergeometric2F1[n + nu + 1/2, n + 3*nu + 1/2, 2*nu + 1, -a/2]"
+  ],
+  "conds": [
+   "Re[a] > -2",
+   "Re[n + nu] > -1/2",
+   "Re[n + 3*nu] > -1/2",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 370(44)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf x^(n+2nu-1/2) exp[-(1+a)x] L_n^(2nu)(ax) K_nu(x) dx = pi^(1/2) G(n+nu+1/2)G(n+3nu+1/2)/(2^(n+2nu+1/2) n! G(2nu+1)) F(n+nu+1/2,n+3nu+1/2;2nu+1;-a/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.421.1",
+  "gr": "7.421.1",
+  "page": 860,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-alpha*x^2/2)*LaguerreL[n, beta*x^2/2]*BesselJ[0, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "(alpha - beta)^n/alpha^(n + 1)*E^(-y^2/(2*alpha))*LaguerreL[n, beta*y^2/(2*alpha*(beta - alpha))]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[alpha] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 13(4)a",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf x e^(-alpha x^2/2) L_n(beta x^2/2) J_0(xy) dx = (alpha-beta)^n/alpha^(n+1) e^(-y^2/(2alpha)) L_n[beta y^2/(2alpha(beta-alpha))]",
+  "note": ""
+ },
+ {
+  "id": "GR7.421.2",
+  "gr": "7.421.2",
+  "page": 860,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-x^2)*LaguerreL[n, x^2]*BesselJ[0, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-2*n - 1)/n!*y^(2*n)*E^(-y^2/4)"
+  ],
+  "conds": [
+   "y > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 13(5)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf x e^(-x^2) L_n(x^2) J_0(xy) dx = 2^(-2n-1)/n! y^(2n) e^(-y^2/4)",
+  "note": "no conditions printed; y > 0 added"
+ },
+ {
+  "id": "GR7.421.3",
+  "gr": "7.421.3",
+  "page": 861,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n + nu + 1)*E^(-x^2/2)*LaguerreL[n, nu + n, x^2/2]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "y^(2*n + nu)*E^(-y^2/2)*LaguerreL[n, nu + n, y^2/2]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MO 183",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf x^(2n+nu+1) e^(-x^2/2) L_n^(nu+n)(x^2/2) J_nu(xy) dx = y^(2n+nu) e^(-y^2/2) L_n^(nu+n)(y^2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.421.4",
+  "gr": "7.421.4",
+  "page": 861,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*E^(-beta*x^2)*LaguerreL[n, nu, alpha*x^2]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-nu - 1)*beta^(-nu - n - 1)*(beta - alpha)^n*y^nu*E^(-y^2/(4*beta))*LaguerreL[n, nu, alpha*y^2/(4*beta*(alpha - beta))]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[beta] > 0",
+   "Re[nu] > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 43(5)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf x^(nu+1) e^(-beta x^2) L_n^nu(alpha x^2) J_nu(xy) dx = 2^(-nu-1) beta^(-nu-n-1) (beta-alpha)^n y^nu e^(-y^2/(4beta)) L_n^nu[alpha y^2/(4beta(alpha-beta))]",
+  "note": "no conditions printed; y > 0, Re beta > 0, Re nu > -1 added for convergence"
+ },
+ {
+  "id": "GR7.421.5",
+  "gr": "7.421.5",
+  "page": 861,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2/(2*q))*x^(nu + 1)*LaguerreL[n, nu, x^2/(2*q*(1 - q))]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "q^(n + nu + 1)/(q - 1)^n*E^(-q*y^2/2)*y^nu*LaguerreL[n, nu, y^2/2]"
+  ],
+  "conds": [
+   "nu > 0",
+   "0 < q < 1",
+   "y > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MO 183",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^(-x^2/(2q)) x^(nu+1) L_n^nu[x^2/(2q(1-q))] J_nu(xy) dx = q^(n+nu+1)/(q-1)^n e^(-qy^2/2) y^nu L_n^nu(y^2/2)",
+  "note": "only nu > 0 printed; 0 < q < 1 and y > 0 added (convergence)"
+ },
+ {
+  "id": "GR7.421.6",
+  "gr": "7.421.6",
+  "page": 861,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*E^(-x^2)*LaguerreL[n, nu, x^2]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*n!)*(y/2)^(2*n + nu)*E^(-y^2/4)"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf x^(nu+1) e^(-x^2) L_n^nu(x^2) J_nu(xy) dx = 1/(2 n!) (y/2)^(2n+nu) e^(-y^2/4)",
+  "note": "no conditions printed; y > 0, Re nu > -1 added"
+ },
+ {
+  "id": "GR7.422.1",
+  "gr": "7.422.1",
+  "page": 861,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*E^(-beta*x^2)*LaguerreL[n, nu/2, alpha*x^2]^2*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "y^nu/(Pi*n!)*Gamma[n + 1 + nu/2]*(2*beta)^(-nu - 1)*E^(-y^2/(4*beta))*Sum[(-1)^l*Gamma[n - l + 1/2]*Gamma[l + 1/2]/(Gamma[l + 1 + nu/2]*(n - l)!)*((2*alpha - beta)/beta)^(2*l)*LaguerreL[2*l, nu, alpha*y^2/(2*beta*(2*alpha - beta))], {l, 0, n}]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[beta] > 0",
+   "Re[nu] > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 43(7)",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf x^(nu+1) e^(-beta x^2) [L_n^(nu/2)(alpha x^2)]^2 J_nu(xy) dx = y^nu/(pi n!) G(n+1+nu/2)(2beta)^(-nu-1) e^(-y^2/(4beta)) sum_l (-1)^l G(n-l+1/2)G(l+1/2)/(G(l+1+nu/2)(n-l)!) ((2alpha-beta)/beta)^(2l) L_(2l)^nu[alpha y^2/(2beta(2alpha-beta))]",
+  "note": ""
+ },
+ {
+  "id": "GR7.422.2",
+  "gr": "7.422.2",
+  "page": 861,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*E^(-alpha*x^2)*LaguerreL[m, nu - sigma, alpha*x^2]*LaguerreL[n, sigma, alpha*x^2]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(m + n)*(2*alpha)^(-nu - 1)*y^nu*E^(-y^2/(4*alpha))*LaguerreL[n, m - n - sigma, y^2/(4*alpha)]*LaguerreL[m, n - m + sigma - nu, y^2/(4*alpha)]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[alpha] > 0",
+   "Re[nu] > -1",
+   "Element[n, Integers] && n >= 1",
+   "Element[m, Integers] && m >= 0",
+   "sigma != 0",
+   "alpha != 1"
+  ],
+  "cite": "ET II 43(8)",
+  "edition_note": "9",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf x^(nu+1) e^(-alpha x^2) L_m^(nu-sigma)(alpha x^2) L_n^sigma(alpha x^2) J_nu(xy) dx = (-1)^(m+n) (2alpha)^(-nu-1) y^nu e^(-y^2/(4alpha)) L_n^(m-n-sigma)(y^2/(4alpha)) L_m^(n-m+sigma-nu)(y^2/(4alpha))",
+  "note": "printed conditions include n != 0, sigma != 0, alpha != 1"
+ },
+ {
+  "id": "GR7.423.1",
+  "gr": "7.423.1",
+  "page": 861,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2/2)*LaguerreL[n, x^2/2]*HermiteH[2*n + 1, x/(2*Sqrt[2])]*Sin[x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/2)^(1/2)*E^(-y^2/2)*LaguerreL[n, y^2/2]*HermiteH[2*n + 1, y/(2*Sqrt[2])]"
+  ],
+  "conds": [
+   "y > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 294(13)a",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^(-x^2/2) L_n(x^2/2) H_(2n+1)(x/(2sqrt2)) sin(xy) dx = (pi/2)^(1/2) e^(-y^2/2) L_n(y^2/2) H_(2n+1)(y/(2sqrt2))",
+  "note": "no conditions printed; y > 0 added"
+ },
+ {
+  "id": "GR7.423.2",
+  "gr": "7.423.2",
+  "page": 861,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2/2)*LaguerreL[n, x^2/2]*HermiteH[2*n, x/(2*Sqrt[2])]*Cos[x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/2)^(1/2)*E^(-y^2/2)*LaguerreL[n, y^2/2]*HermiteH[2*n, y/(2*Sqrt[2])]"
+  ],
+  "conds": [
+   "y > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 294(14)a",
+  "edition_note": "",
+  "section": "7.41-7.42 Laguerre polynomials",
+  "tex": "int_0^inf e^(-x^2/2) L_n(x^2/2) H_(2n)(x/(2sqrt2)) cos(xy) dx = (pi/2)^(1/2) e^(-y^2/2) L_n(y^2/2) H_(2n)(y/(2sqrt2))",
+  "note": "no conditions printed; y > 0 added"
+ },
+ {
+  "id": "GR7.511",
+  "gr": "7.511",
+  "page": 861,
+  "status": "ok",
+  "lhs": "Integrate[Hypergeometric2F1[a, b, c, -z]*z^(-s - 1), {z, 0, Infinity}]",
+  "rhs": [
+   "Gamma[a + s]*Gamma[b + s]*Gamma[c]*Gamma[-s]/(Gamma[a]*Gamma[b]*Gamma[c + s])"
+  ],
+  "conds": [
+   "Re[s] < 0",
+   "Re[a + s] > 0",
+   "Re[b + s] > 0"
+  ],
+  "cite": "EH I 79(4)",
+  "edition_note": "",
+  "section": "7.51 Combinations of hypergeometric functions and powers",
+  "tex": "int_0^inf F(a,b;c;-z) z^(-s-1) dz = G(a+s)G(b+s)G(c)G(-s)/(G(a)G(b)G(c+s))",
+  "note": "c != 0, -1, -2, ..."
+ },
+ {
+  "id": "GR7.512.1",
+  "gr": "7.512.1",
+  "page": 862,
+  "status": "ok",
+  "lhs": "Integrate[x^(alpha - gamma)*(1 - x)^(gamma - beta - 1)*Hypergeometric2F1[alpha, beta, gamma, x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[1 + alpha/2]*Gamma[gamma]*Gamma[alpha - gamma + 1]*Gamma[gamma - alpha/2 - beta]/(Gamma[1 + alpha]*Gamma[1 + alpha/2 - beta]*Gamma[gamma - alpha/2])"
+  ],
+  "conds": [
+   "Re[alpha] + 1 > Re[gamma] > Re[beta]",
+   "Re[gamma - alpha/2 - beta] > 0"
+  ],
+  "cite": "ET II 398(1)",
+  "edition_note": "",
+  "section": "7.51 Combinations of hypergeometric functions and powers",
+  "tex": "int_0^1 x^(alpha-gamma)(1-x)^(gamma-beta-1) F(alpha,beta;gamma;x) dx = G(1+alpha/2)G(gamma)G(alpha-gamma+1)G(gamma-alpha/2-beta)/(G(1+alpha)G(1+alpha/2-beta)G(gamma-alpha/2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.512.2",
+  "gr": "7.512.2",
+  "page": 862,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*(1 - x)^(beta - gamma - n)*Hypergeometric2F1[-n, beta, gamma, x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[gamma]*Gamma[rho]*Gamma[beta - gamma + 1]*Gamma[gamma - rho + n]/(Gamma[gamma + n]*Gamma[gamma - rho]*Gamma[beta - gamma + rho + 1])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[rho] > 0",
+   "Re[beta - gamma] > n - 1"
+  ],
+  "cite": "ET II 398(2)",
+  "edition_note": "",
+  "section": "7.51 Combinations of hypergeometric functions and powers",
+  "tex": "int_0^1 x^(rho-1)(1-x)^(beta-gamma-n) F(-n,beta;gamma;x) dx = G(gamma)G(rho)G(beta-gamma+1)G(gamma-rho+n)/(G(gamma+n)G(gamma-rho)G(beta-gamma+rho+1))",
+  "note": ""
+ },
+ {
+  "id": "GR7.512.3",
+  "gr": "7.512.3",
+  "page": 862,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*(1 - x)^(beta - rho - 1)*Hypergeometric2F1[alpha, beta, gamma, x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[gamma]*Gamma[rho]*Gamma[beta - rho]*Gamma[gamma - alpha - rho]/(Gamma[beta]*Gamma[gamma - alpha]*Gamma[gamma - rho])"
+  ],
+  "conds": [
+   "Re[rho] > 0",
+   "Re[beta - rho] > 0",
+   "Re[gamma - alpha - rho] > 0"
+  ],
+  "cite": "ET II 399(3)",
+  "edition_note": "",
+  "section": "7.51 Combinations of hypergeometric functions and powers",
+  "tex": "int_0^1 x^(rho-1)(1-x)^(beta-rho-1) F(alpha,beta;gamma;x) dx = G(gamma)G(rho)G(beta-rho)G(gamma-alpha-rho)/(G(beta)G(gamma-alpha)G(gamma-rho))",
+  "note": ""
+ },
+ {
+  "id": "GR7.512.4",
+  "gr": "7.512.4",
+  "page": 862,
+  "status": "ok",
+  "lhs": "Integrate[x^(gamma - 1)*(1 - x)^(rho - 1)*Hypergeometric2F1[alpha, beta, gamma, x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[gamma]*Gamma[rho]*Gamma[gamma + rho - alpha - beta]/(Gamma[gamma + rho - alpha]*Gamma[gamma + rho - beta])"
+  ],
+  "conds": [
+   "Re[gamma] > 0",
+   "Re[rho] > 0",
+   "Re[gamma + rho - alpha - beta] > 0"
+  ],
+  "cite": "ET II 399(4)",
+  "edition_note": "",
+  "section": "7.51 Combinations of hypergeometric functions and powers",
+  "tex": "int_0^1 x^(gamma-1)(1-x)^(rho-1) F(alpha,beta;gamma;x) dx = G(gamma)G(rho)G(gamma+rho-alpha-beta)/(G(gamma+rho-alpha)G(gamma+rho-beta))",
+  "note": ""
+ },
+ {
+  "id": "GR7.512.5",
+  "gr": "7.512.5",
+  "page": 862,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*(1 - x)^(sigma - 1)*Hypergeometric2F1[alpha, beta, gamma, x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[rho]*Gamma[sigma]/Gamma[rho + sigma]*HypergeometricPFQ[{alpha, beta, rho}, {gamma, rho + sigma}, 1]"
+  ],
+  "conds": [
+   "Re[rho] > 0",
+   "Re[sigma] > 0",
+   "Re[gamma + sigma - alpha - beta] > 0"
+  ],
+  "cite": "ET II 399(5)",
+  "edition_note": "",
+  "section": "7.51 Combinations of hypergeometric functions and powers",
+  "tex": "int_0^1 x^(rho-1)(1-x)^(sigma-1) F(alpha,beta;gamma;x) dx = G(rho)G(sigma)/G(rho+sigma) 3F2(alpha,beta,rho;gamma,rho+sigma;1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.512.6",
+  "gr": "7.512.6",
+  "page": 862,
+  "status": "ok",
+  "lhs": "Integrate[x^(lam - 1)*(1 - x)^(beta - lam - 1)*Hypergeometric2F1[alpha, beta, lam, z*x/b], {x, 0, 1}]",
+  "rhs": [
+   "Beta[lam, beta - lam]*(1 - z/b)^(-alpha)"
+  ],
+  "conds": [
+   "Re[lam] > 0",
+   "Re[beta - lam] > 0",
+   "Abs[z/b] < 1"
+  ],
+  "cite": "BU 9",
+  "edition_note": "10",
+  "section": "7.51 Combinations of hypergeometric functions and powers",
+  "tex": "int_0^1 x^(lam-1)(1-x)^(beta-lam-1) F(alpha,beta;lam;zx/b) dx = B(lam,beta-lam)(1-z/b)^-alpha",
+  "note": "no conditions printed; Re lam > 0, Re(beta-lam) > 0 (convergence) and |z/b| < 1 (stay off the cut) added"
+ },
+ {
+  "id": "GR7.512.7",
+  "gr": "7.512.7",
+  "page": 862,
+  "status": "ok",
+  "lhs": "Integrate[x^(gamma - 1)*(1 - x)^(delta - gamma - 1)*Hypergeometric2F1[alpha, beta, gamma, z*x]*Hypergeometric2F1[delta - alpha, delta - beta, delta - gamma, (1 - x)*zeta], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[gamma]*Gamma[delta - gamma]/Gamma[delta]*(1 - zeta)^(alpha + beta - delta)*Hypergeometric2F1[alpha, beta, delta, z + zeta - z*zeta]"
+  ],
+  "conds": [
+   "0 < Re[gamma] < Re[delta]",
+   "Abs[Arg[1 - z]] < Pi",
+   "Abs[Arg[1 - zeta]] < Pi"
+  ],
+  "cite": "ET II 400(11)",
+  "edition_note": "11",
+  "section": "7.51 Combinations of hypergeometric functions and powers",
+  "tex": "int_0^1 x^(gamma-1)(1-x)^(delta-gamma-1) F(alpha,beta;gamma;zx) F(delta-alpha,delta-beta;delta-gamma;(1-x)zeta) dx = G(gamma)G(delta-gamma)/G(delta) (1-zeta)^(alpha+beta-delta) F(alpha,beta;delta;z+zeta-z zeta)",
+  "note": ""
+ },
+ {
+  "id": "GR7.512.8",
+  "gr": "7.512.8",
+  "page": 862,
+  "status": "ok",
+  "lhs": "Integrate[x^(gamma - 1)*(1 - x)^(epsilon - 1)*(1 - x*z)^(-delta)*Hypergeometric2F1[alpha, beta, gamma, x*z]*Hypergeometric2F1[delta, beta - gamma, epsilon, (1 - x)*z/(1 - x*z)], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[gamma]*Gamma[epsilon]/Gamma[gamma + epsilon]*Hypergeometric2F1[alpha + delta, beta, gamma + epsilon, z]"
+  ],
+  "conds": [
+   "Re[gamma] > 0",
+   "Re[epsilon] > 0",
+   "Abs[Arg[1 - z]] < Pi"
+  ],
+  "cite": "ET II 400(12), EH I 78(3)",
+  "edition_note": "",
+  "section": "7.51 Combinations of hypergeometric functions and powers",
+  "tex": "int_0^1 x^(gamma-1)(1-x)^(epsilon-1)(1-xz)^(-delta) F(alpha,beta;gamma;xz) F[delta,beta-gamma;epsilon;(1-x)z/(1-xz)] dx = G(gamma)G(epsilon)/G(gamma+epsilon) F(alpha+delta,beta;gamma+epsilon;z)",
+  "note": "condition printed as |arg(z-1)| < pi; corrected to |arg(1-z)| < pi (the printed form excludes real z < 1)"
+ },
+ {
+  "id": "GR7.512.9",
+  "gr": "7.512.9",
+  "page": 862,
+  "status": "ok",
+  "lhs": "Integrate[x^(gamma - 1)*(1 - x)^(rho - 1)*(1 - z*x)^(-sigma)*Hypergeometric2F1[alpha, beta, gamma, x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[gamma]*Gamma[rho]*Gamma[gamma + rho - alpha - beta]/(Gamma[gamma + rho - alpha]*Gamma[gamma + rho - beta])*(1 - z)^(-sigma)*HypergeometricPFQ[{rho, sigma, gamma + rho - alpha - beta}, {gamma + rho - alpha, gamma + rho - beta}, z/(z - 1)]"
+  ],
+  "conds": [
+   "Re[gamma] > 0",
+   "Re[rho] > 0",
+   "Re[gamma + rho - alpha - beta] > 0",
+   "Abs[Arg[1 - z]] < Pi"
+  ],
+  "cite": "ET II 399(6)",
+  "edition_note": "",
+  "section": "7.51 Combinations of hypergeometric functions and powers",
+  "tex": "int_0^1 x^(gamma-1)(1-x)^(rho-1)(1-zx)^(-sigma) F(alpha,beta;gamma;x) dx = G(gamma)G(rho)G(gamma+rho-alpha-beta)/(G(gamma+rho-alpha)G(gamma+rho-beta)) (1-z)^(-sigma) 3F2(rho,sigma,gamma+rho-alpha-beta;gamma+rho-alpha,gamma+rho-beta;z/(z-1))",
+  "note": ""
+ },
+ {
+  "id": "GR7.512.10",
+  "gr": "7.512.10",
+  "page": 863,
+  "status": "ok",
+  "lhs": "Integrate[x^(gamma - 1)*(x + z)^(-sigma)*Hypergeometric2F1[alpha, beta, gamma, -x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[gamma]*Gamma[alpha - gamma + sigma]*Gamma[beta - gamma + sigma]/(Gamma[sigma]*Gamma[alpha + beta - gamma + sigma])*Hypergeometric2F1[alpha - gamma + sigma, beta - gamma + sigma, alpha + beta - gamma + sigma, 1 - z]"
+  ],
+  "conds": [
+   "Re[gamma] > 0",
+   "Re[alpha - gamma + sigma] > 0",
+   "Re[beta - gamma + sigma] > 0",
+   "Abs[Arg[z]] < Pi"
+  ],
+  "cite": "ET II 400(10)",
+  "edition_note": "",
+  "section": "7.51 Combinations of hypergeometric functions and powers",
+  "tex": "int_0^inf x^(gamma-1)(x+z)^(-sigma) F(alpha,beta;gamma;-x) dx = G(gamma)G(alpha-gamma+sigma)G(beta-gamma+sigma)/(G(sigma)G(alpha+beta-gamma+sigma)) F(alpha-gamma+sigma,beta-gamma+sigma;alpha+beta-gamma+sigma;1-z)",
+  "note": ""
+ },
+ {
+  "id": "GR7.512.11",
+  "gr": "7.512.11",
+  "page": 863,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[(1 - x)^(mu - 1)*x^(nu - 1)*HypergeometricPFQ[{a1, a2}, {nu, b2}, a*x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[mu]*Gamma[nu]/Gamma[mu + nu]*HypergeometricPFQ[{a1, a2}, {mu + nu, b2}, a]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 200(94)",
+  "edition_note": "",
+  "section": "7.51 Combinations of hypergeometric functions and powers",
+  "tex": "int_0^1 (1-x)^(mu-1) x^(nu-1) pFq(a1..ap;nu,b2..bq;ax) dx = G(mu)G(nu)/G(mu+nu) pFq(a1..ap;mu+nu,b2..bq;a) [p <= q+1; if p=q+1 then |a|<1]",
+  "note": "lhs/rhs shown for the instance p = q = 2",
+  "reason": "indexed parameter family"
+ },
+ {
+  "id": "GR7.512.12",
+  "gr": "7.512.12",
+  "page": 863,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[(1 - x)^(mu - 1)*x^(nu - 1)*HypergeometricPFQ[{a1, a2}, {b1, b2}, a*x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[mu]*Gamma[nu]/Gamma[mu + nu]*HypergeometricPFQ[{nu, a1, a2}, {mu + nu, b1, b2}, a]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 200(95)",
+  "edition_note": "",
+  "section": "7.51 Combinations of hypergeometric functions and powers",
+  "tex": "int_0^1 (1-x)^(mu-1) x^(nu-1) pFq(a1..ap;b1..bq;ax) dx = G(mu)G(nu)/G(mu+nu) p+1Fq+1(nu,a1..ap;mu+nu,b1..bq;a) [p <= q+1; if p=q+1 then |a|<1]",
+  "note": "lhs/rhs shown for the instance p = q = 2",
+  "reason": "indexed parameter family"
+ },
+ {
+  "id": "GR7.513",
+  "gr": "7.513",
+  "page": 863,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(1 - x^2)^nu*Hypergeometric2F1[-n, a, b, x^2], {x, 0, 1}]",
+  "rhs": [
+   "1/2*Beta[nu + 1, s/2]*HypergeometricPFQ[{-n, a, s/2}, {b, nu + 1 + s/2}, 1]"
+  ],
+  "conds": [
+   "Re[s] > 0",
+   "Re[nu] > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 336(4)",
+  "edition_note": "",
+  "section": "7.51 Combinations of hypergeometric functions and powers",
+  "tex": "int_0^1 x^(s-1)(1-x^2)^nu F(-n,a;b;x^2) dx = 1/2 B(nu+1,s/2) 3F2(-n,a,s/2;b,nu+1+s/2;1)",
+  "note": ""
+ },
+ {
+  "id": "GR7.521",
+  "gr": "7.521",
+  "page": 863,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[E^(-s*t)*HypergeometricPFQ[{a1, a2}, {b1, b2}, t], {t, 0, Infinity}]",
+  "rhs": [
+   "1/s*HypergeometricPFQ[{1, a1, a2}, {b1, b2}, 1/s]"
+  ],
+  "conds": [
+   "Re[s] > 0"
+  ],
+  "cite": "EH I 192",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf e^(-st) pFq(a1..ap;b1..bq;t) dt = 1/s p+1Fq(1,a1..ap;b1..bq;1/s) [p <= q]",
+  "note": "lhs/rhs shown for the instance p = q = 2",
+  "reason": "indexed parameter family"
+ },
+ {
+  "id": "GR7.522.1",
+  "gr": "7.522.1",
+  "page": 863,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^(-lam*x)*x^(gamma - 1)*Hypergeometric2F1[alpha, beta, delta, -x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[delta]*lam^(-gamma)/(Gamma[alpha]*Gamma[beta])*MacRobertE[{alpha, beta, gamma}, {delta}, lam]"
+  ],
+  "conds": [
+   "Re[lam] > 0",
+   "Re[gamma] > 0"
+  ],
+  "cite": "EH I 205(10)",
+  "edition_note": "11",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf e^(-lam x) x^(gamma-1) 2F1(alpha,beta;delta;-x) dx = G(delta) lam^(-gamma)/(G(alpha)G(beta)) E(alpha,beta,gamma:delta:lam)",
+  "note": "MacRobert E(alpha,beta,gamma:delta:lam) written as placeholder MacRobertE[{a..},{b..},z]",
+  "reason": "MacRobert E-function"
+ },
+ {
+  "id": "GR7.522.2",
+  "gr": "7.522.2",
+  "page": 863,
+  "status": "ok",
+  "lhs": "Integrate[E^(-b*x)*x^(a - 1)*Hypergeometric2F1[1/2 + nu, 1/2 - nu, a, -x/2], {x, 0, Infinity}]",
+  "rhs": [
+   "2^a*E^b*(1/Sqrt[Pi])*Gamma[a]*(2*b)^(1/2 - a)*BesselK[nu, b]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0"
+  ],
+  "cite": "ET I 212(1)",
+  "edition_note": "6",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf e^(-bx) x^(a-1) F(1/2+nu,1/2-nu;a;-x/2) dx = 2^a e^b pi^(-1/2) G(a)(2b)^(1/2-a) K_nu(b)",
+  "note": ""
+ },
+ {
+  "id": "GR7.522.3",
+  "gr": "7.522.3",
+  "page": 863,
+  "status": "ok",
+  "lhs": "Integrate[E^(-b*x)*x^(gamma - 1)*Hypergeometric2F1[2*alpha, 2*beta, gamma, -lam*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[gamma]*b^(-gamma)*(b/lam)^(alpha + beta - 1/2)*E^(b/(2*lam))*WhittakerW[1/2 - alpha - beta, alpha - beta, b/lam]"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "Re[gamma] > 0",
+   "Abs[Arg[lam]] < Pi"
+  ],
+  "cite": "BU 78(30), ET I 212(4)",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf e^(-bx) x^(gamma-1) F(2alpha,2beta;gamma;-lam x) dx = G(gamma) b^(-gamma)(b/lam)^(alpha+beta-1/2) e^(b/(2lam)) W_(1/2-alpha-beta,alpha-beta)(b/lam)",
+  "note": ""
+ },
+ {
+  "id": "GR7.522.4",
+  "gr": "7.522.4",
+  "page": 863,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x*t)*t^(b - 1)*Hypergeometric2F1[a, a - c + 1, b, -t], {t, 0, Infinity}]",
+  "rhs": [
+   "x^(a - b)*Gamma[b]*HypergeometricU[a, c, x]"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "Re[x] > 0"
+  ],
+  "cite": "EH I 273(11)",
+  "edition_note": "6",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf e^(-xt) t^(b-1) F(a,a-c+1;b;-t) dt = x^(a-b) G(b) Psi(a,c;x)",
+  "note": ""
+ },
+ {
+  "id": "GR7.522.5",
+  "gr": "7.522.5",
+  "page": 863,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[E^(-x)*x^(s - 1)*HypergeometricPFQ[{a1, a2}, {b1, b2, b3}, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[s]*HypergeometricPFQ[{s, a1, a2}, {b1, b2, b3}, a]"
+  ],
+  "conds": [
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 337(11)",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf e^-x x^(s-1) pFq(a1..ap;b1..bq;ax) dx = G(s) p+1Fq(s,a1..ap;b1..bq;a) [p < q, Re s > 0]",
+  "note": "lhs/rhs shown for the instance p = 2, q = 3",
+  "reason": "indexed parameter family"
+ },
+ {
+  "id": "GR7.522.6",
+  "gr": "7.522.6",
+  "page": 864,
+  "status": "ok",
+  "lhs": "Integrate[x^(beta - 1)*E^(-mu*x)*HypergeometricPFQ[{-n, n + 1}, {1, beta}, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[beta]*mu^(-beta)*LegendreP[n, 1 - 2/mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[beta] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 218(6)",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(beta-1) e^(-mu x) 2F2(-n,n+1;1,beta;x) dx = G(beta) mu^(-beta) P_n(1-2/mu)",
+  "note": ""
+ },
+ {
+  "id": "GR7.522.7",
+  "gr": "7.522.7",
+  "page": 864,
+  "status": "ok",
+  "lhs": "Integrate[x^(beta - 1)*E^(-mu*x)*HypergeometricPFQ[{-n, n}, {beta, 1/2}, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[beta]*mu^(-beta)*Cos[2*n*ArcSin[1/Sqrt[mu]]]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[beta] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 218(7)",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(beta-1) e^(-mu x) 2F2(-n,n;beta,1/2;x) dx = G(beta) mu^(-beta) cos[2n arcsin(1/sqrt mu)]",
+  "note": ""
+ },
+ {
+  "id": "GR7.522.8",
+  "gr": "7.522.8",
+  "page": 864,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[x^(rho2 - 1)*E^(-mu*x)*HypergeometricPFQ[{a1, a2}, {rho1, rho2}, lam*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[rho2]*mu^(-rho2)*HypergeometricPFQ[{a1, a2}, {rho1}, lam/mu]"
+  ],
+  "conds": [
+   "Re[rho2] > 0",
+   "Re[mu] > Re[lam]"
+  ],
+  "cite": "ET I 219(16)a",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho_n-1) e^(-mu x) mFn(a1..am;rho1..rhon;lam x) dx = G(rho_n) mu^(-rho_n) mFn-1(a1..am;rho1..rho_(n-1);lam/mu) [m <= n; Re rho_n > 0; Re mu > 0 if m<n; Re mu > Re lam if m=n]",
+  "note": "lhs/rhs shown for the instance m = n = 2",
+  "reason": "indexed parameter family"
+ },
+ {
+  "id": "GR7.522.9",
+  "gr": "7.522.9",
+  "page": 864,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[x^(sigma - 1)*E^(-mu*x)*HypergeometricPFQ[{a1, a2}, {rho1, rho2}, lam*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[sigma]*mu^(-sigma)*HypergeometricPFQ[{a1, a2, sigma}, {rho1, rho2}, lam/mu]"
+  ],
+  "conds": [
+   "Re[sigma] > 0",
+   "Re[mu] > Re[lam]"
+  ],
+  "cite": "ET I 219(17)",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(sigma-1) e^(-mu x) mFn(a1..am;rho1..rhon;lam x) dx = G(sigma) mu^(-sigma) m+1Fn(a1..am,sigma;rho1..rhon;lam/mu) [m <= n, Re sigma > 0, Re mu > 0 if m<n; Re mu > Re lam if m=n]",
+  "note": "lhs/rhs shown for the instance m = n = 2",
+  "reason": "indexed parameter family"
+ },
+ {
+  "id": "GR7.523a",
+  "gr": "7.523",
+  "page": 864,
+  "status": "ok",
+  "lhs": "Integrate[(x - 1)^(mu - 1)*x^(-mu - 1/2)*E^(-a*x/2)*WhittakerW[2*mu + 1/2, lam, a*x], {x, 1, Infinity}]",
+  "rhs": [
+   "Gamma[mu]*E^(-a/2)*WhittakerW[mu + 1/2, lam, a]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[a] > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_1^inf (x-1)^(mu-1) x^(-mu-1/2) e^(-ax/2) W_(2mu+1/2,lam)(ax) dx = G(mu) e^(-a/2) W_(mu+1/2,lam)(a)",
+  "note": "as printed; no source citation printed"
+ },
+ {
+  "id": "GR7.523b",
+  "gr": "7.523",
+  "page": 864,
+  "status": "ok",
+  "lhs": "Integrate[(x - 1)^(mu - 1)*x^(-mu - 1/2)*E^(-a*x/2)*WhittakerW[1/2, lam, a*x], {x, 1, Infinity}]",
+  "rhs": [
+   "Gamma[mu]*E^(-a/2)*WhittakerW[1/2 - mu, lam, a]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[a] > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_1^inf (x-1)^(mu-1) x^(-mu-1/2) e^(-ax/2) W_(1/2,lam)(ax) dx = G(mu) e^(-a/2) W_(1/2-mu,lam)(a)",
+  "note": "corrected integrand (conjectural): instance kappa = 1/2 of the general form int_1^inf (x-1)^(mu-1) x^(kappa-mu-1) e^(-ax/2) W_(kappa,nu)(ax) dx = G(mu) e^(-a/2) W_(kappa-mu,nu)(a)"
+ },
+ {
+  "id": "GR7.524.1",
+  "gr": "7.524.1",
+  "page": 864,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^(-lam*x)*Hypergeometric2F1[alpha, beta, 1/2, -x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "lam^(alpha + beta - 1)*LommelS2[1 - alpha - beta, alpha - beta, lam]"
+  ],
+  "conds": [
+   "Re[lam] > 0"
+  ],
+  "cite": "ET II 401(13)",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf e^(-lam x) F(alpha,beta;1/2;-x^2) dx = lam^(alpha+beta-1) S_(1-alpha-beta,alpha-beta)(lam)",
+  "note": "",
+  "reason": "Lommel function"
+ },
+ {
+  "id": "GR7.524.2",
+  "gr": "7.524.2",
+  "page": 864,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[E^(-s*t)*HypergeometricPFQ[{a1, a2}, {b1, b2, b3}, t^2], {t, 0, Infinity}]",
+  "rhs": [
+   "s^(-1)*HypergeometricPFQ[{a1, a2, 1, 1/2}, {b1, b2, b3}, 4/s^2]"
+  ],
+  "conds": [
+   "Re[s] > 0"
+  ],
+  "cite": "MO 176",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf e^(-st) pFq(a1..ap;b1..bq;t^2) dt = s^(-1) p+2Fq(a1..ap,1,1/2;b1..bq;4/s^2) [p < q]",
+  "note": "lhs/rhs shown for the instance p = 2, q = 3",
+  "reason": "indexed parameter family"
+ },
+ {
+  "id": "GR7.524.3",
+  "gr": "7.524.3",
+  "page": 864,
+  "status": "ok",
+  "lhs": "Integrate[E^(-s*t)*HypergeometricPFQ[{}, Append[Table[j/q, {j, 1, q - 1}], 1], t^q/q^q], {t, 0, Infinity}]",
+  "rhs": [
+   "s^(-1)*Exp[s^(-q)]"
+  ],
+  "conds": [
+   "Element[q, Integers] && q >= 1",
+   "Re[s] > 0"
+  ],
+  "cite": "MO 176",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf e^(-st) 0Fq(1/q,2/q,...,(q-1)/q,1;t^q/q^q) dt = s^(-1) exp(s^(-q))",
+  "note": "no conditions printed; q a positive integer and Re s > 0 added; the lower parameters are j/q (j=1..q-1) and 1"
+ },
+ {
+  "id": "GR7.525.1",
+  "gr": "7.525.1",
+  "page": 864,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[x^(sigma - 1)*E^(-mu*x)*HypergeometricPFQ[{a1}, {rho1, rho2}, (lam*x)^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[sigma]*mu^(-sigma)*HypergeometricPFQ[{a1, sigma/2, (sigma + 1)/2}, {rho1, rho2}, (2*lam/mu)^2]"
+  ],
+  "conds": [
+   "Re[sigma] > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 220(19)",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(sigma-1) e^(-mu x) mFn(a1..am;rho1..rhon;(lam x)^k) dx = G(sigma) mu^(-sigma) m+kFn(a1..am,sigma/k,(sigma+1)/k,...,(sigma+k-1)/k;rho1..rhon;(k lam/mu)^k)",
+  "note": "lhs/rhs shown for the instance m = 1, n = 2, k = 2",
+  "reason": "indexed parameter family"
+ },
+ {
+  "id": "GR7.525.2",
+  "gr": "7.525.2",
+  "page": 865,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x*E^(-lam*x)*Hypergeometric2F1[alpha, beta, 3/2, -x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "lam^(alpha + beta - 2)*LommelS2[1 - alpha - beta, alpha - beta, lam]"
+  ],
+  "conds": [
+   "Re[lam] > 0"
+  ],
+  "cite": "ET II 401(14)",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf x e^(-lam x) F(alpha,beta;3/2;-x^2) dx = lam^(alpha+beta-2) S_(1-alpha-beta,alpha-beta)(lam)",
+  "note": "",
+  "reason": "Lommel function"
+ },
+ {
+  "id": "GR7.526.1",
+  "gr": "7.526.1",
+  "page": 865,
+  "status": "SKIP-CONTOUR",
+  "lhs": "Integrate[E^(s*t)*s^(-b)*Hypergeometric2F1[a, b, a + b - c + 1, 1 - 1/s], {s, gamma - I*Infinity, gamma + I*Infinity}]",
+  "rhs": [
+   "2*Pi*I*Gamma[a + b - c + 1]/(Gamma[b]*Gamma[b - c + 1])*t^(b - 1)*HypergeometricU[a, c, t]"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "Re[b - c] > -1",
+   "gamma > 1/2"
+  ],
+  "cite": "EH I 273(12)",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_(gamma-i inf)^(gamma+i inf) e^(st) s^(-b) F(a,b;a+b-c+1;1-1/s) ds = 2 pi i G(a+b-c+1)/(G(b)G(b-c+1)) t^(b-1) Psi(a;c;t)",
+  "note": "",
+  "reason": "Bromwich contour integral"
+ },
+ {
+  "id": "GR7.526.2",
+  "gr": "7.526.2",
+  "page": 865,
+  "status": "ok",
+  "lhs": "Integrate[E^(-t)*t^((alpha + alpha1 - c + 1) - 1)*(x + t)^(-alpha)*(y + t)^(-alpha1)*Hypergeometric2F1[alpha, alpha1, (alpha + alpha1 - c + 1), t*(x + y + t)/((x + t)*(y + t))], {t, 0, Infinity}]",
+  "rhs": [
+   "Gamma[(alpha + alpha1 - c + 1)]*HypergeometricU[alpha, c, x]*HypergeometricU[alpha1, c, y]"
+  ],
+  "conds": [
+   "Re[(alpha + alpha1 - c + 1)] > 0",
+   "x > 0",
+   "y > 0"
+  ],
+  "cite": "EH I 287(21)",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf e^-t t^(gamma-1)(x+t)^(-alpha)(y+t)^(-alpha') F[alpha,alpha';gamma;t(x+y+t)/((x+t)(y+t))] dt = G(gamma) Psi(alpha,c;x) Psi(alpha',c;y), gamma = alpha+alpha'-c+1",
+  "note": "gamma = alpha + alpha' - c + 1 substituted; alpha' -> alpha1; printed condition xy != 0, x > 0 and y > 0 used for sampling"
+ },
+ {
+  "id": "GR7.526.3",
+  "gr": "7.526.3",
+  "page": 865,
+  "status": "ok",
+  "lhs": "Integrate[x^(gamma - 1)*(x + y)^(-alpha)*(x + z)^(-beta)*E^(-x)*Hypergeometric2F1[alpha, beta, gamma, x*(x + y + z)/((x + y)*(x + z))], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[gamma]*(z*y)^(-1/2 - (alpha + beta - gamma)/2)*E^((y + z)/2)*WhittakerW[(1 - alpha + beta - gamma)/2, (alpha + beta - gamma)/2, y]*WhittakerW[(1 + alpha - beta - gamma)/2, (alpha + beta - gamma)/2, z]"
+  ],
+  "conds": [
+   "Re[gamma] > 0",
+   "Abs[Arg[y]] < Pi",
+   "Abs[Arg[z]] < Pi"
+  ],
+  "cite": "ET II 401(15)",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(gamma-1)(x+y)^(-alpha)(x+z)^(-beta) e^-x F[alpha,beta;gamma;x(x+y+z)/((x+y)(x+z))] dx = G(gamma)(zy)^(-1/2-mu) e^((y+z)/2) W_(nu,mu)(y) W_(lam,mu)(z), 2nu=1-alpha+beta-gamma, 2lam=1+alpha-beta-gamma, 2mu=alpha+beta-gamma",
+  "note": "nu, lam, mu substituted"
+ },
+ {
+  "id": "GR7.527.1",
+  "gr": "7.527.1",
+  "page": 865,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-x))^(lam - 1)*E^(-mu*x)*Hypergeometric2F1[alpha, beta, gamma, delta*E^(-x)], {x, 0, Infinity}]",
+  "rhs": [
+   "Beta[mu, lam]*HypergeometricPFQ[{alpha, beta, mu}, {gamma, mu + lam}, delta]"
+  ],
+  "conds": [
+   "Re[lam] > 0",
+   "Re[mu] > 0",
+   "Abs[Arg[1 - delta]] < Pi"
+  ],
+  "cite": "ET I 213(9)",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf (1-e^-x)^(lam-1) e^(-mu x) F(alpha,beta;gamma;delta e^-x) dx = B(mu,lam) 3F2(alpha,beta,mu;gamma,mu+lam;delta)",
+  "note": ""
+ },
+ {
+  "id": "GR7.527.2",
+  "gr": "7.527.2",
+  "page": 865,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-x))^mu*E^(-alpha*x)*Hypergeometric2F1[-n, mu + beta + n, beta, E^(-x)], {x, 0, Infinity}]",
+  "rhs": [
+   "Beta[alpha, mu + n + 1]*Beta[alpha, beta + n - alpha]/Beta[alpha, beta - alpha]"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Re[mu] > -1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 213(10)",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf (1-e^-x)^mu e^(-alpha x) F(-n,mu+beta+n;beta;e^-x) dx = B(alpha,mu+n+1)B(alpha,beta+n-alpha)/B(alpha,beta-alpha)",
+  "note": ""
+ },
+ {
+  "id": "GR7.527.3",
+  "gr": "7.527.3",
+  "page": 865,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-x))^(gamma - 1)*E^(-mu*x)*Hypergeometric2F1[alpha, beta, gamma, 1 - E^(-x)], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu]*Gamma[gamma - alpha - beta + mu]*Gamma[gamma]/(Gamma[gamma - alpha + mu]*Gamma[gamma - beta + mu])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[mu] > Re[alpha + beta - gamma]",
+   "Re[gamma] > 0"
+  ],
+  "cite": "ET I 213(11)",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf (1-e^-x)^(gamma-1) e^(-mu x) F(alpha,beta;gamma;1-e^-x) dx = G(mu)G(gamma-alpha-beta+mu)G(gamma)/(G(gamma-alpha+mu)G(gamma-beta+mu))",
+  "note": ""
+ },
+ {
+  "id": "GR7.527.4",
+  "gr": "7.527.4",
+  "page": 865,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-x))^(gamma - 1)*E^(-mu*x)*Hypergeometric2F1[alpha, beta, gamma, delta*(1 - E^(-x))], {x, 0, Infinity}]",
+  "rhs": [
+   "Beta[mu, gamma]*Hypergeometric2F1[alpha, beta, mu + gamma, delta]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[gamma] > 0",
+   "Abs[Arg[1 - delta]] < Pi"
+  ],
+  "cite": "ET I 213(12)",
+  "edition_note": "",
+  "section": "7.52 Combinations of hypergeometric functions and exponentials",
+  "tex": "int_0^inf (1-e^-x)^(gamma-1) e^(-mu x) F[alpha,beta;gamma;delta(1-e^-x)] dx = B(mu,gamma) F(alpha,beta;mu+gamma;delta)",
+  "note": ""
+ }
+]

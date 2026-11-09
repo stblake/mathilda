@@ -1,0 +1,2745 @@
+[
+ {
+  "id": "GR2.263.3",
+  "gr": "2.263.3",
+  "page": 145,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[1/(a + b*x + c*x^2)^((2*n + 1)/2), x]",
+  "rhs": [],
+  "conds": [],
+  "cite": "TI (189)",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/R^((2n+1)/2) = 2(2cx+b)/((2n-1) Delta R^((2n-1)/2)) + 8(n-1)c/((2n-1)Delta) int dx/R^((2n-1)/2)",
+  "note": "",
+  "reason": "integral of R^(-(2n-1)/2) on the right-hand side"
+ },
+ {
+  "id": "GR2.263.4",
+  "gr": "2.263.4",
+  "page": 145,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*x + c*x^2)^((2*n + 1)/2), x]",
+  "rhs": [
+   "2*(2*c*x + b)/((2*n - 1)*(4*a*c - b^2)*(a + b*x + c*x^2)^((2*n - 1)/2))*(1 + Sum[8^k*Product[n - j, {j, 1, k}]/Product[2*n - 2*j - 1, {j, 1, k}]*c^k/(4*a*c - b^2)^k*(a + b*x + c*x^2)^k, {k, 1, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "TI (191)",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/R^((2n+1)/2) = 2(2cx+b)/((2n-1)Delta R^((2n-1)/2)) {1 + sum_{k=1}^{n-1} 8^k (n-1)...(n-k)/((2n-3)...(2n-2k-1)) c^k/Delta^k R^k}",
+  "note": "R = a + b x + c x^2, Delta = 4ac - b^2"
+ },
+ {
+  "id": "GR2.264.1",
+  "gr": "2.264.1",
+  "page": 145,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[1/Sqrt[a + b*x + c*x^2], x]",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/sqrt(R) (see 2.261)",
+  "note": "",
+  "reason": "see 2.261"
+ },
+ {
+  "id": "GR2.264.2",
+  "gr": "2.264.2",
+  "page": 145,
+  "status": "ok",
+  "lhs": "Integrate[x/Sqrt[a + b*x + c*x^2], x]",
+  "rhs": [
+   "Sqrt[a + b*x + c*x^2]/c - b/(2*c)*(Log[2*Sqrt[c]*Sqrt[a + b*x + c*x^2] + 2*c*x + b]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int x dx/sqrt R = sqrt R/c - b/(2c) int dx/sqrt R",
+  "note": "Int dx/Sqrt[R] substituted from 2.261 (c > 0 form)"
+ },
+ {
+  "id": "GR2.264.3",
+  "gr": "2.264.3",
+  "page": 145,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[a + b*x + c*x^2], x]",
+  "rhs": [
+   "(x/(2*c) - 3*b/(4*c^2))*Sqrt[a + b*x + c*x^2] + (3*b^2/(8*c^2) - a/(2*c))*(Log[2*Sqrt[c]*Sqrt[a + b*x + c*x^2] + 2*c*x + b]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int x^2/sqrt R = (x/(2c) - 3b/(4c^2)) sqrt R + (3b^2/(8c^2) - a/(2c)) int dx/sqrt R",
+  "note": "Int dx/Sqrt[R] substituted from 2.261 (c > 0 form)"
+ },
+ {
+  "id": "GR2.264.4",
+  "gr": "2.264.4",
+  "page": 145,
+  "status": "ok",
+  "lhs": "Integrate[x^3/Sqrt[a + b*x + c*x^2], x]",
+  "rhs": [
+   "(x^2/(3*c) - 5*b*x/(12*c^2) + 5*b^2/(8*c^3) - 2*a/(3*c^2))*Sqrt[a + b*x + c*x^2] - (5*b^3/(16*c^3) - 3*a*b/(4*c^2))*(Log[2*Sqrt[c]*Sqrt[a + b*x + c*x^2] + 2*c*x + b]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int x^3/sqrt R = (x^2/(3c) - 5bx/(12c^2) + 5b^2/(8c^3) - 2a/(3c^2)) sqrt R - (5b^3/(16c^3) - 3ab/(4c^2)) int dx/sqrt R",
+  "note": "Int dx/Sqrt[R] substituted from 2.261 (c > 0 form)"
+ },
+ {
+  "id": "GR2.264.5",
+  "gr": "2.264.5",
+  "page": 145,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*x + c*x^2)^(3/2), x]",
+  "rhs": [
+   "2*(2*c*x + b)/((4*a*c - b^2)*Sqrt[a + b*x + c*x^2])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/sqrt(R^3) = 2(2cx+b)/(Delta sqrt R)",
+  "note": ""
+ },
+ {
+  "id": "GR2.264.6",
+  "gr": "2.264.6",
+  "page": 145,
+  "status": "ok",
+  "lhs": "Integrate[x/(a + b*x + c*x^2)^(3/2), x]",
+  "rhs": [
+   "-2*(2*a + b*x)/((4*a*c - b^2)*Sqrt[a + b*x + c*x^2])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int x dx/sqrt(R^3) = -2(2a+bx)/(Delta sqrt R)",
+  "note": ""
+ },
+ {
+  "id": "GR2.264.7",
+  "gr": "2.264.7",
+  "page": 145,
+  "status": "ok",
+  "lhs": "Integrate[x^2/(a + b*x + c*x^2)^(3/2), x]",
+  "rhs": [
+   "-(((4*a*c - b^2) - b^2)*x - 2*a*b)/(c*(4*a*c - b^2)*Sqrt[a + b*x + c*x^2]) + 1/c*(Log[2*Sqrt[c]*Sqrt[a + b*x + c*x^2] + 2*c*x + b]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int x^2/sqrt(R^3) = -((Delta - b^2)x - 2ab)/(c Delta sqrt R) + 1/c int dx/sqrt R",
+  "note": "Int dx/Sqrt[R] substituted from 2.261 (c > 0 form)"
+ },
+ {
+  "id": "GR2.264.8",
+  "gr": "2.264.8",
+  "page": 145,
+  "status": "ok",
+  "lhs": "Integrate[x^3/(a + b*x + c*x^2)^(3/2), x]",
+  "rhs": [
+   "(c*(4*a*c - b^2)*x^2 + b*(10*a*c - 3*b^2)*x + a*(8*a*c - 3*b^2))/(c^2*(4*a*c - b^2)*Sqrt[a + b*x + c*x^2]) - 3*b/(2*c^2)*(Log[2*Sqrt[c]*Sqrt[a + b*x + c*x^2] + 2*c*x + b]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int x^3/sqrt(R^3) = (c Delta x^2 + b(10ac-3b^2)x + a(8ac-3b^2))/(c^2 Delta sqrt R) - 3b/(2c^2) int dx/sqrt R",
+  "note": "Int dx/Sqrt[R] substituted from 2.261 (c > 0 form)"
+ },
+ {
+  "id": "GR2.265a",
+  "gr": "2.265",
+  "page": 145,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[(a + b*x + c*x^2)^((2*n + 1)/2)/x^m, x]",
+  "rhs": [],
+  "conds": [],
+  "cite": "TI (195)",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int R^((2n+1)/2)/x^m = -R^((2n+3)/2)/((m-1)a x^(m-1)) + (2n-2m+5)b/(2(m-1)a) int R^((2n+1)/2)/x^(m-1) + (2n-m+4)c/((m-1)a) int R^((2n+1)/2)/x^(m-2)",
+  "note": "",
+  "reason": "reduction formula in m, n"
+ },
+ {
+  "id": "GR2.265b",
+  "gr": "2.265",
+  "page": 145,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[(a + b*x + c*x^2)^((2*n + 1)/2)/x, x]",
+  "rhs": [],
+  "conds": [],
+  "cite": "TI (198)",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "m=1: int R^((2n+1)/2)/x = R^((2n+1)/2)/(2n+1) + b/2 int R^((2n-1)/2) + a int R^((2n-1)/2)/x",
+  "note": "",
+  "reason": "reduction formula (m = 1 case)"
+ },
+ {
+  "id": "GR2.265c",
+  "gr": "2.265",
+  "page": 145,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[(b*x + c*x^2)^((2*n + 1)/2)/x^m, x]",
+  "rhs": [],
+  "conds": [],
+  "cite": "LA 169 (3)",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "a=0: int (bx+cx^2)^((2n+1)/2)/x^m = 2 (bx+cx^2)^((2n+3)/2)/((2n-2m+3) b x^m) + 2(m-2n-3)c/((2n-2m+3)b) int (bx+cx^2)^((2n+1)/2)/x^(m-1)",
+  "note": "",
+  "reason": "reduction formula (a = 0 case)"
+ },
+ {
+  "id": "GR2.266a",
+  "gr": "2.266",
+  "page": 146,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*Sqrt[a + b*x + c*x^2]), x]",
+  "rhs": [
+   "-1/Sqrt[a]*Log[(2*a + b*x + 2*Sqrt[a*(a + b*x + c*x^2)])/x]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "TI (137)",
+  "edition_note": "8",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/(x sqrt R) = -1/sqrt a ln((2a+bx+2 sqrt(aR))/x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.266b",
+  "gr": "2.266",
+  "page": 146,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*Sqrt[a + b*x + c*x^2]), x]",
+  "rhs": [
+   "1/Sqrt[-a]*ArcSin[(2*a + b*x)/(x*Sqrt[b^2 - 4*a*c])]"
+  ],
+  "conds": [
+   "a < 0",
+   "(4*a*c - b^2) < 0"
+  ],
+  "cite": "TI (138)",
+  "edition_note": "8",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/(x sqrt R) = 1/sqrt(-a) arcsin((2a+bx)/(x sqrt(b^2-4ac)))",
+  "note": ""
+ },
+ {
+  "id": "GR2.266c",
+  "gr": "2.266",
+  "page": 146,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*Sqrt[a + b*x + c*x^2]), x]",
+  "rhs": [
+   "1/Sqrt[-a]*ArcTan[(2*a + b*x)/(2*Sqrt[-a]*Sqrt[a + b*x + c*x^2])]"
+  ],
+  "conds": [
+   "a < 0"
+  ],
+  "cite": "LA 178 (6)a",
+  "edition_note": "8",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/(x sqrt R) = 1/sqrt(-a) arctan((2a+bx)/(2 sqrt(-a) sqrt R))",
+  "note": ""
+ },
+ {
+  "id": "GR2.266d",
+  "gr": "2.266",
+  "page": 146,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*Sqrt[a + b*x + c*x^2]), x]",
+  "rhs": [
+   "-1/Sqrt[a]*ArcSinh[(2*a + b*x)/(x*Sqrt[(4*a*c - b^2)])]"
+  ],
+  "conds": [
+   "a > 0",
+   "(4*a*c - b^2) > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "8",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/(x sqrt R) = -1/sqrt a arcsinh((2a+bx)/(x sqrt Delta))",
+  "note": ""
+ },
+ {
+  "id": "GR2.266e",
+  "gr": "2.266",
+  "page": 146,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*Sqrt[a + b*x + c*x^2]), x]",
+  "rhs": [
+   "-1/Sqrt[a]*ArcTanh[(2*a + b*x)/(2*Sqrt[a]*Sqrt[a + b*x + c*x^2])]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/(x sqrt R) = -1/sqrt a arctanh((2a+bx)/(2 sqrt a sqrt R))",
+  "note": ""
+ },
+ {
+  "id": "GR2.266f",
+  "gr": "2.266",
+  "page": 146,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*Sqrt[a + b*x + c*x^2]), x]",
+  "rhs": [
+   "1/Sqrt[a]*Log[x/(2*a + b*x)]"
+  ],
+  "conds": [
+   "a > 0",
+   "(4*a*c - b^2) == 0"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/(x sqrt R) = 1/sqrt a ln(x/(2a+bx))",
+  "note": ""
+ },
+ {
+  "id": "GR2.266g",
+  "gr": "2.266",
+  "page": 146,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*Sqrt[b*x + c*x^2]), x]",
+  "rhs": [
+   "-2*Sqrt[b*x + c*x^2]/(b*x)"
+  ],
+  "conds": [
+   "b != 0"
+  ],
+  "cite": "LA 170 (16)",
+  "edition_note": "8",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/(x sqrt R) = -2 sqrt(bx+cx^2)/(bx) [a=0, b!=0]",
+  "note": "a = 0 case"
+ },
+ {
+  "id": "GR2.266h",
+  "gr": "2.266",
+  "page": 146,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*Sqrt[a + b*x + c*x^2]), x]",
+  "rhs": [
+   "1/Sqrt[a]*ArcCosh[(2*a + b*x)/(x*Sqrt[-(4*a*c - b^2)])]"
+  ],
+  "conds": [
+   "a > 0",
+   "(4*a*c - b^2) < 0"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/(x sqrt R) = 1/sqrt a arccosh((2a+bx)/(x sqrt(-Delta)))",
+  "note": ""
+ },
+ {
+  "id": "GR2.267.1",
+  "gr": "2.267.1",
+  "page": 146,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + b*x + c*x^2]/x, x]",
+  "rhs": [
+   "Sqrt[a + b*x + c*x^2] + a*(-Log[(2*a + b*x + 2*Sqrt[a]*Sqrt[a + b*x + c*x^2])/x]/Sqrt[a]) + b/2*(Log[2*Sqrt[c]*Sqrt[a + b*x + c*x^2] + 2*c*x + b]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0",
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int sqrt R/x = sqrt R + a int dx/(x sqrt R) + b/2 int dx/sqrt R",
+  "note": "Int dx/Sqrt[R] substituted from 2.261 (c > 0 form); Int dx/(x Sqrt[R]) substituted from 2.266 (a > 0 form)"
+ },
+ {
+  "id": "GR2.267.2a",
+  "gr": "2.267.2",
+  "page": 146,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + b*x + c*x^2]/x^2, x]",
+  "rhs": [
+   "-Sqrt[a + b*x + c*x^2]/x + b/2*(-Log[(2*a + b*x + 2*Sqrt[a]*Sqrt[a + b*x + c*x^2])/x]/Sqrt[a]) + c*(Log[2*Sqrt[c]*Sqrt[a + b*x + c*x^2] + 2*c*x + b]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0",
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int sqrt R/x^2 = -sqrt R/x + b/2 int dx/(x sqrt R) + c int dx/sqrt R",
+  "note": "Int dx/Sqrt[R] substituted from 2.261 (c > 0 form); Int dx/(x Sqrt[R]) substituted from 2.266 (a > 0 form)"
+ },
+ {
+  "id": "GR2.267.2b",
+  "gr": "2.267.2",
+  "page": 146,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[b*x + c*x^2]/x^2, x]",
+  "rhs": [
+   "-2*Sqrt[b*x + c*x^2]/x + c*(Log[2*Sqrt[c]*Sqrt[b*x + c*x^2] + 2*c*x + b]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "a=0: int sqrt(bx+cx^2)/x^2 = -2 sqrt(bx+cx^2)/x + c int dx/sqrt(bx+cx^2)",
+  "note": "a = 0 case; Int dx/Sqrt[R] substituted from 2.261 (c > 0 form)"
+ },
+ {
+  "id": "GR2.267.3a",
+  "gr": "2.267.3",
+  "page": 146,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + b*x + c*x^2]/x^3, x]",
+  "rhs": [
+   "-(1/(2*x^2) + b/(4*a*x))*Sqrt[a + b*x + c*x^2] - (b^2/(8*a) - c/2)*(-Log[(2*a + b*x + 2*Sqrt[a]*Sqrt[a + b*x + c*x^2])/x]/Sqrt[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int sqrt R/x^3 = -(1/(2x^2) + b/(4ax)) sqrt R - (b^2/(8a) - c/2) int dx/(x sqrt R)",
+  "note": "Int dx/(x Sqrt[R]) substituted from 2.266 (a > 0 form)"
+ },
+ {
+  "id": "GR2.267.3b",
+  "gr": "2.267.3",
+  "page": 146,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[b*x + c*x^2]/x^3, x]",
+  "rhs": [
+   "-2*(b*x + c*x^2)^(3/2)/(3*b*x^3)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "a=0: int sqrt(bx+cx^2)/x^3 = -2 sqrt((bx+cx^2)^3)/(3bx^3)",
+  "note": "a = 0 case"
+ },
+ {
+  "id": "GR2.267.4",
+  "gr": "2.267.4",
+  "page": 146,
+  "status": "ok",
+  "lhs": "Integrate[(a + b*x + c*x^2)^(3/2)/x, x]",
+  "rhs": [
+   "(a + b*x + c*x^2)^(3/2)/3 + (2*b*c*x + b^2 + 8*a*c)/(8*c)*Sqrt[a + b*x + c*x^2] + a^2*(-Log[(2*a + b*x + 2*Sqrt[a]*Sqrt[a + b*x + c*x^2])/x]/Sqrt[a]) + b*(12*a*c - b^2)/(16*c)*(Log[2*Sqrt[c]*Sqrt[a + b*x + c*x^2] + 2*c*x + b]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0",
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int sqrt(R^3)/x = sqrt(R^3)/3 + (2bcx+b^2+8ac)/(8c) sqrt R + a^2 int dx/(x sqrt R) + b(12ac-b^2)/(16c) int dx/sqrt R",
+  "note": "Int dx/Sqrt[R] substituted from 2.261 (c > 0 form); Int dx/(x Sqrt[R]) substituted from 2.266 (a > 0 form)"
+ },
+ {
+  "id": "GR2.267.5a",
+  "gr": "2.267.5",
+  "page": 146,
+  "status": "ok",
+  "lhs": "Integrate[(a + b*x + c*x^2)^(3/2)/x^2, x]",
+  "rhs": [
+   "-(a + b*x + c*x^2)^(5/2)/(a*x) + (c*x + b)/a*(a + b*x + c*x^2)^(3/2) + 3/4*(2*c*x + 3*b)*Sqrt[a + b*x + c*x^2] + 3/2*a*b*(-Log[(2*a + b*x + 2*Sqrt[a]*Sqrt[a + b*x + c*x^2])/x]/Sqrt[a]) + 3*(4*a*c + b^2)/8*(Log[2*Sqrt[c]*Sqrt[a + b*x + c*x^2] + 2*c*x + b]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0",
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int sqrt(R^3)/x^2 = -sqrt(R^5)/(ax) + (cx+b)/a sqrt(R^3) + 3/4(2cx+3b) sqrt R + 3/2 ab int dx/(x sqrt R) + 3(4ac+b^2)/8 int dx/sqrt R",
+  "note": "Int dx/Sqrt[R] substituted from 2.261 (c > 0 form); Int dx/(x Sqrt[R]) substituted from 2.266 (a > 0 form)"
+ },
+ {
+  "id": "GR2.267.5b",
+  "gr": "2.267.5",
+  "page": 146,
+  "status": "ok",
+  "lhs": "Integrate[(b*x + c*x^2)^(3/2)/x^2, x]",
+  "rhs": [
+   "(b*x + c*x^2)^(3/2)/(2*x) + 3*b/4*Sqrt[b*x + c*x^2] + 3*b^2/8*(Log[2*Sqrt[c]*Sqrt[b*x + c*x^2] + 2*c*x + b]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "a=0: int sqrt((bx+cx^2)^3)/x^2 = sqrt((bx+cx^2)^3)/(2x) + 3b/4 sqrt(bx+cx^2) + 3b^2/8 int dx/sqrt(bx+cx^2)",
+  "note": "a = 0 case; Int dx/Sqrt[R] substituted from 2.261 (c > 0 form)"
+ },
+ {
+  "id": "GR2.267.6a",
+  "gr": "2.267.6",
+  "page": 147,
+  "status": "ok",
+  "lhs": "Integrate[(a + b*x + c*x^2)^(3/2)/x^3, x]",
+  "rhs": [
+   "-(1/(2*a*x^2) + b/(4*a^2*x))*(a + b*x + c*x^2)^(5/2) + (b*c*x + 2*a*c + b^2)/(4*a^2)*(a + b*x + c*x^2)^(3/2) + 3*(b*c*x + 2*a*c + b^2)/(4*a)*Sqrt[a + b*x + c*x^2] + 3/8*(4*a*c + b^2)*(-Log[(2*a + b*x + 2*Sqrt[a]*Sqrt[a + b*x + c*x^2])/x]/Sqrt[a]) + 3/2*b*c*(Log[2*Sqrt[c]*Sqrt[a + b*x + c*x^2] + 2*c*x + b]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0",
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int sqrt(R^3)/x^3 = -(1/(2ax^2) + b/(4a^2x)) sqrt(R^5) + (bcx+2ac+b^2)/(4a^2) sqrt(R^3) + 3(bcx+2ac+b^2)/(4a) sqrt R + 3/8(4ac+b^2) int dx/(x sqrt R) + 3/2 bc int dx/sqrt R",
+  "note": "Int dx/Sqrt[R] substituted from 2.261 (c > 0 form); Int dx/(x Sqrt[R]) substituted from 2.266 (a > 0 form)"
+ },
+ {
+  "id": "GR2.267.6b",
+  "gr": "2.267.6",
+  "page": 147,
+  "status": "ok",
+  "lhs": "Integrate[(b*x + c*x^2)^(3/2)/x^3, x]",
+  "rhs": [
+   "(c - 2*b/x)*Sqrt[b*x + c*x^2] + 3*b*c/2*(Log[2*Sqrt[c]*Sqrt[b*x + c*x^2] + 2*c*x + b]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "a=0: int sqrt((bx+cx^2)^3)/x^3 = (c - 2b/x) sqrt(bx+cx^2) + 3bc/2 int dx/sqrt(bx+cx^2)",
+  "note": "a = 0 case; Int dx/Sqrt[R] substituted from 2.261 (c > 0 form)"
+ },
+ {
+  "id": "GR2.268a",
+  "gr": "2.268",
+  "page": 147,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[1/(x^m*(a + b*x + c*x^2)^((2*n + 1)/2)), x]",
+  "rhs": [],
+  "conds": [],
+  "cite": "TI (196)",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/(x^m R^((2n+1)/2)) = -1/((m-1) a x^(m-1) R^((2n-1)/2)) - (2n+2m-3)b/(2(m-1)a) int dx/(x^(m-1) R^((2n+1)/2)) - (2n+m-2)c/((m-1)a) int dx/(x^(m-2) R^((2n+1)/2))",
+  "note": "",
+  "reason": "reduction formula in m, n"
+ },
+ {
+  "id": "GR2.268b",
+  "gr": "2.268",
+  "page": 147,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[1/(x*(a + b*x + c*x^2)^((2*n + 1)/2)), x]",
+  "rhs": [],
+  "conds": [],
+  "cite": "TI (199)",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "m=1: int dx/(x R^((2n+1)/2)) = 1/((2n-1) a R^((2n-1)/2)) - b/(2a) int dx/R^((2n+1)/2) + 1/a int dx/(x R^((2n-1)/2))",
+  "note": "",
+  "reason": "reduction formula (m = 1 case)"
+ },
+ {
+  "id": "GR2.268c",
+  "gr": "2.268",
+  "page": 147,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[1/(x^m*(b*x + c*x^2)^((2*n + 1)/2)), x]",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "a=0: int dx/(x^m (bx+cx^2)^((2n+1)/2)) = -2/((2n+2m-1) b x^m (bx+cx^2)^((2n-1)/2)) - (4n+2m-2)c/((2n+2m-1)b) int dx/(x^(m-1) (bx+cx^2)^((2n+1)/2))",
+  "note": "",
+  "reason": "reduction formula (a = 0 case)"
+ },
+ {
+  "id": "GR2.269.1",
+  "gr": "2.269.1",
+  "page": 147,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[1/(x*Sqrt[a + b*x + c*x^2]), x]",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/(x sqrt R) (see 2.266)",
+  "note": "",
+  "reason": "see 2.266"
+ },
+ {
+  "id": "GR2.269.2a",
+  "gr": "2.269.2",
+  "page": 147,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*Sqrt[a + b*x + c*x^2]), x]",
+  "rhs": [
+   "-Sqrt[a + b*x + c*x^2]/(a*x) - b/(2*a)*(-Log[(2*a + b*x + 2*Sqrt[a]*Sqrt[a + b*x + c*x^2])/x]/Sqrt[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/(x^2 sqrt R) = -sqrt R/(ax) - b/(2a) int dx/(x sqrt R)",
+  "note": "Int dx/(x Sqrt[R]) substituted from 2.266 (a > 0 form)"
+ },
+ {
+  "id": "GR2.269.2b",
+  "gr": "2.269.2",
+  "page": 147,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*Sqrt[b*x + c*x^2]), x]",
+  "rhs": [
+   "2/3*(-1/(b*x^2) + 2*c/(b^2*x))*Sqrt[b*x + c*x^2]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "a=0: int dx/(x^2 sqrt(bx+cx^2)) = 2/3(-1/(bx^2) + 2c/(b^2x)) sqrt(bx+cx^2)",
+  "note": "a = 0 case"
+ },
+ {
+  "id": "GR2.269.3a",
+  "gr": "2.269.3",
+  "page": 147,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^3*Sqrt[a + b*x + c*x^2]), x]",
+  "rhs": [
+   "(-1/(2*a*x^2) + 3*b/(4*a^2*x))*Sqrt[a + b*x + c*x^2] + (3*b^2/(8*a^2) - c/(2*a))*(-Log[(2*a + b*x + 2*Sqrt[a]*Sqrt[a + b*x + c*x^2])/x]/Sqrt[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/(x^3 sqrt R) = (-1/(2ax^2) + 3b/(4a^2x)) sqrt R + (3b^2/(8a^2) - c/(2a)) int dx/(x sqrt R)",
+  "note": "Int dx/(x Sqrt[R]) substituted from 2.266 (a > 0 form)"
+ },
+ {
+  "id": "GR2.269.3b",
+  "gr": "2.269.3",
+  "page": 147,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^3*Sqrt[b*x + c*x^2]), x]",
+  "rhs": [
+   "2/5*(-1/(b*x^3) + 4*c/(3*b^2*x^2) - 8*c^2/(3*b^3*x))*Sqrt[b*x + c*x^2]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "a=0: int dx/(x^3 sqrt(bx+cx^2)) = 2/5(-1/(bx^3) + 4c/(3b^2x^2) - 8c^2/(3b^3x)) sqrt(bx+cx^2)",
+  "note": "a = 0 case"
+ },
+ {
+  "id": "GR2.269.4a",
+  "gr": "2.269.4",
+  "page": 147,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*(a + b*x + c*x^2)^(3/2)), x]",
+  "rhs": [
+   "-2*(b*c*x - 2*a*c + b^2)/(a*(4*a*c - b^2)*Sqrt[a + b*x + c*x^2]) + 1/a*(-Log[(2*a + b*x + 2*Sqrt[a]*Sqrt[a + b*x + c*x^2])/x]/Sqrt[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/(x sqrt(R^3)) = -2(bcx - 2ac + b^2)/(a Delta sqrt R) + 1/a int dx/(x sqrt R)",
+  "note": "Int dx/(x Sqrt[R]) substituted from 2.266 (a > 0 form)"
+ },
+ {
+  "id": "GR2.269.4b",
+  "gr": "2.269.4",
+  "page": 148,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*(b*x + c*x^2)^(3/2)), x]",
+  "rhs": [
+   "2/3*(-1/(b*x) + 4*c/b^2 + 8*c^2*x/b^3)/Sqrt[b*x + c*x^2]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "a=0: int dx/(x sqrt((bx+cx^2)^3)) = 2/3(-1/(bx) + 4c/b^2 + 8c^2x/b^3)/sqrt(bx+cx^2)",
+  "note": "a = 0 case (continued on next page)"
+ },
+ {
+  "id": "GR2.269.5a",
+  "gr": "2.269.5",
+  "page": 148,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*(a + b*x + c*x^2)^(3/2)), x]",
+  "rhs": [
+   "-(-1/(a*x) - b*(10*a*c - 3*b^2)/(a^2*(4*a*c - b^2)) - c*(8*a*c - 3*b^2)*x/(a^2*(4*a*c - b^2)))/Sqrt[a + b*x + c*x^2] - 3*b/(2*a^2)*(-Log[(2*a + b*x + 2*Sqrt[a]*Sqrt[a + b*x + c*x^2])/x]/Sqrt[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/(x^2 sqrt(R^3)) = -A/sqrt R - 3b/(2a^2) int dx/(x sqrt R), A = -1/(ax) - b(10ac-3b^2)/(a^2 Delta) - c(8ac-3b^2)x/(a^2 Delta)",
+  "note": "A substituted; Int dx/(x Sqrt[R]) substituted from 2.266 (a > 0 form)"
+ },
+ {
+  "id": "GR2.269.5b",
+  "gr": "2.269.5",
+  "page": 148,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*(b*x + c*x^2)^(3/2)), x]",
+  "rhs": [
+   "2/5*(-1/(b*x^2) + 2*c/(b^2*x) - 8*c^2/b^3 - 16*c^3*x/b^4)/Sqrt[b*x + c*x^2]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "11",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "a=0: int dx/(x^2 sqrt((bx+cx^2)^3)) = 2/5(-1/(bx^2) + 2c/(b^2x) - 8c^2/b^3 - 16c^3x/b^4)/sqrt(bx+cx^2)",
+  "note": "a = 0 case"
+ },
+ {
+  "id": "GR2.269.6a",
+  "gr": "2.269.6",
+  "page": 148,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^3*(a + b*x + c*x^2)^(3/2)), x]",
+  "rhs": [
+   "(-1/(a*x^2) + 5*b/(2*a^2*x) - (15*b^4 - 62*a*c*b^2 + 24*a^2*c^2)/(2*a^3*(4*a*c - b^2)) - b*c*(15*b^2 - 52*a*c)*x/(2*a^3*(4*a*c - b^2)))/(2*Sqrt[a + b*x + c*x^2]) + (15*b^2 - 12*a*c)/(8*a^3)*(-Log[(2*a + b*x + 2*Sqrt[a]*Sqrt[a + b*x + c*x^2])/x]/Sqrt[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "int dx/(x^3 sqrt(R^3)) = (-1/(ax^2) + 5b/(2a^2x) - (15b^4-62acb^2+24a^2c^2)/(2a^3 Delta) - bc(15b^2-52ac)x/(2a^3 Delta)) 1/(2 sqrt R) + (15b^2-12ac)/(8a^3) int dx/(x sqrt R)",
+  "note": "Int dx/(x Sqrt[R]) substituted from 2.266 (a > 0 form)"
+ },
+ {
+  "id": "GR2.269.6b",
+  "gr": "2.269.6",
+  "page": 148,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^3*(b*x + c*x^2)^(3/2)), x]",
+  "rhs": [
+   "2/7*(-1/(b*x^3) + 8*c/(5*b^2*x^2) - 16*c^2/(5*b^3*x) + 64*c^3/(5*b^4) + 128*c^4*x/(5*b^5))/Sqrt[b*x + c*x^2]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing Sqrt[a + b x + c x^2] and integral powers of x",
+  "tex": "a=0: int dx/(x^3 sqrt((bx+cx^2)^3)) = 2/7(-1/(bx^3) + 8c/(5b^2x^2) - 16c^2/(5b^3x) + 64c^3/(5b^4) + 128c^4x/(5b^5))/sqrt(bx+cx^2)",
+  "note": "a = 0 case"
+ },
+ {
+  "id": "GR2.271.1a",
+  "gr": "2.271.1",
+  "page": 148,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^5, x]",
+  "rhs": [
+   "1/6*x*Sqrt[a + c*x^2]^5 + 5/24*a*x*Sqrt[a + c*x^2]^3 + 5/16*a^2*x*Sqrt[a + c*x^2] + 5/16*a^3*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^5 = 1/6 x u^5 + 5/24 a x u^3 + 5/16 a^2 x u + 5/16 a^3 I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.271.1b",
+  "gr": "2.271.1",
+  "page": 148,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^5, x]",
+  "rhs": [
+   "1/6*x*Sqrt[a + c*x^2]^5 + 5/24*a*x*Sqrt[a + c*x^2]^3 + 5/16*a^2*x*Sqrt[a + c*x^2] + 5/16*a^3*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^5 = 1/6 x u^5 + 5/24 a x u^3 + 5/16 a^2 x u + 5/16 a^3 I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.271.2a",
+  "gr": "2.271.2",
+  "page": 148,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^3, x]",
+  "rhs": [
+   "1/4*x*Sqrt[a + c*x^2]^3 + 3/8*a*x*Sqrt[a + c*x^2] + 3/8*a^2*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^3 = 1/4 x u^3 + 3/8 a x u + 3/8 a^2 I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.271.2b",
+  "gr": "2.271.2",
+  "page": 148,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^3, x]",
+  "rhs": [
+   "1/4*x*Sqrt[a + c*x^2]^3 + 3/8*a*x*Sqrt[a + c*x^2] + 3/8*a^2*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^3 = 1/4 x u^3 + 3/8 a x u + 3/8 a^2 I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.271.3a",
+  "gr": "2.271.3",
+  "page": 148,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2], x]",
+  "rhs": [
+   "1/2*x*Sqrt[a + c*x^2] + 1/2*a*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u = 1/2 x u + 1/2 a I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.271.3b",
+  "gr": "2.271.3",
+  "page": 148,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2], x]",
+  "rhs": [
+   "1/2*x*Sqrt[a + c*x^2] + 1/2*a*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u = 1/2 x u + 1/2 a I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.271.4a",
+  "gr": "2.271.4",
+  "page": 148,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[a + c*x^2], x]",
+  "rhs": [
+   "(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/u = I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.271.4b",
+  "gr": "2.271.4",
+  "page": 148,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[a + c*x^2], x]",
+  "rhs": [
+   "(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/u = I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.271.5",
+  "gr": "2.271.5",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[a + c*x^2]^3, x]",
+  "rhs": [
+   "x/(a*Sqrt[a + c*x^2])"
+  ],
+  "conds": [],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/u^3 = 1/a x/u",
+  "note": ""
+ },
+ {
+  "id": "GR2.271.6",
+  "gr": "2.271.6",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[a + c*x^2]^(2*n + 1), x]",
+  "rhs": [
+   "1/a^n*Sum[(-1)^k/(2*k + 1)*Binomial[n - 1, k]*c^k*x^(2*k + 1)/Sqrt[a + c*x^2]^(2*k + 1), {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/u^(2n+1) = 1/a^n sum_{k=0}^{n-1} (-1)^k/(2k+1) C(n-1,k) c^k x^(2k+1)/u^(2k+1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.271.7",
+  "gr": "2.271.7",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x/Sqrt[a + c*x^2]^(2*n + 1), x]",
+  "rhs": [
+   "-1/((2*n - 1)*c*Sqrt[a + c*x^2]^(2*n - 1))"
+  ],
+  "conds": [],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x dx/u^(2n+1) = -1/((2n-1) c u^(2n-1))",
+  "note": ""
+ },
+ {
+  "id": "GR2.272.1a",
+  "gr": "2.272.1",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Sqrt[a + c*x^2]^3, x]",
+  "rhs": [
+   "1/6*x*Sqrt[a + c*x^2]^5/c - 1/24*a*x*Sqrt[a + c*x^2]^3/c - 1/16*a^2*x*Sqrt[a + c*x^2]/c - 1/16*a^3/c*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^2 u^3 = 1/6 xu^5/c - 1/24 axu^3/c - 1/16 a^2xu/c - 1/16 a^3/c I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.272.1b",
+  "gr": "2.272.1",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Sqrt[a + c*x^2]^3, x]",
+  "rhs": [
+   "1/6*x*Sqrt[a + c*x^2]^5/c - 1/24*a*x*Sqrt[a + c*x^2]^3/c - 1/16*a^2*x*Sqrt[a + c*x^2]/c - 1/16*a^3/c*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^2 u^3 = 1/6 xu^5/c - 1/24 axu^3/c - 1/16 a^2xu/c - 1/16 a^3/c I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.272.2a",
+  "gr": "2.272.2",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Sqrt[a + c*x^2], x]",
+  "rhs": [
+   "1/4*x*Sqrt[a + c*x^2]^3/c - 1/8*a*x*Sqrt[a + c*x^2]/c - 1/8*a^2/c*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^2 u = 1/4 xu^3/c - 1/8 axu/c - 1/8 a^2/c I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.272.2b",
+  "gr": "2.272.2",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Sqrt[a + c*x^2], x]",
+  "rhs": [
+   "1/4*x*Sqrt[a + c*x^2]^3/c - 1/8*a*x*Sqrt[a + c*x^2]/c - 1/8*a^2/c*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^2 u = 1/4 xu^3/c - 1/8 axu/c - 1/8 a^2/c I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.272.3a",
+  "gr": "2.272.3",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[a + c*x^2], x]",
+  "rhs": [
+   "1/2*x*Sqrt[a + c*x^2]/c - 1/2*a/c*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^2/u = 1/2 xu/c - 1/2 a/c I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.272.3b",
+  "gr": "2.272.3",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[a + c*x^2], x]",
+  "rhs": [
+   "1/2*x*Sqrt[a + c*x^2]/c - 1/2*a/c*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^2/u = 1/2 xu/c - 1/2 a/c I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.272.4a",
+  "gr": "2.272.4",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[a + c*x^2]^3, x]",
+  "rhs": [
+   "-x/(c*Sqrt[a + c*x^2]) + 1/c*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^2/u^3 = -x/(cu) + 1/c I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.272.4b",
+  "gr": "2.272.4",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[a + c*x^2]^3, x]",
+  "rhs": [
+   "-x/(c*Sqrt[a + c*x^2]) + 1/c*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^2/u^3 = -x/(cu) + 1/c I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.272.5",
+  "gr": "2.272.5",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[a + c*x^2]^5, x]",
+  "rhs": [
+   "1/3*x^3/(a*Sqrt[a + c*x^2]^3)"
+  ],
+  "conds": [],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^2/u^5 = 1/3 x^3/(a u^3)",
+  "note": ""
+ },
+ {
+  "id": "GR2.272.6",
+  "gr": "2.272.6",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[a + c*x^2]^(2*n + 1), x]",
+  "rhs": [
+   "1/a^(n - 1)*Sum[(-1)^k/(2*k + 3)*Binomial[n - 2, k]*c^k*x^(2*k + 3)/Sqrt[a + c*x^2]^(2*k + 3), {k, 0, n - 2}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^2/u^(2n+1) = 1/a^(n-1) sum_{k=0}^{n-2} (-1)^k/(2k+3) C(n-2,k) c^k x^(2k+3)/u^(2k+3)",
+  "note": ""
+ },
+ {
+  "id": "GR2.272.7",
+  "gr": "2.272.7",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^3/Sqrt[a + c*x^2]^(2*n + 1), x]",
+  "rhs": [
+   "-1/((2*n - 3)*c^2*Sqrt[a + c*x^2]^(2*n - 3)) + a/((2*n - 1)*c^2*Sqrt[a + c*x^2]^(2*n - 1))"
+  ],
+  "conds": [],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^3/u^(2n+1) = -1/((2n-3)c^2 u^(2n-3)) + a/((2n-1)c^2 u^(2n-1))",
+  "note": ""
+ },
+ {
+  "id": "GR2.273.1a",
+  "gr": "2.273.1",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^4*Sqrt[a + c*x^2]^3, x]",
+  "rhs": [
+   "1/8*x^3*Sqrt[a + c*x^2]^5/c - a*x*Sqrt[a + c*x^2]^5/(16*c^2) + a^2*x*Sqrt[a + c*x^2]^3/(64*c^2) + 3*a^3*x*Sqrt[a + c*x^2]/(128*c^2) + 3*a^4/(128*c^2)*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^4 u^3 = 1/8 x^3u^5/c - axu^5/(16c^2) + a^2xu^3/(64c^2) + 3a^3xu/(128c^2) + 3a^4/(128c^2) I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.273.1b",
+  "gr": "2.273.1",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^4*Sqrt[a + c*x^2]^3, x]",
+  "rhs": [
+   "1/8*x^3*Sqrt[a + c*x^2]^5/c - a*x*Sqrt[a + c*x^2]^5/(16*c^2) + a^2*x*Sqrt[a + c*x^2]^3/(64*c^2) + 3*a^3*x*Sqrt[a + c*x^2]/(128*c^2) + 3*a^4/(128*c^2)*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^4 u^3 = 1/8 x^3u^5/c - axu^5/(16c^2) + a^2xu^3/(64c^2) + 3a^3xu/(128c^2) + 3a^4/(128c^2) I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.273.2a",
+  "gr": "2.273.2",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^4*Sqrt[a + c*x^2], x]",
+  "rhs": [
+   "1/6*x^3*Sqrt[a + c*x^2]^3/c - a*x*Sqrt[a + c*x^2]^3/(8*c^2) + a^2*x*Sqrt[a + c*x^2]/(16*c^2) + a^3/(16*c^2)*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^4 u = 1/6 x^3u^3/c - axu^3/(8c^2) + a^2xu/(16c^2) + a^3/(16c^2) I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.273.2b",
+  "gr": "2.273.2",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^4*Sqrt[a + c*x^2], x]",
+  "rhs": [
+   "1/6*x^3*Sqrt[a + c*x^2]^3/c - a*x*Sqrt[a + c*x^2]^3/(8*c^2) + a^2*x*Sqrt[a + c*x^2]/(16*c^2) + a^3/(16*c^2)*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^4 u = 1/6 x^3u^3/c - axu^3/(8c^2) + a^2xu/(16c^2) + a^3/(16c^2) I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.273.3a",
+  "gr": "2.273.3",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[a + c*x^2], x]",
+  "rhs": [
+   "1/4*x^3*Sqrt[a + c*x^2]/c - 3/8*a*x*Sqrt[a + c*x^2]/c^2 + 3/8*a^2/c^2*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^4/u = 1/4 x^3u/c - 3/8 axu/c^2 + 3/8 a^2/c^2 I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.273.3b",
+  "gr": "2.273.3",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[a + c*x^2], x]",
+  "rhs": [
+   "1/4*x^3*Sqrt[a + c*x^2]/c - 3/8*a*x*Sqrt[a + c*x^2]/c^2 + 3/8*a^2/c^2*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^4/u = 1/4 x^3u/c - 3/8 axu/c^2 + 3/8 a^2/c^2 I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.273.4a",
+  "gr": "2.273.4",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[a + c*x^2]^3, x]",
+  "rhs": [
+   "1/2*x*Sqrt[a + c*x^2]/c^2 + a*x/(c^2*Sqrt[a + c*x^2]) - 3/2*a/c^2*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^4/u^3 = 1/2 xu/c^2 + ax/(c^2u) - 3/2 a/c^2 I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.273.4b",
+  "gr": "2.273.4",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[a + c*x^2]^3, x]",
+  "rhs": [
+   "1/2*x*Sqrt[a + c*x^2]/c^2 + a*x/(c^2*Sqrt[a + c*x^2]) - 3/2*a/c^2*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^4/u^3 = 1/2 xu/c^2 + ax/(c^2u) - 3/2 a/c^2 I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.273.5a",
+  "gr": "2.273.5",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[a + c*x^2]^5, x]",
+  "rhs": [
+   "-x/(c^2*Sqrt[a + c*x^2]) - 1/3*x^3/(c*Sqrt[a + c*x^2]^3) + 1/c^2*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^4/u^5 = -x/(c^2u) - 1/3 x^3/(cu^3) + 1/c^2 I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.273.5b",
+  "gr": "2.273.5",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[a + c*x^2]^5, x]",
+  "rhs": [
+   "-x/(c^2*Sqrt[a + c*x^2]) - 1/3*x^3/(c*Sqrt[a + c*x^2]^3) + 1/c^2*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^4/u^5 = -x/(c^2u) - 1/3 x^3/(cu^3) + 1/c^2 I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.273.6",
+  "gr": "2.273.6",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[a + c*x^2]^7, x]",
+  "rhs": [
+   "1/5*x^5/(a*Sqrt[a + c*x^2]^5)"
+  ],
+  "conds": [],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^4/u^7 = 1/5 x^5/(a u^5)",
+  "note": ""
+ },
+ {
+  "id": "GR2.273.7",
+  "gr": "2.273.7",
+  "page": 149,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[a + c*x^2]^(2*n + 1), x]",
+  "rhs": [
+   "1/a^(n - 2)*Sum[(-1)^k/(2*k + 5)*Binomial[n - 3, k]*c^k*x^(2*k + 5)/Sqrt[a + c*x^2]^(2*k + 5), {k, 0, n - 3}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 3"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^4/u^(2n+1) = 1/a^(n-2) sum_{k=0}^{n-3} (-1)^k/(2k+5) C(n-3,k) c^k x^(2k+5)/u^(2k+5)",
+  "note": ""
+ },
+ {
+  "id": "GR2.273.8",
+  "gr": "2.273.8",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[x^5/Sqrt[a + c*x^2]^(2*n + 1), x]",
+  "rhs": [
+   "-1/((2*n - 5)*c^3*Sqrt[a + c*x^2]^(2*n - 5)) + 2*a/((2*n - 3)*c^3*Sqrt[a + c*x^2]^(2*n - 3)) - a^2/((2*n - 1)*c^3*Sqrt[a + c*x^2]^(2*n - 1))"
+  ],
+  "conds": [],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^5/u^(2n+1) = -1/((2n-5)c^3u^(2n-5)) + 2a/((2n-3)c^3u^(2n-3)) - a^2/((2n-1)c^3u^(2n-1))",
+  "note": ""
+ },
+ {
+  "id": "GR2.274.1a",
+  "gr": "2.274.1",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[x^6*Sqrt[a + c*x^2]^3, x]",
+  "rhs": [
+   "1/10*x^5*Sqrt[a + c*x^2]^5/c - a*x^3*Sqrt[a + c*x^2]^5/(16*c^2) + a^2*x*Sqrt[a + c*x^2]^5/(32*c^3) - a^3*x*Sqrt[a + c*x^2]^3/(128*c^3) - 3*a^4*x*Sqrt[a + c*x^2]/(256*c^3) - 3/256*a^5/c^3*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^6 u^3 = 1/10 x^5u^5/c - ax^3u^5/(16c^2) + a^2xu^5/(32c^3) - a^3xu^3/(128c^3) - 3a^4xu/(256c^3) - 3/256 a^5/c^3 I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.274.1b",
+  "gr": "2.274.1",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[x^6*Sqrt[a + c*x^2]^3, x]",
+  "rhs": [
+   "1/10*x^5*Sqrt[a + c*x^2]^5/c - a*x^3*Sqrt[a + c*x^2]^5/(16*c^2) + a^2*x*Sqrt[a + c*x^2]^5/(32*c^3) - a^3*x*Sqrt[a + c*x^2]^3/(128*c^3) - 3*a^4*x*Sqrt[a + c*x^2]/(256*c^3) - 3/256*a^5/c^3*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^6 u^3 = 1/10 x^5u^5/c - ax^3u^5/(16c^2) + a^2xu^5/(32c^3) - a^3xu^3/(128c^3) - 3a^4xu/(256c^3) - 3/256 a^5/c^3 I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.274.2a",
+  "gr": "2.274.2",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[x^6*Sqrt[a + c*x^2], x]",
+  "rhs": [
+   "1/8*x^5*Sqrt[a + c*x^2]^3/c - 5/48*a*x^3*Sqrt[a + c*x^2]^3/c^2 + 5*a^2*x*Sqrt[a + c*x^2]^3/(64*c^3) - 5*a^3*x*Sqrt[a + c*x^2]/(128*c^3) - 5/128*a^4/c^3*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^6 u = 1/8 x^5u^3/c - 5/48 ax^3u^3/c^2 + 5a^2xu^3/(64c^3) - 5a^3xu/(128c^3) - 5/128 a^4/c^3 I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.274.2b",
+  "gr": "2.274.2",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[x^6*Sqrt[a + c*x^2], x]",
+  "rhs": [
+   "1/8*x^5*Sqrt[a + c*x^2]^3/c - 5/48*a*x^3*Sqrt[a + c*x^2]^3/c^2 + 5*a^2*x*Sqrt[a + c*x^2]^3/(64*c^3) - 5*a^3*x*Sqrt[a + c*x^2]/(128*c^3) - 5/128*a^4/c^3*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^6 u = 1/8 x^5u^3/c - 5/48 ax^3u^3/c^2 + 5a^2xu^3/(64c^3) - 5a^3xu/(128c^3) - 5/128 a^4/c^3 I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.274.3a",
+  "gr": "2.274.3",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[x^6/Sqrt[a + c*x^2], x]",
+  "rhs": [
+   "1/6*x^5*Sqrt[a + c*x^2]/c - 5/24*a*x^3*Sqrt[a + c*x^2]/c^2 + 5/16*a^2*x*Sqrt[a + c*x^2]/c^3 - 5/16*a^3/c^3*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^6/u = 1/6 x^5u/c - 5/24 ax^3u/c^2 + 5/16 a^2xu/c^3 - 5/16 a^3/c^3 I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.274.3b",
+  "gr": "2.274.3",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[x^6/Sqrt[a + c*x^2], x]",
+  "rhs": [
+   "1/6*x^5*Sqrt[a + c*x^2]/c - 5/24*a*x^3*Sqrt[a + c*x^2]/c^2 + 5/16*a^2*x*Sqrt[a + c*x^2]/c^3 - 5/16*a^3/c^3*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^6/u = 1/6 x^5u/c - 5/24 ax^3u/c^2 + 5/16 a^2xu/c^3 - 5/16 a^3/c^3 I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.274.4a",
+  "gr": "2.274.4",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[x^6/Sqrt[a + c*x^2]^3, x]",
+  "rhs": [
+   "1/4*x^5/(c*Sqrt[a + c*x^2]) - 5/8*a*x^3/(c^2*Sqrt[a + c*x^2]) - 15/8*a^2*x/(c^3*Sqrt[a + c*x^2]) + 15/8*a^2/c^3*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^6/u^3 = 1/4 x^5/(cu) - 5/8 ax^3/(c^2u) - 15/8 a^2x/(c^3u) + 15/8 a^2/c^3 I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.274.4b",
+  "gr": "2.274.4",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[x^6/Sqrt[a + c*x^2]^3, x]",
+  "rhs": [
+   "1/4*x^5/(c*Sqrt[a + c*x^2]) - 5/8*a*x^3/(c^2*Sqrt[a + c*x^2]) - 15/8*a^2*x/(c^3*Sqrt[a + c*x^2]) + 15/8*a^2/c^3*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^6/u^3 = 1/4 x^5/(cu) - 5/8 ax^3/(c^2u) - 15/8 a^2x/(c^3u) + 15/8 a^2/c^3 I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.274.5a",
+  "gr": "2.274.5",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[x^6/Sqrt[a + c*x^2]^5, x]",
+  "rhs": [
+   "1/2*x^5/(c*Sqrt[a + c*x^2]^3) + 10/3*a*x^3/(c^2*Sqrt[a + c*x^2]^3) + 5/2*a^2*x/(c^3*Sqrt[a + c*x^2]^3) - 5/2*a/c^3*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^6/u^5 = 1/2 x^5/(cu^3) + 10/3 ax^3/(c^2u^3) + 5/2 a^2x/(c^3u^3) - 5/2 a/c^3 I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.274.5b",
+  "gr": "2.274.5",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[x^6/Sqrt[a + c*x^2]^5, x]",
+  "rhs": [
+   "1/2*x^5/(c*Sqrt[a + c*x^2]^3) + 10/3*a*x^3/(c^2*Sqrt[a + c*x^2]^3) + 5/2*a^2*x/(c^3*Sqrt[a + c*x^2]^3) - 5/2*a/c^3*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^6/u^5 = 1/2 x^5/(cu^3) + 10/3 ax^3/(c^2u^3) + 5/2 a^2x/(c^3u^3) - 5/2 a/c^3 I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.274.6a",
+  "gr": "2.274.6",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[x^6/Sqrt[a + c*x^2]^7, x]",
+  "rhs": [
+   "-23/15*x^5/(c*Sqrt[a + c*x^2]^5) - 7/3*a*x^3/(c^2*Sqrt[a + c*x^2]^5) - a^2*x/(c^3*Sqrt[a + c*x^2]^5) + 1/c^3*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^6/u^7 = -23/15 x^5/(cu^5) - 7/3 ax^3/(c^2u^5) - a^2x/(c^3u^5) + 1/c^3 I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.274.6b",
+  "gr": "2.274.6",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[x^6/Sqrt[a + c*x^2]^7, x]",
+  "rhs": [
+   "-23/15*x^5/(c*Sqrt[a + c*x^2]^5) - 7/3*a*x^3/(c^2*Sqrt[a + c*x^2]^5) - a^2*x/(c^3*Sqrt[a + c*x^2]^5) + 1/c^3*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^6/u^7 = -23/15 x^5/(cu^5) - 7/3 ax^3/(c^2u^5) - a^2x/(c^3u^5) + 1/c^3 I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.274.7",
+  "gr": "2.274.7",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[x^6/Sqrt[a + c*x^2]^9, x]",
+  "rhs": [
+   "1/7*x^7/(a*Sqrt[a + c*x^2]^7)"
+  ],
+  "conds": [],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^6/u^9 = 1/7 x^7/(a u^7)",
+  "note": ""
+ },
+ {
+  "id": "GR2.274.8",
+  "gr": "2.274.8",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[x^6/Sqrt[a + c*x^2]^(2*n + 1), x]",
+  "rhs": [
+   "1/a^(n - 3)*Sum[(-1)^k/(2*k + 7)*Binomial[n - 4, k]*c^k*x^(2*k + 7)/Sqrt[a + c*x^2]^(2*k + 7), {k, 0, n - 4}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 4"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^6/u^(2n+1) = 1/a^(n-3) sum_{k=0}^{n-4} (-1)^k/(2k+7) C(n-4,k) c^k x^(2k+7)/u^(2k+7)",
+  "note": ""
+ },
+ {
+  "id": "GR2.274.9",
+  "gr": "2.274.9",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[x^7/Sqrt[a + c*x^2]^(2*n + 1), x]",
+  "rhs": [
+   "-1/((2*n - 7)*c^4*Sqrt[a + c*x^2]^(2*n - 7)) + 3*a/((2*n - 5)*c^4*Sqrt[a + c*x^2]^(2*n - 5)) - 3*a^2/((2*n - 3)*c^4*Sqrt[a + c*x^2]^(2*n - 3)) + a^3/((2*n - 1)*c^4*Sqrt[a + c*x^2]^(2*n - 1))"
+  ],
+  "conds": [],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int x^7/u^(2n+1) = -1/((2n-7)c^4u^(2n-7)) + 3a/((2n-5)c^4u^(2n-5)) - 3a^2/((2n-3)c^4u^(2n-3)) + a^3/((2n-1)c^4u^(2n-1))",
+  "note": ""
+ },
+ {
+  "id": "GR2.275.1a",
+  "gr": "2.275.1",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^5/x, x]",
+  "rhs": [
+   "Sqrt[a + c*x^2]^5/5 + 1/3*a*Sqrt[a + c*x^2]^3 + a^2*Sqrt[a + c*x^2] + a^3*(Log[(Sqrt[a + c*x^2] - Sqrt[a])/(Sqrt[a + c*x^2] + Sqrt[a])]/(2*Sqrt[a]))"
+  ],
+  "conds": [
+   "a > 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^5/x = u^5/5 + 1/3 a u^3 + a^2 u + a^3 I2",
+  "note": "I2 = Log[(u - Sqrt[a])/(u + Sqrt[a])]/(2 Sqrt[a]) [a > 0, c > 0]"
+ },
+ {
+  "id": "GR2.275.1b",
+  "gr": "2.275.1",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^5/x, x]",
+  "rhs": [
+   "Sqrt[a + c*x^2]^5/5 + 1/3*a*Sqrt[a + c*x^2]^3 + a^2*Sqrt[a + c*x^2] + a^3*(ArcSec[x*Sqrt[-c/a]]/Sqrt[-a])"
+  ],
+  "conds": [
+   "a < 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^5/x = u^5/5 + 1/3 a u^3 + a^2 u + a^3 I2",
+  "note": "I2 = ArcSec[x Sqrt[-c/a]]/Sqrt[-a] [a < 0, c > 0]"
+ },
+ {
+  "id": "GR2.275.2a",
+  "gr": "2.275.2",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^3/x, x]",
+  "rhs": [
+   "Sqrt[a + c*x^2]^3/3 + a*Sqrt[a + c*x^2] + a^2*(Log[(Sqrt[a + c*x^2] - Sqrt[a])/(Sqrt[a + c*x^2] + Sqrt[a])]/(2*Sqrt[a]))"
+  ],
+  "conds": [
+   "a > 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^3/x = u^3/3 + a u + a^2 I2",
+  "note": "I2 = Log[(u - Sqrt[a])/(u + Sqrt[a])]/(2 Sqrt[a]) [a > 0, c > 0]"
+ },
+ {
+  "id": "GR2.275.2b",
+  "gr": "2.275.2",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^3/x, x]",
+  "rhs": [
+   "Sqrt[a + c*x^2]^3/3 + a*Sqrt[a + c*x^2] + a^2*(ArcSec[x*Sqrt[-c/a]]/Sqrt[-a])"
+  ],
+  "conds": [
+   "a < 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^3/x = u^3/3 + a u + a^2 I2",
+  "note": "I2 = ArcSec[x Sqrt[-c/a]]/Sqrt[-a] [a < 0, c > 0]"
+ },
+ {
+  "id": "GR2.275.3a",
+  "gr": "2.275.3",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]/x, x]",
+  "rhs": [
+   "Sqrt[a + c*x^2] + a*(Log[(Sqrt[a + c*x^2] - Sqrt[a])/(Sqrt[a + c*x^2] + Sqrt[a])]/(2*Sqrt[a]))"
+  ],
+  "conds": [
+   "a > 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u/x = u + a I2",
+  "note": "I2 = Log[(u - Sqrt[a])/(u + Sqrt[a])]/(2 Sqrt[a]) [a > 0, c > 0]"
+ },
+ {
+  "id": "GR2.275.3b",
+  "gr": "2.275.3",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]/x, x]",
+  "rhs": [
+   "Sqrt[a + c*x^2] + a*(ArcSec[x*Sqrt[-c/a]]/Sqrt[-a])"
+  ],
+  "conds": [
+   "a < 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u/x = u + a I2",
+  "note": "I2 = ArcSec[x Sqrt[-c/a]]/Sqrt[-a] [a < 0, c > 0]"
+ },
+ {
+  "id": "GR2.275.4a",
+  "gr": "2.275.4",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*Sqrt[a + c*x^2]), x]",
+  "rhs": [
+   "(Log[(Sqrt[a + c*x^2] - Sqrt[a])/(Sqrt[a + c*x^2] + Sqrt[a])]/(2*Sqrt[a]))"
+  ],
+  "conds": [
+   "a > 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/(x u) = I2",
+  "note": "I2 = Log[(u - Sqrt[a])/(u + Sqrt[a])]/(2 Sqrt[a]) [a > 0, c > 0]"
+ },
+ {
+  "id": "GR2.275.4b",
+  "gr": "2.275.4",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*Sqrt[a + c*x^2]), x]",
+  "rhs": [
+   "(ArcSec[x*Sqrt[-c/a]]/Sqrt[-a])"
+  ],
+  "conds": [
+   "a < 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/(x u) = I2",
+  "note": "I2 = ArcSec[x Sqrt[-c/a]]/Sqrt[-a] [a < 0, c > 0]"
+ },
+ {
+  "id": "GR2.275.5a",
+  "gr": "2.275.5",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*Sqrt[a + c*x^2]^(2*n + 1)), x]",
+  "rhs": [
+   "1/a^n*(Log[(Sqrt[a + c*x^2] - Sqrt[a])/(Sqrt[a + c*x^2] + Sqrt[a])]/(2*Sqrt[a])) + Sum[1/((2*k + 1)*a^(n - k)*Sqrt[a + c*x^2]^(2*k + 1)), {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "a > 0",
+   "c > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/(x u^(2n+1)) = 1/a^n I2 + sum_{k=0}^{n-1} 1/((2k+1) a^(n-k) u^(2k+1))",
+  "note": "I2 = Log[(u - Sqrt[a])/(u + Sqrt[a])]/(2 Sqrt[a]) [a > 0, c > 0]"
+ },
+ {
+  "id": "GR2.275.5b",
+  "gr": "2.275.5",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*Sqrt[a + c*x^2]^(2*n + 1)), x]",
+  "rhs": [
+   "1/a^n*(ArcSec[x*Sqrt[-c/a]]/Sqrt[-a]) + Sum[1/((2*k + 1)*a^(n - k)*Sqrt[a + c*x^2]^(2*k + 1)), {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "a < 0",
+   "c > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/(x u^(2n+1)) = 1/a^n I2 + sum_{k=0}^{n-1} 1/((2k+1) a^(n-k) u^(2k+1))",
+  "note": "I2 = ArcSec[x Sqrt[-c/a]]/Sqrt[-a] [a < 0, c > 0]"
+ },
+ {
+  "id": "GR2.275.6a",
+  "gr": "2.275.6",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^5/x^2, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]^5/x + 5/4*c*x*Sqrt[a + c*x^2]^3 + 15/8*a*c*x*Sqrt[a + c*x^2] + 15/8*a^2*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])",
+   "-Sqrt[a + c*x^2]^5/x + 5/4*c*x*Sqrt[a + c*x^2]^3 + 15/8*a*c*x*Sqrt[a + c*x^2] + 15/8*a^2*c*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^5/x^2 = -u^5/x + 5/4 cxu^3 + 15/8 acxu + 15/8 a^2 I1",
+  "note": "as printed the I1 term is dimensionally inconsistent; second rhs has 15/8 a^2 c I1; I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.275.6b",
+  "gr": "2.275.6",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^5/x^2, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]^5/x + 5/4*c*x*Sqrt[a + c*x^2]^3 + 15/8*a*c*x*Sqrt[a + c*x^2] + 15/8*a^2*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])",
+   "-Sqrt[a + c*x^2]^5/x + 5/4*c*x*Sqrt[a + c*x^2]^3 + 15/8*a*c*x*Sqrt[a + c*x^2] + 15/8*a^2*c*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^5/x^2 = -u^5/x + 5/4 cxu^3 + 15/8 acxu + 15/8 a^2 I1",
+  "note": "as printed the I1 term is dimensionally inconsistent; second rhs has 15/8 a^2 c I1; I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.275.7a",
+  "gr": "2.275.7",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^3/x^2, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]^3/x + 3/2*c*x*Sqrt[a + c*x^2] + 3/2*a*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])",
+   "-Sqrt[a + c*x^2]^3/x + 3/2*c*x*Sqrt[a + c*x^2] + 3/2*a*c*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^3/x^2 = -u^3/x + 3/2 cxu + 3/2 a I1",
+  "note": "as printed the I1 term is dimensionally inconsistent; second rhs has 3/2 a c I1; I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.275.7b",
+  "gr": "2.275.7",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^3/x^2, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]^3/x + 3/2*c*x*Sqrt[a + c*x^2] + 3/2*a*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])",
+   "-Sqrt[a + c*x^2]^3/x + 3/2*c*x*Sqrt[a + c*x^2] + 3/2*a*c*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^3/x^2 = -u^3/x + 3/2 cxu + 3/2 a I1",
+  "note": "as printed the I1 term is dimensionally inconsistent; second rhs has 3/2 a c I1; I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.275.8a",
+  "gr": "2.275.8",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]/x^2, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]/x + c*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u/x^2 = -u/x + c I1",
+  "note": "I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.275.8b",
+  "gr": "2.275.8",
+  "page": 150,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]/x^2, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]/x + c*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u/x^2 = -u/x + c I1",
+  "note": "I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.275.9",
+  "gr": "2.275.9",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*Sqrt[a + c*x^2]^(2*n + 1)), x]",
+  "rhs": [
+   "-1/a^(n + 1)*(Sqrt[a + c*x^2]/x + Sum[(-1)^(k + 1)/(2*k - 1)*Binomial[n, k]*c^k*(x/Sqrt[a + c*x^2])^(2*k - 1), {k, 1, n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/(x^2 u^(2n+1)) = -1/a^(n+1) {u/x + sum_{k=1}^{n} (-1)^(k+1)/(2k-1) C(n,k) c^k (x/u)^(2k-1)}",
+  "note": ""
+ },
+ {
+  "id": "GR2.276.1a",
+  "gr": "2.276.1",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^5/x^3, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]^5/(2*x^2) + 5/6*c*Sqrt[a + c*x^2]^3 + 5/2*a*c*Sqrt[a + c*x^2] + 5/2*a^2*c*(Log[(Sqrt[a + c*x^2] - Sqrt[a])/(Sqrt[a + c*x^2] + Sqrt[a])]/(2*Sqrt[a]))"
+  ],
+  "conds": [
+   "a > 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^5/x^3 = -u^5/(2x^2) + 5/6 cu^3 + 5/2 acu + 5/2 a^2c I2",
+  "note": "I2 = Log[(u - Sqrt[a])/(u + Sqrt[a])]/(2 Sqrt[a]) [a > 0, c > 0]"
+ },
+ {
+  "id": "GR2.276.1b",
+  "gr": "2.276.1",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^5/x^3, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]^5/(2*x^2) + 5/6*c*Sqrt[a + c*x^2]^3 + 5/2*a*c*Sqrt[a + c*x^2] + 5/2*a^2*c*(ArcSec[x*Sqrt[-c/a]]/Sqrt[-a])"
+  ],
+  "conds": [
+   "a < 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^5/x^3 = -u^5/(2x^2) + 5/6 cu^3 + 5/2 acu + 5/2 a^2c I2",
+  "note": "I2 = ArcSec[x Sqrt[-c/a]]/Sqrt[-a] [a < 0, c > 0]"
+ },
+ {
+  "id": "GR2.276.2a",
+  "gr": "2.276.2",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^3/x^3, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]^3/(2*x^2) + 3/2*c*Sqrt[a + c*x^2] + 3/2*a*c*(Log[(Sqrt[a + c*x^2] - Sqrt[a])/(Sqrt[a + c*x^2] + Sqrt[a])]/(2*Sqrt[a]))"
+  ],
+  "conds": [
+   "a > 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^3/x^3 = -u^3/(2x^2) + 3/2 cu + 3/2 ac I2",
+  "note": "I2 = Log[(u - Sqrt[a])/(u + Sqrt[a])]/(2 Sqrt[a]) [a > 0, c > 0]"
+ },
+ {
+  "id": "GR2.276.2b",
+  "gr": "2.276.2",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^3/x^3, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]^3/(2*x^2) + 3/2*c*Sqrt[a + c*x^2] + 3/2*a*c*(ArcSec[x*Sqrt[-c/a]]/Sqrt[-a])"
+  ],
+  "conds": [
+   "a < 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^3/x^3 = -u^3/(2x^2) + 3/2 cu + 3/2 ac I2",
+  "note": "I2 = ArcSec[x Sqrt[-c/a]]/Sqrt[-a] [a < 0, c > 0]"
+ },
+ {
+  "id": "GR2.276.3a",
+  "gr": "2.276.3",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]/x^3, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]/(2*x^2) + c/2*(Log[(Sqrt[a + c*x^2] - Sqrt[a])/(Sqrt[a + c*x^2] + Sqrt[a])]/(2*Sqrt[a]))"
+  ],
+  "conds": [
+   "a > 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u/x^3 = -u/(2x^2) + c/2 I2",
+  "note": "I2 = Log[(u - Sqrt[a])/(u + Sqrt[a])]/(2 Sqrt[a]) [a > 0, c > 0]"
+ },
+ {
+  "id": "GR2.276.3b",
+  "gr": "2.276.3",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]/x^3, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]/(2*x^2) + c/2*(ArcSec[x*Sqrt[-c/a]]/Sqrt[-a])"
+  ],
+  "conds": [
+   "a < 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u/x^3 = -u/(2x^2) + c/2 I2",
+  "note": "I2 = ArcSec[x Sqrt[-c/a]]/Sqrt[-a] [a < 0, c > 0]"
+ },
+ {
+  "id": "GR2.276.4a",
+  "gr": "2.276.4",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^3*Sqrt[a + c*x^2]), x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]/(2*a*x^2) - c/(2*a)*(Log[(Sqrt[a + c*x^2] - Sqrt[a])/(Sqrt[a + c*x^2] + Sqrt[a])]/(2*Sqrt[a]))"
+  ],
+  "conds": [
+   "a > 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/(x^3 u) = -u/(2ax^2) - c/(2a) I2",
+  "note": "I2 = Log[(u - Sqrt[a])/(u + Sqrt[a])]/(2 Sqrt[a]) [a > 0, c > 0]"
+ },
+ {
+  "id": "GR2.276.4b",
+  "gr": "2.276.4",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^3*Sqrt[a + c*x^2]), x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]/(2*a*x^2) - c/(2*a)*(ArcSec[x*Sqrt[-c/a]]/Sqrt[-a])"
+  ],
+  "conds": [
+   "a < 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/(x^3 u) = -u/(2ax^2) - c/(2a) I2",
+  "note": "I2 = ArcSec[x Sqrt[-c/a]]/Sqrt[-a] [a < 0, c > 0]"
+ },
+ {
+  "id": "GR2.276.5a",
+  "gr": "2.276.5",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^3*Sqrt[a + c*x^2]^3), x]",
+  "rhs": [
+   "-1/(2*a*x^2*Sqrt[a + c*x^2]) - 3*c/(2*a^2*Sqrt[a + c*x^2]) - 3*c/(2*a^2)*(Log[(Sqrt[a + c*x^2] - Sqrt[a])/(Sqrt[a + c*x^2] + Sqrt[a])]/(2*Sqrt[a]))"
+  ],
+  "conds": [
+   "a > 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/(x^3 u^3) = -1/(2ax^2u) - 3c/(2a^2u) - 3c/(2a^2) I2",
+  "note": "I2 = Log[(u - Sqrt[a])/(u + Sqrt[a])]/(2 Sqrt[a]) [a > 0, c > 0]"
+ },
+ {
+  "id": "GR2.276.5b",
+  "gr": "2.276.5",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^3*Sqrt[a + c*x^2]^3), x]",
+  "rhs": [
+   "-1/(2*a*x^2*Sqrt[a + c*x^2]) - 3*c/(2*a^2*Sqrt[a + c*x^2]) - 3*c/(2*a^2)*(ArcSec[x*Sqrt[-c/a]]/Sqrt[-a])"
+  ],
+  "conds": [
+   "a < 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/(x^3 u^3) = -1/(2ax^2u) - 3c/(2a^2u) - 3c/(2a^2) I2",
+  "note": "I2 = ArcSec[x Sqrt[-c/a]]/Sqrt[-a] [a < 0, c > 0]"
+ },
+ {
+  "id": "GR2.276.6a",
+  "gr": "2.276.6",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^3*Sqrt[a + c*x^2]^5), x]",
+  "rhs": [
+   "-1/(2*a*x^2*Sqrt[a + c*x^2]^3) - 5/6*c/(a^2*Sqrt[a + c*x^2]^3) - 5/2*c/(a^3*Sqrt[a + c*x^2]) - 5/2*c/a^3*(Log[(Sqrt[a + c*x^2] - Sqrt[a])/(Sqrt[a + c*x^2] + Sqrt[a])]/(2*Sqrt[a]))"
+  ],
+  "conds": [
+   "a > 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/(x^3 u^5) = -1/(2ax^2u^3) - 5/6 c/(a^2u^3) - 5/2 c/(a^3u) - 5/2 c/a^3 I2",
+  "note": "I2 = Log[(u - Sqrt[a])/(u + Sqrt[a])]/(2 Sqrt[a]) [a > 0, c > 0]"
+ },
+ {
+  "id": "GR2.276.6b",
+  "gr": "2.276.6",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^3*Sqrt[a + c*x^2]^5), x]",
+  "rhs": [
+   "-1/(2*a*x^2*Sqrt[a + c*x^2]^3) - 5/6*c/(a^2*Sqrt[a + c*x^2]^3) - 5/2*c/(a^3*Sqrt[a + c*x^2]) - 5/2*c/a^3*(ArcSec[x*Sqrt[-c/a]]/Sqrt[-a])"
+  ],
+  "conds": [
+   "a < 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/(x^3 u^5) = -1/(2ax^2u^3) - 5/6 c/(a^2u^3) - 5/2 c/(a^3u) - 5/2 c/a^3 I2",
+  "note": "I2 = ArcSec[x Sqrt[-c/a]]/Sqrt[-a] [a < 0, c > 0]"
+ },
+ {
+  "id": "GR2.276.7a",
+  "gr": "2.276.7",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^5/x^4, x]",
+  "rhs": [
+   "-a*Sqrt[a + c*x^2]^3/(3*x^3) - 2*a*c*Sqrt[a + c*x^2]/x + c^2*x*Sqrt[a + c*x^2]/2 + 5/2*a*c*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])",
+   "-a*Sqrt[a + c*x^2]^3/(3*x^3) - 2*a*c*Sqrt[a + c*x^2]/x + c^2*x*Sqrt[a + c*x^2]/2 + 5/2*a*c^2*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^5/x^4 = -au^3/(3x^3) - 2acu/x + c^2xu/2 + 5/2 ac I1",
+  "note": "as printed the I1 term is dimensionally inconsistent; second rhs has 5/2 a c^2 I1; I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.276.7b",
+  "gr": "2.276.7",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^5/x^4, x]",
+  "rhs": [
+   "-a*Sqrt[a + c*x^2]^3/(3*x^3) - 2*a*c*Sqrt[a + c*x^2]/x + c^2*x*Sqrt[a + c*x^2]/2 + 5/2*a*c*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])",
+   "-a*Sqrt[a + c*x^2]^3/(3*x^3) - 2*a*c*Sqrt[a + c*x^2]/x + c^2*x*Sqrt[a + c*x^2]/2 + 5/2*a*c^2*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^5/x^4 = -au^3/(3x^3) - 2acu/x + c^2xu/2 + 5/2 ac I1",
+  "note": "as printed the I1 term is dimensionally inconsistent; second rhs has 5/2 a c^2 I1; I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.276.8a",
+  "gr": "2.276.8",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^3/x^4, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]^3/(3*x^3) - c*Sqrt[a + c*x^2]/x + c*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])",
+   "-Sqrt[a + c*x^2]^3/(3*x^3) - c*Sqrt[a + c*x^2]/x + c^2*(Log[x*Sqrt[c] + Sqrt[a + c*x^2]]/Sqrt[c])"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^3/x^4 = -u^3/(3x^3) - cu/x + c I1",
+  "note": "as printed the I1 term is dimensionally inconsistent; second rhs has c^2 I1; I1 = Log[x Sqrt[c] + u]/Sqrt[c] [c > 0]"
+ },
+ {
+  "id": "GR2.276.8b",
+  "gr": "2.276.8",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^3/x^4, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]^3/(3*x^3) - c*Sqrt[a + c*x^2]/x + c*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])",
+   "-Sqrt[a + c*x^2]^3/(3*x^3) - c*Sqrt[a + c*x^2]/x + c^2*(ArcSin[x*Sqrt[-c/a]]/Sqrt[-c])"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^3/x^4 = -u^3/(3x^3) - cu/x + c I1",
+  "note": "as printed the I1 term is dimensionally inconsistent; second rhs has c^2 I1; I1 = ArcSin[x Sqrt[-c/a]]/Sqrt[-c] [c < 0, a > 0]"
+ },
+ {
+  "id": "GR2.276.9",
+  "gr": "2.276.9",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]/x^4, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]^3/(3*a*x^3)"
+  ],
+  "conds": [],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u/x^4 = -u^3/(3ax^3)",
+  "note": ""
+ },
+ {
+  "id": "GR2.276.10",
+  "gr": "2.276.10",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^4*Sqrt[a + c*x^2]^(2*n + 1)), x]",
+  "rhs": [
+   "1/a^(n + 2)*(-Sqrt[a + c*x^2]^3/(3*x^3) + (n + 1)*c*Sqrt[a + c*x^2]/x + Sum[(-1)^k/(2*k - 3)*Binomial[n + 1, k]*c^k*(x/Sqrt[a + c*x^2])^(2*k - 3), {k, 2, n + 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/(x^4 u^(2n+1)) = 1/a^(n+2) {-u^3/(3x^3) + (n+1)cu/x + sum_{k=2}^{n+1} (-1)^k/(2k-3) C(n+1,k) c^k (x/u)^(2k-3)}",
+  "note": ""
+ },
+ {
+  "id": "GR2.277.1a",
+  "gr": "2.277.1",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^3/x^5, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]^3/(4*x^4) - 3/8*c*Sqrt[a + c*x^2]^3/(a*x^2) + 3/8*c^2*Sqrt[a + c*x^2]/a + 3/8*c^2*(Log[(Sqrt[a + c*x^2] - Sqrt[a])/(Sqrt[a + c*x^2] + Sqrt[a])]/(2*Sqrt[a]))"
+  ],
+  "conds": [
+   "a > 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^3/x^5 = -u^3/(4x^4) - 3/8 cu^3/(ax^2) + 3/8 c^2u/a + 3/8 c^2 I2",
+  "note": "I2 = Log[(u - Sqrt[a])/(u + Sqrt[a])]/(2 Sqrt[a]) [a > 0, c > 0]"
+ },
+ {
+  "id": "GR2.277.1b",
+  "gr": "2.277.1",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^3/x^5, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]^3/(4*x^4) - 3/8*c*Sqrt[a + c*x^2]^3/(a*x^2) + 3/8*c^2*Sqrt[a + c*x^2]/a + 3/8*c^2*(ArcSec[x*Sqrt[-c/a]]/Sqrt[-a])"
+  ],
+  "conds": [
+   "a < 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^3/x^5 = -u^3/(4x^4) - 3/8 cu^3/(ax^2) + 3/8 c^2u/a + 3/8 c^2 I2",
+  "note": "I2 = ArcSec[x Sqrt[-c/a]]/Sqrt[-a] [a < 0, c > 0]"
+ },
+ {
+  "id": "GR2.277.2a",
+  "gr": "2.277.2",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]/x^5, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]/(4*x^4) - 1/8*c*Sqrt[a + c*x^2]/(a*x^2) - 1/8*c^2/a*(Log[(Sqrt[a + c*x^2] - Sqrt[a])/(Sqrt[a + c*x^2] + Sqrt[a])]/(2*Sqrt[a]))"
+  ],
+  "conds": [
+   "a > 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u/x^5 = -u/(4x^4) - 1/8 cu/(ax^2) - 1/8 c^2/a I2",
+  "note": "I2 = Log[(u - Sqrt[a])/(u + Sqrt[a])]/(2 Sqrt[a]) [a > 0, c > 0]"
+ },
+ {
+  "id": "GR2.277.2b",
+  "gr": "2.277.2",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]/x^5, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]/(4*x^4) - 1/8*c*Sqrt[a + c*x^2]/(a*x^2) - 1/8*c^2/a*(ArcSec[x*Sqrt[-c/a]]/Sqrt[-a])"
+  ],
+  "conds": [
+   "a < 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u/x^5 = -u/(4x^4) - 1/8 cu/(ax^2) - 1/8 c^2/a I2",
+  "note": "I2 = ArcSec[x Sqrt[-c/a]]/Sqrt[-a] [a < 0, c > 0]"
+ },
+ {
+  "id": "GR2.277.3a",
+  "gr": "2.277.3",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^5*Sqrt[a + c*x^2]), x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]/(4*a*x^4) + 3/8*c*Sqrt[a + c*x^2]/(a^2*x^2) + 3/8*c^2/a^2*(Log[(Sqrt[a + c*x^2] - Sqrt[a])/(Sqrt[a + c*x^2] + Sqrt[a])]/(2*Sqrt[a]))"
+  ],
+  "conds": [
+   "a > 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/(x^5 u) = -u/(4ax^4) + 3/8 cu/(a^2x^2) + 3/8 c^2/a^2 I2",
+  "note": "I2 = Log[(u - Sqrt[a])/(u + Sqrt[a])]/(2 Sqrt[a]) [a > 0, c > 0]"
+ },
+ {
+  "id": "GR2.277.3b",
+  "gr": "2.277.3",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^5*Sqrt[a + c*x^2]), x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]/(4*a*x^4) + 3/8*c*Sqrt[a + c*x^2]/(a^2*x^2) + 3/8*c^2/a^2*(ArcSec[x*Sqrt[-c/a]]/Sqrt[-a])"
+  ],
+  "conds": [
+   "a < 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/(x^5 u) = -u/(4ax^4) + 3/8 cu/(a^2x^2) + 3/8 c^2/a^2 I2",
+  "note": "I2 = ArcSec[x Sqrt[-c/a]]/Sqrt[-a] [a < 0, c > 0]"
+ },
+ {
+  "id": "GR2.277.4a",
+  "gr": "2.277.4",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^5*Sqrt[a + c*x^2]^3), x]",
+  "rhs": [
+   "-1/(4*a*x^4*Sqrt[a + c*x^2]) + 5/8*c/(a^2*x^2*Sqrt[a + c*x^2]) + 15/8*c^2/(a^3*Sqrt[a + c*x^2]) + 15/8*c^2/a^3*(Log[(Sqrt[a + c*x^2] - Sqrt[a])/(Sqrt[a + c*x^2] + Sqrt[a])]/(2*Sqrt[a]))"
+  ],
+  "conds": [
+   "a > 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/(x^5 u^3) = -1/(4ax^4u) + 5/8 c/(a^2x^2u) + 15/8 c^2/(a^3u) + 15/8 c^2/a^3 I2",
+  "note": "I2 = Log[(u - Sqrt[a])/(u + Sqrt[a])]/(2 Sqrt[a]) [a > 0, c > 0]"
+ },
+ {
+  "id": "GR2.277.4b",
+  "gr": "2.277.4",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^5*Sqrt[a + c*x^2]^3), x]",
+  "rhs": [
+   "-1/(4*a*x^4*Sqrt[a + c*x^2]) + 5/8*c/(a^2*x^2*Sqrt[a + c*x^2]) + 15/8*c^2/(a^3*Sqrt[a + c*x^2]) + 15/8*c^2/a^3*(ArcSec[x*Sqrt[-c/a]]/Sqrt[-a])"
+  ],
+  "conds": [
+   "a < 0",
+   "c > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/(x^5 u^3) = -1/(4ax^4u) + 5/8 c/(a^2x^2u) + 15/8 c^2/(a^3u) + 15/8 c^2/a^3 I2",
+  "note": "I2 = ArcSec[x Sqrt[-c/a]]/Sqrt[-a] [a < 0, c > 0]"
+ },
+ {
+  "id": "GR2.278.1",
+  "gr": "2.278.1",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]^3/x^6, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]^5/(5*a*x^5)"
+  ],
+  "conds": [],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u^3/x^6 = -u^5/(5ax^5)",
+  "note": ""
+ },
+ {
+  "id": "GR2.278.2",
+  "gr": "2.278.2",
+  "page": 151,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + c*x^2]/x^6, x]",
+  "rhs": [
+   "-Sqrt[a + c*x^2]^3/(5*a*x^5) + 2/15*c*Sqrt[a + c*x^2]^3/(a^2*x^3)"
+  ],
+  "conds": [],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int u/x^6 = -u^3/(5ax^5) + 2/15 cu^3/(a^2x^3)",
+  "note": ""
+ },
+ {
+  "id": "GR2.278.3",
+  "gr": "2.278.3",
+  "page": 152,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^6*Sqrt[a + c*x^2]), x]",
+  "rhs": [
+   "1/a^3*(-Sqrt[a + c*x^2]^5/(5*x^5) + 2/3*c*Sqrt[a + c*x^2]^3/x^3 - c^2*Sqrt[a + c*x^2]/x)"
+  ],
+  "conds": [],
+  "cite": "DW",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/(x^6 u) = 1/a^3 (-u^5/(5x^5) + 2/3 cu^3/x^3 - c^2u/x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.278.4",
+  "gr": "2.278.4",
+  "page": 152,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^6*Sqrt[a + c*x^2]^(2*n + 1)), x]",
+  "rhs": [
+   "1/a^(n + 3)*(-Sqrt[a + c*x^2]^5/(5*x^5) + 1/3*Binomial[n + 2, 1]*c*Sqrt[a + c*x^2]^3/x^3 - Binomial[n + 2, 2]*c^2*Sqrt[a + c*x^2]/x + Sum[(-1)^k/(2*k - 5)*Binomial[n + 2, k]*c^k*(x/Sqrt[a + c*x^2])^(2*k - 5), {k, 3, n + 2}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.27 Forms containing Sqrt[a + c x^2] and integral powers of x",
+  "tex": "int dx/(x^6 u^(2n+1)) = 1/a^(n+3) {-u^5/(5x^5) + 1/3 C(n+2,1) cu^3/x^3 - C(n+2,2) c^2u/x + sum_{k=3}^{n+2} (-1)^k/(2k-5) C(n+2,k) c^k (x/u)^(2k-5)}",
+  "note": ""
+ },
+ {
+  "id": "GR2.281",
+  "gr": "2.281",
+  "page": 152,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[1/((x + p)^n*Sqrt[a + b*x + c*x^2]), x]",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "3",
+  "section": "2.28 Forms containing Sqrt[a + b x + c x^2] and first- and second-degree polynomials",
+  "tex": "int dx/((x+p)^n sqrt R) = -int t^(n-1) dt/sqrt(c + (b-2pc)t + (a-bp+cp^2)t^2) [t = 1/(x+p) > 0]",
+  "note": "",
+  "reason": "substitution rule t = 1/(x+p), integral on both sides"
+ },
+ {
+  "id": "GR2.282.1",
+  "gr": "2.282.1",
+  "page": 152,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[Sqrt[a + b*x + c*x^2]/(x + p), x]",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "3",
+  "section": "2.28 Forms containing Sqrt[a + b x + c x^2] and first- and second-degree polynomials",
+  "tex": "int sqrt R/(x+p) = c int x dx/sqrt R + (b-cp) int dx/sqrt R + (a-bp+cp^2) int dx/((x+p) sqrt R) [x+p>0]",
+  "note": "",
+  "reason": "decomposition into other integrals"
+ },
+ {
+  "id": "GR2.282.2",
+  "gr": "2.282.2",
+  "page": 152,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[1/((x + p)*(x + q)*Sqrt[a + b*x + c*x^2]), x]",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.28 Forms containing Sqrt[a + b x + c x^2] and first- and second-degree polynomials",
+  "tex": "int dx/((x+p)(x+q) sqrt R) = 1/(q-p) int dx/((x+p) sqrt R) + 1/(p-q) int dx/((x+q) sqrt R)",
+  "note": "",
+  "reason": "partial-fraction decomposition into other integrals"
+ },
+ {
+  "id": "GR2.282.3",
+  "gr": "2.282.3",
+  "page": 152,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[Sqrt[a + b*x + c*x^2]/((x + p)*(x + q)), x]",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.28 Forms containing Sqrt[a + b x + c x^2] and first- and second-degree polynomials",
+  "tex": "int sqrt R/((x+p)(x+q)) = 1/(q-p) int sqrt R/(x+p) + 1/(p-q) int sqrt R/(x+q)",
+  "note": "",
+  "reason": "partial-fraction decomposition into other integrals"
+ },
+ {
+  "id": "GR2.282.4",
+  "gr": "2.282.4",
+  "page": 152,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[(x + p)*Sqrt[a + b*x + c*x^2]/(x + q), x]",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.28 Forms containing Sqrt[a + b x + c x^2] and first- and second-degree polynomials",
+  "tex": "int (x+p) sqrt R/(x+q) = int sqrt R + (p-q) int sqrt R/(x+q)",
+  "note": "",
+  "reason": "decomposition into other integrals"
+ },
+ {
+  "id": "GR2.282.5",
+  "gr": "2.282.5",
+  "page": 152,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[(r*x + s)/((x + p)*(x + q)*Sqrt[a + b*x + c*x^2]), x]",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.28 Forms containing Sqrt[a + b x + c x^2] and first- and second-degree polynomials",
+  "tex": "int (rx+s)/((x+p)(x+q) sqrt R) = (s-pr)/(q-p) int dx/((x+p) sqrt R) + (s-qr)/(p-q) int dx/((x+q) sqrt R)",
+  "note": "",
+  "reason": "partial-fraction decomposition into other integrals"
+ },
+ {
+  "id": "GR2.283",
+  "gr": "2.283",
+  "page": 152,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[(AA*x + BB)/((p + (a + b*x + c*x^2))^n*Sqrt[a + b*x + c*x^2]), x]",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.28 Forms containing Sqrt[a + b x + c x^2] and first- and second-degree polynomials",
+  "tex": "int (Ax+B)/((p+R)^n sqrt R) = A/c int du/(p+u^2)^n + (2Bc-Ab)/(2c) int (1-cv^2)^(n-1) dv/[p + a - b^2/(4c) - cpv^2]^n",
+  "note": "",
+  "reason": "reduction to integrals in u = sqrt R and v = (b+2cx)/(2c sqrt R)"
+ },
+ {
+  "id": "GR2.284a",
+  "gr": "2.284",
+  "page": 152,
+  "status": "ok",
+  "lhs": "Integrate[(AA*x + BB)/((p + (a + b*x + c*x^2))*Sqrt[a + b*x + c*x^2]), x]",
+  "rhs": [
+   "AA/c*(1/Sqrt[p]*ArcTan[Sqrt[(a + b*x + c*x^2)/p]]) + (2*BB*c - AA*b)/Sqrt[c^2*p*(b^2 - 4*(a + p)*c)]*(-ArcTan[Sqrt[p/(b^2 - 4*(a + p)*c)]*(b + 2*c*x)/Sqrt[a + b*x + c*x^2]])"
+  ],
+  "conds": [
+   "p*(b^2 - 4*(a + p)*c) > 0",
+   "p > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.28 Forms containing Sqrt[a + b x + c x^2] and first- and second-degree polynomials",
+  "tex": "int (Ax+B)/((p+R) sqrt R) = A/c I1 + (2Bc-Ab)/sqrt(c^2 p [b^2-4(a+p)c]) I2; I1 = 1/sqrt p arctan sqrt(R/p) [p>0] = 1/(2 sqrt(-p)) ln((sqrt(-p)-sqrt R)/(sqrt(-p)+sqrt R)) [p<0]; I2 four branch forms (p.104)",
+  "note": "A,B renamed AA,BB; I1 p>0 form, I2 second form; item finishes on next page"
+ },
+ {
+  "id": "GR2.284b",
+  "gr": "2.284",
+  "page": 152,
+  "status": "ok",
+  "lhs": "Integrate[(AA*x + BB)/((p + (a + b*x + c*x^2))*Sqrt[a + b*x + c*x^2]), x]",
+  "rhs": [
+   "AA/c*(1/Sqrt[p]*ArcTan[Sqrt[(a + b*x + c*x^2)/p]]) + (2*BB*c - AA*b)/Sqrt[c^2*p*(b^2 - 4*(a + p)*c)]*(1/(2*I)*Log[(Sqrt[4*(a + p)*c - b^2]*Sqrt[a + b*x + c*x^2] + Sqrt[p]*(b + 2*c*x))/(Sqrt[4*(a + p)*c - b^2]*Sqrt[a + b*x + c*x^2] - Sqrt[p]*(b + 2*c*x))])"
+  ],
+  "conds": [
+   "p*(b^2 - 4*(a + p)*c) < 0",
+   "p > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.28 Forms containing Sqrt[a + b x + c x^2] and first- and second-degree polynomials",
+  "tex": "int (Ax+B)/((p+R) sqrt R) = A/c I1 + (2Bc-Ab)/sqrt(c^2 p [b^2-4(a+p)c]) I2; I1 = 1/sqrt p arctan sqrt(R/p) [p>0] = 1/(2 sqrt(-p)) ln((sqrt(-p)-sqrt R)/(sqrt(-p)+sqrt R)) [p<0]; I2 four branch forms (p.104)",
+  "note": "A,B renamed AA,BB; I1 p>0 form, I2 third form; item finishes on next page"
+ },
+ {
+  "id": "GR2.284c",
+  "gr": "2.284",
+  "page": 152,
+  "status": "ok",
+  "lhs": "Integrate[(AA*x + BB)/((p + (a + b*x + c*x^2))*Sqrt[a + b*x + c*x^2]), x]",
+  "rhs": [
+   "AA/c*(1/(2*Sqrt[-p])*Log[(Sqrt[-p] - Sqrt[a + b*x + c*x^2])/(Sqrt[-p] + Sqrt[a + b*x + c*x^2])]) + (2*BB*c - AA*b)/Sqrt[c^2*p*(b^2 - 4*(a + p)*c)]*(ArcTan[Sqrt[p/(b^2 - 4*(a + p)*c)]*(b + 2*c*x)/Sqrt[a + b*x + c*x^2]])"
+  ],
+  "conds": [
+   "p*(b^2 - 4*(a + p)*c) > 0",
+   "p < 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.28 Forms containing Sqrt[a + b x + c x^2] and first- and second-degree polynomials",
+  "tex": "int (Ax+B)/((p+R) sqrt R) = A/c I1 + (2Bc-Ab)/sqrt(c^2 p [b^2-4(a+p)c]) I2; I1 = 1/sqrt p arctan sqrt(R/p) [p>0] = 1/(2 sqrt(-p)) ln((sqrt(-p)-sqrt R)/(sqrt(-p)+sqrt R)) [p<0]; I2 four branch forms (p.104)",
+  "note": "A,B renamed AA,BB; I1 p<0 form, I2 first form; item finishes on next page"
+ },
+ {
+  "id": "GR2.284d",
+  "gr": "2.284",
+  "page": 152,
+  "status": "ok",
+  "lhs": "Integrate[(AA*x + BB)/((p + (a + b*x + c*x^2))*Sqrt[a + b*x + c*x^2]), x]",
+  "rhs": [
+   "AA/c*(1/(2*Sqrt[-p])*Log[(Sqrt[-p] - Sqrt[a + b*x + c*x^2])/(Sqrt[-p] + Sqrt[a + b*x + c*x^2])]) + (2*BB*c - AA*b)/Sqrt[c^2*p*(b^2 - 4*(a + p)*c)]*(1/(2*I)*Log[(Sqrt[b^2 - 4*(a + p)*c]*Sqrt[a + b*x + c*x^2] - Sqrt[-p]*(b + 2*c*x))/(Sqrt[b^2 - 4*(a + p)*c]*Sqrt[a + b*x + c*x^2] + Sqrt[-p]*(b + 2*c*x))])"
+  ],
+  "conds": [
+   "p*(b^2 - 4*(a + p)*c) < 0",
+   "p < 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.28 Forms containing Sqrt[a + b x + c x^2] and first- and second-degree polynomials",
+  "tex": "int (Ax+B)/((p+R) sqrt R) = A/c I1 + (2Bc-Ab)/sqrt(c^2 p [b^2-4(a+p)c]) I2; I1 = 1/sqrt p arctan sqrt(R/p) [p>0] = 1/(2 sqrt(-p)) ln((sqrt(-p)-sqrt R)/(sqrt(-p)+sqrt R)) [p<0]; I2 four branch forms (p.104)",
+  "note": "A,B renamed AA,BB; I1 p<0 form, I2 fourth form; item finishes on next page"
+ }
+]

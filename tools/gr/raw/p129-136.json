@@ -1,0 +1,1450 @@
+[
+ {
+  "id": "GR2.173.1",
+  "gr": "2.173.1",
+  "page": 129,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int dx/R^2 = (b+2cx)/(Delta R) + 2c/Delta int dx/R",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.173.2",
+  "gr": "2.173.2",
+  "page": 129,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int dx/R^3 = (b+2cx)/Delta {1/(2R^2) + 3c/(Delta R)} + 6c^2/Delta^2 int dx/R",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.174.1",
+  "gr": "2.174.1",
+  "page": 129,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int x^m dx/R^n = -x^(m-1)/((2n-m-1)c R^(n-1)) - (n-m)b/((2n-m-1)c) int x^(m-1)dx/R^n + (m-1)a/((2n-m-1)c) int x^(m-2) dx/R^n",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.174.2",
+  "gr": "2.174.2",
+  "page": 129,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int x^(2n-1) dx/R^n = 1/c int x^(2n-3)dx/R^(n-1) - a/c int x^(2n-3)dx/R^n - b/c int x^(2n-2)dx/R^n",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.175.1",
+  "gr": "2.175.1",
+  "page": 129,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int x dx/R = 1/(2c) ln R - b/(2c) int dx/R",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.175.2",
+  "gr": "2.175.2",
+  "page": 129,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int x dx/R^2 = -(2a+bx)/(Delta R) - b/Delta int dx/R",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.175.3",
+  "gr": "2.175.3",
+  "page": 129,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int x dx/R^3 = -(2a+bx)/(2 Delta R^2) - 3b(b+2cx)/(2 Delta^2 R) - 3bc/Delta^2 int dx/R",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.175.4",
+  "gr": "2.175.4",
+  "page": 129,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int x^2 dx/R = x/c - b/(2c^2) ln R + (b^2-2ac)/(2c^2) int dx/R",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.175.5",
+  "gr": "2.175.5",
+  "page": 129,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int x^2 dx/R^2 = (ab+(b^2-2ac)x)/(c Delta R) + 2a/Delta int dx/R",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.175.6",
+  "gr": "2.175.6",
+  "page": 129,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int x^2 dx/R^3 = (ab+(b^2-2ac)x)/(2c Delta R^2) + (2ac+b^2)(b+2cx)/(2c Delta^2 R) + (2ac+b^2)/Delta^2 int dx/R",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.175.7",
+  "gr": "2.175.7",
+  "page": 129,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int x^3 dx/R = x^2/(2c) - bx/c^2 + (b^2-ac)/(2c^3) ln R - b(b^2-3ac)/(2c^3) int dx/R",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.175.8",
+  "gr": "2.175.8",
+  "page": 129,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int x^3 dx/R^2 = 1/(2c^2) ln R + (a(2ac-b^2)+b(3ac-b^2)x)/(c^2 Delta R) - b(6ac-b^2)/(2c^2 Delta) int dx/R",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.175.9",
+  "gr": "2.175.9",
+  "page": 129,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int x^3 dx/R^3 = -(x^2/c + abx/(c Delta) + 2a^2/(c Delta)) 1/(2R^2) - 3ab/(2c Delta) int dx/R^2",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.176",
+  "gr": "2.176",
+  "page": 129,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int dx/(x^m R^n) = -1/((m-1)a x^(m-1) R^(n-1)) - b(m+n-2)/(a(m-1)) int dx/(x^(m-1)R^n) - c(m+2n-3)/(a(m-1)) int dx/(x^(m-2)R^n)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.177.1",
+  "gr": "2.177.1",
+  "page": 129,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int dx/(xR) = 1/(2a) ln(x^2/R) - b/(2a) int dx/R",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.177.2",
+  "gr": "2.177.2",
+  "page": 130,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int dx/(xR^2) = 1/(2a^2) ln(x^2/R) + 1/(2aR){1 - b(b+2cx)/Delta} - b/(2a^2)(1+2ac/Delta) int dx/R",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.177.3",
+  "gr": "2.177.3",
+  "page": 130,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int dx/(xR^3) = 1/(4aR^2) + 1/(2a^2R) + 1/(2a^3) ln(x^2/R) - b/(2a) int dx/R^3 - b/(2a^2) int dx/R^2 - b/(2a^3) int dx/R",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.177.4",
+  "gr": "2.177.4",
+  "page": 130,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int dx/(x^2R) = -b/(2a^2) ln(x^2/R) - 1/(ax) + (b^2-2ac)/(2a^2) int dx/R",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.177.5",
+  "gr": "2.177.5",
+  "page": 130,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int dx/(x^2R^2) = -b/a^3 ln(x^2/R) - (a+bx)/(a^2xR) + (b^2-3ac)(b+2cx)/(a^2 Delta R) - 1/Delta (b^4/a^3 - 6b^2c/a^2 + 6c^2/a) int dx/R",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.177.6",
+  "gr": "2.177.6",
+  "page": 130,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int dx/(x^2R^3) = -1/(axR^2) - 3b/a int dx/(xR^3) - 5c/a int dx/R^3",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.177.7",
+  "gr": "2.177.7",
+  "page": 130,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int dx/(x^3R) = -(ac-b^2)/(2a^3) ln(x^2/R) + b/(a^2x) - 1/(2ax^2) + b(3ac-b^2)/(2a^3) int dx/R",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.177.8",
+  "gr": "2.177.8",
+  "page": 130,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int dx/(x^3R^2) = (-1/(2ax^2) + 3b/(2a^2x)) 1/R + (3b^2/a^2 - 2c/a) int dx/(xR^2) + 9bc/(2a^2) int dx/R^2",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.177.9",
+  "gr": "2.177.9",
+  "page": 130,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, Delta = 4ac-b^2: int dx/(x^3R^3) = (-1/(2ax^2) + 2b/(a^2x)) 1/R^2 + (6b^2/a^2 - 3c/a) int dx/(xR^3) + 10bc/a^2 int dx/R^3",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.17 Forms containing the quadratic trinomial a + bx + cx^2 and powers of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.18.1",
+  "gr": "2.18.1",
+  "page": 130,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, z = alpha+beta x, A = a beta^2 - alpha b beta + c alpha^2, B = b beta - 2 c alpha, Delta = 4ac-b^2: int z^m R^n dx = beta z^(m-1) R^(n+1)/((m+2n+1)c) - (m+n)B/((m+2n+1)c) int z^(m-1)R^n dx - (m-1)A/((m+2n+1)c) int z^(m-2) R^n dx",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.18 Forms containing the quadratic trinomial a + bx + cx^2 and the binomial alpha + beta x",
+  "note": "item printed as bare '1.', '2.', ... under section 2.18 heading (no 2.18x number shown); numbered 2.18.k here"
+ },
+ {
+  "id": "GR2.18.2a",
+  "gr": "2.18.2",
+  "page": 130,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, z = alpha+beta x, A = a beta^2 - alpha b beta + c alpha^2, B = b beta - 2 c alpha, Delta = 4ac-b^2: int R^n dx/z^m = -1/((m-2n-1)beta) R^n/z^(m-1) - 2nA/((m-2n-1)beta^2) int R^(n-1)dx/z^m - nB/((m-2n-1)beta^2) int R^(n-1) dx/z^(m-1)",
+  "reason": "integral on right-hand side",
+  "cite": "LA 184 (4)a",
+  "edition_note": "",
+  "section": "2.18 Forms containing the quadratic trinomial a + bx + cx^2 and the binomial alpha + beta x",
+  "note": "item printed as bare '1.', '2.', ... under section 2.18 heading (no 2.18x number shown); numbered 2.18.k here"
+ },
+ {
+  "id": "GR2.18.2b",
+  "gr": "2.18.2",
+  "page": 130,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, z = alpha+beta x, A = a beta^2 - alpha b beta + c alpha^2, B = b beta - 2 c alpha, Delta = 4ac-b^2: int R^n dx/z^m = -beta/((m-1)A) R^(n+1)/z^(m-1) - (m-n-2)B/((m-1)A) int R^n dx/z^(m-1) - (m-2n-3)c/((m-1)A) int R^n dx/z^(m-2)",
+  "reason": "integral on right-hand side",
+  "cite": "LA 148 (5)",
+  "edition_note": "",
+  "section": "2.18 Forms containing the quadratic trinomial a + bx + cx^2 and the binomial alpha + beta x",
+  "note": "item printed as bare '1.', '2.', ... under section 2.18 heading (no 2.18x number shown); numbered 2.18.k here"
+ },
+ {
+  "id": "GR2.18.2c",
+  "gr": "2.18.2",
+  "page": 130,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, z = alpha+beta x, A = a beta^2 - alpha b beta + c alpha^2, B = b beta - 2 c alpha, Delta = 4ac-b^2: int R^n dx/z^m = -1/((m-1)beta) R^n/z^(m-1) + nB/((m-1)beta^2) int R^(n-1)dx/z^(m-1) + 2nc/((m-1)beta^2) int R^(n-1)dx/z^(m-2)",
+  "reason": "integral on right-hand side",
+  "cite": "LA 418 (6)",
+  "edition_note": "",
+  "section": "2.18 Forms containing the quadratic trinomial a + bx + cx^2 and the binomial alpha + beta x",
+  "note": "item printed as bare '1.', '2.', ... under section 2.18 heading (no 2.18x number shown); numbered 2.18.k here"
+ },
+ {
+  "id": "GR2.18.3a",
+  "gr": "2.18.3",
+  "page": 131,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, z = alpha+beta x, A = a beta^2 - alpha b beta + c alpha^2, B = b beta - 2 c alpha, Delta = 4ac-b^2: int z^m dx/R^n = beta/((m-2n+1)c) z^(m-1)/R^(n-1) - (m-n)B/((m-2n+1)c) int z^(m-1)dx/R^n - (m-1)A/((m-2n+1)c) int z^(m-2)dx/R^n",
+  "reason": "integral on right-hand side",
+  "cite": "LA 147 (1)",
+  "edition_note": "",
+  "section": "2.18 Forms containing the quadratic trinomial a + bx + cx^2 and the binomial alpha + beta x",
+  "note": "item printed as bare '1.', '2.', ... under section 2.18 heading (no 2.18x number shown); numbered 2.18.k here"
+ },
+ {
+  "id": "GR2.18.3b",
+  "gr": "2.18.3",
+  "page": 131,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, z = alpha+beta x, A = a beta^2 - alpha b beta + c alpha^2, B = b beta - 2 c alpha, Delta = 4ac-b^2: int z^m dx/R^n = -(b+2cx)/((n-1)Delta) z^m/R^(n-1) - 2(m-2n+3)c/((n-1)Delta) int z^m dx/R^(n-1) - Bm/((n-1)Delta) int z^(m-1)dx/R^(n-1)",
+  "reason": "integral on right-hand side",
+  "cite": "LA 148 (3)",
+  "edition_note": "",
+  "section": "2.18 Forms containing the quadratic trinomial a + bx + cx^2 and the binomial alpha + beta x",
+  "note": "item printed as bare '1.', '2.', ... under section 2.18 heading (no 2.18x number shown); numbered 2.18.k here"
+ },
+ {
+  "id": "GR2.18.4a",
+  "gr": "2.18.4",
+  "page": 131,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, z = alpha+beta x, A = a beta^2 - alpha b beta + c alpha^2, B = b beta - 2 c alpha, Delta = 4ac-b^2: int dx/(z^m R^n) = -beta/((m-1)A) 1/(z^(m-1)R^(n-1)) - (m+n-2)B/((m-1)A) int dx/(z^(m-1)R^n) - (m+2n-3)c/((m-1)A) int dx/(z^(m-2)R^n)",
+  "reason": "integral on right-hand side",
+  "cite": "LA 148 (7)",
+  "edition_note": "3",
+  "section": "2.18 Forms containing the quadratic trinomial a + bx + cx^2 and the binomial alpha + beta x",
+  "note": "item printed as bare '1.', '2.', ... under section 2.18 heading (no 2.18x number shown); numbered 2.18.k here"
+ },
+ {
+  "id": "GR2.18.4b",
+  "gr": "2.18.4",
+  "page": 131,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, z = alpha+beta x, A = a beta^2 - alpha b beta + c alpha^2, B = b beta - 2 c alpha, Delta = 4ac-b^2: int dx/(z^m R^n) = beta/(2(n-1)A) 1/(z^(m-1)R^(n-1)) - B/(2A) int dx/(z^(m-1)R^n) + (m+2n-3)beta^2/(2(n-1)A) int dx/(z^m R^(n-1))",
+  "reason": "integral on right-hand side",
+  "cite": "LA 148 (8)",
+  "edition_note": "3",
+  "section": "2.18 Forms containing the quadratic trinomial a + bx + cx^2 and the binomial alpha + beta x",
+  "note": "item printed as bare '1.', '2.', ... under section 2.18 heading (no 2.18x number shown); numbered 2.18.k here"
+ },
+ {
+  "id": "GR2.18.4c",
+  "gr": "2.18.4",
+  "page": 131,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, z = alpha+beta x, A = a beta^2 - alpha b beta + c alpha^2, B = b beta - 2 c alpha, Delta = 4ac-b^2: [m=1,n=1] int dx/(zR) = beta/(2A) ln(z^2/R) - B/(2A) int dx/R",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "3",
+  "section": "2.18 Forms containing the quadratic trinomial a + bx + cx^2 and the binomial alpha + beta x",
+  "note": "item printed as bare '1.', '2.', ... under section 2.18 heading (no 2.18x number shown); numbered 2.18.k here"
+ },
+ {
+  "id": "GR2.18.4d",
+  "gr": "2.18.4",
+  "page": 131,
+  "status": "SKIP-RECURRENCE",
+  "tex": "R = a+bx+cx^2, z = alpha+beta x, A = a beta^2 - alpha b beta + c alpha^2, B = b beta - 2 c alpha, Delta = 4ac-b^2: [A=0] int dx/(z^m R^n) = -beta/((m+n-1)B) 1/(z^m R^(n-1)) - (m+2n-2)c/((m+n-1)B) int dx/(z^(m-1)R^n)",
+  "reason": "integral on right-hand side",
+  "cite": "LA 148 (9)",
+  "edition_note": "3",
+  "section": "2.18 Forms containing the quadratic trinomial a + bx + cx^2 and the binomial alpha + beta x",
+  "note": "item printed as bare '1.', '2.', ... under section 2.18 heading (no 2.18x number shown); numbered 2.18.k here"
+ },
+ {
+  "id": "GR2.201",
+  "gr": "2.201",
+  "page": 131,
+  "status": "SKIP-REFERENCE",
+  "tex": "int R(x, ((alpha x+beta)/(gamma x+delta))^r, ...) dx reduces to rational integrand via (alpha x+beta)/(gamma x+delta) = t^m",
+  "reason": "substitution rule, no closed value; R is a generic rational function",
+  "cite": "FI II 57",
+  "edition_note": "",
+  "section": "2.20 Introduction",
+  "note": ""
+ },
+ {
+  "id": "GR2.202",
+  "gr": "2.202",
+  "page": 131,
+  "status": "SKIP-REFERENCE",
+  "tex": "int x^m (a+bx^n)^p dx elementary iff p, (m+1)/n, or (m+1)/n+p integer (Chebyshev conditions)",
+  "reason": "statement of reduction conditions, no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.20 Introduction",
+  "note": ""
+ },
+ {
+  "id": "GR2.211a",
+  "gr": "2.211",
+  "page": 132,
+  "status": "ok",
+  "lhs": "Integrate[1/((a + b*x)*Sqrt[x]), x]",
+  "rhs": [
+   "2/Sqrt[a*b]*ArcTan[Sqrt[b*x/a]]"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "tex": "int dx/(z1 sqrt x) = 2/sqrt(ab) arctan sqrt(bx/a) [ab>0], z1=a+bx",
+  "note": ""
+ },
+ {
+  "id": "GR2.211b",
+  "gr": "2.211",
+  "page": 132,
+  "status": "ok",
+  "lhs": "Integrate[1/((a + b*x)*Sqrt[x]), x]",
+  "rhs": [
+   "1/(I*Sqrt[a*b])*Log[(a - b*x + 2*I*Sqrt[x*a*b])/(a + b*x)]"
+  ],
+  "conds": [
+   "a*b < 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "tex": "= 1/(i sqrt(ab)) ln((a - bx + 2i sqrt(xab))/z1) [ab<0]",
+  "note": ""
+ },
+ {
+  "id": "GR2.212",
+  "gr": "2.212",
+  "page": 132,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z1=a+bx: int x^m sqrt(x)/z1 dx = 2 sqrt(x) Sum_{k=0}^m (-1)^k a^k x^(m-k)/((2m-2k+1) b^(k+1)) + (-1)^(m+1) a^(m+1)/b^(m+1) int dx/(z1 sqrt x)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.213.1",
+  "gr": "2.213.1",
+  "page": 132,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z1=a+bx: int sqrt(x) dx/z1 = 2 sqrt(x)/b - a/b int dx/(z1 sqrt x)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.213.2",
+  "gr": "2.213.2",
+  "page": 132,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z1=a+bx: int x sqrt(x) dx/z1 = (x/(3b) - a/b^2) 2 sqrt(x) + a^2/b^2 int dx/(z1 sqrt x)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.213.3",
+  "gr": "2.213.3",
+  "page": 132,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z1=a+bx: int x^2 sqrt(x) dx/z1 = (x^2/(5b) - xa/(3b^2) + a^2/b^3) 2 sqrt(x) - a^3/b^3 int dx/(z1 sqrt x)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.213.4",
+  "gr": "2.213.4",
+  "page": 132,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z1=a+bx: int dx/(z1^2 sqrt x) = sqrt(x)/(a z1) + 1/(2a) int dx/(z1 sqrt x)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.213.5",
+  "gr": "2.213.5",
+  "page": 132,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z1=a+bx: int sqrt(x) dx/z1^2 = -sqrt(x)/(b z1) + 1/(2b) int dx/(z1 sqrt x)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.213.6",
+  "gr": "2.213.6",
+  "page": 132,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z1=a+bx: int x sqrt(x) dx/z1^2 = 2x sqrt(x)/(b z1) - 3a/b int sqrt(x)dx/z1^2",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.213.7",
+  "gr": "2.213.7",
+  "page": 132,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z1=a+bx: int x^2 sqrt(x) dx/z1^2 = (x^2/(3b) - 5ax/(3b^2)) 2 sqrt(x)/z1 + 5a^2/b^2 int sqrt(x) dx/z1^2",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.213.8",
+  "gr": "2.213.8",
+  "page": 132,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z1=a+bx: int dx/(z1^3 sqrt x) = (1/(2a z1^2) + 3/(4a^2 z1)) sqrt(x) + 3/(8a^2) int dx/(z1 sqrt x)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.213.9",
+  "gr": "2.213.9",
+  "page": 132,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z1=a+bx: int sqrt(x) dx/z1^3 = (-1/(2b z1^2) + 1/(4ab z1)) sqrt(x) + 1/(8ab) int dx/(z1 sqrt x)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.213.10",
+  "gr": "2.213.10",
+  "page": 132,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z1=a+bx: int x sqrt(x) dx/z1^3 = -2x sqrt(x)/(b z1^2) + 3a/b int sqrt(x) dx/z1^3",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.213.11",
+  "gr": "2.213.11",
+  "page": 132,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z1=a+bx: int x^2 sqrt(x) dx/z1^3 = (x^2/b + 5ax/b^2) 2 sqrt(x)/z1^2 - 15a^2/b^2 int sqrt(x) dx/z1^3",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.214a",
+  "gr": "2.214",
+  "page": 132,
+  "status": "ok",
+  "lhs": "Integrate[1/((a + b*x^2)*Sqrt[x]), x]",
+  "rhs": [
+   "1/(b*(a/b)^(3/4)*Sqrt[2])*(Log[(x + (a/b)^(1/4)*Sqrt[2*x] + (a/b)^(1/2))/Sqrt[(a + b*x^2)]] + ArcTan[(a/b)^(1/4)*Sqrt[2*x]/((a/b)^(1/2) - x)])"
+  ],
+  "conds": [
+   "a/b > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "tex": "z2=a+bx^2, alpha=(a/b)^(1/4): int dx/(z2 sqrt x) = 1/(b alpha^3 sqrt2)[ln((x+alpha sqrt(2x)+alpha^2)/sqrt(z2)) + arctan(alpha sqrt(2x)/(alpha^2-x))] [a/b>0]",
+  "note": ""
+ },
+ {
+  "id": "GR2.214b",
+  "gr": "2.214",
+  "page": 132,
+  "status": "ok",
+  "lhs": "Integrate[1/((a + b*x^2)*Sqrt[x]), x]",
+  "rhs": [
+   "1/(2*b*(-a/b)^(3/4))*(Log[((-a/b)^(1/4) - Sqrt[x])/((-a/b)^(1/4) + Sqrt[x])] - 2*ArcTan[Sqrt[x]/(-a/b)^(1/4)])"
+  ],
+  "conds": [
+   "a/b < 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "tex": "alpha'=(-a/b)^(1/4): = 1/(2b alpha'^3)(ln((alpha'-sqrt x)/(alpha'+sqrt x)) - 2 arctan(sqrt(x)/alpha')) [a/b<0]",
+  "note": ""
+ },
+ {
+  "id": "GR2.215a",
+  "gr": "2.215",
+  "page": 133,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[x]/(a + b*x^2), x]",
+  "rhs": [
+   "1/(b*(a/b)^(1/4)*Sqrt[2])*(-Log[(x + (a/b)^(1/4)*Sqrt[2*x] + (a/b)^(1/2))/Sqrt[(a + b*x^2)]] + ArcTan[(a/b)^(1/4)*Sqrt[2*x]/((a/b)^(1/2) - x)])"
+  ],
+  "conds": [
+   "a/b > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "tex": "int sqrt(x) dx/z2 = 1/(b alpha sqrt2)[-ln((x+alpha sqrt(2x)+alpha^2)/sqrt(z2)) + arctan(alpha sqrt(2x)/(alpha^2-x))] [a/b>0]",
+  "note": ""
+ },
+ {
+  "id": "GR2.215b",
+  "gr": "2.215",
+  "page": 133,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[x]/(a + b*x^2), x]",
+  "rhs": [
+   "1/(2*b*(-a/b)^(1/4))*(Log[((-a/b)^(1/4) - Sqrt[x])/((-a/b)^(1/4) + Sqrt[x])] + 2*ArcTan[Sqrt[x]/(-a/b)^(1/4)])"
+  ],
+  "conds": [
+   "a/b < 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "tex": "= 1/(2b alpha')[ln((alpha'-sqrt x)/(alpha'+sqrt x)) + 2 arctan(sqrt(x)/alpha')] [a/b<0]",
+  "note": ""
+ },
+ {
+  "id": "GR2.216.1",
+  "gr": "2.216.1",
+  "page": 133,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z2=a+bx^2: int x sqrt(x) dx/z2 = 2 sqrt(x)/b - a/b int dx/(z2 sqrt x)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.216.2",
+  "gr": "2.216.2",
+  "page": 133,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z2=a+bx^2: int x^2 sqrt(x) dx/z2 = 2x sqrt(x)/(3b) - a/b int sqrt(x) dx/z2",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.216.3",
+  "gr": "2.216.3",
+  "page": 133,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z2=a+bx^2: int dx/(z2^2 sqrt x) = sqrt(x)/(2a z2) + 3/(4a) int dx/(z2 sqrt x)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.216.4",
+  "gr": "2.216.4",
+  "page": 133,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z2=a+bx^2: int sqrt(x) dx/z2^2 = x sqrt(x)/(2a z2) + 1/(4a) int sqrt(x) dx/z2",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.216.5",
+  "gr": "2.216.5",
+  "page": 133,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z2=a+bx^2: int x sqrt(x) dx/z2^2 = -sqrt(x)/(2b z2) + 1/(4b) int dx/(z2 sqrt x)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.216.6",
+  "gr": "2.216.6",
+  "page": 133,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z2=a+bx^2: int x^2 sqrt(x) dx/z2^2 = -x sqrt(x)/(2b z2) + 3/(4b) int sqrt(x) dx/z2",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.216.7",
+  "gr": "2.216.7",
+  "page": 133,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z2=a+bx^2: int dx/(z2^3 sqrt x) = (1/(4a z2^2) + 7/(16a^2 z2)) sqrt(x) + 21/(32a^2) int dx/(z2 sqrt x)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.216.8",
+  "gr": "2.216.8",
+  "page": 133,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z2=a+bx^2: int sqrt(x) dx/z2^3 = (1/(4a z2^2) + 5/(16a^2 z2)) x sqrt(x) + 5/(32a^2) int sqrt(x) dx/z2",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.216.9",
+  "gr": "2.216.9",
+  "page": 133,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z2=a+bx^2: int x sqrt(x) dx/z2^3 = (bx^2-3a) sqrt(x)/(16ab z2^2) + 3/(32ab) int dx/(z2 sqrt x)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.216.10",
+  "gr": "2.216.10",
+  "page": 133,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z2=a+bx^2: int x^2 sqrt(x) dx/z2^3 = -2x sqrt(x)/(5b z2^2) + 3a/(5b) int sqrt(x) dx/z2^3",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.21 Forms containing the binomial a + bx^k and sqrt(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.220",
+  "gr": "2.220",
+  "page": 133,
+  "status": "ok",
+  "lhs": "Integrate[x^n*((a + b*x)^(l*m + f))^(1/l), x]",
+  "rhs": [
+   "Sum[(-1)^k*Binomial[n, k]*(a + b*x)^(n - k)*a^k/(l*n - l*k + l*(m + 1) + f), {k, 0, n}]*l*((a + b*x)^(l*(m + 1) + f))^(1/l)/b^(n + 1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "tex": "z=a+bx: int x^n (z^(lm+f))^(1/l) dx = {Sum_{k=0}^n (-1)^k C(n,k) z^(n-k) a^k/(ln - lk + l(m+1) + f)} l (z^(l(m+1)+f))^(1/l)/b^(n+1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.221",
+  "gr": "2.221",
+  "page": 133,
+  "status": "ok",
+  "lhs": "Integrate[x^n*Sqrt[(a + b*x)^(2*m - 1)], x]",
+  "rhs": [
+   "Sum[(-1)^k*Binomial[n, k]*(a + b*x)^(n - k)*a^k/(2*n - 2*k + 2*m + 1), {k, 0, n}]*2*Sqrt[(a + b*x)^(2*m + 1)]/b^(n + 1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "tex": "int x^n sqrt(z^(2m-1)) dx = {Sum_{k=0}^n (-1)^k C(n,k) z^(n-k) a^k/(2n-2k+2m+1)} 2 sqrt(z^(2m+1))/b^(n+1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.222.1",
+  "gr": "2.222.1",
+  "page": 133,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a + b*x)], x]",
+  "rhs": [
+   "2/b*Sqrt[(a + b*x)]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "tex": "int dx/sqrt z = 2/b sqrt z",
+  "note": ""
+ },
+ {
+  "id": "GR2.222.2",
+  "gr": "2.222.2",
+  "page": 134,
+  "status": "ok",
+  "lhs": "Integrate[x/Sqrt[(a + b*x)], x]",
+  "rhs": [
+   "((a + b*x)/3 - a)*2*Sqrt[(a + b*x)]/b^2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "tex": "int x dx/sqrt z = (z/3 - a) 2 sqrt z/b^2",
+  "note": ""
+ },
+ {
+  "id": "GR2.222.3",
+  "gr": "2.222.3",
+  "page": 134,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a + b*x)], x]",
+  "rhs": [
+   "((a + b*x)^2/5 - 2*a*(a + b*x)/3 + a^2)*2*Sqrt[(a + b*x)]/b^3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "tex": "int x^2 dx/sqrt z = (z^2/5 - 2az/3 + a^2) 2 sqrt z/b^3",
+  "note": ""
+ },
+ {
+  "id": "GR2.223.1",
+  "gr": "2.223.1",
+  "page": 134,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a + b*x)^3], x]",
+  "rhs": [
+   "-2/(b*Sqrt[(a + b*x)])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "tex": "int dx/sqrt(z^3) = -2/(b sqrt z)",
+  "note": ""
+ },
+ {
+  "id": "GR2.223.2",
+  "gr": "2.223.2",
+  "page": 134,
+  "status": "ok",
+  "lhs": "Integrate[x/Sqrt[(a + b*x)^3], x]",
+  "rhs": [
+   "((a + b*x) + a)*2/(b^2*Sqrt[(a + b*x)])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "tex": "int x dx/sqrt(z^3) = (z+a) 2/(b^2 sqrt z)",
+  "note": ""
+ },
+ {
+  "id": "GR2.223.3",
+  "gr": "2.223.3",
+  "page": 134,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a + b*x)^3], x]",
+  "rhs": [
+   "((a + b*x)^2/3 - 2*a*(a + b*x) - a^2)*2/(b^3*Sqrt[(a + b*x)])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "tex": "int x^2 dx/sqrt(z^3) = (z^2/3 - 2az - a^2) 2/(b^3 sqrt z)",
+  "note": ""
+ },
+ {
+  "id": "GR2.224.1",
+  "gr": "2.224.1",
+  "page": 134,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int z^m dx/(x^n sqrt z) = -z^m sqrt z/((n-1)a x^(n-1)) + (2m-2n+3)/(2(n-1)) b/a int z^m dx/(x^(n-1) sqrt z)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "note": ""
+ },
+ {
+  "id": "GR2.224.2",
+  "gr": "2.224.2",
+  "page": 134,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int z^m dx/(x^n sqrt z) = -z^m sqrt z {1/((n-1)a x^(n-1)) + Sum_{k=1}^{n-2} (2m-2n+3)(2m-2n+5)...(2m-2n+2k+1)/(2^k (n-1)(n-2)...(n-k-1) x^(n-k-1)) b^k/a^(k+1)} + (2m-2n+3)(2m-2n+5)...(2m-3)(2m-1)/(2^(n-1)(n-1)! x) b^(n-1)/a^(n-1) int z^m dx/(x sqrt z)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "note": "the final term's '1/x' factor before the integral is as printed (likely misplaced)"
+ },
+ {
+  "id": "GR2.224.3",
+  "gr": "2.224.3",
+  "page": 134,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: [n=1] int z^m/(x sqrt z) dx = 2 z^m/((2m-1) sqrt z) + a int z^(m-1)/(x sqrt z) dx",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "note": ""
+ },
+ {
+  "id": "GR2.224.4",
+  "gr": "2.224.4",
+  "page": 134,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int z^m/(x sqrt z) dx = Sum_{k=1}^m 2 a^(m-k) z^k/((2k-1) sqrt z) + a^m int dx/(x sqrt z)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "note": ""
+ },
+ {
+  "id": "GR2.224.5a",
+  "gr": "2.224.5",
+  "page": 134,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*Sqrt[(a + b*x)]), x]",
+  "rhs": [
+   "1/Sqrt[a]*Log[Abs[(Sqrt[(a + b*x)] - Sqrt[a])/(Sqrt[(a + b*x)] + Sqrt[a])]]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "6",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "tex": "int dx/(x sqrt z) = 1/sqrt(a) ln|(sqrt z - sqrt a)/(sqrt z + sqrt a)| [a>0]",
+  "note": ""
+ },
+ {
+  "id": "GR2.224.5b",
+  "gr": "2.224.5",
+  "page": 134,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*Sqrt[(a + b*x)]), x]",
+  "rhs": [
+   "2/Sqrt[-a]*ArcTan[Sqrt[(a + b*x)]/Sqrt[-a]]"
+  ],
+  "conds": [
+   "a < 0"
+  ],
+  "cite": "",
+  "edition_note": "6",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "tex": "= 2/sqrt(-a) arctan(sqrt z/sqrt(-a)) [a<0]",
+  "note": ""
+ },
+ {
+  "id": "GR2.225.1",
+  "gr": "2.225.1",
+  "page": 134,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int sqrt(z) dx/x = 2 sqrt z + a int dx/(x sqrt z)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "note": ""
+ },
+ {
+  "id": "GR2.225.2",
+  "gr": "2.225.2",
+  "page": 134,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int sqrt(z) dx/x^2 = -sqrt(z)/x + b/2 int dx/(x sqrt z)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "note": ""
+ },
+ {
+  "id": "GR2.225.3",
+  "gr": "2.225.3",
+  "page": 134,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int sqrt(z) dx/x^3 = -sqrt(z^3)/(2ax^2) + b sqrt(z)/(4ax) - b^2/(8a) int dx/(x sqrt z)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "note": ""
+ },
+ {
+  "id": "GR2.226.1",
+  "gr": "2.226.1",
+  "page": 135,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int sqrt(z^3) dx/x = (z/3 + a) 2 sqrt z + a^2 int dx/(x sqrt z)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "note": ""
+ },
+ {
+  "id": "GR2.226.2",
+  "gr": "2.226.2",
+  "page": 135,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int sqrt(z^3) dx/x^2 = -sqrt(z^5)/(ax) + 3b/(2a) int sqrt(z^3) dx/x",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "note": ""
+ },
+ {
+  "id": "GR2.226.3",
+  "gr": "2.226.3",
+  "page": 135,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int sqrt(z^3) dx/x^3 = -(1/(2ax^2) + b/(4a^2 x)) sqrt(z^5) + 3b^2/(8a^2) int sqrt(z^3) dx/x",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "note": ""
+ },
+ {
+  "id": "GR2.227",
+  "gr": "2.227",
+  "page": 135,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int dx/(x z^m sqrt z) = Sum_{k=0}^{m-1} 2/((2k+1) a^(m-k) z^k sqrt z) + 1/a^m int dx/(x sqrt z)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "note": ""
+ },
+ {
+  "id": "GR2.228.1",
+  "gr": "2.228.1",
+  "page": 135,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int dx/(x^2 sqrt z) = -sqrt(z)/(ax) - b/(2a) int dx/(x sqrt z)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "note": ""
+ },
+ {
+  "id": "GR2.228.2",
+  "gr": "2.228.2",
+  "page": 135,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int dx/(x^3 sqrt z) = (-1/(2ax^2) + 3b/(4a^2 x)) sqrt z + 3b^2/(8a^2) int dx/(x sqrt z)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "note": ""
+ },
+ {
+  "id": "GR2.229.1",
+  "gr": "2.229.1",
+  "page": 135,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int dx/(x sqrt(z^3)) = 2/(a sqrt z) + 1/a int dx/(x sqrt z)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "note": ""
+ },
+ {
+  "id": "GR2.229.2",
+  "gr": "2.229.2",
+  "page": 135,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int dx/(x^2 sqrt(z^3)) = (-1/(ax) - 3b/a^2) 1/sqrt z - 3b/(2a^2) int dx/(x sqrt z)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "note": ""
+ },
+ {
+  "id": "GR2.229.3",
+  "gr": "2.229.3",
+  "page": 135,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int dx/(x^3 sqrt(z^3)) = (-1/(2ax^2) + 5b/(4a^2 x) + 15b^2/(4a^3)) 1/sqrt z + 15b^2/(8a^3) int dx/(x sqrt z)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n)",
+  "note": ""
+ },
+ {
+  "id": "GR2.231.1",
+  "gr": "2.231.1",
+  "page": 135,
+  "status": "ok",
+  "lhs": "Integrate[((a + b*x)^(3*m + 1))^(1/3)*x^n, x]",
+  "rhs": [
+   "Sum[(-1)^k*Binomial[n, k]*(a + b*x)^(n - k)*a^k/(3*n - 3*k + 3*(m + 1) + 1), {k, 0, n}]*3*((a + b*x)^(3*(m + 1) + 1))^(1/3)/b^(n + 1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "tex": "int (z^(3m+1))^(1/3) x^n dx = {Sum (-1)^k C(n,k) z^(n-k) a^k/(3n-3k+3(m+1)+1)} 3 (z^(3(m+1)+1))^(1/3)/b^(n+1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.231.2",
+  "gr": "2.231.2",
+  "page": 135,
+  "status": "ok",
+  "lhs": "Integrate[x^n/((a + b*x)^(3*m + 2))^(1/3), x]",
+  "rhs": [
+   "Sum[(-1)^k*Binomial[n, k]*(a + b*x)^(n - k)*a^k/(3*n - 3*k - 3*(m - 1) - 2), {k, 0, n}]*3/(b^(n + 1)*((a + b*x)^(3*(m - 1) + 2))^(1/3))"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "tex": "int x^n dx/(z^(3m+2))^(1/3) = {Sum (-1)^k C(n,k) z^(n-k) a^k/(3n-3k-3(m-1)-2)} 3/(b^(n+1) (z^(3(m-1)+2))^(1/3))",
+  "note": ""
+ },
+ {
+  "id": "GR2.231.3",
+  "gr": "2.231.3",
+  "page": 135,
+  "status": "ok",
+  "lhs": "Integrate[((a + b*x)^(3*m + 2))^(1/3)*x^n, x]",
+  "rhs": [
+   "Sum[(-1)^k*Binomial[n, k]*(a + b*x)^(n - k)*a^k/(3*n - 3*k + 3*(m + 1) + 2), {k, 0, n}]*3*((a + b*x)^(3*(m + 1) + 2))^(1/3)/b^(n + 1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "tex": "int (z^(3m+2))^(1/3) x^n dx = {Sum ... /(3n-3k+3(m+1)+2)} 3 (z^(3(m+1)+2))^(1/3)/b^(n+1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.231.4",
+  "gr": "2.231.4",
+  "page": 135,
+  "status": "ok",
+  "lhs": "Integrate[x^n/((a + b*x)^(3*m + 1))^(1/3), x]",
+  "rhs": [
+   "Sum[(-1)^k*Binomial[n, k]*(a + b*x)^(n - k)*a^k/(3*n - 3*k - 3*(m - 1) - 1), {k, 0, n}]*3/(b^(n + 1)*((a + b*x)^(3*(m - 1) + 1))^(1/3))"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "tex": "int x^n dx/(z^(3m+1))^(1/3) = {Sum ... /(3n-3k-3(m-1)-1)} 3/(b^(n+1) (z^(3(m-1)+1))^(1/3))",
+  "note": ""
+ },
+ {
+  "id": "GR2.231.5a",
+  "gr": "2.231.5",
+  "page": 136,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int z^n dx/(x^m z^(2/3)) = -z^(n+1/3)/((m-1)a x^(m-1)) + (3n-3m+4)/(3(m-1)) b/a int z^n dx/(x^(m-1) z^(2/3))",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "note": "book prints cube-root(x^2) in the integrand denominators (both sides); misprint for cube-root(z^2), as the m=1 case and RHS z^(n+1/3) show"
+ },
+ {
+  "id": "GR2.231.5b",
+  "gr": "2.231.5",
+  "page": 136,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: [m=1] int z^n dx/(x z^(2/3)) = 3z^n/((3n-2) z^(2/3)) + a int z^(n-1) dx/(x z^(2/3))",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "note": ""
+ },
+ {
+  "id": "GR2.231.6",
+  "gr": "2.231.6",
+  "page": 136,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int dx/(x z^n z^(2/3)) = 3 z^(1/3)/((3n-1) a z^n) + 1/a int z^(1/3) dx/(x z^n)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "note": ""
+ },
+ {
+  "id": "GR2.232",
+  "gr": "2.232",
+  "page": 136,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*(a + b*x)^(2/3)), x]",
+  "rhs": [
+   "1/a^(2/3)*(3/2*Log[((a + b*x)^(1/3) - a^(1/3))/x^(1/3)] - Sqrt[3]*ArcTan[Sqrt[3]*(a + b*x)^(1/3)/((a + b*x)^(1/3) + 2*a^(1/3))])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "tex": "int dx/(x z^(2/3)) = 1/a^(2/3) {3/2 ln((z^(1/3) - a^(1/3))/x^(1/3)) - sqrt3 arctan(sqrt3 z^(1/3)/(z^(1/3) + 2 a^(1/3)))}",
+  "note": ""
+ },
+ {
+  "id": "GR2.233.1",
+  "gr": "2.233.1",
+  "page": 136,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int z^(1/3) dx/x = 3 z^(1/3) + a int dx/(x z^(2/3))",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "note": ""
+ },
+ {
+  "id": "GR2.233.2",
+  "gr": "2.233.2",
+  "page": 136,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int z^(1/3) dx/x^2 = -z z^(1/3)/(ax) + b/a z^(1/3) + b/3 int dx/(x z^(2/3))",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "note": ""
+ },
+ {
+  "id": "GR2.233.3",
+  "gr": "2.233.3",
+  "page": 136,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int z^(1/3) dx/x^3 = (-1/(2ax^2) + b/(3a^2 x)) z z^(1/3) - b^2/(3a^2) z^(1/3) - b^2/(9a) int dx/(x z^(2/3))",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "note": ""
+ },
+ {
+  "id": "GR2.233.4",
+  "gr": "2.233.4",
+  "page": 136,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int dx/(x^2 z^(2/3)) = -z^(1/3)/(ax) - 2b/(3a) int dx/(x z^(2/3))",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "note": ""
+ },
+ {
+  "id": "GR2.233.5",
+  "gr": "2.233.5",
+  "page": 136,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int dx/(x^3 z^(2/3)) = [-1/(2ax^2) + 5b/(6a^2 x)] z^(1/3) + 5b^2/(9a^2) int dx/(x z^(2/3))",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "note": ""
+ },
+ {
+  "id": "GR2.234.1",
+  "gr": "2.234.1",
+  "page": 136,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int z^n dx/(x^m z^(1/3)) = -z^n z^(2/3)/((m-1)a x^(m-1)) + (3n-3m+5)/(3(m-1)) b/a int z^n dx/(x^(m-1) z^(1/3))",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "note": ""
+ },
+ {
+  "id": "GR2.234.2",
+  "gr": "2.234.2",
+  "page": 136,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: [m=1] int z^n dx/(x z^(1/3)) = 3z^n/((3n-1) z^(1/3)) + a int z^(n-1) dx/(x z^(1/3))",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "note": ""
+ },
+ {
+  "id": "GR2.234.3",
+  "gr": "2.234.3",
+  "page": 136,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int dx/(x z^n z^(1/3)) = 3 z^(2/3)/((3n-2) a z^n) + 1/a int z^(2/3) dx/(x z^n)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "note": ""
+ },
+ {
+  "id": "GR2.235",
+  "gr": "2.235",
+  "page": 136,
+  "status": "ok",
+  "lhs": "Integrate[1/(x*(a + b*x)^(1/3)), x]",
+  "rhs": [
+   "1/a^(1/3)*(3/2*Log[((a + b*x)^(1/3) - a^(1/3))/x^(1/3)] + Sqrt[3]*ArcTan[Sqrt[3]*(a + b*x)^(1/3)/((a + b*x)^(1/3) + 2*a^(1/3))])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "tex": "int dx/(x z^(1/3)) = 1/a^(1/3) {3/2 ln((z^(1/3) - a^(1/3))/x^(1/3)) + sqrt3 arctan(sqrt3 z^(1/3)/(z^(1/3) + 2 a^(1/3)))}",
+  "note": ""
+ },
+ {
+  "id": "GR2.236.1",
+  "gr": "2.236.1",
+  "page": 136,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int z^(2/3) dx/x = 3/2 z^(2/3) + a int dx/(x z^(1/3))",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "note": ""
+ },
+ {
+  "id": "GR2.236.2",
+  "gr": "2.236.2",
+  "page": 136,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int z^(2/3) dx/x^2 = -z^(5/3)/(ax) + b/a z^(2/3) + 2b/3 int dx/(x z^(1/3))",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "note": ""
+ },
+ {
+  "id": "GR2.236.3",
+  "gr": "2.236.3",
+  "page": 137,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int z^(2/3) dx/x^3 = [-1/(2ax^2) + b/(6a^2 x)] z^(5/3) - b^2/(6a^2) z^(2/3) - b^2/(9a) int dx/(x z^(1/3))",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "note": ""
+ },
+ {
+  "id": "GR2.236.4",
+  "gr": "2.236.4",
+  "page": 137,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int dx/(x^2 z^(1/3)) = -z^(2/3)/(ax) - b/(3a) int dx/(x z^(1/3))",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "note": ""
+ },
+ {
+  "id": "GR2.236.5",
+  "gr": "2.236.5",
+  "page": 137,
+  "status": "SKIP-RECURRENCE",
+  "tex": "z=a+bx: int dx/(x^3 z^(1/3)) = [-1/(2ax^2) + 2b/(3a^2 x)] z^(2/3) + 2b^2/(9a^2) int dx/(x z^(1/3))",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.22-2.23 Forms containing (a + bx)^(k/n): cube root",
+  "note": ""
+ }
+]

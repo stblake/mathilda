@@ -1,0 +1,1080 @@
+[
+ {
+  "id": "GR2.236.3",
+  "gr": "2.236.3",
+  "page": 137,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int z^(2/3)/x^3 dx = [-1/(2ax^2)+b/(6a^2x)] z^(5/3) - b^2/(6a^2) z^(2/3) - b^2/(9a) int dx/(x z^(1/3))",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.23 Forms containing the binomial a + bx^k and sqrt(x) (z = a + bx)"
+ },
+ {
+  "id": "GR2.236.4",
+  "gr": "2.236.4",
+  "page": 137,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(x^2 z^(1/3)) = -z^(2/3)/(ax) - b/(3a) int dx/(x z^(1/3))",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.23 Forms containing the binomial a + bx^k and sqrt(x) (z = a + bx)"
+ },
+ {
+  "id": "GR2.236.5",
+  "gr": "2.236.5",
+  "page": 137,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(x^3 z^(1/3)) = [-1/(2ax^2)+2b/(3a^2x)] z^(2/3) + 2b^2/(9a^2) int dx/(x z^(1/3))",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.23 Forms containing the binomial a + bx^k and sqrt(x) (z = a + bx)"
+ },
+ {
+  "id": "GR2.241.1",
+  "gr": "2.241.1",
+  "page": 137,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int z^m t^n/sqrt z dx = 2/((2n+2m+1)beta) t^(n+1) z^(m-1) sqrt z + (2m-1)Delta/((2n+2m+1)beta) int z^(m-1) t^n/sqrt z dx",
+  "reason": "integral appears on the right-hand side",
+  "cite": "LA 176 (1)",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.241.2",
+  "gr": "2.241.2",
+  "page": 137,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)^n*(a + b*x)^m/Sqrt[(a + b*x)], x]",
+  "rhs": [
+   "2*Sqrt[(a + b*x)^(2*m + 1)]*Sum[Binomial[n, k]*alpha^(n - k)*beta^k/b^(k + 1)*Sum[(-1)^p*Binomial[k, p]*(a + b*x)^(k - p)*a^p/(2*k - 2*p + 2*m + 1), {p, 0, k}], {k, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t^n z^m/sqrt z dx = 2 sqrt(z^(2m+1)) sum_k C(n,k) alpha^(n-k) beta^k/b^(k+1) sum_p (-1)^p C(k,p) z^(k-p) a^p/(2k-2p+2m+1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.242.1",
+  "gr": "2.242.1",
+  "page": 137,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)/Sqrt[(a + b*x)], x]",
+  "rhs": [
+   "2*alpha*Sqrt[(a + b*x)]/b + beta*((a + b*x)/3 - a)*2*Sqrt[(a + b*x)]/b^2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "11",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t/sqrt z = 2 alpha sqrt z/b + beta (z/3 - a) 2 sqrt z/b^2",
+  "note": ""
+ },
+ {
+  "id": "GR2.242.2",
+  "gr": "2.242.2",
+  "page": 137,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)^2/Sqrt[(a + b*x)], x]",
+  "rhs": [
+   "2*alpha^2*Sqrt[(a + b*x)]/b + 2*alpha*beta*((a + b*x)/3 - a)*2*Sqrt[(a + b*x)]/b^2 + beta^2*((a + b*x)^2/5 - 2/3*(a + b*x)*a + a^2)*2*Sqrt[(a + b*x)]/b^3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t^2/sqrt z dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.242.3",
+  "gr": "2.242.3",
+  "page": 137,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)^3/Sqrt[(a + b*x)], x]",
+  "rhs": [
+   "2*alpha^3*Sqrt[(a + b*x)]/b + 3*alpha^2*beta*((a + b*x)/3 - alpha)*2*Sqrt[(a + b*x)]/b^2 + 3*alpha*beta^2*((a + b*x)^2/5 - 2/3*(a + b*x)*a + a^2)*2*Sqrt[(a + b*x)]/b^3 + beta^alpha*((a + b*x)^3/7 - 3*(a + b*x)^2*a/5 + (a + b*x)*a^2 - a^3)*2*Sqrt[(a + b*x)]/b^4",
+   "2*alpha^3*Sqrt[(a + b*x)]/b + 3*alpha^2*beta*((a + b*x)/3 - a)*2*Sqrt[(a + b*x)]/b^2 + 3*alpha*beta^2*((a + b*x)^2/5 - 2/3*(a + b*x)*a + a^2)*2*Sqrt[(a + b*x)]/b^3 + beta^3*((a + b*x)^3/7 - 3*(a + b*x)^2*a/5 + (a + b*x)*a^2 - a^3)*2*Sqrt[(a + b*x)]/b^4"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t^3/sqrt z dx (printed (z/3 - alpha) and beta^alpha)",
+  "note": "book misprints: (z/3 - alpha) should be (z/3 - a), and beta^alpha should be beta^3; second rhs is corrected"
+ },
+ {
+  "id": "GR2.242.4",
+  "gr": "2.242.4",
+  "page": 137,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)*(a + b*x)/Sqrt[(a + b*x)], x]",
+  "rhs": [
+   "2*alpha*(a + b*x)^(3/2)/(3*b) + beta*((a + b*x)/5 - a/3)*2*(a + b*x)^(3/2)/b^2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t z/sqrt z dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.242.5",
+  "gr": "2.242.5",
+  "page": 137,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)^2*(a + b*x)/Sqrt[(a + b*x)], x]",
+  "rhs": [
+   "2*alpha^2*(a + b*x)^(3/2)/(3*b) + 2*alpha*beta*((a + b*x)/5 - a/3)*2*(a + b*x)^(3/2)/b^2 + beta^2*((a + b*x)^2/7 - 2*(a + b*x)*a/5 + a^2/3)*2*(a + b*x)^(3/2)/b^3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t^2 z/sqrt z dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.242.6",
+  "gr": "2.242.6",
+  "page": 137,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)^3*(a + b*x)/Sqrt[(a + b*x)], x]",
+  "rhs": [
+   "2*alpha^3*(a + b*x)^(3/2)/(3*b) + 3*alpha^2*beta*((a + b*x)/5 - a/3)*2*(a + b*x)^(3/2)/b^2 + 3*alpha*beta^2*((a + b*x)^2/7 - 2*(a + b*x)*a/5 + a^2/3)*2*(a + b*x)^(3/2)/b^3 + beta^3*((a + b*x)^3/9 - 3*(a + b*x)^2*a/7 + 3*(a + b*x)*a^2/5 - a^3/3)*2*(a + b*x)^(3/2)/b^4"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t^3 z/sqrt z dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.242.7",
+  "gr": "2.242.7",
+  "page": 137,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)*(a + b*x)^2/Sqrt[(a + b*x)], x]",
+  "rhs": [
+   "2*alpha*(a + b*x)^(5/2)/(5*b) + beta*((a + b*x)/7 - a/5)*2*(a + b*x)^(5/2)/b^2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t z^2/sqrt z dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.242.8",
+  "gr": "2.242.8",
+  "page": 137,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)^2*(a + b*x)^2/Sqrt[(a + b*x)], x]",
+  "rhs": [
+   "2*alpha^2*(a + b*x)^(5/2)/(5*b) + 2*alpha*beta*((a + b*x)/7 - a/5)*2*(a + b*x)^(5/2)/b^2 + beta^2*((a + b*x)^2/9 - 2*(a + b*x)*a/7 + a^2/5)*2*(a + b*x)^(5/2)/b^3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t^2 z^2/sqrt z dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.242.9",
+  "gr": "2.242.9",
+  "page": 138,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)^3*(a + b*x)^2/Sqrt[(a + b*x)], x]",
+  "rhs": [
+   "2*alpha^3*(a + b*x)^(5/2)/(5*b) + 3*alpha^2*beta*((a + b*x)/7 - a/5)*2*(a + b*x)^(5/2)/b^2 + 3*alpha*beta^2*((a + b*x)^2/9 - 2*(a + b*x)*a/7 + a^2/5)*2*(a + b*x)^(5/2)/b^3 + beta^3*((a + b*x)^3/11 - 3*(a + b*x)^2*a/9 + 3*(a + b*x)*a^2/7 - a^3/5)*2*(a + b*x)^(5/2)/b^4"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t^3 z^2/sqrt z dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.242.10",
+  "gr": "2.242.10",
+  "page": 138,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)*(a + b*x)^3/Sqrt[(a + b*x)], x]",
+  "rhs": [
+   "2*alpha*(a + b*x)^(7/2)/(7*b) + beta*((a + b*x)/9 - a/7)*2*(a + b*x)^(7/2)/b^2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t z^3/sqrt z dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.242.11",
+  "gr": "2.242.11",
+  "page": 138,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)^2*(a + b*x)^3/Sqrt[(a + b*x)], x]",
+  "rhs": [
+   "2*alpha^2*(a + b*x)^(7/2)/(7*b) + 2*alpha*beta*((a + b*x)/9 - a/7)*2*(a + b*x)^(7/2)/b^2 + beta^2*((a + b*x)^2/11 - 2*(a + b*x)*a/9 + a^2/7)*2*(a + b*x)^(7/2)/b^3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t^2 z^3/sqrt z dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.242.12",
+  "gr": "2.242.12",
+  "page": 138,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)^3*(a + b*x)^3/Sqrt[(a + b*x)], x]",
+  "rhs": [
+   "2*alpha^3*(a + b*x)^(7/2)/(7*b) + 3*alpha^2*beta*((a + b*x)/9 - a/7)*2*(a + b*x)^(7/2)/b^2 + 3*alpha*beta^2*((a + b*x)^2/11 - 2*(a + b*x)*a/9 + a^2/7)*2*(a + b*x)^(7/2)/b^3 + beta^3*((a + b*x)^3/13 - 3*(a + b*x)^2*a/11 + 3*(a + b*x)*a^2/9 - a^3/7)*2*(a + b*x)^(7/2)/b^4"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t^3 z^3/sqrt z dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.243.1a",
+  "gr": "2.243.1",
+  "page": 138,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int t^n/(z^m sqrt z) dx = 2/((2m-1)Delta) t^(n+1)/z^m sqrt z - (2n-2m+3)beta/((2m-1)Delta) int t^n/(z^(m-1) sqrt z) dx",
+  "reason": "integral appears on the right-hand side",
+  "cite": "LA 176 (2)",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.243.1b",
+  "gr": "2.243.1",
+  "page": 138,
+  "status": "SKIP-RECURRENCE",
+  "tex": "= -2/((2m-1)b) t^n/z^m sqrt z + 2n beta/((2m-1)b) int t^(n-1)/(z^(m-1) sqrt z) dx",
+  "reason": "integral appears on the right-hand side",
+  "cite": "LA 176 (2)",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.243.2",
+  "gr": "2.243.2",
+  "page": 138,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)^n/((a + b*x)^m*Sqrt[(a + b*x)]), x]",
+  "rhs": [
+   "2/Sqrt[(a + b*x)^(2*m - 1)]*Sum[Binomial[n, k]*a^(n - k)*beta^k/b^(k + 1)*Sum[(-1)^p*Binomial[k, p]*(a + b*x)^(k - p)*a^p/(2*k - 2*p - 2*m + 1), {p, 0, k}], {k, 0, n}]",
+   "2/Sqrt[(a + b*x)^(2*m - 1)]*Sum[Binomial[n, k]*alpha^(n - k)*beta^k/b^(k + 1)*Sum[(-1)^p*Binomial[k, p]*(a + b*x)^(k - p)*a^p/(2*k - 2*p - 2*m + 1), {p, 0, k}], {k, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t^n/(z^m sqrt z) dx = 2/sqrt(z^(2m-1)) sum_k C(n,k) a^(n-k) beta^k/b^(k+1) sum_p (-1)^p C(k,p) z^(k-p) a^p/(2k-2p-2m+1)",
+  "note": "printed a^(n-k) looks like a misprint for alpha^(n-k) (cf. 2.241.2); second rhs is corrected"
+ },
+ {
+  "id": "GR2.244.1",
+  "gr": "2.244.1",
+  "page": 138,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)/((a + b*x)*Sqrt[(a + b*x)]), x]",
+  "rhs": [
+   "-2*alpha/(b*Sqrt[(a + b*x)]) + 2*beta*((a + b*x) + a)/(b^2*Sqrt[(a + b*x)])",
+   "-2*a/(b*Sqrt[(a + b*x)]) + 2*beta*((a + b*x) + a)/(b^2*Sqrt[(a + b*x)])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t/(z sqrt z) dx = -2alpha/(b sqrt z) + 2beta(z+a)/(b^2 sqrt z)",
+  "note": "leading alpha may print as a in the scan; second rhs is that reading"
+ },
+ {
+  "id": "GR2.244.2",
+  "gr": "2.244.2",
+  "page": 138,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)^2/((a + b*x)*Sqrt[(a + b*x)]), x]",
+  "rhs": [
+   "-2*alpha^2/(b*Sqrt[(a + b*x)]) + 4*alpha*beta*((a + b*x) + a)/(b^2*Sqrt[(a + b*x)]) + 2*beta^2*((a + b*x)^2/3 - 2*(a + b*x)*a - a^2)/(b^3*Sqrt[(a + b*x)])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t^2/(z sqrt z) dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.244.3",
+  "gr": "2.244.3",
+  "page": 138,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)^3/((a + b*x)*Sqrt[(a + b*x)]), x]",
+  "rhs": [
+   "-2*alpha^3/(b*Sqrt[(a + b*x)]) + 6*alpha^2*beta*((a + b*x) + a)/(b^2*Sqrt[(a + b*x)]) + 6*alpha*beta^2*((a + b*x)^2/3 - 2*(a + b*x)*a - a^2)/(b^3*Sqrt[(a + b*x)]) + 2*beta^3*((a + b*x)^3/5 - (a + b*x)^2*a + 3*(a + b*x)*a^2 + a^3)/(b^4*Sqrt[(a + b*x)])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t^3/(z sqrt z) dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.244.4",
+  "gr": "2.244.4",
+  "page": 138,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)/((a + b*x)^2*Sqrt[(a + b*x)]), x]",
+  "rhs": [
+   "-2*alpha/(3*b*(a + b*x)^(3/2)) - 2*beta*((a + b*x) - a/3)/(b^2*(a + b*x)^(3/2))",
+   "-2*a/(3*b*(a + b*x)^(3/2)) - 2*beta*((a + b*x) - a/3)/(b^2*(a + b*x)^(3/2))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t/(z^2 sqrt z) dx",
+  "note": "leading alpha may print as a in the scan; second rhs is that reading"
+ },
+ {
+  "id": "GR2.244.5",
+  "gr": "2.244.5",
+  "page": 138,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)^2/((a + b*x)^2*Sqrt[(a + b*x)]), x]",
+  "rhs": [
+   "-2*alpha^2/(3*b*(a + b*x)^(3/2)) - 4*alpha*beta*((a + b*x) - a/3)/(b^2*(a + b*x)^(3/2)) + 2*beta^2*((a + b*x)^2 + 2*a*(a + b*x) - a^2/3)/(b^3*(a + b*x)^(3/2))",
+   "-2*a^2/(3*b*(a + b*x)^(3/2)) - 4*alpha*beta*((a + b*x) - a/3)/(b^2*(a + b*x)^(3/2)) + 2*beta^2*((a + b*x)^2 + 2*a*(a + b*x) - a^2/3)/(b^3*(a + b*x)^(3/2))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t^2/(z^2 sqrt z) dx",
+  "note": "leading alpha may print as a in the scan; second rhs is that reading"
+ },
+ {
+  "id": "GR2.244.6",
+  "gr": "2.244.6",
+  "page": 138,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)^3/((a + b*x)^2*Sqrt[(a + b*x)]), x]",
+  "rhs": [
+   "-2*alpha^3/(3*b*(a + b*x)^(3/2)) - 6*alpha^2*beta*((a + b*x) - a/3)/(b^2*(a + b*x)^(3/2)) + 6*alpha*beta^2*((a + b*x)^2 + 2*(a + b*x)*a - a^2/3)/(b^3*(a + b*x)^(3/2)) + 2*beta^3*((a + b*x)^3/3 - 3*(a + b*x)^2*a - 3*(a + b*x)*a^2 + a^3/3)/(b^4*(a + b*x)^(3/2))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t^3/(z^2 sqrt z) dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.244.7",
+  "gr": "2.244.7",
+  "page": 138,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)/((a + b*x)^3*Sqrt[(a + b*x)]), x]",
+  "rhs": [
+   "-2*alpha/(5*b*(a + b*x)^(5/2)) - 2*beta*((a + b*x)/3 - a/5)/(b^2*(a + b*x)^(5/2))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t/(z^3 sqrt z) dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.244.8",
+  "gr": "2.244.8",
+  "page": 139,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)^2/((a + b*x)^3*Sqrt[(a + b*x)]), x]",
+  "rhs": [
+   "-2*alpha^2/(5*b*(a + b*x)^(5/2)) - 4*alpha*beta*((a + b*x)/3 - a/5)/(b^2*(a + b*x)^(5/2)) - 2*beta^2*((a + b*x)^2 - 2*(a + b*x)*a/3 + a^2/5)/(b^3*(a + b*x)^(5/2))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t^2/(z^3 sqrt z) dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.244.9",
+  "gr": "2.244.9",
+  "page": 139,
+  "status": "ok",
+  "lhs": "Integrate[(alpha + beta*x)^3/((a + b*x)^3*Sqrt[(a + b*x)]), x]",
+  "rhs": [
+   "-2*alpha^3/(5*b*(a + b*x)^(5/2)) - 6*alpha^2*beta*((a + b*x)/3 - a/5)/(b^2*(a + b*x)^(5/2)) - 6*alpha*beta^2*((a + b*x)^2 - 2*(a + b*x)*a/3 + a^2/5)/(b^3*(a + b*x)^(5/2)) + 2*beta^3*((a + b*x)^3 + 3*(a + b*x)^2*a - (a + b*x)*a^2 + a^3/5)/(b^4*(a + b*x)^(5/2))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int t^3/(z^3 sqrt z) dx",
+  "note": ""
+ },
+ {
+  "id": "GR2.245.1a",
+  "gr": "2.245.1",
+  "page": 139,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int z^m/(t^n sqrt z) dx = -2/((2n-2m-1)beta) z^(m-1)/t^(n-1) sqrt z - (2m-1)Delta/((2n-2m-1)beta) int z^(m-1)/(t^n sqrt z) dx",
+  "reason": "integral appears on the right-hand side",
+  "cite": "LA 176 (3)",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.245.1b",
+  "gr": "2.245.1",
+  "page": 139,
+  "status": "SKIP-RECURRENCE",
+  "tex": "= -1/((n-1)beta) z^(m-1)/t^(n-1) sqrt z + (2m-1)b/(2(n-1)beta) int z^(m-1)/(t^(n-1) sqrt z) dx",
+  "reason": "integral appears on the right-hand side",
+  "cite": "LA 176 (3)",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.245.1c",
+  "gr": "2.245.1",
+  "page": 139,
+  "status": "SKIP-RECURRENCE",
+  "tex": "= -1/((n-1)Delta) z^m/t^(n-1) sqrt z - (2n-2m-3)b/(2(n-1)Delta) int z^m/(t^(n-1) sqrt z) dx",
+  "reason": "integral appears on the right-hand side",
+  "cite": "LA 176 (3)",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.245.2",
+  "gr": "2.245.2",
+  "page": 139,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int z^m/(t^n sqrt z) dz = -z^m sqrt z [ ... sum_{k=2}^{n-1} ... ] - (...)/(2^(n-1)(n-1)! Delta^n) int z^m/(t sqrt z) dx",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.245.3",
+  "gr": "2.245.3",
+  "page": 139,
+  "status": "SKIP-RECURRENCE",
+  "tex": "n=1: int z^m/(t sqrt z) dx = 2/((2m-1)beta) z^m/sqrt z + Delta/beta int z^(m-1)/(t sqrt z) dx",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.245.4",
+  "gr": "2.245.4",
+  "page": 139,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int z^m/(t sqrt z) dx = 2 sum_{k=0}^{m-1} Delta^k/((2m-2k-1)beta^(k+1)) z^(m-k)/sqrt z + Delta^m/beta^m int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.246a",
+  "gr": "2.246",
+  "page": 139,
+  "status": "ok",
+  "lhs": "Integrate[1/((alpha + beta*x)*Sqrt[(a + b*x)]), x]",
+  "rhs": [
+   "1/Sqrt[beta*(a*beta - b*alpha)]*Log[(beta*Sqrt[(a + b*x)] - Sqrt[beta*(a*beta - b*alpha)])/(beta*Sqrt[(a + b*x)] + Sqrt[beta*(a*beta - b*alpha)])]"
+  ],
+  "conds": [
+   "beta*(a*beta - b*alpha) > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "int dx/(t sqrt z) = 1/sqrt(beta Delta) ln((beta sqrt z - sqrt(beta Delta))/(beta sqrt z + sqrt(beta Delta)))",
+  "note": ""
+ },
+ {
+  "id": "GR2.246b",
+  "gr": "2.246",
+  "page": 139,
+  "status": "ok",
+  "lhs": "Integrate[1/((alpha + beta*x)*Sqrt[(a + b*x)]), x]",
+  "rhs": [
+   "2/Sqrt[-beta*(a*beta - b*alpha)]*ArcTan[beta*Sqrt[(a + b*x)]/Sqrt[-beta*(a*beta - b*alpha)]]"
+  ],
+  "conds": [
+   "beta*(a*beta - b*alpha) < 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "= 2/sqrt(-beta Delta) arctan(beta sqrt z/sqrt(-beta Delta))",
+  "note": ""
+ },
+ {
+  "id": "GR2.246c",
+  "gr": "2.246",
+  "page": 139,
+  "status": "ok",
+  "lhs": "Integrate[1/((alpha + beta*x)*Sqrt[(a + b*x)]), x]",
+  "rhs": [
+   "-2*Sqrt[(a + b*x)]/(b*(alpha + beta*x))"
+  ],
+  "conds": [
+   "(a*beta - b*alpha) == 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)",
+  "tex": "= -2 sqrt z/(b t) [Delta = 0]",
+  "note": ""
+ },
+ {
+  "id": "GR2.247",
+  "gr": "2.247",
+  "page": 139,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(t z^m sqrt z) = 2/(z^(m-1) sqrt z) + sum_{k=1}^m beta^(k-1) z^k/(Delta^k(2m-2k+1)) + beta^m/Delta^m int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.1",
+  "gr": "2.248.1",
+  "page": 139,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(t z sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.2",
+  "gr": "2.248.2",
+  "page": 140,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(t z^2 sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.3",
+  "gr": "2.248.3",
+  "page": 140,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(t z^3 sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.4",
+  "gr": "2.248.4",
+  "page": 140,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(t^2 sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.5",
+  "gr": "2.248.5",
+  "page": 140,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(t^2 z sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.6",
+  "gr": "2.248.6",
+  "page": 140,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(t^2 z^2 sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.7",
+  "gr": "2.248.7",
+  "page": 140,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(t^2 z^3 sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.8",
+  "gr": "2.248.8",
+  "page": 140,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(t^3 sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.9",
+  "gr": "2.248.9",
+  "page": 140,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(t^3 z sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.10",
+  "gr": "2.248.10",
+  "page": 140,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(t^3 z^2 sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.11",
+  "gr": "2.248.11",
+  "page": 140,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(t^3 z^3 sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.12",
+  "gr": "2.248.12",
+  "page": 140,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int z dx/(t sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.13",
+  "gr": "2.248.13",
+  "page": 140,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int z^2 dx/(t sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.14",
+  "gr": "2.248.14",
+  "page": 140,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int z^3 dx/(t sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.15",
+  "gr": "2.248.15",
+  "page": 140,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int z dx/(t^2 sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.16",
+  "gr": "2.248.16",
+  "page": 140,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int z^2 dx/(t^2 sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.17",
+  "gr": "2.248.17",
+  "page": 141,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int z^3 dx/(t^2 sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.18",
+  "gr": "2.248.18",
+  "page": 141,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int z dx/(t^3 sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "3",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.19",
+  "gr": "2.248.19",
+  "page": 141,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int z^2 dx/(t^3 sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.248.20",
+  "gr": "2.248.20",
+  "page": 141,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int z^3 dx/(t^3 sqrt z) = ... + c int dx/(t sqrt z)",
+  "reason": "integral appears on the right-hand side (see 2.246)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.249.1a",
+  "gr": "2.249.1",
+  "page": 141,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(z^m t^n sqrt z) = 2/((2m-1)Delta) sqrt z/(t^(n-1) z^m) + (2n+2m-3)beta/((2m-1)Delta) int dx/(t^n z^(m-1) sqrt z)",
+  "reason": "integral appears on the right-hand side",
+  "cite": "LA 177 (4)",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.249.1b",
+  "gr": "2.249.1",
+  "page": 141,
+  "status": "SKIP-RECURRENCE",
+  "tex": "= -1/((n-1)Delta) sqrt z/(z^m t^(n-1)) - (2n+2m-3)b/(2(n-1)Delta) int dx/(t^(n-1) z^m sqrt z)",
+  "reason": "integral appears on the right-hand side",
+  "cite": "LA 177 (4)",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.249.2a",
+  "gr": "2.249.2",
+  "page": 141,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(z^m t^n sqrt z) = sqrt z/z^m [ ... ] + (-1)^(n-1) ... int dx/(t z^m sqrt z)",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.249.2b",
+  "gr": "2.249.2",
+  "page": 141,
+  "status": "SKIP-RECURRENCE",
+  "tex": "n=1: int dx/(z^m t sqrt z) = 2/((2m-1)Delta) 1/(z^(m-1) sqrt z) + beta/Delta int dx/(t z^(m-1) sqrt z)",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.24 Forms containing sqrt(a + bx) and the binomial alpha + beta x (z = a + bx, t = alpha + beta x, Delta = a beta - b alpha)"
+ },
+ {
+  "id": "GR2.251",
+  "gr": "2.251",
+  "page": 141,
+  "status": "SKIP-REFERENCE",
+  "tex": "Euler substitutions: sqrt(a+bx+cx^2) = xt +- sqrt a (a>0); = t +- x sqrt c (c>0); sqrt(c(x-x1)(x-x2)) = t(x-x1)",
+  "reason": "substitution rule, no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.25 Forms containing sqrt(a + bx + cx^2)"
+ },
+ {
+  "id": "GR2.252",
+  "gr": "2.252",
+  "page": 142,
+  "status": "SKIP-REFERENCE",
+  "tex": "reduction of int R(x, sqrt(a+bx+cx^2)) dx to three standard forms; int P(x)dx/sqrt(a+bx+cx^2) = Q(x) sqrt(...) + lambda int dx/sqrt(...)",
+  "reason": "method description, no closed value",
+  "cite": "LI II 77; FI II 78-82",
+  "edition_note": "",
+  "section": "2.25 Forms containing sqrt(a + bx + cx^2)"
+ },
+ {
+  "id": "GR2.260.1",
+  "gr": "2.260.1",
+  "page": 143,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^m sqrt(R^(2n+1)) dx = x^(m-1) sqrt(R^(2n+3))/((m+2n+2)c) - (2m+2n+1)b/(2(m+2n+2)c) int x^(m-1) sqrt(R^(2n+1)) dx - (m-1)a/((m+2n+2)c) int x^(m-2) sqrt(R^(2n+1)) dx",
+  "reason": "integral appears on the right-hand side",
+  "cite": "TI (192)a",
+  "edition_note": "",
+  "section": "2.26 Forms containing sqrt(a + bx + cx^2) and integral powers of x (R = a + bx + cx^2, Delta = 4ac - b^2)"
+ },
+ {
+  "id": "GR2.260.2",
+  "gr": "2.260.2",
+  "page": 143,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sqrt(R^(2n+1)) dx = (2cx+b)/(4(n+1)c) sqrt(R^(2n+1)) + (2n+1)/(8(n+1)) Delta/c int sqrt(R^(2n-1)) dx",
+  "reason": "integral appears on the right-hand side",
+  "cite": "TI (188)",
+  "edition_note": "",
+  "section": "2.26 Forms containing sqrt(a + bx + cx^2) and integral powers of x (R = a + bx + cx^2, Delta = 4ac - b^2)"
+ },
+ {
+  "id": "GR2.260.3",
+  "gr": "2.260.3",
+  "page": 143,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sqrt(R^(2n+1)) dx = (2cx+b) sqrt R/(4(n+1)c) {R^n + sum ...} + (2n+1)!!/(8^(n+1)(n+1)!) (Delta/c)^(n+1) int dx/sqrt R",
+  "reason": "integral appears on the right-hand side",
+  "cite": "TI (190)",
+  "edition_note": "",
+  "section": "2.26 Forms containing sqrt(a + bx + cx^2) and integral powers of x (R = a + bx + cx^2, Delta = 4ac - b^2)"
+ },
+ {
+  "id": "GR2.261a",
+  "gr": "2.261",
+  "page": 143,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a + b*x + c*x^2)], x]",
+  "rhs": [
+   "1/Sqrt[c]*Log[(2*Sqrt[c*(a + b*x + c*x^2)] + 2*c*x + b)/Sqrt[(4*a*c - b^2)]]"
+  ],
+  "conds": [
+   "c > 0"
+  ],
+  "cite": "TI (127)",
+  "edition_note": "11",
+  "section": "2.26 Forms containing sqrt(a + bx + cx^2) and integral powers of x (R = a + bx + cx^2, Delta = 4ac - b^2)",
+  "tex": "n=-1: int dx/sqrt R = 1/sqrt c ln((2 sqrt(cR) + 2cx + b)/sqrt Delta)",
+  "note": ""
+ },
+ {
+  "id": "GR2.261b",
+  "gr": "2.261",
+  "page": 143,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a + b*x + c*x^2)], x]",
+  "rhs": [
+   "1/Sqrt[c]*ArcSinh[(2*c*x + b)/Sqrt[(4*a*c - b^2)]]"
+  ],
+  "conds": [
+   "c > 0",
+   "(4*a*c - b^2) > 0"
+  ],
+  "cite": "DW",
+  "edition_note": "11",
+  "section": "2.26 Forms containing sqrt(a + bx + cx^2) and integral powers of x (R = a + bx + cx^2, Delta = 4ac - b^2)",
+  "tex": "= 1/sqrt c arcsinh((2cx+b)/sqrt Delta)",
+  "note": ""
+ },
+ {
+  "id": "GR2.261c",
+  "gr": "2.261",
+  "page": 143,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a + b*x + c*x^2)], x]",
+  "rhs": [
+   "1/Sqrt[c]*Log[2*c*x + b]"
+  ],
+  "conds": [
+   "c > 0",
+   "(4*a*c - b^2) == 0"
+  ],
+  "cite": "DW",
+  "edition_note": "11",
+  "section": "2.26 Forms containing sqrt(a + bx + cx^2) and integral powers of x (R = a + bx + cx^2, Delta = 4ac - b^2)",
+  "tex": "= 1/sqrt c ln(2cx+b)",
+  "note": ""
+ },
+ {
+  "id": "GR2.261d",
+  "gr": "2.261",
+  "page": 143,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a + b*x + c*x^2)], x]",
+  "rhs": [
+   "-1/Sqrt[-c]*ArcSin[(2*c*x + b)/Sqrt[-(4*a*c - b^2)]]"
+  ],
+  "conds": [
+   "c < 0",
+   "(4*a*c - b^2) < 0"
+  ],
+  "cite": "TI (128)",
+  "edition_note": "11",
+  "section": "2.26 Forms containing sqrt(a + bx + cx^2) and integral powers of x (R = a + bx + cx^2, Delta = 4ac - b^2)",
+  "tex": "= -1/sqrt(-c) arcsin((2cx+b)/sqrt(-Delta))",
+  "note": ""
+ },
+ {
+  "id": "GR2.262.1",
+  "gr": "2.262.1",
+  "page": 144,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sqrt R dx = ... + c int dx/sqrt R",
+  "reason": "integral appears on the right-hand side (see 2.261)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing sqrt(a + bx + cx^2) and integral powers of x (R = a + bx + cx^2, Delta = 4ac - b^2)"
+ },
+ {
+  "id": "GR2.262.2",
+  "gr": "2.262.2",
+  "page": 144,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x sqrt R dx = ... + c int dx/sqrt R",
+  "reason": "integral appears on the right-hand side (see 2.261)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing sqrt(a + bx + cx^2) and integral powers of x (R = a + bx + cx^2, Delta = 4ac - b^2)"
+ },
+ {
+  "id": "GR2.262.3",
+  "gr": "2.262.3",
+  "page": 144,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^2 sqrt R dx = ... + c int dx/sqrt R",
+  "reason": "integral appears on the right-hand side (see 2.261)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing sqrt(a + bx + cx^2) and integral powers of x (R = a + bx + cx^2, Delta = 4ac - b^2)"
+ },
+ {
+  "id": "GR2.262.4",
+  "gr": "2.262.4",
+  "page": 144,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^3 sqrt R dx = ... + c int dx/sqrt R",
+  "reason": "integral appears on the right-hand side (see 2.261)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing sqrt(a + bx + cx^2) and integral powers of x (R = a + bx + cx^2, Delta = 4ac - b^2)"
+ },
+ {
+  "id": "GR2.262.5",
+  "gr": "2.262.5",
+  "page": 144,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sqrt(R^3) dx = ... + c int dx/sqrt R",
+  "reason": "integral appears on the right-hand side (see 2.261)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing sqrt(a + bx + cx^2) and integral powers of x (R = a + bx + cx^2, Delta = 4ac - b^2)"
+ },
+ {
+  "id": "GR2.262.6",
+  "gr": "2.262.6",
+  "page": 144,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x sqrt(R^3) dx = ... + c int dx/sqrt R",
+  "reason": "integral appears on the right-hand side (see 2.261)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing sqrt(a + bx + cx^2) and integral powers of x (R = a + bx + cx^2, Delta = 4ac - b^2)"
+ },
+ {
+  "id": "GR2.262.7",
+  "gr": "2.262.7",
+  "page": 144,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^2 sqrt(R^3) dx = ... + c int dx/sqrt R",
+  "reason": "integral appears on the right-hand side (see 2.261)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing sqrt(a + bx + cx^2) and integral powers of x (R = a + bx + cx^2, Delta = 4ac - b^2)"
+ },
+ {
+  "id": "GR2.262.8",
+  "gr": "2.262.8",
+  "page": 144,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^3 sqrt(R^3) dx = ... + c int dx/sqrt R",
+  "reason": "integral appears on the right-hand side (see 2.261)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.26 Forms containing sqrt(a + bx + cx^2) and integral powers of x (R = a + bx + cx^2, Delta = 4ac - b^2)"
+ },
+ {
+  "id": "GR2.263.1",
+  "gr": "2.263.1",
+  "page": 144,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^m dx/sqrt(R^(2n+1)) = x^(m-1)/((m-2n)c sqrt(R^(2n-1))) - (2m-2n-1)b/(2(m-2n)c) int x^(m-1)dx/sqrt(R^(2n+1)) - (m-1)a/((m-2n)c) int x^(m-2) dx/sqrt(R^(2n+1))",
+  "reason": "integral appears on the right-hand side",
+  "cite": "TI (193)a",
+  "edition_note": "",
+  "section": "2.26 Forms containing sqrt(a + bx + cx^2) and integral powers of x (R = a + bx + cx^2, Delta = 4ac - b^2)"
+ },
+ {
+  "id": "GR2.263.2",
+  "gr": "2.263.2",
+  "page": 144,
+  "status": "SKIP-RECURRENCE",
+  "tex": "m=2n: int x^(2n) dx/sqrt(R^(2n+1)) = -x^(2n-1)/((2n-1)c sqrt(R^(2n-1))) - b/(2c) int x^(2n-1)/sqrt(R^(2n+1)) dx + 1/c int x^(2n-2)/sqrt(R^(2n-1)) dx",
+  "reason": "integral appears on the right-hand side",
+  "cite": "TI (194)a",
+  "edition_note": "",
+  "section": "2.26 Forms containing sqrt(a + bx + cx^2) and integral powers of x (R = a + bx + cx^2, Delta = 4ac - b^2)"
+ }
+]

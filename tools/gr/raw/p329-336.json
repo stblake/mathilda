@@ -1,0 +1,1589 @@
+[
+ {
+  "id": "GR3.152.7",
+  "gr": "3.152.7",
+  "page": 329,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 - x^2)*(b^2 - x^2)], {x, 0, u}]",
+  "rhs": [
+   "1/a*MatharF2[ArcSin[u/b], (b/a)]"
+  ],
+  "conds": [
+   "a > b >= u > 0"
+  ],
+  "cite": "H 63 (264), BY (219.00)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u dx/sqrt((a^2-x^2)(b^2-x^2)) = F(eta,t)/a",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.152.8",
+  "gr": "3.152.8",
+  "page": 329,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 - x^2)*(b^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "1/a*MatharF2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)]"
+  ],
+  "conds": [
+   "a > b > u >= 0"
+  ],
+  "cite": "H 63 (265), BY (220.00)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b dx/sqrt((a^2-x^2)(b^2-x^2)) = F(zeta,t)/a",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.152.9",
+  "gr": "3.152.9",
+  "page": 329,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 - x^2)*(x^2 - b^2)], {x, b, u}]",
+  "rhs": [
+   "1/a*MatharF2[ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)]"
+  ],
+  "conds": [
+   "a >= u > b > 0"
+  ],
+  "cite": "H 63 (266), BY (217.00)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u dx/sqrt((a^2-x^2)(x^2-b^2)) = F(kappa,q)/a",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.152.10",
+  "gr": "3.152.10",
+  "page": 329,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 - x^2)*(x^2 - b^2)], {x, u, a}]",
+  "rhs": [
+   "1/a*MatharF2[ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)]"
+  ],
+  "conds": [
+   "a > u >= b > 0"
+  ],
+  "cite": "H 63 (257), BY (218.00)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^a dx/sqrt((a^2-x^2)(x^2-b^2)) = F(lambda,q)/a",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.152.11",
+  "gr": "3.152.11",
+  "page": 329,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 - a^2)*(x^2 - b^2)], {x, a, u}]",
+  "rhs": [
+   "1/a*MatharF2[ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]], (b/a)]"
+  ],
+  "conds": [
+   "u > a > b > 0"
+  ],
+  "cite": "H 63 (268), BY (216.00)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_a^u dx/sqrt((x^2-a^2)(x^2-b^2)) = F(mu,t)/a",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.152.12",
+  "gr": "3.152.12",
+  "page": 329,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 - a^2)*(x^2 - b^2)], {x, u, Infinity}]",
+  "rhs": [
+   "1/a*MatharF2[ArcSin[a/u], (b/a)]"
+  ],
+  "conds": [
+   "u >= a > b > 0"
+  ],
+  "cite": "H 64(269), BY (215.00)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf dx/sqrt((x^2-a^2)(x^2-b^2)) = F(nu,t)/a",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.153.1",
+  "gr": "3.153.1",
+  "page": 329,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 + x^2)*(b^2 + x^2)], {x, 0, u}]",
+  "rhs": [
+   "u*Sqrt[(a^2 + u^2)/(b^2 + u^2)] - a*MatharE2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)]"
+  ],
+  "conds": [
+   "u > 0",
+   "a > b",
+   "b > 0"
+  ],
+  "cite": "BY (221.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u x^2 dx/sqrt((x^2+a^2)(x^2+b^2)) = u sqrt((a^2+u^2)/(b^2+u^2)) - a E(alpha,q)",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; a > b > 0 assumed for real modulus q"
+ },
+ {
+  "id": "GR3.153.2",
+  "gr": "3.153.2",
+  "page": 329,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 + x^2)*(b^2 - x^2)], {x, 0, u}]",
+  "rhs": [
+   "Sqrt[a^2 + b^2]*MatharE2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])] - a^2/Sqrt[a^2 + b^2]*MatharF2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])] - u*Sqrt[(b^2 - u^2)/(a^2 + u^2)]"
+  ],
+  "conds": [
+   "b >= u > 0"
+  ],
+  "cite": "BY (214.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u x^2/sqrt((a^2+x^2)(b^2-x^2)) = sqrt(a^2+b^2)E(gamma,r) - a^2/sqrt(a^2+b^2)F(gamma,r) - u sqrt((b^2-u^2)/(a^2+u^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.153.3",
+  "gr": "3.153.3",
+  "page": 329,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 + x^2)*(b^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "Sqrt[a^2 + b^2]*MatharE2[ArcCos[u/b], (b/Sqrt[a^2 + b^2])] - a^2/Sqrt[a^2 + b^2]*MatharF2[ArcCos[u/b], (b/Sqrt[a^2 + b^2])]"
+  ],
+  "conds": [
+   "b > u >= 0"
+  ],
+  "cite": "BY (213.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b x^2/sqrt((a^2+x^2)(b^2-x^2)) = sqrt(a^2+b^2)E(delta,r) - a^2/sqrt(a^2+b^2)F(delta,r)",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.153.4",
+  "gr": "3.153.4",
+  "page": 329,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 + x^2)*(x^2 - b^2)], {x, b, u}]",
+  "rhs": [
+   "b^2/Sqrt[a^2 + b^2]*MatharF2[ArcCos[b/u], (a/Sqrt[a^2 + b^2])] - Sqrt[a^2 + b^2]*MatharE2[ArcCos[b/u], (a/Sqrt[a^2 + b^2])] + 1/u*Sqrt[(u^2 + a^2)*(u^2 - b^2)]"
+  ],
+  "conds": [
+   "u > b > 0"
+  ],
+  "cite": "BY (211.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u x^2/sqrt((a^2+x^2)(x^2-b^2)) = b^2/sqrt(a^2+b^2)F(eps,s) - sqrt(a^2+b^2)E(eps,s) + sqrt((u^2+a^2)(u^2-b^2))/u",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.153.5",
+  "gr": "3.153.5",
+  "page": 329,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 - x^2)*(b^2 - x^2)], {x, 0, u}]",
+  "rhs": [
+   "a*(MatharF2[ArcSin[u/b], (b/a)] - MatharE2[ArcSin[u/b], (b/a)])"
+  ],
+  "conds": [
+   "a > b >= u > 0"
+  ],
+  "cite": "BY (219.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u x^2/sqrt((a^2-x^2)(b^2-x^2)) = a{F(eta,t)-E(eta,t)}",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.153.6",
+  "gr": "3.153.6",
+  "page": 329,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 - x^2)*(b^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "a*(MatharF2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)] - MatharE2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)]) + u*Sqrt[(b^2 - u^2)/(a^2 - u^2)]"
+  ],
+  "conds": [
+   "a > b > u >= 0"
+  ],
+  "cite": "BY (220.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b x^2/sqrt((a^2-x^2)(b^2-x^2)) = a{F(zeta,t)-E(zeta,t)} + u sqrt((b^2-u^2)/(a^2-u^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.153.7",
+  "gr": "3.153.7",
+  "page": 329,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 - x^2)*(x^2 - b^2)], {x, b, u}]",
+  "rhs": [
+   "a*MatharE2[ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] - 1/u*Sqrt[(a^2 - u^2)*(u^2 - b^2)]"
+  ],
+  "conds": [
+   "a >= u > b > 0"
+  ],
+  "cite": "BY (217.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u x^2/sqrt((a^2-x^2)(x^2-b^2)) = a E(kappa,q) - sqrt((a^2-u^2)(u^2-b^2))/u",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.153.8",
+  "gr": "3.153.8",
+  "page": 329,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 - x^2)*(x^2 - b^2)], {x, u, a}]",
+  "rhs": [
+   "a*MatharE2[ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)]"
+  ],
+  "conds": [
+   "a > u >= b > 0"
+  ],
+  "cite": "BY (218.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^a x^2/sqrt((a^2-x^2)(x^2-b^2)) = a E(lambda,q)",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.153.9",
+  "gr": "3.153.9",
+  "page": 330,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(x^2 - a^2)*(x^2 - b^2)], {x, a, u}]",
+  "rhs": [
+   "a*(MatharF2[ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]], (b/a)] - MatharE2[ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]], (b/a)]) + u*Sqrt[(u^2 - a^2)/(u^2 - b^2)]"
+  ],
+  "conds": [
+   "u > a > b > 0"
+  ],
+  "cite": "BY (216.06)",
+  "edition_note": "6",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_a^u x^2/sqrt((x^2-a^2)(x^2-b^2)) = a{F(mu,t)-E(mu,t)} + u sqrt((u^2-a^2)/(u^2-b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.153.10",
+  "gr": "3.153.10",
+  "page": 330,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(1 + x^2)*(1 + k^2*x^2)], {x, 0, 1}]",
+  "rhs": [
+   "1/k^2*(Sqrt[(1 + k^2)/2] - MatharE2[Pi/4, Sqrt[1 - k^2]])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (14)(9)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^1 x^2/sqrt((1+x^2)(1+k^2x^2)) = (1/k^2){sqrt((1+k^2)/2) - E(pi/4, sqrt(1-k^2))}",
+  "note": "no condition printed; 0 < k < 1 added so the modulus sqrt(1-k^2) is real"
+ },
+ {
+  "id": "GR3.154.1",
+  "gr": "3.154.1",
+  "page": 330,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[(a^2 + x^2)*(b^2 + x^2)], {x, 0, u}]",
+  "rhs": [
+   "a/3*(2*(a^2 + b^2)*MatharE2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)] - b^2*MatharF2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)]) + u/3*(u^2 - 2*a^2 - b^2)*Sqrt[(a^2 + u^2)/(b^2 + u^2)]"
+  ],
+  "conds": [
+   "a > b",
+   "u > 0",
+   "b > 0"
+  ],
+  "cite": "BY (221.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u x^4/sqrt((x^2+a^2)(x^2+b^2)) = a/3{2(a^2+b^2)E(alpha,q) - b^2F(alpha,q)} + u/3(u^2-2a^2-b^2)sqrt((a^2+u^2)/(b^2+u^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; b > 0 added"
+ },
+ {
+  "id": "GR3.154.2",
+  "gr": "3.154.2",
+  "page": 330,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[(a^2 + x^2)*(b^2 - x^2)], {x, 0, u}]",
+  "rhs": [
+   "1/(3*Sqrt[a^2 + b^2])*((2*a^2 - b^2)*a^2*MatharF2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])] - 2*(a^4 - b^4)*MatharE2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])]) - u/3*(2*b^2 - a^2 + u^2)*Sqrt[(b^2 - u^2)/(a^2 + u^2)]"
+  ],
+  "conds": [
+   "a >= u > 0",
+   "b >= u"
+  ],
+  "cite": "BY (214.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u x^4/sqrt((a^2+x^2)(b^2-x^2)) = 1/(3sqrt(a^2+b^2)){(2a^2-b^2)a^2F(gamma,r)-2(a^4-b^4)E(gamma,r)} - u/3(2b^2-a^2+u^2)sqrt((b^2-u^2)/(a^2+u^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; book prints [a >= u > 0]; likely misprint for b >= u > 0 (integrand real only for u <= b), so b >= u added"
+ },
+ {
+  "id": "GR3.154.3",
+  "gr": "3.154.3",
+  "page": 330,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[(a^2 + x^2)*(b^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "1/(3*Sqrt[a^2 + b^2])*((2*a^2 - b^2)*a^2*MatharF2[ArcCos[u/b], (b/Sqrt[a^2 + b^2])] - 2*(a^4 - b^4)*MatharE2[ArcCos[u/b], (b/Sqrt[a^2 + b^2])]) + u/3*Sqrt[(a^2 + u^2)*(b^2 - u^2)]"
+  ],
+  "conds": [
+   "b > u >= 0"
+  ],
+  "cite": "BY (213.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b x^4/sqrt((a^2+x^2)(b^2-x^2)) = 1/(3sqrt(a^2+b^2)){(2a^2-b^2)a^2F(delta,r)-2(a^4-b^4)E(delta,r)} + u/3 sqrt((a^2+u^2)(b^2-u^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.154.4",
+  "gr": "3.154.4",
+  "page": 330,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[(a^2 + x^2)*(x^2 - b^2)], {x, b, u}]",
+  "rhs": [
+   "1/(3*Sqrt[a^2 + b^2])*((2*b^2 - a^2)*b^2*MatharF2[ArcCos[b/u], (a/Sqrt[a^2 + b^2])] + 2*(a^4 - b^4)*MatharE2[ArcCos[b/u], (a/Sqrt[a^2 + b^2])]) + (2*b^2 - 2*a^2 + u^2)/(3*u)*Sqrt[(u^2 + a^2)*(u^2 - b^2)]"
+  ],
+  "conds": [
+   "u > b > 0"
+  ],
+  "cite": "BY (211.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u x^4/sqrt((a^2+x^2)(x^2-b^2)) = 1/(3sqrt(a^2+b^2)){(2b^2-a^2)b^2F(eps,s)+2(a^4-b^4)E(eps,s)} + (2b^2-2a^2+u^2)/(3u) sqrt((u^2+a^2)(u^2-b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.154.5",
+  "gr": "3.154.5",
+  "page": 330,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[(a^2 - x^2)*(b^2 - x^2)], {x, 0, u}]",
+  "rhs": [
+   "a/3*((2*a^2 + b^2)*MatharF2[ArcSin[u/b], (b/a)] - 2*(a^2 + b^2)*MatharE2[ArcSin[u/b], (b/a)]) + u/3*Sqrt[(a^2 - u^2)*(b^2 - u^2)]"
+  ],
+  "conds": [
+   "a > b >= u > 0"
+  ],
+  "cite": "BY (219.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u x^4/sqrt((a^2-x^2)(b^2-x^2)) = a/3{(2a^2+b^2)F(eta,t)-2(a^2+b^2)E(eta,t)} + u/3 sqrt((a^2-u^2)(b^2-u^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.154.6",
+  "gr": "3.154.6",
+  "page": 330,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[(a^2 - x^2)*(b^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "a/3*((2*a^2 + b^2)*MatharF2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)] - 2*(a^2 + b^2)*MatharE2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)]) + u/3*(u^2 + a^2 + 2*b^2)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]"
+  ],
+  "conds": [
+   "a > b > u >= 0"
+  ],
+  "cite": "BY (220.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b x^4/sqrt((a^2-x^2)(b^2-x^2)) = a/3{(2a^2+b^2)F(zeta,t)-2(a^2+b^2)E(zeta,t)} + u/3(u^2+a^2+2b^2)sqrt((b^2-u^2)/(a^2-u^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.154.7",
+  "gr": "3.154.7",
+  "page": 330,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[(a^2 - x^2)*(x^2 - b^2)], {x, b, u}]",
+  "rhs": [
+   "a/3*(2*(a^2 + b^2)*MatharE2[ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] - b^2*MatharF2[ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)]) - (u^2 + 2*a^2 + 2*b^2)/(3*u)*Sqrt[(a^2 - u^2)*(u^2 - b^2)]"
+  ],
+  "conds": [
+   "a >= u > b > 0"
+  ],
+  "cite": "BY (217.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u x^4/sqrt((a^2-x^2)(x^2-b^2)) = a/3{2(a^2+b^2)E(kappa,q)-b^2F(kappa,q)} - (u^2+2a^2+2b^2)/(3u) sqrt((a^2-u^2)(u^2-b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.154.8",
+  "gr": "3.154.8",
+  "page": 330,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[(a^2 - x^2)*(x^2 - b^2)], {x, u, a}]",
+  "rhs": [
+   "a/3*(2*(a^2 + b^2)*MatharE2[ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] - b^2*MatharF2[ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)]) + u/3*Sqrt[(a^2 - u^2)*(u^2 - b^2)]"
+  ],
+  "conds": [
+   "a > u >= b > 0"
+  ],
+  "cite": "BY (218.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^a x^4/sqrt((a^2-x^2)(x^2-b^2)) = a/3{2(a^2+b^2)E(lambda,q)-b^2F(lambda,q)} + u/3 sqrt((a^2-u^2)(u^2-b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.154.9",
+  "gr": "3.154.9",
+  "page": 331,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[(x^2 - a^2)*(x^2 - b^2)], {x, a, u}]",
+  "rhs": [
+   "a/3*((2*a^2 + b^2)*MatharF2[ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]], (b/a)] - 2*(a^2 + b^2)*MatharE2[ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]], (b/a)]) + u/3*(u^2 + 2*a^2 + b^2)*Sqrt[(u^2 - a^2)/(u^2 - b^2)]"
+  ],
+  "conds": [
+   "u > a > b > 0"
+  ],
+  "cite": "BY (216.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_a^u x^4/sqrt((x^2-a^2)(x^2-b^2)) = a/3{(2a^2+b^2)F(mu,t)-2(a^2+b^2)E(mu,t)} + u/3(u^2+2a^2+b^2)sqrt((u^2-a^2)/(u^2-b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.155.1",
+  "gr": "3.155.1",
+  "page": 331,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a^2 - x^2)*(x^2 - b^2)], {x, u, a}]",
+  "rhs": [
+   "a/3*((a^2 + b^2)*MatharE2[ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] - 2*b^2*MatharF2[ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)]) - u/3*Sqrt[(a^2 - u^2)*(u^2 - b^2)]"
+  ],
+  "conds": [
+   "a > u >= b > 0"
+  ],
+  "cite": "BY (218.11)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^a sqrt((a^2-x^2)(x^2-b^2)) = a/3{(a^2+b^2)E(lambda,q)-2b^2F(lambda,q)} - u/3 sqrt((a^2-u^2)(u^2-b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.155.2",
+  "gr": "3.155.2",
+  "page": 331,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x^2 - a^2)*(x^2 - b^2)], {x, a, u}]",
+  "rhs": [
+   "a/3*((a^2 + b^2)*MatharE2[ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]], (b/a)] - (a^2 - b^2)*MatharF2[ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]], (b/a)]) + u/3*(u^2 - a^2 - 2*b^2)*Sqrt[(u^2 - a^2)/(u^2 - b^2)]"
+  ],
+  "conds": [
+   "u > a > b > 0"
+  ],
+  "cite": "BY (216.10)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_a^u sqrt((x^2-a^2)(x^2-b^2)) = a/3{(a^2+b^2)E(mu,t)-(a^2-b^2)F(mu,t)} + u/3(u^2-a^2-2b^2)sqrt((u^2-a^2)/(u^2-b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.155.3",
+  "gr": "3.155.3",
+  "page": 331,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a^2 + x^2)*(b^2 + x^2)], {x, 0, u}]",
+  "rhs": [
+   "a/3*(2*b^2*MatharF2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)] - (a^2 + b^2)*MatharE2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)]) + u/3*(u^2 + a^2 + 2*b^2)*Sqrt[(a^2 + u^2)/(b^2 + u^2)]"
+  ],
+  "conds": [
+   "a > b",
+   "u > 0",
+   "b > 0"
+  ],
+  "cite": "BY (221.08)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u sqrt((x^2+a^2)(x^2+b^2)) = a/3{2b^2F(alpha,q)-(a^2+b^2)E(alpha,q)} + u/3(u^2+a^2+2b^2)sqrt((a^2+u^2)/(b^2+u^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; b > 0 added"
+ },
+ {
+  "id": "GR3.155.4",
+  "gr": "3.155.4",
+  "page": 331,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a^2 + x^2)*(b^2 - x^2)], {x, 0, u}]",
+  "rhs": [
+   "1/3*Sqrt[a^2 + b^2]*(a^2*MatharF2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])] - (a^2 - b^2)*MatharE2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])]) + u/3*(u^2 + 2*a^2 - b^2)*Sqrt[(b^2 - u^2)/(a^2 + u^2)]"
+  ],
+  "conds": [
+   "a >= u > 0",
+   "b >= u"
+  ],
+  "cite": "BY (214.12)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u sqrt((a^2+x^2)(b^2-x^2)) = 1/3 sqrt(a^2+b^2){a^2F(gamma,r)-(a^2-b^2)E(gamma,r)} + u/3(u^2+2a^2-b^2)sqrt((b^2-u^2)/(a^2+u^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; book prints [a >= u > 0]; likely misprint for b >= u > 0 (integrand real only for u <= b), so b >= u added"
+ },
+ {
+  "id": "GR3.155.5",
+  "gr": "3.155.5",
+  "page": 331,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a^2 + x^2)*(b^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "1/3*Sqrt[a^2 + b^2]*(a^2*MatharF2[ArcCos[u/b], (b/Sqrt[a^2 + b^2])] + (b^2 - a^2)*MatharE2[ArcCos[u/b], (b/Sqrt[a^2 + b^2])]) + u/3*Sqrt[(a^2 + u^2)*(b^2 - u^2)]"
+  ],
+  "conds": [
+   "b > u >= 0"
+  ],
+  "cite": "BY (213.13)",
+  "edition_note": "9",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b sqrt((a^2+x^2)(b^2-x^2)) = 1/3 sqrt(a^2+b^2){a^2F(delta,r)+(b^2-a^2)E(delta,r)} + u/3 sqrt((a^2+u^2)(b^2-u^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.155.6",
+  "gr": "3.155.6",
+  "page": 331,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a^2 + x^2)*(x^2 - b^2)], {x, b, u}]",
+  "rhs": [
+   "1/3*Sqrt[a^2 + b^2]*((b^2 - a^2)*MatharE2[ArcCos[b/u], (a/Sqrt[a^2 + b^2])] - b^2*MatharF2[ArcCos[b/u], (a/Sqrt[a^2 + b^2])]) + (u^2 + a^2 - b^2)/(3*u)*Sqrt[(a^2 + u^2)*(u^2 - b^2)]"
+  ],
+  "conds": [
+   "u > b > 0"
+  ],
+  "cite": "BY (211.08)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u sqrt((a^2+x^2)(x^2-b^2)) = 1/3 sqrt(a^2+b^2){(b^2-a^2)E(eps,s)-b^2F(eps,s)} + (u^2+a^2-b^2)/(3u) sqrt((a^2+u^2)(u^2-b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.155.7",
+  "gr": "3.155.7",
+  "page": 331,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a^2 - x^2)*(b^2 - x^2)], {x, 0, u}]",
+  "rhs": [
+   "a/3*((a^2 + b^2)*MatharE2[ArcSin[u/b], (b/a)] - (a^2 - b^2)*MatharF2[ArcSin[u/b], (b/a)]) + u/3*Sqrt[(a^2 - u^2)*(b^2 - u^2)]"
+  ],
+  "conds": [
+   "a > b >= u > 0"
+  ],
+  "cite": "BY (219.11)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u sqrt((a^2-x^2)(b^2-x^2)) = a/3{(a^2+b^2)E(eta,t)-(a^2-b^2)F(eta,t)} + u/3 sqrt((a^2-u^2)(b^2-u^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.155.8",
+  "gr": "3.155.8",
+  "page": 331,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a^2 - x^2)*(b^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "a/3*((a^2 + b^2)*MatharE2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)] - (a^2 - b^2)*MatharF2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)]) + u/3*(u^2 - 2*a^2 - b^2)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]"
+  ],
+  "conds": [
+   "a > b > u >= 0"
+  ],
+  "cite": "BY (220.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b sqrt((a^2-x^2)(b^2-x^2)) = a/3{(a^2+b^2)E(zeta,t)-(a^2-b^2)F(zeta,t)} + u/3(u^2-2a^2-b^2)sqrt((b^2-u^2)/(a^2-u^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.155.9",
+  "gr": "3.155.9",
+  "page": 332,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a^2 - x^2)*(x^2 - b^2)], {x, b, u}]",
+  "rhs": [
+   "a/3*((a^2 + b^2)*MatharE2[ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] - 2*b^2*MatharF2[ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)]) + (u^2 - a^2 - b^2)/(3*u)*Sqrt[(a^2 - u^2)*(u^2 - b^2)]"
+  ],
+  "conds": [
+   "a >= u > b > 0"
+  ],
+  "cite": "BY (217.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u sqrt((a^2-x^2)(x^2-b^2)) = a/3{(a^2+b^2)E(kappa,q)-2b^2F(kappa,q)} + (u^2-a^2-b^2)/(3u) sqrt((a^2-u^2)(u^2-b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.156.1",
+  "gr": "3.156.1",
+  "page": 332,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*Sqrt[(a^2 + x^2)*(b^2 + x^2)]), {x, u, Infinity}]",
+  "rhs": [
+   "1/(u*b^2)*Sqrt[(b^2 + u^2)/(a^2 + u^2)] - 1/(a*b^2)*MatharE2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)]"
+  ],
+  "conds": [
+   "a >= b",
+   "u > 0",
+   "b > 0"
+  ],
+  "cite": "BY (222.04)",
+  "edition_note": "6",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf dx/(x^2 sqrt((x^2+a^2)(x^2+b^2))) = 1/(ub^2) sqrt((b^2+u^2)/(a^2+u^2)) - E(beta,q)/(ab^2)",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; b > 0 added"
+ },
+ {
+  "id": "GR3.156.2",
+  "gr": "3.156.2",
+  "page": 332,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*Sqrt[(a^2 + x^2)*(b^2 - x^2)]), {x, u, b}]",
+  "rhs": [
+   "1/(a^2*b^2*Sqrt[a^2 + b^2])*(a^2*MatharF2[ArcCos[u/b], (b/Sqrt[a^2 + b^2])] - (a^2 + b^2)*MatharE2[ArcCos[u/b], (b/Sqrt[a^2 + b^2])]) + 1/(a^2*b^2*u)*Sqrt[(a^2 + u^2)*(b^2 - u^2)]"
+  ],
+  "conds": [
+   "b > u > 0"
+  ],
+  "cite": "BY (213.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b dx/(x^2 sqrt((x^2+a^2)(b^2-x^2))) = 1/(a^2b^2sqrt(a^2+b^2)){a^2F(delta,r)-(a^2+b^2)E(delta,r)} + sqrt((a^2+u^2)(b^2-u^2))/(a^2b^2u)",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.156.3",
+  "gr": "3.156.3",
+  "page": 332,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*Sqrt[(a^2 + x^2)*(x^2 - b^2)]), {x, b, u}]",
+  "rhs": [
+   "1/(a^2*b^2*Sqrt[a^2 + b^2])*((a^2 + b^2)*MatharE2[ArcCos[b/u], (a/Sqrt[a^2 + b^2])] - b^2*MatharF2[ArcCos[b/u], (a/Sqrt[a^2 + b^2])])"
+  ],
+  "conds": [
+   "u > b > 0"
+  ],
+  "cite": "BY (211.11)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u dx/(x^2 sqrt((x^2+a^2)(x^2-b^2))) = 1/(a^2b^2sqrt(a^2+b^2)){(a^2+b^2)E(eps,s)-b^2F(eps,s)}",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.156.4",
+  "gr": "3.156.4",
+  "page": 332,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*Sqrt[(a^2 + x^2)*(x^2 - b^2)]), {x, u, Infinity}]",
+  "rhs": [
+   "1/(a^2*b^2*Sqrt[a^2 + b^2])*((a^2 + b^2)*MatharE2[ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (a/Sqrt[a^2 + b^2])] - b^2*MatharF2[ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (a/Sqrt[a^2 + b^2])]) - 1/(b^2*u)*Sqrt[(u^2 - b^2)/(a^2 + u^2)]"
+  ],
+  "conds": [
+   "u >= b > 0"
+  ],
+  "cite": "BY (212.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf dx/(x^2 sqrt((x^2+a^2)(x^2-b^2))) = 1/(a^2b^2sqrt(a^2+b^2)){(a^2+b^2)E(xi,s)-b^2F(xi,s)} - sqrt((u^2-b^2)/(a^2+u^2))/(b^2u)",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.156.5",
+  "gr": "3.156.5",
+  "page": 332,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*Sqrt[(a^2 - x^2)*(b^2 - x^2)]), {x, u, b}]",
+  "rhs": [
+   "1/(a*b^2)*(MatharF2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)] - MatharE2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)]) + 1/(b^2*u)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]"
+  ],
+  "conds": [
+   "a > b > u > 0"
+  ],
+  "cite": "BY (220.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b dx/(x^2 sqrt((a^2-x^2)(b^2-x^2))) = {F(zeta,t)-E(zeta,t)}/(ab^2) + sqrt((b^2-u^2)/(a^2-u^2))/(b^2u)",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.156.6",
+  "gr": "3.156.6",
+  "page": 332,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*Sqrt[(a^2 - x^2)*(x^2 - b^2)]), {x, b, u}]",
+  "rhs": [
+   "1/(a*b^2)*MatharE2[ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)]"
+  ],
+  "conds": [
+   "a >= u > b > 0"
+  ],
+  "cite": "BY (217.01)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u dx/(x^2 sqrt((a^2-x^2)(x^2-b^2))) = E(kappa,q)/(ab^2)",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.156.7",
+  "gr": "3.156.7",
+  "page": 332,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*Sqrt[(a^2 - x^2)*(x^2 - b^2)]), {x, u, a}]",
+  "rhs": [
+   "1/(a*b^2)*MatharE2[ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] - 1/(a^2*b^2*u)*Sqrt[(a^2 - u^2)*(u^2 - b^2)]"
+  ],
+  "conds": [
+   "a > u >= b > 0"
+  ],
+  "cite": "BY (218.12)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^a dx/(x^2 sqrt((a^2-x^2)(x^2-b^2))) = E(lambda,q)/(ab^2) - sqrt((a^2-u^2)(u^2-b^2))/(a^2b^2u)",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.156.8",
+  "gr": "3.156.8",
+  "page": 332,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*Sqrt[(x^2 - a^2)*(x^2 - b^2)]), {x, a, u}]",
+  "rhs": [
+   "1/(a*b^2)*(MatharF2[ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]], (b/a)] - MatharE2[ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]], (b/a)]) + 1/(a^2*u)*Sqrt[(u^2 - a^2)/(u^2 - b^2)]"
+  ],
+  "conds": [
+   "u > a > b > 0"
+  ],
+  "cite": "BY (216.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_a^u dx/(x^2 sqrt((x^2-a^2)(x^2-b^2))) = {F(mu,t)-E(mu,t)}/(ab^2) + sqrt((u^2-a^2)/(u^2-b^2))/(a^2u)",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.156.9",
+  "gr": "3.156.9",
+  "page": 332,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*Sqrt[(x^2 - a^2)*(x^2 - b^2)]), {x, u, Infinity}]",
+  "rhs": [
+   "1/(a*b^2)*(MatharF2[ArcSin[a/u], (b/a)] - MatharE2[ArcSin[a/u], (b/a)])"
+  ],
+  "conds": [
+   "u >= a > b > 0"
+  ],
+  "cite": "BY (215.07)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf dx/(x^2 sqrt((x^2-a^2)(x^2-b^2))) = {F(nu,t)-E(nu,t)}/(ab^2)",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.157.1",
+  "gr": "3.157.1",
+  "page": 333,
+  "status": "ok",
+  "lhs": "Integrate[1/((p - x^2)*Sqrt[(a^2 + x^2)*(b^2 + x^2)]), {x, 0, u}]",
+  "rhs": [
+   "1/(a*(p + b^2))*(b^2/p*EllipticPi[(p + b^2)/p, ArcTan[u/b], (Sqrt[a^2 - b^2]/a)^2] + MatharF2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)])"
+  ],
+  "conds": [
+   "p != 0",
+   "a > b > 0",
+   "u > 0"
+  ],
+  "cite": "BY (221.13)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u dx/((p-x^2)sqrt((x^2+a^2)(x^2+b^2))) = 1/(a(p+b^2)){b^2/p Pi(alpha,(p+b^2)/p,q) + F(alpha,q)}",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; Pi(phi,n,k) -> EllipticPi[n, phi, k^2]; a > b > 0, u > 0 added (section convention); p is a pole parameter; if p lies inside the integration range the integral is a PV, so the oracle should sample p outside"
+ },
+ {
+  "id": "GR3.157.2",
+  "gr": "3.157.2",
+  "page": 333,
+  "status": "ok",
+  "lhs": "Integrate[1/((p - x^2)*Sqrt[(a^2 + x^2)*(b^2 + x^2)]), {x, u, Infinity}]",
+  "rhs": [
+   "-1/(a*(a^2 + p))*(EllipticPi[(a^2 + p)/a^2, ArcCot[u/a], (Sqrt[a^2 - b^2]/a)^2] - MatharF2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)])"
+  ],
+  "conds": [
+   "a > b > 0",
+   "u > 0"
+  ],
+  "cite": "BY (222.11)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf dx/((p-x^2)sqrt((x^2+a^2)(x^2+b^2))) = -1/(a(a^2+p)){Pi(beta,(a^2+p)/a^2,q) - F(beta,q)}",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; Pi(phi,n,k) -> EllipticPi[n, phi, k^2]; no condition printed; a > b > 0, u > 0 added; p is a pole parameter; if p lies inside the integration range the integral is a PV, so the oracle should sample p outside"
+ },
+ {
+  "id": "GR3.157.3",
+  "gr": "3.157.3",
+  "page": 333,
+  "status": "ok",
+  "lhs": "Integrate[1/((p - x^2)*Sqrt[(a^2 + x^2)*(b^2 - x^2)]), {x, 0, u}]",
+  "rhs": [
+   "1/(p*(p + a^2)*Sqrt[a^2 + b^2])*(a^2*EllipticPi[b^2*(p + a^2)/(p*(a^2 + b^2)), ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])^2] + p*MatharF2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])])"
+  ],
+  "conds": [
+   "b >= u > 0",
+   "p != 0"
+  ],
+  "cite": "BY (214.13)a",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u dx/((p-x^2)sqrt((a^2+x^2)(b^2-x^2))) = 1/(p(p+a^2)sqrt(a^2+b^2)){a^2 Pi(gamma,b^2(p+a^2)/(p(a^2+b^2)),r) + pF(gamma,r)}",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; Pi(phi,n,k) -> EllipticPi[n, phi, k^2]; p is a pole parameter; if p lies inside the integration range the integral is a PV, so the oracle should sample p outside"
+ },
+ {
+  "id": "GR3.157.4",
+  "gr": "3.157.4",
+  "page": 333,
+  "status": "ok",
+  "lhs": "Integrate[1/((p - x^2)*Sqrt[(a^2 + x^2)*(b^2 - x^2)]), {x, u, b}]",
+  "rhs": [
+   "1/((p - b^2)*Sqrt[a^2 + b^2])*EllipticPi[b^2/(b^2 - p), ArcCos[u/b], (b/Sqrt[a^2 + b^2])^2]"
+  ],
+  "conds": [
+   "b > u >= 0",
+   "p != b^2"
+  ],
+  "cite": "BY (213.02)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b dx/((p-x^2)sqrt((a^2+x^2)(b^2-x^2))) = Pi(delta,b^2/(b^2-p),r)/((p-b^2)sqrt(a^2+b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; Pi(phi,n,k) -> EllipticPi[n, phi, k^2]; p is a pole parameter; if p lies inside the integration range the integral is a PV, so the oracle should sample p outside"
+ },
+ {
+  "id": "GR3.157.5",
+  "gr": "3.157.5",
+  "page": 333,
+  "status": "ok",
+  "lhs": "Integrate[1/((p - x^2)*Sqrt[(a^2 + x^2)*(x^2 - b^2)]), {x, b, u}]",
+  "rhs": [
+   "1/(p*(p - b^2)*Sqrt[a^2 + b^2])*(b^2*EllipticPi[p/(p - b^2), ArcCos[b/u], (a/Sqrt[a^2 + b^2])^2] + (p - b^2)*MatharF2[ArcCos[b/u], (a/Sqrt[a^2 + b^2])])"
+  ],
+  "conds": [
+   "u > b > 0",
+   "p != b^2"
+  ],
+  "cite": "BY (211.14)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u dx/((p-x^2)sqrt((a^2+x^2)(x^2-b^2))) = 1/(p(p-b^2)sqrt(a^2+b^2)){b^2 Pi(eps,p/(p-b^2),s) + (p-b^2)F(eps,s)}",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; Pi(phi,n,k) -> EllipticPi[n, phi, k^2]; p is a pole parameter; if p lies inside the integration range the integral is a PV, so the oracle should sample p outside"
+ },
+ {
+  "id": "GR3.157.6",
+  "gr": "3.157.6",
+  "page": 333,
+  "status": "ok",
+  "lhs": "Integrate[1/((x^2 - p)*Sqrt[(a^2 + x^2)*(x^2 - b^2)]), {x, u, Infinity}]",
+  "rhs": [
+   "1/((a^2 + p)*Sqrt[a^2 + b^2])*(EllipticPi[(a^2 + p)/(a^2 + b^2), ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (a/Sqrt[a^2 + b^2])^2] - MatharF2[ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (a/Sqrt[a^2 + b^2])])"
+  ],
+  "conds": [
+   "u >= b > 0"
+  ],
+  "cite": "BY (212.12)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf dx/((x^2-p)sqrt((a^2+x^2)(x^2-b^2))) = 1/((a^2+p)sqrt(a^2+b^2)){Pi(xi,(a^2+p)/(a^2+b^2),s) - F(xi,s)}",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; Pi(phi,n,k) -> EllipticPi[n, phi, k^2]; p is a pole parameter; if p lies inside the integration range the integral is a PV, so the oracle should sample p outside"
+ },
+ {
+  "id": "GR3.157.7",
+  "gr": "3.157.7",
+  "page": 333,
+  "status": "ok",
+  "lhs": "Integrate[1/((p - x^2)*Sqrt[(a^2 - x^2)*(b^2 - x^2)]), {x, 0, u}]",
+  "rhs": [
+   "1/(a*p)*EllipticPi[b^2/p, ArcSin[u/b], (b/a)^2]"
+  ],
+  "conds": [
+   "a > b >= u > 0",
+   "p != b"
+  ],
+  "cite": "BY (219.02)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u dx/((p-x^2)sqrt((a^2-x^2)(b^2-x^2))) = Pi(eta,b^2/p,t)/(ap)",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; Pi(phi,n,k) -> EllipticPi[n, phi, k^2]; book prints p != b, presumably p != b^2 (harmless for sampling); p is a pole parameter; if p lies inside the integration range the integral is a PV, so the oracle should sample p outside"
+ },
+ {
+  "id": "GR3.157.8",
+  "gr": "3.157.8",
+  "page": 333,
+  "status": "ok",
+  "lhs": "Integrate[1/((p - x^2)*Sqrt[(a^2 - x^2)*(b^2 - x^2)]), {x, u, b}]",
+  "rhs": [
+   "1/(a*(p - a^2)*(p - b^2))*((b^2 - a^2)*EllipticPi[b^2*(p - a^2)/(a^2*(p - b^2)), ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)^2] + (p - b^2)*MatharF2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)])"
+  ],
+  "conds": [
+   "a > b > u >= 0",
+   "p != b^2"
+  ],
+  "cite": "BY (220.13)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b dx/((p-x^2)sqrt((a^2-x^2)(b^2-x^2))) = 1/(a(p-a^2)(p-b^2)){(b^2-a^2)Pi(zeta,b^2(p-a^2)/(a^2(p-b^2)),t) + (p-b^2)F(zeta,t)}",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; Pi(phi,n,k) -> EllipticPi[n, phi, k^2]; p is a pole parameter; if p lies inside the integration range the integral is a PV, so the oracle should sample p outside"
+ },
+ {
+  "id": "GR3.157.9",
+  "gr": "3.157.9",
+  "page": 333,
+  "status": "ok",
+  "lhs": "Integrate[1/((p - x^2)*Sqrt[(a^2 - x^2)*(x^2 - b^2)]), {x, b, u}]",
+  "rhs": [
+   "1/(a*p*(p - b^2))*(b^2*EllipticPi[p*(a^2 - b^2)/(a^2*(p - b^2)), ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)^2] + (p - b^2)*MatharF2[ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)])"
+  ],
+  "conds": [
+   "a >= u > b > 0",
+   "p != b^2"
+  ],
+  "cite": "BY (217.12)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u dx/((p-x^2)sqrt((a^2-x^2)(x^2-b^2))) = 1/(ap(p-b^2)){b^2 Pi(kappa,p(a^2-b^2)/(a^2(p-b^2)),q) + (p-b^2)F(kappa,q)}",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; Pi(phi,n,k) -> EllipticPi[n, phi, k^2]; p is a pole parameter; if p lies inside the integration range the integral is a PV, so the oracle should sample p outside"
+ },
+ {
+  "id": "GR3.157.10",
+  "gr": "3.157.10",
+  "page": 333,
+  "status": "ok",
+  "lhs": "Integrate[1/((x^2 - p)*Sqrt[(a^2 - x^2)*(x^2 - b^2)]), {x, u, a}]",
+  "rhs": [
+   "1/(a*(a^2 - p))*EllipticPi[(a^2 - b^2)/(a^2 - p), ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)^2]"
+  ],
+  "conds": [
+   "a > u >= b > 0",
+   "p != a^2"
+  ],
+  "cite": "BY (218.02)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^a dx/((x^2-p)sqrt((a^2-x^2)(x^2-b^2))) = Pi(lambda,(a^2-b^2)/(a^2-p),q)/(a(a^2-p))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; Pi(phi,n,k) -> EllipticPi[n, phi, k^2]; p is a pole parameter; if p lies inside the integration range the integral is a PV, so the oracle should sample p outside"
+ },
+ {
+  "id": "GR3.157.11",
+  "gr": "3.157.11",
+  "page": 333,
+  "status": "ok",
+  "lhs": "Integrate[1/((p - x^2)*Sqrt[(x^2 - a^2)*(x^2 - b^2)]), {x, a, u}]",
+  "rhs": [
+   "1/(a*(p - a^2)*(p - b^2))*((a^2 - b^2)*EllipticPi[(p - b^2)/(p - a^2), ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]], (b/a)^2] + (p - a^2)*MatharF2[ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]], (b/a)])"
+  ],
+  "conds": [
+   "u > a > b > 0",
+   "p != a^2",
+   "p != b^2"
+  ],
+  "cite": "BY (216.12)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_a^u dx/((p-x^2)sqrt((x^2-a^2)(x^2-b^2))) = 1/(a(p-a^2)(p-b^2)){(a^2-b^2)Pi(mu,(p-b^2)/(p-a^2),t) + (p-a^2)F(mu,t)}",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; Pi(phi,n,k) -> EllipticPi[n, phi, k^2]; p is a pole parameter; if p lies inside the integration range the integral is a PV, so the oracle should sample p outside"
+ },
+ {
+  "id": "GR3.157.12",
+  "gr": "3.157.12",
+  "page": 334,
+  "status": "ok",
+  "lhs": "Integrate[1/((x^2 - p)*Sqrt[(x^2 - a^2)*(x^2 - b^2)]), {x, u, Infinity}]",
+  "rhs": [
+   "1/(a*p)*(EllipticPi[p/a^2, ArcSin[a/u], (b/a)^2] - MatharF2[ArcSin[a/u], (b/a)])"
+  ],
+  "conds": [
+   "u >= a > b > 0",
+   "p != 0"
+  ],
+  "cite": "BY (215.12)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf dx/((x^2-p)sqrt((x^2-a^2)(x^2-b^2))) = 1/(ap){Pi(nu,p/a^2,t) - F(nu,t)}",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; Pi(phi,n,k) -> EllipticPi[n, phi, k^2]; p is a pole parameter; if p lies inside the integration range the integral is a PV, so the oracle should sample p outside"
+ },
+ {
+  "id": "GR3.158.1",
+  "gr": "3.158.1",
+  "page": 334,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 + a^2)*(x^2 + b^2)^3], {x, 0, u}]",
+  "rhs": [
+   "1/(a*b^2*(a^2 - b^2))*(a^2*MatharE2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)] - b^2*MatharF2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)])"
+  ],
+  "conds": [
+   "a > b",
+   "u > 0",
+   "b > 0"
+  ],
+  "cite": "BY (221.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u dx/sqrt((x^2+a^2)(x^2+b^2)^3) = 1/(ab^2(a^2-b^2)){a^2E(alpha,q)-b^2F(alpha,q)}",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; b > 0 added"
+ },
+ {
+  "id": "GR3.158.2",
+  "gr": "3.158.2",
+  "page": 334,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 + a^2)*(x^2 + b^2)^3], {x, u, Infinity}]",
+  "rhs": [
+   "1/(a*b^2*(a^2 - b^2))*(a^2*MatharE2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)] - b^2*MatharF2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)]) - u/(b^2*Sqrt[(a^2 + u^2)*(b^2 + u^2)])"
+  ],
+  "conds": [
+   "a > b",
+   "u >= 0",
+   "b > 0"
+  ],
+  "cite": "BY (222.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf dx/sqrt((x^2+a^2)(x^2+b^2)^3) = 1/(ab^2(a^2-b^2)){a^2E(beta,q)-b^2F(beta,q)} - u/(b^2 sqrt((a^2+u^2)(b^2+u^2)))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; b > 0 added"
+ },
+ {
+  "id": "GR3.158.3",
+  "gr": "3.158.3",
+  "page": 334,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 + a^2)^3*(x^2 + b^2)], {x, 0, u}]",
+  "rhs": [
+   "1/(a*(a^2 - b^2))*(MatharF2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)] - MatharE2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)]) + u/(a^2*Sqrt[(u^2 + a^2)*(u^2 + b^2)])"
+  ],
+  "conds": [
+   "a > b",
+   "u > 0",
+   "b > 0"
+  ],
+  "cite": "BY (221.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u dx/sqrt((x^2+a^2)^3(x^2+b^2)) = {F(alpha,q)-E(alpha,q)}/(a(a^2-b^2)) + u/(a^2 sqrt((u^2+a^2)(u^2+b^2)))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; b > 0 added"
+ },
+ {
+  "id": "GR3.158.4",
+  "gr": "3.158.4",
+  "page": 334,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 + x^2)^3*(x^2 + b^2)], {x, u, Infinity}]",
+  "rhs": [
+   "1/(a*(a^2 - b^2))*(MatharF2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)] - MatharE2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)])"
+  ],
+  "conds": [
+   "a > b",
+   "u >= 0",
+   "b > 0"
+  ],
+  "cite": "BY (222.03)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf dx/sqrt((a^2+x^2)^3(x^2+b^2)) = {F(beta,q)-E(beta,q)}/(a(a^2-b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; b > 0 added"
+ },
+ {
+  "id": "GR3.158.5",
+  "gr": "3.158.5",
+  "page": 334,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 + x^2)^3*(b^2 - x^2)], {x, 0, u}]",
+  "rhs": [
+   "1/(a^2*Sqrt[a^2 + b^2])*MatharE2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])]"
+  ],
+  "conds": [
+   "b >= u > 0"
+  ],
+  "cite": "BY (214.01)a",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u dx/sqrt((a^2+x^2)^3(b^2-x^2)) = E(gamma,r)/(a^2 sqrt(a^2+b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.158.6",
+  "gr": "3.158.6",
+  "page": 334,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 + x^2)^3*(b^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "1/(a^2*Sqrt[a^2 + b^2])*MatharE2[ArcCos[u/b], (b/Sqrt[a^2 + b^2])] - u/(a^2*(a^2 + b^2))*Sqrt[(b^2 - u^2)/(a^2 + u^2)]"
+  ],
+  "conds": [
+   "b > u >= 0"
+  ],
+  "cite": "BY (213.08)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b dx/sqrt((a^2+x^2)^3(b^2-x^2)) = E(delta,r)/(a^2 sqrt(a^2+b^2)) - u/(a^2(a^2+b^2)) sqrt((b^2-u^2)/(a^2+u^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.158.7",
+  "gr": "3.158.7",
+  "page": 334,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 + x^2)^3*(x^2 - b^2)], {x, b, u}]",
+  "rhs": [
+   "1/(a^2*Sqrt[a^2 + b^2])*(MatharF2[ArcCos[b/u], (a/Sqrt[a^2 + b^2])] - MatharE2[ArcCos[b/u], (a/Sqrt[a^2 + b^2])]) + 1/((a^2 + b^2)*u)*Sqrt[(u^2 - b^2)/(u^2 + a^2)]"
+  ],
+  "conds": [
+   "u > b > 0"
+  ],
+  "cite": "BY (211.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u dx/sqrt((a^2+x^2)^3(x^2-b^2)) = {F(eps,s)-E(eps,s)}/(a^2 sqrt(a^2+b^2)) + sqrt((u^2-b^2)/(u^2+a^2))/((a^2+b^2)u)",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.158.8",
+  "gr": "3.158.8",
+  "page": 334,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 + x^2)^3*(x^2 - b^2)], {x, u, Infinity}]",
+  "rhs": [
+   "1/(a^2*Sqrt[a^2 + b^2])*(MatharF2[ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (a/Sqrt[a^2 + b^2])] - MatharE2[ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (a/Sqrt[a^2 + b^2])])"
+  ],
+  "conds": [
+   "u >= b > 0"
+  ],
+  "cite": "BY (212.03)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf dx/sqrt((a^2+x^2)^3(x^2-b^2)) = {F(xi,s)-E(xi,s)}/(a^2 sqrt(a^2+b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.158.9",
+  "gr": "3.158.9",
+  "page": 334,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 + x^2)*(b^2 - x^2)^3], {x, 0, u}]",
+  "rhs": [
+   "1/(b^2*Sqrt[a^2 + b^2])*(MatharF2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])] - MatharE2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])]) + u/(b^2*Sqrt[(a^2 + u^2)*(b^2 - u^2)])"
+  ],
+  "conds": [
+   "b > u > 0"
+  ],
+  "cite": "BY (214.10)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u dx/sqrt((a^2+x^2)(b^2-x^2)^3) = {F(gamma,r)-E(gamma,r)}/(b^2 sqrt(a^2+b^2)) + u/(b^2 sqrt((a^2+u^2)(b^2-u^2)))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.158.10",
+  "gr": "3.158.10",
+  "page": 334,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 + x^2)*(x^2 - b^2)^3], {x, u, Infinity}]",
+  "rhs": [
+   "u/(b^2*Sqrt[(a^2 + u^2)*(u^2 - b^2)]) - 1/(b^2*Sqrt[a^2 + b^2])*MatharE2[ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (a/Sqrt[a^2 + b^2])]"
+  ],
+  "conds": [
+   "u >= b > 0"
+  ],
+  "cite": "BY (212.04)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf dx/sqrt((a^2+x^2)(x^2-b^2)^3) = u/(b^2 sqrt((a^2+u^2)(u^2-b^2))) - E(xi,s)/(b^2 sqrt(a^2+b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; integral diverges at u = b; printed u >= b kept"
+ },
+ {
+  "id": "GR3.158.11",
+  "gr": "3.158.11",
+  "page": 335,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 - x^2)^3*(b^2 - x^2)], {x, 0, u}]",
+  "rhs": [
+   "1/(a^2*(a^2 - b^2))*(a*MatharE2[ArcSin[u/b], (b/a)] - u*Sqrt[(b^2 - u^2)/(a^2 - u^2)])"
+  ],
+  "conds": [
+   "a > b >= u > 0"
+  ],
+  "cite": "BY (219.07)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u dx/sqrt((a^2-x^2)^3(b^2-x^2)) = {aE(eta,t) - u sqrt((b^2-u^2)/(a^2-u^2))}/(a^2(a^2-b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.158.12",
+  "gr": "3.158.12",
+  "page": 335,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 - x^2)^3*(b^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "1/(a*(a^2 - b^2))*MatharE2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)]"
+  ],
+  "conds": [
+   "a > b > u >= 0"
+  ],
+  "cite": "BY (220.10)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b dx/sqrt((a^2-x^2)^3(b^2-x^2)) = E(zeta,t)/(a(a^2-b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.158.13",
+  "gr": "3.158.13",
+  "page": 335,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 - x^2)^3*(x^2 - b^2)], {x, b, u}]",
+  "rhs": [
+   "1/(a*(a^2 - b^2))*(MatharF2[ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] - MatharE2[ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] + a/u*Sqrt[(u^2 - b^2)/(a^2 - u^2)])"
+  ],
+  "conds": [
+   "a > u > b > 0"
+  ],
+  "cite": "BY (217.10)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u dx/sqrt((a^2-x^2)^3(x^2-b^2)) = {F(kappa,q)-E(kappa,q)+a/u sqrt((u^2-b^2)/(a^2-u^2))}/(a(a^2-b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.158.14",
+  "gr": "3.158.14",
+  "page": 335,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 - a^2)^3*(x^2 - b^2)], {x, u, Infinity}]",
+  "rhs": [
+   "1/(a*(b^2 - a^2))*(MatharE2[ArcSin[a/u], (b/a)] - a/u*Sqrt[(u^2 - b^2)/(u^2 - a^2)])"
+  ],
+  "conds": [
+   "u > a > b > 0"
+  ],
+  "cite": "BY (215.04)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf dx/sqrt((x^2-a^2)^3(x^2-b^2)) = {E(nu,t) - a/u sqrt((u^2-b^2)/(u^2-a^2))}/(a(b^2-a^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.158.15",
+  "gr": "3.158.15",
+  "page": 335,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 - x^2)*(b^2 - x^2)^3], {x, 0, u}]",
+  "rhs": [
+   "1/(a*b^2)*MatharF2[ArcSin[u/b], (b/a)] - 1/(b^2*(a^2 - b^2))*(a*MatharE2[ArcSin[u/b], (b/a)] - u*Sqrt[(a^2 - u^2)/(b^2 - u^2)])"
+  ],
+  "conds": [
+   "a > b > u > 0"
+  ],
+  "cite": "BY (219.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u dx/sqrt((a^2-x^2)(b^2-x^2)^3) = F(eta,t)/(ab^2) - {aE(eta,t) - u sqrt((a^2-u^2)/(b^2-u^2))}/(b^2(a^2-b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.158.16",
+  "gr": "3.158.16",
+  "page": 335,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 - x^2)*(x^2 - b^2)^3], {x, u, a}]",
+  "rhs": [
+   "1/(a*b^2*(a^2 - b^2))*(b^2*MatharF2[ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] - a^2*MatharE2[ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] + a*u*Sqrt[(a^2 - u^2)/(u^2 - b^2)])"
+  ],
+  "conds": [
+   "a > u > b > 0"
+  ],
+  "cite": "BY (218.04)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^a dx/sqrt((a^2-x^2)(x^2-b^2)^3) = {b^2F(lambda,q) - a^2E(lambda,q) + au sqrt((a^2-u^2)/(u^2-b^2))}/(ab^2(a^2-b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.158.17",
+  "gr": "3.158.17",
+  "page": 335,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 - a^2)*(x^2 - b^2)^3], {x, a, u}]",
+  "rhs": [
+   "a/(b^2*(a^2 - b^2))*MatharE2[ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]], (b/a)] - 1/(a*b^2)*MatharF2[ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]], (b/a)]"
+  ],
+  "conds": [
+   "u > a > b > 0"
+  ],
+  "cite": "BY (216.11)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_a^u dx/sqrt((x^2-a^2)(x^2-b^2)^3) = aE(mu,t)/(b^2(a^2-b^2)) - F(mu,t)/(ab^2)",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.158.18",
+  "gr": "3.158.18",
+  "page": 335,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 - a^2)*(x^2 - b^2)^3], {x, u, Infinity}]",
+  "rhs": [
+   "1/(b^2*(a^2 - b^2))*(a*MatharE2[ArcSin[a/u], (b/a)] - b^2/u*Sqrt[(u^2 - a^2)/(u^2 - b^2)]) - 1/(a*b^2)*MatharF2[ArcSin[a/u], (b/a)]"
+  ],
+  "conds": [
+   "u >= a > b > 0"
+  ],
+  "cite": "BY (215.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf dx/sqrt((x^2-a^2)(x^2-b^2)^3) = {aE(nu,t) - b^2/u sqrt((u^2-a^2)/(u^2-b^2))}/(b^2(a^2-b^2)) - F(nu,t)/(ab^2)",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.159.1",
+  "gr": "3.159.1",
+  "page": 335,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(x^2 + a^2)*(x^2 + b^2)^3], {x, 0, u}]",
+  "rhs": [
+   "a/(a^2 - b^2)*(MatharF2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)] - MatharE2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)])"
+  ],
+  "conds": [
+   "a > b",
+   "u > 0",
+   "b > 0"
+  ],
+  "cite": "BY (221.12)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u x^2/sqrt((x^2+a^2)(x^2+b^2)^3) = a/(a^2-b^2){F(alpha,q)-E(alpha,q)}",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; b > 0 added"
+ },
+ {
+  "id": "GR3.159.2",
+  "gr": "3.159.2",
+  "page": 335,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(x^2 + a^2)*(x^2 + b^2)^3], {x, u, Infinity}]",
+  "rhs": [
+   "a/(a^2 - b^2)*(MatharF2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)] - MatharE2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)]) + u/Sqrt[(a^2 + u^2)*(b^2 + u^2)]"
+  ],
+  "conds": [
+   "a > b",
+   "u >= 0",
+   "b > 0"
+  ],
+  "cite": "BY (222.10)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf x^2/sqrt((x^2+a^2)(x^2+b^2)^3) = a/(a^2-b^2){F(beta,q)-E(beta,q)} + u/sqrt((a^2+u^2)(b^2+u^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; b > 0 added"
+ },
+ {
+  "id": "GR3.159.3",
+  "gr": "3.159.3",
+  "page": 336,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(x^2 + a^2)^3*(x^2 + b^2)], {x, 0, u}]",
+  "rhs": [
+   "1/(a*(a^2 - b^2))*(a^2*MatharE2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)] - b^2*MatharF2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)]) - u/Sqrt[(a^2 + u^2)*(b^2 + u^2)]"
+  ],
+  "conds": [
+   "a > b",
+   "u > 0",
+   "b > 0"
+  ],
+  "cite": "BY (221.11)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u x^2/sqrt((x^2+a^2)^3(x^2+b^2)) = {a^2E(alpha,q)-b^2F(alpha,q)}/(a(a^2-b^2)) - u/sqrt((a^2+u^2)(b^2+u^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; b > 0 added"
+ },
+ {
+  "id": "GR3.159.4",
+  "gr": "3.159.4",
+  "page": 336,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(x^2 + a^2)^3*(x^2 + b^2)], {x, u, Infinity}]",
+  "rhs": [
+   "1/(a*(a^2 - b^2))*(a^2*MatharE2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)] - b^2*MatharF2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)])"
+  ],
+  "conds": [
+   "a > b",
+   "u >= 0",
+   "b > 0"
+  ],
+  "cite": "BY (222.07)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf x^2/sqrt((x^2+a^2)^3(x^2+b^2)) = {a^2E(beta,q)-b^2F(beta,q)}/(a(a^2-b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t; b > 0 added"
+ },
+ {
+  "id": "GR3.159.5",
+  "gr": "3.159.5",
+  "page": 336,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 + x^2)^3*(b^2 - x^2)], {x, 0, u}]",
+  "rhs": [
+   "1/Sqrt[a^2 + b^2]*(MatharF2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])] - MatharE2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])])"
+  ],
+  "conds": [
+   "b >= u > 0"
+  ],
+  "cite": "BY (214.04)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u x^2/sqrt((a^2+x^2)^3(b^2-x^2)) = {F(gamma,r)-E(gamma,r)}/sqrt(a^2+b^2)",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.159.6",
+  "gr": "3.159.6",
+  "page": 336,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 + x^2)^3*(b^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "1/Sqrt[a^2 + b^2]*(MatharF2[ArcCos[u/b], (b/Sqrt[a^2 + b^2])] - MatharE2[ArcCos[u/b], (b/Sqrt[a^2 + b^2])]) + u/(a^2 + b^2)*Sqrt[(b^2 - u^2)/(a^2 + u^2)]"
+  ],
+  "conds": [
+   "b > u >= 0"
+  ],
+  "cite": "BY (213.07)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b x^2/sqrt((a^2+x^2)^3(b^2-x^2)) = {F(delta,r)-E(delta,r)}/sqrt(a^2+b^2) + u/(a^2+b^2) sqrt((b^2-u^2)/(a^2+u^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.159.7",
+  "gr": "3.159.7",
+  "page": 336,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 + x^2)^3*(x^2 - b^2)], {x, b, u}]",
+  "rhs": [
+   "1/Sqrt[a^2 + b^2]*MatharE2[ArcCos[b/u], (a/Sqrt[a^2 + b^2])] - a^2/(u*(a^2 + b^2))*Sqrt[(u^2 - b^2)/(u^2 + a^2)]"
+  ],
+  "conds": [
+   "u > b > 0"
+  ],
+  "cite": "BY (211.13)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u x^2/sqrt((a^2+x^2)^3(x^2-b^2)) = E(eps,s)/sqrt(a^2+b^2) - a^2/(u(a^2+b^2)) sqrt((u^2-b^2)/(u^2+a^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.159.8",
+  "gr": "3.159.8",
+  "page": 336,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 + x^2)^3*(x^2 - b^2)], {x, u, Infinity}]",
+  "rhs": [
+   "1/Sqrt[a^2 + b^2]*MatharE2[ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (a/Sqrt[a^2 + b^2])]"
+  ],
+  "conds": [
+   "u >= b > 0"
+  ],
+  "cite": "BY (212.01)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf x^2/sqrt((a^2+x^2)^3(x^2-b^2)) = E(xi,s)/sqrt(a^2+b^2)",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.159.9",
+  "gr": "3.159.9",
+  "page": 336,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 + x^2)*(b^2 - x^2)^3], {x, 0, u}]",
+  "rhs": [
+   "u/Sqrt[(a^2 + u^2)*(b^2 - u^2)] - 1/Sqrt[a^2 + b^2]*MatharE2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])]"
+  ],
+  "conds": [
+   "b > u > 0"
+  ],
+  "cite": "BY (214.07)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u x^2/sqrt((a^2+x^2)(b^2-x^2)^3) = u/sqrt((a^2+u^2)(b^2-u^2)) - E(gamma,r)/sqrt(a^2+b^2)",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.159.10",
+  "gr": "3.159.10",
+  "page": 336,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 + x^2)*(x^2 - b^2)^3], {x, u, Infinity}]",
+  "rhs": [
+   "1/Sqrt[a^2 + b^2]*(MatharF2[ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (a/Sqrt[a^2 + b^2])] - MatharE2[ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (a/Sqrt[a^2 + b^2])]) + u/Sqrt[(a^2 + u^2)*(u^2 - b^2)]"
+  ],
+  "conds": [
+   "u > b > 0"
+  ],
+  "cite": "BY (212.10)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^inf x^2/sqrt((a^2+x^2)(x^2-b^2)^3) = {F(xi,s)-E(xi,s)}/sqrt(a^2+b^2) + u/sqrt((a^2+u^2)(u^2-b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.159.11",
+  "gr": "3.159.11",
+  "page": 336,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 - x^2)^3*(b^2 - x^2)], {x, 0, u}]",
+  "rhs": [
+   "1/(a^2 - b^2)*(a*MatharE2[ArcSin[u/b], (b/a)] - u*Sqrt[(b^2 - u^2)/(a^2 - u^2)]) - 1/a*MatharF2[ArcSin[u/b], (b/a)]"
+  ],
+  "conds": [
+   "a > b >= u > 0"
+  ],
+  "cite": "BY (219.04)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_0^u x^2/sqrt((a^2-x^2)^3(b^2-x^2)) = {aE(eta,t) - u sqrt((b^2-u^2)/(a^2-u^2))}/(a^2-b^2) - F(eta,t)/a",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.159.12",
+  "gr": "3.159.12",
+  "page": 336,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 - x^2)^3*(b^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "a/(a^2 - b^2)*MatharE2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)] - 1/a*MatharF2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)]"
+  ],
+  "conds": [
+   "a > b > u >= 0"
+  ],
+  "cite": "BY (220.08)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_u^b x^2/sqrt((a^2-x^2)^3(b^2-x^2)) = aE(zeta,t)/(a^2-b^2) - F(zeta,t)/a",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ },
+ {
+  "id": "GR3.159.13",
+  "gr": "3.159.13",
+  "page": 336,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 - x^2)^3*(x^2 - b^2)], {x, b, u}]",
+  "rhs": [
+   "1/(a*(a^2 - b^2))*(b^2*MatharF2[ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] - a^2*MatharE2[ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] + a^3/u*Sqrt[(u^2 - b^2)/(a^2 - u^2)])"
+  ],
+  "conds": [
+   "a > u > b > 0"
+  ],
+  "cite": "BY (217.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials",
+  "tex": "int_b^u x^2/sqrt((a^2-x^2)^3(x^2-b^2)) = {b^2F(kappa,q) - a^2E(kappa,q) + a^3/u sqrt((u^2-b^2)/(a^2-u^2))}/(a(a^2-b^2))",
+  "note": "G&R 3.152 notation (alpha..nu, q, r, s, t) substituted; F, E incomplete elliptic integrals of modulus q, r, s or t"
+ }
+]

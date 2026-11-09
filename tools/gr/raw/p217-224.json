@@ -1,0 +1,1505 @@
+[
+ {
+  "id": "GR2.541.3",
+  "gr": "2.541.3",
+  "page": 217,
+  "status": "ok",
+  "lhs": "Integrate[Cos[(n + 1)*x]*Sin[x]^(n - 1), x]",
+  "rhs": [
+   "Sin[x]^n*Cos[n*x]/n"
+  ],
+  "conds": [
+   "n != 0"
+  ],
+  "cite": "BI (71)(3)a",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos(n+1)x sin^(n-1)x dx = 1/n sin^n x cos nx",
+  "note": ""
+ },
+ {
+  "id": "GR2.541.4",
+  "gr": "2.541.4",
+  "page": 217,
+  "status": "ok",
+  "lhs": "Integrate[Cos[(n + 1)*x]*Cos[x]^(n - 1), x]",
+  "rhs": [
+   "Cos[x]^n*Sin[n*x]/n"
+  ],
+  "conds": [
+   "n != 0"
+  ],
+  "cite": "BI (71)(4)a",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos(n+1)x cos^(n-1)x dx = 1/n cos^n x sin nx",
+  "note": ""
+ },
+ {
+  "id": "GR2.541.5",
+  "gr": "2.541.5",
+  "page": 217,
+  "status": "ok",
+  "lhs": "Integrate[Sin[(n + 1)*(Pi/2 - x)]*Sin[x]^(n - 1), x]",
+  "rhs": [
+   "Sin[x]^n*Cos[n*(Pi/2 - x)]/n"
+  ],
+  "conds": [
+   "n != 0"
+  ],
+  "cite": "BI (71)(5)a",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin[(n+1)(pi/2-x)] sin^(n-1)x dx = 1/n sin^n x cos n(pi/2-x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.541.6",
+  "gr": "2.541.6",
+  "page": 217,
+  "status": "ok",
+  "lhs": "Integrate[Cos[(n + 1)*(Pi/2 - x)]*Sin[x]^(n - 1), x]",
+  "rhs": [
+   "-Sin[x]^n*Sin[n*(Pi/2 - x)]/n"
+  ],
+  "conds": [
+   "n != 0"
+  ],
+  "cite": "BI (71)(6)a",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos[(n+1)(pi/2-x)] sin^(n-1)x dx = -1/n sin^n x sin n(pi/2-x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.542.1",
+  "gr": "2.542.1",
+  "page": 217,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*x]/Sin[x]^n, x]",
+  "rhs": [
+   "-2/((n - 2)*Sin[x]^(n - 2))"
+  ],
+  "conds": [
+   "n != 2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin2x/sin^n x dx = -2/((n-2) sin^(n-2) x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.542.2",
+  "gr": "2.542.2",
+  "page": 217,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*x]/Sin[x]^2, x]",
+  "rhs": [
+   "2*Log[Sin[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin2x/sin^2 x dx = 2 ln sin x",
+  "note": ""
+ },
+ {
+  "id": "GR2.543.1",
+  "gr": "2.543.1",
+  "page": 217,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*x]/Cos[x]^n, x]",
+  "rhs": [
+   "2/((n - 2)*Cos[x]^(n - 2))"
+  ],
+  "conds": [
+   "n != 2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin2x/cos^n x dx = 2/((n-2) cos^(n-2) x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.543.2",
+  "gr": "2.543.2",
+  "page": 217,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*x]/Cos[x]^2, x]",
+  "rhs": [
+   "-2*Log[Cos[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin2x/cos^2 x dx = -2 ln cos x",
+  "note": ""
+ },
+ {
+  "id": "GR2.544.1",
+  "gr": "2.544.1",
+  "page": 217,
+  "status": "ok",
+  "lhs": "Integrate[Cos[2*x]/Sin[x], x]",
+  "rhs": [
+   "2*Cos[x] + Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos2x/sin x = 2cos x + ln tan x/2",
+  "note": ""
+ },
+ {
+  "id": "GR2.544.2",
+  "gr": "2.544.2",
+  "page": 217,
+  "status": "ok",
+  "lhs": "Integrate[Cos[2*x]/Sin[x]^2, x]",
+  "rhs": [
+   "-Cot[x] - 2*x"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos2x/sin^2 x = -cot x - 2x",
+  "note": ""
+ },
+ {
+  "id": "GR2.544.3",
+  "gr": "2.544.3",
+  "page": 217,
+  "status": "ok",
+  "lhs": "Integrate[Cos[2*x]/Sin[x]^3, x]",
+  "rhs": [
+   "-Cos[x]/(2*Sin[x]^2) - (3/2)*Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos2x/sin^3 x = -cos x/(2 sin^2 x) - 3/2 ln tan x/2",
+  "note": ""
+ },
+ {
+  "id": "GR2.544.4",
+  "gr": "2.544.4",
+  "page": 217,
+  "status": "ok",
+  "lhs": "Integrate[Cos[2*x]/Cos[x], x]",
+  "rhs": [
+   "2*Sin[x] - Log[Tan[Pi/4 + x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos2x/cos x = 2 sin x - ln tan(pi/4+x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.544.5",
+  "gr": "2.544.5",
+  "page": 217,
+  "status": "ok",
+  "lhs": "Integrate[Cos[2*x]/Cos[x]^2, x]",
+  "rhs": [
+   "2*x - Tan[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos2x/cos^2 x = 2x - tan x",
+  "note": ""
+ },
+ {
+  "id": "GR2.544.6",
+  "gr": "2.544.6",
+  "page": 217,
+  "status": "ok",
+  "lhs": "Integrate[Cos[2*x]/Cos[x]^3, x]",
+  "rhs": [
+   "-Sin[x]/(2*Cos[x]^2) + (3/2)*Log[Tan[Pi/4 + x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos2x/cos^3 x = -sin x/(2cos^2 x) + 3/2 ln tan(pi/4+x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.544.7",
+  "gr": "2.544.7",
+  "page": 217,
+  "status": "ok",
+  "lhs": "Integrate[Sin[3*x]/Sin[x], x]",
+  "rhs": [
+   "x + Sin[2*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin3x/sin x = x + sin 2x",
+  "note": ""
+ },
+ {
+  "id": "GR2.544.8",
+  "gr": "2.544.8",
+  "page": 217,
+  "status": "ok",
+  "lhs": "Integrate[Sin[3*x]/Sin[x]^2, x]",
+  "rhs": [
+   "3*Log[Tan[x/2]] + 4*Cos[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin3x/sin^2 x = 3 ln tan x/2 + 4 cos x",
+  "note": ""
+ },
+ {
+  "id": "GR2.544.9",
+  "gr": "2.544.9",
+  "page": 217,
+  "status": "ok",
+  "lhs": "Integrate[Sin[3*x]/Sin[x]^3, x]",
+  "rhs": [
+   "-3*Cot[x] - 4*x"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin3x/sin^3 x = -3 cot x - 4x",
+  "note": ""
+ },
+ {
+  "id": "GR2.545.1",
+  "gr": "2.545.1",
+  "page": 218,
+  "status": "ok",
+  "lhs": "Integrate[Sin[3*x]/Cos[x]^n, x]",
+  "rhs": [
+   "4/((n - 3)*Cos[x]^(n - 3)) - 1/((n - 1)*Cos[x]^(n - 1))"
+  ],
+  "conds": [
+   "n != 1",
+   "n != 3"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin3x/cos^n x = 4/((n-3)cos^(n-3)) - 1/((n-1)cos^(n-1))",
+  "note": ""
+ },
+ {
+  "id": "GR2.545.2",
+  "gr": "2.545.2",
+  "page": 218,
+  "status": "ok",
+  "lhs": "Integrate[Sin[3*x]/Cos[x], x]",
+  "rhs": [
+   "2*Sin[x]^2 + Log[Cos[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin3x/cos x = 2 sin^2 x + ln cos x",
+  "note": ""
+ },
+ {
+  "id": "GR2.545.3",
+  "gr": "2.545.3",
+  "page": 218,
+  "status": "ok",
+  "lhs": "Integrate[Sin[3*x]/Cos[x]^3, x]",
+  "rhs": [
+   "-1/(2*Cos[x]^2) - 4*Log[Cos[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin3x/cos^3 x = -1/(2cos^2 x) - 4 ln cos x",
+  "note": ""
+ },
+ {
+  "id": "GR2.546.1",
+  "gr": "2.546.1",
+  "page": 218,
+  "status": "ok",
+  "lhs": "Integrate[Cos[3*x]/Sin[x]^n, x]",
+  "rhs": [
+   "4/((n - 3)*Sin[x]^(n - 3)) - 1/((n - 1)*Sin[x]^(n - 1))"
+  ],
+  "conds": [
+   "n != 1",
+   "n != 3"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos3x/sin^n x = 4/((n-3)sin^(n-3)) - 1/((n-1)sin^(n-1))",
+  "note": ""
+ },
+ {
+  "id": "GR2.546.2",
+  "gr": "2.546.2",
+  "page": 218,
+  "status": "ok",
+  "lhs": "Integrate[Cos[3*x]/Sin[x], x]",
+  "rhs": [
+   "-2*Sin[x]^2 + Log[Sin[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos3x/sin x = -2 sin^2 x + ln sin x",
+  "note": ""
+ },
+ {
+  "id": "GR2.546.3",
+  "gr": "2.546.3",
+  "page": 218,
+  "status": "ok",
+  "lhs": "Integrate[Cos[3*x]/Sin[x]^3, x]",
+  "rhs": [
+   "-1/(2*Sin[x]^2) - 4*Log[Sin[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos3x/sin^3 x = -1/(2sin^2 x) - 4 ln sin x",
+  "note": ""
+ },
+ {
+  "id": "GR2.547.1",
+  "gr": "2.547.1",
+  "page": 218,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin nx/cos^p x = 2 int sin(n-1)x/cos^(p-1) x - int sin(n-2)x/cos^p x",
+  "reason": "integrals on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument"
+ },
+ {
+  "id": "GR2.547.2",
+  "gr": "2.547.2",
+  "page": 218,
+  "status": "ok",
+  "lhs": "Integrate[Cos[3*x]/Cos[x], x]",
+  "rhs": [
+   "Sin[2*x] - x"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos3x/cos x = sin 2x - x",
+  "note": ""
+ },
+ {
+  "id": "GR2.547.3",
+  "gr": "2.547.3",
+  "page": 218,
+  "status": "ok",
+  "lhs": "Integrate[Cos[3*x]/Cos[x]^2, x]",
+  "rhs": [
+   "4*Sin[x] - 3*Log[Tan[Pi/4 + x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos3x/cos^2 x = 4 sin x - 3 ln tan(pi/4+x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.547.4",
+  "gr": "2.547.4",
+  "page": 218,
+  "status": "ok",
+  "lhs": "Integrate[Cos[3*x]/Cos[x]^3, x]",
+  "rhs": [
+   "4*x - 3*Tan[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos3x/cos^3 x = 4x - 3 tan x",
+  "note": ""
+ },
+ {
+  "id": "GR2.548.1",
+  "gr": "2.548.1",
+  "page": 218,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^m/Sin[(2*n + 1)*x], x]",
+  "rhs": [
+   "1/(2*n + 1)*Sum[(-1)^(n + k)*Cos[(2*k + 1)*Pi/(2*(2*n + 1))]^m*Log[Sin[(k - n)*Pi/(2*(2*n + 1)) + x/2]/Sin[(k + n + 1)*Pi/(2*n + 1) - x/2]], {k, 0, 2*n}]",
+   "1/(2*n + 1)*Sum[(-1)^(n + k)*Cos[(2*k + 1)*Pi/(2*(2*n + 1))]^m*Log[Sin[(k - n)*Pi/(2*(2*n + 1)) + x/2]/Sin[(k + n + 1)*Pi/(2*(2*n + 1)) - x/2]], {k, 0, 2*n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[m, Integers] && 1 <= m <= 2*n"
+  ],
+  "cite": "TI (378)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin^m x/sin(2n+1)x = 1/(2n+1) sum_{k=0}^{2n} (-1)^(n+k) cos^m[(2k+1)pi/(2(2n+1))] ln{sin[(k-n)pi/(2(2n+1))+x/2]/sin[(k+n+1)pi/(2n+1)-x/2]} [m natural <= 2n]",
+  "note": "denominator argument printed (k+n+1)pi/(2n+1); second candidate uses 2(2n+1) to match the numerator"
+ },
+ {
+  "id": "GR2.548.2",
+  "gr": "2.548.2",
+  "page": 218,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*m)/Sin[2*n*x], x]",
+  "rhs": [
+   "(-1)^n/(2*n)*(Log[Cos[x]] + Sum[(-1)^k*Cos[k*Pi/(2*n)]^(2*m)*Log[Cos[x]^2 - Sin[k*Pi/(2*n)]^2], {k, 1, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[m, Integers] && 1 <= m <= n"
+  ],
+  "cite": "TI (379)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin^2m x/sin 2nx = (-1)^n/(2n){ln cos x + sum_{k=1}^{n-1} (-1)^k cos^2m(k pi/2n) ln(cos^2 x - sin^2(k pi/2n))} [m natural <= n]",
+  "note": ""
+ },
+ {
+  "id": "GR2.548.3",
+  "gr": "2.548.3",
+  "page": 218,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*m + 1)/Sin[2*n*x], x]",
+  "rhs": [
+   "(-1)^n/(2*n)*(Log[Tan[Pi/4 - x/2]] + Sum[(-1)^k*Cos[k*Pi/(2*n)]^(2*m + 1)*Log[Tan[(n + k)*Pi/(4*n) - x/2]*Tan[(n - k)*Pi/(4*n) - x/2]], {k, 1, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[m, Integers] && 1 <= m < n"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin^(2m+1) x/sin 2nx = (-1)^n/(2n){ln tan(pi/4-x/2) + sum_{k=1}^{n-1} (-1)^k cos^(2m+1)(k pi/2n) ln[tan((n+k)pi/4n - x/2) tan((n-k)pi/4n - x/2)]} [m natural < n]",
+  "note": ""
+ },
+ {
+  "id": "GR2.548.4",
+  "gr": "2.548.4",
+  "page": 219,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*m)/Cos[(2*n + 1)*x], x]",
+  "rhs": [
+   "(-1)^(n + 1)/(2*n + 1)*(Log[Tan[Pi/4 - x/2]] + Sum[(-1)^k*Cos[k*Pi/(2*n + 1)]^(2*m)*Log[Tan[(2*n + 2*k + 1)*Pi/(4*(2*n + 1)) - x/2]*Tan[(2*n - 2*k + 1)*Pi/(2*(2*n + 1)) - x/2]], {k, 1, n}])",
+   "(-1)^(n + 1)/(2*n + 1)*(Log[Tan[Pi/4 - x/2]] + Sum[(-1)^k*Cos[k*Pi/(2*n + 1)]^(2*m)*Log[Tan[(2*n + 2*k + 1)*Pi/(4*(2*n + 1)) - x/2]*Tan[(2*n - 2*k + 1)*Pi/(4*(2*n + 1)) - x/2]], {k, 1, n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[m, Integers] && 1 <= m <= n"
+  ],
+  "cite": "TI (381)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin^2m x/cos(2n+1)x = (-1)^(n+1)/(2n+1){ln tan(pi/4-x/2) + sum_{k=1}^n (-1)^k cos^2m(k pi/(2n+1)) ln[tan((2n+2k+1)pi/(4(2n+1))-x/2) tan((2n-2k+1)pi/(2(2n+1))-x/2)]}",
+  "note": "second tan printed with 2(2n+1) in the denominator; second candidate uses 4(2n+1) to match the first"
+ },
+ {
+  "id": "GR2.548.5",
+  "gr": "2.548.5",
+  "page": 219,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*m + 1)/Cos[(2*n + 1)*x], x]",
+  "rhs": [
+   "(-1)^(n + 1)/(2*n + 1)*(Log[Cos[x]] + Sum[(-1)^k*Cos[k*Pi/(2*n + 1)]^(2*m + 1)*Log[Cos[x]^2 - Sin[k*Pi/(2*n + 1)]^2], {k, 1, n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[m, Integers] && 1 <= m <= n"
+  ],
+  "cite": "TI (382)a",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin^(2m+1)x/cos(2n+1)x = (-1)^(n+1)/(2n+1){ln cos x + sum_{k=1}^n (-1)^k cos^(2m+1)(k pi/(2n+1)) ln(cos^2 x - sin^2(k pi/(2n+1)))}",
+  "note": ""
+ },
+ {
+  "id": "GR2.548.6",
+  "gr": "2.548.6",
+  "page": 219,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^m/Cos[2*n*x], x]",
+  "rhs": [
+   "1/(2*n)*Sum[(-1)^(n + k)*Cos[(2*k + 1)*Pi/(4*n)]^m*Log[Sin[(2*k - 2*n + 1)*Pi/(8*n) + x/2]/Sin[(2*k + 2*n + 1)*Pi/(8*n) - x/2]], {k, 0, 2*n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[m, Integers] && 1 <= m < 2*n"
+  ],
+  "cite": "TI (377)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin^m x/cos 2nx = 1/(2n) sum_{k=0}^{2n-1} (-1)^(n+k) cos^m((2k+1)pi/4n) ln{sin[(2k-2n+1)pi/8n + x/2]/sin[(2k+2n+1)pi/8n - x/2]} [m natural < 2n]",
+  "note": ""
+ },
+ {
+  "id": "GR2.548.7",
+  "gr": "2.548.7",
+  "page": 219,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*m + 1)/Sin[(2*n + 1)*x], x]",
+  "rhs": [
+   "1/(2*n + 1)*(Log[Sin[x]] + Sum[(-1)^k*Cos[k*Pi/(2*n + 1)]^(2*m + 1)*Log[Sin[x]^2 - Sin[k*Pi/(2*n + 1)]^2], {k, 1, n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[m, Integers] && 1 <= m <= n"
+  ],
+  "cite": "TI (376)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos^(2m+1)x/sin(2n+1)x = 1/(2n+1){ln sin x + sum_{k=1}^n (-1)^k cos^(2m+1)(k pi/(2n+1)) ln(sin^2 x - sin^2(k pi/(2n+1)))}",
+  "note": ""
+ },
+ {
+  "id": "GR2.548.8",
+  "gr": "2.548.8",
+  "page": 219,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*m)/Sin[(2*n + 1)*x], x]",
+  "rhs": [
+   "1/(2*n + 1)*(Log[Tan[x/2]] + Sum[(-1)^k*Cos[k*Pi/(2*n + 1)]^(2*m)*Log[Tan[x/2 + k*Pi/(4*n + 2)]*Tan[x/2 - k*Pi/(4*n + 2)]], {k, 1, n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[m, Integers] && 1 <= m <= n"
+  ],
+  "cite": "TI (375)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos^2m x/sin(2n+1)x = 1/(2n+1){ln tan x/2 + sum_{k=1}^n (-1)^k cos^2m(k pi/(2n+1)) ln[tan(x/2 + k pi/(4n+2)) tan(x/2 - k pi/(4n+2))]}",
+  "note": ""
+ },
+ {
+  "id": "GR2.548.9",
+  "gr": "2.548.9",
+  "page": 219,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*m + 1)/Sin[2*n*x], x]",
+  "rhs": [
+   "1/(2*n)*(Log[Tan[x/2]] + Sum[(-1)^k*Cos[k*Pi/(2*n)]^(2*m + 1)*Log[Tan[x/2 + k*Pi/4]*Tan[x/2 - k*Pi/(4*n)]], {k, 1, n - 1}])",
+   "1/(2*n)*(Log[Tan[x/2]] + Sum[(-1)^k*Cos[k*Pi/(2*n)]^(2*m + 1)*Log[Tan[x/2 + k*Pi/(4*n)]*Tan[x/2 - k*Pi/(4*n)]], {k, 1, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[m, Integers] && 1 <= m < n"
+  ],
+  "cite": "TI (374)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos^(2m+1)x/sin 2nx = 1/(2n){ln tan x/2 + sum_{k=1}^{n-1} (-1)^k cos^(2m+1)(k pi/2n) ln[tan(x/2 + k pi/4) tan(x/2 - k pi/4n)]}",
+  "note": "first tan printed with k pi/4; second candidate uses k pi/(4n) to match the second tan"
+ },
+ {
+  "id": "GR2.548.10",
+  "gr": "2.548.10",
+  "page": 219,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*m)/Sin[2*n*x], x]",
+  "rhs": [
+   "1/(2*n)*(Log[Sin[x]] + Sum[(-1)^k*Cos[k*Pi/(2*n)]^(2*m)*Log[Sin[x]^2 - Sin[k*Pi/(2*n)]^2], {k, 1, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[m, Integers] && 1 <= m <= n"
+  ],
+  "cite": "TI (373)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos^2m x/sin 2nx = 1/(2n){ln sin x + sum_{k=1}^{n-1} (-1)^k cos^2m(k pi/2n) ln(sin^2 x - sin^2(k pi/2n))}",
+  "note": ""
+ },
+ {
+  "id": "GR2.548.11",
+  "gr": "2.548.11",
+  "page": 219,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^m/Cos[n*x], x]",
+  "rhs": [
+   "1/n*Sum[(-1)^k*Cos[(2*k + 1)*Pi/(2*n)]^m*Log[Sin[(2*k + 1)*Pi/(4*n) + x/2]/Sin[(2*k + 1)*Pi/(4*n) - x/2]], {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "Element[m, Integers] && 1 <= m <= n"
+  ],
+  "cite": "TI (372)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos^m x/cos nx = 1/n sum_{k=0}^{n-1} (-1)^k cos^m((2k+1)pi/2n) ln{sin[(2k+1)pi/4n + x/2]/sin[(2k+1)pi/4n - x/2]} [m natural <= n]",
+  "note": ""
+ },
+ {
+  "id": "GR2.549.1",
+  "gr": "2.549.1",
+  "page": 219,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x^2], x]",
+  "rhs": [
+   "Sqrt[Pi/2]*FresnelS[Sqrt[2/Pi]*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin x^2 dx = sqrt(pi/2) S(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.549.2",
+  "gr": "2.549.2",
+  "page": 220,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x^2], x]",
+  "rhs": [
+   "Sqrt[Pi/2]*FresnelC[Sqrt[2/Pi]*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos x^2 dx = sqrt(pi/2) C(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.549.3",
+  "gr": "2.549.3",
+  "page": 220,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x^2 + 2*b*x + c], x]",
+  "rhs": [
+   "Sqrt[Pi/(2*a)]*(Cos[(a*c - b^2)/a]*FresnelS[Sqrt[2/Pi]*(a*x + b)/Sqrt[a]] + Sin[(a*c - b^2)/a]*FresnelC[Sqrt[2/Pi]*(a*x + b)/Sqrt[a]])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin(ax^2+2bx+c) = sqrt(pi/2a){cos((ac-b^2)/a) S((ax+b)/sqrt a) + sin((ac-b^2)/a) C((ax+b)/sqrt a)} [a>0]",
+  "note": ""
+ },
+ {
+  "id": "GR2.549.4",
+  "gr": "2.549.4",
+  "page": 220,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x^2 + 2*b*x + c], x]",
+  "rhs": [
+   "Sqrt[Pi/(2*a)]*(Cos[(a*c - b^2)/a]*FresnelC[Sqrt[2/Pi]*(a*x + b)/Sqrt[a]] - Sin[(a*c - b^2)/a]*FresnelS[Sqrt[2/Pi]*(a*x + b)/Sqrt[a]])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos(ax^2+2bx+c) = sqrt(pi/2a){cos((ac-b^2)/a) C((ax+b)/sqrt a) - sin((ac-b^2)/a) S((ax+b)/sqrt a)} [a>0]",
+  "note": ""
+ },
+ {
+  "id": "GR2.549.5",
+  "gr": "2.549.5",
+  "page": 220,
+  "status": "ok",
+  "lhs": "Integrate[Sin[Log[x]], x]",
+  "rhs": [
+   "x/2*(Sin[Log[x]] - Cos[Log[x]])"
+  ],
+  "conds": [],
+  "cite": "PE (444)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int sin ln x = x/2 (sin ln x - cos ln x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.549.6",
+  "gr": "2.549.6",
+  "page": 220,
+  "status": "ok",
+  "lhs": "Integrate[Cos[Log[x]], x]",
+  "rhs": [
+   "x/2*(Sin[Log[x]] + Cos[Log[x]])"
+  ],
+  "conds": [],
+  "cite": "PE (445)",
+  "edition_note": "",
+  "section": "2.53-2.54 Sines and cosines of multiple angles and of functions of the argument",
+  "tex": "int cos ln x = x/2 (sin ln x + cos ln x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.551.1",
+  "gr": "2.551.1",
+  "page": 220,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B sin x)/(a+b sin x)^n = 1/((n-1)(a^2-b^2))[(Ab-aB)cos x/(a+b sin x)^(n-1) + int ...]",
+  "reason": "reduction formula: integral on right-hand side",
+  "cite": "TI (358)a",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine"
+ },
+ {
+  "id": "GR2.551.2",
+  "gr": "2.551.2",
+  "page": 220,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sin[x])/(a + b*Sin[x]), x]",
+  "rhs": [
+   "B/b*x + (A*b - a*B)/b*2/Sqrt[a^2 - b^2]*ArcTan[(a*Tan[x/2] + b)/Sqrt[a^2 - b^2]]"
+  ],
+  "conds": [
+   "a^2 > b^2"
+  ],
+  "cite": "TI (342)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (A+B sin x)/(a+b sin x) = B/b x + (Ab-aB)/b int dx/(a+b sin x) (see 2.551 3)",
+  "note": "int dx/(a+b sin x) replaced by the 2.551.3 arctan branch [a^2>b^2]"
+ },
+ {
+  "id": "GR2.551.3a",
+  "gr": "2.551.3",
+  "page": 220,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Sin[x]), x]",
+  "rhs": [
+   "2/Sqrt[a^2 - b^2]*ArcTan[(a*Tan[x/2] + b)/Sqrt[a^2 - b^2]]"
+  ],
+  "conds": [
+   "a^2 > b^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int dx/(a+b sin x) = 2/sqrt(a^2-b^2) arctan((a tan(x/2)+b)/sqrt(a^2-b^2)) [a^2>b^2]",
+  "note": ""
+ },
+ {
+  "id": "GR2.551.3b",
+  "gr": "2.551.3",
+  "page": 220,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Sin[x]), x]",
+  "rhs": [
+   "1/Sqrt[b^2 - a^2]*Log[(a*Tan[x/2] + b - Sqrt[b^2 - a^2])/(a*Tan[x/2] + b + Sqrt[b^2 - a^2])]"
+  ],
+  "conds": [
+   "a^2 < b^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "= 1/sqrt(b^2-a^2) ln((a tan(x/2)+b-sqrt(b^2-a^2))/(a tan(x/2)+b+sqrt(b^2-a^2))) [a^2<b^2]",
+  "note": ""
+ },
+ {
+  "id": "GR2.552.1",
+  "gr": "2.552.1",
+  "page": 220,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B cos x)/(a+b sin x)^n = -B/((n-1)b(a+b sin x)^(n-1)) + A int dx/(a+b sin x)^n (see 2.552 3)",
+  "reason": "integral on right-hand side is a reduction family (2.552.3)",
+  "cite": "TI (361)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine"
+ },
+ {
+  "id": "GR2.552.2",
+  "gr": "2.552.2",
+  "page": 220,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cos[x])/(a + b*Sin[x]), x]",
+  "rhs": [
+   "B/b*Log[a + b*Sin[x]] + A*2/Sqrt[a^2 - b^2]*ArcTan[(a*Tan[x/2] + b)/Sqrt[a^2 - b^2]]"
+  ],
+  "conds": [
+   "a^2 > b^2"
+  ],
+  "cite": "TI (344)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (A+B cos x)/(a+b sin x) = B/b ln(a+b sin x) + A int dx/(a+b sin x) (see 2.551 3)",
+  "note": "int dx/(a+b sin x) replaced by the 2.551.3 arctan branch [a^2>b^2]"
+ },
+ {
+  "id": "GR2.552.3",
+  "gr": "2.552.3",
+  "page": 221,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(a+b sin x)^n = 1/((n-1)(a^2-b^2))[b cos x/(a+b sin x)^(n-1) + int ((n-1)a-(n-2)b sin x)/(a+b sin x)^(n-1) dx]",
+  "reason": "reduction formula",
+  "cite": "TI (359)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine"
+ },
+ {
+  "id": "GR2.553.1",
+  "gr": "2.553.1",
+  "page": 221,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B sin x)/(a+b cos x)^n = B/((n-1)b(a+b cos x)^(n-1)) + A int dx/(a+b cos x)^n (see 2.554 3)",
+  "reason": "integral on right-hand side is a reduction family (2.554.3)",
+  "cite": "TI (355)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine"
+ },
+ {
+  "id": "GR2.553.2",
+  "gr": "2.553.2",
+  "page": 221,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sin[x])/(a + b*Cos[x]), x]",
+  "rhs": [
+   "-B/b*Log[a + b*Cos[x]] + A*2/Sqrt[a^2 - b^2]*ArcTan[(a - b)*Tan[x/2]/Sqrt[a^2 - b^2]]"
+  ],
+  "conds": [
+   "a^2 > b^2"
+  ],
+  "cite": "TI (343)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (A+B sin x)/(a+b cos x) = -B/b ln(a+b cos x) + A int dx/(a+b cos x) (see 2.553 3*)",
+  "note": "int dx/(a+b cos x) replaced by the 2.553.3 arctan branch [a^2>b^2]"
+ },
+ {
+  "id": "GR2.553.3a",
+  "gr": "2.553.3",
+  "page": 221,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cos[x]), x]",
+  "rhs": [
+   "2/Sqrt[a^2 - b^2]*ArcTan[(a - b)*Tan[x/2]/Sqrt[a^2 - b^2]]"
+  ],
+  "conds": [
+   "a^2 > b^2"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int dx/(a+b cos x) = 2/sqrt(a^2-b^2) arctan((a-b)tan(x/2)/sqrt(a^2-b^2)) [a^2>b^2]",
+  "note": ""
+ },
+ {
+  "id": "GR2.553.3b",
+  "gr": "2.553.3",
+  "page": 221,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cos[x]), x]",
+  "rhs": [
+   "2/Sqrt[a^2 - b^2]*Log[Abs[((b - a)*Tan[x/2] + Sqrt[b^2 - b^a])/((b - a)*Tan[x/2] - Sqrt[b^2 - b^a])]]",
+   "1/Sqrt[b^2 - a^2]*Log[Abs[((b - a)*Tan[x/2] + Sqrt[b^2 - a^2])/((b - a)*Tan[x/2] - Sqrt[b^2 - a^2])]]",
+   "-1/Sqrt[b^2 - a^2]*Log[Abs[((b - a)*Tan[x/2] + Sqrt[b^2 - a^2])/((b - a)*Tan[x/2] - Sqrt[b^2 - a^2])]]"
+  ],
+  "conds": [
+   "b^2 > a^2"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "= 2/sqrt(a^2-b^2) ln|((b-a)tan(x/2)+sqrt(b^2-b^a))/((b-a)tan(x/2)-sqrt(b^2-b^a))| [b^2>a^2]",
+  "note": "printed with prefactor 2/sqrt(a^2-b^2) and radicand b^2-b^a (misprints); candidates 2-3 use 1/sqrt(b^2-a^2) and b^2-a^2 with either sign"
+ },
+ {
+  "id": "GR2.553.3c",
+  "gr": "2.553.3",
+  "page": 221,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cos[x]), x]",
+  "rhs": [
+   "2/Sqrt[b^2 - a^2]*ArcTanh[(a - b)*Tan[x/2]/Sqrt[b^2 - a^2]]",
+   "-2/Sqrt[b^2 - a^2]*ArcTanh[(a - b)*Tan[x/2]/Sqrt[b^2 - a^2]]"
+  ],
+  "conds": [
+   "b^2 > a^2"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "= 2/sqrt(b^2-a^2) artanh((a-b)tan(x/2)/sqrt(b^2-a^2)) [b^2>a^2, |(b-a)tan(x/2)| < sqrt(b^2-a^2)]",
+  "note": "condition |(b-a)tan(x/2)| < sqrt(b^2-a^2) is on the integration variable; second candidate flips the sign (differentiating the printed form gives the negative of the integrand)"
+ },
+ {
+  "id": "GR2.553.3d",
+  "gr": "2.553.3",
+  "page": 221,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cos[x]), x]",
+  "rhs": [
+   "2/Sqrt[b^2 - a^2]*ArcCoth[(a - b)*Tan[x/2]/Sqrt[b^2 - a^2]]",
+   "-2/Sqrt[b^2 - a^2]*ArcCoth[(a - b)*Tan[x/2]/Sqrt[b^2 - a^2]]"
+  ],
+  "conds": [
+   "b^2 > a^2"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "= 2/sqrt(b^2-a^2) arcoth((a-b)tan(x/2)/sqrt(b^2-a^2)) [b^2>a^2, |(b-a)tan(x/2)| > sqrt(b^2-a^2)]",
+  "note": "condition |(b-a)tan(x/2)| > sqrt(b^2-a^2) is on the integration variable; second candidate flips the sign as for 2.553.3c"
+ },
+ {
+  "id": "GR2.554.1",
+  "gr": "2.554.1",
+  "page": 221,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B cos x)/(a+b cos x)^n = 1/((n-1)(a^2-b^2))[(aB-Ab)sin x/(a+b cos x)^(n-1) + int ...]",
+  "reason": "reduction formula",
+  "cite": "TI (353)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine"
+ },
+ {
+  "id": "GR2.554.2",
+  "gr": "2.554.2",
+  "page": 222,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cos[x])/(a + b*Cos[x]), x]",
+  "rhs": [
+   "B/b*x + (A*b - a*B)/b*2/Sqrt[a^2 - b^2]*ArcTan[(a - b)*Tan[x/2]/Sqrt[a^2 - b^2]]"
+  ],
+  "conds": [
+   "a^2 > b^2"
+  ],
+  "cite": "TI (341)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (A+B cos x)/(a+b cos x) = B/b x + (Ab-aB)/b int dx/(a+b cos x) (see 2.553 3)",
+  "note": "int dx/(a+b cos x) replaced by the 2.553.3 arctan branch [a^2>b^2]"
+ },
+ {
+  "id": "GR2.554.3",
+  "gr": "2.554.3",
+  "page": 222,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int dx/(a+b cos x)^n = -1/((n-1)(a^2-b^2)){b sin x/(a+b cos x)^(n-1) - int ((n-1)a-(n-2)b cos x)/(a+b cos x)^(n-1) dx}",
+  "reason": "reduction formula",
+  "cite": "TI (354)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine"
+ },
+ {
+  "id": "GR2.555.1a",
+  "gr": "2.555.1",
+  "page": 222,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sin[x])/(1 + Sin[x])^n, x]",
+  "rhs": [
+   "-1/2^(n - 1)*(2*B*Sum[Binomial[n - 2, k]*Tan[Pi/4 - x/2]^(2*k + 1)/(2*k + 1), {k, 0, n - 2}] + (A - B)*Sum[Binomial[n - 1, k]*Tan[Pi/4 - x/2]^(2*k + 1)/(2*k + 1), {k, 0, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "TI (361)a",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (A+B sin x)/(1+sin x)^n = -1/2^(n-1){2B sum_0^(n-2) C(n-2,k) tan^(2k+1)(pi/4-x/2)/(2k+1) + (A-B) sum_0^(n-1) C(n-1,k) tan^(2k+1)(pi/4-x/2)/(2k+1)}",
+  "note": "upper sign of the printed +/- pair"
+ },
+ {
+  "id": "GR2.555.1b",
+  "gr": "2.555.1",
+  "page": 222,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sin[x])/(1 - Sin[x])^n, x]",
+  "rhs": [
+   "-1/2^(n - 1)*(2*B*Sum[Binomial[n - 2, k]*Tan[Pi/4 + x/2]^(2*k + 1)/(2*k + 1), {k, 0, n - 2}] - (A + B)*Sum[Binomial[n - 1, k]*Tan[Pi/4 + x/2]^(2*k + 1)/(2*k + 1), {k, 0, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "TI (361)a",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (A+B sin x)/(1-sin x)^n = -1/2^(n-1){2B sum_0^(n-2) C(n-2,k) tan^(2k+1)(pi/4+x/2)/(2k+1) - (A+B) sum_0^(n-1) C(n-1,k) tan^(2k+1)(pi/4+x/2)/(2k+1)}",
+  "note": "lower sign of the printed +/- pair"
+ },
+ {
+  "id": "GR2.555.2a",
+  "gr": "2.555.2",
+  "page": 222,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cos[x])/(1 + Cos[x])^n, x]",
+  "rhs": [
+   "1/2^(n - 1)*(2*B*Sum[Binomial[n - 2, k]*Tan[Pi/4 - (Pi/4 - x/2)]^(2*k + 1)/(2*k + 1), {k, 0, n - 2}] + (A - B)*Sum[Binomial[n - 1, k]*Tan[Pi/4 - (Pi/4 - x/2)]^(2*k + 1)/(2*k + 1), {k, 0, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "TI (356)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (A+B cos x)/(1+cos x)^n = 1/2^(n-1){2B sum C(n-2,k) tan^(2k+1)[pi/4-(pi/4-x/2)]/(2k+1) + (A-B) sum C(n-1,k) tan^(2k+1)[...]/(2k+1)}",
+  "note": "upper sign of the printed +/- pair"
+ },
+ {
+  "id": "GR2.555.2b",
+  "gr": "2.555.2",
+  "page": 222,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cos[x])/(1 - Cos[x])^n, x]",
+  "rhs": [
+   "1/2^(n - 1)*(2*B*Sum[Binomial[n - 2, k]*Tan[Pi/4 + (Pi/4 - x/2)]^(2*k + 1)/(2*k + 1), {k, 0, n - 2}] - (A + B)*Sum[Binomial[n - 1, k]*Tan[Pi/4 + (Pi/4 - x/2)]^(2*k + 1)/(2*k + 1), {k, 0, n - 1}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "TI (356)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (A+B cos x)/(1-cos x)^n = 1/2^(n-1){2B sum C(n-2,k) tan^(2k+1)[pi/4+(pi/4-x/2)]/(2k+1) - (A+B) sum C(n-1,k) tan^(2k+1)[...]/(2k+1)}",
+  "note": "lower sign of the printed +/- pair"
+ },
+ {
+  "id": "GR2.555.3a",
+  "gr": "2.555.3",
+  "page": 222,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sin[x])/(1 + Sin[x]), x]",
+  "rhs": [
+   "B*x + (B - A)*Tan[Pi/4 - x/2]"
+  ],
+  "conds": [],
+  "cite": "TI (250)",
+  "edition_note": "11",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (A+B sin x)/(1+sin x) = +Bx + (B-A) tan(pi/4-x/2)",
+  "note": "upper sign of the printed +/- pair"
+ },
+ {
+  "id": "GR2.555.3b",
+  "gr": "2.555.3",
+  "page": 222,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sin[x])/(1 - Sin[x]), x]",
+  "rhs": [
+   "-B*x + (B + A)*Tan[Pi/4 + x/2]"
+  ],
+  "conds": [],
+  "cite": "TI (250)",
+  "edition_note": "11",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (A+B sin x)/(1-sin x) = -Bx + (B+A) tan(pi/4+x/2)",
+  "note": "lower sign of the printed +/- pair"
+ },
+ {
+  "id": "GR2.555.4a",
+  "gr": "2.555.4",
+  "page": 222,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cos[x])/(1 + Cos[x]), x]",
+  "rhs": [
+   "B*x + (A - B)*Tan[Pi/4 - (Pi/4 - x/2)]"
+  ],
+  "conds": [],
+  "cite": "TI (248)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (A+B cos x)/(1+cos x) = +Bx + (A-B) tan[pi/4-(pi/4-x/2)]",
+  "note": "upper sign of the printed +/- pair"
+ },
+ {
+  "id": "GR2.555.4b",
+  "gr": "2.555.4",
+  "page": 222,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cos[x])/(1 - Cos[x]), x]",
+  "rhs": [
+   "-B*x - (A + B)*Tan[Pi/4 + (Pi/4 - x/2)]"
+  ],
+  "conds": [],
+  "cite": "TI (248)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (A+B cos x)/(1-cos x) = -Bx - (A+B) tan[pi/4+(pi/4-x/2)]",
+  "note": "lower sign of the printed +/- pair"
+ },
+ {
+  "id": "GR2.556.1",
+  "gr": "2.556.1",
+  "page": 222,
+  "status": "ok",
+  "lhs": "Integrate[(1 - a^2)/(1 - 2*a*Cos[x] + a^2), x]",
+  "rhs": [
+   "2*ArcTan[(1 + a)/(1 - a)*Tan[x/2]]"
+  ],
+  "conds": [
+   "0 < a < 1"
+  ],
+  "cite": "FI II 93",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (1-a^2)/(1-2a cos x+a^2) = 2 arctan((1+a)/(1-a) tan x/2) [0<a<1, |x|<pi]",
+  "note": "|x| < pi is a condition on the integration variable"
+ },
+ {
+  "id": "GR2.556.2",
+  "gr": "2.556.2",
+  "page": 222,
+  "status": "ok",
+  "lhs": "Integrate[(1 - a*Cos[x])/(1 - 2*a*Cos[x] + a^2), x]",
+  "rhs": [
+   "x/2 + ArcTan[(1 + a)/(1 - a)*Tan[x/2]]"
+  ],
+  "conds": [
+   "0 < a < 1"
+  ],
+  "cite": "FI II 93",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (1-a cos x)/(1-2a cos x+a^2) = x/2 + arctan((1+a)/(1-a) tan x/2) [0<a<1, |x|<pi]",
+  "note": "|x| < pi is a condition on the integration variable"
+ },
+ {
+  "id": "GR2.557.1",
+  "gr": "2.557.1",
+  "page": 222,
+  "status": "SKIP-REFERENCE",
+  "tex": "int dx/(a cos x+b sin x)^n = 1/sqrt((a^2+b^2)^n) int dx/sin^n(x+arctan(a/b)) (see 2.515)",
+  "reason": "substitution rule; integral on right-hand side",
+  "cite": "MZ 173a",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine"
+ },
+ {
+  "id": "GR2.557.2",
+  "gr": "2.557.2",
+  "page": 223,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/(a*Sin[x] + b*Cos[x]), x]",
+  "rhs": [
+   "(a*x - b*Log[Sin[x + ArcTan[b/a]]])/(a^2 + b^2)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "6",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int sin x/(a sin x+b cos x) = (ax - b ln sin(x+arctan(b/a)))/(a^2+b^2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.557.3",
+  "gr": "2.557.3",
+  "page": 223,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/(a*Cos[x] + b*Sin[x]), x]",
+  "rhs": [
+   "(a*x + b*Log[Sin[x + ArcTan[a/b]]])/(a^2 + b^2)"
+  ],
+  "conds": [],
+  "cite": "MZ 174a",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int cos x/(a cos x+b sin x) = (ax + b ln sin(x+arctan(a/b)))/(a^2+b^2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.557.4",
+  "gr": "2.557.4",
+  "page": 223,
+  "status": "ok",
+  "lhs": "Integrate[1/(a*Cos[x] + b*Sin[x]), x]",
+  "rhs": [
+   "Log[Tan[(x + ArcTan[a/b])/2]]/Sqrt[a^2 + b^2]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int dx/(a cos x+b sin x) = ln tan[(x+arctan(a/b))/2]/sqrt(a^2+b^2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.557.5a",
+  "gr": "2.557.5",
+  "page": 223,
+  "status": "ok",
+  "lhs": "Integrate[1/(a*Cos[x] + b*Sin[x])^2, x]",
+  "rhs": [
+   "-Cot[x + ArcTan[a/b]]/(a^2 + b^2)"
+  ],
+  "conds": [],
+  "cite": "MZ 174a",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int dx/(a cos x+b sin x)^2 = -cot(x+arctan(a/b))/(a^2+b^2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.557.5b",
+  "gr": "2.557.5",
+  "page": 223,
+  "status": "ok",
+  "lhs": "Integrate[1/(a*Cos[x] + b*Sin[x])^2, x]",
+  "rhs": [
+   "1/(a^2 + b^2)*(a*Sin[x] - b*Cos[x])/(a*Cos[x] + b*Sin[x])"
+  ],
+  "conds": [],
+  "cite": "MZ 174a",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "= 1/(a^2+b^2) (a sin x - b cos x)/(a cos x + b sin x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.558.1a",
+  "gr": "2.558.1",
+  "page": 223,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int (A+B cos x+C sin x)/(a+b cos x+c sin x)^n = ... + 1/((n-1)(a^2-b^2-c^2)) int ((n-1)(Aa-Bb-Cc)-(n-2)[...])/(...)^(n-1) dx [n!=1, a^2!=b^2+c^2]",
+  "reason": "reduction formula: integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine"
+ },
+ {
+  "id": "GR2.558.1b",
+  "gr": "2.558.1",
+  "page": 223,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cos[x] + CC*Sin[x])/(Sqrt[b^2 + c^2] + b*Cos[x] + c*Sin[x])^n, x]",
+  "rhs": [
+   "(CC*b - B*c + CC*Sqrt[b^2 + c^2]*Cos[x] - B*Sqrt[b^2 + c^2]*Sin[x])/((n - 1)*Sqrt[b^2 + c^2]*(Sqrt[b^2 + c^2] + b*Cos[x] + c*Sin[x])^n) + (A/Sqrt[b^2 + c^2] + n*(B*b + CC*c)/((n - 1)*(b^2 + c^2)))*(-c*Cos[x] + b*Sin[x])*(n - 1)!/(2*n - 1)!!*Sum[(2*n - 2*k - 3)!!/((n - k - 1)!*Sqrt[b^2 + c^2]^k)*1/(Sqrt[b^2 + c^2] + b*Cos[x] + c*Sin[x])^(n - k), {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "= (Cb-Bc+Ca cos x-Ba sin x)/((n-1)a(a+b cos x+c sin x)^n) + (A/a + n(Bb+Cc)/((n-1)a^2))(-c cos x+b sin x) (n-1)!/(2n-1)!! sum_{k=0}^{n-1} (2n-2k-3)!!/((n-k-1)! a^k) 1/(a+b cos x+c sin x)^(n-k) [n!=1, a^2=b^2+c^2]",
+  "note": "a^2 = b^2 + c^2 substituted as a = Sqrt[b^2 + c^2]; C renamed CC"
+ },
+ {
+  "id": "GR2.558.2",
+  "gr": "2.558.2",
+  "page": 223,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cos[x] + CC*Sin[x])/(a + b*Cos[x] + c*Sin[x]), x]",
+  "rhs": [
+   "(B*c - CC*b)/(b^2 + c^2)*Log[a + b*Cos[x] + c*Sin[x]] + (B*b + CC*c)/(b^2 + c^2)*x + (A - (B*b + CC*c)/(b^2 + c^2)*a)*2/Sqrt[a^2 - b^2 - c^2]*ArcTan[((a - b)*Tan[x/2] + c)/Sqrt[a^2 - b^2 - c^2]]"
+  ],
+  "conds": [
+   "a^2 > b^2 + c^2"
+  ],
+  "cite": "GU (331)(18)",
+  "edition_note": "11",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (A+B cos x+C sin x)/(a+b cos x+c sin x) = (Bc-Cb)/(b^2+c^2) ln(a+b cos x+c sin x) + (Bb+Cc)/(b^2+c^2) x + (A - (Bb+Cc)/(b^2+c^2) a) int dx/(a+b cos x+c sin x) (see 2.558 4)",
+  "note": "int dx/(a+b cos x+c sin x) replaced by the 2.558.4 arctan branch [a^2>b^2+c^2]; C renamed CC"
+ },
+ {
+  "id": "GR2.558.3",
+  "gr": "2.558.3",
+  "page": 223,
+  "status": "SKIP-REFERENCE",
+  "tex": "int dx/(a+b cos x+c sin x)^n = int d(x-alpha)/[a+r cos(x-alpha)]^n, b = r cos alpha, c = r sin alpha (see 2.554 3)",
+  "reason": "substitution rule",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine"
+ },
+ {
+  "id": "GR2.558.4a",
+  "gr": "2.558.4",
+  "page": 223,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cos[x] + c*Sin[x]), x]",
+  "rhs": [
+   "2/Sqrt[a^2 - b^2 - c^2]*ArcTan[((a - b)*Tan[x/2] + c)/Sqrt[a^2 - b^2 - c^2]]"
+  ],
+  "conds": [
+   "a^2 > b^2 + c^2"
+  ],
+  "cite": "TI (253), FI II 94",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int dx/(a+b cos x+c sin x) = 2/sqrt(a^2-b^2-c^2) arctan(((a-b)tan(x/2)+c)/sqrt(a^2-b^2-c^2)) [a^2>b^2+c^2]",
+  "note": ""
+ },
+ {
+  "id": "GR2.558.4b",
+  "gr": "2.558.4",
+  "page": 223,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cos[x] + c*Sin[x]), x]",
+  "rhs": [
+   "1/Sqrt[b^2 + c^2 - a^2]*Log[((a - b)*Tan[x/2] + c - Sqrt[b^2 + c^2 - a^2])/((a - b)*Tan[x/2] + c + Sqrt[b^2 + c^2 - a^2])]"
+  ],
+  "conds": [
+   "a^2 < b^2 + c^2"
+  ],
+  "cite": "TI (253)a",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "= 1/sqrt(b^2+c^2-a^2) ln(((a-b)tan(x/2)+c-sqrt(b^2+c^2-a^2))/((a-b)tan(x/2)+c+sqrt(b^2+c^2-a^2))) [a^2<b^2+c^2]",
+  "note": ""
+ },
+ {
+  "id": "GR2.558.4c",
+  "gr": "2.558.4",
+  "page": 223,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + a*Cos[x] + c*Sin[x]), x]",
+  "rhs": [
+   "1/c*Log[a + c*Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "= 1/c ln(a + c tan(x/2)) [a=b]",
+  "note": "a = b substituted (b -> a)"
+ },
+ {
+  "id": "GR2.558.4d",
+  "gr": "2.558.4",
+  "page": 223,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sqrt[b^2 + c^2] + b*Cos[x] + c*Sin[x]), x]",
+  "rhs": [
+   "-2/(c + (Sqrt[b^2 + c^2] - b)*Tan[x/2])"
+  ],
+  "conds": [],
+  "cite": "TI (253)a",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "= -2/(c + (a-b) tan(x/2)) [a^2=b^2+c^2]",
+  "note": "a^2 = b^2 + c^2 substituted as a = Sqrt[b^2 + c^2]"
+ },
+ {
+  "id": "GR2.559.1",
+  "gr": "2.559.1",
+  "page": 224,
+  "status": "ok",
+  "lhs": "Integrate[1/(a*(1 + Cos[x]) + c*Sin[x])^2, x]",
+  "rhs": [
+   "1/c^3*(c*(a*Sin[x] - c*Cos[x])/(a*(1 + Cos[x]) + c*Sin[x]) - a*Log[a + c*Tan[x/2]])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int dx/[a(1+cos x)+c sin x]^2 = 1/c^3 [c(a sin x - c cos x)/(a(1+cos x)+c sin x) - a ln(a + c tan x/2)]",
+  "note": ""
+ },
+ {
+  "id": "GR2.559.2",
+  "gr": "2.559.2",
+  "page": 224,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cos[x] + CC*Sin[x])/((a1 + b1*Cos[x] + c1*Sin[x])*(a2 + b2*Cos[x] + c2*Sin[x])), x]",
+  "rhs": [
+   "((A)*(b1*c2 - b2*c1) - (B)*(a1*c2 - a2*c1) + (CC)*(a1*b2 - a2*b1))/((a1*b2 - a2*b1)^2 - (b1*c2 - b2*c1)^2 + (c1*a2 - c2*a1)^2)*Log[(a1 + b1*Cos[x] + c1*Sin[x])/(a2 + b2*Cos[x] + c + 2*Sin[x])] + ((B*c1 - b1*CC)*(b1*c2 - b2*c1) - (A*c1 - a1*CC)*(a1*c2 - a2*c1) + (B*a1 - b1*A)*(a1*b2 - a2*b1))/((a1*b2 - a2*b1)^2 - (b1*c2 - b2*c1)^2 + (c1*a2 - c2*a1)^2)*2/Sqrt[a1^2 - b1^2 - c1^2]*ArcTan[((a1 - b1)*Tan[x/2] + c1)/Sqrt[a1^2 - b1^2 - c1^2]] + ((CC*b2 - c2*B)*(b1*c2 - b2*c1) - (CC*a2 - c2*A)*(a1*c2 - a2*c1) + (A*b2 - a2*B)*(a1*b2 - a2*b1))/((a1*b2 - a2*b1)^2 - (b1*c2 - b2*c1)^2 + (c1*a2 - c2*a1)^2)*2/Sqrt[a2^2 - b2^2 - c2^2]*ArcTan[((a2 - b2)*Tan[x/2] + c2)/Sqrt[a2^2 - b2^2 - c2^2]]",
+   "((A)*(b1*c2 - b2*c1) - (B)*(a1*c2 - a2*c1) + (CC)*(a1*b2 - a2*b1))/((a1*b2 - a2*b1)^2 - (b1*c2 - b2*c1)^2 + (c1*a2 - c2*a1)^2)*Log[(a1 + b1*Cos[x] + c1*Sin[x])/(a2 + b2*Cos[x] + c2*Sin[x])] + ((B*c1 - b1*CC)*(b1*c2 - b2*c1) - (A*c1 - a1*CC)*(a1*c2 - a2*c1) + (B*a1 - b1*A)*(a1*b2 - a2*b1))/((a1*b2 - a2*b1)^2 - (b1*c2 - b2*c1)^2 + (c1*a2 - c2*a1)^2)*2/Sqrt[a1^2 - b1^2 - c1^2]*ArcTan[((a1 - b1)*Tan[x/2] + c1)/Sqrt[a1^2 - b1^2 - c1^2]] + ((CC*b2 - c2*B)*(b1*c2 - b2*c1) - (CC*a2 - c2*A)*(a1*c2 - a2*c1) + (A*b2 - a2*B)*(a1*b2 - a2*b1))/((a1*b2 - a2*b1)^2 - (b1*c2 - b2*c1)^2 + (c1*a2 - c2*a1)^2)*2/Sqrt[a2^2 - b2^2 - c2^2]*ArcTan[((a2 - b2)*Tan[x/2] + c2)/Sqrt[a2^2 - b2^2 - c2^2]]"
+  ],
+  "conds": [
+   "a1^2 > b1^2 + c1^2",
+   "a2^2 > b2^2 + c2^2",
+   "((a1*b2 - a2*b1)^2 - (b1*c2 - b2*c1)^2 + (c1*a2 - c2*a1)^2) != 0"
+  ],
+  "cite": "GU (331)(19)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (A+B cos x+C sin x)/((a1+b1 cos x+c1 sin x)(a2+b2 cos x+c2 sin x)) = A0 ln((a1+b1 cos+c1 sin)/(a2+b2 cos x+c+2 sin x)) + A1 int dx/(a1+...) + A2 int dx/(a2+...); A0,A1,A2 ratios of determinants",
+  "note": "A0, A1, A2 expanded from the printed determinants (A1 top row |B C;b1 c1|,|A C;a1 c1|,|B A;b1 a1|; A2 top row |C B;c2 b2|,|C A;c2 a2|,|A B;a2 b2|); both remaining integrals replaced by the 2.558.4 arctan branch [aj^2>bj^2+cj^2]; log denominator printed 'a2+b2 cos x+c+2 sin x' (misprint), second candidate uses c2 sin x; C renamed CC"
+ },
+ {
+  "id": "GR2.559.3a",
+  "gr": "2.559.3",
+  "page": 224,
+  "status": "ok",
+  "lhs": "Integrate[(A*Cos[x]^2 + 2*B*Sin[x]*Cos[x] + CC*Sin[x]^2)/(a*Cos[x]^2 + 2*b*Sin[x]*Cos[x] + c*Sin[x]^2), x]",
+  "rhs": [
+   "1/(4*b^2 + (a - c)^2)*((4*B*b + (A - CC)*(a - c))*x + ((A - CC)*b - B*(a - c))*Log[a*Cos[x]^2 + 2*b*Sin[x]*Cos[x] + c*Sin[x]^2] + (2*(A + CC)*b^2 - 2*B*b*(a + c) + (a*CC - A*c)*(a - c))*1/(2*Sqrt[b^2 - a*c])*Log[(c*Tan[x] + b - Sqrt[b^2 - a*c])/(c*Tan[x] + b + Sqrt[b^2 - a*c])])"
+  ],
+  "conds": [
+   "b^2 > a*c"
+  ],
+  "cite": "GU (331)(24)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (A cos^2 x+2B sin x cos x+C sin^2 x)/(a cos^2 x+2b sin x cos x+c sin^2 x) = 1/(4b^2+(a-c)^2){[4Bb+(A-C)(a-c)]x + [(A-C)b-B(a-c)] ln(a cos^2+2b sin cos+c sin^2) + [2(A+C)b^2-2Bb(a+c)+(aC-Ac)(a-c)] f(x)}, f = 1/(2 sqrt(b^2-ac)) ln((c tan x+b-sqrt(b^2-ac))/(c tan x+b+sqrt(b^2-ac))) [b^2>ac]",
+  "note": "f(x) substituted; C renamed CC"
+ },
+ {
+  "id": "GR2.559.3b",
+  "gr": "2.559.3",
+  "page": 224,
+  "status": "ok",
+  "lhs": "Integrate[(A*Cos[x]^2 + 2*B*Sin[x]*Cos[x] + CC*Sin[x]^2)/(a*Cos[x]^2 + 2*b*Sin[x]*Cos[x] + c*Sin[x]^2), x]",
+  "rhs": [
+   "1/(4*b^2 + (a - c)^2)*((4*B*b + (A - CC)*(a - c))*x + ((A - CC)*b - B*(a - c))*Log[a*Cos[x]^2 + 2*b*Sin[x]*Cos[x] + c*Sin[x]^2] + (2*(A + CC)*b^2 - 2*B*b*(a + c) + (a*CC - A*c)*(a - c))*1/Sqrt[a*c - b^2]*ArcTan[(c*Tan[x] + b)/Sqrt[a*c - b^2]])"
+  ],
+  "conds": [
+   "b^2 < a*c"
+  ],
+  "cite": "GU (331)(24)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (A cos^2 x+2B sin x cos x+C sin^2 x)/(a cos^2 x+2b sin x cos x+c sin^2 x) = 1/(4b^2+(a-c)^2){[4Bb+(A-C)(a-c)]x + [(A-C)b-B(a-c)] ln(a cos^2+2b sin cos+c sin^2) + [2(A+C)b^2-2Bb(a+c)+(aC-Ac)(a-c)] f(x)}, f = 1/sqrt(ac-b^2) arctan((c tan x+b)/sqrt(ac-b^2)) [b^2<ac]",
+  "note": "f(x) substituted; C renamed CC"
+ },
+ {
+  "id": "GR2.559.3c",
+  "gr": "2.559.3",
+  "page": 224,
+  "status": "ok",
+  "lhs": "Integrate[(A*Cos[x]^2 + 2*B*Sin[x]*Cos[x] + CC*Sin[x]^2)/((b^2/c)*Cos[x]^2 + 2*b*Sin[x]*Cos[x] + c*Sin[x]^2), x]",
+  "rhs": [
+   "1/(4*b^2 + ((b^2/c) - c)^2)*((4*B*b + (A - CC)*((b^2/c) - c))*x + ((A - CC)*b - B*((b^2/c) - c))*Log[(b^2/c)*Cos[x]^2 + 2*b*Sin[x]*Cos[x] + c*Sin[x]^2] + (2*(A + CC)*b^2 - 2*B*b*((b^2/c) + c) + ((b^2/c)*CC - A*c)*((b^2/c) - c))*(-1/(c*Tan[x] + b)))"
+  ],
+  "conds": [],
+  "cite": "GU (331)(24)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (A cos^2 x+2B sin x cos x+C sin^2 x)/(a cos^2 x+2b sin x cos x+c sin^2 x) = 1/(4b^2+(a-c)^2){[4Bb+(A-C)(a-c)]x + [(A-C)b-B(a-c)] ln(a cos^2+2b sin cos+c sin^2) + [2(A+C)b^2-2Bb(a+c)+(aC-Ac)(a-c)] f(x)}, f = -1/(c tan x + b) [b^2=ac]",
+  "note": "f(x) substituted; b^2 = ac substituted as a = b^2/c; C renamed CC"
+ },
+ {
+  "id": "GR2.561.1",
+  "gr": "2.561.1",
+  "page": 224,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sin[x])/(Sin[x]*(a + b*Sin[x])), x]",
+  "rhs": [
+   "A/a*Log[Tan[x/2]] + (B*a - A*b)/a*2/Sqrt[a^2 - b^2]*ArcTan[(a*Tan[x/2] + b)/Sqrt[a^2 - b^2]]"
+  ],
+  "conds": [
+   "a^2 > b^2"
+  ],
+  "cite": "TI (348)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of the sine and cosine",
+  "tex": "int (A+B sin x)/(sin x(a+b sin x)) = A/a ln tan x/2 + (Ba-Ab)/a int dx/(a+b sin x) (see 2.551 3)",
+  "note": "int dx/(a+b sin x) replaced by the 2.551.3 arctan branch [a^2>b^2]"
+ }
+]

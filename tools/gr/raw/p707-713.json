@@ -1,0 +1,1591 @@
+[
+ {
+  "id": "GR6.458",
+  "gr": "6.458",
+  "page": 707,
+  "status": "ok",
+  "lhs": "Integrate[x^(1 - 2*nu)*Exp[alpha*x^2]*Sin[b*x]*Gamma[nu, alpha*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*2^(-nu)*alpha^(nu - 1)*Gamma[3/2 - nu]*Exp[b^2/(8*alpha)]*ParabolicCylinderD[2*nu - 2, b/Sqrt[2*alpha]]"
+  ],
+  "conds": [
+   "Abs[Arg[alpha]] < 3*Pi/2",
+   "0 < Re[nu] < 1"
+  ],
+  "cite": "ET II 309(18)",
+  "edition_note": "",
+  "section": "6.45 The incomplete gamma function",
+  "tex": "int_0^inf x^(1-2nu) exp(alpha x^2) sin(bx) Gamma(nu,alpha x^2) dx = pi^(1/2) 2^-nu alpha^(nu-1) Gamma(3/2-nu) exp(b^2/8alpha) D_{2nu-2}[b/(2alpha)^(1/2)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.461",
+  "gr": "6.461",
+  "page": 707,
+  "status": "ok",
+  "lhs": "Integrate[PolyGamma[t], {t, 1, x}]",
+  "rhs": [
+   "Log[Gamma[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_1^x psi(t) dt = ln Gamma(x)",
+  "note": ""
+ },
+ {
+  "id": "GR6.462",
+  "gr": "6.462",
+  "page": 707,
+  "status": "ok",
+  "lhs": "Integrate[PolyGamma[alpha + x], {x, 0, 1}]",
+  "rhs": [
+   "Log[alpha]"
+  ],
+  "conds": [
+   "alpha > 0"
+  ],
+  "cite": "ET II 305(1)",
+  "edition_note": "",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_0^1 psi(alpha+x) dx = ln alpha",
+  "note": ""
+ },
+ {
+  "id": "GR6.463",
+  "gr": "6.463",
+  "page": 707,
+  "status": "ok",
+  "lhs": "Integrate[x^(-alpha)*(EulerGamma + PolyGamma[1 + x]), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*Csc[Pi*alpha]*Zeta[alpha]"
+  ],
+  "conds": [
+   "1 < Re[alpha] < 2"
+  ],
+  "cite": "ET II 305(6)",
+  "edition_note": "",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_0^inf x^-alpha [C + psi(1+x)] dx = -pi cosec(pi alpha) zeta(alpha)",
+  "note": ""
+ },
+ {
+  "id": "GR6.464",
+  "gr": "6.464",
+  "page": 707,
+  "status": "ok",
+  "lhs": "Integrate[E^(2*Pi*n*x*I)*PolyGamma[alpha + x], {x, 0, 1}]",
+  "rhs": [
+   "E^(-2*Pi*n*alpha*I)*ExpIntegralEi[2*Pi*n*alpha*I]"
+  ],
+  "conds": [
+   "alpha > 0",
+   "Element[n, Integers] && n != 0"
+  ],
+  "cite": "ET II 305(2)",
+  "edition_note": "",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_0^1 e^(2 pi n x i) psi(alpha+x) dx = e^(-2 pi n alpha i) Ei(2 pi n alpha i)",
+  "note": "Book prints n = +-i, +-2, ...; read as n = +-1, +-2, ... (typo)."
+ },
+ {
+  "id": "GR6.465.1",
+  "gr": "6.465.1",
+  "page": 707,
+  "status": "ok",
+  "lhs": "Integrate[PolyGamma[x]*Sin[Pi*x], {x, 0, 1}]",
+  "rhs": [
+   "-(2/Pi)*(EulerGamma + Log[2*Pi] + 2*Sum[Log[k]/(4*k^2 - 1), {k, 2, Infinity}])"
+  ],
+  "conds": [],
+  "cite": "NH 204",
+  "edition_note": "8",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_0^1 psi(x) sin(pi x) dx = -(2/pi)[C + ln 2pi + 2 sum_{k>=2} ln k/(4k^2-1)]",
+  "note": "see 6.443 4"
+ },
+ {
+  "id": "GR6.465.2",
+  "gr": "6.465.2",
+  "page": 707,
+  "status": "ok",
+  "lhs": "Integrate[PolyGamma[x]*Sin[2*Pi*n*x], {x, 0, 1}]",
+  "rhs": [
+   "-Pi/2"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "ET II 305(3)",
+  "edition_note": "",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_0^1 psi(x) sin(2 pi n x) dx = -pi/2",
+  "note": ""
+ },
+ {
+  "id": "GR6.466",
+  "gr": "6.466",
+  "page": 707,
+  "status": "ok",
+  "lhs": "Integrate[(PolyGamma[alpha + I*x] - PolyGamma[alpha - I*x])*Sin[x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "I*Pi*E^(-alpha*y)*(1 - E^(-y))^(-1)"
+  ],
+  "conds": [
+   "alpha > 0",
+   "y > 0"
+  ],
+  "cite": "ET I 96(1)",
+  "edition_note": "",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_0^inf [psi(alpha+ix) - psi(alpha-ix)] sin xy dx = i pi e^(-alpha y) (1-e^-y)^-1",
+  "note": ""
+ },
+ {
+  "id": "GR6.467.1",
+  "gr": "6.467.1",
+  "page": 707,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*Pi*n*x]*PolyGamma[alpha + x], {x, 0, 1}]",
+  "rhs": [
+   "Sin[2*Pi*n*alpha]*CosIntegral[2*Pi*n*alpha] + Cos[2*Pi*n*alpha]*(SinIntegral[2*Pi*n*alpha] - Pi/2)"
+  ],
+  "conds": [
+   "alpha >= 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "ET II 305(4)",
+  "edition_note": "",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_0^1 sin(2 pi n x) psi(alpha+x) dx = sin(2pi n alpha) ci(2pi n alpha) + cos(2pi n alpha) si(2pi n alpha)",
+  "note": ""
+ },
+ {
+  "id": "GR6.467.2",
+  "gr": "6.467.2",
+  "page": 707,
+  "status": "ok",
+  "lhs": "Integrate[Cos[2*Pi*n*x]*PolyGamma[alpha + x], {x, 0, 1}]",
+  "rhs": [
+   "Sin[2*Pi*n*alpha]*(SinIntegral[2*Pi*n*alpha] - Pi/2) - Cos[2*Pi*n*alpha]*CosIntegral[2*Pi*n*alpha]"
+  ],
+  "conds": [
+   "alpha > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "ET II 305(5)",
+  "edition_note": "",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_0^1 cos(2 pi n x) psi(alpha+x) dx = sin(2pi n alpha) si(2pi n alpha) - cos(2pi n alpha) ci(2pi n alpha)",
+  "note": ""
+ },
+ {
+  "id": "GR6.468",
+  "gr": "6.468",
+  "page": 707,
+  "status": "ok",
+  "lhs": "Integrate[PolyGamma[x]*Sin[Pi*x]^2, {x, 0, 1}]",
+  "rhs": [
+   "-(EulerGamma + Log[2*Pi])/2"
+  ],
+  "conds": [],
+  "cite": "NH 204",
+  "edition_note": "",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_0^1 psi(x) sin^2 pi x dx = -(1/2)[C + ln(2pi)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.469.1",
+  "gr": "6.469.1",
+  "page": 707,
+  "status": "ok",
+  "lhs": "Integrate[PolyGamma[x]*Sin[Pi*x]*Cos[Pi*x], {x, 0, 1}]",
+  "rhs": [
+   "-Pi/4"
+  ],
+  "conds": [],
+  "cite": "NH 204",
+  "edition_note": "",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_0^1 psi(x) sin pi x cos pi x dx = -pi/4",
+  "note": ""
+ },
+ {
+  "id": "GR6.469.2a",
+  "gr": "6.469.2a",
+  "page": 707,
+  "status": "ok",
+  "lhs": "Integrate[PolyGamma[x]*Sin[Pi*x]*Sin[n*Pi*x], {x, 0, 1}]",
+  "rhs": [
+   "n/(1 - n^2)"
+  ],
+  "conds": [
+   "Element[n/2, Integers] && n > 0"
+  ],
+  "cite": "NH 204(8)a",
+  "edition_note": "8",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_0^1 psi(x) sin pi x sin(n pi x) dx = n/(1-n^2) [n even]",
+  "note": ""
+ },
+ {
+  "id": "GR6.469.2b",
+  "gr": "6.469.2b",
+  "page": 707,
+  "status": "ok",
+  "lhs": "Integrate[PolyGamma[x]*Sin[Pi*x]*Sin[n*Pi*x], {x, 0, 1}]",
+  "rhs": [
+   "(1/2)*Log[(n - 1)/(n + 1)]"
+  ],
+  "conds": [
+   "Element[(n - 1)/2, Integers] && n > 1"
+  ],
+  "cite": "NH 204(8)a",
+  "edition_note": "8",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_0^1 psi(x) sin pi x sin(n pi x) dx = (1/2) ln((n-1)/(n+1)) [n>1 odd]",
+  "note": ""
+ },
+ {
+  "id": "GR6.471.1",
+  "gr": "6.471.1",
+  "page": 708,
+  "status": "ok",
+  "lhs": "Integrate[x^(-alpha)*(Log[x] - PolyGamma[1 + x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Csc[Pi*alpha]*Zeta[alpha]"
+  ],
+  "conds": [
+   "0 < Re[alpha] < 1"
+  ],
+  "cite": "ET II 306(7)",
+  "edition_note": "",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_0^inf x^-alpha [ln x - psi(1+x)] dx = pi cosec(pi alpha) zeta(alpha)",
+  "note": ""
+ },
+ {
+  "id": "GR6.471.2",
+  "gr": "6.471.2",
+  "page": 708,
+  "status": "ok",
+  "lhs": "Integrate[x^(-alpha)*(Log[1 + x] - PolyGamma[1 + x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Csc[Pi*alpha]*(Zeta[alpha] - (alpha - 1)^(-1))"
+  ],
+  "conds": [
+   "0 < Re[alpha] < 1"
+  ],
+  "cite": "ET II 306(8)",
+  "edition_note": "",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_0^inf x^-alpha [ln(1+x) - psi(1+x)] dx = pi cosec(pi alpha)[zeta(alpha) - (alpha-1)^-1]",
+  "note": ""
+ },
+ {
+  "id": "GR6.471.3",
+  "gr": "6.471.3",
+  "page": 708,
+  "status": "ok",
+  "lhs": "Integrate[(PolyGamma[x + 1] - Log[x])*Cos[2*Pi*x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "(PolyGamma[y + 1] - Log[y])/2"
+  ],
+  "conds": [],
+  "cite": "ET II 306(12)",
+  "edition_note": "",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_0^inf [psi(x+1) - ln x] cos(2 pi x y) dx = (1/2)[psi(y+1) - ln y]",
+  "note": "no condition printed; y > 0 implied"
+ },
+ {
+  "id": "GR6.472.1",
+  "gr": "6.472.1",
+  "page": 708,
+  "status": "ok",
+  "lhs": "Integrate[x^(-alpha)*((1 + x)^(-1) - PolyGamma[1, 1 + x]), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*alpha*Csc[Pi*alpha]*(Zeta[1 + alpha] - alpha^(-1))"
+  ],
+  "conds": [
+   "Abs[Re[alpha]] < 1"
+  ],
+  "cite": "ET II 306(9)",
+  "edition_note": "",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_0^inf x^-alpha [(1+x)^-1 - psi'(1+x)] dx = -pi alpha cosec(pi alpha)[zeta(1+alpha) - alpha^-1]",
+  "note": ""
+ },
+ {
+  "id": "GR6.472.2",
+  "gr": "6.472.2",
+  "page": 708,
+  "status": "ok",
+  "lhs": "Integrate[x^(-alpha)*(x^(-1) - PolyGamma[1, 1 + x]), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*alpha*Csc[Pi*alpha]*Zeta[1 + alpha]"
+  ],
+  "conds": [
+   "-2 < Re[alpha] < 0"
+  ],
+  "cite": "ET II 306(10)",
+  "edition_note": "",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_0^inf x^-alpha [x^-1 - psi'(1+x)] dx = -pi alpha cosec(pi alpha) zeta(1+alpha)",
+  "note": ""
+ },
+ {
+  "id": "GR6.473",
+  "gr": "6.473",
+  "page": 708,
+  "status": "ok",
+  "lhs": "Integrate[x^(-alpha)*PolyGamma[n, 1 + x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n - 1)*Pi*Gamma[alpha + n]/(Gamma[alpha]*Sin[Pi*alpha])*Zeta[alpha + n]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "0 < Re[alpha] < 1"
+  ],
+  "cite": "ET II 306(11)",
+  "edition_note": "",
+  "section": "6.46-6.47 The function psi(x)",
+  "tex": "int_0^inf x^-alpha psi^(n)(1+x) dx = (-1)^(n-1) pi Gamma(alpha+n)/(Gamma(alpha) sin pi alpha) zeta(alpha+n)",
+  "note": ""
+ },
+ {
+  "id": "GR6.511.1",
+  "gr": "6.511.1",
+  "page": 708,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/b"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "b > 0"
+  ],
+  "cite": "ET II 22(3)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf J_nu(bx) dx = 1/b",
+  "note": ""
+ },
+ {
+  "id": "GR6.511.2",
+  "gr": "6.511.2",
+  "page": 708,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-(1/b)*Tan[nu*Pi/2]"
+  ],
+  "conds": [
+   "Abs[Re[nu]] < 1",
+   "b > 0"
+  ],
+  "cite": "WA 432(7), ET II 96(1)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf Y_nu(bx) dx = -(1/b) tan(nu pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.511.3",
+  "gr": "6.511.3",
+  "page": 708,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, x], {x, 0, a}]",
+  "rhs": [
+   "2*Sum[BesselJ[nu + 2*k + 1, a], {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 333(1)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^a J_nu(x) dx = 2 sum_{k>=0} J_{nu+2k+1}(a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.511.4",
+  "gr": "6.511.4",
+  "page": 708,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[1/2, t], {t, 0, a}]",
+  "rhs": [
+   "2*FresnelS[Sqrt[2/Pi]*Sqrt[a]]"
+  ],
+  "conds": [],
+  "cite": "WA 599(4)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^a J_{1/2}(t) dt = 2 S(sqrt a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.511.5",
+  "gr": "6.511.5",
+  "page": 708,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[-1/2, t], {t, 0, a}]",
+  "rhs": [
+   "2*FresnelC[Sqrt[2/Pi]*Sqrt[a]]"
+  ],
+  "conds": [],
+  "cite": "WA 599(3)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^a J_{-1/2}(t) dt = 2 C(sqrt a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.511.6",
+  "gr": "6.511.6",
+  "page": 708,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[0, x], {x, 0, a}]",
+  "rhs": [
+   "a*BesselJ[0, a] + (Pi*a/2)*(BesselJ[1, a]*StruveH[0, a] - BesselJ[0, a]*StruveH[1, a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 7(2)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^a J_0(x) dx = a J0(a) + (pi a/2)[J1(a) H0(a) - J0(a) H1(a)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.511.7",
+  "gr": "6.511.7",
+  "page": 709,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[1, x], {x, 0, a}]",
+  "rhs": [
+   "1 - BesselJ[0, a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 18(1)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^a J_1(x) dx = 1 - J0(a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.511.8",
+  "gr": "6.511.8",
+  "page": 709,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[0, x], {x, a, Infinity}]",
+  "rhs": [
+   "1 - a*BesselJ[0, a] + (Pi*a/2)*(BesselJ[0, a]*StruveH[1, a] - BesselJ[1, a]*StruveH[0, a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 7(3)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_a^inf J_0(x) dx = 1 - a J0(a) + (pi a/2)[J0(a) H1(a) - J1(a) H0(a)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.511.9",
+  "gr": "6.511.9",
+  "page": 709,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[1, x], {x, a, Infinity}]",
+  "rhs": [
+   "BesselJ[0, a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 18(2)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_a^inf J_1(x) dx = J0(a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.511.10",
+  "gr": "6.511.10",
+  "page": 709,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[nu, x], {x, a, b}]",
+  "rhs": [
+   "2*Sum[BesselY[nu + 2*n + 1, b] - BesselY[nu + 2*n + 1, a], {n, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "ET II 339(46)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_a^b Y_nu(x) dx = 2 sum_{n>=0} [Y_{nu+2n+1}(b) - Y_{nu+2n+1}(a)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.511.11",
+  "gr": "6.511.11",
+  "page": 709,
+  "status": "ok",
+  "lhs": "Integrate[BesselI[nu, x], {x, 0, a}]",
+  "rhs": [
+   "2*Sum[(-1)^n*BesselI[nu + 2*n + 1, a], {n, 0, Infinity}]"
+  ],
+  "conds": [
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 364(1)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^a I_nu(x) dx = 2 sum_{n>=0} (-1)^n I_{nu+2n+1}(a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.511.12",
+  "gr": "6.511.12",
+  "page": 709,
+  "status": "ok",
+  "lhs": "Integrate[BesselK[0, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf K_0(ax) = pi/(2a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.511.13",
+  "gr": "6.511.13",
+  "page": 709,
+  "status": "ok",
+  "lhs": "Integrate[BesselK[0, a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/(4*a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf K_0^2(ax) = pi^2/(4a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.512.1",
+  "gr": "6.512.1",
+  "page": 709,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[mu, a*x]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b^nu*a^(-nu - 1)*Gamma[(mu + nu + 1)/2]/(Gamma[nu + 1]*Gamma[(mu - nu + 1)/2])*Hypergeometric2F1[(mu + nu + 1)/2, (nu - mu + 1)/2, nu + 1, b^2/a^2]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[mu + nu] > -1",
+   "b < a"
+  ],
+  "cite": "ET II 48(6)",
+  "edition_note": "11",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf J_mu(ax) J_nu(bx) dx = b^nu a^(-nu-1) Gamma((mu+nu+1)/2)/(Gamma(nu+1) Gamma((mu-nu+1)/2)) F((mu+nu+1)/2,(nu-mu+1)/2;nu+1;b^2/a^2)",
+  "note": "For a > b, the positions of mu and nu should be reversed."
+ },
+ {
+  "id": "GR6.512.2a",
+  "gr": "6.512.2a",
+  "page": 709,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu + n, alpha*t]*BesselJ[nu - n - 1, beta*t], {t, 0, Infinity}]",
+  "rhs": [
+   "beta^(nu - n - 1)*Gamma[nu]/(alpha^(nu - n)*n!*Gamma[nu - n])*Hypergeometric2F1[nu, -n, nu - n, beta^2/alpha^2]"
+  ],
+  "conds": [
+   "0 < beta < alpha",
+   "Re[nu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MO 50",
+  "edition_note": "7",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf J_{nu+n}(alpha t) J_{nu-n-1}(beta t) dt = beta^(nu-n-1) Gamma(nu)/(alpha^(nu-n) n! Gamma(nu-n)) F(nu,-n;nu-n;beta^2/alpha^2) [0<beta<alpha]",
+  "note": "n assumed nonnegative integer (n! appears)"
+ },
+ {
+  "id": "GR6.512.2b",
+  "gr": "6.512.2b",
+  "page": 709,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu + n, alpha*t]*BesselJ[nu - n - 1, alpha*t], {t, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n/(2*alpha)"
+  ],
+  "conds": [
+   "alpha > 0",
+   "Re[nu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MO 50",
+  "edition_note": "7",
+  "section": "6.51 Bessel functions",
+  "tex": "same with beta = alpha: = (-1)^n 1/(2 alpha)",
+  "note": "beta = alpha case; beta substituted by alpha"
+ },
+ {
+  "id": "GR6.512.2c",
+  "gr": "6.512.2c",
+  "page": 709,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu + n, alpha*t]*BesselJ[nu - n - 1, beta*t], {t, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < alpha < beta",
+   "Re[nu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MO 50",
+  "edition_note": "7",
+  "section": "6.51 Bessel functions",
+  "tex": "same = 0 [0<alpha<beta]",
+  "note": ""
+ },
+ {
+  "id": "GR6.512.3a",
+  "gr": "6.512.3a",
+  "page": 709,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, alpha*x]*BesselJ[nu - 1, beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "beta^(nu - 1)/alpha^nu"
+  ],
+  "conds": [
+   "0 < beta < alpha",
+   "Re[nu] > 0"
+  ],
+  "cite": "WA 444(8), KU (40)a",
+  "edition_note": "8",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf J_nu(alpha x) J_{nu-1}(beta x) dx = beta^(nu-1)/alpha^nu [beta<alpha]",
+  "note": ""
+ },
+ {
+  "id": "GR6.512.3b",
+  "gr": "6.512.3b",
+  "page": 709,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, beta*x]*BesselJ[nu - 1, beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*beta)"
+  ],
+  "conds": [
+   "beta > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "WA 444(8), KU (40)a",
+  "edition_note": "8",
+  "section": "6.51 Bessel functions",
+  "tex": "same = 1/(2 beta) [beta = alpha]",
+  "note": "beta = alpha case; alpha substituted by beta"
+ },
+ {
+  "id": "GR6.512.3c",
+  "gr": "6.512.3c",
+  "page": 709,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, alpha*x]*BesselJ[nu - 1, beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "beta > alpha > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "WA 444(8), KU (40)a",
+  "edition_note": "8",
+  "section": "6.51 Bessel functions",
+  "tex": "same = 0 [beta > alpha]",
+  "note": ""
+ },
+ {
+  "id": "GR6.512.4a",
+  "gr": "6.512.4a",
+  "page": 709,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu + 2*n + 1, a*x]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b^nu*a^(-nu - 1)*JacobiP[n, nu, 0, 1 - 2*b^2/a^2]"
+  ],
+  "conds": [
+   "Re[nu] > -1 - n",
+   "0 < b < a",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 47(5)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf J_{nu+2n+1}(ax) J_nu(bx) dx = b^nu a^(-nu-1) P_n^(nu,0)(1-2b^2/a^2) [0<b<a]",
+  "note": ""
+ },
+ {
+  "id": "GR6.512.4b",
+  "gr": "6.512.4b",
+  "page": 709,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu + 2*n + 1, a*x]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Re[nu] > -1 - n",
+   "0 < a < b",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 47(5)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "same = 0 [0<a<b]",
+  "note": ""
+ },
+ {
+  "id": "GR6.512.5",
+  "gr": "6.512.5",
+  "page": 710,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu + n, a*x]*BesselY[nu - n, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n + 1)/(2*a)"
+  ],
+  "conds": [
+   "Re[nu] > -1/2",
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 347(57)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf J_{nu+n}(ax) Y_{nu-n}(ax) dx = (-1)^(n+1) 1/(2a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.512.6",
+  "gr": "6.512.6",
+  "page": 710,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[1, b*x]*BesselY[0, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-(b^(-1)/Pi)*Log[1 - b^2/a^2]"
+  ],
+  "conds": [
+   "0 < b < a"
+  ],
+  "cite": "ET II 21(31)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf J_1(bx) Y_0(ax) dx = -(b^-1/pi) ln(1 - b^2/a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.512.7",
+  "gr": "6.512.7",
+  "page": 710,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, x]*BesselJ[nu + 1, x], {x, 0, a}]",
+  "rhs": [
+   "Sum[BesselJ[nu + n + 1, a]^2, {n, 0, Infinity}]"
+  ],
+  "conds": [
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 338(37)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^a J_nu(x) J_{nu+1}(x) dx = sum_{n>=0} [J_{nu+n+1}(a)]^2",
+  "note": ""
+ },
+ {
+  "id": "GR6.512.8",
+  "gr": "6.512.8",
+  "page": 710,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[k*BesselJ[n, k*a]*BesselJ[n, k*b], {k, 0, Infinity}]",
+  "rhs": [
+   "DiracDelta[b - a]/a"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "JAC 110",
+  "edition_note": "9",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf k J_n(ka) J_n(kb) dk = (1/a) delta(b-a)",
+  "note": "",
+  "reason": "Distributional identity (Dirac delta closure relation); integral does not converge classically."
+ },
+ {
+  "id": "GR6.512.9",
+  "gr": "6.512.9",
+  "page": 710,
+  "status": "ok",
+  "lhs": "Integrate[BesselK[0, a*x]*BesselJ[1, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(1/(2*b))*Log[1 + b^2/a^2]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf K_0(ax) J_1(bx) = (1/2b) ln(1 + b^2/a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.512.10",
+  "gr": "6.512.10",
+  "page": 710,
+  "status": "ok",
+  "lhs": "Integrate[BesselK[0, a*x]*BesselI[1, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-(1/(2*b))*Log[1 - b^2/a^2]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf K_0(ax) I_1(bx) = -(1/2b) ln(1 - b^2/a^2)",
+  "note": "Book condition reads [a > 0, b > 0]; convergence actually needs a > b > 0."
+ },
+ {
+  "id": "GR6.513.1",
+  "gr": "6.513.1",
+  "page": 710,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[mu, a*x]^2*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "a^(2*mu)*b^(-2*mu - 1)*Gamma[(1 + nu + 2*mu)/2]/(Gamma[mu + 1]^2*Gamma[(1 + nu - 2*mu)/2])*Hypergeometric2F1[(1 - nu + 2*mu)/2, (1 + nu + 2*mu)/2, mu + 1, (1 - Sqrt[1 - 4*a^2/b^2])/2]^2"
+  ],
+  "conds": [
+   "Re[nu] + Re[2*mu] > -1",
+   "0 < 2*a < b"
+  ],
+  "cite": "ET II 52(33)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf [J_mu(ax)]^2 J_nu(bx) dx = a^(2mu) b^(-2mu-1) Gamma((1+nu+2mu)/2)/([Gamma(mu+1)]^2 Gamma((1+nu-2mu)/2)) [F((1-nu+2mu)/2,(1+nu+2mu)/2;mu+1;(1-sqrt(1-4a^2/b^2))/2)]^2",
+  "note": ""
+ },
+ {
+  "id": "GR6.513.2",
+  "gr": "6.513.2",
+  "page": 710,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[mu, a*x]^2*BesselK[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(b^(-1)/2)*Gamma[(2*mu + nu + 1)/2]*Gamma[(2*mu - nu + 1)/2]*LegendreP[nu/2 - 1/2, -mu, Sqrt[1 + 4*a^2/b^2]]^2"
+  ],
+  "conds": [
+   "2*Re[mu] > Abs[Re[nu]] - 1",
+   "Re[b] > 2*Abs[Im[a]]"
+  ],
+  "cite": "ET II 138(18)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf [J_mu(ax)]^2 K_nu(bx) dx = (b^-1/2) Gamma((2mu+nu+1)/2) Gamma((2mu-nu+1)/2) [P^{-mu}_{nu/2-1/2}(sqrt(1+4a^2/b^2))]^2",
+  "note": "type 3"
+ },
+ {
+  "id": "GR6.513.3",
+  "gr": "6.513.3",
+  "page": 710,
+  "status": "ok",
+  "lhs": "Integrate[BesselI[mu, a*x]*BesselK[mu, a*x]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "E^(mu*Pi*I)*Gamma[(nu + 2*mu + 1)/2]/(b*Gamma[(nu - 2*mu + 1)/2])*LegendreP[nu/2 - 1/2, -mu, Sqrt[1 + 4*a^2/b^2]]*LegendreQ[nu/2 - 1/2, -mu, Sqrt[1 + 4*a^2/b^2]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Re[nu] > -1",
+   "Re[nu + 2*mu] > -1"
+  ],
+  "cite": "ET II 65(20)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf I_mu(ax) K_mu(ax) J_nu(bx) dx = e^(mu pi i) Gamma((nu+2mu+1)/2)/(b Gamma((nu-2mu+1)/2)) P^{-mu}_{nu/2-1/2}(s) Q^{-mu}_{nu/2-1/2}(s), s = sqrt(1+4a^2/b^2)",
+  "note": "type 3"
+ },
+ {
+  "id": "GR6.513.4",
+  "gr": "6.513.4",
+  "page": 710,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[mu, a*x]*BesselJ[-mu, a*x]*BesselK[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/(2*b))*Sec[nu*Pi/2]*LegendreP[nu/2 - 1/2, mu, Sqrt[1 + 4*a^2/b^2]]*LegendreP[nu/2 - 1/2, -mu, Sqrt[1 + 4*a^2/b^2]]"
+  ],
+  "conds": [
+   "Abs[Re[nu]] < 1",
+   "Re[b] > 2*Abs[Im[a]]"
+  ],
+  "cite": "ET II 138(21)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf J_mu(ax) J_-mu(ax) K_nu(bx) dx = (pi/2b) sec(nu pi/2) P^mu_{nu/2-1/2}(s) P^-mu_{nu/2-1/2}(s)",
+  "note": "type 3"
+ },
+ {
+  "id": "GR6.513.5",
+  "gr": "6.513.5",
+  "page": 711,
+  "status": "ok",
+  "lhs": "Integrate[BesselK[mu, a*x]^2*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "E^(2*mu*Pi*I)*Gamma[(1 + nu + 2*mu)/2]/(b*Gamma[(1 + nu - 2*mu)/2])*LegendreQ[nu/2 - 1/2, -mu, Sqrt[1 + 4*a^2/b^2]]^2"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Re[nu/2 + mu] > -1/2",
+   "Re[nu/2 - mu] > -1/2"
+  ],
+  "cite": "ET II 66(28)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf [K_mu(ax)]^2 J_nu(bx) dx = e^(2 mu pi i) Gamma((1+nu+2mu)/2)/(b Gamma((1+nu-2mu)/2)) [Q^-mu_{nu/2-1/2}(s)]^2",
+  "note": "type 3"
+ },
+ {
+  "id": "GR6.513.6",
+  "gr": "6.513.6",
+  "page": 711,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[mu, x]*BesselJ[nu, z - x], {x, 0, z}]",
+  "rhs": [
+   "2*Sum[(-1)^k*BesselJ[mu + nu + 2*k + 1, z], {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "Re[mu] > -1",
+   "Re[nu] > -1"
+  ],
+  "cite": "WA 414(2)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^z J_mu(x) J_nu(z-x) dx = 2 sum_{k>=0} (-1)^k J_{mu+nu+2k+1}(z)",
+  "note": ""
+ },
+ {
+  "id": "GR6.513.7",
+  "gr": "6.513.7",
+  "page": 711,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[mu, x]*BesselJ[-mu, z - x], {x, 0, z}]",
+  "rhs": [
+   "Sin[z]"
+  ],
+  "conds": [
+   "-1 < Re[mu] < 1"
+  ],
+  "cite": "WA 415(4)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^z J_mu(x) J_-mu(z-x) dx = sin z",
+  "note": ""
+ },
+ {
+  "id": "GR6.513.8",
+  "gr": "6.513.8",
+  "page": 711,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[mu, x]*BesselJ[1 - mu, z - x], {x, 0, z}]",
+  "rhs": [
+   "BesselJ[0, z] - Cos[z]"
+  ],
+  "conds": [
+   "-1 < Re[mu] < 2"
+  ],
+  "cite": "WA 415(4)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^z J_mu(x) J_{1-mu}(z-x) dx = J0(z) - cos z",
+  "note": ""
+ },
+ {
+  "id": "GR6.513.9a",
+  "gr": "6.513.9a",
+  "page": 711,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[0, a*x]^2*BesselJ[1, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/b"
+  ],
+  "conds": [
+   "b > 2*a > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf J_0^2(ax) J_1(bx) = 1/b [b > 2a > 0]",
+  "note": ""
+ },
+ {
+  "id": "GR6.513.9b",
+  "gr": "6.513.9b",
+  "page": 711,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[0, a*x]^2*BesselJ[1, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2/(Pi*b))*ArcSin[b/(2*a)]"
+  ],
+  "conds": [
+   "2*a > b > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.51 Bessel functions",
+  "tex": "same = (2/(pi b)) arcsin(b/2a) [2a > b > 0]",
+  "note": ""
+ },
+ {
+  "id": "GR6.514.1",
+  "gr": "6.514.1",
+  "page": 711,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, a/x]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b^(-1)*BesselJ[2*nu, 2*Sqrt[a*b]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 57(9)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf J_nu(a/x) J_nu(bx) dx = b^-1 J_{2nu}(2 sqrt(ab))",
+  "note": ""
+ },
+ {
+  "id": "GR6.514.2",
+  "gr": "6.514.2",
+  "page": 711,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, a/x]*BesselY[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b^(-1)*(BesselY[2*nu, 2*Sqrt[a*b]] + (2/Pi)*BesselK[2*nu, Sqrt[2*a*b]])",
+   "b^(-1)*(BesselY[2*nu, 2*Sqrt[a*b]] + (2/Pi)*BesselK[2*nu, 2*Sqrt[a*b]])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "-1/2 < Re[nu] < 3/2"
+  ],
+  "cite": "ET II 110(12)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf J_nu(a/x) Y_nu(bx) dx = b^-1 [Y_{2nu}(2 sqrt(ab)) + (2/pi) K_{2nu}(sqrt(2ab))]",
+  "note": "K argument printed as sqrt(2ab); likely typo for 2 sqrt(ab) (second candidate)."
+ },
+ {
+  "id": "GR6.514.3",
+  "gr": "6.514.3",
+  "page": 711,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, a/x]*BesselK[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b^(-1)*E^(I*(nu + 1)*Pi/2)*BesselK[2*nu, 2*E^(I*Pi/4)*Sqrt[a*b]] + b^(-1)*E^(-I*(nu + 1)*Pi/2)*BesselK[2*nu, 2*E^(-I*Pi/4)*Sqrt[a*b]]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[b] > 0",
+   "Abs[Re[nu]] < 5/2"
+  ],
+  "cite": "ET II 141(31)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf J_nu(a/x) K_nu(bx) dx = b^-1 e^(i(nu+1)pi/2) K_{2nu}[2e^(i pi/4) sqrt(ab)] + b^-1 e^(-i(nu+1)pi/2) K_{2nu}[2e^(-i pi/4) sqrt(ab)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.514.4",
+  "gr": "6.514.4",
+  "page": 711,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[nu, a/x]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-(2*b^(-1)/Pi)*(BesselK[2*nu, 2*Sqrt[a*b]] - (Pi/2)*BesselY[2*nu, 2*Sqrt[a*b]])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 62(37)a",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf Y_nu(a/x) J_nu(bx) dx = -(2b^-1/pi)[K_{2nu}(2 sqrt(ab)) - (pi/2) Y_{2nu}(2 sqrt(ab))]",
+  "note": ""
+ },
+ {
+  "id": "GR6.514.5",
+  "gr": "6.514.5",
+  "page": 711,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[nu, a/x]*BesselY[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-b^(-1)*BesselJ[2*nu, 2*Sqrt[a*b]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 110(14)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf Y_nu(a/x) Y_nu(bx) dx = -b^-1 J_{2nu}(2 sqrt(ab))",
+  "note": ""
+ },
+ {
+  "id": "GR6.514.6",
+  "gr": "6.514.6",
+  "page": 711,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[nu, a/x]*BesselK[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-b^(-1)*E^(nu*Pi*I/2)*BesselK[2*nu, 2*E^(Pi*I/4)*Sqrt[a*b]] - b^(-1)*E^(-nu*Pi*I/2)*BesselK[2*nu, 2*E^(-Pi*I/4)*Sqrt[a*b]]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[b] > 0",
+   "Abs[Re[nu]] < 5/2"
+  ],
+  "cite": "ET II 143(37)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf Y_nu(a/x) K_nu(bx) dx = -b^-1 e^(nu pi i/2) K_{2nu}(2e^(pi i/4) sqrt(ab)) - b^-1 e^(-nu pi i/2) K_{2nu}(2e^(-pi i/4) sqrt(ab))",
+  "note": ""
+ },
+ {
+  "id": "GR6.514.7",
+  "gr": "6.514.7",
+  "page": 712,
+  "status": "ok",
+  "lhs": "Integrate[BesselK[nu, a/x]*BesselY[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-2*b^(-1)*(Sin[3*nu*Pi/2]*KelvinKer[2*nu, 2*Sqrt[a*b]] + Cos[3*nu*Pi/2]*KelvinKei[2*nu, 2*Sqrt[a*b]])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 113(28)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf K_nu(a/x) Y_nu(bx) dx = -2b^-1 [sin(3 nu pi/2) ker_{2nu}(2 sqrt(ab)) + cos(3 nu pi/2) kei_{2nu}(2 sqrt(ab))]",
+  "note": ""
+ },
+ {
+  "id": "GR6.514.8",
+  "gr": "6.514.8",
+  "page": 712,
+  "status": "ok",
+  "lhs": "Integrate[BesselK[nu, a/x]*BesselK[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*b^(-1)*BesselK[2*nu, 2*Sqrt[a*b]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0"
+  ],
+  "cite": "ET II 146(54)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf K_nu(a/x) K_nu(bx) dx = pi b^-1 K_{2nu}(2 sqrt(ab))",
+  "note": ""
+ },
+ {
+  "id": "GR6.515.1",
+  "gr": "6.515.1",
+  "page": 712,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[mu, a/x]*BesselY[mu, a/x]*BesselK[0, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-2*b^(-1)*BesselJ[2*mu, 2*Sqrt[a*b]]*BesselK[2*mu, 2*Sqrt[a*b]]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[b] > 0"
+  ],
+  "cite": "ET II 143(42)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf J_mu(a/x) Y_mu(a/x) K_0(bx) dx = -2b^-1 J_{2mu}(2 sqrt(ab)) K_{2mu}(2 sqrt(ab))",
+  "note": ""
+ },
+ {
+  "id": "GR6.515.2",
+  "gr": "6.515.2",
+  "page": 712,
+  "status": "ok",
+  "lhs": "Integrate[BesselK[mu, a/x]^2*BesselK[0, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi*b^(-1)*BesselK[2*mu, 2*E^(Pi*I/4)*Sqrt[a*b]]*BesselK[2*mu, 2*E^(-Pi*I/4)*Sqrt[a*b]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > 0"
+  ],
+  "cite": "ET II 147(59)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf [K_mu(a/x)]^2 K_0(bx) dx = 2 pi b^-1 K_{2mu}(2e^(pi i/4) sqrt(ab)) K_{2mu}(2e^(-pi i/4) sqrt(ab))",
+  "note": ""
+ },
+ {
+  "id": "GR6.515.3",
+  "gr": "6.515.3",
+  "page": 712,
+  "status": "ok",
+  "lhs": "Integrate[HankelH1[mu, a^2/x]*HankelH2[mu, a^2/x]*BesselJ[0, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "16*Pi^(-2)*b^(-1)*Cos[mu*Pi]*BesselK[2*mu, 2*E^(Pi*I/4)*a*Sqrt[b]]*BesselK[2*mu, 2*E^(-Pi*I/4)*a*Sqrt[b]]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi/4",
+   "b > 0",
+   "Abs[Re[mu]] < 1/4"
+  ],
+  "cite": "ET II 17(36)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf H^(1)_mu(a^2/x) H^(2)_mu(a^2/x) J_0(bx) dx = 16 pi^-2 b^-1 cos(mu pi) K_{2mu}(2e^(pi i/4) a sqrt b) K_{2mu}(2e^(-pi i/4) a sqrt b)",
+  "note": ""
+ },
+ {
+  "id": "GR6.516.1",
+  "gr": "6.516.1",
+  "page": 712,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[2*nu, a*Sqrt[x]]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b^(-1)*BesselJ[nu, a^2/(4*b)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 58(16)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf J_{2nu}(a sqrt x) J_nu(bx) dx = b^-1 J_nu(a^2/4b)",
+  "note": ""
+ },
+ {
+  "id": "GR6.516.2",
+  "gr": "6.516.2",
+  "page": 712,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[2*nu, a*Sqrt[x]]*BesselY[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-b^(-1)*StruveH[nu, a^2/(4*b)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 111(18)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf J_{2nu}(a sqrt x) Y_nu(bx) dx = -b^-1 H_nu(a^2/4b)",
+  "note": ""
+ },
+ {
+  "id": "GR6.516.3",
+  "gr": "6.516.3",
+  "page": 712,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[2*nu, a*Sqrt[x]]*BesselK[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/2)*b^(-1)*(BesselI[nu, a^2/(4*b)] - StruveL[nu, a^2/(4*b)])"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 144(45)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf J_{2nu}(a sqrt x) K_nu(bx) dx = (pi/2) b^-1 [I_nu(a^2/4b) - L_nu(a^2/4b)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.516.4",
+  "gr": "6.516.4",
+  "page": 712,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[2*nu, a*Sqrt[x]]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(1/b)*BesselJ[nu, a^2/(4*b)]*Cot[2*Pi*nu] - (1/(2*b))*BesselJ[-nu, a^2/(4*b)]*Csc[2*Pi*nu] - 2^(3*nu - 3)*a^(2 - 2*nu)*b^(nu - 2)/Pi^(3/2)*Gamma[nu - 1/2]*HypergeometricPFQ[{1}, {3/2, 3/2 - nu}, a^4/(64*b^2)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "MC",
+  "edition_note": "10",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf Y_{2nu}(a sqrt x) J_nu(bx) dx = (1/b) J_nu(a^2/4b) cot(2 pi nu) - (1/2b) J_-nu(a^2/4b) cosec(2 pi nu) - 2^(3nu-3) a^(2-2nu) b^(nu-2)/pi^(3/2) Gamma(nu-1/2) 1F2(1;3/2,3/2-nu;a^4/64b^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.516.5",
+  "gr": "6.516.5",
+  "page": 712,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[2*nu, a*Sqrt[x]]*BesselY[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(b^(-1)/2)*(Sec[nu*Pi]*BesselJ[-nu, a^2/(4*b)] + Csc[nu*Pi]*StruveH[-nu, a^2/(4*b)] - 2*Cot[2*nu*Pi]*StruveH[nu, a^2/(4*b)])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 111(19)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf Y_{2nu}(a sqrt x) Y_nu(bx) dx = (b^-1/2)[sec(nu pi) J_-nu(w) + cosec(nu pi) H_-nu(w) - 2 cot(2 nu pi) H_nu(w)], w = a^2/4b",
+  "note": ""
+ },
+ {
+  "id": "GR6.516.6",
+  "gr": "6.516.6",
+  "page": 713,
+  "status": "ok",
+  "lhs": "Integrate[BesselY[2*nu, a*Sqrt[x]]*BesselK[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi*b^(-1)/2)*(Csc[2*nu*Pi]*StruveL[-nu, a^2/(4*b)] - Cot[2*nu*Pi]*StruveL[nu, a^2/(4*b)] - Tan[nu*Pi]*BesselI[nu, a^2/(4*b)] - (Sec[nu*Pi]/Pi)*BesselK[nu, a^2/(4*b)])"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 144(46)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf Y_{2nu}(a sqrt x) K_nu(bx) dx = (pi b^-1/2)[cosec(2nu pi) L_-nu(w) - cot(2nu pi) L_nu(w) - tan(nu pi) I_nu(w) - sec(nu pi)/pi K_nu(w)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.516.7",
+  "gr": "6.516.7",
+  "page": 713,
+  "status": "ok",
+  "lhs": "Integrate[BesselK[2*nu, a*Sqrt[x]]*BesselJ[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(1/4)*Pi*b^(-1)*Sec[nu*Pi]*(StruveH[-nu, a^2/(4*b)] - BesselY[-nu, a^2/(4*b)])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 70(22)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf K_{2nu}(a sqrt x) J_nu(bx) dx = (1/4) pi b^-1 sec(nu pi)[H_-nu(w) - Y_-nu(w)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.516.8",
+  "gr": "6.516.8",
+  "page": 713,
+  "status": "ok",
+  "lhs": "Integrate[BesselK[2*nu, a*Sqrt[x]]*BesselY[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-(1/4)*Pi*b^(-1)*(Sec[nu*Pi]*BesselJ[-nu, a^2/(4*b)] - Csc[nu*Pi]*StruveH[-nu, a^2/(4*b)] + 2*Csc[2*nu*Pi]*StruveH[nu, a^2/(4*b)])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 114(34)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf K_{2nu}(a sqrt x) Y_nu(bx) dx = -(1/4) pi b^-1 [sec(nu pi) J_-nu(w) - cosec(nu pi) H_-nu(w) + 2 cosec(2nu pi) H_nu(w)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.516.9",
+  "gr": "6.516.9",
+  "page": 713,
+  "status": "ok",
+  "lhs": "Integrate[BesselK[2*nu, a*Sqrt[x]]*BesselK[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*b^(-1)/(4*Cos[nu*Pi])*(BesselK[nu, a^2/(4*b)] + Pi/(2*Sin[nu*Pi])*(StruveL[-nu, a^2/(4*b)] - StruveL[nu, a^2/(4*b)]))"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET II 147(63)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf K_{2nu}(a sqrt x) K_nu(bx) dx = pi b^-1/(4 cos nu pi) {K_nu(w) + pi/(2 sin nu pi) [L_-nu(w) - L_nu(w)]}",
+  "note": ""
+ },
+ {
+  "id": "GR6.516.10",
+  "gr": "6.516.10",
+  "page": 713,
+  "status": "ok",
+  "lhs": "Integrate[BesselI[2*nu, a*Sqrt[x]]*BesselK[nu, b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi*b^(-1)/2)*(BesselI[nu, a^2/(4*b)] + StruveL[nu, a^2/(4*b)])"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 147(60)",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf I_{2nu}(a sqrt x) K_nu(bx) dx = (pi b^-1/2)[I_nu(w) + L_nu(w)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.517",
+  "gr": "6.517",
+  "page": 713,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[0, Sqrt[z^2 - x^2]], {x, 0, z}]",
+  "rhs": [
+   "Sin[z]"
+  ],
+  "conds": [],
+  "cite": "MO 48",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^z J_0(sqrt(z^2-x^2)) dx = sin z",
+  "note": ""
+ },
+ {
+  "id": "GR6.518",
+  "gr": "6.518",
+  "page": 713,
+  "status": "ok",
+  "lhs": "Integrate[BesselK[2*nu, 2*z*Sinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/(8*Cos[nu*Pi])*(BesselJ[nu, z]^2 + BesselY[nu, z]^2)"
+  ],
+  "conds": [
+   "Re[z] > 0",
+   "-1/2 < Re[nu] < 1/2"
+  ],
+  "cite": "MO 45",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^inf K_{2nu}(2z sinh x) dx = pi^2/(8 cos nu pi) (J_nu^2(z) + N_nu^2(z))",
+  "note": ""
+ },
+ {
+  "id": "GR6.519.1",
+  "gr": "6.519.1",
+  "page": 713,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[2*nu, 2*z*Cos[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "(Pi/2)*BesselJ[nu, z]^2"
+  ],
+  "conds": [
+   "Re[nu] > -1/2"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^{pi/2} J_{2nu}(2z cos x) dx = (pi/2) J_nu^2(z)",
+  "note": ""
+ },
+ {
+  "id": "GR6.519.2",
+  "gr": "6.519.2",
+  "page": 713,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[2*nu, 2*z*Sin[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "(Pi/2)*BesselJ[nu, z]^2"
+  ],
+  "conds": [
+   "Re[nu] > -1/2"
+  ],
+  "cite": "WA 42(1)a",
+  "edition_note": "",
+  "section": "6.51 Bessel functions",
+  "tex": "int_0^{pi/2} J_{2nu}(2z sin x) dx = (pi/2) J_nu^2(z)",
+  "note": ""
+ },
+ {
+  "id": "GR6.521.1a",
+  "gr": "6.521.1a",
+  "page": 713,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[nu, alpha*x]*BesselJ[nu, beta*x], {x, 0, 1}]",
+  "rhs": [
+   "(beta*BesselJ[nu - 1, beta]*BesselJ[nu, alpha] - alpha*BesselJ[nu - 1, alpha]*BesselJ[nu, beta])/(alpha^2 - beta^2)"
+  ],
+  "conds": [
+   "alpha != beta",
+   "nu > -1"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "int_0^1 x J_nu(alpha x) J_nu(beta x) dx = [beta J_{nu-1}(beta) J_nu(alpha) - alpha J_{nu-1}(alpha) J_nu(beta)]/(alpha^2-beta^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.521.1b",
+  "gr": "6.521.1b",
+  "page": 713,
+  "status": "ok",
+  "lhs": "Integrate[x*BesselJ[nu, alpha*x]*BesselJ[nu, beta*x], {x, 0, 1}]",
+  "rhs": [
+   "(alpha*BesselJ[nu, beta]*Derivative[0, 1][BesselJ][nu, alpha] - beta*BesselJ[nu, alpha]*Derivative[0, 1][BesselJ][nu, beta])/(beta^2 - alpha^2)"
+  ],
+  "conds": [
+   "alpha != beta",
+   "nu > -1"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "6.52 Bessel functions combined with x and x^2",
+  "tex": "same = [alpha J_nu(beta) J'_nu(alpha) - beta J_nu(alpha) J'_nu(beta)]/(beta^2-alpha^2)",
+  "note": "J'_nu written as Derivative[0, 1][BesselJ]"
+ }
+]

@@ -1,0 +1,1894 @@
+[
+ {
+  "id": "GR3.768.13",
+  "gr": "3.768.13",
+  "page": 490,
+  "status": "ok",
+  "lhs": "Integrate[x^mu*(1 - x)^mu*Sin[2*a*x], {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi]/(2*a)^(mu + 1/2)*Gamma[mu + 1]*BesselJ[mu + 1/2, a]*Sin[a]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > -1"
+  ],
+  "cite": "ET I 68(4)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x^mu*(1 - x)^mu*Sin[2*a*x], {x, 0, 1}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.768.14",
+  "gr": "3.768.14",
+  "page": 490,
+  "status": "ok",
+  "lhs": "Integrate[x^mu*(1 - x)^mu*Cos[2*a*x], {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi]/(2*a)^(mu + 1/2)*Gamma[mu + 1]*BesselJ[mu + 1/2, a]*Cos[a]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > -1"
+  ],
+  "cite": "ET I 11(4)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x^mu*(1 - x)^mu*Cos[2*a*x], {x, 0, 1}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.769.1",
+  "gr": "3.769.1",
+  "page": 490,
+  "status": "ok",
+  "lhs": "Integrate[((beta + I*x)^(-nu) - (beta - I*x)^(-nu))*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*I*a^(nu - 1)*E^(-a*beta)/Gamma[nu]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET I 70(15)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[((beta + I*x)^(-nu) - (beta - I*x)^(-nu))*Sin[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.769.2",
+  "gr": "3.769.2",
+  "page": 490,
+  "status": "ok",
+  "lhs": "Integrate[((beta + I*x)^(-nu) + (beta - I*x)^(-nu))*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*a^(nu - 1)*E^(-a*beta)/Gamma[nu]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET I 13(19)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[((beta + I*x)^(-nu) + (beta - I*x)^(-nu))*Cos[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.769.3",
+  "gr": "3.769.3",
+  "page": 490,
+  "status": "ok",
+  "lhs": "Integrate[x*((beta + I*x)^(-nu) + (beta - I*x)^(-nu))*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*a^(nu - 2)*(nu - 1 - a*beta)/Gamma[nu]*E^(-a*beta)"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET I 70(16)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x*((beta + I*x)^(-nu) + (beta - I*x)^(-nu))*Sin[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.769.4",
+  "gr": "3.769.4",
+  "page": 490,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n)*((beta - I*x)^(-nu) - (beta + I*x)^(-nu))*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*I/Gamma[nu]*(2*n)!*Pi*a^(nu - 2*n - 1)*E^(-a*beta)*LaguerreL[2*n, nu - 2*n - 1, a*beta]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Element[n, Integers] && n >= 0",
+   "2*n < Re[nu]"
+  ],
+  "cite": "ET I 70(17)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x^(2*n)*((beta - I*x)^(-nu) - (beta + I*x)^(-nu))*Sin[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.769.5",
+  "gr": "3.769.5",
+  "page": 490,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n)*((beta + I*x)^(-nu) + (beta - I*x)^(-nu))*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n/Gamma[nu]*(2*n)!*Pi*a^(nu - 2*n - 1)*E^(-a*beta)*LaguerreL[2*n, nu - 2*n - 1, a*beta]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Element[n, Integers] && n >= 0",
+   "2*n < Re[nu]"
+  ],
+  "cite": "ET I 13(20)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x^(2*n)*((beta + I*x)^(-nu) + (beta - I*x)^(-nu))*Cos[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.769.6",
+  "gr": "3.769.6",
+  "page": 490,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n + 1)*((beta + I*x)^(-nu) + (beta - I*x)^(-nu))*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n + 1)/Gamma[nu]*(2*n + 1)!*Pi*a^(nu - 2*n - 2)*E^(-a*beta)*LaguerreL[2*n + 1, nu - 2*n - 2, a*beta]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Element[n, Integers] && n >= 0",
+   "2*n + 1 < Re[nu]"
+  ],
+  "cite": "ET I 70(18)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x^(2*n + 1)*((beta + I*x)^(-nu) + (beta - I*x)^(-nu))*Sin[a*x], {x, 0, Infinity}]",
+  "note": "Book: -1 <= 2n+1 < Re nu; n = -1 makes (2n+1)! singular, so n >= 0 is sampled."
+ },
+ {
+  "id": "GR3.769.7",
+  "gr": "3.769.7",
+  "page": 490,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n + 1)*((beta + I*x)^(-nu) - (beta - I*x)^(-nu))*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n + 1)/Gamma[nu]*(2*n + 1)!*Pi*a^(nu - 2*n - 2)*E^(-a*beta)*LaguerreL[2*n + 1, nu - 2*n - 2, a*beta]",
+   "I*(-1)^(n + 1)/Gamma[nu]*(2*n + 1)!*Pi*a^(nu - 2*n - 2)*E^(-a*beta)*LaguerreL[2*n + 1, nu - 2*n - 2, a*beta]",
+   "-I*(-1)^(n + 1)/Gamma[nu]*(2*n + 1)!*Pi*a^(nu - 2*n - 2)*E^(-a*beta)*LaguerreL[2*n + 1, nu - 2*n - 2, a*beta]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Element[n, Integers] && n >= 0",
+   "2*n < Re[nu] - 1"
+  ],
+  "cite": "ET I 13(21)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x^(2*n + 1)*((beta + I*x)^(-nu) - (beta - I*x)^(-nu))*Cos[a*x], {x, 0, Infinity}]",
+  "note": "Probable misprint: the integrand is purely imaginary for real beta but the printed value is real; candidates with a factor +-I added."
+ },
+ {
+  "id": "GR3.771.1",
+  "gr": "3.771.1",
+  "page": 490,
+  "status": "ok",
+  "lhs": "Integrate[(beta^2 + x^2)^(nu - 1/2)*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/2*(2*beta/a)^nu*Gamma[nu + 1/2]*(BesselI[-nu, a*beta] - StruveL[nu, a*beta])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[nu] < 1/2"
+  ],
+  "cite": "EH II 38a, ET I 68(6)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[(beta^2 + x^2)^(nu - 1/2)*Sin[a*x], {x, 0, Infinity}]",
+  "note": "nu != -1/2, -3/2, -5/2, ..."
+ },
+ {
+  "id": "GR3.771.2",
+  "gr": "3.771.2",
+  "page": 491,
+  "status": "ok",
+  "lhs": "Integrate[(beta^2 + x^2)^(nu - 1/2)*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/Sqrt[Pi]*(2*beta/a)^nu*Cos[Pi*nu]*Gamma[nu + 1/2]*BesselK[-nu, a*beta]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[nu] < 1/2"
+  ],
+  "cite": "WA 191(1)a, GW(333)(78)a",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[(beta^2 + x^2)^(nu - 1/2)*Cos[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.771.3",
+  "gr": "3.771.3",
+  "page": 491,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*nu - 1)*(u^2 - x^2)^(mu - 1)*Sin[a*x], {x, 0, u}]",
+  "rhs": [
+   "a/2*u^(2*mu + 2*nu - 1)*Beta[mu, nu + 1/2]*HypergeometricPFQ[{nu + 1/2}, {3/2, mu + nu + 1/2}, -a^2*u^2/4]"
+  ],
+  "conds": [
+   "u > 0",
+   "Re[mu] > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 189(29)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x^(2*nu - 1)*(u^2 - x^2)^(mu - 1)*Sin[a*x], {x, 0, u}]",
+  "note": "u > 0 implied by the range."
+ },
+ {
+  "id": "GR3.771.4",
+  "gr": "3.771.4",
+  "page": 491,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*nu - 1)*(u^2 - x^2)^(mu - 1)*Cos[a*x], {x, 0, u}]",
+  "rhs": [
+   "1/2*u^(2*mu + 2*nu - 2)*Beta[mu, nu]*HypergeometricPFQ[{nu}, {1/2, mu + nu}, -a^2*u^2/4]"
+  ],
+  "conds": [
+   "u > 0",
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 190(35)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x^(2*nu - 1)*(u^2 - x^2)^(mu - 1)*Cos[a*x], {x, 0, u}]",
+  "note": "u > 0 implied by the range."
+ },
+ {
+  "id": "GR3.771.5a",
+  "gr": "3.771.5",
+  "page": 491,
+  "status": "ok",
+  "lhs": "Integrate[x*(x^2 + beta^2)^(nu - 1/2)*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/Sqrt[Pi]*beta*(2*beta/a)^nu*Cos[nu*Pi]*Gamma[nu + 1/2]*BesselK[nu + 1, a*beta]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[nu] < 0"
+  ],
+  "cite": "ET I 69(11)",
+  "edition_note": "7",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x*(x^2 + beta^2)^(nu - 1/2)*Sin[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.771.5b",
+  "gr": "3.771.5",
+  "page": 491,
+  "status": "ok",
+  "lhs": "Integrate[x*(x^2 + beta^2)^(nu - 1/2)*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*beta*(2*beta/a)^nu/Gamma[1/2 - nu]*BesselK[nu + 1, a*beta]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[nu] < 0"
+  ],
+  "cite": "ET I 69(11)",
+  "edition_note": "7",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x*(x^2 + beta^2)^(nu - 1/2)*Sin[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.771.6",
+  "gr": "3.771.6",
+  "page": 491,
+  "status": "ok",
+  "lhs": "Integrate[(u^2 - x^2)^(nu - 1/2)*Sin[a*x], {x, 0, u}]",
+  "rhs": [
+   "Sqrt[Pi]/2*(2*u/a)^nu*Gamma[nu + 1/2]*StruveH[nu, a*u]"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET I 69(7), WA 358(1)a",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[(u^2 - x^2)^(nu - 1/2)*Sin[a*x], {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.771.7",
+  "gr": "3.771.7",
+  "page": 491,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 - u^2)^(nu - 1/2)*Sin[a*x], {x, u, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/2*(2*u/a)^nu*Gamma[nu + 1/2]*BesselJ[-nu, a*u]"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "EH II 81(12)a, ET I 69(8), WA 187(3)a",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[(x^2 - u^2)^(nu - 1/2)*Sin[a*x], {x, u, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.771.8",
+  "gr": "3.771.8",
+  "page": 491,
+  "status": "ok",
+  "lhs": "Integrate[(u^2 - x^2)^(nu - 1/2)*Cos[a*x], {x, 0, u}]",
+  "rhs": [
+   "Sqrt[Pi]/2*(2*u/a)^nu*Gamma[nu + 1/2]*BesselJ[nu, a*u]"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET I 11(8)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[(u^2 - x^2)^(nu - 1/2)*Cos[a*x], {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.771.9",
+  "gr": "3.771.9",
+  "page": 491,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 - u^2)^(nu - 1/2)*Cos[a*x], {x, u, Infinity}]",
+  "rhs": [
+   "-Sqrt[Pi]/2*(2*u/a)^nu*Gamma[nu + 1/2]*BesselY[-nu, a*u]"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "WA 187(4)a, EH II 82(13)a, ET I 11(9)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[(x^2 - u^2)^(nu - 1/2)*Cos[a*x], {x, u, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.771.10",
+  "gr": "3.771.10",
+  "page": 491,
+  "status": "ok",
+  "lhs": "Integrate[x*(u^2 - x^2)^(nu - 1/2)*Sin[a*x], {x, 0, u}]",
+  "rhs": [
+   "Sqrt[Pi]/2*u*(2*u/a)^nu*Gamma[nu + 1/2]*BesselJ[nu + 1, a*u]"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET I 69(9)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x*(u^2 - x^2)^(nu - 1/2)*Sin[a*x], {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.771.11",
+  "gr": "3.771.11",
+  "page": 492,
+  "status": "ok",
+  "lhs": "Integrate[x*(x^2 - u^2)^(nu - 1/2)*Sin[a*x], {x, u, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/2*u*(2*u/a)^nu*Gamma[nu + 1/2]*BesselY[-nu - 1, a*u]"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0",
+   "-1/2 < Re[nu] < 0"
+  ],
+  "cite": "ET I 69(10)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x*(x^2 - u^2)^(nu - 1/2)*Sin[a*x], {x, u, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.771.12a",
+  "gr": "3.771.12",
+  "page": 492,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x*(u^2 - x^2)^(nu - 1/2)*Cos[a*x], {x, 0, u}]",
+  "rhs": [
+   "-u^(nu + 1)/a^nu*LommelS1[nu - 1, nu + 1, a*u]"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET I 12(10)",
+  "edition_note": "7",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x*(u^2 - x^2)^(nu - 1/2)*Cos[a*x], {x, 0, u}]",
+  "note": "Subscript printed garbled as s_{(nu-1)nu+1}; read as s_{nu-1,nu+1} (matches small-a limit).",
+  "reason": "Lommel function s_{mu,nu}"
+ },
+ {
+  "id": "GR3.771.12b",
+  "gr": "3.771.12",
+  "page": 492,
+  "status": "ok",
+  "lhs": "Integrate[x*(u^2 - x^2)^(nu - 1/2)*Cos[a*x], {x, 0, u}]",
+  "rhs": [
+   "1/2*(nu + 1/2)^(-1)*u^(2*nu + 1) - Sqrt[Pi]/2*u*(2*u/a)^nu*Gamma[nu + 1/2]*StruveH[nu + 1, a*u]"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET I 12(10)",
+  "edition_note": "7",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x*(u^2 - x^2)^(nu - 1/2)*Cos[a*x], {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.771.13",
+  "gr": "3.771.13",
+  "page": 492,
+  "status": "ok",
+  "lhs": "Integrate[x*(x^2 - u^2)^(nu - 1/2)*Cos[a*x], {x, u, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*u/2*(2*u/a)^nu*Gamma[nu + 1/2]*BesselJ[-nu - 1, a*u]"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0",
+   "0 < Re[nu] < 1/2"
+  ],
+  "cite": "ET I 12(11)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x*(x^2 - u^2)^(nu - 1/2)*Cos[a*x], {x, u, Infinity}]",
+  "note": "'=' sign missing in print."
+ },
+ {
+  "id": "GR3.772.1",
+  "gr": "3.772.1",
+  "page": 492,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 + 2*beta*x)^(nu - 1/2)*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/2*(2*beta/a)^nu*Gamma[nu + 1/2]*(BesselJ[-nu, a*beta]*Cos[a*beta] + BesselY[-nu, a*beta]*Sin[a*beta])"
+  ],
+  "conds": [
+   "a > 0",
+   "Abs[Arg[beta]] < Pi",
+   "-3/2 < Re[nu] < 1/2"
+  ],
+  "cite": "ET I 69(12)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[(x^2 + 2*beta*x)^(nu - 1/2)*Sin[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.772.2",
+  "gr": "3.772.2",
+  "page": 492,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 + 2*beta*x)^(nu - 1/2)*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-Sqrt[Pi]/2*(2*beta/a)^nu*Gamma[nu + 1/2]*(BesselY[-nu, a*beta]*Cos[a*beta] - BesselJ[-nu, a*beta]*Sin[a*beta])"
+  ],
+  "conds": [
+   "a > 0",
+   "beta > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET I 12(13)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[(x^2 + 2*beta*x)^(nu - 1/2)*Cos[a*x], {x, 0, Infinity}]",
+  "note": "beta > 0 not printed; added (as in 3.772.1)."
+ },
+ {
+  "id": "GR3.772.3",
+  "gr": "3.772.3",
+  "page": 492,
+  "status": "ok",
+  "lhs": "Integrate[(2*u*x - x^2)^(nu - 1/2)*Sin[a*x], {x, 0, 2*u}]",
+  "rhs": [
+   "Sqrt[Pi]*(2*u/a)^nu*Gamma[nu + 1/2]*Sin[a*u]*BesselJ[nu, a*u]"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET I 69(13)a",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[(2*u*x - x^2)^(nu - 1/2)*Sin[a*x], {x, 0, 2*u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.772.4",
+  "gr": "3.772.4",
+  "page": 492,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 - 2*u*x)^(nu - 1/2)*Sin[a*x], {x, 2*u, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/2*(2*beta/a)^nu*Gamma[nu + 1/2]*(BesselJ[-nu, a*u]*Cos[a*u] - BesselY[-nu, a*u]*Sin[a*u])",
+   "Sqrt[Pi]/2*(2*u/a)^nu*Gamma[nu + 1/2]*(BesselJ[-nu, a*u]*Cos[a*u] - BesselY[-nu, a*u]*Sin[a*u])"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET I 70(14)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[(x^2 - 2*u*x)^(nu - 1/2)*Sin[a*x], {x, 2*u, Infinity}]",
+  "note": "Misprint: value has (2beta/a)^nu but beta is absent from the integral; corrected candidate uses (2u/a)^nu."
+ },
+ {
+  "id": "GR3.772.5",
+  "gr": "3.772.5",
+  "page": 492,
+  "status": "ok",
+  "lhs": "Integrate[(2*u*x - x^2)^(nu - 1/2)*Cos[a*x], {x, 0, 2*u}]",
+  "rhs": [
+   "Sqrt[Pi]*(2*u/a)^nu*Gamma[nu + 1/2]*BesselJ[nu, a*u]*Cos[a*u]"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET I 12(4)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[(2*u*x - x^2)^(nu - 1/2)*Cos[a*x], {x, 0, 2*u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.772.6",
+  "gr": "3.772.6",
+  "page": 492,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 - 2*u*x)^(nu - 1/2)*Cos[a*x], {x, 2*u, Infinity}]",
+  "rhs": [
+   "-Sqrt[Pi]/2*(2*u/a)^nu*Gamma[nu + 1/2]*(BesselJ[-nu, a*u]*Sin[a*u] + BesselY[-nu, a*u]*Cos[a*u])"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0",
+   "Abs[Re[nu]] < 1/2"
+  ],
+  "cite": "ET I 12(12)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[(x^2 - 2*u*x)^(nu - 1/2)*Cos[a*x], {x, 2*u, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.773.1a",
+  "gr": "3.773.1",
+  "page": 493,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*nu)/(x^2 + beta^2)^(mu + 1)*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*beta^(2*nu - 2*mu)*a*Beta[1 + nu, mu - nu]*HypergeometricPFQ[{nu + 1}, {nu + 1 - mu, 3/2}, beta^2*a^2/4] + Sqrt[Pi]*a^(2*mu - 2*nu + 1)/4^(mu - nu + 1)*Gamma[nu - mu]/Gamma[mu - nu + 3/2]*HypergeometricPFQ[{mu + 1}, {mu - nu + 3/2, mu - nu + 1}, beta^2*a^2/4]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "-1 < Re[nu]",
+   "Re[nu] < Re[mu] + 1"
+  ],
+  "cite": "ET I 71(28)a, ET II 234(17)",
+  "edition_note": "8",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x^(2*nu)/(x^2 + beta^2)^(mu + 1)*Sin[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.773.1b",
+  "gr": "3.773.1",
+  "page": 493,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*nu)/(x^2 + beta^2)^(mu + 1)*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/(2*Gamma[mu + 1])*beta^(2*nu - 2*mu - 1)*MeijerG[{{-nu + 1/2}, {}}, {{mu - nu + 1/2, 1/2}, {0}}, a^2*beta^2/4]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "-1 < Re[nu]",
+   "Re[nu] < Re[mu] + 1"
+  ],
+  "cite": "ET I 71(28)a, ET II 234(17)",
+  "edition_note": "8",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x^(2*nu)/(x^2 + beta^2)^(mu + 1)*Sin[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.773.2",
+  "gr": "3.773.2",
+  "page": 493,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m + 1)*Sin[a*x]/(z + x^2)^(n + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n + m)/n!*Pi/2*D[z^m*E^(-a*Sqrt[z]), {z, n}]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers]",
+   "m <= n",
+   "Abs[Arg[z]] < Pi"
+  ],
+  "cite": "ET I 68(39)",
+  "edition_note": "8",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x^(2*m + 1)*Sin[a*x]/(z + x^2)^(n + 1), {x, 0, Infinity}]",
+  "note": "z is a genuine parameter here, not an abbreviation."
+ },
+ {
+  "id": "GR3.773.3",
+  "gr": "3.773.3",
+  "page": 493,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m + 1)*Sin[a*x]/(beta^2 + x^2)^(n + 1/2), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(m + 1)*Sqrt[Pi]/(2^n*beta^n*Gamma[n + 1/2])*D[a^n*BesselK[n, a*beta], {a, 2*m + 1}]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers]",
+   "m <= n"
+  ],
+  "cite": "ET I 67(37)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x^(2*m + 1)*Sin[a*x]/(beta^2 + x^2)^(n + 1/2), {x, 0, Infinity}]",
+  "note": "Book: -1 <= m <= n; m = -1 gives a derivative of order -1, so m >= 0 is sampled."
+ },
+ {
+  "id": "GR3.773.4a",
+  "gr": "3.773.4",
+  "page": 493,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*nu)*Cos[a*x]/(x^2 + beta^2)^(mu + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*beta^(2*nu - 2*mu - 1)*Beta[nu + 1/2, mu - nu + 1/2]*HypergeometricPFQ[{nu + 1/2}, {nu - mu + 1/2, 1/2}, beta^2*a^2/4] + Sqrt[Pi]*a^(2*mu - 2*nu + 1)/4^(mu - nu + 1)*Gamma[nu - mu - 1/2]/Gamma[mu - nu + 1]*HypergeometricPFQ[{mu + 1}, {mu - nu + 1, mu - nu + 3/2}, beta^2*a^2/4]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "-1/2 < Re[nu]",
+   "Re[nu] < Re[mu] + 1"
+  ],
+  "cite": "ET I 14(29)a, ET II 235(19)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x^(2*nu)*Cos[a*x]/(x^2 + beta^2)^(mu + 1), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.773.4b",
+  "gr": "3.773.4",
+  "page": 493,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*nu)*Cos[a*x]/(x^2 + beta^2)^(mu + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/(2*Gamma[mu + 1])*beta^(2*nu - 2*mu - 1)*MeijerG[{{-nu + 1/2}, {}}, {{mu - nu + 1/2, 0}, {1/2}}, a^2*beta^2/4]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "-1/2 < Re[nu]",
+   "Re[nu] < Re[mu] + 1"
+  ],
+  "cite": "ET I 14(29)a, ET II 235(19)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x^(2*nu)*Cos[a*x]/(x^2 + beta^2)^(mu + 1), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.773.5",
+  "gr": "3.773.5",
+  "page": 493,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m)*Cos[a*x]/(z + x^2)^(n + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(m + n)*Pi/(2*n!)*D[z^(m - 1/2)*E^(-a*Sqrt[z]), {z, n}]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers]",
+   "m < n + 1",
+   "Abs[Arg[z]] < Pi"
+  ],
+  "cite": "ET I 10(28)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x^(2*m)*Cos[a*x]/(z + x^2)^(n + 1), {x, 0, Infinity}]",
+  "note": "z is a genuine parameter here, not an abbreviation."
+ },
+ {
+  "id": "GR3.773.6",
+  "gr": "3.773.6",
+  "page": 493,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m)*Cos[a*x]/(beta^2 + x^2)^(n + 1/2), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^m*Sqrt[Pi]/(2^n*beta^n*Gamma[n + 1/2])*D[a^n*BesselK[n, a*beta], {a, 2*m}]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers]",
+   "m < n + 1/2"
+  ],
+  "cite": "ET I 14(28)",
+  "edition_note": "7",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[x^(2*m)*Cos[a*x]/(beta^2 + x^2)^(n + 1/2), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.774.1",
+  "gr": "3.774.1",
+  "page": 493,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/(Sqrt[x^2 + b^2]*(x + Sqrt[x^2 + b^2])^nu), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(b^nu*Sin[nu*Pi])*(Sin[nu*Pi/2]*BesselI[nu, a*b] + I/2*AngerJ[nu, I*a*b] - I/2*AngerJ[nu, -I*a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET I 70(19)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[Sin[a*x]/(Sqrt[x^2 + b^2]*(x + Sqrt[x^2 + b^2])^nu), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.774.2",
+  "gr": "3.774.2",
+  "page": 494,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/(Sqrt[x^2 + b^2]*(x + Sqrt[x^2 + b^2])^nu), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(b^nu*Sin[nu*Pi])*(1/2*AngerJ[nu, I*a*b] + 1/2*AngerJ[nu, -I*a*b] - Cos[nu*Pi/2]*BesselI[nu, a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET I 12(15)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[Cos[a*x]/(Sqrt[x^2 + b^2]*(x + Sqrt[x^2 + b^2])^nu), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.774.3",
+  "gr": "3.774.3",
+  "page": 494,
+  "status": "ok",
+  "lhs": "Integrate[(x + Sqrt[x^2 + beta^2])^nu/Sqrt[x*(x^2 + beta^2)]*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[a*Pi/2]*beta^nu*BesselI[1/4 - nu/2, a*beta/2]*BesselK[1/4 + nu/2, a*beta/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[nu] < 3/2"
+  ],
+  "cite": "ET I 71(23)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[(x + Sqrt[x^2 + beta^2])^nu/Sqrt[x*(x^2 + beta^2)]*Sin[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.774.4",
+  "gr": "3.774.4",
+  "page": 494,
+  "status": "ok",
+  "lhs": "Integrate[(Sqrt[x^2 + beta^2] - x)^nu/Sqrt[x*(x^2 + beta^2)]*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[a*Pi/2]*beta^nu*BesselI[-1/4 + nu/2, a*beta/2]*BesselK[-1/4 - nu/2, a*beta/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[nu] > -3/2"
+  ],
+  "cite": "ET I 12(17)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[(Sqrt[x^2 + beta^2] - x)^nu/Sqrt[x*(x^2 + beta^2)]*Cos[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.774.5",
+  "gr": "3.774.5",
+  "page": 494,
+  "status": "ok",
+  "lhs": "Integrate[(beta + Sqrt[x^2 + beta^2])^nu/(x^(nu + 1/2)*Sqrt[x^2 + beta^2])*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/beta*Sqrt[2/a]*Gamma[3/4 - nu/2]*WhittakerW[nu/2, 1/4, a*beta]*WhittakerM[-nu/2, 1/4, a*beta]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[nu] < 3/2"
+  ],
+  "cite": "ET I 71(27)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[(beta + Sqrt[x^2 + beta^2])^nu/(x^(nu + 1/2)*Sqrt[x^2 + beta^2])*Sin[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.774.6",
+  "gr": "3.774.6",
+  "page": 494,
+  "status": "ok",
+  "lhs": "Integrate[(beta + Sqrt[x^2 + beta^2])^nu/(x^(nu + 1/2)*Sqrt[beta^2 + x^2])*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(beta*Sqrt[2*a])*Gamma[1/4 - nu/2]*WhittakerW[nu/2, -1/4, a*beta]*WhittakerM[-nu/2, -1/4, a*beta]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Re[nu] < 1/2"
+  ],
+  "cite": "ET I 12(18)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[(beta + Sqrt[x^2 + beta^2])^nu/(x^(nu + 1/2)*Sqrt[beta^2 + x^2])*Cos[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.775.1",
+  "gr": "3.775.1",
+  "page": 494,
+  "status": "ok",
+  "lhs": "Integrate[((Sqrt[x^2 + beta^2] + x)^nu - (Sqrt[x^2 + beta^2] - x)^nu)/Sqrt[x^2 + beta^2]*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*beta^nu*Sin[nu*Pi/2]*BesselK[nu, a*beta]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Abs[Re[nu]] < 1"
+  ],
+  "cite": "ET I 70(20)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[((Sqrt[x^2 + beta^2] + x)^nu - (Sqrt[x^2 + beta^2] - x)^nu)/Sqrt[x^2 + beta^2]*Sin[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.775.2",
+  "gr": "3.775.2",
+  "page": 494,
+  "status": "ok",
+  "lhs": "Integrate[((Sqrt[x^2 + beta^2] + x)^nu + (Sqrt[x^2 + beta^2] - x)^nu)/Sqrt[x^2 + beta^2]*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*beta^nu*Cos[nu*Pi/2]*BesselK[nu, a*beta]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0",
+   "Abs[Re[nu]] < 1"
+  ],
+  "cite": "ET I 13(22)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[((Sqrt[x^2 + beta^2] + x)^nu + (Sqrt[x^2 + beta^2] - x)^nu)/Sqrt[x^2 + beta^2]*Cos[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.775.3",
+  "gr": "3.775.3",
+  "page": 494,
+  "status": "ok",
+  "lhs": "Integrate[((x + Sqrt[x^2 - u^2])^nu + (x - Sqrt[x^2 - u^2])^nu)/Sqrt[x^2 - u^2]*Sin[a*x], {x, u, Infinity}]",
+  "rhs": [
+   "Pi*u^nu*(BesselJ[nu, a*u]*Cos[nu*Pi/2] - BesselY[nu, a*u]*Sin[nu*Pi/2])"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0",
+   "Abs[Re[nu]] < 1"
+  ],
+  "cite": "ET I 70(22)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[((x + Sqrt[x^2 - u^2])^nu + (x - Sqrt[x^2 - u^2])^nu)/Sqrt[x^2 - u^2]*Sin[a*x], {x, u, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.775.4",
+  "gr": "3.775.4",
+  "page": 494,
+  "status": "ok",
+  "lhs": "Integrate[((x + Sqrt[x^2 - u^2])^nu + (x - Sqrt[x^2 - u^2])^nu)/Sqrt[x^2 - u^2]*Cos[a*x], {x, u, Infinity}]",
+  "rhs": [
+   "-Pi*u^nu*(BesselY[nu, a*u]*Cos[nu*Pi/2] + BesselJ[nu, a*u]*Sin[nu*Pi/2])"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0",
+   "Abs[Re[nu]] < 1"
+  ],
+  "cite": "ET I 13(25)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[((x + Sqrt[x^2 - u^2])^nu + (x - Sqrt[x^2 - u^2])^nu)/Sqrt[x^2 - u^2]*Cos[a*x], {x, u, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.775.5",
+  "gr": "3.775.5",
+  "page": 495,
+  "status": "ok",
+  "lhs": "Integrate[((x + I*Sqrt[u^2 - x^2])^nu + (x - I*Sqrt[u^2 - x^2])^nu)/Sqrt[u^2 - x^2]*Sin[a*x], {x, 0, u}]",
+  "rhs": [
+   "Pi/2*u^nu*Csc[nu*Pi/2]*(AngerJ[nu, a*u] - AngerJ[-nu, a*u])"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0"
+  ],
+  "cite": "ET I 70(21)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[((x + I*Sqrt[u^2 - x^2])^nu + (x - I*Sqrt[u^2 - x^2])^nu)/Sqrt[u^2 - x^2]*Sin[a*x], {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.775.6",
+  "gr": "3.775.6",
+  "page": 495,
+  "status": "ok",
+  "lhs": "Integrate[((x + I*Sqrt[u^2 - x^2])^nu + (x - I*Sqrt[u^2 - x^2])^nu)/Sqrt[u^2 - x^2]*Cos[a*x], {x, 0, u}]",
+  "rhs": [
+   "Pi/2*u^nu*Sec[nu*Pi/2]*(AngerJ[nu, a*u] + AngerJ[-nu, a*u])"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0",
+   "Abs[Re[nu]] < 1"
+  ],
+  "cite": "ET I 13(24)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[((x + I*Sqrt[u^2 - x^2])^nu + (x - I*Sqrt[u^2 - x^2])^nu)/Sqrt[u^2 - x^2]*Cos[a*x], {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.775.7",
+  "gr": "3.775.7",
+  "page": 495,
+  "status": "ok",
+  "lhs": "Integrate[((x + Sqrt[x^2 - u^2])^nu + (x - Sqrt[x^2 - u^2])^nu)/Sqrt[x*(x^2 - u^2)]*Sin[a*x], {x, u, Infinity}]",
+  "rhs": [
+   "-Sqrt[(Pi/2)^3*a]*u^nu*(BesselJ[1/4 + nu/2, a*u/2]*BesselY[1/4 - nu/2, a*u/2] + BesselJ[1/4 - nu/2, a*u/2]*BesselY[1/4 + nu/2, a*u/2])"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0",
+   "Abs[Re[nu]] < 3/2"
+  ],
+  "cite": "ET I 71(25)",
+  "edition_note": "6",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[((x + Sqrt[x^2 - u^2])^nu + (x - Sqrt[x^2 - u^2])^nu)/Sqrt[x*(x^2 - u^2)]*Sin[a*x], {x, u, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.775.8",
+  "gr": "3.775.8",
+  "page": 495,
+  "status": "ok",
+  "lhs": "Integrate[((x + Sqrt[x^2 - u^2])^nu + (x - Sqrt[x^2 - u^2])^nu)/Sqrt[x*(x^2 - u^2)]*Cos[a*x], {x, u, Infinity}]",
+  "rhs": [
+   "-Sqrt[(Pi/2)^3*a]*u^nu*(BesselJ[-1/4 + nu/2, a*u/2]*BesselY[-1/4 - nu/2, a*u/2] + BesselJ[-1/4 - nu/2, a*u/2]*BesselY[-1/4 + nu/2, a*u/2])"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0",
+   "Abs[Re[nu]] < 3/2"
+  ],
+  "cite": "ET I 13(26)",
+  "edition_note": "6",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[((x + Sqrt[x^2 - u^2])^nu + (x - Sqrt[x^2 - u^2])^nu)/Sqrt[x*(x^2 - u^2)]*Cos[a*x], {x, u, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.775.9",
+  "gr": "3.775.9",
+  "page": 495,
+  "status": "ok",
+  "lhs": "Integrate[((x + beta + Sqrt[x^2 + 2*beta*x])^nu + (x + beta - Sqrt[x^2 + 2*beta*x])^nu)/Sqrt[x^2 + 2*beta*x]*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*beta^nu*(BesselY[nu, beta*a]*Sin[beta*a - nu*Pi/2] + BesselJ[nu, beta*a]*Cos[beta*a - nu*Pi/2])"
+  ],
+  "conds": [
+   "a > 0",
+   "Abs[Arg[beta]] < Pi",
+   "Abs[Re[nu]] < 1"
+  ],
+  "cite": "ET I 71(26)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[((x + beta + Sqrt[x^2 + 2*beta*x])^nu + (x + beta - Sqrt[x^2 + 2*beta*x])^nu)/Sqrt[x^2 + 2*beta*x]*Sin[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.775.10",
+  "gr": "3.775.10",
+  "page": 495,
+  "status": "ok",
+  "lhs": "Integrate[((x + beta + Sqrt[x^2 + 2*beta*x])^nu + (x + beta - Sqrt[x^2 + 2*beta*x])^nu)/Sqrt[x^2 + 2*beta*x]*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*beta^nu*(BesselJ[nu, beta*a]*Sin[beta*a - nu*Pi/2] - BesselY[nu, beta*a]*Cos[beta*a - nu*Pi/2])"
+  ],
+  "conds": [
+   "a > 0",
+   "Abs[Arg[beta]] < Pi",
+   "Abs[Re[nu]] < 1"
+  ],
+  "cite": "ET I 13(23)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[((x + beta + Sqrt[x^2 + 2*beta*x])^nu + (x + beta - Sqrt[x^2 + 2*beta*x])^nu)/Sqrt[x^2 + 2*beta*x]*Cos[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.775.11",
+  "gr": "3.775.11",
+  "page": 495,
+  "status": "ok",
+  "lhs": "Integrate[((Sqrt[2*u + x] + I*Sqrt[2*u - x])^(4*nu) + (Sqrt[2*u + x] - I*Sqrt[2*u - x])^(4*nu))/Sqrt[4*u^2*x - x^3]*Cos[a*x], {x, 0, 2*u}]",
+  "rhs": [
+   "(4*u)^(2*nu)*Pi^(3/2)*Sqrt[a/2]*BesselJ[nu - 1/4, a*u]*BesselJ[-nu - 1/4, a*u]"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0"
+  ],
+  "cite": "ET I 14(27)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[((Sqrt[2*u + x] + I*Sqrt[2*u - x])^(4*nu) + (Sqrt[2*u + x] - I*Sqrt[2*u - x])^(4*nu))/Sqrt[4*u^2*x - x^3]*Cos[a*x], {x, 0, 2*u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.776.1",
+  "gr": "3.776.1",
+  "page": 495,
+  "status": "ok",
+  "lhs": "Integrate[(a^2*(b + x)^2 + p*(p + 1))/(b + x)^(p + 2)*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "a/b^p"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "p > 0"
+  ],
+  "cite": "BI (170)(1)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[(a^2*(b + x)^2 + p*(p + 1))/(b + x)^(p + 2)*Sin[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.776.2",
+  "gr": "3.776.2",
+  "page": 495,
+  "status": "ok",
+  "lhs": "Integrate[(a^2*(b + x)^2 + p*(p + 1))/(b + x)^(p + 2)*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "p/b^(p + 1)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "p > 0"
+  ],
+  "cite": "BI (170)(2)",
+  "edition_note": "",
+  "section": "3.76-3.77 Trigonometric functions and powers",
+  "tex": "Integrate[(a^2*(b + x)^2 + p*(p + 1))/(b + x)^(p + 2)*Cos[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.781.1",
+  "gr": "3.781.1",
+  "page": 496,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[x]/x - 1/(1 + x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "1 - EulerGamma"
+  ],
+  "conds": [],
+  "cite": "BI (173)(7)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(Sin[x]/x - 1/(1 + x))/x, {x, 0, Infinity}]",
+  "note": "cf. 3.784.4 and 3.781.2"
+ },
+ {
+  "id": "GR3.781.2",
+  "gr": "3.781.2",
+  "page": 496,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[x] - 1/(1 + x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-EulerGamma"
+  ],
+  "conds": [],
+  "cite": "BI (173)(8)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(Cos[x] - 1/(1 + x))/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.782.1",
+  "gr": "3.782.1",
+  "page": 496,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Cos[x])/x, {x, 0, u}]",
+  "rhs": [
+   "EulerGamma + Log[u] - CosIntegral[u]"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "GW (333)(31)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "int_0^u (1-cos x)/x dx - int_u^inf cos x/x dx = C + ln u",
+  "note": "Book subtracts int_u^inf cos x/x dx = -Ci(u); that closed form was substituted so lhs has one integral."
+ },
+ {
+  "id": "GR3.782.2",
+  "gr": "3.782.2",
+  "page": 496,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Cos[a*x])/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "a*Pi/2"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "BI (158)(1)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(1 - Cos[a*x])/x^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.782.3",
+  "gr": "3.782.3",
+  "page": 496,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[(1 - Cos[a*x])/(x*(x - b)), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*Sin[a*b]/b"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[b, Reals]",
+   "b != 0"
+  ],
+  "cite": "ET II 253(48)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(1 - Cos[a*x])/(x*(x - b)), {x, -Infinity, Infinity}]",
+  "note": "",
+  "reason": "pole at x = b on the path (implied PV)"
+ },
+ {
+  "id": "GR3.783.1",
+  "gr": "3.783.1",
+  "page": 496,
+  "status": "ok",
+  "lhs": "Integrate[((Cos[x] - 1)/x^2 + 1/(2*(1 + x)))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "EulerGamma/2 - 3/4"
+  ],
+  "conds": [],
+  "cite": "BI (173)(19)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[((Cos[x] - 1)/x^2 + 1/(2*(1 + x)))/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.783.2",
+  "gr": "3.783.2",
+  "page": 496,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[x] - 1/(1 + x^2))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-EulerGamma"
+  ],
+  "conds": [],
+  "cite": "EH I 17, BI(273)(21)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(Cos[x] - 1/(1 + x^2))/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.784.1",
+  "gr": "3.784.1",
+  "page": 496,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[a*x] - Cos[b*x])/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[b/a]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "FI II 635, GW(333)(20)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(Cos[a*x] - Cos[b*x])/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.784.2",
+  "gr": "3.784.2",
+  "page": 496,
+  "status": "ok",
+  "lhs": "Integrate[(a*Sin[b*x] - b*Sin[a*x])/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "a*b*Log[a/b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "FI II 647",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(a*Sin[b*x] - b*Sin[a*x])/x^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.784.3",
+  "gr": "3.784.3",
+  "page": 496,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[a*x] - Cos[b*x])/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(b - a)*Pi/2"
+  ],
+  "conds": [
+   "a >= 0",
+   "b >= 0"
+  ],
+  "cite": "BI(158)(12), FI II 645",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(Cos[a*x] - Cos[b*x])/x^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.784.4",
+  "gr": "3.784.4",
+  "page": 496,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[x] - x*Cos[x])/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1"
+  ],
+  "conds": [],
+  "cite": "BI (158)(3)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(Sin[x] - x*Cos[x])/x^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.784.5",
+  "gr": "3.784.5",
+  "page": 496,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[a*x] - Cos[b*x])/(x*(x + beta)), {x, 0, Infinity}]",
+  "rhs": [
+   "1/beta*(CosIntegral[a*beta]*Cos[a*beta] + (SinIntegral[a*beta] - Pi/2)*Sin[a*beta] - CosIntegral[b*beta]*Cos[b*beta] - (SinIntegral[b*beta] - Pi/2)*Sin[b*beta] + Log[b/a])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Abs[Arg[beta]] < Pi"
+  ],
+  "cite": "ET II 221(49)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(Cos[a*x] - Cos[b*x])/(x*(x + beta)), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.784.6",
+  "gr": "3.784.6",
+  "page": 496,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[a*x] + x*Sin[a*x])/(1 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*E^(-a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "GW (333)(73)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(Cos[a*x] + x*Sin[a*x])/(1 + x^2), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.784.7",
+  "gr": "3.784.7",
+  "page": 496,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[a*x] - a*x*Cos[a*x])/x^3, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*a^2*Sign[a]"
+  ],
+  "conds": [
+   "Element[a, Reals]"
+  ],
+  "cite": "LI (158)(5)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(Sin[a*x] - a*x*Cos[a*x])/x^3, {x, 0, Infinity}]",
+  "note": "No condition printed; a real assumed."
+ },
+ {
+  "id": "GR3.784.8",
+  "gr": "3.784.8",
+  "page": 496,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[a*x] - Cos[b*x])/(x^2*(x^2 + beta^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*((b - a)*beta + E^(-b*beta) - E^(-a*beta))/(2*beta^3)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Abs[Arg[beta]] < Pi"
+  ],
+  "cite": "BI(173)(20)a, ET II 222(59)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(Cos[a*x] - Cos[b*x])/(x^2*(x^2 + beta^2)), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.784.9",
+  "gr": "3.784.9",
+  "page": 497,
+  "status": "ok",
+  "lhs": "Integrate[Cos[m*x]/(1 + a^2*ChebyshevT[n, x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*n*Sqrt[1 + a^2])*Sum[E^(-m*Sin[(2*k - 1)*Pi/(2*n)]*Sinh[ArcSinh[1/a]])*(Cos[m*Cos[(2*k - 1)*Pi/(2*n)]*Cosh[ArcSinh[1/a]]]*Sin[(2*k - 1)*Pi/(2*n)]*Cosh[ArcSinh[1/a]] + Sin[m*Cos[(2*k - 1)*Pi/(2*n)]*Cosh[ArcSinh[1/a]]]*Cos[(2*k - 1)*Pi/(2*n)]*Sinh[ArcSinh[1/a]]), {k, 1, n}]",
+   "Pi/(2*n*Sqrt[1 + a^2])*Sum[E^(-m*Sin[(2*k - 1)*Pi/(2*n)]*Sinh[ArcSinh[1/a]/n])*(Cos[m*Cos[(2*k - 1)*Pi/(2*n)]*Cosh[ArcSinh[1/a]/n]]*Sin[(2*k - 1)*Pi/(2*n)]*Cosh[ArcSinh[1/a]/n] + Sin[m*Cos[(2*k - 1)*Pi/(2*n)]*Cosh[ArcSinh[1/a]/n]]*Cos[(2*k - 1)*Pi/(2*n)]*Sinh[ArcSinh[1/a]/n]), {k, 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "m > 0",
+   "0 < Abs[a] < 1"
+  ],
+  "cite": "",
+  "edition_note": "10",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "int_0^inf cos mx/(1 + a^2 T_n(x)) = pi/(2n sqrt(1+a^2)) sum_{k=1}^n e^{-m sin u sinh phi}(cos beta sin u cosh phi + sin beta cos u sinh phi), u=(2k-1)pi/(2n), phi=arcsinh(1/a), beta=m cos u cosh phi",
+  "note": "Abbreviations u, phi, beta substituted. Printed T_n(x) (no square); poles of 1+a^2 T_n(x)^2 at cos(u + i phi/n) suggest the intended integrand is 1 + a^2 T_n(x)^2 with phi -> arcsinh(1/a)/n (second candidate). m > 0 and n >= 1 assumed."
+ },
+ {
+  "id": "GR3.785",
+  "gr": "3.785",
+  "page": 497,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[1/x*Sum[ak*Cos[bk*x], {k, 1, n}], {x, 0, Infinity}]",
+  "rhs": [
+   "-Sum[ak*Log[bk], {k, 1, n}]"
+  ],
+  "conds": [],
+  "cite": "FI II 649",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "int_0^inf (1/x) sum a_k cos b_k x dx = -sum a_k ln b_k [b_k>0, sum a_k = 0]",
+  "note": "",
+  "reason": "indexed parameter family"
+ },
+ {
+  "id": "GR3.786.1",
+  "gr": "3.786.1",
+  "page": 497,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Cos[a*x])*Sin[b*x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "b/2*Log[(b^2 - a^2)/b^2] + a/2*Log[(a + b)/(a - b)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 81(29)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(1 - Cos[a*x])*Sin[b*x]/x^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.786.2",
+  "gr": "3.786.2",
+  "page": 497,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Cos[a*x])*Cos[b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Sqrt[Abs[a^2 - b^2]]/b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "a != b"
+  ],
+  "cite": "FI II 647",
+  "edition_note": "11",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(1 - Cos[a*x])*Cos[b*x]/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.786.3a",
+  "gr": "3.786.3",
+  "page": 497,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Cos[a*x])*Cos[b*x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(a - b)",
+   "Pi/2*(b - a)"
+  ],
+  "conds": [
+   "a < b",
+   "b <= 0"
+  ],
+  "cite": "ET I 20(16)",
+  "edition_note": "11",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(1 - Cos[a*x])*Cos[b*x]/x^2, {x, 0, Infinity}]",
+  "note": "Condition printed [a < b <= 0]; the value pi/2 (a-b) holds for 0 <= b <= a (probable misprint); under the printed condition the value would be pi/2 (b-a) (second candidate)."
+ },
+ {
+  "id": "GR3.786.3b",
+  "gr": "3.786.3",
+  "page": 497,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Cos[a*x])*Cos[b*x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < a",
+   "a <= b"
+  ],
+  "cite": "ET I 20(16)",
+  "edition_note": "11",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(1 - Cos[a*x])*Cos[b*x]/x^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.787.1a",
+  "gr": "3.787.1",
+  "page": 497,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[a] - Cos[n*a*x])*Sin[m*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(Cos[a] - 1)"
+  ],
+  "conds": [
+   "m > n*a",
+   "n*a > 0"
+  ],
+  "cite": "BI(155)(7)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(Cos[a] - Cos[n*a*x])*Sin[m*x]/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.787.1b",
+  "gr": "3.787.1",
+  "page": 497,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[a] - Cos[n*a*x])*Sin[m*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Cos[a]"
+  ],
+  "conds": [
+   "n*a > m",
+   "m > 0"
+  ],
+  "cite": "BI(155)(7)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(Cos[a] - Cos[n*a*x])*Sin[m*x]/x, {x, 0, Infinity}]",
+  "note": "m > 0 not printed; added."
+ },
+ {
+  "id": "GR3.787.2",
+  "gr": "3.787.2",
+  "page": 497,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[a*x]^2 - Sin[b*x]^2)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[a/b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (333)(20b)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(Sin[a*x]^2 - Sin[b*x]^2)/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.787.3",
+  "gr": "3.787.3",
+  "page": 497,
+  "status": "ok",
+  "lhs": "Integrate[(x^3 - Sin[x]^3)/x^5, {x, 0, Infinity}]",
+  "rhs": [
+   "13/32*Pi"
+  ],
+  "conds": [],
+  "cite": "BI (158)(6)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(x^3 - Sin[x]^3)/x^5, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.787.4",
+  "gr": "3.787.4",
+  "page": 497,
+  "status": "ok",
+  "lhs": "Integrate[(3 - 4*Sin[a*x]^2)*Sin[a*x]^2/x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[2]"
+  ],
+  "conds": [
+   "Element[a, Reals]",
+   "a != 0"
+  ],
+  "cite": "HBI (155)(6)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(3 - 4*Sin[a*x]^2)*Sin[a*x]^2/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.788",
+  "gr": "3.788",
+  "page": 497,
+  "status": "ok",
+  "lhs": "Integrate[1/x - Cot[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Log[Pi/2]"
+  ],
+  "conds": [],
+  "cite": "GW (333)(61)a",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[1/x - Cot[x], {x, 0, Pi/2}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.789",
+  "gr": "3.789",
+  "page": 497,
+  "status": "ok",
+  "lhs": "Integrate[(4*x^2*Cos[x] + (Pi - x)*x)/Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi^2*Log[2]"
+  ],
+  "conds": [],
+  "cite": "LI (206)(10)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(4*x^2*Cos[x] + (Pi - x)*x)/Sin[x], {x, 0, Pi/2}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.1",
+  "gr": "3.791.1",
+  "page": 497,
+  "status": "ok",
+  "lhs": "Integrate[x/(1 + Sin[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Log[2]"
+  ],
+  "conds": [],
+  "cite": "GW (333)(55a)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[x/(1 + Sin[x]), {x, 0, Pi/2}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.2",
+  "gr": "3.791.2",
+  "page": 497,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[x]/(1 + Sin[x]), {x, 0, Pi}]",
+  "rhs": [
+   "Pi*Log[2] - 4*Catalan"
+  ],
+  "conds": [],
+  "cite": "GW (333)(55c)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[x*Cos[x]/(1 + Sin[x]), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.3",
+  "gr": "3.791.3",
+  "page": 497,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[x]/(1 + Sin[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Log[2] - 2*Catalan"
+  ],
+  "conds": [],
+  "cite": "GW (333)(55b)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[x*Cos[x]/(1 + Sin[x]), {x, 0, Pi/2}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.4a",
+  "gr": "3.791.4",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[(Pi/2 - x)*Cos[x]/(1 - Sin[x]), {x, 0, Pi}]",
+  "rhs": [
+   "Pi*Log[2] + 4*Catalan"
+  ],
+  "conds": [],
+  "cite": "BI(207)(3), GW(333)(56c)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(Pi/2 - x)*Cos[x]/(1 - Sin[x]), {x, 0, Pi}]",
+  "note": "Book also gives the decimal 5.8414484669..."
+ },
+ {
+  "id": "GR3.791.4b",
+  "gr": "3.791.4",
+  "page": 498,
+  "status": "ok",
+  "lhs": "2*Integrate[(Pi/2 - x)*Cos[x]/(1 - Sin[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Log[2] + 4*Catalan"
+  ],
+  "conds": [],
+  "cite": "BI(207)(3), GW(333)(56c)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "2*Integrate[(Pi/2 - x)*Cos[x]/(1 - Sin[x]), {x, 0, Pi/2}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.5",
+  "gr": "3.791.5",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x^2/(1 - Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi^2/4 + Pi*Log[2] + 4*Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (207)(3)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[x^2/(1 - Cos[x]), {x, 0, Pi/2}]",
+  "note": "Book also gives the decimal 3.3740473667..."
+ },
+ {
+  "id": "GR3.791.6",
+  "gr": "3.791.6",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x^2/(1 - Cos[x]), {x, 0, Pi}]",
+  "rhs": [
+   "4*Pi*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (219)(1)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[x^2/(1 - Cos[x]), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.7",
+  "gr": "3.791.7",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x^(p + 1)/(1 - Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "-(Pi/2)^(p + 1) + (Pi/2)^p*(p + 1)*(2/p - Sum[Zeta[2*k]/(4^(2*k - 1)*(p + 2*k)), {k, 1, Infinity}])"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "LI (207)(4)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[x^(p + 1)/(1 - Cos[x]), {x, 0, Pi/2}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.8",
+  "gr": "3.791.8",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x/(1 + Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2 - Log[2]"
+  ],
+  "conds": [],
+  "cite": "GW (333)(55a)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[x/(1 + Cos[x]), {x, 0, Pi/2}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.9",
+  "gr": "3.791.9",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/(1 - Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Log[2] + 2*Catalan"
+  ],
+  "conds": [],
+  "cite": "GW (333)(56a)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[x*Sin[x]/(1 - Cos[x]), {x, 0, Pi/2}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.10",
+  "gr": "3.791.10",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/(1 - Cos[x]), {x, 0, Pi}]",
+  "rhs": [
+   "2*Pi*Log[2]"
+  ],
+  "conds": [],
+  "cite": "GW (333)(56b)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[x*Sin[x]/(1 - Cos[x]), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.11a",
+  "gr": "3.791.11",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[(x - Sin[x])/(1 - Cos[x]), {x, 0, Pi}]",
+  "rhs": [
+   "2"
+  ],
+  "conds": [],
+  "cite": "GW (333)(57a)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[(x - Sin[x])/(1 - Cos[x]), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.11b",
+  "gr": "3.791.11",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Pi/2 + Integrate[(x - Sin[x])/(1 - Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "2"
+  ],
+  "conds": [],
+  "cite": "GW (333)(57a)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Pi/2 + Integrate[(x - Sin[x])/(1 - Cos[x]), {x, 0, Pi/2}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.791.12",
+  "gr": "3.791.12",
+  "page": 498,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/(1 + Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi/2*Log[2] + 2*Catalan"
+  ],
+  "conds": [],
+  "cite": "GW (333)(55b)",
+  "edition_note": "",
+  "section": "3.78-3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[x*Sin[x]/(1 + Cos[x]), {x, 0, Pi/2}]",
+  "note": ""
+ }
+]

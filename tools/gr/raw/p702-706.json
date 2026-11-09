@@ -1,0 +1,947 @@
+[
+ {
+  "id": "GR6.422.3",
+  "gr": "6.422.3",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH I 256, BU 75",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{g-i inf}^{g+i inf} Gamma(-s)Gamma(beta+s) t^s ds = 2 pi i Gamma(beta)(1+t)^(-beta)",
+  "note": "",
+  "reason": "Mellin-Barnes integral along a vertical line in the complex s-plane"
+ },
+ {
+  "id": "GR6.422.4",
+  "gr": "6.422.4",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "WH",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-inf i}^{inf i} Gamma((t-p)/2) Gamma(-t) (sqrt2)^(t-p-2) z^t dt = 2 pi i e^(z^2/4) Gamma(-p) D_p(z)",
+  "note": "",
+  "reason": "Mellin-Barnes integral along a vertical line in the complex s-plane"
+ },
+ {
+  "id": "GR6.422.5",
+  "gr": "6.422.5",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH II 120",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int Gamma(s)Gamma(nu/2+1/4-s)Gamma(nu/2-1/4-s)(z^2/2)^s ds = 2pi i 2^(1/4-nu/2) z^(-1/2) e^(z^2/4) Gamma(nu/2+1/4)Gamma(nu/2-1/4) D_nu(z)",
+  "note": "",
+  "reason": "Mellin-Barnes integral along a vertical line in the complex s-plane"
+ },
+ {
+  "id": "GR6.422.6",
+  "gr": "6.422.6",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH II 21(34)",
+  "edition_note": "3",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{c-i inf}^{c+i inf} (x/2)^(-s) Gamma(nu/2+s/2)/Gamma(1+nu/2-s/2) ds = 4 pi i J_nu(x)",
+  "note": "",
+  "reason": "Mellin-Barnes integral along a vertical line in the complex s-plane"
+ },
+ {
+  "id": "GR6.422.7",
+  "gr": "6.422.7",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH II 83(34)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-c-i inf}^{-c+i inf} Gamma(-nu-s)Gamma(-s)(-iz/2)^(nu+2s) ds = -2 pi^2 e^(i nu pi/2) H1_nu(z)",
+  "note": "",
+  "reason": "Mellin-Barnes integral along a vertical line in the complex s-plane"
+ },
+ {
+  "id": "GR6.422.8",
+  "gr": "6.422.8",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH II 83(35)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-c-i inf}^{-c+i inf} Gamma(-nu-s)Gamma(-s)(iz/2)^(nu+2s) ds = 2 pi^2 e^(-i nu pi/2) H2_nu(z)",
+  "note": "",
+  "reason": "Mellin-Barnes integral along a vertical line in the complex s-plane"
+ },
+ {
+  "id": "GR6.422.9",
+  "gr": "6.422.9",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH II 83(36)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int Gamma(-s)(x/2)^(nu+2s)/Gamma(nu+s+1) ds = 2 pi i J_nu(x)",
+  "note": "",
+  "reason": "Mellin-Barnes integral along a vertical line in the complex s-plane"
+ },
+ {
+  "id": "GR6.422.10",
+  "gr": "6.422.10",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH II 83(37)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int Gamma(-s)Gamma(-2nu-s)Gamma(nu+s+1/2)(-2iz)^s ds = -pi^(5/2) e^(-i(z-nu pi)) sec(nu pi)(2z)^(-nu) H1_nu(z)",
+  "note": "",
+  "reason": "Mellin-Barnes integral along a vertical line in the complex s-plane"
+ },
+ {
+  "id": "GR6.422.11",
+  "gr": "6.422.11",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH II 84(38)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int Gamma(-s)Gamma(-2nu-s)Gamma(nu+s+1/2)(2iz)^s ds = pi^(5/2) e^(i(z-nu pi)) sec(nu pi)(2z)^(-nu) H2_nu(z)",
+  "note": "",
+  "reason": "Mellin-Barnes integral along a vertical line in the complex s-plane"
+ },
+ {
+  "id": "GR6.422.12",
+  "gr": "6.422.12",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH II 84(39)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int Gamma(s)Gamma(1/2-s-nu)Gamma(1/2-s+nu)(2z)^s ds = 2^(3/2) pi^(3/2) i z^(1/2) e^z sec(nu pi) K_nu(z)",
+  "note": "",
+  "reason": "Mellin-Barnes integral along a vertical line in the complex s-plane"
+ },
+ {
+  "id": "GR6.422.13",
+  "gr": "6.422.13",
+  "page": 702,
+  "status": "SKIP-CONTOUR",
+  "cite": "MO 41",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-1/2-i inf}^{-1/2+i inf} Gamma(-s)/(s Gamma(1+s)) x^(2s) ds = 4 pi int_{2x}^inf J_0(t)/t dt",
+  "note": "",
+  "reason": "Mellin-Barnes integral along a vertical line in the complex s-plane"
+ },
+ {
+  "id": "GR6.422.14",
+  "gr": "6.422.14",
+  "page": 703,
+  "status": "SKIP-CONTOUR",
+  "cite": "",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int Gamma(alpha+s)Gamma(beta+s)Gamma(-s)/Gamma(gamma+s) (-z)^s ds = 2 pi i Gamma(alpha)Gamma(beta)/Gamma(gamma) 2F1(alpha,beta;gamma;z)",
+  "note": "",
+  "reason": "Mellin-Barnes integral along a vertical line in the complex s-plane"
+ },
+ {
+  "id": "GR6.422.15",
+  "gr": "6.422.15",
+  "page": 703,
+  "status": "SKIP-CONTOUR",
+  "cite": "EH I 62(15), EH I 256(4)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{delta-i inf}^{delta+i inf} Gamma(alpha+s)Gamma(-s)/Gamma(gamma+s) (-z)^s ds = 2 pi i Gamma(alpha)/Gamma(gamma) 1F1(alpha;gamma;z)",
+  "note": "",
+  "reason": "Mellin-Barnes integral along a vertical line in the complex s-plane"
+ },
+ {
+  "id": "GR6.422.16",
+  "gr": "6.422.16",
+  "page": 703,
+  "status": "SKIP-CONTOUR",
+  "cite": "ET II 303(33)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int [Gamma(1/2-s)/Gamma(s)]^2 z^s ds = 2 pi i z^(1/2)[2/pi K_0(4 z^(1/4)) - Y_0(4 z^(1/4))]",
+  "note": "",
+  "reason": "Mellin-Barnes integral along a vertical line in the complex s-plane"
+ },
+ {
+  "id": "GR6.422.17",
+  "gr": "6.422.17",
+  "page": 703,
+  "status": "SKIP-CONTOUR",
+  "cite": "ET II 302(30)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int Gamma(lam+mu-s+1/2)Gamma(lam-mu-s+1/2)/Gamma(lam-k-s+1) z^s ds = 2 pi i z^lam e^(-z/2) W_{k,mu}(z)",
+  "note": "",
+  "reason": "Mellin-Barnes integral along a vertical line in the complex s-plane"
+ },
+ {
+  "id": "GR6.422.18",
+  "gr": "6.422.18",
+  "page": 703,
+  "status": "SKIP-CONTOUR",
+  "cite": "ET II 302(31)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int Gamma(k-lam+s)Gamma(lam+mu-s+1/2)/Gamma(mu-lam+s+1/2) z^s ds = 2 pi i Gamma(k+mu+1/2)/Gamma(2mu+1) z^lam e^(-z/2) M_{k,mu}(z)",
+  "note": "",
+  "reason": "Mellin-Barnes integral along a vertical line in the complex s-plane"
+ },
+ {
+  "id": "GR6.422.19",
+  "gr": "6.422.19",
+  "page": 703,
+  "status": "SKIP-CONTOUR",
+  "cite": "ET II 303(34)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int prod Gamma(b_j-s) prod Gamma(1-a_j+s)/(prod Gamma(1-b_j+s) prod Gamma(a_j-s)) z^s ds = 2 pi i G^{pq}_{mn}(z | a; b)",
+  "note": "",
+  "reason": "Mellin-Barnes integral along a vertical line in the complex s-plane"
+ },
+ {
+  "id": "GR6.423.1",
+  "gr": "6.423.1",
+  "page": 703,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^(-alpha*x)/Gamma[1 + x], {x, 0, Infinity}]",
+  "rhs": [
+   "VolterraNu[E^(-alpha)]"
+  ],
+  "conds": [],
+  "cite": "MI 39, EH III 222(16)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_0^inf e^(-alpha x)/Gamma(1+x) dx = nu(e^(-alpha))",
+  "note": "nu(x) = Integrate[x^t/Gamma[t + 1], {t, 0, Infinity}]",
+  "reason": "Volterra-type function nu(x), nu(x,a), mu(x,b), mu(x,b,a) (G&R 9.640); placeholders VolterraNu/VolterraMu"
+ },
+ {
+  "id": "GR6.423.2",
+  "gr": "6.423.2",
+  "page": 703,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^(-alpha*x)/Gamma[x + beta + 1], {x, 0, Infinity}]",
+  "rhs": [
+   "E^(beta*alpha)*VolterraNu[E^(-alpha), beta]"
+  ],
+  "conds": [],
+  "cite": "MI 39, EH III 222(16)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_0^inf e^(-alpha x)/Gamma(x+beta+1) dx = e^(beta alpha) nu(e^(-alpha), beta)",
+  "note": "nu(x, a) = Integrate[x^(a + t)/Gamma[a + t + 1], {t, 0, Infinity}]",
+  "reason": "Volterra-type function nu(x), nu(x,a), mu(x,b), mu(x,b,a) (G&R 9.640); placeholders VolterraNu/VolterraMu"
+ },
+ {
+  "id": "GR6.423.3",
+  "gr": "6.423.3",
+  "page": 703,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^(-alpha*x)*x^m/Gamma[x + 1], {x, 0, Infinity}]",
+  "rhs": [
+   "VolterraMu[E^(-alpha), m]*Gamma[m + 1]"
+  ],
+  "conds": [
+   "Re[m] > -1"
+  ],
+  "cite": "MI 39, EH III 222(17)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_0^inf e^(-alpha x) x^m/Gamma(x+1) dx = mu(e^(-alpha), m) Gamma(m+1)",
+  "note": "mu(x, b) = Integrate[x^t*t^b/(Gamma[b + 1]*Gamma[t + 1]), {t, 0, Infinity}]",
+  "reason": "Volterra-type function nu(x), nu(x,a), mu(x,b), mu(x,b,a) (G&R 9.640); placeholders VolterraNu/VolterraMu"
+ },
+ {
+  "id": "GR6.423.4",
+  "gr": "6.423.4",
+  "page": 704,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^(-alpha*x)*x^m/Gamma[x + n + 1], {x, 0, Infinity}]",
+  "rhs": [
+   "E^(n*alpha)*VolterraMu[E^(-alpha), m, n]*Gamma[m + 1]"
+  ],
+  "conds": [
+   "Re[m] > -1"
+  ],
+  "cite": "MI 39, EH III 222(17)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_0^inf e^(-alpha x) x^m/Gamma(x+n+1) dx = e^(n alpha) mu(e^(-alpha), m, n) Gamma(m+1)",
+  "note": "mu(x, b, a) = Integrate[x^(a + t)*t^b/(Gamma[b + 1]*Gamma[a + t + 1]), {t, 0, Infinity}]",
+  "reason": "Volterra-type function nu(x), nu(x,a), mu(x,b), mu(x,b,a) (G&R 9.640); placeholders VolterraNu/VolterraMu"
+ },
+ {
+  "id": "GR6.424",
+  "gr": "6.424",
+  "page": 704,
+  "status": "SKIP-GENERIC",
+  "cite": "ET II 299(16)",
+  "edition_note": "",
+  "section": "6.42 Combinations of the gamma function, the exponential, and powers",
+  "tex": "int_{-inf}^{inf} R(x) exp[(2 pi n + theta) x i]/(Gamma(alpha+x)Gamma(beta-x)) dx = [2cos(theta/2)]^(alpha+beta-2)/Gamma(alpha+beta-1) exp[theta(beta-alpha)i/2] int_0^1 R(t) exp(2 pi n t i) dt",
+  "note": "",
+  "reason": "unspecified periodic function R(x)"
+ },
+ {
+  "id": "GR6.431.1a",
+  "gr": "6.431.1",
+  "page": 704,
+  "status": "ok",
+  "lhs": "Integrate[Sin[r*x]/(Gamma[p + x]*Gamma[q - x]), {x, -Infinity, -Infinity}]",
+  "rhs": [
+   "(2*Cos[r/2])^(p + q - 2)*Sin[r*(q - p)/2]/Gamma[p + q - 1]"
+  ],
+  "conds": [
+   "Element[r, Reals]",
+   "-Pi < r < Pi",
+   "Re[p + q] > 1"
+  ],
+  "cite": "MO 10a, ET II 298(9, 10)",
+  "edition_note": "",
+  "section": "6.43 Combinations of the gamma function and trigonometric functions",
+  "tex": "int sin rx/(Gamma(p+x)Gamma(q-x)) dx = (2cos(r/2))^(p+q-2) sin(r(q-p)/2)/Gamma(p+q-1) [|r|<pi]",
+  "note": "Upper limit printed as -Infinity (misprint; see corrected records)."
+ },
+ {
+  "id": "GR6.431.1b",
+  "gr": "6.431.1",
+  "page": 704,
+  "status": "ok",
+  "lhs": "Integrate[Sin[r*x]/(Gamma[p + x]*Gamma[q - x]), {x, -Infinity, -Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[r, Reals]",
+   "r > Pi",
+   "Re[p + q] > 1"
+  ],
+  "cite": "MO 10a, ET II 298(9, 10)",
+  "edition_note": "",
+  "section": "6.43 Combinations of the gamma function and trigonometric functions",
+  "tex": "int sin rx/(Gamma(p+x)Gamma(q-x)) dx = 0 [|r|>pi]",
+  "note": "Upper limit printed as -Infinity (misprint; see corrected records). Disjunctive |r| > pi: kept r > Pi; r < -Pi also stated."
+ },
+ {
+  "id": "GR6.431.1c",
+  "gr": "6.431.1",
+  "page": 704,
+  "status": "ok",
+  "lhs": "Integrate[Sin[r*x]/(Gamma[p + x]*Gamma[q - x]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2*Cos[r/2])^(p + q - 2)*Sin[r*(q - p)/2]/Gamma[p + q - 1]"
+  ],
+  "conds": [
+   "Element[r, Reals]",
+   "-Pi < r < Pi",
+   "Re[p + q] > 1"
+  ],
+  "cite": "MO 10a, ET II 298(9, 10)",
+  "edition_note": "",
+  "section": "6.43 Combinations of the gamma function and trigonometric functions",
+  "tex": "int sin rx/(Gamma(p+x)Gamma(q-x)) dx = (2cos(r/2))^(p+q-2) sin(r(q-p)/2)/Gamma(p+q-1) [|r|<pi]",
+  "note": "corrected integrand: upper limit -Infinity in the book is a misprint for Infinity."
+ },
+ {
+  "id": "GR6.431.1d",
+  "gr": "6.431.1",
+  "page": 704,
+  "status": "ok",
+  "lhs": "Integrate[Sin[r*x]/(Gamma[p + x]*Gamma[q - x]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[r, Reals]",
+   "r > Pi",
+   "Re[p + q] > 1"
+  ],
+  "cite": "MO 10a, ET II 298(9, 10)",
+  "edition_note": "",
+  "section": "6.43 Combinations of the gamma function and trigonometric functions",
+  "tex": "int sin rx/(Gamma(p+x)Gamma(q-x)) dx = 0 [|r|>pi]",
+  "note": "corrected integrand: upper limit -Infinity in the book is a misprint for Infinity. Disjunctive |r| > pi: kept r > Pi; r < -Pi also stated."
+ },
+ {
+  "id": "GR6.431.2a",
+  "gr": "6.431.2",
+  "page": 704,
+  "status": "ok",
+  "lhs": "Integrate[Cos[r*x]/(Gamma[p + x]*Gamma[q - x]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2*Cos[r/2])^(p + q - 2)*Cos[r*(q - p)/2]/Gamma[p + q - 1]"
+  ],
+  "conds": [
+   "Element[r, Reals]",
+   "-Pi < r < Pi",
+   "Re[p + q] > 1"
+  ],
+  "cite": "MO 10a, ET II 299(13, 14)",
+  "edition_note": "",
+  "section": "6.43 Combinations of the gamma function and trigonometric functions",
+  "tex": "int cos rx/(Gamma(p+x)Gamma(q-x)) dx = (2cos(r/2))^(p+q-2) cos(r(q-p)/2)/Gamma(p+q-1) [|r|<pi]",
+  "note": ""
+ },
+ {
+  "id": "GR6.431.2b",
+  "gr": "6.431.2",
+  "page": 704,
+  "status": "ok",
+  "lhs": "Integrate[Cos[r*x]/(Gamma[p + x]*Gamma[q - x]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[r, Reals]",
+   "r > Pi",
+   "Re[p + q] > 1"
+  ],
+  "cite": "MO 10a, ET II 299(13, 14)",
+  "edition_note": "",
+  "section": "6.43 Combinations of the gamma function and trigonometric functions",
+  "tex": "int cos rx/(Gamma(p+x)Gamma(q-x)) dx = 0 [|r|>pi]",
+  "note": "Disjunctive |r| > pi: kept r > Pi; r < -Pi also stated."
+ },
+ {
+  "id": "GR6.432a",
+  "gr": "6.432",
+  "page": 704,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*k*Pi*x]/Sin[Pi*x]/(Gamma[alpha + x]*Gamma[beta - x]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[k, Integers]",
+   "Re[alpha + beta] > 1"
+  ],
+  "cite": "ET II 298(11, 12)",
+  "edition_note": "",
+  "section": "6.43 Combinations of the gamma function and trigonometric functions",
+  "tex": "int_{-inf}^{inf} sin(m pi x)/sin(pi x) dx/(Gamma(alpha+x)Gamma(beta-x)) = 0 [m even]",
+  "note": "m even integer substituted as m = 2*k"
+ },
+ {
+  "id": "GR6.432b",
+  "gr": "6.432",
+  "page": 704,
+  "status": "ok",
+  "lhs": "Integrate[Sin[(2*k + 1)*Pi*x]/Sin[Pi*x]/(Gamma[alpha + x]*Gamma[beta - x]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2^(alpha + beta - 2)/Gamma[alpha + beta - 1]"
+  ],
+  "conds": [
+   "Element[k, Integers]",
+   "Re[alpha + beta] > 1"
+  ],
+  "cite": "ET II 298(11, 12)",
+  "edition_note": "",
+  "section": "6.43 Combinations of the gamma function and trigonometric functions",
+  "tex": "int_{-inf}^{inf} sin(m pi x)/sin(pi x) dx/(Gamma(alpha+x)Gamma(beta-x)) = 2^(alpha+beta-2)/Gamma(alpha+beta-1) [m odd]",
+  "note": "m odd integer substituted as m = 2*k + 1"
+ },
+ {
+  "id": "GR6.433.1",
+  "gr": "6.433.1",
+  "page": 704,
+  "status": "ok",
+  "lhs": "Integrate[Sin[Pi*x]/(Gamma[alpha + x]*Gamma[beta - x]*Gamma[gamma + x]*Gamma[(beta + gamma - alpha) - x]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Sin[Pi/2*(beta - alpha)]/(2*Gamma[(alpha + beta)/2]*Gamma[(gamma + (beta + gamma - alpha))/2]*Gamma[alpha + (beta + gamma - alpha) - 1])"
+  ],
+  "conds": [
+   "Re[beta + gamma] > 1"
+  ],
+  "cite": "ET II 300(22)",
+  "edition_note": "",
+  "section": "6.43 Combinations of the gamma function and trigonometric functions",
+  "tex": "int_{-inf}^{inf} sin(pi x)/(Gamma(alpha+x)Gamma(beta-x)Gamma(gamma+x)Gamma(delta-x)) dx = sin[pi/2(beta-alpha)]/(2 Gamma((alpha+beta)/2)Gamma((gamma+delta)/2)Gamma(alpha+delta-1))",
+  "note": "Condition alpha + delta = beta + gamma substituted: delta = beta + gamma - alpha; Re(alpha+beta+gamma+delta) > 2 becomes Re[beta + gamma] > 1"
+ },
+ {
+  "id": "GR6.433.2",
+  "gr": "6.433.2",
+  "page": 704,
+  "status": "ok",
+  "lhs": "Integrate[Cos[Pi*x]/(Gamma[alpha + x]*Gamma[beta - x]*Gamma[gamma + x]*Gamma[(beta + gamma - alpha) - x]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Cos[Pi/2*(beta - alpha)]/(2*Gamma[(alpha + beta)/2]*Gamma[(gamma + (beta + gamma - alpha))/2]*Gamma[alpha + (beta + gamma - alpha) - 1])"
+  ],
+  "conds": [
+   "Re[beta + gamma] > 1"
+  ],
+  "cite": "ET II 301(23)",
+  "edition_note": "",
+  "section": "6.43 Combinations of the gamma function and trigonometric functions",
+  "tex": "int_{-inf}^{inf} cos(pi x)/(Gamma(alpha+x)Gamma(beta-x)Gamma(gamma+x)Gamma(delta-x)) dx = cos[pi/2(beta-alpha)]/(2 Gamma((alpha+beta)/2)Gamma((gamma+delta)/2)Gamma(alpha+delta-1))",
+  "note": "Condition alpha + delta = beta + gamma substituted: delta = beta + gamma - alpha; Re(alpha+beta+gamma+delta) > 2 becomes Re[beta + gamma] > 1"
+ },
+ {
+  "id": "GR6.441.1",
+  "gr": "6.441.1",
+  "page": 705,
+  "status": "ok",
+  "lhs": "Integrate[LogGamma[x], {x, p, p + 1}]",
+  "rhs": [
+   "Log[2*Pi]/2 + p*Log[p] - p"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "FI II 784",
+  "edition_note": "",
+  "section": "6.44 The logarithm of the gamma function",
+  "tex": "int_p^{p+1} ln Gamma(x) dx = 1/2 ln 2pi + p ln p - p",
+  "note": "p > 0 implied"
+ },
+ {
+  "id": "GR6.441.2a",
+  "gr": "6.441.2",
+  "page": 705,
+  "status": "ok",
+  "lhs": "Integrate[LogGamma[x], {x, 0, 1}]",
+  "rhs": [
+   "Log[2*Pi]/2"
+  ],
+  "conds": [],
+  "cite": "FI II 783",
+  "edition_note": "",
+  "section": "6.44 The logarithm of the gamma function",
+  "tex": "int_0^1 ln Gamma(x) dx = 1/2 ln 2pi",
+  "note": ""
+ },
+ {
+  "id": "GR6.441.2b",
+  "gr": "6.441.2",
+  "page": 705,
+  "status": "ok",
+  "lhs": "Integrate[LogGamma[1 - x], {x, 0, 1}]",
+  "rhs": [
+   "Log[2*Pi]/2"
+  ],
+  "conds": [],
+  "cite": "FI II 783",
+  "edition_note": "",
+  "section": "6.44 The logarithm of the gamma function",
+  "tex": "int_0^1 ln Gamma(1-x) dx = 1/2 ln 2pi",
+  "note": ""
+ },
+ {
+  "id": "GR6.441.3",
+  "gr": "6.441.3",
+  "page": 705,
+  "status": "ok",
+  "lhs": "Integrate[LogGamma[x + q], {x, 0, 1}]",
+  "rhs": [
+   "Log[2*Pi]/2 + q*Log[q] - q"
+  ],
+  "conds": [
+   "q >= 0"
+  ],
+  "cite": "NH 89(17), ET II 304(40)",
+  "edition_note": "",
+  "section": "6.44 The logarithm of the gamma function",
+  "tex": "int_0^1 ln Gamma(x+q) dx = 1/2 ln 2pi + q ln q - q",
+  "note": ""
+ },
+ {
+  "id": "GR6.441.4",
+  "gr": "6.441.4",
+  "page": 705,
+  "status": "ok",
+  "lhs": "Integrate[LogGamma[x + 1], {x, 0, z}]",
+  "rhs": [
+   "z/2*Log[2*Pi] - z*(z + 1)/2 + z*LogGamma[z + 1] - Log[BarnesG[z + 1]]"
+  ],
+  "conds": [
+   "z > 0"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "6.44 The logarithm of the gamma function",
+  "tex": "int_0^z ln Gamma(x+1) dx = z/2 ln 2pi - z(z+1)/2 + z ln Gamma(z+1) - ln G(z+1), G Barnes",
+  "note": "G(z+1) = (2pi)^(z/2) exp(-z(z+1)/2 - EulerGamma z^2/2) Prod_k (1+z/k)^k exp(-z+z^2/(2k)) is the Barnes G-function; z > 0 implied"
+ },
+ {
+  "id": "GR6.441.5",
+  "gr": "6.441.5",
+  "page": 705,
+  "status": "ok",
+  "lhs": "Integrate[LogGamma[a + x], {x, 0, n}]",
+  "rhs": [
+   "Sum[(a + k)*Log[a + k], {k, 0, n - 1}] - n*a + n*Log[2*Pi]/2 - n*(n - 1)/2"
+  ],
+  "conds": [
+   "a >= 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "ET II 304(41)",
+  "edition_note": "",
+  "section": "6.44 The logarithm of the gamma function",
+  "tex": "int_0^n ln Gamma(a+x) dx = sum_{k=0}^{n-1} (a+k) ln(a+k) - na + n ln(2pi)/2 - n(n-1)/2",
+  "note": ""
+ },
+ {
+  "id": "GR6.442",
+  "gr": "6.442",
+  "page": 705,
+  "status": "ok",
+  "lhs": "Integrate[Exp[2*Pi*n*x*I]*LogGamma[a + x], {x, 0, 1}]",
+  "rhs": [
+   "(2*Pi*n*I)^(-1)*(Log[a] - Exp[-2*Pi*n*a*I]*ExpIntegralEi[2*Pi*n*a*I])"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n != 0"
+  ],
+  "cite": "ET II 304(38)",
+  "edition_note": "",
+  "section": "6.44 The logarithm of the gamma function",
+  "tex": "int_0^1 exp(2 pi n x i) ln Gamma(a+x) dx = (2 pi n i)^(-1)[ln a - exp(-2 pi n a i) Ei(2 pi n a i)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.443.1",
+  "gr": "6.443.1",
+  "page": 705,
+  "status": "ok",
+  "lhs": "Integrate[LogGamma[x]*Sin[2*Pi*n*x], {x, 0, 1}]",
+  "rhs": [
+   "(Log[2*Pi*n] + EulerGamma)/(2*Pi*n)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "NH 203(5), ET II 304(42)",
+  "edition_note": "",
+  "section": "6.44 The logarithm of the gamma function",
+  "tex": "int_0^1 ln Gamma(x) sin 2pi n x dx = (ln(2 pi n) + C)/(2 pi n)",
+  "note": "n = 1, 2, ... implied"
+ },
+ {
+  "id": "GR6.443.2",
+  "gr": "6.443.2",
+  "page": 705,
+  "status": "ok",
+  "lhs": "Integrate[LogGamma[x]*Sin[(2*n + 1)*Pi*x], {x, 0, 1}]",
+  "rhs": [
+   "(Log[Pi/2] + 2*Sum[1/(2*k - 1), {k, 1, n}] + 1/(2*n + 1))/((2*n + 1)*Pi)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 305(43)",
+  "edition_note": "",
+  "section": "6.44 The logarithm of the gamma function",
+  "tex": "int_0^1 ln Gamma(x) sin(2n+1)pi x dx = 1/((2n+1)pi)[ln(pi/2) + 2(1+1/3+...+1/(2n-1)) + 1/(2n+1)]",
+  "note": "n = 0, 1, ... implied"
+ },
+ {
+  "id": "GR6.443.3",
+  "gr": "6.443.3",
+  "page": 705,
+  "status": "ok",
+  "lhs": "Integrate[LogGamma[x]*Cos[2*Pi*n*x], {x, 0, 1}]",
+  "rhs": [
+   "1/(4*n)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "NH 203(6), ET II 305(44)",
+  "edition_note": "",
+  "section": "6.44 The logarithm of the gamma function",
+  "tex": "int_0^1 ln Gamma(x) cos 2pi n x dx = 1/(4n)",
+  "note": "n = 1, 2, ... implied"
+ },
+ {
+  "id": "GR6.443.4",
+  "gr": "6.443.4",
+  "page": 705,
+  "status": "ok",
+  "lhs": "Integrate[LogGamma[x]*Cos[(2*n + 1)*Pi*x], {x, 0, 1}]",
+  "rhs": [
+   "2/Pi^2*((EulerGamma + Log[2*Pi])/(2*n + 1)^2 + 2*Sum[Log[k]/(4*k^2 - (2*n + 1)^2), {k, 2, Infinity}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "NH 203(6)",
+  "edition_note": "8",
+  "section": "6.44 The logarithm of the gamma function",
+  "tex": "int_0^1 ln Gamma(x) cos(2n+1)pi x dx = 2/pi^2[(C + ln 2pi)/(2n+1)^2 + 2 sum_{k=2}^inf ln k/(4k^2-(2n+1)^2)]",
+  "note": "n = 0, 1, ... implied"
+ },
+ {
+  "id": "GR6.443.5",
+  "gr": "6.443.5",
+  "page": 705,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*Pi*n*x]*LogGamma[a + x], {x, 0, 1}]",
+  "rhs": [
+   "-(2*Pi*n)^(-1)*(Log[a] + Cos[2*Pi*n*a]*CosIntegral[2*Pi*n*a] - Sin[2*Pi*n*a]*(SinIntegral[2*Pi*n*a] - Pi/2))"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "ET II 304(36)",
+  "edition_note": "",
+  "section": "6.44 The logarithm of the gamma function",
+  "tex": "int_0^1 sin(2 pi n x) ln Gamma(a+x) dx = -(2 pi n)^(-1)[ln a + cos(2 pi n a) ci(2 pi n a) - sin(2 pi n a) si(2 pi n a)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.443.6",
+  "gr": "6.443.6",
+  "page": 705,
+  "status": "ok",
+  "lhs": "Integrate[Cos[2*Pi*n*x]*LogGamma[a + x], {x, 0, 1}]",
+  "rhs": [
+   "-(2*Pi*n)^(-1)*(Sin[2*Pi*n*a]*CosIntegral[2*Pi*n*a] + Cos[2*Pi*n*a]*(SinIntegral[2*Pi*n*a] - Pi/2))"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "ET II 304(37)",
+  "edition_note": "",
+  "section": "6.44 The logarithm of the gamma function",
+  "tex": "int_0^1 cos(2 pi n x) ln Gamma(a+x) dx = -(2 pi n)^(-1)[sin(2 pi n a) ci(2 pi n a) + cos(2 pi n a) si(2 pi n a)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.451.1",
+  "gr": "6.451.1",
+  "page": 706,
+  "status": "ok",
+  "lhs": "Integrate[E^(-alpha*x)*Gamma[beta, 0, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[beta]*(1 + alpha)^(-beta)/alpha"
+  ],
+  "conds": [
+   "beta > 0",
+   "Re[alpha] > 0"
+  ],
+  "cite": "MI 39",
+  "edition_note": "",
+  "section": "6.45 The incomplete gamma function",
+  "tex": "int_0^inf e^(-alpha x) gamma(beta,x) dx = Gamma(beta)(1+alpha)^(-beta)/alpha",
+  "note": "Re[alpha] > 0 implied by convergence"
+ },
+ {
+  "id": "GR6.451.2",
+  "gr": "6.451.2",
+  "page": 706,
+  "status": "ok",
+  "lhs": "Integrate[E^(-alpha*x)*Gamma[beta, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[beta]*(1 - 1/(alpha + 1)^beta)/alpha"
+  ],
+  "conds": [
+   "beta > 0",
+   "Re[alpha] > 0"
+  ],
+  "cite": "MI 39",
+  "edition_note": "",
+  "section": "6.45 The incomplete gamma function",
+  "tex": "int_0^inf e^(-alpha x) Gamma(beta,x) dx = Gamma(beta)[1 - (alpha+1)^(-beta)]/alpha",
+  "note": "Re[alpha] > 0 added (implied)"
+ },
+ {
+  "id": "GR6.452.1",
+  "gr": "6.452.1",
+  "page": 706,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Gamma[nu, 0, x^2/(8*a^2)], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-nu - 1)*Gamma[2*nu]*E^((a*mu)^2)*ParabolicCylinderD[-2*nu, 2*a*mu]/mu"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi/4",
+   "Re[nu] > -1/2",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 179(36)",
+  "edition_note": "",
+  "section": "6.45 The incomplete gamma function",
+  "tex": "int_0^inf e^(-mu x) gamma(nu, x^2/(8a^2)) dx = 2^(-nu-1) Gamma(2nu) e^((a mu)^2) D_(-2nu)(2 a mu)/mu",
+  "note": ""
+ },
+ {
+  "id": "GR6.452.2",
+  "gr": "6.452.2",
+  "page": 706,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Gamma[1/4, 0, x^2/(8*a^2)], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(3/4)*Sqrt[a]/Sqrt[mu]*E^((a*mu)^2)*BesselK[1/4, a^2*mu^2]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi/4",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 179(35)",
+  "edition_note": "",
+  "section": "6.45 The incomplete gamma function",
+  "tex": "int_0^inf e^(-mu x) gamma(1/4, x^2/(8a^2)) dx = 2^(3/4) sqrt(a)/sqrt(mu) e^((a mu)^2) K_(1/4)(a^2 mu^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.453",
+  "gr": "6.453",
+  "page": 706,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Gamma[nu, a/x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*a^(nu/2)*mu^(nu/2 - 1)*BesselK[nu, 2*Sqrt[mu*a]]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi/2",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 179(32)",
+  "edition_note": "",
+  "section": "6.45 The incomplete gamma function",
+  "tex": "int_0^inf e^(-mu x) Gamma(nu, a/x) dx = 2 a^(nu/2) mu^(nu/2-1) K_nu(2 sqrt(mu a))",
+  "note": ""
+ },
+ {
+  "id": "GR6.454",
+  "gr": "6.454",
+  "page": 706,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*Gamma[nu, 0, alpha*Sqrt[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-nu/2)*alpha^nu*beta^(-nu/2 - 1)*Gamma[nu]*Exp[alpha^2/(8*beta)]*ParabolicCylinderD[-nu, alpha/Sqrt[2*beta]]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 309(19), MI 39a",
+  "edition_note": "",
+  "section": "6.45 The incomplete gamma function",
+  "tex": "int_0^inf e^(-beta x) gamma(nu, alpha sqrt x) dx = 2^(-nu/2) alpha^nu beta^(-nu/2-1) Gamma(nu) exp(alpha^2/(8 beta)) D_(-nu)(alpha/sqrt(2 beta))",
+  "note": ""
+ },
+ {
+  "id": "GR6.455.1",
+  "gr": "6.455.1",
+  "page": 706,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-beta*x)*Gamma[nu, alpha*x], {x, 0, Infinity}]",
+  "rhs": [
+   "alpha^nu*Gamma[mu + nu]/(mu*(alpha + beta)^(mu + nu))*Hypergeometric2F1[1, mu + nu, mu + 1, beta/(alpha + beta)]"
+  ],
+  "conds": [
+   "Re[alpha + beta] > 0",
+   "Re[mu] > 0",
+   "Re[mu + nu] > 0"
+  ],
+  "cite": "ET II 309(16)",
+  "edition_note": "",
+  "section": "6.45 The incomplete gamma function",
+  "tex": "int_0^inf x^(mu-1) e^(-beta x) Gamma(nu, alpha x) dx = alpha^nu Gamma(mu+nu)/(mu (alpha+beta)^(mu+nu)) 2F1(1, mu+nu; mu+1; beta/(alpha+beta))",
+  "note": ""
+ },
+ {
+  "id": "GR6.455.2",
+  "gr": "6.455.2",
+  "page": 706,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-beta*x)*Gamma[nu, 0, alpha*x], {x, 0, Infinity}]",
+  "rhs": [
+   "alpha^nu*Gamma[mu + nu]/(nu*(alpha + beta)^(mu + nu))*Hypergeometric2F1[1, mu + nu, nu + 1, alpha/(alpha + beta)]"
+  ],
+  "conds": [
+   "Re[alpha + beta] > 0",
+   "Re[beta] > 0",
+   "Re[mu + nu] > 0"
+  ],
+  "cite": "ET II 308(15)",
+  "edition_note": "",
+  "section": "6.45 The incomplete gamma function",
+  "tex": "int_0^inf x^(mu-1) e^(-beta x) gamma(nu, alpha x) dx = alpha^nu Gamma(mu+nu)/(nu (alpha+beta)^(mu+nu)) 2F1(1, mu+nu; nu+1; alpha/(alpha+beta))",
+  "note": ""
+ },
+ {
+  "id": "GR6.456.1",
+  "gr": "6.456.1",
+  "page": 706,
+  "status": "ok",
+  "lhs": "Integrate[E^(-alpha*x)*(4*x)^(nu - 1/2)*Gamma[nu, 0, 1/(4*x)], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*Gamma[2*nu, 0, Sqrt[alpha]]/alpha^(nu + 1/2)"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "MI 39a",
+  "edition_note": "",
+  "section": "6.45 The incomplete gamma function",
+  "tex": "int_0^inf e^(-alpha x)(4x)^(nu-1/2) gamma(nu, 1/(4x)) dx = sqrt(pi) gamma(2nu, sqrt alpha)/alpha^(nu+1/2)",
+  "note": "conditions not printed; Re[alpha] > 0, Re[nu] > 0 implied"
+ },
+ {
+  "id": "GR6.456.2",
+  "gr": "6.456.2",
+  "page": 706,
+  "status": "ok",
+  "lhs": "Integrate[E^(-alpha*x)*(4*x)^(nu - 1/2)*Gamma[nu, 1/(4*x)], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*Gamma[2*nu, Sqrt[alpha]]/alpha^(nu + 1/2)"
+  ],
+  "conds": [
+   "Re[alpha] > 0"
+  ],
+  "cite": "MI 39a",
+  "edition_note": "",
+  "section": "6.45 The incomplete gamma function",
+  "tex": "int_0^inf e^(-alpha x)(4x)^(nu-1/2) Gamma(nu, 1/(4x)) dx = sqrt(pi) Gamma(2nu, sqrt alpha)/alpha^(nu+1/2)",
+  "note": "conditions not printed; Re[alpha] > 0 implied"
+ },
+ {
+  "id": "GR6.457.1",
+  "gr": "6.457.1",
+  "page": 706,
+  "status": "ok",
+  "lhs": "Integrate[E^(-alpha*x)*(4*x)^nu/Sqrt[x]*Gamma[nu + 1, 0, 1/(4*x)], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*Gamma[2*nu + 1, 0, Sqrt[alpha]]/alpha^(nu + 1/2)"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "MI 39",
+  "edition_note": "",
+  "section": "6.45 The incomplete gamma function",
+  "tex": "int_0^inf e^(-alpha x)(4x)^nu/sqrt(x) gamma(nu+1, 1/(4x)) dx = sqrt(pi) gamma(2nu+1, sqrt alpha)/alpha^(nu+1/2)",
+  "note": "conditions not printed; Re[alpha] > 0, Re[nu] > -1 implied"
+ },
+ {
+  "id": "GR6.457.2",
+  "gr": "6.457.2",
+  "page": 706,
+  "status": "ok",
+  "lhs": "Integrate[E^(-alpha*x)*(4*x)^nu/Sqrt[x]*Gamma[nu + 1, 1/(4*x)], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*Gamma[2*nu + 1, Sqrt[alpha]]/alpha^(nu + 1/2)"
+  ],
+  "conds": [
+   "Re[alpha] > 0"
+  ],
+  "cite": "MI 39",
+  "edition_note": "",
+  "section": "6.45 The incomplete gamma function",
+  "tex": "int_0^inf e^(-alpha x)(4x)^nu/sqrt(x) Gamma(nu+1, 1/(4x)) dx = sqrt(pi) Gamma(2nu+1, sqrt alpha)/alpha^(nu+1/2)",
+  "note": "conditions not printed; Re[alpha] > 0 implied"
+ }
+]

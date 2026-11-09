@@ -1,0 +1,1601 @@
+[
+ {
+  "id": "GR2.290",
+  "gr": "2.290",
+  "page": 153,
+  "status": "SKIP-REFERENCE",
+  "tex": "int R(x, sqrt(P(x))) dx, P cubic/quartic, reducible to elliptic integrals (see 8.11, 3.13, 3.17)",
+  "reason": "descriptive entry, no formula",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.29 Integrals that can be reduced to elliptic or pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.291",
+  "gr": "2.291",
+  "page": 153,
+  "status": "SKIP-REFERENCE",
+  "tex": "int R(x, sqrt(P(x))) dx reducible to int R(x, P_n(x)^(1/k)) dx",
+  "reason": "descriptive entry introducing 2.291.1-8",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.29 Integrals that can be reduced to elliptic or pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.291.1",
+  "gr": "2.291.1",
+  "page": 153,
+  "status": "SKIP-REFERENCE",
+  "tex": "int dx/sqrt(1-x^6) = -int dz/sqrt(3+3z^2+z^4) [x^2 = 1/(1+z^2)]",
+  "reason": "substitution rule reducing to another integral; no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.29 Integrals that can be reduced to elliptic or pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.291.2",
+  "gr": "2.291.2",
+  "page": 153,
+  "status": "SKIP-REFERENCE",
+  "tex": "int dx/sqrt(a+bx^2+cx^4+dx^6) = 1/2 int dz/sqrt(az+bz^2+cz^3+dz^4) [x^2=z]",
+  "reason": "substitution rule reducing to another integral; no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.29 Integrals that can be reduced to elliptic or pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.291.3",
+  "gr": "2.291.3",
+  "page": 153,
+  "status": "SKIP-REFERENCE",
+  "tex": "int (a+2bx+cx^2+gx^3)^(+-1/3) dx = 3/2 int z^2 A^(+-1/3) dz/B [a+2bx+cx^2=z^3, A=g((-b+sqrt(b^2+(z^3-a)c))/c)^3+z^3, B=sqrt(b^2+(z^3-a)c)]",
+  "reason": "substitution rule reducing to another integral; no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.29 Integrals that can be reduced to elliptic or pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.291.4",
+  "gr": "2.291.4",
+  "page": 153,
+  "status": "SKIP-REFERENCE",
+  "tex": "int dx/sqrt(a+bx+cx^2+dx^3+cx^4+bx^5+ax^6) = -1/sqrt2 int dz/sqrt((z+1)p) - 1/sqrt2 int dz/sqrt((z-1)p) [x=z+sqrt(z^2-1)] = ... [x=z-sqrt(z^2-1)], p=2a(4z^3-3z)+2b(2z^2-1)+2cz+d",
+  "reason": "substitution rule reducing to another integral; no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.29 Integrals that can be reduced to elliptic or pseudo-elliptic integrals",
+  "note": "book prints 'd' for 'dz' in the second line"
+ },
+ {
+  "id": "GR2.291.5",
+  "gr": "2.291.5",
+  "page": 154,
+  "status": "SKIP-REFERENCE",
+  "tex": "int dx/sqrt(a+bx^2+cx^4+bx^6+ax^8) = 1/2 int dy/(sqrt y sqrt(a+by+cy^2+by^3+ay^4)) [x=sqrt y] = ... p=2a(2z^2-1)+2bz+c",
+  "reason": "substitution rule reducing to another integral; no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.29 Integrals that can be reduced to elliptic or pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.291.6",
+  "gr": "2.291.6",
+  "page": 154,
+  "status": "SKIP-REFERENCE",
+  "tex": "int dx/sqrt(a+bx^4+cx^8) = 1/2 (a/c)^(1/8) int dt/(sqrt t sqrt(a b1 t^2 + a t^4)) [x=(a/c)^(1/8) sqrt t] = ..., p=2a(2z^2-1)+b1, b1=b sqrt(a/c)",
+  "reason": "substitution rule reducing to another integral; no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.29 Integrals that can be reduced to elliptic or pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.291.7",
+  "gr": "2.291.7",
+  "page": 154,
+  "status": "SKIP-REFERENCE",
+  "tex": "int x dx/(a+bx^2+cx^4)^(1/4) = 2 int z^2 dz/sqrt(A+Bz^4) [a+bx^2+cx^4=z^4, A=b^2-4ac, B=4c]",
+  "reason": "substitution rule reducing to another integral; no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.29 Integrals that can be reduced to elliptic or pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.291.8",
+  "gr": "2.291.8",
+  "page": 154,
+  "status": "SKIP-REFERENCE",
+  "tex": "int dx/(a+2bx^2+cx^4)^(1/4) = int (sqrt(b^2-a(c-z^4))+b)/((c-z^4)sqrt(b^2-a(c-z^4))) z^2 dz = int R1(z^4) z^2 dz + int R2(z^4) z^2 dz/sqrt(b^2-a(c-z^4))",
+  "reason": "substitution rule reducing to another integral; no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.29 Integrals that can be reduced to elliptic or pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.292",
+  "gr": "2.292",
+  "page": 154,
+  "status": "SKIP-GENERIC",
+  "tex": "pseudo-elliptic integrals: f1(x)=f1(1/(k^2x)), f2(x)=f2((1-k^2x)/(k^2(1-x))), f3(x)=f3((1-x)/(1-k^2x))",
+  "reason": "descriptive entry; unspecified functions f_i",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.29 Integrals that can be reduced to elliptic or pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.292.1",
+  "gr": "2.292.1",
+  "page": 154,
+  "status": "SKIP-GENERIC",
+  "tex": "int f1(x) dx/sqrt(x(1-x)(1-k^2x)) = int R1(z) dz [z=sqrt(x(1-x)(1-k^2x))]",
+  "reason": "integrand contains unspecified function f1, rational R1",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.29 Integrals that can be reduced to elliptic or pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.292.2",
+  "gr": "2.292.2",
+  "page": 154,
+  "status": "SKIP-GENERIC",
+  "tex": "int f2(x) dx/sqrt(x(1-x)(1-k^2x)) = int R2(z) dz [z=sqrt(x(1-k^2x))/sqrt(1-x)]",
+  "reason": "integrand contains unspecified function f2, rational R2",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.29 Integrals that can be reduced to elliptic or pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.292.3",
+  "gr": "2.292.3",
+  "page": 154,
+  "status": "SKIP-GENERIC",
+  "tex": "int f3(x) dx/sqrt(x(1-x)(1-k^2x)) = int R3(z) dz [z=sqrt(x(1-x))/sqrt(1-k^2x)]",
+  "reason": "integrand contains unspecified function f3, rational R3",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.29 Integrals that can be reduced to elliptic or pseudo-elliptic integrals",
+  "note": ""
+ },
+ {
+  "id": "GR2.311",
+  "gr": "2.311",
+  "page": 155,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x), x]",
+  "rhs": [
+   "E^(a*x)/a"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.31 Forms containing e^(ax)",
+  "tex": "int e^(ax) dx = e^(ax)/a",
+  "note": ""
+ },
+ {
+  "id": "GR2.312",
+  "gr": "2.312",
+  "page": 155,
+  "status": "SKIP-REFERENCE",
+  "tex": "a^x in the integrands should be replaced with e^(x ln a) = a^x",
+  "reason": "substitution rule, no formula",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.31 Forms containing e^(ax)",
+  "note": ""
+ },
+ {
+  "id": "GR2.313.1",
+  "gr": "2.313.1",
+  "page": 155,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*E^(m*x)), x]",
+  "rhs": [
+   "(m*x - Log[a + b*E^(m*x)])/(a*m)"
+  ],
+  "conds": [
+   "a != 0",
+   "m != 0"
+  ],
+  "cite": "PE (410)",
+  "edition_note": "",
+  "section": "2.31 Forms containing e^(ax)",
+  "tex": "int dx/(a+b e^(mx)) = 1/(am)[mx - ln(a+be^(mx))]",
+  "note": ""
+ },
+ {
+  "id": "GR2.313.2a",
+  "gr": "2.313.2a",
+  "page": 155,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 + E^x), x]",
+  "rhs": [
+   "Log[E^x/(1 + E^x)]"
+  ],
+  "conds": [],
+  "cite": "PE (409)",
+  "edition_note": "",
+  "section": "2.31 Forms containing e^(ax)",
+  "tex": "int dx/(1+e^x) = ln(e^x/(1+e^x))",
+  "note": ""
+ },
+ {
+  "id": "GR2.313.2b",
+  "gr": "2.313.2b",
+  "page": 155,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 + E^x), x]",
+  "rhs": [
+   "x - Log[1 + E^x]"
+  ],
+  "conds": [],
+  "cite": "PE (409)",
+  "edition_note": "",
+  "section": "2.31 Forms containing e^(ax)",
+  "tex": "int dx/(1+e^x) = x - ln(1+e^x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.314a",
+  "gr": "2.314a",
+  "page": 155,
+  "status": "ok",
+  "lhs": "Integrate[1/(a*E^(m*x) + b*E^(-m*x)), x]",
+  "rhs": [
+   "1/(m*Sqrt[a*b])*ArcTan[E^(m*x)*Sqrt[a/b]]"
+  ],
+  "conds": [
+   "a*b > 0",
+   "m != 0"
+  ],
+  "cite": "PE (411)",
+  "edition_note": "",
+  "section": "2.31 Forms containing e^(ax)",
+  "tex": "int dx/(ae^(mx)+be^(-mx)) = 1/(m sqrt(ab)) arctan(e^(mx) sqrt(a/b)) [ab>0]",
+  "note": ""
+ },
+ {
+  "id": "GR2.314b",
+  "gr": "2.314b",
+  "page": 155,
+  "status": "ok",
+  "lhs": "Integrate[1/(a*E^(m*x) + b*E^(-m*x)), x]",
+  "rhs": [
+   "1/(2*m*Sqrt[-a*b])*Log[Abs[(b + E^(m*x)*Sqrt[-a*b])/(b - E^(m*x)*Sqrt[-a*b])]]"
+  ],
+  "conds": [
+   "a*b < 0",
+   "m != 0"
+  ],
+  "cite": "PE (411)",
+  "edition_note": "",
+  "section": "2.31 Forms containing e^(ax)",
+  "tex": "= 1/(2m sqrt(-ab)) ln|(b+e^(mx)sqrt(-ab))/(b-e^(mx)sqrt(-ab))| [ab<0]",
+  "note": ""
+ },
+ {
+  "id": "GR2.315a",
+  "gr": "2.315a",
+  "page": 155,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[a + b*E^(m*x)], x]",
+  "rhs": [
+   "1/(m*Sqrt[a])*Log[(Sqrt[a + b*E^(m*x)] - Sqrt[a])/(Sqrt[a + b*E^(m*x)] + Sqrt[a])]"
+  ],
+  "conds": [
+   "a > 0",
+   "m != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.31 Forms containing e^(ax)",
+  "tex": "int dx/sqrt(a+be^(mx)) = 1/(m sqrt a) ln((sqrt(a+be^(mx))-sqrt a)/(sqrt(a+be^(mx))+sqrt a)) [a>0]",
+  "note": ""
+ },
+ {
+  "id": "GR2.315b",
+  "gr": "2.315b",
+  "page": 155,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[a + b*E^(m*x)], x]",
+  "rhs": [
+   "2/(m*Sqrt[-a])*ArcTan[Sqrt[a + b*E^(m*x)]/Sqrt[-a]]"
+  ],
+  "conds": [
+   "a < 0",
+   "m != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.31 Forms containing e^(ax)",
+  "tex": "= 2/(m sqrt(-a)) arctan(sqrt(a+be^(mx))/sqrt(-a)) [a<0]",
+  "note": ""
+ },
+ {
+  "id": "GR2.321.1",
+  "gr": "2.321.1",
+  "page": 155,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^n e^(ax) dx = x^n e^(ax)/a - n/a int x^(n-1) e^(ax) dx",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.321.2",
+  "gr": "2.321.2",
+  "page": 155,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(a*x), x]",
+  "rhs": [
+   "E^(a*x)*Sum[(-1)^k*k!*Binomial[n, k]/a^(k + 1)*x^(n - k), {k, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int x^n e^(ax) dx = e^(ax) sum_{k=0}^n (-1)^k k! C(n,k)/a^(k+1) x^(n-k)",
+  "note": ""
+ },
+ {
+  "id": "GR2.322.1",
+  "gr": "2.322.1",
+  "page": 155,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(a*x), x]",
+  "rhs": [
+   "E^(a*x)*(x/a - 1/a^2)"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int x e^(ax) dx = e^(ax)(x/a - 1/a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.322.2",
+  "gr": "2.322.2",
+  "page": 155,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(a*x), x]",
+  "rhs": [
+   "E^(a*x)*(x^2/a - 2*x/a^2 + 2/a^3)"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int x^2 e^(ax) dx = e^(ax)(x^2/a - 2x/a^2 + 2/a^3)",
+  "note": ""
+ },
+ {
+  "id": "GR2.322.3",
+  "gr": "2.322.3",
+  "page": 155,
+  "status": "ok",
+  "lhs": "Integrate[x^3*E^(a*x), x]",
+  "rhs": [
+   "E^(a*x)*(x^3/a - 3*x^2/a^2 + 6*x/a^3 - 6/a^4)"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int x^3 e^(ax) dx = e^(ax)(x^3/a - 3x^2/a^2 + 6x/a^3 - 6/a^4)",
+  "note": ""
+ },
+ {
+  "id": "GR2.322.4",
+  "gr": "2.322.4",
+  "page": 155,
+  "status": "ok",
+  "lhs": "Integrate[x^4*E^(a*x), x]",
+  "rhs": [
+   "E^(a*x)*(x^4/a - 4*x^3/a^2 + 12*x^2/a^3 - 24*x/a^4 + 24/a^5)"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "10",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int x^4 e^(ax) dx = e^(ax)(x^4/a - 4x^3/a^2 + 12x^2/a^3 - 24x/a^4 + 24/a^5)",
+  "note": ""
+ },
+ {
+  "id": "GR2.323",
+  "gr": "2.323",
+  "page": 155,
+  "status": "SKIP-GENERIC",
+  "tex": "int P_m(x) e^(ax) dx = e^(ax)/a sum_{k=0}^m (-1)^k P^(k)(x)/a^k",
+  "reason": "integrand contains unspecified polynomial P_m",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.324.1",
+  "gr": "2.324.1",
+  "page": 156,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int e^(ax)/x^m dx = 1/(m-1)[-e^(ax)/x^(m-1) + a int e^(ax)/x^(m-1) dx]",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.324.2",
+  "gr": "2.324.2",
+  "page": 156,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)/x^n, x]",
+  "rhs": [
+   "-E^(a*x)*Sum[a^(k - 1)/(Product[n - j, {j, 1, k}]*x^(n - k)), {k, 1, n - 1}] + a^(n - 1)/(n - 1)!*ExpIntegralEi[a*x]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 2",
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int e^(ax)/x^n dx = -e^(ax) sum_{k=1}^{n-1} a^(k-1)/((n-1)(n-2)...(n-k) x^(n-k)) + a^(n-1)/(n-1)! Ei(ax)",
+  "note": ""
+ },
+ {
+  "id": "GR2.325.1",
+  "gr": "2.325.1",
+  "page": 156,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)/x, x]",
+  "rhs": [
+   "ExpIntegralEi[a*x]"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int e^(ax)/x dx = Ei(ax)",
+  "note": ""
+ },
+ {
+  "id": "GR2.325.2",
+  "gr": "2.325.2",
+  "page": 156,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)/x^2, x]",
+  "rhs": [
+   "-E^(a*x)/x + a*ExpIntegralEi[a*x]"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int e^(ax)/x^2 dx = -e^(ax)/x + a Ei(ax)",
+  "note": ""
+ },
+ {
+  "id": "GR2.325.3",
+  "gr": "2.325.3",
+  "page": 156,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)/x^3, x]",
+  "rhs": [
+   "-E^(a*x)/(2*x^2) - a*E^(a*x)/(2*x) + a^2/2*ExpIntegralEi[a*x]"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int e^(ax)/x^3 dx = -e^(ax)/(2x^2) - ae^(ax)/(2x) + a^2/2 Ei(ax)",
+  "note": ""
+ },
+ {
+  "id": "GR2.325.4",
+  "gr": "2.325.4",
+  "page": 156,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)/x^4, x]",
+  "rhs": [
+   "-E^(a*x)/(3*x^3) - a*E^(a*x)/(6*x^2) - a^2*E^(a*x)/(6*x) + a^3/6*ExpIntegralEi[a*x]"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int e^(ax)/x^4 dx = -e^(ax)/(3x^3) - ae^(ax)/(6x^2) - a^2e^(ax)/(6x) + a^3/6 Ei(ax)",
+  "note": ""
+ },
+ {
+  "id": "GR2.325.5",
+  "gr": "2.325.5",
+  "page": 156,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int e^(+-ax^n)/x^m dx = 1/(m-1)[-e^(+-ax^n)/x^(m-1) +- na int e^(+-ax^n)/x^(m-n) dx] [m != 1]",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.325.6a",
+  "gr": "2.325.6a",
+  "page": 156,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x^n)/x^m, x]",
+  "rhs": [
+   "(-1)^((m - 1)/n + 1)*a^((m - 1)/n)*Gamma[-(m - 1)/n, -a*x^n]/n"
+  ],
+  "conds": [
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int e^(ax^n)/x^m dx = (-1)^(z+1) a^z Gamma(-z, -ax^n)/n, z=(m-1)/n",
+  "note": "z = (m-1)/n substituted"
+ },
+ {
+  "id": "GR2.325.6b",
+  "gr": "2.325.6b",
+  "page": 156,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int e^(ax^n)/x^m dx = (-1)^(z+1) a^z/n int_{-ax^n}^inf e^(-t)/t^(z+1) dt, z=(m-1)/n",
+  "reason": "integral on right-hand side (integral representation of Gamma(-z,-ax^n))",
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.325.7",
+  "gr": "2.325.7",
+  "page": 156,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x^n)/x, x]",
+  "rhs": [
+   "ExpIntegralEi[a*x^n]/n"
+  ],
+  "conds": [
+   "a != 0",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int e^(ax^n)/x dx = Ei(ax^n)/n",
+  "note": ""
+ },
+ {
+  "id": "GR2.325.8",
+  "gr": "2.325.8",
+  "page": 156,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x^n)/x^(n*z + 1), x]",
+  "rhs": [
+   "-E^(a*x^n)*Sum[k!*a^(z - k - 1)/x^(n*(k + 1)), {k, 0, z - 1}]/(n*z!) + a^z*ExpIntegralEi[a*x^n]/(n*z!)"
+  ],
+  "conds": [
+   "a != 0",
+   "Element[z, Integers] && z >= 1",
+   "Element[n*z + 1, Integers]",
+   "n*z + 1 >= 2"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int e^(ax^n)/x^m dx = -e^(ax^n) sum_{k=0}^{z-1} k! a^(z-k-1)/x^(n(k+1)) /(n z!) + a^z Ei(ax^n)/(n z!) [z=(m-1)/n=1,2,..., m=2,3,...]",
+  "note": "m = n*z + 1 substituted"
+ },
+ {
+  "id": "GR2.325.9",
+  "gr": "2.325.9",
+  "page": 156,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x^n)/x^(n + 1), x]",
+  "rhs": [
+   "-E^(a*x^n)/(n*x^n) + a*ExpIntegralEi[a*x^n]/n"
+  ],
+  "conds": [
+   "a != 0",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int e^(ax^n)/x^m dx = -e^(ax^n)/(nx^n) + a Ei(ax^n)/n [z=(m-1)/n=1]",
+  "note": "m = n + 1 substituted"
+ },
+ {
+  "id": "GR2.325.10",
+  "gr": "2.325.10",
+  "page": 156,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x^n)/x^(2*n + 1), x]",
+  "rhs": [
+   "-E^(a*x^n)/(2*n*x^(2*n)) - a*E^(a*x^n)/(2*n*x^n) + a^2*ExpIntegralEi[a*x^n]/(2*n)"
+  ],
+  "conds": [
+   "a != 0",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "= -e^(ax^n)/(2nx^(2n)) - ae^(ax^n)/(2nx^n) + a^2 Ei(ax^n)/(2n) [z=2]",
+  "note": "m = 2n + 1 substituted"
+ },
+ {
+  "id": "GR2.325.11",
+  "gr": "2.325.11",
+  "page": 156,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x^n)/x^(3*n + 1), x]",
+  "rhs": [
+   "-E^(a*x^n)/(3*n*x^(3*n)) - E^(a*x^n)/(6*n*x^(2*n)) - a^2*E^(a*x^n)/(6*n*x^n) + a^3*ExpIntegralEi[a*x^n]/(6*n)",
+   "-E^(a*x^n)/(3*n*x^(3*n)) - a*E^(a*x^n)/(6*n*x^(2*n)) - a^2*E^(a*x^n)/(6*n*x^n) + a^3*ExpIntegralEi[a*x^n]/(6*n)"
+  ],
+  "conds": [
+   "a != 0",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "= -e/(3nx^(3n)) - e/(6nx^(2n)) - a^2 e/(6nx^n) + a^3 Ei(ax^n)/(6n) [z=3]",
+  "note": "m = 3n + 1 substituted. Book's second term lacks the factor a (compare 2.325.4 and 2.325.8 with z=3); corrected candidate second."
+ },
+ {
+  "id": "GR2.325.12",
+  "gr": "2.325.12",
+  "page": 156,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x^2)/x^2, x]",
+  "rhs": [
+   "-E^(a*x^2)/x + Sqrt[a*Pi]*Erfi[Sqrt[a]*x]"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int e^(ax^2)/x^2 dx = -e^(ax^2)/x + sqrt(a pi) erfi(sqrt a x), erfi(z)=erf(iz)/i",
+  "note": ""
+ },
+ {
+  "id": "GR2.325.13",
+  "gr": "2.325.13",
+  "page": 157,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x^2 + 2*b*x + c), x]",
+  "rhs": [
+   "1/2*Sqrt[Pi/a]*Exp[(a*c - b^2)/a]*Erfi[Sqrt[a]*x + b/Sqrt[a]]"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int e^(ax^2+2bx+c) dx = 1/2 sqrt(pi/a) exp((ac-b^2)/a) erfi(sqrt a x + b/sqrt a)",
+  "note": ""
+ },
+ {
+  "id": "GR2.326",
+  "gr": "2.326",
+  "page": 157,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(a*x)/(1 + a*x)^2, x]",
+  "rhs": [
+   "E^(a*x)/(a^2*(1 + a*x))"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int x e^(ax)/(1+ax)^2 dx = e^(ax)/(a^2(1+ax))",
+  "note": ""
+ },
+ {
+  "id": "GR2.33.1",
+  "gr": "2.33.1",
+  "page": 157,
+  "status": "ok",
+  "lhs": "Integrate[E^(-(a*x^2 + 2*b*x + c)), x]",
+  "rhs": [
+   "1/2*Sqrt[Pi/a]*Exp[(b^2 - a*c)/a]*Erf[Sqrt[a]*x + b/Sqrt[a]]"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int e^(-(ax^2+2bx+c)) dx = 1/2 sqrt(pi/a) exp((b^2-ac)/a) erf(sqrt a x + b/sqrt a)",
+  "note": ""
+ },
+ {
+  "id": "GR2.33.2",
+  "gr": "2.33.2",
+  "page": 157,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x^2), x]",
+  "rhs": [
+   "1/2*Sqrt[Pi/a]*Erfi[Sqrt[a]*x]"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int e^(ax^2) dx = 1/2 sqrt(pi/a) erfi(sqrt a x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.33.3",
+  "gr": "2.33.3",
+  "page": 157,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x^2 + b*x + c), x]",
+  "rhs": [
+   "1/2*Sqrt[Pi/a]*Exp[(a*c - b^2)/a]*Erfi[Sqrt[a]*x + b/Sqrt[a]]",
+   "1/2*Sqrt[Pi/a]*Exp[(4*a*c - b^2)/(4*a)]*Erfi[Sqrt[a]*x + b/(2*Sqrt[a])]"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int e^(ax^2+bx+c) dx = 1/2 sqrt(pi/a) exp((ac-b^2)/a) erfi(sqrt a x + b/sqrt a)",
+  "note": "As printed the value is that of 2.325.13 (exponent with 2bx). Corrected candidate for bx: exp((4ac-b^2)/(4a)) erfi(sqrt a x + b/(2 sqrt a))."
+ },
+ {
+  "id": "GR2.33.4",
+  "gr": "2.33.4",
+  "page": 157,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^m e^(+-ax^n) dx = +- x^(m+1-n)/(na) -+ (m+1-n)/(na) int x^(m-n) e^(+-ax^n) dx [a!=0, n!=0]",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.33.5",
+  "gr": "2.33.5",
+  "page": 157,
+  "status": "ok",
+  "lhs": "Integrate[x^(n*gamma - 1)*E^(a*x^n), x]",
+  "rhs": [
+   "E^(a*x^n)/n*((gamma - 1)!*Sum[(-1)^(k + 1 - gamma)*x^(n*k)/(k!*a^(gamma - k)), {k, 0, gamma - 1}])"
+  ],
+  "conds": [
+   "a != 0",
+   "Element[gamma, Integers] && gamma >= 1",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int x^m e^(ax^n) dx = e^(ax^n)/n [(gamma-1)! sum_{k=0}^{gamma-1} (-1)^(k+1-gamma) x^(nk)/(k! a^(gamma-k))] [gamma=(m+1)/n=1,2,...]",
+  "note": "m = n*gamma - 1 substituted"
+ },
+ {
+  "id": "GR2.33.6",
+  "gr": "2.33.6",
+  "page": 157,
+  "status": "ok",
+  "lhs": "Integrate[x^(n - 1)*E^(a*x^n), x]",
+  "rhs": [
+   "E^(a*x^n)/(n*a)"
+  ],
+  "conds": [
+   "a != 0",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int x^m e^(ax^n) dx = e^(ax^n)/(na) [gamma=(m+1)/n=1]",
+  "note": "m = n - 1 substituted"
+ },
+ {
+  "id": "GR2.33.7",
+  "gr": "2.33.7",
+  "page": 157,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n - 1)*E^(a*x^n), x]",
+  "rhs": [
+   "E^(a*x^n)/n*(x^n/a - 1/a^2)"
+  ],
+  "conds": [
+   "a != 0",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "= e^(ax^n)/n (x^n/a - 1/a^2) [gamma=2]",
+  "note": "m = 2n - 1 substituted"
+ },
+ {
+  "id": "GR2.33.8",
+  "gr": "2.33.8",
+  "page": 157,
+  "status": "ok",
+  "lhs": "Integrate[x^(3*n - 1)*E^(a*x^n), x]",
+  "rhs": [
+   "E^(a*x^n)/n*(x^(2*n)/a - 2*x^n/a^2 + 2/a^3)"
+  ],
+  "conds": [
+   "a != 0",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "= e^(ax^n)/n (x^(2n)/a - 2x^n/a^2 + 2/a^3) [gamma=3]",
+  "note": "m = 3n - 1 substituted"
+ },
+ {
+  "id": "GR2.33.9",
+  "gr": "2.33.9",
+  "page": 157,
+  "status": "ok",
+  "lhs": "Integrate[x^(4*n - 1)*E^(a*x^n), x]",
+  "rhs": [
+   "E^(a*x^n)/n*(x^(3*n)/a - 3*x^(2*n)/a^2 + 6*x^n/a^3 - 6/a^4)"
+  ],
+  "conds": [
+   "a != 0",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "= e^(ax^n)/n (x^(3n)/a - 3x^(2n)/a^2 + 6x^n/a^3 - 6/a^4) [gamma=4]",
+  "note": "m = 4n - 1 substituted"
+ },
+ {
+  "id": "GR2.33.10a",
+  "gr": "2.33.10a",
+  "page": 157,
+  "status": "ok",
+  "lhs": "Integrate[x^m*E^(-beta*x^n), x]",
+  "rhs": [
+   "-Gamma[(m + 1)/n, beta*x^n]/(n*beta^((m + 1)/n))"
+  ],
+  "conds": [
+   "beta != 0",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int x^m e^(-beta x^n) dx = -Gamma(gamma, beta x^n)/(n beta^gamma), gamma=(m+1)/n",
+  "note": "gamma = (m+1)/n substituted"
+ },
+ {
+  "id": "GR2.33.10b",
+  "gr": "2.33.10b",
+  "page": 157,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^m e^(-beta x^n) dx = -1/(n beta^gamma) int_{beta x^n}^inf t^(gamma-1) e^(-t) dx",
+  "reason": "integral on right-hand side (integral representation of Gamma); book prints dx for dt",
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.33.11",
+  "gr": "2.33.11",
+  "page": 157,
+  "status": "ok",
+  "lhs": "Integrate[x^(n*gamma - 1)*Exp[-beta*x^n], x]",
+  "rhs": [
+   "-(gamma - 1)!/n*Exp[-beta*x^n]*Sum[x^(n*k)/(k!*beta^(gamma - k)), {k, 0, gamma - 1}]"
+  ],
+  "conds": [
+   "Element[gamma, Integers] && gamma >= 1",
+   "beta != 0",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int x^m exp(-beta x^n) dx = -(gamma-1)!/n exp(-beta x^n) sum_{k=0}^{gamma-1} x^(nk)/(k! beta^(gamma-k)) [gamma=(m+1)/n=1,2,...]",
+  "note": "m = n*gamma - 1 substituted"
+ },
+ {
+  "id": "GR2.33.12",
+  "gr": "2.33.12",
+  "page": 158,
+  "status": "ok",
+  "lhs": "Integrate[x^(n - 1)*Exp[-beta*x^n], x]",
+  "rhs": [
+   "-Exp[-beta*x^n]/(n*beta)"
+  ],
+  "conds": [
+   "beta != 0",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "= -exp(-beta x^n)/(n beta) [gamma=1]",
+  "note": "m = n - 1 substituted"
+ },
+ {
+  "id": "GR2.33.13",
+  "gr": "2.33.13",
+  "page": 158,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n - 1)*Exp[-beta*x^n], x]",
+  "rhs": [
+   "-Exp[-beta*x^n]/n*(x^n/beta + 1/beta^2)"
+  ],
+  "conds": [
+   "beta != 0",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "= -exp(-beta x^n)/n (x^n/beta + 1/beta^2) [gamma=2]",
+  "note": "m = 2n - 1 substituted"
+ },
+ {
+  "id": "GR2.33.14",
+  "gr": "2.33.14",
+  "page": 158,
+  "status": "ok",
+  "lhs": "Integrate[x^(3*n - 1)*Exp[-beta*x^n], x]",
+  "rhs": [
+   "-Exp[-beta*x^n]/n*(x^(2*n)/beta + 2*x^n/beta^2 + 2/beta^3)"
+  ],
+  "conds": [
+   "beta != 0",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "= -exp(-beta x^n)/n (x^(2n)/beta + 2x^n/beta^2 + 2/beta^3) [gamma=3]",
+  "note": "m = 3n - 1 substituted"
+ },
+ {
+  "id": "GR2.33.15",
+  "gr": "2.33.15",
+  "page": 158,
+  "status": "ok",
+  "lhs": "Integrate[x^(4*n - 1)*Exp[-beta*x^n], x]",
+  "rhs": [
+   "-Exp[-beta*x^n]/n*(x^(3*n)/beta + 3*x^(2*n)/beta^2 + 6*x^n/beta^3 + 6/beta^4)"
+  ],
+  "conds": [
+   "beta != 0",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "= -exp(-beta x^n)/n (x^(3n)/beta + 3x^(2n)/beta^2 + 6x^n/beta^3 + 6/beta^4) [gamma=4]",
+  "note": "m = 4n - 1 substituted"
+ },
+ {
+  "id": "GR2.33.16",
+  "gr": "2.33.16",
+  "page": 158,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x^2), x]",
+  "rhs": [
+   "1/2*Sqrt[Pi/beta]*Erf[Sqrt[beta]*x]"
+  ],
+  "conds": [
+   "beta != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int e^(-beta x^n) dx = 1/2 sqrt(pi/beta) erf(sqrt beta x) [beta != 0]",
+  "note": "Book prints the integrand as e^(-beta x^n); the value holds only for n = 2, so lhs is written with x^2 (misprint)."
+ },
+ {
+  "id": "GR2.33.17a",
+  "gr": "2.33.17a",
+  "page": 158,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*x^n]/x^m, x]",
+  "rhs": [
+   "-beta^((m - 1)/n)*Gamma[-(m - 1)/n, beta*x^n]/n"
+  ],
+  "conds": [
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int exp(-beta x^n)/x^m dx = -beta^z Gamma(-z, beta x^n)/n, z=(m-1)/n",
+  "note": "z = (m-1)/n substituted"
+ },
+ {
+  "id": "GR2.33.17b",
+  "gr": "2.33.17b",
+  "page": 158,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int exp(-beta x^n)/x^m dx = -beta^z/n int_{beta x^n}^inf e^(-t)/t^(z+a) dt, z=(m-1)/n",
+  "reason": "integral on right-hand side (integral representation of Gamma); book prints t^(z+a), presumably t^(z+1)",
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "note": ""
+ },
+ {
+  "id": "GR2.33.18",
+  "gr": "2.33.18",
+  "page": 158,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*x^n]/x, x]",
+  "rhs": [
+   "ExpIntegralEi[-beta*x^n]/n"
+  ],
+  "conds": [
+   "beta != 0",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int exp(-beta x^n)/x dx = Ei(-beta x^n)/n",
+  "note": ""
+ },
+ {
+  "id": "GR2.33.19",
+  "gr": "2.33.19",
+  "page": 158,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*x^n]/x^(n*z + 1), x]",
+  "rhs": [
+   "(-1)^z*Exp[-beta*x^n]/(n*z!)*Sum[(-1)^k*k!*beta^(z - k - 1)/x^(n*(k + 1)), {k, 0, z - 1}] + (-1)^z*beta^z/(n*z!)*ExpIntegralEi[-beta*x^n]"
+  ],
+  "conds": [
+   "beta != 0",
+   "Element[z, Integers] && z >= 1",
+   "Element[n*z + 1, Integers]",
+   "n*z + 1 >= 2"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int exp(-beta x^n)/x^m dx = (-1)^z exp(-beta x^n)/(n z!) sum_{k=0}^{z-1} (-1)^k k! beta^(z-k-1)/x^(n(k+1)) + (-1)^z beta^z/(n z!) Ei(-beta x^n) [z=(m-1)/n=1,2,..., m=2,3,...]",
+  "note": "m = n*z + 1 substituted; the factor read as (-1)^k k! (typeset close to (-1)^(k!)), consistent with 2.33.20-22"
+ },
+ {
+  "id": "GR2.33.20",
+  "gr": "2.33.20",
+  "page": 158,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*x^n]/x^(n + 1), x]",
+  "rhs": [
+   "-Exp[-beta*x^n]/(n*x^n) - beta*ExpIntegralEi[-beta*x^n]/n"
+  ],
+  "conds": [
+   "beta != 0",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "= -exp(-beta x^n)/(nx^n) - beta Ei(-beta x^n)/n [z=1]",
+  "note": "m = n + 1 substituted"
+ },
+ {
+  "id": "GR2.33.21",
+  "gr": "2.33.21",
+  "page": 158,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*x^n]/x^(2*n + 1), x]",
+  "rhs": [
+   "-Exp[-beta*x^n]/(2*n*x^(2*n)) + beta*Exp[-beta*x^n]/(2*n*x^n) + beta^2*ExpIntegralEi[-beta*x^n]/(2*n)"
+  ],
+  "conds": [
+   "beta != 0",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "= -exp/(2nx^(2n)) + beta exp/(2nx^n) + beta^2 Ei(-beta x^n)/(2n) [z=2]",
+  "note": "m = 2n + 1 substituted"
+ },
+ {
+  "id": "GR2.33.22",
+  "gr": "2.33.22",
+  "page": 158,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*x^n]/x^(3*n + 1), x]",
+  "rhs": [
+   "-Exp[-beta*x^n]/(3*n*x^(3*n)) + beta*Exp[-beta*x^n]/(6*n*x^(2*n)) - beta^2*Exp[-beta*x^n]/(6*n*x^n) - beta^3*ExpIntegralEi[-beta*x^n]/(6*n)"
+  ],
+  "conds": [
+   "beta != 0",
+   "n != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "= -exp/(3nx^(3n)) + beta exp/(6nx^(2n)) - beta^2 exp/(6nx^n) - beta^3 Ei(-beta x^n)/(6n) [z=3]",
+  "note": "m = 3n + 1 substituted"
+ },
+ {
+  "id": "GR2.33.23",
+  "gr": "2.33.23",
+  "page": 158,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*x^2]/x^2, x]",
+  "rhs": [
+   "-Exp[-beta*x^2]/x - Sqrt[beta*Pi]*Erf[Sqrt[beta]*x]"
+  ],
+  "conds": [
+   "beta != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "2.32 The exponential combined with rational functions of x",
+  "tex": "int exp(-beta x^2)/x^2 dx = -exp(-beta x^2)/x - sqrt(beta pi) erf(sqrt beta x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.411a",
+  "gr": "2.411a",
+  "page": 159,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sinh^p x cosh^q x dx = sinh^(p+1) cosh^(q-1)/(p+q) + (q-1)/(p+q) int sinh^p cosh^(q-2)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "note": ""
+ },
+ {
+  "id": "GR2.411b",
+  "gr": "2.411b",
+  "page": 159,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sinh^p x cosh^q x dx = sinh^(p-1) cosh^(q+1)/(p+q) - (p-1)/(p+q) int sinh^(p-2) cosh^q",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "note": ""
+ },
+ {
+  "id": "GR2.411c",
+  "gr": "2.411c",
+  "page": 159,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sinh^p x cosh^q x dx = sinh^(p-1) cosh^(q+1)/(q+1) - (p-1)/(q+1) int sinh^(p-2) cosh^(q+2)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "note": ""
+ },
+ {
+  "id": "GR2.411d",
+  "gr": "2.411d",
+  "page": 159,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sinh^p x cosh^q x dx = sinh^(p+1) cosh^(q-1)/(p+1) - (q-1)/(p+1) int sinh^(p+2) cosh^(q-2)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "note": ""
+ },
+ {
+  "id": "GR2.411e",
+  "gr": "2.411e",
+  "page": 159,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sinh^p x cosh^q x dx = sinh^(p+1) cosh^(q+1)/(p+1) - (p+q+2)/(p+1) int sinh^(p+2) cosh^q",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "note": ""
+ },
+ {
+  "id": "GR2.411f",
+  "gr": "2.411f",
+  "page": 159,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sinh^p x cosh^q x dx = -sinh^(p+1) cosh^(q+1)/(q+1) + (p+q+2)/(q+1) int sinh^p cosh^(q+2)",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "note": ""
+ },
+ {
+  "id": "GR2.412.1",
+  "gr": "2.412.1",
+  "page": 159,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sinh^p x cosh^(2n) x dx = sinh^(p+1)/(2n+p)[cosh^(2n-1) + sum_{k=1}^{n-1} (2n-1)...(2n-2k+1)/((2n+p-2)...(2n+p-2k)) cosh^(2n-2k-1)] + (2n-1)!!/((2n+p)(2n+p-2)...(p+2)) int sinh^p x dx",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "note": ""
+ },
+ {
+  "id": "GR2.412.2",
+  "gr": "2.412.2",
+  "page": 159,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]^(2*m), x]",
+  "rhs": [
+   "(-1)^m*Binomial[2*m, m]*x/2^(2*m) + 1/2^(2*m - 1)*Sum[(-1)^k*Binomial[2*m, k]*Sinh[(2*m - 2*k)*x]/(2*m - 2*k), {k, 0, m - 1}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "TI (543)",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "tex": "int sinh^(2m) x dx = (-1)^m C(2m,m) x/2^(2m) + 1/2^(2m-1) sum_{k=0}^{m-1} (-1)^k C(2m,k) sinh((2m-2k)x)/(2m-2k)",
+  "note": ""
+ },
+ {
+  "id": "GR2.412.3a",
+  "gr": "2.412.3a",
+  "page": 159,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]^(2*m + 1), x]",
+  "rhs": [
+   "1/2^(2*m)*Sum[(-1)^k*Binomial[2*m + 1, k]*Cosh[(2*m - 2*k + 1)*x]/(2*m - 2*k + 1), {k, 0, m}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "TI (544)",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "tex": "int sinh^(2m+1) x dx = 1/2^(2m) sum_{k=0}^m (-1)^k C(2m+1,k) cosh((2m-2k+1)x)/(2m-2k+1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.412.3b",
+  "gr": "2.412.3b",
+  "page": 159,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]^(2*m + 1), x]",
+  "rhs": [
+   "(-1)^n*Sum[(-1)^k*Binomial[m, k]*Cosh[x]^(2*k + 1)/(2*k + 1), {k, 0, m}]",
+   "(-1)^m*Sum[(-1)^k*Binomial[m, k]*Cosh[x]^(2*k + 1)/(2*k + 1), {k, 0, m}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "GU (351) (5)",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "tex": "= (-1)^n sum_{k=0}^m (-1)^k C(m,k) cosh^(2k+1) x/(2k+1)",
+  "note": "Book prints (-1)^n; n does not occur in the integral, so (-1)^m is given as corrected candidate."
+ },
+ {
+  "id": "GR2.412.4",
+  "gr": "2.412.4",
+  "page": 159,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]^p*Cosh[x]^(2*n + 1), x]",
+  "rhs": [
+   "Sinh[x]^(p + 1)/(2*n + p + 1)*(Cosh[x]^(2*n) + Sum[2^k*n!/(n - k)!*Cosh[x]^(2*n - 2*k)/Product[2*n + p + 1 - 2*j, {j, 1, k}], {k, 1, n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "p != -1",
+   "p != -3"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "tex": "int sinh^p x cosh^(2n+1) x dx = sinh^(p+1)/(2n+p+1){cosh^(2n) + sum_{k=1}^n 2^k n(n-1)...(n-k+1) cosh^(2n-2k)/((2n+p-1)(2n+p-3)...(2n+p-2k+1))}",
+  "note": "n(n-1)...(n-k+1) written n!/(n-k)!; valid except p = -1, -3, ..., -(2n+1)"
+ },
+ {
+  "id": "GR2.413.1",
+  "gr": "2.413.1",
+  "page": 160,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cosh^p x sinh^(2n) x dx = cosh^(p+1)/(2n+p)[sinh^(2n-1) + sum_{k=1}^{n-1} (-1)^k (2n-1)...(2n-2k+1) sinh^(2n-2k-1)/((2n+p-2)...(2n+p-2k))] + (-1)^n (2n-1)!!/((2n+p)(2n+p-2)...(p+2)) int cosh^p x dx",
+  "reason": "integral on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "note": ""
+ },
+ {
+  "id": "GR2.413.2",
+  "gr": "2.413.2",
+  "page": 160,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]^(2*m), x]",
+  "rhs": [
+   "Binomial[2*m, m]*x/2^(2*m) + 1/2^(2*m - 1)*Sum[Binomial[2*m, k]*Sinh[(2*m - 2*k)*x]/(2*m - 2*k), {k, 0, m - 1}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "TI (541)",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "tex": "int cosh^(2m) x dx = C(2m,m) x/2^(2m) + 1/2^(2m-1) sum_{k=0}^{m-1} C(2m,k) sinh((2m-2k)x)/(2m-2k)",
+  "note": ""
+ },
+ {
+  "id": "GR2.413.3a",
+  "gr": "2.413.3a",
+  "page": 160,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]^(2*m + 1), x]",
+  "rhs": [
+   "1/2^(2*m)*Sum[Binomial[2*m + 1, k]*Sinh[(2*m - 2*k + 1)*x]/(2*m - 2*k + 1), {k, 0, m}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "TI (542)",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "tex": "int cosh^(2m+1) x dx = 1/2^(2m) sum_{k=0}^m C(2m+1,k) sinh((2m-2k+1)x)/(2m-2k+1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.413.3b",
+  "gr": "2.413.3b",
+  "page": 160,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]^(2*m + 1), x]",
+  "rhs": [
+   "Sum[Binomial[m, k]*Sinh[x]^(2*k + 1)/(2*k + 1), {k, 0, m}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "GU (351) (8)",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "tex": "= sum_{k=0}^m C(m,k) sinh^(2k+1) x/(2k+1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.413.4",
+  "gr": "2.413.4",
+  "page": 160,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]^p*Sinh[x]^(2*n + 1), x]",
+  "rhs": [
+   "Cosh[x]^(p + 1)/(2*n + p + 1)*(Sinh[x]^(2*n) + Sum[(-1)^k*2^k*n!/(n - k)!*Sinh[x]^(2*n - 2*k)/Product[2*n + p + 1 - 2*j, {j, 1, k}], {k, 1, n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "p != -1",
+   "p != -3"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "tex": "int cosh^p x sinh^(2n+1) x dx = cosh^(p+1)/(2n+p+1)[sinh^(2n) + sum_{k=1}^n (-1)^k 2^k n(n-1)...(n-k+1) sinh^(2n-2k)/((2n+p-1)(2n+p-3)...(2n+p-2k+1))]",
+  "note": "n(n-1)...(n-k+1) written n!/(n-k)!; valid except p = -1, -3, ..., -(2n+1)"
+ },
+ {
+  "id": "GR2.414.1",
+  "gr": "2.414.1",
+  "page": 160,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x], x]",
+  "rhs": [
+   "Cosh[a*x]/a"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "tex": "int sinh ax dx = cosh(ax)/a",
+  "note": ""
+ },
+ {
+  "id": "GR2.414.2",
+  "gr": "2.414.2",
+  "page": 160,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x]^2, x]",
+  "rhs": [
+   "Sinh[2*a*x]/(4*a) - x/2"
+  ],
+  "conds": [
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "tex": "int sinh^2 ax dx = sinh(2ax)/(4a) - x/2",
+  "note": ""
+ },
+ {
+  "id": "GR2.414.3a",
+  "gr": "2.414.3a",
+  "page": 160,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]^3, x]",
+  "rhs": [
+   "-3/4*Cosh[x] + 1/12*Cosh[3*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "tex": "int sinh^3 x dx = -3/4 cosh x + 1/12 cosh 3x",
+  "note": ""
+ },
+ {
+  "id": "GR2.414.3b",
+  "gr": "2.414.3b",
+  "page": 160,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]^3, x]",
+  "rhs": [
+   "1/3*Cosh[x]^3 - Cosh[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "tex": "= 1/3 cosh^3 x - cosh x",
+  "note": ""
+ },
+ {
+  "id": "GR2.414.4a",
+  "gr": "2.414.4a",
+  "page": 160,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]^4, x]",
+  "rhs": [
+   "3/8*x - 1/4*Sinh[2*x] + 1/32*Sinh[4*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "tex": "int sinh^4 x dx = 3/8 x - 1/4 sinh 2x + 1/32 sinh 4x",
+  "note": ""
+ },
+ {
+  "id": "GR2.414.4b",
+  "gr": "2.414.4b",
+  "page": 160,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]^4, x]",
+  "rhs": [
+   "3/8*x - 3/8*Sinh[x]*Cosh[x] + 1/4*Sinh[x]^3*Cosh[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "tex": "= 3/8 x - 3/8 sinh x cosh x + 1/4 sinh^3 x cosh x",
+  "note": ""
+ },
+ {
+  "id": "GR2.414.5a",
+  "gr": "2.414.5a",
+  "page": 160,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]^5, x]",
+  "rhs": [
+   "5/8*Cosh[x] - 5/48*Cosh[3*x] + 1/80*Cosh[5*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "tex": "int sinh^5 x dx = 5/8 cosh x - 5/48 cosh 3x + 1/80 cosh 5x",
+  "note": ""
+ },
+ {
+  "id": "GR2.414.5b",
+  "gr": "2.414.5b",
+  "page": 160,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]^5, x]",
+  "rhs": [
+   "4/5*Cosh[x] + 1/5*Sinh[x]^4*Cosh[x] - 4/15*Cosh[x]^3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "tex": "= 4/5 cosh x + 1/5 sinh^4 x cosh x - 4/15 cosh^3 x",
+  "note": ""
+ },
+ {
+  "id": "GR2.414.6a",
+  "gr": "2.414.6a",
+  "page": 160,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]^6, x]",
+  "rhs": [
+   "-5/16*x + 15/64*Sinh[2*x] - 3/64*Sinh[4*x] + 1/192*Sinh[6*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "tex": "int sinh^6 x dx = -5/16 x + 15/64 sinh 2x - 3/64 sinh 4x + 1/192 sinh 6x",
+  "note": ""
+ },
+ {
+  "id": "GR2.414.6b",
+  "gr": "2.414.6b",
+  "page": 160,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]^6, x]",
+  "rhs": [
+   "-5/16*x + 1/6*Sinh[x]^5*Cosh[x] - 5/24*Sinh[x]^3*Cosh[x] + 5/16*Sinh[x]*Cosh[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.41-2.43 Powers of sinh x, cosh x, tanh x, and coth x",
+  "tex": "= -5/16 x + 1/6 sinh^5 x cosh x - 5/24 sinh^3 x cosh x + 5/16 sinh x cosh x",
+  "note": ""
+ }
+]

@@ -1,0 +1,1769 @@
+[
+ {
+  "id": "GR3.172.18",
+  "gr": "3.172.18",
+  "page": 361,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x^2 - a^2)/(x^2 - b^2)^3], {x, u, Infinity}]",
+  "rhs": [
+   "a/b^2*(MatharF2[ArcSin[a/u], b/a] - MatharE2[ArcSin[a/u], b/a]) + 1/u*Sqrt[(u^2 - a^2)/(u^2 - b^2)]"
+  ],
+  "conds": [
+   "u >= a > b > 0"
+  ],
+  "cite": "BY (215.03)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "int_u^inf sqrt((x^2-a^2)/(x^2-b^2)^3) dx = a/b^2 [F(nu,t)-E(nu,t)] + 1/u sqrt((u^2-a^2)/(u^2-b^2))",
+  "note": "3.169 notation substituted: nu = arcsin(a/u), t = b/a"
+ },
+ {
+  "id": "GR3.173.1",
+  "gr": "3.173.1",
+  "page": 361,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(x^2 + 1)/(1 - x^2)], {x, u, 1}]",
+  "rhs": [
+   "Sqrt[2]*(MatharF2[ArcCos[u], Sqrt[2]/2] - MatharE2[ArcCos[u], Sqrt[2]/2]) + Sqrt[1 - u^4]/u"
+  ],
+  "conds": [
+   "u < 1",
+   "u > 0"
+  ],
+  "cite": "BY (259.77)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "int_u^1 dx/x^2 sqrt((x^2+1)/(1-x^2)) = sqrt2 [F(arccos u, sqrt2/2) - E(arccos u, sqrt2/2)] + sqrt(1-u^4)/u",
+  "note": "u > 0 added (integrand singular at 0)"
+ },
+ {
+  "id": "GR3.173.2",
+  "gr": "3.173.2",
+  "page": 361,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(x^2 + 1)/(x^2 - 1)], {x, 1, u}]",
+  "rhs": [
+   "Sqrt[2]*MatharE2[ArcCos[1/u], Sqrt[2]/2]"
+  ],
+  "conds": [
+   "u > 1"
+  ],
+  "cite": "BY (260.76)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "int_1^u dx/x^2 sqrt((x^2+1)/(x^2-1)) = sqrt2 E(arccos(1/u), sqrt2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.174.1",
+  "gr": "3.174.1",
+  "page": 361,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 + (1 + Sqrt[3])*x)^2*Sqrt[(1 - x + x^2)/(x*(1 + x))], {x, 0, u}]",
+  "rhs": [
+   "3^(-1/4)*MatharE2[ArcCos[(1 + (1 - Sqrt[3])*u)/(1 + (1 + Sqrt[3])*u)], Sqrt[2 + Sqrt[3]]/2]"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "BY (260.51)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "int_0^u dx/[1+(1+sqrt3)x]^2 sqrt((1-x+x^2)/(x(1+x))) = 3^(-1/4) E(alpha,p)",
+  "note": "3.174 notation substituted: alpha = arccos[(1+(1-sqrt3)u)/(1+(1+sqrt3)u)], beta = arccos[(1-(1+sqrt3)u)/(1+(sqrt3-1)u)], p = sqrt(2+sqrt3)/2, q = sqrt(2-sqrt3)/2"
+ },
+ {
+  "id": "GR3.174.2",
+  "gr": "3.174.2",
+  "page": 361,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 + (Sqrt[3] - 1)*x)^2*Sqrt[(1 + x + x^2)/(x*(1 - x))], {x, 0, u}]",
+  "rhs": [
+   "3^(-1/4)*MatharE2[ArcCos[(1 - (1 + Sqrt[3])*u)/(1 + (Sqrt[3] - 1)*u)], Sqrt[2 - Sqrt[3]]/2]"
+  ],
+  "conds": [
+   "1 >= u > 0"
+  ],
+  "cite": "BY (259.51)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "int_0^u dx/[1+(sqrt3-1)x]^2 sqrt((1+x+x^2)/(x(1-x))) = 3^(-1/4) E(beta,q)",
+  "note": "3.174 notation substituted: alpha = arccos[(1+(1-sqrt3)u)/(1+(1+sqrt3)u)], beta = arccos[(1-(1+sqrt3)u)/(1+(sqrt3-1)u)], p = sqrt(2+sqrt3)/2, q = sqrt(2-sqrt3)/2"
+ },
+ {
+  "id": "GR3.174.3",
+  "gr": "3.174.3",
+  "page": 361,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 - x + x^2)*Sqrt[x*(1 + x)/(1 - x + x^2)], {x, 0, u}]",
+  "rhs": [
+   "27^(-1/4)*MatharE2[ArcCos[(1 + (1 - Sqrt[3])*u)/(1 + (1 + Sqrt[3])*u)], Sqrt[2 + Sqrt[3]]/2] - (2 - Sqrt[3])*27^(-1/4)*MatharF2[ArcCos[(1 + (1 - Sqrt[3])*u)/(1 + (1 + Sqrt[3])*u)], Sqrt[2 + Sqrt[3]]/2] - 2*(2 + Sqrt[3])/Sqrt[3]*(1 + (1 - Sqrt[3])*u)/(1 + (1 + Sqrt[3])*u)*Sqrt[u*(1 + u)/(1 - u + u^2)]",
+   "27^(-1/4)*MatharE2[ArcCos[(1 + (1 - Sqrt[3])*u)/(1 + (1 + Sqrt[3])*u)], Sqrt[2 + Sqrt[3]]/2] + (2 - Sqrt[3])*27^(-1/4)*MatharF2[ArcCos[(1 + (1 - Sqrt[3])*u)/(1 + (1 + Sqrt[3])*u)], Sqrt[2 + Sqrt[3]]/2] - 2*(2 + Sqrt[3])/Sqrt[3]*(1 + (1 - Sqrt[3])*u)/(1 + (1 + Sqrt[3])*u)*Sqrt[u*(1 + u)/(1 - u + u^2)]"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "BY (260.54)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "int_0^u dx/(1-x+x^2) sqrt(x(1+x)/(1-x+x^2)) = 27^(-1/4) E(alpha,p) + - (2-sqrt3)/27^(1/4) F(alpha,p) - 2(2+sqrt3)/sqrt3 (1+(1-sqrt3)u)/(1+(1+sqrt3)u) sqrt(u(1+u)/(1-u+u^2))",
+  "note": "3.174 notation substituted: alpha = arccos[(1+(1-sqrt3)u)/(1+(1+sqrt3)u)], beta = arccos[(1-(1+sqrt3)u)/(1+(sqrt3-1)u)], p = sqrt(2+sqrt3)/2, q = sqrt(2-sqrt3)/2; book prints no '=' and '+ -' before the F term; read as '-', alternative '+' given"
+ },
+ {
+  "id": "GR3.174.4",
+  "gr": "3.174.4",
+  "page": 361,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 + x + x^2)*Sqrt[x*(1 - x)/(1 + x + x^2)], {x, 0, u}]",
+  "rhs": [
+   "4*27^(-1/4)*MatharE2[ArcCos[(1 - (1 + Sqrt[3])*u)/(1 + (Sqrt[3] - 1)*u)], Sqrt[2 - Sqrt[3]]/2] - (2 + Sqrt[3])*27^(-1/4)*MatharF2[ArcCos[(1 - (1 + Sqrt[3])*u)/(1 + (Sqrt[3] - 1)*u)], Sqrt[2 - Sqrt[3]]/2] - 2*(2 - Sqrt[3])/Sqrt[3]*(1 - (1 + Sqrt[3])*u)/(1 + (Sqrt[3] - 1)*u)*Sqrt[u*(1 - u)/(1 + u + u^2)]",
+   "27^(-1/4)*MatharE2[ArcCos[(1 - (1 + Sqrt[3])*u)/(1 + (Sqrt[3] - 1)*u)], Sqrt[2 - Sqrt[3]]/2] - (2 + Sqrt[3])*27^(-1/4)*MatharF2[ArcCos[(1 - (1 + Sqrt[3])*u)/(1 + (Sqrt[3] - 1)*u)], Sqrt[2 - Sqrt[3]]/2] - 2*(2 - Sqrt[3])/Sqrt[3]*(1 - (1 + Sqrt[3])*u)/(1 + (Sqrt[3] - 1)*u)*Sqrt[u*(1 - u)/(1 + u + u^2)]"
+  ],
+  "conds": [
+   "1 >= u > 0"
+  ],
+  "cite": "BY (259.55)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "int_0^u dx/(1+x+x^2) sqrt(x(1-x)/(1+x+x^2)) = 4/27^(1/4) E(beta,q) - (2+sqrt3)/27^(1/4) F(beta,q) - 2(2-sqrt3)/sqrt3 (1-(1+sqrt3)u)/(1+(sqrt3-1)u) sqrt(u(1-u)/(1+u+u^2))",
+  "note": "3.174 notation substituted: alpha = arccos[(1+(1-sqrt3)u)/(1+(1+sqrt3)u)], beta = arccos[(1-(1+sqrt3)u)/(1+(sqrt3-1)u)], p = sqrt(2+sqrt3)/2, q = sqrt(2-sqrt3)/2; book prints no '='; leading coefficient 4 as printed, alternative 1 (cf. 3.174.3)"
+ },
+ {
+  "id": "GR3.175.1",
+  "gr": "3.175.1",
+  "page": 361,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 + x)*Sqrt[x/(1 + x^3)], {x, 0, u}]",
+  "rhs": [
+   "27^(-1/4)*(MatharF2[ArcCos[(1 + (1 - Sqrt[3])*u)/(1 + (1 + Sqrt[3])*u)], Sqrt[2 + Sqrt[3]]/2] - 2*MatharE2[ArcCos[(1 + (1 - Sqrt[3])*u)/(1 + (1 + Sqrt[3])*u)], Sqrt[2 + Sqrt[3]]/2]) + 2/Sqrt[3]*Sqrt[u*(1 - u + u^2)]/(Sqrt[1 + u]*(1 + (1 + Sqrt[3])*u))"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "BY (260.55)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "int_0^u dx/(1+x) sqrt(x/(1+x^3)) = 27^(-1/4)[F(alpha,p)-2E(alpha,p)] + 2/sqrt3 sqrt(u(1-u+u^2))/(sqrt(1+u)[1+(1+sqrt3)u])",
+  "note": "3.174 notation substituted: alpha = arccos[(1+(1-sqrt3)u)/(1+(1+sqrt3)u)], beta = arccos[(1-(1+sqrt3)u)/(1+(sqrt3-1)u)], p = sqrt(2+sqrt3)/2, q = sqrt(2-sqrt3)/2"
+ },
+ {
+  "id": "GR3.175.2",
+  "gr": "3.175.2",
+  "page": 361,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 - x)*Sqrt[x/(1 - x^3)], {x, 0, u}]",
+  "rhs": [
+   "27^(-1/4)*(MatharF2[ArcCos[(1 - (1 + Sqrt[3])*u)/(1 + (Sqrt[3] - 1)*u)], Sqrt[2 - Sqrt[3]]/2] - 2*MatharE2[ArcCos[(1 - (1 + Sqrt[3])*u)/(1 + (Sqrt[3] - 1)*u)], Sqrt[2 - Sqrt[3]]/2]) + 2/Sqrt[3]*Sqrt[u*(1 + u + u^2)]/(Sqrt[1 - u]*(1 + (Sqrt[3] - 1)*u))"
+  ],
+  "conds": [
+   "0 < u < 1"
+  ],
+  "cite": "BY (259.52)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "int_0^u dx/(1-x) sqrt(x/(1-x^3)) = 27^(-1/4)[F(beta,q)-2E(beta,q)] + 2/sqrt3 sqrt(u(1+u+u^2))/(sqrt(1-u)[1+(sqrt3-1)u])",
+  "note": "3.174 notation substituted: alpha = arccos[(1+(1-sqrt3)u)/(1+(1+sqrt3)u)], beta = arccos[(1-(1+sqrt3)u)/(1+(sqrt3-1)u)], p = sqrt(2+sqrt3)/2, q = sqrt(2-sqrt3)/2"
+ },
+ {
+  "id": "GR3.181.1",
+  "gr": "3.181.1",
+  "page": 362,
+  "status": "ok",
+  "lhs": "Integrate[1/((a - x)*(x - b))^(1/4), {x, b, u}]",
+  "rhs": [
+   "Sqrt[a - b]*(2*(MatharE[1/Sqrt[2]] + MatharE2[ArcCos[(4*(a - u)*(u - b)/(a - b)^2)^(1/4)], 1/Sqrt[2]]) - (MatharK[1/Sqrt[2]] + MatharF2[ArcCos[(4*(a - u)*(u - b)/(a - b)^2)^(1/4)], 1/Sqrt[2]]))",
+   "Sqrt[a - b]*(2*(MatharE[1/Sqrt[2]] - MatharE2[ArcCos[(4*(a - u)*(u - b)/(a - b)^2)^(1/4)], 1/Sqrt[2]]) - (MatharK[1/Sqrt[2]] - MatharF2[ArcCos[(4*(a - u)*(u - b)/(a - b)^2)^(1/4)], 1/Sqrt[2]]))"
+  ],
+  "conds": [
+   "a >= u > b"
+  ],
+  "cite": "BY (271.05)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_b^u dx/((a-x)(x-b))^(1/4) = sqrt(a-b){2[E(1/sqrt2) + E(arccos (4(a-u)(u-b)/(a-b)^2)^(1/4), 1/sqrt2)] - [K(1/sqrt2) + F(arccos ..., 1/sqrt2)]}",
+  "note": "Printed '+' form gives the integral for (a+b)/2 <= u <= a (at u=b it is nonzero); the '-' alternative covers b < u <= (a+b)/2"
+ },
+ {
+  "id": "GR3.181.2",
+  "gr": "3.181.2",
+  "page": 362,
+  "status": "ok",
+  "lhs": "Integrate[1/((x - a)*(x - b))^(1/4), {x, a, u}]",
+  "rhs": [
+   "Sqrt[(a - b)/2]*(MatharF2[ArcCos[(a - b - 2*Sqrt[(u - a)*(u - b)])/(a - b + 2*Sqrt[(u - a)*(u - b)])], 1/Sqrt[2]] - 2*MatharE2[ArcCos[(a - b - 2*Sqrt[(u - a)*(u - b)])/(a - b + 2*Sqrt[(u - a)*(u - b)])], 1/Sqrt[2]]) + 2*(2*u - a - b)*((u - a)*(u - b))^(1/4)/(a - b + 2*Sqrt[(u - a)*(u - b)])"
+  ],
+  "conds": [
+   "u > a > b"
+  ],
+  "cite": "BY (272.05)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_a^u dx/((x-a)(x-b))^(1/4) = sqrt((a-b)/2)[F(phi,1/sqrt2) - 2E(phi,1/sqrt2)] + 2(2u-a-b)((u-a)(u-b))^(1/4)/(a-b+2sqrt((u-a)(u-b)))",
+  "note": "book omits '=' and misplaces the bracket after F; read as sqrt((a-b)/2)*[F(...) - 2E(...)]"
+ },
+ {
+  "id": "GR3.182.1",
+  "gr": "3.182.1",
+  "page": 362,
+  "status": "ok",
+  "lhs": "Integrate[1/((a - x)*(x - b))^(3/4), {x, b, u}]",
+  "rhs": [
+   "2/Sqrt[a - b]*(MatharK[1/Sqrt[2]] + MatharF2[ArcCos[Sqrt[4*(a - u)*(u - b)/(a - b)^2]], 1/Sqrt[2]])",
+   "2/Sqrt[a - b]*(MatharK[1/Sqrt[2]] + MatharF2[ArcCos[(4*(a - u)*(u - b)/(a - b)^2)^(1/4)], 1/Sqrt[2]])",
+   "2/Sqrt[a - b]*(MatharK[1/Sqrt[2]] - MatharF2[ArcCos[(4*(a - u)*(u - b)/(a - b)^2)^(1/4)], 1/Sqrt[2]])",
+   "2/Sqrt[a - b]*(MatharK[1/Sqrt[2]] - MatharF2[ArcCos[Sqrt[4*(a - u)*(u - b)/(a - b)^2]], 1/Sqrt[2]])"
+  ],
+  "conds": [
+   "a >= u > b"
+  ],
+  "cite": "BY (271.01)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_b^u dx/[(a-x)(x-b)]^(3/4) = 2/sqrt(a-b) [K(1/sqrt2) + F(arccos sqrt(4(a-u)(u-b)/(a-b)^2), 1/sqrt2)]",
+  "note": "printed with a square root inside arccos (3.181.1 has a fourth root): alternatives with fourth root, and with '-' (printed '+' is nonzero at u=b, so it can hold only for u above the midpoint)"
+ },
+ {
+  "id": "GR3.182.2",
+  "gr": "3.182.2",
+  "page": 362,
+  "status": "ok",
+  "lhs": "Integrate[1/((x - a)*(x - b))^(3/4), {x, a, u}]",
+  "rhs": [
+   "Sqrt[2]/Sqrt[a - b]*MatharF2[ArcCos[(a - b - 2*Sqrt[(u - a)*(u - b)])/(a - b + 2*Sqrt[(u - a)*(u - b)])], 1/Sqrt[2]]"
+  ],
+  "conds": [
+   "u > a > b"
+  ],
+  "cite": "BY (272.00)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_a^u dx/[(x-a)(x-b)]^(3/4) = sqrt2/sqrt(a-b) F(arccos[(a-b-2sqrt((u-a)(u-b)))/(a-b+2sqrt(...))], 1/sqrt2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.183.1",
+  "gr": "3.183.1",
+  "page": 362,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2 + 1)^(1/4), {x, 0, u}]",
+  "rhs": [
+   "Sqrt[2]*(MatharF2[ArcCos[1/(u^2 + 1)^(1/4)], 1/Sqrt[2]] - 2*MatharE2[ArcCos[1/(u^2 + 1)^(1/4)], 1/Sqrt[2]]) + 2*u/(u^2 + 1)^(1/4)"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "BY (273.55)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_0^u dx/(x^2+1)^(1/4) = sqrt2[F(alpha,1/sqrt2) - 2E(alpha,1/sqrt2)] + 2u/(u^2+1)^(1/4)",
+  "note": "3.183 notation substituted: alpha = arccos(1/(u^2+1)^(1/4)), beta = arccos((1-u^2)^(1/4)), gamma = arccos[(1-sqrt(u^2-1))/(1+sqrt(u^2-1))]"
+ },
+ {
+  "id": "GR3.183.2",
+  "gr": "3.183.2",
+  "page": 362,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 - x^2)^(1/4), {x, 0, u}]",
+  "rhs": [
+   "Sqrt[2]*(2*MatharE2[ArcCos[(1 - u^2)^(1/4)], 1/Sqrt[2]] - MatharF2[ArcCos[(1 - u^2)^(1/4)], 1/Sqrt[2]])"
+  ],
+  "conds": [
+   "0 < u <= 1"
+  ],
+  "cite": "BY (271.55)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_0^u dx/(1-x^2)^(1/4) = sqrt2[2E(beta,1/sqrt2) - F(beta,1/sqrt2)]",
+  "note": "3.183 notation substituted: alpha = arccos(1/(u^2+1)^(1/4)), beta = arccos((1-u^2)^(1/4)), gamma = arccos[(1-sqrt(u^2-1))/(1+sqrt(u^2-1))]"
+ },
+ {
+  "id": "GR3.183.3",
+  "gr": "3.183.3",
+  "page": 362,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2 - 1)^(1/4), {x, 1, u}]",
+  "rhs": [
+   "MatharF2[ArcCos[(1 - Sqrt[u^2 - 1])/(1 + Sqrt[u^2 - 1])], 1/Sqrt[2]] - 2*MatharE2[ArcCos[(1 - Sqrt[u^2 - 1])/(1 + Sqrt[u^2 - 1])], 1/Sqrt[2]] + 2*u*(u^2 - 1)^(1/4)/(1 + Sqrt[u^2 - 1])"
+  ],
+  "conds": [
+   "u > 1"
+  ],
+  "cite": "BY (272.55)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_1^u dx/(x^2-1)^(1/4) = F(gamma,1/sqrt2) - 2E(gamma,1/sqrt2) + 2u(u^2-1)^(1/4)/(1+sqrt(u^2-1))",
+  "note": "3.183 notation substituted: alpha = arccos(1/(u^2+1)^(1/4)), beta = arccos((1-u^2)^(1/4)), gamma = arccos[(1-sqrt(u^2-1))/(1+sqrt(u^2-1))]"
+ },
+ {
+  "id": "GR3.184.1",
+  "gr": "3.184.1",
+  "page": 363,
+  "status": "ok",
+  "lhs": "Integrate[x^2/(1 - x^2)^(1/4), {x, 0, u}]",
+  "rhs": [
+   "2*Sqrt[2]/5*(2*MatharE2[ArcCos[(1 - u^2)^(1/4)], 1/Sqrt[2]] - MatharF2[ArcCos[(1 - u^2)^(1/4)], 1/Sqrt[2]]) - 2*u/5*((1 - u^2)^3)^(1/4)"
+  ],
+  "conds": [
+   "0 < u <= 1"
+  ],
+  "cite": "BY (271.59)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_0^u x^2 dx/(1-x^2)^(1/4) = 2sqrt2/5[2E(beta) - F(beta)] - 2u/5 ((1-u^2)^3)^(1/4)",
+  "note": "3.183 notation substituted: alpha = arccos(1/(u^2+1)^(1/4)), beta = arccos((1-u^2)^(1/4)), gamma = arccos[(1-sqrt(u^2-1))/(1+sqrt(u^2-1))]"
+ },
+ {
+  "id": "GR3.184.2",
+  "gr": "3.184.2",
+  "page": 363,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*(x^2 - 1)^(1/4)), {x, 1, u}]",
+  "rhs": [
+   "MatharE2[ArcCos[(1 - Sqrt[u^2 - 1])/(1 + Sqrt[u^2 - 1])], 1/Sqrt[2]] - 1/2*MatharF2[ArcCos[(1 - Sqrt[u^2 - 1])/(1 + Sqrt[u^2 - 1])], 1/Sqrt[2]] - (1 - Sqrt[u^2 - 1])/(1 + Sqrt[u^2 - 1])*Sqrt[u^2 - 1]/u",
+   "MatharE2[ArcCos[(1 - Sqrt[u^2 - 1])/(1 + Sqrt[u^2 - 1])], 1/Sqrt[2]] - 1/2*MatharF2[ArcCos[(1 - Sqrt[u^2 - 1])/(1 + Sqrt[u^2 - 1])], 1/Sqrt[2]] - (1 - Sqrt[u^2 - 1])/(1 + Sqrt[u^2 - 1])*(u^2 - 1)^(1/4)/u"
+  ],
+  "conds": [
+   "u > 1"
+  ],
+  "cite": "BY (272.54)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_1^u dx/(x^2 (x^2-1)^(1/4)) = E(gamma) - 1/2 F(gamma) - (1-sqrt(u^2-1))/(1+sqrt(u^2-1)) * sqrt(u^2-1)/u",
+  "note": "3.183 notation substituted: alpha = arccos(1/(u^2+1)^(1/4)), beta = arccos((1-u^2)^(1/4)), gamma = arccos[(1-sqrt(u^2-1))/(1+sqrt(u^2-1))]; last factor printed sqrt(u^2-1)/u; alternative with fourth root (dimensionally expected)"
+ },
+ {
+  "id": "GR3.185.1",
+  "gr": "3.185.1",
+  "page": 363,
+  "status": "ok",
+  "lhs": "Integrate[1/((x^2 + 1)^3)^(1/4), {x, 0, u}]",
+  "rhs": [
+   "Sqrt[2]*MatharF2[ArcCos[1/(u^2 + 1)^(1/4)], 1/Sqrt[2]]"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "BY (273.50)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_0^u dx/((x^2+1)^3)^(1/4) = sqrt2 F(alpha,1/sqrt2)",
+  "note": "3.183 notation substituted: alpha = arccos(1/(u^2+1)^(1/4)), beta = arccos((1-u^2)^(1/4)), gamma = arccos[(1-sqrt(u^2-1))/(1+sqrt(u^2-1))]"
+ },
+ {
+  "id": "GR3.185.2",
+  "gr": "3.185.2",
+  "page": 363,
+  "status": "ok",
+  "lhs": "Integrate[1/((1 - x^2)^3)^(1/4), {x, 0, u}]",
+  "rhs": [
+   "Sqrt[2]*MatharF2[ArcCos[(1 - u^2)^(1/4)], 1/Sqrt[2]]"
+  ],
+  "conds": [
+   "0 < u <= 1"
+  ],
+  "cite": "BY (271.51)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_0^u dx/((1-x^2)^3)^(1/4) = sqrt2 F(beta,1/sqrt2)",
+  "note": "3.183 notation substituted: alpha = arccos(1/(u^2+1)^(1/4)), beta = arccos((1-u^2)^(1/4)), gamma = arccos[(1-sqrt(u^2-1))/(1+sqrt(u^2-1))]"
+ },
+ {
+  "id": "GR3.185.3",
+  "gr": "3.185.3",
+  "page": 363,
+  "status": "ok",
+  "lhs": "Integrate[1/((x^2 - 1)^3)^(1/4), {x, 1, u}]",
+  "rhs": [
+   "MatharF2[ArcCos[(1 - Sqrt[u^2 - 1])/(1 + Sqrt[u^2 - 1])], 1/Sqrt[2]]"
+  ],
+  "conds": [
+   "u > 1"
+  ],
+  "cite": "BY (272.50)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_1^u dx/((x^2-1)^3)^(1/4) = F(gamma,1/sqrt2)",
+  "note": "3.183 notation substituted: alpha = arccos(1/(u^2+1)^(1/4)), beta = arccos((1-u^2)^(1/4)), gamma = arccos[(1-sqrt(u^2-1))/(1+sqrt(u^2-1))]"
+ },
+ {
+  "id": "GR3.185.4",
+  "gr": "3.185.4",
+  "page": 363,
+  "status": "ok",
+  "lhs": "Integrate[x^2/((1 - x^2)^3)^(1/4), {x, 0, u}]",
+  "rhs": [
+   "2*Sqrt[2]/3*MatharF2[ArcCos[(1 - u^2)^(1/4)], 1/Sqrt[2]] - 2/3*u*(1 - u^2)^(1/4)"
+  ],
+  "conds": [
+   "0 < u <= 1"
+  ],
+  "cite": "BY (271.54)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_0^u x^2 dx/((1-x^2)^3)^(1/4) = 2sqrt2/3 F(beta) - 2/3 u (1-u^2)^(1/4)",
+  "note": "3.183 notation substituted: alpha = arccos(1/(u^2+1)^(1/4)), beta = arccos((1-u^2)^(1/4)), gamma = arccos[(1-sqrt(u^2-1))/(1+sqrt(u^2-1))]"
+ },
+ {
+  "id": "GR3.185.5",
+  "gr": "3.185.5",
+  "page": 363,
+  "status": "ok",
+  "lhs": "Integrate[1/((x^2 + 1)^5)^(1/4), {x, 0, u}]",
+  "rhs": [
+   "2*Sqrt[2]*MatharE2[ArcCos[1/(u^2 + 1)^(1/4)], 1/Sqrt[2]] - Sqrt[2]*MatharF2[ArcCos[1/(u^2 + 1)^(1/4)], 1/Sqrt[2]]"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "BY (273.54)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_0^u dx/((x^2+1)^5)^(1/4) = 2sqrt2 E(alpha) - sqrt2 F(alpha)",
+  "note": "3.183 notation substituted: alpha = arccos(1/(u^2+1)^(1/4)), beta = arccos((1-u^2)^(1/4)), gamma = arccos[(1-sqrt(u^2-1))/(1+sqrt(u^2-1))]"
+ },
+ {
+  "id": "GR3.185.6",
+  "gr": "3.185.6",
+  "page": 363,
+  "status": "ok",
+  "lhs": "Integrate[x^2/((x^2 + 1)^5)^(1/4), {x, 0, u}]",
+  "rhs": [
+   "2*Sqrt[2]*(MatharF2[ArcCos[1/(u^2 + 1)^(1/4)], 1/Sqrt[2]] - 2*MatharE2[ArcCos[1/(u^2 + 1)^(1/4)], 1/Sqrt[2]]) + 2*u/(u^2 + 1)^(1/4)"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "BY (273.56)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_0^u x^2 dx/((x^2+1)^5)^(1/4) = 2sqrt2[F(alpha) - 2E(alpha)] + 2u/(u^2+1)^(1/4)",
+  "note": "3.183 notation substituted: alpha = arccos(1/(u^2+1)^(1/4)), beta = arccos((1-u^2)^(1/4)), gamma = arccos[(1-sqrt(u^2-1))/(1+sqrt(u^2-1))]"
+ },
+ {
+  "id": "GR3.185.7",
+  "gr": "3.185.7",
+  "page": 363,
+  "status": "ok",
+  "lhs": "Integrate[x^2/((x^2 + 1)^7)^(1/4), {x, 0, u}]",
+  "rhs": [
+   "1/(3*Sqrt[2])*MatharF2[ArcCos[1/(u^2 + 1)^(1/4)], 1/Sqrt[2]] - u/(6*((u^2 + 1)^3)^(1/4))"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "BY (273.53)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_0^u x^2 dx/((x^2+1)^7)^(1/4) = 1/(3sqrt2) F(alpha) - u/(6((u^2+1)^3)^(1/4))",
+  "note": "3.183 notation substituted: alpha = arccos(1/(u^2+1)^(1/4)), beta = arccos((1-u^2)^(1/4)), gamma = arccos[(1-sqrt(u^2-1))/(1+sqrt(u^2-1))]"
+ },
+ {
+  "id": "GR3.186.1",
+  "gr": "3.186.1",
+  "page": 363,
+  "status": "ok",
+  "lhs": "Integrate[(1 + Sqrt[x^2 + 1])/((x^2 + 1)*(x^2 + 1)^(1/4)), {x, 0, u}]",
+  "rhs": [
+   "2*Sqrt[2]*MatharE2[ArcCos[1/(u^2 + 1)^(1/4)], 1/Sqrt[2]]"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "BY (273.51)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_0^u (1+sqrt(x^2+1))/((x^2+1)(x^2+1)^(1/4)) dx = 2sqrt2 E(alpha)",
+  "note": "3.183 notation substituted: alpha = arccos(1/(u^2+1)^(1/4)), beta = arccos((1-u^2)^(1/4)), gamma = arccos[(1-sqrt(u^2-1))/(1+sqrt(u^2-1))]"
+ },
+ {
+  "id": "GR3.186.2",
+  "gr": "3.186.2",
+  "page": 363,
+  "status": "ok",
+  "lhs": "Integrate[1/((1 + Sqrt[1 - x^2])*(1 - x^2)^(1/4)), {x, 0, u}]",
+  "rhs": [
+   "Sqrt[2]*(MatharF2[ArcCos[(1 - u^2)^(1/4)], 1/Sqrt[2]] - MatharE2[ArcCos[(1 - u^2)^(1/4)], 1/Sqrt[2]]) + u*(1 - u^2)^(1/4)/(1 + Sqrt[1 - u^2])"
+  ],
+  "conds": [
+   "0 < u <= 1"
+  ],
+  "cite": "BY (271.58)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_0^u dx/((1+sqrt(1-x^2))(1-x^2)^(1/4)) = sqrt2[F(beta)-E(beta)] + u(1-u^2)^(1/4)/(1+sqrt(1-u^2))",
+  "note": "3.183 notation substituted: alpha = arccos(1/(u^2+1)^(1/4)), beta = arccos((1-u^2)^(1/4)), gamma = arccos[(1-sqrt(u^2-1))/(1+sqrt(u^2-1))]"
+ },
+ {
+  "id": "GR3.186.3",
+  "gr": "3.186.3",
+  "page": 363,
+  "status": "ok",
+  "lhs": "Integrate[1/((x^2 + 2*Sqrt[x^2 - 1])*(x^2 - 1)^(1/4)), {x, 1, u}]",
+  "rhs": [
+   "1/2*(MatharF2[ArcCos[(1 - Sqrt[u^2 - 1])/(1 + Sqrt[u^2 - 1])], 1/Sqrt[2]] - MatharE2[ArcCos[(1 - Sqrt[u^2 - 1])/(1 + Sqrt[u^2 - 1])], 1/Sqrt[2]])"
+  ],
+  "conds": [
+   "u > 1"
+  ],
+  "cite": "BY (272.53)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_1^u dx/((x^2+2sqrt(x^2-1))(x^2-1)^(1/4)) = 1/2[F(gamma)-E(gamma)]",
+  "note": "3.183 notation substituted: alpha = arccos(1/(u^2+1)^(1/4)), beta = arccos((1-u^2)^(1/4)), gamma = arccos[(1-sqrt(u^2-1))/(1+sqrt(u^2-1))]"
+ },
+ {
+  "id": "GR3.186.4",
+  "gr": "3.186.4",
+  "page": 364,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Sqrt[1 - x^2])/(1 + Sqrt[1 - x^2])/((1 - x^2)^3)^(1/4), {x, 0, u}]",
+  "rhs": [
+   "Sqrt[2]*(2*MatharE2[ArcCos[(1 - u^2)^(1/4)], 1/Sqrt[2]] - MatharF2[ArcCos[(1 - u^2)^(1/4)], 1/Sqrt[2]]) - 2*u*(1 - u^2)^(1/4)/(1 + Sqrt[1 - u^2])"
+  ],
+  "conds": [
+   "0 < u <= 1"
+  ],
+  "cite": "BY (271.57)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_0^u (1-sqrt(1-x^2))/(1+sqrt(1-x^2)) dx/((1-x^2)^3)^(1/4) = sqrt2[2E(beta)-F(beta)] - 2u(1-u^2)^(1/4)/(1+sqrt(1-u^2))",
+  "note": "3.183 notation substituted: alpha = arccos(1/(u^2+1)^(1/4)), beta = arccos((1-u^2)^(1/4)), gamma = arccos[(1-sqrt(u^2-1))/(1+sqrt(u^2-1))]"
+ },
+ {
+  "id": "GR3.186.5",
+  "gr": "3.186.5",
+  "page": 364,
+  "status": "ok",
+  "lhs": "Integrate[x^2/((x^2 + 2*Sqrt[x^2 - 1])*((x^2 - 1)^3)^(1/4)), {x, 1, u}]",
+  "rhs": [
+   "MatharE2[ArcCos[(1 - Sqrt[u^2 - 1])/(1 + Sqrt[u^2 - 1])], 1/Sqrt[2]]"
+  ],
+  "conds": [
+   "u > 1"
+  ],
+  "cite": "BY (272.51)",
+  "edition_note": "",
+  "section": "3.18 Expressions that can be reduced to fourth roots of second-degree polynomials and their products with rational functions",
+  "tex": "int_1^u x^2 dx/((x^2+2sqrt(x^2-1))((x^2-1)^3)^(1/4)) = E(gamma,1/sqrt2)",
+  "note": "3.183 notation substituted: alpha = arccos(1/(u^2+1)^(1/4)), beta = arccos((1-u^2)^(1/4)), gamma = arccos[(1-sqrt(u^2-1))/(1+sqrt(u^2-1))]"
+ },
+ {
+  "id": "GR3.191.1",
+  "gr": "3.191.1",
+  "page": 364,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*(u - x)^(mu - 1), {x, 0, u}]",
+  "rhs": [
+   "u^(mu + nu - 1)*Beta[mu, nu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0",
+   "u > 0"
+  ],
+  "cite": "ET II 185(7)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^u x^(nu-1)(u-x)^(mu-1) dx = u^(mu+nu-1) B(mu,nu)",
+  "note": "u > 0 implied by the limits"
+ },
+ {
+  "id": "GR3.191.2",
+  "gr": "3.191.2",
+  "page": 364,
+  "status": "ok",
+  "lhs": "Integrate[x^(-nu)*(x - u)^(mu - 1), {x, u, Infinity}]",
+  "rhs": [
+   "u^(mu - nu)*Beta[nu - mu, mu]"
+  ],
+  "conds": [
+   "Re[nu] > Re[mu] > 0",
+   "u > 0"
+  ],
+  "cite": "ET II 201(6)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_u^inf x^(-nu)(x-u)^(mu-1) dx = u^(mu-nu) B(nu-mu,mu)",
+  "note": "u > 0 implied"
+ },
+ {
+  "id": "GR3.191.3a",
+  "gr": "3.191.3",
+  "page": 364,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*(1 - x)^(mu - 1), {x, 0, 1}]",
+  "rhs": [
+   "Beta[mu, nu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "FI II 774(1)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 x^(nu-1)(1-x)^(mu-1) dx = B(mu,nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.191.3b",
+  "gr": "3.191.3",
+  "page": 364,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*(1 - x)^(nu - 1), {x, 0, 1}]",
+  "rhs": [
+   "Beta[mu, nu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "FI II 774(1)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 x^(mu-1)(1-x)^(nu-1) dx = B(mu,nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.192.1",
+  "gr": "3.192.1",
+  "page": 364,
+  "status": "ok",
+  "lhs": "Integrate[x^p/(1 - x)^p, {x, 0, 1}]",
+  "rhs": [
+   "p*Pi*Csc[p*Pi]"
+  ],
+  "conds": [
+   "p^2 < 1"
+  ],
+  "cite": "BI (3)(4)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 x^p/(1-x)^p dx = p pi cosec(p pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.192.2",
+  "gr": "3.192.2",
+  "page": 364,
+  "status": "ok",
+  "lhs": "Integrate[x^p/(1 - x)^(p + 1), {x, 0, 1}]",
+  "rhs": [
+   "-Pi*Csc[p*Pi]"
+  ],
+  "conds": [
+   "-1 < p < 0"
+  ],
+  "cite": "BI (3)(5)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 x^p/(1-x)^(p+1) dx = -pi cosec(p pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.192.3",
+  "gr": "3.192.3",
+  "page": 364,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^p/x^(p + 1), {x, 0, 1}]",
+  "rhs": [
+   "-Pi*Csc[p*Pi]"
+  ],
+  "conds": [
+   "-1 < p < 0"
+  ],
+  "cite": "BI (4)(6)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 (1-x)^p/x^(p+1) dx = -pi cosec(p pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.192.4",
+  "gr": "3.192.4",
+  "page": 364,
+  "status": "ok",
+  "lhs": "Integrate[(x - 1)^(p - 1/2)/x, {x, 1, Infinity}]",
+  "rhs": [
+   "Pi*Sec[p*Pi]"
+  ],
+  "conds": [
+   "-1/2 < p < 1/2"
+  ],
+  "cite": "BI (23)(7)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_1^inf (x-1)^(p-1/2) dx/x = pi sec(p pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.193",
+  "gr": "3.193",
+  "page": 364,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*(n - x)^n, {x, 0, n}]",
+  "rhs": [
+   "n!*n^(nu + n)/Pochhammer[nu, n + 1]"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "EH I 2",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^n x^(nu-1)(n-x)^n dx = n! n^(nu+n)/(nu(nu+1)...(nu+n))",
+  "note": "nu(nu+1)...(nu+n) written as Pochhammer[nu, n+1]; n natural implied"
+ },
+ {
+  "id": "GR3.194.1",
+  "gr": "3.194.1",
+  "page": 364,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/(1 + beta*x)^nu, {x, 0, u}]",
+  "rhs": [
+   "u^mu/mu*Hypergeometric2F1[nu, mu, 1 + mu, -beta*u]"
+  ],
+  "conds": [
+   "Abs[Arg[1 + beta*u]] < Pi",
+   "Re[mu] > 0",
+   "u > 0"
+  ],
+  "cite": "ET I 310(20)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^u x^(mu-1)/(1+beta x)^nu dx = u^mu/mu 2F1(nu,mu;1+mu;-beta u)",
+  "note": "u > 0 implied"
+ },
+ {
+  "id": "GR3.194.2",
+  "gr": "3.194.2",
+  "page": 364,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/(1 + beta*x)^nu, {x, u, Infinity}]",
+  "rhs": [
+   "u^(mu - nu)/(beta^nu*(nu - mu))*Hypergeometric2F1[nu, nu - mu, nu - mu + 1, -1/(beta*u)]"
+  ],
+  "conds": [
+   "Re[nu] > Re[mu]",
+   "u > 0",
+   "beta > 0"
+  ],
+  "cite": "ET I 310(21)",
+  "edition_note": "6",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_u^inf x^(mu-1)/(1+beta x)^nu dx = u^(mu-nu)/(beta^nu (nu-mu)) 2F1(nu,nu-mu;nu-mu+1;-1/(beta u))",
+  "note": "u > 0, beta > 0 added (no condition given on beta)"
+ },
+ {
+  "id": "GR3.194.3",
+  "gr": "3.194.3",
+  "page": 364,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/(1 + beta*x)^nu, {x, 0, Infinity}]",
+  "rhs": [
+   "beta^(-mu)*Beta[mu, nu - mu]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "Re[nu] > Re[mu] > 0"
+  ],
+  "cite": "FI II 775a, ET I 310(19)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf x^(mu-1)/(1+beta x)^nu dx = beta^(-mu) B(mu, nu-mu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.194.4",
+  "gr": "3.194.4",
+  "page": 365,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/(1 + beta*x)^(n + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*Pi/beta^mu*Binomial[mu - 1, n]*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "0 < Re[mu] < n + 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 308(6)",
+  "edition_note": "11",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf x^(mu-1)/(1+beta x)^(n+1) dx = (-1)^n pi/beta^mu binom(mu-1,n) cosec(mu pi)",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR3.194.5",
+  "gr": "3.194.5",
+  "page": 365,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/(1 + beta*x), {x, 0, u}]",
+  "rhs": [
+   "u^mu/mu*Hypergeometric2F1[1, mu, 1 + mu, -beta*u]"
+  ],
+  "conds": [
+   "Abs[Arg[1 + u*beta]] < Pi",
+   "Re[mu] > 0",
+   "u > 0"
+  ],
+  "cite": "ET I 308(5)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^u x^(mu-1)/(1+beta x) dx = u^mu/mu 2F1(1,mu;1+mu;-beta u)",
+  "note": "u > 0 implied"
+ },
+ {
+  "id": "GR3.194.6",
+  "gr": "3.194.6",
+  "page": 365,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/(1 + beta*x)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(1 - mu)*Pi/beta^mu*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "0 < Re[mu] < 2",
+   "beta > 0"
+  ],
+  "cite": "BI (16)(4)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf x^(mu-1)/(1+beta x)^2 dx = (1-mu) pi/beta^mu cosec(mu pi)",
+  "note": "beta > 0 added (no condition given on beta)"
+ },
+ {
+  "id": "GR3.194.7",
+  "gr": "3.194.7",
+  "page": 365,
+  "status": "ok",
+  "lhs": "Integrate[x^m/(a + b*x)^(n + 1/2), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(m + 1)*m!*(2*n - 2*m - 3)!!/(2*n - 1)!!*a^(m - n + 1/2)/b^(m + 1)"
+  ],
+  "conds": [
+   "m < n - 1/2",
+   "a > 0",
+   "b > 0",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers]"
+  ],
+  "cite": "BI (21)(2)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf x^m/(a+bx)^(n+1/2) dx = 2^(m+1) m! (2n-2m-3)!!/(2n-1)!! a^(m-n+1/2)/b^(m+1)",
+  "note": "m, n integers implied by factorials"
+ },
+ {
+  "id": "GR3.194.8",
+  "gr": "3.194.8",
+  "page": 365,
+  "status": "ok",
+  "lhs": "Integrate[x^(n - 1)/(1 + x)^m, {x, 0, 1}]",
+  "rhs": [
+   "2^(-n)*Sum[Binomial[m - n - 1, k]*(-2)^(-k)/(n + k), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "n > 0"
+  ],
+  "cite": "BI (3)(1)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 x^(n-1)/(1+x)^m dx = 2^(-n) sum_{k>=0} binom(m-n-1,k) (-2)^(-k)/(n+k)",
+  "note": "n > 0 added for convergence"
+ },
+ {
+  "id": "GR3.195a",
+  "gr": "3.195",
+  "page": 365,
+  "status": "ok",
+  "lhs": "Integrate[(1 + x)^(p - 1)/(a + x)^(p + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(1 - a^(-p))/(p*(a - 1))"
+  ],
+  "conds": [
+   "p != 0",
+   "a > 0",
+   "a != 1"
+  ],
+  "cite": "LI (19)(6)",
+  "edition_note": "11",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf (1+x)^(p-1)/(a+x)^(p+1) dx = (1-a^(-p))/(p(a-1))",
+  "note": ""
+ },
+ {
+  "id": "GR3.195b",
+  "gr": "3.195",
+  "page": 365,
+  "status": "ok",
+  "lhs": "Integrate[1/((1 + x)*(a + x)), {x, 0, Infinity}]",
+  "rhs": [
+   "Log[a]/(a - 1)"
+  ],
+  "conds": [
+   "a > 0",
+   "a != 1"
+  ],
+  "cite": "LI (19)(6)",
+  "edition_note": "11",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "p=0: int_0^inf dx/((1+x)(a+x)) = ln a/(a-1)",
+  "note": "p = 0 substituted"
+ },
+ {
+  "id": "GR3.195c",
+  "gr": "3.195",
+  "page": 365,
+  "status": "ok",
+  "lhs": "Integrate[(1 + x)^(p - 1)/(1 + x)^(p + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "1"
+  ],
+  "conds": [],
+  "cite": "LI (19)(6)",
+  "edition_note": "11",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "a=1: int_0^inf (1+x)^(p-1)/(1+x)^(p+1) dx = 1",
+  "note": "a = 1 substituted"
+ },
+ {
+  "id": "GR3.196.1",
+  "gr": "3.196.1",
+  "page": 365,
+  "status": "ok",
+  "lhs": "Integrate[(x + beta)^nu*(u - x)^(mu - 1), {x, 0, u}]",
+  "rhs": [
+   "beta^nu*u^mu/mu*Hypergeometric2F1[1, -nu, 1 + mu, -u/beta]"
+  ],
+  "conds": [
+   "Abs[Arg[u/beta]] < Pi",
+   "Re[mu] > 0",
+   "u > 0"
+  ],
+  "cite": "ET II 185(8)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^u (x+beta)^nu (u-x)^(mu-1) dx = beta^nu u^mu/mu 2F1(1,-nu;1+mu;-u/beta)",
+  "note": "Re mu > 0 and u > 0 added (convergence / limits)"
+ },
+ {
+  "id": "GR3.196.2",
+  "gr": "3.196.2",
+  "page": 365,
+  "status": "ok",
+  "lhs": "Integrate[(x + beta)^(-nu)*(x - u)^(mu - 1), {x, u, Infinity}]",
+  "rhs": [
+   "(u + beta)^(mu - nu)*Beta[nu - mu, mu]"
+  ],
+  "conds": [
+   "Abs[Arg[u/beta]] < Pi",
+   "Re[nu] > Re[mu] > 0",
+   "u > 0"
+  ],
+  "cite": "ET II 201(7)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_u^inf (x+beta)^(-nu)(x-u)^(mu-1) dx = (u+beta)^(mu-nu) B(nu-mu,mu)",
+  "note": "u > 0 added"
+ },
+ {
+  "id": "GR3.196.3",
+  "gr": "3.196.3",
+  "page": 365,
+  "status": "ok",
+  "lhs": "Integrate[(x - a)^(mu - 1)*(b - x)^(nu - 1), {x, a, b}]",
+  "rhs": [
+   "(b - a)^(mu + nu - 1)*Beta[mu, nu]"
+  ],
+  "conds": [
+   "b > a",
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "EH I 10(13)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_a^b (x-a)^(mu-1)(b-x)^(nu-1) dx = (b-a)^(mu+nu-1) B(mu,nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.196.4",
+  "gr": "3.196.4",
+  "page": 365,
+  "status": "ok",
+  "lhs": "Integrate[1/((a - b*x)*(x - 1)^nu), {x, 1, Infinity}]",
+  "rhs": [
+   "-Pi/b*Csc[nu*Pi]*(b/(b - a))^nu"
+  ],
+  "conds": [
+   "a < b",
+   "b > 0",
+   "0 < nu < 1"
+  ],
+  "cite": "LI (23)(5)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_1^inf dx/((a-bx)(x-1)^nu) = -pi/b cosec(nu pi) (b/(b-a))^nu",
+  "note": ""
+ },
+ {
+  "id": "GR3.196.5",
+  "gr": "3.196.5",
+  "page": 365,
+  "status": "ok",
+  "lhs": "Integrate[1/((a - b*x)*(1 - x)^nu), {x, -Infinity, 1}]",
+  "rhs": [
+   "Pi/b*Csc[nu*Pi]*(b/(a - b))^nu"
+  ],
+  "conds": [
+   "a > b > 0",
+   "0 < nu < 1"
+  ],
+  "cite": "LI (24)(10)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_-inf^1 dx/((a-bx)(1-x)^nu) = pi/b cosec(nu pi) (b/(a-b))^nu",
+  "note": ""
+ },
+ {
+  "id": "GR3.197.1",
+  "gr": "3.197.1",
+  "page": 366,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*(beta + x)^(-mu)*(x + gamma)^(-rho), {x, 0, Infinity}]",
+  "rhs": [
+   "beta^(-mu)*gamma^(nu - rho)*Beta[nu, mu - nu + rho]*Hypergeometric2F1[mu, nu, mu + rho, 1 - gamma/beta]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "Abs[Arg[gamma]] < Pi",
+   "Re[nu] > 0",
+   "Re[mu] > Re[nu - rho]"
+  ],
+  "cite": "ET II 233(9)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf x^(nu-1)(beta+x)^(-mu)(x+gamma)^(-rho) dx = beta^(-mu) gamma^(nu-rho) B(nu,mu-nu+rho) 2F1(mu,nu;mu+rho;1-gamma/beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.197.2",
+  "gr": "3.197.2",
+  "page": 366,
+  "status": "ok",
+  "lhs": "Integrate[x^(-lam)*(x + beta)^nu*(x - u)^(mu - 1), {x, u, Infinity}]",
+  "rhs": [
+   "u^(-lam)*(beta + u)^(mu + nu)*Beta[lam - mu - nu, mu]*Hypergeometric2F1[lam, mu, lam - mu, -beta/u]",
+   "u^(-lam)*(beta + u)^(mu + nu)*Beta[lam - mu - nu, mu]*Hypergeometric2F1[lam, mu, lam - nu, -beta/u]"
+  ],
+  "conds": [
+   "0 < Re[mu] < Re[lam - nu]",
+   "u > 0",
+   "beta > 0"
+  ],
+  "cite": "ET II 201(8)",
+  "edition_note": "11",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_u^inf x^(-lam)(x+beta)^nu (x-u)^(mu-1) dx = u^(-lam)(beta+u)^(mu+nu) B(lam-mu-nu,mu) 2F1(lam,mu;lam-mu;-beta/u)",
+  "note": "condition '|arg(u/beta)| < pi or |beta/u| < 1' replaced by u > 0, beta > 0; third 2F1 parameter printed lam-mu, alternative lam-nu (substitution x=u/t plus Euler transform gives lam-nu)"
+ },
+ {
+  "id": "GR3.197.3",
+  "gr": "3.197.3",
+  "page": 366,
+  "status": "ok",
+  "lhs": "Integrate[x^(lam - 1)*(1 - x)^(mu - 1)*(1 - beta*x)^(-nu), {x, 0, 1}]",
+  "rhs": [
+   "Beta[lam, mu]*Hypergeometric2F1[nu, lam, lam + mu, beta]"
+  ],
+  "conds": [
+   "Re[lam] > 0",
+   "Re[mu] > 0",
+   "Abs[beta] < 1"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 x^(lam-1)(1-x)^(mu-1)(1-beta x)^(-nu) dx = B(lam,mu) 2F1(nu,lam;lam+mu;beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.197.4",
+  "gr": "3.197.4",
+  "page": 366,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*(1 - x)^(nu - 1)*(1 + a*x)^(-mu - nu), {x, 0, 1}]",
+  "rhs": [
+   "(1 + a)^(-mu)*Beta[mu, nu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0",
+   "a > -1"
+  ],
+  "cite": "BI(5)4, EH I 10(11)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 x^(mu-1)(1-x)^(nu-1)(1+ax)^(-mu-nu) dx = (1+a)^(-mu) B(mu,nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.197.5",
+  "gr": "3.197.5",
+  "page": 366,
+  "status": "ok",
+  "lhs": "Integrate[x^(lam - 1)*(1 + x)^nu*(1 + alpha*x)^mu, {x, 0, Infinity}]",
+  "rhs": [
+   "Beta[lam, -mu - nu - lam]*Hypergeometric2F1[-mu, lam, -mu - nu, 1 - alpha]"
+  ],
+  "conds": [
+   "Abs[Arg[alpha]] < Pi",
+   "-Re[mu + nu] > Re[lam] > 0"
+  ],
+  "cite": "EH I 60(12), ET I 310(23)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf x^(lam-1)(1+x)^nu(1+alpha x)^mu dx = B(lam,-mu-nu-lam) 2F1(-mu,lam;-mu-nu;1-alpha)",
+  "note": ""
+ },
+ {
+  "id": "GR3.197.6",
+  "gr": "3.197.6",
+  "page": 366,
+  "status": "ok",
+  "lhs": "Integrate[x^(lam - nu)*(x - 1)^(nu - mu - 1)*(alpha*x - 1)^(-lam), {x, 1, Infinity}]",
+  "rhs": [
+   "alpha^(-lam)*Beta[mu, nu - mu]*Hypergeometric2F1[nu, mu, lam, 1/alpha]"
+  ],
+  "conds": [
+   "1 + Re[nu] > Re[lam] > Re[mu]",
+   "Abs[Arg[alpha - 1]] < Pi"
+  ],
+  "cite": "EH I 115(6)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_1^inf x^(lam-nu)(x-1)^(nu-mu-1)(alpha x-1)^(-lam) dx = alpha^(-lam) B(mu,nu-mu) 2F1(nu,mu;lam;1/alpha)",
+  "note": ""
+ },
+ {
+  "id": "GR3.197.7",
+  "gr": "3.197.7",
+  "page": 366,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1/2)*(x + a)^(-mu)*(x + b)^(-mu), {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*(Sqrt[a] + Sqrt[b])^(1 - 2*mu)*Gamma[mu - 1/2]/Gamma[mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI 19(5)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf x^(mu-1/2)(x+a)^(-mu)(x+b)^(-mu) dx = sqrt(pi)(sqrt a + sqrt b)^(1-2mu) Gamma(mu-1/2)/Gamma(mu)",
+  "note": "a > 0, b > 0 added; convergence at infinity actually needs Re mu > 1/2 (book prints Re mu > 0)"
+ },
+ {
+  "id": "GR3.197.8",
+  "gr": "3.197.8",
+  "page": 366,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*(x + alpha)^lam*(u - x)^(mu - 1), {x, 0, u}]",
+  "rhs": [
+   "alpha^lam*u^(mu + nu - 1)*Beta[mu, nu]*Hypergeometric2F1[-lam, nu, mu + nu, -u/alpha]"
+  ],
+  "conds": [
+   "Abs[Arg[u/alpha]] < Pi",
+   "Re[mu] > 0",
+   "Re[nu] > 0",
+   "u > 0"
+  ],
+  "cite": "ET II 186(9)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^u x^(nu-1)(x+alpha)^lam (u-x)^(mu-1) dx = alpha^lam u^(mu+nu-1) B(mu,nu) 2F1(-lam,nu;mu+nu;-u/alpha)",
+  "note": "u > 0 added"
+ },
+ {
+  "id": "GR3.197.9",
+  "gr": "3.197.9",
+  "page": 366,
+  "status": "ok",
+  "lhs": "Integrate[x^(lam - 1)*(1 + x)^(-mu + nu)*(x + beta)^(-nu), {x, 0, Infinity}]",
+  "rhs": [
+   "Beta[mu - lam, lam]*Hypergeometric2F1[nu, mu - lam, mu, 1 - beta]"
+  ],
+  "conds": [
+   "Re[mu] > Re[lam] > 0",
+   "beta > 0"
+  ],
+  "cite": "EH I 205",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf x^(lam-1)(1+x)^(-mu+nu)(x+beta)^(-nu) dx = B(mu-lam,lam) 2F1(nu,mu-lam;mu;1-beta)",
+  "note": "beta > 0 added"
+ },
+ {
+  "id": "GR3.197.10",
+  "gr": "3.197.10",
+  "page": 366,
+  "status": "ok",
+  "lhs": "Integrate[x^(q - 1)/((1 - x)^q*(1 + p*x)), {x, 0, 1}]",
+  "rhs": [
+   "Pi/(1 + p)^q*Csc[q*Pi]"
+  ],
+  "conds": [
+   "0 < q < 1",
+   "p > -1"
+  ],
+  "cite": "BI (5)(1)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 x^(q-1)/((1-x)^q (1+px)) dx = pi/(1+p)^q cosec(q pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.197.11",
+  "gr": "3.197.11",
+  "page": 366,
+  "status": "ok",
+  "lhs": "Integrate[x^(p - 1/2)/((1 - x)^p*(1 + q*x)^p), {x, 0, 1}]",
+  "rhs": [
+   "2*Gamma[p + 1/2]*Gamma[1 - p]/Sqrt[Pi]*Cos[ArcTan[Sqrt[q]]]^(2*p)*Sin[(2*p - 1)*ArcTan[Sqrt[q]]]/((2*p - 1)*Sin[ArcTan[Sqrt[q]]])"
+  ],
+  "conds": [
+   "-1/2 < p < 1",
+   "q > 0"
+  ],
+  "cite": "BI (11)(1)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 x^(p-1/2)/((1-x)^p (1+qx)^p) dx = 2Gamma(p+1/2)Gamma(1-p)/sqrt(pi) cos^(2p)(arctan sqrt q) sin[(2p-1)arctan sqrt q]/((2p-1) sin[arctan sqrt q])",
+  "note": ""
+ },
+ {
+  "id": "GR3.197.12",
+  "gr": "3.197.12",
+  "page": 367,
+  "status": "ok",
+  "lhs": "Integrate[x^(p - 1/2)/((1 - x)^p*(1 - q*x)^p), {x, 0, 1}]",
+  "rhs": [
+   "Gamma[p + 1/2]*Gamma[1 - p]/Sqrt[Pi]*((1 - Sqrt[q])^(1 - 2*p) - (1 + Sqrt[q])^(1 - 2*p))/((2*p - 1)*Sqrt[q])"
+  ],
+  "conds": [
+   "-1/2 < p < 1",
+   "0 < q < 1"
+  ],
+  "cite": "BI (11)(2)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 x^(p-1/2)/((1-x)^p (1-qx)^p) dx = Gamma(p+1/2)Gamma(1-p)/sqrt(pi) ((1-sqrt q)^(1-2p) - (1+sqrt q)^(1-2p))/((2p-1)sqrt q)",
+  "note": ""
+ },
+ {
+  "id": "GR3.198",
+  "gr": "3.198",
+  "page": 367,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*(1 - x)^(nu - 1)*(a*x + b*(1 - x) + c)^(-(mu + nu)), {x, 0, 1}]",
+  "rhs": [
+   "(a + c)^(-mu)*(b + c)^(-nu)*Beta[mu, nu]"
+  ],
+  "conds": [
+   "a >= 0",
+   "b >= 0",
+   "c > 0",
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "FI II 787",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 x^(mu-1)(1-x)^(nu-1)[ax+b(1-x)+c]^(-(mu+nu)) dx = (a+c)^(-mu)(b+c)^(-nu) B(mu,nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.199",
+  "gr": "3.199",
+  "page": 367,
+  "status": "ok",
+  "lhs": "Integrate[(x - a)^(mu - 1)*(b - x)^(nu - 1)*(x - c)^(-mu - nu), {x, a, b}]",
+  "rhs": [
+   "(b - a)^(mu + nu - 1)*(b - c)^(-mu)*(a - c)^(-nu)*Beta[mu, nu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0",
+   "c < a < b"
+  ],
+  "cite": "EH I 10(14)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_a^b (x-a)^(mu-1)(b-x)^(nu-1)(x-c)^(-mu-nu) dx = (b-a)^(mu+nu-1)(b-c)^(-mu)(a-c)^(-nu) B(mu,nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.211",
+  "gr": "3.211",
+  "page": 367,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(lam - 1)*(1 - x)^(mu - 1)*(1 - u*x)^(-rho)*(1 - v*x)^(-sigma), {x, 0, 1}]",
+  "rhs": [
+   "Beta[mu, lam]*AppellF1[lam, rho, sigma, lam + mu, u, v]"
+  ],
+  "conds": [
+   "Re[lam] > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "EH I 231(5)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 x^(lam-1)(1-x)^(mu-1)(1-ux)^(-rho)(1-vx)^(-sigma) dx = B(mu,lam) F1(lam,rho,sigma,lam+mu;u,v)",
+  "note": "Appell F1 written as AppellF1 (no Mathilda head); |u|,|v| < 1 implicit",
+  "reason": "Appell F1 has no Mathilda head"
+ },
+ {
+  "id": "GR3.212",
+  "gr": "3.212",
+  "page": 367,
+  "status": "ok",
+  "lhs": "Integrate[((1 + a*x)^(-p) + (1 + b*x)^(-p))*x^(q - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "2*(a*b)^(-q/2)*Beta[q, p - q]*Cos[q*ArcCos[(a + b)/(2*Sqrt[a*b])]]"
+  ],
+  "conds": [
+   "p > q > 0",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (19)(9)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf [(1+ax)^(-p)+(1+bx)^(-p)] x^(q-1) dx = 2(ab)^(-q/2) B(q,p-q) cos{q arccos[(a+b)/(2 sqrt(ab))]}",
+  "note": "a > 0, b > 0 added"
+ },
+ {
+  "id": "GR3.213",
+  "gr": "3.213",
+  "page": 367,
+  "status": "ok",
+  "lhs": "Integrate[((1 + a*x)^(-p) - (1 + b*x)^(-p))*x^(q - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "-2*I*(a*b)^(-q/2)*Beta[q, p - q]*Sin[q*ArcCos[(a + b)/(2*Sqrt[a*b])]]"
+  ],
+  "conds": [
+   "p > q > 0",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (19)(10)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf [(1+ax)^(-p)-(1+bx)^(-p)] x^(q-1) dx = -2i(ab)^(-q/2) B(q,p-q) sin{q arccos[(a+b)/(2 sqrt(ab))]}",
+  "note": "a > 0, b > 0 added; arccos argument >= 1 so the value is real"
+ },
+ {
+  "id": "GR3.214",
+  "gr": "3.214",
+  "page": 367,
+  "status": "ok",
+  "lhs": "Integrate[(1 + x)^(mu - 1)*(1 - x)^(nu - 1) + (1 + x)^(nu - 1)*(1 - x)^(mu - 1), {x, 0, 1}]",
+  "rhs": [
+   "2^(mu + nu - 1)*Beta[mu, nu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "LI(1)(15), EH I 10(10)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 [(1+x)^(mu-1)(1-x)^(nu-1) + (1+x)^(nu-1)(1-x)^(mu-1)] dx = 2^(mu+nu-1) B(mu,nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.215",
+  "gr": "3.215",
+  "page": 367,
+  "status": "ok",
+  "lhs": "Integrate[a^mu*x^(mu - 1)*(1 - a*x)^(nu - 1) + (1 - a)^nu*x^(nu - 1)*(1 - (1 - a)*x)^(mu - 1), {x, 0, 1}]",
+  "rhs": [
+   "Beta[mu, nu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0",
+   "Abs[a] < 1"
+  ],
+  "cite": "BI (1)(16)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 {a^mu x^(mu-1)(1-ax)^(nu-1) + (1-a)^nu x^(nu-1)[1-(1-a)x]^(mu-1)} dx = B(mu,nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.216.1",
+  "gr": "3.216.1",
+  "page": 367,
+  "status": "ok",
+  "lhs": "Integrate[(x^(mu - 1) + x^(nu - 1))/(1 + x)^(mu + nu), {x, 0, 1}]",
+  "rhs": [
+   "Beta[mu, nu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "FI II 775",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 (x^(mu-1)+x^(nu-1))/(1+x)^(mu+nu) dx = B(mu,nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.216.2",
+  "gr": "3.216.2",
+  "page": 367,
+  "status": "ok",
+  "lhs": "Integrate[(x^(mu - 1) + x^(nu - 1))/(1 + x)^(mu + nu), {x, 1, Infinity}]",
+  "rhs": [
+   "Beta[mu, nu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "FI II 775",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_1^inf (x^(mu-1)+x^(nu-1))/(1+x)^(mu+nu) dx = B(mu,nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.217",
+  "gr": "3.217",
+  "page": 367,
+  "status": "ok",
+  "lhs": "Integrate[b^p*x^(p - 1)/(1 + b*x)^p - (1 + b*x)^(p - 1)/(b^(p - 1)*x^p), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Cot[p*Pi]"
+  ],
+  "conds": [
+   "0 < p < 1",
+   "b > 0"
+  ],
+  "cite": "BI(18)(13)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf {b^p x^(p-1)/(1+bx)^p - (1+bx)^(p-1)/(b^(p-1) x^p)} dx = pi cot(p pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.218",
+  "gr": "3.218",
+  "page": 367,
+  "status": "ok",
+  "lhs": "Integrate[(x^(2*p - 1) - (a + x)^(2*p - 1))/((a + x)^p*x^p), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Cot[p*Pi]"
+  ],
+  "conds": [
+   "p < 1",
+   "a > 0"
+  ],
+  "cite": "BI (18)(7)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf (x^(2p-1)-(a+x)^(2p-1))/((a+x)^p x^p) dx = pi cot(p pi)",
+  "note": "a > 0 added; convergence at 0 also needs p > 0"
+ },
+ {
+  "id": "GR3.219",
+  "gr": "3.219",
+  "page": 367,
+  "status": "ok",
+  "lhs": "Integrate[x^nu/(x + 1)^(nu + 1) - x^mu/(x + 1)^(mu + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "PolyGamma[mu + 1] - PolyGamma[nu + 1]"
+  ],
+  "conds": [
+   "Re[mu] > -1",
+   "Re[nu] > -1"
+  ],
+  "cite": "BI (19)(13)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf {x^nu/(x+1)^(nu+1) - x^mu/(x+1)^(mu+1)} dx = psi(mu+1) - psi(nu+1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.221.1",
+  "gr": "3.221.1",
+  "page": 367,
+  "status": "ok",
+  "lhs": "Integrate[(x - a)^(p - 1)/(x - b), {x, a, Infinity}]",
+  "rhs": [
+   "Pi*(a - b)^(p - 1)*Csc[p*Pi]"
+  ],
+  "conds": [
+   "a > b",
+   "0 < p < 1"
+  ],
+  "cite": "LI (24)(8)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_a^inf (x-a)^(p-1)/(x-b) dx = pi (a-b)^(p-1) cosec(p pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.221.2",
+  "gr": "3.221.2",
+  "page": 368,
+  "status": "ok",
+  "lhs": "Integrate[(a - x)^(p - 1)/(x - b), {x, -Infinity, a}]",
+  "rhs": [
+   "-Pi*(b - a)^(p - 1)*Csc[p*Pi]"
+  ],
+  "conds": [
+   "a < b",
+   "0 < p < 1"
+  ],
+  "cite": "LI (24)(8)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_-inf^a (a-x)^(p-1)/(x-b) dx = -pi (b-a)^(p-1) cosec(p pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.222.1",
+  "gr": "3.222.1",
+  "page": 368,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/(1 + x), {x, 0, 1}]",
+  "rhs": [
+   "(PolyGamma[(mu + 1)/2] - PolyGamma[mu/2])/2"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 x^(mu-1)/(1+x) dx = beta(mu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.222.2a",
+  "gr": "3.222.2",
+  "page": 368,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/(x + a), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Csc[mu*Pi]*a^(mu - 1)"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "FI II 718, FI II 737",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf x^(mu-1)/(x+a) dx = pi cosec(mu pi) a^(mu-1) [a>0]",
+  "note": ""
+ },
+ {
+  "id": "GR3.222.2b",
+  "gr": "3.222.2",
+  "page": 368,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^(mu - 1)/(x + a), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*Cot[mu*Pi]*(-a)^(mu - 1)"
+  ],
+  "conds": [
+   "a < 0",
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "BI(18)(2), ET II 249(28)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf x^(mu-1)/(x+a) dx = -pi cot(mu pi)(-a)^(mu-1) [a<0]",
+  "note": "a < 0: pole at x = -a on the path; the value is a principal value",
+  "reason": "pole on the integration path for a < 0; value is a principal value"
+ },
+ {
+  "id": "GR3.223.1",
+  "gr": "3.223.1",
+  "page": 368,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/((beta + x)*(gamma + x)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(gamma - beta)*(beta^(mu - 1) - gamma^(mu - 1))*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "Abs[Arg[gamma]] < Pi",
+   "0 < Re[mu] < 2"
+  ],
+  "cite": "ET I 309(7)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf x^(mu-1)/((beta+x)(gamma+x)) dx = pi/(gamma-beta)(beta^(mu-1)-gamma^(mu-1)) cosec(mu pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.223.2",
+  "gr": "3.223.2",
+  "page": 368,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^(mu - 1)/((beta + x)*(alpha - x)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(alpha + beta)*(beta^(mu - 1)*Csc[mu*Pi] + alpha^(mu - 1)*Cot[mu*Pi])"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "alpha > 0",
+   "0 < Re[mu] < 2"
+  ],
+  "cite": "ET I 309(8)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf x^(mu-1)/((beta+x)(alpha-x)) dx = pi/(alpha+beta)[beta^(mu-1) cosec(mu pi) + alpha^(mu-1) cot(mu pi)]",
+  "note": "pole at x = alpha on the path: principal value",
+  "reason": "pole at x = alpha > 0 on the integration path; principal value"
+ },
+ {
+  "id": "GR3.223.3",
+  "gr": "3.223.3",
+  "page": 368,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^(mu - 1)/((a - x)*(b - x)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Cot[mu*Pi]*(a^(mu - 1) - b^(mu - 1))/(b - a)"
+  ],
+  "conds": [
+   "a > b > 0",
+   "0 < Re[mu] < 2"
+  ],
+  "cite": "ET I 309(9)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf x^(mu-1)/((a-x)(b-x)) dx = pi cot(mu pi)(a^(mu-1)-b^(mu-1))/(b-a)",
+  "note": "poles at x = a, b on the path: principal value",
+  "reason": "poles at x = a, b > 0 on the integration path; principal value"
+ },
+ {
+  "id": "GR3.224",
+  "gr": "3.224",
+  "page": 368,
+  "status": "ok",
+  "lhs": "Integrate[(x + beta)*x^(mu - 1)/((x + gamma)*(x + delta)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Csc[mu*Pi]*((gamma - beta)/(gamma - delta)*gamma^(mu - 1) + (delta - beta)/(delta - gamma)*delta^(mu - 1))"
+  ],
+  "conds": [
+   "Abs[Arg[gamma]] < Pi",
+   "Abs[Arg[delta]] < Pi",
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "ET I 309(10)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf (x+beta)x^(mu-1)/((x+gamma)(x+delta)) dx = pi cosec(mu pi){(gamma-beta)/(gamma-delta) gamma^(mu-1) + (delta-beta)/(delta-gamma) delta^(mu-1)}",
+  "note": ""
+ },
+ {
+  "id": "GR3.225.1",
+  "gr": "3.225.1",
+  "page": 368,
+  "status": "ok",
+  "lhs": "Integrate[(x - 1)^(p - 1)/x^2, {x, 1, Infinity}]",
+  "rhs": [
+   "(1 - p)*Pi*Csc[p*Pi]"
+  ],
+  "conds": [
+   "-1 < p < 1"
+  ],
+  "cite": "BI (23)(8)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_1^inf (x-1)^(p-1)/x^2 dx = (1-p) pi cosec(p pi)",
+  "note": "convergence at x=1 needs p > 0 (book prints -1 < p < 1)"
+ },
+ {
+  "id": "GR3.225.2",
+  "gr": "3.225.2",
+  "page": 368,
+  "status": "ok",
+  "lhs": "Integrate[(x - 1)^(1 - p)/x^3, {x, 1, Infinity}]",
+  "rhs": [
+   "1/2*p*(1 - p)*Pi*Csc[p*Pi]"
+  ],
+  "conds": [
+   "0 < p < 1"
+  ],
+  "cite": "BI (23)(1)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_1^inf (x-1)^(1-p)/x^3 dx = 1/2 p(1-p) pi cosec(p pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.225.3",
+  "gr": "3.225.3",
+  "page": 368,
+  "status": "ok",
+  "lhs": "Integrate[x^p/(1 + x)^3, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*p*(1 - p)*Csc[p*Pi]"
+  ],
+  "conds": [
+   "-1 < p < 2"
+  ],
+  "cite": "BI (16)(5)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^inf x^p/(1+x)^3 dx = pi/2 p(1-p) cosec(p pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.226.1",
+  "gr": "3.226.1",
+  "page": 368,
+  "status": "ok",
+  "lhs": "Integrate[x^n/Sqrt[1 - x], {x, 0, 1}]",
+  "rhs": [
+   "2*(2*n)!!/(2*n + 1)!!"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (8)(1)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 x^n/sqrt(1-x) dx = 2 (2n)!!/(2n+1)!!",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR3.226.2",
+  "gr": "3.226.2",
+  "page": 368,
+  "status": "ok",
+  "lhs": "Integrate[x^(n - 1/2)/Sqrt[1 - x], {x, 0, 1}]",
+  "rhs": [
+   "(2*n - 1)!!/(2*n)!!*Pi"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (8)(2)",
+  "edition_note": "",
+  "section": "3.19-3.23 Combinations of powers of x and powers of binomials of the form (alpha + beta x)",
+  "tex": "int_0^1 x^(n-1/2)/sqrt(1-x) dx = (2n-1)!!/(2n)!! pi",
+  "note": "n nonnegative integer implied"
+ }
+]

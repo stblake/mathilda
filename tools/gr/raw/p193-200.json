@@ -1,0 +1,1444 @@
+[
+ {
+  "id": "GR2.476.2a",
+  "gr": "2.476.2a",
+  "page": 193,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[k*x]/(a + b*x), x]",
+  "rhs": [
+   "(Cosh[k*a/b]*CoshIntegral[(k*(a + b*x)/b)] - Sinh[k*a/b]*SinhIntegral[(k*(a + b*x)/b)])/b"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int cosh kx/(a+bx) = 1/b[cosh(ka/b) chi(u) - sinh(ka/b) shi(u)], u=k(a+bx)/b",
+  "note": "u = k(a+bx)/b substituted"
+ },
+ {
+  "id": "GR2.476.2b",
+  "gr": "2.476.2b",
+  "page": 193,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[k*x]/(a + b*x), x]",
+  "rhs": [
+   "(Exp[-k*a/b]*ExpIntegralEi[(k*(a + b*x)/b)] + Exp[k*a/b]*ExpIntegralEi[-(k*(a + b*x)/b)])/(2*b)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int cosh kx/(a+bx) = 1/(2b)[exp(-ka/b) Ei(u) + exp(ka/b) Ei(-u)]",
+  "note": "u = k(a+bx)/b substituted"
+ },
+ {
+  "id": "GR2.476.3",
+  "gr": "2.476.3",
+  "page": 193,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[k*x]/(a + b*x)^2, x]",
+  "rhs": [
+   "-Sinh[k*x]/(b*(a + b*x)) + k/b*((Cosh[k*a/b]*CoshIntegral[(k*(a + b*x)/b)] - Sinh[k*a/b]*SinhIntegral[(k*(a + b*x)/b)])/b)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int sinh kx/(a+bx)^2 = -1/b sinh kx/(a+bx) + k/b int cosh kx/(a+bx) (see 2.476 2)",
+  "note": "integral on rhs replaced by closed form of 2.476.2 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.476.4",
+  "gr": "2.476.4",
+  "page": 193,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[k*x]/(a + b*x)^2, x]",
+  "rhs": [
+   "-Cosh[k*x]/(b*(a + b*x)) + k/b*((Cosh[k*a/b]*SinhIntegral[(k*(a + b*x)/b)] - Sinh[k*a/b]*CoshIntegral[(k*(a + b*x)/b)])/b)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int cosh kx/(a+bx)^2 = -1/b cosh kx/(a+bx) + k/b int sinh kx/(a+bx) (see 2.476 1)",
+  "note": "integral on rhs replaced by closed form of 2.476.1 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.476.5",
+  "gr": "2.476.5",
+  "page": 193,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[k*x]/(a + b*x)^3, x]",
+  "rhs": [
+   "-Sinh[k*x]/(2*b*(a + b*x)^2) - k*Cosh[k*x]/(2*b^2*(a + b*x)) + k^2/(2*b^2)*((Cosh[k*a/b]*SinhIntegral[(k*(a + b*x)/b)] - Sinh[k*a/b]*CoshIntegral[(k*(a + b*x)/b)])/b)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int sinh kx/(a+bx)^3 = -sinh/(2b z^2) - k cosh/(2b^2 z) + k^2/(2b^2) int sinh kx/z",
+  "note": "integral on rhs replaced by closed form of 2.476.1 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.476.6",
+  "gr": "2.476.6",
+  "page": 193,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[k*x]/(a + b*x)^3, x]",
+  "rhs": [
+   "-Cosh[k*x]/(2*b*(a + b*x)^2) - k*Sinh[k*x]/(2*b^2*(a + b*x)) + k^2/(2*b^2)*((Cosh[k*a/b]*CoshIntegral[(k*(a + b*x)/b)] - Sinh[k*a/b]*SinhIntegral[(k*(a + b*x)/b)])/b)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int cosh kx/(a+bx)^3 = -cosh/(2b z^2) - k sinh/(2b^2 z) + k^2/(2b^2) int cosh kx/z",
+  "note": "integral on rhs replaced by closed form of 2.476.2 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.476.7",
+  "gr": "2.476.7",
+  "page": 193,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[k*x]/(a + b*x)^4, x]",
+  "rhs": [
+   "-Sinh[k*x]/(3*b*(a + b*x)^3) - k*Cosh[k*x]/(6*b^2*(a + b*x)^2) - k^2*Sinh[k*x]/(6*b^3*(a + b*x)) + k^3/(6*b^3)*((Cosh[k*a/b]*CoshIntegral[(k*(a + b*x)/b)] - Sinh[k*a/b]*SinhIntegral[(k*(a + b*x)/b)])/b)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int sinh kx/(a+bx)^4 = ... + k^3/(6b^3) int cosh kx/z",
+  "note": "integral on rhs replaced by closed form of 2.476.2 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.476.8",
+  "gr": "2.476.8",
+  "page": 193,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[k*x]/(a + b*x)^4, x]",
+  "rhs": [
+   "-Cosh[k*x]/(3*b*(a + b*x)^3) - k*Sinh[k*x]/(6*b^2*(a + b*x)^2) - k^2*Cosh[k*x]/(6*b^3*(a + b*x)) + k^3/(6*b^3)*((Cosh[k*a/b]*SinhIntegral[(k*(a + b*x)/b)] - Sinh[k*a/b]*CoshIntegral[(k*(a + b*x)/b)])/b)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int cosh kx/(a+bx)^4 = ... + k^3/(6b^3) int sinh kx/z",
+  "note": "integral on rhs replaced by closed form of 2.476.1 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.476.9",
+  "gr": "2.476.9",
+  "page": 193,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[k*x]/(a + b*x)^5, x]",
+  "rhs": [
+   "-Sinh[k*x]/(4*b*(a + b*x)^4) - k*Cosh[k*x]/(12*b^2*(a + b*x)^3) - k^2*Sinh[k*x]/(24*b^3*(a + b*x)^2) - k^3*Cosh[k*x]/(24*b^4*(a + b*x)) + k^4/(24*b^4)*((Cosh[k*a/b]*SinhIntegral[(k*(a + b*x)/b)] - Sinh[k*a/b]*CoshIntegral[(k*(a + b*x)/b)])/b)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int sinh kx/(a+bx)^5 = ... + k^4/(24b^4) int sinh kx/z",
+  "note": "integral on rhs replaced by closed form of 2.476.1 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.476.10",
+  "gr": "2.476.10",
+  "page": 193,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[k*x]/(a + b*x)^5, x]",
+  "rhs": [
+   "-Cosh[k*x]/(4*b*(a + b*x)^4) - k*Sinh[k*x]/(12*b^2*(a + b*x)^3) - k^2*Cosh[k*x]/(24*b^3*(a + b*x)^2) - k^3*Sinh[k*x]/(24*b^4*(a + b*x)) + k^4/(24*b^4)*((Cosh[k*a/b]*CoshIntegral[(k*(a + b*x)/b)] - Sinh[k*a/b]*SinhIntegral[(k*(a + b*x)/b)])/b)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int cosh kx/(a+bx)^5 = ... + k^4/(24b^4) int cosh kx/z",
+  "note": "integral on rhs replaced by closed form of 2.476.2 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.476.11",
+  "gr": "2.476.11",
+  "page": 193,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[k*x]/(a + b*x)^6, x]",
+  "rhs": [
+   "-Sinh[k*x]/(5*b*(a + b*x)^5) - k*Cosh[k*x]/(20*b^2*(a + b*x)^4) - k^2*Sinh[k*x]/(60*b^3*(a + b*x)^3) - k^3*Cosh[k*x]/(120*b^4*(a + b*x)^2) - k^4*Sinh[k*x]/(120*b^5*(a + b*x)) + k^5/(120*b^5)*((Cosh[k*a/b]*CoshIntegral[(k*(a + b*x)/b)] - Sinh[k*a/b]*SinhIntegral[(k*(a + b*x)/b)])/b)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int sinh kx/(a+bx)^6 = ... + k^5/(120b^5) int cosh kx/z",
+  "note": "integral on rhs replaced by closed form of 2.476.2 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.476.12",
+  "gr": "2.476.12",
+  "page": 193,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[k*x]/(a + b*x)^6, x]",
+  "rhs": [
+   "-Cosh[k*x]/(5*b*(a + b*x)^5) - k*Sinh[k*x]/(20*b^2*(a + b*x)^4) - k^2*Cosh[k*x]/(60*b^3*(a + b*x)^3) - k^3*Sinh[k*x]/(120*b^4*(a + b*x)^2) - k^4*Cosh[k*x]/(120*b^5*(a + b*x)) + k^5/(120*b^5)*((Cosh[k*a/b]*SinhIntegral[(k*(a + b*x)/b)] - Sinh[k*a/b]*CoshIntegral[(k*(a + b*x)/b)])/b)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int cosh kx/(a+bx)^6 = ... + k^5/(120b^5) int sinh kx/z",
+  "note": "integral on rhs replaced by closed form of 2.476.1 (u = k(a+bx)/b)"
+ },
+ {
+  "id": "GR2.477.1",
+  "gr": "2.477.1",
+  "page": 194,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^p/sinh^q x = ... + p(p-1)/((q-1)(q-2)) int x^(p-2)/sinh^(q-2) - (q-2)/(q-1) int x^p/sinh^(q-2) [q>2]",
+  "reason": "reduction formula",
+  "cite": "GU (353)(8a)",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers"
+ },
+ {
+  "id": "GR2.477.2",
+  "gr": "2.477.2",
+  "page": 194,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^p/cosh^q x = ... - p(p-1)/((q-1)(q-2)) int x^(p-2)/cosh^(q-2) + (q-2)/(q-1) int x^p/cosh^(q-2) [q>2]",
+  "reason": "reduction formula",
+  "cite": "GU (353)(10a)",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers"
+ },
+ {
+  "id": "GR2.477.3",
+  "gr": "2.477.3",
+  "page": 194,
+  "status": "ok",
+  "lhs": "Integrate[x^n/Sinh[x], x]",
+  "rhs": [
+   "Sum[(2 - 2^(2*k))*BernoulliB[2*k]*x^(n + 2*k)/((n + 2*k)*(2*k)!), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "n > 0"
+  ],
+  "cite": "GU(353)(8b)",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x^n/sinh x = sum_{k>=0} (2-2^(2k)) B_2k x^(n+2k)/((n+2k)(2k)!) [|x|<pi, n>0]",
+  "note": "|x| < pi is a condition on the integration variable"
+ },
+ {
+  "id": "GR2.477.4",
+  "gr": "2.477.4",
+  "page": 194,
+  "status": "ok",
+  "lhs": "Integrate[x^n/Cosh[x], x]",
+  "rhs": [
+   "Sum[EulerE[2*k]*x^(n + 2*k + 1)/((n + 2*k + 1)*(2*k)!), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "n >= 0"
+  ],
+  "cite": "GU (353)(10b)",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x^n/cosh x = sum E_2k x^(n+2k+1)/((n+2k+1)(2k)!) [|x|<pi/2, n>=0]",
+  "note": "|x| < pi/2 is a condition on the integration variable"
+ },
+ {
+  "id": "GR2.477.5",
+  "gr": "2.477.5",
+  "page": 194,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^n*Sinh[x]), x]",
+  "rhs": [
+   "-(1 + (-1)^n)*(2^(n - 1) - 1)/n!*BernoulliB[n]*Log[x] + Sum[If[2*k == n, 0, (2 - 2^(2*k))/((2*k - n)*(2*k)!)*BernoulliB[2*k]*x^(2*k - n)], {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (353)(9b)",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int dx/(x^n sinh x) = -[1+(-1)^n](2^(n-1)-1)/n! B_n ln x + sum_{k>=0, k!=n/2} (2-2^(2k))/((2k-n)(2k)!) B_2k x^(2k-n) [|x|<pi, n>=1]",
+  "note": "|x| < pi is a condition on the integration variable; the excluded term k = n/2 is written as If[2*k == n, 0, ...]"
+ },
+ {
+  "id": "GR2.477.6",
+  "gr": "2.477.6",
+  "page": 194,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^n*Cosh[x]), x]",
+  "rhs": [
+   "Sum[If[2*k == n - 1, 0, EulerE[2*k]*x^(2*k - n + 1)/((2*k - n + 1)*(2*k)!)], {k, 0, Infinity}] + (1 + (-1)^n)/2 + EulerE[n - 1]/(n - 1)!*Log[x]",
+   "Sum[If[2*k == n - 1, 0, EulerE[2*k]*x^(2*k - n + 1)/((2*k - n + 1)*(2*k)!)], {k, 0, Infinity}] + (1 - (-1)^n)/2*EulerE[n - 1]/(n - 1)!*Log[x]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (353)(11b)",
+  "edition_note": "11",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int dx/(x^n cosh x) = sum_{k>=0, k!=(n-1)/2} E_2k x^(2k-n+1)/((2k-n+1)(2k)!) + 1/2[1+(-1)^n] + E_(n-1)/(n-1)! ln x [|x|<pi/2]",
+  "note": "|x| < pi/2 is a condition on the integration variable; printed as '+ 1/2[1+(-1)^n] + E_(n-1)/(n-1)! ln x' (a constant plus the log term); second candidate reads the bracket as the factor 1/2[1-(-1)^n] multiplying the log term; n integer implied by the (-1)^n"
+ },
+ {
+  "id": "GR2.477.7",
+  "gr": "2.477.7",
+  "page": 194,
+  "status": "ok",
+  "lhs": "Integrate[x^n/Sinh[x]^2, x]",
+  "rhs": [
+   "-x^n*Coth[x] + n*Sum[2^(2*k)*BernoulliB[2*k]*x^(n + 2*k - 1)/((n + 2*k - 1)*(2*k)!), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "n > 1"
+  ],
+  "cite": "GU (353)(8c)",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x^n/sinh^2 x = -x^n coth x + n sum_{k>=0} 2^(2k) B_2k x^(n+2k-1)/((n+2k-1)(2k)!) [n>1, |x|<pi]",
+  "note": "|x| < pi is a condition on the integration variable"
+ },
+ {
+  "id": "GR2.477.8",
+  "gr": "2.477.8",
+  "page": 194,
+  "status": "ok",
+  "lhs": "Integrate[x^n/Cosh[x]^2, x]",
+  "rhs": [
+   "x^n*Tanh[x] - n*Sum[2^(2*k)*(2^(2*k) - 1)*BernoulliB[2*k]*x^(n + 2*k - 1)/((n + 2*k - 1)*(2*k)!), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "n > 1"
+  ],
+  "cite": "GU (353)(10c)",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x^n/cosh^2 x = x^n tanh x - n sum_{k>=1} 2^(2k)(2^(2k)-1) B_2k x^(n+2k-1)/((n+2k-1)(2k)!) [n>1, |x|<pi/2]",
+  "note": "|x| < pi/2 is a condition on the integration variable"
+ },
+ {
+  "id": "GR2.477.9",
+  "gr": "2.477.9",
+  "page": 194,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^n*Sinh[x]^2), x]",
+  "rhs": [
+   "-Coth[x]/x^n - (1 - (-1)^n)*2^n*n/(n + 1)!*BernoulliB[n + 1]*Log[x] - n/x^(n + 1)*Sum[If[2*k == n + 1, 0, BernoulliB[2*k]/((2*k - n - 1)*(2*k)!)*(2*x)^(2^k)], {k, 0, Infinity}]",
+   "-Coth[x]/x^n - (1 - (-1)^n)*2^n*n/(n + 1)!*BernoulliB[n + 1]*Log[x] - n/x^(n + 1)*Sum[If[2*k == n + 1, 0, BernoulliB[2*k]/((2*k - n - 1)*(2*k)!)*(2*x)^(2*k)], {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (353)(9c)",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int dx/(x^n sinh^2 x) = -coth x/x^n - [1-(-1)^n] 2^n n/(n+1)! B_(n+1) ln x - n/x^(n+1) sum_{k>=0, k!=(n+1)/2} B_2k/((2k-n-1)(2k)!) (2x)^(2^k) [|x|<pi]",
+  "note": "|x| < pi is a condition on the integration variable; book prints exponent (2x)^(2^k), misprint for (2x)^(2k) (second candidate, from the coth x series); n integer implied by (-1)^n"
+ },
+ {
+  "id": "GR2.477.10",
+  "gr": "2.477.10",
+  "page": 195,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^n*Cosh[x]^2), x]",
+  "rhs": [
+   "Tanh[x]/x^n + (1 - (-1)^n) - 2*n*(2^(n + 1) - 1)*n/(n + 1)!*BernoulliB[n + 1]*Log[x] + n/x^(n + 1)*Sum[If[2*k == n + 1, 0, (2^(2*k) - 1)*BernoulliB[2*k]/((2*k - n - 1)*(2*k)!)*(2*x)^(2^k)], {k, 1, Infinity}]",
+   "Tanh[x]/x^n + (1 - (-1)^n)*2^n*n*(2^(n + 1) - 1)/(n + 1)!*BernoulliB[n + 1]*Log[x] + n/x^(n + 1)*Sum[If[2*k == n + 1, 0, (2^(2*k) - 1)*BernoulliB[2*k]/((2*k - n - 1)*(2*k)!)*(2*x)^(2*k)], {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (353)(11c)",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int dx/(x^n cosh^2 x) = tanh x/x^n + [1-(-1)^n] - 2n(2^(n+1)-1)n/(n+1)! B_(n+1) ln x + n/x^(n+1) sum_{k>=1, k!=(n+1)/2} (2^(2k)-1) B_2k/((2k-n-1)(2k)!) (2x)^(2^k) [|x|<pi/2]",
+  "note": "|x| < pi/2 is a condition on the integration variable; printed log term '[1-(-1)^n] - 2n(2^(n+1)-1)n/(n+1)! B_(n+1) ln x' and exponent (2x)^(2^k) look misprinted; second candidate (derived from the tanh series): +[1-(-1)^n] 2^n n (2^(n+1)-1)/(n+1)! B_(n+1) ln x and (2x)^(2k)"
+ },
+ {
+  "id": "GR2.477.11",
+  "gr": "2.477.11",
+  "page": 195,
+  "status": "ok",
+  "lhs": "Integrate[x/Sinh[x]^(2*n), x]",
+  "rhs": [
+   "Sum[(-1)^k*Product[2*n - 2*j, {j, 1, k - 1}]/Product[2*n - 2*j + 1, {j, 1, k}]*(x*Cosh[x]/Sinh[x]^(2*n - 2*k + 1) + 1/((2*n - 2*k)*Sinh[x]^(2*n - 2*k))), {k, 1, n - 1}] + (-1)^(n - 1)*(2*n - 2)!!/(2*n - 1)!!*(-x*Coth[x] + Log[Sinh[x]])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (353)(8e)",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x/sinh^(2n) x = sum_{k=1}^{n-1} (-1)^k (2n-2)(2n-4)..(2n-2k+2)/((2n-1)(2n-3)..(2n-2k+1)) {x cosh x/sinh^(2n-2k+1) x + 1/((2n-2k) sinh^(2n-2k) x)} + (-1)^(n-1)(2n-2)!!/(2n-1)!! int x/sinh^2 x (see 2.477 17)",
+  "note": "int x dx/sinh^2 x replaced by 2.477.17 closed form; descending products written as Product"
+ },
+ {
+  "id": "GR2.477.12",
+  "gr": "2.477.12",
+  "page": 195,
+  "status": "ok",
+  "lhs": "Integrate[x/Sinh[x]^(2*n - 1), x]",
+  "rhs": [
+   "Sum[(-1)^k*Product[2*n - 2*j - 1, {j, 1, k - 1}]/Product[2*n - 2*j, {j, 1, k}]*(x*Cosh[x]/Sinh[x]^(2*n - 2*k) + 1/((2*n - 2*k - 1)*Sinh[x]^(2*n - 2*k - 1))), {k, 1, n - 1}] + (-1)^(n - 1)*(2*n - 3)!!/(2*n - 2)!!*Sum[(2 - 2^(2*j))*BernoulliB[2*j]*x^(2*j + 1)/((2*j + 1)*(2*j)!), {j, 0, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (353)(8e)",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x/sinh^(2n-1) x = sum_{k=1}^{n-1} (-1)^k (2n-3)(2n-5)..(2n-2k+1)/((2n-2)(2n-4)..(2n-2k)) {x cosh x/sinh^(2n-2k) x + 1/((2n-2k-1) sinh^(2n-2k-1) x)} + (-1)^(n-1)(2n-3)!!/(2n-2)!! int x/sinh x (see 2.477 15)",
+  "note": "int x dx/sinh x replaced by the 2.477.15 series (valid |x| < pi, condition on the integration variable); descending products written as Product"
+ },
+ {
+  "id": "GR2.477.13",
+  "gr": "2.477.13",
+  "page": 195,
+  "status": "ok",
+  "lhs": "Integrate[x/Cosh[x]^(2*n), x]",
+  "rhs": [
+   "Sum[Product[2*n - 2*j, {j, 1, k - 1}]/Product[2*n - 2*j + 1, {j, 1, k}]*(x*Sinh[x]/Cosh[x]^(2*n - 2*k + 1) + 1/((2*n - 2*k)*Cosh[x]^(2*n - 2*k))), {k, 1, n - 1}] + (2*n - 2)!!/(2*n - 1)!!*(x*Tanh[x] - Log[Cosh[x]])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (353)(10e)",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x/cosh^(2n) x = sum_{k=1}^{n-1} (2n-2)..(2n-2k+2)/((2n-1)..(2n-2k+1)) {x sinh x/cosh^(2n-2k+1) x + 1/((2n-2k) cosh^(2n-2k) x)} + (2n-2)!!/(2n-1)!! int x/cosh^2 x (see 2.477 18)",
+  "note": "int x dx/cosh^2 x replaced by 2.477.18 closed form; descending products written as Product"
+ },
+ {
+  "id": "GR2.477.14",
+  "gr": "2.477.14",
+  "page": 195,
+  "status": "ok",
+  "lhs": "Integrate[x/Cosh[x]^(2*n - 1), x]",
+  "rhs": [
+   "Sum[Product[2*n - 2*j - 1, {j, 1, k - 1}]/Product[2*n - 2*j, {j, 1, k}]*(x*Sinh[x]/Cosh[x]^(2*n - 2*k) + 1/((2*n - 2*k - 1)*Cosh[x]^(2*n - 2*k - 1))), {k, 1, n - 1}] + (2*n - 3)!!/(2*n - 2)!!*Sum[EulerE[2*j]*x^(2*j + 2)/((2*j + 2)*(2*j)!), {j, 0, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GU (353)(10e)",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x/cosh^(2n-1) x = sum_{k=1}^{n-1} (2n-3)..(2n-2k+1)/((2n-2)..(2n-2k)) {x sinh x/cosh^(2n-2k) x + 1/((2n-2k-1) cosh^(2n-2k-1) x)} + (2n-3)!!/(2n-2)!! int x/cosh x (see 2.477 16)",
+  "note": "int x dx/cosh x replaced by the 2.477.16 series (valid |x| < pi/2, condition on the integration variable); descending products written as Product"
+ },
+ {
+  "id": "GR2.477.15",
+  "gr": "2.477.15",
+  "page": 195,
+  "status": "ok",
+  "lhs": "Integrate[x/Sinh[x], x]",
+  "rhs": [
+   "Sum[(2 - 2^(2*k))*BernoulliB[2*k]*x^(2*k + 1)/((2*k + 1)*(2*k)!), {k, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "GU (353)(8b)a",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x/sinh x = sum_{k>=0} (2-2^(2k))/((2k+1)(2k)!) B_2k x^(2k+1) [|x|<pi]",
+  "note": "|x| < pi is a condition on the integration variable"
+ },
+ {
+  "id": "GR2.477.16",
+  "gr": "2.477.16",
+  "page": 195,
+  "status": "ok",
+  "lhs": "Integrate[x/Cosh[x], x]",
+  "rhs": [
+   "Sum[EulerE[2*k]*x^(2*k + 2)/((2*k + 2)*(2*k)!), {k, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "GU (353)(10b)a",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x/cosh x = sum_{k>=0} E_2k x^(2k+2)/((2k+2)(2k)!) [|x|<pi/2]",
+  "note": "|x| < pi/2 is a condition on the integration variable"
+ },
+ {
+  "id": "GR2.477.17",
+  "gr": "2.477.17",
+  "page": 195,
+  "status": "ok",
+  "lhs": "Integrate[x/Sinh[x]^2, x]",
+  "rhs": [
+   "-x*Coth[x] + Log[Sinh[x]]"
+  ],
+  "conds": [],
+  "cite": "MZ 257",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x/sinh^2 x = -x coth x + ln sinh x",
+  "note": ""
+ },
+ {
+  "id": "GR2.477.18",
+  "gr": "2.477.18",
+  "page": 195,
+  "status": "ok",
+  "lhs": "Integrate[x/Cosh[x]^2, x]",
+  "rhs": [
+   "x*Tanh[x] - Log[Cosh[x]]"
+  ],
+  "conds": [],
+  "cite": "MZ 262",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x/cosh^2 x = x tanh x - ln cosh x",
+  "note": ""
+ },
+ {
+  "id": "GR2.477.19",
+  "gr": "2.477.19",
+  "page": 195,
+  "status": "ok",
+  "lhs": "Integrate[x/Sinh[x]^3, x]",
+  "rhs": [
+   "-x*Cosh[x]/(2*Sinh[x]^2) - 1/(2*Sinh[x]) - 1/2*Sum[(2 - 2^(2*j))*BernoulliB[2*j]*x^(2*j + 1)/((2*j + 1)*(2*j)!), {j, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "MZ 257",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x/sinh^3 x = -x cosh x/(2 sinh^2 x) - 1/(2 sinh x) - 1/2 int x/sinh x (see 2.477 15)",
+  "note": "int x dx/sinh x replaced by the 2.477.15 series (valid |x| < pi, condition on the integration variable)"
+ },
+ {
+  "id": "GR2.477.20",
+  "gr": "2.477.20",
+  "page": 196,
+  "status": "ok",
+  "lhs": "Integrate[x/Cosh[x]^3, x]",
+  "rhs": [
+   "x*Sinh[x]/(2*Cosh[x]^2) + 1/(2*Cosh[x]) + 1/2*Sum[EulerE[2*j]*x^(2*j + 2)/((2*j + 2)*(2*j)!), {j, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "MZ 262",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x/cosh^3 x = x sinh x/(2 cosh^2 x) + 1/(2 cosh x) + 1/2 int x/cosh x (see 2.477 16)",
+  "note": "int x dx/cosh x replaced by the 2.477.16 series (valid |x| < pi/2, condition on the integration variable)"
+ },
+ {
+  "id": "GR2.477.21",
+  "gr": "2.477.21",
+  "page": 196,
+  "status": "ok",
+  "lhs": "Integrate[x/Sinh[x]^4, x]",
+  "rhs": [
+   "-x*Cosh[x]/(3*Sinh[x]^3) - 1/(6*Sinh[x]^2) + 2/3*x*Coth[x] - 2/3*Log[Sinh[x]]"
+  ],
+  "conds": [],
+  "cite": "MZ 258",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x/sinh^4 x = -x cosh x/(3 sinh^3 x) - 1/(6 sinh^2 x) + 2/3 x coth x - 2/3 ln sinh x",
+  "note": ""
+ },
+ {
+  "id": "GR2.477.22",
+  "gr": "2.477.22",
+  "page": 196,
+  "status": "ok",
+  "lhs": "Integrate[x/Cosh[x]^4, x]",
+  "rhs": [
+   "x*Sinh[x]/(3*Cosh[x]^3) + 1/(6*Cosh[x]^2) + 2/3*x*Tanh[x] - 2/3*Log[Cosh[x]]"
+  ],
+  "conds": [],
+  "cite": "MZ 262",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x/cosh^4 x = x sinh x/(3 cosh^3 x) + 1/(6 cosh^2 x) + 2/3 x tanh x - 2/3 ln cosh x",
+  "note": ""
+ },
+ {
+  "id": "GR2.477.23",
+  "gr": "2.477.23",
+  "page": 196,
+  "status": "ok",
+  "lhs": "Integrate[x/Sinh[x]^5, x]",
+  "rhs": [
+   "-x*Cosh[x]/(4*Sinh[x]^4) - 1/(12*Sinh[x]^3) + 3*x*Cosh[x]/(8*Sinh[x]^2) + 3/(8*Sinh[x]) + 3/8*Sum[(2 - 2^(2*j))*BernoulliB[2*j]*x^(2*j + 1)/((2*j + 1)*(2*j)!), {j, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "MZ 258",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x/sinh^5 x = -x cosh/(4 sinh^4) - 1/(12 sinh^3) + 3x cosh/(8 sinh^2) + 3/(8 sinh) + 3/8 int x/sinh x (see 2.477 15)",
+  "note": "int x dx/sinh x replaced by the 2.477.15 series (valid |x| < pi, condition on the integration variable)"
+ },
+ {
+  "id": "GR2.477.24",
+  "gr": "2.477.24",
+  "page": 196,
+  "status": "ok",
+  "lhs": "Integrate[x/Cosh[x]^5, x]",
+  "rhs": [
+   "x*Sinh[x]/(4*Cosh[x]^4) + 1/(12*Cosh[x]^3) + 3*x*Sinh[x]/(8*Cosh[x]^2) + 3/(8*Cosh[x]) + 3/8*Sum[EulerE[2*j]*x^(2*j + 2)/((2*j + 2)*(2*j)!), {j, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "MZ 262",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x/cosh^5 x = x sinh/(4 cosh^4) + 1/(12 cosh^3) + 3x sinh/(8 cosh^2) + 3/(8 cosh) + 3/8 int x/cosh x (see 2.477 16)",
+  "note": "int x dx/cosh x replaced by the 2.477.16 series (valid |x| < pi/2, condition on the integration variable)"
+ },
+ {
+  "id": "GR2.478.1",
+  "gr": "2.478.1",
+  "page": 196,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^n cosh x/(a+b sinh x)^m = -x^n/((m-1)b(a+b sinh x)^(m-1)) + n/((m-1)b) int x^(n-1)/(a+b sinh x)^(m-1) [m!=1]",
+  "reason": "reduction formula",
+  "cite": "MZ 263",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers"
+ },
+ {
+  "id": "GR2.478.2",
+  "gr": "2.478.2",
+  "page": 196,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^n sinh x/(a+b cosh x)^m = -x^n/((m-1)b(a+b cosh x)^(m-1)) + n/((m-1)b) int x^(n-1)/(a+b cosh x)^(m-1) [m!=1]",
+  "reason": "reduction formula",
+  "cite": "MZ 263",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers"
+ },
+ {
+  "id": "GR2.478.3",
+  "gr": "2.478.3",
+  "page": 196,
+  "status": "ok",
+  "lhs": "Integrate[x/(1 + Cosh[x]), x]",
+  "rhs": [
+   "x*Tanh[x/2] - 2*Log[Cosh[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x/(1+cosh x) = x tanh(x/2) - 2 ln cosh(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.478.4",
+  "gr": "2.478.4",
+  "page": 196,
+  "status": "ok",
+  "lhs": "Integrate[x/(1 - Cosh[x]), x]",
+  "rhs": [
+   "x*Coth[x/2] - 2*Log[Sinh[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x/(1-cosh x) = x coth(x/2) - 2 ln sinh(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.478.5",
+  "gr": "2.478.5",
+  "page": 196,
+  "status": "ok",
+  "lhs": "Integrate[x*Sinh[x]/(1 + Cosh[x])^2, x]",
+  "rhs": [
+   "-x/(1 + Cosh[x]) + Tanh[x/2]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x sinh x/(1+cosh x)^2 = -x/(1+cosh x) + tanh(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.478.6",
+  "gr": "2.478.6",
+  "page": 196,
+  "status": "ok",
+  "lhs": "Integrate[x*Sinh[x]/(1 - Cosh[x])^2, x]",
+  "rhs": [
+   "x/(1 - Cosh[x]) - Coth[x/2]"
+  ],
+  "conds": [],
+  "cite": "MZ 262-264",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x sinh x/(1-cosh x)^2 = x/(1-cosh x) - coth(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.478.7",
+  "gr": "2.478.7",
+  "page": 196,
+  "status": "SKIP-UNSUPPORTED",
+  "tex": "int x/(cosh 2x - cos 2t) = 1/(2 sin 2t)[L(u+t) - L(u-t) - 2L(t)], u = arctan(tanh x cot t), t != +-n pi",
+  "reason": "Lobachevsky function L",
+  "cite": "LO III 402",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "lhs": "Integrate[x/(Cosh[2*x] - Cos[2*t]), x]",
+  "rhs": [
+   "(LobachevskyL[ArcTan[Tanh[x]*Cot[t]] + t] - LobachevskyL[ArcTan[Tanh[x]*Cot[t]] - t] - 2*LobachevskyL[t])/(2*Sin[2*t])"
+  ],
+  "conds": [],
+  "note": "u = arctan(tanh x cot t) substituted; t != n pi goes here (not sampleable)"
+ },
+ {
+  "id": "GR2.478.8",
+  "gr": "2.478.8",
+  "page": 196,
+  "status": "SKIP-UNSUPPORTED",
+  "tex": "int x cosh x/(cosh 2x - cos 2t) = 1/(2 sin t)[L((u+t)/2) - L((u-t)/2) + L(pi - (v+t)/2) + L((v-t)/2) - 2L(t/2) - 2L((pi-t)/2)], u = 2 arctan(tanh(x/2) cot(t/2)), v = 2 arctan(coth(x/2) cot(t/2))",
+  "reason": "Lobachevsky function L",
+  "cite": "LO III 403",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "lhs": "Integrate[x*Cosh[x]/(Cosh[2*x] - Cos[2*t]), x]",
+  "rhs": [
+   "(LobachevskyL[((2*ArcTan[Tanh[x/2]*Cot[t/2]]) + t)/2] - LobachevskyL[((2*ArcTan[Tanh[x/2]*Cot[t/2]]) - t)/2] + LobachevskyL[Pi - ((2*ArcTan[Coth[x/2]*Cot[t/2]]) + t)/2] + LobachevskyL[((2*ArcTan[Coth[x/2]*Cot[t/2]]) - t)/2] - 2*LobachevskyL[t/2] - 2*LobachevskyL[(Pi - t)/2])/(2*Sin[t])"
+  ],
+  "conds": [],
+  "note": "u, v substituted; t != n pi not sampleable. The half-angle arguments suggest the integrand may be x/(cosh x - cos t) (printed as x cosh x/(cosh 2x - cos 2t)); transcribed as printed"
+ },
+ {
+  "id": "GR2.479.1",
+  "gr": "2.479.1",
+  "page": 197,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^p sinh^(2m) x/cosh^n x = sum_{k=0}^m (-1)^(m+k) C(m,k) int x^p/cosh^(n-2k) x (see 4.477 2 [sic, 2.477 2])",
+  "reason": "integrals on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers"
+ },
+ {
+  "id": "GR2.479.2",
+  "gr": "2.479.2",
+  "page": 197,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^p sinh^(2m+1) x/cosh^n x = sum_{k=0}^m (-1)^(m+k) C(m,k) int x^p sinh x/cosh^(n-2k) x [n>1] (see 2.479 3)",
+  "reason": "integrals on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers"
+ },
+ {
+  "id": "GR2.479.3",
+  "gr": "2.479.3",
+  "page": 197,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^p sinh x/cosh^n x = -x^p/((n-1) cosh^(n-1) x) + p/(n-1) int x^(p-1)/cosh^(n-1) x [n>1] (see 2.477 2)",
+  "reason": "reduction formula",
+  "cite": "GU (353)(12)",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers"
+ },
+ {
+  "id": "GR2.479.4",
+  "gr": "2.479.4",
+  "page": 197,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^p cosh^(2m) x/sinh^n x = sum_{k=0}^m C(m,k) int x^p/sinh^(n-2k) x (see 2.477 1)",
+  "reason": "integrals on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers"
+ },
+ {
+  "id": "GR2.479.5",
+  "gr": "2.479.5",
+  "page": 197,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^p cosh^(2m+1) x/sinh^n x = sum_{k=0}^m C(m,k) int x^p cosh x/sinh^(n-2k) x (see 2.479 6)",
+  "reason": "integrals on right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers"
+ },
+ {
+  "id": "GR2.479.6",
+  "gr": "2.479.6",
+  "page": 197,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^p cosh x/sinh^n x = -x^p/((n-1) sinh^(n-1) x) + p/(n-1) int x^(p-1)/sinh^(n-1) x [n>1] (see 2.477 1)",
+  "reason": "reduction formula",
+  "cite": "GU (353)(13c)",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers"
+ },
+ {
+  "id": "GR2.479.7",
+  "gr": "2.479.7",
+  "page": 197,
+  "status": "ok",
+  "lhs": "Integrate[x^p*Tanh[x], x]",
+  "rhs": [
+   "Sum[2^(2*k)*(2^(2*k) - 1)*BernoulliB[2*k]*x^(p + 2*k)/((2*k + p)*(2*k)!), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "p > -1"
+  ],
+  "cite": "GU (353)(12d)",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x^p tanh x = sum_{k>=1} 2^(2k)(2^(2k)-1) B_2k x^(p+2k)/((2k+p)(2k)!) [p>-1, |x|<pi/2]",
+  "note": "|x| < pi/2 is a condition on the integration variable"
+ },
+ {
+  "id": "GR2.479.8",
+  "gr": "2.479.8",
+  "page": 197,
+  "status": "ok",
+  "lhs": "Integrate[x^p*Coth[x], x]",
+  "rhs": [
+   "Sum[2^(2*k)*BernoulliB[2*k]*x^(p + 2*k)/((p + 2*k)*(2*k)!), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "p >= 1"
+  ],
+  "cite": "GU (353)(13d)",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x^p coth x = sum_{k>=0} 2^(2k) B_2k x^(p+2k)/((p+2k)(2k)!) [p>=+1, |x|<pi]",
+  "note": "|x| < pi is a condition on the integration variable"
+ },
+ {
+  "id": "GR2.479.9",
+  "gr": "2.479.9",
+  "page": 197,
+  "status": "ok",
+  "lhs": "Integrate[x*Cosh[x]/Sinh[x]^2, x]",
+  "rhs": [
+   "Log[Tanh[x/2]] - x/Sinh[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x cosh x/sinh^2 x = ln tanh(x/2) - x/sinh x",
+  "note": ""
+ },
+ {
+  "id": "GR2.479.10",
+  "gr": "2.479.10",
+  "page": 197,
+  "status": "ok",
+  "lhs": "Integrate[x*Sinh[x]/Cosh[x]^2, x]",
+  "rhs": [
+   "-x/Cosh[x] + ArcTan[Sinh[x]]"
+  ],
+  "conds": [],
+  "cite": "MZ 263",
+  "edition_note": "",
+  "section": "2.47 Combinations of hyperbolic functions and powers",
+  "tex": "int x sinh x/cosh^2 x = -x/cosh x + arctan(sinh x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.481.1",
+  "gr": "2.481.1",
+  "page": 197,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Sinh[b*x + c], x]",
+  "rhs": [
+   "E^(a*x)/(a^2 - b^2)*(a*Sinh[b*x + c] - b*Cosh[b*x + c])"
+  ],
+  "conds": [
+   "a^2 != b^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int e^(ax) sinh(bx+c) = e^(ax)/(a^2-b^2)[a sinh(bx+c) - b cosh(bx+c)]",
+  "note": ""
+ },
+ {
+  "id": "GR2.481.2",
+  "gr": "2.481.2",
+  "page": 197,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Cosh[b*x + c], x]",
+  "rhs": [
+   "E^(a*x)/(a^2 - b^2)*(a*Cosh[b*x + c] - b*Sinh[b*x + c])"
+  ],
+  "conds": [
+   "a^2 != b^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int e^(ax) cosh(bx+c) = e^(ax)/(a^2-b^2)[a cosh(bx+c) - b sinh(bx+c)]",
+  "note": ""
+ },
+ {
+  "id": "GR2.481.3",
+  "gr": "2.481.3",
+  "page": 198,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Sinh[a*x + c], x]",
+  "rhs": [
+   "-1/2*x*E^(-c) + E^(2*a*x + c)/(4*a)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int e^(ax) sinh(ax+c) = -1/2 x e^(-c) + 1/(4a) e^(2ax+c)",
+  "note": "case a^2 = b^2, written with b = a"
+ },
+ {
+  "id": "GR2.481.4",
+  "gr": "2.481.4",
+  "page": 198,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*Sinh[a*x + c], x]",
+  "rhs": [
+   "1/2*x*E^c + E^(-(2*a*x + c))/(4*a)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int e^(-ax) sinh(ax+c) = 1/2 x e^c + 1/(4a) e^(-(2ax+c))",
+  "note": "case a^2 = b^2, written with b = a"
+ },
+ {
+  "id": "GR2.481.5",
+  "gr": "2.481.5",
+  "page": 198,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Cosh[a*x + c], x]",
+  "rhs": [
+   "1/2*x*E^(-c) + E^(2*a*x + c)/(4*a)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int e^(ax) cosh(ax+c) = 1/2 x e^(-c) + 1/(4a) e^(2ax+c)",
+  "note": "case a^2 = b^2, written with b = a"
+ },
+ {
+  "id": "GR2.481.6",
+  "gr": "2.481.6",
+  "page": 198,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*Cosh[a*x + c], x]",
+  "rhs": [
+   "1/2*x*E^c - E^(-(2*a*x + c))/(4*a)"
+  ],
+  "conds": [],
+  "cite": "MZ 275-277",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int e^(-ax) cosh(ax+c) = 1/2 x e^c - 1/(4a) e^(-(2ax+c))",
+  "note": "case a^2 = b^2, written with b = a"
+ },
+ {
+  "id": "GR2.482.1",
+  "gr": "2.482.1",
+  "page": 198,
+  "status": "ok",
+  "lhs": "Integrate[x^p*E^(a*x)*Sinh[b*x], x]",
+  "rhs": [
+   "1/2*((-x^(p + 1)*(-(a + b)*x)^(-p - 1)*Gamma[p + 1, -(a + b)*x]) - (-x^(p + 1)*(-(a - b)*x)^(-p - 1)*Gamma[p + 1, -(a - b)*x]))"
+  ],
+  "conds": [
+   "a^2 != b^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int x^p e^(ax) sinh bx = 1/2{int x^p e^((a+b)x) - int x^p e^((a-b)x)}",
+  "note": "integrals int x^p e^(cx) dx on the right (see 2.321) replaced by -x^(p+1) (-c x)^(-p-1) Gamma[p+1, -c x]"
+ },
+ {
+  "id": "GR2.482.2",
+  "gr": "2.482.2",
+  "page": 198,
+  "status": "ok",
+  "lhs": "Integrate[x^p*E^(a*x)*Cosh[b*x], x]",
+  "rhs": [
+   "1/2*((-x^(p + 1)*(-(a + b)*x)^(-p - 1)*Gamma[p + 1, -(a + b)*x]) + (-x^(p + 1)*(-(a - b)*x)^(-p - 1)*Gamma[p + 1, -(a - b)*x]))"
+  ],
+  "conds": [
+   "a^2 != b^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int x^p e^(ax) cosh bx = 1/2{int x^p e^((a+b)x) + int x^p e^((a-b)x)}",
+  "note": "integrals int x^p e^(cx) dx on the right (see 2.321) replaced by -x^(p+1) (-c x)^(-p-1) Gamma[p+1, -c x]"
+ },
+ {
+  "id": "GR2.482.3",
+  "gr": "2.482.3",
+  "page": 198,
+  "status": "ok",
+  "lhs": "Integrate[x^p*E^(a*x)*Sinh[a*x], x]",
+  "rhs": [
+   "1/2*(-x^(p + 1)*(-(2*a)*x)^(-p - 1)*Gamma[p + 1, -(2*a)*x]) - x^(p + 1)/(2*(p + 1))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int x^p e^(ax) sinh ax = 1/2 int x^p e^(2ax) - x^(p+1)/(2(p+1)) (see 2.321)",
+  "note": "case a^2 = b^2, written with b = a; integrals int x^p e^(cx) dx on the right (see 2.321) replaced by -x^(p+1) (-c x)^(-p-1) Gamma[p+1, -c x]"
+ },
+ {
+  "id": "GR2.482.4",
+  "gr": "2.482.4",
+  "page": 198,
+  "status": "ok",
+  "lhs": "Integrate[x^p*E^(-a*x)*Sinh[a*x], x]",
+  "rhs": [
+   "x^(p + 1)/(2*(p + 1)) - 1/2*(-x^(p + 1)*(-(-2*a)*x)^(-p - 1)*Gamma[p + 1, -(-2*a)*x])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int x^p e^(-ax) sinh ax = x^(p+1)/(2(p+1)) - 1/2 int x^p e^(-2ax) (see 2.321)",
+  "note": "case a^2 = b^2, written with b = a; integrals int x^p e^(cx) dx on the right (see 2.321) replaced by -x^(p+1) (-c x)^(-p-1) Gamma[p+1, -c x]"
+ },
+ {
+  "id": "GR2.482.5",
+  "gr": "2.482.5",
+  "page": 198,
+  "status": "ok",
+  "lhs": "Integrate[x^p*E^(a*x)*Cosh[a*x], x]",
+  "rhs": [
+   "x^(p + 1)/(2*(p + 1)) + 1/2*(-x^(p + 1)*(-(2*a)*x)^(-p - 1)*Gamma[p + 1, -(2*a)*x])"
+  ],
+  "conds": [],
+  "cite": "MZ 276, 278",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int x^p e^(ax) cosh ax = x^(p+1)/(2(p+1)) + 1/2 int x^p e^(2ax) (see 2.321)",
+  "note": "case a^2 = b^2, written with b = a; integrals int x^p e^(cx) dx on the right (see 2.321) replaced by -x^(p+1) (-c x)^(-p-1) Gamma[p+1, -c x]"
+ },
+ {
+  "id": "GR2.483.1",
+  "gr": "2.483.1",
+  "page": 198,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(a*x)*Sinh[b*x], x]",
+  "rhs": [
+   "E^(a*x)/(a^2 - b^2)*((a*x - (a^2 + b^2)/(a^2 - b^2))*Sinh[b*x] - (b*x - 2*a*b/(a^2 - b^2))*Cosh[b*x])"
+  ],
+  "conds": [
+   "a^2 != b^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int x e^(ax) sinh bx = e^(ax)/(a^2-b^2)[(ax - (a^2+b^2)/(a^2-b^2)) sinh bx - (bx - 2ab/(a^2-b^2)) cosh bx]",
+  "note": ""
+ },
+ {
+  "id": "GR2.483.2",
+  "gr": "2.483.2",
+  "page": 198,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(a*x)*Cosh[b*x], x]",
+  "rhs": [
+   "E^(a*x)/(a^2 - b^2)*((a*x - (a^2 + b^2)/(a^2 - b^2))*Cosh[b*x] - (b*x - 2*a*b/(a^2 - b^2))*Sinh[b*x])"
+  ],
+  "conds": [
+   "a^2 != b^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int x e^(ax) cosh bx = e^(ax)/(a^2-b^2)[(ax - (a^2+b^2)/(a^2-b^2)) cosh bx - (bx - 2ab/(a^2-b^2)) sinh bx]",
+  "note": ""
+ },
+ {
+  "id": "GR2.483.3",
+  "gr": "2.483.3",
+  "page": 198,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(a*x)*Sinh[b*x], x]",
+  "rhs": [
+   "E^(a*x)/(a^2 - b^2)*((a*x^2 - 2*(a^2 + b^2)/(a^2 - b^2)*x + 2*a*(a^2 + 3*b^2)/(a^2 - b^2)^2)*Sinh[b*x] - (b*x^2 - 4*a*b/(a^2 - b^2)*x + 2*b*(3*a^2 + b^2)/(a^2 - b^2)^2)*Cosh[x])",
+   "E^(a*x)/(a^2 - b^2)*((a*x^2 - 2*(a^2 + b^2)/(a^2 - b^2)*x + 2*a*(a^2 + 3*b^2)/(a^2 - b^2)^2)*Sinh[b*x] - (b*x^2 - 4*a*b/(a^2 - b^2)*x + 2*b*(3*a^2 + b^2)/(a^2 - b^2)^2)*Cosh[b*x])"
+  ],
+  "conds": [
+   "a^2 != b^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int x^2 e^(ax) sinh bx = e^(ax)/(a^2-b^2){[ax^2 - 2(a^2+b^2)/(a^2-b^2) x + 2a(a^2+3b^2)/(a^2-b^2)^2] sinh bx - [bx^2 - 4ab/(a^2-b^2) x + 2b(3a^2+b^2)/(a^2-b^2)^2] cosh x}",
+  "note": "book prints final 'cosh x'; misprint for cosh bx (second candidate)"
+ },
+ {
+  "id": "GR2.483.4",
+  "gr": "2.483.4",
+  "page": 199,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(a*x)*Cosh[b*x], x]",
+  "rhs": [
+   "E^(a*x)/(a^2 - b^2)*((a*x^2 - 2*(a^2 + b^2)/(a^2 - b^2)*x + 2*a*(a^2 + 3*b^2)/(a^2 - b^2)^2)*Cosh[b*x] - (b*x^2 - 4*a*b/(a^2 - b^2)*x + 2*b*(3*a^2 + b^2)/(a^2 - b^2)^2)*Sinh[x])",
+   "E^(a*x)/(a^2 - b^2)*((a*x^2 - 2*(a^2 + b^2)/(a^2 - b^2)*x + 2*a*(a^2 + 3*b^2)/(a^2 - b^2)^2)*Cosh[b*x] - (b*x^2 - 4*a*b/(a^2 - b^2)*x + 2*b*(3*a^2 + b^2)/(a^2 - b^2)^2)*Sinh[b*x])"
+  ],
+  "conds": [
+   "a^2 != b^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int x^2 e^(ax) cosh bx = e^(ax)/(a^2-b^2){[...] cosh bx - [...] sinh x}",
+  "note": "book prints final 'sinh x'; misprint for sinh bx (second candidate)"
+ },
+ {
+  "id": "GR2.483.5",
+  "gr": "2.483.5",
+  "page": 199,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(a*x)*Sinh[a*x], x]",
+  "rhs": [
+   "E^(2*a*x)/(4*a)*(x - 1/(2*a)) - x^2/4"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int x e^(ax) sinh ax = e^(2ax)/(4a)(x - 1/(2a)) - x^2/4",
+  "note": "case a^2 = b^2, written with b = a"
+ },
+ {
+  "id": "GR2.483.6",
+  "gr": "2.483.6",
+  "page": 199,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-a*x)*Sinh[a*x], x]",
+  "rhs": [
+   "E^(-2*a*x)/(4*a)*(x + 1/(2*a)) + x^2/4"
+  ],
+  "conds": [],
+  "cite": "MZ 276, 278",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int x e^(-ax) sinh ax = e^(-2ax)/(4a)(x + 1/(2a)) + x^2/4",
+  "note": "case a^2 = b^2, written with b = a"
+ },
+ {
+  "id": "GR2.483.7",
+  "gr": "2.483.7",
+  "page": 199,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(a*x)*Cosh[a*x], x]",
+  "rhs": [
+   "x^2/4 + E^(2*a*x)/(4*a)*(x - 1/(2*a))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int x e^(ax) cosh ax = x^2/4 + e^(2ax)/(4a)(x - 1/(2a))",
+  "note": "case a^2 = b^2, written with b = a"
+ },
+ {
+  "id": "GR2.483.8",
+  "gr": "2.483.8",
+  "page": 199,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-a*x)*Cosh[a*x], x]",
+  "rhs": [
+   "x^2/4 - E^(-2*a*x)/(4*a)*(x + 1/(2*a))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int x e^(-ax) cosh ax = x^2/4 - e^(-2ax)/(4a)(x + 1/(2a))",
+  "note": "case a^2 = b^2, written with b = a"
+ },
+ {
+  "id": "GR2.483.9",
+  "gr": "2.483.9",
+  "page": 199,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(a*x)*Sinh[a*x], x]",
+  "rhs": [
+   "E^(2*a*x)/(4*a)*(x^2 - x/a + 1/(2*a^2)) - x^3/6"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int x^2 e^(ax) sinh ax = e^(2ax)/(4a)(x^2 - x/a + 1/(2a^2)) - x^3/6",
+  "note": "case a^2 = b^2, written with b = a"
+ },
+ {
+  "id": "GR2.483.10",
+  "gr": "2.483.10",
+  "page": 199,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-a*x)*Sinh[a*x], x]",
+  "rhs": [
+   "E^(-2*a*x)/(4*a)*(x^2 + x/a + 1/(2*a^2)) + x^3/6"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int x^2 e^(-ax) sinh ax = e^(-2ax)/(4a)(x^2 + x/a + 1/(2a^2)) + x^3/6",
+  "note": "case a^2 = b^2, written with b = a"
+ },
+ {
+  "id": "GR2.483.11",
+  "gr": "2.483.11",
+  "page": 199,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(a*x)*Cosh[a*x], x]",
+  "rhs": [
+   "x^3/6 + E^(2*a*x)/(4*a)*(x^2 - x/a + 1/(2*a^2))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int x^2 e^(ax) cosh ax = x^3/6 + e^(2ax)/(4a)(x^2 - x/a + 1/(2a^2))",
+  "note": "case a^2 = b^2, written with b = a"
+ },
+ {
+  "id": "GR2.484.1",
+  "gr": "2.484.1",
+  "page": 199,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Sinh[b*x]/x, x]",
+  "rhs": [
+   "1/2*(ExpIntegralEi[(a + b)*x] - ExpIntegralEi[(a - b)*x])"
+  ],
+  "conds": [
+   "a^2 != b^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int e^(ax) sinh bx dx/x = 1/2{Ei[(a+b)x] - Ei[(a-b)x]}",
+  "note": ""
+ },
+ {
+  "id": "GR2.484.2",
+  "gr": "2.484.2",
+  "page": 199,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Cosh[b*x]/x, x]",
+  "rhs": [
+   "1/2*(ExpIntegralEi[(a + b)*x] + ExpIntegralEi[(a - b)*x])"
+  ],
+  "conds": [
+   "a^2 != b^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int e^(ax) cosh bx dx/x = 1/2{Ei[(a+b)x] + Ei[(a-b)x]}",
+  "note": ""
+ },
+ {
+  "id": "GR2.484.3",
+  "gr": "2.484.3",
+  "page": 199,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Sinh[b*x]/x^2, x]",
+  "rhs": [
+   "-E^(a*x)*Sinh[b*x]/(2*x) + 1/2*((a + b)*ExpIntegralEi[(a + b)*x] - (a - b)*ExpIntegralEi[(a - b)*x])",
+   "-E^(a*x)*Sinh[b*x]/x + 1/2*((a + b)*ExpIntegralEi[(a + b)*x] - (a - b)*ExpIntegralEi[(a - b)*x])"
+  ],
+  "conds": [
+   "a^2 != b^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int e^(ax) sinh bx dx/x^2 = -e^(ax) sinh bx/(2x) + 1/2{(a+b)Ei[(a+b)x] - (a-b)Ei[(a-b)x]}",
+  "note": "as printed the first term has 1/(2x); differentiation suggests -e^(ax) sinh bx/x (second candidate)"
+ },
+ {
+  "id": "GR2.484.4",
+  "gr": "2.484.4",
+  "page": 199,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Cosh[b*x]/x^2, x]",
+  "rhs": [
+   "-E^(a*x)*Cosh[b*x]/(2*x) + 1/2*((a + b)*ExpIntegralEi[(a + b)*x] + (a - b)*ExpIntegralEi[(a - b)*x])",
+   "-E^(a*x)*Cosh[b*x]/x + 1/2*((a + b)*ExpIntegralEi[(a + b)*x] + (a - b)*ExpIntegralEi[(a - b)*x])"
+  ],
+  "conds": [
+   "a^2 != b^2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int e^(ax) cosh bx dx/x^2 = -e^(ax) cosh bx/(2x) + 1/2{(a+b)Ei[(a+b)x] + (a-b)Ei[(a-b)x]}",
+  "note": "as printed the first term has 1/(2x); differentiation suggests -e^(ax) cosh bx/x (second candidate)"
+ },
+ {
+  "id": "GR2.484.5",
+  "gr": "2.484.5",
+  "page": 199,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Sinh[a*x]/x, x]",
+  "rhs": [
+   "1/2*(ExpIntegralEi[2*a*x] - Log[x])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int e^(ax) sinh ax dx/x = 1/2[Ei(2ax) - ln x]",
+  "note": "case a^2 = b^2, written with b = a"
+ },
+ {
+  "id": "GR2.484.6",
+  "gr": "2.484.6",
+  "page": 199,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*Sinh[a*x]/x, x]",
+  "rhs": [
+   "1/2*(Log[x] - ExpIntegralEi[-2*a*x])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int e^(-ax) sinh ax dx/x = 1/2[ln x - Ei(-2ax)]",
+  "note": "case a^2 = b^2, written with b = a"
+ },
+ {
+  "id": "GR2.484.7",
+  "gr": "2.484.7",
+  "page": 199,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Cosh[a*x]/x, x]",
+  "rhs": [
+   "1/2*(Log[x] + ExpIntegralEi[2*a*x])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int e^(ax) cosh ax dx/x = 1/2[ln x + Ei(2ax)]",
+  "note": "case a^2 = b^2, written with b = a"
+ },
+ {
+  "id": "GR2.484.8",
+  "gr": "2.484.8",
+  "page": 200,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Sinh[a*x]/x^2, x]",
+  "rhs": [
+   "-1/(2*x)*(E^(2*a*x) - 1) + a*ExpIntegralEi[2*a*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int e^(ax) sinh ax dx/x^2 = -1/(2x)(e^(2ax) - 1) + a Ei(2ax)",
+  "note": "case a^2 = b^2, written with b = a"
+ },
+ {
+  "id": "GR2.484.9",
+  "gr": "2.484.9",
+  "page": 200,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*Sinh[a*x]/x^2, x]",
+  "rhs": [
+   "-1/(2*x)*(1 - E^(-2*a*x)) + a*ExpIntegralEi[-2*a*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int e^(-ax) sinh ax dx/x^2 = -1/(2x)(1 - e^(-2ax)) + a Ei(-2ax)",
+  "note": "case a^2 = b^2, written with b = a"
+ },
+ {
+  "id": "GR2.484.10",
+  "gr": "2.484.10",
+  "page": 200,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Cosh[a*x]/x^2, x]",
+  "rhs": [
+   "-1/(2*x)*(E^(2*a*x) + 1) + a*ExpIntegralEi[2*a*x]"
+  ],
+  "conds": [],
+  "cite": "MZ 276, 278",
+  "edition_note": "",
+  "section": "2.48 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "int e^(ax) cosh ax dx/x^2 = -1/(2x)(e^(2ax) + 1) + a Ei(2ax)",
+  "note": "case a^2 = b^2, written with b = a"
+ },
+ {
+  "id": "GR2.501",
+  "gr": "2.501",
+  "page": 200,
+  "status": "SKIP-REFERENCE",
+  "tex": "int R(sin x, cos x) dx reduces to rational functions via t = tan(x/2)",
+  "reason": "substitution rule, no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.50 Introduction"
+ },
+ {
+  "id": "GR2.502",
+  "gr": "2.502",
+  "page": 200,
+  "status": "SKIP-REFERENCE",
+  "tex": "if R(sin x, cos x) = -R(-sin x, cos x), substitute t = cos x",
+  "reason": "substitution rule, no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.50 Introduction"
+ },
+ {
+  "id": "GR2.503",
+  "gr": "2.503",
+  "page": 200,
+  "status": "SKIP-REFERENCE",
+  "tex": "if R(sin x, cos x) = -R(sin x, -cos x), substitute t = sin x",
+  "reason": "substitution rule, no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.50 Introduction"
+ },
+ {
+  "id": "GR2.504",
+  "gr": "2.504",
+  "page": 200,
+  "status": "SKIP-REFERENCE",
+  "tex": "if R(sin x, cos x) = R(-sin x, -cos x), substitute t = tan x",
+  "reason": "substitution rule, no closed value",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.50 Introduction"
+ },
+ {
+  "id": "GR2.510",
+  "gr": "2.510",
+  "page": 200,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^p x cos^q x dx = -sin^(p-1) cos^(q+1)/(q+1) + (p-1)/(q+1) int sin^(p-2) cos^(q+2) = ... (seven equivalent reduction forms)",
+  "reason": "reduction formulas (all seven forms)",
+  "cite": "FI II 89, TI 214",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions"
+ }
+]

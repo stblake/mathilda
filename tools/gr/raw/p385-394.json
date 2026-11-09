@@ -1,0 +1,2420 @@
+[
+ {
+  "id": "GR3.318.1",
+  "gr": "3.318.1",
+  "page": 385,
+  "status": "ok",
+  "lhs": "Integrate[((beta + Sqrt[1 - E^(-x)])^(-nu) + (beta - Sqrt[1 - E^(-x)])^(-nu))/Sqrt[1 - E^(-x)]*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(mu + 1)*E^((mu - nu)*Pi*I)*(beta^2 - 1)^((mu - nu)/2)*Gamma[mu]*LegendreQ[mu - 1, nu - mu, 3, beta]/Gamma[nu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 145(18)",
+  "edition_note": "",
+  "section": "3.31 Exponential functions",
+  "tex": "int_0^inf {[beta+sqrt(1-e^-x)]^-nu + [beta-sqrt(1-e^-x)]^-nu}/sqrt(1-e^-x) e^(-mu x) dx = 2^(mu+1) e^((mu-nu) pi i) (beta^2-1)^((mu-nu)/2) Gamma(mu) Q^(nu-mu)_(mu-1)(beta)/Gamma(nu)",
+  "note": "Q^{nu-mu}_{mu-1}(beta) taken as type-3 Legendre Q (beta off (-1,1) implicitly, e.g. beta > 1)"
+ },
+ {
+  "id": "GR3.318.2",
+  "gr": "3.318.2",
+  "page": 385,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[1 - E^(-2*x)]*(E^(-u)*Sqrt[1 - E^(-2*x)] - E^(-x)*Sqrt[1 - E^(-2*u)])^nu*E^(-mu*x), {x, u, Infinity}]",
+  "rhs": [
+   "2^(-(mu + nu)/2)*Sqrt[Pi]*E^(-u*(mu + nu)/2)*Gamma[mu]*Gamma[nu + 1]*LegendreP[-(mu - nu)/2, -(mu + nu)/2, Sqrt[1 - E^(-2*u)]]/Gamma[(mu + nu + 1)/2]"
+  ],
+  "conds": [
+   "u > 0",
+   "Re[mu] > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET I 145(19)",
+  "edition_note": "7",
+  "section": "3.31 Exponential functions",
+  "tex": "int_u^inf (1-e^-2x)^(-1/2) (e^-u sqrt(1-e^-2x) - e^-x sqrt(1-e^-2u))^nu e^(-mu x) dx = 2^(-(mu+nu)/2) sqrt(pi) e^(-u(mu+nu)/2) Gamma(mu) Gamma(nu+1) P^(-(mu+nu)/2)_(-(mu-nu)/2)(sqrt(1-e^-2u))/Gamma((mu+nu+1)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.321.1a",
+  "gr": "3.321.1",
+  "page": 385,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2), {x, 0, u}]",
+  "rhs": [
+   "Sqrt[Pi]/2*Erf[u]"
+  ],
+  "conds": [],
+  "cite": "AD 6.700",
+  "edition_note": "11",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "sqrt(pi)/2 Phi(u) = int_0^u e^(-x^2) dx",
+  "note": ""
+ },
+ {
+  "id": "GR3.321.1b",
+  "gr": "3.321.1",
+  "page": 385,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2), {x, 0, u}]",
+  "rhs": [
+   "Sum[(-1)^k*u^(2*k + 1)/(k!*(2*k + 1)), {k, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "AD 6.700",
+  "edition_note": "11",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "int_0^u e^(-x^2) dx = sum (-1)^k u^(2k+1)/(k!(2k+1))",
+  "note": ""
+ },
+ {
+  "id": "GR3.321.1c",
+  "gr": "3.321.1",
+  "page": 385,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2), {x, 0, u}]",
+  "rhs": [
+   "E^(-u^2)*Sum[2^k*u^(2*k + 1)/(2*k + 1)!!, {k, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "AD 6.700",
+  "edition_note": "11",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "int_0^u e^(-x^2) dx = e^(-u^2) sum 2^k u^(2k+1)/(2k+1)!!",
+  "note": ""
+ },
+ {
+  "id": "GR3.321.2",
+  "gr": "3.321.2",
+  "page": 385,
+  "status": "ok",
+  "lhs": "Integrate[E^(-q^2*x^2), {x, 0, u}]",
+  "rhs": [
+   "Sqrt[Pi]/(2*q)*Erf[q*u]"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[E^(-q^2*x^2), {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.321.3",
+  "gr": "3.321.3",
+  "page": 385,
+  "status": "ok",
+  "lhs": "Integrate[E^(-q^2*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/(2*q)"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "FI II 624",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[E^(-q^2*x^2), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.321.4",
+  "gr": "3.321.4",
+  "page": 385,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-q^2*x^2), {x, 0, u}]",
+  "rhs": [
+   "1/(2*q^2)*(1 - E^(-q^2*u^2))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[x*E^(-q^2*x^2), {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.321.5",
+  "gr": "3.321.5",
+  "page": 385,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-q^2*x^2), {x, 0, u}]",
+  "rhs": [
+   "1/(2*q^3)*(Sqrt[Pi]/2*Erf[q*u] - q*u*E^(-q^2*u^2))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[x^2*E^(-q^2*x^2), {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.321.6",
+  "gr": "3.321.6",
+  "page": 385,
+  "status": "ok",
+  "lhs": "Integrate[x^3*E^(-q^2*x^2), {x, 0, u}]",
+  "rhs": [
+   "1/(2*q^4)*(1 - (1 + q^2*u^2)*E^(-q^2*u^2))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[x^3*E^(-q^2*x^2), {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.321.7",
+  "gr": "3.321.7",
+  "page": 385,
+  "status": "ok",
+  "lhs": "Integrate[x^4*E^(-q^2*x^2), {x, 0, u}]",
+  "rhs": [
+   "1/(2*q^5)*(3*Sqrt[Pi]/4*Erf[q*u] - (3/2 + q^2*u^2)*q*u*E^(-q^2*u^2))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[x^4*E^(-q^2*x^2), {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.322.1",
+  "gr": "3.322.1",
+  "page": 385,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-x^2/(4*beta) - gamma*x], {x, u, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi*beta]*E^(beta*gamma^2)*(1 - Erf[gamma*Sqrt[beta] + u/(2*Sqrt[beta])])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 146(21)",
+  "edition_note": "11",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-x^2/(4*beta) - gamma*x], {x, u, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.322.2",
+  "gr": "3.322.2",
+  "page": 385,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-x^2/(4*beta) - gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi*beta]*Exp[beta*gamma^2]*(1 - Erf[gamma*Sqrt[beta]])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "NT 27(1)a",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-x^2/(4*beta) - gamma*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.322.3a",
+  "gr": "3.322.3",
+  "page": 386,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[E^(I*lam*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sqrt[Pi/lam]*E^(Pi*I/4)"
+  ],
+  "conds": [
+   "lam > 0"
+  ],
+  "cite": "PBM 343 (2.3.15(2))",
+  "edition_note": "11",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "PV int_0^inf e^(i lam x^2) dx = 1/2 sqrt(pi/lam) e^(pi i/4)",
+  "note": "",
+  "reason": "marked PV in the book"
+ },
+ {
+  "id": "GR3.322.3b",
+  "gr": "3.322.3",
+  "page": 386,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[E^(-I*lam*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sqrt[Pi/lam]*E^(-Pi*I/4)"
+  ],
+  "conds": [
+   "lam > 0"
+  ],
+  "cite": "PBM 343 (2.3.15(2))",
+  "edition_note": "11",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "PV int_0^inf e^(-i lam x^2) dx = 1/2 sqrt(pi/lam) e^(-pi i/4)",
+  "note": "",
+  "reason": "marked PV in the book"
+ },
+ {
+  "id": "GR3.323.1",
+  "gr": "3.323.1",
+  "page": 386,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-q*x - x^2], {x, 1, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/2*E^(q^2/4)*(1 - Erf[1 + q/2])"
+  ],
+  "conds": [],
+  "cite": "BI (29)(4)",
+  "edition_note": "11",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-q*x - x^2], {x, 1, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.323.2a",
+  "gr": "3.323.2",
+  "page": 386,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-p^2*x^2 + q*x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Exp[q^2/(4*p^2)]*Sqrt[Pi]/p"
+  ],
+  "conds": [
+   "Re[p^2] > 0"
+  ],
+  "cite": "BI (28)(1)",
+  "edition_note": "10",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-p^2*x^2 + q*x], {x, -Infinity, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.323.2b",
+  "gr": "3.323.2",
+  "page": 386,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-p^2*x^2 - q*x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Exp[q^2/(4*p^2)]*Sqrt[Pi]/p"
+  ],
+  "conds": [
+   "Re[p^2] > 0"
+  ],
+  "cite": "BI (28)(1)",
+  "edition_note": "10",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-p^2*x^2 - q*x], {x, -Infinity, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.323.3",
+  "gr": "3.323.3",
+  "page": 386,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta^2*x^4 - 2*gamma^2*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-3/2)*gamma/beta*E^(gamma^4/(2*beta^2))*BesselK[1/4, gamma^4/(2*beta^2)]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi/4",
+   "Abs[Arg[gamma]] < Pi/4"
+  ],
+  "cite": "ET I 147(34)a",
+  "edition_note": "11",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-beta^2*x^4 - 2*gamma^2*x^2], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.324.1",
+  "gr": "3.324.1",
+  "page": 386,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta/(4*x) - gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[beta/gamma]*BesselK[1, Sqrt[beta*gamma]]"
+  ],
+  "conds": [
+   "Re[beta] >= 0",
+   "Re[gamma] > 0"
+  ],
+  "cite": "ET I 146(25)",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-beta/(4*x) - gamma*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.324.2",
+  "gr": "3.324.2",
+  "page": 386,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-(x - b/x)^(2*n)], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "1/n*Gamma[1/(2*n)]"
+  ],
+  "conds": [
+   "b >= 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-(x - b/x)^(2*n)], {x, -Infinity, Infinity}]",
+  "note": "n positive integer added (not printed; needed for (x-b/x)^(2n) to be real)"
+ },
+ {
+  "id": "GR3.325",
+  "gr": "3.325",
+  "page": 386,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-a*x^2 - b/x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sqrt[Pi/a]*Exp[-2*Sqrt[a*b]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "FI II 644",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-a*x^2 - b/x^2], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.326.1",
+  "gr": "3.326.1",
+  "page": 386,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-x^mu], {x, 0, Infinity}]",
+  "rhs": [
+   "1/mu*Gamma[1/mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (26)(4)",
+  "edition_note": "8",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-x^mu], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.326.2",
+  "gr": "3.326.2",
+  "page": 386,
+  "status": "ok",
+  "lhs": "Integrate[x^m*Exp[-beta*x^n], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[(m + 1)/n]/(n*beta^((m + 1)/n))"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[m] > 0",
+   "Re[n] > 0"
+  ],
+  "cite": "",
+  "edition_note": "10",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[x^m*Exp[-beta*x^n], {x, 0, Infinity}]",
+  "note": "gamma = (m+1)/n substituted"
+ },
+ {
+  "id": "GR3.326.3",
+  "gr": "3.326.3",
+  "page": 386,
+  "status": "ok",
+  "lhs": "Integrate[(x - a)*Exp[-beta*(x - b)^n], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[2/n, beta*(-b)^n]/(n*beta^(2/n)) - (a - b)*Gamma[1/n, beta*(-b)^n]/(n*beta^(1/n))"
+  ],
+  "conds": [
+   "Re[n] > 0",
+   "Re[beta] > 0",
+   "Abs[Arg[b]] < Pi"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[(x - a)*Exp[-beta*(x - b)^n], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.326.4",
+  "gr": "3.326.4",
+  "page": 386,
+  "status": "ok",
+  "lhs": "Integrate[(x - a)*Exp[-beta*(x - b)^n], {x, 0, u}]",
+  "rhs": [
+   "(Gamma[2/n, beta*(-b)^n] - Gamma[2/n, beta*(u - b)^n])/(n*beta^(2/n)) - (a - b)*(Gamma[1/n, beta*(-b)^n] - Gamma[1/n, beta*(u - b)^n])/(n*beta^(1/n))"
+  ],
+  "conds": [
+   "Re[n] > 0",
+   "Re[beta] > 0",
+   "Abs[Arg[b]] < Pi",
+   "Abs[Arg[u - b]] < Pi"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[(x - a)*Exp[-beta*(x - b)^n], {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.326.5",
+  "gr": "3.326.5",
+  "page": 386,
+  "status": "ok",
+  "lhs": "Integrate[(x - a)*Exp[-beta*(x - b)^n], {x, u, Infinity}]",
+  "rhs": [
+   "Gamma[2/n, beta*(u - b)^n]/(n*beta^(2/n)) - (a - b)*Gamma[1/n, beta*(u - b)^n]/(n*beta^(1/n))"
+  ],
+  "conds": [
+   "Re[n] > 0",
+   "Re[beta] > 0",
+   "Abs[Arg[u - b]] < Pi"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[(x - a)*Exp[-beta*(x - b)^n], {x, u, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.327",
+  "gr": "3.327",
+  "page": 387,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-a*E^(n*x)], {x, 0, Infinity}]",
+  "rhs": [
+   "-1/n*ExpIntegralEi[-a]"
+  ],
+  "conds": [
+   "n >= 1",
+   "Re[a] >= 0",
+   "a != 0"
+  ],
+  "cite": "LI (26)(5)",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-a*E^(n*x)], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.328",
+  "gr": "3.328",
+  "page": 387,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-E^x]*E^(mu*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Gamma[mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "NH 145(14)",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-E^x]*E^(mu*x), {x, -Infinity, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.329",
+  "gr": "3.329",
+  "page": 387,
+  "status": "ok",
+  "lhs": "Integrate[a*Exp[-c*E^(a*x)]/(1 - E^(-a*x)) - b*Exp[-c*E^(b*x)]/(1 - E^(-b*x)), {x, 0, Infinity}]",
+  "rhs": [
+   "E^(-c)*Log[b/a]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "BI (27)(12)",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[a*Exp[-c*E^(a*x)]/(1 - E^(-a*x)) - b*Exp[-c*E^(b*x)]/(1 - E^(-b*x)), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.331.1",
+  "gr": "3.331.1",
+  "page": 387,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*E^(-x) - mu*x], {x, 0, Infinity}]",
+  "rhs": [
+   "beta^(-mu)*Gamma[mu, 0, beta]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 147(36)",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-beta*E^(-x) - mu*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.331.2",
+  "gr": "3.331.2",
+  "page": 387,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*E^x - mu*x], {x, 0, Infinity}]",
+  "rhs": [
+   "beta^mu*Gamma[-mu, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 147(37)",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-beta*E^x - mu*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.331.3",
+  "gr": "3.331.3",
+  "page": 387,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-x))^(nu - 1)*Exp[beta*E^(-x) - mu*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Beta[mu, nu]*beta^(-(mu + nu)/2)*E^(beta/2)*WhittakerM[(nu - mu)/2, (nu + mu - 1)/2, beta]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET I 147(38)",
+  "edition_note": "11",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[(1 - E^(-x))^(nu - 1)*Exp[beta*E^(-x) - mu*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.331.4",
+  "gr": "3.331.4",
+  "page": 387,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-x))^(nu - 1)*Exp[-beta*E^x - mu*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]*beta^((mu - 1)/2)*E^(-beta/2)*WhittakerW[(1 - mu - 2*nu)/2, -mu/2, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET I 147(39)",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[(1 - E^(-x))^(nu - 1)*Exp[-beta*E^x - mu*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.332",
+  "gr": "3.332",
+  "page": 387,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[(1 - E^(-x))^(nu - 1)*(1 - lam*E^(-x))^(-rho)*Exp[beta*E^(-x) - mu*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Beta[mu, nu]*HumbertPhi1[mu, rho, nu, lam, beta]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0",
+   "Abs[Arg[1 - lam]] < Pi"
+  ],
+  "cite": "ET I 147(40)",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[(1 - E^(-x))^(nu - 1)*(1 - lam*E^(-x))^(-rho)*Exp[beta*E^(-x) - mu*x], {x, 0, Infinity}]",
+  "note": "",
+  "reason": "Humbert Phi_1 confluent hypergeometric function of two variables; no head"
+ },
+ {
+  "id": "GR3.333.1",
+  "gr": "3.333.1",
+  "page": 387,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/(Exp[E^(-x)] - 1), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Gamma[mu]*Zeta[mu]"
+  ],
+  "conds": [
+   "Re[mu] > 1"
+  ],
+  "cite": "ET I 121(24)",
+  "edition_note": "3",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[E^(-mu*x)/(Exp[E^(-x)] - 1), {x, -Infinity, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.333.2a",
+  "gr": "3.333.2",
+  "page": 387,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/(Exp[E^(-x)] + 1), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(1 - 2^(1 - mu))*Gamma[mu]*Zeta[mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "mu != 1"
+  ],
+  "cite": "ET I 121(25)",
+  "edition_note": "3",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[E^(-mu*x)/(Exp[E^(-x)] + 1), {x, -Infinity, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.333.2b",
+  "gr": "3.333.2",
+  "page": 387,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x)/(Exp[E^(-x)] + 1), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Log[2]"
+  ],
+  "conds": [],
+  "cite": "ET I 121(25)",
+  "edition_note": "3",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[E^(-x)/(Exp[E^(-x)] + 1), {x, -Infinity, Infinity}]",
+  "note": "mu = 1 substituted"
+ },
+ {
+  "id": "GR3.333.3",
+  "gr": "3.333.3",
+  "page": 387,
+  "status": "ok",
+  "lhs": "Integrate[Tanh[x]/x^3 - 1/(x^2*Cosh[x]^2), {x, 0, Infinity}]",
+  "rhs": [
+   "7*Zeta[3]/Pi^2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Tanh[x]/x^3 - 1/(x^2*Cosh[x]^2), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.334",
+  "gr": "3.334",
+  "page": 387,
+  "status": "ok",
+  "lhs": "Integrate[(E^x - 1)^(nu - 1)*Exp[-beta/(E^x - 1) - mu*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu - nu + 1]*E^(beta/2)*beta^((nu - 1)/2)*WhittakerW[(nu - 2*mu - 1)/2, -nu/2, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[mu] > Re[nu] - 1"
+  ],
+  "cite": "ET I 137(41)",
+  "edition_note": "11",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[(E^x - 1)^(nu - 1)*Exp[-beta/(E^x - 1) - mu*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.335",
+  "gr": "3.335",
+  "page": 387,
+  "status": "ok",
+  "lhs": "Integrate[(E^(nu*x) + E^(-nu*x)*Cos[nu*Pi])*Exp[-beta*Sinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*(WeberE[nu, beta] + BesselY[nu, beta])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "EH II 35(34)",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[(E^(nu*x) + E^(-nu*x)*Cos[nu*Pi])*Exp[-beta*Sinh[x]], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.336.1",
+  "gr": "3.336.1",
+  "page": 388,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-nu*x - beta*Sinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Csc[nu*Pi]*(AngerJ[nu, beta] - BesselJ[nu, beta])"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi/2"
+  ],
+  "cite": "WA 341(2)",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-nu*x - beta*Sinh[x]], {x, 0, Infinity}]",
+  "note": "also valid for |arg beta| = pi/2 when Re nu > 0; nu is not an integer"
+ },
+ {
+  "id": "GR3.336.2",
+  "gr": "3.336.2",
+  "page": 388,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Exp[n*x - beta*Sinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*(SchlaefliS[n, beta] - Pi*WeberE[n, beta] - Pi*BesselY[n, beta])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "WA 342(6)",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[n*x - beta*Sinh[x]], {x, 0, Infinity}]",
+  "note": "",
+  "reason": "S_n is Schlaefli's polynomial; no head (SchlaefliS is a placeholder)"
+ },
+ {
+  "id": "GR3.336.3",
+  "gr": "3.336.3",
+  "page": 388,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Exp[-n*x - beta*Sinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*(-1)^(n + 1)*(SchlaefliS[n, beta] + Pi*WeberE[n, beta] + Pi*BesselY[n, beta])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "EH II 84(47)",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-n*x - beta*Sinh[x]], {x, 0, Infinity}]",
+  "note": "",
+  "reason": "S_n is Schlaefli's polynomial; no head (SchlaefliS is a placeholder)"
+ },
+ {
+  "id": "GR3.337.1",
+  "gr": "3.337.1",
+  "page": 388,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-alpha*x - beta*Cosh[x]], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2*BesselK[alpha, beta]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi/2"
+  ],
+  "cite": "WA 201(7)",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-alpha*x - beta*Cosh[x]], {x, -Infinity, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.337.2",
+  "gr": "3.337.2",
+  "page": 388,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-nu*x + I*beta*Cosh[x]], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "I*Pi*E^(I*nu*Pi/2)*HankelH1[nu, beta]"
+  ],
+  "conds": [
+   "0 < Arg[beta] < Pi"
+  ],
+  "cite": "EH II 21(27)",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-nu*x + I*beta*Cosh[x]], {x, -Infinity, Infinity}]",
+  "note": "condition printed as 0 < arg z < pi; z read as beta"
+ },
+ {
+  "id": "GR3.337.3",
+  "gr": "3.337.3",
+  "page": 388,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-nu*x - I*beta*Cosh[x]], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-I*Pi*E^(-I*nu*Pi/2)*HankelH2[nu, beta]"
+  ],
+  "conds": [
+   "-Pi < Arg[beta] < 0"
+  ],
+  "cite": "EH II 21(30)",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-nu*x - I*beta*Cosh[x]], {x, -Infinity, Infinity}]",
+  "note": "condition printed as -pi < arg z < 0; z read as beta"
+ },
+ {
+  "id": "GR3.338.1",
+  "gr": "3.338.1",
+  "page": 388,
+  "status": "ok",
+  "lhs": "Integrate[Exp[I*((nu - 1)*x - beta*Sin[x])] - Exp[I*((nu + 1)*x - beta*Sin[x])], {x, 0, Pi}]",
+  "rhs": [
+   "2*Pi*(Derivative[0, 1][AngerJ][nu, beta] + I*Derivative[0, 1][WeberE][nu, beta])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "EH II 36",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[I*((nu - 1)*x - beta*Sin[x])] - Exp[I*((nu + 1)*x - beta*Sin[x])], {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.338.2a",
+  "gr": "3.338.2",
+  "page": 388,
+  "status": "ok",
+  "lhs": "Integrate[Exp[I*(nu*x - beta*Sin[x])], {x, 0, Pi}]",
+  "rhs": [
+   "Pi*(AngerJ[nu, beta] + I*WeberE[nu, beta])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "EH II 35(32)",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[I*(nu*x - beta*Sin[x])], {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.338.2b",
+  "gr": "3.338.2",
+  "page": 388,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-I*(nu*x - beta*Sin[x])], {x, 0, Pi}]",
+  "rhs": [
+   "Pi*(AngerJ[nu, beta] - I*WeberE[nu, beta])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "EH II 35(32)",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-I*(nu*x - beta*Sin[x])], {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.338.3",
+  "gr": "3.338.3",
+  "page": 388,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-gamma*(x - beta*Sin[x])], {x, 0, Infinity}]",
+  "rhs": [
+   "1/gamma + 2*Sum[gamma*BesselJ[k, k*beta]/(gamma^2 + k^2), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "Re[gamma] > 0"
+  ],
+  "cite": "WA 619(4)",
+  "edition_note": "10",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-gamma*(x - beta*Sin[x])], {x, 0, Infinity}]",
+  "note": "Kapteyn series; presumably also needs |beta| < 1 (not printed)"
+ },
+ {
+  "id": "GR3.338.4",
+  "gr": "3.338.4",
+  "page": 388,
+  "status": "ok",
+  "lhs": "Integrate[Exp[(a + b*Sin[x] + c*Cos[x])/(1 + p*Sin[x] + q*Cos[x])]/(1 + p*Sin[x] + q*Cos[x]), {x, -Pi, Pi}]",
+  "rhs": [
+   "2*Pi/Sqrt[1 - p^2 - q^2]*E^(-(b*p + c*q - a)/(1 - p^2 - q^2))*BesselI[0, Sqrt[((b*p + c*q - a)/(1 - p^2 - q^2))^2 - (a^2 - b^2 - c^2)/(1 - p^2 - q^2)]]"
+  ],
+  "conds": [
+   "p^2 + q^2 < 1"
+  ],
+  "cite": "",
+  "edition_note": "6",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[(a + b*Sin[x] + c*Cos[x])/(1 + p*Sin[x] + q*Cos[x])]/(1 + p*Sin[x] + q*Cos[x]), {x, -Pi, Pi}]",
+  "note": "alpha = (bp+cq-a)/(1-p^2-q^2), beta = sqrt(alpha^2 - (a^2-b^2-c^2)/(1-p^2-q^2)) substituted"
+ },
+ {
+  "id": "GR3.338.5",
+  "gr": "3.338.5",
+  "page": 388,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-Sum[Tan[x]^(2*n)/(n + 1/2), {n, 1, Infinity}]], {x, 0, Pi/4}]",
+  "rhs": [
+   "Log[Sqrt[2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-Sum[Tan[x]^(2*n)/(n + 1/2), {n, 1, Infinity}]], {x, 0, Pi/4}]",
+  "note": "the inner sum equals 2*(ArcTanh[Tan[x]]/Tan[x] - 1)"
+ },
+ {
+  "id": "GR3.339",
+  "gr": "3.339",
+  "page": 389,
+  "status": "ok",
+  "lhs": "Integrate[Exp[z*Cos[x]], {x, 0, Pi}]",
+  "rhs": [
+   "Pi*BesselI[0, z]"
+  ],
+  "conds": [],
+  "cite": "BI (277)(2)a",
+  "edition_note": "6",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[z*Cos[x]], {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.341",
+  "gr": "3.341",
+  "page": 389,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-p*Tan[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "CosIntegral[p]*Sin[p] - (SinIntegral[p] - Pi/2)*Cos[p]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (271)(2)a",
+  "edition_note": "",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-p*Tan[x]], {x, 0, Pi/2}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.342a",
+  "gr": "3.342",
+  "page": 389,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-p*x*Log[x]], {x, 0, 1}]",
+  "rhs": [
+   "Sum[p^(k - 1)/k^k, {k, 1, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "BI (29)(1)",
+  "edition_note": "11",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[Exp[-p*x*Log[x]], {x, 0, 1}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.342b",
+  "gr": "3.342",
+  "page": 389,
+  "status": "ok",
+  "lhs": "Integrate[x^(-p*x), {x, 0, 1}]",
+  "rhs": [
+   "Sum[p^(k - 1)/k^k, {k, 1, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "BI (29)(1)",
+  "edition_note": "11",
+  "section": "3.32-3.34 Exponentials of more complicated arguments",
+  "tex": "Integrate[x^(-p*x), {x, 0, 1}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.351.1a",
+  "gr": "3.351.1",
+  "page": 389,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(-mu*x), {x, 0, u}]",
+  "rhs": [
+   "n!/mu^(n + 1) - E^(-u*mu)*Sum[n!/k!*u^k/mu^(n - k + 1), {k, 0, n}]"
+  ],
+  "conds": [
+   "u > 0",
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 134(5)",
+  "edition_note": "8",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^n*E^(-mu*x), {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.351.1b",
+  "gr": "3.351.1",
+  "page": 389,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(-mu*x), {x, 0, u}]",
+  "rhs": [
+   "mu^(-n - 1)*Gamma[n + 1, 0, mu*u]"
+  ],
+  "conds": [
+   "u > 0",
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 134(5)",
+  "edition_note": "8",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^n*E^(-mu*x), {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.351.2a",
+  "gr": "3.351.2",
+  "page": 389,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(-mu*x), {x, u, Infinity}]",
+  "rhs": [
+   "E^(-u*mu)*Sum[n!/k!*u^k/mu^(n - k + 1), {k, 0, n}]"
+  ],
+  "conds": [
+   "u > 0",
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 33(4)",
+  "edition_note": "11",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^n*E^(-mu*x), {x, u, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.351.2b",
+  "gr": "3.351.2",
+  "page": 389,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(-mu*x), {x, u, Infinity}]",
+  "rhs": [
+   "mu^(-n - 1)*Gamma[n + 1, mu*u]"
+  ],
+  "conds": [
+   "u > 0",
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 33(4)",
+  "edition_note": "11",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^n*E^(-mu*x), {x, u, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.351.3",
+  "gr": "3.351.3",
+  "page": 389,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "n!*mu^(-n - 1)"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 133(3)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^n*E^(-mu*x), {x, 0, Infinity}]",
+  "note": "n nonnegative integer (section context; not printed)"
+ },
+ {
+  "id": "GR3.351.4",
+  "gr": "3.351.4",
+  "page": 389,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)/x^(n + 1), {x, u, Infinity}]",
+  "rhs": [
+   "(-1)^(n + 1)*p^n*ExpIntegralEi[-p*u]/n! + E^(-p*u)/u^n*Sum[(-1)^k*p^k*u^k*(n - k - 1)!/n!, {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "p > 0",
+   "u > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "NT 21(3)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-p*x)/x^(n + 1), {x, u, Infinity}]",
+  "note": "n(n-1)...(n-k) written as n!/(n-k-1)!; u > 0 and n positive integer added (not printed)"
+ },
+ {
+  "id": "GR3.351.5",
+  "gr": "3.351.5",
+  "page": 389,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/x, {x, 1, Infinity}]",
+  "rhs": [
+   "-ExpIntegralEi[-mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (104)(10)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-mu*x)/x, {x, 1, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.351.6a",
+  "gr": "3.351.6",
+  "page": 389,
+  "status": "ok",
+  "lhs": "Integrate[E^x/x, {x, -Infinity, u}]",
+  "rhs": [
+   "LogIntegral[E^u]"
+  ],
+  "conds": [
+   "u < 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^x/x, {x, -Infinity, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.351.6b",
+  "gr": "3.351.6",
+  "page": 389,
+  "status": "ok",
+  "lhs": "Integrate[E^x/x, {x, -Infinity, u}]",
+  "rhs": [
+   "ExpIntegralEi[u]"
+  ],
+  "conds": [
+   "u < 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^x/x, {x, -Infinity, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.351.7",
+  "gr": "3.351.7",
+  "page": 389,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-mu*x), {x, 0, u}]",
+  "rhs": [
+   "1/mu^2 - 1/mu^2*E^(-mu*u)*(1 + mu*u)"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "",
+  "edition_note": "9",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x*E^(-mu*x), {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.351.8",
+  "gr": "3.351.8",
+  "page": 389,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-mu*x), {x, 0, u}]",
+  "rhs": [
+   "2/mu^3 - 1/mu^3*E^(-mu*u)*(2 + 2*mu*u + mu^2*u^2)"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^2*E^(-mu*x), {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.351.9",
+  "gr": "3.351.9",
+  "page": 389,
+  "status": "ok",
+  "lhs": "Integrate[x^3*E^(-mu*x), {x, 0, u}]",
+  "rhs": [
+   "6/mu^4 - 1/mu^4*E^(-mu*u)*(6 + 6*mu*u + 3*mu^2*u^2 + mu^3*u^3)"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "",
+  "edition_note": "7",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^3*E^(-mu*x), {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.352.1",
+  "gr": "3.352.1",
+  "page": 389,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/(x + beta), {x, 0, u}]",
+  "rhs": [
+   "E^(mu*beta)*(ExpIntegralEi[-mu*u - mu*beta] - ExpIntegralEi[-mu*beta])"
+  ],
+  "conds": [
+   "u >= 0",
+   "Abs[Arg[beta]] < Pi"
+  ],
+  "cite": "ET II 217(12)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-mu*x)/(x + beta), {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.352.2",
+  "gr": "3.352.2",
+  "page": 389,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/(x + beta), {x, u, Infinity}]",
+  "rhs": [
+   "-E^(beta*mu)*ExpIntegralEi[-mu*u - mu*beta]"
+  ],
+  "conds": [
+   "u >= 0",
+   "Abs[Arg[u + beta]] < Pi",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 134(6), JA",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-mu*x)/(x + beta), {x, u, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.352.3",
+  "gr": "3.352.3",
+  "page": 390,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/(x + alpha), {x, u, v}]",
+  "rhs": [
+   "E^(alpha*mu)*(ExpIntegralEi[-(alpha + v)*mu] - ExpIntegralEi[-(alpha + u)*mu])"
+  ],
+  "conds": [
+   "-alpha < u || -alpha > v",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 134 (7)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-mu*x)/(x + alpha), {x, u, v}]",
+  "note": "condition printed as \"-alpha < n, and -alpha > v\"; n read as u and \"and\" as \"or\" (pole outside [u, v])"
+ },
+ {
+  "id": "GR3.352.4",
+  "gr": "3.352.4",
+  "page": 390,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/(x + beta), {x, 0, Infinity}]",
+  "rhs": [
+   "-E^(beta*mu)*ExpIntegralEi[-mu*beta]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET II 217(11)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-mu*x)/(x + beta), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.352.5",
+  "gr": "3.352.5",
+  "page": 390,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)/(a - x), {x, u, Infinity}]",
+  "rhs": [
+   "E^(-p*a)*ExpIntegralEi[p*a - p*u]"
+  ],
+  "conds": [
+   "p > 0",
+   "a < u"
+  ],
+  "cite": "ET II 251(37)",
+  "edition_note": "7",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-p*x)/(a - x), {x, u, Infinity}]",
+  "note": "for a > u the book replaces Ei(pa - pu) by the principal-value Ei-bar"
+ },
+ {
+  "id": "GR3.352.6",
+  "gr": "3.352.6",
+  "page": 390,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/(a - x), {x, 0, Infinity}]",
+  "rhs": [
+   "E^(-mu*a)*ExpIntegralEi[a*mu]"
+  ],
+  "conds": [
+   "a < 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (91)(4)",
+  "edition_note": "8",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-mu*x)/(a - x), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.352.7",
+  "gr": "3.352.7",
+  "page": 390,
+  "status": "ok",
+  "lhs": "Integrate[E^(I*p*x)/(x - a), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "I*Pi*E^(I*a*p)"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "ET II 251(38)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(I*p*x)/(x - a), {x, -Infinity, Infinity}]",
+  "note": "real pole at x = a: a principal-value integral (not marked PV)"
+ },
+ {
+  "id": "GR3.353.1",
+  "gr": "3.353.1",
+  "page": 390,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/(x + beta)^n, {x, u, Infinity}]",
+  "rhs": [
+   "E^(-u*mu)*Sum[(k - 1)!*(-mu)^(n - k - 1)/((n - 1)!*(u + beta)^k), {k, 1, n - 1}] - (-mu)^(n - 1)/(n - 1)!*E^(beta*mu)*ExpIntegralEi[-(u + beta)*mu]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 2",
+   "Abs[Arg[u + beta]] < Pi",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 134(10)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-mu*x)/(x + beta)^n, {x, u, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.353.2",
+  "gr": "3.353.2",
+  "page": 390,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/(x + beta)^n, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(n - 1)!*Sum[(k - 1)!*(-mu)^(n - k - 1)*beta^(-k), {k, 1, n - 1}] - (-mu)^(n - 1)/(n - 1)!*E^(beta*mu)*ExpIntegralEi[-beta*mu]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 2",
+   "Abs[Arg[beta]] < Pi",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 134(9), BI (92)(2)",
+  "edition_note": "7",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-mu*x)/(x + beta)^n, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.353.3",
+  "gr": "3.353.3",
+  "page": 390,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)/(a + x)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "p*E^(a*p)*ExpIntegralEi[-a*p] + 1/a"
+  ],
+  "conds": [
+   "p > 0",
+   "a > 0"
+  ],
+  "cite": "LI (281)(28), LI (281)(29)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-p*x)/(a + x)^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.353.4",
+  "gr": "3.353.4",
+  "page": 390,
+  "status": "ok",
+  "lhs": "Integrate[x*E^x/(1 + x)^2, {x, 0, 1}]",
+  "rhs": [
+   "E/2 - 1"
+  ],
+  "conds": [],
+  "cite": "BI (80)(6)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x*E^x/(1 + x)^2, {x, 0, 1}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.353.5",
+  "gr": "3.353.5",
+  "page": 390,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(-mu*x)/(x + beta), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n - 1)*beta^n*E^(beta*mu)*ExpIntegralEi[-beta*mu] + Sum[(k - 1)!*(-beta)^(n - k)*mu^(-k), {k, 1, n}]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (91)(3)a, LET I 135(11)",
+  "edition_note": "7",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^n*E^(-mu*x)/(x + beta), {x, 0, Infinity}]",
+  "note": "n nonnegative integer added (not printed)"
+ },
+ {
+  "id": "GR3.354.1",
+  "gr": "3.354.1",
+  "page": 390,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/beta*(CosIntegral[beta*mu]*Sin[beta*mu] - (SinIntegral[beta*mu] - Pi/2)*Cos[beta*mu])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (91)(7)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-mu*x)/(beta^2 + x^2), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.354.2",
+  "gr": "3.354.2",
+  "page": 390,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-mu*x)/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-CosIntegral[beta*mu]*Cos[beta*mu] - (SinIntegral[beta*mu] - Pi/2)*Sin[beta*mu]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (91)(8)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x*E^(-mu*x)/(beta^2 + x^2), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.354.3",
+  "gr": "3.354.3",
+  "page": 390,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/(beta^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*beta)*(E^(-beta*mu)*ExpIntegralEi[beta*mu] - E^(beta*mu)*ExpIntegralEi[-beta*mu])"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "Abs[Arg[-beta]] < Pi",
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (91)(14)",
+  "edition_note": "7",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-mu*x)/(beta^2 - x^2), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.354.4",
+  "gr": "3.354.4",
+  "page": 391,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-mu*x)/(beta^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*(E^(-beta*mu)*ExpIntegralEi[beta*mu] + E^(beta*mu)*ExpIntegralEi[-beta*mu])"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "Abs[Arg[-beta]] < Pi",
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (91)(15)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x*E^(-mu*x)/(beta^2 - x^2), {x, 0, Infinity}]",
+  "note": "for beta > 0 the book replaces Ei(beta mu) by the principal-value Ei-bar"
+ },
+ {
+  "id": "GR3.354.5",
+  "gr": "3.354.5",
+  "page": 391,
+  "status": "ok",
+  "lhs": "Integrate[E^(-I*p*x)/(a^2 + x^2), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi/a*E^(-Abs[a*p])",
+   "Pi/Abs[a]*E^(-Abs[a*p])"
+  ],
+  "conds": [
+   "a != 0",
+   "Element[a, Reals]",
+   "Element[p, Reals]"
+  ],
+  "cite": "ET I 118(1)a",
+  "edition_note": "8",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-I*p*x)/(a^2 + x^2), {x, -Infinity, Infinity}]",
+  "note": "a taken real (implied by |ap|); printed pi/a is negative for a < 0, corrected candidate pi/|a|"
+ },
+ {
+  "id": "GR3.355.1",
+  "gr": "3.355.1",
+  "page": 391,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/(beta^2 + x^2)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*beta^3)*(CosIntegral[beta*mu]*Sin[beta*mu] - (SinIntegral[beta*mu] - Pi/2)*Cos[beta*mu]) - beta*mu*(CosIntegral[beta*mu]*Cos[beta*mu] + (SinIntegral[beta*mu] - Pi/2)*Sin[beta*mu])",
+   "1/(2*beta^3)*((CosIntegral[beta*mu]*Sin[beta*mu] - (SinIntegral[beta*mu] - Pi/2)*Cos[beta*mu]) - beta*mu*(CosIntegral[beta*mu]*Cos[beta*mu] + (SinIntegral[beta*mu] - Pi/2)*Sin[beta*mu]))"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "LI (92)(6)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-mu*x)/(beta^2 + x^2)^2, {x, 0, Infinity}]",
+  "note": "conditions taken from 3.355.2 (none printed); second candidate puts the beta*mu term inside the 1/(2 beta^3) prefactor (dimensionally required)"
+ },
+ {
+  "id": "GR3.355.2",
+  "gr": "3.355.2",
+  "page": 391,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-mu*x)/(beta^2 + x^2)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*beta^2)*(-beta*mu*(CosIntegral[beta*mu]*Sin[beta*mu] - (SinIntegral[beta*mu] - Pi/2)*Cos[beta*mu]))",
+   "1/(2*beta^2)*(1 - beta*mu*(CosIntegral[beta*mu]*Sin[beta*mu] - (SinIntegral[beta*mu] - Pi/2)*Cos[beta*mu]))"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (92)(7)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x*E^(-mu*x)/(beta^2 + x^2)^2, {x, 0, Infinity}]",
+  "note": "as printed the value vanishes as mu -> 0, but the integral tends to 1/(2 beta^2); second candidate adds the missing 1"
+ },
+ {
+  "id": "GR3.355.3",
+  "gr": "3.355.3",
+  "page": 391,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)/(a^2 - x^2)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*a^3)*((a*p - 1)*E^(a*p)*ExpIntegralEi[-a*p] + (1 + a*p)*E^(-a*p)*ExpIntegralEi[a*p])"
+  ],
+  "conds": [
+   "Im[a^2] > 0",
+   "p > 0"
+  ],
+  "cite": "BI (92)(8)",
+  "edition_note": "3",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-p*x)/(a^2 - x^2)^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.355.4",
+  "gr": "3.355.4",
+  "page": 391,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-p*x)/(a^2 - x^2)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*a^2)*(-2 + a*p*(E^(-a*p)*ExpIntegralEi[a*p] - E^(a*p)*ExpIntegralEi[-a*p]))"
+  ],
+  "conds": [
+   "Im[a^2] > 0",
+   "p > 0"
+  ],
+  "cite": "LI (92)(9)",
+  "edition_note": "3",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x*E^(-p*x)/(a^2 - x^2)^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.356.1",
+  "gr": "3.356.1",
+  "page": 391,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n + 1)*E^(-p*x)/(a^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n - 1)*a^(2*n)*(CosIntegral[a*p]*Cos[a*p] + (SinIntegral[a*p] - Pi/2)*Sin[a*p]) + 1/p^(2*n)*Sum[(2*n - 2*k + 1)!*(-a^2*p^2)^(k - 1), {k, 1, n}]"
+  ],
+  "conds": [
+   "p > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (91)(12)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^(2*n + 1)*E^(-p*x)/(a^2 + x^2), {x, 0, Infinity}]",
+  "note": "n nonnegative integer added (not printed)"
+ },
+ {
+  "id": "GR3.356.2",
+  "gr": "3.356.2",
+  "page": 391,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n)*E^(-p*x)/(a^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*a^(2*n - 1)*(CosIntegral[a*p]*Sin[a*p] - (SinIntegral[a*p] - Pi/2)*Cos[a*p]) + 1/p^(2*n - 1)*Sum[(2*n - 2*k)!*(-a^2*p^2)^(k - 1), {k, 1, n}]"
+  ],
+  "conds": [
+   "p > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (91)(11)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^(2*n)*E^(-p*x)/(a^2 + x^2), {x, 0, Infinity}]",
+  "note": "n nonnegative integer added (not printed)"
+ },
+ {
+  "id": "GR3.356.3",
+  "gr": "3.356.3",
+  "page": 391,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n + 1)*E^(-p*x)/(a^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*a^(2*n)*(E^(a*p)*ExpIntegralEi[-a*p] + E^(-a*p)*ExpIntegralEi[a*p]) - 1/p^(2*n)*Sum[(2*n - 2*k + 1)!*(a^2*p^2)^(k - 1), {k, 1, n}]"
+  ],
+  "conds": [
+   "p > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (91)(17)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^(2*n + 1)*E^(-p*x)/(a^2 - x^2), {x, 0, Infinity}]",
+  "note": "n nonnegative integer added; for real a the integral is a principal value (not marked PV)"
+ },
+ {
+  "id": "GR3.356.4",
+  "gr": "3.356.4",
+  "page": 391,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n)*E^(-p*x)/(a^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*a^(2*n - 1)*(E^(-a*p)*ExpIntegralEi[a*p] - E^(a*p)*ExpIntegralEi[-a*p]) - 1/p^(2*n - 1)*Sum[(2*n - 2*k)!*(a^2*p^2)^(k - 1), {k, 1, n}]"
+  ],
+  "conds": [
+   "p > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (91)(16)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^(2*n)*E^(-p*x)/(a^2 - x^2), {x, 0, Infinity}]",
+  "note": "n nonnegative integer added; for real a the integral is a principal value (not marked PV)"
+ },
+ {
+  "id": "GR3.357.1",
+  "gr": "3.357.1",
+  "page": 392,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/(a^3 + a^2*x + a*x^2 + x^3), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*a^2)*(CosIntegral[a*mu]*(Sin[a*mu] + Cos[a*mu]) + (SinIntegral[a*mu] - Pi/2)*(Sin[a*mu] - Cos[a*mu]) - E^(a*mu)*ExpIntegralEi[-a*mu])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "a > 0"
+  ],
+  "cite": "BI (92)(18)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-mu*x)/(a^3 + a^2*x + a*x^2 + x^3), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.357.2",
+  "gr": "3.357.2",
+  "page": 392,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-mu*x)/(a^3 + a^2*x + a*x^2 + x^3), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*a)*(CosIntegral[a*mu]*(Sin[a*mu] - Cos[a*mu]) - (SinIntegral[a*mu] - Pi/2)*(Sin[a*mu] + Cos[a*mu]) - E^(a*mu)*ExpIntegralEi[-a*mu])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "a > 0"
+  ],
+  "cite": "BI (92)(19)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x*E^(-mu*x)/(a^3 + a^2*x + a*x^2 + x^3), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.357.3",
+  "gr": "3.357.3",
+  "page": 392,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-mu*x)/(a^3 + a^2*x + a*x^2 + x^3), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*(-CosIntegral[a*mu]*(Sin[a*mu] + Cos[a*mu]) - (SinIntegral[a*mu] - Pi/2)*(Sin[a*mu] - Cos[a*mu]) - E^(a*mu)*ExpIntegralEi[-a*mu])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "a > 0"
+  ],
+  "cite": "BI (92)(20)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^2*E^(-mu*x)/(a^3 + a^2*x + a*x^2 + x^3), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.357.4",
+  "gr": "3.357.4",
+  "page": 392,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/(a^3 - a^2*x + a*x^2 - x^3), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*a^2)*(CosIntegral[a*mu]*(Sin[a*mu] - Cos[a*mu]) - (SinIntegral[a*mu] - Pi/2)*(Sin[a*mu] + Cos[a*mu]) + E^(-a*mu)*ExpIntegralEi[a*mu])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "a > 0"
+  ],
+  "cite": "BI (92)(21)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-mu*x)/(a^3 - a^2*x + a*x^2 - x^3), {x, 0, Infinity}]",
+  "note": "real pole at x = a: principal value (not marked PV)"
+ },
+ {
+  "id": "GR3.357.5",
+  "gr": "3.357.5",
+  "page": 392,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-mu*x)/(a^3 - a^2*x + a*x^2 - x^3), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*a)*(-CosIntegral[a*mu]*(Sin[a*mu] + Cos[a*mu]) - (SinIntegral[a*mu] - Pi/2)*(Sin[a*mu] - Cos[a*mu]) + E^(-a*mu)*ExpIntegralEi[a*mu])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "a > 0"
+  ],
+  "cite": "BI (92)(22)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x*E^(-mu*x)/(a^3 - a^2*x + a*x^2 - x^3), {x, 0, Infinity}]",
+  "note": "real pole at x = a: principal value (not marked PV)"
+ },
+ {
+  "id": "GR3.357.6",
+  "gr": "3.357.6",
+  "page": 392,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-mu*x)/(a^3 - a^2*x + a*x^2 - x^3), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*(CosIntegral[a*mu]*(Cos[a*mu] - Sin[a*mu]) + (SinIntegral[a*mu] - Pi/2)*(Cos[a*mu] + Sin[a*mu]) + E^(-a*mu)*ExpIntegralEi[a*mu])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "a > 0"
+  ],
+  "cite": "BI (92)(23)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^2*E^(-mu*x)/(a^3 - a^2*x + a*x^2 - x^3), {x, 0, Infinity}]",
+  "note": "real pole at x = a: principal value (not marked PV)"
+ },
+ {
+  "id": "GR3.358.1",
+  "gr": "3.358.1",
+  "page": 392,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)/(a^4 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*a^3)*(E^(-a*p)*ExpIntegralEi[a*p] - E^(a*p)*ExpIntegralEi[-a*p] + 2*CosIntegral[a*p]*Sin[a*p] - 2*(SinIntegral[a*p] - Pi/2)*Cos[a*p])"
+  ],
+  "conds": [
+   "p > 0",
+   "a > 0"
+  ],
+  "cite": "BI (91)(18)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[E^(-p*x)/(a^4 - x^4), {x, 0, Infinity}]",
+  "note": "real pole at x = a: principal value (not marked PV)"
+ },
+ {
+  "id": "GR3.358.2",
+  "gr": "3.358.2",
+  "page": 392,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-p*x)/(a^4 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*a^2)*(E^(a*p)*ExpIntegralEi[-a*p] + E^(-a*p)*ExpIntegralEi[a*p] - 2*CosIntegral[a*p]*Cos[a*p] - 2*(SinIntegral[a*p] - Pi/2)*Sin[a*p])"
+  ],
+  "conds": [
+   "p > 0",
+   "a > 0"
+  ],
+  "cite": "BI (91)(19)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x*E^(-p*x)/(a^4 - x^4), {x, 0, Infinity}]",
+  "note": "real pole at x = a: principal value (not marked PV)"
+ },
+ {
+  "id": "GR3.358.3",
+  "gr": "3.358.3",
+  "page": 392,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-p*x)/(a^4 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*a)*(E^(-a*p)*ExpIntegralEi[a*p] - E^(a*p)*ExpIntegralEi[-a*p] - 2*CosIntegral[a*p]*Sin[a*p] + 2*(SinIntegral[a*p] - Pi/2)*Cos[a*p])"
+  ],
+  "conds": [
+   "p > 0",
+   "a > 0"
+  ],
+  "cite": "BI (91)(20)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^2*E^(-p*x)/(a^4 - x^4), {x, 0, Infinity}]",
+  "note": "real pole at x = a: principal value (not marked PV)"
+ },
+ {
+  "id": "GR3.358.4",
+  "gr": "3.358.4",
+  "page": 392,
+  "status": "ok",
+  "lhs": "Integrate[x^3*E^(-p*x)/(a^4 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*(E^(a*p)*ExpIntegralEi[-a*p] + E^(-a*p)*ExpIntegralEi[a*p] + 2*CosIntegral[a*p]*Cos[a*p] + 2*(SinIntegral[a*p] - Pi/2)*Sin[a*p])"
+  ],
+  "conds": [
+   "p > 0",
+   "a > 0"
+  ],
+  "cite": "BI (91)(21)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^3*E^(-p*x)/(a^4 - x^4), {x, 0, Infinity}]",
+  "note": "real pole at x = a: principal value (not marked PV)"
+ },
+ {
+  "id": "GR3.358.5",
+  "gr": "3.358.5",
+  "page": 393,
+  "status": "ok",
+  "lhs": "Integrate[x^(4*n)*E^(-p*x)/(a^4 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*a^(4*n - 3)*(E^(-a*p)*ExpIntegralEi[a*p] - E^(a*p)*ExpIntegralEi[-a*p] + 2*CosIntegral[a*p]*Sin[a*p] - 2*(SinIntegral[a*p] - Pi/2)*Cos[a*p]) - 1/p^(4*n - 3)*Sum[(4*n - 4*k)!*(a^4*p^4)^(k - 1), {k, 1, n}]"
+  ],
+  "conds": [
+   "p > 0",
+   "a > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (91)(22)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^(4*n)*E^(-p*x)/(a^4 - x^4), {x, 0, Infinity}]",
+  "note": "real pole at x = a: principal value (not marked PV); n positive integer added (not printed)"
+ },
+ {
+  "id": "GR3.358.6",
+  "gr": "3.358.6",
+  "page": 393,
+  "status": "ok",
+  "lhs": "Integrate[x^(4*n + 1)*E^(-p*x)/(a^4 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*a^(4*n - 2)*(E^(a*p)*ExpIntegralEi[-a*p] + E^(-a*p)*ExpIntegralEi[a*p] - 2*CosIntegral[a*p]*Cos[a*p] - 2*(SinIntegral[a*p] - Pi/2)*Sin[a*p]) - 1/p^(4*n - 2)*Sum[(4*n - 4*k + 1)!*(a^4*p^4)^(k - 1), {k, 1, n}]"
+  ],
+  "conds": [
+   "p > 0",
+   "a > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (91)(23)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^(4*n + 1)*E^(-p*x)/(a^4 - x^4), {x, 0, Infinity}]",
+  "note": "real pole at x = a: principal value (not marked PV); n positive integer added (not printed)"
+ },
+ {
+  "id": "GR3.358.7",
+  "gr": "3.358.7",
+  "page": 393,
+  "status": "ok",
+  "lhs": "Integrate[x^(4*n + 2)*E^(-p*x)/(a^4 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*a^(4*n - 1)*(E^(-a*p)*ExpIntegralEi[a*p] - E^(a*p)*ExpIntegralEi[-a*p] - 2*CosIntegral[a*p]*Sin[a*p] + 2*(SinIntegral[a*p] - Pi/2)*Cos[a*p]) - 1/p^(4*n - 1)*Sum[(4*n - 4*k + 2)!*(a^4*p^4)^(k - 1), {k, 1, n}]"
+  ],
+  "conds": [
+   "p > 0",
+   "a > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (91)(24)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^(4*n + 2)*E^(-p*x)/(a^4 - x^4), {x, 0, Infinity}]",
+  "note": "real pole at x = a: principal value (not marked PV); n positive integer added (not printed)"
+ },
+ {
+  "id": "GR3.358.8",
+  "gr": "3.358.8",
+  "page": 393,
+  "status": "ok",
+  "lhs": "Integrate[x^(4*n + 3)*E^(-p*x)/(a^4 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*a^(4*n)*(E^(a*p)*ExpIntegralEi[-a*p] + E^(-a*p)*ExpIntegralEi[a*p] + 2*CosIntegral[a*p]*Cos[a*p] + 2*(SinIntegral[a*p] - Pi/2)*Sin[a*p]) - 1/p^(4*n)*Sum[(4*n - 4*k + 3)!*(a^4*p^4)^(k - 1), {k, 1, n}]"
+  ],
+  "conds": [
+   "p > 0",
+   "a > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (91)(25)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "Integrate[x^(4*n + 3)*E^(-p*x)/(a^4 - x^4), {x, 0, Infinity}]",
+  "note": "real pole at x = a: principal value (not marked PV); n positive integer added (not printed)"
+ },
+ {
+  "id": "GR3.359a",
+  "gr": "3.359",
+  "page": 393,
+  "status": "ok",
+  "lhs": "Integrate[(I - x)^n/(I + x)^n*E^(-I*p*x)/(1 + x^2), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(-1)^(n - 1)*2*Pi*p*E^(-p)*LaguerreL[n - 1, 2*p]"
+  ],
+  "conds": [
+   "p > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "ET I 118(2)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "int (i-x)^n/(i+x)^n e^(-ipx)/(i+x^2) dx = (-1)^(n-1) 2 pi p e^-p L_(n-1)(2p) for p > 0",
+  "note": "book prints the denominator as (i + x^2); transcribed as (1 + x^2), which the n = 1 residue check confirms (with 1 + x^2 the n=1 value is 2 pi p e^-p, matching the book). n positive integer added (L_{n-1})."
+ },
+ {
+  "id": "GR3.359b",
+  "gr": "3.359",
+  "page": 393,
+  "status": "ok",
+  "lhs": "Integrate[(I - x)^n/(I + x)^n*E^(-I*p*x)/(1 + x^2), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "p < 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "ET I 118(2)",
+  "edition_note": "",
+  "section": "3.35 Combinations of exponentials and rational functions",
+  "tex": "int (i-x)^n/(i+x)^n e^(-ipx)/(i+x^2) dx = 0 for p < 0",
+  "note": "book prints the denominator as (i + x^2); transcribed as (1 + x^2), which the n = 1 residue check confirms (with 1 + x^2 the n=1 value is 2 pi p e^-p, matching the book). n positive integer added (L_{n-1})."
+ },
+ {
+  "id": "GR3.361.1",
+  "gr": "3.361.1",
+  "page": 393,
+  "status": "ok",
+  "lhs": "Integrate[E^(-q*x)/Sqrt[x], {x, 0, u}]",
+  "rhs": [
+   "Sqrt[Pi/q]*Erf[Sqrt[q*u]]"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[E^(-q*x)/Sqrt[x], {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.361.2",
+  "gr": "3.361.2",
+  "page": 393,
+  "status": "ok",
+  "lhs": "Integrate[E^(-q*x)/Sqrt[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/q]"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "BI(98)(10)",
+  "edition_note": "8",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[E^(-q*x)/Sqrt[x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.361.3",
+  "gr": "3.361.3",
+  "page": 393,
+  "status": "ok",
+  "lhs": "Integrate[E^(-q*x)/Sqrt[1 + x], {x, -1, Infinity}]",
+  "rhs": [
+   "E^q*Sqrt[Pi/q]"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "BI (104)(16)",
+  "edition_note": "8",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[E^(-q*x)/Sqrt[1 + x], {x, -1, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.362.1",
+  "gr": "3.362.1",
+  "page": 393,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/Sqrt[x - 1], {x, 1, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/mu]*E^(-mu)"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (104)(11)a",
+  "edition_note": "",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[E^(-mu*x)/Sqrt[x - 1], {x, 1, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.362.2",
+  "gr": "3.362.2",
+  "page": 393,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/Sqrt[x + beta], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/mu]*E^(beta*mu)*(1 - Erf[Sqrt[beta*mu]])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Abs[Arg[beta]] < Pi"
+  ],
+  "cite": "ET I 135(18)",
+  "edition_note": "",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[E^(-mu*x)/Sqrt[x + beta], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.363.1",
+  "gr": "3.363.1",
+  "page": 394,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[x - u]/x*E^(-mu*x), {x, u, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/mu]*E^(-u*mu) - Pi*Sqrt[u]*(1 - Erf[Sqrt[u*mu]])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "u > 0"
+  ],
+  "cite": "ET I 136(23)",
+  "edition_note": "",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[Sqrt[x - u]/x*E^(-mu*x), {x, u, Infinity}]",
+  "note": "u > 0 added (not printed)"
+ },
+ {
+  "id": "GR3.363.2",
+  "gr": "3.363.2",
+  "page": 394,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/(x*Sqrt[x - u]), {x, u, Infinity}]",
+  "rhs": [
+   "Pi/Sqrt[u]*(1 - Erf[Sqrt[u*mu]])"
+  ],
+  "conds": [
+   "u > 0",
+   "Re[mu] >= 0"
+  ],
+  "cite": "ET I 136(26)",
+  "edition_note": "",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[E^(-mu*x)/(x*Sqrt[x - u]), {x, u, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.364.1",
+  "gr": "3.364.1",
+  "page": 394,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)/Sqrt[x*(2 - x)], {x, 0, 2}]",
+  "rhs": [
+   "Pi*E^(-p)*BesselI[0, p]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "GW (312)(7a)",
+  "edition_note": "",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[E^(-p*x)/Sqrt[x*(2 - x)], {x, 0, 2}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.364.2",
+  "gr": "3.364.2",
+  "page": 394,
+  "status": "ok",
+  "lhs": "Integrate[E^(2*x)/Sqrt[1 - x^2], {x, -1, 1}]",
+  "rhs": [
+   "Pi*BesselI[0, 2]"
+  ],
+  "conds": [],
+  "cite": "BI (277)(2)a",
+  "edition_note": "",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[E^(2*x)/Sqrt[1 - x^2], {x, -1, 1}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.364.3",
+  "gr": "3.364.3",
+  "page": 394,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)/Sqrt[x*(x + a)], {x, 0, Infinity}]",
+  "rhs": [
+   "E^(a*p/2)*BesselK[0, a*p/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "p > 0"
+  ],
+  "cite": "GW (312)(8a)",
+  "edition_note": "",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[E^(-p*x)/Sqrt[x*(x + a)], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.365.1",
+  "gr": "3.365.1",
+  "page": 394,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-mu*x)/Sqrt[u^2 - x^2], {x, 0, u}]",
+  "rhs": [
+   "Pi*u/2*(StruveL[1, mu*u] - BesselI[1, mu*u]) + u"
+  ],
+  "conds": [
+   "u > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 136(28)",
+  "edition_note": "",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[x*E^(-mu*x)/Sqrt[u^2 - x^2], {x, 0, u}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.365.2",
+  "gr": "3.365.2",
+  "page": 394,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-mu*x)/Sqrt[x^2 - u^2], {x, u, Infinity}]",
+  "rhs": [
+   "u*BesselK[1, u*mu]"
+  ],
+  "conds": [
+   "u > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 136(29)",
+  "edition_note": "",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[x*E^(-mu*x)/Sqrt[x^2 - u^2], {x, u, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.366.1",
+  "gr": "3.366.1",
+  "page": 394,
+  "status": "ok",
+  "lhs": "Integrate[(u - x)*E^(-mu*x)/Sqrt[2*u*x - x^2], {x, 0, 2*u}]",
+  "rhs": [
+   "Pi*u*E^(-u*mu)*BesselI[1, u*mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "u > 0"
+  ],
+  "cite": "ET I 136(31)",
+  "edition_note": "",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[(u - x)*E^(-mu*x)/Sqrt[2*u*x - x^2], {x, 0, 2*u}]",
+  "note": "u > 0 added (not printed)"
+ },
+ {
+  "id": "GR3.366.2",
+  "gr": "3.366.2",
+  "page": 394,
+  "status": "ok",
+  "lhs": "Integrate[(x + beta)*E^(-mu*x)/Sqrt[x^2 + 2*beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "beta*E^(beta*mu)*BesselK[1, beta*mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Abs[Arg[beta]] < Pi"
+  ],
+  "cite": "ET I 136(30)",
+  "edition_note": "",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[(x + beta)*E^(-mu*x)/Sqrt[x^2 + 2*beta*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.366.3",
+  "gr": "3.366.3",
+  "page": 394,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-mu*x)/Sqrt[x^2 + beta^2], {x, 0, Infinity}]",
+  "rhs": [
+   "beta*Pi/2*(StruveH[1, beta*mu] - BesselY[1, beta*mu]) - beta"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi/2",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 136(27)",
+  "edition_note": "",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[x*E^(-mu*x)/Sqrt[x^2 + beta^2], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.367",
+  "gr": "3.367",
+  "page": 394,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[E^(-mu*x)/((1 + Cos[t] + x)*Sqrt[x^2 + 2*x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Exp[2*mu*Cos[t/2]^2]/Sin[t]*(t - Sin[t]*Integrate[BesselK[0, v]*E^(-v*Cos[t]), {v, 0, mu}])"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 136(33)",
+  "edition_note": "",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "int_0^inf e^(-mu x)/((1+cos t+x) sqrt(x^2+2x)) dx = exp(2 mu cos^2(t/2))/sin t (t - sin t int_0^u K_0(v) e^(-v cos t) dv)",
+  "note": "upper limit of the inner integral printed as u; read as mu",
+  "reason": "value contains an unevaluated integral of K_0(v) e^(-v cos t)"
+ },
+ {
+  "id": "GR3.368",
+  "gr": "3.368",
+  "page": 394,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/(x + Sqrt[x^2 + beta^2]), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*beta*mu)*(StruveH[1, beta*mu] - BesselY[1, beta*mu]) - 1/(beta^2*mu^2)"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi/2",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 136(32)",
+  "edition_note": "",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[E^(-mu*x)/(x + Sqrt[x^2 + beta^2]), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.369",
+  "gr": "3.369",
+  "page": 394,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)/Sqrt[(x + a)^3], {x, 0, Infinity}]",
+  "rhs": [
+   "2/Sqrt[a] - 2*Sqrt[Pi*mu]*E^(a*mu)*(1 - Erf[Sqrt[a*mu]])"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 135(20)",
+  "edition_note": "11",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[E^(-mu*x)/Sqrt[(x + a)^3], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.371a",
+  "gr": "3.371",
+  "page": 394,
+  "status": "ok",
+  "lhs": "Integrate[x^(n - 1/2)*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*Product[(2*k - 1)/2, {k, 1, n}]*mu^(-n - 1/2)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 135(17)",
+  "edition_note": "11",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[x^(n - 1/2)*E^(-mu*x), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.371b",
+  "gr": "3.371",
+  "page": 394,
+  "status": "ok",
+  "lhs": "Integrate[x^(n - 1/2)*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*2^(-n)*mu^(-n - 1/2)*(2*n - 1)!!"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 135(17)",
+  "edition_note": "11",
+  "section": "3.36-3.37 Exponentials and algebraic functions",
+  "tex": "Integrate[x^(n - 1/2)*E^(-mu*x), {x, 0, Infinity}]",
+  "note": ""
+ }
+]

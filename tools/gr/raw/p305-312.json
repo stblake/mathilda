@@ -1,0 +1,1152 @@
+[
+ {
+  "id": "GR3.133.6",
+  "gr": "3.133.6",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)^3*(x - b)*(x - c)], {x, u, Infinity}]",
+  "rhs": [
+   "2/((b - a)*Sqrt[a - c])*MatharE2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]] + 2/(a - b)*Sqrt[(u - b)/((u - a)*(u - c))]"
+  ],
+  "conds": [
+   "u > a > b > c"
+  ],
+  "cite": "BY (238.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(x - a)^3*(x - b)*(x - c)], {x, u, Infinity}] = 2/((b - a)*Sqrt[a - c])*E[nu, q] + 2/(a - b)*Sqrt[(u - b)/((u - a)*(u - c))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.133.7",
+  "gr": "3.133.7",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)^3*(c - x)], {x, -Infinity, u}]",
+  "rhs": [
+   "2*Sqrt[a - c]/((a - b)*(b - c))*MatharE2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]] - 2/((a - b)*Sqrt[a - c])*MatharF2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]] - 2/(b - c)*Sqrt[(c - u)/((a - u)*(b - u))]"
+  ],
+  "conds": [
+   "a > b > c >= u"
+  ],
+  "cite": "BY (231.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)*(b - x)^3*(c - x)], {x, -Infinity, u}] = 2*Sqrt[a - c]/((a - b)*(b - c))*E[al, p] - 2/((a - b)*Sqrt[a - c])*F[al, p] - 2/(b - c)*Sqrt[(c - u)/((a - u)*(b - u))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.133.8",
+  "gr": "3.133.8",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)^3*(c - x)], {x, u, c}]",
+  "rhs": [
+   "2*Sqrt[a - c]/((a - b)*(b - c))*MatharE2[ArcSin[Sqrt[(c - u)/(b - u)]], Sqrt[(a - b)/(a - c)]] - 2/((a - b)*Sqrt[a - c])*MatharF2[ArcSin[Sqrt[(c - u)/(b - u)]], Sqrt[(a - b)/(a - c)]]"
+  ],
+  "conds": [
+   "a > b > c > u"
+  ],
+  "cite": "BY (232.14)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)*(b - x)^3*(c - x)], {x, u, c}] = 2*Sqrt[a - c]/((a - b)*(b - c))*E[be, p] - 2/((a - b)*Sqrt[a - c])*F[be, p]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.133.9",
+  "gr": "3.133.9",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)^3*(x - c)], {x, c, u}]",
+  "rhs": [
+   "2/((b - c)*Sqrt[a - c])*MatharF2[ArcSin[Sqrt[(u - c)/(b - c)]], Sqrt[(b - c)/(a - c)]] - 2*Sqrt[a - c]/((a - b)*(b - c))*MatharE2[ArcSin[Sqrt[(u - c)/(b - c)]], Sqrt[(b - c)/(a - c)]] + 2/((a - b)*(b - c))*Sqrt[((a - u)*(u - c))/(b - u)]"
+  ],
+  "conds": [
+   "a > b > u > c"
+  ],
+  "cite": "BY (233.10)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)*(b - x)^3*(x - c)], {x, c, u}] = 2/((b - c)*Sqrt[a - c])*F[ga, q] - 2*Sqrt[a - c]/((a - b)*(b - c))*E[ga, q] + 2/((a - b)*(b - c))*Sqrt[((a - u)*(u - c))/(b - u)]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.133.10",
+  "gr": "3.133.10",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(x - b)^3*(x - c)], {x, u, a}]",
+  "rhs": [
+   "2/((a - b)*Sqrt[a - c])*MatharF2[ArcSin[Sqrt[(a - u)/(a - b)]], Sqrt[(a - b)/(a - c)]] - 2*Sqrt[a - c]/((a - b)*(b - c))*MatharE2[ArcSin[Sqrt[(a - u)/(a - b)]], Sqrt[(a - b)/(a - c)]] + 2/((a - b)*(b - c))*Sqrt[((a - u)*(u - c))/(u - b)]"
+  ],
+  "conds": [
+   "a > u > b > c"
+  ],
+  "cite": "BY (236.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)*(x - b)^3*(x - c)], {x, u, a}] = 2/((a - b)*Sqrt[a - c])*F[la, p] - 2*Sqrt[a - c]/((a - b)*(b - c))*E[la, p] + 2/((a - b)*(b - c))*Sqrt[((a - u)*(u - c))/(u - b)]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.133.11",
+  "gr": "3.133.11",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)*(x - b)^3*(x - c)], {x, a, u}]",
+  "rhs": [
+   "2*Sqrt[a - c]/((a - b)*(b - c))*MatharE2[ArcSin[Sqrt[(u - a)/(u - b)]], Sqrt[(b - c)/(a - c)]] - 2/((b - c)*Sqrt[a - c])*MatharF2[ArcSin[Sqrt[(u - a)/(u - b)]], Sqrt[(b - c)/(a - c)]]"
+  ],
+  "conds": [
+   "u > a > b > c"
+  ],
+  "cite": "BY (237.12)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(x - a)*(x - b)^3*(x - c)], {x, a, u}] = 2*Sqrt[a - c]/((a - b)*(b - c))*E[mu, q] - 2/((b - c)*Sqrt[a - c])*F[mu, q]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.133.12",
+  "gr": "3.133.12",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)*(x - b)^3*(x - c)], {x, u, Infinity}]",
+  "rhs": [
+   "2*Sqrt[a - c]/((a - b)*(b - c))*MatharE2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]] - 2/((b - c)*Sqrt[a - c])*MatharF2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]] - 2/(a - b)*Sqrt[(u - a)/((u - b)*(u - c))]"
+  ],
+  "conds": [
+   "u >= a > b > c"
+  ],
+  "cite": "BY (238.04)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(x - a)*(x - b)^3*(x - c)], {x, u, Infinity}] = 2*Sqrt[a - c]/((a - b)*(b - c))*E[nu, q] - 2/((b - c)*Sqrt[a - c])*F[nu, q] - 2/(a - b)*Sqrt[(u - a)/((u - b)*(u - c))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.133.13",
+  "gr": "3.133.13",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)*(c - x)^3], {x, -Infinity, u}]",
+  "rhs": [
+   "2/((c - b)*Sqrt[a - c])*MatharE2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]] + 2/(b - c)*Sqrt[(b - u)/((a - u)*(c - u))]"
+  ],
+  "conds": [
+   "a > b > c > u"
+  ],
+  "cite": "BY (231.10)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)*(b - x)*(c - x)^3], {x, -Infinity, u}] = 2/((c - b)*Sqrt[a - c])*E[al, p] + 2/(b - c)*Sqrt[(b - u)/((a - u)*(c - u))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.133.14",
+  "gr": "3.133.14",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)*(x - c)^3], {x, u, b}]",
+  "rhs": [
+   "2/((b - c)*Sqrt[a - c])*(MatharF2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[(b - c)/(a - c)]] - MatharE2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[(b - c)/(a - c)]]) + 2/(b - c)*Sqrt[(b - u)/((a - u)*(u - c))]"
+  ],
+  "conds": [
+   "a > b > u > c"
+  ],
+  "cite": "BY (234.04)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)*(b - x)*(x - c)^3], {x, u, b}] = 2/((b - c)*Sqrt[a - c])*(F[de, q] - E[de, q]) + 2/(b - c)*Sqrt[(b - u)/((a - u)*(u - c))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.133.15",
+  "gr": "3.133.15",
+  "page": 305,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(x - b)*(x - c)^3], {x, b, u}]",
+  "rhs": [
+   "2/((b - c)*Sqrt[a - c])*MatharE2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[(a - b)/(a - c)]]"
+  ],
+  "conds": [
+   "a >= u > b > c"
+  ],
+  "cite": "BY (235.01)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)*(x - b)*(x - c)^3], {x, b, u}] = 2/((b - c)*Sqrt[a - c])*E[ka, p]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.133.16",
+  "gr": "3.133.16",
+  "page": 306,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(x - b)*(x - c)^3], {x, u, a}]",
+  "rhs": [
+   "2/((b - c)*Sqrt[a - c])*MatharE2[ArcSin[Sqrt[(a - u)/(a - b)]], Sqrt[(a - b)/(a - c)]] - 2/((b - c)*(a - c))*Sqrt[((a - u)*(u - b))/(u - c)]"
+  ],
+  "conds": [
+   "a > u >= b > c"
+  ],
+  "cite": "BY (236.10)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)*(x - b)*(x - c)^3], {x, u, a}] = 2/((b - c)*Sqrt[a - c])*E[la, p] - 2/((b - c)*(a - c))*Sqrt[((a - u)*(u - b))/(u - c)]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.133.17",
+  "gr": "3.133.17",
+  "page": 306,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)*(x - b)*(x - c)^3], {x, a, u}]",
+  "rhs": [
+   "2/((b - c)*Sqrt[a - c])*(MatharF2[ArcSin[Sqrt[(u - a)/(u - b)]], Sqrt[(b - c)/(a - c)]] - MatharE2[ArcSin[Sqrt[(u - a)/(u - b)]], Sqrt[(b - c)/(a - c)]]) + 2/(a - c)*Sqrt[(u - a)/((u - b)*(u - c))]"
+  ],
+  "conds": [
+   "u > a > b > c"
+  ],
+  "cite": "BY (237.13)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(x - a)*(x - b)*(x - c)^3], {x, a, u}] = 2/((b - c)*Sqrt[a - c])*(F[mu, q] - E[mu, q]) + 2/(a - c)*Sqrt[(u - a)/((u - b)*(u - c))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.133.18",
+  "gr": "3.133.18",
+  "page": 306,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)*(x - b)*(x - c)^3], {x, u, Infinity}]",
+  "rhs": [
+   "2/((b - c)*Sqrt[a - c])*(MatharF2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]] - MatharE2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]])"
+  ],
+  "conds": [
+   "u >= a > b > c"
+  ],
+  "cite": "BY (238.03)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(x - a)*(x - b)*(x - c)^3], {x, u, Infinity}] = 2/((b - c)*Sqrt[a - c])*(F[nu, q] - E[nu, q])",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.134.1",
+  "gr": "3.134.1",
+  "page": 306,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)^5*(b - x)*(c - x)], {x, -Infinity, u}]",
+  "rhs": [
+   "2/(3*(a - b)^2*Sqrt[(a - c)^3])*((3*a - b - 2*c)*MatharF2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]] - 2*(2*a - b - c)*MatharE2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]]) + 2/(3*(a - c)*(a - b))*Sqrt[((c - u)*(b - u))/(a - u)^3]"
+  ],
+  "conds": [
+   "a > b > c >= u"
+  ],
+  "cite": "BY (231.08)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)^5*(b - x)*(c - x)], {x, -Infinity, u}] = 2/(3*(a - b)^2*Sqrt[(a - c)^3])*((3*a - b - 2*c)*F[al, p] - 2*(2*a - b - c)*E[al, p]) + 2/(3*(a - c)*(a - b))*Sqrt[((c - u)*(b - u))/(a - u)^3]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.134.2",
+  "gr": "3.134.2",
+  "page": 306,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)^5*(b - x)*(c - x)], {x, u, c}]",
+  "rhs": [
+   "2/(3*(a - b)^2*Sqrt[(a - c)^3])*((3*a - b - 2*c)*MatharF2[ArcSin[Sqrt[(c - u)/(b - u)]], Sqrt[(a - b)/(a - c)]] - 2*(2*a - b - c)*MatharE2[ArcSin[Sqrt[(c - u)/(b - u)]], Sqrt[(a - b)/(a - c)]]) + 2*(4*a^2 - 3*a*b - 2*a*c + b*c - u*(3*a - 2*b - c))/(3*(a - b)*(a - c)^2)*Sqrt[(c - u)/((a - u)^3*(b - u))]"
+  ],
+  "conds": [
+   "a > b > c > u"
+  ],
+  "cite": "BY (232.13)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)^5*(b - x)*(c - x)], {x, u, c}] = 2/(3*(a - b)^2*Sqrt[(a - c)^3])*((3*a - b - 2*c)*F[be, p] - 2*(2*a - b - c)*E[be, p]) + 2*(4*a^2 - 3*a*b - 2*a*c + b*c - u*(3*a - 2*b - c))/(3*(a - b)*(a - c)^2)*Sqrt[(c - u)/((a - u)^3*(b - u))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.134.3",
+  "gr": "3.134.3",
+  "page": 306,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)^5*(b - x)*(x - c)], {x, c, u}]",
+  "rhs": [
+   "2/(3*(a - b)^3*Sqrt[(a - c)^3])*(2*(2*a - b - c)*MatharE2[ArcSin[Sqrt[(u - c)/(b - c)]], Sqrt[(b - c)/(a - c)]] - (a - b)*MatharF2[ArcSin[Sqrt[(u - c)/(b - c)]], Sqrt[(b - c)/(a - c)]]) - 2*(5*a^2 - 3*a*b - 3*a*c + b*c - 2*u*(2*a - b - c))/(3*(a - b)^2*(a - c)^2)*Sqrt[((b - u)*(u - c))/(a - u)^3]",
+   "2/(3*(a - b)^2*Sqrt[(a - c)^3])*(2*(2*a - b - c)*MatharE2[ArcSin[Sqrt[(u - c)/(b - c)]], Sqrt[(b - c)/(a - c)]] - (a - b)*MatharF2[ArcSin[Sqrt[(u - c)/(b - c)]], Sqrt[(b - c)/(a - c)]]) - 2*(5*a^2 - 3*a*b - 3*a*c + b*c - 2*u*(2*a - b - c))/(3*(a - b)^2*(a - c)^2)*Sqrt[((b - u)*(u - c))/(a - u)^3]"
+  ],
+  "conds": [
+   "a > b >= u > c"
+  ],
+  "cite": "BY (233.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)^5*(b - x)*(x - c)], {x, c, u}] = 2/(3*(a - b)^3*Sqrt[(a - c)^3])*(2*(2*a - b - c)*E[ga, q] - (a - b)*F[ga, q]) - 2*(5*a^2 - 3*a*b - 3*a*c + b*c - 2*u*(2*a - b - c))/(3*(a - b)^2*(a - c)^2)*Sqrt[((b - u)*(u - c))/(a - u)^3]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted; printed prefactor (a-b)^3 is dimensionally inconsistent; second rhs uses (a-b)^2 as in 3.134.4"
+ },
+ {
+  "id": "GR3.134.4",
+  "gr": "3.134.4",
+  "page": 306,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)^5*(b - x)*(x - c)], {x, u, b}]",
+  "rhs": [
+   "2/(3*(a - b)^2*Sqrt[(a - c)^3])*(2*(2*a - b - c)*MatharE2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[(b - c)/(a - c)]] - (a - b)*MatharF2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[(b - c)/(a - c)]]) - 2/(3*(a - b)*(a - c))*Sqrt[((b - u)*(u - c))/(a - u)^3]"
+  ],
+  "conds": [
+   "a > b > u >= c"
+  ],
+  "cite": "BY (234.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)^5*(b - x)*(x - c)], {x, u, b}] = 2/(3*(a - b)^2*Sqrt[(a - c)^3])*(2*(2*a - b - c)*E[de, q] - (a - b)*F[de, q]) - 2/(3*(a - b)*(a - c))*Sqrt[((b - u)*(u - c))/(a - u)^3]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.134.5",
+  "gr": "3.134.5",
+  "page": 306,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)^5*(x - b)*(x - c)], {x, b, u}]",
+  "rhs": [
+   "2/(3*(a - b)^2*Sqrt[(a - c)^3])*((3*a - b - 2*c)*MatharF2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[(a - b)/(a - c)]] - 2*(2*a - b - c)*MatharE2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[(a - b)/(a - c)]]) + 2*(4*a^2 - 2*a*b - 3*a*c + b*c - u*(3*a - b - 2*c))/(3*(a - b)^2*(a - c))*Sqrt[(u - b)/((a - u)^3*(u - c))]"
+  ],
+  "conds": [
+   "a > u > b > c"
+  ],
+  "cite": "BY (235.04)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)^5*(x - b)*(x - c)], {x, b, u}] = 2/(3*(a - b)^2*Sqrt[(a - c)^3])*((3*a - b - 2*c)*F[ka, p] - 2*(2*a - b - c)*E[ka, p]) + 2*(4*a^2 - 2*a*b - 3*a*c + b*c - u*(3*a - b - 2*c))/(3*(a - b)^2*(a - c))*Sqrt[(u - b)/((a - u)^3*(u - c))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.134.6",
+  "gr": "3.134.6",
+  "page": 307,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)^5*(x - b)*(x - c)], {x, u, Infinity}]",
+  "rhs": [
+   "2/(3*(a - b)^2*Sqrt[(a - c)^3])*(2*(2*a - b - c)*MatharE2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]] - (a - b)*MatharF2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]]) + 2*(4*a^2 - 2*a*b - 3*a*c + b*c + u*(b + 2*c - 3*a))/(3*(a - b)^2*(a - c))*Sqrt[(u - b)/((u - a)^3*(u - c))]"
+  ],
+  "conds": [
+   "u > a > b > c"
+  ],
+  "cite": "BY (238.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(x - a)^5*(x - b)*(x - c)], {x, u, Infinity}] = 2/(3*(a - b)^2*Sqrt[(a - c)^3])*(2*(2*a - b - c)*E[nu, q] - (a - b)*F[nu, q]) + 2*(4*a^2 - 2*a*b - 3*a*c + b*c + u*(b + 2*c - 3*a))/(3*(a - b)^2*(a - c))*Sqrt[(u - b)/((u - a)^3*(u - c))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.134.7",
+  "gr": "3.134.7",
+  "page": 307,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)^5*(c - x)], {x, -Infinity, u}]",
+  "rhs": [
+   "2/(3*(a - b)^2*(b - c)^2*Sqrt[a - c])*(2*(a - c)*(a + c - 2*b)*MatharE2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]] + (b - c)*(3*b - a - 2*c)*MatharF2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]]) - 2*(3*a*b - a*c + 2*b*c - 4*b^2 - u*(2*a - 3*b + c))/(3*(a - b)*(b - c)^2)*Sqrt[(c - u)/((a - u)*(b - u)^3)]"
+  ],
+  "conds": [
+   "a > b > c >= u"
+  ],
+  "cite": "BY (231.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)*(b - x)^5*(c - x)], {x, -Infinity, u}] = 2/(3*(a - b)^2*(b - c)^2*Sqrt[a - c])*(2*(a - c)*(a + c - 2*b)*E[al, p] + (b - c)*(3*b - a - 2*c)*F[al, p]) - 2*(3*a*b - a*c + 2*b*c - 4*b^2 - u*(2*a - 3*b + c))/(3*(a - b)*(b - c)^2)*Sqrt[(c - u)/((a - u)*(b - u)^3)]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.134.8",
+  "gr": "3.134.8",
+  "page": 307,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)^5*(c - x)], {x, u, c}]",
+  "rhs": [
+   "2/(3*(a - b)^2*(b - c)^2*Sqrt[a - c])*((b - c)*(3*b - a - 2*c)*MatharF2[ArcSin[Sqrt[(c - u)/(b - u)]], Sqrt[(a - b)/(a - c)]] + 2*(a - c)*(a - 2*b + c)*MatharE2[ArcSin[Sqrt[(c - u)/(b - u)]], Sqrt[(a - b)/(a - c)]]) + 2/(3*(a - b)*(b - c))*Sqrt[((a - u)*(c - u))/(b - u)^3]"
+  ],
+  "conds": [
+   "a > b > c > u"
+  ],
+  "cite": "BY (232.14)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)*(b - x)^5*(c - x)], {x, u, c}] = 2/(3*(a - b)^2*(b - c)^2*Sqrt[a - c])*((b - c)*(3*b - a - 2*c)*F[be, p] + 2*(a - c)*(a - 2*b + c)*E[be, p]) + 2/(3*(a - b)*(b - c))*Sqrt[((a - u)*(c - u))/(b - u)^3]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.134.9",
+  "gr": "3.134.9",
+  "page": 307,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)^5*(x - c)], {x, c, u}]",
+  "rhs": [
+   "2/(3*(a - b)^2*(b - c)^2*Sqrt[a - c])*((a - b)*(2*a - 3*b + c)*MatharF2[ArcSin[Sqrt[(u - c)/(b - c)]], Sqrt[(b - c)/(a - c)]] + 2*(a - c)*(2*b - a - c)*MatharE2[ArcSin[Sqrt[(u - c)/(b - c)]], Sqrt[(b - c)/(a - c)]]) + 2*(3*a*b + 3*b*c - a*c - 5*b^2 - 2*u*(a - 2*b + c))/(3*(a - b)^2*(b - c)^2)*Sqrt[((a - u)*(u - c))/(b - u)^3]"
+  ],
+  "conds": [
+   "a > b > u > c"
+  ],
+  "cite": "BY (233.10)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)*(b - x)^5*(x - c)], {x, c, u}] = 2/(3*(a - b)^2*(b - c)^2*Sqrt[a - c])*((a - b)*(2*a - 3*b + c)*F[ga, q] + 2*(a - c)*(2*b - a - c)*E[ga, q]) + 2*(3*a*b + 3*b*c - a*c - 5*b^2 - 2*u*(a - 2*b + c))/(3*(a - b)^2*(b - c)^2)*Sqrt[((a - u)*(u - c))/(b - u)^3]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.134.10",
+  "gr": "3.134.10",
+  "page": 307,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(x - b)^5*(x - c)], {x, u, a}]",
+  "rhs": [
+   "2/(3*(a - b)^2*(b - c)^2*Sqrt[a - c])*((b - c)*(3*b - 2*c - a)*MatharF2[ArcSin[Sqrt[(a - u)/(a - b)]], Sqrt[(a - b)/(a - c)]] + 2*(a - c)*(a + c - 2*b)*MatharE2[ArcSin[Sqrt[(a - u)/(a - b)]], Sqrt[(a - b)/(a - c)]]) + 2*(3*a*b + 3*b*c - a*c - 5*b^2 + 2*u*(2*b - a - c))/(3*(a - b)^2*(b - c)^2)*Sqrt[((a - u)*(u - c))/(u - b)^3]"
+  ],
+  "conds": [
+   "a > u > b > c"
+  ],
+  "cite": "BY (236.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)*(x - b)^5*(x - c)], {x, u, a}] = 2/(3*(a - b)^2*(b - c)^2*Sqrt[a - c])*((b - c)*(3*b - 2*c - a)*F[la, p] + 2*(a - c)*(a + c - 2*b)*E[la, p]) + 2*(3*a*b + 3*b*c - a*c - 5*b^2 + 2*u*(2*b - a - c))/(3*(a - b)^2*(b - c)^2)*Sqrt[((a - u)*(u - c))/(u - b)^3]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.134.11",
+  "gr": "3.134.11",
+  "page": 307,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)*(x - b)^5*(x - c)], {x, a, u}]",
+  "rhs": [
+   "2/(3*(a - b)^2*(b - c)^2*Sqrt[a - c])*((a - b)*(2*a + c - 3*b)*MatharF2[ArcSin[Sqrt[(u - a)/(u - b)]], Sqrt[(b - c)/(a - c)]] + 2*(a - c)*(2*b - a - c)*MatharE2[ArcSin[Sqrt[(u - a)/(u - b)]], Sqrt[(b - c)/(a - c)]]) + 2/(3*(a - b)*(b - c))*Sqrt[((u - a)*(u - c))/(u - b)^3]"
+  ],
+  "conds": [
+   "u > a > b > c"
+  ],
+  "cite": "BY (237.12)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(x - a)*(x - b)^5*(x - c)], {x, a, u}] = 2/(3*(a - b)^2*(b - c)^2*Sqrt[a - c])*((a - b)*(2*a + c - 3*b)*F[mu, q] + 2*(a - c)*(2*b - a - c)*E[mu, q]) + 2/(3*(a - b)*(b - c))*Sqrt[((u - a)*(u - c))/(u - b)^3]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.134.12",
+  "gr": "3.134.12",
+  "page": 308,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)*(x - b)^5*(x - c)], {x, u, Infinity}]",
+  "rhs": [
+   "2/(3*(a - b)^2*(b - c)^2*Sqrt[a - c])*((a - b)*(2*a + c - 3*b)*MatharF2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]] + 2*(a - c)*(2*b - c - a)*MatharE2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]]) - 2*(3*b*c + 2*a*b - a*c - 4*b^2 + u*(3*b - a - 2*c))/(3*(a - b)^2*(b - c))*Sqrt[(u - a)/((u - b)^3*(u - c))]"
+  ],
+  "conds": [
+   "u >= a > b > c"
+  ],
+  "cite": "BY (238.04)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(x - a)*(x - b)^5*(x - c)], {x, u, Infinity}] = 2/(3*(a - b)^2*(b - c)^2*Sqrt[a - c])*((a - b)*(2*a + c - 3*b)*F[nu, q] + 2*(a - c)*(2*b - c - a)*E[nu, q]) - 2*(3*b*c + 2*a*b - a*c - 4*b^2 + u*(3*b - a - 2*c))/(3*(a - b)^2*(b - c))*Sqrt[(u - a)/((u - b)^3*(u - c))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.134.13",
+  "gr": "3.134.13",
+  "page": 308,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)*(c - x)^5], {x, -Infinity, u}]",
+  "rhs": [
+   "2/(3*(b - c)^2*Sqrt[(a - c)^3])*(2*(a + b - 2*c)*MatharE2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]] - (b - c)*MatharF2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]]) + 2*(a*b - 3*a*c - 2*b*c + 4*c^2 + u*(2*a + b - 3*c))/(3*(a - c)*(b - c)^2)*Sqrt[(b - u)/((a - u)*(c - u)^3)]"
+  ],
+  "conds": [
+   "a > b > c > u"
+  ],
+  "cite": "BY (231.10)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)*(b - x)*(c - x)^5], {x, -Infinity, u}] = 2/(3*(b - c)^2*Sqrt[(a - c)^3])*(2*(a + b - 2*c)*E[al, p] - (b - c)*F[al, p]) + 2*(a*b - 3*a*c - 2*b*c + 4*c^2 + u*(2*a + b - 3*c))/(3*(a - c)*(b - c)^2)*Sqrt[(b - u)/((a - u)*(c - u)^3)]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.134.14",
+  "gr": "3.134.14",
+  "page": 308,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)*(x - c)^5], {x, u, b}]",
+  "rhs": [
+   "2/(3*(b - c)^2*Sqrt[(a - c)^3])*((2*a + b - 3*c)*MatharF2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[(b - c)/(a - c)]] - 2*(a + b - 2*c)*MatharE2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[(b - c)/(a - c)]]) + 2*(a*b - 3*a*c - 2*b*c + 4*c^2 + u*(2*a + b - 3*c))/(3*(b - c)^2*(a - c))*Sqrt[(b - u)/((a - u)*(u - c)^3)]"
+  ],
+  "conds": [
+   "a > b > u > c"
+  ],
+  "cite": "BY (234.04)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)*(b - x)*(x - c)^5], {x, u, b}] = 2/(3*(b - c)^2*Sqrt[(a - c)^3])*((2*a + b - 3*c)*F[de, q] - 2*(a + b - 2*c)*E[de, q]) + 2*(a*b - 3*a*c - 2*b*c + 4*c^2 + u*(2*a + b - 3*c))/(3*(b - c)^2*(a - c))*Sqrt[(b - u)/((a - u)*(u - c)^3)]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.134.15",
+  "gr": "3.134.15",
+  "page": 308,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(x - b)*(x - c)^5], {x, b, u}]",
+  "rhs": [
+   "2/(3*(b - c)^2*Sqrt[(a - c)^3])*(2*(a + b - 2*c)*MatharE2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[(a - b)/(a - c)]] - (b - c)*MatharF2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[(a - b)/(a - c)]]) + 2/(3*(a - c)*(b - c))*Sqrt[((a - u)*(u - b))/(u - c)^3]"
+  ],
+  "conds": [
+   "a >= u > b > c"
+  ],
+  "cite": "BY (235.20)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)*(x - b)*(x - c)^5], {x, b, u}] = 2/(3*(b - c)^2*Sqrt[(a - c)^3])*(2*(a + b - 2*c)*E[ka, p] - (b - c)*F[ka, p]) + 2/(3*(a - c)*(b - c))*Sqrt[((a - u)*(u - b))/(u - c)^3]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.134.16",
+  "gr": "3.134.16",
+  "page": 308,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(x - b)*(x - c)^5], {x, u, a}]",
+  "rhs": [
+   "2/(3*(b - c)^2*Sqrt[(a - c)^3])*(2*(a + b - 2*c)*MatharE2[ArcSin[Sqrt[(a - u)/(a - b)]], Sqrt[(a - b)/(a - c)]] - (b - c)*MatharF2[ArcSin[Sqrt[(a - u)/(a - b)]], Sqrt[(a - b)/(a - c)]]) - 2*(a*b - 3*a*c - 3*b*c + 5*c^2 + 2*u*(a + b - 2*c))/(3*(b - c)^2*(a - c)^2)*Sqrt[((a - u)*(u - b))/(u - c)^3]"
+  ],
+  "conds": [
+   "a > u >= b > c"
+  ],
+  "cite": "BY (236.10)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)*(x - b)*(x - c)^5], {x, u, a}] = 2/(3*(b - c)^2*Sqrt[(a - c)^3])*(2*(a + b - 2*c)*E[la, p] - (b - c)*F[la, p]) - 2*(a*b - 3*a*c - 3*b*c + 5*c^2 + 2*u*(a + b - 2*c))/(3*(b - c)^2*(a - c)^2)*Sqrt[((a - u)*(u - b))/(u - c)^3]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.134.17",
+  "gr": "3.134.17",
+  "page": 308,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)*(x - b)*(x - c)^5], {x, a, u}]",
+  "rhs": [
+   "2/(3*(b - c)^2*Sqrt[(a - c)^3])*((2*a + b - 3*c)*MatharF2[ArcSin[Sqrt[(u - a)/(u - b)]], Sqrt[(b - c)/(a - c)]] - 2*(a + b - 2*c)*MatharE2[ArcSin[Sqrt[(u - a)/(u - b)]], Sqrt[(b - c)/(a - c)]]) + 2*(4*c^2 - a*b - 2*a*c - b*c + u*(3*a + 2*b - 5*c))/(3*(b - c)*(a - c)^2)*Sqrt[(u - a)/((u - b)*(u - c)^3)]"
+  ],
+  "conds": [
+   "u > a > b > c"
+  ],
+  "cite": "BY (237.13)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(x - a)*(x - b)*(x - c)^5], {x, a, u}] = 2/(3*(b - c)^2*Sqrt[(a - c)^3])*((2*a + b - 3*c)*F[mu, q] - 2*(a + b - 2*c)*E[mu, q]) + 2*(4*c^2 - a*b - 2*a*c - b*c + u*(3*a + 2*b - 5*c))/(3*(b - c)*(a - c)^2)*Sqrt[(u - a)/((u - b)*(u - c)^3)]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.134.18",
+  "gr": "3.134.18",
+  "page": 308,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)*(x - b)*(x - c)^5], {x, u, Infinity}]",
+  "rhs": [
+   "2/(3*(b - c)^2*Sqrt[(a - c)^3])*((2*a + b - 3*c)*MatharF2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]] - 2*(a + b - 2*c)*MatharE2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]]) + 2/(3*(a - c)*(b - c))*Sqrt[((u - a)*(u - b))/(u - c)^3]"
+  ],
+  "conds": [
+   "u >= a > b > c"
+  ],
+  "cite": "BY (238.03)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(x - a)*(x - b)*(x - c)^5], {x, u, Infinity}] = 2/(3*(b - c)^2*Sqrt[(a - c)^3])*((2*a + b - 3*c)*F[nu, q] - 2*(a + b - 2*c)*E[nu, q]) + 2/(3*(a - c)*(b - c))*Sqrt[((u - a)*(u - b))/(u - c)^3]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.135.1",
+  "gr": "3.135.1",
+  "page": 309,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(b - x)^3*(c - x)^3], {x, -Infinity, u}]",
+  "rhs": [
+   "2/((a - b)*(b - c)^2*Sqrt[a - c])*((b - c)*MatharF2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]] - (2*a - b - c)*MatharE2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]]) + 2*(b + c - 2*u)/((b - c)^2*Sqrt[(a - u)*(b - u)*(c - u)])"
+  ],
+  "conds": [
+   "a > b > c > u"
+  ],
+  "cite": "BY (231.13)",
+  "edition_note": "6",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)*(b - x)^3*(c - x)^3], {x, -Infinity, u}] = 2/((a - b)*(b - c)^2*Sqrt[a - c])*((b - c)*F[al, p] - (2*a - b - c)*E[al, p]) + 2*(b + c - 2*u)/((b - c)^2*Sqrt[(a - u)*(b - u)*(c - u)])",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.135.2",
+  "gr": "3.135.2",
+  "page": 309,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)*(x - b)^3*(x - c)^3], {x, u, a}]",
+  "rhs": [
+   "2/((a - b)*(b - c)^2*Sqrt[a - c])*((b - c)*MatharF2[ArcSin[Sqrt[(a - u)/(a - b)]], Sqrt[(a - b)/(a - c)]] - 2*(2*a - b - c)*MatharE2[ArcSin[Sqrt[(a - u)/(a - b)]], Sqrt[(a - b)/(a - c)]]) + 2*(a - b - c + u)/((a - b)*(b - c)*(a - c))*Sqrt[(a - u)/((u - b)*(u - c))]",
+   "2/((a - b)*(b - c)^2*Sqrt[a - c])*((b - c)*MatharF2[ArcSin[Sqrt[(a - u)/(a - b)]], Sqrt[(a - b)/(a - c)]] - (2*a - b - c)*MatharE2[ArcSin[Sqrt[(a - u)/(a - b)]], Sqrt[(a - b)/(a - c)]]) + 2*(a - b - c + u)/((a - b)*(b - c)*(a - c))*Sqrt[(a - u)/((u - b)*(u - c))]"
+  ],
+  "conds": [
+   "a > u > b > c"
+  ],
+  "cite": "BY (236.15)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)*(x - b)^3*(x - c)^3], {x, u, a}] = 2/((a - b)*(b - c)^2*Sqrt[a - c])*((b - c)*F[la, p] - 2*(2*a - b - c)*E[la, p]) + 2*(a - b - c + u)/((a - b)*(b - c)*(a - c))*Sqrt[(a - u)/((u - b)*(u - c))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted; second rhs drops the factor 2 on the E term, by analogy with 3.135.1 (suspected misprint)"
+ },
+ {
+  "id": "GR3.135.3",
+  "gr": "3.135.3",
+  "page": 309,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)*(x - b)^3*(x - c)^3], {x, a, u}]",
+  "rhs": [
+   "2/((a - b)*(b - c)^2*Sqrt[a - c])*((2*a - b - c)*MatharE2[ArcSin[Sqrt[(u - a)/(u - b)]], Sqrt[(b - c)/(a - c)]] - 2*(a - b)*MatharF2[ArcSin[Sqrt[(u - a)/(u - b)]], Sqrt[(b - c)/(a - c)]]) + 2/((a - c)*(b - c))*Sqrt[(u - a)/((u - b)*(u - c))]"
+  ],
+  "conds": [
+   "u > a > b > c"
+  ],
+  "cite": "BY (236.14)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(x - a)*(x - b)^3*(x - c)^3], {x, a, u}] = 2/((a - b)*(b - c)^2*Sqrt[a - c])*((2*a - b - c)*E[mu, q] - 2*(a - b)*F[mu, q]) + 2/((a - c)*(b - c))*Sqrt[(u - a)/((u - b)*(u - c))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.135.4",
+  "gr": "3.135.4",
+  "page": 309,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)*(x - b)^3*(x - c)^3], {x, u, Infinity}]",
+  "rhs": [
+   "2/((a - b)*(b - c)^2*Sqrt[a - c])*((2*a - b - c)*MatharE2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]] - 2*(a - b)*MatharF2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]]) - 2/((a - b)*(b - c))*Sqrt[(u - a)/((u - b)*(u - c))]"
+  ],
+  "conds": [
+   "u >= a > b > c"
+  ],
+  "cite": "BY (238.13)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(x - a)*(x - b)^3*(x - c)^3], {x, u, Infinity}] = 2/((a - b)*(b - c)^2*Sqrt[a - c])*((2*a - b - c)*E[nu, q] - 2*(a - b)*F[nu, q]) - 2/((a - b)*(b - c))*Sqrt[(u - a)/((u - b)*(u - c))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.135.5",
+  "gr": "3.135.5",
+  "page": 309,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)^3*(b - x)*(c - x)^3], {x, -Infinity, u}]",
+  "rhs": [
+   "2/((a - b)*(b - c)*Sqrt[(a - c)^3])*((2*b - a - c)*MatharE2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]] - (b - c)*MatharF2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]]) + 2/((b - c)*(a - c))*Sqrt[(b - u)/((a - u)*(c - u))]"
+  ],
+  "conds": [
+   "a > b > c > u"
+  ],
+  "cite": "BY (231.12)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)^3*(b - x)*(c - x)^3], {x, -Infinity, u}] = 2/((a - b)*(b - c)*Sqrt[(a - c)^3])*((2*b - a - c)*E[al, p] - (b - c)*F[al, p]) + 2/((b - c)*(a - c))*Sqrt[(b - u)/((a - u)*(c - u))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.135.6",
+  "gr": "3.135.6",
+  "page": 309,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)^3*(b - x)*(x - c)^3], {x, u, b}]",
+  "rhs": [
+   "2/((b - c)*(a - b)*Sqrt[(a - c)^3])*((a - b)*MatharF2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[(b - c)/(a - c)]] + (2*b - a - c)*MatharE2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[(b - c)/(a - c)]]) + 2/((b - c)*(a - c))*Sqrt[(b - u)/((a - u)*(u - c))]"
+  ],
+  "conds": [
+   "a > b > u > c"
+  ],
+  "cite": "BY (234.03)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)^3*(b - x)*(x - c)^3], {x, u, b}] = 2/((b - c)*(a - b)*Sqrt[(a - c)^3])*((a - b)*F[de, q] + (2*b - a - c)*E[de, q]) + 2/((b - c)*(a - c))*Sqrt[(b - u)/((a - u)*(u - c))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.135.7",
+  "gr": "3.135.7",
+  "page": 309,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)^3*(x - b)*(x - c)^3], {x, b, u}]",
+  "rhs": [
+   "2/((a - b)*(b - c)*Sqrt[(a - c)^3])*((b - c)*MatharF2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[(a - b)/(a - c)]] - (2*b - a - c)*MatharE2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[(a - b)/(a - c)]]) + 2/((a - b)*(a - c))*Sqrt[(u - b)/((a - u)*(u - c))]"
+  ],
+  "conds": [
+   "a > u > b > c"
+  ],
+  "cite": "BY (235.15)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)^3*(x - b)*(x - c)^3], {x, b, u}] = 2/((a - b)*(b - c)*Sqrt[(a - c)^3])*((b - c)*F[ka, p] - (2*b - a - c)*E[ka, p]) + 2/((a - b)*(a - c))*Sqrt[(u - b)/((a - u)*(u - c))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.135.8",
+  "gr": "3.135.8",
+  "page": 310,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)^3*(x - b)*(x - c)^3], {x, u, Infinity}]",
+  "rhs": [
+   "2/((a - b)*(b - c)*Sqrt[(a - c)^3])*((a + c - 2*b)*MatharE2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]] - (a - b)*MatharF2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]]) + 2/((a - b)*(a - c))*Sqrt[(u - b)/((u - a)*(u - c))]"
+  ],
+  "conds": [
+   "u > a > b > c"
+  ],
+  "cite": "BY (238.14)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(x - a)^3*(x - b)*(x - c)^3], {x, u, Infinity}] = 2/((a - b)*(b - c)*Sqrt[(a - c)^3])*((a + c - 2*b)*E[nu, q] - (a - b)*F[nu, q]) + 2/((a - b)*(a - c))*Sqrt[(u - b)/((u - a)*(u - c))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.135.9",
+  "gr": "3.135.9",
+  "page": 310,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)^3*(b - x)^3*(c - x)], {x, -Infinity, u}]",
+  "rhs": [
+   "2/((b - c)*(a - b)^2*Sqrt[a - c])*((a + b - 2*c)*MatharE2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]] - 2*(b - c)*MatharF2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]]) - 2/((a - b)*(b - c))*Sqrt[(c - u)/((a - u)*(b - u))]"
+  ],
+  "conds": [
+   "a > b > c >= u"
+  ],
+  "cite": "BY (231.11)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)^3*(b - x)^3*(c - x)], {x, -Infinity, u}] = 2/((b - c)*(a - b)^2*Sqrt[a - c])*((a + b - 2*c)*E[al, p] - 2*(b - c)*F[al, p]) - 2/((a - b)*(b - c))*Sqrt[(c - u)/((a - u)*(b - u))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.135.10",
+  "gr": "3.135.10",
+  "page": 310,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)^3*(b - x)^3*(c - x)], {x, u, c}]",
+  "rhs": [
+   "2/((a - b)^2*(b - c)*Sqrt[a - c])*((a + b - 2*c)*MatharE2[ArcSin[Sqrt[(c - u)/(b - u)]], Sqrt[(a - b)/(a - c)]] - 2*(b - c)*MatharF2[ArcSin[Sqrt[(c - u)/(b - u)]], Sqrt[(a - b)/(a - c)]]) + 2/((a - b)*(a - c))*Sqrt[(c - u)/((a - u)*(b - u))]"
+  ],
+  "conds": [
+   "a > b > c > u"
+  ],
+  "cite": "BY (232.15)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)^3*(b - x)^3*(c - x)], {x, u, c}] = 2/((a - b)^2*(b - c)*Sqrt[a - c])*((a + b - 2*c)*E[be, p] - 2*(b - c)*F[be, p]) + 2/((a - b)*(a - c))*Sqrt[(c - u)/((a - u)*(b - u))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.135.11",
+  "gr": "3.135.11",
+  "page": 310,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)^3*(b - x)^3*(x - c)], {x, c, u}]",
+  "rhs": [
+   "2/((a - b)^2*(b - c)*Sqrt[a - c])*((a - b)*MatharF2[ArcSin[Sqrt[(u - c)/(b - c)]], Sqrt[(b - c)/(a - c)]] - (a + b - 2*c)*MatharE2[ArcSin[Sqrt[(u - c)/(b - c)]], Sqrt[(b - c)/(a - c)]]) + 2*(a^2 + b^2 - a*c - b*c - u*(a + b - 2*c))/((a - b)^2*(b - c)*(a - c))*Sqrt[(u - c)/((a - u)*(b - u))]"
+  ],
+  "conds": [
+   "a > b > u > c"
+  ],
+  "cite": "BY (233.11)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)^3*(b - x)^3*(x - c)], {x, c, u}] = 2/((a - b)^2*(b - c)*Sqrt[a - c])*((a - b)*F[ga, q] - (a + b - 2*c)*E[ga, q]) + 2*(a^2 + b^2 - a*c - b*c - u*(a + b - 2*c))/((a - b)^2*(b - c)*(a - c))*Sqrt[(u - c)/((a - u)*(b - u))]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.135.12",
+  "gr": "3.135.12",
+  "page": 310,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)^3*(x - b)^3*(x - c)], {x, u, Infinity}]",
+  "rhs": [
+   "2/((a - b)^2*(b - c)*Sqrt[a - c])*((a - b)*MatharF2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]] - (a + b - 2*c)*MatharE2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]]) + (2*u - a - b)/((a - b)^2*Sqrt[(u - a)*(u - b)*(u - c)])"
+  ],
+  "conds": [
+   "u > a > b > c"
+  ],
+  "cite": "BY (238.15)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(x - a)^3*(x - b)^3*(x - c)], {x, u, Infinity}] = 2/((a - b)^2*(b - c)*Sqrt[a - c])*((a - b)*F[nu, q] - (a + b - 2*c)*E[nu, q]) + (2*u - a - b)/((a - b)^2*Sqrt[(u - a)*(u - b)*(u - c)])",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.136.1",
+  "gr": "3.136.1",
+  "page": 310,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - x)^3*(b - x)^3*(c - x)^3], {x, -Infinity, u}]",
+  "rhs": [
+   "2/((a - b)^2*(b - c)^2*Sqrt[(a - c)^3])*((b - c)*(a + b - 2*c)*MatharF2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]] - 2*(c^2 + a^2 + b^2 - a*b - a*c - b*c)*MatharE2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]]) + 2*(c*(a - c) + b*(a - b) - u*(2*a - c - b))/((a - b)*(a - c)*(b - c)^2*Sqrt[(a - u)*(b - u)*(c - u)])"
+  ],
+  "conds": [
+   "a > b > c > u"
+  ],
+  "cite": "BY (231.14)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(a - x)^3*(b - x)^3*(c - x)^3], {x, -Infinity, u}] = 2/((a - b)^2*(b - c)^2*Sqrt[(a - c)^3])*((b - c)*(a + b - 2*c)*F[al, p] - 2*(c^2 + a^2 + b^2 - a*b - a*c - b*c)*E[al, p]) + 2*(c*(a - c) + b*(a - b) - u*(2*a - c - b))/((a - b)*(a - c)*(b - c)^2*Sqrt[(a - u)*(b - u)*(c - u)])",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.136.2",
+  "gr": "3.136.2",
+  "page": 311,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - a)^3*(x - b)^3*(x - c)^3], {x, u, Infinity}]",
+  "rhs": [
+   "2/((a - b)^2*(b - c)^2*Sqrt[(a - c)^3])*((a - b)*(2*a - b - c)*MatharF2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]] - 2*(a^2 + b^2 + c^2 - a*b - a*c - b*c)*MatharE2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]]) + 2*(u*(a + b - 2*c) - a*(a - c) - b*(b - c))/((a - b)^2*(a - c)*(b - c)*Sqrt[(u - a)*(u - b)*(u - c)])"
+  ],
+  "conds": [
+   "u > a > b > c"
+  ],
+  "cite": "BY (238.16)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(x - a)^3*(x - b)^3*(x - c)^3], {x, u, Infinity}] = 2/((a - b)^2*(b - c)^2*Sqrt[(a - c)^3])*((a - b)*(2*a - b - c)*F[nu, q] - 2*(a^2 + b^2 + c^2 - a*b - a*c - b*c)*E[nu, q]) + 2*(u*(a + b - 2*c) - a*(a - c) - b*(b - c))/((a - b)^2*(a - c)*(b - c)*Sqrt[(u - a)*(u - b)*(u - c)])",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.137.1",
+  "gr": "3.137.1",
+  "page": 311,
+  "status": "ok",
+  "lhs": "Integrate[1/((r - x)*Sqrt[(a - x)*(b - x)*(c - x)]), {x, -Infinity, u}]",
+  "rhs": [
+   "2/((a - r)*Sqrt[a - c])*(EllipticPi[(a - r)/(a - c), ArcSin[Sqrt[(a - c)/(a - u)]], ((a - b)/(a - c))] - MatharF2[ArcSin[Sqrt[(a - c)/(a - u)]], Sqrt[(a - b)/(a - c)]])"
+  ],
+  "conds": [
+   "a > b > c >= u"
+  ],
+  "cite": "BY (231.15)",
+  "edition_note": "6",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/((r - x)*Sqrt[(a - x)*(b - x)*(c - x)]), {x, -Infinity, u}] = 2/((a - r)*Sqrt[a - c])*(EllipticPi[(a - r)/(a - c), al, p2] - F[al, p])",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted; r must lie outside (-Infinity, u] for convergence (not stated)"
+ },
+ {
+  "id": "GR3.137.2",
+  "gr": "3.137.2",
+  "page": 311,
+  "status": "ok",
+  "lhs": "Integrate[1/((r - x)*Sqrt[(a - x)*(b - x)*(c - x)]), {x, u, c}]",
+  "rhs": [
+   "2*(c - b)/((r - b)*(r - c)*Sqrt[a - c])*EllipticPi[(r - b)/(r - c), ArcSin[Sqrt[(c - u)/(b - u)]], ((a - b)/(a - c))] + 2/((r - b)*Sqrt[a - c])*MatharF2[ArcSin[Sqrt[(c - u)/(b - u)]], Sqrt[(a - b)/(a - c)]]"
+  ],
+  "conds": [
+   "a > b > c > u",
+   "r != 0"
+  ],
+  "cite": "BY (232.17)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/((r - x)*Sqrt[(a - x)*(b - x)*(c - x)]), {x, u, c}] = 2*(c - b)/((r - b)*(r - c)*Sqrt[a - c])*EllipticPi[(r - b)/(r - c), be, p2] + 2/((r - b)*Sqrt[a - c])*F[be, p]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted; printed condition r != 0 (probably meant r outside [u, c])"
+ },
+ {
+  "id": "GR3.137.3",
+  "gr": "3.137.3",
+  "page": 311,
+  "status": "ok",
+  "lhs": "Integrate[1/((r - x)*Sqrt[(a - x)*(b - x)*(x - c)]), {x, c, u}]",
+  "rhs": [
+   "2/((r - c)*Sqrt[a - c])*EllipticPi[(b - c)/(r - c), ArcSin[Sqrt[(u - c)/(b - c)]], ((b - c)/(a - c))]"
+  ],
+  "conds": [
+   "a > b >= u > c",
+   "r != c"
+  ],
+  "cite": "BY (233.02)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/((r - x)*Sqrt[(a - x)*(b - x)*(x - c)]), {x, c, u}] = 2/((r - c)*Sqrt[a - c])*EllipticPi[(b - c)/(r - c), ga, q2]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.137.4",
+  "gr": "3.137.4",
+  "page": 311,
+  "status": "ok",
+  "lhs": "Integrate[1/((r - x)*Sqrt[(a - x)*(b - x)*(x - c)]), {x, u, b}]",
+  "rhs": [
+   "2/((r - a)*(r - b)*Sqrt[a - c])*((b - a)*EllipticPi[((b - c)/(a - c))*(r - a)/(r - b), ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], ((b - c)/(a - c))] + (r - b)*MatharF2[ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]], Sqrt[(b - c)/(a - c)]])"
+  ],
+  "conds": [
+   "a > b > u >= c",
+   "r != b"
+  ],
+  "cite": "BY (234.18)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/((r - x)*Sqrt[(a - x)*(b - x)*(x - c)]), {x, u, b}] = 2/((r - a)*(r - b)*Sqrt[a - c])*((b - a)*EllipticPi[q2*(r - a)/(r - b), de, q2] + (r - b)*F[de, q])",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.137.5",
+  "gr": "3.137.5",
+  "page": 311,
+  "status": "ok",
+  "lhs": "Integrate[1/((x - r)*Sqrt[(a - x)*(x - b)*(x - c)]), {x, b, u}]",
+  "rhs": [
+   "2/((c - r)*(b - r)*Sqrt[a - c])*((c - b)*EllipticPi[((a - b)/(a - c))*(c - r)/(b - r), ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], ((a - b)/(a - c))] + (b - r)*MatharF2[ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]], Sqrt[(a - b)/(a - c)]])"
+  ],
+  "conds": [
+   "a >= u > b > c",
+   "r != b"
+  ],
+  "cite": "BY (235.17)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/((x - r)*Sqrt[(a - x)*(x - b)*(x - c)]), {x, b, u}] = 2/((c - r)*(b - r)*Sqrt[a - c])*((c - b)*EllipticPi[p2*(c - r)/(b - r), ka, p2] + (b - r)*F[ka, p])",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.137.6",
+  "gr": "3.137.6",
+  "page": 311,
+  "status": "ok",
+  "lhs": "Integrate[1/((x - r)*Sqrt[(a - x)*(x - b)*(x - c)]), {x, u, a}]",
+  "rhs": [
+   "2/((a - r)*Sqrt[a - c])*EllipticPi[(a - b)/(a - r), ArcSin[Sqrt[(a - u)/(a - b)]], ((a - b)/(a - c))]"
+  ],
+  "conds": [
+   "a > u >= b > c",
+   "r != a"
+  ],
+  "cite": "BY (236.02)",
+  "edition_note": "8",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/((x - r)*Sqrt[(a - x)*(x - b)*(x - c)]), {x, u, a}] = 2/((a - r)*Sqrt[a - c])*EllipticPi[(a - b)/(a - r), la, p2]",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.137.7",
+  "gr": "3.137.7",
+  "page": 311,
+  "status": "ok",
+  "lhs": "Integrate[1/((x - r)*Sqrt[(x - a)*(x - b)*(x - c)]), {x, a, u}]",
+  "rhs": [
+   "2/((b - r)*(a - r)*Sqrt[a - c])*((b - a)*EllipticPi[(b - r)/(a - b), ArcSin[Sqrt[(u - a)/(u - b)]], ((b - c)/(a - c))] + (a - p)*MatharF2[ArcSin[Sqrt[(u - a)/(u - b)]], Sqrt[(b - c)/(a - c)]])",
+   "2/((b - r)*(a - r)*Sqrt[a - c])*((b - a)*EllipticPi[(b - r)/(a - b), ArcSin[Sqrt[(u - a)/(u - b)]], ((b - c)/(a - c))] + (a - r)*MatharF2[ArcSin[Sqrt[(u - a)/(u - b)]], Sqrt[(b - c)/(a - c)]])"
+  ],
+  "conds": [
+   "u > a > b > c",
+   "r != a"
+  ],
+  "cite": "BY (237.17)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/((x - r)*Sqrt[(x - a)*(x - b)*(x - c)]), {x, a, u}] = 2/((b - r)*(a - r)*Sqrt[a - c])*((b - a)*EllipticPi[(b - r)/(a - b), mu, q2] + (a - p)*F[mu, q])",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted; printed (a - p) multiplying F contains a stray p (p here is NOT the modulus abbreviation, kept literal); second rhs uses (a - r)"
+ },
+ {
+  "id": "GR3.137.8",
+  "gr": "3.137.8",
+  "page": 312,
+  "status": "ok",
+  "lhs": "Integrate[1/((x - r)*Sqrt[(x - a)*(x - b)*(x - c)]), {x, u, Infinity}]",
+  "rhs": [
+   "2/((r - c)*Sqrt[a - c])*(EllipticPi[(r - c)/(a - c), ArcSin[Sqrt[(a - c)/(u - c)]], ((b - c)/(a - c))] - MatharF2[ArcSin[Sqrt[(a - c)/(u - c)]], Sqrt[(b - c)/(a - c)]])"
+  ],
+  "conds": [
+   "u >= a > b > c"
+  ],
+  "cite": "BY (238.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/((x - r)*Sqrt[(x - a)*(x - b)*(x - c)]), {x, u, Infinity}] = 2/((r - c)*Sqrt[a - c])*(EllipticPi[(r - c)/(a - c), nu, q2] - F[nu, q])",
+  "note": "abbreviations alpha..nu, p, q of 3.131 notation substituted"
+ },
+ {
+  "id": "GR3.138.1",
+  "gr": "3.138.1",
+  "page": 312,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x*(1 - x)*(1 - k^2*x)], {x, 0, u}]",
+  "rhs": [
+   "2*MatharF2[ArcSin[Sqrt[u]], k]"
+  ],
+  "conds": [
+   "0 < u < 1",
+   "0 < k < 1"
+  ],
+  "cite": "PE (532), JA",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[x*(1 - x)*(1 - k^2*x)], {x, 0, u}] = 2*F[ArcSin[Sqrt[u]], k]",
+  "note": ""
+ },
+ {
+  "id": "GR3.138.2",
+  "gr": "3.138.2",
+  "page": 312,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x*(1 - x)*((1 - k^2) + k^2*x)], {x, u, 1}]",
+  "rhs": [
+   "2*MatharF2[ArcCos[Sqrt[u]], k]"
+  ],
+  "conds": [
+   "0 < u < 1",
+   "0 < k < 1"
+  ],
+  "cite": "PE(533)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[x*(1 - x)*((1 - k^2) + k^2*x)], {x, u, 1}] = 2*F[ArcCos[Sqrt[u]], k]",
+  "note": "k'^2 = 1 - k^2 substituted"
+ },
+ {
+  "id": "GR3.138.3",
+  "gr": "3.138.3",
+  "page": 312,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x*(1 - x)*(x - (1 - k^2))], {x, u, 1}]",
+  "rhs": [
+   "2*MatharF2[ArcSin[Sqrt[1 - u]/k], k]"
+  ],
+  "conds": [
+   "0 < u < 1",
+   "0 < k < 1",
+   "u > 1 - k^2"
+  ],
+  "cite": "PE (534)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[x*(1 - x)*(x - (1 - k^2))], {x, u, 1}] = 2*F[ArcSin[Sqrt[1 - u]/k], k]",
+  "note": "k'^2 = 1 - k^2 substituted; u > k'^2 added (needed for a real integrand and arcsin argument <= 1)"
+ },
+ {
+  "id": "GR3.138.4",
+  "gr": "3.138.4",
+  "page": 312,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x*(1 + x)*(1 + (1 - k^2)*x)], {x, 0, u}]",
+  "rhs": [
+   "2*MatharF2[ArcTan[Sqrt[u]], k]"
+  ],
+  "conds": [
+   "0 < u < 1",
+   "0 < k < 1"
+  ],
+  "cite": "PE (535)",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[x*(1 + x)*(1 + (1 - k^2)*x)], {x, 0, u}] = 2*F[ArcTan[Sqrt[u]], k]",
+  "note": "k'^2 = 1 - k^2 substituted"
+ },
+ {
+  "id": "GR3.138.5",
+  "gr": "3.138.5",
+  "page": 312,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x*(1 + x^2 + 2*((1 - k^2) - k^2)*x)], {x, 0, u}]",
+  "rhs": [
+   "MatharF2[2*ArcTan[Sqrt[u]], k]"
+  ],
+  "conds": [
+   "0 < u < 1",
+   "0 < k < 1"
+  ],
+  "cite": "JA",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[x*(1 + x^2 + 2*((1 - k^2) - k^2)*x)], {x, 0, u}] = F[2*ArcTan[Sqrt[u]], k]",
+  "note": "k'^2 = 1 - k^2 substituted"
+ },
+ {
+  "id": "GR3.138.6",
+  "gr": "3.138.6",
+  "page": 312,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x*((1 - k^2)*(1 + x^2) + 2*(1 + k^2)*x)], {x, u, 1}]",
+  "rhs": [
+   "MatharF2[Pi/2 - 2*ArcTan[Sqrt[u]], k]"
+  ],
+  "conds": [
+   "0 < u < 1",
+   "0 < k < 1"
+  ],
+  "cite": "JA",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[x*((1 - k^2)*(1 + x^2) + 2*(1 + k^2)*x)], {x, u, 1}] = F[Pi/2 - 2*ArcTan[Sqrt[u]], k]",
+  "note": "k'^2 = 1 - k^2 substituted"
+ },
+ {
+  "id": "GR3.138.7",
+  "gr": "3.138.7",
+  "page": 312,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x - alpha)*((x - m)^2 + n^2)], {x, alpha, u}]",
+  "rhs": [
+   "1/Sqrt[Sqrt[(m - alpha)^2 + n^2]]*MatharF2[2*ArcTan[Sqrt[(u - alpha)/Sqrt[(m - alpha)^2 + n^2]]], Sqrt[(Sqrt[(m - alpha)^2 + n^2] + m - alpha)/(2*Sqrt[(m - alpha)^2 + n^2])]]"
+  ],
+  "conds": [
+   "alpha < u"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(x - alpha)*((x - m)^2 + n^2)], {x, alpha, u}] = 1/Sqrt[Sqrt[(m - alpha)^2 + n^2]]*F[2*ArcTan[Sqrt[(u - alpha)/Sqrt[(m - alpha)^2 + n^2]]], Sqrt[(Sqrt[(m - alpha)^2 + n^2] + m - alpha)/(2*Sqrt[(m - alpha)^2 + n^2])]]",
+  "note": "p = Sqrt[(m - alpha)^2 + n^2] substituted; lower limit printed in a glyph resembling a, read as alpha"
+ },
+ {
+  "id": "GR3.138.8",
+  "gr": "3.138.8",
+  "page": 312,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(alpha - x)*((x - m)^2 + n^2)], {x, u, alpha}]",
+  "rhs": [
+   "1/Sqrt[Sqrt[(m - alpha)^2 + n^2]]*MatharF2[2*ArcCot[Sqrt[(alpha - u)/Sqrt[(m - alpha)^2 + n^2]]], Sqrt[(Sqrt[(m - alpha)^2 + n^2] - m + alpha)/(2*Sqrt[(m - alpha)^2 + n^2])]]"
+  ],
+  "conds": [
+   "u < alpha"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.13-3.17 Expressions that can be reduced to square roots of third- and fourth-degree polynomials and their products with rational functions",
+  "tex": "Integrate[1/Sqrt[(alpha - x)*((x - m)^2 + n^2)], {x, u, alpha}] = 1/Sqrt[Sqrt[(m - alpha)^2 + n^2]]*F[2*ArcCot[Sqrt[(alpha - u)/Sqrt[(m - alpha)^2 + n^2]]], Sqrt[(Sqrt[(m - alpha)^2 + n^2] - m + alpha)/(2*Sqrt[(m - alpha)^2 + n^2])]]",
+  "note": "p = Sqrt[(m - alpha)^2 + n^2] substituted; upper limit read as alpha"
+ },
+ {
+  "id": "GR3.139.1",
+  "gr": "3.139.1",
+  "page": 312,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[1 - x^3], {x, -Infinity, u}]",
+  "rhs": [
+   "3^(-1/4)*MatharF2[ArcCos[(1 - Sqrt[3] - u)/(1 + Sqrt[3] - u)], Sin[5*Pi/12]]"
+  ],
+  "conds": [
+   "u < 1"
+  ],
+  "cite": "H 66 (285)",
+  "edition_note": "",
+  "section": "3.139 Square roots of polynomials (cubic 1 - x^3)",
+  "tex": "Integrate[1/Sqrt[1 - x^3], {x, -Infinity, u}] = 3^(-1/4)*F[ArcCos[(1 - Sqrt[3] - u)/(1 + Sqrt[3] - u)], Sin[5*Pi/12]]",
+  "note": "alpha = arccos((1 - Sqrt3 - u)/(1 + Sqrt3 - u)) substituted; sin 75 deg = Sin[5*Pi/12]; u < 1 added (real integrand)"
+ },
+ {
+  "id": "GR3.139.2",
+  "gr": "3.139.2",
+  "page": 312,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[1 - x^3], {x, u, 1}]",
+  "rhs": [
+   "3^(-1/4)*MatharF2[ArcCos[(Sqrt[3] - 1 + u)/(Sqrt[3] + 1 - u)], Sin[5*Pi/12]]"
+  ],
+  "conds": [
+   "u < 1"
+  ],
+  "cite": "H 65 (284)",
+  "edition_note": "",
+  "section": "3.139 Square roots of polynomials (cubic 1 - x^3)",
+  "tex": "Integrate[1/Sqrt[1 - x^3], {x, u, 1}] = 3^(-1/4)*F[ArcCos[(Sqrt[3] - 1 + u)/(Sqrt[3] + 1 - u)], Sin[5*Pi/12]]",
+  "note": "beta = arccos((Sqrt3 - 1 + u)/(Sqrt3 + 1 - u)) substituted; sin 75 deg = Sin[5*Pi/12]; u < 1 added"
+ }
+]

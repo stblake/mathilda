@@ -1,0 +1,2356 @@
+[
+ {
+  "id": "GR3.637.4",
+  "gr": "3.637.4",
+  "page": 450,
+  "status": "ok",
+  "lhs": "Integrate[Cot[x]^p*Cos[x]^(q - 2)*Cos[q*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Sin[p*Pi/2]*Beta[p + q - 1, 1 - p]"
+  ],
+  "conds": [
+   "p + q > 1",
+   "1 > p"
+  ],
+  "cite": "GW (332)(15a)",
+  "edition_note": "",
+  "section": "3.62-3.63 Powers of trigonometric functions",
+  "tex": "int_0^pi/2 cot^p x cos^(q-2) x cos qx dx = sin(p pi/2) B(p+q-1,1-p)",
+  "note": ""
+ },
+ {
+  "id": "GR3.638.1",
+  "gr": "3.638.1",
+  "page": 450,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*mu)/(Cos[2*x]^(mu + 1/2)*Cos[x]), {x, 0, Pi/4}]",
+  "rhs": [
+   "Pi/2*Sec[mu*Pi]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1/2"
+  ],
+  "cite": "BI (38)(8)",
+  "edition_note": "",
+  "section": "3.62-3.63 Powers of trigonometric functions",
+  "tex": "int_0^pi/4 sin^(2mu) x dx/(cos^(mu+1/2) 2x cos x) = pi/2 sec mu pi",
+  "note": "cf. 3.192 2"
+ },
+ {
+  "id": "GR3.638.2",
+  "gr": "3.638.2",
+  "page": 450,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*x]^(mu - 1/2)/(Cos[2*x]^mu*Cos[x]), {x, 0, Pi/4}]",
+  "rhs": [
+   "2/(2*mu - 1)*Gamma[mu + 1/2]*Gamma[1 - mu]/Sqrt[Pi]*Sin[(2*mu - 1)*Pi/4]"
+  ],
+  "conds": [
+   "-1/2 < Re[mu] < 1"
+  ],
+  "cite": "BI (38)(17)",
+  "edition_note": "",
+  "section": "3.62-3.63 Powers of trigonometric functions",
+  "tex": "int_0^pi/4 sin^(mu-1/2) 2x dx/(cos^mu 2x cos x) = 2/(2mu-1) Gamma(mu+1/2)Gamma(1-mu)/sqrt(pi) sin((2mu-1)pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR3.638.3",
+  "gr": "3.638.3",
+  "page": 450,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(p - 1)*Sin[p*x]/Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "GW(332)(17), BI(45)(5)",
+  "edition_note": "",
+  "section": "3.62-3.63 Powers of trigonometric functions",
+  "tex": "int_0^pi/2 cos^(p-1) x sin px/sin x dx = pi/2",
+  "note": ""
+ },
+ {
+  "id": "GR3.641.1a",
+  "gr": "3.641.1",
+  "page": 450,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(p - 1)*Cos[x]^(-p)/(a*Cos[x] + b*Sin[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Csc[p*Pi]/(a^(1 - p)*b^p)"
+  ],
+  "conds": [
+   "a*b > 0",
+   "0 < p < 1"
+  ],
+  "cite": "GW (331)(62)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 sin^(p-1) cos^(-p)/(a cos x + b sin x) = pi cosec p pi/(a^(1-p) b^p)",
+  "note": ""
+ },
+ {
+  "id": "GR3.641.1b",
+  "gr": "3.641.1",
+  "page": 450,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(-p)*Cos[x]^(p - 1)/(a*Sin[x] + b*Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Csc[p*Pi]/(a^(1 - p)*b^p)"
+  ],
+  "conds": [
+   "a*b > 0",
+   "0 < p < 1"
+  ],
+  "cite": "GW (331)(62)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 sin^(-p) cos^(p-1)/(a sin x + b cos x) = pi cosec p pi/(a^(1-p) b^p)",
+  "note": ""
+ },
+ {
+  "id": "GR3.641.2a",
+  "gr": "3.641.2",
+  "page": 450,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(1 - p)*Cos[x]^p/(Sin[x] + Cos[x])^3, {x, 0, Pi/2}]",
+  "rhs": [
+   "(1 - p)*p/2*Pi*Csc[p*Pi]"
+  ],
+  "conds": [
+   "-1 < p < 2"
+  ],
+  "cite": "BI(48)(5)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 sin^(1-p) cos^p/(sin+cos)^3 = (1-p)p/2 pi cosec p pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.641.2b",
+  "gr": "3.641.2",
+  "page": 450,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^p*Cos[x]^(1 - p)/(Sin[x] + Cos[x])^3, {x, 0, Pi/2}]",
+  "rhs": [
+   "(1 - p)*p/2*Pi*Csc[p*Pi]"
+  ],
+  "conds": [
+   "-1 < p < 2"
+  ],
+  "cite": "BI(48)(5)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 sin^p cos^(1-p)/(sin+cos)^3 = (1-p)p/2 pi cosec p pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.642.1",
+  "gr": "3.642.1",
+  "page": 450,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*mu - 1)*Cos[x]^(2*nu - 1)/(a^2*Sin[x]^2 + b^2*Cos[x]^2)^(mu + nu), {x, 0, Pi/2}]",
+  "rhs": [
+   "Beta[mu, nu]/(2*a^(2*mu)*b^(2*nu))"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (48)(28)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 sin^(2mu-1) cos^(2nu-1)/(a^2 sin^2+b^2 cos^2)^(mu+nu) = B(mu,nu)/(2 a^(2mu) b^(2nu))",
+  "note": "a > 0, b > 0 added (implied by the value)"
+ },
+ {
+  "id": "GR3.642.2",
+  "gr": "3.642.2",
+  "page": 450,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(n - 1)*Cos[x]^(n - 1)/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^n, {x, 0, Pi/2}]",
+  "rhs": [
+   "Beta[n/2, n/2]/(2*(a*b)^n)"
+  ],
+  "conds": [
+   "a*b > 0",
+   "n > 0"
+  ],
+  "cite": "GW (331)(59a)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 sin^(n-1) cos^(n-1)/(a^2 cos^2+b^2 sin^2)^n = B(n/2,n/2)/(2(ab)^n)",
+  "note": "n > 0 added (convergence)"
+ },
+ {
+  "id": "GR3.642.3a",
+  "gr": "3.642.3",
+  "page": 450,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*n)/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^(n + 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "(2*n - 1)!!*Pi/(2^(n + 1)*n!*a*b^(2*n + 1))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (331)(58)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 sin^2n/(a^2cos^2+b^2sin^2)^(n+1) = (2n-1)!! pi/(2^(n+1) n! a b^(2n+1))",
+  "note": "book: ab > 0; a, b > 0 used (value has a b^(2n+1)); n = 0, 1, 2, ... assumed"
+ },
+ {
+  "id": "GR3.642.3b",
+  "gr": "3.642.3",
+  "page": 450,
+  "status": "ok",
+  "lhs": "(1/2)*Integrate[Sin[x]^(2*n)/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^(n + 1), {x, 0, Pi}]",
+  "rhs": [
+   "(2*n - 1)!!*Pi/(2^(n + 1)*n!*a*b^(2*n + 1))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (331)(58)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "1/2 int_0^pi sin^2n/(a^2cos^2+b^2sin^2)^(n+1)",
+  "note": "book: ab > 0; a, b > 0 used (value has a b^(2n+1)); n = 0, 1, 2, ... assumed"
+ },
+ {
+  "id": "GR3.642.3c",
+  "gr": "3.642.3",
+  "page": 450,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*n)/(a^2*Sin[x]^2 + b^2*Cos[x]^2)^(n + 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "(2*n - 1)!!*Pi/(2^(n + 1)*n!*a*b^(2*n + 1))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (331)(58)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 cos^2n/(a^2sin^2+b^2cos^2)^(n+1)",
+  "note": "book: ab > 0; a, b > 0 used (value has a b^(2n+1)); n = 0, 1, 2, ... assumed"
+ },
+ {
+  "id": "GR3.642.3d",
+  "gr": "3.642.3",
+  "page": 450,
+  "status": "ok",
+  "lhs": "(1/2)*Integrate[Cos[x]^(2*n)/(a^2*Sin[x]^2 + b^2*Cos[x]^2)^(n + 1), {x, 0, Pi}]",
+  "rhs": [
+   "(2*n - 1)!!*Pi/(2^(n + 1)*n!*a*b^(2*n + 1))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (331)(58)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "1/2 int_0^pi cos^2n/(a^2sin^2+b^2cos^2)^(n+1)",
+  "note": "book: ab > 0; a, b > 0 used (value has a b^(2n+1)); n = 0, 1, 2, ... assumed"
+ },
+ {
+  "id": "GR3.642.4",
+  "gr": "3.642.4",
+  "page": 450,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(p + 2*n)*Cos[p*x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^(n + 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Sum[Binomial[2*n - k, n]*Binomial[p + k - 1, k]*b^(p - 1)/((2*a)^(2*n - k + 1)*(a + b)^(p + k)), {k, 0, n}]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "p > -2*n - 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (332)(30)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 cos^(p+2n) cos px/(a^2cos^2+b^2sin^2)^(n+1) = pi sum_k binom(2n-k,n) binom(p+k-1,k) b^(p-1)/((2a)^(2n-k+1)(a+b)^(p+k))",
+  "note": ""
+ },
+ {
+  "id": "GR3.643.1",
+  "gr": "3.643.1",
+  "page": 451,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^p*Cos[p*x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2^(p + 1)*(1 + a)^(p - 1)/(1 - a)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "p > -1"
+  ],
+  "cite": "GW (332)(33c)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 cos^p cos px/(1-2a cos2x+a^2) = pi/2^(p+1) (1+a)^(p-1)/(1-a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.643.2",
+  "gr": "3.643.2",
+  "page": 451,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*n)*Cos[x]^mu*Cos[(2*m - 2*n - mu - 2)*x]/(1 - 2*a*Cos[2*x] + a^2)^m, {x, 0, Pi/2}]",
+  "rhs": [
+   "(-1)^n*Pi*(1 - a)^(2*n - 2*m + 1)/(2^(2*m - (2*m - 2*n - mu - 2) - 1)*(1 + a)^(2*m + (2*m - 2*n - mu - 2) + 1))*Sum[Sum[Binomial[(2*m - 2*n - mu - 2), k]*Binomial[2*n, l]*Binomial[2*m - k - l - 2, m - 1]*(-2)^l*(a - 1)^k, {l, 0, m - k - 1}], {k, 0, m - 1}]"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "mu > -1",
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "GW (332)(33)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 sin^2n cos^mu cos beta x/(1-2a cos2x+a^2)^m = (-1)^n pi (1-a)^(2n-2m+1)/(2^(2m-beta-1)(1+a)^(2m+beta+1)) sum_k sum_l binom(beta,k) binom(2n,l) binom(2m-k-l-2,m-1)(-2)^l (a-1)^k",
+  "note": "equality condition beta = 2m - 2n - mu - 2 substituted; printed binomial reads (2m-k-l-2 over m-1(-2)^l), read as binom(2m-k-l-2, m-1)*(-2)^l; m, n nonnegative integers assumed"
+ },
+ {
+  "id": "GR3.644.1a",
+  "gr": "3.644.1",
+  "page": 451,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*k + 2)/(p + q*Cos[x]), {x, 0, Pi}]",
+  "rhs": [
+   "2^((2*k + 2) - 2)*p/q^2*Sum[((p^2 - q^2)/(-4*q^2))^(j - 1)*Beta[((2*k + 2) + 1 - 2*j)/2, ((2*k + 2) + 1 - 2*j)/2], {j, 1, k}] + ((p^2 - q^2)/(-q^2))^k*(Pi*p/q^2*(1 - Sqrt[1 - q^2/p^2]))"
+  ],
+  "conds": [
+   "p^2 - q^2 > 0",
+   "q != 0",
+   "Element[k, Integers] && k >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi sin^m/(p+q cos x) = 2^(m-2) p/q^2 sum_nu ((p^2-q^2)/(-4q^2))^(nu-1) B((m+1-2nu)/2,(m+1-2nu)/2) + ((p^2-q^2)/(-q^2))^k A, A = pi p/q^2 (1-sqrt(1-q^2/p^2)), m = 2k+2",
+  "note": "case m = 2k+2 substituted; summation index nu renamed j; book condition p^2 - q^2 >= 0 (strict used: equality makes the integrand singular)"
+ },
+ {
+  "id": "GR3.644.1b",
+  "gr": "3.644.1",
+  "page": 451,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*k + 1)/(p + q*Cos[x]), {x, 0, Pi}]",
+  "rhs": [
+   "2^((2*k + 1) - 2)*p/q^2*Sum[((p^2 - q^2)/(-4*q^2))^(j - 1)*Beta[((2*k + 1) + 1 - 2*j)/2, ((2*k + 1) + 1 - 2*j)/2], {j, 1, k}] + ((p^2 - q^2)/(-q^2))^k*(1/q*Log[(p + q)/(p - q)])"
+  ],
+  "conds": [
+   "p^2 - q^2 > 0",
+   "q != 0",
+   "Element[k, Integers] && k >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "same, A = (1/q) ln((p+q)/(p-q)), m = 2k+1",
+  "note": "case m = 2k+1 substituted; summation index nu renamed j; book condition p^2 - q^2 >= 0 (strict used)"
+ },
+ {
+  "id": "GR3.644.2",
+  "gr": "3.644.2",
+  "page": 451,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^m/(1 + Cos[x]), {x, 0, Pi}]",
+  "rhs": [
+   "2^(m - 1)*Beta[(m - 1)/2, (m + 1)/2]"
+  ],
+  "conds": [
+   "m >= 2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi sin^m/(1+cos x) = 2^(m-1) B((m-1)/2,(m+1)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.644.3",
+  "gr": "3.644.3",
+  "page": 451,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^m/(1 - Cos[x]), {x, 0, Pi}]",
+  "rhs": [
+   "2^(m - 1)*Beta[(m - 1)/2, (m + 1)/2]"
+  ],
+  "conds": [
+   "m >= 2"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi sin^m/(1-cos x) = 2^(m-1) B((m-1)/2,(m+1)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.644.4",
+  "gr": "3.644.4",
+  "page": 451,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2/(p + q*Cos[x]), {x, 0, Pi}]",
+  "rhs": [
+   "p*Pi/q^2*(1 - Sqrt[1 - q^2/p^2])"
+  ],
+  "conds": [
+   "p^2 > q^2",
+   "q != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi sin^2/(p+q cos x) = p pi/q^2 (1 - sqrt(1-q^2/p^2))",
+  "note": "conditions p^2 > q^2, q != 0 added from 3.644.1"
+ },
+ {
+  "id": "GR3.644.5",
+  "gr": "3.644.5",
+  "page": 451,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3/(p + q*Cos[x]), {x, 0, Pi}]",
+  "rhs": [
+   "2*p/q^2 + 1/q*(1 - p^2/q^2)*Log[(p + q)/(p - q)]"
+  ],
+  "conds": [
+   "p^2 > q^2",
+   "q != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi sin^3/(p+q cos x) = 2p/q^2 + (1/q)(1-p^2/q^2) ln((p+q)/(p-q))",
+  "note": "conditions p^2 > q^2, q != 0 added from 3.644.1"
+ },
+ {
+  "id": "GR3.645",
+  "gr": "3.645",
+  "page": 451,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^n/(a + b*Cos[x])^(n + 1), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(2^n*(a + b)^n*Sqrt[a^2 - b^2])*Sum[(-1)^k*(2*n - 2*k - 1)!!*(2*k - 1)!!/((n - k)!*k!)*((a + b)/(a - b))^k, {k, 0, n}]"
+  ],
+  "conds": [
+   "a^2 > b^2",
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "LI (64)(16)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi cos^n/(a+b cos x)^(n+1) = pi/(2^n (a+b)^n sqrt(a^2-b^2)) sum (-1)^k (2n-2k-1)!!(2k-1)!!/((n-k)!k!) ((a+b)/(a-b))^k",
+  "note": "a > 0 added (branch of a^2 > b^2 with real positive denominator)"
+ },
+ {
+  "id": "GR3.646.1",
+  "gr": "3.646.1",
+  "page": 451,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^n*Sin[n*x]*Sin[2*x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(4*a)*(((1 + a)/2)^n - 1/2^n)"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "BI (50)(6)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 cos^n sin nx sin2x/(1-2a cos2x+a^2) = pi/(4a)[((1+a)/2)^n - 1/2^n]",
+  "note": "n not specified; treated as real parameter"
+ },
+ {
+  "id": "GR3.646.2",
+  "gr": "3.646.2",
+  "page": 451,
+  "status": "ok",
+  "lhs": "Integrate[(1 - a*Cos[2*n*x])/(1 - 2*a*Cos[2*n*x] + a^2)*Cos[x]^m*Cos[m*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2^(m + 2)*Sum[Binomial[m, k*n]*a^k, {k, 1, Infinity}] + Pi/2^(m + 1)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (50)(7)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 (1-a cos2nx)/(1-2a cos2nx+a^2) cos^m x cos mx = pi/2^(m+2) sum_{k>=1} binom(m,kn) a^k + pi/2^(m+1)",
+  "note": "m, n taken as nonnegative/positive integers"
+ },
+ {
+  "id": "GR3.647",
+  "gr": "3.647",
+  "page": 451,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^p*Cos[p*x]/(a^2*Sin[x]^2 + b^2*Cos[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*b)*a^(p - 1)/(a + b)^p"
+  ],
+  "conds": [
+   "p > -1",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (47)(20)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 cos^p cos px/(a^2 sin^2+b^2 cos^2) = pi/(2b) a^(p-1)/(a+b)^p",
+  "note": ""
+ },
+ {
+  "id": "GR3.648.1a",
+  "gr": "3.648.1",
+  "page": 452,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^l/(1 + Cos[m*Pi/n]*Sin[2*x]), {x, 0, Pi/4}]",
+  "rhs": [
+   "1/(2*n)*Csc[m*Pi/n]*Sum[(-1)^(k - 1)*Sin[k*m*Pi/n]*(PolyGamma[(n + l + k)/(2*n)] - PolyGamma[(l + k)/(2*n)]), {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 1",
+   "Element[m, Integers] && m >= 1",
+   "Element[n, Integers] && n >= 2",
+   "OddQ[m + n]"
+  ],
+  "cite": "BI (36)(5)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/4 tan^l/(1+cos(m pi/n) sin2x) = 1/(2n) cosec(m pi/n) sum_{k=0}^{n-1} (-1)^(k-1) sin(km pi/n)[psi((n+l+k)/2n) - psi((l+k)/2n)] [m+n odd]",
+  "note": "l natural number; m, n taken as positive integers"
+ },
+ {
+  "id": "GR3.648.1b",
+  "gr": "3.648.1",
+  "page": 452,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^l/(1 + Cos[m*Pi/n]*Sin[2*x]), {x, 0, Pi/4}]",
+  "rhs": [
+   "1/n*Csc[m*Pi/n]*Sum[(-1)^(k - 1)*Sin[k*m*Pi/n]*(PolyGamma[(n + l - k)/n] - PolyGamma[(l + k)/n]), {k, 0, Floor[(n - 1)/2]}]"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 1",
+   "Element[m, Integers] && m >= 1",
+   "Element[n, Integers] && n >= 2",
+   "EvenQ[m + n]"
+  ],
+  "cite": "BI (36)(5)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "... = 1/n cosec(m pi/n) sum_{k=0}^{(n-1)/2} (-1)^(k-1) sin(km pi/n)[psi((n+l-k)/n) - psi((l+k)/n)] [m+n even]",
+  "note": "l natural number; m, n taken as positive integers; upper limit (n-1)/2 read as Floor"
+ },
+ {
+  "id": "GR3.648.2a",
+  "gr": "3.648.2",
+  "page": 452,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(mu)/(1 + Cos[t]*Sin[2*x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Csc[t]*Sin[mu*t]*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1",
+   "t^2 < Pi^2"
+  ],
+  "cite": "BI (47)(4)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(+mu)/(1+cos t sin2x) = pi cosec t sin(mu t) cosec(mu pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.648.2b",
+  "gr": "3.648.2",
+  "page": 452,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(-mu)/(1 + Cos[t]*Sin[2*x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Csc[t]*Sin[mu*t]*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1",
+   "t^2 < Pi^2"
+  ],
+  "cite": "BI (47)(4)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(-mu)/(1+cos t sin2x) = pi cosec t sin(mu t) cosec(mu pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.649.1a",
+  "gr": "3.649.1",
+  "page": 452,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(mu)*Sin[2*x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(4*a)*Csc[mu*Pi/2]*(1 - ((1 - a)/(1 + a))^mu)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "-2 < Re[mu] < 1"
+  ],
+  "cite": "BI (50)(3)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(+mu) sin2x/(1-2a cos2x+a^2) [a^2 < 1]",
+  "note": "sign pair: upper/lower signs taken together"
+ },
+ {
+  "id": "GR3.649.1b",
+  "gr": "3.649.1",
+  "page": 452,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(mu)*Sin[2*x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(4*a)*Csc[mu*Pi/2]*(1 + ((a - 1)/(a + 1))^mu)"
+  ],
+  "conds": [
+   "a^2 > 1",
+   "-2 < Re[mu] < 1"
+  ],
+  "cite": "BI (50)(3)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(+mu) sin2x/(1-2a cos2x+a^2) [a^2 > 1]",
+  "note": "sign pair: upper/lower signs taken together"
+ },
+ {
+  "id": "GR3.649.1c",
+  "gr": "3.649.1",
+  "page": 452,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(-mu)*Sin[2*x]/(1 + 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(4*a)*Csc[mu*Pi/2]*(1 - ((1 - a)/(1 + a))^mu)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "-2 < Re[mu] < 1"
+  ],
+  "cite": "BI (50)(3)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(-mu) sin2x/(1+2a cos2x+a^2) [a^2 < 1]",
+  "note": "sign pair: upper/lower signs taken together"
+ },
+ {
+  "id": "GR3.649.1d",
+  "gr": "3.649.1",
+  "page": 452,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(-mu)*Sin[2*x]/(1 + 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(4*a)*Csc[mu*Pi/2]*(1 + ((a - 1)/(a + 1))^mu)"
+  ],
+  "conds": [
+   "a^2 > 1",
+   "-2 < Re[mu] < 1"
+  ],
+  "cite": "BI (50)(3)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(-mu) sin2x/(1+2a cos2x+a^2) [a^2 > 1]",
+  "note": "sign pair: upper/lower signs taken together"
+ },
+ {
+  "id": "GR3.649.2a",
+  "gr": "3.649.2",
+  "page": 452,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(mu)*(1 - a*Cos[2*x])/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4*Sec[mu*Pi/2]*(1 + ((1 - a)/(1 + a))^mu)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Abs[Re[mu]] < 1"
+  ],
+  "cite": "BI (50)(4)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(+mu)(1-a cos2x)/(1-2a cos2x+a^2) [a^2 < 1]",
+  "note": "sign pair: upper/lower signs taken together"
+ },
+ {
+  "id": "GR3.649.2b",
+  "gr": "3.649.2",
+  "page": 452,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(mu)*(1 - a*Cos[2*x])/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4*Sec[mu*Pi/2]*(1 - ((a - 1)/(a + 1))^mu)"
+  ],
+  "conds": [
+   "a^2 > 1",
+   "Abs[Re[mu]] < 1"
+  ],
+  "cite": "BI (50)(4)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(+mu)(1-a cos2x)/(1-2a cos2x+a^2) [a^2 > 1]",
+  "note": "sign pair: upper/lower signs taken together"
+ },
+ {
+  "id": "GR3.649.2c",
+  "gr": "3.649.2",
+  "page": 452,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(-mu)*(1 + a*Cos[2*x])/(1 + 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4*Sec[mu*Pi/2]*(1 + ((1 - a)/(1 + a))^mu)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Abs[Re[mu]] < 1"
+  ],
+  "cite": "BI (50)(4)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(-mu)(1+a cos2x)/(1+2a cos2x+a^2) [a^2 < 1]",
+  "note": "sign pair: upper/lower signs taken together"
+ },
+ {
+  "id": "GR3.649.2d",
+  "gr": "3.649.2",
+  "page": 452,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(-mu)*(1 + a*Cos[2*x])/(1 + 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4*Sec[mu*Pi/2]*(1 - ((a - 1)/(a + 1))^mu)"
+  ],
+  "conds": [
+   "a^2 > 1",
+   "Abs[Re[mu]] < 1"
+  ],
+  "cite": "BI (50)(4)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(-mu)(1+a cos2x)/(1+2a cos2x+a^2) [a^2 > 1]",
+  "note": "sign pair: upper/lower signs taken together"
+ },
+ {
+  "id": "GR3.651.1",
+  "gr": "3.651.1",
+  "page": 452,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^mu/(1 + Sin[x]*Cos[x]), {x, 0, Pi/4}]",
+  "rhs": [
+   "1/3*(PolyGamma[(mu + 2)/3] - PolyGamma[(mu + 1)/3])"
+  ],
+  "conds": [
+   "Re[mu] > -1"
+  ],
+  "cite": "BI (36)(3)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/4 tan^mu/(1+sin x cos x) = 1/3[psi((mu+2)/3) - psi((mu+1)/3)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.651.2",
+  "gr": "3.651.2",
+  "page": 452,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^mu/(1 - Sin[x]*Cos[x]), {x, 0, Pi/4}]",
+  "rhs": [
+   "1/3*(((PolyGamma[((mu + 2)/3 + 1)/2] - PolyGamma[((mu + 2)/3)/2])/2) + ((PolyGamma[((mu + 1)/3 + 1)/2] - PolyGamma[((mu + 1)/3)/2])/2))"
+  ],
+  "conds": [
+   "Re[mu] > -1"
+  ],
+  "cite": "BI (36)(4)a",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/4 tan^mu/(1-sin x cos x) = 1/3[beta((mu+2)/3) + beta((mu+1)/3)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.652.1a",
+  "gr": "3.652.1",
+  "page": 452,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^mu/((Sin[x] + Cos[x])*Sin[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "BI (49)(1)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^mu/((sin+cos) sin x) = pi cosec mu pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.652.1b",
+  "gr": "3.652.1",
+  "page": 452,
+  "status": "ok",
+  "lhs": "Integrate[Cot[x]^mu/((Sin[x] + Cos[x])*Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "BI (49)(1)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 cot^mu/((sin+cos) cos x) = pi cosec mu pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.652.2a",
+  "gr": "3.652.2",
+  "page": 452,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Tan[x]^mu/((Sin[x] - Cos[x])*Sin[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi*Cot[mu*Pi]"
+  ],
+  "conds": [
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "BI (49)(2)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^mu/((sin-cos) sin x) = -pi cot mu pi",
+  "note": "",
+  "reason": "pole at x = pi/4 on the path (principal value)"
+ },
+ {
+  "id": "GR3.652.2b",
+  "gr": "3.652.2",
+  "page": 452,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cot[x]^mu/((Cos[x] - Sin[x])*Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi*Cot[mu*Pi]"
+  ],
+  "conds": [
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "BI (49)(2)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 cot^mu/((cos-sin) cos x) = -pi cot mu pi",
+  "note": "",
+  "reason": "pole at x = pi/4 on the path (principal value)"
+ },
+ {
+  "id": "GR3.652.3a",
+  "gr": "3.652.3",
+  "page": 452,
+  "status": "ok",
+  "lhs": "Integrate[Cot[x]^(mu + 1/2)/((Sin[x] + Cos[x])*Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Sec[mu*Pi]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1/2"
+  ],
+  "cite": "BI (61)(1, 2)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 cot^(mu+1/2) x/((sin+cos) cos x) = pi sec mu pi",
+  "note": "exponent typeset as mu+1/2 x; read as cot^(mu+1/2) x"
+ },
+ {
+  "id": "GR3.652.3b",
+  "gr": "3.652.3",
+  "page": 452,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(mu - 1/2)/((Sin[x] + Cos[x])*Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Sec[mu*Pi]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1/2"
+  ],
+  "cite": "BI (61)(1, 2)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(mu-1/2) x/((sin+cos) cos x) = pi sec mu pi",
+  "note": "exponent typeset as mu-1/2 x; read as tan^(mu-1/2) x"
+ },
+ {
+  "id": "GR3.653.1a",
+  "gr": "3.653.1",
+  "page": 453,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(1 - 2*mu)/(a^2*Cos[x]^2 + b^2*Sin[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*a^(2*mu)*b^(2 - 2*mu)*Sin[mu*Pi])"
+  ],
+  "conds": [
+   "0 < Re[mu] < 1",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (331)(59b)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(1-2mu)/(a^2cos^2+b^2sin^2) = pi/(2 a^2mu b^(2-2mu) sin mu pi)",
+  "note": "a, b > 0 added"
+ },
+ {
+  "id": "GR3.653.1b",
+  "gr": "3.653.1",
+  "page": 453,
+  "status": "ok",
+  "lhs": "Integrate[Cot[x]^(1 - 2*mu)/(a^2*Sin[x]^2 + b^2*Cos[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*a^(2*mu)*b^(2 - 2*mu)*Sin[mu*Pi])"
+  ],
+  "conds": [
+   "0 < Re[mu] < 1",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (331)(59b)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 cot^(1-2mu)/(a^2sin^2+b^2cos^2) = same",
+  "note": "a, b > 0 added"
+ },
+ {
+  "id": "GR3.653.2a",
+  "gr": "3.653.2",
+  "page": 453,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^mu/(1 - a*Sin[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Sec[mu*Pi/2]/(2*Sqrt[(1 - a)^(mu + 1)])"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1",
+   "a < 1"
+  ],
+  "cite": "BI (49)(6)",
+  "edition_note": "11",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^mu/(1-a sin^2) = pi sec(mu pi/2)/(2 sqrt((1-a)^(mu+1)))",
+  "note": ""
+ },
+ {
+  "id": "GR3.653.2b",
+  "gr": "3.653.2",
+  "page": 453,
+  "status": "ok",
+  "lhs": "Integrate[Cot[x]^mu/(1 - a*Cos[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Sec[mu*Pi/2]/(2*Sqrt[(1 - a)^(mu + 1)])"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1",
+   "a < 1"
+  ],
+  "cite": "BI (49)(6)",
+  "edition_note": "11",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 cot^mu/(1-a cos^2) = same",
+  "note": ""
+ },
+ {
+  "id": "GR3.653.3a",
+  "gr": "3.653.3",
+  "page": 453,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(mu)/(1 - Cos[t]^2*Sin[2*x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Csc[t]*Sec[mu*Pi/2]*Cos[(Pi/2 - t)*mu]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1",
+   "t^2 < Pi^2"
+  ],
+  "cite": "BI(49)(7), BI(47)(21)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(+mu)/(1-cos^2 t sin^2 2x) = pi/2 cosec t sec(mu pi/2) cos((pi/2-t)mu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.653.3b",
+  "gr": "3.653.3",
+  "page": 453,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(-mu)/(1 - Cos[t]^2*Sin[2*x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Csc[t]*Sec[mu*Pi/2]*Cos[(Pi/2 - t)*mu]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1",
+   "t^2 < Pi^2"
+  ],
+  "cite": "BI(49)(7), BI(47)(21)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(-mu)/(1-cos^2 t sin^2 2x) = pi/2 cosec t sec(mu pi/2) cos((pi/2-t)mu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.653.4a",
+  "gr": "3.653.4",
+  "page": 453,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(mu)*Sin[2*x]/(1 - Cos[t]^2*Sin[2*x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Csc[2*t]*Csc[mu*Pi/2]*Sin[(Pi/2 - t)*mu]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1",
+   "t^2 < Pi^2"
+  ],
+  "cite": "BI (47)(22)a",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(+mu) sin2x/(1-cos^2 t sin^2 2x) = pi cosec 2t cosec(mu pi/2) sin((pi/2-t)mu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.653.4b",
+  "gr": "3.653.4",
+  "page": 453,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(-mu)*Sin[2*x]/(1 - Cos[t]^2*Sin[2*x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Csc[2*t]*Csc[mu*Pi/2]*Sin[(Pi/2 - t)*mu]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1",
+   "t^2 < Pi^2"
+  ],
+  "cite": "BI (47)(22)a",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(-mu) sin2x/(1-cos^2 t sin^2 2x) = pi cosec 2t cosec(mu pi/2) sin((pi/2-t)mu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.653.5a",
+  "gr": "3.653.5",
+  "page": 453,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^mu*Sin[x]^2/(1 - Cos[t]^2*Sin[2*x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Csc[2*t]*Sec[mu*Pi/2]*Cos[mu*Pi/2 - (mu + 1)*t]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1",
+   "t^2 < Pi^2"
+  ],
+  "cite": "BI(47)(23)a, BI(49)(10)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int tan^mu sin^2/(1-cos^2 t sin^2 2x) = pi/2 cosec2t sec(mu pi/2) cos(mu pi/2-(mu+1)t)",
+  "note": ""
+ },
+ {
+  "id": "GR3.653.5b",
+  "gr": "3.653.5",
+  "page": 453,
+  "status": "ok",
+  "lhs": "Integrate[Cot[x]^mu*Cos[x]^2/(1 - Cos[t]^2*Sin[2*x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Csc[2*t]*Sec[mu*Pi/2]*Cos[mu*Pi/2 - (mu + 1)*t]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1",
+   "t^2 < Pi^2"
+  ],
+  "cite": "BI(47)(23)a, BI(49)(10)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int cot^mu cos^2/(1-cos^2 t sin^2 2x) = same",
+  "note": ""
+ },
+ {
+  "id": "GR3.653.6a",
+  "gr": "3.653.6",
+  "page": 453,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^mu*Cos[x]^2/(1 - Cos[t]^2*Sin[2*x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Csc[2*t]*Sec[mu*Pi/2]*Cos[mu*Pi/2 - (mu - 1)*t]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1",
+   "t^2 < Pi^2"
+  ],
+  "cite": "BI(47)(24)a, BI(49)(9)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int tan^mu cos^2/(1-cos^2 t sin^2 2x) = pi/2 cosec2t sec(mu pi/2) cos(mu pi/2-(mu-1)t)",
+  "note": ""
+ },
+ {
+  "id": "GR3.653.6b",
+  "gr": "3.653.6",
+  "page": 453,
+  "status": "ok",
+  "lhs": "Integrate[Cot[x]^mu*Sin[x]^2/(1 - Cos[t]^2*Sin[2*x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Csc[2*t]*Sec[mu*Pi/2]*Cos[mu*Pi/2 - (mu - 1)*t]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1",
+   "t^2 < Pi^2"
+  ],
+  "cite": "BI(47)(24)a, BI(49)(9)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int cot^mu sin^2/(1-cos^2 t sin^2 2x) = same",
+  "note": ""
+ },
+ {
+  "id": "GR3.654.1a",
+  "gr": "3.654.1",
+  "page": 453,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(mu + 1)*Cos[x]^2/(1 + Cos[t]*Sin[2*x])^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*(mu*Sin[t]*Cos[mu*t] - Cos[t]*Sin[mu*t])/(2*Sin[mu*Pi]*Sin[t]^3)"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1",
+   "t^2 < Pi^2"
+  ],
+  "cite": "BI(48)(3), BI(49)(22)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(mu+1) cos^2/(1+cos t sin2x)^2 = pi(mu sin t cos mu t - cos t sin mu t)/(2 sin mu pi sin^3 t)",
+  "note": ""
+ },
+ {
+  "id": "GR3.654.1b",
+  "gr": "3.654.1",
+  "page": 453,
+  "status": "ok",
+  "lhs": "Integrate[Cot[x]^(mu + 1)*Sin[x]^2/(1 + Cos[t]*Sin[2*x])^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*(mu*Sin[t]*Cos[mu*t] - Cos[t]*Sin[mu*t])/(2*Sin[mu*Pi]*Sin[t]^3)"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1",
+   "t^2 < Pi^2"
+  ],
+  "cite": "BI(48)(3), BI(49)(22)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 cot^(mu+1) sin^2/(1+cos t sin2x)^2 = same",
+  "note": ""
+ },
+ {
+  "id": "GR3.654.2a",
+  "gr": "3.654.2",
+  "page": 453,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(mu)/(Sin[x] + Cos[x])^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "mu*Pi/Sin[mu*Pi]"
+  ],
+  "conds": [
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "BI (56)(9)a",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(+mu)/(sin+cos)^2 = mu pi/sin mu pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.654.2b",
+  "gr": "3.654.2",
+  "page": 453,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(-mu)/(Sin[x] + Cos[x])^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "mu*Pi/Sin[mu*Pi]"
+  ],
+  "conds": [
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "BI (56)(9)a",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(-mu)/(sin+cos)^2 = mu pi/sin mu pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.654.3a",
+  "gr": "3.654.3",
+  "page": 453,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Tan[x]^(mu - 1)/(Cos[x]^2 - Sin[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Cot[mu*Pi/2]"
+  ],
+  "conds": [
+   "0 < Re[mu] < 2"
+  ],
+  "cite": "BI (45)(27, 29)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(mu-1)/(cos^2-sin^2) = pi/2 cot(mu pi/2)",
+  "note": "exponent typeset as +-(mu-1)x; read as tan^(+-(mu-1)) x",
+  "reason": "pole at x = pi/4 on the path (principal value)"
+ },
+ {
+  "id": "GR3.654.3b",
+  "gr": "3.654.3",
+  "page": 453,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Tan[x]^(-(mu - 1))/(Cos[x]^2 - Sin[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi/2*Cot[mu*Pi/2]"
+  ],
+  "conds": [
+   "0 < Re[mu] < 2"
+  ],
+  "cite": "BI (45)(27, 29)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(-(mu-1))/(cos^2-sin^2) = -pi/2 cot(mu pi/2)",
+  "note": "exponent typeset as +-(mu-1)x; read as tan^(+-(mu-1)) x",
+  "reason": "pole at x = pi/4 on the path (principal value)"
+ },
+ {
+  "id": "GR3.655a",
+  "gr": "3.655",
+  "page": 453,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(2*mu - 1)/(1 - 2*a*(Cos[t1]*Sin[x]^2 + Cos[t2]*Cos[x]^2) + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Csc[mu*Pi]/((1 - 2*a*Cos[t2] + a^2)^mu*(1 - 2*a*Cos[t1] + a^2)^(1 - mu))"
+  ],
+  "conds": [
+   "0 < Re[mu] < 1",
+   "t1^2 < Pi^2",
+   "t2^2 < Pi^2"
+  ],
+  "cite": "BI (50)(18)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(2mu-1)/(1-2a(cos t1 sin^2+cos t2 cos^2)+a^2) = pi cosec mu pi/((1-2a cos t2+a^2)^mu (1-2a cos t1+a^2)^(1-mu))",
+  "note": ""
+ },
+ {
+  "id": "GR3.655b",
+  "gr": "3.655",
+  "page": 453,
+  "status": "ok",
+  "lhs": "Integrate[Cot[x]^(2*mu - 1)/(1 - 2*a*(Cos[t1]*Cos[x]^2 + Cos[t2]*Sin[x]^2) + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Csc[mu*Pi]/((1 - 2*a*Cos[t2] + a^2)^mu*(1 - 2*a*Cos[t1] + a^2)^(1 - mu))"
+  ],
+  "conds": [
+   "0 < Re[mu] < 1",
+   "t1^2 < Pi^2",
+   "t2^2 < Pi^2"
+  ],
+  "cite": "BI (50)(18)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 cot^(2mu-1)/(1-2a(cos t1 cos^2+cos t2 sin^2)+a^2) = same",
+  "note": ""
+ },
+ {
+  "id": "GR3.656.1",
+  "gr": "3.656.1",
+  "page": 454,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^mu/(1 - Sin[x]^2*Cos[x]^2), {x, 0, Pi/4}]",
+  "rhs": [
+   "1/12*(-PolyGamma[(mu + 1)/6] - PolyGamma[(mu + 2)/6] + PolyGamma[(mu + 4)/6] + PolyGamma[(mu + 5)/6] + 2*PolyGamma[(mu + 2)/3] - 2*PolyGamma[(mu + 1)/3])"
+  ],
+  "conds": [
+   "Re[mu] > -1"
+  ],
+  "cite": "LI (36)(10)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/4 tan^mu/(1-sin^2 cos^2) = 1/12{-psi((mu+1)/6)-psi((mu+2)/6)+psi((mu+4)/6)+psi((mu+5)/6)+2psi((mu+2)/3)-2psi((mu+1)/3)}",
+  "note": "cf. 3.651 1 and 2"
+ },
+ {
+  "id": "GR3.656.2a",
+  "gr": "3.656.2",
+  "page": 454,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^(mu - 1)*Cos[x]^2/(1 - Sin[x]^2*Cos[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(4*Sqrt[3])*Csc[mu*Pi/6]*Csc[(2 + mu)*Pi/6]"
+  ],
+  "conds": [
+   "0 < Re[mu] < 4"
+  ],
+  "cite": "LI (47)(26)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 tan^(mu-1) cos^2/(1-sin^2 cos^2) = pi/(4 sqrt3) cosec(mu pi/6) cosec((2+mu)pi/6)",
+  "note": ""
+ },
+ {
+  "id": "GR3.656.2b",
+  "gr": "3.656.2",
+  "page": 454,
+  "status": "ok",
+  "lhs": "Integrate[Cot[x]^(mu - 1)*Sin[x]^2/(1 - Sin[x]^2*Cos[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(4*Sqrt[3])*Csc[mu*Pi/6]*Csc[(2 + mu)*Pi/6]"
+  ],
+  "conds": [
+   "0 < Re[mu] < 4"
+  ],
+  "cite": "LI (47)(26)",
+  "edition_note": "",
+  "section": "3.64-3.65 Powers and rational functions of trigonometric functions",
+  "tex": "int_0^pi/2 cot^(mu-1) sin^2/(1-sin^2 cos^2) = same",
+  "note": ""
+ },
+ {
+  "id": "GR3.661.1",
+  "gr": "3.661.1",
+  "page": 454,
+  "status": "ok",
+  "lhs": "Integrate[(a*Sin[x] + b*Cos[x])^(2*n + 1), {x, 0, 2*Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (68)(9)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^2pi (a sin x + b cos x)^(2n+1) = 0",
+  "note": "n = 0, 1, 2, ... assumed"
+ },
+ {
+  "id": "GR3.661.2",
+  "gr": "3.661.2",
+  "page": 454,
+  "status": "ok",
+  "lhs": "Integrate[(a*Sin[x] + b*Cos[x])^(2*n), {x, 0, 2*Pi}]",
+  "rhs": [
+   "(2*n - 1)!!/(2*n)!!*2*Pi*(a^2 + b^2)^n"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (68)(8)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^2pi (a sin x + b cos x)^(2n) = (2n-1)!!/(2n)!! 2pi (a^2+b^2)^n",
+  "note": "n = 0, 1, 2, ... assumed"
+ },
+ {
+  "id": "GR3.661.3a",
+  "gr": "3.661.3",
+  "page": 454,
+  "status": "ok",
+  "lhs": "Integrate[(a + b*Cos[x])^n, {x, 0, Pi}]",
+  "rhs": [
+   "Pi*(a^2 - b^2)^(n/2)*LegendreP[n, a/Sqrt[a^2 - b^2]]"
+  ],
+  "conds": [
+   "a^2 > b^2",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (332)(37a)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi (a+b cos x)^n = pi (a^2-b^2)^(n/2) P_n(a/sqrt(a^2-b^2))",
+  "note": ""
+ },
+ {
+  "id": "GR3.661.3b",
+  "gr": "3.661.3",
+  "page": 454,
+  "status": "ok",
+  "lhs": "(1/2)*Integrate[(a + b*Cos[x])^n, {x, 0, 2*Pi}]",
+  "rhs": [
+   "Pi*(a^2 - b^2)^(n/2)*LegendreP[n, a/Sqrt[a^2 - b^2]]"
+  ],
+  "conds": [
+   "a^2 > b^2",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (332)(37a)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "1/2 int_0^2pi (a+b cos x)^n = same",
+  "note": ""
+ },
+ {
+  "id": "GR3.661.3c",
+  "gr": "3.661.3",
+  "page": 454,
+  "status": "ok",
+  "lhs": "Integrate[(a + b*Cos[x])^n, {x, 0, Pi}]",
+  "rhs": [
+   "Pi/2^n*Sum[(-1)^k*(2*n - 2*k)!/(k!*(n - k)!*(n - 2*k)!)*a^(n - 2*k)*(a^2 - b^2)^k, {k, 0, Floor[n/2]}]"
+  ],
+  "conds": [
+   "a^2 > b^2",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (332)(37a)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi (a+b cos x)^n = pi/2^n sum_{k=0}^{[n/2]} (-1)^k (2n-2k)!/(k!(n-k)!(n-2k)!) a^(n-2k) (a^2-b^2)^k",
+  "note": ""
+ },
+ {
+  "id": "GR3.661.4a",
+  "gr": "3.661.4",
+  "page": 454,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cos[x])^(n + 1), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(a^2 - b^2)^((n + 1)/2)*LegendreP[n, a/Sqrt[a^2 - b^2]]"
+  ],
+  "conds": [
+   "a > Abs[b]",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW(332)(38), LI(64)(14)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi dx/(a+b cos x)^(n+1) = pi/(a^2-b^2)^((n+1)/2) P_n(a/sqrt(a^2-b^2))",
+  "note": ""
+ },
+ {
+  "id": "GR3.661.4b",
+  "gr": "3.661.4",
+  "page": 454,
+  "status": "ok",
+  "lhs": "(1/2)*Integrate[1/(a + b*Cos[x])^(n + 1), {x, 0, 2*Pi}]",
+  "rhs": [
+   "Pi/(a^2 - b^2)^((n + 1)/2)*LegendreP[n, a/Sqrt[a^2 - b^2]]"
+  ],
+  "conds": [
+   "a > Abs[b]",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW(332)(38), LI(64)(14)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "1/2 int_0^2pi dx/(a+b cos x)^(n+1) = same",
+  "note": ""
+ },
+ {
+  "id": "GR3.661.4c",
+  "gr": "3.661.4",
+  "page": 454,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cos[x])^(n + 1), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(2^n*(a + b)^n*Sqrt[a^2 - b^2])*Sum[(2*n - 2*k - 1)!!*(2*k - 1)!!/((n - k)!*k!)*((a + b)/(a - b))^k, {k, 0, n}]"
+  ],
+  "conds": [
+   "a > Abs[b]",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW(332)(38), LI(64)(14)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi dx/(a+b cos x)^(n+1) = pi/(2^n (a+b)^n sqrt(a^2-b^2)) sum (2n-2k-1)!!(2k-1)!!/((n-k)!k!) ((a+b)/(a-b))^k",
+  "note": ""
+ },
+ {
+  "id": "GR3.662.1a",
+  "gr": "3.662.1",
+  "page": 454,
+  "status": "ok",
+  "lhs": "Integrate[(Sec[x] - 1)^mu*Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "mu*Pi*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1"
+  ],
+  "cite": "BI (55)(13)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi/2 (sec x-1)^mu sin x = mu pi cosec mu pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.662.1b",
+  "gr": "3.662.1",
+  "page": 454,
+  "status": "ok",
+  "lhs": "Integrate[(Csc[x] - 1)^mu*Cos[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "mu*Pi*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1"
+  ],
+  "cite": "BI (55)(13)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi/2 (cosec x-1)^mu cos x = mu pi cosec mu pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.662.2",
+  "gr": "3.662.2",
+  "page": 454,
+  "status": "ok",
+  "lhs": "Integrate[(Csc[x] - 1)^mu*Sin[2*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "(1 - mu)*mu*Pi*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "-1 < Re[mu] < 2"
+  ],
+  "cite": "BI (48)(7)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi/2 (cosec x-1)^mu sin2x = (1-mu) mu pi cosec mu pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.662.3a",
+  "gr": "3.662.3",
+  "page": 454,
+  "status": "ok",
+  "lhs": "Integrate[(Sec[x] - 1)^mu*Tan[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "-1 < Re[mu] < 0"
+  ],
+  "cite": "BI (46)(4,6)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi/2 (sec x-1)^mu tan x = -pi cosec mu pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.662.3b",
+  "gr": "3.662.3",
+  "page": 454,
+  "status": "ok",
+  "lhs": "Integrate[(Csc[x] - 1)^mu*Cot[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "-1 < Re[mu] < 0"
+  ],
+  "cite": "BI (46)(4,6)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi/2 (cosec x-1)^mu cot x = -pi cosec mu pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.662.4",
+  "gr": "3.662.4",
+  "page": 454,
+  "status": "ok",
+  "lhs": "Integrate[(Cot[x] - 1)^mu/Sin[2*x], {x, 0, Pi/4}]",
+  "rhs": [
+   "-Pi/2*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "-1 < Re[mu] < 0"
+  ],
+  "cite": "BI (38)(22)a",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi/4 (cot x-1)^mu/sin2x = -pi/2 cosec mu pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.662.5",
+  "gr": "3.662.5",
+  "page": 455,
+  "status": "ok",
+  "lhs": "Integrate[(Cot[x] - 1)^mu/Cos[x]^2, {x, 0, Pi/4}]",
+  "rhs": [
+   "mu*Pi*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1"
+  ],
+  "cite": "BI (38)(11)a",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi/4 (cot x-1)^mu/cos^2 x = mu pi cosec mu pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.663.1",
+  "gr": "3.663.1",
+  "page": 455,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[x] - Cos[u])^(nu - 1/2)*Cos[a*x], {x, 0, u}]",
+  "rhs": [
+   "Sqrt[Pi/2]*Sin[u]^nu*Gamma[nu + 1/2]*LegendreP[a - 1/2, -nu, Cos[u]]"
+  ],
+  "conds": [
+   "Re[nu] > -1/2",
+   "a > 0",
+   "0 < u < Pi"
+  ],
+  "cite": "EH I 159(27), ET I 22(28)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^u (cos x - cos u)^(nu-1/2) cos ax = sqrt(pi/2) sin^nu u Gamma(nu+1/2) P^(-nu)_(a-1/2)(cos u)",
+  "note": ""
+ },
+ {
+  "id": "GR3.663.2",
+  "gr": "3.663.2",
+  "page": 455,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[x] - Cos[u])^(nu - 1)*Cos[(nu + beta)*x], {x, 0, u}]",
+  "rhs": [
+   "Sqrt[Pi]*Gamma[beta + 1]*Gamma[nu]*Gamma[2*nu]*Sin[u]^(2*nu - 1)/(2^nu*Gamma[beta + 2*nu]*Gamma[nu + 1/2])*GegenbauerC[beta, nu, Cos[u]]"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "Re[beta] > -1",
+   "0 < u < Pi"
+  ],
+  "cite": "EH I 178(23)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^u (cos x - cos u)^(nu-1) cos((nu+beta)x) = sqrt(pi) Gamma(beta+1)Gamma(nu)Gamma(2nu) sin^(2nu-1)u/(2^nu Gamma(beta+2nu)Gamma(nu+1/2)) C^nu_beta(cos u)",
+  "note": ""
+ },
+ {
+  "id": "GR3.664.1",
+  "gr": "3.664.1",
+  "page": 455,
+  "status": "ok",
+  "lhs": "Integrate[(z + Sqrt[z^2 - 1]*Cos[x])^q, {x, 0, Pi}]",
+  "rhs": [
+   "Pi*LegendreP[q, 0, 3, z]"
+  ],
+  "conds": [
+   "Re[z] > 0",
+   "z > 1"
+  ],
+  "cite": "SM 482",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi (z + sqrt(z^2-1) cos x)^q = pi P_q(z)",
+  "note": "arg condition (arg(z + sqrt(z^2-1) cos x) = arg z at x = pi/2) is a branch convention; book: Re z > 0; z > 1 used so the type-3 Legendre form applies"
+ },
+ {
+  "id": "GR3.664.2",
+  "gr": "3.664.2",
+  "page": 455,
+  "status": "ok",
+  "lhs": "Integrate[1/(z + Sqrt[z^2 - 1]*Cos[x])^q, {x, 0, Pi}]",
+  "rhs": [
+   "Pi*LegendreP[q - 1, 0, 3, z]"
+  ],
+  "conds": [
+   "Re[z] > 0",
+   "z > 1"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi dx/(z + sqrt(z^2-1) cos x)^q = pi P_(q-1)(z)",
+  "note": "arg condition (arg(z + sqrt(z^2-1) cos x) = arg z at x = pi/2) is a branch convention; book: Re z > 0; z > 1 used so the type-3 Legendre form applies"
+ },
+ {
+  "id": "GR3.664.3",
+  "gr": "3.664.3",
+  "page": 455,
+  "status": "ok",
+  "lhs": "Integrate[(z + Sqrt[z^2 - 1]*Cos[x])^q*Cos[n*x], {x, 0, Pi}]",
+  "rhs": [
+   "Pi/Pochhammer[q + 1, n]*LegendreP[q, n, 3, z]"
+  ],
+  "conds": [
+   "Re[z] > 0",
+   "z > 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "WH, SM 483(15)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi (z + sqrt(z^2-1) cos x)^q cos nx = pi/((q+1)(q+2)...(q+n)) P^n_q(z)",
+  "note": "arg condition (arg(z + sqrt(z^2-1) cos x) = arg z at x = pi/2) is a branch convention; book: Re z > 0; z > 1 used so the type-3 Legendre form applies; book: z outside (-1,1); n taken as nonnegative integer"
+ },
+ {
+  "id": "GR3.664.4a",
+  "gr": "3.664.4",
+  "page": 455,
+  "status": "ok",
+  "lhs": "Integrate[(z + Sqrt[z^2 - 1]*Cos[x])^mu*Sin[x]^(2*nu - 1), {x, 0, Pi}]",
+  "rhs": [
+   "2^(2*nu - 1)*Gamma[mu + 1]*Gamma[nu]^2/Gamma[2*nu + mu]*GegenbauerC[mu, nu, z]"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "z > 1"
+  ],
+  "cite": "EH I 155(6)a, EH I 178(22)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi (z+sqrt(z^2-1)cos x)^mu sin^(2nu-1) x = 2^(2nu-1) Gamma(mu+1)[Gamma(nu)]^2/Gamma(2nu+mu) C^nu_mu(z)",
+  "note": "z > 1 added (real sampling; type-3 Legendre for the last form)"
+ },
+ {
+  "id": "GR3.664.4b",
+  "gr": "3.664.4",
+  "page": 455,
+  "status": "ok",
+  "lhs": "Integrate[(z + Sqrt[z^2 - 1]*Cos[x])^mu*Sin[x]^(2*nu - 1), {x, 0, Pi}]",
+  "rhs": [
+   "Sqrt[Pi]*Gamma[nu]*Gamma[2*nu]*Gamma[mu + 1]/(Gamma[2*nu + mu]*Gamma[nu + 1/2])*GegenbauerC[mu, nu, z]"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "z > 1"
+  ],
+  "cite": "EH I 155(6)a, EH I 178(22)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "= sqrt(pi) Gamma(nu)Gamma(2nu)Gamma(mu+1)/(Gamma(2nu+mu)Gamma(nu+1/2)) C^nu_mu(z)",
+  "note": "z > 1 added (real sampling; type-3 Legendre for the last form)"
+ },
+ {
+  "id": "GR3.664.4c",
+  "gr": "3.664.4",
+  "page": 455,
+  "status": "ok",
+  "lhs": "Integrate[(z + Sqrt[z^2 - 1]*Cos[x])^mu*Sin[x]^(2*nu - 1), {x, 0, Pi}]",
+  "rhs": [
+   "2^nu*Sqrt[Pi/2]*(z^2 - 1)^(1/4 - nu/2)*Gamma[nu]*LegendreP[mu + nu - 1/2, 1/2 - nu, 3, z]"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "z > 1"
+  ],
+  "cite": "EH I 155(6)a, EH I 178(22)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "= 2^nu sqrt(pi/2) (z^2-1)^(1/4-nu/2) Gamma(nu) P^(1/2-nu)_(mu+nu-1/2)(z)",
+  "note": "z > 1 added (real sampling; type-3 Legendre for the last form)"
+ },
+ {
+  "id": "GR3.664.5",
+  "gr": "3.664.5",
+  "page": 455,
+  "status": "ok",
+  "lhs": "Integrate[(beta + Sqrt[beta^2 - 1]*Cos[a - x])^nu*(gamma + Sqrt[gamma^2 - 1]*Cos[x])^(nu - 1), {x, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi*LegendreP[nu, 0, 3, beta*gamma - Sqrt[beta^2 - 1]*Sqrt[gamma^2 - 1]*Cos[a]]",
+   "2*Pi*LegendreP[nu, beta*gamma - Sqrt[beta^2 - 1]*Sqrt[gamma^2 - 1]*Cos[a]]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[gamma] > 0",
+   "beta > 1",
+   "gamma > 1"
+  ],
+  "cite": "EH I 157(18)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^2pi [beta + sqrt(beta^2-1) cos(a-x)]^nu (gamma + sqrt(gamma^2-1) cos x)^(nu-1) = 2pi P_nu(beta gamma - sqrt(beta^2-1)sqrt(gamma^2-1) cos a)",
+  "note": "transcribed as printed; the second exponent is probably -nu-1 (EH I 157(18)), a misprint in the integrand that cannot be corrected via rhs; beta, gamma > 1 added (real square roots); Legendre argument may lie in (-1,1) where type-3 form differs -- Ferrers LegendreP[nu, arg] alternative given"
+ },
+ {
+  "id": "GR3.665.1",
+  "gr": "3.665.1",
+  "page": 456,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(mu - 1)/(a + b*Cos[x])^mu, {x, 0, Pi}]",
+  "rhs": [
+   "2^(mu - 1)/Sqrt[(a^2 - b^2)^mu]*Beta[mu/2, mu/2]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "0 < b < a"
+  ],
+  "cite": "FI II 790a",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi sin^(mu-1)/(a+b cos x)^mu = 2^(mu-1)/sqrt((a^2-b^2)^mu) B(mu/2,mu/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.665.2",
+  "gr": "3.665.2",
+  "page": 456,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*mu - 1)/(1 + 2*a*Cos[x] + a^2)^nu, {x, 0, Pi}]",
+  "rhs": [
+   "Beta[mu, 1/2]*Hypergeometric2F1[nu, nu - mu + 1/2, mu + 1/2, a^2]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Abs[a] < 1"
+  ],
+  "cite": "EH I 81(9)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi sin^(2mu-1)/(1+2a cos x+a^2)^nu = B(mu,1/2) F(nu,nu-mu+1/2;mu+1/2;a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.666.1",
+  "gr": "3.666.1",
+  "page": 456,
+  "status": "ok",
+  "lhs": "Integrate[(beta + Cos[x])^(mu - nu - 1/2)*Sin[x]^(2*nu), {x, 0, Pi}]",
+  "rhs": [
+   "2^(nu + 1/2)*E^(-I*mu*Pi)*(beta^2 - 1)^(mu/2)*Gamma[nu + 1/2]*LegendreQ[nu - 1/2, mu, 3, beta]/Gamma[nu + mu + 1/2]"
+  ],
+  "conds": [
+   "Re[nu + mu + 1/2] > 0",
+   "Re[nu] > -1/2",
+   "beta > 1"
+  ],
+  "cite": "EH I 155(5)a",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi (beta + cos x)^(mu-nu-1/2) sin^(2nu) x = 2^(nu+1/2) e^(-i mu pi)(beta^2-1)^(mu/2) Gamma(nu+1/2) Q^mu_(nu-1/2)(beta)/Gamma(nu+mu+1/2)",
+  "note": "beta > 1 added (type-3 Legendre Q)"
+ },
+ {
+  "id": "GR3.666.2",
+  "gr": "3.666.2",
+  "page": 456,
+  "status": "ok",
+  "lhs": "Integrate[(Cosh[beta] + Sinh[beta]*Cos[x])^(mu + nu)*Sin[x]^(-2*nu), {x, 0, Pi}]",
+  "rhs": [
+   "Sqrt[Pi]/2^nu*Sinh[beta]^nu*Gamma[1/2 - nu]*LegendreP[mu, nu, 3, Cosh[beta]]"
+  ],
+  "conds": [
+   "Re[nu] < 1/2",
+   "beta > 0"
+  ],
+  "cite": "EH I 156(7)",
+  "edition_note": "6",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi (cosh beta + sinh beta cos x)^(mu+nu) sin^(-2nu) x = sqrt(pi)/2^nu sinh^nu(beta) Gamma(1/2-nu) P^nu_mu(cosh beta)",
+  "note": "beta > 0 added"
+ },
+ {
+  "id": "GR3.666.3",
+  "gr": "3.666.3",
+  "page": 456,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[t] + I*Sin[t]*Cos[x])^mu*Sin[x]^(2*nu - 1), {x, 0, Pi}]",
+  "rhs": [
+   "2^(nu - 1/2)*Sqrt[Pi]*Sin[t]^(1/2 - nu)*Gamma[nu]*LegendreP[mu + nu - 1/2, 1/2 - nu, Cos[t]]"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "t^2 < Pi^2"
+  ],
+  "cite": "EH I 158(23)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi (cos t + i sin t cos x)^mu sin^(2nu-1) x = 2^(nu-1/2) sqrt(pi) sin^(1/2-nu) t Gamma(nu) P^(1/2-nu)_(mu+nu-1/2)(cos t)",
+  "note": ""
+ },
+ {
+  "id": "GR3.666.4",
+  "gr": "3.666.4",
+  "page": 456,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[t] + I*Sin[t]*Cos[a - x])^nu*Cos[m*x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "I^(3*m)*2*Pi*Gamma[nu + 1]/Gamma[nu + m + 1]*Cos[m*a]*LegendreP[nu, m, Cos[t]]"
+  ],
+  "conds": [
+   "0 < t < Pi/2",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "EH I 159(25)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^2pi [cos t + i sin t cos(a-x)]^nu cos mx = i^(3m) 2pi Gamma(nu+1)/Gamma(nu+m+1) cos ma P^m_nu(cos t)",
+  "note": "m taken as nonnegative integer"
+ },
+ {
+  "id": "GR3.666.5",
+  "gr": "3.666.5",
+  "page": 456,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[t] + I*Sin[t]*Cos[a - x])^nu*Sin[m*x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "I^(3*m)*2*Pi*Gamma[nu + 1]/Gamma[nu + m + 1]*Sin[m*a]*LegendreP[nu, m, Cos[t]]"
+  ],
+  "conds": [
+   "0 < t < Pi/2",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "EH I 159(26)",
+  "edition_note": "10",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^2pi [cos t + i sin t cos(a-x)]^nu sin mx = i^(3m) 2pi Gamma(nu+1)/Gamma(nu+m+1) sin ma P^m_nu(cos t)",
+  "note": "m taken as nonnegative integer"
+ },
+ {
+  "id": "GR3.667.1",
+  "gr": "3.667.1",
+  "page": 456,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*x]^(mu - 1)/(Cos[x] + Sin[x])^(2*mu), {x, 0, Pi/4}]",
+  "rhs": [
+   "Sqrt[Pi]/2^(mu + 1)*Gamma[mu]/Gamma[mu + 1/2]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (37)(1)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi/4 sin^(mu-1) 2x/(cos x + sin x)^(2mu) = sqrt(pi)/2^(mu+1) Gamma(mu)/Gamma(mu+1/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.667.2",
+  "gr": "3.667.2",
+  "page": 456,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^mu/((Cos[x] - Sin[x])^(mu + 1)*Cos[x]), {x, 0, Pi/4}]",
+  "rhs": [
+   "-Pi*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "-1 < Re[mu] < 0"
+  ],
+  "cite": "BI (37)(16)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi/4 sin^mu/((cos-sin)^(mu+1) cos x) = -pi cosec mu pi",
+  "note": "cf. 3.192 2"
+ },
+ {
+  "id": "GR3.667.3",
+  "gr": "3.667.3",
+  "page": 456,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[x] - Sin[x])^mu/(Sin[x]^mu*Sin[2*x]), {x, 0, Pi/4}]",
+  "rhs": [
+   "-Pi/2*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "-1 < Re[mu] < 0"
+  ],
+  "cite": "BI (35)(27)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi/4 (cos-sin)^mu/(sin^mu x sin2x) = -pi/2 cosec mu pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.667.4",
+  "gr": "3.667.4",
+  "page": 456,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^mu/((Cos[x] - Sin[x])^mu*Sin[2*x]), {x, 0, Pi/4}]",
+  "rhs": [
+   "Pi/2*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "LI (37)(20)a",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi/4 sin^mu/((cos-sin)^mu sin2x) = pi/2 cosec mu pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.667.5",
+  "gr": "3.667.5",
+  "page": 456,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^mu/((Cos[x] - Sin[x])^mu*Cos[x]^2), {x, 0, Pi/4}]",
+  "rhs": [
+   "mu*Pi*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1"
+  ],
+  "cite": "BI (37)(17)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi/4 sin^mu/((cos-sin)^mu cos^2 x) = mu pi cosec mu pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.667.6",
+  "gr": "3.667.6",
+  "page": 457,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^mu/((Cos[x] - Sin[x])^(mu - 1)*Cos[x]^3), {x, 0, Pi/4}]",
+  "rhs": [
+   "(1 - mu)/2*mu*Pi*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] < 1"
+  ],
+  "cite": "BI(35)(24), BI(37)(18)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi/4 sin^mu/((cos-sin)^(mu-1) cos^3 x) = (1-mu)/2 mu pi cosec mu pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.667.7",
+  "gr": "3.667.7",
+  "page": 457,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(mu - 1)*Cos[x]^(nu - 1)/(Sin[x] + Cos[x])^(mu + nu), {x, 0, Pi/2}]",
+  "rhs": [
+   "Beta[mu, nu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "BI (48)(8)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi/2 sin^(mu-1) cos^(nu-1)/(sin+cos)^(mu+nu) = B(mu,nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.668.1",
+  "gr": "3.668.1",
+  "page": 457,
+  "status": "ok",
+  "lhs": "Integrate[((Cos[x] + Sin[x])/(Cos[x] - Sin[x]))^Cos[2*t], {x, -Pi/4, Pi/4}]",
+  "rhs": [
+   "Pi/(2*Sin[Pi*Cos[t]^2])"
+  ],
+  "conds": [
+   "0 < t < Pi/2"
+  ],
+  "cite": "FI II 788",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_-pi/4^pi/4 ((cos+sin)/(cos-sin))^(cos 2t) = pi/(2 sin(pi cos^2 t))",
+  "note": "no condition printed; 0 < t < pi/2 added (|cos 2t| < 1 for convergence)"
+ },
+ {
+  "id": "GR3.668.2",
+  "gr": "3.668.2",
+  "page": 457,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[u] - Cos[x])^(mu - 1)/(Cos[x] - Cos[v])^mu*Sin[x]/(1 - 2*a*Cos[x] + a^2), {x, u, v}]",
+  "rhs": [
+   "(1 - 2*a*Cos[u] + a^2)^(mu - 1)/(1 - 2*a*Cos[v] + a^2)^mu*Pi/Sin[mu*Pi]"
+  ],
+  "conds": [
+   "0 < Re[mu] < 1",
+   "a^2 < 1",
+   "0 < u < v < Pi"
+  ],
+  "cite": "BI (73)(2)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_u^v (cos u - cos x)^(mu-1)/(cos x - cos v)^mu sin x/(1-2a cos x+a^2) = (1-2a cos u+a^2)^(mu-1)/(1-2a cos v+a^2)^mu pi/sin mu pi",
+  "note": "0 < u < v < pi added (real integrand)"
+ },
+ {
+  "id": "GR3.669a",
+  "gr": "3.669",
+  "page": 457,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(p - 1)*Cos[x]^(q - p - 1)/(a*Cos[x] + b*Sin[x])^q, {x, 0, Pi/2}]",
+  "rhs": [
+   "Beta[p, q - p]/(a^(q - p)*b^p)"
+  ],
+  "conds": [
+   "q > p > 0",
+   "a*b > 0"
+  ],
+  "cite": "BI (331)(9)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi/2 sin^(p-1) cos^(q-p-1)/(a cos+b sin)^q = B(p,q-p)/(a^(q-p) b^p)",
+  "note": ""
+ },
+ {
+  "id": "GR3.669b",
+  "gr": "3.669",
+  "page": 457,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(q - p - 1)*Cos[x]^(p - 1)/(a*Sin[x] + b*Cos[x])^q, {x, 0, Pi/2}]",
+  "rhs": [
+   "Beta[p, q - p]/(a^(q - p)*b^p)"
+  ],
+  "conds": [
+   "q > p > 0",
+   "a*b > 0"
+  ],
+  "cite": "BI (331)(9)",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^pi/2 sin^(q-p-1) cos^(p-1)/(a sin+b cos)^q = same",
+  "note": ""
+ },
+ {
+  "id": "GR3.670.1a",
+  "gr": "3.670.1",
+  "page": 457,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + b*Cos[x]], {x, 0, Pi}]",
+  "rhs": [
+   "2*Sqrt[a + b]*MatharK[Sqrt[2*b/(a + b)]]",
+   "2*Sqrt[a + b]*MatharE[Sqrt[2*b/(a + b)]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^Pi Sqrt[a + b*Cos[x]] dx = 2 sqrt(a+b) K(sqrt(2b/(a+b)))",
+  "note": "printed value has K; the correct value is E (corrected candidate second)"
+ },
+ {
+  "id": "GR3.670.1b",
+  "gr": "3.670.1",
+  "page": 457,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a - b*Cos[x]], {x, 0, Pi}]",
+  "rhs": [
+   "2*Sqrt[a + b]*MatharK[Sqrt[2*b/(a + b)]]",
+   "2*Sqrt[a + b]*MatharE[Sqrt[2*b/(a + b)]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^Pi Sqrt[a - b*Cos[x]] dx = 2 sqrt(a+b) K(sqrt(2b/(a+b)))",
+  "note": "printed value has K; the correct value is E (corrected candidate second)"
+ },
+ {
+  "id": "GR3.670.1c",
+  "gr": "3.670.1",
+  "page": 457,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + b*Cos[x]], {x, -Pi/2, Pi/2}]",
+  "rhs": [
+   "2*Sqrt[a + b]*MatharK[Sqrt[2*b/(a + b)]]",
+   "2*Sqrt[a + b]*MatharE[Sqrt[2*b/(a + b)]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_-Pi/2^Pi/2 Sqrt[a + b*Cos[x]] dx = 2 sqrt(a+b) K(sqrt(2b/(a+b)))",
+  "note": "printed value has K; the correct value is E (corrected candidate second); second integral printed with cos x, probably sin x (cf. 3.670.2)"
+ },
+ {
+  "id": "GR3.670.1d",
+  "gr": "3.670.1",
+  "page": 457,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a - b*Cos[x]], {x, -Pi/2, Pi/2}]",
+  "rhs": [
+   "2*Sqrt[a + b]*MatharK[Sqrt[2*b/(a + b)]]",
+   "2*Sqrt[a + b]*MatharE[Sqrt[2*b/(a + b)]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_-Pi/2^Pi/2 Sqrt[a - b*Cos[x]] dx = 2 sqrt(a+b) K(sqrt(2b/(a+b)))",
+  "note": "printed value has K; the correct value is E (corrected candidate second); second integral printed with cos x, probably sin x (cf. 3.670.2)"
+ },
+ {
+  "id": "GR3.670.2a",
+  "gr": "3.670.2",
+  "page": 457,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[a + b*Cos[x]], {x, 0, Pi}]",
+  "rhs": [
+   "2/Sqrt[a + b]*MatharE[Sqrt[2*b/(a + b)]]",
+   "2/Sqrt[a + b]*MatharK[Sqrt[2*b/(a + b)]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^Pi 1/Sqrt[a + b*Cos[x]] dx = 2/sqrt(a+b) E(sqrt(2b/(a+b)))",
+  "note": "printed value has E; the correct value is K (corrected candidate second)"
+ },
+ {
+  "id": "GR3.670.2b",
+  "gr": "3.670.2",
+  "page": 457,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[a - b*Cos[x]], {x, 0, Pi}]",
+  "rhs": [
+   "2/Sqrt[a + b]*MatharE[Sqrt[2*b/(a + b)]]",
+   "2/Sqrt[a + b]*MatharK[Sqrt[2*b/(a + b)]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_0^Pi 1/Sqrt[a - b*Cos[x]] dx = 2/sqrt(a+b) E(sqrt(2b/(a+b)))",
+  "note": "printed value has E; the correct value is K (corrected candidate second)"
+ },
+ {
+  "id": "GR3.670.2c",
+  "gr": "3.670.2",
+  "page": 457,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[a + b*Sin[x]], {x, -Pi/2, Pi/2}]",
+  "rhs": [
+   "2/Sqrt[a + b]*MatharE[Sqrt[2*b/(a + b)]]",
+   "2/Sqrt[a + b]*MatharK[Sqrt[2*b/(a + b)]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_-Pi/2^Pi/2 1/Sqrt[a + b*Sin[x]] dx = 2/sqrt(a+b) E(sqrt(2b/(a+b)))",
+  "note": "printed value has E; the correct value is K (corrected candidate second)"
+ },
+ {
+  "id": "GR3.670.2d",
+  "gr": "3.670.2",
+  "page": 457,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[a - b*Sin[x]], {x, -Pi/2, Pi/2}]",
+  "rhs": [
+   "2/Sqrt[a + b]*MatharE[Sqrt[2*b/(a + b)]]",
+   "2/Sqrt[a + b]*MatharK[Sqrt[2*b/(a + b)]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.66 Forms containing powers of linear functions of trigonometric functions",
+  "tex": "int_-Pi/2^Pi/2 1/Sqrt[a - b*Sin[x]] dx = 2/sqrt(a+b) E(sqrt(2b/(a+b)))",
+  "note": "printed value has E; the correct value is K (corrected candidate second)"
+ },
+ {
+  "id": "GR3.671.1",
+  "gr": "3.671.1",
+  "page": 457,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^alpha*Cos[x]^beta*Sqrt[1 - k^2*Sin[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "1/2*Beta[(alpha + 1)/2, (beta + 1)/2]*Hypergeometric2F1[(alpha + 1)/2, -1/2, (alpha + beta + 2)/2, k^2]"
+  ],
+  "conds": [
+   "alpha > -1",
+   "beta > -1",
+   "Abs[k] < 1"
+  ],
+  "cite": "GW (331)(93)",
+  "edition_note": "",
+  "section": "3.67 Square roots of expressions containing trigonometric functions",
+  "tex": "int_0^pi/2 sin^alpha cos^beta sqrt(1-k^2 sin^2) = 1/2 B((alpha+1)/2,(beta+1)/2) F((alpha+1)/2,-1/2;(alpha+beta+2)/2;k^2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.671.2",
+  "gr": "3.671.2",
+  "page": 457,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^alpha*Cos[x]^beta/Sqrt[1 - k^2*Sin[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "1/2*Beta[(alpha + 1)/2, (beta + 1)/2]*Hypergeometric2F1[(alpha + 1)/2, 1/2, (alpha + beta + 2)/2, k^2]"
+  ],
+  "conds": [
+   "alpha > -1",
+   "beta > -1",
+   "Abs[k] < 1"
+  ],
+  "cite": "GW (331)(92)",
+  "edition_note": "",
+  "section": "3.67 Square roots of expressions containing trigonometric functions",
+  "tex": "int_0^pi/2 sin^alpha cos^beta/sqrt(1-k^2 sin^2) = 1/2 B((alpha+1)/2,(beta+1)/2) F((alpha+1)/2,1/2;(alpha+beta+2)/2;k^2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.671.3a",
+  "gr": "3.671.3",
+  "page": 457,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*n)/Sqrt[1 - k^2*Sin[x]^2], {x, 0, Pi}]",
+  "rhs": [
+   "Pi/2^n*Sum[(2*j - 1)!!*(2*n + 2*j - 1)!!/(2^(2*j)*j!*(n + j)!)*k^(2*j), {j, 0, Infinity}]"
+  ],
+  "conds": [
+   "k^2 < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "LI (67)(2)",
+  "edition_note": "",
+  "section": "3.67 Square roots of expressions containing trigonometric functions",
+  "tex": "int_0^pi sin^2n/sqrt(1-k^2 sin^2) = pi/2^n sum_j (2j-1)!!(2n+2j-1)!!/(2^2j j!(n+j)!) k^2j",
+  "note": "n = 0, 1, 2, ... assumed"
+ },
+ {
+  "id": "GR3.671.3b",
+  "gr": "3.671.3",
+  "page": 457,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*n)/Sqrt[1 - k^2*Sin[x]^2], {x, 0, Pi}]",
+  "rhs": [
+   "(2*n - 1)!!*Pi/(2^n*Sqrt[1 - k^2])*Sum[((2*j - 1)!!)^2/(2^(2*j)*j!*(n + j)!)*(k^2/(k^2 - 1))^j, {j, 0, Infinity}]"
+  ],
+  "conds": [
+   "k^2 < 1/2",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "LI (67)(2)",
+  "edition_note": "",
+  "section": "3.67 Square roots of expressions containing trigonometric functions",
+  "tex": "= (2n-1)!! pi/(2^n sqrt(1-k^2)) sum_j [(2j-1)!!]^2/(2^2j j!(n+j)!) (k^2/(k^2-1))^j",
+  "note": "n = 0, 1, 2, ... assumed"
+ }
+]

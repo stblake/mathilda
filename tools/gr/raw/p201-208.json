@@ -1,0 +1,2449 @@
+[
+ {
+  "id": "GR2.511.1",
+  "gr": "2.511.1",
+  "page": 201,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^p cos^(2n) = sin^(p+1)/(2n+p){cos^(2n-1) + sum ...} + (2n-1)!!/((2n+p)...(p+2)) int sin^p",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "note": ""
+ },
+ {
+  "id": "GR2.511.2",
+  "gr": "2.511.2",
+  "page": 201,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*l), x]",
+  "rhs": [
+   "-Cos[x]/(2*l)*(Sin[x]^(2*l - 1) + Sum[Product[2*l - 2*j + 1, {j, 1, k}]/(2^k*Product[l - j, {j, 1, k}])*Sin[x]^(2*l - 2*k - 1), {k, 1, l - 1}]) + (2*l - 1)!!/(2^l*l!)*x"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 1"
+  ],
+  "cite": "TI (232)",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^(2l) = -cos x/(2l){sin^(2l-1) + sum_{k=1}^{l-1} (2l-1)...(2l-2k+1)/(2^k(l-1)...(l-k)) sin^(2l-2k-1)} + (2l-1)!!/(2^l l!) x",
+  "note": ""
+ },
+ {
+  "id": "GR2.511.3",
+  "gr": "2.511.3",
+  "page": 201,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*l + 1), x]",
+  "rhs": [
+   "-Cos[x]/(2*l + 1)*(Sin[x]^(2*l) + Sum[2^(k + 1)*Product[l - j, {j, 0, k}]/Product[2*l - 2*j - 1, {j, 0, k}]*Sin[x]^(2*l - 2*k - 2), {k, 0, l - 1}])"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 0"
+  ],
+  "cite": "TI (233)",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^(2l+1) = -cos x/(2l+1){sin^(2l) + sum_{k=0}^{l-1} 2^(k+1) l(l-1)...(l-k)/((2l-1)...(2l-2k-1)) sin^(2l-2k-2)}",
+  "note": ""
+ },
+ {
+  "id": "GR2.511.4",
+  "gr": "2.511.4",
+  "page": 201,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^p*Cos[x]^(2*n + 1), x]",
+  "rhs": [
+   "Sin[x]^(p + 1)/(2*n + p + 1)*(Cos[x]^(2*n) + Sum[2^k*Product[n - j, {j, 0, k - 1}]/Product[2*n + p - 2*j + 1, {j, 1, k}]*Cos[x]^(2*n - 2*k), {k, 1, n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[p, Reals]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^p cos^(2n+1) = sin^(p+1)/(2n+p+1){cos^(2n) + sum_{k=1}^n 2^k n(n-1)...(n-k+1) cos^(2n-2k)/((2n+p-1)...(2n+p-2k+1))}",
+  "note": "p arbitrary real except the negative odd integers -1, -3, ..., -(2n+1)"
+ },
+ {
+  "id": "GR2.512.1",
+  "gr": "2.512.1",
+  "page": 201,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cos^p sin^(2n) = -cos^(p+1)/(2n+p){sin^(2n-1)+sum...} + (2n-1)!!/(...) int cos^p",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "note": ""
+ },
+ {
+  "id": "GR2.512.2",
+  "gr": "2.512.2",
+  "page": 201,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*l), x]",
+  "rhs": [
+   "Sin[x]/(2*l)*(Cos[x]^(2*l - 1) + Sum[Product[2*l - 2*j + 1, {j, 1, k}]/(2^k*Product[l - j, {j, 1, k}])*Cos[x]^(2*l - 2*k - 1), {k, 1, l - 1}]) + (2*l - 1)!!/(2^l*l!)*x"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 1"
+  ],
+  "cite": "TI (230)",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^(2l) = sin x/(2l){cos^(2l-1) + sum_{k=1}^{l-1} (2l-1)...(2l-2k+1)/(2^k(l-1)...(l-k)) cos^(2l-2k-1)} + (2l-1)!!/(2^l l!) x",
+  "note": ""
+ },
+ {
+  "id": "GR2.512.3",
+  "gr": "2.512.3",
+  "page": 202,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*l + 1), x]",
+  "rhs": [
+   "Sin[x]/(2*l + 1)*(Cos[x]^(2*l) + Sum[2^(k + 1)*Product[l - j, {j, 0, k}]/Product[2*l - 2*j - 1, {j, 0, k}]*Cos[x]^(2*l - 2*k - 2), {k, 0, l - 1}])"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 0"
+  ],
+  "cite": "TI (231)",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^(2l+1) = sin x/(2l+1){cos^(2l) + sum_{k=0}^{l-1} 2^(k+1) l(l-1)...(l-k)/((2l-1)...(2l-2k-1)) cos^(2l-2k-2)}",
+  "note": ""
+ },
+ {
+  "id": "GR2.512.4",
+  "gr": "2.512.4",
+  "page": 202,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^p*Sin[x]^(2*n + 1), x]",
+  "rhs": [
+   "-Cos[x]^(p + 1)/(2*n + p + 1)*(Sin[x]^(2*n) + Sum[2^k*Product[n - j, {j, 0, k - 1}]/Product[2*n + p - 2*j + 1, {j, 1, k}]*Sin[x]^(2*n - 2*k), {k, 1, n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[p, Reals]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^p sin^(2n+1) = -cos^(p+1)/(2n+p+1){sin^(2n) + sum_{k=1}^n 2^k n(n-1)...(n-k+1) sin^(2n-2k)/((2n+p-1)...(2n+p-2k+1))}",
+  "note": "p arbitrary real except the negative odd integers -1, -3, ..., -(2n+1)"
+ },
+ {
+  "id": "GR2.513.1",
+  "gr": "2.513.1",
+  "page": 202,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*n), x]",
+  "rhs": [
+   "Binomial[2*n, n]*x/2^(2*n) + (-1)^n/2^(2*n - 1)*Sum[(-1)^k*Binomial[2*n, k]*Sin[(2*n - 2*k)*x]/(2*n - 2*k), {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "TI (226)",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^(2n) = binom(2n,n) x/2^(2n) + (-1)^n/2^(2n-1) sum_{k=0}^{n-1} (-1)^k binom(2n,k) sin((2n-2k)x)/(2n-2k)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.2",
+  "gr": "2.513.2",
+  "page": 202,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*n + 1), x]",
+  "rhs": [
+   "(-1)^(n + 1)/2^(2*n)*Sum[(-1)^k*Binomial[2*n + 1, k]*Cos[(2*n + 1 - 2*k)*x]/(2*n + 1 - 2*k), {k, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "TI (227)",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^(2n+1) = (-1)^(n+1)/2^(2n) sum_{k=0}^n (-1)^k binom(2n+1,k) cos((2n+1-2k)x)/(2n+1-2k)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.3",
+  "gr": "2.513.3",
+  "page": 202,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*n), x]",
+  "rhs": [
+   "Binomial[2*n, n]*x/2^(2*n) + 1/2^(2*n - 1)*Sum[Binomial[2*n, k]*Sin[(2*n - 2*k)*x]/(2*n - 2*k), {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "TI (224)",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^(2n) = binom(2n,n) x/2^(2n) + 1/2^(2n-1) sum_{k=0}^{n-1} binom(2n,k) sin((2n-2k)x)/(2n-2k)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.4",
+  "gr": "2.513.4",
+  "page": 202,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*n + 1), x]",
+  "rhs": [
+   "1/2^(2*n)*Sum[Binomial[2*n + 1, k]*Sin[(2*n - 2*k + 1)*x]/(2*n - 2*k + 1), {k, 0, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "TI (225)",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^(2n+1) = 1/2^(2n) sum_{k=0}^n binom(2n+1,k) sin((2n-2k+1)x)/(2n-2k+1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.5a",
+  "gr": "2.513.5",
+  "page": 202,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2, x]",
+  "rhs": [
+   "-Sin[2*x]/4 + x/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^2 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.5b",
+  "gr": "2.513.5",
+  "page": 202,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2, x]",
+  "rhs": [
+   "-Sin[x]*Cos[x]/2 + x/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^2 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.6a",
+  "gr": "2.513.6",
+  "page": 202,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3, x]",
+  "rhs": [
+   "Cos[3*x]/12 - 3*Cos[x]/4"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^3 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.6b",
+  "gr": "2.513.6",
+  "page": 202,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3, x]",
+  "rhs": [
+   "Cos[x]^3/3 - Cos[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^3 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.7a",
+  "gr": "2.513.7",
+  "page": 202,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^4, x]",
+  "rhs": [
+   "3*x/8 - Sin[2*x]/4 + Sin[4*x]/32"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^4 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.7b",
+  "gr": "2.513.7",
+  "page": 202,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^4, x]",
+  "rhs": [
+   "-3/8*Sin[x]*Cos[x] - 1/4*Sin[x]^3*Cos[x] + 3*x/8"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^4 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.8a",
+  "gr": "2.513.8",
+  "page": 202,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^5, x]",
+  "rhs": [
+   "-5/8*Cos[x] + 5/48*Cos[3*x] - 1/80*Cos[5*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^5 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.8b",
+  "gr": "2.513.8",
+  "page": 202,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^5, x]",
+  "rhs": [
+   "-1/5*Sin[x]^4*Cos[x] + 4/15*Cos[x]^3 - 4/5*Cos[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^5 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.9a",
+  "gr": "2.513.9",
+  "page": 202,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^6, x]",
+  "rhs": [
+   "5*x/16 - 15/64*Sin[2*x] + 3/64*Sin[4*x] - 1/192*Sin[6*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^6 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.9b",
+  "gr": "2.513.9",
+  "page": 202,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^6, x]",
+  "rhs": [
+   "-1/6*Sin[x]^5*Cos[x] - 5/24*Sin[x]^3*Cos[x] - 5/16*Sin[x]*Cos[x] + 5*x/16"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^6 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.10a",
+  "gr": "2.513.10",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^7, x]",
+  "rhs": [
+   "-35/64*Cos[x] + 7/64*Cos[3*x] - 7/320*Cos[5*x] + 1/448*Cos[7*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^7 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.10b",
+  "gr": "2.513.10",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^7, x]",
+  "rhs": [
+   "-1/7*Sin[x]^6*Cos[x] - 6/35*Sin[x]^4*Cos[x] + 8/35*Cos[x]^3 - 24/35*Cos[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^7 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.11a",
+  "gr": "2.513.11",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^2, x]",
+  "rhs": [
+   "Sin[2*x]/4 + x/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^2 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.11b",
+  "gr": "2.513.11",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^2, x]",
+  "rhs": [
+   "Sin[x]*Cos[x]/2 + x/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^2 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.12a",
+  "gr": "2.513.12",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^3, x]",
+  "rhs": [
+   "Sin[3*x]/12 + 3*Sin[x]/4"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^3 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.12b",
+  "gr": "2.513.12",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^3, x]",
+  "rhs": [
+   "Sin[x] - Sin[x]^3/3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^3 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.13a",
+  "gr": "2.513.13",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^4, x]",
+  "rhs": [
+   "3*x/8 + Sin[2*x]/4 + Sin[4*x]/32"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^4 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.13b",
+  "gr": "2.513.13",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^4, x]",
+  "rhs": [
+   "3*x/8 + 3/8*Sin[x]*Cos[x] + 1/4*Sin[x]*Cos[x]^3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^4 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.14a",
+  "gr": "2.513.14",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^5, x]",
+  "rhs": [
+   "5/8*Sin[x] + 5/48*Sin[3*x] + 1/80*Sin[5*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^5 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.14b",
+  "gr": "2.513.14",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^5, x]",
+  "rhs": [
+   "4/5*Sin[x] - 4/15*Sin[x]^3 + 1/5*Cos[x]^4*Sin[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^5 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.15a",
+  "gr": "2.513.15",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^6, x]",
+  "rhs": [
+   "5*x/16 + 15/64*Sin[2*x] + 3/64*Sin[4*x] + 1/192*Sin[6*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^6 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.15b",
+  "gr": "2.513.15",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^6, x]",
+  "rhs": [
+   "5*x/16 + 5/16*Sin[x]*Cos[x] + 5/24*Sin[x]*Cos[x]^3 + 1/6*Sin[x]*Cos[x]^5"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^6 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.16a",
+  "gr": "2.513.16",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^7, x]",
+  "rhs": [
+   "35/64*Sin[x] + 7/64*Sin[3*x] + 7/320*Sin[5*x] + 1/448*Sin[7*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^7 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.16b",
+  "gr": "2.513.16",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^7, x]",
+  "rhs": [
+   "24/35*Sin[x] - 8/35*Sin[x]^3 + 6/35*Sin[x]*Cos[x]^4 + 1/7*Sin[x]*Cos[x]^6"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^7 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.17a",
+  "gr": "2.513.17",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]^2, x]",
+  "rhs": [
+   "-1/4*(Cos[3*x]/3 + Cos[x])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin cos^2 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.17b",
+  "gr": "2.513.17",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]^2, x]",
+  "rhs": [
+   "-Cos[x]^3/3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin cos^2 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.18",
+  "gr": "2.513.18",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]^3, x]",
+  "rhs": [
+   "-Cos[x]^4/4"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin cos^3",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.19",
+  "gr": "2.513.19",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]^4, x]",
+  "rhs": [
+   "-Cos[x]^5/5"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin cos^4",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.20a",
+  "gr": "2.513.20",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2*Cos[x], x]",
+  "rhs": [
+   "-1/4*(Sin[3*x]/3 - Sin[x])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^2 cos (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.20b",
+  "gr": "2.513.20",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2*Cos[x], x]",
+  "rhs": [
+   "Sin[x]^3/3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^2 cos (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.21",
+  "gr": "2.513.21",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2*Cos[x]^2, x]",
+  "rhs": [
+   "-1/8*(Sin[4*x]/4 - x)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^2 cos^2",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.22a",
+  "gr": "2.513.22",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2*Cos[x]^3, x]",
+  "rhs": [
+   "-1/16*(Sin[5*x]/5 + Sin[3*x]/3 - 2*Sin[x])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^2 cos^3 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.22b",
+  "gr": "2.513.22",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2*Cos[x]^3, x]",
+  "rhs": [
+   "Sin[x]^3/5*(Cos[x]^2 + 2/3)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^2 cos^3 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.22c",
+  "gr": "2.513.22",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2*Cos[x]^3, x]",
+  "rhs": [
+   "Sin[x]^3/5*(5/3 - Sin[x]^2)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^2 cos^3 (form 3)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.23",
+  "gr": "2.513.23",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2*Cos[x]^4, x]",
+  "rhs": [
+   "x/16 + Sin[2*x]/64 - Sin[4*x]/64 - Sin[6*x]/192"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^2 cos^4",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.24a",
+  "gr": "2.513.24",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3*Cos[x], x]",
+  "rhs": [
+   "1/8*(Cos[4*x]/4 - Cos[2*x])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^3 cos (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.24b",
+  "gr": "2.513.24",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3*Cos[x], x]",
+  "rhs": [
+   "Sin[x]^4/4"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^3 cos (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.25a",
+  "gr": "2.513.25",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3*Cos[x]^2, x]",
+  "rhs": [
+   "1/16*(Cos[5*x]/5 - Cos[3*x]/3 - 2*Cos[x])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^3 cos^2 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.25b",
+  "gr": "2.513.25",
+  "page": 203,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3*Cos[x]^2, x]",
+  "rhs": [
+   "Cos[x]^5/5 - Cos[x]^3/3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^3 cos^2 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.26",
+  "gr": "2.513.26",
+  "page": 204,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3*Cos[x]^3, x]",
+  "rhs": [
+   "1/32*(Cos[6*x]/6 - 3/2*Cos[2*x])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^3 cos^3",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.27",
+  "gr": "2.513.27",
+  "page": 204,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3*Cos[x]^4, x]",
+  "rhs": [
+   "1/7*Cos[x]^3*(-2/5 - 3/5*Sin[x]^2 + Sin[x]^4)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^3 cos^4",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.28",
+  "gr": "2.513.28",
+  "page": 204,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^4*Cos[x], x]",
+  "rhs": [
+   "Sin[x]^5/5"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^4 cos",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.29",
+  "gr": "2.513.29",
+  "page": 204,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^4*Cos[x]^2, x]",
+  "rhs": [
+   "x/16 - Sin[2*x]/64 - Sin[4*x]/64 + Sin[6*x]/192"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^4 cos^2",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.30",
+  "gr": "2.513.30",
+  "page": 204,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^4*Cos[x]^3, x]",
+  "rhs": [
+   "1/7*Sin[x]^3*(2/5 + 3/5*Cos[x]^2 - Cos[x]^4)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^4 cos^3",
+  "note": ""
+ },
+ {
+  "id": "GR2.513.31",
+  "gr": "2.513.31",
+  "page": 204,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^4*Cos[x]^4, x]",
+  "rhs": [
+   "3*x/128 - Sin[4*x]/128 + Sin[8*x]/1024"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^4 cos^4",
+  "note": ""
+ },
+ {
+  "id": "GR2.514",
+  "gr": "2.514",
+  "page": 204,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^p/cos^(2n) = sin^(p+1)/(2n-1){sec^(2n-1)+sum...} + (2n-p-2)...(-p)/(2n-1)!! int sin^p",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "note": ""
+ },
+ {
+  "id": "GR2.515.1",
+  "gr": "2.515.1",
+  "page": 204,
+  "status": "ok",
+  "lhs": "Integrate[1/Sin[x]^(2*l), x]",
+  "rhs": [
+   "-Cos[x]/(2*l - 1)*(Csc[x]^(2*l - 1) + Sum[2^k*Product[l - j, {j, 1, k}]/Product[2*l - 2*j - 1, {j, 1, k}]*Csc[x]^(2*l - 2*k - 1), {k, 1, l - 1}])"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 1"
+  ],
+  "cite": "TI (242)",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/sin^(2l) = -cos x/(2l-1){cosec^(2l-1) + sum_{k=1}^{l-1} 2^k(l-1)...(l-k)/((2l-3)(2l-5)...(2l-2k-1)) cosec^(2l-2k-1)}",
+  "note": ""
+ },
+ {
+  "id": "GR2.515.2",
+  "gr": "2.515.2",
+  "page": 204,
+  "status": "ok",
+  "lhs": "Integrate[1/Sin[x]^(2*l + 1), x]",
+  "rhs": [
+   "-Cos[x]/(2*l)*(Csc[x]^(2*l) + Sum[Product[2*l - 2*j + 1, {j, 1, k}]/(28^k*Product[l - j, {j, 1, k}])*Csc[x]^(2*l - 2*k), {k, 1, l - 1}]) + (2*l - 1)!!/(2^l*l!)*Log[Tan[x/2]]",
+   "-Cos[x]/(2*l)*(Csc[x]^(2*l) + Sum[Product[2*l - 2*j + 1, {j, 1, k}]/(2^k*Product[l - j, {j, 1, k}])*Csc[x]^(2*l - 2*k), {k, 1, l - 1}]) + (2*l - 1)!!/(2^l*l!)*Log[Tan[x/2]]"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 1"
+  ],
+  "cite": "TI (243)",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/sin^(2l+1) = -cos x/(2l){cosec^(2l) + sum_{k=1}^{l-1} (2l-1)...(2l-2k+1)/(28^k (l-1)...(l-k)) cosec^(2l-2k)} + (2l-1)!!/(2^l l!) ln tan(x/2)",
+  "note": "book prints 28^k in the denominator; misprint for 2^k (cf. 2.519.2); corrected candidate second"
+ },
+ {
+  "id": "GR2.516.1",
+  "gr": "2.516.1",
+  "page": 204,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^p/cos^(2n+1) = sin^(p+1)/(2n){sec^(2n)+sum...} + (2n-p-1)...(1-p)/(2^n n!) int sin^p/cos",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "note": ""
+ },
+ {
+  "id": "GR2.516.2",
+  "gr": "2.516.2",
+  "page": 204,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*l + 1)/Cos[x], x]",
+  "rhs": [
+   "-Sum[Sin[x]^(2*k)/(2*k), {k, 1, l}] - Log[Cos[x]]"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^(2l+1)/cos = -sum_{k=1}^l sin^(2k)/(2k) - ln cos x",
+  "note": ""
+ },
+ {
+  "id": "GR2.516.3",
+  "gr": "2.516.3",
+  "page": 205,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*l)/Cos[x], x]",
+  "rhs": [
+   "-Sum[Sin[x]^(2*k - 1)/(2*k - 1), {k, 1, l}] + Log[Tan[Pi/4 + x/2]]"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^(2l)/cos = -sum_{k=1}^l sin^(2k-1)/(2k-1) + ln tan(pi/4 + x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.517.1",
+  "gr": "2.517.1",
+  "page": 205,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^(2*m + 1)*Cos[x]), x]",
+  "rhs": [
+   "-Sum[1/((2*m - 2*k + 2)*Sin[x]^(2*m - 2*k + 2)), {k, 1, m}] + Log[Tan[x]]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin^(2m+1) cos) = -sum_{k=1}^m 1/((2m-2k+2) sin^(2m-2k+2)) + ln tan x",
+  "note": ""
+ },
+ {
+  "id": "GR2.517.2",
+  "gr": "2.517.2",
+  "page": 205,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^(2*m)*Cos[x]), x]",
+  "rhs": [
+   "-Sum[1/((2*m - 2*k + 1)*Sin[x]^(2*m - 2*k + 1)), {k, 1, m}] + Log[Tan[Pi/4 - x/2]]",
+   "-Sum[1/((2*m - 2*k + 1)*Sin[x]^(2*m - 2*k + 1)), {k, 1, m}] + Log[Tan[Pi/4 + x/2]]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin^(2m) cos) = -sum_{k=1}^m 1/((2m-2k+1) sin^(2m-2k+1)) + ln tan(pi/4 - x/2)",
+  "note": "book prints ln tan(pi/4 - x/2), whose derivative is -sec x; likely misprint for pi/4 + x/2 (cf. 2.526.53); corrected candidate second"
+ },
+ {
+  "id": "GR2.518.1",
+  "gr": "2.518.1",
+  "page": 205,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int sin^p/cos^2 = sin^(p-1)/cos - (p-1) int sin^(p-2)",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "note": ""
+ },
+ {
+  "id": "GR2.518.2",
+  "gr": "2.518.2",
+  "page": 205,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cos^p/sin^(2n) = cos^(p+1)/(2n-1){cosec^(2n-1)+sum...} + (2n-p-2)...(-p)/(2n-1)!! int cos^p",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "note": ""
+ },
+ {
+  "id": "GR2.519.1",
+  "gr": "2.519.1",
+  "page": 205,
+  "status": "ok",
+  "lhs": "Integrate[1/Cos[x]^(2*l), x]",
+  "rhs": [
+   "Sin[x]/(2*l - 1)*(Sec[x]^(2*l - 1) + Sum[2^k*Product[l - j, {j, 1, k}]/Product[2*l - 2*j - 1, {j, 1, k}]*Sec[x]^(2*l - 2*k - 1), {k, 1, l - 1}])"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 1"
+  ],
+  "cite": "TI (240)",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/cos^(2l) = sin x/(2l-1){sec^(2l-1) + sum_{k=1}^{l-1} 2^k(l-1)...(l-k)/((2l-3)...(2l-2k-1)) sec^(2l-2k-1)}",
+  "note": ""
+ },
+ {
+  "id": "GR2.519.2",
+  "gr": "2.519.2",
+  "page": 205,
+  "status": "ok",
+  "lhs": "Integrate[1/Cos[x]^(2*l + 1), x]",
+  "rhs": [
+   "Sin[x]/(2*l)*(Sec[x]^(2*l) + Sum[Product[2*l - 2*j + 1, {j, 1, k}]/(2^k*Product[l - j, {j, 1, k}])*Sec[x]^(2*l - 2*k), {k, 1, l - 1}]) + (2*l - 1)!!/(2^l*l!)*Log[Tan[Pi/4 + x/2]]"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 1"
+  ],
+  "cite": "TI (241)",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/cos^(2l+1) = sin x/(2l){sec^(2l) + sum_{k=1}^{l-1} (2l-1)...(2l-2k+1)/(2^k(l-1)...(l-k)) sec^(2l-2k)} + (2l-1)!!/(2^l l!) ln tan(pi/4 + x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.521.1",
+  "gr": "2.521.1",
+  "page": 205,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cos^p/sin^(2n+1) = -cos^(p+1)/(2n){cosec^(2n)+sum...} + (2n-p-1)...(1-p)/(2^n n!) int cos^p/sin",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "note": ""
+ },
+ {
+  "id": "GR2.521.2",
+  "gr": "2.521.2",
+  "page": 206,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*l + 1)/Sin[x], x]",
+  "rhs": [
+   "Sum[Cos[x]^(2*k)/(2*k), {k, 1, l}] + Log[Sin[x]]"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^(2l+1)/sin = sum_{k=1}^l cos^(2k)/(2k) + ln sin x",
+  "note": ""
+ },
+ {
+  "id": "GR2.521.3",
+  "gr": "2.521.3",
+  "page": 206,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*l)/Sin[x], x]",
+  "rhs": [
+   "Sum[Cos[x]^(2*k - 1)/(2*k - 1), {k, 1, l}] + Log[Tan[x/2]]"
+  ],
+  "conds": [
+   "Element[l, Integers] && l >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^(2l)/sin = sum_{k=1}^l cos^(2k-1)/(2k-1) + ln tan(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.522.1",
+  "gr": "2.522.1",
+  "page": 206,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]*Cos[x]^(2*m + 1)), x]",
+  "rhs": [
+   "Sum[1/((2*m - 2*k + 2)*Cos[x]^(2*m - 2*k + 2)), {k, 1, m}] + Log[Tan[x]]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin cos^(2m+1)) = sum_{k=1}^m 1/((2m-2k+2) cos^(2m-2k+2)) + ln tan x",
+  "note": ""
+ },
+ {
+  "id": "GR2.522.2",
+  "gr": "2.522.2",
+  "page": 206,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]*Cos[x]^(2*m)), x]",
+  "rhs": [
+   "Sum[1/((2*m - 2*k + 1)*Cos[x]^(2*m - 2*k + 1)), {k, 1, m}] + Log[Tan[x/2]]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "GW (331)(15)",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin cos^(2m)) = sum_{k=1}^m 1/((2m-2k+1) cos^(2m-2k+1)) + ln tan(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.523",
+  "gr": "2.523",
+  "page": 206,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int cos^m/sin^2 = -cos^(m-1)/sin - (m-1) int cos^(m-2)",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "note": ""
+ },
+ {
+  "id": "GR2.524.1",
+  "gr": "2.524.1",
+  "page": 206,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*n + 1)/Cos[x]^m, x]",
+  "rhs": [
+   "Sum[If[k == (m - 1)/2, 0, (-1)^(k + 1)*Binomial[n, k]*Cos[x]^(2*k - m + 1)/(2*k - m + 1)], {k, 0, n}] + If[OddQ[m] && m < 2*n + 1, 1, 0]*(-1)^((m + 1)/2)*Binomial[n, (m - 1)/2]*Log[Cos[x]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "GU (331)(11d)",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^(2n+1)/cos^m = sum_{k=0,k!=(m-1)/2}^n (-1)^(k+1) binom(n,k) cos^(2k-m+1)/(2k-m+1) + s(-1)^((m+1)/2) binom(n,(m-1)/2) ln cos x; s=1 for m odd and m<2n+1, else 0",
+  "note": "s encoded as If[OddQ[m] && m < 2n+1, 1, 0]; the excluded term k=(m-1)/2 encoded with If"
+ },
+ {
+  "id": "GR2.524.2",
+  "gr": "2.524.2",
+  "page": 206,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*n + 1)/Sin[x]^m, x]",
+  "rhs": [
+   "Sum[If[k == (m - 1)/2, 0, (-1)^k*Binomial[n, k]*Sin[x]^(2*k - m + 1)/(2*k - m + 1)], {k, 0, n}] + If[OddQ[m] && m < 2*n + 1, 1, 0]*(-1)^((m - 1)/2)*Binomial[n, (m - 1)/2]*Log[Sin[x]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^(2n+1)/sin^m = sum_{k=0,k!=(m-1)/2}^n (-1)^k binom(n,k) sin^(2k-m+1)/(2k-m+1) + s(-1)^((m-1)/2) binom(n,(m-1)/2) ln sin x; s=1 for m odd and m<2n+1, else 0",
+  "note": "s encoded as If[OddQ[m] && m < 2n+1, 1, 0]; the excluded term k=(m-1)/2 encoded with If"
+ },
+ {
+  "id": "GR2.525.1",
+  "gr": "2.525.1",
+  "page": 206,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^(2*m)*Cos[x]^(2*n)), x]",
+  "rhs": [
+   "Sum[Binomial[m + n - 1, k]*Tan[x]^(2*k - 2*m + 1)/(2*k - 2*m + 1), {k, 0, m + n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m + n >= 1"
+  ],
+  "cite": "TI (267)",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin^(2m) cos^(2n)) = sum_{k=0}^{m+n-1} binom(m+n-1,k) tan^(2k-2m+1)/(2k-2m+1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.525.2",
+  "gr": "2.525.2",
+  "page": 206,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^(2*m + 1)*Cos[x]^(2*n + 1)), x]",
+  "rhs": [
+   "Sum[Binomial[m + n, k]*Tan[x]^(2*k - 2*m)/(2*k - 2*m), {k, 0, m + n}] + Binomial[m + n, m]*Log[Tan[x]]",
+   "Sum[If[k == m, 0, Binomial[m + n, k]*Tan[x]^(2*k - 2*m)/(2*k - 2*m)], {k, 0, m + n}] + Binomial[m + n, m]*Log[Tan[x]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "TI (268), GU (331)(15f)",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin^(2m+1) cos^(2n+1)) = sum_{k=0}^{m+n} binom(m+n,k) tan^(2k-2m)/(2k-2m) + binom(m+n,m) ln tan x",
+  "note": "as printed the k=m term is 0/0; it must be omitted (its role is taken by the log term); corrected candidate second"
+ },
+ {
+  "id": "GR2.526.1",
+  "gr": "2.526.1",
+  "page": 206,
+  "status": "ok",
+  "lhs": "Integrate[1/Sin[x], x]",
+  "rhs": [
+   "Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/sin",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.2",
+  "gr": "2.526.2",
+  "page": 206,
+  "status": "ok",
+  "lhs": "Integrate[1/Sin[x]^2, x]",
+  "rhs": [
+   "-Cot[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/sin^2",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.3",
+  "gr": "2.526.3",
+  "page": 206,
+  "status": "ok",
+  "lhs": "Integrate[1/Sin[x]^3, x]",
+  "rhs": [
+   "-1/2*Cos[x]/Sin[x]^2 + 1/2*Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/sin^3",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.4a",
+  "gr": "2.526.4",
+  "page": 206,
+  "status": "ok",
+  "lhs": "Integrate[1/Sin[x]^4, x]",
+  "rhs": [
+   "-Cos[x]/(3*Sin[x]^3) - 2/3*Cot[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/sin^4 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.4b",
+  "gr": "2.526.4",
+  "page": 206,
+  "status": "ok",
+  "lhs": "Integrate[1/Sin[x]^4, x]",
+  "rhs": [
+   "-1/3*Cot[x]^3 - Cot[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/sin^4 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.5",
+  "gr": "2.526.5",
+  "page": 206,
+  "status": "ok",
+  "lhs": "Integrate[1/Sin[x]^5, x]",
+  "rhs": [
+   "-Cos[x]/(4*Sin[x]^4) - 3/8*Cos[x]/Sin[x]^2 + 3/8*Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/sin^5",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.6a",
+  "gr": "2.526.6",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[1/Sin[x]^6, x]",
+  "rhs": [
+   "-Cos[x]/(5*Sin[x]^5) - 4/15*Cot[x]^3 - 4/5*Cot[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/sin^6 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.6b",
+  "gr": "2.526.6",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[1/Sin[x]^6, x]",
+  "rhs": [
+   "-1/5*Cot[x]^5 - 2/3*Cot[x]^3 - Cot[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/sin^6 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.7",
+  "gr": "2.526.7",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[1/Sin[x]^7, x]",
+  "rhs": [
+   "-Cos[x]/(6*Sin[x]^2)*(1/Sin[x]^4 + 5/(4*Sin[x]^2) + 15/8) + 5/16*Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/sin^7",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.8",
+  "gr": "2.526.8",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[1/Sin[x]^8, x]",
+  "rhs": [
+   "-(Cot[x]^7/7 + 3/5*Cot[x]^5 + Cot[x]^3 + Cot[x])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/sin^8",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.9a",
+  "gr": "2.526.9",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[1/Cos[x], x]",
+  "rhs": [
+   "Log[Tan[Pi/4 + x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/cos (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.9b",
+  "gr": "2.526.9",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[1/Cos[x], x]",
+  "rhs": [
+   "Log[Cot[Pi/4 - x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/cos (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.9c",
+  "gr": "2.526.9",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[1/Cos[x], x]",
+  "rhs": [
+   "Log[Sqrt[(1 + Sin[x])/(1 - Sin[x])]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/cos (form 3)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.10",
+  "gr": "2.526.10",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[1/Cos[x]^2, x]",
+  "rhs": [
+   "Tan[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/cos^2",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.11",
+  "gr": "2.526.11",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[1/Cos[x]^3, x]",
+  "rhs": [
+   "1/2*Sin[x]/Cos[x]^2 + 1/2*Log[Tan[Pi/4 + x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/cos^3",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.12a",
+  "gr": "2.526.12",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[1/Cos[x]^4, x]",
+  "rhs": [
+   "Sin[x]/(3*Cos[x]^3) + 2/3*Tan[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/cos^4 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.12b",
+  "gr": "2.526.12",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[1/Cos[x]^4, x]",
+  "rhs": [
+   "Tan[x]^3/3 + Tan[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/cos^4 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.13",
+  "gr": "2.526.13",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[1/Cos[x]^5, x]",
+  "rhs": [
+   "Sin[x]/(4*Cos[x]^4) + 3/8*Sin[x]/Cos[x]^2 + 3/8*Log[Tan[x/2 + Pi/4]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/cos^5",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.14a",
+  "gr": "2.526.14",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[1/Cos[x]^6, x]",
+  "rhs": [
+   "Sin[x]/(5*Cos[x]^5) + 4/15*Tan[x]^3 + 4/5*Tan[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/cos^6 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.14b",
+  "gr": "2.526.14",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[1/Cos[x]^6, x]",
+  "rhs": [
+   "Tan[x]^5/5 + 2/3*Tan[x]^3 + Tan[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/cos^6 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.15",
+  "gr": "2.526.15",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[1/Cos[x]^7, x]",
+  "rhs": [
+   "Sin[x]/(6*Cos[x]^6) + 5*Sin[x]/(24*Cos[x]^4) + 5*Sin[x]/(16*Cos[x]^2) + 5/16*Log[Tan[x/2 + Pi/4]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/cos^7",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.16",
+  "gr": "2.526.16",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[1/Cos[x]^8, x]",
+  "rhs": [
+   "Tan[x]^7/7 + 3/5*Tan[x]^5 + Tan[x]^3 + Tan[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/cos^8",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.17",
+  "gr": "2.526.17",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/Cos[x], x]",
+  "rhs": [
+   "-Log[Cos[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin/cos",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.18",
+  "gr": "2.526.18",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2/Cos[x], x]",
+  "rhs": [
+   "-Sin[x] + Log[Tan[Pi/4 + x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^2/cos = -sin x + ln tan(pi/4 = x/2)",
+  "note": "book prints ln tan(pi/4 = x/2); '=' is a misprint for '+' (cf. 2.526.20)"
+ },
+ {
+  "id": "GR2.526.19a",
+  "gr": "2.526.19",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3/Cos[x], x]",
+  "rhs": [
+   "-Sin[x]^2/2 - Log[Cos[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^3/cos (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.19b",
+  "gr": "2.526.19",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3/Cos[x], x]",
+  "rhs": [
+   "Cos[x]^2/2 - Log[Cos[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^3/cos (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.20",
+  "gr": "2.526.20",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^4/Cos[x], x]",
+  "rhs": [
+   "-Sin[x]^3/3 - Sin[x] + Log[Tan[x/2 + Pi/4]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^4/cos",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.21",
+  "gr": "2.526.21",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/Cos[x]^2, x]",
+  "rhs": [
+   "1/Cos[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^2/cos^2 = 1/cos (as printed)",
+  "note": "book prints sin^2 x in the numerator (same integrand as 2.526.22); misprint for sin x, since d/dx sec x = sin x/cos^2 x and the series 21-24 runs sin^1..sin^4; lhs written with sin x"
+ },
+ {
+  "id": "GR2.526.22",
+  "gr": "2.526.22",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2/Cos[x]^2, x]",
+  "rhs": [
+   "Tan[x] - x"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^2/cos^2",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.23",
+  "gr": "2.526.23",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3/Cos[x]^2, x]",
+  "rhs": [
+   "Cos[x] + 1/Cos[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^3/cos^2",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.24",
+  "gr": "2.526.24",
+  "page": 207,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^4/Cos[x]^2, x]",
+  "rhs": [
+   "Tan[x] + 1/2*Sin[x]*Cos[x] - 3*x/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^4/cos^2",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.25a",
+  "gr": "2.526.25",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/Cos[x]^3, x]",
+  "rhs": [
+   "1/(2*Cos[x]^2)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin/cos^3 (form 1)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.25b",
+  "gr": "2.526.25",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/Cos[x]^3, x]",
+  "rhs": [
+   "Tan[x]^2/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin/cos^3 (form 2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.26",
+  "gr": "2.526.26",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2/Cos[x]^3, x]",
+  "rhs": [
+   "Sin[x]/(2*Cos[x]^2) - 1/2*Log[Tan[Pi/4 + x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^2/cos^3",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.27",
+  "gr": "2.526.27",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3/Cos[x]^3, x]",
+  "rhs": [
+   "1/2*Sin[x]/Cos[x]^2 + Log[Cos[x]]",
+   "1/2*Sin[x]^2/Cos[x]^2 + Log[Cos[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^3/cos^3 = 1/2 sin x/cos^2 x + ln cos x (as printed)",
+  "note": "as printed the first term is sin x/(2cos^2 x); tan^2 x/2 + ln cos x would be expected (book may intend sin^2 x); corrected candidate second"
+ },
+ {
+  "id": "GR2.526.28",
+  "gr": "2.526.28",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^4/Cos[x]^3, x]",
+  "rhs": [
+   "1/2*Sin[x]/Cos[x]^2 + Sin[x] - 3/2*Log[Tan[x/2 + Pi/4]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^4/cos^3",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.29",
+  "gr": "2.526.29",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/Cos[x]^4, x]",
+  "rhs": [
+   "1/(3*Cos[x]^3)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin/cos^4",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.30",
+  "gr": "2.526.30",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2/Cos[x]^4, x]",
+  "rhs": [
+   "Tan[x]^3/3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^2/cos^4",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.31",
+  "gr": "2.526.31",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3/Cos[x]^4, x]",
+  "rhs": [
+   "-1/Cos[x] + 1/(3*Cos[x]^3)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^3/cos^4",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.32",
+  "gr": "2.526.32",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^4/Cos[x]^4, x]",
+  "rhs": [
+   "Tan[x]^3/3 - Tan[x] + x"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int sin^4/cos^4",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.33",
+  "gr": "2.526.33",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/Sin[x], x]",
+  "rhs": [
+   "Log[Sin[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos/sin",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.34",
+  "gr": "2.526.34",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^2/Sin[x], x]",
+  "rhs": [
+   "Cos[x] + Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^2/sin",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.35",
+  "gr": "2.526.35",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^3/Sin[x], x]",
+  "rhs": [
+   "Cos[x]^2/2 + Log[Sin[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^3/sin",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.36",
+  "gr": "2.526.36",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^4/Sin[x], x]",
+  "rhs": [
+   "Cos[x]^3/3 + Cos[x] + Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^4/sin",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.37",
+  "gr": "2.526.37",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/Sin[x]^2, x]",
+  "rhs": [
+   "-1/Sin[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos/sin^2",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.38",
+  "gr": "2.526.38",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^2/Sin[x]^2, x]",
+  "rhs": [
+   "-Cot[x] - x"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^2/sin^2",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.39",
+  "gr": "2.526.39",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^3/Sin[x]^2, x]",
+  "rhs": [
+   "-Sin[x] - 1/Sin[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^3/sin^2",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.40",
+  "gr": "2.526.40",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^4/Sin[x]^2, x]",
+  "rhs": [
+   "-Cot[x] - 1/2*Sin[x]*Cos[x] - 3*x/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^4/sin^2",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.41",
+  "gr": "2.526.41",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/Sin[x]^3, x]",
+  "rhs": [
+   "-1/(2*Sin[x]^2)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos/sin^3",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.42",
+  "gr": "2.526.42",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^2/Sin[x]^3, x]",
+  "rhs": [
+   "-Cos[x]/(2*Sin[x]^2) - 1/2*Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^2/sin^3",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.43",
+  "gr": "2.526.43",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^3/Sin[x]^3, x]",
+  "rhs": [
+   "-1/(2*Sin[x]^2) - Log[Sin[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^3/sin^3",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.44",
+  "gr": "2.526.44",
+  "page": 208,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^4/Sin[x]^3, x]",
+  "rhs": [
+   "-1/2*Cos[x]/Sin[x]^2 - Cos[x] - 3/2*Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^4/sin^3",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.45",
+  "gr": "2.526.45",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/Sin[x]^4, x]",
+  "rhs": [
+   "-1/(3*Sin[x]^3)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos/sin^4",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.46",
+  "gr": "2.526.46",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^2/Sin[x]^4, x]",
+  "rhs": [
+   "-Cot[x]^3/3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^2/sin^4",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.47",
+  "gr": "2.526.47",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^3/Sin[x]^4, x]",
+  "rhs": [
+   "1/Sin[x] - 1/(3*Sin[x]^3)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^3/sin^4",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.48",
+  "gr": "2.526.48",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^4/Sin[x]^4, x]",
+  "rhs": [
+   "-Cot[x]^3/3 + Cot[x] + x"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int cos^4/sin^4",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.49",
+  "gr": "2.526.49",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]*Cos[x]), x]",
+  "rhs": [
+   "Log[Tan[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin cos)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.50",
+  "gr": "2.526.50",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]*Cos[x]^2), x]",
+  "rhs": [
+   "1/Cos[x] + Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin cos^2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.51",
+  "gr": "2.526.51",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]*Cos[x]^3), x]",
+  "rhs": [
+   "1/(2*Cos[x]^2) + Log[Tan[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin cos^3)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.52",
+  "gr": "2.526.52",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]*Cos[x]^4), x]",
+  "rhs": [
+   "1/Cos[x] + 1/(3*Cos[x]^3) + Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin cos^4)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.53",
+  "gr": "2.526.53",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^2*Cos[x]), x]",
+  "rhs": [
+   "Log[Tan[Pi/4 + x/2]] - Csc[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin^2 cos)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.54",
+  "gr": "2.526.54",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^2*Cos[x]^2), x]",
+  "rhs": [
+   "-2*Cot[2*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin^2 cos^2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.55",
+  "gr": "2.526.55",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^2*Cos[x]^3), x]",
+  "rhs": [
+   "(1/(2*Cos[x]^2) - 3/2)*(1/Sin[x]) + 3/2*Log[Tan[Pi/4 + x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin^2 cos^3)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.56",
+  "gr": "2.526.56",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^2*Cos[x]^4), x]",
+  "rhs": [
+   "1/(3*Sin[x]*Cos[x]^3) - 8/3*Cot[2*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin^2 cos^4)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.57",
+  "gr": "2.526.57",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^3*Cos[x]), x]",
+  "rhs": [
+   "-1/(2*Sin[x]^2) + Log[Tan[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin^3 cos)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.58",
+  "gr": "2.526.58",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^3*Cos[x]^2), x]",
+  "rhs": [
+   "-1/Cos[x]*(1/(2*Sin[x]^2) - 3/2) + 3/2*Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin^3 cos^2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.59",
+  "gr": "2.526.59",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^3*Cos[x]^3), x]",
+  "rhs": [
+   "-2*Cos[2*x]/Sin[2*x]^2 + 2*Log[Tan[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin^3 cos^3)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.60",
+  "gr": "2.526.60",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^3*Cos[x]^4), x]",
+  "rhs": [
+   "2/Cos[x] + 1/(3*Cos[x]^3) - Cos[x]/(2*Sin[x]^2) + 5/2*Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin^3 cos^4)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.61",
+  "gr": "2.526.61",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^4*Cos[x]), x]",
+  "rhs": [
+   "-1/Sin[x] - 1/(3*Sin[x]^3) + Log[Tan[x/2 + Pi/4]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin^4 cos)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.62",
+  "gr": "2.526.62",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^4*Cos[x]^2), x]",
+  "rhs": [
+   "-1/(3*Cos[x]*Sin[x]^3) - 8/3*Cot[2*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin^4 cos^2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.63",
+  "gr": "2.526.63",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^4*Cos[x]^3), x]",
+  "rhs": [
+   "-2/Sin[x] - 1/(3*Sin[x]^3) + Sin[x]/(2*Cos[x]^2) + 5/2*Log[Tan[x/2 + Pi/4]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin^4 cos^3)",
+  "note": ""
+ },
+ {
+  "id": "GR2.526.64",
+  "gr": "2.526.64",
+  "page": 209,
+  "status": "ok",
+  "lhs": "Integrate[1/(Sin[x]^4*Cos[x]^4), x]",
+  "rhs": [
+   "-8*Cot[2*x] - 8/3*Cot[2*x]^3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.51-2.52 Powers of trigonometric functions",
+  "tex": "int dx/(sin^4 cos^4)",
+  "note": ""
+ }
+]

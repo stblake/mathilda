@@ -1,0 +1,2052 @@
+[
+ {
+  "id": "GR6.228.1",
+  "gr": "6.228.1",
+  "page": 688,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-x]*E^x*x^(nu - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*Gamma[nu]/Sin[nu*Pi]"
+  ],
+  "conds": [
+   "0 < Re[nu] < 1"
+  ],
+  "cite": "ET II 308(13)",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int_0^inf Ei(-x) e^x x^(nu-1) dx = -pi Gamma(nu)/sin(nu pi)",
+  "note": ""
+ },
+ {
+  "id": "GR6.228.2",
+  "gr": "6.228.2",
+  "page": 688,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-beta*x]*E^(-mu*x)*x^(nu - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "-Gamma[nu]/(nu*(beta + mu)^nu)*Hypergeometric2F1[1, nu, nu + 1, mu/(beta + mu)]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "Re[beta + mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 308(14)",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int_0^inf Ei(-beta x) e^(-mu x) x^(nu-1) dx = -Gamma(nu)/(nu (beta+mu)^nu) 2F1(1,nu;nu+1;mu/(beta+mu))",
+  "note": ""
+ },
+ {
+  "id": "GR6.229",
+  "gr": "6.229",
+  "page": 688,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-1/(4*x^2)]*Exp[-mu*x^2 + 1/(4*x^2)]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2*Sqrt[Pi]*(Cos[Sqrt[mu]]*(SinIntegral[Sqrt[mu]] - Pi/2) - Sin[Sqrt[mu]]*CosIntegral[Sqrt[mu]])"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 34",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int_0^inf Ei(-1/(4x^2)) exp(-mu x^2 + 1/(4x^2)) dx/x^2 = 2 sqrt(pi)(cos sqrt mu si sqrt mu - sin sqrt mu ci sqrt mu)",
+  "note": ""
+ },
+ {
+  "id": "GR6.231",
+  "gr": "6.231",
+  "page": 688,
+  "status": "ok",
+  "lhs": "Integrate[(ExpIntegralEi[-a] - ExpIntegralEi[-E^(-x)])*E^(-mu*x), {x, -Log[a], Infinity}]",
+  "rhs": [
+   "1/mu*Gamma[mu, 0, a]"
+  ],
+  "conds": [
+   "0 < a < 1",
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 34",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int_{-ln a}^inf [Ei(-a) - Ei(-e^(-x))] e^(-mu x) dx = gamma(mu,a)/mu",
+  "note": "a > 0 added (lower limit -ln a)"
+ },
+ {
+  "id": "GR6.232.1",
+  "gr": "6.232.1",
+  "page": 688,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-a*x]*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-Log[1 + b^2/a^2]/(2*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (473)(1)a",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int_0^inf Ei(-ax) sin bx dx = -ln(1+b^2/a^2)/(2b)",
+  "note": ""
+ },
+ {
+  "id": "GR6.232.2",
+  "gr": "6.232.2",
+  "page": 688,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-a*x]*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-1/b*ArcTan[b/a]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (473)(2)a",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int_0^inf Ei(-ax) cos bx dx = -(1/b) arctan(b/a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.233.1",
+  "gr": "6.233.1",
+  "page": 688,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-x]*E^(-mu*x)*Sin[beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-1/(beta^2 + mu^2)*(beta/2*Log[(1 + mu)^2 + beta^2] - mu*ArcTan[beta/(1 + mu)])"
+  ],
+  "conds": [
+   "Re[mu] > Abs[Im[beta]]"
+  ],
+  "cite": "BI (473)(7)a",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int_0^inf Ei(-x) e^(-mu x) sin(beta x) dx = -1/(beta^2+mu^2){beta/2 ln[(1+mu)^2+beta^2] - mu arctan(beta/(1+mu))}",
+  "note": ""
+ },
+ {
+  "id": "GR6.233.2",
+  "gr": "6.233.2",
+  "page": 688,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-x]*E^(-mu*x)*Cos[beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-1/(beta^2 + mu^2)*(mu/2*Log[(1 + mu)^2 + beta^2] + beta*ArcTan[beta/(1 + mu)])"
+  ],
+  "conds": [
+   "Re[mu] > Abs[Im[beta]]"
+  ],
+  "cite": "BI (473)(8)a",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int_0^inf Ei(-x) e^(-mu x) cos(beta x) dx = -1/(beta^2+mu^2){mu/2 ln[(1+mu)^2+beta^2] + beta arctan(beta/(1+mu))}",
+  "note": ""
+ },
+ {
+  "id": "GR6.234",
+  "gr": "6.234",
+  "page": 688,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-x]*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "EulerGamma + 1"
+  ],
+  "conds": [],
+  "cite": "NT 56(10)",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int_0^inf Ei(-x) ln x dx = C + 1",
+  "note": ""
+ },
+ {
+  "id": "GR6.241.1",
+  "gr": "6.241.1",
+  "page": 688,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[p*x] - Pi/2)*(SinIntegral[q*x] - Pi/2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*p)"
+  ],
+  "conds": [
+   "p >= q",
+   "q > 0"
+  ],
+  "cite": "BI II 653, NT 54(8)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf si(px) si(qx) dx = pi/(2p)",
+  "note": "q > 0 added"
+ },
+ {
+  "id": "GR6.241.2",
+  "gr": "6.241.2",
+  "page": 688,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[p*x]*CosIntegral[q*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*p)"
+  ],
+  "conds": [
+   "p >= q",
+   "q > 0"
+  ],
+  "cite": "FI II 653, NT 54(7)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf ci(px) ci(qx) dx = pi/(2p)",
+  "note": "q > 0 added"
+ },
+ {
+  "id": "GR6.241.3a",
+  "gr": "6.241.3",
+  "page": 689,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[p*x] - Pi/2)*CosIntegral[q*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*q)*Log[((p + q)/(p - q))^2] + 1/(4*p)*Log[(p^2 - q^2)^2/q^4]"
+  ],
+  "conds": [
+   "p != q",
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "FI II 653, NT 54(10, 12)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf si(px) ci(qx) dx = 1/(4q) ln((p+q)/(p-q))^2 + 1/(4p) ln((p^2-q^2)^2/q^4)",
+  "note": "p, q > 0 added"
+ },
+ {
+  "id": "GR6.241.3b",
+  "gr": "6.241.3",
+  "page": 689,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[q*x] - Pi/2)*CosIntegral[q*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Log[2]/q"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "FI II 653, NT 54(10, 12)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf si(qx) ci(qx) dx = (1/q) ln 2  [p = q]",
+  "note": "p = q substituted"
+ },
+ {
+  "id": "GR6.242",
+  "gr": "6.242",
+  "page": 689,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[a*x]/(beta + x), {x, 0, Infinity}]",
+  "rhs": [
+   "-1/2*((SinIntegral[a*beta] - Pi/2)^2 + CosIntegral[a*beta]^2)"
+  ],
+  "conds": [
+   "a > 0",
+   "Abs[Arg[beta]] < Pi"
+  ],
+  "cite": "ET II 224(1)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf ci(ax)/(beta+x) dx = -1/2{[si(a beta)]^2 + [ci(a beta)]^2}",
+  "note": ""
+ },
+ {
+  "id": "GR6.243.1",
+  "gr": "6.243.1",
+  "page": 689,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[(SinIntegral[a*Abs[x]] - Pi/2)/(x - b)*Sign[x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*CosIntegral[a*Abs[b]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 253(3)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_-inf^inf si(a|x|)/(x-b) sign x dx = pi ci(a|b|)",
+  "note": "",
+  "reason": "pole at x = b on the path"
+ },
+ {
+  "id": "GR6.243.2",
+  "gr": "6.243.2",
+  "page": 689,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[CosIntegral[a*Abs[x]]/(x - b), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-Pi*Sign[b]*(SinIntegral[a*Abs[b]] - Pi/2)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 253(2)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_-inf^inf ci(a|x|)/(x-b) dx = -pi sign b si(a|b|)",
+  "note": "",
+  "reason": "pole at x = b on the path"
+ },
+ {
+  "id": "GR6.244.1",
+  "gr": "6.244.1",
+  "page": 689,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[p*x] - Pi/2)*x/(q^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*ExpIntegralEi[-p*q]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (255)(6)",
+  "edition_note": "8",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf si(px) x dx/(q^2+x^2) = pi/2 Ei(-pq)",
+  "note": ""
+ },
+ {
+  "id": "GR6.244.2",
+  "gr": "6.244.2",
+  "page": 689,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[(SinIntegral[p*x] - Pi/2)*x/(q^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/2*CosIntegral[p*q]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (255)(6)",
+  "edition_note": "8",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf si(px) x dx/(q^2-x^2) = -pi/2 ci(pq)",
+  "note": "",
+  "reason": "pole at x = q on the path"
+ },
+ {
+  "id": "GR6.245.1",
+  "gr": "6.245.1",
+  "page": 689,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[p*x]/(q^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*q)*ExpIntegralEi[-p*q]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (255)(7)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf ci(px) dx/(q^2+x^2) = pi/(2q) Ei(-pq)",
+  "note": ""
+ },
+ {
+  "id": "GR6.245.2",
+  "gr": "6.245.2",
+  "page": 689,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[CosIntegral[p*x]/(q^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*q)*(SinIntegral[p*q] - Pi/2)"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (255)(8)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf ci(px) dx/(q^2-x^2) = pi/(2q) si(pq)",
+  "note": "",
+  "reason": "pole at x = q on the path"
+ },
+ {
+  "id": "GR6.246.1",
+  "gr": "6.246.1",
+  "page": 689,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[a*x] - Pi/2)*x^(mu - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "-Gamma[mu]/(mu*a^mu)*Sin[mu*Pi/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "NT 56(9), ET I 325(12)a",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf si(ax) x^(mu-1) dx = -Gamma(mu)/(mu a^mu) sin(mu pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.246.2",
+  "gr": "6.246.2",
+  "page": 689,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[a*x]*x^(mu - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "-Gamma[mu]/(mu*a^mu)*Cos[mu*Pi/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "NT 56(8), ET I 325(13)a",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf ci(ax) x^(mu-1) dx = -Gamma(mu)/(mu a^mu) cos(mu pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.247.1",
+  "gr": "6.247.1",
+  "page": 689,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[beta*x] - Pi/2)*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-1/mu*ArcTan[mu/beta]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "beta > 0"
+  ],
+  "cite": "NT 49(12), ET I 177(18)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf si(beta x) e^(-mu x) dx = -(1/mu) arctan(mu/beta)",
+  "note": "beta > 0 added"
+ },
+ {
+  "id": "GR6.247.2",
+  "gr": "6.247.2",
+  "page": 689,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[beta*x]*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-1/mu*Log[Sqrt[1 + mu^2/beta^2]]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "beta > 0"
+  ],
+  "cite": "NT 49(11), ET I 178(19)a",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf ci(beta x) e^(-mu x) dx = -(1/mu) ln sqrt(1+mu^2/beta^2)",
+  "note": "beta > 0 added"
+ },
+ {
+  "id": "GR6.248.1",
+  "gr": "6.248.1",
+  "page": 689,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[x] - Pi/2)*E^(-mu*x^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*mu)*(Erf[1/(2*Sqrt[mu])] - 1)"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 34",
+  "edition_note": "8",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf si(x) e^(-mu x^2) x dx = pi/(4mu)[Phi(1/(2 sqrt mu)) - 1]",
+  "note": ""
+ },
+ {
+  "id": "GR6.248.2",
+  "gr": "6.248.2",
+  "page": 690,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[x]*E^(-mu*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Sqrt[Pi/mu]*ExpIntegralEi[-1/(4*mu)]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 34",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf ci(x) e^(-mu x^2) dx = 1/4 sqrt(pi/mu) Ei(-1/(4mu))",
+  "note": ""
+ },
+ {
+  "id": "GR6.249",
+  "gr": "6.249",
+  "page": 690,
+  "status": "ok",
+  "lhs": "Integrate[SinIntegral[x^2]*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/mu*((FresnelS[Sqrt[2/Pi]*(mu^2/4)] - 1/2)^2 + (FresnelC[Sqrt[2/Pi]*(mu^2/4)] - 1/2)^2)",
+   "Pi/mu*((FresnelS[Sqrt[2/Pi]*(Sqrt[mu^2/4])] - 1/2)^2 + (FresnelC[Sqrt[2/Pi]*(Sqrt[mu^2/4])] - 1/2)^2)"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "ME 26",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf [si(x^2) + pi/2] e^(-mu x) dx = pi/mu {[S(mu^2/4) - 1/2]^2 + [C(mu^2/4) - 1/2]^2}",
+  "note": "si(x^2)+pi/2 written as SinIntegral[x^2]. S, C here are probably G&R 8.251's sqrt-argument Fresnel (S(x) = 2/sqrt(2pi) int_0^sqrt(x) sin t^2 dt): asymptotics mu->inf need argument mu/2. Second rhs uses that convention."
+ },
+ {
+  "id": "GR6.251.1",
+  "gr": "6.251.1",
+  "page": 690,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[1/x] - Pi/2)*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2/mu*KelvinKei[2*Sqrt[mu]]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 34",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf si(1/x) e^(-mu x) dx = (2/mu) kei(2 sqrt mu)",
+  "note": ""
+ },
+ {
+  "id": "GR6.251.2",
+  "gr": "6.251.2",
+  "page": 690,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[1/x]*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-2/mu*KelvinKer[2*Sqrt[mu]]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 34",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf ci(1/x) e^(-mu x) dx = -(2/mu) ker(2 sqrt mu)",
+  "note": ""
+ },
+ {
+  "id": "GR6.252.1a",
+  "gr": "6.252.1",
+  "page": 690,
+  "status": "ok",
+  "lhs": "Integrate[Sin[p*x]*(SinIntegral[q*x] - Pi/2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/(2*p)"
+  ],
+  "conds": [
+   "p^2 > q^2",
+   "q > 0"
+  ],
+  "cite": "FI II 652, NT 50(8)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf sin px si(qx) dx = -pi/(2p) [p^2 > q^2]",
+  "note": "q > 0 added"
+ },
+ {
+  "id": "GR6.252.1b",
+  "gr": "6.252.1",
+  "page": 690,
+  "status": "ok",
+  "lhs": "Integrate[Sin[p*x]*(SinIntegral[p*x] - Pi/2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/(4*p)"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "FI II 652, NT 50(8)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf sin px si(px) dx = -pi/(4p) [p^2 = q^2]",
+  "note": "q = p substituted"
+ },
+ {
+  "id": "GR6.252.1c",
+  "gr": "6.252.1",
+  "page": 690,
+  "status": "ok",
+  "lhs": "Integrate[Sin[p*x]*(SinIntegral[q*x] - Pi/2), {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "p^2 < q^2",
+   "q > 0"
+  ],
+  "cite": "FI II 652, NT 50(8)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf sin px si(qx) dx = 0 [p^2 < q^2]",
+  "note": "q > 0 added"
+ },
+ {
+  "id": "GR6.252.2a",
+  "gr": "6.252.2",
+  "page": 690,
+  "status": "ok",
+  "lhs": "Integrate[Cos[p*x]*(SinIntegral[q*x] - Pi/2), {x, 0, Infinity}]",
+  "rhs": [
+   "-1/(4*p)*Log[((p + q)/(p - q))^2]"
+  ],
+  "conds": [
+   "p != 0",
+   "p^2 != q^2",
+   "q > 0"
+  ],
+  "cite": "FI II 652, NT 50(10)",
+  "edition_note": "6",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf cos px si(qx) dx = -1/(4p) ln((p+q)/(p-q))^2",
+  "note": "q > 0 added"
+ },
+ {
+  "id": "GR6.252.2b",
+  "gr": "6.252.2",
+  "page": 690,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[q*x] - Pi/2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/q",
+   "-1/q"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "FI II 652, NT 50(10)",
+  "edition_note": "6",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf si(qx) dx = 1/q [p = 0]",
+  "note": "p = 0 substituted. Book prints 1/q; the p->0 limit of 6.252.2a and int_0^inf si(x) dx = -1 give -1/q (second rhs)."
+ },
+ {
+  "id": "GR6.252.3a",
+  "gr": "6.252.3",
+  "page": 690,
+  "status": "ok",
+  "lhs": "Integrate[Sin[p*x]*CosIntegral[q*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-1/(4*p)*Log[(p^2/q^2 - 1)^2]"
+  ],
+  "conds": [
+   "p != 0",
+   "p^2 != q^2",
+   "q > 0"
+  ],
+  "cite": "FI II 652, NT 50(9)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf sin px ci(qx) dx = -1/(4p) ln(p^2/q^2 - 1)^2",
+  "note": "q > 0 added"
+ },
+ {
+  "id": "GR6.252.3b",
+  "gr": "6.252.3",
+  "page": 690,
+  "status": "ok",
+  "lhs": "Integrate[Sin[0*x]*CosIntegral[q*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "FI II 652, NT 50(9)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf sin px ci(qx) dx = 0 [p = 0]",
+  "note": "p = 0 substituted (trivial)"
+ },
+ {
+  "id": "GR6.252.4a",
+  "gr": "6.252.4",
+  "page": 690,
+  "status": "ok",
+  "lhs": "Integrate[Cos[p*x]*CosIntegral[q*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/(2*p)"
+  ],
+  "conds": [
+   "p^2 > q^2",
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "FI II 654, NT 50(7)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf cos px ci(qx) dx = -pi/(2p) [p^2 > q^2]",
+  "note": "p, q > 0 added"
+ },
+ {
+  "id": "GR6.252.4b",
+  "gr": "6.252.4",
+  "page": 690,
+  "status": "ok",
+  "lhs": "Integrate[Cos[p*x]*CosIntegral[p*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/(4*p)"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "FI II 654, NT 50(7)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf cos px ci(px) dx = -pi/(4p) [p^2 = q^2]",
+  "note": "q = p substituted"
+ },
+ {
+  "id": "GR6.252.4c",
+  "gr": "6.252.4",
+  "page": 690,
+  "status": "ok",
+  "lhs": "Integrate[Cos[p*x]*CosIntegral[q*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "p^2 < q^2",
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "FI II 654, NT 50(7)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf cos px ci(qx) dx = 0 [p^2 < q^2]",
+  "note": "p, q > 0 added"
+ },
+ {
+  "id": "GR6.253a",
+  "gr": "6.253",
+  "page": 690,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[a*x] - Pi/2)*Sin[(a - m)*x]/(1 - 2*r*Cos[x] + r^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*(r^m + r^(m + 1))/(4*(a - m)*(1 - r)*(1 - r^2))"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "a > m",
+   "Abs[r] < 1"
+  ],
+  "cite": "ET I 97(10)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf si(ax) sin bx/(1 - 2r cos x + r^2) dx = -pi(r^m + r^(m+1))/(4b(1-r)(1-r^2)) [b = a - m]",
+  "note": "b = a - m substituted; m nonnegative integer, a > m, |r| < 1 assumed (not printed)"
+ },
+ {
+  "id": "GR6.253b",
+  "gr": "6.253",
+  "page": 690,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[a*x] - Pi/2)*Sin[(a + m)*x]/(1 - 2*r*Cos[x] + r^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*(2 + 2*r - r^m - r^(m + 1))/(4*(a + m)*(1 - r)*(1 - r^2))"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "a > 0",
+   "Abs[r] < 1"
+  ],
+  "cite": "ET I 97(10)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "= -pi(2 + 2r - r^m - r^(m+1))/(4b(1-r)(1-r^2)) [b = a + m]",
+  "note": "b = a + m substituted; m nonnegative integer, a > 0, |r| < 1 assumed (not printed)"
+ },
+ {
+  "id": "GR6.253c",
+  "gr": "6.253",
+  "page": 690,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[a*x] - Pi/2)*Sin[b*x]/(1 - 2*r*Cos[x] + r^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*r^(m + 1)/(2*b*(1 - r)*(1 - r^2))"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "a - m - 1 < b < a - m",
+   "b > 0",
+   "a > 0",
+   "Abs[r] < 1"
+  ],
+  "cite": "ET I 97(10)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "= -pi r^(m+1)/(2b(1-r)(1-r^2)) [a - m - 1 < b < a - m]",
+  "note": "m nonnegative integer, a, b > 0, |r| < 1 assumed (not printed)"
+ },
+ {
+  "id": "GR6.253d",
+  "gr": "6.253",
+  "page": 690,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[a*x] - Pi/2)*Sin[b*x]/(1 - 2*r*Cos[x] + r^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*(1 + r - r^(m + 1))/(2*b*(1 - r)*(1 - r^2))"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "a + m < b < a + m + 1",
+   "a > 0",
+   "Abs[r] < 1"
+  ],
+  "cite": "ET I 97(10)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "= -pi(1 + r - r^(m+1))/(2b(1-r)(1-r^2)) [a + m < b < a + m + 1]",
+  "note": "m nonnegative integer, a > 0, |r| < 1 assumed (not printed)"
+ },
+ {
+  "id": "GR6.254.1",
+  "gr": "6.254.1",
+  "page": 691,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[x]*Sin[x]^2/x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*(PolyLog[2, 1/2] - PolyLog[2, -1/2])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf ci(x) sin^2 x dx/x = 1/2[L2(1/2) - L2(-1/2)], L2 Euler dilogarithm",
+  "note": ""
+ },
+ {
+  "id": "GR6.254.2",
+  "gr": "6.254.2",
+  "page": 691,
+  "status": "ok",
+  "lhs": "Integrate[SinIntegral[a*x]*Cos[b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Log[a/b]*UnitStep[a - b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 41(11)",
+  "edition_note": "11",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf [si(ax) + pi/2] cos bx dx/x = pi/2 ln(a/b) H(a-b)",
+  "note": "si(ax)+pi/2 written as SinIntegral[a x]; H Heaviside -> UnitStep"
+ },
+ {
+  "id": "GR6.255.1",
+  "gr": "6.255.1",
+  "page": 691,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[(Cos[a*x]*CosIntegral[a*Abs[x]] + Sin[a*Abs[x]]*(SinIntegral[a*Abs[x]] - Pi/2))/(x - b), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-Pi*(Sign[b]*Cos[a*b]*(SinIntegral[a*Abs[b]] - Pi/2) - Sin[a*b]*CosIntegral[a*Abs[b]])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 253(4)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_-inf^inf [cos ax ci(a|x|) + sin(a|x|) si(a|x|)] dx/(x-b) = -pi[sign b cos ab si(a|b|) - sin ab ci(a|b|)]",
+  "note": "",
+  "reason": "pole at x = b on the path"
+ },
+ {
+  "id": "GR6.255.2",
+  "gr": "6.255.2",
+  "page": 691,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[(Sin[a*x]*CosIntegral[a*Abs[x]] - Sign[x]*Cos[a*x]*(SinIntegral[a*Abs[x]] - Pi/2))/(x - b), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-Pi*(Sin[a*Abs[b]]*(SinIntegral[a*Abs[b]] - Pi/2) + Cos[a*b]*CosIntegral[a*Abs[b]])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET II 253(5)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_-inf^inf [sin ax ci(a|x|) - sign x cos ax si(a|x|)] dx/(x-b) = -pi[sin(a|b|) si(a|b|) + cos ab ci(a|b|)]",
+  "note": "",
+  "reason": "pole at x = b on the path"
+ },
+ {
+  "id": "GR6.256.1",
+  "gr": "6.256.1",
+  "page": 691,
+  "status": "ok",
+  "lhs": "Integrate[((SinIntegral[x] - Pi/2)^2 + CosIntegral[x]^2)*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/a*Log[1 + a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf [si^2(x) + ci^2(x)] cos ax dx = (pi/a) ln(1+a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.256.2",
+  "gr": "6.256.2",
+  "page": 691,
+  "status": "ok",
+  "lhs": "Integrate[((SinIntegral[x] - Pi/2)*Cos[x] - CosIntegral[x]*Sin[x])^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf [si(x) cos x - ci(x) sin x]^2 dx = pi/2",
+  "note": ""
+ },
+ {
+  "id": "GR6.256.3",
+  "gr": "6.256.3",
+  "page": 691,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[x] - Pi/2)^2*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a)*Log[1 + a]"
+  ],
+  "conds": [
+   "0 < a <= 2"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf si^2(x) cos(ax) dx = pi/(2a) log(1+a) [0 <= a <= 2]",
+  "note": "book prints 0 <= a <= 2; a = 0 excluded (value is a limit there)"
+ },
+ {
+  "id": "GR6.256.4",
+  "gr": "6.256.4",
+  "page": 691,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[x]^2*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a)*Log[1 + a]"
+  ],
+  "conds": [
+   "0 < a <= 2"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf ci^2(x) cos(ax) dx = pi/(2a) log(1+a) [0 <= a <= 2]",
+  "note": "book prints 0 <= a <= 2; a = 0 excluded (value is a limit there)"
+ },
+ {
+  "id": "GR6.257",
+  "gr": "6.257",
+  "page": 691,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[a/x] - Pi/2)*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/(2*b)*BesselJ[0, 2*Sqrt[a*b]]"
+  ],
+  "conds": [
+   "b > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 42(18)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf si(a/x) sin bx dx = -pi/(2b) J0(2 sqrt(ab))",
+  "note": "a > 0 added"
+ },
+ {
+  "id": "GR6.258.1a",
+  "gr": "6.258.1",
+  "page": 691,
+  "status": "ok",
+  "lhs": "Integrate[SinIntegral[a*x]*Sin[b*x]/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*c)*(E^(-b*c)*(ExpIntegralEi[b*c] - ExpIntegralEi[-a*c]) + E^(b*c)*(ExpIntegralEi[-a*c] - ExpIntegralEi[-b*c]))"
+  ],
+  "conds": [
+   "0 < b <= a",
+   "c > 0"
+  ],
+  "cite": "BI (460)(1)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf [si(ax) + pi/2] sin bx dx/(x^2+c^2) = pi/(4c){e^(-bc)[Ei(bc) - Ei(-ac)] + e^(bc)[Ei(-ac) - Ei(-bc)]}",
+  "note": "si(ax)+pi/2 written as SinIntegral[a x]"
+ },
+ {
+  "id": "GR6.258.1b",
+  "gr": "6.258.1",
+  "page": 691,
+  "status": "ok",
+  "lhs": "Integrate[SinIntegral[a*x]*Sin[b*x]/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*c)*E^(-b*c)*(ExpIntegralEi[a*c] - ExpIntegralEi[-a*c])"
+  ],
+  "conds": [
+   "0 < a <= b",
+   "c > 0"
+  ],
+  "cite": "BI (460)(1)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "= pi/(4c) e^(-bc)[Ei(ac) - Ei(-ac)] [0 < a <= b]",
+  "note": "si(ax)+pi/2 written as SinIntegral[a x]"
+ },
+ {
+  "id": "GR6.258.2a",
+  "gr": "6.258.2",
+  "page": 691,
+  "status": "ok",
+  "lhs": "Integrate[SinIntegral[a*x]*Cos[b*x]*x/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/4*(E^(-b*c)*(ExpIntegralEi[b*c] - ExpIntegralEi[-a*c]) + E^(b*c)*(ExpIntegralEi[-b*c] - ExpIntegralEi[-a*c]))"
+  ],
+  "conds": [
+   "0 < b <= a",
+   "c > 0"
+  ],
+  "cite": "BI (460)(2, 5)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf [si(ax) + pi/2] cos bx x dx/(x^2+c^2) = -pi/4{e^(-bc)[Ei(bc) - Ei(-ac)] + e^(bc)[Ei(-bc) - Ei(-ac)]}",
+  "note": "si(ax)+pi/2 written as SinIntegral[a x]"
+ },
+ {
+  "id": "GR6.258.2b",
+  "gr": "6.258.2",
+  "page": 691,
+  "status": "ok",
+  "lhs": "Integrate[SinIntegral[a*x]*Cos[b*x]*x/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*E^(-b*c)*(ExpIntegralEi[-a*c] - ExpIntegralEi[a*c])"
+  ],
+  "conds": [
+   "0 < a <= b",
+   "c > 0"
+  ],
+  "cite": "BI (460)(2, 5)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "= pi/4 e^(-bc)[Ei(-ac) - Ei(ac)] [0 < a <= b]",
+  "note": "si(ax)+pi/2 written as SinIntegral[a x]"
+ },
+ {
+  "id": "GR6.259.1a",
+  "gr": "6.259.1",
+  "page": 692,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[a*x] - Pi/2)*Sin[b*x]/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*c)*ExpIntegralEi[-a*c]*Sinh[b*c]"
+  ],
+  "conds": [
+   "0 < b <= a",
+   "c > 0"
+  ],
+  "cite": "ET I 96(8)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf si(ax) sin bx dx/(x^2+c^2) = pi/(2c) Ei(-ac) sinh(bc)",
+  "note": ""
+ },
+ {
+  "id": "GR6.259.1b",
+  "gr": "6.259.1",
+  "page": 692,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[a*x] - Pi/2)*Sin[b*x]/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*c)*E^(-c*b)*(ExpIntegralEi[-b*c] + ExpIntegralEi[b*c] - ExpIntegralEi[-a*c] - ExpIntegralEi[a*c]) + Pi/(2*c)*ExpIntegralEi[-b*c]*Sinh[b*c]"
+  ],
+  "conds": [
+   "0 < a <= b",
+   "c > 0"
+  ],
+  "cite": "ET I 96(8)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "= pi/(4c) e^(-cb)[Ei(-bc) + Ei(bc) - Ei(-ac) - Ei(ac)] + pi/(2c) Ei(-bc) sinh(bc) [0 < a <= b]",
+  "note": ""
+ },
+ {
+  "id": "GR6.259.2a",
+  "gr": "6.259.2",
+  "page": 692,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[a*x]*Sin[b*x]*x/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/2*Sinh[b*c]*ExpIntegralEi[-a*c]"
+  ],
+  "conds": [
+   "0 < b <= a",
+   "c > 0"
+  ],
+  "cite": "BI (460)(3)a, ET I 97(15)a",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf ci(ax) sin bx x dx/(x^2+c^2) = -pi/2 sinh(bc) Ei(-ac)",
+  "note": ""
+ },
+ {
+  "id": "GR6.259.2b",
+  "gr": "6.259.2",
+  "page": 692,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[a*x]*Sin[b*x]*x/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/2*Sinh[b*c]*ExpIntegralEi[-b*c] + Pi/4*E^(-b*c)*(ExpIntegralEi[-b*c] + ExpIntegralEi[b*c] - ExpIntegralEi[-a*c] - ExpIntegralEi[a*c])"
+  ],
+  "conds": [
+   "0 < a <= b",
+   "c > 0"
+  ],
+  "cite": "BI (460)(3)a, ET I 97(15)a",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "= -pi/2 sinh(bc) Ei(-bc) + pi/4 e^(-bc)[Ei(-bc) + Ei(bc) - Ei(-ac) - Ei(ac)] [0 < a <= b]",
+  "note": ""
+ },
+ {
+  "id": "GR6.259.3a",
+  "gr": "6.259.3",
+  "page": 692,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[a*x]*Cos[b*x]/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*c)*Cosh[b*c]*ExpIntegralEi[-a*c]"
+  ],
+  "conds": [
+   "0 < b <= a",
+   "c > 0"
+  ],
+  "cite": "BI (460)(4), ET I 41(15)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf ci(ax) cos bx dx/(x^2+c^2) = pi/(2c) cosh bc Ei(-ac)",
+  "note": ""
+ },
+ {
+  "id": "GR6.259.3b",
+  "gr": "6.259.3",
+  "page": 692,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[a*x]*Cos[b*x]/(x^2 + c^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*c)*(E^(-b*c)*(ExpIntegralEi[a*c] + ExpIntegralEi[-a*c] - ExpIntegralEi[b*c]) + E^(b*c)*ExpIntegralEi[-b*c])"
+  ],
+  "conds": [
+   "0 < a <= b",
+   "c > 0"
+  ],
+  "cite": "BI (460)(4), ET I 41(15)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "= pi/(4c){e^(-bc)[Ei(ac) + Ei(-ac) - Ei(bc)] + e^(bc) Ei(-bc)} [0 < a <= b]",
+  "note": ""
+ },
+ {
+  "id": "GR6.259.4a",
+  "gr": "6.259.4",
+  "page": 692,
+  "status": "ok",
+  "lhs": "Integrate[(CosIntegral[x]*Sin[x] - SinIntegral[x]*Cos[x])*Sin[x]*x/(a^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/8*(ExpIntegralEi[a]*E^(-a) - ExpIntegralEi[-a]*E^a)^2"
+  ],
+  "conds": [
+   "Element[a, Reals]",
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf [ci(x) sin x - Si(x) cos x] sin x x dx/(a^2+x^2) = 1/8[Ei(a)e^(-a) - Ei(-a)e^a]^2",
+  "note": "as printed, with capital Si(x)"
+ },
+ {
+  "id": "GR6.259.4b",
+  "gr": "6.259.4",
+  "page": 692,
+  "status": "ok",
+  "lhs": "Integrate[(CosIntegral[x]*Sin[x] - (SinIntegral[x] - Pi/2)*Cos[x])*Sin[x]*x/(a^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/8*(ExpIntegralEi[a]*E^(-a) - ExpIntegralEi[-a]*E^a)^2"
+  ],
+  "conds": [
+   "Element[a, Reals]",
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf [ci(x) sin x - si(x) cos x] sin x x dx/(a^2+x^2) = 1/8[Ei(a)e^(-a) - Ei(-a)e^a]^2",
+  "note": "corrected integrand: Si(x) read as si(x) (the usual auxiliary combination ci sin - si cos)"
+ },
+ {
+  "id": "GR6.259.5a",
+  "gr": "6.259.5",
+  "page": 692,
+  "status": "ok",
+  "lhs": "Integrate[(CosIntegral[x]*Sin[x] - SinIntegral[x]*Cos[x])^2*x/(a^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^3*E^(-Abs[a])/(8*a)*Sinh[a] - Pi/(8*Abs[a])*(ExpIntegralEi[a]*E^(-a) - ExpIntegralEi[-a]*E^a)^2"
+  ],
+  "conds": [
+   "Element[a, Reals]",
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf [ci(x) sin x - Si(x) cos x]^2 x dx/(a^2+x^2) = pi^3 e^(-|a|)/(8a) sinh(a) - pi/(8|a|)[Ei(a)e^(-a) - Ei(-a)e^a]^2",
+  "note": "as printed, with capital Si(x); this integrand diverges logarithmically"
+ },
+ {
+  "id": "GR6.259.5b",
+  "gr": "6.259.5",
+  "page": 692,
+  "status": "ok",
+  "lhs": "Integrate[(CosIntegral[x]*Sin[x] - (SinIntegral[x] - Pi/2)*Cos[x])^2*x/(a^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^3*E^(-Abs[a])/(8*a)*Sinh[a] - Pi/(8*Abs[a])*(ExpIntegralEi[a]*E^(-a) - ExpIntegralEi[-a]*E^a)^2"
+  ],
+  "conds": [
+   "Element[a, Reals]",
+   "a != 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf [ci(x) sin x - si(x) cos x]^2 x dx/(a^2+x^2) = ...",
+  "note": "corrected integrand: Si(x) read as si(x); the as-printed integrand diverges"
+ },
+ {
+  "id": "GR6.261.1",
+  "gr": "6.261.1",
+  "page": 692,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[b*x] - Pi/2)*Cos[a*x]*E^(-p*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-1/(2*(a^2 + p^2))*(a/2*Log[(p^2 + (a + b)^2)/(p^2 + (a - b)^2)] + p*ArcTan[2*b*p/(b^2 - a^2 - p^2)])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "p > 0"
+  ],
+  "cite": "ET I 40(8)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf si(bx) cos ax e^(-px) dx = -1/(2(a^2+p^2))[a/2 ln((p^2+(a+b)^2)/(p^2+(a-b)^2)) + p arctan(2bp/(b^2-a^2-p^2))]",
+  "note": ""
+ },
+ {
+  "id": "GR6.261.2",
+  "gr": "6.261.2",
+  "page": 692,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[beta*x] - Pi/2)*Cos[a*x]*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-ArcTan[(mu + a*I)/beta]/(2*(mu + a*I)) - ArcTan[(mu - a*I)/beta]/(2*(mu - a*I))"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > Abs[Im[beta]]"
+  ],
+  "cite": "ET I 40(9)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf si(beta x) cos ax e^(-mu x) dx = -arctan((mu+ai)/beta)/(2(mu+ai)) - arctan((mu-ai)/beta)/(2(mu-ai))",
+  "note": ""
+ },
+ {
+  "id": "GR6.262.1",
+  "gr": "6.262.1",
+  "page": 692,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[b*x]*Sin[a*x]*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*(a^2 + mu^2))*(mu*ArcTan[2*a*mu/(mu^2 + b^2 - a^2)] - a/2*Log[((mu^2 + b^2 - a^2)^2 + 4*a^2*mu^2)/b^4])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 98(16)a",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf ci(bx) sin ax e^(-mu x) dx = 1/(2(a^2+mu^2)){mu arctan(2a mu/(mu^2+b^2-a^2)) - a/2 ln(((mu^2+b^2-a^2)^2+4a^2mu^2)/b^4)}",
+  "note": ""
+ },
+ {
+  "id": "GR6.262.2",
+  "gr": "6.262.2",
+  "page": 693,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[b*x]*Cos[a*x]*E^(-p*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-1/(2*(a^2 + p^2))*(p/2*Log[((b^2 + p^2 - a^2)^2 + 4*a^2*p^2)/b^4] + a*ArcTan[2*a*p/(b^2 + p^2 - a^2)])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[p] > 0"
+  ],
+  "cite": "ET I 41(16)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf ci(bx) cos ax e^(-px) dx = -1/(2(a^2+p^2)){p/2 ln([(b^2+p^2-a^2)^2+4a^2p^2]/b^4) + a arctan(2ap/(b^2+p^2-a^2))}",
+  "note": ""
+ },
+ {
+  "id": "GR6.262.3",
+  "gr": "6.262.3",
+  "page": 693,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[beta*x]*Cos[a*x]*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-Log[1 + (mu + a*I)^2/beta^2]/(4*(mu + a*I)) - Log[1 + (mu - a*I)^2/beta^2]/(4*(mu - a*I))"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > Abs[Im[beta]]"
+  ],
+  "cite": "ET I 41(17)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf ci(beta x) cos ax e^(-mu x) dx = -ln[1+(mu+ai)^2/beta^2]/(4(mu+ai)) - ln[1+(mu-ai)^2/beta^2]/(4(mu-ai))",
+  "note": ""
+ },
+ {
+  "id": "GR6.263.1",
+  "gr": "6.263.1",
+  "page": 693,
+  "status": "ok",
+  "lhs": "Integrate[(CosIntegral[x]*Cos[x] + (SinIntegral[x] - Pi/2)*Sin[x])*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(-Pi/2 - mu*Log[mu])/(1 + mu^2)"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "ME 26a, ET I 178(21)a",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf [ci(x) cos x + si(x) sin x] e^(-mu x) dx = (-pi/2 - mu ln mu)/(1+mu^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.263.2",
+  "gr": "6.263.2",
+  "page": 693,
+  "status": "ok",
+  "lhs": "Integrate[((SinIntegral[x] - Pi/2)*Cos[x] - CosIntegral[x]*Sin[x])*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(-Pi/2*mu + Log[mu])/(1 + mu^2)"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "ME 26a, ET I 178(20)a",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf [si(x) cos x - ci(x) sin x] e^(-mu x) dx = (-pi/2 mu + ln mu)/(1+mu^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.263.3",
+  "gr": "6.263.3",
+  "page": 693,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[x] - x*CosIntegral[x])*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Log[1 + mu^2]/(2*mu^2)"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "ME 26",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf [sin x - x ci(x)] e^(-mu x) dx = ln(1+mu^2)/(2mu^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.264.1",
+  "gr": "6.264.1",
+  "page": 693,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[x] - Pi/2)*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "EulerGamma + 1"
+  ],
+  "conds": [],
+  "cite": "NT 46(10)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf si(x) ln x dx = C + 1",
+  "note": ""
+ },
+ {
+  "id": "GR6.264.2",
+  "gr": "6.264.2",
+  "page": 693,
+  "status": "ok",
+  "lhs": "Integrate[CosIntegral[x]*Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2"
+  ],
+  "conds": [],
+  "cite": "NT 56(11)",
+  "edition_note": "",
+  "section": "6.24-6.26 The sine integral and cosine integral functions",
+  "tex": "int_0^inf ci(x) ln x dx = pi/2",
+  "note": ""
+ },
+ {
+  "id": "GR6.271.1a",
+  "gr": "6.271.1",
+  "page": 693,
+  "status": "ok",
+  "lhs": "Integrate[SinhIntegral[x]*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*mu)*Log[(mu + 1)/(mu - 1)]"
+  ],
+  "conds": [
+   "Re[mu] > 1"
+  ],
+  "cite": "MI 34",
+  "edition_note": "",
+  "section": "6.27 The hyperbolic sine integral and hyperbolic cosine integral functions",
+  "tex": "int_0^inf shi(x) e^(-mu x) dx = 1/(2mu) ln((mu+1)/(mu-1))",
+  "note": ""
+ },
+ {
+  "id": "GR6.271.1b",
+  "gr": "6.271.1",
+  "page": 693,
+  "status": "ok",
+  "lhs": "Integrate[SinhIntegral[x]*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/mu*ArcCoth[mu]"
+  ],
+  "conds": [
+   "Re[mu] > 1"
+  ],
+  "cite": "MI 34",
+  "edition_note": "",
+  "section": "6.27 The hyperbolic sine integral and hyperbolic cosine integral functions",
+  "tex": "= (1/mu) arccoth mu",
+  "note": ""
+ },
+ {
+  "id": "GR6.271.2",
+  "gr": "6.271.2",
+  "page": 693,
+  "status": "ok",
+  "lhs": "Integrate[CoshIntegral[x]*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-1/(2*mu)*Log[mu^2 - 1]"
+  ],
+  "conds": [
+   "Re[mu] > 1"
+  ],
+  "cite": "MI 34",
+  "edition_note": "11",
+  "section": "6.27 The hyperbolic sine integral and hyperbolic cosine integral functions",
+  "tex": "int_0^inf chi(x) e^(-mu x) dx = -1/(2mu) ln(mu^2 - 1)",
+  "note": ""
+ },
+ {
+  "id": "GR6.272",
+  "gr": "6.272",
+  "page": 693,
+  "status": "ok",
+  "lhs": "Integrate[CoshIntegral[x]*E^(-p*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Sqrt[Pi/p]*ExpIntegralEi[1/(4*p)]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "MI 35",
+  "edition_note": "11",
+  "section": "6.27 The hyperbolic sine integral and hyperbolic cosine integral functions",
+  "tex": "int_0^inf chi(x) e^(-px^2) dx = 1/4 sqrt(pi/p) Ei(1/(4p))",
+  "note": ""
+ },
+ {
+  "id": "GR6.273.1",
+  "gr": "6.273.1",
+  "page": 693,
+  "status": "ok",
+  "lhs": "Integrate[(Cosh[x]*SinhIntegral[x] - Sinh[x]*CoshIntegral[x])*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Log[mu]/(mu^2 - 1)"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 35",
+  "edition_note": "11",
+  "section": "6.27 The hyperbolic sine integral and hyperbolic cosine integral functions",
+  "tex": "int_0^inf [cosh x shi(x) - sinh x chi(x)] e^(-mu x) dx = ln mu/(mu^2 - 1)",
+  "note": ""
+ },
+ {
+  "id": "GR6.273.2",
+  "gr": "6.273.2",
+  "page": 693,
+  "status": "ok",
+  "lhs": "Integrate[(Cosh[x]*CoshIntegral[x] + Sinh[x]*SinhIntegral[x])*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "mu*Log[mu]/(1 - mu^2)"
+  ],
+  "conds": [
+   "Re[mu] > 2"
+  ],
+  "cite": "MI 35",
+  "edition_note": "11",
+  "section": "6.27 The hyperbolic sine integral and hyperbolic cosine integral functions",
+  "tex": "int_0^inf [cosh x chi(x) + sinh x shi(x)] e^(-mu x) dx = mu ln mu/(1 - mu^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.274",
+  "gr": "6.274",
+  "page": 694,
+  "status": "ok",
+  "lhs": "Integrate[(Cosh[x]*SinhIntegral[x] - Sinh[x]*CoshIntegral[x])*E^(-mu*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Sqrt[Pi/mu]*E^(1/(4*mu))*ExpIntegralEi[-1/(4*mu)]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 35",
+  "edition_note": "11",
+  "section": "6.27 The hyperbolic sine integral and hyperbolic cosine integral functions",
+  "tex": "int_0^inf [cosh x shi(x) - sinh x chi(x)] e^(-mu x^2) dx = 1/4 sqrt(pi/mu) e^(1/(4mu)) Ei(-1/(4mu))",
+  "note": ""
+ },
+ {
+  "id": "GR6.275",
+  "gr": "6.275",
+  "page": 694,
+  "status": "ok",
+  "lhs": "Integrate[(x*CoshIntegral[x] - Sinh[x])*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-Log[mu^2 - 1]/(2*mu^2)"
+  ],
+  "conds": [
+   "Re[mu] > 1"
+  ],
+  "cite": "MI 35",
+  "edition_note": "",
+  "section": "6.27 The hyperbolic sine integral and hyperbolic cosine integral functions",
+  "tex": "int_0^inf [x chi(x) - sinh x] e^(-mu x) dx = -ln(mu^2-1)/(2mu^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.276",
+  "gr": "6.276",
+  "page": 694,
+  "status": "ok",
+  "lhs": "Integrate[(Cosh[x]*CoshIntegral[x] + Sinh[x]*SinhIntegral[x])*E^(-mu*x^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/8*Sqrt[Pi/mu^3]*Exp[1/(4*mu)]*ExpIntegralEi[-1/(4*mu)]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 35",
+  "edition_note": "",
+  "section": "6.27 The hyperbolic sine integral and hyperbolic cosine integral functions",
+  "tex": "int_0^inf [cosh x chi(x) + sinh x shi(x)] e^(-mu x^2) x dx = 1/8 sqrt(pi/mu^3) exp(1/(4mu)) Ei(-1/(4mu))",
+  "note": ""
+ },
+ {
+  "id": "GR6.277.1",
+  "gr": "6.277.1",
+  "page": 694,
+  "status": "ok",
+  "lhs": "Integrate[(CoshIntegral[x] + CosIntegral[x])*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-Log[mu^4 - 1]/(2*mu)"
+  ],
+  "conds": [
+   "Re[mu] > 1"
+  ],
+  "cite": "MI 34",
+  "edition_note": "",
+  "section": "6.27 The hyperbolic sine integral and hyperbolic cosine integral functions",
+  "tex": "int_0^inf [chi(x) + ci(x)] e^(-mu x) dx = -ln(mu^4-1)/(2mu)",
+  "note": ""
+ },
+ {
+  "id": "GR6.277.2",
+  "gr": "6.277.2",
+  "page": 694,
+  "status": "ok",
+  "lhs": "Integrate[(CoshIntegral[x] - CosIntegral[x])*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*mu)*Log[(mu^2 + 1)/(mu^2 - 1)]"
+  ],
+  "conds": [
+   "Re[mu] > 1"
+  ],
+  "cite": "MI 35",
+  "edition_note": "",
+  "section": "6.27 The hyperbolic sine integral and hyperbolic cosine integral functions",
+  "tex": "int_0^inf [chi(x) - ci(x)] e^(-mu x) dx = 1/(2mu) ln((mu^2+1)/(mu^2-1))",
+  "note": ""
+ },
+ {
+  "id": "GR6.281.1",
+  "gr": "6.281.1",
+  "page": 694,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Erf[p*x])*x^(2*q - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[q + 1/2]/(2*Sqrt[Pi]*q*p^(2*q))"
+  ],
+  "conds": [
+   "Re[q] > 0",
+   "Re[p] > 0"
+  ],
+  "cite": "NT 56(12), ET II 306(1)a",
+  "edition_note": "6",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "int_0^inf [1 - Phi(px)] x^(2q-1) dx = Gamma(q+1/2)/(2 sqrt(pi) q p^(2q))",
+  "note": ""
+ },
+ {
+  "id": "GR6.281.2a",
+  "gr": "6.281.2",
+  "page": 694,
+  "status": "ok",
+  "lhs": "Integrate[1 - Erf[a*t^alpha + b/t^alpha], {t, 0, Infinity}]",
+  "rhs": [
+   "2*b/Sqrt[Pi]*(b/a)^((1 - alpha)/(2*alpha))*(BesselK[(1 + alpha)/(2*alpha), 2*a*b] + BesselK[(1 - alpha)/(2*alpha), 2*a*b])*E^(2*a*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "alpha != 0"
+  ],
+  "cite": "",
+  "edition_note": "6",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "int_0^inf [1 - Phi(a t^alpha + b/t^alpha)] dt = 2b/sqrt(pi) (b/a)^((1-alpha)/(2alpha)) [K_((1+alpha)/(2alpha))(2ab) + K_((1-alpha)/(2alpha))(2ab)] e^(+2ab)",
+  "note": "upper branch of the printed +/-"
+ },
+ {
+  "id": "GR6.281.2b",
+  "gr": "6.281.2",
+  "page": 694,
+  "status": "ok",
+  "lhs": "Integrate[1 - Erf[a*t^alpha - b/t^alpha], {t, 0, Infinity}]",
+  "rhs": [
+   "2*b/Sqrt[Pi]*(b/a)^((1 - alpha)/(2*alpha))*(BesselK[(1 + alpha)/(2*alpha), 2*a*b] - BesselK[(1 - alpha)/(2*alpha), 2*a*b])*E^(-2*a*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "alpha != 0"
+  ],
+  "cite": "",
+  "edition_note": "6",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "int_0^inf [1 - Phi(a t^alpha - b/t^alpha)] dt = 2b/sqrt(pi) (b/a)^((1-alpha)/(2alpha)) [K_((1+alpha)/(2alpha))(2ab) - K_((1-alpha)/(2alpha))(2ab)] e^(-2ab)",
+  "note": "lower branch of the printed +/-"
+ },
+ {
+  "id": "GR6.282.1",
+  "gr": "6.282.1",
+  "page": 694,
+  "status": "ok",
+  "lhs": "Integrate[Erf[q*t]*E^(-p*t), {t, 0, Infinity}]",
+  "rhs": [
+   "1/p*(1 - Erf[p/(2*q)])*Exp[p^2/(4*q^2)]"
+  ],
+  "conds": [
+   "Re[p] > 0",
+   "Abs[Arg[q]] < Pi/4"
+  ],
+  "cite": "MO 175, EH II 148(11)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "int_0^inf Phi(qt) e^(-pt) dt = (1/p)[1 - Phi(p/(2q))] exp(p^2/(4q^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.282.2",
+  "gr": "6.282.2",
+  "page": 694,
+  "status": "ok",
+  "lhs": "Integrate[(Erf[x + 1/2] - Erf[1/2])*E^(-mu*x + 1/4), {x, 0, Infinity}]",
+  "rhs": [
+   "1/((mu + 1)*(mu + 2))*Exp[(mu + 1)^2/4]*(1 - Erf[(mu + 1)/2])"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "ME 27",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "int_0^inf [Phi(x+1/2) - Phi(1/2)] e^(-mu x + 1/4) dx = 1/((mu+1)(mu+2)) exp((mu+1)^2/4)[1 - Phi((mu+1)/2)]",
+  "note": "no condition printed; Re mu > 0 added for convergence"
+ },
+ {
+  "id": "GR6.283.1",
+  "gr": "6.283.1",
+  "page": 694,
+  "status": "ok",
+  "lhs": "Integrate[E^(beta*x)*(1 - Erf[Sqrt[alpha*x]]), {x, 0, Infinity}]",
+  "rhs": [
+   "1/beta*(Sqrt[alpha]/Sqrt[alpha - beta] - 1)"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Re[beta] < Re[alpha]"
+  ],
+  "cite": "ET II 307(5)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "int_0^inf e^(beta x)[1 - Phi(sqrt(alpha x))] dx = (1/beta)[sqrt(alpha)/sqrt(alpha-beta) - 1]",
+  "note": ""
+ },
+ {
+  "id": "GR6.283.2",
+  "gr": "6.283.2",
+  "page": 694,
+  "status": "ok",
+  "lhs": "Integrate[Erf[Sqrt[q*t]]*E^(-p*t), {t, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[q]/p*1/Sqrt[p + q]"
+  ],
+  "conds": [
+   "Re[p] > 0",
+   "Re[q + p] > 0"
+  ],
+  "cite": "EH II 148(12)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "int_0^inf Phi(sqrt(qt)) e^(-pt) dt = sqrt(q)/p 1/sqrt(p+q)",
+  "note": ""
+ },
+ {
+  "id": "GR6.284",
+  "gr": "6.284",
+  "page": 694,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Erf[q/(2*Sqrt[x])])*E^(-p*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/p*E^(-q*Sqrt[p])"
+  ],
+  "conds": [
+   "Re[p] > 0",
+   "Abs[Arg[q]] < Pi/4"
+  ],
+  "cite": "EF 147(235), EH II 148(13)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "int_0^inf [1 - Phi(q/(2 sqrt x))] e^(-px) dx = (1/p) e^(-q sqrt p)",
+  "note": ""
+ },
+ {
+  "id": "GR6.285.1",
+  "gr": "6.285.1",
+  "page": 695,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Erf[x])*E^(-mu^2*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "ArcTan[mu]/(Sqrt[Pi]*mu)"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 37",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "int_0^inf [1 - Phi(x)] e^(-mu^2 x^2) dx = arctan(mu)/(sqrt(pi) mu)",
+  "note": ""
+ },
+ {
+  "id": "GR6.285.2",
+  "gr": "6.285.2",
+  "page": 695,
+  "status": "ok",
+  "lhs": "Integrate[Erf[I*a*t]*E^(-a^2*t^2 - s*t), {t, 0, Infinity}]",
+  "rhs": [
+   "-1/(2*a*I*Sqrt[Pi])*Exp[s^2/(4*a^2)]*ExpIntegralEi[-s^2/(4*a^2)]"
+  ],
+  "conds": [
+   "Re[s] > 0",
+   "Abs[Arg[a]] < Pi/4"
+  ],
+  "cite": "EH II 148(14)a",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "int_0^inf Phi(iat) e^(-a^2t^2 - st) dt = -1/(2ai sqrt(pi)) exp(s^2/(4a^2)) Ei(-s^2/(4a^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.286.1",
+  "gr": "6.286.1",
+  "page": 695,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Erf[beta*x])*E^(mu^2*x^2)*x^(nu - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[(nu + 1)/2]/(Sqrt[Pi]*nu*beta^nu)*Hypergeometric2F1[nu/2, (nu + 1)/2, nu/2 + 1, mu^2/beta^2]"
+  ],
+  "conds": [
+   "Re[beta^2] > Re[mu^2]",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 306(2)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "int_0^inf [1 - Phi(beta x)] e^(mu^2 x^2) x^(nu-1) dx = Gamma((nu+1)/2)/(sqrt(pi) nu beta^nu) 2F1(nu/2,(nu+1)/2;nu/2+1;mu^2/beta^2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.286.2",
+  "gr": "6.286.2",
+  "page": 695,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Erf[Sqrt[2]*x/2])*E^(x^2/2)*x^(nu - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(nu/2 - 1)*Sec[nu*Pi/2]*Gamma[nu/2]"
+  ],
+  "conds": [
+   "0 < Re[nu] < 1"
+  ],
+  "cite": "ET I 325(9)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "int_0^inf [1 - Phi(sqrt2 x/2)] e^(x^2/2) x^(nu-1) dx = 2^(nu/2-1) sec(nu pi/2) Gamma(nu/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.287.1",
+  "gr": "6.287.1",
+  "page": 695,
+  "status": "ok",
+  "lhs": "Integrate[Erf[beta*x]*E^(-mu*x^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "beta/(2*mu*Sqrt[mu + beta^2])"
+  ],
+  "conds": [
+   "Re[mu] > -Re[beta^2]",
+   "Re[mu] > 0"
+  ],
+  "cite": "ME 27a, ET I 176(4)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "int_0^inf Phi(beta x) e^(-mu x^2) x dx = beta/(2 mu sqrt(mu+beta^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.287.2",
+  "gr": "6.287.2",
+  "page": 695,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Erf[beta*x])*E^(-mu*x^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*mu)*(1 - beta/Sqrt[mu + beta^2])"
+  ],
+  "conds": [
+   "Re[mu] > -Re[beta^2]",
+   "Re[mu] > 0"
+  ],
+  "cite": "NT 49(14), ET I 177(9)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "int_0^inf [1 - Phi(beta x)] e^(-mu x^2) x dx = 1/(2mu)(1 - beta/sqrt(mu+beta^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.287.3a",
+  "gr": "6.287.3",
+  "page": 695,
+  "status": "ok",
+  "lhs": "Integrate[r/sigma^2*Exp[r/sigma^2]*(Erfc[(r*AA)/Sqrt[2]]/2)*(Erfc[(r*BB)/Sqrt[2]]/2), {r, -Infinity, Infinity}]",
+  "rhs": [
+   "1/4 - 1/(2*Pi)*(Sqrt[sigma^2*AA^2/(1 + sigma^2*AA^2)]*ArcTan[AA/(Sqrt[sigma^2*AA^2/(1 + sigma^2*AA^2)]*BB)] + Sqrt[sigma^2*BB^2/(1 + sigma^2*BB^2)]*ArcTan[BB/(Sqrt[sigma^2*BB^2/(1 + sigma^2*BB^2)]*AA)])"
+  ],
+  "conds": [
+   "sigma > 0",
+   "AA > 0",
+   "BB > 0",
+   "BB != AA"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "I = int_-inf^inf r/sigma^2 exp(r/sigma^2) Q(rA) Q(rB) dr = 1/4 - 1/(2pi)[alpha arctan(A/(alpha B)) + beta arctan(B/(beta A))]; Q(x) = 1/2[1 - erf(x/sqrt2)], alpha = sqrt(sigma^2A^2/(1+sigma^2A^2)), beta likewise",
+  "note": "as printed (A -> AA, B -> BB; Q, alpha, beta substituted). Q(x) = Erfc[x/Sqrt[2]]/2"
+ },
+ {
+  "id": "GR6.287.3b",
+  "gr": "6.287.3",
+  "page": 695,
+  "status": "ok",
+  "lhs": "Integrate[r/sigma^2*Exp[r/sigma^2]*(Erfc[(r*AA)/Sqrt[2]]/2)^2, {r, -Infinity, Infinity}]",
+  "rhs": [
+   "1/4 - 1/Pi*Sqrt[sigma^2*AA^2/(1 + sigma^2*AA^2)]*ArcTan[1/Sqrt[sigma^2*AA^2/(1 + sigma^2*AA^2)]]"
+  ],
+  "conds": [
+   "sigma > 0",
+   "AA > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "same, B = A: = 1/4 - (1/pi) alpha arctan(1/alpha)",
+  "note": "as printed, B = A substituted"
+ },
+ {
+  "id": "GR6.287.3c",
+  "gr": "6.287.3",
+  "page": 695,
+  "status": "ok",
+  "lhs": "Integrate[r/sigma^2*Exp[-r^2/(2*sigma^2)]*(Erfc[(r*AA)/Sqrt[2]]/2)*(Erfc[(r*BB)/Sqrt[2]]/2), {r, 0, Infinity}]",
+  "rhs": [
+   "1/4 - 1/(2*Pi)*(Sqrt[sigma^2*AA^2/(1 + sigma^2*AA^2)]*ArcTan[AA/(Sqrt[sigma^2*AA^2/(1 + sigma^2*AA^2)]*BB)] + Sqrt[sigma^2*BB^2/(1 + sigma^2*BB^2)]*ArcTan[BB/(Sqrt[sigma^2*BB^2/(1 + sigma^2*BB^2)]*AA)])"
+  ],
+  "conds": [
+   "sigma > 0",
+   "AA > 0",
+   "BB > 0",
+   "BB != AA"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "I = int_-inf^inf r/sigma^2 exp(r/sigma^2) Q(rA) Q(rB) dr = 1/4 - 1/(2pi)[alpha arctan(A/(alpha B)) + beta arctan(B/(beta A))]; Q(x) = 1/2[1 - erf(x/sqrt2)], alpha = sqrt(sigma^2A^2/(1+sigma^2A^2)), beta likewise",
+  "note": "corrected integrand (Rayleigh density r/sigma^2 exp(-r^2/(2sigma^2)) on (0, inf)): the value is 1/4 at A = B = 0 and 0 as A, B -> inf, which the as-printed form does not give"
+ },
+ {
+  "id": "GR6.287.3d",
+  "gr": "6.287.3",
+  "page": 695,
+  "status": "ok",
+  "lhs": "Integrate[r/sigma^2*Exp[-r^2/(2*sigma^2)]*(Erfc[(r*AA)/Sqrt[2]]/2)^2, {r, 0, Infinity}]",
+  "rhs": [
+   "1/4 - 1/Pi*Sqrt[sigma^2*AA^2/(1 + sigma^2*AA^2)]*ArcTan[1/Sqrt[sigma^2*AA^2/(1 + sigma^2*AA^2)]]"
+  ],
+  "conds": [
+   "sigma > 0",
+   "AA > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "corrected, B = A: = 1/4 - (1/pi) alpha arctan(1/alpha)",
+  "note": "corrected integrand (Rayleigh density on (0, inf)), B = A substituted"
+ },
+ {
+  "id": "GR6.288",
+  "gr": "6.288",
+  "page": 695,
+  "status": "ok",
+  "lhs": "Integrate[Erf[I*a*x]*E^(-mu*x^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "a*I/(2*mu*Sqrt[mu - a^2])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > Re[a^2]"
+  ],
+  "cite": "MI 37a",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "int_0^inf Phi(iax) e^(-mu x^2) x dx = ai/(2mu sqrt(mu - a^2))",
+  "note": ""
+ },
+ {
+  "id": "GR6.289.1",
+  "gr": "6.289.1",
+  "page": 695,
+  "status": "ok",
+  "lhs": "Integrate[Erf[beta*x]*E^((beta^2 - mu^2)*x^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "beta/(2*mu*(mu^2 - beta^2))"
+  ],
+  "conds": [
+   "Re[mu]^2 > Re[beta^2]",
+   "Abs[Arg[mu]] < Pi/4"
+  ],
+  "cite": "ET I 176(5)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "int_0^inf Phi(beta x) e^((beta^2-mu^2)x^2) x dx = beta/(2mu(mu^2-beta^2)) [Re^2 mu > Re beta^2]",
+  "note": "Re^2 mu read as (Re mu)^2"
+ },
+ {
+  "id": "GR6.289.2",
+  "gr": "6.289.2",
+  "page": 695,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Erf[beta*x])*E^((beta^2 - mu^2)*x^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*mu*(mu + beta))"
+  ],
+  "conds": [
+   "Re[mu]^2 > Re[beta^2]",
+   "Abs[Arg[mu]] < Pi/4"
+  ],
+  "cite": "ET I 177(10)",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "int_0^inf [1 - Phi(beta x)] e^((beta^2-mu^2)x^2) x dx = 1/(2mu(mu+beta)) [Re^2 mu > Re beta^2, arg mu < pi/4]",
+  "note": "Re^2 mu read as (Re mu)^2; 'arg mu < pi/4' read as |arg mu| < pi/4"
+ },
+ {
+  "id": "GR6.289.3",
+  "gr": "6.289.3",
+  "page": 696,
+  "status": "ok",
+  "lhs": "Integrate[Erf[Sqrt[b - a]*x]*E^(-(a + mu)*x^2)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[b - a]/(2*(mu + a)*Sqrt[mu + b])"
+  ],
+  "conds": [
+   "Re[mu] > -a",
+   "-a > 0",
+   "b > a"
+  ],
+  "cite": "ME 27",
+  "edition_note": "",
+  "section": "6.28-6.31 The probability integral",
+  "tex": "int_0^inf Phi(sqrt(b-a) x) e^(-(a+mu)x^2) x dx = sqrt(b-a)/(2(mu+a) sqrt(mu+b)) [Re mu > -a > 0, b > a]",
+  "note": ""
+ }
+]

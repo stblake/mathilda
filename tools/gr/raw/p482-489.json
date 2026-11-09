@@ -1,0 +1,2018 @@
+[
+ {
+  "id": "GR3.742.8a",
+  "gr": "3.742.8a",
+  "page": 482,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[a*x]*Cos[b*x]/(p^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*p)*Sin[a*p]*Cos[b*p]"
+  ],
+  "conds": [
+   "a > b > 0",
+   "p > 0"
+  ],
+  "cite": "BI (166)(3)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "int_0^inf cos ax cos bx/(p^2-x^2) = pi/(2p) sin ap cos bp",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.742.8b",
+  "gr": "3.742.8b",
+  "page": 482,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[a*x]*Cos[a*x]/(p^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*p)*Sin[2*a*p]"
+  ],
+  "conds": [
+   "a > 0",
+   "p > 0"
+  ],
+  "cite": "BI (166)(3)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "a=b: pi/(4p) sin 2ap",
+  "note": "a = b substituted",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.742.8c",
+  "gr": "3.742.8c",
+  "page": 482,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[a*x]*Cos[b*x]/(p^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*p)*Cos[a*p]*Sin[b*p]"
+  ],
+  "conds": [
+   "b > a > 0",
+   "p > 0"
+  ],
+  "cite": "BI (166)(3)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "b>a>0: pi/(2p) cos ap sin bp",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.743.1",
+  "gr": "3.743.1",
+  "page": 482,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*x]/Sin[b*x]/(x^2 + beta^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*beta)*Sinh[a*beta]/Sinh[b*beta]"
+  ],
+  "conds": [
+   "0 < a < b",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 80(21)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "int_0^inf sin ax/sin bx dx/(x^2+beta^2)",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.743.2",
+  "gr": "3.743.2",
+  "page": 482,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*x]/Cos[b*x]*x/(x^2 + beta^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-(Pi/2)*Sinh[a*beta]/Cosh[b*beta]"
+  ],
+  "conds": [
+   "0 < a < b",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 81(30)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "int_0^inf sin ax/cos bx x dx/(x^2+beta^2)",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.743.3",
+  "gr": "3.743.3",
+  "page": 482,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[a*x]/Sin[b*x]*x/(x^2 + beta^2), {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/2)*Cosh[a*beta]/Sinh[b*beta]"
+  ],
+  "conds": [
+   "0 < a < b",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 23(37)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "int_0^inf cos ax/sin bx x dx/(x^2+beta^2)",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.743.4",
+  "gr": "3.743.4",
+  "page": 482,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[a*x]/Cos[b*x]/(x^2 + beta^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*beta)*Cosh[a*beta]/Cosh[b*beta]"
+  ],
+  "conds": [
+   "0 < a < b",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 23(36)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "int_0^inf cos ax/cos bx dx/(x^2+beta^2)",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.743.5a",
+  "gr": "3.743.5a",
+  "page": 482,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*x]/Sin[x]/(b^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 <= a <= 1",
+   "Element[b, Reals]"
+  ],
+  "cite": "",
+  "edition_note": "6",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "PV int sin ax/sin x dx/(b^2-x^2) = 0",
+  "note": "b/pi not an integer",
+  "reason": "PV"
+ },
+ {
+  "id": "GR3.743.5b",
+  "gr": "3.743.5b",
+  "page": 482,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*x]/Sin[x]/(b^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/b*Sin[(a - 1)*b]"
+  ],
+  "conds": [
+   "1 <= a <= 2",
+   "Element[b, Reals]"
+  ],
+  "cite": "",
+  "edition_note": "6",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "= pi/b sin(a-1)b",
+  "note": "b/pi not an integer",
+  "reason": "PV"
+ },
+ {
+  "id": "GR3.744",
+  "gr": "3.744",
+  "page": 482,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*x]/Cos[b*x]/(x*(x^2 + beta^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*beta^2)*Sinh[a*beta]/Cosh[b*beta]"
+  ],
+  "conds": [
+   "0 < a < b",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 82(32)",
+  "edition_note": "3",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "sin ax/cos bx dx/(x(x^2+beta^2))",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.745",
+  "gr": "3.745",
+  "page": 482,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*x]/Cos[b*x]/(x*(c^2 - x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < a < b",
+   "c > 0"
+  ],
+  "cite": "ET I 82(31)",
+  "edition_note": "3",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "sin ax/cos bx dx/(x(c^2-x^2)) = 0",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.746.1",
+  "gr": "3.746.1",
+  "page": 482,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[Product[Sin[ak*x], {k, 0, n}]/x^(n + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Product[ak, {k, 1, n}]"
+  ],
+  "conds": [],
+  "cite": "FI II 646",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "int dx/x^(n+1) prod_0^n sin(a_k x) = pi/2 prod_1^n a_k [a_0 > sum a_k]",
+  "note": "",
+  "reason": "indexed parameter family"
+ },
+ {
+  "id": "GR3.746.2",
+  "gr": "3.746.2",
+  "page": 482,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[Sin[a*x]/x^(n + 1)*Product[Sin[ak*x], {k, 1, n}]*Product[Cos[bj*x], {j, 1, m}], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Product[ak, {k, 1, n}]"
+  ],
+  "conds": [],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "sin ax/x^(n+1) prod sin a_k x prod cos b_j x = pi/2 prod a_k",
+  "note": "",
+  "reason": "indexed parameter family"
+ },
+ {
+  "id": "GR3.747.1a",
+  "gr": "3.747.1a",
+  "page": 482,
+  "status": "ok",
+  "lhs": "Integrate[x^m/Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "(Pi/2)^m*(1/m + Sum[(2^(2*k - 1) - 1)/(4^(2*k - 1)*(m + 2*k))*Zeta[2*k], {k, 1, Infinity}])"
+  ],
+  "conds": [
+   "m > 0"
+  ],
+  "cite": "LI (206)(2)",
+  "edition_note": "7",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "int_0^{pi/2} x^m/sin x = (pi/2)^m [1/m + sum (2^(2k-1)-1)/(4^(2k-1)(m+2k)) zeta(2k)]",
+  "note": "bracket [m = 2] printed after the final equality; series form kept for general m (m > 0 implied by 1/m and convergence)"
+ },
+ {
+  "id": "GR3.747.1b",
+  "gr": "3.747.1b",
+  "page": 482,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "2*Pi*Catalan - 7/2*Zeta[3]"
+  ],
+  "conds": [],
+  "cite": "LI (206)(2)",
+  "edition_note": "7",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "m=2: 2 pi G - 7/2 zeta(3)",
+  "note": "m = 2 substituted"
+ },
+ {
+  "id": "GR3.747.2a",
+  "gr": "3.747.2a",
+  "page": 482,
+  "status": "ok",
+  "lhs": "Integrate[x/Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "2*Catalan"
+  ],
+  "conds": [],
+  "cite": "BI(204)(18), BI(206)(1), GW(333)(32)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "int_0^{pi/2} x/sin x = 2G",
+  "note": ""
+ },
+ {
+  "id": "GR3.747.2b",
+  "gr": "3.747.2b",
+  "page": 482,
+  "status": "ok",
+  "lhs": "Integrate[(Pi/2 - x)/Cos[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "2*Catalan"
+  ],
+  "conds": [],
+  "cite": "BI(204)(18), BI(206)(1), GW(333)(32)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "int_0^{pi/2} (pi/2-x)/cos x = 2G",
+  "note": ""
+ },
+ {
+  "id": "GR3.747.3",
+  "gr": "3.747.3",
+  "page": 482,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x/((x^2 + b^2)*Sin[a*x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*Sinh[a*b])"
+  ],
+  "conds": [
+   "b > 0",
+   "a > 0"
+  ],
+  "cite": "GW (333)(79c)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "x dx/((x^2+b^2) sin ax) = pi/(2 sinh ab)",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.747.4",
+  "gr": "3.747.4",
+  "page": 482,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*Tan[x], {x, 0, Pi}]",
+  "rhs": [
+   "-Pi*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (218)(4)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "int_0^pi x tan x = -pi ln 2",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.747.5",
+  "gr": "3.747.5",
+  "page": 483,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[x*Tan[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Infinity"
+  ],
+  "conds": [],
+  "cite": "BI (205)(2)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "int_0^{pi/2} x tan x = inf",
+  "note": "",
+  "reason": "divergent"
+ },
+ {
+  "id": "GR3.747.6",
+  "gr": "3.747.6",
+  "page": 483,
+  "status": "ok",
+  "lhs": "Integrate[x*Tan[x], {x, 0, Pi/4}]",
+  "rhs": [
+   "-Pi/8*Log[2] + Catalan/2"
+  ],
+  "conds": [],
+  "cite": "BI (204)(1)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "= -pi/8 ln2 + G/2 = 0.1857845358",
+  "note": ""
+ },
+ {
+  "id": "GR3.747.7",
+  "gr": "3.747.7",
+  "page": 483,
+  "status": "ok",
+  "lhs": "Integrate[x*Cot[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Log[2]"
+  ],
+  "conds": [],
+  "cite": "FI II 623",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "int_0^{pi/2} x cot x = pi/2 ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR3.747.8",
+  "gr": "3.747.8",
+  "page": 483,
+  "status": "ok",
+  "lhs": "Integrate[x*Cot[x], {x, 0, Pi/4}]",
+  "rhs": [
+   "Pi/8*Log[2] + Catalan/2"
+  ],
+  "conds": [],
+  "cite": "BI (204)(2)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "= pi/8 ln2 + G/2 = 0.7301810584",
+  "note": ""
+ },
+ {
+  "id": "GR3.747.9a",
+  "gr": "3.747.9a",
+  "page": 483,
+  "status": "ok",
+  "lhs": "Integrate[(Pi/2 - x)*Tan[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Log[2]"
+  ],
+  "conds": [],
+  "cite": "GW(333)(33b), BI(218)(12)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "int_0^{pi/2} (pi/2-x) tan x = pi/2 ln2",
+  "note": ""
+ },
+ {
+  "id": "GR3.747.9b",
+  "gr": "3.747.9b",
+  "page": 483,
+  "status": "ok",
+  "lhs": "(1/2)*Integrate[(Pi/2 - x)*Tan[x], {x, 0, Pi}]",
+  "rhs": [
+   "Pi/2*Log[2]"
+  ],
+  "conds": [],
+  "cite": "GW(333)(33b), BI(218)(12)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "1/2 int_0^pi (pi/2-x) tan x = pi/2 ln2",
+  "note": ""
+ },
+ {
+  "id": "GR3.747.10",
+  "gr": "3.747.10",
+  "page": 483,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Tan[a*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "LO V 279(5)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "int_0^inf tan ax dx/x = pi/2",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.747.11",
+  "gr": "3.747.11",
+  "page": 483,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*Cot[x]/Cos[2*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (206)(12)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "x cot x/cos 2x = pi/4 ln2",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.748.1",
+  "gr": "3.748.1",
+  "page": 483,
+  "status": "ok",
+  "lhs": "Integrate[x^m*Tan[x], {x, 0, Pi/4}]",
+  "rhs": [
+   "1/2*(Pi/4)^m*Sum[(4^k - 1)*Zeta[2*k]/(4^(2*k - 1)*(m + 2*k)), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "m > -1"
+  ],
+  "cite": "LI (204)(5)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "x^m tan x = 1/2 (pi/4)^m sum (4^k-1) zeta(2k)/(4^(2k-1)(m+2k))",
+  "note": "no condition printed; m > -1 added for convergence"
+ },
+ {
+  "id": "GR3.748.2",
+  "gr": "3.748.2",
+  "page": 483,
+  "status": "ok",
+  "lhs": "Integrate[x^p*Cot[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "(Pi/2)^p*(1/p - 2*Sum[Zeta[2*k]/(4^k*(p + 2*k)), {k, 1, Infinity}])"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "LI (205)(7)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "x^p cot x = (pi/2)^p (1/p - 2 sum zeta(2k)/(4^k (p+2k)))",
+  "note": "no condition printed; p > 0 implied by 1/p and convergence"
+ },
+ {
+  "id": "GR3.748.3",
+  "gr": "3.748.3",
+  "page": 483,
+  "status": "ok",
+  "lhs": "Integrate[x^m*Cot[x], {x, 0, Pi/4}]",
+  "rhs": [
+   "1/2*(Pi/4)^m*(2/m - Sum[Zeta[2*k]/(4^(2*k - 1)*(m + 2*k)), {k, 1, Infinity}])"
+  ],
+  "conds": [
+   "m > 0"
+  ],
+  "cite": "LI (204)(6)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "x^m cot x = 1/2 (pi/4)^m (2/m - sum zeta(2k)/(4^(2k-1)(m+2k)))",
+  "note": "no condition printed; m > 0 implied by 2/m and convergence"
+ },
+ {
+  "id": "GR3.749.1",
+  "gr": "3.749.1",
+  "page": 483,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*Tan[a*x]/(x^2 + b^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(E^(2*a*b) + 1)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (333)(79a)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "x tan ax/(x^2+b^2) = pi/(e^(2ab)+1)",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.749.2",
+  "gr": "3.749.2",
+  "page": 483,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*Cot[a*x]/(x^2 + b^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(E^(2*a*b) - 1)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (333)(79b)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "x cot ax/(x^2+b^2) = pi/(e^(2ab)-1)",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.749.3a",
+  "gr": "3.749.3a",
+  "page": 483,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[x*Tan[a*x]/(b^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Infinity"
+  ],
+  "conds": [],
+  "cite": "BI (161)(7, 8, 9)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "x tan(ax)/(b^2-x^2) = inf",
+  "note": "",
+  "reason": "divergent"
+ },
+ {
+  "id": "GR3.749.3b",
+  "gr": "3.749.3b",
+  "page": 483,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[x*Cot[a*x]/(b^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Infinity"
+  ],
+  "conds": [],
+  "cite": "BI (161)(7, 8, 9)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "x cot(ax)/(b^2-x^2) = inf",
+  "note": "",
+  "reason": "divergent"
+ },
+ {
+  "id": "GR3.749.3c",
+  "gr": "3.749.3c",
+  "page": 483,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[x*Csc[a*x]/(b^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Infinity"
+  ],
+  "conds": [],
+  "cite": "BI (161)(7, 8, 9)",
+  "edition_note": "",
+  "section": "3.74 Combinations of trigonometric functions and rational functions",
+  "tex": "x csc(ax)/(b^2-x^2) = inf",
+  "note": "",
+  "reason": "divergent"
+ },
+ {
+  "id": "GR3.751.1",
+  "gr": "3.751.1",
+  "page": 483,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/Sqrt[x + beta], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/(2*a)]*(Cos[a*beta] - Sin[a*beta] + 2*FresnelC[Sqrt[2/Pi]*Sqrt[a*beta]]*Sin[a*beta] - 2*FresnelS[Sqrt[2/Pi]*Sqrt[a*beta]]*Cos[a*beta])"
+  ],
+  "conds": [
+   "a > 0",
+   "Abs[Arg[beta]] < Pi"
+  ],
+  "cite": "ET I 65(12)a",
+  "edition_note": "",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "sin ax/sqrt(x+beta) = sqrt(pi/2a)[cos ab - sin ab + 2C(sqrt(ab)) sin ab - 2S(sqrt(ab)) cos ab]",
+  "note": ""
+ },
+ {
+  "id": "GR3.751.2",
+  "gr": "3.751.2",
+  "page": 483,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/Sqrt[x + beta], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/(2*a)]*(Cos[a*beta] + Sin[a*beta] - 2*FresnelC[Sqrt[2/Pi]*Sqrt[a*beta]]*Cos[a*beta] - 2*FresnelS[Sqrt[2/Pi]*Sqrt[a*beta]]*Sin[a*beta])"
+  ],
+  "conds": [
+   "a > 0",
+   "Abs[Arg[beta]] < Pi"
+  ],
+  "cite": "ET I 8(9)a",
+  "edition_note": "9",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "cos ax/sqrt(x+beta) = sqrt(pi/2a)[cos ab + sin ab - 2C cos ab - 2S sin ab]",
+  "note": ""
+ },
+ {
+  "id": "GR3.751.3",
+  "gr": "3.751.3",
+  "page": 484,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/Sqrt[x - u], {x, u, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/(2*a)]*(Sin[a*u] + Cos[a*u])"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0"
+  ],
+  "cite": "ET I 65(13)",
+  "edition_note": "",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "int_u^inf sin ax/sqrt(x-u)",
+  "note": ""
+ },
+ {
+  "id": "GR3.751.4",
+  "gr": "3.751.4",
+  "page": 484,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/Sqrt[x - u], {x, u, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/(2*a)]*(Cos[a*u] - Sin[a*u])"
+  ],
+  "conds": [
+   "a > 0",
+   "u > 0"
+  ],
+  "cite": "ET I 8(10)",
+  "edition_note": "",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "int_u^inf cos ax/sqrt(x-u)",
+  "note": ""
+ },
+ {
+  "id": "GR3.752.1a",
+  "gr": "3.752.1a",
+  "page": 484,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "Sum[(-1)^k*a^(2*k + 1)/((2*k - 1)!!*(2*k + 3)!!), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (149)(6)",
+  "edition_note": "8",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "sin ax sqrt(1-x^2) = sum (-1)^k a^(2k+1)/((2k-1)!!(2k+3)!!)",
+  "note": "(-1)!! = 1"
+ },
+ {
+  "id": "GR3.752.1b",
+  "gr": "3.752.1b",
+  "page": 484,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "Pi/(2*a)*StruveH[1, a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (149)(6)",
+  "edition_note": "8",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "= pi/(2a) H_1(a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.752.2",
+  "gr": "3.752.2",
+  "page": 484,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]*Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "Pi/(2*a)*BesselJ[1, a]"
+  ],
+  "conds": [],
+  "cite": "KU 65(6)a",
+  "edition_note": "",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "cos ax sqrt(1-x^2) = pi/(2a) J_1(a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.753.1a",
+  "gr": "3.753.1a",
+  "page": 484,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "Sum[(-1)^k*a^(2*k + 1)/((2*k + 1)!!)^2, {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (149)(9)",
+  "edition_note": "8",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "sin ax/sqrt(1-x^2) = sum (-1)^k a^(2k+1)/((2k+1)!!)^2",
+  "note": ""
+ },
+ {
+  "id": "GR3.753.1b",
+  "gr": "3.753.1b",
+  "page": 484,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*StruveH[0, a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (149)(9)",
+  "edition_note": "8",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "= pi/2 H_0(a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.753.2",
+  "gr": "3.753.2",
+  "page": 484,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*BesselJ[0, a]"
+  ],
+  "conds": [],
+  "cite": "WA 30(7)a",
+  "edition_note": "",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "cos ax/sqrt(1-x^2) = pi/2 J_0(a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.753.3",
+  "gr": "3.753.3",
+  "page": 484,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/Sqrt[x^2 - 1], {x, 1, Infinity}]",
+  "rhs": [
+   "Pi/2*BesselJ[0, a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 200(14)",
+  "edition_note": "",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "int_1^inf sin ax/sqrt(x^2-1) = pi/2 J_0(a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.753.4",
+  "gr": "3.753.4",
+  "page": 484,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/Sqrt[x^2 - 1], {x, 1, Infinity}]",
+  "rhs": [
+   "-Pi/2*BesselY[0, a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 200(15)",
+  "edition_note": "",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "int_1^inf cos ax/sqrt(x^2-1) = -pi/2 Y_0(a)",
+  "note": "a > 0 not printed; added for convergence"
+ },
+ {
+  "id": "GR3.753.5",
+  "gr": "3.753.5",
+  "page": 484,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x]/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*BesselJ[1, a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 30(6)",
+  "edition_note": "",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "x sin ax/sqrt(1-x^2) = pi/2 J_1(a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.754.1",
+  "gr": "3.754.1",
+  "page": 484,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/Sqrt[beta^2 + x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(BesselI[0, a*beta] - StruveL[0, a*beta])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 66(26)",
+  "edition_note": "",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "sin ax/sqrt(beta^2+x^2) = pi/2 [I_0 - L_0](a beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.754.2",
+  "gr": "3.754.2",
+  "page": 484,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/Sqrt[beta^2 + x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "BesselK[0, a*beta]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "WA 191(1), GW(333)(78a)",
+  "edition_note": "",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "cos ax/sqrt(beta^2+x^2) = K_0(a beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.754.3",
+  "gr": "3.754.3",
+  "page": 484,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x]/Sqrt[(beta^2 + x^2)^3], {x, 0, Infinity}]",
+  "rhs": [
+   "a*BesselK[0, a*beta]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 66(27)",
+  "edition_note": "",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "x sin ax/sqrt((beta^2+x^2)^3) = a K_0(a beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.755.1",
+  "gr": "3.755.1",
+  "page": 484,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[Sqrt[x^2 + beta^2] - beta]*Sin[a*x]/Sqrt[x^2 + beta^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/(2*a)]*E^(-a*beta)"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 66(31)",
+  "edition_note": "",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "sqrt(sqrt(x^2+b^2)-b) sin ax/sqrt(x^2+b^2) = sqrt(pi/2a) e^(-a beta)",
+  "note": "only a > 0 printed; Re beta > 0 added as in 3.755.2"
+ },
+ {
+  "id": "GR3.755.2",
+  "gr": "3.755.2",
+  "page": 484,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[Sqrt[x^2 + beta^2] + beta]*Cos[a*x]/Sqrt[x^2 + beta^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/(2*a)]*E^(-a*beta)"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 10(25)",
+  "edition_note": "",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "sqrt(sqrt(x^2+b^2)+b) cos ax/sqrt(x^2+b^2) = sqrt(pi/2a) e^(-a beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.756.1",
+  "gr": "3.756.1",
+  "page": 485,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[Sin[a*x]/x^(n/2 - 1)*Product[Sin[ak*x], {k, 2, n}], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [],
+  "cite": "ET I 80(22)",
+  "edition_note": "",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "sin ax/x^(n/2-1) prod_2^n sin(a_k x) = 0 [a > sum a_k]",
+  "note": "",
+  "reason": "indexed parameter family"
+ },
+ {
+  "id": "GR3.756.2",
+  "gr": "3.756.2",
+  "page": 485,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[x^(n/2 - 1)*Cos[a*x]*Product[Cos[ak*x], {k, 1, n}], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [],
+  "cite": "ET I 22(26)",
+  "edition_note": "",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "x^(n/2-1) cos ax prod_1^n cos(a_k x) = 0 [a > sum a_k]",
+  "note": "",
+  "reason": "indexed parameter family"
+ },
+ {
+  "id": "GR3.757.1",
+  "gr": "3.757.1",
+  "page": 485,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/Sqrt[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/(2*a)]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (177)(1)",
+  "edition_note": "11",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "sin ax/sqrt x = sqrt(pi/2a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.757.2",
+  "gr": "3.757.2",
+  "page": 485,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/Sqrt[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/(2*a)]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (177)(2)",
+  "edition_note": "11",
+  "section": "3.75 Combinations of trigonometric and algebraic functions",
+  "tex": "cos ax/sqrt x = sqrt(pi/2a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.761.1",
+  "gr": "3.761.1",
+  "page": 485,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Sin[a*x], {x, 0, 1}]",
+  "rhs": [
+   "-I/(2*mu)*(Hypergeometric1F1[mu, mu + 1, I*a] - Hypergeometric1F1[mu, mu + 1, -I*a])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > -1",
+   "mu != 0"
+  ],
+  "cite": "ET I 68(2)a",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_0^1 x^(mu-1) sin ax = -i/(2mu)[1F1(mu;mu+1;ia) - 1F1(mu;mu+1;-ia)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.761.2",
+  "gr": "3.761.2",
+  "page": 485,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Sin[x], {x, u, Infinity}]",
+  "rhs": [
+   "I/2*(E^(-I*Pi*mu/2)*Gamma[mu, I*u] - E^(I*Pi*mu/2)*Gamma[mu, -I*u])"
+  ],
+  "conds": [
+   "Re[mu] < 1",
+   "u > 0"
+  ],
+  "cite": "EH II 149(2)",
+  "edition_note": "8",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_u^inf x^(mu-1) sin x = i/2[e^(-i pi mu/2) Gamma(mu,iu) - e^(i pi mu/2) Gamma(mu,-iu)]",
+  "note": "u > 0 added"
+ },
+ {
+  "id": "GR3.761.3",
+  "gr": "3.761.3",
+  "page": 485,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/x^(2*n), {x, 1, Infinity}]",
+  "rhs": [
+   "a^(2*n - 1)/(2*n - 1)!*(Sum[(2*n - k - 1)!/a^(2*n - k)*Sin[a + (k - 1)*Pi/2], {k, 1, 2*n - 1}] + (-1)^n*CosIntegral[a])"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (203)(15)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_1^inf sin ax/x^(2n) = a^(2n-1)/(2n-1)! [sum (2n-k-1)!/a^(2n-k) sin(a+(k-1)pi/2) + (-1)^n ci(a)]",
+  "note": "n positive integer implied"
+ },
+ {
+  "id": "GR3.761.4a",
+  "gr": "3.761.4a",
+  "page": 485,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu]/a^mu*Sin[mu*Pi/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "Abs[Re[mu]] < 1",
+   "Re[mu] != 0"
+  ],
+  "cite": "FI II 809a, BI(150)(1)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "x^(mu-1) sin ax = Gamma(mu)/a^mu sin(mu pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.761.4b",
+  "gr": "3.761.4b",
+  "page": 485,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Sin[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Sec[mu*Pi/2]/(2*a^mu*Gamma[1 - mu])"
+  ],
+  "conds": [
+   "a > 0",
+   "Abs[Re[mu]] < 1",
+   "Re[mu] != 0"
+  ],
+  "cite": "FI II 809a, BI(150)(1)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "= pi sec(mu pi/2)/(2 a^mu Gamma(1-mu))",
+  "note": ""
+ },
+ {
+  "id": "GR3.761.5",
+  "gr": "3.761.5",
+  "page": 485,
+  "status": "ok",
+  "lhs": "Integrate[x^m*Sin[n*x], {x, 0, Pi}]",
+  "rhs": [
+   "(-1)^(n + 1)/n^(m + 1)*Sum[(-1)^k*m!/(m - 2*k)!*(n*Pi)^(m - 2*k), {k, 0, Floor[m/2]}] - (-1)^Floor[m/2]*m!*Floor[m - 2*Floor[m/2] - 1]/n^(m + 1)"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW(333)(6)",
+  "edition_note": "10",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_0^pi x^m sin nx = (-1)^(n+1)/n^(m+1) sum_0^[m/2] (-1)^k m!/(m-2k)! (n pi)^(m-2k) - (-1)^[m/2] m! [m-2[m/2]-1]/n^(m+1)",
+  "note": "m, n integers implied"
+ },
+ {
+  "id": "GR3.761.6",
+  "gr": "3.761.6",
+  "page": 485,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Cos[a*x], {x, 0, 1}]",
+  "rhs": [
+   "1/(2*mu)*(Hypergeometric1F1[mu, mu + 1, I*a] + Hypergeometric1F1[mu, mu + 1, -I*a])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 11(2)",
+  "edition_note": "8",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_0^1 x^(mu-1) cos ax = 1/(2mu)[1F1 + 1F1]",
+  "note": ""
+ },
+ {
+  "id": "GR3.761.7",
+  "gr": "3.761.7",
+  "page": 485,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Cos[x], {x, u, Infinity}]",
+  "rhs": [
+   "1/2*(E^(-I*Pi*mu/2)*Gamma[mu, I*u]*s + E^(I*Pi*mu/2)*Gamma[mu, -I*u])",
+   "1/2*(E^(-I*Pi*mu/2)*Gamma[mu, I*u] + E^(I*Pi*mu/2)*Gamma[mu, -I*u])"
+  ],
+  "conds": [
+   "Re[mu] < 1",
+   "u > 0"
+  ],
+  "cite": "EH II 149(1)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_u^inf x^(mu-1) cos x = 1/2[e^(-i pi mu/2) Gamma(mu,iu) s + e^(i pi mu/2) Gamma(mu,-iu)]",
+  "note": "misprint: stray factor 's' after Gamma(mu,iu); second candidate drops it. u > 0 added"
+ },
+ {
+  "id": "GR3.761.8",
+  "gr": "3.761.8",
+  "page": 486,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/x^(2*n + 1), {x, 1, Infinity}]",
+  "rhs": [
+   "a^(2*n)/(2*n)!*(Sum[(2*n - k)!/a^(2*n - k + 1)*Cos[a + (k - 1)*Pi/2], {k, 1, 2*n}] + (-1)^(n + 1)*CosIntegral[a])"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (203)(16)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_1^inf cos ax/x^(2n+1) = a^(2n)/(2n)! [sum (2n-k)!/a^(2n-k+1) cos(a+(k-1)pi/2) + (-1)^(n+1) ci(a)]",
+  "note": "n positive integer implied"
+ },
+ {
+  "id": "GR3.761.9a",
+  "gr": "3.761.9a",
+  "page": 486,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu]/a^mu*Cos[mu*Pi/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "FI II 809a, BI(150)(2)",
+  "edition_note": "8",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "x^(mu-1) cos ax = Gamma(mu)/a^mu cos(mu pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.761.9b",
+  "gr": "3.761.9b",
+  "page": 486,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Csc[mu*Pi/2]/(2*a^mu*Gamma[1 - mu])"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "FI II 809a, BI(150)(2)",
+  "edition_note": "8",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "= pi cosec(mu pi/2)/(2 a^mu Gamma(1-mu))",
+  "note": ""
+ },
+ {
+  "id": "GR3.761.10",
+  "gr": "3.761.10",
+  "page": 486,
+  "status": "ok",
+  "lhs": "Integrate[x^m*Cos[n*x], {x, 0, Pi}]",
+  "rhs": [
+   "(-1)^n/n^(m + 1)*Sum[(-1)^k*m!/(m - 2*k - 1)!*(n*Pi)^(m - 2*k - 1), {k, 0, Floor[(m - 1)/2]}] + (-1)^Floor[(m + 1)/2]*(2*Floor[(m + 1)/2] - m)/n^(m + 1)*m!"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (333)(7)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_0^pi x^m cos nx = (-1)^n/n^(m+1) sum_0^[(m-1)/2] (-1)^k m!/(m-2k-1)! (n pi)^(m-2k-1) + (-1)^[(m+1)/2] (2[(m+1)/2]-m)/n^(m+1) m!",
+  "note": "m, n integers implied"
+ },
+ {
+  "id": "GR3.761.11",
+  "gr": "3.761.11",
+  "page": 486,
+  "status": "ok",
+  "lhs": "Integrate[x^m*Cos[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Sum[(-1)^k*m!/(m - 2*k)!*(Pi/2)^(m - 2*k), {k, 0, Floor[m/2]}] + (-1)^Floor[m/2]*(2*Floor[m/2] - m)*m!"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "GW (333)(9c)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_0^{pi/2} x^m cos x = sum_0^[m/2] (-1)^k m!/(m-2k)! (pi/2)^(m-2k) + (-1)^[m/2] (2[m/2]-m) m!",
+  "note": "m integer implied"
+ },
+ {
+  "id": "GR3.761.12",
+  "gr": "3.761.12",
+  "page": 486,
+  "status": "ok",
+  "lhs": "Integrate[x^m*Cos[k*x], {x, 0, 2*n*Pi}]",
+  "rhs": [
+   "-Sum[j!/k^(j + 1)*Binomial[m, j]*(2*n*Pi)^(m - j)*Cos[(j + 1)*Pi/2], {j, 0, m - 1}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1",
+   "Element[n, Integers] && n >= 1",
+   "Element[k, Integers] && k >= 1"
+  ],
+  "cite": "BI (226)(2)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_0^{2n pi} x^m cos kx = -sum_0^(m-1) j!/k^(j+1) C(m,j) (2n pi)^(m-j) cos((j+1)pi/2)",
+  "note": "m, n, k positive integers implied"
+ },
+ {
+  "id": "GR3.762.1",
+  "gr": "3.762.1",
+  "page": 486,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Sin[a*x]*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Cos[mu*Pi/2]*Gamma[mu]*(Abs[b - a]^(-mu) - (b + a)^(-mu))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "a != b",
+   "-2 < Re[mu] < 1"
+  ],
+  "cite": "BI(149)(7), ET I 321(40)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "x^(mu-1) sin ax sin bx = 1/2 cos(mu pi/2) Gamma(mu)[|b-a|^-mu - (b+a)^-mu]",
+  "note": "for mu = 0 see 3.741.1, for mu = -1 see 3.741.3"
+ },
+ {
+  "id": "GR3.762.2",
+  "gr": "3.762.2",
+  "page": 486,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Sin[a*x]*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sin[mu*Pi/2]*Gamma[mu]*((a + b)^(-mu) + Abs[a - b]^(-mu)*Sign[a - b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Abs[Re[mu]] < 1"
+  ],
+  "cite": "BI(159)(8)a, ET I 321(41)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "x^(mu-1) sin ax cos bx = 1/2 sin(mu pi/2) Gamma(mu)[(a+b)^-mu + |a-b|^-mu sign(a-b)]",
+  "note": "for mu = 0 see 3.741.2"
+ },
+ {
+  "id": "GR3.762.3",
+  "gr": "3.762.3",
+  "page": 486,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Cos[a*x]*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Cos[mu*Pi/2]*Gamma[mu]*((a + b)^(-mu) + Abs[a - b]^(-mu))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "ET I 20(17)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "x^(mu-1) cos ax cos bx = 1/2 cos(mu pi/2) Gamma(mu)[(a+b)^-mu + |a-b|^-mu]",
+  "note": ""
+ },
+ {
+  "id": "GR3.763.1",
+  "gr": "3.763.1",
+  "page": 486,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sin[b*x]*Sin[c*x]/x^nu, {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Cos[nu*Pi/2]*Gamma[1 - nu]*((c + a - b)^(nu - 1) - (c + a + b)^(nu - 1) - Abs[c - a + b]^(nu - 1)*Sign[a - b - c] + Abs[c - a - b]^(nu - 1)*Sign[a + b - c])"
+  ],
+  "conds": [
+   "c > 0",
+   "0 < Re[nu] < 4",
+   "a >= b > 0"
+  ],
+  "cite": "GW(333)(26a)a, ET I 79(13)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "sin ax sin bx sin cx/x^nu = 1/4 cos(nu pi/2) Gamma(1-nu){(c+a-b)^(nu-1) - (c+a+b)^(nu-1) - |c-a+b|^(nu-1) sign(a-b-c) + |c-a-b|^(nu-1) sign(a+b-c)}",
+  "note": "nu != 1, 2, 3"
+ },
+ {
+  "id": "GR3.763.2a",
+  "gr": "3.763.2a",
+  "page": 487,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sin[b*x]*Sin[c*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "c > a + b",
+   "a >= b > 0"
+  ],
+  "cite": "FI II 645",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "= 0 [c < a-b or c > a+b]",
+  "note": "disjunctive condition: branch c < a - b (with c > 0) dropped"
+ },
+ {
+  "id": "GR3.763.2b",
+  "gr": "3.763.2b",
+  "page": 487,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sin[b*x]*Sin[(a + b)*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/8"
+  ],
+  "conds": [
+   "a >= b > 0"
+  ],
+  "cite": "FI II 645",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "= pi/8 [c = a-b or c = a+b]",
+  "note": "c = a + b substituted (other branch c = a - b)"
+ },
+ {
+  "id": "GR3.763.2c",
+  "gr": "3.763.2c",
+  "page": 487,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sin[b*x]*Sin[c*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4"
+  ],
+  "conds": [
+   "a - b < c < a + b",
+   "a >= b > 0",
+   "c > 0"
+  ],
+  "cite": "FI II 645",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "= pi/4 [a-b < c < a+b]",
+  "note": ""
+ },
+ {
+  "id": "GR3.763.3",
+  "gr": "3.763.3",
+  "page": 487,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sin[b*x]*Sin[c*x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*(c + a + b)*Log[c + a + b] - 1/4*(c + a - b)*Log[c + a - b] - 1/4*Abs[c - a - b]*Log[Abs[c - a - b]]*Sign[a + b - c] + 1/4*Abs[c - a + b]*Log[Abs[c - a + b]]*Sign[a - b - c]"
+  ],
+  "conds": [
+   "a >= b > 0",
+   "c > 0"
+  ],
+  "cite": "BI(157)(8)a, ET I 79(11)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "sin ax sin bx sin cx/x^2 = 1/4(c+a+b)ln(c+a+b) - 1/4(c+a-b)ln(c+a-b) - 1/4|c-a-b| ln|c-a-b| sign(a+b-c) + 1/4|c-a+b| ln|c-a+b| sign(a-b-c)",
+  "note": ""
+ },
+ {
+  "id": "GR3.763.4a",
+  "gr": "3.763.4a",
+  "page": 487,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sin[b*x]*Sin[c*x]/x^3, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*b*c/2"
+  ],
+  "conds": [
+   "0 < c < a - b",
+   "a >= b > 0"
+  ],
+  "cite": "BI(157)(20), ET I 79(12)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "= pi bc/2 [0 < c < a-b and c > a+b]",
+  "note": "printed condition '0 < c < a - b and c > a + b' is contradictory (likely 'or'); branch 0 < c < a - b kept"
+ },
+ {
+  "id": "GR3.763.4b",
+  "gr": "3.763.4b",
+  "page": 487,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sin[b*x]*Sin[c*x]/x^3, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*b*c/2 - Pi*(a - b - c)^2/8"
+  ],
+  "conds": [
+   "a - b < c < a + b",
+   "a >= b > 0",
+   "c > 0"
+  ],
+  "cite": "BI(157)(20), ET I 79(12)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "= pi bc/2 - pi(a-b-c)^2/8 [a-b < c < a+b]",
+  "note": ""
+ },
+ {
+  "id": "GR3.764.1",
+  "gr": "3.764.1",
+  "page": 487,
+  "status": "ok",
+  "lhs": "Integrate[x^p*Sin[a*x + b], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1 + p]/a^(p + 1)*Cos[b + p*Pi/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "-1 < p < 0"
+  ],
+  "cite": "GW (333)(30a)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "x^p sin(ax+b) = Gamma(1+p)/a^(p+1) cos(b + p pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.764.2",
+  "gr": "3.764.2",
+  "page": 487,
+  "status": "ok",
+  "lhs": "Integrate[x^p*Cos[a*x + b], {x, 0, Infinity}]",
+  "rhs": [
+   "-Gamma[1 + p]/a^(p + 1)*Sin[b + Pi*p/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "-1 < p < 0"
+  ],
+  "cite": "GW (333)(30b)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "x^p cos(ax+b) = -Gamma(1+p)/a^(p+1) sin(b + pi p/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.765.1",
+  "gr": "3.765.1",
+  "page": 487,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/(x^nu*(x + b)), {x, 0, Infinity}]",
+  "rhs": [
+   "a^(1 + nu)*b*Cos[Pi*nu/2]*Gamma[-1 - nu]*HypergeometricPFQ[{1}, {1 + nu/2, 3/2 + nu/2}, -1/4*a^2*b^2]*Sign[a] - Pi*Csc[Pi*nu]*Sin[a*b]/b^nu - a^nu*Gamma[-nu]*HypergeometricPFQ[{1}, {1 + nu/2, 1 + nu/2}, -1/4*a^2*b^2]*Sign[a]*Sin[Pi*nu/2]",
+   "a^(1 + nu)*b*Cos[Pi*nu/2]*Gamma[-1 - nu]*HypergeometricPFQ[{1}, {1 + nu/2, 3/2 + nu/2}, -1/4*a^2*b^2]*Sign[a] - Pi*Csc[Pi*nu]*Sin[a*b]/b^nu - a^nu*Gamma[-nu]*HypergeometricPFQ[{1}, {1/2 + nu/2, 1 + nu/2}, -1/4*a^2*b^2]*Sign[a]*Sin[Pi*nu/2]"
+  ],
+  "conds": [
+   "Element[a, Reals]",
+   "-1 < Re[nu] < 2",
+   "Abs[Arg[b]] < Pi"
+  ],
+  "cite": "MC",
+  "edition_note": "10",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "sin ax/(x^nu (x+b)) = a^(1+nu) b cos(pi nu/2) Gamma(-1-nu) 1F2(1;1+nu/2,3/2+nu/2;-a^2b^2/4) sign a - pi cosec(pi nu) sin(ab)/b^nu - a^nu Gamma(-nu) 1F2(1;1+nu/2,1+nu/2;-a^2b^2/4) sign a sin(pi nu/2)",
+  "note": "printed condition '-1 < Re b < 2' read as Re nu (misprint); second 1F2 printed with lower parameters 1+nu/2, 1+nu/2, second candidate uses 1/2+nu/2, 1+nu/2"
+ },
+ {
+  "id": "GR3.765.2",
+  "gr": "3.765.2",
+  "page": 487,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/(x^nu*(x + beta)), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1 - nu]/(2*beta^nu)*(E^(I*a*beta)*Gamma[nu, I*a*beta] + E^(-I*a*beta)*Gamma[nu, -I*a*beta])"
+  ],
+  "conds": [
+   "a > 0",
+   "Abs[Re[nu]] < 1",
+   "Abs[Arg[beta]] < Pi"
+  ],
+  "cite": "ET II 221(52)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "cos ax/(x^nu (x+beta)) = Gamma(1-nu)/(2 beta^nu)[e^(ia beta) Gamma(nu, ia beta) + e^(-ia beta) Gamma(nu, -ia beta)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.766.1",
+  "gr": "3.766.1",
+  "page": 487,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Sin[a*x]/(1 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-a^(2 - mu)*Gamma[mu - 2]*HypergeometricPFQ[{1}, {(3 - mu)/2, (4 - mu)/2}, a^2/4]*Sign[a]*Sin[Pi*mu/2] + Pi/2*Sec[Pi*mu/2]*Sinh[a]"
+  ],
+  "conds": [
+   "Element[a, Reals]",
+   "-1 < Re[mu] < 3"
+  ],
+  "cite": "MC",
+  "edition_note": "10",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "x^(mu-1) sin ax/(1+x^2) = -a^(2-mu) Gamma(mu-2) 1F2(1;(3-mu)/2,(4-mu)/2;a^2/4) sign a sin(pi mu/2) + pi/2 sec(pi mu/2) sinh a",
+  "note": ""
+ },
+ {
+  "id": "GR3.766.2",
+  "gr": "3.766.2",
+  "page": 488,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Cos[a*x]/(1 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Csc[mu*Pi/2]*Cosh[a] + 1/2*Cos[mu*Pi/2]*Gamma[mu]*(Exp[-a + I*Pi*(1 - mu)]*Gamma[1 - mu, 0, -a] - E^a*Gamma[1 - mu, 0, a])"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < Re[mu] < 3"
+  ],
+  "cite": "ET I 319(24)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "x^(mu-1) cos ax/(1+x^2) = pi/2 cosec(mu pi/2) cosh a + 1/2 cos(mu pi/2) Gamma(mu){exp[-a+i pi(1-mu)] gamma(1-mu,-a) - e^a gamma(1-mu,a)}",
+  "note": ""
+ },
+ {
+  "id": "GR3.766.3",
+  "gr": "3.766.3",
+  "page": 488,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*mu + 1)*Sin[a*x]/(x^2 + b^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/2*b^(2*mu)*Sec[mu*Pi]*Sinh[a*b] + Sin[mu*Pi]/(2*a^(2*mu))*Gamma[2*mu]*(Hypergeometric1F1[1, 1 - 2*mu, a*b] + Hypergeometric1F1[1, 1 - 2*mu, -a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "-3/2 < Re[mu] < 1/2",
+   "b > 0"
+  ],
+  "cite": "ET II 220(39)",
+  "edition_note": "9",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "x^(2mu+1) sin ax/(x^2+b^2) = -pi/2 b^(2mu) sec(mu pi) sinh ab + sin(mu pi)/(2a^(2mu)) Gamma(2mu)[1F1(1;1-2mu;ab) + 1F1(1;1-2mu;-ab)]",
+  "note": "b > 0 added"
+ },
+ {
+  "id": "GR3.766.4",
+  "gr": "3.766.4",
+  "page": 488,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*mu + 1)*Cos[a*x]/(x^2 + b^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/2*b^(2*(mu + 1/2))*Csc[(mu + 1/2)*Pi]*Cosh[a*b] + Cos[(mu + 1/2)*Pi]/(2*a^(2*(mu + 1/2)))*Gamma[2*(mu + 1/2)]*(Hypergeometric1F1[1, 1 - 2*(mu + 1/2), a*b] + Hypergeometric1F1[1, 1 - 2*(mu + 1/2), -a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "-1 < Re[mu] < 1/2",
+   "b > 0"
+  ],
+  "cite": "ET II 221(56)",
+  "edition_note": "9",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "x^(2mu+1) cos ax/(x^2+b^2) = -pi/2 b^(2(mu+1/2)) cosec[(mu+1/2)pi] cosh ab + cos[(mu+1/2)pi]/(2a^(2(mu+1/2))) Gamma[2(mu+1/2)]{1F1(1;1-2(mu+1/2);ab) + 1F1(1;1-2(mu+1/2);-ab)}",
+  "note": "b > 0 added"
+ },
+ {
+  "id": "GR3.767.1",
+  "gr": "3.767.1",
+  "page": 488,
+  "status": "ok",
+  "lhs": "Integrate[x^(beta - 1)*Sin[a*x - beta*Pi/2]/(gamma^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/2*gamma^(beta - 2)*E^(-a*gamma)"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[gamma] > 0",
+   "0 < Re[beta] < 2"
+  ],
+  "cite": "BI (160)(20)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "x^(beta-1) sin(ax - beta pi/2)/(gamma^2+x^2) = -pi/2 gamma^(beta-2) e^(-a gamma)",
+  "note": ""
+ },
+ {
+  "id": "GR3.767.2",
+  "gr": "3.767.2",
+  "page": 488,
+  "status": "ok",
+  "lhs": "Integrate[x^beta*Cos[a*x - beta*Pi/2]/(gamma^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*gamma^(beta - 1)*E^(-a*gamma)"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[gamma] > 0",
+   "Abs[Re[beta]] < 1"
+  ],
+  "cite": "BI (160)(21)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "x^beta cos(ax - beta pi/2)/(gamma^2+x^2) = pi/2 gamma^(beta-1) e^(-a gamma)",
+  "note": ""
+ },
+ {
+  "id": "GR3.767.3",
+  "gr": "3.767.3",
+  "page": 488,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^(beta - 1)*Sin[a*x - beta*Pi/2]/(x^2 - b^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*b^(beta - 2)*Cos[a*b - Pi*beta/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "0 < Re[beta] < 2"
+  ],
+  "cite": "BI (161)(11)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "x^(beta-1) sin(ax - beta pi/2)/(x^2-b^2) = pi/2 b^(beta-2) cos(ab - pi beta/2)",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.767.4",
+  "gr": "3.767.4",
+  "page": 488,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^beta*Cos[a*x - beta*Pi/2]/(x^2 - b^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/2*b^(beta - 1)*Sin[a*b - Pi*beta/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Abs[beta] < 1"
+  ],
+  "cite": "GW (333)(82)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "x^beta cos(ax - beta pi/2)/(x^2-b^2) = -pi/2 b^(beta-1) sin(ab - pi beta/2)",
+  "note": "",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.768.1",
+  "gr": "3.768.1",
+  "page": 488,
+  "status": "ok",
+  "lhs": "Integrate[(x - u)^(mu - 1)*Sin[a*x], {x, u, Infinity}]",
+  "rhs": [
+   "Gamma[mu]/a^mu*Sin[a*u + mu*Pi/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "ET II 203(19)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_u^inf (x-u)^(mu-1) sin ax = Gamma(mu)/a^mu sin(au + mu pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.768.2",
+  "gr": "3.768.2",
+  "page": 488,
+  "status": "ok",
+  "lhs": "Integrate[(x - u)^(mu - 1)*Cos[a*x], {x, u, Infinity}]",
+  "rhs": [
+   "Gamma[mu]/a^mu*Cos[a*u + mu*Pi/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "ET II 204(24)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_u^inf (x-u)^(mu-1) cos ax = Gamma(mu)/a^mu cos(au + mu pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.768.3a",
+  "gr": "3.768.3a",
+  "page": 488,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^nu*Sin[a*x], {x, 0, 1}]",
+  "rhs": [
+   "1/a - Gamma[nu + 1]/a^(nu + 1)*((a^nu/2)/Gamma[nu + 1]*(Hypergeometric1F1[1, nu + 1, I*a] + Hypergeometric1F1[1, nu + 1, -I*a]))"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET I 11(3)a",
+  "edition_note": "11",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "(1-x)^nu sin ax = 1/a - Gamma(nu+1)/a^(nu+1) C_nu(a)",
+  "note": "Young's function C_nu(a) = (a^nu/2)/Gamma(nu+1)[1F1(1;nu+1;ia) + 1F1(1;nu+1;-ia)] (defined on p.440) substituted"
+ },
+ {
+  "id": "GR3.768.3b",
+  "gr": "3.768.3b",
+  "page": 488,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[(1 - x)^nu*Sin[a*x], {x, 0, 1}]",
+  "rhs": [
+   "a^(-nu - 1/2)*LommelS1[nu + 1/2, 1/2, a]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET I 11(3)a",
+  "edition_note": "11",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "= a^(-nu-1/2) s_{nu+1/2,1/2}(a)",
+  "note": "",
+  "reason": "Lommel s function"
+ },
+ {
+  "id": "GR3.768.4a",
+  "gr": "3.768.4a",
+  "page": 489,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^nu*Cos[a*x], {x, 0, 1}]",
+  "rhs": [
+   "I/2*a^(-nu - 1)*(Exp[I/2*(nu*Pi - 2*a)]*Gamma[nu + 1, 0, -I*a] - Exp[-I/2*(nu*Pi - 2*a)]*Gamma[nu + 1, 0, I*a])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET I 11(3)a",
+  "edition_note": "3",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "(1-x)^nu cos ax = i/2 a^(-nu-1){exp[i/2(nu pi - 2a)] gamma(nu+1,-ia) - exp[-i/2(nu pi - 2a)] gamma(nu+1,ia)}",
+  "note": ""
+ },
+ {
+  "id": "GR3.768.4b",
+  "gr": "3.768.4b",
+  "page": 489,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^nu*Cos[a*x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[nu + 1]*Sum[(-a^2)^n/Gamma[nu + 2 + 2*n], {n, 0, Infinity}]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET I 11(3)a",
+  "edition_note": "3",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "= Gamma(nu+1) sum (-a^2)^n/Gamma(nu+2+2n)",
+  "note": ""
+ },
+ {
+  "id": "GR3.768.5",
+  "gr": "3.768.5",
+  "page": 489,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*(u - x)^(mu - 1)*Sin[a*x], {x, 0, u}]",
+  "rhs": [
+   "u^(mu + nu - 1)/(2*I)*Beta[mu, nu]*(Hypergeometric1F1[nu, mu + nu, I*a*u] - Hypergeometric1F1[nu, mu + nu, -I*a*u])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > 0",
+   "Re[nu] > -1",
+   "nu != 0",
+   "u > 0"
+  ],
+  "cite": "ET II 189(26)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_0^u x^(nu-1)(u-x)^(mu-1) sin ax = u^(mu+nu-1)/(2i) B(mu,nu)[1F1(nu;mu+nu;iau) - 1F1(nu;mu+nu;-iau)]",
+  "note": "u > 0 added"
+ },
+ {
+  "id": "GR3.768.6",
+  "gr": "3.768.6",
+  "page": 489,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*(u - x)^(mu - 1)*Cos[a*x], {x, 0, u}]",
+  "rhs": [
+   "u^(mu + nu - 1)/2*Beta[mu, nu]*(Hypergeometric1F1[nu, mu + nu, I*a*u] + Hypergeometric1F1[nu, mu + nu, -I*a*u])"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > 0",
+   "Re[nu] > 0",
+   "u > 0"
+  ],
+  "cite": "ET II 189(32)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_0^u x^(nu-1)(u-x)^(mu-1) cos ax = u^(mu+nu-1)/2 B(mu,nu)[1F1 + 1F1]",
+  "note": "u > 0 added"
+ },
+ {
+  "id": "GR3.768.7",
+  "gr": "3.768.7",
+  "page": 489,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*(u - x)^(mu - 1)*Sin[a*x], {x, 0, u}]",
+  "rhs": [
+   "Sqrt[Pi]*(u/a)^(mu - 1/2)*Sin[a*u/2]*Gamma[mu]*BesselJ[mu - 1/2, a*u/2]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "a > 0",
+   "u > 0"
+  ],
+  "cite": "ET II 189(25)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_0^u x^(mu-1)(u-x)^(mu-1) sin ax = sqrt(pi)(u/a)^(mu-1/2) sin(au/2) Gamma(mu) J_(mu-1/2)(au/2)",
+  "note": "a > 0, u > 0 added"
+ },
+ {
+  "id": "GR3.768.8",
+  "gr": "3.768.8",
+  "page": 489,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*(x - u)^(mu - 1)*Sin[a*x], {x, u, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/2*(u/a)^(mu - 1/2)*Gamma[mu]*(Cos[a*u/2]*BesselJ[1/2 - mu, a*u/2] - Sin[a*u/2]*BesselY[1/2 - mu, a*u/2])"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < Re[mu] < 1/2",
+   "u > 0"
+  ],
+  "cite": "ET II 203(20)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_u^inf x^(mu-1)(x-u)^(mu-1) sin ax = sqrt(pi)/2 (u/a)^(mu-1/2) Gamma(mu)[cos(au/2) J_(1/2-mu)(au/2) - sin(au/2) Y_(1/2-mu)(au/2)]",
+  "note": "u > 0 added"
+ },
+ {
+  "id": "GR3.768.9",
+  "gr": "3.768.9",
+  "page": 489,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*(u - x)^(mu - 1)*Cos[a*x], {x, 0, u}]",
+  "rhs": [
+   "Sqrt[Pi]*(u/a)^(mu - 1/2)*Cos[a*u/2]*Gamma[mu]*BesselJ[mu - 1/2, a*u/2]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "a > 0",
+   "u > 0"
+  ],
+  "cite": "ET II 189(31)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_0^u x^(mu-1)(u-x)^(mu-1) cos ax = sqrt(pi)(u/a)^(mu-1/2) cos(au/2) Gamma(mu) J_(mu-1/2)(au/2)",
+  "note": "a > 0, u > 0 added"
+ },
+ {
+  "id": "GR3.768.10",
+  "gr": "3.768.10",
+  "page": 489,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*(x - u)^(mu - 1)*Cos[a*x], {x, u, Infinity}]",
+  "rhs": [
+   "-Sqrt[Pi]/2*(u/a)^(mu - 1/2)*Gamma[mu]*(Sin[a*u/2]*BesselJ[1/2 - mu, a*u/2] - Cos[a*u/2]*BesselY[1/2 - mu, a*u/2])"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < Re[mu] < 1/2",
+   "u > 0"
+  ],
+  "cite": "ET II 204(25)",
+  "edition_note": "",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_u^inf x^(mu-1)(x-u)^(mu-1) cos ax = -sqrt(pi)/2 (u/a)^(mu-1/2) Gamma(mu)[sin(au/2) J_(1/2-mu)(au/2) - cos(au/2) Y_(1/2-mu)(au/2)]",
+  "note": "u > 0 added"
+ },
+ {
+  "id": "GR3.768.11",
+  "gr": "3.768.11",
+  "page": 489,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*(1 - x)^(mu - 1)*Sin[a*x], {x, 0, 1}]",
+  "rhs": [
+   "-I/2*Beta[mu, nu]*(Hypergeometric1F1[nu, nu + mu, I*a] - Hypergeometric1F1[nu, nu + mu, -I*a])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > -1",
+   "nu != 0"
+  ],
+  "cite": "ET I 68 (5)a, ET I 317(5)",
+  "edition_note": "3",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_0^1 x^(nu-1)(1-x)^(mu-1) sin ax = -i/2 B(mu,nu)[1F1(nu;nu+mu;ia) - 1F1(nu;nu+mu;-ia)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.768.12",
+  "gr": "3.768.12",
+  "page": 489,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*(1 - x)^(mu - 1)*Cos[a*x], {x, 0, 1}]",
+  "rhs": [
+   "1/2*Beta[mu, nu]*(Hypergeometric1F1[nu, nu + mu, I*a] + Hypergeometric1F1[nu, nu + mu, -I*a])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET I 11(5)",
+  "edition_note": "3",
+  "section": "3.76-3.77 Combinations of trigonometric functions and powers",
+  "tex": "int_0^1 x^(nu-1)(1-x)^(mu-1) cos ax = 1/2 B(mu,nu)[1F1 + 1F1]",
+  "note": ""
+ }
+]

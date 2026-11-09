@@ -1,0 +1,1375 @@
+[
+ {
+  "id": "GR17.13.86",
+  "gr": "17.13.86",
+  "page": 1164,
+  "status": "ok",
+  "lhs": "Integrate[((Sinh[a*x] - a*x)/a^3)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-2)*(s^2 - a^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "(sinh ax - ax)/a^3 -> s^-2 (s^2-a^2)^-1",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.87",
+  "gr": "17.13.87",
+  "page": 1164,
+  "status": "ok",
+  "lhs": "Integrate[((Cosh[a*x] - a^2*x^2/2 - 1)/a^4)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-3)*(s^2 - a^2)^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "[cosh ax - a^2x^2/2 - 1]/a^4 -> s^-3 (s^2-a^2)^-1",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.88",
+  "gr": "17.13.88",
+  "page": 1164,
+  "status": "ok",
+  "lhs": "Integrate[((1 - Cosh[a*x] + a*x*Sinh[a*x]/2)/a^4)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-1)*(s^2 - a^2)^(-2)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "[1 - cosh ax + ax sinh(ax)/2]/a^4 -> s^-1 (s^2-a^2)^-2",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.89",
+  "gr": "17.13.89",
+  "page": 1164,
+  "status": "ok",
+  "lhs": "Integrate[(x^(1/2)*Sinh[a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi^(1/2)/4)*((s - a)^(3/2) - (s + a)^(3/2))",
+   "(Pi^(1/2)/4)*((s - a)^(-3/2) - (s + a)^(-3/2))"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "x^(1/2) sinh(ax) -> (pi^(1/2)/4)[(s-a)^(3/2) - (s+a)^(3/2)]",
+  "note": "misprint: exponents printed +3/2; L{x^(1/2) e^(ax)} = Gamma(3/2)(s-a)^(-3/2), so second candidate uses -3/2"
+ },
+ {
+  "id": "GR17.13.90",
+  "gr": "17.13.90",
+  "page": 1164,
+  "status": "ok",
+  "lhs": "Integrate[(Log[x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-s^(-1)*Log[EulerGamma*s]",
+   "-s^(-1)*Log[E^EulerGamma*s]"
+  ],
+  "conds": [
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 148(1)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "ln x -> -s^-1 ln(C s)",
+  "note": "bold C in this table denotes e^gamma (ln C = Euler's constant), not gamma itself; first candidate is the literal map C->EulerGamma, second uses E^EulerGamma"
+ },
+ {
+  "id": "GR17.13.91",
+  "gr": "17.13.91",
+  "page": 1164,
+  "status": "ok",
+  "lhs": "Integrate[(Log[1 + a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-1)*E^(s/a)*ExpIntegralEi[-s/a]",
+   "-s^(-1)*E^(s/a)*ExpIntegralEi[-s/a]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 148(4)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "ln(1+ax) -> s^-1 e^(s/a) Ei(-s/a)",
+  "note": "likely sign misprint: second candidate has the leading minus (value must be positive for a,s>0)"
+ },
+ {
+  "id": "GR17.13.92",
+  "gr": "17.13.92",
+  "page": 1164,
+  "status": "ok",
+  "lhs": "Integrate[(x^(-1/2)*Log[x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-(Pi/s)^(1/2)*Log[4*EulerGamma*s]",
+   "-(Pi/s)^(1/2)*Log[4*E^EulerGamma*s]"
+  ],
+  "conds": [
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 148(9)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "x^(-1/2) ln x -> -(pi/s)^(1/2) ln(4 C s)",
+  "note": "bold C denotes e^gamma (see 17.13.90); second candidate uses E^EulerGamma"
+ },
+ {
+  "id": "GR17.13.93",
+  "gr": "17.13.93",
+  "page": 1164,
+  "status": "ok",
+  "lhs": "Integrate[(HeavisideTheta[x - a])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-1)*E^(-a*s)"
+  ],
+  "conds": [
+   "a >= 0",
+   "Re[s] > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "H(x-a) -> s^-1 e^(-as)",
+  "note": "Re s > 0 implied"
+ },
+ {
+  "id": "GR17.13.94",
+  "gr": "17.13.94",
+  "page": 1164,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[(DiracDelta[x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "delta(x) -> 1",
+  "note": "",
+  "reason": "distribution (Dirac delta)"
+ },
+ {
+  "id": "GR17.13.95",
+  "gr": "17.13.95",
+  "page": 1164,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[(DiracDelta[x - a])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "E^(-a*s)"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "delta(x-a) -> e^(-as)",
+  "note": "",
+  "reason": "distribution (Dirac delta)"
+ },
+ {
+  "id": "GR17.13.96",
+  "gr": "17.13.96",
+  "page": 1164,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[(Derivative[1][DiracDelta][x - a])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s*E^(-a*s)"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "delta'(x-a) -> s e^(-as)",
+  "note": "",
+  "reason": "distribution (derivative of Dirac delta)"
+ },
+ {
+  "id": "GR17.13.97",
+  "gr": "17.13.97",
+  "page": 1164,
+  "status": "ok",
+  "lhs": "Integrate[(SinIntegral[x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-1)*ArcCot[s]"
+  ],
+  "conds": [
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 177(17)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "Si(x) -> s^-1 arccot s",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.98",
+  "gr": "17.13.98",
+  "page": 1164,
+  "status": "ok",
+  "lhs": "Integrate[(CosIntegral[x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-(1/2)*s^(-1)*Log[1 + s^2]"
+  ],
+  "conds": [
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 178(19)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "Ci(x) -> -(1/2) s^-1 ln(1+s^2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.99",
+  "gr": "17.13.99",
+  "page": 1164,
+  "status": "ok",
+  "lhs": "Integrate[(Erf[x/(2*a)])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-1)*E^(a^2*s^2)*Erfc[a*s]"
+  ],
+  "conds": [
+   "Re[s] > 0",
+   "Abs[Arg[a]] < Pi/4"
+  ],
+  "cite": "ET I 176(2)",
+  "edition_note": "8",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "erf(x/(2a)) -> s^-1 e^(a^2 s^2) erfc(as)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.100",
+  "gr": "17.13.100",
+  "page": 1165,
+  "status": "ok",
+  "lhs": "Integrate[(Erf[a*Sqrt[x]])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "a*s^(-1)*(s + a^2)^(-1/2)"
+  ],
+  "conds": [
+   "Re[s] > 0",
+   "Re[s] > -Re[a^2]"
+  ],
+  "cite": "ET I 176(4)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "erf(a sqrt x) -> a s^-1 (s+a^2)^(-1/2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.101",
+  "gr": "17.13.101",
+  "page": 1165,
+  "status": "ok",
+  "lhs": "Integrate[(Erfc[a*Sqrt[x]])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-1)*(s + a^2)^(-1/2)*((s + a^2)^(1/2) - a)"
+  ],
+  "conds": [
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 177(9)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "erfc(a sqrt x) -> s^-1 (s+a^2)^(-1/2)[(s+a^2)^(1/2) - a]",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.102",
+  "gr": "17.13.102",
+  "page": 1165,
+  "status": "ok",
+  "lhs": "Integrate[(Erfc[a/Sqrt[x]])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^(-1)*E^(-2*a*Sqrt[s])"
+  ],
+  "conds": [
+   "Re[s] > 0",
+   "Re[a] > 0"
+  ],
+  "cite": "ET I 177(11)",
+  "edition_note": "8",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "erfc(a/sqrt x) -> s^-1 e^(-2a sqrt s)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.103",
+  "gr": "17.13.103",
+  "page": 1165,
+  "status": "ok",
+  "lhs": "Integrate[(BesselJ[nu, a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "a^(-nu)*(Sqrt[s^2 + a^2] - s)^nu*(s^2 + a^2)^(-1/2)"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "ET I 182(1)",
+  "edition_note": "8",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "J_nu(ax) -> a^-nu (sqrt(s^2+a^2) - s)^nu (s^2+a^2)^(-1/2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.104",
+  "gr": "17.13.104",
+  "page": 1165,
+  "status": "ok",
+  "lhs": "Integrate[(x*BesselJ[nu, a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "a^nu*(s + nu*(s^2 + a^2)^(1/2))*(s + (s^2 + a^2)^(1/2))^(-nu)*(s^2 + a^2)^(-3/2)"
+  ],
+  "conds": [
+   "Re[nu] > -2",
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "ET I 182(2)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "x J_nu(ax) -> a^nu [s + nu (s^2+a^2)^(1/2)][s + (s^2+a^2)^(1/2)]^-nu (s^2+a^2)^(-3/2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.105",
+  "gr": "17.13.105",
+  "page": 1165,
+  "status": "ok",
+  "lhs": "Integrate[(BesselJ[nu, a*x]/x)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "a^nu*nu^(-1)*(s + (s^2 + a^2)^(1/2))^(-nu)"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "Re[s] >= Abs[Im[a]]"
+  ],
+  "cite": "ET I 182(5)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "J_nu(ax)/x -> a^nu nu^-1 [s + (s^2+a^2)^(1/2)]^-nu",
+  "note": "Re nu > 0 implied (not printed)"
+ },
+ {
+  "id": "GR17.13.106",
+  "gr": "17.13.106",
+  "page": 1165,
+  "status": "ok",
+  "lhs": "Integrate[(x^n*BesselJ[n, a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(2*n - 1)!!*a^n*(s^2 + a^2)^(-(n + 1/2))"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "ET I 182(4)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "x^n J_n(ax) -> 1.3.5...(2n-1) a^n (s^2+a^2)^-(n+1/2)",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR17.13.107",
+  "gr": "17.13.107",
+  "page": 1165,
+  "status": "ok",
+  "lhs": "Integrate[(x^nu*BesselJ[nu, a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2^nu*Pi^(-1/2)*Gamma[nu + 1/2]*a^nu*(s^2 + a^2)^(-(nu + 1/2))"
+  ],
+  "conds": [
+   "Re[nu] > -1/2",
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "ET I 182(7)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "x^nu J_nu(ax) -> 2^nu pi^-1/2 Gamma(nu+1/2) a^nu (s^2+a^2)^-(nu+1/2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.108",
+  "gr": "17.13.108",
+  "page": 1165,
+  "status": "ok",
+  "lhs": "Integrate[(x^(nu + 1)*BesselJ[nu, a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(nu + 1)*Pi^(-1/2)*Gamma[nu + 3/2]*a^nu*s*(s^2 + a^2)^(-(nu + 3/2))"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "ET I 182(8)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "x^(nu+1) J_nu(ax) -> 2^(nu+1) pi^-1/2 Gamma(nu+3/2) a^nu s (s^2+a^2)^-(nu+3/2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.109",
+  "gr": "17.13.109",
+  "page": 1165,
+  "status": "ok",
+  "lhs": "Integrate[(BesselI[nu, a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "a^(-nu)*(s - Sqrt[s^2 - a^2])^nu*(s^2 - a^2)^(-1/2)"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "ET I 195(1)",
+  "edition_note": "8",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "I_nu(ax) -> a^-nu [s - sqrt(s^2-a^2)]^nu (s^2-a^2)^(-1/2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.110",
+  "gr": "17.13.110",
+  "page": 1166,
+  "status": "ok",
+  "lhs": "Integrate[(x^nu*BesselI[nu, a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2^nu*Pi^(-1/2)*Gamma[nu + 1/2]*a^nu*(s^2 - a^2)^(-(nu + 1/2))"
+  ],
+  "conds": [
+   "Re[nu] > -1/2",
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "ET I 195(6)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "x^nu I_nu(ax) -> 2^nu pi^-1/2 Gamma(nu+1/2) a^nu (s^2-a^2)^-(nu+1/2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.111",
+  "gr": "17.13.111",
+  "page": 1166,
+  "status": "ok",
+  "lhs": "Integrate[(x^(nu + 1)*BesselI[nu, a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(nu + 1)*Pi^(-1/2)*Gamma[nu + 3/2]*a^nu*s*(s^2 - a^2)^(-(nu + 3/2))"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "ET I 196(7)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "x^(nu+1) I_nu(ax) -> 2^(nu+1) pi^-1/2 Gamma(nu+3/2) a^nu s (s^2-a^2)^-(nu+3/2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.112",
+  "gr": "17.13.112",
+  "page": 1166,
+  "status": "ok",
+  "lhs": "Integrate[(x^(-1)*BesselI[nu, a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "nu^(-1)*a^nu*(s + (s^2 - a^2)^(1/2))^(-nu)"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "ET I 195(4)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "x^-1 I_nu(ax) -> nu^-1 a^nu [s + (s^2-a^2)^(1/2)]^-nu",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.113",
+  "gr": "17.13.113",
+  "page": 1166,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[2*a^(1/2)*x^(1/2)])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi*a)^(1/2)*s^(-3/2)*E^(-a/s)"
+  ],
+  "conds": [
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 153(32)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "sin(2 a^1/2 x^1/2) -> (pi a)^1/2 s^-3/2 e^(-a/s)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.114",
+  "gr": "17.13.114",
+  "page": 1166,
+  "status": "ok",
+  "lhs": "Integrate[(x^(-1/2)*Cos[2*a^(1/2)*x^(1/2)])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^(1/2)*s^(-1/2)*E^(-a/s)"
+  ],
+  "conds": [
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 158(67)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "x^-1/2 cos(2 a^1/2 x^1/2) -> pi^1/2 s^-1/2 e^(-a/s)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.115",
+  "gr": "17.13.115",
+  "page": 1166,
+  "status": "ok",
+  "lhs": "Integrate[(x^(-1)*E^(-a*x)*BesselI[1, a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "((s + 2*a)^(1/2) - s^(1/2))*((s + 2*a)^(1/2) + s^(1/2))^(-1)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "AS 1024(29.3.52)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "x^-1 e^(-ax) I_1(ax) -> [(s+2a)^1/2 - s^1/2][(s+2a)^1/2 + s^1/2]^-1",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.116",
+  "gr": "17.13.116",
+  "page": 1166,
+  "status": "ok",
+  "lhs": "Integrate[(BesselJ[k, a*x]/x)*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "k^(-1)*a^(-k)*((s^2 + a^2)^(1/2) - s)^k"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]",
+   "k > -1",
+   "k > 0"
+  ],
+  "cite": "AS 1025(29.3.58)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "J_k(ax)/x -> k^-1 a^-k [(s^2+a^2)^1/2 - s]^k",
+  "note": "book prints k > -1; the integral diverges at x=0 for k <= 0 and the value has k^-1, so k > 0 added"
+ },
+ {
+  "id": "GR17.13.117",
+  "gr": "17.13.117",
+  "page": 1166,
+  "status": "ok",
+  "lhs": "Integrate[((x/(2*a))^(k - 1/2)*BesselJ[k - 1/2, a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[k]*Pi^(-1/2)*(s^2 + a^2)^(-k)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]",
+   "k > 0"
+  ],
+  "cite": "AS 1024(29.3.57)",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "(x/2a)^(k-1/2) J_(k-1/2)(ax) -> Gamma(k) pi^-1/2 (s^2+a^2)^-k",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.118",
+  "gr": "17.13.118",
+  "page": 1166,
+  "status": "ok",
+  "lhs": "Integrate[(BesselJ[0, a*x] - a*x*BesselJ[1, a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^2*(s^2 + a^2)^(-3/2)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "J_0(ax) - ax J_1(ax) -> s^2 (s^2+a^2)^(-3/2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.13.119",
+  "gr": "17.13.119",
+  "page": 1166,
+  "status": "ok",
+  "lhs": "Integrate[(BesselI[0, a*x] + a*x*BesselI[1, a*x])*E^(-s*x), {x, 0, Infinity}]",
+  "rhs": [
+   "s^2*(s^2 - a^2)^(-3/2)"
+  ],
+  "conds": [
+   "Re[s] > Abs[Im[a]]",
+   "Re[s] > Abs[Re[a]]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.13 Table of Laplace transform pairs",
+  "tex": "I_0(ax) + ax I_1(ax) -> s^2 (s^2-a^2)^(-3/2)",
+  "note": "book prints Re s > |Im a|; for I-functions Re s > |Re a| is required, added"
+ },
+ {
+  "id": "GR17.23.1",
+  "gr": "17.23.1",
+  "page": 1167,
+  "status": "SKIP-REFERENCE",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(1)*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2*Pi)^(1/2)*DiracDelta[xi]"
+  ],
+  "conds": [],
+  "cite": "SU 496",
+  "edition_note": "",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "1 -> (2pi)^1/2 delta(xi)",
+  "note": "",
+  "reason": "distribution (Dirac delta)"
+ },
+ {
+  "id": "GR17.23.2",
+  "gr": "17.23.2",
+  "page": 1167,
+  "status": "SKIP-PV",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(1/x)*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(Pi/2)^(1/2)*I*Sign[xi]"
+  ],
+  "conds": [
+   "Element[xi, Reals]"
+  ],
+  "cite": "SU 50",
+  "edition_note": "7",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "1/x -> (pi/2)^1/2 i sign xi",
+  "note": "",
+  "reason": "pole at x=0: principal value"
+ },
+ {
+  "id": "GR17.23.3",
+  "gr": "17.23.3",
+  "page": 1167,
+  "status": "SKIP-REFERENCE",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(DiracDelta[x])*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2*Pi)^(-1/2)"
+  ],
+  "conds": [],
+  "cite": "SU 496",
+  "edition_note": "",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "delta(x) -> (2pi)^-1/2",
+  "note": "",
+  "reason": "distribution (Dirac delta)"
+ },
+ {
+  "id": "GR17.23.4",
+  "gr": "17.23.4",
+  "page": 1167,
+  "status": "SKIP-REFERENCE",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(DiracDelta[a*x + b])*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2*Pi)^(-1/2)*E^(I*b*xi/a)"
+  ],
+  "conds": [
+   "Element[a, Reals]",
+   "Element[b, Reals]",
+   "a != 0"
+  ],
+  "cite": "SU 517",
+  "edition_note": "8",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "delta(ax+b) -> (2pi)^-1/2 e^(i b xi/a)",
+  "note": "as printed; the exact value is (2pi)^-1/2 e^(-i b xi/a)/|a|",
+  "reason": "distribution (Dirac delta)"
+ },
+ {
+  "id": "GR17.23.5",
+  "gr": "17.23.5",
+  "page": 1167,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[E^(I*xi*x), {x, -a, a}]",
+  "rhs": [
+   "(2/Pi)^(1/2)*xi^(-1)*Sin[a*xi]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[xi, Reals]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "{1 |x|<a; 0 |x|>a} -> (2/pi)^1/2 xi^-1 sin(a xi)",
+  "note": ""
+ },
+ {
+  "id": "GR17.23.6",
+  "gr": "17.23.6",
+  "page": 1167,
+  "status": "SKIP-REFERENCE",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(HeavisideTheta[x])*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-1/(I*xi*Sqrt[2*Pi]) + Sqrt[Pi/2]*DiracDelta[xi]"
+  ],
+  "conds": [],
+  "cite": "SN 523",
+  "edition_note": "8",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "H(x) -> -1/(i xi sqrt(2pi)) + sqrt(pi/2) delta(xi)",
+  "note": "",
+  "reason": "distribution (Dirac delta in the transform)"
+ },
+ {
+  "id": "GR17.23.7",
+  "gr": "17.23.7",
+  "page": 1168,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(1/Abs[x]^a)*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2/Pi)^(1/2)*Gamma[1 - a]*Sin[a*Pi/2]/Abs[xi]^(1 - a)"
+  ],
+  "conds": [
+   "0 < Re[a] < 1",
+   "Element[xi, Reals]"
+  ],
+  "cite": "SN 523",
+  "edition_note": "",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "1/|x|^a -> (2/pi)^1/2 Gamma(1-a) sin(a pi/2)/|xi|^(1-a)",
+  "note": ""
+ },
+ {
+  "id": "GR17.23.8",
+  "gr": "17.23.8",
+  "page": 1168,
+  "status": "SKIP-REFERENCE",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(E^(I*a*x))*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2*Pi)^(1/2)*DiracDelta[xi + a]"
+  ],
+  "conds": [
+   "Element[a, Reals]"
+  ],
+  "cite": "SU 50",
+  "edition_note": "",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "e^(iax) -> (2pi)^1/2 delta(xi+a)",
+  "note": "",
+  "reason": "distribution (Dirac delta)"
+ },
+ {
+  "id": "GR17.23.9",
+  "gr": "17.23.9",
+  "page": 1168,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(E^(-a*Abs[x]))*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "a*(2/Pi)^(1/2)/(a^2 + xi^2)"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[xi, Reals]"
+  ],
+  "cite": "SU 50",
+  "edition_note": "",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "e^(-a|x|) -> a (2/pi)^1/2/(a^2+xi^2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.23.10",
+  "gr": "17.23.10",
+  "page": 1168,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(x*E^(-a*Abs[x]))*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2*a*I*xi*(2/Pi)^(1/2)/(a^2 + xi^2)^2"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "SU 50",
+  "edition_note": "7",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "x e^(-a|x|) -> 2 a i xi (2/pi)^1/2/(a^2+xi^2)^2, xi > 0",
+  "note": ""
+ },
+ {
+  "id": "GR17.23.11",
+  "gr": "17.23.11",
+  "page": 1168,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(Abs[x]*E^(-a*Abs[x]))*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2/Pi)^(1/2)*(a^2 - xi^2)/(a^2 + xi^2)^2"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[xi, Reals]"
+  ],
+  "cite": "SU 50",
+  "edition_note": "",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "|x| e^(-a|x|) -> (2/pi)^1/2 (a^2-xi^2)/(a^2+xi^2)^2",
+  "note": ""
+ },
+ {
+  "id": "GR17.23.12",
+  "gr": "17.23.12",
+  "page": 1168,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(E^(-a*Abs[x])/Abs[x]^(1/2))*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(a + (a^2 + xi^2)^(1/2))^(1/2)/(x*(a^2 + xi^2)^(1/2))",
+   "(a + (a^2 + xi^2)^(1/2))^(1/2)/(a^2 + xi^2)^(1/2)"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[xi, Reals]"
+  ],
+  "cite": "SN 523",
+  "edition_note": "",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "e^(-a|x|)/|x|^1/2 -> [a + (a^2+xi^2)^1/2]^1/2 / (x (a^2+xi^2)^1/2)",
+  "note": "misprint: the integration variable x appears in the printed value; second candidate drops it"
+ },
+ {
+  "id": "GR17.23.13",
+  "gr": "17.23.13",
+  "page": 1168,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(E^(-a^2*x^2))*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(a*Sqrt[2])^(-1)*E^(-xi^2/(4*a^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[xi, Reals]"
+  ],
+  "cite": "SU 51",
+  "edition_note": "",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "e^(-a^2x^2) -> (a sqrt2)^-1 e^(-xi^2/4a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.23.14",
+  "gr": "17.23.14",
+  "page": 1168,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(1/(a^2 + x^2))*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(Pi/2)^(1/2)*E^(-a*Abs[xi])/a"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Element[xi, Reals]"
+  ],
+  "cite": "SU 51",
+  "edition_note": "",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "1/(a^2+x^2) -> (pi/2)^1/2 e^(-a|xi|)/a",
+  "note": ""
+ },
+ {
+  "id": "GR17.23.15",
+  "gr": "17.23.15",
+  "page": 1168,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(x/(a^2 + x^2))*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "I*Sign[xi]*(Pi/2)^(1/2)*E^(-a*Abs[xi])"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Element[xi, Reals]"
+  ],
+  "cite": "",
+  "edition_note": "7",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "x/(a^2+x^2) -> i sign xi (pi/2)^1/2 e^(-a|xi|)",
+  "note": ""
+ },
+ {
+  "id": "GR17.23.16",
+  "gr": "17.23.16",
+  "page": 1168,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(Sin[a*x^2])*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2*a)^(-1/2)*Cos[xi^2/(4*a) + Pi/4]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[xi, Reals]"
+  ],
+  "cite": "SN 523",
+  "edition_note": "9",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "sin(ax^2) -> (2a)^-1/2 cos(xi^2/4a + pi/4)",
+  "note": "a > 0 implied"
+ },
+ {
+  "id": "GR17.23.17",
+  "gr": "17.23.17",
+  "page": 1168,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(Cos[a*x^2])*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2*a)^(-1/2)*Cos[xi^2/(4*a) - Pi/4]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[xi, Reals]"
+  ],
+  "cite": "SN 523",
+  "edition_note": "",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "cos(ax^2) -> (2a)^-1/2 cos(xi^2/4a - pi/4)",
+  "note": "a > 0 implied"
+ },
+ {
+  "id": "GR17.23.18",
+  "gr": "17.23.18",
+  "page": 1168,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(E^(-a*Abs[x])*Cos[b*x])*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "a*(2*Pi)^(-1/2)*(1/(a^2 + (b + xi)^2) + 1/(a^2 + (b - xi)^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Element[xi, Reals]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "e^(-a|x|) cos(bx) -> a(2pi)^-1/2 [1/(a^2+(b+xi)^2) + 1/(a^2+(b-xi)^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR17.23.19",
+  "gr": "17.23.19",
+  "page": 1168,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(E^(-a*x^2/2)*Sin[b*x])*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(1/2)*I*a^(-1/2)*(Exp[-(1/2)*(xi - b)^2/a] - Exp[-(1/2)*(xi + b)^2/a])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Element[xi, Reals]"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "e^(-ax^2/2) sin(bx) -> (1/2) i a^-1/2 {exp[-(xi-b)^2/2a] - exp[-(xi+b)^2/2a]}",
+  "note": ""
+ },
+ {
+  "id": "GR17.23.20",
+  "gr": "17.23.20",
+  "page": 1168,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(Sinh[a*x]/Sinh[b*x])*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(Pi/2)^(1/2)*Sin[Pi*a/b]/(b*(Cosh[Pi*xi/b] + Cos[Pi*a/b]))"
+  ],
+  "conds": [
+   "Abs[a] < Abs[b]",
+   "b > 0",
+   "Element[xi, Reals]"
+  ],
+  "cite": "SU 123",
+  "edition_note": "9",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "sinh(ax)/sinh(bx) -> (pi/2)^1/2 sin(pi a/b)/(b[cosh(pi xi/b) + cos(pi a/b)])",
+  "note": "b > 0 added (value is not even in b)"
+ },
+ {
+  "id": "GR17.23.21",
+  "gr": "17.23.21",
+  "page": 1168,
+  "status": "SKIP-PV",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(Cosh[a*x]/Sinh[b*x])*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "I*(Pi/2)^(1/2)*Sinh[Pi*xi/b]/(b*(Cosh[Pi*xi/b] + Cos[Pi*a/b]))"
+  ],
+  "conds": [
+   "Abs[a] < Abs[b]",
+   "b > 0",
+   "Element[xi, Reals]"
+  ],
+  "cite": "SU 123",
+  "edition_note": "9",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "cosh(ax)/sinh(bx) -> i (pi/2)^1/2 sinh(pi xi/b)/(b[cosh(pi xi/b) + cos(pi a/b)])",
+  "note": "",
+  "reason": "pole at x=0: principal value"
+ },
+ {
+  "id": "GR17.23.22",
+  "gr": "17.23.22",
+  "page": 1169,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(Sin[a*x]/x)*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Piecewise[{{(Pi/2)^(1/2), Abs[xi] < a}}, 0]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[xi, Reals]"
+  ],
+  "cite": "SN 523",
+  "edition_note": "",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "sin(ax)/x -> (pi/2)^1/2 for |xi|<a, 0 for |xi|>a",
+  "note": "a > 0 implied"
+ },
+ {
+  "id": "GR17.23.23",
+  "gr": "17.23.23",
+  "page": 1169,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(x/Sinh[x])*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2*Pi^3)^(1/2)*E^(Pi*xi)/(1 + E^(Pi*xi))^2"
+  ],
+  "conds": [
+   "Element[xi, Reals]"
+  ],
+  "cite": "SU 123",
+  "edition_note": "11",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "x/sinh x -> (2pi^3)^1/2 e^(pi xi)/(1+e^(pi xi))^2",
+  "note": ""
+ },
+ {
+  "id": "GR17.23.24",
+  "gr": "17.23.24",
+  "page": 1169,
+  "status": "SKIP-REFERENCE",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(x^n*Sign[x])*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2/Pi)^(1/2)*(-I*xi)^(-(1 + n))*n!"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "SU 506",
+  "edition_note": "7",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "x^n sign x -> (2/pi)^1/2 (-i xi)^-(1+n) n!",
+  "note": "",
+  "reason": "generalized (distributional) transform; the integral diverges"
+ },
+ {
+  "id": "GR17.23.25",
+  "gr": "17.23.25",
+  "page": 1169,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(Abs[x]^nu)*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2/Pi)^(1/2)*Gamma[nu + 1]*Abs[xi]^(-nu - 1)*Cos[Pi*(nu + 1)/2]"
+  ],
+  "conds": [
+   "-1 < nu < 0",
+   "Element[xi, Reals]"
+  ],
+  "cite": "SU 506",
+  "edition_note": "7",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "|x|^nu -> (2/pi)^1/2 Gamma(nu+1)|xi|^(-nu-1) cos[pi(nu+1)/2]",
+  "note": "nu not an integer (automatic for -1<nu<0)"
+ },
+ {
+  "id": "GR17.23.26",
+  "gr": "17.23.26",
+  "page": 1169,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(Abs[x]^nu*Sign[x])*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "I*Sign[xi]*(2/Pi)^(1/2)*Sin[(Pi/2)*(nu + 1)]*Gamma[nu + 1]/Abs[xi]^(nu + 1)"
+  ],
+  "conds": [
+   "-1 < nu < 0",
+   "Element[xi, Reals]"
+  ],
+  "cite": "SU 506",
+  "edition_note": "7",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "|x|^nu sign x -> i sign xi (2/pi)^1/2 sin[(pi/2)(nu+1)] Gamma(nu+1)/|xi|^(nu+1)",
+  "note": ""
+ },
+ {
+  "id": "GR17.23.27",
+  "gr": "17.23.27",
+  "page": 1169,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(E^(-a*x)*Log[Abs[1 - E^(-x)]])*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(Pi/2)^(1/2)*Cot[Pi*a - I*xi*Pi]/(a - I*xi)"
+  ],
+  "conds": [
+   "-1 < Re[a] < 0",
+   "Element[xi, Reals]"
+  ],
+  "cite": "ET I 121(26)",
+  "edition_note": "",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "e^(-ax) ln|1-e^(-x)| -> (pi/2)^1/2 cot(pi a - i xi pi)/(a - i xi)",
+  "note": ""
+ },
+ {
+  "id": "GR17.23.28",
+  "gr": "17.23.28",
+  "page": 1169,
+  "status": "ok",
+  "lhs": "1/Sqrt[2*Pi]*Integrate[(E^(-a*x)*Log[1 + E^(-x)])*E^(I*xi*x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(Pi/2)^(1/2)*Csc[Pi*a - I*xi*Pi]/(a - I*xi)"
+  ],
+  "conds": [
+   "-1 < Re[a] < 0",
+   "Element[xi, Reals]"
+  ],
+  "cite": "ET I 121 (27)",
+  "edition_note": "",
+  "section": "17.23 Table of Fourier transform pairs",
+  "tex": "e^(-ax) ln(1+e^(-x)) -> (pi/2)^1/2 csc(pi a - i xi pi)/(a - i xi)",
+  "note": ""
+ },
+ {
+  "id": "GR17.24.1",
+  "gr": "17.24.1",
+  "page": 1169,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Sqrt[2/Pi]/k*Integrate[f[x]*Sin[k*x]*x, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]/k*Integrate[f[x]*Sin[k*x]*x, {x, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.24 Table of Fourier transform pairs for spherically symmetric functions",
+  "tex": "f(r) = sqrt(2/pi)(1/r) int_0^inf E(k) sin(kr) k dk; E(k) = sqrt(2/pi)(1/k) int_0^inf f(r) sin(kr) r dr",
+  "note": "radial reduction of the 3-D transform E(|k|) = (2pi)^(-3/2) iiint f(|r|) e^(-ik.r) dr; rows 2-3 use this 1-D form with r -> x",
+  "reason": "definition of the radial transform pair"
+ },
+ {
+  "id": "GR17.24.2",
+  "gr": "17.24.2",
+  "page": 1169,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]/k*Integrate[(E^(-a*x))*Sin[k*x]*x, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]*2*a/(a^2 + k^2)^2"
+  ],
+  "conds": [
+   "a > 0",
+   "k > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "17.24 Table of Fourier transform pairs for spherically symmetric functions",
+  "tex": "e^(-ar) -> sqrt(2/pi) 2a/(a^2+k^2)^2",
+  "note": "3-D radial transform written via 17.24.1 with r -> x"
+ },
+ {
+  "id": "GR17.24.3",
+  "gr": "17.24.3",
+  "page": 1169,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]/k*Integrate[(E^(-a*x)/x)*Sin[k*x]*x, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2/Pi]/(a^2 + k^2)^2",
+   "Sqrt[2/Pi]/(a^2 + k^2)"
+  ],
+  "conds": [
+   "a > 0",
+   "k > 0"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "17.24 Table of Fourier transform pairs for spherically symmetric functions",
+  "tex": "e^(-ar)/r -> sqrt(2/pi) 1/(a^2+k^2)^2",
+  "note": "via 17.24.1 with r -> x; printed exponent 2 appears to be a misprint (int_0^inf e^(-ax) sin(kx) dx = k/(a^2+k^2)), second candidate has exponent 1"
+ },
+ {
+  "id": "GR17.24.4",
+  "gr": "17.24.4",
+  "page": 1169,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Sqrt[2/Pi]/k*Integrate[(1)*Sin[k*x]*x, {x, 0, Infinity}]",
+  "rhs": [
+   "(2*Pi)^(3/2)*DiracDelta[k]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "11",
+  "section": "17.24 Table of Fourier transform pairs for spherically symmetric functions",
+  "tex": "1 -> (2pi)^(3/2) delta(k)",
+  "note": "",
+  "reason": "distribution (Dirac delta)"
+ },
+ {
+  "id": "GR17.33.1",
+  "gr": "17.33.1",
+  "page": 1171,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x^(-1))*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/2)^(1/2)"
+  ],
+  "conds": [
+   "xi > 0"
+  ],
+  "cite": "ET I 64(3)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "x^-1 -> (pi/2)^1/2",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.2",
+  "gr": "17.33.2",
+  "page": 1171,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x^(-nu))*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2/Pi)^(1/2)*xi^(nu - 1)*Gamma[1 - nu]*Cos[nu*Pi/2]"
+  ],
+  "conds": [
+   "0 < Re[nu] < 2",
+   "xi > 0"
+  ],
+  "cite": "ET I 68(1)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "x^-nu -> (2/pi)^1/2 xi^(nu-1) Gamma(1-nu) cos(nu pi/2)",
+  "note": "nu = 1 is a removable limit"
+ },
+ {
+  "id": "GR17.33.3",
+  "gr": "17.33.3",
+  "page": 1171,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x^(-1/2))*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "xi^(-1/2)"
+  ],
+  "conds": [
+   "xi > 0"
+  ],
+  "cite": "ET I 64(6)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "x^-1/2 -> xi^-1/2",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.4",
+  "gr": "17.33.4",
+  "page": 1171,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[(x^(-3/2))*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*xi^(1/2)"
+  ],
+  "conds": [
+   "xi > 0"
+  ],
+  "cite": "ET I 64(9)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "x^-3/2 -> 2 xi^1/2",
+  "note": ""
+ },
+ {
+  "id": "GR17.33.5",
+  "gr": "17.33.5",
+  "page": 1171,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[Sin[xi*x], {x, 0, a}]",
+  "rhs": [
+   "(2/Pi)^(1/2)*xi^(-1)*(1 - Cos[a*xi])"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 63(1)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "{1 0<x<a; 0 x>a} -> (2/pi)^1/2 xi^-1 [1 - cos(a xi)]",
+  "note": "a > 0 implied"
+ },
+ {
+  "id": "GR17.33.6",
+  "gr": "17.33.6",
+  "page": 1171,
+  "status": "ok",
+  "lhs": "Sqrt[2/Pi]*Integrate[x^(-1)*Sin[xi*x], {x, 0, a}]",
+  "rhs": [
+   "(2/Pi)^(1/2)*SinIntegral[a*xi]"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 64(4)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "{x^-1 0<x<a; 0 x>a} -> (2/pi)^1/2 Si(a xi)",
+  "note": "a > 0 implied"
+ },
+ {
+  "id": "GR17.33.7",
+  "gr": "17.33.7",
+  "page": 1171,
+  "status": "SKIP-PV",
+  "lhs": "Sqrt[2/Pi]*Integrate[(1/(a - x))*Sin[xi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2/Pi)^(1/2)*(Sin[a*xi]*CosIntegral[a*xi] - Cos[a*xi]*(Pi/2 + SinIntegral[a*xi]))"
+  ],
+  "conds": [
+   "a > 0",
+   "xi > 0"
+  ],
+  "cite": "ET I 64(11)",
+  "edition_note": "",
+  "section": "17.33 Table of Fourier sine transforms",
+  "tex": "1/(a-x) -> (2/pi)^1/2 {sin(a xi) Ci(a xi) - cos(a xi)[pi/2 + Si(a xi)]}",
+  "note": "",
+  "reason": "pole at x=a on the path: principal value"
+ }
+]

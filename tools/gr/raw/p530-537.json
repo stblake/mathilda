@@ -1,0 +1,1966 @@
+[
+ {
+  "id": "GR3.871.4",
+  "gr": "3.871.4",
+  "page": 530,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Cos[a*(x - b^2/x)], {x, 0, Infinity}]",
+  "rhs": [
+   "2*b^mu*BesselK[mu, 2*a*b]*Cos[mu*Pi/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Abs[Re[mu]] < 1"
+  ],
+  "cite": "ET I 321(36)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf x^(mu-1) cos[a(x-b^2/x)] dx = 2 b^mu K_mu(2ab) cos(mu pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.872.1a",
+  "gr": "3.872.1",
+  "page": 530,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*(x + 1/x)]*Sin[a*(x - 1/x)]/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "-Pi/4*Sin[2*a]"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "BI (149)(15), GW (334)(8a)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^1 sin[a(x+1/x)] sin[a(x-1/x)] dx/(1-x^2) = -pi/4 sin 2a",
+  "note": ""
+ },
+ {
+  "id": "GR3.872.1b",
+  "gr": "3.872.1",
+  "page": 530,
+  "status": "ok",
+  "lhs": "1/2*Integrate[Sin[a*(x + 1/x)]*Sin[a*(x - 1/x)]/(1 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/4*Sin[2*a]"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "BI (149)(15), GW (334)(8a)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "1/2 int_0^inf sin[a(x+1/x)] sin[a(x-1/x)] dx/(1-x^2) = -pi/4 sin 2a",
+  "note": ""
+ },
+ {
+  "id": "GR3.872.2a",
+  "gr": "3.872.2",
+  "page": 530,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*(x + 1/x)]*Cos[a*(x - 1/x)]/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "Pi/4*E^(-2*a)"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "GW (334)(8b)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^1 cos[a(x+1/x)] cos[a(x-1/x)] dx/(1+x^2) = pi/4 e^(-2a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.872.2b",
+  "gr": "3.872.2",
+  "page": 530,
+  "status": "ok",
+  "lhs": "1/2*Integrate[Cos[a*(x + 1/x)]*Cos[a*(x - 1/x)]/(1 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*E^(-2*a)"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "GW (334)(8b)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "1/2 int_0^inf cos[a(x+1/x)] cos[a(x-1/x)] dx/(1+x^2) = pi/4 e^(-2a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.873.1",
+  "gr": "3.873.1",
+  "page": 530,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a^2/x^2]*Cos[b^2*x^2]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/(4*Sqrt[2]*a)*(Sin[2*a*b] + Cos[2*a*b] + E^(-2*a*b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 24(15)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf sin(a^2/x^2) cos(b^2x^2) dx/x^2 = sqrt(pi)/(4 sqrt2 a)[sin 2ab + cos 2ab + e^(-2ab)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.873.2",
+  "gr": "3.873.2",
+  "page": 530,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a^2/x^2]*Cos[b^2*x^2]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/(4*Sqrt[2]*a)*(Cos[2*a*b] - Sin[2*a*b] + E^(-2*a*b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 24(16)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf cos(a^2/x^2) cos(b^2x^2) dx/x^2 = sqrt(pi)/(4 sqrt2 a)[cos 2ab - sin 2ab + e^(-2ab)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.874.1",
+  "gr": "3.874.1",
+  "page": 530,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a^2*x^2 + b^2/x^2]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/(2*b)*Sin[2*a*b + Pi/4]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (179)(6)a, GW(334)(10a)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf sin(a^2x^2+b^2/x^2) dx/x^2 = sqrt(pi)/(2b) sin(2ab+pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR3.874.2",
+  "gr": "3.874.2",
+  "page": 530,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a^2*x^2 + b^2/x^2]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/(2*b)*Cos[2*a*b + Pi/4]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GI (179)(8)a, GW(334)(10a)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf cos(a^2x^2+b^2/x^2) dx/x^2 = sqrt(pi)/(2b) cos(2ab+pi/4)",
+  "note": "cite printed 'GI', presumably BI"
+ },
+ {
+  "id": "GR3.874.3",
+  "gr": "3.874.3",
+  "page": 530,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a^2*x^2 - b^2/x^2]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "-Sqrt[Pi]/(2*Sqrt[2]*b)*E^(-2*a*b)"
+  ],
+  "conds": [
+   "a >= 0",
+   "b > 0"
+  ],
+  "cite": "GW (335)(10b)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf sin(a^2x^2-b^2/x^2) dx/x^2 = -sqrt(pi)/(2 sqrt2 b) e^(-2ab)",
+  "note": ""
+ },
+ {
+  "id": "GR3.874.4",
+  "gr": "3.874.4",
+  "page": 530,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a^2*x^2 - b^2/x^2]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/(2*Sqrt[2]*b)*E^(-2*a*b)"
+  ],
+  "conds": [
+   "a >= 0",
+   "b > 0"
+  ],
+  "cite": "GW (334)(10b)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf cos(a^2x^2-b^2/x^2) dx/x^2 = sqrt(pi)/(2 sqrt2 b) e^(-2ab)",
+  "note": ""
+ },
+ {
+  "id": "GR3.874.5",
+  "gr": "3.874.5",
+  "page": 530,
+  "status": "ok",
+  "lhs": "Integrate[Sin[(a*x - b/x)^2]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi]/(4*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (179)(13)a",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf sin(ax-b/x)^2 dx/x^2 = sqrt(2pi)/(4b)",
+  "note": ""
+ },
+ {
+  "id": "GR3.874.6",
+  "gr": "3.874.6",
+  "page": 530,
+  "status": "ok",
+  "lhs": "Integrate[Cos[(a*x - b/x)^2]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi]/(4*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (179)(14)a",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf cos(ax-b/x)^2 dx/x^2 = sqrt(2pi)/(4b)",
+  "note": ""
+ },
+ {
+  "id": "GR3.875.1",
+  "gr": "3.875.1",
+  "page": 531,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[p*Sqrt[x^2 - u^2]]/(x^2 + a^2)*Cos[b*x], {x, u, Infinity}]",
+  "rhs": [
+   "Pi/2*Exp[-p*Sqrt[a^2 + u^2]]*Cosh[a*b]"
+  ],
+  "conds": [
+   "0 < b < p",
+   "u > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 27(39)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_u^inf x sin(p sqrt(x^2-u^2))/(x^2+a^2) cos bx dx = pi/2 exp(-p sqrt(a^2+u^2)) cosh ab",
+  "note": "u > 0, a > 0 added (implied)"
+ },
+ {
+  "id": "GR3.875.2",
+  "gr": "3.875.2",
+  "page": 531,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[p*Sqrt[x^2 - u^2]]/(a^2 + x^2 - u^2)*Cos[b*x], {x, u, Infinity}]",
+  "rhs": [
+   "Pi/2*E^(-a*p)*Cos[b*Sqrt[u^2 - a^2]]"
+  ],
+  "conds": [
+   "0 < b < p",
+   "a > 0",
+   "u > 0"
+  ],
+  "cite": "ET I 27(38)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_u^inf x sin(p sqrt(x^2-u^2))/(a^2+x^2-u^2) cos bx dx = pi/2 e^(-ap) cos(b sqrt(u^2-a^2))",
+  "note": "u > 0 added (implied)"
+ },
+ {
+  "id": "GR3.875.3",
+  "gr": "3.875.3",
+  "page": 531,
+  "status": "ok",
+  "lhs": "Integrate[Sin[p*Sqrt[a^2 + x^2]]/(a^2 + x^2)^(3/2)*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*p/(2*a)*E^(-a*b)"
+  ],
+  "conds": [
+   "0 < p < b",
+   "a > 0"
+  ],
+  "cite": "ET I 26(29)",
+  "edition_note": "6",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf sin(p sqrt(a^2+x^2))/(a^2+x^2)^(3/2) cos bx dx = pi p/(2a) e^(-ab)",
+  "note": ""
+ },
+ {
+  "id": "GR3.876.1a",
+  "gr": "3.876.1",
+  "page": 531,
+  "status": "ok",
+  "lhs": "Integrate[Sin[p*Sqrt[x^2 + a^2]]/Sqrt[x^2 + a^2]*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*BesselJ[0, a*Sqrt[p^2 - b^2]]"
+  ],
+  "conds": [
+   "0 < b < p",
+   "a > 0"
+  ],
+  "cite": "ET I 26(30)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf sin(p sqrt(x^2+a^2))/sqrt(x^2+a^2) cos bx dx = pi/2 J_0(a sqrt(p^2-b^2))",
+  "note": ""
+ },
+ {
+  "id": "GR3.876.1b",
+  "gr": "3.876.1",
+  "page": 531,
+  "status": "ok",
+  "lhs": "Integrate[Sin[p*Sqrt[x^2 + a^2]]/Sqrt[x^2 + a^2]*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "b > p > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 26(30)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "same integral = 0 for b > p > 0",
+  "note": ""
+ },
+ {
+  "id": "GR3.876.2a",
+  "gr": "3.876.2",
+  "page": 531,
+  "status": "ok",
+  "lhs": "Integrate[Cos[p*Sqrt[x^2 + a^2]]/Sqrt[x^2 + a^2]*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/2*BesselY[0, a*Sqrt[p^2 - b^2]]"
+  ],
+  "conds": [
+   "0 < b < p",
+   "a > 0"
+  ],
+  "cite": "ET I 26(34)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf cos(p sqrt(x^2+a^2))/sqrt(x^2+a^2) cos bx dx = -pi/2 Y_0(a sqrt(p^2-b^2))",
+  "note": ""
+ },
+ {
+  "id": "GR3.876.2b",
+  "gr": "3.876.2",
+  "page": 531,
+  "status": "ok",
+  "lhs": "Integrate[Cos[p*Sqrt[x^2 + a^2]]/Sqrt[x^2 + a^2]*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "BesselK[0, a*Sqrt[b^2 - p^2]]"
+  ],
+  "conds": [
+   "b > p > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 26(34)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "same integral = K_0(a sqrt(b^2-p^2)) for b > p > 0",
+  "note": ""
+ },
+ {
+  "id": "GR3.876.3",
+  "gr": "3.876.3",
+  "page": 531,
+  "status": "ok",
+  "lhs": "Integrate[Cos[p*Sqrt[x^2 + a^2]]/(x^2 + c^2)*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*c)*E^(-b*c)*Cos[p*Sqrt[a^2 - c^2]]"
+  ],
+  "conds": [
+   "c > 0",
+   "b > p"
+  ],
+  "cite": "ET I 26(33)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf cos(p sqrt(x^2+a^2))/(x^2+c^2) cos bx dx = pi/(2c) e^(-bc) cos(p sqrt(a^2-c^2))",
+  "note": ""
+ },
+ {
+  "id": "GR3.876.4a",
+  "gr": "3.876.4",
+  "page": 531,
+  "status": "ok",
+  "lhs": "Integrate[Sin[p*Sqrt[x^2 + a^2]]/((x^2 + c^2)*Sqrt[x^2 + a^2])*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*c)*E^(-b*c)*Sin[p*Sqrt[a^2 - c^2]]/Sqrt[a^2 - c^2]"
+  ],
+  "conds": [
+   "b > p",
+   "c > 0"
+  ],
+  "cite": "ET I 26(31)a",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf sin(p sqrt(x^2+a^2))/((x^2+c^2) sqrt(x^2+a^2)) cos bx dx = pi/(2c) e^(-bc) sin(p sqrt(a^2-c^2))/sqrt(a^2-c^2)",
+  "note": "c != a"
+ },
+ {
+  "id": "GR3.876.4b",
+  "gr": "3.876.4",
+  "page": 531,
+  "status": "ok",
+  "lhs": "Integrate[Sin[p*Sqrt[x^2 + a^2]]/(x^2 + a^2)^(3/2)*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*E^(-b*a)*p/a"
+  ],
+  "conds": [
+   "b > p",
+   "a > 0"
+  ],
+  "cite": "ET I 26(31)a",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "case c = a: = pi/2 e^(-ba) p/a",
+  "note": "equality condition c = a substituted; a > 0 added"
+ },
+ {
+  "id": "GR3.876.5",
+  "gr": "3.876.5",
+  "page": 531,
+  "status": "ok",
+  "lhs": "Integrate[Cos[p*Sqrt[x^2 + a^2]]/(x^2 + a^2)*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a)*E^(-a*b)"
+  ],
+  "conds": [
+   "b > p > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 27(35)a",
+  "edition_note": "6",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf cos(p sqrt(x^2+a^2))/(x^2+a^2) cos bx dx = pi/(2a) e^(-ab)",
+  "note": ""
+ },
+ {
+  "id": "GR3.876.6",
+  "gr": "3.876.6",
+  "page": 531,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[p*Sqrt[x^2 + a^2]]/(x^2 + a^2)*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*E^(-a*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > p > 0"
+  ],
+  "cite": "ET I 85(29)a",
+  "edition_note": "6",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf x cos(p sqrt(x^2+a^2))/(x^2+a^2) sin bx dx = pi/2 e^(-ab)",
+  "note": ""
+ },
+ {
+  "id": "GR3.876.7",
+  "gr": "3.876.7",
+  "page": 531,
+  "status": "ok",
+  "lhs": "Integrate[Cos[p*Sqrt[u^2 - x^2]]/Sqrt[u^2 - x^2]*Cos[b*x], {x, 0, u}]",
+  "rhs": [
+   "Pi/2*BesselJ[0, u*Sqrt[b^2 + p^2]]"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "ET I 28(42)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^u cos(p sqrt(u^2-x^2))/sqrt(u^2-x^2) cos bx dx = pi/2 J_0(u sqrt(b^2+p^2))",
+  "note": "u > 0 added (implied)"
+ },
+ {
+  "id": "GR3.876.8a",
+  "gr": "3.876.8",
+  "page": 531,
+  "status": "ok",
+  "lhs": "Integrate[Cos[p*Sqrt[x^2 - u^2]]/Sqrt[x^2 - u^2]*Cos[b*x], {x, u, Infinity}]",
+  "rhs": [
+   "BesselK[0, u*Sqrt[p^2 - b^2]]"
+  ],
+  "conds": [
+   "0 < b < Abs[p]",
+   "u > 0"
+  ],
+  "cite": "ET I 28(43)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_u^inf cos(p sqrt(x^2-u^2))/sqrt(x^2-u^2) cos bx dx = K_0(u sqrt(p^2-b^2))",
+  "note": "u > 0 added (implied)"
+ },
+ {
+  "id": "GR3.876.8b",
+  "gr": "3.876.8",
+  "page": 531,
+  "status": "ok",
+  "lhs": "Integrate[Cos[p*Sqrt[x^2 - u^2]]/Sqrt[x^2 - u^2]*Cos[b*x], {x, u, Infinity}]",
+  "rhs": [
+   "-Pi/2*BesselY[0, u*Sqrt[b^2 - p^2]]"
+  ],
+  "conds": [
+   "b > Abs[p]",
+   "u > 0"
+  ],
+  "cite": "ET I 28(43)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "same integral = -pi/2 Y_0(u sqrt(b^2-p^2)) for b > |p|",
+  "note": "u > 0 added (implied)"
+ },
+ {
+  "id": "GR3.877.1",
+  "gr": "3.877.1",
+  "page": 532,
+  "status": "ok",
+  "lhs": "Integrate[Sin[p*Sqrt[u^2 - x^2]]/(u^2 - x^2)^(3/4)*Cos[b*x], {x, 0, u}]",
+  "rhs": [
+   "Sqrt[Pi^3*p/8]*BesselJ[1/4, u/2*(Sqrt[b^2 + p^2] - b)]*BesselJ[1/4, u/2*(Sqrt[b^2 + p^2] + b)]"
+  ],
+  "conds": [
+   "b > 0",
+   "p > 0",
+   "u > 0"
+  ],
+  "cite": "ET I 27(40)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^u sin(p sqrt(u^2-x^2))/(u^2-x^2)^(3/4) cos bx dx = sqrt(pi^3 p/8) J_{1/4}[u/2(sqrt(b^2+p^2)-b)] J_{1/4}[u/2(sqrt(b^2+p^2)+b)]",
+  "note": "u > 0 added (implied)"
+ },
+ {
+  "id": "GR3.877.2",
+  "gr": "3.877.2",
+  "page": 532,
+  "status": "ok",
+  "lhs": "Integrate[Sin[p*Sqrt[x^2 - u^2]]/(x^2 - u^2)^(3/4)*Cos[b*x], {x, u, Infinity}]",
+  "rhs": [
+   "-Sqrt[Pi^3*p/8]*BesselJ[1/4, u/2*(b - Sqrt[b^2 - p^2])]*BesselY[1/4, u/2*(b + Sqrt[b^2 - p^2])]"
+  ],
+  "conds": [
+   "b > p > 0",
+   "u > 0"
+  ],
+  "cite": "ET I 27(41)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_u^inf sin(p sqrt(x^2-u^2))/(x^2-u^2)^(3/4) cos bx dx = -sqrt(pi^3 p/8) J_{1/4}[u/2(b-sqrt(b^2-p^2))] Z_{1/4}[u/2(b+sqrt(b^2-p^2))]",
+  "note": "book prints Z_{1/4} (generic cylinder function) in the second factor; read as Y_{1/4} (cf. 3.877.4). u > 0 added (implied)"
+ },
+ {
+  "id": "GR3.877.3",
+  "gr": "3.877.3",
+  "page": 532,
+  "status": "ok",
+  "lhs": "Integrate[Cos[p*Sqrt[u^2 - x^2]]/(u^2 - x^2)^(3/4)*Cos[b*x], {x, 0, u}]",
+  "rhs": [
+   "Sqrt[Pi^3*p/8]*BesselJ[-1/4, u/2*(Sqrt[p^2 + b^2] - b)]*BesselJ[-1/4, u/2*(Sqrt[p^2 + b^2] + b)]"
+  ],
+  "conds": [
+   "u > 0",
+   "p > 0"
+  ],
+  "cite": "ET I 28(44)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^u cos(p sqrt(u^2-x^2))/(u^2-x^2)^(3/4) cos bx dx = sqrt(pi^3 p/8) J_{-1/4}[..] J_{-1/4}[..]",
+  "note": ""
+ },
+ {
+  "id": "GR3.877.4",
+  "gr": "3.877.4",
+  "page": 532,
+  "status": "ok",
+  "lhs": "Integrate[Cos[p*Sqrt[x^2 - u^2]]/(x^2 - u^2)^(3/4)*Cos[b*x], {x, u, Infinity}]",
+  "rhs": [
+   "-Sqrt[Pi^3*p/8]*BesselJ[-1/4, u/2*(b - Sqrt[b^2 - p^2])]*BesselY[1/4, u/2*(b + Sqrt[b^2 - p^2])]",
+   "-Sqrt[Pi^3*p/8]*BesselJ[-1/4, u/2*(b - Sqrt[b^2 - p^2])]*BesselY[-1/4, u/2*(b + Sqrt[b^2 - p^2])]"
+  ],
+  "conds": [
+   "b > p > 0",
+   "u > 0"
+  ],
+  "cite": "ET I 28(45)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_u^inf cos(p sqrt(x^2-u^2))/(x^2-u^2)^(3/4) cos bx dx = -sqrt(pi^3 p/8) J_{-1/4}[..] Y_{1/4}[..]",
+  "note": "as printed Y_{1/4}; second candidate Y_{-1/4} (order matching J_{-1/4}). u > 0 added (implied)"
+ },
+ {
+  "id": "GR3.878.1",
+  "gr": "3.878.1",
+  "page": 532,
+  "status": "ok",
+  "lhs": "Integrate[Sin[p*Sqrt[x^4 + a^4]]/Sqrt[x^4 + a^4]*Cos[b*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sqrt[(Pi/2)^3]*b*BesselJ[-1/4, a^2/2*(p - Sqrt[p^2 - b^2])]*BesselJ[1/4, a^2/2*(p + Sqrt[p^2 - b^2])]",
+   "1/2*Sqrt[(Pi/2)^3*b]*BesselJ[-1/4, a^2/2*(p - Sqrt[p^2 - b^2])]*BesselJ[1/4, a^2/2*(p + Sqrt[p^2 - b^2])]"
+  ],
+  "conds": [
+   "p > b > 0"
+  ],
+  "cite": "ET I 26(32)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf sin(p sqrt(x^4+a^4))/sqrt(x^4+a^4) cos bx^2 dx = 1/2 sqrt((pi/2)^3) b J_{-1/4}[a^2/2(p-sqrt(p^2-b^2))] J_{1/4}[a^2/2(p+sqrt(p^2-b^2))]",
+  "note": "as printed the factor b stands outside the radical; scaling x -> a t requires sqrt(b), so second candidate puts b under the radical"
+ },
+ {
+  "id": "GR3.878.2",
+  "gr": "3.878.2",
+  "page": 532,
+  "status": "ok",
+  "lhs": "Integrate[Cos[p*Sqrt[x^4 + a^4]]/Sqrt[x^4 + a^4]*Cos[b*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "-1/2*Sqrt[(Pi/2)^3]*b*BesselJ[-1/4, a^2/2*(p - Sqrt[p^2 - b^2])]*BesselY[1/4, a^2/2*(p + Sqrt[p^2 - b^2])]",
+   "-1/2*Sqrt[(Pi/2)^3*b]*BesselJ[-1/4, a^2/2*(p - Sqrt[p^2 - b^2])]*BesselY[1/4, a^2/2*(p + Sqrt[p^2 - b^2])]"
+  ],
+  "conds": [
+   "a > 0",
+   "p > b > 0"
+  ],
+  "cite": "ET I 27(36)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf cos(p sqrt(x^4+a^4))/sqrt(x^4+a^4) cos bx^2 dx = -1/2 sqrt((pi/2)^3) b J_{-1/4}[..] Y_{1/4}[..]",
+  "note": "as printed the factor b stands outside the radical; scaling x -> a t requires sqrt(b), so second candidate puts b under the radical"
+ },
+ {
+  "id": "GR3.878.3",
+  "gr": "3.878.3",
+  "page": 532,
+  "status": "ok",
+  "lhs": "Integrate[Cos[p*Sqrt[u^4 - x^4]]/Sqrt[u^4 - x^4]*Cos[b*x^2], {x, 0, u}]",
+  "rhs": [
+   "1/2*Sqrt[(Pi/2)^3]*b*BesselJ[-1/4, u^2/2*(Sqrt[p^2 + b^2] - p)]*BesselJ[-1/4, u^2/2*(Sqrt[p^2 + b^2] + p)]",
+   "1/2*Sqrt[(Pi/2)^3*b]*BesselJ[-1/4, u^2/2*(Sqrt[p^2 + b^2] - p)]*BesselJ[-1/4, u^2/2*(Sqrt[p^2 + b^2] + p)]"
+  ],
+  "conds": [
+   "p > 0",
+   "b > 0",
+   "u > 0"
+  ],
+  "cite": "ET I 28(46)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^u cos(p sqrt(u^4-x^4))/sqrt(u^4-x^4) cos bx^2 dx = 1/2 sqrt((pi/2)^3) b J_{-1/4}[..] J_{-1/4}[..]",
+  "note": "as printed the factor b stands outside the radical; scaling x -> a t requires sqrt(b), so second candidate puts b under the radical; u > 0 added (implied)"
+ },
+ {
+  "id": "GR3.879",
+  "gr": "3.879",
+  "page": 532,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x^p]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*p)"
+  ],
+  "conds": [
+   "a > 0",
+   "p > 0"
+  ],
+  "cite": "GW (334)(6)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf sin(a x^p) dx/x = pi/(2p)",
+  "note": ""
+ },
+ {
+  "id": "GR3.881.1",
+  "gr": "3.881.1",
+  "page": 532,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*Tan[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4*E^(-a)*(EulerGamma + Log[2*a] - E^(2*a)*ExpIntegralEi[-2*a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (205)(9)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^{pi/2} x sin(a tan x) dx = pi/4 e^(-a)[C + ln 2a - e^(2a) Ei(-2a)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.881.2",
+  "gr": "3.881.2",
+  "page": 532,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Tan[x]]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(1 - E^(-a))"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (151)(6)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf sin(a tan x) dx/x = pi/2 (1-e^(-a))",
+  "note": ""
+ },
+ {
+  "id": "GR3.881.3",
+  "gr": "3.881.3",
+  "page": 532,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Tan[x]]*Cos[x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(1 - E^(-a))"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (151)(19)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf sin(a tan x) cos x dx/x = pi/2 (1-e^(-a))",
+  "note": ""
+ },
+ {
+  "id": "GR3.881.4",
+  "gr": "3.881.4",
+  "page": 533,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*Tan[x]]*Sin[x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*E^(-a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (151)(20)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf cos(a tan x) sin x dx/x = pi/2 e^(-a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.881.5",
+  "gr": "3.881.5",
+  "page": 533,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Tan[x]]*Sin[2*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(1 + a)/2*Pi*E^(-a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (152)(11)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf sin(a tan x) sin 2x dx/x = (1+a)/2 pi e^(-a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.881.6",
+  "gr": "3.881.6",
+  "page": 533,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*Tan[x]]*Sin[x]^3/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(1 - a)/4*Pi*E^(-a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (151)(23)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf cos(a tan x) sin^3 x dx/x = (1-a)/4 pi e^(-a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.881.7",
+  "gr": "3.881.7",
+  "page": 533,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Tan[x]]*Tan[x/2]*Cos[x]^2/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(1 + a)/4*Pi*E^(-a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (152)(13)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf sin(a tan x) tan(x/2) cos^2 x dx/x = (1+a)/4 pi e^(-a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.881.8",
+  "gr": "3.881.8",
+  "page": 533,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*Tan[x]]*x/Sin[2*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi/4*ExpIntegralEi[-a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (206)(15)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^{pi/2} cos(a tan x) x dx/sin 2x = -pi/4 Ei(-a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.881.9",
+  "gr": "3.881.9",
+  "page": 533,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Cot[x]]*x/Sin[x]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "(1 - E^(-a))/(2*a)*Pi"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "LI (206)(14)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^{pi/2} sin(a cot x) x dx/sin^2 x = (1-e^(-a))/(2a) pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.881.10",
+  "gr": "3.881.10",
+  "page": 533,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[a*Tan[x]]*Tan[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi/4*E^(-a)*(EulerGamma + Log[2*a] + E^(2*a)*ExpIntegralEi[-2*a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (205)(10)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^{pi/2} x cos(a tan x) tan x dx = -pi/4 e^(-a)[C + ln 2a + e^(2a) Ei(-2a)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.881.11",
+  "gr": "3.881.11",
+  "page": 533,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*Tan[x]]*Tan[x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*E^(-a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (151)(21)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf cos(a tan x) tan x dx/x = pi/2 e^(-a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.881.12",
+  "gr": "3.881.12",
+  "page": 533,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*Tan[x]]*Sin[x]^2*Tan[x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(1 - a)/16*Pi*E^(-a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (152)(15)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf cos(a tan x) sin^2 x tan x dx/x = (1-a)/16 pi e^(-a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.881.13",
+  "gr": "3.881.13",
+  "page": 533,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Tan[x]]*Tan[x]^2/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*E^(-a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (152)(9)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf sin(a tan x) tan^2 x dx/x = pi/2 e^(-a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.881.14",
+  "gr": "3.881.14",
+  "page": 533,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[a*Tan[2*x]]*Tan[x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*E^(-a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (151)(22)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf cos(a tan 2x) tan x dx/x = pi/2 e^(-a)",
+  "note": "tan x has poles at x = pi/2 + k pi where cos(a tan 2x) -> 1",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.881.15",
+  "gr": "3.881.15",
+  "page": 533,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Tan[2*x]]*Cos[2*x]^2*Tan[x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(1 + a)/4*Pi*E^(-a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (152)(13)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf sin(a tan 2x) cos^2 2x tan x dx/x = (1+a)/4 pi e^(-a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.881.16",
+  "gr": "3.881.16",
+  "page": 533,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Tan[2*x]]*Tan[x]*Tan[2*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*E^(-a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (152)(10)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf sin(a tan 2x) tan x tan 2x dx/x = pi/2 e^(-a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.881.17",
+  "gr": "3.881.17",
+  "page": 533,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*Tan[2*x]]*Tan[x]*Cot[2*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(1 - E^(-a))"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (180)(6)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf sin(a tan 2x) tan x cot 2x dx/x = pi/2 (1-e^(-a))",
+  "note": "tan x cot 2x = (1 - tan^2 x)/2; simple poles at x = pi/2 + k pi where sin(a tan 2x) ~ linear",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.882.1",
+  "gr": "3.882.1",
+  "page": 533,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Tan[x]^2]*x/(b^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(Exp[-a*Tanh[b]] - E^(-a))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (160)(22)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf sin(a tan^2 x) x dx/(b^2+x^2) = pi/2 [exp(-a tanh b) - e^(-a)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.882.2",
+  "gr": "3.882.2",
+  "page": 533,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*Tan[x]^2]*Cos[x]/(b^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b)*(Cosh[b]*Exp[-a*Tanh[b]] - E^(-a)*Sinh[b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (163)(3)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf cos(a tan^2 x) cos x dx/(b^2+x^2) = pi/(2b)[cosh b exp(-a tanh b) - e^(-a) sinh b]",
+  "note": ""
+ },
+ {
+  "id": "GR3.882.3",
+  "gr": "3.882.3",
+  "page": 533,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[a*Tan[x]^2]*Csc[2*x]*x/(b^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*Sinh[2*b])*Exp[-a*Tanh[b]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (191)(10)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf cos(a tan^2 x) cosec 2x x dx/(b^2+x^2) = pi/(2 sinh 2b) exp(-a tanh b)",
+  "note": "cosec 2x has poles at x = k pi where cos(a tan^2 x) -> 1",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.882.4",
+  "gr": "3.882.4",
+  "page": 534,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*Tan[x]^2]*Tan[x]*x/(b^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*Cosh[b])*(E^(-a)*Cosh[b] - Exp[-a*Tanh[b]]*Sinh[b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (163)(4)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf cos(a tan^2 x) tan x x dx/(b^2+x^2) = pi/(2 cosh b)[e^(-a) cosh b - exp(-a tanh b) sinh b]",
+  "note": ""
+ },
+ {
+  "id": "GR3.882.5",
+  "gr": "3.882.5",
+  "page": 534,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[a*Tan[x]^2]*Cot[x]*x/(b^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(Coth[b]*Exp[-a*Tanh[b]] - E^(-a))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (163)(5)",
+  "edition_note": "11",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf cos(a tan^2 x) cot x x dx/(b^2+x^2) = pi/2 [coth b exp(-a tanh b) - e^(-a)]",
+  "note": "cot x has poles at x = k pi where cos(a tan^2 x) -> 1",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.882.6",
+  "gr": "3.882.6",
+  "page": 534,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[a*Tan[x]^2]*Cot[2*x]*x/(b^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(Coth[2*b]*Exp[-a*Tanh[b]] - E^(-a))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (191)(11)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^inf cos(a tan^2 x) cot 2x x dx/(b^2+x^2) = pi/2 [coth 2b exp(-a tanh b) - e^(-a)]",
+  "note": "cot 2x has poles at x = k pi where cos(a tan^2 x) -> 1",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.883.1",
+  "gr": "3.883.1",
+  "page": 534,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*Log[x]]/(1 + x)^2, {x, 0, 1}]",
+  "rhs": [
+   "a*Pi/(2*Sinh[a*Pi])"
+  ],
+  "conds": [],
+  "cite": "BI (404)(4)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^1 cos(a ln x) dx/(1+x)^2 = a pi/(2 sinh a pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.883.2",
+  "gr": "3.883.2",
+  "page": 534,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Sin[beta*Log[x]], {x, 0, 1}]",
+  "rhs": [
+   "-beta/(beta^2 + mu^2)"
+  ],
+  "conds": [
+   "Re[mu] > Abs[Im[beta]]"
+  ],
+  "cite": "ET I 319(19)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^1 x^(mu-1) sin(beta ln x) dx = -beta/(beta^2+mu^2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.883.3",
+  "gr": "3.883.3",
+  "page": 534,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Cos[beta*Log[x]], {x, 0, 1}]",
+  "rhs": [
+   "mu/(beta^2 + mu^2)"
+  ],
+  "conds": [
+   "Re[mu] > Abs[Im[beta]]"
+  ],
+  "cite": "ET I 321(38)",
+  "edition_note": "",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_0^1 x^(mu-1) cos(beta ln x) dx = mu/(beta^2+mu^2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.884",
+  "gr": "3.884",
+  "page": 534,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Sqrt[Abs[x]]]/(x - b)*Sign[x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*(Exp[-a*Sqrt[-b]] + Exp[-a*Sqrt[Abs[b]]])",
+   "Pi*(Exp[-a*Sqrt[-b]] + Exp[-a*Sqrt[b]])"
+  ],
+  "conds": [
+   "a > 0",
+   "Im[b] != 0"
+  ],
+  "cite": "ET II 253(46)",
+  "edition_note": "11",
+  "section": "3.87-3.88 Trigonometric functions with powers",
+  "tex": "int_-inf^inf sin(a sqrt|x|)/(x-b) sign x dx = pi[exp(-a sqrt(-b)) + exp(-a sqrt|b|)]",
+  "note": "second exponent read as sqrt|b| (as printed); second candidate uses sqrt(b)"
+ },
+ {
+  "id": "GR3.891.1a",
+  "gr": "3.891.1",
+  "page": 534,
+  "status": "ok",
+  "lhs": "Integrate[E^(I*m*x)*Sin[n*x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0",
+   "m != n"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^{2pi} e^(imx) sin nx dx = 0 [m != n; or m = n = 0]",
+  "note": "integrality and m, n >= 0 implied (fails for m = -n); case m = n = 0 trivially 0"
+ },
+ {
+  "id": "GR3.891.1b",
+  "gr": "3.891.1",
+  "page": 534,
+  "status": "ok",
+  "lhs": "Integrate[E^(I*n*x)*Sin[n*x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "Pi*I"
+  ],
+  "conds": [
+   "Element[n, Integers] && n > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "m = n != 0: = pi i",
+  "note": "equality condition m = n substituted; n > 0 implied (n < 0 gives -pi i)"
+ },
+ {
+  "id": "GR3.891.2a",
+  "gr": "3.891.2",
+  "page": 534,
+  "status": "ok",
+  "lhs": "Integrate[E^(I*m*x)*Cos[n*x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0",
+   "m != n"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^{2pi} e^(imx) cos nx dx = 0 [m != n]",
+  "note": "integrality and m, n >= 0 implied (fails for m = -n)"
+ },
+ {
+  "id": "GR3.891.2b",
+  "gr": "3.891.2",
+  "page": 534,
+  "status": "ok",
+  "lhs": "Integrate[E^(I*n*x)*Cos[n*x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "Pi"
+  ],
+  "conds": [
+   "Element[n, Integers] && n != 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "m = n != 0: = pi",
+  "note": "equality condition m = n substituted"
+ },
+ {
+  "id": "GR3.891.2c",
+  "gr": "3.891.2",
+  "page": 534,
+  "status": "ok",
+  "lhs": "Integrate[E^(I*0*x)*Cos[0*x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "m = n = 0: = 2 pi",
+  "note": "equality condition m = n = 0 substituted"
+ },
+ {
+  "id": "GR3.892.1",
+  "gr": "3.892.1",
+  "page": 534,
+  "status": "ok",
+  "lhs": "Integrate[E^(I*beta*x)*Sin[x]^(nu - 1), {x, 0, Pi}]",
+  "rhs": [
+   "Pi*E^(I*beta*Pi/2)/(2^(nu - 1)*nu*Beta[(nu + beta + 1)/2, (nu - beta + 1)/2])"
+  ],
+  "conds": [
+   "Re[nu] > -1"
+  ],
+  "cite": "NH 158, EH I 12(29)",
+  "edition_note": "11",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^pi e^(i beta x) sin^(nu-1) x dx = pi e^(i beta pi/2)/(2^(nu-1) nu B((nu+beta+1)/2,(nu-beta+1)/2))",
+  "note": "condition printed Re nu > -1; convergence needs Re nu > 0"
+ },
+ {
+  "id": "GR3.892.2",
+  "gr": "3.892.2",
+  "page": 534,
+  "status": "ok",
+  "lhs": "Integrate[E^(I*beta*x)*Cos[x]^(nu - 1), {x, -Pi/2, Pi/2}]",
+  "rhs": [
+   "Pi/(2^(nu - 1)*nu*Beta[(nu + beta + 1)/2, (nu - beta + 1)/2])"
+  ],
+  "conds": [
+   "Re[nu] > -1"
+  ],
+  "cite": "GW (335)(19)",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_{-pi/2}^{pi/2} e^(i beta x) cos^(nu-1) x dx = pi/(2^(nu-1) nu B((nu+beta+1)/2,(nu-beta+1)/2))",
+  "note": "condition printed Re nu > -1; convergence needs Re nu > 0"
+ },
+ {
+  "id": "GR3.892.3",
+  "gr": "3.892.3",
+  "page": 535,
+  "status": "ok",
+  "lhs": "Integrate[E^(I*2*beta*x)*Sin[x]^(2*mu)*Cos[x]^(2*nu), {x, 0, Pi/2}]",
+  "rhs": [
+   "1/2^(2*mu + 2*nu + 1)*(Exp[I*Pi*(beta - nu - 1/2)]*Beta[beta - mu - nu, 2*nu + 1]*Hypergeometric2F1[-2*mu, beta - mu - nu, 1 + beta - mu + nu, -1] + Exp[I*Pi*(mu + 1/2)]*Beta[beta - mu - nu, 2*mu + 1]*Hypergeometric2F1[-2*nu, beta - mu - nu, 1 + beta + mu - nu, -1])"
+  ],
+  "conds": [
+   "Re[mu] > -1/2",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "EH I 80(6)",
+  "edition_note": "6",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^{pi/2} e^(i2beta x) sin^(2mu) x cos^(2nu) x dx = 2^-(2mu+2nu+1){exp[i pi(beta-nu-1/2)] B(beta-mu-nu,2nu+1) F(-2mu,beta-mu-nu;1+beta-mu+nu;-1) + exp[i pi(mu+1/2)] B(beta-mu-nu,2mu+1) F(-2nu,beta-mu-nu;1+beta+mu-nu;-1)}",
+  "note": ""
+ },
+ {
+  "id": "GR3.892.4",
+  "gr": "3.892.4",
+  "page": 535,
+  "status": "ok",
+  "lhs": "Integrate[E^(I*2*beta*x)*Sin[x]^(2*mu)*Cos[x]^(2*nu), {x, 0, Pi}]",
+  "rhs": [
+   "Pi*Exp[I*Pi*(beta - nu)]*Hypergeometric2F1[-2*nu, beta - mu - nu, 1 + beta + mu - nu, -1]/(4^(mu + nu)*(2*mu + 1)*Beta[1 - beta + mu + nu, 1 + beta + mu - nu])"
+  ],
+  "conds": [
+   "Re[mu] > -1/2",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "EH I 80(8)",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^pi e^(i2beta x) sin^(2mu) x cos^(2nu) x dx = pi exp[i pi(beta-nu)] F(-2nu,beta-mu-nu;1+beta+mu-nu;-1)/(4^(mu+nu)(2mu+1) B(1-beta+mu+nu,1+beta+mu-nu))",
+  "note": "no condition printed; Re mu, Re nu > -1/2 added for convergence"
+ },
+ {
+  "id": "GR3.892.5a",
+  "gr": "3.892.5",
+  "page": 535,
+  "status": "ok",
+  "lhs": "Integrate[E^(I*(mu + nu)*x)*Sin[x]^(mu - 1)*Cos[x]^(nu - 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "E^(I*mu*Pi/2)*Beta[mu, nu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "EH I 80(7)",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^{pi/2} e^(i(mu+nu)x) sin^(mu-1) x cos^(nu-1) x dx = e^(i mu pi/2) B(mu,nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.892.5b",
+  "gr": "3.892.5",
+  "page": 535,
+  "status": "ok",
+  "lhs": "Integrate[E^(I*(mu + nu)*x)*Sin[x]^(mu - 1)*Cos[x]^(nu - 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "1/2^(mu + nu - 1)*E^(I*mu*Pi/2)*(1/mu*Hypergeometric2F1[1 - nu, 1, mu + 1, -1] + 1/nu*Hypergeometric2F1[1 - mu, 1, nu + 1, -1])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "EH I 80(7)",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "= 2^-(mu+nu-1) e^(i mu pi/2){F(1-nu,1;mu+1;-1)/mu + F(1-mu,1;nu+1;-1)/nu}",
+  "note": ""
+ },
+ {
+  "id": "GR3.893.1",
+  "gr": "3.893.1",
+  "page": 535,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Sin[q*x + lam], {x, 0, Infinity}]",
+  "rhs": [
+   "(q*Cos[lam] + p*Sin[lam])/(p^2 + q^2)"
+  ],
+  "conds": [
+   "Re[p] > 0"
+  ],
+  "cite": "BI (261)(3)",
+  "edition_note": "8",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-px) sin(qx+lambda) dx = (q cos lambda + p sin lambda)/(p^2+q^2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.893.2",
+  "gr": "3.893.2",
+  "page": 535,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Cos[q*x + lam], {x, 0, Infinity}]",
+  "rhs": [
+   "(p*Cos[lam] - q*Sin[lam])/(p^2 + q^2)"
+  ],
+  "conds": [
+   "Re[p] > 0"
+  ],
+  "cite": "BI (261)(4)",
+  "edition_note": "8",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-px) cos(qx+lambda) dx = (p cos lambda - q sin lambda)/(p^2+q^2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.893.3",
+  "gr": "3.893.3",
+  "page": 535,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x*Cos[t])*Cos[t - x*Sin[t]], {x, 0, Infinity}]",
+  "rhs": [
+   "1"
+  ],
+  "conds": [
+   "-Pi/2 < t < Pi/2"
+  ],
+  "cite": "BI (261)(7)",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-x cos t) cos(t - x sin t) dx = 1",
+  "note": "no condition printed; cos t > 0 needed for convergence"
+ },
+ {
+  "id": "GR3.893.4",
+  "gr": "3.893.4",
+  "page": 535,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[E^(-beta*x)*Sin[a*x]/Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Re[1/(2*b*I)*(PolyGamma[(a + b)/(2*b) - I*beta/(2*b)] - PolyGamma[(b - a)/(2*b) - I*beta/(2*b)])]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "b != 0"
+  ],
+  "cite": "GW (335)(15)",
+  "edition_note": "8",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-beta x) sin ax/sin bx dx = Re{1/(2bi)[psi((a+b)/(2b) - i beta/(2b)) - psi((b-a)/(2b) - i beta/(2b))]}",
+  "note": "sin bx vanishes at x = k pi/b on the path",
+  "reason": "pole on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.893.5",
+  "gr": "3.893.5",
+  "page": 535,
+  "status": "ok",
+  "lhs": "Integrate[E^(-2*p*x)*Sin[(2*n + 1)*x]/Sin[x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*p) + Sum[p/(p^2 + k^2), {k, 1, n}]"
+  ],
+  "conds": [
+   "Re[p] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (267)(15)",
+  "edition_note": "8",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-2px) sin[(2n+1)x]/sin x dx = 1/(2p) + sum_{k=1}^n p/(p^2+k^2)",
+  "note": "n integer implied"
+ },
+ {
+  "id": "GR3.893.6",
+  "gr": "3.893.6",
+  "page": 535,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Sin[2*n*x]/Sin[x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*p*Sum[1/(p^2 + (2*k + 1)^2), {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "Re[p] > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (335)(15c)",
+  "edition_note": "8",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-px) sin 2nx/sin x dx = 2p sum_{k=0}^{n-1} 1/(p^2+(2k+1)^2)",
+  "note": "n integer implied"
+ },
+ {
+  "id": "GR3.893.7",
+  "gr": "3.893.7",
+  "page": 535,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Cos[(2*n + 1)*x]*Tan[x], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*n + 1)/(p^2 + (2*n + 1)^2) + (-1)^n*2*Sum[(-1)^k*(2*k + 1)/(p^2 + (2*k + 1)^2), {k, 0, n - 1}]"
+  ],
+  "conds": [
+   "p > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "LI (267)(16)",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-px) cos[(2n+1)x] tan x dx = (2n+1)/(p^2+(2n+1)^2) + (-1)^n 2 sum_{k=0}^{n-1} (-1)^k(2k+1)/(p^2+(2k+1)^2)",
+  "note": "n integer implied"
+ },
+ {
+  "id": "GR3.894",
+  "gr": "3.894",
+  "page": 535,
+  "status": "ok",
+  "lhs": "Integrate[(beta + Sqrt[beta^2 - 1]*Cos[x])^nu*E^(I*n*x), {x, -Pi, Pi}]",
+  "rhs": [
+   "2*Pi*Gamma[nu + 1]*LegendreP[nu, m, 3, beta]/Gamma[nu + m + 1]",
+   "2*Pi*Gamma[nu + 1]*LegendreP[nu, n, 3, beta]/Gamma[nu + n + 1]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Element[n, Integers]"
+  ],
+  "cite": "ET I 157(15)",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_-pi^pi [beta + sqrt(beta^2-1) cos x]^nu e^(inx) dx = 2 pi Gamma(nu+1) P^m_nu(beta)/Gamma(nu+m+1)",
+  "note": "misprint: integrand has e^(inx) but value uses m; second candidate with m -> n. n integer implied"
+ },
+ {
+  "id": "GR3.895.1",
+  "gr": "3.895.1",
+  "page": 535,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*Sin[x]^(2*m), {x, 0, Infinity}]",
+  "rhs": [
+   "(2*m)!/(beta*Product[beta^2 + (2*k)^2, {k, 1, m}])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "FI II 615, WA 620a",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-beta x) sin^(2m) x dx = (2m)!/(beta(beta^2+2^2)(beta^2+4^2)...(beta^2+(2m)^2))",
+  "note": "m nonnegative integer implied"
+ },
+ {
+  "id": "GR3.895.2",
+  "gr": "3.895.2",
+  "page": 536,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Sin[x]^(2*m), {x, 0, Pi}]",
+  "rhs": [
+   "(2*m)!*(1 - E^(-p*Pi))/(p*Product[p^2 + (2*k)^2, {k, 1, m}])"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "GW (335)(4a)",
+  "edition_note": "10",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^pi e^(-px) sin^(2m) x dx = (2m)!(1-e^(-p pi))/(p(p^2+2^2)...(p^2+(2m)^2))",
+  "note": "m nonnegative integer implied"
+ },
+ {
+  "id": "GR3.895.3",
+  "gr": "3.895.3",
+  "page": 536,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Sin[x]^(2*m), {x, 0, Pi/2}]",
+  "rhs": [
+   "(2*m)!/(p*Product[p^2 + (2*k)^2, {k, 1, m}])*(1 - E^(-p*Pi/2)*(1 + Sum[Product[p^2 + (2*j)^2, {j, 0, k - 1}]/(2*k)!, {k, 1, m}]))"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (270)(4)",
+  "edition_note": "10",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^{pi/2} e^(-px) sin^(2m) x dx = (2m)!/(p(p^2+2^2)...(p^2+(2m)^2)) {1 - e^(-p pi/2)[1 + p^2/2! + p^2(p^2+2^2)/4! + ... + p^2(p^2+2^2)...(p^2+(2m-2)^2)/(2m)!]}",
+  "note": "the ... series written as a Sum of Products; m nonnegative integer implied"
+ },
+ {
+  "id": "GR3.895.4",
+  "gr": "3.895.4",
+  "page": 536,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*Sin[x]^(2*m + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(2*m + 1)!/Product[beta^2 + (2*k + 1)^2, {k, 0, m}]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "FI II 615, WA 620a",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-beta x) sin^(2m+1) x dx = (2m+1)!/((beta^2+1^2)(beta^2+3^2)...(beta^2+(2m+1)^2))",
+  "note": "m nonnegative integer implied"
+ },
+ {
+  "id": "GR3.895.5",
+  "gr": "3.895.5",
+  "page": 536,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Sin[x]^(2*m + 1), {x, 0, Pi}]",
+  "rhs": [
+   "(2*m + 1)!*(1 + E^(-p*Pi))/Product[p^2 + (2*k + 1)^2, {k, 0, m}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "GW (335)(4b)",
+  "edition_note": "10",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^pi e^(-px) sin^(2m+1) x dx = (2m+1)!(1+e^(-p pi))/((p^2+1^2)...(p^2+(2m+1)^2))",
+  "note": "m nonnegative integer implied"
+ },
+ {
+  "id": "GR3.895.6",
+  "gr": "3.895.6",
+  "page": 536,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Sin[x]^(2*m + 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "(2*m + 1)!/Product[p^2 + (2*k + 1)^2, {k, 0, m}]*(1 - p*E^(-p*Pi/2)*(1 + Sum[Product[p^2 + (2*j + 1)^2, {j, 0, k - 1}]/(2*k + 1)!, {k, 1, m}]))"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (270)(5)",
+  "edition_note": "8",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^{pi/2} e^(-px) sin^(2m+1) x dx = (2m+1)!/((p^2+1^2)...(p^2+(2m+1)^2)) {1 - p e^(-p pi/2)[1 + (p^2+1^2)/3! + ... + (p^2+1^2)...(p^2+(2m-1)^2)/(2m+1)!]}",
+  "note": "the ... series written as a Sum of Products; m nonnegative integer implied"
+ },
+ {
+  "id": "GR3.895.7",
+  "gr": "3.895.7",
+  "page": 536,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Cos[x]^(2*m), {x, 0, Infinity}]",
+  "rhs": [
+   "(2*m)!/(p*Product[p^2 + (2*k)^2, {k, 1, m}])*(1 + Sum[Product[p^2 + (2*j)^2, {j, 0, k - 1}]/(2*k)!, {k, 1, m}])"
+  ],
+  "conds": [
+   "p > 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (262)(3)",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-px) cos^(2m) x dx = (2m)!/(p(p^2+2^2)...(p^2+(2m)^2)) {1 + p^2/2! + ... + p^2(p^2+2^2)...(p^2+(2m-2)^2)/(2m)!}",
+  "note": "the ... series written as a Sum of Products; m nonnegative integer implied"
+ },
+ {
+  "id": "GR3.895.8",
+  "gr": "3.895.8",
+  "page": 536,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Cos[x]^(2*m), {x, 0, Pi/2}]",
+  "rhs": [
+   "(2*m)!/(p*Product[p^2 + (2*k)^2, {k, 1, m}])*(-E^(-p*Pi/2) + (1 + Sum[Product[p^2 + (2*j)^2, {j, 0, k - 1}]/(2*k)!, {k, 1, m}]))"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (270)(6)",
+  "edition_note": "10",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^{pi/2} e^(-px) cos^(2m) x dx = (2m)!/(p(p^2+2^2)...(p^2+(2m)^2)) {-e^(-p pi/2) + 1 + p^2/2! + ... + p^2(p^2+2^2)...(p^2+(2m-2)^2)/(2m)!}",
+  "note": "the ... series written as a Sum of Products; m nonnegative integer implied"
+ },
+ {
+  "id": "GR3.895.9",
+  "gr": "3.895.9",
+  "page": 536,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Cos[x]^(2*m + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(2*m + 1)!*p/Product[p^2 + (2*k + 1)^2, {k, 0, m}]*(1 + Sum[Product[p^2 + (2*j + 1)^2, {j, 0, k - 1}]/(2*k + 1)!, {k, 1, m}])"
+  ],
+  "conds": [
+   "p > 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (262)(4)",
+  "edition_note": "7",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-px) cos^(2m+1) x dx = (2m+1)! p/((p^2+1^2)...(p^2+(2m+1)^2)) {1 + (p^2+1^2)/3! + (p^2+1^2)(p^2+3^2)/5! + ... + (p^2+1^2)...(p^2+(2m-1)^2)/(2m+1)!}",
+  "note": "the ... series written as a Sum of Products; m nonnegative integer implied"
+ },
+ {
+  "id": "GR3.895.10",
+  "gr": "3.895.10",
+  "page": 537,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*x)*Cos[x]^(2*m + 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "(2*m + 1)!/Product[p^2 + (2*k + 1)^2, {k, 0, m}]*(E^(-p*Pi/2) + p*(1 + Sum[Product[p^2 + (2*j + 1)^2, {j, 0, k - 1}]/(2*k + 1)!, {k, 1, m}]))"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (270)(7)",
+  "edition_note": "11",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^{pi/2} e^(-px) cos^(2m+1) x dx = (2m+1)!/((p^2+1^2)...(p^2+(2m+1)^2)) {e^(-p pi/2) + p[1 + (p^2+1^2)/3! + ... + (p^2+1)(p^2+3^2)...(p^2+(2m-1)^2)/(2m+1)!]}",
+  "note": "the ... series written as a Sum of Products; m nonnegative integer implied"
+ },
+ {
+  "id": "GR3.895.11a",
+  "gr": "3.895.11",
+  "page": 537,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*Sin[a*x]^n*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-n - 2)/(a*(n + 1))*E^(n*Pi*I/2)*(1/Binomial[(b + n*a + I*beta)/(2*a), n + 1] + (-1)^n/Binomial[(b + n*a - I*beta)/(2*a), n + 1])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[beta] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-beta x) sin^n ax sin bx dx = 2^(-n-2)/(a(n+1)) e^((1-1+2n) pi i/4) {binom((b+na+i beta)/(2a), n+1)^-1 + (-1)^n binom((b+na-i beta)/(2a), n+1)^-1}",
+  "note": "upper signs (sin bx) of the printed {sin/cos} pair; n nonnegative integer implied"
+ },
+ {
+  "id": "GR3.895.11b",
+  "gr": "3.895.11",
+  "page": 537,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*Sin[a*x]^n*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-n - 2)/(a*(n + 1))*E^((2 + 2*n)*Pi*I/4)*(1/Binomial[(b + n*a + I*beta)/(2*a), n + 1] - (-1)^n/Binomial[(b + n*a - I*beta)/(2*a), n + 1])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[beta] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-beta x) sin^n ax cos bx dx = 2^(-n-2)/(a(n+1)) e^((1+1+2n) pi i/4) {binom((b+na+i beta)/(2a), n+1)^-1 - (-1)^n binom((b+na-i beta)/(2a), n+1)^-1}",
+  "note": "lower signs (cos bx) of the printed {sin/cos} pair; n nonnegative integer implied"
+ },
+ {
+  "id": "GR3.895.12",
+  "gr": "3.895.12",
+  "page": 537,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*Cos[m*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(a^2 + 2*m^2)/(a*(a^2 + 4*m^2))"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "DW61 (861.06)",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-ax) cos^2 mx dx = (a^2+2m^2)/(a(a^2+4m^2))",
+  "note": "a > 0 added (implied)"
+ },
+ {
+  "id": "GR3.895.13",
+  "gr": "3.895.13",
+  "page": 537,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*Cos[m*x]*Cos[n*x], {x, 0, Infinity}]",
+  "rhs": [
+   "a*(a^2 + m^2 + n^2)/((a^2 + (m - n)^2)*(a^2 + (m + n)^2))"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "DW61 (861.15)",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-ax) cos mx cos nx dx = a(a^2+m^2+n^2)/((a^2+(m-n)^2)(a^2+(m+n)^2))",
+  "note": "a > 0 added (implied)"
+ },
+ {
+  "id": "GR3.895.14",
+  "gr": "3.895.14",
+  "page": 537,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*Sin[m*x]*Cos[n*x], {x, 0, Infinity}]",
+  "rhs": [
+   "m*(a^2 + m^2 - n^2)/((a^2 + (m - n)^2)*(a^2 + (m + n)^2))"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "DW61 (861.14)",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-ax) sin mx cos nx dx = m(a^2+m^2-n^2)/((a^2+(m-n)^2)(a^2+(m+n)^2))",
+  "note": "a > 0 added (implied)"
+ },
+ {
+  "id": "GR3.895.15",
+  "gr": "3.895.15",
+  "page": 537,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*Sin[m*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2*m/(a*(a^2 + 4*m^2))",
+   "2*m^2/(a*(a^2 + 4*m^2))"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "DW61 (861.10)",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-ax) sin^2 mx dx = 2m/(a(a^2+4m^2))",
+  "note": "numerator read as 2m; second candidate 2m^2 (dimensionally consistent)"
+ },
+ {
+  "id": "GR3.895.16",
+  "gr": "3.895.16",
+  "page": 537,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x)*Sin[m*x]*Sin[n*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*a*m*n/((a^2 + (m - n)^2)*(a^2 + (m + n)^2))"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "DW61 (861.13)",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-ax) sin mx sin nx dx = 2amn/([a^2+(m-n)^2][a^2+(m+n)^2])",
+  "note": "a > 0 added (implied)"
+ },
+ {
+  "id": "GR3.896.1",
+  "gr": "3.896.1",
+  "page": 537,
+  "status": "ok",
+  "lhs": "Integrate[E^(-q^2*x^2)*Sin[p*(x + lam)], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/q*E^(-p^2/(4*q^2))*Sin[p*lam]"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "BI (269)(2)",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_-inf^inf e^(-q^2x^2) sin[p(x+lambda)] dx = sqrt(pi)/q e^(-p^2/(4q^2)) sin p lambda",
+  "note": "q > 0 added (implied)"
+ },
+ {
+  "id": "GR3.896.2",
+  "gr": "3.896.2",
+  "page": 537,
+  "status": "ok",
+  "lhs": "Integrate[E^(-q^2*x^2)*Cos[p*(x + lam)], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/q*E^(-p^2/(4*q^2))*Cos[p*lam]"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "BI (269)(3)",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_-inf^inf e^(-q^2x^2) cos[p(x+lambda)] dx = sqrt(pi)/q e^(-p^2/(4q^2)) cos p lambda",
+  "note": "q > 0 added (implied)"
+ },
+ {
+  "id": "GR3.896.3a",
+  "gr": "3.896.3",
+  "page": 537,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x^2)*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b/(2*a)*Exp[-b^2/(4*a)]*Hypergeometric1F1[1/2, 3/2, b^2/(4*a)]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET I 73(18)",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-ax^2) sin bx dx = b/(2a) exp(-b^2/(4a)) 1F1(1/2;3/2;b^2/(4a))",
+  "note": ""
+ },
+ {
+  "id": "GR3.896.3b",
+  "gr": "3.896.3",
+  "page": 537,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x^2)*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b/(2*a)*Hypergeometric1F1[1, 3/2, -b^2/(4*a)]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET I 73(18)",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "= b/(2a) 1F1(1;3/2;-b^2/(4a))",
+  "note": ""
+ },
+ {
+  "id": "GR3.896.3c",
+  "gr": "3.896.3",
+  "page": 537,
+  "status": "ok",
+  "lhs": "Integrate[E^(-a*x^2)*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "b/(2*a)*Sum[1/(2*k - 1)!!*(-b^2/(2*a))^(k - 1), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "FI II 720",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "= b/(2a) sum_{k=1}^inf 1/(2k-1)!! (-b^2/(2a))^(k-1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.896.4",
+  "gr": "3.896.4",
+  "page": 537,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x^2)*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sqrt[Pi/beta]*Exp[-b^2/(4*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "BI (263)(2)",
+  "edition_note": "",
+  "section": "3.89-3.91 Trigonometric functions and exponentials",
+  "tex": "int_0^inf e^(-beta x^2) cos bx dx = 1/2 sqrt(pi/beta) exp(-b^2/(4 beta))",
+  "note": ""
+ }
+]

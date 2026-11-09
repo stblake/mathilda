@@ -1,0 +1,2 @@
+verify: 1803 records, 1750 cached, 53 to run
+verified 1803 records: {'BADEXPR': 1, 'MISMATCH': 63, 'NOCONV': 49, 'TIMEOUT': 3, 'VERIFIED': 1665, 'VERIFIED1': 22}

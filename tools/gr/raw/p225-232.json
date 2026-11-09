@@ -1,0 +1,1328 @@
+[
+ {
+  "id": "GR2.561.2",
+  "gr": "2.561.2",
+  "page": 225,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sin[x])/(Sin[x]*(a + b*Cos[x])), x]",
+  "rhs": [
+   "A/(a^2 - b^2)*(a*Log[Tan[x/2]] + b*Log[(a + b*Cos[x])/Sin[x]]) + B*(2/Sqrt[a^2 - b^2]*ArcTan[Sqrt[a^2 - b^2]*Tan[x/2]/(a + b)])"
+  ],
+  "conds": [
+   "a > Abs[b]"
+  ],
+  "cite": "TI (349)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int (A+B sin x)/(sin x (a+b cos x)) = A/(a^2-b^2){a ln tan x/2 + b ln((a+b cos x)/sin x)} + B int dx/(a+b cos x)",
+  "note": "remaining integral of dx/(a + b Cos[x]) replaced by 2.553.3 closed form (a^2 > b^2 branch)"
+ },
+ {
+  "id": "GR2.561.3",
+  "gr": "2.561.3",
+  "page": 225,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sin[x])/(Sin[x]*(1 + Cos[x])), x]",
+  "rhs": [
+   "A/2*(Log[Tan[x/2]] + 1/(1 + Cos[x])) + B*Tan[x/2]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int (A+B sin x)/(sin x(1+cos x)) = A/2{ln tan x/2 + 1/(1+cos x)} + B tan x/2",
+  "note": "case a = b = 1"
+ },
+ {
+  "id": "GR2.561.4",
+  "gr": "2.561.4",
+  "page": 225,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sin[x])/(Sin[x]*(1 - Cos[x])), x]",
+  "rhs": [
+   "A/2*(Log[Tan[x/2]] - 1/(1 - Cos[x])) - B*Cot[x/2]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int (A+B sin x)/(sin x(1-cos x)) = A/2{ln tan x/2 - 1/(1-cos x)} - B cot x/2",
+  "note": "case a = -b = 1"
+ },
+ {
+  "id": "GR2.561.5",
+  "gr": "2.561.5",
+  "page": 225,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sin[x])/(Cos[x]*(a + b*Sin[x])), x]",
+  "rhs": [
+   "1/(a^2 - b^2)*((A*a - B*b)*Log[Tan[Pi/4 + x/2]] - (A*b - a*B)*Log[(a + b*Sin[x])/Cos[x]])"
+  ],
+  "conds": [],
+  "cite": "TI (346)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int (A+B sin x)/(cos x(a+b sin x)) = 1/(a^2-b^2){(Aa-Bb) ln tan(pi/4+x/2) - (Ab-aB) ln((a+b sin x)/cos x)}",
+  "note": ""
+ },
+ {
+  "id": "GR2.561.6a",
+  "gr": "2.561.6",
+  "page": 225,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sin[x])/(Cos[x]*(1 + Sin[x])), x]",
+  "rhs": [
+   "(A + B)/2*Log[Tan[Pi/4 + x/2]] - (A - B)/(2*(1 + Sin[x]))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int (A+B sin x)/(cos x(1+sin x)) = (A+B)/2 ln tan(pi/4+x/2) - (A-B)/(2(1+sin x))",
+  "note": "upper signs"
+ },
+ {
+  "id": "GR2.561.6b",
+  "gr": "2.561.6",
+  "page": 225,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sin[x])/(Cos[x]*(1 - Sin[x])), x]",
+  "rhs": [
+   "(A - B)/2*Log[Tan[Pi/4 + x/2]] + (A + B)/(2*(1 - Sin[x]))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int (A+B sin x)/(cos x(1-sin x)) = (A-B)/2 ln tan(pi/4+x/2) + (A+B)/(2(1-sin x))",
+  "note": "lower signs"
+ },
+ {
+  "id": "GR2.561.7",
+  "gr": "2.561.7",
+  "page": 225,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sin[x])/(Cos[x]*(a + b*Cos[x])), x]",
+  "rhs": [
+   "A/a*Log[Tan[Pi/4 + x/2]] + B/a*Log[(a + b*Cos[x])/Cos[x]] - A*b/a*(2/Sqrt[a^2 - b^2]*ArcTan[Sqrt[a^2 - b^2]*Tan[x/2]/(a + b)])"
+  ],
+  "conds": [
+   "a > Abs[b]"
+  ],
+  "cite": "TI (351)a",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int (A+B sin x)/(cos x(a+b cos x)) = A/a ln tan(pi/4+x/2) + B/a ln((a+b cos x)/cos x) - Ab/a int dx/(a+b cos x)",
+  "note": "remaining integral of dx/(a + b Cos[x]) replaced by 2.553.3 closed form (a^2 > b^2 branch)"
+ },
+ {
+  "id": "GR2.561.8",
+  "gr": "2.561.8",
+  "page": 225,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cos[x])/(Sin[x]*(a + b*Sin[x])), x]",
+  "rhs": [
+   "A/a*Log[Tan[x/2]] - B/a*Log[(a + b*Sin[x])/Sin[x]] - A*b/a*(2/Sqrt[a^2 - b^2]*ArcTan[(a*Tan[x/2] + b)/Sqrt[a^2 - b^2]])"
+  ],
+  "conds": [
+   "a > Abs[b]"
+  ],
+  "cite": "TI (352)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int (A+B cos x)/(sin x(a+b sin x)) = A/a ln tan x/2 - B/a ln((a+b sin x)/sin x) - Ab/a int dx/(a+b sin x)",
+  "note": "remaining integral of dx/(a + b Sin[x]) replaced by 2.551.3 closed form (a^2 > b^2 branch)"
+ },
+ {
+  "id": "GR2.561.9",
+  "gr": "2.561.9",
+  "page": 225,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cos[x])/(Sin[x]*(a + b*Cos[x])), x]",
+  "rhs": [
+   "1/(a^2 - b^2)*((A*a - B*b)*Log[Tan[x/2]] + (A*b - B*a)*Log[(a + b*Cos[x])/Sin[x]])"
+  ],
+  "conds": [],
+  "cite": "TI (345)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int (A+B cos x)/(sin x(a+b cos x)) = 1/(a^2-b^2){(Aa-Bb) ln tan x/2 + (Ab-Ba) ln((a+b cos x)/sin x)}",
+  "note": ""
+ },
+ {
+  "id": "GR2.561.10a",
+  "gr": "2.561.10",
+  "page": 225,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cos[x])/(Sin[x]*(1 + Cos[x])), x]",
+  "rhs": [
+   "(A - B)/(2*(1 + Cos[x])) + (A + B)/2*Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int (A+B cos x)/(sin x(1+cos x)) = (A-B)/(2(1+cos x)) + (A+B)/2 ln tan x/2",
+  "note": "upper signs"
+ },
+ {
+  "id": "GR2.561.10b",
+  "gr": "2.561.10",
+  "page": 225,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cos[x])/(Sin[x]*(1 - Cos[x])), x]",
+  "rhs": [
+   "-(A + B)/(2*(1 - Cos[x])) + (A - B)/2*Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int (A+B cos x)/(sin x(1-cos x)) = -(A+B)/(2(1-cos x)) + (A-B)/2 ln tan x/2",
+  "note": "lower signs"
+ },
+ {
+  "id": "GR2.561.11",
+  "gr": "2.561.11",
+  "page": 225,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cos[x])/(Cos[x]*(a + b*Sin[x])), x]",
+  "rhs": [
+   "A/(a^2 - b^2)*(a*Log[Tan[Pi/4 + x/2]] - b*Log[(a + b*Sin[x])/Cos[x]]) + B*(2/Sqrt[a^2 - b^2]*ArcTan[(a*Tan[x/2] + b)/Sqrt[a^2 - b^2]])"
+  ],
+  "conds": [
+   "a > Abs[b]"
+  ],
+  "cite": "TI (350)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int (A+B cos x)/(cos x(a+b sin x)) = A/(a^2-b^2){a ln tan(pi/4+x/2) - b ln((a+b sin x)/cos x)} + B int dx/(a+b sin x)",
+  "note": "remaining integral of dx/(a + b Sin[x]) replaced by 2.551.3 closed form (a^2 > b^2 branch)"
+ },
+ {
+  "id": "GR2.561.12a",
+  "gr": "2.561.12",
+  "page": 225,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sin[x])/(Cos[x]*(1 + Sin[x])), x]",
+  "rhs": [
+   "(A + B)/2*Log[Tan[Pi/4 + x/2]] - (A - B)/(2*(1 + Sin[x]))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int (A+B sin x)/(cos x(1+sin x)) = (A+B)/2 ln tan(pi/4+x/2) - (A-B)/(2(1+sin x))",
+  "note": "upper signs; printed identical to 2.561.6 (likely intended integrand A + B cos x, cf. 2.561.11, but the printed value matches the A + B sin x integrand)"
+ },
+ {
+  "id": "GR2.561.12b",
+  "gr": "2.561.12",
+  "page": 225,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Sin[x])/(Cos[x]*(1 - Sin[x])), x]",
+  "rhs": [
+   "(A - B)/2*Log[Tan[Pi/4 + x/2]] + (A + B)/(2*(1 - Sin[x]))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int (A+B sin x)/(cos x(1-sin x)) = (A-B)/2 ln tan(pi/4+x/2) + (A+B)/(2(1-sin x))",
+  "note": "lower signs; printed identical to 2.561.6"
+ },
+ {
+  "id": "GR2.561.13",
+  "gr": "2.561.13",
+  "page": 225,
+  "status": "ok",
+  "lhs": "Integrate[(A + B*Cos[x])/(Cos[x]*(a + b*Cos[x])), x]",
+  "rhs": [
+   "A/a*Log[Tan[Pi/4 + x/2]] + (B*a - A*b)/a*(2/Sqrt[a^2 - b^2]*ArcTan[Sqrt[a^2 - b^2]*Tan[x/2]/(a + b)])"
+  ],
+  "conds": [
+   "a > Abs[b]"
+  ],
+  "cite": "TI (347)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int (A+B cos x)/(cos x(a+b cos x)) = A/a ln tan(pi/4+x/2) + (Ba-Ab)/a int dx/(a+b cos x)",
+  "note": "remaining integral of dx/(a + b Cos[x]) replaced by 2.553.3 closed form (a^2 > b^2 branch)"
+ },
+ {
+  "id": "GR2.562.1a",
+  "gr": "2.562.1",
+  "page": 226,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Sin[x]^2), x]",
+  "rhs": [
+   "Sign[a]/Sqrt[a*(a + b)]*ArcTan[Sqrt[(a + b)/a]*Tan[x]]"
+  ],
+  "conds": [
+   "b/a > -1"
+  ],
+  "cite": "MZ 155",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int dx/(a+b sin^2 x) = sign a/sqrt(a(a+b)) arctan(sqrt((a+b)/a) tan x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.562.1b",
+  "gr": "2.562.1",
+  "page": 226,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Sin[x]^2), x]",
+  "rhs": [
+   "Sign[a]/Sqrt[-a*(a + b)]*ArcTanh[Sqrt[-(a + b)/a]*Tan[x]]"
+  ],
+  "conds": [
+   "b/a < -1"
+  ],
+  "cite": "MZ 155",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "= sign a/sqrt(-a(a+b)) arctanh(sqrt(-(a+b)/a) tan x)",
+  "note": "valid for sin^2 x < -a/b"
+ },
+ {
+  "id": "GR2.562.1c",
+  "gr": "2.562.1",
+  "page": 226,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Sin[x]^2), x]",
+  "rhs": [
+   "Sign[a]/Sqrt[-a*(a + b)]*ArcCoth[Sqrt[-(a + b)/a]*Tan[x]]"
+  ],
+  "conds": [
+   "b/a < -1"
+  ],
+  "cite": "MZ 155",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "= sign a/sqrt(-a(a+b)) arccoth(sqrt(-(a+b)/a) tan x)",
+  "note": "valid for sin^2 x > -a/b"
+ },
+ {
+  "id": "GR2.562.2a",
+  "gr": "2.562.2",
+  "page": 226,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cos[x]^2), x]",
+  "rhs": [
+   "-Sign[a]/Sqrt[a*(a + b)]*ArcTan[Sqrt[(a + b)/a]*Cot[x]]"
+  ],
+  "conds": [
+   "b/a > -1"
+  ],
+  "cite": "MZ 162",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int dx/(a+b cos^2 x) = -sign a/sqrt(a(a+b)) arctan(sqrt((a+b)/a) cot x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.562.2b",
+  "gr": "2.562.2",
+  "page": 226,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cos[x]^2), x]",
+  "rhs": [
+   "-Sign[a]/Sqrt[-a*(a + b)]*ArcTanh[Sqrt[-(a + b)/a]*Cot[x]]"
+  ],
+  "conds": [
+   "b/a < -1"
+  ],
+  "cite": "MZ 162",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "= -sign a/sqrt(-a(a+b)) arctanh(sqrt(-(a+b)/a) cot x)",
+  "note": "valid for cos^2 x < -a/b"
+ },
+ {
+  "id": "GR2.562.2c",
+  "gr": "2.562.2",
+  "page": 226,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cos[x]^2), x]",
+  "rhs": [
+   "-Sign[a]/Sqrt[-a*(a + b)]*ArcCoth[Sqrt[-(a + b)/a]*Cot[x]]"
+  ],
+  "conds": [
+   "b/a < -1"
+  ],
+  "cite": "MZ 162",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "= -sign a/sqrt(-a(a+b)) arccoth(sqrt(-(a+b)/a) cot x)",
+  "note": "valid for cos^2 x > -a/b"
+ },
+ {
+  "id": "GR2.562.3",
+  "gr": "2.562.3",
+  "page": 226,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 + Sin[x]^2), x]",
+  "rhs": [
+   "1/Sqrt[2]*ArcTan[Sqrt[2]*Tan[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int dx/(1+sin^2 x) = 1/sqrt2 arctan(sqrt2 tan x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.562.4",
+  "gr": "2.562.4",
+  "page": 226,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 - Sin[x]^2), x]",
+  "rhs": [
+   "Tan[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int dx/(1-sin^2 x) = tan x",
+  "note": ""
+ },
+ {
+  "id": "GR2.562.5",
+  "gr": "2.562.5",
+  "page": 226,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 + Cos[x]^2), x]",
+  "rhs": [
+   "-1/Sqrt[2]*ArcTan[Sqrt[2]*Cot[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int dx/(1+cos^2 x) = -1/sqrt2 arctan(sqrt2 cot x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.562.6",
+  "gr": "2.562.6",
+  "page": 226,
+  "status": "ok",
+  "lhs": "Integrate[1/(1 - Cos[x]^2), x]",
+  "rhs": [
+   "-Cot[x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int dx/(1-cos^2 x) = -cot x",
+  "note": ""
+ },
+ {
+  "id": "GR2.563.1",
+  "gr": "2.563.1",
+  "page": 226,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Sin[x]^2)^2, x]",
+  "rhs": [
+   "1/(2*a*(a + b))*((2*a + b)*(Sign[a]/Sqrt[a*(a + b)]*ArcTan[Sqrt[(a + b)/a]*Tan[x]]) + b*Sin[x]*Cos[x]/(a + b*Sin[x]^2))"
+  ],
+  "conds": [
+   "b/a > -1"
+  ],
+  "cite": "MZ 155",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int dx/(a+b sin^2 x)^2 = 1/(2a(a+b))[(2a+b) int dx/(a+b sin^2 x) + b sin x cos x/(a+b sin^2 x)]",
+  "note": "remaining integral replaced by 2.562.1 arctan branch (b/a > -1)"
+ },
+ {
+  "id": "GR2.563.2",
+  "gr": "2.563.2",
+  "page": 226,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cos[x]^2)^2, x]",
+  "rhs": [
+   "1/(2*a*(a + b))*((2*a + b)*(-Sign[a]/Sqrt[a*(a + b)]*ArcTan[Sqrt[(a + b)/a]*Cot[x]]) - b*Sin[x]*Cos[x]/(a + b*Cos[x]^2))"
+  ],
+  "conds": [
+   "b/a > -1"
+  ],
+  "cite": "MZ 163",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int dx/(a+b cos^2 x)^2 = 1/(2a(a+b))[(2a+b) int dx/(a+b cos^2 x) - b sin x cos x/(a+b cos^2 x)]",
+  "note": "remaining integral replaced by 2.562.2 arctan branch (b/a > -1)"
+ },
+ {
+  "id": "GR2.563.3a",
+  "gr": "2.563.3",
+  "page": 227,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Sin[x]^2)^3, x]",
+  "rhs": [
+   "1/(8*Sqrt[1 + b/a]*a^3)*((3 + 2/Sqrt[1 + b/a]^2 + 3/Sqrt[1 + b/a]^4)*ArcTan[Sqrt[1 + b/a]*Tan[x]] + (3 + 2/Sqrt[1 + b/a]^2 - 3/Sqrt[1 + b/a]^4)*Sqrt[1 + b/a]*Tan[x]/(1 + Sqrt[1 + b/a]^2*Tan[x]^2) + (1 - 2/Sqrt[1 + b/a]^2 - 1/Sqrt[1 + b/a]^2*Tan[x]^2)*2*Sqrt[1 + b/a]*Tan[x]/(1 + Sqrt[1 + b/a]^2*Tan[x]^2)^2)"
+  ],
+  "conds": [
+   "1 + b/a > 0"
+  ],
+  "cite": "MZ 156",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int dx/(a+b sin^2x)^3 = 1/(8pa^3)[(3+2/p^2+3/p^4) arctan(p tan x) + (3+2/p^2-3/p^4) p tan x/(1+p^2tan^2x) + (1-2/p^2-1/p^2 tan^2x) 2p tan x/(1+p^2tan^2x)^2]",
+  "note": "p^2 = 1 + b/a substituted, p = Sqrt[1 + b/a]"
+ },
+ {
+  "id": "GR2.563.3b",
+  "gr": "2.563.3",
+  "page": 227,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Sin[x]^2)^3, x]",
+  "rhs": [
+   "1/(8*Sqrt[-1 - b/a]*a^3)*((3 - 2/Sqrt[-1 - b/a]^2 + 3/Sqrt[-1 - b/a]^4)*ArcTanh[Sqrt[-1 - b/a]*Tan[x]] + (3 - 2/Sqrt[-1 - b/a]^2 - 3/Sqrt[-1 - b/a]^4)*Sqrt[-1 - b/a]*Tan[x]/(1 - Sqrt[-1 - b/a]^2*Tan[x]^2) + (1 + 2/Sqrt[-1 - b/a]^2 + 1/Sqrt[-1 - b/a]^2*Tan[x]^2)*2*Sqrt[-1 - b/a]*Tan[x]/(1 - Sqrt[-1 - b/a]^2*Tan[x]^2)^2)"
+  ],
+  "conds": [
+   "-1 - b/a > 0"
+  ],
+  "cite": "MZ 156",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "= 1/(8qa^3)[(3-2/q^2+3/q^4) arctanh(q tan x) + (3-2/q^2-3/q^4) q tan x/(1-q^2tan^2x) + (1+2/q^2+1/q^2 tan^2x) 2q tan x/(1-q^2tan^2x)^2]",
+  "note": "q^2 = -1 - b/a substituted, q = Sqrt[-1 - b/a]; valid for sin^2 x < -a/b"
+ },
+ {
+  "id": "GR2.563.3c",
+  "gr": "2.563.3",
+  "page": 227,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Sin[x]^2)^3, x]",
+  "rhs": [
+   "1/(8*Sqrt[-1 - b/a]*a^3)*((3 - 2/Sqrt[-1 - b/a]^2 + 3/Sqrt[-1 - b/a]^4)*ArcCoth[Sqrt[-1 - b/a]*Tan[x]] + (3 - 2/Sqrt[-1 - b/a]^2 - 3/Sqrt[-1 - b/a]^4)*Sqrt[-1 - b/a]*Tan[x]/(1 - Sqrt[-1 - b/a]^2*Tan[x]^2) + (1 + 2/Sqrt[-1 - b/a]^2 + 1/Sqrt[-1 - b/a]^2*Tan[x]^2)*2*Sqrt[-1 - b/a]*Tan[x]/(1 - Sqrt[-1 - b/a]^2*Tan[x]^2)^2)"
+  ],
+  "conds": [
+   "-1 - b/a > 0"
+  ],
+  "cite": "MZ 156",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "same with arctanh(q tan x) -> arccoth(q tan x)",
+  "note": "q^2 = -1 - b/a substituted, q = Sqrt[-1 - b/a]; valid for sin^2 x > -a/b"
+ },
+ {
+  "id": "GR2.563.4a",
+  "gr": "2.563.4",
+  "page": 227,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cos[x]^2)^3, x]",
+  "rhs": [
+   "-1/(8*Sqrt[1 + b/a]*a^3)*((3 + 2/Sqrt[1 + b/a]^2 + 3/Sqrt[1 + b/a]^4)*ArcTan[Sqrt[1 + b/a]*Cot[x]] + (3 + 2/Sqrt[1 + b/a]^2 - 3/Sqrt[1 + b/a]^4)*Sqrt[1 + b/a]*Cot[x]/(1 + Sqrt[1 + b/a]^2*Cot[x]^2) + (1 - 2/Sqrt[1 + b/a]^2 - 1/Sqrt[1 + b/a]^2*Cot[x]^2)*2*Sqrt[1 + b/a]*Cot[x]/(1 + Sqrt[1 + b/a]^2*Cot[x]^2)^2)"
+  ],
+  "conds": [
+   "1 + b/a > 0"
+  ],
+  "cite": "MZ 163a",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int dx/(a+b cos^2x)^3 = -1/(8pa^3)[(3+2/p^2+3/p^4) arctan(p cot x) + ... cot x ...]",
+  "note": "p^2 = 1 + b/a substituted, p = Sqrt[1 + b/a]"
+ },
+ {
+  "id": "GR2.563.4b",
+  "gr": "2.563.4",
+  "page": 227,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cos[x]^2)^3, x]",
+  "rhs": [
+   "-1/(8*Sqrt[-1 - b/a]*a^3)*((3 - 2/Sqrt[-1 - b/a]^2 + 3/Sqrt[-1 - b/a]^4)*ArcTanh[Sqrt[-1 - b/a]*Cot[x]] + (3 - 2/Sqrt[-1 - b/a]^2 - 3/Sqrt[-1 - b/a]^4)*Sqrt[-1 - b/a]*Cot[x]/(1 - Sqrt[-1 - b/a]^2*Cot[x]^2) + (1 + 2/Sqrt[-1 - b/a]^2 + 1/Sqrt[-1 - b/a]^2*Cot[x]^2)*2*Sqrt[-1 - b/a]*Cot[x]/(1 - Sqrt[-1 - b/a]^2*Cot[x]^2)^2)"
+  ],
+  "conds": [
+   "-1 - b/a > 0"
+  ],
+  "cite": "MZ 163a",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "= -1/(8qa^3)[(3-2/q^2+3/q^4) arctanh(q cot x) + ... cot x ...]",
+  "note": "q^2 = -1 - b/a substituted, q = Sqrt[-1 - b/a]; valid for cos^2 x < -a/b"
+ },
+ {
+  "id": "GR2.563.4c",
+  "gr": "2.563.4",
+  "page": 227,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Cos[x]^2)^3, x]",
+  "rhs": [
+   "-1/(8*Sqrt[-1 - b/a]*a^3)*((3 - 2/Sqrt[-1 - b/a]^2 + 3/Sqrt[-1 - b/a]^4)*ArcCoth[Sqrt[-1 - b/a]*Cot[x]] + (3 - 2/Sqrt[-1 - b/a]^2 - 3/Sqrt[-1 - b/a]^4)*Sqrt[-1 - b/a]*Cot[x]/(1 - Sqrt[-1 - b/a]^2*Cot[x]^2) + (1 + 2/Sqrt[-1 - b/a]^2 + 1/Sqrt[-1 - b/a]^2*Cot[x]^2)*2*Sqrt[-1 - b/a]*Cot[x]/(1 - Sqrt[-1 - b/a]^2*Cot[x]^2)^2)"
+  ],
+  "conds": [
+   "-1 - b/a > 0"
+  ],
+  "cite": "MZ 163a",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "same with arctanh(q cot x) -> arccoth(q cot x)",
+  "note": "q^2 = -1 - b/a substituted, q = Sqrt[-1 - b/a]; valid for cos^2 x > -a/b"
+ },
+ {
+  "id": "GR2.564.1",
+  "gr": "2.564.1",
+  "page": 227,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]/(1 + m^2*Tan[x]^2), x]",
+  "rhs": [
+   "Log[Cos[x]^2 + m^2*Sin[x]^2]/(2*(m^2 - 1))"
+  ],
+  "conds": [
+   "m^2 != 1"
+  ],
+  "cite": "LA 210 (10)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int tan x/(1+m^2 tan^2 x) = ln(cos^2 x + m^2 sin^2 x)/(2(m^2-1))",
+  "note": ""
+ },
+ {
+  "id": "GR2.564.2",
+  "gr": "2.564.2",
+  "page": 227,
+  "status": "ok",
+  "lhs": "Integrate[(Tan[alpha] - Tan[x])/(Tan[alpha] + Tan[x]), x]",
+  "rhs": [
+   "Sin[2*alpha]*Log[Sin[x + alpha]] - x*Cos[2*alpha]"
+  ],
+  "conds": [],
+  "cite": "LA 210 (11)a",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int (tan alpha - tan x)/(tan alpha + tan x) = sin 2alpha ln sin(x+alpha) - x cos 2alpha",
+  "note": ""
+ },
+ {
+  "id": "GR2.564.3",
+  "gr": "2.564.3",
+  "page": 227,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]/(a + b*Tan[x]), x]",
+  "rhs": [
+   "1/(a^2 + b^2)*(b*x - a*Log[a*Cos[x] + b*Sin[x]])"
+  ],
+  "conds": [],
+  "cite": "PE (335)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int tan x/(a+b tan x) = 1/(a^2+b^2){bx - a ln(a cos x + b sin x)}",
+  "note": ""
+ },
+ {
+  "id": "GR2.564.4",
+  "gr": "2.564.4",
+  "page": 227,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + b*Tan[x]^2), x]",
+  "rhs": [
+   "1/(a - b)*(x - Sqrt[b/a]*ArcTan[Sqrt[b/a]*Tan[x]])"
+  ],
+  "conds": [
+   "a != b"
+  ],
+  "cite": "PE (334)",
+  "edition_note": "",
+  "section": "2.55-2.56 Rational functions of sine and cosine",
+  "tex": "int dx/(a+b tan^2 x) = 1/(a-b)[x - sqrt(b/a) arctan(sqrt(b/a) tan x)]",
+  "note": ""
+ },
+ {
+  "id": "GR2.571.1a",
+  "gr": "2.571.1",
+  "page": 228,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[a + b*Sin[x]], x]",
+  "rhs": [
+   "-2/Sqrt[a + b]*MatharF2[ArcSin[Sqrt[(1 - Sin[x])/2]], Sqrt[2*b/(a + b)]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "BY (288.00)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int dx/sqrt(a+b sin x) = -2/sqrt(a+b) F(alpha, r)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for -Pi/2 <= x < Pi/2"
+ },
+ {
+  "id": "GR2.571.1b",
+  "gr": "2.571.1",
+  "page": 228,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[a + b*Sin[x]], x]",
+  "rhs": [
+   "-Sqrt[2/b]*MatharF2[ArcSin[Sqrt[b*(1 - Sin[x])/(a + b)]], Sqrt[(a + b)/(2*b)]]"
+  ],
+  "conds": [
+   "0 < Abs[a] < b"
+  ],
+  "cite": "BY (288.50)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "= -sqrt(2/b) F(beta, 1/r)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for -ArcSin[a/b] < x < Pi/2"
+ },
+ {
+  "id": "GR2.571.2a",
+  "gr": "2.571.2",
+  "page": 228,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/Sqrt[a + b*Sin[x]], x]",
+  "rhs": [
+   "2*a/(b*Sqrt[a + b])*MatharF2[ArcSin[Sqrt[(1 - Sin[x])/2]], Sqrt[2*b/(a + b)]] - 2*Sqrt[a + b]/b*MatharE2[ArcSin[Sqrt[(1 - Sin[x])/2]], Sqrt[2*b/(a + b)]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "BY (288.03)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int sin x dx/sqrt(a+b sin x) = 2a/(b sqrt(a+b)) F(alpha,r) - 2 sqrt(a+b)/b E(alpha,r)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for -Pi/2 <= x < Pi/2"
+ },
+ {
+  "id": "GR2.571.2b",
+  "gr": "2.571.2",
+  "page": 228,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/Sqrt[a + b*Sin[x]], x]",
+  "rhs": [
+   "Sqrt[2/b]*(MatharF2[ArcSin[Sqrt[b*(1 - Sin[x])/(a + b)]], Sqrt[(a + b)/(2*b)]] - 2*MatharE2[ArcSin[Sqrt[b*(1 - Sin[x])/(a + b)]], Sqrt[(a + b)/(2*b)]])"
+  ],
+  "conds": [
+   "0 < Abs[a] < b"
+  ],
+  "cite": "BY (288.54)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "= sqrt(2/b){F(beta,1/r) - 2E(beta,1/r)}",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for -ArcSin[a/b] < x < Pi/2"
+ },
+ {
+  "id": "GR2.571.3a",
+  "gr": "2.571.3",
+  "page": 228,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2/Sqrt[a + b*Sin[x]], x]",
+  "rhs": [
+   "4*a*Sqrt[a + b]/(3*b^2)*MatharE2[ArcSin[Sqrt[(1 - Sin[x])/2]], Sqrt[2*b/(a + b)]] - 2*(2*a^2 + b^2)/(3*b^2*Sqrt[a + b])*MatharF2[ArcSin[Sqrt[(1 - Sin[x])/2]], Sqrt[2*b/(a + b)]] - 2/(3*b)*Cos[x]*Sqrt[a + b*Sin[x]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "BY (288.03, 288.54)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int sin^2x dx/sqrt(a+b sin x) = 4a sqrt(a+b)/(3b^2) E(alpha,r) - 2(2a^2+b^2)/(3b^2 sqrt(a+b)) F(alpha,r) - 2/(3b) cos x sqrt(a+b sin x)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for -Pi/2 <= x < Pi/2"
+ },
+ {
+  "id": "GR2.571.3b",
+  "gr": "2.571.3",
+  "page": 228,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^2/Sqrt[a + b*Sin[x]], x]",
+  "rhs": [
+   "Sqrt[2/b]*(4*a/(3*b)*MatharE2[ArcSin[Sqrt[b*(1 - Sin[x])/(a + b)]], Sqrt[(a + b)/(2*b)]] - (2*a + b)/(3*b)*MatharF2[ArcSin[Sqrt[b*(1 - Sin[x])/(a + b)]], Sqrt[(a + b)/(2*b)]]) - 2/(3*b)*Cos[x]*Sqrt[a + b*Sin[x]]"
+  ],
+  "conds": [
+   "0 < Abs[a] < b"
+  ],
+  "cite": "BY (288.03, 288.54)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "= sqrt(2/b){4a/(3b) E(beta,1/r) - (2a+b)/(3b) F(beta,1/r)} - 2/(3b) cos x sqrt(a+b sin x)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for -ArcSin[a/b] < x < Pi/2"
+ },
+ {
+  "id": "GR2.571.4a",
+  "gr": "2.571.4",
+  "page": 228,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[a + b*Cos[x]], x]",
+  "rhs": [
+   "2/Sqrt[a + b]*MatharF2[x/2, Sqrt[2*b/(a + b)]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "BY (289.00)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int dx/sqrt(a+b cos x) = 2/sqrt(a+b) F(x/2, r)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x <= Pi"
+ },
+ {
+  "id": "GR2.571.4b",
+  "gr": "2.571.4",
+  "page": 228,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[a + b*Cos[x]], x]",
+  "rhs": [
+   "Sqrt[2/b]*MatharF2[ArcSin[Sqrt[b*(1 - Cos[x])/(a + b)]], Sqrt[(a + b)/(2*b)]]"
+  ],
+  "conds": [
+   "b >= Abs[a] > 0"
+  ],
+  "cite": "BY (289.00)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "= sqrt(2/b) F(gamma, 1/r)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x < ArcCos[-a/b]"
+ },
+ {
+  "id": "GR2.571.5",
+  "gr": "2.571.5",
+  "page": 228,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[a - b*Cos[x]], x]",
+  "rhs": [
+   "2/Sqrt[a + b]*MatharF2[ArcSin[Sqrt[(a + b)*(1 - Cos[x])/(2*(a - b*Cos[x]))]], Sqrt[2*b/(a + b)]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "BY (291.00)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int dx/sqrt(a-b cos x) = 2/sqrt(a+b) F(delta, r)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x <= Pi"
+ },
+ {
+  "id": "GR2.571.6a",
+  "gr": "2.571.6",
+  "page": 229,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/Sqrt[a + b*Cos[x]], x]",
+  "rhs": [
+   "2/(b*Sqrt[a + b])*((a + b)*MatharE2[x/2, Sqrt[2*b/(a + b)]] - a*MatharF2[x/2, Sqrt[2*b/(a + b)]])"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "BY (289.03)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int cos x dx/sqrt(a+b cos x) = 2/(b sqrt(a+b)){(a+b)E(x/2,r) - aF(x/2,r)}",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x <= Pi"
+ },
+ {
+  "id": "GR2.571.6b",
+  "gr": "2.571.6",
+  "page": 229,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/Sqrt[a + b*Cos[x]], x]",
+  "rhs": [
+   "Sqrt[2/b]*(2*MatharE2[ArcSin[Sqrt[b*(1 - Cos[x])/(a + b)]], Sqrt[(a + b)/(2*b)]] - MatharF2[ArcSin[Sqrt[b*(1 - Cos[x])/(a + b)]], Sqrt[(a + b)/(2*b)]])"
+  ],
+  "conds": [
+   "b > Abs[a] > 0"
+  ],
+  "cite": "BY (290.04)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "= sqrt(2/b){2E(gamma,1/r) - F(gamma,1/r)}",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x < ArcCos[-a/b]"
+ },
+ {
+  "id": "GR2.571.7",
+  "gr": "2.571.7",
+  "page": 229,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/Sqrt[a - b*Cos[x]], x]",
+  "rhs": [
+   "2/(b*Sqrt[a + b])*((b - a)*EllipticPi[(2*b/(a + b)), ArcSin[Sqrt[(a + b)*(1 - Cos[x])/(2*(a - b*Cos[x]))]], (2*b/(a + b))] + a*MatharF2[ArcSin[Sqrt[(a + b)*(1 - Cos[x])/(2*(a - b*Cos[x]))]], Sqrt[2*b/(a + b)]])"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "BY (291.03)",
+  "edition_note": "6",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int cos x dx/sqrt(a-b cos x) = 2/(b sqrt(a+b)){(b-a) Pi(delta, r^2, r) + a F(delta,r)}",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x <= Pi"
+ },
+ {
+  "id": "GR2.571.8a",
+  "gr": "2.571.8",
+  "page": 229,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^2/Sqrt[a + b*Cos[x]], x]",
+  "rhs": [
+   "2/(3*b^2*Sqrt[a + b])*((2*a^2 + b^2)*MatharF2[x/2, Sqrt[2*b/(a + b)]] - 2*a*(a + b)*MatharE2[x/2, Sqrt[2*b/(a + b)]]) + 2/(3*b)*Sin[x]*Sqrt[a + b*Cos[x]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "BY (289.03)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int cos^2x dx/sqrt(a+b cos x) = 2/(3b^2 sqrt(a+b)){(2a^2+b^2)F(x/2,r) - 2a(a+b)E(x/2,r)} + 2/(3b) sin x sqrt(a+b cos x)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x <= Pi"
+ },
+ {
+  "id": "GR2.571.8b",
+  "gr": "2.571.8",
+  "page": 229,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^2/Sqrt[a + b*Cos[x]], x]",
+  "rhs": [
+   "1/(3*b)*Sqrt[2/b]*((2*a + b)*MatharF2[ArcSin[Sqrt[b*(1 - Cos[x])/(a + b)]], Sqrt[(a + b)/(2*b)]] - 4*a*MatharE2[ArcSin[Sqrt[b*(1 - Cos[x])/(a + b)]], Sqrt[(a + b)/(2*b)]]) + 2/(3*b)*Sin[x]*Sqrt[a + b*Cos[x]]"
+  ],
+  "conds": [
+   "b >= Abs[a] > 0"
+  ],
+  "cite": "BY (290.04)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "= 1/(3b) sqrt(2/b){(2a+b)F(gamma,1/r) - 4aE(gamma,1/r)} + 2/(3b) sin x sqrt(a+b cos x)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x < ArcCos[-a/b]"
+ },
+ {
+  "id": "GR2.571.9",
+  "gr": "2.571.9",
+  "page": 229,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^2/Sqrt[a - b*Cos[x]], x]",
+  "rhs": [
+   "2/(3*b^2*Sqrt[a + b])*((2*a^2 + b^2)*MatharF2[ArcSin[Sqrt[(a + b)*(1 - Cos[x])/(2*(a - b*Cos[x]))]], Sqrt[2*b/(a + b)]] - 2*a*(a + b)*MatharE2[ArcSin[Sqrt[(a + b)*(1 - Cos[x])/(2*(a - b*Cos[x]))]], Sqrt[2*b/(a + b)]]) + 2/(3*b)*Sin[x]*(a + b*Cos[x])/Sqrt[a - b*Cos[x]]",
+   "2/(3*b^2*Sqrt[a + b])*((2*a^2 + b^2)*MatharF2[ArcSin[Sqrt[(a + b)*(1 - Cos[x])/(2*(a - b*Cos[x]))]], Sqrt[2*b/(a + b)]] - 2*a*(a + b)*MatharE2[ArcSin[Sqrt[(a + b)*(1 - Cos[x])/(2*(a - b*Cos[x]))]], Sqrt[2*b/(a + b)]]) + 2/(3*b)*Sin[x]*Sqrt[a - b*Cos[x]]",
+   "2/(3*b^2*Sqrt[a + b])*((2*a^2 + b^2)*MatharF2[ArcSin[Sqrt[(a + b)*(1 - Cos[x])/(2*(a - b*Cos[x]))]], Sqrt[2*b/(a + b)]] - 2*a*(a + b)*MatharE2[ArcSin[Sqrt[(a + b)*(1 - Cos[x])/(2*(a - b*Cos[x]))]], Sqrt[2*b/(a + b)]]) - 2/(3*b)*Sin[x]*Sqrt[a - b*Cos[x]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "BY (291.04)a",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int cos^2x dx/sqrt(a-b cos x) = 2/(3b^2 sqrt(a+b)){(2a^2+b^2)F(delta,r) - 2a(a+b)E(delta,r)} + 2/(3b) sin x (a+b cos x)/sqrt(a-b cos x)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x <= Pi; condition printed '[a > b > 0, ]' (x range assumed as 2.571.5); the algebraic term (a + b cos x)/sqrt(a - b cos x) looks suspicious, extra candidates use +-sqrt(a - b cos x)"
+ },
+ {
+  "id": "GR2.572a",
+  "gr": "2.572",
+  "page": 229,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^2/Sqrt[a + b*Sin[x]], x]",
+  "rhs": [
+   "1/Sqrt[a + b]*MatharF2[ArcSin[Sqrt[(1 - Sin[x])/2]], Sqrt[2*b/(a + b)]] + a/((a - b)*Sqrt[a + b])*MatharE2[ArcSin[Sqrt[(1 - Sin[x])/2]], Sqrt[2*b/(a + b)]] - (b - a*Sin[x])/((a^2 - b^2)*Cos[x])*Sqrt[a + b*Sin[x]]"
+  ],
+  "conds": [
+   "0 < b < a"
+  ],
+  "cite": "BY (288.08)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int tan^2x dx/sqrt(a+b sin x) = 1/sqrt(a+b) F(alpha,r) + a/((a-b)sqrt(a+b)) E(alpha,r) - (b - a sin x)/((a^2-b^2)cos x) sqrt(a+b sin x)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for -Pi/2 < x < Pi/2"
+ },
+ {
+  "id": "GR2.572b",
+  "gr": "2.572",
+  "page": 229,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]^2/Sqrt[a + b*Sin[x]], x]",
+  "rhs": [
+   "Sqrt[2/b]*((2*a + b)/(2*(a + b))*MatharF2[ArcSin[Sqrt[b*(1 - Sin[x])/(a + b)]], Sqrt[(a + b)/(2*b)]] + a*b/(a^2 - b^2)*MatharE2[ArcSin[Sqrt[b*(1 - Sin[x])/(a + b)]], Sqrt[(a + b)/(2*b)]]) - (b - a*Sin[x])/((a^2 - b^2)*Cos[x])*Sqrt[a + b*Sin[x]]"
+  ],
+  "conds": [
+   "0 < Abs[a] < b"
+  ],
+  "cite": "BY (288.58)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "= sqrt(2/b){(2a+b)/(2(a+b)) F(beta,1/r) + ab/(a^2-b^2) E(beta,1/r)} - (b - a sin x)/((a^2-b^2)cos x) sqrt(a+b sin x)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for -ArcSin[a/b] < x < Pi/2"
+ },
+ {
+  "id": "GR2.573.1",
+  "gr": "2.573.1",
+  "page": 229,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Sin[x])/(1 + Sin[x])/Sqrt[a + b*Sin[x]], x]",
+  "rhs": [
+   "2/(a - b)*(Sqrt[a + b]*MatharE2[ArcSin[Sqrt[(1 - Sin[x])/2]], Sqrt[2*b/(a + b)]] - Tan[Pi/4 - x/2]*Sqrt[a + b*Sin[x]])",
+   "2/(a - b)*Sqrt[a + b]*MatharE2[ArcSin[Sqrt[(1 - Sin[x])/2]], Sqrt[2*b/(a + b)]] - Tan[Pi/4 - x/2]*Sqrt[a + b*Sin[x]]"
+  ],
+  "conds": [
+   "0 < b < a"
+  ],
+  "cite": "BY (288.07)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int (1-sin x)/(1+sin x) dx/sqrt(a+b sin x) = 2/(a-b){sqrt(a+b) E(alpha,r)} - tan(pi/4 - x/2) sqrt(a+b sin x)}",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for -Pi/2 <= x < Pi/2; braces printed unbalanced: first candidate has 2/(a-b) multiplying both terms, second only the E term"
+ },
+ {
+  "id": "GR2.573.2",
+  "gr": "2.573.2",
+  "page": 230,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Cos[x])/(1 + Cos[x])/Sqrt[a + b*Cos[x]], x]",
+  "rhs": [
+   "2/(a - b)*Tan[x/2]*Sqrt[a + b*Cos[x]] - 2*Sqrt[a + b]/(a - b)*MatharE2[x/2, Sqrt[2*b/(a + b)]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "BY (289.07)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int (1-cos x)/(1+cos x) dx/sqrt(a+b cos x) = 2/(a-b) tan(x/2) sqrt(a+b cos x) - 2 sqrt(a+b)/(a-b) E(x/2,r)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x < Pi"
+ },
+ {
+  "id": "GR2.574.1",
+  "gr": "2.574.1",
+  "page": 230,
+  "status": "ok",
+  "lhs": "Integrate[1/((2 - p^2 + p^2*Sin[x])*Sqrt[a + b*Sin[x]]), x]",
+  "rhs": [
+   "-1/(a + b)*EllipticPi[p^2, ArcSin[Sqrt[(1 - Sin[x])/2]], (2*b/(a + b))]"
+  ],
+  "conds": [
+   "0 < b < a"
+  ],
+  "cite": "BY (288.02)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int dx/((2-p^2+p^2 sin x) sqrt(a+b sin x)) = -1/(a+b) Pi(alpha, p^2, r)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for -Pi/2 <= x < Pi/2"
+ },
+ {
+  "id": "GR2.574.2",
+  "gr": "2.574.2",
+  "page": 230,
+  "status": "ok",
+  "lhs": "Integrate[1/((a + b - p^2*b + p^2*b*Sin[x])*Sqrt[a + b*Sin[x]]), x]",
+  "rhs": [
+   "-1/(a + b)*Sqrt[2/b]*EllipticPi[p^2, ArcSin[Sqrt[b*(1 - Sin[x])/(a + b)]], ((a + b)/(2*b))]"
+  ],
+  "conds": [
+   "0 < Abs[a] < b"
+  ],
+  "cite": "BY (288.52)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int dx/((a+b-p^2b+p^2b sin x) sqrt(a+b sin x)) = -1/(a+b) sqrt(2/b) Pi(beta, p^2, 1/r)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for -ArcSin[a/b] < x < Pi/2"
+ },
+ {
+  "id": "GR2.574.3",
+  "gr": "2.574.3",
+  "page": 230,
+  "status": "ok",
+  "lhs": "Integrate[1/((2 - p^2 + p^2*Cos[x])*Sqrt[a + b*Cos[x]]), x]",
+  "rhs": [
+   "1/Sqrt[a + b]*EllipticPi[p^2, x/2, (2*b/(a + b))]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "BY (289.02)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int dx/((2-p^2+p^2 cos x) sqrt(a+b cos x)) = 1/sqrt(a+b) Pi(x/2, p^2, r)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x < Pi"
+ },
+ {
+  "id": "GR2.574.4",
+  "gr": "2.574.4",
+  "page": 230,
+  "status": "ok",
+  "lhs": "Integrate[1/((a + b - p^2*b + p^2*b*Cos[x])*Sqrt[a + b*Cos[x]]), x]",
+  "rhs": [
+   "Sqrt[2]/((a + b)*Sqrt[b])*EllipticPi[p^2, ArcSin[Sqrt[b*(1 - Cos[x])/(a + b)]], ((a + b)/(2*b))]"
+  ],
+  "conds": [
+   "b >= Abs[a] > 0"
+  ],
+  "cite": "BY (290.02)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int dx/((a+b-p^2b+p^2b cos x) sqrt(a+b cos x)) = sqrt2/((a+b)sqrt b) Pi(gamma, p^2, 1/r)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x < ArcCos[-a/b]"
+ },
+ {
+  "id": "GR2.575.1a",
+  "gr": "2.575.1",
+  "page": 230,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a + b*Sin[x])^3], x]",
+  "rhs": [
+   "2*b*Cos[x]/((a^2 - b^2)*Sqrt[a + b*Sin[x]]) - 2/((a - b)*Sqrt[a + b])*MatharE2[ArcSin[Sqrt[(1 - Sin[x])/2]], Sqrt[2*b/(a + b)]]"
+  ],
+  "conds": [
+   "0 < b < a"
+  ],
+  "cite": "BY (288.05)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int dx/sqrt((a+b sin x)^3) = 2b cos x/((a^2-b^2) sqrt(a+b sin x)) - 2/((a-b)sqrt(a+b)) E(alpha,r)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for -Pi/2 <= x < Pi/2"
+ },
+ {
+  "id": "GR2.575.1b",
+  "gr": "2.575.1",
+  "page": 230,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a + b*Sin[x])^3], x]",
+  "rhs": [
+   "Sqrt[2/b]*(2*b/(b^2 - a^2)*MatharE2[ArcSin[Sqrt[b*(1 - Sin[x])/(a + b)]], Sqrt[(a + b)/(2*b)]] - 1/(a + b)*MatharF2[ArcSin[Sqrt[b*(1 - Sin[x])/(a + b)]], Sqrt[(a + b)/(2*b)]]) + 2*b/(b^2 - a^2)*Cos[x]/Sqrt[a + b*Sin[x]]"
+  ],
+  "conds": [
+   "0 < Abs[a] < b"
+  ],
+  "cite": "BY (288.56)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "= sqrt(2/b){2b/(b^2-a^2) E(beta,1/r) - 1/(a+b) F(beta,1/r)} + 2b/(b^2-a^2) cos x/sqrt(a+b sin x)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for -ArcSin[a/b] < x < Pi/2"
+ },
+ {
+  "id": "GR2.575.2a",
+  "gr": "2.575.2",
+  "page": 231,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a + b*Sin[x])^5], x]",
+  "rhs": [
+   "2/(3*(a^2 - b^2)^2*Sqrt[a + b])*((a^2 - b^2)*MatharF2[ArcSin[Sqrt[(1 - Sin[x])/2]], Sqrt[2*b/(a + b)]] - 4*a*(a + b)*MatharE2[ArcSin[Sqrt[(1 - Sin[x])/2]], Sqrt[2*b/(a + b)]]) + 2*b*(5*a^2 - b^2 + 4*a*b*Sin[x])/(3*(a^2 - b^2)^2*Sqrt[(a + b*Sin[x])^3])*Cos[x]"
+  ],
+  "conds": [
+   "0 < b < a"
+  ],
+  "cite": "BY (288.05)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int dx/sqrt((a+b sin x)^5) = 2/(3(a^2-b^2)^2 sqrt(a+b)){(a^2-b^2)F(alpha,r) - 4a(a+b)E(alpha,r)} + 2b(5a^2-b^2+4ab sin x)/(3(a^2-b^2)^2 sqrt((a+b sin x)^3)) cos x",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for -Pi/2 <= x < Pi/2"
+ },
+ {
+  "id": "GR2.575.2b",
+  "gr": "2.575.2",
+  "page": 231,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a + b*Sin[x])^5], x]",
+  "rhs": [
+   "-1/(3*(a^2 - b^2)^2)*Sqrt[2/b]*((3*a - b)*(a - b)*MatharF2[ArcSin[Sqrt[b*(1 - Sin[x])/(a + b)]], Sqrt[(a + b)/(2*b)]] + 8*a*b*MatharE2[ArcSin[Sqrt[b*(1 - Sin[x])/(a + b)]], Sqrt[(a + b)/(2*b)]]) + 2*b*(a^2 - b^2 + 4*a*(a + b*Sin[x]))/(3*(a^2 - b^2)^2*Sqrt[(a + b*Sin[x])^3])*Cos[x]"
+  ],
+  "conds": [
+   "0 < Abs[a] < b"
+  ],
+  "cite": "BY (288.56)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "= -1/(3(a^2-b^2)^2) sqrt(2/b){(3a-b)(a-b)F(beta,1/r) + 8ab E(beta,1/r)} + 2b[a^2-b^2+4a(a+b sin x)]/(3(a^2-b^2)^2 sqrt((a+b sin x)^3)) cos x",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for -ArcSin[a/b] < x < Pi/2"
+ },
+ {
+  "id": "GR2.575.3a",
+  "gr": "2.575.3",
+  "page": 231,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a + b*Cos[x])^3], x]",
+  "rhs": [
+   "2/((a - b)*Sqrt[a + b])*MatharE2[x/2, Sqrt[2*b/(a + b)]] - 2*b/(a^2 - b^2)*Sin[x]/Sqrt[a + b*Cos[x]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "BY (289.05)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int dx/sqrt((a+b cos x)^3) = 2/((a-b)sqrt(a+b)) E(x/2,r) - 2b/(a^2-b^2) sin x/sqrt(a+b cos x)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x <= Pi"
+ },
+ {
+  "id": "GR2.575.3b",
+  "gr": "2.575.3",
+  "page": 231,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a + b*Cos[x])^3], x]",
+  "rhs": [
+   "1/(a^2 - b^2)*Sqrt[2/b]*((a - b)*MatharF2[ArcSin[Sqrt[b*(1 - Cos[x])/(a + b)]], Sqrt[(a + b)/(2*b)]] + 2*b*MatharE2[ArcSin[Sqrt[b*(1 - Cos[x])/(a + b)]], Sqrt[(a + b)/(2*b)]]) + 2*b/(b^2 - a^2)*Sin[x]/Sqrt[a + b*Cos[x]]"
+  ],
+  "conds": [
+   "b >= Abs[a] > 0"
+  ],
+  "cite": "BY (290.06)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "= 1/(a^2-b^2) sqrt(2/b){(a-b)F(gamma,1/r) + 2b E(gamma,1/r)} + 2b/(b^2-a^2) sin x/sqrt(a+b cos x)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x < ArcCos[-a/b]"
+ },
+ {
+  "id": "GR2.575.4",
+  "gr": "2.575.4",
+  "page": 231,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a - b*Cos[x])^3], x]",
+  "rhs": [
+   "2/((a - b)*Sqrt[a + b])*MatharE2[ArcSin[Sqrt[(a + b)*(1 - Cos[x])/(2*(a - b*Cos[x]))]], Sqrt[2*b/(a + b)]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "(291.01)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int dx/sqrt((a-b cos x)^3) = 2/((a-b)sqrt(a+b)) E(delta,r)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x <= Pi"
+ },
+ {
+  "id": "GR2.575.5a",
+  "gr": "2.575.5",
+  "page": 232,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a + b*Cos[x])^5], x]",
+  "rhs": [
+   "2*Sqrt[a + b]/(3*(a^2 - b^2)^2)*(4*a*MatharE2[x/2, Sqrt[2*b/(a + b)]] - (a - b)*MatharF2[x/2, Sqrt[2*b/(a + b)]]) - 2*b/(3*(a^2 - b^2)^2)*(5*a^2 - b^2 + 4*a*b*Cos[x])/Sqrt[(a + b*Cos[x])^3]*Sin[x]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "BY (289.05)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int dx/sqrt((a+b cos x)^5) = 2 sqrt(a+b)/(3(a^2-b^2)^2){4aE(x/2,r) - (a-b)F(x/2,r)} - 2b/(3(a^2-b^2)^2) (5a^2-b^2+4ab cos x)/sqrt((a+b cos x)^3) sin x",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x <= Pi"
+ },
+ {
+  "id": "GR2.575.5b",
+  "gr": "2.575.5",
+  "page": 232,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a + b*Cos[x])^5], x]",
+  "rhs": [
+   "1/(3*(a^2 - b^2)^2)*Sqrt[2/b]*((a - b)*(3*a - b)*MatharF2[ArcSin[Sqrt[b*(1 - Cos[x])/(a + b)]], Sqrt[(a + b)/(2*b)]] + 8*a*b*MatharE2[ArcSin[Sqrt[b*(1 - Cos[x])/(a + b)]], Sqrt[(a + b)/(2*b)]]) + 2*b*(5*a^2 - b^2 + 4*a*b*Cos[x])*Sin[x]/(3*(a^b - b^2)^2*Sqrt[(a + b*Cos[x])^3])",
+   "1/(3*(a^2 - b^2)^2)*Sqrt[2/b]*((a - b)*(3*a - b)*MatharF2[ArcSin[Sqrt[b*(1 - Cos[x])/(a + b)]], Sqrt[(a + b)/(2*b)]] + 8*a*b*MatharE2[ArcSin[Sqrt[b*(1 - Cos[x])/(a + b)]], Sqrt[(a + b)/(2*b)]]) + 2*b*(5*a^2 - b^2 + 4*a*b*Cos[x])*Sin[x]/(3*(a^2 - b^2)^2*Sqrt[(a + b*Cos[x])^3])",
+   "1/(3*(a^2 - b^2)^2)*Sqrt[2/b]*((a - b)*(3*a - b)*MatharF2[ArcSin[Sqrt[b*(1 - Cos[x])/(a + b)]], Sqrt[(a + b)/(2*b)]] + 8*a*b*MatharE2[ArcSin[Sqrt[b*(1 - Cos[x])/(a + b)]], Sqrt[(a + b)/(2*b)]]) - 2*b*(5*a^2 - b^2 + 4*a*b*Cos[x])*Sin[x]/(3*(a^2 - b^2)^2*Sqrt[(a + b*Cos[x])^3])"
+  ],
+  "conds": [
+   "b >= Abs[a] > 0"
+  ],
+  "cite": "BY (290.06)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "= 1/(3(a^2-b^2)^2) sqrt(2/b){(a-b)(3a-b)F(gamma,1/r) + 8ab E(gamma,1/r)} + 2b(5a^2-b^2+4ab cos x) sin x/(3(a^b-b^2)^2 sqrt((a+b cos x)^3))",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x < ArcCos[-a/b]; denominator printed (a^b - b^2)^2, misprint for (a^2 - b^2)^2 (2nd candidate); 3rd candidate flips sign of algebraic term to match 2.575.5a"
+ },
+ {
+  "id": "GR2.576.1a",
+  "gr": "2.576.1",
+  "page": 232,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + b*Cos[x]], x]",
+  "rhs": [
+   "2*Sqrt[a + b]*MatharE2[x/2, Sqrt[2*b/(a + b)]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "BY (289.01)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int sqrt(a+b cos x) dx = 2 sqrt(a+b) E(x/2, r)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x <= Pi"
+ },
+ {
+  "id": "GR2.576.1b",
+  "gr": "2.576.1",
+  "page": 232,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a + b*Cos[x]], x]",
+  "rhs": [
+   "Sqrt[2/b]*((a - b)*MatharF2[ArcSin[Sqrt[b*(1 - Cos[x])/(a + b)]], Sqrt[(a + b)/(2*b)]] + 2*b*MatharE2[ArcSin[Sqrt[b*(1 - Cos[x])/(a + b)]], Sqrt[(a + b)/(2*b)]])"
+  ],
+  "conds": [
+   "b >= Abs[a] > 0"
+  ],
+  "cite": "BY (290.03)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "= sqrt(2/b){(a-b)F(gamma,1/r) + 2b E(gamma,1/r)}",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x < ArcCos[-a/b]"
+ },
+ {
+  "id": "GR2.576.2",
+  "gr": "2.576.2",
+  "page": 232,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a - b*Cos[x]], x]",
+  "rhs": [
+   "2*Sqrt[a + b]*MatharE2[ArcSin[Sqrt[(a + b)*(1 - Cos[x])/(2*(a - b*Cos[x]))]], Sqrt[2*b/(a + b)]] - 2*b*Sin[x]/Sqrt[a - b*Cos[x]]"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "BY (291.05)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int sqrt(a-b cos x) dx = 2 sqrt(a+b) E(delta,r) - 2b sin x/sqrt(a-b cos x)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x <= Pi"
+ },
+ {
+  "id": "GR2.577.1",
+  "gr": "2.577.1",
+  "page": 232,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[a - b*Cos[x]]/(1 + p*Cos[x]), x]",
+  "rhs": [
+   "2*(a - b)/((1 + p)*Sqrt[a + b])*EllipticPi[2*a*p/((a + b)*(1 + p)), ArcSin[Sqrt[(a + b)*(1 - Cos[x])/(2*(a - b*Cos[x]))]], (2*b/(a + b))]"
+  ],
+  "conds": [
+   "a > b > 0",
+   "p != -1"
+  ],
+  "cite": "BY (291.02)",
+  "edition_note": "3",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int sqrt(a-b cos x)/(1+p cos x) dx = 2(a-b)/((1+p)sqrt(a+b)) Pi(delta, 2ap/((a+b)(1+p)), r)",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x <= Pi"
+ },
+ {
+  "id": "GR2.577.2",
+  "gr": "2.577.2",
+  "page": 232,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - b*Cos[x])/(1 + p*Cos[x])], x]",
+  "rhs": [
+   "2*(a - b)/Sqrt[(1 + p)*(a + b)]*EllipticPi[-(2*b/(a + b)), ArcSin[Sqrt[(a + b)*(1 - Cos[x])/(2*(a - b*Cos[x]))]], 2*(a*p + b)/((1 + p)*(a + b))]"
+  ],
+  "conds": [
+   "a > b > 0",
+   "p != -1"
+  ],
+  "cite": "",
+  "edition_note": "3",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int sqrt((a-b cos x)/(1+p cos x)) dx = 2(a-b)/sqrt((1+p)(a+b)) Pi(delta, -r^2, sqrt(2(ap+b)/((1+p)(a+b))))",
+  "note": "2.57 notation alpha, beta, gamma, delta, r substituted; valid for 0 <= x <= Pi; modulus sqrt(2(ap+b)/((1+p)(a+b))) entered as its square in EllipticPi"
+ },
+ {
+  "id": "GR2.578",
+  "gr": "2.578",
+  "page": 232,
+  "status": "ok",
+  "lhs": "Integrate[Tan[x]/Sqrt[a + b*Tan[x]^2], x]",
+  "rhs": [
+   "1/Sqrt[b - a]*ArcCos[Sqrt[b - a]/Sqrt[b]*Cos[x]]"
+  ],
+  "conds": [
+   "b > a",
+   "b > 0"
+  ],
+  "cite": "PE (333)",
+  "edition_note": "",
+  "section": "2.57 Integrals containing Sqrt[a +- b Sin[x]] or Sqrt[a +- b Cos[x]]",
+  "tex": "int tan x dx/sqrt(a+b tan^2 x) = 1/sqrt(b-a) arccos(sqrt(b-a)/sqrt(b) cos x)",
+  "note": ""
+ }
+]

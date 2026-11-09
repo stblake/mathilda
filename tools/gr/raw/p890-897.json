@@ -1,0 +1,1551 @@
+[
+ {
+  "id": "GR7.684",
+  "gr": "7.684",
+  "page": 890,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*E^(-x/2)*WhittakerM[gamma + rho, beta + rho + 1/2, x]*Hypergeometric2F1[alpha, beta, gamma, -lam/x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[alpha + beta + 2*rho]*Gamma[2*beta + 2*rho]*Gamma[gamma]/(Gamma[beta]*Gamma[beta + gamma + 2*rho])*lam^(beta/2 + rho - 1/2)*E^(lam/2)*WhittakerW[1/2 - alpha - beta/2 - rho, beta/2 + rho, lam]"
+  ],
+  "conds": [
+   "Abs[Arg[lam]] < Pi",
+   "Re[beta + rho] > 0",
+   "Re[alpha + beta + 2*rho] > 0",
+   "Re[gamma] > 0"
+  ],
+  "cite": "ET II 405(19)",
+  "edition_note": "",
+  "section": "A combination of hypergeometric and confluent hypergeometric functions",
+  "tex": "int_0^inf x^(rho-1) e^(-x/2) M_{gamma+rho,beta+rho+1/2}(x) 2F1(alpha,beta;gamma;-lam/x) dx = ... W_{k,mu}(lam), k=1/2-alpha-beta/2-rho, mu=beta/2+rho",
+  "note": "k and mu substituted"
+ },
+ {
+  "id": "GR7.691",
+  "gr": "7.691",
+  "page": 890,
+  "status": "ok",
+  "lhs": "Integrate[Sech[Pi*x]*WhittakerW[I*x, 0, alpha]*WhittakerW[-I*x, 0, beta], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2*Sqrt[alpha*beta]/(alpha + beta)*Exp[-(alpha + beta)/2]"
+  ],
+  "conds": [
+   "alpha > 0",
+   "beta > 0"
+  ],
+  "cite": "ET II 414(61)",
+  "edition_note": "",
+  "section": "7.69 Integration of confluent hypergeometric functions with respect to the index",
+  "tex": "int_-inf^inf sech(pi x) W_{ix,0}(alpha) W_{-ix,0}(beta) dx = 2 (alpha beta)^(1/2)/(alpha+beta) exp(-(alpha+beta)/2)",
+  "note": "no conditions printed; alpha, beta > 0 added for sampling"
+ },
+ {
+  "id": "GR7.692",
+  "gr": "7.692",
+  "page": 890,
+  "status": "SKIP-CONTOUR",
+  "lhs": "Integrate[Gamma[-a]*Gamma[c - a]*HypergeometricU[a, c, x]*HypergeometricU[c - a, c, y], {a, -I*Infinity, I*Infinity}]",
+  "rhs": [
+   "2*Pi*I*Gamma[c]*HypergeometricU[c, 2*c, x + y]"
+  ],
+  "conds": [],
+  "cite": "EH I 285(15)",
+  "edition_note": "",
+  "section": "7.69 Integration of confluent hypergeometric functions with respect to the index",
+  "tex": "int_{-i inf}^{i inf} Gamma(-a)Gamma(c-a) Psi(a,c;x) Psi(c-a,c;y) da = 2 pi i Gamma(c) Psi(c,2c;x+y)",
+  "note": "",
+  "reason": "Mellin-Barnes integral along the imaginary axis"
+ },
+ {
+  "id": "GR7.693.1",
+  "gr": "7.693.1",
+  "page": 890,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Gamma[I*x]*Gamma[2*k + I*x]*WhittakerW[k + I*x, k - 1/2, alpha]*WhittakerW[-k - I*x, k - 1/2, beta], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2*Sqrt[Pi]*Gamma[2*k]*(alpha*beta)^k*(alpha + beta)^(1/2 - 2*k)*BesselK[2*k - 1/2, (alpha + beta)/2]"
+  ],
+  "conds": [
+   "Re[k] > 0",
+   "alpha > 0",
+   "beta > 0"
+  ],
+  "cite": "ET II 414(62)",
+  "edition_note": "",
+  "section": "7.69 Integration of confluent hypergeometric functions with respect to the index",
+  "tex": "int_-inf^inf Gamma(ix)Gamma(2k+ix) W_{k+ix,k-1/2}(alpha) W_{-k-ix,k-1/2}(beta) dx = 2 pi^(1/2) Gamma(2k)(alpha beta)^k (alpha+beta)^(1/2-2k) K_{2k-1/2}((alpha+beta)/2)",
+  "note": "no conditions printed; Re k > 0, alpha, beta > 0 added",
+  "reason": "Gamma(ix) has a pole at x = 0 on the integration path"
+ },
+ {
+  "id": "GR7.693.2",
+  "gr": "7.693.2",
+  "page": 890,
+  "status": "SKIP-CONTOUR",
+  "lhs": "Integrate[Gamma[1/2 + nu + mu + x]*Gamma[1/2 + nu + mu - x]*Gamma[1/2 + nu - mu + x]*Gamma[1/2 + nu - mu - x]*WhittakerM[mu + I*x, nu, alpha]*WhittakerM[mu - I*x, nu, beta], {x, -I*Infinity, I*Infinity}]",
+  "rhs": [
+   "2*Pi*(alpha*beta)^(nu + 1/2)*Gamma[2*nu + 1]^2*Gamma[2*nu + 2*mu + 1]*Gamma[2*nu - 2*mu + 1]/((alpha + beta)^(2*nu + 1)*Gamma[4*nu + 2])*WhittakerM[2*mu, 2*nu + 1/2, alpha + beta]"
+  ],
+  "conds": [
+   "Re[nu] > Abs[Re[mu]] - 1/2"
+  ],
+  "cite": "ET II 413(59)",
+  "edition_note": "",
+  "section": "7.69 Integration of confluent hypergeometric functions with respect to the index",
+  "tex": "int_{-i inf}^{i inf} Gamma(1/2+nu+mu+x)Gamma(1/2+nu+mu-x)Gamma(1/2+nu-mu+x)Gamma(1/2+nu-mu-x) M_{mu+ix,nu}(alpha) M_{mu-ix,nu}(beta) dx = ...",
+  "note": "integrand M indices printed as mu+ix with x on the imaginary axis, transcribed as printed",
+  "reason": "integration along the imaginary axis"
+ },
+ {
+  "id": "GR7.694",
+  "gr": "7.694",
+  "page": 890,
+  "status": "ok",
+  "lhs": "Integrate[E^(-2*rho*x*I)*Gamma[1/2 + nu + I*x]*Gamma[1/2 + nu - I*x]*WhittakerM[I*x, nu, alpha]*WhittakerM[I*x, nu, beta], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*Sqrt[alpha*beta]*Gamma[2*nu + 1]^2*Sech[rho]*Exp[-(alpha + beta)*Tanh[rho]/2]*BesselJ[2*nu, Sqrt[alpha*beta]*Sech[rho]]"
+  ],
+  "conds": [
+   "Abs[Im[rho]] < Pi/2",
+   "Re[nu] > -1/2",
+   "alpha > 0",
+   "beta > 0"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "7.69 Integration of confluent hypergeometric functions with respect to the index",
+  "tex": "int_-inf^inf e^(-2 rho x i) Gamma(1/2+nu+ix)Gamma(1/2+nu-ix) M_{ix,nu}(alpha) M_{ix,nu}(beta) dx = pi sqrt(alpha beta)[Gamma(2nu+1)]^2 sech rho exp(-(alpha+beta)tanh(rho)/2) J_{2nu}(sqrt(alpha beta) sech rho)",
+  "note": "alpha, beta > 0 added for sampling"
+ },
+ {
+  "id": "GR7.711.1a",
+  "gr": "7.711.1a",
+  "page": 890,
+  "status": "ok",
+  "lhs": "Integrate[ParabolicCylinderD[n, x]*ParabolicCylinderD[m, x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Element[m, Integers] && m >= 0",
+   "m != n"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "7.71 Parabolic cylinder functions",
+  "tex": "int_-inf^inf D_n(x) D_m(x) dx = 0 [m != n]",
+  "note": "n, m nonnegative integers assumed"
+ },
+ {
+  "id": "GR7.711.1b",
+  "gr": "7.711.1b",
+  "page": 890,
+  "status": "ok",
+  "lhs": "Integrate[ParabolicCylinderD[n, x]^2, {x, -Infinity, Infinity}]",
+  "rhs": [
+   "n!*Sqrt[2*Pi]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "7.71 Parabolic cylinder functions",
+  "tex": "int_-inf^inf D_n(x)^2 dx = n! (2 pi)^(1/2) [m = n]",
+  "note": "m = n substituted"
+ },
+ {
+  "id": "GR7.711.2a",
+  "gr": "7.711.2a",
+  "page": 891,
+  "status": "ok",
+  "lhs": "Integrate[ParabolicCylinderD[mu, t]*ParabolicCylinderD[nu, t], {t, 0, Infinity}]",
+  "rhs": [
+   "Pi*2^((mu + nu + 1)/2)/(mu - nu)*(1/(Gamma[1/2 - mu/2]*Gamma[-nu/2]) - 1/(Gamma[1/2 - nu/2]*Gamma[-mu/2]))"
+  ],
+  "conds": [],
+  "cite": "BU 11 117(13a), EH II 122(21)",
+  "edition_note": "",
+  "section": "7.71 Parabolic cylinder functions",
+  "tex": "int_0^inf D_mu(t) D_nu(t) dt = pi 2^((mu+nu+1)/2)/(mu-nu) [1/(Gamma(1/2-mu/2)Gamma(-nu/2)) - 1/(Gamma(1/2-nu/2)Gamma(-mu/2))] (upper sign)",
+  "note": "upper sign"
+ },
+ {
+  "id": "GR7.711.2b",
+  "gr": "7.711.2b",
+  "page": 891,
+  "status": "ok",
+  "lhs": "Integrate[ParabolicCylinderD[mu, -t]*ParabolicCylinderD[nu, t], {t, 0, Infinity}]",
+  "rhs": [
+   "Pi*2^((mu + nu + 1)/2)/(mu - nu)*(1/(Gamma[1/2 - mu/2]*Gamma[-nu/2]) + 1/(Gamma[1/2 - nu/2]*Gamma[-mu/2]))"
+  ],
+  "conds": [
+   "Re[mu] > Re[nu]"
+  ],
+  "cite": "BU 11 117(13a), EH II 122(21)",
+  "edition_note": "",
+  "section": "7.71 Parabolic cylinder functions",
+  "tex": "int_0^inf D_mu(-t) D_nu(t) dt = pi 2^((mu+nu+1)/2)/(mu-nu) [... + ...] (lower sign)",
+  "note": "lower sign"
+ },
+ {
+  "id": "GR7.711.3",
+  "gr": "7.711.3",
+  "page": 891,
+  "status": "ok",
+  "lhs": "Integrate[ParabolicCylinderD[nu, t]^2, {t, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*2^(-3/2)*(PolyGamma[1/2 - nu/2] - PolyGamma[-nu/2])/Gamma[-nu]"
+  ],
+  "conds": [],
+  "cite": "BU 117(13b)a, EH II 122(22)a",
+  "edition_note": "",
+  "section": "7.71 Parabolic cylinder functions",
+  "tex": "int_0^inf [D_nu(t)]^2 dt = pi^(1/2) 2^(-3/2) (psi(1/2-nu/2) - psi(-nu/2))/Gamma(-nu)",
+  "note": "nu not a nonnegative integer (limit otherwise)"
+ },
+ {
+  "id": "GR7.721.1a",
+  "gr": "7.721.1a",
+  "page": 891,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2/4)*(x - z)^(-1)*ParabolicCylinderD[n, x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "I*E^(-n*Pi*I)*Sqrt[2*Pi]*n!*E^(-z^2/4)*ParabolicCylinderD[-n - 1, -I*z]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Im[z] > 0"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "int_-inf^inf e^(-x^2/4)(x-z)^(-1) D_n(x) dx = +i e^(-n pi i)(2pi)^(1/2) n! e^(-z^2/4) D_{-n-1}(-iz) [Im z > 0]",
+  "note": "upper sign; z complex with Im z > 0"
+ },
+ {
+  "id": "GR7.721.1b",
+  "gr": "7.721.1b",
+  "page": 891,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2/4)*(x - z)^(-1)*ParabolicCylinderD[n, x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-I*E^(n*Pi*I)*Sqrt[2*Pi]*n!*E^(-z^2/4)*ParabolicCylinderD[-n - 1, I*z]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Im[z] < 0"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "same, lower sign: -i e^(n pi i)(2pi)^(1/2) n! e^(-z^2/4) D_{-n-1}(iz) [Im z < 0]",
+  "note": "lower sign; z complex with Im z < 0"
+ },
+ {
+  "id": "GR7.721.2",
+  "gr": "7.721.2",
+  "page": 891,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*(x - 1)^(mu/2 - nu/2 - 1)*Exp[-(x - 1)^2*a^2/4]*ParabolicCylinderD[mu, a*x], {x, 1, Infinity}]",
+  "rhs": [
+   "2^(mu - nu - 2)*a^(nu/2 - mu/2 - 1)*Gamma[(mu - nu)/2]*ParabolicCylinderD[nu, a]"
+  ],
+  "conds": [
+   "Re[mu - nu] > 0",
+   "a > 0"
+  ],
+  "cite": "ET II 395(4)a",
+  "edition_note": "",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "int_1^inf x^nu (x-1)^(mu/2-nu/2-1) exp(-(x-1)^2 a^2/4) D_mu(ax) dx = 2^(mu-nu-2) a^(nu/2-mu/2-1) Gamma((mu-nu)/2) D_nu(a)",
+  "note": "a > 0 added for convergence"
+ },
+ {
+  "id": "GR7.722.1",
+  "gr": "7.722.1",
+  "page": 891,
+  "status": "ok",
+  "lhs": "Integrate[E^(-3*x^2/4)*x^nu*ParabolicCylinderD[nu + 1, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-1/2 - nu/2)*Gamma[nu + 1]*Sin[(1 - nu)*Pi/4]"
+  ],
+  "conds": [
+   "Re[nu] > -1"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "int_0^inf e^(-3x^2/4) x^nu D_{nu+1}(x) dx = 2^(-1/2-nu/2) Gamma(nu+1) sin((1-nu)pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR7.722.2",
+  "gr": "7.722.2",
+  "page": 891,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2/4)*x^(mu - 1)*ParabolicCylinderD[-nu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*2^(-mu/2 - nu/2)*Gamma[mu]/Gamma[mu/2 + nu/2 + 1/2]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "EH II 122(20)",
+  "edition_note": "",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "int_0^inf e^(-x^2/4) x^(mu-1) D_{-nu}(x) dx = pi^(1/2) 2^(-mu/2-nu/2) Gamma(mu)/Gamma(mu/2+nu/2+1/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.722.3",
+  "gr": "7.722.3",
+  "page": 891,
+  "status": "ok",
+  "lhs": "Integrate[E^(-3*x^2/4)*x^nu*ParabolicCylinderD[nu - 1, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-nu/2)*Gamma[nu]*Sin[Pi*nu/4]"
+  ],
+  "conds": [
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 395(2)",
+  "edition_note": "11",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "int_0^inf e^(-3x^2/4) x^nu D_{nu-1}(x) dx = 2^(-nu/2) Gamma(nu) sin(pi nu/4)",
+  "note": ""
+ },
+ {
+  "id": "GR7.723.1",
+  "gr": "7.723.1",
+  "page": 891,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2/4)*x^nu*(x^2 + y^2)^(-1)*ParabolicCylinderD[nu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*Gamma[nu + 1]*y^(nu - 1)*E^(y^2/4)*ParabolicCylinderD[-nu - 1, y]"
+  ],
+  "conds": [
+   "Re[y] > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "EH II 121(18)a, ET II 396(6)a",
+  "edition_note": "",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "int_0^inf e^(-x^2/4) x^nu (x^2+y^2)^(-1) D_nu(x) dx = (pi/2)^(1/2) Gamma(nu+1) y^(nu-1) e^(y^2/4) D_{-nu-1}(y)",
+  "note": ""
+ },
+ {
+  "id": "GR7.723.2",
+  "gr": "7.723.2",
+  "page": 891,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2/4)*x^(nu - 1)*(x^2 + y^2)^(-1/2)*ParabolicCylinderD[nu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "y^(nu - 1)*Gamma[nu]*E^(y^2/4)*ParabolicCylinderD[-nu, y]"
+  ],
+  "conds": [
+   "Re[y] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 396(7)",
+  "edition_note": "",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "int_0^inf e^(-x^2/4) x^(nu-1)(x^2+y^2)^(-1/2) D_nu(x) dx = y^(nu-1) Gamma(nu) e^(y^2/4) D_{-nu}(y)",
+  "note": ""
+ },
+ {
+  "id": "GR7.723.3",
+  "gr": "7.723.3",
+  "page": 891,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*nu - 1)*(1 - x^2)^(lam - 1)*E^(a^2*x^2/4)*ParabolicCylinderD[-2*lam - 2*nu, a*x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[lam]*Gamma[2*nu]/Gamma[2*lam + 2*nu]*2^(lam - 1)*E^(a^2/4)*ParabolicCylinderD[-2*nu, a]"
+  ],
+  "conds": [
+   "Re[lam] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 395(3)a",
+  "edition_note": "",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "int_0^1 x^(2nu-1)(1-x^2)^(lam-1) e^(a^2x^2/4) D_{-2lam-2nu}(ax) dx = Gamma(lam)Gamma(2nu)/Gamma(2lam+2nu) 2^(lam-1) e^(a^2/4) D_{-2nu}(a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.724",
+  "gr": "7.724",
+  "page": 891,
+  "status": "ok",
+  "lhs": "Integrate[E^(-(x - y)^2/(2*mu))*E^(x^2/4)*ParabolicCylinderD[nu, x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi*mu]*(1 - mu)^(nu/2)*E^(y^2/(4 - 4*mu))*ParabolicCylinderD[nu, y*(1 - mu)^(-1/2)]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[mu] < 1"
+  ],
+  "cite": "EH II 121(15)",
+  "edition_note": "",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "int_-inf^inf e^(-(x-y)^2/(2mu)) e^(x^2/4) D_nu(x) dx = (2 pi mu)^(1/2)(1-mu)^(nu/2) e^(y^2/(4-4mu)) D_nu(y(1-mu)^(-1/2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.725.1",
+  "gr": "7.725.1",
+  "page": 892,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*t)*(2*t)^((nu - 1)/2)*E^(-t/2)*ParabolicCylinderD[-nu - 2, Sqrt[2*t]], {t, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*(Sqrt[p + 1] - 1)^(nu + 1)/((nu + 1)*p^(nu + 1))"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "p > 0"
+  ],
+  "cite": "MO 175",
+  "edition_note": "",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "int_0^inf e^(-pt)(2t)^((nu-1)/2) e^(-t/2) D_{-nu-2}(sqrt(2t)) dt = (pi/2)^(1/2)(sqrt(p+1)-1)^(nu+1)/((nu+1)p^(nu+1))",
+  "note": "p > 0 added"
+ },
+ {
+  "id": "GR7.725.2",
+  "gr": "7.725.2",
+  "page": 892,
+  "status": "ok",
+  "lhs": "Integrate[E^(-p*t)*(2*t)^((nu - 1)/2)*E^(-t/2)*ParabolicCylinderD[-nu, Sqrt[2*t]], {t, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*(Sqrt[p + 1] - 1)^nu/(p^nu*Sqrt[p + 1])"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "p > 0"
+  ],
+  "cite": "MO 175",
+  "edition_note": "",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "int_0^inf e^(-pt)(2t)^((nu-1)/2) e^(-t/2) D_{-nu}(sqrt(2t)) dt = (pi/2)^(1/2)(sqrt(p+1)-1)^nu/(p^nu sqrt(p+1))",
+  "note": "p > 0 added"
+ },
+ {
+  "id": "GR7.725.3",
+  "gr": "7.725.3",
+  "page": 892,
+  "status": "ok",
+  "lhs": "Integrate[E^(-b*x)*ParabolicCylinderD[2*n + 1, Sqrt[2*x]], {x, 0, Infinity}]",
+  "rhs": [
+   "(-2)^n*Gamma[n + 3/2]*(b - 1/2)^n*(b + 1/2)^(-n - 3/2)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[b] > -1/2"
+  ],
+  "cite": "ET I 210(3)",
+  "edition_note": "",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "int_0^inf e^(-bx) D_{2n+1}(sqrt(2x)) dx = (-2)^n Gamma(n+3/2)(b-1/2)^n (b+1/2)^(-n-3/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.725.4",
+  "gr": "7.725.4",
+  "page": 892,
+  "status": "ok",
+  "lhs": "Integrate[(Sqrt[x])^(-1)*E^(-b*x)*ParabolicCylinderD[2*n, Sqrt[2*x]], {x, 0, Infinity}]",
+  "rhs": [
+   "(-2)^n*Gamma[n + 1/2]*(b - 1/2)^n*(b + 1/2)^(-n - 1/2)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[b] > -1/2"
+  ],
+  "cite": "ET I 210(5)",
+  "edition_note": "",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "int_0^inf x^(-1/2) e^(-bx) D_{2n}(sqrt(2x)) dx = (-2)^n Gamma(n+1/2)(b-1/2)^n (b+1/2)^(-n-1/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.725.5",
+  "gr": "7.725.5",
+  "page": 892,
+  "status": "ok",
+  "lhs": "Integrate[x^(-(nu + 1)/2)*E^(-s*x)*ParabolicCylinderD[nu, Sqrt[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*(1 + Sqrt[1/2 + 2*s])^nu/Sqrt[1/4 + s]"
+  ],
+  "conds": [
+   "Re[s] > -1/4",
+   "Re[nu] < 1"
+  ],
+  "cite": "ET I 210(7)",
+  "edition_note": "",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "int_0^inf x^(-(nu+1)/2) e^(-sx) D_nu(sqrt x) dx = sqrt(pi)(1+sqrt(1/2+2s))^nu / sqrt(1/4+s)",
+  "note": ""
+ },
+ {
+  "id": "GR7.725.6",
+  "gr": "7.725.6",
+  "page": 892,
+  "status": "ok",
+  "lhs": "Integrate[E^(-z*t)*t^(-1 + beta/2)*ParabolicCylinderD[-nu, 2*(k*t)^(1/2)], {t, 0, Infinity}]",
+  "rhs": [
+   "2^(1 - beta - nu/2)*Pi^(1/2)*Gamma[beta]/Gamma[nu/2 + beta/2 + 1/2]*(z + k)^(-beta/2)*Hypergeometric2F1[nu/2, beta/2, (nu + beta + 1)/2, (z - k)/(z + k)]"
+  ],
+  "conds": [
+   "Re[z + k] > 0",
+   "Re[z/k] > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "EH II 121(11)",
+  "edition_note": "",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "int_0^inf e^(-zt) t^(-1+beta/2) D_{-nu}(2(kt)^(1/2)) dt = 2^(1-beta-nu/2) pi^(1/2) Gamma(beta)/Gamma(nu/2+beta/2+1/2) (z+k)^(-beta/2) F(nu/2,beta/2;(nu+beta+1)/2;(z-k)/(z+k))",
+  "note": "Re beta > 0 added (implied by convergence at t = 0); z is a parameter, not an abbreviation"
+ },
+ {
+  "id": "GR7.726",
+  "gr": "7.726",
+  "page": 892,
+  "status": "ok",
+  "lhs": "Integrate[E^(I*x*y - (1 + lam)*x^2/4)*ParabolicCylinderD[nu, x*(1 - lam)^(1/2)], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi]*lam^(nu/2)*E^(-(1 + lam)*y^2/(4*lam))*ParabolicCylinderD[nu, I*(lam^(-1) - 1)^(1/2)*y]"
+  ],
+  "conds": [
+   "Re[lam] > 0",
+   "Element[y, Reals]"
+  ],
+  "cite": "EH II 121(16)",
+  "edition_note": "",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "int_-inf^inf e^(ixy-(1+lam)x^2/4) D_nu(x(1-lam)^(1/2)) dx = (2pi)^(1/2) lam^(nu/2) e^(-(1+lam)y^2/(4lam)) D_nu(i(1/lam-1)^(1/2) y)",
+  "note": "y real added"
+ },
+ {
+  "id": "GR7.727",
+  "gr": "7.727",
+  "page": 892,
+  "status": "ok",
+  "lhs": "Integrate[E^(x/2)*E^(-b*x)/(E^x - 1)^(mu + 1/2)*Exp[-a/(1 - E^(-x))]*ParabolicCylinderD[2*mu, 2*Sqrt[a]/Sqrt[1 - E^(-x)]], {x, 0, Infinity}]",
+  "rhs": [
+   "E^(-a)*2^(b + mu)*Gamma[b + mu]*ParabolicCylinderD[-2*b, 2*Sqrt[a]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[b] > -Re[mu]"
+  ],
+  "cite": "ET I 211(13)",
+  "edition_note": "",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "int_0^inf e^(x/2) e^(-bx)/(e^x-1)^(mu+1/2) exp(-a/(1-e^(-x))) D_{2mu}(2 sqrt a/sqrt(1-e^(-x))) dx = e^(-a) 2^(b+mu) Gamma(b+mu) D_{-2b}(2 sqrt a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.728",
+  "gr": "7.728",
+  "page": 892,
+  "status": "ok",
+  "lhs": "Integrate[(2*t)^(-nu/2)*E^(-p*t)*E^(-q^2/(8*t))*ParabolicCylinderD[nu - 1, q/Sqrt[2*t]], {t, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*p^(nu/2 - 1)*E^(-q*Sqrt[p])"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "MO 175",
+  "edition_note": "",
+  "section": "7.72 Combinations of parabolic cylinder functions, powers, and exponentials",
+  "tex": "int_0^inf (2t)^(-nu/2) e^(-pt) e^(-q^2/(8t)) D_{nu-1}(q/sqrt(2t)) dt = (pi/2)^(1/2) p^(nu/2-1) e^(-q sqrt p)",
+  "note": "no conditions printed; p, q > 0 added"
+ },
+ {
+  "id": "GR7.731.1",
+  "gr": "7.731.1",
+  "page": 892,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[2*mu*x]*Exp[-(a*Sinh[x])^2]*ParabolicCylinderD[2*k, 2*a*Cosh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(k - 3/2)*Sqrt[Pi]*a^(-1)*WhittakerW[k, mu, 2*a^2]"
+  ],
+  "conds": [
+   "Re[a^2] > 0"
+  ],
+  "cite": "ET II 398(20)",
+  "edition_note": "",
+  "section": "7.73 Combinations of parabolic cylinder and hyperbolic functions",
+  "tex": "int_0^inf cosh(2 mu x) exp(-(a sinh x)^2) D_{2k}(2a cosh x) dx = 2^(k-3/2) pi^(1/2) a^(-1) W_{k,mu}(2a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.731.2",
+  "gr": "7.731.2",
+  "page": 893,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[2*mu*x]*Exp[(a*Sinh[x])^2]*ParabolicCylinderD[2*k, 2*a*Cosh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu - k]*Gamma[-mu - k]/(2^(k + 5/2)*a*Gamma[-2*k])*WhittakerW[k + 1/2, mu, 2*a^2]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < 3*Pi/4",
+   "Re[k] + Abs[Re[mu]] < 0"
+  ],
+  "cite": "ET II 398(21)",
+  "edition_note": "",
+  "section": "7.73 Combinations of parabolic cylinder and hyperbolic functions",
+  "tex": "int_0^inf cosh(2 mu x) exp((a sinh x)^2) D_{2k}(2a cosh x) dx = Gamma(mu-k)Gamma(-mu-k)/(2^(k+5/2) a Gamma(-2k)) W_{k+1/2,mu}(2a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.741.1",
+  "gr": "7.741.1",
+  "page": 893,
+  "status": "ok",
+  "lhs": "Integrate[Sin[b*x]*(ParabolicCylinderD[-n - 1, I*x]^2 - ParabolicCylinderD[-n - 1, -I*x]^2), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n + 1)*I/n!*Pi*Sqrt[2*Pi]*E^(-b^2/2)*LaguerreL[n, b^2]"
+  ],
+  "conds": [
+   "b > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 115(3)",
+  "edition_note": "",
+  "section": "7.74 Combinations of parabolic cylinder and trigonometric functions",
+  "tex": "int_0^inf sin(bx){[D_{-n-1}(ix)]^2 - [D_{-n-1}(-ix)]^2} dx = (-1)^(n+1) i/n! pi sqrt(2pi) e^(-b^2/2) L_n(b^2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.741.2",
+  "gr": "7.741.2",
+  "page": 893,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2/4)*Sin[b*x]*ParabolicCylinderD[2*n + 1, x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*Sqrt[Pi/2]*b^(2*n + 1)*E^(-b^2/2)"
+  ],
+  "conds": [
+   "b > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 115(1)",
+  "edition_note": "",
+  "section": "7.74 Combinations of parabolic cylinder and trigonometric functions",
+  "tex": "int_0^inf e^(-x^2/4) sin(bx) D_{2n+1}(x) dx = (-1)^n sqrt(pi/2) b^(2n+1) e^(-b^2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.741.3",
+  "gr": "7.741.3",
+  "page": 893,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2/4)*Cos[b*x]*ParabolicCylinderD[2*n, x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*Sqrt[Pi/2]*b^(2*n)*E^(-b^2/2)"
+  ],
+  "conds": [
+   "b > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 60(2)",
+  "edition_note": "",
+  "section": "7.74 Combinations of parabolic cylinder and trigonometric functions",
+  "tex": "int_0^inf e^(-x^2/4) cos(bx) D_{2n}(x) dx = (-1)^n sqrt(pi/2) b^(2n) e^(-b^2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.741.4",
+  "gr": "7.741.4",
+  "page": 893,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2/4)*Sin[b*x]*(ParabolicCylinderD[2*nu - 1/2, x] - ParabolicCylinderD[2*nu - 1/2, -x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi]*Sin[(nu - 1/4)*Pi]*b^(2*nu - 1/2)*E^(-b^2/2)"
+  ],
+  "conds": [
+   "Re[nu] > 1/4",
+   "b > 0"
+  ],
+  "cite": "ET I 115(2)",
+  "edition_note": "",
+  "section": "7.74 Combinations of parabolic cylinder and trigonometric functions",
+  "tex": "int_0^inf e^(-x^2/4) sin(bx)[D_{2nu-1/2}(x) - D_{2nu-1/2}(-x)] dx = sqrt(2pi) sin((nu-1/4)pi) b^(2nu-1/2) e^(-b^2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.741.5",
+  "gr": "7.741.5",
+  "page": 893,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x^2/2)*Cos[b*x]*(ParabolicCylinderD[2*nu - 1/2, x] + ParabolicCylinderD[2*nu - 1/2, -x]), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(1/4 - 2*nu)*Sqrt[Pi]*b^(2*nu - 1/2)*E^(-b^2/4)/Csc[(nu + 1/4)*Pi]"
+  ],
+  "conds": [
+   "Re[nu] > 1/4",
+   "b > 0"
+  ],
+  "cite": "ET I 61(4)",
+  "edition_note": "",
+  "section": "7.74 Combinations of parabolic cylinder and trigonometric functions",
+  "tex": "int_0^inf e^(-x^2/2) cos(bx)[D_{2nu-1/2}(x) + D_{2nu-1/2}(-x)] dx = 2^(1/4-2nu) sqrt(pi) b^(2nu-1/2) e^(-b^2/4)/cosec((nu+1/4)pi)",
+  "note": "integrand factor printed e^(-x^2/2) (differs from neighbours' e^(-x^2/4)); transcribed as printed"
+ },
+ {
+  "id": "GR7.742.1",
+  "gr": "7.742.1",
+  "page": 893,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*rho - 1)*Sin[a*x]*E^(-x^2/4)*ParabolicCylinderD[2*nu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(nu - rho - 1/2)*Pi^(1/2)*a*Gamma[2*rho + 1]/Gamma[rho - nu + 1]*HypergeometricPFQ[{rho + 1/2, rho + 1}, {3/2, rho - nu + 1}, -a^2/2]"
+  ],
+  "conds": [
+   "Re[rho] > -1/2"
+  ],
+  "cite": "ET II 396(8)",
+  "edition_note": "",
+  "section": "7.74 Combinations of parabolic cylinder and trigonometric functions",
+  "tex": "int_0^inf x^(2rho-1) sin(ax) e^(-x^2/4) D_{2nu}(x) dx = 2^(nu-rho-1/2) pi^(1/2) a Gamma(2rho+1)/Gamma(rho-nu+1) 2F2(rho+1/2,rho+1;3/2,rho-nu+1;-a^2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.742.2",
+  "gr": "7.742.2",
+  "page": 893,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*rho - 1)*Sin[a*x]*E^(x^2/4)*ParabolicCylinderD[2*nu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(rho - nu - 2)/Gamma[-2*nu]*MeijerG[{{1/2 - rho, 1 - rho}, {}}, {{-rho - nu, 1/2}, {0}}, a^2/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[rho] > -1/2",
+   "Re[rho + nu] < 1/2"
+  ],
+  "cite": "ET II 396(9)",
+  "edition_note": "",
+  "section": "7.74 Combinations of parabolic cylinder and trigonometric functions",
+  "tex": "int_0^inf x^(2rho-1) sin(ax) e^(x^2/4) D_{2nu}(x) dx = 2^(rho-nu-2)/Gamma(-2nu) G^{22}_{23}(a^2/2 | 1/2-rho,1-rho; -rho-nu,1/2,0)",
+  "note": ""
+ },
+ {
+  "id": "GR7.742.3",
+  "gr": "7.742.3",
+  "page": 893,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*rho - 1)*Cos[a*x]*E^(-x^2/4)*ParabolicCylinderD[2*nu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(nu - rho)*Gamma[2*rho]*Pi^(1/2)/Gamma[rho - nu + 1/2]*HypergeometricPFQ[{rho, rho + 1/2}, {1/2, rho - nu + 1/2}, -a^2/2]"
+  ],
+  "conds": [
+   "Re[rho] > 0"
+  ],
+  "cite": "ET II 396(10)a",
+  "edition_note": "",
+  "section": "7.74 Combinations of parabolic cylinder and trigonometric functions",
+  "tex": "int_0^inf x^(2rho-1) cos(ax) e^(-x^2/4) D_{2nu}(x) dx = 2^(nu-rho) Gamma(2rho) pi^(1/2)/Gamma(rho-nu+1/2) 2F2(rho,rho+1/2;1/2,rho-nu+1/2;-a^2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.742.4",
+  "gr": "7.742.4",
+  "page": 894,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*rho - 1)*Cos[a*x]*E^(x^2/4)*ParabolicCylinderD[2*nu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(rho - nu - 2)/Gamma[-2*nu]*MeijerG[{{1/2 - rho, 1 - rho}, {}}, {{-rho - nu, 0}, {1/2}}, a^2/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[rho] > 0",
+   "Re[rho + nu] < 1/2"
+  ],
+  "cite": "ET II 396(11)",
+  "edition_note": "",
+  "section": "7.74 Combinations of parabolic cylinder and trigonometric functions",
+  "tex": "int_0^inf x^(2rho-1) cos(ax) e^(x^2/4) D_{2nu}(x) dx = 2^(rho-nu-2)/Gamma(-2nu) G^{22}_{23}(a^2/2 | 1/2-rho,1-rho; -rho-nu,0,1/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.743",
+  "gr": "7.743",
+  "page": 894,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(-mu - 2)*Sin[x]^(-nu)*ParabolicCylinderD[nu, a*Sin[x]]*ParabolicCylinderD[mu, a*Cos[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Sqrt[Pi/2]*(1 + mu)^(-1)*ParabolicCylinderD[mu + nu + 1, a]"
+  ],
+  "conds": [
+   "Re[nu] < 1",
+   "Re[mu] < -1"
+  ],
+  "cite": "ET II 397(19)",
+  "edition_note": "",
+  "section": "7.74 Combinations of parabolic cylinder and trigonometric functions",
+  "tex": "int_0^(pi/2) (cos x)^(-mu-2)(sin x)^(-nu) D_nu(a sin x) D_mu(a cos x) dx = -(pi/2)^(1/2)(1+mu)^(-1) D_{mu+nu+1}(a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.744.1",
+  "gr": "7.744.1",
+  "page": 894,
+  "status": "ok",
+  "lhs": "Integrate[Sin[b*x]*(ParabolicCylinderD[-nu - 1/2, Sqrt[2*x]] - ParabolicCylinderD[-nu - 1/2, -Sqrt[2*x]])*ParabolicCylinderD[nu - 1/2, Sqrt[2*x]], {x, 0, Infinity}]",
+  "rhs": [
+   "-Sqrt[2*Pi]*Sin[(1/4 + nu/2)*Pi]*b^(-nu - 1/2)*(1 + Sqrt[1 + b^2])^nu/Sqrt[1 + b^2]"
+  ],
+  "conds": [
+   "b > 0"
+  ],
+  "cite": "ET I 115(4)",
+  "edition_note": "",
+  "section": "7.74 Combinations of parabolic cylinder and trigonometric functions",
+  "tex": "int_0^inf sin(bx)[D_{-nu-1/2}(sqrt(2x)) - D_{-nu-1/2}(-sqrt(2x))] D_{nu-1/2}(sqrt(2x)) dx = -sqrt(2pi) sin((1/4+nu/2)pi) b^(-nu-1/2)(1+sqrt(1+b^2))^nu/sqrt(1+b^2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.744.2",
+  "gr": "7.744.2",
+  "page": 894,
+  "status": "ok",
+  "lhs": "Integrate[Cos[b*x]*(ParabolicCylinderD[-2*nu - 1/2, Sqrt[2*x]] + ParabolicCylinderD[-2*nu - 1/2, -Sqrt[2*x]])*ParabolicCylinderD[2*nu - 1/2, Sqrt[2*x]], {x, 0, Infinity}]",
+  "rhs": [
+   "-Sqrt[Pi]*Sin[(nu - 1/4)*Pi]*(1 + Sqrt[1 + b^2])^(2*nu)/(Sqrt[1 + b^2]*b^(2*nu + 1/2))"
+  ],
+  "conds": [
+   "b > 0"
+  ],
+  "cite": "ET I 60(3)",
+  "edition_note": "",
+  "section": "7.74 Combinations of parabolic cylinder and trigonometric functions",
+  "tex": "int_0^inf cos(bx)[D_{-2nu-1/2}(sqrt(2x)) + D_{-2nu-1/2}(-sqrt(2x))] D_{2nu-1/2}(sqrt(2x)) dx = -sqrt(pi) sin((nu-1/4)pi)(1+sqrt(1+b^2))^(2nu)/(sqrt(1+b^2) b^(2nu+1/2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.751.1",
+  "gr": "7.751.1",
+  "page": 894,
+  "status": "ok",
+  "lhs": "Integrate[ParabolicCylinderD[n, a*x]^2*BesselJ[1, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n - 1)*y^(-1)*ParabolicCylinderD[n, y/a]^2"
+  ],
+  "conds": [
+   "y > 0",
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 20(24)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int_0^inf [D_n(ax)]^2 J_1(xy) dx = (-1)^(n-1) y^(-1) [D_n(y/a)]^2",
+  "note": "a > 0 and n nonnegative integer added"
+ },
+ {
+  "id": "GR7.751.2",
+  "gr": "7.751.2",
+  "page": 894,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[0, x*y]*ParabolicCylinderD[n, a*x]*ParabolicCylinderD[n + 1, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n*y^(-1)*ParabolicCylinderD[n, y/a]*ParabolicCylinderD[n + 1, y/a]"
+  ],
+  "conds": [
+   "y > 0",
+   "Abs[Arg[a]] < Pi/4",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET II 17(42)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int_0^inf J_0(xy) D_n(ax) D_{n+1}(ax) dx = (-1)^n y^(-1) D_n(y/a) D_{n+1}(y/a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.751.3",
+  "gr": "7.751.3",
+  "page": 894,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[0, x*y]*ParabolicCylinderD[nu, x]*ParabolicCylinderD[nu + 1, x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-1)*y^(-1)*(ParabolicCylinderD[nu, -y]*ParabolicCylinderD[nu + 1, y] - ParabolicCylinderD[nu + 1, -y]*ParabolicCylinderD[nu, y])"
+  ],
+  "conds": [
+   "y > 0"
+  ],
+  "cite": "ET II 397(17)a",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int_0^inf J_0(xy) D_nu(x) D_{nu+1}(x) dx = (1/2) y^(-1)[D_nu(-y) D_{nu+1}(y) - D_{nu+1}(-y) D_nu(y)]",
+  "note": "y > 0 added"
+ },
+ {
+  "id": "GR7.752.1",
+  "gr": "7.752.1",
+  "page": 894,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*E^(-x^2/4)*ParabolicCylinderD[2*nu - 1, x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "-1/2*Sec[nu*Pi]*y^(nu - 1)*E^(-y^2/4)*(ParabolicCylinderD[2*nu - 1, y] - ParabolicCylinderD[2*nu - 1, -y])"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 76(1), MO 183",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^nu e^(-x^2/4) D_{2nu-1}(x) J_nu(xy) dx = -(1/2) sec(nu pi) y^(nu-1) e^(-y^2/4)[D_{2nu-1}(y) - D_{2nu-1}(-y)]",
+  "note": ""
+ },
+ {
+  "id": "GR7.752.2",
+  "gr": "7.752.2",
+  "page": 894,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*E^(x^2/4)*ParabolicCylinderD[2*nu - 1, x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(1/2 - nu)*Pi*Sin[nu*Pi]*y^(-nu)*Gamma[2*nu]*E^(y^2/4)*BesselK[nu, y^2/4]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1/2",
+   "Re[nu] < 1/2"
+  ],
+  "cite": "ET II 77(4)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^nu e^(x^2/4) D_{2nu-1}(x) J_nu(xy) dx = 2^(1/2-nu) pi sin(nu pi) y^(-nu) Gamma(2nu) e^(y^2/4) K_nu(y^2/4)",
+  "note": ""
+ },
+ {
+  "id": "GR7.752.3",
+  "gr": "7.752.3",
+  "page": 894,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*E^(-x^2/4)*ParabolicCylinderD[2*nu, x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sec[nu*Pi]*y^(nu - 1)*E^(-y^2/4)*(ParabolicCylinderD[2*nu + 1, y] - ParabolicCylinderD[2*nu + 1, -y])"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 78(13)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(nu+1) e^(-x^2/4) D_{2nu}(x) J_nu(xy) dx = (1/2) sec(nu pi) y^(nu-1) e^(-y^2/4)[D_{2nu+1}(y) - D_{2nu+1}(-y)]",
+  "note": ""
+ },
+ {
+  "id": "GR7.752.4",
+  "gr": "7.752.4",
+  "page": 895,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*E^(-x^2/4)*ParabolicCylinderD[2*nu + 1, x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Sec[nu*Pi]*E^(-y^2/4)*y^nu*(ParabolicCylinderD[2*nu, y] + ParabolicCylinderD[2*nu, -y])"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 77(5)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^nu e^(-x^2/4) D_{2nu+1}(x) J_nu(xy) dx = (1/2) sec(nu pi) e^(-y^2/4) y^nu [D_{2nu}(y) + D_{2nu}(-y)]",
+  "note": ""
+ },
+ {
+  "id": "GR7.752.5",
+  "gr": "7.752.5",
+  "page": 895,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*E^(-x^2/4)*ParabolicCylinderD[2*nu + 2, x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "-1/2*Sec[nu*Pi]*y^nu*E^(-y^2/4)*(ParabolicCylinderD[2*nu + 2, y] + ParabolicCylinderD[2*nu + 2, -y])"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "y > 0"
+  ],
+  "cite": "ET II 78(16)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(nu+1) e^(-x^2/4) D_{2nu+2}(x) J_nu(xy) dx = -(1/2) sec(nu pi) y^nu e^(-y^2/4)[D_{2nu+2}(y) + D_{2nu+2}(-y)]",
+  "note": ""
+ },
+ {
+  "id": "GR7.752.6",
+  "gr": "7.752.6",
+  "page": 895,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*E^(x^2/4)*ParabolicCylinderD[2*nu + 2, x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^(-1)*Sin[nu*Pi]*Gamma[2*nu + 3]*y^(-nu - 2)*E^(y^2/4)*BesselK[nu + 1, y^2/4]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1",
+   "Re[nu] < -5/6"
+  ],
+  "cite": "ET II 78(19)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(nu+1) e^(x^2/4) D_{2nu+2}(x) J_nu(xy) dx = pi^(-1) sin(nu pi) Gamma(2nu+3) y^(-nu-2) e^(y^2/4) K_{nu+1}(y^2/4)",
+  "note": ""
+ },
+ {
+  "id": "GR7.752.7",
+  "gr": "7.752.7",
+  "page": 895,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*E^(-x^2/4)*ParabolicCylinderD[-2*nu, x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-1/2)*Pi^(1/2)*y^(-nu)*E^(-y^2/4)*BesselI[nu, y^2/4]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 77(8)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^nu e^(-x^2/4) D_{-2nu}(x) J_nu(xy) dx = 2^(-1/2) pi^(1/2) y^(-nu) e^(-y^2/4) I_nu(y^2/4)",
+  "note": ""
+ },
+ {
+  "id": "GR7.752.8",
+  "gr": "7.752.8",
+  "page": 895,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*E^(x^2/4)*ParabolicCylinderD[-2*nu, x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "y^(nu - 1)*E^(y^2/4)*ParabolicCylinderD[-2*nu, y]"
+  ],
+  "conds": [
+   "Re[nu] > -1/2",
+   "y > 0"
+  ],
+  "cite": "ET II 77(9), EH II 121(17)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^nu e^(x^2/4) D_{-2nu}(x) J_nu(xy) dx = y^(nu-1) e^(y^2/4) D_{-2nu}(y)",
+  "note": ""
+ },
+ {
+  "id": "GR7.752.9",
+  "gr": "7.752.9",
+  "page": 895,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*E^(x^2/4)*ParabolicCylinderD[-2*nu - 2, x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*nu + 1)^(-1)*y^nu*E^(y^2/4)*ParabolicCylinderD[-2*nu - 1, y]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 77(10)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^nu e^(x^2/4) D_{-2nu-2}(x) J_nu(xy) dx = (2nu+1)^(-1) y^nu e^(y^2/4) D_{-2nu-1}(y)",
+  "note": ""
+ },
+ {
+  "id": "GR7.752.10",
+  "gr": "7.752.10",
+  "page": 895,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*E^(-a^2*x^2/4)*ParabolicCylinderD[2*mu, a*x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(mu - 1/2)*Gamma[nu + 1/2]*y^nu/(Gamma[nu - mu + 1]*a^(1 + 2*nu))*Hypergeometric1F1[nu + 1/2, nu - mu + 1, -y^2/(2*a^2)]"
+  ],
+  "conds": [
+   "y > 0",
+   "Abs[Arg[a]] < Pi/4",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 77(11)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^nu e^(-a^2x^2/4) D_{2mu}(ax) J_nu(xy) dx = 2^(mu-1/2) Gamma(nu+1/2) y^nu/(Gamma(nu-mu+1) a^(1+2nu)) 1F1(nu+1/2;nu-mu+1;-y^2/(2a^2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.752.11",
+  "gr": "7.752.11",
+  "page": 895,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*E^(a^2*x^2/4)*ParabolicCylinderD[2*mu, a*x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1/2 + nu]*a^(1/2 + mu - nu)*2^((1/2 + mu + nu)/2 + mu)/(Gamma[1/2 - mu]*y^(mu + 3/2))*E^(y^2/(4*a^2))*WhittakerW[(1/2 + mu - nu)/2, (1/2 + mu + nu)/2, y^2/(4*a^2)]",
+   "Gamma[1/2 + nu]*a^(1/2 + mu - nu)*2^((1/2 + mu + nu)/2 + mu)/(Gamma[1/2 - mu]*y^(mu + 3/2))*E^(y^2/(4*a^2))*WhittakerW[(1/2 + mu - nu)/2, (1/2 + mu + nu)/2, y^2/(2*a^2)]"
+  ],
+  "conds": [
+   "y > 0",
+   "Abs[Arg[a]] < Pi/4",
+   "Re[nu] > -1/2",
+   "Re[nu] < Re[1/2 - 2*mu]"
+  ],
+  "cite": "ET II 78(12)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^nu e^(a^2x^2/4) D_{2mu}(ax) J_nu(xy) dx = Gamma(1/2+nu) a^(2k) 2^(m+mu)/(Gamma(1/2-mu) y^(mu+3/2)) e^(y^2/(4a^2)) W_{k,m}(y^2/(4a^2)), 2k=1/2+mu-nu, 2m=1/2+mu+nu",
+  "note": "k, m substituted; second rhs candidate uses W argument y^2/(2a^2) as in 7.752.13 (suspected misprint)"
+ },
+ {
+  "id": "GR7.752.12",
+  "gr": "7.752.12",
+  "page": 895,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*E^(-a^2*x^2/4)*ParabolicCylinderD[2*mu, a*x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^mu*Gamma[nu + 3/2]*y^nu/(Gamma[nu - mu + 3/2]*a^(2*nu + 2))*Hypergeometric1F1[nu + 3/2, nu - mu + 3/2, -y^2/(2*a^2)]"
+  ],
+  "conds": [
+   "y > 0",
+   "Abs[Arg[a]] < Pi/4",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 79(23)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(nu+1) e^(-a^2x^2/4) D_{2mu}(ax) J_nu(xy) dx = 2^mu Gamma(nu+3/2) y^nu/(Gamma(nu-mu+3/2) a^(2nu+2)) 1F1(nu+3/2;nu-mu+3/2;-y^2/(2a^2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.752.13",
+  "gr": "7.752.13",
+  "page": 895,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*E^(a^2*x^2/4)*ParabolicCylinderD[2*mu, a*x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[3/2 + nu]*2^(1/2 + (mu + nu + 1)/2 + mu)*a^(mu - nu)/(Gamma[-mu]*y^(mu + 2))*E^(y^2/(4*a^2))*WhittakerW[(mu - nu - 1)/2, (mu + nu + 1)/2, y^2/(2*a^2)]"
+  ],
+  "conds": [
+   "y > 0",
+   "Abs[Arg[a]] < 3*Pi/4",
+   "Re[nu] > -1",
+   "Re[nu] < -1/2 - 2*Re[mu]"
+  ],
+  "cite": "ET II 79(24)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(nu+1) e^(a^2x^2/4) D_{2mu}(ax) J_nu(xy) dx = Gamma(3/2+nu) 2^(1/2+m+mu) a^(2k+1)/(Gamma(-mu) y^(mu+2)) e^(y^2/(4a^2)) W_{k,m}(y^2/(2a^2)), 2k=mu-nu-1, 2m=mu+nu+1",
+  "note": "k, m substituted (a^(2k+1) = a^(mu-nu))"
+ },
+ {
+  "id": "GR7.752.14",
+  "gr": "7.752.14",
+  "page": 896,
+  "status": "ok",
+  "lhs": "Integrate[x^(lam + 1/2)*E^(a^2*x^2/4)*ParabolicCylinderD[mu, a*x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(lam - mu/2)*Pi^(-1/2)/(Gamma[-mu]*y^(lam + 3/2))*MeijerG[{{1/2, 1}, {}}, {{3/4 + (lam + nu)/2, -mu/2}, {3/4 + (lam - nu)/2}}, y^2/(2*a^2)]"
+  ],
+  "conds": [
+   "y > 0",
+   "Abs[Arg[a]] < 3*Pi/4",
+   "Re[mu] < -Re[lam]",
+   "-Re[lam] < Re[nu] + 3/2"
+  ],
+  "cite": "ET II 80(26)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(lam+1/2) e^(a^2x^2/4) D_mu(ax) J_nu(xy) dx = 2^(lam-mu/2) pi^(-1/2)/(Gamma(-mu) y^(lam+3/2)) G^{22}_{23}(y^2/(2a^2) | 1/2,1; 3/4+(lam+nu)/2, -mu/2, 3/4+(lam-nu)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.752.15",
+  "gr": "7.752.15",
+  "page": 896,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*E^(x^2/4)*ParabolicCylinderD[-2*nu - 1, x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "(2*nu + 1)*y^(nu - 1)*E^(y^2/4)*ParabolicCylinderD[-2*nu - 2, y]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 79(20)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(nu+1) e^(x^2/4) D_{-2nu-1}(x) J_nu(xy) dx = (2nu+1) y^(nu-1) e^(y^2/4) D_{-2nu-2}(y)",
+  "note": ""
+ },
+ {
+  "id": "GR7.752.16",
+  "gr": "7.752.16",
+  "page": 896,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*E^(-x^2/4)*ParabolicCylinderD[-2*nu - 3, x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-1/2)*Pi^(1/2)*y^(-nu - 2)*E^(-y^2/4)*BesselI[nu + 1, y^2/4]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 79(21)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(nu+1) e^(-x^2/4) D_{-2nu-3}(x) J_nu(xy) dx = 2^(-1/2) pi^(1/2) y^(-nu-2) e^(-y^2/4) I_{nu+1}(y^2/4)",
+  "note": ""
+ },
+ {
+  "id": "GR7.752.17",
+  "gr": "7.752.17",
+  "page": 896,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*E^(x^2/4)*ParabolicCylinderD[-2*nu - 3, x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "y^nu*E^(y^2/4)*ParabolicCylinderD[-2*nu - 3, y]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 79(22)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(nu+1) e^(x^2/4) D_{-2nu-3}(x) J_nu(xy) dx = y^nu e^(y^2/4) D_{-2nu-3}(y)",
+  "note": ""
+ },
+ {
+  "id": "GR7.752.18",
+  "gr": "7.752.18",
+  "page": 896,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*E^(a^2*x^2/4)*ParabolicCylinderD[nu/2 - 1/2, a*x]*BesselY[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi^(-1)*2^(3*nu/4 + 3/4)*a^(-nu)*y^(-1)*Gamma[nu + 1]*E^(y^2/(4*a^2))*WhittakerW[-nu/2 - 1/2, nu/2, y^2/(2*a^2)]"
+  ],
+  "conds": [
+   "y > 0",
+   "Abs[Arg[a]] < 3*Pi/4",
+   "Re[nu] > -1/2",
+   "Re[nu] < 2/3"
+  ],
+  "cite": "ET II 115(39)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^nu e^(a^2x^2/4) D_{nu/2-1/2}(ax) Y_nu(xy) dx = -pi^(-1) 2^(3nu/4+3/4) a^(-nu) y^(-1) Gamma(nu+1) e^(y^2/(4a^2)) W_{-nu/2-1/2,nu/2}(y^2/(2a^2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.753.1",
+  "gr": "7.753.1",
+  "page": 896,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1/2)*E^(-(x + a)^2)*BesselI[nu - 1/2, 2*a*x]*ParabolicCylinderD[nu, 2*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Pi^(-1/2)*Gamma[nu]*a^(nu - 1/2)*ParabolicCylinderD[-nu, 2*a]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "ET II 397(12)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(nu-1/2) e^(-(x+a)^2) I_{nu-1/2}(2ax) D_nu(2x) dx = (1/2) pi^(-1/2) Gamma(nu) a^(nu-1/2) D_{-nu}(2a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.753.2",
+  "gr": "7.753.2",
+  "page": 896,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 3/2)*E^(-(x + a)^2)*BesselI[nu - 3/2, 2*a*x]*ParabolicCylinderD[nu, 2*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Pi^(-1/2)*Gamma[nu]*a^(nu - 3/2)*ParabolicCylinderD[-nu, 2*a]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[nu] > 1"
+  ],
+  "cite": "ET II 397(13)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(nu-3/2) e^(-(x+a)^2) I_{nu-3/2}(2ax) D_nu(2x) dx = (1/2) pi^(-1/2) Gamma(nu) a^(nu-3/2) D_{-nu}(2a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.754.1a",
+  "gr": "7.754.1a",
+  "page": 896,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*E^(-x^2/4)*((1 - 2*Cos[nu*Pi])*ParabolicCylinderD[2*nu - 1, x] - ParabolicCylinderD[2*nu - 1, -x])*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "y^(nu - 1)*E^(-y^2/4)*((1 - 2*Cos[nu*Pi])*ParabolicCylinderD[2*nu - 1, y] - ParabolicCylinderD[2*nu - 1, -y])"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 76(2, 3)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^nu e^(-x^2/4){[1 -+ 2cos(nu pi)] D_{2nu-1}(x) - D_{2nu-1}(-x)} J_nu(xy) dx = +- y^(nu-1) e^(-y^2/4){[1 -+ 2cos(nu pi)] D_{2nu-1}(y) - D_{2nu-1}(-y)} (upper sign)",
+  "note": "upper sign"
+ },
+ {
+  "id": "GR7.754.2a",
+  "gr": "7.754.2a",
+  "page": 896,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*E^(-x^2/4)*((1 - 2*Cos[nu*Pi])*ParabolicCylinderD[2*nu + 1, x] - ParabolicCylinderD[2*nu + 1, -x])*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "-y^nu*E^(-y^2/4)*((1 - 2*Cos[nu*Pi])*ParabolicCylinderD[2*nu, y] + ParabolicCylinderD[2*nu, -y])"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 77(6, 7)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^nu e^(-x^2/4){[1 -+ 2cos(nu pi)] D_{2nu+1}(x) - D_{2nu+1}(-x)} J_nu(xy) dx = -+ y^nu e^(-y^2/4){[1 -+ 2cos(nu pi)] D_{2nu}(y) + D_{2nu}(-y)} (upper sign)",
+  "note": "upper sign"
+ },
+ {
+  "id": "GR7.754.1b",
+  "gr": "7.754.1b",
+  "page": 896,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*E^(-x^2/4)*((1 + 2*Cos[nu*Pi])*ParabolicCylinderD[2*nu - 1, x] - ParabolicCylinderD[2*nu - 1, -x])*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "-y^(nu - 1)*E^(-y^2/4)*((1 + 2*Cos[nu*Pi])*ParabolicCylinderD[2*nu - 1, y] - ParabolicCylinderD[2*nu - 1, -y])"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 76(2, 3)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^nu e^(-x^2/4){[1 -+ 2cos(nu pi)] D_{2nu-1}(x) - D_{2nu-1}(-x)} J_nu(xy) dx = +- y^(nu-1) e^(-y^2/4){[1 -+ 2cos(nu pi)] D_{2nu-1}(y) - D_{2nu-1}(-y)} (lower sign)",
+  "note": "lower sign"
+ },
+ {
+  "id": "GR7.754.2b",
+  "gr": "7.754.2b",
+  "page": 896,
+  "status": "ok",
+  "lhs": "Integrate[x^nu*E^(-x^2/4)*((1 + 2*Cos[nu*Pi])*ParabolicCylinderD[2*nu + 1, x] - ParabolicCylinderD[2*nu + 1, -x])*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "y^nu*E^(-y^2/4)*((1 + 2*Cos[nu*Pi])*ParabolicCylinderD[2*nu, y] + ParabolicCylinderD[2*nu, -y])"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 77(6, 7)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^nu e^(-x^2/4){[1 -+ 2cos(nu pi)] D_{2nu+1}(x) - D_{2nu+1}(-x)} J_nu(xy) dx = -+ y^nu e^(-y^2/4){[1 -+ 2cos(nu pi)] D_{2nu}(y) + D_{2nu}(-y)} (lower sign)",
+  "note": "lower sign"
+ },
+ {
+  "id": "GR7.754.3a",
+  "gr": "7.754.3a",
+  "page": 896,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*E^(-x^2/4)*((1 + 2*Cos[nu*Pi])*ParabolicCylinderD[2*nu, x] + ParabolicCylinderD[2*nu, -x])*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "y^(nu - 1)*E^(-y^2/4)*((1 + 2*Cos[nu*Pi])*ParabolicCylinderD[2*nu + 1, y] - ParabolicCylinderD[2*nu + 1, -y])"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 78(14, 15)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(nu+1) e^(-x^2/4){[1 +- 2cos(nu pi)] D_{2nu}(x) + D_{2nu}(-x)} J_nu(xy) dx = +- y^(nu-1) e^(-y^2/4){[1 +- 2cos(nu pi)] D_{2nu+1}(y) - D_{2nu+1}(-y)} (upper sign)",
+  "note": "upper sign"
+ },
+ {
+  "id": "GR7.754.3b",
+  "gr": "7.754.3b",
+  "page": 896,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*E^(-x^2/4)*((1 - 2*Cos[nu*Pi])*ParabolicCylinderD[2*nu, x] + ParabolicCylinderD[2*nu, -x])*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "-y^(nu - 1)*E^(-y^2/4)*((1 - 2*Cos[nu*Pi])*ParabolicCylinderD[2*nu + 1, y] - ParabolicCylinderD[2*nu + 1, -y])"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 78(14, 15)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(nu+1) e^(-x^2/4){[1 +- 2cos(nu pi)] D_{2nu}(x) + D_{2nu}(-x)} J_nu(xy) dx = +- y^(nu-1) e^(-y^2/4){[1 +- 2cos(nu pi)] D_{2nu+1}(y) - D_{2nu+1}(-y)} (lower sign)",
+  "note": "lower sign"
+ },
+ {
+  "id": "GR7.754.4a",
+  "gr": "7.754.4a",
+  "page": 897,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*E^(-x^2/4)*((1 - 2*Cos[nu*Pi])*ParabolicCylinderD[2*nu + 2, x] + ParabolicCylinderD[2*nu + 2, -x])*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "y^nu*E^(-y^2/4)*((1 - 2*Cos[nu*Pi])*ParabolicCylinderD[2*nu + 2, y] + ParabolicCylinderD[2*nu + 2, -y])"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 78(17, 18)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(nu+1) e^(-x^2/4){[1 -+ 2cos(nu pi)] D_{2nu+2}(x) + D_{2nu+2}(-x)} J_nu(xy) dx = +- y^nu e^(-y^2/4){[1 -+ 2cos(nu pi)] D_{2nu+2}(y) + D_{2nu+2}(-y)} (upper sign)",
+  "note": "upper sign"
+ },
+ {
+  "id": "GR7.754.4b",
+  "gr": "7.754.4b",
+  "page": 897,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*E^(-x^2/4)*((1 + 2*Cos[nu*Pi])*ParabolicCylinderD[2*nu + 2, x] + ParabolicCylinderD[2*nu + 2, -x])*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "-y^nu*E^(-y^2/4)*((1 + 2*Cos[nu*Pi])*ParabolicCylinderD[2*nu + 2, y] + ParabolicCylinderD[2*nu + 2, -y])"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 78(17, 18)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(nu+1) e^(-x^2/4){[1 -+ 2cos(nu pi)] D_{2nu+2}(x) + D_{2nu+2}(-x)} J_nu(xy) dx = +- y^nu e^(-y^2/4){[1 -+ 2cos(nu pi)] D_{2nu+2}(y) + D_{2nu+2}(-y)} (lower sign)",
+  "note": "lower sign"
+ },
+ {
+  "id": "GR7.755.1",
+  "gr": "7.755.1",
+  "page": 897,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1/2)*ParabolicCylinderD[nu, Sqrt[a*x]]*ParabolicCylinderD[-nu - 1, Sqrt[a*x]]*BesselJ[0, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-3/2)*Pi*a^(-1/2)*LegendreP[-1/4, nu/2 + 1/4, 3, (1 + 4*y^2/a^2)^(1/2)]*LegendreP[1/4, nu/2 - 1/4, 3, (1 + 4*y^2/a^2)^(1/2)]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[a] > 0"
+  ],
+  "cite": "ET II 17(43)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(-1/2) D_nu(sqrt(ax)) D_{-nu-1}(sqrt(ax)) J_0(xy) dx = 2^(-3/2) pi a^(-1/2) P^{nu/2+1/4}_{-1/4}[(1+4y^2/a^2)^(1/2)] P^{nu/2-1/4}_{1/4}[(1+4y^2/a^2)^(1/2)]",
+  "note": "Legendre argument > 1: type-3 form"
+ },
+ {
+  "id": "GR7.755.2",
+  "gr": "7.755.2",
+  "page": 897,
+  "status": "ok",
+  "lhs": "Integrate[x^(1/2)*ParabolicCylinderD[-1/2 - nu, a*E^(I*Pi/4)*x^(1/2)]*ParabolicCylinderD[-1/2 - nu, a*E^(-I*Pi/4)*x^(1/2)]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-nu)*Pi^(1/2)*y^(-nu - 1)*(a^2 + 2*y)^(-1/2)*Gamma[nu + 1/2]^(-1)*((a^2 + 2*y)^(1/2) - a)^(2*nu)"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[a] > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 80(27)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(1/2) D_{-1/2-nu}(a e^(i pi/4) x^(1/2)) D_{-1/2-nu}(a e^(-i pi/4) x^(1/2)) J_nu(xy) dx = 2^(-nu) pi^(1/2) y^(-nu-1)(a^2+2y)^(-1/2)[Gamma(nu+1/2)]^(-1)[(a^2+2y)^(1/2)-a]^(2nu)",
+  "note": ""
+ },
+ {
+  "id": "GR7.755.3",
+  "gr": "7.755.3",
+  "page": 897,
+  "status": "ok",
+  "lhs": "a*Integrate[ParabolicCylinderD[-1/2 - nu, a*E^(I*Pi/4)*x^(-1/2)]*ParabolicCylinderD[-1/2 - nu, a*E^(-I*Pi/4)*x^(-1/2)]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(1/2)*Pi^(1/2)*y^(-1)*Gamma[nu + 1/2]^(-1)*Exp[-a*(2*y)^(1/2)]",
+   "a*2^(1/2)*Pi^(1/2)*y^(-1)*Gamma[nu + 1/2]^(-1)*Exp[-a*(2*y)^(1/2)]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[a] > 0",
+   "Re[nu] > -1/2"
+  ],
+  "cite": "ET II 80(28)a",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "a int_0^inf D_{-1/2-nu}(a e^(i pi/4) x^(-1/2)) D_{-1/2-nu}(a e^(-i pi/4) x^(-1/2)) J_nu(xy) dx = 2^(1/2) pi^(1/2) y^(-1)[Gamma(nu+1/2)]^(-1) exp(-a(2y)^(1/2))",
+  "note": "condition printed 'e Re nu > -1/2' (stray 'e'), corrected to Re nu > -1/2; the leading factor a looks spurious, second rhs candidate is the value if the integral alone equals the printed right side"
+ },
+ {
+  "id": "GR7.755.4",
+  "gr": "7.755.4",
+  "page": 897,
+  "status": "ok",
+  "lhs": "Integrate[x^(1/2)*ParabolicCylinderD[nu - 1/2, a*x^(-1/2)]*ParabolicCylinderD[-nu - 1/2, a*x^(-1/2)]*BesselY[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "y^(-3/2)*Exp[-a*y^(1/2)]*Sin[a*y^(1/2) - (nu - 1/2)*Pi/2]"
+  ],
+  "conds": [
+   "y > 0",
+   "Abs[Arg[a]] < Pi/4"
+  ],
+  "cite": "ET II 115(40)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(1/2) D_{nu-1/2}(a x^(-1/2)) D_{-nu-1/2}(a x^(-1/2)) Y_nu(xy) dx = y^(-3/2) exp(-a y^(1/2)) sin(a y^(1/2) - (nu-1/2)pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.755.5",
+  "gr": "7.755.5",
+  "page": 897,
+  "status": "ok",
+  "lhs": "Integrate[x^(1/2)*ParabolicCylinderD[nu - 1/2, a*x^(-1/2)]*ParabolicCylinderD[-nu - 1/2, a*x^(-1/2)]*BesselK[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-1)*y^(-3/2)*Pi*Exp[-a*(2*y)^(1/2)]"
+  ],
+  "conds": [
+   "Re[y] > 0",
+   "Abs[Arg[a]] < Pi/4"
+  ],
+  "cite": "ET II 151(81)",
+  "edition_note": "",
+  "section": "7.75 Combinations of parabolic cylinder and Bessel functions",
+  "tex": "int x^(1/2) D_{nu-1/2}(a x^(-1/2)) D_{-nu-1/2}(a x^(-1/2)) K_nu(xy) dx = (1/2) y^(-3/2) pi exp(-a(2y)^(1/2))",
+  "note": ""
+ },
+ {
+  "id": "GR7.756",
+  "gr": "7.756",
+  "page": 897,
+  "status": "ok",
+  "lhs": "Integrate[x^(-nu)*E^(-x^2/4)*(ParabolicCylinderD[mu, x] - ParabolicCylinderD[mu, -x])*StruveH[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(3/2)*Gamma[mu/2 + 1/2]/Gamma[mu/2 + nu + 1]*y^(mu + nu)*Sin[mu*Pi/2]*Hypergeometric1F1[mu/2 + 1/2, mu/2 + nu + 1, -y^2/2]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[mu + nu] > -3/2",
+   "Re[mu] > -1"
+  ],
+  "cite": "ET II 171(41)",
+  "edition_note": "",
+  "section": "Combinations of parabolic cylinder and Struve functions",
+  "tex": "int_0^inf x^(-nu) e^(-x^2/4)[D_mu(x) - D_mu(-x)] H_nu(xy) dx = 2^(3/2) Gamma(mu/2+1/2)/Gamma(mu/2+nu+1) y^(mu+nu) sin(mu pi/2) 1F1(mu/2+1/2;mu/2+nu+1;-y^2/2)",
+  "note": ""
+ }
+]

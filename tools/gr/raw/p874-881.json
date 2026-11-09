@@ -1,0 +1,1406 @@
+[
+ {
+  "id": "GR7.623.8",
+  "gr": "7.623.8",
+  "page": 874,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(mu - 1)*x^(k - mu - 1)*E^(-a*x/2)*WhittakerW[k, lam, a*x], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[mu]*E^(-a/2)*Sec[(k - mu - lam)*Pi]*(Sin[mu*Pi]*Gamma[k - mu + lam + 1/2]/Gamma[2*lam + 1]*WhittakerM[k - mu, lam, a] + Cos[(k - lam)*Pi]*WhittakerW[k - mu, lam, a])"
+  ],
+  "conds": [
+   "0 < Re[mu] < Re[k] - Abs[Re[lam]] + 1/2"
+  ],
+  "cite": "ET II 200(93)a",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^1 (1-x)^(mu-1) x^(k-mu-1) e^(-ax/2) W_{k,lam}(ax) dx = Gamma(mu) e^(-a/2) sec[(k-mu-lam)pi]{sin(mu pi) Gamma(k-mu+lam+1/2)/Gamma(2lam+1) M_{k-mu,lam}(a) + cos[(k-lam)pi] W_{k-mu,lam}(a)}",
+  "note": ""
+ },
+ {
+  "id": "GR7.624.1",
+  "gr": "7.624.1",
+  "page": 874,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*(Sqrt[x] + Sqrt[a + x])^(2*sigma)*E^(-x/2)*WhittakerM[k, mu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "-sigma*Gamma[2*mu + 1]*a^sigma/(Sqrt[Pi]*Gamma[1/2 + k + mu])*MeijerG[{{1/2, 1, 1 - k + rho}, {}}, {{1/2 + mu + rho, -sigma}, {sigma, 1/2 - mu + rho}}, a]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[mu + rho] > -1/2",
+   "Re[k - rho - sigma] > 0"
+  ],
+  "cite": "ET II 403(8)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1)[x^(1/2)+(a+x)^(1/2)]^(2sigma) e^(-x/2) M_{k,mu}(x) dx = -sigma Gamma(2mu+1) a^sigma/(pi^(1/2) Gamma(1/2+k+mu)) G^{23}_{34}(a | 1/2,1,1-k+rho; 1/2+mu+rho,-sigma,sigma,1/2-mu+rho)",
+  "note": ""
+ },
+ {
+  "id": "GR7.624.2",
+  "gr": "7.624.2",
+  "page": 874,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*(Sqrt[x] + Sqrt[a + x])^(2*sigma)*E^(-x/2)*WhittakerW[k, mu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "-sigma*a^sigma/Sqrt[Pi]*MeijerG[{{1/2, 1}, {1 - k + rho}}, {{1/2 + mu + rho, 1/2 - mu + rho, -sigma}, {sigma}}, a]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[rho] > Abs[Re[mu]] - 1/2"
+  ],
+  "cite": "ET II 406(24)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1)[x^(1/2)+(a+x)^(1/2)]^(2sigma) e^(-x/2) W_{k,mu}(x) dx = -pi^(-1/2) sigma a^sigma G^{32}_{34}(a | 1/2,1,1-k+rho; 1/2+mu+rho,1/2-mu+rho,-sigma,sigma)",
+  "note": ""
+ },
+ {
+  "id": "GR7.624.3",
+  "gr": "7.624.3",
+  "page": 874,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*(Sqrt[x] + Sqrt[a + x])^(2*sigma)*E^(-x/2)*WhittakerW[k, mu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "-sigma*a^sigma/(Sqrt[Pi]*Gamma[1/2 - k + mu]*Gamma[1/2 - k - mu])*MeijerG[{{1/2, 1, 1 + k + rho}, {}}, {{1/2 + mu + rho, 1/2 - mu + rho, -sigma}, {sigma}}, a]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[rho] > Abs[Re[mu]] - 1/2",
+   "Re[k + rho + sigma] < 0"
+  ],
+  "cite": "ET II 406(25)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1)[x^(1/2)+(a+x)^(1/2)]^(2sigma) e^(-x/2) W_{k,mu}(x) dx = -sigma pi^(-1/2) a^sigma/(Gamma(1/2-k+mu)Gamma(1/2-k-mu)) G^{33}_{34}(a | 1/2,1,1+k+rho; 1/2+mu+rho,1/2-mu+rho,-sigma,sigma)",
+  "note": "as printed: integrand identical to 7.624.2 but a different value; see 7.624.3b"
+ },
+ {
+  "id": "GR7.624.3b",
+  "gr": "7.624.3",
+  "page": 874,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*(Sqrt[x] + Sqrt[a + x])^(2*sigma)*E^(x/2)*WhittakerW[k, mu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "-sigma*a^sigma/(Sqrt[Pi]*Gamma[1/2 - k + mu]*Gamma[1/2 - k - mu])*MeijerG[{{1/2, 1, 1 + k + rho}, {}}, {{1/2 + mu + rho, 1/2 - mu + rho, -sigma}, {sigma}}, a]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[rho] > Abs[Re[mu]] - 1/2",
+   "Re[k + rho + sigma] < 0"
+  ],
+  "cite": "ET II 406(25)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1)[x^(1/2)+(a+x)^(1/2)]^(2sigma) e^(+x/2) W_{k,mu}(x) dx = -sigma pi^(-1/2) a^sigma/(Gamma(1/2-k+mu)Gamma(1/2-k-mu)) G^{33}_{34}(a | 1/2,1,1+k+rho; 1/2+mu+rho,1/2-mu+rho,-sigma,sigma)",
+  "note": "corrected integrand: e^(+x/2) instead of printed e^(-x/2) (printed integrand duplicates 7.624.2; the Gamma(1/2-k+-mu)^-1 prefactor and Re(k+rho+sigma)<0 fit the e^(x/2) case)"
+ },
+ {
+  "id": "GR7.624.4",
+  "gr": "7.624.4",
+  "page": 874,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*(a + x)^(-1/2)*(Sqrt[x] + Sqrt[a + x])^(2*sigma)*E^(-x/2)*WhittakerM[k, mu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[2*mu + 1]*a^sigma/(Sqrt[Pi]*Gamma[1/2 + k + mu])*MeijerG[{{0, 1/2, 1/2 - k - rho}, {}}, {{-sigma, rho + mu}, {rho - mu, sigma}}, a]",
+   "Gamma[2*mu + 1]*a^sigma/(Sqrt[Pi]*Gamma[1/2 + k + mu])*MeijerG[{{0, 1/2, 1/2 - k + rho}, {}}, {{-sigma, rho + mu}, {rho - mu, sigma}}, a]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[rho + mu] > -1/2",
+   "Re[k - rho - sigma] > -1/2"
+  ],
+  "cite": "ET II 403(9)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1)(a+x)^(-1/2)[x^(1/2)+(a+x)^(1/2)]^(2sigma) e^(-x/2) M_{k,mu}(x) dx = Gamma(2mu+1)a^sigma/(pi^(1/2)Gamma(1/2+k+mu)) G^{23}_{34}(a | 0,1/2,1/2-k-rho; -sigma,rho+mu,rho-mu,sigma)",
+  "note": "printed top parameter 1/2-k-rho; second candidate 1/2-k+rho by analogy with 7.624.1 (1-k+rho) and 7.624.6"
+ },
+ {
+  "id": "GR7.624.5",
+  "gr": "7.624.5",
+  "page": 874,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*(a + x)^(-1/2)*(Sqrt[x] + Sqrt[a + x])^(2*sigma)*E^(-x/2)*WhittakerW[k, mu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "a^sigma/(Sqrt[Pi]*Gamma[1/2 - k + mu]*Gamma[1/2 - k - mu])*MeijerG[{{0, 1/2, 1/2 + k + rho}, {}}, {{-sigma, rho + mu, rho - mu}, {sigma}}, a]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[rho] > Abs[Re[mu]] - 1/2",
+   "Re[k + rho + sigma] < 1/2"
+  ],
+  "cite": "ET II 406(26)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1)(a+x)^(-1/2)[x^(1/2)+(a+x)^(1/2)]^(2sigma) e^(-x/2) W_{k,mu}(x) dx = pi^(-1/2)a^sigma/(Gamma(1/2-k+mu)Gamma(1/2-k-mu)) G^{33}_{34}(a | 0,1/2,1/2+k+rho; -sigma,rho+mu,rho-mu,sigma)",
+  "note": "as printed: integrand identical to 7.624.6 but a different value; see 7.624.5b"
+ },
+ {
+  "id": "GR7.624.5b",
+  "gr": "7.624.5",
+  "page": 874,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*(a + x)^(-1/2)*(Sqrt[x] + Sqrt[a + x])^(2*sigma)*E^(x/2)*WhittakerW[k, mu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "a^sigma/(Sqrt[Pi]*Gamma[1/2 - k + mu]*Gamma[1/2 - k - mu])*MeijerG[{{0, 1/2, 1/2 + k + rho}, {}}, {{-sigma, rho + mu, rho - mu}, {sigma}}, a]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[rho] > Abs[Re[mu]] - 1/2",
+   "Re[k + rho + sigma] < 1/2"
+  ],
+  "cite": "ET II 406(26)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1)(a+x)^(-1/2)[x^(1/2)+(a+x)^(1/2)]^(2sigma) e^(+x/2) W_{k,mu}(x) dx = pi^(-1/2)a^sigma/(Gamma(1/2-k+mu)Gamma(1/2-k-mu)) G^{33}_{34}(a | 0,1/2,1/2+k+rho; -sigma,rho+mu,rho-mu,sigma)",
+  "note": "corrected integrand: e^(+x/2) instead of printed e^(-x/2) (duplicates 7.624.6; Gamma^-1 prefactor and Re(k+rho+sigma)<1/2 fit the e^(x/2) case)"
+ },
+ {
+  "id": "GR7.624.6",
+  "gr": "7.624.6",
+  "page": 874,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*(a + x)^(-1/2)*(Sqrt[x] + Sqrt[a + x])^(2*sigma)*E^(-x/2)*WhittakerW[k, mu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "a^sigma/Sqrt[Pi]*MeijerG[{{0, 1/2}, {1/2 - k + rho}}, {{-sigma, rho + mu, rho - mu}, {sigma}}, a]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[rho] > Abs[Re[mu]] - 1/2"
+  ],
+  "cite": "ET II 406(27)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1)(a+x)^(-1/2)[x^(1/2)+(a+x)^(1/2)]^(2sigma) e^(-x/2) W_{k,mu}(x) dx = pi^(-1/2) a^sigma G^{32}_{34}(a | 0,1/2,1/2-k+rho; -sigma,rho+mu,rho-mu,sigma)",
+  "note": ""
+ },
+ {
+  "id": "GR7.625.1",
+  "gr": "7.625.1",
+  "page": 875,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*Exp[-(alpha + beta)*x/2]*WhittakerM[k, mu, alpha*x]*WhittakerW[lam, nu, beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1 + mu + nu + rho]*Gamma[1 + mu - nu + rho]/Gamma[3/2 - lam + mu + rho]*alpha^(mu + 1/2)*beta^(-mu - rho - 1/2)*HypergeometricPFQ[{1/2 + k + mu, 1 + mu + nu + rho, 1 + mu - nu + rho}, {2*mu + 1, 3/2 - lam + mu + rho}, -alpha/beta]"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Re[beta] > 0",
+   "Re[rho + mu] > Abs[Re[nu]] - 1"
+  ],
+  "cite": "ET II 410(43)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1) exp[-(alpha+beta)x/2] M_{k,mu}(alpha x) W_{lam,nu}(beta x) dx = Gamma(1+mu+nu+rho)Gamma(1+mu-nu+rho)/Gamma(3/2-lam+mu+rho) alpha^(mu+1/2) beta^(-mu-rho-1/2) 3F2(1/2+k+mu,1+mu+nu+rho,1+mu-nu+rho; 2mu+1,3/2-lam+mu+rho; -alpha/beta)",
+  "note": ""
+ },
+ {
+  "id": "GR7.625.2",
+  "gr": "7.625.2",
+  "page": 875,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*Exp[-(alpha + beta)*x/2]*WhittakerW[k, mu, alpha*x]*WhittakerW[lam, nu, beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "beta^(-rho)/(Gamma[1/2 - k + mu]*Gamma[1/2 - k - mu]*Gamma[1/2 - lam + nu]*Gamma[1/2 - lam - nu])*MeijerG[{{1/2 + mu, 1/2 - mu, 1 + lam + rho}, {}}, {{1/2 + nu + rho, 1/2 - nu + rho, -k}, {}}, beta/alpha]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] + Abs[Re[nu]] < Re[rho] + 1",
+   "Re[k + lam + rho] < 0",
+   "Re[alpha] > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET II 410(44)a",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1) exp[-(alpha+beta)x/2] W_{k,mu}(alpha x) W_{lam,nu}(beta x) dx = beta^(-rho)[Gamma(1/2-k+mu)Gamma(1/2-k-mu)Gamma(1/2-lam+nu)Gamma(1/2-lam-nu)]^-1 G^{33}_{33}(beta/alpha | 1/2+mu,1/2-mu,1+lam+rho; 1/2+nu+rho,1/2-nu+rho,-k)",
+  "note": "Re alpha > 0, Re beta > 0 added for sampling. As printed the integrand is identical to 7.625.3 with a different value; see 7.625.2b"
+ },
+ {
+  "id": "GR7.625.2b",
+  "gr": "7.625.2",
+  "page": 875,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*Exp[(alpha + beta)*x/2]*WhittakerW[k, mu, alpha*x]*WhittakerW[lam, nu, beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "beta^(-rho)/(Gamma[1/2 - k + mu]*Gamma[1/2 - k - mu]*Gamma[1/2 - lam + nu]*Gamma[1/2 - lam - nu])*MeijerG[{{1/2 + mu, 1/2 - mu, 1 + lam + rho}, {}}, {{1/2 + nu + rho, 1/2 - nu + rho, -k}, {}}, beta/alpha]"
+  ],
+  "conds": [
+   "Abs[Re[mu]] + Abs[Re[nu]] < Re[rho] + 1",
+   "Re[k + lam + rho] < 0",
+   "Re[alpha] > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET II 410(44)a",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1) exp[+(alpha+beta)x/2] W_{k,mu}(alpha x) W_{lam,nu}(beta x) dx = beta^(-rho)[Gamma(1/2-k+mu)Gamma(1/2-k-mu)Gamma(1/2-lam+nu)Gamma(1/2-lam-nu)]^-1 G^{33}_{33}(beta/alpha | 1/2+mu,1/2-mu,1+lam+rho; 1/2+nu+rho,1/2-nu+rho,-k)",
+  "note": "corrected integrand: exp[+(alpha+beta)x/2] (printed exp[-...] duplicates 7.625.3; the Gamma^-1 prefactor and Re(k+lam+rho)<0 fit the growing-exponential case). Re alpha, Re beta > 0 added"
+ },
+ {
+  "id": "GR7.625.3",
+  "gr": "7.625.3",
+  "page": 875,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*Exp[-(alpha + beta)*x/2]*WhittakerW[k, mu, alpha*x]*WhittakerW[lam, nu, beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "beta^(-rho)*MeijerG[{{1/2 + mu, 1/2 - nu}, {1 - lam + rho}}, {{1/2 + nu + rho, 1/2 - nu + rho}, {k}}, beta/alpha]",
+   "beta^(-rho)*MeijerG[{{1/2 + mu, 1/2 - mu}, {1 - lam + rho}}, {{1/2 + nu + rho, 1/2 - nu + rho}, {k}}, beta/alpha]"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Re[beta] > 0",
+   "Abs[Re[mu]] + Abs[Re[nu]] < Re[rho] + 1"
+  ],
+  "cite": "ET II 411(46)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1) exp[-(alpha+beta)x/2] W_{k,mu}(alpha x) W_{lam,nu}(beta x) dx = beta^(-rho) G^{22}_{33}(beta/alpha | 1/2+mu,1/2-nu,1-lam+rho; 1/2+nu+rho,1/2-nu+rho,k)",
+  "note": "no conditions printed; convergence conditions added (taken from 7.625.2/7.625.4). Top row printed '1/2+mu, 1/2-nu' (second entry possibly 1/2-mu); second rhs candidate uses 1/2-mu (pattern of 7.625.2/7.625.4)"
+ },
+ {
+  "id": "GR7.625.4",
+  "gr": "7.625.4",
+  "page": 875,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*Exp[-(alpha - beta)*x/2]*WhittakerW[k, mu, alpha*x]*WhittakerW[lam, nu, beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "beta^(-rho)/(Gamma[1/2 - lam + nu]*Gamma[1/2 - lam - nu])*MeijerG[{{1/2 + mu, 1/2 - mu}, {1 + lam + rho}}, {{1/2 + nu + rho, 1/2 - nu + rho}, {k}}, beta/alpha]"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Abs[Re[mu]] + Abs[Re[nu]] < Re[rho] + 1"
+  ],
+  "cite": "ET II 411(45)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1) exp[-(alpha-beta)x/2] W_{k,mu}(alpha x) W_{lam,nu}(beta x) dx = beta^(-rho)[Gamma(1/2-lam+nu)Gamma(1/2-lam-nu)]^-1 G^{23}_{33}(beta/alpha | 1/2+mu,1/2-mu,1+lam+rho; 1/2+nu+rho,1/2-nu+rho,k)",
+  "note": "convergence at infinity also needs Re(k+lam+rho) < 0 or similar (not printed)"
+ },
+ {
+  "id": "GR7.626.1a",
+  "gr": "7.626.1",
+  "page": 875,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[(k/x - (xi + eta)/4)*Exp[-(xi + eta)*x/2]*x^c*Hypergeometric1F1[a, c, xi*x]*Hypergeometric1F1[a, c, eta*x], {x, 0, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Re[c] > 0"
+  ],
+  "cite": "EH I 285",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^1 [k/x - (xi+eta)/4] exp[-(xi+eta)x/2] x^c 1F1(a;c;xi x) 1F1(a;c;eta x) dx = 0 [xi != eta]",
+  "note": "xi != eta, both zeros of 1F1(a;c;x); bracket in book closes after x^c (typesetting)",
+  "reason": "parameters xi, eta are zeros of 1F1(a;c;x) and k is not defined on the page; cannot be sampled"
+ },
+ {
+  "id": "GR7.626.1b",
+  "gr": "7.626.1",
+  "page": 875,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[(k/x - xi/2)*Exp[-xi*x]*x^c*Hypergeometric1F1[a, c, xi*x]^2, {x, 0, 1}]",
+  "rhs": [
+   "a/xi*E^(-xi)*Hypergeometric1F1[a + 1, c, xi]^2"
+  ],
+  "conds": [
+   "Re[c] > 0"
+  ],
+  "cite": "EH I 285",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "xi = eta: = (a/xi) e^(-xi)[1F1(a+1;c;xi)]^2",
+  "note": "xi = eta substituted; xi a zero of 1F1(a;c;x)",
+  "reason": "parameters xi, eta are zeros of 1F1(a;c;x) and k is not defined on the page; cannot be sampled"
+ },
+ {
+  "id": "GR7.626.2a",
+  "gr": "7.626.2",
+  "page": 875,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[(k/x - (xi + eta)/4)*Exp[-(xi + eta)*x/2]*x^c*HypergeometricU[a, c, xi*x]*HypergeometricU[a, c, eta*x], {x, 1, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [],
+  "cite": "EH I 286",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_1^inf [k/x - (xi+eta)/4] e^(-(xi+eta)x/2) x^c Psi(a,c;xi x) Psi(a,c;eta x) dx = 0 [xi != eta]",
+  "note": "xi != eta, both zeros of Psi(a,c;x); lower limit printed 1",
+  "reason": "parameters xi, eta are zeros of Psi(a,c;x) and k is not defined on the page; cannot be sampled"
+ },
+ {
+  "id": "GR7.626.2b",
+  "gr": "7.626.2",
+  "page": 875,
+  "status": "SKIP-GENERIC",
+  "lhs": "Integrate[(k/x - xi/2)*Exp[-xi*x]*x^c*HypergeometricU[a, c, xi*x]^2, {x, 1, Infinity}]",
+  "rhs": [
+   "-E^(-xi)/xi*HypergeometricU[a - 1, c, xi]^2"
+  ],
+  "conds": [],
+  "cite": "EH I 286",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "xi = eta: = -xi^-1 e^(-xi)[Psi(a-1,c;xi)]^2",
+  "note": "xi = eta substituted",
+  "reason": "parameters xi, eta are zeros of Psi(a,c;x) and k is not defined on the page; cannot be sampled"
+ },
+ {
+  "id": "GR7.627.1",
+  "gr": "7.627.1",
+  "page": 876,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*lam - 1)*(a + x)^(-mu - 1/2)*E^(x/2)*WhittakerW[k, mu, a + x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[2*lam]*Gamma[1/2 - k + mu - 2*lam]/Gamma[1/2 - k + mu]*a^(lam - mu - 1/2)*WhittakerW[k + lam, mu - lam, a]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "0 < 2*Re[lam] < 1/2 - Re[k - mu]"
+  ],
+  "cite": "ET II 411(50)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(2lam-1)(a+x)^(-mu-1/2) e^(x/2) W_{k,mu}(a+x) dx = Gamma(2lam)Gamma(1/2-k+mu-2lam)/Gamma(1/2-k+mu) a^(lam-mu-1/2) W_{k+lam,mu-lam}(a)",
+  "note": "printed condition 0 < 2 Re lam < 1/2 - Re(k+mu); convergence at infinity (integrand ~ x^(2lam-mu-3/2+k)) and Gamma(1/2-k+mu-2lam) require 2 Re lam < 1/2 - Re(k-mu)"
+ },
+ {
+  "id": "GR7.627.2",
+  "gr": "7.627.2",
+  "page": 876,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*lam - 1)*(a + x)^(-mu - 1/2)*E^(-x/2)*WhittakerM[k, mu, a + x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[2*lam]*Gamma[2*mu + 1]*Gamma[k + mu - 2*lam + 1/2]/(Gamma[k + mu + 1/2]*Gamma[1 - 2*lam + 2*mu])*a^(lam - mu - 1/2)*WhittakerM[k - lam, mu - lam, a]"
+  ],
+  "conds": [
+   "Re[lam] > 0",
+   "Re[k + mu - 2*lam] > -1/2",
+   "a > 0"
+  ],
+  "cite": "ET II 405(20)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(2lam-1)(a+x)^(-mu-1/2) e^(-x/2) M_{k,mu}(a+x) dx = Gamma(2lam)Gamma(2mu+1)Gamma(k+mu-2lam+1/2)/(Gamma(k+mu+1/2)Gamma(1-2lam+2mu)) a^(lam-mu-1/2) M_{k-lam,mu-lam}(a)",
+  "note": "book prints a stray superscript -x/2 on M (M^{-x/2}_{k,mu}); read as M_{k,mu}(a+x). a > 0 implied"
+ },
+ {
+  "id": "GR7.627.3",
+  "gr": "7.627.3",
+  "page": 876,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*lam - 1)*(a + x)^(-mu - 1/2)*E^(-x/2)*WhittakerW[k, mu, a + x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[2*lam]*a^(lam - mu - 1/2)*WhittakerW[k - lam, mu - lam, a]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[lam] > 0"
+  ],
+  "cite": "ET II 411(47)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(2lam-1)(a+x)^(-mu-1/2) e^(-x/2) W_{k,mu}(a+x) dx = Gamma(2lam) a^(lam-mu-1/2) W_{k-lam,mu-lam}(a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.627.4",
+  "gr": "7.627.4",
+  "page": 876,
+  "status": "ok",
+  "lhs": "Integrate[x^(lam - 1)*(a + x)^(k - lam - 1)*E^(-x/2)*WhittakerW[k, mu, a + x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[lam]*a^(k - 1)*WhittakerW[k - lam, mu, a]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[lam] > 0"
+  ],
+  "cite": "ET II 411(48)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(lam-1)(a+x)^(k-lam-1) e^(-x/2) W_{k,mu}(a+x) dx = Gamma(lam) a^(k-1) W_{k-lam,mu}(a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.627.5",
+  "gr": "7.627.5",
+  "page": 876,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*(a + x)^(-sigma)*E^(-x/2)*WhittakerW[k, mu, a + x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[rho]*a^rho*E^(a/2)*MeijerG[{{}, {0, 1 - k - sigma}}, {{-rho, 1/2 + mu - sigma, 1/2 - mu - sigma}, {}}, a]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[rho] > 0"
+  ],
+  "cite": "ET II 411(49)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1)(a+x)^(-sigma) e^(-x/2) W_{k,mu}(a+x) dx = Gamma(rho) a^rho e^(a/2) G^{30}_{23}(a | 0,1-k-sigma; -rho,1/2+mu-sigma,1/2-mu-sigma)",
+  "note": ""
+ },
+ {
+  "id": "GR7.627.6",
+  "gr": "7.627.6",
+  "page": 876,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*(a + x)^(-sigma)*E^(x/2)*WhittakerW[k, mu, a + x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[rho]*a^rho*E^(-a/2)/(Gamma[1/2 - k + mu]*Gamma[1/2 - k - mu])*MeijerG[{{k - sigma + 1}, {0}}, {{-rho, 1/2 + mu - sigma, 1/2 - mu - sigma}, {}}, a]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "0 < Re[rho] < Re[sigma - k]"
+  ],
+  "cite": "ET II 412(51)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1)(a+x)^(-sigma) e^(x/2) W_{k,mu}(a+x) dx = Gamma(rho)a^rho e^(-a/2)/(Gamma(1/2-k+mu)Gamma(1/2-k-mu)) G^{31}_{23}(a | k-sigma+1,0; -rho,1/2+mu-sigma,1/2-mu-sigma)",
+  "note": ""
+ },
+ {
+  "id": "GR7.627.7",
+  "gr": "7.627.7",
+  "page": 876,
+  "status": "ok",
+  "lhs": "Integrate[E^(-(a + x)/2)*(a + x)^(2*kappa - 1)/(a*x)^kappa*WhittakerW[kappa, mu, x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1/2 - mu - kappa]*Gamma[1/2 + mu - kappa]/(a*Gamma[1 - 2*kappa])*WhittakerW[kappa, mu, a]"
+  ],
+  "conds": [
+   "Re[1/2 + mu - kappa] > 0",
+   "Re[1/2 - mu - kappa] > 0",
+   "a > 0"
+  ],
+  "cite": "BU 126(7a)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf e^(-(a+x)/2) (a+x)^(2kappa-1)/(ax)^kappa W_{kappa,mu}(x) dx/x = Gamma(1/2-mu-kappa)Gamma(1/2+mu-kappa)/(a Gamma(1-2kappa)) W_{kappa,mu}(a)",
+  "note": "a > 0 added (implied)"
+ },
+ {
+  "id": "GR7.627.8",
+  "gr": "7.627.8",
+  "page": 876,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x/2)*x^(gamma + alpha - 1)*WhittakerM[kappa, mu, x]/(x + a)^alpha, {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1 + 2*mu]*Gamma[1/2 + mu + gamma]*Gamma[kappa - gamma]/(Gamma[1/2 + mu - gamma]*Gamma[1/2 + mu + kappa])*HypergeometricPFQ[{alpha, kappa - gamma}, {1/2 + mu - gamma, 1/2 - mu - gamma}, a] + Gamma[alpha + gamma + 1/2 + mu]*Gamma[-gamma - 1/2 - mu]/Gamma[alpha]*a^(gamma + 1/2 + mu)*HypergeometricPFQ[{alpha + gamma + mu + 1/2, kappa + mu + 1/2}, {1 + 2*mu, 3/2 + mu + gamma}, a]"
+  ],
+  "conds": [
+   "Re[gamma + alpha + 1/2 + mu] > 0",
+   "Re[gamma - kappa] < 0",
+   "a > 0"
+  ],
+  "cite": "BU 126(8)a",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf e^(-x/2) x^(gamma+alpha-1) M_{kappa,mu}(x) dx/(x+a)^alpha = Gamma(1+2mu)Gamma(1/2+mu+gamma)Gamma(kappa-gamma)/(Gamma(1/2+mu-gamma)Gamma(1/2+mu+kappa)) 2F2(alpha,kappa-gamma;1/2+mu-gamma,1/2-mu-gamma;a) + Gamma(alpha+gamma+1/2+mu)Gamma(-gamma-1/2-mu)/Gamma(alpha) a^(gamma+1/2+mu) 2F2(alpha+gamma+mu+1/2,kappa+mu+1/2;1+2mu,3/2+mu+gamma;a)",
+  "note": "a > 0 added (implied)"
+ },
+ {
+  "id": "GR7.627.9",
+  "gr": "7.627.9",
+  "page": 877,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x/2)*x^(n + mu + 1/2)*WhittakerM[kappa, mu, x]/(x + a), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n + 1)*a^(n + mu + 1/2)*E^(a/2)*Gamma[1 + 2*mu]*Gamma[1/2 - mu + kappa]*WhittakerW[-kappa, mu, a]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[mu + 1 + n/2] > 0",
+   "Re[kappa - mu - 1/2] < n",
+   "Abs[Arg[a]] < Pi"
+  ],
+  "cite": "BU 127(10a)a",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf e^(-x/2) x^(n+mu+1/2) M_{kappa,mu}(x) dx/(x+a) = (-1)^(n+1) a^(n+mu+1/2) e^(a/2) Gamma(1+2mu)Gamma(1/2-mu+kappa) W_{-kappa,mu}(a)",
+  "note": ""
+ },
+ {
+  "id": "GR7.628.1",
+  "gr": "7.628.1",
+  "page": 877,
+  "status": "ok",
+  "lhs": "Integrate[E^(-s*t)*E^(-t^2)*t^(2*c - 2)*Hypergeometric1F1[a, c, t^2], {t, 0, Infinity}]",
+  "rhs": [
+   "2^(1 - 2*c)*Gamma[2*c - 1]*HypergeometricU[c - 1/2, a + 1/2, s^2/4]"
+  ],
+  "conds": [
+   "Re[c] > 1/2",
+   "Re[s] > 0"
+  ],
+  "cite": "EH I 270(11)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf e^(-st) e^(-t^2) t^(2c-2) 1F1(a;c;t^2) dt = 2^(1-2c) Gamma(2c-1) Psi(c-1/2, a+1/2; s^2/4)",
+  "note": ""
+ },
+ {
+  "id": "GR7.628.2",
+  "gr": "7.628.2",
+  "page": 877,
+  "status": "ok",
+  "lhs": "Integrate[t^(2*nu - 1)*E^(-t^2/(2*a))*E^(-s*t)*WhittakerM[-3*nu, nu, t^2/a], {t, 0, Infinity}]",
+  "rhs": [
+   "1/(2*Sqrt[Pi])*Gamma[4*nu + 1]*a^(-nu)*s^(-4*nu)*E^(a*s^2/8)*BesselK[2*nu, a*s^2/8]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[nu] > -1/4",
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 215(12)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf t^(2nu-1) e^(-t^2/(2a)) e^(-st) M_{-3nu,nu}(t^2/a) dt = (2 sqrt(pi))^-1 Gamma(4nu+1) a^(-nu) s^(-4nu) e^(as^2/8) K_{2nu}(as^2/8)",
+  "note": ""
+ },
+ {
+  "id": "GR7.628.3",
+  "gr": "7.628.3",
+  "page": 877,
+  "status": "ok",
+  "lhs": "Integrate[t^(2*mu - 1)*E^(-t^2/(2*a))*E^(-s*t)*WhittakerM[lam, mu, t^2/a], {t, 0, Infinity}]",
+  "rhs": [
+   "2^(-3*mu - lam)*Gamma[4*mu + 1]*a^((lam + mu - 1)/2)*s^(lam - mu - 1)*E^(a*s^2/8)*WhittakerW[-(lam + 3*mu)/2, (lam - mu)/2, a*s^2/4]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[mu] > -1/4",
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 215(13)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf t^(2mu-1) e^(-t^2/(2a)) e^(-st) M_{lam,mu}(t^2/a) dt = 2^(-3mu-lam) Gamma(4mu+1) a^((lam+mu-1)/2) s^(lam-mu-1) e^(as^2/8) W_{-(lam+3mu)/2,(lam-mu)/2}(as^2/4)",
+  "note": ""
+ },
+ {
+  "id": "GR7.629.1",
+  "gr": "7.629.1",
+  "page": 877,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[t^k*Exp[a/(2*t)]*E^(-s*t)*WhittakerW[k, mu, a/t], {t, 0, Infinity}]",
+  "rhs": [
+   "2^(1 - 2*k)*Sqrt[a]*s^(-k - 1/2)*LommelS2[2*k, 2*mu, 2*Sqrt[a*s]]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Re[k + mu] > -1/2",
+   "Re[k - mu] > -1/2",
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 217(21)",
+  "edition_note": "8",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf t^k exp(a/(2t)) e^(-st) W_{k,mu}(a/t) dt = 2^(1-2k) sqrt(a) s^(-k-1/2) S_{2k,2mu}(2 sqrt(as))",
+  "note": "",
+  "reason": "Lommel function S_{mu,nu}"
+ },
+ {
+  "id": "GR7.629.2",
+  "gr": "7.629.2",
+  "page": 877,
+  "status": "ok",
+  "lhs": "Integrate[t^(-k)*Exp[-a/(2*t)]*E^(-s*t)*WhittakerW[k, mu, a/t], {t, 0, Infinity}]",
+  "rhs": [
+   "2*Sqrt[a]*s^(k - 1/2)*BesselK[2*mu, 2*Sqrt[a*s]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[s] > 0"
+  ],
+  "cite": "ET I 217(22)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf t^(-k) exp(-a/(2t)) e^(-st) W_{k,mu}(a/t) dt = 2 sqrt(a) s^(k-1/2) K_{2mu}(2 sqrt(as))",
+  "note": ""
+ },
+ {
+  "id": "GR7.631.1",
+  "gr": "7.631.1",
+  "page": 877,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*Exp[(x/alpha - beta/x)/2]*WhittakerW[k, mu, x/alpha]*WhittakerW[lam, nu, beta/x], {x, 0, Infinity}]",
+  "rhs": [
+   "beta^rho/(Gamma[1/2 - k + mu]*Gamma[1/2 - k - mu])*MeijerG[{{1 + k}, {1 - lam - rho}}, {{1/2 + mu, 1/2 - mu, 1/2 + nu - rho, 1/2 - nu - rho}, {}}, beta/alpha]"
+  ],
+  "conds": [
+   "Abs[Arg[alpha]] < 3*Pi/2",
+   "Re[beta] > 0",
+   "Re[k + rho] < -Abs[Re[nu]] - 1/2"
+  ],
+  "cite": "ET II 412(55)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1) exp[(x/alpha - beta/x)/2] W_{k,mu}(x/alpha) W_{lam,nu}(beta/x) dx = beta^rho [Gamma(1/2-k+mu)Gamma(1/2-k-mu)]^-1 G^{41}_{24}(beta/alpha | 1+k,1-lam-rho; 1/2+mu,1/2-mu,1/2+nu-rho,1/2-nu-rho)",
+  "note": ""
+ },
+ {
+  "id": "GR7.631.2",
+  "gr": "7.631.2",
+  "page": 877,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*Exp[(x/alpha - beta/x)/2]*WhittakerW[k, mu, x/alpha]*WhittakerW[lam, nu, beta/x], {x, 0, Infinity}]",
+  "rhs": [
+   "beta^rho/(Gamma[1/2 - k + mu]*Gamma[1/2 - k - mu]*Gamma[1/2 - lam + nu]*Gamma[1/2 - lam - nu])*MeijerG[{{1 + k, 1 + lam - rho}, {}}, {{1/2 + mu, 1/2 - mu, 1/2 + nu - rho, 1/2 - nu - rho}, {}}, beta/alpha]"
+  ],
+  "conds": [
+   "Abs[Arg[alpha]] < 3*Pi/2",
+   "Abs[Arg[beta]] < 3*Pi/2",
+   "Re[lam - rho] < 1/2 - Abs[Re[mu]]",
+   "Re[k + rho] < 1/2 - Abs[Re[nu]]"
+  ],
+  "cite": "ET II 412(57)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1) exp[(x/alpha - beta/x)/2] W_{k,mu}(x/alpha) W_{lam,nu}(beta/x) dx = beta^rho [Gamma(1/2-k+mu)Gamma(1/2-k-mu)Gamma(1/2-lam+nu)Gamma(1/2-lam-nu)]^-1 G^{42}_{24}(beta/alpha | 1+k,1+lam-rho; 1/2+mu,1/2-mu,1/2+nu-rho,1/2-nu-rho)",
+  "note": "as printed: integrand identical to 7.631.1 with a different value; see 7.631.2b"
+ },
+ {
+  "id": "GR7.631.2b",
+  "gr": "7.631.2",
+  "page": 877,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*Exp[(x/alpha + beta/x)/2]*WhittakerW[k, mu, x/alpha]*WhittakerW[lam, nu, beta/x], {x, 0, Infinity}]",
+  "rhs": [
+   "beta^rho/(Gamma[1/2 - k + mu]*Gamma[1/2 - k - mu]*Gamma[1/2 - lam + nu]*Gamma[1/2 - lam - nu])*MeijerG[{{1 + k, 1 + lam - rho}, {}}, {{1/2 + mu, 1/2 - mu, 1/2 + nu - rho, 1/2 - nu - rho}, {}}, beta/alpha]"
+  ],
+  "conds": [
+   "Abs[Arg[alpha]] < 3*Pi/2",
+   "Abs[Arg[beta]] < 3*Pi/2",
+   "Re[lam - rho] < 1/2 - Abs[Re[mu]]",
+   "Re[k + rho] < 1/2 - Abs[Re[nu]]"
+  ],
+  "cite": "ET II 412(57)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1) exp[(x/alpha + beta/x)/2] W_{k,mu}(x/alpha) W_{lam,nu}(beta/x) dx = beta^rho [Gamma(1/2-k+mu)Gamma(1/2-k-mu)Gamma(1/2-lam+nu)Gamma(1/2-lam-nu)]^-1 G^{42}_{24}(beta/alpha | 1+k,1+lam-rho; 1/2+mu,1/2-mu,1/2+nu-rho,1/2-nu-rho)",
+  "note": "corrected integrand: exp[(x/alpha + beta/x)/2]; printed exp[(x/alpha - beta/x)/2] duplicates 7.631.1. Both Gamma-pairs, |arg alpha|,|arg beta| < 3pi/2 and the two power conditions fit exponentials cancelling both W decays"
+ },
+ {
+  "id": "GR7.631.3",
+  "gr": "7.631.3",
+  "page": 878,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*Exp[(x/alpha + beta/x)/2]*WhittakerW[k, mu, x/alpha]*WhittakerW[lam, nu, beta/x], {x, 0, Infinity}]",
+  "rhs": [
+   "beta^rho*MeijerG[{{}, {1 - k, 1 - lam - rho}}, {{1/2 + mu, 1/2 - mu, 1/2 + nu - rho, 1/2 - nu - rho}, {}}, beta/alpha]"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET II 412(54)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1) exp[(x/alpha + beta/x)/2] W_{k,mu}(x/alpha) W_{lam,nu}(beta/x) dx = beta^rho G^{40}_{24}(beta/alpha | 1-k,1-lam-rho; 1/2+mu,1/2-mu,1/2+nu-rho,1/2-nu-rho)",
+  "note": "as printed; see 7.631.3b"
+ },
+ {
+  "id": "GR7.631.3b",
+  "gr": "7.631.3",
+  "page": 878,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*Exp[-(x/alpha + beta/x)/2]*WhittakerW[k, mu, x/alpha]*WhittakerW[lam, nu, beta/x], {x, 0, Infinity}]",
+  "rhs": [
+   "beta^rho*MeijerG[{{}, {1 - k, 1 - lam - rho}}, {{1/2 + mu, 1/2 - mu, 1/2 + nu - rho, 1/2 - nu - rho}, {}}, beta/alpha]"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET II 412(54)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf x^(rho-1) exp[-(x/alpha + beta/x)/2] W_{k,mu}(x/alpha) W_{lam,nu}(beta/x) dx = beta^rho G^{40}_{24}(beta/alpha | 1-k,1-lam-rho; 1/2+mu,1/2-mu,1/2+nu-rho,1/2-nu-rho)",
+  "note": "corrected integrand: exp[-(x/alpha + beta/x)/2]; with only Re alpha, Re beta > 0 and no power conditions, both W decays must be doubled, not cancelled (printed sign + makes the integral diverge in general)"
+ },
+ {
+  "id": "GR7.632",
+  "gr": "7.632",
+  "page": 878,
+  "status": "ok",
+  "lhs": "Integrate[E^(-s*t)*(E^t - 1)^(mu - 1/2)*Exp[-lam*E^t/2]*WhittakerM[k, mu, lam*E^t - lam], {t, 0, Infinity}]",
+  "rhs": [
+   "Gamma[2*mu + 1]*Gamma[1/2 + k - mu + s]/Gamma[s + 1]*WhittakerW[-k - s/2, mu - s/2, lam]"
+  ],
+  "conds": [
+   "Re[mu] > -1/2",
+   "Re[s] > Re[mu - k] - 1/2",
+   "lam > 0"
+  ],
+  "cite": "ET I 216(15)",
+  "edition_note": "",
+  "section": "7.62 Combinations of confluent hypergeometric functions and exponentials",
+  "tex": "int_0^inf e^(-st)(e^t-1)^(mu-1/2) exp(-lam e^t/2) M_{k,mu}(lam e^t - lam) dt = Gamma(2mu+1)Gamma(1/2+k-mu+s)/Gamma(s+1) W_{-k-s/2,mu-s/2}(lam)",
+  "note": "lam > 0 implied"
+ },
+ {
+  "id": "GR7.641a",
+  "gr": "7.641",
+  "page": 878,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]*Hypergeometric1F1[nu + 1, 1, I*x]*Hypergeometric1F1[nu + 1, 1, -I*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-Sin[nu*Pi]/a*LegendreP[nu, 0, 3, 2/a^2 - 1]"
+  ],
+  "conds": [
+   "0 < a < 1",
+   "-1 < Re[nu] < 0"
+  ],
+  "cite": "ET II 402(4)",
+  "edition_note": "",
+  "section": "7.64 Combinations of confluent hypergeometric and trigonometric functions",
+  "tex": "int_0^inf cos(ax) 1F1(nu+1;1;ix) 1F1(nu+1;1;-ix) dx = -a^-1 sin(nu pi) P_nu(2a^-2 - 1) [0<a<1]",
+  "note": "argument 2/a^2-1 > 1: type-3 Legendre"
+ },
+ {
+  "id": "GR7.641b",
+  "gr": "7.641",
+  "page": 878,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]*Hypergeometric1F1[nu + 1, 1, I*x]*Hypergeometric1F1[nu + 1, 1, -I*x], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a > 1",
+   "-1 < Re[nu] < 0"
+  ],
+  "cite": "ET II 402(4)",
+  "edition_note": "",
+  "section": "7.64 Combinations of confluent hypergeometric and trigonometric functions",
+  "tex": "= 0 [1 < a < inf]",
+  "note": ""
+ },
+ {
+  "id": "GR7.642",
+  "gr": "7.642",
+  "page": 878,
+  "status": "ok",
+  "lhs": "Integrate[Cos[2*x*y]*Hypergeometric1F1[a, c, -x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/2*Gamma[c]/Gamma[a]*Abs[y]^(2*alpha - 1)*E^(-y^2)*HypergeometricU[c - 1/2, a + 1/2, y^2]",
+   "Sqrt[Pi]/2*Gamma[c]/Gamma[a]*Abs[y]^(2*a - 1)*E^(-y^2)*HypergeometricU[c - 1/2, a + 1/2, y^2]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "y > 0"
+  ],
+  "cite": "EH I 285(12)",
+  "edition_note": "11",
+  "section": "7.64 Combinations of confluent hypergeometric and trigonometric functions",
+  "tex": "int_0^inf cos(2xy) 1F1(a;c;-x^2) dx = (1/2) pi^(1/2) Gamma(c)/Gamma(a) |y|^(2alpha-1) e^(-y^2) Psi(c-1/2, a+1/2; y^2)",
+  "note": "no conditions printed; Re a > 0, y > 0 added. Printed exponent 2alpha-1 (alpha not in the integral); second candidate uses 2a-1"
+ },
+ {
+  "id": "GR7.643.1",
+  "gr": "7.643.1",
+  "page": 878,
+  "status": "ok",
+  "lhs": "Integrate[x^(4*nu)*E^(-x^2/2)*Sin[b*x]*Hypergeometric1F1[1/2 - 2*nu, 2*nu + 1, x^2/2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*b^(4*nu)*c^(-b^2/2)*Hypergeometric1F1[1/2 - 2*nu, 1 + 2*nu, b^2/2]",
+   "Sqrt[Pi/2]*b^(4*nu)*E^(-b^2/2)*Hypergeometric1F1[1/2 - 2*nu, 1 + 2*nu, b^2/2]"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[nu] > -1/4"
+  ],
+  "cite": "ET I 115(5)",
+  "edition_note": "",
+  "section": "7.64 Combinations of confluent hypergeometric and trigonometric functions",
+  "tex": "int_0^inf x^(4nu) e^(-x^2/2) sin(bx) 1F1(1/2-2nu;2nu+1;x^2/2) dx = sqrt(pi/2) b^(4nu) c^(-b^2/2) 1F1(1/2-2nu;1+2nu;b^2/2)",
+  "note": "printed c^(-b^2/2) (c absent from integral); second candidate e^(-b^2/2)"
+ },
+ {
+  "id": "GR7.643.2",
+  "gr": "7.643.2",
+  "page": 878,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*nu - 1)*E^(-x^2/4)*Sin[b*x]*WhittakerM[3*nu, nu, x^2/2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*b^(2*nu - 1)*E^(-b^2/4)*WhittakerM[3*nu, nu, b^2/2]"
+  ],
+  "conds": [
+   "b > 0",
+   "Re[nu] > -1/4"
+  ],
+  "cite": "ET I 116(10)",
+  "edition_note": "",
+  "section": "7.64 Combinations of confluent hypergeometric and trigonometric functions",
+  "tex": "int_0^inf x^(2nu-1) e^(-x^2/4) sin(bx) M_{3nu,nu}(x^2/2) dx = sqrt(pi/2) b^(2nu-1) e^(-b^2/4) M_{3nu,nu}(b^2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.643.3",
+  "gr": "7.643.3",
+  "page": 878,
+  "status": "ok",
+  "lhs": "Integrate[x^(-2*nu - 1)*E^(x^2/4)*Cos[b*x]*WhittakerW[3*nu, nu, x^2/2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*b^(-2*nu - 1)*E^(b^2/4)*WhittakerW[3*nu, nu, b^2/2]"
+  ],
+  "conds": [
+   "Re[nu] < 1/4",
+   "b > 0"
+  ],
+  "cite": "ET I 61(7)",
+  "edition_note": "",
+  "section": "7.64 Combinations of confluent hypergeometric and trigonometric functions",
+  "tex": "int_0^inf x^(-2nu-1) e^(x^2/4) cos(bx) W_{3nu,nu}(x^2/2) dx = sqrt(pi/2) b^(-2nu-1) e^(b^2/4) W_{3nu,nu}(b^2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.643.4",
+  "gr": "7.643.4",
+  "page": 878,
+  "status": "ok",
+  "lhs": "Integrate[x^(-2*nu)*E^(x^2/4)*Sin[b*x]*WhittakerW[3*nu - 1, nu, x^2/2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/2]*b^(-2*nu)*E^(b^2/4)*WhittakerW[3*nu - 1, nu, b^2/2]"
+  ],
+  "conds": [
+   "Re[nu] < 1/2",
+   "b > 0"
+  ],
+  "cite": "ET I 116(9)",
+  "edition_note": "",
+  "section": "7.64 Combinations of confluent hypergeometric and trigonometric functions",
+  "tex": "int_0^inf x^(-2nu) e^(x^2/4) sin(bx) W_{3nu-1,nu}(x^2/2) dx = sqrt(pi/2) b^(-2nu) e^(b^2/4) W_{3nu-1,nu}(b^2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.644.1",
+  "gr": "7.644.1",
+  "page": 878,
+  "status": "ok",
+  "lhs": "Integrate[x^(-mu - 1/2)*E^(-x/2)*Sin[2*a*Sqrt[x]]*WhittakerM[k, mu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*a^(k + mu - 1)*Gamma[3 - 2*mu]/Gamma[1/2 + k + mu]*Exp[-a^2/2]*WhittakerW[(k - 3*mu + 1)/2, (k + mu - 1)/2, a^2]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[k + mu] > 0"
+  ],
+  "cite": "ET II 403(10)",
+  "edition_note": "11",
+  "section": "7.64 Combinations of confluent hypergeometric and trigonometric functions",
+  "tex": "int_0^inf x^(-mu-1/2) e^(-x/2) sin(2a x^(1/2)) M_{k,mu}(x) dx = pi^(1/2) a^(k+mu-1) Gamma(3-2mu)/Gamma(1/2+k+mu) exp(-a^2/2) W_{rho,sigma}(a^2), 2rho = k-3mu+1, 2sigma = k+mu-1",
+  "note": "rho = (k-3mu+1)/2, sigma = (k+mu-1)/2 substituted"
+ },
+ {
+  "id": "GR7.644.2",
+  "gr": "7.644.2",
+  "page": 879,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*Sin[c*Sqrt[x]]*E^(-x/2)*WhittakerW[k, mu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "c*Gamma[1 + mu + rho]*Gamma[1 - mu + rho]/Gamma[3/2 - k + rho]*HypergeometricPFQ[{1 + mu + rho, 1 - mu + rho}, {3/2, 3/2 - k + rho}, -c^2/4]"
+  ],
+  "conds": [
+   "Re[rho] > Abs[Re[mu]] - 1"
+  ],
+  "cite": "ET II 407(28)",
+  "edition_note": "",
+  "section": "7.64 Combinations of confluent hypergeometric and trigonometric functions",
+  "tex": "int_0^inf x^(rho-1) sin(c x^(1/2)) e^(-x/2) W_{k,mu}(x) dx = c Gamma(1+mu+rho)Gamma(1-mu+rho)/Gamma(3/2-k+rho) 2F2(1+mu+rho,1-mu+rho;3/2,3/2-k+rho;-c^2/4)",
+  "note": ""
+ },
+ {
+  "id": "GR7.644.3",
+  "gr": "7.644.3",
+  "page": 879,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*Sin[c*Sqrt[x]]*E^(x/2)*WhittakerW[k, mu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/(Gamma[1/2 - k + mu]*Gamma[1/2 - k - mu])*MeijerG[{{1/2 + mu - rho, 1/2 - mu - rho}, {}}, {{1/2, -k - rho}, {0}}, c^2/4]"
+  ],
+  "conds": [
+   "c > 0",
+   "Re[rho] > Abs[Re[mu]] - 1",
+   "Re[k + rho] < 1/2"
+  ],
+  "cite": "ET II 407(29)",
+  "edition_note": "",
+  "section": "7.64 Combinations of confluent hypergeometric and trigonometric functions",
+  "tex": "int_0^inf x^(rho-1) sin(c x^(1/2)) e^(x/2) W_{k,mu}(x) dx = pi^(1/2)/(Gamma(1/2-k+mu)Gamma(1/2-k-mu)) G^{22}_{23}(c^2/4 | 1/2+mu-rho,1/2-mu-rho; 1/2,-k-rho,0)",
+  "note": ""
+ },
+ {
+  "id": "GR7.644.4",
+  "gr": "7.644.4",
+  "page": 879,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*Cos[c*Sqrt[x]]*E^(-x/2)*WhittakerW[k, mu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1/2 + mu + rho]*Gamma[1/2 - mu + rho]/Gamma[1 - k + rho]*HypergeometricPFQ[{1/2 + mu + rho, 1/2 - mu + rho}, {1/2, 1 - k + rho}, -c^2/4]"
+  ],
+  "conds": [
+   "Re[rho] > Abs[Re[mu]] - 1/2"
+  ],
+  "cite": "ET II 407(30)",
+  "edition_note": "",
+  "section": "7.64 Combinations of confluent hypergeometric and trigonometric functions",
+  "tex": "int_0^inf x^(rho-1) cos(c x^(1/2)) e^(-x/2) W_{k,mu}(x) dx = Gamma(1/2+mu+rho)Gamma(1/2-mu+rho)/Gamma(1-k+rho) 2F2(1/2+mu+rho,1/2-mu+rho;1/2,1-k+rho;-c^2/4)",
+  "note": ""
+ },
+ {
+  "id": "GR7.644.5",
+  "gr": "7.644.5",
+  "page": 879,
+  "status": "ok",
+  "lhs": "Integrate[x^(rho - 1)*Cos[c*Sqrt[x]]*E^(x/2)*WhittakerW[k, mu, x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/(Gamma[1/2 - k + mu]*Gamma[1/2 - k - mu])*MeijerG[{{1/2 + mu - rho, 1/2 - mu - rho}, {}}, {{0, -k - rho}, {1/2}}, c^2/4]"
+  ],
+  "conds": [
+   "c > 0",
+   "Re[rho] > Abs[Re[mu]] - 1/2",
+   "Re[k + rho] < 1/2"
+  ],
+  "cite": "ET II 407(31)",
+  "edition_note": "",
+  "section": "7.64 Combinations of confluent hypergeometric and trigonometric functions",
+  "tex": "int_0^inf x^(rho-1) cos(c x^(1/2)) e^(x/2) W_{k,mu}(x) dx = pi^(1/2)/(Gamma(1/2-k+mu)Gamma(1/2-k-mu)) G^{22}_{23}(c^2/4 | 1/2+mu-rho,1/2-mu-rho; 0,-k-rho,1/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.651.1",
+  "gr": "7.651.1",
+  "page": 879,
+  "status": "ok",
+  "lhs": "Integrate[BesselJ[nu, x*y]*WhittakerM[-mu/2, nu/2, a*x]*WhittakerW[mu/2, nu/2, a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "a*y^(-mu - 1)*Gamma[nu + 1]/Gamma[1/2 - mu/2 + nu/2]*(a + Sqrt[a^2 + y^2])^mu*(a^2 + y^2)^(-1/2)"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1",
+   "Re[mu] < 1/2",
+   "Re[a] > 0"
+  ],
+  "cite": "ET II 85(19)",
+  "edition_note": "",
+  "section": "7.65 Combinations of confluent hypergeometric functions and Bessel functions",
+  "tex": "int_0^inf J_nu(xy) M_{-mu/2,nu/2}(ax) W_{mu/2,nu/2}(ax) dx = a y^(-mu-1) Gamma(nu+1)/Gamma(1/2-mu/2+nu/2) [a+(a^2+y^2)^(1/2)]^mu (a^2+y^2)^(-1/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.651.2a",
+  "gr": "7.651.2",
+  "page": 879,
+  "status": "ok",
+  "lhs": "Integrate[WhittakerM[k, nu/2, -I*a*x]*WhittakerM[-k, nu/2, -I*a*x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "a*E^(-(nu + 1)*Pi*I/2)*Gamma[1 + nu]^2/(Gamma[1/2 + k + nu/2]*Gamma[1/2 - k + nu/2])*y^(-1 - 2*k)*(a^2 - y^2)^(-1/2)*((a + Sqrt[a^2 - y^2])^(2*k) + (a - Sqrt[a^2 - y^2])^(2*k))"
+  ],
+  "conds": [
+   "0 < y < a",
+   "a > 0",
+   "Re[nu] > -1",
+   "Abs[Re[k]] < 1/4"
+  ],
+  "cite": "ET II 85(18)",
+  "edition_note": "",
+  "section": "7.65 Combinations of confluent hypergeometric functions and Bessel functions",
+  "tex": "int_0^inf M_{k,nu/2}(-iax) M_{-k,nu/2}(-iax) J_nu(xy) dx = a e^(-(nu+1)pi i/2)[Gamma(1+nu)]^2/(Gamma(1/2+k+nu/2)Gamma(1/2-k+nu/2)) y^(-1-2k)(a^2-y^2)^(-1/2){[a+(a^2-y^2)^(1/2)]^(2k)+[a-(a^2-y^2)^(1/2)]^(2k)} [0<y<a]",
+  "note": ""
+ },
+ {
+  "id": "GR7.651.2b",
+  "gr": "7.651.2",
+  "page": 879,
+  "status": "ok",
+  "lhs": "Integrate[WhittakerM[k, nu/2, -I*a*x]*WhittakerM[-k, nu/2, -I*a*x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "y > a",
+   "a > 0",
+   "Re[nu] > -1",
+   "Abs[Re[k]] < 1/4"
+  ],
+  "cite": "ET II 85(18)",
+  "edition_note": "",
+  "section": "7.65 Combinations of confluent hypergeometric functions and Bessel functions",
+  "tex": "= 0 [a < y < inf]",
+  "note": ""
+ },
+ {
+  "id": "GR7.652",
+  "gr": "7.652",
+  "page": 880,
+  "status": "ok",
+  "lhs": "Integrate[WhittakerM[-mu, nu/2, a*(Sqrt[b^2 + x^2] - b)]*WhittakerW[mu, nu/2, a*(Sqrt[b^2 + x^2] + b)]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "a*y^(-2*mu - 1)*Gamma[1 + nu]*(Sqrt[a^2 + y^2] + a)^(2*mu)/(Gamma[1/2 + nu/2 - mu]*Sqrt[a^2 + y^2])*Exp[-b*Sqrt[a^2 + y^2]]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1",
+   "Re[mu] < 1/4",
+   "Re[a] > 0",
+   "Re[b] > 0"
+  ],
+  "cite": "ET II 87(29)",
+  "edition_note": "",
+  "section": "7.65 Combinations of confluent hypergeometric functions and Bessel functions",
+  "tex": "int_0^inf M_{-mu,nu/2}{a[(b^2+x^2)^(1/2)-b]} W_{mu,nu/2}{a[(b^2+x^2)^(1/2)+b]} J_nu(xy) dx = a y^(-2mu-1) Gamma(1+nu)[(a^2+y^2)^(1/2)+a]^(2mu)/(Gamma(1/2+nu/2-mu)(A^2+Y^2)^(1/2)) exp[-b(a^2+y^2)^(1/2)]",
+  "note": "denominator printed (A^2+Y^2)^(1/2) with capitals; read as (a^2+y^2)^(1/2) (capitalisation misprint)"
+ },
+ {
+  "id": "GR7.661.1",
+  "gr": "7.661.1",
+  "page": 880,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1)*WhittakerW[k, mu, a*x]*WhittakerM[-k, mu, a*x]*BesselJ[0, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "E^(-I*k*Pi)*Gamma[1 + 2*mu]/Gamma[1/2 + mu + k]*LegendreP[mu - 1/2, k, 3, Sqrt[1 + y^2/a^2]]*LegendreQ[mu - 1/2, k, 3, Sqrt[1 + y^2/a^2]]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[a] > 0",
+   "Re[mu] > -1/2",
+   "Re[k] < 3/4"
+  ],
+  "cite": "ET II 18(44)",
+  "edition_note": "",
+  "section": "7.66 Combinations of confluent hypergeometric functions, Bessel functions, and powers",
+  "tex": "int_0^inf x^-1 W_{k,mu}(ax) M_{-k,mu}(ax) J_0(xy) dx = e^(-ik pi) Gamma(1+2mu)/Gamma(1/2+mu+k) P^k_{mu-1/2}[(1+y^2/a^2)^(1/2)] Q^k_{mu-1/2}[(1+y^2/a^2)^(1/2)]",
+  "note": "argument > 1: type-3 Legendre functions"
+ },
+ {
+  "id": "GR7.661.2",
+  "gr": "7.661.2",
+  "page": 880,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1)*WhittakerW[k, mu, a*x]*WhittakerW[-k, mu, a*x]*BesselJ[0, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Cos[mu*Pi]*LegendreP[mu - 1/2, k, 3, Sqrt[1 + y^2/a^2]]*LegendreP[mu - 1/2, -k, 3, Sqrt[1 + y^2/a^2]]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[a] > 0",
+   "Abs[Re[mu]] < 1/2"
+  ],
+  "cite": "ET II 18(45)",
+  "edition_note": "",
+  "section": "7.66 Combinations of confluent hypergeometric functions, Bessel functions, and powers",
+  "tex": "int_0^inf x^-1 W_{k,mu}(ax) W_{-k,mu}(ax) J_0(xy) dx = (1/2) pi cos(mu pi) P^k_{mu-1/2}[(1+y^2/a^2)^(1/2)] P^-k_{mu-1/2}[(1+y^2/a^2)^(1/2)]",
+  "note": "argument > 1: type-3 Legendre functions"
+ },
+ {
+  "id": "GR7.661.3",
+  "gr": "7.661.3",
+  "page": 880,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*mu - nu)*WhittakerW[k, mu, a*x]*WhittakerM[-k, mu, a*x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(2*mu - nu + 2*k)*a^(2*k)*y^(nu - 2*mu - 2*k - 1)*Gamma[2*mu + 1]/Gamma[nu - k - mu + 1/2]*HypergeometricPFQ[{1/2 - k, 1 - k, 1/2 - k + mu}, {1 - 2*k, 1/2 - k - mu + nu}, -y^2/a^2]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[mu] > -1/2",
+   "Re[a] > 0",
+   "Re[2*mu + 2*k - nu] < 1/2"
+  ],
+  "cite": "ET II 85(20)",
+  "edition_note": "",
+  "section": "7.66 Combinations of confluent hypergeometric functions, Bessel functions, and powers",
+  "tex": "int_0^inf x^(2mu-nu) W_{k,mu}(ax) M_{-k,mu}(ax) J_nu(xy) dx = 2^(2mu-nu+2k) a^(2k) y^(nu-2mu-2k-1) Gamma(2mu+1)/Gamma(nu-k-mu+1/2) 3F2(1/2-k,1-k,1/2-k+mu;1-2k,1/2-k-mu+nu;-y^2/a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.661.4",
+  "gr": "7.661.4",
+  "page": 880,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*rho - nu)*WhittakerW[k, mu, I*a*x]*WhittakerW[k, mu, -I*a*x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(2*rho - nu)*y^(nu - 2*rho - 1)*Pi^(-1/2)/(Gamma[1/2 - k + mu]*Gamma[1/2 - k - mu])*MeijerG[{{1/2, 0, 1/2 - mu, 1/2 + mu}, {}}, {{rho + 1/2, -k}, {k, rho - nu + 1/2}}, y^2/a^2]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[a] > 0",
+   "Re[rho] > Abs[Re[mu]] - 1",
+   "Re[2*rho + 2*k - nu] < 1/2"
+  ],
+  "cite": "ET II 86(23)a",
+  "edition_note": "",
+  "section": "7.66 Combinations of confluent hypergeometric functions, Bessel functions, and powers",
+  "tex": "int_0^inf x^(2rho-nu) W_{k,mu}(iax) W_{k,mu}(-iax) J_nu(xy) dx = 2^(2rho-nu) y^(nu-2rho-1) pi^(-1/2)[Gamma(1/2-k+mu)Gamma(1/2-k-mu)]^-1 G^{24}_{44}(y^2/a^2 | 1/2,0,1/2-mu,1/2+mu; rho+1/2,-k,k,rho-nu+1/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.661.5",
+  "gr": "7.661.5",
+  "page": 880,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*rho - nu)*WhittakerW[k, mu, a*x]*WhittakerM[-k, mu, a*x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(2*rho - nu)*Gamma[2*mu + 1]/(Sqrt[Pi]*Gamma[1/2 - k + mu])*y^(nu - 2*rho - 1)*MeijerG[{{1/2, 0, 1/2 - mu}, {1/2 + mu}}, {{rho + 1/2, -k}, {k, rho - nu + 1/2}}, y^2/a^2]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[a] > 0",
+   "Re[rho] > -1",
+   "Re[rho + mu] > -1",
+   "Re[2*rho + 2*k - nu] < 1/2"
+  ],
+  "cite": "ET II 86(21)a",
+  "edition_note": "",
+  "section": "7.66 Combinations of confluent hypergeometric functions, Bessel functions, and powers",
+  "tex": "int_0^inf x^(2rho-nu) W_{k,mu}(ax) M_{-k,mu}(ax) J_nu(xy) dx = 2^(2rho-nu) Gamma(2mu+1)/(pi^(1/2) Gamma(1/2-k+mu)) y^(nu-2rho-1) G^{23}_{44}(y^2/a^2 | 1/2,0,1/2-mu,1/2+mu; rho+1/2,-k,k,rho-nu+1/2)",
+  "note": "printed condition Re(2e+2k+nu) < 1/2 ('e' a misprint for rho); corrected to Re(2rho+2k-nu) < 1/2 to match convergence at infinity (integrand ~ x^(2rho+2k-nu-1/2) times oscillation) and 7.661.3/7.661.4"
+ },
+ {
+  "id": "GR7.661.6",
+  "gr": "7.661.6",
+  "page": 881,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*rho - nu)*WhittakerW[k, mu, a*x]*WhittakerW[-k, mu, a*x]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[rho + 1 + mu]*Gamma[rho + 1 - mu]*Gamma[2*rho + 2]/(Gamma[3/2 + k + rho]*Gamma[3/2 - k + rho]*Gamma[1 + nu])*y^nu*2^(-nu - 1)*a^(-2*rho - 1)*HypergeometricPFQ[{rho + 1, rho + 3/2, rho + 1 + mu, rho + 1 - mu}, {3/2 + k + rho, 3/2 - k + rho, 1 + nu}, -y^2/a^2]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[rho] > Abs[Re[mu]] - 1",
+   "Re[a] > 0"
+  ],
+  "cite": "ET II 86(22)a",
+  "edition_note": "",
+  "section": "7.66 Combinations of confluent hypergeometric functions, Bessel functions, and powers",
+  "tex": "int_0^inf x^(2rho-nu) W_{k,mu}(ax) W_{-k,mu}(ax) J_nu(xy) dx = Gamma(rho+1+mu)Gamma(rho+1-mu)Gamma(2rho+2)/(Gamma(3/2+k+rho)Gamma(3/2-k+rho)Gamma(1+nu)) y^nu 2^(-nu-1) a^(-2rho-1) 4F3(rho+1,rho+3/2,rho+1+mu,rho+1-mu;3/2+k+rho,3/2-k+rho,1+nu;-y^2/a^2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.662.1",
+  "gr": "7.662.1",
+  "page": 881,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1)*WhittakerM[-mu, nu/4, x^2/2]*WhittakerW[mu, nu/4, x^2/2]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1 + nu/2]/Gamma[1/2 + nu/4 - mu]*BesselI[nu/4 - mu, y^2/4]*BesselK[nu/4 + mu, y^2/4]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "ET II 86(24)",
+  "edition_note": "",
+  "section": "7.66 Combinations of confluent hypergeometric functions, Bessel functions, and powers",
+  "tex": "int_0^inf x^-1 M_{-mu,nu/4}(x^2/2) W_{mu,nu/4}(x^2/2) J_nu(xy) dx = Gamma(1+nu/2)/Gamma(1/2+nu/4-mu) I_{nu/4-mu}(y^2/4) K_{nu/4+mu}(y^2/4)",
+  "note": ""
+ },
+ {
+  "id": "GR7.662.2",
+  "gr": "7.662.2",
+  "page": 881,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1)*WhittakerM[alpha - beta, nu/4 - gamma, x^2/2]*WhittakerW[alpha + beta, nu/4 + gamma, x^2/2]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1 + nu/2 - 2*gamma]/Gamma[1 + nu/2 - 2*beta]*y^(-2)*WhittakerM[alpha - gamma, nu/4 - beta, y^2/2]*WhittakerW[alpha + gamma, nu/4 + beta, y^2/2]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[beta] < 1/8",
+   "Re[nu] > -1",
+   "Re[nu - 4*gamma] > -2"
+  ],
+  "cite": "ET II 86(25)",
+  "edition_note": "",
+  "section": "7.66 Combinations of confluent hypergeometric functions, Bessel functions, and powers",
+  "tex": "int_0^inf x^-1 M_{alpha-beta,nu/4-gamma}(x^2/2) W_{alpha+beta,nu/4+gamma}(x^2/2) J_nu(xy) dx = Gamma(1+nu/2-2gamma)/Gamma(1+nu/2-2beta) y^-2 M_{alpha-gamma,nu/4-beta}(y^2/2) W_{alpha+gamma,nu/4+beta}(y^2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.662.3",
+  "gr": "7.662.3",
+  "page": 881,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1)*WhittakerM[k, 0, I*a*x^2]*WhittakerM[k, 0, -I*a*x^2]*BesselK[0, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/16*(BesselJ[k, y^2/(8*a)]^2 + BesselY[k, y^2/(8*a)]^2)"
+  ],
+  "conds": [
+   "a > 0",
+   "y > 0"
+  ],
+  "cite": "ET II 152(83)",
+  "edition_note": "",
+  "section": "7.66 Combinations of confluent hypergeometric functions, Bessel functions, and powers",
+  "tex": "int_0^inf x^-1 M_{k,0}(iax^2) M_{k,0}(-iax^2) K_0(xy) dx = (pi/16){[J_k(y^2/(8a))]^2 + [Y_k(y^2/(8a))]^2}",
+  "note": "y > 0 implied"
+ },
+ {
+  "id": "GR7.662.4",
+  "gr": "7.662.4",
+  "page": 881,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1)*WhittakerM[k, mu, I*a*x^2]*WhittakerM[k, mu, -I*a*x^2]*BesselK[0, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "a*y^(-2)*Gamma[2*mu + 1]^2*WhittakerW[-mu, k, I*y^2/(4*a)]*WhittakerW[-mu, k, -I*y^2/(4*a)]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[y] > 0",
+   "Re[mu] > -1/2"
+  ],
+  "cite": "ET II 152(84)",
+  "edition_note": "",
+  "section": "7.66 Combinations of confluent hypergeometric functions, Bessel functions, and powers",
+  "tex": "int_0^inf x^-1 M_{k,mu}(iax^2) M_{k,mu}(-iax^2) K_0(xy) dx = a y^-2 [Gamma(2mu+1)]^2 W_{-mu,k}(iy^2/(4a)) W_{-mu,k}(-iy^2/(4a))",
+  "note": ""
+ },
+ {
+  "id": "GR7.663.1",
+  "gr": "7.663.1",
+  "page": 881,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*rho)*Hypergeometric1F1[a, b, -lam*x^2]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(2*rho)*Gamma[b]/(Gamma[a]*y^(2*rho + 1))*MeijerG[{{1}, {b}}, {{1/2 + rho + nu/2, a}, {1/2 + rho - nu/2}}, y^2/(4*lam)]"
+  ],
+  "conds": [
+   "y > 0",
+   "-1 - Re[nu] < 2*Re[rho] < 1/2 + 2*Re[a]",
+   "Re[lam] > 0"
+  ],
+  "cite": "ET II 88(6)",
+  "edition_note": "",
+  "section": "7.66 Combinations of confluent hypergeometric functions, Bessel functions, and powers",
+  "tex": "int_0^inf x^(2rho) 1F1(a;b;-lam x^2) J_nu(xy) dx = 2^(2rho) Gamma(b)/(Gamma(a) y^(2rho+1)) G^{21}_{23}(y^2/(4lam) | 1,b; 1/2+rho+nu/2, a, 1/2+rho-nu/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.663.2",
+  "gr": "7.663.2",
+  "page": 881,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*Hypergeometric1F1[2*a - nu, a + 1, -x^2/2]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(nu - a + 1/2)*Gamma[a + 1]/(Sqrt[Pi]*Gamma[2*a - nu])*y^(2*a - nu - 1)*E^(-y^2/4)*BesselK[a - nu - 1/2, y^2/4]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[nu] > -1",
+   "Re[4*a - 3*nu] > 1/2"
+  ],
+  "cite": "ET II 87(1)",
+  "edition_note": "",
+  "section": "7.66 Combinations of confluent hypergeometric functions, Bessel functions, and powers",
+  "tex": "int_0^inf x^(nu+1) 1F1(2a-nu;a+1;-x^2/2) J_nu(xy) dx = 2^(nu-a+1/2) Gamma(a+1)/(pi^(1/2) Gamma(2a-nu)) y^(2a-nu-1) e^(-y^2/4) K_{a-nu-1/2}(y^2/4)",
+  "note": ""
+ },
+ {
+  "id": "GR7.663.3",
+  "gr": "7.663.3",
+  "page": 881,
+  "status": "ok",
+  "lhs": "Integrate[x^a*Hypergeometric1F1[a, (1 + a + nu)/2, -x^2/2]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "y^(a - 1)*Hypergeometric1F1[a, (1 + a + nu)/2, -y^2/2]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[a] > -1/2",
+   "Re[a + nu] > -1"
+  ],
+  "cite": "ET II 87(2)",
+  "edition_note": "",
+  "section": "7.66 Combinations of confluent hypergeometric functions, Bessel functions, and powers",
+  "tex": "int_0^inf x^a 1F1(a;(1+a+nu)/2;-x^2/2) J_nu(xy) dx = y^(a-1) 1F1(a;(1+a+nu)/2;-y^2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.663.4",
+  "gr": "7.663.4",
+  "page": 882,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1 - 2*a)*Hypergeometric1F1[a, 1 + nu - a, -x^2/2]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*Gamma[1 + nu - a]/Gamma[a]*2^(-2*a + nu + 1/2)*y^(2*a - nu - 1)*E^(-y^2/4)*BesselI[a - 1/2, y^2/4]"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[a] - 1 < Re[nu] < 4*Re[a] - 1/2"
+  ],
+  "cite": "ET II 87(3)",
+  "edition_note": "",
+  "section": "7.66 Combinations of confluent hypergeometric functions, Bessel functions, and powers",
+  "tex": "int_0^inf x^(nu+1-2a) 1F1(a;1+nu-a;-x^2/2) J_nu(xy) dx = pi^(1/2) Gamma(1+nu-a)/Gamma(a) 2^(-2a+nu+1/2) y^(2a-nu-1) e^(-y^2/4) I_{a-1/2}(y^2/4)",
+  "note": ""
+ },
+ {
+  "id": "GR7.663.5",
+  "gr": "7.663.5",
+  "page": 882,
+  "status": "ok",
+  "lhs": "Integrate[x*Hypergeometric1F1[lam, 1, -x^2]*BesselJ[0, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "y^(2*lam - 2)*E^(-y^2/4)/(2^(2*lam - 1)*Gamma[lam])"
+  ],
+  "conds": [
+   "y > 0",
+   "Re[lam] > 0"
+  ],
+  "cite": "ET II 18(46)",
+  "edition_note": "",
+  "section": "7.66 Combinations of confluent hypergeometric functions, Bessel functions, and powers",
+  "tex": "int_0^inf x 1F1(lam;1;-x^2) J_0(xy) dx = [2^(2lam-1) Gamma(lam)]^-1 y^(2lam-2) e^(-y^2/4)",
+  "note": ""
+ },
+ {
+  "id": "GR7.663.6",
+  "gr": "7.663.6",
+  "page": 882,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu + 1)*Hypergeometric1F1[a, b, -lam*x^2]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(1 - a)*Gamma[b]/(Gamma[a]*lam^(a/2 + nu/2))*y^(a - 2)*E^(-y^2/(8*lam))*WhittakerW[(a - 2*b + nu + 2)/2, (a - nu - 1)/2, y^2/(4*lam)]"
+  ],
+  "conds": [
+   "y > 0",
+   "-1 < Re[nu] < 2*Re[a] - 1/2",
+   "Re[lam] > 0"
+  ],
+  "cite": "ET II 88(4)",
+  "edition_note": "",
+  "section": "7.66 Combinations of confluent hypergeometric functions, Bessel functions, and powers",
+  "tex": "int_0^inf x^(nu+1) 1F1(a;b;-lam x^2) J_nu(xy) dx = 2^(1-a) Gamma(b)/(Gamma(a) lam^(a/2+nu/2)) y^(a-2) e^(-y^2/(8lam)) W_{k,mu}(y^2/(4lam)), 2k = a-2b+nu+2, 2mu = a-nu-1",
+  "note": "k = (a-2b+nu+2)/2, mu = (a-nu-1)/2 substituted"
+ },
+ {
+  "id": "GR7.663.7",
+  "gr": "7.663.7",
+  "page": 882,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*b - nu - 1)*Hypergeometric1F1[a, b, -lam*x^2]*BesselJ[nu, x*y], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(2*b - 2*a - nu - 1)*Gamma[b]/Gamma[a - b + nu + 1]*lam^(-a)*y^(2*a - 2*b + nu)*Hypergeometric1F1[a, 1 + a - b + nu, -y^2/(4*lam)]"
+  ],
+  "conds": [
+   "y > 0",
+   "0 < Re[b] < 3/4 + Re[a + nu/2]",
+   "Re[lam] > 0"
+  ],
+  "cite": "ET II 88(5)",
+  "edition_note": "",
+  "section": "7.66 Combinations of confluent hypergeometric functions, Bessel functions, and powers",
+  "tex": "int_0^inf x^(2b-nu-1) 1F1(a;b;-lam x^2) J_nu(xy) dx = 2^(2b-2a-nu-1) Gamma(b)/Gamma(a-b+nu+1) lam^(-a) y^(2a-2b+nu) 1F1(a;1+a-b+nu;-y^2/(4lam))",
+  "note": ""
+ }
+]

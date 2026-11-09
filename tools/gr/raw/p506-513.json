@@ -1,0 +1,2177 @@
+[
+ {
+  "id": "GR3.816.4",
+  "gr": "3.816.4",
+  "page": 506,
+  "status": "ok",
+  "lhs": "Integrate[(a*Cos[2*x] + Sin[x]^2)/(a - Sin[x]^2)^2*x^2, {x, 0, Pi}]",
+  "rhs": [
+   "2*Pi*Log[2*(a - Sqrt[a]*Sqrt[a + 1])]",
+   "2*Pi*Log[2*(a - Sqrt[a]*Sqrt[a - 1])]"
+  ],
+  "conds": [
+   "a > 1"
+  ],
+  "cite": "LI (220)(11)",
+  "edition_note": "11",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "int_0^pi (a cos2x + sin^2 x)/(a - sin^2 x)^2 x^2 dx = 2 pi ln[2(a - sqrt a sqrt(a+1))]",
+  "note": "printed condition 'a < 0 and a > 1' read as a disjunction; kept a > 1 (a < 0 is the other branch). Printed value has sqrt(a+1), which makes the log argument negative for a > 1; large-a asymptotics (pi/(2a)) give sqrt(a-1): corrected candidate second. Book also says 'When a > 1, can write sqrt a sqrt(a+1) as sqrt(a(a+1))' (cf. 3.812 6)"
+ },
+ {
+  "id": "GR3.817.1",
+  "gr": "3.817.1",
+  "page": 506,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^2/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*(a^2 + b^2)/(a^3*b^3)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (181)(12)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^2/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.817.2",
+  "gr": "3.817.2",
+  "page": 506,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^2/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*a^3*b)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(8)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]*Cos[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^2/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.817.3",
+  "gr": "3.817.3",
+  "page": 506,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^2/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*a*b^3)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (181)(15)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]^3/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^2/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.817.4",
+  "gr": "3.817.4",
+  "page": 506,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]^2/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^2/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*a^3*b)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(9)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]*Cos[x]^2/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^2/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.817.5",
+  "gr": "3.817.5",
+  "page": 506,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Tan[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^2/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*(a^2 + b^2)/(a^3*b^3)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (181)(13)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Tan[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^2/x, {x, 0, Infinity}]",
+  "note": "tan x has poles at x = (k+1/2) Pi on the path; implied principal value",
+  "reason": "implied principal value (pole of tan x on path)"
+ },
+ {
+  "id": "GR3.817.6",
+  "gr": "3.817.6",
+  "page": 506,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Tan[x]/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^2/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*(a^2 + b^2)/(a^3*b^3)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (181)(14)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Tan[x]/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^2/x, {x, 0, Infinity}]",
+  "note": "tan x has poles at x = (k+1/2) Pi on the path; implied principal value",
+  "reason": "implied principal value (pole of tan x on path)"
+ },
+ {
+  "id": "GR3.817.7",
+  "gr": "3.817.7",
+  "page": 506,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[x]^2*Tan[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^2/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*a*b^3)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(11)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]^2*Tan[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^2/x, {x, 0, Infinity}]",
+  "note": "tan x has poles at x = (k+1/2) Pi on the path; implied principal value",
+  "reason": "implied principal value (pole of tan x on path)"
+ },
+ {
+  "id": "GR3.817.8",
+  "gr": "3.817.8",
+  "page": 506,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Tan[x]*Cos[2*x]^2/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^2/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*a^3*b)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(10)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Tan[x]*Cos[2*x]^2/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^2/x, {x, 0, Infinity}]",
+  "note": "tan x has poles at x = (k+1/2) Pi on the path; implied principal value",
+  "reason": "implied principal value (pole of tan x on path)"
+ },
+ {
+  "id": "GR3.818.1",
+  "gr": "3.818.1",
+  "page": 506,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^3/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/16*(3*a^4 + 2*a^2*b^2 + 3*b^4)/(a^5*b^5)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (181)(16)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^3/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.818.2",
+  "gr": "3.818.2",
+  "page": 506,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^3/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/16*(a^2 + 3*b^2)/(a^5*b^3)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(13)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]*Cos[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^3/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.818.3",
+  "gr": "3.818.3",
+  "page": 506,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]^2/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^3/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/16*(a^2 + 3*b^2)/(a^5*b^3)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(14)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]*Cos[x]^2/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^3/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.818.4",
+  "gr": "3.818.4",
+  "page": 506,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^3/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/16*(3*a^2 + b^2)/(a^3*b^5)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "LI (181)(19)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]^3/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^3/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.818.5",
+  "gr": "3.818.5",
+  "page": 506,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3*Cos[x]/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^3/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/64*(3*a^2 + b^2)/(a^3*b^5)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(17)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]^3*Cos[x]/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^3/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.818.6",
+  "gr": "3.818.6",
+  "page": 507,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Tan[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^3/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/16*(3*a^4 + 2*a^2*b^2 + 3*b^4)/(a^5*b^5)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (181)(17)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Tan[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^3/x, {x, 0, Infinity}]",
+  "note": "tan x has poles at x = (k+1/2) Pi on the path; implied principal value",
+  "reason": "implied principal value (pole of tan x on path)"
+ },
+ {
+  "id": "GR3.818.7",
+  "gr": "3.818.7",
+  "page": 507,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[x]^2*Tan[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^3/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/16*(3*a^2 + b^2)/(a^3*b^5)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(16)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]^2*Tan[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^3/x, {x, 0, Infinity}]",
+  "note": "tan x has poles at x = (k+1/2) Pi on the path; implied principal value",
+  "reason": "implied principal value (pole of tan x on path)"
+ },
+ {
+  "id": "GR3.818.8",
+  "gr": "3.818.8",
+  "page": 507,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Tan[x]/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^3/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/16*(3*a^4 + 2*a^2*b^2 + 3*b^4)/(a^5*b^5)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (181)(18)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Tan[x]/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^3/x, {x, 0, Infinity}]",
+  "note": "tan x has poles at x = (k+1/2) Pi on the path; implied principal value",
+  "reason": "implied principal value (pole of tan x on path)"
+ },
+ {
+  "id": "GR3.818.9",
+  "gr": "3.818.9",
+  "page": 507,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Tan[x]*Cos[2*x]^2/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^3/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/16*(a^2 + 3*b^2)/(a^5*b^3)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(15)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Tan[x]*Cos[2*x]^2/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^3/x, {x, 0, Infinity}]",
+  "note": "tan x has poles at x = (k+1/2) Pi on the path; implied principal value",
+  "reason": "implied principal value (pole of tan x on path)"
+ },
+ {
+  "id": "GR3.819.1",
+  "gr": "3.819.1",
+  "page": 507,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/32*(5*a^6 + 3*a^4*b^2 + 3*a^2*b^4 + 5*b^6)/(a^7*b^7)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (181)(20)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.819.2",
+  "gr": "3.819.2",
+  "page": 507,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/32*(a^4 + 2*a^2*b^2 + 5*b^4)/(a^7*b^5)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(18)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]*Cos[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.819.3",
+  "gr": "3.819.3",
+  "page": 507,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]^2/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/32*(a^4 + 2*a^2*b^2 + 5*b^4)/(a^7*b^5)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(19)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]*Cos[x]^2/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.819.4",
+  "gr": "3.819.4",
+  "page": 507,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/32*(5*a^4 + a^2*b^2 + b^4)/(a^5*b^7)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (181)(23)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]^3/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.819.5",
+  "gr": "3.819.5",
+  "page": 507,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3*Cos[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/32*(a^2 + b^2)/(a^5*b^5)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(26)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]^3*Cos[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.819.6",
+  "gr": "3.819.6",
+  "page": 507,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]^3/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/32*(a^2 + 5*b^2)/(a^7*b^3)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(23)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]*Cos[x]^3/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.819.7",
+  "gr": "3.819.7",
+  "page": 507,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3*Cos[x]^2/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/32*(a^2 + b^2)/(a^5*b^5)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(27)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]^3*Cos[x]^2/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.819.8",
+  "gr": "3.819.8",
+  "page": 507,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]*Cos[x]^4/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/32*(a^2 + 5*b^2)/(a^7*b^3)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(24)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]*Cos[x]^4/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.819.9",
+  "gr": "3.819.9",
+  "page": 507,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^5/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/32*(5*a^2 + b^2)/(a^3*b^7)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (181)(24)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]^5/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.819.10",
+  "gr": "3.819.10",
+  "page": 508,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3*Cos[x]/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^4/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/128*(5*a^4 + 2*a^2*b^2 + b^4)/(a^5*b^7)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(22)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]^3*Cos[x]/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^4/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.819.11",
+  "gr": "3.819.11",
+  "page": 508,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^5*Cos[x]^3/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^4/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/512*(5*a^2 + b^2)/(a^3*b^7)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(30)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]^5*Cos[x]^3/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^4/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.819.12",
+  "gr": "3.819.12",
+  "page": 508,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[x]^2*Tan[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/32*(5*a^4 + 2*a^2*b^2 + b^4)/(a^5*b^7)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(21)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]^2*Tan[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "note": "tan x has poles at x = (k+1/2) Pi on the path; implied principal value",
+  "reason": "implied principal value (pole of tan x on path)"
+ },
+ {
+  "id": "GR3.819.13",
+  "gr": "3.819.13",
+  "page": 508,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[x]^4*Tan[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/32*(5*a^2 + b^2)/(a^3*b^7)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(29)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[x]^4*Tan[x]/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^4/x, {x, 0, Infinity}]",
+  "note": "tan x has poles at x = (k+1/2) Pi on the path; implied principal value",
+  "reason": "implied principal value (pole of tan x on path)"
+ },
+ {
+  "id": "GR3.819.14",
+  "gr": "3.819.14",
+  "page": 508,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[2*x]^2*Tan[x]/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^4/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/32*(a^4 + 2*a^2*b^2 + 5*b^4)/(a^7*b^5)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(29)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Cos[2*x]^2*Tan[x]/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^4/x, {x, 0, Infinity}]",
+  "note": "tan x has poles at x = (k+1/2) Pi on the path; implied principal value",
+  "reason": "implied principal value (pole of tan x on path)"
+ },
+ {
+  "id": "GR3.819.15",
+  "gr": "3.819.15",
+  "page": 508,
+  "status": "ok",
+  "lhs": "Integrate[Sin[4*x]^3*Tan[x]/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^4/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/8*(a^2 + b^2)/(a^5*b^5)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(28)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Sin[4*x]^3*Tan[x]/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^4/x, {x, 0, Infinity}]",
+  "note": "printed sin^3 4x tan x (no pole: sin 4x vanishes at x = Pi/2); possibly a misprint for another power/argument, transcribed as printed"
+ },
+ {
+  "id": "GR3.819.16",
+  "gr": "3.819.16",
+  "page": 508,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[2*x]^4*Tan[x]/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^4/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/32*(a^2 + 5*b^2)/(a^7*b^3)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (182)(25)",
+  "edition_note": "",
+  "section": "3.81 Rational functions of x and of trigonometric functions",
+  "tex": "Integrate[Cos[2*x]^4*Tan[x]/(a^2*Cos[2*x]^2 + b^2*Sin[2*x]^2)^4/x, {x, 0, Infinity}]",
+  "note": "tan x has poles at x = (k+1/2) Pi on the path; implied principal value",
+  "reason": "implied principal value (pole of tan x on path)"
+ },
+ {
+  "id": "GR3.821.1",
+  "gr": "3.821.1",
+  "page": 508,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]^p, {x, 0, Pi}]",
+  "rhs": [
+   "Pi^2/2^(p + 1)*Gamma[p + 1]/Gamma[p/2 + 1]^2"
+  ],
+  "conds": [
+   "p > -1"
+  ],
+  "cite": "BI(218)(7), LO V 121(71)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^pi x sin^p x dx = pi^2/2^(p+1) Gamma(p+1)/[Gamma(p/2+1)]^2",
+  "note": ""
+ },
+ {
+  "id": "GR3.821.2a",
+  "gr": "3.821.2",
+  "page": 508,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]^(2*m), {x, 0, r*Pi}]",
+  "rhs": [
+   "Pi^2/2*(2*m - 1)!!/(2*m)!!*r^2"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[r, Integers] && r >= 1"
+  ],
+  "cite": "GW (333)(8c)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^{r pi} x sin^n x dx = pi^2/2 (2m-1)!!/(2m)!! r^2 [n=2m]",
+  "note": "n = 2m substituted; r natural number"
+ },
+ {
+  "id": "GR3.821.2b",
+  "gr": "3.821.2",
+  "page": 508,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]^(2*m + 1), {x, 0, r*Pi}]",
+  "rhs": [
+   "(-1)^(r + 1)*Pi*(2*m)!!/(2*m + 1)!!*r"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[r, Integers] && r >= 1"
+  ],
+  "cite": "GW (333)(8c)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= (-1)^(r+1) pi (2m)!!/(2m+1)!! r [n=2m+1]",
+  "note": "n = 2m+1 substituted; r natural number"
+ },
+ {
+  "id": "GR3.821.3a",
+  "gr": "3.821.3",
+  "page": 508,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[x]^(2*m), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi^2/8*(2*m - 1)!!/(2*m)!! - 1/2^(2*m - 2)*Sum[(1 - (-1)^(m - k))/2*Binomial[2*m, k]/(2*m - 2*k)^2, {k, 0, m - 1}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "GW (333)(9b)",
+  "edition_note": "11",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^{pi/2} x cos^n x = pi^2/8 (n-1)!!/n!! - 1/2^(n-2) sum_{k=0, m-k odd}^{m-1} C(n,k)/(n-2k)^2 [n=2m]",
+  "note": "n = 2m substituted; the restriction m-k odd is encoded by the factor (1-(-1)^(m-k))/2"
+ },
+ {
+  "id": "GR3.821.3b",
+  "gr": "3.821.3",
+  "page": 508,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[x]^(2*m - 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*(2*m - 2)!!/(2*m - 1)!! - 1/2^(2*m - 2)*Sum[Binomial[2*m - 1, k]/(2*m - 1 - 2*k)^2, {k, 0, m - 1}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "GW (333)(9b)",
+  "edition_note": "11",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= pi/2 (n-1)!!/n!! - 1/2^(n-1) sum_{k=0}^{m-1} C(n,k)/(n-2k)^2 [n=2m-1]",
+  "note": "n = 2m-1 substituted"
+ },
+ {
+  "id": "GR3.821.4",
+  "gr": "3.821.4",
+  "page": 508,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[x]^(2*m), {x, 0, Pi}]",
+  "rhs": [
+   "Pi^2/2*(2*m - 1)!!/(2*m)!!"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (218)(10)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^pi x cos^2m x dx = pi^2/2 (2m-1)!!/(2m)!!",
+  "note": "m = 0, 1, 2, ... assumed"
+ },
+ {
+  "id": "GR3.821.5",
+  "gr": "3.821.5",
+  "page": 508,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[x]^(2*m), {x, r*Pi, s*Pi}]",
+  "rhs": [
+   "Pi^2/2*(s^2 - r^2)*(2*m - 1)!!/(2*m)!!"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[r, Integers] && r >= 0",
+   "Element[s, Integers] && s >= 0"
+  ],
+  "cite": "BI (226)(3)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_{r pi}^{s pi} x cos^2m x dx = pi^2/2 (s^2-r^2)(2m-1)!!/(2m)!!",
+  "note": "no conditions printed; m, r, s nonnegative integers assumed"
+ },
+ {
+  "id": "GR3.821.6a",
+  "gr": "3.821.6",
+  "page": 509,
+  "status": "ok",
+  "lhs": "Integrate[Sign[Sin[x]]*Abs[Sin[x]]^p/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]/2*Gamma[p/2]/Gamma[(p + 1)/2]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "LO V 278, FI II 808",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^p x/x dx = sqrt(pi)/2 Gamma(p/2)/Gamma((p+1)/2)",
+  "note": "the book's sin^p with p = odd/odd means the real odd root; written as Sign[Sin[x]]*Abs[Sin[x]]^p (valid for all real p > 0, since sgn(sin)|sin|^(p-1) sin x / x reduces to int_0^{pi/2} sin^(p-1)). Printed condition 'p is a fraction with odd numerator and denominator' cannot be sampled"
+ },
+ {
+  "id": "GR3.821.6b",
+  "gr": "3.821.6",
+  "page": 509,
+  "status": "ok",
+  "lhs": "Integrate[Sign[Sin[x]]*Abs[Sin[x]]^p/x, {x, 0, Infinity}]",
+  "rhs": [
+   "2^(p - 2)*Beta[p/2, p/2]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "LO V 278, FI II 808",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= 2^(p-2) B(p/2, p/2)",
+  "note": "the book's sin^p with p = odd/odd means the real odd root; written as Sign[Sin[x]]*Abs[Sin[x]]^p (valid for all real p > 0, since sgn(sin)|sin|^(p-1) sin x / x reduces to int_0^{pi/2} sin^(p-1)). Printed condition 'p is a fraction with odd numerator and denominator' cannot be sampled"
+ },
+ {
+  "id": "GR3.821.7",
+  "gr": "3.821.7",
+  "page": 509,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*n + 1)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "(2*n - 1)!!/(2*n)!!*Pi/2"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (151)(4)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^(2n+1) x/x dx = (2n-1)!!/(2n)!! pi/2",
+  "note": ""
+ },
+ {
+  "id": "GR3.821.8",
+  "gr": "3.821.8",
+  "page": 509,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[Sin[x]^(2*n)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Infinity"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (151)(3)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^2n x/x dx = inf",
+  "note": "",
+  "reason": "divergent"
+ },
+ {
+  "id": "GR3.821.9",
+  "gr": "3.821.9",
+  "page": 509,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "a*Pi/2"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "LO V 307, 312, FI II 632",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^2 ax/x^2 dx = a pi/2",
+  "note": ""
+ },
+ {
+  "id": "GR3.821.10",
+  "gr": "3.821.10",
+  "page": 509,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^(2*m)/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(2*m - 3)!!/(2*m - 2)!!*a*Pi/2"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "GW (333)(14b)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^2m ax/x^2 = (2m-3)!!/(2m-2)!! a pi/2",
+  "note": ""
+ },
+ {
+  "id": "GR3.821.11",
+  "gr": "3.821.11",
+  "page": 509,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^(2*m + 1)/x^3, {x, 0, Infinity}]",
+  "rhs": [
+   "(2*m - 3)!!/(2*m)!!*(2*m + 1)*a^2*Pi/4"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "GW (333)(14d)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^(2m+1) ax/x^3 = (2m-3)!!/(2m)!! (2m+1) a^2 pi/4",
+  "note": ""
+ },
+ {
+  "id": "GR3.821.12a",
+  "gr": "3.821.12",
+  "page": 509,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[Sin[x]^p/x^m, {x, 0, Infinity}]",
+  "rhs": [
+   "p/(m - 1)*Integrate[Sin[x]^(p - 1)/x^(m - 1)*Cos[x], {x, 0, Infinity}]"
+  ],
+  "conds": [
+   "p > m - 1 > 0"
+  ],
+  "cite": "GW (333)(17)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int sin^p x/x^m = p/(m-1) int sin^(p-1) x/x^(m-1) cos x dx",
+  "note": "",
+  "reason": "reduction formula"
+ },
+ {
+  "id": "GR3.821.12b",
+  "gr": "3.821.12",
+  "page": 509,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[Sin[x]^p/x^m, {x, 0, Infinity}]",
+  "rhs": [
+   "p*(p - 1)/((m - 1)*(m - 2))*Integrate[Sin[x]^(p - 2)/x^(m - 2), {x, 0, Infinity}] - p^2/((m - 1)*(m - 2))*Integrate[Sin[x]^p/x^(m - 2), {x, 0, Infinity}]"
+  ],
+  "conds": [
+   "p > m - 1 > 1"
+  ],
+  "cite": "GW (333)(17)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= p(p-1)/((m-1)(m-2)) int sin^(p-2)/x^(m-2) - p^2/((m-1)(m-2)) int sin^p/x^(m-2)",
+  "note": "",
+  "reason": "reduction formula"
+ },
+ {
+  "id": "GR3.821.13",
+  "gr": "3.821.13",
+  "page": 509,
+  "status": "SKIP-REFERENCE",
+  "lhs": "Integrate[Sin[p*x]^(2*n)/Sqrt[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Infinity"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (177)(5)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^2n px/sqrt x dx = inf",
+  "note": "",
+  "reason": "divergent"
+ },
+ {
+  "id": "GR3.821.14",
+  "gr": "3.821.14",
+  "page": 509,
+  "status": "ok",
+  "lhs": "Integrate[Sin[p*x]^(2*n + 1)/Sqrt[x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2^(2*n)*Sqrt[Pi/(2*p)]*Sum[(-1)^k*Binomial[2*n + 1, n + k + 1]/Sqrt[2*k + 1], {k, 0, n}]"
+  ],
+  "conds": [
+   "p > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (177)(7)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^(2n+1) px dx/sqrt x = 1/2^2n sqrt(pi/2p) sum_{k=0}^n (-1)^k C(2n+1,n+k+1)/sqrt(2k+1)",
+  "note": "p > 0, n = 0, 1, ... assumed (not printed)"
+ },
+ {
+  "id": "GR3.822.1",
+  "gr": "3.822.1",
+  "page": 509,
+  "status": "SKIP-RECURRENCE",
+  "lhs": "Integrate[x^p*Cos[x]^m, {x, 0, Pi/2}]",
+  "rhs": [
+   "-p*(p - 1)/m^2*Integrate[x^(p - 2)*Cos[x]^m, {x, 0, Pi/2}] + (m - 1)/m*Integrate[x^p*Cos[x]^(m - 2), {x, 0, Pi/2}]"
+  ],
+  "conds": [
+   "m > 1",
+   "p > 1"
+  ],
+  "cite": "GW (333)(9a)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^{pi/2} x^p cos^m x = -p(p-1)/m^2 int x^(p-2) cos^m + (m-1)/m int x^p cos^(m-2)",
+  "note": "",
+  "reason": "reduction formula"
+ },
+ {
+  "id": "GR3.822.2",
+  "gr": "3.822.2",
+  "page": 509,
+  "status": "ok",
+  "lhs": "Integrate[x^(-1/2)*Cos[p*x]^(2*n + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2^(2*n)*Sqrt[Pi/(2*p)]*Sum[Binomial[2*n + 1, n + k + 1]/Sqrt[2*k + 1], {k, 0, n}]"
+  ],
+  "conds": [
+   "p > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (177)(8)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf x^(-1/2) cos^(2n+1)(px) dx = 1/2^2n sqrt(pi/2p) sum_{k=0}^n C(2n+1,n+k+1)/sqrt(2k+1)",
+  "note": "p > 0, n = 0, 1, ... assumed (not printed)"
+ },
+ {
+  "id": "GR3.823",
+  "gr": "3.823",
+  "page": 509,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*Sin[a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "-Gamma[mu]*Cos[mu*Pi/2]/(2^(mu + 1)*a^mu)"
+  ],
+  "conds": [
+   "a > 0",
+   "-2 < Re[mu] < 0"
+  ],
+  "cite": "ET I 319(15), GW(333)(19c)a",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf x^(mu-1) sin^2 ax dx = -Gamma(mu) cos(mu pi/2)/(2^(mu+1) a^mu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.824.1",
+  "gr": "3.824.1",
+  "page": 509,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2/(x^2 + beta^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*beta)*(1 - E^(-2*a*beta))"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "BI (160)(10)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^2 ax/(x^2+beta^2) = pi/(4 beta)(1 - e^(-2 a beta))",
+  "note": ""
+ },
+ {
+  "id": "GR3.824.2",
+  "gr": "3.824.2",
+  "page": 509,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]^2/(x^2 + beta^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*beta)*(1 + E^(-2*a*beta))"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "BI (160)(11)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf cos^2 ax/(x^2+beta^2) = pi/(4 beta)(1 + e^(-2 a beta))",
+  "note": ""
+ },
+ {
+  "id": "GR3.824.3",
+  "gr": "3.824.3",
+  "page": 510,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*m)/(a^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^m/2^(2*m + 1)*Pi/2*(2^(2*m)*Sinh[a]^(2*m) - 2*Sum[(-1)^k*Binomial[2*m, k]*Sinh[2*(m - k)*a], {k, 0, m}])",
+   "(-1)^m/2^(2*m)*Pi/(2*a)*(2^(2*m)*Sinh[a]^(2*m) - 2*Sum[(-1)^k*Binomial[2*m, k]*Sinh[2*(m - k)*a], {k, 0, m}])"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (160)(12)",
+  "edition_note": "7",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^2m x dx/(a^2+x^2) = (-1)^m/2^(2m+1) pi/2 {2^2m sinh^2m a - 2 sum_{k=0}^m (-1)^k C(2m,k) sinh[2(m-k)a]}",
+  "note": "printed prefactor (-1)^m/2^(2m+1) * pi/2 fails at m = 0 (gives pi/4, not pi/(2a)); expanding sin^2m in cosines gives (-1)^m/2^(2m) * pi/(2a): corrected candidate second"
+ },
+ {
+  "id": "GR3.824.4",
+  "gr": "3.824.4",
+  "page": 510,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*m + 1)/(a^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(m - 1)/(2^(2*m + 2)*a)*(E^((2*m + 1)*a)*Sum[(-1)^k*Binomial[2*m + 1, k]*E^(-2*k*a)*ExpIntegralEi[(2*k - 2*m - 1)*a], {k, 0, 2*m + 1}] + E^(-(2*m + 1)*a)*Sum[(-1)^(k - 1)*Binomial[2*m + 1, k]*E^(2*k*a)*ExpIntegralEi[(2*m + 1 - 2*k)*a], {k, 0, 2*m + 1}])"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (160)(14)",
+  "edition_note": "7",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^(2m+1) x dx/(a^2+x^2) = (-1)^(m-1)/(2^(2m+2) a){e^((2m+1)a) sum (-1)^k C(2m+1,k) e^(-2ka) Ei[(2k-2m-1)a] + e^(-(2m+1)a) sum (-1)^(k-1) C(2m+1,k) e^(2ka) Ei[(2m+1-2k)a]}",
+  "note": ""
+ },
+ {
+  "id": "GR3.824.5",
+  "gr": "3.824.5",
+  "page": 510,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^(2*m + 1)*x/(a^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2^(2*m + 1)*E^(-(2*m + 1)*a)*Sum[(-1)^(m + k)*Binomial[2*m + 1, k]*E^(2*k*a), {k, 0, m}]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi/2",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "",
+  "edition_note": "7",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^(2m+1) x x dx/(a^2+x^2) = pi/2^(2m+1) e^(-(2m+1)a) sum_{k=0}^m (-1)^(m+k) C(2m+1,k) e^(2ka)",
+  "note": ""
+ },
+ {
+  "id": "GR3.824.6",
+  "gr": "3.824.6",
+  "page": 510,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*m)/(a^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2^(2*m + 1)*a)*Binomial[2*m, m] + Pi/2^(2*m)*Sum[Binomial[2*m, m + k]*E^(-2*k*a), {k, 1, m}]",
+   "Pi/(2^(2*m + 1)*a)*Binomial[2*m, m] + Pi/(2^(2*m)*a)*Sum[Binomial[2*m, m + k]*E^(-2*k*a), {k, 1, m}]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (160)(16)",
+  "edition_note": "7",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf cos^2m x dx/(a^2+x^2) = pi/(2^(2m+1) a) C(2m,m) + pi/2^2m sum_{k=1}^m C(2m,m+k) e^(-2ka)",
+  "note": "second term printed without 1/a (dimensionally inconsistent with the first); corrected candidate second"
+ },
+ {
+  "id": "GR3.824.7",
+  "gr": "3.824.7",
+  "page": 510,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*m + 1)/(a^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2^(2*m + 1)*a)*Sum[Binomial[2*m + 1, m + k + 1]*E^(-(2*k + 1)*a), {k, 1, m}]",
+   "Pi/(2^(2*m + 1)*a)*Sum[Binomial[2*m + 1, m + k + 1]*E^(-(2*k + 1)*a), {k, 0, m}]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (160)(17)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf cos^(2m+1) x dx/(a^2+x^2) = pi/(2^(2m+1) a) sum_{k=1}^m C(2m+1,m+k+1) e^(-(2k+1)a)",
+  "note": "printed sum starts at k = 1 (gives 0 for m = 0, true value pi e^(-a)/(2a)); cosine expansion gives k = 0: corrected candidate second"
+ },
+ {
+  "id": "GR3.824.8",
+  "gr": "3.824.8",
+  "page": 510,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^(2*m + 1)*x/(a^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-E^(-(2*m + 1)*a)/2^(2*m + 2)*Sum[Binomial[2*m + 1, k]*E^(2*k*a)*ExpIntegralEi[(2*m - 2*k + 1)*a], {k, 0, 2*m + 1}] - E^((2*m + 1)*a)/2^(2*m + 2)*Sum[Binomial[2*m + 1, k]*E^(-2*k*a)*ExpIntegralEi[(2*k - 2*m - 1)*a], {k, 0, 2*m + 1}]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (160)(18)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf cos^(2m+1) x x dx/(a^2+x^2) = -e^(-(2m+1)a)/2^(2m+2) sum C(2m+1,k) e^(2ka) Ei[(2m-2k+1)a] - e^((2m+1)a)/2^(2m+2) sum C(2m+1,k) e^(-2ka) Ei[(2k-2m-1)a]",
+  "note": "no conditions printed; a > 0, m = 0, 1, ... assumed from neighbours"
+ },
+ {
+  "id": "GR3.824.9",
+  "gr": "3.824.9",
+  "page": 510,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[a*x]^2/(b^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*b)*Sin[2*a*b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (161)(10)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf cos^2 ax/(b^2-x^2) dx = pi/(4b) sin 2ab",
+  "note": "pole at x = b on the path; implied principal value",
+  "reason": "implied principal value (pole at x = b)"
+ },
+ {
+  "id": "GR3.824.10a",
+  "gr": "3.824.10",
+  "page": 510,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2*Cos[b*x]^2/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(8*beta)*(1 - 1/2*E^(-2*(a + b)*beta) + E^(-2*b*beta) - 1/2*E^(2*(b - a)*beta) - E^(-2*a*beta))"
+  ],
+  "conds": [
+   "a > b > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "BI (162)(6)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^2 ax cos^2 bx/(beta^2+x^2) = pi/(8 beta)[1 - 1/2 e^(-2(a+b)beta) + e^(-2b beta) - 1/2 e^(2(b-a)beta) - e^(-2a beta)] [a>b]",
+  "note": "Re[beta] > 0 assumed (not printed)"
+ },
+ {
+  "id": "GR3.824.10b",
+  "gr": "3.824.10",
+  "page": 510,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2*Cos[a*x]^2/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(16*beta)*(1 - E^(-4*a*beta))"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "BI (162)(6)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= pi/(16 beta)[1 - e^(-4 a beta)] [a=b]",
+  "note": "a = b substituted; Re[beta] > 0 assumed (not printed)"
+ },
+ {
+  "id": "GR3.824.10c",
+  "gr": "3.824.10",
+  "page": 510,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2*Cos[b*x]^2/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(8*beta)*(1 - 1/2*E^(-2*(a + b)*beta) + E^(-2*b*beta) - 1/2*E^(2*(a - b)*beta) - E^(-2*a*beta))"
+  ],
+  "conds": [
+   "b > a > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "BI (162)(6)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= pi/(8 beta)[1 - 1/2 e^(-2(a+b)beta) + e^(-2b beta) - 1/2 e^(2(a-b)beta) - e^(-2a beta)] [a<b]",
+  "note": "Re[beta] > 0 assumed (not printed)"
+ },
+ {
+  "id": "GR3.824.11a",
+  "gr": "3.824.11",
+  "page": 511,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[2*a*x]*Cos[b*x]^2/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/8*(2*E^(-2*a*beta) + E^(-2*(a + b)*beta) + E^(2*(b - a)*beta))"
+  ],
+  "conds": [
+   "a > b > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "LI (162)(5)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf x sin 2ax cos^2 bx/(beta^2+x^2) = pi/8[2e^(-2a beta) + e^(-2(a+b)beta) + e^(2(b-a)beta)] [a>0 (sic)]",
+  "note": "printed condition '[a > 0]' on the first case is evidently a misprint for a > b (the other cases are a = b, a < b); b > 0, Re beta > 0 assumed"
+ },
+ {
+  "id": "GR3.824.11b",
+  "gr": "3.824.11",
+  "page": 511,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[2*a*x]*Cos[a*x]^2/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/8*(E^(-4*a*beta) + 2*E^(-2*a*beta))"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "LI (162)(5)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= pi/8[e^(-4a beta) + 2e^(-2a beta)] [a=b]",
+  "note": "a = b substituted; Re beta > 0 assumed"
+ },
+ {
+  "id": "GR3.824.11c",
+  "gr": "3.824.11",
+  "page": 511,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[2*a*x]*Cos[b*x]^2/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/8*(2*E^(-2*a*beta) + E^(-2*(a + b)*beta) - E^(2*(a - b)*beta))"
+  ],
+  "conds": [
+   "b > a > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "LI (162)(5)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= pi/8[2e^(-2a beta) + e^(-2(a+b)beta) - e^(2(a-b)beta)] [a<b]",
+  "note": "Re beta > 0 assumed"
+ },
+ {
+  "id": "GR3.825.1",
+  "gr": "3.825.1",
+  "page": 511,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2/((b^2 + x^2)*(c^2 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(b - c + c*E^(-2*a*b) - b*E^(-2*a*c))/(4*b*c*(b^2 - c^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "BI (174)(15)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^2 ax/((b^2+x^2)(c^2+x^2)) = pi(b - c + c e^(-2ab) - b e^(-2ac))/(4bc(b^2-c^2))",
+  "note": ""
+ },
+ {
+  "id": "GR3.825.2",
+  "gr": "3.825.2",
+  "page": 511,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]^2/((b^2 + x^2)*(c^2 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(b - c + b*E^(-2*a*c) - c*E^(-2*a*b))/(4*b*c*(b^2 - c^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "BI (175)(14)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf cos^2 ax/((b^2+x^2)(c^2+x^2)) = pi(b - c + b e^(-2ac) - c e^(-2ab))/(4bc(b^2-c^2))",
+  "note": ""
+ },
+ {
+  "id": "GR3.825.3",
+  "gr": "3.825.3",
+  "page": 511,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*x]^2/((b^2 - x^2)*(c^2 - x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(c*Sin[2*a*b] - b*Sin[2*a*c])/(4*b*c*(b^2 - c^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0",
+   "b != c"
+  ],
+  "cite": "LI (174)(16)",
+  "edition_note": "3",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^2 ax/((b^2-x^2)(c^2-x^2)) = pi(c sin 2ab - b sin 2ac)/(4bc(b^2-c^2))",
+  "note": "poles at x = b and x = c on the path; implied principal value",
+  "reason": "implied principal value (poles at x = b, c)"
+ },
+ {
+  "id": "GR3.825.4",
+  "gr": "3.825.4",
+  "page": 511,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[a*x]^2/((b^2 - x^2)*(c^2 - x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(b*Sin[2*a*c] - c*Sin[2*a*b])/(4*b*c*(b^2 - c^2))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0",
+   "b != c"
+  ],
+  "cite": "LI (175)(15)",
+  "edition_note": "3",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf cos^2 ax/((b^2-x^2)(c^2-x^2)) = pi(b sin 2ac - c sin 2ab)/(4bc(b^2-c^2))",
+  "note": "poles at x = b and x = c on the path; implied principal value",
+  "reason": "implied principal value (poles at x = b, c)"
+ },
+ {
+  "id": "GR3.826.1",
+  "gr": "3.826.1",
+  "page": 511,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2/(x^2*(b^2 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*b^2)*(2*a - (1 - E^(-2*a*b))/b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (172)(13)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^2 ax/(x^2(b^2+x^2)) = pi/(4b^2)[2a - (1 - e^(-2ab))/b]",
+  "note": ""
+ },
+ {
+  "id": "GR3.826.2",
+  "gr": "3.826.2",
+  "page": 511,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Sin[a*x]^2/(x^2*(b^2 - x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*b^2)*(2*a - Sin[2*a*b]/b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BII (172)(14)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^2 ax/(x^2(b^2-x^2)) = pi/(4b^2)(2a - sin 2ab/b)",
+  "note": "pole at x = b on the path; implied principal value",
+  "reason": "implied principal value (pole at x = b)"
+ },
+ {
+  "id": "GR3.827.1",
+  "gr": "3.827.1",
+  "page": 511,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^3/x^nu, {x, 0, Infinity}]",
+  "rhs": [
+   "(3 - 3^(nu - 1))/4*a^(nu - 1)*Cos[nu*Pi/2]*Gamma[1 - nu]"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < Re[nu] < 4"
+  ],
+  "cite": "GW (333)(19f)",
+  "edition_note": "8",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^3 ax/x^nu dx = (3 - 3^(nu-1))/4 a^(nu-1) cos(nu pi/2) Gamma(1-nu) [a < Re nu < 4, nu != 1,2,3]",
+  "note": "printed condition 'a < Re nu < 4' read as 0 < Re nu < 4 (misprint); a > 0 assumed; nu != 1, 2, 3 (removable singularities) not sampled"
+ },
+ {
+  "id": "GR3.827.2",
+  "gr": "3.827.2",
+  "page": 511,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^3/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "LO V 277",
+  "edition_note": "8",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^3/x dx = Pi/4",
+  "note": "a > 0 assumed (not printed)"
+ },
+ {
+  "id": "GR3.827.3",
+  "gr": "3.827.3",
+  "page": 511,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^3/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "3/4*a*Log[3]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (156)(2)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^3/x^2 dx = 3/4*a*Log[3]",
+  "note": "a > 0 assumed (not printed)"
+ },
+ {
+  "id": "GR3.827.4",
+  "gr": "3.827.4",
+  "page": 511,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^3/x^3, {x, 0, Infinity}]",
+  "rhs": [
+   "3/8*a^2*Pi"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI(156)(7)a,LO V 312",
+  "edition_note": "8",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^3/x^3 dx = 3/8*a^2*Pi",
+  "note": "a > 0 assumed (not printed)"
+ },
+ {
+  "id": "GR3.827.5",
+  "gr": "3.827.5",
+  "page": 511,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^4/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "a*Pi/4"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (156)(3)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^4/x^2 dx = a*Pi/4",
+  "note": ""
+ },
+ {
+  "id": "GR3.827.6",
+  "gr": "3.827.6",
+  "page": 511,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^4/x^3, {x, 0, Infinity}]",
+  "rhs": [
+   "a^2*Log[2]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (156)(8)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^4/x^3 dx = a^2*Log[2]",
+  "note": "a > 0 assumed (not printed)"
+ },
+ {
+  "id": "GR3.827.7",
+  "gr": "3.827.7",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^4/x^4, {x, 0, Infinity}]",
+  "rhs": [
+   "a^3*Pi/3"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI(156)(11), LO V 312",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^4/x^4 dx = a^3*Pi/3",
+  "note": ""
+ },
+ {
+  "id": "GR3.827.8",
+  "gr": "3.827.8",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^5/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "5/16*a*(3*Log[3] - Log[5])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (156)(4)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^5/x^2 dx = 5/16*a*(3*Log[3] - Log[5])",
+  "note": "a > 0 assumed (not printed)"
+ },
+ {
+  "id": "GR3.827.9",
+  "gr": "3.827.9",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^5/x^3, {x, 0, Infinity}]",
+  "rhs": [
+   "5/32*a^2*Pi"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (156)(9)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^5/x^3 dx = 5/32*a^2*Pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.827.10",
+  "gr": "3.827.10",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^5/x^4, {x, 0, Infinity}]",
+  "rhs": [
+   "5/96*a^3*(25*Log[5] - 27*Log[3])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (156)(12)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^5/x^4 dx = 5/96*a^3*(25*Log[5] - 27*Log[3])",
+  "note": "a > 0 assumed (not printed)"
+ },
+ {
+  "id": "GR3.827.11",
+  "gr": "3.827.11",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^5/x^5, {x, 0, Infinity}]",
+  "rhs": [
+   "115/384*a^4*Pi"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI(156)(13), LO V 312",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^5/x^5 dx = 115/384*a^4*Pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.827.12",
+  "gr": "3.827.12",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^6/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "3/16*a*Pi"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (156)(5)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^6/x^2 dx = 3/16*a*Pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.827.13",
+  "gr": "3.827.13",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^6/x^3, {x, 0, Infinity}]",
+  "rhs": [
+   "3/16*a^2*(8*Log[2] - 3*Log[3])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (156)(10)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^6/x^3 dx = 3/16*a^2*(8*Log[2] - 3*Log[3])",
+  "note": "a > 0 assumed (not printed)"
+ },
+ {
+  "id": "GR3.827.14",
+  "gr": "3.827.14",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^6/x^5, {x, 0, Infinity}]",
+  "rhs": [
+   "1/16*a^4*(27*Log[3] - 32*Log[2])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (156)(14)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^6/x^5 dx = 1/16*a^4*(27*Log[3] - 32*Log[2])",
+  "note": "a > 0 assumed (not printed)"
+ },
+ {
+  "id": "GR3.827.15",
+  "gr": "3.827.15",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^6/x^6, {x, 0, Infinity}]",
+  "rhs": [
+   "11/40*a^5*Pi"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "LO V 312",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^6/x^6 dx = 11/40*a^5*Pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.828.1",
+  "gr": "3.828.1",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sin[b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Log[Abs[(a + b)/(a - b)]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "a != b"
+  ],
+  "cite": "FI II 647",
+  "edition_note": "8",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]*Sin[b*x]/x dx = 1/2*Log[Abs[(a + b)/(a - b)]]",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.2",
+  "gr": "3.828.2",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]*Sin[b*x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Pi*Min[a, b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (157)(1)",
+  "edition_note": "8",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]*Sin[b*x]/x^2 dx = 1/2*Pi*Min[a, b]",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.3a",
+  "gr": "3.828.3",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2*Sin[b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4"
+  ],
+  "conds": [
+   "2*a > b > 0"
+  ],
+  "cite": "BI (151)(10)",
+  "edition_note": "8",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^2 ax sin bx/x = pi/4 [b<2a]",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.3b",
+  "gr": "3.828.3",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2*Sin[2*a*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/8"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (151)(10)",
+  "edition_note": "8",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= pi/8 [b=2a]",
+  "note": "b = 2a substituted; section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.3c",
+  "gr": "3.828.3",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2*Sin[b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "b > 2*a > 0"
+  ],
+  "cite": "BI (151)(10)",
+  "edition_note": "8",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= 0 [b>2a]",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.4",
+  "gr": "3.828.4",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2*Cos[b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Log[(4*a^2 - b^2)/b^2]",
+   "1/4*Log[Abs[4*a^2 - b^2]/b^2]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "2*a != b"
+  ],
+  "cite": "BI (151)(12)",
+  "edition_note": "8",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^2*Cos[b*x]/x dx = 1/4*Log[(4*a^2 - b^2)/b^2]",
+  "note": "printed log has no absolute value (complex for b > 2a); corrected candidate with |4a^2 - b^2| second; section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.5",
+  "gr": "3.828.5",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2*Cos[2*b*x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Pi*Max[0, a - b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^2*Cos[2*b*x]/x^2 dx = 1/2*Pi*Max[0, a - b]",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.6a",
+  "gr": "3.828.6",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*a*x]*Cos[b*x]^2/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "BI (151)(9)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin 2ax cos^2 bx/x = pi/2 [a>b]",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.6b",
+  "gr": "3.828.6",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*a*x]*Cos[a*x]^2/x, {x, 0, Infinity}]",
+  "rhs": [
+   "3/8*Pi"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (151)(9)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= 3pi/8 [a=b]",
+  "note": "a = b substituted; section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.6c",
+  "gr": "3.828.6",
+  "page": 512,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*a*x]*Cos[b*x]^2/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4"
+  ],
+  "conds": [
+   "b > a > 0"
+  ],
+  "cite": "BI (151)(9)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= pi/4 [a<b]",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.7",
+  "gr": "3.828.7",
+  "page": 513,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2*Sin[b*x]*Sin[c*x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/16*(Abs[b - 2*a - c] - Abs[2*a - b - c] + 2*c)"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < c <= b"
+  ],
+  "cite": "BI(157)(9)a, ET I 79(15)",
+  "edition_note": "8",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^2*Sin[b*x]*Sin[c*x]/x^2 dx = Pi/16*(Abs[b - 2*a - c] - Abs[2*a - b - c] + 2*c)",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.8",
+  "gr": "3.828.8",
+  "page": 513,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2*Sin[b*x]*Sin[c*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/8*Log[Abs[(b + c)^2*(2*a - b + c)*(2*a + b - c)/((b - c)^2*(2*a + b + c)*(2*a - b - c))]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0",
+   "b != c",
+   "2*a + c != b",
+   "2*a + b != c",
+   "2*a != b + c"
+  ],
+  "cite": "LI (152)(2)",
+  "edition_note": "8",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^2*Sin[b*x]*Sin[c*x]/x dx = 1/8*Log[Abs[(b + c)^2*(2*a - b + c)*(2*a + b - c)/((b - c)^2*(2*a + b + c)*(2*a - b - c))]]",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.9a",
+  "gr": "3.828.9",
+  "page": 513,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2*Sin[b*x]^2/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*a"
+  ],
+  "conds": [
+   "0 < a <= b"
+  ],
+  "cite": "BI (157)(3)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^2 ax sin^2 bx/x^2 = pi/4 a [0<=a<=b]",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.9b",
+  "gr": "3.828.9",
+  "page": 513,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2*Sin[b*x]^2/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*b"
+  ],
+  "conds": [
+   "0 < b <= a"
+  ],
+  "cite": "BI (157)(3)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= pi/4 b [0<=b<=a]",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.10",
+  "gr": "3.828.10",
+  "page": 513,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2*Sin[b*x]^2/x^4, {x, 0, Infinity}]",
+  "rhs": [
+   "1/6*Pi*Min[a^2, b^2]*(3*Max[a, b] - Min[a, b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (157)(27)",
+  "edition_note": "8",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^2*Sin[b*x]^2/x^4 dx = 1/6*Pi*Min[a^2, b^2]*(3*Max[a, b] - Min[a, b])",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.11",
+  "gr": "3.828.11",
+  "page": 513,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^2*Cos[b*x]^2/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Pi*(a + Max[0, a - b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (157)(6)",
+  "edition_note": "8",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf Sin[a*x]^2*Cos[b*x]^2/x^2 dx = 1/4*Pi*(a + Max[0, a - b])",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.12a",
+  "gr": "3.828.12",
+  "page": 513,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^3*Sin[3*b*x]/x^4, {x, 0, Infinity}]",
+  "rhs": [
+   "a^3*Pi/2"
+  ],
+  "conds": [
+   "b > a > 0"
+  ],
+  "cite": "BI (157)(28)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^3 ax sin 3bx/x^4 = a^3 pi/2 [b>a]",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.12b",
+  "gr": "3.828.12",
+  "page": 513,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^3*Sin[3*b*x]/x^4, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/16*(8*a^3 - 9*(a - b)^3)"
+  ],
+  "conds": [
+   "b > 0",
+   "b <= a <= 3*b"
+  ],
+  "cite": "BI (157)(28)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= pi/16[8a^3 - 9(a-b)^3] [a <= 3b <= 3a]",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.12c",
+  "gr": "3.828.12",
+  "page": 513,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^3*Sin[3*b*x]/x^4, {x, 0, Infinity}]",
+  "rhs": [
+   "9*b*Pi/8*(a^2 - b^2)"
+  ],
+  "conds": [
+   "b > 0",
+   "a >= 3*b"
+  ],
+  "cite": "LI (157)(28)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= 9b pi/8 (a^2-b^2) [3b <= a]",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.13a",
+  "gr": "3.828.13",
+  "page": 513,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^3*Cos[b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "b > 3*a",
+   "a > 0"
+  ],
+  "cite": "BI (151)(15)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^3 ax cos bx/x = 0 [b>3a]",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.13b",
+  "gr": "3.828.13",
+  "page": 513,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^3*Cos[3*a*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/16"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (151)(15)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= -pi/16 [b=3a]",
+  "note": "b = 3a substituted; section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.13c",
+  "gr": "3.828.13",
+  "page": 513,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^3*Cos[b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/8"
+  ],
+  "conds": [
+   "3*a > b > a > 0"
+  ],
+  "cite": "BI (151)(15)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= -pi/8 [3a>b>a]",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.13d",
+  "gr": "3.828.13",
+  "page": 513,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^3*Cos[a*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/16"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (151)(15)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= pi/16 [b=a]",
+  "note": "b = a substituted; section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.13e",
+  "gr": "3.828.13",
+  "page": 513,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^3*Cos[b*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "BI (151)(15)",
+  "edition_note": "",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "= pi/4 [a>b]",
+  "note": "section restriction a > 0, b > 0, c > 0"
+ },
+ {
+  "id": "GR3.828.14",
+  "gr": "3.828.14",
+  "page": 513,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]^3*Cos[3*b*x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "3/16*(a*Log[81] - 2*(a - 3*b)*Log[a - 3*b] + 2*(a - b)*Log[a - b] + 2*(a + b)*Log[a + b] - 2*(a + 3*b)*Log[a + 3])",
+   "3/16*(a*Log[81] - 2*(a - 3*b)*Log[a - 3*b] + 2*(a - b)*Log[a - b] + 2*(a + b)*Log[a + b] - 2*(a + 3*b)*Log[a + 3*b])",
+   "3/16*(a*Log[81] - 2*(a - 3*b)*Log[Abs[a - 3*b]] + 2*(a - b)*Log[Abs[a - b]] + 2*(a + b)*Log[Abs[a + b]] - 2*(a + 3*b)*Log[Abs[a + 3*b]])"
+  ],
+  "conds": [
+   "Element[a, Reals]",
+   "Element[b, Reals]",
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "MC",
+  "edition_note": "10",
+  "section": "3.82-3.83 Powers of trigonometric functions combined with other powers",
+  "tex": "int_0^inf sin^3 ax cos 3bx/x^2 = 3/16(a ln 81 - 2(a-3b) ln(a-3b) + 2(a-b) ln(a-b) + 2(a+b) ln(a+b) - 2(a+3b) ln(a+3)) [Im a = 0, Im b = 0]",
+  "note": "printed last log is ln(a+3), evidently ln(a+3b): candidate 2; logs of negative arguments (a < 3b) should be ln|.|: candidate 3. a, b > 0 from the 3.828 section restriction"
+ }
+]

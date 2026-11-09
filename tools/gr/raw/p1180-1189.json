@@ -1,0 +1,680 @@
+[
+ {
+  "id": "GR17.43.1",
+  "gr": "17.43.1",
+  "page": 1180,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(E^(-x)), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[s]"
+  ],
+  "conds": [
+   "Re[s] > 0"
+  ],
+  "cite": "SU 521(M13)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin e^-x = Gamma(s)",
+  "note": ""
+ },
+ {
+  "id": "GR17.43.2",
+  "gr": "17.43.2",
+  "page": 1180,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(E^(-x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[s/2]/2"
+  ],
+  "conds": [
+   "Re[s] > 0"
+  ],
+  "cite": "SU 521(M14)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin e^-x^2 = Gamma(s/2)/2",
+  "note": ""
+ },
+ {
+  "id": "GR17.43.3",
+  "gr": "17.43.3",
+  "page": 1180,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(Cos[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[s]*Cos[Pi*s/2]"
+  ],
+  "conds": [
+   "0 < Re[s] < 1"
+  ],
+  "cite": "SU 521(M15)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin cos x",
+  "note": ""
+ },
+ {
+  "id": "GR17.43.4",
+  "gr": "17.43.4",
+  "page": 1180,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(Sin[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[s]*Sin[Pi*s/2]"
+  ],
+  "conds": [
+   "0 < Re[s] < 1"
+  ],
+  "cite": "SU 521(M16)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin sin x",
+  "note": ""
+ },
+ {
+  "id": "GR17.43.5",
+  "gr": "17.43.5",
+  "page": 1180,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^(s - 1)*(1/(1 - x)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Cot[Pi*s]"
+  ],
+  "conds": [
+   "0 < Re[s] < 1"
+  ],
+  "cite": "SU 521(M1)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin 1/(1-x) = pi cot(pi s)",
+  "note": "pole at x = 1 on the path; principal value",
+  "reason": "pole on integration path (x = 1), principal value"
+ },
+ {
+  "id": "GR17.43.6",
+  "gr": "17.43.6",
+  "page": 1180,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(1/(1 + x)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Csc[Pi*s]"
+  ],
+  "conds": [
+   "0 < Re[s] < 1"
+  ],
+  "cite": "SU 521(M2)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin 1/(1+x) = pi cosec(pi s)",
+  "note": ""
+ },
+ {
+  "id": "GR17.43.7",
+  "gr": "17.43.7",
+  "page": 1180,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*((1 + x^a)^(-b)), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[s/a]*Gamma[b - s/a]/(a*Gamma[b])"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < Re[s]",
+   "Re[s] < a*Re[b]"
+  ],
+  "cite": "SU 521(M3)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin (1+x^a)^-b",
+  "note": "a > 0 implied by 0 < Re s < ab"
+ },
+ {
+  "id": "GR17.43.8",
+  "gr": "17.43.8",
+  "page": 1180,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(ChebyshevT[n, x]/Sqrt[1 - x^2]), {x, 0, 1}]",
+  "rhs": [
+   "2^(-s)*Pi*Gamma[s]/(Gamma[1/2 + s/2 + n/2]*Gamma[1/2 + s/2 - n/2])"
+  ],
+  "conds": [
+   "Re[s] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "SU 521(M4)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin T_n(x) H(1-x)/sqrt(1-x^2)",
+  "note": "H(1-x) Heaviside truncates the range to (0,1)"
+ },
+ {
+  "id": "GR17.43.9",
+  "gr": "17.43.9",
+  "page": 1180,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(ChebyshevT[n, 1/x]/Sqrt[1 - x^2]), {x, 0, 1}]",
+  "rhs": [
+   "2^(s - 2)*Gamma[n/2 + s/2]*Gamma[s/2 - n/2]/Gamma[s]"
+  ],
+  "conds": [
+   "Re[s] > n",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "SU 521(M5)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin T_n(1/x) H(1-x)/sqrt(1-x^2)",
+  "note": "H(1-x) Heaviside truncates the range to (0,1)"
+ },
+ {
+  "id": "GR17.43.10",
+  "gr": "17.43.10",
+  "page": 1180,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(LegendreP[n, x]), {x, 0, 1}]",
+  "rhs": [
+   "Gamma[s/2]*Gamma[s/2 + 1/2]/(2*Gamma[s/2 - n/2 + 1/2]*Gamma[s/2 + n/2 + 1])"
+  ],
+  "conds": [
+   "Re[s] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "SU 521(M6)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin P_n(x) H(1-x)",
+  "note": "H(1-x) Heaviside truncates the range to (0,1)"
+ },
+ {
+  "id": "GR17.43.11",
+  "gr": "17.43.11",
+  "page": 1180,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(LegendreP[n, 1/x]), {x, 0, 1}]",
+  "rhs": [
+   "2^(s - 1)*Gamma[s/2 + n/2 + 1/2]*Gamma[s/2 - n/2]/(Sqrt[Pi]*Gamma[s + 1])"
+  ],
+  "conds": [
+   "Re[s] > n",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "SU 521(M7)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin P_n(1/x) H(1-x)",
+  "note": "H(1-x) Heaviside truncates the range to (0,1)"
+ },
+ {
+  "id": "GR17.43.12",
+  "gr": "17.43.12",
+  "page": 1180,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*((1 + x*Cos[phi])/(1 - 2*x*Cos[phi] + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Cos[s*phi]/Sin[s*Pi]"
+  ],
+  "conds": [
+   "0 < Re[s] < 1",
+   "-Pi < phi < Pi",
+   "phi != 0"
+  ],
+  "cite": "SU 521(M11)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin (1+x cos phi)/(1-2x cos phi+x^2)",
+  "note": "phi range taken from row 13 (not printed on row 12); phi = 0 puts a double pole on the path"
+ },
+ {
+  "id": "GR17.43.13",
+  "gr": "17.43.13",
+  "page": 1180,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(x*Sin[phi]/(1 - 2*x*Cos[phi] + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Sin[s*phi]/Sin[s*Pi]"
+  ],
+  "conds": [
+   "0 < Re[s] < 1",
+   "-Pi < phi < Pi"
+  ],
+  "cite": "SU 521(M12)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin x sin phi/(1-2x cos phi+x^2)",
+  "note": ""
+ },
+ {
+  "id": "GR17.43.14",
+  "gr": "17.43.14",
+  "page": 1181,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(E^(-x*Cos[phi])*Cos[x*Sin[phi]]), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[s]*Cos[s*phi]"
+  ],
+  "conds": [
+   "Re[s] > 0",
+   "-Pi/2 < phi < Pi/2"
+  ],
+  "cite": "SU 522(M17)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin e^(-x cos phi) cos(x sin phi)",
+  "note": "book prints condition '1/2 pi < phi < 1/2 pi' (minus sign dropped); read as -pi/2 < phi < pi/2"
+ },
+ {
+  "id": "GR17.43.15a",
+  "gr": "17.43.15",
+  "page": 1181,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(E^(-x*Sin[phi])*Sin[x*Sin[p*phi]]), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[s]*Sin[s*phi]"
+  ],
+  "conds": [
+   "Re[s] > -1",
+   "-Pi/2 < phi < Pi/2"
+  ],
+  "cite": "SU 522(M18)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin e^(-x sin phi) sin(x sin p phi) [as printed]",
+  "note": "as printed: e^(-x sin phi) sin(x sin p phi); p is a stray symbol (likely misprint), see 15b"
+ },
+ {
+  "id": "GR17.43.15b",
+  "gr": "17.43.15",
+  "page": 1181,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(E^(-x*Cos[phi])*Sin[x*Sin[phi]]), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[s]*Sin[s*phi]"
+  ],
+  "conds": [
+   "Re[s] > -1",
+   "-Pi/2 < phi < Pi/2"
+  ],
+  "cite": "SU 522(M18)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin e^(-x cos phi) sin(x sin phi) [corrected]",
+  "note": "corrected integrand: companion of row 14, e^(-x cos phi) sin(x sin phi)"
+ },
+ {
+  "id": "GR17.43.16",
+  "gr": "17.43.16",
+  "page": 1181,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(x^(-nu)*BesselJ[nu, x]), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(s - nu - 1)*Gamma[s/2]/Gamma[nu - s/2 + 1]"
+  ],
+  "conds": [
+   "nu > -1/2",
+   "0 < Re[s] < 1"
+  ],
+  "cite": "SU 522(M19)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin x^-nu J_nu(x)",
+  "note": ""
+ },
+ {
+  "id": "GR17.43.17",
+  "gr": "17.43.17",
+  "page": 1181,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(BesselY[nu, x]), {x, 0, Infinity}]",
+  "rhs": [
+   "-2^(s - 1)*Pi^(-1)*Gamma[s/2 + nu/2]*Gamma[s/2 - nu/2]*Cos[(s/2 - nu/2)*Pi]"
+  ],
+  "conds": [
+   "Element[nu, Reals]",
+   "Abs[nu] < Re[s]",
+   "Re[s] < 3/2"
+  ],
+  "cite": "SU 522(M20)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin Y_nu(x)",
+  "note": ""
+ },
+ {
+  "id": "GR17.43.18",
+  "gr": "17.43.18",
+  "page": 1181,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(BesselK[nu, x]), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(s - 2)*Gamma[s/2 + nu/2]*Gamma[s/2 - nu/2]"
+  ],
+  "conds": [
+   "Element[nu, Reals]",
+   "nu > 0",
+   "Re[s] > nu"
+  ],
+  "cite": "SU 522(M21)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin K_nu(x)",
+  "note": ""
+ },
+ {
+  "id": "GR17.43.19",
+  "gr": "17.43.19",
+  "page": 1181,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(StruveH[nu, x]), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(s - 1)*Tan[Pi*s/2 + Pi*nu/2]*Gamma[s/2 + nu/2]/Gamma[nu/2 - s/2 + 1]"
+  ],
+  "conds": [
+   "Element[nu, Reals]",
+   "-1 - nu < Re[s]",
+   "Re[s] < 3/2",
+   "Re[s] < 1 - nu"
+  ],
+  "cite": "SU 522(M22)",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin H_nu(x) Struve",
+  "note": ""
+ },
+ {
+  "id": "GR17.43.20",
+  "gr": "17.43.20",
+  "page": 1181,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(1/(a + x^n)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*n^(-1)*Csc[Pi*s/n]*a^(s/n - 1)"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "Element[n, Integers] && n >= 1",
+   "0 < Re[s] < n"
+  ],
+  "cite": "MS 453",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin 1/(a+x^n)",
+  "note": ""
+ },
+ {
+  "id": "GR17.43.21",
+  "gr": "17.43.21",
+  "page": 1181,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*((1 + a*x^h)^(-nu)), {x, 0, Infinity}]",
+  "rhs": [
+   "h^(-1)*a^(-s/h)*Beta[s/h, nu - s/h]"
+  ],
+  "conds": [
+   "h > 0",
+   "Abs[Arg[a]] < Pi",
+   "0 < Re[s]",
+   "Re[s] < h*Re[nu]"
+  ],
+  "cite": "MS 454",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin (1+a x^h)^-nu",
+  "note": ""
+ },
+ {
+  "id": "GR17.43.22",
+  "gr": "17.43.22",
+  "page": 1181,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*((1 - x^h)^(nu - 1)), {x, 0, 1}]",
+  "rhs": [
+   "h^(-1)*Beta[nu, s/h]"
+  ],
+  "conds": [
+   "h > 0",
+   "Re[nu] > 0",
+   "Re[s] > 0"
+  ],
+  "cite": "MS 454",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin (1-x^h)^(nu-1) on (0,1), 0 for x>1",
+  "note": "piecewise f is zero for x > 1, range truncated to (0,1); Re s > 0 implied"
+ },
+ {
+  "id": "GR17.43.23",
+  "gr": "17.43.23",
+  "page": 1181,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(Log[1 + a*x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*s^(-1)*a^(-s)*Csc[Pi*s]"
+  ],
+  "conds": [
+   "Abs[Arg[a]] < Pi",
+   "-1 < Re[s] < 0"
+  ],
+  "cite": "MS 454",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin ln(1+ax)",
+  "note": ""
+ },
+ {
+  "id": "GR17.43.24",
+  "gr": "17.43.24",
+  "page": 1181,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(ArcTan[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "-(1/2)*Pi*s^(-1)*Sec[Pi*s/2]"
+  ],
+  "conds": [
+   "-1 < Re[s] < 0"
+  ],
+  "cite": "MS 454",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin arctan x",
+  "note": ""
+ },
+ {
+  "id": "GR17.43.25",
+  "gr": "17.43.25",
+  "page": 1182,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(ArcCot[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "(1/2)*Pi*s^(-1)*Sec[Pi*s/2]"
+  ],
+  "conds": [
+   "0 < Re[s] < 1"
+  ],
+  "cite": "MS 454",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin arccot x",
+  "note": ""
+ },
+ {
+  "id": "GR17.43.26",
+  "gr": "17.43.26",
+  "page": 1182,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(Csch[a*x]), {x, 0, Infinity}]",
+  "rhs": [
+   "a^(-s)*2*(1 - 2^(-s))*Gamma[s]*Zeta[s]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[s] > 1"
+  ],
+  "cite": "MS 454",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin cosech(ax)",
+  "note": ""
+ },
+ {
+  "id": "GR17.43.27",
+  "gr": "17.43.27",
+  "page": 1182,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(Sech[a*x]^2), {x, 0, Infinity}]",
+  "rhs": [
+   "4*a^(-s)*(1 - 2^(2 - s))*Gamma[s]*2^(-s)*Zeta[s - 1]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[s] > 2"
+  ],
+  "cite": "MS 454",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin sech^2(ax)",
+  "note": ""
+ },
+ {
+  "id": "GR17.43.28",
+  "gr": "17.43.28",
+  "page": 1182,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(Csch[a*x]^2), {x, 0, Infinity}]",
+  "rhs": [
+   "4*a^(-s)*Gamma[s]*2^(-s)*Zeta[s - 1]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Re[s] > 2"
+  ],
+  "cite": "MS 454",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin cosech^2(ax)",
+  "note": ""
+ },
+ {
+  "id": "GR17.43.29",
+  "gr": "17.43.29",
+  "page": 1182,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*((x^2 + b^2)^(-nu/2)*BesselJ[nu, a*(x^2 + b^2)^(1/2)]), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(s/2 - 1)*a^(-s/2)*b^(s/2 - nu)*Gamma[s/2]*BesselJ[nu - s/2, a*b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "0 < Re[s]",
+   "Re[s] < 3/2 + Re[nu]"
+  ],
+  "cite": "ET I 328",
+  "edition_note": "11",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin (x^2+b^2)^(-nu/2) J_nu(a sqrt(x^2+b^2))",
+  "note": "a, b > 0 assumed (not printed)"
+ },
+ {
+  "id": "GR17.43.30",
+  "gr": "17.43.30",
+  "page": 1182,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*((a^2 - x^2)^(nu/2)*BesselJ[nu, b*(a^2 - x^2)^(1/2)]), {x, 0, a}]",
+  "rhs": [
+   "2^(s/2 - 1)*Gamma[s/2]*b^(-s/2)*a^(nu + s/2)*BesselJ[nu + s/2, a*b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[nu] > -1",
+   "Re[s] > 0"
+  ],
+  "cite": "MS 455",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin (a^2-x^2)^(nu/2) J_nu(b sqrt(a^2-x^2)) on (0,a)",
+  "note": "piecewise f is zero for x > a, range truncated to (0,a); a, b > 0 assumed"
+ },
+ {
+  "id": "GR17.43.31",
+  "gr": "17.43.31",
+  "page": 1182,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(s - 1)*((a^2 - x^2)^(-nu/2)*BesselJ[nu, b*(a^2 - x^2)^(1/2)]), {x, 0, a}]",
+  "rhs": [
+   "2^(1 - nu)*Gamma[nu]^(-1)*a^(s/2 - nu)*b^(-s/2)*LommelS1[nu - 1 + s/2, s/2 - nu, a*b]",
+   "2^(1 - nu)*Gamma[nu]^(-1)*a^(s/2 - nu)*b^(nu/2)*LommelS1[nu - 1 + s/2, s/2 - nu, a*b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[s] > 0"
+  ],
+  "cite": "MS 455",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin (a^2-x^2)^(-nu/2) J_nu(b sqrt(a^2-x^2)) on (0,a) = ... s_{nu-1+s/2, s/2-nu}(ab)",
+  "note": "exponent of b is garbled in print ('b^{,1/2 nu}'); two readings given. Range truncated to (0,a)",
+  "reason": "Lommel function s_{mu,nu}"
+ },
+ {
+  "id": "GR17.43.32",
+  "gr": "17.43.32",
+  "page": 1182,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*(BesselK[nu, alpha*x]), {x, 0, Infinity}]",
+  "rhs": [
+   "alpha^(-s)*2^(s - 2)*Gamma[s/2 - nu/2]*Gamma[s/2 + nu/2]"
+  ],
+  "conds": [
+   "alpha > 0",
+   "Re[s] > Abs[Re[nu]]"
+  ],
+  "cite": "MS 455",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin K_nu(alpha x)",
+  "note": "alpha > 0 assumed (not printed)"
+ },
+ {
+  "id": "GR17.43.33a",
+  "gr": "17.43.33",
+  "page": 1182,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*((beta*a^2 + x^2)^(-nu/2)*BesselK[nu, alpha*(beta*a^2 + x^2)^(1/2)]), {x, 0, Infinity}]",
+  "rhs": [
+   "alpha^(-s/2)*2^(s/2 - 1)*beta^(s/2 - nu)*Gamma[s/2]*BesselK[nu - s/2, alpha*beta]"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Re[beta] > 0",
+   "a > 0",
+   "Re[s] > 0"
+  ],
+  "cite": "MS 455",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin (beta a^2+x^2)^(-nu/2) K_nu(alpha sqrt(beta a^2+x^2)) [as printed]",
+  "note": "as printed 'beta a^2'; value has no a, likely misprint for beta^2, see 33b"
+ },
+ {
+  "id": "GR17.43.33b",
+  "gr": "17.43.33",
+  "page": 1182,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*((beta^2 + x^2)^(-nu/2)*BesselK[nu, alpha*(beta^2 + x^2)^(1/2)]), {x, 0, Infinity}]",
+  "rhs": [
+   "alpha^(-s/2)*2^(s/2 - 1)*beta^(s/2 - nu)*Gamma[s/2]*BesselK[nu - s/2, alpha*beta]"
+  ],
+  "conds": [
+   "Re[alpha] > 0",
+   "Re[beta] > 0",
+   "Re[s] > 0"
+  ],
+  "cite": "MS 455",
+  "edition_note": "",
+  "section": "17.43 Table of Mellin transforms",
+  "tex": "Mellin (beta^2+x^2)^(-nu/2) K_nu(alpha sqrt(beta^2+x^2)) [corrected]",
+  "note": "corrected integrand: beta a^2 -> beta^2"
+ }
+]

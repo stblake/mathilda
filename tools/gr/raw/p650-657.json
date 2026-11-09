@@ -1,0 +1,2108 @@
+[
+ {
+  "id": "GR4.522.8",
+  "gr": "4.522.8",
+  "page": 650,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*ArcSin[x]/((x^2 - Cos[lam]^2)*Sqrt[1 - x^2]), {x, 0, 1}]",
+  "rhs": [
+   "2/Sin[lam]*Sum[Sin[(2*k + 1)*lam]/(2*k + 1)^2, {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "0 < lam < Pi/2"
+  ],
+  "cite": "BI (243)(11)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 x arcsin x/((x^2-cos^2 lam) sqrt(1-x^2)) = 2/sin lam sum sin((2k+1)lam)/(2k+1)^2",
+  "note": "pole at x = cos(lam) inside (0,1): implied principal value; lam range implied",
+  "reason": "pole on integration path (implied PV)"
+ },
+ {
+  "id": "GR4.522.9",
+  "gr": "4.522.9",
+  "page": 650,
+  "status": "ok",
+  "lhs": "Integrate[x*ArcSin[k*x]/Sqrt[(1 - x^2)*(1 - k^2*x^2)], {x, 0, 1}]",
+  "rhs": [
+   "-Pi/(2*k)*Log[Sqrt[1 - k^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (239)(1)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 x arcsin kx/sqrt((1-x^2)(1-k^2x^2)) = -pi/(2k) ln k'",
+  "note": "k range implied"
+ },
+ {
+  "id": "GR4.522.10",
+  "gr": "4.522.10",
+  "page": 650,
+  "status": "ok",
+  "lhs": "Integrate[x*ArcCos[k*x]/Sqrt[(1 - x^2)*(1 - k^2*x^2)], {x, 0, 1}]",
+  "rhs": [
+   "Pi/(2*k)*Log[1 + k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (242)(1)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 x arccos kx/sqrt((1-x^2)(1-k^2x^2)) = pi/(2k) ln(1+k)",
+  "note": "k range implied"
+ },
+ {
+  "id": "GR4.523.1",
+  "gr": "4.523.1",
+  "page": 650,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n)*ArcSin[x], {x, 0, 1}]",
+  "rhs": [
+   "1/(2*n + 1)*(Pi/2 - 2^n*n!/(2*n + 1)!!)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (229)(1)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 x^(2n) arcsin x = 1/(2n+1)[pi/2 - 2^n n!/(2n+1)!!]",
+  "note": "n range implied"
+ },
+ {
+  "id": "GR4.523.2",
+  "gr": "4.523.2",
+  "page": 650,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n - 1)*ArcSin[x], {x, 0, 1}]",
+  "rhs": [
+   "Pi/(4*n)*(1 - (2*n - 1)!!/(2^n*n!))"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (229)(2)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 x^(2n-1) arcsin x = pi/(4n)[1 - (2n-1)!!/(2^n n!)]",
+  "note": "n range implied"
+ },
+ {
+  "id": "GR4.523.3",
+  "gr": "4.523.3",
+  "page": 650,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n)*ArcCos[x], {x, 0, 1}]",
+  "rhs": [
+   "2^n*n!/((2*n + 1)*(2*n + 1)!!)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (229)(4)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 x^(2n) arccos x = 2^n n!/((2n+1)(2n+1)!!)",
+  "note": "n range implied"
+ },
+ {
+  "id": "GR4.523.4",
+  "gr": "4.523.4",
+  "page": 650,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n - 1)*ArcCos[x], {x, 0, 1}]",
+  "rhs": [
+   "Pi/(4*n)*(2*n - 1)!!/(2^n*n!)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (229)(5)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 x^(2n-1) arccos x = pi/(4n) (2n-1)!!/(2^n n!)",
+  "note": "n range implied"
+ },
+ {
+  "id": "GR4.523.5",
+  "gr": "4.523.5",
+  "page": 650,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^n*ArcCos[x], {x, -1, 1}]",
+  "rhs": [
+   "Pi*2^n*n!/(2*n + 1)!!"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (254)(2)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_-1^1 (1-x^2)^n arccos x = pi 2^n n!/(2n+1)!!",
+  "note": "n range implied"
+ },
+ {
+  "id": "GR4.523.6",
+  "gr": "4.523.6",
+  "page": 650,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^(n - 1/2)*ArcCos[x], {x, -1, 1}]",
+  "rhs": [
+   "Pi^2/2*(2*n - 1)!!/(2^n*n!)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (254)(3)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_-1^1 (1-x^2)^(n-1/2) arccos x = pi^2/2 (2n-1)!!/(2^n n!)",
+  "note": "n range implied"
+ },
+ {
+  "id": "GR4.524.1",
+  "gr": "4.524.1",
+  "page": 650,
+  "status": "ok",
+  "lhs": "Integrate[ArcSin[x]^2/(x^2*Sqrt[1 - x^2]), {x, 0, 1}]",
+  "rhs": [
+   "Pi*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (243)(13)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 arcsin^2 x/(x^2 sqrt(1-x^2)) = pi ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR4.524.2",
+  "gr": "4.524.2",
+  "page": 650,
+  "status": "ok",
+  "lhs": "Integrate[ArcCos[x]^2/(Sqrt[1 - x^2])^3, {x, 0, 1}]",
+  "rhs": [
+   "Pi*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (244)(9)",
+  "edition_note": "",
+  "section": "4.52 Combinations of arcsines, arccosines, and powers",
+  "tex": "int_0^1 arccos^2 x/(sqrt(1-x^2))^3 = pi ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR4.531.1a",
+  "gr": "4.531.1a",
+  "page": 650,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[x]/x, {x, 0, 1}]",
+  "rhs": [
+   "Catalan"
+  ],
+  "conds": [],
+  "cite": "FI II 482, BI (253)(8)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 arctan x/x = G",
+  "note": ""
+ },
+ {
+  "id": "GR4.531.1b",
+  "gr": "4.531.1b",
+  "page": 650,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[x]/x, {x, 1, Infinity}]",
+  "rhs": [
+   "Catalan"
+  ],
+  "conds": [],
+  "cite": "FI II 482, BI (253)(8)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_1^inf arccot x/x = G",
+  "note": ""
+ },
+ {
+  "id": "GR4.531.2a",
+  "gr": "4.531.2a",
+  "page": 650,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[x]/(1 + x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*Log[2] + Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (248)(6, 7)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf arccot x/(1+x) = pi/4 ln2 + G",
+  "note": ""
+ },
+ {
+  "id": "GR4.531.2b",
+  "gr": "4.531.2b",
+  "page": 650,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[ArcCot[x]/(1 - x), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/4*Log[2] + Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (248)(6, 7)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf arccot x/(1-x) = -pi/4 ln2 + G",
+  "note": "pole at x = 1: implied principal value",
+  "reason": "pole on integration path (implied PV)"
+ },
+ {
+  "id": "GR4.531.3",
+  "gr": "4.531.3",
+  "page": 650,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[x]/(x*(1 + x)), {x, 0, 1}]",
+  "rhs": [
+   "-Pi/8*Log[2] + Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (235)(11)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 arccot x/(x(1+x)) = -pi/8 ln2 + G",
+  "note": "as printed the integral diverges at x=0 (arccot 0 = pi/2); see 4.531.3b"
+ },
+ {
+  "id": "GR4.531.3b",
+  "gr": "4.531.3b",
+  "page": 650,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[x]/(x*(1 + x)), {x, 0, 1}]",
+  "rhs": [
+   "-Pi/8*Log[2] + Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (235)(11)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 arctan x/(x(1+x)) = -pi/8 ln2 + G",
+  "note": "corrected integrand: arccot -> arctan (printed form diverges at 0)"
+ },
+ {
+  "id": "GR4.531.4",
+  "gr": "4.531.4",
+  "page": 650,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[ArcTan[x]/(1 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (248)(2)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf arctan x/(1-x^2) = -G",
+  "note": "pole at x = 1: implied principal value",
+  "reason": "pole on integration path (implied PV)"
+ },
+ {
+  "id": "GR4.531.5",
+  "gr": "4.531.5",
+  "page": 651,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[q*x]/(1 + p*x)^2, {x, 0, 1}]",
+  "rhs": [
+   "1/2*q/(p^2 + q^2)*Log[(1 + p)^2/(1 + q^2)] + (q^2 - p)/((1 + p)*(p^2 + q^2))*ArcTan[q]"
+  ],
+  "conds": [
+   "p > -1",
+   "Element[q, Reals]"
+  ],
+  "cite": "BI (243)(7)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 arctan qx/(1+px)^2 = 1/2 q/(p^2+q^2) ln((1+p)^2/(1+q^2)) + (q^2-p)/((1+p)(p^2+q^2)) arctan q",
+  "note": "q real implied"
+ },
+ {
+  "id": "GR4.531.6",
+  "gr": "4.531.6",
+  "page": 651,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[q*x]/(1 + p*x)^2, {x, 0, 1}]",
+  "rhs": [
+   "1/2*q/(p^2 + q^2)*Log[(1 + q^2)/(1 + p)^2] + p/(p^2 + q^2)*ArcTan[q] + 1/(1 + p)*ArcCot[q]"
+  ],
+  "conds": [
+   "p > -1",
+   "q > 0"
+  ],
+  "cite": "BI (234)(10)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 arccot qx/(1+px)^2 = 1/2 q/(p^2+q^2) ln((1+q^2)/(1+p)^2) + p/(p^2+q^2) arctan q + 1/(1+p) arccot q",
+  "note": "q > 0 added (implied; avoids arccot branch convention for q < 0)"
+ },
+ {
+  "id": "GR4.531.7",
+  "gr": "4.531.7",
+  "page": 651,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[x]/(x*(1 + x^2)), {x, 0, 1}]",
+  "rhs": [
+   "Pi/8*Log[2] + Catalan/2"
+  ],
+  "conds": [],
+  "cite": "BI (235)(12)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 arctan x/(x(1+x^2)) = pi/8 ln2 + G/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.531.8",
+  "gr": "4.531.8",
+  "page": 651,
+  "status": "ok",
+  "lhs": "Integrate[x*ArcTan[x]/(1 + x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/16"
+  ],
+  "conds": [],
+  "cite": "BI (248)(3)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf x arctan x/(1+x^4) = pi^2/16",
+  "note": ""
+ },
+ {
+  "id": "GR4.531.9",
+  "gr": "4.531.9",
+  "page": 651,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*ArcTan[x]/(1 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/8*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (248)(4)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf x arctan x/(1-x^4) = -pi/8 ln2",
+  "note": "pole at x = 1: implied principal value",
+  "reason": "pole on integration path (implied PV)"
+ },
+ {
+  "id": "GR4.531.10",
+  "gr": "4.531.10",
+  "page": 651,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*ArcCot[x]/(1 - x^4), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/8*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (248)(12)",
+  "edition_note": "11",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf x arccot x/(1-x^4) = pi/8 ln2",
+  "note": "pole at x = 1: implied principal value",
+  "reason": "pole on integration path (implied PV)"
+ },
+ {
+  "id": "GR4.531.11a",
+  "gr": "4.531.11a",
+  "page": 651,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[x]/(x*Sqrt[1 + x^2]), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (251)(3, 10)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf arccot x/(x sqrt(1+x^2)) = 2G",
+  "note": "as printed the integral diverges at x=0; see 4.531.11c"
+ },
+ {
+  "id": "GR4.531.11b",
+  "gr": "4.531.11b",
+  "page": 651,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[x]/Sqrt[1 + x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "2*Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (251)(3, 10)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf arccot x/sqrt(1+x^2) = 2G",
+  "note": ""
+ },
+ {
+  "id": "GR4.531.11c",
+  "gr": "4.531.11c",
+  "page": 651,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[x]/(x*Sqrt[1 + x^2]), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (251)(3, 10)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf arctan x/(x sqrt(1+x^2)) = 2G",
+  "note": "corrected integrand of 4.531.11a: arccot -> arctan (printed form diverges at 0)"
+ },
+ {
+  "id": "GR4.531.12",
+  "gr": "4.531.12",
+  "page": 651,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[x]/(x*Sqrt[1 - x^2]), {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*Log[1 + Sqrt[2]]"
+  ],
+  "conds": [],
+  "cite": "FI II 694",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 arctan x/(x sqrt(1-x^2)) = pi/2 ln(1+sqrt2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.531.13",
+  "gr": "4.531.13",
+  "page": 651,
+  "status": "ok",
+  "lhs": "Integrate[x*ArcTan[x]/Sqrt[(1 + x^2)*(1 + (1 - k^2)*x^2)], {x, 0, 1}]",
+  "rhs": [
+   "1/k^2*(MatharF2[Pi/4, k] - Pi/(2*Sqrt[2*(1 + (1 - k^2))]))"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (294)(14)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 x arctan x/sqrt((1+x^2)(1+k'^2x^2)) = 1/k^2 [F(pi/4,k) - pi/(2 sqrt(2(1+k'^2)))]",
+  "note": "k'^2 = 1 - k^2 substituted; k range implied"
+ },
+ {
+  "id": "GR4.532.1",
+  "gr": "4.532.1",
+  "page": 651,
+  "status": "ok",
+  "lhs": "Integrate[x^p*ArcTan[x], {x, 0, 1}]",
+  "rhs": [
+   "1/(2*(p + 1))*(Pi/2 - (PolyGamma[p/4 + 1] - PolyGamma[p/4 + 1/2])/2)"
+  ],
+  "conds": [
+   "p > -2"
+  ],
+  "cite": "BI (229)(7)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 x^p arctan x = 1/(2(p+1)) [pi/2 - beta(p/2+1)]",
+  "note": "beta(z) = (psi((z+1)/2) - psi(z/2))/2 with z = p/2+1; p = -1 is a removable point"
+ },
+ {
+  "id": "GR4.532.2",
+  "gr": "4.532.2",
+  "page": 651,
+  "status": "ok",
+  "lhs": "Integrate[x^p*ArcTan[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*(p + 1))*Csc[p*Pi/2]"
+  ],
+  "conds": [
+   "-2 < p < -1"
+  ],
+  "cite": "BI (246)(1)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf x^p arctan x = pi/(2(p+1)) cosec(p pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.532.3",
+  "gr": "4.532.3",
+  "page": 651,
+  "status": "ok",
+  "lhs": "Integrate[x^p*ArcCot[x], {x, 0, 1}]",
+  "rhs": [
+   "1/(2*(p + 1))*(Pi/2 + (PolyGamma[p/4 + 1] - PolyGamma[p/4 + 1/2])/2)"
+  ],
+  "conds": [
+   "p > -1"
+  ],
+  "cite": "BI (229)(8)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 x^p arccot x = 1/(2(p+1)) [pi/2 + beta(p/2+1)]",
+  "note": "beta(z) = (psi((z+1)/2) - psi(z/2))/2 with z = p/2+1"
+ },
+ {
+  "id": "GR4.532.4",
+  "gr": "4.532.4",
+  "page": 651,
+  "status": "ok",
+  "lhs": "Integrate[x^p*ArcCot[x], {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/(2*(p + 1))*Csc[p*Pi/2]"
+  ],
+  "conds": [
+   "-1 < p < 0"
+  ],
+  "cite": "BI (246)(2)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf x^p arccot x = -pi/(2(p+1)) cosec(p pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.532.5",
+  "gr": "4.532.5",
+  "page": 651,
+  "status": "ok",
+  "lhs": "Integrate[(x^p/(1 + x^(2*p)))^(2*q)*ArcTan[x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi^3]/(2^(2*q + 2)*p)*Gamma[q]/Gamma[q + 1/2]"
+  ],
+  "conds": [
+   "q > 0",
+   "p > 0"
+  ],
+  "cite": "BI (250)(10)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf (x^p/(1+x^(2p)))^(2q) arctan x dx/x = sqrt(pi^3)/(2^(2q+2) p) Gamma(q)/Gamma(q+1/2)",
+  "note": "p > 0 added (implied by 1/p in value)"
+ },
+ {
+  "id": "GR4.533.1",
+  "gr": "4.533.1",
+  "page": 651,
+  "status": "ok",
+  "lhs": "Integrate[1 - x*ArcCot[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4"
+  ],
+  "conds": [],
+  "cite": "BI (246)(3)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf (1 - x arccot x) = pi/4",
+  "note": ""
+ },
+ {
+  "id": "GR4.533.2",
+  "gr": "4.533.2",
+  "page": 651,
+  "status": "ok",
+  "lhs": "Integrate[(Pi/4 - ArcTan[x])/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "-Pi/8*Log[2] + Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (232)(2)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 (pi/4 - arctan x)/(1-x) = -pi/8 ln2 + G",
+  "note": ""
+ },
+ {
+  "id": "GR4.533.3",
+  "gr": "4.533.3",
+  "page": 652,
+  "status": "ok",
+  "lhs": "Integrate[(Pi/4 - ArcTan[x])*(1 + x)/((1 - x)*(1 + x^2)), {x, 0, 1}]",
+  "rhs": [
+   "Pi/8*Log[2] + Catalan/2"
+  ],
+  "conds": [],
+  "cite": "BI (235)(25)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 (pi/4 - arctan x)(1+x)/((1-x)(1+x^2)) = pi/8 ln2 + G/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.533.4",
+  "gr": "4.533.4",
+  "page": 652,
+  "status": "ok",
+  "lhs": "Integrate[(x*ArcCot[x] - ArcTan[x]/x)/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "-Pi/4*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (232)(1)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 (x arccot x - arctan x/x)/(1-x^2) = -pi/4 ln2",
+  "note": ""
+ },
+ {
+  "id": "GR4.534a",
+  "gr": "4.534a",
+  "page": 652,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[x]^2/(x^2*Sqrt[1 + x^2]), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi^2/4 + 4*Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (251)(9, 17)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf arctan^2 x/(x^2 sqrt(1+x^2)) = -pi^2/4 + 4G",
+  "note": ""
+ },
+ {
+  "id": "GR4.534b",
+  "gr": "4.534b",
+  "page": 652,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[x]^2*x/Sqrt[1 + x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi^2/4 + 4*Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (251)(9, 17)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf arccot^2 x x/sqrt(1+x^2) = -pi^2/4 + 4G",
+  "note": ""
+ },
+ {
+  "id": "GR4.535.1",
+  "gr": "4.535.1",
+  "page": 652,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[p*x]/(1 + p^2*x), {x, 0, 1}]",
+  "rhs": [
+   "1/(2*p^2)*ArcTan[p]*Log[1 + p^2]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (231)(19)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 arctan px/(1+p^2 x) = 1/(2p^2) arctan p ln(1+p^2)",
+  "note": "p > 0 added (implied)"
+ },
+ {
+  "id": "GR4.535.2",
+  "gr": "4.535.2",
+  "page": 652,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[p*x]/(1 + p^2*x), {x, 0, 1}]",
+  "rhs": [
+   "1/p^2*(Pi/4 + 1/2*ArcCot[p])*Log[1 + p^2]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (231)(24)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 arccot px/(1+p^2 x) = 1/p^2 {pi/4 + 1/2 arccot p} ln(1+p^2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.535.3",
+  "gr": "4.535.3",
+  "page": 652,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[q*x]/(p + x)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "-q/(1 + p^2*q^2)*(Log[p*q] - Pi/2*p*q)"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (249)(1)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf arctan qx/(p+x)^2 = -q/(1+p^2q^2) (ln pq - pi/2 pq)",
+  "note": ""
+ },
+ {
+  "id": "GR4.535.4",
+  "gr": "4.535.4",
+  "page": 652,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[q*x]/(p + x)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "q/(1 + p^2*q^2)*(Log[p*q] + Pi/(2*p*q))"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (249)(8)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf arccot qx/(p+x)^2 = q/(1+p^2q^2) (ln pq + pi/(2pq))",
+  "note": ""
+ },
+ {
+  "id": "GR4.535.5",
+  "gr": "4.535.5",
+  "page": 652,
+  "status": "ok",
+  "lhs": "Integrate[x*ArcCot[p*x]/(q^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Log[(1 + p*q)/(p*q)]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (248)(9)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf x arccot px/(q^2+x^2) = pi/2 ln((1+pq)/(pq))",
+  "note": ""
+ },
+ {
+  "id": "GR4.535.6",
+  "gr": "4.535.6",
+  "page": 652,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*ArcCot[p*x]/(x^2 - q^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*Log[(1 + p^2*q^2)/(p^2*q^2)]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (248)(10)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf x arccot px/(x^2-q^2) = pi/4 ln((1+p^2q^2)/(p^2q^2))",
+  "note": "pole at x = q: implied principal value",
+  "reason": "pole on integration path (implied PV)"
+ },
+ {
+  "id": "GR4.535.7",
+  "gr": "4.535.7",
+  "page": 652,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[p*x]/(x*(1 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Log[1 + p]"
+  ],
+  "conds": [
+   "p >= 0"
+  ],
+  "cite": "FI II 745",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf arctan px/(x(1+x^2)) = pi/2 ln(1+p)",
+  "note": ""
+ },
+ {
+  "id": "GR4.535.8",
+  "gr": "4.535.8",
+  "page": 652,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[ArcTan[p*x]/(x*(1 - x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*Log[1 + p^2]"
+  ],
+  "conds": [
+   "p >= 0"
+  ],
+  "cite": "BI (250)(6)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf arctan px/(x(1-x^2)) = pi/4 ln(1+p^2)",
+  "note": "pole at x = 1: implied principal value",
+  "reason": "pole on integration path (implied PV)"
+ },
+ {
+  "id": "GR4.535.9",
+  "gr": "4.535.9",
+  "page": 652,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[q*x]/(x*(p^2 + x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*p^2)*Log[1 + p*q]"
+  ],
+  "conds": [
+   "p > 0",
+   "q >= 0"
+  ],
+  "cite": "BI (250)(3)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf arctan qx/(x(p^2+x^2)) = pi/(2p^2) ln(1+pq)",
+  "note": ""
+ },
+ {
+  "id": "GR4.535.10",
+  "gr": "4.535.10",
+  "page": 652,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[ArcTan[q*x]/(x*(1 - p^2*x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*Log[(p^2 + q^2)/p^2]"
+  ],
+  "conds": [
+   "p >= 0"
+  ],
+  "cite": "BI (250)(6)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf arctan qx/(x(1-p^2x^2)) = pi/4 ln((p^2+q^2)/p^2)",
+  "note": "pole at x = 1/p: implied principal value",
+  "reason": "pole on integration path (implied PV)"
+ },
+ {
+  "id": "GR4.535.11",
+  "gr": "4.535.11",
+  "page": 652,
+  "status": "ok",
+  "lhs": "Integrate[x*ArcTan[q*x]/(p^2 + x^2)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*q/(4*p*(1 + p*q))"
+  ],
+  "conds": [
+   "p > 0",
+   "q >= 0"
+  ],
+  "cite": "BI (252)(12)a",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf x arctan qx/(p^2+x^2)^2 = pi q/(4p(1+pq))",
+  "note": ""
+ },
+ {
+  "id": "GR4.535.12",
+  "gr": "4.535.12",
+  "page": 652,
+  "status": "ok",
+  "lhs": "Integrate[x*ArcCot[q*x]/(p^2 + x^2)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(4*p^2*(1 + p*q))"
+  ],
+  "conds": [
+   "p > 0",
+   "q >= 0"
+  ],
+  "cite": "BI (252)(20)a",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf x arccot qx/(p^2+x^2)^2 = pi/(4p^2(1+pq))",
+  "note": ""
+ },
+ {
+  "id": "GR4.535.13",
+  "gr": "4.535.13",
+  "page": 652,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[q*x]/(x*Sqrt[1 - x^2]), {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*Log[q + Sqrt[1 + q^2]]"
+  ],
+  "conds": [
+   "Element[q, Reals]"
+  ],
+  "cite": "BI (244)(11)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 arctan qx/(x sqrt(1-x^2)) = pi/2 ln(q + sqrt(1+q^2))",
+  "note": "q real implied"
+ },
+ {
+  "id": "GR4.535.14a",
+  "gr": "4.535.14a",
+  "page": 652,
+  "status": "ok",
+  "lhs": "Integrate[x*ArcTan[alpha*x]/((x^2 + beta^2)*(x^2 + gamma^2)), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi/(beta^2 - gamma^2)*Log[(1 + Abs[alpha*beta])/(1 + Abs[alpha*gamma])]*Sign[alpha]"
+  ],
+  "conds": [
+   "Element[alpha, Reals]",
+   "Element[beta, Reals]",
+   "Element[gamma, Reals]"
+  ],
+  "cite": "",
+  "edition_note": "9",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_-inf^inf x arctan(alpha x)/((x^2+beta^2)(x^2+gamma^2)) = pi/(beta^2-gamma^2) ln((1+|alpha beta|)/(1+|alpha gamma|)) sign(alpha)",
+  "note": "case beta != gamma"
+ },
+ {
+  "id": "GR4.535.14b",
+  "gr": "4.535.14b",
+  "page": 652,
+  "status": "ok",
+  "lhs": "Integrate[x*ArcTan[alpha*x]/(x^2 + beta^2)^2, {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*alpha/(2*Abs[beta]*(1 + Abs[alpha*beta]))"
+  ],
+  "conds": [
+   "Element[alpha, Reals]",
+   "Element[beta, Reals]"
+  ],
+  "cite": "",
+  "edition_note": "9",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_-inf^inf x arctan(alpha x)/(x^2+beta^2)^2 = pi alpha/(2|beta|(1+|alpha beta|))",
+  "note": "case beta = gamma substituted"
+ },
+ {
+  "id": "GR4.535.15a",
+  "gr": "4.535.15a",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[x*ArcTan[alpha/x]/((x^2 + beta^2)*(x^2 + gamma^2)), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi/(beta^2 - gamma^2)*Log[(1 + Abs[alpha/gamma])/(1 + Abs[alpha/beta])]*Sign[alpha]"
+  ],
+  "conds": [
+   "Element[alpha, Reals]",
+   "Element[beta, Reals]",
+   "Element[gamma, Reals]"
+  ],
+  "cite": "",
+  "edition_note": "9",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_-inf^inf x arctan(alpha/x)/((x^2+beta^2)(x^2+gamma^2)) = pi/(beta^2-gamma^2) ln((1+|alpha/gamma|)/(1+|alpha/beta|)) sign(alpha)",
+  "note": "case beta != gamma"
+ },
+ {
+  "id": "GR4.535.15b",
+  "gr": "4.535.15b",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[x*ArcTan[alpha/x]/(x^2 + beta^2)^2, {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*alpha/(2*beta^2*(Abs[beta] + Abs[alpha]))"
+  ],
+  "conds": [
+   "Element[alpha, Reals]",
+   "Element[beta, Reals]"
+  ],
+  "cite": "",
+  "edition_note": "9",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_-inf^inf x arctan(alpha/x)/(x^2+beta^2)^2 = pi alpha/(2 beta^2(|beta|+|alpha|))",
+  "note": "case beta = gamma substituted"
+ },
+ {
+  "id": "GR4.536.1",
+  "gr": "4.536.1",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[q*x]*ArcSin[x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*q*Pi*Log[(1 + Sqrt[1 + q^2])/Sqrt[1 + q^2]] + Pi/2*Log[q + Sqrt[1 + q^2]] - Pi/2*ArcTan[q]"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "BI (230)(7)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf arctan qx arcsin x dx/x^2 = 1/2 q pi ln((1+sqrt(1+q^2))/sqrt(1+q^2)) + pi/2 ln(q+sqrt(1+q^2)) - pi/2 arctan q",
+  "note": "upper limit printed as infinity, where arcsin x is complex for x > 1; see 4.536.1b. q > 0 added"
+ },
+ {
+  "id": "GR4.536.1b",
+  "gr": "4.536.1b",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[q*x]*ArcSin[x]/x^2, {x, 0, 1}]",
+  "rhs": [
+   "1/2*q*Pi*Log[(1 + Sqrt[1 + q^2])/Sqrt[1 + q^2]] + Pi/2*Log[q + Sqrt[1 + q^2]] - Pi/2*ArcTan[q]"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "BI (230)(7)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 arctan qx arcsin x dx/x^2 = ...",
+  "note": "corrected integrand: upper limit infinity -> 1 (arcsin domain)"
+ },
+ {
+  "id": "GR4.536.2",
+  "gr": "4.536.2",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[(ArcTan[p*x] - ArcTan[q*x])/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Log[p/q]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "FI II 635",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf (arctan px - arctan qx)/x = pi/2 ln(p/q)",
+  "note": ""
+ },
+ {
+  "id": "GR4.536.3",
+  "gr": "4.536.3",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[p*x]*ArcTan[q*x]/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Log[(p + q)^(p + q)/(p^p*q^q)]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "FI II 745",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf arctan px arctan qx/x^2 = pi/2 ln((p+q)^(p+q)/(p^p q^q))",
+  "note": ""
+ },
+ {
+  "id": "GR4.537.1",
+  "gr": "4.537.1",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[Sqrt[1 - x^2]]/(1 - x^2*Cos[lam]^2), {x, 0, 1}]",
+  "rhs": [
+   "Pi/(2*Cos[lam])*Log[Cos[(Pi - 4*lam)/8]*Csc[(Pi + 4*lam)/8]]"
+  ],
+  "conds": [
+   "0 < lam < Pi/2"
+  ],
+  "cite": "BI (245)(9)",
+  "edition_note": "8",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 arctan sqrt(1-x^2) dx/(1-x^2 cos^2 lam) = pi/(2 cos lam) ln[cos((pi-4lam)/8) cosec((pi+4lam)/8)]",
+  "note": "lam range implied"
+ },
+ {
+  "id": "GR4.537.2",
+  "gr": "4.537.2",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[p*Sqrt[1 - x^2]]/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "1/2*Pi*Log[p + Sqrt[1 + p^2]]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (245)(10)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 arctan(p sqrt(1-x^2)) dx/(1-x^2) = pi/2 ln(p+sqrt(1+p^2))",
+  "note": ""
+ },
+ {
+  "id": "GR4.537.3",
+  "gr": "4.537.3",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[Tan[lam]*Sqrt[1 - k^2*x^2]]*Sqrt[(1 - x^2)/(1 - k^2*x^2)], {x, 0, 1}]",
+  "rhs": [
+   "Pi/(2*k^2)*(MatharE2[lam, k] - (1 - k^2)*MatharF2[gamma, k]) - Pi/(2*k^2)*Cot[gamma]*(1 - Sqrt[1 - k^2*Sin[gamma]^2])",
+   "Pi/(2*k^2)*(MatharE2[lam, k] - (1 - k^2)*MatharF2[lam, k]) - Pi/(2*k^2)*Cot[lam]*(1 - Sqrt[1 - k^2*Sin[lam]^2])"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "0 < lam < Pi/2",
+   "0 < gamma < Pi/2"
+  ],
+  "cite": "BI (245)(12)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 arctan(tan lam sqrt(1-k^2x^2)) sqrt((1-x^2)/(1-k^2x^2)) = pi/(2k^2)[E(lam,k) - k'^2 F(gamma,k)] - pi/(2k^2) cot gamma (1 - sqrt(1-k^2 sin^2 gamma))",
+  "note": "printed value uses gamma, absent from the integral; second candidate replaces gamma by lam (cf. 4.577.2). k'^2 = 1-k^2 substituted"
+ },
+ {
+  "id": "GR4.537.4",
+  "gr": "4.537.4",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[Tan[lam]*Sqrt[1 - k^2*x^2]]*Sqrt[(1 - k^2*x^2)/(1 - x^2)], {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*MatharE2[lam, k] - Pi/2*Cot[lam]*(1 - Sqrt[1 - k^2*Sin[lam]^2])"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "0 < lam < Pi/2"
+  ],
+  "cite": "BI (245)(11)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 arctan(tan lam sqrt(1-k^2x^2)) sqrt((1-k^2x^2)/(1-x^2)) = pi/2 E(lam,k) - pi/2 cot lam (1 - sqrt(1-k^2 sin^2 lam))",
+  "note": "parameter ranges implied"
+ },
+ {
+  "id": "GR4.537.5",
+  "gr": "4.537.5",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[Tan[lam]*Sqrt[1 - k^2*x^2]]/Sqrt[(1 - x^2)*(1 - k^2*x^2)], {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*MatharF2[lam, k]"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "0 < lam < Pi/2"
+  ],
+  "cite": "BI (245)(13)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 arctan(tan lam sqrt(1-k^2x^2))/sqrt((1-x^2)(1-k^2x^2)) = pi/2 F(lam,k)",
+  "note": "parameter ranges implied"
+ },
+ {
+  "id": "GR4.538.1a",
+  "gr": "4.538.1a",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[x^2]/(1 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/8"
+  ],
+  "conds": [],
+  "cite": "BI (252)(10, 11), BI (252)(18, 19)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf ArcTan[x^2]/(1+x^2) = pi^2/8",
+  "note": ""
+ },
+ {
+  "id": "GR4.538.1b",
+  "gr": "4.538.1b",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[x^3]/(1 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/8"
+  ],
+  "conds": [],
+  "cite": "BI (252)(10, 11), BI (252)(18, 19)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf ArcTan[x^3]/(1+x^2) = pi^2/8",
+  "note": ""
+ },
+ {
+  "id": "GR4.538.1c",
+  "gr": "4.538.1c",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[x^2]/(1 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/8"
+  ],
+  "conds": [],
+  "cite": "BI (252)(10, 11), BI (252)(18, 19)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf ArcCot[x^2]/(1+x^2) = pi^2/8",
+  "note": ""
+ },
+ {
+  "id": "GR4.538.1d",
+  "gr": "4.538.1d",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[x^3]/(1 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/8"
+  ],
+  "conds": [],
+  "cite": "BI (252)(10, 11), BI (252)(18, 19)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf ArcCot[x^3]/(1+x^2) = pi^2/8",
+  "note": ""
+ },
+ {
+  "id": "GR4.538.2",
+  "gr": "4.538.2",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)/x^2*ArcTan[x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*(Sqrt[2] - 1)"
+  ],
+  "conds": [],
+  "cite": "BI (244)(10)a",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf (1-x^2)/x^2 arctan x^2 = pi/2 (sqrt2 - 1)",
+  "note": "as printed the integral diverges at infinity; see 4.538.2b"
+ },
+ {
+  "id": "GR4.538.2b",
+  "gr": "4.538.2b",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)/x^2*ArcTan[x^2], {x, 0, 1}]",
+  "rhs": [
+   "Pi/2*(Sqrt[2] - 1)"
+  ],
+  "conds": [],
+  "cite": "BI (244)(10)a",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^1 (1-x^2)/x^2 arctan x^2 = pi/2 (sqrt2 - 1)",
+  "note": "corrected integrand: upper limit infinity -> 1 (printed form diverges)"
+ },
+ {
+  "id": "GR4.539",
+  "gr": "4.539",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[x^(s - 1)*ArcTan[a*E^(-x)], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-s - 1)*Gamma[s]*a*LerchPhi[-a^2, s + 1, 1/2]"
+  ],
+  "conds": [
+   "Re[s] > 0",
+   "0 < a < 1"
+  ],
+  "cite": "ET I 222(47)",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf x^(s-1) arctan(a e^-x) = 2^(-s-1) Gamma(s) a Phi(-a^2, s+1, 1/2)",
+  "note": "conditions Re s > 0, |a| < 1 implied (none printed)"
+ },
+ {
+  "id": "GR4.541",
+  "gr": "4.541",
+  "page": 653,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[p*Sin[q*x]/(1 + p*Cos[q*x])]*x/(1 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Log[1 + p*E^(-q)]"
+  ],
+  "conds": [
+   "p > -E^q",
+   "q > 0"
+  ],
+  "cite": "BI (341)(14)a",
+  "edition_note": "",
+  "section": "4.53-4.54 Combinations of arctangents, arccotangents, and powers",
+  "tex": "int_0^inf arctan(p sin qx/(1+p cos qx)) x/(1+x^2) = pi/2 ln(1 + p e^-q)",
+  "note": "q > 0 added (implied)"
+ },
+ {
+  "id": "GR4.551.1",
+  "gr": "4.551.1",
+  "page": 654,
+  "status": "ok",
+  "lhs": "Integrate[ArcSin[x]*E^(-b*x), {x, 0, 1}]",
+  "rhs": [
+   "Pi/(2*b)*(BesselI[0, b] - StruveL[0, b]) - Pi*E^(-b)/(2*b)"
+  ],
+  "conds": [],
+  "cite": "ET I 160(1)",
+  "edition_note": "9",
+  "section": "4.55 Combinations of inverse trigonometric functions and exponentials",
+  "tex": "int_0^1 arcsin x e^-bx = pi/(2b)[I0(b) - L0(b)] - pi e^-b/(2b)",
+  "note": ""
+ },
+ {
+  "id": "GR4.551.2",
+  "gr": "4.551.2",
+  "page": 654,
+  "status": "ok",
+  "lhs": "Integrate[x*ArcSin[x]*E^(-b*x), {x, 0, 1}]",
+  "rhs": [
+   "Pi/(2*b^2)*(StruveL[0, b] - BesselI[0, b] + b*StruveL[1, b] - b*BesselI[1, b]) + 1/b"
+  ],
+  "conds": [],
+  "cite": "ET I 161(2)",
+  "edition_note": "",
+  "section": "4.55 Combinations of inverse trigonometric functions and exponentials",
+  "tex": "int_0^1 x arcsin x e^-bx = pi/(2b^2)[L0(b) - I0(b) + b L1(b) - b I1(b)] + 1/b",
+  "note": ""
+ },
+ {
+  "id": "GR4.551.3",
+  "gr": "4.551.3",
+  "page": 654,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[x/a]*E^(-b*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/b*(CosIntegral[a*b]*Sin[a*b] - (SinIntegral[a*b] - Pi/2)*Cos[a*b])"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 161(3)",
+  "edition_note": "9",
+  "section": "4.55 Combinations of inverse trigonometric functions and exponentials",
+  "tex": "int_0^inf arctan(x/a) e^-bx = 1/b [ci(ab) sin(ab) - si(ab) cos(ab)]",
+  "note": "a > 0 added (implied)"
+ },
+ {
+  "id": "GR4.551.4",
+  "gr": "4.551.4",
+  "page": 654,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[x/a]*E^(-b*x), {x, 0, Infinity}]",
+  "rhs": [
+   "1/b*(Pi/2 - CosIntegral[a*b]*Sin[a*b] + (SinIntegral[a*b] - Pi/2)*Cos[a*b])"
+  ],
+  "conds": [
+   "Re[b] > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 161(4)",
+  "edition_note": "9",
+  "section": "4.55 Combinations of inverse trigonometric functions and exponentials",
+  "tex": "int_0^inf arccot(x/a) e^-bx = 1/b [pi/2 - ci(ab) sin(ab) + si(ab) cos(ab)]",
+  "note": "a > 0 added (implied)"
+ },
+ {
+  "id": "GR4.552",
+  "gr": "4.552",
+  "page": 654,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[x/q]/(E^(2*Pi*x) - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*(Log[Gamma[q]] - (q - 1/2)*Log[q] + q - 1/2*Log[2*Pi])"
+  ],
+  "conds": [
+   "q > 0"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "4.55 Combinations of inverse trigonometric functions and exponentials",
+  "tex": "int_0^inf arctan(x/q)/(e^(2 pi x)-1) = 1/2[ln Gamma(q) - (q-1/2) ln q + q - 1/2 ln 2pi]",
+  "note": ""
+ },
+ {
+  "id": "GR4.553",
+  "gr": "4.553",
+  "page": 654,
+  "status": "ok",
+  "lhs": "Integrate[(2/Pi*ArcCot[x] - E^(-p*x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "EulerGamma + Log[p]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "NT 66(12)",
+  "edition_note": "",
+  "section": "4.55 Combinations of inverse trigonometric functions and exponentials",
+  "tex": "int_0^inf (2/pi arccot x - e^-px) dx/x = C + ln p",
+  "note": ""
+ },
+ {
+  "id": "GR4.561a",
+  "gr": "4.561a",
+  "page": 654,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[E^(-x)]/Cosh[p*x]^(2*q), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi^3]/(4*p)*Gamma[q]/Gamma[q + 1/2]"
+  ],
+  "conds": [
+   "q > 0",
+   "p > 0"
+  ],
+  "cite": "LI (282)(10)",
+  "edition_note": "",
+  "section": "4.56 A combination of the arctangent and a hyperbolic function",
+  "tex": "int_-inf^inf arctan e^-x / cosh^(2q) px = sqrt(pi^3)/(4p) Gamma(q)/Gamma(q+1/2)",
+  "note": "p > 0 added (implied by 1/p)"
+ },
+ {
+  "id": "GR4.561b",
+  "gr": "4.561b",
+  "page": 654,
+  "status": "SKIP-GENERIC",
+  "lhs": "1/2*Integrate[PiCapital[x]/Cosh[p*x]^(2*q), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi^3]/(4*p)*Gamma[q]/Gamma[q + 1/2]"
+  ],
+  "conds": [
+   "q > 0",
+   "p > 0"
+  ],
+  "cite": "LI (282)(10)",
+  "edition_note": "",
+  "section": "4.56 A combination of the arctangent and a hyperbolic function",
+  "tex": "1/2 int_-inf^inf Pi(x)/cosh^(2q) px = sqrt(pi^3)/(4p) Gamma(q)/Gamma(q+1/2)",
+  "note": "Pi(x) is not defined on the page (consistent with Pi(x) = pi/2)",
+  "reason": "undefined function Pi(x) in integrand"
+ },
+ {
+  "id": "GR4.571",
+  "gr": "4.571",
+  "page": 654,
+  "status": "ok",
+  "lhs": "Integrate[ArcSin[k*Sin[x]]*Sin[x]/Sqrt[1 - k^2*Sin[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi/(2*k)*Log[Sqrt[1 - k^2]]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (344)(2)",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^(pi/2) arcsin(k sin x) sin x/sqrt(1-k^2 sin^2 x) = -pi/(2k) ln k'",
+  "note": "k range implied"
+ },
+ {
+  "id": "GR4.572",
+  "gr": "4.572",
+  "page": 654,
+  "status": "ok",
+  "lhs": "Integrate[2/Pi*ArcCot[x] - Cos[p*x], {x, 0, Infinity}]",
+  "rhs": [
+   "EulerGamma + Log[p]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "NT 66(12)",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^inf (2/pi arccot x - cos px) dx = C + ln p",
+  "note": "as printed the integral diverges (missing 1/x); see 4.572b"
+ },
+ {
+  "id": "GR4.572b",
+  "gr": "4.572b",
+  "page": 654,
+  "status": "ok",
+  "lhs": "Integrate[(2/Pi*ArcCot[x] - Cos[p*x])/x, {x, 0, Infinity}]",
+  "rhs": [
+   "EulerGamma + Log[p]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "NT 66(12)",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^inf (2/pi arccot x - cos px) dx/x = C + ln p",
+  "note": "corrected integrand: dx -> dx/x (cf. 4.553, same source NT 66(12))"
+ },
+ {
+  "id": "GR4.573.1",
+  "gr": "4.573.1",
+  "page": 654,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[q*x]*Sin[p*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*p)*(1 - E^(-p/q))"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (347)(1)a",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^inf arccot qx sin px = pi/(2p)(1 - e^(-p/q))",
+  "note": ""
+ },
+ {
+  "id": "GR4.573.2",
+  "gr": "4.573.2",
+  "page": 654,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[q*x]*Cos[p*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*p)*(E^(-p/q)*ExpIntegralEi[p/q] - E^(p/q)*ExpIntegralEi[-p/q])"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (347)(2)a",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^inf arccot qx cos px = 1/(2p)[e^(-p/q) Ei(p/q) - e^(p/q) Ei(-p/q)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.573.3a",
+  "gr": "4.573.3a",
+  "page": 654,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[r*x]*Sin[p*x]/(1 + 2*q*Cos[p*x] + q^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*p*q)*Log[(1 + q)/(1 + q*E^(-p/r))]"
+  ],
+  "conds": [
+   "q^2 < 1",
+   "r > 0",
+   "p > 0"
+  ],
+  "cite": "BI (347)(10)",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^inf arccot rx sin px/(1+2q cos px+q^2) = pi/(2pq) ln((1+q)/(1+q e^(-p/r)))",
+  "note": "printed condition for the q^2<1 branch reads p^2 < 1, taken as q^2 < 1 (the companion branch is q^2 > 1)"
+ },
+ {
+  "id": "GR4.573.3b",
+  "gr": "4.573.3b",
+  "page": 654,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[r*x]*Sin[p*x]/(1 - 2*q*Cos[p*x] + q^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/(2*p*q)*Log[(1 - q)/(1 - q*E^(-p/r))]"
+  ],
+  "conds": [
+   "q^2 < 1",
+   "r > 0",
+   "p > 0"
+  ],
+  "cite": "BI (347)(10)",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^inf arccot rx sin px/(1-2q cos px+q^2) = -pi/(2pq) ln((1-q)/(1-q e^(-p/r)))",
+  "note": "printed condition for the q^2<1 branch reads p^2 < 1, taken as q^2 < 1 (the companion branch is q^2 > 1)"
+ },
+ {
+  "id": "GR4.573.3c",
+  "gr": "4.573.3c",
+  "page": 654,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[r*x]*Sin[p*x]/(1 + 2*q*Cos[p*x] + q^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*p*q)*Log[(q + 1)/(q + E^(-p/r))]"
+  ],
+  "conds": [
+   "q^2 > 1",
+   "r > 0",
+   "p > 0"
+  ],
+  "cite": "BI (347)(10)",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^inf arccot rx sin px/(1+2q cos px+q^2) = pi/(2pq) ln((q+1)/(q+e^(-p/r)))",
+  "note": ""
+ },
+ {
+  "id": "GR4.573.3d",
+  "gr": "4.573.3d",
+  "page": 654,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[r*x]*Sin[p*x]/(1 - 2*q*Cos[p*x] + q^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/(2*p*q)*Log[(q - 1)/(q - E^(-p/r))]"
+  ],
+  "conds": [
+   "q^2 > 1",
+   "r > 0",
+   "p > 0"
+  ],
+  "cite": "BI (347)(10)",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^inf arccot rx sin px/(1-2q cos px+q^2) = -pi/(2pq) ln((q-1)/(q-e^(-p/r)))",
+  "note": ""
+ },
+ {
+  "id": "GR4.573.4",
+  "gr": "4.573.4",
+  "page": 655,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[ArcCot[p*x]*Tan[x]/(q^2*Cos[x]^2 + r^2*Sin[x]^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*r^2)*Log[1 + r/q*Tanh[1/p]]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "r > 0"
+  ],
+  "cite": "BI (347)(9)",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^inf arccot px tan x/(q^2 cos^2 x + r^2 sin^2 x) = pi/(2r^2) ln(1 + r/q tanh(1/p))",
+  "note": "tan x has poles at x = pi/2 + n pi on the path: implied principal value",
+  "reason": "poles on integration path (implied PV)"
+ },
+ {
+  "id": "GR4.574.1",
+  "gr": "4.574.1",
+  "page": 655,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[2*a/x]*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/b*E^(-a*b)*Sinh[a*b]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 87(8)",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^inf arctan(2a/x) sin bx = pi/b e^(-ab) sinh(ab)",
+  "note": ""
+ },
+ {
+  "id": "GR4.574.2",
+  "gr": "4.574.2",
+  "page": 655,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[a/x]*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*b)*(E^(-a*b)*ExpIntegralEi[a*b] - E^(a*b)*ExpIntegralEi[-a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 29(7)",
+  "edition_note": "7",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^inf arctan(a/x) cos bx = 1/(2b)[e^(-ab) Ei(ab) - e^(ab) Ei(-ab)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.574.3",
+  "gr": "4.574.3",
+  "page": 655,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[2*a*x/(x^2 + c^2)]*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/b*E^(-b*Sqrt[a^2 + c^2])*Sinh[a*b]"
+  ],
+  "conds": [
+   "b > 0",
+   "a > 0",
+   "c > 0"
+  ],
+  "cite": "ET I 87(9)",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^inf arctan(2ax/(x^2+c^2)) sin bx = pi/b e^(-b sqrt(a^2+c^2)) sinh(ab)",
+  "note": "a > 0, c > 0 added (implied)"
+ },
+ {
+  "id": "GR4.574.4",
+  "gr": "4.574.4",
+  "page": 655,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[2/x^2]*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/b*E^(-b)*Sin[b]"
+  ],
+  "conds": [
+   "b > 0"
+  ],
+  "cite": "ET I 29(8)",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^inf arctan(2/x^2) cos bx = pi/b e^-b sin b",
+  "note": ""
+ },
+ {
+  "id": "GR4.575.1",
+  "gr": "4.575.1",
+  "page": 655,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[p*Sin[x]/(1 - p*Cos[x])]*Sin[n*x], {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(2*n)*p^n"
+  ],
+  "conds": [
+   "p^2 < 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (345)(4)",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^pi arctan(p sin x/(1-p cos x)) sin nx = pi/(2n) p^n",
+  "note": "n integer range implied"
+ },
+ {
+  "id": "GR4.575.2",
+  "gr": "4.575.2",
+  "page": 655,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[p*Sin[x]/(1 - p*Cos[x])]*Sin[n*x]*Cos[x], {x, 0, Pi}]",
+  "rhs": [
+   "Pi/4*(p^(n + 1)/(n + 1) + p^(n - 1)/(n - 1))"
+  ],
+  "conds": [
+   "p^2 < 1",
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "BI (345)(5)",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^pi arctan(p sin x/(1-p cos x)) sin nx cos x = pi/4 (p^(n+1)/(n+1) + p^(n-1)/(n-1))",
+  "note": "n integer range implied (n != 1)"
+ },
+ {
+  "id": "GR4.575.3",
+  "gr": "4.575.3",
+  "page": 655,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[p*Sin[x]/(1 - p*Cos[x])]*Cos[n*x]*Sin[x], {x, 0, Pi}]",
+  "rhs": [
+   "Pi/4*(p^(n + 1)/(n + 1) - p^(n - 1)/(n - 1))"
+  ],
+  "conds": [
+   "p^2 < 1",
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "BI (345)(6)",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^pi arctan(p sin x/(1-p cos x)) cos nx sin x = pi/4 (p^(n+1)/(n+1) - p^(n-1)/(n-1))",
+  "note": "n integer range implied (n != 1)"
+ },
+ {
+  "id": "GR4.576.1",
+  "gr": "4.576.1",
+  "page": 655,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[p*Sin[x]/(1 - p*Cos[x])]/Sin[x], {x, 0, Pi}]",
+  "rhs": [
+   "Pi/2*Log[(1 + p)/(1 - p)]"
+  ],
+  "conds": [
+   "p^2 < 1"
+  ],
+  "cite": "BI(346)(1)",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^pi arctan(p sin x/(1-p cos x)) dx/sin x = pi/2 ln((1+p)/(1-p))",
+  "note": ""
+ },
+ {
+  "id": "GR4.576.2",
+  "gr": "4.576.2",
+  "page": 655,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[p*Sin[x]/(1 - p*Cos[x])]/Tan[x], {x, 0, Pi}]",
+  "rhs": [
+   "-Pi/2*Log[1 - p^2]"
+  ],
+  "conds": [
+   "p^2 < 1"
+  ],
+  "cite": "BI(346)(3)",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^pi arctan(p sin x/(1-p cos x)) dx/tan x = -pi/2 ln(1-p^2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.577.1",
+  "gr": "4.577.1",
+  "page": 655,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[Tan[lam]*Sqrt[1 - k^2*Sin[x]^2]]*Sin[x]^2/Sqrt[1 - k^2*Sin[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*k^2)*(MatharF2[lam, k] - MatharE2[lam, k] + Cot[lam]*(1 - Sqrt[1 - k^2*Sin[lam]^2]))"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "0 < lam < Pi/2"
+  ],
+  "cite": "BI (344)(4)",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^(pi/2) arctan(tan lam sqrt(1-k^2 sin^2 x)) sin^2 x/sqrt(1-k^2 sin^2 x) = pi/(2k^2)[F(lam,k) - E(lam,k) + cot lam (1 - sqrt(1-k^2 sin^2 lam))]",
+  "note": "parameter ranges implied"
+ },
+ {
+  "id": "GR4.577.2",
+  "gr": "4.577.2",
+  "page": 655,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[Tan[lam]*Sqrt[1 - k^2*Sin[x]^2]]*Cos[x]^2/Sqrt[1 - k^2*Sin[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*k^2)*(MatharE2[lam, k] - (1 - k^2)*MatharF2[lam, k] + Cot[lam]*(Sqrt[1 - k^2*Sin[lam]^2] - 1))"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "0 < lam < Pi/2"
+  ],
+  "cite": "BI (344)(5)",
+  "edition_note": "",
+  "section": "4.57 Combinations of inverse and direct trigonometric functions",
+  "tex": "int_0^(pi/2) arctan(tan lam sqrt(1-k^2 sin^2 x)) cos^2 x/sqrt(1-k^2 sin^2 x) = pi/(2k^2)[E(lam,k) - k'^2 F(lam,k) + cot lam (sqrt(1-k^2 sin^2 lam) - 1)]",
+  "note": "k'^2 = 1-k^2 substituted; parameter ranges implied"
+ },
+ {
+  "id": "GR4.581a",
+  "gr": "4.581a",
+  "page": 656,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[x]*Cos[p*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/2*ExpIntegralEi[-p]"
+  ],
+  "conds": [
+   "Re[p] > 0"
+  ],
+  "cite": "ET I 29(3), NT 25(13)",
+  "edition_note": "10",
+  "section": "4.58 A combination involving an inverse and a direct trigonometric function and a power",
+  "tex": "int_0^inf arctan x cos px dx/x = -pi/2 Ei(-p)",
+  "note": ""
+ },
+ {
+  "id": "GR4.581b",
+  "gr": "4.581b",
+  "page": 656,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[x/p]*Cos[x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi/2*ExpIntegralEi[-p]"
+  ],
+  "conds": [
+   "Re[p] > 0"
+  ],
+  "cite": "ET I 29(3), NT 25(13)",
+  "edition_note": "10",
+  "section": "4.58 A combination involving an inverse and a direct trigonometric function and a power",
+  "tex": "int_0^inf arctan(x/p) cos x dx/x = -pi/2 Ei(-p)",
+  "note": ""
+ },
+ {
+  "id": "GR4.591.1",
+  "gr": "4.591.1",
+  "page": 656,
+  "status": "ok",
+  "lhs": "Integrate[ArcSin[x]*Log[x], {x, 0, 1}]",
+  "rhs": [
+   "2 - Log[2] - Pi/2"
+  ],
+  "conds": [],
+  "cite": "BI (339)(1)",
+  "edition_note": "",
+  "section": "4.59 Combinations of inverse trigonometric functions and logarithms",
+  "tex": "int_0^1 arcsin x ln x = 2 - ln2 - pi/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.591.2",
+  "gr": "4.591.2",
+  "page": 656,
+  "status": "ok",
+  "lhs": "Integrate[ArcCos[x]*Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Log[2] - 2"
+  ],
+  "conds": [],
+  "cite": "BI (339)(2)",
+  "edition_note": "",
+  "section": "4.59 Combinations of inverse trigonometric functions and logarithms",
+  "tex": "int_0^1 arccos x ln x = ln2 - 2",
+  "note": ""
+ },
+ {
+  "id": "GR4.592",
+  "gr": "4.592",
+  "page": 656,
+  "status": "ok",
+  "lhs": "Integrate[ArcCos[x]/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "-Sum[(2*k - 1)!!*Log[2*k + 2]/(2^k*k!*(2*k + 1)), {k, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "BI (339)(8)",
+  "edition_note": "",
+  "section": "4.59 Combinations of inverse trigonometric functions and logarithms",
+  "tex": "int_0^1 arccos x dx/ln x = -sum_k (2k-1)!! ln(2k+2)/(2^k k! (2k+1))",
+  "note": ""
+ },
+ {
+  "id": "GR4.593.1",
+  "gr": "4.593.1",
+  "page": 656,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[x]*Log[x], {x, 0, 1}]",
+  "rhs": [
+   "1/2*Log[2] - Pi/4 + Pi^2/48"
+  ],
+  "conds": [],
+  "cite": "BI (339)(3)",
+  "edition_note": "",
+  "section": "4.59 Combinations of inverse trigonometric functions and logarithms",
+  "tex": "int_0^1 arctan x ln x = 1/2 ln2 - pi/4 + pi^2/48",
+  "note": ""
+ },
+ {
+  "id": "GR4.593.2",
+  "gr": "4.593.2",
+  "page": 656,
+  "status": "ok",
+  "lhs": "Integrate[ArcCot[x]*Log[x], {x, 0, 1}]",
+  "rhs": [
+   "-Pi^2/48 - Pi/4 - 1/2*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (339)(4)",
+  "edition_note": "",
+  "section": "4.59 Combinations of inverse trigonometric functions and logarithms",
+  "tex": "int_0^1 arccot x ln x = -pi^2/48 - pi/4 - 1/2 ln2",
+  "note": ""
+ },
+ {
+  "id": "GR4.594",
+  "gr": "4.594",
+  "page": 656,
+  "status": "ok",
+  "lhs": "Integrate[ArcTan[x]*Log[x]^(n - 1)*(Log[x] + n), {x, 0, 1}]",
+  "rhs": [
+   "n!/(-2)^(n + 1)*(2^(-n) - 1)*Zeta[n + 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (339)(7)",
+  "edition_note": "",
+  "section": "4.59 Combinations of inverse trigonometric functions and logarithms",
+  "tex": "int_0^1 arctan x (ln x)^(n-1) (ln x + n) = n!/(-2)^(n+1) (2^-n - 1) zeta(n+1)",
+  "note": "n range implied"
+ },
+ {
+  "id": "GR4.601.1",
+  "gr": "4.601.1",
+  "page": 656,
+  "status": "SKIP-MULTIPLE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "4.60 Change of variables in multiple integrals",
+  "tex": "double integral change of variables: int int f(x,y) dx dy = int int f[phi,psi] |Delta| du dv",
+  "note": "",
+  "reason": "double integral; generic change-of-variables rule"
+ },
+ {
+  "id": "GR4.601.2",
+  "gr": "4.601.2",
+  "page": 656,
+  "status": "SKIP-MULTIPLE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "4.60 Change of variables in multiple integrals",
+  "tex": "triple integral change of variables with Jacobian D(phi,psi,chi)/D(u,v,w)",
+  "note": "",
+  "reason": "triple integral; generic change-of-variables rule"
+ },
+ {
+  "id": "GR4.602",
+  "gr": "4.602",
+  "page": 657,
+  "status": "SKIP-REFERENCE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "4.60 Change of variables in multiple integrals",
+  "tex": "polar coordinates x = r cos phi, y = r sin phi, D(x,y)/D(r,phi) = r",
+  "note": "",
+  "reason": "definition (coordinate transformation), no integral"
+ },
+ {
+  "id": "GR4.603",
+  "gr": "4.603",
+  "page": 657,
+  "status": "SKIP-REFERENCE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "4.60 Change of variables in multiple integrals",
+  "tex": "spherical coordinates, Jacobian r^2 sin theta",
+  "note": "",
+  "reason": "definition (coordinate transformation), no integral"
+ },
+ {
+  "id": "GR4.611.1",
+  "gr": "4.611.1",
+  "page": 657,
+  "status": "SKIP-MULTIPLE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "4.61 Change of the order of integration and change of variables",
+  "tex": "int_0^a dx int_0^x f(x,y) dy = int_0^a dy int_y^a f(x,y) dx",
+  "note": "",
+  "reason": "double integral; order of integration"
+ },
+ {
+  "id": "GR4.611.2",
+  "gr": "4.611.2",
+  "page": 657,
+  "status": "SKIP-MULTIPLE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "4.61 Change of the order of integration and change of variables",
+  "tex": "int_0^a dx int_0^(b x/a) f dy = int_0^b dy int_(a y/b)^a f dx",
+  "note": "",
+  "reason": "double integral; order of integration"
+ },
+ {
+  "id": "GR4.612.1",
+  "gr": "4.612.1",
+  "page": 657,
+  "status": "SKIP-MULTIPLE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "4.61 Change of the order of integration and change of variables",
+  "tex": "int_0^R dx int_0^sqrt(R^2-x^2) f dy = int_0^R dy int_0^sqrt(R^2-y^2) f dx",
+  "note": "",
+  "reason": "double integral; order of integration"
+ },
+ {
+  "id": "GR4.612.2",
+  "gr": "4.612.2",
+  "page": 657,
+  "status": "SKIP-MULTIPLE",
+  "lhs": "",
+  "rhs": [],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "4.61 Change of the order of integration and change of variables",
+  "tex": "int_0^(2p) dx int_0^(q/p sqrt(2px-x^2)) f dy = int_0^q dy int_(p[1-sqrt(1-(y/q)^2)])^(p[1+sqrt(1-(y/q)^2)]) f dx",
+  "note": "",
+  "reason": "double integral; order of integration"
+ }
+]

@@ -1,0 +1,2350 @@
+[
+ {
+  "id": "GR4.214.1",
+  "gr": "4.214.1",
+  "page": 578,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[1/(a^4 - Log[x]^4), {x, 0, 1}]",
+  "rhs": [
+   "-1/(4*a^3)*(E^a*ExpIntegralEi[-a] - E^(-a)*ExpIntegralEi[a] - 2*CosIntegral[a]*Sin[a] + 2*(SinIntegral[a] - Pi/2)*Cos[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (31)(10)",
+  "edition_note": "",
+  "section": "4.21 Logarithms of more complicated arguments",
+  "tex": "int_0^1 dx/(a^4-(ln x)^4) = -1/(4a^3)[e^a Ei(-a) - e^-a Eibar(a) - 2ci(a) sin a + 2si(a) cos a]",
+  "note": "Pole at x = E^(-a) inside (0,1) (ln x = -a); value is a principal value (Ei-bar = PV Ei).",
+  "reason": "implied PV: pole at x=e^-a"
+ },
+ {
+  "id": "GR4.214.2",
+  "gr": "4.214.2",
+  "page": 578,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[x]/(a^4 - Log[x]^4), {x, 0, 1}]",
+  "rhs": [
+   "-1/(4*a^2)*(E^a*ExpIntegralEi[-a] + E^(-a)*ExpIntegralEi[a] - 2*CosIntegral[a]*Cos[a] - 2*(SinIntegral[a] - Pi/2)*Sin[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (31)(11)",
+  "edition_note": "",
+  "section": "4.21 Logarithms of more complicated arguments",
+  "tex": "int_0^1 ln x dx/(a^4-(ln x)^4) = -1/(4a^2)[e^a Ei(-a) + e^-a Eibar(a) - 2ci cos a - 2si sin a]",
+  "note": "Pole at x = E^(-a) inside (0,1) (ln x = -a); value is a principal value (Ei-bar = PV Ei).",
+  "reason": "implied PV: pole at x=e^-a"
+ },
+ {
+  "id": "GR4.214.3",
+  "gr": "4.214.3",
+  "page": 578,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[x]^2/(a^4 - Log[x]^4), {x, 0, 1}]",
+  "rhs": [
+   "-1/(4*a)*(E^a*ExpIntegralEi[-a] - E^(-a)*ExpIntegralEi[a] + 2*CosIntegral[a]*Sin[a] - 2*(SinIntegral[a] - Pi/2)*Cos[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (31)(12)",
+  "edition_note": "",
+  "section": "4.21 Logarithms of more complicated arguments",
+  "tex": "int_0^1 (ln x)^2 dx/(a^4-(ln x)^4) = -1/(4a)[e^a Ei(-a) - e^-a Eibar(a) + 2ci sin a - 2si cos a]",
+  "note": "Pole at x = E^(-a) inside (0,1) (ln x = -a); value is a principal value (Ei-bar = PV Ei).",
+  "reason": "implied PV: pole at x=e^-a"
+ },
+ {
+  "id": "GR4.214.4",
+  "gr": "4.214.4",
+  "page": 578,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[x]^3/(a^4 - Log[x]^4), {x, 0, 1}]",
+  "rhs": [
+   "-1/4*(E^a*ExpIntegralEi[-a] + E^(-a)*ExpIntegralEi[a] + 2*CosIntegral[a]*Cos[a] + 2*(SinIntegral[a] - Pi/2)*Sin[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (31)(13)",
+  "edition_note": "7",
+  "section": "4.21 Logarithms of more complicated arguments",
+  "tex": "int_0^1 (ln x)^3 dx/(a^4-(ln x)^4) = -1/4[e^a Ei(-a) + e^-a Eibar(a) + 2ci cos a + 2si sin a]",
+  "note": "Pole at x = E^(-a) inside (0,1) (ln x = -a); value is a principal value (Ei-bar = PV Ei).",
+  "reason": "implied PV: pole at x=e^-a"
+ },
+ {
+  "id": "GR4.215.1",
+  "gr": "4.215.1",
+  "page": 578,
+  "status": "ok",
+  "lhs": "Integrate[Log[1/x]^(mu - 1), {x, 0, 1}]",
+  "rhs": [
+   "Gamma[mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "FI II 778",
+  "edition_note": "",
+  "section": "4.21 Logarithms of more complicated arguments",
+  "tex": "int_0^1 (ln 1/x)^(mu-1) dx = Gamma(mu)",
+  "note": ""
+ },
+ {
+  "id": "GR4.215.2",
+  "gr": "4.215.2",
+  "page": 578,
+  "status": "ok",
+  "lhs": "Integrate[1/Log[1/x]^mu, {x, 0, 1}]",
+  "rhs": [
+   "Pi/Gamma[mu]*Csc[mu*Pi]"
+  ],
+  "conds": [
+   "Re[mu] < 1"
+  ],
+  "cite": "BI (31)(1)",
+  "edition_note": "",
+  "section": "4.21 Logarithms of more complicated arguments",
+  "tex": "int_0^1 dx/(ln 1/x)^mu = pi/Gamma(mu) cosec(mu pi)",
+  "note": ""
+ },
+ {
+  "id": "GR4.215.3",
+  "gr": "4.215.3",
+  "page": 578,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[Log[1/x]], {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi]/2"
+  ],
+  "conds": [],
+  "cite": "BI (32)(1)",
+  "edition_note": "",
+  "section": "4.21 Logarithms of more complicated arguments",
+  "tex": "int_0^1 sqrt(ln 1/x) dx = sqrt(pi)/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.215.4",
+  "gr": "4.215.4",
+  "page": 578,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[Log[1/x]], {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi]"
+  ],
+  "conds": [],
+  "cite": "BI (32)(3)",
+  "edition_note": "",
+  "section": "4.21 Logarithms of more complicated arguments",
+  "tex": "int_0^1 dx/sqrt(ln 1/x) = sqrt(pi)",
+  "note": ""
+ },
+ {
+  "id": "GR4.216.1",
+  "gr": "4.216.1",
+  "page": 578,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[Log[x]^2 - 1], {x, 0, 1/E}]",
+  "rhs": [
+   "BesselK[0, 1]"
+  ],
+  "conds": [],
+  "cite": "GW (32)(2)",
+  "edition_note": "",
+  "section": "4.21 Logarithms of more complicated arguments",
+  "tex": "int_0^{1/e} dx/sqrt((ln x)^2-1) = K_0(1)",
+  "note": ""
+ },
+ {
+  "id": "GR4.216.2",
+  "gr": "4.216.2",
+  "page": 578,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[-Log[x] - 1], {x, 0, 1/E}]",
+  "rhs": [
+   "Sqrt[Pi]/E"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "*",
+  "section": "4.21 Logarithms of more complicated arguments",
+  "tex": "int_0^{1/e} dx/sqrt(-ln x - 1) = sqrt(pi)/e",
+  "note": ""
+ },
+ {
+  "id": "GR4.221.1",
+  "gr": "4.221.1",
+  "page": 578,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Log[1 - x], {x, 0, 1}]",
+  "rhs": [
+   "2 - Pi^2/6"
+  ],
+  "conds": [],
+  "cite": "BI (30)(7)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^1 ln x ln(1-x) dx = 2 - pi^2/6",
+  "note": ""
+ },
+ {
+  "id": "GR4.221.2",
+  "gr": "4.221.2",
+  "page": 578,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Log[1 + x], {x, 0, 1}]",
+  "rhs": [
+   "2 - Pi^2/12 - 2*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (30)(8)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^1 ln x ln(1+x) dx = 2 - pi^2/12 - 2 ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR4.221.3",
+  "gr": "4.221.3",
+  "page": 579,
+  "status": "ok",
+  "lhs": "Integrate[Log[(1 - a*x)/(1 - a)]/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "-Sum[a^k*Log[1 + k]/k, {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "a < 1",
+   "a > -1"
+  ],
+  "cite": "BI (31)(3)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^1 ln((1-ax)/(1-a)) dx/ln x = -sum_{k>=1} a^k ln(1+k)/k",
+  "note": "Book condition a<1; a>-1 added (implied by convergence of the series)."
+ },
+ {
+  "id": "GR4.222.1",
+  "gr": "4.222.1",
+  "page": 579,
+  "status": "ok",
+  "lhs": "Integrate[Log[(a^2 + x^2)/(b^2 + x^2)], {x, 0, Infinity}]",
+  "rhs": [
+   "(a - b)*Pi"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (322)(20)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^inf ln((a^2+x^2)/(b^2+x^2)) dx = (a-b) pi",
+  "note": ""
+ },
+ {
+  "id": "GR4.222.2",
+  "gr": "4.222.2",
+  "page": 579,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Log[(a^2 + x^2)/(b^2 + x^2)], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(b - a) + Pi*Log[a^a/b^b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (33)(1)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^inf ln x ln((a^2+x^2)/(b^2+x^2)) dx = pi(b-a) + pi ln(a^a/b^b)",
+  "note": ""
+ },
+ {
+  "id": "GR4.222.3",
+  "gr": "4.222.3",
+  "page": 579,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Log[1 + b^2/x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*b*(Log[b] - 1)"
+  ],
+  "conds": [
+   "b > 0"
+  ],
+  "cite": "BI (33)(2)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^inf ln x ln(1+b^2/x^2) dx = pi b (ln b - 1)",
+  "note": ""
+ },
+ {
+  "id": "GR4.222.4",
+  "gr": "4.222.4",
+  "page": 579,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + a^2*x^2]*Log[1 + b^2/x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi*((1 + a*b)/a*Log[1 + a*b] - b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (33)(3)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^inf ln(1+a^2x^2) ln(1+b^2/x^2) dx = 2pi[(1+ab)/a ln(1+ab) - b]",
+  "note": ""
+ },
+ {
+  "id": "GR4.222.5",
+  "gr": "4.222.5",
+  "page": 579,
+  "status": "ok",
+  "lhs": "Integrate[Log[a^2 + x^2]*Log[1 + b^2/x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi*((a + b)*Log[a + b] - a*Log[a] - b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (33)(4)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^inf ln(a^2+x^2) ln(1+b^2/x^2) dx = 2pi[(a+b)ln(a+b) - a ln a - b]",
+  "note": ""
+ },
+ {
+  "id": "GR4.222.6",
+  "gr": "4.222.6",
+  "page": 579,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + a^2/x^2]*Log[1 + b^2/x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi*((a + b)*Log[a + b] - a*Log[a] - b*Log[b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (33)(5)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^inf ln(1+a^2/x^2) ln(1+b^2/x^2) dx = 2pi[(a+b)ln(a+b) - a ln a - b ln b]",
+  "note": ""
+ },
+ {
+  "id": "GR4.222.7",
+  "gr": "4.222.7",
+  "page": 579,
+  "status": "ok",
+  "lhs": "Integrate[Log[a^2 + 1/x^2]*Log[1 + b^2/x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi*((1 + a*b)/a*Log[1 + a*b] - b*Log[b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (33)(7)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^inf ln(a^2+1/x^2) ln(1+b^2/x^2) dx = 2pi[(1+ab)/a ln(1+ab) - b ln b]",
+  "note": ""
+ },
+ {
+  "id": "GR4.222.8",
+  "gr": "4.222.8",
+  "page": 579,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + a*x]*x^b*E^(-x), {x, 0, Infinity}]",
+  "rhs": [
+   "Sum[b!/(b - m)!*((-1)^(b - m - 1)/a^(b - m)*E^(1/a)*ExpIntegralEi[-1/a] + Sum[(k - 1)!/(-a)^(b - m - k), {k, 1, b - m}]), {m, 0, b}]"
+  ],
+  "conds": [
+   "Element[b, Integers] && b > 0",
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^inf ln(1+ax) x^b e^-x dx = sum_{m=0}^b b!/(b-m)! [(-1)^(b-m-1)/a^(b-m) e^{1/a} Ei(-1/a) + sum_{k=1}^{b-m} (k-1)!/(-a)^(b-m-k)]",
+  "note": "a > 0 not printed; added (implied by ln(1+ax) on (0,inf))."
+ },
+ {
+  "id": "GR4.223.1",
+  "gr": "4.223.1",
+  "page": 579,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + E^(-x)], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/12"
+  ],
+  "conds": [],
+  "cite": "BI (256)(10)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^inf ln(1+e^-x) dx = pi^2/12",
+  "note": ""
+ },
+ {
+  "id": "GR4.223.2",
+  "gr": "4.223.2",
+  "page": 579,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - E^(-x)], {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi^2/6"
+  ],
+  "conds": [],
+  "cite": "BI (256)(11)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^inf ln(1-e^-x) dx = -pi^2/6",
+  "note": ""
+ },
+ {
+  "id": "GR4.223.3",
+  "gr": "4.223.3",
+  "page": 579,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + 2*E^(-x)*Cos[t] + E^(-2*x)], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/6 - t^2/2"
+  ],
+  "conds": [
+   "Abs[t] < Pi"
+  ],
+  "cite": "BI (256)(18)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^inf ln(1+2e^-x cos t + e^-2x) dx = pi^2/6 - t^2/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.224.1",
+  "gr": "4.224.1",
+  "page": 579,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Log[Sin[x]], {x, 0, u}]",
+  "rhs": [
+   "LobachevskyL[Pi/2 - u] - LobachevskyL[Pi/2]"
+  ],
+  "conds": [
+   "0 < u < Pi"
+  ],
+  "cite": "LO III 186(15)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^u ln sin x dx = L(pi/2-u) - L(pi/2)",
+  "note": "Lobachevsky L(x) = -int_0^x ln cos t dt (8.26). Range of u not printed; 0<u<pi assumed.",
+  "reason": "Lobachevsky function"
+ },
+ {
+  "id": "GR4.224.2",
+  "gr": "4.224.2",
+  "page": 579,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]], {x, 0, Pi/4}]",
+  "rhs": [
+   "-Pi/4*Log[2] - Catalan/2"
+  ],
+  "conds": [],
+  "cite": "BI (285)(1)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/4} ln sin x dx = -pi/4 ln2 - G/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.224.3a",
+  "gr": "4.224.3a",
+  "page": 580,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi/2*Log[2]"
+  ],
+  "conds": [],
+  "cite": "FI II 629,643",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} ln sin x dx = -pi/2 ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR4.224.3b",
+  "gr": "4.224.3b",
+  "page": 580,
+  "status": "ok",
+  "lhs": "1/2*Integrate[Log[Sin[x]], {x, 0, Pi}]",
+  "rhs": [
+   "-Pi/2*Log[2]"
+  ],
+  "conds": [],
+  "cite": "FI II 629,643",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "1/2 int_0^pi ln sin x dx = -pi/2 ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR4.224.4",
+  "gr": "4.224.4",
+  "page": 580,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Log[Cos[x]], {x, 0, u}]",
+  "rhs": [
+   "-LobachevskyL[u]"
+  ],
+  "conds": [
+   "Abs[u] < Pi/2"
+  ],
+  "cite": "LO III 184(10)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^u ln cos x dx = -L(u)",
+  "note": "Definition of Lobachevsky L. Range of u not printed.",
+  "reason": "Lobachevsky function"
+ },
+ {
+  "id": "GR4.224.5",
+  "gr": "4.224.5",
+  "page": 580,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]], {x, 0, Pi/4}]",
+  "rhs": [
+   "-Pi/4*Log[2] + Catalan/2"
+  ],
+  "conds": [],
+  "cite": "BI (286)(1)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/4} ln cos x dx = -pi/4 ln2 + G/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.224.6",
+  "gr": "4.224.6",
+  "page": 580,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi/2*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI 306(1)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} ln cos x dx = -pi/2 ln2",
+  "note": ""
+ },
+ {
+  "id": "GR4.224.7",
+  "gr": "4.224.7",
+  "page": 580,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*(Log[2]^2 + Pi^2/12)"
+  ],
+  "conds": [],
+  "cite": "BI (305)(19)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} (ln sin x)^2 dx = pi/2[(ln2)^2 + pi^2/12]",
+  "note": ""
+ },
+ {
+  "id": "GR4.224.8",
+  "gr": "4.224.8",
+  "page": 580,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*(Log[2]^2 + Pi^2/12)"
+  ],
+  "conds": [],
+  "cite": "BI (306)(14)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} (ln cos x)^2 dx = pi/2[(ln2)^2 + pi^2/12]",
+  "note": ""
+ },
+ {
+  "id": "GR4.224.9",
+  "gr": "4.224.9",
+  "page": 580,
+  "status": "ok",
+  "lhs": "Integrate[Log[a + b*Cos[x]], {x, 0, Pi}]",
+  "rhs": [
+   "Pi*Log[(a + Sqrt[a^2 - b^2])/2]"
+  ],
+  "conds": [
+   "a >= Abs[b]",
+   "Abs[b] > 0"
+  ],
+  "cite": "GW (322)(15)",
+  "edition_note": "8",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^pi ln(a + b cos x) dx = pi ln((a+sqrt(a^2-b^2))/2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.224.10a",
+  "gr": "4.224.10a",
+  "page": 580,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + Sin[x]], {x, 0, Pi}]",
+  "rhs": [
+   "-Pi*Log[2] + 4*Catalan"
+  ],
+  "conds": [],
+  "cite": "GW (322)(16a)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^pi ln(1+sin x) dx = -pi ln2 + 4G",
+  "note": ""
+ },
+ {
+  "id": "GR4.224.10b",
+  "gr": "4.224.10b",
+  "page": 580,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - Sin[x]], {x, 0, Pi}]",
+  "rhs": [
+   "-Pi*Log[2] - 4*Catalan"
+  ],
+  "conds": [],
+  "cite": "GW (322)(16a)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^pi ln(1-sin x) dx = -pi ln2 - 4G",
+  "note": ""
+ },
+ {
+  "id": "GR4.224.11a",
+  "gr": "4.224.11a",
+  "page": 580,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + a*Sin[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Log[a/2] + 2*Catalan + 2*Sum[((1 - a)/(1 + a))^k/k*Sum[(-1)^(n + 1)/(2*n - 1), {n, 1, k}], {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "7",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} ln(1+a sin x) dx = pi/2 ln(a/2) + 2G + 2 sum_k b^k/k sum_{n=1}^k (-1)^(n+1)/(2n-1), b=(1-a)/(1+a)",
+  "note": "Abbreviation b = (1-a)/(1+a) substituted."
+ },
+ {
+  "id": "GR4.224.11b",
+  "gr": "4.224.11b",
+  "page": 580,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + Sin[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi/2*Log[2] + 2*Catalan"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "7",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} ln(1+sin x) dx = -pi/2 ln2 + 2G (a=1)",
+  "note": "Case a = 1 substituted."
+ },
+ {
+  "id": "GR4.224.12",
+  "gr": "4.224.12",
+  "page": 580,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + a*Cos[x]], {x, 0, Pi}]",
+  "rhs": [
+   "Pi*Log[(1 + Sqrt[1 - a^2])/2]"
+  ],
+  "conds": [
+   "a^2 <= 1"
+  ],
+  "cite": "BI (330)(1)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^pi ln(1+a cos x) dx = pi ln((1+sqrt(1-a^2))/2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.224.12.1a",
+  "gr": "4.224.12.1a",
+  "page": 580,
+  "status": "ok",
+  "lhs": "Integrate[Log[(1 + a*Cos[x])^2], {x, 0, Pi}]",
+  "rhs": [
+   "2*Pi*Log[(1 + Sqrt[1 - a^2])/2]"
+  ],
+  "conds": [
+   "a^2 <= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "item 12(1): int_0^pi ln(1+a cos x)^2 dx = 2pi ln((1+sqrt(1-a^2))/2) for a^2<=1",
+  "note": "Item printed as \"12 (1)\"; read ln(1+a cos x)^2 as ln of the square."
+ },
+ {
+  "id": "GR4.224.12.1b",
+  "gr": "4.224.12.1b",
+  "page": 580,
+  "status": "ok",
+  "lhs": "Integrate[Log[(1 + a*Cos[x])^2], {x, 0, Pi}]",
+  "rhs": [
+   "Pi/2*Log[a^2/4]",
+   "Pi*Log[a^2/4]"
+  ],
+  "conds": [
+   "a^2 >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "item 12(1): int_0^pi ln(1+a cos x)^2 dx = pi/2 ln(a^2/4) for a^2>=1",
+  "note": "Item printed as \"12 (1)\". Suspected misprint: printed pi/2 ln(a^2/4); by 2*int ln|1+a cos x| = 2pi ln(|a|/2) the value should be pi ln(a^2/4) (second candidate)."
+ },
+ {
+  "id": "GR4.224.13",
+  "gr": "4.224.13",
+  "page": 580,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + 2*a*Sin[x] + a^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "Sum[2^(2*k)*(k!)^2/((2*k + 1)*(2*k + 1)!!)*(2*a/(1 + a^2))^(2*k + 1), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "a^2 <= 1"
+  ],
+  "cite": "BI (308)(24)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} ln(1+2a sin x + a^2) dx = sum_k 2^{2k}(k!)^2/((2k+1)(2k+1)!!) (2a/(1+a^2))^{2k+1}",
+  "note": ""
+ },
+ {
+  "id": "GR4.224.14",
+  "gr": "4.224.14",
+  "page": 580,
+  "status": "ok",
+  "lhs": "Integrate[Log[a^2 - 2*a*b*Cos[x] + b^2], {x, 0, n*Pi}]",
+  "rhs": [
+   "2*n*Pi*Log[Max[Abs[a], Abs[b]]]"
+  ],
+  "conds": [
+   "a*b > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "FI II 142, 163, 688",
+  "edition_note": "11",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{n pi} ln(a^2 - 2ab cos x + b^2) dx = 2 n pi ln max(|a|,|b|)",
+  "note": "n a positive integer (implied, not printed)."
+ },
+ {
+  "id": "GR4.224.15a",
+  "gr": "4.224.15a",
+  "page": 580,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - 2*a*Cos[x] + a^2], {x, 0, n*Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a^2 <= 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{n pi} ln(1 - 2a cos x + a^2) dx = 0 [a^2<=1]",
+  "note": "n a positive integer (implied, not printed)."
+ },
+ {
+  "id": "GR4.224.15b",
+  "gr": "4.224.15b",
+  "page": 580,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - 2*a*Cos[x] + a^2], {x, 0, n*Pi}]",
+  "rhs": [
+   "n*Pi*Log[a^2]"
+  ],
+  "conds": [
+   "a^2 >= 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{n pi} ln(1 - 2a cos x + a^2) dx = n pi ln a^2 [a^2>=1]",
+  "note": "n a positive integer (implied, not printed)."
+ },
+ {
+  "id": "GR4.225.1",
+  "gr": "4.225.1",
+  "page": 580,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x] - Sin[x]], {x, 0, Pi/4}]",
+  "rhs": [
+   "-Pi/8*Log[2] - Catalan/2"
+  ],
+  "conds": [],
+  "cite": "GW (322)(9b)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/4} ln(cos x - sin x) dx = -pi/8 ln2 - G/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.225.2a",
+  "gr": "4.225.2a",
+  "page": 581,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x] + Sin[x]], {x, 0, Pi/4}]",
+  "rhs": [
+   "-Pi/8*Log[2] + Catalan/2"
+  ],
+  "conds": [],
+  "cite": "GW (322)(9a)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/4} ln(cos x + sin x) dx = -pi/8 ln2 + G/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.225.2b",
+  "gr": "4.225.2b",
+  "page": 581,
+  "status": "ok",
+  "lhs": "1/2*Integrate[Log[Cos[x] + Sin[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi/8*Log[2] + Catalan/2"
+  ],
+  "conds": [],
+  "cite": "GW (322)(9a)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "1/2 int_0^{pi/2} ln(cos x + sin x) dx = -pi/8 ln2 + G/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.225.3",
+  "gr": "4.225.3",
+  "page": 581,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + a*Sin[x] + b*Cos[x]], {x, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi*Log[(1 + Sqrt[1 - a^2 - b^2])/2]"
+  ],
+  "conds": [
+   "a^2 + b^2 < 1"
+  ],
+  "cite": "BI (332)(2)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{2pi} ln(1 + a sin x + b cos x) dx = 2pi ln((1+sqrt(1-a^2-b^2))/2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.225.4a",
+  "gr": "4.225.4a",
+  "page": 581,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + a^2 + b^2 + 2*a*Sin[x] + 2*b*Cos[x]], {x, 0, 2*Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a^2 + b^2 <= 1"
+  ],
+  "cite": "BI (322)(3)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{2pi} ln(1+a^2+b^2+2a sin x+2b cos x) dx = 0 [a^2+b^2<=1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.225.4b",
+  "gr": "4.225.4b",
+  "page": 581,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + a^2 + b^2 + 2*a*Sin[x] + 2*b*Cos[x]], {x, 0, 2*Pi}]",
+  "rhs": [
+   "2*Pi*Log[a^2 + b^2]"
+  ],
+  "conds": [
+   "a^2 + b^2 >= 1"
+  ],
+  "cite": "BI (322)(3)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "= 2pi ln(a^2+b^2) [a^2+b^2>=1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.226.1a",
+  "gr": "4.226.1a",
+  "page": 581,
+  "status": "ok",
+  "lhs": "Integrate[Log[(a^2 - Sin[x]^2)^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "-2*Pi*Log[2]"
+  ],
+  "conds": [
+   "a^2 <= 1"
+  ],
+  "cite": "FI II 644, 687",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} ln(a^2 - sin^2 x)^2 dx = -2pi ln2 [a^2<=1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.226.1b",
+  "gr": "4.226.1b",
+  "page": 581,
+  "status": "ok",
+  "lhs": "Integrate[Log[(a^2 - Sin[x]^2)^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "2*Pi*Log[(a + Sqrt[a^2 - 1])/2]"
+  ],
+  "conds": [
+   "a > 1"
+  ],
+  "cite": "FI II 644, 687",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "= 2pi ln((a+sqrt(a^2-1))/2) [a>1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.226.1c",
+  "gr": "4.226.1c",
+  "page": 581,
+  "status": "ok",
+  "lhs": "Integrate[Log[(a^2 - Sin[x]^2)^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "2*Pi*(ArcCosh[a] - Log[2])"
+  ],
+  "conds": [
+   "a > 1"
+  ],
+  "cite": "FI II 644, 687",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "= 2pi(arccosh a - ln 2) [a>1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.226.2a",
+  "gr": "4.226.2a",
+  "page": 581,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + a*Sin[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Log[(1 + Sqrt[1 + a])/2]"
+  ],
+  "conds": [
+   "a >= -1"
+  ],
+  "cite": "BI (308)(15), GW(322)(12)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} ln(1+a sin^2 x) dx = pi ln((1+sqrt(1+a))/2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.226.2b",
+  "gr": "4.226.2b",
+  "page": 581,
+  "status": "ok",
+  "lhs": "1/2*Integrate[Log[1 + a*Sin[x]^2], {x, 0, Pi}]",
+  "rhs": [
+   "Pi*Log[(1 + Sqrt[1 + a])/2]"
+  ],
+  "conds": [
+   "a >= -1"
+  ],
+  "cite": "BI (308)(15), GW(322)(12)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "1/2 int_0^pi ln(1+a sin^2 x) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.226.2c",
+  "gr": "4.226.2c",
+  "page": 581,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + a*Cos[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Log[(1 + Sqrt[1 + a])/2]"
+  ],
+  "conds": [
+   "a >= -1"
+  ],
+  "cite": "BI (308)(15), GW(322)(12)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} ln(1+a cos^2 x) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.226.2d",
+  "gr": "4.226.2d",
+  "page": 581,
+  "status": "ok",
+  "lhs": "1/2*Integrate[Log[1 + a*Cos[x]^2], {x, 0, Pi}]",
+  "rhs": [
+   "Pi*Log[(1 + Sqrt[1 + a])/2]"
+  ],
+  "conds": [
+   "a >= -1"
+  ],
+  "cite": "BI (308)(15), GW(322)(12)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "1/2 int_0^pi ln(1+a cos^2 x) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.226.3",
+  "gr": "4.226.3",
+  "page": 581,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Log[1 - Sin[alpha]^2*Sin[x]^2], {x, 0, u}]",
+  "rhs": [
+   "(Pi - 2*ArcCot[Cos[alpha]*Tan[u]])*Log[Cot[alpha/2]] + 2*u*Log[Sin[alpha]/2] - Pi/2*Log[2] + LobachevskyL[ArcCot[Cos[alpha]*Tan[u]] + u] - LobachevskyL[ArcCot[Cos[alpha]*Tan[u]] - u] + LobachevskyL[Pi/2 - 2*u]"
+  ],
+  "conds": [
+   "-Pi <= alpha <= Pi",
+   "-Pi/2 <= u <= Pi/2"
+  ],
+  "cite": "LO III 287",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^u ln(1 - sin^2 alpha sin^2 x) dx = (pi-2theta) ln cot(alpha/2) + 2u ln(sin(alpha)/2) - pi/2 ln2 + L(theta+u) - L(theta-u) + L(pi/2-2u), cot theta = cos alpha tan u",
+  "note": "theta defined by cot theta = cos alpha tan u, substituted as ArcCot[Cos[alpha] Tan[u]] (branch choice).",
+  "reason": "Lobachevsky function"
+ },
+ {
+  "id": "GR4.226.4",
+  "gr": "4.226.4",
+  "page": 581,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - Cos[x]^2*(Sin[alpha]^2 - Sin[beta]^2*Sin[x]^2)], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Log[1/2*(Cos[alpha/2]^2 + Sqrt[Cos[alpha/2]^4 + Sin[beta/2]^2*Cos[beta/2]^2])]"
+  ],
+  "conds": [
+   "alpha > beta > 0"
+  ],
+  "cite": "LO III 283",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} ln[1 - cos^2 x (sin^2 alpha - sin^2 beta sin^2 x)] dx = pi ln[1/2(cos^2(alpha/2) + sqrt(cos^4(alpha/2) + sin^2(beta/2) cos^2(beta/2)))]",
+  "note": ""
+ },
+ {
+  "id": "GR4.226.5",
+  "gr": "4.226.5",
+  "page": 581,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Log[1 - Sin[x]^2/Sin[alpha]^2], {x, 0, u}]",
+  "rhs": [
+   "-u*Log[Sin[alpha]^2] - LobachevskyL[Pi/2 - alpha + u] + LobachevskyL[Pi/2 - alpha - u]"
+  ],
+  "conds": [
+   "-Pi/2 <= u <= Pi/2",
+   "Abs[Sin[u]] <= Abs[Sin[alpha]]"
+  ],
+  "cite": "LO III 287",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^u ln(1 - sin^2 x/sin^2 alpha) dx = -u ln sin^2 alpha - L(pi/2-alpha+u) + L(pi/2-alpha-u)",
+  "note": "",
+  "reason": "Lobachevsky function"
+ },
+ {
+  "id": "GR4.226.6a",
+  "gr": "4.226.6a",
+  "page": 581,
+  "status": "ok",
+  "lhs": "Integrate[Log[a^2*Cos[x]^2 + b^2*Sin[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Log[(a + b)/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (322)(13)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} ln(a^2 cos^2 x + b^2 sin^2 x) dx = pi ln((a+b)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.226.6b",
+  "gr": "4.226.6b",
+  "page": 581,
+  "status": "ok",
+  "lhs": "1/2*Integrate[Log[a^2*Cos[x]^2 + b^2*Sin[x]^2], {x, 0, Pi}]",
+  "rhs": [
+   "Pi*Log[(a + b)/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (322)(13)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "1/2 int_0^pi ln(a^2 cos^2 x + b^2 sin^2 x) dx = pi ln((a+b)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.226.7a",
+  "gr": "4.226.7a",
+  "page": 582,
+  "status": "ok",
+  "lhs": "Integrate[Log[(1 + Sin[t]*Cos[x]^2)/(1 - Sin[t]*Cos[x]^2)], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Log[(1 + Sin[t/2])/Cos[t/2]]"
+  ],
+  "conds": [
+   "Abs[t] < Pi/2"
+  ],
+  "cite": "LO III 283",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} ln((1+sin t cos^2 x)/(1-sin t cos^2 x)) dx = pi ln((1+sin(t/2))/cos(t/2))",
+  "note": ""
+ },
+ {
+  "id": "GR4.226.7b",
+  "gr": "4.226.7b",
+  "page": 582,
+  "status": "ok",
+  "lhs": "Integrate[Log[(1 + Sin[t]*Cos[x]^2)/(1 - Sin[t]*Cos[x]^2)], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Log[Cot[(Pi - t)/4]]"
+  ],
+  "conds": [
+   "Abs[t] < Pi/2"
+  ],
+  "cite": "LO III 283",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "= pi ln cot((pi-t)/4)",
+  "note": ""
+ },
+ {
+  "id": "GR4.227.1",
+  "gr": "4.227.1",
+  "page": 582,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Log[Tan[x]], {x, 0, u}]",
+  "rhs": [
+   "LobachevskyL[u] + LobachevskyL[Pi/2 - u] - LobachevskyL[Pi/2]"
+  ],
+  "conds": [
+   "0 < u < Pi/2"
+  ],
+  "cite": "LO III 186(16)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^u ln tan x dx = L(u) + L(pi/2-u) - L(pi/2)",
+  "note": "Range of u not printed; 0<u<pi/2 assumed.",
+  "reason": "Lobachevsky function"
+ },
+ {
+  "id": "GR4.227.2a",
+  "gr": "4.227.2a",
+  "page": 582,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]], {x, 0, Pi/4}]",
+  "rhs": [
+   "-Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (286)(11)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/4} ln tan x dx = -G",
+  "note": ""
+ },
+ {
+  "id": "GR4.227.2b",
+  "gr": "4.227.2b",
+  "page": 582,
+  "status": "ok",
+  "lhs": "-Integrate[Log[Tan[x]], {x, Pi/4, Pi/2}]",
+  "rhs": [
+   "-Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (286)(11)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "-int_{pi/4}^{pi/2} ln tan x dx = -G",
+  "note": ""
+ },
+ {
+  "id": "GR4.227.3",
+  "gr": "4.227.3",
+  "page": 582,
+  "status": "ok",
+  "lhs": "Integrate[Log[a*Tan[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Log[a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (307)(2)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} ln(a tan x) dx = pi/2 ln a",
+  "note": ""
+ },
+ {
+  "id": "GR4.227.4a",
+  "gr": "4.227.4a",
+  "page": 582,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]^n, {x, 0, Pi/4}]",
+  "rhs": [
+   "n!*(-1)^n*Sum[(-1)^k/(2*k + 1)^(n + 1), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (286)(21)",
+  "edition_note": "7",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/4} (ln tan x)^n dx = n!(-1)^n sum_k (-1)^k/(2k+1)^(n+1)",
+  "note": "n a nonnegative integer (implied by n!)."
+ },
+ {
+  "id": "GR4.227.4b",
+  "gr": "4.227.4b",
+  "page": 582,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]^n, {x, 0, Pi/4}]",
+  "rhs": [
+   "1/2*(Pi/2)^(n + 1)*Abs[EulerE[n]]"
+  ],
+  "conds": [
+   "Element[n/2, Integers] && n >= 0"
+  ],
+  "cite": "BI (286)(21)",
+  "edition_note": "7",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "= 1/2 (pi/2)^(n+1) |E_n| [n even]",
+  "note": ""
+ },
+ {
+  "id": "GR4.227.5a",
+  "gr": "4.227.5a",
+  "page": 582,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]^(2*n), {x, 0, Pi/2}]",
+  "rhs": [
+   "2*(2*n)!*Sum[(-1)^k/(2*k + 1)^(2*n + 1), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (307)(15)",
+  "edition_note": "7",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} (ln tan x)^{2n} dx = 2(2n)! sum_k (-1)^k/(2k+1)^{2n+1}",
+  "note": ""
+ },
+ {
+  "id": "GR4.227.5b",
+  "gr": "4.227.5b",
+  "page": 582,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]^(2*n), {x, 0, Pi/2}]",
+  "rhs": [
+   "(Pi/2)^(2*n + 1)*Abs[EulerE[2*n]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (307)(15)",
+  "edition_note": "7",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "= (pi/2)^{2n+1} |E_{2n}|",
+  "note": ""
+ },
+ {
+  "id": "GR4.227.6",
+  "gr": "4.227.6",
+  "page": 582,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]^(2*n + 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (307)(14)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} (ln tan x)^{2n+1} dx = 0",
+  "note": ""
+ },
+ {
+  "id": "GR4.227.7",
+  "gr": "4.227.7",
+  "page": 582,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]^2, {x, 0, Pi/4}]",
+  "rhs": [
+   "Pi^3/16"
+  ],
+  "conds": [],
+  "cite": "BI (286)(16)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/4} (ln tan x)^2 dx = pi^3/16",
+  "note": ""
+ },
+ {
+  "id": "GR4.227.8",
+  "gr": "4.227.8",
+  "page": 582,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x]]^4, {x, 0, Pi/4}]",
+  "rhs": [
+   "5/64*Pi^5"
+  ],
+  "conds": [],
+  "cite": "BI (286)(19)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/4} (ln tan x)^4 dx = 5 pi^5/64",
+  "note": ""
+ },
+ {
+  "id": "GR4.227.9",
+  "gr": "4.227.9",
+  "page": 582,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + Tan[x]], {x, 0, Pi/4}]",
+  "rhs": [
+   "Pi/8*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (287)(1)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/4} ln(1+tan x) dx = pi/8 ln2",
+  "note": ""
+ },
+ {
+  "id": "GR4.227.10",
+  "gr": "4.227.10",
+  "page": 582,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + Tan[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4*Log[2] + Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (308)(9)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} ln(1+tan x) dx = pi/4 ln2 + G",
+  "note": ""
+ },
+ {
+  "id": "GR4.227.11",
+  "gr": "4.227.11",
+  "page": 582,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - Tan[x]], {x, 0, Pi/4}]",
+  "rhs": [
+   "Pi/8*Log[2] - Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (287)(2)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/4} ln(1-tan x) dx = pi/8 ln2 - G",
+  "note": ""
+ },
+ {
+  "id": "GR4.227.12",
+  "gr": "4.227.12",
+  "page": 582,
+  "status": "ok",
+  "lhs": "Integrate[Log[(1 - Tan[x])^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Log[2] - 2*Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (308)(10)",
+  "edition_note": "11",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} (ln(1-tan x))^2 dx [read as ln((1-tan x)^2)] = pi/2 ln2 - 2G",
+  "note": "Printed as (ln(...))^2, but the value is negative, so it cannot be the square of a real log; transcribed as ln((...)^2), which matches the value. Suspected typesetting misprint."
+ },
+ {
+  "id": "GR4.227.13",
+  "gr": "4.227.13",
+  "page": 582,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + Cot[x]], {x, 0, Pi/4}]",
+  "rhs": [
+   "Pi/8*Log[2] + Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (287)(3)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/4} ln(1+cot x) dx = pi/8 ln2 + G",
+  "note": ""
+ },
+ {
+  "id": "GR4.227.14",
+  "gr": "4.227.14",
+  "page": 582,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cot[x] - 1], {x, 0, Pi/4}]",
+  "rhs": [
+   "Pi/8*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (287)(4)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/4} ln(cot x - 1) dx = pi/8 ln2",
+  "note": ""
+ },
+ {
+  "id": "GR4.227.15a",
+  "gr": "4.227.15a",
+  "page": 583,
+  "status": "ok",
+  "lhs": "Integrate[Log[Tan[x] + Cot[x]], {x, 0, Pi/4}]",
+  "rhs": [
+   "Pi/2*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (287)(5), BI (308)(11)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/4} ln(tan x + cot x) dx = pi/2 ln2",
+  "note": ""
+ },
+ {
+  "id": "GR4.227.15b",
+  "gr": "4.227.15b",
+  "page": 583,
+  "status": "ok",
+  "lhs": "1/2*Integrate[Log[Tan[x] + Cot[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (287)(5), BI (308)(11)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "1/2 int_0^{pi/2} ln(tan x + cot x) dx = pi/2 ln2",
+  "note": ""
+ },
+ {
+  "id": "GR4.227.16a",
+  "gr": "4.227.16a",
+  "page": 583,
+  "status": "ok",
+  "lhs": "Integrate[Log[(Cot[x] - Tan[x])^2], {x, 0, Pi/4}]",
+  "rhs": [
+   "Pi/2*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (287)(6), BI (308)(12)",
+  "edition_note": "11",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/4} (ln(cot x - tan x))^2 dx [read as ln((..)^2)] = pi/2 ln2",
+  "note": "Printed as (ln(cot x - tan x))^2; the true square gives pi/4 ln^2 2 + pi^3/16, while ln((cot x - tan x)^2) gives pi/2 ln2. Transcribed as ln of the square. Suspected typesetting misprint."
+ },
+ {
+  "id": "GR4.227.16b",
+  "gr": "4.227.16b",
+  "page": 583,
+  "status": "ok",
+  "lhs": "1/2*Integrate[Log[(Cot[x] - Tan[x])^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (287)(6), BI (308)(12)",
+  "edition_note": "11",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "1/2 int_0^{pi/2} (ln(cot x - tan x))^2 dx = pi/2 ln2",
+  "note": "Printed as (ln(cot x - tan x))^2 (complex on (pi/4,pi/2) as printed); transcribed as ln((cot x - tan x)^2). Suspected typesetting misprint."
+ },
+ {
+  "id": "GR4.227.17a",
+  "gr": "4.227.17a",
+  "page": 583,
+  "status": "ok",
+  "lhs": "Integrate[Log[a^2 + b^2*Tan[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*Log[a + b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (322)(17)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} ln(a^2 + b^2 tan^2 x) dx = pi ln(a+b)",
+  "note": ""
+ },
+ {
+  "id": "GR4.227.17b",
+  "gr": "4.227.17b",
+  "page": 583,
+  "status": "ok",
+  "lhs": "1/2*Integrate[Log[a^2 + b^2*Tan[x]^2], {x, 0, Pi}]",
+  "rhs": [
+   "Pi*Log[a + b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (322)(17)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "1/2 int_0^pi ln(a^2 + b^2 tan^2 x) dx = pi ln(a+b)",
+  "note": ""
+ },
+ {
+  "id": "GR4.228.1",
+  "gr": "4.228.1",
+  "page": 583,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Log[Sin[t]*Sin[x] + Sqrt[1 - Cos[t]^2*Sin[x]^2]], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Log[2] - 2*LobachevskyL[t/2] - 2*LobachevskyL[(Pi - t)/2]"
+  ],
+  "conds": [
+   "0 < t < Pi"
+  ],
+  "cite": "LO III 290",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/2} ln(sin t sin x + sqrt(1 - cos^2 t sin^2 x)) dx = pi/2 ln2 - 2L(t/2) - 2L((pi-t)/2)",
+  "note": "Range of t not printed; 0<t<pi assumed.",
+  "reason": "Lobachevsky function"
+ },
+ {
+  "id": "GR4.228.2",
+  "gr": "4.228.2",
+  "page": 583,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Log[Cos[x] + Sqrt[Cos[x]^2 - Cos[t]^2]], {x, 0, u}]",
+  "rhs": [
+   "-(Pi/2 - t - ArcCos[Sin[u]/Sin[t]])*Log[Cos[t]] + 1/2*LobachevskyL[u + ArcCos[Sin[u]/Sin[t]]] - 1/2*LobachevskyL[u - ArcCos[Sin[u]/Sin[t]]] - LobachevskyL[ArcCos[Sin[u]/Sin[t]]]"
+  ],
+  "conds": [
+   "0 <= u <= t <= Pi/2"
+  ],
+  "cite": "LO III 290",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^u ln(cos x + sqrt(cos^2 x - cos^2 t)) dx = -(pi/2 - t - phi) ln cos t + 1/2 L(u+phi) - 1/2 L(u-phi) - L(phi), cos phi = sin u/sin t",
+  "note": "phi defined by cos phi = sin u/sin t, substituted as ArcCos.",
+  "reason": "Lobachevsky function"
+ },
+ {
+  "id": "GR4.228.3",
+  "gr": "4.228.3",
+  "page": 583,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x] + Sqrt[Cos[x]^2 - Cos[t]^2]], {x, 0, t}]",
+  "rhs": [
+   "-(Pi/2 - t)*Log[Cos[t]]"
+  ],
+  "conds": [
+   "0 < t < Pi/2"
+  ],
+  "cite": "LO III 285",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^t ln(cos x + sqrt(cos^2 x - cos^2 t)) dx = -(pi/2 - t) ln cos t",
+  "note": "0<t<pi/2 not printed; taken from 4.228.2."
+ },
+ {
+  "id": "GR4.228.4",
+  "gr": "4.228.4",
+  "page": 583,
+  "status": "ok",
+  "lhs": "Integrate[Log[(Sin[u] + Sin[t]*Cos[x]*Sqrt[Sin[u]^2 - Sin[x]^2])/(Sin[u] - Sin[t]*Cos[x]*Sqrt[Sin[u]^2 - Sin[x]^2])], {x, 0, u}]",
+  "rhs": [
+   "Pi*Log[Tan[t/2]*Sin[u] + Sqrt[Tan[t/2]^2*Sin[u]^2 + 1]]"
+  ],
+  "conds": [
+   "t > 0",
+   "u > 0"
+  ],
+  "cite": "LO III 283",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^u ln((sin u + sin t cos x sqrt(sin^2 u - sin^2 x))/(sin u - sin t cos x sqrt(...))) dx = pi ln[tan(t/2) sin u + sqrt(tan^2(t/2) sin^2 u + 1)]",
+  "note": "Presumably also u <= pi/2 and t < pi (not printed)."
+ },
+ {
+  "id": "GR4.228.5",
+  "gr": "4.228.5",
+  "page": 583,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[Log[Cot[x]]], {x, 0, Pi/4}]",
+  "rhs": [
+   "Sqrt[Pi]/2*Sum[(-1)^k/Sqrt[(2*k + 1)^3], {k, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "BI (297)(9)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/4} sqrt(ln cot x) dx = sqrt(pi)/2 sum_k (-1)^k/sqrt((2k+1)^3)",
+  "note": ""
+ },
+ {
+  "id": "GR4.228.6",
+  "gr": "4.228.6",
+  "page": 583,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[Log[Cot[x]]], {x, 0, Pi/4}]",
+  "rhs": [
+   "Sqrt[Pi]*Sum[(-1)^k/Sqrt[2*k + 1], {k, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "BI (304)(24)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/4} dx/sqrt(ln cot x) = sqrt(pi) sum_k (-1)^k/sqrt(2k+1)",
+  "note": ""
+ },
+ {
+  "id": "GR4.228.7a",
+  "gr": "4.228.7a",
+  "page": 583,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sqrt[Tan[x]] + Sqrt[Cot[x]]], {x, 0, Pi/4}]",
+  "rhs": [
+   "Pi/8*Log[2] + Catalan/2"
+  ],
+  "conds": [],
+  "cite": "BI (287)(7), BI (308)(22)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/4} ln(sqrt tan x + sqrt cot x) dx = pi/8 ln2 + G/2",
+  "note": ""
+ },
+ {
+  "id": "GR4.228.7b",
+  "gr": "4.228.7b",
+  "page": 583,
+  "status": "ok",
+  "lhs": "1/2*Integrate[Log[Sqrt[Tan[x]] + Sqrt[Cot[x]]], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/8*Log[2] + Catalan/2"
+  ],
+  "conds": [],
+  "cite": "BI (287)(7), BI (308)(22)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "1/2 int_0^{pi/2} ln(sqrt tan x + sqrt cot x) dx",
+  "note": ""
+ },
+ {
+  "id": "GR4.228.8a",
+  "gr": "4.228.8a",
+  "page": 583,
+  "status": "ok",
+  "lhs": "Integrate[Log[(Sqrt[Cot[x]] - Sqrt[Tan[x]])^2], {x, 0, Pi/4}]",
+  "rhs": [
+   "Pi/4*Log[2] - Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (287)(8), BI (308)(23)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^{pi/4} ln^2(sqrt cot x - sqrt tan x) dx [read as ln((..)^2)] = pi/4 ln2 - G",
+  "note": "Printed ln^2(sqrt cot x - sqrt tan x); the value pi/4 ln2 - G is negative, and equals int ln((sqrt cot - sqrt tan)^2). Transcribed as ln of the square. Suspected typesetting misprint."
+ },
+ {
+  "id": "GR4.228.8b",
+  "gr": "4.228.8b",
+  "page": 583,
+  "status": "ok",
+  "lhs": "1/2*Integrate[Log[(Sqrt[Cot[x]] - Sqrt[Tan[x]])^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4*Log[2] - Catalan"
+  ],
+  "conds": [],
+  "cite": "BI (287)(8), BI (308)(23)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "1/2 int_0^{pi/2} ln^2(sqrt cot x - sqrt tan x) dx",
+  "note": "Printed ln^2(sqrt cot x - sqrt tan x); the value pi/4 ln2 - G is negative, and equals int ln((sqrt cot - sqrt tan)^2). Transcribed as ln of the square. Suspected typesetting misprint."
+ },
+ {
+  "id": "GR4.229.1",
+  "gr": "4.229.1",
+  "page": 583,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[1/x]], {x, 0, 1}]",
+  "rhs": [
+   "-EulerGamma"
+  ],
+  "conds": [],
+  "cite": "FI II 807",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^1 ln(ln 1/x) dx = -C",
+  "note": ""
+ },
+ {
+  "id": "GR4.229.2a",
+  "gr": "4.229.2a",
+  "page": 583,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[1/Log[Log[1/x]], {x, 0, 1}]",
+  "rhs": [
+   "-0.154479"
+  ],
+  "conds": [],
+  "cite": "BI (31)(2)",
+  "edition_note": "11",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "PV int_0^1 dx/ln(ln 1/x) ~ -0.154479",
+  "note": "Numeric value only (truncated).",
+  "reason": "marked PV"
+ },
+ {
+  "id": "GR4.229.2b",
+  "gr": "4.229.2b",
+  "page": 583,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[E^(-u)/Log[u], {u, 0, Infinity}]",
+  "rhs": [
+   "-0.154479"
+  ],
+  "conds": [],
+  "cite": "BI (31)(2)",
+  "edition_note": "11",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "PV int_0^inf e^-u/ln u du ~ -0.154479",
+  "note": "Numeric value only (truncated).",
+  "reason": "marked PV"
+ },
+ {
+  "id": "GR4.229.3",
+  "gr": "4.229.3",
+  "page": 584,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[1/x]]/Sqrt[Log[1/x]], {x, 0, 1}]",
+  "rhs": [
+   "-(EulerGamma + 2*Log[2])*Sqrt[Pi]"
+  ],
+  "conds": [],
+  "cite": "BI (32)(4)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^1 ln(ln 1/x) dx/sqrt(ln 1/x) = -(C + 2 ln2) sqrt(pi)",
+  "note": ""
+ },
+ {
+  "id": "GR4.229.4",
+  "gr": "4.229.4",
+  "page": 584,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[1/x]]*Log[1/x]^(mu - 1), {x, 0, 1}]",
+  "rhs": [
+   "PolyGamma[mu]*Gamma[mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (30)(10)",
+  "edition_note": "11",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^1 ln(ln 1/x)(ln 1/x)^(mu-1) dx = psi(mu) Gamma(mu)",
+  "note": ""
+ },
+ {
+  "id": "GR4.229.5",
+  "gr": "4.229.5",
+  "page": 584,
+  "status": "ok",
+  "lhs": "Integrate[Log[a + Log[x]], {x, 0, 1}]",
+  "rhs": [
+   "Log[a] - E^(-a)*ExpIntegralEi[a]",
+   "Log[a] - E^(-a)*ExpIntegralEi[a] + I*Pi*E^(-a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (30)(5)",
+  "edition_note": "7",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^1 ln(a + ln x) dx = ln a - e^-a Ei(a)",
+  "note": "a + ln x < 0 on (0, e^-a): printed value is the real part (ln|a + ln x|); second candidate adds the i pi e^-a of the principal log."
+ },
+ {
+  "id": "GR4.229.6",
+  "gr": "4.229.6",
+  "page": 584,
+  "status": "ok",
+  "lhs": "Integrate[Log[a - Log[x]], {x, 0, 1}]",
+  "rhs": [
+   "Log[a] - E^a*ExpIntegralEi[-a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (30)(6)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_0^1 ln(a - ln x) dx = ln a - e^a Ei(-a)",
+  "note": ""
+ },
+ {
+  "id": "GR4.229.7",
+  "gr": "4.229.7",
+  "page": 584,
+  "status": "ok",
+  "lhs": "Integrate[Log[Log[Tan[x]]], {x, Pi/4, Pi/2}]",
+  "rhs": [
+   "Pi/2*Log[Gamma[3/4]/Gamma[1/4]*Sqrt[2*Pi]]"
+  ],
+  "conds": [],
+  "cite": "BI (308)(28)",
+  "edition_note": "",
+  "section": "4.22 Logarithms of more complicated arguments",
+  "tex": "int_{pi/4}^{pi/2} ln ln tan x dx = pi/2 ln(Gamma(3/4)/Gamma(1/4) sqrt(2pi))",
+  "note": ""
+ },
+ {
+  "id": "GR4.231.1",
+  "gr": "4.231.1",
+  "page": 584,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(1 + x), {x, 0, 1}]",
+  "rhs": [
+   "-Pi^2/12"
+  ],
+  "conds": [],
+  "cite": "FI II 483a",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^1 ln x/(1+x) dx = -pi^2/12",
+  "note": ""
+ },
+ {
+  "id": "GR4.231.2",
+  "gr": "4.231.2",
+  "page": 584,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "-Pi^2/6"
+  ],
+  "conds": [],
+  "cite": "FI II 714",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^1 ln x/(1-x) dx = -pi^2/6",
+  "note": ""
+ },
+ {
+  "id": "GR4.231.3",
+  "gr": "4.231.3",
+  "page": 584,
+  "status": "ok",
+  "lhs": "Integrate[x*Log[x]/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "1 - Pi^2/6"
+  ],
+  "conds": [],
+  "cite": "BI (108)(7)",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^1 x ln x/(1-x) dx = 1 - pi^2/6",
+  "note": ""
+ },
+ {
+  "id": "GR4.231.4",
+  "gr": "4.231.4",
+  "page": 584,
+  "status": "ok",
+  "lhs": "Integrate[(1 + x)/(1 - x)*Log[x], {x, 0, 1}]",
+  "rhs": [
+   "1 - Pi^2/3"
+  ],
+  "conds": [],
+  "cite": "BI (108)(9)",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^1 (1+x)/(1-x) ln x dx = 1 - pi^2/3",
+  "note": ""
+ },
+ {
+  "id": "GR4.231.5",
+  "gr": "4.231.5",
+  "page": 584,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(x + a)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[a]/a"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (139)(1)",
+  "edition_note": "11",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^inf ln x dx/(x+a)^2 = ln a / a",
+  "note": ""
+ },
+ {
+  "id": "GR4.231.6",
+  "gr": "4.231.6",
+  "page": 584,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(1 + x)^2, {x, 0, 1}]",
+  "rhs": [
+   "-Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (111)(1)",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^1 ln x/(1+x)^2 dx = -ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR4.231.7",
+  "gr": "4.231.7",
+  "page": 584,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(a^2 + b^2*x^2)^n, {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[n - 1/2]*Sqrt[Pi]/(4*(n - 1)!*a^(2*n - 1)*b)*(2*Log[a/(2*b)] - EulerGamma - PolyGamma[n - 1/2])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (139)(3)",
+  "edition_note": "7",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^inf ln x dx/(a^2+b^2x^2)^n = Gamma(n-1/2) sqrt(pi)/(4(n-1)! a^(2n-1) b) [2 ln(a/(2b)) - C - psi(n-1/2)]",
+  "note": "n a positive integer (implied by (n-1)!)."
+ },
+ {
+  "id": "GR4.231.8",
+  "gr": "4.231.8",
+  "page": 584,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(a^2 + b^2*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*a*b)*Log[a/b]"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "BI (135)(6)",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^inf ln x dx/(a^2+b^2x^2) = pi/(2ab) ln(a/b)",
+  "note": ""
+ },
+ {
+  "id": "GR4.231.9",
+  "gr": "4.231.9",
+  "page": 584,
+  "status": "ok",
+  "lhs": "Integrate[Log[p*x]/(q^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*q)*Log[p*q]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (135)(4)",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^inf ln(px)/(q^2+x^2) dx = pi/(2q) ln(pq)",
+  "note": ""
+ },
+ {
+  "id": "GR4.231.10",
+  "gr": "4.231.10",
+  "page": 584,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[x]/(a^2 - b^2*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi^2/(4*a*b)"
+  ],
+  "conds": [
+   "a*b > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^inf ln x dx/(a^2-b^2x^2) = -pi^2/(4ab)",
+  "note": "Pole at x = a/b on the path; value is a principal value.",
+  "reason": "implied PV: pole at x=a/b"
+ },
+ {
+  "id": "GR4.231.11",
+  "gr": "4.231.11",
+  "page": 585,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(x^2 + a^2), {x, 0, a}]",
+  "rhs": [
+   "Pi*Log[a]/(4*a) - Catalan/a"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "GW (324)(7b)",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^a ln x dx/(x^2+a^2) = pi ln a/(4a) - G/a",
+  "note": ""
+ },
+ {
+  "id": "GR4.231.12a",
+  "gr": "4.231.12a",
+  "page": 585,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "-Catalan"
+  ],
+  "conds": [],
+  "cite": "FI II 482, 614",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^1 ln x/(1+x^2) dx = -G",
+  "note": ""
+ },
+ {
+  "id": "GR4.231.12b",
+  "gr": "4.231.12b",
+  "page": 585,
+  "status": "ok",
+  "lhs": "-Integrate[Log[x]/(1 + x^2), {x, 1, Infinity}]",
+  "rhs": [
+   "-Catalan"
+  ],
+  "conds": [],
+  "cite": "FI II 482, 614",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "-int_1^inf ln x/(1+x^2) dx = -G",
+  "note": ""
+ },
+ {
+  "id": "GR4.231.13",
+  "gr": "4.231.13",
+  "page": 585,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "-Pi^2/8"
+  ],
+  "conds": [],
+  "cite": "BI (108)(11)",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^1 ln x dx/(1-x^2) = -pi^2/8",
+  "note": ""
+ },
+ {
+  "id": "GR4.231.14",
+  "gr": "4.231.14",
+  "page": 585,
+  "status": "ok",
+  "lhs": "Integrate[x*Log[x]/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "-Pi^2/48"
+  ],
+  "conds": [],
+  "cite": "GW (324)(7b)",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^1 x ln x/(1+x^2) dx = -pi^2/48",
+  "note": ""
+ },
+ {
+  "id": "GR4.231.15",
+  "gr": "4.231.15",
+  "page": 585,
+  "status": "ok",
+  "lhs": "Integrate[x*Log[x]/(1 - x^2), {x, 0, 1}]",
+  "rhs": [
+   "-Pi^2/24"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^1 x ln x/(1-x^2) dx = -pi^2/24",
+  "note": ""
+ },
+ {
+  "id": "GR4.231.16",
+  "gr": "4.231.16",
+  "page": 585,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*(1 - x^(2*n + 2))/(1 - x^2)^2, {x, 0, 1}]",
+  "rhs": [
+   "-(n + 1)*Pi^2/8 + Sum[(n - k + 1)/(2*k - 1)^2, {k, 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (111)(5)",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^1 ln x (1-x^{2n+2})/(1-x^2)^2 dx = -(n+1)pi^2/8 + sum_{k=1}^n (n-k+1)/(2k-1)^2",
+  "note": "n a nonnegative integer (implied)."
+ },
+ {
+  "id": "GR4.231.17",
+  "gr": "4.231.17",
+  "page": 585,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*(1 + (-1)^n*x^(n + 1))/(1 + x)^2, {x, 0, 1}]",
+  "rhs": [
+   "-(n + 1)*Pi^2/12 - Sum[(-1)^k*(n - k + 1)/k^2, {k, 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (111)(2)",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^1 ln x (1+(-1)^n x^{n+1})/(1+x)^2 dx = -(n+1)pi^2/12 - sum_{k=1}^n (-1)^k (n-k+1)/k^2",
+  "note": "n a nonnegative integer (implied)."
+ },
+ {
+  "id": "GR4.231.18",
+  "gr": "4.231.18",
+  "page": 585,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*(1 - x^(n + 1))/(1 - x)^2, {x, 0, 1}]",
+  "rhs": [
+   "-(n + 1)*Pi^2/6 + Sum[(n - k + 1)/k^2, {k, 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (111)(3)",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^1 ln x (1-x^{n+1})/(1-x)^2 dx = -(n+1)pi^2/6 + sum_{k=1}^n (n-k+1)/k^2",
+  "note": "n a nonnegative integer (implied)."
+ },
+ {
+  "id": "GR4.231.19",
+  "gr": "4.231.19",
+  "page": 585,
+  "status": "ok",
+  "lhs": "Integrate[x*Log[x]/(1 + x), {x, 0, 1}]",
+  "rhs": [
+   "-1 + Pi^2/2",
+   "-1 + Pi^2/12"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "*",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^1 x ln x/(1+x) dx = -1 + pi^2/2",
+  "note": "Suspected misprint: printed -1 + pi^2/2; int ln x - int ln x/(1+x) = -1 + pi^2/12 (second candidate)."
+ },
+ {
+  "id": "GR4.231.20",
+  "gr": "4.231.20",
+  "page": 585,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)*Log[x]/(1 + x), {x, 0, 1}]",
+  "rhs": [
+   "1 - Pi^2/6"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "*",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^1 (1-x) ln x/(1+x) dx = 1 - pi^2/6",
+  "note": ""
+ },
+ {
+  "id": "GR4.232.1",
+  "gr": "4.232.1",
+  "page": 585,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/((x + u)*(x + v)), {x, u, v}]",
+  "rhs": [
+   "Log[u*v]/(2*(v - u))*Log[(u + v)^2/(4*u*v)]"
+  ],
+  "conds": [
+   "u > 0",
+   "v > 0"
+  ],
+  "cite": "BI (145)(32)",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_u^v ln x dx/((x+u)(x+v)) = ln(uv)/(2(v-u)) ln((u+v)^2/(4uv))",
+  "note": "u, v > 0 not printed; added (implied)."
+ },
+ {
+  "id": "GR4.232.2",
+  "gr": "4.232.2",
+  "page": 585,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/((x + beta)*(x + gamma)), {x, 0, Infinity}]",
+  "rhs": [
+   "(Log[beta]^2 - Log[gamma]^2)/(2*(beta - gamma))"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "Abs[Arg[gamma]] < Pi"
+  ],
+  "cite": "ET II 218(24)",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^inf ln x dx/((x+beta)(x+gamma)) = ((ln beta)^2 - (ln gamma)^2)/(2(beta-gamma))",
+  "note": ""
+ },
+ {
+  "id": "GR4.232.3",
+  "gr": "4.232.3",
+  "page": 585,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/((x + a)*(x - 1)), {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi^2 + Log[a]^2)/(2*(a + 1))"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (140)(10)",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^inf ln x/(x+a) dx/(x-1) = (pi^2 + (ln a)^2)/(2(a+1))",
+  "note": "x = 1 is a removable singularity (ln x/(x-1) finite)."
+ },
+ {
+  "id": "GR4.233.1",
+  "gr": "4.233.1",
+  "page": 585,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(1 + x + x^2), {x, 0, 1}]",
+  "rhs": [
+   "2/9*(2*Pi^2/3 - PolyGamma[1, 1/3])"
+  ],
+  "conds": [],
+  "cite": "LI (113)(1)",
+  "edition_note": "3",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^1 ln x/(1+x+x^2) dx = 2/9[2pi^2/3 - psi'(1/3)] = -0.7813024129...",
+  "note": "Book also gives numeric value -0.7813024129..."
+ },
+ {
+  "id": "GR4.233.2",
+  "gr": "4.233.2",
+  "page": 585,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(1 - x + x^2), {x, 0, 1}]",
+  "rhs": [
+   "1/3*(2*Pi^2/3 - PolyGamma[1, 1/3])"
+  ],
+  "conds": [],
+  "cite": "LI (113)(2)",
+  "edition_note": "3",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^1 ln x/(1-x+x^2) dx = 1/3[2pi^2/3 - psi'(1/3)] = -1.17195361934...",
+  "note": "Book also gives numeric value -1.17195361934..."
+ },
+ {
+  "id": "GR4.233.3",
+  "gr": "4.233.3",
+  "page": 585,
+  "status": "ok",
+  "lhs": "Integrate[x*Log[x]/(1 + x + x^2), {x, 0, 1}]",
+  "rhs": [
+   "-1/9*(7*Pi^2/6 - PolyGamma[1, 1/3])"
+  ],
+  "conds": [],
+  "cite": "LI (113)(2)",
+  "edition_note": "11",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^1 x ln x/(1+x+x^2) dx = -1/9[7pi^2/6 - psi'(1/3)] = -0.15766014917...",
+  "note": "Book also gives numeric value -0.15766014917..."
+ },
+ {
+  "id": "GR4.233.4",
+  "gr": "4.233.4",
+  "page": 585,
+  "status": "ok",
+  "lhs": "Integrate[x*Log[x]/(1 - x + x^2), {x, 0, 1}]",
+  "rhs": [
+   "1/6*(5*Pi^2/6 - PolyGamma[1, 1/3])"
+  ],
+  "conds": [],
+  "cite": "LI (113)(4)",
+  "edition_note": "3",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^1 x ln x/(1-x+x^2) dx = 1/6[5pi^2/6 - psi'(1/3)] = -0.3118211319...",
+  "note": "Book also gives numeric value -0.3118211319..."
+ },
+ {
+  "id": "GR4.233.5",
+  "gr": "4.233.5",
+  "page": 586,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(x^2 + 2*x*a*Cos[t] + a^2), {x, 0, Infinity}]",
+  "rhs": [
+   "t*Log[a]/(a*Sin[t])"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < t < Pi"
+  ],
+  "cite": "GW (324)(13c)",
+  "edition_note": "",
+  "section": "4.23 Combinations of logarithms and rational functions",
+  "tex": "int_0^inf ln x dx/(x^2+2xa cos t+a^2) = t ln a/(a sin t)",
+  "note": "Item 4.233 started on p585; sub-item 5 runs onto p586."
+ }
+]

@@ -1,0 +1,2293 @@
+[
+ {
+  "id": "GR3.692.3",
+  "gr": "3.692.3",
+  "page": 466,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*(1 - x^2)]*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-(1/2)*Sqrt[Pi/a]*Cos[a + b^2/(4*a) + Pi/4]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET I 23(2)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf sin[a(1-x^2)] cos bx dx = -1/2 sqrt(pi/a) cos(a+b^2/(4a)+pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR3.692.4",
+  "gr": "3.692.4",
+  "page": 466,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*(1 - x^2)]*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(1/2)*Sqrt[Pi/a]*Sin[a + b^2/(4*a) + Pi/4]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET I 24(10)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf cos[a(1-x^2)] cos bx dx = 1/2 sqrt(pi/a) sin(a+b^2/(4a)+pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR3.692.5a",
+  "gr": "3.692.5",
+  "page": 466,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x^2 + b^2/a]*Cos[2*b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(1/2)*Sqrt[Pi/(2*a)]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (70)(19, 20)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf sin(ax^2+b^2/a) cos 2bx dx = 1/2 sqrt(pi/(2a))",
+  "note": ""
+ },
+ {
+  "id": "GR3.692.5b",
+  "gr": "3.692.5",
+  "page": 466,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x^2 + b^2/a]*Cos[2*b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(1/2)*Sqrt[Pi/(2*a)]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (70)(19, 20)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf cos(ax^2+b^2/a) cos 2bx dx = 1/2 sqrt(pi/(2a))",
+  "note": ""
+ },
+ {
+  "id": "GR3.692.6",
+  "gr": "3.692.6",
+  "page": 466,
+  "status": "ok",
+  "lhs": "Integrate[Cos[Sqrt[x^2 - 1]] - Cos[Sqrt[x^2 + 1]], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Sum[Pi/(2^(4*n + 1)*((2*n)!)^2*(n + 1/2)), {n, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "8",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_-inf^inf [cos sqrt(x^2-1) - cos sqrt(x^2+1)] dx = sum_{n>=0} pi/(2^(4n+1) [(2n)!]^2 (n+1/2))",
+  "note": ""
+ },
+ {
+  "id": "GR3.693.1",
+  "gr": "3.693.1",
+  "page": 466,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x^2 + 2*b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/(2*a)]*(Cos[b^2/a]*(1/2 - FresnelS[Sqrt[2/Pi]*Sqrt[b^2/a]]) - Sin[b^2/a]*(1/2 - FresnelC[Sqrt[2/Pi]*Sqrt[b^2/a]]))"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (70)(3)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf sin(ax^2+2bx) dx = sqrt(pi/2a){cos(b^2/a)[1/2 - S_2(b^2/a)] - sin(b^2/a)[1/2 - C_2(b^2/a)]}",
+  "note": "S_2(z), C_2(z) = (1/Sqrt[2 Pi]) int_0^z sin t/Sqrt[t] (cos) dt = S(Sqrt z), C(Sqrt z) of G&R 8.251, so S_2(b^2/a) -> FresnelS[Sqrt[2/Pi]*Sqrt[b^2/a]]"
+ },
+ {
+  "id": "GR3.693.2",
+  "gr": "3.693.2",
+  "page": 466,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x^2 + 2*b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/(2*a)]*(Cos[b^2/a]*(1/2 - FresnelC[Sqrt[2/Pi]*Sqrt[b^2/a]]) + Sin[b^2/a]*(1/2 - FresnelS[Sqrt[2/Pi]*Sqrt[b^2/a]]))"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (70)(4)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf cos(ax^2+2bx) dx = sqrt(pi/2a){cos(b^2/a)[1/2 - C_2] + sin(b^2/a)[1/2 - S_2]}",
+  "note": "S_2(z), C_2(z) = (1/Sqrt[2 Pi]) int_0^z sin t/Sqrt[t] (cos) dt = S(Sqrt z), C(Sqrt z) of G&R 8.251, so S_2(b^2/a) -> FresnelS[Sqrt[2/Pi]*Sqrt[b^2/a]]"
+ },
+ {
+  "id": "GR3.694.1",
+  "gr": "3.694.1",
+  "page": 466,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x^2 + 2*b*x + c], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/(2*a)]*Cos[b^2/a]*((1/2 - FresnelC[Sqrt[2/Pi]*Sqrt[b^2/a]])*Sin[c] + (1/2 - FresnelS[Sqrt[2/Pi]*Sqrt[b^2/a]])*Cos[c]) + Sqrt[Pi/(2*a)]*Sin[b^2/a]*((1/2 - FresnelS[Sqrt[2/Pi]*Sqrt[b^2/a]])*Sin[c] - (1/2 - FresnelC[Sqrt[2/Pi]*Sqrt[b^2/a]])*Cos[c])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "GW (334)(4a)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf sin(ax^2+2bx+c) dx = sqrt(pi/2a) cos(b^2/a){(1/2-C_2) sin c + (1/2-S_2) cos c} + sqrt(pi/2a) sin(b^2/a){(1/2-S_2) sin c - (1/2-C_2) cos c}",
+  "note": "S_2(z), C_2(z) = (1/Sqrt[2 Pi]) int_0^z sin t/Sqrt[t] (cos) dt = S(Sqrt z), C(Sqrt z) of G&R 8.251, so S_2(b^2/a) -> FresnelS[Sqrt[2/Pi]*Sqrt[b^2/a]]"
+ },
+ {
+  "id": "GR3.694.2",
+  "gr": "3.694.2",
+  "page": 466,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x^2 + 2*b*x + c], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/(2*a)]*Cos[b^2/a]*((1/2 - FresnelC[Sqrt[2/Pi]*Sqrt[b^2/a]])*Cos[c] - (1/2 - FresnelS[Sqrt[2/Pi]*Sqrt[b^2/a]])*Sin[c]) + Sqrt[Pi/(2*a)]*Sin[b^2/a]*((1/2 - FresnelS[Sqrt[2/Pi]*Sqrt[b^2/a]])*Cos[c] + (1/2 - FresnelC[Sqrt[2/Pi]*Sqrt[b^2/a]])*Sin[c])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "GW (334)(4b)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf cos(ax^2+2bx+c) dx = sqrt(pi/2a) cos(b^2/a){(1/2-C_2) cos c - (1/2-S_2) sin c} + sqrt(pi/2a) sin(b^2/a){(1/2-S_2) cos c + (1/2-C_2) sin c}",
+  "note": "S_2(z), C_2(z) = (1/Sqrt[2 Pi]) int_0^z sin t/Sqrt[t] (cos) dt = S(Sqrt z), C(Sqrt z) of G&R 8.251, so S_2(b^2/a) -> FresnelS[Sqrt[2/Pi]*Sqrt[b^2/a]]"
+ },
+ {
+  "id": "GR3.695.1",
+  "gr": "3.695.1",
+  "page": 466,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a^3*x^3]*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(6*a)*Sqrt[b/(3*a)]*(BesselJ[1/3, (2*b/(3*a))*Sqrt[b/(3*a)]] + BesselJ[-1/3, (2*b/(3*a))*Sqrt[b/(3*a)]] - Sqrt[3]/Pi*BesselK[1/3, (2*b/(3*a))*Sqrt[b/(3*a)]])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 83(5)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf sin(a^3x^3) sin bx dx = pi/(6a) sqrt(b/3a){J_1/3(w)+J_-1/3(w) - sqrt3/pi K_1/3(w)}, w=(2b/3a)sqrt(b/3a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.695.2",
+  "gr": "3.695.2",
+  "page": 466,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a^3*x^3]*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(6*a)*Sqrt[b/(3*a)]*(BesselJ[1/3, (2*b/(3*a))*Sqrt[b/(3*a)]] + BesselJ[-1/3, (2*b/(3*a))*Sqrt[b/(3*a)]] + Sqrt[3]/Pi*BesselK[1/3, (2*b/(3*a))*Sqrt[b/(3*a)]])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 24(11)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf cos(a^3x^3) cos bx dx = pi/(6a) sqrt(b/3a){J_1/3(w)+J_-1/3(w) + sqrt3/pi K_1/3(w)}",
+  "note": ""
+ },
+ {
+  "id": "GR3.696.1",
+  "gr": "3.696.1",
+  "page": 467,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x^4]*Sin[b*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "-(Pi/4)*Sqrt[b/(2*a)]*Sin[b^2/(8*a) - 3*Pi/8]*BesselJ[1/4, b^2/(8*a)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 83(2)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf sin(ax^4) sin(bx^2) dx = -pi/4 sqrt(b/2a) Sin[b^2/(8*a) - 3*Pi/8] J_1/4(b^2/8a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.696.2",
+  "gr": "3.696.2",
+  "page": 467,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x^4]*Cos[b*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "-(Pi/4)*Sqrt[b/(2*a)]*Sin[b^2/(8*a) - Pi/8]*BesselJ[-1/4, b^2/(8*a)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 84(19)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf sin(ax^4) cos(bx^2) dx = -pi/4 sqrt(b/2a) Sin[b^2/(8*a) - Pi/8] J_-1/4(b^2/8a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.696.3",
+  "gr": "3.696.3",
+  "page": 467,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x^4]*Sin[b*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/4)*Sqrt[b/(2*a)]*Cos[b^2/(8*a) - 3*Pi/8]*BesselJ[1/4, b^2/(8*a)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 83(4), ET I 25(24)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf cos(ax^4) sin(bx^2) dx = pi/4 sqrt(b/2a) Cos[b^2/(8*a) - 3*Pi/8] J_1/4(b^2/8a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.696.4",
+  "gr": "3.696.4",
+  "page": 467,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x^4]*Cos[b*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi/4)*Sqrt[b/(2*a)]*Cos[b^2/(8*a) - Pi/8]*BesselJ[-1/4, b^2/(8*a)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 25(25)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf cos(ax^4) cos(bx^2) dx = pi/4 sqrt(b/2a) Cos[b^2/(8*a) - Pi/8] J_-1/4(b^2/8a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.697",
+  "gr": "3.697",
+  "page": 467,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a^2/x]*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "a*Pi/(2*Sqrt[b])*BesselJ[1, 2*a*Sqrt[b]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 83(6)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf sin(a^2/x) sin(bx) dx = a pi/(2 sqrt b) J_1(2a sqrt b)",
+  "note": ""
+ },
+ {
+  "id": "GR3.698.1",
+  "gr": "3.698.1",
+  "page": 467,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a^2/x^2]*Sin[b^2*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*b)*Sqrt[Pi/2]*(Sin[2*a*b] - Cos[2*a*b] + E^(-2*a*b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 83(9)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf sin(a^2/x^2) sin(b^2x^2) dx = 1/(4b) sqrt(pi/2)[Sin[2*a*b] - Cos[2*a*b] + E^(-2*a*b)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.698.2",
+  "gr": "3.698.2",
+  "page": 467,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a^2/x^2]*Cos[b^2*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*b)*Sqrt[Pi/2]*(Sin[2*a*b] + Cos[2*a*b] - E^(-2*a*b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 24(13)",
+  "edition_note": "8",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf sin(a^2/x^2) cos(b^2x^2) dx = 1/(4b) sqrt(pi/2)[Sin[2*a*b] + Cos[2*a*b] - E^(-2*a*b)]",
+  "note": "no condition printed; a > 0, b > 0 assumed as in neighbours"
+ },
+ {
+  "id": "GR3.698.3",
+  "gr": "3.698.3",
+  "page": 467,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a^2/x^2]*Sin[b^2*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*b)*Sqrt[Pi/2]*(Sin[2*a*b] + Cos[2*a*b] + E^(-2*a*b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 84(12)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf cos(a^2/x^2) sin(b^2x^2) dx = 1/(4b) sqrt(pi/2)[Sin[2*a*b] + Cos[2*a*b] + E^(-2*a*b)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.698.4",
+  "gr": "3.698.4",
+  "page": 467,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a^2/x^2]*Cos[b^2*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*b)*Sqrt[Pi/2]*(Cos[2*a*b] - Sin[2*a*b] + E^(-2*a*b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 24(14)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf cos(a^2/x^2) cos(b^2x^2) dx = 1/(4b) sqrt(pi/2)[Cos[2*a*b] - Sin[2*a*b] + E^(-2*a*b)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.699.1",
+  "gr": "3.699.1",
+  "page": 467,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a^2*x^2 + b^2/x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi]/(4*a)*(Cos[2*a*b] + Sin[2*a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (70)(27)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf sin(a^2x^2+b^2/x^2) dx = sqrt(2pi)/(4a)(cos 2ab + sin 2ab)",
+  "note": ""
+ },
+ {
+  "id": "GR3.699.2",
+  "gr": "3.699.2",
+  "page": 467,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a^2*x^2 + b^2/x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi]/(4*a)*(Cos[2*a*b] - Sin[2*a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (70)(28)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf cos(a^2x^2+b^2/x^2) dx = sqrt(2pi)/(4a)(cos 2ab - sin 2ab)",
+  "note": ""
+ },
+ {
+  "id": "GR3.699.3a",
+  "gr": "3.699.3",
+  "page": 467,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a^2*x^2 - 2*a*b + b^2/x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi]/(4*a)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI(179)(11, 12)a, ET I 83(6)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf sin(a^2x^2-2ab+b^2/x^2) dx = sqrt(2pi)/(4a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.699.3b",
+  "gr": "3.699.3",
+  "page": 467,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a^2*x^2 - 2*a*b + b^2/x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi]/(4*a)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI(179)(11, 12)a, ET I 83(6)",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf cos(a^2x^2-2ab+b^2/x^2) dx = sqrt(2pi)/(4a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.699.4",
+  "gr": "3.699.4",
+  "page": 468,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a^2*x^2 - b^2/x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi]/(4*a)*E^(-2*a*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (334)(9b)a",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf sin(a^2x^2-b^2/x^2) dx = sqrt(2pi)/(4a) e^(-2ab)",
+  "note": ""
+ },
+ {
+  "id": "GR3.699.5",
+  "gr": "3.699.5",
+  "page": 468,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a^2*x^2 - b^2/x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[2*Pi]/(4*a)*E^(-2*a*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "GW (334)(9b)a",
+  "edition_note": "",
+  "section": "3.69 Trigonometric functions of complicated arguments",
+  "tex": "int_0^inf cos(a^2x^2-b^2/x^2) dx = sqrt(2pi)/(4a) e^(-2ab)",
+  "note": ""
+ },
+ {
+  "id": "GR3.711",
+  "gr": "3.711",
+  "page": 468,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Sqrt[u^2 - x^2]]*Cos[b*x], {x, 0, u}]",
+  "rhs": [
+   "Pi*a*u/(2*Sqrt[a^2 + b^2])*BesselJ[1, u*Sqrt[a^2 + b^2]]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "u > 0"
+  ],
+  "cite": "ET I 27(37)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^u sin(a sqrt(u^2-x^2)) cos bx dx = pi a u/(2 sqrt(a^2+b^2)) J_1(u sqrt(a^2+b^2))",
+  "note": ""
+ },
+ {
+  "id": "GR3.712.1",
+  "gr": "3.712.1",
+  "page": 468,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x^p], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1/p]*Sin[Pi/(2*p)]/(p*a^(1/p))"
+  ],
+  "conds": [
+   "a > 0",
+   "p > 1"
+  ],
+  "cite": "EH I 13(40)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^inf sin(ax^p) dx = Gamma(1/p) sin(pi/2p)/(p a^(1/p))",
+  "note": ""
+ },
+ {
+  "id": "GR3.712.2",
+  "gr": "3.712.2",
+  "page": 468,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x^p], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[1/p]*Cos[Pi/(2*p)]/(p*a^(1/p))"
+  ],
+  "conds": [
+   "a > 0",
+   "p > 1"
+  ],
+  "cite": "EH I 13(39)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^inf cos(ax^p) dx = Gamma(1/p) cos(pi/2p)/(p a^(1/p))",
+  "note": ""
+ },
+ {
+  "id": "GR3.713.1",
+  "gr": "3.713.1",
+  "page": 468,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x^p + b*x^q], {x, 0, Infinity}]",
+  "rhs": [
+   "1/p*Sum[(-b)^k/k!*a^(-(k*q + 1)/p)*Gamma[(k*q + 1)/p]*Sin[(k*(q - p) + 1)/(2*p)*Pi], {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (70)(7)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^inf sin(ax^p+bx^q) dx = 1/p sum_k (-b)^k/k! a^(-(kq+1)/p) Gamma((kq+1)/p) sin[(k(q-p)+1)pi/(2p)]",
+  "note": "series converges only when q < p (p > 1 for the k = 0 term); transcribed with printed conditions"
+ },
+ {
+  "id": "GR3.713.2",
+  "gr": "3.713.2",
+  "page": 468,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x^p + b*x^q], {x, 0, Infinity}]",
+  "rhs": [
+   "1/p*Sum[(-b)^k/k!*a^(-(k*q + 1)/p)*Gamma[(k*q + 1)/p]*Cos[(k*(q - p) + 1)/(2*p)*Pi], {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (70)(8)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^inf cos(ax^p+bx^q) dx = 1/p sum_k (-b)^k/k! a^(-(kq+1)/p) Gamma((kq+1)/p) cos[(k(q-p)+1)pi/(2p)]",
+  "note": "series converges only when q < p (p > 1 for the k = 0 term); transcribed with printed conditions"
+ },
+ {
+  "id": "GR3.714.1",
+  "gr": "3.714.1",
+  "page": 468,
+  "status": "ok",
+  "lhs": "Integrate[Cos[z*Sinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "BesselK[0, z]"
+  ],
+  "conds": [
+   "Re[z] > 0"
+  ],
+  "cite": "WA 202(14)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^inf cos(z sinh x) dx = K_0(z)",
+  "note": "for convergence z must in fact be real positive; Re z > 0 as printed"
+ },
+ {
+  "id": "GR3.714.2",
+  "gr": "3.714.2",
+  "page": 468,
+  "status": "ok",
+  "lhs": "Integrate[Sin[z*Cosh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*BesselJ[0, z]"
+  ],
+  "conds": [
+   "Re[z] > 0"
+  ],
+  "cite": "MO 36",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^inf sin(z cosh x) dx = pi/2 J_0(z)",
+  "note": "converges (conditionally) only for real z > 0; Re z > 0 as printed"
+ },
+ {
+  "id": "GR3.714.3",
+  "gr": "3.714.3",
+  "page": 468,
+  "status": "ok",
+  "lhs": "Integrate[Cos[z*Cosh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "-(Pi/2)*BesselY[0, z]"
+  ],
+  "conds": [
+   "Re[z] > 0"
+  ],
+  "cite": "MO 37",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^inf cos(z cosh x) dx = -pi/2 Y_0(z)",
+  "note": "converges (conditionally) only for real z > 0; Re z > 0 as printed"
+ },
+ {
+  "id": "GR3.714.4",
+  "gr": "3.714.4",
+  "page": 468,
+  "status": "ok",
+  "lhs": "Integrate[Cos[z*Sinh[x]]*Cosh[mu*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Cos[mu*Pi/2]*BesselK[mu, z]"
+  ],
+  "conds": [
+   "Re[z] > 0",
+   "Abs[Re[mu]] < 1"
+  ],
+  "cite": "WA 202(13)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^inf cos(z sinh x) cosh(mu x) dx = cos(mu pi/2) K_mu(z)",
+  "note": "converges only for real z > 0; Re z > 0 as printed"
+ },
+ {
+  "id": "GR3.714.5a",
+  "gr": "3.714.5",
+  "page": 468,
+  "status": "ok",
+  "lhs": "Integrate[Cos[z*Cosh[x]]*Sin[x]^(2*mu), {x, 0, Pi}]",
+  "rhs": [
+   "Sqrt[Pi]*(2/z)^mu*Gamma[mu + 1/2]*BesselI[mu, z]"
+  ],
+  "conds": [
+   "Re[z] > 0",
+   "Re[mu] > -1/2"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi cos(z cosh x) sin^(2mu) x dx = sqrt(pi)(2/z)^mu Gamma(mu+1/2) I_mu(z)",
+  "note": "as printed (cos(z cosh x)); almost certainly a misprint for cosh(z cos x) (Poisson integral for I_mu; cf. 3.715.21 with J_mu) -- corrected lhs in 3.714.5b"
+ },
+ {
+  "id": "GR3.714.5b",
+  "gr": "3.714.5",
+  "page": 468,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[z*Cos[x]]*Sin[x]^(2*mu), {x, 0, Pi}]",
+  "rhs": [
+   "Sqrt[Pi]*(2/z)^mu*Gamma[mu + 1/2]*BesselI[mu, z]"
+  ],
+  "conds": [
+   "Re[z] > 0",
+   "Re[mu] > -1/2"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi cosh(z cos x) sin^(2mu) x dx = sqrt(pi)(2/z)^mu Gamma(mu+1/2) I_mu(z)",
+  "note": "corrected reading of 3.714.5 (book prints cos(z cosh x)); Poisson integral for I_mu"
+ },
+ {
+  "id": "GR3.715.1a",
+  "gr": "3.715.1",
+  "page": 468,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[z*Sin[x]]*Sin[a*x], {x, 0, Pi}]",
+  "rhs": [
+   "Sin[a*Pi]*LommelS1[0, a, z]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 338(13)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi sin(z sin x) sin ax dx = sin(a pi) s_{0,a}(z)",
+  "note": "",
+  "reason": "s_{mu,nu} Lommel function (LommelS1)"
+ },
+ {
+  "id": "GR3.715.1b",
+  "gr": "3.715.1",
+  "page": 468,
+  "status": "ok",
+  "lhs": "Integrate[Sin[z*Sin[x]]*Sin[a*x], {x, 0, Pi}]",
+  "rhs": [
+   "Sin[a*Pi]*Sum[(-1)^(k - 1)*z^(2*k - 1)/Product[(2*j - 1)^2 - a^2, {j, 1, k}], {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 338(13)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi sin(z sin x) sin ax dx = sin(a pi) sum_k (-1)^(k-1) z^(2k-1)/[(1^2-a^2)(3^2-a^2)...((2k-1)^2-a^2)]",
+  "note": "a odd integer is a removable singularity; not sampleable"
+ },
+ {
+  "id": "GR3.715.2a",
+  "gr": "3.715.2",
+  "page": 469,
+  "status": "ok",
+  "lhs": "Integrate[Sin[z*Sin[x]]*Sin[n*x], {x, 0, Pi}]",
+  "rhs": [
+   "(1 - (-1)^n)*Pi/2*BesselJ[n, z]"
+  ],
+  "conds": [
+   "Element[n, Integers]"
+  ],
+  "cite": "WA 30(6), GW(334)(153a)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi sin(z sin x) sin nx dx = [1-(-1)^n] pi/2 J_n(z)",
+  "note": ""
+ },
+ {
+  "id": "GR3.715.2b",
+  "gr": "3.715.2",
+  "page": 469,
+  "status": "ok",
+  "lhs": "(1/2)*Integrate[Sin[z*Sin[x]]*Sin[n*x], {x, -Pi, Pi}]",
+  "rhs": [
+   "(1 - (-1)^n)*Pi/2*BesselJ[n, z]"
+  ],
+  "conds": [
+   "Element[n, Integers]"
+  ],
+  "cite": "WA 30(6), GW(334)(153a)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "1/2 int_-pi^pi sin(z sin x) sin nx dx = [1-(-1)^n] pi/2 J_n(z)",
+  "note": ""
+ },
+ {
+  "id": "GR3.715.2c",
+  "gr": "3.715.2",
+  "page": 469,
+  "status": "ok",
+  "lhs": "(1 - (-1)^n)*Integrate[Sin[z*Sin[x]]*Sin[n*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "(1 - (-1)^n)*Pi/2*BesselJ[n, z]"
+  ],
+  "conds": [
+   "Element[n, Integers]",
+   "Element[(n - 1)/2, Integers]"
+  ],
+  "cite": "WA 30(6), GW(334)(153a)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "[1-(-1)^n] int_0^(pi/2) sin(z sin x) sin nx dx = [1-(-1)^n] pi/2 J_n(z)",
+  "note": "for even n both sides vanish identically; odd-n condition added so the integral can be solved for"
+ },
+ {
+  "id": "GR3.715.3",
+  "gr": "3.715.3",
+  "page": 469,
+  "status": "ok",
+  "lhs": "Integrate[Sin[z*Sin[x]]*Sin[2*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "2/z^2*(Sin[z] - z*Cos[z])"
+  ],
+  "conds": [],
+  "cite": "LI (43)(14)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(z sin x) sin 2x dx = 2/z^2 (sin z - z cos z)",
+  "note": ""
+ },
+ {
+  "id": "GR3.715.4a",
+  "gr": "3.715.4",
+  "page": 469,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[z*Sin[x]]*Cos[a*x], {x, 0, Pi}]",
+  "rhs": [
+   "(1 + Cos[a*Pi])*LommelS1[0, a, z]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 338(14)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi sin(z sin x) cos ax dx = (1+cos a pi) s_{0,a}(z)",
+  "note": "",
+  "reason": "s_{mu,nu} Lommel function (LommelS1)"
+ },
+ {
+  "id": "GR3.715.4b",
+  "gr": "3.715.4",
+  "page": 469,
+  "status": "ok",
+  "lhs": "Integrate[Sin[z*Sin[x]]*Cos[a*x], {x, 0, Pi}]",
+  "rhs": [
+   "(1 + Cos[a*Pi])*Sum[(-1)^(k - 1)*z^(2*k - 1)/Product[(2*j - 1)^2 - a^2, {j, 1, k}], {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 338(14)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi sin(z sin x) cos ax dx = (1+cos a pi) sum_k (-1)^(k-1) z^(2k-1)/[(1^2-a^2)...((2k-1)^2-a^2)]",
+  "note": "a odd integer is a removable singularity; not sampleable"
+ },
+ {
+  "id": "GR3.715.5",
+  "gr": "3.715.5",
+  "page": 469,
+  "status": "ok",
+  "lhs": "Integrate[Sin[z*Sin[x]]*Cos[(2*n + 1)*x], {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers]"
+  ],
+  "cite": "GW (334)(53b)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi sin(z sin x) cos[(2n+1)x] dx = 0",
+  "note": "n integer assumed (not printed)"
+ },
+ {
+  "id": "GR3.715.6a",
+  "gr": "3.715.6",
+  "page": 469,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[z*Sin[x]]*Sin[a*x], {x, 0, Pi}]",
+  "rhs": [
+   "-a*(1 - Cos[a*Pi])*LommelS1[-1, a, z]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 338(12)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi cos(z sin x) sin ax dx = -a(1-cos a pi) s_{-1,a}(z)",
+  "note": "",
+  "reason": "s_{mu,nu} Lommel function (LommelS1)"
+ },
+ {
+  "id": "GR3.715.6b",
+  "gr": "3.715.6",
+  "page": 469,
+  "status": "ok",
+  "lhs": "Integrate[Cos[z*Sin[x]]*Sin[a*x], {x, 0, Pi}]",
+  "rhs": [
+   "-a*(1 - Cos[a*Pi])*(-1/a^2 + Sum[(-1)^(k - 1)*z^(2*k)/(a^2*Product[(2*j)^2 - a^2, {j, 1, k}]), {k, 1, Infinity}])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 338(12)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi cos(z sin x) sin ax dx = -a(1-cos a pi){-1/a^2 + sum_k (-1)^(k-1) z^(2k)/[a^2(2^2-a^2)...((2k)^2-a^2)]}",
+  "note": "a even integer is a removable singularity; not sampleable"
+ },
+ {
+  "id": "GR3.715.7",
+  "gr": "3.715.7",
+  "page": 469,
+  "status": "ok",
+  "lhs": "Integrate[Cos[z*Sin[x]]*Sin[2*n*x], {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers]"
+  ],
+  "cite": "GW (334)(54a)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi cos(z sin x) sin 2nx dx = 0",
+  "note": "n integer assumed (not printed)"
+ },
+ {
+  "id": "GR3.715.8a",
+  "gr": "3.715.8",
+  "page": 469,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[z*Sin[x]]*Cos[a*x], {x, 0, Pi}]",
+  "rhs": [
+   "-a*Sin[a*Pi]*LommelS1[-1, a, z]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 338(11)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi cos(z sin x) cos ax dx = -a sin(a pi) s_{-1,a}(z)",
+  "note": "",
+  "reason": "s_{mu,nu} Lommel function (LommelS1)"
+ },
+ {
+  "id": "GR3.715.8b",
+  "gr": "3.715.8",
+  "page": 469,
+  "status": "ok",
+  "lhs": "Integrate[Cos[z*Sin[x]]*Cos[a*x], {x, 0, Pi}]",
+  "rhs": [
+   "-a*Sin[a*Pi]*(-1/a^2 + Sum[(-1)^(k - 1)*z^(2*k)/(a^2*Product[(2*j)^2 - a^2, {j, 1, k}]), {k, 1, Infinity}])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 338(11)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi cos(z sin x) cos ax dx = -a sin(a pi){-1/a^2 + sum_k (-1)^(k-1) z^(2k)/[a^2(2^2-a^2)...((2k)^2-a^2)]}",
+  "note": "a even integer is a removable singularity; not sampleable"
+ },
+ {
+  "id": "GR3.715.9a",
+  "gr": "3.715.9",
+  "page": 469,
+  "status": "ok",
+  "lhs": "Integrate[Cos[z*Sin[x]]*Cos[n*x], {x, 0, Pi}]",
+  "rhs": [
+   "(1 + (-1)^n)*Pi/2*BesselJ[n, z]"
+  ],
+  "conds": [
+   "Element[n, Integers]"
+  ],
+  "cite": "GW (334)(54b)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi cos(z sin x) cos nx dx = [1+(-1)^n] pi/2 J_n(z)",
+  "note": "n integer assumed (not printed)"
+ },
+ {
+  "id": "GR3.715.9b",
+  "gr": "3.715.9",
+  "page": 469,
+  "status": "ok",
+  "lhs": "(1/2)*Integrate[Cos[z*Sin[x]]*Cos[n*x], {x, -Pi, Pi}]",
+  "rhs": [
+   "(1 + (-1)^n)*Pi/2*BesselJ[n, z]"
+  ],
+  "conds": [
+   "Element[n, Integers]"
+  ],
+  "cite": "GW (334)(54b)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "1/2 int_-pi^pi cos(z sin x) cos nx dx = [1+(-1)^n] pi/2 J_n(z)",
+  "note": "n integer assumed (not printed)"
+ },
+ {
+  "id": "GR3.715.9c",
+  "gr": "3.715.9",
+  "page": 469,
+  "status": "ok",
+  "lhs": "(1 + (-1)^n)*Integrate[Cos[z*Sin[x]]*Cos[n*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "(1 + (-1)^n)*Pi/2*BesselJ[n, z]"
+  ],
+  "conds": [
+   "Element[n, Integers]",
+   "Element[n/2, Integers]"
+  ],
+  "cite": "GW (334)(54b)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "[1+(-1)^n] int_0^(pi/2) cos(z sin x) cos nx dx = [1+(-1)^n] pi/2 J_n(z)",
+  "note": "for odd n both sides vanish identically; even-n condition added so the integral can be solved for"
+ },
+ {
+  "id": "GR3.715.10",
+  "gr": "3.715.10",
+  "page": 469,
+  "status": "ok",
+  "lhs": "Integrate[Cos[z*Sin[x]]*Cos[x]^(2*n), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*(2*n - 1)!!/z^n*BesselJ[n, z]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "FI II 486, WA 35a",
+  "edition_note": "8",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) cos(z sin x) cos^(2n) x dx = pi/2 (2n-1)!!/z^n J_n(z)",
+  "note": ""
+ },
+ {
+  "id": "GR3.715.11",
+  "gr": "3.715.11",
+  "page": 469,
+  "status": "ok",
+  "lhs": "Integrate[Sin[z*Cos[x]]*Sin[2*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "2/z^2*(Sin[z] - z*Cos[z])"
+  ],
+  "conds": [],
+  "cite": "LI (43)(15)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(z cos x) sin 2x dx = 2/z^2 (sin z - z cos z)",
+  "note": ""
+ },
+ {
+  "id": "GR3.715.12a",
+  "gr": "3.715.12",
+  "page": 470,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Sin[z*Cos[x]]*Cos[a*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Cos[a*Pi/2]*LommelS1[0, a, z]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 339",
+  "edition_note": "8",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(z cos x) cos ax dx = cos(a pi/2) s_{0,a}(z)",
+  "note": "",
+  "reason": "s_{mu,nu} Lommel function (LommelS1)"
+ },
+ {
+  "id": "GR3.715.12b",
+  "gr": "3.715.12",
+  "page": 470,
+  "status": "ok",
+  "lhs": "Integrate[Sin[z*Cos[x]]*Cos[a*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4*Csc[a*Pi/2]*(AngerJ[a, z] - AngerJ[-a, z])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 339",
+  "edition_note": "8",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(z cos x) cos ax dx = pi/4 cosec(a pi/2)[J_a(z) - J_-a(z)] (Anger)",
+  "note": ""
+ },
+ {
+  "id": "GR3.715.12c",
+  "gr": "3.715.12",
+  "page": 470,
+  "status": "ok",
+  "lhs": "Integrate[Sin[z*Cos[x]]*Cos[a*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "-(Pi/4)*Sec[a*Pi/4]*(WeberE[a, z] + WeberE[-a, z])",
+   "-(Pi/4)*Sec[a*Pi/2]*(WeberE[a, z] + WeberE[-a, z])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 339",
+  "edition_note": "8",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(z cos x) cos ax dx = -pi/4 sec(a pi/4)[E_a(z) + E_-a(z)] (Weber)",
+  "note": "book prints sec(a pi/4); second candidate sec(a pi/2) (cf. the parallel forms of 3.715.17)"
+ },
+ {
+  "id": "GR3.715.12d",
+  "gr": "3.715.12",
+  "page": 470,
+  "status": "ok",
+  "lhs": "Integrate[Sin[z*Cos[x]]*Cos[a*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Cos[a*Pi/2]*Sum[(-1)^(k - 1)*z^(2*k - 1)/Product[(2*j - 1)^2 - a^2, {j, 1, k}], {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 339",
+  "edition_note": "8",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(z cos x) cos ax dx = cos(a pi/2) sum_k (-1)^(k-1) z^(2k-1)/[(1^2-a^2)...((2k-1)^2-a^2)]",
+  "note": "a odd integer is a removable singularity; not sampleable"
+ },
+ {
+  "id": "GR3.715.13a",
+  "gr": "3.715.13",
+  "page": 470,
+  "status": "ok",
+  "lhs": "Integrate[Sin[z*Cos[x]]*Cos[n*x], {x, 0, Pi}]",
+  "rhs": [
+   "Pi*Sin[n*Pi/2]*BesselJ[n, z]"
+  ],
+  "conds": [
+   "Element[n, Integers]"
+  ],
+  "cite": "GW (334)(55b)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi sin(z cos x) cos nx dx = pi sin(n pi/2) J_n(z)",
+  "note": "n integer assumed (not printed)"
+ },
+ {
+  "id": "GR3.715.13b",
+  "gr": "3.715.13",
+  "page": 470,
+  "status": "ok",
+  "lhs": "(1/2)*Integrate[Sin[z*Cos[x]]*Cos[n*x], {x, -Pi, Pi}]",
+  "rhs": [
+   "Pi*Sin[n*Pi/2]*BesselJ[n, z]"
+  ],
+  "conds": [
+   "Element[n, Integers]"
+  ],
+  "cite": "GW (334)(55b)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "1/2 int_-pi^pi sin(z cos x) cos nx dx = pi sin(n pi/2) J_n(z)",
+  "note": "n integer assumed (not printed)"
+ },
+ {
+  "id": "GR3.715.14",
+  "gr": "3.715.14",
+  "page": 470,
+  "status": "ok",
+  "lhs": "Integrate[Sin[z*Cos[x]]*Cos[(2*n + 1)*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "(-1)^n*Pi/2*BesselJ[2*n + 1, z]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "WA 30(8)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(z cos x) cos[(2n+1)x] dx = (-1)^n pi/2 J_(2n+1)(z)",
+  "note": "n nonnegative integer assumed (not printed)"
+ },
+ {
+  "id": "GR3.715.15",
+  "gr": "3.715.15",
+  "page": 470,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Cos[x]]*Tan[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "(SinIntegral[a] - Pi/2) + Pi/2"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (43)(17)",
+  "edition_note": "11",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(a cos x) tan x dx = si(a) + pi/2",
+  "note": ""
+ },
+ {
+  "id": "GR3.715.16",
+  "gr": "3.715.16",
+  "page": 470,
+  "status": "ok",
+  "lhs": "Integrate[Sin[z*Cos[x]]*Sin[x]^(2*nu), {x, 0, Pi/2}]",
+  "rhs": [
+   "Sqrt[Pi]/2*(2/z)^nu*Gamma[nu + 1/2]*StruveH[nu, z]"
+  ],
+  "conds": [
+   "Re[nu] > -1/2"
+  ],
+  "cite": "WA 358(1)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(z cos x) sin^(2nu) x dx = sqrt(pi)/2 (2/z)^nu Gamma(nu+1/2) H_nu(z)",
+  "note": ""
+ },
+ {
+  "id": "GR3.715.17a",
+  "gr": "3.715.17",
+  "page": 470,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[Cos[z*Cos[x]]*Cos[a*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "-a*Sin[a*Pi/2]*LommelS1[-1, a, z]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 339",
+  "edition_note": "7",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) cos(z cos x) cos ax dx = -a sin(a pi/2) s_{-1,a}(z)",
+  "note": "",
+  "reason": "s_{mu,nu} Lommel function (LommelS1)"
+ },
+ {
+  "id": "GR3.715.17b",
+  "gr": "3.715.17",
+  "page": 470,
+  "status": "ok",
+  "lhs": "Integrate[Cos[z*Cos[x]]*Cos[a*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4*Sec[a*Pi/2]*(AngerJ[a, z] + AngerJ[-a, z])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 339",
+  "edition_note": "7",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) cos(z cos x) cos ax dx = pi/4 sec(a pi/2)[J_a(z) + J_-a(z)] (Anger)",
+  "note": ""
+ },
+ {
+  "id": "GR3.715.17c",
+  "gr": "3.715.17",
+  "page": 470,
+  "status": "ok",
+  "lhs": "Integrate[Cos[z*Cos[x]]*Cos[a*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4*Csc[a*Pi/2]*(WeberE[a, z] - WeberE[-a, z])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 339",
+  "edition_note": "7",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) cos(z cos x) cos ax dx = pi/4 cosec(a pi/2)[E_a(z) - E_-a(z)] (Weber)",
+  "note": ""
+ },
+ {
+  "id": "GR3.715.17d",
+  "gr": "3.715.17",
+  "page": 470,
+  "status": "ok",
+  "lhs": "Integrate[Cos[z*Cos[x]]*Cos[a*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "-a*Sin[a*Pi/2]*(-1/a^2 + Sum[(-1)^(k - 1)*z^(2*k)/(a^2*Product[(2*j)^2 - a^2, {j, 1, k}]), {k, 1, Infinity}])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "WA 339",
+  "edition_note": "7",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) cos(z cos x) cos ax dx = -a sin(a pi/2){-1/a^2 + sum_k (-1)^(k-1) z^(2k)/[a^2(2^2-a^2)...((2k)^2-a^2)]}",
+  "note": "a even integer is a removable singularity; not sampleable"
+ },
+ {
+  "id": "GR3.715.18a",
+  "gr": "3.715.18",
+  "page": 470,
+  "status": "ok",
+  "lhs": "Integrate[Cos[z*Cos[x]]*Cos[n*x], {x, 0, Pi}]",
+  "rhs": [
+   "Pi*Cos[n*Pi/2]*BesselJ[n, z]"
+  ],
+  "conds": [
+   "Element[n, Integers]"
+  ],
+  "cite": "GW (334)(56b)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi cos(z cos x) cos nx dx = pi cos(n pi/2) J_n(z)",
+  "note": "n integer assumed (not printed)"
+ },
+ {
+  "id": "GR3.715.18b",
+  "gr": "3.715.18",
+  "page": 470,
+  "status": "ok",
+  "lhs": "(1/2)*Integrate[Cos[z*Cos[x]]*Cos[n*x], {x, -Pi, Pi}]",
+  "rhs": [
+   "Pi*Cos[n*Pi/2]*BesselJ[n, z]"
+  ],
+  "conds": [
+   "Element[n, Integers]"
+  ],
+  "cite": "GW (334)(56b)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "1/2 int_-pi^pi cos(z cos x) cos nx dx = pi cos(n pi/2) J_n(z)",
+  "note": "n integer assumed (not printed)"
+ },
+ {
+  "id": "GR3.715.19",
+  "gr": "3.715.19",
+  "page": 470,
+  "status": "ok",
+  "lhs": "Integrate[Cos[z*Cos[x]]*Cos[2*n*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "(-1)^n*Pi/2*BesselJ[2*n, z]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "WA 30(9)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) cos(z cos x) cos 2nx dx = (-1)^n pi/2 J_2n(z)",
+  "note": "n nonnegative integer assumed (not printed)"
+ },
+ {
+  "id": "GR3.715.20",
+  "gr": "3.715.20",
+  "page": 470,
+  "status": "ok",
+  "lhs": "Integrate[Cos[z*Cos[x]]*Sin[x]^(2*nu), {x, 0, Pi/2}]",
+  "rhs": [
+   "Sqrt[Pi]/2*(2/z)^nu*Gamma[nu + 1/2]*BesselJ[nu, z]"
+  ],
+  "conds": [
+   "Re[nu] > -1/2"
+  ],
+  "cite": "WA 35, WH",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) cos(z cos x) sin^(2nu) x dx = sqrt(pi)/2 (2/z)^nu Gamma(nu+1/2) J_nu(z)",
+  "note": ""
+ },
+ {
+  "id": "GR3.715.21",
+  "gr": "3.715.21",
+  "page": 470,
+  "status": "ok",
+  "lhs": "Integrate[Cos[z*Cos[x]]*Sin[x]^(2*mu), {x, 0, Pi}]",
+  "rhs": [
+   "Sqrt[Pi]*(2/z)^mu*Gamma[mu + 1/2]*BesselJ[mu, z]"
+  ],
+  "conds": [
+   "Re[mu] > -1/2"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi cos(z cos x) sin^(2mu) x dx = sqrt(pi)(2/z)^mu Gamma(mu+1/2) J_mu(z)",
+  "note": ""
+ },
+ {
+  "id": "GR3.716.1",
+  "gr": "3.716.1",
+  "page": 470,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Tan[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "1/2*(E^(-a)*ExpIntegralEi[a] - E^a*ExpIntegralEi[-a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (43)(1)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(a tan x) dx = 1/2[e^-a Ei-bar(a) - e^a Ei(-a)]",
+  "note": "barred Ei (PV exponential integral of positive argument) -> ExpIntegralEi; cf. 3.723.1"
+ },
+ {
+  "id": "GR3.716.2",
+  "gr": "3.716.2",
+  "page": 470,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*Tan[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*E^(-a)"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "BI (43)(2)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) cos(a tan x) dx = pi/2 e^-a",
+  "note": ""
+ },
+ {
+  "id": "GR3.716.3",
+  "gr": "3.716.3",
+  "page": 471,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Tan[x]]*Sin[2*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "a*Pi/2*E^(-a)"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "BI (43)(7)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(a tan x) sin 2x dx = a pi/2 e^-a",
+  "note": ""
+ },
+ {
+  "id": "GR3.716.4",
+  "gr": "3.716.4",
+  "page": 471,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*Tan[x]]*Sin[x]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "(1 - a)/4*Pi*E^(-a)"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "BI (43)(8)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) cos(a tan x) sin^2 x dx = (1-a)/4 pi e^-a",
+  "note": ""
+ },
+ {
+  "id": "GR3.716.5",
+  "gr": "3.716.5",
+  "page": 471,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*Tan[x]]*Cos[x]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "(1 + a)/4*Pi*E^(-a)"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "BI (43)(9)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) cos(a tan x) cos^2 x dx = (1+a)/4 pi e^-a",
+  "note": ""
+ },
+ {
+  "id": "GR3.716.6",
+  "gr": "3.716.6",
+  "page": 471,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Tan[x]]*Tan[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*E^(-a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (43)(5)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(a tan x) tan x dx = pi/2 e^-a",
+  "note": "conditionally convergent (Abel sense)"
+ },
+ {
+  "id": "GR3.716.7",
+  "gr": "3.716.7",
+  "page": 471,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*Tan[x]]*Tan[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "-(1/2)*(E^(-a)*ExpIntegralEi[a] + E^a*ExpIntegralEi[-a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (43)(6)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) cos(a tan x) tan x dx = -1/2[e^-a Ei-bar(a) + e^a Ei(-a)]",
+  "note": "barred Ei (PV exponential integral of positive argument) -> ExpIntegralEi; cf. 3.723.5"
+ },
+ {
+  "id": "GR3.716.8",
+  "gr": "3.716.8",
+  "page": 471,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Tan[x]]*Sin[x]^2*Tan[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "(2 - a)/4*Pi*E^(-a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (43)(11)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(a tan x) sin^2 x tan x dx = (2-a)/4 pi e^-a",
+  "note": ""
+ },
+ {
+  "id": "GR3.716.9",
+  "gr": "3.716.9",
+  "page": 471,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Tan[x]]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4*(1 - E^(-2*a))"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "BI (43)(3)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin^2(a tan x) dx = pi/4(1 - e^-2a)",
+  "note": "cf. 3.742.1"
+ },
+ {
+  "id": "GR3.716.10",
+  "gr": "3.716.10",
+  "page": 471,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*Tan[x]]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4*(1 + E^(-2*a))"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "BI (43)(4)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) cos^2(a tan x) dx = pi/4(1 + e^-2a)",
+  "note": "cf. 3.742.3"
+ },
+ {
+  "id": "GR3.716.11",
+  "gr": "3.716.11",
+  "page": 471,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Tan[x]]^2*Cot[x]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4*(E^(-2*a) + 2*a - 1)"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "BI (43)(19)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin^2(a tan x) cot^2 x dx = pi/4(e^-2a + 2a - 1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.716.12",
+  "gr": "3.716.12",
+  "page": 471,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Sec[x]^2*Cos[Tan[x]])/Tan[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "EulerGamma"
+  ],
+  "conds": [],
+  "cite": "BI (51)(14)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) [1 - sec^2 x cos(tan x)] dx/tan x = C",
+  "note": ""
+ },
+ {
+  "id": "GR3.716.13",
+  "gr": "3.716.13",
+  "page": 471,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Cot[x]]*Sin[2*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "a*Pi/2*E^(-a)"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(a cot x) sin 2x dx = a pi/2 e^-a",
+  "note": "cf. 3.716.3"
+ },
+ {
+  "id": "GR3.717a",
+  "gr": "3.717",
+  "page": 471,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Csc[x]]*Sin[a*Cot[x]]/Cos[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Sin[a]"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "BI (52)(11, 12)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(a cosec x) sin(a cot x) dx/cos x = pi/2 sin a",
+  "note": ""
+ },
+ {
+  "id": "GR3.717b",
+  "gr": "3.717",
+  "page": 471,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Sec[x]]*Sin[a*Tan[x]]/Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*Sin[a]"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "BI (52)(11, 12)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(a sec x) sin(a tan x) dx/sin x = pi/2 sin a",
+  "note": ""
+ },
+ {
+  "id": "GR3.718.1a",
+  "gr": "3.718.1",
+  "page": 471,
+  "status": "ok",
+  "lhs": "Integrate[Sin[Pi*p/2 - a*Tan[x]]*Tan[x]^(p - 1), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*E^(-a)"
+  ],
+  "conds": [
+   "p^2 < 1",
+   "p != 0",
+   "a >= 0"
+  ],
+  "cite": "BI (44)(5, 6)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(pi p/2 - a tan x) tan^(p-1) x dx = pi/2 e^-a",
+  "note": ""
+ },
+ {
+  "id": "GR3.718.1b",
+  "gr": "3.718.1",
+  "page": 471,
+  "status": "ok",
+  "lhs": "Integrate[Cos[Pi*p/2 - a*Tan[x]]*Tan[x]^p, {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2*E^(-a)"
+  ],
+  "conds": [
+   "p^2 < 1",
+   "p != 0",
+   "a >= 0"
+  ],
+  "cite": "BI (44)(5, 6)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) cos(pi p/2 - a tan x) tan^p x dx = pi/2 e^-a",
+  "note": ""
+ },
+ {
+  "id": "GR3.718.2a",
+  "gr": "3.718.2",
+  "page": 471,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Tan[x] - nu*x]*Sin[x]^(nu - 2), {x, 0, Pi/2}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "a > 0"
+  ],
+  "cite": "NH 157(15)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(a tan x - nu x) sin^(nu-2) x dx = 0",
+  "note": "as printed; companion of 3.718.4 suggests cos^(nu-2) x (possible misprint) -- that reading is 3.718.2b"
+ },
+ {
+  "id": "GR3.718.2b",
+  "gr": "3.718.2",
+  "page": 471,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Tan[x] - nu*x]*Cos[x]^(nu - 2), {x, 0, Pi/2}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "a > 0"
+  ],
+  "cite": "NH 157(15)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(a tan x - nu x) cos^(nu-2) x dx = 0",
+  "note": "suspected corrected reading of 3.718.2 (book prints sin^(nu-2) x); cf. 3.718.4"
+ },
+ {
+  "id": "GR3.718.3",
+  "gr": "3.718.3",
+  "page": 471,
+  "status": "ok",
+  "lhs": "Integrate[Sin[n*Tan[x] + nu*x]*Cos[x]^(nu - 1)/Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2"
+  ],
+  "conds": [
+   "Re[nu] > 0"
+  ],
+  "cite": "BI (51)(15)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) sin(n tan x + nu x) cos^(nu-1) x/sin x dx = pi/2",
+  "note": "n is a real parameter (presumably n > 0; not printed)"
+ },
+ {
+  "id": "GR3.718.4",
+  "gr": "3.718.4",
+  "page": 472,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*Tan[x] - nu*x]*Cos[x]^(nu - 2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*E^(-a)*a^(nu - 1)/Gamma[nu]"
+  ],
+  "conds": [
+   "Re[nu] > 1",
+   "a > 0"
+  ],
+  "cite": "LO V 153(112), NT 157(14)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) cos(a tan x - nu x) cos^(nu-2) x dx = pi e^-a a^(nu-1)/Gamma(nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.718.5",
+  "gr": "3.718.5",
+  "page": 472,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*Tan[x] + nu*x]*Cos[x]^nu, {x, 0, Pi/2}]",
+  "rhs": [
+   "2^(-nu - 1)*Pi*E^(-a)"
+  ],
+  "conds": [
+   "Re[nu] > -1",
+   "a >= 0"
+  ],
+  "cite": "BI (44)(4)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) cos(a tan x + nu x) cos^nu x dx = 2^(-nu-1) pi e^-a",
+  "note": ""
+ },
+ {
+  "id": "GR3.718.6",
+  "gr": "3.718.6",
+  "page": 472,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*Tan[x] - gamma*x]*Cos[x]^nu, {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*a^(nu/2)/2^(nu/2 + 1)*WhittakerW[gamma/2, -(nu + 1)/2, 2*a]/Gamma[1 + (gamma + nu)/2]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[nu] > -1"
+  ],
+  "cite": "EH I 274(13)a",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) cos(a tan x - gamma x) cos^nu x dx = pi a^(nu/2)/2^(nu/2+1) W_{gamma/2,-(nu+1)/2}(2a)/Gamma(1+(gamma+nu)/2)",
+  "note": "(nu + gamma)/2 != -1, -2, ... (not sampleable)"
+ },
+ {
+  "id": "GR3.718.7a",
+  "gr": "3.718.7",
+  "page": 472,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*Tan[x]]/(Sin[x]*Cos[x]), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "LO V 153(114)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) [sin nx - sin(nx - a tan x)]/sin x cos^(n-1) x dx = pi/2 (n = 0)",
+  "note": "n = 0 substituted"
+ },
+ {
+  "id": "GR3.718.7b",
+  "gr": "3.718.7",
+  "page": 472,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[x] - Sin[x - a*Tan[x]])/Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi*(1 - E^(-a))"
+  ],
+  "conds": [
+   "a >= 0"
+  ],
+  "cite": "LO V 153(114)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^(pi/2) [sin nx - sin(nx - a tan x)]/sin x cos^(n-1) x dx = pi(1 - e^-a) (n = 1)",
+  "note": "n = 1 substituted"
+ },
+ {
+  "id": "GR3.719.1",
+  "gr": "3.719.1",
+  "page": 472,
+  "status": "ok",
+  "lhs": "Integrate[Sin[nu*x - z*Sin[x]], {x, 0, Pi}]",
+  "rhs": [
+   "Pi*WeberE[nu, z]"
+  ],
+  "conds": [],
+  "cite": "WA 336(2)",
+  "edition_note": "6",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi sin(nu x - z sin x) dx = pi E_nu(z) (Weber)",
+  "note": ""
+ },
+ {
+  "id": "GR3.719.2",
+  "gr": "3.719.2",
+  "page": 472,
+  "status": "ok",
+  "lhs": "Integrate[Cos[n*x - z*Sin[x]], {x, 0, Pi}]",
+  "rhs": [
+   "Pi*BesselJ[n, z]"
+  ],
+  "conds": [
+   "Element[n, Integers]"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi cos(nx - z sin x) dx = pi J_n(z)",
+  "note": "n integer assumed (not printed)"
+ },
+ {
+  "id": "GR3.719.3",
+  "gr": "3.719.3",
+  "page": 472,
+  "status": "ok",
+  "lhs": "Integrate[Cos[nu*x - z*Sin[x]], {x, 0, Pi}]",
+  "rhs": [
+   "Pi*AngerJ[nu, z]"
+  ],
+  "conds": [],
+  "cite": "WA 336(1)",
+  "edition_note": "",
+  "section": "3.71 Trigonometric functions of more complicated arguments",
+  "tex": "int_0^pi cos(nu x - z sin x) dx = pi J_nu(z) (Anger)",
+  "note": ""
+ },
+ {
+  "id": "GR3.721.1",
+  "gr": "3.721.1",
+  "page": 472,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Sign[a]"
+  ],
+  "conds": [
+   "Element[a, Reals]"
+  ],
+  "cite": "FI II 645",
+  "edition_note": "",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_0^inf sin(ax)/x dx = pi/2 sign a",
+  "note": ""
+ },
+ {
+  "id": "GR3.721.2",
+  "gr": "3.721.2",
+  "page": 472,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/x, {x, 1, Infinity}]",
+  "rhs": [
+   "-(SinIntegral[a] - Pi/2)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI 203(1)",
+  "edition_note": "",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_1^inf sin(ax)/x dx = -si(a)",
+  "note": "a > 0 assumed (not printed)"
+ },
+ {
+  "id": "GR3.721.3",
+  "gr": "3.721.3",
+  "page": 472,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/x, {x, 1, Infinity}]",
+  "rhs": [
+   "-CosIntegral[a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI 203(5)",
+  "edition_note": "8",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_1^inf cos(ax)/x dx = -ci(a)",
+  "note": "a > 0 assumed (not printed)"
+ },
+ {
+  "id": "GR3.722.1",
+  "gr": "3.722.1",
+  "page": 472,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/(x + beta), {x, 0, Infinity}]",
+  "rhs": [
+   "CosIntegral[a*beta]*Sin[a*beta] - Cos[a*beta]*(SinIntegral[a*beta] - Pi/2)"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "a > 0"
+  ],
+  "cite": "BI(16)(1), FI II 646a",
+  "edition_note": "",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_0^inf sin(ax)/(x+beta) dx = ci(a beta) sin(a beta) - cos(a beta) si(a beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.722.2",
+  "gr": "3.722.2",
+  "page": 472,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/(x + beta), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*E^(I*a*beta)"
+  ],
+  "conds": [
+   "a > 0",
+   "Im[beta] > 0"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_-inf^inf sin(ax)/(x+beta) dx = pi e^(i a beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.722.3",
+  "gr": "3.722.3",
+  "page": 472,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/(x + beta), {x, 0, Infinity}]",
+  "rhs": [
+   "-Sin[a*beta]*(SinIntegral[a*beta] - Pi/2) - Cos[a*beta]*CosIntegral[a*beta]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "a > 0"
+  ],
+  "cite": "ET I 8(7), BI(160)(2)",
+  "edition_note": "",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_0^inf cos(ax)/(x+beta) dx = -sin(a beta) si(a beta) - cos(a beta) ci(a beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.722.4",
+  "gr": "3.722.4",
+  "page": 473,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/(x + beta), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-I*Pi*E^(I*a*beta)"
+  ],
+  "conds": [
+   "a > 0",
+   "Im[beta] > 0"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_-inf^inf cos(ax)/(x+beta) dx = -i pi e^(i a beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.722.5",
+  "gr": "3.722.5",
+  "page": 473,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/(beta - x), {x, 0, Infinity}]",
+  "rhs": [
+   "Sin[beta*a]*CosIntegral[beta*a] - Cos[beta*a]*((SinIntegral[beta*a] - Pi/2) + Pi)"
+  ],
+  "conds": [
+   "a > 0",
+   "Im[beta] > 0"
+  ],
+  "cite": "FI II 646, BI(161)(1)",
+  "edition_note": "10",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_0^inf sin(ax)/(beta - x) dx = sin(beta a) ci(beta a) - cos(beta a)[si(beta a) + pi]",
+  "note": "condition 'beta not real and positive' kept as the sampleable branch Im[beta] > 0 (Im[beta] < 0 and beta <= 0 also allowed)"
+ },
+ {
+  "id": "GR3.722.6",
+  "gr": "3.722.6",
+  "page": 473,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/(beta - x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-Pi*E^(I*a*beta)"
+  ],
+  "conds": [
+   "a > 0",
+   "Im[beta] > 0"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_-inf^inf sin(ax)/(beta - x) dx = -pi e^(i a beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.722.7",
+  "gr": "3.722.7",
+  "page": 473,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/(beta - x), {x, 0, Infinity}]",
+  "rhs": [
+   "-Cos[a*beta]*CosIntegral[a*beta] + Sin[a*beta]*((SinIntegral[a*beta] - Pi/2) + Pi)"
+  ],
+  "conds": [
+   "a > 0",
+   "Im[beta] > 0"
+  ],
+  "cite": "ET I 8(8), BI(161)(2)a",
+  "edition_note": "10",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_0^inf cos(ax)/(beta - x) dx = -cos(a beta) ci(a beta) + sin(a beta)[si(a beta) + pi]",
+  "note": "condition 'beta not real and positive' kept as the sampleable branch Im[beta] > 0 (Im[beta] < 0 and beta <= 0 also allowed)"
+ },
+ {
+  "id": "GR3.722.8",
+  "gr": "3.722.8",
+  "page": 473,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/(beta - x), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-I*Pi*E^(I*a*beta)"
+  ],
+  "conds": [
+   "a > 0",
+   "Im[beta] > 0"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_-inf^inf cos(ax)/(beta - x) dx = -i pi e^(i a beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.723.1",
+  "gr": "3.723.1",
+  "page": 473,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*beta)*(E^(-a*beta)*ExpIntegralEi[a*beta] - E^(a*beta)*ExpIntegralEi[-a*beta])"
+  ],
+  "conds": [
+   "a > 0",
+   "beta > 0"
+  ],
+  "cite": "ET I 65(14), BI(160)(3)",
+  "edition_note": "11",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_0^inf sin(ax)/(beta^2+x^2) dx = 1/(2beta)[e^(-a beta) Ei-bar(a beta) - e^(a beta) Ei(-a beta)]",
+  "note": "barred Ei (PV exponential integral of positive argument) -> ExpIntegralEi"
+ },
+ {
+  "id": "GR3.723.2",
+  "gr": "3.723.2",
+  "page": 473,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*beta)*E^(-a*beta)"
+  ],
+  "conds": [
+   "a >= 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "FI II 741, 750, ET I 8(11), WH",
+  "edition_note": "",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_0^inf cos(ax)/(beta^2+x^2) dx = pi/(2beta) e^(-a beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.723.3",
+  "gr": "3.723.3",
+  "page": 473,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*E^(-a*beta)"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "FI II 741, 750, ET I 65(15), WH",
+  "edition_note": "",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_0^inf x sin(ax)/(beta^2+x^2) dx = pi/2 e^(-a beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.723.4",
+  "gr": "3.723.4",
+  "page": 473,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[a*x]/(beta^2 + x^2), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*E^(-a*beta)"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "BI (202)(10)",
+  "edition_note": "",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_-inf^inf x sin(ax)/(beta^2+x^2) dx = pi e^(-a beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.723.5",
+  "gr": "3.723.5",
+  "page": 473,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[a*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-(1/2)*(E^(-a*beta)*ExpIntegralEi[a*beta] + E^(a*beta)*ExpIntegralEi[-a*beta])"
+  ],
+  "conds": [
+   "a > 0",
+   "beta > 0"
+  ],
+  "cite": "BI (160)(6)",
+  "edition_note": "11",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_0^inf x cos(ax)/(beta^2+x^2) dx = -1/2[e^(-a beta) Ei-bar(a beta) + e^(a beta) Ei(-a beta)]",
+  "note": "barred Ei (PV exponential integral of positive argument) -> ExpIntegralEi"
+ },
+ {
+  "id": "GR3.723.6",
+  "gr": "3.723.6",
+  "page": 473,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*(b - x)]/(c^2 + x^2), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi/c*E^(-a*c)*Sin[a*b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "LI (202)(9)",
+  "edition_note": "",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_-inf^inf sin[a(b-x)]/(c^2+x^2) dx = pi/c e^(-ac) sin(ab)",
+  "note": ""
+ },
+ {
+  "id": "GR3.723.7",
+  "gr": "3.723.7",
+  "page": 473,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*(b - x)]/(c^2 + x^2), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi/c*E^(-a*c)*Cos[a*b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "LI (202)(11)a",
+  "edition_note": "",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_-inf^inf cos[a(b-x)]/(c^2+x^2) dx = pi/c e^(-ac) cos(ab)",
+  "note": ""
+ },
+ {
+  "id": "GR3.723.8",
+  "gr": "3.723.8",
+  "page": 473,
+  "status": "ok",
+  "lhs": "Integrate[Sin[a*x]/(beta^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "1/beta*(Sin[a*beta]*CosIntegral[a*beta] - Cos[a*beta]*((SinIntegral[a*beta] - Pi/2) + Pi/2))"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "a > 0"
+  ],
+  "cite": "BI (161)(3)",
+  "edition_note": "",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_0^inf sin(ax)/(beta^2-x^2) dx = 1/beta[sin(a beta) ci(a beta) - cos(a beta)(si(a beta) + pi/2)]",
+  "note": "for real beta > 0 the pole x = beta is on the path (implied PV); for complex beta the right side is continuous across beta > 0 while the integral jumps, so it may hold only as the PV"
+ },
+ {
+  "id": "GR3.723.9",
+  "gr": "3.723.9",
+  "page": 473,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Cos[a*x]/(b^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*b)*Sin[a*b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI(161)(5), ET I 9(15)",
+  "edition_note": "",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_0^inf cos(ax)/(b^2-x^2) dx = pi/(2b) sin(ab)",
+  "note": "",
+  "reason": "pole at x = b on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.723.10",
+  "gr": "3.723.10",
+  "page": 473,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x*Sin[a*x]/(b^2 - x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-(Pi/2)*Cos[a*b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "FI II 647, ET II 252(45)",
+  "edition_note": "",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_0^inf x sin(ax)/(b^2-x^2) dx = -pi/2 cos(ab)",
+  "note": "b > 0 assumed (not printed)",
+  "reason": "pole at x = b on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR3.723.11",
+  "gr": "3.723.11",
+  "page": 473,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[a*x]/(beta^2 + x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Cos[a*beta]*CosIntegral[a*beta] + Sin[a*beta]*((SinIntegral[a*beta] - Pi/2) + Pi/2)"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "a > 0"
+  ],
+  "cite": "BI (161)(6)",
+  "edition_note": "",
+  "section": "3.72-3.74 Combinations of trigonometric and rational functions",
+  "tex": "int_0^inf x cos(ax)/(beta^2+x^2) dx = cos(a beta) ci(a beta) + sin(a beta)[si(a beta) + pi/2]",
+  "note": "denominator printed beta^2 + x^2; the value (and BI 161 neighbour 3.723.8) suggests beta^2 - x^2; second reading not given since lhs differs"
+ }
+]

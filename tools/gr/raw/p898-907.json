@@ -1,0 +1,422 @@
+[
+ {
+  "id": "GR7.761.1",
+  "gr": "7.761.1",
+  "page": 898,
+  "status": "ok",
+  "lhs": "Integrate[E^(t^2/4)*t^(2*c - 1)*ParabolicCylinderD[-nu, t]*Hypergeometric1F1[a, c, -p*t^2/2], {t, 0, Infinity}]",
+  "rhs": [
+   "Pi^(1/2)*Gamma[2*c]*Gamma[nu/2 - c + a]/(2^(c + nu/2)*Gamma[nu/2]*Gamma[a + 1/2 + nu/2])*Hypergeometric2F1[a, c + 1/2, a + 1/2 + nu/2, 1 - p]"
+  ],
+  "conds": [
+   "Abs[1 - p] < 1",
+   "Re[c] > 0",
+   "Re[nu] > 2*Re[c - a]"
+  ],
+  "cite": "EH II 121(12)",
+  "edition_note": "",
+  "section": "7.76 Combinations of parabolic cylinder functions and confluent hypergeometric functions",
+  "tex": "int_0^inf e^(t^2/4) t^(2c-1) D_{-nu}(t) 1F1(a;c;-p t^2/2) dt = ... F(a,c+1/2;a+1/2+nu/2;1-p)",
+  "note": ""
+ },
+ {
+  "id": "GR7.761.2",
+  "gr": "7.761.2",
+  "page": 898,
+  "status": "ok",
+  "lhs": "Integrate[E^(t^2/4)*t^(2*c - 2)*ParabolicCylinderD[-nu, t]*Hypergeometric1F1[a, c, -p*t^2/2], {t, 0, Infinity}]",
+  "rhs": [
+   "Pi^(1/2)*Gamma[2*c - 1]*Gamma[nu/2 + 1/2 - c + a]/(2^(c + nu/2 - 1/2)*Gamma[1/2 + nu/2]*Gamma[a + nu/2])*Hypergeometric2F1[a, c - 1/2, a + nu/2, 1 - p]"
+  ],
+  "conds": [
+   "Abs[1 - p] < 1",
+   "Re[c] > 1/2",
+   "Re[nu] > 2*Re[c - a] - 1"
+  ],
+  "cite": "EH II 121(13)",
+  "edition_note": "",
+  "section": "7.76 Combinations of parabolic cylinder functions and confluent hypergeometric functions",
+  "tex": "int_0^inf e^(t^2/4) t^(2c-2) D_{-nu}(t) 1F1(a;c;-p t^2/2) dt = ... F(a,c-1/2;a+nu/2;1-p)",
+  "note": ""
+ },
+ {
+  "id": "GR7.771a",
+  "gr": "7.771a",
+  "page": 898,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]*ParabolicCylinderD[x - 1/2, beta]*ParabolicCylinderD[-x - 1/2, beta], {x, 0, Infinity}]",
+  "rhs": [
+   "(1/2)*(Pi/Cos[a])^(1/2)*Exp[-beta^2*Cos[a]/2]"
+  ],
+  "conds": [
+   "Abs[a] < Pi/2"
+  ],
+  "cite": "ET II 298(22)",
+  "edition_note": "",
+  "section": "7.77 Integration of a parabolic cylinder function with respect to the index",
+  "tex": "int_0^inf cos(ax) D_{x-1/2}(beta) D_{-x-1/2}(beta) dx = 1/2 (pi/cos a)^(1/2) exp(-beta^2 cos a/2)",
+  "note": ""
+ },
+ {
+  "id": "GR7.771b",
+  "gr": "7.771b",
+  "page": 898,
+  "status": "ok",
+  "lhs": "Integrate[Cos[a*x]*ParabolicCylinderD[x - 1/2, beta]*ParabolicCylinderD[-x - 1/2, beta], {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Abs[a] > Pi/2"
+  ],
+  "cite": "ET II 298(22)",
+  "edition_note": "",
+  "section": "7.77 Integration of a parabolic cylinder function with respect to the index",
+  "tex": "int_0^inf cos(ax) D_{x-1/2}(beta) D_{-x-1/2}(beta) dx = 0 for |a| > pi/2",
+  "note": ""
+ },
+ {
+  "id": "GR7.772.1",
+  "gr": "7.772.1",
+  "page": 898,
+  "status": "SKIP-CONTOUR",
+  "tex": "int_{-1/2-i inf}^{-1/2+i inf} [ (tan phi/2)^nu/cos(phi/2) D_nu(-e^{i pi/4} xi) D_{-nu-1}(e^{i pi/4} eta) + (cot phi/2)^nu/sin(phi/2) D_{-nu-1}(e^{i pi/4} xi) D_nu(-e^{i pi/4} eta) ] dnu/sin(nu pi) = -2i(2pi)^(1/2) exp[-i/4 (xi^2-eta^2) cos phi - i/2 xi eta sin phi]",
+  "reason": "complex-path integral over the order nu along Re nu = const",
+  "cite": "EH II 125(7)",
+  "edition_note": "",
+  "section": "7.77 Integration of a parabolic cylinder function with respect to the index"
+ },
+ {
+  "id": "GR7.772.2",
+  "gr": "7.772.2",
+  "page": 898,
+  "status": "SKIP-CONTOUR",
+  "tex": "int_{-1/2-i inf}^{-1/2+i inf} (tan phi/2)^nu/cos(phi/2) D_nu(-e^{i pi/4} zeta) D_{-nu-1}(e^{i pi/4} eta) dnu/sin(nu pi) = -2i D_0[e^{i pi/4}(zeta cos phi/2 + eta sin phi/2)] D_{-1}[e^{i pi/4}(eta cos phi/2 - zeta sin phi/2)]",
+  "reason": "complex-path integral over the order nu along Re nu = const",
+  "cite": "EH II 125(8)",
+  "edition_note": "",
+  "section": "7.77 Integration of a parabolic cylinder function with respect to the index"
+ },
+ {
+  "id": "GR7.773.1",
+  "gr": "7.773.1",
+  "page": 898,
+  "status": "SKIP-CONTOUR",
+  "tex": "int_{c-i inf}^{c+i inf} D_nu(z) t^nu Gamma(-nu) dnu = 2 pi i e^{-z^2/4 - z t - t^2/2}  [c<0, |arg t|<pi/4]",
+  "reason": "complex-path integral over the order nu along Re nu = const",
+  "cite": "EH II 126(10)",
+  "edition_note": "",
+  "section": "7.77 Integration of a parabolic cylinder function with respect to the index"
+ },
+ {
+  "id": "GR7.773.2",
+  "gr": "7.773.2",
+  "page": 899,
+  "status": "SKIP-CONTOUR",
+  "tex": "int_{c-i inf}^{c+i inf} [D_nu(x) D_{-nu-1}(iy) + D_nu(-x) D_{-nu-1}(iy)] t^{-nu-1} dnu/sin(-nu pi) = 2 pi i/(pi/2)^(1/2) (1+t^2)^(-1/2) exp[1/4 (1-t^2)/(1+t^2) (x^2+y^2) + i t x y/(1+t^2)]  [-1<c<0, |arg t|<pi/2]",
+  "reason": "complex-path integral over the order nu along Re nu = const",
+  "cite": "EH II 126(11)",
+  "edition_note": "",
+  "section": "7.77 Integration of a parabolic cylinder function with respect to the index"
+ },
+ {
+  "id": "GR7.774",
+  "gr": "7.774",
+  "page": 899,
+  "status": "SKIP-CONTOUR",
+  "tex": "int_{c-i inf}^{c+i inf} D_nu[k^(1/2)(1+i) xi] D_{-nu-1}[k^(1/2)(1+i) eta] Gamma(-nu/2) Gamma(1/2+nu/2) dnu = 2^(1/2) pi^2 H0^(2)[k(xi^2+eta^2)/2]  [-1<c<0, Re ik >= 0]",
+  "reason": "complex-path integral over the order nu along Re nu = const",
+  "cite": "EH II 125(9)",
+  "edition_note": "",
+  "section": "7.77 Integration of a parabolic cylinder function with respect to the index"
+ },
+ {
+  "id": "GR7.811.1",
+  "gr": "7.811.1",
+  "page": 899,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf G^{mn}_{pq}(eta x | a;b) G^{mu nu}_{sigma tau}(omega x | c;d) dx = (1/eta) G^{n+mu,m+nu}_{q+sigma,p+tau}(omega/eta | -b1..-bm,c1..c_sigma,-b_{m+1}..-bq ; -a1..-an,d1..d_tau,-a_{n+1}..-ap)",
+  "reason": "indexed parameter family",
+  "cite": "ET II 422(14)",
+  "edition_note": "",
+  "section": "7.81 Combinations of the functions G and E and the elementary functions"
+ },
+ {
+  "id": "GR7.811.2",
+  "gr": "7.811.2",
+  "page": 900,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^1 x^(rho-1)(1-x)^(sigma-1) G^{mn}_{pq}(alpha x | a;b) dx = Gamma(sigma) G^{m,n+1}_{p+1,q+1}(alpha | 1-rho,a1..ap ; b1..bq,1-rho-sigma)",
+  "reason": "indexed parameter family",
+  "cite": "ET II 417(1)",
+  "edition_note": "",
+  "section": "7.81 Combinations of the functions G and E and the elementary functions",
+  "note": "Book misprints: condition reads |arg a| (should be |arg alpha|); 'either' branch has (m+n-rho/2-q/2) where p/2 is meant."
+ },
+ {
+  "id": "GR7.811.3",
+  "gr": "7.811.3",
+  "page": 900,
+  "status": "SKIP-GENERIC",
+  "tex": "int_1^inf x^(-rho)(x-1)^(sigma-1) G^{mn}_{pq}(alpha x | a;b) dx = Gamma(sigma) G^{m+1,n}_{p+1,q+1}(alpha | a1..ap,rho ; rho-sigma,b1..bq)",
+  "reason": "indexed parameter family",
+  "cite": "ET II 417(2)",
+  "edition_note": "",
+  "section": "7.81 Combinations of the functions G and E and the elementary functions"
+ },
+ {
+  "id": "GR7.811.4",
+  "gr": "7.811.4",
+  "page": 900,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf x^(rho-1) G^{mn}_{pq}(alpha x | a;b) dx = prod_{j<=m} Gamma(bj+rho) prod_{j<=n} Gamma(1-aj-rho) / (prod_{j>m} Gamma(1-bj-rho) prod_{j>n} Gamma(aj+rho)) alpha^(-rho)",
+  "reason": "indexed parameter family",
+  "cite": "ET II 418(3)a, ET I 337(14)",
+  "edition_note": "",
+  "section": "7.81 Combinations of the functions G and E and the elementary functions"
+ },
+ {
+  "id": "GR7.811.5",
+  "gr": "7.811.5",
+  "page": 901,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf x^(rho-1)(x+beta)^(-sigma) G^{mn}_{pq}(alpha x | a;b) dx = beta^(rho-sigma)/Gamma(sigma) G^{m+1,n+1}_{p+1,q+1}(alpha beta | 1-rho,a1..ap ; sigma-rho,b1..bq)",
+  "reason": "indexed parameter family",
+  "cite": "ET II 418(4)",
+  "edition_note": "",
+  "section": "7.81 Combinations of the functions G and E and the elementary functions",
+  "note": "Book misprint: first 'either' branch reads Re(rho = bj) > 0, meaning Re(rho + bj) > 0."
+ },
+ {
+  "id": "GR7.812.1",
+  "gr": "7.812.1",
+  "page": 901,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^1 x^(beta-1)(1-x)^(gamma-beta-1) E(a1..ap : rho1..rhoq : z/x^m) dx = Gamma(gamma-beta) m^(beta-gamma) E(a1..a_{p+m} : rho1..rho_{q+m} : z), a_{p+k}=(beta+k-1)/m, rho_{q+k}=(gamma+k-1)/m [Re gamma > Re beta > 0, m=1,2,...]",
+  "reason": "indexed parameter family; MacRobert E-function (no Mathilda head)",
+  "cite": "ET II 414(2)",
+  "edition_note": "",
+  "section": "7.81 Combinations of the functions G and E and the elementary functions"
+ },
+ {
+  "id": "GR7.812.2",
+  "gr": "7.812.2",
+  "page": 901,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf x^(rho-1)(1+x)^(-sigma) E[a1..ap : rho1..rhoq : (1+x)z] dx = Gamma(rho) E(a1..ap, sigma-rho ; rho1..rhoq, sigma ; z) [Re sigma > Re rho > 0]",
+  "reason": "indexed parameter family; MacRobert E-function (no Mathilda head)",
+  "cite": "ET II 415(3)",
+  "edition_note": "",
+  "section": "7.81 Combinations of the functions G and E and the elementary functions"
+ },
+ {
+  "id": "GR7.812.3",
+  "gr": "7.812.3",
+  "page": 902,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf (1+x)^(-beta) x^(s-1) G^{mn}_{pq}(a x/(1+x) | a;b) dx = Gamma(beta-s) G^{m,n+1}_{p+1,q+1}(a | 1-s,a1..ap ; b1..bq,1-beta)",
+  "reason": "indexed parameter family",
+  "cite": "ET I 338(19)",
+  "edition_note": "",
+  "section": "7.81 Combinations of the functions G and E and the elementary functions"
+ },
+ {
+  "id": "GR7.813.1",
+  "gr": "7.813.1",
+  "page": 902,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf x^(-rho) e^(-beta x) G^{mn}_{pq}(alpha x | a;b) dx = beta^(rho-1) G^{m,n+1}_{p+1,q}(alpha/beta | rho,a1..ap ; b1..bq)",
+  "reason": "indexed parameter family",
+  "cite": "ET II 419(5)",
+  "edition_note": "",
+  "section": "7.81 Combinations of the functions G and E and the elementary functions"
+ },
+ {
+  "id": "GR7.813.2",
+  "gr": "7.813.2",
+  "page": 902,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf e^(-beta x) G^{mn}_{pq}(alpha x^2 | a;b) dx = pi^(-1/2) beta^(-1) G^{m,n+2}_{p+2,q}(4 alpha/beta^2 | 0,1/2,a1..ap ; b1..bq)",
+  "reason": "indexed parameter family",
+  "cite": "ET II 419(6)",
+  "edition_note": "",
+  "section": "7.81 Combinations of the functions G and E and the elementary functions"
+ },
+ {
+  "id": "GR7.814.1",
+  "gr": "7.814.1",
+  "page": 902,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf x^(beta-1) e^(-x) E(a1..ap : rho1..rhoq : xz) dx = pi cosec(beta pi)[E(a1..ap : 1-beta,rho1..rhoq : e^{+-i pi} z) - z^(-beta) E(a1+beta..ap+beta : 1+beta, rho1+beta..rho_q+beta : e^{+-i pi} z)]",
+  "reason": "indexed parameter family; MacRobert E-function (no Mathilda head)",
+  "cite": "ET II 415(4)",
+  "edition_note": "",
+  "section": "7.81 Combinations of the functions G and E and the elementary functions",
+  "note": "Book prints rho_l+beta in the last E; rho_q+beta is meant."
+ },
+ {
+  "id": "GR7.814.2",
+  "gr": "7.814.2",
+  "page": 902,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf x^(beta-1) e^(-x) E(a1..ap : rho1..rhoq : x^(-m) z) dx = (2pi)^(1/2-m/2) m^(beta-1/2) E(a1..a_{p+m} : rho1..rhoq : m^(-m) z), a_{p+k}=(beta+k-1)/m",
+  "reason": "indexed parameter family; MacRobert E-function (no Mathilda head)",
+  "cite": "ET II 415(5)",
+  "edition_note": "",
+  "section": "7.81 Combinations of the functions G and E and the elementary functions"
+ },
+ {
+  "id": "GR7.815.1",
+  "gr": "7.815.1",
+  "page": 902,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf sin(cx) G^{mn}_{pq}(alpha x^2 | a;b) dx = sqrt(pi) c^(-1) G^{m,n+1}_{p+2,q}(4 alpha/c^2 | 0,a1..ap,1/2 ; b1..bq)",
+  "reason": "indexed parameter family",
+  "cite": "ET II 420(7)",
+  "edition_note": "",
+  "section": "7.81 Combinations of the functions G and E and the elementary functions"
+ },
+ {
+  "id": "GR7.815.2",
+  "gr": "7.815.2",
+  "page": 903,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf cos(cx) G^{mn}_{pq}(alpha x^2 | a;b) dx = pi^(1/2) c^(-1) G^{m,n+1}_{p+2,q}(4 alpha/c^2 | 1/2,a1..ap,0 ; b1..bq)",
+  "reason": "indexed parameter family",
+  "cite": "ET II 420(8)",
+  "edition_note": "",
+  "section": "7.81 Combinations of the functions G and E and the elementary functions"
+ },
+ {
+  "id": "GR7.821.1",
+  "gr": "7.821.1",
+  "page": 903,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf x^(-rho) J_nu(2 sqrt x) G^{mn}_{pq}(alpha x | a;b) dx = G^{m,n+1}_{p+2,q}(alpha | rho-nu/2,a1..ap,rho+nu/2 ; b1..bq)",
+  "reason": "indexed parameter family",
+  "cite": "ET II 420(9)",
+  "edition_note": "",
+  "section": "7.82 Combinations of the functions G and E and Bessel functions"
+ },
+ {
+  "id": "GR7.821.2",
+  "gr": "7.821.2",
+  "page": 903,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf x^(-rho) Y_nu(2 sqrt x) G^{mn}_{pq}(alpha x | a;b) dx = G^{m,n+2}_{p+3,q+1}(alpha | rho-nu/2,rho+nu/2,a1..ap,rho+1/2+nu/2 ; b1..bq,rho+1/2+nu/2)",
+  "reason": "indexed parameter family",
+  "cite": "ET II 420(10)",
+  "edition_note": "",
+  "section": "7.82 Combinations of the functions G and E and Bessel functions"
+ },
+ {
+  "id": "GR7.821.3",
+  "gr": "7.821.3",
+  "page": 903,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf x^(-rho) K_nu(2 sqrt x) G^{mn}_{pq}(alpha x | a;b) dx = 1/2 G^{m,n+2}_{p+2,q}(alpha | rho-nu/2,rho+nu/2,a1..ap ; b1..bq)",
+  "reason": "indexed parameter family",
+  "cite": "ET II 421(11)",
+  "edition_note": "",
+  "section": "7.82 Combinations of the functions G and E and Bessel functions"
+ },
+ {
+  "id": "GR7.822.1",
+  "gr": "7.822.1",
+  "page": 903,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf x^(2rho) J_nu(xy) G^{mn}_{pq}(lam x^2 | a;b) dx = 2^(2rho)/y^(2rho+1) G^{m,n+1}_{p+2,q}(4 lam/y^2 | h,a1..ap,k ; b1..bq), h=1/2-rho-nu/2, k=1/2-rho+nu/2",
+  "reason": "indexed parameter family",
+  "cite": "ET II 91(20)",
+  "edition_note": "",
+  "section": "7.82 Combinations of the functions G and E and Bessel functions"
+ },
+ {
+  "id": "GR7.822.2",
+  "gr": "7.822.2",
+  "page": 904,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf x^(1/2) Y_nu(xy) G^{mn}_{pq}(lam x^2 | a;b) dx = (2 lam)^(-1/2) y^(-1/2) G^{n+2,m}_{q+1,p+3}(y^2/(4 lam) | 1/2-b1..1/2-bq,l ; h,k,1/2-a1..1/2-ap,l), h=1/4+nu/2, k=1/4-nu/2, l=-1/4-nu/2",
+  "reason": "indexed parameter family",
+  "cite": "ET II 119(56)",
+  "edition_note": "",
+  "section": "7.82 Combinations of the functions G and E and Bessel functions"
+ },
+ {
+  "id": "GR7.822.3",
+  "gr": "7.822.3",
+  "page": 904,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf x^(1/2) K_nu(xy) G^{mn}_{pq}(lam x^2 | a;b) dx = 2^(-3/2) lam^(-1/2) y^(-1/2) G^{n+2,m}_{q,p+2}(y^2/(4 lam) | 1/2-b1..1/2-bq ; h,k,1/2-a1..1/2-ap), h=1/4+nu/2, k=1/4-nu/2",
+  "reason": "indexed parameter family",
+  "cite": "ET II 153(90)",
+  "edition_note": "",
+  "section": "7.82 Combinations of the functions G and E and Bessel functions"
+ },
+ {
+  "id": "GR7.823.1",
+  "gr": "7.823.1",
+  "page": 904,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf x^(beta-1) J_nu(x) E(a1..ap : rho1..rhoq : x^(-2m) z) dx = (2pi)^(-m)(2m)^(beta-1){exp[pi(beta-nu-1)i/2] E[a1..a_{p+2m} : rho1..rhoq : (2m)^(-2m) z e^{-m pi i}] + exp[-pi(beta-nu-1)i/2] E[... : (2m)^(-2m) z e^{m pi i}]}",
+  "reason": "indexed parameter family; MacRobert E-function (no Mathilda head)",
+  "cite": "ET II 415(7)",
+  "edition_note": "",
+  "section": "7.82 Combinations of the functions G and E and Bessel functions"
+ },
+ {
+  "id": "GR7.823.2",
+  "gr": "7.823.2",
+  "page": 904,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf x^(beta-1) K_nu(x) E(a1..ap : rho1..rhoq : x^(-2m) z) dx = (2pi)^(1-m) 2^(beta-2) m^(beta-1) E[a1..a_{p+2m} : rho1..rhoq : (2m)^(-2m) z]",
+  "reason": "indexed parameter family; MacRobert E-function (no Mathilda head)",
+  "cite": "ET II 416(8)",
+  "edition_note": "",
+  "section": "7.82 Combinations of the functions G and E and Bessel functions"
+ },
+ {
+  "id": "GR7.824.1",
+  "gr": "7.824.1",
+  "page": 905,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf x^(1/2) H_nu(xy) G^{mn}_{pq}(lam x^2 | a;b) dx = (2 lam y)^(-1/2) G^{n+1,m+1}_{q+1,p+3}(y^2/(4 lam) | l,1/2-b1..1/2-bq ; l,1/2-a1..1/2-ap,h,k), h=1/4+nu/2, k=1/4-nu/2, l=3/4+nu/2",
+  "reason": "indexed parameter family",
+  "cite": "ET II 172(47)",
+  "edition_note": "",
+  "section": "7.82 Combinations of the functions G and E and Bessel functions"
+ },
+ {
+  "id": "GR7.824.2",
+  "gr": "7.824.2",
+  "page": 905,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf x^(-rho) H_nu(2 sqrt x) G^{mn}_{pq}(alpha x | a;b) dx = G^{m+1,n+1}_{p+3,q+1}(alpha | rho-1/2-nu/2,a1..ap,rho+nu/2,rho-nu/2 ; rho-1/2-nu/2,b1..bq)",
+  "reason": "indexed parameter family",
+  "cite": "ET II 421(12)",
+  "edition_note": "",
+  "section": "7.82 Combinations of the functions G and E and Bessel functions"
+ },
+ {
+  "id": "GR7.831",
+  "gr": "7.831",
+  "page": 905,
+  "status": "SKIP-GENERIC",
+  "tex": "int_1^inf x^(-rho)(x-1)^(sigma-1) F(k+sigma-rho, lam+sigma-rho; sigma; 1-x) G^{mn}_{pq}(alpha x | a;b) dx = Gamma(sigma) G^{m+2,n}_{p+2,q+2}(alpha | a1..ap,k+lam+sigma-rho,rho ; k,lam,b1..bq)",
+  "reason": "indexed parameter family",
+  "cite": "ET II 421(13)",
+  "edition_note": "",
+  "section": "7.83 Combinations of the functions G and E and other special functions"
+ },
+ {
+  "id": "GR7.832",
+  "gr": "7.832",
+  "page": 906,
+  "status": "SKIP-GENERIC",
+  "tex": "int_0^inf x^(beta-1) e^(-x/2) W_{kappa,mu}(x) E(a1..ap : rho1..rhoq : x^(-m) z) dx = (2pi)^(1/2-m/2) m^(beta+kappa-1/2) E(a1..a_{p+2m} : rho1..rho_{q+m} : m^(-m) z), a_{p+k}=(beta+k+mu-1/2)/m, a_{p+m+k}=(beta-mu+k-1/2)/m, rho_{q+k}=(beta-kappa+k)/m",
+  "reason": "indexed parameter family; MacRobert E-function (no Mathilda head)",
+  "cite": "ET II 416(10)",
+  "edition_note": "",
+  "section": "7.83 Combinations of the functions G and E and other special functions"
+ }
+]

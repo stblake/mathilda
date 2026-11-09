@@ -1,0 +1,1407 @@
+[
+ {
+  "id": "GR2.645.7",
+  "gr": "2.645.7",
+  "page": 273,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[x]/Sin[x]^2, x]",
+  "rhs": [
+   "-x/Sin[x] + Log[Tan[x/2]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x cos x/sin^2 x = -x/sin x + ln tan(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.645.8",
+  "gr": "2.645.8",
+  "page": 273,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/Cos[x]^2, x]",
+  "rhs": [
+   "x/Cos[x] - Log[Tan[x/2 + Pi/4]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x sin x/cos^2 x = x/cos x - ln tan(x/2+pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR2.646.1",
+  "gr": "2.646.1",
+  "page": 273,
+  "status": "ok",
+  "lhs": "Integrate[x^p*Tan[x], x]",
+  "rhs": [
+   "Sum[(-1)^(k + 1)*2^(2*k)*(2^(2*k - 1) - 1)/((p + 2*k)*(2*k)!)*BernoulliB[2*k]*x^(p + 2*k), {k, 1, Infinity}]",
+   "Sum[(-1)^(k + 1)*2^(2*k)*(2^(2*k) - 1)/((p + 2*k)*(2*k)!)*BernoulliB[2*k]*x^(p + 2*k), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "p >= -1"
+  ],
+  "cite": "GU (333)(12d)",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x^p tan x = sum_{k>=1} (-1)^(k+1) 2^(2k)(2^(2k-1)-1)/((p+2k)(2k)!) B_2k x^(p+2k)",
+  "note": "condition |x| < pi/2 on the integration variable. Book prints 2^(2k-1)-1; the tangent series has 2^(2k)-1 (second rhs)."
+ },
+ {
+  "id": "GR2.646.2",
+  "gr": "2.646.2",
+  "page": 273,
+  "status": "ok",
+  "lhs": "Integrate[x^p*Cot[x], x]",
+  "rhs": [
+   "Sum[(-1)^k*2^(2*k)*BernoulliB[2*k]/((p + 2*k)*(2*k)!)*x^(p + 2*k), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "p >= 1"
+  ],
+  "cite": "GU (333)(13d)",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x^p cot x = sum_{k>=0} (-1)^k 2^(2k) B_2k/((p+2k)(2k)!) x^(p+2k)",
+  "note": "condition |x| < pi on the integration variable"
+ },
+ {
+  "id": "GR2.646.3",
+  "gr": "2.646.3",
+  "page": 273,
+  "status": "ok",
+  "lhs": "Integrate[x*Tan[x]^2, x]",
+  "rhs": [
+   "x*Tan[x] + Log[Cos[x]] - x^2/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x^p tan^2 x = x tan x + ln cos x - x^2/2",
+  "note": "Book prints x^p in the integrand, but the value has no p; it is the p = 1 case (misprint). Transcribed with x."
+ },
+ {
+  "id": "GR2.646.4",
+  "gr": "2.646.4",
+  "page": 273,
+  "status": "ok",
+  "lhs": "Integrate[x*Cot[x]^2, x]",
+  "rhs": [
+   "-x*Cot[x] + Log[Sin[x]] - x^2/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x cot^2 x = -x cot x + ln sin x - x^2/2",
+  "note": ""
+ },
+ {
+  "id": "GR2.647.1",
+  "gr": "2.647.1",
+  "page": 273,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^n cos x/(a+b sin x)^m = -x^n/((m-1)b(a+b sin x)^(m-1)) + n/((m-1)b) int x^(n-1)/(a+b sin x)^(m-1)",
+  "reason": "integral appears on the right-hand side",
+  "cite": "MZ 247",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "note": ""
+ },
+ {
+  "id": "GR2.647.2",
+  "gr": "2.647.2",
+  "page": 273,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^n sin x/(a+b cos x)^m = x^n/((m-1)b(a+b cos x)^(m-1)) - n/((m-1)b) int x^(n-1)/(a+b cos x)^(m-1)",
+  "reason": "integral appears on the right-hand side",
+  "cite": "MZ 247",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "note": ""
+ },
+ {
+  "id": "GR2.647.3",
+  "gr": "2.647.3",
+  "page": 273,
+  "status": "ok",
+  "lhs": "Integrate[x/(1 + Sin[x]), x]",
+  "rhs": [
+   "-x*Tan[Pi/4 - x/2] + 2*Log[Cos[Pi/4 - x/2]]"
+  ],
+  "conds": [],
+  "cite": "PE (329)",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x/(1+sin x) = -x tan(pi/4-x/2) + 2 ln cos(pi/4-x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.647.4",
+  "gr": "2.647.4",
+  "page": 273,
+  "status": "ok",
+  "lhs": "Integrate[x/(1 - Sin[x]), x]",
+  "rhs": [
+   "x*Cot[Pi/4 - x/2] + 2*Log[Sin[Pi/4 - x/2]]"
+  ],
+  "conds": [],
+  "cite": "PE (330)",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x/(1-sin x) = x cot(pi/4-x/2) + 2 ln sin(pi/4-x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.647.5",
+  "gr": "2.647.5",
+  "page": 273,
+  "status": "ok",
+  "lhs": "Integrate[x/(1 + Cos[x]), x]",
+  "rhs": [
+   "x*Tan[x/2] + 2*Log[Cos[x/2]]"
+  ],
+  "conds": [],
+  "cite": "PE (331)",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x/(1+cos x) = x tan(x/2) + 2 ln cos(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.647.6",
+  "gr": "2.647.6",
+  "page": 273,
+  "status": "ok",
+  "lhs": "Integrate[x/(1 - Cos[x]), x]",
+  "rhs": [
+   "-x*Cot[x/2] + 2*Log[Sin[x/2]]"
+  ],
+  "conds": [],
+  "cite": "PE (332)",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x/(1-cos x) = -x cot(x/2) + 2 ln sin(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.647.7",
+  "gr": "2.647.7",
+  "page": 273,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[x]/(1 + Sin[x])^2, x]",
+  "rhs": [
+   "-x/(1 + Sin[x]) + Tan[x/2 - Pi/4]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x cos x/(1+sin x)^2 = -x/(1+sin x) + tan(x/2-pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR2.647.8",
+  "gr": "2.647.8",
+  "page": 273,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[x]/(1 - Sin[x])^2, x]",
+  "rhs": [
+   "x/(1 - Sin[x]) + Tan[x/2 + Pi/4]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x cos x/(1-sin x)^2 = x/(1-sin x) + tan(x/2+pi/4)",
+  "note": ""
+ },
+ {
+  "id": "GR2.647.9",
+  "gr": "2.647.9",
+  "page": 273,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/(1 + Cos[x])^2, x]",
+  "rhs": [
+   "x/(1 + Cos[x]) - Tan[x/2]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x sin x/(1+cos x)^2 = x/(1+cos x) - tan(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.647.10",
+  "gr": "2.647.10",
+  "page": 273,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/(1 - Cos[x])^2, x]",
+  "rhs": [
+   "-x/(1 - Cos[x]) - Cot[x/2]"
+  ],
+  "conds": [],
+  "cite": "MZ 247a",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x sin x/(1-cos x)^2 = -x/(1-cos x) - cot(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.648.1",
+  "gr": "2.648.1",
+  "page": 274,
+  "status": "ok",
+  "lhs": "Integrate[(x + Sin[x])/(1 + Cos[x]), x]",
+  "rhs": [
+   "x*Tan[x/2]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int (x+sin x)/(1+cos x) = x tan(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.648.2",
+  "gr": "2.648.2",
+  "page": 274,
+  "status": "ok",
+  "lhs": "Integrate[(x - Sin[x])/(1 - Cos[x]), x]",
+  "rhs": [
+   "-x*Cot[x/2]"
+  ],
+  "conds": [],
+  "cite": "GU (333)(16)",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int (x-sin x)/(1-cos x) = -x cot(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.649",
+  "gr": "2.649",
+  "page": 274,
+  "status": "ok",
+  "lhs": "Integrate[x^2/((a*x - b)*Sin[x] + (a + b*x)*Cos[x])^2, x]",
+  "rhs": [
+   "(x*Sin[x] + Cos[x])/(b*((a*x - b)*Sin[x] + (a + b*x)*Cos[x]))"
+  ],
+  "conds": [],
+  "cite": "GU (333)(17)",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x^2/[(ax-b) sin x + (a+bx) cos x]^2 = (x sin x + cos x)/(b[(ax-b) sin x + (a+bx) cos x])",
+  "note": ""
+ },
+ {
+  "id": "GR2.651",
+  "gr": "2.651",
+  "page": 274,
+  "status": "ok",
+  "lhs": "Integrate[1/(a + (a*x + b)*Tan[x])^2, x]",
+  "rhs": [
+   "Tan[x]/(a*(a + (a*x + b)*Tan[x]))"
+  ],
+  "conds": [],
+  "cite": "GU (333)(18)",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int dx/[a+(ax+b) tan x]^2 = tan x/(a[a+(ax+b) tan x])",
+  "note": ""
+ },
+ {
+  "id": "GR2.652",
+  "gr": "2.652",
+  "page": 274,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x/(Cos[x + t]*Cos[x - t]), x]",
+  "rhs": [
+   "Csc[2*t]*(x*Log[Cos[x - t]/Cos[x + t]] - LobachevskyL[x + t] + LobachevskyL[x - t])"
+  ],
+  "conds": [
+   "t != 0"
+  ],
+  "cite": "LO III 288",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x/(cos(x+t)cos(x-t)) = cosec 2t {x ln(cos(x-t)/cos(x+t)) - L(x+t) + L(x-t)}",
+  "reason": "Lobachevsky function L(x)",
+  "note": "Conditions: t != n pi; |x| < pi/2 - |t0| (t0 = t reduced into (-pi/2, pi/2)); x-condition not sampleable."
+ },
+ {
+  "id": "GR2.653.1",
+  "gr": "2.653.1",
+  "page": 274,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]/Sqrt[x], x]",
+  "rhs": [
+   "Sqrt[2*Pi]*FresnelS[Sqrt[2/Pi]*Sqrt[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int sin x/sqrt x = sqrt(2pi) S(sqrt x)",
+  "note": "cf. 8.251 21"
+ },
+ {
+  "id": "GR2.653.2",
+  "gr": "2.653.2",
+  "page": 274,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/Sqrt[x], x]",
+  "rhs": [
+   "Sqrt[2*Pi]*FresnelC[Sqrt[2/Pi]*Sqrt[x]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int cos x/sqrt x = sqrt(2pi) C(sqrt x)",
+  "note": "cf. 8.251 3"
+ },
+ {
+  "id": "GR2.654.1",
+  "gr": "2.654.1",
+  "page": 274,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]*Cos[x]/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-x*Sqrt[1 - k^2*Sin[x]^2]/k^2 + MatharE2[x, k]/k^2"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x sin x cos x/Delta = -x Delta/k^2 + E(x,k)/k^2",
+  "note": "Notation Delta = sqrt(1-k^2 sin^2 x), k' = sqrt(1-k^2) substituted."
+ },
+ {
+  "id": "GR2.654.2",
+  "gr": "2.654.2",
+  "page": 274,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]^3*Cos[x]/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-(1 - k^2)/(9*k^4)*MatharF2[x, k] + (2*k^2 + 5)/(9*k^4)*MatharE2[x, k] - 1/(9*k^4)*(3*(3 - (1 - k^2*Sin[x]^2))*x + k^2*Sin[x]*Cos[x])*Sqrt[1 - k^2*Sin[x]^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x sin^3 x cos x/Delta = -k'^2/(9k^4) F + (2k^2+5)/(9k^4) E - 1/(9k^4)[3(3-Delta^2)x + k^2 sin x cos x] Delta",
+  "note": "Notation Delta = sqrt(1-k^2 sin^2 x), k' = sqrt(1-k^2) substituted."
+ },
+ {
+  "id": "GR2.654.3",
+  "gr": "2.654.3",
+  "page": 274,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]*Cos[x]^3/Sqrt[1 - k^2*Sin[x]^2], x]",
+  "rhs": [
+   "-(1 - k^2)/(9*k^4)*MatharF2[x, k] + (7*k^2 - 5)/(9*k^4)*MatharE2[x, k] - 1/(9*k^4)*(3*((1 - k^2*Sin[x]^2) - 3*(1 - k^2))*x - k^2*Sin[x]*Cos[x])*Sqrt[1 - k^2*Sin[x]^2]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x sin x cos^3 x/Delta = -k'^2/(9k^4) F + (7k^2-5)/(9k^4) E - 1/(9k^4)[3(Delta^2-3k'^2)x - k^2 sin x cos x] Delta",
+  "note": "Notation Delta = sqrt(1-k^2 sin^2 x), k' = sqrt(1-k^2) substituted."
+ },
+ {
+  "id": "GR2.654.4",
+  "gr": "2.654.4",
+  "page": 274,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]/Sqrt[1 - k^2*Sin[x]^2]^3, x]",
+  "rhs": [
+   "-x*Cos[x]/((1 - k^2)*Sqrt[1 - k^2*Sin[x]^2]) + ArcSin[k*Sin[x]]/(k*(1 - k^2))"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x sin x/Delta^3 = -x cos x/(k'^2 Delta) + arcsin(k sin x)/(k k'^2)",
+  "note": "Notation Delta = sqrt(1-k^2 sin^2 x), k' = sqrt(1-k^2) substituted."
+ },
+ {
+  "id": "GR2.654.5",
+  "gr": "2.654.5",
+  "page": 274,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[x]/Sqrt[1 - k^2*Sin[x]^2]^3, x]",
+  "rhs": [
+   "x*Sin[x]/Sqrt[1 - k^2*Sin[x]^2] + Log[k*Cos[x] + Sqrt[1 - k^2*Sin[x]^2]]/k"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x cos x/Delta^3 = x sin x/Delta + ln(k cos x + Delta)/k",
+  "note": "Notation Delta = sqrt(1-k^2 sin^2 x), k' = sqrt(1-k^2) substituted."
+ },
+ {
+  "id": "GR2.654.6",
+  "gr": "2.654.6",
+  "page": 274,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]*Cos[x]/Sqrt[1 - k^2*Sin[x]^2]^3, x]",
+  "rhs": [
+   "x/(k^2*Sqrt[1 - k^2*Sin[x]^2]) - MatharF2[x, k]/k^2"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x sin x cos x/Delta^3 = x/(k^2 Delta) - F(x,k)/k^2",
+  "note": "Notation Delta = sqrt(1-k^2 sin^2 x), k' = sqrt(1-k^2) substituted."
+ },
+ {
+  "id": "GR2.654.7",
+  "gr": "2.654.7",
+  "page": 274,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]^3*Cos[x]/Sqrt[1 - k^2*Sin[x]^2]^3, x]",
+  "rhs": [
+   "x*(2 - k^2*Sin[x]^2)/(k^4*Sqrt[1 - k^2*Sin[x]^2]) - (MatharE2[x, k] + MatharF2[x, k])/k^4"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x sin^3 x cos x/Delta^3 = x(2-k^2 sin^2 x)/(k^4 Delta) - [E+F]/k^4",
+  "note": "Notation Delta = sqrt(1-k^2 sin^2 x), k' = sqrt(1-k^2) substituted."
+ },
+ {
+  "id": "GR2.654.8",
+  "gr": "2.654.8",
+  "page": 274,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x]*Cos[x]^3/Sqrt[1 - k^2*Sin[x]^2]^3, x]",
+  "rhs": [
+   "x*(k^2*Sin[x]^2 + k^2 - 2)/(k^4*Sqrt[1 - k^2*Sin[x]^2]) + (1 - k^2)/k^4*MatharF2[x, k] + MatharE2[x, k]/k^4"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x sin x cos^3 x/Delta^3 = x(k^2 sin^2 x + k^2 - 2)/(k^4 Delta) + k'^2/k^4 F + E/k^4",
+  "note": "Notation Delta = sqrt(1-k^2 sin^2 x), k' = sqrt(1-k^2) substituted."
+ },
+ {
+  "id": "GR2.655.1",
+  "gr": "2.655.1",
+  "page": 275,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^p sin x^2 = -x^(p-1)/2 cos x^2 + (p-1)/2 int x^(p-2) cos x^2",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "note": ""
+ },
+ {
+  "id": "GR2.655.2",
+  "gr": "2.655.2",
+  "page": 275,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^p cos x^2 = x^(p-1)/2 sin x^2 - (p-1)/2 int x^(p-2) sin x^2",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "note": ""
+ },
+ {
+  "id": "GR2.655.3",
+  "gr": "2.655.3",
+  "page": 275,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^n sin x^2 = (n-1)!!{sum_{k=1}^r (-1)^k[...] + (-1)^r/(2^(2r)(n-4r-1)!!) int x^(n-4r) sin x^2}, r=[n/4]",
+  "reason": "integral appears on the right-hand side",
+  "cite": "GU (336)(4a)",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "note": ""
+ },
+ {
+  "id": "GR2.655.4",
+  "gr": "2.655.4",
+  "page": 275,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^n cos x^2 = (n-1)!!{sum_{k=1}^r (-1)^(k-1)[...] + (-1)^r/(2^(2r)(n-4r-1)!!) int x^(n-4r) cos x^2}, r=[n/4]",
+  "reason": "integral appears on the right-hand side",
+  "cite": "GU (336)(5a)",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "note": ""
+ },
+ {
+  "id": "GR2.655.5",
+  "gr": "2.655.5",
+  "page": 275,
+  "status": "ok",
+  "lhs": "Integrate[x*Sin[x^2], x]",
+  "rhs": [
+   "-Cos[x]^2/2",
+   "-Cos[x^2]/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x sin x^2 = -cos^2 x/2",
+  "note": "Book prints cos^2 x; intended cos(x^2) (second rhs)."
+ },
+ {
+  "id": "GR2.655.6",
+  "gr": "2.655.6",
+  "page": 275,
+  "status": "ok",
+  "lhs": "Integrate[x*Cos[x^2], x]",
+  "rhs": [
+   "-Sin[x]^2/2",
+   "Sin[x^2]/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x cos x^2 = -sin^2 x/2",
+  "note": "Book prints -sin^2 x/2; correct is +sin(x^2)/2 (second rhs): both the argument and the sign are misprinted."
+ },
+ {
+  "id": "GR2.655.7",
+  "gr": "2.655.7",
+  "page": 275,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Sin[x^2], x]",
+  "rhs": [
+   "-x/2*Cos[x^2] + 1/2*Sqrt[Pi/2]*FresnelC[Sqrt[2/Pi]*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x^2 sin x^2 = -x/2 cos x^2 + 1/2 sqrt(pi/2) C(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.655.8",
+  "gr": "2.655.8",
+  "page": 275,
+  "status": "ok",
+  "lhs": "Integrate[x^2*Cos[x^2], x]",
+  "rhs": [
+   "x/2*Sin[x^2] - 1/2*Sqrt[Pi/2]*FresnelS[Sqrt[2/Pi]*x]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x^2 cos x^2 = x/2 sin x^2 - 1/2 sqrt(pi/2) S(x)",
+  "note": ""
+ },
+ {
+  "id": "GR2.655.9",
+  "gr": "2.655.9",
+  "page": 275,
+  "status": "ok",
+  "lhs": "Integrate[x^3*Sin[x^2], x]",
+  "rhs": [
+   "-x^2/2*Cos[x^2] + Sin[x^2]/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x^3 sin x^2 = -x^2/2 cos x^2 + 1/2 sin x^2",
+  "note": ""
+ },
+ {
+  "id": "GR2.655.10",
+  "gr": "2.655.10",
+  "page": 275,
+  "status": "ok",
+  "lhs": "Integrate[x^3*Cos[x^2], x]",
+  "rhs": [
+   "x^2/2*Sin[x^2] + Cos[x^2]/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.64 Trigonometric functions and powers",
+  "tex": "int x^3 cos x^2 = x^2/2 sin x^2 + 1/2 cos x^2",
+  "note": ""
+ },
+ {
+  "id": "GR2.661a",
+  "gr": "2.661a",
+  "page": 276,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int e^(ax) sin^p x cos^q x = 1/(a^2+(p+q)^2){... + int e^(ax) sin^.. cos^.. ...} (form a)",
+  "reason": "integral appears on the right-hand side",
+  "cite": "TI (523)",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.661b",
+  "gr": "2.661b",
+  "page": 276,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int e^(ax) sin^p x cos^q x = 1/(a^2+(p+q)^2){... + int e^(ax) sin^.. cos^.. ...} (form b)",
+  "reason": "integral appears on the right-hand side",
+  "cite": "TI (524)",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.661c",
+  "gr": "2.661c",
+  "page": 276,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int e^(ax) sin^p x cos^q x = 1/(a^2+(p+q)^2){... + int e^(ax) sin^.. cos^.. ...} (form c)",
+  "reason": "integral appears on the right-hand side",
+  "cite": "TI (525)",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.661d",
+  "gr": "2.661d",
+  "page": 276,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int e^(ax) sin^p x cos^q x = 1/(a^2+(p+q)^2){... + int e^(ax) sin^.. cos^.. ...} (form d)",
+  "reason": "integral appears on the right-hand side",
+  "cite": "TI (526)",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.661e",
+  "gr": "2.661e",
+  "page": 276,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int e^(ax) sin^p x cos^q x = 1/(a^2+(p+q)^2){... + int e^(ax) sin^.. cos^.. ...} (form e)",
+  "reason": "integral appears on the right-hand side",
+  "cite": "GU (334)(1a)",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.662.1",
+  "gr": "2.662.1",
+  "page": 277,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int e^(ax) sin^n bx = 1/(a^2+n^2b^2)[(a sin bx - nb cos bx) e^(ax) sin^(n-1) bx + n(n-1)b^2 int e^(ax) sin^(n-2) bx]",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.662.2",
+  "gr": "2.662.2",
+  "page": 277,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int e^(ax) cos^n bx = 1/(a^2+n^2b^2)[(a cos bx + nb sin bx) e^(ax) cos^(n-1) bx + n(n-1)b^2 int e^(ax) cos^(n-2) bx]",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.662.3a",
+  "gr": "2.662.3a",
+  "page": 277,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Sin[b*x]^(2*m), x]",
+  "rhs": [
+   "Sum[(2*m)!*b^(2*k)*E^(a*x)*Sin[b*x]^(2*m - 2*k - 1)/((2*m - 2*k)!*Product[a^2 + (2*m - 2*j)^2*b^2, {j, 0, k}])*(a*Sin[b*x] - (2*m - 2*k)*b*Cos[b*x]), {k, 0, m - 1}] + (2*m)!*b^(2*m)*E^(a*x)/(Product[a^2 + (2*m - 2*j)^2*b^2, {j, 0, m - 1}]*a)"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "int e^(ax) sin^(2m) bx = sum_{k=0}^{m-1} (2m)! b^(2k) e^(ax) sin^(2m-2k-1) bx/((2m-2k)![a^2+(2m)^2b^2]...[a^2+(2m-2k)^2b^2]) x [a sin bx - (2m-2k) b cos bx] + (2m)! b^(2m) e^(ax)/([a^2+(2m)^2b^2]...[a^2+4b^2] a)",
+  "note": ""
+ },
+ {
+  "id": "GR2.662.3b",
+  "gr": "2.662.3b",
+  "page": 277,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Sin[b*x]^(2*m), x]",
+  "rhs": [
+   "Binomial[2*m, m]*E^(a*x)/(2^(2*m)*a) + E^(a*x)/2^(2*m - 1)*Sum[(-1)^k*Binomial[2*m, m - k]/(a^2 + 4*b^2*k^2)*(a*Cos[2*b*k*x] + 2*b*k*Sin[2*b*k*x]), {k, 1, m}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "= C(2m,m) e^(ax)/(2^(2m) a) + e^(ax)/2^(2m-1) sum_{k=1}^m (-1)^k C(2m,m-k)/(a^2+4b^2k^2)(a cos 2bkx + 2bk sin 2bkx)",
+  "note": ""
+ },
+ {
+  "id": "GR2.662.4a",
+  "gr": "2.662.4a",
+  "page": 277,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Sin[b*x]^(2*m + 1), x]",
+  "rhs": [
+   "Sum[(2*m + 1)!*b^(2*k)*E^(a*x)*Sin[b*x]^(2*m - 2*k)*(a*Sin[b*x] - (2*m - 2*k + 1)*b*Cos[b*x])/((2*m - 2*k + 1)!*Product[a^2 + (2*m + 1 - 2*j)^2*b^2, {j, 0, k}]), {k, 0, m}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "int e^(ax) sin^(2m+1) bx = sum_{k=0}^m (2m+1)! b^(2k) e^(ax) sin^(2m-2k) bx [a sin bx - (2m-2k+1) b cos bx]/((2m-2k+1)![a^2+(2m+1)^2b^2]...[a^2+(2m-2k+1)^2b^2])",
+  "note": ""
+ },
+ {
+  "id": "GR2.662.4b",
+  "gr": "2.662.4b",
+  "page": 277,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Sin[b*x]^(2*m + 1), x]",
+  "rhs": [
+   "E^(a*x)/2^(2*m)*Sum[(-1)^k/(a^2 + (2*k + 1)^2*b^2)*Binomial[2*m + 1, m - k]*(a*Sin[(2*k + 1)*b*x] - (2*k + 1)*b*Cos[(2*k + 1)*b*x]), {k, 0, m}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "= e^(ax)/2^(2m) sum_{k=0}^m (-1)^k/(a^2+(2k+1)^2b^2) C(2m+1,m-k)[a sin(2k+1)bx - (2k+1)b cos(2k+1)bx]",
+  "note": ""
+ },
+ {
+  "id": "GR2.662.5a",
+  "gr": "2.662.5a",
+  "page": 277,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Cos[b*x]^(2*m), x]",
+  "rhs": [
+   "Sum[(2*m)!*b^(2*k)*E^(a*x)*Cos[b*x]^(2*m - 2*k - 1)*(a*Cos[b*x] + (2*m - 2*k)*b*Sin[b*x])/((2*m - 2*k)!*Product[a^2 + (2*m - 2*j)^2*b^2, {j, 0, k}]), {k, 0, m - 1}] + (2*m)!*b^(2*m)*E^(a*x)/(Product[a^2 + (2*m - 2*j)^2*b^2, {j, 0, m - 1}]*a)"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "int e^(ax) cos^(2m) bx = sum_{k=0}^{m-1} (2m)! b^(2k) e^(ax) cos^(2m-2k-1) bx [a cos bx + (2m-2k) b sin bx]/((2m-2k)![...]) + (2m)! b^(2m) e^(ax)/([...][a^2+4b^2] a)",
+  "note": ""
+ },
+ {
+  "id": "GR2.662.5b",
+  "gr": "2.662.5b",
+  "page": 277,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Cos[b*x]^(2*m), x]",
+  "rhs": [
+   "Binomial[2*m, m]*E^(a*x)/(2^(2*m)*a) + E^(a*x)/2^(2*m - 1)*Sum[Binomial[2*m, m - k]/(a^2 + 4*b^2*k^2)*(a*Cos[2*k*b*x] + 2*k*b*Sin[2*k*b*x]), {k, 1, m}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "",
+  "edition_note": "8",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "= C(2m,m) e^(ax)/(2^(2m) a) + e^(ax)/2^(2m-1) sum_{k=1}^m C(2m,m-k)/(a^2+4b^2k^2)[a cos 2kbx + 2kb sin 2kbx]",
+  "note": ""
+ },
+ {
+  "id": "GR2.662.6a",
+  "gr": "2.662.6a",
+  "page": 277,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Cos[b*x]^(2*m + 1), x]",
+  "rhs": [
+   "Sum[(2*m + 1)!*b^(2*k)*E^(a*x)*Cos[b*x]^(2*m - 2*k)/((2*m - 2*k + 1)!*Product[a^2 + (2*m + 1 - 2*j)^2*b^2, {j, 1, k}]), {k, 0, m}]",
+   "Sum[(2*m + 1)!*b^(2*k)*E^(a*x)*Cos[b*x]^(2*m - 2*k)*(a*Cos[b*x] + (2*m - 2*k + 1)*b*Sin[b*x])/((2*m - 2*k + 1)!*Product[a^2 + (2*m + 1 - 2*j)^2*b^2, {j, 0, k}]), {k, 0, m}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "int e^(ax) cos^(2m+1) bx = sum_{k=0}^m (2m+1)! b^(2k) e^(ax) cos^(2m-2k) bx/((2m-2k+1)![a^2+(2m-1)^2b^2]...[a^2+(2m-2k+1)^2b^2])",
+  "note": "As printed the denominator product starts at (2m-1)^2 and the factor [a cos bx + (2m-2k+1) b sin bx] is missing (misprint); second rhs is the corrected form by analogy with 2.662.4a."
+ },
+ {
+  "id": "GR2.662.6b",
+  "gr": "2.662.6b",
+  "page": 277,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Cos[b*x]^(2*m + 1), x]",
+  "rhs": [
+   "E^(a*x)/2^(2*m)*Sum[Binomial[2*m + 1, m - k]/(a^2 + (2*k + 1)^2*b^2)*(a*Cos[(2*k + 1)*b*x] + (2*k + 1)*b*Sin[(2*k + 1)*b*x]), {k, 0, m}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "= e^(ax)/2^(2m) sum_{k=0}^m C(2m+1,m-k)/(a^2+(2k+1)^2b^2)[a cos(2k+1)bx + (2k+1)b sin(2k+1)bx]",
+  "note": ""
+ },
+ {
+  "id": "GR2.663.1",
+  "gr": "2.663.1",
+  "page": 277,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Sin[b*x], x]",
+  "rhs": [
+   "E^(a*x)*(a*Sin[b*x] - b*Cos[b*x])/(a^2 + b^2)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "int e^(ax) sin bx = e^(ax)(a sin bx - b cos bx)/(a^2+b^2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.663.2a",
+  "gr": "2.663.2a",
+  "page": 278,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Sin[b*x]^2, x]",
+  "rhs": [
+   "E^(a*x)*Sin[b*x]*(a*Sin[b*x] - 2*b*Cos[b*x])/(4*b^2 + a^2) + 2*b^2*E^(a*x)/((4*b^2 + a^2)*a)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "int e^(ax) sin^2 bx = e^(ax) sin bx(a sin bx - 2b cos bx)/(4b^2+a^2) + 2b^2 e^(ax)/((4b^2+a^2)a)",
+  "note": ""
+ },
+ {
+  "id": "GR2.663.2b",
+  "gr": "2.663.2b",
+  "page": 278,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Sin[b*x]^2, x]",
+  "rhs": [
+   "E^(a*x)/(2*a) - E^(a*x)/(a^2 + 4*b^2)*(a/2*Cos[2*b*x] + b*Sin[2*b*x])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "= e^(ax)/(2a) - e^(ax)/(a^2+4b^2)(a/2 cos 2bx + b sin 2bx)",
+  "note": ""
+ },
+ {
+  "id": "GR2.663.3",
+  "gr": "2.663.3",
+  "page": 278,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Cos[b*x], x]",
+  "rhs": [
+   "E^(a*x)*(a*Cos[b*x] + b*Sin[b*x])/(a^2 + b^2)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "int e^(ax) cos bx = e^(ax)(a cos bx + b sin bx)/(a^2+b^2)",
+  "note": ""
+ },
+ {
+  "id": "GR2.663.4a",
+  "gr": "2.663.4a",
+  "page": 278,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Cos[b*x]^2, x]",
+  "rhs": [
+   "E^(a*x)*Cos[b*x]*(a*Cos[b*x] + 2*b*Sin[b*x])/(4*b^2 + a^2) + 2*b^2*E^(a*x)/((4*b^2 + a^2)*a)"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "int e^(ax) cos^2 bx = e^(ax) cos bx(a cos bx + 2b sin bx)/(4b^2+a^2) + 2b^2 e^(ax)/((4b^2+a^2)a)",
+  "note": ""
+ },
+ {
+  "id": "GR2.663.4b",
+  "gr": "2.663.4b",
+  "page": 278,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Cos[b*x]^2, x]",
+  "rhs": [
+   "E^(a*x)/(2*a) + E^(a*x)/(a^2 + 4*b^2)*(a/2*Cos[2*b*x] + b*Sin[2*b*x])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "= e^(ax)/(2a) + e^(ax)/(a^2+4b^2)(a/2 cos 2bx + b sin 2bx)",
+  "note": ""
+ },
+ {
+  "id": "GR2.664.1",
+  "gr": "2.664.1",
+  "page": 278,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Sin[b*x]*Cos[c*x], x]",
+  "rhs": [
+   "E^(a*x)/2*((a*Sin[(b + c)*x] - (b + c)*Cos[(b + c)*x])/(a^2 + (b + c)^2) + (a*Sin[(b - c)*x] - (b - c)*Cos[(b - c)*x])/(a^2 + (b - c)^2))"
+  ],
+  "conds": [],
+  "cite": "GU (334)(6b)",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "int e^(ax) sin bx cos cx = e^(ax)/2[(a sin(b+c)x - (b+c)cos(b+c)x)/(a^2+(b+c)^2) + (a sin(b-c)x - (b-c)cos(b-c)x)/(a^2+(b-c)^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR2.664.2",
+  "gr": "2.664.2",
+  "page": 278,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Sin[b*x]^2*Cos[c*x], x]",
+  "rhs": [
+   "E^(a*x)/4*(2*(a*Cos[c*x] + c*Sin[c*x])/(a^2 + c^2) - (a*Cos[(2*b + c)*x] + (2*b + c)*Sin[(2*b + c)*x])/(a^2 + (2*b + c)^2) - (a*Cos[(2*b - c)*x] + (2*b - c)*Sin[(2*b - c)*x])/(a^2 + (2*b - c)^2))"
+  ],
+  "conds": [],
+  "cite": "GU (334)(6c)",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "int e^(ax) sin^2 bx cos cx = e^(ax)/4[2(a cos cx + c sin cx)/(a^2+c^2) - (a cos(2b+c)x + (2b+c) sin(2b+c)x)/(a^2+(2b+c)^2) - (a cos(2b-c)x + (2b-c) sin(2b-c)x)/(a^2+(2b-c)^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR2.664.3",
+  "gr": "2.664.3",
+  "page": 278,
+  "status": "ok",
+  "lhs": "Integrate[E^(a*x)*Sin[b*x]*Cos[c*x]^2, x]",
+  "rhs": [
+   "E^(a*x)/4*(2*(a*Sin[b*x] - b*Cos[b*x])/(a^2 + b^2) + (a*Sin[(b + 2*c)*x] - (b + 2*c)*Cos[(b + 2*c)*x])/(a^2 + (b + 2*c)^2) + (a*Sin[(b - 2*c)*x] - (b - 2*c)*Cos[(b - 2*c)*x])/(a^2 + (b - 2*c)^2))"
+  ],
+  "conds": [],
+  "cite": "GU (334)(6d)",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "int e^(ax) sin bx cos^2 cx = e^(ax)/4[2(a sin bx - b cos bx)/(a^2+b^2) + (a sin(b+2c)x - (b+2c)cos(b+2c)x)/(a^2+(b+2c)^2) + (a sin(b-2c)x - (b-2c)cos(b-2c)x)/(a^2+(b-2c)^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR2.665.1",
+  "gr": "2.665.1",
+  "page": 278,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int e^(ax)/sin^p bx = -e^(ax)[a sin bx + (p-2)b cos bx]/((p-1)(p-2)b^2 sin^(p-1) bx) + (a^2+(p-2)^2b^2)/((p-1)(p-2)b^2) int e^(ax)/sin^(p-2) bx",
+  "reason": "integral appears on the right-hand side",
+  "cite": "TI (530)a",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.665.2",
+  "gr": "2.665.2",
+  "page": 278,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int e^(ax)/cos^p bx = -e^(ax)[a cos bx - (p-2)b sin bx]/((p-1)(p-2)b^2 cos^(p-1) bx) + (a^2+(p-2)^2b^2)/((p-1)(p-2)b^2) int e^(ax)/cos^(p-2) bx",
+  "reason": "integral appears on the right-hand side",
+  "cite": "TI (529)a",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.666.1",
+  "gr": "2.666.1",
+  "page": 278,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int e^(ax) tan^p x = e^(ax)/(p-1) tan^(p-1) x - a/(p-1) int e^(ax) tan^(p-1) x - int e^(ax) tan^(p-2) x",
+  "reason": "integral appears on the right-hand side",
+  "cite": "TI (527)",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.666.2",
+  "gr": "2.666.2",
+  "page": 278,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int e^(ax) cot^p x = -e^(ax) cot^(p-1) x/(p-1) + a/(p-1) int e^(ax) cot^(p-1) x - int e^(ax) cot^(p-2) x",
+  "reason": "integral appears on the right-hand side",
+  "cite": "TI (528)",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.666.3",
+  "gr": "2.666.3",
+  "page": 278,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int e^(ax) tan x = e^(ax) tan x/a - 1/a int e^(ax)/cos^2 x",
+  "reason": "integral appears on the right-hand side (non-elementary; see remark following 2.665)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.666.4",
+  "gr": "2.666.4",
+  "page": 279,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int e^(ax) tan^2 x = e^(ax)/a (a tan x - 1) - a int e^(ax) tan x",
+  "reason": "integral appears on the right-hand side (see 2.666.3)",
+  "cite": "TI 355",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.666.5",
+  "gr": "2.666.5",
+  "page": 279,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int e^(ax) cot x = e^(ax) cot x/a + 1/a int e^(ax)/sin^2 x",
+  "reason": "integral appears on the right-hand side (see remark following 2.665)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.666.6",
+  "gr": "2.666.6",
+  "page": 279,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int e^(ax) cot^2 x = -e^(ax)/a (a cot x + 1) + a int e^(ax) cot x",
+  "reason": "integral appears on the right-hand side (see 2.666.5)",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.667.1a",
+  "gr": "2.667.1a",
+  "page": 279,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^p e^(ax) sin bx = x^p e^(ax)/(a^2+b^2)(a sin bx - b cos bx) - p/(a^2+b^2) int x^(p-1) e^(ax)(a sin bx - b cos bx) (form a)",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.667.1b",
+  "gr": "2.667.1b",
+  "page": 279,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^p e^(ax) sin bx = x^p e^(ax)/(a^2+b^2)(a sin bx - b cos bx) - p/(a^2+b^2) int x^(p-1) e^(ax)(a sin bx - b cos bx) (form b)",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.667.2a",
+  "gr": "2.667.2a",
+  "page": 279,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^p e^(ax) cos bx = x^p e^(ax)/(a^2+b^2)(a cos bx + b sin bx) - p/(a^2+b^2) int x^(p-1) e^(ax)(a cos bx + b sin bx) (form a)",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.667.2b",
+  "gr": "2.667.2b",
+  "page": 279,
+  "status": "SKIP-RECURRENCE",
+  "tex": "int x^p e^(ax) cos bx = x^p e^(ax)/(a^2+b^2)(a cos bx + b sin bx) - p/(a^2+b^2) int x^(p-1) e^(ax)(a cos bx + b sin bx) (form b)",
+  "reason": "integral appears on the right-hand side",
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "note": ""
+ },
+ {
+  "id": "GR2.667.3",
+  "gr": "2.667.3",
+  "page": 279,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(a*x)*Sin[b*x], x]",
+  "rhs": [
+   "E^(a*x)*Sum[(-1)^(k + 1)*n!*x^(n - k + 1)/((n - k + 1)!*(a^2 + b^2)^(k/2))*Sin[b*x + k*ArcTan[a, -b]], {k, 1, n + 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a^2 + b^2 > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "int x^n e^(ax) sin bx = e^(ax) sum_{k=1}^{n+1} (-1)^(k+1) n! x^(n-k+1)/((n-k+1)!(a^2+b^2)^(k/2)) sin(bx+kt)",
+  "note": "Notation sin t = -b/sqrt(a^2+b^2), cos t = a/sqrt(a^2+b^2) substituted as t = ArcTan[a, -b]."
+ },
+ {
+  "id": "GR2.667.4",
+  "gr": "2.667.4",
+  "page": 279,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(a*x)*Cos[b*x], x]",
+  "rhs": [
+   "E^(a*x)*Sum[(-1)^(k + 1)*n!*x^(n - k + 1)/((n - k + 1)!*(a^2 + b^2)^(k/2))*Cos[b*x + k*ArcTan[a, -b]], {k, 1, n + 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "a^2 + b^2 > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "int x^n e^(ax) cos bx = e^(ax) sum_{k=1}^{n+1} (-1)^(k+1) n! x^(n-k+1)/((n-k+1)!(a^2+b^2)^(k/2)) cos(bx+kt)",
+  "note": "Notation sin t = -b/sqrt(a^2+b^2), cos t = a/sqrt(a^2+b^2) substituted as t = ArcTan[a, -b]."
+ },
+ {
+  "id": "GR2.667.5",
+  "gr": "2.667.5",
+  "page": 279,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(a*x)*Sin[b*x], x]",
+  "rhs": [
+   "E^(a*x)/(a^2 + b^2)*((a*x - (a^2 - b^2)/(a^2 + b^2))*Sin[b*x] - (b*x - 2*a*b/(a^2 + b^2))*Cos[b*x])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "int x e^(ax) sin bx = e^(ax)/(a^2+b^2)[(ax - (a^2-b^2)/(a^2+b^2)) sin bx - (bx - 2ab/(a^2+b^2)) cos bx]",
+  "note": ""
+ },
+ {
+  "id": "GR2.667.6",
+  "gr": "2.667.6",
+  "page": 279,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(a*x)*Cos[b*x], x]",
+  "rhs": [
+   "E^(a*x)/(a^2 + b^2)*((a*x - (a^2 - b^2)/(a^2 + b^2))*Cos[b*x] + (b*x - 2*a*b/(a^2 + b^2))*Sin[b*x])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "int x e^(ax) cos bx = e^(ax)/(a^2+b^2)[(ax - (a^2-b^2)/(a^2+b^2)) cos bx + (bx - 2ab/(a^2+b^2)) sin bx]",
+  "note": ""
+ },
+ {
+  "id": "GR2.667.7",
+  "gr": "2.667.7",
+  "page": 279,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(a*x)*Sin[b*x], x]",
+  "rhs": [
+   "E^(a*x)/(a^2 + b^2)*((a*x^2 - 2*(a^2 - b^2)/(a^2 + b^2)*x + 2*a*(a^2 - 3*b^2)/(a^2 + b^2)^2)*Sin[b*x] - (b*x^2 - 4*a*b/(a^2 + b^2)*x + 2*b*(3*a^2 - b^2)/(a^2 + b^2)^2)*Cos[b*x])"
+  ],
+  "conds": [],
+  "cite": "GU (335), MZ 274-275",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "int x^2 e^(ax) sin bx = e^(ax)/(a^2+b^2){[ax^2 - 2(a^2-b^2)/(a^2+b^2) x + 2a(a^2-3b^2)/(a^2+b^2)^2] sin bx - [bx^2 - 4ab/(a^2+b^2) x + 2b(3a^2-b^2)/(a^2+b^2)^2] cos bx}",
+  "note": "Citation printed after 2.667.8, shared by the group."
+ },
+ {
+  "id": "GR2.667.8",
+  "gr": "2.667.8",
+  "page": 280,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(a*x)*Cos[b*x], x]",
+  "rhs": [
+   "E^(a*x)/(a^2 + b^2)*((a*x^2 - 2*(a^2 - b^2)/(a^2 + b^2)*x + 2*a*(a^2 - 3*b^2)/(a^2 + b^2)^2)*Cos[b*x] + (b*x^2 - 4*a*b/(a^2 + b^2)*x + 2*b*(3*a^2 - b^2)/(a^2 + b^2)^2)*Sin[b*x])"
+  ],
+  "conds": [],
+  "cite": "GU (335), MZ 274-275",
+  "edition_note": "",
+  "section": "2.66 Combinations of trigonometric functions and exponentials",
+  "tex": "int x^2 e^(ax) cos bx = e^(ax)/(a^2+b^2){[...] cos bx + [...] sin bx}",
+  "note": ""
+ },
+ {
+  "id": "GR2.671.1",
+  "gr": "2.671.1",
+  "page": 280,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x + b]*Sin[c*x + d], x]",
+  "rhs": [
+   "a/(a^2 + c^2)*Cosh[a*x + b]*Sin[c*x + d] - c/(a^2 + c^2)*Sinh[a*x + b]*Cos[c*x + d]"
+  ],
+  "conds": [],
+  "cite": "GU (354)(1)",
+  "edition_note": "",
+  "section": "2.67 Combinations of trigonometric and hyperbolic functions",
+  "tex": "int sinh(ax+b) sin(cx+d) = a/(a^2+c^2) cosh sin - c/(a^2+c^2) sinh cos",
+  "note": ""
+ },
+ {
+  "id": "GR2.671.2",
+  "gr": "2.671.2",
+  "page": 280,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x + b]*Cos[c*x + d], x]",
+  "rhs": [
+   "a/(a^2 + c^2)*Cosh[a*x + b]*Cos[c*x + d] + c/(a^2 + c^2)*Sinh[a*x + b]*Sin[c*x + d]"
+  ],
+  "conds": [],
+  "cite": "GU (354)(1)",
+  "edition_note": "",
+  "section": "2.67 Combinations of trigonometric and hyperbolic functions",
+  "tex": "int sinh(ax+b) cos(cx+d) = a/(a^2+c^2) cosh cos + c/(a^2+c^2) sinh sin",
+  "note": ""
+ },
+ {
+  "id": "GR2.671.3",
+  "gr": "2.671.3",
+  "page": 280,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[a*x + b]*Sin[c*x + d], x]",
+  "rhs": [
+   "a/(a^2 + c^2)*Sinh[a*x + b]*Sin[c*x + d] - c/(a^2 + c^2)*Cosh[a*x + b]*Cos[c*x + d]"
+  ],
+  "conds": [],
+  "cite": "GU (354)(1)",
+  "edition_note": "",
+  "section": "2.67 Combinations of trigonometric and hyperbolic functions",
+  "tex": "int cosh(ax+b) sin(cx+d) = a/(a^2+c^2) sinh sin - c/(a^2+c^2) cosh cos",
+  "note": ""
+ },
+ {
+  "id": "GR2.671.4",
+  "gr": "2.671.4",
+  "page": 280,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[a*x + b]*Cos[c*x + d], x]",
+  "rhs": [
+   "a/(a^2 + c^2)*Sinh[a*x + b]*Cos[c*x + d] + c/(a^2 + c^2)*Cosh[a*x + b]*Sin[c*x + d]"
+  ],
+  "conds": [],
+  "cite": "GU (354)(1)",
+  "edition_note": "",
+  "section": "2.67 Combinations of trigonometric and hyperbolic functions",
+  "tex": "int cosh(ax+b) cos(cx+d) = a/(a^2+c^2) sinh cos + c/(a^2+c^2) cosh sin",
+  "note": ""
+ },
+ {
+  "id": "GR2.672.1",
+  "gr": "2.672.1",
+  "page": 280,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]*Sin[x], x]",
+  "rhs": [
+   "(Cosh[x]*Sin[x] - Sinh[x]*Cos[x])/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.67 Combinations of trigonometric and hyperbolic functions",
+  "tex": "int sinh x sin x = (cosh x sin x - sinh x cos x)/2",
+  "note": ""
+ },
+ {
+  "id": "GR2.672.2",
+  "gr": "2.672.2",
+  "page": 280,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x]*Cos[x], x]",
+  "rhs": [
+   "(Cosh[x]*Cos[x] + Sinh[x]*Sin[x])/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.67 Combinations of trigonometric and hyperbolic functions",
+  "tex": "int sinh x cos x = (cosh x cos x + sinh x sin x)/2",
+  "note": ""
+ },
+ {
+  "id": "GR2.672.3",
+  "gr": "2.672.3",
+  "page": 280,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]*Sin[x], x]",
+  "rhs": [
+   "(Sinh[x]*Sin[x] - Cosh[x]*Cos[x])/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.67 Combinations of trigonometric and hyperbolic functions",
+  "tex": "int cosh x sin x = (sinh x sin x - cosh x cos x)/2",
+  "note": ""
+ },
+ {
+  "id": "GR2.672.4",
+  "gr": "2.672.4",
+  "page": 280,
+  "status": "ok",
+  "lhs": "Integrate[Cosh[x]*Cos[x], x]",
+  "rhs": [
+   "(Sinh[x]*Cos[x] + Cosh[x]*Sin[x])/2"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "2.67 Combinations of trigonometric and hyperbolic functions",
+  "tex": "int cosh x cos x = (sinh x cos x + cosh x sin x)/2",
+  "note": ""
+ }
+]

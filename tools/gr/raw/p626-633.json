@@ -1,0 +1,2341 @@
+[
+ {
+  "id": "GR4.358.4",
+  "gr": "4.358.4",
+  "page": 626,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*E^(-mu*x)*Log[x]^4, {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]/nu*((PolyGamma[nu] - Log[mu])^4 + 6*HurwitzZeta[2, nu]*(PolyGamma[nu] - Log[mu])^2 - 8*HurwitzZeta[3, nu]*(PolyGamma[nu] - Log[mu]) + 3*HurwitzZeta[2, nu]^2 + 6*HurwitzZeta[4, nu])",
+   "Gamma[nu]/mu^nu*((PolyGamma[nu] - Log[mu])^4 + 6*HurwitzZeta[2, nu]*(PolyGamma[nu] - Log[mu])^2 - 8*HurwitzZeta[3, nu]*(PolyGamma[nu] - Log[mu]) + 3*HurwitzZeta[2, nu]^2 + 6*HurwitzZeta[4, nu])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "",
+  "edition_note": "7",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^inf x^(nu-1) e^(-mu x) ln^4 x dx = Gamma(nu)/nu {[psi(nu)-ln mu]^4 + 6 zeta(2,nu)[..]^2 - 8 zeta(3,nu)[..] + 3 zeta(2,nu)^2 + 6 zeta(4,nu)}",
+  "note": "book prints prefactor Gamma(nu)/nu; 4.358.2-3 have Gamma(nu)/mu^nu -- second rhs is that corrected candidate"
+ },
+ {
+  "id": "GR4.358.5",
+  "gr": "4.358.5",
+  "page": 626,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*E^(-mu*x)*Log[x]^n, {x, 0, Infinity}]",
+  "rhs": [
+   "D[mu^(-nu)*Gamma[nu], {nu, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "",
+  "edition_note": "3",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^inf x^(nu-1) e^(-mu x) (ln x)^n dx = d^n/dnu^n {mu^(-nu) Gamma(nu)}",
+  "note": "Re mu > 0, Re nu > 0 implied (not printed)"
+ },
+ {
+  "id": "GR4.359.1",
+  "gr": "4.359.1",
+  "page": 626,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^(-mu*x)*(x^(p - 1) - x^(q - 1))/Log[x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/mu*(VolterraLambda[mu, p - 1] - VolterraLambda[mu, q - 1])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "MI 27",
+  "edition_note": "",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^inf e^(-mu x) (x^(p-1) - x^(q-1))/ln x dx = 1/mu [lambda(mu,p-1) - lambda(mu,q-1)]",
+  "note": "placeholder head VolterraLambda[x, y] for G&R lambda(x,y); the integral equals Integrate[Gamma[t+1]*mu^(-t-1), {t, q-1, p-1}]",
+  "reason": "Volterra-type function lambda(x,y) (G&R 9.640) has no Mathilda head"
+ },
+ {
+  "id": "GR4.359.2",
+  "gr": "4.359.2",
+  "page": 626,
+  "status": "ok",
+  "lhs": "Integrate[E^(mu*x)*(x^(p - 1) - x^(q - 1))/Log[x], {x, 0, 1}]",
+  "rhs": [
+   "Sum[mu^k/k!*Log[(p + k)/(q + k)], {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (352)(9)",
+  "edition_note": "11",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^1 e^(mu x)(x^(p-1)-x^(q-1))/ln x dx = sum_k mu^k/k! ln((p+k)/(q+k))",
+  "note": ""
+ },
+ {
+  "id": "GR4.361.1",
+  "gr": "4.361.1",
+  "page": 626,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[(x + 1)*E^(-mu*x)/(Pi^2 + Log[x]^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Derivative[1][VolterraNu][mu] - Derivative[2][VolterraNu][mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 27",
+  "edition_note": "",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^inf (x+1) e^(-mu x)/(pi^2 + ln^2 x) dx = nu'(mu) - nu''(mu)",
+  "note": "placeholder head VolterraNu[x] = Integrate[x^t/Gamma[t+1], {t, 0, Infinity}]",
+  "reason": "Volterra function nu(x) (G&R 9.640) has no Mathilda head"
+ },
+ {
+  "id": "GR4.361.2",
+  "gr": "4.361.2",
+  "page": 626,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^(-mu*x)/(x*(Pi^2 + Log[x]^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "E^mu - VolterraNu[mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 27",
+  "edition_note": "",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^inf e^(-mu x) dx/(x[pi^2 + ln^2 x]) = e^mu - nu(mu)",
+  "note": "placeholder head VolterraNu[x] = Integrate[x^t/Gamma[t+1], {t, 0, Infinity}]",
+  "reason": "Volterra function nu(x) (G&R 9.640) has no Mathilda head"
+ },
+ {
+  "id": "GR4.362.1",
+  "gr": "4.362.1",
+  "page": 626,
+  "status": "ok",
+  "lhs": "Integrate[x*E^x*Log[1 - x], {x, 0, 1}]",
+  "rhs": [
+   "1 - E"
+  ],
+  "conds": [],
+  "cite": "BI (352)(5)a",
+  "edition_note": "",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^1 x e^x ln(1-x) dx = 1 - e",
+  "note": ""
+ },
+ {
+  "id": "GR4.362.2",
+  "gr": "4.362.2",
+  "page": 626,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[2*x - 1]/x, {x, 1, Infinity}]",
+  "rhs": [
+   "1/2*ExpIntegralEi[-mu/2]^2"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 148(8)",
+  "edition_note": "",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_1^inf e^(-mu x) ln(2x-1) dx/x = 1/2 [Ei(-mu/2)]^2",
+  "note": ""
+ },
+ {
+  "id": "GR4.363.1a",
+  "gr": "4.363.1a",
+  "page": 626,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[x + a]*(mu*(x + a)*Log[x + a] - 2)/(x + a), {x, 0, Infinity}]",
+  "rhs": [
+   "Log[a]^2"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "a > 0"
+  ],
+  "cite": "BI (354)(4, 5)",
+  "edition_note": "",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^inf e^(-mu x) ln(x+a) [mu(x+a) ln(x+a) - 2]/(x+a) dx = (ln a)^2",
+  "note": ""
+ },
+ {
+  "id": "GR4.363.1b",
+  "gr": "4.363.1b",
+  "page": 626,
+  "status": "ok",
+  "lhs": "1/4*Integrate[E^(-mu*x)*Log[a - x]^2*(mu*(x - a)*Log[x - a]^2 - 4)/(x - a), {x, 0, Infinity}]",
+  "rhs": [
+   "Log[a]^2"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "a > 0"
+  ],
+  "cite": "BI (354)(4, 5)",
+  "edition_note": "",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "1/4 int_0^inf e^(-mu x) ln^2(a-x) [mu(x-a) ln^2(x-a) - 4]/(x-a) dx = (ln a)^2",
+  "note": "transcribed as printed; integrand looks garbled (ln(a-x), ln(x-a) complex for x > a; d/dx[e^(-mu x) ln^4(x+a)] would give (ln a)^4/4 instead); no confident correction"
+ },
+ {
+  "id": "GR4.363.2",
+  "gr": "4.363.2",
+  "page": 626,
+  "status": "ok",
+  "lhs": "Integrate[x*(1 - x)*(2 - x)*E^(-(1 - x)^2)*Log[1 - x], {x, 0, 1}]",
+  "rhs": [
+   "(1 - E)/(4*E)"
+  ],
+  "conds": [],
+  "cite": "BI (352)(4)",
+  "edition_note": "",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^1 x(1-x)(2-x) e^(-(1-x)^2) ln(1-x) dx = (1-e)/(4e)",
+  "note": ""
+ },
+ {
+  "id": "GR4.364.1",
+  "gr": "4.364.1",
+  "page": 626,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[(x + a)*(x + b)]/(x + a + b), {x, 0, Infinity}]",
+  "rhs": [
+   "E^((a + b)*mu)*(ExpIntegralEi[-a*mu]*ExpIntegralEi[-b*mu] - Log[a*b]*ExpIntegralEi[-(a + b)*mu])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (354)(11)",
+  "edition_note": "",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^inf e^(-mu x) ln[(x+a)(x+b)] dx/(x+a+b) = e^((a+b)mu){Ei(-a mu)Ei(-b mu) - ln(ab) Ei[-(a+b)mu]}",
+  "note": ""
+ },
+ {
+  "id": "GR4.364.2",
+  "gr": "4.364.2",
+  "page": 627,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[x + a + b]*(1/(x + a) + 1/(x + b)), {x, 0, Infinity}]",
+  "rhs": [
+   "(1 + Log[a]*Log[b])*Log[a + b] + E^(-(a + b)*mu)*ExpIntegralEi[-alpha*mu]*ExpIntegralEi[-b*mu] + (1 - Log[a*b])*ExpIntegralEi[-(a + b)*mu]",
+   "(1 + Log[a]*Log[b])*Log[a + b] + E^(-(a + b)*mu)*ExpIntegralEi[-a*mu]*ExpIntegralEi[-b*mu] + (1 - Log[a*b])*ExpIntegralEi[-(a + b)*mu]",
+   "(1 + Log[a]*Log[b])*Log[a + b] + E^((a + b)*mu)*ExpIntegralEi[-a*mu]*ExpIntegralEi[-b*mu] + (1 - Log[a*b])*ExpIntegralEi[-(a + b)*mu]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (354)(12)",
+  "edition_note": "",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^inf e^(-mu x) ln(x+a+b)(1/(x+a)+1/(x+b)) dx = (1+ln a ln b) ln(a+b) + e^(-(a+b)mu){Ei(-alpha mu)Ei(-b mu)} + (1-ln(ab)) Ei[-(a+b)mu]",
+  "note": "book prints Ei(-alpha mu) with alpha absent from the integral (misprint for a: 2nd rhs); 3rd rhs also flips e^(-(a+b)mu) to e^((a+b)mu) as in 4.364.1. The value looks garbled (constant term does not vanish as mu -> inf)"
+ },
+ {
+  "id": "GR4.365",
+  "gr": "4.365",
+  "page": 627,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-x) - x/((1 + x)^(p + 1)*Log[1 + x]))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[p]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (354)(15)",
+  "edition_note": "",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^inf [e^(-x) - x/((1+x)^(p+1) ln(1+x))] dx/x = ln p",
+  "note": ""
+ },
+ {
+  "id": "GR4.366.1",
+  "gr": "4.366.1",
+  "page": 627,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[1 + x^2/a^2]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "CosIntegral[a*mu]^2 + (SinIntegral[a*mu] - Pi/2)^2"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "a > 0"
+  ],
+  "cite": "NT 32(11)a",
+  "edition_note": "",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^inf e^(-mu x) ln(1 + x^2/a^2) dx/x = [ci(a mu)]^2 + [si(a mu)]^2",
+  "note": "a > 0 implied (not printed)"
+ },
+ {
+  "id": "GR4.366.2",
+  "gr": "4.366.2",
+  "page": 627,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x)*Log[Abs[1 - x^2/a^2]]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "ExpIntegralEi[a*mu]*ExpIntegralEi[-a*mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "a > 0"
+  ],
+  "cite": "ME 18",
+  "edition_note": "",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^inf e^(-mu x) ln|1 - x^2/a^2| dx/x = Ei(a mu) Ei(-a mu)",
+  "note": "a > 0 implied (not printed)"
+ },
+ {
+  "id": "GR4.366.3",
+  "gr": "4.366.3",
+  "page": 627,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-mu*x^2)*Log[Abs[(1 + x^2)/(1 - x^2)]], {x, 0, Infinity}]",
+  "rhs": [
+   "1/mu*(Cosh[mu]*Sinh[I*mu] - Sinh[mu]*Cosh[I*mu])",
+   "1/mu*(Cosh[mu]*SinhIntegral[mu] - Sinh[mu]*CoshIntegral[mu])"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 27",
+  "edition_note": "",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^inf x e^(-mu x^2) ln|(1+x^2)/(1-x^2)| dx = 1/mu [cosh mu sinh(i mu) - sinh mu cosh(i mu)]  (cf. 4.339)",
+  "note": "book prints sinh(i mu), cosh(i mu); probable misprint for shi(mu), chi(mu) (2nd rhs)"
+ },
+ {
+  "id": "GR4.367",
+  "gr": "4.367",
+  "page": 627,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-mu*x^2)*Log[(x + Sqrt[x^2 + 2*beta])/Sqrt[2*beta]], {x, 0, Infinity}]",
+  "rhs": [
+   "E^(beta*mu)/(4*mu)*BesselK[0, beta*mu]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 149(19)",
+  "edition_note": "",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^inf x e^(-mu x^2) ln[(x + sqrt(x^2+2 beta))/sqrt(2 beta)] dx = e^(beta mu)/(4 mu) K_0(beta mu)",
+  "note": ""
+ },
+ {
+  "id": "GR4.368",
+  "gr": "4.368",
+  "page": 627,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x^2)*Log[x^2*(4*u^2 - x^2)/u^4]/Sqrt[4*u^2 - x^2], {x, 0, 2*u}]",
+  "rhs": [
+   "Pi/2*E^(-2*u^2*mu)*(Pi/2*BesselY[0, 2*I*u^2*mu] - (EulerGamma - Log[2])*BesselJ[0, 2*I*u^2*mu])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "u > 0"
+  ],
+  "cite": "ET I 149(21)a",
+  "edition_note": "",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^(2u) e^(-mu x^2) ln[x^2(4u^2-x^2)/u^4] dx/sqrt(4u^2-x^2) = pi/2 e^(-2u^2 mu)[pi/2 Y_0(2iu^2 mu) - (C - ln 2) J_0(2iu^2 mu)]",
+  "note": "u > 0 implied by the upper limit"
+ },
+ {
+  "id": "GR4.369.1",
+  "gr": "4.369.1",
+  "page": 627,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*E^(-mu*x)*(PolyGamma[nu] - Log[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[nu]*Log[mu]/mu^nu"
+  ],
+  "conds": [
+   "Re[nu] > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET I 149(12)",
+  "edition_note": "",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^inf x^(nu-1) e^(-mu x)[psi(nu) - ln x] dx = Gamma(nu) ln mu/mu^nu",
+  "note": "Re mu > 0 implied (not printed)"
+ },
+ {
+  "id": "GR4.369.2",
+  "gr": "4.369.2",
+  "page": 627,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(-mu*x)*((Log[x] - PolyGamma[n + 1]/2)^2 - PolyGamma[1, n + 1]/2), {x, 0, Infinity}]",
+  "rhs": [
+   "n!/mu^(n + 1)*((Log[mu] - PolyGamma[n + 1]/2)^2 + PolyGamma[1, n + 1]/2)"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "MI 26",
+  "edition_note": "",
+  "section": "4.35-4.36 Logarithms, exponentials, and powers",
+  "tex": "int_0^inf x^n e^(-mu x){[ln x - psi(n+1)/2]^2 - psi'(n+1)/2} dx = n!/mu^(n+1) {[ln mu - psi(n+1)/2]^2 + psi'(n+1)/2}",
+  "note": "n nonnegative integer implied by n!"
+ },
+ {
+  "id": "GR4.371.1",
+  "gr": "4.371.1",
+  "page": 627,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/Cosh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Log[Sqrt[2*Pi]*Gamma[3/4]/Gamma[1/4]]"
+  ],
+  "conds": [],
+  "cite": "LI (260)(1)a",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln x/cosh x dx = pi ln[sqrt(2 pi) Gamma(3/4)/Gamma(1/4)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.371.2",
+  "gr": "4.371.2",
+  "page": 627,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(Cosh[x] + Cos[t]), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/Sin[t]*Log[(2*Pi)^(t/Pi)*Gamma[(Pi + t)/(2*Pi)]/Gamma[(Pi - t)/(2*Pi)]]"
+  ],
+  "conds": [
+   "t^2 < Pi^2"
+  ],
+  "cite": "BI (257)(7)a",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln x dx/(cosh x + cos t) = pi/sin t ln[(2 pi)^(t/pi) Gamma((pi+t)/(2pi))/Gamma((pi-t)/(2pi))]",
+  "note": ""
+ },
+ {
+  "id": "GR4.371.3a",
+  "gr": "4.371.3a",
+  "page": 628,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/Cosh[x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "PolyGamma[1/2] + Log[Pi]"
+  ],
+  "conds": [],
+  "cite": "BI (257)(4)a",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln x dx/cosh^2 x = psi(1/2) + ln pi",
+  "note": ""
+ },
+ {
+  "id": "GR4.371.3b",
+  "gr": "4.371.3b",
+  "page": 628,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/Cosh[x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[Pi] - 2*Log[2] - EulerGamma"
+  ],
+  "conds": [],
+  "cite": "BI (257)(4)a",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln x dx/cosh^2 x = ln pi - 2 ln 2 - C",
+  "note": ""
+ },
+ {
+  "id": "GR4.372.1a",
+  "gr": "4.372.1a",
+  "page": 628,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Sinh[m*x]/Sinh[n*x], {x, 1, Infinity}]",
+  "rhs": [
+   "Pi/(2*n)*Tan[m*Pi/(2*n)]*Log[2*Pi] + Pi/n*Sum[(-1)^(k - 1)*Sin[k*m*Pi/n]*Log[Gamma[(n + k)/(2*n)]/Gamma[k/(2*n)]], {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "Element[m, Integers]",
+   "Element[n, Integers]",
+   "0 <= m < n",
+   "Element[(m + n - 1)/2, Integers]"
+  ],
+  "cite": "BI (148)(3)a",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_1^inf ln x Sinh[m*x]/Sinh[n*x] dx  [m+n is odd]",
+  "note": "m, n integers with 0 <= m < n implied (convergence and sum limits); m + n even case needs n odd for the (n-1)/2 upper limit; transcribed as printed with lower limit 1"
+ },
+ {
+  "id": "GR4.372.1b",
+  "gr": "4.372.1b",
+  "page": 628,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Sinh[m*x]/Sinh[n*x], {x, 1, Infinity}]",
+  "rhs": [
+   "Pi/(2*n)*Tan[m*Pi/(2*n)]*Log[Pi] + Pi/n*Sum[(-1)^(k - 1)*Sin[k*m*Pi/n]*Log[Gamma[(n - k)/n]/Gamma[k/n]], {k, 1, (n - 1)/2}]"
+  ],
+  "conds": [
+   "Element[m, Integers]",
+   "Element[n, Integers]",
+   "0 <= m < n",
+   "Element[(m + n)/2, Integers]",
+   "Element[(n - 1)/2, Integers]"
+  ],
+  "cite": "BI (148)(3)a",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_1^inf ln x Sinh[m*x]/Sinh[n*x] dx  [m+n is even]",
+  "note": "m, n integers with 0 <= m < n implied (convergence and sum limits); m + n even case needs n odd for the (n-1)/2 upper limit; transcribed as printed with lower limit 1"
+ },
+ {
+  "id": "GR4.372.1c",
+  "gr": "4.372.1c",
+  "page": 628,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Sinh[m*x]/Sinh[n*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*n)*Tan[m*Pi/(2*n)]*Log[2*Pi] + Pi/n*Sum[(-1)^(k - 1)*Sin[k*m*Pi/n]*Log[Gamma[(n + k)/(2*n)]/Gamma[k/(2*n)]], {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "Element[m, Integers]",
+   "Element[n, Integers]",
+   "0 <= m < n",
+   "Element[(m + n - 1)/2, Integers]"
+  ],
+  "cite": "BI (148)(3)a",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln x Sinh[m*x]/Sinh[n*x] dx  [m+n is odd]",
+  "note": "m, n integers with 0 <= m < n implied (convergence and sum limits); m + n even case needs n odd for the (n-1)/2 upper limit; corrected integrand: book prints lower limit 1, almost certainly 0 (the value has no dependence on a cut at 1)"
+ },
+ {
+  "id": "GR4.372.1d",
+  "gr": "4.372.1d",
+  "page": 628,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Sinh[m*x]/Sinh[n*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*n)*Tan[m*Pi/(2*n)]*Log[Pi] + Pi/n*Sum[(-1)^(k - 1)*Sin[k*m*Pi/n]*Log[Gamma[(n - k)/n]/Gamma[k/n]], {k, 1, (n - 1)/2}]"
+  ],
+  "conds": [
+   "Element[m, Integers]",
+   "Element[n, Integers]",
+   "0 <= m < n",
+   "Element[(m + n)/2, Integers]",
+   "Element[(n - 1)/2, Integers]"
+  ],
+  "cite": "BI (148)(3)a",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln x Sinh[m*x]/Sinh[n*x] dx  [m+n is even]",
+  "note": "m, n integers with 0 <= m < n implied (convergence and sum limits); m + n even case needs n odd for the (n-1)/2 upper limit; corrected integrand: book prints lower limit 1, almost certainly 0 (the value has no dependence on a cut at 1)"
+ },
+ {
+  "id": "GR4.372.2a",
+  "gr": "4.372.2a",
+  "page": 628,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Cosh[m*x]/Cosh[n*x], {x, 1, Infinity}]",
+  "rhs": [
+   "Pi/(2*n)*Log[2*Pi]/Cos[m*Pi/(2*n)] + Pi/n*Sum[(-1)^(k - 1)*Cos[(2*k - 1)*m*Pi/(2*n)]*Log[Gamma[(2*n + 2*k - 1)/(4*n)]/Gamma[(2*k - 1)/(4*n)]], {k, 1, n}]"
+  ],
+  "conds": [
+   "Element[m, Integers]",
+   "Element[n, Integers]",
+   "0 <= m < n",
+   "Element[(m + n - 1)/2, Integers]"
+  ],
+  "cite": "BI (148)(6)a",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_1^inf ln x Cosh[m*x]/Cosh[n*x] dx  [m+n is odd]",
+  "note": "m, n integers with 0 <= m < n implied (convergence and sum limits); m + n even case needs n odd for the (n-1)/2 upper limit; transcribed as printed with lower limit 1"
+ },
+ {
+  "id": "GR4.372.2b",
+  "gr": "4.372.2b",
+  "page": 628,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Cosh[m*x]/Cosh[n*x], {x, 1, Infinity}]",
+  "rhs": [
+   "Pi/(2*n)*Log[Pi]/Cos[m*Pi/(2*n)] + Pi/n*Sum[(-1)^(k - 1)*Cos[(2*k - 1)*m*Pi/(2*n)]*Log[Gamma[(2*n - 2*k + 1)/(2*n)]/Gamma[(2*k - 1)/(2*n)]], {k, 1, (n - 1)/2}]"
+  ],
+  "conds": [
+   "Element[m, Integers]",
+   "Element[n, Integers]",
+   "0 <= m < n",
+   "Element[(m + n)/2, Integers]",
+   "Element[(n - 1)/2, Integers]"
+  ],
+  "cite": "BI (148)(6)a",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_1^inf ln x Cosh[m*x]/Cosh[n*x] dx  [m+n is even]",
+  "note": "m, n integers with 0 <= m < n implied (convergence and sum limits); m + n even case needs n odd for the (n-1)/2 upper limit; transcribed as printed with lower limit 1"
+ },
+ {
+  "id": "GR4.372.2c",
+  "gr": "4.372.2c",
+  "page": 628,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Cosh[m*x]/Cosh[n*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*n)*Log[2*Pi]/Cos[m*Pi/(2*n)] + Pi/n*Sum[(-1)^(k - 1)*Cos[(2*k - 1)*m*Pi/(2*n)]*Log[Gamma[(2*n + 2*k - 1)/(4*n)]/Gamma[(2*k - 1)/(4*n)]], {k, 1, n}]"
+  ],
+  "conds": [
+   "Element[m, Integers]",
+   "Element[n, Integers]",
+   "0 <= m < n",
+   "Element[(m + n - 1)/2, Integers]"
+  ],
+  "cite": "BI (148)(6)a",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln x Cosh[m*x]/Cosh[n*x] dx  [m+n is odd]",
+  "note": "m, n integers with 0 <= m < n implied (convergence and sum limits); m + n even case needs n odd for the (n-1)/2 upper limit; corrected integrand: book prints lower limit 1, almost certainly 0 (the value has no dependence on a cut at 1)"
+ },
+ {
+  "id": "GR4.372.2d",
+  "gr": "4.372.2d",
+  "page": 628,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Cosh[m*x]/Cosh[n*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(2*n)*Log[Pi]/Cos[m*Pi/(2*n)] + Pi/n*Sum[(-1)^(k - 1)*Cos[(2*k - 1)*m*Pi/(2*n)]*Log[Gamma[(2*n - 2*k + 1)/(2*n)]/Gamma[(2*k - 1)/(2*n)]], {k, 1, (n - 1)/2}]"
+  ],
+  "conds": [
+   "Element[m, Integers]",
+   "Element[n, Integers]",
+   "0 <= m < n",
+   "Element[(m + n)/2, Integers]",
+   "Element[(n - 1)/2, Integers]"
+  ],
+  "cite": "BI (148)(6)a",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln x Cosh[m*x]/Cosh[n*x] dx  [m+n is even]",
+  "note": "m, n integers with 0 <= m < n implied (convergence and sum limits); m + n even case needs n odd for the (n-1)/2 upper limit; corrected integrand: book prints lower limit 1, almost certainly 0 (the value has no dependence on a cut at 1)"
+ },
+ {
+  "id": "GR4.373.1",
+  "gr": "4.373.1",
+  "page": 628,
+  "status": "ok",
+  "lhs": "Integrate[Log[a^2 + x^2]/Cosh[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/b*(2*Log[2*Gamma[(2*a*b + 3*Pi)/(4*Pi)]/Gamma[(2*a*b + Pi)/(4*Pi)]] - Log[2*b/Pi])"
+  ],
+  "conds": [
+   "b > 0",
+   "a > -Pi/(2*b)"
+  ],
+  "cite": "BI (258)(11)a",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln(a^2+x^2)/cosh bx dx = pi/b [2 ln (2 Gamma((2ab+3pi)/(4pi))/Gamma((2ab+pi)/(4pi))) - ln(2b/pi)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.373.2",
+  "gr": "4.373.2",
+  "page": 628,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x^2]/Cosh[Pi*x/2], {x, 0, Infinity}]",
+  "rhs": [
+   "2*Log[4/Pi]"
+  ],
+  "conds": [],
+  "cite": "BI (258)(1)a",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln(1+x^2) dx/cosh(pi x/2) = 2 ln(4/pi)",
+  "note": ""
+ },
+ {
+  "id": "GR4.373.3",
+  "gr": "4.373.3",
+  "page": 628,
+  "status": "ok",
+  "lhs": "Integrate[Log[a^2 + x^2]*Sinh[2*Pi*x/3]/Sinh[Pi*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*Sin[Pi/3]*Log[6*Gamma[(a + 4)/6]*Gamma[(a + 5)/6]/(Gamma[(a + 1)/6]*Gamma[(a + 2)/6])]"
+  ],
+  "conds": [
+   "a > -1"
+  ],
+  "cite": "BI (258)(12)",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln(a^2+x^2) sinh(2pi x/3)/sinh(pi x) dx = 2 sin(pi/3) ln[6 Gamma((a+4)/6)Gamma((a+5)/6)/(Gamma((a+1)/6)Gamma((a+2)/6))]",
+  "note": ""
+ },
+ {
+  "id": "GR4.373.4",
+  "gr": "4.373.4",
+  "page": 628,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x^2]/Sinh[a*x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2/a*(Log[a/Pi] + Pi/(2*a) - PolyGamma[(Pi + a)/Pi])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (258)(5)",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln(1+x^2) dx/sinh^2 ax = 2/a [ln(a/pi) + pi/(2a) - psi((pi+a)/pi)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.373.5",
+  "gr": "4.373.5",
+  "page": 628,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x^2]*Cosh[Pi*x/2]/Sinh[Pi*x/2]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(2*Pi - 4)/Pi"
+  ],
+  "conds": [],
+  "cite": "BI (258)(3)",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln(1+x^2) cosh(pi x/2)/sinh^2(pi x/2) dx = (2pi - 4)/pi",
+  "note": ""
+ },
+ {
+  "id": "GR4.373.6",
+  "gr": "4.373.6",
+  "page": 628,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x^2]*Cosh[Pi*x/4]/Sinh[Pi*x/4]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "4*Sqrt[2] - 16/Pi + 8*Sqrt[2]/Pi*Log[Sqrt[2] + 1]"
+  ],
+  "conds": [],
+  "cite": "BI (258)(2)",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln(1+x^2) cosh(pi x/4)/sinh^2(pi x/4) dx = 4 sqrt2 - 16/pi + 8 sqrt2/pi ln(sqrt2 + 1)",
+  "note": ""
+ },
+ {
+  "id": "GR4.374.1",
+  "gr": "4.374.1",
+  "page": 628,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[t]^2 + E^(-2*x)*Sin[t]^2]/Sinh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "-2*t^2"
+  ],
+  "conds": [],
+  "cite": "BI (259)(10)a",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln(cos^2 t + e^(-2x) sin^2 t) dx/sinh x = -2t^2",
+  "note": "no condition printed; presumably |t| < pi/2 (the value is not periodic in t)"
+ },
+ {
+  "id": "GR4.374.2",
+  "gr": "4.374.2",
+  "page": 629,
+  "status": "ok",
+  "lhs": "Integrate[Log[a + b*E^(-2*x)]/Cosh[x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2/(b - a)*((a + b)/2*Log[a + b] - a*Log[a] - b*Log[2])"
+  ],
+  "conds": [
+   "a > 0",
+   "a + b > 0"
+  ],
+  "cite": "LI (259)(14)",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln(a + b e^(-2x)) dx/cosh^2 x = 2/(b-a) [(a+b)/2 ln(a+b) - a ln a - b ln 2]",
+  "note": ""
+ },
+ {
+  "id": "GR4.375.1",
+  "gr": "4.375.1",
+  "page": 629,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cosh[x/2]]/Cosh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Catalan - Pi/4*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (259)(11)",
+  "edition_note": "11",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln cosh(x/2) dx/cosh x = G - pi/4 ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR4.375.2",
+  "gr": "4.375.2",
+  "page": 629,
+  "status": "ok",
+  "lhs": "Integrate[Log[Coth[x]]/Cosh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/2*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (259)(16)",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln coth x dx/cosh x = pi/2 ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR4.376.1",
+  "gr": "4.376.1",
+  "page": 629,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]/(Sqrt[x]*Cosh[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Sqrt[Pi]*Sum[(-1)^(k + 1)/Sqrt[2*k + 1]*(Log[2*k + 1] + 2*Log[2] + EulerGamma), {k, 0, Infinity}]"
+  ],
+  "conds": [],
+  "cite": "BI (147)(4)",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln x/(sqrt x cosh x) dx = 2 sqrt(pi) sum_k (-1)^(k+1)/sqrt(2k+1) {ln(2k+1) + 2 ln 2 + C}",
+  "note": ""
+ },
+ {
+  "id": "GR4.376.2",
+  "gr": "4.376.2",
+  "page": 629,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*((mu + 1)*Cosh[x] - x*Sinh[x])/Cosh[x]^2*x^mu, {x, 0, Infinity}]",
+  "rhs": [
+   "2*Gamma[mu + 1]*Sum[(-1)^(k + 1)/(2*k + 1)^(mu + 1), {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "Re[mu] > -1"
+  ],
+  "cite": "BI (356)(10)",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln x ((mu+1)cosh x - x sinh x)/cosh^2 x x^mu dx = 2 Gamma(mu+1) sum_k (-1)^(k+1)/(2k+1)^(mu+1)",
+  "note": ""
+ },
+ {
+  "id": "GR4.376.3",
+  "gr": "4.376.3",
+  "page": 629,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*((n + 1)*Cosh[x] - x*Sinh[x])/Cosh[x]^2*x^n, {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n/2^n*(PolyGamma[n, 3/4] - PolyGamma[n, 1/4])/2^(n + 1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln x ((n+1)cosh x - x sinh x)/cosh^2 x x^n dx = (-1)^n/2^n beta^(n)(1/2)",
+  "note": "beta^(n)(1/2) substituted via beta(x) = (psi((x+1)/2) - psi(x/2))/2, so beta^(n)(x) = (psi^(n)((x+1)/2) - psi^(n)(x/2))/2^(n+1); n nonnegative integer implied; no citation printed"
+ },
+ {
+  "id": "GR4.376.4",
+  "gr": "4.376.4",
+  "page": 629,
+  "status": "ok",
+  "lhs": "Integrate[Log[2*x]*(n*Sinh[2*a*x] - a*x)/Sinh[a*x]^2*x^(2*n - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "-1/n*(Pi/a)^(2*n)*Abs[BernoulliB[2*n]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "a > 0"
+  ],
+  "cite": "BI (356)(9)a",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln 2x (n sinh 2ax - ax)/sinh^2 ax x^(2n-1) dx = -1/n (pi/a)^(2n) |B_2n|",
+  "note": "a > 0 implied (not printed)"
+ },
+ {
+  "id": "GR4.376.5",
+  "gr": "4.376.5",
+  "page": 629,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*(a*x*Cosh[a*x] - (2*n + 1)*Sinh[a*x])/Sinh[a*x]^2*x^(2*n), {x, 0, Infinity}]",
+  "rhs": [
+   "2*(2^(2*n + 1) - 1)/(2*a)^(2*n + 1)*(2*n)!*Zeta[2*n + 1]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "a > 0"
+  ],
+  "cite": "BI (356)(14)",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln x (ax cosh ax - (2n+1) sinh ax)/sinh^2 ax x^(2n) dx = 2 (2^(2n+1)-1)/(2a)^(2n+1) (2n)! zeta(2n+1)",
+  "note": "no condition printed; n positive integer and a > 0 implied"
+ },
+ {
+  "id": "GR4.376.6",
+  "gr": "4.376.6",
+  "page": 629,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*(a*x*Cosh[a*x] - 2*n*Sinh[a*x])/Sinh[a*x]^2*x^(2*n - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(2^(2*n - 1) - 1)/(2*n)*Abs[BernoulliB[2*n]]*(Pi/a)^(2*n)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "a > 0"
+  ],
+  "cite": "BI (356)(15)",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln x (ax cosh ax - 2n sinh ax)/sinh^2 ax x^(2n-1) dx = (2^(2n-1)-1)/(2n) |B_2n| (pi/a)^(2n)",
+  "note": ""
+ },
+ {
+  "id": "GR4.376.7",
+  "gr": "4.376.7",
+  "page": 629,
+  "status": "ok",
+  "lhs": "Integrate[Log[((2*n + 1)*Cosh[a*x] - a*x*Sinh[a*x])/Cosh[a*x]^2]*x^(2*n), {x, 0, Infinity}]",
+  "rhs": [
+   "-(Pi/(2*a))^(2*n + 1)*Abs[EulerE[2*n]]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (356)(11)",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln[((2n+1) cosh ax - ax sinh ax)/cosh^2 ax] x^(2n) dx = -(pi/(2a))^(2n+1) |E_2n|",
+  "note": "as printed: 'ln' with no argument before the fraction (log of the fraction). See 4.376.7b for the corrected integrand ln x; n nonnegative integer implied"
+ },
+ {
+  "id": "GR4.376.7b",
+  "gr": "4.376.7b",
+  "page": 629,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*((2*n + 1)*Cosh[a*x] - a*x*Sinh[a*x])/Cosh[a*x]^2*x^(2*n), {x, 0, Infinity}]",
+  "rhs": [
+   "-(Pi/(2*a))^(2*n + 1)*Abs[EulerE[2*n]]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (356)(11)",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln x ((2n+1) cosh ax - ax sinh ax)/cosh^2 ax x^(2n) dx = -(pi/(2a))^(2n+1) |E_2n|",
+  "note": "corrected integrand: book prints 'ln' without its argument x (cf. 4.376.2-3)"
+ },
+ {
+  "id": "GR4.376.8a",
+  "gr": "4.376.8a",
+  "page": 629,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*(2*a*x*Sinh[a*x] - (2*n + 1)*Cosh[a*x])/Cosh[a*x]^3*x^(2*n), {x, 0, Infinity}]",
+  "rhs": [
+   "2/a*(2^(2*n - 1) - 1)*(Pi/(2*a))^(2*n)*Abs[BernoulliB[2*n]]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (356)(2)",
+  "edition_note": "6",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln x (2ax sinh ax - (2n+1) cosh ax)/cosh^3 ax x^(2n) dx = 2/a (2^(2n-1)-1)(pi/(2a))^(2n) |B_2n|, n = 1,2,...",
+  "note": ""
+ },
+ {
+  "id": "GR4.376.8b",
+  "gr": "4.376.8b",
+  "page": 629,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*(2*a*x*Sinh[a*x] - Cosh[a*x])/Cosh[a*x]^3, {x, 0, Infinity}]",
+  "rhs": [
+   "1/a"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (356)(2)",
+  "edition_note": "6",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln x (2ax sinh ax - cosh ax)/cosh^3 ax dx = 1/a  (n = 0)",
+  "note": "n = 0 case, n substituted"
+ },
+ {
+  "id": "GR4.376.9",
+  "gr": "4.376.9",
+  "page": 629,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*(2*a*x*Cosh[a*x] - (2*n + 1)*Sinh[a*x])/Sinh[a*x]^3*x^(2*n), {x, 0, Infinity}]",
+  "rhs": [
+   "1/a*(Pi/a)^(2*n)*Abs[BernoulliB[2*n]]"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (356)(6)a",
+  "edition_note": "6",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln x (2ax cosh ax - (2n+1) sinh ax)/sinh^3 ax x^(2n) dx = 1/a (pi/a)^(2n) |B_2n|",
+  "note": ""
+ },
+ {
+  "id": "GR4.376.10",
+  "gr": "4.376.10",
+  "page": 630,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*(x*Sinh[x] - 6*Sinh[x/2]^2 - 6*Cos[t/2]^2)/(Cosh[x] + Cos[t])^2*x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(Pi - t^2)*t/(3*Sin[t])",
+   "(Pi^2 - t^2)*t/(3*Sin[t])"
+  ],
+  "conds": [
+   "0 < t < Pi"
+  ],
+  "cite": "BI (356)(16)a",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln x (x sinh x - 6 sinh^2(x/2) - 6 cos^2(t/2))/(cosh x + cos t)^2 x^2 dx = (pi - t^2) t/(3 sin t)",
+  "note": "book prints (pi - t^2); dimensionally (pi^2 - t^2) is likely (2nd rhs)"
+ },
+ {
+  "id": "GR4.376.11",
+  "gr": "4.376.11",
+  "page": 630,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + x^2]*(Cosh[Pi*x] + Pi*x*Sinh[Pi*x])/Cosh[Pi*x]^2/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "4 - Pi"
+  ],
+  "conds": [],
+  "cite": "BI (356)(12)",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln(1+x^2) (cosh pi x + pi x sinh pi x)/cosh^2 pi x dx/x^2 = 4 - pi",
+  "note": ""
+ },
+ {
+  "id": "GR4.376.12",
+  "gr": "4.376.12",
+  "page": 630,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + 4*x^2]*(Cosh[Pi*x] + Pi*x*Sinh[Pi*x])/Cosh[Pi*x]^2/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "4*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (356)(13)",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln(1+4x^2) (cosh pi x + pi x sinh pi x)/cosh^2 pi x dx/x^2 = 4 ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR4.377",
+  "gr": "4.377",
+  "page": 630,
+  "status": "ok",
+  "lhs": "Integrate[Log[2*x]*(a*x - n*(1 - E^(-2*a*x)))/Sinh[a*x]^2*x^(2*n - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*n)*(Pi/a)^(2*n)*Abs[BernoulliB[2*n]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1",
+   "a > 0"
+  ],
+  "cite": "LI (356)(8)a",
+  "edition_note": "",
+  "section": "4.37 Combinations of logarithms and hyperbolic functions",
+  "tex": "int_0^inf ln 2x (ax - n(1 - e^(-2ax)))/sinh^2 ax x^(2n-1) dx = 1/(2n) (pi/a)^(2n) |B_2n|",
+  "note": "a > 0 implied (not printed)"
+ },
+ {
+  "id": "GR4.381.1",
+  "gr": "4.381.1",
+  "page": 630,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Sin[a*x], {x, 0, 1}]",
+  "rhs": [
+   "-1/a*(EulerGamma + Log[a] - CosIntegral[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "GW (338)(2a)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^1 ln x sin ax dx = -1/a [C + ln a - ci(a)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.381.2",
+  "gr": "4.381.2",
+  "page": 630,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Cos[a*x], {x, 0, 1}]",
+  "rhs": [
+   "-1/a*((SinIntegral[a] - Pi/2) + Pi/2)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (284)(2)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^1 ln x cos ax dx = -1/a [si(a) + pi/2]",
+  "note": ""
+ },
+ {
+  "id": "GR4.381.3",
+  "gr": "4.381.3",
+  "page": 630,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Sin[n*x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "-1/n*(EulerGamma + Log[2*n*Pi] - CosIntegral[2*n*Pi])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (338)(1a)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(2pi) ln x sin nx dx = -1/n [C + ln(2n pi) - ci(2n pi)]",
+  "note": "n positive integer implied (not printed)"
+ },
+ {
+  "id": "GR4.381.4",
+  "gr": "4.381.4",
+  "page": 630,
+  "status": "ok",
+  "lhs": "Integrate[Log[x]*Cos[n*x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "-1/n*((SinIntegral[2*n*Pi] - Pi/2) + Pi/2)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (338)(1b)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(2pi) ln x cos nx dx = -1/n [si(2n pi) + pi/2]",
+  "note": "n positive integer implied (not printed)"
+ },
+ {
+  "id": "GR4.382.1",
+  "gr": "4.382.1",
+  "page": 630,
+  "status": "ok",
+  "lhs": "Integrate[Log[Abs[(x + a)/(x - a)]]*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/b*Sin[a*b]"
+  ],
+  "conds": [
+   "a < 0",
+   "b > 0"
+  ],
+  "cite": "ET I 77(11)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^inf ln|(x+a)/(x-a)| sin bx dx = pi/b sin ab  [a < 0, b > 0]",
+  "note": "book prints a < 0; the formula is odd-symmetric in a so also holds for a > 0"
+ },
+ {
+  "id": "GR4.382.2",
+  "gr": "4.382.2",
+  "page": 630,
+  "status": "ok",
+  "lhs": "Integrate[Log[Abs[(x + a)/(x - a)]]*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2/b*(Cos[a*b]*((SinIntegral[a*b] - Pi/2) + Pi/2) - Sin[a*b]*CosIntegral[a*b])"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 18(9)",
+  "edition_note": "10",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^inf ln|(x+a)/(x-a)| cos bx dx = 2/b [cos(ab){si(ab) + pi/2} - sin(ab) ci(ab)]",
+  "note": ""
+ },
+ {
+  "id": "GR4.382.3",
+  "gr": "4.382.3",
+  "page": 630,
+  "status": "ok",
+  "lhs": "Integrate[Log[(a^2 + x^2)/(b^2 + x^2)]*Cos[c*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/c*(E^(-b*c) - E^(-a*c))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "FI III 648a, BI (337)(5)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^inf ln((a^2+x^2)/(b^2+x^2)) cos cx dx = pi/c (e^(-bc) - e^(-ac))",
+  "note": ""
+ },
+ {
+  "id": "GR4.382.4",
+  "gr": "4.382.4",
+  "page": 630,
+  "status": "ok",
+  "lhs": "Integrate[Log[(x^2 + x + a^2)/(x^2 - x + a^2)]*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi/b*Exp[-b*Sqrt[a^2 - 1/4]]*Sin[b/2]"
+  ],
+  "conds": [
+   "b > 0",
+   "a > 1/2"
+  ],
+  "cite": "ET I 77(12)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^inf ln((x^2+x+a^2)/(x^2-x+a^2)) sin bx dx = 2pi/b exp(-b sqrt(a^2 - 1/4)) sin(b/2)",
+  "note": "a > 1/2 added (implied by the real square root); only b > 0 printed"
+ },
+ {
+  "id": "GR4.382.5",
+  "gr": "4.382.5",
+  "page": 630,
+  "status": "ok",
+  "lhs": "Integrate[Log[((x + beta)^2 + gamma^2)/((x - beta)^2 + gamma^2)]*Sin[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2*Pi/b*E^(-gamma*b)*Sin[beta*b]"
+  ],
+  "conds": [
+   "Re[gamma] > 0",
+   "Abs[Im[beta]] <= Re[gamma]",
+   "b > 0"
+  ],
+  "cite": "ET I 77(13)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^inf ln(((x+beta)^2+gamma^2)/((x-beta)^2+gamma^2)) sin bx dx = 2pi/b e^(-gamma b) sin(beta b)",
+  "note": ""
+ },
+ {
+  "id": "GR4.383.1",
+  "gr": "4.383.1",
+  "page": 631,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + E^(-beta*x)]*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "beta/(2*b^2) - Pi/(2*b*Sinh[Pi*b/beta])"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 18(13)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^inf ln(1 + e^(-beta x)) cos bx dx = beta/(2b^2) - pi/(2b sinh(pi b/beta))",
+  "note": ""
+ },
+ {
+  "id": "GR4.383.2",
+  "gr": "4.383.2",
+  "page": 631,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 - E^(-beta*x)]*Cos[b*x], {x, 0, Infinity}]",
+  "rhs": [
+   "beta/(2*b^2) - Pi/(2*b)*Coth[Pi*b/beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "b > 0"
+  ],
+  "cite": "ET I 18(14)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^inf ln(1 - e^(-beta x)) cos bx dx = beta/(2b^2) - pi/(2b) coth(pi b/beta)",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.1",
+  "gr": "4.384.1",
+  "page": 631,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[Pi*x]]*Sin[2*n*Pi*x], {x, 0, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers]"
+  ],
+  "cite": "GW (338)(3a)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^1 ln(sin pi x) sin 2n pi x dx = 0",
+  "note": "n integer implied"
+ },
+ {
+  "id": "GR4.384.2a",
+  "gr": "4.384.2a",
+  "page": 631,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[Pi*x]]*Sin[(2*n + 1)*Pi*x], {x, 0, 1}]",
+  "rhs": [
+   "2/((2*n + 1)*Pi)*(Log[2] - 1/(2*n + 1) - 2*Sum[1/(2*k - 1), {k, 1, n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (338)(3b)",
+  "edition_note": "7",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^1 ln(sin pi x) sin(2n+1)pi x dx = 2/((2n+1)pi)[ln 2 - 1/(2n+1) - 2 sum_{k=1}^n 1/(2k-1)]",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR4.384.2b",
+  "gr": "4.384.2b",
+  "page": 631,
+  "status": "ok",
+  "lhs": "2*Integrate[Log[Sin[Pi*x]]*Sin[(2*n + 1)*Pi*x], {x, 0, 1/2}]",
+  "rhs": [
+   "2/((2*n + 1)*Pi)*(Log[2] - 1/(2*n + 1) - 2*Sum[1/(2*k - 1), {k, 1, n}])"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (338)(3b)",
+  "edition_note": "7",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "2 int_0^(1/2) ln(sin pi x) sin(2n+1)pi x dx = (same value)",
+  "note": "n nonnegative integer implied"
+ },
+ {
+  "id": "GR4.384.3a",
+  "gr": "4.384.3a",
+  "page": 631,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[Pi*x]], {x, 0, 1}]",
+  "rhs": [
+   "-Log[2]"
+  ],
+  "conds": [],
+  "cite": "GW (338)(3c)",
+  "edition_note": "6",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^1 ln(sin pi x) cos 2n pi x dx = -ln 2  [n = 0]",
+  "note": "n = 0 substituted"
+ },
+ {
+  "id": "GR4.384.3b",
+  "gr": "4.384.3b",
+  "page": 631,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[Pi*x]]*Cos[2*n*Pi*x], {x, 0, 1}]",
+  "rhs": [
+   "-1/(2*n)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (338)(3c)",
+  "edition_note": "6",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^1 ln(sin pi x) cos 2n pi x dx = -1/(2n)  [n > 0]",
+  "note": "n integer implied"
+ },
+ {
+  "id": "GR4.384.3c",
+  "gr": "4.384.3c",
+  "page": 631,
+  "status": "ok",
+  "lhs": "2*Integrate[Log[Sin[Pi*x]], {x, 0, 1/2}]",
+  "rhs": [
+   "-Log[2]"
+  ],
+  "conds": [],
+  "cite": "GW (338)(3c)",
+  "edition_note": "6",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "2 int_0^(1/2) ln(sin pi x) cos 2n pi x dx = -ln 2  [n = 0]",
+  "note": "n = 0 substituted"
+ },
+ {
+  "id": "GR4.384.3d",
+  "gr": "4.384.3d",
+  "page": 631,
+  "status": "ok",
+  "lhs": "2*Integrate[Log[Sin[Pi*x]]*Cos[2*n*Pi*x], {x, 0, 1/2}]",
+  "rhs": [
+   "-1/(2*n)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (338)(3c)",
+  "edition_note": "6",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "2 int_0^(1/2) ln(sin pi x) cos 2n pi x dx = -1/(2n)  [n > 0]",
+  "note": "n integer implied"
+ },
+ {
+  "id": "GR4.384.4",
+  "gr": "4.384.4",
+  "page": 631,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[Pi*x]]*Cos[(2*n + 1)*Pi*x], {x, 0, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers]"
+  ],
+  "cite": "GW (338)(3d)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^1 ln(sin pi x) cos(2n+1) pi x dx = 0",
+  "note": "n integer implied"
+ },
+ {
+  "id": "GR4.384.5",
+  "gr": "4.384.5",
+  "page": 631,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Log[2] - 1"
+  ],
+  "conds": [],
+  "cite": "BI (305)(4)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x sin x dx = ln 2 - 1",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.6",
+  "gr": "4.384.6",
+  "page": 631,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Cos[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "-1"
+  ],
+  "conds": [],
+  "cite": "BI (305)(5)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x cos x dx = -1",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.7a",
+  "gr": "4.384.7a",
+  "page": 631,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Cos[2*n*x], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi/(4*n)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (305)(6)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x cos 2nx dx = -pi/(4n)  for n > 0",
+  "note": "n integer implied"
+ },
+ {
+  "id": "GR4.384.7b",
+  "gr": "4.384.7b",
+  "page": 631,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi/2*Log[2]"
+  ],
+  "conds": [],
+  "cite": "LI (305)(6)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x cos 2nx dx = -pi/2 ln 2  for n = 0",
+  "note": "n = 0 substituted"
+ },
+ {
+  "id": "GR4.384.8",
+  "gr": "4.384.8",
+  "page": 631,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Cos[2*m*(x - n)], {x, 0, Pi}]",
+  "rhs": [
+   "-Pi*Cos[2*m*n]/(2*m)"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "LI (330)(8)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln sin x cos[2m(x-n)] dx = -pi cos(2mn)/(2m)",
+  "note": "m positive integer implied; n arbitrary"
+ },
+ {
+  "id": "GR4.384.9",
+  "gr": "4.384.9",
+  "page": 631,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Sin[x]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/8*(1 - Log[4])"
+  ],
+  "conds": [],
+  "cite": "BI (305)(7)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x sin^2 x dx = pi/8 (1 - ln 4)",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.10",
+  "gr": "4.384.10",
+  "page": 631,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Cos[x]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi/8*(1 + Log[4])"
+  ],
+  "conds": [],
+  "cite": "BI (305)(8)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x cos^2 x dx = -pi/8 (1 + ln 4)",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.11",
+  "gr": "4.384.11",
+  "page": 631,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Sin[x]*Cos[x]^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "1/9*(Log[8] - 4)"
+  ],
+  "conds": [],
+  "cite": "BI (305)(9)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x sin x cos^2 x dx = 1/9 (ln 8 - 4)",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.12",
+  "gr": "4.384.12",
+  "page": 631,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Tan[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi^2/24"
+  ],
+  "conds": [],
+  "cite": "BI (305)(11)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x tan x dx = -pi^2/24",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.13a",
+  "gr": "4.384.13a",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[2*x]]*Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "2*(Log[2] - 1)"
+  ],
+  "conds": [],
+  "cite": "BI (305)(16, 17)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin 2x sin x dx = 2(ln 2 - 1)",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.13b",
+  "gr": "4.384.13b",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[2*x]]*Cos[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "2*(Log[2] - 1)"
+  ],
+  "conds": [],
+  "cite": "BI (305)(16, 17)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin 2x cos x dx = 2(ln 2 - 1)",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.14",
+  "gr": "4.384.14",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[1 + p*Cos[x]]/Cos[x], {x, 0, Pi}]",
+  "rhs": [
+   "Pi*ArcSin[p]"
+  ],
+  "conds": [
+   "p^2 < 1"
+  ],
+  "cite": "FI II 484",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln(1 + p cos x)/cos x dx = pi arcsin p",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.15a",
+  "gr": "4.384.15a",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(1 - a^2)*Log[(1 - a^2)/2]"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "BI (331)(8)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln sin x dx/(1 - 2a cos x + a^2) = pi/(1-a^2) ln((1-a^2)/2)  [a^2 < 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.15b",
+  "gr": "4.384.15b",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(a^2 - 1)*Log[(a^2 - 1)/(2*a^2)]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "BI (331)(8)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln sin x dx/(1 - 2a cos x + a^2) = pi/(a^2-1) ln((a^2-1)/(2a^2))  [a^2 > 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.16",
+  "gr": "4.384.16",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[b*x]]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(1 - a^2)*Log[(1 - a^(2*b))/2]"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[b, Integers] && b >= 1"
+  ],
+  "cite": "BI (331)(10)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln sin bx dx/(1 - 2a cos x + a^2) = pi/(1-a^2) ln((1-a^(2b))/2)",
+  "note": "b positive integer assumed (not printed; for non-integer b, sin bx / cos bx change sign on (0, pi))"
+ },
+ {
+  "id": "GR4.384.17",
+  "gr": "4.384.17",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[b*x]]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(1 - a^2)*Log[(1 + a^(2*b))/2]"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[b, Integers] && b >= 1"
+  ],
+  "cite": "BI (331)(11)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln cos bx dx/(1 - 2a cos x + a^2) = pi/(1-a^2) ln((1+a^(2b))/2)",
+  "note": "b positive integer assumed (not printed; for non-integer b, sin bx / cos bx change sign on (0, pi))"
+ },
+ {
+  "id": "GR4.384.18a",
+  "gr": "4.384.18a",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*(1 - a^2))*Log[(1 - a)/2]"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "BI (321)(1), BI (331)(13)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x dx/(1 - 2a cos 2x + a^2) = 1/2 int_0^pi ... = pi/(2(1-a^2)) ln((1-a)/2)  [a^2 < 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.18b",
+  "gr": "4.384.18b",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*(a^2 - 1))*Log[(a - 1)/(2*a)]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "BI (321)(1), BI (331)(13)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x dx/(1 - 2a cos 2x + a^2) = 1/2 int_0^pi ... = pi/(2(a^2-1)) ln((a-1)/(2a))  [a^2 > 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.18c",
+  "gr": "4.384.18c",
+  "page": 632,
+  "status": "ok",
+  "lhs": "1/2*Integrate[Log[Sin[x]]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(2*(1 - a^2))*Log[(1 - a)/2]"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "BI (321)(1), BI (331)(13)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x dx/(1 - 2a cos 2x + a^2) = 1/2 int_0^pi ... = pi/(2(1-a^2)) ln((1-a)/2)  [a^2 < 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.18d",
+  "gr": "4.384.18d",
+  "page": 632,
+  "status": "ok",
+  "lhs": "1/2*Integrate[Log[Sin[x]]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(2*(a^2 - 1))*Log[(a - 1)/(2*a)]"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "BI (321)(1), BI (331)(13)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x dx/(1 - 2a cos 2x + a^2) = 1/2 int_0^pi ... = pi/(2(a^2-1)) ln((a-1)/(2a))  [a^2 > 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.19",
+  "gr": "4.384.19",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[b*x]]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(1 - a^2)*Log[(1 - a^b)/2]"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[b, Integers] && b >= 1"
+  ],
+  "cite": "BI (331)(18)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln sin bx dx/(1 - 2a cos 2x + a^2) = pi/(1-a^2) ln((1-a^b)/2)",
+  "note": "b positive integer assumed (not printed; for non-integer b, sin bx / cos bx change sign on (0, pi))"
+ },
+ {
+  "id": "GR4.384.20",
+  "gr": "4.384.20",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[b*x]]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(1 - a^2)*Log[(1 + a^b)/2]"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[b, Integers] && b >= 1"
+  ],
+  "cite": "BI (331)(21)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln cos bx dx/(1 - 2a cos 2x + a^2) = pi/(1-a^2) ln((1+a^b)/2)",
+  "note": "b positive integer assumed (not printed; for non-integer b, sin bx / cos bx change sign on (0, pi))"
+ },
+ {
+  "id": "GR4.384.21a",
+  "gr": "4.384.21a",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]/(1 - 2*p*Cos[2*x] + p^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*(1 - p^2))*Log[(1 + p)/2]"
+  ],
+  "conds": [
+   "p^2 < 1"
+  ],
+  "cite": "BI (321)(8)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln cos x dx/(1 - 2p cos 2x + p^2) = pi/(2(1-p^2)) ln((1+p)/2)  [p^2 < 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.21b",
+  "gr": "4.384.21b",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]/(1 - 2*p*Cos[2*x] + p^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*(p^2 - 1))*Log[(p + 1)/(2*p)]"
+  ],
+  "conds": [
+   "p^2 > 1"
+  ],
+  "cite": "BI (321)(8)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln cos x dx/(1 - 2p cos 2x + p^2) = pi/(2(p^2-1)) ln((p+1)/(2p))  [p^2 > 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.22a",
+  "gr": "4.384.22a",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Cos[x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(2*a)*(1 + a^2)/(1 - a^2)*Log[1 - a^2] - a*Pi*Log[2]/(1 - a^2)"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "LI (331)(9)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln sin x cos x dx/(1 - 2a cos x + a^2) = pi/(2a) (1+a^2)/(1-a^2) ln(1-a^2) - a pi ln 2/(1-a^2)  [a^2 < 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.22b",
+  "gr": "4.384.22b",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Cos[x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(2*a)*(a^2 + 1)/(a^2 - 1)*Log[(a^2 - 1)/a^2] - Pi*Log[2]/(a*(a^2 - 1))"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "LI (331)(9)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "... = pi/(2a) (a^2+1)/(a^2-1) ln((a^2-1)/a^2) - pi ln 2/(a(a^2-1))  [a^2 > 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.23a",
+  "gr": "4.384.23a",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[b*x]]*Cos[x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < a < 1",
+   "Element[b, Integers] && b >= 1"
+  ],
+  "cite": "BI (331)(19, 22)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln sin bx cos x dx/(1 - 2a cos 2x + a^2) = 0",
+  "note": "b positive integer assumed (not printed; for non-integer b, sin bx / cos bx change sign on (0, pi))"
+ },
+ {
+  "id": "GR4.384.23b",
+  "gr": "4.384.23b",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[b*x]]*Cos[x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "0 < a < 1",
+   "Element[b, Integers] && b >= 1"
+  ],
+  "cite": "BI (331)(19, 22)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln cos bx cos x dx/(1 - 2a cos 2x + a^2) = 0",
+  "note": "b positive integer assumed (not printed; for non-integer b, sin bx / cos bx change sign on (0, pi))"
+ },
+ {
+  "id": "GR4.384.24a",
+  "gr": "4.384.24a",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Cos[x]^2/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(4*a)*(1 + a)/(1 - a)*Log[1 - a] - Pi*Log[2]/(2*(1 - a))"
+  ],
+  "conds": [
+   "0 < a < 1"
+  ],
+  "cite": "BI (331)(16)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln sin x cos^2 x dx/(1 - 2a cos 2x + a^2) = pi/(4a) (1+a)/(1-a) ln(1-a) - pi ln 2/(2(1-a))  [0 < a < 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.24b",
+  "gr": "4.384.24b",
+  "page": 632,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Cos[x]^2/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(4*a)*(a + 1)/(a - 1)*Log[(a - 1)/a] - Pi*Log[2]/(2*a*(a - 1))"
+  ],
+  "conds": [
+   "a > 1"
+  ],
+  "cite": "BI (331)(16)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "... = pi/(4a) (a+1)/(a-1) ln((a-1)/a) - pi ln 2/(2a(a-1))  [a > 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.25a",
+  "gr": "4.384.25a",
+  "page": 633,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Cos[2*x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*a*(1 - a^2))*((1 + a^2)/2*Log[1 - a] - a^2*Log[2])"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "BI (321)(2), BI (331)(15), LI (321)(2)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x cos 2x dx/(1 - 2a cos 2x + a^2) = 1/2 int_0^pi ... = pi/(2a(1-a^2)) {(1+a^2)/2 ln(1-a) - a^2 ln 2}  [a^2 < 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.25b",
+  "gr": "4.384.25b",
+  "page": 633,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Cos[2*x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*a*(a^2 - 1))*((1 + a^2)/2*Log[(a - 1)/a] - Log[2])"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "BI (321)(2), BI (331)(15), LI (321)(2)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "... = pi/(2a(a^2-1)) {(1+a^2)/2 ln((a-1)/a) - ln 2}  [a^2 > 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.25c",
+  "gr": "4.384.25c",
+  "page": 633,
+  "status": "ok",
+  "lhs": "1/2*Integrate[Log[Sin[x]]*Cos[2*x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(2*a*(1 - a^2))*((1 + a^2)/2*Log[1 - a] - a^2*Log[2])"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "BI (321)(2), BI (331)(15), LI (321)(2)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x cos 2x dx/(1 - 2a cos 2x + a^2) = 1/2 int_0^pi ... = pi/(2a(1-a^2)) {(1+a^2)/2 ln(1-a) - a^2 ln 2}  [a^2 < 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.25d",
+  "gr": "4.384.25d",
+  "page": 633,
+  "status": "ok",
+  "lhs": "1/2*Integrate[Log[Sin[x]]*Cos[2*x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(2*a*(a^2 - 1))*((1 + a^2)/2*Log[(a - 1)/a] - Log[2])"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "BI (321)(2), BI (331)(15), LI (321)(2)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "... = pi/(2a(a^2-1)) {(1+a^2)/2 ln((a-1)/a) - ln 2}  [a^2 > 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.26a",
+  "gr": "4.384.26a",
+  "page": 633,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]*Cos[2*x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*a*(1 - a^2))*((1 + a^2)/2*Log[1 + a] - a^2*Log[2])"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "BI (321)(9)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln cos x cos 2x dx/(1 - 2a cos 2x + a^2) = pi/(2a(1-a^2)) {(1+a^2)/2 ln(1+a) - a^2 ln 2}  [a^2 < 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.384.26b",
+  "gr": "4.384.26b",
+  "page": 633,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]*Cos[2*x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*a*(a^2 - 1))*((1 + a^2)/2*Log[(1 + a)/a] - Log[2])"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "BI (321)(9)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "... = pi/(2a(a^2-1)) {(1+a^2)/2 ln((1+a)/a) - ln 2}  [a^2 > 1]",
+  "note": ""
+ },
+ {
+  "id": "GR4.385.1",
+  "gr": "4.385.1",
+  "page": 633,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]/(a + b*Cos[x]), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/Sqrt[a^2 - b^2]*Log[Sqrt[a^2 - b^2]/(a + Sqrt[a^2 - b^2])]"
+  ],
+  "conds": [
+   "a > 0",
+   "a > b",
+   "a + b > 0"
+  ],
+  "cite": "BI (331)(6)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^pi ln sin x dx/(a + b cos x) = pi/sqrt(a^2-b^2) ln(sqrt(a^2-b^2)/(a + sqrt(a^2-b^2)))",
+  "note": "a + b > 0 added (otherwise a pole on (0, pi)); book prints a > 0, a > b"
+ },
+ {
+  "id": "GR4.385.2a",
+  "gr": "4.385.2a",
+  "page": 633,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]/(a*Sin[x] + b*Cos[x])^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "1/(b*(a^2 + b^2))*(-a*Log[a/b] - b*Pi/2)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (319)(1,6)a",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x dx/(a sin x + b cos x)^2 = 1/(b(a^2+b^2)) (-a ln(a/b) - b pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.385.2b",
+  "gr": "4.385.2b",
+  "page": 633,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[Sin[x]]/(a*Sin[x] - b*Cos[x])^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "1/(b*(a^2 + b^2))*(a*Log[a/b] - b*Pi/2)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (319)(1,6)a",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x dx/(a sin x - b cos x)^2 = 1/(b(a^2+b^2)) (a ln(a/b) - b pi/2)",
+  "note": "lower sign: a sin x - b cos x (resp. a cos x - b sin x) vanishes inside (0, pi/2) for a, b > 0, a double pole on the path; not marked PV",
+  "reason": "pole on the integration path"
+ },
+ {
+  "id": "GR4.385.2c",
+  "gr": "4.385.2c",
+  "page": 633,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]/(a*Cos[x] + b*Sin[x])^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "1/(b*(a^2 + b^2))*(-a*Log[a/b] - b*Pi/2)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (319)(1,6)a",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln cos x dx/(a cos x + b sin x)^2 = 1/(b(a^2+b^2)) (-a ln(a/b) - b pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR4.385.2d",
+  "gr": "4.385.2d",
+  "page": 633,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Log[Cos[x]]/(a*Cos[x] - b*Sin[x])^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "1/(b*(a^2 + b^2))*(a*Log[a/b] - b*Pi/2)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (319)(1,6)a",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln cos x dx/(a cos x - b sin x)^2 = 1/(b(a^2+b^2)) (a ln(a/b) - b pi/2)",
+  "note": "lower sign: a sin x - b cos x (resp. a cos x - b sin x) vanishes inside (0, pi/2) for a, b > 0, a double pole on the path; not marked PV",
+  "reason": "pole on the integration path"
+ },
+ {
+  "id": "GR4.385.3a",
+  "gr": "4.385.3a",
+  "page": 633,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]/(a^2*Sin[x]^2 + b^2*Cos[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*a*b)*Log[b/(a + b)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (317)(4, 10)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x dx/(a^2 sin^2 x + b^2 cos^2 x) = pi/(2ab) ln(b/(a+b))",
+  "note": ""
+ },
+ {
+  "id": "GR4.385.3b",
+  "gr": "4.385.3b",
+  "page": 633,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]/(b^2*Sin[x]^2 + a^2*Cos[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*a*b)*Log[b/(a + b)]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (317)(4, 10)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln cos x dx/(b^2 sin^2 x + a^2 cos^2 x) = pi/(2ab) ln(b/(a+b))",
+  "note": ""
+ },
+ {
+  "id": "GR4.385.4a",
+  "gr": "4.385.4a",
+  "page": 633,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Sin[2*x]/(a*Sin[x]^2 + b*Cos[x]^2)^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "1/(2*b*(b - a))*Log[a/b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (319)(3, 7), LI (319)(3)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x sin 2x dx/(a sin^2 x + b cos^2 x)^2 = 1/(2b(b-a)) ln(a/b)",
+  "note": ""
+ },
+ {
+  "id": "GR4.385.4b",
+  "gr": "4.385.4b",
+  "page": 633,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]*Sin[2*x]/(b*Sin[x]^2 + a*Cos[x]^2)^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "1/(2*b*(b - a))*Log[a/b]"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "BI (319)(3, 7), LI (319)(3)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln cos x sin 2x dx/(b sin^2 x + a cos^2 x)^2 = 1/(2b(b-a)) ln(a/b)",
+  "note": ""
+ },
+ {
+  "id": "GR4.385.5a",
+  "gr": "4.385.5a",
+  "page": 633,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*(a^2*Sin[x]^2 - b^2*Cos[x]^2)/(a^2*Sin[x]^2 + b^2*Cos[x]^2)^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*b*(a + b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "LI (319)(2, 8)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x (a^2 sin^2 x - b^2 cos^2 x)/(a^2 sin^2 x + b^2 cos^2 x)^2 dx = pi/(2b(a+b))",
+  "note": ""
+ },
+ {
+  "id": "GR4.385.5b",
+  "gr": "4.385.5b",
+  "page": 633,
+  "status": "ok",
+  "lhs": "Integrate[Log[Cos[x]]*(a^2*Cos[x]^2 - b^2*Sin[x]^2)/(a^2*Cos[x]^2 + b^2*Sin[x]^2)^2, {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*b*(a + b))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "LI (319)(2, 8)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln cos x (a^2 cos^2 x - b^2 sin^2 x)/(a^2 cos^2 x + b^2 sin^2 x)^2 dx = pi/(2b(a+b))",
+  "note": ""
+ },
+ {
+  "id": "GR4.386.1a",
+  "gr": "4.386.1a",
+  "page": 633,
+  "status": "ok",
+  "lhs": "Integrate[Log[Sin[x]]*Sin[x]/Sqrt[1 + Sin[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi/8*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (322)(1, 6)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) ln sin x sin x/sqrt(1 + sin^2 x) dx = -pi/8 ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR4.386.1b",
+  "gr": "4.386.1b",
+  "page": 633,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]*Log[Cos[x]]/Sqrt[1 + Cos[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "-Pi/8*Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (322)(1, 6)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) cos x ln cos x/sqrt(1 + cos^2 x) dx = -pi/8 ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR4.386.2a",
+  "gr": "4.386.2a",
+  "page": 633,
+  "status": "ok",
+  "lhs": "Integrate[Sin[x]^3*Log[Sin[x]]/Sqrt[1 + Sin[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "(Log[2] - 1)/4"
+  ],
+  "conds": [],
+  "cite": "BI (322)(2, 7)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) sin^3 x ln sin x/sqrt(1 + sin^2 x) dx = (ln 2 - 1)/4",
+  "note": ""
+ },
+ {
+  "id": "GR4.386.2b",
+  "gr": "4.386.2b",
+  "page": 633,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]^3*Log[Cos[x]]/Sqrt[1 + Cos[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "(Log[2] - 1)/4"
+  ],
+  "conds": [],
+  "cite": "BI (322)(2, 7)",
+  "edition_note": "",
+  "section": "4.38-4.41 Logarithms and trigonometric functions",
+  "tex": "int_0^(pi/2) cos^3 x ln cos x/sqrt(1 + cos^2 x) dx = (ln 2 - 1)/4",
+  "note": ""
+ }
+]

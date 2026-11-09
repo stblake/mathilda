@@ -1,0 +1,374 @@
+pycheck: 4319 records, 2373 cached, 1946 to run
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The maximum number of subdivisions (400) has been achieved.
+  If increasing the limit yields no improvement it is advised to analyze 
+  the integrand in order to determine the difficulties.  If the position of a 
+  local difficulty can be determined (singularity, discontinuity) one will 
+  probably gain from splitting up the interval and calling the integrator 
+  on the subranges.  Perhaps a special-purpose integrator should be used.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The maximum number of subdivisions (400) has been achieved.
+  If increasing the limit yields no improvement it is advised to analyze 
+  the integrand in order to determine the difficulties.  If the position of a 
+  local difficulty can be determined (singularity, discontinuity) one will 
+  probably gain from splitting up the interval and calling the integrator 
+  on the subranges.  Perhaps a special-purpose integrator should be used.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The integral is probably divergent, or slowly convergent.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The maximum number of subdivisions (400) has been achieved.
+  If increasing the limit yields no improvement it is advised to analyze 
+  the integrand in order to determine the difficulties.  If the position of a 
+  local difficulty can be determined (singularity, discontinuity) one will 
+  probably gain from splitting up the interval and calling the integrator 
+  on the subranges.  Perhaps a special-purpose integrator should be used.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The integral is probably divergent, or slowly convergent.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The maximum number of subdivisions (400) has been achieved.
+  If increasing the limit yields no improvement it is advised to analyze 
+  the integrand in order to determine the difficulties.  If the position of a 
+  local difficulty can be determined (singularity, discontinuity) one will 
+  probably gain from splitting up the interval and calling the integrator 
+  on the subranges.  Perhaps a special-purpose integrator should be used.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The maximum number of subdivisions (400) has been achieved.
+  If increasing the limit yields no improvement it is advised to analyze 
+  the integrand in order to determine the difficulties.  If the position of a 
+  local difficulty can be determined (singularity, discontinuity) one will 
+  probably gain from splitting up the interval and calling the integrator 
+  on the subranges.  Perhaps a special-purpose integrator should be used.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The integral is probably divergent, or slowly convergent.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The integral is probably divergent, or slowly convergent.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The integral is probably divergent, or slowly convergent.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The integral is probably divergent, or slowly convergent.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The maximum number of subdivisions (400) has been achieved.
+  If increasing the limit yields no improvement it is advised to analyze 
+  the integrand in order to determine the difficulties.  If the position of a 
+  local difficulty can be determined (singularity, discontinuity) one will 
+  probably gain from splitting up the interval and calling the integrator 
+  on the subranges.  Perhaps a special-purpose integrator should be used.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The maximum number of subdivisions (400) has been achieved.
+  If increasing the limit yields no improvement it is advised to analyze 
+  the integrand in order to determine the difficulties.  If the position of a 
+  local difficulty can be determined (singularity, discontinuity) one will 
+  probably gain from splitting up the interval and calling the integrator 
+  on the subranges.  Perhaps a special-purpose integrator should be used.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The integral is probably divergent, or slowly convergent.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The integral is probably divergent, or slowly convergent.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The occurrence of roundoff error is detected, which prevents 
+  the requested tolerance from being achieved.  The error may be 
+  underestimated.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The occurrence of roundoff error is detected, which prevents 
+  the requested tolerance from being achieved.  The error may be 
+  underestimated.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The occurrence of roundoff error is detected, which prevents 
+  the requested tolerance from being achieved.  The error may be 
+  underestimated.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The occurrence of roundoff error is detected, which prevents 
+  the requested tolerance from being achieved.  The error may be 
+  underestimated.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The occurrence of roundoff error is detected, which prevents 
+  the requested tolerance from being achieved.  The error may be 
+  underestimated.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The occurrence of roundoff error is detected, which prevents 
+  the requested tolerance from being achieved.  The error may be 
+  underestimated.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The occurrence of roundoff error is detected, which prevents 
+  the requested tolerance from being achieved.  The error may be 
+  underestimated.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The occurrence of roundoff error is detected, which prevents 
+  the requested tolerance from being achieved.  The error may be 
+  underestimated.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The occurrence of roundoff error is detected, which prevents 
+  the requested tolerance from being achieved.  The error may be 
+  underestimated.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The occurrence of roundoff error is detected, which prevents 
+  the requested tolerance from being achieved.  The error may be 
+  underestimated.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The occurrence of roundoff error is detected, which prevents 
+  the requested tolerance from being achieved.  The error may be 
+  underestimated.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The maximum number of subdivisions (400) has been achieved.
+  If increasing the limit yields no improvement it is advised to analyze 
+  the integrand in order to determine the difficulties.  If the position of a 
+  local difficulty can be determined (singularity, discontinuity) one will 
+  probably gain from splitting up the interval and calling the integrator 
+  on the subranges.  Perhaps a special-purpose integrator should be used.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The maximum number of subdivisions (400) has been achieved.
+  If increasing the limit yields no improvement it is advised to analyze 
+  the integrand in order to determine the difficulties.  If the position of a 
+  local difficulty can be determined (singularity, discontinuity) one will 
+  probably gain from splitting up the interval and calling the integrator 
+  on the subranges.  Perhaps a special-purpose integrator should be used.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The integral is probably divergent, or slowly convergent.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The maximum number of subdivisions (400) has been achieved.
+  If increasing the limit yields no improvement it is advised to analyze 
+  the integrand in order to determine the difficulties.  If the position of a 
+  local difficulty can be determined (singularity, discontinuity) one will 
+  probably gain from splitting up the interval and calling the integrator 
+  on the subranges.  Perhaps a special-purpose integrator should be used.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The maximum number of subdivisions (400) has been achieved.
+  If increasing the limit yields no improvement it is advised to analyze 
+  the integrand in order to determine the difficulties.  If the position of a 
+  local difficulty can be determined (singularity, discontinuity) one will 
+  probably gain from splitting up the interval and calling the integrator 
+  on the subranges.  Perhaps a special-purpose integrator should be used.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The maximum number of subdivisions (400) has been achieved.
+  If increasing the limit yields no improvement it is advised to analyze 
+  the integrand in order to determine the difficulties.  If the position of a 
+  local difficulty can be determined (singularity, discontinuity) one will 
+  probably gain from splitting up the interval and calling the integrator 
+  on the subranges.  Perhaps a special-purpose integrator should be used.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The maximum number of subdivisions (400) has been achieved.
+  If increasing the limit yields no improvement it is advised to analyze 
+  the integrand in order to determine the difficulties.  If the position of a 
+  local difficulty can be determined (singularity, discontinuity) one will 
+  probably gain from splitting up the interval and calling the integrator 
+  on the subranges.  Perhaps a special-purpose integrator should be used.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The integral is probably divergent, or slowly convergent.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The maximum number of subdivisions (400) has been achieved.
+  If increasing the limit yields no improvement it is advised to analyze 
+  the integrand in order to determine the difficulties.  If the position of a 
+  local difficulty can be determined (singularity, discontinuity) one will 
+  probably gain from splitting up the interval and calling the integrator 
+  on the subranges.  Perhaps a special-purpose integrator should be used.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The maximum number of subdivisions (400) has been achieved.
+  If increasing the limit yields no improvement it is advised to analyze 
+  the integrand in order to determine the difficulties.  If the position of a 
+  local difficulty can be determined (singularity, discontinuity) one will 
+  probably gain from splitting up the interval and calling the integrator 
+  on the subranges.  Perhaps a special-purpose integrator should be used.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The integral is probably divergent, or slowly convergent.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The integral is probably divergent, or slowly convergent.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The algorithm does not converge.  Roundoff error is detected
+  in the extrapolation table.  It is assumed that the requested tolerance
+  cannot be achieved, and that the returned result (if full_output = 1) is 
+  the best which can be obtained.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: Extremely bad integrand behavior occurs at some points of the
+  integration interval.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The maximum number of subdivisions (400) has been achieved.
+  If increasing the limit yields no improvement it is advised to analyze 
+  the integrand in order to determine the difficulties.  If the position of a 
+  local difficulty can be determined (singularity, discontinuity) one will 
+  probably gain from splitting up the interval and calling the integrator 
+  on the subranges.  Perhaps a special-purpose integrator should be used.
+  r = si.quad(fr, a, b, **kw)[0]
+/Users/user/Mathilda_dev/Mathilda/tools/gr/pycheck.py:452: IntegrationWarning: The integral is probably divergent, or slowly convergent.
+  r = si.quad(fr, a, b, **kw)[0]
+mathilda/python verdicts: {'BADEXPR/UNDECIDED': 11, 'MISMATCH/MISMATCH': 129, 'MISMATCH/UNDECIDED': 79, 'MISMATCH/UNSUPPORTED': 18, 'MISMATCH/VERIFIED': 71, 'MISMATCH/VERIFIED1': 7, 'NOCONV/MISMATCH': 3, 'NOCONV/UNDECIDED': 281, 'NOCONV/VERIFIED': 1, 'NOHEAD/UNDECIDED': 36, 'NOOUTPUT/UNDECIDED': 1, 'TIMEOUT/UNDECIDED': 74, 'VERIFIED/MISMATCH': 31, 'VERIFIED/UNDECIDED': 374, 'VERIFIED/UNSUPPORTED': 12, 'VERIFIED/VERIFIED': 2813, 'VERIFIED/VERIFIED1': 271, 'VERIFIED1/MISMATCH': 3, 'VERIFIED1/UNDECIDED': 13, 'VERIFIED1/VERIFIED': 87, 'VERIFIED1/VERIFIED1': 4}
+Mathilda numeric defects found: {'NOVALUE': 109, 'N_WRONG': 6, 'NINT_WRONG': 22}

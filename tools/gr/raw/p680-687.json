@@ -1,0 +1,1632 @@
+[
+ {
+  "id": "GR6.111",
+  "gr": "6.111",
+  "page": 680,
+  "status": "ok",
+  "lhs": "Integrate[MatharF2[x, k]*Cot[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/4*MatharK1[k] + 1/2*Log[k]*MatharK[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (350)(1)",
+  "edition_note": "",
+  "section": "6.11 Forms containing F(x,k)",
+  "tex": "int_0^{pi/2} F(x,k) cot x dx = pi/4 K(k') + 1/2 ln k K(k)",
+  "note": ""
+ },
+ {
+  "id": "GR6.112.1",
+  "gr": "6.112.1",
+  "page": 680,
+  "status": "ok",
+  "lhs": "Integrate[MatharF2[x, k]*Sin[x]*Cos[x]/(1 + k*Sin[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "1/(4*k)*MatharK[k]*Log[(1 + k)*Sqrt[k]/2] + Pi/(16*k)*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (350)(6)",
+  "edition_note": "",
+  "section": "6.11 Forms containing F(x,k)",
+  "tex": "int F(x,k) sin cos/(1+k sin^2 x) = 1/(4k) K ln((1+k)sqrt k/2) + pi/(16k) K(k')",
+  "note": ""
+ },
+ {
+  "id": "GR6.112.2",
+  "gr": "6.112.2",
+  "page": 680,
+  "status": "ok",
+  "lhs": "Integrate[MatharF2[x, k]*Sin[x]*Cos[x]/(1 - k*Sin[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "1/(4*k)*MatharK[k]*Log[2/((1 - k)*Sqrt[k])] - Pi/(16*k)*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (350)(7)",
+  "edition_note": "",
+  "section": "6.11 Forms containing F(x,k)",
+  "tex": "int F(x,k) sin cos/(1-k sin^2 x) = 1/(4k) K ln(2/((1-k)sqrt k)) - pi/(16k) K(k')",
+  "note": ""
+ },
+ {
+  "id": "GR6.112.3",
+  "gr": "6.112.3",
+  "page": 680,
+  "status": "ok",
+  "lhs": "Integrate[MatharF2[x, k]*Sin[x]*Cos[x]/(1 - k^2*Sin[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "-1/(2*k^2)*Log[Sqrt[1 - k^2]]*MatharK[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (350)(2)a, BY(802.12)a",
+  "edition_note": "",
+  "section": "6.11 Forms containing F(x,k)",
+  "tex": "int F(x,k) sin cos/(1-k^2 sin^2 x) = -1/(2k^2) ln k' K(k)",
+  "note": ""
+ },
+ {
+  "id": "GR6.113.1",
+  "gr": "6.113.1",
+  "page": 680,
+  "status": "ok",
+  "lhs": "Integrate[MatharF2[x, Sqrt[1 - k^2]]*Sin[x]*Cos[x]/(Cos[x]^2 + k*Sin[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "1/(4*(1 - k))*Log[2/((1 + k)*Sqrt[k])]*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (350)(5)",
+  "edition_note": "",
+  "section": "6.11 Forms containing F(x,k)",
+  "tex": "int F(x,k') sin cos/(cos^2+k sin^2) = 1/(4(1-k)) ln(2/((1+k)sqrt k)) K(k')",
+  "note": ""
+ },
+ {
+  "id": "GR6.113.2",
+  "gr": "6.113.2",
+  "page": 680,
+  "status": "ok",
+  "lhs": "Integrate[MatharF2[x, k]*Sin[x]*Cos[x]/((1 - k^2*Sin[t]^2*Sin[x]^2)*Sqrt[1 - k^2*Sin[x]^2]), {x, 0, Pi/2}]",
+  "rhs": [
+   "-1/(k^2*Sin[t]*Cos[t])*(MatharK[k]*ArcTan[Sqrt[1 - k^2]*Tan[t]] - Pi/2*MatharF2[t, k])"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "0 < t < Pi/2"
+  ],
+  "cite": "BI (350)(12)",
+  "edition_note": "",
+  "section": "6.11 Forms containing F(x,k)",
+  "tex": "int F(x,k) sin cos/((1-k^2 sin^2 t sin^2 x) sqrt(1-k^2 sin^2 x)) = -1/(k^2 sin t cos t)[K arctan(k' tan t) - pi/2 F(t,k)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.114",
+  "gr": "6.114",
+  "page": 680,
+  "status": "ok",
+  "lhs": "Integrate[MatharF2[x, Sqrt[1 - Cot[u]^2*Cot[v]^2]]/Sqrt[(Sin[x]^2 - Sin[u]^2)*(Sin[v]^2 - Sin[x]^2)], {x, u, v}]",
+  "rhs": [
+   "1/(2*Cos[u]*Sin[v])*MatharK[Sqrt[1 - Cot[u]^2*Cot[v]^2]]*MatharK[Sqrt[1 - Tan[u]^2*Cot[v]^2]]"
+  ],
+  "conds": [
+   "0 < u < v < Pi/2",
+   "u + v > Pi/2"
+  ],
+  "cite": "BI (351)(9)",
+  "edition_note": "",
+  "section": "6.11 Forms containing F(x,k)",
+  "tex": "int_u^v F(x,k) dx/sqrt((sin^2x-sin^2u)(sin^2v-sin^2x)) = 1/(2 cos u sin v) K(k) K(sqrt(1-tan^2u cot^2v)) [k^2=1-cot^2u cot^2v]",
+  "note": "equality condition k^2 = 1 - cot^2 u cot^2 v substituted; u+v>pi/2 keeps k real"
+ },
+ {
+  "id": "GR6.115",
+  "gr": "6.115",
+  "page": 680,
+  "status": "ok",
+  "lhs": "Integrate[MatharF2[ArcSin[x], k]*x/(1 + k*x^2), {x, 0, 1}]",
+  "rhs": [
+   "1/(4*k)*MatharK[k]*Log[(1 + k)*Sqrt[k]/2] + Pi/(16*k)*MatharK1[k]"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (466)(1)",
+  "edition_note": "",
+  "section": "6.11 Forms containing F(x,k)",
+  "tex": "int_0^1 F(arcsin x,k) x/(1+kx^2) dx = 1/(4k) K ln((1+k)sqrt k/2) + pi/(16k) K(k')",
+  "note": ""
+ },
+ {
+  "id": "GR6.121",
+  "gr": "6.121",
+  "page": 681,
+  "status": "ok",
+  "lhs": "Integrate[MatharE2[x, k]*Sin[x]*Cos[x]/(1 - k^2*Sin[x]^2), {x, 0, Pi/2}]",
+  "rhs": [
+   "1/(2*k^2)*((1 + (1 - k^2))*MatharK[k] - (2 + Log[Sqrt[1 - k^2]])*MatharE[k])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (350)(4)",
+  "edition_note": "",
+  "section": "6.12 Forms containing E(x,k)",
+  "tex": "int E(x,k) sin cos/(1-k^2 sin^2) = 1/(2k^2){(1+k'^2)K - (2+ln k')E}",
+  "note": ""
+ },
+ {
+  "id": "GR6.122",
+  "gr": "6.122",
+  "page": 681,
+  "status": "ok",
+  "lhs": "Integrate[MatharE2[x, k]/Sqrt[1 - k^2*Sin[x]^2], {x, 0, Pi/2}]",
+  "rhs": [
+   "1/2*(MatharE[k]*MatharK[k] - Log[Sqrt[1 - k^2]])"
+  ],
+  "conds": [
+   "0 < k < 1"
+  ],
+  "cite": "BI (350)(10), BY (630.02)",
+  "edition_note": "",
+  "section": "6.12 Forms containing E(x,k)",
+  "tex": "int E(x,k)/sqrt(1-k^2 sin^2 x) = 1/2{E K - ln k'}",
+  "note": ""
+ },
+ {
+  "id": "GR6.123",
+  "gr": "6.123",
+  "page": 681,
+  "status": "ok",
+  "lhs": "Integrate[MatharE2[x, k]*Sin[x]*Cos[x]/((1 - k^2*Sin[t]^2*Sin[x]^2)*Sqrt[1 - k^2*Sin[x]^2]), {x, 0, Pi/2}]",
+  "rhs": [
+   "-1/(k^2*Sin[t]*Cos[t])*(MatharE[k]*ArcTan[Sqrt[1 - k^2]*Tan[t]] - Pi/2*MatharE2[t, k] + Pi/2*Cot[t]*(1 - Sqrt[1 - k^2*Sin[t]^2]))"
+  ],
+  "conds": [
+   "0 < k < 1",
+   "0 < t < Pi/2"
+  ],
+  "cite": "BI (350)(13)",
+  "edition_note": "",
+  "section": "6.12 Forms containing E(x,k)",
+  "tex": "... = -1/(k^2 sin t cos t)[E arctan(k' tan t) - pi/2 E(t,k) + pi/2 cot t (1 - sqrt(1-k^2 sin^2 t))]",
+  "note": ""
+ },
+ {
+  "id": "GR6.124",
+  "gr": "6.124",
+  "page": 681,
+  "status": "ok",
+  "lhs": "Integrate[MatharE2[x, Sqrt[1 - Cot[u]^2*Cot[v]^2]]/Sqrt[(Sin[x]^2 - Sin[u]^2)*(Sin[v]^2 - Sin[x]^2)], {x, u, v}]",
+  "rhs": [
+   "1/(2*Cos[u]*Sin[v])*MatharE[Sqrt[1 - Cot[u]^2*Cot[v]^2]]*MatharK[Sqrt[1 - Tan[u]^2/Tan[v]^2]] + (1 - Cot[u]^2*Cot[v]^2)*Sin[v]/(2*Cos[u])*MatharK[Sqrt[1 - Sin[2*u]^2/Sin[2*v]^2]]"
+  ],
+  "conds": [
+   "0 < u < v < Pi/2",
+   "u + v > Pi/2"
+  ],
+  "cite": "BI (351)(10)",
+  "edition_note": "",
+  "section": "6.12 Forms containing E(x,k)",
+  "tex": "int_u^v E(x,k) dx/sqrt(...) = 1/(2cos u sin v) E(k) K(sqrt(1-tg^2u/tg^2v)) + k^2 sin v/(2cos u) K(sqrt(1-sin^2 2u/sin^2 2v)) [k^2=1-cot^2u cot^2v]",
+  "note": "equality condition k^2 = 1 - cot^2 u cot^2 v substituted"
+ },
+ {
+  "id": "GR6.131a",
+  "gr": "6.131a",
+  "page": 681,
+  "status": "ok",
+  "lhs": "Integrate[MatharF2[x, k]*k, {k, 0, 1}]",
+  "rhs": [
+   "(1 - Cos[x])/Sin[x]"
+  ],
+  "conds": [
+   "0 < x < Pi/2"
+  ],
+  "cite": "BY (616.03)",
+  "edition_note": "",
+  "section": "6.13 Integration of elliptic integrals with respect to the modulus",
+  "tex": "int_0^1 F(x,k) k dk = (1-cos x)/sin x",
+  "note": ""
+ },
+ {
+  "id": "GR6.131b",
+  "gr": "6.131b",
+  "page": 681,
+  "status": "ok",
+  "lhs": "Integrate[MatharF2[x, k]*k, {k, 0, 1}]",
+  "rhs": [
+   "Tan[x/2]"
+  ],
+  "conds": [
+   "0 < x < Pi/2"
+  ],
+  "cite": "BY (616.03)",
+  "edition_note": "",
+  "section": "6.13 Integration of elliptic integrals with respect to the modulus",
+  "tex": "int_0^1 F(x,k) k dk = tan(x/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.132",
+  "gr": "6.132",
+  "page": 681,
+  "status": "ok",
+  "lhs": "Integrate[MatharE2[x, k]*k, {k, 0, 1}]",
+  "rhs": [
+   "(Sin[x]^2 + 1 - Cos[x])/(3*Sin[x])"
+  ],
+  "conds": [
+   "0 < x < Pi/2"
+  ],
+  "cite": "BY (616.04)",
+  "edition_note": "",
+  "section": "6.13 Integration of elliptic integrals with respect to the modulus",
+  "tex": "int_0^1 E(x,k) k dk = (sin^2 x + 1 - cos x)/(3 sin x)",
+  "note": ""
+ },
+ {
+  "id": "GR6.133",
+  "gr": "6.133",
+  "page": 681,
+  "status": "ok",
+  "lhs": "Integrate[EllipticPi[r^2, x, k^2]*k, {k, 0, 1}]",
+  "rhs": [
+   "Tan[x/2] - r*Log[Sqrt[(1 + r*Sin[x])/(1 - r*Sin[x])]] - r^2*EllipticPi[r^2, x, 0]"
+  ],
+  "conds": [
+   "0 < r < 1",
+   "0 < x < Pi/2"
+  ],
+  "cite": "BY (616.05)",
+  "edition_note": "",
+  "section": "6.13 Integration of elliptic integrals with respect to the modulus",
+  "tex": "int_0^1 Pi(x,r^2,k) k dk = tan(x/2) - r ln sqrt((1+r sin x)/(1-r sin x)) - r^2 Pi(x,r^2,0)",
+  "note": ""
+ },
+ {
+  "id": "GR6.141.1",
+  "gr": "6.141.1",
+  "page": 681,
+  "status": "ok",
+  "lhs": "Integrate[MatharK[k], {k, 0, 1}]",
+  "rhs": [
+   "2*Catalan"
+  ],
+  "conds": [],
+  "cite": "FI II 755",
+  "edition_note": "",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "int_0^1 K(k) dk = 2G",
+  "note": ""
+ },
+ {
+  "id": "GR6.141.2",
+  "gr": "6.141.2",
+  "page": 681,
+  "status": "ok",
+  "lhs": "Integrate[MatharK1[k], {k, 0, 1}]",
+  "rhs": [
+   "Pi^2/4"
+  ],
+  "conds": [],
+  "cite": "BY (615.03)",
+  "edition_note": "",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "int_0^1 K(k') dk = pi^2/4",
+  "note": ""
+ },
+ {
+  "id": "GR6.142",
+  "gr": "6.142",
+  "page": 681,
+  "status": "ok",
+  "lhs": "Integrate[(MatharK[k] - Pi/2)/k, {k, 0, 1}]",
+  "rhs": [
+   "Pi*Log[2] - 2*Catalan"
+  ],
+  "conds": [],
+  "cite": "BY (615.05)",
+  "edition_note": "",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "int_0^1 (K(k) - pi/2) dk/k = pi ln 2 - 2G",
+  "note": ""
+ },
+ {
+  "id": "GR6.143a",
+  "gr": "6.143a",
+  "page": 681,
+  "status": "ok",
+  "lhs": "Integrate[MatharK[k]/Sqrt[1 - k^2], {k, 0, 1}]",
+  "rhs": [
+   "MatharK[Sqrt[2]/2]^2"
+  ],
+  "conds": [],
+  "cite": "BY (615.08)",
+  "edition_note": "7",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "int_0^1 K(k) dk/k' = K^2(sqrt2/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.143b",
+  "gr": "6.143b",
+  "page": 681,
+  "status": "ok",
+  "lhs": "Integrate[MatharK[k]/Sqrt[1 - k^2], {k, 0, 1}]",
+  "rhs": [
+   "Gamma[1/4]^4/(16*Pi)"
+  ],
+  "conds": [],
+  "cite": "BY (615.08)",
+  "edition_note": "7",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "int_0^1 K(k) dk/k' = Gamma^4(1/4)/(16 pi)",
+  "note": ""
+ },
+ {
+  "id": "GR6.144",
+  "gr": "6.144",
+  "page": 681,
+  "status": "ok",
+  "lhs": "Integrate[MatharK[k]/(1 + k), {k, 0, 1}]",
+  "rhs": [
+   "Pi^2/8"
+  ],
+  "conds": [],
+  "cite": "BY (615.09)",
+  "edition_note": "",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "int_0^1 K(k) dk/(1+k) = pi^2/8",
+  "note": ""
+ },
+ {
+  "id": "GR6.145",
+  "gr": "6.145",
+  "page": 682,
+  "status": "ok",
+  "lhs": "Integrate[(MatharK1[k] - Log[4/k])/k, {k, 0, 1}]",
+  "rhs": [
+   "1/12*(24*Log[2]^2 - Pi^2)"
+  ],
+  "conds": [],
+  "cite": "BY (615.13)",
+  "edition_note": "",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "int_0^1 (K(k') - ln(4/k)) dk/k = 1/12[24 (ln 2)^2 - pi^2]",
+  "note": ""
+ },
+ {
+  "id": "GR6.146",
+  "gr": "6.146",
+  "page": 682,
+  "status": "SKIP-RECURRENCE",
+  "tex": "n^2 int_0^1 k^n K(k) dk = (n-1)^2 int_0^1 k^(n-2) K(k) dk + 1",
+  "reason": "recurrence: integral on right-hand side",
+  "cite": "BY (615.12)",
+  "edition_note": "",
+  "section": "6.14-6.15 Complete elliptic integrals"
+ },
+ {
+  "id": "GR6.147",
+  "gr": "6.147",
+  "page": 682,
+  "status": "SKIP-RECURRENCE",
+  "tex": "n int_0^1 k^n K(k') dk = (n-1) int_0^1 k^(n-2) E(k) dk [n>1]",
+  "reason": "recurrence: integral on right-hand side",
+  "cite": "BY (615.11)",
+  "edition_note": "",
+  "section": "6.14-6.15 Complete elliptic integrals"
+ },
+ {
+  "id": "GR6.148.1",
+  "gr": "6.148.1",
+  "page": 682,
+  "status": "ok",
+  "lhs": "Integrate[MatharE[k], {k, 0, 1}]",
+  "rhs": [
+   "1/2 + Catalan"
+  ],
+  "conds": [],
+  "cite": "BY (615.02)",
+  "edition_note": "",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "int_0^1 E(k) dk = 1/2 + G",
+  "note": ""
+ },
+ {
+  "id": "GR6.148.2",
+  "gr": "6.148.2",
+  "page": 682,
+  "status": "ok",
+  "lhs": "Integrate[MatharE1[k], {k, 0, 1}]",
+  "rhs": [
+   "Pi^2/8"
+  ],
+  "conds": [],
+  "cite": "BY (615.04)",
+  "edition_note": "",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "int_0^1 E(k') dk = pi^2/8",
+  "note": ""
+ },
+ {
+  "id": "GR6.148.3",
+  "gr": "6.148.3",
+  "page": 682,
+  "status": "ok",
+  "lhs": "Integrate[MatharE[k]/(1 + k), {k, 0, 1}]",
+  "rhs": [
+   "1"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "int_0^1 E(k)/(1+k) dk = 1",
+  "note": ""
+ },
+ {
+  "id": "GR6.149.1",
+  "gr": "6.149.1",
+  "page": 682,
+  "status": "ok",
+  "lhs": "Integrate[(MatharE[k] - Pi/2)/k, {k, 0, 1}]",
+  "rhs": [
+   "Pi*Log[2] - 2*Catalan + 1 - Pi/2"
+  ],
+  "conds": [],
+  "cite": "BY (615.06)",
+  "edition_note": "",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "int_0^1 (E(k) - pi/2) dk/k = pi ln2 - 2G + 1 - pi/2",
+  "note": ""
+ },
+ {
+  "id": "GR6.149.2",
+  "gr": "6.149.2",
+  "page": 682,
+  "status": "ok",
+  "lhs": "Integrate[(MatharE1[k] - 1)/k, {k, 0, 1}]",
+  "rhs": [
+   "2*Log[2] - 1"
+  ],
+  "conds": [],
+  "cite": "BY (615.07)",
+  "edition_note": "",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "int_0^1 (E(k') - 1) dk/k = 2 ln 2 - 1",
+  "note": ""
+ },
+ {
+  "id": "GR6.149.3",
+  "gr": "6.149.3",
+  "page": 682,
+  "status": "ok",
+  "lhs": "Integrate[MatharE[k]/(1 + k), {k, 0, 1}]",
+  "rhs": [
+   "1"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "int_0^1 E(k)/(1+k) dk = 1 (repeat of 6.148.3)",
+  "note": ""
+ },
+ {
+  "id": "GR6.149.4",
+  "gr": "6.149.4",
+  "page": 682,
+  "status": "ok",
+  "lhs": "Integrate[(Sqrt[a - x^2]*MatharK[x] - MatharE[x]/Sqrt[1 - x^2] + Pi/4*x^2)/x^3, {x, 0, 1}]",
+  "rhs": [
+   "-Pi/4*Log[4/Sqrt[E]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "int_0^1 dx/x^3 (sqrt(a-x^2) K(x) - E(x)/sqrt(1-x^2) + pi/4 x^2) = -pi/4 ln(4/sqrt e)",
+  "note": "as printed; parameter a is presumably a misprint for 1 (integral diverges at 0 unless a = 1), see 6.149.4b"
+ },
+ {
+  "id": "GR6.149.4b",
+  "gr": "6.149.4b",
+  "page": 682,
+  "status": "ok",
+  "lhs": "Integrate[(Sqrt[1 - x^2]*MatharK[x] - MatharE[x]/Sqrt[1 - x^2] + Pi/4*x^2)/x^3, {x, 0, 1}]",
+  "rhs": [
+   "-Pi/4*Log[4/Sqrt[E]]"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "*",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "corrected: sqrt(1-x^2) K(x) in place of sqrt(a-x^2) K(x)",
+  "note": "corrected integrand: a -> 1 (needed for convergence at x = 0)"
+ },
+ {
+  "id": "GR6.151",
+  "gr": "6.151",
+  "page": 682,
+  "status": "ok",
+  "lhs": "Integrate[MatharE[k]/Sqrt[1 - k^2], {k, 0, 1}]",
+  "rhs": [
+   "1/8*(4*MatharK[Sqrt[2]/2]^2 + Pi^2/MatharK[Sqrt[2]/2]^2)"
+  ],
+  "conds": [],
+  "cite": "BY (615.10)",
+  "edition_note": "",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "int_0^1 E(k) dk/k' = 1/8[4 K^2(sqrt2/2) + pi^2/K^2(sqrt2/2)]",
+  "note": ""
+ },
+ {
+  "id": "GR6.152",
+  "gr": "6.152",
+  "page": 682,
+  "status": "SKIP-RECURRENCE",
+  "tex": "(n+2) int_0^1 k^n E(k') dk = (n+1) int_0^1 k^n K(k') dk [n>1]",
+  "reason": "recurrence: integral on right-hand side",
+  "cite": "BY (615.14)",
+  "edition_note": "",
+  "section": "6.14-6.15 Complete elliptic integrals"
+ },
+ {
+  "id": "GR6.153",
+  "gr": "6.153",
+  "page": 682,
+  "status": "ok",
+  "lhs": "Integrate[MatharK[k]*k/((1 - k^2)*Sqrt[a^2 - k^2]), {k, 0, a}]",
+  "rhs": [
+   "Pi/4*1/Sqrt[1 - a^2]*Log[(1 + a)/(1 - a)]"
+  ],
+  "conds": [
+   "0 < a < 1"
+  ],
+  "cite": "LO I 252",
+  "edition_note": "6",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "int_0^a K(k) k dk/(k'^2 sqrt(a^2-k^2)) = pi/4 1/sqrt(1-a^2) ln((1+a)/(1-a))",
+  "note": ""
+ },
+ {
+  "id": "GR6.154",
+  "gr": "6.154",
+  "page": 682,
+  "status": "ok",
+  "lhs": "Integrate[MatharE[p*Sin[x]]/(1 - p^2*Sin[x]^2)*Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*Sqrt[1 - p^2])"
+  ],
+  "conds": [
+   "p^2 > 1"
+  ],
+  "cite": "FI II 489",
+  "edition_note": "",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "int_0^{pi/2} E(p sin x)/(1-p^2 sin^2 x) sin x dx = pi/(2 sqrt(1-p^2)) [p^2>1]",
+  "note": "condition as printed (p^2 > 1); presumably p^2 < 1, see 6.154b"
+ },
+ {
+  "id": "GR6.154b",
+  "gr": "6.154b",
+  "page": 682,
+  "status": "ok",
+  "lhs": "Integrate[MatharE[p*Sin[x]]/(1 - p^2*Sin[x]^2)*Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/(2*Sqrt[1 - p^2])"
+  ],
+  "conds": [
+   "0 < p < 1"
+  ],
+  "cite": "FI II 489",
+  "edition_note": "",
+  "section": "6.14-6.15 Complete elliptic integrals",
+  "tex": "same, condition corrected to p^2 < 1",
+  "note": "corrected condition: printed [p^2 > 1] makes sqrt(1-p^2) imaginary and the modulus exceed 1"
+ },
+ {
+  "id": "GR6.161.1",
+  "gr": "6.161.1",
+  "page": 682,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(s - 1)*ThetaN[2, 0, E^(-Pi*x^2)], {x, 0, Infinity}]",
+  "rhs": [
+   "2^s*(1 - 2^(-s))*Pi^(-s/2)*Gamma[s/2]*Zeta[s]"
+  ],
+  "conds": [
+   "Re[s] > 2"
+  ],
+  "cite": "ET I 339(20)",
+  "edition_note": "",
+  "section": "6.16 The theta function",
+  "tex": "int_0^inf x^(s-1) theta_2(0|ix^2) dx = 2^s(1-2^-s) pi^(-s/2) Gamma(s/2) zeta(s)",
+  "note": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)",
+  "reason": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)"
+ },
+ {
+  "id": "GR6.161.2",
+  "gr": "6.161.2",
+  "page": 682,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(s - 1)*(ThetaN[3, 0, E^(-Pi*x^2)] - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^(-s/2)*Gamma[s/2]*Zeta[s]"
+  ],
+  "conds": [
+   "Re[s] > 2"
+  ],
+  "cite": "ET I 339(21)",
+  "edition_note": "",
+  "section": "6.16 The theta function",
+  "tex": "int x^(s-1)[theta_3(0|ix^2) - 1] dx = pi^(-s/2) Gamma(s/2) zeta(s)",
+  "note": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)",
+  "reason": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)"
+ },
+ {
+  "id": "GR6.161.3",
+  "gr": "6.161.3",
+  "page": 683,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(s - 1)*(1 - ThetaN[4, 0, E^(-Pi*x^2)]), {x, 0, Infinity}]",
+  "rhs": [
+   "(1 - 2^(1 - s))*Pi^(-s/2)*Gamma[s/2]*Zeta[s]"
+  ],
+  "conds": [
+   "Re[s] > 2"
+  ],
+  "cite": "ET I 339(22)",
+  "edition_note": "",
+  "section": "6.16 The theta function",
+  "tex": "int x^(s-1)[1 - theta_4(0|ix^2)] dx = (1-2^(1-s)) pi^(-s/2) Gamma(s/2) zeta(s)",
+  "note": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)",
+  "reason": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)"
+ },
+ {
+  "id": "GR6.161.4",
+  "gr": "6.161.4",
+  "page": 683,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[x^(s - 1)*(ThetaN[4, 0, E^(-Pi*x^2)] + ThetaN[2, 0, E^(-Pi*x^2)] - ThetaN[3, 0, E^(-Pi*x^2)]), {x, 0, Infinity}]",
+  "rhs": [
+   "-(2^s - 1)*(2^(1 - s) - 1)*Pi^(-s/2)*Gamma[s/2]*Zeta[s]"
+  ],
+  "conds": [],
+  "cite": "ET I 339(24)",
+  "edition_note": "",
+  "section": "6.16 The theta function",
+  "tex": "int x^(s-1)[theta_4 + theta_2 - theta_3](0|ix^2) dx = -(2^s-1)(2^(1-s)-1) pi^(-s/2) Gamma(s/2) zeta(s)",
+  "note": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau); no condition printed",
+  "reason": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)"
+ },
+ {
+  "id": "GR6.162.1",
+  "gr": "6.162.1",
+  "page": 683,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^(-a*x)*ThetaN[4, b*Pi/(2*l), E^(-Pi^2*x/l^2)], {x, 0, Infinity}]",
+  "rhs": [
+   "l/Sqrt[a]*Cosh[b*Sqrt[a]]*Csch[l*Sqrt[a]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Abs[b] <= l"
+  ],
+  "cite": "ET I 224(1)a",
+  "edition_note": "11",
+  "section": "6.16 The theta function",
+  "tex": "int e^(-ax) theta_4(b pi/(2l) | i pi x/l^2) dx = l/sqrt a cosh(b sqrt a) csch(l sqrt a)",
+  "note": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)",
+  "reason": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)"
+ },
+ {
+  "id": "GR6.162.2",
+  "gr": "6.162.2",
+  "page": 683,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^(-a*x)*ThetaN[1, b*Pi/(2*l), E^(-Pi^2*x/l^2)], {x, 0, Infinity}]",
+  "rhs": [
+   "-l/Sqrt[a]*Sinh[b*Sqrt[a]]*Sech[l*Sqrt[a]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Abs[b] <= l"
+  ],
+  "cite": "ET I 224(2)a",
+  "edition_note": "",
+  "section": "6.16 The theta function",
+  "tex": "int e^(-ax) theta_1(b pi/(2l) | i pi x/l^2) dx = -l/sqrt a sinh(b sqrt a) sech(l sqrt a)",
+  "note": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)",
+  "reason": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)"
+ },
+ {
+  "id": "GR6.162.3",
+  "gr": "6.162.3",
+  "page": 683,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^(-a*x)*ThetaN[2, (l + b)*Pi/(2*l), E^(-Pi^2*x/l^2)], {x, 0, Infinity}]",
+  "rhs": [
+   "-l/Sqrt[a]*Sinh[b*Sqrt[a]]*Sech[l*Sqrt[a]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Abs[b] <= l"
+  ],
+  "cite": "ET I 224(3)a",
+  "edition_note": "11",
+  "section": "6.16 The theta function",
+  "tex": "int e^(-ax) theta_2((l+b)pi/(2l) | i pi x/l^2) dx = -l/sqrt a sinh(b sqrt a) sech(l sqrt a)",
+  "note": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)",
+  "reason": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)"
+ },
+ {
+  "id": "GR6.162.4",
+  "gr": "6.162.4",
+  "page": 683,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^(-a*x)*ThetaN[3, (l + b)*Pi/(2*l), E^(-Pi^2*x/l^2)], {x, 0, Infinity}]",
+  "rhs": [
+   "l/Sqrt[a]*Cosh[b*Sqrt[a]]*Csch[l*Sqrt[a]]"
+  ],
+  "conds": [
+   "Re[a] > 0",
+   "Abs[b] <= l"
+  ],
+  "cite": "ET I 224(4)a",
+  "edition_note": "11",
+  "section": "6.16 The theta function",
+  "tex": "int e^(-ax) theta_3((l+b)pi/(2l) | i pi x/l^2) dx = l/sqrt a cosh(b sqrt a) csch(l sqrt a)",
+  "note": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)",
+  "reason": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)"
+ },
+ {
+  "id": "GR6.163.1",
+  "gr": "6.163.1",
+  "page": 683,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^(-(a - mu)*x)*ThetaN[3, Pi*Sqrt[mu]*x, E^(-Pi^2*x)], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*Sqrt[a])*(Coth[Sqrt[a] + Sqrt[mu]] + Coth[Sqrt[a] - Sqrt[mu]])"
+  ],
+  "conds": [
+   "Re[a] > 0"
+  ],
+  "cite": "ET I 224(7)a",
+  "edition_note": "10",
+  "section": "6.16 The theta function",
+  "tex": "int e^(-(a-mu)x) theta_3(pi sqrt mu x | i pi x) dx = 1/(2 sqrt a)[coth(sqrt a + sqrt mu) + coth(sqrt a - sqrt mu)]",
+  "note": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)",
+  "reason": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)"
+ },
+ {
+  "id": "GR6.163.2",
+  "gr": "6.163.2",
+  "page": 683,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[ThetaN[3, I*Pi*k*x, E^(-Pi^2*x)]*E^(-(k^2 + l^2)*x), {x, 0, Infinity}]",
+  "rhs": [
+   "Sinh[2*l]/(l*(Cosh[2*l] - Cos[2*k]))"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "10",
+  "section": "6.16 The theta function",
+  "tex": "int theta_3(i pi k x | i pi x) e^(-(k^2+l^2)x) dx = sinh 2l/(l(cosh 2l - cos 2k))",
+  "note": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)",
+  "reason": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)"
+ },
+ {
+  "id": "GR6.164",
+  "gr": "6.164",
+  "page": 683,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[(ThetaN[4, 0, E^(-Pi*E^(2*x))] + ThetaN[2, 0, E^(-Pi*E^(2*x))] - ThetaN[3, 0, E^(-Pi*E^(2*x))])*E^(x/2)*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*(2^(1/2 + I*a) - 1)*(1 - 2^(1/2 - I*a))*Pi^(-1/4 - I*a/2)*Gamma[1/4 + I*a/2]*Zeta[1/2 + I*a]"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET I 61(11)",
+  "edition_note": "11",
+  "section": "6.16 The theta function",
+  "tex": "int [theta_4+theta_2-theta_3](0|ie^(2x)) e^(x/2) cos(ax) dx = 1/2(2^(1/2+ia)-1)(1-2^(1/2-ia)) pi^(-1/4-ia/2) Gamma(1/4+ia/2) zeta(1/2+ia)",
+  "note": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)",
+  "reason": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)"
+ },
+ {
+  "id": "GR6.165",
+  "gr": "6.165",
+  "page": 683,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^(x/2)*(ThetaN[3, 0, E^(-Pi*E^(2*x))] - 1)*Cos[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "2/(1 + 4*a^2)*(1 + (a^2 + 1/4)*Pi^(-I*a/2 - 1/4)*Gamma[I*a/2 + 1/4]*Zeta[I*a + 1/2])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "ET I 61(12)",
+  "edition_note": "",
+  "section": "6.16 The theta function",
+  "tex": "int e^(x/2)[theta_3(0|ie^(2x)) - 1] cos(ax) dx = 2/(1+4a^2){1 + [(a^2+1/4) pi^(-ia/2-1/4) Gamma(ia/2+1/4) zeta(ia+1/2)]}",
+  "note": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)",
+  "reason": "theta function: ThetaN[n, v, q] placeholder with q = E^(I*Pi*tau) for G&R theta_n(v|tau)"
+ },
+ {
+  "id": "GR6.17.1",
+  "gr": "6.17.1",
+  "page": 684,
+  "status": "SKIP-REFERENCE",
+  "tex": "Omega_j(k) = int_0^pi [1-k^2 cos phi]^(-(j+1/2)) dphi = sum alpha_m(j) k^(4m) = sqrt(pi/((2j+1)k^2))(1-k^2)^(-j)[erf lambda + ...] + ...",
+  "reason": "definition of Omega_j(k) with series/asymptotic expansion; no closed value",
+  "cite": "",
+  "edition_note": "10",
+  "section": "6.17 Generalized elliptic integrals"
+ },
+ {
+  "id": "GR6.17.2",
+  "gr": "6.17.2",
+  "page": 684,
+  "status": "SKIP-REFERENCE",
+  "tex": "R_mu(k,alpha,delta) = int_0^pi cos^(2alpha-1)(theta/2) sin^(2delta-2alpha-1)(theta/2)/[1-k^2 cos theta]^(mu+1/2) dtheta = (1-k^2)^(-(mu+1/2)) sum [k^2/(1-k^2)]^nu M_nu = ...",
+  "reason": "definition of R_mu(k,alpha,delta) with series expansions for small k and k^2 near 1; no closed value",
+  "cite": "",
+  "edition_note": "10",
+  "section": "6.17 Generalized elliptic integrals"
+ },
+ {
+  "id": "GR6.211",
+  "gr": "6.211",
+  "page": 685,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[x], {x, 0, 1}]",
+  "rhs": [
+   "-Log[2]"
+  ],
+  "conds": [],
+  "cite": "BI (79)(5)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_0^1 li(x) dx = -ln 2",
+  "note": ""
+ },
+ {
+  "id": "GR6.212.1",
+  "gr": "6.212.1",
+  "page": 685,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[1/x]*x, {x, 0, 1}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [],
+  "cite": "BI (255)(1)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_0^1 li(1/x) x dx = 0",
+  "note": ""
+ },
+ {
+  "id": "GR6.212.2",
+  "gr": "6.212.2",
+  "page": 685,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[x]*x^(p - 1), {x, 0, 1}]",
+  "rhs": [
+   "-1/p*Log[p + 1]"
+  ],
+  "conds": [
+   "p > -1"
+  ],
+  "cite": "BI (255)(2)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_0^1 li(x) x^(p-1) dx = -1/p ln(p+1) [p>-1]",
+  "note": ""
+ },
+ {
+  "id": "GR6.212.3",
+  "gr": "6.212.3",
+  "page": 685,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[x]/x^(q + 1), {x, 0, 1}]",
+  "rhs": [
+   "1/q*Log[1 - q]"
+  ],
+  "conds": [
+   "q < 1"
+  ],
+  "cite": "BI (255)(3)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_0^1 li(x) dx/x^(q+1) = 1/q ln(1-q) [q<1]",
+  "note": ""
+ },
+ {
+  "id": "GR6.212.4",
+  "gr": "6.212.4",
+  "page": 685,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[x]/x^(q + 1), {x, 1, Infinity}]",
+  "rhs": [
+   "-1/q*Log[q - 1]"
+  ],
+  "conds": [
+   "q > 1"
+  ],
+  "cite": "BI (255)(4)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_1^inf li(x) dx/x^(q+1) = -1/q ln(q-1) [q>1]",
+  "note": ""
+ },
+ {
+  "id": "GR6.213.1",
+  "gr": "6.213.1",
+  "page": 685,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[1/x]*Sin[a*Log[x]], {x, 0, 1}]",
+  "rhs": [
+   "1/(1 + a^2)*(a*Log[a] - Pi/2)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (475)(1)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_0^1 li(1/x) sin(a ln x) dx = 1/(1+a^2)(a ln a - pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.213.2",
+  "gr": "6.213.2",
+  "page": 685,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[1/x]*Sin[a*Log[x]], {x, 1, Infinity}]",
+  "rhs": [
+   "-1/(1 + a^2)*(Pi/2 + a*Log[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (475)(9)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_1^inf li(1/x) sin(a ln x) dx = -1/(1+a^2)(pi/2 + a ln a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.213.3",
+  "gr": "6.213.3",
+  "page": 685,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[1/x]*Cos[a*Log[x]], {x, 0, 1}]",
+  "rhs": [
+   "-1/(1 + a^2)*(Log[a] + Pi/2*a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (475)(2)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_0^1 li(1/x) cos(a ln x) dx = -1/(1+a^2)(ln a + pi a/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.213.4",
+  "gr": "6.213.4",
+  "page": 685,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[1/x]*Cos[a*Log[x]], {x, 1, Infinity}]",
+  "rhs": [
+   "1/(1 + a^2)*(Log[a] - Pi/2*a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (475)(10)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_1^inf li(1/x) cos(a ln x) dx = 1/(1+a^2)(ln a - pi a/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.213.5",
+  "gr": "6.213.5",
+  "page": 685,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[x]*Sin[a*Log[x]]/x, {x, 0, 1}]",
+  "rhs": [
+   "Log[1 + a^2]/(2*a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI(479)(1), ET I 98(20)a",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_0^1 li(x) sin(a ln x) dx/x = ln(1+a^2)/(2a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.213.6",
+  "gr": "6.213.6",
+  "page": 686,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[x]*Cos[a*Log[x]]/x, {x, 0, 1}]",
+  "rhs": [
+   "-ArcTan[a]/a"
+  ],
+  "conds": [],
+  "cite": "BI (479)(2)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_0^1 li(x) cos(a ln x) dx/x = -arctan a/a",
+  "note": ""
+ },
+ {
+  "id": "GR6.213.7",
+  "gr": "6.213.7",
+  "page": 686,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[x]*Sin[a*Log[x]]/x^2, {x, 0, 1}]",
+  "rhs": [
+   "1/(1 + a^2)*(a*Log[a] + Pi/2)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (479)(3)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_0^1 li(x) sin(a ln x) dx/x^2 = 1/(1+a^2)(a ln a + pi/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.213.8",
+  "gr": "6.213.8",
+  "page": 686,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[x]*Sin[a*Log[x]]/x^2, {x, 1, Infinity}]",
+  "rhs": [
+   "1/(1 + a^2)*(Pi/2 - a*Log[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (479)(13)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_1^inf li(x) sin(a ln x) dx/x^2 = 1/(1+a^2)(pi/2 - a ln a)",
+  "note": ""
+ },
+ {
+  "id": "GR6.213.9",
+  "gr": "6.213.9",
+  "page": 686,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[x]*Cos[a*Log[x]]/x^2, {x, 0, 1}]",
+  "rhs": [
+   "1/(1 + a^2)*(Log[a] - Pi/2*a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (479)(4)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_0^1 li(x) cos(a ln x) dx/x^2 = 1/(1+a^2)(ln a - pi a/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.213.10",
+  "gr": "6.213.10",
+  "page": 686,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[x]*Cos[a*Log[x]]/x^2, {x, 1, Infinity}]",
+  "rhs": [
+   "-1/(1 + a^2)*(Log[a] + Pi/2*a)"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (479)(14)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_1^inf li(x) cos(a ln x) dx/x^2 = -1/(1+a^2)(ln a + pi a/2)",
+  "note": ""
+ },
+ {
+  "id": "GR6.213.11",
+  "gr": "6.213.11",
+  "page": 686,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[x]*Sin[a*Log[x]]*x^(p - 1), {x, 0, 1}]",
+  "rhs": [
+   "1/(a^2 + p^2)*(a/2*Log[(1 + p)^2 + a^2] - p*ArcTan[a/(1 + p)])"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (477)(1)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_0^1 li(x) sin(a ln x) x^(p-1) dx = 1/(a^2+p^2){a/2 ln[(1+p)^2+a^2] - p arctan(a/(1+p))}",
+  "note": ""
+ },
+ {
+  "id": "GR6.213.12",
+  "gr": "6.213.12",
+  "page": 686,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[x]*Cos[a*Log[x]]*x^(p - 1), {x, 0, 1}]",
+  "rhs": [
+   "-1/(a^2 + p^2)*(a*ArcTan[a/(1 + p)] + p/2*Log[(1 + p)^2 + a^2])"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (477)(2)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_0^1 li(x) cos(a ln x) x^(p-1) dx = -1/(a^2+p^2){a arctan(a/(1+p)) + p/2 ln[(1+p)^2+a^2]}",
+  "note": ""
+ },
+ {
+  "id": "GR6.214.1",
+  "gr": "6.214.1",
+  "page": 686,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[1/x]*Log[1/x]^(p - 1), {x, 0, 1}]",
+  "rhs": [
+   "-Pi*Cot[p*Pi]*Gamma[p]"
+  ],
+  "conds": [
+   "0 < p < 1"
+  ],
+  "cite": "BI (340)(1)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_0^1 li(1/x)(ln 1/x)^(p-1) dx = -pi cot(p pi) Gamma(p)",
+  "note": ""
+ },
+ {
+  "id": "GR6.214.2",
+  "gr": "6.214.2",
+  "page": 686,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[1/x]*Log[x]^(p - 1), {x, 1, Infinity}]",
+  "rhs": [
+   "-Pi/Sin[p*Pi]*Gamma[p]"
+  ],
+  "conds": [
+   "0 < p < 1"
+  ],
+  "cite": "BI (340)(9)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_1^inf li(1/x)(ln x)^(p-1) dx = -pi/sin(p pi) Gamma(p)",
+  "note": ""
+ },
+ {
+  "id": "GR6.215.1a",
+  "gr": "6.215.1a",
+  "page": 686,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[x]*x^(p - 1)/Sqrt[Log[1/x]], {x, 0, 1}]",
+  "rhs": [
+   "-2*Sqrt[Pi/p]*ArcSinh[Sqrt[p]]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (444)(3)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_0^1 li(x) x^(p-1)/sqrt(ln 1/x) dx = -2 sqrt(pi/p) arcsinh sqrt p",
+  "note": ""
+ },
+ {
+  "id": "GR6.215.1b",
+  "gr": "6.215.1b",
+  "page": 686,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[x]*x^(p - 1)/Sqrt[Log[1/x]], {x, 0, 1}]",
+  "rhs": [
+   "-2*Sqrt[Pi/p]*Log[Sqrt[p] + Sqrt[p + 1]]"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (444)(3)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "... = -2 sqrt(pi/p) ln(sqrt p + sqrt(p+1))",
+  "note": ""
+ },
+ {
+  "id": "GR6.215.2",
+  "gr": "6.215.2",
+  "page": 686,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[x]/(x^(p + 1)*Sqrt[Log[1/x]]), {x, 0, 1}]",
+  "rhs": [
+   "-2*Sqrt[Pi/p]*ArcSin[Sqrt[p]]"
+  ],
+  "conds": [
+   "1 > p > 0"
+  ],
+  "cite": "BI (444)(4)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_0^1 li(x) dx/(x^(p+1) sqrt(ln 1/x)) = -2 sqrt(pi/p) arcsin sqrt p",
+  "note": ""
+ },
+ {
+  "id": "GR6.216.1",
+  "gr": "6.216.1",
+  "page": 686,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[x]*Log[1/x]^(p - 1)/x, {x, 0, 1}]",
+  "rhs": [
+   "-1/p*Gamma[p]"
+  ],
+  "conds": [
+   "0 < p <= 1"
+  ],
+  "cite": "BI (444)(1)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_0^1 li(x)[ln(1/x)]^(p-1) dx/x = -1/p Gamma(p)",
+  "note": "book prints 'ax/x'; read as the typo dx/x"
+ },
+ {
+  "id": "GR6.216.2",
+  "gr": "6.216.2",
+  "page": 686,
+  "status": "ok",
+  "lhs": "Integrate[LogIntegral[x]*Log[1/x]^(p - 1)/x^2, {x, 0, 1}]",
+  "rhs": [
+   "-Pi*Gamma[p]/Sin[p*Pi]"
+  ],
+  "conds": [
+   "0 < p < 1"
+  ],
+  "cite": "BI (444)(2)",
+  "edition_note": "",
+  "section": "6.21 The logarithm integral",
+  "tex": "int_0^1 li(x)[ln(1/x)]^(p-1) dx/x^2 = -pi Gamma(p)/sin(p pi)",
+  "note": ""
+ },
+ {
+  "id": "GR6.221",
+  "gr": "6.221",
+  "page": 687,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[alpha*x], {x, 0, p}]",
+  "rhs": [
+   "p*ExpIntegralEi[alpha*p] + (1 - E^(alpha*p))/alpha"
+  ],
+  "conds": [
+   "p > 0",
+   "alpha != 0"
+  ],
+  "cite": "NT 11(7)",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int_0^p Ei(alpha x) dx = p Ei(alpha p) + (1 - e^(alpha p))/alpha",
+  "note": "conditions not printed; p>0 and alpha!=0 added"
+ },
+ {
+  "id": "GR6.222",
+  "gr": "6.222",
+  "page": 687,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-p*x]*ExpIntegralEi[-q*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(1/p + 1/q)*Log[p + q] - Log[q]/p - Log[p]/q"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "FI II 653, NT 53(3)",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int Ei(-px)Ei(-qx) dx = (1/p+1/q) ln(p+q) - ln q/p - ln p/q",
+  "note": ""
+ },
+ {
+  "id": "GR6.223",
+  "gr": "6.223",
+  "page": 687,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-beta*x]*x^(mu - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "-Gamma[mu]/(mu*beta^mu)"
+  ],
+  "conds": [
+   "Re[beta] >= 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "NT 55(7), ET I 325(10)",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int Ei(-beta x) x^(mu-1) dx = -Gamma(mu)/(mu beta^mu)",
+  "note": ""
+ },
+ {
+  "id": "GR6.224.1a",
+  "gr": "6.224.1a",
+  "page": 687,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-beta*x]*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-1/mu*Log[1 + mu/beta]"
+  ],
+  "conds": [
+   "Re[beta + mu] >= 0",
+   "mu > 0"
+  ],
+  "cite": "FI II 652, NT 48(8)",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int Ei(-beta x) e^(-mu x) dx = -1/mu ln(1 + mu/beta)",
+  "note": ""
+ },
+ {
+  "id": "GR6.224.1b",
+  "gr": "6.224.1b",
+  "page": 687,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-beta*x], {x, 0, Infinity}]",
+  "rhs": [
+   "-1/beta"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "FI II 652, NT 48(8)",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "mu = 0: int Ei(-beta x) dx = -1/beta",
+  "note": "mu = 0 case substituted"
+ },
+ {
+  "id": "GR6.224.2",
+  "gr": "6.224.2",
+  "page": 687,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[a*x]*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-1/mu*Log[mu/a - 1]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > 0",
+   "mu > a"
+  ],
+  "cite": "ET I 178(23)a, BI (283)(3)",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int Ei(ax) e^(-mu x) dx = -1/mu ln(mu/a - 1)",
+  "note": ""
+ },
+ {
+  "id": "GR6.225.1a",
+  "gr": "6.225.1a",
+  "page": 687,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-x^2]*E^(-mu*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Sqrt[Pi/mu]*ArcSinh[Sqrt[mu]]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (283)(5), ET I 178(25)a",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int Ei(-x^2) e^(-mu x^2) dx = -sqrt(pi/mu) arcsinh sqrt mu",
+  "note": ""
+ },
+ {
+  "id": "GR6.225.1b",
+  "gr": "6.225.1b",
+  "page": 687,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-x^2]*E^(-mu*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Sqrt[Pi/mu]*Log[Sqrt[mu] + Sqrt[1 + mu]]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "BI (283)(5), ET I 178(25)a",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "... = -sqrt(pi/mu) ln(sqrt mu + sqrt(1+mu))",
+  "note": ""
+ },
+ {
+  "id": "GR6.225.2",
+  "gr": "6.225.2",
+  "page": 687,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-x^2]*E^(p*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Sqrt[Pi/p]*ArcSin[Sqrt[p]]"
+  ],
+  "conds": [
+   "1 > p > 0"
+  ],
+  "cite": "NT 59(9)a",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int Ei(-x^2) e^(p x^2) dx = -sqrt(pi/p) arcsin sqrt p",
+  "note": ""
+ },
+ {
+  "id": "GR6.226.1",
+  "gr": "6.226.1",
+  "page": 687,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-1/(4*x)]*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-2/mu*BesselK[0, Sqrt[mu]]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 34",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int Ei(-1/(4x)) e^(-mu x) dx = -2/mu K_0(sqrt mu)",
+  "note": ""
+ },
+ {
+  "id": "GR6.226.2",
+  "gr": "6.226.2",
+  "page": 687,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[a^2/(4*x)]*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-2/mu*BesselK[0, a*Sqrt[mu]]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 34",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int Ei(a^2/(4x)) e^(-mu x) dx = -2/mu K_0(a sqrt mu)",
+  "note": "as printed; Ei(+a^2/(4x)) diverges as x -> 0, presumably Ei(-a^2/(4x)), see 6.226.2b"
+ },
+ {
+  "id": "GR6.226.2b",
+  "gr": "6.226.2b",
+  "page": 687,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-a^2/(4*x)]*E^(-mu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "-2/mu*BesselK[0, a*Sqrt[mu]]"
+  ],
+  "conds": [
+   "a > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 34",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "corrected: Ei(-a^2/(4x))",
+  "note": "corrected integrand: sign of Ei argument (consistent with 6.226.1 at a = 1)"
+ },
+ {
+  "id": "GR6.226.3",
+  "gr": "6.226.3",
+  "page": 687,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-1/(4*x^2)]*E^(-mu*x^2), {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/mu]*ExpIntegralEi[-Sqrt[mu]]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 34",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int Ei(-1/(4x^2)) e^(-mu x^2) dx = sqrt(pi/mu) Ei(-sqrt mu)",
+  "note": ""
+ },
+ {
+  "id": "GR6.226.4",
+  "gr": "6.226.4",
+  "page": 687,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-1/(4*x^2)]*E^(-mu*x^2 + 1/(4*x^2)), {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi/mu]*(Cos[Sqrt[mu]]*CosIntegral[Sqrt[mu]] - Sin[Sqrt[mu]]*(SinIntegral[Sqrt[mu]] - Pi/2))"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 34",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int Ei(-1/(4x^2)) e^(-mu x^2 + 1/(4x^2)) dx = sqrt(pi/mu)[cos sqrt mu ci sqrt mu - sin sqrt mu si sqrt mu]",
+  "note": ""
+ },
+ {
+  "id": "GR6.227.1",
+  "gr": "6.227.1",
+  "page": 687,
+  "status": "ok",
+  "lhs": "Integrate[ExpIntegralEi[-x]*E^(-mu*x)*x, {x, 0, Infinity}]",
+  "rhs": [
+   "1/(mu*(mu + 1)) - 1/mu^2*Log[1 + mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "MI 34",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int Ei(-x) e^(-mu x) x dx = 1/(mu(mu+1)) - 1/mu^2 ln(1+mu)",
+  "note": ""
+ },
+ {
+  "id": "GR6.227.2a",
+  "gr": "6.227.2a",
+  "page": 688,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[E^(-a*x)*ExpIntegralEi[a*x]/(x - b) - E^(a*x)*ExpIntegralEi[-a*x]/(x + b), {x, 0, Infinity}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a > 0",
+   "b < 0"
+  ],
+  "cite": "ET II 253(1)a",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "int [e^(-ax)Ei(ax)/(x-b) - e^(ax)Ei(-ax)/(x+b)] dx = 0 [a>0, b<0]",
+  "note": "pole of 1/(x+b) at x = -b > 0",
+  "reason": "pole at x = -b on the integration path (implied principal value)"
+ },
+ {
+  "id": "GR6.227.2b",
+  "gr": "6.227.2b",
+  "page": 688,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[E^(-a*x)*ExpIntegralEi[a*x]/(x - b) - E^(a*x)*ExpIntegralEi[-a*x]/(x + b), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2*E^(-a*b)"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0"
+  ],
+  "cite": "ET II 253(1)a",
+  "edition_note": "",
+  "section": "6.22-6.23 The exponential integral function",
+  "tex": "... = pi^2 e^(-ab) [a>0, b>0]",
+  "note": "pole of 1/(x-b) at x = b > 0",
+  "reason": "pole at x = b on the integration path (implied principal value)"
+ }
+]

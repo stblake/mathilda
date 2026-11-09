@@ -1,0 +1,1915 @@
+[
+ {
+  "id": "GR3.227.1",
+  "gr": "3.227.1",
+  "page": 369,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*(beta + x)^(1 - mu)/(gamma + x), {x, 0, Infinity}]",
+  "rhs": [
+   "beta^(1 - mu)*gamma^(nu - 1)*Beta[nu, mu - nu]*Hypergeometric2F1[mu - 1, nu, mu, 1 - gamma/beta]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "Abs[Arg[gamma]] < Pi",
+   "0 < Re[nu] < Re[mu]"
+  ],
+  "cite": "ET II 217(9)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_0^inf x^(nu-1)(beta+x)^(1-mu)/(gamma+x) dx = beta^(1-mu) gamma^(nu-1) B(nu,mu-nu) 2F1(mu-1,nu;mu;1-gamma/beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.227.2",
+  "gr": "3.227.2",
+  "page": 369,
+  "status": "ok",
+  "lhs": "Integrate[x^(-rho)*(beta - x)^(-sigma)/(gamma + x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*gamma^(-rho)*(beta - gamma)^(-sigma)*Csc[rho*Pi]*BetaRegularized[1 - gamma/beta, sigma, rho]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "Abs[Arg[gamma]] < Pi",
+   "-Re[sigma] < Re[rho] < 1"
+  ],
+  "cite": "ET II 217(10)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_0^inf x^(-rho)(beta-x)^(-sigma)/(gamma+x) dx = pi gamma^(-rho)(beta-gamma)^(-sigma) cosec(rho pi) I_{1-gamma/beta}(sigma,rho)",
+  "note": "I_x(p,q) is the normalised incomplete beta function (BetaRegularized). Transcribed as printed with (beta - x)^(-sigma); the condition |arg beta| < pi suggests the intended factor is (beta + x)^(-sigma) (likely misprint in lhs)."
+ },
+ {
+  "id": "GR3.228.1a",
+  "gr": "3.228.1",
+  "page": 369,
+  "status": "ok",
+  "lhs": "Integrate[(x - a)^nu*(b - x)^(-nu)/(x - c), {x, a, b}]",
+  "rhs": [
+   "Pi*Csc[nu*Pi]*(1 - ((a - c)/(b - c))^nu)"
+  ],
+  "conds": [
+   "Abs[Re[nu]] < 1",
+   "c < a",
+   "a < b"
+  ],
+  "cite": "ET II 250(31)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_a^b (x-a)^nu (b-x)^(-nu)/(x-c) dx = pi cosec(nu pi)[1 - ((a-c)/(b-c))^nu] for c<a",
+  "note": ""
+ },
+ {
+  "id": "GR3.228.1b",
+  "gr": "3.228.1",
+  "page": 369,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[(x - a)^nu*(b - x)^(-nu)/(x - c), {x, a, b}]",
+  "rhs": [
+   "Pi*Csc[nu*Pi]*(1 - Cos[nu*Pi]*((c - a)/(b - c))^nu)"
+  ],
+  "conds": [
+   "Abs[Re[nu]] < 1",
+   "a < c < b"
+  ],
+  "cite": "ET II 250(31)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_a^b (x-a)^nu (b-x)^(-nu)/(x-c) dx = pi cosec(nu pi)[1 - cos(nu pi)((c-a)/(b-c))^nu] for a<c<b",
+  "note": "",
+  "reason": "implicit principal value: the integrand has a non-integrable simple pole inside the range of integration"
+ },
+ {
+  "id": "GR3.228.1c",
+  "gr": "3.228.1",
+  "page": 369,
+  "status": "ok",
+  "lhs": "Integrate[(x - a)^nu*(b - x)^(-nu)/(x - c), {x, a, b}]",
+  "rhs": [
+   "Pi*Csc[nu*Pi]*(1 - ((c - a)/(c - b))^nu)"
+  ],
+  "conds": [
+   "Abs[Re[nu]] < 1",
+   "c > b",
+   "a < b"
+  ],
+  "cite": "ET II 250(31)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_a^b (x-a)^nu (b-x)^(-nu)/(x-c) dx = pi cosec(nu pi)[1 - ((c-a)/(c-b))^nu] for c>b",
+  "note": ""
+ },
+ {
+  "id": "GR3.228.2a",
+  "gr": "3.228.2",
+  "page": 369,
+  "status": "ok",
+  "lhs": "Integrate[(x - a)^(nu - 1)*(b - x)^(-nu)/(x - c), {x, a, b}]",
+  "rhs": [
+   "Pi*Csc[nu*Pi]/(b - c)*Abs[(a - c)/(b - c)]^(nu - 1)"
+  ],
+  "conds": [
+   "0 < Re[nu] < 1",
+   "c < a",
+   "a < b"
+  ],
+  "cite": "ET II 250(32)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_a^b (x-a)^(nu-1)(b-x)^(-nu)/(x-c) dx = pi cosec(nu pi)/(b-c) |(a-c)/(b-c)|^(nu-1) for c<a",
+  "note": ""
+ },
+ {
+  "id": "GR3.228.2b",
+  "gr": "3.228.2",
+  "page": 369,
+  "status": "ok",
+  "lhs": "Integrate[(x - a)^(nu - 1)*(b - x)^(-nu)/(x - c), {x, a, b}]",
+  "rhs": [
+   "Pi*Csc[nu*Pi]/(b - c)*Abs[(a - c)/(b - c)]^(nu - 1)"
+  ],
+  "conds": [
+   "0 < Re[nu] < 1",
+   "c > b",
+   "a < b"
+  ],
+  "cite": "ET II 250(32)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "same as 2a, for c>b",
+  "note": ""
+ },
+ {
+  "id": "GR3.228.2c",
+  "gr": "3.228.2",
+  "page": 369,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[(x - a)^(nu - 1)*(b - x)^(-nu)/(x - c), {x, a, b}]",
+  "rhs": [
+   "-Pi*(c - a)^(nu - 1)/(b - c)^nu*Cot[nu*Pi]"
+  ],
+  "conds": [
+   "0 < Re[nu] < 1",
+   "a < c < b"
+  ],
+  "cite": "ET II 250(32)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "= -pi (c-a)^(nu-1)/(b-c)^nu cot(nu pi) for a<c<b",
+  "note": "",
+  "reason": "implicit principal value: the integrand has a non-integrable simple pole inside the range of integration"
+ },
+ {
+  "id": "GR3.228.3a",
+  "gr": "3.228.3",
+  "page": 369,
+  "status": "ok",
+  "lhs": "Integrate[(x - a)^(nu - 1)*(b - x)^(mu - 1)/(x - c), {x, a, b}]",
+  "rhs": [
+   "(b - a)^(mu + nu - 1)/(b - c)*Beta[mu, nu]*Hypergeometric2F1[1, mu, mu + nu, (b - a)/(b - c)]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0",
+   "c < a",
+   "a < b"
+  ],
+  "cite": "ET II 250(33)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_a^b (x-a)^(nu-1)(b-x)^(mu-1)/(x-c) dx = (b-a)^(mu+nu-1)/(b-c) B(mu,nu) 2F1(1,mu;mu+nu;(b-a)/(b-c)) for c<a",
+  "note": "book also lists mu + nu != 1, mu != 1, 2, ..."
+ },
+ {
+  "id": "GR3.228.3b",
+  "gr": "3.228.3",
+  "page": 369,
+  "status": "ok",
+  "lhs": "Integrate[(x - a)^(nu - 1)*(b - x)^(mu - 1)/(x - c), {x, a, b}]",
+  "rhs": [
+   "(b - a)^(mu + nu - 1)/(b - c)*Beta[mu, nu]*Hypergeometric2F1[1, mu, mu + nu, (b - a)/(b - c)]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0",
+   "c > b",
+   "a < b"
+  ],
+  "cite": "ET II 250(33)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "same as 3a, for c>b",
+  "note": "book also lists mu + nu != 1, mu != 1, 2, ..."
+ },
+ {
+  "id": "GR3.228.3c",
+  "gr": "3.228.3",
+  "page": 369,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[(x - a)^(nu - 1)*(b - x)^(mu - 1)/(x - c), {x, a, b}]",
+  "rhs": [
+   "Pi*(c - a)^(nu - 1)*(b - c)^(mu - 1)*Cot[mu*Pi] - (b - a)^(mu + nu - 2)*Beta[mu - 1, nu]*Hypergeometric2F1[2 - mu - nu, 1, 2 - mu, (b - c)/(b - a)]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0",
+   "a < c < b"
+  ],
+  "cite": "ET II 250(33)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "= pi (c-a)^(nu-1)(b-c)^(mu-1) cot(mu pi) - (b-a)^(mu+nu-2) B(mu-1,nu) 2F1(2-mu-nu,1;2-mu;(b-c)/(b-a)) for a<c<b",
+  "note": "book also lists mu + nu != 1, mu != 1, 2, ...",
+  "reason": "implicit principal value: the integrand has a non-integrable simple pole inside the range of integration"
+ },
+ {
+  "id": "GR3.228.4",
+  "gr": "3.228.4",
+  "page": 369,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^(nu - 1)*x^(-nu)/(a - b*x), {x, 0, 1}]",
+  "rhs": [
+   "Pi*(a - b)^(nu - 1)/a^nu*Csc[nu*Pi]"
+  ],
+  "conds": [
+   "0 < Re[nu] < 1",
+   "0 < b < a"
+  ],
+  "cite": "BI (5)(8)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_0^1 (1-x)^(nu-1) x^(-nu)/(a-bx) dx = pi (a-b)^(nu-1)/a^nu cosec(nu pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.228.5a",
+  "gr": "3.228.5",
+  "page": 369,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*(x + a)^(1 - mu)/(x - c), {x, 0, Infinity}]",
+  "rhs": [
+   "a^(1 - mu)*(-c)^(nu - 1)*Beta[mu - nu, nu]*Hypergeometric2F1[mu - 1, nu, mu, 1 + c/a]"
+  ],
+  "conds": [
+   "c < 0",
+   "a > 0",
+   "0 < Re[nu] < Re[mu]"
+  ],
+  "cite": "ET II 251(34)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_0^inf x^(nu-1)(x+a)^(1-mu)/(x-c) dx = a^(1-mu)(-c)^(nu-1) B(mu-nu,nu) 2F1(mu-1,nu;mu;1+c/a) for c<0",
+  "note": ""
+ },
+ {
+  "id": "GR3.228.5b",
+  "gr": "3.228.5",
+  "page": 369,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^(nu - 1)*(x + a)^(1 - mu)/(x - c), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*c^(nu - 1)*(a + c)^(1 - mu)*Cot[(mu - nu)*Pi] - a^(1 - mu - nu)/(a + c)*Beta[mu - nu - 1, nu]*Hypergeometric2F1[2 - mu, 1, 2 - mu + nu, a/(a + c)]"
+  ],
+  "conds": [
+   "c > 0",
+   "a > 0",
+   "0 < Re[nu] < Re[mu]"
+  ],
+  "cite": "ET II 251(34)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "= pi c^(nu-1)(a+c)^(1-mu) cot[(mu-nu)pi] - a^(1-mu-nu)/(a+c) B(mu-nu-1,nu) 2F1(2-mu,1;2-mu+nu;a/(a+c)) for c>0",
+  "note": "",
+  "reason": "implicit principal value: the integrand has a non-integrable simple pole inside the range of integration"
+ },
+ {
+  "id": "GR3.228.6",
+  "gr": "3.228.6",
+  "page": 370,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - 1)*(gamma + x)^(-n)/(x + beta), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/Sin[Pi*nu]*beta^(nu - 1)/(gamma - beta)^n*(1 - (gamma/beta)^(nu - 1)*Sum[Pochhammer[1 - nu, j]/j!*((gamma - beta)/gamma)^j, {j, 0, n - 1}])"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "Abs[Arg[gamma]] < Pi",
+   "0 < Re[nu] < n",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "AS 256 (6.1.22)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_0^inf x^(nu-1)(gamma+x)^(-n)/(x+beta) dx = pi/sin(pi nu) beta^(nu-1)/(gamma-beta)^n [1 - (gamma/beta)^(nu-1) sum_{j=0}^{n-1} (1-nu)_j/j! ((gamma-beta)/gamma)^j]",
+  "note": "n a positive integer (implied by the finite sum)"
+ },
+ {
+  "id": "GR3.229",
+  "gr": "3.229",
+  "page": 370,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/((1 - x)^mu*(1 + a*x)*(1 + b*x)), {x, 0, 1}]",
+  "rhs": [
+   "Pi*Csc[mu*Pi]/(a - b)*(a/(1 + a)^mu - b/(1 + b)^mu)"
+  ],
+  "conds": [
+   "0 < Re[mu] < 1",
+   "a > -1",
+   "b > -1"
+  ],
+  "cite": "BI (5)(7)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_0^1 x^(mu-1)/((1-x)^mu (1+ax)(1+bx)) dx = pi cosec(mu pi)/(a-b) [a/(1+a)^mu - b/(1+b)^mu]",
+  "note": "a > -1, b > -1 added (no pole on [0,1])"
+ },
+ {
+  "id": "GR3.231.1",
+  "gr": "3.231.1",
+  "page": 370,
+  "status": "ok",
+  "lhs": "Integrate[(x^(p - 1) - x^(-p))/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "Pi*Cot[p*Pi]"
+  ],
+  "conds": [
+   "p^2 < 1"
+  ],
+  "cite": "BI (4)(4)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_0^1 (x^(p-1) - x^(-p))/(1-x) dx = pi cot(p pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.231.2",
+  "gr": "3.231.2",
+  "page": 370,
+  "status": "ok",
+  "lhs": "Integrate[(x^(p - 1) + x^(-p))/(1 + x), {x, 0, 1}]",
+  "rhs": [
+   "Pi*Csc[p*Pi]"
+  ],
+  "conds": [
+   "p^2 < 1"
+  ],
+  "cite": "BI (4)(1)",
+  "edition_note": "11",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_0^1 (x^(p-1) + x^(-p))/(1+x) dx = pi cosec(p pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.231.3",
+  "gr": "3.231.3",
+  "page": 370,
+  "status": "ok",
+  "lhs": "Integrate[(x^p - x^(-p))/(x - 1), {x, 0, 1}]",
+  "rhs": [
+   "1/p - Pi*Cot[p*Pi]"
+  ],
+  "conds": [
+   "p^2 < 1"
+  ],
+  "cite": "BI (4)(3)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_0^1 (x^p - x^(-p))/(x-1) dx = 1/p - pi cot(p pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.231.4",
+  "gr": "3.231.4",
+  "page": 370,
+  "status": "ok",
+  "lhs": "Integrate[(x^p - x^(-p))/(1 + x), {x, 0, 1}]",
+  "rhs": [
+   "1/p - Pi*Csc[p*Pi]"
+  ],
+  "conds": [
+   "p^2 < 1"
+  ],
+  "cite": "BI (4)(2)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_0^1 (x^p - x^(-p))/(1+x) dx = 1/p - pi cosec(p pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.231.5",
+  "gr": "3.231.5",
+  "page": 370,
+  "status": "ok",
+  "lhs": "Integrate[(x^(mu - 1) - x^(nu - 1))/(1 - x), {x, 0, 1}]",
+  "rhs": [
+   "PolyGamma[nu] - PolyGamma[mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "FI II 815, BI(4)(5)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_0^1 (x^(mu-1) - x^(nu-1))/(1-x) dx = psi(nu) - psi(mu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.231.6",
+  "gr": "3.231.6",
+  "page": 370,
+  "status": "ok",
+  "lhs": "Integrate[(x^(p - 1) - x^(q - 1))/(1 - x), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*(Cot[p*Pi] - Cot[q*Pi])"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "FI II 718",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_0^inf (x^(p-1) - x^(q-1))/(1-x) dx = pi (cot p pi - cot q pi)",
+  "note": "convergence at infinity also needs p < 1, q < 1 (not printed)"
+ },
+ {
+  "id": "GR3.232",
+  "gr": "3.232",
+  "page": 370,
+  "status": "ok",
+  "lhs": "Integrate[((c + a*x)^(-mu) - (c + b*x)^(-mu))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "c^(-mu)*Log[b/a]"
+  ],
+  "conds": [
+   "Re[mu] > -1",
+   "a > 0",
+   "b > 0",
+   "c > 0"
+  ],
+  "cite": "BI (18)(14)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_0^inf ((c+ax)^(-mu) - (c+bx)^(-mu))/x dx = c^(-mu) ln(b/a)",
+  "note": "condition printed as Re mu > -1; convergence at infinity needs Re mu > 0 (probable misprint in the condition)"
+ },
+ {
+  "id": "GR3.233",
+  "gr": "3.233",
+  "page": 370,
+  "status": "ok",
+  "lhs": "Integrate[(1/(1 + x) - (1 + x)^(-nu))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "PolyGamma[nu] + EulerGamma"
+  ],
+  "conds": [
+   "Re[nu] > 0"
+  ],
+  "cite": "EH I 17, WH",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_0^inf {1/(1+x) - (1+x)^(-nu)} dx/x = psi(nu) + C",
+  "note": ""
+ },
+ {
+  "id": "GR3.234.1",
+  "gr": "3.234.1",
+  "page": 370,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^(q - 1)/(1 - a*x) - x^(-q)/(a - x), {x, 0, 1}]",
+  "rhs": [
+   "Pi*a^(-q)*Cot[q*Pi]"
+  ],
+  "conds": [
+   "0 < q < 1",
+   "a > 0"
+  ],
+  "cite": "BI (5)(11)",
+  "edition_note": "11",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_0^1 (x^(q-1)/(1-ax) - x^(-q)/(a-x)) dx = pi a^(-q) cot(q pi)",
+  "note": "",
+  "reason": "implicit principal value: for a != 1 one term has a simple pole inside (0,1) (x = a or x = 1/a)"
+ },
+ {
+  "id": "GR3.234.2",
+  "gr": "3.234.2",
+  "page": 370,
+  "status": "ok",
+  "lhs": "Integrate[x^(q - 1)/(1 + a*x) + x^(-q)/(a + x), {x, 0, 1}]",
+  "rhs": [
+   "Pi*a^(-q)*Csc[q*Pi]"
+  ],
+  "conds": [
+   "0 < q < 1",
+   "a > 0"
+  ],
+  "cite": "BI (5)(10)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_0^1 (x^(q-1)/(1+ax) + x^(-q)/(a+x)) dx = pi a^(-q) cosec(q pi)",
+  "note": ""
+ },
+ {
+  "id": "GR3.235",
+  "gr": "3.235",
+  "page": 370,
+  "status": "ok",
+  "lhs": "Integrate[((1 + x)^mu - 1)/((1 + x)^nu*x), {x, 0, Infinity}]",
+  "rhs": [
+   "PolyGamma[nu] - PolyGamma[nu - mu]"
+  ],
+  "conds": [
+   "Re[nu] > Re[mu] > 0"
+  ],
+  "cite": "BI (18)(5)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_0^inf ((1+x)^mu - 1)/(1+x)^nu dx/x = psi(nu) - psi(nu-mu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.236",
+  "gr": "3.236",
+  "page": 370,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu/2)/((1 - x)*(1 - a^2*x))^((mu + 1)/2), {x, 0, 1}]",
+  "rhs": [
+   "((1 - a)^(-mu) - (1 + a)^(-mu))/(2*a*mu*Sqrt[Pi])*Gamma[1 + mu/2]*Gamma[(1 - mu)/2]"
+  ],
+  "conds": [
+   "-2 < mu < 1",
+   "Abs[a] < 1"
+  ],
+  "cite": "BI (12)(32)",
+  "edition_note": "10",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_0^1 x^(mu/2)/[(1-x)(1-a^2 x)]^((mu+1)/2) dx = ((1-a)^(-mu) - (1+a)^(-mu))/(2 a mu sqrt(pi)) Gamma(1+mu/2) Gamma((1-mu)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.237",
+  "gr": "3.237",
+  "page": 370,
+  "status": "ok",
+  "lhs": "Sum[(-1)^(n + 1)*Integrate[1/(x + u), {x, n, n + 1}], {n, 0, Infinity}]",
+  "rhs": [
+   "Log[u*Gamma[u/2]^2/(2*Gamma[(u + 1)/2]^2)]"
+  ],
+  "conds": [
+   "Abs[Arg[u]] < Pi"
+  ],
+  "cite": "ET II 216(1)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "sum_{n=0}^inf (-1)^(n+1) int_n^(n+1) dx/(x+u) = ln( u [Gamma(u/2)]^2 / (2 [Gamma((u+1)/2)]^2) )",
+  "note": "series of integrals; equivalently Integrate[-(-1)^Floor[x]/(x + u), {x, 0, Infinity}]"
+ },
+ {
+  "id": "GR3.238.1",
+  "gr": "3.238.1",
+  "page": 371,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Abs[x]^(nu - 1)/(x - u), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-Pi*Cot[nu*Pi/2]*Abs[u]^(nu - 1)*Sign[u]"
+  ],
+  "conds": [
+   "0 < Re[nu] < 1",
+   "Element[u, Reals]",
+   "u != 0"
+  ],
+  "cite": "ET II 249(29)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_-inf^inf |x|^(nu-1)/(x-u) dx = -pi cot(nu pi/2) |u|^(nu-1) sign u",
+  "note": "",
+  "reason": "implicit principal value: the integrand has a non-integrable simple pole inside the range of integration (x = u)"
+ },
+ {
+  "id": "GR3.238.2",
+  "gr": "3.238.2",
+  "page": 371,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[Abs[x]^(nu - 1)*Sign[x]/(x - u), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi*Tan[nu*Pi/2]*Abs[u]^(nu - 1)"
+  ],
+  "conds": [
+   "0 < Re[nu] < 1",
+   "Element[u, Reals]",
+   "u != 0"
+  ],
+  "cite": "ET II 249(30)",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_-inf^inf |x|^(nu-1) sign x/(x-u) dx = pi tan(nu pi/2) |u|^(nu-1)",
+  "note": "",
+  "reason": "implicit principal value: the integrand has a non-integrable simple pole inside the range of integration (x = u)"
+ },
+ {
+  "id": "GR3.238.3",
+  "gr": "3.238.3",
+  "page": 371,
+  "status": "ok",
+  "lhs": "Integrate[(b - x)^(mu - 1)*(x - a)^(nu - 1)/Abs[x - u]^(mu + nu), {x, a, b}]",
+  "rhs": [
+   "(b - a)^(mu + nu - 1)/(Abs[a - u]^mu*Abs[b - u]^nu)*Gamma[mu]*Gamma[nu]/Gamma[mu + nu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0",
+   "(0 < u < a < b) || (0 < a < b < u)"
+  ],
+  "cite": "MO 7",
+  "edition_note": "",
+  "section": "3.22-3.23 Powers of x and of binomials of the form alpha + beta x",
+  "tex": "int_a^b (b-x)^(mu-1)(x-a)^(nu-1)/|x-u|^(mu+nu) dx = (b-a)^(mu+nu-1)/(|a-u|^mu |b-u|^nu) Gamma(mu)Gamma(nu)/Gamma(mu+nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.241.1",
+  "gr": "3.241.1",
+  "page": 371,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/(1 + x^p), {x, 0, 1}]",
+  "rhs": [
+   "1/p*(PolyGamma[((mu/p) + 1)/2] - PolyGamma[(mu/p)/2])/2"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "p > 0"
+  ],
+  "cite": "WH, BI (2)(13)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^1 x^(mu-1)/(1+x^p) dx = (1/p) beta(mu/p)",
+  "note": ""
+ },
+ {
+  "id": "GR3.241.2a",
+  "gr": "3.241.2",
+  "page": 371,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/(1 + x^nu), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/nu*Csc[mu*Pi/nu]"
+  ],
+  "conds": [
+   "Re[nu] > Re[mu] > 0"
+  ],
+  "cite": "ET I 309(15)a, BI (17)(10)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf x^(mu-1)/(1+x^nu) dx = pi/nu cosec(mu pi/nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.241.2b",
+  "gr": "3.241.2",
+  "page": 371,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/(1 + x^nu), {x, 0, Infinity}]",
+  "rhs": [
+   "1/nu*Beta[mu/nu, (nu - mu)/nu]"
+  ],
+  "conds": [
+   "Re[nu] > Re[mu] > 0"
+  ],
+  "cite": "ET I 309(15)a, BI (17)(10)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "= (1/nu) B(mu/nu, (nu-mu)/nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.241.3",
+  "gr": "3.241.3",
+  "page": 371,
+  "status": "SKIP-PV",
+  "lhs": "Integrate[x^(p - 1)/(1 - x^q), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/q*Cot[p*Pi/q]"
+  ],
+  "conds": [
+   "p < q",
+   "p > 0"
+  ],
+  "cite": "BI (17)(11)",
+  "edition_note": "11",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "PV int_0^inf x^(p-1)/(1-x^q) dx = pi/q cot(p pi/q)",
+  "note": "p > 0 added",
+  "reason": "marked PV in the book"
+ },
+ {
+  "id": "GR3.241.4",
+  "gr": "3.241.4",
+  "page": 371,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/(p + q*x^nu)^(n + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "1/(nu*p^(n + 1))*(p/q)^(mu/nu)*Gamma[mu/nu]*Gamma[1 + n - mu/nu]/Gamma[1 + n]"
+  ],
+  "conds": [
+   "0 < mu/nu < n + 1",
+   "p > 0",
+   "q > 0",
+   "nu > 0"
+  ],
+  "cite": "BI (17)(22)a",
+  "edition_note": "11",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf x^(mu-1)/(p+q x^nu)^(n+1) dx = 1/(nu p^(n+1)) (p/q)^(mu/nu) Gamma(mu/nu) Gamma(1+n-mu/nu)/Gamma(1+n)",
+  "note": "book prints p != 0, q != 0; p > 0, q > 0, nu > 0 used for sampling (no pole on the path)"
+ },
+ {
+  "id": "GR3.241.5",
+  "gr": "3.241.5",
+  "page": 371,
+  "status": "ok",
+  "lhs": "Integrate[x^(p - 1)/(1 + x^q)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "(p - q)*Pi/q^2*Csc[(p - q)*Pi/q]"
+  ],
+  "conds": [
+   "p < 2*q",
+   "p > 0",
+   "q > 0"
+  ],
+  "cite": "BI (17)(18)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf x^(p-1)/(1+x^q)^2 dx = (p-q)pi/q^2 cosec((p-q)pi/q)",
+  "note": "p > 0, q > 0 added"
+ },
+ {
+  "id": "GR3.241.6",
+  "gr": "3.241.6",
+  "page": 371,
+  "status": "ok",
+  "lhs": "Integrate[Sign[x/c - ((b - u)/(b - a))^p], {u, a, b}]",
+  "rhs": [
+   "(b - a)*Piecewise[{{-1, (x/c)^(1/p) <= 0}, {2*(x/c)^(1/p) - 1, 0 < (x/c)^(1/p) < 1}}, 1]"
+  ],
+  "conds": [
+   "b > a",
+   "p > 0",
+   "c > 0",
+   "x > 0"
+  ],
+  "cite": "",
+  "edition_note": "10",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "G(x) = int_a^b sign[x/c - ((b-u)/(b-a))^p] du = (b-a) F[(x/c)^(1/p)], F(y) = int_0^1 sign(y-t) dt = -1 (y<=0), 2y-1 (0<y<1), 1 (y>=1)",
+  "note": "F substituted from its inline definition; no conditions printed (b > a, p > 0, c > 0, x > 0 added so (x/c)^(1/p) is real)"
+ },
+ {
+  "id": "GR3.242.1",
+  "gr": "3.242.1",
+  "page": 371,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m)/(x^(4*n) + 2*x^(2*n)*Cos[t] + 1), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi/n*Sin[(2*n - 2*m - 1)*t/(2*n)]*Csc[t]*Csc[(2*m + 1)*Pi/(2*n)]"
+  ],
+  "conds": [
+   "m < n",
+   "t^2 < Pi^2",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "FI II 642",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_-inf^inf x^(2m)/(x^(4n) + 2x^(2n) cos t + 1) dx = pi/n sin[(2n-2m-1)t/(2n)] cosec t cosec((2m+1)pi/(2n))",
+  "note": "m, n integers implied"
+ },
+ {
+  "id": "GR3.242.2",
+  "gr": "3.242.2",
+  "page": 372,
+  "status": "ok",
+  "lhs": "Integrate[(x^2/(x^4 + 2*a*x^2 + 1))^c*((x^2 + 1)/(x^b + 1))/x^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-1/2 - c)*(1 + a)^(1/2 - c)*Beta[c - 1/2, 1/2]"
+  ],
+  "conds": [
+   "c > 1/2",
+   "a > -1"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf [x^2/(x^4+2a x^2+1)]^c ((x^2+1)/(x^b+1)) dx/x^2 = 2^(-1/2-c)(1+a)^(1/2-c) B(c-1/2,1/2)",
+  "note": "no conditions printed; c > 1/2, a > -1 added. Value is independent of b (b enters only through a symmetric x -> 1/x factor)."
+ },
+ {
+  "id": "GR3.243",
+  "gr": "3.243",
+  "page": 372,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/((1 + x^(2*nu))*(1 + x^(3*nu))), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(48*nu)*(8*Csc[2*(mu*Pi/(6*nu))] + 12*Csc[3*(mu*Pi/(6*nu))] - 8*Csc[2*(mu*Pi/(6*nu)) - 4*Pi/3] + 8*Csc[2*(mu*Pi/(6*nu)) - 2*Pi/3] - 3*Csc[(mu*Pi/(6*nu)) - Pi/6]*Csc[(mu*Pi/(6*nu)) + Pi/6]*Sec[(mu*Pi/(6*nu))])"
+  ],
+  "conds": [
+   "0 < Re[mu] < 5*Re[nu]"
+  ],
+  "cite": "ET I 312(34)",
+  "edition_note": "11",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf x^(mu-1)/((1+x^(2nu))(1+x^(3nu))) dx = pi/(48nu)[8cosec(2rho)+12cosec(3rho)-8cosec(2rho-4pi/3)+8cosec(2rho-2pi/3)-3cosec(rho-pi/6)cosec(rho+pi/6)sec(rho)], rho = mu pi/(6nu)",
+  "note": "rho = mu*Pi/(6*nu) substituted"
+ },
+ {
+  "id": "GR3.244.1",
+  "gr": "3.244.1",
+  "page": 372,
+  "status": "ok",
+  "lhs": "Integrate[(x^(p - 1) + x^(q - p - 1))/(1 + x^q), {x, 0, 1}]",
+  "rhs": [
+   "Pi/q*Csc[p*Pi/q]"
+  ],
+  "conds": [
+   "q > p > 0"
+  ],
+  "cite": "BI (2)(14)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^1 (x^(p-1) + x^(q-p-1))/(1+x^q) dx = pi/q cosec(p pi/q)",
+  "note": ""
+ },
+ {
+  "id": "GR3.244.2",
+  "gr": "3.244.2",
+  "page": 372,
+  "status": "ok",
+  "lhs": "Integrate[(x^(p - 1) - x^(q - p - 1))/(1 - x^q), {x, 0, 1}]",
+  "rhs": [
+   "Pi/q*Cot[p*Pi/q]"
+  ],
+  "conds": [
+   "q > p > 0"
+  ],
+  "cite": "BI (2)(16)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^1 (x^(p-1) - x^(q-p-1))/(1-x^q) dx = pi/q cot(p pi/q)",
+  "note": ""
+ },
+ {
+  "id": "GR3.244.3",
+  "gr": "3.244.3",
+  "page": 372,
+  "status": "ok",
+  "lhs": "Integrate[(x^(nu - 1) - x^(mu - 1))/(1 - x^nu), {x, 0, 1}]",
+  "rhs": [
+   "1/nu*(EulerGamma + PolyGamma[mu/nu])"
+  ],
+  "conds": [
+   "Re[mu] > Re[nu] > 0"
+  ],
+  "cite": "BI (2)(17)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^1 (x^(nu-1) - x^(mu-1))/(1-x^nu) dx = (1/nu)[C + psi(mu/nu)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.244.4",
+  "gr": "3.244.4",
+  "page": 372,
+  "status": "ok",
+  "lhs": "Integrate[(x^(2*m) - x^(2*n))/(1 - x^(2*l)), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi/l*(Cot[(2*m + 1)*Pi/(2*l)] - Cot[(2*n + 1)*Pi/(2*l)])"
+  ],
+  "conds": [
+   "m < l",
+   "n < l",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0",
+   "Element[l, Integers] && l >= 1"
+  ],
+  "cite": "FI II 640",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_-inf^inf (x^(2m) - x^(2n))/(1-x^(2l)) dx = pi/l [cot((2m+1)pi/(2l)) - cot((2n+1)pi/(2l))]",
+  "note": "m, n, l integers implied; the poles at x = +-1 are removable"
+ },
+ {
+  "id": "GR3.245",
+  "gr": "3.245",
+  "page": 372,
+  "status": "ok",
+  "lhs": "Integrate[x^(nu - mu) - x^nu*(1 + x)^(-mu), {x, 0, Infinity}]",
+  "rhs": [
+   "nu/(nu - mu + 1)*Beta[nu, mu - nu]"
+  ],
+  "conds": [
+   "Re[mu] > Re[nu] > 0"
+  ],
+  "cite": "BI (16)(13)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf [x^(nu-mu) - x^nu (1+x)^(-mu)] dx = nu/(nu-mu+1) B(nu, mu-nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.246",
+  "gr": "3.246",
+  "page": 372,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^q)/(1 - x^r)*x^(p - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/r*Sin[q*Pi/r]*Csc[p*Pi/r]*Csc[(p + q)*Pi/r]"
+  ],
+  "conds": [
+   "p + q < r",
+   "p > 0"
+  ],
+  "cite": "ET I 331(33), BI (17)(12)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf (1-x^q)/(1-x^r) x^(p-1) dx = pi/r sin(q pi/r) cosec(p pi/r) cosec((p+q)pi/r)",
+  "note": ""
+ },
+ {
+  "id": "GR3.247.1",
+  "gr": "3.247.1",
+  "page": 372,
+  "status": "ok",
+  "lhs": "Integrate[x^(alpha - 1)*(1 - x)^(n - 1)/(1 - xi*x^b), {x, 0, 1}]",
+  "rhs": [
+   "(n - 1)!*Sum[xi^k/Pochhammer[alpha + k*b, n], {k, 0, Infinity}]"
+  ],
+  "conds": [
+   "b > 0",
+   "Abs[xi] < 1",
+   "alpha > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "AD (6704)",
+  "edition_note": "11",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^1 x^(alpha-1)(1-x)^(n-1)/(1-xi x^b) dx = (n-1)! sum_{k=0}^inf xi^k/((alpha+kb)(alpha+kb+1)...(alpha+kb+n-1))",
+  "note": "product (alpha+kb)...(alpha+kb+n-1) written as Pochhammer[alpha + k*b, n]; alpha > 0 and integer n >= 1 added"
+ },
+ {
+  "id": "GR3.247.2",
+  "gr": "3.247.2",
+  "page": 372,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^p)*x^(nu - 1)/(1 - x^(n*p)), {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/(n*p)*Sin[Pi/n]*Csc[(p + nu)*Pi/(n*p)]*Csc[Pi*nu/(n*p)]"
+  ],
+  "conds": [
+   "0 < Re[nu] < (n - 1)*p",
+   "p > 0",
+   "n > 1"
+  ],
+  "cite": "ET I 311(33)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf (1-x^p) x^(nu-1)/(1-x^(np)) dx = pi/(np) sin(pi/n) cosec((p+nu)pi/(np)) cosec(pi nu/(np))",
+  "note": "p > 0, n > 1 added"
+ },
+ {
+  "id": "GR3.248.1",
+  "gr": "3.248.1",
+  "page": 373,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/Sqrt[1 + x^nu], {x, 0, Infinity}]",
+  "rhs": [
+   "1/nu*Beta[mu/nu, 1/2 - mu/nu]"
+  ],
+  "conds": [
+   "Re[nu] > Re[2*mu] > 0"
+  ],
+  "cite": "BI (21)(9)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf x^(mu-1)/sqrt(1+x^nu) dx = (1/nu) B(mu/nu, 1/2 - mu/nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.248.2",
+  "gr": "3.248.2",
+  "page": 373,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n + 1)/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "(2*n)!!/(2*n + 1)!!"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (8)(14)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^1 x^(2n+1)/sqrt(1-x^2) dx = (2n)!!/(2n+1)!!",
+  "note": ""
+ },
+ {
+  "id": "GR3.248.3",
+  "gr": "3.248.3",
+  "page": 373,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*n)/Sqrt[1 - x^2], {x, 0, 1}]",
+  "rhs": [
+   "(2*n - 1)!!/(2*n)!!*Pi/2"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (8)(13)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^1 x^(2n)/sqrt(1-x^2) dx = (2n-1)!!/(2n)!! pi/2",
+  "note": ""
+ },
+ {
+  "id": "GR3.248.4",
+  "gr": "3.248.4",
+  "page": 373,
+  "status": "ok",
+  "lhs": "Integrate[1/((1 + x^2)*Sqrt[4 + 3*x^2]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Pi/3"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "3",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_-inf^inf dx/((1+x^2) sqrt(4+3x^2)) = pi/3",
+  "note": ""
+ },
+ {
+  "id": "GR3.248.6a",
+  "gr": "3.248.6",
+  "page": 373,
+  "status": "ok",
+  "lhs": "Integrate[1/((1 + x^2)^2*Sqrt[b + a*x^2]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2/Sqrt[b - a]*ArcTan[Sqrt[b/a - 1]]",
+   "(Sqrt[a] + (b - 2*a)*ArcTan[Sqrt[b/a - 1]]/Sqrt[b - a])/(b - a)"
+  ],
+  "conds": [
+   "0 < a < b"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_-inf^inf dx/((1+x^2)^2 sqrt(b+ax^2)) = 2/sqrt(b-a) arctan(sqrt(b/a-1)) if a<b",
+  "note": "Printed with (1 + x^2)^2; the printed values are those of the integrand with (1 + x^2)^1 (probable misprint of the exponent). Second rhs is the value for the integrand as printed, (1 + x^2)^2. a > 0 added."
+ },
+ {
+  "id": "GR3.248.6b",
+  "gr": "3.248.6",
+  "page": 373,
+  "status": "ok",
+  "lhs": "Integrate[1/((1 + x^2)^2*Sqrt[a + a*x^2]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "2/Sqrt[a]",
+   "4/(3*Sqrt[a])"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "= 2/sqrt(a) if a = b",
+  "note": "Printed with (1 + x^2)^2; the printed values are those of the integrand with (1 + x^2)^1 (probable misprint of the exponent). Second rhs is the value for the integrand as printed, (1 + x^2)^2. Equality condition a = b substituted (b -> a)."
+ },
+ {
+  "id": "GR3.248.6c",
+  "gr": "3.248.6",
+  "page": 373,
+  "status": "ok",
+  "lhs": "Integrate[1/((1 + x^2)^2*Sqrt[b + a*x^2]), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "1/Sqrt[a - b]*Log[(Sqrt[a] + Sqrt[a - b])/(Sqrt[a] - Sqrt[a - b])]",
+   "(Sqrt[a] + (b - 2*a)/(2*Sqrt[a - b])*Log[(Sqrt[a] + Sqrt[a - b])/(Sqrt[a] - Sqrt[a - b])])/(b - a)"
+  ],
+  "conds": [
+   "a > b > 0"
+  ],
+  "cite": "",
+  "edition_note": "*",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "= 1/sqrt(a-b) ln((sqrt a + sqrt(a-b))/(sqrt a - sqrt(a-b))) if a>b",
+  "note": "Printed with (1 + x^2)^2; the printed values are those of the integrand with (1 + x^2)^1 (probable misprint of the exponent). Second rhs is the value for the integrand as printed, (1 + x^2)^2. b > 0 added."
+ },
+ {
+  "id": "GR3.249.1",
+  "gr": "3.249.1",
+  "page": 373,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2 + a^2)^n, {x, 0, Infinity}]",
+  "rhs": [
+   "(2*n - 3)!!/(2*(2*n - 2)!!)*Pi/a^(2*n - 1)"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "FI II 743",
+  "edition_note": "0",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf dx/(x^2+a^2)^n = (2n-3)!!/(2(2n-2)!!) pi/a^(2n-1)",
+  "note": ""
+ },
+ {
+  "id": "GR3.249.2",
+  "gr": "3.249.2",
+  "page": 373,
+  "status": "ok",
+  "lhs": "Integrate[(a^2 - x^2)^(n - 1/2), {x, 0, a}]",
+  "rhs": [
+   "a^(2*n)*(2*n - 1)!!/(2*(2*n)!!)*Pi"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "FI II 156",
+  "edition_note": "9",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^a (a^2-x^2)^(n-1/2) dx = a^(2n) (2n-1)!!/(2(2n)!!) pi",
+  "note": ""
+ },
+ {
+  "id": "GR3.249.3",
+  "gr": "3.249.3",
+  "page": 373,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^n/(a - x)^(n + 1), {x, -1, 1}]",
+  "rhs": [
+   "2^(n + 1)*LegendreQ[n, 0, 3, a]"
+  ],
+  "conds": [
+   "a > 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "EH II 181(31)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_-1^1 (1-x^2)^n/(a-x)^(n+1) dx = 2^(n+1) Q_n(a)",
+  "note": "no conditions printed; a > 1 (off the cut, type-3 Q) and integer n >= 0 added"
+ },
+ {
+  "id": "GR3.249.4",
+  "gr": "3.249.4",
+  "page": 373,
+  "status": "ok",
+  "lhs": "Integrate[x^mu/(1 + x^2), {x, 0, 1}]",
+  "rhs": [
+   "1/2*(PolyGamma[(((mu + 1)/2) + 1)/2] - PolyGamma[((mu + 1)/2)/2])/2"
+  ],
+  "conds": [
+   "Re[mu] > -1"
+  ],
+  "cite": "BI (2)(7)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^1 x^mu/(1+x^2) dx = (1/2) beta((mu+1)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.249.5a",
+  "gr": "3.249.5",
+  "page": 373,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^(mu - 1), {x, 0, 1}]",
+  "rhs": [
+   "2^(2*mu - 2)*Beta[mu, mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "FI II 784",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^1 (1-x^2)^(mu-1) dx = 2^(2mu-2) B(mu,mu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.249.5b",
+  "gr": "3.249.5",
+  "page": 373,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^2)^(mu - 1), {x, 0, 1}]",
+  "rhs": [
+   "1/2*Beta[1/2, mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0"
+  ],
+  "cite": "FI II 784",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "= (1/2) B(1/2, mu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.249.6",
+  "gr": "3.249.6",
+  "page": 373,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Sqrt[x])^(p - 1), {x, 0, 1}]",
+  "rhs": [
+   "2/(p*(p + 1))"
+  ],
+  "conds": [
+   "p > 0"
+  ],
+  "cite": "BI (7)(7)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^1 (1 - sqrt x)^(p-1) dx = 2/(p(p+1))",
+  "note": ""
+ },
+ {
+  "id": "GR3.249.7",
+  "gr": "3.249.7",
+  "page": 373,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x^mu)^(-1/nu), {x, 0, 1}]",
+  "rhs": [
+   "1/mu*Beta[1/mu, 1 - 1/nu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Abs[nu] > 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^1 (1-x^mu)^(-1/nu) dx = (1/mu) B(1/mu, 1-1/nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.249.8",
+  "gr": "3.249.8",
+  "page": 373,
+  "status": "ok",
+  "lhs": "Integrate[(1 + x^2/(n - 1))^(-n/2), {x, -Infinity, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi*(n - 1)]/Gamma[n/2]*Gamma[(n - 1)/2]"
+  ],
+  "conds": [
+   "n > 1"
+  ],
+  "cite": "",
+  "edition_note": "11",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_-inf^inf (1 + x^2/(n-1))^(-n/2) dx = sqrt(pi(n-1))/Gamma(n/2) Gamma((n-1)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.251.1",
+  "gr": "3.251.1",
+  "page": 373,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*(1 - x^lam)^(nu - 1), {x, 0, 1}]",
+  "rhs": [
+   "1/lam*Beta[mu/lam, nu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0",
+   "lam > 0"
+  ],
+  "cite": "FI II 787",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^1 x^(mu-1)(1-x^lambda)^(nu-1) dx = (1/lambda) B(mu/lambda, nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.251.2",
+  "gr": "3.251.2",
+  "page": 373,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*(1 + x^2)^(nu - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "1/2*Beta[mu/2, 1 - nu - mu/2]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu + mu/2] < 1"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf x^(mu-1)(1+x^2)^(nu-1) dx = (1/2) B(mu/2, 1-nu-mu/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.251.3",
+  "gr": "3.251.3",
+  "page": 374,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*(x^p - 1)^(nu - 1), {x, 1, Infinity}]",
+  "rhs": [
+   "1/p*Beta[1 - nu - mu/p, nu]"
+  ],
+  "conds": [
+   "p > 0",
+   "Re[nu] > 0",
+   "Re[mu] < p - p*Re[nu]"
+  ],
+  "cite": "ET I 311(32)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_1^inf x^(mu-1)(x^p-1)^(nu-1) dx = (1/p) B(1-nu-mu/p, nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.251.4",
+  "gr": "3.251.4",
+  "page": 374,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m)/(a*x^2 + c)^n, {x, 0, Infinity}]",
+  "rhs": [
+   "(2*m - 1)!!*(2*n - 2*m - 3)!!*Pi/(2*(2*n - 2)!!*a^m*c^(n - m - 1)*Sqrt[a*c])"
+  ],
+  "conds": [
+   "a > 0",
+   "c > 0",
+   "n > m + 1",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GU (141)(8a)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf x^(2m)/(ax^2+c)^n dx = (2m-1)!!(2n-2m-3)!! pi/(2 (2n-2)!! a^m c^(n-m-1) sqrt(ac))",
+  "note": "m, n integers implied"
+ },
+ {
+  "id": "GR3.251.5",
+  "gr": "3.251.5",
+  "page": 374,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m + 1)/(a*x^2 + c)^n, {x, 0, Infinity}]",
+  "rhs": [
+   "m!*(n - m - 2)!/(2*(n - 1)!*a^(m + 1)*c^(n - m - 1))"
+  ],
+  "conds": [
+   "a*c > 0",
+   "n > m + 1",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GU (141)(8b)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf x^(2m+1)/(ax^2+c)^n dx = m!(n-m-2)!/(2(n-1)! a^(m+1) c^(n-m-1))",
+  "note": "printed condition n > m + 1 >= 1; m, n integers implied"
+ },
+ {
+  "id": "GR3.251.6",
+  "gr": "3.251.6",
+  "page": 374,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu + 1)/(1 + x^2)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "mu*Pi/(4*Sin[mu*Pi/2])"
+  ],
+  "conds": [
+   "-2 < Re[mu] < 2"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf x^(mu+1)/(1+x^2)^2 dx = mu pi/(4 sin(mu pi/2))",
+  "note": ""
+ },
+ {
+  "id": "GR3.251.7",
+  "gr": "3.251.7",
+  "page": 374,
+  "status": "ok",
+  "lhs": "Integrate[x^mu/(1 + x^2)^2, {x, 0, 1}]",
+  "rhs": [
+   "-1/4 + (mu - 1)/4*(PolyGamma[(((mu - 1)/2) + 1)/2] - PolyGamma[((mu - 1)/2)/2])/2"
+  ],
+  "conds": [
+   "Re[mu] > 1"
+  ],
+  "cite": "LI (3)(11)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^1 x^mu/(1+x^2)^2 dx = -1/4 + (mu-1)/4 beta((mu-1)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.251.8",
+  "gr": "3.251.8",
+  "page": 374,
+  "status": "ok",
+  "lhs": "Integrate[x^(q + p - 1)*(1 - x^q)^(-p/q), {x, 0, 1}]",
+  "rhs": [
+   "p*Pi/q^2*Csc[p*Pi/q]"
+  ],
+  "conds": [
+   "q > p",
+   "p > 0"
+  ],
+  "cite": "BI (9)(22)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^1 x^(q+p-1)(1-x^q)^(-p/q) dx = p pi/q^2 cosec(p pi/q)",
+  "note": "p > 0 added"
+ },
+ {
+  "id": "GR3.251.9",
+  "gr": "3.251.9",
+  "page": 374,
+  "status": "ok",
+  "lhs": "Integrate[x^(q/p - 1)*(1 - x^q)^(-1/p), {x, 0, 1}]",
+  "rhs": [
+   "Pi/q*Csc[Pi/p]"
+  ],
+  "conds": [
+   "p > 1",
+   "q > 0"
+  ],
+  "cite": "BI (9)(23)a",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^1 x^(q/p-1)(1-x^q)^(-1/p) dx = pi/q cosec(pi/p)",
+  "note": ""
+ },
+ {
+  "id": "GR3.251.10",
+  "gr": "3.251.10",
+  "page": 374,
+  "status": "ok",
+  "lhs": "Integrate[x^(p - 1)*(1 - x^q)^(-p/q), {x, 0, 1}]",
+  "rhs": [
+   "Pi/q*Csc[p*Pi/q]"
+  ],
+  "conds": [
+   "q > p > 0"
+  ],
+  "cite": "BI (9)(20)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^1 x^(p-1)(1-x^q)^(-p/q) dx = pi/q cosec(p pi/q)",
+  "note": ""
+ },
+ {
+  "id": "GR3.251.11",
+  "gr": "3.251.11",
+  "page": 374,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*(1 + beta*x^p)^(-nu), {x, 0, Infinity}]",
+  "rhs": [
+   "1/p*beta^(-mu/p)*Beta[mu/p, nu - mu/p]"
+  ],
+  "conds": [
+   "Abs[Arg[beta]] < Pi",
+   "p > 0",
+   "0 < Re[mu] < p*Re[nu]"
+  ],
+  "cite": "BI (17)(20), EH I 10(16)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf x^(mu-1)(1+beta x^p)^(-nu) dx = (1/p) beta^(-mu/p) B(mu/p, nu-mu/p)",
+  "note": ""
+ },
+ {
+  "id": "GR3.252.1",
+  "gr": "3.252.1",
+  "page": 374,
+  "status": "ok",
+  "lhs": "Integrate[1/(a*x^2 + 2*b*x + c)^n, {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^(n - 1)/(n - 1)!*D[1/Sqrt[a*c - b^2]*ArcCot[b/Sqrt[a*c - b^2]], {c, n - 1}]"
+  ],
+  "conds": [
+   "a > 0",
+   "a*c > b^2",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (131)(4)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf dx/(ax^2+2bx+c)^n = (-1)^(n-1)/(n-1)! d^(n-1)/dc^(n-1) [1/sqrt(ac-b^2) arccot(b/sqrt(ac-b^2))]",
+  "note": "value is an (n-1)-fold derivative in c: instantiate n before c"
+ },
+ {
+  "id": "GR3.252.2",
+  "gr": "3.252.2",
+  "page": 374,
+  "status": "ok",
+  "lhs": "Integrate[1/(a*x^2 + 2*b*x + c)^n, {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(2*n - 3)!!*Pi*a^(n - 1)/((2*n - 2)!!*(a*c - b^2)^(n - 1/2))"
+  ],
+  "conds": [
+   "a > 0",
+   "a*c > b^2",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (131)(5)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_-inf^inf dx/(ax^2+2bx+c)^n = (2n-3)!! pi a^(n-1)/((2n-2)!! (ac-b^2)^(n-1/2))",
+  "note": ""
+ },
+ {
+  "id": "GR3.252.3",
+  "gr": "3.252.3",
+  "page": 374,
+  "status": "ok",
+  "lhs": "Integrate[1/(a*x^2 + 2*b*x + c)^(n + 3/2), {x, 0, Infinity}]",
+  "rhs": [
+   "(-2)^n/(2*n + 1)!!*D[1/(Sqrt[c]*(Sqrt[a*c] + b)), {c, n}]"
+  ],
+  "conds": [
+   "a >= 0",
+   "c > 0",
+   "b > -Sqrt[a*c]",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (213)(4)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf dx/(ax^2+2bx+c)^(n+3/2) = (-2)^n/(2n+1)!! d^n/dc^n {1/(sqrt c (sqrt(ac) + b))}",
+  "note": "value is an n-fold derivative in c: instantiate n before c"
+ },
+ {
+  "id": "GR3.252.4a",
+  "gr": "3.252.4",
+  "page": 375,
+  "status": "ok",
+  "lhs": "Integrate[x/(a*x^2 + 2*b*x + c)^n, {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n/(n - 1)!*D[1/(2*(a*c - b^2)) - b/(2*(a*c - b^2)^(3/2))*ArcCot[b/Sqrt[a*c - b^2]], {c, n - 2}]"
+  ],
+  "conds": [
+   "a*c > b^2",
+   "a > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "GW (141)(5)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf x dx/(ax^2+2bx+c)^n = (-1)^n/(n-1)! d^(n-2)/dc^(n-2) {1/(2(ac-b^2)) - b/(2(ac-b^2)^(3/2)) arccot(b/sqrt(ac-b^2))} for ac>b^2",
+  "note": "value is an (n-2)-fold derivative in c: instantiate n before c"
+ },
+ {
+  "id": "GR3.252.4b",
+  "gr": "3.252.4",
+  "page": 375,
+  "status": "ok",
+  "lhs": "Integrate[x/(a*x^2 + 2*b*x + c)^n, {x, 0, Infinity}]",
+  "rhs": [
+   "(-1)^n/(n - 1)!*D[1/(2*(a*c - b^2)) + b/(4*(b^2 - a*c)^(3/2))*Log[(b + Sqrt[b^2 - a*c])/(b - Sqrt[b^2 - a*c])], {c, n - 2}]"
+  ],
+  "conds": [
+   "b^2 > a*c > 0",
+   "a > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "GW (141)(5)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "= (-1)^n/(n-1)! d^(n-2)/dc^(n-2) {1/(2(ac-b^2)) + b/(4(b^2-ac)^(3/2)) ln((b+sqrt(b^2-ac))/(b-sqrt(b^2-ac)))} for b^2>ac>0",
+  "note": "value is an (n-2)-fold derivative in c: instantiate n before c"
+ },
+ {
+  "id": "GR3.252.4c",
+  "gr": "3.252.4",
+  "page": 375,
+  "status": "ok",
+  "lhs": "Integrate[x/(a*x^2 + 2*b*x + b^2/a)^n, {x, 0, Infinity}]",
+  "rhs": [
+   "a^(n - 2)/(2*(n - 1)*(2*n - 1)*b^(2*n - 2))"
+  ],
+  "conds": [
+   "a > 0",
+   "b > 0",
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "GW (141)(5)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "= a^(n-2)/(2(n-1)(2n-1) b^(2n-2)) for ac = b^2",
+  "note": "equality condition ac = b^2 substituted (c -> b^2/a)"
+ },
+ {
+  "id": "GR3.252.5",
+  "gr": "3.252.5",
+  "page": 375,
+  "status": "ok",
+  "lhs": "Integrate[x/(a*x^2 + 2*b*x + c)^n, {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-(2*n - 3)!!*Pi*b*a^(n - 2)/((2*n - 2)!!*(a*c - b^2)^((2*n - 1)/2))"
+  ],
+  "conds": [
+   "a*c > b^2",
+   "a > 0",
+   "Element[n, Integers] && n >= 2"
+  ],
+  "cite": "GW (141)(6)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_-inf^inf x dx/(ax^2+2bx+c)^n = -(2n-3)!! pi b a^(n-2)/((2n-2)!! (ac-b^2)^((2n-1)/2))",
+  "note": ""
+ },
+ {
+  "id": "GR3.252.6",
+  "gr": "3.252.6",
+  "page": 375,
+  "status": "ok",
+  "lhs": "Integrate[x^m/(a*x^2 + 2*b*x + c)^n, {x, -Infinity, Infinity}]",
+  "rhs": [
+   "(-1)^m*Pi*a^(n - m - 1)*b^m/((2*n - 2)!!*(a*c - b^2)^(n - 1/2))*Sum[Binomial[m, 2*k]*(2*k - 1)!!*(2*n - 2*k - 3)!!*((a*c - b^2)/b^2)^k, {k, 0, Floor[m/2]}]"
+  ],
+  "conds": [
+   "a*c > b^2",
+   "a > 0",
+   "0 <= m <= 2*n - 2",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (141)(17)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_-inf^inf x^m dx/(ax^2+2bx+c)^n = (-1)^m pi a^(n-m-1) b^m/((2n-2)!! (ac-b^2)^(n-1/2)) sum_{k=0}^{[m/2]} C(m,2k)(2k-1)!!(2n-2k-3)!! ((ac-b^2)/b^2)^k",
+  "note": "a > 0 added; m, n integers implied"
+ },
+ {
+  "id": "GR3.252.7",
+  "gr": "3.252.7",
+  "page": 375,
+  "status": "ok",
+  "lhs": "Integrate[x^n/(a*x^2 + 2*b*x + c)^(n + 3/2), {x, 0, Infinity}]",
+  "rhs": [
+   "n!/((2*n + 1)!!*Sqrt[c]*(Sqrt[a*c] + b)^(n + 1))"
+  ],
+  "conds": [
+   "a >= 0",
+   "c > 0",
+   "b > -Sqrt[a*c]",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (213)(5a)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf x^n dx/(ax^2+2bx+c)^(n+3/2) = n!/((2n+1)!! sqrt c (sqrt(ac)+b)^(n+1))",
+  "note": ""
+ },
+ {
+  "id": "GR3.252.8",
+  "gr": "3.252.8",
+  "page": 375,
+  "status": "ok",
+  "lhs": "Integrate[x^(n + 1)/(a*x^2 + 2*b*x + c)^(n + 3/2), {x, 0, Infinity}]",
+  "rhs": [
+   "n!/((2*n + 1)!!*Sqrt[a]*(Sqrt[a*c] + b)^(n + 1))"
+  ],
+  "conds": [
+   "a > 0",
+   "c >= 0",
+   "b > -Sqrt[a*c]",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (213)(5b)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf x^(n+1) dx/(ax^2+2bx+c)^(n+3/2) = n!/((2n+1)!! sqrt a (sqrt(ac)+b)^(n+1))",
+  "note": ""
+ },
+ {
+  "id": "GR3.252.9",
+  "gr": "3.252.9",
+  "page": 375,
+  "status": "ok",
+  "lhs": "Integrate[x^(n + 1/2)/(a*x^2 + 2*b*x + c)^(n + 1), {x, 0, Infinity}]",
+  "rhs": [
+   "(2*n - 1)!!*Pi/(2^(n + 1/2)*(b + Sqrt[a*c])^(n + 1/2)*n!*Sqrt[a])"
+  ],
+  "conds": [
+   "a > 0",
+   "c > 0",
+   "b + Sqrt[a*c] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "LI (21)(19)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf x^(n+1/2) dx/(ax^2+2bx+c)^(n+1) = (2n-1)!! pi/(2^(n+1/2) (b+sqrt(ac))^(n+1/2) n! sqrt a)",
+  "note": ""
+ },
+ {
+  "id": "GR3.252.10",
+  "gr": "3.252.10",
+  "page": 375,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/(1 + 2*x*Cos[t] + x^2)^nu, {x, 0, Infinity}]",
+  "rhs": [
+   "2^(nu - 1/2)*Sin[t]^(1/2 - nu)*t*Gamma[nu + 1/2]*Beta[mu, 2*nu - mu]*LegendreP[mu - nu - 1/2, 1/2 - nu, Cos[t]]",
+   "2^(nu - 1/2)*Sin[t]^(1/2 - nu)*Gamma[nu + 1/2]*Beta[mu, 2*nu - mu]*LegendreP[mu - nu - 1/2, 1/2 - nu, Cos[t]]"
+  ],
+  "conds": [
+   "0 < t < Pi",
+   "0 < Re[mu] < Re[2*nu]"
+  ],
+  "cite": "ET I 310(22)",
+  "edition_note": "6",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf x^(mu-1)/(1+2x cos t+x^2)^nu dx = 2^(nu-1/2)(sin t)^(1/2-nu) t Gamma(nu+1/2) B(mu,2nu-mu) P^{1/2-nu}_{mu-nu-1/2}(cos t)",
+  "note": "a stray factor t appears in the printed value; second rhs omits it (probable misprint)"
+ },
+ {
+  "id": "GR3.252.11a",
+  "gr": "3.252.11",
+  "page": 376,
+  "status": "ok",
+  "lhs": "Integrate[(1 + 2*beta*x + x^2)^(mu - 1/2)*x^(-nu - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-mu)*(beta^2 - 1)^(mu/2)*Gamma[1 - mu]*Beta[nu - 2*mu + 1, -nu]*LegendreP[nu - mu, mu, 3, beta]"
+  ],
+  "conds": [
+   "Re[nu] < 0",
+   "Re[2*mu - nu] < 1",
+   "Abs[Arg[beta + 1]] < Pi",
+   "Abs[Arg[beta - 1]] < Pi"
+  ],
+  "cite": "EH I 160(33)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf (1+2beta x+x^2)^(mu-1/2) x^(-nu-1) dx = 2^(-mu)(beta^2-1)^(mu/2) Gamma(1-mu) B(nu-2mu+1,-nu) P^mu_{nu-mu}(beta)",
+  "note": "P^mu_{nu-mu}(beta) taken as the type-3 Legendre function (factor (beta^2-1)^(mu/2), beta off the cut)"
+ },
+ {
+  "id": "GR3.252.11b",
+  "gr": "3.252.11",
+  "page": 376,
+  "status": "ok",
+  "lhs": "Integrate[(1 + 2*beta*x + x^2)^(mu - 1/2)*x^(-nu - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*Csc[nu*Pi]*GegenbauerC[nu, 1/2 - mu, beta]"
+  ],
+  "conds": [
+   "-2 < Re[1/2 - mu] < Re[nu] < 0",
+   "Abs[Arg[beta + 1]] < Pi",
+   "Abs[Arg[beta - 1]] < Pi"
+  ],
+  "cite": "EH I 178(24)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "= -pi cosec(nu pi) C^{1/2-mu}_nu(beta)",
+  "note": ""
+ },
+ {
+  "id": "GR3.252.12",
+  "gr": "3.252.12",
+  "page": 376,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/(x^2 + 2*a*x*Cos[t] + a^2), {x, 0, Infinity}]",
+  "rhs": [
+   "-Pi*a^(mu - 2)*Csc[t]*Csc[mu*Pi]*Sin[(mu - 1)*t]"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < Abs[t] < Pi",
+   "0 < Re[mu] < 2"
+  ],
+  "cite": "FI II 738, BI(20)(3)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf x^(mu-1)/(x^2+2ax cos t+a^2) dx = -pi a^(mu-2) cosec t cosec(mu pi) sin[(mu-1)t]",
+  "note": ""
+ },
+ {
+  "id": "GR3.252.13",
+  "gr": "3.252.13",
+  "page": 376,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/(x^2 + 2*a*x*Cos[t] + a^2)^2, {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*a^(mu - 4)/2*Csc[mu*Pi]*Csc[t]^3*((mu - 1)*Sin[t]*Cos[(mu - 2)*t] - Sin[(mu - 1)*t])"
+  ],
+  "conds": [
+   "a > 0",
+   "0 < Abs[t] < Pi",
+   "0 < Re[mu] < 4"
+  ],
+  "cite": "LI(20)(8)a, ET I 309(13)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf x^(mu-1)/(x^2+2ax cos t+a^2)^2 dx = pi a^(mu-4)/2 cosec(mu pi) cosec^3 t {(mu-1) sin t cos[(mu-2)t] - sin[(mu-1)t]}",
+  "note": ""
+ },
+ {
+  "id": "GR3.252.14",
+  "gr": "3.252.14",
+  "page": 376,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)/Sqrt[1 + 2*x*Cos[t] + x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi*Csc[mu*Pi]*LegendreP[mu - 1, Cos[t]]"
+  ],
+  "conds": [
+   "-Pi < t < Pi",
+   "0 < Re[mu] < 1"
+  ],
+  "cite": "ET I 310(17)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^inf x^(mu-1)/sqrt(1+2x cos t+x^2) dx = pi cosec(mu pi) P_{mu-1}(cos t)",
+  "note": ""
+ },
+ {
+  "id": "GR3.253",
+  "gr": "3.253",
+  "page": 376,
+  "status": "ok",
+  "lhs": "Integrate[(1 + x)^(2*mu - 1)*(1 - x)^(2*nu - 1)/(1 + x^2)^(mu + nu), {x, -1, 1}]",
+  "rhs": [
+   "2^(mu + nu - 2)*Beta[mu, nu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[nu] > 0"
+  ],
+  "cite": "FI II 787",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_-1^1 (1+x)^(2mu-1)(1-x)^(2nu-1)/(1+x^2)^(mu+nu) dx = 2^(mu+nu-2) B(mu,nu)",
+  "note": ""
+ },
+ {
+  "id": "GR3.254.1",
+  "gr": "3.254.1",
+  "page": 376,
+  "status": "ok",
+  "lhs": "Integrate[x^(lam - 1)*(u - x)^(mu - 1)*(x^2 + beta^2)^nu, {x, 0, u}]",
+  "rhs": [
+   "beta^(2*nu)*u^(lam + mu - 1)*Beta[lam, mu]*HypergeometricPFQ[{-nu, lam/2, (lam + 1)/2}, {(lam + mu)/2, (lam + mu + 1)/2}, -u^2/beta^2]"
+  ],
+  "conds": [
+   "Re[u/beta] > 0",
+   "lam > 0",
+   "Re[mu] > 0"
+  ],
+  "cite": "ET II 186(10)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^u x^(lambda-1)(u-x)^(mu-1)(x^2+beta^2)^nu dx = beta^(2nu) u^(lambda+mu-1) B(lambda,mu) 3F2(-nu, lambda/2, (lambda+1)/2; (lambda+mu)/2, (lambda+mu+1)/2; -u^2/beta^2)",
+  "note": "u > 0 implied (upper limit)"
+ },
+ {
+  "id": "GR3.254.2",
+  "gr": "3.254.2",
+  "page": 376,
+  "status": "ok",
+  "lhs": "Integrate[(x^(-lam)*(x - u)^(mu - 1)*(x^2 + beta^2))^nu, {x, u, Infinity}]",
+  "rhs": [
+   "u^(mu - lam + 2*nu)*Gamma[mu]*Gamma[lam - mu - 2*nu]/Gamma[lam - 2*nu]*HypergeometricPFQ[{-nu, (lam - mu)/2 - nu, (1 + lam - mu)/2 - nu}, {lam/2 - nu, (1 + lam)/2 - nu}, -beta^2/u^2]"
+  ],
+  "conds": [
+   "Abs[u] > Abs[beta]",
+   "Re[beta/u] > 0",
+   "0 < Re[mu] < Re[lam - 2*nu]"
+  ],
+  "cite": "ET II 202(9)",
+  "edition_note": "6",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_u^inf (x^(-lambda)(x-u)^(mu-1)(x^2+beta^2))^nu dx = u^(mu-lambda+2nu) Gamma(mu)Gamma(lambda-mu-2nu)/Gamma(lambda-2nu) 3F2(-nu,(lambda-mu)/2-nu,(1+lambda-mu)/2-nu; lambda/2-nu,(1+lambda)/2-nu; -beta^2/u^2)",
+  "note": "Transcribed as printed, with the exponent nu outside the whole bracket. The value (power u^(mu-lambda+2nu), Gamma(mu)) fits the integrand x^(-lambda)*(x-u)^(mu-1)*(x^2+beta^2)^nu instead (probable misprint of the bracket)."
+ },
+ {
+  "id": "GR3.255",
+  "gr": "3.255",
+  "page": 376,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu + 1/2)*(1 - x)^(mu - 1/2)/(c + 2*b*x - a*x^2)^(mu + 1), {x, 0, 1}]",
+  "rhs": [
+   "Sqrt[Pi]/((a + (Sqrt[c + 2*b - a] + Sqrt[c])^2)^(mu + 1/2)*Sqrt[c + 2*b - a])*Gamma[mu + 1/2]/Gamma[mu + 1]"
+  ],
+  "conds": [
+   "a + (Sqrt[c + 2*b - a] + Sqrt[c])^2 > 0",
+   "c + 2*b - a > 0",
+   "Re[mu] > -1/2",
+   "c > 0"
+  ],
+  "cite": "BI (14)(2)",
+  "edition_note": "",
+  "section": "3.24-3.27 Powers of x, of binomials of the form alpha + beta x^p and of polynomials in x",
+  "tex": "int_0^1 x^(mu+1/2)(1-x)^(mu-1/2)/(c+2bx-ax^2)^(mu+1) dx = sqrt(pi)/({a+(sqrt(c+2b-a)+sqrt c)^2}^(mu+1/2) sqrt(c+2b-a)) Gamma(mu+1/2)/Gamma(mu+1)",
+  "note": "c > 0 added"
+ }
+]

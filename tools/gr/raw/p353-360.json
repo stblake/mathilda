@@ -1,0 +1,1599 @@
+[
+ {
+  "id": "GR3.168.26",
+  "gr": "3.168.26",
+  "page": 353,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b - x)/((a - x)*(c - x)^3*(x - d))], {x, d, u}]",
+  "rhs": [
+   "2/(c - d)*Sqrt[(b - d)/(a - c)]*(MatharF2[(ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - MatharE2[(ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])]) + 2/(c - d)*Sqrt[((b - u)*(u - d))/((a - u)*(c - u))]"
+  ],
+  "conds": [
+   "a > b > c > u > d"
+  ],
+  "cite": "BY (252.03)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_d^u Sqrt[(b - x)/((a - x)*(c - x)^3*(x - d))] dx = 2/(c - d)*Sqrt[(b - d)/(a - c)]*(F[be,r] - EE[be,r]) + 2/(c - d)*Sqrt[((b - u)*(u - d))/((a - u)*(c - u))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.27",
+  "gr": "3.168.27",
+  "page": 353,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b - x)/((a - x)*(x - c)^3*(x - d))], {x, u, b}]",
+  "rhs": [
+   "2/(d - c)*Sqrt[(b - d)/(a - c)]*MatharE2[(ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] + 2/(c - d)*Sqrt[((b - u)*(u - d))/((a - u)*(u - c))]"
+  ],
+  "conds": [
+   "a > b > u > c > d"
+  ],
+  "cite": "BY (255.03)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^b Sqrt[(b - x)/((a - x)*(x - c)^3*(x - d))] dx = 2/(d - c)*Sqrt[(b - d)/(a - c)]*EE[ka,q] + 2/(c - d)*Sqrt[((b - u)*(u - d))/((a - u)*(u - c))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.28",
+  "gr": "3.168.28",
+  "page": 353,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - b)/((a - x)*(x - c)^3*(x - d))], {x, b, u}]",
+  "rhs": [
+   "2/(c - d)*Sqrt[(b - d)/(a - c)]*(MatharF2[(ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - MatharE2[(ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])])"
+  ],
+  "conds": [
+   "a >= u > b > c > d"
+  ],
+  "cite": "BY (256.08)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_b^u Sqrt[(x - b)/((a - x)*(x - c)^3*(x - d))] dx = 2/(c - d)*Sqrt[(b - d)/(a - c)]*(F[la,r] - EE[la,r])",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.29",
+  "gr": "3.168.29",
+  "page": 353,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - b)/((a - x)*(x - c)^3*(x - d))], {x, u, a}]",
+  "rhs": [
+   "2/(c - d)*Sqrt[(b - d)/(a - c)]*(MatharF2[(ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - MatharE2[(ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])]) + 2/(a - c)*Sqrt[((a - u)*(u - b))/((u - c)*(u - d))]"
+  ],
+  "conds": [
+   "a > u >= b > c > d"
+  ],
+  "cite": "BY (257.03)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^a Sqrt[(x - b)/((a - x)*(x - c)^3*(x - d))] dx = 2/(c - d)*Sqrt[(b - d)/(a - c)]*(F[mu,r] - EE[mu,r]) + 2/(a - c)*Sqrt[((a - u)*(u - b))/((u - c)*(u - d))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.30",
+  "gr": "3.168.30",
+  "page": 353,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - b)/((x - a)*(x - c)^3*(x - d))], {x, a, u}]",
+  "rhs": [
+   "2/(c - d)*Sqrt[(b - d)/(a - c)]*MatharE2[(ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - 2*(b - c)/((a - c)*(c - d))*Sqrt[((u - a)*(u - d))/((u - b)*(u - c))]"
+  ],
+  "conds": [
+   "u > a > b > c > d"
+  ],
+  "cite": "BY (258.03)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_a^u Sqrt[(x - b)/((x - a)*(x - c)^3*(x - d))] dx = 2/(c - d)*Sqrt[(b - d)/(a - c)]*EE[nu,q] - 2*(b - c)/((a - c)*(c - d))*Sqrt[((u - a)*(u - d))/((u - b)*(u - c))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.31",
+  "gr": "3.168.31",
+  "page": 353,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((b - x)*(c - x)^3*(d - x))], {x, u, d}]",
+  "rhs": [
+   "2*(Sqrt[(a - c)*(b - d)])/((b - c)*(c - d))*MatharE2[(ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - (a - b)/(b - c)*2/(Sqrt[(a - c)*(b - d)])*MatharF2[(ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])]"
+  ],
+  "conds": [
+   "a > b > c > d > u"
+  ],
+  "cite": "BY (251.08)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^d Sqrt[(a - x)/((b - x)*(c - x)^3*(d - x))] dx = 2*SQ/((b - c)*(c - d))*EE[al,q] - (a - b)/(b - c)*2/SQ*F[al,q]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.32",
+  "gr": "3.168.32",
+  "page": 353,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((b - x)*(c - x)^3*(x - d))], {x, d, u}]",
+  "rhs": [
+   "2*(a - d)/((c - d)*(Sqrt[(a - c)*(b - d)]))*MatharF2[(ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - 2*(Sqrt[(a - c)*(b - d)])/((b - c)*(c - d))*MatharE2[(ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] + 2*(a - c)/((b - c)*(c - d))*Sqrt[((b - u)*(u - d))/((a - u)*(c - u))]"
+  ],
+  "conds": [
+   "a > b > c > u > d"
+  ],
+  "cite": "BY (252.04)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_d^u Sqrt[(a - x)/((b - x)*(c - x)^3*(x - d))] dx = 2*(a - d)/((c - d)*SQ)*F[be,r] - 2*SQ/((b - c)*(c - d))*EE[be,r] + 2*(a - c)/((b - c)*(c - d))*Sqrt[((b - u)*(u - d))/((a - u)*(c - u))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.33",
+  "gr": "3.168.33",
+  "page": 353,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((b - x)*(x - c)^3*(x - d))], {x, u, b}]",
+  "rhs": [
+   "2*(a - b)/((b - c)*Sqrt[(a - c)*(b - c)])*MatharF2[(ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - 2*Sqrt[((a - c)*(b - d))/((b - c)*(c - d))]*MatharE2[(ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] + 2*(a - c)/((b - c)*(c - d))*Sqrt[((b - u)*(u - d))/((a - u)*(u - c))]",
+   "2*(a - b)/((b - c)*(Sqrt[(a - c)*(b - d)]))*MatharF2[(ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - 2*(Sqrt[(a - c)*(b - d)])/((b - c)*(c - d))*MatharE2[(ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] + 2*(a - c)/((b - c)*(c - d))*Sqrt[((b - u)*(u - d))/((a - u)*(u - c))]",
+   "2*(a - b)/((b - c)*(Sqrt[(a - c)*(b - d)]))*MatharF2[(ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - 2*Sqrt[((a - c)*(b - d))/((b - c)*(c - d))]*MatharE2[(ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] + 2*(a - c)/((b - c)*(c - d))*Sqrt[((b - u)*(u - d))/((a - u)*(u - c))]"
+  ],
+  "conds": [
+   "a > b > u > c > d"
+  ],
+  "cite": "BY (255.04)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^b Sqrt[(a - x)/((b - x)*(x - c)^3*(x - d))] dx = 2*(a - b)/((b - c)*Sqrt[(a - c)*(b - c)])*F[ka,q] - 2*Sqrt[((a - c)*(b - d))/((b - c)*(c - d))]*EE[ka,q] + 2*(a - c)/((b - c)*(c - d))*Sqrt[((b - u)*(u - d))/((a - u)*(u - c))]",
+  "note": "printed Sqrt[(a-c)(b-c)] in the F coefficient and a whole-fraction root in the E coefficient look like misprints (cf. 3.168.32/34); rhs[1] uses Sqrt[(a-c)(b-d)] and 2 Sqrt[(a-c)(b-d)]/((b-c)(c-d)); rhs[2] fixes only the F coefficient"
+ },
+ {
+  "id": "GR3.168.34",
+  "gr": "3.168.34",
+  "page": 353,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((x - b)*(x - c)^3*(x - d))], {x, b, u}]",
+  "rhs": [
+   "2*(Sqrt[(a - c)*(b - d)])/((b - c)*(c - d))*MatharE2[(ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - 2*(a - d)/((c - d)*(Sqrt[(a - c)*(b - d)]))*MatharF2[(ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])]"
+  ],
+  "conds": [
+   "a >= u > b > c > d"
+  ],
+  "cite": "BY (256.09)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_b^u Sqrt[(a - x)/((x - b)*(x - c)^3*(x - d))] dx = 2*SQ/((b - c)*(c - d))*EE[la,r] - 2*(a - d)/((c - d)*SQ)*F[la,r]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.35",
+  "gr": "3.168.35",
+  "page": 353,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((x - b)*(x - c)^3*(x - d))], {x, u, a}]",
+  "rhs": [
+   "2*(Sqrt[(a - c)*(b - d)])/((b - c)*(c - d))*MatharE2[(ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - 2*(a - d)/((c - d)*(Sqrt[(a - c)*(b - d)]))*MatharF2[(ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - 2/(b - c)*Sqrt[((a - u)*(u - b))/((u - c)*(u - d))]"
+  ],
+  "conds": [
+   "a > u >= b > c > d"
+  ],
+  "cite": "BY (257.04)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^a Sqrt[(a - x)/((x - b)*(x - c)^3*(x - d))] dx = 2*SQ/((b - c)*(c - d))*EE[mu,r] - 2*(a - d)/((c - d)*SQ)*F[mu,r] - 2/(b - c)*Sqrt[((a - u)*(u - b))/((u - c)*(u - d))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.36",
+  "gr": "3.168.36",
+  "page": 354,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - a)/((x - b)*(x - c)^3*(x - d))], {x, a, u}]",
+  "rhs": [
+   "2*(Sqrt[(a - c)*(b - d)])/((b - c)*(c - d))*MatharE2[(ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - 2*(a - b)/((b - c)*(Sqrt[(a - c)*(b - d)]))*MatharF2[(ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - 2/(c - d)*Sqrt[((u - a)*(u - d))/((u - b)*(u - c))]"
+  ],
+  "conds": [
+   "u > a > b > c > d"
+  ],
+  "cite": "BY (258.04)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_a^u Sqrt[(x - a)/((x - b)*(x - c)^3*(x - d))] dx = 2*SQ/((b - c)*(c - d))*EE[nu,q] - 2*(a - b)/((b - c)*SQ)*F[nu,q] - 2/(c - d)*Sqrt[((u - a)*(u - d))/((u - b)*(u - c))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.37",
+  "gr": "3.168.37",
+  "page": 354,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(d - x)/((a - x)*(b - x)^3*(c - x))], {x, u, d}]",
+  "rhs": [
+   "2*(Sqrt[(a - c)*(b - d)])/((a - b)*(b - c))*MatharE2[(ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - 2*(c - d)/((b - c)*(Sqrt[(a - c)*(b - d)]))*MatharF2[(ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - 2/(a - b)*Sqrt[((a - u)*(d - u))/((b - u)*(c - u))]"
+  ],
+  "conds": [
+   "a > b > c > d > u"
+  ],
+  "cite": "BY (251.11)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^d Sqrt[(d - x)/((a - x)*(b - x)^3*(c - x))] dx = 2*SQ/((a - b)*(b - c))*EE[al,q] - 2*(c - d)/((b - c)*SQ)*F[al,q] - 2/(a - b)*Sqrt[((a - u)*(d - u))/((b - u)*(c - u))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.38",
+  "gr": "3.168.38",
+  "page": 354,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)*(b - x)^3*(c - x))], {x, d, u}]",
+  "rhs": [
+   "2*(Sqrt[(a - c)*(b - d)])/((a - b)*(b - c))*MatharE2[(ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - 2*(a - d)/((a - b)*(Sqrt[(a - c)*(b - d)]))*MatharF2[(ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] + 2/(b - c)*Sqrt[((c - u)*(u - d))/((a - u)*(b - u))]"
+  ],
+  "conds": [
+   "a > b > c >= u > d"
+  ],
+  "cite": "BY (252.07)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_d^u Sqrt[(x - d)/((a - x)*(b - x)^3*(c - x))] dx = 2*SQ/((a - b)*(b - c))*EE[be,r] - 2*(a - d)/((a - b)*SQ)*F[be,r] + 2/(b - c)*Sqrt[((c - u)*(u - d))/((a - u)*(b - u))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.39",
+  "gr": "3.168.39",
+  "page": 354,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)*(b - x)^3*(c - x))], {x, u, c}]",
+  "rhs": [
+   "2*(Sqrt[(a - c)*(b - d)])/((a - b)*(b - c))*MatharE2[(ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - 2*(a - d)/((a - b)*(Sqrt[(a - c)*(b - d)]))*MatharF2[(ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])]"
+  ],
+  "conds": [
+   "a > b > c > u >= d"
+  ],
+  "cite": "BY (253.07)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^c Sqrt[(x - d)/((a - x)*(b - x)^3*(c - x))] dx = 2*SQ/((a - b)*(b - c))*EE[ga,r] - 2*(a - d)/((a - b)*SQ)*F[ga,r]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.40",
+  "gr": "3.168.40",
+  "page": 354,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)*(b - x)^3*(x - c))], {x, c, u}]",
+  "rhs": [
+   "2*(c - d)/((b - c)*(Sqrt[(a - c)*(b - d)]))*MatharF2[(ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - 2*(Sqrt[(a - c)*(b - d)])/((a - b)*(b - c))*MatharE2[(ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] + 2*(b - d)/((a - b)*(b - c))*Sqrt[((a - u)*(u - c))/((b - u)*(u - d))]"
+  ],
+  "conds": [
+   "a > b > u > c > d"
+  ],
+  "cite": "BY (254.05)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_c^u Sqrt[(x - d)/((a - x)*(b - x)^3*(x - c))] dx = 2*(c - d)/((b - c)*SQ)*F[de,q] - 2*SQ/((a - b)*(b - c))*EE[de,q] + 2*(b - d)/((a - b)*(b - c))*Sqrt[((a - u)*(u - c))/((b - u)*(u - d))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.41",
+  "gr": "3.168.41",
+  "page": 354,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)*(x - b)^3*(x - c))], {x, u, a}]",
+  "rhs": [
+   "2*(a - d)/((a - b)*(Sqrt[(a - c)*(b - d)]))*MatharF2[(ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - 2*(Sqrt[(a - c)*(b - d)])/((a - b)*(b - c))*MatharE2[(ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] + 2*(b - d)/((a - b)*(b - c))*Sqrt[((a - u)*(u - c))/((u - b)*(u - d))]"
+  ],
+  "conds": [
+   "a > u > b > c > d"
+  ],
+  "cite": "BY (257.07)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^a Sqrt[(x - d)/((a - x)*(x - b)^3*(x - c))] dx = 2*(a - d)/((a - b)*SQ)*F[mu,r] - 2*SQ/((a - b)*(b - c))*EE[mu,r] + 2*(b - d)/((a - b)*(b - c))*Sqrt[((a - u)*(u - c))/((u - b)*(u - d))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.42",
+  "gr": "3.168.42",
+  "page": 354,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((x - a)*(x - b)^3*(x - c))], {x, a, u}]",
+  "rhs": [
+   "2*(Sqrt[(a - c)*(b - d)])/((a - b)*(b - c))*MatharE2[(ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - 2*(c - d)/((b - c)*(Sqrt[(a - c)*(b - d)]))*MatharF2[(ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])]"
+  ],
+  "conds": [
+   "u > a > b > c > d"
+  ],
+  "cite": "BY (258.07)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_a^u Sqrt[(x - d)/((x - a)*(x - b)^3*(x - c))] dx = 2*SQ/((a - b)*(b - c))*EE[nu,q] - 2*(c - d)/((b - c)*SQ)*F[nu,q]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.43",
+  "gr": "3.168.43",
+  "page": 354,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(c - x)/((a - x)*(b - x)^3*(d - x))], {x, u, d}]",
+  "rhs": [
+   "2/(a - b)*Sqrt[(a - c)/(b - d)]*MatharE2[(ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - 2*(b - c)/((a - b)*(b - d))*Sqrt[((a - u)*(d - u))/((b - u)*(c - u))]"
+  ],
+  "conds": [
+   "a > b > c > d > u"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^d Sqrt[(c - x)/((a - x)*(b - x)^3*(d - x))] dx = 2/(a - b)*Sqrt[(a - c)/(b - d)]*EE[al,q] - 2*(b - c)/((a - b)*(b - d))*Sqrt[((a - u)*(d - u))/((b - u)*(c - u))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.44",
+  "gr": "3.168.44",
+  "page": 355,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(c - x)/((a - x)*(b - x)^3*(x - d))], {x, d, u}]",
+  "rhs": [
+   "2/(a - b)*Sqrt[(a - c)/(b - d)]*(MatharF2[(ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - MatharE2[(ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])]) + 2/(b - d)*Sqrt[((c - u)*(u - d))/((a - u)*(b - u))]"
+  ],
+  "conds": [
+   "a > b > c >= u > d"
+  ],
+  "cite": "BY (252.10)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_d^u Sqrt[(c - x)/((a - x)*(b - x)^3*(x - d))] dx = 2/(a - b)*Sqrt[(a - c)/(b - d)]*(F[be,r] - EE[be,r]) + 2/(b - d)*Sqrt[((c - u)*(u - d))/((a - u)*(b - u))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.45",
+  "gr": "3.168.45",
+  "page": 355,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(c - x)/((a - x)*(b - x)^3*(x - d))], {x, u, c}]",
+  "rhs": [
+   "2/(a - b)*Sqrt[(a - c)/(b - d)]*(MatharF2[(ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - MatharE2[(ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])])"
+  ],
+  "conds": [
+   "a > b > c > u >= d"
+  ],
+  "cite": "BY (254.08)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^c Sqrt[(c - x)/((a - x)*(b - x)^3*(x - d))] dx = 2/(a - b)*Sqrt[(a - c)/(b - d)]*(F[ga,r] - EE[ga,r])",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.46",
+  "gr": "3.168.46",
+  "page": 355,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - c)/((a - x)*(b - x)^3*(x - d))], {x, c, u}]",
+  "rhs": [
+   "2/(b - a)*Sqrt[(a - c)/(b - d)]*MatharE2[(ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] + 2/(a - b)*Sqrt[((a - u)*(u - c))/((b - u)*(u - d))]"
+  ],
+  "conds": [
+   "a > b >= u > c > d"
+  ],
+  "cite": "BY (254.08)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_c^u Sqrt[(x - c)/((a - x)*(b - x)^3*(x - d))] dx = 2/(b - a)*Sqrt[(a - c)/(b - d)]*EE[de,q] + 2/(a - b)*Sqrt[((a - u)*(u - c))/((b - u)*(u - d))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.47",
+  "gr": "3.168.47",
+  "page": 355,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - c)/((a - x)*(x - b)^3*(x - d))], {x, u, a}]",
+  "rhs": [
+   "2/(a - b)*Sqrt[(a - c)/(b - d)]*(MatharF2[(ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - MatharE2[(ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])]) + 2/(a - b)*Sqrt[((a - u)*(u - c))/((u - b)*(u - d))]"
+  ],
+  "conds": [
+   "a > u >= b > c > d"
+  ],
+  "cite": "BY (257.10)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^a Sqrt[(x - c)/((a - x)*(x - b)^3*(x - d))] dx = 2/(a - b)*Sqrt[(a - c)/(b - d)]*(F[mu,r] - EE[mu,r]) + 2/(a - b)*Sqrt[((a - u)*(u - c))/((u - b)*(u - d))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.48",
+  "gr": "3.168.48",
+  "page": 355,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - c)/((x - a)*(x - b)^3*(x - d))], {x, a, u}]",
+  "rhs": [
+   "2/(a - b)*Sqrt[(a - c)/(b - d)]*MatharE2[(ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])]"
+  ],
+  "conds": [
+   "u > a > b > c > d"
+  ],
+  "cite": "BY (258.01)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_a^u Sqrt[(x - c)/((x - a)*(x - b)^3*(x - d))] dx = 2/(a - b)*Sqrt[(a - c)/(b - d)]*EE[nu,q]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.49",
+  "gr": "3.168.49",
+  "page": 355,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((b - x)^3*(c - x)*(d - x))], {x, u, d}]",
+  "rhs": [
+   "2/(b - c)*Sqrt[(a - c)/(b - d)]*(MatharF2[(ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - MatharE2[(ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])]) + 2/(b - d)*Sqrt[((a - u)*(d - u))/((b - u)*(c - u))]"
+  ],
+  "conds": [
+   "a > b > c > d > u"
+  ],
+  "cite": "BY (251.12)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^d Sqrt[(a - x)/((b - x)^3*(c - x)*(d - x))] dx = 2/(b - c)*Sqrt[(a - c)/(b - d)]*(F[al,q] - EE[al,q]) + 2/(b - d)*Sqrt[((a - u)*(d - u))/((b - u)*(c - u))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.50",
+  "gr": "3.168.50",
+  "page": 355,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((b - x)^3*(c - x)*(x - d))], {x, d, u}]",
+  "rhs": [
+   "2/(b - c)*Sqrt[(a - c)/(b - d)]*MatharE2[(ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - 2*(a - b)/((b - c)*(b - d))*Sqrt[((u - d)*(c - u))/((a - u)*(b - u))]"
+  ],
+  "conds": [
+   "a > b > c >= u > d"
+  ],
+  "cite": "BY (252.09)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_d^u Sqrt[(a - x)/((b - x)^3*(c - x)*(x - d))] dx = 2/(b - c)*Sqrt[(a - c)/(b - d)]*EE[be,r] - 2*(a - b)/((b - c)*(b - d))*Sqrt[((u - d)*(c - u))/((a - u)*(b - u))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.51",
+  "gr": "3.168.51",
+  "page": 355,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((b - x)^3*(c - x)*(x - d))], {x, u, c}]",
+  "rhs": [
+   "2/(b - c)*Sqrt[(a - c)/(b - d)]*MatharE2[(ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])]"
+  ],
+  "conds": [
+   "a > b > c > u >= d"
+  ],
+  "cite": "BY (253.01)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^c Sqrt[(a - x)/((b - x)^3*(c - x)*(x - d))] dx = 2/(b - c)*Sqrt[(a - c)/(b - d)]*EE[ga,r]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.52",
+  "gr": "3.168.52",
+  "page": 355,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((b - x)^3*(x - c)*(x - d))], {x, c, u}]",
+  "rhs": [
+   "2/(b - c)*Sqrt[(a - c)/(b - d)]*(MatharF2[(ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - MatharE2[(ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])]) + 2/(b - c)*Sqrt[((a - u)*(u - c))/((b - u)*(u - d))]"
+  ],
+  "conds": [
+   "a > b > u > c > d"
+  ],
+  "cite": "BY (254.06)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_c^u Sqrt[(a - x)/((b - x)^3*(x - c)*(x - d))] dx = 2/(b - c)*Sqrt[(a - c)/(b - d)]*(F[de,q] - EE[de,q]) + 2/(b - c)*Sqrt[((a - u)*(u - c))/((b - u)*(u - d))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.53",
+  "gr": "3.168.53",
+  "page": 355,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a - x)/((x - b)^3*(x - c)*(x - d))], {x, u, a}]",
+  "rhs": [
+   "2/(c - b)*Sqrt[(a - c)/(b - d)]*MatharE2[(ArcSin[Sqrt[((b - d)*(a - u))/((a - b)*(u - d))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] + 2/(b - c)*Sqrt[((a - u)*(u - c))/((u - b)*(u - d))]"
+  ],
+  "conds": [
+   "a > u > b > c > d"
+  ],
+  "cite": "BY (257.08)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^a Sqrt[(a - x)/((x - b)^3*(x - c)*(x - d))] dx = 2/(c - b)*Sqrt[(a - c)/(b - d)]*EE[mu,r] + 2/(b - c)*Sqrt[((a - u)*(u - c))/((u - b)*(u - d))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.54",
+  "gr": "3.168.54",
+  "page": 355,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - a)/((x - b)^3*(x - c)*(x - d))], {x, a, u}]",
+  "rhs": [
+   "2/(b - c)*Sqrt[(a - c)/(b - d)]*(MatharF2[(ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - MatharE2[(ArcSin[Sqrt[((b - d)*(u - a))/((a - d)*(u - b))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])])"
+  ],
+  "conds": [
+   "u > a > b > c > d"
+  ],
+  "cite": "BY (258.08)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_a^u Sqrt[(x - a)/((x - b)^3*(x - c)*(x - d))] dx = 2/(b - c)*Sqrt[(a - c)/(b - d)]*(F[nu,q] - EE[nu,q])",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.55",
+  "gr": "3.168.55",
+  "page": 356,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(d - x)/((a - x)^3*(b - x)*(c - x))], {x, u, d}]",
+  "rhs": [
+   "2/(b - a)*Sqrt[(b - d)/(a - c)]*MatharE2[(ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] + 2/(a - b)*Sqrt[((b - u)*(d - u))/((a - u)*(c - u))]"
+  ],
+  "conds": [
+   "a > b > c > d > u"
+  ],
+  "cite": "BY (251.09)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^d Sqrt[(d - x)/((a - x)^3*(b - x)*(c - x))] dx = 2/(b - a)*Sqrt[(b - d)/(a - c)]*EE[al,q] + 2/(a - b)*Sqrt[((b - u)*(d - u))/((a - u)*(c - u))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.56",
+  "gr": "3.168.56",
+  "page": 356,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)^3*(b - x)*(c - x))], {x, d, u}]",
+  "rhs": [
+   "2/(a - b)*Sqrt[(b - d)/(a - c)]*(MatharF2[(ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - MatharE2[(ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])])",
+   "2/(a - b)*Sqrt[(b - d)/(a - c)]*(MatharF2[(ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - MatharE2[(ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])])"
+  ],
+  "conds": [
+   "a > b > c >= u > d"
+  ],
+  "cite": "BY (252.05)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_d^u Sqrt[(x - d)/((a - x)^3*(b - x)*(c - x))] dx = 2/(a - b)*Sqrt[(b - d)/(a - c)]*(F[be,q] - EE[be,q])",
+  "note": "printed modulus q with amplitude beta; everywhere else beta pairs with r, so rhs[1] uses r"
+ },
+ {
+  "id": "GR3.168.57",
+  "gr": "3.168.57",
+  "page": 356,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)^3*(b - x)*(c - x))], {x, u, c}]",
+  "rhs": [
+   "2/(a - b)*Sqrt[(b - d)/(a - c)]*(MatharF2[(ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - MatharE2[(ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])]) + 2/(a - c)*Sqrt[((c - u)*(u - d))/((a - u)*(b - u))]"
+  ],
+  "conds": [
+   "a > b > c > u >= d"
+  ],
+  "cite": "BY (253.05)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^c Sqrt[(x - d)/((a - x)^3*(b - x)*(c - x))] dx = 2/(a - b)*Sqrt[(b - d)/(a - c)]*(F[ga,r] - EE[ga,r]) + 2/(a - c)*Sqrt[((c - u)*(u - d))/((a - u)*(b - u))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.58",
+  "gr": "3.168.58",
+  "page": 356,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)^3*(b - x)*(x - c))], {x, c, u}]",
+  "rhs": [
+   "2/(a - b)*Sqrt[(b - d)/(a - c)]*MatharE2[(ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - 2*(a - d)/((a - b)*(a - c))*Sqrt[((b - u)*(u - c))/((a - u)*(u - d))]"
+  ],
+  "conds": [
+   "a > b >= u > c > d"
+  ],
+  "cite": "BY (254.03)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_c^u Sqrt[(x - d)/((a - x)^3*(b - x)*(x - c))] dx = 2/(a - b)*Sqrt[(b - d)/(a - c)]*EE[de,q] - 2*(a - d)/((a - b)*(a - c))*Sqrt[((b - u)*(u - c))/((a - u)*(u - d))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.59",
+  "gr": "3.168.59",
+  "page": 356,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)^3*(b - x)*(x - c))], {x, u, b}]",
+  "rhs": [
+   "2/(a - b)*Sqrt[(b - d)/(a - c)]*MatharE2[(ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])]"
+  ],
+  "conds": [
+   "a > b > u >= c > d"
+  ],
+  "cite": "BY (255.01)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^b Sqrt[(x - d)/((a - x)^3*(b - x)*(x - c))] dx = 2/(a - b)*Sqrt[(b - d)/(a - c)]*EE[ka,q]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.60",
+  "gr": "3.168.60",
+  "page": 356,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - d)/((a - x)^3*(x - b)*(x - c))], {x, b, u}]",
+  "rhs": [
+   "2/(a - b)*Sqrt[(b - d)/(a - c)]*(MatharF2[(ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - MatharE2[(ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])]) + 2/(a - b)*Sqrt[((u - b)*(u - d))/((a - u)*(u - c))]"
+  ],
+  "conds": [
+   "a > u > b > c > d"
+  ],
+  "cite": "BY (256.10)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_b^u Sqrt[(x - d)/((a - x)^3*(x - b)*(x - c))] dx = 2/(a - b)*Sqrt[(b - d)/(a - c)]*(F[la,r] - EE[la,r]) + 2/(a - b)*Sqrt[((u - b)*(u - d))/((a - u)*(u - c))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.61",
+  "gr": "3.168.61",
+  "page": 356,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(c - x)/((a - x)^3*(b - x)*(d - x))], {x, u, d}]",
+  "rhs": [
+   "2*(c - d)/((a - d)*(Sqrt[(a - c)*(b - d)]))*MatharF2[(ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - 2*(Sqrt[(a - c)*(b - d)])/((a - b)*(a - d))*MatharE2[(ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] + 2*(a - c)/((a - b)*(a - d))*Sqrt[((b - u)*(d - u))/((a - u)*(c - u))]"
+  ],
+  "conds": [
+   "a > b > c > d > u"
+  ],
+  "cite": "BY (251.15)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^d Sqrt[(c - x)/((a - x)^3*(b - x)*(d - x))] dx = 2*(c - d)/((a - d)*SQ)*F[al,q] - 2*SQ/((a - b)*(a - d))*EE[al,q] + 2*(a - c)/((a - b)*(a - d))*Sqrt[((b - u)*(d - u))/((a - u)*(c - u))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.62",
+  "gr": "3.168.62",
+  "page": 356,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(c - x)/((a - x)^3*(b - x)*(x - d))], {x, d, u}]",
+  "rhs": [
+   "2*(Sqrt[(a - c)*(b - d)])/((a - b)*(a - d))*MatharE2[(ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - 2*(b - c)/((a - b)*(Sqrt[(a - c)*(b - d)]))*MatharF2[(ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])]"
+  ],
+  "conds": [
+   "a > b > c >= u > d"
+  ],
+  "cite": "BY (252.08)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_d^u Sqrt[(c - x)/((a - x)^3*(b - x)*(x - d))] dx = 2*SQ/((a - b)*(a - d))*EE[be,r] - 2*(b - c)/((a - b)*SQ)*F[be,r]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.63",
+  "gr": "3.168.63",
+  "page": 356,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(c - x)/((a - x)^3*(b - x)*(x - d))], {x, u, c}]",
+  "rhs": [
+   "2*(Sqrt[(a - c)*(b - d)])/((a - b)*(a - d))*MatharE2[(ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - 2*(b - c)/((a - b)*(Sqrt[(a - c)*(b - d)]))*MatharF2[(ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - 2/(a - d)*Sqrt[((c - u)*(u - d))/((a - u)*(b - u))]"
+  ],
+  "conds": [
+   "a > b > c > u >= d"
+  ],
+  "cite": "BY (253.10)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^c Sqrt[(c - x)/((a - x)^3*(b - x)*(x - d))] dx = 2*SQ/((a - b)*(a - d))*EE[ga,r] - 2*(b - c)/((a - b)*SQ)*F[ga,r] - 2/(a - d)*Sqrt[((c - u)*(u - d))/((a - u)*(b - u))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.64",
+  "gr": "3.168.64",
+  "page": 356,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - c)/((a - x)^3*(b - x)*(x - d))], {x, c, u}]",
+  "rhs": [
+   "2*(Sqrt[(a - c)*(b - d)])/((a - b)*(a - d))*MatharE2[(ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - 2*(c - d)/((a - d)*(Sqrt[(a - c)*(b - d)]))*MatharF2[(ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - 2/(a - b)*Sqrt[((b - u)*(u - c))/((a - u)*(u - d))]"
+  ],
+  "conds": [
+   "a > b >= u > c > d"
+  ],
+  "cite": "BY (254.09)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_c^u Sqrt[(x - c)/((a - x)^3*(b - x)*(x - d))] dx = 2*SQ/((a - b)*(a - d))*EE[de,q] - 2*(c - d)/((a - d)*SQ)*F[de,q] - 2/(a - b)*Sqrt[((b - u)*(u - c))/((a - u)*(u - d))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.65",
+  "gr": "3.168.65",
+  "page": 357,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - c)/((a - x)^3*(b - x)*(x - d))], {x, u, b}]",
+  "rhs": [
+   "2*(Sqrt[(a - c)*(b - d)])/((a - b)*(a - d))*MatharE2[(ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - 2*(c - d)/((a - d)*(Sqrt[(a - c)*(b - d)]))*MatharF2[(ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])]"
+  ],
+  "conds": [
+   "a > b > u >= c > d"
+  ],
+  "cite": "BY (255.10)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^b Sqrt[(x - c)/((a - x)^3*(b - x)*(x - d))] dx = 2*SQ/((a - b)*(a - d))*EE[ka,q] - 2*(c - d)/((a - d)*SQ)*F[ka,q]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.66",
+  "gr": "3.168.66",
+  "page": 357,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - c)/((a - x)^3*(x - b)*(x - d))], {x, b, u}]",
+  "rhs": [
+   "2*(b - c)/((a - b)*(Sqrt[(a - c)*(b - d)]))*MatharF2[(ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - 2*(Sqrt[(a - c)*(b - d)])/((a - b)*(a - d))*MatharE2[(ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] + 2*(a - c)/((a - b)*(a - d))*Sqrt[((u - b)*(u - d))/((a - u)*(u - c))]"
+  ],
+  "conds": [
+   "a > u > b > c > d"
+  ],
+  "cite": "BY (256.07)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_b^u Sqrt[(x - c)/((a - x)^3*(x - b)*(x - d))] dx = 2*(b - c)/((a - b)*SQ)*F[la,r] - 2*SQ/((a - b)*(a - d))*EE[la,r] + 2*(a - c)/((a - b)*(a - d))*Sqrt[((u - b)*(u - d))/((a - u)*(u - c))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.67",
+  "gr": "3.168.67",
+  "page": 357,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b - x)/((a - x)^3*(c - x)*(d - x))], {x, u, d}]",
+  "rhs": [
+   "2/(a - d)*Sqrt[(b - d)/(a - c)]*(MatharF2[(ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - MatharE2[(ArcSin[Sqrt[((a - c)*(d - u))/((a - d)*(c - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])]) + 2/(a - d)*Sqrt[((b - u)*(d - u))/((a - u)*(c - u))]"
+  ],
+  "conds": [
+   "a > b > c > d > u"
+  ],
+  "cite": "BY (251.13)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^d Sqrt[(b - x)/((a - x)^3*(c - x)*(d - x))] dx = 2/(a - d)*Sqrt[(b - d)/(a - c)]*(F[al,q] - EE[al,q]) + 2/(a - d)*Sqrt[((b - u)*(d - u))/((a - u)*(c - u))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.68",
+  "gr": "3.168.68",
+  "page": 357,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b - x)/((a - x)^3*(c - x)*(x - d))], {x, d, u}]",
+  "rhs": [
+   "2/(a - d)*Sqrt[(b - d)/(a - c)]*MatharE2[(ArcSin[Sqrt[((a - c)*(u - d))/((c - d)*(a - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])]"
+  ],
+  "conds": [
+   "a > b > c >= u > d"
+  ],
+  "cite": "BY (252.01)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_d^u Sqrt[(b - x)/((a - x)^3*(c - x)*(x - d))] dx = 2/(a - d)*Sqrt[(b - d)/(a - c)]*EE[be,r]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.69",
+  "gr": "3.168.69",
+  "page": 357,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b - x)/((a - x)^3*(c - x)*(x - d))], {x, u, c}]",
+  "rhs": [
+   "2/(a - d)*Sqrt[(b - d)/(a - c)]*MatharE2[(ArcSin[Sqrt[((b - d)*(c - u))/((c - d)*(b - u))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] - 2*(a - b)/((a - c)*(a - d))*Sqrt[((c - u)*(u - d))/((a - u)*(b - u))]"
+  ],
+  "conds": [
+   "a > b > c > u >= d"
+  ],
+  "cite": "BY (253.08)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^c Sqrt[(b - x)/((a - x)^3*(c - x)*(x - d))] dx = 2/(a - d)*Sqrt[(b - d)/(a - c)]*EE[ga,r] - 2*(a - b)/((a - c)*(a - d))*Sqrt[((c - u)*(u - d))/((a - u)*(b - u))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.70",
+  "gr": "3.168.70",
+  "page": 357,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b - x)/((a - x)^3*(x - c)*(x - d))], {x, c, u}]",
+  "rhs": [
+   "2/(a - d)*Sqrt[(b - d)/(a - c)]*(MatharF2[(ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - MatharE2[(ArcSin[Sqrt[((b - d)*(u - c))/((b - c)*(u - d))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])]) + 2/(a - c)*Sqrt[((b - u)*(u - c))/((a - u)*(u - d))]"
+  ],
+  "conds": [
+   "a > b >= u > c > d"
+  ],
+  "cite": "BY (254.07)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_c^u Sqrt[(b - x)/((a - x)^3*(x - c)*(x - d))] dx = 2/(a - d)*Sqrt[(b - d)/(a - c)]*(F[de,q] - EE[de,q]) + 2/(a - c)*Sqrt[((b - u)*(u - c))/((a - u)*(u - d))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.71",
+  "gr": "3.168.71",
+  "page": 357,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b - x)/((a - x)^3*(x - c)*(x - d))], {x, u, b}]",
+  "rhs": [
+   "2/(a - d)*Sqrt[(b - d)/(a - c)]*(MatharF2[(ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])] - MatharE2[(ArcSin[Sqrt[((a - c)*(b - u))/((b - c)*(a - u))]]),(Sqrt[((b - c)*(a - d))/((a - c)*(b - d))])])"
+  ],
+  "conds": [
+   "a > b > u >= c > d"
+  ],
+  "cite": "BY (255.07)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_u^b Sqrt[(b - x)/((a - x)^3*(x - c)*(x - d))] dx = 2/(a - d)*Sqrt[(b - d)/(a - c)]*(F[ka,q] - EE[ka,q])",
+  "note": ""
+ },
+ {
+  "id": "GR3.168.72",
+  "gr": "3.168.72",
+  "page": 357,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x - b)/((a - x)^3*(x - c)*(x - d))], {x, b, u}]",
+  "rhs": [
+   "-2/(a - d)*Sqrt[(b - d)/(a - c)]*MatharE2[(ArcSin[Sqrt[((a - c)*(u - b))/((a - b)*(u - c))]]),(Sqrt[((a - b)*(c - d))/((a - c)*(b - d))])] + 2/(a - d)*Sqrt[((u - b)*(u - d))/((a - u)*(u - c))]"
+  ],
+  "conds": [
+   "a >= u > b > c > d"
+  ],
+  "cite": "BY (256.04)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.167 notation: alpha..nu, q, r)",
+  "tex": "int_b^u Sqrt[(x - b)/((a - x)^3*(x - c)*(x - d))] dx = -2/(a - d)*Sqrt[(b - d)/(a - c)]*EE[la,r] + 2/(a - d)*Sqrt[((u - b)*(u - d))/((a - u)*(u - c))]",
+  "note": ""
+ },
+ {
+  "id": "GR3.169.1",
+  "gr": "3.169.1",
+  "page": 358,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x^2 + a^2)/(x^2 + b^2)], {x, 0, u}]",
+  "rhs": [
+   "a*(MatharF2[(ArcTan[u/b]),(Sqrt[a^2 - b^2]/a)] - MatharE2[(ArcTan[u/b]),(Sqrt[a^2 - b^2]/a)]) + u*Sqrt[(a^2 + u^2)/(b^2 + u^2)]"
+  ],
+  "conds": [
+   "a > b",
+   "u > 0"
+  ],
+  "cite": "BY (221.03)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_0^u Sqrt[(x^2 + a^2)/(x^2 + b^2)] dx = a*(F[al,q] - EE[al,q]) + u*Sqrt[(a^2 + u^2)/(b^2 + u^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.169.2",
+  "gr": "3.169.2",
+  "page": 358,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x^2 + b^2)/(x^2 + a^2)], {x, 0, u}]",
+  "rhs": [
+   "b^2/a*MatharF2[(ArcTan[u/b]),(Sqrt[a^2 - b^2]/a)] - a*MatharE2[(ArcTan[u/b]),(Sqrt[a^2 - b^2]/a)] + u*Sqrt[(a^2 + u^2)/(b^2 + u^2)]"
+  ],
+  "conds": [
+   "a > b",
+   "u > 0"
+  ],
+  "cite": "BY (221.04)",
+  "edition_note": "6",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_0^u Sqrt[(x^2 + b^2)/(x^2 + a^2)] dx = b^2/a*F[al,q] - a*EE[al,q] + u*Sqrt[(a^2 + u^2)/(b^2 + u^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.169.3",
+  "gr": "3.169.3",
+  "page": 358,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x^2 + a^2)/(b^2 - x^2)], {x, 0, u}]",
+  "rhs": [
+   "(Sqrt[a^2 + b^2])*MatharE2[(ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]]),(b/Sqrt[a^2 + b^2])] - u*Sqrt[(b^2 - u^2)/(a^2 + u^2)]"
+  ],
+  "conds": [
+   "b >= u > 0"
+  ],
+  "cite": "BY (214.11)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_0^u Sqrt[(x^2 + a^2)/(b^2 - x^2)] dx = AB*EE[ga,r] - u*Sqrt[(b^2 - u^2)/(a^2 + u^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.169.4",
+  "gr": "3.169.4",
+  "page": 358,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a^2 + x^2)/(b^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "(Sqrt[a^2 + b^2])*MatharE2[(ArcCos[u/b]),(b/Sqrt[a^2 + b^2])]"
+  ],
+  "conds": [
+   "b > u >= 0"
+  ],
+  "cite": "BY (213.01), ZH 64 (273)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^b Sqrt[(a^2 + x^2)/(b^2 - x^2)] dx = AB*EE[de,r]",
+  "note": ""
+ },
+ {
+  "id": "GR3.169.5",
+  "gr": "3.169.5",
+  "page": 358,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a^2 + x^2)/(x^2 - b^2)], {x, b, u}]",
+  "rhs": [
+   "(Sqrt[a^2 + b^2])*(MatharF2[(ArcCos[b/u]),(a/Sqrt[a^2 + b^2])] - MatharE2[(ArcCos[b/u]),(a/Sqrt[a^2 + b^2])]) + 1/u*Sqrt[(u^2 + a^2)*(u^2 - b^2)]"
+  ],
+  "conds": [
+   "u > b > 0"
+  ],
+  "cite": "BY (211.03)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_b^u Sqrt[(a^2 + x^2)/(x^2 - b^2)] dx = AB*(F[ep,s] - EE[ep,s]) + 1/u*Sqrt[(u^2 + a^2)*(u^2 - b^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.169.6",
+  "gr": "3.169.6",
+  "page": 358,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b^2 - x^2)/(a^2 + x^2)], {x, 0, u}]",
+  "rhs": [
+   "(Sqrt[a^2 + b^2])*(MatharF2[(ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]]),(b/Sqrt[a^2 + b^2])] - MatharE2[(ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]]),(b/Sqrt[a^2 + b^2])]) + u*Sqrt[(b^2 - u^2)/(a^2 + u^2)]"
+  ],
+  "conds": [
+   "b >= u > 0"
+  ],
+  "cite": "BY (214.03)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_0^u Sqrt[(b^2 - x^2)/(a^2 + x^2)] dx = AB*(F[ga,r] - EE[ga,r]) + u*Sqrt[(b^2 - u^2)/(a^2 + u^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.169.7",
+  "gr": "3.169.7",
+  "page": 358,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b^2 - x^2)/(a^2 + x^2)], {x, u, b}]",
+  "rhs": [
+   "(Sqrt[a^2 + b^2])*(MatharF2[(ArcCos[u/b]),(b/Sqrt[a^2 + b^2])] - MatharE2[(ArcCos[u/b]),(b/Sqrt[a^2 + b^2])])"
+  ],
+  "conds": [
+   "b > u >= 0"
+  ],
+  "cite": "BY (213.03)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^b Sqrt[(b^2 - x^2)/(a^2 + x^2)] dx = AB*(F[de,r] - EE[de,r])",
+  "note": ""
+ },
+ {
+  "id": "GR3.169.8",
+  "gr": "3.169.8",
+  "page": 358,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x^2 - b^2)/(a^2 + x^2)], {x, b, u}]",
+  "rhs": [
+   "1/u*Sqrt[(a^2 + u^2)*(u^2 - b^2)] - (Sqrt[a^2 + b^2])*MatharE2[(ArcCos[b/u]),(a/Sqrt[a^2 + b^2])]"
+  ],
+  "conds": [
+   "u > b > 0"
+  ],
+  "cite": "BY (211.04)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_b^u Sqrt[(x^2 - b^2)/(a^2 + x^2)] dx = 1/u*Sqrt[(a^2 + u^2)*(u^2 - b^2)] - AB*EE[ep,s]",
+  "note": ""
+ },
+ {
+  "id": "GR3.169.9",
+  "gr": "3.169.9",
+  "page": 358,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b^2 - x^2)/(a^2 - x^2)], {x, 0, u}]",
+  "rhs": [
+   "a*MatharE2[(ArcSin[u/b]),(b/a)] - (a^2 - b^2)/a*MatharF2[(ArcSin[u/b]),(b/a)]"
+  ],
+  "conds": [
+   "a > b >= u > 0"
+  ],
+  "cite": "BY (219.03)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_0^u Sqrt[(b^2 - x^2)/(a^2 - x^2)] dx = a*EE[eta,t] - (a^2 - b^2)/a*F[eta,t]",
+  "note": ""
+ },
+ {
+  "id": "GR3.169.10",
+  "gr": "3.169.10",
+  "page": 358,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b^2 - x^2)/(a^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "a*MatharE2[(ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]]),(b/a)] - (a^2 - b^2)/a*MatharF2[(ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]]),(b/a)] - u*Sqrt[(b^2 - u^2)/(a^2 - u^2)]"
+  ],
+  "conds": [
+   "a > b > u >= 0"
+  ],
+  "cite": "BY (220.04)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^b Sqrt[(b^2 - x^2)/(a^2 - x^2)] dx = a*EE[ze,t] - (a^2 - b^2)/a*F[ze,t] - u*Sqrt[(b^2 - u^2)/(a^2 - u^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.169.11",
+  "gr": "3.169.11",
+  "page": 358,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x^2 - b^2)/(a^2 - x^2)], {x, b, u}]",
+  "rhs": [
+   "a*MatharE2[(ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]]),(Sqrt[a^2 - b^2]/a)] - b^2/a*MatharF2[(ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]]),(Sqrt[a^2 - b^2]/a)] - 1/u*Sqrt[(a^2 - u^2)*(u^2 - b^2)]"
+  ],
+  "conds": [
+   "a >= u > b > 0"
+  ],
+  "cite": "BY (217.04)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_b^u Sqrt[(x^2 - b^2)/(a^2 - x^2)] dx = a*EE[ka,q] - b^2/a*F[ka,q] - 1/u*Sqrt[(a^2 - u^2)*(u^2 - b^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.169.12",
+  "gr": "3.169.12",
+  "page": 358,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x^2 - b^2)/(a^2 - x^2)], {x, u, a}]",
+  "rhs": [
+   "a*MatharE2[(ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]]),(Sqrt[a^2 - b^2]/a)] - b^2/a*MatharF2[(ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]]),(Sqrt[a^2 - b^2]/a)]"
+  ],
+  "conds": [
+   "a > u >= b > 0"
+  ],
+  "cite": "BY (218.03)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^a Sqrt[(x^2 - b^2)/(a^2 - x^2)] dx = a*EE[la,q] - b^2/a*F[la,q]",
+  "note": ""
+ },
+ {
+  "id": "GR3.169.13",
+  "gr": "3.169.13",
+  "page": 358,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x^2 - b^2)/(x^2 - a^2)], {x, a, u}]",
+  "rhs": [
+   "(a^2 - b^2)/a*MatharF2[(ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]]),(b/a)] - a*MatharE2[(ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]]),(b/a)] + (ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]])*Sqrt[(u^2 - a^2)/(u^2 - b^2)]",
+   "(a^2 - b^2)/a*MatharF2[(ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]]),(b/a)] - a*MatharE2[(ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]]),(b/a)] + u*Sqrt[(u^2 - a^2)/(u^2 - b^2)]"
+  ],
+  "conds": [
+   "u > a > b > 0"
+  ],
+  "cite": "BY (216.03)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_a^u Sqrt[(x^2 - b^2)/(x^2 - a^2)] dx = (a^2 - b^2)/a*F[mu,t] - a*EE[mu,t] + mu*Sqrt[(u^2 - a^2)/(u^2 - b^2)]",
+  "note": "printed coefficient mu (the amplitude) of the algebraic term is dimensionally a misprint for u; rhs[1] uses u"
+ },
+ {
+  "id": "GR3.169.14",
+  "gr": "3.169.14",
+  "page": 358,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a^2 - x^2)/(b^2 - x^2)], {x, 0, u}]",
+  "rhs": [
+   "a*MatharE2[(ArcSin[u/b]),(b/a)]"
+  ],
+  "conds": [
+   "a > b >= u > 0"
+  ],
+  "cite": "H 64 (276), BY (219.01)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_0^u Sqrt[(a^2 - x^2)/(b^2 - x^2)] dx = a*EE[eta,t]",
+  "note": ""
+ },
+ {
+  "id": "GR3.169.15",
+  "gr": "3.169.15",
+  "page": 359,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a^2 - x^2)/(b^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "a*(MatharE2[(ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]]),(b/a)] - u/a*Sqrt[(b^2 - u^2)/(a^2 - u^2)])"
+  ],
+  "conds": [
+   "a > b > u >= 0"
+  ],
+  "cite": "BY (220.03)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^b Sqrt[(a^2 - x^2)/(b^2 - x^2)] dx = a*(EE[ze,t] - u/a*Sqrt[(b^2 - u^2)/(a^2 - u^2)])",
+  "note": ""
+ },
+ {
+  "id": "GR3.169.16",
+  "gr": "3.169.16",
+  "page": 359,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a^2 - x^2)/(x^2 - b^2)], {x, b, u}]",
+  "rhs": [
+   "a*(MatharF2[(ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]]),(Sqrt[a^2 - b^2]/a)] - MatharE2[(ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]]),(Sqrt[a^2 - b^2]/a)]) + 1/u*Sqrt[(a^2 - u^2)*(u^2 - b^2)]"
+  ],
+  "conds": [
+   "a >= u > b > 0"
+  ],
+  "cite": "BY (217.03)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_b^u Sqrt[(a^2 - x^2)/(x^2 - b^2)] dx = a*(F[ka,q] - EE[ka,q]) + 1/u*Sqrt[(a^2 - u^2)*(u^2 - b^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.169.17",
+  "gr": "3.169.17",
+  "page": 359,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(a^2 - x^2)/(x^2 - b^2)], {x, u, a}]",
+  "rhs": [
+   "a*(MatharF2[(ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]]),(Sqrt[a^2 - b^2]/a)] - MatharE2[(ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]]),(Sqrt[a^2 - b^2]/a)])"
+  ],
+  "conds": [
+   "a > u >= b > 0"
+  ],
+  "cite": "BY (218.09)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^a Sqrt[(a^2 - x^2)/(x^2 - b^2)] dx = a*(F[la,q] - EE[la,q])",
+  "note": ""
+ },
+ {
+  "id": "GR3.169.18",
+  "gr": "3.169.18",
+  "page": 359,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x^2 - a^2)/(x^2 - b^2)], {x, a, u}]",
+  "rhs": [
+   "u*Sqrt[(u^2 - a^2)/(u^2 - b^2)] - a*MatharE2[(ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]]),(b/a)]"
+  ],
+  "conds": [
+   "u > a > b > 0"
+  ],
+  "cite": "BY (216.04)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_a^u Sqrt[(x^2 - a^2)/(x^2 - b^2)] dx = u*Sqrt[(u^2 - a^2)/(u^2 - b^2)] - a*EE[mu,t]",
+  "note": ""
+ },
+ {
+  "id": "GR3.171.1",
+  "gr": "3.171.1",
+  "page": 359,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(a^2 + x^2)/(x^2 - b^2)], {x, b, u}]",
+  "rhs": [
+   "(Sqrt[a^2 + b^2])/b^2*MatharE2[(ArcCos[b/u]),(a/Sqrt[a^2 + b^2])]"
+  ],
+  "conds": [
+   "u > b > 0"
+  ],
+  "cite": "BY (211.01), ZH 64 (274)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_b^u 1/x^2*Sqrt[(a^2 + x^2)/(x^2 - b^2)] dx = AB/b^2*EE[ep,s]",
+  "note": ""
+ },
+ {
+  "id": "GR3.171.2",
+  "gr": "3.171.2",
+  "page": 359,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(a^2 + x^2)/(x^2 - b^2)], {x, u, Infinity}]",
+  "rhs": [
+   "(Sqrt[a^2 + b^2])/b^2*MatharE2[(ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]]),(a/Sqrt[a^2 + b^2])] - a^2/(b^2*u)*Sqrt[(u^2 - b^2)/(a^2 + u^2)]"
+  ],
+  "conds": [
+   "u >= b > 0"
+  ],
+  "cite": "BY (212.09)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^oo 1/x^2*Sqrt[(a^2 + x^2)/(x^2 - b^2)] dx = AB/b^2*EE[xi,s] - a^2/(b^2*u)*Sqrt[(u^2 - b^2)/(a^2 + u^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.171.3",
+  "gr": "3.171.3",
+  "page": 359,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(a^2 - x^2)/(b^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "(a^2 - b^2)/(a*b^2)*MatharF2[(ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]]),(b/a)] - a/b^2*MatharE2[(ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]]),(b/a)] + a^2/(b^2*u)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]"
+  ],
+  "conds": [
+   "a > b > u > 0"
+  ],
+  "cite": "BY (220.12)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^b 1/x^2*Sqrt[(a^2 - x^2)/(b^2 - x^2)] dx = (a^2 - b^2)/(a*b^2)*F[ze,t] - a/b^2*EE[ze,t] + a^2/(b^2*u)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.171.4",
+  "gr": "3.171.4",
+  "page": 359,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(a^2 - x^2)/(x^2 - b^2)], {x, b, u}]",
+  "rhs": [
+   "a/b^2*MatharE2[(ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]]),(Sqrt[a^2 - b^2]/a)] - 1/a*MatharF2[(ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]]),(Sqrt[a^2 - b^2]/a)]"
+  ],
+  "conds": [
+   "a >= u > b > 0"
+  ],
+  "cite": "BY (217.11)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_b^u 1/x^2*Sqrt[(a^2 - x^2)/(x^2 - b^2)] dx = a/b^2*EE[ka,q] - 1/a*F[ka,q]",
+  "note": ""
+ },
+ {
+  "id": "GR3.171.5",
+  "gr": "3.171.5",
+  "page": 359,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(a^2 - x^2)/(x^2 - b^2)], {x, u, a}]",
+  "rhs": [
+   "a/b^2*MatharE2[(ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]]),(Sqrt[a^2 - b^2]/a)] - 1/a*MatharF2[(ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]]),(Sqrt[a^2 - b^2]/a)] - Sqrt[(a^2 - u^2)*(u^2 - b^2)]/(b^2*u)"
+  ],
+  "conds": [
+   "a > u >= b > 0"
+  ],
+  "cite": "BY (218.10)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^a 1/x^2*Sqrt[(a^2 - x^2)/(x^2 - b^2)] dx = a/b^2*EE[la,q] - 1/a*F[la,q] - Sqrt[(a^2 - u^2)*(u^2 - b^2)]/(b^2*u)",
+  "note": "book prints lower-case f(lambda,q); read as the elliptic integral F(lambda,q)"
+ },
+ {
+  "id": "GR3.171.6",
+  "gr": "3.171.6",
+  "page": 359,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(x^2 - a^2)/(x^2 - b^2)], {x, a, u}]",
+  "rhs": [
+   "a/b^2*MatharE2[(ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]]),(b/a)] - (a^2 - b^2)/(a*b^2)*MatharF2[(ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]]),(b/a)] - 1/u*Sqrt[(u^2 - a^2)/(u^2 - b^2)]"
+  ],
+  "conds": [
+   "u > a > b > 0"
+  ],
+  "cite": "BY (216.08)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_a^u 1/x^2*Sqrt[(x^2 - a^2)/(x^2 - b^2)] dx = a/b^2*EE[mu,t] - (a^2 - b^2)/(a*b^2)*F[mu,t] - 1/u*Sqrt[(u^2 - a^2)/(u^2 - b^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.171.7",
+  "gr": "3.171.7",
+  "page": 359,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(x^2 + a^2)/(x^2 + b^2)], {x, u, Infinity}]",
+  "rhs": [
+   "1/a*MatharF2[(ArcTan[a/u]),(Sqrt[a^2 - b^2]/a)] - a/b^2*MatharE2[(ArcTan[a/u]),(Sqrt[a^2 - b^2]/a)] + a^2/(b^2*u)*Sqrt[(b^2 + u^2)/(a^2 + u^2)]"
+  ],
+  "conds": [
+   "a > b",
+   "u > 0"
+  ],
+  "cite": "BY (222.08)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^oo 1/x^2*Sqrt[(x^2 + a^2)/(x^2 + b^2)] dx = 1/a*F[be,q] - a/b^2*EE[be,q] + a^2/(b^2*u)*Sqrt[(b^2 + u^2)/(a^2 + u^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.171.8",
+  "gr": "3.171.8",
+  "page": 359,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(x^2 + b^2)/(x^2 + a^2)], {x, u, Infinity}]",
+  "rhs": [
+   "1/a*(MatharF2[(ArcTan[a/u]),(Sqrt[a^2 - b^2]/a)] - MatharE2[(ArcTan[a/u]),(Sqrt[a^2 - b^2]/a)]) + 1/u*Sqrt[(b^2 + u^2)/(a^2 + u^2)]"
+  ],
+  "conds": [
+   "a > b",
+   "u > 0"
+  ],
+  "cite": "BY (222.09)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^oo 1/x^2*Sqrt[(x^2 + b^2)/(x^2 + a^2)] dx = 1/a*(F[be,q] - EE[be,q]) + 1/u*Sqrt[(b^2 + u^2)/(a^2 + u^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.171.9",
+  "gr": "3.171.9",
+  "page": 359,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(b^2 - x^2)/(a^2 + x^2)], {x, u, b}]",
+  "rhs": [
+   "Sqrt[(b^2 - u^2)*(a^2 + u^2)]/(a^2*u) - (Sqrt[a^2 + b^2])/a^2*MatharE2[(ArcCos[u/b]),(b/Sqrt[a^2 + b^2])]"
+  ],
+  "conds": [
+   "b > u > 0"
+  ],
+  "cite": "BY (213.10)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^b 1/x^2*Sqrt[(b^2 - x^2)/(a^2 + x^2)] dx = Sqrt[(b^2 - u^2)*(a^2 + u^2)]/(a^2*u) - AB/a^2*EE[de,r]",
+  "note": ""
+ },
+ {
+  "id": "GR3.171.10",
+  "gr": "3.171.10",
+  "page": 360,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(x^2 - b^2)/(a^2 + x^2)], {x, b, u}]",
+  "rhs": [
+   "(Sqrt[a^2 + b^2])/a^2*(MatharF2[(ArcCos[b/u]),(a/Sqrt[a^2 + b^2])] - MatharE2[(ArcCos[b/u]),(a/Sqrt[a^2 + b^2])])"
+  ],
+  "conds": [
+   "a > b > 0",
+   "u > b"
+  ],
+  "cite": "BY (211.07)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_b^u 1/x^2*Sqrt[(x^2 - b^2)/(a^2 + x^2)] dx = AB/a^2*(F[ep,s] - EE[ep,s])",
+  "note": "book prints only [a > b > 0]; u > b added from the integration range (epsilon = arccos(b/u))"
+ },
+ {
+  "id": "GR3.171.11",
+  "gr": "3.171.11",
+  "page": 360,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(x^2 - b^2)/(a^2 + x^2)], {x, u, Infinity}]",
+  "rhs": [
+   "(Sqrt[a^2 + b^2])/a^2*(MatharF2[(ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]]),(a/Sqrt[a^2 + b^2])] - MatharE2[(ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]]),(a/Sqrt[a^2 + b^2])]) + 1/u*Sqrt[(u^2 - b^2)/(a^2 + u^2)]"
+  ],
+  "conds": [
+   "u >= b > 0"
+  ],
+  "cite": "BY (212.11)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^oo 1/x^2*Sqrt[(x^2 - b^2)/(a^2 + x^2)] dx = AB/a^2*(F[xi,s] - EE[xi,s]) + 1/u*Sqrt[(u^2 - b^2)/(a^2 + u^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.171.12",
+  "gr": "3.171.12",
+  "page": 360,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(a^2 + x^2)/(b^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "(Sqrt[a^2 + b^2])/b^2*(MatharF2[(ArcCos[u/b]),(b/Sqrt[a^2 + b^2])] - MatharE2[(ArcCos[u/b]),(b/Sqrt[a^2 + b^2])]) + Sqrt[(b^2 - u^2)*(a^2 + u^2)]/(b^2*u)"
+  ],
+  "conds": [
+   "b > u > 0"
+  ],
+  "cite": "BY (213.05)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^b 1/x^2*Sqrt[(a^2 + x^2)/(b^2 - x^2)] dx = AB/b^2*(F[de,r] - EE[de,r]) + Sqrt[(b^2 - u^2)*(a^2 + u^2)]/(b^2*u)",
+  "note": ""
+ },
+ {
+  "id": "GR3.171.13",
+  "gr": "3.171.13",
+  "page": 360,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(x^2 - a^2)/(x^2 - b^2)], {x, u, Infinity}]",
+  "rhs": [
+   "a/b^2*MatharE2[(ArcSin[a/u]),(b/a)] - (a^2 - b^2)/(a*b^2)*MatharF2[(ArcSin[a/u]),(b/a)]"
+  ],
+  "conds": [
+   "u >= a > b > 0"
+  ],
+  "cite": "BY (215.08)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^oo 1/x^2*Sqrt[(x^2 - a^2)/(x^2 - b^2)] dx = a/b^2*EE[nu,t] - (a^2 - b^2)/(a*b^2)*F[nu,t]",
+  "note": ""
+ },
+ {
+  "id": "GR3.171.14",
+  "gr": "3.171.14",
+  "page": 360,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(b^2 - x^2)/(a^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "1/u*Sqrt[(b^2 - u^2)/(a^2 - u^2)] - 1/a*MatharE2[(ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]]),(b/a)]"
+  ],
+  "conds": [
+   "a > b > u > 0"
+  ],
+  "cite": "BY (220.11)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^b 1/x^2*Sqrt[(b^2 - x^2)/(a^2 - x^2)] dx = 1/u*Sqrt[(b^2 - u^2)/(a^2 - u^2)] - 1/a*EE[ze,t]",
+  "note": ""
+ },
+ {
+  "id": "GR3.171.15",
+  "gr": "3.171.15",
+  "page": 360,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(x^2 - b^2)/(a^2 - x^2)], {x, b, u}]",
+  "rhs": [
+   "1/a*(MatharF2[(ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]]),(Sqrt[a^2 - b^2]/a)] - MatharE2[(ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]]),(Sqrt[a^2 - b^2]/a)])"
+  ],
+  "conds": [
+   "a >= u > b > 0"
+  ],
+  "cite": "BY (217.08)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_b^u 1/x^2*Sqrt[(x^2 - b^2)/(a^2 - x^2)] dx = 1/a*(F[ka,q] - EE[ka,q])",
+  "note": ""
+ },
+ {
+  "id": "GR3.171.16",
+  "gr": "3.171.16",
+  "page": 360,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(x^2 - b^2)/(a^2 - x^2)], {x, u, a}]",
+  "rhs": [
+   "1/a*(MatharF2[(ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]]),(Sqrt[a^2 - b^2]/a)] - MatharE2[(ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]]),(Sqrt[a^2 - b^2]/a)]) + Sqrt[(a^2 - u^2)*(u^2 - b^2)]/(a^2*u)"
+  ],
+  "conds": [
+   "a > u >= b > 0"
+  ],
+  "cite": "BY (218.08)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^a 1/x^2*Sqrt[(x^2 - b^2)/(a^2 - x^2)] dx = 1/a*(F[la,q] - EE[la,q]) + Sqrt[(a^2 - u^2)*(u^2 - b^2)]/(a^2*u)",
+  "note": "book prints the integrand denominator as u^2 - x^2, an evident misprint for a^2 - x^2 (integral runs u..a); transcribed with a^2 - x^2"
+ },
+ {
+  "id": "GR3.171.17",
+  "gr": "3.171.17",
+  "page": 360,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(x^2 - b^2)/(x^2 - a^2)], {x, a, u}]",
+  "rhs": [
+   "1/a*MatharE2[(ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]]),(b/a)] - 1/u*Sqrt[(u^2 - a^2)/(u^2 - b^2)]"
+  ],
+  "conds": [
+   "u > a > b > 0"
+  ],
+  "cite": "BY (216.07)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_a^u 1/x^2*Sqrt[(x^2 - b^2)/(x^2 - a^2)] dx = 1/a*EE[mu,t] - 1/u*Sqrt[(u^2 - a^2)/(u^2 - b^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.171.18",
+  "gr": "3.171.18",
+  "page": 360,
+  "status": "ok",
+  "lhs": "Integrate[1/x^2*Sqrt[(x^2 - b^2)/(x^2 - a^2)], {x, u, Infinity}]",
+  "rhs": [
+   "1/a*MatharE2[(ArcSin[a/u]),(b/a)]"
+  ],
+  "conds": [
+   "u >= a > b > 0"
+  ],
+  "cite": "BY (215.01), ZH 65 (281)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^oo 1/x^2*Sqrt[(x^2 - b^2)/(x^2 - a^2)] dx = 1/a*EE[nu,t]",
+  "note": ""
+ },
+ {
+  "id": "GR3.172.1",
+  "gr": "3.172.1",
+  "page": 360,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x^2 + b^2)/(x^2 + a^2)^3], {x, 0, u}]",
+  "rhs": [
+   "1/a*MatharE2[(ArcTan[u/b]),(Sqrt[a^2 - b^2]/a)] - (a^2 - b^2)/a^2*u/Sqrt[(a^2 + u^2)*(b^2 + u^2)]"
+  ],
+  "conds": [
+   "a > b",
+   "u > 0"
+  ],
+  "cite": "BY (221.10)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_0^u Sqrt[(x^2 + b^2)/(x^2 + a^2)^3] dx = 1/a*EE[al,q] - (a^2 - b^2)/a^2*u/Sqrt[(a^2 + u^2)*(b^2 + u^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.172.2",
+  "gr": "3.172.2",
+  "page": 360,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x^2 + b^2)/(x^2 + a^2)^3], {x, u, Infinity}]",
+  "rhs": [
+   "1/a*MatharE2[(ArcTan[a/u]),(Sqrt[a^2 - b^2]/a)]"
+  ],
+  "conds": [
+   "a > b",
+   "u >= 0"
+  ],
+  "cite": "H 64 (271)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^oo Sqrt[(x^2 + b^2)/(x^2 + a^2)^3] dx = 1/a*EE[be,q]",
+  "note": ""
+ },
+ {
+  "id": "GR3.172.3",
+  "gr": "3.172.3",
+  "page": 360,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x^2 + a^2)/(x^2 + b^2)^3], {x, 0, u}]",
+  "rhs": [
+   "a/b^2*MatharE2[(ArcTan[u/b]),(Sqrt[a^2 - b^2]/a)]"
+  ],
+  "conds": [
+   "a > b",
+   "u > 0"
+  ],
+  "cite": "H 64 (270)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_0^u Sqrt[(x^2 + a^2)/(x^2 + b^2)^3] dx = a/b^2*EE[al,q]",
+  "note": ""
+ },
+ {
+  "id": "GR3.172.4",
+  "gr": "3.172.4",
+  "page": 360,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x^2 + a^2)/(x^2 + b^2)^3], {x, u, Infinity}]",
+  "rhs": [
+   "a/b^2*MatharE2[(ArcTan[a/u]),(Sqrt[a^2 - b^2]/a)] - (a^2 - b^2)/b^2*u/Sqrt[(a^2 + u^2)*(b^2 + u^2)]"
+  ],
+  "conds": [
+   "a > b",
+   "u >= 0"
+  ],
+  "cite": "BY (222.06)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_u^oo Sqrt[(x^2 + a^2)/(x^2 + b^2)^3] dx = a/b^2*EE[be,q] - (a^2 - b^2)/b^2*u/Sqrt[(a^2 + u^2)*(b^2 + u^2)]",
+  "note": ""
+ },
+ {
+  "id": "GR3.172.5",
+  "gr": "3.172.5",
+  "page": 360,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(b^2 - x^2)/(a^2 + x^2)^3], {x, 0, u}]",
+  "rhs": [
+   "(Sqrt[a^2 + b^2])/a^2*MatharE2[(ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]]),(b/Sqrt[a^2 + b^2])] - 1/(Sqrt[a^2 + b^2])*MatharF2[(ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]]),(b/Sqrt[a^2 + b^2])]"
+  ],
+  "conds": [
+   "b >= u > 0"
+  ],
+  "cite": "BY (214.08)",
+  "edition_note": "",
+  "section": "3.16 Square roots of polynomials (3.169 notation for 3.169-3.172)",
+  "tex": "int_0^u Sqrt[(b^2 - x^2)/(a^2 + x^2)^3] dx = AB/a^2*EE[ga,r] - 1/AB*F[ga,r]",
+  "note": ""
+ }
+]

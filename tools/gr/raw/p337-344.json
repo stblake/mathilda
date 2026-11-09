@@ -1,0 +1,1491 @@
+[
+ {
+  "id": "GR3.159.14",
+  "gr": "3.159.14",
+  "page": 337,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(x^2 - a^2)^3*(x^2 - b^2)], {x, u, Infinity}]",
+  "rhs": [
+   "a/(a^2 - b^2)*((a/u)*Sqrt[(u^2 - b^2)/(u^2 - a^2)] - MatharE2[ArcSin[a/u], (b/a)]) + (1/a)*MatharF2[ArcSin[a/u], (b/a)]"
+  ],
+  "conds": [
+   "u > a > b > 0"
+  ],
+  "cite": "BY (215.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf x^2/sqrt((x^2-a^2)^3(x^2-b^2)) = a/(a^2-b^2){a/u sqrt((u^2-b^2)/(u^2-a^2)) - E(nu,t)} + F(nu,t)/a",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.159.15",
+  "gr": "3.159.15",
+  "page": 337,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 - x^2)*(b^2 - x^2)^3], {x, 0, u}]",
+  "rhs": [
+   "1/(a^2 - b^2)*(u*Sqrt[(a^2 - u^2)/(b^2 - u^2)] - a*MatharE2[ArcSin[u/b], (b/a)])"
+  ],
+  "conds": [
+   "a > b > u > 0"
+  ],
+  "cite": "BY (219.12)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_0^u x^2/sqrt((a^2-x^2)(b^2-x^2)^3) = {u sqrt((a^2-u^2)/(b^2-u^2)) - a E(eta,t)}/(a^2-b^2)",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.159.16",
+  "gr": "3.159.16",
+  "page": 337,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(a^2 - x^2)*(x^2 - b^2)^3], {x, u, a}]",
+  "rhs": [
+   "1/(a^2 - b^2)*(a*MatharF2[ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] - a*MatharE2[ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] + u*Sqrt[(a^2 - u^2)/(u^2 - b^2)])"
+  ],
+  "conds": [
+   "a > u > b > 0"
+  ],
+  "cite": "BY (218.07)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^a x^2/sqrt((a^2-x^2)(x^2-b^2)^3) = {aF(lam,q) - aE(lam,q) + u sqrt((a^2-u^2)/(u^2-b^2))}/(a^2-b^2)",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.159.17",
+  "gr": "3.159.17",
+  "page": 337,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(x^2 - a^2)*(x^2 - b^2)^3], {x, a, u}]",
+  "rhs": [
+   "a/(a^2 - b^2)*MatharE2[ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]], (b/a)]"
+  ],
+  "conds": [
+   "u > a > b > 0"
+  ],
+  "cite": "BY (216.01)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_a^u x^2/sqrt((x^2-a^2)(x^2-b^2)^3) = a E(mu,t)/(a^2-b^2)",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.159.18",
+  "gr": "3.159.18",
+  "page": 337,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(x^2 - a^2)*(x^2 - b^2)^3], {x, u, Infinity}]",
+  "rhs": [
+   "1/(a^2 - b^2)*(a*MatharE2[ArcSin[a/u], (b/a)] - (b^2/u)*Sqrt[(u^2 - a^2)/(u^2 - b^2)])"
+  ],
+  "conds": [
+   "u >= a > b > 0"
+  ],
+  "cite": "BY (215.11)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf x^2/sqrt((x^2-a^2)(x^2-b^2)^3) = {aE(nu,t) - b^2/u sqrt((u^2-a^2)/(u^2-b^2))}/(a^2-b^2)",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.161.1",
+  "gr": "3.161.1",
+  "page": 337,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^4*Sqrt[(x^2 + a^2)*(x^2 + b^2)]), {x, u, Infinity}]",
+  "rhs": [
+   "1/(3*a^3*b^4)*(2*(a^2 + b^2)*MatharE2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)] - b^2*MatharF2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)]) + (a^2*b^2 - u^2*(2*a^2 + b^2))/(3*a^2*b^4*u^3)",
+   "1/(3*a^3*b^4)*(2*(a^2 + b^2)*MatharE2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)] - b^2*MatharF2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)]) + (a^2*b^2 - u^2*(2*a^2 + b^2))/(3*a^2*b^4*u^3)*Sqrt[(b^2 + u^2)/(a^2 + u^2)]",
+   "1/(3*a^3*b^4)*(2*(a^2 + b^2)*MatharE2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)] - b^2*MatharF2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)]) + (a^2*b^2 - u^2*(2*a^2 + b^2))/(3*a^2*b^4*u^3)*Sqrt[(a^2 + u^2)/(b^2 + u^2)]"
+  ],
+  "conds": [
+   "a > b",
+   "u > 0"
+  ],
+  "cite": "BY (222.04)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf dx/(x^4 sqrt((x^2+a^2)(x^2+b^2))) = {2(a^2+b^2)E(beta,q) - b^2F(beta,q)}/(3a^3b^4) + (a^2b^2 - u^2(2a^2+b^2))/(3a^2b^4u^3)",
+  "note": "3.152 notation substituted. Printed algebraic term carries no square-root factor; candidates 2-3 add the factor sqrt((b^2+u^2)/(a^2+u^2)) or its inverse (cf. 3.156.1)."
+ },
+ {
+  "id": "GR3.161.2",
+  "gr": "3.161.2",
+  "page": 337,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^4*Sqrt[(x^2 + a^2)*(b^2 - x^2)]), {x, u, b}]",
+  "rhs": [
+   "1/(3*a^4*b^4*Sqrt[a^2 + b^2])*(a^2*(2*a^2 - b^2)*MatharF2[ArcCos[u/b], (b/Sqrt[a^2 + b^2])] - 2*(a^4 - b^4)*MatharE2[ArcCos[u/b], (b/Sqrt[a^2 + b^2])]) + (a^2*b^2 + 2*u^2*(a^2 - b^2))/(3*a^4*b^4*u^3)*Sqrt[(b^2 - u^2)*(a^2 + u^2)]"
+  ],
+  "conds": [
+   "b > u > 0"
+  ],
+  "cite": "BY (213.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^b dx/(x^4 sqrt((x^2+a^2)(b^2-x^2))) = ...F(delta,r)...E(delta,r) + (a^2b^2+2u^2(a^2-b^2))/(3a^4b^4u^3) sqrt((b^2-u^2)(a^2+u^2))",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.161.3",
+  "gr": "3.161.3",
+  "page": 337,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^4*Sqrt[(x^2 + a^2)*(x^2 - b^2)]), {x, b, u}]",
+  "rhs": [
+   "(2*b^2 - a^2)/(3*a^4*b^2*Sqrt[a^2 + b^2])*MatharF2[ArcCos[b/u], (a/Sqrt[a^2 + b^2])] + (2/3)*(a^2 - b^2)*Sqrt[a^2 + b^2]/(a^4*b^4)*MatharE2[ArcCos[b/u], (a/Sqrt[a^2 + b^2])] + 1/(3*a^2*b^2*u^3)*Sqrt[(u^2 + a^2)*(u^2 - b^2)]"
+  ],
+  "conds": [
+   "u > b > 0"
+  ],
+  "cite": "BY (211.11)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_b^u dx/(x^4 sqrt((x^2+a^2)(x^2-b^2))) = (2b^2-a^2)/(3a^4b^2 sqrt(a^2+b^2)) F(eps,s) + 2/3 (a^2-b^2)sqrt(a^2+b^2)/(a^4b^4) E(eps,s) + sqrt((u^2+a^2)(u^2-b^2))/(3a^2b^2u^3)",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.161.4",
+  "gr": "3.161.4",
+  "page": 337,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^4*Sqrt[(x^2 + a^2)*(x^2 - b^2)]), {x, u, Infinity}]",
+  "rhs": [
+   "1/(3*a^4*b^4*Sqrt[a^2 + b^2])*(2*(a^4 - b^4)*MatharE2[ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (a/Sqrt[a^2 + b^2])] + b^2*(2*b^2 - a^2)*MatharF2[ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (a/Sqrt[a^2 + b^2])]) - (a^2*b^2 + u^2*(2*a^2 - b^2))/(3*a^2*b^4*u^3)*Sqrt[(u^2 - b^2)/(u^2 + a^2)]"
+  ],
+  "conds": [
+   "u >= b > 0"
+  ],
+  "cite": "BY (212.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf dx/(x^4 sqrt((x^2+a^2)(x^2-b^2))) = {2(a^4-b^4)E(xi,s)+b^2(2b^2-a^2)F(xi,s)}/(3a^4b^4 sqrt(a^2+b^2)) - (a^2b^2+u^2(2a^2-b^2))/(3a^2b^4u^3) sqrt((u^2-b^2)/(u^2+a^2))",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.161.5",
+  "gr": "3.161.5",
+  "page": 338,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^4*Sqrt[(a^2 - x^2)*(b^2 - x^2)]), {x, u, b}]",
+  "rhs": [
+   "1/(3*a^3*b^4)*(((2*a^2 + b^2)*MatharF2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)] - 2*(a^2 + b^2)*MatharE2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)]) + ((2*a^2 + b^2)*u^2 + a^2*b^2)*a/u^3*Sqrt[(b^2 - u^2)/(a^2 - u^2)])"
+  ],
+  "conds": [
+   "a > b > u > 0"
+  ],
+  "cite": "BY (220.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^b dx/(x^4 sqrt((a^2-x^2)(b^2-x^2))) = 1/(3a^3b^4){(2a^2+b^2)F(zeta,t) - 2(a^2+b^2)E(zeta,t) + [(2a^2+b^2)u^2+a^2b^2]a/u^3 sqrt((b^2-u^2)/(a^2-u^2))}",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.161.6",
+  "gr": "3.161.6",
+  "page": 338,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^4*Sqrt[(a^2 - x^2)*(x^2 - b^2)]), {x, b, u}]",
+  "rhs": [
+   "1/(3*a^3*b^4)*(2*(a^2 + b^2)*MatharE2[ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] - b^2*MatharF2[ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)]) + 1/(3*a^2*b^2*u^3)*Sqrt[(a^2 - u^2)*(u^2 - b^2)]"
+  ],
+  "conds": [
+   "a >= u > b > 0"
+  ],
+  "cite": "BY (217.14)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_b^u dx/(x^4 sqrt((a^2-x^2)(x^2-b^2))) = {2(a^2+b^2)E(kappa,q) - b^2F(kappa,q)}/(3a^3b^4) + sqrt((a^2-u^2)(u^2-b^2))/(3a^2b^2u^3)",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.161.7",
+  "gr": "3.161.7",
+  "page": 338,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^4*Sqrt[(a^2 - x^2)*(x^2 - b^2)]), {x, u, a}]",
+  "rhs": [
+   "1/(3*a^3*b^4)*(2*(a^2 + b^2)*MatharE2[ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] - b^2*MatharF2[ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] - (2*(a^2 + b^2)*u^2 + a^2*b^2)/(a*u^3)*Sqrt[(a^2 - u^2)*(u^2 - b^2)])"
+  ],
+  "conds": [
+   "a > u >= b > 0"
+  ],
+  "cite": "BY (218.12)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^a dx/(x^4 sqrt((a^2-x^2)(x^2-b^2))) = 1/(3a^3b^4){2(a^2+b^2)E(lam,q) - b^2F(lam,q) - (2(a^2+b^2)u^2+a^2b^2)/(au^3) sqrt((a^2-u^2)(u^2-b^2))}",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.161.8",
+  "gr": "3.161.8",
+  "page": 338,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^4*Sqrt[(x^2 - a^2)*(x^2 - b^2)]), {x, a, u}]",
+  "rhs": [
+   "1/(3*a^3*b^4)*(((2*a^2 + b^2)*MatharF2[ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]], (b/a)] - 2*(a^2 + b^2)*MatharE2[ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]], (b/a)]) + ((a^2 + 2*b^2)*u^2 + a^2*b^2)*b^2/(a*u^3)*Sqrt[(u^2 - a^2)/(u^2 - b^2)])"
+  ],
+  "conds": [
+   "u > a > b > 0"
+  ],
+  "cite": "BY (216.09)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_a^u dx/(x^4 sqrt((x^2-a^2)(x^2-b^2))) = 1/(3a^3b^4){(2a^2+b^2)F(mu,t) - 2(a^2+b^2)E(mu,t) + [(a^2+2b^2)u^2+a^2b^2]b^2/(au^3) sqrt((u^2-a^2)/(u^2-b^2))}",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.161.9",
+  "gr": "3.161.9",
+  "page": 338,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^4*Sqrt[(x^2 - a^2)*(x^2 - b^2)]), {x, u, Infinity}]",
+  "rhs": [
+   "1/(3*a^3*b^4)*((2*a^2 + b^2)*MatharF2[ArcSin[a/u], (b/a)] - 2*(a^2 + b^2)*MatharE2[ArcSin[a/u], (b/a)] + (a*b^2/u^3)*Sqrt[(u^2 - a^2)*(u^2 - b^2)])"
+  ],
+  "conds": [
+   "u >= a > b > 0"
+  ],
+  "cite": "BY (215.07)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf dx/(x^4 sqrt((x^2-a^2)(x^2-b^2))) = 1/(3a^3b^4){(2a^2+b^2)F(nu,t) - 2(a^2+b^2)E(nu,t) + ab^2/u^3 sqrt((u^2-a^2)(u^2-b^2))}",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.162.1",
+  "gr": "3.162.1",
+  "page": 338,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 + a^2)^5*(x^2 + b^2)], {x, 0, u}]",
+  "rhs": [
+   "1/(3*a^3*(a^2 - b^2)^2)*((3*a^2 - b^2)*MatharF2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)] - 2*(2*a^2 - b^2)*MatharE2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)]) + u*(a^2*(4*a^2 - 3*b^2) + u^2*(3*a^2 - 2*b^2))/(3*a^4*(a^2 - b^2)*Sqrt[(u^2 + a^2)^3*(u^2 + b^2)])"
+  ],
+  "conds": [
+   "a > b",
+   "u > 0"
+  ],
+  "cite": "BY (221.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_0^u dx/sqrt((x^2+a^2)^5(x^2+b^2)) = {(3a^2-b^2)F(alpha,q) - 2(2a^2-b^2)E(alpha,q)}/(3a^3(a^2-b^2)^2) + u[a^2(4a^2-3b^2)+u^2(3a^2-2b^2)]/(3a^4(a^2-b^2) sqrt((u^2+a^2)^3(u^2+b^2)))",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.162.2",
+  "gr": "3.162.2",
+  "page": 339,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 + a^2)^5*(x^2 + b^2)], {x, u, Infinity}]",
+  "rhs": [
+   "1/(3*a^3*(a^2 - b^2)^2)*((3*a^2 - b^2)*MatharF2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)] - 2*(2*a^2 - b^2)*MatharE2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)]) + u/(3*a^2*(a^2 - b^2))*Sqrt[(u^2 + b^2)/(a^2 + u^2)^3]"
+  ],
+  "conds": [
+   "a > b",
+   "u >= 0"
+  ],
+  "cite": "BY (222.03)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf dx/sqrt((x^2+a^2)^5(x^2+b^2)) = {(3a^2-b^2)F(beta,q) - 2(2a^2-b^2)E(beta,q)}/(3a^3(a^2-b^2)^2) + u/(3a^2(a^2-b^2)) sqrt((u^2+b^2)/(a^2+u^2)^3)",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.162.3",
+  "gr": "3.162.3",
+  "page": 339,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 + a^2)*(x^2 + b^2)^5], {x, 0, u}]",
+  "rhs": [
+   "(3*b^2 - a^2)/(3*a*b^2*(a^2 - b^2)^2)*MatharF2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)] + a*(2*a^2 - 4*b^2)/(3*b^4*(a^2 - b^2)^2)*MatharE2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)] + u/(3*b^2*(a^2 - b^2))*Sqrt[(u^2 + a^2)/(u^2 + b^2)^3]"
+  ],
+  "conds": [
+   "a > b",
+   "u > 0"
+  ],
+  "cite": "BY (221.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_0^u dx/sqrt((x^2+a^2)(x^2+b^2)^5) = (3b^2-a^2)/(3ab^2(a^2-b^2)^2) F(alpha,q) + a(2a^2-4b^2)/(3b^4(a^2-b^2)^2) E(alpha,q) + u/(3b^2(a^2-b^2)) sqrt((u^2+a^2)/(u^2+b^2)^3)",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.162.4",
+  "gr": "3.162.4",
+  "page": 339,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 + a^2)*(x^2 + b^2)^5], {x, u, Infinity}]",
+  "rhs": [
+   "1/(3*a*b^4*(a^2 - b^2)^2)*(2*a^2*(a^2 - 2*b^2)*MatharE2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)] + b^2*(3*b^2 - a^2)*MatharF2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)]) - u*(b^2*(3*a^2 - 4*b^2) + u^2*(2*a^2 - 3*b^2))/(3*b^4*(a^2 - b^2)*Sqrt[(u^2 + a^2)*(u^2 + b^2)^3])"
+  ],
+  "conds": [
+   "a > b",
+   "u >= 0"
+  ],
+  "cite": "BY (222.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf dx/sqrt((x^2+a^2)(x^2+b^2)^5) = {2a^2(a^2-2b^2)E(beta,q) + b^2(3b^2-a^2)F(beta,q)}/(3ab^4(a^2-b^2)^2) - u[b^2(3a^2-4b^2)+u^2(2a^2-3b^2)]/(3b^4(a^2-b^2) sqrt((u^2+a^2)(u^2+b^2)^3))",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.162.5",
+  "gr": "3.162.5",
+  "page": 339,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 + x^2)^5*(b^2 - x^2)], {x, 0, u}]",
+  "rhs": [
+   "1/(3*a^4*Sqrt[(a^2 + b^2)^3])*(2*(b^2 + 2*a^2)*MatharE2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])] - a^2*MatharF2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])]) + u/(3*a^2*(a^2 + b^2))*Sqrt[(b^2 - u^2)/(a^2 + u^2)^3]"
+  ],
+  "conds": [
+   "b >= u > 0"
+  ],
+  "cite": "BY (214.15)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_0^u dx/sqrt((a^2+x^2)^5(b^2-x^2)) = {2(b^2+2a^2)E(gamma,r) - a^2F(gamma,r)}/(3a^4 sqrt((a^2+b^2)^3)) + u/(3a^2(a^2+b^2)) sqrt((b^2-u^2)/(a^2+u^2)^3)",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.162.6",
+  "gr": "3.162.6",
+  "page": 339,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 + x^2)^5*(b^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "1/(3*a^4*Sqrt[(a^2 + b^2)^3])*((4*a^2 + 2*b^2)*MatharE2[ArcCos[u/b], (b/Sqrt[a^2 + b^2])] - a^2*MatharF2[ArcCos[u/b], (b/Sqrt[a^2 + b^2])]) - u*(a^2*(5*a^2 + 3*b^2) + u^2*(4*a^2 + 2*b^2))/(3*a^4*(a^2 + b^2)^2)*Sqrt[(b^2 - u^2)/(a^2 + u^2)^3]"
+  ],
+  "conds": [
+   "b > u > 0"
+  ],
+  "cite": "BY (213.08)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^b dx/sqrt((a^2+x^2)^5(b^2-x^2)) = {(4a^2+2b^2)E(delta,r) - a^2F(delta,r)}/(3a^4 sqrt((a^2+b^2)^3)) - u[a^2(5a^2+3b^2)+u^2(4a^2+2b^2)]/(3a^4(a^2+b^2)^2) sqrt((b^2-u^2)/(a^2+u^2)^3)",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.162.7",
+  "gr": "3.162.7",
+  "page": 339,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 + x^2)^5*(x^2 - b^2)], {x, b, u}]",
+  "rhs": [
+   "1/(3*a^4*Sqrt[(a^2 + b^2)^3])*((3*a^2 + 2*b^2)*MatharF2[ArcCos[b/u], (a/Sqrt[a^2 + b^2])] - (4*a^2 + 2*b^2)*MatharE2[ArcCos[b/u], (a/Sqrt[a^2 + b^2])]) + ((3*a^2 + b^2)*u^2 + 2*(2*a^2 + b^2)*a^2)/(3*a^2*(a^2 + b^2)^2*u)*Sqrt[(u^2 - b^2)/(u^2 + a^2)^3]"
+  ],
+  "conds": [
+   "u > b > 0"
+  ],
+  "cite": "BY (211.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_b^u dx/sqrt((a^2+x^3)^5(x^2-b^2)) [sic] = {(3a^2+2b^2)F(eps,s) - (4a^2+2b^2)E(eps,s)}/(3a^4 sqrt((a^2+b^2)^3)) + ((3a^2+b^2)u^2 + 2(2a^2+b^2)a^2)/(3a^2(a^2+b^2)^2 u) sqrt((u^2-b^2)/(u^2+a^2)^3)",
+  "note": "3.152 notation substituted. Book prints (a^2 + x^3)^5 in the integrand: an evident misprint for (a^2 + x^2)^5 (all neighbouring items and the BY reference); transcribed with x^2."
+ },
+ {
+  "id": "GR3.162.8",
+  "gr": "3.162.8",
+  "page": 339,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 + x^2)^5*(x^2 - b^2)], {x, u, Infinity}]",
+  "rhs": [
+   "1/(3*a^4*Sqrt[(a^2 + b^2)^3])*((3*a^2 + 2*b^2)*MatharF2[ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (a/Sqrt[a^2 + b^2])] - (4*a^2 + 2*b^2)*MatharE2[ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (a/Sqrt[a^2 + b^2])]) + u/(3*a^2*(a^2 + b^2))*Sqrt[(u^2 - b^2)/(a^2 + u^2)^3]"
+  ],
+  "conds": [
+   "u > b > 0"
+  ],
+  "cite": "BY (212.03)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf dx/sqrt((a^2+x^2)^5(x^2-b^2)) = {(3a^2+2b^2)F(xi,s) - (4a^2+2b^2)E(xi,s)}/(3a^4 sqrt((a^2+b^2)^3)) + u/(3a^2(a^2+b^2)) sqrt((u^2-b^2)/(a^2+u^2)^3)",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.162.9",
+  "gr": "3.162.9",
+  "page": 340,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 + x^2)*(b^2 - x^2)^5], {x, 0, u}]",
+  "rhs": [
+   "1/(3*b^4*Sqrt[(a^2 + b^2)^3])*((2*a^2 + 3*b^2)*MatharF2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])] - (2*a^2 + 4*b^2)*MatharE2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])]) + u*((3*a^3 + 4*b^2)*b^2 - (2*a^2 + 3*b^2)*u^2)/(3*b^4*(a^2 + b^2)*Sqrt[(a^2 + u^2)*(b^2 - u^2)^3])",
+   "1/(3*b^4*Sqrt[(a^2 + b^2)^3])*((2*a^2 + 3*b^2)*MatharF2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])] - (2*a^2 + 4*b^2)*MatharE2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])]) + u*((3*a^2 + 4*b^2)*b^2 - (2*a^2 + 3*b^2)*u^2)/(3*b^4*(a^2 + b^2)*Sqrt[(a^2 + u^2)*(b^2 - u^2)^3])"
+  ],
+  "conds": [
+   "b > u > 0"
+  ],
+  "cite": "BY (214.10)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_0^u dx/sqrt((a^2+x^2)(b^2-x^2)^5) = {(2a^2+3b^2)F(gamma,r) - (2a^2+4b^2)E(gamma,r)}/(3b^4 sqrt((a^2+b^2)^3)) + u[(3a^3+4b^2)b^2 - (2a^2+3b^2)u^2]/(3b^4(a^2+b^2) sqrt((a^2+u^2)(b^2-u^2)^3))",
+  "note": "3.152 notation substituted. Book prints 3a^3 in (3a^3 + 4b^2): dimensionally inconsistent; second rhs uses 3a^2 (cf. 3.162.10)."
+ },
+ {
+  "id": "GR3.162.10",
+  "gr": "3.162.10",
+  "page": 340,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 + x^2)*(x^2 - b^2)^5], {x, u, Infinity}]",
+  "rhs": [
+   "1/(3*b^4*Sqrt[(a^2 + b^2)^3])*((2*a^2 + 4*b^2)*MatharE2[ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (a/Sqrt[a^2 + b^2])] - b^2*MatharF2[ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (a/Sqrt[a^2 + b^2])]) + u*((3*a^2 + 4*b^2)*b^2 - (2*a^2 + 3*b^2)*u^2)/(3*b^4*(a^2 + b^2)*Sqrt[(a^2 + u^2)*(u^2 - b^2)^3])"
+  ],
+  "conds": [
+   "u > b > 0"
+  ],
+  "cite": "BY (212.04)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf dx/sqrt((a^2+x^2)(x^2-b^2)^5) = {(2a^2+4b^2)E(xi,s) - b^2F(xi,s)}/(3b^4 sqrt((a^2+b^2)^3)) + u[(3a^2+4b^2)b^2 - (2a^2+3b^2)u^2]/(3b^4(a^2+b^2) sqrt((a^2+u^2)(u^2-b^2)^3))",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.162.11",
+  "gr": "3.162.11",
+  "page": 340,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 - x^2)*(b^2 - x^2)^5], {x, 0, u}]",
+  "rhs": [
+   "(2*a^2 - 3*b^2)/(3*a*b^4*(a^2 - b^2))*MatharF2[ArcSin[u/b], (b/a)] + 2*a*(2*b^2 - a^2)/(3*b^4*(a^2 - b^2)^2)*MatharE2[ArcSin[u/b], (b/a)] + u*((3*a^2 - 5*b^2)*b^2 - 2*(a^2 - 2*b^2)*u^2)/(3*b^4*(a^2 - b^2)^2*(b^2 - u^2))*Sqrt[(a^2 - u^2)/(b^2 - u^2)]"
+  ],
+  "conds": [
+   "a > b > u > 0"
+  ],
+  "cite": "BY (219.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_0^u dx/sqrt((a^2-x^2)(b^2-x^2)^5) = (2a^2-3b^2)/(3ab^4(a^2-b^2)) F(eta,t) + 2a(2b^2-a^2)/(3b^4(a^2-b^2)^2) E(eta,t) + u[(3a^2-5b^2)b^2 - 2(a^2-2b^2)u^2]/(3b^4(a^2-b^2)^2(b^2-u^2)) sqrt((a^2-u^2)/(b^2-u^2))",
+  "note": "3.152 notation substituted. Book prints the condition as [a > b > a > 0], an evident misprint for a > b > u > 0."
+ },
+ {
+  "id": "GR3.162.12",
+  "gr": "3.162.12",
+  "page": 340,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 - x^2)*(x^2 - b^2)^5], {x, u, a}]",
+  "rhs": [
+   "(3*b^2 - a^2)/(3*a*b^2*(a^2 - b^2)^2)*MatharF2[ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] + 2*a*(a^2 - 2*b^2)/(3*b^4*(a^2 - b^2)^2)*MatharE2[ArcSin[Sqrt[(a^2 - u^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] + u*(2*(2*b^2 - a^2)*u^2 + (3*a^2 - 5*b^2)*b^2)/(3*b^4*(a^2 - b^2)^2*(u^2 - b^2))*Sqrt[(a^2 - u^2)/(u^2 - b^2)]"
+  ],
+  "conds": [
+   "a > u > b > 0"
+  ],
+  "cite": "BY (218.04)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^a dx/sqrt((a^2-x^2)(x^2-b^2)^5) = (3b^2-a^2)/(3ab^2(a^2-b^2)^2) F(lam,q) + 2a(a^2-2b^2)/(3b^4(a^2-b^2)^2) E(lam,q) + u[2(2b^2-a^2)u^2 + (3a^2-5b^2)b^2]/(3b^4(a^2-b^2)^2(u^2-b^2)) sqrt((a^2-u^2)/(u^2-b^2))",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.162.13",
+  "gr": "3.162.13",
+  "page": 340,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 - a^2)*(x^2 - b^2)^5], {x, a, u}]",
+  "rhs": [
+   "(2*a^2 - 3*b^2)/(3*a*b^4*(a^2 - b^2))*MatharF2[ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]], (b/a)] + 2*a*(2*b^2 - a^2)/(3*b^4*(a^2 - b^2)^2)*MatharE2[ArcSin[Sqrt[(u^2 - a^2)/(u^2 - b^2)]], (b/a)] + u/(3*b^2*(a^2 - b^2)*(u^2 - b^2))*Sqrt[(u^2 - a^2)/(u^2 - b^2)]"
+  ],
+  "conds": [
+   "u > a > b > 0"
+  ],
+  "cite": "BY (216.11)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_a^u dx/sqrt((x^2-a^2)(x^2-b^2)^5) = (2a^2-3b^2)/(3ab^4(a^2-b^2)) F(mu,t) + 2a(2b^2-a^2)/(3b^4(a^2-b^2)^2) E(mu,t) + u/(3b^2(a^2-b^2)(u^2-b^2)) sqrt((u^2-a^2)/(u^2-b^2))",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.162.14",
+  "gr": "3.162.14",
+  "page": 340,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 - a^2)*(x^2 - b^2)^5], {x, u, Infinity}]",
+  "rhs": [
+   "(4*b^2 - 2*a^2)*a/(3*b^4*(a^2 - b^2)^2)*MatharE2[ArcSin[a/u], (b/a)] + (2*a^2 - 3*b^2)/(3*a*b^4*(a^2 - b^2))*MatharF2[ArcSin[a/u], (b/a)] - ((3*b^2 - a^2)*u^2 - (4*b^2 - 2*a^2)*b^2)/(3*b^2*u*(a^2 - b^2)^2*(u^2 - b^2))*Sqrt[(u^2 - a^2)/(u^2 - b^2)]"
+  ],
+  "conds": [
+   "u >= a > b > 0"
+  ],
+  "cite": "BY (215.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf dx/sqrt((x^2-a^2)(x^2-b^2)^5) = (4b^2-2a^2)a/(3b^4(a^2-b^2)^2) E(nu,t) + (2a^2-3b^2)/(3ab^4(a^2-b^2)) F(nu,t) - ((3b^2-a^2)u^2 - (4b^2-2a^2)b^2)/(3b^2u(a^2-b^2)^2(u^2-b^2)) sqrt((u^2-a^2)/(u^2-b^2))",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.162.15",
+  "gr": "3.162.15",
+  "page": 340,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 - x^2)^5*(b^2 - x^2)], {x, 0, u}]",
+  "rhs": [
+   "1/(3*a^3*(a^2 - b^2)^2)*((4*a^2 - 2*b^2)*MatharE2[ArcSin[u/b], (b/a)] - (a^2 - b^2)*MatharF2[ArcSin[u/b], (b/a)] - u*((5*a^2 - 3*b^2)*a^2 - (4*a^2 - 2*b^2)*u^2)/(a*(a^2 - u^2))*Sqrt[(b^2 - u^2)/(a^2 - u^2)])"
+  ],
+  "conds": [
+   "a > b >= u > 0"
+  ],
+  "cite": "BY (219.07)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_0^u dx/sqrt((a^2-x^2)^5(b^2-x^2)) = 1/(3a^3(a^2-b^2)^2){(4a^2-2b^2)E(eta,t) - (a^2-b^2)F(eta,t) - u[(5a^2-3b^2)a^2 - (4a^2-2b^2)u^2]/(a(a^2-u^2)) sqrt((b^2-u^2)/(a^2-u^2))}",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.162.16",
+  "gr": "3.162.16",
+  "page": 341,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 - x^2)^5*(b^2 - x^2)], {x, u, b}]",
+  "rhs": [
+   "2*(2*a^2 - b^2)/(3*a^3*(a^2 - b^2)^2)*MatharE2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/Sqrt[a^2 + b^2])] - 1/(3*a^3*(a^2 - b^2))*MatharF2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)] + u/(3*a^2*(a^2 - b^2)*(a^2 - u^2))*Sqrt[(b^2 - u^2)/(a^2 - u^2)]",
+   "2*(2*a^2 - b^2)/(3*a^3*(a^2 - b^2)^2)*MatharE2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)] - 1/(3*a^3*(a^2 - b^2))*MatharF2[ArcSin[(a/b)*Sqrt[(b^2 - u^2)/(a^2 - u^2)]], (b/a)] + u/(3*a^2*(a^2 - b^2)*(a^2 - u^2))*Sqrt[(b^2 - u^2)/(a^2 - u^2)]"
+  ],
+  "conds": [
+   "a > b > u >= 0"
+  ],
+  "cite": "BY (220.10)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^b dx/sqrt((a^2-x^2)^5(b^2-x^2)) = 2(2a^2-b^2)/(3a^3(a^2-b^2)^2) E(zeta,r) - F(zeta,t)/(3a^3(a^2-b^2)) + u/(3a^2(a^2-b^2)(a^2-u^2)) sqrt((b^2-u^2)/(a^2-u^2))",
+  "note": "3.152 notation substituted. Book prints E(zeta, r); the zeta family uses modulus t everywhere else, so the second rhs uses E(zeta, t)."
+ },
+ {
+  "id": "GR3.162.17",
+  "gr": "3.162.17",
+  "page": 341,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 - x^2)^5*(x^2 - b^2)], {x, b, u}]",
+  "rhs": [
+   "1/(3*a^3*(a^2 - b^2)^2)*((3*a^2 - b^2)*MatharF2[ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)] - (4*a^2 - 2*b^2)*MatharE2[ArcSin[(a/u)*Sqrt[(u^2 - b^2)/(a^2 - b^2)]], (Sqrt[a^2 - b^2]/a)]) + (2*(2*a^2 - b^2)*a^2 + (b^2 - 3*a^2)*u^2)/(3*a^2*u*(a^2 - b^2)^2*(a^2 - u^2))*Sqrt[(u^2 - b^2)/(a^2 - u^2)]"
+  ],
+  "conds": [
+   "a > u > b > 0"
+  ],
+  "cite": "BY (217.10)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_b^u dx/sqrt((a^2-x^2)^5(x^2-b^2)) = {(3a^2-b^2)F(kappa,q) - (4a^2-2b^2)E(kappa,q)}/(3a^3(a^2-b^2)^2) + (2(2a^2-b^2)a^2 + (b^2-3a^2)u^2)/(3a^2u(a^2-b^2)^2(a^2-u^2)) sqrt((u^2-b^2)/(a^2-u^2))",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.162.18",
+  "gr": "3.162.18",
+  "page": 341,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 - a^2)^5*(x^2 - b^2)], {x, u, Infinity}]",
+  "rhs": [
+   "1/(3*a^3*(a^2 - b^2)^2)*((4*a^2 - 2*b^2)*MatharE2[ArcSin[a/u], (b/a)] - (a^2 - b^2)*MatharF2[ArcSin[a/u], (b/a)]) + ((4*a^2 - 2*b^2)*a^2 + (b^2 - 3*a^2)*u^2)/(3*a^2*u*(a^2 - b^2)^2*(u^2 - a^2))*Sqrt[(u^2 - b^2)/(u^2 - a^2)]"
+  ],
+  "conds": [
+   "u > a > b > 0"
+  ],
+  "cite": "BY (215.04)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf dx/sqrt((x^2-a^2)^5(x^2-b^2)) = {(4a^2-2b^2)E(nu,t) - (a^2-b^2)F(nu,t)}/(3a^3(a^2-b^2)^2) + ((4a^2-2b^2)a^2 + (b^2-3a^2)u^2)/(3a^2u(a^2-b^2)^2(u^2-a^2)) sqrt((u^2-b^2)/(u^2-a^2))",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.163.1",
+  "gr": "3.163.1",
+  "page": 341,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 + a^2)^3*(x^2 + b^2)^3], {x, 0, u}]",
+  "rhs": [
+   "1/(a*b^2*(a^2 - b^2)^2)*((a^2 + b^2)*MatharE2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)] - 2*b^2*MatharF2[ArcTan[u/b], (Sqrt[a^2 - b^2]/a)]) - u/(a^2*(a^2 - b^2)*Sqrt[(a^2 + u^2)*(b^2 + u^2)])"
+  ],
+  "conds": [
+   "a > b",
+   "u > 0"
+  ],
+  "cite": "BY (221.07)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_0^u dx/sqrt((x^2+a^2)^3(x^2+b^2)^3) = {(a^2+b^2)E(alpha,q) - 2b^2F(alpha,q)}/(ab^2(a^2-b^2)^2) - u/(a^2(a^2-b^2) sqrt((a^2+u^2)(b^2+u^2)))",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.163.2",
+  "gr": "3.163.2",
+  "page": 341,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 + a^2)^3*(x^2 + b^2)^3], {x, u, Infinity}]",
+  "rhs": [
+   "1/(a*b^2*(a^2 - b^2)^2)*((a^2 + b^2)*MatharE2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)] - 2*b^2*MatharF2[ArcCot[u/a], (Sqrt[a^2 - b^2]/a)]) - u/(b^2*(a^2 - b^2)*Sqrt[(a^2 + u^2)*(b^2 + u^2)])"
+  ],
+  "conds": [
+   "a > b",
+   "u >= 0"
+  ],
+  "cite": "BY (222.12)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf dx/sqrt((x^2+a^2)^3(x^2+b^2)^3) = {(a^2+b^2)E(beta,q) - 2b^2F(beta,q)}/(ab^2(a^2-b^2)^2) - u/(b^2(a^2-b^2) sqrt((a^2+u^2)(b^2+u^2)))",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.163.3",
+  "gr": "3.163.3",
+  "page": 341,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 + a^2)^3*(b^2 - x^2)^3], {x, 0, u}]",
+  "rhs": [
+   "1/(a^2*b^2*Sqrt[(a^2 + b^2)^3])*(a^2*MatharF2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])] - (a^2 - b^2)*MatharE2[ArcSin[(u/b)*Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (b/Sqrt[a^2 + b^2])]) + u/(b^2*(a^2 + b^2)*Sqrt[(a^2 + u^2)*(b^2 - u^2)])"
+  ],
+  "conds": [
+   "b > u > 0"
+  ],
+  "cite": "BY (214.15)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_0^u dx/sqrt((x^2+a^2)^3(b^3-x^2)^3) [sic] = {a^2F(gamma,r) - (a^2-b^2)E(gamma,r)}/(a^2b^2 sqrt((a^2+b^2)^3)) + u/(b^2(a^2+b^2) sqrt((a^2+u^2)(b^2-u^2)))",
+  "note": "3.152 notation substituted. Book prints (b^3 - x^2)^3 in the integrand: an evident misprint for (b^2 - x^2)^3; transcribed with b^2."
+ },
+ {
+  "id": "GR3.163.4",
+  "gr": "3.163.4",
+  "page": 341,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 + a^2)^3*(x^2 - b^2)^3], {x, u, Infinity}]",
+  "rhs": [
+   "(b^2 - a^2)/(a^2*b^2*Sqrt[(a^2 + b^2)^3])*MatharE2[ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (a/Sqrt[a^2 + b^2])] - 1/(a^2*Sqrt[(a^2 + b^2)^3])*MatharF2[ArcSin[Sqrt[(a^2 + b^2)/(a^2 + u^2)]], (a/Sqrt[a^2 + b^2])] + u/(b^2*(a^2 + b^2)*Sqrt[(u^2 + a^2)*(u^2 - b^2)])"
+  ],
+  "conds": [
+   "u > b > 0"
+  ],
+  "cite": "BY (212.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf dx/sqrt((x^2+a^2)^3(x^2-b^2)^3) = (b^2-a^2)/(a^2b^2 sqrt((a^2+b^2)^3)) E(xi,s) - F(xi,s)/(a^2 sqrt((a^2+b^2)^3)) + u/(b^2(a^2+b^2) sqrt((u^2+a^2)(u^2-b^2)))",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.163.5",
+  "gr": "3.163.5",
+  "page": 342,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(a^2 - x^2)^3*(b^2 - x^2)^3], {x, 0, u}]",
+  "rhs": [
+   "1/(a*b^2*(a^2 - b^2))*MatharF2[ArcSin[u/b], (b/a)] - (a^2 + b^2)/(a*b^2*(a^2 - b^2)^2)*MatharE2[ArcSin[u/b], (b/a)] + (a^4 + b^4 - (a^2 + b^2)*u^2)*u/(a^2*b^2*(a^2 - b^2)^2*Sqrt[(a^2 - u^2)*(b^2 - u^2)])"
+  ],
+  "conds": [
+   "a > b > u > 0"
+  ],
+  "cite": "BY (279.08)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_0^u dx/sqrt((a^2-x^2)^3(b^2-x^2)^3) = F(eta,t)/(ab^2(a^2-b^2)) - (a^2+b^2)/(ab^2(a^2-b^2)^2) E(eta,t) + [a^4+b^4-(a^2+b^2)u^2]u/(a^2b^2(a^2-b^2)^2 sqrt((a^2-u^2)(b^2-u^2)))",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.163.6",
+  "gr": "3.163.6",
+  "page": 342,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 - a^2)^3*(x^2 - b^2)^3], {x, u, Infinity}]",
+  "rhs": [
+   "1/(a*b^2*(a^2 - b^2))*MatharF2[ArcSin[a/u], (b/a)] - (a^2 + b^2)/(a*b^2*(a^2 - b^2)^2)*MatharE2[ArcSin[a/u], (b/a)] + 1/(u*(a^2 - b^2)*Sqrt[(u^2 - a^2)*(u^2 - b^2)])"
+  ],
+  "conds": [
+   "u > a > b > 0"
+  ],
+  "cite": "BY (215.10)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf dx/sqrt((x^2-a^2)^3(x^2-b^2)^3) = F(nu,t)/(ab^2(a^2-b^2)) - (a^2+b^2)/(ab^2(a^2-b^2)^2) E(nu,t) + 1/(u(a^2-b^2) sqrt((u^2-a^2)(u^2-b^2)))",
+  "note": "3.152 notation substituted."
+ },
+ {
+  "id": "GR3.164.1",
+  "gr": "3.164.1",
+  "page": 342,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^2 + (m + I*n)^2)*(x^2 + (m - I*n)^2)], {x, u, Infinity}]",
+  "rhs": [
+   "1/Sqrt[(m + I*n)*(m - I*n)]*MatharF2[ArcCos[(u^2 - (m + I*n)*(m - I*n))/(u^2 + (m + I*n)*(m - I*n))], ((1/2)*Sqrt[-((m + I*n) - (m - I*n))^2/((m + I*n)*(m - I*n))])]"
+  ],
+  "conds": [],
+  "cite": "BY (225.00)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf dx/sqrt((x^2+rho^2)(x^2+rhobar^2)) = F(alpha,r)/sqrt(rho rhobar)",
+  "note": "3.164 notation alpha = arccos((u^2 - rho rhobar)/(u^2 + rho rhobar)), r = (1/2) sqrt(-(rho - rhobar)^2/(rho rhobar)) substituted; the complex parameter rho (with conjugate rhobar) is written rho = m + I n with m, n real so that the oracle's real sampler can instantiate it."
+ },
+ {
+  "id": "GR3.164.2",
+  "gr": "3.164.2",
+  "page": 342,
+  "status": "ok",
+  "lhs": "Integrate[x^2/((x^2 - (m + I*n)*(m - I*n))^2*Sqrt[(x^2 + (m + I*n)^2)*(x^2 + (m - I*n)^2)]), {x, u, Infinity}]",
+  "rhs": [
+   "2*u*Sqrt[(u^2 + (m + I*n)^2)*(u^2 + (m - I*n)^2)]/(((m + I*n) + (m - I*n))^2*(u^4 - (m + I*n)^2*(m - I*n)^2)) - 1/(((m + I*n) + (m - I*n))^2*Sqrt[(m + I*n)*(m - I*n)])*MatharE2[ArcCos[(u^2 - (m + I*n)*(m - I*n))/(u^2 + (m + I*n)*(m - I*n))], ((1/2)*Sqrt[-((m + I*n) - (m - I*n))^2/((m + I*n)*(m - I*n))])]"
+  ],
+  "conds": [
+   "u^2 > m^2 + n^2"
+  ],
+  "cite": "BY (225.03)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf x^2 dx/((x^2-rho rhobar)^2 sqrt((x^2+rho^2)(x^2+rhobar^2))) = 2u sqrt((u^2+rho^2)(u^2+rhobar^2))/((rho+rhobar)^2(u^4-rho^2 rhobar^2)) - E(alpha,r)/((rho+rhobar)^2 sqrt(rho rhobar))",
+  "note": "3.164 notation alpha = arccos((u^2 - rho rhobar)/(u^2 + rho rhobar)), r = (1/2) sqrt(-(rho - rhobar)^2/(rho rhobar)) substituted; the complex parameter rho (with conjugate rhobar) is written rho = m + I n with m, n real so that the oracle's real sampler can instantiate it. Condition u^2 > rho rhobar added (the integrand has a double pole at x^2 = rho rhobar; the book gives none)."
+ },
+ {
+  "id": "GR3.164.3",
+  "gr": "3.164.3",
+  "page": 342,
+  "status": "ok",
+  "lhs": "Integrate[x^2/((x^2 + (m + I*n)*(m - I*n))^2*Sqrt[(x^2 + (m + I*n)^2)*(x^2 + (m - I*n)^2)]), {x, u, Infinity}]",
+  "rhs": [
+   "-1/(((m + I*n) - (m - I*n))^2*Sqrt[(m + I*n)*(m - I*n)])*(MatharF2[ArcCos[(u^2 - (m + I*n)*(m - I*n))/(u^2 + (m + I*n)*(m - I*n))], ((1/2)*Sqrt[-((m + I*n) - (m - I*n))^2/((m + I*n)*(m - I*n))])] - MatharE2[ArcCos[(u^2 - (m + I*n)*(m - I*n))/(u^2 + (m + I*n)*(m - I*n))], ((1/2)*Sqrt[-((m + I*n) - (m - I*n))^2/((m + I*n)*(m - I*n))])])"
+  ],
+  "conds": [],
+  "cite": "BY (225.07)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf x^2 dx/((x^2+rho rhobar)^2 sqrt(...)) = -[F(alpha,r) - E(alpha,r)]/((rho-rhobar)^2 sqrt(rho rhobar))",
+  "note": "3.164 notation alpha = arccos((u^2 - rho rhobar)/(u^2 + rho rhobar)), r = (1/2) sqrt(-(rho - rhobar)^2/(rho rhobar)) substituted; the complex parameter rho (with conjugate rhobar) is written rho = m + I n with m, n real so that the oracle's real sampler can instantiate it."
+ },
+ {
+  "id": "GR3.164.4",
+  "gr": "3.164.4",
+  "page": 342,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(x^2 + (m + I*n)^2)^3*(x^2 + (m - I*n)^2)^3], {x, u, Infinity}]",
+  "rhs": [
+   "-4*Sqrt[(m + I*n)*(m - I*n)]/((m + I*n)^2 - (m - I*n)^2)^2*MatharE2[ArcCos[(u^2 - (m + I*n)*(m - I*n))/(u^2 + (m + I*n)*(m - I*n))], ((1/2)*Sqrt[-((m + I*n) - (m - I*n))^2/((m + I*n)*(m - I*n))])] + 1/(((m + I*n) - (m - I*n))^2*Sqrt[(m + I*n)*(m - I*n)])*MatharF2[ArcCos[(u^2 - (m + I*n)*(m - I*n))/(u^2 + (m + I*n)*(m - I*n))], ((1/2)*Sqrt[-((m + I*n) - (m - I*n))^2/((m + I*n)*(m - I*n))])] - 2*u*(u^2 - (m + I*n)*(m - I*n))/(((m + I*n) + (m - I*n))^2*(u^2 + (m + I*n)*(m - I*n))*Sqrt[(u^2 + (m + I*n)^2)*(u^2 + (m - I*n)^2)])"
+  ],
+  "conds": [],
+  "cite": "BY (225.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf x^2 dx/sqrt((x^2+rho^2)^3(x^2+rhobar^2)^3) = -4 sqrt(rho rhobar)/(rho^2-rhobar^2)^2 E(alpha,r) + F(alpha,r)/((rho-rhobar)^2 sqrt(rho rhobar)) - 2u(u^2-rho rhobar)/((rho+rhobar)^2(u^2+rho rhobar) sqrt((u^2+rho^2)(u^2+rhobar^2)))",
+  "note": "3.164 notation alpha = arccos((u^2 - rho rhobar)/(u^2 + rho rhobar)), r = (1/2) sqrt(-(rho - rhobar)^2/(rho rhobar)) substituted; the complex parameter rho (with conjugate rhobar) is written rho = m + I n with m, n real so that the oracle's real sampler can instantiate it."
+ },
+ {
+  "id": "GR3.164.5",
+  "gr": "3.164.5",
+  "page": 342,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 - (m + I*n)*(m - I*n))^2/Sqrt[(x^2 + (m + I*n)^2)^3*(x^2 + (m - I*n)^2)^3], {x, u, Infinity}]",
+  "rhs": [
+   "-4*Sqrt[(m + I*n)*(m - I*n)]/((m + I*n) - (m - I*n))^2*(MatharF2[ArcCos[(u^2 - (m + I*n)*(m - I*n))/(u^2 + (m + I*n)*(m - I*n))], ((1/2)*Sqrt[-((m + I*n) - (m - I*n))^2/((m + I*n)*(m - I*n))])] - MatharE2[ArcCos[(u^2 - (m + I*n)*(m - I*n))/(u^2 + (m + I*n)*(m - I*n))], ((1/2)*Sqrt[-((m + I*n) - (m - I*n))^2/((m + I*n)*(m - I*n))])]) + 2*u*(u^2 - (m + I*n)*(m - I*n))/((u^2 + (m + I*n)*(m - I*n))*Sqrt[(u^2 + (m + I*n)^2)*(u^2 + (m - I*n)^2)])"
+  ],
+  "conds": [],
+  "cite": "BY (225.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf (x^2-rho rhobar)^2 dx/sqrt((x^2+rho^2)^3(x^2+rhobar^2)^3) = -4 sqrt(rho rhobar)/(rho-rhobar)^2 [F-E](alpha,r) + 2u(u^2-rho rhobar)/((u^2+rho rhobar) sqrt((u^2+rho^2)(u^2+rhobar^2)))",
+  "note": "3.164 notation alpha = arccos((u^2 - rho rhobar)/(u^2 + rho rhobar)), r = (1/2) sqrt(-(rho - rhobar)^2/(rho rhobar)) substituted; the complex parameter rho (with conjugate rhobar) is written rho = m + I n with m, n real so that the oracle's real sampler can instantiate it."
+ },
+ {
+  "id": "GR3.164.6",
+  "gr": "3.164.6",
+  "page": 342,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x^2 + (m + I*n)^2)*(x^2 + (m - I*n)^2)]/(x^2 + (m + I*n)*(m - I*n))^2, {x, u, Infinity}]",
+  "rhs": [
+   "1/Sqrt[(m + I*n)*(m - I*n)]*MatharE2[ArcCos[(u^2 - (m + I*n)*(m - I*n))/(u^2 + (m + I*n)*(m - I*n))], ((1/2)*Sqrt[-((m + I*n) - (m - I*n))^2/((m + I*n)*(m - I*n))])]"
+  ],
+  "conds": [],
+  "cite": "BY (225.01)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf sqrt((x^2+rho^2)(x^2+rhobar^2))/(x^2+rho rhobar)^2 dx = E(alpha,r)/sqrt(rho rhobar)",
+  "note": "3.164 notation alpha = arccos((u^2 - rho rhobar)/(u^2 + rho rhobar)), r = (1/2) sqrt(-(rho - rhobar)^2/(rho rhobar)) substituted; the complex parameter rho (with conjugate rhobar) is written rho = m + I n with m, n real so that the oracle's real sampler can instantiate it."
+ },
+ {
+  "id": "GR3.164.7",
+  "gr": "3.164.7",
+  "page": 342,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 - (m + I*n)*(m - I*n))^2/((x^2 + (m + I*n)*(m - I*n))^2*Sqrt[(x^2 + (m + I*n)^2)*(x^2 + (m - I*n)^2)]), {x, u, Infinity}]",
+  "rhs": [
+   "-4*Sqrt[(m + I*n)*(m - I*n)]/((m + I*n) - (m - I*n))^2*MatharE2[ArcCos[(u^2 - (m + I*n)*(m - I*n))/(u^2 + (m + I*n)*(m - I*n))], ((1/2)*Sqrt[-((m + I*n) - (m - I*n))^2/((m + I*n)*(m - I*n))])] + ((m + I*n) + (m - I*n))^2/(((m + I*n) - (m - I*n))^2*Sqrt[(m + I*n)*(m - I*n)])*MatharF2[ArcCos[(u^2 - (m + I*n)*(m - I*n))/(u^2 + (m + I*n)*(m - I*n))], ((1/2)*Sqrt[-((m + I*n) - (m - I*n))^2/((m + I*n)*(m - I*n))])]"
+  ],
+  "conds": [],
+  "cite": "BY (225.08)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf (x^2-rho rhobar)^2 dx/((x^2+rho rhobar)^2 sqrt(...)) = -4 sqrt(rho rhobar)/(rho-rhobar)^2 E(alpha,r) + (rho+rhobar)^2/((rho-rhobar)^2 sqrt(rho rhobar)) F(alpha,r)",
+  "note": "3.164 notation alpha = arccos((u^2 - rho rhobar)/(u^2 + rho rhobar)), r = (1/2) sqrt(-(rho - rhobar)^2/(rho rhobar)) substituted; the complex parameter rho (with conjugate rhobar) is written rho = m + I n with m, n real so that the oracle's real sampler can instantiate it."
+ },
+ {
+  "id": "GR3.164.8",
+  "gr": "3.164.8",
+  "page": 342,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 + (m + I*n)*(m - I*n))^2/(((x^2 + (m + I*n)*(m - I*n))^2 - 4*p^2*(m + I*n)*(m - I*n)*x^2)*Sqrt[(x^2 + (m + I*n)^2)*(x^2 + (m - I*n)^2)]), {x, u, Infinity}]",
+  "rhs": [
+   "1/Sqrt[(m + I*n)*(m - I*n)]*EllipticPi[p^2, ArcCos[(u^2 - (m + I*n)*(m - I*n))/(u^2 + (m + I*n)*(m - I*n))], (((1/2)*Sqrt[-((m + I*n) - (m - I*n))^2/((m + I*n)*(m - I*n))]))^2]"
+  ],
+  "conds": [
+   "p^2 < 1"
+  ],
+  "cite": "BY (225.02)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf (x^2+rho rhobar)^2 dx/([(x^2+rho rhobar)^2 - 4p^2 rho rhobar x^2] sqrt(...)) = Pi(alpha,p^2,r)/sqrt(rho rhobar)",
+  "note": "3.164 notation alpha = arccos((u^2 - rho rhobar)/(u^2 + rho rhobar)), r = (1/2) sqrt(-(rho - rhobar)^2/(rho rhobar)) substituted; the complex parameter rho (with conjugate rhobar) is written rho = m + I n with m, n real so that the oracle's real sampler can instantiate it. Condition p^2 < 1 added (otherwise the integrand has real poles); book gives none."
+ },
+ {
+  "id": "GR3.165.1",
+  "gr": "3.165.1",
+  "page": 343,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^4 + 2*b^2*x^2 + a^4)], {x, u, a}]",
+  "rhs": [
+   "Sqrt[2]/(a*Sqrt[2] + Sqrt[a^2 + b^2])*MatharF2[ArcTan[(a*Sqrt[2] + Sqrt[a^2 - b^2])/Sqrt[a^2 + b^2]*(a - u)/(a + u)], 2*Sqrt[a*Sqrt[2*(a^2 - b^2)]]/(a*Sqrt[2] + Sqrt[a^2 - b^2])]",
+   "Sqrt[2]/(a*Sqrt[2] + Sqrt[a^2 - b^2])*MatharF2[ArcTan[(a*Sqrt[2] + Sqrt[a^2 - b^2])/Sqrt[a^2 + b^2]*(a - u)/(a + u)], 2*Sqrt[a*Sqrt[2*(a^2 - b^2)]]/(a*Sqrt[2] + Sqrt[a^2 - b^2])]"
+  ],
+  "conds": [
+   "a > b",
+   "a > u >= 0"
+  ],
+  "cite": "BY (264.00)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^a dx/sqrt(x^4+2b^2x^2+a^4) = sqrt2/(a sqrt2 + sqrt(a^2+b^2)) F[arctan((a sqrt2 + sqrt(a^2-b^2))/sqrt(a^2+b^2) (a-u)/(a+u)), 2 sqrt(a sqrt(2(a^2-b^2)))/(a sqrt2 + sqrt(a^2-b^2))]",
+  "note": "Prefactor printed with sqrt(a^2 + b^2) while the modulus uses sqrt(a^2 - b^2); second rhs uses sqrt(a^2 - b^2) in the prefactor."
+ },
+ {
+  "id": "GR3.165.2",
+  "gr": "3.165.2",
+  "page": 343,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[(x^4 + 2*b^2*x^2 + a^4)], {x, u, Infinity}]",
+  "rhs": [
+   "1/(2*a)*MatharF2[ArcCos[(u^2 - a^2)/(u^2 + a^2)], (Sqrt[a^2 - b^2]/(a*Sqrt[2]))]"
+  ],
+  "conds": [
+   "a^2 > b^2",
+   "a^2 > 0",
+   "u >= 0"
+  ],
+  "cite": "BY (263.00, 266.00)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf dx/sqrt(x^4+2b^2x^2+a^4) = F(alpha,r)/(2a)  [a^2>b^2>-inf, a^2>0, u>=0]",
+  "note": "3.165 notation alpha = arccos((u^2-a^2)/(u^2+a^2)), r = sqrt(a^2-b^2)/(a sqrt 2) substituted."
+ },
+ {
+  "id": "GR3.165.3",
+  "gr": "3.165.3",
+  "page": 343,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*Sqrt[(x^4 + 2*b^2*x^2 + a^4)]), {x, u, Infinity}]",
+  "rhs": [
+   "1/(2*a^3)*(MatharF2[ArcCos[(u^2 - a^2)/(u^2 + a^2)], (Sqrt[a^2 - b^2]/(a*Sqrt[2]))] - 2*MatharE2[ArcCos[(u^2 - a^2)/(u^2 + a^2)], (Sqrt[a^2 - b^2]/(a*Sqrt[2]))]) + Sqrt[(u^4 + 2*b^2*u^2 + a^4)]/(a^2*u*(u^2 + a^2))"
+  ],
+  "conds": [
+   "a > b > 0",
+   "u > 0"
+  ],
+  "cite": "BY (263.06)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf dx/(x^2 sqrt(x^4+2b^2x^2+a^4)) = [F(alpha,r) - 2E(alpha,r)]/(2a^3) + sqrt(u^4+2b^2u^2+a^4)/(a^2u(u^2+a^2))",
+  "note": "3.165 notation alpha = arccos((u^2-a^2)/(u^2+a^2)), r = sqrt(a^2-b^2)/(a sqrt 2) substituted."
+ },
+ {
+  "id": "GR3.165.4",
+  "gr": "3.165.4",
+  "page": 343,
+  "status": "ok",
+  "lhs": "Integrate[x^2/((x^2 + a^2)^2*Sqrt[(x^4 + 2*b^2*x^2 + a^4)]), {x, u, Infinity}]",
+  "rhs": [
+   "1/(4*a*(a^2 - b^2))*(MatharF2[ArcCos[(u^2 - a^2)/(u^2 + a^2)], (Sqrt[a^2 - b^2]/(a*Sqrt[2]))] - MatharE2[ArcCos[(u^2 - a^2)/(u^2 + a^2)], (Sqrt[a^2 - b^2]/(a*Sqrt[2]))])"
+  ],
+  "conds": [
+   "a^2 > b^2",
+   "a^2 > 0",
+   "u >= 0"
+  ],
+  "cite": "BY (263.03, 266.05)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf x^2 dx/((x^2+a^2)^2 sqrt(x^4+2b^2x^2+a^4)) = [F(alpha,r) - E(alpha,r)]/(4a(a^2-b^2))",
+  "note": "3.165 notation alpha = arccos((u^2-a^2)/(u^2+a^2)), r = sqrt(a^2-b^2)/(a sqrt 2) substituted."
+ },
+ {
+  "id": "GR3.165.5",
+  "gr": "3.165.5",
+  "page": 343,
+  "status": "ok",
+  "lhs": "Integrate[x^2/((x^2 - a^2)^2*Sqrt[(x^4 + 2*b^2*x^2 + a^4)]), {x, u, Infinity}]",
+  "rhs": [
+   "u*Sqrt[(u^4 + 2*b^2*u^2 + a^4)]/(2*(a^2 + b^2)*(u^4 - a^4)) - 1/(4*a*(a^2 + b^2))*MatharE2[ArcCos[(u^2 - a^2)/(u^2 + a^2)], (Sqrt[a^2 - b^2]/(a*Sqrt[2]))]"
+  ],
+  "conds": [
+   "a^2 > b^2",
+   "u^2 > a^2 > 0"
+  ],
+  "cite": "BY (263.05, 266.02)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf x^2 dx/((x^2-a^2)^2 sqrt(x^4+2b^2x^2+a^4)) = u sqrt(u^4+2b^2u^2+a^4)/(2(a^2+b^2)(u^4-a^4)) - E(alpha,r)/(4a(a^2+b^2))",
+  "note": "3.165 notation alpha = arccos((u^2-a^2)/(u^2+a^2)), r = sqrt(a^2-b^2)/(a sqrt 2) substituted."
+ },
+ {
+  "id": "GR3.165.6",
+  "gr": "3.165.6",
+  "page": 343,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[(x^4 + 2*b^2*x^2 + a^4)^3], {x, u, Infinity}]",
+  "rhs": [
+   "a/(2*(a^4 - b^4))*MatharE2[ArcCos[(u^2 - a^2)/(u^2 + a^2)], (Sqrt[a^2 - b^2]/(a*Sqrt[2]))] - 1/(4*a*(a^2 - b^2))*MatharF2[ArcCos[(u^2 - a^2)/(u^2 + a^2)], (Sqrt[a^2 - b^2]/(a*Sqrt[2]))] - u*(u^2 - a^2)/(2*(a^2 + b^2)*(u^2 + a^2)*Sqrt[(u^4 + 2*b^2*u^2 + a^4)])"
+  ],
+  "conds": [
+   "a^2 > b^2",
+   "a^2 > 0",
+   "u >= 0"
+  ],
+  "cite": "BY (263.08, 266.03)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf x^2 dx/sqrt((x^4+2b^2x^2+a^4)^3) = aE(alpha,r)/(2(a^4-b^4)) - F(alpha,r)/(4a(a^2-b^2)) - u(u^2-a^2)/(2(a^2+b^2)(u^2+a^2) sqrt(u^4+2b^2u^2+a^4))",
+  "note": "3.165 notation alpha = arccos((u^2-a^2)/(u^2+a^2)), r = sqrt(a^2-b^2)/(a sqrt 2) substituted."
+ },
+ {
+  "id": "GR3.165.7",
+  "gr": "3.165.7",
+  "page": 343,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 - a^2)^2/Sqrt[(x^4 + 2*b^2*x^2 + a^4)^3], {x, u, Infinity}]",
+  "rhs": [
+   "a/(a^2 - b^2)*(MatharF2[ArcCos[(u^2 - a^2)/(u^2 + a^2)], (Sqrt[a^2 - b^2]/(a*Sqrt[2]))] - MatharE2[ArcCos[(u^2 - a^2)/(u^2 + a^2)], (Sqrt[a^2 - b^2]/(a*Sqrt[2]))]) + (u^2 - a^2)/(u^2 + a^2)*u/Sqrt[(u^4 + 2*b^2*u^2 + a^4)]"
+  ],
+  "conds": [
+   "Abs[b^2] < a^2",
+   "u >= 0"
+  ],
+  "cite": "BY (266.08)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf (x^2-a^2)^2 dx/sqrt((x^4+2b^2x^2+a^4)^3) = a[F-E](alpha,r)/(a^2-b^2) + (u^2-a^2)/(u^2+a^2) u/sqrt(u^4+2b^2u^2+a^4)",
+  "note": "3.165 notation alpha = arccos((u^2-a^2)/(u^2+a^2)), r = sqrt(a^2-b^2)/(a sqrt 2) substituted."
+ },
+ {
+  "id": "GR3.165.8",
+  "gr": "3.165.8",
+  "page": 343,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 + a^2)^2/Sqrt[(x^4 + 2*b^2*x^2 + a^4)^3], {x, u, Infinity}]",
+  "rhs": [
+   "a/(a^2 + b^2)*MatharE2[ArcCos[(u^2 - a^2)/(u^2 + a^2)], (Sqrt[a^2 - b^2]/(a*Sqrt[2]))] - (a^2 - b^2)/(a^2 + b^2)*(u^2 - a^2)/(u^2 + a^2)*u/Sqrt[(u^4 + 2*b^2*u^2 + a^4)]"
+  ],
+  "conds": [
+   "Abs[b^2] < a^2",
+   "u >= 0"
+  ],
+  "cite": "BY (266.06)a",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf (x^2+a^2)^2 dx/sqrt((x^2+2b^2x^2+a^4)^3) [sic] = aE(alpha,r)/(a^2+b^2) - (a^2-b^2)/(a^2+b^2) (u^2-a^2)/(u^2+a^2) u/sqrt(u^4+2b^2u^2+a^4)",
+  "note": "3.165 notation alpha = arccos((u^2-a^2)/(u^2+a^2)), r = sqrt(a^2-b^2)/(a sqrt 2) substituted. Book prints (x^2 + 2b^2x^2 + a^4)^3 under the root: an evident misprint for x^4 (cf. the value and neighbouring items); transcribed with x^4."
+ },
+ {
+  "id": "GR3.165.9",
+  "gr": "3.165.9",
+  "page": 343,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 - a^2)^2/((x^2 + a^2)^2*Sqrt[(x^4 + 2*b^2*x^2 + a^4)]), {x, u, Infinity}]",
+  "rhs": [
+   "a/(a^2 - b^2)*MatharE2[ArcCos[(u^2 - a^2)/(u^2 + a^2)], (Sqrt[a^2 - b^2]/(a*Sqrt[2]))] - (a^2 + b^2)/(2*a*(a^2 - b^2))*MatharF2[ArcCos[(u^2 - a^2)/(u^2 + a^2)], (Sqrt[a^2 - b^2]/(a*Sqrt[2]))]"
+  ],
+  "conds": [
+   "a^2 > b^2",
+   "a^2 > 0",
+   "u >= 0"
+  ],
+  "cite": "BY (263.04, 266.07)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf (x^2-a^2)^2 dx/((x^2+a^2)^2 sqrt(x^4+2b^2x^2+a^4)) = aE(alpha,r)/(a^2-b^2) - (a^2+b^2)F(alpha,r)/(2a(a^2-b^2))",
+  "note": "3.165 notation alpha = arccos((u^2-a^2)/(u^2+a^2)), r = sqrt(a^2-b^2)/(a sqrt 2) substituted."
+ },
+ {
+  "id": "GR3.165.10",
+  "gr": "3.165.10",
+  "page": 344,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x^4 + 2*b^2*x^2 + a^4)]/(x^2 + a^2)^2, {x, u, Infinity}]",
+  "rhs": [
+   "1/(2*a)*MatharE2[ArcCos[(u^2 - a^2)/(u^2 + a^2)], (Sqrt[a^2 - b^2]/(a*Sqrt[2]))]"
+  ],
+  "conds": [
+   "a^2 > b^2",
+   "a^2 > 0",
+   "u >= 0"
+  ],
+  "cite": "BY (263.01, 266.01)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf sqrt(x^4+2b^2x^2+a^4)/(x^2+a^2)^2 dx = E(alpha,r)/(2a)",
+  "note": "3.165 notation alpha = arccos((u^2-a^2)/(u^2+a^2)), r = sqrt(a^2-b^2)/(a sqrt 2) substituted."
+ },
+ {
+  "id": "GR3.165.11",
+  "gr": "3.165.11",
+  "page": 344,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[(x^4 + 2*b^2*x^2 + a^4)]/(x^2 - a^2)^2, {x, u, Infinity}]",
+  "rhs": [
+   "1/(2*a)*(MatharF2[ArcCos[(u^2 - a^2)/(u^2 + a^2)], (Sqrt[a^2 - b^2]/(a*Sqrt[2]))] - MatharE2[ArcCos[(u^2 - a^2)/(u^2 + a^2)], (Sqrt[a^2 - b^2]/(a*Sqrt[2]))]) + u/(u^4 - a^4)*Sqrt[(u^4 + 2*b^2*u^2 + a^4)]"
+  ],
+  "conds": [
+   "a > b > 0",
+   "u > a"
+  ],
+  "cite": "BY (263)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf sqrt(x^4+2b^2x^2+a^4)/(x^2-a^2)^2 dx = [F-E](alpha,r)/(2a) + u sqrt(u^4+2b^2u^2+a^4)/(u^4-a^4)",
+  "note": "3.165 notation alpha = arccos((u^2-a^2)/(u^2+a^2)), r = sqrt(a^2-b^2)/(a sqrt 2) substituted."
+ },
+ {
+  "id": "GR3.165.12",
+  "gr": "3.165.12",
+  "page": 344,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 + a^2)^2/(((x^2 + a^2)^2 - 4*a^2*p^2*x^2)*Sqrt[(x^4 + 2*b^2*x^2 + a^4)]), {x, u, Infinity}]",
+  "rhs": [
+   "1/(2*a)*EllipticPi[p^2, ArcCos[(u^2 - a^2)/(u^2 + a^2)], ((Sqrt[a^2 - b^2]/(a*Sqrt[2])))^2]"
+  ],
+  "conds": [
+   "a > b > 0",
+   "u >= 0",
+   "p^2 < 1"
+  ],
+  "cite": "BY (263.02)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf (x^2+a^2)^2 dx/([(x^2+a^2)^2 - 4a^2p^2x^2] sqrt(x^4+2b^2x^2+a^4)) = Pi(alpha,p^2,r)/(2a)",
+  "note": "3.165 notation alpha = arccos((u^2-a^2)/(u^2+a^2)), r = sqrt(a^2-b^2)/(a sqrt 2) substituted. Condition p^2 < 1 added (otherwise the integrand has real poles); book gives none."
+ },
+ {
+  "id": "GR3.166.1",
+  "gr": "3.166.1",
+  "page": 344,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x^4 + 1], {x, u, Infinity}]",
+  "rhs": [
+   "(1/2)*MatharF2[ArcCos[(u^2 - 1)/(u^2 + 1)], (Sqrt[2]/2)]"
+  ],
+  "conds": [
+   "u >= 0"
+  ],
+  "cite": "H (287), BY (263.50)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf dx/sqrt(x^4+1) = F(alpha,r)/2",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.2",
+  "gr": "3.166.2",
+  "page": 344,
+  "status": "ok",
+  "lhs": "Integrate[1/(x^2*Sqrt[x^4 + 1]), {x, u, Infinity}]",
+  "rhs": [
+   "(1/2)*(MatharF2[ArcCos[(u^2 - 1)/(u^2 + 1)], (Sqrt[2]/2)] - 2*MatharE2[ArcCos[(u^2 - 1)/(u^2 + 1)], (Sqrt[2]/2)]) + Sqrt[u^4 + 1]/(u*(u^2 + 1))"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "BY (263.57)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf dx/(x^2 sqrt(x^4+1)) = [F(alpha,r) - 2E(alpha,r)]/2 + sqrt(u^4+1)/(u(u^2+1))",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.3",
+  "gr": "3.166.3",
+  "page": 344,
+  "status": "ok",
+  "lhs": "Integrate[x^2/((x^4 + 1)*Sqrt[x^4 + 1]), {x, u, Infinity}]",
+  "rhs": [
+   "(1/2)*MatharE2[ArcCos[(u^2 - 1)/(u^2 + 1)], (Sqrt[2]/2)] - (1/4)*MatharF2[ArcCos[(u^2 - 1)/(u^2 + 1)], (Sqrt[2]/2)] - u*(u^2 - 1)/(2*(u^2 + 1)*Sqrt[u^4 + 1])"
+  ],
+  "conds": [
+   "u >= 0"
+  ],
+  "cite": "BY (263.59)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf x^2 dx/((x^4+1) sqrt(x^4+1)) = E/2 - F/4 - u(u^2-1)/(2(u^2+1) sqrt(u^4+1))",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.4",
+  "gr": "3.166.4",
+  "page": 344,
+  "status": "ok",
+  "lhs": "Integrate[x^2/((x^2 + 1)^2*Sqrt[x^4 + 1]), {x, u, Infinity}]",
+  "rhs": [
+   "(1/4)*(MatharF2[ArcCos[(u^2 - 1)/(u^2 + 1)], (Sqrt[2]/2)] - MatharE2[ArcCos[(u^2 - 1)/(u^2 + 1)], (Sqrt[2]/2)])"
+  ],
+  "conds": [
+   "u >= 0"
+  ],
+  "cite": "BY (263.53)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf x^2 dx/((x^2+1)^2 sqrt(x^4+1)) = [F(alpha,r) - E(alpha,r)]/4",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.5",
+  "gr": "3.166.5",
+  "page": 344,
+  "status": "ok",
+  "lhs": "Integrate[x^2/((x^2 - 1)^2*Sqrt[x^4 + 1]), {x, u, Infinity}]",
+  "rhs": [
+   "u*Sqrt[u^4 + 1]/(2*(u^4 - 1)) - (1/4)*MatharE2[ArcCos[(u^2 - 1)/(u^2 + 1)], (Sqrt[2]/2)]"
+  ],
+  "conds": [
+   "u > 1"
+  ],
+  "cite": "BY (263.55)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf x^2 dx/((x^2-1)^2 sqrt(x^4+1)) = u sqrt(u^4+1)/(2(u^4-1)) - E(alpha,r)/4",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.6",
+  "gr": "3.166.6",
+  "page": 344,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[x^4 + 1]/(x^2 - 1)^2, {x, u, Infinity}]",
+  "rhs": [
+   "(1/2)*(MatharF2[ArcCos[(u^2 - 1)/(u^2 + 1)], (Sqrt[2]/2)] - MatharE2[ArcCos[(u^2 - 1)/(u^2 + 1)], (Sqrt[2]/2)]) + u*Sqrt[u^4 + 1]/(u^4 - 1)"
+  ],
+  "conds": [
+   "u > 1"
+  ],
+  "cite": "BY (263.58)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf sqrt(x^4+1)/(x^2-1)^2 dx = [F-E]/2 + u sqrt(u^4+1)/(u^4-1)",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.7",
+  "gr": "3.166.7",
+  "page": 344,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 - 1)^2/((x^2 + 1)^2*Sqrt[x^4 + 1]), {x, u, Infinity}]",
+  "rhs": [
+   "MatharE2[ArcCos[(u^2 - 1)/(u^2 + 1)], (Sqrt[2]/2)] - (1/2)*MatharF2[ArcCos[(u^2 - 1)/(u^2 + 1)], (Sqrt[2]/2)]"
+  ],
+  "conds": [
+   "u >= 0"
+  ],
+  "cite": "BY (263.54)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf (x^2-1)^2 dx/((x^2+1)^2 sqrt(x^4+1)) = E(alpha,r) - F(alpha,r)/2",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.8",
+  "gr": "3.166.8",
+  "page": 344,
+  "status": "ok",
+  "lhs": "Integrate[Sqrt[x^4 + 1]/(x^2 + 1)^2, {x, u, Infinity}]",
+  "rhs": [
+   "(1/2)*MatharE2[ArcCos[(u^2 - 1)/(u^2 + 1)], (Sqrt[2]/2)]"
+  ],
+  "conds": [
+   "u >= 0"
+  ],
+  "cite": "BY (263.51)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf sqrt(x^4+1)/(x^2+1)^2 dx = E(alpha,r)/2",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.9",
+  "gr": "3.166.9",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 + 1)^2/(((x^2 + 1)^2 - 4*p^2*x^2)*Sqrt[x^4 + 1]), {x, u, Infinity}]",
+  "rhs": [
+   "(1/2)*EllipticPi[p^2, ArcCos[(u^2 - 1)/(u^2 + 1)], ((Sqrt[2]/2))^2]"
+  ],
+  "conds": [
+   "u >= 0",
+   "p^2 < 1"
+  ],
+  "cite": "BY (263.52)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^inf (x^2+1)^2 dx/([(x^2+1)^2 - 4p^2x^2] sqrt(x^4+1)) = Pi(alpha,p^2,r)/2",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted. Condition p^2 < 1 added (otherwise the integrand has real poles); book gives none."
+ },
+ {
+  "id": "GR3.166.10",
+  "gr": "3.166.10",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x^4 + 1], {x, 0, u}]",
+  "rhs": [
+   "(1/2)*MatharF2[ArcCos[(1 - u^2)/(1 + u^2)], (Sqrt[2]/2)]"
+  ],
+  "conds": [],
+  "cite": "H 66(288)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_0^u dx/sqrt(x^4+1) = F(epsilon,r)/2",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.11",
+  "gr": "3.166.11",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x^4 + 1], {x, u, 1}]",
+  "rhs": [
+   "(2 - Sqrt[2])*MatharF2[ArcTan[(1 + Sqrt[2])*(1 - u)/(1 + u)], (2*Sqrt[3*Sqrt[2] - 4])]"
+  ],
+  "conds": [
+   "0 <= u < 1"
+  ],
+  "cite": "BY (264.50)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^1 dx/sqrt(x^4+1) = (2 - sqrt2) F(beta,q)",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.12",
+  "gr": "3.166.12",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[(x^2 + x*Sqrt[2] + 1)/((x^2 - x*Sqrt[2] + 1)*Sqrt[x^4 + 1]), {x, u, 1}]",
+  "rhs": [
+   "(2 + Sqrt[2])*MatharE2[ArcTan[(1 + Sqrt[2])*(1 - u)/(1 + u)], (2*Sqrt[3*Sqrt[2] - 4])]"
+  ],
+  "conds": [
+   "0 <= u < 1"
+  ],
+  "cite": "BY (264.51)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^1 (x^2+x sqrt2+1) dx/((x^2-x sqrt2+1) sqrt(x^4+1)) = (2+sqrt2) E(beta,q)",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.13",
+  "gr": "3.166.13",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[(1 - x)^2/((x^2 - x*Sqrt[2] + 1)*Sqrt[x^4 + 1]), {x, u, 1}]",
+  "rhs": [
+   "1/Sqrt[2]*(MatharF2[ArcTan[(1 + Sqrt[2])*(1 - u)/(1 + u)], (2*Sqrt[3*Sqrt[2] - 4])] - MatharE2[ArcTan[(1 + Sqrt[2])*(1 - u)/(1 + u)], (2*Sqrt[3*Sqrt[2] - 4])])"
+  ],
+  "conds": [
+   "0 <= u < 1"
+  ],
+  "cite": "BY (264.55)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^1 (1-x)^2 dx/((x^2-x sqrt2+1) sqrt(x^4+1)) = [F(beta,q) - E(beta,q)]/sqrt2",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.14",
+  "gr": "3.166.14",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[(1 + x)^2/((x^2 - x*Sqrt[2] + 1)*Sqrt[x^4 + 1]), {x, u, 1}]",
+  "rhs": [
+   "(3*Sqrt[2] + 4)/2*MatharE2[ArcTan[(1 + Sqrt[2])*(1 - u)/(1 + u)], (2*Sqrt[3*Sqrt[2] - 4])] - (3*Sqrt[2] - 4)/2*MatharF2[ArcTan[(1 + Sqrt[2])*(1 - u)/(1 + u)], (2*Sqrt[3*Sqrt[2] - 4])]"
+  ],
+  "conds": [
+   "0 <= u < 1"
+  ],
+  "cite": "BY (264.56)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^1 (1+x)^2 dx/((x^2-x sqrt2+1) sqrt(x^4+1)) = (3sqrt2+4)/2 E(beta,q) - (3sqrt2-4)/2 F(beta,q)",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.15",
+  "gr": "3.166.15",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[1 - x^4], {x, u, 1}]",
+  "rhs": [
+   "1/Sqrt[2]*MatharF2[ArcCos[u], (Sqrt[2]/2)]"
+  ],
+  "conds": [
+   "u < 1"
+  ],
+  "cite": "H 66 (290), BY (259.75)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^1 dx/sqrt(1-x^4) = F(gamma,r)/sqrt2",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.16",
+  "gr": "3.166.16",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[1 - x^4], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[1/4]^2/(4*Sqrt[2*Pi])"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_0^1 dx/sqrt(1-x^4) = Gamma(1/4)^2/(4 sqrt(2 pi))",
+  "note": ""
+ },
+ {
+  "id": "GR3.166.17",
+  "gr": "3.166.17",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x^4 - 1], {x, 1, u}]",
+  "rhs": [
+   "1/Sqrt[2]*MatharF2[ArcCos[1/u], (Sqrt[2]/2)]"
+  ],
+  "conds": [
+   "u > 1"
+  ],
+  "cite": "H 66 (289), BY (260.75)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_1^u dx/sqrt(x^4-1) = F(delta,r)/sqrt2",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.18a",
+  "gr": "3.166.18a",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[1 - x^4], {x, u, 1}]",
+  "rhs": [
+   "Sqrt[2]*MatharE2[ArcCos[u], (Sqrt[2]/2)] - 1/Sqrt[2]*MatharF2[ArcCos[u], (Sqrt[2]/2)]"
+  ],
+  "conds": [
+   "u < 1"
+  ],
+  "cite": "BY (259.76)",
+  "edition_note": "8",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^1 x^2 dx/sqrt(1-x^4) = sqrt2 E(gamma,r) - F(gamma,r)/sqrt2  [u<1]",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.18b",
+  "gr": "3.166.18b",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[1 - x^4], {x, 0, 1}]",
+  "rhs": [
+   "Gamma[3/4]^2/Sqrt[2*Pi]"
+  ],
+  "conds": [],
+  "cite": "BY (259.76)",
+  "edition_note": "8",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_0^1 x^2 dx/sqrt(1-x^4) = Gamma(3/4)^2/sqrt(2 pi)  [u=0]",
+  "note": "u = 0 case of 3.166.18 substituted."
+ },
+ {
+  "id": "GR3.166.19",
+  "gr": "3.166.19",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[x^2/Sqrt[x^4 - 1], {x, 1, u}]",
+  "rhs": [
+   "1/Sqrt[2]*MatharF2[ArcCos[1/u], (Sqrt[2]/2)] - Sqrt[2]*MatharE2[ArcCos[1/u], (Sqrt[2]/2)] + (1/u)*Sqrt[u^4 - 1]"
+  ],
+  "conds": [
+   "u > 1"
+  ],
+  "cite": "BY (260.77)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_1^u x^2 dx/sqrt(x^4-1) = F(delta,r)/sqrt2 - sqrt2 E(delta,r) + sqrt(u^4-1)/u",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.20",
+  "gr": "3.166.20",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[1 - x^4], {x, u, 1}]",
+  "rhs": [
+   "1/(3*Sqrt[2])*MatharF2[ArcCos[u], (Sqrt[2]/2)] + (u/3)*Sqrt[1 - u^4]"
+  ],
+  "conds": [
+   "u < 1"
+  ],
+  "cite": "BY (259.76)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_u^1 x^4 dx/sqrt(1-x^4) = F(gamma,r)/(3 sqrt2) + u sqrt(1-u^4)/3",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.21",
+  "gr": "3.166.21",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[x^4/Sqrt[x^4 - 1], {x, 1, u}]",
+  "rhs": [
+   "1/(3*Sqrt[2])*MatharF2[ArcCos[1/u], (Sqrt[2]/2)] + (1/3)*u*Sqrt[u^4 - 1]"
+  ],
+  "conds": [
+   "u > 1"
+  ],
+  "cite": "BY (260.77)",
+  "edition_note": "3",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_1^u x^4 dx/sqrt(x^4-1) = F(delta,r)/(3 sqrt2) + u sqrt(u^4-1)/3",
+  "note": "3.166 notation (alpha, beta, gamma, delta, epsilon, r = sqrt2/2, q = 2 sqrt(3 sqrt2 - 4)) substituted."
+ },
+ {
+  "id": "GR3.166.22",
+  "gr": "3.166.22",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x*(1 + x^3)], {x, 0, u}]",
+  "rhs": [
+   "1/3^(1/4)*MatharF2[ArcCos[(1 + (1 - Sqrt[3])*u)/(1 + (1 + Sqrt[3])*u)], Sqrt[2 + Sqrt[3]]/2]"
+  ],
+  "conds": [
+   "u > 0"
+  ],
+  "cite": "BY (260.50)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_0^u dx/sqrt(x(1+x^3)) = 3^(-1/4) F(arccos((1+(1-sqrt3)u)/(1+(1+sqrt3)u)), sqrt(2+sqrt3)/2)",
+  "note": ""
+ },
+ {
+  "id": "GR3.166.23",
+  "gr": "3.166.23",
+  "page": 345,
+  "status": "ok",
+  "lhs": "Integrate[1/Sqrt[x*(1 - x^3)], {x, 0, u}]",
+  "rhs": [
+   "1/3^(1/4)*MatharF2[ArcCos[(1 - (1 + Sqrt[3])*u)/(1 + (Sqrt[3] - 1)*u)], Sqrt[2 - Sqrt[3]]/2]"
+  ],
+  "conds": [
+   "1 >= u > 0"
+  ],
+  "cite": "BY (259.50)",
+  "edition_note": "",
+  "section": "3.13-3.17 Square roots of polynomials",
+  "tex": "int_0^u dx/sqrt(x(1-x^3)) = 3^(-1/4) F(arccos((1-(1+sqrt3)u)/(1+(sqrt3-1)u)), sqrt(2-sqrt3)/2)",
+  "note": ""
+ }
+]

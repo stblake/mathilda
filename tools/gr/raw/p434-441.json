@@ -1,0 +1,2036 @@
+[
+ {
+  "id": "GR3.547.12",
+  "gr": "3.547.12",
+  "page": 434,
+  "status": "ok",
+  "lhs": "Integrate[Exp[2*nu*x - 2*beta*Sinh[x]]/Sqrt[Sinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi^3*beta]/2*(BesselJ[nu + 1/4, beta]*BesselJ[nu - 1/4, beta] + BesselY[nu + 1/4, beta]*BesselY[nu - 1/4, beta])",
+   "Sqrt[Pi^3*beta]/2*(BesselJ[1/4 + nu, beta]*BesselJ[1/4 - nu, beta] + BesselY[1/4 + nu, beta]*BesselY[1/4 - nu, beta])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "EH I 169(20)",
+  "edition_note": "",
+  "section": "3.54 Hyperbolic functions and exponentials",
+  "tex": "int_0^inf exp(2nu x - 2beta sinh x)/sqrt(sinh x) dx = 1/2 sqrt(pi^3 beta)[J_{nu+1/4}J_{nu-1/4}+Y_{nu+1/4}Y_{nu-1/4}]",
+  "note": "second rhs: orders 1/4+nu, 1/4-nu as in 3.547.18 (possible misprint of order signs)"
+ },
+ {
+  "id": "GR3.547.13",
+  "gr": "3.547.13",
+  "page": 434,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-2*nu*x - 2*beta*Sinh[x]]/Sqrt[Sinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi^3*beta]/2*(BesselJ[nu + 1/4, beta]*BesselY[nu - 1/4, beta] - BesselJ[nu - 1/4, beta]*BesselY[nu + 1/4, beta])",
+   "Sqrt[Pi^3*beta]/2*(BesselJ[1/4 + nu, beta]*BesselY[1/4 - nu, beta] - BesselJ[1/4 - nu, beta]*BesselY[1/4 + nu, beta])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 169(21)",
+  "edition_note": "",
+  "section": "3.54 Hyperbolic functions and exponentials",
+  "tex": "int_0^inf exp(-2nu x - 2beta sinh x)/sqrt(sinh x) dx = 1/2 sqrt(pi^3 beta)[J_{nu+1/4}Y_{nu-1/4}-J_{nu-1/4}Y_{nu+1/4}]",
+  "note": "second rhs: orders 1/4+nu, 1/4-nu as in 3.547.19 (possible misprint)"
+ },
+ {
+  "id": "GR3.547.14",
+  "gr": "3.547.14",
+  "page": 434,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-2*beta*Sinh[x]]*Sinh[2*nu*x]/Sqrt[Sinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(4*I)*Sqrt[Pi^3*beta/2]*(E^(nu*Pi*I)*HankelH1[1/2 + nu, beta]*HankelH2[1/2 - nu, beta] - E^(-nu*Pi*I)*HankelH1[1/2 - nu, beta]*HankelH2[1/2 + nu, beta])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 170(24)",
+  "edition_note": "",
+  "section": "3.54 Hyperbolic functions and exponentials",
+  "tex": "Integrate[Exp[-2*beta*Sinh[x]]*Sinh[2*nu*x]/Sqrt[Sinh[x]], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.547.15",
+  "gr": "3.547.15",
+  "page": 434,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-2*beta*Sinh[x]]*Cosh[2*nu*x]/Sqrt[Sinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "1/4*Sqrt[Pi^3*beta/2]*(E^(nu*Pi*I)*HankelH1[1/2 + nu, beta]*HankelH2[1/2 - nu, beta] + E^(-nu*Pi*I)*HankelH1[1/2 - nu, beta]*HankelH2[1/2 + nu, beta])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 170(25)",
+  "edition_note": "",
+  "section": "3.54 Hyperbolic functions and exponentials",
+  "tex": "Integrate[Exp[-2*beta*Sinh[x]]*Cosh[2*nu*x]/Sqrt[Sinh[x]], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.547.16",
+  "gr": "3.547.16",
+  "page": 434,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-2*beta*Cosh[x]]*Cosh[2*nu*x]/Sqrt[Cosh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[beta/Pi]*BesselK[nu + 1/4, beta]*BesselK[nu - 1/4, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 170(26)",
+  "edition_note": "",
+  "section": "3.54 Hyperbolic functions and exponentials",
+  "tex": "Integrate[Exp[-2*beta*Cosh[x]]*Cosh[2*nu*x]/Sqrt[Cosh[x]], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.547.17",
+  "gr": "3.547.17",
+  "page": 434,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-2*beta*(Cosh[x] - 1)]*Cosh[2*nu*x]/Sqrt[Cosh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[beta/Pi]*E^(2*beta)*BesselK[nu + 1/4, beta]*BesselK[nu - 1/4, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 170(27)",
+  "edition_note": "8",
+  "section": "3.54 Hyperbolic functions and exponentials",
+  "tex": "Integrate[Exp[-2*beta*(Cosh[x] - 1)]*Cosh[2*nu*x]/Sqrt[Cosh[x]], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.547.18",
+  "gr": "3.547.18",
+  "page": 434,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[(nu + 1/4)*Pi]*Exp[-2*nu*x - 2*beta*Sinh[x]] + Sin[(nu + 1/4)*Pi]*Exp[2*nu*x - 2*beta*Sinh[x]])/Sqrt[Sinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi^3*beta]/2*(BesselJ[1/4 + nu, beta]*BesselJ[1/4 - nu, beta] + BesselY[1/4 + nu, beta]*BesselY[1/4 - nu, beta])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 169(22)",
+  "edition_note": "",
+  "section": "3.54 Hyperbolic functions and exponentials",
+  "tex": "Integrate[(Cos[(nu + 1/4)*Pi]*Exp[-2*nu*x - 2*beta*Sinh[x]] + Sin[(nu + 1/4)*Pi]*Exp[2*nu*x - 2*beta*Sinh[x]])/Sqrt[Sinh[x]], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.547.19",
+  "gr": "3.547.19",
+  "page": 434,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[(nu + 1/4)*Pi]*Exp[-2*nu*x - 2*beta*Sinh[x]] - Cos[(nu + 1/4)*Pi]*Exp[2*nu*x - 2*beta*Sinh[x]])/Sqrt[Sinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi^3*beta]/2*(BesselJ[1/4 + nu, beta]*BesselY[1/4 - nu, beta] - BesselJ[1/4 - nu, beta]*BesselY[1/4 + nu, beta])"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 169(23)",
+  "edition_note": "",
+  "section": "3.54 Hyperbolic functions and exponentials",
+  "tex": "Integrate[(Sin[(nu + 1/4)*Pi]*Exp[-2*nu*x - 2*beta*Sinh[x]] - Cos[(nu + 1/4)*Pi]*Exp[2*nu*x - 2*beta*Sinh[x]])/Sqrt[Sinh[x]], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.547.20",
+  "gr": "3.547.20",
+  "page": 434,
+  "status": "ok",
+  "lhs": "Integrate[Exp[-beta*(Cosh[x] - 1)]*Cosh[nu*x]*Sinh[x]/Sqrt[Cosh[x]*(Cosh[x] - 1)], {x, 0, Infinity}]",
+  "rhs": [
+   "E^beta*BesselK[nu, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 169(19)",
+  "edition_note": "",
+  "section": "3.54 Hyperbolic functions and exponentials",
+  "tex": "Integrate[Exp[-beta*(Cosh[x] - 1)]*Cosh[nu*x]*Sinh[x]/Sqrt[Cosh[x]*(Cosh[x] - 1)], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.548.1",
+  "gr": "3.548.1",
+  "page": 434,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x^4)*Sinh[a*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*Sqrt[a/(2*mu)]*Exp[a^2/(8*mu)]*BesselI[1/4, a^2/(8*mu)]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "a >= 0"
+  ],
+  "cite": "ET I 166(42)",
+  "edition_note": "",
+  "section": "3.54 Hyperbolic functions and exponentials",
+  "tex": "Integrate[E^(-mu*x^4)*Sinh[a*x^2], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.548.2",
+  "gr": "3.548.2",
+  "page": 434,
+  "status": "ok",
+  "lhs": "Integrate[E^(-mu*x^4)*Cosh[a*x^2], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi/4*Sqrt[a/(2*mu)]*Exp[a^2/(8*mu)]*BesselI[-1/4, a^2/(8*mu)]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "a > 0"
+  ],
+  "cite": "ET I 166(43)",
+  "edition_note": "",
+  "section": "3.54 Hyperbolic functions and exponentials",
+  "tex": "Integrate[E^(-mu*x^4)*Cosh[a*x^2], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.549.1",
+  "gr": "3.549.1",
+  "page": 435,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^(-beta*x)*Sinh[(2*n + 1)*ArcSinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "NeumannO[2*n + 1, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 167(5)",
+  "edition_note": "",
+  "section": "3.54 Hyperbolic functions and exponentials",
+  "tex": "Integrate[E^(-beta*x)*Sinh[(2*n + 1)*ArcSinh[x]], {x, 0, Infinity}]",
+  "note": "cf. 3.547.6",
+  "reason": "Neumann polynomial O_n"
+ },
+ {
+  "id": "GR3.549.2",
+  "gr": "3.549.2",
+  "page": 435,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^(-beta*x)*Cosh[2*n*ArcSinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "NeumannO[2*n, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "ET I 168(6)",
+  "edition_note": "",
+  "section": "3.54 Hyperbolic functions and exponentials",
+  "tex": "Integrate[E^(-beta*x)*Cosh[2*n*ArcSinh[x]], {x, 0, Infinity}]",
+  "note": "cf. 3.547.8",
+  "reason": "Neumann polynomial O_n"
+ },
+ {
+  "id": "GR3.549.3",
+  "gr": "3.549.3",
+  "page": 435,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*Sinh[nu*ArcSinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "nu/beta*(Pi/2*Tan[Pi*nu/2]*(AngerJ[nu, beta] - BesselJ[nu, beta]) - Pi/2*(WeberE[nu, beta] + BesselY[nu, beta]))"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 168(7)",
+  "edition_note": "",
+  "section": "3.54 Hyperbolic functions and exponentials",
+  "tex": "int_0^inf e^(-beta x) sinh(nu arcsinh x) dx = nu/beta S_{0,nu}(beta)",
+  "note": "cf. 3.547.5; Lommel S_{0,nu}(beta) substituted from its defining relation in 3.547.3; nu not an integer (tan pole at odd nu)"
+ },
+ {
+  "id": "GR3.549.4",
+  "gr": "3.549.4",
+  "page": 435,
+  "status": "SKIP-UNSUPPORTED",
+  "lhs": "Integrate[E^(-beta*x)*Cosh[nu*ArcSinh[x]], {x, 0, Infinity}]",
+  "rhs": [
+   "1/beta*LommelS2[1, nu, beta]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "",
+  "edition_note": "",
+  "section": "3.54 Hyperbolic functions and exponentials",
+  "tex": "Integrate[E^(-beta*x)*Cosh[nu*ArcSinh[x]], {x, 0, Infinity}]",
+  "note": "cf. 3.547.7",
+  "reason": "Lommel function S_{1,nu}"
+ },
+ {
+  "id": "GR3.551.1",
+  "gr": "3.551.1",
+  "page": 435,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-beta*x)*Sinh[gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu]/2*((beta - gamma)^(-mu) - (beta + gamma)^(-mu))"
+  ],
+  "conds": [
+   "Re[mu] > -1",
+   "Re[beta] > Abs[Re[gamma]]"
+  ],
+  "cite": "ET I 164(18)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^(mu - 1)*E^(-beta*x)*Sinh[gamma*x], {x, 0, Infinity}]",
+  "note": "book prints [Re beta > -1, Re beta > |Re gamma|]; first condition is evidently Re mu > -1 (convergence at 0) and is transcribed so"
+ },
+ {
+  "id": "GR3.551.2",
+  "gr": "3.551.2",
+  "page": 435,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-beta*x)*Cosh[gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu]/2*((beta - gamma)^(-mu) + (beta + gamma)^(-mu))"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[beta] > Abs[Re[gamma]]"
+  ],
+  "cite": "ET I 164(19)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^(mu - 1)*E^(-beta*x)*Cosh[gamma*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.551.3",
+  "gr": "3.551.3",
+  "page": 435,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-beta*x)*Coth[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[mu]*(2^(1 - mu)*HurwitzZeta[mu, beta/2] - beta^(-mu))"
+  ],
+  "conds": [
+   "Re[mu] > 1",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 164(21)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^(mu - 1)*E^(-beta*x)*Coth[x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.551.4",
+  "gr": "3.551.4",
+  "page": 435,
+  "status": "ok",
+  "lhs": "Integrate[x^n*E^(-(p + m*q)*x)*Sinh[q*x]^m, {x, 0, Infinity}]",
+  "rhs": [
+   "2^(-m)*n!*Sum[Binomial[m, k]*(-1)^k/(p + 2*k*q)^(n + 1), {k, 0, m}]"
+  ],
+  "conds": [
+   "p > 0",
+   "q > 0",
+   "m < p + q*m",
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "LI (81)(4)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^n*E^(-(p + m*q)*x)*Sinh[q*x]^m, {x, 0, Infinity}]",
+  "note": "m, n nonnegative integers implied by m! sum and n!"
+ },
+ {
+  "id": "GR3.551.5",
+  "gr": "3.551.5",
+  "page": 435,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)/x*Sinh[gamma*x], {x, 0, 1}]",
+  "rhs": [
+   "(Log[(beta + gamma)/(beta - gamma)] + ExpIntegralEi[gamma - beta] - ExpIntegralEi[-gamma - beta])/2"
+  ],
+  "conds": [
+   "beta > gamma",
+   "beta + gamma > 0"
+  ],
+  "cite": "BI (80)(4)",
+  "edition_note": "11",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[E^(-beta*x)/x*Sinh[gamma*x], {x, 0, 1}]",
+  "note": "beta + gamma > 0 added (log argument positive)"
+ },
+ {
+  "id": "GR3.551.6",
+  "gr": "3.551.6",
+  "page": 435,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)/x*Sinh[gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Log[(beta + gamma)/(beta - gamma)]/2"
+  ],
+  "conds": [
+   "Re[beta] > Abs[Re[gamma]]"
+  ],
+  "cite": "ET I 163(12)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[E^(-beta*x)/x*Sinh[gamma*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.551.7",
+  "gr": "3.551.7",
+  "page": 435,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)/x*Cosh[gamma*x], {x, 1, Infinity}]",
+  "rhs": [
+   "(-ExpIntegralEi[gamma - beta] - ExpIntegralEi[-gamma - beta])/2"
+  ],
+  "conds": [
+   "Re[beta] > Abs[Re[gamma]]"
+  ],
+  "cite": "ET I 164(15)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[E^(-beta*x)/x*Cosh[gamma*x], {x, 1, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.551.8",
+  "gr": "3.551.8",
+  "page": 435,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-x)*Coth[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/4 - 1"
+  ],
+  "conds": [],
+  "cite": "BI (82)(6)",
+  "edition_note": "6",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x*E^(-x)*Coth[x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.551.9",
+  "gr": "3.551.9",
+  "page": 436,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*Tanh[x]/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[beta/4] + 2*Log[Gamma[beta/4]/Gamma[beta/4 + 1/2]]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 164(16)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[E^(-beta*x)*Tanh[x]/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.551.10",
+  "gr": "3.551.10",
+  "page": 436,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-x)*Coth[x/2], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^2/3 - 1"
+  ],
+  "conds": [],
+  "cite": "",
+  "edition_note": "6",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x*E^(-x)*Coth[x/2], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.552.1",
+  "gr": "3.552.1",
+  "page": 436,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-beta*x)/Sinh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(1 - mu)*Gamma[mu]*HurwitzZeta[mu, (beta + 1)/2]"
+  ],
+  "conds": [
+   "Re[mu] > 1",
+   "Re[beta] > -1"
+  ],
+  "cite": "ET I 164(20)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^(mu - 1)*E^(-beta*x)/Sinh[x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.552.2",
+  "gr": "3.552.2",
+  "page": 436,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m - 1)*E^(-a*x)/Sinh[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "1/(2*m)*Abs[BernoulliB[2*m]]*(Pi/a)^(2*m)"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "EH I 38(24)a",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^(2*m - 1)*E^(-a*x)/Sinh[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.552.3a",
+  "gr": "3.552.3",
+  "page": 436,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-x)/Cosh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "2^(1 - mu)*(1 - 2^(1 - mu))*Gamma[mu]*Zeta[mu]"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "mu != 1"
+  ],
+  "cite": "EH I 32(5)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^(mu - 1)*E^(-x)/Cosh[x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.552.3b",
+  "gr": "3.552.3",
+  "page": 436,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x)/Cosh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Log[2]"
+  ],
+  "conds": [],
+  "cite": "EH I 32(5)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[E^(-x)/Cosh[x], {x, 0, Infinity}]",
+  "note": "mu = 1 case substituted"
+ },
+ {
+  "id": "GR3.552.4",
+  "gr": "3.552.4",
+  "page": 436,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m - 1)*E^(-a*x)/Cosh[a*x], {x, 0, Infinity}]",
+  "rhs": [
+   "(1 - 2^(1 - 2*m))/(2*m)*Abs[BernoulliB[2*m]]*(Pi/a)^(2*m)"
+  ],
+  "conds": [
+   "a > 0",
+   "Element[m, Integers] && m >= 1"
+  ],
+  "cite": "EH I 39(25)a",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^(2*m - 1)*E^(-a*x)/Cosh[a*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.552.5",
+  "gr": "3.552.5",
+  "page": 436,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-2*n*x)/Sinh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "4*Sum[1/(2*k + 1)^3, {k, n, Infinity}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI(84)(4)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^2*E^(-2*n*x)/Sinh[x], {x, 0, Infinity}]",
+  "note": "cf. 4.261.13"
+ },
+ {
+  "id": "GR3.552.6",
+  "gr": "3.552.6",
+  "page": 436,
+  "status": "ok",
+  "lhs": "Integrate[x^3*E^(-2*n*x)/Sinh[x], {x, 0, Infinity}]",
+  "rhs": [
+   "Pi^4/8 - 12*Sum[1/(2*k - 1)^4, {k, 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (84)(6)",
+  "edition_note": "11",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^3*E^(-2*n*x)/Sinh[x], {x, 0, Infinity}]",
+  "note": "cf. 4.262.6"
+ },
+ {
+  "id": "GR3.553.1",
+  "gr": "3.553.1",
+  "page": 436,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x]^2/Sinh[x]*E^(-x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[a*Pi*Csc[a*Pi]]/2"
+  ],
+  "conds": [
+   "a < 1",
+   "a > -1"
+  ],
+  "cite": "BI (95)(7)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[Sinh[a*x]^2/Sinh[x]*E^(-x)/x, {x, 0, Infinity}]",
+  "note": "a > -1 added (convergence; integrand even in a)"
+ },
+ {
+  "id": "GR3.553.2",
+  "gr": "3.553.2",
+  "page": 436,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[x/2]^2/Cosh[x]*E^(-x)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[4/Pi]/2"
+  ],
+  "conds": [],
+  "cite": "BI (95)(4)",
+  "edition_note": "11",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[Sinh[x/2]^2/Cosh[x]*E^(-x)/x, {x, 0, Infinity}]",
+  "note": "cf. 4.267.2"
+ },
+ {
+  "id": "GR3.554.1",
+  "gr": "3.554.1",
+  "page": 436,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*(1 - Sech[x])/x, {x, 0, Infinity}]",
+  "rhs": [
+   "2*Log[Gamma[(beta + 3)/4]/Gamma[(beta + 1)/4]] - Log[beta/4]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 164(17)",
+  "edition_note": "11",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[E^(-beta*x)*(1 - Sech[x])/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.554.2",
+  "gr": "3.554.2",
+  "page": 436,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*(1/x - Csch[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "PolyGamma[(beta + 1)/2] - Log[beta/2]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 163(10)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[E^(-beta*x)*(1/x - Csch[x]), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.554.3",
+  "gr": "3.554.3",
+  "page": 436,
+  "status": "ok",
+  "lhs": "Integrate[(Sinh[(1/2 - beta)*x]/Sinh[x/2] - (1 - 2*beta)*E^(-x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "2*Log[Gamma[beta]] - Log[Pi] + Log[Sin[Pi*beta]]"
+  ],
+  "conds": [
+   "0 < Re[beta] < 1"
+  ],
+  "cite": "EH I 21(7)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[(Sinh[(1/2 - beta)*x]/Sinh[x/2] - (1 - 2*beta)*E^(-x))/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.554.4",
+  "gr": "3.554.4",
+  "page": 437,
+  "status": "ok",
+  "lhs": "Integrate[E^(-beta*x)*(1/x - Coth[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "PolyGamma[beta/2] - Log[beta/2] + 1/beta"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 163(11)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[E^(-beta*x)*(1/x - Coth[x]), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.554.5",
+  "gr": "3.554.5",
+  "page": 437,
+  "status": "ok",
+  "lhs": "Integrate[(-Sinh[q*x]/Sinh[x/2] + 2*q*E^(-x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "2*Log[Gamma[q + 1/2]] + Log[Cos[Pi*q]] - Log[Pi]"
+  ],
+  "conds": [
+   "q^2 < 1/4"
+  ],
+  "cite": "WH",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[(-Sinh[q*x]/Sinh[x/2] + 2*q*E^(-x))/x, {x, 0, Infinity}]",
+  "note": "book prints [q^2 < 1/2]; convergence at infinity needs |q| < 1/2, so q^2 < 1/4 is used for sampling"
+ },
+ {
+  "id": "GR3.554.6",
+  "gr": "3.554.6",
+  "page": 437,
+  "status": "ok",
+  "lhs": "Integrate[x^(mu - 1)*E^(-beta*x)*(Coth[x] - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "2^(1 - mu)*Gamma[mu]*HurwitzZeta[mu, beta/2 + 1]"
+  ],
+  "conds": [
+   "Re[beta] > 0",
+   "Re[mu] > 1"
+  ],
+  "cite": "ET I 164(22)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^(mu - 1)*E^(-beta*x)*(Coth[x] - 1), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.555.1",
+  "gr": "3.555.1",
+  "page": 437,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x]^2/(1 - E^(p*x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Log[p/(2*a*Pi)*Sin[2*a*Pi/p]]/4"
+  ],
+  "conds": [
+   "0 < 2*Abs[a] < p"
+  ],
+  "cite": "BI (93)(15)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[Sinh[a*x]^2/(1 - E^(p*x))/x, {x, 0, Infinity}]",
+  "note": "cf. 3.545.2"
+ },
+ {
+  "id": "GR3.555.2",
+  "gr": "3.555.2",
+  "page": 437,
+  "status": "ok",
+  "lhs": "Integrate[Sinh[a*x]^2/(E^x + 1)/x, {x, 0, Infinity}]",
+  "rhs": [
+   "-Log[a*Pi*Cot[a*Pi]]/4"
+  ],
+  "conds": [
+   "a < 1/2",
+   "a > -1/2"
+  ],
+  "cite": "BI (93)(9)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[Sinh[a*x]^2/(E^x + 1)/x, {x, 0, Infinity}]",
+  "note": "cf. 3.545.1; a > -1/2 added (convergence; integrand even in a)"
+ },
+ {
+  "id": "GR3.556.1",
+  "gr": "3.556.1",
+  "page": 437,
+  "status": "ok",
+  "lhs": "Integrate[x*(1 - E^(p*x))/Sinh[x], {x, -Infinity, Infinity}]",
+  "rhs": [
+   "-Pi^2/2*Tan[p*Pi/2]^2"
+  ],
+  "conds": [
+   "p < 1",
+   "p > -1"
+  ],
+  "cite": "BI (101)(4)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x*(1 - E^(p*x))/Sinh[x], {x, -Infinity, Infinity}]",
+  "note": "cf. 4.255.3; p > -1 added (convergence at -Infinity)"
+ },
+ {
+  "id": "GR3.556.2",
+  "gr": "3.556.2",
+  "page": 437,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-p*x))/Sinh[x]*(1 - E^(-(p + 1)*x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "2*p*Log[2]"
+  ],
+  "conds": [
+   "p > -1"
+  ],
+  "cite": "BI (95)(8)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[(1 - E^(-p*x))/Sinh[x]*(1 - E^(-(p + 1)*x))/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.557.1a",
+  "gr": "3.557.1",
+  "page": 437,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-p*x) - E^(-q*x))/(Cosh[x] - Cos[m*Pi/n])/x, {x, 0, Infinity}]",
+  "rhs": [
+   "2*Csc[m*Pi/n]*Sum[(-1)^(k - 1)*Sin[k*m*Pi/n]*Log[Gamma[(n + q + k)/(2*n)]*Gamma[(p + k)/(2*n)]/(Gamma[(n + p + k)/(2*n)]*Gamma[(q + k)/(2*n)])], {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "p > -1",
+   "q > -1",
+   "OddQ[m + n]",
+   "Element[m, Integers]",
+   "Element[n, Integers]",
+   "0 < m < n"
+  ],
+  "cite": "BI (96)(1)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[(E^(-p*x) - E^(-q*x))/(Cosh[x] - Cos[m*Pi/n])/x, {x, 0, Infinity}]",
+  "note": "0 < m < n added (integer m, n; denominator nonvanishing)"
+ },
+ {
+  "id": "GR3.557.1b",
+  "gr": "3.557.1",
+  "page": 437,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-p*x) - E^(-q*x))/(Cosh[x] - Cos[m*Pi/n])/x, {x, 0, Infinity}]",
+  "rhs": [
+   "2*Csc[m*Pi/n]*Sum[(-1)^(k - 1)*Sin[k*m*Pi/n]*Log[Gamma[(n + q - k)/n]*Gamma[(p + k)/n]/(Gamma[(n + p - k)/n]*Gamma[(q + k)/n])], {k, 1, (n - 1)/2}]"
+  ],
+  "conds": [
+   "p > -1",
+   "q > -1",
+   "EvenQ[m + n]",
+   "Element[m, Integers]",
+   "Element[n, Integers]",
+   "0 < m < n"
+  ],
+  "cite": "BI (96)(1)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[(E^(-p*x) - E^(-q*x))/(Cosh[x] - Cos[m*Pi/n])/x, {x, 0, Infinity}]",
+  "note": "0 < m < n added (integer m, n; denominator nonvanishing)"
+ },
+ {
+  "id": "GR3.557.2a",
+  "gr": "3.557.2",
+  "page": 437,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-x))^2/(Cosh[x] + Cos[m*Pi/n])/x, {x, 0, Infinity}]",
+  "rhs": [
+   "2*Csc[m*Pi/n]*Sum[(-1)^(k - 1)*Sin[k*m*Pi/n]*Log[Gamma[(n + k + 1)/(2*n)]^2*Gamma[(k + 2)/(2*n)]*Gamma[k/(2*n)]/(Gamma[(k + 1)/(2*n)]^2*Gamma[(n + k)/(2*n)]*Gamma[(n + k + 2)/(2*n)])], {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "OddQ[m + n]",
+   "Element[m, Integers]",
+   "Element[n, Integers]",
+   "0 < m < n"
+  ],
+  "cite": "BI (96)(2)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[(1 - E^(-x))^2/(Cosh[x] + Cos[m*Pi/n])/x, {x, 0, Infinity}]",
+  "note": "0 < m < n added"
+ },
+ {
+  "id": "GR3.557.2b",
+  "gr": "3.557.2",
+  "page": 437,
+  "status": "ok",
+  "lhs": "Integrate[(1 - E^(-x))^2/(Cosh[x] + Cos[m*Pi/n])/x, {x, 0, Infinity}]",
+  "rhs": [
+   "2*Csc[m*Pi/n]*Sum[(-1)^(k - 1)*Sin[k*m*Pi/n]*Log[Gamma[(n - k + 1)/n]^2*Gamma[(k + 2)/n]*Gamma[k/n]/(Gamma[(k + 1)/n]^2*Gamma[(n - k)/n]*Gamma[(n - k + 2)/n])], {k, 1, (n - 1)/2}]"
+  ],
+  "conds": [
+   "EvenQ[m + n]",
+   "Element[m, Integers]",
+   "Element[n, Integers]",
+   "0 < m < n"
+  ],
+  "cite": "BI (96)(2)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[(1 - E^(-x))^2/(Cosh[x] + Cos[m*Pi/n])/x, {x, 0, Infinity}]",
+  "note": "0 < m < n added"
+ },
+ {
+  "id": "GR3.557.3a",
+  "gr": "3.557.3",
+  "page": 438,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-x)*Tan[m*Pi/(2*n)] - E^(-p*x)*Sin[m*Pi/n]/(Cosh[x] + Cos[m*Pi/n]))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Tan[m*Pi/(2*n)]*Log[2*n] + 2*Sum[(-1)^(k - 1)*Sin[k*m*Pi/n]*Log[Gamma[(p + n + k)/(2*n)]/Gamma[(p + k)/(2*n)]], {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "OddQ[m + n]",
+   "p > -1",
+   "Element[m, Integers]",
+   "Element[n, Integers]",
+   "0 < m < n"
+  ],
+  "cite": "BI (96)(3)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[(E^(-x)*Tan[m*Pi/(2*n)] - E^(-p*x)*Sin[m*Pi/n]/(Cosh[x] + Cos[m*Pi/n]))/x, {x, 0, Infinity}]",
+  "note": "p > -1 and 0 < m < n added (not printed)"
+ },
+ {
+  "id": "GR3.557.3b",
+  "gr": "3.557.3",
+  "page": 438,
+  "status": "ok",
+  "lhs": "Integrate[(E^(-x)*Tan[m*Pi/(2*n)] - E^(-p*x)*Sin[m*Pi/n]/(Cosh[x] + Cos[m*Pi/n]))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "Tan[m*Pi/(2*n)]*Log[n] + 2*Sum[(-1)^(k - 1)*Sin[k*m*Pi/n]*Log[Gamma[(p + n - k)/n]/Gamma[(p + k)/n]], {k, 1, (n - 1)/2}]"
+  ],
+  "conds": [
+   "EvenQ[m + n]",
+   "p > -1",
+   "Element[m, Integers]",
+   "Element[n, Integers]",
+   "0 < m < n"
+  ],
+  "cite": "BI (96)(3)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[(E^(-x)*Tan[m*Pi/(2*n)] - E^(-p*x)*Sin[m*Pi/n]/(Cosh[x] + Cos[m*Pi/n]))/x, {x, 0, Infinity}]",
+  "note": "p > -1 and 0 < m < n added (not printed)"
+ },
+ {
+  "id": "GR3.557.4",
+  "gr": "3.557.4",
+  "page": 438,
+  "status": "ok",
+  "lhs": "Integrate[(1 + E^(-x))/(Cosh[x] + Cos[a])*x^(p - 1), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Sec[a/2]*Gamma[p]*Sum[(-1)^(k - 1)*Cos[(k - 1/2)*a]/k^p, {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "p > 0",
+   "Abs[a] < Pi"
+  ],
+  "cite": "LI (96)(5)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[(1 + E^(-x))/(Cosh[x] + Cos[a])*x^(p - 1), {x, 0, Infinity}]",
+  "note": "dx/x^(1-p) read as x^(p-1) dx; |a| < Pi added"
+ },
+ {
+  "id": "GR3.557.5",
+  "gr": "3.557.5",
+  "page": 438,
+  "status": "ok",
+  "lhs": "Integrate[x^q*E^(-x/2)*Cosh[x/2]/(Cosh[x] + Cos[lam]), {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[q + 1]/Cos[lam/2]*Sum[(-1)^(k - 1)*Cos[(k - 1/2)*lam]/k^(q + 1), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "q > -1",
+   "Abs[lam] < Pi"
+  ],
+  "cite": "LI (96)(5)a",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^q*E^(-x/2)*Cosh[x/2]/(Cosh[x] + Cos[lam]), {x, 0, Infinity}]",
+  "note": "|lam| < Pi added"
+ },
+ {
+  "id": "GR3.557.6",
+  "gr": "3.557.6",
+  "page": 438,
+  "status": "ok",
+  "lhs": "Integrate[x*(E^(-x) - Cos[a])/(Cosh[x] - Cos[a]), {x, 0, Infinity}]",
+  "rhs": [
+   "Abs[a]*Pi - a^2/2 - Pi^2/3"
+  ],
+  "conds": [
+   "Abs[a] < Pi"
+  ],
+  "cite": "BI (88)(8)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x*(E^(-x) - Cos[a])/(Cosh[x] - Cos[a]), {x, 0, Infinity}]",
+  "note": "|a| < Pi added (value not 2pi-periodic)"
+ },
+ {
+  "id": "GR3.557.7",
+  "gr": "3.557.7",
+  "page": 438,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*m + 1)*(E^(-x) - Cos[a*Pi])/(Cosh[x] - Cos[a*Pi]), {x, 0, Infinity}]",
+  "rhs": [
+   "2*(2*m + 1)!*Sum[Cos[k*a*Pi]/k^(2*m + 2), {k, 1, Infinity}]",
+   "-2*(2*m + 1)!*Sum[Cos[k*a*Pi]/k^(2*m + 2), {k, 1, Infinity}]"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0"
+  ],
+  "cite": "BI (88)(6)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^(2*m + 1)*(E^(-x) - Cos[a*Pi])/(Cosh[x] - Cos[a*Pi]), {x, 0, Infinity}]",
+  "note": "book sign appears wrong: (e^-x - cos t)/(cosh x - cos t) = -2 Sum e^(-kx) cos(kt), and m=0 contradicts 3.557.6; second rhs has the minus sign"
+ },
+ {
+  "id": "GR3.558.1",
+  "gr": "3.558.1",
+  "page": 438,
+  "status": "ok",
+  "lhs": "Integrate[x*(1 - E^(-n*x))/Sinh[x/2]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "2*n*Pi^2/3 - 4*Sum[(n - k)/k^2, {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (85)(3)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x*(1 - E^(-n*x))/Sinh[x/2]^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.558.2",
+  "gr": "3.558.2",
+  "page": 438,
+  "status": "ok",
+  "lhs": "Integrate[x*(1 - (-1)^n*E^(-n*x))/Cosh[x/2]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "n*Pi^2/3 + 4*Sum[(-1)^k*(n - k)/k^2, {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (85)(1)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x*(1 - (-1)^n*E^(-n*x))/Cosh[x/2]^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.558.3",
+  "gr": "3.558.3",
+  "page": 438,
+  "status": "ok",
+  "lhs": "Integrate[x^2*(1 - E^(-n*x))/Sinh[x/2]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "8*n*Zeta[3] - 8*Sum[(n - k)/k^3, {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (85)(5)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^2*(1 - E^(-n*x))/Sinh[x/2]^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.558.4",
+  "gr": "3.558.4",
+  "page": 438,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^x*(1 - E^(-2*n*x))/Sinh[x]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "8*n*Sum[1/(2*k - 1)^3, {k, 1, Infinity}] - 8*Sum[(n - k)/(2*k - 1)^3, {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (85)(6)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^2*E^x*(1 - E^(-2*n*x))/Sinh[x]^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.558.6",
+  "gr": "3.558.6",
+  "page": 438,
+  "status": "ok",
+  "lhs": "Integrate[x^3*(1 - E^(-n*x))/Sinh[x/2]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "4/15*n*Pi^4 - 24*Sum[(n - k)/k^4, {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (85)(9)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^3*(1 - E^(-n*x))/Sinh[x/2]^2, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.558.5",
+  "gr": "3.558.5",
+  "page": 438,
+  "status": "ok",
+  "lhs": "Integrate[x^2*(1 + (-1)^n*E^(-n*x))/Cosh[x/2]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "6*n*Zeta[3] - 8*Sum[(n - k)/k^3, {k, 1, n - 1}]",
+   "4*Pi^2/3 - 6*n*Zeta[3] + 8*Sum[(n - k)/k^3, {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (85)(4)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^2*(1 + (-1)^n*E^(-n*x))/Cosh[x/2]^2, {x, 0, Infinity}]",
+  "note": "printed value matches the integrand x^2(1 - (-1)^n e^(-nx))/cosh^2(x/2) (sign misprint in lhs, cf. 3.558.2); second rhs = value of the printed lhs, 2*Integrate[x^2 Sech[x/2]^2] - printed value"
+ },
+ {
+  "id": "GR3.558.7",
+  "gr": "3.558.7",
+  "page": 438,
+  "status": "ok",
+  "lhs": "Integrate[x^3*(1 + (-1)^n*E^(-n*x))/Cosh[x/2]^2, {x, 0, Infinity}]",
+  "rhs": [
+   "7/30*n*Pi^4 + 24*Sum[(-1)^k*(n - k)/k^4, {k, 1, n - 1}]",
+   "36*Zeta[3] - 7/30*n*Pi^4 - 24*Sum[(-1)^k*(n - k)/k^4, {k, 1, n - 1}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (85)(8)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^3*(1 + (-1)^n*E^(-n*x))/Cosh[x/2]^2, {x, 0, Infinity}]",
+  "note": "printed value matches the integrand x^3(1 - (-1)^n e^(-nx))/cosh^2(x/2) (sign misprint in lhs, cf. 3.558.2); second rhs = value of the printed lhs, 2*Integrate[x^3 Sech[x/2]^2] - printed value"
+ },
+ {
+  "id": "GR3.559",
+  "gr": "3.559",
+  "page": 439,
+  "status": "ok",
+  "lhs": "Integrate[E^(-x)*(a - 1/2 + ((1 - E^(-x))*(1 - a*x) - x*E^(-x))/(4*Sinh[x/2]^2)*E^((2 - a)*x))/x, {x, 0, Infinity}]",
+  "rhs": [
+   "a - 1/2 + Log[Gamma[a]] - Log[2*Pi]/2"
+  ],
+  "conds": [
+   "a > 0"
+  ],
+  "cite": "BI (96)(6)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[E^(-x)*(a - 1/2 + ((1 - E^(-x))*(1 - a*x) - x*E^(-x))/(4*Sinh[x/2]^2)*E^((2 - a)*x))/x, {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.561",
+  "gr": "3.561",
+  "page": 439,
+  "status": "ok",
+  "lhs": "Integrate[E^(-2*x)*Tanh[x/2]/(x*Cosh[x]), {x, 0, Infinity}]",
+  "rhs": [
+   "2*Log[Pi/(2*Sqrt[2])]"
+  ],
+  "conds": [],
+  "cite": "BI (93)(18)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[E^(-2*x)*Tanh[x/2]/(x*Cosh[x]), {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.562.1",
+  "gr": "3.562.1",
+  "page": 439,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*mu - 1)*E^(-beta*x^2)*Sinh[gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[2*mu]*(2*beta)^(-mu)/2*Exp[gamma^2/(8*beta)]*(ParabolicCylinderD[-2*mu, -gamma/Sqrt[2*beta]] - ParabolicCylinderD[-2*mu, gamma/Sqrt[2*beta]])"
+  ],
+  "conds": [
+   "Re[mu] > -1/2",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 166(44)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^(2*mu - 1)*E^(-beta*x^2)*Sinh[gamma*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.562.2",
+  "gr": "3.562.2",
+  "page": 439,
+  "status": "ok",
+  "lhs": "Integrate[x^(2*mu - 1)*E^(-beta*x^2)*Cosh[gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Gamma[2*mu]*(2*beta)^(-mu)/2*Exp[gamma^2/(8*beta)]*(ParabolicCylinderD[-2*mu, -gamma/Sqrt[2*beta]] + ParabolicCylinderD[-2*mu, gamma/Sqrt[2*beta]])"
+  ],
+  "conds": [
+   "Re[mu] > 0",
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 166(45)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^(2*mu - 1)*E^(-beta*x^2)*Cosh[gamma*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.562.3",
+  "gr": "3.562.3",
+  "page": 439,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-beta*x^2)*Sinh[gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "gamma/(4*beta)*Sqrt[Pi/beta]*Exp[gamma^2/(4*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "BI(81)(12)a, ET I 165(34)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x*E^(-beta*x^2)*Sinh[gamma*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.562.4",
+  "gr": "3.562.4",
+  "page": 439,
+  "status": "ok",
+  "lhs": "Integrate[x*E^(-beta*x^2)*Cosh[gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "gamma/(4*beta)*Sqrt[Pi/beta]*Exp[gamma^2/(4*beta)]*Erf[gamma/(2*Sqrt[beta])] + 1/(2*beta)"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 166(35)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x*E^(-beta*x^2)*Cosh[gamma*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.562.5",
+  "gr": "3.562.5",
+  "page": 439,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-beta*x^2)*Sinh[gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*(2*beta + gamma^2)/(8*beta^2*Sqrt[beta])*Exp[gamma^2/(4*beta)]*Erf[gamma/(2*Sqrt[beta])] + gamma/(4*beta^2)"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 166(36)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^2*E^(-beta*x^2)*Sinh[gamma*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.562.6",
+  "gr": "3.562.6",
+  "page": 439,
+  "status": "ok",
+  "lhs": "Integrate[x^2*E^(-beta*x^2)*Cosh[gamma*x], {x, 0, Infinity}]",
+  "rhs": [
+   "Sqrt[Pi]*(2*beta + gamma^2)/(8*beta^2*Sqrt[beta])*Exp[gamma^2/(4*beta)]"
+  ],
+  "conds": [
+   "Re[beta] > 0"
+  ],
+  "cite": "ET I 166(37)",
+  "edition_note": "",
+  "section": "3.55-3.56 Combinations of hyperbolic functions, exponentials, and powers",
+  "tex": "Integrate[x^2*E^(-beta*x^2)*Cosh[gamma*x], {x, 0, Infinity}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.611.1",
+  "gr": "3.611.1",
+  "page": 439,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Cos[x])^n*Sin[n*x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (68)(10)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[(1 - Cos[x])^n*Sin[n*x], {x, 0, 2*Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.611.2",
+  "gr": "3.611.2",
+  "page": 439,
+  "status": "ok",
+  "lhs": "Integrate[(1 - Cos[x])^n*Cos[n*x], {x, 0, 2*Pi}]",
+  "rhs": [
+   "(-1)^n*Pi/2^(n - 1)"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (68)(11)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[(1 - Cos[x])^n*Cos[n*x], {x, 0, 2*Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.611.3a",
+  "gr": "3.611.3",
+  "page": 439,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[t] + I*Sin[t]*Cos[x])^n, {x, 0, Pi}]",
+  "rhs": [
+   "Pi*LegendreP[n, Cos[t]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "0 < t < Pi"
+  ],
+  "cite": "EH I 158(23)a",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[(Cos[t] + I*Sin[t]*Cos[x])^n, {x, 0, Pi}]",
+  "note": "0 < t < Pi added (t real)"
+ },
+ {
+  "id": "GR3.611.3b",
+  "gr": "3.611.3",
+  "page": 439,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[t] + I*Sin[t]*Cos[x])^(-n - 1), {x, 0, Pi}]",
+  "rhs": [
+   "Pi*LegendreP[n, Cos[t]]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "0 < t < Pi"
+  ],
+  "cite": "EH I 158(23)a",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[(Cos[t] + I*Sin[t]*Cos[x])^(-n - 1), {x, 0, Pi}]",
+  "note": "0 < t < Pi added (t real)"
+ },
+ {
+  "id": "GR3.612.1a",
+  "gr": "3.612.1",
+  "page": 440,
+  "status": "ok",
+  "lhs": "Integrate[Sin[n*x]*Cos[m*x]/Sin[x], {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0",
+   "n <= m"
+  ],
+  "cite": "LI (64)(3)",
+  "edition_note": "6",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Sin[n*x]*Cos[m*x]/Sin[x], {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.612.1b",
+  "gr": "3.612.1",
+  "page": 440,
+  "status": "ok",
+  "lhs": "Integrate[Sin[n*x]*Cos[m*x]/Sin[x], {x, 0, Pi}]",
+  "rhs": [
+   "Pi"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0",
+   "n > m",
+   "OddQ[m + n]"
+  ],
+  "cite": "LI (64)(3)",
+  "edition_note": "6",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Sin[n*x]*Cos[m*x]/Sin[x], {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.612.1c",
+  "gr": "3.612.1",
+  "page": 440,
+  "status": "ok",
+  "lhs": "Integrate[Sin[n*x]*Cos[m*x]/Sin[x], {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[m, Integers] && m >= 0",
+   "Element[n, Integers] && n >= 0",
+   "n > m",
+   "EvenQ[m + n]"
+  ],
+  "cite": "LI (64)(3)",
+  "edition_note": "6",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Sin[n*x]*Cos[m*x]/Sin[x], {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.612.2a",
+  "gr": "3.612.2",
+  "page": 440,
+  "status": "ok",
+  "lhs": "Integrate[Sin[n*x]/Sin[x], {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "EvenQ[n]"
+  ],
+  "cite": "BI (64)(1, 2)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Sin[n*x]/Sin[x], {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.612.2b",
+  "gr": "3.612.2",
+  "page": 440,
+  "status": "ok",
+  "lhs": "Integrate[Sin[n*x]/Sin[x], {x, 0, Pi}]",
+  "rhs": [
+   "Pi"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0",
+   "OddQ[n]"
+  ],
+  "cite": "BI (64)(1, 2)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Sin[n*x]/Sin[x], {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.612.3",
+  "gr": "3.612.3",
+  "page": 440,
+  "status": "ok",
+  "lhs": "Integrate[Sin[(2*n - 1)*x]/Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "FI II 145",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Sin[(2*n - 1)*x]/Sin[x], {x, 0, Pi/2}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.612.4",
+  "gr": "3.612.4",
+  "page": 440,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*n*x]/Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "2*Sum[(-1)^(k - 1)/(2*k - 1), {k, 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (332)(21b)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Sin[2*n*x]/Sin[x], {x, 0, Pi/2}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.612.5a",
+  "gr": "3.612.5",
+  "page": 440,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*n*x]/Cos[x], {x, 0, Pi}]",
+  "rhs": [
+   "(-1)^(n - 1)*4*Sum[(-1)^(k - 1)/(2*k - 1), {k, 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (332)(22a)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Sin[2*n*x]/Cos[x], {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.612.5b",
+  "gr": "3.612.5",
+  "page": 440,
+  "status": "ok",
+  "lhs": "2*Integrate[Sin[2*n*x]/Cos[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "(-1)^(n - 1)*4*Sum[(-1)^(k - 1)/(2*k - 1), {k, 1, n}]"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "GW (332)(22a)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "2*Integrate[Sin[2*n*x]/Cos[x], {x, 0, Pi/2}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.612.6a",
+  "gr": "3.612.6",
+  "page": 440,
+  "status": "ok",
+  "lhs": "Integrate[Cos[(2*n + 1)*x]/Cos[x], {x, 0, Pi}]",
+  "rhs": [
+   "(-1)^n*Pi"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (332)(22b)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Cos[(2*n + 1)*x]/Cos[x], {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.612.6b",
+  "gr": "3.612.6",
+  "page": 440,
+  "status": "ok",
+  "lhs": "2*Integrate[Cos[(2*n + 1)*x]/Cos[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "(-1)^n*Pi"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "GW (332)(22b)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "2*Integrate[Cos[(2*n + 1)*x]/Cos[x], {x, 0, Pi/2}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.612.7",
+  "gr": "3.612.7",
+  "page": 440,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*n*x]*Cos[x]/Sin[x], {x, 0, Pi/2}]",
+  "rhs": [
+   "Pi/2"
+  ],
+  "conds": [
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "LI (45)(17)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Sin[2*n*x]*Cos[x]/Sin[x], {x, 0, Pi/2}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.613.1",
+  "gr": "3.613.1",
+  "page": 440,
+  "status": "ok",
+  "lhs": "Integrate[Cos[n*x]/(1 + a*Cos[x]), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/Sqrt[1 - a^2]*((Sqrt[1 - a^2] - 1)/a)^n"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (64)(12)",
+  "edition_note": "6",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Cos[n*x]/(1 + a*Cos[x]), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.613.2a",
+  "gr": "3.613.2",
+  "page": 440,
+  "status": "ok",
+  "lhs": "Integrate[Cos[n*x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi*a^n/(1 - a^2)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (65)(3)",
+  "edition_note": "6",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Cos[n*x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.613.2b",
+  "gr": "3.613.2",
+  "page": 440,
+  "status": "ok",
+  "lhs": "Integrate[Cos[n*x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/((a^2 - 1)*a^n)"
+  ],
+  "conds": [
+   "a^2 > 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (65)(3)",
+  "edition_note": "6",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Cos[n*x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.613.3a",
+  "gr": "3.613.3",
+  "page": 440,
+  "status": "ok",
+  "lhs": "Integrate[Sin[n*x]*Sin[x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/2*a^(n - 1)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI(65)(4), GW(332)(34a)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Sin[n*x]*Sin[x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.613.3b",
+  "gr": "3.613.3",
+  "page": 440,
+  "status": "ok",
+  "lhs": "Integrate[Sin[n*x]*Sin[x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(2*a^(n + 1))"
+  ],
+  "conds": [
+   "a^2 > 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI(65)(4), GW(332)(34a)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Sin[n*x]*Sin[x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.613.4a",
+  "gr": "3.613.4",
+  "page": 441,
+  "status": "ok",
+  "lhs": "Integrate[Cos[n*x]*Cos[x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/2*(1 + a^2)/(1 - a^2)*a^(n - 1)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI(65)(5), GW(332)(34b)",
+  "edition_note": "10",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Cos[n*x]*Cos[x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.613.4b",
+  "gr": "3.613.4",
+  "page": 441,
+  "status": "ok",
+  "lhs": "Integrate[Cos[n*x]*Cos[x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(2*a^(n + 1))*(a^2 + 1)/(a^2 - 1)"
+  ],
+  "conds": [
+   "a^2 > 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI(65)(5), GW(332)(34b)",
+  "edition_note": "10",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Cos[n*x]*Cos[x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.613.4c",
+  "gr": "3.613.4",
+  "page": 441,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi*a/(1 - a^2)"
+  ],
+  "conds": [
+   "a^2 < 1"
+  ],
+  "cite": "BI(65)(5), GW(332)(34b)",
+  "edition_note": "10",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Cos[x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "note": "n = 0 substituted"
+ },
+ {
+  "id": "GR3.613.4d",
+  "gr": "3.613.4",
+  "page": 441,
+  "status": "ok",
+  "lhs": "Integrate[Cos[x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/(a*(a^2 - 1))"
+  ],
+  "conds": [
+   "a^2 > 1"
+  ],
+  "cite": "BI(65)(5), GW(332)(34b)",
+  "edition_note": "10",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Cos[x]/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "note": "n = 0 substituted"
+ },
+ {
+  "id": "GR3.613.5a",
+  "gr": "3.613.5",
+  "page": 441,
+  "status": "ok",
+  "lhs": "Integrate[Cos[(2*n - 1)*x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a^2 != 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (65)(9, 10)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Cos[(2*n - 1)*x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.613.5b",
+  "gr": "3.613.5",
+  "page": 441,
+  "status": "ok",
+  "lhs": "Integrate[Cos[2*n*x]*Cos[x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a^2 != 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (65)(9, 10)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Cos[2*n*x]*Cos[x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.613.6",
+  "gr": "3.613.6",
+  "page": 441,
+  "status": "ok",
+  "lhs": "Integrate[Cos[(2*n - 1)*x]*Cos[2*x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a^2 != 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (65)(12)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Cos[(2*n - 1)*x]*Cos[2*x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.613.7a",
+  "gr": "3.613.7",
+  "page": 441,
+  "status": "ok",
+  "lhs": "Integrate[Sin[2*n*x]*Sin[x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a^2 != 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (65)(6, 7)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Sin[2*n*x]*Sin[x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.613.7b",
+  "gr": "3.613.7",
+  "page": 441,
+  "status": "ok",
+  "lhs": "Integrate[Sin[(2*n - 1)*x]*Sin[2*x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a^2 != 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (65)(6, 7)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Sin[(2*n - 1)*x]*Sin[2*x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.613.8a",
+  "gr": "3.613.8",
+  "page": 441,
+  "status": "ok",
+  "lhs": "Integrate[Sin[(2*n - 1)*x]*Sin[x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/2*a^(n - 1)/(1 + a)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (65)(8)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Sin[(2*n - 1)*x]*Sin[x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.613.8b",
+  "gr": "3.613.8",
+  "page": 441,
+  "status": "ok",
+  "lhs": "Integrate[Sin[(2*n - 1)*x]*Sin[x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/2/((1 + a)*a^n)"
+  ],
+  "conds": [
+   "a^2 > 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (65)(8)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Sin[(2*n - 1)*x]*Sin[x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.613.9a",
+  "gr": "3.613.9",
+  "page": 441,
+  "status": "ok",
+  "lhs": "Integrate[Cos[(2*n - 1)*x]*Cos[x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/2*a^(n - 1)/(1 - a)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (65)(11)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Cos[(2*n - 1)*x]*Cos[x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.613.9b",
+  "gr": "3.613.9",
+  "page": 441,
+  "status": "ok",
+  "lhs": "Integrate[Cos[(2*n - 1)*x]*Cos[x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi/2/((a - 1)*a^n)"
+  ],
+  "conds": [
+   "a^2 > 1",
+   "Element[n, Integers] && n >= 1"
+  ],
+  "cite": "BI (65)(11)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[Cos[(2*n - 1)*x]*Cos[x]/(1 - 2*a*Cos[2*x] + a^2), {x, 0, Pi}]",
+  "note": ""
+ },
+ {
+  "id": "GR3.613.10a",
+  "gr": "3.613.10",
+  "page": 441,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[n*x] - a*Sin[(n - 1)*x])/(1 - 2*a*Cos[x] + a^2)*Sin[m*x], {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[m, Integers]",
+   "Element[n, Integers]",
+   "0 <= m < n"
+  ],
+  "cite": "LI (65)(13)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[(Sin[n*x] - a*Sin[(n - 1)*x])/(1 - 2*a*Cos[x] + a^2)*Sin[m*x], {x, 0, Pi}]",
+  "note": "integer 0 <= m added"
+ },
+ {
+  "id": "GR3.613.10b",
+  "gr": "3.613.10",
+  "page": 441,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[n*x] - a*Sin[(n - 1)*x])/(1 - 2*a*Cos[x] + a^2)*Sin[m*x], {x, 0, Pi}]",
+  "rhs": [
+   "Pi/2*a^(m - n)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[m, Integers]",
+   "Element[n, Integers]",
+   "m >= n",
+   "n >= 0",
+   "m >= 1"
+  ],
+  "cite": "LI (65)(13)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[(Sin[n*x] - a*Sin[(n - 1)*x])/(1 - 2*a*Cos[x] + a^2)*Sin[m*x], {x, 0, Pi}]",
+  "note": "integer n >= 0, m >= 1 added"
+ },
+ {
+  "id": "GR3.613.11",
+  "gr": "3.613.11",
+  "page": 441,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[n*x] - a*Cos[(n - 1)*x])/(1 - 2*a*Cos[x] + a^2)*Cos[m*x], {x, 0, Pi}]",
+  "rhs": [
+   "Pi/2*(a^(Abs[m] - n) - 1)",
+   "Pi/2*a^(m - n)"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[m, Integers]",
+   "Element[n, Integers]",
+   "m >= n",
+   "n >= 0",
+   "m >= 1"
+  ],
+  "cite": "BI (65)(14)",
+  "edition_note": "6",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[(Cos[n*x] - a*Cos[(n - 1)*x])/(1 - 2*a*Cos[x] + a^2)*Cos[m*x], {x, 0, Pi}]",
+  "note": "printed value pi/2 (a^(|m|-n) - 1) looks wrong (expansion Sum a^k cos((n+k)x) gives pi/2 a^(m-n) for m >= n >= 0, m >= 1; 0 for m < n); conditions m >= n >= 0, m >= 1 added; second rhs is the corrected value"
+ },
+ {
+  "id": "GR3.613.12",
+  "gr": "3.613.12",
+  "page": 441,
+  "status": "ok",
+  "lhs": "Integrate[(Sin[n*x] - a*Sin[(n + 1)*x])/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "0"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (68)(13)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[(Sin[n*x] - a*Sin[(n + 1)*x])/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "note": "suspicious as printed: the n = 0 case gives -Log[(1 + a)/(1 - a)], not 0"
+ },
+ {
+  "id": "GR3.613.13",
+  "gr": "3.613.13",
+  "page": 441,
+  "status": "ok",
+  "lhs": "Integrate[(Cos[n*x] - a*Cos[(n + 1)*x])/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "rhs": [
+   "Pi*a^n"
+  ],
+  "conds": [
+   "a^2 < 1",
+   "Element[n, Integers] && n >= 0"
+  ],
+  "cite": "BI (68)(14)",
+  "edition_note": "",
+  "section": "3.61 Rational functions of sines and cosines and trigonometric functions of multiple angles",
+  "tex": "Integrate[(Cos[n*x] - a*Cos[(n + 1)*x])/(1 - 2*a*Cos[x] + a^2), {x, 0, Pi}]",
+  "note": ""
+ }
+]
