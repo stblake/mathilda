@@ -107,7 +107,9 @@ static void mb_square_split(fmpz_t sq, fmpz_t fr, const fmpz_t x) {
     fmpz_one(sq); fmpz_one(fr);
     for (ulong p = 2; p < 4096 && fmpz_cmp_ui(rest, 1) > 0; p += (p == 2 ? 1 : 2)) {
         int e = 0;
-        while (fmpz_divisible_ui(rest, p)) { fmpz_divexact_ui(rest, rest, p); e++; }
+        /* fmpz_divisible_si, not _ui: the latter only exists from FLINT 3.1,
+         * and Ubuntu 24.04 LTS ships 3.0.1.  p < 4096, so the cast is exact. */
+        while (fmpz_divisible_si(rest, (slong)p)) { fmpz_divexact_ui(rest, rest, p); e++; }
         for (int i = 0; i < e / 2; i++) fmpz_mul_ui(sq, sq, p);
         if (e & 1) fmpz_mul_ui(fr, fr, p);
     }
