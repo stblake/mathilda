@@ -1580,8 +1580,17 @@ static slong nb_ladder3(acb_t R, nb_fn3 f, nb_load3 load, const void* ctx, slong
             wp *= 2;
             continue;
         }
-        if (nb_should_retry(R, outb, attempt)) { wp = nb_next_wp(R, wp, outb); continue; }
-        bits = nb_emit_bits(R, outb);
+        /* RELATIVE accuracy is required even for a ball that contains zero:
+         * these functions take values far below 2^-outb (theta near |q| = 1 is
+         * 1e-147 at u = 2), where the shared rule's "tight in absolute terms"
+         * would emit an uncomputed midpoint. An exact zero (radius 0) is
+         * accepted as it is. */
+        bool exact0 = acb_is_exact(R) && acb_is_zero(R);
+        if (!exact0 && acb_rel_accuracy_bits(R) < outb && attempt < NB_MAX_DOUBLINGS + 2) {
+            wp = nb_next_wp(R, wp, outb);
+            continue;
+        }
+        bits = exact0 ? outb : nb_emit_bits(R, outb);
         break;
     }
     acb_clear(A); acb_clear(B); acb_clear(C);
@@ -1619,6 +1628,63 @@ bool flint_gegenbauer_d(double nr, double ni, double lr, double li, double zr, d
     acb_t R; acb_init(R);
     bool ok = false;
     if (nb_ladder3(R, nb_gegenbauer, nb_load3_d, &ctx, 53) > 0) {
+        *rr = arf_get_d(arb_midref(acb_realref(R)), ARF_RND_NEAR);
+        *ri = arf_get_d(arb_midref(acb_imagref(R)), ARF_RND_NEAR);
+        ok = isfinite(*rr) && isfinite(*ri);
+    }
+    acb_clear(R);
+    return ok;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Jacobi theta functions of nome q                                   */
+/* ------------------------------------------------------------------ */
+/* theta_a(u, q) and its u-derivative: arb's theta_a(z, tau) at
+ * tau = log(q)/(i pi), z = u/pi (q^(1/4) = e^(i pi tau/4) is then the principal
+ * root); the derivative from acb_modular_theta_jet, divided by pi.
+ * acb_modular_theta reduces tau to the fundamental domain, so |q| -> 1 costs
+ * no series length. W encodes a + 10 prime. */
+static void nb_theta(acb_t res, const acb_t u, const acb_t q, const acb_t W, slong prec) {
+    slong code = arf_get_si(arb_midref(acb_realref(W)), ARF_RND_NEAR);
+    int a = (int)(code % 10), prime = (int)(code / 10);
+    if (acb_is_zero(q)) {
+        if (!prime && (a == 3 || a == 4)) acb_one(res); else acb_zero(res);
+        return;
+    }
+    acb_t tau, z, pi;
+    acb_init(tau); acb_init(z); acb_init(pi);
+    acb_const_pi(pi, prec);
+    acb_log(tau, q, prec);
+    acb_div(tau, tau, pi, prec);
+    acb_div_onei(tau, tau);                          /* log(q)/(i pi) */
+    acb_div(z, u, pi, prec);
+    acb_ptr t = _acb_vec_init(8);
+    acb_modular_theta_jet(t, t + 2, t + 4, t + 6, z, tau, 2, prec);
+    acb_set(res, t + 2 * (a - 1) + prime);
+    if (prime) acb_div(res, res, pi, prec);
+    _acb_vec_clear(t, 8);
+    acb_clear(tau); acb_clear(z); acb_clear(pi);
+}
+
+Expr* flint_num_theta(int a, int prime, const Expr* u, const Expr* q) {
+    Expr* W = expr_new_integer(a + 10 * prime);
+    const Expr* args[2] = { u, q };
+    nb_ex3 ctx = { u, q, W };
+    acb_t R; acb_init(R);
+    slong bits = nb_ladder3(R, nb_theta, nb_load3_expr, &ctx, pick_out_bits(args, 2));
+    Expr* out = bits > 0 ? acb_to_expr(R, bits) : NULL;
+    acb_clear(R);
+    expr_free(W);
+    return out;
+}
+
+bool flint_theta_d(int a, int prime, double ur, double ui, double qr, double qi,
+                   double* rr, double* ri) {
+    nb_d6 ctx = { { ur, ui, qr, qi, (double)(a + 10 * prime), 0.0 } };
+    for (int i = 0; i < 4; i++) if (!isfinite(ctx.v[i])) return false;
+    acb_t R; acb_init(R);
+    bool ok = false;
+    if (nb_ladder3(R, nb_theta, nb_load3_d, &ctx, 53) > 0) {
         *rr = arf_get_d(arb_midref(acb_realref(R)), ARF_RND_NEAR);
         *ri = arf_get_d(arb_midref(acb_imagref(R)), ARF_RND_NEAR);
         ok = isfinite(*rr) && isfinite(*ri);
@@ -3276,6 +3342,14 @@ Expr* flint_num_hankel_sph(int code, const Expr* n, const Expr* z) {
 bool flint_hankel_sph_d(int code, double nr, double ni, double zr, double zi,
                         double* rr, double* ri) {
     (void)code; (void)nr; (void)ni; (void)zr; (void)zi; (void)rr; (void)ri;
+    return false;
+}
+Expr* flint_num_theta(int a, int prime, const Expr* u, const Expr* q) {
+    (void)a; (void)prime; (void)u; (void)q; return NULL;
+}
+bool flint_theta_d(int a, int prime, double ur, double ui, double qr, double qi,
+                   double* rr, double* ri) {
+    (void)a; (void)prime; (void)ur; (void)ui; (void)qr; (void)qi; (void)rr; (void)ri;
     return false;
 }
 Expr* flint_num_hypergeometric_u(const Expr* a, const Expr* b, const Expr* z) {

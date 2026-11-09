@@ -1,6 +1,6 @@
 # Special Functions
 
-Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Riemann–Siegel functions `RiemannSiegelTheta` and `RiemannSiegelZ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the parabolic cylinder function `ParabolicCylinderD`, the Gegenbauer polynomials `GegenbauerC`, the Hankel functions `HankelH1`, `HankelH2` and the spherical Bessel functions `SphericalBesselJ`, `SphericalBesselY`, `SphericalHankelH1`, `SphericalHankelH2`, the Jacobi elliptic functions `JacobiSN` ... `JacobiSD` (with `JacobiAmplitude` and `InverseJacobiSN`, `InverseJacobiCN`, `InverseJacobiDN`), the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
+Higher transcendental functions: the gamma function `Gamma`, the error function `Erf`, its complement `Erfc` and the imaginary error function `Erfi`, the digamma/polygamma family `PolyGamma`, the log-gamma function `LogGamma`, the harmonic numbers `HarmonicNumber`, the Pochhammer symbol (rising factorial) `Pochhammer`, the Riemann/Hurwitz zeta function `Zeta` (with the inert Stieltjes constants `StieltjesGamma`), the Hurwitz zeta function `HurwitzZeta`, the Bernoulli numbers and polynomials `BernoulliB`, the Euler numbers and polynomials `EulerE`, the polylogarithm `PolyLog`, the Lerch transcendent `LerchPhi`, the Dirichlet L-function `DirichletL`, the hypergeometric family `Hypergeometric0F1`, `Hypergeometric1F1`, `Hypergeometric2F1`, the generalized `HypergeometricPFQ`, and the Tricomi confluent function `HypergeometricU`, the Airy functions `AiryAi` and `AiryBi`, the Lambert W function `ProductLog`, the Legendre functions of the first and second kind (and their associated forms) `LegendreP` and `LegendreQ`, the Jacobi polynomials `JacobiP`, the Riemann–Siegel functions `RiemannSiegelTheta` and `RiemannSiegelZ`, the Chebyshev polynomials of the first and second kind `ChebyshevT` and `ChebyshevU`, the Laguerre polynomials `LaguerreL`, the physicists' Hermite polynomials `HermiteH`, the Whittaker functions `WhittakerM` and `WhittakerW`, the parabolic cylinder function `ParabolicCylinderD`, the Gegenbauer polynomials `GegenbauerC`, the Jacobi theta functions `EllipticTheta` (with `EllipticThetaPrime`), the Hankel functions `HankelH1`, `HankelH2` and the spherical Bessel functions `SphericalBesselJ`, `SphericalBesselY`, `SphericalHankelH1`, `SphericalHankelH2`, the Jacobi elliptic functions `JacobiSN` ... `JacobiSD` (with `JacobiAmplitude` and `InverseJacobiSN`, `InverseJacobiCN`, `InverseJacobiDN`), the even and odd Mathieu functions `MathieuC` and `MathieuS` (with `MathieuCPrime`, `MathieuSPrime`), and the Meijer G-function `MeijerG` (with a minimal `FunctionExpand`, and `MeijerGReduce`, which rewrites an expression in inactive G functions).
 
 **Machine overflow/underflow** on a machine-precision argument never leaks a libm
 `inf.0`/`nan`: `Gamma[256.] → 3.35…×10^504`, `Erfi[30.] → 1.38…×10^389`,
@@ -3678,6 +3678,52 @@ Out[2]= 0. + 0.114273 I
 
 In[3]:= D[SphericalBesselJ[n, z], z]
 Out[3]= -SphericalBesselJ[n, z]/(2 z) + 1/2 (SphericalBesselJ[-1 + n, z] - SphericalBesselJ[1 + n, z])
+```
+
+## EllipticTheta and EllipticThetaPrime
+
+`EllipticTheta[a, u, q]` gives the Jacobi theta function `theta_a(u, q)`,
+`a = 1, 2, 3, 4`, of **nome** `q` (`|q| < 1`): `theta_1 = 2 Σ (-1)^n
+q^((n+1/2)^2) Sin[(2n+1) u]`, `theta_2` the same without `(-1)^n` and with `Cos`,
+`theta_3 = 1 + 2 Σ q^(n^2) Cos[2 n u]`, `theta_4` with `(-1)^n`; `q^(1/4)` is the
+principal root. `EllipticThetaPrime[a, u, q]` is the `u`-derivative;
+`EllipticTheta[a, q]` / `EllipticThetaPrime[a, q]` are the values at `u = 0`.
+
+- **Exact rules** (the reference system's): `q = 0` gives `0, 0, 1, 1` (and `0`
+  for every derivative); the vanishing values `theta_1(0, q)`, `theta'_2(0, q)`,
+  `theta'_3(0, q)`, `theta'_4(0, q)` are `ConditionalExpression[0, Abs[q] < 1]`;
+  other exact calls stay unevaluated (`EllipticTheta[3, q]`); a first argument
+  outside `1..4` gives `EllipticTheta::etype`.
+- **Numerics.** Machine kernel `sf_machine_theta` (scalar, packed / `NDArray`,
+  `Compile[]`): for `|q| <= 0.9` the q-series in double complex arithmetic, `Re u`
+  first reduced modulo `Pi` in double-double, declining when the series cancels by
+  more than `2^3`; otherwise arb (`acb_modular_theta[_jet]` at `tau =
+  Log[q]/(I Pi)`, `z = u/Pi`, which reduces `tau` to the fundamental domain), in
+  the kernel. The arb ladder requires **relative** accuracy even for a ball that
+  contains zero: theta values far below `2^-53` (`EllipticThetaPrime[3, 2.045,
+  0.99752] = 1.01*10^-206`) are computed, not guessed. Accuracy against mpmath
+  at 500 digits (2000 points; mpmath at 130 digits is itself wrong for `|q| >
+  0.99`): median 0.2-1 ulp, max 95 ulp (complex `q`); `|q| > 0.95` max 0.7 ulp.
+  The reference system loses this in machine precision: it prints
+  `EllipticThetaPrime[4, 0.7, 0.99] = 6.7*10^-16` for the true `5.24*10^-30`.
+- **Derivatives.** `D[EllipticTheta[a, u, q], u] = EllipticThetaPrime[a, u, q]`;
+  the other partials stay inert `Derivative` forms (as the reference).
+- **Performance** (2.2 GHz Intel): scalar 0.5 µs (wolframscript 4.0 µs, mpmath
+  37 µs); `|q| = 0.97` 13 µs (arb); 10^6 packed `EllipticTheta[3, x, 0.3]`
+  0.075 s (wolframscript ~5.6 s); 50 digits 35 µs (wolframscript 22 µs, mpmath
+  55 µs). SciPy has no theta functions.
+
+Attributes: `Listable`, `NHoldFirst`, `NumericFunction`, `Protected`.
+
+```mathematica
+In[1]:= EllipticTheta[1, 0.7, 0.3]
+Out[1]= 0.838179
+
+In[2]:= EllipticTheta[1, 0, q]
+Out[2]= ConditionalExpression[0, Abs[q] < 1]
+
+In[3]:= D[EllipticTheta[3, u, q], u]
+Out[3]= EllipticThetaPrime[3, u, q]
 ```
 
 ## MathieuC and MathieuCPrime

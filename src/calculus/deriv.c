@@ -2465,6 +2465,46 @@ static Expr* compute_deriv(Expr* f, Expr* x, Expr* nonconsts) {
             return mk_fn2("Plus", terms[0], terms[1]);
         }
 
+        /* --- EllipticTheta[A, U, Q] / EllipticThetaPrime[A, U, Q]:
+         *   d/dU EllipticTheta = EllipticThetaPrime; every other partial is the
+         *   inert Derivative form (the reference's). A is a discrete index. */
+        if (n == 3 && h && (strcmp(h, "EllipticTheta") == 0 || strcmp(h, "EllipticThetaPrime") == 0)) {
+            bool pr = h[13] == 'P';
+            Expr* A = args[0];
+            Expr* U = args[1];
+            Expr* Q = args[2];
+            Expr* dU = deriv_of(U, x, nonconsts);
+            Expr* dQ = deriv_of(Q, x, nonconsts);
+            Expr* terms[2];
+            size_t nt = 0;
+            if (!is_lit_zero(dU)) {
+                Expr* g;
+                if (!pr) {
+                    g = expr_new_function(mk_sym("EllipticThetaPrime"),
+                        (Expr*[]){ expr_copy(A), expr_copy(U), expr_copy(Q) }, 3);
+                } else {
+                    Expr* op = expr_new_function(mk_sym("Derivative"),
+                                  (Expr*[]){ mk_int(0), mk_int(1), mk_int(0) }, 3);
+                    g = expr_new_function(mk_fn_head1(op, mk_sym(h)),
+                        (Expr*[]){ expr_copy(A), expr_copy(U), expr_copy(Q) }, 3);
+                }
+                terms[nt++] = mk_fn2("Times", g, dU);
+            } else {
+                expr_free(dU);
+            }
+            if (!is_lit_zero(dQ)) {
+                Expr* op = expr_new_function(mk_sym("Derivative"),
+                              (Expr*[]){ mk_int(0), mk_int(0), mk_int(1) }, 3);
+                Expr* g = expr_new_function(mk_fn_head1(op, mk_sym(h)),
+                    (Expr*[]){ expr_copy(A), expr_copy(U), expr_copy(Q) }, 3);
+                terms[nt++] = mk_fn2("Times", g, dQ);
+            } else {
+                expr_free(dQ);
+            }
+            if (nt == 0) return mk_int(0);
+            if (nt == 1) return terms[0];
+            return mk_fn2("Plus", terms[0], terms[1]);
+        }
         /* --- HankelH1/H2 and the spherical Bessel family f[N, Z] (DLMF 10.6.1,
          * 10.51.2): H' = (H_{N-1} - H_{N+1})/2, f' = -f/(2Z) + (f_{N-1} - f_{N+1})/2;
          * the order derivative stays inert. */

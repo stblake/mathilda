@@ -153,6 +153,13 @@ Expr* flint_num_hankel_sph(int code, const Expr* n, const Expr* z);
 bool flint_hankel_sph_d(int code, double nr, double ni, double zr, double zi,
                         double* rr, double* ri);
 
+/* EllipticTheta (prime = 0) / EllipticThetaPrime (prime = 1) [a, u, q] of nome
+ * q: arb's theta at tau = log(q)/(i pi), z = u/pi (modular reduction near
+ * |q| = 1). And its machine twin. */
+Expr* flint_num_theta(int a, int prime, const Expr* u, const Expr* q);
+bool flint_theta_d(int a, int prime, double ur, double ui, double qr, double qi,
+                   double* rr, double* ri);
+
 /* StruveH[nu, z] -- the Struve function H_nu(z). FLINT/arb ships no Struve
  * kernel, so this is composed from the rigorous regularized generalized
  * hypergeometric: H_nu(z) = (z/2)^(nu+1) * 1F2~(1; 3/2, nu+3/2; -z^2/4). The

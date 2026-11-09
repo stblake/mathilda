@@ -595,6 +595,7 @@ set(COMMON_SRC
     ../src/special_functions/gegenbauer.c
     ../src/special_functions/jacobi_elliptic.c
     ../src/special_functions/hankel_spherical.c
+    ../src/special_functions/elliptic_theta.c
     ../src/special_functions/hypergeometricu.c
     ../src/special_functions/airyai.c
     ../src/special_functions/airybi.c
@@ -4366,6 +4367,10 @@ add_test(NAME jacobi_elliptic_tests COMMAND jacobi_elliptic_tests)
 add_executable(hankel_spherical_tests test_hankel_spherical.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(hankel_spherical_tests PRIVATE ../src)
 add_test(NAME hankel_spherical_tests COMMAND hankel_spherical_tests)
+
+add_executable(elliptic_theta_tests test_elliptic_theta.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(elliptic_theta_tests PRIVATE ../src)
+add_test(NAME elliptic_theta_tests COMMAND elliptic_theta_tests)
 
 add_executable(mathieu_tests test_mathieu.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(mathieu_tests PRIVATE ../src)

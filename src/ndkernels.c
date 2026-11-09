@@ -48,6 +48,7 @@
 #include "special_functions/gegenbauer.h"         /* sf_machine_gegenbauer[2]_c */
 #include "special_functions/jacobi_elliptic.h"    /* sf_machine_jacobi */
 #include "special_functions/hankel_spherical.h"   /* sf_machine_hankel_sph */
+#include "special_functions/elliptic_theta.h"     /* sf_machine_theta */
 #include "special_functions/sf_machine_meijerg.h" /* MeijerG flattened n-ary kernel */
 #include "special_functions/sf_machine_mathieu.h" /* MathieuC / MathieuCPrime */
 #include "special_functions/sf_machine_dirichlet.h" /* DirichletL n-ary kernel */
@@ -1179,6 +1180,25 @@ static bool ndk_GegenbauerC_n(const double* re, const double* im, size_t n,
     return sf_machine_gegenbauer_c(re[0], im[0], re[1], im[1], re[2], im[2], rr, ri);
 }
 static const NDNaryKernel NDKN_GegenbauerC         = { ndk_GegenbauerC_n, 3, false };
+/* EllipticTheta / EllipticThetaPrime [a, u, q]: re[0] = a (1..4, exact), then u
+ * and q real or complex, through sf_machine_theta -- the scalar builtins'
+ * helper. Complex for a real negative q (theta_1, theta_2), so not real-closed. */
+static bool ndk_theta_n(int prime, const double* re, const double* im, size_t n,
+                        double* rr, double* ri) {
+    if (n != 3 || im[0] != 0.0 || re[0] != floor(re[0]) || re[0] < 1.0 || re[0] > 4.0)
+        return false;
+    return sf_machine_theta((int)re[0], prime, re[1], im[1], re[2], im[2], rr, ri);
+}
+static bool ndk_EllipticTheta_n(const double* re, const double* im, size_t n,
+                                double* rr, double* ri) {
+    return ndk_theta_n(0, re, im, n, rr, ri);
+}
+static bool ndk_EllipticThetaPrime_n(const double* re, const double* im, size_t n,
+                                     double* rr, double* ri) {
+    return ndk_theta_n(1, re, im, n, rr, ri);
+}
+static const NDNaryKernel NDKN_EllipticTheta      = { ndk_EllipticTheta_n, 3, false };
+static const NDNaryKernel NDKN_EllipticThetaPrime = { ndk_EllipticThetaPrime_n, 3, false };
 static const NDNaryKernel NDKN_MathieuC            = { ndk_MathieuC_n, 3, true };
 static const NDNaryKernel NDKN_MathieuCPrime       = { ndk_MathieuCPrime_n, 3, true };
 static const NDNaryKernel NDKN_MathieuS            = { ndk_MathieuS_n, 3, true };
@@ -1288,6 +1308,7 @@ void ndkernels_init(void) {
     REG_B(HankelH1, NDKB_HankelH1); REG_B(HankelH2, NDKB_HankelH2);
     REG_B(SphericalBesselJ, NDKB_SphericalBesselJ); REG_B(SphericalBesselY, NDKB_SphericalBesselY);
     REG_B(SphericalHankelH1, NDKB_SphericalHankelH1); REG_B(SphericalHankelH2, NDKB_SphericalHankelH2);
+    REG_N(EllipticTheta); REG_N(EllipticThetaPrime);   /* [a, u, q], a = 1..4 */
     REG_U(AiryAi); REG_U(AiryBi); REG_U(AiryAiPrime); REG_U(AiryBiPrime);
     REG_B(BesselI,           NDKB_BesselI);
     REG_B(BesselK,           NDKB_BesselK);
