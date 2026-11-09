@@ -994,7 +994,7 @@ Expr* nsolve_polynomial_system(Expr** polys, int npoly, Expr** vars, int nvar,
     }
 #undef NSYS_FREE_F
 
-eigen_stage:
+eigen_stage: ;
     /* 6-7. Eigenvectors of a generic M_l, coordinates, Newton polish on the
      * original system, verification and multiplicity accounting
      * (nsys_attempt).  An attempt that rejects a candidate, or in which two
