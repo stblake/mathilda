@@ -1128,6 +1128,14 @@ static bool residue_is_numeric_decline(const Expr* z) {
     if (z->type == EXPR_FUNCTION) {
         const Expr* h = z->data.function.head;
         if (!h || h->type != EXPR_SYMBOL) return false;
+        /* Overflow[] / Underflow[]: arithmetic left the MPFR exponent range --
+         * the same out-of-range class as an IEEE overflow, re-drawn from a
+         * smaller shell.  Aborting on it made PossibleZeroQ report True for the
+         * wrong antiderivative of Sinh[x]/Sqrt[Sinh[x]^2 - 49/16] (its first
+         * sample, x = 48.3, overflowed through Sinh[x]^4). */
+        if ((h->data.symbol.name == SYM_Overflow || h->data.symbol.name == SYM_Underflow)
+            && z->data.function.arg_count == 0)
+            return true;
         if (!(get_attributes(h->data.symbol.name) & ATTR_NUMERICFUNCTION))
             return false;
         for (size_t i = 0; i < z->data.function.arg_count; ++i)
@@ -1243,6 +1251,26 @@ static ZeroTestResult evaluate_rung_core(const Expr* e, long bits,
         *out_mag = INFINITY;
         if (out_scale) *out_scale = 0.0;
         return ZERO_TEST_FALSE;
+    }
+    if (z->type == EXPR_SYMBOL && z->data.symbol.name == SYM_Indeterminate) {
+        /* Indeterminate from numbers: 0 ComplexInfinity / 0/0 formed by
+         * ROUNDING -- Coth[63.9] is exactly 1.0 in doubles, so
+         * (-1 + Coth[x])^(3/2) in a denominator is 1/0 and the point reads
+         * Indeterminate.  Like a machine ComplexInfinity above it may resolve at
+         * a higher rung; if it never does, the POINT carries no information and
+         * is flagged for re-draw from a smaller shell.  It used to abort the
+         * whole test to UNKNOWN, which PossibleZeroQ reports as True: the
+         * wrong-signed antiderivative of Cosh[x] Coth[x]^2 passed the
+         * derivative-divides verifier on its first sample.  SOUND: an
+         * expression Indeterminate at every point has no informative sample
+         * and still ends UNKNOWN (screen_informative == 0). */
+        expr_free(z);
+        for (int i = 0; i + 1 < PRECISION_LADDER_LEN; ++i)
+            if (PRECISION_LADDER[i] >= bits || (i == 0 && bits <= 53))
+                return evaluate_rung_core(e, PRECISION_LADDER[i + 1], out_mag, out_scale,
+                                          in_scale, out_overflow, out_pinned);
+        if (out_overflow) *out_overflow = true;
+        return ZERO_TEST_UNKNOWN;
     }
     if (!is_pure_numeric(z)) {
         /* A residue the evaluator declined to reduce. If it is a numeric

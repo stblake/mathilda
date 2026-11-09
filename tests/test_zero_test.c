@@ -1277,6 +1277,25 @@ static void test_nonholomorphic_assumed_real_stays_real(void) {
     assert_pzq("PossibleZeroQ[Conjugate[x] - x, Assumptions -> y > 0]", "False");
 }
 
+/* A sample point whose numeric value is Indeterminate by ROUNDING (Coth[63.9]
+ * is exactly 1.0 in doubles, so (-1 + Coth[x])^(3/2) in a denominator is 1/0)
+ * or out of the MPFR range (Overflow[]) carries no information and is
+ * re-drawn; it used to abort the whole test to UNKNOWN, reported True, and
+ * the wrong-signed antiderivatives below passed Integrate's verifier.  The
+ * true antiderivatives (Sinh - Csch; Log[Cosh + Sqrt[Sinh^2 - a^2]]) are
+ * derived by the substitutions u = Coth[x], u = Cosh[x]. */
+static void test_uninformative_points_are_redrawn(void) {
+    assert_pzq("PossibleZeroQ[D[(2 - 3 Coth[x]^2 + Coth[x]^4)/((-1 + Coth[x])^(3/2) (1 + Coth[x])^(3/2)), x]"
+               " - Cosh[x] Coth[x]^2]", "False");
+    assert_pzq("PossibleZeroQ[D[(-2 + 3 Coth[x]^2 - Coth[x]^4)/((-1 + Coth[x])^(3/2) (1 + Coth[x])^(3/2)), x]"
+               " - Cosh[x] Coth[x]^2]", "True");
+    assert_pzq("PossibleZeroQ[D[Log[-33 + 32 Sinh[x]^2 - (8 (-49 - 33 Sinh[x]^2 + 16 Sinh[x]^4))/"
+               "(Sqrt[-7 + 4 Sinh[x]] Sqrt[7 + 4 Sinh[x]] Sqrt[1 + Sinh[x]^2])]/2, x]"
+               " - Sinh[x]/Sqrt[-49/16 + Sinh[x]^2]]", "False");
+    assert_pzq("PossibleZeroQ[D[Log[Cosh[x] + Sqrt[Sinh[x]^2 - 49/16]], x] - Sinh[x]/Sqrt[-49/16 + Sinh[x]^2]]",
+               "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1487,6 +1506,7 @@ int main(void) {
     TEST(test_nonholomorphic_re_minus_x);
     TEST(test_nonholomorphic_genuine_identities);
     TEST(test_nonholomorphic_assumed_real_stays_real);
+    TEST(test_uninformative_points_are_redrawn);
 
     printf("\nAll PossibleZeroQ tests passed.\n");
     return 0;

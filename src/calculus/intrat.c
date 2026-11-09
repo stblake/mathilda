@@ -209,8 +209,71 @@ bool intrat_freeq_test(Expr* expr, Expr* var) {
  * Result is expanded — every downstream consumer feeds the gcd into
  * get_degree_poly, which sees through `Power[var, n]` only, not
  * `Power[base, n]` for multi-term `base`. */
+/* True when e carries a radical of a SYMBOLIC base free of x, such as
+ * Sqrt[b^2 + c^2]: PolynomialGCD treats it as an independent variable, so a
+ * gcd that holds only through the relation Sqrt[p]^2 = p is missed. */
+static bool intrat_has_symbolic_radical(const Expr* e, const Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power &&
+        e->data.function.arg_count == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* r = e->data.function.args[1];
+        bool frac_exp = r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL &&
+             r->data.function.head->data.symbol.name == SYM_Rational;
+        if (frac_exp && b->type != EXPR_INTEGER && b->type != EXPR_BIGINT &&
+            !(b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL &&
+              b->data.function.head->data.symbol.name == SYM_Rational) &&
+            intrat_freeq_test((Expr*)b, (Expr*)x))
+            return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (intrat_has_symbolic_radical(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+/* gcd(a, b) in K[x] by Euclid's algorithm, every remainder put over a common
+ * denominator (Together), so the evaluator's Sqrt[p]^2 -> p reduction decides
+ * which remainders vanish.  The gcd of (Sqrt[b^2+c^2] - b) u^2 + 2 c u +
+ * Sqrt[b^2+c^2] + b and its derivative is the linear factor -- the quadratic is
+ * a square in the field -- where PolynomialGCD answered 1, Hermite reduction
+ * then left the "squarefree" quadratic to Rothstein-Trager, whose resultant had
+ * a zero discriminant: Integrate[1/(Sqrt[b^2 + c^2] + b Cos[x] + c Sin[x]), x]
+ * came out 0 after 1/0 and 0 ComplexInfinity messages.  NULL when a remainder's
+ * degree fails to drop (an undecided zero test): the caller keeps PolynomialGCD. */
+static Expr* intrat_euclid_gcd(Expr* a, Expr* b, Expr* x) {
+    Expr* u = expr_copy(a);
+    Expr* v = expr_copy(b);
+    for (int it = 0; it < 64; it++) {
+        int dv = get_degree_poly(v, x);
+        if (is_zero_poly(v)) { expr_free(v); return u; }
+        if (dv <= 0) { expr_free(u); expr_free(v); return expr_new_integer(1); }
+        Expr* r = intrat_polyrem_t(u, v, x);
+        Expr* rt = r ? internal_together((Expr*[]){r}, 1) : NULL;
+        Expr* re = rt ? expr_expand(rt) : NULL;
+        if (rt) expr_free(rt);
+        if (!re) { expr_free(u); expr_free(v); return NULL; }
+        Expr* rn = internal_numerator((Expr*[]){expr_copy(re)}, 1);
+        Expr* rne = rn ? expr_expand(rn) : NULL;
+        if (rn) expr_free(rn);
+        expr_free(re);
+        if (!rne) { expr_free(u); expr_free(v); return NULL; }
+        if (!is_zero_poly(rne) && get_degree_poly(rne, x) >= dv) {
+            expr_free(rne); expr_free(u); expr_free(v); return NULL;
+        }
+        expr_free(u);
+        u = v;
+        v = rne;     /* the numerator: a scalar multiple of the remainder */
+    }
+    expr_free(u); expr_free(v);
+    return NULL;
+}
+
 static Expr* intrat_polygcd_monic(Expr* a, Expr* b, Expr* x) {
-    Expr* g = internal_polynomialgcd(
+    Expr* g = NULL;
+    if (intrat_has_symbolic_radical(a, x) || intrat_has_symbolic_radical(b, x))
+        g = intrat_euclid_gcd(a, b, x);
+    if (!g) g = internal_polynomialgcd(
         (Expr*[]){expr_copy(a), expr_copy(b)}, 2);
     Expr* g_e = expr_expand(g);
     expr_free(g);

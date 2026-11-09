@@ -766,6 +766,24 @@ static void test_opaque_parameter_log_part(void) {
     run_eq("FreeQ[Integrate[1/(Sin[k] - x^2), x], ArcTan]", "False");
 }
 
+/* A denominator that is a square only through Sqrt[p]^2 = p: the quadratic
+ * (A - b) u^2 + 2 c u + A + b, A = Sqrt[b^2 + c^2], equals
+ * (A - b) (u + c/(A - b))^2.  PolynomialGCD treats A as a free variable, so
+ * Hermite reduction missed the square and Rothstein-Trager divided by a zero
+ * discriminant: Integrate gave 0 (after 1/0 messages), for this and for the
+ * G&R 2.558.4 integrand 1/(Sqrt[b^2 + c^2] + b Cos[x] + c Sin[x]).  True
+ * antiderivatives: -2/((A - b)^2 (u + c/(A - b))) and, through u = Tan[x/2],
+ * -2/((A - b) Tan[x/2] + c). */
+static void test_square_through_symbolic_radical(void) {
+    run_eq("Together[D[Integrate[1/((Sqrt[b^2 + c^2] - b) u^2 + 2 c u + Sqrt[b^2 + c^2] + b), u], u]"
+           " - 1/((Sqrt[b^2 + c^2] - b) u^2 + 2 c u + Sqrt[b^2 + c^2] + b)]", "0");
+    run_eq("Table[Chop[N[(D[Integrate[1/(Sqrt[b^2 + c^2] + b Cos[x] + c Sin[x]), x], x]"
+           " - 1/(Sqrt[b^2 + c^2] + b Cos[x] + c Sin[x])) /. {b -> 3/4, c -> 5/4, x -> t}]],"
+           " {t, {31/100, 77/100, 143/100}}]", "{0, 0, 0}");
+    run_eq("Chop[N[(Integrate[1/(Sqrt[b^2 + c^2] + b Cos[x] + c Sin[x]), x]"
+           " + 2/((Sqrt[b^2 + c^2] - b) Tan[x/2] + c)) /. {b -> 3/4, c -> 5/4, x -> 1/3}]]", "0");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -827,6 +845,7 @@ int main(void) {
     TEST(test_closed_nth_root_nonic_plus);
     TEST(test_opaque_parameter_log_part);
     TEST(test_number_field_repeated_residues);
+    TEST(test_square_through_symbolic_radical);
 
     printf("All Phase 1-7 (full BronsteinRational pipeline) tests passed!\n");
     return 0;

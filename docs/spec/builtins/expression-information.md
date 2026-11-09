@@ -259,6 +259,16 @@ and `PossibleZeroQ[f[a] - f[a]]` is `True`, as in the reference; until
 v0.6127 such a call was never sampled and the test reported `True`. The
 internal `zero_test_decide` used by the solvers is unchanged.
 
+**Uninformative sample points are re-drawn.** A sample whose value is
+`Indeterminate` only through rounding (`Coth[63.9]` is exactly `1.0` in
+doubles, so `(-1 + Coth[x])^(3/2)` in a denominator is `1/0`) is retried at the
+higher rungs and, failing that, re-drawn from a smaller shell, like an IEEE
+overflow; an `Overflow[]` / `Underflow[]` residue is re-drawn the same way.
+Either used to abort the sampler to UNKNOWN on its first point, which the
+builtin reports as `True` -- and the wrong-signed antiderivatives of
+`Cosh[x] Coth[x]^2` and `Sinh[x]/Sqrt[Sinh[x]^2 - 49/16]` passed Integrate's
+verifier. An expression with no informative point still ends UNKNOWN.
+
 Pipeline (each stage exits early on a definite verdict):
 
 0. **Exponential-combining normalisation** — when `expr` carries a
