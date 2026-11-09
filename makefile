@@ -93,12 +93,31 @@ endif
 #                                    (fftw, pcre2, ...) cannot bring a 2nd GMP.
 # Override either way: `make HOMEBREW=` (MacPorts only) or
 # `make MACPORTS=/opt/local` (MacPorts behind Homebrew).
-ifeq ($(origin MACPORTS),undefined)
+MACPORTS_AUTO := $(if $(filter undefined,$(origin MACPORTS)),y,)
+ifeq ($(MACPORTS_AUTO),y)
   MACPORTS :=
   ifeq ($(BUILD_PLATFORM)$(wildcard $(HOMEBREW)/include/gmp.h),Darwin)
     MACPORTS := $(patsubst %/bin/port,%,$(shell command -v port 2>/dev/null))
     ifeq ($(strip $(MACPORTS)),)
       MACPORTS := $(patsubst %/bin/port,%,$(wildcard /opt/local/bin/port))
+    endif
+  endif
+endif
+
+# Never skip MacPorts silently: when it is installed but yields to a Homebrew
+# that provides GMP, say so and name the switch, since the libraries the user
+# installed with `port` will otherwise all be reported "not detected". On an
+# Intel Mac Homebrew is /usr/local, which is also SYSTEM_PREFIX, so both must be
+# cleared for MacPorts' gmp.h to win.
+ifeq ($(MACPORTS_AUTO),y)
+  ifeq ($(BUILD_PLATFORM),Darwin)
+    ifeq ($(strip $(MACPORTS)),)
+      MACPORTS_SKIPPED := $(firstword $(patsubst %/bin/port,%,$(shell command -v port 2>/dev/null)) \
+                                      $(patsubst %/bin/port,%,$(wildcard /opt/local/bin/port)))
+      ifneq ($(MACPORTS_SKIPPED),)
+        $(warning MacPorts at $(MACPORTS_SKIPPED) is being IGNORED because Homebrew at $(HOMEBREW) provides GMP (two GMPs in one link are unsafe).)
+        $(warning   To build against MacPorts instead:  make HOMEBREW= SYSTEM_PREFIX=)
+      endif
     endif
   endif
 endif
