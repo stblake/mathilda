@@ -129,13 +129,44 @@ Expr** dsolve_fos_implicit_try(DSolveProblem* P, size_t* nbranch) {
     if (ds_is_zero(denom)) { expr_free(denom); expr_free(r); return NULL; }
     Expr* invD = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
                      (Expr*[]){ denom, expr_new_integer(-1) }, 2));
-    Expr* lhsInt = ds_integrate(invD, expr_new_symbol(Wname));
+    Expr* lhsInt = ds_integrate(expr_copy(invD), expr_new_symbol(Wname));
 
     /* v = y[x] + r x ; relation  G = lhsInt(v) - x == C[1]. */
     Expr* v = eval_and_free(ds_call2(SYM_Plus, ds_make_funcapp(yname, 0, xvar),
                   ds_call2(SYM_Times, expr_copy(r), expr_new_symbol(xvar))));
     expr_free(r);
-    Expr* G = ds_subst(lhsInt, expr_new_symbol(Wname), v);
+    Expr* G;
+    if (ds_has_head(lhsInt, SYM_Integrate)) {
+        /* Non-elementary (always, for an arbitrary F).  Substituting W -> v into
+         * the unevaluated Integrate[g(W), W] made the integration VARIABLE an
+         * expression -- Integrate[1/(1 + f[x + y[x]]), x + y[x]] -- which has no
+         * meaning: D cannot differentiate it, and the PDE corpus scored the
+         * characteristic invariant built on it a wrong answer (pde-804 and eight
+         * Polyanin 6.2 siblings).  Keep the antiderivative as a DEFINITE inert
+         * integral over a dummy, Inactive[Integrate][g(K), {K, 1, v}]: the
+         * lower limit is absorbed by C[1], and D applies the Leibniz rule, so the
+         * implicit-function verification below now actually decides it. */
+        expr_free(lhsInt);
+        /* a SYMBOL dummy (as DSolve`HeatKernel uses): D's Leibniz rule does not
+         * yet handle an indexed dummy K[1] (tasks/todo.md) */
+        const char* Kn = intern_symbol("K");
+        if (Kn == xvar || ds_contains(invD, Kn) || ds_contains(v, Kn))
+            Kn = intern_symbol("DSolve`fosK");
+        Expr* K = expr_new_symbol(Kn);
+        Expr* gK = ds_subst(invD, expr_new_symbol(Wname), expr_copy(K)); /* consumes invD */
+        /* H was checked free of x, but only up to evaluation: the integrand can
+         * still SPELL x (f[c + a x + b (K - a x/b)]), which blocks the Leibniz
+         * rule.  Its value does not depend on x, so x -> 0 is exact. */
+        gK = ds_subst(gK, expr_new_symbol(xvar), expr_new_integer(0));
+        Expr* lim = expr_new_function(expr_new_symbol(SYM_List),
+                        (Expr*[]){ K, expr_new_integer(1), v }, 3);
+        Expr* inert = expr_new_function(expr_new_symbol(SYM_Inactive),
+                          (Expr*[]){ expr_new_symbol(SYM_Integrate) }, 1);
+        G = expr_new_function(inert, (Expr*[]){ gK, lim }, 2);
+    } else {
+        expr_free(invD);
+        G = ds_subst(lhsInt, expr_new_symbol(Wname), v);
+    }
     G = eval_and_free(ds_call2(SYM_Subtract, G, expr_new_symbol(xvar)));
 
     Expr** out = malloc(sizeof(Expr*));

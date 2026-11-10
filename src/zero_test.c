@@ -2769,6 +2769,35 @@ static bool pzq_opaque_call(const Expr* e) {
     return d->builtin_func == NULL && !(d->attributes & ATTR_NUMERICFUNCTION);
 }
 
+static ZeroTestResult pzq_decide_abstracted(const Expr* e);
+
+/* Do two opaque calls denote the SAME quantity?  An inert f is still a
+ * function: f[a] == f[b] whenever a == b, so the atom key is the head plus the
+ * VALUES of the arguments, not their spelling.  Keyed on spelling alone,
+ * PossibleZeroQ[f[2 (x + 1)] - f[2 x + 2]] was False, and so was the residual
+ * of every characteristic invariant whose Leibniz derivative re-spells the
+ * argument (f[c + a x + b y] against f[c + b (a x/b + y)], the PDE corpus's
+ * pde-804).  Same head, same arity, and each argument pair proved equal by the
+ * same abstracted decision procedure; structural equality is the fast path. */
+static bool pzq_same_atom(const Expr* a, const Expr* b) {
+    if (expr_eq((Expr*)a, (Expr*)b)) return true;
+    if (a->type != EXPR_FUNCTION || b->type != EXPR_FUNCTION) return false;
+    size_t n = a->data.function.arg_count;
+    if (n == 0 || n != b->data.function.arg_count) return false;
+    if (!expr_eq(a->data.function.head, b->data.function.head)) return false;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* ai = a->data.function.args[i];
+        const Expr* bi = b->data.function.args[i];
+        if (expr_eq((Expr*)ai, (Expr*)bi)) continue;
+        Expr* diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Subtract),
+                         (Expr*[]){ expr_copy((Expr*)ai), expr_copy((Expr*)bi) }, 2));
+        ZeroTestResult r = pzq_decide_abstracted(diff);
+        expr_free(diff);
+        if (r != ZERO_TEST_TRUE) return false;
+    }
+    return true;
+}
+
 /* Owned copy of `e` with every opaque call replaced; NULL if none. */
 static Expr* pzq_abstract(const Expr* e, PzqAtoms* at) {
     if (e->type != EXPR_FUNCTION) return NULL;
@@ -2781,7 +2810,7 @@ static Expr* pzq_abstract(const Expr* e, PzqAtoms* at) {
         return NULL;
     if (pzq_opaque_call(e)) {
         for (size_t i = 0; i < at->n; i++)
-            if (expr_eq(at->from[i], (Expr*)e)) return expr_copy(at->to[i]);
+            if (pzq_same_atom(at->from[i], e)) return expr_copy(at->to[i]);
         if (at->n == at->cap) {
             at->cap = at->cap ? at->cap * 2 : 8;
             at->from = (Expr**)realloc(at->from, at->cap * sizeof(Expr*));

@@ -97,6 +97,16 @@ static void test_possible_zero_q_inert_calls(void) {
     assert_eval_eq("PossibleZeroQ[C[1] - 1]", "False", 0);
     assert_eval_eq("PossibleZeroQ[Derivative[1][f][x] - Derivative[1][f][x]]", "True", 0);
     assert_eval_eq("PossibleZeroQ[1/(g[l, l] + g[l, n]) - 1/(g[l, l] - g[l, n])]", "False", 0);
+    /* v0.6499: an inert call is keyed on the VALUES of its arguments, not their
+     * spelling -- f[a] == f[b] whenever a == b. */
+    assert_eval_eq("PossibleZeroQ[f[2 (x + 1)] - f[2 x + 2]]", "True", 0);
+    assert_eval_eq("PossibleZeroQ[f[(x + 1)^2] - f[x^2 + 2 x + 1]]", "True", 0);
+    assert_eval_eq("PossibleZeroQ[f[c + a x + b y] - f[c + b (a x/b + y)]]", "True", 0);
+    assert_eval_eq("PossibleZeroQ[f[x, Sin[y]^2] - f[x, 1 - Cos[y]^2]]", "True", 0);
+    assert_eval_eq("PossibleZeroQ[f[x, 1] - f[x, 2]]", "False", 0);
+    assert_eval_eq("PossibleZeroQ[f[a] - g[a]]", "False", 0);
+    assert_eval_eq("PossibleZeroQ[f[x] - f[y]]", "False", 0);
+    assert_eval_eq("PossibleZeroQ[f[g[2 (x + 1)]] - f[g[2 x + 2]]]", "True", 0);
 }
 
 static void test_association_thread_scalar(void) {

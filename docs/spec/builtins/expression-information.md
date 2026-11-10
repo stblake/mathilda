@@ -256,7 +256,11 @@ replaces each distinct maximal subexpression whose head is not a symbol
 expression and in the assumptions alike, and samples that symbol like any
 other. So `PossibleZeroQ[f[a]]` and `PossibleZeroQ[C[1] - 1]` are `False`
 and `PossibleZeroQ[f[a] - f[a]]` is `True`, as in the reference; until
-v0.6127 such a call was never sampled and the test reported `True`. The
+v0.6127 such a call was never sampled and the test reported `True`. Two calls
+share one symbol when they have the same head, the same arity, and arguments
+that are *equal as values*, proved by the same procedure. Spelling is not the
+key, so `PossibleZeroQ[f[2 (x + 1)] - f[2 x + 2]]` is `True`, while
+`f[x] - f[y]` and `f[a] - g[a]` stay `False` (v0.6499). The
 internal `zero_test_decide` used by the solvers is unchanged.
 
 **Uninformative sample points are re-drawn.** A sample whose value is
