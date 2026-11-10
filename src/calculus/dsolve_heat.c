@@ -38,6 +38,7 @@
 #include "../attr.h"
 #include <stdlib.h>
 
+static Expr* add(Expr* a, Expr* b) { return eval_and_free(ds_call2(SYM_Plus, a, b)); }
 static Expr* mul(Expr* a, Expr* b) { return eval_and_free(ds_call2(SYM_Times, a, b)); }
 static Expr* sub(Expr* a, Expr* b) { return eval_and_free(ds_call2(SYM_Subtract, a, b)); }
 static Expr* powi(Expr* a, int n)  { return eval_and_free(ds_call2(SYM_Power, a, expr_new_integer(n))); }
@@ -167,6 +168,18 @@ Expr* dsolve_heat_run(DSolveProblem* P) {
            && ds_free_of(Axx, v1) && ds_free_of(Axx, v2)
            && !ds_is_zero(Aut) && !ds_is_zero(Axx)
            && ds_is_zero(Att) && ds_is_zero(Axy) && ds_is_zero(Ax) && ds_is_zero(A0);
+    /* ...and NOTHING ELSE: the residual must be exactly a u_t + c u_xx.  The
+     * coefficient reads see only the terms they name, so a forcing term
+     * (u_t == u_xx + Sin[x]) or a higher derivative (+ u_xxxx) passed through and
+     * got the homogeneous heat-kernel answer; the kernel-level verification below
+     * checks the kernel, not the user's PDE, so it could not notice. */
+    if (ok) {
+        Expr* model = add(mul(expr_copy(Aut), u_at(u, t1, t2, expr_new_symbol(v1), expr_new_symbol(v2))),
+                          mul(expr_copy(Axx), u_at(u, s1, s2, expr_new_symbol(v1), expr_new_symbol(v2))));
+        Expr* extra = sub(expr_copy((Expr*)R), model);
+        ok = ds_is_zero(extra);
+        expr_free(extra);
+    }
 
     Expr* k = NULL;
     if (ok) {

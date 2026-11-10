@@ -239,6 +239,18 @@ Expr* dsolve_wave_ivp_run(DSolveProblem* P) {
           && ds_free_of(Ass, v1) && ds_free_of(Ass, v2)
           && !ds_is_zero(Att) && ds_is_zero(Axy)
           && ds_is_zero(Ax) && ds_is_zero(Ay) && ds_is_zero(A0);
+        /* ...and NOTHING ELSE: the residual must be exactly A_tt u_tt + A_ss u_ss.
+         * The coefficient reads above see only the terms they name, so a forcing
+         * term (u_tt == c^2 u_xx + Cos[t]) or a higher derivative (- u_xxxx)
+         * passed through, and the homogeneous d'Alembert answer was returned for
+         * it -- verified only against rebuilt test data, never the real PDE. */
+        if (ok) {
+            Expr* model = add(mul(expr_copy(Att), u_at(u, tt1, tt2, expr_new_symbol(v1), expr_new_symbol(v2))),
+                              mul(expr_copy(Ass), u_at(u, ss1, ss2, expr_new_symbol(v1), expr_new_symbol(v2))));
+            Expr* extra = sub(expr_copy((Expr*)R), model);
+            ok = ds_is_zero(extra);
+            expr_free(extra);
+        }
         if (ok) {
             c_squared = ds_simplify(mul(expr_new_integer(-1), mul(expr_copy(Ass), powi(expr_copy(Att), -1))));
             /* d'Alembert needs a hyperbolic (positive) speed; reject Δ<=0 (elliptic/parabolic) */

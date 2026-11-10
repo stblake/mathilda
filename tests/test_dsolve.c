@@ -1792,6 +1792,23 @@ static void t_wave_dalembert(void) {
     /* declines the bare wave equation (no initial conditions, neq == 1) */
     check_form("Head[DSolve`WaveDAlembert[D[u[x,t],{t,2}] == c^2 D[u[x,t],{x,2}], u, {x,t}]]",
                "DSolve`WaveDAlembert");
+    /* v0.6498: declines (never solves as homogeneous) a FORCED wave equation and
+     * one with a higher space derivative.  These returned the homogeneous
+     * d'Alembert answer -- wrong answers caught by the PDE corpus (pde-381,
+     * pde-391). */
+    check_form("Head[DSolve`WaveDAlembert[{D[u[x,t],{t,2}] == 4 D[u[x,t],{x,2}] + Cos[t], "
+               "u[x,0] == Sin[x], Derivative[0,1][u][x,0] == Cos[x]}, u, {x,t}]]",
+               "DSolve`WaveDAlembert");
+    check_form("Head[DSolve`WaveDAlembert[{D[u[x,t],{t,2}] == D[u[x,t],{x,2}] + m, "
+               "u[x,0] == Sin[x], Derivative[0,1][u][x,0] == 0}, u, {x,t}]]",
+               "DSolve`WaveDAlembert");
+    check_form("Head[DSolve`WaveDAlembert[{D[u[x,t],{t,2}] == D[u[x,t],{x,2}] - D[u[x,t],{x,4}], "
+               "u[x,0] == f[x], Derivative[0,1][u][x,0] == 0}, u, {x,t}]]",
+               "DSolve`WaveDAlembert");
+    /* ...and DSolve as a whole returns no wrong closed form for it */
+    check_true("With[{r = DSolve[{D[u[x,t],{t,2}] == 4 D[u[x,t],{x,2}] + Cos[t], u[x,0] == Sin[x], "
+               "Derivative[0,1][u][x,0] == Cos[x]}, u[x,t], {x,t}]}, Head[r] === DSolve || "
+               "With[{b = u[x,t] /. r[[1]]}, PossibleZeroQ[D[b,{t,2}] - 4 D[b,{x,2}] - Cos[t]]]]");
 }
 
 /* ---- M6 (Phase 2): heat-equation Cauchy problem by the heat kernel (DSolve auto
@@ -1816,6 +1833,12 @@ static void t_heat_kernel(void) {
                "DSolve`HeatKernel");
     /* declines advection-diffusion (a u_x term is present) */
     check_form("Head[DSolve`HeatKernel[{D[u[x,t],t] == D[u[x,t],{x,2}] + D[u[x,t],x], u[x,0] == f[x]}, u, {x,t}]]",
+               "DSolve`HeatKernel");
+    /* v0.6498: declines a forced heat equation and one with a higher space
+     * derivative -- both used to get the homogeneous heat-kernel answer. */
+    check_form("Head[DSolve`HeatKernel[{D[u[x,t],t] == D[u[x,t],{x,2}] + Sin[x], u[x,0] == f[x]}, u, {x,t}]]",
+               "DSolve`HeatKernel");
+    check_form("Head[DSolve`HeatKernel[{D[u[x,t],t] == D[u[x,t],{x,2}] + D[u[x,t],{x,4}], u[x,0] == f[x]}, u, {x,t}]]",
                "DSolve`HeatKernel");
 }
 
