@@ -145,28 +145,49 @@ static double aw_cutoff(double mu, double z) {
     return T > tp ? T : tp + 1.0;
 }
 
-/* A(nu) and (when want_neg) A(-nu) on one shared node set. The symmetric
- * node pair t = h (1 +- x_i) shares its exponentials: e^t = e^h e^(+-h x_i) and
- * e^(-nu t) = e^(-nu h) e^(-+nu h x_i), so a pair costs four exp() calls
- * (two of them e^(-z sinh t)) instead of six. */
-static bool aw_laplace(double nu, double z, bool want_neg, double* ap, double* am) {
-    double T = aw_cutoff(nu, z);
-    if (want_neg) { double T2 = aw_cutoff(-nu, z); if (T2 > T) T = T2; }
-    if (!isfinite(T) || T > 700.0) return false;
-    double h = 0.5 * T, sp = 0.0, sm = 0.0;
-    double eh = exp(h), gh = exp(-nu * h);
+/* A(nu) and (when want_neg) A(-nu) on [lo, lo + 2h] by the 24-point rule.
+ * The symmetric node pair t = c +- h x_i shares its exponentials: e^t =
+ * e^c e^(+-h x_i) and e^(-nu t) = e^(-nu c) e^(-+nu h x_i), so a pair costs
+ * four exp() calls (two of them e^(-z sinh t)) instead of six. */
+static void aw_laplace_panel(double nu, double z, bool want_neg, double lo, double h,
+                             double* sp, double* sm) {
+    double c = lo + h;
+    double ec = exp(c), gc = exp(-nu * c);
+    double ap = 0.0, am = 0.0;
     for (int i = 0; i < AW_GL_N; i++) {
         double f = exp(h * AW_GL_X[i]), g = exp(-nu * h * AW_GL_X[i]);
-        double etp = eh * f, etm = eh / f;               /* e^t at the pair     */
-        double enp = gh * g, enm = gh / g;               /* e^(-nu t)           */
+        double etp = ec * f, etm = ec / f;               /* e^t at the pair     */
+        double enp = gc * g, enm = gc / g;               /* e^(-nu t)           */
         double ep = exp(-0.5 * z * (etp - 1.0 / etp));   /* e^(-z sinh t)       */
         double em = exp(-0.5 * z * (etm - 1.0 / etm));
         double w = AW_GL_W[i];
-        sp += w * (enp * ep + enm * em);
-        if (want_neg) sm += w * (ep / enp + em / enm);
+        ap += w * (enp * ep + enm * em);
+        if (want_neg) am += w * (ep / enp + em / enm);
     }
-    *ap = h * sp;
-    *am = h * sm;
+    *sp = h * ap;
+    *sm = h * am;
+}
+
+/* A(nu) and (when want_neg) A(-nu), with a MEASURED quadrature error: the
+ * one-panel rule on [0, T] against the two-panel rule on its halves.  The
+ * 24 nodes alone are not always enough -- a negative order at small z puts
+ * structure near t = 0 that one panel misses (AngerJ[-5/6, 5/6] came out
+ * -0.24730 for -0.24614, against a claimed error of 2e-16, and the regime
+ * choice took it over the correct series).  *ep_err / *em_err bound the
+ * error of the two-panel values returned. */
+static bool aw_laplace(double nu, double z, bool want_neg, double* ap, double* am,
+                       double* ap_err, double* am_err) {
+    double T = aw_cutoff(nu, z);
+    if (want_neg) { double T2 = aw_cutoff(-nu, z); if (T2 > T) T = T2; }
+    if (!isfinite(T) || T > 700.0) return false;
+    double p1, m1, pa, ma, pb, mb;
+    aw_laplace_panel(nu, z, want_neg, 0.0, 0.5 * T, &p1, &m1);
+    aw_laplace_panel(nu, z, want_neg, 0.0, 0.25 * T, &pa, &ma);
+    aw_laplace_panel(nu, z, want_neg, 0.5 * T, 0.25 * T, &pb, &mb);
+    *ap = pa + pb;
+    *am = ma + mb;
+    *ap_err = fabs(*ap - p1);
+    *am_err = fabs(*am - m1);
     return isfinite(*ap) && isfinite(*am);
 }
 
@@ -177,23 +198,26 @@ static bool aw_integral(int which, double nu, double z, double* val, double* abs
                         double* env) {
     double sn, cs;
     aw_sincospi(nu, &sn, &cs);
-    double ap = 0.0, am = 0.0, b, v, scale;
+    double ap = 0.0, am = 0.0, pe = 0.0, me = 0.0, b, v, scale, qerr;
     if (which == 0) {
         if (!sf_bessel_j_r(nu, z, &b)) return false;
-        if (sn != 0.0 && !aw_laplace(nu, z, false, &ap, &am)) return false;
+        if (sn != 0.0 && !aw_laplace(nu, z, false, &ap, &am, &pe, &me)) return false;
         v = b + sn / M_PI * ap;
         scale = fabs(b) + fabs(sn / M_PI * ap);
+        qerr = fabs(sn) / M_PI * pe;
     } else {
         if (!sf_bessel_y_r(nu, z, &b)) return false;
-        if (!aw_laplace(nu, z, true, &ap, &am)) return false;
+        if (!aw_laplace(nu, z, true, &ap, &am, &pe, &me)) return false;
         double c = (am + cs * ap) / M_PI;
         v = -b - c;
         scale = fabs(b) + (fabs(am) + fabs(cs * ap)) / M_PI;
+        qerr = (me + fabs(cs) * pe) / M_PI;
     }
     if (!isfinite(v)) return false;
     *val = v;
-    /* ~4 eps per component (the Bessel kernel, the quadrature sum) */
-    *abserr = 4.0 * DBL_EPSILON * scale;
+    /* ~4 eps per component (the Bessel kernel, the quadrature sum), plus the
+     * measured quadrature error */
+    *abserr = 4.0 * DBL_EPSILON * scale + qerr;
     *env = scale;
     return true;
 }

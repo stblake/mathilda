@@ -121,6 +121,14 @@ void test_machine_values() {
     MCLOSE("AngerJ[-1.3, 15.0]", -0.15200463240340436);
     MCLOSE("AngerJ[0.3, -4.0]", -0.41029924328865747);
     MCLOSE("AngerJ[4.5, 0.6]", 0.062217256819454954);
+    /* A negative order at small z: the Laplace-integral route's one-panel
+     * rule was 1e-3 off here (and 1e-2 at (-0.3, 0.375)) while claiming 2e-16,
+     * so the regime choice took it over the correct series.  The quadrature
+     * error is now measured (one panel against two). */
+    MCLOSE("AngerJ[-5/6 + 0., 5/6 + 0.]", -0.24614064761204724);
+    MCLOSE("AngerJ[-0.3, 0.375]", 0.72333831342879523);
+    MCLOSE("AngerJ[5/6 + 0., -5/6 + 0.]", -0.24614064761204724);
+    assert_true("Abs[AngerJ[-5/6 + 0., 5/6 + 0.] - N[AngerJ[-5/6, 5/6], 30]] < 10^-14");
     MCLOSE("WeberE[1/3, 2.0]", -0.56546195207908119);
     MCLOSE("WeberE[2.5, 7.5]", -0.047184647791081139);
     MCLOSE("WeberE[-1.3, 15.0]", 0.11004674332791673);
