@@ -89,7 +89,10 @@ ospCheckMultiset[ans_, ref_, p_] := Module[{key = Sort[{Re[#], Im[#]} & /@ ospN[
 (* ---- differential and difference equations ---- *)
 
 (* arbitrary constants and functions, given values *)
+(* an arbitrary function C[i][z..] is sampled as a fixed smooth function, and
+   its derivatives (Liouville's C[1]'[x]) as that function's derivatives *)
 ospConst[e_] := e /. {C[i_][z__] :> Plus @@ ((i/3 + Sin[#] + #^2/(5 i)) & /@ {z}),
+     Derivative[n_][C[i_]] :> Derivative[n][Function[{ospQ}, i/3 + Sin[ospQ] + ospQ^2/(5 i)]],
      C[i_] :> (i + 2)/7 + 3/(10 i)};
 
 (* a solution {f[v..] -> e} or {f -> Function[..]}, as a pure function *)

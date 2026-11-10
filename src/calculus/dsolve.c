@@ -271,6 +271,8 @@ extern void dsolve_pdeclassify_init(void);  /* PDEClassify (standalone classifie
 extern Expr* dsolve_wave_ivp_run(DSolveProblem* P);  /* wave d'Alembert IVP (own runner) */
 extern void dsolve_wave_init(void);
 extern Expr* dsolve_heat_run(DSolveProblem* P);      /* heat-kernel Cauchy IVP (own runner) */
+extern Expr* dsolve_pde_ivp_run(DSolveProblem* P);   /* PDE IVP by invariant families */
+extern void dsolve_pde_ivp_init(void);
 extern void dsolve_heat_init(void);
 extern Expr** dsolve_decouple_solve(DSolveProblem* P);
 extern Expr** dsolve_triangular_solve(DSolveProblem* P);
@@ -416,6 +418,10 @@ Expr* builtin_dsolve(Expr* res) {
         /* wave d'Alembert IVP: PDE + two initial conditions (neq==3); its own
          * runner (multi-equation verify/assemble, not the single-equation
          * dsolve_run_pde).  Declines anything that is not a 1-D wave IVP. */
+        /* initial-value problems by an invariant family of the data
+         * (amplitude, shift, exponential polynomial): a verified closed form,
+         * ahead of the kernel/d'Alembert integrals below */
+        if (!result) result = dsolve_pde_ivp_run(&P);
         if (!result) result = dsolve_wave_ivp_run(&P);
         /* heat-kernel Cauchy IVP: PDE + one initial condition (neq==2). */
         if (!result) result = dsolve_heat_run(&P);
@@ -513,6 +519,11 @@ Expr* builtin_dsolve(Expr* res) {
              * order once and recurse.  After Euler (cleaner constants there),
              * before the heavier special-function / Kovacic / series machinery. */
             if (!result) result = dsolve_run(&P, dsolve_exactode_try);
+            /* A second-order equation missing y is first order in y': reduce it
+             * (ReductionOfOrder gates on the missing y) before the special-function
+             * form, which would give F'' + s F'/(2 nu) == 0 as 1F1's where the
+             * reduction gives C[1] + C[2] Erf[s/(2 Sqrt[nu])]. */
+            if (!result) result = dsolve_run(&P, dsolve_reduce_order_try);
             if (!result) result = dsolve_run(&P, dsolve_specialform_try);
             /* Polynomial fundamental set: a homogeneous 2nd-order linear ODE with
              * rational coefficients whose both solutions are polynomials (e.g.
@@ -936,6 +947,7 @@ void dsolve_init(void) {
     dsolve_pdeclassify_init();
     dsolve_wave_init();
     dsolve_heat_init();
+    dsolve_pde_ivp_init();
     dsolve_decouple_init();
     dsolve_triangular_init();
     dsolve_sys_reduce_init();

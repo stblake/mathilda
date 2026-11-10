@@ -1078,6 +1078,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_pdeclassify.c
     ../src/calculus/dsolve_wave.c
     ../src/calculus/dsolve_heat.c
+    ../src/calculus/dsolve_pde_ivp.c
     ../src/calculus/dsolve_decouple.c
     ../src/calculus/dsolve_triangular.c
     ../src/calculus/dsolve_sys_reduce.c
@@ -6495,3 +6496,7 @@ endforeach()
 add_executable(osp_famous_tests test_osp_famous.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(osp_famous_tests PRIVATE ../src)
 add_test(NAME osp_famous_tests COMMAND osp_famous_tests)
+
+add_executable(dsolve_pde_ivp_tests test_dsolve_pde_ivp.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dsolve_pde_ivp_tests PRIVATE ../src)
+add_test(NAME dsolve_pde_ivp_tests COMMAND dsolve_pde_ivp_tests)

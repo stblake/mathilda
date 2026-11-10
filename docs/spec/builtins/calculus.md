@@ -1211,6 +1211,18 @@ Options: `GeneratedParameters` (constant head, default `C`), `Assumptions`,
 - Elliptic first integrals close in EllipticF (the pendulum).
 - A constant fitted to Infinity at a singular point is never returned.
 
+**PDE initial-value problems (`DSolve`PDEInitialValue`, v0.6496).** An
+evolution PDE with initial data is solved by an invariant family of the data:
+amplitude θ(t)·u0(x), shift u0(x − c t), or exponential polynomial
+c0 Exp[Σ θ_m(t) x^m]. The family reduces the PDE to an ODE in t.
+- Half-line problems with constant data are solved by the similarity variable
+  y/√t.
+- Time-harmonic boundary data gives the periodic steady state.
+- `a u_xy + b E^(m u) == 0` (Liouville) has its general solution.
+- Answers are verified by back-substitution.
+- Examples: KdV, sine-Gordon, Fisher–KPP, Burgers, the heat and Schrödinger
+  Gaussians, Lamb–Oseen, Taylor–Green, Stokes I/II.
+
 ## Integrate (rational-function integration, Phase 1-8d)
 
 `Integrate[f, x]` is the public entry point for the rational-function

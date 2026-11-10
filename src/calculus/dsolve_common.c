@@ -551,6 +551,37 @@ static void ds_flatten_items(Expr* e, Expr*** items, size_t* n, size_t* cap) {
 /* ------------------------------------------------------------------ *
  *  Parser                                                             *
  * ------------------------------------------------------------------ */
+/* f[v1, ..., vk] with the arguments exactly the independent variables. */
+static bool ds_applied_on_ind(const Expr* it, const DSolveProblem* P) {
+    if (it->data.function.arg_count != P->nind || P->nind < 2) return false;
+    for (size_t i = 0; i < P->nind; i++) {
+        const Expr* a = it->data.function.args[i];
+        if (a->type != EXPR_SYMBOL || a->data.symbol.name != P->ind_names[i]) return false;
+    }
+    return true;
+}
+
+/* Some call f[a, b, c] in e whose arguments are exactly the three symbols. */
+static bool ds_has_call3(const Expr* e, Expr* const* v) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.arg_count == 3) {
+        bool m = true;
+        for (int i = 0; i < 3 && m; i++) m = expr_eq(e->data.function.args[i], v[i]);
+        if (m) return true;
+    }
+    if (ds_has_call3(e->data.function.head, v)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ds_has_call3(e->data.function.args[i], v)) return true;
+    return false;
+}
+/* {x, y, t} is three independent variables, not the range {x, xmin, xmax},
+ * when all three are symbols and the unknown is applied to exactly them
+ * (Taylor-Green's w[x, y, t]); a range's bounds are never its arguments. */
+static bool ds_three_vars(Expr* const* v, const Expr* eqs, const Expr* funcs) {
+    for (int i = 0; i < 3; i++) if (v[i]->type != EXPR_SYMBOL) return false;
+    return ds_has_call3(funcs, v) || ds_has_call3(eqs, v);
+}
+
 bool dsolve_parse(Expr* res, DSolveProblem* P) {
     memset(P, 0, sizeof(*P));
     P->param_head = "C";
@@ -571,7 +602,7 @@ bool dsolve_parse(Expr* res, DSolveProblem* P) {
     } else if (head_is(vars, SYM_List)) {
         size_t nv = vars->data.function.arg_count;
         Expr** vi = vars->data.function.args;
-        if (nv == 3 && vi[0]->type == EXPR_SYMBOL) {
+        if (nv == 3 && vi[0]->type == EXPR_SYMBOL && !ds_three_vars(vi, A[0], A[1])) {
             /* {x, xmin, xmax} : single ODE variable with a range */
             P->nind = 1;
             P->ind_names = malloc(sizeof(char*));
@@ -610,7 +641,10 @@ bool dsolve_parse(Expr* res, DSolveProblem* P) {
         Expr* it = fi[k];
         if (it->type == EXPR_SYMBOL) P->fun_names[k] = it->data.symbol.name;
         else if (it->type == EXPR_FUNCTION && it->data.function.head->type == EXPR_SYMBOL
-                 && it->data.function.arg_count == 1) {
+                 && (it->data.function.arg_count == 1 || ds_applied_on_ind(it, P))) {
+            /* y[x], or u[x, t] over exactly the independent variables (the
+             * usual PDE spelling; until this it failed to parse, so no PDE
+             * method ran on DSolve[{...}, u[x, t], {x, t}]) */
             P->fun_names[k] = it->data.function.head->data.symbol.name;
             P->applied = true;
         } else { if (own_fi) free(fi); free(P->fun_names); P->fun_names = NULL; return false; }

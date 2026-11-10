@@ -1,12 +1,12 @@
 # OSP famous problems, math score
 
-222 problems: solved 180, unsolved 31, timeout 8, unclear 2, wrong 1
+222 problems: solved 193, unsolved 18, timeout 8, unclear 2, wrong 1
 
-Against the official v0.6222 run: +65 solved, -0 lost.
+Against the official v0.6222 run: +78 solved, -0 lost.
 
 | problem | grade | v0.6222 | s | note |
 |---|---|---|---|---|
-| gaussian_integral | solved | solved | 0.9 |  |
+| gaussian_integral | solved | solved | 0.8 |  |
 | dirichlet_integral | solved | solved | 0.4 |  |
 | fresnel_sine_integral | solved | solved | 0.4 |  |
 | fresnel_cosine_integral | solved | solved | 0.4 |  |
@@ -14,16 +14,16 @@ Against the official v0.6222 run: +65 solved, -0 lost.
 | wallis_integral | solved | solved | 0.4 |  |
 | sophomore_dream_first | solved | unsolved | 0.9 |  |
 | sophomore_dream_second | unsolved | unsolved | 0.8 | left unevaluated |
-| serret_integral | solved | solved | 0.5 |  |
-| malmsten_integral | solved | unsolved | 0.7 |  |
-| malmsten_integral_square | solved | unsolved | 0.7 |  |
-| vardi_integral | solved | unsolved | 2.7 |  |
+| serret_integral | solved | solved | 0.4 |  |
+| malmsten_integral | solved | unsolved | 0.6 |  |
+| malmsten_integral_square | solved | unsolved | 0.6 |  |
+| vardi_integral | solved | unsolved | 2.6 |  |
 | watson_integral_bcc | timeout | error | 60.0 |  |
 | watson_integral_sc | timeout | error | 60.0 |  |
 | watson_integral_fcc | timeout | error | 60.0 |  |
 | ahmed_integral | unsolved | unsolved | 0.6 | left unevaluated |
 | coxeter_integral | timeout | timeout-or-review | 60.0 |  |
-| borwein_sinc_integral_13 | solved | timeout-or-review | 17.2 |  |
+| borwein_sinc_integral_13 | solved | timeout-or-review | 17.3 |  |
 | borwein_sinc_integral_15 | timeout | timeout-or-review | 60.0 |  |
 | log_sine_integral | solved | solved | 0.4 |  |
 | euler_gamma_integral | solved | solved | 0.4 |  |
@@ -45,10 +45,10 @@ Against the official v0.6222 run: +65 solved, -0 lost.
 | putnam_1980_a3 | solved | solved | 0.4 |  |
 | euler_log_gamma_integral | solved | solved | 0.4 |  |
 | euler_gompertz_integral | solved | error | 0.4 |  |
-| weber_bessel_integral | solved | solved | 0.4 |  |
+| weber_bessel_integral | solved | solved | 0.5 |  |
 | lobachevsky_integral | solved | solved | 0.4 |  |
 | ellipse_perimeter | solved | timeout-or-review | 0.4 |  |
-| fransen_robinson_constant | solved | unsolved | 0.5 | expected unevaluated |
+| fransen_robinson_constant | solved | unsolved | 0.6 | expected unevaluated |
 | borwein_broadhurst_integral | timeout | timeout-or-review | 60.0 |  |
 | secant_integral | solved | solved | 0.4 |  |
 | leibniz_quartic_integral | solved | solved | 0.4 |  |
@@ -110,10 +110,10 @@ Against the official v0.6222 run: +65 solved, -0 lost.
 | brachistochrone | solved | error | 0.4 |  |
 | catenary | solved | solved | 0.4 |  |
 | tractrix | solved | error | 0.4 |  |
-| pendulum | solved | error | 0.5 |  |
+| pendulum | solved | error | 0.6 |  |
 | lane_emden_zero | solved | unsolved | 0.4 |  |
 | lane_emden_one | solved | timeout-or-review | 0.4 |  |
-| lane_emden_five | unclear | error | 6.3 | no explicit solution to substitute |
+| lane_emden_five | unclear | error | 12.1 | no explicit solution to substitute |
 | bessel_half_order | solved | solved | 0.4 |  |
 | bessel_order_zero | solved | solved | 0.4 |  |
 | airy_equation | solved | solved | 0.4 |  |
@@ -131,19 +131,19 @@ Against the official v0.6222 run: +65 solved, -0 lost.
 | painleve_second | solved | unsolved | 0.4 | expected unevaluated |
 | thomas_fermi_equation | solved | unsolved | 0.5 | expected unevaluated |
 | blasius_equation | solved | unsolved | 0.6 | expected unevaluated |
-| burgers_cole_hopf | unsolved | unsolved | 0.4 | left unevaluated |
-| kdv_soliton | unsolved | unsolved | 0.4 | left unevaluated |
-| sine_gordon_kink | unsolved | unsolved | 0.4 | left unevaluated |
-| heat_equation_gaussian | unsolved | unsolved | 0.4 | left unevaluated |
-| dalembert_wave | unsolved | unsolved | 0.4 | left unevaluated |
-| stokes_first_problem | unsolved | unsolved | 0.4 | left unevaluated |
-| stokes_second_problem | unsolved | unsolved | 0.4 | left unevaluated |
-| taylor_green_vortex | unsolved | unsolved | 0.4 | left unevaluated |
-| lamb_oseen_vortex | unsolved | unsolved | 0.4 | left unevaluated |
-| liouville_equation | unsolved | unsolved | 0.4 | left unevaluated |
-| fisher_kpp_wave | unsolved | unsolved | 0.4 | left unevaluated |
-| gaussian_wave_packet | unsolved | unsolved | 0.4 | left unevaluated |
-| riemann_simple_wave | unsolved | unsolved | 0.4 | left unevaluated |
+| burgers_cole_hopf | solved | unsolved | 0.5 |  |
+| kdv_soliton | solved | unsolved | 0.5 |  |
+| sine_gordon_kink | solved | unsolved | 0.7 |  |
+| heat_equation_gaussian | solved | unsolved | 0.4 |  |
+| dalembert_wave | solved | unsolved | 0.4 |  |
+| stokes_first_problem | solved | unsolved | 0.4 |  |
+| stokes_second_problem | solved | unsolved | 0.5 |  |
+| taylor_green_vortex | solved | unsolved | 0.4 |  |
+| lamb_oseen_vortex | solved | unsolved | 0.4 |  |
+| liouville_equation | solved | unsolved | 0.4 |  |
+| fisher_kpp_wave | solved | unsolved | 0.4 |  |
+| gaussian_wave_packet | solved | unsolved | 0.4 |  |
+| riemann_simple_wave | solved | unsolved | 0.4 |  |
 | fibonacci_rabbits | unsolved | unsolved | 0.4 | left unevaluated |
 | lucas_numbers | unsolved | unsolved | 0.4 | left unevaluated |
 | tower_of_hanoi | unsolved | unsolved | 0.4 | left unevaluated |
@@ -217,7 +217,7 @@ Against the official v0.6222 run: +65 solved, -0 lost.
 | chowla_selberg_singular_value | solved | unsolved | 0.4 |  |
 | gauss_agm_lemniscate | solved | unsolved | 0.4 |  |
 | ramanujan_constant | solved | solved | 0.4 |  |
-| rogers_ramanujan_continued_fraction | unsolved | error | 48.7 | left unevaluated |
+| rogers_ramanujan_continued_fraction | unsolved | error | 48.6 | left unevaluated |
 | chudnovsky_gamma_quarter | solved | error | 0.4 | expected unevaluated |
 | gamma_one_fifth | solved | error | 0.4 | expected unevaluated |
 | hilbert_matrix_inverse | solved | solved | 0.4 |  |

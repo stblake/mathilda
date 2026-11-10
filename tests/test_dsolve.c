@@ -475,8 +475,11 @@ static void t_hypergeometric_kummer_degenerate(void) {
             "y1 = g /. {C[1] -> 1, C[2] -> 0}; y2 = g /. {C[1] -> 0, C[2] -> 1}; "
             "FreeQ[g, HypergeometricU] && !FreeQ[g, ExpIntegralEi] && "
             "PossibleZeroQ[Together[(%s) /. y -> Function[x, Evaluate[g]]]] && "
-            "PossibleZeroQ[Together[y1 D[y2, x] - D[y1, x] y2 - (%s)]]]",
-            cases[i][0], cases[i][0], cases[i][1]);
+            /* the Wronskian up to sign: which basis member C[1] multiplies is a
+             * labelling (ReductionOfOrder gives C[2] + C[1] Ei for the a = 0 case) */
+            "(PossibleZeroQ[Together[y1 D[y2, x] - D[y1, x] y2 - (%s)]] || "
+            " PossibleZeroQ[Together[y1 D[y2, x] - D[y1, x] y2 + (%s)]])]",
+            cases[i][0], cases[i][0], cases[i][1], cases[i][1]);
         check_true(buf);
     }
     /* the repro, verbatim */

@@ -209,6 +209,32 @@ Expr* dsolve_heat_run(DSolveProblem* P) {
                                  (Expr*[]){ integrand, iter }, 2);
             Expr* body = expr_new_function(expr_new_symbol(SYM_Times),
                              (Expr*[]){ heat_prefactor(k, tau), integral }, 2);
+            /* Concrete data: the convolution, under tau > 0 and real space, closes
+             * for Gaussian, trigonometric and polynomial data (e^-x^2 gives
+             * e^(-x^2/(1 + 4 k t))/Sqrt[1 + 4 k t]).  Attempted under a time
+             * budget; an unclosed integral keeps the kernel form. */
+            if (!ds_contains(f_expr, P->fun_names[0])) {
+                Expr* asm_ = ds_call2(SYM_And,
+                    ds_call2(SYM_Greater, expr_copy(tau), expr_new_integer(0)),
+                    ds_call2(SYM_Element, expr_new_symbol(space), expr_new_symbol(SYM_Reals)));
+                Expr* integ = expr_new_function(expr_new_symbol(SYM_Integrate), (Expr*[]){
+                    expr_copy(body->data.function.args[1]->data.function.args[0]),
+                    expr_copy(body->data.function.args[1]->data.function.args[1]),
+                    ds_call2(SYM_Rule, expr_new_symbol(SYM_Assumptions), expr_copy(asm_)) }, 3);
+                Expr* tc = eval_and_free(ds_call2(intern_symbol("TimeConstrained"), integ,
+                                                  expr_new_integer(10)));
+                if (tc && !ds_contains(tc, SYM_Integrate) && !ds_contains(tc, intern_symbol("$Aborted"))
+                    && !ds_contains(tc, SYM_ConditionalExpression)) {
+                    Expr* cl = eval_and_free(ds_call2(SYM_Times, heat_prefactor(k, tau), tc));
+                    tc = NULL;
+                    Expr* sm = eval_and_free(ds_call2(SYM_Simplify, cl, asm_));
+                    asm_ = NULL;
+                    expr_free(body);
+                    body = sm;
+                }
+                if (tc) expr_free(tc);
+                if (asm_) expr_free(asm_);
+            }
 
             Expr* lhs; Expr* rhs;
             if (P->applied) {
