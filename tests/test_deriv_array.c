@@ -217,6 +217,17 @@ static void test_edge_cases(void) {
     check("D[x^2, {{}}]", "List[]");
 }
 
+/* D[f, {x}] is the first derivative (the one-element scalar spec), the
+ * spelling the PDE-in-CAS corpus uses throughout; {x, y, z} and {} stay
+ * malformed (D::dvar, unevaluated). */
+static void test_single_element_spec(void) {
+    check("D[x^2 y, {x}]", "Times[2, x, y]");
+    check("D[u[x, t], {t}]", "Derivative[0, 1][u][x, t]");
+    check_zero("D[Sin[x y], {x}] - D[Sin[x y], x]");
+    check_zero("D[x^3 y^2, {x}, {y}] - D[x^3 y^2, x, y]");
+    check("D[x^2, {x, y, z}]", "D[Power[x, 2], List[x, y, z]]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -231,6 +242,7 @@ int main(void) {
     TEST(test_jacobian);
     TEST(test_chained_arrays);
     TEST(test_edge_cases);
+    TEST(test_single_element_spec);
 
     printf("All array-derivative tests passed.\n");
     return 0;

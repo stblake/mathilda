@@ -20,6 +20,7 @@ Partial derivative.
   other symbols as constants).
 - `D[f, {x, n}]` -- the `n`-th partial derivative; `n` must be a
   non-negative integer.
+- `D[f, {x}]` -- the first derivative, the same as `D[f, x]` (v0.6497).
 - `D[f, x, y, ...]` -- mixed partial derivative, equivalent to
   `D[D[f, x], y, ...]`.
 - **Sums and products**: `D[Sum[f, {k, a, b}, ...], x]` is
