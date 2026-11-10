@@ -314,6 +314,7 @@ static void test_nl_elliptic_antiderivative_crosschecked(void) {
 int main(void) {
     symtab_init();
     core_init();
+    test_load_init_m();   /* production environment: init.m loaded */
 
     TEST(test_nl_elliptic_antiderivative_crosschecked);
 

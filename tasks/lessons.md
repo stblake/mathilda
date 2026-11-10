@@ -5166,3 +5166,26 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
 ## Adamchik–Marichev completion (2026-11-05)
 - **New Integrate methods are written in `.m`** (user instruction): the mathematics goes in
   `src/internal/*.m`, and `integrate.c` only gets the lazy-load stage wiring.
+
+## 2026-11-09 — G&R corpus: no external CAS in the pipeline
+- Correction: I forked the Mathar external-CAS oracle scripts for G&R.
+  User: Mathilda should run .m files; drop the external CAS entirely.
+- Rule: verification tooling = checked-in .m scripts run by ./Mathilda -file (Python only as
+  a driver). Mathilda NIntegrate is the oracle; its failures are Mathilda bugs to log, not a
+  reason to reach for another CAS. Ask before building on a prior project's tooling pattern
+  that depends on an external CAS.
+
+## 2026-11-10 — G&R: an incorrect book formula is corrected from first principles or removed
+- Correction (user): "If a G&R integral is incorrect, then it should either be corrected from first principals, or removed from the corpus."
+- Trigger: the GRTable returned G&R 2.621.1 (Int 1/Sqrt[Sin[2 a x]]), valid only on part of a > 0; the oracle had passed it at sample points inside the valid region.
+- Rule: check the BOOK's value under exactly the corpus runner's checks (book corpus, tools/gr/build_corpus.py --book); any failure -> SKIP-BOOK-WRONG (out of corpus and table) until a first-principles correction is derived and verified here.
+- Follow-up: the 60-digit central-difference check later passed 2.621.1 at both instantiations (the runner's NONNUMERIC was `Abs'`/branch, not a book error); the rule stands, the trigger was a false alarm.
+
+## 2026-11-10 — G&R table: convention, placement, and four soundness traps
+- Correction (user): "In Mathilda Integrate[1/x, x] should be Log[x], not Log[Abs[x]]. All G&R formulae should be updated to reflect this convention." -> tools/gr/logconv.py rewrites indefinite records Log[Abs[u]] -> Log[u] (integrand and value); re-baseline records whose integrand changed (Integrate closed 5 of 7).
+- Correction (user): "the GR table should be ran last in the cascade." A reference table is the fallback after every algorithm, in both cascades; do not move it earlier to dodge a slow stage's budget.
+- Trap: a power slot has several roots (a^4 -> +-a, +-I a) and book conditions (a^2 > b^2) cannot pick one; a symbolic answer has no numeric self-check, so the first Solve root was a sign-flipped wrong answer (19 records). Order solutions principal-first and prefer the most principal across sibling records.
+- Trap: a ConditionalExpression whose open condition is a sibling's case split (parity, p^2 <= 1 under p^2 >= 1) is a useless answer; decline it in the automatic cascade.
+- Trap: generated records must not share the engine's context. A Do iterator is not renamed like a Module local, so {s, sols} met G&R 17.13.30's parameter s, recursed to $RecursionLimit, and the unwinding left the engine's Module half evaluated (an unbound local returned as the answer).
+- Trap: the book's CONDITIONS can be too weak even when the formula verifies at its two oracle points (3.197.7: Re mu > 0 for mu > 1/2). Audit conditions by sampling the stated domain (tools/gr/condaudit.py) before serving symbolic answers.
+- Trap: a unit suite that does not load init.m tests a non-production cascade; with the table last, it supplied an antiderivative the production cascade gets elsewhere. Load init.m (test_load_init_m) in Integrate suites.

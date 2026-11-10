@@ -1,3 +1,66 @@
+# Gradshteyn & Ryzhik integral review: corpus + triage + GR table (started 2026-11-09)
+
+Plan: ~/.claude/plans/let-s-review-all-integrals-recursive-nygaard.md
+Tooling: tools/gr/ (TRANSCRIBE.md contract, check_raw.wls, merge.py, verify_mathilda.py,
+build_corpus.py; oracle = tools/mathar/verify.wls + instance.wls).
+Buckets: Can-do / Algorithmic (ranked method families) / Table (lazy-loaded GR .m).
+
+- [x] Tooling: transcription contract, syntax checker, merge, Mathilda NIntegrate cross-check, corpus builder
+- [ ] Pilot: 2.0-2.12 (p112-120), 3.38 (p395-401), 6.51 (p707-713) -> calibrate yield/accuracy/cost
+- [ ] Chapter batches: Ch2 (p112-295) -> Ch3-4 (p296-667) -> Ch5 (p668-679) -> Ch6-7 (p680-907) -> Ch17 (p1156-1189)
+- [ ] Spot audit: 2% of pages re-transcribed blind, diff < 1%
+- [ ] Mathilda Integrate run (S/N) -> Can-do; WRONG/CRASH/NONNUMERIC bug list fixed
+- [ ] NIntegrate DISAGREE list triaged/fixed
+- [ ] Triage: docs/design/gr_integrate_triage.md (algorithmic families ranked; table bucket)
+- [x] Corpus snapshot committed to tools/gr/corpus/ (5636662df, 2026-11-10; was only in a session scratchpad)
+- [x] GR table stage (Method -> "GRTable") -- v0.6493, LAST stage of both cascades, 3745 records.
+  STATUS + NEXT STEPS: docs/design/gr_integrate_triage.md (sec. 6). Pending: condaudit re-run with the
+  correction step, final corpus pass + tests/ corpora + nightly floors, ch3-7/17 triage, bugs (#132, NSum 6.666,
+  Inactive leak, runner Abs check), other-Abs convention review.
+  - Design (2026-11-10): engine src/internal/GRTable.m = unification table (x-free subterms -> Optional slots,
+    params solved from slot equations, book conds via Refine, numeric self-check); records in
+    src/internal/GRTables/{Indefinite,DefHalfLine,DefWholeLine,DefUnit,DefTrig,DefOther}.m from
+    tools/gr/build_table.py (verified + S-mode not CORRECT in a baseline run with an EMPTY table).
+    C: integrate.c try_grtable after CRCTable (indefinite), try_grtable_definite before Roach-early/NL.
+  - [x] engine + generator + C wiring; smoke tests pass (Beta Mellin symbolic+numeric, ArcTan instance)
+  - [ ] re-verify NOHEAD records (special functions now exist), finish ch34 pycheck
+  - [ ] baseline Integrate runs (empty table) over GR2..GR17 corpora -> run*.jsonl
+  - [ ] build table from baseline; second run with table; WRONG/CRASH = 0
+  - [ ] triage doc for ch3-7, ctest gr_* nightly, docs, changelog, version bump + tag
+- [ ] ctest gr_* corpora (nightly), docs, changelog, version bump + tag
+- [ ] AFTER all dev campaigns: G&R integrals as a benchmarks/ gap experiment (user, 2026-11-09)
+- Status 2026-11-09: transcription DONE (104 batches, ch2-7 + ch17; gap audit clean -- remaining
+  holes are 7th-ed numbering: 3.248.5, 3.851.1-4, 6.290.1-2). ch2 verified: Mathilda 1686/1803,
+  Python agrees on 1622 both-verified; 63 both-mismatch (book/reading errors), 40 conflicts blocked.
+- Mathilda bugs found by the pipeline (fix phase; minimal repros in scratchpad/gr/bugs.m, bug4.m):
+  - [ ] B1 D[Sum[x^k/k,{k,1,n}],x] -> Derivative[1,0][Sum] with leaked index k (D not threaded over Sum, symbolic limit)
+  - [ ] B2 TimeConstrained cannot interrupt Sum closed-form/Simplify/FLINT mpoly gcd (G&R 2.673: >25 min past a 300 s budget)
+  - [ ] B3 NIntegrate silent WRONG: Int_0^inf J_{7/4}(7x/4) J_{3/4}(7x/4) = 0.630 (true 1/(2b)=0.2857), no message
+  - [ ] B4 NIntegrate SEGFAULT: Int_0^inf I_{5/6}(x/5) J_{3/8}(5x/8) K_{5/6}(x/5)
+  - [ ] B5 N of infinite Sum of BesselJ stays unevaluated (no NSum fallback in N)
+  - [ ] B6 N[Derivative[0,1][BesselJ][3/8,5/8]] unevaluated (order-derivative of Bessel)
+  - [ ] B7 Integrate WRONG (ch2 corpus): 2.558.4d -> 0; 2.423.39 Cosh Coth^2; 2.462.3b/10a/10b instances; 2.619.1/2/11 spurious I
+  - [ ] B8 Integrate -> Indeterminate on numeric instances of (a+bx+cx^2)^(3/2)/x^3 family (2.263.4, 2.267.6, 2.269.6)
+  - [ ] B9 NONNUMERIC closed forms under own Assumptions (2.246c, 2.445.2, 2.451.3a, 2.452.2b, 2.584.92/96)
+  - ch2 Integrate baseline (pre-fix, contended CPU): S 1027/1621, N 1314/1621; triage: CAN-DO 1020, INSTANCE-ONLY 289,
+    elliptic 192, risch 50, symbolic-order 30, liouvillian 21, BUG 19
+  - [x] B1,B3-B8 fixed, merged to main + tagged/pushed v0.6470-v0.6474 (2026-11-09); B2 not reproducible once harness holds values; B9 open (ArcTan/ArcTanh choice ignores Assumptions); divergent Bessel products not detected (run to timeout)
+  - [ ] Special-functions campaign RUNNING (worktree agent, from v0.6475): ParabolicCylinderD(109 G&R uses), GegenbauerC(47),
+        Jacobi elliptic family(~130), HankelH1/H2 + spherical Bessel(47), EllipticTheta(12), Weierstrass(~15), BetaRegularized,
+        BarnesG check, AppellF1/F4 -- all surfaces (machine/MPFR real+complex, ND/packed, Compile), >= reference/scipy speed, valgrind-clean
+  - [x] Special fns families 1-7 done on branch worktree-agent-a2a1e3bfda298329b (v0.6475-v0.6481), unmerged; AppellF1-F4 done v0.6485; MPFR compile campaign done v0.6482-84 (151/151 real, 145 complex); full line on branch worktree-agent-a968fb29571eade76 awaiting user merge. TODO: InverseWeierstrassP, BetaRegularized 50-digit speed, Appell F2-F4 continuation, Plot MPFR autocompile
+  - [ ] RUNNING (started on top of the 7-family branch, from v0.6482): arbitrary-precision
+        lowering campaign -- every special function (existing + new) must lower in Compile[] AND auto-compilation
+        at WorkingPrecision > MachinePrecision (real+complex), reusing its arb/MPFR evaluator; add an MPFR mode to
+        check-compile-coverage (ratchet). Found: at WP30 NIntegrate falls back to the interpreter for all new heads
+        and for Erf, AiryAi, Hypergeometric1F1, EllipticE/K, MathieuC; only Bessel J/Y + elementary lower.
+        Machine Compile[] + machine autocompile already work for all new heads (verified with MATHILDA_COMPILE_DIAG=1).
+  - [ ] Transcription remaps (main session): MathieuCe/Se -> MathieuC/S[MathieuCharacteristicA/B]; LobachevskyL -> Clausen/PolyLog;
+        LommelS1 -> 1F2 form; ThetaN -> EllipticTheta (heads with no builtin: Lommel S/V, Volterra, MacRobert E, Schlaefli stay TABLE/no-head)
+  - [ ] Missing heads -> separate special-functions campaign (user): ParabolicCylinderD, HankelH1/H2,
+        SphericalBesselJ/Y, GegenbauerC, JacobiSN/CN/DN, AppellF1-F4, BetaRegularized, BarnesG,
+        Weierstrass P/Zeta/Sigma, Lommel s/S, theta, Lobachevsky, Volterra nu/mu, MacRobert E
+
 # SIAM 100-Digit Challenge benchmark + holdouts + fixes (started 2026-11-07)
 
 Plan: ~/.claude/plans/pasted-content-id-9fcd-similar-to-fluttering-bentley.md

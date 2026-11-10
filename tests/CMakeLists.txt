@@ -719,6 +719,7 @@ set(COMMON_SRC
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_trig_roundtrip.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_denest.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_cuberoot.c
+    ${CMAKE_SOURCE_DIR}/../src/simp/simp_kummer.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_rationalize.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_algebraic.c
     ${CMAKE_SOURCE_DIR}/../src/simp/simp_canon.c
@@ -3766,6 +3767,14 @@ if(USE_ECM)
     target_link_libraries(inputform_layout_tests gmp m ${ECM_LIB})
 else()
     target_link_libraries(inputform_layout_tests gmp m)
+endif()
+
+add_executable(grtable_tests test_grtable.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(grtable_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(grtable_tests gmp m ${ECM_LIB})
+else()
+    target_link_libraries(grtable_tests gmp m)
 endif()
 
 add_executable(d_multilinear_tests test_d_multilinear.c $<TARGET_OBJECTS:mathilda_common>)

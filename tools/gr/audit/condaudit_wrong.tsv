@@ -1,0 +1,267 @@
+GR17.13.109	condition audit: wrong at a point its conditions admit {{a -> -1/4, nu -> -1/4, s -> 1}, 1.2233034404650986`10. + 1.2233034404650986`10.*I, 1.2233034404650993 - 1.2233034404650989*I}
+GR17.13.117	condition audit: wrong at a point its conditions admit {{a -> -3/2, k -> 1/7, s -> 1/3}, 3.2676502230547229`10., -2.0373465901160337 - 2.554751818077862*I}
+GR17.33.26	condition audit: wrong at a point its conditions admit {{a -> 3, xi -> 1/3}, 0.12086853662115693`10., 0.0}
+GR3.134.4	condition audit: wrong at a point its conditions admit {{a -> 11/2, b -> 7/5, c -> -3/2, u -> -2/3}, 0.036762460974287425`10., 0.04074376809038487}
+GR3.137.4	condition audit: wrong at a point its conditions admit {{a -> 1, b -> 5/6, c -> -3/2, r -> 3/5, u -> -2/3}, -4.3815756226449309`10. + 7.0961344755686468`10.*I, -7.7802147018508965}
+GR3.137.8	condition audit: wrong at a point its conditions admit {{a -> 3/5, b -> 1/3, c -> 1/7, r -> 3, u -> 9/4}, 0.026628446004520329`10. - 0.73467270990868716`10.*I, -1.199270085099586}
+GR3.139.15	condition audit: wrong at a point its conditions admit {{u -> 11/2}, -0.46454887185367078`10., 296.53594879863374}
+GR3.139.16	condition audit: wrong at a point its conditions admit {{u -> 7/5}, -0.40238464786713246`10., 16134238.125588102}
+GR3.139.17	condition audit: wrong at a point its conditions admit {{u -> -1/4}, -4.8562691800346727`10., 18247447.222987086}
+GR3.139.25	condition audit: wrong at a point its conditions admit {{p -> -7/3, u -> 1/7}, -0.47446024133279252`10. - 0.62194275376898656`10.*I, -2.0467995988721865}
+GR3.139.26	condition audit: wrong at a point its conditions admit {{p -> 9/4, u -> -2/3}, -0.28681935501481393`10. - 0.65565794346365625`10.*I, -1.2649423544071787}
+GR3.139.27	condition audit: wrong at a point its conditions admit {{p -> 9/4, u -> 3}, -0.02212855848051698`10. - 0.59612228939437362`10.*I, -1.9583405203045479}
+GR3.139.28	condition audit: wrong at a point its conditions admit {{p -> -7/3, u -> 7/5}, -0.15583040760158262`10. - 0.5696644638413888`10.*I, -0.37445693253206386}
+GR3.145.4	condition audit: wrong at a point its conditions admit {{m -> 11/2, m1 -> -3/2, n -> 11/2, n1 -> 3/5, u -> 9/4}, 0.014630137269743548`10., 0.04835797950933524}
+GR3.157.1	condition audit: wrong at a point its conditions admit {{a -> 1/3, b -> 1/7, p -> 1, u -> 7/5}, 6.7032573729678901`10. - 1.4752110935185527`10.*I, 7.997813052693428}
+GR3.157.10	condition audit: wrong at a point its conditions admit {{a -> 11/2, b -> 3/5, p -> 9/4, u -> 1}, -0.013973862058779513`10. - 0.14395233049477918`10.*I, -0.10773150017559369}
+GR3.157.11	condition audit: wrong at a point its conditions admit {{a -> 9/4, b -> 1, p -> 11/2, u -> 11/2}, 0.15097111244670924`10. - 0.47735694640594195`10.*I, 0.0015100173425929859}
+GR3.157.5	condition audit: wrong at a point its conditions admit {{a -> 3/5, b -> 5/6, p -> 7/5, u -> 7/5}, 1.3438072941684798`10. - 1.1913350448046263`10.*I, -0.40892042581272375}
+GR3.157.9	condition audit: wrong at a point its conditions admit {{a -> 9/4, b -> 1/3, p -> 1/7, u -> 9/4}, 3.3007629653861947`10. - 10.516164859955012`10.*I, 11.929405870652538}
+GR3.162.1	condition audit: wrong at a point its conditions admit {{a -> 3/5, b -> -3/2, u -> 11/2}, -1.6921026543735227`10., 3.3257974147966327}
+GR3.162.3	condition audit: wrong at a point its conditions admit {{a -> 1/7, b -> -3/2, u -> 9/4}, -0.35226045089677616`10., 0.31816937651784627}
+GR3.163.1	condition audit: wrong at a point its conditions admit {{a -> 1/3, b -> -7/3, u -> 7/5}, 0.53966233314718881`10., 0.6669114208123464}
+GR3.165.10	condition audit: wrong at a point its conditions admit {{a -> -7/3, b -> -3/2, u -> 11/2}, -0.16707758192136812`10., 0.16707758192136807}
+GR3.165.4	condition audit: wrong at a point its conditions admit {{a -> -3/2, b -> 1/7, u -> 1}, -0.056289264052650612`10., 0.05628926405265059}
+GR3.165.5	condition audit: wrong at a point its conditions admit {{a -> 5/6, b -> -2/3, u -> -7/3}, -0.38609252553837292`10., 5663878.661783148}
+GR3.165.6	condition audit: wrong at a point its conditions admit {{a -> -7/3, b -> 1, u -> 1/7}, -0.023665900717176558`10., 0.02770426219046201}
+GR3.165.8	condition audit: wrong at a point its conditions admit {{a -> -7/3, b -> 1/7, u -> 3/5}, -0.84804426719297243`10., 1.0392056534662668}
+GR3.165.9	condition audit: wrong at a point its conditions admit {{a -> -7/3, b -> -2/3, u -> 3/5}, -0.25937057767349403`10., 0.25937057767349436}
+GR3.169.1	condition audit: wrong at a point its conditions admit {{a -> 1, b -> -7/3, u -> 3/5}, 0.31206034299006769`10., 0.26879818620112017}
+GR3.169.2	condition audit: wrong at a point its conditions admit {{a -> 7/5, b -> -2/3, u -> 11/2}, 6.6089746113081844`10., 4.659319112184918}
+GR3.172.1	condition audit: wrong at a point its conditions admit {{a -> 1, b -> -7/3, u -> 1/7}, 0.20755358160434922`10., 0.33018754018361623}
+GR3.172.3	condition audit: wrong at a point its conditions admit {{a -> 1/7, b -> -2/3, u -> 9/4}, -1.1582884179592039`10., 1.1582884179592046}
+GR3.191.2	condition audit: wrong at a point its conditions admit {{mu -> 1/7, nu -> 5/6, u -> 1/7}, 29.202264253704243`10., 29.061840613738745}
+GR3.196.2	condition audit: wrong at a point its conditions admit {{beta -> 1/3, mu -> 1/7, nu -> 7/5, u -> 1}, 4.6518206588558186`10., 4.626857742167057}
+GR3.196.4	condition audit: wrong at a point its conditions admit {{a -> -1/4, b -> 1, nu -> 5/6}, -5.2170082582075494`10., -5.206308678251306}
+GR3.196.5	condition audit: wrong at a point its conditions admit {{a -> 9/4, b -> 1/3, nu -> 5/6}, 4.3877773891994138`10., 4.381560690488699}
+GR3.197.6	condition audit: wrong at a point its conditions admit {{alpha -> 1, lam -> 3, mu -> 3/5, nu -> 9/4}, 9.6692630622360838`10., 1.9079378184749614*^21}
+GR3.225.1	condition audit: wrong at a point its conditions admit {{p -> -2/3}, -6.0459978807807246`10., 57911546824.5726}
+GR3.228.2a	condition audit: wrong at a point its conditions admit {{a -> 5/6, b -> 9/4, c -> -2/3, nu -> 5/6}, 2.4067205150002025`10., 2.401863833704609}
+GR3.228.2b	condition audit: wrong at a point its conditions admit {{a -> -7/3, b -> -3/2, c -> 3, nu -> 1/7}, -1.3909728664357424`10., -1.3830382308952243}
+GR3.231.1	condition audit: wrong at a point its conditions admit {{p -> -2/3}, 1.8137993642342174`10., 1.8138427734375}
+GR3.251.9	condition audit: wrong at a point its conditions admit {{p -> 7/5, q -> 1/7}, 28.127734771831484`10., 28.12716136070119}
+GR3.255	condition audit: wrong at a point its conditions admit {{a -> 5/6, b -> 3, c -> 1/3, mu -> -1/4}, 1.2779144009101664`10., 1.2778161780556785}
+GR3.256.1	condition audit: wrong at a point its conditions admit {{p -> 5/6, q -> 1}, 13.5681194272385`10., 13.56753111081265}
+GR3.277.5	condition audit: wrong at a point its conditions admit {{mu -> 3/5, nu -> -1/4, u -> 7/5}, 7.4781629098639044`10. + 0``38.8*I, 7.448344839263591}
+GR3.312.3	condition audit: wrong at a point its conditions admit {{beta -> 1/7, mu -> 9/4, nu -> 1/7, rho -> -1/4}, 5.7876652563917759`10., 5.75510214107521}
+GR3.318.1	condition audit: wrong at a point its conditions admit {{beta -> -3/2, mu -> 7/5, nu -> -1/4}, -1.1047486076465241`10. + 3.4000666024709894`10.*I, 2.52793612314511 + 2.5279361231451096*I}
+GR3.354.5	condition audit: wrong at a point its conditions admit {{a -> -3/2, p -> 5/6}, -0.60005424335613977`10., 0.6000542212561191}
+GR3.359a	condition audit: wrong at a point its conditions admit {{n -> 3, p -> 1/3}, -0.16674440750856911`10., 0.6113962114906062}
+GR3.383.2	condition audit: wrong at a point its conditions admit {{beta -> -2/3, mu -> 7/5, u -> -2/3}, 0.28449115083578524`10., 0.2301581757754365 - 0.16721970286898788*I}
+GR3.383.3	condition audit: wrong at a point its conditions admit {{beta -> 7/5, mu -> 1/7, u -> 1/7}, 22.472396249469114`10., 22.35197511568231}
+GR3.384.6	condition audit: wrong at a point its conditions admit {{mu -> 1/7, nu -> 1/7, u -> 11/2}, 0.8095003087421242`10., 0.8050589088902773}
+GR3.387.2	condition audit: wrong at a point its conditions admit {{mu -> -2/3, nu -> 7/5}, 1.2469738657138212`10. - 0.90597954475233688`10.*I, 1.5413444641879777}
+GR3.387.5	condition audit: wrong at a point its conditions admit {{mu -> -3/2, nu -> 3, u -> 5/6}, -0.14997033860705944`10. - 1.2513616281045822`10.*^-65*I, 0.14997033860705952}
+GR3.387.6	condition audit: wrong at a point its conditions admit {{mu -> 1/3, nu -> 1/7, u -> 11/2}, 0.15262368272337512`10., 0.15167486362561947}
+GR3.388.1	condition audit: wrong at a point its conditions admit {{mu -> -7/3, nu -> 7/5, u -> 3/5}, 2.7391773866997475`10. - 1.9901288631879517`10.*I, 3.385809452391114}
+GR3.389.1	condition audit: wrong at a point its conditions admit {{mu -> 3, nu -> 1/3, rho -> 1/7, u -> 11/2}, 5.9899106519127488`10.*^6, 5941503.47832706}
+GR3.416.3	condition audit: wrong at a point its conditions admit {{n -> 3}, -0.84920634920634885`10., -0.08730158730158749}
+GR3.417.2	condition audit: wrong at a point its conditions admit {{a -> 3, b -> 11/2}, 0.14953946062256596`10., 0.15377721795246788}
+GR3.423.1	condition audit: wrong at a point its conditions admit {{nu -> 9/4}, 3.5518513609736999`10., 3.551433231785953}
+GR3.425.1	condition audit: wrong at a point its conditions admit {{a -> -2/3, b -> -7/3, n -> 9/4}, -3.6017579443773894`10.*^-44 + 3.0032545405049689`10.*I, -3.003254540504968494916`15.9}
+GR3.432.2	condition audit: wrong at a point its conditions admit {{mu -> 11/2, nu -> 1/7}, 1.3566911306979055`10., 1.3571928536474756}
+GR3.462.13b	condition audit: wrong at a point its conditions admit {{a -> -2/3, b -> -7/3, m -> 11/2, p -> 9/4, u -> -1/4}, -70.724516005074861`10. - 0.000060459161333056355`10.*I, 70.72451600369796 - 6.045949221626669*^-5*I}
+GR3.462.14b	condition audit: wrong at a point its conditions admit {{a -> 1/7, b -> 11/2, m -> 11/2, p -> 11/2, u -> 1/7}, 5.7480754731597255`10.*^-48 + 6.8569837024787558`10.*^17*I, 0.0 - 1157.553729687352*I}
+GR3.462.3	condition audit: wrong at a point its conditions admit {{beta -> -2/3, nu -> 5/6, q -> 7/5}, -1.2027203259623676`10. - 0.69439090395420688`10.*I, 1.3228529832331604}
+GR3.471.8	condition audit: wrong at a point its conditions admit {{beta -> 1/7, mu -> 1/7, u -> 7/5}, 2.6849475182665259`10., 2.6750982628085924}
+GR3.484	condition audit: wrong at a point its conditions admit {{a -> 1/7, p -> 3/5, q -> 1/3}, -0.09026345619510634`10., 3.842418657793635*^-6}
+GR3.513.1	condition audit: wrong at a point its conditions admit {{a -> -3/2, b -> 7/5}, -0.047543605508907405`10. + 1.5311185733866086`10.*I, 1.6610891671999721}
+GR3.513.2b	condition audit: wrong at a point its conditions admit {{a -> -7/3, b -> 1}, -0.70724164789916877`10. + 1.4901882398694148`10.*I, -0.03610517670151663}
+GR3.513.4d	condition audit: wrong at a point its conditions admit {{a -> -2/3, b -> 3/5, c -> 7/5}, 2.3460766590276982`10. + 2.1971626912536948`10.*I, 14.065585266060845}
+GR3.536.3	condition audit: wrong at a point its conditions admit {{mu -> 5/6, nu -> 1/7}, 21.765780422957278`10., 21.76082006573121}
+GR3.541.2	condition audit: wrong at a point its conditions admit {{b -> -3/2, beta -> 3/5, mu -> 9/4}, 6.2837091374048768`10., -0.16217618957114152}
+GR3.544	condition audit: wrong at a point its conditions admit {{n -> 1, u -> 11/2}, 0.000022269083160223174`10. - 192.18380394127348`10.*I, 2.2269082392986896*^-5}
+GR3.623.1b	condition audit: wrong at a point its conditions admit {{mu -> 1/7, nu -> 11/2}, 6.0144820927480751`10., 5.989505728398115}
+GR3.631.13a	condition audit: wrong at a point its conditions admit {{m -> 1, n -> 3}, 0, -0.7111111111111112}
+GR3.631.13c	condition audit: wrong at a point its conditions admit {{m -> 1, n -> 3}, 0, -0.3555555555555555}
+GR3.632.5	condition audit: wrong at a point its conditions admit {{p -> 1/7, q -> 1}, 2.8454148098339189`10., 2.8398568249041007}
+GR3.633.1	condition audit: wrong at a point its conditions admit {{a -> 11/2, p -> 1/7}, 4.3542946205951338`10., 4.336633664623984}
+GR3.634.2	condition audit: wrong at a point its conditions admit {{mu -> 3/5, nu -> 1/7}, 4.640895048450524`10., 4.631078339171916}
+GR3.636.2a	condition audit: wrong at a point its conditions admit {{mu -> 5/6}, -5.0575757996373127`10., -5.049224827790733}
+GR3.637.1	condition audit: wrong at a point its conditions admit {{p -> 5/6, q -> 5/6}, 5.7828638899799927`10., 5.774797677565737}
+GR3.637.4	condition audit: wrong at a point its conditions admit {{p -> -1/4, q -> 7/5}, -2.4317415187231042`10., -2.4211993952285176}
+GR3.638.3	condition audit: wrong at a point its conditions admit {{p -> 1/7}, 1.5707963267948966`10., 1.565238348238779}
+GR3.641.1a	condition audit: wrong at a point its conditions admit {{a -> 1/3, b -> 7/5, p -> 5/6}, 5.7006806728648129`10., 5.694716354768904}
+GR3.642.1	condition audit: wrong at a point its conditions admit {{a -> 1/7, b -> 7/5, mu -> 5/6, nu -> 1/7}, 84.774890918556707`10., 84.77292403374582}
+GR3.642.2	condition audit: wrong at a point its conditions admit {{a -> 1/7, b -> 3, n -> 1/7}, 15.681712300969579`10., 15.663463341229333}
+GR3.646.1	condition audit: wrong at a point its conditions admit {{a -> -2/3, n -> -7/3}, -71.129573447551138`10., 12256141.18236381}
+GR3.649.2a	condition audit: wrong at a point its conditions admit {{a -> 5/6, mu -> 5/6}, 3.4459474935285392`10., 3.4413923510477225}
+GR3.652.1a	condition audit: wrong at a point its conditions admit {{mu -> 5/6}, 6.2831853071795862`10., 6.27483421258661}
+GR3.652.1b	condition audit: wrong at a point its conditions admit {{mu -> 1/7}, 7.2406323868675742`10., 7.2156550580739465}
+GR3.652.3a	condition audit: wrong at a point its conditions admit {{mu -> -1/4}, 4.4428829381583697`10., 4.442676703038813}
+GR3.652.3b	condition audit: wrong at a point its conditions admit {{mu -> 1/3}, 6.2831853071795862`10., 6.274834212586609}
+GR3.653.2a	condition audit: wrong at a point its conditions admit {{a -> -1/4, mu -> 5/6}, 4.9464026694651082`10., 4.939721990275486}
+GR3.653.3a	condition audit: wrong at a point its conditions admit {{mu -> 5/6, t -> 1/7}, 15.845302438929522`10., 15.836952848712182}
+GR3.653.3b	condition audit: wrong at a point its conditions admit {{mu -> 1/3, t -> -2/3}, -2.1545229556083356`10., 2.8009925680876}
+GR3.653.4a	condition audit: wrong at a point its conditions admit {{mu -> 1/7, t -> -7/3}, 7.4800658159898461`10., 1.5365147113507522}
+GR3.653.4b	condition audit: wrong at a point its conditions admit {{mu -> -2/3, t -> -1/4}, -7.0896570123680434`10., 5.8343951383810735}
+GR3.653.5a	condition audit: wrong at a point its conditions admit {{mu -> -1/4, t -> -3/2}, -8.9593710580876404`10., 0.6394165000910157}
+GR3.653.5b	condition audit: wrong at a point its conditions admit {{mu -> 1/3, t -> -2/3}, -0.29419810239617838`10., 1.7430385018587122}
+GR3.653.6a	condition audit: wrong at a point its conditions admit {{mu -> 1/3, t -> -2/3}, -1.860324853212159`10., 1.0579540662269498}
+GR3.653.6b	condition audit: wrong at a point its conditions admit {{mu -> -1/4, t -> -2/3}, -0.59122111436161617`10., 1.5822154428813682}
+GR3.654.2a	condition audit: wrong at a point its conditions admit {{mu -> 5/6}, 5.2359877559829897`10., 5.227637045264182}
+GR3.656.2b	condition audit: wrong at a point its conditions admit {{mu -> 1/7}, 6.734788214821279`10., 6.709810585720816}
+GR3.662.1a	condition audit: wrong at a point its conditions admit {{mu -> 5/6}, 5.2359877559829897`10., 5.227636777491162}
+GR3.663.2	condition audit: wrong at a point its conditions admit {{beta -> 3, nu -> 1/7, u -> 3/5}, -0.5854245270796401`10., -0.5667372197233499}
+GR3.664.4c	condition audit: wrong at a point its conditions admit {{mu -> -7/3, nu -> 1/7, z -> 3}, 136.83541714378998`10., 136.83213530367726}
+GR3.665.2	condition audit: wrong at a point its conditions admit {{a -> -1/4, mu -> 1/7, nu -> -7/3}, 12.111289411552065`10., 12.111137196166819}
+GR3.666.3	condition audit: wrong at a point its conditions admit {{mu -> 11/2, nu -> 1/7, t -> -1/4}, 1.209586563898343`10. + 2.5117323809413215`10.*I, 2.787802176965468 - 5.26572368316036*^-5*I}
+GR3.667.2	condition audit: wrong at a point its conditions admit {{mu -> -1/4}, 4.4428829381583697`10., 4.442534148343491}
+GR3.667.7	condition audit: wrong at a point its conditions admit {{mu -> 1/7, nu -> 1/7}, 13.615611581689919`10., 13.590634205886849}
+GR3.668.1	condition audit: wrong at a point its conditions admit {{t -> 7/5}, 17.331510751586364`10., 17.25685848524000349916`15.9}
+GR3.668.2	condition audit: wrong at a point its conditions admit {{a -> 5/6, mu -> 1/7, u -> 3/5, v -> 5/6}, 20.878547413811475`10., 20.877751409701705}
+GR3.669a	condition audit: wrong at a point its conditions admit {{a -> 11/2, b -> 9/4, p -> 3/5, q -> 5/6}, 2.1249136362858536`10., 2.124696352684963}
+GR3.669b	condition audit: wrong at a point its conditions admit {{a -> 1/7, b -> 7/5, p -> 1/7, q -> 3}, 1426.7090643882839`10., 1418.1419064726083}
+GR3.674.2b	condition audit: wrong at a point its conditions admit {{p -> -3/2}, -1.3333333333333339`10., 1.3333333333333335}
+GR3.681.2	condition audit: wrong at a point its conditions admit {{k -> 1/7, mu -> 7/5, nu -> 1/7}, 3.3657362923645771`10., 3.3656908078518133}
+GR3.683.2b	condition audit: wrong at a point its conditions admit {{mu -> 5/6}, -2.8774559202366916`10., -2.8732805421164405}
+GR3.683.3b	condition audit: wrong at a point its conditions admit {{mu -> 5/6}, -3.3206990463513257`10., -3.316523696151029}
+GR3.685.3b	condition audit: wrong at a point its conditions admit {{mu -> 5/6}, -5.8622916999411174`10., -5.853941000961304}
+GR3.685.5b	condition audit: wrong at a point its conditions admit {{mu -> 5/6}, -3.3206990463513257`10., -3.316523696151029}
+GR3.685.7b	condition audit: wrong at a point its conditions admit {{mu -> 5/6}, -2.7206990463513279`10., -2.716523696210049}
+GR3.686a	condition audit: wrong at a point its conditions admit {{mu -> 1/7}, 5.4977871437821406`10., 5.472809950751522}
+GR3.687.1b	condition audit: wrong at a point its conditions admit {{mu -> 1, nu -> 1/7}, 9.6179709130517637`10., 9.592994674178295}
+GR3.687.2a	condition audit: wrong at a point its conditions admit {{mu -> 7/5, nu -> 9/4}, 1.4857820645357673`10., 1.4840698660860718}
+GR3.687.2b	condition audit: wrong at a point its conditions admit {{mu -> 9/4, nu -> 7/5}, -1.4857820645357673`10., -1.4840698660552187}
+GR3.687.5	condition audit: wrong at a point its conditions admit {{mu -> 1/3, nu -> 3/5}, 4.0728754545660593`10., 4.072775360659211}
+GR3.688.13	condition audit: wrong at a point its conditions admit {{mu -> -3/2}, -0.26179938779914957`10., 0.2617993877991494}
+GR3.688.20	condition audit: wrong at a point its conditions admit {{mu -> 1/7, nu -> 1/7}, 3.6784622619385274`10., 3.653528877946162}
+GR3.715.16	condition audit: wrong at a point its conditions admit {{nu -> 1/3, z -> -3/2}, 0.36496537189657774`10. - 0.63213856712814298`10.*I, -0.7299307437931558}
+GR3.715.20	condition audit: wrong at a point its conditions admit {{nu -> 5/6, z -> -7/3}, 0.17508302287122923`10. - 0.30325269115571274`10.*I, 0.3501660457424582}
+GR3.715.21	condition audit: wrong at a point its conditions admit {{mu -> -1/4, z -> -1/4}, 0``38.5 - 5.135349521631916`10.*I, 5.1353494886419755}
+GR3.718.1a	condition audit: wrong at a point its conditions admit {{a -> 3, p -> -1/4}, 0.078205344114127051`10., -8.306797144870758*^61}
+GR3.718.3	condition audit: wrong at a point its conditions admit {{n -> -3/2, nu -> 3}, 1.5707963267948966`10., 0.9702709339040165}
+GR3.724.3	condition audit: wrong at a point its conditions admit {{a -> 9/4, b -> 11/2, t -> -2/3}, -11.958049839160594`10., -0.5861972755763385}
+GR3.765.1	condition audit: wrong at a point its conditions admit {{a -> -2/3, b -> 5/6, nu -> -1/4}, -4.8960830908078989`10. + 2.6572467183457533`10.*I, -0.8510951352288298}
+GR3.771.12b	condition audit: wrong at a point its conditions admit {{a -> 3/5, nu -> -1/4, u -> 5/6}, 1.6465227772256714`10., 1.6464425254127157}
+GR3.772.3	condition audit: wrong at a point its conditions admit {{a -> 3, nu -> -1/4, u -> 5/6}, -1.0734385936792119`10., -1.0731517290052934}
+GR3.815.4	condition audit: wrong at a point its conditions admit {{t1 -> 3, t2 -> 1/7}, -46855.365933012159`10., 0.7974352142680656}
+GR3.838.1	condition audit: wrong at a point its conditions admit {{p -> -2/3}, -4.7123889803846879`10., 417088425798.0502}
+GR3.839.5	condition audit: wrong at a point its conditions admit {{p -> -1/4}, -7.7116131852030207`10., 111678.25472585266}
+GR3.846.1	condition audit: wrong at a point its conditions admit {{k -> 3/5}, 0.8266693349517853`10., 0.8266999487339604}
+GR3.852.2a	condition audit: wrong at a point its conditions admit {{a -> 9/4, b -> 5/6}, 1.8462447503692516`10., 1.846208026171777}
+GR3.865.4	condition audit: wrong at a point its conditions admit {{a -> 9/4, mu -> 1/7, u -> 3}, 10.24329931814151`10., 10.221258713484152}
+GR3.876.3	condition audit: wrong at a point its conditions admit {{a -> 3, b -> 11/2, c -> 1/7, p -> -3/2}, -1.0814446306782042`10., -1.0814627133399908}
+GR3.876.4a	condition audit: wrong at a point its conditions admit {{a -> 3/5, b -> 1/7, c -> 11/2, p -> -3/2}, -43.378904131470108`10., -0.04228164455579344}
+GR3.877.3	condition audit: wrong at a point its conditions admit {{b -> 3, p -> 3/5, u -> 5/6}, -0.93515772940026576`10., -0.9350698188660302}
+GR3.892.1	condition audit: wrong at a point its conditions admit {{beta -> 1/3, nu -> 1/7}, 11.860720229418135`10. + 6.8477900172374007`10.*I, 11.846931598239452 + 6.823907410803632*I}
+GR3.892.5a	condition audit: wrong at a point its conditions admit {{mu -> 1/7, nu -> 1/7}, 13.274239772415598`10. + 3.0297586055440497`10.*I, 13.251735373806993 + 3.018921059202341*I}
+GR3.892.5b	condition audit: wrong at a point its conditions admit {{mu -> 3/5, nu -> 1/7}, 4.640895048450524`10. + 6.3876440394914908`10.*I, 4.631078299848337 + 6.364676614394217*I}
+GR3.913.2a	condition audit: wrong at a point its conditions admit {{a -> -3/2, b -> -7/3, mu -> 7/5, nu -> 9/4, u -> -2/3}, -7.4651415355976739`10.*^-44 + 125.36726606761943`10.*I, 125.36726606761938}
+GR3.913.2b	condition audit: wrong at a point its conditions admit {{a -> -7/3, b -> -3/2, mu -> -2/3, nu -> 9/4, u -> -3/2}, -3.3470573004949843`10.*^-44 + 56.209439718429621`10.*I, 56.20929322936787}
+GR3.915.3	condition audit: wrong at a point its conditions admit {{beta -> -7/3, nu -> 9/4}, -8.3135064406118912`10.*^-45 + 0.71878477951352693`10.*I, 0.7187847795136219}
+GR3.925.1b	condition audit: wrong at a point its conditions admit {{a -> 1, p -> 1/3}, 0.63894268622233863`10., 3.449121000425481*^48}
+GR3.925.2b	condition audit: wrong at a point its conditions admit {{a -> 3/5, p -> 11/2}, 0.0012833380220283099`10., -6.150921848016768*^48}
+GR3.926.1	condition audit: wrong at a point its conditions admit {{a -> -7/3, beta -> 7/5, gamma -> 11/2}, -0.00059302331185551258`10., 0.0005930233118555129}
+GR3.937.1	condition audit: wrong at a point its conditions admit {{a -> 1, b -> -1/4, m -> 1, p -> 1/7, q -> 5/6}, -0.50647859291266784`10. + 0``20.*I, 0.5064785929126674}
+GR3.937.2	condition audit: wrong at a point its conditions admit {{a -> -7/3, b -> 3, m -> 1, p -> -2/3, q -> 1}, -1.9533340708311098`10. + 0``20.*I, 1.9533340708311102}
+GR3.969.1	condition audit: wrong at a point its conditions admit {{p -> 5/6, q -> 3}, 0.88622692545275772`10., 0.8822959258981111}
+GR3.987.2	condition audit: wrong at a point its conditions admit {{a -> -1/4, beta -> 3}, -0.022820251313423967`10., 0.0}
+GR4.131.3b	condition audit: wrong at a point its conditions admit {{a -> 11/2, beta -> 11/2, gamma -> -3/2}, 1.5748996170878851`10. + 0``20.*I, -0.519474671588946}
+GR4.228.4	condition audit: wrong at a point its conditions admit {{t -> 3, u -> 1/7}, 4.5460371209398858`10., 0.03171782583827512}
+GR4.229.4	condition audit: wrong at a point its conditions admit {{mu -> 1/7}, -48.219806116826419`10., -46.589828319194844}
+GR4.253.2	condition audit: wrong at a point its conditions admit {{p -> 5/6}, -7.5398223686155035`10., -7.527907022753265}
+GR4.253.3	condition audit: wrong at a point its conditions admit {{lam -> 9/4, mu -> 1/7, u -> 9/4}, 0.98237258081964818`10., 0.9769800798460242}
+GR4.283.14	condition audit: wrong at a point its conditions admit {{p -> 3/5, q -> 1/3, r -> 1/3}, 0.026715880784952628`10., 0.16844837673822138}
+GR4.295.37	condition audit: wrong at a point its conditions admit {{p -> -3/2, q -> 1/3}, 3.8953260280013495`10., 3.8950851897284067}
+GR4.295.39	condition audit: wrong at a point its conditions admit {{mu -> -3/2}, 1.8498298458664664`10., 1.8496389083969045}
+GR4.299.2	condition audit: wrong at a point its conditions admit {{a -> 9/4}, 0.38612491075955768`10., 0.38612491065515886 + 0.8268485874540111*I}
+GR4.299.3	condition audit: wrong at a point its conditions admit {{a -> 11/2}, 0.93201839090048466`10., 0.9320183910068708 + 1.0243526524150146*I}
+GR4.314.2	condition audit: wrong at a point its conditions admit {{q -> 1/3}, 0.98542064692776687`10., 0.8958303954804798}
+GR4.374.1	condition audit: wrong at a point its conditions admit {{t -> 11/2}, -60.5`10., -1.2267584507639644}
+GR4.382.1	condition audit: wrong at a point its conditions admit {{a -> -7/3, b -> 3}, -0.68799475734729754`10., -0.6905563664195029}
+GR4.382.2	condition audit: wrong at a point its conditions admit {{a -> 3/5, b -> 3}, -0.52465944189393809`10., -0.5241917104534479}
+GR4.384.16	condition audit: wrong at a point its conditions admit {{a -> 1/3, b -> 3}, -2.4546358166433713`10., -2.4546358161667867 + 3.0585016881497777*I}
+GR4.384.19	condition audit: wrong at a point its conditions admit {{a -> -1/4, b -> 3}, -2.2708034685678165`10., -2.270803467689174 + 5.134871364243441*I}
+GR4.388.6	condition audit: wrong at a point its conditions admit {{p -> -2/3}, -0.94247779607693793`10., -0.9409093758599681}
+GR4.389.3	condition audit: wrong at a point its conditions admit {{mu -> 3/5}, 0.79297364234187295`10., -2608756.88776574}
+GR4.389.5	condition audit: wrong at a point its conditions admit {{p -> -2/3}, -9.8270998832483372`10., -9.826855269161014}
+GR4.389.6	condition audit: wrong at a point its conditions admit {{p -> 1/7}, -10.79341165348194`10., -10.534782302891246}
+GR4.396.2	condition audit: wrong at a point its conditions admit {{mu -> 3/5}, 23.949022249315192`10., 23.86606570345412}
+GR4.396.3	condition audit: wrong at a point its conditions admit {{q -> -2/3}, 4.0130989108584174`10., 4.012976522388441}
+GR4.396.4	condition audit: wrong at a point its conditions admit {{q -> 1/7}, -10.995574287564281`10., -10.736945010017537}
+GR4.573.3a	condition audit: wrong at a point its conditions admit {{p -> 1, q -> -1/4, r -> 1/3}, 1.728863648145964`10., 1.7287738930582182}
+GR6.213.1	condition audit: wrong at a point its conditions admit {{a -> 1}, -0.78539816339744828`10., -0.7925214287088698}
+GR6.213.2	condition audit: wrong at a point its conditions admit {{a -> 3/5}, -0.92963305333478097`10., -0.9283005285581855}
+GR6.213.3	condition audit: wrong at a point its conditions admit {{a -> 5/6}, -0.66492317638138587`10., -0.6734708319540907}
+GR6.213.4	condition audit: wrong at a point its conditions admit {{a -> 5/6}, -0.88012239095785638`10., -0.8786776059780382}
+GR6.213.7	condition audit: wrong at a point its conditions admit {{a -> 1}, 0.78539816339744828`10., 0.7924213629136384}
+GR6.213.8	condition audit: wrong at a point its conditions admit {{a -> 1}, 0.78539816339744828`10., 0.7865120230653581}
+GR6.213.9	condition audit: wrong at a point its conditions admit {{a -> 5/6}, -0.88012239095785638`10., -0.8716948039203387}
+GR6.224.1a	condition audit: wrong at a point its conditions admit {{beta -> -2/3, mu -> 11/2}, -0.36018208524846962`10. - 0.57119866428905297`10.*I, -0.3601820852484697106091`15.9}
+GR6.252.2a	condition audit: wrong at a point its conditions admit {{p -> 1/3, q -> 3/5}, -1.8791444527430521`10., -1.9197876861964103}
+GR6.259.2b	condition audit: wrong at a point its conditions admit {{a -> 5/6, b -> 11/2, c -> 1}, 0.30714643559231503`10., -0.060803451806851525}
+GR6.261.2	condition audit: wrong at a point its conditions admit {{a -> 11/2, beta -> -2/3, mu -> 9/4}, 0.1135530544224882`10. + 0``20.*I, -0.08661922085048993}
+GR6.262.1	condition audit: wrong at a point its conditions admit {{a -> 11/2, b -> 5/6, mu -> 9/4}, -0.33006115667505487`10., -0.22997501903856582}
+GR6.262.3	condition audit: wrong at a point its conditions admit {{a -> 11/2, beta -> -1/4, mu -> 1/3}, -0.30751134903104838`10. + 0``20.*I, -0.30751134903104743 + 0.03449141065240444*I}
+GR6.311	condition audit: wrong at a point its conditions admit {{a -> 3, b -> 1}, 0.027395522883651602`10., 0.0}
+GR6.313.1	condition audit: wrong at a point its conditions admit {{alpha -> 3, beta -> -3/2}, -1.2802947101732833`10., -0.05303862316004931}
+GR6.315.1	condition audit: wrong at a point its conditions admit {{alpha -> 9/4, beta -> -3/2, nu -> 3}, -0.0096952328992923192`10., 0.0}
+GR6.315.2	condition audit: wrong at a point its conditions admit {{alpha -> 11/2, beta -> 9/4, nu -> 1/3}, 1.2882008476221678`10., 0.0}
+GR6.315.3	condition audit: wrong at a point its conditions admit {{a -> 3, b -> 5/6}, 0.026982578396868739`10., 0.0}
+GR6.431.1c	condition audit: wrong at a point its conditions admit {{p -> 1/7, q -> 7/5, r -> 3/5}, 0.16738328812899717`10., 0.16984331507381956}
+GR6.431.2a	condition audit: wrong at a point its conditions admit {{p -> -1/4, q -> 7/5, r -> 7/5}, 0.045245228797280324`10., 0.051012881709096757}
+GR6.471.1	condition audit: wrong at a point its conditions admit {{alpha -> 1/7}, -4.7437260702206743`10., -4.7177475387061385}
+GR6.471.2	condition audit: wrong at a point its conditions admit {{alpha -> 1/7}, 3.7036783811248313`10., 3.67180071280776}
+GR6.471.3	condition audit: wrong at a point its conditions admit {{y -> -7/3}, 0.79223386191310396`10. - 1.5707963267948966`10.*I, 0.0996198941652208}
+GR6.472.2	condition audit: wrong at a point its conditions admit {{alpha -> -3/2}, -0.97964075575705856`10., 177434602.6304954}
+GR6.522.4a	condition audit: wrong at a point its conditions admit {{a -> -2/3, b -> -1/4, c -> 11/2}, 0.032514892187253563`10., 0.007964004591594914 + 0.21719023113378305*I}
+GR6.522.4b	condition audit: wrong at a point its conditions admit {{a -> 3, b -> -3/2, c -> -7/3}, 0.06598044977338724`10., 1.5791946047750427 - 0.3133357878469542*I}
+GR6.523	condition audit: wrong at a point its conditions admit {{a -> -1/4, b -> 11/2}, 0.13010427394136248`10. + 0.13223196943501736`10.*I, 0.13010427394136237 - 0.1322319694350173*I}
+GR6.539.1	condition audit: wrong at a point its conditions admit {{a -> 1/3, b -> 11/2, nu -> 9/4}, 4695.8925533309666`10., 8.856987826094571*^16}
+GR6.539.2	condition audit: wrong at a point its conditions admit {{a -> 1, b -> 11/2, nu -> 1/7}, -15.823257338198928`10., 12556199911432714.0}
+GR6.578.10	condition audit: wrong at a point its conditions admit {{a -> -2/3, b -> 7/5, c -> -3/2, mu -> 5/6, nu -> 1}, -0.38203269865160516`10. - 0.19216484180730609`10.*I, 0.37723988544259945 + 0.1505815123319647*I}
+GR6.578.6	condition audit: wrong at a point its conditions admit {{a -> 3/5, b -> 1/3, c -> -1/4, mu -> 1, nu -> 7/5}, 0.83866556072527665`10. + 0.27249895923185719`10.*I, -0.27249895923185735 - 0.838665560725277*I}
+GR6.579.2	condition audit: wrong at a point its conditions admit {{a -> 1/7, b -> 1/3, nu -> 3/5}, 11.303108176571016`10., 9.708658045157879}
+GR6.611.6	condition audit: wrong at a point its conditions admit {{alpha -> 11/2, beta -> -7/3}, 0.16737850579550129`10. + 0.16972610392004572`10.*I, -0.1673785057955012 - 0.16972610392004575*I}
+GR6.611.7	condition audit: wrong at a point its conditions admit {{alpha -> 3, beta -> -2/3}, 0.32539568672798413`10. - 0.45767373058012994`10.*I, 0.9761870601839526 + 0.4576737305801299*I}
+GR6.612.3	condition audit: wrong at a point its conditions admit {{alpha -> 3, beta -> -1/4, gamma -> 9/4, nu -> 1/3}, -0.032459420319177201`10. + 0.056221365177048566`10.*I, 0.03245942031917614 + 0.05622136517704663*I}
+GR6.625.1a	condition audit: wrong at a point its conditions admit {{alpha -> 7/5, lam -> 5/6, mu -> 1/7, nu -> 1/3}, 1.9672377171479454`10. + 4.5414066734548868`10.*I, 1.9666527329479842 + 4.54140697488303*I}
+GR6.628.6	condition audit: wrong at a point its conditions admit {{alpha -> -1/4, mu -> 1/3, nu -> 3}, 0.68885363430955326`10. - 1.7529168001646838`10.*I, 0.32319335213254397}
+GR6.633.4	condition audit: wrong at a point its conditions admit {{alpha -> 9/4, beta -> -2/3, gamma -> -7/3, nu -> 9/4}, 0.00095455213346868056`10., 0.0 + 0.0009545521334686806*I}
+GR6.637.3	condition audit: wrong at a point its conditions admit {{alpha -> 11/2, beta -> 1/3, gamma -> -1/4, nu -> 3/5}, 1.781768879775786`10., -0.5505968638991304 - 1.744922787847757*I}
+GR6.643.2	condition audit: wrong at a point its conditions admit {{alpha -> 1/3, beta -> -2/3, mu -> 7/5, nu -> -2/3}, -47.910642865566729`10., -23.95532143278337 + 41.491833833224455*I}
+GR6.643.3	condition audit: wrong at a point its conditions admit {{alpha -> 1, beta -> -1/4, mu -> 5/6, nu -> -2/3}, -3.5734703204814764`10., -1.7867351602407389 + 2.6562664464775856*I}
+GR6.643.5	condition audit: wrong at a point its conditions admit {{alpha -> 11/2, beta -> -2/3, nu -> 1/7}, -1.5425489489024571`10., -0.9617635385085906 + 1.674574171165723*I}
+GR6.651.1	condition audit: wrong at a point its conditions admit {{alpha -> 9/4, beta -> 1/7, lam -> -2/3, mu -> 11/2, nu -> 3}, 0.068540682098218397`10., 0.01435819838118821016206`15.9}
+GR6.651.2	condition audit: wrong at a point its conditions admit {{alpha -> 1/7, beta -> 3, lam -> 3/5, mu -> 1/3, nu -> 1/7}, 2.4699451899723362`10.*^31, 1.2970341412565791}
+GR6.654	condition audit: wrong at a point its conditions admit {{alpha -> 1, beta -> -2/3, nu -> 11/2}, -1.1268062575160938`10.*^12 - 1.5895899163895792`10.*^-12*I, 1126806257516.095}
+GR6.656.1	condition audit: wrong at a point its conditions admit {{nu -> 1/3, xi -> -3/2, z -> -7/3}, 11.990022064509702`10. - 6.5684365156049083`10.*I, 0.11649301150722598}
+GR6.662.2a	condition audit: wrong at a point its conditions admit {{alpha -> 3, beta -> -7/3, gamma -> 7/5}, 0.4069090301187428`10., -0.40690903011874274}
+GR6.662.2b	condition audit: wrong at a point its conditions admit {{a -> 11/2, b -> -2/3, c -> 5/6}, 0.14794662480977538`10., -0.14794662480977483}
+GR6.669.2	condition audit: wrong at a point its conditions admit {{alpha -> -3/2, beta -> 3, lam -> 1/7, mu -> -1/4}, -0.028486003372157231`10., 0.0 + 0.02848600337215726*I}
+GR6.669.3b	condition audit: wrong at a point its conditions admit {{a1 -> 3/5, a2 -> -7/3, mu -> 5/6, nu -> -2/3, t -> -1/4}, 5.4321008046053052`10. + 2.9194248690237714`10.*I, -5.432100804605295 + 2.9194248690237714*I}
+GR6.672.3	condition audit: wrong at a point its conditions admit {{a -> -2/3, b -> 9/4, c -> 9/4, nu -> 1/3}, -1.7932379993757817`10. - 3.6843165612528139`10.*I, 1.7932379993757808 - 3.6843165612528144*I}
+GR6.672.4	condition audit: wrong at a point its conditions admit {{a -> 7/5, b -> -2/3, c -> 1/7, nu -> 1/3}, -0.33359600084734176`10. + 0.57780522266938661`10.*I, 0.3335960008473418 + 0.5778052226693859*I}
+GR6.677.8	condition audit: wrong at a point its conditions admit {{alpha -> 7/5, beta -> 9/4, gamma -> 5/6}, -0.30721630732947647`10. + 0.53136127482809581`10.*I, 0.0}
+GR6.677.9	condition audit: wrong at a point its conditions admit {{alpha -> 3/5, beta -> 1, gamma -> 1}, 0.78825688012089756`10. + 0.33755771149409153`10.*I, 0.0}
+GR6.679.7	condition audit: wrong at a point its conditions admit {{a -> 1, b -> 1/7}, 1.4557902522521484`10. + 0``20.*I, 0.0}
+GR6.681.12	condition audit: wrong at a point its conditions admit {{a -> 3/5, mu -> 7/5, nu -> -7/3}, 9.7227644563679263`10., 8.890070516028436}
+GR6.681.13	condition audit: wrong at a point its conditions admit {{a -> 9/4, m -> 3, nu -> 9/4}, -0.10628129906607753`10., -0.10625498336287446}
+GR6.681.4	condition audit: wrong at a point its conditions admit {{a -> 5/6, nu -> 5/6}, 1.3282952819396847`10., 1.326875402699447}
+GR6.688.3	condition audit: wrong at a point its conditions admit {{nu -> 3/5, z -> -7/3, zeta -> -3/2}, -0.34787352597116428`10. - 0.25274491098522844`10.*I, 0.42999532567289767}
+GR6.692.1	condition audit: wrong at a point its conditions admit {{a -> 11/2, b -> -1/4, c -> 9/4, nu -> 3/5}, -0.0009834854844791175`10. - 0.0030268570846322083`10.*I, -0.000983485484479117 + 0.003026857084632209*I}
+GR6.692.2	condition audit: wrong at a point its conditions admit {{a -> 7/5, b -> -2/3, c -> 3/5, nu -> 3/5}, -0.073693863966825424`10. + 1.05006048619145`10.*I, -0.07369386396682548 - 1.050060486191451*I}
+GR6.727.1	condition audit: wrong at a point its conditions admit {{a -> 1, b -> -1/4, c -> 1/7, nu -> 3/5}, 0.36583503815500507`10., -0.11304924392768585 + 0.3479297969263484*I}
+GR6.729.2	condition audit: wrong at a point its conditions admit {{a -> 7/5, b -> 1, c -> 5/6, nu -> 9/4}, 0.00017223356632153561`10., 3.968565492648521332548`15.9*^292}
+GR6.739	condition audit: wrong at a point its conditions admit {{a -> -3/2, b -> -1/4, nu -> 1/7, t -> 3/5}, 2.150901334168335`10., 1.3410650378309077 + 1.6816423676660912*I}
+GR6.741.2	condition audit: wrong at a point its conditions admit {{a -> 9/4, nu -> 11/2}, 0.000021421758115234445`10., -0.0006144210035263103}
+GR6.941.4a	condition audit: wrong at a point its conditions admit {{kt -> 3/5, kx -> -1/4, m -> 3, y -> 1/3}, 0.18241068575970232`10., 0.9204539619173978}
+GR7.128.1	condition audit: wrong at a point its conditions admit {{mu -> -1/4, nu -> 1/7, z -> 9/4}, 1.9417822753015113`10. + 0``20.*I, 1.9416513933337411}
+GR7.136.1	condition audit: wrong at a point its conditions admit {{a -> -2/3, lam -> 1/7, mu -> -7/3, nu -> 1}, 7.7535977249054255`10., 7.713078220023482}
+GR7.137.7	condition audit: wrong at a point its conditions admit {{a -> 3/5, mu -> -7/3, nu -> 1/3}, 6.7837757560082144`10.*^43 - 1.1749844276560195`10.*^44*I, -3.1589417130610197*^34 + 5.471447545170352*^34*I}
+GR7.141.3	condition audit: wrong at a point its conditions admit {{a -> 3, lam -> 9/4, mu -> -2/3, nu -> 1}, 0, 0.00657287605365745}
+GR7.182.4	condition audit: wrong at a point its conditions admit {{a -> -2/3, mu -> 5/6, nu -> -1/4}, 0.68657898032215936`10. + 0.68657898032215936`10.*I, 0.6865472134579905 + 0.6865472134579833*I}
+GR7.228	condition audit: wrong at a point its conditions admit {{l -> 3, mu -> 3, z -> 7/5}, 1.9683250923619617`10. + 7.8539816339744846`10.*I, 1.968325092361963}
+GR7.245.3	condition audit: wrong at a point its conditions admit {{alpha -> 11/2, n -> 1}, -1.2559892171458085`10., 1.2559892171458082}
+GR7.312.1	condition audit: wrong at a point its conditions admit {{m -> 1, n -> 1, nu -> -1/4, z -> 11/2}, -0.32711009391034196`10. + 2.6431984812661572`10.*^-45*I, -0.32707068375327847}
+GR7.314.1	condition audit: wrong at a point its conditions admit {{n -> 1, nu -> 3/5}, 13.587704370258905`10., 13.218278204569769}
+GR7.361	condition audit: wrong at a point its conditions admit {{n -> 3, nu -> -7/3, y -> 1}, 18.365033775885479`10., 18.317787282624522}
+GR7.374.5	condition audit: wrong at a point its conditions admit {{alpha -> -3/2, m -> 3, n -> 1}, 1.7329775725843959`10., -1.7329775725843954}
+GR7.391.9	condition audit: wrong at a point its conditions admit {{alpha -> 1/7, beta -> 11/2, m -> 3, n -> 3, sigma -> -2/3}, 3.1015678380878988`10., 3.1014132775700705}
+GR7.527.1	condition audit: wrong at a point its conditions admit {{alpha -> 1/7, beta -> -3/2, delta -> 5/6, gamma -> -3/2, lam -> 1/7, mu -> 7/5}, 8.1499836696869465`10., 8.106269009281968}
+GR7.613.4	condition audit: wrong at a point its conditions admit {{beta -> 5/6, delta -> 1/3, gamma -> -7/3, t -> 3}, 33.238900389554999`10., 33.2337075201741}
+GR7.613.4b	condition audit: wrong at a point its conditions admit {{alpha -> 3/5, beta -> 5/6, delta -> 1/7, gamma -> -7/3, t -> 1/3}, 3.3294986684415626`10., 3.3315549676546006}
+GR7.624.2	condition audit: wrong at a point its conditions admit {{a -> 1/7, k -> 3, mu -> -1/4, rho -> 3/5, sigma -> 11/2}, 1.8755363012749672`10.*^7, 37510726.02549945}
+GR7.674.2b	condition audit: wrong at a point its conditions admit {{a -> -7/3, k -> 1/3, lam -> -1/4, mu -> 5/6, nu -> 1/3, rho -> 11/2}, 10.195778265971526`10., 1987384.9269228815 - 7417031.717251023*I}
+GR7.731.1	condition audit: wrong at a point its conditions admit {{a -> -7/3, k -> 3, mu -> -2/3}, -6.1274721280134017`10., 6.127472128013401345589`15.9}

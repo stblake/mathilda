@@ -1,0 +1,16 @@
+# Book conditions corrected from first principles (id<TAB>extra condition).
+# Each is conjoined to the conditions G&R prints, by tools/gr/build_table.py and
+# tools/gr/build_corpus.py (--cond-fix), and re-audited by tools/gr/condaudit.py.
+# The automatic corrections (an integrand even in a parameter whose value is
+# not: add p > 0) come from condaudit's .fix output; this file holds the ones
+# derived by hand.
+#
+# 3.197.7: x^(mu - 1/2)/((a + x)^mu (b + x)^mu) is ~ x^(mu - 1/2) at 0 and
+# ~ x^(-mu - 1/2) at Infinity, so it converges for mu > 1/2 only (the value's
+# Gamma[mu - 1/2] has its pole there); G&R prints Re mu > 0.
+GR3.197.7	mu > 1/2
+#
+# 3.165.2: the integrand 1/Sqrt[a^4 + 2 b^2 x^2 + x^4] is even in a, the value
+# EllipticF[..]/(2 a) is odd: the formula holds for a > 0 (G&R prints
+# a^2 > b^2, a^2 > 0, which admits a < 0, where it has the wrong sign).
+GR3.165.2	a > 0

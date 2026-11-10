@@ -1049,6 +1049,82 @@ static Expr* try_crctable(Expr* f, Expr* x) {
     return result;
 }
 
+/* Stage: the Gradshteyn & Ryzhik table (src/internal/GRTable.m, records in
+ * src/internal/GRTables/).  The engine and each interval's records load on
+ * first use.  A record matches by unification: its parameters are solved from
+ * the query, the book's conditions are checked, and the answer is tested
+ * numerically before it is returned.  The table holds only formulas the rest
+ * of the cascade does not close (tools/gr/build_table.py), and it runs LAST in
+ * both cascades, so it fills gaps rather than replacing an algorithm.
+ * $Failed or a surviving engine head is a decline. */
+#define MAX_GR_DEPTH 8
+static int gr_depth = 0;
+static unsigned gr_load_gen = 0;   /* symtab_generation() of the attempt */
+static bool gr_load_succeeded = false;
+
+static bool gr_lazy_load(void) {
+    if (gr_load_gen != symtab_generation()) {
+        gr_load_gen = symtab_generation();
+        mth_msg_suppress_push();
+        gr_load_succeeded = mathilda_load_module("GRTable.m") != 0;
+        mth_msg_suppress_pop();
+        if (!gr_load_succeeded)
+            mth_message("Integrate`GRTable", "nofile",
+                "cannot locate src/internal/GRTable.m on disk.");
+    }
+    return gr_load_succeeded;
+}
+
+/* Evaluate one engine call (consumed); NULL on a decline.  The depth guard
+ * stops a table answer whose self-check integrates from re-entering. */
+static Expr* gr_run(Expr* call, const char* engine_head) {
+    if (gr_depth >= MAX_GR_DEPTH) { expr_free(call); return NULL; }
+    gr_depth++;
+    mth_msg_suppress_push();
+    Expr* r = evaluate(call);
+    mth_msg_suppress_pop();
+    gr_depth--;
+    expr_free(call);
+    if (!r) return NULL;
+    if ((r->type == EXPR_SYMBOL && (r->data.symbol.name == SYM_DollarFailed ||
+                                    r->data.symbol.name == SYM_Indeterminate ||
+                                    r->data.symbol.name == SYM_ComplexInfinity)) ||
+        result_contains_head(r, engine_head) ||
+        result_contains_head(r, "Integrate")) {
+        expr_free(r);
+        return NULL;
+    }
+    return r;
+}
+
+static Expr* try_grtable(Expr* f, Expr* x) {
+    if (!gr_lazy_load()) return NULL;
+    Expr* call = expr_new_function(expr_new_symbol("GRTable`RunIndefinite"),
+        (Expr*[]){ expr_copy(f), expr_copy(x) }, 2);
+    return gr_run(call, "GRTable`RunIndefinite");
+}
+
+/* A ConditionalExpression is a decline unless the method is pinned
+ * (conditional_ok): its open condition is a book condition the Assumptions
+ * did not settle, often the case split of a sibling formula (a parity, or
+ * p^2 <= 1 under p^2 >= 1), so the cascade goes on, as at the Roach early
+ * slot. */
+static Expr* try_grtable_definite(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions,
+                                  bool conditional_ok) {
+    if (!gr_lazy_load()) return NULL;
+    Expr* call = expr_new_function(expr_new_symbol("GRTable`RunDefinite"),
+        (Expr*[]){ expr_copy(f), expr_copy(x), expr_copy(a), expr_copy(b),
+                   assumptions ? expr_copy(assumptions) : expr_new_symbol("True") }, 5);
+    Expr* r = gr_run(call, "GRTable`RunDefinite");
+    if (r && !conditional_ok && r->type == EXPR_FUNCTION &&
+        r->data.function.head->type == EXPR_SYMBOL &&
+        r->data.function.head->data.symbol.name == SYM_ConditionalExpression) {
+        expr_free(r);
+        return NULL;
+    }
+    return r;
+}
+
 /* Stage: ParallelMixedTower.  A parallel (Risch-Norman) integrator over a
  * simple radical in a mixed transcendental tower (S. Blake, Parallel
  * Integration over Simple Radical Extensions II), implemented as a Wolfram-
@@ -1672,6 +1748,7 @@ typedef enum {
     METHOD_WEIERSTRASS,
     METHOD_RISCH_TRANSCENDENTAL,
     METHOD_CRCTABLE,
+    METHOD_GRTABLE,          /* Gradshteyn & Ryzhik table (src/internal/GRTable.m) */
     METHOD_POLYLOG_LADDER,
     METHOD_HOLONOMIC,
     METHOD_BESSEL_HYPERGEOMETRIC,
@@ -1714,6 +1791,7 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "Weierstrass") == 0) return METHOD_WEIERSTRASS;
     if (strcmp(s, "RischTranscendental") == 0) return METHOD_RISCH_TRANSCENDENTAL;
     if (strcmp(s, "CRCTable")    == 0) return METHOD_CRCTABLE;
+    if (strcmp(s, "GRTable")     == 0) return METHOD_GRTABLE;
     if (strcmp(s, "PolyLogLadder") == 0) return METHOD_POLYLOG_LADDER;
     if (strcmp(s, "Holonomic") == 0) return METHOD_HOLONOMIC;
     if (strcmp(s, "BesselHypergeometric") == 0) return METHOD_BESSEL_HYPERGEOMETRIC;
@@ -1843,7 +1921,8 @@ static bool definite_parse_method(Expr* opt, const char** name,
         m == METHOD_TRIG_POWER || m == METHOD_SINPOW_MONO ||
         m == METHOD_OSC_POWER || m == METHOD_RATIONAL_LOG ||
         m == METHOD_INTEGRAL_REP || m == METHOD_MEIJER_CONV ||
-        m == METHOD_ROACH || m == METHOD_PIECEWISE) return true;
+        m == METHOD_ROACH || m == METHOD_PIECEWISE ||
+        m == METHOD_GRTABLE) return true;
     *name = rhs->data.string;   /* borrowed: valid while `res` is alive */
     return true;
 }
@@ -2420,7 +2499,8 @@ static Expr* integrate_definite(Expr* res) {
                 mech != METHOD_RATIONAL_LOG && mech != METHOD_INTEGRAL_REP &&
                 mech != METHOD_MEIJER_CONV && mech != METHOD_ROACH &&
                 mech != METHOD_PIECEWISE && mech != METHOD_SERIES &&
-                mech != METHOD_KING && mech != METHOD_FEYNMAN_PARAM) {
+                mech != METHOD_KING && mech != METHOD_FEYNMAN_PARAM &&
+                mech != METHOD_GRTABLE) {
                 /* Under PrincipalValue in the automatic cascade the Roach PV
                  * fallback below may still close what Newton-Leibniz reports
                  * divergent, so its idiv is held until that has run. */
@@ -2461,6 +2541,17 @@ static Expr* integrate_definite(Expr* res) {
                 r = integrate_elliptic_try(cur, x, a, b, assumptions);
             if (!r && !has_undef && !principal_value && mech == METHOD_AUTOMATIC)
                 r = try_roach(cur, x, a, b, assumptions, ROACH_CASCADE_BUDGET_SECONDS, false, false);
+            /* The G&R table, LAST (pinned: alone): a reference table is the
+             * fallback after every algorithm, so an integral any method closes
+             * keeps that method's form.  It holds only formulas the cascade did
+             * not close (tools/gr/build_table.py), a lookup is one hashed
+             * bucket, and an answer with no free symbols is checked against
+             * NIntegrate.  Not under PrincipalValue: the book's values are
+             * ordinary integrals. */
+            if (!r && !has_undef && !principal_value &&
+                (mech == METHOD_AUTOMATIC || mech == METHOD_GRTABLE))
+                r = try_grtable_definite(cur, x, a, b, assumptions,
+                                         mech == METHOD_GRTABLE);
             /* Under PrincipalValue the late fallback is Roach's PV theorem: the
              * pole kernel as the Hilbert-kernel G function inside the one- and
              * two-G theorems. It only sees integrals every PV-capable stage
@@ -2589,7 +2680,7 @@ MATHILDA_MAYBE_UNUSED static bool integrate_budget_spent(void) {
 typedef enum {
     IP_UNDEFINED = 0, IP_STEP, IP_RATIONAL, IP_LINRAD, IP_QUADRAD, IP_LINRATIORAD,
     IP_CHEBYCHEV, IP_FRESNEL, IP_GAMMAPOWER, IP_LINEARITY, IP_LINARG,
-    IP_WEIERSTRASS, IP_DERIVDIVIDES, IP_RISCHTRANS, IP_CRCTABLE, IP_POLYLOG,
+    IP_WEIERSTRASS, IP_DERIVDIVIDES, IP_RISCHTRANS, IP_CRCTABLE, IP_GRTABLE, IP_POLYLOG,
     IP_HOLONOMIC, IP_BESSELHYPER, IP_LOGBYPARTS, IP_PMT, IP_GOURSAT, IP_PMS,
     IP_ROACH, IP_NSTAGES
 } IntegrateProfStage;
@@ -2599,7 +2690,7 @@ static const char* const ip_stage_name[IP_NSTAGES] = {
     "04 QuadraticRadicals", "05 LinearRatioRadicals", "06 ChebychevAlgebraic",
     "07 Fresnel", "08 GammaPower", "09 Linearity", "10 LinearArgSubst",
     "11 Weierstrass", "12 DerivativeDivides", "13 RischTranscendental",
-    "14 CRCTable", "14b PolyLogLadder", "14c Holonomic", "14d BesselHypergeometric", "15 LogByParts",
+    "14 CRCTable", "20 GRTable", "14b PolyLogLadder", "14c Holonomic", "14d BesselHypergeometric", "15 LogByParts",
     "16 ParallelMixedTower", "17 GoursatAlgebraic", "18 ParallelMixedSpecial",
     "19 RoachMeijerG"
 };
@@ -3114,7 +3205,7 @@ Expr* builtin_integrate(Expr* res) {
             static uint64_t last_warned_hash = 0;
             uint64_t h = expr_hash(res);
             if (h != last_warned_hash) {
-                mth_message("Integrate", "method", "Method option value is not one of \"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", \"LinearRadicals\", \"QuadraticRadicals\", \"LinearRatioRadicals\", \"ChebychevAlgebraic\", \"GoursatAlgebraic\", \"Weierstrass\", \"RischTranscendental\", \"CRCTable\", \"ParallelMixedTower\", \"ParallelMixedSpecial\", \"Trager\", \"TragerKauers\", \"NewtonLeibniz\", \"LineIntegral\".");
+                mth_message("Integrate", "method", "Method option value is not one of \"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", \"LinearRadicals\", \"QuadraticRadicals\", \"LinearRatioRadicals\", \"ChebychevAlgebraic\", \"GoursatAlgebraic\", \"Weierstrass\", \"RischTranscendental\", \"CRCTable\", \"GRTable\", \"ParallelMixedTower\", \"ParallelMixedSpecial\", \"Trager\", \"TragerKauers\", \"NewtonLeibniz\", \"LineIntegral\".");
                 last_warned_hash = h;
             }
             return NULL;
@@ -3349,6 +3440,12 @@ Expr* builtin_integrate(Expr* res) {
             if (!g_integrate_no_special)
                 IP_STAGE(IP_ROACH,    try_roach_indefinite(effective_f, x,
                                                            ROACH_INDEFINITE_BUDGET_SECONDS));
+            /* The G&R table, LAST: a reference table is the fallback after
+             * every algorithm, so an integrand any method closes keeps that
+             * method's form.  It holds only formulas the cascade did not close
+             * (tools/gr/build_table.py), a lookup is one hashed bucket, and
+             * every answer is diff-checked before it is returned. */
+            IP_STAGE(IP_GRTABLE,      try_grtable(effective_f, x));
             break;
         case METHOD_RATIONAL:
             result = try_rational(effective_f, x);
@@ -3385,6 +3482,9 @@ Expr* builtin_integrate(Expr* res) {
             break;
         case METHOD_CRCTABLE:
             result = try_crctable(effective_f, x);
+            break;
+        case METHOD_GRTABLE:
+            result = try_grtable(effective_f, x);
             break;
         case METHOD_POLYLOG_LADDER:
             result = try_polylogladder(effective_f, x);
@@ -3578,6 +3678,7 @@ void integrate_init(void) {
         "  \"Weierstrass\"        — Integrate`Weierstrass (continuous tan(x/2) / tanh(x/2) substitution)\n"
         "  \"RischTranscendental\"       — Integrate`RischTranscendental (recursive transcendental Risch; correct by construction)\n"
         "  \"CRCTable\"           — Integrate`CRCTable (lazy-loaded CRC integral table)\n"
+        "  \"GRTable\"            — the Gradshteyn & Ryzhik table (lazy-loaded; also on definite integrals)\n"
         "  \"ParallelMixedTower\" — Integrate`ParallelMixedTower (parallel Risch-Norman over a simple radical in a mixed transcendental tower; Blake II)\n"
         "  \"ParallelMixedSpecial\" — Integrate`ParallelMixedSpecial (the same over a mixed tower with special-function kernels: Ei, li, erf, incomplete Gamma, Si, Ci, elliptic F/E/Pi)\n"
         "  \"Trager\"             — Integrate`Trager (Trager 1984: complete algorithm for one radical r(x)^(1/n) over Q;\n"

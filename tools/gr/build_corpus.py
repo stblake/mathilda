@@ -4,7 +4,23 @@ build_corpus.py -- emit the Gradshteyn & Ryzhik Integrate corpora.
 
 Usage:
     python3 -I tools/gr/build_corpus.py <entries.json> <verified.json>[,more.json...] \
-        <out-dir> [<mathilda names file>]
+        <out-dir> [<mathilda names file>] [--book] [--book-wrong <ids.tsv>[,...]]
+        [--cond-fix <fix.tsv>[,...]]
+
+    --book            write GRBook<ch>Corpus.m instead: each record holds the
+                      book's value in place of Integrate, so the corpus runner
+                      checks the formula AS STATED at every instantiation and x
+                      point.  A record that is not CORRECT there is wrong as
+                      stated (book error, or a validity condition the book
+                      omits).
+    --book-wrong f    id<TAB>reason lines: those records are left out as
+                      SKIP-BOOK-WRONG.  A G&R formula that is wrong as stated is
+                      corrected from first principles (tools/gr/overrides.json)
+                      or removed; it is never admitted on the book's authority.
+    --cond-fix f      id<TAB>condition lines: a book condition corrected from
+                      first principles (tools/gr/cond_fixes.tsv, and the
+                      .fix output of tools/gr/condaudit.py), conjoined to the
+                      stated conditions.
 
 Inputs:
     entries.json        tools/gr/merge.py output (every transcribed formula)
@@ -39,6 +55,9 @@ import sys
 from collections import Counter, defaultdict
 
 _here = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, _here)
+from logconv import convert_record  # noqa: E402  (Log[Abs[u]] -> Log[u])
+
 _spec = importlib.util.spec_from_file_location(
     'mathar_build', os.path.join(_here, '..', 'mathar', 'build_corpus.py'))
 mb = importlib.util.module_from_spec(_spec)
@@ -54,7 +73,37 @@ def section(gr):
     return m.group(1) if m else gr
 
 
+BOOK = False
+
+
 def main():
+    global BOOK
+    if '--book' in sys.argv:
+        # Book mode: emit corpora whose records hold the book's value instead
+        # of an Integrate call (GRBook<ch>Corpus.m), so the corpus runner
+        # tests each formula as stated.  A record that fails there is wrong
+        # as stated: SKIP-BOOK-WRONG via --book-wrong below.
+        BOOK = True
+        sys.argv.remove('--book')
+    book_wrong = {}
+    if '--book-wrong' in sys.argv:
+        k = sys.argv.index('--book-wrong')
+        for path in sys.argv[k + 1].split(','):
+            for line in open(path):
+                if line.strip():
+                    rid, _, why = line.rstrip('\n').partition('\t')
+                    book_wrong[rid] = why
+        del sys.argv[k:k + 2]
+    cond_fix = {}
+    if '--cond-fix' in sys.argv:
+        k = sys.argv.index('--cond-fix')
+        for path in sys.argv[k + 1].split(','):
+            for line in open(path):
+                line = line.split('#', 1)[0].rstrip()
+                if line.strip():
+                    rid, _, c = line.partition('\t')
+                    cond_fix.setdefault(rid.strip(), []).append(c.strip())
+        del sys.argv[k:k + 2]
     entries = json.load(open(sys.argv[1]))
     ver = {}
     for path in sys.argv[2].split(','):
@@ -79,6 +128,9 @@ def main():
         if v is None:
             skipped.append((e, 'SKIP-UNVERIFIED', 'not run through the oracle'))
             continue
+        # Integrate[1/x, x] is Log[x]: an indefinite record's Log[Abs[u]] is
+        # written Log[u], integrand and value alike (tools/gr/logconv.py)
+        v = convert_record(v)
         m_ok = v['status'] in ('VERIFIED', 'VERIFIED1')
         ps = v.get('py_status', 'UNCHECKED')
         p_ok = ps in ('VERIFIED', 'VERIFIED1')
@@ -104,6 +156,13 @@ def main():
             tag = v['status'] if v['status'] != 'NOCONV' or ps in ('UNCHECKED', 'UNDECIDED') else 'NOCONV-PY-' + ps
             skipped.append((e, 'SKIP-ORACLE-' + tag, str(why)[:200]))
             continue
+        if e['id'] in book_wrong:
+            skipped.append((e, 'SKIP-BOOK-WRONG', book_wrong[e['id']]))
+            continue
+        if e['id'] in cond_fix:
+            # a book condition corrected from first principles: the symbolic
+            # record's Assumptions are the corrected domain
+            e = dict(e, conds=e.get('conds', []) + cond_fix[e['id']])
         f = v['integrand']
         if names is not None:
             missing = sorted(h for h in mb.heads_of(f) if h not in names and h not in mb.NON_HEADS)
@@ -137,6 +196,14 @@ def main():
             num = 'Integrate[%s, %s]' % (inst_f, ispec)
         else:
             num = 'Integrate[%s, %s]' % (f, spec)
+        if BOOK:
+            # the book's value in place of Integrate: the runner then checks
+            # the FORMULA AS STATED at every instantiation and x point
+            sym = '(%s)' % v['value']
+            # substitute BEFORE evaluating, as the oracle does (grRel): a
+            # value that tests its parameters (Boole[OddQ[m] && ...]) would
+            # otherwise decide the test on the bare symbol
+            num = sym if insts[0] in ('{}', '') else 'ReleaseHold[Hold[%s] /. %s]' % (v['value'], insts[0])
         nv = judge
         rec = '(* %s p%s %s; oracle %s *)\n{"%s", "%s",\n  Hold[%s],\n  Hold[%s],\n  {%s},\n  {%s},\n  Hold[%s], %s}' % (
             e['gr'], e.get('page', '?'), e.get('cite', ''), nv,
@@ -170,7 +237,7 @@ def main():
             '            Hold[integrand], var}   -- runner: tests/test_mathar_corpus.c\n'
             '*)\n' % (ch, ch))
         txt = head + '{\n' + _join(body) + '\n}\n'
-        open(os.path.join(outdir, 'GR%sIntegralsCorpus.m' % ch), 'w').write(txt)
+        open(os.path.join(outdir, ('GRBook%sCorpus.m' if BOOK else 'GR%sIntegralsCorpus.m') % ch), 'w').write(txt)
 
     by = defaultdict(list)
     for e, st, why in skipped:
