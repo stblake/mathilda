@@ -239,6 +239,17 @@ void test_pcfd_range() {
     assert_true("Abs[ParabolicCylinderD[2.5, -60.]/(-1.1640508397022717`16*^385) - 1] < 10^-12");
     assert_true("ParabolicCylinderD[2.5, 60.] != 0");
     assert_true("Abs[ParabolicCylinderD[0.5, 1000.]] > 0");
+    /* Past MPFR's exponent range (|D| ~ 10^-(1.1*10^15) at z = 10^8): an
+     * underflow is 0., and a growth is Overflow[], as for Exp.  The value
+     * used to carry an out-of-range MPFR exponent: it printed, but r 2 was
+     * 0.e-15 and r r exhausted GMP memory (the kernel aborted), which took
+     * down NIntegrate of a product of two D's on (0, Infinity) (G&R 7.755.1). */
+    assert_eval_eq("ParabolicCylinderD[7/3, 1.*^8]", "0.0", 0);
+    assert_eval_eq("ParabolicCylinderD[-7/3, -1.*^8]", "Overflow[]", 0);
+    assert_true("With[{r = ParabolicCylinderD[7/3, 1.*^8]}, r r == 0 && 2 r == 0]");
+    assert_true("Abs[NIntegrate[x^(-1/2) ParabolicCylinderD[7/3, Sqrt[x/5]] "
+                "ParabolicCylinderD[-10/3, Sqrt[x/5]] BesselJ[0, 3 x/8], {x, 0, Infinity}]"
+                " + 1.0742225188897642] < 10^-4");
 }
 
 /* ---- arbitrary precision -------------------------------------------- */

@@ -118,17 +118,34 @@ static int expr_to_fmpz(const Expr* e, fmpz_t out) {
 /*  acb -> Expr                                                        */
 /* ------------------------------------------------------------------ */
 
+/* arf -> mpfr inside MPFR's CURRENT exponent range.  arb exponents are
+ * unbounded, and arf_get_mpfr will write an exponent that only MPFR's absolute
+ * limits allow (ParabolicCylinderD[7/3, 1.*^8] ~ 10^-(1.1*10^15)).  Every
+ * later MPFR operation assumes its operands are in range, so such a value
+ * printed but multiplied to 0 or exhausted GMP.  mpfr_check_range applies the
+ * range: an underflow becomes 0 (the convention Exp[-1.*^15] -> 0. follows),
+ * an overflow becomes an infinity that the caller turns into Overflow[]. */
+static void nb_arf_get_mpfr(mpfr_t out, const arf_t x) {
+    int t = arf_get_mpfr(out, x, MPFR_RNDN);
+    mpfr_check_range(out, t, MPFR_RNDN);
+}
+
 /* Render a finite acb ball to a numeric Expr at `out_bits` precision. NULL if
- * the result is not finite (pole / overflow / indeterminate). */
+ * the result is not finite (pole / overflow / indeterminate); Overflow[] when
+ * a finite ball is past MPFR's exponent range. */
 static Expr* acb_to_expr(const acb_t z, slong out_bits) {
     if (!acb_is_finite(z)) return NULL;
     mpfr_prec_t mp = out_bits > 2 ? (mpfr_prec_t)out_bits : 53;
     mpfr_t re, im;
     mpfr_init2(re, mp);
     mpfr_init2(im, mp);
-    arf_get_mpfr(re, arb_midref(acb_realref(z)), MPFR_RNDN);
-    arf_get_mpfr(im, arb_midref(acb_imagref(z)), MPFR_RNDN);
-    Expr* out = numeric_mpfr_make_complex(re, im);
+    nb_arf_get_mpfr(re, arb_midref(acb_realref(z)));
+    nb_arf_get_mpfr(im, arb_midref(acb_imagref(z)));
+    Expr* out;
+    if (mpfr_inf_p(re) || mpfr_inf_p(im))
+        out = expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
+    else
+        out = numeric_mpfr_make_complex(re, im);
     mpfr_clear(re);
     mpfr_clear(im);
     return out;
@@ -528,7 +545,8 @@ static Expr* nb_tight_arb_to_expr(const arb_t x, long bits) {
     if (!arb_is_finite(x) || arb_rel_accuracy_bits(x) < bits) return NULL;
     mpfr_t m;
     mpfr_init2(m, bits > 2 ? (mpfr_prec_t)bits : 53);
-    arf_get_mpfr(m, arb_midref(x), MPFR_RNDN);
+    nb_arf_get_mpfr(m, arb_midref(x));
+    if (mpfr_inf_p(m)) { mpfr_clear(m); return NULL; }
     return expr_new_mpfr_move(m);
 }
 
