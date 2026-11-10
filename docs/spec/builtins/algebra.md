@@ -1020,3 +1020,7 @@ In[4]:= MinimalPolynomial[Sqrt[2], x, Extension -> E^(I Pi/4)]
 Out[4]= 4 - 4 x^2 + x^4
 ```
 
+
+**Trigonometric atoms (v0.6491).** Cos, Sin and Tan of a rational multiple of π
+are algebraic. cos(pπ/q) is a root of T_q(t) − (−1)^p, and the irreducible factor
+vanishing at the number is kept: `MinimalPolynomial[Cos[Pi/9], x] = -1 - 6 x + 8 x^3`.

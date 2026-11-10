@@ -45,4 +45,8 @@ Expr* builtin_integrate_elliptic(Expr* res);
 /* Register the builtin, its attributes and docstring. */
 void integrate_elliptic_init(void);
 
+/* Int over [0, Pi/2] (or [0, Pi], [0, 2 Pi]) of (A + B Sin[x]^2)^(+-1/2), A > 0,
+ * as EllipticK / EllipticE; NULL when the integrand is not of that shape. */
+Expr* integrate_elliptic_trig_quadratic(Expr* f, Expr* x, Expr* a, Expr* b);
+
 #endif /* MATHILDA_INTEGRATE_ELLIPTIC_H */

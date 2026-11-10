@@ -171,6 +171,86 @@ void test_pfq_shift_pair() {
     assert_free_of("HypergeometricPFQ[{1/2}, {1/3}, z]", "Hyp`t");
 }
 
+/* ---- HypergeometricPFQ: classical summation theorems at z = +-1 ---------- */
+
+void test_pfq_classical_sums() {
+    /* Gauss, symbolic and numeric; a divergent numeric set declines */
+    assert_true("HypergeometricPFQ[{a, b}, {c}, 1] === Gamma[c] Gamma[c - a - b]/(Gamma[c - a] Gamma[c - b])");
+    assert_true("HypergeometricPFQ[{1/3, 1/4}, {2}, 1] === Gamma[17/12]/(Gamma[5/3] Gamma[7/4])");
+    assert_true("Head[HypergeometricPFQ[{2/3, 1/2}, {1}, 1]] === HypergeometricPFQ");     /* Re(c-a-b) < 0 */
+    assert_true("Head[HypergeometricPFQ[{a, 1/2}, {a + 1/3}, 1]] === HypergeometricPFQ"); /* c-a-b = -1/6 */
+    /* Kummer: either parameter order of the upper pair */
+    assert_true("HypergeometricPFQ[{a, b}, {1 + a - b}, -1] === HypergeometricPFQ[{b, a}, {1 + a - b}, -1]");
+    assert_num_eq("HypergeometricPFQ[{1/2, 1/3}, {7/6}, -1]", "Hypergeometric2F1[1/2, 1/3, 7/6, N[-1, 60]]");
+    /* Pfaff-Saalschutz with a symbolic degree; at n = 3 it is the explicit polynomial */
+    assert_true("Simplify[(HypergeometricPFQ[{a, b, -n}, {c, 1 + a + b - c - n}, 1] /. n -> 3)"
+                " - HypergeometricPFQ[{a, b, -3}, {c, a + b - c - 2}, 1]] === 0");
+    /* Dixon */
+    assert_num_eq("HypergeometricPFQ[{1/2, 1/2, 1/2}, {1, 1}, 1]",
+                  "Gamma[5/4] Gamma[1]^2 Gamma[1/4]/(Gamma[3/2] Gamma[3/4]^2 Gamma[1/2])");
+    /* Dougall, symbolic; the divergent all-1/2 set stays unevaluated */
+    assert_true("HypergeometricPFQ[{a, 1 + a/2, b, c, d}, {a/2, 1 + a - b, 1 + a - c, 1 + a - d}, 1] === "
+                "Gamma[1 + a - b] Gamma[1 + a - c] Gamma[1 + a - d] Gamma[1 + a - b - c - d]/"
+                "(Gamma[1 + a] Gamma[1 + a - c - d] Gamma[1 + a - b - d] Gamma[1 + a - b - c])");
+    assert_true("Head[HypergeometricPFQ[{1/2, 5/4, 1/2, 1/2, 1/2}, {1/4, 1, 1, 1}, 1]] === HypergeometricPFQ");
+    /* Ramanujan's quarter series (Dougall at z = -1 is not a theorem: the Sum route closes it) */
+    assert_num_eq("Sum[(-1)^n (4 n + 1) Pochhammer[1/2, n]^3/n!^3, {n, 0, Infinity}]", "2/Pi");
+}
+
+/* ---- Sum: symbolic bounds, pole-pair regularisation, Lambert series ------ */
+
+void test_sum_dixon_vandermonde_lambert() {
+    assert_true("Sum[(-1)^k Binomial[2 n, n + k]^3, {k, -n, n}] === Gamma[1 + 3 n]/Gamma[1 + n]^3");
+    assert_true("Table[Sum[(-1)^k Binomial[2 m, m + k]^3, {k, -m, m}], {m, 0, 5}] === "
+                "Table[(3 m)!/(m!)^3, {m, 0, 5}]");
+    assert_true("Sum[Binomial[2 n, n + k]^2, {k, -n, n}] === Gamma[1 + 4 n]/Gamma[1 + 2 n]^2");
+    assert_true("Sum[n/(E^(2 Pi n) - 1), {n, 1, Infinity}] === 1/24 - 1/(8 Pi)");
+    assert_true("Sum[n^13/(E^(2 Pi n) - 1), {n, 1, Infinity}] === 1/24");
+    assert_true("Sum[3 n^5/(E^(2 Pi n) - 1), {n, 1, Infinity}] === 1/168");
+    assert_num_eq("Sum[n^9/(E^(2 Pi n) - 1), {n, 1, Infinity}]",
+                  "Sum[N[n^9/(E^(2 Pi n) - 1), 60], {n, 1, 200}]");
+    /* n^3 (s = 3 mod 4) is not covered: stays */
+    assert_true("Head[Sum[n^3/(E^(2 Pi n) - 1), {n, 1, Infinity}]] === Sum");
+}
+
+/* ---- Product, Limit, MinimalPolynomial, Simplify --------------------------- */
+
+void test_product_limit_minpoly_arctan() {
+    assert_true("Product[4 k^2/(4 k^2 - 1), {k, 1, Infinity}] === Pi/2");
+    assert_true("Limit[n!/(Sqrt[2 Pi n] (n/E)^n), n -> Infinity] === 1");
+    assert_true("Limit[((n + 1)!)^(1/(n + 1)) - (n!)^(1/n), n -> Infinity] === 1/E");
+    assert_true("Limit[n! n^z/Pochhammer[z, n + 1], n -> Infinity] === Gamma[z]");
+    assert_true("Limit[x!, x -> 3] === 6");
+    assert_true("MinimalPolynomial[Cos[Pi/9], x] === -1 - 6 x + 8 x^3");
+    assert_true("MinimalPolynomial[Cos[2 Pi/7], x] === -1 - 4 x + 4 x^2 + 8 x^3");
+    assert_true("Simplify[4 ArcTan[1/5] - ArcTan[1/239]] === Pi/4");
+    assert_true("Simplify[44 ArcTan[1/57] + 7 ArcTan[1/239] - 12 ArcTan[1/682] + 24 ArcTan[1/12943]] === Pi/4");
+    /* a near miss is never folded: ArcTan[1/2] + ArcTan[1/4] is not a rational multiple of Pi */
+    assert_true("Head[Simplify[ArcTan[1/2] + ArcTan[1/4]]] === Plus");
+}
+
+/* ---- FunctionExpand point tables, elliptic integrals, LaplaceTransform ---- */
+
+void test_fe_elliptic_laplace() {
+    assert_free_of("FunctionExpand[PolyLog[2, ((1 + Sqrt[5])/2)^-2]]", "PolyLog");
+    assert_num_eq("FunctionExpand[PolyLog[2, -(1 + Sqrt[5])/2]]", "PolyLog[2, -(1 + Sqrt[5])/2]");
+    assert_num_eq("FunctionExpand[PolyLog[2, (3 - Sqrt[5])/2]]", "PolyLog[2, (3 - Sqrt[5])/2]");
+    assert_free_of("FunctionExpand[EllipticK[(Sqrt[2] - 1)^2]]", "EllipticK");
+    assert_num_eq("FunctionExpand[EllipticK[(2 + Sqrt[3])/4]]", "EllipticK[(2 + Sqrt[3])/4]");
+    assert_num_eq("FunctionExpand[EllipticK[1 - (Sqrt[2] - 1)^2]]", "EllipticK[1 - (Sqrt[2] - 1)^2]");
+    assert_true("Head[FunctionExpand[PolyLog[2, 1/3 + Sqrt[2]]]] === PolyLog");
+    assert_num_eq("Integrate[1/Sqrt[Cos[x]^2 + 2 Sin[x]^2], {x, 0, Pi/2}]",
+                  "NIntegrate[1/Sqrt[Cos[x]^2 + 2 Sin[x]^2], {x, 0, Pi/2}, WorkingPrecision -> 50]");
+    assert_true("Integrate[4 Sqrt[Cos[t]^2 + 4 Sin[t]^2], {t, 0, Pi/2}] === 4 EllipticE[-3]");
+    assert_true("Integrate[1/Sqrt[3 + Sin[x]^2], {x, 0, 2 Pi}] === 4 EllipticK[-1/3]/Sqrt[3]");
+    assert_true("LaplaceTransform[BesselJ[0, t], t, s] === 1/Sqrt[1 + s^2]");
+    assert_true("Simplify[LaplaceTransform[t^2 E^(3 t), t, s] - 2/(s - 3)^3] === 0");
+    assert_true("LaplaceTransform[E^(2 t + 1), t, s] === E/(s - 2)");
+    assert_true("LaplaceTransform[{1, t}, t, s] === {1/s, 1/s^2}");
+    assert_true("LaplaceTransform[f[t] + 1, t, s] === 1/s + LaplaceTransform[f[t], t, s]");
+    assert_true("MemberQ[Attributes[LaplaceTransform], Protected]");
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -183,6 +263,10 @@ int main() {
     TEST(test_integrate_cauchy_schlomilch);
     TEST(test_sum_vanishing_leading_terms);
     TEST(test_pfq_shift_pair);
+    TEST(test_pfq_classical_sums);
+    TEST(test_sum_dixon_vandermonde_lambert);
+    TEST(test_product_limit_minpoly_arctan);
+    TEST(test_fe_elliptic_laplace);
 
     printf("All OSP famous-problem regression tests passed.\n");
     return 0;

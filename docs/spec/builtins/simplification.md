@@ -514,6 +514,11 @@ In[4]:= Simplify[a + b, TransformationFunctions -> {(# /. a -> 0 &)}]
 Out[4]= b
 ```
 
+**Inverse-trig folding to rational multiples of π (v0.6491).** A sum of
+ArcTan/ArcSin/ArcCos/ArcCot terms whose value is (p/q)π, with q ≤ 360, folds to
+that value only when the inverse-function decider proves the difference zero:
+`Simplify[4 ArcTan[1/5] - ArcTan[1/239]] = Pi/4`.
+
 ## FullSimplify
 Tries a wider range of transformations than `Simplify`, drawing on a library of
 known elementary- and special-function identities, and returns the simplest form

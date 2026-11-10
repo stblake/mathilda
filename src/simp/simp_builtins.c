@@ -10,6 +10,7 @@
 #include "facpoly.h"
 #include "numeric.h"
 #include "parse.h"
+#include "simp_sf_engine.h"   /* sf_contains_head */
 #include "print.h"
 #include "symtab.h"
 #include "expr.h"
@@ -2268,6 +2269,34 @@ static Expr* builtin_simplify_inner(Expr* res) {
     return out;
 }
 
+/* The candidate (p/q) Pi, q <= 360 smallest, that the numeric quantity e is
+ * within 1e-10 of, or NULL.  Only a screen: the caller proves E - (p/q) Pi
+ * zero before folding. */
+static Expr* simp_rational_pi_candidate(const Expr* e) {
+    if (!expr_is_numeric_quantity(e)) return NULL;
+    Expr* nv = numericalize_machine_unplanned(e);
+    double v = NAN;
+    if (nv && nv->type == EXPR_REAL) v = nv->data.real;
+    if (nv) expr_free(nv);
+    if (!(v == v) || fabs(v) > 1e6) return NULL;
+    double r = v / 3.14159265358979323846;
+    for (int64_t q = 1; q <= 360; q++) {
+        double pq = r * (double)q, pr = floor(pq + 0.5);
+        if (fabs(pq - pr) < 1e-10 * (double)q) {
+            int64_t p = (int64_t)pr;
+            if (p == 0) return NULL;
+            Expr* c = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+                expr_new_integer(p), expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_new_integer(q), expr_new_integer(-1) }, 2),
+                expr_new_symbol(SYM_Pi) }, 3);
+            Expr* out = evaluate(c);
+            expr_free(c);
+            return out;
+        }
+    }
+    return NULL;
+}
+
 static Expr* builtin_simplify_core(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -2865,6 +2894,27 @@ static Expr* builtin_simplify_core(Expr* res) {
     if (best->type == EXPR_FUNCTION && simp_invfn_combo_is_zero(best)) {
         expr_free(best);
         best = expr_new_integer(0);
+    }
+    /* ...and the same decider FOLDS a combination that equals a nonzero
+     * rational multiple of Pi: Machin's 4 ArcTan[1/5] - ArcTan[1/239] -> Pi/4,
+     * Stormer's 44 ArcTan[1/57] + 7 ArcTan[1/239] - 12 ArcTan[1/682]
+     * + 24 ArcTan[1/12943] -> Pi/4.  The candidate (p/q) Pi comes from the
+     * machine value (smallest q <= 360); it is returned only when E - (p/q) Pi is
+     * PROVEN zero, so a numerical near-miss can never be folded. */
+    if (best->type == EXPR_FUNCTION && head_is(best, SYM_Plus)
+        && (sf_contains_head(best, SYM_ArcTan) || sf_contains_head(best, SYM_ArcSin)
+            || sf_contains_head(best, SYM_ArcCos) || sf_contains_head(best, SYM_ArcCot))) {
+        Expr* cand = simp_rational_pi_candidate(best);
+        if (cand) {
+            Expr* diff = expr_new_function(expr_new_symbol(SYM_Plus),
+                (Expr*[]){ expr_copy(best), expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_new_integer(-1), expr_copy(cand) }, 2) }, 2);
+            Expr* d = eval_and_free(diff);
+            bool zero = d && d->type == EXPR_FUNCTION && simp_invfn_combo_is_zero(d);
+            if (d) expr_free(d);
+            if (zero) { expr_free(best); best = cand; cand = NULL; }
+        }
+        if (cand) expr_free(cand);
     }
 
     /* Region-identity fold: an inverse-function addition identity that holds on

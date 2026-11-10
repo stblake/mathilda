@@ -550,9 +550,18 @@ Expr* builtin_productlog(Expr* res) {
         /* The branch index must be an explicit (machine-range) integer.  N maps
          * over both arguments, so N[ProductLog[-1, 2]] arrives as
          * ProductLog[-1., 2.]: an integer-VALUED Real index names the same
-         * branch unambiguously and is accepted (a fractional one is not). */
+         * branch unambiguously and is accepted -- but only in such a wholly
+         * numeric call (z inexact too).  ProductLog[1., Sqrt[2]] declines with
+         * ProductLog::bidx -- the message also stops the evaluator's mixed-
+         * argument retry from numericalizing z and taking the index after all. */
         int64_t k;
         if (kexpr->type == EXPR_INTEGER) k = kexpr->data.integer;
+        else if (!arg_is_inexact(z)) {
+            if (arg_is_inexact(kexpr))
+                mth_message("ProductLog", "bidx",
+                            "The branch index of ProductLog must be an exact integer.");
+            return NULL;
+        }
         else if (kexpr->type == EXPR_REAL && kexpr->data.real == floor(kexpr->data.real)
                  && fabs(kexpr->data.real) < 1e15) k = (int64_t)kexpr->data.real;
 #ifdef USE_MPFR

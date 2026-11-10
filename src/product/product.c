@@ -185,6 +185,7 @@ static Expr* dispatch_def(ProdMethod method, Expr* f, Expr* var,
             if (!r) r = try_def("Product`RationalInfinite", f, var, imin, imax);
             if (!r) r = try_def("Product`BesselZero", f, var, imin, imax);
             if (!r) r = try_def("Product`Infinite",  f, var, imin, imax);
+            if (!r) r = try_def("Product`RationalInfiniteReal", f, var, imin, imax);
             if (!r) r = try_def("Product`LogSum",    f, var, imin, imax);
             return r;
         }

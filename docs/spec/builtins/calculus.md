@@ -750,6 +750,27 @@ Zeta[r, u + 1]`): `Limit[n^2 (HarmonicNumber[n] - Log[n] - EulerGamma -
 1/(2 n)), n -> Infinity]` is `-1/12`. `Limit[n (Zeta[1 + 1/n] - n -
 EulerGamma), n -> Infinity]` is `-StieltjesGamma[1]`.
 
+## LaplaceTransform
+`LaplaceTransform[f, t, s]` and `LaplaceTransform[f, t, s, Assumptions -> a]`
+give the one-sided transform ∫₀^∞ f(t) e^(−st) dt. Attributes: `Protected`.
+- Linear, and threads over lists. A term it cannot transform stays as
+  `LaplaceTransform[term, t, s]`.
+- Factors free of t come out. An exponential factor E^(at+b) shifts s → s − a
+  and contributes E^b. A t-free remainder c is c/s.
+- Anything else uses the defining integral, under the assumptions and s > 0. If
+  Integrate does not close it, the transform stays unevaluated.
+
+```
+LaplaceTransform[BesselJ[0, t], t, s]     (* 1/Sqrt[1 + s^2] *)
+LaplaceTransform[t^2 E^(3 t), t, s]        (* 2/(-3 + s)^3 *)
+LaplaceTransform[E^(-2 t) Cos[t], t, s]    (* (2 + s)/(1 + (2 + s)^2) *)
+```
+
+**Limit (Gamma rewrite).** A limit whose expression contains Factorial,
+Pochhammer or Binomial of the variable is re-run with those written as Gamma
+ratios, which the Stirling/MRV machinery expands:
+`Limit[n!/(Sqrt[2 Pi n] (n/E)^n), n -> Infinity] = 1`.
+
 ## Residue
 
 `Residue[f, {z, z0}]` gives the residue of `f` at the isolated singularity
@@ -4826,6 +4847,14 @@ under the log-divergence-cancellation conditions (else unevaluated).
   nonzero index. `Sum[k^10/k!, {k, 0, Infinity}]` is `115975 E` (Dobinski; it was
   `0`), `Sum[k^3 x^k/k!, {k, 0, Infinity}]` is `E^x x (1 + 3 x + x^2)` (Touchard).
 
+**Summation theorems and Lambert series (v0.6491).** Hypergeometric terms with
+Pochhammer factors, symbolic bounds (the lower bound is shifted to 0, and an upper
+bound must terminate the series) and the |z| = 1 gate (z = 1: σ < −1; otherwise
+σ < 0) reach the pFq theorems. Gamma pole pairs arising from integer bounds are
+regularised by reflection, which gives Dixon's `(3n)!/(n!)^3`. ``Sum`Lambert`` gives
+Σ n^s/(e^{2πn} − 1) = B_{s+1}/(2(s+1)) for s ≡ 1 (mod 4), s ≥ 5, and
+1/24 − 1/(8π) for s = 1.
+
 ## DifferenceDelta
 
 `DifferenceDelta[f, i]` gives the forward difference
@@ -4987,6 +5016,10 @@ Engages on symbolic-power bodies; `PowerExpand[Log[f]]` is summed by the shipped
 `Sum`LogZeta`), `Product[E^(1/k)(1 - 1/k), {k, 2, Infinity}]` → `E^(EulerGamma-1)`
 (via `Sum`LogRational`).
 
+
+**All-real-root rational products (v0.6491).** ``Product`RationalInfiniteReal``
+runs after ``Product`Infinite`` and applies the Gamma canonical form to rational
+products whose roots are all real: Wallis `Product[4k^2/(4k^2-1), {k, 1, Infinity}] = Pi/2`.
 
 ## FindRoot
 

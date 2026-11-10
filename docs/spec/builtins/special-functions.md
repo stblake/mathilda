@@ -1494,6 +1494,14 @@ Out[7]= (a1 a2 HypergeometricPFQ[{1 + a1, 1 + a2}, {1 + b1, 1 + b2, 1 + b3}, x])
   Dobinski sums), `HypergeometricPFQ[{a, c+1}, {c}, z] -> (1-z)^(-a-1) (1 - z + a z/c)`.
   A lower parameter that is a non-positive integer is a pole and is never paired.
 
+**Classical summation theorems (v0.6491).** At z = 1: Gauss 2F1, Pfaff–Saalschütz
+(a terminating, balanced 3F2, including a symbolic degree), Dixon 3F2, and
+Dougall's very-well-poised 5F4. At z = −1: Kummer 2F1. Parameters are matched in
+any order by exact comparison of the linear relations. A numeric parameter set
+outside the region of convergence (for example Re(c − a − b) ≤ 0 for Gauss) is
+declined. An upper parameter b + n over a lower b (n = 1…12) reduces through
+P(z d/dz) when the reduced series closes.
+
 ## Hypergeometric0F1
 
 
@@ -4516,6 +4524,11 @@ Out[2]= Sin[x] + E^(-z)
 In[3]:= FunctionExpand[MeijerG[{{},{2}},{{1/2,3/2},{}},z]]
 Out[3]= MeijerG[{{}, {2}}, {{1/2, 3/2}, {}}, z]
 ```
+
+**Point tables (v0.6491).** `PolyLog[2, z]` at the golden-ratio points φ⁻², φ⁻¹,
+−φ⁻¹ and −φ (Landen). `EllipticK` at the singular moduli (2 ∓ √3)/4,
+(√2 − 1)² and 1 − (√2 − 1)² (Chowla–Selberg). Each argument is screened against
+a double value, and the match is confirmed exactly with `RootReduce`.
 
 ## Formula representations (Roach's algorithm)
 

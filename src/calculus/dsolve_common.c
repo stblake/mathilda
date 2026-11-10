@@ -1642,46 +1642,106 @@ static bool ds_nonfinite(const Expr* e) {
  * a_0's Log-free part to equal v.  The exponents come from the SeriesData itself
  * (nmin, den), so a pole of any order and any fractional (Frobenius) exponent is
  * covered.  Returns a List of Equal, or NULL when the series does not form. */
+/* Rewrite Log[c t^p] (c, p free of t) to Log[c] + p lg in e (owned); the
+ * logarithm of the local variable becomes the polynomial variable lg. */
+static Expr* ds_log_to_lg(Expr* e, const Expr* t, const Expr* lg) {
+    if (!e || e->type != EXPR_FUNCTION) return e;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        e->data.function.args[i] = ds_log_to_lg(e->data.function.args[i], t, lg);
+    if (!head_is(e, SYM_Log) || e->data.function.arg_count != 1) return e;
+    const Expr* arg = e->data.function.args[0];
+    const char* tn = t->data.symbol.name;
+    if (!ds_contains(arg, tn)) return e;
+    size_t nf = head_is(arg, SYM_Times) ? arg->data.function.arg_count : 1;
+    Expr* const* f = head_is(arg, SYM_Times) ? arg->data.function.args : (Expr* const*)&arg;
+    Expr** cf = malloc(sizeof(Expr*) * nf);
+    size_t nc = 0;
+    Expr* p = NULL;
+    bool ok = true;
+    for (size_t j = 0; j < nf && ok; j++) {
+        const Expr* fj = f[j];
+        if (!ds_contains(fj, tn)) { cf[nc++] = expr_copy((Expr*)fj); continue; }
+        if (p) ok = false;
+        else if (expr_eq(fj, t)) p = expr_new_integer(1);
+        else if (head_is(fj, SYM_Power) && fj->data.function.arg_count == 2
+                 && expr_eq(fj->data.function.args[0], t)
+                 && !ds_contains(fj->data.function.args[1], tn))
+            p = expr_copy(fj->data.function.args[1]);
+        else ok = false;
+    }
+    if (!ok || !p) {
+        for (size_t j = 0; j < nc; j++) expr_free(cf[j]);
+        free(cf);
+        if (p) expr_free(p);
+        return e;
+    }
+    Expr* c = expr_new_function(expr_new_symbol(SYM_Times), cf, nc);
+    free(cf);
+    Expr* out = ds_call2(SYM_Plus, ds_call1(SYM_Log, c),
+                         ds_call2(SYM_Times, p, expr_copy((Expr*)lg)));
+    expr_free(e);
+    return out;
+}
+
 static Expr* ds_singular_condition(const Expr* e, const char* xvar, const Expr* x0,
                                    const Expr* v) {
-    static Expr* tmpl = NULL;
-    if (!tmpl)
-        tmpl = parse_expression(
-            "Function[{DSolve`se, DSolve`sx, DSolve`sx0, DSolve`sv},"
-            " Module[{DSolve`su, DSolve`scs, DSolve`snm, DSolve`sdn, DSolve`sq, DSolve`sa,"
-            "         DSolve`sl, DSolve`sout = {}, DSolve`shave0 = False},"
-            "  DSolve`su = Series[DSolve`se /. DSolve`sx -> DSolve`sx0 + DSolve`st,"
-            "                     {DSolve`st, 0, 0}];"
-            "  If[Head[DSolve`su] =!= SeriesData, $Failed,"
-            "   DSolve`scs = DSolve`su[[3]]; DSolve`snm = DSolve`su[[4]];"
-            "   DSolve`sdn = DSolve`su[[6]];"
-            "   Do[DSolve`sq = (DSolve`snm + DSolve`si - 1)/DSolve`sdn;"
-            "      DSolve`sa = Expand[DSolve`scs[[DSolve`si]] /. {Log[DSolve`st] -> DSolve`slg,"
-            "        Log[DSolve`sc_. DSolve`st^DSolve`sp_.] /; FreeQ[{DSolve`sc, DSolve`sp}, DSolve`st]"
-            "          :> Log[DSolve`sc] + DSolve`sp DSolve`slg}];"
-            "      If[DSolve`sq <= 0,"
-            "        DSolve`sl = CoefficientList[DSolve`sa, DSolve`slg];"
-            "        If[DSolve`sl === {}, DSolve`sl = {0}];"
-            "        If[DSolve`sq == 0,"
-            "          DSolve`shave0 = True;"
-            "          DSolve`sout = Join[DSolve`sout, {First[DSolve`sl] == DSolve`sv},"
-            "                             Thread[Rest[DSolve`sl] == 0]],"
-            "          DSolve`sout = Join[DSolve`sout, Thread[DSolve`sl == 0]]]],"
-            "    {DSolve`si, Length[DSolve`scs]}];"
-            "   If[!DSolve`shave0 && DSolve`snm/DSolve`sdn > 0,"
-            "     DSolve`sout = Append[DSolve`sout, 0 == DSolve`sv]];"
-            "   DeleteCases[DSolve`sout, True]]]]");
-    if (!tmpl) return NULL;
-    Expr* call = expr_new_function(expr_copy(tmpl),
-        (Expr*[]){ expr_copy((Expr*)e), expr_new_symbol(xvar), expr_copy((Expr*)x0),
-                   expr_copy((Expr*)v) }, 4);
-    Expr* r = eval_and_free(call);
-    if (!r || !head_is(r, SYM_List) || r->data.function.arg_count == 0
-        || ds_nonfinite(r) || ds_contains(r, SYM_SeriesData)) {
-        if (r) expr_free(r);
+    Expr* t = expr_new_symbol(intern_symbol("DSolve`st"));
+    Expr* lg = expr_new_symbol(intern_symbol("DSolve`slg"));
+    Expr* sub = ds_subst(expr_copy((Expr*)e), expr_new_symbol(xvar),
+                         ds_call2(SYM_Plus, expr_copy((Expr*)x0), expr_copy(t)));
+    Expr* spec = expr_new_function(expr_new_symbol(SYM_List),
+        (Expr*[]){ expr_copy(t), expr_new_integer(0), expr_new_integer(0) }, 3);
+    Expr* ser = eval_and_free(ds_call2(SYM_Series, sub, spec));
+    Expr* out = NULL;
+    if (ser && head_is(ser, SYM_SeriesData) && ser->data.function.arg_count == 6
+        && head_is(ser->data.function.args[2], SYM_List)
+        && ser->data.function.args[3]->type == EXPR_INTEGER
+        && ser->data.function.args[5]->type == EXPR_INTEGER
+        && ser->data.function.args[5]->data.integer > 0) {
+        const Expr* cs = ser->data.function.args[2];
+        int64_t nmin = ser->data.function.args[3]->data.integer;
+        size_t nc = cs->data.function.arg_count, cap = 8, n = 0;
+        Expr** eqs = malloc(sizeof(Expr*) * cap);
+        bool have0 = false;
+        for (size_t i = 0; i < nc; i++) {
+            int64_t num = nmin + (int64_t)i;          /* exponent num/den */
+            if (num > 0) break;
+            Expr* a = ds_log_to_lg(expr_copy(cs->data.function.args[i]), t, lg);
+            a = eval_and_free(ds_call1(SYM_Expand, a));
+            Expr* cl = eval_and_free(ds_call2(SYM_CoefficientList, a, expr_copy(lg)));
+            if (!head_is(cl, SYM_List)) { expr_free(cl); continue; }
+            size_t m = cl->data.function.arg_count;
+            for (size_t k = 0; k < (m ? m : 1); k++) {
+                Expr* ck = m ? expr_copy(cl->data.function.args[k]) : expr_new_integer(0);
+                Expr* rhs = (num == 0 && k == 0) ? expr_copy((Expr*)v) : expr_new_integer(0);
+                if (n == cap) { cap *= 2; eqs = realloc(eqs, sizeof(Expr*) * cap); }
+                eqs[n++] = ds_call2(SYM_Equal, ck, rhs);
+            }
+            if (num == 0) have0 = true;
+            expr_free(cl);
+        }
+        if (!have0 && nmin > 0) {
+            if (n == cap) { cap *= 2; eqs = realloc(eqs, sizeof(Expr*) * cap); }
+            eqs[n++] = ds_call2(SYM_Equal, expr_new_integer(0), expr_copy((Expr*)v));
+        }
+        /* Evaluate; drop the equations that hold identically. */
+        size_t w = 0;
+        for (size_t k = 0; k < n; k++) {
+            Expr* q = eval_and_free(eqs[k]);
+            if (q->type == EXPR_SYMBOL && q->data.symbol.name == SYM_True) expr_free(q);
+            else eqs[w++] = q;
+        }
+        out = expr_new_function(expr_new_symbol(SYM_List), eqs, w);
+        free(eqs);
+    }
+    if (ser) expr_free(ser);
+    expr_free(t); expr_free(lg);
+    if (!out || out->data.function.arg_count == 0
+        || ds_nonfinite(out) || ds_contains(out, SYM_SeriesData)) {
+        if (out) expr_free(out);
         return NULL;
     }
-    return r;
+    return out;
 }
 
 static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,

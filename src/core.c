@@ -1265,6 +1265,8 @@ void core_init(void) {
      * reduction to EllipticF/E/Pi).  Registered beside integrate_init. */
     void integrate_elliptic_init(void);
     integrate_elliptic_init();
+    void laplace_init(void);
+    laplace_init();
     void dsolve_init(void);
     dsolve_init();
     void sum_init(void);

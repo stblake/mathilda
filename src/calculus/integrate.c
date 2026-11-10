@@ -2138,6 +2138,18 @@ static Expr* integrate_definite(Expr* res) {
         nspecs++;
     if (nspecs == 0) return NULL;
 
+    /* A complete elliptic integral written as a trigonometric quadratic is
+     * named before the cascade: the general stages grind on it (tens of
+     * seconds, or not at all with a symbolic parameter) before the elliptic
+     * stage is reached. */
+    if (nspecs == 1 && head_is(res->data.function.args[1], SYM_List)
+        && res->data.function.args[1]->data.function.arg_count == 3) {
+        Expr* sp = res->data.function.args[1];
+        Expr* eq = integrate_elliptic_trig_quadratic(f, sp->data.function.args[0],
+                       sp->data.function.args[1], sp->data.function.args[2]);
+        if (eq) return eq;
+    }
+
     const char* method = NULL;
     IntegrateMethod mech = METHOD_AUTOMATIC;
     Expr* assumptions = NULL;   /* borrowed from res: the Assumptions option value */
@@ -2787,6 +2799,84 @@ static void intg_nonelem_pending_flush(void) {
 
 static Expr* integrate_definite(Expr* res);
 
+/* ---- exponent normal form (integrate_definite_scoped) ---- */
+static bool ies_has(const Expr* e, const Expr* x) {
+    if (expr_eq(e, x)) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (ies_has(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ies_has(e->data.function.args[i], x)) return true;
+    return false;
+}
+static bool ies_is_exp(const Expr* e) {
+    return head_is(e, SYM_Power) && e->data.function.arg_count == 2
+        && e->data.function.args[0]->type == EXPR_SYMBOL
+        && e->data.function.args[0]->data.symbol.name == SYM_E;
+}
+/* A copy of e with every exponent of E expanded (unevaluated rebuild). */
+static Expr* ies_expand_exponents(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) a[i] = ies_expand_exponents(e->data.function.args[i]);
+    if (ies_is_exp(e)) {
+        Expr* ex = expr_new_function(expr_new_symbol(SYM_Expand), (Expr*[]){ a[1] }, 1);
+        a[1] = evaluate(ex);
+        expr_free(ex);
+    }
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return r;
+}
+/* {K, g} with f == K g: exponents expanded, and the x-free part c of each
+ * top-level E^(c + p(x)) moved into K = prod E^c.  NULL if nothing to split. */
+static Expr* intg_exponent_split(const Expr* f, const Expr* x) {
+    Expr* g0 = ies_expand_exponents(f);
+    Expr* g = evaluate(g0);
+    expr_free(g0);
+    if (!g) return NULL;
+    size_t nf = head_is(g, SYM_Times) ? g->data.function.arg_count : 1;
+    Expr* const* fa = head_is(g, SYM_Times) ? g->data.function.args : &g;
+    Expr** gk = malloc(sizeof(Expr*) * nf);
+    Expr** kk = malloc(sizeof(Expr*) * nf);
+    size_t nk = 0;
+    for (size_t i = 0; i < nf; i++) {
+        const Expr* t = fa[i];
+        if (ies_is_exp(t) && head_is(t->data.function.args[1], SYM_Plus)) {
+            const Expr* p = t->data.function.args[1];
+            size_t np = p->data.function.arg_count, nc = 0, nv = 0;
+            Expr** cv = malloc(sizeof(Expr*) * np);
+            Expr** vv = malloc(sizeof(Expr*) * np);
+            for (size_t j = 0; j < np; j++) {
+                Expr* pj = expr_copy(p->data.function.args[j]);
+                if (ies_has(pj, x)) vv[nv++] = pj; else cv[nc++] = pj;
+            }
+            if (nc > 0 && nv > 0) {
+                kk[nk++] = expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){
+                    expr_new_symbol(SYM_E), expr_new_function(expr_new_symbol(SYM_Plus), cv, nc) }, 2);
+                gk[i] = expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){
+                    expr_new_symbol(SYM_E), expr_new_function(expr_new_symbol(SYM_Plus), vv, nv) }, 2);
+            } else {
+                for (size_t j = 0; j < nc; j++) expr_free(cv[j]);
+                for (size_t j = 0; j < nv; j++) expr_free(vv[j]);
+                gk[i] = expr_copy((Expr*)t);
+            }
+            free(cv); free(vv);
+        } else {
+            gk[i] = expr_copy((Expr*)t);
+        }
+    }
+    expr_free(g);
+    Expr* gt = expr_new_function(expr_new_symbol(SYM_Times), gk, nf);
+    Expr* gv = evaluate(gt);
+    expr_free(gt);
+    Expr* kt = expr_new_function(expr_new_symbol(SYM_Times), kk, nk);
+    Expr* kv = evaluate(kt);
+    expr_free(kt);
+    free(gk); free(kk);
+    return expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){ kv, gv }, 2);
+}
+
 /* integrate_definite, bracketed by the definite-level nonelem deferral (see
  * g_integrate_definite_depth).  Only the outermost definite frame decides: a
  * nested definite sub-integral's decline is not the user's answer. */
@@ -2808,24 +2898,9 @@ static Expr* integrate_definite_scoped(Expr* res) {
         && res->data.function.arg_count >= 2
         && head_is(res->data.function.args[1], SYM_List)
         && res->data.function.args[1]->data.function.arg_count == 3) {
-        static Expr* tmpl = NULL;
-        if (!tmpl)
-            tmpl = parse_expression(
-                "Function[{Integrate`ef, Integrate`ex}, Module[{Integrate`eg, Integrate`ek = 1},"
-                " Integrate`eg = Integrate`ef /. Power[E, Integrate`ep_] :> Power[E, Expand[Integrate`ep]];"
-                " Integrate`eg = If[Head[Integrate`eg] === Times, List @@ Integrate`eg, {Integrate`eg}];"
-                " Integrate`eg = Map[Function[Integrate`et,"
-                "   If[Head[Integrate`et] === Power && Integrate`et[[1]] === E"
-                "      && Head[Integrate`et[[2]]] === Plus,"
-                "    With[{Integrate`ec = Select[Integrate`et[[2]], FreeQ[#, Integrate`ex] &]},"
-                "     Integrate`ek = Integrate`ek E^Integrate`ec;"
-                "     Hold[E^(Integrate`et[[2]] - Integrate`ec)] /. Hold[z_] :> z],"
-                "    Integrate`et]], Integrate`eg];"
-                " {Integrate`ek, Times @@ Integrate`eg}]]");
         Expr* f0 = res->data.function.args[0];
         Expr* xv = res->data.function.args[1]->data.function.args[0];
-        Expr* kg = tmpl ? eval_and_free(expr_new_function(expr_copy(tmpl),
-                              (Expr*[]){ expr_copy(f0), expr_copy(xv) }, 2)) : NULL;
+        Expr* kg = intg_exponent_split(f0, xv);
         if (kg && head_is(kg, SYM_List) && kg->data.function.arg_count == 2
             && !expr_eq(kg->data.function.args[1], f0)) {
             Expr** a = malloc(res->data.function.arg_count * sizeof(Expr*));

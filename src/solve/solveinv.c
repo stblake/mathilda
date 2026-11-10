@@ -37,7 +37,6 @@
 #include "eval.h"
 #include "expr.h"
 #include "message.h"   /* mth_msg_suppressed(): quiet internal probes */
-#include "parse.h"     /* parse_expression: the Lambert-W recogniser template */
 #include "poly/solvepoly.h"
 #include "simp/simp_log.h"   /* simp_log_fuse_all(): combine multi-log residuals */
 #include "solverad.h"
@@ -1202,67 +1201,197 @@ static Expr* make_inverse_function_solution(const char* head_name,
  *                   none below -1/e (the equation has no real root);  *
  *    otherwise      the principal W_0 with Solve::ifun.               *
  * ------------------------------------------------------------------ */
-static Expr* lambert_data(Expr* residual, Expr* var) {
-    static Expr* tmpl = NULL;
-    if (!tmpl)
-        tmpl = parse_expression(
-            "Function[{Solve`lr, Solve`lx}, Module[{Solve`lts, Solve`lvt, Solve`lft,"
-            "  Solve`lfs, Solve`lex, Solve`llin, Solve`lk, Solve`lM, Solve`lL},"
-            " Solve`lts = If[Head[Solve`lr] === Plus, List @@ Solve`lr, {Solve`lr}];"
-            " Solve`lvt = Select[Solve`lts, !FreeQ[#, Solve`lx] &];"
-            " Solve`lft = Total[Select[Solve`lts, FreeQ[#, Solve`lx] &]];"
-            " If[Length[Solve`lvt] =!= 1, $Failed,"
-            "  Solve`lfs = If[Head[Solve`lvt[[1]]] === Times, List @@ Solve`lvt[[1]], {Solve`lvt[[1]]}];"
-            "  Solve`lex = Select[Solve`lfs, (Head[#] === Power && FreeQ[#[[1]], Solve`lx]"
-            "                               && !FreeQ[#[[2]], Solve`lx]) &];"
-            "  Solve`llin = Select[Solve`lfs, (!FreeQ[#, Solve`lx] && !MemberQ[Solve`lex, #]) &];"
-            "  Solve`lk = Times @@ Select[Solve`lfs, FreeQ[#, Solve`lx] &];"
-            "  If[Solve`lex === {} || Length[Solve`llin] =!= 1 || Solve`lft === 0, $Failed,"
-            "   Solve`lM = Expand[Total[(#[[2]] Log[#[[1]]]) & /@ Solve`lex]];"
-            "   Solve`lL = Expand[Solve`llin[[1]]];"
-            "   If[!PolynomialQ[Solve`lM, Solve`lx] || Exponent[Solve`lM, Solve`lx] =!= 1"
-            "      || !PolynomialQ[Solve`lL, Solve`lx] || Exponent[Solve`lL, Solve`lx] =!= 1, $Failed,"
-            "    With[{p = Coefficient[Solve`lM, Solve`lx, 1], q = Coefficient[Solve`lM, Solve`lx, 0],"
-            "          a = Coefficient[Solve`lL, Solve`lx, 1], b = Coefficient[Solve`lL, Solve`lx, 0]},"
-            "     {Simplify[-Solve`lft p Exp[p b/a - q]/(Solve`lk a)], p, b/a}]]]]]]");
-    /* The sum form  L(x) + k prod B^M + c  (x == E^-x, x + 2^x == 0):
-     * divided by the exponential it is the product form
-     * (L + c) prod B^{-M} + k, handed to the template above. */
-    static Expr* pre = NULL;
-    if (!pre)
-        pre = parse_expression(
-            "Function[{Solve`lr, Solve`lx}, Module[{Solve`lts, Solve`lin, Solve`loth, Solve`lfs,"
-            "  Solve`lex, Solve`lft},"
-            " Solve`lts = If[Head[Solve`lr] === Plus, List @@ Solve`lr, {Solve`lr}];"
-            " Solve`lft = Total[Select[Solve`lts, FreeQ[#, Solve`lx] &]];"
-            " Solve`lin = Total[Select[Solve`lts, (!FreeQ[#, Solve`lx] && PolynomialQ[#, Solve`lx]"
-            "                                      && Exponent[#, Solve`lx] <= 1) &]];"
-            " Solve`loth = Select[Solve`lts, (!FreeQ[#, Solve`lx] && !(PolynomialQ[#, Solve`lx]"
-            "                                      && Exponent[#, Solve`lx] <= 1)) &];"
-            " If[Length[Solve`loth] =!= 1 || Solve`lin === 0, $Failed,"
-            "  Solve`lfs = If[Head[Solve`loth[[1]]] === Times, List @@ Solve`loth[[1]], {Solve`loth[[1]]}];"
-            "  Solve`lex = Select[Solve`lfs, (Head[#] === Power && FreeQ[#[[1]], Solve`lx]"
-            "                               && !FreeQ[#[[2]], Solve`lx]) &];"
-            "  If[Solve`lex === {} || !FreeQ[Complement[Solve`lfs, Solve`lex], Solve`lx], $Failed,"
-            "   (Solve`lin + Solve`lft) (Times @@ (Power[#[[1]], -#[[2]]] & /@ Solve`lex))"
-            "     + Times @@ Complement[Solve`lfs, Solve`lex]]]]]");
-    if (!tmpl || !pre) return NULL;
-    Expr* r = eval_and_free(expr_new_function(expr_copy(tmpl),
-        (Expr*[]){ expr_copy(residual), expr_copy(var) }, 2));
-    if (!r || !head_is(r, SYM_List) || r->data.function.arg_count != 3) {
-        if (r) expr_free(r);
-        r = NULL;
-        Expr* r2 = eval_and_free(expr_new_function(expr_copy(pre),
-            (Expr*[]){ expr_copy(residual), expr_copy(var) }, 2));
-        if (r2 && !(r2->type == EXPR_SYMBOL && strcmp(r2->data.symbol.name, "$Failed") == 0))
-            r = eval_and_free(expr_new_function(expr_copy(tmpl),
-                (Expr*[]){ expr_copy(r2), expr_copy(var) }, 2));
-        if (r2) expr_free(r2);
-        if (!r || !head_is(r, SYM_List) || r->data.function.arg_count != 3) {
-            if (r) expr_free(r);
-            return NULL;
+/* The terms of e as a borrowed array: Plus arguments, or e itself. */
+static Expr* const* lw_terms(const Expr* e, const char* head, size_t* n,
+                             const Expr** slot) {
+    if (head_is(e, head)) { *n = e->data.function.arg_count; return e->data.function.args; }
+    *n = 1;
+    *slot = e;
+    return (Expr* const*)slot;
+}
+
+/* Split an Expand-ed e as a x + b with a, b free of var.  Each term must be
+ * free of var, var itself, or var times var-free factors.  On success a, b
+ * are new (evaluated) and true is returned; a may be 0 (e free of var). */
+static bool lw_linear(const Expr* e, const Expr* var, Expr** a, Expr** b) {
+    size_t nt;
+    const Expr* st = NULL;
+    Expr* const* t = lw_terms(e, SYM_Plus, &nt, &st);
+    Expr** av = malloc(sizeof(Expr*) * nt);
+    Expr** bv = malloc(sizeof(Expr*) * nt);
+    size_t na = 0, nb = 0;
+    bool ok = true;
+    for (size_t i = 0; i < nt && ok; i++) {
+        const Expr* ti = t[i];
+        if (!contains_var(ti, var)) { bv[nb++] = expr_copy((Expr*)ti); continue; }
+        if (expr_eq(ti, var)) { av[na++] = mk_int(1); continue; }
+        size_t nf;
+        const Expr* sf = NULL;
+        Expr* const* f = lw_terms(ti, SYM_Times, &nf, &sf);
+        if (nf < 2) { ok = false; break; }
+        Expr** rest = malloc(sizeof(Expr*) * nf);
+        size_t nr = 0, nvar = 0;
+        for (size_t j = 0; j < nf; j++) {
+            if (expr_eq(f[j], var)) nvar++;
+            else if (contains_var(f[j], var)) { ok = false; break; }
+            else rest[nr++] = expr_copy(f[j]);
+        }
+        if (ok && nvar == 1) av[na++] = expr_new_function(mk_sym(SYM_Times), rest, nr);
+        else {
+            for (size_t j = 0; j < nr; j++) expr_free(rest[j]);
+            ok = false;
+        }
+        free(rest);
+    }
+    if (!ok) {
+        for (size_t i = 0; i < na; i++) expr_free(av[i]);
+        for (size_t i = 0; i < nb; i++) expr_free(bv[i]);
+    } else {
+        *a = eval_and_free(expr_new_function(mk_sym(SYM_Plus), av, na));
+        *b = eval_and_free(expr_new_function(mk_sym(SYM_Plus), bv, nb));
+    }
+    free(av); free(bv);
+    return ok;
+}
+
+/* e is B^M with B free of var and M containing it. */
+static bool lw_is_exp(const Expr* e, const Expr* var) {
+    return head_is(e, SYM_Power) && e->data.function.arg_count == 2
+        && !contains_var(e->data.function.args[0], var)
+        && contains_var(e->data.function.args[1], var);
+}
+
+/* Linear coefficients of Expand[e] (e owned); false unless the x
+ * coefficient is non-zero. */
+static bool lw_linear_nz(Expr* e, const Expr* var, Expr** a, Expr** b) {
+    Expr* x = eval_and_free(mk_fn1(SYM_Expand, e));
+    bool ok = x && lw_linear(x, var, a, b);
+    if (x) expr_free(x);
+    if (ok && (*a)->type == EXPR_INTEGER && (*a)->data.integer == 0) {
+        expr_free(*a); expr_free(*b);
+        ok = false;
+    }
+    return ok;
+}
+
+/* Product form  k (a x + b) prod B_i^{M_i} + c  ->  {Z, p, b/a}. */
+static Expr* lambert_product_form(const Expr* residual, Expr* var) {
+    size_t nt;
+    const Expr* st = NULL;
+    Expr* const* t = lw_terms(residual, SYM_Plus, &nt, &st);
+    const Expr* vt = NULL;
+    Expr** fv = malloc(sizeof(Expr*) * nt);
+    size_t nf = 0, nvt = 0;
+    for (size_t i = 0; i < nt; i++) {
+        if (contains_var(t[i], var)) { vt = t[i]; nvt++; }
+        else fv[nf++] = expr_copy(t[i]);
+    }
+    Expr* c = eval_and_free(expr_new_function(mk_sym(SYM_Plus), fv, nf));
+    free(fv);
+    if (nvt != 1 || (c->type == EXPR_INTEGER && c->data.integer == 0)) {
+        expr_free(c);
+        return NULL;
+    }
+    size_t nfac;
+    const Expr* sf = NULL;
+    Expr* const* f = lw_terms(vt, SYM_Times, &nfac, &sf);
+    Expr** mterms = malloc(sizeof(Expr*) * nfac);
+    Expr** kf = malloc(sizeof(Expr*) * nfac);
+    size_t nm = 0, nk = 0, nlin = 0;
+    const Expr* lin = NULL;
+    for (size_t j = 0; j < nfac; j++) {
+        if (lw_is_exp(f[j], var))
+            mterms[nm++] = mk_fn2(SYM_Times, expr_copy(f[j]->data.function.args[1]),
+                                  mk_fn1(SYM_Log, expr_copy(f[j]->data.function.args[0])));
+        else if (contains_var(f[j], var)) { lin = f[j]; nlin++; }
+        else kf[nk++] = expr_copy(f[j]);
+    }
+    Expr* k = expr_new_function(mk_sym(SYM_Times), kf, nk);
+    Expr* M = expr_new_function(mk_sym(SYM_Plus), mterms, nm);
+    free(kf); free(mterms);
+    Expr *p = NULL, *q = NULL, *a = NULL, *b = NULL, *out = NULL;
+    if (nm > 0 && nlin == 1
+        && lw_linear_nz(expr_copy(M), var, &p, &q)) {
+        if (lw_linear_nz(expr_copy((Expr*)lin), var, &a, &b)) {
+            Expr* ba = eval_and_free(mk_fn2(SYM_Times, expr_copy(b), mk_pow(expr_copy(a), mk_int(-1))));
+            /* Z = -c p e^{p b/a - q} / (k a) */
+            Expr* Z = mk_fn5(SYM_Times, mk_neg(c), expr_copy(p),
+                mk_pow(mk_sym(SYM_E), mk_fn2(SYM_Plus, mk_fn2(SYM_Times, expr_copy(p), expr_copy(ba)),
+                                             mk_neg(q))),
+                mk_pow(expr_copy(k), mk_int(-1)), mk_pow(a, mk_int(-1)));
+            c = NULL; q = NULL; a = NULL;
+            Z = eval_and_free(mk_fn1(SYM_Simplify, Z));
+            out = mk_fn3(SYM_List, Z, p, ba);
+            p = NULL;
+            expr_free(b);
+        } else {
+            expr_free(q);
         }
     }
+    if (p) expr_free(p);
+    if (c) expr_free(c);
+    expr_free(k); expr_free(M);
+    return out;
+}
+
+/* Sum form  L(x) + c + k prod B^M  (x == E^-x, x + 2^x == 0): divided by
+ * the exponential it is the product form (L + c) prod B^{-M} + k. */
+static Expr* lambert_sum_to_product(const Expr* residual, Expr* var) {
+    size_t nt;
+    const Expr* st = NULL;
+    Expr* const* t = lw_terms(residual, SYM_Plus, &nt, &st);
+    Expr** lv = malloc(sizeof(Expr*) * nt);
+    size_t nl = 0, noth = 0;
+    const Expr* oth = NULL;
+    for (size_t i = 0; i < nt; i++) {
+        Expr *a = NULL, *b = NULL;
+        if (!contains_var(t[i], var)) { lv[nl++] = expr_copy(t[i]); continue; }
+        Expr* x = eval_and_free(mk_fn1(SYM_Expand, expr_copy(t[i])));
+        bool lin = x && lw_linear(x, var, &a, &b);
+        if (x) expr_free(x);
+        if (lin) { expr_free(a); expr_free(b); lv[nl++] = expr_copy(t[i]); }
+        else { oth = t[i]; noth++; }
+    }
+    Expr* L = eval_and_free(expr_new_function(mk_sym(SYM_Plus), lv, nl));
+    free(lv);
+    bool lin_has_var = contains_var(L, var);
+    if (noth != 1 || !lin_has_var) { expr_free(L); return NULL; }
+    size_t nf;
+    const Expr* sf = NULL;
+    Expr* const* f = lw_terms(oth, SYM_Times, &nf, &sf);
+    Expr** inv = malloc(sizeof(Expr*) * nf);
+    Expr** kf = malloc(sizeof(Expr*) * nf);
+    size_t ni = 0, nk = 0;
+    bool ok = true;
+    for (size_t j = 0; j < nf; j++) {
+        if (lw_is_exp(f[j], var))
+            inv[ni++] = mk_pow(expr_copy(f[j]->data.function.args[0]),
+                               mk_neg(expr_copy(f[j]->data.function.args[1])));
+        else if (contains_var(f[j], var)) ok = false;
+        else kf[nk++] = expr_copy(f[j]);
+    }
+    Expr* out = NULL;
+    if (ok && ni > 0) {
+        Expr* prod = expr_new_function(mk_sym(SYM_Times), inv, ni);
+        out = eval_and_free(mk_fn2(SYM_Plus, mk_fn2(SYM_Times, L, prod),
+                                   expr_new_function(mk_sym(SYM_Times), kf, nk)));
+        L = NULL;
+    } else {
+        for (size_t j = 0; j < ni; j++) expr_free(inv[j]);
+        for (size_t j = 0; j < nk; j++) expr_free(kf[j]);
+    }
+    free(inv); free(kf);
+    if (L) expr_free(L);
+    return out;
+}
+
+static Expr* lambert_data(Expr* residual, Expr* var) {
+    Expr* r = lambert_product_form(residual, var);
+    if (r) return r;
+    Expr* r2 = lambert_sum_to_product(residual, var);
+    if (!r2) return NULL;
+    r = lambert_product_form(r2, var);
+    expr_free(r2);
     return r;
 }
 

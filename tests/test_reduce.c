@@ -1767,8 +1767,9 @@ static void test_reals_transcendental_root_isolation(void) {
     run_test("Abs[N[Reduce[Cos[x] == x, x, Reals][[2]], 30] - "
              "0.739085133215160641655312087674`30] < 10^-27", "True");
     /* Exp: right tail certified by the monotone-derivative chain. */
-    run_contains("Reduce[Exp[x] > 3 x, x, Reals]", "0.619061");
-    run_contains("Reduce[Exp[x] > 3 x, x, Reals]", "1.51213");
+    /* The Lambert breakpoints are exact (Solve inverts E^x == 3 x by W). */
+    run_contains("Reduce[Exp[x] > 3 x, x, Reals]", "Less[x, Times[-1, ProductLog[Rational[-1, 3]]]]");
+    run_contains("Reduce[Exp[x] > 3 x, x, Reals]", "ProductLog[-1, Rational[-1, 3]]");
     run_contains("Reduce[x^2 > Cos[x], x, Reals]", "0.824132");
     /* Bounded by the region constraint instead of a dominance bound; the two
      * unbounded end cells are decided without the residual (Kleene). */

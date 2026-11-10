@@ -59,6 +59,9 @@
 #include "parse.h"
 #include "arithmetic.h"         /* is_rational */
 #include "sym_names.h"
+#include "numeric.h"            /* numericalize_machine_unplanned */
+#include <math.h>
+#include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -529,6 +532,122 @@ static Expr* fe_pcfd_integer(const Expr* e) {
 /* A copy of e with every expandable node replaced, bottom-up; sets *changed
  * when anything was rewritten. `which` selects the rule families. Returns an
  * owned Expr. */
+/* ---- native builders for the point tables (arguments consumed) ---- */
+static Expr* fp_fn(const char* h, int n, ...) {
+    Expr* a[8];
+    va_list ap;
+    va_start(ap, n);
+    for (int i = 0; i < n; i++) a[i] = va_arg(ap, Expr*);
+    va_end(ap);
+    return expr_new_function(expr_new_symbol(h), a, (size_t)n);
+}
+static Expr* fp_i(int64_t v) { return expr_new_integer(v); }
+static Expr* fp_q(int64_t n, int64_t d) { return make_rational(n, d); }
+static Expr* fp_pow(Expr* b, Expr* e) { return fp_fn(SYM_Power, 2, b, e); }
+static Expr* fp_sqrt(Expr* b) { return fp_pow(b, fp_q(1, 2)); }
+static Expr* fp_pi(void) { return expr_new_symbol(SYM_Pi); }
+static Expr* fp_eval(Expr* e) { Expr* r = evaluate(e); expr_free(e); return r; }
+/* phi = (1 + Sqrt[5])/2 */
+static Expr* fp_phi(void) {
+    return fp_fn(SYM_Times, 2, fp_q(1, 2), fp_fn(SYM_Plus, 2, fp_i(1), fp_sqrt(fp_i(5))));
+}
+
+/* The value of an exact numeric z as a double (real part), or NAN. */
+static double fp_value(const Expr* z) {
+    Expr* n = numericalize_machine_unplanned(z);
+    double v = NAN;
+    if (n && n->type == EXPR_REAL) v = n->data.real;
+    else if (n && n->type == EXPR_INTEGER) v = (double)n->data.integer;
+    if (n) expr_free(n);
+    return v;
+}
+
+/* A table entry: the point's double value (the screen), and builders for the
+ * exact point and the closed form. */
+typedef struct { double at; Expr* (*point)(void); Expr* (*value)(void); } FePoint;
+
+/* The closed form of the first entry whose point equals z exactly.  The
+ * double screen leaves at most one candidate; RootReduce[z - point] === 0
+ * is then the exact test. */
+static Expr* fe_point_table(const Expr* z, const FePoint* tab, size_t n) {
+    double v = fp_value(z);
+    if (v != v) return NULL;
+    for (size_t i = 0; i < n; i++) {
+        if (fabs(v - tab[i].at) > 1e-12 * (1 + fabs(tab[i].at))) continue;
+        Expr* d = fp_eval(fp_fn("RootReduce", 1, fp_fn(SYM_Plus, 2, expr_copy((Expr*)z),
+                                 fp_fn(SYM_Times, 2, fp_i(-1), tab[i].point()))));
+        bool hit = d && d->type == EXPR_INTEGER && d->data.integer == 0;
+        if (d) expr_free(d);
+        if (hit) return fp_eval(tab[i].value());
+    }
+    return NULL;
+}
+
+/* PolyLog[2, z] at the golden-ratio points (Landen): with phi = (1+Sqrt[5])/2,
+ *   Li2(phi^-2) = Pi^2/15 - Log[phi]^2,     Li2(phi^-1) = Pi^2/10 - Log[phi]^2,
+ *   Li2(-phi^-1) = -Pi^2/15 + Log[phi]^2/2, Li2(-phi) = -Pi^2/10 - Log[phi]^2,
+ * the only algebraic points besides 0, +-1, 1/2 where Li2 is known in closed
+ * form (each verified to 30 digits against the series). */
+static Expr* fp_lg2(void) { return fp_pow(fp_fn(SYM_Log, 1, fp_phi()), fp_i(2)); }
+static Expr* fp_pi2(int64_t n, int64_t d) { return fp_fn(SYM_Times, 2, fp_q(n, d), fp_pow(fp_pi(), fp_i(2))); }
+static Expr* fg_p1(void) { return fp_pow(fp_phi(), fp_i(-2)); }
+static Expr* fg_v1(void) { return fp_fn(SYM_Plus, 2, fp_pi2(1, 15), fp_fn(SYM_Times, 2, fp_i(-1), fp_lg2())); }
+static Expr* fg_p2(void) { return fp_pow(fp_phi(), fp_i(-1)); }
+static Expr* fg_v2(void) { return fp_fn(SYM_Plus, 2, fp_pi2(1, 10), fp_fn(SYM_Times, 2, fp_i(-1), fp_lg2())); }
+static Expr* fg_p3(void) { return fp_fn(SYM_Times, 2, fp_i(-1), fp_pow(fp_phi(), fp_i(-1))); }
+static Expr* fg_v3(void) { return fp_fn(SYM_Plus, 2, fp_pi2(-1, 15), fp_fn(SYM_Times, 2, fp_q(1, 2), fp_lg2())); }
+static Expr* fg_p4(void) { return fp_fn(SYM_Times, 2, fp_i(-1), fp_phi()); }
+static Expr* fg_v4(void) { return fp_fn(SYM_Plus, 2, fp_pi2(-1, 10), fp_fn(SYM_Times, 2, fp_i(-1), fp_lg2())); }
+
+static Expr* fe_polylog_golden(const Expr* e) {
+    if (!fe_is_head(e, SYM_PolyLog) || e->data.function.arg_count != 2) return NULL;
+    const Expr* ne = e->data.function.args[0];
+    if (ne->type != EXPR_INTEGER || ne->data.integer != 2) return NULL;
+    const Expr* z = e->data.function.args[1];
+    if (!fe_is_head((Expr*)z, SYM_Plus) && !fe_is_head((Expr*)z, SYM_Times)) return NULL;
+    const double phi = 1.6180339887498948482;
+    const FePoint tab[4] = {
+        { 1 / (phi * phi), fg_p1, fg_v1 }, { 1 / phi, fg_p2, fg_v2 },
+        { -1 / phi, fg_p3, fg_v3 },        { -phi, fg_p4, fg_v4 } };
+    return fe_point_table(z, tab, 4);
+}
+
+/* EllipticK at the singular moduli k_r^2 with class number h(-4r) = 1 that are
+ * not automatic (K(1/2), K(-1) evaluate on their own), and their complements
+ * K(1 - k_r^2) = Sqrt[r] K(k_r^2) (Chowla-Selberg; each verified to 30 digits):
+ *   r = 3: m = (2 - Sqrt[3])/4,  K = 3^(1/4) Gamma[1/3]^3/(2^(7/3) Pi)
+ *   r = 2: m = (Sqrt[2] - 1)^2,  K = Sqrt[Sqrt[2] + 1] Gamma[1/8] Gamma[3/8]/(2^(13/4) Sqrt[Pi]) */
+static Expr* fk_k3(void) {
+    return fp_fn(SYM_Times, 4, fp_pow(fp_i(3), fp_q(1, 4)),
+                 fp_pow(fp_fn(SYM_Gamma, 1, fp_q(1, 3)), fp_i(3)),
+                 fp_pow(fp_i(2), fp_q(-7, 3)), fp_pow(fp_pi(), fp_i(-1)));
+}
+static Expr* fk_k2(void) {
+    return fp_fn(SYM_Times, 5, fp_sqrt(fp_fn(SYM_Plus, 2, fp_sqrt(fp_i(2)), fp_i(1))),
+                 fp_fn(SYM_Gamma, 1, fp_q(1, 8)), fp_fn(SYM_Gamma, 1, fp_q(3, 8)),
+                 fp_pow(fp_i(2), fp_q(-13, 4)), fp_pow(fp_pi(), fp_q(-1, 2)));
+}
+static Expr* fk_s21(void) {     /* (Sqrt[2] - 1)^2 */
+    return fp_pow(fp_fn(SYM_Plus, 2, fp_sqrt(fp_i(2)), fp_i(-1)), fp_i(2));
+}
+static Expr* fk_p1(void) { return fp_fn(SYM_Times, 2, fp_q(1, 4), fp_fn(SYM_Plus, 2, fp_i(2), fp_fn(SYM_Times, 2, fp_i(-1), fp_sqrt(fp_i(3))))); }
+static Expr* fk_p2(void) { return fp_fn(SYM_Times, 2, fp_q(1, 4), fp_fn(SYM_Plus, 2, fp_i(2), fp_sqrt(fp_i(3)))); }
+static Expr* fk_v2(void) { return fp_fn(SYM_Times, 2, fp_sqrt(fp_i(3)), fk_k3()); }
+static Expr* fk_p4(void) { return fp_fn(SYM_Plus, 2, fp_i(1), fp_fn(SYM_Times, 2, fp_i(-1), fk_s21())); }
+static Expr* fk_v4(void) { return fp_fn(SYM_Times, 2, fp_sqrt(fp_i(2)), fk_k2()); }
+
+static Expr* fe_elliptick_singular(const Expr* e) {
+    if (!fe_is_head(e, SYM_EllipticK) || e->data.function.arg_count != 1) return NULL;
+    const Expr* m = e->data.function.args[0];
+    if (!fe_is_head((Expr*)m, SYM_Plus) && !fe_is_head((Expr*)m, SYM_Times)
+        && !fe_is_head((Expr*)m, SYM_Power)) return NULL;
+    const double s3 = 1.7320508075688772935, s21 = 0.17157287525380990239;
+    const FePoint tab[4] = {
+        { (2 - s3) / 4, fk_p1, fk_k3 }, { (2 + s3) / 4, fk_p2, fk_v2 },
+        { s21, fk_s21, fk_k2 },          { 1 - s21, fk_p4, fk_v4 } };
+    return fe_point_table(m, tab, 4);
+}
+
 static Expr* fe_walk(const Expr* e, bool* changed, int which) {
     if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     size_t n = e->data.function.arg_count;
@@ -573,6 +692,8 @@ static Expr* fe_walk(const Expr* e, bool* changed, int which) {
         s = fe_polylog_root(node);
         if (!s) s = fe_polylog_two(node);
         if (!s) s = fe_polylog2_anharmonic(node);
+        if (!s) s = fe_polylog_golden(node);
+        if (!s) s = fe_elliptick_singular(node);
         if (!s) s = fe_log_root(node);
         if (!s) s = fe_pcfd_integer(node);
     }

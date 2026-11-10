@@ -986,6 +986,25 @@ static Expr* evaluate_inequality(Expr* res, int expected_cmp_1, int expected_cmp
         if (!can_compare) {
             return NULL; // Unevaluated
         }
+
+        /* An order read off machine values of EXACT operands can be a
+         * cancellation residue: E^w - 3 w at w = -ProductLog[-1/3] is exactly
+         * 0 but evaluates to ~1e-35, which made E^w - 3 w > 0 True.  As in
+         * Equal, a nearly-equal exact pair is confirmed by the exact zero test
+         * before an order is committed to. */
+        if (cmp != 0 && (!is_raw_data(a) || !is_raw_data(b))) {
+            double va, vb; int64_t n1, d1, n2, d2; bool ea, eb;
+            /* "Nearly equal" is RELATIVE (two small but distinct numbers, a
+             * 1e-13 residual against 10^-12, are not), except against an exact
+             * 0, where only the size of the other side can say it. */
+            bool zero_side = (a->type == EXPR_INTEGER && a->data.integer == 0)
+                          || (b->type == EXPR_INTEGER && b->data.integer == 0);
+            if (get_numeric_value(a, &va, &n1, &d1, &ea) && get_numeric_value(b, &vb, &n2, &d2, &eb)
+                && (zero_side ? fabs(va - vb) <= 1e-10
+                              : fabs(va - vb) <= 1e-12 * fmax(fabs(va), fabs(vb)))) {
+                if (numeric_pair_zero_test(a, b) == ZERO_TEST_TRUE) cmp = 0;
+            }
+        }
         
         if (cmp != expected_cmp_1 && cmp != expected_cmp_2) {
             return expr_new_symbol(SYM_False);

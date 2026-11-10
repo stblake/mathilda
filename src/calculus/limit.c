@@ -5645,6 +5645,42 @@ cleanup:
  * Power::infy / Infinity::indet messages. Those are noise to the user --
  * the divergent sub-expression is expected and handled. Muting applies only
  * while Limit is running; nested Limit calls nest cleanly via the counter. */
+/* A copy of e with every Factorial / Pochhammer / Binomial whose arguments
+ * involve v replaced by its Gamma ratio (bottom-up, unevaluated):
+ *   Factorial[u]      -> Gamma[1 + u]
+ *   Pochhammer[a, b]  -> Gamma[a + b] / Gamma[a]
+ *   Binomial[a, b]    -> Gamma[1 + a] / (Gamma[1 + b] Gamma[1 + a - b]). */
+static Expr* lg_fn2(const char* h, Expr* a, Expr* b) {
+    return expr_new_function(expr_new_symbol(h), (Expr*[]){ a, b }, 2);
+}
+static Expr* lg_gamma(Expr* a) { return expr_new_function(expr_new_symbol(SYM_Gamma), (Expr*[]){ a }, 1); }
+static Expr* lg_inv(Expr* a) { return lg_fn2(SYM_Power, a, expr_new_integer(-1)); }
+static Expr* lg_neg(Expr* a) { return lg_fn2(SYM_Times, expr_new_integer(-1), a); }
+
+static Expr* limit_gamma_rewrite(Expr* e, Expr* v) {
+    if (!e || e->type != EXPR_FUNCTION || free_of(e, v)) return expr_copy(e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) a[i] = limit_gamma_rewrite(e->data.function.args[i], v);
+    Expr* out = NULL;
+    if (head_is(e, SYM_Factorial) && n == 1) {
+        out = lg_gamma(lg_fn2(SYM_Plus, expr_new_integer(1), a[0]));
+    } else if (head_is(e, SYM_Pochhammer) && n == 2) {
+        out = lg_fn2(SYM_Times, lg_gamma(lg_fn2(SYM_Plus, expr_copy(a[0]), a[1])),
+                     lg_inv(lg_gamma(a[0])));
+    } else if (head_is(e, SYM_Binomial) && n == 2) {
+        Expr* amb = expr_new_function(expr_new_symbol(SYM_Plus),
+            (Expr*[]){ expr_new_integer(1), expr_copy(a[0]), lg_neg(expr_copy(a[1])) }, 3);
+        out = lg_fn2(SYM_Times, lg_gamma(lg_fn2(SYM_Plus, expr_new_integer(1), a[0])),
+                     lg_inv(lg_fn2(SYM_Times, lg_gamma(lg_fn2(SYM_Plus, expr_new_integer(1), a[1])),
+                                   lg_gamma(amb))));
+    } else {
+        out = expr_new_function(expr_copy(e->data.function.head), a, n);
+    }
+    free(a);
+    return out;
+}
+
 Expr* builtin_limit(Expr* res) {
     /* A number is not a limit variable: Block[{x}, x = 5; Limit[f, x -> 0]]
      * asks for Limit[f, 5 -> 0], which the reference rejects with Limit::ivar
@@ -5665,6 +5701,36 @@ Expr* builtin_limit(Expr* res) {
      * value — done outside the mute_push so warnings still nest cleanly. */
     if (internal_args_contain_inexact(res)) {
         return internal_rationalize_then_numericalize(res, builtin_limit);
+    }
+    /* Factorial, Pochhammer and Binomial of the limit variable are Gamma
+     * ratios everywhere (Factorial[u] = Gamma[1+u], Pochhammer[a, b] =
+     * Gamma[a+b]/Gamma[a], Binomial[a, b] = Gamma[1+a]/(Gamma[1+b] Gamma[1+a-b])),
+     * and the asymptotic machinery (LogGamma's Stirling series in the MRV
+     * rewrite) knows Gamma: Stirling's n!/(Sqrt[2 Pi n] (n/E)^n) -> 1, Lalescu's
+     * (n+1)!^(1/(n+1)) - n!^(1/n) -> 1/E, Gauss's n! n^z/Pochhammer[z, n+1]
+     * -> Gamma[z] were all left unevaluated.  Rewrite once and re-run; an
+     * unevaluated rewritten limit is not returned (the user keeps the original). */
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2
+        && head_is(res->data.function.args[1], SYM_Rule)
+        && res->data.function.args[1]->data.function.arg_count == 2) {
+        Expr* f0 = res->data.function.args[0];
+        Expr* v0 = res->data.function.args[1]->data.function.args[0];
+        if ((contains_head_symbol(f0, SYM_Factorial) || contains_head_symbol(f0, SYM_Pochhammer)
+                     || contains_head_symbol(f0, SYM_Binomial))) {
+            Expr* f1 = eval_and_free(limit_gamma_rewrite(f0, v0));
+            if (f1 && !expr_eq(f1, f0)) {
+                size_t n = res->data.function.arg_count;
+                Expr** a = malloc(n * sizeof(Expr*));
+                a[0] = f1; f1 = NULL;
+                for (size_t i = 1; i < n; i++) a[i] = expr_copy(res->data.function.args[i]);
+                Expr* call = expr_new_function(expr_copy(res->data.function.head), a, n);
+                free(a);
+                Expr* r = eval_and_free(call);
+                if (r && !contains_head_symbol(r, SYM_Limit)) return r;
+                if (r) expr_free(r);
+            }
+            if (f1) expr_free(f1);
+        }
     }
     /* An Assumptions option is threaded through Limit's own layers as an
      * AssumeCtx, but the Series, Simplify and zero tests those layers call read

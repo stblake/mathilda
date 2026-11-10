@@ -374,6 +374,7 @@ extern const char* SYM_Integers;
 extern const char* SYM_Inactive;
 extern const char* SYM_Activate;
 extern const char* SYM_Integrate;
+extern const char* SYM_LaplaceTransform;
 extern const char* SYM_Intersection;
 extern const char* SYM_Interval;
 extern const char* SYM_Inverse;

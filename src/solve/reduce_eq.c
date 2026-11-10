@@ -353,6 +353,22 @@ static Expr* real_value_cond_rec(const Expr* e) {
         if (!c1) { expr_free(c0); return NULL; }
         return rc_and(c0, c1);
     }
+    if (n == 2 && h == SYM_ProductLog
+        && e->data.function.args[0]->type == EXPR_INTEGER) {
+        /* Branch k of W at u: W_0 is real iff u >= -1/E; W_{-1} iff
+         * -1/E <= u < 0; every other branch is never real. */
+        int64_t k = e->data.function.args[0]->data.integer;
+        const Expr* u = e->data.function.args[1];
+        if (k != 0 && k != -1) return expr_new_symbol(SYM_False);
+        Expr* cu = real_value_cond_rec(u);
+        if (!cu) return NULL;
+        Expr* lo = rc_fn2(SYM_GreaterEqual, expr_copy((Expr*)u),
+                          rc_fn2(SYM_Times, expr_new_integer(-1),
+                                 rc_fn2(SYM_Power, expr_new_symbol(SYM_E), expr_new_integer(-1))));
+        Expr* dom = k == 0 ? lo
+                  : rc_fn2(SYM_And, lo, rc_fn2(SYM_Less, expr_copy((Expr*)u), expr_new_integer(0)));
+        return rc_and(cu, dom);
+    }
     if (n != 1) return NULL;
 
     const Expr* u = e->data.function.args[0];

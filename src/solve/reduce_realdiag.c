@@ -162,6 +162,10 @@ static int gen_sign_at(const Expr* poly, const Expr* x, const Expr* sample) {
             s = (d > tol) ? 1 : (d < -tol ? -1 : -2);
         }
     }
+    /* Within tolerance of 0: the sample is typically an exact root of poly
+     * (a breakpoint Solve returned, -ProductLog[-1/3] for E^x - 3 x); the
+     * exact zero test confirms it. */
+    if (s == -2 && zero_test_decide(val) == ZERO_TEST_TRUE) s = 0;
     expr_free(val);
     return s;
 }

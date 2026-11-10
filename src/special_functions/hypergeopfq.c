@@ -41,6 +41,7 @@
 #include "numeric.h"      /* numeric_combined_bits, get_approx_mpfr, ... */
 #include "flint_num_bridge.h" /* flint_num_hyp2f1: the arbitrary-precision 2F1 */
 #include "parse.h"        /* parse_expression: closed-form templates */
+#include "simp_sf_engine.h" /* sf_contains_head */
 #ifdef USE_MPFR
 #include "numeric_complex.h"
 #include <mpfr.h>
@@ -75,18 +76,7 @@ static bool is_nonpos_int(const Expr* e, long* neg) {
     return false;
 }
 
-/* Build HypergeometricPFQ[a, b, z] from owned argument copies and evaluate. */
-/* a - b, evaluated (a and b borrowed). */
-static Expr* evaluate_and_free_diff(const Expr* a, const Expr* b) {
-    Expr* neg = expr_new_function(expr_new_symbol(SYM_Times),
-                    (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)b) }, 2);
-    Expr* call = expr_new_function(expr_new_symbol(SYM_Plus),
-                    (Expr*[]){ expr_copy((Expr*)a), neg }, 2);
-    Expr* r = evaluate(call);
-    expr_free(call);
-    return r;
-}
-
+/* Build HypergeometricPFQ[a, b, z] from owned arguments and evaluate. */
 static Expr* rebuild_eval(Expr* a, Expr* b, Expr* z) {
     Expr* args[3] = { a, b, z };
     Expr* call = expr_new_function(expr_new_symbol(SYM_HypergeometricPFQ), args, 3);
@@ -147,10 +137,86 @@ static Expr* try_cancel(Expr* a, Expr* b, Expr* z) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Native builders for the closed-form stages below.  Each hg_* call  */
+/*  builder takes ownership of its Expr arguments.                     */
+/* ------------------------------------------------------------------ */
+
+static Expr* hg_fn(const char* head, Expr** args, size_t n) {
+    return expr_new_function(expr_new_symbol(head), args, n);
+}
+static Expr* hg_plus(Expr* x, Expr* y)  { return hg_fn(SYM_Plus,  (Expr*[]){ x, y }, 2); }
+static Expr* hg_times(Expr* x, Expr* y) { return hg_fn(SYM_Times, (Expr*[]){ x, y }, 2); }
+static Expr* hg_neg(Expr* x)            { return hg_times(expr_new_integer(-1), x); }
+static Expr* hg_half(Expr* x)           { return hg_times(make_rational(1, 2), x); }
+static Expr* hg_inv(Expr* x) {
+    return hg_fn(SYM_Power, (Expr*[]){ x, expr_new_integer(-1) }, 2);
+}
+static Expr* hg_gamma(Expr* x) { return hg_fn(SYM_Gamma, (Expr*[]){ x }, 1); }
+#define HG_CP(x) expr_copy((Expr*)(x))
+
+/* Evaluate e and free it. */
+static Expr* hg_eval(Expr* e) {
+    Expr* r = evaluate(e);
+    expr_free(e);
+    return r;
+}
+
+/* True iff u - v evaluates to exactly 0.  Classical parameter relations are
+ * linear in the parameters (1 + a - b, a/2, ...), so Plus canonicalisation
+ * decides them; no Simplify is needed. */
+static bool hg_eq(const Expr* u, const Expr* v) {
+    if (expr_eq(u, v)) return true;
+    Expr* d = hg_eval(hg_plus(HG_CP(u), hg_neg(HG_CP(v))));
+    bool z = d && d->type == EXPR_INTEGER && d->data.integer == 0;
+    if (d) expr_free(d);
+    return z;
+}
+
+/* The sign of Re(e): 1 if e is a numeric quantity with Re(e) > 0, 0 if it is
+ * numeric with Re(e) <= 0, -1 if e is symbolic (undecided: the theorem is
+ * then the formal value, as for symbolic parameters). */
+static int hg_re_positive(const Expr* e) {
+    if (!expr_is_numeric_quantity(e)) return -1;
+    mpfr_t re, im;
+    mpfr_init2(re, 128); mpfr_init2(im, 128);
+    bool inexact = false;
+    Expr* nv = NULL;
+    bool ok = get_approx_mpfr(e, re, im, &inexact);
+    if (!ok) {
+        nv = numericalize_machine_unplanned(e);
+        ok = nv && get_approx_mpfr(nv, re, im, &inexact);
+    }
+    int s = ok ? (mpfr_sgn(re) > 0 ? 1 : 0) : -1;
+    mpfr_clear(re); mpfr_clear(im);
+    if (nv) expr_free(nv);
+    return s;
+}
+
+/* Gate a closed form on the convergence condition Re(s) > 0, s owned. */
+static bool hg_converges(Expr* s) {
+    Expr* v = hg_eval(s);
+    bool ok = v && hg_re_positive(v) != 0;
+    if (v) expr_free(v);
+    return ok;
+}
+
+/* L with the element at index skip removed, as a new List. */
+static Expr* hg_delete(const Expr* l, size_t skip) {
+    size_t n = l->data.function.arg_count;
+    Expr** v = malloc(sizeof(Expr*) * (n ? n : 1));
+    size_t w = 0;
+    for (size_t k = 0; k < n; k++)
+        if (k != skip) v[w++] = expr_copy(l->data.function.args[k]);
+    Expr* r = hg_fn(SYM_List, v, w);
+    free(v);
+    return r;
+}
+
+/* ------------------------------------------------------------------ */
 /*  Integer-shifted parameter pair: an upper a_i = b_j + n (n a        */
 /*  positive integer) against a lower b_j.                             */
 /*                                                                     */
-/*  (b+n)_k/(b)_k = P(k) = prod_{m<n} (b+m+k)/(b+m) is a polynomial    */
+/*  (b+n)_k/(b)_k = P(k) = prod_{m<n} (k+b+m)/(b+m) is a polynomial    */
 /*  in k of degree n, and k z^k = theta z^k with theta = z d/dz, so    */
 /*      pFq[U + {b+n}, L + {b}, z] = P(theta) pFq[U, L, z].            */
 /*  Applied only when the reduced series has a closed form (it is      */
@@ -158,43 +224,263 @@ static Expr* try_cancel(Expr* a, Expr* b, Expr* z) {
 /*  e^z (1 + 3z + z^2), the Dobinski/Touchard sums Sum k^m z^k/k!,     */
 /*  2F1[{a, c+1},{c},z] -> (1-z)^(-a-1) (1 - z + a z/c).  A pair whose */
 /*  lower b is a non-positive integer is a pole, never reduced.        */
+/*                                                                     */
+/*  P's coefficients are the elementary symmetric functions of the     */
+/*  b+m, built by the recurrence e_d <- e_{d-1} + (b+m) e_d.           */
 /* ------------------------------------------------------------------ */
+#define HG_SHIFT_MAX 12
+
+static Expr* hg_shift_apply(const Expr* a, const Expr* b, const Expr* z,
+                            size_t i, size_t j, int64_t n) {
+    Expr* t = expr_new_symbol("Hyp`t");
+    Expr* F = rebuild_eval(hg_delete(a, i), hg_delete(b, j), HG_CP(t));
+    if (!F || sf_contains_head(F, SYM_HypergeometricPFQ)) {
+        if (F) expr_free(F);
+        expr_free(t);
+        return NULL;
+    }
+    const Expr* bj = b->data.function.args[j];
+    Expr* e[HG_SHIFT_MAX + 1];            /* e[d] = coefficient of k^d */
+    e[0] = expr_new_integer(1);
+    for (int64_t d = 1; d <= n; d++) e[d] = expr_new_integer(0);
+    Expr* norm = expr_new_integer(1);     /* prod (b+m) */
+    for (int64_t m = 0; m < n; m++) {
+        Expr* cm = hg_eval(hg_plus(HG_CP(bj), expr_new_integer(m)));
+        for (int64_t d = m + 1; d >= 1; d--)
+            e[d] = hg_eval(hg_plus(e[d - 1] ? HG_CP(e[d - 1]) : expr_new_integer(0),
+                                   hg_times(HG_CP(cm), e[d])));
+        e[0] = hg_eval(hg_times(HG_CP(cm), e[0]));
+        norm = hg_eval(hg_times(norm, cm));
+    }
+    /* sum_d e[d] theta^d F / norm */
+    Expr** terms = malloc(sizeof(Expr*) * (size_t)(n + 1));
+    Expr* G = F;
+    for (int64_t d = 0; d <= n; d++) {
+        terms[d] = hg_times(e[d], HG_CP(G));
+        if (d < n) {
+            Expr* dG = hg_eval(hg_fn(SYM_D, (Expr*[]){ HG_CP(G), HG_CP(t) }, 2));
+            expr_free(G);
+            G = hg_eval(hg_times(HG_CP(t), dG));
+        }
+    }
+    expr_free(G);
+    Expr* sum = hg_times(hg_fn(SYM_Plus, terms, (size_t)(n + 1)), hg_inv(norm));
+    free(terms);
+    Expr* fac = hg_eval(hg_fn(SYM_Factor, (Expr*[]){ sum }, 1));
+    Expr* rule = hg_fn(SYM_Rule, (Expr*[]){ t, HG_CP(z) }, 2);
+    return hg_eval(hg_fn(SYM_ReplaceAll, (Expr*[]){ fac, rule }, 2));
+}
+
 static Expr* try_shift_pair(Expr* a, Expr* b, Expr* z) {
     size_t p = a->data.function.arg_count, q = b->data.function.arg_count;
     for (size_t i = 0; i < p; i++) {
         for (size_t j = 0; j < q; j++) {
             long dummy;
             if (is_nonpos_int(b->data.function.args[j], &dummy)) continue;
-            Expr* d = evaluate_and_free_diff(a->data.function.args[i], b->data.function.args[j]);
-            bool ok = d && d->type == EXPR_INTEGER && d->data.integer >= 1 && d->data.integer <= 12;
+            Expr* d = hg_eval(hg_plus(HG_CP(a->data.function.args[i]),
+                                      hg_neg(HG_CP(b->data.function.args[j]))));
+            bool ok = d && d->type == EXPR_INTEGER && d->data.integer >= 1
+                   && d->data.integer <= HG_SHIFT_MAX;
             int64_t n = ok ? d->data.integer : 0;
             if (d) expr_free(d);
             if (!ok) continue;
-            static Expr* tmpl = NULL;
-            if (!tmpl)
-                tmpl = parse_expression(
-                    "Function[{Hyp`al, Hyp`bl, Hyp`z, Hyp`i, Hyp`j, Hyp`n},"
-                    " Module[{Hyp`F, Hyp`P, Hyp`G, Hyp`r = 0},"
-                    "  Hyp`F = HypergeometricPFQ[Delete[Hyp`al, Hyp`i], Delete[Hyp`bl, Hyp`j], Hyp`t];"
-                    "  If[!FreeQ[Hyp`F, HypergeometricPFQ], $Failed,"
-                    "   Hyp`P = CoefficientList[Expand[Product[(Hyp`bl[[Hyp`j]] + Hyp`m + Hyp`k)/"
-                    "                                  (Hyp`bl[[Hyp`j]] + Hyp`m), {Hyp`m, 0, Hyp`n - 1}]], Hyp`k];"
-                    "   Hyp`G = Hyp`F;"
-                    "   Do[Hyp`r = Hyp`r + Hyp`P[[Hyp`d + 1]] Hyp`G; Hyp`G = Hyp`t D[Hyp`G, Hyp`t],"
-                    "      {Hyp`d, 0, Length[Hyp`P] - 1}];"
-                    "   Factor[Hyp`r] /. Hyp`t -> Hyp`z]]]");
-            if (!tmpl) return NULL;
-            Expr* call = expr_new_function(expr_copy(tmpl),
-                (Expr*[]){ expr_copy(a), expr_copy(b), expr_copy(z),
-                           expr_new_integer((int64_t)i + 1), expr_new_integer((int64_t)j + 1),
-                           expr_new_integer(n) }, 6);
-            Expr* r = evaluate(call);
-            expr_free(call);
-            if (r && !(r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_DollarFailed))
-                return r;
-            if (r) expr_free(r);
+            Expr* r = hg_shift_apply(a, b, z, i, j, n);
+            if (r) return r;
         }
     }
+    return NULL;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Classical summation theorems at z = 1 and z = -1.                  */
+/*                                                                     */
+/*  Gauss     2F1(a, b; c; 1)            = G(c)G(c-a-b)/(G(c-a)G(c-b))  */
+/*            (Re(c-a-b) > 0)                                           */
+/*  Kummer    2F1(a, b; 1+a-b; -1)       = G(1+a-b)G(1+a/2)/            */
+/*            (Re b < 1)                   (G(1+a)G(1+a/2-b))           */
+/*  Pfaff-Saalschutz (terminating, balanced)                            */
+/*            3F2(a, b, -n; c, 1+a+b-c-n; 1) = (c-a)_n (c-b)_n/         */
+/*                                         ((c)_n (c-a-b)_n)            */
+/*  Dixon     3F2(a, b, c; 1+a-b, 1+a-c; 1)   (Re(1+a/2-b-c) > 0)       */
+/*  Dougall   5F4(a, 1+a/2, b, c, d; a/2, 1+a-b, 1+a-c, 1+a-d; 1)       */
+/*            (very-well-poised; Ramanujan's quarter series;            */
+/*             Re(1+a-b-c-d) > 0)                                       */
+/*                                                                     */
+/*  Parameters are matched up to permutation by exact comparison of     */
+/*  the linear relations (hg_eq): an upper parameter is chosen for each */
+/*  role and the lower list is checked against the relations, so the    */
+/*  work is O(p^2 q) differences, not O(p! q!) Simplify calls.  A       */
+/*  numeric parameter set outside the region of convergence is          */
+/*  declined; symbolic parameters give the formal value.                */
+/* ------------------------------------------------------------------ */
+
+/* 1 + a - x, unevaluated. */
+static Expr* hg_1pa_m(const Expr* a, const Expr* x) {
+    return hg_fn(SYM_Plus, (Expr*[]){ expr_new_integer(1), HG_CP(a), hg_neg(HG_CP(x)) }, 3);
+}
+/* Gamma-ratio  prod Gamma(num) / prod Gamma(den), all owned, evaluated. */
+static Expr* hg_gamma_ratio(Expr** num, size_t nn, Expr** den, size_t nd) {
+    Expr* f[8];
+    size_t w = 0;
+    for (size_t k = 0; k < nn; k++) f[w++] = hg_gamma(num[k]);
+    for (size_t k = 0; k < nd; k++) f[w++] = hg_inv(hg_gamma(den[k]));
+    return hg_eval(hg_fn(SYM_Times, f, w));
+}
+
+static Expr* hg_gauss(const Expr* a, const Expr* b, const Expr* c) {
+    Expr* s = hg_fn(SYM_Plus, (Expr*[]){ HG_CP(c), hg_neg(HG_CP(a)), hg_neg(HG_CP(b)) }, 3);
+    if (!hg_converges(expr_copy(s))) { expr_free(s); return NULL; }
+    return hg_gamma_ratio((Expr*[]){ HG_CP(c), s }, 2,
+        (Expr*[]){ hg_plus(HG_CP(c), hg_neg(HG_CP(a))),
+                   hg_plus(HG_CP(c), hg_neg(HG_CP(b))) }, 2);
+}
+
+static Expr* hg_kummer(const Expr* A, const Expr* c) {
+    for (size_t i = 0; i < 2; i++) {
+        const Expr* a = A->data.function.args[i];
+        const Expr* b = A->data.function.args[1 - i];
+        Expr* rel = hg_1pa_m(a, b);
+        bool m = hg_eq(c, rel);
+        expr_free(rel);
+        if (!m) continue;
+        if (!hg_converges(hg_plus(expr_new_integer(1), hg_neg(HG_CP(b))))) continue;
+        Expr* ha = hg_plus(expr_new_integer(1), hg_half(HG_CP(a)));
+        return hg_gamma_ratio(
+            (Expr*[]){ hg_1pa_m(a, b), expr_copy(ha) }, 2,
+            (Expr*[]){ hg_plus(expr_new_integer(1), HG_CP(a)),
+                       hg_plus(ha, hg_neg(HG_CP(b))) }, 2);
+    }
+    return NULL;
+}
+
+/* -u is a non-negative integer or a bare symbol: the series terminates at
+ * the (possibly symbolic) degree n = -u. */
+static bool hg_terminating(const Expr* u) {
+    if (u->type == EXPR_INTEGER) return u->data.integer <= 0;
+    return u->type == EXPR_FUNCTION && u->data.function.head->type == EXPR_SYMBOL
+        && u->data.function.head->data.symbol.name == SYM_Times
+        && u->data.function.arg_count == 2
+        && u->data.function.args[0]->type == EXPR_INTEGER
+        && u->data.function.args[0]->data.integer == -1
+        && u->data.function.args[1]->type == EXPR_SYMBOL;
+}
+
+static Expr* hg_poch(Expr* x, Expr* n) { return hg_fn(SYM_Pochhammer, (Expr*[]){ x, n }, 2); }
+
+static Expr* hg_saalschutz(const Expr* A, const Expr* B) {
+    for (size_t k = 0; k < 3; k++) {
+        const Expr* u = A->data.function.args[k];
+        if (!hg_terminating(u)) continue;
+        const Expr* a = A->data.function.args[(k + 1) % 3];
+        const Expr* b = A->data.function.args[(k + 2) % 3];
+        for (size_t j = 0; j < 2; j++) {
+            const Expr* c = B->data.function.args[j];
+            Expr* rel = hg_fn(SYM_Plus, (Expr*[]){ expr_new_integer(1), HG_CP(a), HG_CP(b),
+                                                   hg_neg(HG_CP(c)), HG_CP(u) }, 5);
+            bool m = hg_eq(B->data.function.args[1 - j], rel);
+            expr_free(rel);
+            if (!m) continue;
+            Expr* n = hg_eval(hg_neg(HG_CP(u)));
+            Expr* ca = hg_plus(HG_CP(c), hg_neg(HG_CP(a)));
+            Expr* cb = hg_plus(HG_CP(c), hg_neg(HG_CP(b)));
+            Expr* cab = hg_fn(SYM_Plus, (Expr*[]){ HG_CP(c), hg_neg(HG_CP(a)), hg_neg(HG_CP(b)) }, 3);
+            Expr* r = hg_eval(hg_fn(SYM_Times, (Expr*[]){
+                hg_poch(ca, HG_CP(n)), hg_poch(cb, HG_CP(n)),
+                hg_inv(hg_poch(HG_CP(c), HG_CP(n))), hg_inv(hg_poch(cab, HG_CP(n))) }, 4));
+            expr_free(n);
+            return r;
+        }
+    }
+    return NULL;
+}
+
+static Expr* hg_dixon(const Expr* A, const Expr* B) {
+    for (size_t k = 0; k < 3; k++) {
+        const Expr* a = A->data.function.args[k];
+        for (size_t s = 0; s < 2; s++) {
+            const Expr* b = A->data.function.args[(k + 1 + s) % 3];
+            const Expr* c = A->data.function.args[(k + 2 - s) % 3];
+            Expr* r1 = hg_1pa_m(a, b), *r2 = hg_1pa_m(a, c);
+            bool m = hg_eq(B->data.function.args[0], r1) && hg_eq(B->data.function.args[1], r2);
+            expr_free(r1); expr_free(r2);
+            if (!m) continue;
+            Expr* ha = hg_plus(expr_new_integer(1), hg_half(HG_CP(a)));
+            Expr* hbc = hg_fn(SYM_Plus, (Expr*[]){ expr_copy(ha), hg_neg(HG_CP(b)), hg_neg(HG_CP(c)) }, 3);
+            if (!hg_converges(expr_copy(hbc))) { expr_free(ha); expr_free(hbc); return NULL; }
+            return hg_gamma_ratio(
+                (Expr*[]){ expr_copy(ha), hg_1pa_m(a, b), hg_1pa_m(a, c), hbc }, 4,
+                (Expr*[]){ hg_plus(expr_new_integer(1), HG_CP(a)),
+                           hg_plus(expr_copy(ha), hg_neg(HG_CP(b))),
+                           hg_plus(ha, hg_neg(HG_CP(c))),
+                           hg_fn(SYM_Plus, (Expr*[]){ expr_new_integer(1), HG_CP(a),
+                                 hg_neg(HG_CP(b)), hg_neg(HG_CP(c)) }, 4) }, 4);
+        }
+    }
+    return NULL;
+}
+
+static Expr* hg_dougall(const Expr* A, const Expr* B) {
+    for (size_t ia = 0; ia < 5; ia++) {
+        const Expr* a = A->data.function.args[ia];
+        if (a->type == EXPR_INTEGER && a->data.integer == 0) continue;
+        Expr* ha = hg_plus(expr_new_integer(1), hg_half(HG_CP(a)));
+        Expr* a2 = hg_half(HG_CP(a));
+        for (size_t ih = 0; ih < 5; ih++) {
+            if (ih == ia || !hg_eq(A->data.function.args[ih], ha)) continue;
+            size_t ub[3], w = 0;
+            for (size_t k = 0; k < 5; k++) if (k != ia && k != ih) ub[w++] = k;
+            for (size_t jl = 0; jl < 4; jl++) {
+                if (!hg_eq(B->data.function.args[jl], a2)) continue;
+                bool used[3] = { false, false, false }, all = true;
+                for (size_t l = 0; l < 4 && all; l++) {
+                    if (l == jl) continue;
+                    bool found = false;
+                    for (size_t u = 0; u < 3 && !found; u++) {
+                        if (used[u]) continue;
+                        Expr* rel = hg_1pa_m(a, A->data.function.args[ub[u]]);
+                        if (hg_eq(B->data.function.args[l], rel)) used[u] = found = true;
+                        expr_free(rel);
+                    }
+                    all = found;
+                }
+                if (!all) continue;
+                const Expr* b = A->data.function.args[ub[0]];
+                const Expr* c = A->data.function.args[ub[1]];
+                const Expr* d = A->data.function.args[ub[2]];
+                expr_free(ha); expr_free(a2);
+                Expr* s = hg_fn(SYM_Plus, (Expr*[]){ expr_new_integer(1), HG_CP(a),
+                          hg_neg(HG_CP(b)), hg_neg(HG_CP(c)), hg_neg(HG_CP(d)) }, 5);
+                if (!hg_converges(expr_copy(s))) { expr_free(s); return NULL; }
+                #define HG_1A(x, y) hg_fn(SYM_Plus, (Expr*[]){ expr_new_integer(1), HG_CP(a), \
+                                        hg_neg(HG_CP(x)), hg_neg(HG_CP(y)) }, 4)
+                Expr* r = hg_gamma_ratio(
+                    (Expr*[]){ hg_1pa_m(a, b), hg_1pa_m(a, c), hg_1pa_m(a, d), s }, 4,
+                    (Expr*[]){ hg_plus(expr_new_integer(1), HG_CP(a)),
+                               HG_1A(c, d), HG_1A(b, d), HG_1A(b, c) }, 4);
+                #undef HG_1A
+                return r;
+            }
+        }
+        expr_free(ha); expr_free(a2);
+    }
+    return NULL;
+}
+
+static Expr* try_classical_sum(Expr* a, Expr* b, Expr* z) {
+    bool z1 = z->type == EXPR_INTEGER && z->data.integer == 1;
+    bool zm1 = z->type == EXPR_INTEGER && z->data.integer == -1;
+    if (!z1 && !zm1) return NULL;
+    size_t p = a->data.function.arg_count, q = b->data.function.arg_count;
+    const Expr* const* A = (const Expr* const*)a->data.function.args;
+    if (p == 2 && q == 1)
+        return z1 ? hg_gauss(A[0], A[1], b->data.function.args[0])
+                  : hg_kummer(a, b->data.function.args[0]);
+    if (!z1) return NULL;
+    if (p == 3 && q == 2) {
+        Expr* r = hg_saalschutz(a, b);
+        return r ? r : hg_dixon(a, b);
+    }
+    if (p == 5 && q == 4) return hg_dougall(a, b);
     return NULL;
 }
 
@@ -1130,6 +1416,10 @@ Expr* builtin_hypergeometric_pfq(Expr* res) {
     /* (5) Termination to a polynomial. */
     Expr* t = try_terminate(a, b, z);
     if (t) return t;
+
+    /* (5b) Classical summation theorems at z = +-1. */
+    Expr* cs = try_classical_sum(a, b, z);
+    if (cs) return cs;
 
     /* (6) Reduction to elementary closed forms (analytic continuations). */
     Expr* red = try_reduce(a, b, z);

@@ -997,6 +997,7 @@ set(COMMON_SRC
     ../src/calculus/integrate_king.c
     ../src/calculus/integrate_feynparam.c
     ../src/calculus/integrate_elliptic.c
+    ../src/calculus/laplace.c
     ../src/calculus/intrat.c
     ../src/calculus/integrate_risch_transcendental.c
     ../src/calculus/risch_util.c
@@ -1103,6 +1104,7 @@ set(COMMON_SRC
     ../src/sum/sum_alternating.c
     ../src/sum/sum_trigonometric.c
     ../src/sum/sum_logzeta.c
+    ../src/sum/sum_lambert.c
     ../src/sum/sum_logrational.c
     ../src/product/product.c
     ../src/product/product_util.c

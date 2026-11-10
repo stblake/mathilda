@@ -98,6 +98,14 @@ static void free_roots(Expr** r, int* m, size_t n) {
     free(m);
 }
 
+/* Set by Product`RationalInfiniteReal: the all-real-root case is accepted too.
+ * That entry runs AFTER Product`Infinite's limit route in the cascade, so the
+ * products that route already closes keep their form; the Gamma canonical form
+ * is valid for any roots and catches what the limit route cannot take (Wallis:
+ * prod 4k^2/(4k^2 - 1) = Pi/2, whose partial-product limit needs Gamma
+ * asymptotics). */
+static bool g_ri_allow_real = false;
+
 Expr* builtin_product_rational_infinite(Expr* res) {
     Expr *f, *var, *imin, *imax;
     bool definite;
@@ -141,7 +149,7 @@ Expr* builtin_product_rational_infinite(Expr* res) {
         bool z = zeroq(im);
         if (!z) { any_complex = true; break; }
     }
-    if (!any_complex) { RI_CLEAN(); return NULL; }
+    if (!any_complex && !g_ri_allow_real) { RI_CLEAN(); return NULL; }
 
     /* --- Convergence gate. --- */
     /* c = leadN/leadD == 1 */
@@ -372,7 +380,17 @@ Expr* builtin_product_rational_infinite(Expr* res) {
     return result_e;
 }
 
+static Expr* builtin_product_rational_infinite_real(Expr* res) {
+    bool prev = g_ri_allow_real;
+    g_ri_allow_real = true;
+    Expr* r = builtin_product_rational_infinite(res);
+    g_ri_allow_real = prev;
+    return r;
+}
+
 void product_rational_infinite_init(void) {
+    symtab_add_builtin("Product`RationalInfiniteReal", builtin_product_rational_infinite_real);
+    symtab_get_def("Product`RationalInfiniteReal")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Product`RationalInfinite", builtin_product_rational_infinite);
     symtab_get_def("Product`RationalInfinite")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Product`RationalInfinite",

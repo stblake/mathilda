@@ -94,7 +94,8 @@ static void test_named_closed_forms(void) {
     assert_eval_eq("HypergeometricPFQ[{1/2,1/2},{3/2},z]", "ArcSin[Sqrt[z]]/Sqrt[z]", 0);
     assert_eval_eq("HypergeometricPFQ[{1/2,1/2},{3/2},-z]", "ArcSinh[Sqrt[z]]/Sqrt[z]", 0);
     /* symbolic Gauss parameters stay, as in the reference system */
-    assert_eval_eq("HypergeometricPFQ[{a,b},{c},1]", "HypergeometricPFQ[{a, b}, {c}, 1]", 0);
+    /* Gauss's theorem: the analytic value (the series converges for Re(c-a-b) > 0) */
+    assert_eval_eq("HypergeometricPFQ[{a,b},{c},1]", "(Gamma[c] Gamma[-a - b + c])/(Gamma[-a + c] Gamma[-b + c])", 0);
     assert_eval_eq("HypergeometricPFQ[{1/3,1/2},{2},1]", "(2 Gamma[7/6])/(Sqrt[Pi] Gamma[5/3])", 0);
 
     const char* pts[] = { "7/3", "-7/3", "3/10", "-3/10", "2/5 + 3/4 I" };

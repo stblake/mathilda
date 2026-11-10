@@ -30,6 +30,7 @@
  * return an owned result; numericalize does not consume its input.
  */
 #include "minpoly.h"
+#include "eval.h"
 #include "sym_names.h"
 #include "expr.h"
 #include "internal.h"
@@ -164,6 +165,12 @@ static char* mp_fresh_name(AtomCtx* c) {
     return out;
 }
 
+static Expr* evaluate_and_free_mp(Expr* call) {
+    Expr* r = evaluate(call);
+    expr_free(call);
+    return r;
+}
+
 static void mp_store(AtomCtx* c, char* name, Expr* rel) {
     if (c->n == c->cap) {
         c->cap = c->cap ? c->cap * 2 : 8;
@@ -285,6 +292,39 @@ static bool mp_root_of_unity_order(const Expr* exp, long* q_out) {
     return matched;
 }
 
+/* arg == (p/q) Pi with p/q rational?  Sets *p, *q (q > 0). */
+static bool mp_rational_pi(const Expr* arg, int64_t* p, int64_t* q) {
+    Expr* r = evaluate_and_free_mp(expr_new_function(expr_new_symbol(SYM_Times),
+        (Expr*[]){ expr_copy((Expr*)arg),
+                   expr_new_function(expr_new_symbol(SYM_Power),
+                       (Expr*[]){ expr_new_symbol(SYM_Pi), expr_new_integer(-1) }, 2) }, 2));
+    bool ok = false;
+    if (r && r->type == EXPR_INTEGER) { *p = r->data.integer; *q = 1; ok = true; }
+    else if (r && head_is(r, "Rational") && r->data.function.args[0]->type == EXPR_INTEGER
+             && r->data.function.args[1]->type == EXPR_INTEGER) {
+        *p = r->data.function.args[0]->data.integer;
+        *q = r->data.function.args[1]->data.integer;
+        ok = *q > 0 && *q <= 4096;
+    }
+    if (r) expr_free(r);
+    return ok;
+}
+
+/* t = Cos[p Pi/q]: Chebyshev's T_q(cos theta) = cos(q theta), so t is a root
+ * of T_q(t) - (-1)^p.  Not minimal in general (cos(2 Pi/7) and its conjugates
+ * share it with cos(Pi) = -1 when p is even...), but step 3 factors G and
+ * keeps the irreducible factor vanishing at the number: the trisection cubic
+ * 8x^3 - 6x - 1 for Cos[Pi/9], the heptagon 8x^3 + 4x^2 - 4x - 1 for
+ * Cos[2 Pi/7]. */
+static Expr* mp_make_cospi(int64_t p, int64_t q, AtomCtx* c) {
+    char* nm = mp_fresh_name(c);
+    Expr* T = evaluate_and_free_mp(expr_new_function(expr_new_symbol(SYM_ChebyshevT),
+        (Expr*[]){ expr_new_integer(q), expr_new_symbol(nm) }, 2));
+    Expr* rel = internal_subtract((Expr*[]){ T, expr_new_integer((p % 2 == 0) ? 1 : -1) }, 2);
+    mp_store(c, nm, rel);
+    return expr_new_symbol(nm);
+}
+
 static Expr* mp_walk(const Expr* e, AtomCtx* c) {
     if (c->failed || !e) { c->failed = true; return NULL; }
 
@@ -333,6 +373,18 @@ static Expr* mp_walk(const Expr* e, AtomCtx* c) {
                                 : internal_times(vals, na);
         free(vals);
         return r;
+    }
+
+    /* Cos, Sin, Tan of a rational multiple of Pi: real algebraic numbers.
+     * Sin[r Pi] = Cos[(1/2 - r) Pi]; Tan = Sin * (1/Cos). */
+    if ((h == SYM_Cos || h == SYM_Sin || h == SYM_Tan) && na == 1) {
+        int64_t p, q;
+        if (!mp_rational_pi(A[0], &p, &q)) { c->failed = true; return NULL; }
+        Expr* cv = (h == SYM_Sin) ? NULL : mp_make_cospi(p, q, c);
+        Expr* sv = (h == SYM_Cos) ? NULL : mp_make_cospi(q - 2 * p, 2 * q, c);
+        if (h == SYM_Cos) return cv;
+        if (h == SYM_Sin) return sv;
+        return internal_times((Expr*[]){ sv, mp_reciprocal(cv, c) }, 2);
     }
 
     if (h == SYM_Sqrt && na == 1) {
