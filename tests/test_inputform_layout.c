@@ -122,6 +122,17 @@ static void test_inputform_reference_layout(void) {
     assert_eval_eq("ToString[-I x/2, InputForm]", "\"(-1/2*I)*x\"", 0);
     assert_eval_eq("ToString[Complex[1/2, -1/2], InputForm]", "\"1/2 - I/2\"", 0);
     assert_eval_eq("ToString[2/3 a b c, InputForm]", "\"(2*a*b*c)/3\"", 0);
+    /* A held reciprocal of a power with a SUM exponent keeps the sum's
+     * parentheses under the unary minus: it printed -q^(-n + 1), which re-reads
+     * as a different expression (this corrupted every G&R value string of the
+     * form -1/q^(n + 1) or -2^(-(nu + 1/2)) the oracle wrote out). */
+    assert_eval_eq("ToString[Hold[-1/q^(n + 1)], InputForm]", "\"Hold[-q^(-(n + 1))]\"", 0);
+    assert_eval_eq("ToString[Hold[-2^(-(nu + 1/2)) g], InputForm]",
+                   "\"Hold[(-2^(-(nu + 1/2)))*g]\"", 0);
+    assert_eval_eq("ToString[Hold[-1/q^(a b)], InputForm]", "\"Hold[-q^(-(a*b))]\"", 0);
+    assert_eval_eq("ToString[Hold[-1/q^2], InputForm]", "\"Hold[-q^(-2)]\"", 0);
+    assert_eval_eq("With[{h = Hold[-1/q^(n + 1)]}, "
+                   "ReleaseHold[ToExpression[ToString[h, InputForm]]] === ReleaseHold[h]]", "True", 0);
 }
 
 int main(void) {

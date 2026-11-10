@@ -846,7 +846,10 @@ static void print_inputform_rest(Expr** num, size_t nn, Expr** den, size_t nd,
         }
         print_standard(base, 6501);
         printf("^(-");
-        if (ex) print_standard(ex, 0); else printf("1");
+        /* The exponent sits under a unary minus, so a sum must keep its
+         * parentheses: (q^(n + 1))^(-1) is q^(-(n + 1)).  At precedence 0 it
+         * printed q^(-n + 1), which re-reads as a different expression. */
+        if (ex) print_standard(ex, 4501); else printf("1");
         printf(")");
         return;
     }
