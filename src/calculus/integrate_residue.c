@@ -2540,6 +2540,23 @@ static Expr* residue_family_mellin_log(Expr* f, Expr* x, Expr* a, Expr* b) {
  * but not of that shape, or if two arguments disagree.  Leaves *c_io NULL if no
  * such argument occurs.  Used to normalise Sinh[a x] -> Sinh[x] before the
  * w = Exp[x] reduction (which needs an integer/unit coefficient). */
+
+/* Degree of P in x when P is a POLYNOMIAL in x; -2 when it is not; -1 for a
+ * polynomial free of x (Exponent's -Infinity).  Exponent alone reads only the
+ * largest power, so x^2 + x^-2 reports 2 and x + 1/x reports 1: the family
+ * recognisers below must not mistake an essential singularity on the axis
+ * (E^(-x^2 - 1/x^2)) for a Gaussian or an affine exponent. */
+static int res_poly_degree(const Expr* P, const Expr* x) {
+    Expr* q = eval_take(mk_fn2("PolynomialQ", expr_copy((Expr*)P), expr_copy((Expr*)x)));
+    bool poly = q && q->type == EXPR_SYMBOL && q->data.symbol.name == SYM_True;
+    if (q) expr_free(q);
+    if (!poly) return -2;
+    Expr* d = eval_take(mk_fn2("Exponent", expr_copy((Expr*)P), expr_copy((Expr*)x)));
+    int deg = (d && d->type == EXPR_INTEGER) ? (int)d->data.integer : -1;
+    if (d) expr_free(d);
+    return deg;
+}
+
 static void res_collect_scale(Expr* e, Expr* x, Expr** c_io, bool* ok) {
     if (!e || e->type != EXPR_FUNCTION || !*ok) return;
     Expr* arg = NULL;
@@ -2553,9 +2570,7 @@ static void res_collect_scale(Expr* e, Expr* x, Expr** c_io, bool* ok) {
              e->data.function.args[0]->data.symbol.name == SYM_E)
         arg = e->data.function.args[1];
     if (arg && contains_symbol(arg, x)) {
-        Expr* deg = eval_take(mk_fn2("Exponent", expr_copy(arg), expr_copy(x)));
-        bool lin = deg && deg->type == EXPR_INTEGER && deg->data.integer == 1;
-        if (deg) expr_free(deg);
+        bool lin = res_poly_degree(arg, x) == 1;
         Expr* c1 = lin ? eval_take(mk_fn3("Coefficient", expr_copy(arg), expr_copy(x), mk_int(1))) : NULL;
         Expr* c0 = lin ? eval_take(mk_fn3("Coefficient", expr_copy(arg), expr_copy(x), mk_int(0))) : NULL;
         bool good = c1 && !contains_symbol(c1, x) &&
@@ -2832,9 +2847,8 @@ static Expr* residue_family_hyperbolic_strip(Expr* f, Expr* x, Expr* a, Expr* b)
         /* Exponent must be affine in x; alpha = slope (x-free), constant folds into
          * C.  A constant exponent gives Exponent -> -Infinity (alpha = 0, the
          * pure-Sech case), so reject only a genuine degree >= 2. */
-        Expr* deg = eval_take(mk_fn2("Exponent", expr_copy(P), expr_copy(x)));
-        bool deg_ok = !(deg && deg->type == EXPR_INTEGER && deg->data.integer >= 2);
-        if (deg) expr_free(deg);
+        int pdeg = res_poly_degree(P, x);
+        bool deg_ok = pdeg != -2 && pdeg <= 1;
         Expr* alpha = deg_ok ? poly_coeff(P, x, 1) : NULL;
         if (!deg_ok || !alpha || contains_symbol(alpha, x)) {
             if (alpha) expr_free(alpha);
@@ -3115,9 +3129,13 @@ static Expr* residue_family_gaussian(Expr* f, Expr* x, Expr* a, Expr* b) {
 
         /* P must be a degree-2 polynomial in x with a sign-negative leading
          * coefficient (guaranteed over the assumed region, not just sampled). */
-        Expr* deg = eval_take(mk_fn2("Exponent", expr_copy(P), expr_copy(x)));
-        bool deg2 = deg && deg->type == EXPR_INTEGER && deg->data.integer == 2;
-        if (deg) expr_free(deg);
+        /* PolynomialQ first: Exponent reads only the largest power, so for the
+         * Cauchy-Schlomilch exponent -x^2 - x^-2 it says 2 and Coefficient then
+         * silently drops the x^-2 term -- the stage returned the bare Gaussian
+         * Sqrt[Pi]/2 for Integrate[E^(-x^2 - 1/x^2), {x, 0, Infinity}] (true
+         * value Sqrt[Pi]/(2 E^2)).  An essential singularity of the exponent on
+         * the real axis is not this family. */
+        bool deg2 = res_poly_degree(P, x) == 2;
         Expr* A = deg2 ? poly_coeff(P, x, 2) : NULL;
         Expr* B = deg2 ? poly_coeff(P, x, 1) : NULL;
         Expr* D = deg2 ? poly_coeff(P, x, 0) : NULL;

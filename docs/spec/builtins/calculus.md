@@ -1164,6 +1164,17 @@ Options: `GeneratedParameters` (constant head, default `C`), `Assumptions`,
 - The integrating factor's exponents are simplified, and Exact drops a variable its coefficient only appears to depend on.
 - IVP fits evaluate a basis that is singular at the point by PowerExpand (or a one-sided limit), and prefer real constants.
 
+- **Conditions at a singular point** (v0.6490). When the general solution is
+  infinite at a condition's point even after PowerExpand and a one-sided Limit (a
+  pole or log of a basis member at a regular singular point: `Cos[x]/x`, `Log[r]`,
+  `x^-2`), the condition is fitted from the Laurent/Puiseux expansion at the point:
+  every principal-part coefficient and every Log coefficient of the constant term
+  must vanish, and the Log-free constant term must equal the condition's value.
+  Lane–Emden n = 1 `y'' + y + 2y'/x == 0, y(0) == 1, y'(0) == 0` gives `Sin[x]/x`
+  (previously a stack overflow), n = 0 gives `1 - x^2/6`, Poiseuille flow
+  `u'' + u'/r == -G/mu, u(R) == 0, u'(0) == 0` gives `G (R^2 - r^2)/(4 mu)`
+  (previously `{}`).
+
 ## Integrate (rational-function integration, Phase 1-8d)
 
 `Integrate[f, x]` is the public entry point for the rational-function
@@ -4164,6 +4175,16 @@ Regression coverage: `tests/test_mathar_regressions.c`; corpus: `tests/MatharDef
 - The exp-kernel rational reduction requires an integrand rational in its kernel.
 - Differentiation under the integral sign carries the inner integral's ConditionalExpression condition to the answer (`Integrate[(x^a - 1)/Log[x], {x, 0, 1}]` is `ConditionalExpression[Log[1 + a], Re[1 + a] > 0]`).
 
+- **Essential singularities in the exponent** (v0.6490). The contour-residue
+  Gaussian and affine-exponent families and the Ramanujan Gaussian family now
+  require the exponent to be a polynomial in x (`Exponent` reads only the top
+  power, so `-x^2 - x^-2` had been read as `-x^2`):
+  `Integrate[E^(-x^2 - 1/x^2), {x, 0, Infinity}]` was `Sqrt[Pi]/2`, now
+  `BesselK[1/2, 2]` = √π/(2e²). A definite integral that every stage declines is
+  retried once with its exponentials' exponents expanded and their x-free part moved
+  into a constant factor: `Integrate[E^(-(x - 1/x)^2), {x, 0, Infinity}]` is
+  `E^2 BesselK[1/2, 2]` = √π/2 (Cauchy–Schlömilch; previously `Sqrt[Pi] E^2/2`).
+
 ## Integrate`IntRationalLogPart
 
 The Lazard-Rioboo-Trager logarithmic-part computation
@@ -4799,6 +4820,11 @@ digamma / `LogGamma` asymptotics: with `P` decomposed by `Apart` and `R`'s roots
 over `Q`, the value is `sum_{m>=2} c Zeta[m, imin-rho] - sum_{m==1} c PolyGamma[0,
 imin-rho] - sum_num e LogGamma[imin-a] + sum_den e LogGamma[imin-b]`, returned
 under the log-divergence-cancellation conditions (else unevaluated).
+
+- **Vanishing leading terms** (v0.6490). The hypergeometric stage reads the series
+  off its first term t(k₀); when the leading terms vanish it now starts at the first
+  nonzero index. `Sum[k^10/k!, {k, 0, Infinity}]` is `115975 E` (Dobinski; it was
+  `0`), `Sum[k^3 x^k/k!, {k, 0, Infinity}]` is `E^x x (1 + 3 x + x^2)` (Touchard).
 
 ## DifferenceDelta
 

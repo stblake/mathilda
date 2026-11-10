@@ -76,6 +76,17 @@ static bool is_nonpos_int(const Expr* e, long* neg) {
 }
 
 /* Build HypergeometricPFQ[a, b, z] from owned argument copies and evaluate. */
+/* a - b, evaluated (a and b borrowed). */
+static Expr* evaluate_and_free_diff(const Expr* a, const Expr* b) {
+    Expr* neg = expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_new_integer(-1), expr_copy((Expr*)b) }, 2);
+    Expr* call = expr_new_function(expr_new_symbol(SYM_Plus),
+                    (Expr*[]){ expr_copy((Expr*)a), neg }, 2);
+    Expr* r = evaluate(call);
+    expr_free(call);
+    return r;
+}
+
 static Expr* rebuild_eval(Expr* a, Expr* b, Expr* z) {
     Expr* args[3] = { a, b, z };
     Expr* call = expr_new_function(expr_new_symbol(SYM_HypergeometricPFQ), args, 3);
@@ -130,6 +141,58 @@ static Expr* try_cancel(Expr* a, Expr* b, Expr* z) {
             Expr* nbl = expr_new_function(expr_new_symbol(SYM_List), nb, q - 1);
             free(na); free(nb);
             return rebuild_eval(nal, nbl, expr_copy(z));
+        }
+    }
+    return NULL;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Integer-shifted parameter pair: an upper a_i = b_j + n (n a        */
+/*  positive integer) against a lower b_j.                             */
+/*                                                                     */
+/*  (b+n)_k/(b)_k = P(k) = prod_{m<n} (b+m+k)/(b+m) is a polynomial    */
+/*  in k of degree n, and k z^k = theta z^k with theta = z d/dz, so    */
+/*      pFq[U + {b+n}, L + {b}, z] = P(theta) pFq[U, L, z].            */
+/*  Applied only when the reduced series has a closed form (it is      */
+/*  evaluated at a fresh symbol t first): 2F2[{2,2},{1,1},z] ->        */
+/*  e^z (1 + 3z + z^2), the Dobinski/Touchard sums Sum k^m z^k/k!,     */
+/*  2F1[{a, c+1},{c},z] -> (1-z)^(-a-1) (1 - z + a z/c).  A pair whose */
+/*  lower b is a non-positive integer is a pole, never reduced.        */
+/* ------------------------------------------------------------------ */
+static Expr* try_shift_pair(Expr* a, Expr* b, Expr* z) {
+    size_t p = a->data.function.arg_count, q = b->data.function.arg_count;
+    for (size_t i = 0; i < p; i++) {
+        for (size_t j = 0; j < q; j++) {
+            long dummy;
+            if (is_nonpos_int(b->data.function.args[j], &dummy)) continue;
+            Expr* d = evaluate_and_free_diff(a->data.function.args[i], b->data.function.args[j]);
+            bool ok = d && d->type == EXPR_INTEGER && d->data.integer >= 1 && d->data.integer <= 12;
+            int64_t n = ok ? d->data.integer : 0;
+            if (d) expr_free(d);
+            if (!ok) continue;
+            static Expr* tmpl = NULL;
+            if (!tmpl)
+                tmpl = parse_expression(
+                    "Function[{Hyp`al, Hyp`bl, Hyp`z, Hyp`i, Hyp`j, Hyp`n},"
+                    " Module[{Hyp`F, Hyp`P, Hyp`G, Hyp`r = 0},"
+                    "  Hyp`F = HypergeometricPFQ[Delete[Hyp`al, Hyp`i], Delete[Hyp`bl, Hyp`j], Hyp`t];"
+                    "  If[!FreeQ[Hyp`F, HypergeometricPFQ], $Failed,"
+                    "   Hyp`P = CoefficientList[Expand[Product[(Hyp`bl[[Hyp`j]] + Hyp`m + Hyp`k)/"
+                    "                                  (Hyp`bl[[Hyp`j]] + Hyp`m), {Hyp`m, 0, Hyp`n - 1}]], Hyp`k];"
+                    "   Hyp`G = Hyp`F;"
+                    "   Do[Hyp`r = Hyp`r + Hyp`P[[Hyp`d + 1]] Hyp`G; Hyp`G = Hyp`t D[Hyp`G, Hyp`t],"
+                    "      {Hyp`d, 0, Length[Hyp`P] - 1}];"
+                    "   Factor[Hyp`r] /. Hyp`t -> Hyp`z]]]");
+            if (!tmpl) return NULL;
+            Expr* call = expr_new_function(expr_copy(tmpl),
+                (Expr*[]){ expr_copy(a), expr_copy(b), expr_copy(z),
+                           expr_new_integer((int64_t)i + 1), expr_new_integer((int64_t)j + 1),
+                           expr_new_integer(n) }, 6);
+            Expr* r = evaluate(call);
+            expr_free(call);
+            if (r && !(r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_DollarFailed))
+                return r;
+            if (r) expr_free(r);
         }
     }
     return NULL;
@@ -1056,6 +1119,10 @@ Expr* builtin_hypergeometric_pfq(Expr* res) {
     /* (3) Generic parameter cancellation. */
     Expr* c = try_cancel(a, b, z);
     if (c) return c;
+
+    /* (3b) An upper parameter exceeding a lower one by a positive integer. */
+    Expr* sp = try_shift_pair(a, b, z);
+    if (sp) return sp;
 
     /* (4) z == 0 -> 1. */
     if (z->type == EXPR_INTEGER && z->data.integer == 0) return expr_new_integer(1);

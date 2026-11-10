@@ -1486,6 +1486,14 @@ Out[7]= (a1 a2 HypergeometricPFQ[{1 + a1, 1 + a2}, {1 + b1, 1 + b2, 1 + b3}, x])
 > 1.3 s; SciPy 27 ms), `2F1(1,2;3;x)` 0.14 s (was 2.6 s; SciPy 0.16 s),
 > `2F2(1,2;3,4;x)` 0.19 s (was 1.3 s).
 
+- **Integer-shifted parameter pairs** (v0.6490). An upper parameter that exceeds a
+  lower one by a positive integer n (n ≤ 12) reduces through
+  `pFq[U ∪ {b+n}, L ∪ {b}, z] = P(θ) pFq[U, L, z]`, θ = z d/dz,
+  P(k) = (b+n)ₖ/(b)ₖ, when the reduced series closes:
+  `HypergeometricPFQ[{2, 2}, {1, 1}, z] -> E^z (1 + 3 z + z^2)` (the Touchard /
+  Dobinski sums), `HypergeometricPFQ[{a, c+1}, {c}, z] -> (1-z)^(-a-1) (1 - z + a z/c)`.
+  A lower parameter that is a non-positive integer is a pole and is never paired.
+
 ## Hypergeometric0F1
 
 
@@ -3057,6 +3065,10 @@ Out[4]= -0.794024 + 0.770112*I
 In[5]:= Series[ProductLog[x], {x, 0, 4}]
 Out[5]= x - x^2 + 3/2 x^3 - 8/3 x^4 + O[x]^5
 ```
+
+- **Inexact branch index** (v0.6490). `N` maps over both arguments, so
+  `N[ProductLog[-1, 2]]` arrives as `ProductLog[-1., 2.]`; an integer-valued machine
+  or MPFR index names the same branch and evaluates (a fractional index does not).
 
 ## ChebyshevT
 

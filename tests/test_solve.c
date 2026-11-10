@@ -1126,10 +1126,10 @@ static void test_poly_in_kernel(void) {
     run_test("Solve[Log[x]^3 - 6 Log[x]^2 + 11 Log[x] - 6 == 0, x]",
              "List[List[Rule[x, E]], List[Rule[x, Power[E, 2]]], "
                    "List[Rule[x, Power[E, 3]]]]");
-    /* E^x + x == 0 is not a polynomial in one kernel (bare x remains):
-     * left unevaluated. */
-    run_test("Solve[E^x + x == 0, x]",
-             "Solve[Equal[Plus[Power[E, x], x], 0], x]");
+    /* E^x + x == 0 is not a polynomial in one kernel (bare x remains), but it
+     * is the Lambert form x + E^x == 0  <=>  x E^-x == -1:  x = -W(1). */
+    run_test("Quiet[Solve[E^x + x == 0, x]]",
+             "List[List[Rule[x, Times[-1, ProductLog[1]]]]]");
 }
 
 /* Domains still outside the recognised set (Algebraics, Booleans,

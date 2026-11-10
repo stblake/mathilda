@@ -2795,6 +2795,54 @@ static Expr* integrate_definite_scoped(Expr* res) {
         intg_definite_pending_clear();   /* drop anything a longjmp stranded */
     g_integrate_definite_depth++;
     Expr* r = integrate_definite(res);
+    /* Exponent normal form, once, at the outermost definite frame.  The family
+     * recognisers read an exponential's exponent as a polynomial (or Laurent
+     * polynomial) in x with no constant term, so a factored exponent hides the
+     * integrand from all of them: E^(-(x - 1/x)^2) is E^2 E^(-x^2 - x^-2), the
+     * Cauchy-Schlomilch integral, which they close only as K * E^(-x^2 - x^-2).
+     * Expand every exponent, move the x-free part of a top-level exponential's
+     * exponent into a constant factor K, and retry on the rest when that
+     * changed the integrand.  (The evaluator would fold E^c back into the
+     * exponent, so K stays outside the Integrate.) */
+    if (!r && g_integrate_definite_depth == 1 && res->type == EXPR_FUNCTION
+        && res->data.function.arg_count >= 2
+        && head_is(res->data.function.args[1], SYM_List)
+        && res->data.function.args[1]->data.function.arg_count == 3) {
+        static Expr* tmpl = NULL;
+        if (!tmpl)
+            tmpl = parse_expression(
+                "Function[{Integrate`ef, Integrate`ex}, Module[{Integrate`eg, Integrate`ek = 1},"
+                " Integrate`eg = Integrate`ef /. Power[E, Integrate`ep_] :> Power[E, Expand[Integrate`ep]];"
+                " Integrate`eg = If[Head[Integrate`eg] === Times, List @@ Integrate`eg, {Integrate`eg}];"
+                " Integrate`eg = Map[Function[Integrate`et,"
+                "   If[Head[Integrate`et] === Power && Integrate`et[[1]] === E"
+                "      && Head[Integrate`et[[2]]] === Plus,"
+                "    With[{Integrate`ec = Select[Integrate`et[[2]], FreeQ[#, Integrate`ex] &]},"
+                "     Integrate`ek = Integrate`ek E^Integrate`ec;"
+                "     Hold[E^(Integrate`et[[2]] - Integrate`ec)] /. Hold[z_] :> z],"
+                "    Integrate`et]], Integrate`eg];"
+                " {Integrate`ek, Times @@ Integrate`eg}]]");
+        Expr* f0 = res->data.function.args[0];
+        Expr* xv = res->data.function.args[1]->data.function.args[0];
+        Expr* kg = tmpl ? eval_and_free(expr_new_function(expr_copy(tmpl),
+                              (Expr*[]){ expr_copy(f0), expr_copy(xv) }, 2)) : NULL;
+        if (kg && head_is(kg, SYM_List) && kg->data.function.arg_count == 2
+            && !expr_eq(kg->data.function.args[1], f0)) {
+            Expr** a = malloc(res->data.function.arg_count * sizeof(Expr*));
+            a[0] = expr_copy(kg->data.function.args[1]);
+            for (size_t i = 1; i < res->data.function.arg_count; i++)
+                a[i] = expr_copy(res->data.function.args[i]);
+            Expr* res2 = expr_new_function(expr_copy(res->data.function.head), a,
+                                           res->data.function.arg_count);
+            free(a);
+            Expr* r2 = integrate_definite(res2);
+            expr_free(res2);
+            if (r2)
+                r = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ expr_copy(kg->data.function.args[0]), r2 }, 2));
+        }
+        if (kg) expr_free(kg);
+    }
     g_integrate_definite_depth--;
     if (g_integrate_definite_depth == 0) {
         char* fs = g_integrate_definite_pending_f;

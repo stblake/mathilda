@@ -2823,6 +2823,14 @@ static Expr* gaussdiff_try(Expr* f, const Expr* x, Expr* assumptions) {
         Expr* c0 = eval_take(mk_fn3("Coefficient", cp(expo), cp((Expr*)x), mk_int(0)));
         bool shape = c1 && is_zero_now(c1) && c0 && is_zero_now(c0) &&
                      c2 && !contains_symbol(c2, (Expr*)x);
+        /* ...and nothing else: Coefficient cannot see an x^-2 term, so without
+         * this reconstruction E^(-x^2 - x^-2) passed as the Gaussian E^(-x^2)
+         * and the Cauchy-Schlomilch integral lost its E^-2. */
+        if (shape) {
+            Expr* rest = simp(Pls(cp(expo), Neg(Tms(cp(c2), Pw(cp((Expr*)x), mk_int(2))))));
+            shape = rest && is_zero_now(rest);
+            if (rest) expr_free(rest);
+        }
         if (c1) expr_free(c1);
         if (c0) expr_free(c0);
         if (!shape) { if (c2) expr_free(c2); expr_free(C); bad = true; break; }

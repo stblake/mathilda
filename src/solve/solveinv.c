@@ -37,6 +37,7 @@
 #include "eval.h"
 #include "expr.h"
 #include "message.h"   /* mth_msg_suppressed(): quiet internal probes */
+#include "parse.h"     /* parse_expression: the Lambert-W recogniser template */
 #include "poly/solvepoly.h"
 #include "simp/simp_log.h"   /* simp_log_fuse_all(): combine multi-log residuals */
 #include "solverad.h"
@@ -1186,6 +1187,131 @@ static Expr* make_inverse_function_solution(const char* head_name,
  *  Recursive driver -- internal, takes the context.                   *
  * ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ *
+ *  Lambert W.                                                         *
+ *                                                                     *
+ *  A residual with ONE var-containing term of the shape               *
+ *      k (a x + b) prod_i B_i^{M_i(x)}  +  c,   B_i free of x,        *
+ *  with sum_i M_i Log[B_i] = p x + q linear in x, is the Lambert      *
+ *  equation: putting w = p x + p b/a,                                 *
+ *      w e^w = Z,   Z = -c p e^{p b/a - q} / (k a),                   *
+ *  so x = W_n(Z)/p - b/a.  This covers x e^x = 1 (the omega           *
+ *  constant), x 2^x = 3, (2x+1) e^{3x-1} = y, x = e^{-x}.  Branches:  *
+ *    Complexes      every W_n, as ConditionalExpression[.., n in Z];  *
+ *    Reals, Z real  W_0 for Z >= 0, W_0 and W_{-1} on [-1/e, 0),      *
+ *                   none below -1/e (the equation has no real root);  *
+ *    otherwise      the principal W_0 with Solve::ifun.               *
+ * ------------------------------------------------------------------ */
+static Expr* lambert_data(Expr* residual, Expr* var) {
+    static Expr* tmpl = NULL;
+    if (!tmpl)
+        tmpl = parse_expression(
+            "Function[{Solve`lr, Solve`lx}, Module[{Solve`lts, Solve`lvt, Solve`lft,"
+            "  Solve`lfs, Solve`lex, Solve`llin, Solve`lk, Solve`lM, Solve`lL},"
+            " Solve`lts = If[Head[Solve`lr] === Plus, List @@ Solve`lr, {Solve`lr}];"
+            " Solve`lvt = Select[Solve`lts, !FreeQ[#, Solve`lx] &];"
+            " Solve`lft = Total[Select[Solve`lts, FreeQ[#, Solve`lx] &]];"
+            " If[Length[Solve`lvt] =!= 1, $Failed,"
+            "  Solve`lfs = If[Head[Solve`lvt[[1]]] === Times, List @@ Solve`lvt[[1]], {Solve`lvt[[1]]}];"
+            "  Solve`lex = Select[Solve`lfs, (Head[#] === Power && FreeQ[#[[1]], Solve`lx]"
+            "                               && !FreeQ[#[[2]], Solve`lx]) &];"
+            "  Solve`llin = Select[Solve`lfs, (!FreeQ[#, Solve`lx] && !MemberQ[Solve`lex, #]) &];"
+            "  Solve`lk = Times @@ Select[Solve`lfs, FreeQ[#, Solve`lx] &];"
+            "  If[Solve`lex === {} || Length[Solve`llin] =!= 1 || Solve`lft === 0, $Failed,"
+            "   Solve`lM = Expand[Total[(#[[2]] Log[#[[1]]]) & /@ Solve`lex]];"
+            "   Solve`lL = Expand[Solve`llin[[1]]];"
+            "   If[!PolynomialQ[Solve`lM, Solve`lx] || Exponent[Solve`lM, Solve`lx] =!= 1"
+            "      || !PolynomialQ[Solve`lL, Solve`lx] || Exponent[Solve`lL, Solve`lx] =!= 1, $Failed,"
+            "    With[{p = Coefficient[Solve`lM, Solve`lx, 1], q = Coefficient[Solve`lM, Solve`lx, 0],"
+            "          a = Coefficient[Solve`lL, Solve`lx, 1], b = Coefficient[Solve`lL, Solve`lx, 0]},"
+            "     {Simplify[-Solve`lft p Exp[p b/a - q]/(Solve`lk a)], p, b/a}]]]]]]");
+    /* The sum form  L(x) + k prod B^M + c  (x == E^-x, x + 2^x == 0):
+     * divided by the exponential it is the product form
+     * (L + c) prod B^{-M} + k, handed to the template above. */
+    static Expr* pre = NULL;
+    if (!pre)
+        pre = parse_expression(
+            "Function[{Solve`lr, Solve`lx}, Module[{Solve`lts, Solve`lin, Solve`loth, Solve`lfs,"
+            "  Solve`lex, Solve`lft},"
+            " Solve`lts = If[Head[Solve`lr] === Plus, List @@ Solve`lr, {Solve`lr}];"
+            " Solve`lft = Total[Select[Solve`lts, FreeQ[#, Solve`lx] &]];"
+            " Solve`lin = Total[Select[Solve`lts, (!FreeQ[#, Solve`lx] && PolynomialQ[#, Solve`lx]"
+            "                                      && Exponent[#, Solve`lx] <= 1) &]];"
+            " Solve`loth = Select[Solve`lts, (!FreeQ[#, Solve`lx] && !(PolynomialQ[#, Solve`lx]"
+            "                                      && Exponent[#, Solve`lx] <= 1)) &];"
+            " If[Length[Solve`loth] =!= 1 || Solve`lin === 0, $Failed,"
+            "  Solve`lfs = If[Head[Solve`loth[[1]]] === Times, List @@ Solve`loth[[1]], {Solve`loth[[1]]}];"
+            "  Solve`lex = Select[Solve`lfs, (Head[#] === Power && FreeQ[#[[1]], Solve`lx]"
+            "                               && !FreeQ[#[[2]], Solve`lx]) &];"
+            "  If[Solve`lex === {} || !FreeQ[Complement[Solve`lfs, Solve`lex], Solve`lx], $Failed,"
+            "   (Solve`lin + Solve`lft) (Times @@ (Power[#[[1]], -#[[2]]] & /@ Solve`lex))"
+            "     + Times @@ Complement[Solve`lfs, Solve`lex]]]]]");
+    if (!tmpl || !pre) return NULL;
+    Expr* r = eval_and_free(expr_new_function(expr_copy(tmpl),
+        (Expr*[]){ expr_copy(residual), expr_copy(var) }, 2));
+    if (!r || !head_is(r, SYM_List) || r->data.function.arg_count != 3) {
+        if (r) expr_free(r);
+        r = NULL;
+        Expr* r2 = eval_and_free(expr_new_function(expr_copy(pre),
+            (Expr*[]){ expr_copy(residual), expr_copy(var) }, 2));
+        if (r2 && !(r2->type == EXPR_SYMBOL && strcmp(r2->data.symbol.name, "$Failed") == 0))
+            r = eval_and_free(expr_new_function(expr_copy(tmpl),
+                (Expr*[]){ expr_copy(r2), expr_copy(var) }, 2));
+        if (r2) expr_free(r2);
+        if (!r || !head_is(r, SYM_List) || r->data.function.arg_count != 3) {
+            if (r) expr_free(r);
+            return NULL;
+        }
+    }
+    return r;
+}
+
+/* x -> W_n(Z)/p - b/a, as {{var -> value}}. */
+static Expr* lambert_solution(Expr* var, Expr* n, const Expr* data) {
+    Expr* w = n ? mk_fn2("ProductLog", n, expr_copy(data->data.function.args[0]))
+                : mk_fn1("ProductLog", expr_copy(data->data.function.args[0]));
+    Expr* val = eval_and_free(mk_fn2("Plus",
+        mk_fn2("Times", w, mk_pow(expr_copy(data->data.function.args[1]), mk_int(-1))),
+        mk_neg(expr_copy(data->data.function.args[2]))));
+    Expr* rule = mk_fn2("Rule", expr_copy(var), val);
+    return mk_fn1("List", mk_fn1("List", rule));
+}
+
+static Expr* peel_lambert(Expr* residual, Expr* var, SolveInvCtx* ctx) {
+    Expr* data = lambert_data(residual, var);
+    if (!data) return NULL;
+    const char* dn = (ctx->dom && ctx->dom->type == EXPR_SYMBOL) ? ctx->dom->data.symbol.name : NULL;
+    Expr* out = NULL;
+    if (dn == SYM_Complexes) {
+        Expr* Ck = mint_param(ctx);
+        out = wrap_solutions_with_cond(lambert_solution(var, expr_copy(Ck), data),
+            eval_and_free(mk_fn2("Element", expr_copy(Ck), mk_sym("Integers"))));
+        expr_free(Ck);
+    } else {
+        Expr* z = data->data.function.args[0];
+        Expr* nz = eval_and_free(mk_fn1("N", expr_copy(z)));
+        bool real_num = nz->type == EXPR_INTEGER || nz->type == EXPR_REAL
+                     || nz->type == EXPR_BIGINT || head_is(nz, SYM_Rational);
+        double zv = real_num ? (nz->type == EXPR_REAL ? nz->data.real
+                                : nz->type == EXPR_INTEGER ? (double)nz->data.integer : 0.0) : 0.0;
+        if (real_num && head_is(nz, SYM_Rational)) real_num = false;
+        expr_free(nz);
+        if (dn == SYM_Reals && real_num) {
+            /* -1/e = -0.36787944...; the boundary itself is the double root W = -1. */
+            if (zv < -0.36787944117144233) out = expr_new_function(mk_sym("List"), NULL, 0);
+            else if (zv < 0)
+                out = concat_lists(lambert_solution(var, NULL, data),
+                                   lambert_solution(var, mk_int(-1), data));
+            else out = lambert_solution(var, NULL, data);
+        } else {
+            out = lambert_solution(var, NULL, data);
+            emit_ifun(ctx);
+        }
+    }
+    expr_free(data);
+    return out;
+}
+
 static Expr* solveinv_drive(Expr* equation, Expr* var,
                             SolveInvCtx* ctx) {
     if (!equation || !var || !ctx) return NULL;
@@ -1210,8 +1336,11 @@ static Expr* solveinv_drive(Expr* equation, Expr* var,
 
     Isolation iso = {0};
     if (!isolate_residual(residual, var, &iso)) {
+        /* No single invertible head: a product of a linear factor and an
+         * exponential is the Lambert equation. */
+        Expr* lw = peel_lambert(residual, var, ctx);
         expr_free(residual);
-        return NULL;
+        return lw;
     }
     expr_free(residual);
 

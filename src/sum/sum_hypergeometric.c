@@ -177,15 +177,8 @@ static Expr* hg_make_list(Expr** elems, size_t n) {
 
 Expr* builtin_sum_hypergeometric(Expr* res);
 
-Expr* builtin_sum_hypergeometric(Expr* res) {
-    Expr *f, *var, *imin, *imax;
-    bool definite;
-    if (!sum_stage_args(res, &f, &var, &imin, &imax, &definite)) return NULL;
-    if (!definite) return NULL;
-
-    /* Only infinite sums with a concrete integer lower bound. */
-    if (!is_infinity_sym(imax)) return NULL;
-    if (imin->type != EXPR_INTEGER) return NULL;
+/* The series from the (first nonzero) index imin; see builtin_sum_hypergeometric. */
+static Expr* hg_sum_from(Expr* f, Expr* var, Expr* imin) {
 
     /* Term ratio t(k+1)/t(k), reduced to a rational function num/den in var.
      * Binomials are first expanded to factorials so the ratio simplifies. */
@@ -323,6 +316,39 @@ Expr* builtin_sum_hypergeometric(Expr* res) {
         return NULL;
     }
     return result;
+}
+
+Expr* builtin_sum_hypergeometric(Expr* res) {
+    Expr *f, *var, *imin, *imax;
+    bool definite;
+    if (!sum_stage_args(res, &f, &var, &imin, &imax, &definite)) return NULL;
+    if (!definite) return NULL;
+
+    /* Only infinite sums with a concrete integer lower bound. */
+    if (!is_infinity_sym(imax)) return NULL;
+    if (imin->type != EXPR_INTEGER) return NULL;
+
+    /* The series is read off from its first term t(imin): the closed form is
+     * t(imin) pFq(..).  When the leading terms VANISH -- k^m x^k/k! at k = 0,
+     * the Dobinski/Touchard sums -- that product is identically 0 (the bug was
+     * Sum[k^10/k!, {k, 0, Infinity}] == 0, true value 115975 E).  Start instead
+     * at the first index whose term is nonzero; the vanishing terms contribute
+     * nothing.  A term that is zero for every index scanned is left alone. */
+    Expr* imin_eff = NULL;
+    for (int64_t j = imin->data.integer; j < imin->data.integer + 64; j++) {
+        Expr* jj = sum_int(j);
+        Expr* tj = sum_subst(f, var, jj);
+        bool zero = tj && tj->type == EXPR_INTEGER && tj->data.integer == 0;
+        if (tj) expr_free(tj);
+        if (!zero) {
+            if (j != imin->data.integer) imin_eff = jj; else expr_free(jj);
+            break;
+        }
+        expr_free(jj);
+    }
+    Expr* r = hg_sum_from(f, var, imin_eff ? imin_eff : imin);
+    if (imin_eff) expr_free(imin_eff);
+    return r;
 }
 
 void sum_hypergeometric_init(void) {

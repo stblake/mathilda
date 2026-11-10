@@ -829,6 +829,18 @@ Out[19]= {}                        (* over-determined, inconsistent *)
 
 **v0.6036.** In one variable, `Solve[{eqn}, x]` is `Solve[eqn, x]` (`Solve[{Log[y] == 3}, y]` is `{{y -> E^3}}`). The exponential-kernel stage (`u = E^(c x)`) hands a u-equation that is algebraic but not polynomial to the radical solver.
 
+- **Lambert W** (v0.6490). An equation with one var-containing term
+  `k (a x + b) Π Bᵢ^{Mᵢ(x)} + c == 0` (Bᵢ free of x, Σ Mᵢ Log[Bᵢ] = p x + q linear), or
+  the sum form `L(x) + k Π Bᵢ^{Mᵢ(x)} + c == 0` with L linear, is solved as
+  `x = ProductLog[n, Z]/p - b/a`, Z = -c p e^{p b/a - q}/(k a). Over `Complexes`
+  every branch: `ConditionalExpression[ProductLog[C[1], Z] …, C[1] ∈ Integers]`;
+  over `Reals` with real Z: W₀ for Z ≥ 0, W₀ and W₋₁ on [-1/e, 0), `{}` below -1/e;
+  otherwise W₀ with `Solve::ifun`. `Solve[x Exp[x] == 1, x]` is `{{x -> ProductLog[1]}}`,
+  `Solve[x == Exp[-x], x]` likewise, `Solve[x 2^x == 3, x, Reals]` is
+  `{{x -> ProductLog[3 Log[2]]/Log[2]}}`.
+- A one-element equation list in one variable (`Solve[{eqn}, {x}]`) no longer
+  mutates its input: a declined call keeps its equation (it printed `Solve[{Null}, {x}]`).
+
 ## Reduce
 
 Reduces a statement of equations and inequalities to a complete, quantifier-free

@@ -1013,8 +1013,11 @@ Expr* builtin_solve(Expr* res) {
     while (one_var && expr->type == EXPR_FUNCTION && expr->data.function.head->type == EXPR_SYMBOL
            && expr->data.function.head->data.symbol.name == SYM_List
            && expr->data.function.arg_count == 1) {
-        Expr* inner = expr->data.function.args[0];
-        expr->data.function.args[0] = NULL;
+        /* expr_copy is a reference-count bump, so `expr` may be the very List node
+         * still owned by `res`: take a counted reference to the element instead of
+         * stealing it (NULLing args[0] here mutated the caller's input, and a
+         * declined Solve then printed as Solve[{Null}, x]). */
+        Expr* inner = expr_copy(expr->data.function.args[0]);
         expr_free(expr);
         expr = inner;
     }

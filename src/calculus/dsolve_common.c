@@ -1621,6 +1621,69 @@ static bool ds_fit_branch_real(const Expr* cb) {
     return true;
 }
 
+/* True when a fit value is non-finite as written (a pole, 0*Infinity, ...). */
+static bool ds_nonfinite(const Expr* e) {
+    return ds_contains(e, SYM_Indeterminate) || ds_contains(e, SYM_ComplexInfinity)
+        || ds_contains(e, SYM_DirectedInfinity) || ds_contains(e, SYM_Infinity);
+}
+
+/* A condition at a SINGULAR point of the general solution, as equations on the
+ * constants.  A linear ODE with a regular singular point x0 (Lane-Emden, the
+ * radial Laplacian y'' + y'/x of Poiseuille flow, Bessel of order 0) has a basis
+ * member that is infinite there -- Cos[x]/x, Log[r] -- so y(x0) == v cannot be
+ * read off by substitution, and Limit is infinite unless that member's constant
+ * is 0.  The condition means: the solution has the finite value v at x0.  So
+ * expand e = y^(k)(x) in its Laurent/Puiseux series at x0,
+ *
+ *     e = sum_{q < 0} a_q t^q  +  a_0  +  o(1),     t = x - x0,
+ *
+ * where each a_q may be a polynomial in Log[t], and require every principal-part
+ * coefficient a_q (q < 0) and every Log-coefficient of a_0 to vanish, and
+ * a_0's Log-free part to equal v.  The exponents come from the SeriesData itself
+ * (nmin, den), so a pole of any order and any fractional (Frobenius) exponent is
+ * covered.  Returns a List of Equal, or NULL when the series does not form. */
+static Expr* ds_singular_condition(const Expr* e, const char* xvar, const Expr* x0,
+                                   const Expr* v) {
+    static Expr* tmpl = NULL;
+    if (!tmpl)
+        tmpl = parse_expression(
+            "Function[{DSolve`se, DSolve`sx, DSolve`sx0, DSolve`sv},"
+            " Module[{DSolve`su, DSolve`scs, DSolve`snm, DSolve`sdn, DSolve`sq, DSolve`sa,"
+            "         DSolve`sl, DSolve`sout = {}, DSolve`shave0 = False},"
+            "  DSolve`su = Series[DSolve`se /. DSolve`sx -> DSolve`sx0 + DSolve`st,"
+            "                     {DSolve`st, 0, 0}];"
+            "  If[Head[DSolve`su] =!= SeriesData, $Failed,"
+            "   DSolve`scs = DSolve`su[[3]]; DSolve`snm = DSolve`su[[4]];"
+            "   DSolve`sdn = DSolve`su[[6]];"
+            "   Do[DSolve`sq = (DSolve`snm + DSolve`si - 1)/DSolve`sdn;"
+            "      DSolve`sa = Expand[DSolve`scs[[DSolve`si]] /. {Log[DSolve`st] -> DSolve`slg,"
+            "        Log[DSolve`sc_. DSolve`st^DSolve`sp_.] /; FreeQ[{DSolve`sc, DSolve`sp}, DSolve`st]"
+            "          :> Log[DSolve`sc] + DSolve`sp DSolve`slg}];"
+            "      If[DSolve`sq <= 0,"
+            "        DSolve`sl = CoefficientList[DSolve`sa, DSolve`slg];"
+            "        If[DSolve`sl === {}, DSolve`sl = {0}];"
+            "        If[DSolve`sq == 0,"
+            "          DSolve`shave0 = True;"
+            "          DSolve`sout = Join[DSolve`sout, {First[DSolve`sl] == DSolve`sv},"
+            "                             Thread[Rest[DSolve`sl] == 0]],"
+            "          DSolve`sout = Join[DSolve`sout, Thread[DSolve`sl == 0]]]],"
+            "    {DSolve`si, Length[DSolve`scs]}];"
+            "   If[!DSolve`shave0 && DSolve`snm/DSolve`sdn > 0,"
+            "     DSolve`sout = Append[DSolve`sout, 0 == DSolve`sv]];"
+            "   DeleteCases[DSolve`sout, True]]]]");
+    if (!tmpl) return NULL;
+    Expr* call = expr_new_function(expr_copy(tmpl),
+        (Expr*[]){ expr_copy((Expr*)e), expr_new_symbol(xvar), expr_copy((Expr*)x0),
+                   expr_copy((Expr*)v) }, 4);
+    Expr* r = eval_and_free(call);
+    if (!r || !head_is(r, SYM_List) || r->data.function.arg_count == 0
+        || ds_nonfinite(r) || ds_contains(r, SYM_SeriesData)) {
+        if (r) expr_free(r);
+        return NULL;
+    }
+    return r;
+}
+
 static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
                                   bool* no_solution, int* fit_state) {
     if (no_solution) *no_solution = false;
@@ -1685,7 +1748,8 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
         }
     }
 
-    Expr** eqs = malloc(P->ncond * sizeof(Expr*));
+    size_t eqcap = P->ncond;
+    Expr** eqs = malloc(eqcap * sizeof(Expr*));
     size_t neq = 0;
     /* A SeriesData body does not reduce under x->point (SeriesData[x0,x0,{a...}]
      * stays a SeriesData, so the fit equation never exposes a[0]=C[1], a[1]=C[2],
@@ -1735,6 +1799,29 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
                                           expr_new_string("FromAbove") }, 2) }, 3));
             if (lim && !ds_has_head(lim, intern_symbol("Limit"))) { expr_free(atpt); atpt = lim; }
             else if (lim) expr_free(lim);
+        }
+        if (ds_nonfinite(atpt)) {
+            /* Still infinite: a basis member has a pole/log at the point.  The
+             * condition becomes the Laurent equations (singular part zero, finite
+             * part == value) -- never an infinite Equal handed to Solve. */
+            Expr* val = eval_and_free(expr_copy(P->conds[c].value));
+            Expr* seqs = ds_singular_condition(bexpr, xvar, P->conds[c].point, val);
+            expr_free(val);
+            if (seqs) {
+                size_t m = seqs->data.function.arg_count;
+                if (neq + m > eqcap) {
+                    eqcap = neq + m + P->ncond;
+                    eqs = realloc(eqs, eqcap * sizeof(Expr*));
+                }
+                for (size_t j = 0; j < m; j++) {
+                    eqs[neq++] = seqs->data.function.args[j];
+                    seqs->data.function.args[j] = NULL;
+                }
+                expr_free(seqs);
+                expr_free(atpt);
+                expr_free(bexpr);
+                continue;
+            }
         }
         expr_free(bexpr);
         bexpr = atpt;

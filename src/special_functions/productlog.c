@@ -547,9 +547,20 @@ Expr* builtin_productlog(Expr* res) {
     if (argc == 2) {
         Expr* kexpr = res->data.function.args[0];
         Expr* z = res->data.function.args[1];
-        /* The branch index must be an explicit (machine-range) integer. */
-        if (kexpr->type != EXPR_INTEGER) return NULL;
-        int64_t k = kexpr->data.integer;
+        /* The branch index must be an explicit (machine-range) integer.  N maps
+         * over both arguments, so N[ProductLog[-1, 2]] arrives as
+         * ProductLog[-1., 2.]: an integer-VALUED Real index names the same
+         * branch unambiguously and is accepted (a fractional one is not). */
+        int64_t k;
+        if (kexpr->type == EXPR_INTEGER) k = kexpr->data.integer;
+        else if (kexpr->type == EXPR_REAL && kexpr->data.real == floor(kexpr->data.real)
+                 && fabs(kexpr->data.real) < 1e15) k = (int64_t)kexpr->data.real;
+#ifdef USE_MPFR
+        else if (kexpr->type == EXPR_MPFR && mpfr_integer_p(kexpr->data.mpfr)
+                 && mpfr_fits_slong_p(kexpr->data.mpfr, MPFR_RNDN))
+            k = (int64_t)mpfr_get_si(kexpr->data.mpfr, MPFR_RNDN);
+#endif
+        else return NULL;
         if (k < LONG_MIN || k > LONG_MAX) return NULL;
         return productlog_eval((long)k, z);
     }
