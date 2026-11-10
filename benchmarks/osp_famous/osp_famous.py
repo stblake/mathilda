@@ -6,6 +6,7 @@ osp_famous.py -- the 222 "famous" problems of the math.osp.no benchmark
     python3 benchmarks/osp_famous/osp_famous.py                 # solve + grade all
     python3 benchmarks/osp_famous/osp_famous.py --only basel_problem,ahmed_integral -v
     python3 benchmarks/osp_famous/osp_famous.py --runner run.jsonl   # grade a math-run file
+    python3 benchmarks/osp_famous/osp_famous.py --regrade            # re-grade saved answers
 
 TWO INPUTS.  The site drives Mathilda through its runner, math-run 0.1.0, whose
 Mathilda adapter shares another adapter's translation.  That translation has no
@@ -217,7 +218,7 @@ def call(name, a):
     if name == "digamma":
         return "PolyGamma[0, %s]" % a[0]
     if name == "root_of":     # root_of(p(_z), k): the k-th root, Root's numbering
-        return "Root[Function[{$z}, %s], %s]" % (a[0], a[1])
+        return "Root[(%s) &, %s]" % (re.sub(r"\$z\b", "#1", a[0]), a[1])
     return "%s[%s]" % (FUNCS.get(name, ident(name)), ", ".join(a))
 
 
@@ -478,6 +479,8 @@ def main():
     ap.add_argument("--only", help="comma-separated ids (with or without famous-)")
     ap.add_argument("--timeout", type=float, default=60)
     ap.add_argument("--runner", help="grade the answers of a math-run file instead")
+    ap.add_argument("--regrade", action="store_true",
+                    help="re-grade the answers saved in OUT/math.jsonl (after a checker change)")
     ap.add_argument("--out", default=os.path.join(HERE, "results"))
     ap.add_argument("-v", "--verbose", action="store_true")
     args = ap.parse_args()
@@ -487,7 +490,13 @@ def main():
         want = {w if w.startswith("famous-") else "famous-" + w for w in args.only.split(",")}
         probs = [p for p in probs if p["id"] in want]
     runner = {}
-    if args.runner:
+    if args.regrade:            # saved answers, re-graded; solve failures kept as they were
+        for l in open(os.path.join(args.out, "math.jsonl")):
+            r = json.loads(l)
+            st = r["grade"] if r["grade"] in ("timeout", "crash", "error") else "ok"
+            runner[r["id"]] = {"status": st, "answer": r["answer"], "wall": r["seconds"]}
+        args.runner = "regrade"
+    if args.runner and not args.regrade:
         for l in open(args.runner):
             r = json.loads(l)
             if "id" in r:
@@ -499,7 +508,7 @@ def main():
             base[k] = v
 
     os.makedirs(args.out, exist_ok=True)
-    tag = "runner" if args.runner else "math"
+    tag = "math" if args.regrade else "runner" if args.runner else "math"
     rows = []
     for i, r in enumerate(probs, 1):
         pid, prob = r["id"], r["problem"]

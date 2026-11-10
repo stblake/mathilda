@@ -44,6 +44,9 @@ ospAgree[ans_, ref_, p_, indef_] := Module[{a = ans /. p, r = ref /. p, fr, pts,
 ospHeads[e_] := Complement[Union[Cases[e, h_Symbol[___] :> h, {0, Infinity}]],
    {Plus, Times, Power, Rational, Complex, List, Hold, Sqrt}];
 
+(* heads that never count as worked out, whatever the input held *)
+ospNeverWorkedOut = {Root, RootOf, Integrate, Sum, Limit};
+
 ospCheckValue[ans_, ref_, head_, p_, simp_, Hold[inp_]] := Module[{bad},
    If[ospUneval[ans, head], Return["unsolved: left unevaluated"]];
    If[ans === $Failed || ans === Null, Return["error: no answer"]];
@@ -51,7 +54,8 @@ ospCheckValue[ans_, ref_, head_, p_, simp_, Hold[inp_]] := Module[{bad},
      Return[If[NumericQ[ospN[ans /. p]] || Head[ans] === List, "wrong: differs from the reference",
        "unclear: not numeric at the sample point"]]];
    If[simp,
-     bad = Complement[Intersection[ospHeads[ans], ospHeads[Hold[inp]]], ospHeads[ref]];
+     bad = Complement[Intersection[ospHeads[ans], Union[ospHeads[Hold[inp]], ospNeverWorkedOut]],
+       ospHeads[ref]];
      If[bad =!= {}, Return["unsolved: equal, but keeps " <> ToString[bad]]];
      If[ospNest[ans] > ospNest[ref],
        Return["unsolved: equal, but radicals nested " <> ToString[ospNest[ans]] <>
@@ -126,7 +130,7 @@ ospCheckDE[op_, ans_, f_, vars_, eqs_Hold, conds_Hold, ref_Hold, p_, order_] :=
        Return["wrong: does not satisfy the recurrence"]];
      If[Not[ospZeroAt[ospResid /@ cd2, {{}}]], Return["wrong: does not meet the conditions"]];
      Return["solved"]];
-   pts = Table[Thread[vars -> (RotateLeft[{41/100, 113/100, 7/10, 29/100}, j][[1 ;; Length[vars]]])],
+   pts = Table[Thread[vars -> (RotateLeft[{41/100, 63/100, 7/10, 29/100}, j][[1 ;; Length[vars]]])],
      {j, 0, 2}];
    eq2 = ReleaseHold[eqs /. f -> fun /. p];
    If[Not[ospZeroAt[ospResid /@ eq2, pts]], Return["wrong: does not satisfy the equation"]];
