@@ -1194,6 +1194,16 @@ check-fastpath-sweep:
 bench-gap:
 	python3 benchmarks/run_all.py
 
+# `make bench-osp-famous` — the 222 math.osp.no "famous" problems, solved by
+# ./Mathilda and graded locally by Mathilda (benchmarks/osp_famous/README.md).
+# Writes benchmarks/osp_famous/results/math.{md,jsonl}, with the official v0.6222
+# grades alongside.  Runs from a snapshot of the binary, so a rebuild meanwhile
+# is safe.  Tens of minutes (a 60 s timeout per problem).
+bench-osp-famous: $(TARGET)
+	cp $(TARGET) benchmarks/osp_famous/.Mathilda_snapshot
+	python3 benchmarks/osp_famous/osp_famous.py --binary benchmarks/osp_famous/.Mathilda_snapshot; \
+	  rc=$$?; rm -f benchmarks/osp_famous/.Mathilda_snapshot; exit $$rc
+
 # `make check-diophantine-heldout` — the held-out Solve[..., Integers] gate.
 #
 # Runs Mathilda COLD on equations drawn from standard references (NOT the
@@ -1231,7 +1241,7 @@ print-flags:
 print-libs:
 	@echo "$(PC_LIBS_PRIVATE)"
 
-.PHONY: all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-feyncalc check-differentialforms check-interval check-packed-aware \
+.PHONY: bench-osp-famous all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-feyncalc check-differentialforms check-interval check-packed-aware \
         check-messages check-corpus-indvar \
         check-array-exactness check-nd-surfaces check-compile-coverage \
         check-refine-stress \

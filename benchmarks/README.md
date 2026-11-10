@@ -574,3 +574,10 @@ Problems, answers, provenance and the baseline run are in
 | # | experiment | what it measures |
 |---|---|---|
 | 125 | `meijer-g-integrals` | A representative subset of `tests/RoachCorpus.m` (Roach's 2008 Quantum paper and his ISSAC '96/'97 galleries): 12 integrals over (0, oo) by `Integrate[..., Method -> "Roach"]` against sympy's `integrate(..., meijerg=True)` (meijerint, the same PBM 2.24.1 convolution method); 4 pFq of the ISSAC '96 gallery, `FunctionExpand` against `sympy.hyperexpand`; a 3F2 at z = 1 and a G^{1,4}_{4,2} at 30 digits against mpmath. Group A by subject. Numeric parameters, so sympy times its method and not its condition simplifier; every sympy call starts from a cleared cache. Checks: `Round[10^6 value]`, `"unevaluated"` for a row left open. |
+
+## The math.osp.no famous problems
+
+[`osp_famous/`](osp_famous/README.md) grades Mathilda locally on the 222 "famous"
+problems of the math.osp.no CAS benchmark: `make bench-osp-famous`. It writes
+`benchmarks/osp_famous/results/math.md`, diffed against the site's official v0.6222
+grades.
