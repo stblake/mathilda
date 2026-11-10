@@ -384,6 +384,27 @@ def wlstr(s):
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
+def bound_vars(text):
+    """The variables bound by sum(f, n, ...), product(f, n, ...) and
+    integrate(f, y, ...) in samara syntax: their second argument."""
+    out = set()
+    for m in re.finditer(r"\b(?:sum|product|integrate)\(", text):
+        depth, i = 1, m.end()
+        while i < len(text) and depth:
+            c = text[i]
+            if c in "([{":
+                depth += 1
+            elif c in ")]}":
+                depth -= 1
+            elif c == "," and depth == 1:
+                v = re.match(r"\s*([A-Za-z_]\w*)\s*[,)]", text[i + 1:])
+                if v:
+                    out.add(v.group(1))
+                break
+            i += 1
+    return out
+
+
 def check_code(prob, answer):
     a = prob["args"]
     ref = prob["answer"] or ""
@@ -393,6 +414,7 @@ def check_code(prob, answer):
     for n in re.findall(r"\b([A-Za-z_]\w*)\b(?!\s*\()", blob):
         names.add(n)
     skip = set(SYMS) | set(SETS) | {"C1", "C2", "C3", "F1", "F2", "integers", "reals", "_z"}
+    skip |= bound_vars(blob)       # a summation index is not a parameter
     if prob["op"] == "solve":      # k numbers a reference solution family
         skip.add("k")
     if "var" in a:
@@ -408,7 +430,9 @@ def check_code(prob, answer):
     prules = "{" + ", ".join("%s -> %s" % (ident(k), v) for k, v in params.items()) + "}"
     lines = ['Get[%s];' % wlstr(os.path.join(HERE, "check_famous.m")),
              'mrHeld = ToExpression[%s, InputForm, Hold];' % wlstr(answer),
-             'mrAns = If[ospUneval[mrHeld, %s], mrHeld, ReleaseHold[mrHeld]];' % (head or "None"),
+             # a head the reference is written with (a Sum) does not keep it held
+             'mrAns = If[ospUnevalBut[mrHeld, %s, Hold[%s]], mrHeld, ReleaseHold[mrHeld]];'
+             % (head or "None", wl(ref) if ref else "None"),
              'mrP = %s;' % prules,
              'mrHead = %s;' % (head or "None"),
              'mrOp = %s;' % wlstr(prob["op"]),

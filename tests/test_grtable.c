@@ -67,6 +67,20 @@ static void test_grtable_declines(void) {
                    "Integrate", 0);
 }
 
+/* A value the book prints as a decimal is served exactly (tools/gr/value_fixes.tsv):
+ * never a machine number, and a bound iterator prints as the plain symbol. */
+static void test_grtable_exact_values(void) {
+    assert_eval_eq("Integrate[x^(-x), {x, 0, 1}, Method -> \"GRTable\"]",
+                   "Sum[n^(-n), {n, 1, Infinity}]", 0);
+    assert_eval_eq("Integrate[Log[Log[1/x]]/(1 + x), {x, 0, 1}, Method -> \"GRTable\"]",
+                   "-1/2 Log[2]^2", 0);
+    assert_eval_eq("Expand[Integrate[x/(2 Cosh[x] - 1), {x, 0, Infinity}, Method -> \"GRTable\"] - "
+                   "(PolyGamma[1, 1/6] + PolyGamma[1, 1/3] - PolyGamma[1, 2/3] - PolyGamma[1, 5/6])/36]",
+                   "0", 0);
+    assert_eval_eq("FreeQ[{Integrate[x^(-x), {x, 0, 1}, Method -> \"GRTable\"], "
+                   "Integrate[x/(2 Cosh[x] - 1), {x, 0, Infinity}, Method -> \"GRTable\"]}, _Real]", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -76,6 +90,7 @@ int main(void) {
     TEST(test_grtable_indefinite);
     TEST(test_grtable_definite);
     TEST(test_grtable_declines);
+    TEST(test_grtable_exact_values);
     printf("All GRTable tests passed.\n");
     return 0;
 }

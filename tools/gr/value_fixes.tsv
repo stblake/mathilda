@@ -1,0 +1,17 @@
+# Book values corrected from first principles (id<TAB>exact value).
+# Read by tools/gr/build_table.py (--value-fix).  A G&R value printed as a
+# decimal approximation is not a closed form: the table serves the exact value
+# below, or (without an entry here) leaves the formula out.  Each value was
+# checked against the book's decimal and against NIntegrate at 30 digits.
+#
+# 3.486: Int_0^1 x^-x dx = Sum_{n>=1} n^-n (Johann Bernoulli 1697): expand
+#   x^-x = Sum_k (-x Log x)^k/k! and use Int_0^1 x^k Log[x]^k dx = (-1)^k k!/(k+1)^(k+1).
+GR3.486c	Sum[n^(-n), {n, 1, Infinity}]
+# 3.531.1: with q = E^-x, 1/(2 Cosh[x] - 1) = q (1 + q)/(1 + q^3)
+#   = Sum_k (-1)^k (q^(3k+1) + q^(3k+2)); Int_0^oo x E^(-a x) dx = 1/a^2 gives
+#   Sum_k (-1)^k (1/(3k+1)^2 + 1/(3k+2)^2) = (psi'(1/6) + psi'(1/3) - psi'(2/3) - psi'(5/6))/36.
+GR3.531.1b	(PolyGamma[1, 1/6] + PolyGamma[1, 1/3] - PolyGamma[1, 2/3] - PolyGamma[1, 5/6])/36
+# 4.325.1 (book: -EulerGamma Log[2] + 0.159868905): Int_0^1 x^k Log[Log[1/x]] dx
+#   = -(EulerGamma + Log[k+1])/(k+1), so the value is -EulerGamma Log[2] - eta'(1)
+#   with eta'(1) = EulerGamma Log[2] - Log[2]^2/2: the EulerGamma terms cancel.
+GR4.325.1b	-Log[2]^2/2

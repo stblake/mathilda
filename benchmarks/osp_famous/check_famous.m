@@ -11,8 +11,10 @@ ospUneval[e_, head_] := Or @@ (Not[FreeQ[e, #]] & /@ ospUnevalHeads) ||
    (head =!= None && Not[FreeQ[e, head]]);
 
 (* the free (non-numeric) symbols of an expression *)
-ospFree[e_] := Union[Cases[{e}, s_Symbol /; Not[NumericQ[s]] &&
-     Not[MemberQ[{True, False, List, Rule, Integers, Reals, Complexes, Null}, s]], {0, Infinity}]];
+ospFree[e_] := Complement[Union[Cases[{e}, s_Symbol /; Not[NumericQ[s]] &&
+     Not[MemberQ[{True, False, List, Rule, Integers, Reals, Complexes, Null}, s]], {0, Infinity}]],
+   (* a bound iterator (Sum[n^-n, {n, 1, Infinity}]) is not a free parameter *)
+   Union[Cases[{e}, (Sum | Product | Table | Integrate)[_, {b_Symbol, ___}] :> b, {0, Infinity}]]];
 
 ospN[e_] := Quiet[N[e, 60]];
 
@@ -47,8 +49,14 @@ ospHeads[e_] := Complement[Union[Cases[e, h_Symbol[___] :> h, {0, Infinity}]],
 (* heads that never count as worked out, whatever the input held *)
 ospNeverWorkedOut = {Root, RootOf, Integrate, Sum, Limit};
 
+(* unevaluated: a task head left in the answer, other than one the reference
+   itself is written with (Sophomore's dream is Sum[n^-n, {n, 1, Infinity}]) *)
+ospUnevalBut[e_, head_, ref_] := Module[{hs = Complement[ospUnevalHeads, ospHeads[ref]]},
+   Or @@ (Not[FreeQ[e, #]] & /@ hs) ||
+   (head =!= None && Not[MemberQ[ospHeads[ref], head]] && Not[FreeQ[e, head]])];
+
 ospCheckValue[ans_, ref_, head_, p_, simp_, Hold[inp_]] := Module[{bad},
-   If[ospUneval[ans, head], Return["unsolved: left unevaluated"]];
+   If[ospUnevalBut[ans, head, ref], Return["unsolved: left unevaluated"]];
    If[ans === $Failed || ans === Null, Return["error: no answer"]];
    If[Not[ospAgree[ans, ref, p, mrIndef]],
      Return[If[NumericQ[ospN[ans /. p]] || Head[ans] === List, "wrong: differs from the reference",

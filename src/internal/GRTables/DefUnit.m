@@ -77,7 +77,7 @@ GRTable`Private`add["D|Exp|0|1", "GR3.471.14", (E^(1 - x^(-1)) - x^nu)/((1 - x)*
 (* 3.474.2 p418 BI (80)(9) *)
 GRTable`Private`add["D|Exp|0|1", "GR3.474.2", (-(E^(1 - x^(-1))/(1 - x)) + (E^(1 - x^(-n))*n)/(1 - x^n))/x, x, {0, 1}, Hold[-Log[n]], {n}, Hold[{Element[n, Integers] && n >= 1}]];
 (* 3.486 p420 FI II 483 *)
-GRTable`Private`add["D||0|1", "GR3.486c", x^(-x), x, {0, 1}, Hold[1.2912859970627], {}, Hold[{}]];
+GRTable`Private`add["D||0|1", "GR3.486c", x^(-x), x, {0, 1}, Hold[Sum[n^(-n), {n, 1, Infinity}]], {}, Hold[{}]];
 (* 3.534.1 p431 WA 94(9) *)
 GRTable`Private`add["D|Cosh|0|1", "GR3.534.1", Sqrt[1 - x^2]*Cosh[a*x], x, {0, 1}, Hold[(Pi/(2*a))*BesselI[1, a]], {a}, Hold[{}]];
 (* 3.534.2 p431 WA 94(9) *)
@@ -403,7 +403,7 @@ GRTable`Private`add["D|Log|0|1", "GR4.317.7", Log[1 + Sqrt[1 - k^2*x^2]]/Sqrt[(1
 (* 4.317.10 p617 BI (122)(15) *)
 GRTable`Private`add["D|Log|0|1", "GR4.317.10", Log[(1 + q*Sqrt[1 - k^2*x^2])/(1 - q*Sqrt[1 - k^2*x^2])]/Sqrt[(1 - x^2)*(1 - k^2*x^2)], x, {0, 1}, Hold[Pi*EllipticF[ArcSin[q], (Sqrt[1 - k^2])^2]], {k, q}, Hold[{q^2 < 1, 0 < k < 1}]];
 (* 4.325.1b p619 GW (325)(25a) *)
-GRTable`Private`add["D|Log|0|1", "GR4.325.1b", Log[Log[x^(-1)]]/(1 + x), x, {0, 1}, Hold[(-EulerGamma)*Log[2] + 0.159868905], {}, Hold[{}]];
+GRTable`Private`add["D|Log|0|1", "GR4.325.1b", Log[Log[x^(-1)]]/(1 + x), x, {0, 1}, Hold[-Log[2]^2/2], {}, Hold[{}]];
 (* 4.325.1c p619 GW (325)(25a) *)
 GRTable`Private`add["D|Log|0|1", "GR4.325.1c", Log[Log[x^(-1)]]/(1 + x), x, {0, 1}, Hold[(-Log[2]^2)/2], {}, Hold[{}]];
 (* 4.325.3a p619 BI (147)(7) *)

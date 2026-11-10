@@ -59,7 +59,7 @@ python3 -I tools/gr/build_table.py \
     --batch $S/ch2_entries.json:$S/ch2_py2r.json,$S/ch34_entries.json:$S/ch34_py3r.json,$S/ch5to17_entries.json:$S/ch5to17_py3r.json \
     --runs $S/run2.jsonl,$S/runB.jsonl,$S/run_logabs.jsonl --names $S/names.txt \
     --book-wrong tools/gr/audit/condaudit_wrong.tsv --cond-fix tools/gr/cond_fixes.tsv \
-    --out src/internal/GRTables
+    --value-fix tools/gr/value_fixes.tsv --out src/internal/GRTables
 
 # condition audit of a built table (definite records); --ids for a subset
 python3 -I tools/gr/condaudit.py src/internal/GRTables OUT.tsv --jobs 8
@@ -88,6 +88,10 @@ A formula becomes a table record only when (`build_table.py` docstring):
    parameters (`If`, `Boole`, `OddQ`, …). Such a test decides on a bare symbol.
 5. The formula is not on a removal list (`--book-wrong`), and its corrected
    conditions (`--cond-fix`) are used.
+6. The value is exact. A value the book prints as a decimal approximation is
+   replaced by the exact value in `--value-fix` (`tools/gr/value_fixes.tsv`,
+   each derived from first principles), or the formula is left out. A fixed,
+   parameter-free value may be an inert constant `Sum`.
 
 Rules the engine enforces:
 - **Log convention.** `Integrate[1/x, x]` is `Log[x]`. Indefinite records have

@@ -242,6 +242,16 @@ indefCheck[fq_, x_, v_] := Module[{syms, rep, d, ok = 0, bad = 0, z},
 
 (* ------------------------------------------------------------------ run *)
 
+(* A record value that binds an iterator (3.486: Sum[n^-n, {n, 1, Infinity}])
+   names it in the record context, which would print as GRTable`R`n.  Each
+   Sum/Product iterator is renamed to the plain symbol of the same name, unless
+   that symbol has a value (the record symbol is then kept: never captured). *)
+cleanBound[val_] := Module[{js, rules},
+  js = Union[Cases[val, (Sum | Product)[_, {j_Symbol, ___}] :> j, {0, Infinity}]];
+  rules = Select[(# -> Symbol[SymbolName[#]]) & /@ js,
+                 (#[[1]] =!= #[[2]] && Length[OwnValues @@ {#[[2]]}] == 0) &];
+  val /. rules];
+
 tryRecord[id_, cq_, gq_, qx_, qlim_, assum_, kind_] :=
   Module[{g, x, lim, v, ps, conds, pat, slots, cr, gx, m, eqs, sols, st, val, out = $Failed, f},
     {f, x, lim, v, ps, conds} = rec[id];
@@ -265,6 +275,7 @@ tryRecord[id_, cq_, gq_, qx_, qlim_, assum_, kind_] :=
       st = condState[ReleaseHold[conds], s, assum, x, kind];
       If[st === False, Continue[]];
       val = Quiet[(cq / (cr /. s)) (ReleaseHold[v] /. s)] /. x -> qx;
+      val = cleanBound[val];
       If[kind === "D",
         If[!defCheck[cq gq, qx, qlim[[1]], qlim[[2]], val], Continue[]];
         If[st =!= {}, val = ConditionalExpression[val, And @@ st]],

@@ -465,7 +465,7 @@ GRTable`Private`add["D|Cosh,Csch|0|Infinity", "GR3.529.2", ((-1 + Cosh[a*x])*Csc
 (* 3.529.3 p429 BI (94)(11)a *)
 GRTable`Private`add["D|Csch|0|Infinity", "GR3.529.3", (a*Csch[a*x] - b*Csch[b*x])/x, x, {0, Infinity}, Hold[(b - a)*Log[2]], {a, b}, Hold[{a > 0, b > 0}]];
 (* 3.531.1b p429 LI (88)(1) *)
-GRTable`Private`add["D|Cosh|0|Infinity", "GR3.531.1b", x/(-1 + 2*Cosh[x]), x, {0, Infinity}, Hold[1.1719536193], {}, Hold[{}]];
+GRTable`Private`add["D|Cosh|0|Infinity", "GR3.531.1b", x/(-1 + 2*Cosh[x]), x, {0, Infinity}, Hold[(PolyGamma[1, 1/6] + PolyGamma[1, 1/3] - PolyGamma[1, 2/3] - PolyGamma[1, 5/6])/36], {}, Hold[{}]];
 (* 3.531.3 p429 BI (88)(3)a *)
 GRTable`Private`add["D|Cosh|0|Infinity", "GR3.531.3", x^2/(Cos[t] + Cosh[x]), x, {0, Infinity}, Hold[(t/3)*((Pi^2 - t^2)/Sin[t])], {t}, Hold[{0 < t < Pi}]];
 (* 3.531.4 p429 BI (88)(4)a *)

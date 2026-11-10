@@ -35,7 +35,12 @@ A formula becomes a table record when all of these hold:
     tools/gr/cond_fixes.tsv by hand, condaudit's .fix output automatically);
   - the book's value passes the corpus runner's checks AS STATED (--book-wrong,
     from build_corpus.py --book): an incorrect G&R formula is corrected from
-    first principles or left out, never served.
+    first principles or left out, never served;
+  - the value is exact: a value the book prints as a decimal approximation
+    (3.486: 1.2912859970627) is replaced by the exact value derived from first
+    principles in --value-fix (tools/gr/value_fixes.tsv), or left out.  A fixed
+    value with no parameters may be an inert constant Sum (Sum[n^-n, ...]),
+    which costs nothing to re-evaluate and tests no parameter.
 
 Output files are split by interval (see GRTable.m): Indefinite.m,
 DefHalfLine.m, DefWholeLine.m, DefUnit.m, DefTrig.m, DefOther.m.
@@ -97,6 +102,21 @@ def read_cond_fix(paths):
     return fix
 
 
+INEXACT = re.compile(r'(?<![A-Za-z0-9_`$])\d+\.\d*|(?<![A-Za-z0-9_`$])\.\d+')
+
+
+def read_value_fix(paths):
+    """id -> exact value from id<TAB>value files (# comments)."""
+    fix = {}
+    for p in filter(None, paths.split(',')):
+        for line in open(p):
+            line = line.split('#', 1)[0].rstrip()
+            if line.strip():
+                rid, _, v = line.partition('\t')
+                fix[rid.strip()] = v.strip()
+    return fix
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--batch', required=True)
@@ -108,6 +128,9 @@ def main():
     ap.add_argument('--cond-fix', default='',
                     help='id<TAB>condition lines (comma-separated files): a book condition '
                          'corrected from first principles, conjoined to the stated ones')
+    ap.add_argument('--value-fix', default='',
+                    help='id<TAB>value lines (comma-separated files): the exact value of a '
+                         'formula the book states as a decimal approximation')
     a = ap.parse_args()
 
     names = set(l.strip() for l in open(a.names) if l.strip())
@@ -125,6 +148,7 @@ def main():
     for p in filter(None, a.book_wrong.split(',')):
         book_wrong |= set(l.split('\t')[0] for l in open(p) if l.strip())
     cond_fix = read_cond_fix(a.cond_fix)
+    value_fix = read_value_fix(a.value_fix)
     out = defaultdict(list)
     why = Counter()
     seen = set()      # batches overlap at their page boundaries
@@ -162,9 +186,19 @@ def main():
                     continue
             v = convert_record(v)     # Integrate[1/x, x] is Log[x]
             f, val = v['integrand'], v['value']
+            fixed = v['id'] in value_fix
+            if fixed:
+                val = value_fix[v['id']]
+                why['value-fixed'] += 1
+            elif INEXACT.search(val or ''):
+                why['inexact-value'] += 1          # a decimal is not a closed form
+                continue
             conds = e.get('conds', []) + cond_fix.get(v['id'], [])
             hs = heads(f) | heads(val) | heads(' '.join(conds))
-            if hs & BANNED_VALUE_HEADS:
+            banned = hs & BANNED_VALUE_HEADS
+            if fixed and not v.get('params') and banned <= {'Sum'}:
+                banned = set()                     # an inert constant Sum
+            if banned:
                 why['value-sum-or-integral'] += 1
                 continue
             missing = sorted(h for h in hs if h not in names and h not in NON_HEADS)
