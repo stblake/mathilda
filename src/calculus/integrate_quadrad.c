@@ -467,7 +467,8 @@ static bool qr_split(Expr* f, Expr* rad, Expr* x, Expr** E_out, Expr** H_out) {
 }
 
 /* I0 = Integrate[1/Sqrt[rad], x], rad = a x^2 + b x + c.  ArcSinh / ArcSin / Log
- * by the signs of a and the discriminant 4ac-b^2 (Log form for symbolic a).
+ * by the signs of a and the discriminant 4ac-b^2 (Log form for symbolic a;
+ * ArcTan for a < 0 with a discriminant of unknown sign).
  * Borrows a,b,c,rad,x; returns owned. */
 static Expr* qr_I0(Expr* a, Expr* b, Expr* c, Expr* rad, Expr* x) {
     int sa = expr_numeric_sign(a);
@@ -501,6 +502,16 @@ static Expr* qr_I0(Expr* a, Expr* b, Expr* c, Expr* rad, Expr* x) {
             res = mk_neg(mk_fn2("Times", mk_inv(mk_sqrt(mk_neg(expr_copy(a)))),
                 mk_fn1("ArcSin", mk_fn2("Times", expr_copy(lin), mk_inv(sq)))));
         else if (sq) expr_free(sq);
+    }
+    if (!res && sa < 0 && sd == 0) {
+        /* a < 0 with a discriminant of unknown sign (a symbolic parameter:
+         * 2 a y - y^2).  The Log form is complex there; the ArcTan form
+         *   -(1/Sqrt[-a]) ArcTan[(2 a x + b)/(2 Sqrt[-a] Sqrt[rad])]
+         * is real wherever rad > 0, whatever the sign of b^2 - 4ac. */
+        Expr* k = mk_sqrt(mk_neg(expr_copy(a)));                     /* Sqrt[-a] */
+        res = mk_neg(mk_fn2("Times", mk_inv(expr_copy(k)),
+            mk_fn1("ArcTan", mk_fn2("Times", expr_copy(lin),
+                mk_inv(mk_fn3("Times", mk_int(2), k, mk_sqrt(expr_copy(rad))))))));
     }
     if (disc) expr_free(disc);
     if (!res) {   /* (1/Sqrt[a]) Log[2 a x + b + 2 Sqrt[a] Sqrt[rad]] */

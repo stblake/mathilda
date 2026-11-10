@@ -1748,6 +1748,152 @@ static Expr* tq_core(Expr* f, Expr* x, Expr* a, Expr* b) {
     return out;
 }
 
+/* ---- indefinite: incomplete elliptic integrals ----------------------------
+ *
+ *   Int (A + B Sin[k x]^2)^(-1/2) dx = EllipticF[k x, -B/A]/(k Sqrt[A])
+ *   Int (A + B Sin[k x]^2)^(1/2)  dx = Sqrt[A] EllipticE[k x, -B/A]/k
+ *   Int (A + B Cos[k x])^(-1/2)   dx = 2 EllipticF[k x/2, 2B/(A+B)]/(k Sqrt[A+B])
+ *   Int (A + B Cos[k x])^(1/2)    dx = 2 Sqrt[A+B] EllipticE[k x/2, 2B/(A+B)]/k
+ *
+ * (Cos^2 is read as 1 - Sin^2; Cos u = 1 - 2 Sin[u/2]^2.)  Each is the
+ * definition of F and E in the parameter m, d/dphi F = (1 - m Sin^2)^(-1/2),
+ * so the antiderivative differentiates back on the principal branch (A > 0).
+ * The pendulum's first integral Int (C + 2 Cos[th])^(-1/2) dth closes here
+ * instead of grinding through the cascade (60 s, unevaluated). */
+
+/* e == g[k x] (or g[x]) with k free of x: sets *k (owned, or NULL for 1). */
+static bool tq_lin_arg(const Expr* e, const Expr* x, Expr** k) {
+    *k = NULL;
+    if (expr_eq(e, x)) return true;
+    if (tq_head(e, SYM_Times) && e->data.function.arg_count == 2
+        && expr_eq(e->data.function.args[1], x) && !contains_sym(e->data.function.args[0], x)) {
+        *k = expr_copy(e->data.function.args[0]);
+        return true;
+    }
+    return false;
+}
+
+/* f is Trig[u]^pw with u a linear argument; returns the argument's k via *k
+ * and the argument itself via *u (borrowed). */
+static bool tq_trig_pow(const Expr* e, const Expr* x, const char* trig, int64_t pw,
+                        const Expr** u) {
+    (void)x;
+    const Expr* t = e;
+    if (pw != 1) {
+        if (!(tq_head(e, SYM_Power) && e->data.function.arg_count == 2
+              && e->data.function.args[1]->type == EXPR_INTEGER
+              && e->data.function.args[1]->data.integer == pw)) return false;
+        t = e->data.function.args[0];
+    }
+    if (!tq_head(t, trig) || t->data.function.arg_count != 1) return false;
+    *u = t->data.function.args[0];
+    return true;
+}
+
+Expr* integrate_elliptic_trig_indefinite(Expr* f, Expr* x) {
+    if (!f || !x || x->type != EXPR_SYMBOL) return NULL;
+    /* c Q^e: pull a constant factor */
+    const Expr* core = f;
+    Expr* cfac = NULL;
+    if (tq_head(f, SYM_Times)) {
+        size_t n = f->data.function.arg_count, iv = n, nv = 0;
+        for (size_t i = 0; i < n; i++)
+            if (contains_sym(f->data.function.args[i], x)) { iv = i; nv++; }
+        if (nv != 1) return NULL;
+        core = f->data.function.args[iv];
+        Expr** cs = malloc(sizeof(Expr*) * n);
+        size_t w = 0;
+        for (size_t i = 0; i < n; i++) if (i != iv) cs[w++] = expr_copy(f->data.function.args[i]);
+        cfac = expr_new_function(expr_new_symbol(SYM_Times), cs, w);
+        free(cs);
+    }
+    Expr* out = NULL;
+    if (!tq_head(core, SYM_Power) || core->data.function.arg_count != 2) goto done;
+    Expr* half = make_rational(1, 2), *mhalf = make_rational(-1, 2);
+    bool inv = expr_eq(core->data.function.args[1], mhalf);
+    bool dir = expr_eq(core->data.function.args[1], half);
+    expr_free(half); expr_free(mhalf);
+    if (!inv && !dir) goto done;
+    {
+        Expr* q = tq_eval(expr_new_function(expr_new_symbol(SYM_Expand),
+                          (Expr*[]){ expr_copy(core->data.function.args[0]) }, 1));
+        size_t nt = tq_head(q, SYM_Plus) ? q->data.function.arg_count : 1;
+        Expr* const* t = tq_head(q, SYM_Plus) ? q->data.function.args : &q;
+        Expr** A = malloc(sizeof(Expr*) * 2 * nt);
+        Expr** B = malloc(sizeof(Expr*) * 2 * nt);
+        size_t na = 0, nb = 0;
+        int kind = 0;                  /* 1: Sin^2/Cos^2 of u, 2: Cos[u] */
+        const Expr* u0 = NULL;
+        bool ok = true;
+        for (size_t i = 0; i < nt && ok; i++) {
+            const Expr* ti = t[i];
+            if (!contains_sym(ti, x)) { A[na++] = expr_copy((Expr*)ti); continue; }
+            size_t nf = tq_head(ti, SYM_Times) ? ti->data.function.arg_count : 1;
+            Expr* const* fa = tq_head(ti, SYM_Times) ? ti->data.function.args : (Expr* const*)&ti;
+            int which = 0; const Expr* u = NULL;
+            Expr** c = malloc(sizeof(Expr*) * nf);
+            size_t nc = 0;
+            for (size_t j = 0; j < nf && ok; j++) {
+                if (!contains_sym(fa[j], x)) { c[nc++] = expr_copy(fa[j]); continue; }
+                int w = 0;
+                if (tq_trig_pow(fa[j], x, SYM_Sin, 2, &u)) w = 1;
+                else if (tq_trig_pow(fa[j], x, SYM_Cos, 2, &u)) w = 2;
+                else if (tq_trig_pow(fa[j], x, SYM_Cos, 1, &u)) w = 3;
+                if (!w || which) ok = false; else which = w;
+            }
+            int k_needed = which == 3 ? 2 : 1;
+            if (ok && (kind == 0 || kind == k_needed) && (!u0 || expr_eq(u0, u))) {
+                kind = k_needed; u0 = u;
+                Expr* co = expr_new_function(expr_new_symbol(SYM_Times), c, nc);
+                if (which == 2) {          /* c Cos^2 = c - c Sin^2 */
+                    A[na++] = expr_copy(co);
+                    B[nb++] = tq_fn2(SYM_Times, expr_new_integer(-1), co);
+                } else B[nb++] = co;
+            } else {
+                for (size_t j = 0; j < nc; j++) expr_free(c[j]);
+                ok = false;
+            }
+            free(c);
+        }
+        Expr* k = NULL;
+        if (ok && kind && u0 && tq_lin_arg(u0, x, &k)) {
+            Expr* Av = tq_eval(expr_new_function(expr_new_symbol(SYM_Plus), A, na));
+            Expr* Bv = tq_eval(expr_new_function(expr_new_symbol(SYM_Plus), B, nb));
+            na = nb = 0;
+            Expr *amp, *m, *S, *scale;     /* phi, parameter, Sqrt base, prefactor */
+            if (kind == 1) {
+                amp = expr_copy((Expr*)u0);
+                m = tq_fn2(SYM_Times, tq_fn2(SYM_Times, expr_new_integer(-1), expr_copy(Bv)),
+                           tq_fn2(SYM_Power, expr_copy(Av), expr_new_integer(-1)));
+                S = expr_copy(Av);
+                scale = expr_new_integer(1);
+            } else {
+                Expr* AB = tq_fn2(SYM_Plus, expr_copy(Av), expr_copy(Bv));
+                amp = tq_fn2(SYM_Times, make_rational(1, 2), expr_copy((Expr*)u0));
+                m = tq_fn2(SYM_Times, tq_fn2(SYM_Times, expr_new_integer(2), expr_copy(Bv)),
+                           tq_fn2(SYM_Power, expr_copy(AB), expr_new_integer(-1)));
+                S = AB;
+                scale = expr_new_integer(2);
+            }
+            Expr* sq = tq_fn2(SYM_Power, S, inv ? make_rational(-1, 2) : make_rational(1, 2));
+            Expr* ell = expr_new_function(expr_new_symbol(inv ? SYM_EllipticF : SYM_EllipticE),
+                                          (Expr*[]){ amp, m }, 2);
+            Expr* kinv = k ? tq_fn2(SYM_Power, k, expr_new_integer(-1)) : expr_new_integer(1);
+            out = tq_eval(expr_new_function(expr_new_symbol(SYM_Times),
+                          (Expr*[]){ scale, sq, ell, kinv,
+                                     cfac ? expr_copy(cfac) : expr_new_integer(1) }, 5));
+            expr_free(Av); expr_free(Bv);
+        } else if (k) expr_free(k);
+        for (size_t i = 0; i < na; i++) expr_free(A[i]);
+        for (size_t i = 0; i < nb; i++) expr_free(B[i]);
+        free(A); free(B);
+        expr_free(q);
+    }
+done:
+    if (cfac) expr_free(cfac);
+    return out;
+}
+
 Expr* integrate_elliptic_try(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions) {
     (void)assumptions;
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;

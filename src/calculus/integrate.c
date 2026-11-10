@@ -3216,6 +3216,10 @@ Expr* builtin_integrate(Expr* res) {
              * structural gate (a top-level step factor), and first because no
              * later stage integrates a step at all -- they would only grind. */
             IP_STAGE(IP_STEP,         integrate_step_indefinite_try(effective_f, x));
+            /* (A + B Sin[k x]^2)^(+-1/2), (A + B Cos[k x])^(+-1/2): incomplete
+             * EllipticF/E by definition -- a structural recogniser the cascade
+             * would otherwise grind on for its whole budget. */
+            if (!result) result = integrate_elliptic_trig_indefinite(effective_f, x);
             IP_STAGE(IP_RATIONAL,     try_rational(effective_f, x));
             IP_STAGE(IP_LINRAD,       try_linrad(effective_f, x));
             IP_STAGE(IP_QUADRAD,      try_quadrad(effective_f, x));

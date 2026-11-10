@@ -136,6 +136,7 @@ static DSolveMethod ds_method_from_string(const char* s) {
 extern Expr** dsolve_factorable_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_nth_algebraic_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_nth_algebraic_implicit_try(DSolveProblem* P, size_t* nbranch);
+extern bool dsolve_nth_algebraic_has_relations(const DSolveProblem* P);
 extern Expr** dsolve_nth_algebraic_binomial_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_quadrature_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_linear1_try(DSolveProblem* P, size_t* nbranch);
@@ -353,6 +354,18 @@ static bool ds_automatic_answer_admissible(const Expr* result, const DSolveProbl
 /* ------------------------------------------------------------------ *
  *  Dispatcher                                                         *
  * ------------------------------------------------------------------ */
+/* A first-order scalar ODE F(y, y') == 0 with x absent (after y[x], y'[x]
+ * become plain symbols) whose every y'-root NthAlgebraic already integrated. */
+static bool ds_autonomous_with_relations(DSolveProblem* P) {
+    if (P->nfun != 1 || P->neq != 1 || P->nind != 1 || P->max_order[0] != 1) return false;
+    if (!dsolve_nth_algebraic_has_relations(P)) return false;
+    Expr* R = dsolve_algebraic_residual(P, intern_symbol("DSolve`auY"), intern_symbol("DSolve`auP"));
+    if (!R) return false;
+    bool xfree = ds_free_of(R, P->ind_names[0]);
+    expr_free(R);
+    return xfree;
+}
+
 Expr* builtin_dsolve(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     if (res->data.function.arg_count < 3) return NULL;
@@ -474,7 +487,13 @@ Expr* builtin_dsolve(Expr* res) {
             if (!result) result = dsolve_run(&P, dsolve_clairaut_try);
             /* Lagrange/d'Alembert (parametric general solution) — Clairaut, its
              * phi(p)==p special case, runs first. */
-            if (!result) result = dsolve_run_parametric(&P, dsolve_lagrange_try);
+            /* An AUTONOMOUS (x-free) equation whose every y'-root NthAlgebraic
+             * already integrated (its relations are stashed) is a quadrature: the
+             * late implicit slot answers it in x and y (the brachistochrone
+             * y (1 + y'^2) == 2 a), where Lagrange's degenerate f(p) = 0 case
+             * returns a parametric curve.  Lagrange keeps every other equation. */
+            if (!result && !ds_autonomous_with_relations(&P))
+                result = dsolve_run_parametric(&P, dsolve_lagrange_try);
             /* Undetermined coefficients: a tidy particular for UC forcing of a
              * constant-coefficient linear ODE; runs before constcoeff (which is the
              * general variation-of-parameters fallback for any other forcing). */
@@ -651,7 +670,12 @@ Expr* builtin_dsolve(Expr* res) {
              * NthAlgebraic's implicit pass when every y'-root has a first integral.
              * MATHILDA_NO_PARAMQUAD disables it for A/B. */
             if (!result) result = dsolve_run_parametric(&P, dsolve_paramquad_try);
-            if (!result) result = dsolve_run_parametric(&P, dsolve_solvablefory_try);
+            /* SolvableForY defers, as ParametricQuadrature does, when NthAlgebraic
+             * found a first integral for every y'-root: the late implicit slot then
+             * answers in x and y directly (the brachistochrone y (1 + y'^2) == 2 a),
+             * where the "dp" method returns a parametric curve. */
+            if (!result && !dsolve_nth_algebraic_has_relations(&P))
+                result = dsolve_run_parametric(&P, dsolve_solvablefory_try);
             /* ...and its implicit slope elimination: when the induced x(p) ODE solves
              * only implicitly, Phi(p, x) == C, each explicit root p_k(x, y) of the
              * ODE gives the implicit solution Phi(p_k, x) == C (stashed by the pass

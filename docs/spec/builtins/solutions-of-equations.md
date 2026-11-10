@@ -841,6 +841,12 @@ Out[19]= {}                        (* over-determined, inconsistent *)
 - A one-element equation list in one variable (`Solve[{eqn}, {x}]`) no longer
   mutates its input: a declined call keeps its equation (it printed `Solve[{Null}, {x}]`).
 
+**Domain from `Element` constraints (v0.6492).** When every variable is
+constrained by `Element[v, Integers]` among the equations (and no other domain
+is given), Solve treats the system as Diophantine:
+`Solve[{x^2 - 61 y^2 == 1, Element[x, Integers] && x > 0 && Element[y, Integers] && y > 0}, {x, y}]`
+gives the Pell family, indexed by `Element[C[1], Integers] && C[1] >= 1`.
+
 ## Reduce
 
 Reduces a statement of equations and inequalities to a complete, quantifier-free

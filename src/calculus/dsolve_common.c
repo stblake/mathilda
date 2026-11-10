@@ -1744,6 +1744,31 @@ static Expr* ds_singular_condition(const Expr* e, const char* xvar, const Expr* 
     return out;
 }
 
+/* Real form of a fully fitted IVP answer.  Exponential-basis methods give a
+ * real solution of a real ODE as complex exponentials ((-I/2) E^(-I x)
+ * (-1 + E^(2 I x))/x for Lane-Emden n = 1); with no constant left the value
+ * is a fixed function, and ExpToTrig + Simplify returns it as Sin[x]/x.
+ * Applied only when the equations and conditions are free of I, the fitted
+ * answer has no constant, and the rewrite removes every I (otherwise the
+ * answer is genuinely complex and is kept). */
+static bool ds_has_imag(const Expr* e) {
+    return ds_contains(e, SYM_I) || ds_contains(e, SYM_Complex);
+}
+static bool ds_problem_real(const DSolveProblem* P) {
+    for (size_t i = 0; i < P->neq; i++) if (ds_has_imag(P->eq_residuals[i])) return false;
+    for (size_t c = 0; c < P->ncond; c++)
+        if (ds_has_imag(P->conds[c].value) || ds_has_imag(P->conds[c].point)) return false;
+    return true;
+}
+static Expr* ds_real_form(const DSolveProblem* P, Expr* fitted) {
+    if (P->ncond == 0 || !ds_has_imag(fitted) || ds_contains(fitted, P->param_head)
+        || !ds_problem_real(P)) return fitted;
+    Expr* r = eval_and_free(ds_call1(SYM_Simplify, ds_call1(intern_symbol("ExpToTrig"), expr_copy(fitted))));
+    if (r && !ds_has_imag(r)) { expr_free(fitted); return r; }
+    if (r) expr_free(r);
+    return fitted;
+}
+
 static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
                                   bool* no_solution, int* fit_state) {
     if (no_solution) *no_solution = false;
@@ -2776,6 +2801,7 @@ Expr* dsolve_run(DSolveProblem* P, DSolveTryFn fn) {
         if (nosol) { n_nosol++; if (fitted) expr_free(fitted); continue; }
         if (!fitted) continue;
         if (st == FIT_UNDEF) { expr_free(fitted); continue; }   /* never a solution */
+        if (st == FIT_OK) fitted = ds_real_form(P, fitted);
         /* Drop a first-order explicit branch the corpus harness itself would score BAD
          * (a wrong root, or a form valid only on a sub-interval the grid overshoots):
          * declining lets a later cascade method's verifiable (often implicit) form win,
@@ -3117,6 +3143,64 @@ Expr** dsolve_stash_take(int tag, uint64_t h, size_t* n) {
     return NULL;
 }
 
+/* G == C[1] with every term of G sharing a symbolic constant factor (free of
+ * x, of the unknown and of the constants C[k]): Sqrt[a - 1] (G0) arises when a
+ * method scales its first integral, and makes the relation empty (0 == C[1])
+ * where the factor vanishes (a = 1 for the brachistochrone).  The factor is
+ * removed term by term -- the relation is the same level set up to the
+ * renamed constant.  Numeric content is left alone.  Consumes g. */
+static bool ds_const_factor(const DSolveProblem* P, const Expr* f) {
+    if (f->type == EXPR_INTEGER || f->type == EXPR_REAL || head_is(f, SYM_Rational)
+        || head_is(f, SYM_Complex)) return false;
+    for (size_t i = 0; i < P->nind; i++) if (ds_contains(f, P->ind_names[i])) return false;
+    for (size_t i = 0; i < P->nfun; i++) if (ds_contains(f, P->fun_names[i])) return false;
+    return !ds_contains(f, P->param_head);
+}
+static Expr* ds_strip_constant_content(const DSolveProblem* P, Expr* g) {
+    if (!head_is(g, SYM_Plus) || g->data.function.arg_count < 2) return g;
+    size_t nt = g->data.function.arg_count;
+    const Expr* t0 = g->data.function.args[0];
+    size_t nf0 = head_is(t0, SYM_Times) ? t0->data.function.arg_count : 1;
+    Expr* const* f0 = head_is(t0, SYM_Times) ? t0->data.function.args : (Expr* const*)&t0;
+    Expr* common[8]; size_t nc = 0;
+    for (size_t j = 0; j < nf0 && nc < 8; j++) {
+        if (!ds_const_factor(P, f0[j])) continue;
+        bool all = true;
+        for (size_t i = 1; i < nt && all; i++) {
+            const Expr* ti = g->data.function.args[i];
+            bool hit = false;
+            if (head_is(ti, SYM_Times)) {
+                for (size_t k = 0; k < ti->data.function.arg_count && !hit; k++)
+                    hit = expr_eq(ti->data.function.args[k], f0[j]);
+            } else hit = expr_eq(ti, f0[j]);
+            all = hit;
+        }
+        if (all) common[nc++] = f0[j];
+    }
+    if (nc == 0) return g;
+    Expr** terms = malloc(sizeof(Expr*) * nt);
+    for (size_t i = 0; i < nt; i++) {
+        const Expr* ti = g->data.function.args[i];
+        if (!head_is(ti, SYM_Times)) { terms[i] = expr_new_integer(1); continue; }
+        size_t n = ti->data.function.arg_count, w = 0;
+        Expr** keep = malloc(sizeof(Expr*) * n);
+        bool* used = calloc(nc, sizeof(bool));
+        for (size_t k = 0; k < n; k++) {
+            bool drop = false;
+            for (size_t c = 0; c < nc && !drop; c++)
+                if (!used[c] && expr_eq(ti->data.function.args[k], common[c])) used[c] = drop = true;
+            if (!drop) keep[w++] = expr_copy(ti->data.function.args[k]);
+        }
+        terms[i] = expr_new_function(expr_new_symbol(SYM_Times), keep, w);
+        free(keep); free(used);
+    }
+    Expr* out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), terms, nt));
+    free(terms);
+    if (!out) return g;
+    expr_free(g);
+    return out;
+}
+
 Expr* dsolve_run_implicit(DSolveProblem* P, DSolveTryFn fn) {
     size_t nb = 0;
     Expr** gs = fn(P, &nb);
@@ -3127,6 +3211,7 @@ Expr* dsolve_run_implicit(DSolveProblem* P, DSolveTryFn fn) {
     for (size_t b = 0; b < nb; b++) {
         if (!gs[b]) continue;
         if (!dsolve_verify_implicit(P, gs[b])) { expr_free(gs[b]); continue; }
+        gs[b] = ds_strip_constant_content(P, gs[b]);
         /* A relation carrying an INDEFINITE inert integral in y[x] cannot be fitted by
          * substitution: `y[x] -> y0` is a blind ReplaceAll and would rewrite the
          * integration-variable slot too.  Convert it to the definite form anchored at
@@ -3152,6 +3237,10 @@ Expr* dsolve_run_implicit(DSolveProblem* P, DSolveTryFn fn) {
         }
         Expr* rhs = dsolve_implicit_rhs(P, gs[b]);
         rhs = ds_collapse_zero_width_inert(rhs);
+        /* A condition imposed at a singular point of the relation (Log[x] at
+         * x = 0, Lane-Emden's Emden-Fowler variables) "fits" the constant to
+         * Infinity: that is no solution, so the branch is dropped. */
+        if (rhs && ds_nonfinite(rhs)) { expr_free(rhs); expr_free(gs[b]); continue; }
         Expr* rhs2 = ds_rename_param(rhs, P->param_head);      /* renames the C[1] */
         expr_free(rhs);
         Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),

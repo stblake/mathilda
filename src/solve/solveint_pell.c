@@ -200,7 +200,9 @@ Expr* si_solve_pell_parametric(SICtx* c) {
         mk_fn2("Power", mk_fn2("Times", mk_int(2), expr_copy(sqrtD)), mk_int(-1)));
     expr_free(sqrtD);
 
-    Expr* cond = mk_fn2("GreaterEqual", mk_fn1("C", mk_int(1)), mk_int(1));
+    /* C[1] is an integer index: Element[C[1], Integers] && C[1] >= 1. */
+    Expr* cond = mk_fn2("And", mk_fn2("Element", mk_fn1("C", mk_int(1)), mk_sym("Integers")),
+                        mk_fn2("GreaterEqual", mk_fn1("C", mk_int(1)), mk_int(1)));
     Expr* cex = mk_fn2("ConditionalExpression", xval, expr_copy(cond));
     Expr* cey = mk_fn2("ConditionalExpression", yval, cond);
 

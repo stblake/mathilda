@@ -251,6 +251,49 @@ void test_fe_elliptic_laplace() {
     assert_true("MemberQ[Attributes[LaplaceTransform], Protected]");
 }
 
+/* ---- step 1 of the remaining famous problems -------------------------------- */
+
+void test_sum_limit_pell_step1() {
+    /* Dougall with symbolic parameters, and a parameter in factored form */
+    assert_true("Sum[Pochhammer[a, k] Pochhammer[b, k] Pochhammer[c, k] Pochhammer[d, k] Pochhammer[a/2 + 1, k]/"
+                "(k! Pochhammer[a/2, k] Pochhammer[a - b + 1, k] Pochhammer[a - c + 1, k] Pochhammer[a - d + 1, k]), "
+                "{k, 0, Infinity}] === Gamma[1 + a - b] Gamma[1 + a - c] Gamma[1 + a - d] Gamma[1 + a - b - c - d]/"
+                "(Gamma[1 + a] Gamma[1 + a - b - c] Gamma[1 + a - b - d] Gamma[1 + a - c - d])");
+    assert_true("Simplify[Sum[Pochhammer[a, k] Pochhammer[a/2 + 1, k]/(k! Pochhammer[a/2, k]) z^k, {k, 0, Infinity}]"
+                " - (1 + z)/(1 - z)^(a + 1)] === 0");
+    /* L'Hopital at a symbolic point, the zero visible only under a > 0 */
+    assert_true("Limit[(-a (x a^2)^(1/3) + Sqrt[2 x a^3 - x^4])/(a - (a x^3)^(1/4)), x -> a, Assumptions -> a > 0]"
+                " === 16 a/9");
+    assert_true("Limit[(Sqrt[x] - Sqrt[a])/(x - a), x -> a, Assumptions -> a > 0] === 1/(2 Sqrt[a])");
+    /* Element[v, Integers] constraints name the domain; the family index is an integer */
+    assert_true("(x /. First[Solve[{x^2 - 61 y^2 == 1, Element[x, Integers] && x > 0 && Element[y, Integers] && y > 0},"
+                " {x, y}]] /. C[1] -> 1) === 1766319049");
+    assert_true("!FreeQ[Solve[{x^2 - 2 y^2 == 1, x > 0, y > 0}, {x, y}, Integers], Element[C[1], Integers]]");
+    assert_true("Head[Solve[{x + y == 3, Element[x, Integers]}, {x, y}]] === Solve");
+    assert_true("Solve[{2 x == 3, Element[x, Integers]}, x] === {}");
+}
+
+void test_integrate_dsolve_step1() {
+    /* real branch of ArcTanh; real ArcTan for a symbolic-discriminant quadratic */
+    assert_true("Integrate[1/(y Sqrt[1 - y^2]), y] === -ArcTanh[Sqrt[1 - y^2]]");
+    assert_true("FreeQ[Integrate[1/Sqrt[2 a y - y^2], y], Log]");
+    assert_true("Simplify[D[Integrate[y/Sqrt[2 a y - y^2], y], y] - y/Sqrt[2 a y - y^2]] === 0");
+    /* incomplete elliptic integrals, fast */
+    assert_true("Integrate[1/Sqrt[1 - m Sin[x]^2], x] === EllipticF[x, m]");
+    assert_true("Integrate[Sqrt[1 - m Sin[x]^2], x] === EllipticE[x, m]");
+    assert_num_eq("(D[Integrate[1/Sqrt[c + 2 Cos[x]], x], x] /. {c -> 5/2, x -> 7/10})",
+                  "1/Sqrt[5/2 + 2 Cos[7/10]]");
+    assert_num_eq("(D[Integrate[3/Sqrt[4 + Cos[2 x]^2], x], x] /. x -> 7/10)", "3/Sqrt[4 + Cos[7/5]^2]");
+    /* DSolve: real form, real branch, implicit quadrature, elliptic first integral */
+    assert_true("DSolve[{y''[x] + 2 y'[x]/x + y[x] == 0, y[0] == 1, y'[0] == 0}, y[x], x] === {{y[x] -> Sin[x]/x}}");
+    assert_true("FreeQ[DSolve[y'[x] == -y[x]/Sqrt[a^2 - y[x]^2], y[x], x], ArcTanh[a/Sqrt[a^2 - y[x]^2]]]");
+    assert_true("With[{s = DSolve[y[x] (y'[x]^2 + 1) == 2 a, y[x], x]}, FreeQ[s, Function] && FreeQ[s, Log]"
+                " && FreeQ[s, Complex] && !FreeQ[s, Equal]]");
+    assert_true("With[{s = DSolve[theta''[t] + Sin[theta[t]] == 0, theta[t], t]}, FreeQ[s, Inactive] && !FreeQ[s, EllipticF]]");
+    /* a condition at the singular point never fits a constant to Infinity */
+    assert_true("FreeQ[DSolve[{y''[x] + y[x]^5 + 2 y'[x]/x == 0, y[0] == 1, y'[0] == 0}, y[x], x], Infinity]");
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -267,6 +310,8 @@ int main() {
     TEST(test_sum_dixon_vandermonde_lambert);
     TEST(test_product_limit_minpoly_arctan);
     TEST(test_fe_elliptic_laplace);
+    TEST(test_sum_limit_pell_step1);
+    TEST(test_integrate_dsolve_step1);
 
     printf("All OSP famous-problem regression tests passed.\n");
     return 0;

@@ -2025,8 +2025,11 @@ static void t_lagrange_declines(void) {
     check_form("Head[DSolve`Lagrange[y[x] == x y'[x] + (y'[x])^2, y, x]]", "DSolve`Lagrange");
     /* genuinely linear in y' (phi const, psi affine): owned by LinearFirstOrder */
     check_form("Head[DSolve`Lagrange[y'[x] + y[x] == x, y, x]]", "DSolve`Lagrange");
-    /* a parametric IVP is deferred: declines rather than ignoring the condition */
-    check_form("Head[DSolve[{y[x] == 2 x y'[x] + (y'[x])^2, y[1] == 0}, y, x]]", "DSolve");
+    /* a parametric IVP is deferred (Lagrange never ignores the condition); the
+     * implicit relation answers it, and it meets y[1] == 0 */
+    check_form("With[{r = DSolve[{y[x] == 2 x y'[x] + (y'[x])^2, y[1] == 0}, y, x]}, "
+               "Head[r] === List && FreeQ[r, Function] && FreeQ[r, Infinity] && "
+               "TrueQ[r[[1, 1]] /. {y[x] -> 0, x -> 1}]]", "True");
 }
 static void t_lagrange_singular(void) {
     /* y == x (y')^2 + (y')^3: phi(p)=p^2, roots of phi(p)=p are p=0,1 -> singular

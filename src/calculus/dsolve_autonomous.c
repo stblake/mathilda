@@ -27,6 +27,7 @@
  * higher-order nonlinear autonomous families (y y''' == y' y'', 2 y y''' == y', ...).
  */
 #include "dsolve_common.h"
+#include "integrate_elliptic.h"   /* integrate_elliptic_trig_indefinite */
 #include "dsolve.h"          /* g_dsolve_depth */
 #include "../sym_names.h"
 #include "../eval.h"
@@ -904,6 +905,15 @@ static Expr** ar_implicit_impl(DSolveProblem* P, size_t* nbranch, bool elliptic_
         Expr* integ = NULL;
         bool closed = false;
         if (!may_spin) integ = ar_try_quadrature(invp, Ysym, n, &closed);
+        /* An elliptic quadrature of the trigonometric-quadratic family (the
+         * pendulum's 1/Sqrt[C + 2 Cos[y]]) has a closed form in EllipticF/E: the
+         * structural recogniser cannot spin, so it runs even where the cascade is
+         * guarded off. */
+        if (!integ && may_spin) {
+            Expr* ys = expr_new_symbol(Ysym);
+            integ = integrate_elliptic_trig_indefinite(invp, ys);
+            expr_free(ys);
+        }
         /* The early pass claims a branch whose quadrature is provably elliptic, or
          * one Integrate DECLINED (returned unevaluated in budget -- the same
          * quadrature the explicit pass needed, so nothing later can close it); a

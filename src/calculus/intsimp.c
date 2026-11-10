@@ -1093,15 +1093,56 @@ static bool it_num_real(const Expr* e, double* out) {
  * are skipped; a definite real |g| <= 1 or a nonzero imaginary part at any
  * probe vetoes the rewrite (conservative: the swap is derivative-preserving,
  * so a false negative merely leaves the pre-existing form). */
+/* The free symbols of g other than x and the numeric constants, collected
+ * once (borrowed pointers into g). */
+static void it_free_params(const Expr* e, const Expr* x, const Expr*** out, size_t* n, size_t* cap) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        if (expr_eq(e, x) || expr_is_numeric_quantity(e)) return;
+        for (size_t i = 0; i < *n; i++) if (expr_eq((*out)[i], e)) return;
+        if (*n == *cap) { *cap = *cap ? 2 * *cap : 4; *out = realloc(*out, *cap * sizeof(Expr*)); }
+        (*out)[(*n)++] = e;
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        it_free_params(e->data.function.args[i], x, out, n, cap);
+}
+
+/* True iff g(x) is real with |g| > 1 wherever it is real across a spread of
+ * sample points -- the branch condition under which ArcCoth[g] = ArcTanh[1/g]
+ * is the real form and ArcTanh[g] sits on its cut.  The probes run over
+ * (0, 1) as well as beyond, so an antiderivative real only on a bounded
+ * interval (Sqrt[1 - x^2] inside g) is still decided; a probe where g is not
+ * real is outside that interval and is skipped.  Other free symbols (the
+ * parameters: a in a/Sqrt[a^2 - y^2]) take fixed positive sample values.  A
+ * definite real |g| <= 1 at any probe vetoes the rewrite (conservative: the
+ * swap is derivative-preserving, so a false negative merely leaves the
+ * pre-existing form). */
 static bool it_arg_real_outside_unit(const Expr* g, Expr* x) {
-    static const double probes[] = { 0.3, 0.7, 1.3, 2.0, 3.5, 8.0, 15.0 };
+    static const double probes[] = { 0.05, 0.15, 0.3, 0.45, 0.7, 0.9, 1.3, 2.0, 3.5, 8.0, 15.0 };
+    static const double pvals[] = { 1.37, 2.11, 1.73, 2.9 };
     const size_t np = sizeof(probes) / sizeof(probes[0]);
+    const Expr** ps = NULL;
+    size_t npar = 0, pcap = 0;
+    it_free_params(g, x, &ps, &npar, &pcap);
+    if (npar > 4) { free(ps); return false; }
+    Expr* gp = expr_copy((Expr*)g);
+    for (size_t k = 0; k < npar; k++) {
+        Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+            (Expr*[]){ expr_copy((Expr*)ps[k]), expr_new_real(pvals[k]) }, 2);
+        gp = eval_and_free(internal_replace_all((Expr*[]){ gp, rule }, 2));
+    }
+    free(ps);
     int valid = 0;
-    for (size_t i = 0; i < np; i++) {
+    bool veto = false;
+    for (size_t i = 0; i < np && !veto && gp; i++) {
         Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
             (Expr*[]){ expr_copy(x), expr_new_real(probes[i]) }, 2);
+        arith_warnings_mute_push();          /* a probe may sit on a pole */
         Expr* sub = eval_and_free(internal_replace_all(
-            (Expr*[]){ expr_copy((Expr*)g), rule }, 2));
+            (Expr*[]){ expr_copy(gp), rule }, 2));
+        arith_warnings_mute_pop();
         if (!sub) continue;
         Expr* im_call = expr_new_function(expr_new_symbol(SYM_Im),
             (Expr*[]){ expr_copy(sub) }, 1);
@@ -1113,11 +1154,12 @@ static bool it_arg_real_outside_unit(const Expr* g, Expr* x) {
         expr_free(im_call);
         expr_free(ab_call);
         if (!im_ok || !ab_ok) continue;           /* singular / complex-infinite probe */
-        if (fabs(im) > 1e-7)   return false;       /* g not real here */
-        if (ab <= 1.0 + 1e-7)  return false;       /* |g| <= 1: ArcTanh is the real branch */
-        valid++;
+        if (fabs(im) > 1e-7)   continue;          /* g not real here: outside the domain */
+        if (ab <= 1.0 + 1e-7)  veto = true;       /* |g| <= 1: ArcTanh is the real branch */
+        else valid++;
     }
-    return valid >= 3;
+    if (gp) expr_free(gp);
+    return !veto && valid >= 2;
 }
 
 /* Walk `e`, rewriting every x-dependent ArcTanh[g] whose argument is real
@@ -1139,8 +1181,18 @@ static Expr* it_realify_arctanh(const Expr* e, Expr* x) {
         && rebuilt->data.function.arg_count == 1) {
         Expr* g = rebuilt->data.function.args[0];
         if (!intrat_freeq_test(g, x) && it_arg_real_outside_unit(g, x)) {
-            Expr* out = expr_new_function(expr_new_symbol(SYM_ArcCoth),
-                (Expr*[]){ expr_copy(g) }, 1);
+            /* ArcCoth[g] == ArcTanh[1/g]; the reciprocal form when it is
+             * at most two leaves larger (a/Sqrt[a^2 - y^2] -> Sqrt[a^2 - y^2]/a). */
+            Expr* inv = eval_and_free(expr_new_function(expr_new_symbol(SYM_Power),
+                (Expr*[]){ expr_copy(g), expr_new_integer(-1) }, 2));
+            Expr* out;
+            if (inv && leaf_count_internal(inv, true) <= leaf_count_internal(g, true) + 2) {
+                out = expr_new_function(expr_new_symbol(SYM_ArcTanh), (Expr*[]){ inv }, 1);
+            } else {
+                if (inv) expr_free(inv);
+                out = expr_new_function(expr_new_symbol(SYM_ArcCoth),
+                    (Expr*[]){ expr_copy(g) }, 1);
+            }
             expr_free(rebuilt);
             return out;
         }

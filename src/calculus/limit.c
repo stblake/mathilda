@@ -1026,6 +1026,30 @@ static bool has_divergent_inner_arg_at(Expr* e, Expr* x, Expr* point) {
     return false;
 }
 
+/* The value of a denominator at the limit point is zero, also when that is
+ * only visible under the assumptions: a - (a^4)^(1/4) is 0 for a > 0, but no
+ * literal 0.  A parameter radical, Abs or Log is the only way a symbolic
+ * value hides a zero from evaluation, so only then is Simplify (which reads
+ * the ambient $Assumptions that Limit installs) asked. */
+static bool lim_has_branch_atom(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is((Expr*)e, SYM_Abs) || head_is((Expr*)e, SYM_Log)) return true;
+    if (head_is((Expr*)e, SYM_Power) && e->data.function.arg_count == 2
+        && head_is(e->data.function.args[1], SYM_Rational)
+        && e->data.function.args[0]->type != EXPR_INTEGER) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (lim_has_branch_atom(e->data.function.args[i])) return true;
+    return false;
+}
+static bool den_vanishes_at(Expr* v) {
+    if (is_lit_zero(v)) return true;
+    if (!v || v->type != EXPR_FUNCTION || !lim_has_branch_atom(v)) return false;
+    Expr* s = simp(mk_fn1("Simplify", expr_copy(v)));
+    bool z = is_lit_zero(s);
+    expr_free(s);
+    return z;
+}
+
 static Expr* try_numeric_point_substitution(Expr* f, LimitCtx* ctx) {
     if (!is_numeric_literal_point(ctx->point)) return NULL;
 
@@ -1105,7 +1129,7 @@ static Expr* try_continuous_substitution(Expr* f, LimitCtx* ctx) {
     Expr* den = simp(mk_fn1("Denominator", expr_copy(tog)));
     expr_free(tog);
     Expr* den_at = subst_eval(den, ctx->x, ctx->point);
-    bool den_bad = is_lit_zero(den_at) || is_divergent(den_at);
+    bool den_bad = den_vanishes_at(den_at) || is_divergent(den_at);
     expr_free(den_at);
     if (den_bad) {
         expr_free(num); expr_free(den);
@@ -4359,6 +4383,46 @@ static Expr* layer_small_arg_linearize(Expr* f, LimitCtx* ctx) {
     return r;
 }
 
+/* L'Hopital at a finite SYMBOLIC point, for a 0/0 quotient whose zeros are
+ * visible only under the assumptions (radicals of the parameters):
+ * (-a (a^2 x)^(1/3) + Sqrt[2 a^3 x - x^4])/(a - (a x^3)^(1/4)) at x -> a, a > 0.
+ * Series cannot expand those radicals around a symbolic point (it returns
+ * Indeterminate + O[t]); differentiating N and D, up to three times, until
+ * D^(k)(point) is nonzero (Simplify under the ambient assumptions) gives
+ * N^(k)(point)/D^(k)(point) = 16 a/9.  Declines on anything else. */
+static Expr* layer_lhopital_symbolic(Expr* f, LimitCtx* ctx) {
+    if (is_infinity_sym(ctx->point) || is_neg_infinity(ctx->point)
+        || is_complex_infinity(ctx->point)) return NULL;
+    if (is_numeric_literal_point(ctx->point) || !lim_has_branch_atom(f)) return NULL;
+    Expr* tog = simp(mk_fn1("Together", expr_copy(f)));
+    Expr* num = simp(mk_fn1("Numerator", expr_copy(tog)));
+    Expr* den = simp(mk_fn1("Denominator", tog));
+    Expr* out = NULL;
+    for (int k = 0; k < 3 && !out; k++) {
+        Expr* nk = subst_eval(num, ctx->x, ctx->point);
+        Expr* dk = subst_eval(den, ctx->x, ctx->point);
+        bool nz = den_vanishes_at(nk), dz = den_vanishes_at(dk);
+        bool bad = is_divergent(nk) || is_divergent(dk);
+        if (bad || (k == 0 && !(nz && dz))) {
+            expr_free(nk); expr_free(dk);
+            break;
+        }
+        if (!dz) {
+            Expr* q = simp(mk_fn1("Simplify", mk_fn2("Divide", nk, dk)));
+            if (q && !is_divergent(q) && !expr_contains(q, ctx->x)) out = q;
+            else if (q) expr_free(q);
+            break;
+        }
+        expr_free(nk); expr_free(dk);
+        if (!nz) break;                              /* c/0: not this layer */
+        Expr* n1 = simp(mk_fn2("D", num, expr_copy(ctx->x)));
+        Expr* d1 = simp(mk_fn2("D", den, expr_copy(ctx->x)));
+        num = n1; den = d1;
+    }
+    expr_free(num); expr_free(den);
+    return out;
+}
+
 static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
     if (ctx->depth >= LIMIT_MAX_DEPTH) return NULL;
     ctx->depth++;
@@ -4530,6 +4594,10 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
      * leading term. This is the layer that proves a limit does *not* exist
      * for a sum of oscillations with no single dominant summand. */
     TRY(LIMIT_M_OSCILLATORY, layer_oscillatory(f, ctx));
+
+    /* Layer 1.9: L'Hopital for a 0/0 at a symbolic point hidden by
+     * parameter radicals, which Series cannot expand. */
+    TRY(LIMIT_M_SERIES, layer_lhopital_symbolic(f, ctx));
 
     /* Layer 2: series-based evaluation -- the workhorse. */
     TRY(LIMIT_M_SERIES, layer2_series(f, ctx));

@@ -161,12 +161,18 @@ static Expr* hg_eval(Expr* e) {
     return r;
 }
 
-/* True iff u - v evaluates to exactly 0.  Classical parameter relations are
- * linear in the parameters (1 + a - b, a/2, ...), so Plus canonicalisation
- * decides them; no Simplify is needed. */
+/* u - v, expanded: parameters arrive in either distributed (1 + a/2) or
+ * factored (1/2 (2 + a)) form, and Plus alone does not distribute. */
+static Expr* hg_diff(const Expr* u, const Expr* v) {
+    return hg_eval(hg_fn(SYM_Expand, (Expr*[]){ hg_plus(HG_CP(u), hg_neg(HG_CP(v))) }, 1));
+}
+
+/* True iff u - v is exactly 0.  Classical parameter relations are linear in
+ * the parameters (1 + a - b, a/2, ...), so the expanded difference decides
+ * them; no Simplify is needed. */
 static bool hg_eq(const Expr* u, const Expr* v) {
     if (expr_eq(u, v)) return true;
-    Expr* d = hg_eval(hg_plus(HG_CP(u), hg_neg(HG_CP(v))));
+    Expr* d = hg_diff(u, v);
     bool z = d && d->type == EXPR_INTEGER && d->data.integer == 0;
     if (d) expr_free(d);
     return z;
@@ -277,8 +283,7 @@ static Expr* try_shift_pair(Expr* a, Expr* b, Expr* z) {
         for (size_t j = 0; j < q; j++) {
             long dummy;
             if (is_nonpos_int(b->data.function.args[j], &dummy)) continue;
-            Expr* d = hg_eval(hg_plus(HG_CP(a->data.function.args[i]),
-                                      hg_neg(HG_CP(b->data.function.args[j]))));
+            Expr* d = hg_diff(a->data.function.args[i], b->data.function.args[j]);
             bool ok = d && d->type == EXPR_INTEGER && d->data.integer >= 1
                    && d->data.integer <= HG_SHIFT_MAX;
             int64_t n = ok ? d->data.integer : 0;

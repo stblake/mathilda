@@ -49,4 +49,8 @@ void integrate_elliptic_init(void);
  * as EllipticK / EllipticE; NULL when the integrand is not of that shape. */
 Expr* integrate_elliptic_trig_quadratic(Expr* f, Expr* x, Expr* a, Expr* b);
 
+/* Indefinite Int c (A + B Sin[k x]^2)^(+-1/2) dx and c (A + B Cos[k x])^(+-1/2) dx
+ * as incomplete EllipticF / EllipticE; NULL when the integrand is not of that shape. */
+Expr* integrate_elliptic_trig_indefinite(Expr* f, Expr* x);
+
 #endif /* MATHILDA_INTEGRATE_ELLIPTIC_H */

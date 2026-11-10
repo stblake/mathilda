@@ -902,6 +902,87 @@ static Expr* try_single_eq_multivar(Expr* equation, Expr* vars_list,
     return NULL;
 }
 
+/* ---- Element[v, Integers] constraints name the domain ----------------- */
+
+/* Append the conjuncts of e (List and And flattened) to *out. Borrowed. */
+static void sl_conjuncts(const Expr* e, const Expr*** out, size_t* n, size_t* cap) {
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && (e->data.function.head->data.symbol.name == SYM_List
+            || e->data.function.head->data.symbol.name == SYM_And)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            sl_conjuncts(e->data.function.args[i], out, n, cap);
+        return;
+    }
+    if (*n == *cap) { *cap = *cap ? 2 * *cap : 8; *out = realloc(*out, *cap * sizeof(Expr*)); }
+    (*out)[(*n)++] = e;
+}
+
+/* Element[v, Integers] / Element[{v, w}, Integers] / Element[v | w, Integers]:
+ * mark each named variable of vars (vs[0..nv)) in covered[]. */
+static bool sl_integer_element(const Expr* c, Expr* const* vs, size_t nv, bool* covered) {
+    if (!(c->type == EXPR_FUNCTION && c->data.function.head->type == EXPR_SYMBOL
+          && c->data.function.head->data.symbol.name == SYM_Element
+          && c->data.function.arg_count == 2
+          && c->data.function.args[1]->type == EXPR_SYMBOL
+          && c->data.function.args[1]->data.symbol.name == SYM_Integers)) return false;
+    const Expr* w = c->data.function.args[0];
+    size_t nw = 1;
+    Expr* const* ws = (Expr* const*)&w;
+    if (w->type == EXPR_FUNCTION && w->data.function.head->type == EXPR_SYMBOL
+        && (w->data.function.head->data.symbol.name == SYM_List
+            || w->data.function.head->data.symbol.name == SYM_Alternatives)) {
+        nw = w->data.function.arg_count; ws = w->data.function.args;
+    }
+    for (size_t i = 0; i < nw; i++) {
+        bool hit = false;
+        for (size_t j = 0; j < nv; j++)
+            if (expr_eq(ws[i], vs[j])) { covered[j] = true; hit = true; }
+        if (!hit) return false;          /* a non-variable: keep it as a constraint */
+    }
+    return true;
+}
+
+/* Solve[{eqns, Element[x, Integers], Element[y, Integers], ...}, {x, y}] over
+ * Complexes (or with no domain) is the Diophantine problem
+ * Solve[{eqns, ...}, {x, y}, Integers]: the reference treats domain
+ * memberships of every variable as the domain itself.  Returns the rewritten
+ * call (the evaluator re-runs it), or NULL when some variable is not
+ * constrained to the integers. */
+static Expr* solve_element_domain(Expr* res, Expr* vars, Expr* dom, size_t pos_end) {
+    if (dom && !(dom->type == EXPR_SYMBOL && dom->data.symbol.name == SYM_Complexes)) return NULL;
+    size_t nv = 1;
+    Expr* const* vs = &vars;
+    if (vars->type == EXPR_FUNCTION) { nv = vars->data.function.arg_count; vs = vars->data.function.args; }
+    if (nv == 0) return NULL;
+    const Expr** cj = NULL;
+    size_t n = 0, cap = 0;
+    sl_conjuncts(res->data.function.args[0], &cj, &n, &cap);
+    bool* covered = calloc(nv, sizeof(bool));
+    bool* drop = calloc(n ? n : 1, sizeof(bool));
+    size_t ndrop = 0;
+    for (size_t i = 0; i < n; i++)
+        if (sl_integer_element(cj[i], vs, nv, covered)) { drop[i] = true; ndrop++; }
+    bool all = ndrop > 0;
+    for (size_t j = 0; j < nv; j++) all = all && covered[j];
+    Expr* out = NULL;
+    if (all && ndrop < n) {
+        Expr** keep = malloc(sizeof(Expr*) * n);
+        size_t nk = 0;
+        for (size_t i = 0; i < n; i++) if (!drop[i]) keep[nk++] = expr_copy((Expr*)cj[i]);
+        size_t argc = res->data.function.arg_count;
+        Expr** na = malloc(sizeof(Expr*) * (argc + 1));
+        size_t w = 0;
+        na[w++] = expr_new_function(expr_new_symbol(SYM_List), keep, nk);
+        na[w++] = expr_copy(vars);
+        na[w++] = expr_new_symbol(SYM_Integers);
+        for (size_t i = pos_end; i < argc; i++) na[w++] = expr_copy(res->data.function.args[i]);
+        out = expr_new_function(expr_copy(res->data.function.head), na, w);
+        free(keep); free(na);
+    }
+    free(cj); free(covered); free(drop);
+    return out;
+}
+
 Expr* builtin_solve(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -999,6 +1080,11 @@ Expr* builtin_solve(Expr* res) {
     if (!is_valid_solve_vars(vars)) {
         warn_ivar(vars);
         return NULL;
+    }
+
+    {
+        Expr* re = solve_element_domain(res, vars, dom, pos_end);
+        if (re) return re;
     }
 
     Expr* expr = expr_copy(res->data.function.args[0]);

@@ -114,8 +114,8 @@ ospCheckDE[op_, ans_, f_, vars_, eqs_Hold, conds_Hold, ref_Hold, p_, order_] :=
    fun = ospSolFun[ans, f, vars];
    If[fun === $Failed,
      implicit = Cases[ans, _Equal, {0, Infinity}];
-     If[implicit =!= {} && order == 1 && op === "solve_ode",
-       Return[ospCheckImplicit[First[implicit], f, vars[[1]], eqs, p]]];
+     If[implicit =!= {} && order <= 2 && op === "solve_ode" && conds === Hold[{}],
+       Return[ospCheckImplicit[First[implicit], f, vars[[1]], eqs, p, order]]];
      Return["unclear: no explicit solution to substitute"]];
    nconst = Length[Union[Cases[{fun}, C[_], {0, Infinity}]]];
    If[conds === Hold[{}] && nconst < order && op =!= "solve_pde",
@@ -136,18 +136,27 @@ ospCheckDE[op_, ans_, f_, vars_, eqs_Hold, conds_Hold, ref_Hold, p_, order_] :=
    If[Not[ospZeroAt[ospResid /@ eq2, pts]], Return["wrong: does not satisfy the equation"]];
    cd2 = ReleaseHold[conds /. f -> fun /. p];
    If[cd2 =!= {} && Not[ospZeroAt[ospResid /@ cd2, pts]],
+     (* a condition at a removable singularity (y'(0) of Sin[x]/x): approached
+      * from inside, as the one-sided limit of the shifted solution *)
      cd2 = ReleaseHold[conds /. f -> (Function @@ {vars, (fun @@ vars) /.
-             Thread[vars -> vars + 10^-20]}) /. p];
-     If[Not[ospZeroNear[ospResid /@ (cd2 /. Thread[vars -> 1/3]), vars]],
+             Thread[vars -> vars + ospEps]}) /. p];
+     cd2 = Quiet[Limit[#, ospEps -> 0, Direction -> "FromAbove"]] & /@ (ospResid /@ cd2);
+     If[Not[ospZeroNear[cd2, vars]],
        Return["wrong: does not meet the conditions"]]];
    "solved"];
 
 (* F(x, y) == 0, first order: y' by implicit differentiation, C solved for *)
-ospCheckImplicit[rel_, f_, x_, eqs_Hold, p_] := Module[{Y, F, yp, cs, cv, res, pts},
+ospCheckImplicit[rel_, f_, x_, eqs_Hold, p_, order_: 1] := Module[{Y, F, y1, y2, cs, res, pts},
+   (* F(x, Y) == 0: Y' = -F_x/F_Y, Y'' = d/dx Y' along the curve.  The equations
+    * are released FIRST: they spell y' as D[y[x], x], and replacing y[x] -> Y
+    * inside the hold would turn it into D[Y, x] = 0. *)
    F = ospResid[rel] /. f[x] -> Y /. p;
    cs = Union[Cases[{F}, C[_], {0, Infinity}]];
-   yp = -D[F, x]/D[F, Y];
-   res = ReleaseHold[eqs /. {Derivative[1][f][x] -> yp, f[x] -> Y} /. f[x] -> Y /. p];
+   F = F /. Thread[cs -> Table[23/10 + i/7, {i, Length[cs]}]];
+   y1 = -D[F, x]/D[F, Y];
+   y2 = D[y1, x] + D[y1, Y] y1;
+   res = ReleaseHold[eqs] /. p;
+   res = res /. {Derivative[2][f][x] -> y2, Derivative[1][f][x] -> y1} /. f[x] -> Y;
    res = ospResid /@ res;
    pts = {{x -> 31/100, Y -> 47/100}, {x -> 13/10, Y -> 21/100}, {x -> 7/10, Y -> 9/10}};
    If[ospZeroAt[res, pts], "solved", "wrong: the implicit solution does not satisfy the equation"]];
