@@ -4530,6 +4530,12 @@ Out[3]= MeijerG[{{}, {2}}, {{1/2, 3/2}, {}}, z]
 (√2 − 1)² and 1 − (√2 − 1)² (Chowla–Selberg). Each argument is screened against
 a double value, and the match is confirmed exactly with `RootReduce`.
 
+**Gauss periods (v0.6493).** `Cos[a Pi/p]` and `Cos[a Pi/(2p)]` for the
+Fermat primes p = 17, 257 expand in nested square roots by Gauss's
+period descent: `FunctionExpand[Cos[2 Pi/17]] = -1/16 + Sqrt[17]/16
++ Sqrt[34 - 2 Sqrt[17]]/16 + Sqrt[17 + 3 Sqrt[17] - Sqrt[34 - 2 Sqrt[17]]
+- 2 Sqrt[34 + 2 Sqrt[17]]]/8`.
+
 ## Formula representations (Roach's algorithm)
 
 `FunctionExpand[HypergeometricPFQ[{a1, …, ap}, {b1, …, bq}, z]]` and the

@@ -171,6 +171,12 @@ bool is_sqrt(const Expr* e);
 /* ------------------------------------------------------------------ */
 
 Expr* simp_cuberoot(const Expr* e, const AssumeCtx* ctx);
+/* simp_kummer.c: denest radicals r^(1/n) over the Kummer field of r's
+ * radicals (r^(1/n) = c^(1/n) u, proved exactly), and solve Root objects of
+ * composed binomials/quadratics in radicals.  NULL when nothing applies. */
+Expr* simp_kummer_denest(const Expr* e);
+Expr* simp_root_to_radicals(const Expr* e);
+int   simp_kummer_depth(const Expr* e);   /* max radical nesting depth */
 
 /* ------------------------------------------------------------------ */
 /* simp_rationalize.c                                                 */

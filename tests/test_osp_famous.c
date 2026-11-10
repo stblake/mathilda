@@ -294,6 +294,36 @@ void test_integrate_dsolve_step1() {
     assert_true("FreeQ[DSolve[{y''[x] + y[x]^5 + 2 y'[x]/x == 0, y[0] == 1, y'[0] == 0}, y[x], x], Infinity]");
 }
 
+/* ---- step 2: Kummer denesting, Root objects in radicals, Gauss periods ------ */
+
+void test_denest_root_gauss() {
+    /* Ramanujan's denestings: exact, and the nesting depth is 1 */
+    assert_true("With[{s = Simplify[(2^(1/3) - 1)^(1/3)]}, RootReduce[s - (3^(1/3)/3 - 6^(1/3)/3 + 12^(1/3)/3)] === 0"
+                " && FreeQ[s, Power[_Plus, _]]]");
+    assert_true("With[{s = Simplify[Sqrt[28^(1/3) - 3]]}, RootReduce[s - (-1/3 - 28^(1/3)/3 + 98^(1/3)/3)] === 0"
+                " && FreeQ[s, Power[_Plus, _]]]");
+    assert_true("Simplify[((2 5^(1/4) + 3)/(3 - 2 5^(1/4)))^(1/4)] === (1 + 5^(1/4))/(-1 + 5^(1/4))");
+    assert_num_eq("Simplify[Sqrt[5^(1/3) - 2^(2/3)]]", "Sqrt[5^(1/3) - 2^(2/3)]");
+    assert_true("FreeQ[Simplify[Sqrt[5^(1/3) - 2^(2/3)]], Power[_Plus, _]]");
+    assert_num_eq("Simplify[(7 20^(1/3) - 19)^(1/6)]", "(7 20^(1/3) - 19)^(1/6)");
+    assert_true("FreeQ[Simplify[(7 20^(1/3) - 19)^(1/6)], Power[_Plus, _]]");
+    assert_true("FullSimplify[(2^(1/3) - 1)^(1/3), True] === Simplify[(2^(1/3) - 1)^(1/3)]");
+    /* not denestable: unchanged */
+    assert_true("Simplify[Sqrt[1 + 2^(1/3)]] === Sqrt[1 + 2^(1/3)]");
+    assert_true("Simplify[(-1 + 2^(1/3))^(1/3) x] === (-1 + 2^(1/3))^(1/3) x");
+    /* Root of a composed binomial, in radicals */
+    assert_true("Simplify[Cos[2 Pi/7]^(1/3) - (-Cos[4 Pi/7])^(1/3) - (-Cos[8 Pi/7])^(1/3)]"
+                " === -(-5/2 + 3/2 7^(1/3))^(1/3)");
+    /* Gauss periods: the regular 17-gon, and its relatives */
+    assert_true("FunctionExpand[Cos[2 Pi/17]] === -1/16 + Sqrt[17]/16 + Sqrt[34 - 2 Sqrt[17]]/16"
+                " + Sqrt[17 + 3 Sqrt[17] - Sqrt[34 - 2 Sqrt[17]] - 2 Sqrt[34 + 2 Sqrt[17]]]/8");
+    assert_true("And @@ Table[FreeQ[FunctionExpand[Cos[k Pi/17]], Cos], {k, 1, 16}]");
+    assert_num_eq("FunctionExpand[Cos[5 Pi/17]]", "Cos[5 Pi/17]");
+    assert_num_eq("FunctionExpand[Cos[3 Pi/34]]", "Cos[3 Pi/34]");
+    assert_num_eq("FunctionExpand[Cos[2 Pi/257]]", "Cos[2 Pi/257]");
+    assert_true("FunctionExpand[Cos[Pi/7]] === Cos[Pi/7]");
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -312,6 +342,7 @@ int main() {
     TEST(test_fe_elliptic_laplace);
     TEST(test_sum_limit_pell_step1);
     TEST(test_integrate_dsolve_step1);
+    TEST(test_denest_root_gauss);
 
     printf("All OSP famous-problem regression tests passed.\n");
     return 0;

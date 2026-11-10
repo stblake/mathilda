@@ -519,6 +519,13 @@ ArcTan/ArcSin/ArcCos/ArcCot terms whose value is (p/q)π, with q ≤ 360, folds 
 that value only when the inverse-function decider proves the difference zero:
 `Simplify[4 ArcTan[1/5] - ArcTan[1/239]] = Pi/4`.
 
+**Kummer-field denesting and Root objects (v0.6493).**
+- A pure radical constant with a nested radical r^(1/n) is denested when
+  r^(1/n) = c^(1/n) u with c rational and u in the Kummer field of r's
+  radicals. The candidate is found by lattice reduction and proved exactly:
+  `Simplify[(2^(1/3) - 1)^(1/3)] = (3^(1/3) - 6^(1/3) + 12^(1/3))/3`.
+- A Root of a composed binomial or quadratic q(x^m) is given in radicals.
+
 ## FullSimplify
 Tries a wider range of transformations than `Simplify`, drawing on a library of
 known elementary- and special-function identities, and returns the simplest form

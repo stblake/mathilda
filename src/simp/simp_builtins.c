@@ -2323,6 +2323,35 @@ static Expr* builtin_simplify_core(Expr* res) {
 
     Expr* expr = res->data.function.args[0];
 
+    /* A constant with nested radicals that denest over their Kummer field
+     * (Ramanujan's (2^(1/3) - 1)^(1/3) = (1 - 2^(1/3) + 4^(1/3))/9^(1/3)):
+     * the proven denested form has strictly smaller nesting depth and is
+     * returned as the simplification -- the search would trade it back
+     * for a smaller-leaf Root object.  A constant does not depend on the
+     * assumptions, so this holds under any (FullSimplify passes options).
+     * The denested input is simplified in turn (its like radicals cancel,
+     * a reciprocal is rationalised); that answer is kept unless it nests the
+     * radicals again or reintroduces a Root object. */
+    {
+        Expr* dn = simp_kummer_denest(expr);
+        if (dn) {
+            Expr** na = malloc(sizeof(Expr*) * argc);
+            na[0] = expr_copy(dn);
+            for (size_t i = 1; i < argc; i++) na[i] = expr_copy(res->data.function.args[i]);
+            Expr* call = expr_new_function(expr_copy(res->data.function.head), na, argc);
+            free(na);
+            Expr* again = evaluate(call);
+            expr_free(call);
+            if (again && simp_kummer_depth(again) <= simp_kummer_depth(dn)
+                && !(sf_contains_head(again, SYM_Root) && !sf_contains_head(dn, SYM_Root))) {
+                expr_free(dn);
+                return again;
+            }
+            if (again) expr_free(again);
+            return dn;
+        }
+    }
+
     /* Parse remaining args: at most one positional assumption, plus
      * options Rule[Assumptions, X], Rule[ComplexityFunction, f], and
      * Rule[TransformationFunctions, spec]. */
@@ -2894,6 +2923,15 @@ static Expr* builtin_simplify_core(Expr* res) {
     if (best->type == EXPR_FUNCTION && simp_invfn_combo_is_zero(best)) {
         expr_free(best);
         best = expr_new_integer(0);
+    }
+    /* A Root object of a composed binomial / quadratic (the minimal
+     * polynomial of a constant that RootReduce produced) is returned in
+     * radicals: Ramanujan's cosine cube roots are the Root of
+     * 4 x^9 - 30 x^6 + 75 x^3 + 32, i.e. -(3 7^(1/3)/2 - 5/2)^(1/3). */
+    if (best->type == EXPR_FUNCTION && best->data.function.head->type == EXPR_SYMBOL
+        && best->data.function.head->data.symbol.name == SYM_Root) {
+        Expr* rr = simp_root_to_radicals(best);
+        if (rr) { expr_free(best); best = rr; }
     }
     /* ...and the same decider FOLDS a combination that equals a nonzero
      * rational multiple of Pi: Machin's 4 ArcTan[1/5] - ArcTan[1/239] -> Pi/4,
