@@ -107,10 +107,15 @@ static void test_options(void) {
                "[\"Domain\"] === Integers");
     check_true("Certify[x + 1 == 1 + x, Verify -> False][\"Domain\"] === Integers");
     /* Variables that occur only in the assumptions are bound too. */
-    check_str("Certify[x == x, Assumptions -> y > 0, Verify -> False][\"LeanTheorem\"]",
+    check_str("Certify[x == x, Assumptions -> {y > 0, Element[x, Reals]}, Verify -> False]"
+              "[\"LeanTheorem\"]",
               "\xE2\x88\x80 {K : Type} [Lean.Grind.Field K] [LE K] [LT K] [Std.LawfulOrderLT K] "
               "[Std.IsLinearOrder K] [Lean.Grind.OrderedRing K], \xE2\x88\x80 x y : K, y > 0 \xE2\x86\x92 x = x");
-    check_true("Certify[x == x, Assumptions -> y > 0, Verify -> False][\"Domain\"] === Reals");
+    check_true("Certify[x == x, Assumptions -> {y > 0, Element[x, Reals]}, Verify -> False]"
+               "[\"Domain\"] === Reals");
+    /* An order relation makes only ITS variables real (review 3, finding B). */
+    assert_eval_eq("Check[Certify[x == x, Assumptions -> y > 0, Verify -> False], \"realvars\"]",
+                   "\"realvars\"", 0);
     /* The theorem takes the generic binders as parameters; the footer states
      * the full statement. */
     check_true("StringContainsQ[Certify[x^2 == x, Assumptions -> {x == 1}, Verify -> False]"
@@ -497,6 +502,166 @@ static void test_attributes(void) {
     assert_eval_eq("Context[Certify]", "\"Lean`\"", 0);
 }
 
+
+/* Third review round (v0.6520): no Lean needed. */
+
+/* Finding A: LeanVerify's allowlist grammar (src/lean_check.c). */
+static void test_review3_checksource(void) {
+    test_mute_messages();
+#define CK(src) "Lean`Internal`CheckSource[\"" src "\", False, False, None]"
+#define CKM(src) "Lean`Internal`CheckSource[\"" src "\", True, False, None]"
+    /* Accepted: theorem / example / namespace / section / open / variable /
+     * universe / numeric set_option / #print axioms, comments, strings. */
+    check_true(CK("theorem t : 1 + 1 = 2 := rfl\\n") "[\"Theorems\"] === {\"t\"}");
+    check_true(CK("namespace A\\nexample : True := trivial\\nsection\\nvariable (n : Nat)\\n"
+                  "theorem u : n = n := rfl\\nend\\nend A\\n") "[\"Theorems\"] === "
+               "{\"mathilda_example_1\", \"A.u\"}");
+    check_true("StringStartsQ[" CK("example : True := trivial\\n") "[\"Source\"], "
+               "\"noncomputable def _root_.mathilda_example_1 : True\"]");
+    check_true(CK("universe u\\nopen Nat in\\nset_option maxHeartbeats 1000 in\\n"
+                  "theorem t : True := by\\n  trivial -- sorry in a comment\\n"
+                  "/- def /- nested -/ -/\\n#print axioms t\\n") "[\"OK\"]");
+    check_true(CK("theorem t : \\\"#eval\\\" = \\\"#eval\\\" := rfl\\n") "[\"OK\"]");
+    check_true(CKM("import Mathlib\\nimport Mathlib.Tactic\\nlemma t : True := trivial\\n") "[\"OK\"]");
+    /* The trusted prelude, byte-identical, is skipped (it has defs). */
+    check_true("Lean`Internal`CheckSource[Lean`Private`prelude[] <> \"\\ntheorem t : True := "
+               "trivial\\n\", False, False, Lean`Private`prelude[]][\"OK\"]");
+    check_true("Lean`Internal`CheckSource[StringReplace[Lean`Private`prelude[], \"powMod\" -> "
+               "\"powMad\"], False, False, Lean`Private`prelude[]][\"Kind\"] === \"cmd\"");
+    /* Imports: none in Tier 0; only Mathlib with a project. */
+    check_true(CK("import Lean\\ntheorem t : True := trivial\\n") "[\"Kind\"] === \"import\"");
+    check_true(CKM("import Lean\\ntheorem t : True := trivial\\n") "[\"Kind\"] === \"import\"");
+    check_true(CK("import Mathlib\\ntheorem t : True := trivial\\n") "[\"Kind\"] === \"import\"");
+    check_true(CKM("import Mathilda\\n") "[\"Kind\"] === \"import\"");
+    check_true(CKM("import Batteries\\n") "[\"Kind\"] === \"import\"");
+    check_true(CKM("import Mathlib Lean\\n") "[\"Kind\"] === \"import\"");
+    /* Commands outside the grammar. */
+    check_true(CK("def f : Nat := 1\\n") "[\"What\"] === \"def\"");
+    check_true(CK("abbrev f : Nat := 1\\n") "[\"What\"] === \"abbrev\"");
+    check_true(CK("instance : Inhabited Nat := \\u27e81\\u27e9\\n") "[\"What\"] === \"instance\"");
+    check_true(CK("axiom bad : False\\n") "[\"What\"] === \"axiom\"");
+    check_true(CK("macro \\\"x\\\" : term => pure 1\\n") "[\"What\"] === \"macro\"");
+    check_true(CK("attribute [simp] Nat.add_comm\\n") "[\"What\"] === \"attribute\"");
+    check_true(CK("#check 1\\n") "[\"What\"] === \"#check\"");
+    check_true(CK("module\\n") "[\"What\"] === \"module\"");
+    check_true(CK("lemma t : True := trivial\\n") "[\"What\"] === \"lemma\"");
+    check_true(CK("set_option debug.skipKernelTC true\\n") "[\"Kind\"] === \"cmd\"");
+    check_true(CK("set_option maxHeartbeats true\\n") "[\"Kind\"] === \"cmd\"");
+    check_true(CK("open Lean.Elab\\n") "[\"What\"] === \"Elab\"");
+    check_true(CK("theorem t : True := trivial\\n:= rfl\\n") "[\"What\"] === \":\"");
+    check_true(CK("  theorem t : True := trivial\\n") "[\"Kind\"] === \"cmd\"");
+    /* Escapes inside an accepted command, also on a continuation line. */
+    check_true(CK("theorem t : 1 = 1 := by\\n  native_decide\\n") "[\"What\"] === \"native_decide\"");
+    check_true(CK("theorem t : 1 = 1 := by\\n  decide +native\\n") "[\"What\"] === \"native\"");
+    check_true(CK("theorem t : 1 = 1 := by\\n  sorry\\n") "[\"What\"] === \"sorry\"");
+    check_true(CK("theorem t : 1 = 1 := by\\n  run_tac pure ()\\n") "[\"What\"] === \"run_tac\"");
+    check_true(CK("theorem t : 1 = 1 := by_elab pure ()\\n") "[\"What\"] === \"by_elab\"");
+    check_true(CK("theorem t : 1 = 1 := rfl\\n  #eval 1\\n") "[\"What\"] === \"#eval\"");
+    check_true(CK("theorem t : 1 = 1 := rfl\\n  def f := 1\\n") "[\"What\"] === \"def\"");
+    check_true(CK("theorem t : True := by\\n  set_option debug.x true in trivial\\n")
+               "[\"What\"] === \"set_option\"");
+    check_true(CK("theorem t : True := eval% trivial\\n") "[\"What\"] === \"eval%\"");
+    check_true(CK("theorem t : True := (by exact (unsafeBaseIO (pure trivial)))\\n")
+               "[\"What\"] === \"unsafeBaseIO\"");
+    check_true(CK("@[simp] theorem t : True := trivial\\n") "[\"What\"] === \"@[ (an attribute)\"");
+    check_true(CK("theorem t : `x = `x := rfl\\n") "[\"Kind\"] === \"token\"");
+    check_true(CK("theorem t : s!\\\"{1}\\\" = \\\"1\\\" := rfl\\n") "[\"Kind\"] === \"token\"");
+    /* Lexical ambiguity. */
+    check_true(CK("theorem t : True := trivial /- open\\n") "[\"Kind\"] === \"lex\"");
+    check_true(CK("theorem t : \\\"x = 1 := rfl\\n") "[\"Kind\"] === \"lex\"");
+    check_true(CK("theorem t : True := trivial\\n\\tdef f := 1\\n") "[\"Kind\"] === \"lex\"");
+    check_true(CK("theorem t : True := trivial\\r\\n") "[\"Kind\"] === \"lex\"");
+    check_true("Lean`Internal`CheckSource[\"theorem t : \\[LeftGuillemet]sorry\\[RightGuillemet] "
+               "= 1 := rfl\\n\", False, False, None][\"Kind\"] === \"token\"");
+    /* A char literal holding a quote does not open a string. */
+    check_true(CK("theorem t : '\\\"' = '\\\"' := rfl\\n") "[\"OK\"]");
+    /* Certify mode: the generator auxiliaries only. */
+    check_true("Lean`Internal`CheckSource[\"def mathilda_cert_3_S : Nat := 1\\n\", False, True, "
+               "None][\"OK\"]");
+    check_true("Lean`Internal`CheckSource[\"def mathilda_cert_x : Nat := 1\\n\", False, True, "
+               "None][\"OK\"] === False");
+#undef CK
+#undef CKM
+    /* Every generated Certify file passes the check (the internal assertion). */
+    check_true("AllTrue[{Certify[Factor[x^10 - 1], Verify -> False], "
+               "Certify[Sum[k 2^k, {k, 0, n}], Verify -> False], "
+               "Certify[FactorInteger[2^64 + 1], Verify -> False], "
+               "Certify[Integrate[1/(x^2 + 2), x], Verify -> False], "
+               "Certify[Maximize[{3 x + 2 y, x + y <= 4, x + 3 y <= 6, x >= 0, y >= 0}, {x, y}], "
+               "Verify -> False], Certify[Inverse[{{2, 1}, {1, 1}}], Verify -> False], "
+               "Certify[Implies[x^2 + y^2 == 1 && x == y, 2 y^2 == 1], Verify -> False], "
+               "Certify[Integrate[(1 + x)/(1 + x^2), x], Tier -> 1, LeanProject -> \"/nonexistent\", "
+               "Verify -> False]}, "
+               "TrueQ[Lean`Private`checkSource[#[\"LeanSource\"], #[\"Tier\"] === 1, True][\"OK\"]] &]");
+}
+
+/* Findings B, C, D. */
+static void test_review3_claims(void) {
+    test_mute_messages();
+    /* B: an order relation makes only its own variables real. */
+    assert_eval_eq("Check[Certify[x == 7, Assumptions -> x^2 + 4 == 0 && y > 0, Verify -> False], "
+                   "\"realvars\"]", "\"realvars\"", 0);
+    assert_eval_eq("Check[Certify[x == 7, Assumptions -> x^2 + 4 == 0 && y >= y, Verify -> False], "
+                   "\"realvars\"]", "\"realvars\"", 0);
+    assert_eval_eq("Check[Certify[x^2 == -4, Assumptions -> y > 0, Verify -> False], "
+                   "\"realvars\"]", "\"realvars\"", 0);
+    check_true("Certify[x == 7, Assumptions -> x^2 + 4 == 0 && Element[x, Reals] && y > 0, "
+               "Verify -> False][\"Domain\"] === Reals");
+    check_true("Certify[x == y, Assumptions -> {x == y, Element[{x, y}, Reals]}, Verify -> False]"
+               "[\"Domain\"] === Reals");
+    check_true("Certify[x == 1, Assumptions -> 0 < x < 2, Verify -> False][\"Domain\"] === Reals");
+    check_true("Certify[x == 7, Assumptions -> x^2 + 4 == 0, Verify -> False][\"Domain\"] === "
+               "Complexes");
+    /* C: a computation inside a claim is refused, not evaluated. */
+    const char* evals[] = {
+        "Simplify[(x^2 - 1)/(x - 1)] == x + 1", "Refine[Sqrt[x^2], x < 0] == -x",
+        "Integrate[Sin[x], {x, 0, Pi}] == 2", "Integrate[x, {x, 0, 1}] == 1/2",
+        "Exp[Log[x]] == x", "Mod[7, 3] == 1", "Limit[x, x -> 0] == 0", "Sqrt[4] == 2",
+        "Sin[0] == 0", "Det[{{a, b}, {c, d}}] == a d - b c", "N[1/3] == 1/3",
+        "Simplify[Sin[x]^2 + Cos[x]^2] == 1", "PowerExpand[Sqrt[x^2]] == x",
+        "Simplify[x^0] == 1", "f[x] == f[x]", "D[Sin[x], x] == Cos[x]",
+        "Implies[x == 1, Simplify[x^2] == 1]", "ForAll[{x}, Abs[x]^2 >= 0]",
+        "Expand[Integrate[x, x]]", NULL };
+    for (int i = 0; evals[i]; i++) {
+        char buf[512];
+        snprintf(buf, sizeof buf, "Check[Certify[%s, Verify -> False], \"eval\"]", evals[i]);
+        assert_eval_eq(buf, "\"eval\"", 0);
+    }
+    /* ... and the value-preserving rational-function heads are read through. */
+    check_str("Certify[Factor[x^2 - 1] == (x - 1) (x + 1), Verify -> False][\"LeanTheorem\"]",
+              "\xE2\x88\x80 x : Int, x ^ 2 - 1 = (x - 1) * (1 + x)");
+    check_true("With[{c = Certify[Factor[x^2 - 1] == (x - 1) (x + 1), Verify -> False]}, "
+               "c[\"Kind\"] === \"Factorization\" && "
+               "MemberQ[c[\"TrustedSteps\"], \"irreducibility of the factors (not certified)\"]]");
+    check_str("Certify[Expand[(x + 1)^2] == x^2 + 2 x + 1, Verify -> False][\"LeanTheorem\"]",
+              "\xE2\x88\x80 x : Int, (1 + x) ^ 2 = 1 + 2 * x + x ^ 2");
+    check_true("Certify[(1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x, Verify -> False]"
+               "[\"Input\"] === HoldForm[(1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x]");
+    /* x/x is not cancelled to 1 before Lean sees it. */
+    check_true("With[{c = Certify[x/x == 1, Verify -> False]}, c[\"LeanTheorem\"] === "
+               "\"\\[ForAll] x : Int, x = x\" && c[\"Hypotheses\"] === {HoldForm[x != 0]}]");
+    /* D[F, x] of a polynomial: Mathilda's derivative is a trusted step. */
+    check_true("AnyTrue[Certify[D[x^3, x] == 3 x^2, Verify -> False][\"TrustedSteps\"], "
+               "StringStartsQ[#, \"Mathilda's differentiation\"] &]");
+    /* Integrate[f, x] == F checks the CLAIMED F. */
+    assert_eval_eq("leanIC = Certify[Integrate[x^2, x] == x^3/2, Verify -> False]; Null", "Null", 0);
+    check_true("leanIC[\"Kind\"] === \"Antiderivative\" && leanIC[\"Result\"] === x^3/2 && "
+               "leanIC[\"Certificate\"][\"PreCheck\"] === False");
+    check_true("Certify[x^3/3 == Integrate[x^2, x], Verify -> False][\"Certificate\"][\"PreCheck\"]"
+               " === True");
+    /* D: Sum's upper bound must be a variable; ignored options are reported. */
+    assert_eval_eq("Check[Certify[Sum[1, {k, 1, Infinity}] == Infinity, Verify -> False], "
+                   "\"nocert\"]", "\"nocert\"", 0);
+    assert_eval_eq("Check[Certify[Sum[1/2^k, {k, 1, Infinity}], Verify -> False], \"nocert\"]",
+                   "\"nocert\"", 0);
+    assert_eval_eq("Check[Certify[Sum[k, {k, 1, n}] == n (n + 1)/2, Assumptions -> n < 0, "
+                   "Verify -> False], \"optignored\"]", "\"optignored\"", 0);
+    assert_eval_eq("Check[Certify[Inverse[{{2, 1}, {1, 1}}], Domain -> Integers, Verify -> False], "
+                   "\"optignored\"]", "\"optignored\"", 0);
+    check_true("Certify[Sum[k, {k, 1, n}] == n (n + 1)/2, Verify -> False][\"Kind\"] === "
+               "\"ClosedFormSum\"");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -518,6 +683,8 @@ int main(void) {
     TEST(test_oracle);
     TEST(test_hardening);
     TEST(test_attributes);
+    TEST(test_review3_checksource);
+    TEST(test_review3_claims);
     printf("All Lean certificate generation tests passed.\n");
     return 0;
 }

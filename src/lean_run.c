@@ -62,6 +62,7 @@
 #include <string.h>
 #include <time.h>
 #ifndef _WIN32
+#include <dirent.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -201,12 +202,18 @@ static char* with_ext(const char* stem, const char* ext) {
 }
 
 /* Remove the run's files (all but .lean when keep_source) and, when nothing
- * is kept, its directory. */
+ * is kept, its directory.  Every file of the private directory goes, not
+ * only the ones this run expects: first the known names (stem + suffix, the
+ * only step on _WIN32), then, on POSIX, every remaining entry of OUR private
+ * directory -- each is unlinked (a symlink is removed, never followed), a
+ * subdirectory is only rmdir'ed (never recursed into), and nothing outside
+ * the directory is touched. */
 static void scratch_close(Scratch* sc, bool keep_source) {
     /* The source (.lean) last: it is the one entry kept by keep_source.  The
      * compiled module (.olean and its optional parts) never is. */
     const char* ext[] = { ".out", ".err", ".olean", ".olean.server", ".olean.private",
-                          ".ilean", ".ir", ".lean" };
+                          ".ilean", ".ir", ".ir.sig", ".c", ".hash", ".trace", ".forged",
+                          "-check.out", "-check.err", ".lean" };
     const int n = (int)(sizeof ext / sizeof ext[0]);
     for (int i = 0; i < (keep_source ? n - 1 : n); i++) {
         char* p = with_ext(sc->stem, ext[i]);
@@ -214,11 +221,76 @@ static void scratch_close(Scratch* sc, bool keep_source) {
         free(p);
     }
 #ifndef _WIN32
-    if (sc->dir && !keep_source) rmdir(sc->dir);
+    if (sc->dir) {
+        const char* checks[] = { LEAN_SEP "check.out", LEAN_SEP "check.err" };
+        for (int i = 0; i < 2; i++) {
+            char* p = with_ext(sc->dir, checks[i]);
+            remove(p);
+            free(p);
+        }
+        DIR* d = opendir(sc->dir);
+        if (d) {
+            const char* keep = keep_source ? "MathildaCert.lean" : NULL;
+            struct dirent* de;
+            while ((de = readdir(d)) != NULL) {
+                const char* nm = de->d_name;
+                if (strcmp(nm, ".") == 0 || strcmp(nm, "..") == 0) continue;
+                if (keep && strcmp(nm, keep) == 0) continue;
+                if (strchr(nm, '/')) continue;
+                char* p = with_ext(sc->dir, LEAN_SEP);
+                char* q = with_ext(p, nm);
+                free(p);
+                struct stat st;
+                if (lstat(q, &st) == 0) {
+                    if (S_ISDIR(st.st_mode)) rmdir(q);
+                    else unlink(q);
+                }
+                free(q);
+            }
+            closedir(d);
+        }
+        if (!keep_source) rmdir(sc->dir);
+    }
 #endif
     free(sc->dir);
     free(sc->stem);
     sc->dir = sc->stem = NULL;
+}
+
+/* After the elaborating run, the private directory may hold exactly the
+ * files this run created: MathildaCert.lean (written by us), .out / .err (the
+ * shell's redirections) and .olean (Lean's -o).  Anything else (a forged
+ * .olean.server / .olean.private next to the module, a planted helper) means
+ * the run did something it should not have: NULL when the directory is as
+ * expected, else the name of the first unexpected entry (owned). */
+static char* unexpected_entry(const Scratch* sc) {
+#ifndef _WIN32
+    if (!sc->dir) return NULL;
+    DIR* d = opendir(sc->dir);
+    if (!d) return str_copy("(the private directory cannot be read)");
+    const char* allowed[] = { ".", "..", "MathildaCert.lean", "MathildaCert.out",
+                              "MathildaCert.err", "MathildaCert.olean", NULL };
+    char* bad = NULL;
+    struct dirent* de;
+    while (!bad && (de = readdir(d)) != NULL) {
+        bool ok = false;
+        for (int i = 0; allowed[i]; i++)
+            if (strcmp(de->d_name, allowed[i]) == 0) ok = true;
+        if (!ok) bad = str_copy(de->d_name);
+    }
+    closedir(d);
+    if (bad) return bad;
+    /* The module itself must be a regular file, not a symlink planted in
+     * its place. */
+    char* olean = with_ext(sc->stem, ".olean");
+    struct stat st;
+    if (lstat(olean, &st) == 0 && !S_ISREG(st.st_mode)) bad = str_copy("MathildaCert.olean");
+    free(olean);
+    return bad;
+#else
+    (void)sc;
+    return NULL;
+#endif
 }
 
 /* Whole file as a NUL-terminated string ("" when unreadable).  Caller frees. */
@@ -799,6 +871,17 @@ static void replay_module(const Scratch* sc, const char* exe, const char* lake,
         free(olean);
         return;
     }
+    char* odd = unexpected_entry(sc);
+    if (odd) {
+        RBuf w = {0};
+        rb_puts(&w, "unexpected file in the private directory after elaboration: ");
+        rb_puts(&w, odd);
+        free(odd);
+        rr->why = rb_take(&w);
+        rr->axioms = mk_assoc(NULL, 0);
+        free(olean);
+        return;
+    }
     RBuf cs = {0};
     if (sc->dir) { rb_puts(&cs, sc->dir); rb_puts(&cs, LEAN_SEP "check"); }
     else { rb_puts(&cs, sc->stem); rb_puts(&cs, "-check"); }
@@ -982,6 +1065,7 @@ static Expr* builtin_lean_verifysource(Expr* res) {
 }
 
 void lean_init(void) {
+    lean_check_init();
     symtab_add_builtin("Lean`Internal`ToLean", builtin_lean_tolean);
     symtab_set_docstring("Lean`Internal`ToLean",
         "Lean`Internal`ToLean[expr, type, coreOnly, {heads...}, closed]\n"

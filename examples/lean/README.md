@@ -87,7 +87,10 @@ With a Mathlib project configured, row 2 reads:
   theorem's `#print axioms` lists only `propext`, `Classical.choice` and `Quot.sound`
   (so `native_decide` does not count), and a kernel replay of the compiled file in a
   fresh `lean` process (`src/internal/lean/Replay.lean`) re-checked every declaration
-  and found the same. The replay costs about 1.1 s per Lean run.
+  and found the same. The replay costs about 1.1 s per Lean run. The generated file
+  contains no user-defined code (it passes the same allowlist check as a `LeanVerify`
+  source), and the theorem is the input as written: a computation inside a claim
+  (`Simplify[...] == ...`) is refused (`Certify::eval`), never evaluated first.
 - Statements with hypotheses (ideal membership, `Assumptions`) are proved for every field
   of characteristic 0, so for ℚ, ℝ and ℂ alike; inequalities (rows 11-13) for every
   ordered field, so for ℝ.

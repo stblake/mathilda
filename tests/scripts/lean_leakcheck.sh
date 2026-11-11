@@ -104,6 +104,25 @@ Do[Lean`Oracle["LinearCombination", {2 v2^2, 1}, {{v1^2 + v2^2, 1}, {v1, v2}}, {
    Lean`Oracle["Eval", "Factor["];
    Lean`Oracle["Nope", 1], {10}];
 
+(* --- v0.6520: the source check, claim rewriting, real-variable rule --- *)
+Quiet[Do[
+   Lean`Internal`CheckSource["theorem t : 1 + 1 = 2 := rfl\nexample : True := trivial\n", False, False, None];
+   Lean`Internal`CheckSource["import Lean\ntheorem t : True := trivial\n", False, False, None];
+   Lean`Internal`CheckSource["def f := 1\n", False, False, None];
+   Lean`Internal`CheckSource["theorem t : True := by\n  native_decide\n", False, False, None];
+   Lean`Internal`CheckSource["/- open", False, False, None];
+   Lean`Internal`CheckSource["def mathilda_cert_1_S := 1\n", True, True, None];
+   Lean`Internal`CheckSource[Lean`Private`prelude[] <> "theorem t : True := trivial\n", False, False, Lean`Private`prelude[]];
+   Certify[Simplify[(x^2 - 1)/(x - 1)] == x + 1, Verify -> False];
+   Certify[Factor[x^2 - 1] == (x - 1) (x + 1), Verify -> False];
+   Certify[D[x^3, x] == 3 x^2, Verify -> False];
+   Certify[Integrate[x^2, x] == x^3/3, Verify -> False];
+   Certify[x/x == 1, Verify -> False];
+   Certify[x == 7, Assumptions -> x^2 + 4 == 0 && y > 0, Verify -> False];
+   Certify[x == 7, Assumptions -> x^2 + 4 == 0 && Element[x, Reals], Verify -> False];
+   Certify[Sum[1, {k, 1, Infinity}] == Infinity, Verify -> False];
+   Certify[Sum[k, {k, 1, n}] == n (n + 1)/2, Assumptions -> n < 0, Verify -> False], {3}]];
+
 (* --- real Lean runs, when Lean is installed --- *)
 If[StringQ[$LeanVersion],
   Quiet[
@@ -118,6 +137,9 @@ If[StringQ[$LeanVersion],
     LeanVerify["theorem nd : 2 + 2 = 4 := by native_decide"];
     LeanVerify["axiom bad : False\nexample : 1 = 2 := bad.elim\n"];
     LeanVerify["namespace A\nexample : 1 + 1 = 2 := rfl\ntheorem t : True := trivial\nend A\n"];
+    LeanVerify["import Lean\ntheorem t : True := trivial\n"];
+    LeanVerify["def f : Nat := 1\ntheorem t : f = 1 := rfl\n"];
+    Certify[x == 7, Assumptions -> x^2 + 4 == 0 && Element[x, Reals]];
     Certify[{x + 1 == 1 + x, x == x + 1}, Method -> "intros\ngrind"];
     Certify[Solve[(x - 1)/(x^2 - 1) == (x - 1)/(2 x - 2), x]];
     (* kernel replay: a rejected module, and a file with no .olean *)

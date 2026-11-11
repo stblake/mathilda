@@ -40,8 +40,11 @@ LeanVerify::usage =
   "LeanVerify[src] checks the Lean 4 source string src with the Lean executable and gives \
 <|\"Success\", \"ExitCode\", \"Messages\", \"Axioms\", \"AxiomReports\", \"Timing\", \
 \"Command\"|>. Success requires exit code 0, no error, no sorry, and only the standard axioms \
-for every declaration (examples are named so they are checked too); a source using axiom, \
-native_decide, extern, unsafe, debug options, #eval or metaprogramming is refused unrun.";
+for every declaration (examples are named so they are checked too). Only sources with no \
+user-defined code are run: no imports (core Lean) or only import Mathlib with a project, and \
+only theorem / example / open / namespace / section / variable / universe / numeric \
+set_option commands; anything else (def, instance, macro, attribute, #eval, native_decide, \
+sorry, ...) is refused unrun.";
 
 $LeanExecutable::usage =
   "$LeanExecutable is the Lean 4 executable used by Certify and LeanVerify: Automatic \
@@ -106,7 +109,14 @@ Certify::tier = "`1` needs Tier 1 (Mathlib); set $LeanProject";
 Certify::nomathlib = "Tier -> 1 requested but $LeanProject is not set";
 Certify::rejected = "Lean rejected the certificate for `1`; see obj[\"Logs\"]";
 Certify::method = "Method `1` is not accepted: `2`; give a plain tactic script (see ?Certify)";
-LeanVerify::unsafe = "the source uses `1`, which can bypass or forge the kernel check; not run";
+LeanVerify::unsafe = "the source uses `1`, which can run code at elaboration time, bypass or forge the kernel check; not run";
+LeanVerify::import = "the source has `1`; LeanVerify accepts no imports (core Lean) or, with a LeanProject, only import Mathlib / import Mathlib.<Path>; not run";
+LeanVerify::cmd = "the source uses the command `1`; LeanVerify accepts only theorem, example, open, namespace, section, end, variable, universe, numeric set_option and #print axioms commands (lemma with Mathlib), each starting at column 0; not run";
+LeanVerify::lex = "the source contains `1`, which LeanVerify cannot scan unambiguously; not run";
+Certify::unsafe = "the generated Lean source failed the LeanVerify source check (`1`); not run";
+Certify::eval = "the claim `1` applies `2`, which Mathilda would have to evaluate before Lean sees the claim; certify the computation itself (e.g. Certify[Simplify[...]]) or state the claim with arithmetic only";
+Certify::realvars = "the claim `1` has order relations, but `2` is not constrained to be real; add Element[`2`, Reals] (or an order relation on it) to the assumptions";
+Certify::optignored = "`1` is ignored for a `2` certificate (only identity claims read Domain, Assumptions and Method)";
 
 (* ---------------------------------------------------------------------- *)
 (* Settings and discovery                                                  *)
@@ -182,67 +192,47 @@ missingLeanQ[_] := False;
 
 $standardAxioms = {"propext", "Classical.choice", "Quot.sound"};
 
-(* Constructs that can bypass the kernel, add unchecked axioms, run
-   arbitrary code at elaboration time or forge a `#print axioms` report.  A
-   source that mentions one of them (anywhere -- the scan is textual and
-   includes comments, so it errs on the side of refusing) is not run. *)
+(* Words a user Method script may not use (Certify; see methodProblem).
+   LeanVerify no longer relies on a word list: see checkSource below. *)
 $unsafeWords = {"axiom", "native_decide", "implemented_by", "extern", "unsafe",
   "ofReduceBool", "trustCompiler", "debug", "run_cmd", "run_tac", "run_elab", "run_meta",
   "by_elab", "elab", "elab_rules", "macro", "macro_rules", "syntax", "declare_syntax_cat",
   "initialize", "builtin_initialize", "addDeclWithoutChecking", "addDecl", "addAndCompile",
   "skipKernelTC", "command_elab", "term_elab", "tactic_elab", "setEnv", "modifyEnv",
-  "withOptions"};
-(* "#eval" etc. anywhere; a user elaborator attribute (@[tactic ...] et al.);
-   the Mathilda tactic package and its options (they run the oracle). *)
-$unsafeCommands = {"#eval", "#exit", "#reduce", "@[tactic", "@[builtin", "set_option mathilda"};
-$unsafePatterns = {RegularExpression["(?m)^\\s*import\\s+(?:[^\\n]*\\s)?Mathilda\\b"] -> "import Mathilda",
-  RegularExpression["mathilda\\.(?:path|bin)"] -> "mathilda.path"};
+  "withOptions", "native"};
 
 (* Identifier-like words of a source ("Lean.Elab.x" gives Lean, Elab, x). *)
 sourceWords[src_String] := DeleteDuplicates[StringCases[src,
    RegularExpression["[A-Za-z_][A-Za-z0-9_'!?]*"]]];
 
-unsafeConstructs[src_String] := DeleteDuplicates[Join[
-  Intersection[sourceWords[src], $unsafeWords],
-  Select[$unsafeCommands, StringContainsQ[src, #] &],
-  Last /@ Select[$unsafePatterns, StringContainsQ[src, First[#]] &]]];
+(* The structural source check (src/lean_check.c).  The guarantee of
+   LeanVerify (and of Certify) holds only for sources that cannot run
+   user-controlled code while Lean elaborates them: code run at elaboration
+   time can forge everything the elaborating process produces, including the
+   .olean that the kernel replay reads.  So a source is accepted only if it
+   fits an ALLOWLIST grammar -- no imports (core Lean only), or only
+   `import Mathlib[.Path]` with a project; only theorem / lemma (Mathlib) /
+   example / open / namespace / section / end / variable / universe /
+   numeric set_option / #print axioms commands at column 0; none of the
+   meta-level escapes (by_elab, run_tac, native_decide, sorry, ...) inside --
+   and the trusted prelude (Prelude.lean, byte-identical) is skipped.  With
+   certify -> True the generator auxiliaries `def mathilda_cert_<k>_<x>` are
+   accepted too.  Gives the C checker's association. *)
+checkSource[src_String, mathlib_, certify_] :=
+  Lean`Internal`CheckSource[src, TrueQ[mathlib], TrueQ[certify],
+    With[{p = prelude[]}, If[StringQ[p] && p =!= "", p, None]]];
 
-(* Every `example` becomes a named declaration, so its axioms can be
-   reported: noncomputable def _root_.mathilda_example_<k> (a Prop- or
-   data-valued example both elaborate as a def; the line count is unchanged). *)
-$examplePattern = RegularExpression[
-  "(?m)^([ \\t]*(?:@\\[[^\\]\\n]*\\][ \\t]*)?(?:(?:private|protected)[ \\t]+)?)(?:noncomputable[ \\t]+)?example\\b"];
-nameExamples[src_String] := Module[{s = src, k = 0},
-  While[StringContainsQ[s, $examplePattern] && k < 10000,
-    k++;
-    s = StringReplace[s, $examplePattern ->
-      "$1noncomputable def _root_.mathilda_example_" <> ToString[k], 1]];
-  s];
+(* The message of each refusal kind. *)
+refusalMessage["import", w_] := Message[LeanVerify::import, w];
+refusalMessage["cmd", w_] := Message[LeanVerify::cmd, w];
+refusalMessage["token", w_] := Message[LeanVerify::unsafe, w];
+refusalMessage[_, w_] := Message[LeanVerify::lex, w];
 
-(* Fully qualified names declared with theorem / lemma / def / abbrev /
-   instance in src: namespace / section / mutual ... end are tracked line by
-   line, so a declaration inside `namespace A` is reported as A.name. *)
-$declPattern = RegularExpression["^[ \\t]*(?:@\\[[^\\]\\n]*\\][ \\t]*)?(?:(?:private|protected|noncomputable|partial|nonrec)[ \\t]+)*(?:theorem|lemma|def|abbrev|instance)[ \\t]+([^\\s:(){}\\[\\]]+)"];
-qualifiedName[stack_List, n_String] := If[StringStartsQ[n, "_root_."],
-  StringDrop[n, 7], StringRiffle[Append[DeleteCases[stack, ""], n], "."]];
-declaredTheorems[src_String] := Module[{stack = {}, out = {}, m},
-  Do[
-    Which[
-      (m = StringCases[l, RegularExpression["^[ \\t]*namespace[ \\t]+([^\\s]+)"] -> "$1"]) =!= {},
-        AppendTo[stack, First[m]],
-      StringMatchQ[l, RegularExpression["^[ \\t]*(?:noncomputable[ \\t]+)?(?:section|mutual)\\b.*"]],
-        AppendTo[stack, ""],
-      StringMatchQ[l, RegularExpression["^[ \\t]*end\\b.*"]],
-        If[stack =!= {}, stack = Most[stack]],
-      (m = StringCases[l, $declPattern -> "$1"]) =!= {},
-        AppendTo[out, qualifiedName[stack, First[m]]]],
-    {l, StringSplit[src, "\n"]}];
-  DeleteDuplicates[out]];
-
-(* src followed by a trusted footer: one `#print axioms` line per declared
-   name.  Returns {source, <|name -> footer line|>}; only a report printed
-   on its own footer line counts (a report elsewhere could be forged). *)
-withAxiomReports[src_String] := Module[{names = declaredTheorems[src], base, l0},
+(* src (examples already renamed by the checker) followed by a trusted footer:
+   one `#print axioms` line per declared name.  Returns {source, <|name ->
+   footer line|>}; only a report printed on its own footer line counts (a
+   report elsewhere could be forged). *)
+withAxiomReports[src_String, names_List] := Module[{base, l0},
   base = If[StringEndsQ[src, "\n"] || src === "", src, src <> "\n"];
   l0 = StringCount[base, "\n"] + 1;
   {StringJoin[base, ("#print axioms " <> # <> "\n") & /@ names],
@@ -255,27 +245,30 @@ anchoredAxioms[r_, name_, line_] := With[{rep = Select[Lookup[r, "AxiomReports",
 Options[LeanVerify] = {LeanExecutable -> Automatic, LeanProject -> Automatic,
   KeepFiles -> False};
 
-LeanVerify[src_String, opts:OptionsPattern[]] := Module[{exe, proj, full, lines, r, bad,
-    ok, named},
-  bad = unsafeConstructs[src];
-  If[bad =!= {},
-    Message[LeanVerify::unsafe, StringRiffle[bad, ", "]];
-    Return[<|"Success" -> False, "ExitCode" -> Missing["NotRun"],
-      "Messages" -> {<|"Severity" -> "error", "Kind" -> "mathilda.unsafe", "Line" -> 0,
-        "Text" -> "not run: the source uses " <> StringRiffle[bad, ", "]|>},
-      "Axioms" -> <||>, "AxiomReports" -> {}, "Timing" -> 0., "Command" -> "",
-      "Rejected" -> bad|>, Module]];
+LeanVerify[src_String, opts:OptionsPattern[]] := Module[{exe, proj, full, lines, r, chk,
+    ok},
   exe = leanExe[OptionValue[LeanExecutable]];
   proj = leanProject[OptionValue[LeanProject]];
-  named = nameExamples[src];
-  {full, lines} = withAxiomReports[named];
+  chk = checkSource[src, StringQ[proj], False];
+  If[!AssociationQ[chk], Return[$Failed, Module]];
+  If[!TrueQ[chk["OK"]],
+    refusalMessage[chk["Kind"], chk["What"]];
+    Return[<|"Success" -> False, "ExitCode" -> Missing["NotRun"],
+      "Messages" -> {<|"Severity" -> "error", "Kind" -> "mathilda." <> chk["Kind"],
+        "Line" -> chk["Line"], "Text" -> "not run: the source uses " <> chk["What"]|>},
+      "Axioms" -> <||>, "AxiomReports" -> {}, "Timing" -> 0., "Command" -> "",
+      "Rejected" -> {chk["What"]}|>, Module]];
+  {full, lines} = withAxiomReports[chk["Source"], chk["Theorems"]];
   r = Lean`Internal`VerifySource[full, exe, proj, TrueQ[OptionValue[KeepFiles]],
     replayScript[]];
   If[!AssociationQ[r], Return[$Failed, Module]];
   If[missingLeanQ[r], Message[LeanVerify::nolean]];
-  (* The guarantee is the replay: every declaration re-checked by a fresh
-     kernel, and the axioms of every declared name as found by the checker.
-     The file's own #print axioms reports must agree, but are not enough. *)
+  (* Success: Lean's own run was clean, the kernel replay of the compiled
+     module accepted every declaration with standard axioms, and every
+     theorem / example the SOURCE TEXT declares (names from the checker, not
+     from Lean's output) is among the replayed declarations with standard
+     axioms and has a standard report on its own footer line -- so a module
+     that drops or renames a declaration fails. *)
   ok = TrueQ[r["Success"]] && r["Replay"] === True && AllTrue[Keys[lines], Function[nm,
     With[{ax = anchoredAxioms[r, nm, lines[nm]], rax = Lookup[r["ReplayAxioms"], nm]},
       ListQ[ax] && SubsetQ[$standardAxioms, ax] &&
@@ -428,8 +421,20 @@ attribute[r_, name_, {span_, axLine_}, spans_] := Module[{bad, own, stray, ax, r
    Lean rejected some chunks, the file was not compiled and so not replayed;
    the chunks with no error of their own are then run again in a file of
    their own (their verdict needs the replay), the others stay False. *)
-runBatch[chunks_List, tier_, exe_, proj_] := Module[{src, lay, r, res, clean},
+runBatch[chunks_List, tier_, exe_, proj_] := Module[{src, lay, r, res, clean, chk},
   {src, lay} = assembleFile[chunks, tier];
+  (* Internal assertion: the generated file passes the same allowlist check as
+     a LeanVerify source (with the trusted prelude, the Tier 1 Mathlib import
+     and the generator auxiliaries def mathilda_cert_<k>_<x>).  The only
+     user-influenced text in it is a Method script (deny-listed) and the
+     strictly translated statements. *)
+  chk = checkSource[src, tier === 1, True];
+  If[!TrueQ[chk["OK"]],
+    Message[Certify::unsafe, chk["What"]];
+    Return[Table[<|"Verified" -> False, "Axioms" -> {},
+      "Logs" -> {<|"Severity" -> "error", "Line" -> chk["Line"],
+        "Text" -> "not run: the source check refused " <> ToString[chk["What"]]|>},
+      "Timing" -> 0., "Source" -> src|>, {Length[chunks]}], Module]];
   r = Lean`Internal`VerifySource[src, exe, If[tier === 1, proj, None], False, replayScript[]];
   If[AssociationQ[r] && !missingLeanQ[r] && r["Replay"] =!= True && r["ExitCode"] =!= 0 &&
       Length[chunks] > 1,
@@ -526,16 +531,33 @@ rawFraction[Power[b_, k_Integer]] := With[{f = rawFraction[b]},
   If[k >= 0, f^k, Reverse[f]^(-k)]];
 rawFraction[e_] := {e, 1};
 
+(* The same, read off a HELD side (before Mathilda's arithmetic could cancel
+   x/x to 1 or x^2/x to x): each numerator and denominator is a polynomial
+   expression, whose evaluation is ring arithmetic only. *)
+SetAttributes[{rawH, rawHl}, HoldAll];
+rawH[Plus[ts__]] := Fold[{#1[[1]] #2[[2]] + #2[[1]] #1[[2]], #1[[2]] #2[[2]]} &,
+  {rawHl[ts]}];
+rawH[Times[fs__]] := Fold[{#1[[1]] #2[[1]], #1[[2]] #2[[2]]} &, {1, 1}, {rawHl[fs]}];
+rawH[Power[b_, k_Integer]] := With[{f = rawH[b]}, If[k >= 0, f^k, Reverse[f]^(-k)]];
+rawH[Subtract[a_, b_]] := rawH[Plus[a, Times[-1, b]]];
+rawH[Divide[a_, b_]] := rawH[Times[a, Power[b, -1]]];
+rawH[Minus[a_]] := rawH[Times[-1, a]];
+rawH[e_] := rawFraction[e];
+rawHl[] := Sequence[];
+rawHl[t_, r___] := Sequence[rawH[t], rawHl[r]];
+
 (* The certified statement for the identity a == b over `vars`:
    {held statement, hypotheses, form, extra certificate data, extra trusted steps}.
    A rational identity is cross-multiplied with the unreduced numerators and
    denominators of the two sides, so Lean checks the actual polynomial
    identity n_a d_b = n_b d_a. *)
-identityStatement[a_, b_, vars_] := Module[{na, da, nb, db},
-  If[polyQ[a, vars] && polyQ[b, vars],
+identityStatement[a_, b_, vars_, raw_:Automatic] := Module[{na, da, nb, db},
+  {{na, da}, {nb, db}} = If[raw === Automatic, {rawFraction[a], rawFraction[b]}, raw];
+  (* A nonzero numeric denominator is no side condition: fold it back. *)
+  If[NumberQ[da] && da =!= 0, na = na/da; da = 1];
+  If[NumberQ[db] && db =!= 0, nb = nb/db; db = 1];
+  If[da === 1 && db === 1 && polyQ[a, vars] && polyQ[b, vars],
     Return[{HoldForm[a == b], {}, "Polynomial", <||>, {}}, Module]];
-  {na, da} = rawFraction[a];
-  {nb, db} = rawFraction[b];
   If[!AllTrue[{na, da, nb, db}, polyQ[#, vars] &] || Expand[da] === 0 || Expand[db] === 0,
     Return[$Failed, Module]];
   With[{l = If[db === 1, na, na db], r = If[da === 1, nb, nb da]},
@@ -548,21 +570,50 @@ identityStatement[a_, b_, vars_] := Module[{na, da, nb, db},
 denominators of each side as written, no cancellation) gives the rational identity \
 wherever every denominator is nonzero (listed in \"Hypotheses\")"}}]];
 
+(* Real variables (finding B, v0.6520).  The ordered-field form
+   (forall ordered fields K, forall x y : K, ...) is faithful to
+   Mathematica's semantics only when every bound variable is real: in
+   Mathematica an order relation makes ITS variables real, not the others
+   (x^2 + 4 == 0 && y > 0 has the complex solution x = 2 I).  A variable is
+   real when it occurs in an order relation of the assumptions or is
+   declared with Element[v, Reals] / Element[{v, ...}, Reals]. *)
+$orderHeads = Less | Greater | LessEqual | GreaterEqual;
+orderVariables[assum_List] := Union[Variables[Join[
+  Cases[assum, ($orderHeads)[xs__] :> {xs}, {0, Infinity}],
+  Cases[assum, HoldPattern[Inequality[xs___]] :> Take[{xs}, {1, -1, 2}], {0, Infinity}]]]];
+(* {other assumptions, variables declared real} of a list of assumptions. *)
+splitRealDecls[assum_List] := {
+  DeleteCases[assum, Element[_, Reals]],
+  Union[Flatten[Cases[assum, Element[v_, Reals] :> {v}]]]};
+
 (* Generator for an identity a == b (rows 1-2).  Returns the generator
-   association, or $Failed after Certify::nocert. *)
-identityGen[kind_, input_HoldForm, result_, a_, b_, trusted_List, o_] :=
-  Module[{vars, st, ty, held, assum, lean, tier, gk},
-  assum = DeleteCases[Flatten[{o["Assumptions"]}], True];
-  vars = Sort[Union[Variables[{a, b}], relationVariables[assum]]];
+   association, or $Failed after a message. *)
+identityGen[kind_, input_HoldForm, result_, a_, b_, trusted_List, o_, raw_:Automatic] :=
+  Module[{vars, st, ty, held, assum, lean, tier, gk, reals, ordered, notReal},
+  {assum, reals} = splitRealDecls[DeleteCases[
+    Flatten[{o["Assumptions"]} /. And -> List], True]];
+  If[!AllTrue[reals, Head[#] === Symbol &],
+    Message[Certify::nocert, input]; Return[$Failed, Module]];
+  vars = Sort[Union[Variables[{a, b}], If[ListQ[raw], Variables[raw], {}],
+    relationVariables[assum], reals]];
   If[!AllTrue[vars, Head[#] === Symbol &],
     Message[Certify::nocert, input]; Return[$Failed, Module]];
-  st = identityStatement[a, b, vars];
+  st = identityStatement[a, b, vars, raw];
   If[st === $Failed, Message[Certify::nocert, input]; Return[$Failed, Module]];
   ty = domainType[o["Domain"], First[st], assum =!= {}];
   tier = If[ty === "Real", 1, 0];
-  (* Automatic domain with hypotheses: every char-0 / ordered field. *)
+  (* Automatic domain with hypotheses: every char-0 field (variables complex,
+     as in Mathematica), or every ordered field when every variable is real.
+     Order relations with a variable that is not real: no certificate. *)
+  ordered = orderedQ[{assum, st[[2]]}];
+  notReal = Complement[vars, orderVariables[assum], reals];
   gk = If[o["Domain"] === Automatic && assum =!= {},
-    If[orderedQ[{assum, st[[2]]}], "Ordered", "CharZero"], None];
+    Which[
+      ordered && notReal =!= {},
+        Message[Certify::realvars, input, If[Length[notReal] === 1, First[notReal], notReal]];
+        Return[$Failed, Module],
+      ordered || (reals =!= {} && notReal === {}), "Ordered",
+      True, "CharZero"], None];
   (* Bind the variables (and assumptions) around the held statement without
      ever evaluating it: Equal of two identical sides would become True. *)
   held = With[{vs = vars, h = If[Length[assum] === 1, First[assum], And @@ assum]},
@@ -585,10 +636,109 @@ identityGen[kind_, input_HoldForm, result_, a_, b_, trusted_List, o_] :=
 $identityHeads = {Expand, Collect, Together, Apart, Cancel, Simplify, FullSimplify};
 $factorHeads = {Factor, FactorTerms};
 
+(* ---- Inputs are translated as written (finding C, v0.6520) -----------------
+   Certify used to evaluate both sides of a claim before translating them, so
+   Simplify[(x^2 - 1)/(x - 1)] == x + 1 became the tautology 1 + x = 1 + x
+   (likewise Integrate, D, Refine, Limit, Mod, Exp[Log[x]], ...), which Lean
+   "verified" with no trusted step.  Now every input is walked HELD
+   (rewriteInput) before any generator sees it:
+     - numbers, symbols, Plus / Times / Subtract / Divide / Minus, integer
+       powers and the relations / connectives / List of a claim are kept
+       (Mathilda's evaluation of them is arithmetic normalisation, which Lean
+       re-checks: the statement is a polynomial identity);
+     - Expand, Together, Cancel, Apart, Factor, FactorTerms and Collect are
+       value-preserving on rational functions, so h[e] is replaced by e: Lean
+       then checks the user's own expression (a Factor / FactorTerms adds the
+       trusted step "irreducibility of the factors");
+     - D[F, x] with F a polynomial is replaced by Mathilda's derivative, and
+       "Mathilda's differentiation" is a trusted step;
+     - an indefinite Integrate[f, x] as a whole side of a claim goes to the
+       antiderivative generator with the CLAIMED antiderivative (Lean checks
+       D[F] == f through the cleared chain-rule identity); a Sum[t, {k, a, n}]
+       side goes to the closed-form sum generator with the claimed closed form;
+     - the outermost head of a computation (Certify[Simplify[e]]) is kept;
+     - anything else (Simplify, Refine, Limit, Mod, Exp, Log, Sqrt, a definite
+       Integrate, a user function, ...) inside the input: Certify::eval. *)
+SetAttributes[{cw, cwl, cwClaim, hk}, HoldAll];
+$cwKeep = {Plus, Times, Subtract, Divide, Minus, Equal, Unequal, Less, LessEqual, Greater,
+  GreaterEqual, And, Implies, Inequality, ForAll, List, Element};
+$cwComputations = {Expand, Collect, Together, Apart, Cancel, Simplify, FullSimplify,
+  Factor, FactorTerms, Integrate, PolynomialExtendedGCD, PolynomialReduce, Solve, Inverse,
+  Det, LinearSolve, NullSpace, Minimize, Maximize, FactorInteger, PrimeQ, Sum};
+$cwAnti = False;    (* inside a claimed antiderivative: surds, Log, ArcTan, ArcTanh *)
+$cwAnyPow = False;  (* inside a sum: c^k with a symbolic exponent *)
+$cwNotes = {};      (* heads stripped / trusted steps added during one walk *)
+$cwTrusted = {};
+
+cw[e_Integer] := e;
+cw[e_Rational] := e;
+cw[e_Real] := e;
+cw[e_String] := e;
+cw[s_Symbol] := hk[s];
+cw[Power[b_, n_Integer]] := inert[Power, cw[b], n];
+cw[Power[b_, e_]] /; $cwAnti || $cwAnyPow := inert[Power, cw[b], cw[e]];
+cw[(h:Sqrt | Log | ArcTan | ArcTanh)[u_]] /; $cwAnti := inert[h, cw[u]];
+cw[(h:Expand | Together | Cancel | Factor | FactorTerms)[e_]] :=
+  ($cwNotes = Append[$cwNotes, h]; cw[e]);
+cw[(h:Apart | Collect)[e_, v_]] /; MatchQ[Unevaluated[v], _Symbol | {__Symbol}] :=
+  ($cwNotes = Append[$cwNotes, h]; cw[e]);
+cw[D[f_, x_Symbol]] := Module[{fv = cwValue[cw[f]], d},
+  If[!FreeQ[fv, cfail] || !polyQ[fv, Variables[fv]] || !FreeQ[fv, _Real | _Complex],
+    cfail[D],
+    d = D[fv, x];
+    $cwTrusted = Append[$cwTrusted, "Mathilda's differentiation: D[" <>
+      ToString[fv, InputForm] <> ", " <> ToString[x, InputForm] <> "] = " <>
+      ToString[d, InputForm] <> " (Lean checks the claim with this derivative written in)"];
+    hval[d]]];
+cw[(h_Symbol)[a___]] /; MemberQ[$cwKeep, h] := inert[h, cwl[a]];
+cw[(h_)[___]] := cfail[h];
+cw[e_] := cfail[e];
+cwl[] := Sequence[];
+cwl[a_, r___] := Sequence[cw[a], cwl[r]];
+
+(* A whole side of a claimed equation may be an indefinite Integrate (the
+   other side is the claimed antiderivative) or a Sum (the other side is the
+   claimed closed form).  Integrate is put on the left. *)
+cwClaim[Equal[Integrate[f_, x_Symbol], F_]] :=
+  inert[Equal, inert[Integrate, cw[f], hk[x]], Block[{$cwAnti = True}, cw[F]]];
+cwClaim[Equal[F_, Integrate[f_, x_Symbol]]] :=
+  inert[Equal, inert[Integrate, cw[f], hk[x]], Block[{$cwAnti = True}, cw[F]]];
+cwClaim[Equal[Sum[t_, {k_Symbol, a_, n_}], r_]] := Block[{$cwAnyPow = True},
+  inert[Equal, inert[Sum, cw[t], inert[List, hk[k], cw[a], cw[n]]], cw[r]]];
+cwClaim[(h_Symbol)[a___]] /; MemberQ[$cwComputations, h] && h =!= Sum := inert[h, cwl[a]];
+cwClaim[Sum[t_, {k_Symbol, a_, n_}]] := Block[{$cwAnyPow = True},
+  inert[Sum, cw[t], inert[List, hk[k], cw[a], cw[n]]]];
+cwClaim[e_] := cw[e];
+
+cwHeld[t_] := HoldComplete @@ {t} //. {inert[h_, a___] :> h[a], hk[x_] :> x, hval[v_] :> v};
+cwValue[t_] := If[FreeQ[t, cfail], ReleaseHold[cwHeld[t]], t];
+
+(* {HoldComplete[rewritten input], stripped heads, trusted steps}, or
+   $Failed after Certify::eval.  A symbol holding the input (c = a == b;
+   Certify[c]) is evaluated once first. *)
+rewriteInput[HoldComplete[c_Symbol]] := With[{v = c},
+  If[HoldComplete[v] =!= HoldComplete[c], rewriteInput[HoldComplete[v]],
+    {HoldComplete[c], {}, {}}]];
+rewriteInput[hc:HoldComplete[c_]] := Module[{t, bad},
+  Block[{$cwNotes = {}, $cwTrusted = {}},
+    t = cwClaim[c];
+    bad = Cases[{t}, cfail[h_] :> h, Infinity];
+    If[bad =!= {},
+      Message[Certify::eval, HoldForm[c], First[bad]]; Return[$Failed, Module]];
+    {cwHeld[t], $cwNotes, $cwTrusted}]];
+
+(* Mathilda's own evaluation of the two sides of an Equal input (for the
+   heuristic engine and "Result"), never used for the Lean statement. *)
+mathildaSides[HoldComplete[Equal[a_, b_]]] := {a, b};
+mathildaSides[HoldComplete[c_Symbol]] := With[{v = c},
+  If[HoldComplete[v] =!= HoldComplete[c], mathildaSides[HoldComplete[v]], None]];
+mathildaSides[_] := None;
+
 (* Dispatcher: one rule per supported computation / claim shape. *)
 generate[HoldComplete[Equal[a_, b_]], o_] := Module[{av = a, bv = b},
   With[{x = av, y = bv},
-    identityGen["Identity", HoldForm[a == b], HoldForm[x == y], av, bv, {}, o]]];
+    identityGen["Identity", HoldForm[a == b], HoldForm[x == y], av, bv, {}, o,
+      {rawH[a], rawH[b]}]]];
 
 generate[HoldComplete[(h_Symbol)[e_, rest___]], o_] /;
     MemberQ[Join[$identityHeads, $factorHeads], h] :=
@@ -598,7 +748,7 @@ generate[HoldComplete[(h_Symbol)[e_, rest___]], o_] /;
       If[MemberQ[$factorHeads, h], "Factorization", "Identity"],
       HoldForm[h[e, rest]], res, ev, res,
       If[MemberQ[$factorHeads, h], {"irreducibility of the factors (not certified)"}, {}],
-      o]];
+      o, {rawH[e], rawFraction[res]}]];
 
 (* ---------------------------------------------------------------------- *)
 (* Shared helpers for the structured certificates (rows 4-10)              *)
@@ -723,10 +873,13 @@ elemPiece[c_, h_, u_, x_, vars_] := Module[{tu, p, q, pp, qq},
      ArcTanh, iPlus[iPower[q, 2], iTimes[-1, iPower[p, 2]]]],
    h, p, q}];
 
-antiderivGen[input_, f_, x_Symbol, o_] := Module[{F, tf, a, b, Fs, bases, svars, vars,
-    sub, terms, rpart = 0, elems = {}, pieces, tr, r, w, dens, lhs, lhsV, rels, red,
-    ks, rem, rhs, held, stmt, nonzero, hyps, back, fs, ph, cf},
-  F = If[$antiderivOverride =!= None, $antiderivOverride, Integrate[f, x]];
+antiderivGen[input_, f_, x_Symbol, o_, claimed_:None] := Module[{F, tf, a, b, Fs, bases,
+    svars, vars, sub, terms, rpart = 0, elems = {}, pieces, tr, r, w, dens, lhs, lhsV, rels,
+    red, ks, rem, rhs, held, stmt, nonzero, hyps, back, fs, ph, cf},
+  (* The claimed antiderivative of Integrate[f, x] == F, else the test hook,
+     else Mathilda's own Integrate. *)
+  F = Which[claimed =!= None, claimed, $antiderivOverride =!= None, $antiderivOverride,
+    True, Integrate[f, x]];
   If[!FreeQ[F, Integrate], Return[nocert[input], Module]];
   (* The integrand must be a rational function of x over Q. *)
   tf = Together[f]; a = Numerator[tf]; b = Denominator[tf];
@@ -814,6 +967,13 @@ tier1Or[input_, F_, f_, x_, o_] := With[{g = tier1AntiderivGen[input, F, f, x, o
 
 generate[HoldComplete[Integrate[f_, x_Symbol]], o_] :=
   antiderivGen[HoldForm[Integrate[f, x]], f, x, o];
+
+(* The claim Integrate[f, x] == F (rewriteInput puts Integrate on the left):
+   F, the user's antiderivative, is checked -- not Mathilda's.  An
+   antiderivative is determined up to a constant, and that is what is
+   certified: D[F, x] == f. *)
+generate[HoldComplete[Equal[Integrate[f_, x_Symbol], F_]], o_] :=
+  antiderivGen[HoldForm[Integrate[f, x] == F], f, x, o, F];
 
 (* ---------------------------------------------------------------------- *)
 (* Row 5: PolynomialExtendedGCD (Bezout)                                   *)
@@ -1486,6 +1646,10 @@ sumGen[input_, t_, k_Symbol, a_, n_Symbol, cl0_, o_] := Module[{tl, cl, ttxt, ct
   (* Sum @@ {...}: a literal Sum[t, {k, ...}] here would scope (rename) the
      iterator instead of substituting the argument k. *)
   closed = If[cl0 === Automatic, If[IntegerQ[av], Sum @@ {t, {k, av, n}}, $Failed], cl0];
+  (* The upper bound must be a variable, not a built-in constant: n_Symbol
+     also matches Infinity, Pi, E, I, ... *)
+  If[Context[n] === "System`" || MemberQ[Attributes[n], Protected | Constant],
+    Return[nocert[input], Module]];
   If[!IntegerQ[av] || av < 0 || k === n || !FreeQ[closed, Sum] ||
      !SubsetQ[{k}, Union[Cases[t, _Symbol, {0, Infinity}]]] ||
      !SubsetQ[{n}, Union[Cases[closed, _Symbol, {0, Infinity}]]] ||
@@ -1680,9 +1844,38 @@ mkProofObject[g_, v_, engine_, tierShown_, lv_, source_, lt_] := With[{a = <|
 
 (* The generator association of one item plus the tier it runs at
    ("TierUsed"), or $Failed (after a message). *)
-prepare[hc_HoldComplete, o_] := Module[{g, tier, proj},
-  g = generate[hc, o];
+prepare[hc_HoldComplete, o_] := Module[{g, tier, proj, rw, sides, ign},
+  (* The input as written (rewriteInput); Certify::eval when it applies a
+     computation Mathilda would have to evaluate first. *)
+  rw = rewriteInput[hc];
+  If[rw === $Failed, Return[$Failed, Module]];
+  g = generate[First[rw], o];
   If[!AssociationQ[g], Return[$Failed, Module]];
+  If[MemberQ[rw[[2]], Factor | FactorTerms],
+    g = Join[g, <|"Kind" -> If[g["Kind"] === "Identity", "Factorization", g["Kind"]],
+      "TrustedSteps" -> DeleteDuplicates[Append[g["TrustedSteps"],
+        "irreducibility of the factors (not certified)"]]|>]];
+  If[rw[[3]] =!= {},
+    g = Append[g, "TrustedSteps" -> DeleteDuplicates[Join[g["TrustedSteps"], rw[[3]]]]]];
+  (* "Input" is the input as the user wrote it (a symbol holding it shows
+     its value, as before). *)
+  If[!MatchQ[hc, HoldComplete[_Symbol]] && First[rw] =!= hc,
+    g = Append[g, "Input" -> Replace[hc, HoldComplete[e_] :> HoldForm[e]]]];
+  (* For an Equal claim, "Result" and the heuristic engine's claim are
+     Mathilda's own evaluation of the two sides (what Mathilda believes); the
+     Lean statement is the claim as written. *)
+  If[MemberQ[{"Identity", "Factorization"}, g["Kind"]] &&
+      ListQ[sides = Quiet[mathildaSides[hc]]],
+    g = Join[g, <|"Claim" -> sides,
+      "Result" -> With[{x = sides[[1]], y = sides[[2]]}, HoldForm[x == y]]|>]];
+  (* Domain, Assumptions and Method are read by the identity generator only:
+     say so when another kind ignores them (ignoring a hypothesis gives a
+     stronger theorem, so it is sound, but it must not be silent). *)
+  If[!MemberQ[{"Identity", "Factorization"}, g["Kind"]],
+    ign = Select[{Domain -> o["Domain"], Assumptions -> o["Assumptions"],
+        Method -> o["Method"]},
+      !MatchQ[#[[2]], Automatic | {} | True] &];
+    Do[Message[Certify::optignored, r, g["Kind"]], {r, ign}]];
   (* Tier: the generator's natural tier, unless the caller insists. *)
   tier = Switch[o["Tier"], 0, g["Tier"], 1, 1, _, g["Tier"]];
   proj = leanProject[o["LeanProject"]];

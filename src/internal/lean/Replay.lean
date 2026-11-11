@@ -17,6 +17,11 @@
 
   The verdict therefore never comes from the checked file's own output (a
   user elaborator can print anything, including a fake `#print axioms`).
+  The replay's INPUT, the .olean, is written by the elaborating process,
+  so it is only as trustworthy as that process: Mathilda therefore runs
+  only sources that contain no user-defined code (the allowlist of
+  src/lean_check.c), and this script reads only the main module file and
+  refuses a module-system file or the extra parts next to it.
 
   Output (stdout), parsed by src/lean_run.c:
 
@@ -91,15 +96,18 @@ unsafe def main (args : List String) : IO UInt32 := do
     -- `lake env` for a Mathlib project).
     initSearchPath ((← IO.appDir) / "..")
     let mFile : System.FilePath := olean
-    let mut fnames := #[mFile]
-    let sFile := OLeanLevel.server.adjustFileName mFile
-    if ← sFile.pathExists then
-      fnames := fnames.push sFile
-      let pFile := OLeanLevel.private.adjustFileName mFile
-      if ← pFile.pathExists then fnames := fnames.push pFile
-    let parts ← readModuleDataParts fnames
+    -- Only the main module file is read.  The module system's extra parts
+    -- (.olean.server / .olean.private) are never produced for the sources
+    -- Mathilda accepts (`module` is refused), so their presence means
+    -- something planted them: refuse instead of reading them.
+    for part in [OLeanLevel.server.adjustFileName mFile, OLeanLevel.private.adjustFileName mFile] do
+      if ← part.pathExists then
+        throw <| IO.userError s!"unexpected module part {part.fileName.getD "?"}"
+    let parts ← readModuleDataParts #[mFile]
     let some (mod, _) := parts[0]? | throw <| IO.userError "cannot read the module data"
-    let some (last, _) := parts[parts.size - 1]? | throw <| IO.userError "no module data"
+    if mod.isModule then
+      throw <| IO.userError "the module uses the module system (refused)"
+    let last := mod
     let (_, s) ← importModulesCore mod.imports |>.run
     let env ← finalizeImport s mod.imports {} 0 false false (isModule := true)
     let mut newConstants : Std.HashMap Name ConstantInfo := {}

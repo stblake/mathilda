@@ -17,6 +17,9 @@ Mathilda is an **untrusted oracle**. The Lean 4 kernel is the **trusted checker*
 - A bug in Mathilda can make `Certify` fail to find a certificate, or produce a certificate
   that Lean rejects (`"Verified" -> False`). It cannot produce a wrong `True`, except
   through the steps listed in `"TrustedSteps"` below, or through a bug in Lean itself.
+- The statement is the input **as written**: `Certify` never evaluates a claim before
+  translating it (arithmetic aside), so a Mathilda computation inside a claim cannot turn it
+  into a tautology (third review; see below).
 - In the other direction (`lean/`), the same holds: the tactics ask Mathilda for data and
   re-check every step in Lean. A wrong oracle answer makes the tactic fail
   (`lean/test/Untrusted.lean` drives the tactics with a fake oracle that lies).
@@ -41,8 +44,13 @@ The file is header (`set_option autoImplicit false`), prelude, theorem chunks, t
    running `src/internal/lean/Replay.lean` (none of the checked file's code) replayed every
    declaration of the module into a new kernel environment and found only standard axioms
    under the footer theorem `mathilda_cert_k_footer : S := mathilda_cert_k`. Conditions 1-4
-   read the checked run's own output; condition 5 does not, so it holds even if that output
-   were forged.
+   read the checked run's own output; condition 5 reads only the `.olean`, which that run
+   wrote. The replay is therefore defence in depth, not the foundation: the foundation is
+   that the file contains **no user-defined code** (condition 0).
+0. **Source check.** The generated file passes the allowlist check of
+   `src/lean_check.c` (the same grammar as `LeanVerify`, plus the generator auxiliaries
+   `def mathilda_cert_<k>_<x>` and the byte-identical prelude). The only user-influenced
+   text in it is the strictly translated statements and deny-listed `Method` scripts.
 
 The heuristic engine never reports `True`: its answer is `Missing["Heuristic", b]`.
 
@@ -176,11 +184,47 @@ the hostile-answer cases in `lean/test/Untrusted.lean`.
 | **Vacuous hypotheses over ℚ.** `Certify[x == 7, Assumptions -> x^2 + 4 == 0, Method -> …]` proved `∀ x : Rat, 4 + x^2 = 0 → x = 7`, false over Mathematica's complex semantics (`x = 2 I`); likewise `x^2 == 2`. | **Generic domains.** Core Lean's `grind` works over its own algebraic classes, so statements with hypotheses quantify over every field of characteristic 0 (`[Lean.Grind.Field K] [Lean.Grind.IsCharP K 0]`: ℚ, ℝ, ℂ) and, with an order relation, over every ordered field (`[LE K] [LT K] [Std.LawfulOrderLT K] [Std.IsLinearOrder K] [Lean.Grind.OrderedRing K]`: ℝ). The statement is translated over `Rat` and generalised (`Rat` → `K`); the theorem takes the binders as parameters, the footer states the full `∀ {K : Type} …`. Ideal membership, identities with assumptions, SOS and optimality use it; every showcase row still verifies, and the "Rat → Real transfer not checked" trusted step is gone. `Solve` soundness statements are closed rational facts and stay over `Rat`. |
 | **Together cancels; weak primality statements.** `Certify[(x^2 - 1)/(x - 1) == x + 1]` proved `∀ x : Int, 1 + x = 1 + x`; `Certify[Not[PrimeQ[0]]]` proved `0 < 2`. | Rational identities are cross-multiplied with the unreduced numerators and denominators (`rawFraction`), so Lean checks `x ^ 2 - 1 = (x - 1) * (1 + x)`. The prelude defines `Mathilda.IsPrime n := 2 ≤ n ∧ ∀ d, d ∣ n → d = 1 ∨ d = n`; non-primes are `¬ Mathilda.IsPrime n` (from a factor, or from `2 ≤ n`), and `PrimeQ[2]` is `Mathilda.IsPrime 2`, all with no trusted step. |
 
-Residual trust: the replay trusts the imported compiled modules (core, Mathlib, the
-`Mathilda` package) as built, and the toolchain itself. A LeanVerify source with `import
-Lean` still runs arbitrary code at elaboration time with the user's rights (the replay keeps
-it from faking a verdict, not from having side effects); the deny-list refuses the common
-forms.
+(Correction, v0.6520: the claim above that the replay's verdict "cannot be forged by that
+file" was wrong. The replay runs none of the file's code, but its input -- the `.olean` --
+is written by the process that elaborated the file; a file that runs code at elaboration
+time can write a forged module, or race to overwrite it. The third round closes this by
+never running such a file.)
+
+## Soundness hardening, third round (v0.6520)
+
+A third adversarial review found two more false `True` verdicts and three weaker holes.
+Regression tests: `test_review3_*` in `tests/test_lean_verify.c` and
+`tests/test_lean_certify.c`.
+
+| Hole | Fix |
+|---|---|
+| **Forged replay input.** `import Lean` plus `attribute [tactic Lean.Parser.Tactic.decide] pwn`, where `pwn` added `theorem bogus : (1 : Nat) = 0` with `addDeclCore (doCheck := false)` and wrote forged `MathildaCert.olean.server` / `.olean.private` (which `Replay.lean` read in place of the module), or spawned a shell that overwrote the `.olean` between Lean's exit and the replay: `"Success" -> True`. The root cause: the elaborating process is attacker-controlled and produces the replay's input. | **No user code runs.** LeanVerify's guarantee holds only when the checked source cannot run user-controlled code during elaboration, and that is now enforced structurally, before Lean starts, by an allowlist grammar (`` Lean`Internal`CheckSource ``, `src/lean_check.c`): (1) no `import` (core Lean only, "Tier 0"), or with a project only `import Mathlib` / `import Mathlib.<Path>` (`LeanVerify::import`; `Lean`, `Lake`, `Mathilda`, `Qq`, `Aesop`, `Batteries` are refused); (2) every command starts at column 0 (continuation lines indented; tabs and carriage returns refused) with `theorem`, `lemma` (Mathlib only), `example`, `open` (namespace names, optional `scoped` / trailing `in`), `namespace`, `section`, `noncomputable section`, `end`, `variable`, `universe`, `set_option maxHeartbeats / maxRecDepth / synthInstance.maxHeartbeats <n>` or `autoImplicit / relaxedAutoImplicit / linter.* true / false` (optional `in`), or `#print axioms <name>`; everything else (`def`, `abbrev`, `instance`, `structure`, `inductive`, `class`, `axiom`, `opaque`, `macro`, `syntax`, `notation`, `elab`, `attribute`, `@[…]`, `initialize`, `#eval` / `#check` / …, `run_cmd`, `simproc`, `mutual`, `module`, …) is `LeanVerify::cmd`; (3) inside a command, a tiny Lean lexer (comments `--` and nested `/- -/`, string, raw-string and character literals, `«»` identifiers) refuses the escapes `by_elab`, `run_tac`, `run_elab`, `run_meta`, `run_cmd`, `native_decide`, `native` (`decide +native`), `implemented_by`, `extern`, `unsafe` and `unsafe…IO`, `IO` / `EIO` / `BaseIO`, `Elab`, `MetaM` …, `sorry`, `admit`, `ofReduceBool`, `trustCompiler`, `debug`, `plausible`, `slim_check`, `polyrith`, every command keyword (Lean starts a command wherever its keyword appears, column or not), `#word`, `word%` (`eval%`), `@[`, backquotes (name literals, quotations) and interpolated strings (`LeanVerify::unsafe`); an unterminated comment / string / `«»` identifier is `LeanVerify::lex`. Without user definitions and without meta-level imports there is no user-defined code to run: built-in elaborators run only trusted code. The trusted prelude may occur once, byte-identical to `Prelude.lean`. (4) Defence in depth: `Replay.lean` reads only the main `.olean` and refuses a module-system file or any `.olean.server` / `.olean.private`; `lean_run.c` lists the private directory after elaboration and refuses to replay if it holds anything besides `MathildaCert.lean`, `.out`, `.err` and a regular-file `.olean`; and every theorem / example the source text declares (names from the checker; examples renamed as before) must be among the replayed declarations with standard axioms, so a module that drops or renames one fails. (5) `Certify`'s generated files pass the same check as an internal assertion (`Certify::unsafe`, `"Verified" -> False`): the header, the byte-identical prelude, the Tier 1 `import Mathlib`, and generator auxiliaries `def mathilda_cert_<k>_<x>` (sum preambles) are accepted; the user-influenced text (Method scripts, already deny-listed, and the strictly translated statements) must pass the grammar. |
+| **Ordered field for complex variables.** `Certify[x == 7, Assumptions -> x^2 + 4 == 0 && y > 0, Method -> …]` was `True`: one order relation made *every* variable range over an ordered field, where `x^2 + 4 = 0` has no solution. | The ordered-field statement is used only when every bound variable is real: it occurs in an order relation of the assumptions, or is declared with `Element[x, Reals]` / `Element[{x, y}, Reals]` (new). Order relations with a variable that is not real give `Certify::realvars` and no certificate; without order relations the statement is over every char-0 field, as before; with every variable declared real (and no order relation) it is over every ordered field. SOS (`ForAll[vars, p >= q]`) and `Minimize` / `Maximize` keep the ordered-field form: inequalities and optimisation are over the reals by Mathematica's own semantics, so every variable there is real. |
+| **Evaluated claims.** `generate` evaluated both sides of an `Equal` before translating, so `Simplify[(x^2-1)/(x-1)] == x + 1`, `Refine[Sqrt[x^2], x < 0] == -x`, `Integrate[x^2, x] == x^3/3`, `Integrate[Sin[x], {x, 0, Pi}] == 2`, `D[x^3, x] == 3 x^2`, `Factor[x^2 - 1] == (x - 1)(x + 1)`, `Exp[Log[x]] == x`, `Mod[7, 3] == 1` were `True` with tautological statements and no trusted step. | Every input is walked **held** (`rewriteInput`) before a generator sees it: numbers, symbols, `Plus` / `Times` / `Subtract` / `Divide` / `Minus`, integer powers, relations, connectives and `List` are kept; `Expand`, `Together`, `Cancel`, `Apart`, `Factor`, `FactorTerms`, `Collect` are read through (value-preserving on rational functions, so Lean checks the user's own expression; `Factor` adds the irreducibility trusted step and `"Kind" -> "Factorization"`); `D[F, x]` with `F` a polynomial is replaced by Mathilda's derivative with the trusted step "Mathilda's differentiation: D[F, x] = …"; an indefinite `Integrate[f, x]` as a whole side goes to the antiderivative generator with the **claimed** `F` (an antiderivative is certified up to a constant); a `Sum[t, {k, a, n}]` side goes to the closed-form generator with the claimed closed form; anything else inside an input gives `Certify::eval`. Identity numerators and denominators are read off the held sides (`rawH`), so `x/x == 1` is `x = x` with `x ≠ 0`, not `1 = 1`. `"Input"` is the input as written; `"Result"` and the heuristic engine use Mathilda's own evaluation. |
+| **Sum bound; silent options.** `Sum[1, {k, 1, Infinity}] == Infinity` matched `n_Symbol`; `Assumptions` were silently ignored by every kind but identities. | The upper bound must be a symbol outside ``System` `` that is neither `Protected` nor `Constant`. A kind that ignores `Domain`, `Assumptions` or `Method` issues `Certify::optignored` (ignoring a hypothesis proves a stronger theorem, so it was sound, but not silent any more). |
+| **Scratch leftovers.** `scratch_close` removed a fixed suffix list and missed `.ir.sig` (and anything else). | It removes the known names (now including `.ir.sig`, `.c`, `.hash`, `.trace`, …), then every remaining entry of the private directory via `readdir` (POSIX): entries are `unlink`ed (a symlink is removed, never followed), subdirectories only `rmdir`ed, never recursed into; nothing outside the directory is touched. |
+
+### The guarantee, precisely
+
+`LeanVerify[src]["Success"] -> True` means: `src` passed the allowlist grammar above; Lean
+elaborated it (with the trusted prelude, if present) with no error and no `sorry`; the
+compiled module, read by a fresh `lean` process, replayed declaration by declaration into a
+new kernel environment; every declaration of the module and every theorem / example the
+source declares depends only on `propext`, `Classical.choice` and `Quot.sound`; and the
+elaboration's own `#print axioms` reports agree. `Certify[...]["Verified"] -> True` means
+the same for the generated file and its footer theorem `mathilda_cert_k_footer`, whose
+statement is the faithful translation of the input as written; every unchecked step is in
+`"TrustedSteps"`.
+
+**Trust base.** The Lean kernel; the Lean toolchain (elaborator, compiler, `.olean`
+writer and reader) as installed; the imported compiled modules (core `Init`, and with a
+project Mathlib and its dependencies) as built; Mathilda's source checker
+(`src/lean_check.c`) agreeing with Lean on where commands, comments, strings and identifiers
+begin (it splits words at least as finely as Lean and refuses what it cannot scan); and,
+**with Mathlib imports**, that Mathlib's tactics and elaborators (trusted library code) do
+not let term or tactic syntax execute user-supplied code beyond the refused escapes. The
+replay additionally guards against an elaboration that skips the kernel. Mathilda's own
+algorithms are not trusted, except for the listed `"TrustedSteps"`.
 
 ## Configuration
 
@@ -202,13 +246,18 @@ forms.
 - `Det` is limited to n ≤ 6 (Laplace expansion in the kernel; 6×6 takes about 1.5 s).
 - `Domain`, `Method` and `Assumptions` apply to identity claims. Other kinds take their
   hypotheses from the claim itself (`Implies[...]`, `ForAll[vars, cond, ...]`) and pick their
-  own proof script.
+  own proof script; they issue `Certify::optignored` when these options are given.
+- A claim may contain arithmetic, `Expand` / `Together` / `Cancel` / `Apart` / `Factor` /
+  `FactorTerms` / `Collect`, `D` of a polynomial and a whole-side `Integrate[f, x]` or `Sum`;
+  any other computation inside it is refused (`Certify::eval`): certify the computation
+  itself instead.
 - Factor irreducibility, Risch non-elementarity, `NullSpace` completeness and Lucas's
   theorem are not proved (listed as trusted steps).
 - The Lean-side oracle starts one Mathilda process per tactic call (about 0.05 s).
-- `LeanVerify` renames `example`s to named defs so their axioms are checked; anonymous
-  `instance`s are covered only by the error / `sorry` checks, and sources using
-  metaprogramming (`elab`, `macro`, `#eval`, …) are refused rather than run.
+- `LeanVerify` renames `example`s to named defs so their axioms are checked. It runs only
+  sources without user-defined code (the allowlist grammar): no `def`, `instance`,
+  `structure`, `macro`, `attribute`, `#eval`, …, no imports beyond Mathlib. A development
+  with its own definitions has to be checked by Lean / Lake directly.
 
 ## Follow-ups
 

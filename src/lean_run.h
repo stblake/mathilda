@@ -51,4 +51,8 @@ void lean_proc_result_free(LeanProcResult* r);
  * builtins Lean`Internal`RunProcess and Lean`Internal`VerifySource.  Called from core_init(). */
 void lean_init(void);
 
+/* Registers Lean`Internal`CheckSource, LeanVerify's allowlist source check
+ * (src/lean_check.c).  Called from lean_init(). */
+void lean_check_init(void);
+
 #endif /* MATHILDA_LEAN_RUN_H */

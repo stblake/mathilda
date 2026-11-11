@@ -53,6 +53,19 @@ static void test_tier1_negative(void) {
     check_true("leanT1N[\"Verified\"] === False");
 }
 
+/* Third review (v0.6520): with a project, LeanVerify accepts `import Mathlib`
+ * (and `lemma`), and still refuses every other import. */
+static void test_review3_mathlib_grammar(void) {
+    test_mute_messages();
+    assert_eval_eq("leanM = LeanVerify[\"import Mathlib\\nlemma t : (2 : \xE2\x84\x9D) + 2 = 4 := by "
+                   "norm_num\\n\"]; Null", "Null", 0);
+    check_true("leanM[\"Success\"] === True && leanM[\"Replay\"] === True");
+    check_true("LeanVerify[\"import Mathlib\\nimport Lean\\ntheorem t : True := trivial\\n\"]"
+               "[\"Rejected\"] === {\"import Lean\"}");
+    check_true("LeanVerify[\"import Mathlib\\nimport Aesop\\ntheorem t : True := trivial\\n\"]"
+               "[\"Rejected\"] === {\"import Aesop\"}");
+}
+
 int main(void) {
     const char* proj = getenv("MATHILDA_LEAN_PROJECT");
     if (!proj || !*proj) {
@@ -69,6 +82,7 @@ int main(void) {
     }
     TEST(test_tier1_antiderivatives);
     TEST(test_tier1_negative);
+    TEST(test_review3_mathlib_grammar);
     printf("All Lean Tier 1 (Mathlib) tests passed.\n");
     return 0;
 }

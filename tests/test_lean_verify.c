@@ -21,6 +21,7 @@
 #include <stdlib.h>
 #include <string.h>
 #ifndef _WIN32
+#include <dirent.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #endif
@@ -379,16 +380,21 @@ static void test_review2_replay(void) {
     /* Finding A: the guarantee is the kernel replay. */
     ASSERT(write_fixture("lean_review2_replay.lean", REPLAY_EXPLOIT));
     ASSERT(write_fixture("lean_review2_lv2.lean", REVIEW2_LV2));
+    /* Since v0.6520 the source is refused before Lean runs: `import Lean`
+     * is outside LeanVerify's allowlist grammar (third review). */
     assert_eval_eq("leanRP = LeanVerify[ReadString[\"lean_review2_replay.lean\"]]; Null",
                    "Null", 0);
-    check_true("!KeyExistsQ[leanRP, \"Rejected\"]");          /* the deny-list missed it */
-    check_true("leanRP[\"ExitCode\"] === 0");                  /* Lean's own run was clean */
-    check_true("leanRP[\"Success\"] === False");
-    check_true("StringQ[leanRP[\"Replay\"]] && "
-               "StringContainsQ[leanRP[\"Replay\"], \"declaration type mismatch\"]");
-    /* lv2.lean is refused early by the deny-list ... */
+    check_true("leanRP[\"Rejected\"] === {\"import Lean\"}");
+    check_true("leanRP[\"Success\"] === False && leanRP[\"ExitCode\"] === Missing[\"NotRun\"]");
     check_true("LeanVerify[ReadString[\"lean_review2_lv2.lean\"]][\"Success\"] === False");
-    /* ... and, run past the deny-list, by the replay. */
+    /* Run past the source check (straight to the runner), the kernel replay
+     * still rejects both. */
+    assert_eval_eq("leanRP1 = Lean`Internal`VerifySource[ReadString[\"lean_review2_replay.lean\"], "
+                   "Lean`Private`leanExe[Automatic], None, False, Lean`Private`replayScript[]]; Null",
+                   "Null", 0);
+    check_true("leanRP1[\"ExitCode\"] === 0 && leanRP1[\"Success\"] === False && "
+               "StringQ[leanRP1[\"Replay\"]] && "
+               "StringContainsQ[leanRP1[\"Replay\"], \"declaration type mismatch\"]");
     assert_eval_eq("leanRP2 = Lean`Internal`VerifySource[ReadString[\"lean_review2_lv2.lean\"], "
                    "Lean`Private`leanExe[Automatic], None, False, Lean`Private`replayScript[]]; Null",
                    "Null", 0);
@@ -449,6 +455,164 @@ static void test_review2_low(void) {
     check_true("Certify[PrimeQ[1000001]][\"Verified\"] === True");
 }
 
+
+
+/* Third review round.  Each reproducer must now fail closed. */
+
+/* The reviewer's p1/pwn.lean: a user tactic elaborator adds `bogus` with
+ * addDeclCore (doCheck := false) and writes forged .olean.server /
+ * .olean.private files next to the module, which the v0.6519 replay read
+ * instead of the real one: Success -> True for (1 : Nat) = 0. */
+static const char* const REVIEW3_PWN =
+    "import Lean\n"
+    "open Lean Meta Elab Tactic\n"
+    "set_option Elab.async false\n"
+    "\n"
+    "def pwn : Tactic := fun _ => do\n"
+    "  let g ← getMainGoal\n"
+    "  let ty ← g.getType\n"
+    "  let nm := `bogus.aux\n"
+    "  let decl := Declaration.thmDecl { name := nm, levelParams := [], type := ty, value := mkConst ``True.intro }\n"
+    "  let env ← getEnv\n"
+    "  match env.addDeclCore 0 1000 decl none (doCheck := false) with\n"
+    "  | .ok env' => modifyThe Core.State fun s => { s with env := env' }\n"
+    "  | .error _ => throwError \"x\"\n"
+    "  -- plant the module parts the replay checker reads in place of the real one\n"
+    "  let fn ← getFileName\n"
+    "  let base : System.FilePath := (System.FilePath.mk fn).withExtension \"olean\"\n"
+    "  let okThm : ConstantInfo := .thmInfo { name := `bogus, levelParams := [], type := mkConst ``True, value := mkConst ``True.intro }\n"
+    "  let okDef : ConstantInfo := .defnInfo { name := `pwn, levelParams := [], type := mkConst ``True, value := mkConst ``True.intro, hints := .opaque, safety := .safe }\n"
+    "  let md : ModuleData := { isModule := false, imports := #[], constNames := #[`pwn, `bogus], constants := #[okDef, okThm], extraConstNames := #[], entries := #[] }\n"
+    "  saveModuleData (base.addExtension \"server\") `X md\n"
+    "  saveModuleData (base.addExtension \"private\") `Y md\n"
+    "  g.assign (mkConst nm)\n"
+    "attribute [tactic Lean.Parser.Tactic.decide] pwn\n"
+    "\n"
+    "theorem bogus : (1 : Nat) = 0 := by decide\n";
+
+/* The reviewer's p2/race.lean: the same tactic spawns a background shell
+ * that overwrites the .olean after Lean wrote it and before the replay
+ * read it.  It must be refused before Lean runs: never run it here. */
+static const char* const REVIEW3_RACE =
+    "import Lean\n"
+    "open Lean Meta Elab Tactic\n"
+    "set_option Elab.async false\n"
+    "\n"
+    "def pwn : Tactic := fun _ => do\n"
+    "  let g ← getMainGoal\n"
+    "  let ty ← g.getType\n"
+    "  let nm := `bogus.aux\n"
+    "  let decl := Declaration.thmDecl { name := nm, levelParams := [], type := ty, value := mkConst ``True.intro }\n"
+    "  match (← getEnv).addDeclCore 0 1000 decl none (doCheck := false) with\n"
+    "  | .ok env' => modifyThe Core.State fun s => { s with env := env' }\n"
+    "  | .error _ => throwError \"x\"\n"
+    "  let fn ← getFileName\n"
+    "  let base : System.FilePath := (System.FilePath.mk fn).withExtension \"olean\"\n"
+    "  let forged : System.FilePath := (System.FilePath.mk fn).withExtension \"forged\"\n"
+    "  let okThm : ConstantInfo := .thmInfo { name := `bogus, levelParams := [], type := mkConst ``True, value := mkConst ``True.intro }\n"
+    "  let okDef : ConstantInfo := .defnInfo { name := `pwn, levelParams := [], type := mkConst ``True, value := mkConst ``True.intro, hints := .opaque, safety := .safe }\n"
+    "  let md : ModuleData := { isModule := false, imports := #[{ module := `Init }], constNames := #[`pwn, `bogus], constants := #[okDef, okThm], extraConstNames := #[], entries := #[] }\n"
+    "  saveModuleData forged `Z md\n"
+    "  let cmd := s!\"while [ ! -s '{base}' ]; do sleep 0.02; done; sleep 0.3; cp '{forged}' '{base}'\"\n"
+    "  let _ ← IO.Process.spawn { cmd := \"/bin/sh\", args := #[\"-c\", cmd], stdin := .null, stdout := .null, stderr := .null }\n"
+    "  g.assign (mkConst nm)\n"
+    "attribute [tactic Lean.Parser.Tactic.decide] pwn\n"
+    "\n"
+    "theorem bogus : (1 : Nat) = 0 := by decide\n";
+
+static void test_review3_allowlist(void) {
+    test_mute_messages();
+    /* Finding A: both attacks are refused by the allowlist grammar, unrun
+     * (so the race's background process is never spawned). */
+    ASSERT(write_fixture("lean_review3_pwn.lean", REVIEW3_PWN));
+    ASSERT(write_fixture("lean_review3_race.lean", REVIEW3_RACE));
+    assert_eval_eq("leanP1 = LeanVerify[ReadString[\"lean_review3_pwn.lean\"]]; Null", "Null", 0);
+    check_true("leanP1[\"Success\"] === False && leanP1[\"ExitCode\"] === Missing[\"NotRun\"] && "
+               "leanP1[\"Rejected\"] === {\"import Lean\"}");
+    assert_eval_eq("Check[LeanVerify[ReadString[\"lean_review3_pwn.lean\"]], \"import\"]",
+                   "\"import\"", 0);
+    assert_eval_eq("leanP2 = LeanVerify[ReadString[\"lean_review3_race.lean\"]]; Null", "Null", 0);
+    check_true("leanP2[\"Success\"] === False && leanP2[\"ExitCode\"] === Missing[\"NotRun\"]");
+    /* Even with a project, only Mathlib may be imported. */
+    check_true("LeanVerify[ReadString[\"lean_review3_pwn.lean\"], LeanProject -> "
+               "\"/nonexistent\"][\"Rejected\"] === {\"import Lean\"}");
+    /* Defence in depth: run pwn.lean straight through the runner (it spawns
+     * nothing).  Its forged module parts appear in the private directory,
+     * so the replay is refused; and the directory is removed afterwards,
+     * forged files and all (finding E). */
+    assert_eval_eq("leanP3 = Lean`Internal`VerifySource[ReadString[\"lean_review3_pwn.lean\"], "
+                   "Lean`Private`leanExe[Automatic], None, True, Lean`Private`replayScript[]]; Null",
+                   "Null", 0);
+    check_true("leanP3[\"Success\"] === False && StringQ[leanP3[\"Replay\"]] && "
+               "StringContainsQ[leanP3[\"Replay\"], \"unexpected file\"]");
+#ifndef _WIN32
+    {
+        Expr* p = parse_expression("leanP3[\"SourceFile\"]");
+        Expr* v = evaluate(p);
+        expr_free(p);
+        ASSERT(v && v->type == EXPR_STRING);
+        char* dir = malloc(strlen(v->data.string) + 1);
+        ASSERT(dir != NULL);
+        strcpy(dir, v->data.string);
+        char* slash = strrchr(dir, '/');
+        ASSERT(slash != NULL);
+        *slash = '\0';
+        /* KeepFiles keeps exactly the source; every other file is gone. */
+        DIR* d = opendir(dir);
+        ASSERT(d != NULL);
+        int others = 0;
+        struct dirent* de;
+        while ((de = readdir(d)) != NULL)
+            if (strcmp(de->d_name, ".") && strcmp(de->d_name, "..") &&
+                strcmp(de->d_name, "MathildaCert.lean"))
+                others++;
+        closedir(d);
+        ASSERT(others == 0);
+        ASSERT(remove(v->data.string) == 0);
+        ASSERT(remove(dir) == 0);
+        free(dir);
+        expr_free(v);
+    }
+#endif
+    remove("lean_review3_pwn.lean");
+    remove("lean_review3_race.lean");
+    /* Accepted sources still verify: the trusted prelude prefix, examples
+     * in a namespace, open ... in, numeric set_option ... in, #print axioms. */
+    check_true("LeanVerify[\"namespace A\\nexample : 1 + 1 = 2 := rfl\\nopen Nat in\\n"
+               "set_option maxHeartbeats 400000 in\\ntheorem t : True := by\\n  trivial\\n"
+               "end A\\n#print axioms A.t\\n\"][\"Success\"] === True");
+    /* Refused, unrun: user definitions, attributes, commands and escapes. */
+    check_true("LeanVerify[\"def f : Nat := 1\\ntheorem t : f = 1 := rfl\\n\"][\"Rejected\"] === "
+               "{\"def\"}");
+    check_true("LeanVerify[\"theorem t : 1 = 1 := by\\n  decide +native\\n\"][\"Rejected\"] === "
+               "{\"native\"}");
+    check_true("LeanVerify[\"theorem t : 1 = 1 := rfl\\n  #eval 1\\n\"][\"Rejected\"] === "
+               "{\"#eval\"}");
+    check_true("LeanVerify[\"module\\ntheorem t : 1 + 1 = 2 := rfl\\n\"][\"Rejected\"] === "
+               "{\"module\"}");
+    check_true("LeanVerify[\"import Mathlib\\ntheorem t : 1 = 1 := rfl\\n\", LeanProject -> None]"
+               "[\"Rejected\"] === {\"import Mathlib\"}");
+}
+
+static void test_review3_domains(void) {
+    test_mute_messages();
+    /* Finding B: an order relation makes only its own variables real. */
+    check_true("Certify[x == 7, Assumptions -> x^2 + 4 == 0 && y > 0, Method -> \"intro x y h\\n"
+               "have h2 : 0 \\[LessEqual] x ^ 2 := Mathilda.sqnn\\ngrind\"] === $Failed");
+    /* Declared real, the statement is the faithful ordered-field one (and
+     * true: no real x has x^2 + 4 = 0). */
+    assert_eval_eq("leanB = Certify[x == 7, Assumptions -> x^2 + 4 == 0 && Element[x, Reals], "
+                   "Method -> \"intro x h\\nhave h2 : 0 \\[LessEqual] x ^ 2 := Mathilda.sqnn\\n"
+                   "grind\"]; Null", "Null", 0);
+    check_true("leanB[\"Verified\"] === True && leanB[\"Domain\"] === Reals");
+    /* Finding C: the claim is translated as written. */
+    check_true("Certify[Simplify[(x^2 - 1)/(x - 1)] == x + 1] === $Failed");
+    check_true("Certify[Factor[x^2 - 1] == (x - 1) (x + 1)][\"Verified\"] === True");
+    check_true("Certify[Integrate[x^2, x] == x^3/3][\"Verified\"] === True");
+    check_true("Certify[Integrate[x^2, x] == x^3/2][\"Verified\"] === False");
+    check_true("Certify[(1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x][\"Verified\"] === False");
+}
+
 int main(void) {
 #ifdef __GNUC__
     /* The shared alarm(120) in test_utils.h is too short for this suite: every
@@ -480,6 +644,8 @@ int main(void) {
     TEST(test_review2_replay);
     TEST(test_review2_domain);
     TEST(test_review2_low);
+    TEST(test_review3_allowlist);
+    TEST(test_review3_domains);
     printf("All Lean verification tests passed.\n");
     return 0;
 }

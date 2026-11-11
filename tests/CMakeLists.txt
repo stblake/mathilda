@@ -481,6 +481,7 @@ set(COMMON_SRC
     ../src/print_fortran.c
     ../src/print_lean.c
     ../src/lean_run.c
+    ../src/lean_check.c
     ../src/plus.c
     ../src/times.c
     ../src/arithmetic.c
