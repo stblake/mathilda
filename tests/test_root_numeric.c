@@ -189,6 +189,58 @@ static void test_index_out_of_range(void) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Non-real coefficients (v0.6512).  The reference numbers the roots of  */
+/* such a polynomial by real part; among equal real parts the non-real   */
+/* roots come first (by imaginary part), then the real one.  Values and  */
+/* order checked against the reference.                                  */
+
+#define CLOSE(a, b, tol) \
+    "Abs[(" a ") - (" b ")] < " tol
+
+static void test_complex_coefficients_values(void) {
+    check_true(CLOSE("N[Root[#^2 + I &, 1]]", "-0.7071067811865475 + 0.7071067811865476 I", "10^-14"));
+    check_true(CLOSE("N[Root[#^2 + I &, 2]]", "0.7071067811865475 - 0.7071067811865476 I", "10^-14"));
+    check_true(CLOSE("N[Root[#^2 - Sqrt[2] I &, 1]]", "-0.8408964152537146 - 0.8408964152537144 I", "10^-14"));
+    /* 30 digits */
+    check_true(CLOSE("N[Root[#^5 + I #^2 + 1 &, 3], 30]",
+        "-0.196885333304452602162313488934 + 1.117463894146812028378483226312 I", "10^-28"));
+    check_true("Precision[N[Root[#^5 + I #^2 + 1 &, 3], 30]] >= 29");
+    /* an irreducible Gaussian cubic, 20 digits */
+    check_true(CLOSE("N[Root[3 - 2 I + (2 + 2 I) #1 + (-2 - 2 I) #1^2 + #1^3 &, 3], 20]",
+        "1.43526071038211799785 + 2.45426466946671164605 I", "10^-18"));
+}
+
+static void test_complex_coefficients_order(void) {
+    check_true(CLOSE("N[Root[#^3 - I # + 1 &, 1]]", "-1.0046988220954716 - 0.3453793009246787 I", "10^-13"));
+    check_true(CLOSE("N[Root[#^3 - I # + 1 &, 2]]", "0.22454268478871658 - 0.6903145345590079 I", "10^-13"));
+    check_true(CLOSE("N[Root[#^3 - I # + 1 &, 3]]", "0.780156137306755 + 1.0356938354836867 I", "10^-13"));
+    check_true(CLOSE("N[Root[#^4 + (1 + I) #^2 + 2 &, 2]]", "-0.572613580854668 - 0.8077464061219409 I", "10^-13"));
+    /* real part first; a real root after the non-real ones of equal real part */
+    check_true("Chop[N[Table[Root[(# - I) (# + 2) (# - 3 I) &, k], {k, 3}]] - {-2, I, 3 I}] == {0, 0, 0}");
+    check_true("Chop[N[Table[Root[(# - 5) (# - I) (# + 1 - I) &, k], {k, 3}]] - {-1 + I, I, 5}] == {0, 0, 0}");
+    check_true("Chop[N[Table[Root[(# - 1 - I) (# - 1 + 2 I) (# - 1) &, k], {k, 3}]] - {1 - 2 I, 1 + I, 1}] == {0, 0, 0}");
+    check_true("Chop[N[Table[Root[(# - I) (# + I) (# - 2 I) (# - 1/2) &, k], {k, 4}]] - {-I, I, 2 I, 1/2}] == {0, 0, 0, 0}");
+    /* multiplicity counts: a double root occupies two indices */
+    check_true("Chop[N[Table[Root[(# - I)^2 (# + 3) &, k], {k, 3}]] - {-3, I, I}] == {0, 0, 0}");
+}
+
+static void test_complex_coefficients_noise_and_edges(void) {
+    /* solver noise is chopped; a genuine small part is kept */
+    check_eq("N[Root[(# - I) (# + 2) (# - 3 I) &, 2]]", "Complex[0.0, 1.0]");
+    check_true(CLOSE("Re[N[Root[(# - (10^-10 + I)) (# - 2) &, 1]]]", "10^-10", "10^-24"));
+    check_true(CLOSE("Im[N[Root[(# - (1/3 + 10^-12 I)) (# + 1) &, 2]]]", "10^-12", "10^-26"));
+    /* symbolic coefficient or out-of-range index: stays a Root */
+    check_true("Head[N[Root[#^3 + a I &, 1]]] === Root");
+    check_true("Head[Quiet[N[Root[#^2 + I &, 3]]]] === Root");
+    /* Root evaluates its index (NHoldAll, as in the reference) */
+    check_true("Block[{k = 2}, Root[#^3 - 2 &, k]] === Root[#^3 - 2 &, 2]");
+    check_true("Length[Union[N[Table[Root[#^3 - I &, k], {k, 3}]]]] == 3");
+    /* a RootSum antiderivative over a Gaussian cubic can now be checked */
+    check_true("With[{F = Integrate[(-3 + I - x)/(3 - 2 I + (2 + 2 I) x + (-2 - 2 I) x^2 + x^3), x]}, "
+               "Abs[N[(D[F, x] - (-3 + I - x)/(3 - 2 I + (2 + 2 I) x + (-2 - 2 I) x^2 + x^3)) /. x -> 1/3, 20]] < 10^-15]");
+}
+
+/* ------------------------------------------------------------------ */
 /* main                                                                */
 /* ------------------------------------------------------------------ */
 
@@ -213,6 +265,10 @@ int main(void) {
     TEST(test_solve_roundtrip);
 
     TEST(test_index_out_of_range);
+
+    TEST(test_complex_coefficients_values);
+    TEST(test_complex_coefficients_order);
+    TEST(test_complex_coefficients_noise_and_edges);
 
     printf("All N[Root[..]] tests passed!\n");
     return 0;

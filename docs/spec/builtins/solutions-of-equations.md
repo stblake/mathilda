@@ -1836,6 +1836,37 @@ This is the convention used by both `Solve`'s emission and `N[Root[..]]`'s
 numericalization, so `Root[f, 1]` always refers to the same root regardless
 of how it was produced.
 
+**Non-real coefficients** (v0.6512). For a polynomial with non-real
+coefficients there are no conjugate pairs, and the reference numbers the roots
+differently:
+
+1. by real part, ascending;
+2. among roots with equal real parts, the non-real ones first, by imaginary
+   part ascending, and then the real one.
+
+For example, `(# - 1 - I)(# - 1 + 2 I)(# - 1) &` has roots `1 - 2 I, 1 + I, 1`,
+and `(# - I)(# + 2)(# - 3 I) &` has roots `-2, I, 3 I`.
+
+`N[Root[f, k]]` solves such a polynomial over the complex numbers with the
+`NRoots` engines (`nroots_root_complex`: Aberth, falling back to the companion
+matrix), Newton-polishes each root at working precision, and numbers the roots
+in this order. Two details:
+
+- A component that is only solver noise (below `2^-(target + 16)` of the
+  other) is chopped, so `0. + 1. I` prints cleanly. A genuine small part such
+  as `10^-10 + I` is kept.
+- Roots count with multiplicity. A root of multiplicity 3 or more is accurate
+  only to about `1/m` of the working precision, so a tiny imaginary or real
+  residue can remain.
+
+Before v0.6512 these `Root` objects stayed unevaluated under `N`. So a
+`RootSum` over a Gaussian-coefficient denominator, which `Integrate` returns,
+could not be checked numerically.
+
+**Attributes:** `NHoldAll`, `Protected`, as in the reference (it was
+`HoldAll` before v0.6512). The index evaluates, so `Table[Root[f, k], {k, 3}]`
+and `k = 2; Root[f, k]` work, while the `Function` holds its own body.
+
 **Numericalization** — `N[Root[f, k]]` and `N[Root[f, k], prec]`:
 
 The pipeline is companion-matrix QR → Sturm certificate → canonical sort →

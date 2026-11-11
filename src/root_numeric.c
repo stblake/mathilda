@@ -32,6 +32,7 @@
 
 #include "poly/zupoly.h"
 #include "root_trans.h"
+#include "numerical_roots/nroots.h"   /* nroots_root_complex */
 #include "poly/poly_eval_mpfr.h"
 #include "poly/poly.h"       /* is_polynomial / get_degree_poly / get_all_coeffs_expanded */
 #include "expand.h"          /* expr_expand */
@@ -922,6 +923,19 @@ static Expr* solve_root_inexact(Expr* body, int64_t k,
 /* ====================================================================
  *  Entry point (uncached core — see the memoising wrapper below)
  * ================================================================== */
+/* Does the Root body carry a non-real number?  Root is HoldAll, so its body
+ * keeps the bare symbol I unevaluated as well as any Complex[...] literal. */
+static bool root_body_has_complex(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == SYM_I;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Complex) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (root_body_has_complex(e->data.function.args[i])) return true;
+    return false;
+}
+
 static Expr* root_numericalize_uncached(const Expr* root_expr, NumericSpec spec) {
     if (root_trans_is_object(root_expr))            /* Root[{f, x0}] */
         return root_trans_numericalize(root_expr, spec);
@@ -968,7 +982,18 @@ static Expr* root_numericalize_uncached(const Expr* root_expr, NumericSpec spec)
      * Root[] objects — e.g. Eigenvalues of a matrix with symbolic entries,
      * after numeric substitution — be numericalised, so N and the numeric
      * optimisers (NMinimize) can evaluate them. */
-    return solve_root_inexact(body, k, target_bits, want_machine);
+    Expr* r = solve_root_inexact(body, k, target_bits, want_machine);
+    if (r) return r;
+    /* Non-real coefficients (Root[#^3 - I # + 1 &, k], the roots of a RootSum
+     * over a Gaussian-coefficient denominator): the real-coefficient solvers
+     * above decline; solve over C and number the roots as the reference does
+     * (nroots_root_complex). */
+    if (root_body_has_complex(body)) {
+        Expr* s1 = make_slot1();
+        r = nroots_root_complex(body, s1, k, (long)target_bits, want_machine);
+        expr_free(s1);
+    }
+    return r;
 }
 
 /* ====================================================================

@@ -1498,6 +1498,121 @@ int nr_companion(const NrPoly* p, ncpx* roots, mpfr_prec_t wp) {
     return rc;
 }
 
+/* ================================================================== *
+ *  N[Root[f, k]] for non-real coefficients (nroots_root_complex)
+ * ================================================================== */
+
+/* Order for Root[f, k] with non-real f: Re ascending; among roots whose Re
+ * agree to `tol` (relative), non-real roots first by Im ascending, then the
+ * real one.  This is the reference's numbering: (x - 1 - I)(x - 1 + 2 I)(x - 1)
+ * gives 1 - 2 I, 1 + I, 1, and (x - I)(x + 2)(x - 3 I) gives -2, I, 3 I. */
+typedef struct { ncpx* z; int isreal; } NrRootRef;
+
+static int nr_cmp_reim(const NrRootRef* a, const NrRootRef* b, mpfr_prec_t wp,
+                       long tolbits) {
+    mpfr_t d, s;
+    mpfr_init2(d, wp); mpfr_init2(s, wp);
+    mpfr_sub(d, a->z->re, b->z->re, MPFR_RNDN);
+    mpfr_abs(d, d, MPFR_RNDN);
+    mpfr_abs(s, a->z->re, MPFR_RNDN);
+    if (mpfr_cmp_ui(s, 1) < 0) mpfr_set_ui(s, 1, MPFR_RNDN);
+    mpfr_div_2si(s, s, tolbits, MPFR_RNDN);
+    int same_re = mpfr_cmp(d, s) <= 0;
+    int c = 0;
+    if (!same_re) c = mpfr_cmp(a->z->re, b->z->re) < 0 ? -1 : 1;
+    else if (a->isreal != b->isreal) c = a->isreal ? 1 : -1;
+    else if (!a->isreal) c = mpfr_cmp(a->z->im, b->z->im);
+    mpfr_clear(d); mpfr_clear(s);
+    return c < 0 ? -1 : (c > 0 ? 1 : 0);
+}
+
+Expr* nroots_root_complex(Expr* poly, Expr* var, int64_t k, long target_bits,
+                          bool want_machine) {
+    if (!poly || !var || target_bits < 53) return NULL;
+    mpfr_prec_t wp = (mpfr_prec_t)(2 * target_bits + 64);
+    Expr* expanded = expr_expand(poly);
+    if (!is_polynomial(expanded, &var, 1)) { expr_free(expanded); return NULL; }
+    int d = get_degree_poly(expanded, var);
+    if (d < 1 || k < 1 || k > d) { expr_free(expanded); return NULL; }
+    Expr** coeffs = NULL;
+    if (!get_all_coeffs_expanded(expanded, var, d, &coeffs)) { expr_free(expanded); return NULL; }
+    expr_free(expanded);
+
+    /* Quiet coefficient extraction (nr_build_poly would raise NRoots::nnum). */
+    NrPoly p;
+    p.deg = d; p.prec = wp; p.is_real = 1;
+    p.c = (ncpx*)malloc(sizeof(ncpx) * (size_t)(d + 1));
+    NumericSpec spec; spec.mode = NUMERIC_MODE_MPFR; spec.bits = (long)wp;
+    bool ok = true;
+    for (int i = 0; i <= d; i++) {
+        ncpx_init(&p.c[i], wp);
+        if (ok) {
+            Expr* num = eval_and_free(numericalize(coeffs[i], spec));
+            ok = num && nr_expr_to_ncpx(num, &p.c[i]);
+            if (num) expr_free(num);
+            if (ok && !mpfr_zero_p(p.c[i].im)) p.is_real = 0;
+        }
+        expr_free(coeffs[i]);
+    }
+    free(coeffs);
+    if (ok) { mpfr_t m; mpfr_init2(m, wp); ncpx_abs(m, &p.c[d]); ok = !mpfr_zero_p(m); mpfr_clear(m); }
+
+    Expr* out = NULL;
+    if (ok) {
+        ncpx* roots = (ncpx*)malloc(sizeof(ncpx) * (size_t)d);
+        for (int i = 0; i < d; i++) ncpx_init(&roots[i], wp);
+        int rc = nr_solve(&p, NR_AUTO, 1000, wp, roots, /*want_machine=*/false);
+        if (rc != 0) rc = nr_companion(&p, roots, wp);
+        if (rc == 0) {
+            for (int i = 0; i < d; i++) nr_newton_polish(&p, &roots[i], wp, 80);
+            /* Chop a component that is solver noise against the other: the
+             * polished roots carry ~wp bits (a double root ~wp/2), so a part
+             * below 2^-(target + 16) of max(1, |other|) is noise, while a
+             * genuine small part (1e-10 + I) is far above it.  An Im chopped
+             * this way makes the root real (for the numbering). */
+            NrRootRef* refs = (NrRootRef*)malloc(sizeof(NrRootRef) * (size_t)d);
+            mpfr_t aim, are, bound;
+            mpfr_init2(aim, wp); mpfr_init2(are, wp); mpfr_init2(bound, wp);
+            long chop_bits = target_bits + 16;
+            for (int i = 0; i < d; i++) {
+                mpfr_abs(aim, roots[i].im, MPFR_RNDN);
+                mpfr_abs(are, roots[i].re, MPFR_RNDN);
+                mpfr_set(bound, are, MPFR_RNDN);
+                if (mpfr_cmp_ui(bound, 1) < 0) mpfr_set_ui(bound, 1, MPFR_RNDN);
+                mpfr_div_2si(bound, bound, chop_bits, MPFR_RNDN);
+                refs[i].z = &roots[i];
+                refs[i].isreal = mpfr_cmp(aim, bound) <= 0;
+                if (refs[i].isreal) {
+                    mpfr_set_zero(roots[i].im, 1);
+                } else {
+                    mpfr_set(bound, aim, MPFR_RNDN);
+                    if (mpfr_cmp_ui(bound, 1) < 0) mpfr_set_ui(bound, 1, MPFR_RNDN);
+                    mpfr_div_2si(bound, bound, chop_bits, MPFR_RNDN);
+                    if (mpfr_cmp(are, bound) <= 0) mpfr_set_zero(roots[i].re, 1);
+                }
+            }
+            mpfr_clear(aim); mpfr_clear(are); mpfr_clear(bound);
+            /* insertion sort: d is small, and the comparator needs wp */
+            for (int i = 1; i < d; i++) {
+                NrRootRef key = refs[i];
+                int j = i - 1;
+                while (j >= 0 && nr_cmp_reim(&refs[j], &key, wp, target_bits / 2) > 0) {
+                    refs[j + 1] = refs[j];
+                    j--;
+                }
+                refs[j + 1] = key;
+            }
+            out = nr_root_to_expr(refs[k - 1].z, refs[k - 1].isreal, target_bits, want_machine);
+            free(refs);
+        }
+        for (int i = 0; i < d; i++) ncpx_clear(&roots[i]);
+        free(roots);
+    }
+    for (int i = 0; i <= d; i++) ncpx_clear(&p.c[i]);
+    free(p.c);
+    return out;
+}
+
 /* JenkinsTraub engine lives in nroots_jt.c. */
 #endif
 
@@ -1511,3 +1626,11 @@ void nroots_init(void) {
      * extraction, so no argument holding is required.  Not Listable. */
     symtab_get_def("NRoots")->attributes |= ATTR_PROTECTED;
 }
+
+#ifndef USE_MPFR
+Expr* nroots_root_complex(Expr* poly, Expr* var, int64_t k, long target_bits,
+                          bool want_machine) {
+    (void)poly; (void)var; (void)k; (void)target_bits; (void)want_machine;
+    return NULL;
+}
+#endif

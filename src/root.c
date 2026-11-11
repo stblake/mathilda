@@ -520,7 +520,9 @@ Expr* rootsum_expand_over_roots(const Expr* rs) {
 
 void root_init(void) {
     symtab_add_builtin("Root", builtin_root);
-    symtab_get_def("Root")->attributes |= ATTR_PROTECTED | ATTR_HOLDALL;
+    /* NHoldAll, as in the reference: k must evaluate (Table[Root[f, k], {k, 3}],
+     * k = 2; Root[f, k]), while the Function argument holds its own body. */
+    symtab_get_def("Root")->attributes |= ATTR_PROTECTED | ATTR_NHOLDALL;
     symtab_set_docstring("Root",
         "Root[Function[t, p[t]], k]\n"
         "\tRepresents the k-th root of the univariate polynomial p in the\n"

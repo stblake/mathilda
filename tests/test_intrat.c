@@ -1029,12 +1029,10 @@ static void test_complex_coefficient_log_part(void) {
            "fs = Select[Table[Sum[gc[] x^k, {k, 0, RandomInteger[{0, 2}]}]/rp[RandomInteger[{2, 3}]], {40}], "
            "!FreeQ[#, Complex] && FreeQ[#, ComplexInfinity] &]; "
            "Select[fs, Function[f, !TrueQ[TimeConstrained[Module[{F = Integrate[f, x]}, FreeQ[F, Integrate] && "
-           "(!FreeQ[F, RootSum] || "
-           "Max[Table[Abs[N[(D[F, x] - f) /. x -> p, 30]], {p, {1/3, 7/5, 2 + I/3}}]] < 10^-20)], 30, False]]]]]",
+           "Max[Table[Abs[N[(D[F, x] - f) /. x -> p, 30]], {p, {1/3, 7/5, 2 + I/3}}]] < 10^-20], 30, False]]]]]",
            "{}");
-    /* A held RootSum (an irreducible complex cubic) is a correct answer, but N
-     * does not yet evaluate Root objects with non-real coefficients, so it
-     * cannot be checked numerically; the closed forms above all are. */
+    /* A held RootSum (an irreducible complex cubic) is checked numerically too:
+     * N[Root[...]] evaluates non-real-coefficient Root objects since v0.6512. */
 }
 
 static void test_opaque_parameter_log_part(void) {
