@@ -25,6 +25,7 @@
 #include "term/term_input.h"
 #include "term/term_interrupt.h"
 #include "term/term_readline.h"
+#include "term/term_history.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1413,6 +1414,7 @@ int main(int argc, char** argv) {
      * is the protocol -- a dialog there sees end of input at once. */
     MthDialogIO dio = { NULL, NULL, NULL, false };
     TermReader* rd = NULL;
+    TermHistory* hist = NULL;
     bool interactive_rl = false;   /* the full interactive readline session */
     if (!pipe_mode) {
         dio.interactive = isatty(fileno(stdin)) != 0;
@@ -1422,7 +1424,17 @@ int main(int argc, char** argv) {
             /* The interactive session gets every terminal feature; a -file
              * run from a terminal gets the plain reader its Dialog always
              * had (readline and in-memory history, nothing else). */
-            TermReadlineOptions ro = { !script, NULL };
+            if (!script) {
+                /* The history file: $MATHILDA_HISTFILE (empty disables it)
+                 * or ~/.mathilda_history, $MATHILDA_HISTSIZE entries. With
+                 * no file the store still filters the session's history. */
+                size_t hmax = term_history_size_from_env(getenv("MATHILDA_HISTSIZE"));
+                char* hp = term_history_resolve_path(getenv("MATHILDA_HISTFILE"), getenv("HOME"));
+                hist = term_history_open(hp, hmax);
+                free(hp);
+                if (!hist) hist = term_history_open(NULL, hmax);
+            }
+            TermReadlineOptions ro = { !script, hist };
             rd = term_reader_open_readline(&ro);
             interactive_rl = rd && !script;
         }
@@ -1451,6 +1463,7 @@ int main(int argc, char** argv) {
         mth_dialog_set_io(NULL);
         term_reader_close(rd);
     }
+    term_history_close(hist);
     /* Tear down the context subsystem so its $Context / $ContextPath strings and
      * any open package frames are freed rather than lingering as leaks at exit.
      * context_init() is called from core_init(); this is its symmetric partner,

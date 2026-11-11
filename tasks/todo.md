@@ -987,8 +987,8 @@ Plan: ~/.claude/plans/let-s-thoroughly-stress-test-indexed-hopcroft.md.
 - [x] Full suite A/B vs HEAD worktree (core evaluator change) before push -- clean after fixing the settled-step rule (pointer snapshot) and the eigen test; pushed v0.574-v0.581
 - [x] Phase 2a: native reductions (v0.577), structural ops (v0.578), Dot/SpGEMM/MatrixPower/Inner (v0.579)
 - [ ] Phase 2b: sparse LinearSolve direct+Krylov, Eigenvalues[s, k] Lanczos/Arnoldi (worker running)
-- [ ] Phase 3: benchmark 120 broadened, 3-way, every row <= 1.0x
-- [ ] Phase 4: docs, valgrind on the fuzz corpus, `make check-sparse`
+- [x] Phase 3: benchmark 120 broadened, 3-way, every row <= 1.0x
+- [x] Phase 4: docs, valgrind on the fuzz corpus, `make check-sparse`
 - [x] `x = rhs` re-evaluated its value after the assignment (double messages, Quiet leak) -- v0.581
 - [x] Fuzz/worker-found fixes: constructor NULL-side crash (v0.580), Unitize (v0.582), dense KroneckerProduct/triangularize/Transpose/Reverse/IdentityMatrix/Flatten (v0.583), MatrixRank generic rank (v0.575)
 - [ ] Follow-up (pre-existing): `Eigensystem` does not exist
@@ -1449,8 +1449,8 @@ Branch feat/repl-modernize (worktree mathilda-repl). Rules for this PR:
 - [x] Phase 0: baseline worktree /tmp/mathilda-pr1-base (7e7bc9fb) built; tests/pty/repl_pty_test.py; goldens recorded from baseline; appended CMake block with repl_pty_test (skip 77); harness_can_fail seen failing
 - [x] Phase 1: makefile SRC += src/term, LIB_OBJ filters term_readline.o; term_lex (mth_input_complete moved, lexer context); term_lex_tests; nm libmathilda.a has no rl_ refs
 - [x] Phase 2: term_interrupt.{c,h} flag API (§4.1); eval poll (loop + stamp fast path); CheckAbort clears; AbortProtect honours; top-level clear; tc_deadline_passed interrupt-aware after the 44-site audit (A/B table in commit body); message gate; Pause sliced; Raylib loops; interrupt_tests (13 cases); kernel suites; perf gate ≤ +1% or noise floor
-- [ ] Phase 3: term_interrupt handler (SA_RESTART, 3 states, double Ctrl-C within 1 s gives _Exit(130)); term_input seam + stdio backend; term_readline (GNU signal hook, libedit degraded); repl.c single loop and Dialog reader; banner; term_interrupt_tests; pty ctrlc_* cases; USE_READLINE=0 builds; manual libedit check
-- [ ] Phase 4: term_history (own escaped format, 0600, truncate at load, MATHILDA_HISTFILE / MATHILDA_HISTSIZE); readline feed; Dialog entries; term_history_tests; pty history_* cases
+- [x] Phase 3: term_interrupt handler (SA_RESTART, 3 states, double Ctrl-C within 1 s gives _Exit(130)); term_input seam + stdio backend; term_readline (GNU signal hook, libedit degraded); repl.c single loop and Dialog reader; banner; term_interrupt_tests; pty ctrlc_* cases; USE_READLINE=0 builds; manual libedit check
+- [x] Phase 4: term_history (own escaped format, 0600, truncate at load, MATHILDA_HISTFILE / MATHILDA_HISTSIZE); readline feed; Dialog entries; term_history_tests; pty history_* cases
 - [ ] Phase 5: names_complete; term_complete (symbols, context-aware, options of enclosing head, no evaluate); readline adapter; term_complete_tests; pty complete_* cases
 - [ ] Phase 6: term_color decision (NO_COLOR, CLICOLOR_FORCE, TERM, per-stream isatty; interactive only); mth_message_set_style; coloured In/Out (\001/\002 on GNU); "took" line ≥ 1 s on a tty; term_color_tests; pty color_* and took_line; check-pipe-protocol
 - [ ] Phase 7: docs/spec/repl.md + Mathilda_spec.md row; control-flow.md and time-and-date.md (Pause) updates; Pause docstring; changelog 2026-11-09.md REPL heading; SPEC.md §2/§11; building.md; tutorial + book banner; build.yml pty step

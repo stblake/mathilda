@@ -6610,7 +6610,8 @@ endif()
 target_sources(mathilda_common PRIVATE
     ../src/term/term_lex.c
     ../src/term/term_interrupt.c
-    ../src/term/term_input.c)
+    ../src/term/term_input.c
+    ../src/term/term_history.c)
 add_executable(term_lex_tests test_term_lex.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(term_lex_tests PRIVATE ../src)
 if(USE_ECM)
@@ -6638,3 +6639,12 @@ else()
     target_link_libraries(term_interrupt_tests gmp m)
 endif()
 add_test(NAME term_interrupt_tests COMMAND term_interrupt_tests)
+add_executable(term_history_tests test_term_history.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(term_history_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(term_history_tests gmp m ${ECM_LIB})
+    add_dependencies(term_history_tests build_ecm)
+else()
+    target_link_libraries(term_history_tests gmp m)
+endif()
+add_test(NAME term_history_tests COMMAND term_history_tests)

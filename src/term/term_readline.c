@@ -14,6 +14,7 @@ typedef int term_readline_unused_;   /* keep the translation unit non-empty */
 
 #include "term_interrupt.h"
 #include "term_lex.h"
+#include "term_history.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -98,8 +99,16 @@ static TermReadStatus rl_read(TermReader* rd, const char* prompt, char** out) {
     return TERM_READ_OK;
 }
 
+/* With a history store (the interactive session), the store filters the
+ * entry (blank, comment-only, a repeat of the previous one) and appends it to
+ * the file; readline's own list gets exactly what the store kept. Without
+ * one, the plain -file Dialog reader's long-standing behaviour. */
 static void rl_history_add(TermReader* rd, const char* entry) {
-    (void)rd;
+    RlImpl* im = (RlImpl*)rd->impl;
+    if (im && im->opt.history) {
+        if (term_history_add(im->opt.history, entry)) add_history(entry);
+        return;
+    }
     if (*entry) add_history(entry);
 }
 
@@ -122,6 +131,12 @@ TermReader* term_reader_open_readline(const TermReadlineOptions* o) {
     rd->ops = &RL_OPS;
     rd->kind = TERM_BACKEND_READLINE;
     rd->impl = im;
+    if (im->opt.interactive_features && im->opt.history) {
+        TermHistory* h = im->opt.history;
+        using_history();
+        stifle_history((int)term_history_max(h));
+        for (size_t i = 0; i < term_history_count(h); i++) add_history(term_history_get(h, i));
+    }
     if (im->opt.interactive_features) {
         mth_setup_readline();
 #ifdef TERM_RL_GNU

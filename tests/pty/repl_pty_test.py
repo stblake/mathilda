@@ -659,6 +659,108 @@ def double_ctrlc_exit(tmp):
         s.close()
 
 
+HIST_HEADER = b"#mathilda-history v1\n"
+
+
+def quit_session(s):
+    s.send("\x04")
+    check(s.exit_code() == 0, "Ctrl-D did not exit 0")
+
+
+@case
+def history_persist(tmp):
+    hist = os.path.join(tmp, "h")
+    extra = {"MATHILDA_HISTFILE": hist}
+    s = interactive(tmp, extra=extra)
+    try:
+        s.send("a1 = 11\r")
+        s.expect(r"Out\[1\]= 11")
+        wait_prompt(s, 2)
+        s.send("f[\r")
+        s.drain(0.2)
+        s.send("1]\r")
+        s.expect(r"Out\[2\]= f\[1\]")
+        wait_prompt(s, 3)
+        s.send("a1 = 11\r")          # not consecutive: recorded again
+        s.expect(r"Out\[3\]= 11")
+        wait_prompt(s, 4)
+        quit_session(s)
+    finally:
+        s.close()
+    with open(hist, "rb") as f:
+        data = f.read()
+    want = HIST_HEADER + b"a1 = 11\nf[\\n1]\na1 = 11\n"
+    check(data == want, "history file is %r, want %r" % (data, want))
+
+    s = interactive(tmp, extra=extra)
+    try:
+        s.send("\x1b[A")             # Up: a1 = 11
+        s.expect(r"a1 = 11")
+        s.send("\x1b[A")             # Up again: the multi-line f[ / 1]
+        s.expect(r"1\]")
+        s.send("\r")
+        s.expect(r"Out\[1\]= f\[1\]")
+        wait_prompt(s, 2)
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def history_disabled(tmp):
+    s = interactive(tmp, extra={"MATHILDA_HISTFILE": ""})
+    try:
+        s.send("1+1\r")
+        s.expect(r"Out\[1\]= 2")
+        wait_prompt(s, 2)
+        s.send("\x1b[A")             # in-session history still works
+        s.expect(r"1\+1")
+        s.send("\r")
+        s.expect(r"Out\[2\]= 2")
+        wait_prompt(s, 3)
+        quit_session(s)
+    finally:
+        s.close()
+    check(os.listdir(tmp) == [], "files created with history disabled: %r" % os.listdir(tmp))
+
+
+@case
+def history_default_path(tmp):
+    s = interactive(tmp)
+    try:
+        s.send("2+2\r")
+        s.expect(r"Out\[1\]= 4")
+        wait_prompt(s, 2)
+        quit_session(s)
+    finally:
+        s.close()
+    path = os.path.join(tmp, ".mathilda_history")
+    with open(path, "rb") as f:
+        check(f.read() == HIST_HEADER + b"2+2\n", "default history file content")
+    check((os.stat(path).st_mode & 0o777) == 0o600, "history file is not 0600")
+
+
+@case
+def history_dialog(tmp):
+    hist = os.path.join(tmp, "h")
+    s = interactive(tmp, extra={"MATHILDA_HISTFILE": hist})
+    try:
+        s.send("Dialog[]\r")
+        s.expect(r"In\[\d+\]:= ")
+        s.send("inDialog = 3\r")
+        s.expect(r"3")
+        s.expect(r"In\[\d+\]:= ")
+        s.send("Return[1]\r")
+        s.expect(r"Out\[1\]= 1")
+        wait_prompt(s, 2)
+        quit_session(s)
+    finally:
+        s.close()
+    with open(hist, "rb") as f:
+        data = f.read()
+    check(b"inDialog = 3\n" in data, "dialog line missing from history: %r" % data)
+
+
 def harness_can_fail(tmp):
     """Deliberately wrong expectation: must FAIL (MATHILDA_PTY_SELFTEST=1)."""
     s = new_session(tmp)
