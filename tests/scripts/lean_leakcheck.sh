@@ -292,6 +292,11 @@ If[StringQ[$LeanVersion],
     ToString[Conjecture[Sum[k^4, {k, 1, n}], n]];
     Certify[Sum[Fibonacci[k]^2, {k, 1, n}] == Fibonacci[n] Fibonacci[n + 1]];
     Certify[Sum[k, {k, 1, n}] == n^2, Assumptions -> n > 3];
+    (* the showcase's rows 21-29 not covered above *)
+    Certify[(1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x, Engine -> {"Lean", "Exact", "Mathilda"}];
+    Refute[x^3 + y^3 == (x + y)^3, "Domain" -> Integers];
+    Refute[x^2 >= x];
+    Conjecture[Sum[Fibonacci[k]^2, {k, 1, n}], n];
     (* kernel replay: a rejected module, and a file with no .olean *)
     Lean`Internal`VerifySource["import Lean\nset_option debug.skipKernelTC true in\nrun_cmd Lean.Elab.Command.liftCoreM <| Lean.addDecl (.thmDecl { name := `bad, levelParams := [], type := Lean.mkConst ``False, value := Lean.mkConst ``True.intro })\n",
       Lean`Private`leanExe[Automatic], None, False, Lean`Private`replayScript[]];
