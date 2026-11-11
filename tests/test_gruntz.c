@@ -468,6 +468,42 @@ static void test_automatic_fallback(void) {
     assert_eval_eq("Limit[ExpIntegralEi[x + E^-x] E^-x x, x -> Infinity]", "1", 0);
 }
 
+/* ExpIntegralEi's branch constant (issue #132).  Off the real axis the
+ * asymptotic expansion at infinity carries I Pi Sign[Im z] on top of the
+ * E^z/z (1 + 1/z + ...) series (DLMF 6.12.1 with 6.2.4), so Ei[-x + c I] ->
+ * I Pi Sign[c], not 0; at its logarithmic branch point the expansion is
+ * EulerGamma + Log[z] (Log[-z] on the negative axis) + z + z^2/4 + ...  The
+ * side of the cut must be decided -- from the assumptions for a symbolic
+ * offset -- or the limit is left unevaluated. */
+static void test_ei_branch_constant(void) {
+    assert_eval_eq("Limit[ExpIntegralEi[-x - 7/3 I], x -> Infinity] === -I Pi", "True", 0);
+    assert_eval_eq("Limit[ExpIntegralEi[-x + 2 I], x -> Infinity, Method -> \"Gruntz\"] === I Pi",
+                   "True", 0);
+    /* Im[g] -> 0+ still lies above the cut. */
+    assert_eval_eq("Limit[ExpIntegralEi[-x + I/x], x -> Infinity] === I Pi", "True", 0);
+    assert_eval_eq("Limit[ExpIntegralEi[-x^2 - I x], x -> Infinity] === -I Pi", "True", 0);
+    /* On the real axis the constant is 0. */
+    assert_eval_eq("Limit[ExpIntegralEi[-x], x -> Infinity]", "0", 0);
+    assert_eval_eq("Limit[ExpIntegralEi[1/x], x -> 0, Direction -> \"FromBelow\"]", "0", 0);
+    /* The constant also sits under the growing branch: E^-x x Ei[x + 2 I] -> E^(2 I). */
+    assert_eval_eq("Limit[ExpIntegralEi[x + 2 I] E^-x x, x -> Infinity] === E^(2 I)", "True", 0);
+    /* Symbolic offset: decided by the assumptions, else unevaluated. */
+    assert_eval_eq("Limit[ExpIntegralEi[-x + a I], x -> Infinity, Assumptions -> a > 0] === I Pi",
+                   "True", 0);
+    assert_eval_eq("Limit[ExpIntegralEi[-x + a I], x -> Infinity, Assumptions -> a < 0] === -I Pi",
+                   "True", 0);
+    assert_eval_startswith("Limit[ExpIntegralEi[-x + a I], x -> Infinity]", "Limit[");
+    /* The logarithmic branch point. */
+    assert_eval_eq("Limit[ExpIntegralEi[x] - Log[x], x -> 0, Direction -> \"FromAbove\"]",
+                   "EulerGamma", 0);
+    assert_eval_eq("Limit[ExpIntegralEi[x] - Log[x], x -> 0, Direction -> \"FromBelow\"] === "
+                   "EulerGamma - I Pi", "True", 0);
+    assert_eval_eq("Limit[ExpIntegralEi[x] - Log[-x], x -> 0, Direction -> \"FromBelow\"]",
+                   "EulerGamma", 0);
+    assert_eval_eq("Limit[(ExpIntegralEi[2 x] - EulerGamma - Log[2 x])/x, x -> 0, "
+                   "Direction -> \"FromAbove\"]", "2", 0);
+}
+
 /* Documented gaps and honest abstentions: these must be left UNEVALUATED
  * (printed head "Limit["), never collapsed to a wrong finite value.
  *   - the 8.31 Gamma Stirling-difference needs a deeper x^x-tower cancellation
@@ -554,6 +590,7 @@ int main(void) {
     TEST(test_thesis_loggamma);
     TEST(test_thesis_gamma);
     TEST(test_automatic_fallback);
+    TEST(test_ei_branch_constant);
     TEST(test_honest_abstentions);
 
     printf("All gruntz tests passed!\n");

@@ -311,6 +311,38 @@ static void test_nl_elliptic_antiderivative_crosschecked(void) {
              "0.1279340024731467]] < 10^-10", "True");
 }
 
+/* Issue #132: ExpIntegralEi boundary values off the real axis.
+ *  - At an infinite endpoint, Ei[-t - c I] -> -I Pi (not 0): E^-t/(t + c I)
+ *    on [0, oo) is E^(c I) E1[c I], and the G&R 4.338.1 / 4.551.3-4 / 3.341
+ *    family came out real but wrong by a Pi multiple.
+ *  - At a finite endpoint where an Ei argument is infinite (Ei[Log[x] - c I]
+ *    at x = 0), substitution goes through c + (-Infinity) = -Infinity and
+ *    loses the side of the cut; the Limit engine keeps it (G&R 4.213.1/3).
+ *  - A real-looking integrand that is complex on part of the interval
+ *    (Log[5/6 + Log[x]], G&R 4.229.5) is split at the antiderivative's branch
+ *    points, so the I Pi E^(-5/6) part is no longer dropped.
+ * References are NIntegrate/mpmath values. */
+static void test_nl_ei_branch_side(void) {
+    check_eq("Integrate[E^(-t)/(t + 7/3 I), {t, 0, Infinity}] === "
+             "-I E^(7/3 I) Pi - E^(7/3 I) ExpIntegralEi[-7/3 I]", "True");
+    num_match("E^(-x)/(x + 2 I)", "1", "Infinity");
+    num_match("E^x/(x - 2 I)", "-Infinity", "0");
+    check_eq("Abs[N[Integrate[E^((-7*Tan[x])/4), {x, 0, Pi/2}]] - 0.4386142036879010] < 10^-10",
+             "True");
+    check_eq("Abs[N[Integrate[Log[9/64 + x^2]/E^(x/5), {x, 0, Infinity}]] - 11.40046498543361] "
+             "< 10^-9", "True");
+    check_eq("Abs[N[Integrate[ArcTan[(8*x)/5]/E^((5*x)/8), {x, 0, Infinity}]] - "
+             "1.506794487553691] < 10^-10", "True");
+    check_eq("Abs[N[Integrate[(49/9 + Log[x]^2)^(-1), {x, 0, 1}]] - 0.1525142744519606] < 10^-10",
+             "True");
+    check_eq("Abs[N[Integrate[Log[x]/(25/36 + Log[x]^2), {x, 0, 1}]] + 0.4170403262489011] "
+             "< 10^-10", "True");
+    check_eq("Integrate[Log[5/6 + Log[x]], {x, 0, 1}] === "
+             "I Pi/E^(5/6) - ExpIntegralEi[5/6]/E^(5/6) + Log[5/6]", "True");
+    check_eq("Abs[N[Integrate[Log[1/2 + Log[x]], {x, 0, 1}]] - "
+             "NIntegrate[Log[1/2 + Log[x]], {x, 0, 1}]] < 10^-8", "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -333,6 +365,7 @@ int main(void) {
     TEST(test_stress_numeric);
 
     TEST(test_nl_exponential_denominator);
+    TEST(test_nl_ei_branch_side);
     printf("All Integrate NewtonLeibniz tests passed!\n");
     return 0;
 }
