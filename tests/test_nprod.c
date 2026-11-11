@@ -116,6 +116,24 @@ static void test_factors(void) {
                  "Sinh[Pi]/Pi", 1e-7);
 }
 
+/* Long finite products ride NSum's finite-range engine (Exp of a finite NSum
+ * of Log[f]).  Through v0.6511 the log-sum was the difference of two
+ * extrapolated tails and NProduct[1+1/k^2,{k,1,10^6}] came back 3.6760779
+ * against 3.6760742.  Reference: the infinite product Sinh[Pi]/Pi divided by
+ * the tail prod_{k>n}(1+1/k^2) = Exp[PolyGamma[1,n+1] - HurwitzZeta[4,n+1]/2
+ * + ...]; at n >= 10^6 the quartic term is below 1e-18. */
+static void test_long_finite(void) {
+    ASSERT_CLOSE("NProduct[1+1/k^2,{k,1,10^6}]",
+                 "N[Sinh[Pi]/Pi Exp[-PolyGamma[1,10^6+1]],30]", 1e-12);
+    /* Each machine term Log[1. + 1/k^2] loses ~eps absolute to the rounding
+     * of 1 + 1/k^2 (the compiled summand has no log1p), so 10^7 terms carry
+     * ~1e-12 relative: inherent to machine precision, not to the method. */
+    ASSERT_CLOSE("NProduct[1+1/k^2,{k,1,10^7}]",
+                 "N[Sinh[Pi]/Pi Exp[-PolyGamma[1,10^7+1]],30]", 1e-11);
+    ASSERT_CLOSE("NProduct[1+1/k,{k,1,10^6}]/10^6", "(10^6+1)/10^6", 1e-12);
+    ASSERT_CLOSE("NProduct[(k+1)/k,{k,1,10^7}]/10^7", "(10^7+1)/10^7", 1e-12);
+}
+
 static void test_sin_identity(void) {
     ASSERT_CLOSE("Block[{x=1/2}, x NProduct[1-x^2/(Pi^2 k^2),{k,1,Infinity}]]",
                  "Sin[0.5]", 1e-5);
@@ -203,6 +221,7 @@ int main(void) {
     TEST(test_complex);
     TEST(test_goals);
     TEST(test_factors);
+    TEST(test_long_finite);
     TEST(test_sin_identity);
     TEST(test_working_precision);
     TEST(test_unevaluated_forms);

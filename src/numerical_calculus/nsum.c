@@ -10,10 +10,12 @@
  * the outer sum an inner NSum[...] (HoldAll + localisation lets a dependent
  * inner bound such as {k,1,n} see the bound outer index).
  *
- * Methods are layered: this file currently provides Direct (small finite sums)
- * and WynnEpsilon (partial-sum extrapolation, shared seqaccel kernels), machine
- * and MPFR, real and complex.  Euler–Maclaurin and Cohen–Villegas–Zagier are
- * added on top of the same term machinery.
+ * Methods are layered on one term machinery, machine and MPFR, real and
+ * complex.  A finite range is never extrapolated (ns_finite: compensated direct
+ * summation, then a verified finite Euler–Maclaurin estimate).  An infinite
+ * range is dispatched to Euler–Maclaurin, Cohen–Villegas–Zagier, Wynn epsilon
+ * or Levin (shared seqaccel kernels), after the Dirichlet, fast-decay and
+ * phase-split front ends.
  *
  * Memory: receives `res` owned by the evaluator; returns a fresh Expr* on
  * success or NULL (unevaluated).  Never frees `res`.  Every temporary index
@@ -895,30 +897,103 @@ static Expr* ns_levin_mpfr(NsCtx* c, long count, const NsOpts* o) {
  *  Method: Direct (exact small finite sum)                            *
  * ------------------------------------------------------------------ */
 
-static Expr* ns_direct_machine(NsCtx* c, long count) {
-    double _Complex acc = 0.0;
-    for (long k = 0; k < count; k++) {
-        double _Complex t;
-        if (!ns_term_machine(c, k, &t)) { ns_warn("nnum", "summand is not numerical at a term"); return NULL; }
-        acc += t;
+/* Neumaier's compensated (improved Kahan) accumulator.  A long finite sum of
+ * machine terms loses ~count·eps relative to plain left-to-right addition (1e7
+ * terms: ~1e-9); the compensation keeps the error at ~2 eps of the sum of the
+ * magnitudes, independent of the count, for two extra adds per term.  Real and
+ * imaginary parts are compensated separately.  Correctness of the trick relies
+ * on IEEE evaluation order, which the build's -ffp-contract=off (and the absence
+ * of -ffast-math) guarantees. */
+typedef struct { double s, c; } NsNeumaier;
+
+static void ns_neu_add(NsNeumaier* a, double x) {
+    double t = a->s + x;
+    if (fabs(a->s) >= fabs(x)) a->c += (a->s - t) + x;
+    else                       a->c += (x - t) + a->s;
+    a->s = t;
+}
+
+static double ns_neu_value(const NsNeumaier* a) { return a->s + a->c; }
+
+/* A complex compensated accumulator (two Neumaier lanes). */
+typedef struct { NsNeumaier re, im; } NsCSum;
+
+static void ns_csum_init(NsCSum* a) { a->re.s = a->re.c = a->im.s = a->im.c = 0.0; }
+
+static void ns_csum_add(NsCSum* a, double _Complex t) {
+    ns_neu_add(&a->re, creal(t));
+    if (cimag(t) != 0.0) ns_neu_add(&a->im, cimag(t));
+}
+
+static double _Complex ns_csum_value(const NsCSum* a) {
+    return ns_neu_value(&a->re) + I * ns_neu_value(&a->im);
+}
+
+/* Poll the TimeConstrained deadline this often inside a long direct loop (a
+ * compiled term is ~10 ns, so 2^16 terms is well under a millisecond). */
+#define NS_DIRECT_POLL_MASK 0xFFFFL
+
+/* Accumulate the terms k in [k0, k1) into `acc`.  The compiled program serves
+ * every term it can, with the index and outer-index arguments prepared once
+ * outside the loop; a term the program declines (an exact value, a pole, a
+ * complex branch) goes to the interpreter, exactly as ns_term_machine does.
+ * False on a non-numerical term or an expired TimeConstrained deadline. */
+static bool ns_direct_range_machine(NsCtx* c, long k0, long k1, NsCSum* acc) {
+    double lo = 0.0, step = 0.0, xs[1 + NS_MAX_OUTER];
+    bool fast = c->ac && ns_to_double_real(c->imin, &lo) && ns_to_double_real(c->di, &step);
+    if (fast) {
+        size_t nv = autocompiled_num_vars(c->ac);
+        for (size_t i = 1; i < nv && fast; i++) {
+            Expr* ov = (int)i <= c->nouter ? ns_outer_value(c->outer[i - 1]) : NULL;
+            if (!ov || !ns_to_double_real(ov, &xs[i])) fast = false;
+        }
     }
-    return ns_from_complex_d(acc);
+    for (long k = k0; k < k1; k++) {
+        if (((k - k0) & NS_DIRECT_POLL_MASK) == NS_DIRECT_POLL_MASK && tc_deadline_passed())
+            return false;
+        double _Complex t;
+        if (fast) {
+            xs[0] = lo + (double)k * step;
+            if (autocompiled_eval_complex(c->ac, xs, &t)
+                && isfinite(creal(t)) && isfinite(cimag(t))) {
+                ns_csum_add(acc, t);
+                continue;
+            }
+        }
+        if (!ns_term_machine(c, k, &t)) {
+            ns_warn("nnum", "summand is not numerical at a term");
+            return false;
+        }
+        ns_csum_add(acc, t);
+    }
+    return true;
+}
+
+static Expr* ns_direct_machine(NsCtx* c, long count) {
+    NsCSum acc;
+    ns_csum_init(&acc);
+    if (!ns_direct_range_machine(c, 0, count, &acc)) return NULL;
+    return ns_from_complex_d(ns_csum_value(&acc));
 }
 
 #ifdef USE_MPFR
+/* MPFR direct sum.  The working precision already carries the ~2x + 32 bit
+ * guard (builtin_nsum), so plain rounded addition loses at most log2(count)
+ * of those guard bits — no compensation is needed. */
 static Expr* ns_direct_mpfr(NsCtx* c, long count, long bits) {
     mpfr_prec_t p = (mpfr_prec_t)bits;
     mpfr_t accr, acci, tr, ti;
     mpfr_inits2(p, accr, acci, tr, ti, (mpfr_ptr)0);
     mpfr_set_ui(accr, 0, MPFR_RNDN); mpfr_set_ui(acci, 0, MPFR_RNDN);
-    bool ok = true;
+    bool ok = true, numeric = true;
     for (long k = 0; k < count; k++) {
-        if (!ns_term_mpfr(c, k, tr, ti)) { ok = false; break; }
+        if ((k & 0x3FFL) == 0x3FFL && tc_deadline_passed()) { ok = false; break; }
+        if (!ns_term_mpfr(c, k, tr, ti)) { ok = false; numeric = false; break; }
         mpfr_add(accr, accr, tr, MPFR_RNDN);
         mpfr_add(acci, acci, ti, MPFR_RNDN);
     }
     Expr* out = ok ? ns_from_complex_mpfr(accr, acci) : NULL;
-    if (!ok) ns_warn("nnum", "summand is not numerical at a term");
+    if (!numeric) ns_warn("nnum", "summand is not numerical at a term");
     mpfr_clears(accr, acci, tr, ti, (mpfr_ptr)0);
     return out;
 }
@@ -2243,13 +2318,6 @@ static const char* ns_choose_method(const NsProfile* p) {
  *  Single-variable driver                                             *
  * ------------------------------------------------------------------ */
 
-/* Direct-evaluation cap for finite sums (above this, extrapolate the tail). */
-static long ns_direct_cap(const NsOpts* o) {
-    long cap = (long)(o->nsum_terms < 0 ? 0 : o->nsum_terms) + ns_seq_len(o) + 4;
-    if (cap < 64) cap = 64;
-    return cap;
-}
-
 /* Direct machine/MPFR sum dispatch over `count` terms. */
 static Expr* ns_direct(NsCtx* c, long count, const NsOpts* o) {
     if (count < 0) count = 0;
@@ -2543,11 +2611,295 @@ static void ns_ctx_compile(NsCtx* c, Expr* body, const char* var, const NsOpts* 
     for (size_t i = 0; i < nv; i++) expr_free(syms[i]);
 }
 
-/* Run NSum over one iterator spec already split into (var, imin, imax, di),
- * with imin/imax/di evaluated to numbers and `infinite`/`count` describing the
- * range.  A large finite sum is computed as the difference of two infinite
- * tails, Σ_{imin}^∞ − Σ_{imax+di}^∞, when the summand decays. */
-static Expr* ns_run_single(Expr* body, const char* var, Expr* imin, Expr* imax,
+/* ------------------------------------------------------------------ *
+ *  Finite sums                                                        *
+ *                                                                     *
+ *  A finite sum has an exact answer, so nothing here extrapolates.    *
+ *  (Through v0.6511 a span above ~30 terms whose head terms looked    *
+ *  non-increasing was taken as the difference of two infinite tails,  *
+ *  Σ_{imin}^∞ − Σ_{imax+di}^∞.  For 1/k both tails diverge, and the   *
+ *  extrapolated "values" of the two divergent series cancelled to     *
+ *  3.8159 for HarmonicNumber[10^6] = 14.3927; a constant summand also *
+ *  counted as non-increasing, and failed with ncvg.)                  *
+ *                                                                     *
+ *    1. Direct compensated summation while it is affordable: up to    *
+ *       NS_FIN_DIRECT_COMPILED terms when the summand compiled, else  *
+ *       NS_FIN_DIRECT_INTERP (an interpreted term costs ~1.5 us, a    *
+ *       compiled one ~30-70 ns).                                      *
+ *    2. Beyond that, at machine precision and for a summand that      *
+ *       extends smoothly off the integers, Euler–Maclaurin over the   *
+ *       finite range with the boundary corrections at BOTH ends,      *
+ *       computed twice over different splits (different head and      *
+ *       tail blocks, and an interior window summed directly), and     *
+ *       accepted only when the two agree to the tolerance.            *
+ *    3. When that check fails, direct summation up to the hard cap    *
+ *       (NS_FIN_HARD_*: seconds, not minutes).                        *
+ *    4. Past the hard cap, the best value is returned with            *
+ *       NSum::accgl when the two Euler–Maclaurin estimates agree      *
+ *       loosely; otherwise the call stays unevaluated with NSum::nsum.*
+ *       Never a silently unverified value.                            *
+ * ------------------------------------------------------------------ */
+
+#define NS_FIN_DIRECT_COMPILED  4000000L    /* ~0.2 s compiled            */
+#define NS_FIN_DIRECT_INTERP     100000L    /* ~0.2 s interpreted         */
+#define NS_FIN_HARD_COMPILED  100000000L    /* ~5 s compiled              */
+#define NS_FIN_HARD_INTERP      2000000L    /* ~3 s interpreted           */
+#define NS_FIN_LADDER                40     /* log-spaced smoothness probes */
+#define NS_FIN_LINEAR                 8     /* linear-spaced probes         */
+
+/* g(u) = f(-e^u)·e^u: the integrand of ∫_a^b f dx (a < b < 0) on the
+ * logarithmic abscissa of |x|. */
+static bool ns_sample_neglogx_machine(void* vc, double u, double _Complex* out) {
+    double x = exp(u);
+    double _Complex f;
+    if (!isfinite(x) || !ns_sample_x_machine(vc, -x, &f)) return false;
+    *out = f * x;
+    return true;
+}
+
+/* ∫_xa^xb f(x) dx (xa < xb) by adaptive Gauss–Kronrod, on the logarithmic
+ * abscissa when the interval keeps one sign (a long range of a power-law or
+ * logarithmic summand is then short and smooth), else on x itself.  False
+ * when the rule does not converge (an oscillatory or nonsmooth summand). */
+static bool ns_fin_integral_machine(NsCtx* c, double xa, double xb,
+                                    double _Complex* out, double* abserr) {
+    GkResult q;
+    if (xa > 0.0)
+        q = gk_integrate_machine(ns_sample_logx_machine, c, log(xa), log(xb),
+                                 1e-300, 1e-14, 400, 0, false);
+    else if (xb < 0.0)
+        q = gk_integrate_machine(ns_sample_neglogx_machine, c, log(-xb), log(-xa),
+                                 1e-300, 1e-14, 400, 0, false);
+    else
+        q = gk_integrate_machine(ns_sample_x_machine, c, xa, xb,
+                                 1e-300, 1e-14, 400, 0, false);
+    /* A roundoff-limited rule stops short of 1e-14 without having failed. */
+    if (q.status == GK_NONNUMERIC) return false;
+    if (q.status != GK_OK && !(q.abs_err <= 1e-13 * cabs(q.value))) return false;
+    *out = q.value;
+    /* A converged rule met 1e-14 relative and the caller's cross-check of two
+     * independent splits measures what is left; only a roundoff-stopped rule
+     * carries its (pessimistic, roundoff-floor) estimate into the error. */
+    *abserr = (q.status == GK_OK) ? 0.0 : q.abs_err;
+    return isfinite(creal(q.value)) && isfinite(cimag(q.value));
+}
+
+/* Euler–Maclaurin for the inclusive block Σ_{k=kA}^{kB} f(lo + k h), h > 0:
+ *     (1/h)∫_{xa}^{xb} f + (f(xa) + f(xb))/2
+ *       + Σ_j B_{2j}/(2j)! h^{2j-1} (f^{(2j-1)}(xb) − f^{(2j-1)}(xa)),
+ * the derivatives from circle-DFT Taylor coefficients at both ends
+ * (a_m = f^(m)/m!, so the j-th term is B_{2j}/(2j) h^{2j-1} (a_{2j-1}(xb) −
+ * a_{2j-1}(xa))), truncated at the asymptotic minimum.  `err` is the
+ * quadrature estimate plus the last correction when the series did not reach
+ * `tol`.  False when the integral or either Taylor expansion fails. */
+static bool ns_fin_em_block_machine(NsCtx* c, long kA, long kB, double lo, double h,
+                                    const double* bc, int J, double tol,
+                                    double _Complex* val, double* err) {
+    double xa = lo + (double)kA * h, xb = lo + (double)kB * h;
+    double _Complex I_ab, fa, fb;
+    double qerr;
+    if (!ns_fin_integral_machine(c, xa, xb, &I_ab, &qerr)) return false;
+    if (!ns_term_machine(c, kA, &fa) || !ns_term_machine(c, kB, &fb)) return false;
+    int M = 2 * J - 1;
+    double _Complex* aA = malloc(sizeof(double _Complex) * (size_t)(M + 1));
+    double _Complex* aB = malloc(sizeof(double _Complex) * (size_t)(M + 1));
+    bool ok = aA && aB && ns_taylor_machine_auto(c, xa, M, aA)
+              && ns_taylor_machine_auto(c, xb, M, aB);
+    if (ok) {
+        double _Complex s = I_ab / h + 0.5 * (fa + fb);
+        double hp = h, prev = INFINITY, last = 0.0;
+        bool met = false;
+        for (int j = 1; j <= J; j++) {
+            int ord = 2 * j - 1;
+            double _Complex corr = bc[j] * hp * (aB[ord] - aA[ord]);
+            double mag = cabs(corr);
+            if (!isfinite(mag)) { ok = false; break; }
+            if (j > 1 && mag > prev) break;          /* asymptotic minimum */
+            s += corr;
+            prev = mag; last = mag;
+            if (mag <= 1e-3 * tol) { met = true; break; }
+            hp *= h * h;
+        }
+        if (ok) {
+            *val = s;
+            *err = qerr / h + (met ? 0.0 : last);
+        }
+    }
+    free(aA); free(aB);
+    return ok;
+}
+
+/* Smoothness on the scale of the step, on a ladder over [kA, kB): at each
+ * probe k the off-grid midpoint must match the mean of its two neighbours,
+ *     |f(x_k + h/2) − (f(x_k) + f(x_{k+1}))/2| <= 5% of max(|f(x_k)|, |f(x_{k+1})|),
+ * which a summand that is smooth between the integers meets with room to
+ * spare and an aliased one (Cos[2 Pi k], (-1)^k), a sawtooth (Mod,
+ * FractionalPart) or a peak of unit width does not.  Sets *peak to the probe
+ * of largest magnitude (the interior window of the second Euler–Maclaurin
+ * estimate is placed there) and returns false on the first failing or
+ * non-numeric probe. */
+static bool ns_fin_smooth_machine(NsCtx* c, long kA, long kB, double lo, double h,
+                                  long* peak) {
+    long span = kB - kA;
+    if (span < 4) return false;
+    long ks[NS_FIN_LADDER + NS_FIN_LINEAR];
+    int n = 0;
+    for (int i = 0; i < NS_FIN_LADDER; i++) {
+        double t = (double)i / (double)(NS_FIN_LADDER - 1);
+        long k = kA + (long)floor(pow((double)span, t)) - 1;
+        if (k < kA) k = kA;
+        if (k > kB - 1) k = kB - 1;
+        ks[n++] = k;
+    }
+    for (int i = 1; i <= NS_FIN_LINEAR; i++)
+        ks[n++] = kA + (long)((double)span * (double)i / (double)(NS_FIN_LINEAR + 1));
+    double best = -1.0;
+    *peak = kA + span / 2;
+    for (int i = 0; i < n; i++) {
+        long k = ks[i];
+        double _Complex f0, f1, fm;
+        if (!ns_term_machine(c, k, &f0) || !ns_term_machine(c, k + 1, &f1)) return false;
+        if (!ns_sample_x_machine(c, lo + ((double)k + 0.5) * h, &fm)) return false;
+        double scale = fmax(cabs(f0), cabs(f1));
+        if (!isfinite(scale) || !isfinite(cabs(fm))) return false;
+        if (cabs(fm - 0.5 * (f0 + f1)) > 0.05 * scale + 1e-300) return false;
+        if (scale > best) { best = scale; *peak = k; }
+    }
+    return true;
+}
+
+/* One Euler–Maclaurin estimate of Σ_{k<count}: head [0,H) and tail
+ * [count-T, count) summed directly, the middle by ns_fin_em_block_machine —
+ * split into two blocks around a directly summed window [P, P+W) when W > 0. */
+static bool ns_fin_em_estimate(NsCtx* c, long count, long H, long T, long P, long W,
+                               double lo, double h, const double* bc, int J, double tol,
+                               double _Complex* val, double* err) {
+    NsCSum acc;
+    ns_csum_init(&acc);
+    double e = 0.0, e2 = 0.0;
+    double _Complex b;
+    if (!ns_direct_range_machine(c, 0, H, &acc)) return false;
+    if (W > 0) {
+        if (!ns_fin_em_block_machine(c, H, P - 1, lo, h, bc, J, tol, &b, &e)) return false;
+        ns_csum_add(&acc, b);
+        if (!ns_direct_range_machine(c, P, P + W, &acc)) return false;
+        if (!ns_fin_em_block_machine(c, P + W, count - T - 1, lo, h, bc, J, tol, &b, &e2))
+            return false;
+        ns_csum_add(&acc, b);
+    } else {
+        if (!ns_fin_em_block_machine(c, H, count - T - 1, lo, h, bc, J, tol, &b, &e))
+            return false;
+        ns_csum_add(&acc, b);
+    }
+    if (!ns_direct_range_machine(c, count - T, count, &acc)) return false;
+    *val = ns_csum_value(&acc);
+    *err = e + e2;
+    return true;
+}
+
+/* Verified finite Euler–Maclaurin (machine precision, h > 0).  Returns 1 with
+ * *val when two independent estimates agree to the tolerance, 0 with *val
+ * and the combined error in *err when they do not, -1 when the summand is
+ * not smooth enough to try or a step fails. */
+static int ns_fin_em_machine(NsCtx* c, long count, const NsOpts* o, double lo, double h,
+                             double _Complex* val, double* err) {
+    const long H1 = 64, T1 = 16, H2 = 160, T2 = 48, W = 64;
+    if (count < 8 * (H2 + T2 + W)) return -1;
+    long peak;
+    if (!ns_fin_smooth_machine(c, H1, count - T1 - 1, lo, h, &peak)) return -1;
+    /* The interior window: centred on the largest probed term, kept clear of
+     * the second estimate's head and tail blocks. */
+    long P = peak - W / 2;
+    if (P < 2 * H2) P = 2 * H2;
+    if (P + W > count - 2 * T2) P = count - 2 * T2 - W;
+
+    int J = ns_em_maxj(o);
+    if (J > 64) J = 64;
+    double bc[65];
+    for (int j = 1; j <= J; j++) bc[j] = ns_em_bcoeff_machine(j);
+
+    double _Complex s1, s2;
+    double e1, e2;
+    /* The first estimate runs its correction series to the asymptotic minimum
+     * (tolerance 0); its magnitude fixes the tolerance for the second. */
+    if (!ns_fin_em_estimate(c, count, H1, T1, 0, 0, lo, h, bc, J, 0.0, &s1, &e1)) return -1;
+    double tol = nc_combined_tol(o->acc_goal, o->prec_goal, cabs(s1),
+                                 NUMERIC_MACHINE_PRECISION_DIGITS);
+    if (!ns_fin_em_estimate(c, count, H2, T2, P, W, lo, h, bc, J, tol, &s2, &e2)) return -1;
+    double diff = cabs(s1 - s2);
+    *val = s2;
+    *err = diff + fmax(e1, e2);
+    if (!isfinite(*err)) return -1;
+    /* Two estimates of a summand that is smooth on the step scale agree to
+     * the quadrature's ~1e-13; a disagreement far above that (yet inside a
+     * loose PrecisionGoal) says the model does not fit, and direct summation
+     * is never wrong — so the acceptance is held to 1e-10 relative whatever
+     * the goal. */
+    bool agree = diff <= 1e-10 * cabs(s2) + nc_combined_tol(o->acc_goal, NC_GOAL_OFF, 0.0,
+                                                            NUMERIC_MACHINE_PRECISION_DIGITS);
+    /* The goal is met to the cross-check's own resolution: each block's
+     * quadrature converges to 1e-14 relative, so two splits agree to ~1e-13
+     * of the sum at best, and a machine goal tighter than that is not a
+     * reason to fall back to 10^8 terms of direct summation. */
+    return (agree && *err <= fmax(tol, 1e-12 * cabs(s2))) ? 1 : 0;
+}
+
+/* The finite sum Σ_{k=0}^{count-1} f(imin + k·di). */
+static Expr* ns_finite(NsCtx* c, long count, const NsOpts* o) {
+    if (count <= 0) return ns_direct(c, 0, o);
+    bool compiled = !o->prec_mpfr && c->ac;
+    long direct_max = compiled ? NS_FIN_DIRECT_COMPILED : NS_FIN_DIRECT_INTERP;
+    long hard_max   = compiled ? NS_FIN_HARD_COMPILED   : NS_FIN_HARD_INTERP;
+    if (count <= direct_max) return ns_direct(c, count, o);
+
+    /* Euler–Maclaurin over the finite range (machine precision, a summand
+     * that extends off the integers).  A negative step sums the same points
+     * from the far end. */
+    double lo, h;
+    double _Complex v = 0.0;
+    double err = INFINITY;
+    int em = -1;
+    if (!o->prec_mpfr && !ns_body_is_blackbox(c->body)
+        && ns_to_double_real(c->imin, &lo) && ns_to_double_real(c->di, &h) && h != 0.0
+        && ns_summand_is_continuous(c) && !ns_summand_is_step(c)) {
+        NsCtx c2 = *c;
+        Expr* lo2 = NULL;
+        Expr* h2 = NULL;
+        if (h < 0.0) {
+            lo2 = ns_index_value(c, count - 1);
+            h2 = eval_and_free(ns_mk2("Times", expr_new_integer(-1), expr_copy(c->di)));
+            c2.imin = lo2; c2.di = h2;
+            lo = lo + (double)(count - 1) * h;
+            h = -h;
+        }
+        g_ns_quiet++;                 /* trial samples: not the user's messages */
+        em = ns_fin_em_machine(&c2, count, o, lo, h, &v, &err);
+        g_ns_quiet--;
+        expr_free(lo2);
+        expr_free(h2);
+        if (em == 1) {
+            if (fabs(cimag(v)) <= 1e-15 * fabs(creal(v))) v = creal(v);
+            return ns_from_complex_d(v);
+        }
+    }
+    if (count <= hard_max) return ns_direct(c, count, o);
+    if (em == 0 && err <= 1e-8 * (cabs(v) + 1e-300)) {
+        double tol = nc_combined_tol(o->acc_goal, o->prec_goal, cabs(v),
+                                     NUMERIC_MACHINE_PRECISION_DIGITS);
+        nc_warn_goal("NSum", err, tol);
+        if (fabs(cimag(v)) <= 1e-15 * fabs(creal(v))) v = creal(v);
+        return ns_from_complex_d(v);
+    }
+    ns_warn("nsum", "the finite sum of %ld terms is too long to sum term by term and its "
+                    "summand is not smooth enough for a verified Euler-Maclaurin estimate; "
+                    "use Sum for a closed form or split the range", count);
+    return NULL;
+}
+
+/* Run NSum over one iterator spec already split into (var, imin, di), with
+ * imin/di evaluated to numbers and `infinite`/`count` describing the range.
+ * A finite range is summed by ns_finite (never extrapolated). */
+static Expr* ns_run_single(Expr* body, const char* var, Expr* imin,
                            Expr* di, bool infinite, long count, NsOpts* o) {
     NsBind bind; ns_bind_snapshot(&bind, var);
     NsCtx ctx;
@@ -2568,36 +2920,8 @@ static Expr* ns_run_single(Expr* body, const char* var, Expr* imin, Expr* imax,
     Expr* out = NULL;
     if (infinite) {
         out = ns_sum_infinite(&ctx, var, o, o->verify);
-    } else if (count <= ns_direct_cap(o)) {
-        out = ns_direct(&ctx, count, o);
     } else {
-        /* Large finite sum.  If the summand decays, use the difference of two
-         * infinite tails; otherwise fall back to direct summation. */
-        NsProfile prof;
-        ns_build_profile(&ctx, -1, &prof);
-        bool decays = prof.head.ok && !prof.rising_far
-                      && ((prof.ladder_ok && prof.nl >= 2
-                           && prof.lmag[prof.nl - 1] < prof.lmag[prof.nl - 2])
-                          || ns_mag_decreasing(&prof.head, prof.head.n / 2));
-        if (decays) {
-            Expr* head_sum = ns_sum_infinite(&ctx, var, o, false);
-            /* Second tail starts at imax + di. */
-            Expr* imin2 = eval_and_free(ns_mk2("Plus", expr_copy(imax), expr_copy(di)));
-            ctx.imin = imin2;
-            Expr* tail_sum = head_sum ? ns_sum_infinite(&ctx, var, o, false) : NULL;
-            ctx.imin = imin;
-            expr_free(imin2);
-            if (head_sum && tail_sum) {
-                out = eval_and_free(ns_mk2("Subtract", head_sum, tail_sum));
-            } else {
-                expr_free(head_sum); expr_free(tail_sum);
-            }
-        } else if (count <= 2000000) {
-            out = ns_direct(&ctx, count, o);
-        } else {
-            ns_warn("nsum", "large finite sum of non-decaying terms; supply a "
-                            "closed form via Sum or fewer terms");
-        }
+        out = ns_finite(&ctx, count, o);
     }
 
     autocompiled_free(ctx.ac);
@@ -2883,7 +3207,7 @@ static void ns_phase_groups_free(NsPhaseGroup* G, int ng) {
 /* Attempt the phase split for an infinite Automatic sum.  Returns the sum, or
  * NULL when the summand has no oscillatory linear phase (or cannot be split),
  * in which case the caller proceeds with the ordinary method dispatch. */
-static Expr* ns_phase_split(Expr* body, const char* var, Expr* imin, Expr* imax,
+static Expr* ns_phase_split(Expr* body, const char* var, Expr* imin,
                             Expr* di, const NsOpts* o) {
     double dlo, ddi;
     if (!ns_to_double_real(imin, &dlo) || !ns_to_double_real(di, &ddi) || !(ddi > 0.0))
@@ -3048,7 +3372,7 @@ static Expr* ns_phase_split(Expr* body, const char* var, Expr* imin, Expr* imax,
             rest = eval_and_free(rest);
             Expr* n1 = ns_index_at(imin, di, m1);
             NsOpts ro = *o;
-            restv = ns_run_single(rest, var, n1, imax, di, true, -1, &ro);
+            restv = ns_run_single(rest, var, n1, di, true, -1, &ro);
             expr_free(n1);
             rest_ok = restv != NULL;
         }
@@ -3478,9 +3802,9 @@ Expr* builtin_nsum(Expr* res) {
     /* Linear-phase summands (Sin[n]/n, (-1)^n Log[n]/n) are split by frequency
      * before the ordinary dispatch, which cannot sum them (see ns_phase_split). */
     if (!out && !bad && infinite && o.method == SYM_Automatic && nspecs == 1)
-        out = ns_phase_split(eff_body, var, imin, imax_e, di, &o);
+        out = ns_phase_split(eff_body, var, imin, di, &o);
     if (!bad && !out)
-        out = ns_run_single(eff_body, var, imin, imax_e, di, infinite, count, &o);
+        out = ns_run_single(eff_body, var, imin, di, infinite, count, &o);
 
     /* Round the guarded internal result back to the requested precision. */
 #ifdef USE_MPFR

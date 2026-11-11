@@ -743,8 +743,49 @@ The terms are reindexed to `k = 0, 1, 2, …`; the head terms (`NSumTerms`, defa
   any reachable index (Putnam 2002 A6, `f(n) = n f(BitLength[n])`) return with
   an `NSum::accgl` error that brackets the true sum.
 
-A **large finite** sum is evaluated as the difference of two infinite tails,
-`Σ_{imin}^∞ − Σ_{imax+di}^∞`, when the summand decays.
+### Finite ranges
+
+A finite sum has an exact answer, so it is never extrapolated (v0.6513; through
+v0.6511 a span of more than ~30 terms was the difference of two extrapolated
+infinite tails whenever the head terms looked non-increasing, and both tails of
+`1/k` diverge: `NSum[1/k, {k, 1, 10^6}]` was `3.81593` and `NSum[1, {k, 1,
+10^5}]` failed with `NSum::ncvg`).  `Method` and `NSumTerms` do not apply to a
+finite range.  In order:
+
+1. **Direct, compensated.** Up to 4·10^6 terms when the summand compiles (the
+   compiled program serves each term with its arguments prepared once, ~30–70 ns
+   a term), or 10^5 terms when it is interpreted (~1.5 µs a term) or at
+   `WorkingPrecision` (compiled MPFR where possible). Machine terms are added
+   with Neumaier's compensated sum, real and imaginary parts separately, so the
+   rounding error does not grow with the count; the MPFR sum runs at the guarded
+   working precision.
+2. **Finite Euler–Maclaurin, verified** (machine precision, beyond the direct
+   budget, for a summand that extends off the integers):
+   `Σ = (1/h)∫ f + (f(a) + f(b))/2 + Σ_j B_2j/(2j)! h^(2j-1) (f^(2j-1)(b) − f^(2j-1)(a))`,
+   with the integral by adaptive Gauss–Kronrod (on `log x` when the range keeps
+   one sign) and the derivatives at **both** ends from circle-DFT Taylor
+   coefficients. Before it is tried, the summand must pass a smoothness probe on
+   48 log- and linear-spaced points: the off-grid midpoint `f(x + h/2)` must
+   match the mean of its neighbours to 5%, which rejects aliased extensions
+   (`Cos[2 Pi k]`, `(-1)^k`), sawtooth forms and unit-width peaks at a probe.
+   The sum is then computed twice: once with a 64-term head and 16-term tail
+   summed directly, and once with a 160-term head, a 48-term tail and a 64-term
+   window at the largest probed term summed directly between two
+   Euler–Maclaurin blocks. It is accepted only when the two agree to
+   `max(tolerance, 1e-12 |S|)` and to `1e-10 |S|` whatever the goal.
+   `NSum[1/k, {k, 1, 10^8}]` takes ~2 ms and agrees with `HarmonicNumber[10^8]`
+   to the last digit.
+3. **Direct again** when the check fails, up to 10^8 compiled terms (~5 s) or
+   2·10^6 interpreted ones. `Sin[k]/k`, `(-1)^k/k`, `Cos[2 Pi k]/k` and
+   `1/(1 + (k - 5·10^6 - 1/3)^2)` over `{k, 1, 10^7}` land here and are exact.
+4. **Beyond that,** the best value is returned with `NSum::accgl` when the two
+   Euler–Maclaurin estimates agree to `1e-8`; otherwise the call stays
+   unevaluated with `NSum::nsum` (`NSum[1/Prime[k], {k, 1, 10^9}]`).
+
+A negative step sums the same points from the far end. The limits of any
+sampling method apply to step 2: a feature narrower than the probe spacing and
+missed by both splits is invisible to it, so a summand with an isolated spike
+over a span past the direct budget is best split at the spike.
 
 ### Options
 
@@ -866,7 +907,10 @@ Attributes: `HoldAll, Protected`.
 Per Keiper (1992) the product is evaluated as `Exp[NSum[Log[f], …]]`, reusing
 the full NSum engine: Euler-Maclaurin (`Method -> "EulerMaclaurin"`, default for
 monotone factors), Wynn epsilon (`Method -> "WynnEpsilon"`), automatic method
-selection, MPFR working precision, large-finite tail differences, and the
+selection, MPFR working precision, the finite-range engine (direct
+compensated summation, then verified finite Euler–Maclaurin; see NSum's
+"Finite ranges" — `NProduct[1 + 1/k^2, {k, 1, 10^6}]` is `3.6760742343009`,
+it was `3.6760779` through v0.6511), and the
 convergence test (factors are checked for `-> 1`; a divergent product such as
 `∏(1+2^i)` returns `ComplexInfinity`).  Options: `Method`, `WorkingPrecision`,
 `NProductFactors` (leading factors taken explicitly, default 15),

@@ -3,7 +3,8 @@
  * Cover: Direct (small finite) sums; infinite sums via Automatic dispatch
  * (Euler–Maclaurin for monotone, Cohen–Villegas–Zagier for alternating, Wynn
  * epsilon fallback); the explicit Method settings; step di; complex summands;
- * large finite sums (difference of tails); multidimensional sums with
+ * long finite sums (direct and verified finite Euler-Maclaurin, never
+ * extrapolated); multidimensional sums with
  * independent and dependent inner bounds; VerifyConvergence and divergence;
  * arbitrary precision via WorkingPrecision; options and unevaluated forms; the
  * HoldAll/Protected attributes; and memory hygiene.
@@ -144,6 +145,148 @@ static void test_large_finite(void) {
     /* Sum_{100}^inf 1/i^2 = PolyGamma[1,100] */
     ASSERT_CLOSE("NSum[1/i^2,{i,100,Infinity}]", "PolyGamma[1,100]", 1e-9);
     ASSERT_CLOSE("NSum[1/i^2,{i,100,1000000}]", "0.0100492", 1e-6);
+}
+
+/* Long finite ranges (v0.6513).  A finite sum has an exact answer and is never
+ * extrapolated: direct compensated summation while affordable, then a finite
+ * Euler-Maclaurin estimate with the boundary corrections at both ends that is
+ * accepted only when two independent splits agree, then direct again.  Through
+ * v0.6511 such a sum was the difference of two "infinite" tails whenever the
+ * head terms looked non-increasing: for 1/k both tails diverge, and
+ * HarmonicNumber[10^6] came back as 3.81593 with only NSum::accgl; a constant
+ * summand failed with NSum::ncvg. */
+static void test_long_finite(void) {
+    /* the three reported cases */
+    ASSERT_CLOSE("NSum[1/k,{k,1,10^6}]", "N[HarmonicNumber[10^6],30]", 1e-12);
+    ASSERT_CLOSE("NSum[1,{k,1,10^5}]", "100000", 1e-8);
+    ASSERT_CLOSE("NSum[1,{k,1,10^7}]", "10^7", 1e-6);
+    /* short ranges */
+    ASSERT_CLOSE("NSum[1/k,{k,1,1000}]", "N[PolyGamma[0,1001]+EulerGamma,30]", 1e-13);
+    /* past the direct budget: the verified finite Euler-Maclaurin path */
+    ASSERT_CLOSE("NSum[1/k,{k,1,10^7}]", "N[PolyGamma[0,10^7+1]+EulerGamma,30]", 1e-12);
+    ASSERT_CLOSE("NSum[1/k,{k,1,10^8}]", "N[PolyGamma[0,10^8+1]+EulerGamma,30]", 1e-11);
+    ASSERT_CLOSE("NSum[1,{k,1,10^12}]", "10^12", 1e-1);
+    ASSERT_CLOSE("NSum[Log[k],{k,1,10^7}]", "LogGamma[10000001`30]", 1e-5);
+    ASSERT_CLOSE("NSum[1/Sqrt[k],{k,1,10^7}]",
+                 "N[Zeta[1/2]-HurwitzZeta[1/2,10^7+1],30]", 1e-9);
+    /* polynomial growth over a long range */
+    ASSERT_CLOSE("NSum[k^2,{k,10^5,10^6}]/10^17",
+                 "(10^6 (10^6+1)(2 10^6+1) - (10^5-1) 10^5 (2 10^5-1))/6/10^17", 1e-13);
+    ASSERT_CLOSE("NSum[k^2,{k,10^5,10^7}]/10^20",
+                 "(10^7 (10^7+1)(2 10^7+1) - (10^5-1) 10^5 (2 10^5-1))/6/10^20", 1e-12);
+}
+
+/* Non-monotone, oscillating and aliased summands over long ranges: the
+ * Euler-Maclaurin model does not fit, the smoothness probe or the two-split
+ * check rejects it, and direct summation answers. */
+static void test_long_finite_oscillating(void) {
+    /* sum_{k=1}^{2m} (-1)^k/k = H(m) - H(2m) */
+    ASSERT_CLOSE("NSum[(-1)^k/k,{k,1,10^6}]",
+                 "N[PolyGamma[0,5 10^5+1]-PolyGamma[0,10^6+1],30]", 1e-13);
+    ASSERT_CLOSE("NSum[(-1)^k/k,{k,1,10^7}]",
+                 "N[PolyGamma[0,5 10^6+1]-PolyGamma[0,10^7+1],30]", 1e-13);
+    /* 40-digit reference sums */
+    ASSERT_CLOSE("NSum[Sin[k]/k,{k,1,10^6}]", "1.07079529444189234462687620342038446", 1e-13);
+    ASSERT_CLOSE("NSum[Sin[k]/k,{k,1,10^7}]", "1.07079643085964681354032959984767176", 1e-13);
+    /* Cos[2 Pi k] = 1 on the integers: an aliased continuous extension */
+    ASSERT_CLOSE("NSum[Cos[2 Pi k]/k,{k,1,10^7}]", "N[PolyGamma[0,10^7+1]+EulerGamma,30]", 1e-12);
+    /* a unit-width peak in the middle of the range: the sum over all integers
+     * is Pi Sinh[2Pi]/(Cosh[2Pi]-Cos[2Pi/3]); the two tails cut off ~4e-7 */
+    ASSERT_CLOSE("NSum[1/(1+(k-5*10^6-1/3)^2),{k,1,10^7}]",
+                 "N[Pi Sinh[2 Pi]/(Cosh[2 Pi]-Cos[2 Pi/3]),20]", 1e-6);
+    /* a broad peak (k e^(-k/10^5) peaks at 10^5): sum_{k=1}^n k r^k in closed form */
+    ASSERT_CLOSE("NSum[k Exp[-k/10^5],{k,1,10^7}]/10^10",
+                 "N[(Exp[-1/10^5] - (10^7+1) Exp[-(10^7+1)/10^5] + 10^7 Exp[-(10^7+2)/10^5])"
+                 "/(1-Exp[-1/10^5])^2/10^10, 30]", 1e-13);
+    /* complex summand */
+    ASSERT_CLOSE("NSum[(1+I)/k,{k,1,10^7}]", "(1+I) N[PolyGamma[0,10^7+1]+EulerGamma,30]", 1e-11);
+}
+
+/* Non-unit and negative steps, negative ranges, the empty range. */
+static void test_long_finite_steps(void) {
+    ASSERT_CLOSE("NSum[1/k^2,{k,1,10^6,2}]",
+                 "N[(PolyGamma[1,1/2]-PolyGamma[1,1/2+5 10^5])/4,30]", 1e-14);
+    ASSERT_CLOSE("NSum[1/k,{k,1,3*10^7,3}]",
+                 "N[(PolyGamma[0,1/3+10^7]-PolyGamma[0,1/3])/3,30]", 1e-12);
+    ASSERT_CLOSE("NSum[1/k,{k,10^7,1,-1}]", "N[PolyGamma[0,10^7+1]+EulerGamma,30]", 1e-12);
+    ASSERT_CLOSE("NSum[1/k^2,{k,-10^7,-1}]", "N[Zeta[2]-HurwitzZeta[2,10^7+1],30]", 1e-14);
+    ASSERT_CLOSE("NSum[1/k,{k,5,1}]", "0", 1e-300);
+}
+
+/* Summands that do not compile (PrimePi, Prime): the interpreter serves
+ * every term, the direct budget is smaller, and Euler-Maclaurin still applies
+ * where the summand extends off the integers. */
+static void test_long_finite_interpreted(void) {
+    ASSERT_CLOSE("NSum[1/(k+PrimePi[3]),{k,1,10^6}]",
+                 "N[PolyGamma[0,10^6+3]+EulerGamma-3/2,30]", 1e-12);
+    ASSERT_CLOSE("NSum[1/Prime[k],{k,1,2000}]", "N[Total[1/Prime[Range[2000]]],30]", 1e-13);
+    /* an integer-only summand past the hard cap has no verified method: the
+     * call stays unevaluated with NSum::nsum, never an extrapolation */
+    char* s = eval_str("Quiet[NSum[1/Prime[k],{k,1,10^9}]]");
+    ASSERT_MSG(strncmp(s, "NSum[", 5) == 0, "unevaluated, got %s", s);
+    free(s);
+    s = eval_str("Check[NSum[1/Prime[k],{k,1,10^9}], failed]");
+    ASSERT_MSG(strcmp(s, "failed") == 0, "Check sees NSum::nsum, got %s", s);
+    free(s);
+}
+
+/* WorkingPrecision -> 30 over a long finite range: compiled MPFR direct sum. */
+static void test_long_finite_working_precision(void) {
+    ASSERT_CLOSE("NSum[1/k,{k,1,10^5},WorkingPrecision->30]",
+                 "N[PolyGamma[0,10^5+1]+EulerGamma,40]", 1e-26);
+    char* s = eval_str("Precision[NSum[1/k,{k,1,10^5},WorkingPrecision->30]]");
+    ASSERT_MSG(strcmp(s, "30.") == 0 || strcmp(s, "30.0") == 0, "precision 30, got %s", s);
+    free(s);
+}
+
+/* Timing bound: the long-range paths stay fast (generous for CI load; each
+ * takes 2-30 ms on an M-series machine). */
+static void test_long_finite_timing(void) {
+    const char* cases[] = {
+        "First[AbsoluteTiming[NSum[1/k,{k,1,10^8}]]] < 1.5",
+        "First[AbsoluteTiming[NSum[1,{k,1,10^7}]]] < 1.5",
+        "First[AbsoluteTiming[NSum[1/(k+PrimePi[3]),{k,1,10^6}]]] < 1.5",
+        "First[AbsoluteTiming[NSum[1/k,{k,1,10^6}]]] < 1.5",
+    };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        char* s = eval_str(cases[i]);
+        ASSERT_MSG(strcmp(s, "True") == 0, "%s => %s", cases[i], s);
+        free(s);
+    }
+}
+
+/* Randomised agreement with exact closed forms: fixed seed, summand families
+ * with known finite sums, spans 10^3..10^7 (both the direct and the
+ * Euler-Maclaurin paths).  Every case must agree to 1e-11 relative. */
+static void test_long_finite_random(void) {
+    const char* prog =
+        "Module[{fam, res = {}},"
+        " SeedRandom[6513];"
+        " fam = {"
+        "  {Function[{k, c}, 1/(k + c)], Function[{a, b, c}, PolyGamma[0, b + 1 + c] - PolyGamma[0, a + c]]},"
+        "  {Function[{k, c}, 1/(k + c)^2], Function[{a, b, c}, PolyGamma[1, a + c] - PolyGamma[1, b + 1 + c]]},"
+        "  {Function[{k, c}, (k + c)^(-3/2)], Function[{a, b, c}, HurwitzZeta[3/2, a + c] - HurwitzZeta[3/2, b + 1 + c]]},"
+        "  {Function[{k, c}, Log[k + c]], Function[{a, b, c}, LogGamma[b + 1 + c] - LogGamma[a + c]]},"
+        "  {Function[{k, c}, Sqrt[k + c]], Function[{a, b, c}, HurwitzZeta[-1/2, a + c] - HurwitzZeta[-1/2, b + 1 + c]]},"
+        "  {Function[{k, c}, k^2 - c k], Function[{a, b, c}, (b (b + 1) (2 b + 1) - (a - 1) a (2 a - 1))/6 - c (b (b + 1) - (a - 1) a)/2]}};"
+        " Do[Module[{f = RandomChoice[fam], c = RandomInteger[{1, 99}]/RandomInteger[{1, 9}],"
+        "     a = RandomInteger[{1, 50}], b, v, x},"
+        "   b = a + Round[10^RandomReal[{3, 7}]] - 1;"
+        "   v = NSum[Evaluate[f[[1]][k, c]], {k, a, b}];"
+        "   x = N[f[[2]][N[a, 40], N[b, 40], N[c, 40]], 30];"
+        "   AppendTo[res, If[NumberQ[v], N[Abs[SetPrecision[v, 40] - x]/Abs[x]], Infinity]]],"
+        "  {24}];"
+        " Max[res]]";
+    char buf[4096];
+    snprintf(buf, sizeof buf, "(%s) < 10^-11", prog);
+    char* s = eval_str(buf);
+    if (strcmp(s, "True") != 0) {
+        char* m = eval_str(prog);
+        fprintf(stderr, "  random finite NSum: max rel err %s\n", m);
+        free(m);
+    }
+    ASSERT_MSG(strcmp(s, "True") == 0, "random finite NSum agreement, got %s", s);
+    free(s);
 }
 
 static void test_multidim(void) {
@@ -607,6 +750,13 @@ int main(void) {
     TEST(test_step_di);
     TEST(test_complex_summand);
     TEST(test_large_finite);
+    TEST(test_long_finite);
+    TEST(test_long_finite_oscillating);
+    TEST(test_long_finite_steps);
+    TEST(test_long_finite_interpreted);
+    TEST(test_long_finite_working_precision);
+    TEST(test_long_finite_timing);
+    TEST(test_long_finite_random);
     TEST(test_multidim);
     TEST(test_fast_decay);
     TEST(test_saturated_sequence);
