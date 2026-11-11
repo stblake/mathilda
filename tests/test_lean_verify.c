@@ -803,6 +803,11 @@ static void test_refute_verify(void) {
     /* With the Exact engine listed. */
     check_true("Quiet[Certify[(x+1)^3 == x^3+3x^2+2x+1, Engine -> {\"Lean\", \"Exact\"}]]"
                "[\"Refuted\"] === True");
+    /* The search honours an Assumptions the sum statement omits: n -> 2
+     * would refute the statement but not the claim for n > 3. */
+    assert_eval_eq("leanCN = Quiet[Certify[Sum[k, {k, 1, n}] == n^2, Assumptions -> n > 3]]; "
+                   "Null", "Null", 0);
+    check_true("leanCN[\"Verified\"] === False && leanCN[\"Counterexample\"] === {n -> 4}");
     /* Failure injection: a non-witness is refused, so nothing is attached. */
     assert_eval_eq("Lean`Private`$witnessOverride = {x -> 0}; "
                    "leanCW = Quiet[Certify[(x+1)^3 == x^3+3x^2+2x+1]]; "

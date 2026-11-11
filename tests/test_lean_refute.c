@@ -163,6 +163,41 @@ static void test_refusals(void) {
                    "Lean`Private`$witnessOverride = None; leanRw", "$Failed", 0);
 }
 
+/* A Domain / Assumptions that the refuted statement omits (only identity
+ * claims state them) must restrict the witness: a refutation is never
+ * reported for a claim other than the one stated.  x^2 >= x is true over
+ * the integers, so there is no counterexample; x -> 1/2 refutes it for
+ * x > 0. */
+static void test_domain_assumptions(void) {
+    test_mute_messages();
+    assert_eval_eq("Check[Refute[x^2 >= x, Assumptions -> Element[x, Integers], "
+                   "\"Verify\" -> False, \"SearchTime\" -> 2], \"none\", Refute::none]",
+                   "\"none\"", 0);
+    check_true("Quiet[Refute[x^2 >= x, \"Domain\" -> Integers, \"Verify\" -> False, "
+               "\"SearchTime\" -> 2]] === $Failed");
+    check_witness("x^2 >= x", "{x -> 1/2}");
+    check_witness("x^2 >= x, Assumptions -> x > 0", "{x -> 1/2}");
+    check_true("MemberQ[Refute[x^2 >= x, Assumptions -> x > 0, \"Verify\" -> False]"
+               "[\"TrustedSteps\"], s_String /; StringContainsQ[s, \"the witness satisfies x > 0\"]]");
+    /* No Certify::optignored any more: the options are honoured. */
+    check_true("Block[{$MessageList = {}}, Quiet[Refute[x^2 >= x, Assumptions -> x > 0, "
+               "\"Verify\" -> False]]; $MessageList] === {}");
+    /* Implication of equations: x -> -1 violates x > 0; x == 1 holds otherwise. */
+    check_true("Quiet[Refute[Implies[x^2 == 1, x == 1], Assumptions -> x > 0, "
+               "\"Verify\" -> False, \"SearchTime\" -> 2]] === $Failed");
+    /* Sums: the first n >= a that satisfies the assumption. */
+    check_witness("Sum[k, {k, 1, n}] == n^2", "{n -> 2}");
+    check_witness("Sum[k, {k, 1, n}] == n^2, Assumptions -> n > 3", "{n -> 4}");
+    /* The helper: identity claims state the options themselves (no "Assume"). */
+    check_true("!KeyExistsQ[Lean`Private`withAssume[<|\"Form\" -> \"Forall\", \"Vars\" -> {x}|>, "
+               "<|\"Kind\" -> \"Identity\"|>, <|\"Domain\" -> Integers, \"Assumptions\" -> x > 0|>], "
+               "\"Assume\"]");
+    check_true("Lean`Private`withAssume[<|\"Form\" -> \"Forall\", \"Vars\" -> {x, y}|>, "
+               "<|\"Kind\" -> \"Nonnegativity\"|>, <|\"Domain\" -> Integers, "
+               "\"Assumptions\" -> {x > 0}|>][\"Assume\"] === "
+               "Hold[And[Element[x, Integers], Element[y, Integers], x > 0]]");
+}
+
 /* Certify searches only after a kernel REJECTION: no Lean (or Verify ->
  * False) means no search and the usual 19 keys. */
 static void test_certify_no_lean(void) {
@@ -199,6 +234,7 @@ int main(void) {
     TEST(test_exact_only);
     TEST(test_lean_text);
     TEST(test_refusals);
+    TEST(test_domain_assumptions);
     TEST(test_certify_no_lean);
     TEST(test_helpers);
     printf("All Lean refutation tests passed.\n");

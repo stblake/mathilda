@@ -152,19 +152,36 @@ kernelWitnessQ[prob_, w_] := AllTrue[w[[All, 2]], If[prob["DomainForm"] === "Int
    the variables of S in order, domain membership, every denominator of the
    claim nonzero, the proposition False -- all by exact arithmetic. *)
 witnessOK[prob_, w_] := ListQ[w] && MatchQ[w, {___Rule}] &&
-  If[prob["Form"] === "Closed", w === {} && closedTruth[prob] === False,
+  If[prob["Form"] === "Closed", w === {} && assumeOK[prob, w] && closedTruth[prob] === False,
     w[[All, 1]] === prob["Vars"] &&
     AllTrue[w[[All, 2]], valueOK[prob["DomainForm"], #] &] &&
     AllTrue[prob["Dens"], refZero[ReleaseHold[# /. w]] === False &] &&
+    assumeOK[prob, w] &&
     Quiet[ReleaseHold[prob["Body"] /. w /. $refRelations]] === False];
+
+(* The Domain and Assumptions of the call, for a claim whose statement S
+   omits them (only identity claims state them; S is then stronger than the
+   claim, so a proof of S proves the claim, but a counterexample to S
+   refutes the claim only when it satisfies them).  The problem gains
+   "Assume" -> Hold[condition]; every witness must satisfy it exactly. *)
+withAssume[prob_, ir_, o_] := Module[{c = {}},
+  If[MemberQ[{"Identity", "Factorization"}, ir["Kind"]], Return[prob, Module]];
+  If[MemberQ[{Integers, Rationals, Reals, Complexes}, o["Domain"]],
+    c = Join[c, Element[#, o["Domain"]] & /@ prob["Vars"]]];
+  If[!MatchQ[o["Assumptions"], {} | True | Automatic],
+    c = Join[c, Flatten[{o["Assumptions"]} /. And -> List]]];
+  If[c === {}, prob, Join[prob, <|"Assume" -> Hold @@ {And @@ c},
+    "AssumeText" -> ToString[And @@ c, InputForm]|>]]];
+assumeOK[prob_, w_] := !KeyExistsQ[prob, "Assume"] ||
+  TrueQ[Quiet[ReleaseHold[prob["Assume"] /. w /. $refRelations]]];
 
 closedTruth[prob_] := If[TrueQ[prob["ClosedFact"]], Quiet[exClosed[prob["Statement"]]],
   Quiet[ReleaseHold[prob["Body"] /. $refRelations]]];
 
 (* The quick test of a rational grid point: denominators, then the
    proposition by Mathilda's (exact rational) evaluation. *)
-fastWitnessQ[prob_, w_] := Quiet[If[AllTrue[prob["Dens"], ReleaseHold[# /. w] =!= 0 &],
-  ReleaseHold[prob["Body"] /. w] === False, False]];
+fastWitnessQ[prob_, w_] := Quiet[If[AllTrue[prob["Dens"], ReleaseHold[# /. w] =!= 0 &] &&
+    assumeOK[prob, w], ReleaseHold[prob["Body"] /. w] === False, False]];
 
 (* ---------------------------------------------------------------------- *)
 (* The search (deterministic, no randomness)                                *)
@@ -204,7 +221,8 @@ negHeld[e_] := !e;
    list in the variables' order; None when it gives nothing. *)
 findWitness[prob_, dom_, t_] := Module[{cond, r},
   If[t <= 0, Return[None, Module]];
-  cond = (negHeld @@ prob["Body"]) && (And @@ ((ReleaseHold[#] != 0) & /@ prob["Dens"]));
+  cond = (negHeld @@ prob["Body"]) && (And @@ ((ReleaseHold[#] != 0) & /@ prob["Dens"])) &&
+    ReleaseHold[Lookup[prob, "Assume", Hold[True]]];
   r = TimeConstrained[Quiet[If[dom === All, FindInstance[cond, prob["Vars"]],
     FindInstance[cond, prob["Vars"], dom]]], t, None];
   If[MatchQ[r, {{__Rule}, ___}], Thread[prob["Vars"] -> (prob["Vars"] /. First[r])], None]];
@@ -249,6 +267,9 @@ check by the system that found it, not a kernel proof";
 $refAntiStep = "D[F, x] and f are rational numbers at the witness and differ (Mathilda's D \
 and exact arithmetic), so F is not an antiderivative of f; the claim Integrate[f, x] == F is \
 certified as D[F, x] == f";
+$refAssumeStep = "the witness satisfies `1` (the call's Domain and Assumptions, which the \
+refuted statement omits; checked by Mathilda's exact arithmetic), so it is a counterexample to \
+the claim as stated";
 $refAlgStep = "the nonzero tests at an algebraic witness: RootReduce and a 50-digit numerical \
 value (no kernel proof in core Lean for this witness)";
 
@@ -256,6 +277,7 @@ refutationIR[ir_, prob_, w_] := <|"Kind" -> "Refutation", "Input" -> ir["Input"]
   "Refuted" -> ir, "Problem" -> prob, "Witness" -> w, "Kernel" -> kernelWitnessQ[prob, w],
   "Statement" -> prob["Statement"], "Theorem" -> notHeld[prob["Statement"]],
   "TrustedSteps" -> Join[{$refStmtStep}, If[prob["Dens"] === {}, {}, {$refDensStep}],
+    If[KeyExistsQ[prob, "Assume"], {StringReplace[$refAssumeStep, "`1`" -> prob["AssumeText"]]}, {}],
     If[prob["Form"] === "Induction", {$refSumStep}, {}]]|>;
 
 (* The budget of the automatic search. *)
@@ -277,6 +299,7 @@ refuteAfterRejection[out_, items_List, vs_List, engines_List, o_] := Module[{res
   Do[
     If[AnyTrue[kern, vs[[#, j]]["Verified"] === False &],
       ir = items[[j]]["G"]; prob = refProblem[ir];
+      If[AssociationQ[prob], prob = withAssume[prob, ir, o]];
       If[AssociationQ[prob],
         w = searchCounterexample[prob, searchBudget[o["Counterexample"]]];
         If[w =!= None && witnessOK[prob, w],
@@ -337,7 +360,7 @@ refuteIR[hc_HoldComplete, o_] := If[!MatchQ[hc, $refuteShapes],
   Message[Refute::nostmt, Replace[hc, HoldComplete[e_] :> HoldForm[e]]]; $Failed,
   Block[{$statementOnly = True}, generate[hc, o]]];
 
-refuteClaim[hc_HoldComplete, opts_List] := Module[{o, rw, ir, prob, w, t0, ts, rir, input, ign},
+refuteClaim[hc_HoldComplete, opts_List] := Module[{o, rw, ir, prob, w, t0, ts, rir, input},
   t0 = AbsoluteTime[];
   o = refOptions[opts];
   If[o === $Failed, Return[$Failed, Module]];
@@ -352,10 +375,8 @@ refuteClaim[hc_HoldComplete, opts_List] := Module[{o, rw, ir, prob, w, t0, ts, r
   If[!AssociationQ[ir], Return[$Failed, Module]];
   prob = refProblem[ir];
   If[!AssociationQ[prob], Message[Refute::nostmt, input]; Return[$Failed, Module]];
-  If[!MemberQ[{"Identity", "Factorization"}, ir["Kind"]],
-    ign = Select[{"Domain" -> o["Domain"], Assumptions -> o["Assumptions"]},
-      !MatchQ[#[[2]], Automatic | {} | True] &];
-    Do[Message[Certify::optignored, r, ir["Kind"]], {r, ign}]];
+  (* A Domain / Assumptions the statement omits restricts the witness. *)
+  prob = withAssume[prob, ir, o];
   w = searchCounterexample[prob, searchBudget[o["SearchTime"]]];
   If[w === None || !witnessOK[prob, w], Message[Refute::none, input]; Return[$Failed, Module]];
   rir = Append[refutationIR[ir, prob, w], "Input" -> input];
