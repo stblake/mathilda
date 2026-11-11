@@ -39,7 +39,7 @@ static void test_indexed(void) {
 }
 
 static void test_directories(void) {
-    run("$RootDirectory", "/");
+    run("$RootDirectory", "\"/\"");
     run("$InitialDirectory === Directory[]", "True");
     run("StringQ[$InitialDirectory]", "True");
     run("MemberQ[Attributes[$InitialDirectory], Protected]", "True");
@@ -81,7 +81,8 @@ static void test_inheritedblock(void) {
     /* ... and every change is undone on exit. */
     run("{ibg[2], iby, Length[DownValues[ibg]]}", "{4, 7, 1}");
     /* Block, by contrast, starts from an unset symbol. */
-    run("Block[{iby}, iby]", "iby");
+    run("Block[{iby}, ValueQ[iby]]", "False");
+    run("Internal`InheritedBlock[{iby}, ValueQ[iby]]", "True");
     run("Internal`InheritedBlock[{iby}, iby]", "7");
     run("Internal`InheritedBlock[{iby = 2}, iby]", "2");
     run("iby", "7");
