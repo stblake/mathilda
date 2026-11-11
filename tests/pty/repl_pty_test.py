@@ -445,6 +445,24 @@ def smoke_interactive(tmp):
         s.close()
 
 
+@case
+def smart_return_continuation(tmp):
+    """An open bracket continues the line; closing it evaluates the whole."""
+    s = new_session(tmp)
+    try:
+        wait_prompt(s, 1)
+        s.send("f[\r")
+        s.drain(0.3)
+        check(b"Out[1]" not in s.buf, "f[ was submitted")
+        s.send("1]\r")
+        s.expect(r"Out\[1\]= f\[1\]")
+        wait_prompt(s, 2)
+        s.send("\x04")
+        check(s.exit_code() == 0, "Ctrl-D did not exit 0")
+    finally:
+        s.close()
+
+
 def harness_can_fail(tmp):
     """Deliberately wrong expectation: must FAIL (MATHILDA_PTY_SELFTEST=1)."""
     s = new_session(tmp)

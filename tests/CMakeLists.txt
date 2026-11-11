@@ -6605,3 +6605,16 @@ if(PYTHON3_EXE)
              WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
     set_tests_properties(repl_pty_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
 endif()
+# The readline adapter (term_readline.c) is deliberately absent: tests link no
+# readline, exactly as libmathilda.a omits it.
+target_sources(mathilda_common PRIVATE
+    ../src/term/term_lex.c)
+add_executable(term_lex_tests test_term_lex.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(term_lex_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(term_lex_tests gmp m ${ECM_LIB})
+    add_dependencies(term_lex_tests build_ecm)
+else()
+    target_link_libraries(term_lex_tests gmp m)
+endif()
+add_test(NAME term_lex_tests COMMAND term_lex_tests)

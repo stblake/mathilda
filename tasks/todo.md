@@ -1447,7 +1447,7 @@ Branch feat/repl-modernize (worktree mathilda-repl). Rules for this PR:
 - The src/term/term_interrupt.h API (mth_interrupt_pending / mth_interrupt_request) is fixed for other branches.
 
 - [x] Phase 0: baseline worktree /tmp/mathilda-pr1-base (7e7bc9fb) built; tests/pty/repl_pty_test.py; goldens recorded from baseline; appended CMake block with repl_pty_test (skip 77); harness_can_fail seen failing
-- [ ] Phase 1: makefile SRC += src/term, LIB_OBJ filters term_readline.o; term_lex (mth_input_complete moved, lexer context); term_lex_tests; nm libmathilda.a has no rl_ refs
+- [x] Phase 1: makefile SRC += src/term, LIB_OBJ filters term_readline.o; term_lex (mth_input_complete moved, lexer context); term_lex_tests; nm libmathilda.a has no rl_ refs
 - [ ] Phase 2: term_interrupt.{c,h} flag API (§4.1); eval poll (loop + stamp fast path); CheckAbort clears; AbortProtect honours; top-level clear; tc_deadline_passed interrupt-aware after the 44-site audit (A/B table in commit body); message gate; Pause sliced; Raylib loops; interrupt_tests (13 cases); kernel suites; perf gate ≤ +1% or noise floor
 - [ ] Phase 3: term_interrupt handler (SA_RESTART, 3 states, double Ctrl-C within 1 s gives _Exit(130)); term_input seam + stdio backend; term_readline (GNU signal hook, libedit degraded); repl.c single loop and Dialog reader; banner; term_interrupt_tests; pty ctrlc_* cases; USE_READLINE=0 builds; manual libedit check
 - [ ] Phase 4: term_history (own escaped format, 0600, truncate at load, MATHILDA_HISTFILE / MATHILDA_HISTSIZE); readline feed; Dialog entries; term_history_tests; pty history_* cases
