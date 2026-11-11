@@ -2,7 +2,7 @@
 
 Mathilda can hand its answers to the [Lean 4](https://lean-lang.org) theorem prover for checking. `Certify` computes a result, writes a self-contained Lean 4 file that states the result as a theorem with a proof script, and runs the Lean kernel on it. The answer is a `ProofObject`.
 
-**Trust model.** Mathilda is an untrusted oracle and the Lean kernel is the trusted checker. `"Verified" -> True` means that Lean accepted the theorem with no `sorry` and with no axiom outside `{propext, Classical.choice, Quot.sound}`. Each `ProofObject` also lists its `"TrustedSteps"`: the facts that Lean did **not** check for that kind of certificate, such as the `Together` normal form used to clear denominators, or the irreducibility of the factors of a `Factor` result. When the theorem is the whole claim, the list is empty.
+**Trust model.** Mathilda is an untrusted oracle and the Lean kernel is the trusted checker. `"Verified" -> True` means that Lean accepted the theorem with no `sorry` and with no axiom outside `{propext, Classical.choice, Quot.sound}`. Each `ProofObject` also lists its `"TrustedSteps"`: the facts that Lean did **not** check for that kind of certificate, such as the `Together` normal form used to clear denominators, or the irreducibility of the factors of a `Factor` result. When the theorem is the whole claim, the list is empty. Only Lean can make `"Verified"` `True`: the heuristic engine (`Engine -> "Mathilda"`) reports `Missing["Heuristic", True | False]`, never `True`.
 
 Lean is optional. With no Lean installed, `Certify[..., Verify -> False]` still generates the Lean source and the statement, and `"Verified"` is `Missing["NotChecked"]`. Tier 0 certificates need only core Lean 4 (v4.35 or newer, for `grind`) and no Mathlib. The package lives in `src/internal/lean/` (`Lean.m`, and `Prelude.lean`, which is inlined into every generated file). The C side is `src/print_lean.c` (LeanForm) and `src/lean_run.c` (the runner).
 
@@ -34,7 +34,7 @@ Out[3]= "[fun x => x + 1, (3 / 4) * a, Real.log b, f (-3)]"
 ```
 
 ### `` Lean`Internal`ToLean ``
-`` Lean`Internal`ToLean[expr, type, coreOnly, {heads...}] `` is the **strict** translator that the certificate generators use. It is internal to the package: the C pieces (`` Lean`Internal`ToLean ``, `` Lean`Internal`RunProcess ``, `` Lean`Internal`VerifySource ``) live in a context that is not on `$ContextPath`, so their short names never capture another package's symbols. `type` is `"Int"`, `"Rat"`, `"Real"` or `None`: it types the binders (`∀ x : Rat, …`), ascribes rational literals (`(3 / 4 : Rat)`), and ascribes the left side of a relation between numbers (`(2 + 2 : Int) = 4`) so that numerals do not default to `Nat`. `heads` lists the Lean names that may appear as applied functions. Unlike the display form, it **refuses** every node whose Lean text would not mean the same thing as the Mathilda expression, giving `$Failed` and `LeanForm::untrans`:
+`` Lean`Internal`ToLean[expr, type, coreOnly, {heads...}, closed] `` (`closed` optional, default `False`) is the **strict** translator that the certificate generators use. It is internal to the package: the C pieces (`` Lean`Internal`ToLean ``, `` Lean`Internal`RunProcess ``, `` Lean`Internal`VerifySource ``) live in a context that is not on `$ContextPath`, so their short names never capture another package's symbols. `type` is `"Int"`, `"Rat"`, `"Real"` or `None`: it types the binders (`∀ x : Rat, …`), ascribes rational literals (`(3 / 4 : Rat)`), and ascribes the left side of a relation between numbers (`(2 + 2 : Int) = 4`) so that numerals do not default to `Nat`. `heads` lists the Lean names that may appear as applied functions. Unlike the display form, it **refuses** every node whose Lean text would not mean the same thing as the Mathilda expression, giving `$Failed` and `LeanForm::untrans`:
 
 | Refused | Reason |
 |---|---|
@@ -45,6 +45,11 @@ Out[3]= "[fun x => x + 1, (3 / 4) * a, Real.log b, f (-3)]"
 | `Infinity`, `Indeterminate`, `ComplexInfinity` | `infinite or indeterminate quantity` |
 | `f[x]` with `f` not in `heads` | `no Lean counterpart for this head` |
 | `#^2 &` | `pure function with Slot` |
+| a symbol whose name contains `«`, `»` or a control character | it could close the `«…»` escape early |
+| two distinct symbols with the same Lean text | they would become one Lean variable |
+| with `closed` `True`: a symbol not bound by an enclosing `ForAll` / `Exists` / `Function` and not in `heads` | `free variable (not bound by a quantifier)`; a free `default` or `id` would silently mean Lean's global |
+
+Every theorem statement a generator emits is translated with `closed -> True`; open pieces (the `have` steps of a proof, after `intro`) are not.
 
 `Format` rules do not apply in the strict form, so a display rule can never change the statement handed to Lean.
 
@@ -55,13 +60,13 @@ Out[3]= "[fun x => x + 1, (3 / 4) * a, Real.log b, f (-3)]"
 - Supported in this release (`"Kind"`):
   - `"Identity"`: claims `a == b`, and `Expand`, `Collect`, `Together`, `Apart`, `Cancel`, `Simplify`, `FullSimplify`. For a computation, the claim is `input == result`, with the input taken from the held call, so it is the user's expression that is proved equal.
   - `"Factorization"`: `Factor`, `FactorTerms`. `"TrustedSteps" -> {"irreducibility of the factors (not certified)"}`.
-- **Polynomial identities** are stated as `∀ x y : T, a = b` over the sorted `Variables`, with `T` being `Int` when every coefficient is an integer and there is no division, and `Rat` otherwise. The proof is `by intros; grind`.
+- **Polynomial identities** are stated as `∀ x y : T, a = b` over the sorted `Variables`, with `T` being `Int` when every coefficient is an integer, there is no division **and there are no hypotheses**, and `Rat` otherwise. A hypothesis-free integer polynomial identity that holds over `Int` holds in every commutative ring, so `Int` loses nothing there; with `Assumptions` an `Int` statement could be much weaker than intended, even vacuous (`∀ x : Int, 2 * x = 1 → x = 0`), so the automatic domain is then `Rat`. `Domain -> Integers` is still honoured and shown in `"Domain"`. The proof is `by intros; grind`.
 - **Rational-function identities** are cleared: with `a = na/da` and `b = nb/db` (`Together`), the theorem is the polynomial identity `na * db = nb * da`. `"Hypotheses"` records `da ≠ 0` and `db ≠ 0` (informational in Tier 0), and `"TrustedSteps"` records the `Together` normal form.
 - `"Antiderivative"`: `Integrate[f, x]` with `f` a rational function of `x` over ℚ (see [Antiderivatives](#antiderivatives-tier-0)).
   - `"Bezout"`: `PolynomialExtendedGCD[a, b, x]` → `{g, {s, t}}`. The theorem is `∀ x, s·a + t·b = g ∧ a = g·qa ∧ b = g·qb`, with the quotients from `PolynomialQuotient`. It proves that `g` is a common divisor and a combination of `a` and `b`, so every common divisor divides `g`: `g` is a gcd. `"TrustedSteps" -> {}`.
   - `"IdealMembership"`: `PolynomialReduce[q, {p1, …}, vars]` → `{{c1, …}, r}` is certified as the division identity `∀ vars, q = c1·p1 + … + r` (`"TrustedSteps"` notes that the remainder being fully reduced is not certified). The claim `Implies[p1 == q1 && …, p == q]` is certified with cofactors `c_i` such that `p - q = Σ c_i (p_i - q_i)`: from `PolynomialReduce` when its remainder is 0, otherwise from a degree-bounded ansatz (degree 0 to 4) whose coefficient equations are solved by `LinearSolve`. The proof is `have k_i : p_i - q_i = 0`, `have hc : p - q = Σ c_i * (p_i - q_i)`, `rw [k_i] at hc`, `grind`.
-  - `"Roots"`: `Solve[eqs, vars]` with rational solutions. A single univariate polynomial equation that splits over ℚ is certified **complete**: `∀ x : Rat, lhs = rhs ↔ x = r1 ∨ … ∨ x = rk`, through the factorization `lhs - rhs = lc · Π (x - r_i)^m_i` (`"Certificate"` has `"Roots"` and `"Multiplicities"`). Otherwise (systems, or a polynomial with irreducible non-linear factors) only **soundness** is certified: every solution substituted into every equation, checked by `decide +kernel`, with completeness listed in `"TrustedSteps"`. Radical or complex roots have no certificate yet.
-  - `"MatrixInverse"`, `"Determinant"`, `"LinearSolve"`, `"NullSpace"`: `Inverse[A]`, `Det[A]` (n ≤ 6), `LinearSolve[A, b]` and `NullSpace[A]` for matrices of rational numbers. The theorems use the prelude's `Mathilda.matMul`, `Mathilda.idMat`, `Mathilda.det` (Laplace expansion) and `Mathilda.matVec`, and the kernel evaluates them (`decide +kernel`): `matMul A B = idMat n ∧ matMul B A = idMat n`, `det A = d`, `matVec A x = b`, and `matVec A v = 0` for each basis vector (`NullSpace`'s completeness is a trusted step).
+  - `"Roots"`: `Solve[eqs, vars]` with rational solutions. A single univariate polynomial equation that splits over ℚ is certified **complete**: `∀ x : Rat, lhs = rhs ↔ x = r1 ∨ … ∨ x = rk`, through the factorization `lhs - rhs = lc · Π (x - r_i)^m_i` (`"Certificate"` has `"Roots"` and `"Multiplicities"`). Otherwise (systems, inequality / `Unequal` constraints, a polynomial with irreducible non-linear factors, or division) only **soundness** is certified: every solution substituted into **every constraint** (`==`, `!=`, `<`, `<=`, `>`, `>=`, joined by `&&` or a list), checked by `decide +kernel`, with completeness listed in `"TrustedSteps"`. Lean's `x / 0 = 0` would otherwise accept a "solution" that zeroes a denominator (`Solve[(x-1)/(x^2-1) == (x-1)/(2x-2), x]` returns the spurious `x -> 1`), so every denominator of the system is also stated nonzero at every solution (`"Certificate"["Denominators"]`); the spurious root is then `False`. Completeness needs a single polynomial equation with no other constraint and no division. A system with `||`, `Element` or any other head, or a symbol other than the variables, has no certificate. Radical or complex roots have no certificate yet.
+  - `"MatrixInverse"`, `"Determinant"`, `"LinearSolve"`, `"NullSpace"`: `Inverse[A]`, `Det[A]` (n ≤ 6), `LinearSolve[A, b]` and `NullSpace[A]` for matrices of rational numbers. The theorems use the prelude's `Mathilda.matMul`, `Mathilda.idMat`, `Mathilda.det` (Laplace expansion) and `Mathilda.matVec`, and the kernel evaluates them (`decide +kernel`): `matMul A B = idMat n ∧ matMul B A = idMat n`, `det A = d`, `matVec A x = b`, and `matVec A v = 0` for each basis vector (`NullSpace`'s completeness is a trusted step). These functions use `zipWith` / `getD`, which silently truncate or pad ragged input, so every statement also fixes the shapes with `Mathilda.HasShape A r c` (`r` rows of `c` entries) and `Mathilda.HasLength v n`: `HasShape A n n ∧ HasShape B n n ∧ …`, `HasShape A n n ∧ det A = d`, `HasShape A m n ∧ HasLength x n ∧ matVec A x = b`, and `HasLength v n ∧ matVec A v = 0` per basis vector.
   - `"Nonnegativity"`: claims `ForAll[vars, p >= q]` (or `<=`, or a bare `p >= q`), optionally with hypotheses `ForAll[vars, g1 >= 0 && …, p >= q]` or `Implies[g1 >= 0 && …, p >= q]` (see [Sums of squares and optimality](#sums-of-squares-and-optimality)).
   - `"Optimality"`: `Minimize[{f, cons…}, vars]` and `Maximize[…]` with a polynomial objective, linear equalities and polynomial (non-strict) inequalities.
   - `"Primality"`: `PrimeQ[n]` and `FactorInteger[n]` (see [Primality](#primality)).
@@ -152,7 +157,7 @@ Out[3]= "by
 ```
 
 ### Primality
-A flat Pratt certificate lists steps `(p, a, factors of p - 1)` in dependency order, with 2 as the base. The kernel evaluates the prelude's `Mathilda.prattCheck` with `decide +kernel`. The witness `a` is `PrimitiveRoot[p]`, or the first `a ≥ 2` that satisfies Lucas's conditions (checked with `PowerMod`).
+A flat Pratt certificate lists steps `(p, a, factors of p - 1)` in dependency order, with 2 as the base. The kernel evaluates the prelude's `Mathilda.prattCheck` with `decide +kernel`. The witness `a` is `PrimitiveRoot[p]`, or the first `a ≥ 2` that satisfies Lucas's conditions (checked with `PowerMod`). Each step checks `2 < p`, that the listed factors multiply out to exactly `p - 1` (`prodPow fs = p - 1`, so no prime factor can be left out), `a^(p-1) ≡ 1`, `a^((p-1)/q) ≢ 1` for every listed `q`, and that every `q` is an earlier step (or 2). `Mathilda.powMod` is exact for every exponent: its fuel is `e + 1`, which bounds the `log2 e + 1` halving steps (an earlier fixed fuel of 256 bits accepted the composite `2^256 + 1` with the certificate `[(2, 256)]`). The kernel only unfolds as many fuel steps as there are bits, so large exponents cost nothing extra: `PrimeQ[51 2^257 + 1]` checks in well under a second, and `PrimeQ[NextPrime[2^256]]` is `True` after about 118 s, nearly all of it Mathilda finding the certificate (`PrimitiveRoot` for the 39-digit factor of `p - 1`); Lean takes 0.8 s.
 
 - `Certify[FactorInteger[n]]` emits one lemma `theorem mathilda_cert_1_pratt_i : Mathilda.PrattCertifies p cert` per odd prime factor. The theorem is `n = Π p^k ∧ (∃ c, Mathilda.PrattCertifies p c) ∧ …`.
 - `Certify[PrimeQ[n]]` proves `Mathilda.PrattCertifies n cert` for a prime `n`. For a composite `n` it proves `¬ PrimeQ[n]` through a factor witness `n = a * b ∧ 1 < a ∧ a < n`; for `n < 2` it proves `n < 2`.
@@ -165,7 +170,7 @@ Out[2]= {True, "18446744073709551617 = 274177 * 67280421310721 ∧ (∃ c, Mathi
 ```
 
 ### Closed-form sums
-`Certify[Sum[t, {k, a, n}]]` takes a non-negative integer `a` and a term `t` that is a polynomial in `k`, or a polynomial times `c^k` for a rational `c`. It certifies Mathilda's closed form. For a claim `Sum[t, {k, a, n}] == closed`, it certifies the claimed form instead. Lean defines
+`Certify[Sum[t, {k, a, n}]]` takes a non-negative integer `a` and a term `t` that is a polynomial in `k`, or a polynomial times `c^k` for a rational `c`. A term with a denominator in `k` (or a closed form with a denominator in `n`) has no certificate: the denominator could vanish inside the range, where Lean's `x / 0 = 0` would give the sum a junk value. It certifies Mathilda's closed form. For a claim `Sum[t, {k, a, n}] == closed`, it certifies the claimed form instead. Lean defines
 
 ```lean
 def mathilda_cert_1_t (k1 : Nat) : Rat := …
@@ -188,14 +193,14 @@ Out[2]= False
 
 | Option | Default | Meaning |
 |---|---|---|
-| `Engine` | `"Lean"` | `"Lean"`, or `"Mathilda"`: a heuristic check through `PossibleZeroQ` / `Simplify` (`"Tier" -> "Heuristic"`), for contrast. Anything else issues `Certify::engine` and returns `$Failed`. |
+| `Engine` | `"Lean"` | `"Lean"`, or `"Mathilda"`: a heuristic check through `PossibleZeroQ` / `Simplify` (`"Tier" -> "Heuristic"`, `"Verified" -> Missing["Heuristic", True \| False]`; the summary box reads `Mathilda Heuristic`). A heuristic answer is **not** a verification. Anything else issues `Certify::engine` and returns `$Failed`. |
 | `Tier` | `Automatic` | `0` (core Lean), `1` (Mathlib; needs `$LeanProject`, otherwise `Certify::nomathlib`) or `Automatic`. |
 | `Domain` | `Automatic` | `Integers`, `Rationals` or `Reals`. `Reals` needs Tier 1 (`Certify::tier` without a project). |
-| `Method` | `Automatic` | The tactic: `"grind"`, `"decide"`, `"omega"`, or any Lean tactic string. It goes into the Lean source file only, never into a shell command. |
+| `Method` | `Automatic` | The tactic: `"grind"`, `"decide"`, `"omega"`, or a tactic script string. It goes into the Lean source file only, never into a shell command. A script is refused (`Certify::method`, `$Failed`) when it contains a tab, a control character, `«`, `»`, a backquote, `$`, `#`, `@[`, `--`, `/-` or `"`, or uses a command keyword or meta-level escape as a word (`theorem`, `def`, `example`, `macro`, `syntax`, `elab`, `set_option`, `attribute`, `open`, `namespace`, `section`, `end`, `axiom`, `run_tac`, `native_decide`, `sorry`, `Lean`, `IO`, …). Every line is indented under `by`, and each item with a script runs in a Lean file of its own. |
 | `TimeConstraint` | `60` | Seconds, mapped to `set_option maxHeartbeats (40000 t) in` on the theorem. This is a deterministic resource bound, not a wall-clock kill. |
-| `Assumptions` | `{}` | Extra hypotheses: `Assumptions -> {x == 1}` gives `∀ x : Int, x = 1 → …`. |
+| `Assumptions` | `{}` | Extra hypotheses: `Assumptions -> {x == 1}` gives `∀ x : Rat, x = 1 → …` (hypotheses make the automatic domain `Rat`; variables that occur only in the assumptions are bound as well). |
 
-`Domain`, `Method` and `Assumptions` apply to identity claims (`a == b` and the `"Identity"` / `"Factorization"` computations). The other kinds choose their own proof script and number type, and take their hypotheses from the claim itself (`Implies[...]`, `ForAll[vars, cond, ...]`).
+`Domain`, `Method` and `Assumptions` apply to identity claims (`a == b` and the `"Identity"` / `"Factorization"` computations). The other kinds choose their own proof script and number type, and take their hypotheses from the claim itself (`Implies[...]`, `ForAll[vars, cond, ...]`); a claim with hypotheses is always stated over `Rat`. The option names `Engine`, `Tier`, `Domain`, `Verify`, `KeepFiles`, `LeanExecutable` and `LeanProject` live in `` Lean` `` (on `$ContextPath`) and are deliberately **not** `Protected`, so that a package that happens to use one of these short names still works.
 | `Verify` | `True` | `False` generates the source without running Lean (`"Verified" -> Missing["NotChecked"]`). |
 | `LeanExecutable` | `Automatic` | Overrides `$LeanExecutable` for one call. |
 | `LeanProject` | `Automatic` | Overrides `$LeanProject` for one call (`None` forces no project). |
@@ -229,7 +234,11 @@ Out[2]= False
 | `"Cached"` | Whether the verdict came from the session cache |
 | `"LeanVersion"` | `lean --version` of the checker that ran |
 
-**The `"Verified" -> True` contract.** All of these must hold: Lean's exit code is 0; no message has severity `error`; no message has kind `hasSorry`; and the theorem's `#print axioms` report (appended by the generator) names only `propext`, `Classical.choice` and `Quot.sound`. `sorryAx`, and the auxiliary axiom that `native_decide` adds, both fail the last test. An error in the theorem's own lines, or outside every theorem (the header or the prelude), makes it `False`.
+**The `"Verified" -> True` contract.** The generated file is: a header (`set_option autoImplicit false`), the prelude, the theorem chunks (`theorem mathilda_cert_k`, with any auxiliary declarations), and then a **trusted footer** after all chunks with, for each theorem, `example : <statement> := mathilda_cert_k` (the statement is re-elaborated and must be the theorem's type, so a chunk cannot pass by declaring something else under that name) and `#print axioms mathilda_cert_k`. A theorem is `True` only when all of these hold:
+1. no message of severity `error` and no `hasSorry` message lies in its chunk or in its footer lines;
+2. no such message lies outside every chunk and footer (header, prelude);
+3. the `#print axioms` report printed **on its own footer line** (a report anywhere else is ignored) names only `propext`, `Classical.choice` and `Quot.sound` — `sorryAx` and the auxiliary axiom `native_decide` adds fail this;
+4. Lean exited with code 0, or every error it reported lies in some theorem's lines (a non-zero exit is then explained by sibling theorems of the batch, which are `False`).
 
 ```mathematica
 In[1]:= Certify[Factor[x^4 - 1]]
@@ -248,16 +257,18 @@ Out[3]= False
 ```mathematica
 In[4]:= c = (1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x;
 In[5]:= {Certify[c, Engine -> "Mathilda"]["Verified"], Quiet[Certify[c]["Verified"]]}
-Out[5]= {True, False}
+Out[5]= {Missing["Heuristic", True], False}
 ```
 
 ## LeanVerify
-- `LeanVerify[src]`: checks the Lean 4 source string `src` and gives `<|"Success", "ExitCode", "Messages", "Axioms", "Timing", "Command"|>`.
+- `LeanVerify[src]`: checks the Lean 4 source string `src` and gives `<|"Success", "ExitCode", "Messages", "Axioms", "AxiomReports", "Timing", "Command"|>`.
 
 **Features**:
 - `Protected`. Options `LeanExecutable`, `LeanProject` and `KeepFiles` (`True` keeps the temporary `.lean` file and returns its path as `"SourceFile"`).
-- A `#print axioms` line is appended for every `theorem` the source declares and does not already report. `"Success"` applies the `Verified` contract to the whole file, and also requires an axiom report for every declared theorem. A `sorry` or a `native_decide` proof gives `False`. `example`s cannot be axiom-checked.
-- `"Messages"` is a list of `<|"Severity", "Kind", "Line", "Text"|>` parsed from `lean --json`. `"Axioms"` maps each theorem name to its axioms.
+- **Refused sources.** A source that mentions (as a word, anywhere, comments included) `axiom`, `native_decide`, `implemented_by`, `extern`, `unsafe`, `ofReduceBool`, `trustCompiler`, `debug` (e.g. `set_option debug.skipKernelTC`), `run_cmd`, `run_tac`, `run_elab`, `run_meta`, `by_elab`, `elab`, `elab_rules`, `macro`, `macro_rules`, `syntax`, `declare_syntax_cat`, `initialize`, `builtin_initialize` or `addDeclWithoutChecking`, or contains `#eval`, `#exit` or `#reduce`, is **not run**: `LeanVerify::unsafe`, `"Success" -> False`, `"ExitCode" -> Missing["NotRun"]` and `"Rejected"` listing the constructs. These can add unchecked axioms, bypass the kernel, run code at elaboration time or forge an axiom report. `LeanVerify` is a checker for plain proof sources; `Certify` is the trusted path.
+- Every `example` is renamed to `noncomputable def _root_.mathilda_example_k` (same line), so its axioms are checked too. Every declared `theorem`, `lemma`, `def`, `abbrev`, `instance` (named) and renamed example — with its namespace prefix, tracked through `namespace` / `section` / `mutual` … `end` — gets a `#print axioms` line in a footer appended after the source.
+- `"Success"` is `True` only when Lean's exit code is 0, no message has severity `error` or kind `hasSorry`, every reported axiom list is standard, and every declared name has a standard axiom report **printed on its own footer line**. Anonymous instances are covered only by the error / `sorry` checks.
+- `"Messages"` is a list of `<|"Severity", "Kind", "Line", "Text"|>` parsed from `lean --json`. `"Axioms"` maps each reported name to its axioms; `"AxiomReports"` lists every report as `<|"Theorem", "Line", "Axioms"|>`.
 - With a project (`LeanProject`), the command is `cd project && <lake> env <lean> --json FILE`, where `<lake>` is the `lake` binary beside the Lean executable.
 - `LeanVerify::nolean` is issued when no Lean executable can be run. `LeanVerify::badpath` is issued when a path cannot be quoted safely for the shell (Windows `cmd.exe` only), and `LeanVerify::fail` when the process could not be started.
 
@@ -269,7 +280,7 @@ In[2]:= LeanVerify["theorem nd : 2 + 2 = 4 := by native_decide"]["Success"]
 Out[2]= False
 ```
 
-**Process execution.** Lean runs through ISO C `system()`. The command line holds only executable paths, flags written by Mathilda and temp-file paths, each single-quoted for the POSIX shell (with `set -C`, so the output redirections never follow a planted file). The Lean source, claims and tactic strings are always written to the `.lean` file. Temp files go in `$TemporaryDirectory` and are removed afterwards. `system()` blocks, and `TimeConstrained` measures this process's CPU time, so it does not interrupt a Lean run. The bound on a run is the deterministic `maxHeartbeats` of each theorem.
+**Process execution.** Lean runs through ISO C `system()`. The command line holds only executable paths, flags written by Mathilda and temp-file paths, each single-quoted for the POSIX shell (with `set -C`, so the output redirections never follow a planted file). The Lean source, claims and tactic strings are always written to the `.lean` file. Each run creates a private directory with `mkdtemp` (mode `0700`) under `$TemporaryDirectory`; the source is written there with `O_CREAT | O_EXCL | O_NOFOLLOW` (mode `0600`) and the shell's redirections create the output files there, so no other user can plant a file or a symlink, and the output parsed is the one this run wrote (a missing output file is a failure). The directory is removed afterwards (with `KeepFiles -> True`, the source and its directory are kept). Windows has no `mkdtemp` in its C runtime and keeps a probed fresh name in the temp directory. `system()` blocks, and `TimeConstrained` measures this process's CPU time, so it does not interrupt a Lean run. The bound on a run is the deterministic `maxHeartbeats` of each theorem.
 
 ## Settings
 - `$LeanExecutable`: `Automatic`, or a path. `Automatic` tries, in order, the environment variable `MATHILDA_LEAN`, the newest `~/.elan/toolchains/*/bin/lean` (called directly, so no `lean-toolchain` file is needed), and `lean` on `PATH`. The first hit is remembered for the session.

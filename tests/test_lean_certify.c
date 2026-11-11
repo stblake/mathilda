@@ -93,8 +93,18 @@ static void test_rational_identity(void) {
 }
 
 static void test_options(void) {
+    /* Hypotheses: the automatic domain is Rat (over Int an implication can be
+     * vacuous); Domain -> Integers is honoured and labelled. */
     check_str("Certify[x^2 == x, Assumptions -> {x == 1}, Verify -> False][\"LeanTheorem\"]",
-              "\xE2\x88\x80 x : Int, x = 1 \xE2\x86\x92 x ^ 2 = x");
+              "\xE2\x88\x80 x : Rat, x = 1 \xE2\x86\x92 x ^ 2 = x");
+    check_true("Certify[x == 0, Assumptions -> 2 x == 1, Verify -> False][\"Domain\"] === "
+               "Rationals");
+    check_true("Certify[x == 0, Assumptions -> 2 x == 1, Domain -> Integers, Verify -> False]"
+               "[\"Domain\"] === Integers");
+    check_true("Certify[x + 1 == 1 + x, Verify -> False][\"Domain\"] === Integers");
+    /* Variables that occur only in the assumptions are bound too. */
+    check_str("Certify[x == x, Assumptions -> y > 0, Verify -> False][\"LeanTheorem\"]",
+              "\xE2\x88\x80 x y : Rat, y > 0 \xE2\x86\x92 x = x");
     check_true("StringContainsQ[Certify[x == x, TimeConstraint -> 5, Verify -> False]"
                "[\"LeanSource\"], \"set_option maxHeartbeats 200000 in\"]");
     check_str("Certify[x == x, Method -> \"omega\", Verify -> False][\"ProofScript\"]",
@@ -198,13 +208,22 @@ static void test_algebra(void) {
 
 /* Rows 8-10: matrices, checked by kernel evaluation of the prelude. */
 static void test_matrices(void) {
+    /* Every matrix statement states the shapes (matMul / matVec zipWith would
+     * silently truncate ragged input). */
     check_str("Certify[Det[{{2,1},{1,1}}], Verify -> False][\"LeanTheorem\"]",
+              "Mathilda.HasShape [[2, 1], [1, 1]] 2 2 \xE2\x88\xA7 "
               "Mathilda.det [[2, 1], [1, 1]] = 1");
     check_str("Certify[LinearSolve[{{2,1},{1,3}},{3,5}], Verify -> False][\"LeanTheorem\"]",
+              "Mathilda.HasShape [[2, 1], [1, 3]] 2 2 \xE2\x88\xA7 "
+              "Mathilda.HasLength [(4 / 5 : Rat), (7 / 5 : Rat)] 2 \xE2\x88\xA7 "
               "Mathilda.matVec [[2, 1], [1, 3]] [(4 / 5 : Rat), (7 / 5 : Rat)] = [3, 5]");
     check_true("StringStartsQ[Certify[Inverse[{{2,1},{1,1}}], Verify -> False]"
-               "[\"LeanTheorem\"], \"Mathilda.matMul [[2, 1], [1, 1]] [[1, -1], [-1, 2]] = "
+               "[\"LeanTheorem\"], \"Mathilda.HasShape [[2, 1], [1, 1]] 2 2 \xE2\x88\xA7 "
+               "Mathilda.HasShape [[1, -1], [-1, 2]] 2 2 \xE2\x88\xA7 "
+               "Mathilda.matMul [[2, 1], [1, 1]] [[1, -1], [-1, 2]] = "
                "Mathilda.idMat 2 \xE2\x88\xA7 \"]");
+    check_true("StringCount[Certify[NullSpace[{{1,2,3},{2,4,6}}], Verify -> False]"
+               "[\"LeanTheorem\"], \"Mathilda.HasLength\"] === 2");
     check_true("Certify[NullSpace[{{1,2,3},{2,4,6}}], Verify -> False][\"Kind\"] === "
                "\"NullSpace\"");
     check_true("Certify[Inverse[{{2,1},{1,1}}], Verify -> False][\"ProofScript\"] === "
@@ -223,7 +242,7 @@ static void test_batch(void) {
     check_true("leanBa[[1]][\"LeanSource\"] === leanBa[[2]][\"LeanSource\"]");
     check_true("Certify[{}] === {}");
     check_true("Certify[{x == x, Integrate[1/x, x]}, Engine -> \"Mathilda\"][[2]]"
-               "[\"Verified\"] === True");
+               "[\"Verified\"] === Missing[\"Heuristic\", True]");
 }
 
 static void test_heuristic_engine(void) {
@@ -232,10 +251,14 @@ static void test_heuristic_engine(void) {
      * that Lean says False. */
     assert_eval_eq("leanH = Certify[(1+x)^20 == Expand[(1+x)^20] - 10^-25 x, "
                    "Engine -> \"Mathilda\"]; Null", "Null", 0);
-    check_true("leanH[\"Verified\"] === True && leanH[\"Tier\"] === \"Heuristic\" && "
-               "leanH[\"Engine\"] === \"Mathilda\"");
+    /* "Verified" is never True without Lean: the heuristic answer is carried
+     * as Missing["Heuristic", True | False]. */
+    check_true("leanH[\"Verified\"] === Missing[\"Heuristic\", True] && "
+               "leanH[\"Tier\"] === \"Heuristic\" && leanH[\"Engine\"] === \"Mathilda\"");
     check_true("leanH[\"Domain\"] === Rationals");
-    check_true("Certify[(x+1)^2 == x^2 + 1, Engine -> \"Mathilda\"][\"Verified\"] === False");
+    check_true("Certify[(x+1)^2 == x^2 + 1, Engine -> \"Mathilda\"][\"Verified\"] === "
+               "Missing[\"Heuristic\", False]");
+    check_true("StringContainsQ[ToString[leanH], \"Mathilda Heuristic\"]");
 }
 
 /* Row 12: the exact certificate behind Reduce's SOS stage. */
@@ -388,6 +411,65 @@ static void test_oracle(void) {
     assert_eval_eq("Context[Oracle]", "\"Lean`\"", 0);
 }
 
+/* Soundness hardening (generation side; the Lean verdicts are in
+ * test_lean_verify.c). */
+static void test_hardening(void) {
+    test_mute_messages();
+    /* Method: the reviewer's macro injection and other command-level text are
+     * refused before any file is written; a plain multi-line script is
+     * indented under `by`. */
+    assert_eval_eq("Certify[{x + 1 == 1 + x, x == x + 1}, Method -> \"intros\\n  grind\\n"
+                   "set_option hygiene false in macro_rules | `(command| set_option "
+                   "maxHeartbeats $n:num in $_:command) => `(def mathilda_cert_2 : Nat := 0)\"]",
+                   "$Failed", 0);
+    assert_eval_eq("Check[Certify[x == x, Method -> \"grind\\nopen Nat in\\ntheorem t : True "
+                   ":= trivial\", Verify -> False], \"method\"]", "\"method\"", 0);
+    assert_eval_eq("Certify[x == x, Method -> \"run_tac pure ()\", Verify -> False]",
+                   "$Failed", 0);
+    assert_eval_eq("Certify[x == x, Method -> \"grind -- \\u00bb\", Verify -> False]",
+                   "$Failed", 0);
+    assert_eval_eq("Certify[x == x, Method -> 3, Verify -> False]", "$Failed", 0);
+    check_str("Certify[x == x, Method -> \"intros\\ngrind\", Verify -> False][\"ProofScript\"]",
+              "by\n  intros\n  grind");
+    check_true("Certify[x == x, Method -> \"intros\\ngrind\", Verify -> False]"
+               "[\"LeanSource\"] // StringContainsQ[\"example :\\n    \\[ForAll] x : Int, x = x "
+               ":=\\n  mathilda_cert_1\\n#print axioms mathilda_cert_1\"]");
+    /* Every generated file disables auto-bound implicits. */
+    check_true("StringContainsQ[Certify[x == x, Verify -> False][\"LeanSource\"], "
+               "\"set_option autoImplicit false\"]");
+    /* Closed statements: a free symbol is refused (it could resolve to a Lean
+     * global such as Inhabited.default), a bound one is fine. */
+    assert_eval_eq("Lean`Internal`ToLean[HoldForm[ForAll[x, x == default]], \"Int\", True, {}, "
+                   "True]", "$Failed", 0);
+    check_str("Lean`Internal`ToLean[HoldForm[ForAll[x, x == x]], \"Int\", True, {}, True]",
+              "\xE2\x88\x80 x : Int, x = x");
+    check_str("Lean`Internal`ToLean[HoldForm[x == default], \"Int\", True, {}]",
+              "x = default");
+    assert_eval_eq("Certify[Solve[x^2 == 1 && default x == 0, x], Verify -> False]",
+                   "$Failed", 0);
+    /* Solve: every constraint is in the soundness statement, and every
+     * denominator is stated nonzero at the solution. */
+    check_true("StringContainsQ[Certify[Solve[x^2 == 1 && x > 0, x], Verify -> False]"
+               "[\"LeanTheorem\"], \"(1 : Rat) > 0\"]");
+    check_true("StringContainsQ[Certify[Solve[x^2 == 1 && x != 1, x], Verify -> False]"
+               "[\"LeanTheorem\"], \"(-1 : Rat) \xE2\x89\xA0 1\"]");
+    check_true("Quiet[Certify[Solve[(x-1)/(x^2-1) == (x-1)/(2 x - 2), x], Verify -> False]]"
+               "[\"Certificate\"][\"Denominators\"] === {-1 + x^2, -2 + 2 x}");
+    check_true("StringStartsQ[Quiet[Certify[Solve[(x-1)/(x^2-1) == (x-1)/(2 x - 2), x], "
+               "Verify -> False]][\"LeanTheorem\"], \"(1 ^ 2 - 1 : Rat) \xE2\x89\xA0 0 "
+               "\xE2\x88\xA7 (2 * 1 - 2 : Rat) \xE2\x89\xA0 0 \xE2\x88\xA7 \"]");
+    assert_eval_eq("Certify[Solve[x^2 == 1 || x == 3, x], Verify -> False]", "$Failed", 0);
+    check_true("Certify[Solve[x^2 == 1 && x > 0, x], Verify -> False][\"Certificate\"]"
+               "[\"Completeness\"] === False");
+    /* Sums whose term (or closed form) has a denominator in the variable. */
+    assert_eval_eq("Certify[Sum[(k^2 - k)/(k (k - 1)), {k, 1, n}] == n - 1, Verify -> False]",
+                   "$Failed", 0);
+    assert_eval_eq("Certify[Sum[1/(k (k + 1)), {k, 1, n}], Verify -> False]", "$Failed", 0);
+    /* The cache key is the theorem text, not a hash of it. */
+    check_true("ListQ[Lean`Private`cacheKey[<|\"Statement\" -> \"True\", \"Proof\" -> "
+               "\"by trivial\", \"TierUsed\" -> 0|>, 0, \"lean\", None]]");
+}
+
 static void test_attributes(void) {
     assert_eval_eq("Attributes[Certify]", "{HoldFirst, Protected}", 0);
     assert_eval_eq("Attributes[ProofObject]", "{HoldFirst, Protected}", 0);
@@ -414,6 +496,7 @@ int main(void) {
     TEST(test_sums);
     TEST(test_tier1_generation);
     TEST(test_oracle);
+    TEST(test_hardening);
     TEST(test_attributes);
     printf("All Lean certificate generation tests passed.\n");
     return 0;

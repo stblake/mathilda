@@ -11,7 +11,9 @@
 #   - Lean`Oracle, all four query kinds plus their failure answers,
 # and, when a Lean executable is found ($LeanVersion is a string), also
 #   - real Certify runs (True and a refuted False), a batch, cache hits,
-#     LeanVerify (accepted, sorry, native_decide) and Lean`Internal`RunProcess.
+#     user-Method items (one file each), LeanVerify (accepted, sorry,
+#     native_decide, a refused axiom, named examples in a namespace) and
+#     Lean`Internal`RunProcess.
 # It FAILS on any leaked byte.
 #
 #   macOS : leaks --atExit (with MallocStackLogging=1 for stack traces)
@@ -35,7 +37,11 @@ Do[ToString[LeanForm[ForAll[{x, y}, (x + y)^2 == x^2 + 2 x y + y^2]]];
    Quiet[Lean`Internal`ToLean[1.5 x, "Rat", True, {}]];
    Quiet[Lean`Internal`ToLean[g[x], "Rat", True, {}]];
    Quiet[Lean`Internal`ToLean[x^(1/3), "Rat", True, {}]];
-   Quiet[Lean`Internal`ToLean[#^2 &, "Rat", True, {}]], {50}];
+   Quiet[Lean`Internal`ToLean[#^2 &, "Rat", True, {}]];
+   (* closed mode: a free symbol is refused, bound ones are fine *)
+   Lean`Internal`ToLean[HoldForm[ForAll[{x, y}, x + y == y + x]], "Int", True, {}, True];
+   Quiet[Lean`Internal`ToLean[HoldForm[ForAll[x, x == default]], "Int", True, {}, True]];
+   Quiet[Lean`Internal`ToLean[HoldForm[Function[{x}, a`x + x]], "Rat", True, {}, True]], {50}];
 
 (* --- every generator, no Lean run --- *)
 gens = Hold[
@@ -71,6 +77,11 @@ gens = Hold[
   Certify[(1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x, Engine -> "Mathilda"],
   Certify[Factor[x^2 - 1], Engine -> "Bogus"],
   Certify[Sin[x] == Cos[x], Verify -> False],
+  Certify[x == 0, Assumptions -> 2 x == 1, Verify -> False],
+  Certify[Solve[(x - 1)/(x^2 - 1) == (x - 1)/(2 x - 2), x], Verify -> False],
+  Certify[Solve[x^2 == 1 && x > 0, x], Verify -> False],
+  Certify[x == x, Method -> "intros\ngrind", Verify -> False],
+  Certify[x == x, Method -> "grind\nopen Nat in", Verify -> False],
   ProofObject[Factor[x^4 - 1], Verify -> False]];
 Do[Quiet[ReleaseHold[Map[Function[c, With[{o = c}, If[Head[o] === ProofObject,
      {o["LeanSource"], o["Properties"], ToString[o]}, o]]], gens]]], {5}];
@@ -104,6 +115,10 @@ If[StringQ[$LeanVersion],
     LeanVerify["theorem ok : 2 + 2 = 4 := by decide"];
     LeanVerify["theorem s : 2 + 2 = 5 := by sorry"];
     LeanVerify["theorem nd : 2 + 2 = 4 := by native_decide"];
+    LeanVerify["axiom bad : False\nexample : 1 = 2 := bad.elim\n"];
+    LeanVerify["namespace A\nexample : 1 + 1 = 2 := rfl\ntheorem t : True := trivial\nend A\n"];
+    Certify[{x + 1 == 1 + x, x == x + 1}, Method -> "intros\ngrind"];
+    Certify[Solve[(x - 1)/(x^2 - 1) == (x - 1)/(2 x - 2), x]];
     Lean`Internal`RunProcess[{"sh", "-c", "echo out; echo err 1>&2; exit 3"}, None]];
   Print["lean_leakcheck: real Lean runs included"],
   Print["lean_leakcheck: no Lean found; real Lean runs skipped"]];

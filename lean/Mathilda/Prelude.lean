@@ -10,15 +10,18 @@
 -/
 namespace Mathilda
 
-/-- Square-and-multiply `b ^ e % m`; `fuel` bounds the number of exponent bits. -/
+/-- Square-and-multiply `b ^ e % m`; `fuel` bounds the number of loop steps. -/
 def powModAux : Nat → Nat → Nat → Nat → Nat → Nat
   | 0, _, _, _, acc => acc
   | fuel+1, b, e, m, acc =>
     if e = 0 then acc
     else powModAux fuel (b * b % m) (e / 2) m (if e % 2 = 1 then acc * b % m else acc)
 
-/-- `b ^ e % m` for exponents below `2 ^ 256`. -/
-def powMod (b e m : Nat) : Nat := powModAux 256 (b % m) e m (1 % m)
+/-- `b ^ e % m` for every exponent `e`.  The loop halves `e` and stops at 0, so it
+    runs `log2 e + 1 ≤ e + 1` steps: fuel `e + 1` never runs out (a fixed fuel would
+    silently truncate large exponents).  The kernel only peels as many successors off
+    the fuel literal as there are steps, so a huge `e` costs nothing extra. -/
+def powMod (b e m : Nat) : Nat := powModAux (e + 1) (b % m) e m (1 % m)
 
 /-- `Π q ^ k` over a factor list `[(q, k), ...]`. -/
 def prodPow : List (Nat × Nat) → Nat
@@ -52,6 +55,14 @@ def matMul (A B : Mat) : Mat :=
 /-- Matrix-vector product. -/
 def matVec (A : Mat) (v : List Rat) : List Rat :=
   A.map fun r => (List.zipWith (· * ·) r v).sum
+
+/-- `A` has exactly `r` rows, each of exactly `c` entries (`matMul` / `matVec` /
+    `det` use `zipWith` and `getD`, which silently truncate or pad ragged input,
+    so every matrix statement also states the shapes). -/
+abbrev HasShape (A : Mat) (r c : Nat) : Prop := A.length = r ∧ ∀ row ∈ A, row.length = c
+
+/-- The vector `v` has exactly `n` entries. -/
+abbrev HasLength (v : List Rat) (n : Nat) : Prop := v.length = n
 
 /-- The `n × n` identity matrix. -/
 def idMat (n : Nat) : Mat :=

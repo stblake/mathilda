@@ -23,16 +23,21 @@ Mathilda is an **untrusted oracle**. The Lean 4 kernel is the **trusted checker*
 
 ### What `"Verified" -> True` means
 
-All of the following hold, as checked by `` Lean`Internal`VerifySource `` and by the
-per-theorem attribution in `Lean.m`:
+The file is header (`set_option autoImplicit false`), prelude, theorem chunks, then a
+**trusted footer** with, per theorem, `example : <statement> := mathilda_cert_k` and
+`#print axioms mathilda_cert_k`. All of the following hold, as checked by
+`` Lean`Internal`VerifySource `` and by the per-theorem attribution in `Lean.m`:
 
-1. Lean's exit code is 0.
-2. No message with severity `error` falls in the theorem's line span, or outside every
-   theorem (header or prelude).
-3. No message has kind `hasSorry`.
-4. The theorem's `#print axioms` report (appended by the generator) names only `propext`,
-   `Classical.choice` and `Quot.sound`. `sorryAx` and the auxiliary axiom that
-   `native_decide` adds both fail this test.
+1. No message with severity `error` or kind `hasSorry` falls in the theorem's chunk or its
+   footer lines.
+2. No such message falls outside every chunk and footer (header or prelude).
+3. The `#print axioms` report printed on the theorem's **own footer line** names only
+   `propext`, `Classical.choice` and `Quot.sound` (a report on any other line is ignored).
+   `sorryAx` and the auxiliary axiom that `native_decide` adds both fail this test.
+4. Lean's exit code is 0, or every error lies in some theorem's lines (then the sibling
+   theorems that own those errors are `False`).
+
+The heuristic engine never reports `True`: its answer is `Missing["Heuristic", b]`.
 
 `Missing["NotChecked"]` means `Verify -> False` (the source was generated but not run).
 `Missing["NotAvailable"]` means no Lean executable was found. A missing checker is not a
@@ -51,7 +56,7 @@ refutation, so it is never `False`.
 | IdealMembership (`Implies[...]`) | 0 | none |
 | IdealMembership (`PolynomialReduce`) | 0 | that the remainder is fully reduced (the division identity is proved) |
 | Roots (univariate, splits over ℚ) | 0 | none: completeness `p = 0 ↔ x = r1 ∨ …` is proved |
-| Roots (systems, other polynomials) | 0 | completeness (only soundness is proved) |
+| Roots (systems, constraints, other polynomials) | 0 | completeness (only soundness is proved: every constraint, and every denominator nonzero, at every solution) |
 | MatrixInverse, Determinant, LinearSolve | 0 | none |
 | NullSpace | 0 | completeness (independence and span) |
 | Nonnegativity, Optimality | 0 | the statement is proved over ℚ; the identity inside it is polynomial, so the bound holds over ℝ, but that transfer is not checked |
@@ -63,8 +68,9 @@ refutation, so it is never `False`.
 ### Tiers
 
 - **Tier 0** uses core Lean 4 only (v4.35 or newer, for `grind`). No Mathlib, no Lake. Every
-  generated file inlines `src/internal/lean/Prelude.lean` (about 80 lines: `powMod`,
-  `prattCheck`, `PrattCertifies`, `matMul`, `matVec`, `idMat`, `det`, `sqnn`, `mulnn`).
+  generated file inlines `src/internal/lean/Prelude.lean` (about 90 lines: `powMod`,
+  `prattCheck`, `PrattCertifies`, `matMul`, `matVec`, `HasShape`, `HasLength`, `idMat`,
+  `det`, `sqnn`, `mulnn`).
   Proofs are `grind` (polynomial identities, with SOS hints), `decide +kernel` (matrices,
   Pratt) or induction (sums). A warm run takes about 0.5 s.
 - **Tier 1** is opt-in and needs a Lake project with Mathlib built (`$LeanProject`). It is
@@ -100,18 +106,25 @@ Only the public API and the option names are in `` Lean` ``.
 
 ## Why `system()`, and why it is safe
 
-Strict C99 has no process API other than `system()`, and the repo forbids `popen`, `fork`
-and `<unistd.h>` in new code. `system()` is enough because the runner only needs an exit
-code and two output files.
+Strict C99 has no process API other than `system()`, and the repo forbids `popen` and
+`fork` in new code. `system()` is enough because the runner only needs an exit code and two
+output files. The only POSIX calls (`mkdtemp`, `open`, `fdopen`, `rmdir`, under
+`_POSIX_C_SOURCE 200809L` plus `_DARWIN_C_SOURCE` on macOS, guarded by `#ifndef _WIN32`)
+create the private scratch directory.
 
 - **No user text reaches the shell.** The command line contains only the executable path,
   flags written by Mathilda, and temp-file paths. The Lean source, the claim and any
   `Method` tactic string go into the `.lean` file.
 - **Quoting is complete on POSIX.** Every argument is single-quoted, with each embedded `'`
   written as `'\''`. No character is special inside POSIX single quotes.
-- **No planted files.** The command starts with `set -C` (noclobber), so the `>` and `2>`
-  redirections fail if the output file already exists, including as a symlink. The source
-  file name is probed before it is written, and all three files are removed afterwards.
+- **No planted files.** Every run gets a fresh directory from `mkdtemp` (mode `0700`), and
+  the source is created in it with `O_CREAT | O_EXCL | O_NOFOLLOW` (mode `0600`). No other
+  user can create, replace or symlink anything there, so the `.out` that is parsed is the
+  one the shell's redirection created for this run (if it is missing, the run is a
+  failure); `set -C` (noclobber) stays as a second guard. The files and the directory are
+  removed afterwards. (The earlier scheme -- predictable names in the shared temp
+  directory, probed with `fopen` and then opened -- could be raced: a dangling symlink at
+  the source name was followed, and a pre-created `.out` was parsed as Lean's output.)
 - **Windows.** `cmd.exe` has no complete quoting, so an argument containing any of
   `" % ! ^ & | < >` is refused (`LeanVerify::badpath`). That branch compiles under MinGW but
   has not been exercised at run time.
@@ -119,6 +132,26 @@ code and two output files.
   which is deterministic. `system()` blocks, and `TimeConstrained` measures this process's
   CPU time, so the timer does not fire during a Lean run and no child process is orphaned.
   A wall-clock kill needs a real spawn API (F7).
+
+## Soundness hardening (v0.6518)
+
+An adversarial review produced four false `"Verified" -> True` results and several weaker
+holes. Each is closed at its root, and each reproducer is a regression test
+(`test_review_*` in `tests/test_lean_verify.c`, `test_hardening` in
+`tests/test_lean_certify.c`).
+
+| Hole | Fix |
+|---|---|
+| **Method injection.** `Method` was pasted as `"by\n  " <> m`; a second line at column 0 became a top-level command, and a `macro_rules` turned a later `theorem mathilda_cert_2` of a batch into a `def`, whose empty `#print axioms` report passed `x == x + 1`. | Three layers. (1) A Method script is refused (`Certify::method`) if it contains a control character, tab, `«`, `»`, a backquote, `$`, `#`, `@[`, `--`, `/-` or `"`, or uses any command keyword or meta escape as a word (`theorem`, `def`, `example`, `macro`, `syntax`, `elab`, `set_option`, `attribute`, `open`, `namespace`, `end`, `axiom`, `run_tac`, `native_decide`, `sorry`, `Lean`, `IO`, …); every line is indented under `by`. (2) Each item with a user script runs in a Lean file of its own. (3) For every theorem the trusted footer, after all chunks, re-elaborates the statement (`example : S := mathilda_cert_k`) and prints its axioms, and only the report on that footer line counts -- so a chunk cannot pass by declaring something else under the theorem's name, and a report elsewhere (forged or not) is ignored. A deny-list was chosen over a tactic allow-list because lemma names and term arguments are open-ended; the deny-list blocks every way to leave the tactic block or extend the parser, and layers 2-3 bound the damage of anything it misses. |
+| **Vacuous Int hypotheses.** `Certify[x == 0, Assumptions -> 2 x == 1]` proved `∀ x : Int, 2 * x = 1 → x = 0`. | The automatic domain is `Int` only for hypothesis-free integer polynomial identities (which then hold in every commutative ring). With `Assumptions` it is `Rat`; ideal membership (`Implies[...]`) is always `Rat` (its cofactor identity holds in every commutative ring anyway). `Domain -> Integers` is still honoured and labelled. Variables of the assumptions are bound. |
+| **Solve and `x / 0 = 0`.** Solve's spurious root `x = 1` of `(x-1)/(x^2-1) == (x-1)/(2x-2)` was "verified", because both sides are `0` in Lean. Only `Equal` constraints were checked (`x^2 == 1 && x > 0` checked `1^2 = 1` only). | The soundness statement is every constraint (`==`, `!=`, `<`, `<=`, `>`, `>=`) at every solution, conjoined with `d ≠ 0` for every denominator `d` of the system. Completeness needs one polynomial equation and nothing else. Other heads (`||`, ...) get no certificate. Audit of the other kinds: antiderivative and identity statements are cleared polynomial identities; matrix, optimality and Pratt statements have no division; sums with a denominator in the variable now get no certificate. |
+| **Pratt fuel.** `powMod` had 256 bits of fuel, so `PrattCertifies (2^256 + 1) [(2^256 + 1, 3, [(2, 256)])]` held for the composite Fermat number F8. | The fuel is `e + 1`, which bounds the `log2 e + 1` halving steps for every `e`; the kernel unfolds only as many steps as there are bits. F8 is rejected; `2^64 + 1`, `1000003`, `51·2^257 + 1` still verify (well under 1 s), and `NextPrime[2^256]` verifies (Lean 0.8 s; Mathilda's certificate search takes about 117 s, so it is not in the default suite). The checker already required the factor list to multiply out to `p - 1` and every factor to be an earlier step. |
+| **LeanVerify.** `axiom bad : False` used from an `example` or a `def`, and `example … := by native_decide`, gave `"Success" -> True`. | Sources that mention `axiom`, `native_decide`, `implemented_by`, `extern`, `unsafe`, `debug`, `#eval`, `elab`, `macro`, `syntax`, `run_cmd`, ... are refused unrun (`LeanVerify::unsafe`). `example`s are renamed to named defs, and every theorem / lemma / def / abbrev / named instance (namespace-qualified) is axiom-checked through an appended, line-anchored `#print axioms` footer. |
+| **Temp-file race.** Predictable names, probe-then-open, dangling symlinks followed, a pre-created `.out` parsed as Lean's output. | A private `mkdtemp` directory per run, `O_EXCL | O_NOFOLLOW` source creation, and a check that the shell created the output file. |
+| **Shape truncation.** `matVec [[1, 1]] [1] = [1]` holds (`zipWith` truncates). | Matrix statements state `Mathilda.HasShape` / `Mathilda.HasLength`. |
+| **Free identifiers.** A symbol not bound by the statement (e.g. `default` in `Solve[x^2 == 1 && default x == 0, x]`) was emitted as a free Lean identifier and resolved to `Inhabited.default`. | Generated files set `autoImplicit false`; theorem statements are translated in closed mode, which refuses unbound symbols, names that contain `«`/`»`/control characters, and two symbols with the same Lean text. |
+| **Heuristic `True`.** `Engine -> "Mathilda"` used the same `"Verified" -> True`. | It now gives `Missing["Heuristic", True \| False]`; the summary box already reads `Mathilda Heuristic`. |
+| **Cache key.** A 64-bit hash of the theorem text. | The text itself is the key. |
 
 ## Configuration
 
@@ -143,7 +176,9 @@ code and two output files.
 - Factor irreducibility, Risch non-elementarity, `NullSpace` completeness and Lucas's
   theorem are not proved (listed as trusted steps).
 - The Lean-side oracle starts one Mathilda process per tactic call (about 0.05 s).
-- `example`s cannot be axiom-checked by `LeanVerify`; only `theorem`s can.
+- `LeanVerify` renames `example`s to named defs so their axioms are checked; anonymous
+  `instance`s are covered only by the error / `sorry` checks, and sources using
+  metaprogramming (`elab`, `macro`, `#eval`, …) are refused rather than run.
 
 ## Follow-ups
 

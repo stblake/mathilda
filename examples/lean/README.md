@@ -59,7 +59,7 @@ session is about 1–3 s cold, and later runs are about 0.5 s each. Excerpt:
 [17] Lean catches the CAS: a PossibleZeroQ false positive
     In:        PossibleZeroQ[(1 + x)^20 - Expand[(1 + x)^20] + 10^-25 x]
     Result:    True   (wrong: the expression is the polynomial x/10^25)
-    Engine -> "Mathilda":  Verified: True    Tier: Heuristic
+    Engine -> "Mathilda":  Verified: Missing[Heuristic, True]    Tier: Heuristic
     Engine -> "Lean":      Verified: False    Tier: 0
 
 [19] Batch: rows 4-10 in ONE Lean run (session cache cleared first)

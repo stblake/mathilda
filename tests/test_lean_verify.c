@@ -20,6 +20,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _WIN32
+#include <sys/stat.h>
+#include <sys/types.h>
+#endif
 
 static void check_true(const char* input) {
     assert_eval_eq(input, "True", 0);
@@ -60,7 +64,7 @@ static void test_negative(void) {
     /* Lean catches the CAS: PossibleZeroQ calls this claim true; it is false
      * (the two sides differ by x/10^25). */
     check_true("Certify[(1+x)^20 == Expand[(1+x)^20] - 10^-25 x, Engine -> \"Mathilda\"]"
-               "[\"Verified\"] === True");
+               "[\"Verified\"] === Missing[\"Heuristic\", True]");
     check_true("Certify[(1+x)^20 == Expand[(1+x)^20] - 10^-25 x, Engine -> \"Lean\"]"
                "[\"Verified\"] === False");
 }
@@ -183,6 +187,141 @@ static void test_batch(void) {
                "NoneTrue[leanBc[[1]][\"Logs\"], #[\"Severity\"] === \"error\" &]");
 }
 
+/* Regressions for the adversarial review's false "Verified -> True" results:
+ * every reproducer must now be refused or come back False, while the
+ * legitimate certificates stay True. */
+static void test_review_method_injection(void) {
+    test_mute_messages();
+    /* Finding 1: a Method whose second line replaced a later theorem by a
+     * def (so #print axioms reported nothing) -- now refused outright. */
+    assert_eval_eq("Certify[{x + 1 == 1 + x, x == x + 1}, Method -> \"intros\\n  grind\\n"
+                   "set_option hygiene false in macro_rules | `(command| set_option "
+                   "maxHeartbeats $n:num in $_:command) => `(def mathilda_cert_2 : Nat := 0)\"]",
+                   "$Failed", 0);
+    /* A plain multi-line script still works; each user-Method item runs in its
+     * own file and the false one stays False. */
+    assert_eval_eq("leanM = Certify[{x + 1 == 1 + x, x == x + 1}, Method -> \"intros\\ngrind\"]; "
+                   "Null", "Null", 0);
+    check_true("leanM[[1]][\"Verified\"] === True && leanM[[2]][\"Verified\"] === False");
+    check_true("leanM[[1]][\"LeanSource\"] =!= leanM[[2]][\"LeanSource\"]");
+    /* The trusted footer: a chunk that declares something else under the
+     * theorem's name (here a def of type Nat) fails the statement re-check. */
+    check_true("Lean`Private`runBatch[{<|\"Name\" -> \"mathilda_cert_1\", "
+               "\"Statement\" -> \"(1 : Nat) = 2\", "
+               "\"Text\" -> \"def mathilda_cert_1 : Nat := 0\\n\"|>}, 0, "
+               "Lean`Private`leanExe[Automatic], None][[1, \"Verified\"]] === False");
+    /* ... and the same chunk with an honest theorem is accepted. */
+    check_true("Lean`Private`runBatch[{<|\"Name\" -> \"mathilda_cert_1\", "
+               "\"Statement\" -> \"(1 : Nat) = 1\", "
+               "\"Text\" -> \"theorem mathilda_cert_1 : (1 : Nat) = 1 := rfl\\n\"|>}, 0, "
+               "Lean`Private`leanExe[Automatic], None][[1, \"Verified\"]] === True");
+}
+
+static void test_review_domain(void) {
+    test_mute_messages();
+    /* Finding 2: Assumptions over the automatic Int domain were vacuous. */
+    check_true("Certify[x == 0, Assumptions -> 2 x == 1][\"Verified\"] === False");
+    check_true("Certify[x == 1, Assumptions -> 0 < x < 2][\"Verified\"] === False");
+    check_true("Certify[x^2 == 1, Assumptions -> x^2 <= 1 && x != 0][\"Verified\"] === False");
+    check_true("Certify[x^2 == x, Assumptions -> {x == 1}][\"Verified\"] === True");
+    assert_eval_eq("leanIM = Certify[Implies[x^2+y^2 == 1 && x == y, 2 y^2 == 1]]; Null",
+                   "Null", 0);
+    check_true("leanIM[\"Verified\"] === True && leanIM[\"Domain\"] === Rationals");
+}
+
+static void test_review_solve(void) {
+    test_mute_messages();
+    /* Finding 3: Solve's spurious root x = 1 zeroes a denominator; Lean's
+     * x / 0 = 0 accepted it. */
+    check_true("Certify[Solve[(x-1)/(x^2-1) == (x-1)/(2 x - 2), x]][\"Verified\"] === False");
+    check_true("Certify[Solve[(x-1)/(x^2-1) == 1/2, x]][\"Verified\"] === False");
+    check_true("Certify[Solve[x^2 + 1/(x-1) == 1 + 1/(x-1), x]][\"Verified\"] === True");
+    /* Finding 7: the inequalities / Unequal are part of the statement. */
+    assert_eval_eq("leanS7 = Certify[Solve[x^2 == 1 && x > 0, x]]; Null", "Null", 0);
+    check_true("leanS7[\"Verified\"] === True && "
+               "StringContainsQ[leanS7[\"LeanTheorem\"], \"(1 : Rat) > 0\"]");
+    check_true("Certify[Solve[x^2 == 1 && x != 1, x]][\"Verified\"] === True");
+    /* A wrong solution set for a constrained system is caught by the
+     * inequality conjunct (the equation alone holds at x = -1). */
+    check_true("LeanVerify[StringReplace[Certify[Solve[x^2 == 1 && x > 0, x], Verify -> False]"
+               "[\"LeanSource\"], \"(1 ^ 2 : Rat) = 1 \xE2\x88\xA7 (1 : Rat) > 0\" -> "
+               "\"((-1) ^ 2 : Rat) = 1 \xE2\x88\xA7 (-1 : Rat) > 0\"]][\"Success\"] === False");
+}
+
+static void test_review_pratt(void) {
+    test_mute_messages();
+    /* Finding 4: powMod had 256 bits of fuel, so the composite Fermat number
+     * F8 = 2^256 + 1 passed as prime with the certificate [(2, 256)]. */
+    check_true("LeanVerify[Lean`Private`prelude[] <> \"\\ntheorem fake_prime : "
+               "Mathilda.PrattCertifies (2^256 + 1) [(2^256 + 1, 3, [(2, 256)])] := "
+               "by decide +kernel\\n\"][\"Success\"] === False");
+    /* Genuine certificates still verify, above 2^256 too (51 * 2^257 + 1 is
+     * prime with a three-step certificate; exponents of 258 bits). */
+    check_true("Certify[FactorInteger[2^64 + 1]][\"Verified\"] === True");
+    check_true("Certify[PrimeQ[1000003]][\"Verified\"] === True");
+    check_true("Certify[PrimeQ[51 2^257 + 1]][\"Verified\"] === True");
+}
+
+static void test_review_leanverify(void) {
+    test_mute_messages();
+    /* Finding 5: an axiom of False used from an example / def, and
+     * native_decide in an example, reported Success -> True. */
+    check_true("LeanVerify[\"axiom bad : False\\nexample : 1 = 2 := bad.elim\\n"
+               "def t : 2 + 2 = 5 := bad.elim\\n\"][\"Success\"] === False");
+    check_true("LeanVerify[\"example : 10^9 + 7 = 1000000007 := by native_decide\\n\"]"
+               "[\"Success\"] === False");
+    check_true("LeanVerify[\"theorem a1 : (1:Nat) = 1 := rfl\\nset_option debug.skipKernelTC "
+               "true\\n\"][\"Success\"] === False");
+    check_true("LeanVerify[\"#eval IO.println \\\"'t' does not depend on any axioms\\\"\\n\"]"
+               "[\"Success\"] === False");
+    /* Examples are named, so their axioms are checked; a clean one passes. */
+    assert_eval_eq("leanLV = LeanVerify[\"example : 1 + 1 = 2 := rfl\\n\"]; Null", "Null", 0);
+    check_true("leanLV[\"Success\"] === True && "
+               "leanLV[\"Axioms\"] === <|\"mathilda_example_1\" -> {}|>");
+    check_true("LeanVerify[\"example : 1 + 1 = 3 := by sorry\\n\"][\"Success\"] === False");
+}
+
+static void test_review_tempfiles(void) {
+    test_mute_messages();
+#ifndef _WIN32
+    /* Finding 6: every run uses a private mkdtemp directory (mode 0700). */
+    Expr* p = parse_expression(
+        "LeanVerify[\"theorem ok : 2 + 2 = 4 := by decide\", KeepFiles -> True][\"SourceFile\"]");
+    Expr* v = evaluate(p);
+    expr_free(p);
+    ASSERT(v && v->type == EXPR_STRING);
+    const char* path = v->data.string;
+    ASSERT(strstr(path, "mathilda-lean-") != NULL);
+    char* dir = malloc(strlen(path) + 1);
+    ASSERT(dir != NULL);
+    strcpy(dir, path);
+    char* slash = strrchr(dir, '/');
+    ASSERT(slash != NULL);
+    *slash = '\0';
+    struct stat st;
+    ASSERT(stat(dir, &st) == 0);
+    ASSERT(S_ISDIR(st.st_mode));
+    ASSERT((st.st_mode & 0777) == 0700);
+    ASSERT(remove(path) == 0);
+    ASSERT(remove(dir) == 0);
+    free(dir);
+    expr_free(v);
+#endif
+}
+
+static void test_review_shapes(void) {
+    test_mute_messages();
+    /* Finding 8: zipWith truncation -- a too-short vector "solves" a system
+     * unless the statement also fixes the shapes. */
+    check_true("LeanVerify[Lean`Private`prelude[] <> \"\\ntheorem t : Mathilda.matVec "
+               "[[1, 1]] [1] = [1] := by decide +kernel\\n\"][\"Success\"] === True");
+    check_true("LeanVerify[Lean`Private`prelude[] <> \"\\ntheorem t : Mathilda.HasShape "
+               "[[1, 1]] 1 2 \xE2\x88\xA7 Mathilda.HasLength [1] 2 \xE2\x88\xA7 Mathilda.matVec "
+               "[[1, 1]] [1] = [1] := by decide +kernel\\n\"][\"Success\"] === False");
+    check_true("Certify[NullSpace[{{1,2,3},{2,4,6}}]][\"Verified\"] === True");
+    check_true("Certify[Det[{{1,2,0},{0,1,3},{4,0,1}}]][\"Verified\"] === True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -198,6 +337,13 @@ int main(void) {
     TEST(test_batch);
     TEST(test_phase3_positive);
     TEST(test_phase3_negative);
+    TEST(test_review_method_injection);
+    TEST(test_review_domain);
+    TEST(test_review_solve);
+    TEST(test_review_pratt);
+    TEST(test_review_leanverify);
+    TEST(test_review_tempfiles);
+    TEST(test_review_shapes);
     printf("All Lean verification tests passed.\n");
     return 0;
 }

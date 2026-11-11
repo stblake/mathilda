@@ -13,24 +13,40 @@
  *       `#print axioms` reports, and returns
  *         <|"Success" -> b, "ExitCode" -> n, "Messages" -> {<|"Severity",
  *           "Kind", "Line", "Text"|>...}, "Axioms" -> <|thm -> {ax...}|>,
- *           "Timing" -> secs, "Command" -> "..."|>
+ *           "AxiomReports" -> {...}, "Timing" -> secs, "Command" -> "..."|>
  *       Success is the file-level verdict: exit code 0, no error message, no
  *       `sorry` (kind hasSorry), and every reported axiom list a subset of
  *       {propext, Classical.choice, Quot.sound} -- so sorryAx and
  *       Lean.ofReduceBool (native_decide) fail it.  Per-theorem attribution
  *       lives in Lean.m.
  *
- * Temp files live in $TemporaryDirectory and are named
- * mathilda-lean-<time>-<clock>-<counter>-<k>.{lean,out,err}; a name is used
- * only after an fopen(..., "r") probe finds it absent (and set -C guards the
- * redirections).  tmpnam is avoided: it raises deprecation warnings at link
- * time on macOS.  All three files are removed unless keep is True (then the
- * .lean file is kept and its path returned as "SourceFile").
+ * Each run gets a private directory made by mkdtemp (mode 0700) under
+ * $TemporaryDirectory, holding run.lean (created with O_CREAT | O_EXCL |
+ * O_NOFOLLOW, mode 0600), run.out and run.err (created by the shell's
+ * redirections under set -C).  No other user can plant a file or a symlink
+ * there, so the .out parsed afterwards is the one Lean's run wrote (its
+ * absence is reported as a failure).  The directory and its files are
+ * removed unless keep is True (then run.lean and the directory are kept and
+ * the path is returned as "SourceFile").  _WIN32 has no mkdtemp in its C
+ * runtime and keeps a best-effort probed fresh name in the temp directory.
+ * mkdtemp / open / fdopen / rmdir need POSIX.1-2008, hence the feature-test
+ * macro below (set before any header).
+ *
+ * "AxiomReports" lists every `#print axioms` report with its source line
+ * (<|"Theorem", "Line", "Axioms"|>), so that Lean.m can accept only the
+ * report printed by its own trusted footer line.
  */
-#ifndef _WIN32
-#ifndef _POSIX_C_SOURCE
-#define _POSIX_C_SOURCE 200809L
+#if defined(__APPLE__)
+/* Darwin declares mkdtemp only in its full (non-strict) namespace, which
+ * _POSIX_C_SOURCE alone would hide. */
+#  ifndef _DARWIN_C_SOURCE
+#  define _DARWIN_C_SOURCE
+#  endif
 #endif
+#ifndef _WIN32
+#  ifndef _POSIX_C_SOURCE
+#  define _POSIX_C_SOURCE 200809L
+#  endif
 #endif
 
 #include "lean_run.h"
@@ -42,7 +58,11 @@
 #include <string.h>
 #include <time.h>
 #ifndef _WIN32
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 #include <sys/wait.h>
+#include <unistd.h>
 #endif
 
 #include "assoc.h"
@@ -90,7 +110,7 @@ static char* str_copy(const char* s) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Temp files                                                          */
+/* Scratch space: a private per-run directory                          */
 /* ------------------------------------------------------------------ */
 
 #ifdef _WIN32
@@ -116,34 +136,56 @@ static bool file_exists(const char* path) {
     return true;
 }
 
-/* A fresh "<tmp>/mathilda-lean-<time>-<clock>-<counter>-<k>" stem whose
- * .lean, .out and .err files do not exist yet.  Caller frees. */
-static char* fresh_stem(int k) {
+/* Where one run keeps its files: <stem>.lean, <stem>.out, <stem>.err.
+ *
+ * POSIX: `dir` is a fresh directory made by mkdtemp (mode 0700, owned by this
+ * process's user), and stem is <dir>/run.  Nobody else can create, replace or
+ * symlink a file in it, so a file found there after the run was written by
+ * this run.  _WIN32: there is no mkdtemp in the C runtime; `dir` is NULL and
+ * stem is a fresh name in the temp directory, probed as absent (the old,
+ * best-effort scheme -- this branch is compiled but not exercised). */
+typedef struct { char* dir; char* stem; } Scratch;
+
+static bool scratch_open(Scratch* sc) {
+    sc->dir = sc->stem = NULL;
+    char* tmp = temp_directory();
+    RBuf b = {0};
+    rb_puts(&b, tmp);
+    free(tmp);
+#ifndef _WIN32
+    rb_puts(&b, LEAN_SEP "mathilda-lean-XXXXXX");
+    if (!mkdtemp(b.s)) { free(b.s); return false; }
+    sc->dir = b.s;
+    RBuf st = {0};
+    rb_puts(&st, sc->dir);
+    rb_puts(&st, LEAN_SEP "run");
+    sc->stem = rb_take(&st);
+    return true;
+#else
     static unsigned long counter = 0;
-    char* dir = temp_directory();
-    char* stem = NULL;
-    for (int tries = 0; tries < 1000 && !stem; tries++) {
-        RBuf b = {0};
+    rb_puts(&b, LEAN_SEP);
+    for (int tries = 0; tries < 1000; tries++) {
+        RBuf c = {0};
         char t[96];
-        snprintf(t, sizeof t, "mathilda-lean-%lu-%lu-%lu-%d", (unsigned long)time(NULL),
-                 (unsigned long)clock(), counter++, k);
-        rb_puts(&b, dir);
-        rb_puts(&b, LEAN_SEP);
-        rb_puts(&b, t);
+        snprintf(t, sizeof t, "mathilda-lean-%lu-%lu-%lu", (unsigned long)time(NULL),
+                 (unsigned long)clock(), counter++);
+        rb_puts(&c, b.s);
+        rb_puts(&c, t);
         bool clash = false;
         const char* ext[3] = { ".lean", ".out", ".err" };
         for (int i = 0; i < 3 && !clash; i++) {
             RBuf p = {0};
-            rb_puts(&p, b.s);
+            rb_puts(&p, c.s);
             rb_puts(&p, ext[i]);
             clash = file_exists(p.s);
             free(p.s);
         }
-        if (clash) free(b.s);
-        else stem = b.s;
+        if (!clash) { sc->stem = c.s; break; }
+        free(c.s);
     }
-    free(dir);
-    return stem;
+    free(b.s);
+    return sc->stem != NULL;
+#endif
 }
 
 static char* with_ext(const char* stem, const char* ext) {
@@ -151,6 +193,23 @@ static char* with_ext(const char* stem, const char* ext) {
     rb_puts(&b, stem);
     rb_puts(&b, ext);
     return rb_take(&b);
+}
+
+/* Remove the run's files (all but .lean when keep_source) and, when nothing
+ * is kept, its directory. */
+static void scratch_close(Scratch* sc, bool keep_source) {
+    const char* ext[3] = { ".out", ".err", ".lean" };
+    for (int i = 0; i < (keep_source ? 2 : 3); i++) {
+        char* p = with_ext(sc->stem, ext[i]);
+        remove(p);
+        free(p);
+    }
+#ifndef _WIN32
+    if (sc->dir && !keep_source) rmdir(sc->dir);
+#endif
+    free(sc->dir);
+    free(sc->stem);
+    sc->dir = sc->stem = NULL;
 }
 
 /* Whole file as a NUL-terminated string ("" when unreadable).  Caller frees. */
@@ -166,9 +225,23 @@ static char* slurp(const char* path) {
     return rb_take(&b);
 }
 
+/* Write a new file: POSIX creates it exclusively (O_EXCL, and O_NOFOLLOW
+ * where the platform has it), mode 0600, so an existing file or a planted
+ * symlink makes the write fail instead of being followed. */
 static bool write_file(const char* path, const char* text) {
+#ifndef _WIN32
+    int flags = O_WRONLY | O_CREAT | O_EXCL;
+#ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+#endif
+    int fd = open(path, flags, 0600);
+    if (fd < 0) return false;
+    FILE* f = fdopen(fd, "wb");
+    if (!f) { close(fd); return false; }
+#else
     FILE* f = fopen(path, "wb");
     if (!f) return false;
+#endif
     size_t n = strlen(text);
     bool ok = fwrite(text, 1, n, f) == n;
     if (fclose(f) != 0) ok = false;
@@ -247,15 +320,13 @@ static int decode_status(int st) {
 #endif
 }
 
-int lean_run_process(const char* const* argv, int argc, const char* cwd, LeanProcResult* r,
-                     const char** why) {
+/* Run argv with stdout / stderr redirected to <stem>.out / <stem>.err. */
+static int run_in(const char* stem, const char* const* argv, int argc, const char* cwd,
+                  LeanProcResult* r, const char** why) {
     memset(r, 0, sizeof *r);
     *why = NULL;
-    char* stem = fresh_stem(0);
-    if (!stem) { *why = "no free temp file name"; return -1; }
     char* out = with_ext(stem, ".out");
     char* err = with_ext(stem, ".err");
-    free(stem);
     const char* bad = NULL;
     char* cmd = build_command(argv, argc, cwd, out, err, &bad);
     if (!cmd) {
@@ -271,6 +342,9 @@ int lean_run_process(const char* const* argv, int argc, const char* cwd, LeanPro
     r->seconds = mth_mono_seconds() - t0;
     free(cmd);
     r->exit_code = decode_status(st);
+    /* The redirection creates <stem>.out; in the private directory nobody
+     * else can, so a missing file means the shell never ran the command. */
+    bool created = file_exists(out);
     r->out = slurp(out);
     r->err = slurp(err);
     remove(out);
@@ -278,7 +352,25 @@ int lean_run_process(const char* const* argv, int argc, const char* cwd, LeanPro
     free(out);
     free(err);
     if (st == -1) { *why = "system() failed"; lean_proc_result_free(r); return -1; }
+    if (!created) {
+        *why = "the shell did not create the output file";
+        lean_proc_result_free(r);
+        return -1;
+    }
     return 0;
+}
+
+int lean_run_process(const char* const* argv, int argc, const char* cwd, LeanProcResult* r,
+                     const char** why) {
+    Scratch sc;
+    if (!scratch_open(&sc)) {
+        memset(r, 0, sizeof *r);
+        *why = "cannot create a private temp directory";
+        return -1;
+    }
+    int rc = run_in(sc.stem, argv, argc, cwd, r, why);
+    scratch_close(&sc, false);
+    return rc;
 }
 
 void lean_proc_result_free(LeanProcResult* r) {
@@ -628,19 +720,18 @@ static Expr* builtin_lean_verifysource(Expr* res) {
     const char* exe = a[1]->data.string;
     const char* project = a[2]->type == EXPR_STRING ? a[2]->data.string : NULL;
 
-    char* stem = fresh_stem(1);
-    if (!stem) {
+    Scratch sc;
+    if (!scratch_open(&sc)) {
         mth_message("LeanVerify", "fail", "Lean process could not be started: %s.",
-                    "no free temp file name");
+                    "cannot create a private temp directory");
         return expr_new_symbol(SYM_DollarFailed);
     }
-    char* src = with_ext(stem, ".lean");
-    free(stem);
+    char* src = with_ext(sc.stem, ".lean");
     if (!write_file(src, a[0]->data.string)) {
         mth_message("LeanVerify", "fail", "Lean process could not be started: %s.",
                     "cannot write the temp source file");
-        remove(src);
         free(src);
+        scratch_close(&sc, false);
         return expr_new_symbol(SYM_DollarFailed);
     }
 
@@ -654,10 +745,10 @@ static Expr* builtin_lean_verifysource(Expr* res) {
 
     LeanProcResult r;
     const char* why = NULL;
-    int rc = lean_run_process(argv, argc, project, &r, &why);
+    int rc = run_in(sc.stem, argv, argc, project, &r, &why);
     char* shown = display_command(argv, argc, project);
     free(lake);
-    if (!keep) remove(src);
+    scratch_close(&sc, keep && rc == 0);
     if (rc != 0) {
         mth_message("LeanVerify", "fail", "Lean process could not be started: %s.", why);
         free(shown);
@@ -665,7 +756,7 @@ static Expr* builtin_lean_verifysource(Expr* res) {
         return expr_new_symbol(SYM_DollarFailed);
     }
 
-    EList msgs = {0}, axr = {0};
+    EList msgs = {0}, axr = {0}, reps = {0};
     bool any_error = false, any_sorry = false, axioms_ok = true;
     for (char* line = r.out; line && *line; ) {
         char* nl = strchr(line, '\n');
@@ -682,7 +773,14 @@ static Expr* builtin_lean_verifysource(Expr* res) {
             bool std_only = true;
             if (strcmp(sev, "information") == 0 && parse_axioms(text, &thm, &ax, &std_only)) {
                 if (!std_only) axioms_ok = false;
-                el_push(&axr, mk_rule(thm, el_list(&ax)));
+                Expr* axl = el_list(&ax);
+                Expr* rep[3] = {
+                    mk_rule("Theorem", expr_new_string(thm)),
+                    mk_rule("Line", expr_new_integer(m.line)),
+                    mk_rule("Axioms", expr_copy(axl)),
+                };
+                el_push(&reps, mk_assoc(rep, 3));
+                el_push(&axr, mk_rule(thm, axl));
                 free(thm);
             } else {
                 free(ax.v);
@@ -715,12 +813,13 @@ static Expr* builtin_lean_verifysource(Expr* res) {
     size_t nax = axr.n;
     Expr* axioms = mk_assoc(axr.v, nax);
     free(axr.v);
-    Expr* rules[8];
+    Expr* rules[9];
     size_t k = 0;
     rules[k++] = mk_rule("Success", mk_bool(success));
     rules[k++] = mk_rule("ExitCode", expr_new_integer(r.exit_code));
     rules[k++] = mk_rule("Messages", el_list(&msgs));
     rules[k++] = mk_rule("Axioms", axioms);
+    rules[k++] = mk_rule("AxiomReports", el_list(&reps));
     rules[k++] = mk_rule("Timing", expr_new_real(r.seconds));
     rules[k++] = mk_rule("Command", expr_new_string(shown));
     if (keep) rules[k++] = mk_rule("SourceFile", expr_new_string(src));
@@ -733,11 +832,12 @@ static Expr* builtin_lean_verifysource(Expr* res) {
 void lean_init(void) {
     symtab_add_builtin("Lean`Internal`ToLean", builtin_lean_tolean);
     symtab_set_docstring("Lean`Internal`ToLean",
-        "Lean`Internal`ToLean[expr, type, coreOnly, {heads...}]\n"
+        "Lean`Internal`ToLean[expr, type, coreOnly, {heads...}, closed]\n"
         "\tgives the strict Lean 4 translation of expr as a String, with type \"Int\",\n"
         "\t\"Rat\", \"Real\" or None for rational literals and binders; coreOnly -> True\n"
         "\trefuses Mathlib-only heads; heads are the Lean names allowed as applied\n"
-        "\tfunctions. An untranslatable node gives $Failed and LeanForm::untrans.");
+        "\tfunctions; closed -> True (optional, default False) refuses any symbol not\n"
+        "\tbound by a quantifier. An untranslatable node gives $Failed and LeanForm::untrans.");
     symtab_get_def("Lean`Internal`ToLean")->attributes |= ATTR_PROTECTED;
 
     symtab_add_builtin("Lean`Internal`RunProcess", builtin_lean_runprocess);

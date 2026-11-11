@@ -150,7 +150,7 @@ Print["    Engine -> \"Lean\":      Verified: ", lean17["Verified"], "    Tier: 
   If[lean17["Verified"] === False, "", "   <-- UNEXPECTED (expected False)"]];
 Print["    Lean:      ", clip[lean17["LeanTheorem"]]];
 Print["    Time:      Lean ", secs[lean17["Timing"]], ", whole Certify call ", secs[t17[[1]]]];
-record[17, "Lean catches the CAS (Engine Mathilda: " <> ToString[heur["Verified"]] <> ")",
+record[17, "Lean catches the CAS (the heuristic said " <> ToString[Last[heur["Verified"]]] <> ")",
   lean17["Verified"], lean17["Tier"], t17[[1]], lean17["TrustedSteps"]];
 
 (* ---------------------------------------------------------------------- *)

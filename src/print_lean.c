@@ -34,7 +34,12 @@
  *   - any other head f[x, y] -> the application f x y (strict mode: only for
  *     heads in the pass-through set);
  *   - symbols: a plain identifier passes through; anything else (a context
- *     mark, $, a Lean keyword) is escaped as <<name>> (French quotes).
+ *     mark, $, a Lean keyword) is escaped as <<name>> (French quotes).  The
+ *     strict translator refuses a name that contains a French quote or a
+ *     control character, two distinct symbols with the same Lean text, and --
+ *     with LeanFormOpts.closed -- any symbol not bound by an enclosing
+ *     quantifier / Function and not in the pass-through set (a free name such
+ *     as `default` would silently resolve to a Lean global).
  */
 #include "print_lean.h"
 
@@ -106,7 +111,22 @@ typedef struct {
     const char* err;      /* first refusal (strict mode) */
     const Expr* bad;
     int fmt_depth;
+    /* Strict mode only: the binder variables in scope (interned names) ... */
+    const char** bound;
+    size_t n_bound, cap_bound;
+    /* ... and every identifier written so far, as {Mathilda name, Lean text},
+     * so two distinct symbols never print as the same Lean identifier. */
+    const char** seen_name;
+    char** seen_text;
+    size_t n_seen, cap_seen;
 } LCtx;
+
+static void ctx_release(LCtx* c) {
+    for (size_t i = 0; i < c->n_seen; i++) free(c->seen_text[i]);
+    free((void*)c->seen_name);
+    free(c->seen_text);
+    free((void*)c->bound);
+}
 
 static int build(LCtx* c, const Expr* e, LBuf* b);
 
@@ -349,6 +369,76 @@ static void put_ident(const char* name, LBuf* b) {
     lb_puts(b, "\xC2\xBB");          /* U+00BB >> */
 }
 
+/* Strict mode: may `name` be written as an identifier?  Refused when its
+ * escaped form could break out of the French quotes (a << or >> or a control
+ * character inside the name), or when another symbol already printed as the
+ * same Lean text (two Mathilda symbols must stay two Lean variables). */
+static const char* ident_problem(LCtx* c, const char* name) {
+    if (!c->strict) return NULL;
+    const char* nm = context_display_name(name);
+    for (const unsigned char* p = (const unsigned char*)nm; *p; p++) {
+        if (*p < 0x20 || *p == 0x7F) return "symbol name with a control character";
+        if (p[0] == 0xC2 && (p[1] == 0xAB || p[1] == 0xBB))
+            return "symbol name containing a French quote";
+    }
+    LBuf t = {0};
+    put_ident(name, &t);
+    const char* txt = t.s ? t.s : "";
+    for (size_t i = 0; i < c->n_seen; i++) {
+        if (strcmp(c->seen_text[i], txt) == 0) {
+            free(t.s);
+            return c->seen_name[i] == name ? NULL
+                                           : "two symbols with the same Lean name";
+        }
+    }
+    if (c->n_seen == c->cap_seen) {
+        size_t nc = c->cap_seen ? 2 * c->cap_seen : 16;
+        const char** a = realloc((void*)c->seen_name, nc * sizeof *a);
+        if (!a) abort();
+        c->seen_name = a;
+        char** tx = realloc(c->seen_text, nc * sizeof *tx);
+        if (!tx) abort();
+        c->seen_text = tx;
+        c->cap_seen = nc;
+    }
+    c->seen_name[c->n_seen] = name;
+    c->seen_text[c->n_seen] = t.s ? t.s : lb_take(&t);
+    c->n_seen++;
+    return NULL;
+}
+
+static bool is_bound(const LCtx* c, const char* name) {
+    for (size_t i = c->n_bound; i > 0; i--)
+        if (c->bound[i - 1] == name) return true;
+    return false;
+}
+
+static void push_bound(LCtx* c, const char* name) {
+    if (c->n_bound == c->cap_bound) {
+        size_t nc = c->cap_bound ? 2 * c->cap_bound : 8;
+        const char** a = realloc((void*)c->bound, nc * sizeof *a);
+        if (!a) abort();
+        c->bound = a;
+        c->cap_bound = nc;
+    }
+    c->bound[c->n_bound++] = name;
+}
+
+/* Push the binder symbols of v (x or {x, y}); the number pushed. */
+static size_t push_binders(LCtx* c, const Expr* v) {
+    if (v->type == EXPR_SYMBOL) { push_bound(c, v->data.symbol.name); return 1; }
+    size_t k = 0;
+    if (head_name(v) == SYM_List)
+        for (size_t i = 0; i < v->data.function.arg_count; i++)
+            if (v->data.function.args[i]->type == EXPR_SYMBOL) {
+                push_bound(c, v->data.function.args[i]->data.symbol.name);
+                k++;
+            }
+    return k;
+}
+
+static const char* pass_head(const LCtx* c, const char* h, char* buf, size_t bufsz);
+
 static int build_symbol(LCtx* c, const Expr* e, LBuf* b) {
     const char* nm = e->data.symbol.name;
     if (nm == SYM_True) { lb_puts(b, "True"); return P_ATOM; }
@@ -363,6 +453,13 @@ static int build_symbol(LCtx* c, const Expr* e, LBuf* b) {
     }
     if (c->strict && (nm == SYM_Infinity || nm == SYM_ComplexInfinity || nm == SYM_Indeterminate))
         return refuse(c, e, "infinite or indeterminate quantity", b);
+    if (c->strict && c->o.closed && !is_bound(c, nm)) {
+        char buf[256];
+        if (!pass_head(c, nm, buf, sizeof buf))
+            return refuse(c, e, "free variable (not bound by a quantifier)", b);
+    }
+    const char* why = ident_problem(c, nm);
+    if (why) return refuse(c, e, why, b);
     put_ident(nm, b);
     return P_ATOM;
 }
@@ -471,8 +568,6 @@ static int build_times(LCtx* c, const Expr* e, LBuf* b) {
     free(den);
     return prec;
 }
-
-static const char* pass_head(const LCtx* c, const char* h, char* buf, size_t bufsz);
 
 /* A symbol exponent the generator declared Nat-typed: its Lean name (context
  * marks as dots, as for pass-through heads) is in the pass-through set. */
@@ -588,15 +683,19 @@ static int build_nary(LCtx* c, const Expr* e, const char* op, int prec, LBuf* b)
 
 /* The binder variables of ForAll / Exists / Function: x or {x, y}. */
 static bool put_binder_vars(LCtx* c, const Expr* v, LBuf* b) {
-    if (v->type == EXPR_SYMBOL) { put_ident(v->data.symbol.name, b); return true; }
+    if (v->type == EXPR_SYMBOL) {
+        if (ident_problem(c, v->data.symbol.name)) return false;
+        put_ident(v->data.symbol.name, b);
+        return true;
+    }
     if (head_name(v) != SYM_List || v->data.function.arg_count == 0) return false;
     for (size_t i = 0; i < v->data.function.arg_count; i++) {
         const Expr* s = v->data.function.args[i];
         if (s->type != EXPR_SYMBOL) return false;
+        if (ident_problem(c, s->data.symbol.name)) return false;
         if (i) lb_puts(b, " ");
         put_ident(s->data.symbol.name, b);
     }
-    (void)c;
     return true;
 }
 
@@ -615,6 +714,7 @@ static int build_quantifier(LCtx* c, const Expr* e, bool forall, LBuf* b) {
     const char* ty = num_type_name(c->o.num);
     if (ty) { lb_puts(b, " : "); lb_puts(b, ty); }
     lb_puts(b, ", ");
+    size_t pushed = push_binders(c, a[0]);
     if (n == 3) {
         put(c, a[1], forall ? P_IMP + 1 : P_AND + 1, b);
         lb_puts(b, forall ? " \xE2\x86\x92 " : " \xE2\x88\xA7 ");   /* -> or /\ */
@@ -622,6 +722,7 @@ static int build_quantifier(LCtx* c, const Expr* e, bool forall, LBuf* b) {
     } else {
         put(c, a[1], P_BINDER, b);
     }
+    c->n_bound -= pushed;
     return P_BINDER;
 }
 
@@ -641,7 +742,9 @@ static int build_function(LCtx* c, const Expr* e, LBuf* b) {
     lb_puts(b, vars.s);
     free(vars.s);
     lb_puts(b, " => ");
+    size_t pushed = push_binders(c, a[0]);
     put(c, a[1], P_BINDER, b);
+    c->n_bound -= pushed;
     return P_BINDER;
 }
 
@@ -841,6 +944,7 @@ char* lean_form_string(const Expr* e) {
     memset(&c, 0, sizeof c);
     LBuf b = {0};
     build(&c, e, &b);
+    ctx_release(&c);
     return lb_take(&b);
 }
 
@@ -853,6 +957,7 @@ char* lean_form_string_ex(const Expr* e, const LeanFormOpts* o, const char** err
     if (c.o.num == LEAN_NUM_INT) c.o.allow_division = 0;
     LBuf b = {0};
     build(&c, e, &b);
+    ctx_release(&c);
     if (err) *err = c.err;
     if (bad) *bad = c.bad;
     if (c.err) { free(b.s); return NULL; }
@@ -860,11 +965,19 @@ char* lean_form_string_ex(const Expr* e, const LeanFormOpts* o, const char** err
 }
 
 Expr* builtin_lean_tolean(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 4) return NULL;
+    if (res->type != EXPR_FUNCTION ||
+        (res->data.function.arg_count != 4 && res->data.function.arg_count != 5))
+        return NULL;
     Expr* const* a = res->data.function.args;
     LeanFormOpts o;
     memset(&o, 0, sizeof o);
     o.allow_division = 1;
+    if (res->data.function.arg_count == 5) {
+        if (a[4]->type != EXPR_SYMBOL ||
+            (a[4]->data.symbol.name != SYM_True && a[4]->data.symbol.name != SYM_False))
+            return NULL;
+        o.closed = a[4]->data.symbol.name == SYM_True;
+    }
     if (a[1]->type == EXPR_STRING) {
         const char* t = a[1]->data.string;
         if (strcmp(t, "Int") == 0) o.num = LEAN_NUM_INT;

@@ -1,7 +1,9 @@
 /*
  * lean_run.h -- running the Lean 4 checker from Mathilda.
  *
- * The process layer is ISO C system(): no fork / popen / <unistd.h>.  The
+ * The process layer is ISO C system(): no fork / popen (POSIX <unistd.h> /
+ * <fcntl.h> are used only for the private temp directory: mkdtemp, open with
+ * O_EXCL, rmdir).  The
  * command line is assembled from an argv whose every element is quoted for
  * the host shell, and holds only executable paths, flags written by Mathilda
  * and temp-file paths: the Lean source, tactic strings and claims are always
@@ -9,9 +11,10 @@
  *
  *   POSIX:  set -C; [cd 'CWD' &&] 'ARG0' 'ARG1' ... > 'OUT' 2> 'ERR'
  *           Single quotes make every character literal (an embedded ' is
- *           written '\''), so the quoting is complete; set -C (noclobber)
- *           makes the redirections fail on an existing file, a planted
- *           symlink included.  The exit status is decoded with WEXITSTATUS.
+ *           written '\''), so the quoting is complete; OUT and ERR lie in
+ *           a fresh mkdtemp directory (mode 0700), and set -C (noclobber)
+ *           makes the redirections fail on an existing file anyway.  The
+ *           exit status is decoded with WEXITSTATUS.
  *   _WIN32: [cd /d "CWD" &&] "ARG0" "ARG1" ... > "OUT" 2> "ERR"; an argument
  *           containing any of " % ! ^ & | < > is refused (cmd.exe has no
  *           complete quoting).  This branch compiles under MinGW but is not

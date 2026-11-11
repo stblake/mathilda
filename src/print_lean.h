@@ -40,6 +40,10 @@ typedef struct {
     int allow_division;     /* 0 forbids `/`; forced to 0 under LEAN_NUM_INT */
     const char* const* pass_heads;  /* Lean names allowed as applied heads (strict form) */
     size_t n_pass_heads;
+    int closed;             /* 1: the text is a whole theorem statement -- every symbol must be
+                             * bound by an enclosing ForAll / Exists / Function or be a
+                             * pass-through name, so no free identifier can resolve to a Lean
+                             * global (default, id, ...) */
 } LeanFormOpts;
 
 /* Display form (LeanForm[e], ToString[e, LeanForm]): permissive, never NULL, caller frees. */
@@ -51,8 +55,9 @@ char* lean_form_string(const Expr* e);
 char* lean_form_string_ex(const Expr* e, const LeanFormOpts* o, const char** err,
                           const Expr** bad);
 
-/* Lean`Internal`ToLean[expr, "Int"|"Rat"|"Real"|None, coreOnly, {passHeads...}]: the strict
- * translation as a String, or $Failed with LeanForm::untrans. */
+/* Lean`Internal`ToLean[expr, "Int"|"Rat"|"Real"|None, coreOnly, {passHeads...}(, closed)]:
+ * the strict translation as a String, or $Failed with LeanForm::untrans.  closed -> True
+ * sets LeanFormOpts.closed. */
 Expr* builtin_lean_tolean(Expr* res);
 
 #endif /* MATHILDA_PRINT_LEAN_H */
