@@ -962,7 +962,10 @@ static void test_algebraic_constant_normal_form(void) {
     assert_integral_form("1/(x^2 + 3 + 2 Sqrt[2])", "(-1 + Sqrt[2]) ArcTan[(-1 + Sqrt[2]) x]");
     assert_integral_form("1/(x^2 + 3/4 - 1/Sqrt[2])", "(2 + 2 Sqrt[2]) ArcTan[(2 + 2 Sqrt[2]) x]");
     assert_integral_form("1/(x^2 + 4 + 2 Sqrt[3])", "1/2 (-1 + Sqrt[3]) ArcTan[1/2 (-1 + Sqrt[3]) x]");
-    assert_integral_form("1/(x^2 - 3 - 2 Sqrt[2])", "(-1 + Sqrt[2]) ArcTanh[(1 - Sqrt[2]) x]");
+    /* the reference's -(ArcTanh[x/Sqrt[3 + 2 Sqrt[2]]]/Sqrt[3 + 2 Sqrt[2]]),
+     * 1/Sqrt[3 + 2 Sqrt[2]] = -1 + Sqrt[2] (equal to the odd-symmetric
+     * (-1 + Sqrt[2]) ArcTanh[(1 - Sqrt[2]) x]) */
+    assert_integral_form("1/(x^2 - 3 - 2 Sqrt[2])", "(1 - Sqrt[2]) ArcTanh[(-1 + Sqrt[2]) x]");
     assert_integral_form("1/(x^2 + 2 x + 4 + 2 Sqrt[2])",
                          "(-1 + Sqrt[2]) ArcTan[-1 + Sqrt[2] + (-1 + Sqrt[2]) x]");
     /* the #133 integrand: kernels merged, ArcTan arguments polynomial in x */

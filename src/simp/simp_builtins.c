@@ -23,6 +23,7 @@
 #include "simp_log.h"
 #include "expsplit.h"
 #include "flint_qqbar.h"
+#include "algfield.h"
 
 #include <math.h>
 #include <stdio.h>
@@ -2216,6 +2217,20 @@ static Expr* simp_rejoin_divided_sum_factors(const Expr* e) {
     return r;
 }
 
+/* The field normal form of a rational function whose coefficients carry a
+ * nested constant radical (algfield_normalize, Together over the number field
+ * of the coefficients), when it scores strictly below the input; else NULL. */
+static Expr* simp_nested_constant_field(const Expr* expr, const Expr* complexity) {
+    if (!algfield_has_nested_constant_radical(expr)) return NULL;
+    Expr* r = algfield_normalize(expr, SYM_Together);
+    if (!r) return NULL;
+    if (score_with_func(r, complexity) >= score_with_func(expr, complexity)) {
+        expr_free(r);
+        return NULL;
+    }
+    return r;
+}
+
 Expr* builtin_simplify(Expr* res) {
     Expr* out = builtin_simplify_inner(res);
     if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2) {
@@ -2574,6 +2589,22 @@ static Expr* builtin_simplify_core(Expr* res) {
          * numerator zero-test — a genuine symbolic decision, no sampling.
          * Declines cheaply (NULL) on non-vanishing / non-single-kernel inputs,
          * so the general search below runs unchanged for everything else. */
+    } else if ((best = simp_nested_constant_field(expr, opt_complexity)) != NULL) {
+        /* Nested constant radicals among the coefficients
+         * (Sqrt[3/4 - 1/Sqrt[2]], Sqrt[1 + Sqrt[2]]): the rational function
+         * over the number field of its coefficients, denested where the field
+         * allows (algfield.h).  The general search below cannot see the
+         * relations between such atoms and runs into the same swell as the
+         * generator model.  Exact, so only the assumption-aware bottom-up
+         * polish may improve on it. */
+        Expr* polished = simp_bottomup(best, ctx, opt_complexity, &memo, 0);
+        if (polished && score_with_func(polished, opt_complexity)
+                            < score_with_func(best, opt_complexity)) {
+            expr_free(best);
+            best = polished;
+        } else if (polished) {
+            expr_free(polished);
+        }
     } else if ((best = simp_algebraic_field(expr, ctx, opt_complexity)) != NULL) {
         /* Algebraic-function-field fast path. A rational function of radicals
          * (any number, with parameters and nesting) gets its canonical form

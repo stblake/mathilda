@@ -933,6 +933,7 @@ set(COMMON_SRC
     ../src/poly/flint_trager.c
     ../src/poly/flint_polymat.c
     ../src/poly/flint_qqbar.c
+    ../src/poly/algfield.c
     ../src/poly/algebraicnumber.c
     ../src/poly/tonumberfield.c
     ../src/poly/algebraicnumberpolynomial.c
@@ -2281,7 +2282,7 @@ add_test(NAME coefficient_rules_tests COMMAND coefficient_rules_tests)
 
 add_executable(field_together_cancel_tests test_field_together_cancel.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(field_together_cancel_tests PRIVATE ../src)
-add_test(NAME field_together_cancel_tests COMMAND field_together_cancel_tests)
+add_test(NAME field_together_cancel_tests COMMAND field_together_cancel_tests ${CMAKE_CURRENT_SOURCE_DIR}/together_nested_radical_d2.m)
 
 add_executable(polynomialreduce_tests test_polynomialreduce.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(polynomialreduce_tests PRIVATE ../src)

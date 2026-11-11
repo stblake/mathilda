@@ -286,17 +286,18 @@ static void test_multigen_together_no_op(void) {
 }
 
 static void test_nested_radical_skip_matches_no_ext(void) {
-    /* Layer-0 prefilter regression test.  Input has a nested radical
-     * (Sqrt[5 + 2 Sqrt[6]] surfaced via Power[Plus[...], -3/2]) and
-     * no free polynomial variable, so the predicate skips the
-     * extension_autodetect + tower-build cascade.  Result must match
-     * what no-extension Together would produce — the structural
-     * combine is the same regardless of the Extension option, the
-     * difference is just throughput. */
-    assert_eval_same(
-        "Together[1/(5 + 2 Sqrt[6])^(3/2) + (Sqrt[2] - Sqrt[3])^3]",
-        "Together[1/(5 + 2 Sqrt[6])^(3/2) + (Sqrt[2] - Sqrt[3])^3, "
-        "Extension -> Automatic]");
+    /* A nested constant radical with no free variable.  Extension -> Automatic
+     * works over the number field of the coefficients (src/poly/algfield.c):
+     * (5 + 2 Sqrt[6])^(3/2) = (Sqrt[2] + Sqrt[3])^3, so the sum is 0, as in the
+     * reference.  The default Together keeps the nested radical (it was the
+     * same as the Extension -> Automatic answer while that skipped the
+     * extension for nested radicals). */
+    assert_eval_eq(
+        "TimeConstrained[Together[1/(5 + 2 Sqrt[6])^(3/2) + (Sqrt[2] - Sqrt[3])^3, "
+        "Extension -> Automatic], 10, $Failed]", "0", 0);
+    assert_eval_eq(
+        "FreeQ[Together[1/(5 + 2 Sqrt[6])^(3/2) + (Sqrt[2] - Sqrt[3])^3], "
+        "(5 + 2 Sqrt[6])^(3/2)]", "False", 0);
 }
 
 /* =========================== Phase C: multi-radical GCD/LCM =========================== */

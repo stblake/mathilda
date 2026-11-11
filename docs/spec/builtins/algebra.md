@@ -265,15 +265,52 @@ Out[7]= -(2 x)/(k^(2/3) - x^2)
   generalises the sqrt-only combiner to any index. The same path serves `Cancel`;
   single-fraction relation-dependent cancellations (`(x^3-k)/(x-k^(1/3))`) still
   go through the relation-aware GCD path.
-- **Known deficiency: nested-radical coefficient fields (no termination).** A
-  rational function of `x` with coefficients in `Q(I, Sqrt[2], Sqrt[3/4 - 1/Sqrt[2]])`
-  (4639 leaves, value ≈ 1.4714 at `x = 1/3`) does not finish in `Together` or
-  `Simplify` within 20 s, with or without `Extension -> Automatic`. The time goes in
-  `cancel_recursive -> PolynomialGCD -> pseudo_rem` over the multi-atom ring, and the
-  field is really just `Q(I, Sqrt[2])`, because the inner radical denests. It is the
-  same root cause as `PolynomialGCD`'s nested-radical deficiency. Reproducer:
-  `tasks/polygcd_together_deficiencies/` (found via issue #133, where `Integrate` hung
-  on this input. Integrate is fixed separately and no longer builds it).
+- **Nested constant radicals among the coefficients** (v0.6507,
+  `src/poly/algfield.c`). A radical `b^(p/q)` whose base `b` is a constant
+  algebraic number that is not rational (`q = Sqrt[3/4 - 1/Sqrt[2]]`,
+  `Sqrt[1 + Sqrt[2]]`, `(1 + I Sqrt[3])^(1/3)`) defeated the generator model: its relation
+  has algebraic coefficients and may be reducible (`q = 1/Sqrt[2] - 1/2`), and the
+  gcds over the atoms `I`, `Sqrt[2]`, `q`, `q^3` swelled without bound. Such an
+  input is now read in one of two ways, the same for `Cancel`:
+  - *By default* the fast exact paths run first, as before. If they all decline,
+    then before the classical fallback each such radical's base takes its Together
+    form. A radicand that combines to a radical monomial
+    (`-1/(9 2^(2/3)) + 2/9 2^(1/3) = 1/(3 2^(2/3))`) is then not nested and the
+    classical path takes it as before. Each remaining nested radical is an opaque
+    generator `g = b^(1/m)`: the combination runs with `g` a fresh symbol, and
+    numerator and denominator are reduced modulo `g^m - b`. There is no denesting
+    and no rationalisation, as in the reference: `Together[1/(x - q) + 1/(x + q)]` is
+    `(8 Sqrt[2] x)/(4 - 3 Sqrt[2] + 4 Sqrt[2] x^2)`, and
+    `Together[(x^2 - q^2)/(x - q)]` is unchanged.
+  - *With `Extension -> Automatic`* the computation runs over the number field `K`
+    of the coefficients. Every atom becomes an element of `K` (one FLINT qqbar
+    primitive element), the combination and the gcd run over `K`, and each
+    coefficient of the answer is written over a basis of radical monomials in the
+    atoms, simplest atoms first. An atom that lies in the field of simpler ones
+    adds nothing to that basis, so a nested radical is denested exactly when the
+    field allows it. The denominator is monic over `K` and the rational content is
+    cleared. `Together[(x^2 - q^2)/(x - q), Extension -> Automatic]` is
+    `(-1 + Sqrt[2] + 2 x)/2`, `Together[1/(x - q) - 1/(x - 1/Sqrt[2] + 1/2),
+    Extension -> Automatic]` is `0`, and the non-denestable
+    `Together[(x^2 - 1 - Sqrt[2])/(x - Sqrt[1 + Sqrt[2]]), Extension -> Automatic]`
+    is `Sqrt[1 + Sqrt[2]] + x`.
+  - The input that exposed this (4639 leaves over `Q(I, Sqrt[2], q)`, from issue
+    #133, `tasks/polygcd_together_deficiencies/`) ran past 20 s in `Together`,
+    `Cancel` and `Simplify`. Now `Together[e, Extension -> Automatic]` is
+    `1 + Sqrt[2] x` in 9 ms, the default `Together[e]` takes 0.09 s (an
+    equal-valued LeafCount-163 form over `Sqrt[2]`, `q` and `I`), and `Simplify[e]`
+    is `1 + Sqrt[2] x` in 0.08 s.
+  - Why the default keeps the nested radical: the reference's default `Together` of
+    that input keeps one (`(7 - 5 Sqrt[2] - 10 x + 7 Sqrt[2] x)/(Sqrt[3 - 2 Sqrt[2]]
+    (-3 + 2 Sqrt[2]))`), and so do Maxima's `ratsimp` and FriCAS's `normalize`.
+    With `Extension -> Automatic` the reference's answer has no nested radical.
+  - Under `Extension -> Automatic` the field computation runs first; if it
+    declines (another kernel such as `Sin[x]`, a field of degree above 32), the
+    former extension paths run.
+  - The new work is gated on one linear walk for such a radical. Inputs without
+    one take their former paths, and so does a default call with no symbolic
+    variable (numbers and numeric kernels such as `EllipticK[1/2 (7 - 3 Sqrt[5])]`
+    only), which the numeric-constant guards already leave as written.
 
 ## RootReduce
 

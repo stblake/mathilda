@@ -19,6 +19,7 @@
 #include "print.h"
 #include "rat_internal.h"
 #include "expsplit.h"
+#include "algfield.h"
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -1628,6 +1629,60 @@ static bool rat_canon_enabled(void) {
 }
 #endif
 
+#ifdef USE_FLINT
+/* A polynomial variable that is not a numeric quantity (a symbol, or a kernel
+ * such as f[x]; not Pi or EllipticK[1/3]). */
+static bool rat_has_symbolic_variable(const Expr* e) {
+    size_t vc = 0, vp = 16;
+    Expr** vv = malloc(sizeof(Expr*) * vp);
+    collect_variables((Expr*)e, &vv, &vc, &vp);
+    bool found = false;
+    for (size_t i = 0; i < vc; i++) {
+        if (!found && !expr_is_numeric_quantity(vv[i])) found = true;
+        expr_free(vv[i]);
+    }
+    free(vv);
+    return found;
+}
+
+/* A nested constant radical among the coefficients (Sqrt[3/4 - 1/Sqrt[2]],
+ * Sqrt[1 + Sqrt[2]]; see algfield.h).  The classical generator model at the
+ * end of the cascade cannot read one: its relation has algebraic coefficients
+ * and may be reducible, and the gcds over the atoms swell without bound.
+ *
+ * Under Extension -> Automatic the computation runs over the number field of
+ * the coefficients, denesting what denests (rat_nested_field, first in the
+ * dispatch).  Otherwise, once every fast path has declined, each such radical
+ * is an opaque generator reduced by its own relation (rat_nested_kernels,
+ * just before the classical fallback), with no denesting and no
+ * rationalisation.  Both return NULL (the cascade continues) when there is no
+ * such radical, an explicit Extension -> alpha or another option is given, or
+ * the input is inexact. */
+static Expr* rat_nested_field(Expr* res, const char* head) {
+    size_t argc = res->data.function.arg_count;
+    bool auto_flag = false;
+    const Expr* alpha = extract_extension_option_full(res, &argc, &auto_flag);
+    if (argc != 1 || alpha || !auto_flag || res->data.function.arg_count != 2) return NULL;
+    Expr* arg = res->data.function.args[0];
+    if (!algfield_has_nested_constant_radical(arg) || internal_args_contain_inexact(res))
+        return NULL;
+    return algfield_normalize(arg, head);
+}
+
+static Expr* rat_nested_kernels(const Expr* arg, const char* head,
+                                Expr* (*compute)(Expr*)) {
+    if (!algfield_has_nested_constant_radical(arg)) return NULL;
+    /* With no symbolic variable (only numbers and numeric kernels such as
+     * EllipticK[1/2 (7 - 3 Sqrt[5])]) there is nothing to combine but
+     * numbers; the numeric-constant guards of the fallback handle that. */
+    if (!rat_has_symbolic_variable(arg)) return NULL;
+    Expr* plain = expr_new_function(expr_new_symbol(head), (Expr*[]){ expr_copy((Expr*)arg) }, 1);
+    Expr* r = algfield_kernel_model(plain, head, compute);
+    expr_free(plain);
+    return r;
+}
+#endif
+
 static Expr* builtin_cancel_compute(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 1) return NULL;
 
@@ -1647,6 +1702,10 @@ static Expr* builtin_cancel_compute(Expr* res) {
             expr_free(stripped);
             return out;
         }
+    }
+    {
+        Expr* nr = rat_nested_field(res, SYM_Cancel);
+        if (nr) return nr;
     }
     /* Factored rational-function engine over Q (+ kernels): one conversion into
      * FLINT, the answer with its factors kept.  Declines (NULL) on algebraic
@@ -1947,6 +2006,13 @@ static Expr* builtin_cancel_compute(Expr* res) {
     if (internal_args_contain_inexact_coefficient(res)) {
         return internal_rationalize_then_numericalize_algebraic(res, builtin_cancel, NULL);
     }
+
+#ifdef USE_FLINT
+    {
+        Expr* nk = rat_nested_kernels(arg, SYM_Cancel, builtin_cancel_compute);
+        if (nk) return nk;
+    }
+#endif
 
     /* Algebraic-generator pass: if the input contains a sub-expression
      * u with fractional rational exponents (u^(p/q), q != 1), substitute
@@ -2378,6 +2444,10 @@ static Expr* builtin_together_compute(Expr* res) {
             return out;
         }
     }
+    {
+        Expr* nr = rat_nested_field(res, SYM_Together);
+        if (nr) return nr;
+    }
     /* Factored rational-function engine first (see builtin_cancel_compute). */
     if (res->data.function.arg_count == 1 && ratfun_enabled() &&
         !internal_args_contain_inexact(res)) {
@@ -2552,6 +2622,13 @@ static Expr* builtin_together_compute(Expr* res) {
     if (internal_args_contain_inexact_coefficient(res)) {
         return internal_rationalize_then_numericalize_algebraic(res, builtin_together, NULL);
     }
+
+#ifdef USE_FLINT
+    {
+        Expr* nk = rat_nested_kernels(arg, SYM_Together, builtin_together_compute);
+        if (nk) return nk;
+    }
+#endif
 
     /* Algebraic-generator pass (see builtin_cancel for the rationale). */
     {

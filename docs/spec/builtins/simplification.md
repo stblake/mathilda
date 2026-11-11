@@ -14,6 +14,8 @@ returns the simplest form it finds.
   the candidate of minimum complexity.
 - `Simplify[expr, assum]` — simplifies using the assumptions `assum`.
 
+**Nested constant radicals among the coefficients** (v0.6507). A rational function whose coefficients carry a nested constant radical (`Sqrt[3/4 - 1/Sqrt[2]]`, `Sqrt[1 + Sqrt[2]]`) takes its normal form over the number field of its coefficients (`Together[..., Extension -> Automatic]`, see Together) when that scores lower, then the bottom-up polish. The general search cannot see the relations between such atoms. The 4639-leaf input of issue #133 over `Q(I, Sqrt[2], Sqrt[3/4 - 1/Sqrt[2]])` ran past 20 s; `Simplify` and `FullSimplify` now give `1 + Sqrt[2] x` in 0.08 s. `Simplify[(x^2 - 1 - Sqrt[2])/(x - Sqrt[1 + Sqrt[2]])]` is `Sqrt[1 + Sqrt[2]] + x`.
+
 **Powers of sums and of negative numbers; a sum's quotient terms** (v0.6225, #126 second follow-up).
 - *Content of a power's base* (`PowerContent`): a sum under a non-integer exponent sheds its positive rational content, `(c u)^e = c^e u^e` (valid for `c > 0`, any `u`, `e`). `Simplify[(4^eps (a + b)^eps)/(4 a + 4 b)^eps]` is `1` (it stayed as it was), `Simplify[(4 a + 4 b)^eps]` is `4^eps (a + b)^eps` and `Simplify[Sqrt[4 a + 4 b]]` is `2 Sqrt[a + b]`, as in the reference; ties go to the rewrite. The sign stays inside: `(-4 a - 4 b)^e` would become `4^e (-a - b)^e`, which costs more and is not taken.
 - *A number out of a negative base's exponent* (`NegativeBasePower`): `c^(k + r) = c^k c^r` for a negative rational `c` and an exact `k`, ties included: `Simplify[(-1)^(2 + n) a]` is `(-1)^n a`, `Simplify[(-1)^(1 + x) a]` is `-(-1)^x a`, `Simplify[-((-4)^(-1 + x) 3^x)]` is `(-3)^x 4^(-1 + x)`.
