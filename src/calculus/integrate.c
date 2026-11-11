@@ -64,6 +64,7 @@
 #include "risch_hypertangent.h"
 #include "risch_coupled.h"
 #include "risch_hermite.h"
+#include "risch_util.h"
 #include "intsimp.h"
 #include "common.h"
 #include "expr.h"
@@ -1463,7 +1464,8 @@ static Expr* try_parallelmixedtower(Expr* f, Expr* x, bool cascade) {
  * src/internal/trager/ and loaded on first use.  The worker
  * Trager`TragerIntegrate[f, x, engine] returns the antiderivative (verified
  * exactly before it is returned), {"not elementary", reason} -- a proof -- or
- * {"failed", reason}.  Neither method is part of the Automatic cascade. */
+ * {"failed", reason}.  Method -> "Trager" also runs in the Automatic cascade
+ * (try_trager_cascade, gated and budgeted); TragerKauers does not. */
 static unsigned trager_load_gen = 0;   /* symtab_generation() of the attempt */
 static bool trager_load_succeeded = false;
 
@@ -1596,6 +1598,173 @@ static Expr* try_bronstein(Expr* f, Expr* x) {
         return NULL;
     }
     return result;
+}
+
+/* ------------------------------------------------------------------------- *
+ * Automatic-cascade stages: Trager and Bronstein.
+ * ------------------------------------------------------------------------- *
+ * Both are complete decision procedures in their scope, so they run in the
+ * Automatic cascade (after LogByParts, before ParallelMixedTower), each behind a
+ * cheap STRUCTURAL gate and a wall-clock budget:
+ *   - Trager:    an x-dependent radical, and nothing but rational operations and
+ *                rational powers (no transcendental head of x, no algebraic
+ *                constant);
+ *   - Bronstein: a radical whose radicand contains a Log/Exp kernel of x, and no
+ *                head other than rational operations, powers and Log.
+ * A budget expiry is a decline: the cascade continues (a budget must never stop
+ * the cascade).  A certificate {"not elementary", ...} is announced by the
+ * method symbol (Integrate::nonelem) and sets *nonelem so the cascade skips its
+ * remaining ELEMENTARY-only stages (ParallelMixedTower, Goursat) -- the special-
+ * function stages still run, since an Erf / elliptic answer is still wanted.
+ * The budgets are the zero-argument-safe symbols $TragerCascadeBudget and
+ * $BronsteinCascadeBudget (seconds; Infinity = none). */
+#define TRAGER_CASCADE_BUDGET_DEFAULT 10
+#define BRONSTEIN_CASCADE_BUDGET_DEFAULT 10
+
+/* Is e built from x, numbers, Plus/Times and Power with an integer or rational
+ * exponent only (base algebraic in x), with no numeric radical (an algebraic
+ * constant)?  Sets *has_rad when some Power[b, r] (r a non-integer rational)
+ * has a base depending on x. */
+static bool cg_algebraic_only(const Expr* e, const Expr* x, bool* has_rad) {
+    if (!e) return false;
+    switch (e->type) {
+        case EXPR_INTEGER: case EXPR_BIGINT: return true;
+        case EXPR_SYMBOL: return true;          /* x, or a parameter: Trager declines those */
+        case EXPR_FUNCTION: break;
+        default: return false;                  /* Real, String, ... */
+    }
+    if (rt_head_is(e, "Rational")) return true;
+    if (rt_head_is(e, "Plus") || rt_head_is(e, "Times")) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!cg_algebraic_only(e->data.function.args[i], x, has_rad)) return false;
+        return true;
+    }
+    if (rt_head_is(e, "Power") && e->data.function.arg_count == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* r = e->data.function.args[1];
+        bool rat = rt_head_is(r, "Rational");
+        if (!(r->type == EXPR_INTEGER || rat)) return false;
+        if (rat) {
+            if (!depends_on_var(b, x)) return false;   /* algebraic constant */
+            *has_rad = true;
+        }
+        return cg_algebraic_only(b, x, has_rad);
+    }
+    return false;
+}
+
+/* Bronstein gate: only Plus/Times/Power/Log over x and numbers; at least one
+ * radical whose base contains a Log or an E-power kernel of x. */
+static bool cg_mixed_only(const Expr* e, const Expr* x, bool* has_mixed_rad) {
+    if (!e) return false;
+    switch (e->type) {
+        case EXPR_INTEGER: case EXPR_BIGINT: return true;
+        case EXPR_SYMBOL: return true;
+        case EXPR_FUNCTION: break;
+        default: return false;
+    }
+    if (rt_head_is(e, "Rational")) return true;
+    if (rt_head_is(e, "Plus") || rt_head_is(e, "Times") ||
+        (rt_head_is(e, "Log") && e->data.function.arg_count == 1)) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            if (!cg_mixed_only(e->data.function.args[i], x, has_mixed_rad)) return false;
+        return true;
+    }
+    if (rt_head_is(e, "Power") && e->data.function.arg_count == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* r = e->data.function.args[1];
+        if (b->type == EXPR_SYMBOL && b->data.symbol.name == intern_symbol("E"))
+            return cg_mixed_only(r, x, has_mixed_rad);
+        bool rat = rt_head_is(r, "Rational");
+        if (!(r->type == EXPR_INTEGER || rat)) return false;
+        if (rat) {
+            if (!depends_on_var(b, x)) return false;   /* algebraic constant */
+            if (rt_find_exp_of_x((Expr*)b, (Expr*)x) || rt_find_log_of_x((Expr*)b, (Expr*)x))
+                *has_mixed_rad = true;
+        }
+        return cg_mixed_only(b, x, has_mixed_rad);
+    }
+    return false;
+}
+
+static bool cascade_gate_trager(const Expr* f, const Expr* x) {
+    bool has_rad = false;
+    return cg_algebraic_only(f, x, &has_rad) && has_rad;
+}
+
+static bool cascade_gate_bronstein(const Expr* f, const Expr* x) {
+    bool has_mixed = false;
+    return cg_mixed_only(f, x, &has_mixed) && has_mixed;
+}
+
+/* Integrate`CascadeGateQ["Trager" | "Bronstein", f, x] -- the cascade gates,
+ * exposed for direct testing. */
+static Expr* builtin_integrate_cascadegateq(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    Expr* which = res->data.function.args[0];
+    Expr* f = res->data.function.args[1];
+    Expr* x = res->data.function.args[2];
+    if (which->type != EXPR_STRING || x->type != EXPR_SYMBOL) return NULL;
+    bool r;
+    if (strcmp(which->data.string, "Trager") == 0) r = cascade_gate_trager(f, x);
+    else if (strcmp(which->data.string, "Bronstein") == 0) r = cascade_gate_bronstein(f, x);
+    else return NULL;
+    return expr_new_symbol(r ? "True" : "False");
+}
+
+/* The cascade budget held by the symbol `name` (seconds), or `dflt` when it is
+ * unset or not a positive number; 0 means Infinity (no TimeConstrained). */
+static double cascade_budget(const char* name, double dflt) {
+    Expr* v = evaluate(expr_new_symbol(name));
+    double b = dflt;
+    if (v) {
+        if (v->type == EXPR_INTEGER && v->data.integer > 0) b = (double)v->data.integer;
+        else if (v->type == EXPR_REAL && v->data.real > 0) b = v->data.real;
+        else if (v->type == EXPR_SYMBOL && v->data.symbol.name == intern_symbol("Infinity")) b = 0;
+        expr_free(v);
+    }
+    return b;
+}
+
+/* Run the method symbol `head` on (f, x) under the budget; an antiderivative,
+ * or NULL (decline).  A {"not elementary", ...} certificate sets *nonelem. */
+static Expr* try_cascade_decider(const char* head, const char* budget_sym, double dflt,
+                                 Expr* f, Expr* x, bool* nonelem) {
+    double budget = cascade_budget(budget_sym, dflt);
+    Expr* call = expr_new_function(expr_new_symbol(head),
+        (Expr*[]){ expr_copy(f), expr_copy(x) }, 2);
+    if (budget > 0)
+        call = expr_new_function(expr_new_symbol("TimeConstrained"), (Expr*[]){
+            call, expr_new_real(budget), expr_new_symbol(SYM_DollarFailed) }, 3);
+    Expr* r = evaluate(call);
+    expr_free(call);
+    if (!r) return NULL;
+    if (r->type == EXPR_FUNCTION && r->data.function.head->type == EXPR_SYMBOL &&
+        r->data.function.head->data.symbol.name == SYM_List) {
+        if (pmt_is_nonelementary_certificate(r) && nonelem) *nonelem = true;
+        expr_free(r);
+        return NULL;
+    }
+    if ((r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_DollarFailed) ||
+        result_is_unresolved(r, head) ||
+        result_contains_head(r, "Trager`TragerIntegrate") ||
+        result_contains_head(r, "Bronstein`BronsteinIntegrate")) {
+        expr_free(r);
+        return NULL;
+    }
+    return r;
+}
+
+static Expr* try_trager_cascade(Expr* f, Expr* x, bool* nonelem) {
+    if (!cascade_gate_trager(f, x)) return NULL;
+    return try_cascade_decider("Integrate`Trager", "$TragerCascadeBudget",
+                               TRAGER_CASCADE_BUDGET_DEFAULT, f, x, nonelem);
+}
+
+static Expr* try_bronstein_cascade(Expr* f, Expr* x, bool* nonelem) {
+    if (!cascade_gate_bronstein(f, x)) return NULL;
+    return try_cascade_decider("Integrate`Bronstein", "$BronsteinCascadeBudget",
+                               BRONSTEIN_CASCADE_BUDGET_DEFAULT, f, x, nonelem);
 }
 
 /* ------------------------------------------------------------------------- *
@@ -2751,8 +2920,8 @@ typedef enum {
     IP_UNDEFINED = 0, IP_STEP, IP_RATIONAL, IP_LINRAD, IP_QUADRAD, IP_LINRATIORAD,
     IP_CHEBYCHEV, IP_FRESNEL, IP_GAMMAPOWER, IP_LINEARITY, IP_LINARG,
     IP_WEIERSTRASS, IP_DERIVDIVIDES, IP_RISCHTRANS, IP_CRCTABLE, IP_GRTABLE, IP_POLYLOG,
-    IP_HOLONOMIC, IP_BESSELHYPER, IP_LOGBYPARTS, IP_PMT, IP_GOURSAT, IP_PMS,
-    IP_ROACH, IP_NSTAGES
+    IP_HOLONOMIC, IP_BESSELHYPER, IP_LOGBYPARTS, IP_TRAGER, IP_BRONSTEIN, IP_PMT,
+    IP_GOURSAT, IP_PMS, IP_ROACH, IP_NSTAGES
 } IntegrateProfStage;
 
 static const char* const ip_stage_name[IP_NSTAGES] = {
@@ -2761,7 +2930,7 @@ static const char* const ip_stage_name[IP_NSTAGES] = {
     "07 Fresnel", "08 GammaPower", "09 Linearity", "10 LinearArgSubst",
     "11 Weierstrass", "12 DerivativeDivides", "13 RischTranscendental",
     "14 CRCTable", "20 GRTable", "14b PolyLogLadder", "14c Holonomic", "14d BesselHypergeometric", "15 LogByParts",
-    "16 ParallelMixedTower", "17 GoursatAlgebraic", "18 ParallelMixedSpecial",
+    "15b Trager", "15c Bronstein", "16 ParallelMixedTower", "17 GoursatAlgebraic", "18 ParallelMixedSpecial",
     "19 RoachMeijerG"
 };
 static long   g_ip_entries = 0;   /* cascade passes over one integrand */
@@ -3362,6 +3531,7 @@ Expr* builtin_integrate(Expr* res) {
     }
 
     Expr* result = NULL;
+    bool cascade_nonelem = false;   /* a Trager/Bronstein certificate in this pass */
     switch (method) {
         case METHOD_AUTOMATIC:
             /* Depth 1 only: a NESTED pass (a stage recursing into Integrate --
@@ -3444,6 +3614,15 @@ Expr* builtin_integrate(Expr* res) {
              * Bessel-product antiderivative exists. */
             IP_STAGE(IP_BESSELHYPER,  try_besselhyper(effective_f, x));
             IP_STAGE(IP_LOGBYPARTS,   try_logbyparts(effective_f, x));
+            /* The complete decision procedures for one radical: Trager (algebraic)
+             * and Bronstein (a radical over a Log/Exp tower).  Gated and
+             * budgeted (see try_cascade_decider); a certificate skips the
+             * remaining elementary-only stages below.  Skipped under
+             * g_integrate_no_special like the other heavy tail stages. */
+            if (!g_integrate_no_special) {
+                IP_STAGE(IP_TRAGER,    try_trager_cascade(effective_f, x, &cascade_nonelem));
+                IP_STAGE(IP_BRONSTEIN, try_bronstein_cascade(effective_f, x, &cascade_nonelem));
+            }
             /* The parallel Risch-Norman integrator over a mixed tower.  After
              * the CRC table so a tabled integral is answered cleanly and
              * cheaply rather than paying this stage's package load and search
@@ -3457,7 +3636,7 @@ Expr* builtin_integrate(Expr* res) {
              * Also skipped when g_integrate_no_special is raised (a speculative
              * sub-integral of LogByParts): a reduction that does not close at a
              * cheap stage must decline promptly, not grind the tower. */
-            if (!g_integrate_no_special && !has_pseudoelliptic_radical(effective_f, x))
+            if (!g_integrate_no_special && !cascade_nonelem && !has_pseudoelliptic_radical(effective_f, x))
                 IP_STAGE(IP_PMT,      try_parallelmixedtower(effective_f, x, true));
             /* Goursat pseudo-elliptic (and cube-/fourth-root) reductions to
              * genus-0 curves.  Runs last, after ParallelMixedTower: it is a
@@ -3472,7 +3651,7 @@ Expr* builtin_integrate(Expr* res) {
              * differentiate-back guard), so a decline here leaves the integral
              * unevaluated rather than wrong.  Skipped under g_integrate_no_special
              * (a LogByParts speculative sub-integral). */
-            if (!g_integrate_no_special)
+            if (!g_integrate_no_special && !cascade_nonelem)
                 IP_STAGE(IP_GOURSAT,  try_goursat(effective_f, x));
             /* ParallelMixedSpecial: the special-function stage, and the LAST
              * stage of the cascade.
@@ -3724,6 +3903,32 @@ void integrate_init(void) {
         "Trager's algorithm, purely transcendental ones to the transcendental Risch "
         "algorithm. It returns the antiderivative (verified), {\"not elementary\", "
         "reason} -- a proof, also announced as Integrate::nonelem -- or {\"failed\", reason}.");
+    /* The Automatic-cascade gates of the Trager / Bronstein stages, and their budgets. */
+    symtab_add_builtin("Integrate`CascadeGateQ", builtin_integrate_cascadegateq);
+    symtab_get_def("Integrate`CascadeGateQ")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Integrate`CascadeGateQ",
+        "Integrate`CascadeGateQ[\"Trager\" | \"Bronstein\", f, x] is the structural gate of the "
+        "Trager / Bronstein stage of the Automatic Integrate cascade: True when f is an "
+        "algebraic function of x with a radical (Trager), or has a radical whose radicand "
+        "contains a Log/Exp kernel of x and no other functions (Bronstein).");
+    {   /* symtab_add_own_value copies both pattern and value */
+        Expr* sym = expr_new_symbol("$TragerCascadeBudget");
+        Expr* rhs = expr_new_integer(TRAGER_CASCADE_BUDGET_DEFAULT);
+        symtab_add_own_value("$TragerCascadeBudget", sym, rhs);
+        expr_free(sym); expr_free(rhs);
+        sym = expr_new_symbol("$BronsteinCascadeBudget");
+        rhs = expr_new_integer(BRONSTEIN_CASCADE_BUDGET_DEFAULT);
+        symtab_add_own_value("$BronsteinCascadeBudget", sym, rhs);
+        expr_free(sym); expr_free(rhs);
+    }
+    symtab_set_docstring("$TragerCascadeBudget",
+        "$TragerCascadeBudget is the wall-clock budget in seconds (default 10) of the Trager "
+        "stage of the Automatic Integrate cascade; past it the stage declines and the cascade "
+        "continues. Infinity removes the budget. An explicit Method -> \"Trager\" is unbudgeted.");
+    symtab_set_docstring("$BronsteinCascadeBudget",
+        "$BronsteinCascadeBudget is the wall-clock budget in seconds (default 10) of the Bronstein "
+        "stage of the Automatic Integrate cascade; past it the stage declines and the cascade "
+        "continues. Infinity removes the budget. An explicit Method -> \"Bronstein\" is unbudgeted.");
     /* The ParallelMixedSpecial method symbol (lazy-loads
      * src/internal/ParallelMixedSpecial.m, which loads Part II itself). */
     symtab_add_builtin("Integrate`ParallelMixedSpecial", builtin_integrate_pms);
@@ -3769,7 +3974,7 @@ void integrate_init(void) {
         "  \"ParallelMixedTower\" — Integrate`ParallelMixedTower (parallel Risch-Norman over a simple radical in a mixed transcendental tower; Blake II)\n"
         "  \"ParallelMixedSpecial\" — Integrate`ParallelMixedSpecial (the same over a mixed tower with special-function kernels: Ei, li, erf, incomplete Gamma, Si, Ci, elliptic F/E/Pi)\n"
         "  \"Trager\"             — Integrate`Trager (Trager 1984: complete algorithm for one radical r(x)^(1/n) over Q;\n"
-        "                          decides elementarity, torsion by reduction mod p; not in the Automatic cascade)\n"
+        "                          decides elementarity, torsion by reduction mod p; also an Automatic cascade stage)\n"
         "  \"TragerKauers\"       — Integrate`TragerKauers (the same with Kauers' 2008 Groebner heuristic for the log part)\n"
         "  \"Bronstein\"          — Integrate`Bronstein (Bronstein 1990: one radical over a Log/Exp tower; decides elementarity)\n"
         "  \"Undefined\"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)\n"

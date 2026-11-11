@@ -6560,6 +6560,10 @@ add_executable(bronstein_integrate_tests test_bronstein_integrate.c $<TARGET_OBJ
 target_include_directories(bronstein_integrate_tests PRIVATE ../src)
 add_test(NAME bronstein_integrate_tests COMMAND bronstein_integrate_tests)
 
+add_executable(integrate_cascade_trager_bronstein_tests test_integrate_cascade_trager_bronstein.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(integrate_cascade_trager_bronstein_tests PRIVATE ../src)
+add_test(NAME integrate_cascade_trager_bronstein_tests COMMAND integrate_cascade_trager_bronstein_tests)
+
 # Nightly: Integrate[..., Method -> "Trager" / "TragerKauers"] against FriCAS on
 # a corpus of simple-radical integrands (tools/trager_fricas_stress.py). Skipped
 # (exit 0 with a note) when fricas or python3 is not installed.

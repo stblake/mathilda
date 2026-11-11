@@ -10,7 +10,7 @@ Living plan: src/internal/bronstein/BRONSTEIN_PLAN.md (phases, design, progress 
 - [x] 5. Divisors.m, Specialize.m
 - [x] 6. LogPart.m
 - [x] 7. Pipeline.m + Method -> "Bronstein" (v0.6518)
-- [ ] 8. Trager + Bronstein cascade stages
+- [x] 8. Trager + Bronstein cascade stages (v0.6519; budget profile still to rerun)
 - [ ] 9 / 9b. FriCAS stress; integral generator + benchmark 256
 - [ ] 10-11. Shape B
 - [ ] 13. Close-out

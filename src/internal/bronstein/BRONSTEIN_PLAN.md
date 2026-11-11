@@ -500,7 +500,7 @@ antiderivative.** The generator is `tools/integral_generator/generate.m`, run by
   list plus an `Integrate`Bronstein` subsection: algorithm, scope, decline rules, examples),
   the changelog `docs/spec/changelog/2026-11-09.md` (or the current week's), the Integrate
   docstring. Commit, bump, tag.
-- [ ] **8. Cascade.**
+- [x] **8. Cascade.**
   - Trager and Bronstein stages, gates, budgets, the nonelem skip flag; suite `cascade`.
   - **Measure**: stage profile (`IP_*` timings) over `ctest -R integrate` and the
     integration corpora, before and after. The decline cost per non-matching integrand must
@@ -775,4 +775,18 @@ Next: Phase 8 (cascade).
   `tests/test_integrate_cascade_trager_bronstein.c`.
 - Then measure the stage profile and run the full ctest.
 - Presentation polish: `Log[-E^x]` → x; `Log[x^6]/2` → 3 Log[x].
+
+### 2026-11-12 — Phase 8 (session 1), v0.6519
+
+- The cascade stages "15b Trager" and "15c Bronstein" are in place (see the
+  `integrate.c` comment at `try_cascade_decider`):
+  - `Integrate`CascadeGateQ` exposes the gates;
+  - budgets `$TragerCascadeBudget`/`$BronsteinCascadeBudget` (10 s);
+  - a local `cascade_nonelem` flag skips PMT/Goursat;
+  - the cascade's held `nonelem` is dropped when PMS answers (existing design).
+- `ctest -LE nightly` 647/647.
+- **Open:** the before/after stage profile was killed by system memory pressure.
+  The `N::meprec` flood came from a parametric DDI integrand in another stage.
+  Rerun it on a reduced corpus (no symbolic parameters, one process per
+  integrand), then set the budgets from the data.
 

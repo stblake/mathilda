@@ -2463,7 +2463,8 @@ monotonically down.
     function of x and ONE radical `r(x)^(1/n)` with rational coefficients. It is a
     decision procedure: an elementary antiderivative is found if one exists, and
     otherwise `Integrate::nonelem` is issued with a proof. Written in Mathilda's own
-    language (`src/internal/trager/`). Not part of the Automatic cascade. See
+    language (`src/internal/trager/`). Also a stage of the Automatic cascade (see
+    "Trager and Bronstein in the Automatic cascade" below). See
     `### Integrate\`Trager` below.
   - `"TragerKauers"` — `Integrate\`TragerKauers[f, x]`: the same pipeline with the
     logarithmic part found by Kauers' Groebner-basis heuristic (2008). It is faster
@@ -3838,6 +3839,37 @@ by `PossibleZeroQ[D[F, x] - f]` before it is returned.
 | `Integrate[Log[1 + E^x]^(1/3)/(1 + Log[1 + E^x]), x, Method -> "Bronstein"]` ([B] p.139) | `Integrate::nonelem` (resultant criterion) |
 | `Integrate[Sqrt[Log[x]], x, Method -> "Bronstein"]` | `Integrate::nonelem` (no algebraic part) |
 | `Integrate[5/(x (Log[x] - 3) Sqrt[Log[x]^3 - 2]), x, Method -> "Bronstein"]` | `Integrate::nonelem` (residue divisor of infinite order) |
+
+### Trager and Bronstein in the Automatic cascade
+
+Both decision procedures run in the Automatic cascade of `Integrate[f, x]`. Their
+stages come after `LogByParts` and before `ParallelMixedTower`, as profile stages
+"15b Trager" and "15c Bronstein".
+
+**Gates.** Each stage runs only when a cheap structural gate passes.
+`Integrate\`CascadeGateQ["Trager" | "Bronstein", f, x]` exposes the gates:
+- Trager: an x-dependent radical, and nothing but rational operations and rational
+  powers, with no algebraic constant;
+- Bronstein: a radical whose radicand contains a `Log`/`Exp` kernel of x, and no
+  other functions.
+
+**Budgets.** `$TragerCascadeBudget` and `$BronsteinCascadeBudget` hold the
+wall-clock budget in seconds (default 10 each; `Infinity` removes it). When a budget
+expires, the stage declines and the cascade continues.
+
+**Certificates.** A certificate from either stage has two effects:
+- the stages that can only answer elementarily (`ParallelMixedTower`, Goursat) are
+  skipped;
+- the special-function stages still run, since an Erf or elliptic form may exist.
+
+The certificate's `Integrate::nonelem` is held. It is printed only if no later stage
+answers.
+
+| Input | Output |
+|---|---|
+| `Integrate[1/(x Sqrt[1 - x^3]), x]` | Trager's `1/3 Log[(-2 + x^3 + 2 Sqrt[1 - x^3])/x^3]` |
+| `Integrate[(x + 1)/((x Log[x] + x^2) Sqrt[x + Log[x]]), x]` | `-2/Sqrt[x + Log[x]]` |
+| `Integrate[Log[1 + E^x]^(1/3)/(1 + Log[1 + E^x]), x]` | unevaluated, `Integrate::nonelem` |
 
 ### Integrate`GRTable
 
