@@ -9,6 +9,10 @@
  * TestInterrupt[] is a test-only builtin that raises the interrupt from inside
  * an evaluation, the way the REPL's SIGINT handler does from outside one.
  */
+#ifndef _POSIX_C_SOURCE
+#define _POSIX_C_SOURCE 200809L
+#endif
+
 #include "test_utils.h"
 #include "symtab.h"
 #include "core.h"
@@ -19,6 +23,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <signal.h>
+#include <sys/time.h>
 #include <unistd.h>
 
 bool tc_deadline_passed(void);
@@ -133,11 +139,30 @@ static void test_callbacks_and_messages(void) {
     assert_eval_eq("$MessageList", "{}", 0);
 }
 
+static void on_alarm(int sig) {
+    (void)sig;
+    mth_interrupt_request();   /* async-signal-safe, as the REPL handler uses it */
+}
+
 static void test_heavy_kernel(void) {
-    /* 11. A C kernel that polls tc_deadline_passed() declines promptly. */
-    double dt = run_top("TestInterrupt[]; FactorInteger[NextPrime[10^30] NextPrime[10^31]]",
-                        "$Aborted");
-    ASSERT_MSG(dt < 2.0, "FactorInteger took %.2fs", dt);
+    /* 11. A C kernel that polls tc_deadline_passed() declines promptly when
+     * the interrupt arrives while it runs (here from a SIGALRM 0.3 s in; the
+     * factorization alone takes a few seconds). */
+    struct sigaction sa, old;
+    memset(&sa, 0, sizeof(sa));
+    sa.sa_handler = on_alarm;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    sigaction(SIGALRM, &sa, &old);
+    struct itimerval it;
+    memset(&it, 0, sizeof(it));
+    it.it_value.tv_usec = 300000;
+    setitimer(ITIMER_REAL, &it, NULL);
+    double dt = run_top("FactorInteger[NextPrime[10^35] NextPrime[10^36]]", "$Aborted");
+    memset(&it, 0, sizeof(it));
+    setitimer(ITIMER_REAL, &it, NULL);
+    sigaction(SIGALRM, &old, NULL);
+    ASSERT_MSG(dt < 2.0, "FactorInteger took %.2fs after the interrupt", dt);
 }
 
 static void test_public_contract(void) {

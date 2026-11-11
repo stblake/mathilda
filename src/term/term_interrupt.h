@@ -51,4 +51,36 @@ extern volatile sig_atomic_t g_mth_interrupt_pending;
 void mth_interrupt_clear(void);          /* consumers only: top level, CheckAbort, REPL */
 bool mth_interrupt_should_stop(void);    /* pending && abort_protect_depth() == 0     */
 
+/* ---- REPL SIGINT handler (interactive readline loop only) -----------------
+ *
+ * The handler only stores sig_atomic_t values. What a Ctrl-C means depends on
+ * what the REPL is doing:
+ *   IDLE        ignored (start-up, shut-down, between states);
+ *   READING     at a prompt: sets the reading flag, which the line reader
+ *               turns into "clear the line and prompt again";
+ *   EVALUATING  requests an interrupt (the evaluation ends as $Aborted). A
+ *               second Ctrl-C within 1000 ms, still evaluating, writes a
+ *               newline to stderr and exits with status 130 -- the escape
+ *               hatch for a computation that never polls.
+ * Nothing here is installed unless the REPL calls term_interrupt_install(): an
+ * embedder, pipe mode and -file runs get no handler. */
+typedef enum { TERM_STATE_IDLE, TERM_STATE_READING, TERM_STATE_EVALUATING } TermState;
+
+/* POSIX: sigaction(SIGINT) with SA_RESTART (a Ctrl-C during Export or Get
+ * must not make a stdio call fail with EINTR), saving the old disposition. */
+void      term_interrupt_install(void);
+/* Restore the disposition saved by term_interrupt_install. */
+void      term_interrupt_uninstall(void);
+/* Set the state; returns the previous one. Entering EVALUATING resets the
+ * double-tap timer, so a Ctrl-C at the prompt never counts towards a quit. */
+TermState term_interrupt_set_state(TermState s);
+TermState term_interrupt_state(void);
+/* Read and clear the prompt interrupt (the READING-state flag). */
+bool      term_interrupt_take_reading(void);
+
+/* Test seams: the handler body with an injected clock (milliseconds), and the
+ * hard-exit function (default: C99 _Exit). */
+void      term_interrupt_on_signal_at(long now_ms);
+void      term_interrupt_set_exit_fn(void (*fn)(int status));
+
 #endif /* MATHILDA_TERM_INTERRUPT_H */

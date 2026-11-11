@@ -22,7 +22,9 @@
 #include "version.h"
 #include "quit.h"
 #include "dialog.h"
-#include "term/term_lex.h"
+#include "term/term_input.h"
+#include "term/term_interrupt.h"
+#include "term/term_readline.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -42,10 +44,6 @@ void mth_block_graveyard_flush(void);   /* modular.c: free Block values parked b
   #include <unistd.h>
 #endif
 
-#ifndef NO_READLINE
-  #include <readline/readline.h>
-  #include <readline/history.h>
-#endif
 
 #define MAX_INPUT_LEN 10240
 
@@ -157,84 +155,55 @@ void process_input(const char* input, int line_number) {
     expr_free(evaluated);
 }
 
-#ifndef NO_READLINE
-
-/* Return key handler: evaluate the buffer once it forms a complete
- * expression, otherwise open a new line so the user can keep typing. This is
- * the terminal-native substitute for a notebook's Shift+Enter — it needs no
- * enhanced-keyboard protocol and works on every terminal. */
-static int mth_smart_return(int count, int key) {
-    if (term_lex_input_complete(rl_line_buffer ? rl_line_buffer : ""))
-        return rl_newline(count, key);   /* accept the whole buffer */
-    rl_insert_text("\n");                /* still open: continue editing */
-    return 0;
+/* process_input for the interactive loop: the interrupt state is EVALUATING
+ * for its duration (a Ctrl-C aborts the evaluation), and no interrupt or
+ * top-level abort survives it in either direction -- a Ctrl-C that arrives
+ * after the result was printed must not abort the next input. */
+static void repl_process(const char* line, int line_number) {
+    TermState prev = term_interrupt_set_state(TERM_STATE_EVALUATING);
+    mth_interrupt_clear();
+    (void)eval_take_top_abort();
+    process_input(line, line_number);
+    mth_interrupt_clear();
+    term_interrupt_set_state(prev);
 }
 
-/* Esc-Return (and Alt/Meta-Return, where the terminal sends it) forces the
- * buffer to be evaluated even while term_lex_input_complete() still considers it
- * open. The escape hatch for a genuine syntax error the user wants to see,
- * so an unbalanced buffer can never trap them on a growing line. */
-static int mth_force_return(int count, int key) {
-    return rl_newline(count, key);
-}
-
-/* Install the completeness-driven Return bindings. Called once, when the
- * interactive loop starts. Bracketed paste is (re)enabled so a pasted block
- * with embedded newlines is inserted verbatim rather than firing the Return
- * handler on every line and submitting a fragment mid-paste. */
-static void mth_setup_readline(void) {
-    rl_variable_bind("enable-bracketed-paste", "on");
-    rl_bind_key('\r', mth_smart_return);        /* RET / Ctrl-M */
-    rl_bind_key('\n', mth_smart_return);        /* LFD / Ctrl-J */
-    /* Esc-Return / Meta-Return force-submits an expression the completeness
-     * check still considers open. rl_bind_keyseq() is a GNU Readline entry
-     * point absent from Apple's libedit shim; RL_STATE_INITIALIZED is defined
-     * only by GNU Readline, so it doubles as the "real readline" probe. */
-#ifdef RL_STATE_INITIALIZED
-    rl_bind_keyseq("\\e\\r", mth_force_return); /* Esc then Return */
-    rl_bind_keyseq("\\e\\n", mth_force_return);
-#else
-    (void)mth_force_return;
-#endif
-}
-
-void repl_loop() {
+static void repl_banner(TermBackendKind kind) {
     printf("\nMathilda " MATHILDA_VERSION_STRING " - A small, open source computer algebra system.\n\n");
-    printf("This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.\n\n");
-    printf("Press Return to evaluate. An open bracket, string or comment continues\n");
-    printf("on the next line; press Esc then Return to force evaluation.\n");
-    printf("Exit by evaluating Quit[] or CONTROL-C.\n\n");
+    if (kind == TERM_BACKEND_READLINE) {
+        printf("This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.\n\n");
+        printf("Press Return to evaluate. An open bracket, string or comment continues\n");
+        printf("on the next line; press Esc then Return to force evaluation.\n");
+        printf("Ctrl-C interrupts an evaluation (twice within a second force-quits).\n");
+        printf("Exit by evaluating Quit[] or pressing Ctrl-D.\n\n");
+    } else {
+        printf("Exit by evaluating Quit[] or pressing Ctrl+Z (Windows) / Ctrl+D (Unix).\n\n");
+    }
+}
 
-    mth_setup_readline();
-
+/* The interactive loop, over any line reader (term_input.h): readline with
+ * its smart Return key, or plain fgets in a NO_READLINE build. With the smart
+ * Return binding a single read returns the whole (possibly multi-line)
+ * expression, so no accumulation buffer is needed. */
+void repl_loop(TermReader* rd) {
+    repl_banner(term_reader_kind(rd));
     int line_number = 1;
     char prompt[64];
-
-    while (1) {
+    for (;;) {
         snprintf(prompt, sizeof(prompt), "In[%d]:= ", line_number);
-
-        /* With the smart Return binding a single readline() call returns the
-         * whole (possibly multi-line) expression, so no accumulation buffer
-         * is needed and readline owns the allocation. */
-        char* line = readline(prompt);
-        if (!line) {
+        char* line = NULL;
+        TermReadStatus st = term_read(rd, prompt, &line);
+        if (st == TERM_READ_INTERRUPTED) continue;        /* same In[n] again */
+        if (st == TERM_READ_EOF) {
             printf("\n");
-            /* EOF: run $Epilog before tearing down. */
-            repl_apply_epilog();
+            repl_apply_epilog();                          /* EOF: $Epilog first */
             break;
         }
-
-        if (strlen(line) == 0) {
-            free(line);
-            continue;
-        }
-
-        add_history(line);
-
-        process_input(line, line_number);
-        line_number++;
+        if (line[0] == '\0') { free(line); continue; }
+        /* Before evaluating: a crash or a forced quit keeps the entry. */
+        term_reader_history_add(rd, line);
+        repl_process(line, line_number++);
         free(line);
-
         if (mth_quit_requested()) {
             /* Quit[] / Quit[n] evaluated anywhere in the input (a bare
              * Quit[], If[c, Quit[]], a Get'd file, ...): run $Epilog first. */
@@ -242,41 +211,8 @@ void repl_loop() {
             break;
         }
     }
-
     printf("\n");
 }
-#else
-/* Fallback interactive loop when readline is not available (e.g. Windows).
- * Uses fgets; no history or line-editing. Pipe mode bypasses this entirely. */
-void repl_loop(void) {
-    printf("\nMathilda " MATHILDA_VERSION_STRING " - A small, open source computer algebra system.\n\n");
-    printf("Exit by evaluating Quit[] or pressing Ctrl+Z (Windows) / Ctrl+D (Unix).\n\n");
-
-    char line[MAX_INPUT_LEN];
-    int line_number = 1;
-
-    while (1) {
-        printf("In[%d]:= ", line_number);
-        fflush(stdout);
-        if (!fgets(line, sizeof(line), stdin)) {
-            printf("\n");
-            repl_apply_epilog();
-            break;
-        }
-        /* Strip trailing newline / carriage-return. */
-        size_t len = strlen(line);
-        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
-            line[--len] = '\0';
-        if (len == 0) continue;
-        process_input(line, line_number++);
-        if (mth_quit_requested()) {
-            repl_apply_epilog();
-            break;
-        }
-    }
-    printf("\n");
-}
-#endif
 
 #include "core.h"
 #include "loadmodule.h"
@@ -1370,11 +1306,18 @@ static int run_script_file(const char* path) {
 /* Dialog[] input readers (see main). Each shows the prompt and returns one
  * malloc'd line, or NULL at end of input. */
 #ifndef NO_READLINE
-static char* dialog_read_readline(const char* prompt, void* ctx) {
-    (void)ctx;
-    char* line = readline(prompt);
-    if (line && *line) add_history(line);
-    return line;
+/* A terminal: the session's line reader (ctx). A Ctrl-C at the prompt clears
+ * the line and asks again; accepted lines go into the reader's history. */
+static char* dialog_read_term(const char* prompt, void* ctx) {
+    TermReader* rd = (TermReader*)ctx;
+    for (;;) {
+        char* line = NULL;
+        TermReadStatus st = term_read(rd, prompt, &line);
+        if (st == TERM_READ_INTERRUPTED) continue;
+        if (st == TERM_READ_EOF) return NULL;
+        term_reader_history_add(rd, line);
+        return line;
+    }
 }
 #endif
 
@@ -1469,12 +1412,24 @@ int main(int argc, char** argv) {
      * one, a script's stdin under -file, and nowhere in pipe mode, where stdin
      * is the protocol -- a dialog there sees end of input at once. */
     MthDialogIO dio = { NULL, NULL, NULL, false };
+    TermReader* rd = NULL;
+    bool interactive_rl = false;   /* the full interactive readline session */
     if (!pipe_mode) {
         dio.interactive = isatty(fileno(stdin)) != 0;
-#ifndef NO_READLINE
-        dio.read = dio.interactive ? dialog_read_readline : dialog_read_stdin;
-#else
         dio.read = dialog_read_stdin;
+#ifndef NO_READLINE
+        if (!script || dio.interactive) {
+            /* The interactive session gets every terminal feature; a -file
+             * run from a terminal gets the plain reader its Dialog always
+             * had (readline and in-memory history, nothing else). */
+            TermReadlineOptions ro = { !script, NULL };
+            rd = term_reader_open_readline(&ro);
+            interactive_rl = rd && !script;
+        }
+#endif
+        if (!rd && !script) rd = term_reader_open_stdio();
+#ifndef NO_READLINE
+        if (rd && dio.interactive) { dio.read = dialog_read_term; dio.ctx = rd; }
 #endif
         mth_dialog_set_io(&dio);
     }
@@ -1485,8 +1440,16 @@ int main(int argc, char** argv) {
     } else if (pipe_mode) {
         pipe_mode_loop();
     } else {
-        repl_loop();
+        /* Ctrl-C handling only for the readline session: the fgets loop of a
+         * NO_READLINE build keeps the default (Ctrl-C ends the process). */
+        if (interactive_rl) term_interrupt_install();
+        repl_loop(rd);
+        if (interactive_rl) term_interrupt_uninstall();
         if (mth_quit_requested()) rc = mth_quit_status();
+    }
+    if (rd) {
+        mth_dialog_set_io(NULL);
+        term_reader_close(rd);
     }
     /* Tear down the context subsystem so its $Context / $ContextPath strings and
      * any open package frames are freed rather than lingering as leaks at exit.

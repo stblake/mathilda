@@ -463,6 +463,202 @@ def smart_return_continuation(tmp):
         s.close()
 
 
+def interactive(tmp, **kw):
+    s = new_session(tmp, **kw)
+    wait_prompt(s, 1)
+    return s
+
+
+def ctrlc_after(s, input_text, delay, n=1, timeout=2.0):
+    """Send input, wait `delay`, press Ctrl-C; expect Out[n]= $Aborted.
+    Returns the seconds from the key to the result."""
+    s.send(input_text + "\r")
+    s.drain(delay)
+    check(b"Out[%d]" % n not in s.buf[s.pos:], "%s finished before Ctrl-C" % input_text)
+    t0 = time.monotonic()
+    s.send("\x03")
+    s.expect(r"Out\[%d\]= \$Aborted" % n, timeout)
+    return time.monotonic() - t0
+
+
+def then_still_works(s, n):
+    wait_prompt(s, n)
+    s.send("1+1\r")
+    s.expect(r"Out\[%d\]= 2" % n)
+    wait_prompt(s, n + 1)
+    s.send("\x04")
+    check(s.exit_code() == 0, "Ctrl-D did not exit 0")
+
+
+@case
+def banner(tmp):
+    s = interactive(tmp)
+    try:
+        text = s.text()
+        check("Ctrl-C interrupts" in text, "banner lacks the Ctrl-C line")
+        check("or CONTROL-C" not in text, "banner still says Ctrl-C exits")
+        s.send("\x04")
+        s.exit_code()
+    finally:
+        s.close()
+
+
+@case
+def ctrlc_infinite_loop(tmp):
+    s = interactive(tmp)
+    try:
+        ctrlc_after(s, "Do[i, {i, 10^9}]", 0.5)
+        then_still_works(s, 2)
+    finally:
+        s.close()
+
+
+@case
+def ctrlc_while_true(tmp):
+    s = interactive(tmp)
+    try:
+        ctrlc_after(s, "While[True]", 0.5)
+        then_still_works(s, 2)
+    finally:
+        s.close()
+
+
+@case
+def ctrlc_pause(tmp):
+    s = interactive(tmp)
+    try:
+        dt = ctrlc_after(s, "Pause[30]", 0.3, timeout=1.0)
+        check(dt < 1.0, "Pause took %.2fs to abort" % dt)
+        then_still_works(s, 2)
+    finally:
+        s.close()
+
+
+@case
+def ctrlc_kernel(tmp):
+    s = interactive(tmp)
+    try:
+        ctrlc_after(s, "FactorInteger[NextPrime[10^35] NextPrime[10^36]]", 0.5, timeout=3.0)
+        then_still_works(s, 2)
+    finally:
+        s.close()
+
+
+@case
+def ctrlc_checkabort(tmp):
+    s = interactive(tmp)
+    try:
+        s.send("CheckAbort[Do[i, {i, 10^9}], caught]\r")
+        s.drain(0.5)
+        s.send("\x03")
+        s.expect(r"Out\[1\]= caught", 2.0)
+        then_still_works(s, 2)
+    finally:
+        s.close()
+
+
+@case
+def ctrlc_abortprotect(tmp):
+    s = interactive(tmp)
+    try:
+        s.send("AbortProtect[Pause[1]; x = 5]\r")
+        s.drain(0.2)
+        t0 = time.monotonic()
+        s.send("\x03")
+        s.expect(r"Out\[1\]= \$Aborted", 3.0)
+        dt = time.monotonic() - t0
+        check(dt >= 0.7, "AbortProtect body cut short (%.2fs)" % dt)
+        wait_prompt(s, 2)
+        s.send("x\r")
+        s.expect(r"Out\[2\]= 5")
+        then_still_works(s, 3)
+    finally:
+        s.close()
+
+
+@case
+def ctrlc_timeconstrained(tmp):
+    s = interactive(tmp)
+    try:
+        s.send("TimeConstrained[Do[i, {i, 10^9}], 100, fail]\r")
+        s.drain(0.5)
+        s.send("\x03")
+        s.expect(r"Out\[1\]= \$Aborted", 2.0)
+        then_still_works(s, 2)
+    finally:
+        s.close()
+
+
+@case
+def ctrlc_prompt(tmp):
+    s = interactive(tmp)
+    try:
+        s.send("1+")
+        s.drain(0.2)
+        s.send("\x03")
+        s.expect(r"\^C")
+        wait_prompt(s, 1)
+        s.send("2+2\r")
+        s.expect(r"Out\[1\]= 4")
+        wait_prompt(s, 2)
+        s.send("\x04")
+        check(s.exit_code() == 0, "Ctrl-D did not exit 0")
+    finally:
+        s.close()
+
+
+@case
+def ctrlc_prompt_multiline(tmp):
+    s = interactive(tmp)
+    try:
+        s.send("f[\r")
+        s.drain(0.2)
+        s.send("x")
+        s.drain(0.2)
+        s.send("\x03")
+        wait_prompt(s, 1)
+        s.send("3\r")
+        s.expect(r"Out\[1\]= 3")
+        wait_prompt(s, 2)
+        s.send("\x04")
+        check(s.exit_code() == 0, "Ctrl-D did not exit 0")
+    finally:
+        s.close()
+
+
+@case
+def ctrlc_dialog(tmp):
+    s = interactive(tmp)
+    try:
+        s.send("Dialog[]\r")
+        s.expect(r"In\[\d+\]:= ")
+        s.send("Do[i, {i, 10^9}]\r")
+        s.drain(0.5)
+        s.send("\x03")
+        s.expect(r"\$Aborted", 2.0)
+        s.expect(r"In\[\d+\]:= ")
+        s.send("Return[7]\r")
+        s.expect(r"Out\[1\]= 7", 5.0)
+        then_still_works(s, 2)
+    finally:
+        s.close()
+
+
+@case
+def double_ctrlc_exit(tmp):
+    s = interactive(tmp)
+    try:
+        s.send("AbortProtect[Pause[20]]\r")
+        s.drain(0.3)
+        s.send("\x03")
+        s.drain(0.3)
+        s.send("\x03")
+        code = s.exit_code(timeout=2.0)
+        check(code == 130, "double Ctrl-C exit status %d, want 130" % code)
+    finally:
+        s.close()
+
+
 def harness_can_fail(tmp):
     """Deliberately wrong expectation: must FAIL (MATHILDA_PTY_SELFTEST=1)."""
     s = new_session(tmp)
