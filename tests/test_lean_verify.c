@@ -121,6 +121,45 @@ static void test_phase2_negative(void) {
                "[\"Success\"] === False");
 }
 
+/* Phase 3, Tier 0: SOS, optimality, Pratt, sums. */
+static void test_phase3_positive(void) {
+    check_true("Certify[ForAll[{x,y}, x^4-2x^2+1+y^2 >= 0]][\"Verified\"] === True");
+    check_true("Certify[ForAll[{x,y}, x^2+y^2 >= 2 x y]][\"Verified\"] === True");
+    check_true("Certify[ForAll[{x}, x >= 0, x^3 + x >= 0]][\"Verified\"] === True");
+    assert_eval_eq("leanM = Certify[Minimize[{x^2+y^2, x+y >= 1}, {x,y}]]; Null", "Null", 0);
+    check_true("leanM[\"Verified\"] === True && leanM[\"Certificate\"][\"Multipliers\"] === {1}");
+    assert_eval_eq("leanLP = Certify[Maximize[{3x+2y, x+y<=4, x+3y<=6, x>=0, y>=0}, {x,y}]]; "
+                   "Null", "Null", 0);
+    check_true("leanLP[\"Verified\"] === True && leanLP[\"Kind\"] === \"Optimality\" && "
+               "AllTrue[leanLP[\"Certificate\"][\"Multipliers\"], # >= 0 &]");
+    check_true("Certify[Maximize[{x y, x+y == 2}, {x,y}]][\"Verified\"] === True");
+    check_true("Certify[Minimize[x^4-2x^2+1+y^2, {x,y}]][\"Verified\"] === True");
+    assert_eval_eq("leanFI = Certify[FactorInteger[2^64+1]]; Null", "Null", 0);
+    check_true("leanFI[\"Verified\"] === True && leanFI[\"Timing\"] < 5");
+    check_true("StringCount[leanFI[\"LeanSource\"], \"theorem mathilda_cert_1_pratt_\"] === 2");
+    check_true("Certify[PrimeQ[1000003]][\"Verified\"] === True");
+    assert_eval_eq("leanPC = Certify[PrimeQ[1000001]]; Null", "Null", 0);
+    check_true("leanPC[\"Verified\"] === True && leanPC[\"Kind\"] === \"Primality\" && "
+               "leanPC[\"Theorem\"] === HoldForm[!PrimeQ[1000001]]");
+    check_true("Certify[PrimeQ[2]][\"Verified\"] === True");
+    check_true("Certify[FactorInteger[360]][\"Verified\"] === True");
+    check_true("Certify[Sum[k 2^k, {k, 0, n}]][\"Verified\"] === True");
+    check_true("Certify[Sum[k^3, {k, 1, n}]][\"Verified\"] === True");
+    check_true("Certify[Sum[k^2 (1/3)^k, {k, 0, n}]][\"Verified\"] === True");
+    check_true("Certify[Sum[2^k, {k, 2, n}]][\"Verified\"] === True");
+}
+
+static void test_phase3_negative(void) {
+    test_mute_messages();
+    /* A Pratt certificate whose witness is a square (never a generator). */
+    check_true("With[{s = Certify[PrimeQ[1000003], Verify -> False][\"LeanSource\"], "
+               "a = Lean`Private`pratt[1000003][[-1, 2]]}, "
+               "LeanVerify[StringReplace[s, \"(1000003, \" <> ToString[a] <> \",\" -> "
+               "\"(1000003, \" <> ToString[Mod[a^2, 1000003]] <> \",\"]][\"Success\"]] === False");
+    assert_eval_eq("leanSN = Certify[Sum[k^3,{k,1,n}] == n^2 (n+1)^2/4 + 1]; Null", "Null", 0);
+    check_true("leanSN[\"Verified\"] === False && Length[leanSN[\"Logs\"]] > 0");
+}
+
 /* Row 11: one Lean run for a batch, the session cache, line-span verdicts. */
 static void test_batch(void) {
     test_mute_messages();
@@ -157,6 +196,8 @@ int main(void) {
     TEST(test_phase2_positive);
     TEST(test_phase2_negative);
     TEST(test_batch);
+    TEST(test_phase3_positive);
+    TEST(test_phase3_negative);
     printf("All Lean verification tests passed.\n");
     return 0;
 }

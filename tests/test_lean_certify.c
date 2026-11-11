@@ -238,6 +238,123 @@ static void test_heuristic_engine(void) {
     check_true("Certify[(x+1)^2 == x^2 + 1, Engine -> \"Mathilda\"][\"Verified\"] === False");
 }
 
+/* Row 12: the exact certificate behind Reduce's SOS stage. */
+static void test_sos_certificate(void) {
+#ifdef USE_LAPACK
+    assert_eval_eq("leanSC = Reduce`SOSCertificate[x^4 + y^4 - x^2 y^2 + 1, {}, {x, y}]; "
+                   "ListQ[leanSC]", "True", 0);
+    /* The blocks {mult, basis, Gram} reproduce q exactly. */
+    check_true("Expand[Total[(#1 (#2 . #3 . #2)) & @@@ leanSC] - "
+               "(x^4 + y^4 - x^2 y^2 + 1)] === 0");
+    check_true("Lean`Private`ldl[leanSC[[1, 3]]] =!= $Failed");
+#else
+    assert_eval_eq("Reduce`SOSCertificate[x^4 + y^4 - x^2 y^2 + 1, {}, {x, y}]", "$Failed", 0);
+#endif
+    assert_eval_eq("Reduce`SOSCertificate[x^2 - 1, {}, {x}]", "$Failed", 0);
+    assert_eval_eq("Attributes[Reduce`SOSCertificate]", "{Protected}", 0);
+    /* Exact LDL^T: PSD decided exactly, zero pivots allowed. */
+    check_true("Lean`Private`ldl[{{4, 2}, {2, 2}}] === {{{1, 0}, {1/2, 1}}, {4, 1}}");
+    check_true("Lean`Private`ldl[{{1, 2}, {2, 1}}] === $Failed");
+    check_true("Lean`Private`ldl[{{0, 0}, {0, 1}}] === {{{1, 0}, {0, 1}}, {0, 1}}");
+    check_true("Lean`Private`ldl[{{0, 1}, {1, 1}}] === $Failed");
+}
+
+/* Rows 13-14: nonnegativity and optimality certificates. */
+static void test_sos_optimality(void) {
+    assert_eval_eq("leanP = Certify[ForAll[{x,y}, x^4-2x^2+1+y^2 >= 0], Verify -> False]; Null",
+                   "Null", 0);
+    check_true("leanP[\"Kind\"] === \"Nonnegativity\" && leanP[\"Domain\"] === Rationals");
+    check_true("StringContainsQ[leanP[\"ProofScript\"], \":= Mathilda.sqnn\"]");
+    check_true("StringContainsQ[leanP[\"ProofScript\"], \"have mth_e : \"]");
+    check_true("Length[leanP[\"TrustedSteps\"]] === 1");
+    /* The quadratic path never calls Reduce`SOSCertificate. */
+    assert_eval_eq("Lean`Private`$sosCalls = 0; "
+                   "leanQ2 = Certify[ForAll[{x,y}, x^2+y^2 >= 2 x y], Verify -> False]; "
+                   "Lean`Private`$sosCalls", "0", 0);
+    check_true("leanQ2[\"Certificate\"][\"Method\"] === \"Quadratic\"");
+    check_true("leanQ2[\"Certificate\"][\"Squares\"] === {{1, x - y, 1}}");
+    check_str("leanQ2[\"LeanTheorem\"]", "\xE2\x88\x80 x y : Rat, x ^ 2 + y ^ 2 \xE2\x89\xA5 2 * x * y");
+    /* Putinar: a multiplier block uses the hypothesis 0 <= g. */
+    check_true("StringContainsQ[Certify[ForAll[{x}, x >= 0, x^3 + x >= 0], Verify -> False]"
+               "[\"ProofScript\"], \"Mathilda.mulnn Mathilda.sqnn mth_g1\"]");
+    assert_eval_eq("leanM = Certify[Minimize[{x^2+y^2, x+y >= 1}, {x,y}], Verify -> False]; Null",
+                   "Null", 0);
+    check_true("leanM[\"Kind\"] === \"Optimality\" && leanM[\"Certificate\"][\"Multipliers\"] === {1}");
+    check_true("leanM[\"Result\"] === {1/2, {x -> 1/2, y -> 1/2}}");
+    check_true("leanM[\"Certificate\"][\"PreCheck\"] === True");
+    assert_eval_eq("leanLP = Certify[Maximize[{3x+2y, x+y<=4, x+3y<=6, x>=0, y>=0}, {x,y}], "
+                   "Verify -> False]; Null", "Null", 0);
+    check_true("leanLP[\"Certificate\"][\"Multipliers\"] === {3, 0, 0, 1} && "
+               "leanLP[\"Certificate\"][\"LinearProgram\"] === True");
+    check_true("StringContainsQ[leanLP[\"LeanTheorem\"], \"3 * x + 2 * y \xE2\x89\xA4 12\"]");
+    check_true("StringContainsQ[Certify[Maximize[{x y, x+y == 2}, {x,y}], Verify -> False]"
+               "[\"ProofScript\"], \"subst mth_v1\"]");
+    /* (x^2 - 1)^2 + y^2 has two zeros: the exact Gram search, not the numeric engine. */
+    check_true("Certify[Minimize[x^4-2x^2+1+y^2, {x,y}], Verify -> False][\"Certificate\"]"
+               "[\"Method\"] === \"ExactGram\"");
+    test_mute_messages();
+    assert_eval_eq("Check[Certify[ForAll[x, x^3 >= 0], Verify -> False], \"nocert\"]",
+                   "\"nocert\"", 0);
+    assert_eval_eq("Certify[Minimize[{x, x > 0}, x], Verify -> False]", "$Failed", 0);
+}
+
+/* Row 15: Pratt certificates. */
+static void test_pratt(void) {
+    check_true("Lean`Private`pratt[274177] === {{3, 2, {{2, 1}}}, {7, 3, {{2, 1}, {3, 1}}}, "
+               "{17, 3, {{2, 4}}}, {274177, 5, {{2, 8}, {3, 2}, {7, 1}, {17, 1}}}}");
+    assert_eval_eq("leanFI = Certify[FactorInteger[2^64+1], Verify -> False]; Null", "Null", 0);
+    check_true("StringCount[leanFI[\"LeanSource\"], \"theorem mathilda_cert_1_pratt_\"] === 2");
+    check_true("StringStartsQ[leanFI[\"LeanTheorem\"], "
+               "\"18446744073709551617 = 274177 * 67280421310721 \xE2\x88\xA7 \"]");
+    check_true("leanFI[\"Kind\"] === \"Primality\" && Length[leanFI[\"TrustedSteps\"]] === 1");
+    check_true("!StringContainsQ[leanFI[\"LeanSource\"], \"@NAME@\"]");
+    check_true("Certify[PrimeQ[1000001], Verify -> False][\"Theorem\"] === "
+               "HoldForm[!PrimeQ[1000001]]");
+    check_str("Certify[PrimeQ[1000001], Verify -> False][\"LeanTheorem\"]",
+              "1000001 = 101 * 9901 \xE2\x88\xA7 1 < 101 \xE2\x88\xA7 101 < 1000001");
+    check_true("StringStartsQ[Certify[PrimeQ[1000003], Verify -> False][\"LeanTheorem\"], "
+               "\"Mathilda.PrattCertifies 1000003 [\"]");
+}
+
+/* Row 16: closed-form sums. */
+static void test_sums(void) {
+    assert_eval_eq("leanSu = Certify[Sum[k 2^k, {k, 0, n}], Verify -> False]; Null", "Null", 0);
+    check_true("leanSu[\"Kind\"] === \"ClosedFormSum\" && leanSu[\"Result\"] === 2 + 2^(1 + n) (-1 + n)");
+    check_str("leanSu[\"LeanTheorem\"]",
+              "\xE2\x88\x80 m1 : Nat, mathilda_cert_1_S m1 = 2 + 2 ^ m1 * 2 * ((m1 : Rat) - 1)");
+    check_true("StringContainsQ[leanSu[\"LeanSource\"], "
+               "\"def mathilda_cert_1_t (k1 : Nat) : Rat := 2 ^ k1 * (k1 : Rat)\"]");
+    check_true("StringContainsQ[leanSu[\"ProofScript\"], \"induction m1 with\"]");
+    assert_eval_eq("leanS3 = Certify[Sum[k^3, {k, 1, n}], Verify -> False]; Null", "Null", 0);
+    check_true("leanS3[\"Input\"] === HoldForm[Sum[k^3, {k, 1, n}]]");
+    check_true("StringContainsQ[leanS3[\"LeanSource\"], \"| m1 + 1 => mathilda_cert_1_S m1 + "
+               "mathilda_cert_1_t (m1 + 1 + 1)\"]");
+    /* A claimed closed form is what gets proved. */
+    check_true("Certify[Sum[k^3,{k,1,n}] == n^2 (n+1)^2/4 + 1, Verify -> False]"
+               "[\"Certificate\"][\"PreCheck\"] === False");
+    test_mute_messages();
+    assert_eval_eq("Certify[Sum[1/k, {k, 1, n}], Verify -> False]", "$Failed", 0);
+}
+
+/* Row 17: Tier 1 HasDerivAt generation (no Lean, no Mathlib needed). */
+static void test_tier1_generation(void) {
+    assert_eval_eq("leanT1 = Certify[Integrate[(1+x)/(1+x^2), x], Tier -> 1, "
+                   "LeanProject -> \"/nonexistent\", Verify -> False]; Null", "Null", 0);
+    check_true("leanT1[\"Tier\"] === 1 && leanT1[\"TrustedSteps\"] === {} && "
+               "leanT1[\"Domain\"] === Reals");
+    check_true("StringStartsQ[leanT1[\"LeanSource\"], \"import Mathlib\"]");
+    check_true("StringStartsQ[leanT1[\"LeanTheorem\"], \"\xE2\x88\x80 x : Real, \"]");
+    check_true("StringContainsQ[leanT1[\"LeanTheorem\"], \"HasDerivAt (fun x : Real => \"]");
+    check_true("StringContainsQ[leanT1[\"ProofScript\"], \"refine mth_d.congr_deriv ?_\"]");
+    check_true("leanT1[\"Hypotheses\"] === {HoldForm[1 + x^2 != 0]}");
+    /* ArcTanh is written through Log (Mathlib has no Real.artanh). */
+    check_true("StringContainsQ[Certify[Integrate[1/(x^2-1), x], Tier -> 1, LeanProject -> "
+               "\"/nonexistent\", Verify -> False][\"LeanTheorem\"], \"Real.log (1 - x)\"]");
+    test_mute_messages();
+    assert_eval_eq("Check[Certify[Integrate[1/(x^2+1), x], Tier -> 1, LeanProject -> None], "
+                   "\"nomathlib\"]", "\"nomathlib\"", 0);
+}
+
 static void test_attributes(void) {
     assert_eval_eq("Attributes[Certify]", "{HoldFirst, Protected}", 0);
     assert_eval_eq("Attributes[ProofObject]", "{HoldFirst, Protected}", 0);
@@ -258,6 +375,11 @@ int main(void) {
     TEST(test_matrices);
     TEST(test_batch);
     TEST(test_heuristic_engine);
+    TEST(test_sos_certificate);
+    TEST(test_sos_optimality);
+    TEST(test_pratt);
+    TEST(test_sums);
+    TEST(test_tier1_generation);
     TEST(test_attributes);
     printf("All Lean certificate generation tests passed.\n");
     return 0;

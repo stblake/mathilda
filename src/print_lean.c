@@ -21,7 +21,10 @@
  *     Power[_, -k] factors to a denominator (x / (y * z)), and prints a
  *     negative coefficient as a negation of the rest: -(2 * x), -x;
  *   - Power[a, n] (n >= 0 an integer) -> a ^ n; Power[a, -n] -> 1 / a ^ n;
- *     Power[a, 1/2] -> Real.sqrt a; any other exponent only in display form;
+ *     Power[a, 1/2] -> Real.sqrt a; Power[a, k] with k a symbol whose Lean
+ *     name is in the pass-through set -> a ^ k (the generator vouches that k
+ *     is a Nat-typed binder, so `^` is the monoid power); any other exponent
+ *     only in display form;
  *   - relations = != < <= > >=, chains and Inequality[...] become
  *     conjunctions; And Or Not Implies Equivalent -> /\ \/ not -> <->;
  *   - ForAll / Exists -> binders (typed with the number type, if any);
@@ -469,6 +472,15 @@ static int build_times(LCtx* c, const Expr* e, LBuf* b) {
     return prec;
 }
 
+static const char* pass_head(const LCtx* c, const char* h, char* buf, size_t bufsz);
+
+/* A symbol exponent the generator declared Nat-typed: its Lean name (context
+ * marks as dots, as for pass-through heads) is in the pass-through set. */
+static bool nat_exponent_symbol(const LCtx* c, const Expr* x) {
+    char buf[256];
+    return x->type == EXPR_SYMBOL && pass_head(c, x->data.symbol.name, buf, sizeof buf) != NULL;
+}
+
 static int build_power(LCtx* c, const Expr* e, LBuf* b) {
     const Expr* base = e->data.function.args[0];
     const Expr* x = e->data.function.args[1];
@@ -494,7 +506,8 @@ static int build_power(LCtx* c, const Expr* e, LBuf* b) {
         expr_free(d);
         return P_TIMES;
     }
-    if (c->strict && !is_int(x)) return refuse(c, e, "non-integer exponent", b);
+    if (c->strict && !is_int(x) && !nat_exponent_symbol(c, x))
+        return refuse(c, e, "non-integer exponent", b);
     put(c, base, P_POW + 1, b);
     lb_puts(b, " ^ ");
     put(c, x, P_POW, b);

@@ -33,4 +33,12 @@ struct Expr;
  * NULL (decline).  `F` and `vlist` are borrowed. */
 struct Expr* reduce_sos(const RForm* F, struct Expr** vlist, int nv);
 
+/* Reduce`SOSCertificate[q, {g...}, {vars...}]: the exact Putinar certificate
+ * of q >= 0 on {g_i >= 0} found by the same engine, as a list of blocks
+ * {mult, {basis...}, Gram} (mult = 1 or g_i, Gram an exact rational PSD
+ * matrix) with q == Sum mult * basis.Gram.basis identically; $Failed when no
+ * certificate is found or LAPACK is unavailable.  Takes ownership of `res`
+ * per the builtin contract. */
+struct Expr* builtin_reduce_sos_certificate(struct Expr* res);
+
 #endif /* REDUCE_SOS_H */

@@ -62,6 +62,10 @@ Out[3]= "[fun x => x + 1, (3 / 4) * a, Real.log b, f (-3)]"
   - `"IdealMembership"`: `PolynomialReduce[q, {p1, …}, vars]` → `{{c1, …}, r}` is certified as the division identity `∀ vars, q = c1·p1 + … + r` (`"TrustedSteps"` notes that the remainder being fully reduced is not certified). The claim `Implies[p1 == q1 && …, p == q]` is certified with cofactors `c_i` such that `p - q = Σ c_i (p_i - q_i)`: from `PolynomialReduce` when its remainder is 0, otherwise from a degree-bounded ansatz (degree 0 to 4) whose coefficient equations are solved by `LinearSolve`. The proof is `have k_i : p_i - q_i = 0`, `have hc : p - q = Σ c_i * (p_i - q_i)`, `rw [k_i] at hc`, `grind`.
   - `"Roots"`: `Solve[eqs, vars]` with rational solutions. A single univariate polynomial equation that splits over ℚ is certified **complete**: `∀ x : Rat, lhs = rhs ↔ x = r1 ∨ … ∨ x = rk`, through the factorization `lhs - rhs = lc · Π (x - r_i)^m_i` (`"Certificate"` has `"Roots"` and `"Multiplicities"`). Otherwise (systems, or a polynomial with irreducible non-linear factors) only **soundness** is certified: every solution substituted into every equation, checked by `decide +kernel`, with completeness listed in `"TrustedSteps"`. Radical or complex roots have no certificate yet.
   - `"MatrixInverse"`, `"Determinant"`, `"LinearSolve"`, `"NullSpace"`: `Inverse[A]`, `Det[A]` (n ≤ 6), `LinearSolve[A, b]` and `NullSpace[A]` for matrices of rational numbers. The theorems use the prelude's `Mathilda.matMul`, `Mathilda.idMat`, `Mathilda.det` (Laplace expansion) and `Mathilda.matVec`, and the kernel evaluates them (`decide +kernel`): `matMul A B = idMat n ∧ matMul B A = idMat n`, `det A = d`, `matVec A x = b`, and `matVec A v = 0` for each basis vector (`NullSpace`'s completeness is a trusted step).
+  - `"Nonnegativity"`: claims `ForAll[vars, p >= q]` (or `<=`, or a bare `p >= q`), optionally with hypotheses `ForAll[vars, g1 >= 0 && …, p >= q]` or `Implies[g1 >= 0 && …, p >= q]` (see [Sums of squares and optimality](#sums-of-squares-and-optimality)).
+  - `"Optimality"`: `Minimize[{f, cons…}, vars]` and `Maximize[…]` with a polynomial objective, linear equalities and polynomial (non-strict) inequalities.
+  - `"Primality"`: `PrimeQ[n]` and `FactorInteger[n]` (see [Primality](#primality)).
+  - `"ClosedFormSum"`: `Sum[t, {k, a, n}]` and claims `Sum[t, {k, a, n}] == closed` (see [Closed-form sums](#closed-form-sums)).
 - **Batches.** `Certify[{c1, c2, …}]` gives a list of `ProofObject`s from **one** Lean run (per tier). The theorems are `mathilda_cert_1`, `mathilda_cert_2`, … in input order, every object's `"LeanSource"` is the shared file, and each theorem gets its own verdict from the messages in its own line span, so one bad member is `False` while its siblings stay `True`. An item with no certificate gives `$Failed` in its slot.
 - **Session cache.** A Lean verdict (`True` or `False`) is remembered for the session, keyed by the theorem text, the tier, the executable and the project. Certifying the same thing again, alone or inside a batch, gives `"Cached" -> True` with the original `"Timing"` and does not run Lean.
 - Both sides of a claim are evaluated by Mathilda first. A symbol that holds a claim (`c = a == b; Certify[c]`) is evaluated and then dispatched. Anything else (a transcendental claim, an unsupported head) issues `Certify::nocert` and returns `$Failed`.
@@ -77,7 +81,7 @@ Out[3]= "[fun x => x + 1, (3 / 4) * a, Real.log b, f (-3)]"
    The cofactors `K_k` come from `PolynomialReduce` modulo `s_k^2 - d_k`. This is an **unconditional** polynomial identity in `ℚ[x, s…]`; it never assumes `s^2 = 2` over `ℚ` (which would be vacuous, since `√2 ∉ ℚ`). Mapping `s_k ↦ √d_k` is a ring homomorphism, so the identity holds for the real surds. The proof is `grind`.
 5. Mathilda checks the identity itself first and records the result as `"Certificate"["PreCheck"]`. A failed pre-check does **not** suppress the theorem: it is still emitted, and Lean refutes it. A denominator `D_i` that vanishes identically would make the identity vacuous, so in that case there is no certificate.
 
-What Lean proves is that the integrand equals the formal derivative of the antiderivative, as an identity of rational functions over `ℚ(√d…)`, cleared of denominators. Lean does **not** check the following, which `"TrustedSteps"` lists: the elementary derivative rules and the quotient rule (applied symbolically by Mathilda), the polynomial derivatives written into the statement (Mathilda's `D`), the `Together` normal forms `f = a/b` and `u_i = p_i/q_i`, and that the cleared denominators are not identically zero (checked by Mathilda). `"Hypotheses"` lists the denominators `≠ 0`, with the surds written back as `Sqrt[d]`; they are informational in Tier 0. A Tier 1 certificate (`HasDerivAt` in Mathlib, nothing trusted) is a separate, later kind.
+What Lean proves is that the integrand equals the formal derivative of the antiderivative, as an identity of rational functions over `ℚ(√d…)`, cleared of denominators. Lean does **not** check the following, which `"TrustedSteps"` lists: the elementary derivative rules and the quotient rule (applied symbolically by Mathilda), the polynomial derivatives written into the statement (Mathilda's `D`), the `Together` normal forms `f = a/b` and `u_i = p_i/q_i`, and that the cleared denominators are not identically zero (checked by Mathilda). `"Hypotheses"` lists the denominators `≠ 0`, with the surds written back as `Sqrt[d]`; they are informational in Tier 0. The Tier 1 certificate below proves the analytic statement instead, with nothing trusted.
 
 ```mathematica
 In[1]:= c = Certify[Integrate[(x^4 - 3 x^2 + 6)/(x^6 - 5 x^4 + 5 x^2 + 4), x]];
@@ -100,6 +104,84 @@ Out[5]= "∀ x : Rat, 11 * x - 6 - 6 * x ^ 2 + x ^ 3 = 0 ↔ x = 1 ∨ x = 2 ∨
 In[6]:= #["Verified"] & /@ Certify[{Factor[x^6 - 1], Inverse[{{2, 1}, {1, 1}}], (x + 1)^2 == x^2 + 1}]
 Certify::rejected: Lean rejected the certificate for (x + 1)^2 == x^2 + 1; see obj["Logs"]
 Out[6]= {True, True, False}
+```
+
+### Antiderivatives (Tier 1, Mathlib)
+`Certify[Integrate[f, x], Tier -> 1]` proves `∀ x : Real, d1 ≠ 0 → … → HasDerivAt (fun x => F) f x` in Mathlib, with `"TrustedSteps" -> {}`. It needs `$LeanProject` (or `LeanProject -> dir`, or the environment variable `MATHILDA_LEAN_PROJECT`): a Lake project with Mathlib built for the same toolchain as the Lean executable. Without one it issues `Certify::nomathlib`. Nothing in the default path depends on Mathlib. With `Tier -> Automatic`, an antiderivative outside the Tier 0 shape uses Tier 1 when a project is configured, and issues `Certify::tier` otherwise.
+
+- The proof term is built from `F`'s tree, and the same walk writes the function body, so the two have the same shape: `hasDerivAt_id'`, `hasDerivAt_const`, `hasDerivAt_pow n x`, then `.add`, `.mul`, `.const_mul c`, `.div … h`, `.pow n`, `.log h` and `.arctan`. `ArcTanh[u]` is written as `(Real.log (1 + u) - Real.log (1 - u)) / 2`, because Mathlib has no `Real.artanh`.
+- The hypotheses `d ≠ 0` are real binders. They cover every `Log` argument and denominator, the integrand's denominator, and each irreducible factor of these. Each factor hypothesis follows from its product, so adding them does not weaken the statement. `"Hypotheses"` lists them.
+- The proof closes with `refine d.congr_deriv ?_`, a pointwise `simp only [Pi.add_apply, …]`, `eq_div_iff`, `field_simp`, then `ring1` (or `ring_nf` with `Real.sq_sqrt` for surd coefficients). A tactic that fails gives `"Verified" -> False` with the logs, never a wrong `True`.
+- `import Mathlib` takes about 10–40 s per Lean run, so a batch of Tier 1 items shares one run.
+
+```mathematica
+In[1]:= c = Certify[Integrate[(1 + x)/(1 + x^2), x], Tier -> 1];
+In[2]:= {c["Verified"], c["TrustedSteps"], c["Hypotheses"]}
+Out[2]= {True, {}, {1 + x^2 != 0}}
+```
+
+### Sums of squares and optimality
+`Certify[ForAll[vars, p >= q]]` looks for `p - q = Σ d_k ℓ_k² · m_k`, with every `d_k > 0` rational, every `ℓ_k` a polynomial and every `m_k` equal to `1` or to one of the hypotheses `g ≥ 0`. The squares come from Gram matrices through an exact rational LDLᵀ (`Q = L·diag(d)·Lᵀ`, `ℓ = Lᵀ·basis`). The Gram matrices are found in one of three ways (`"Certificate"["Method"]`):
+
+- `"Quadratic"`: a quadratic form with no hypotheses has a unique Gram matrix over `{1, vars}`, so no numeric engine and no LAPACK is needed.
+- `"SOSCertificate"`: [`` Reduce`SOSCertificate ``](solutions-of-equations.md#reducesoscertificate), the exact Putinar certificate of `Reduce`'s sum-of-squares stage.
+- `"ExactGram"`: when that engine declines a problem with no hypotheses, the Gram matrix over the half-degree monomials is pinned by coefficient matching, by `Q·m(z) = 0` at every rational real zero `z`, and by zero rows where a diagonal entry is forced to 0. Free parameters are then set to 0. This handles problems whose SDP is not strictly feasible, such as `(x² - 1)² + y²` with its two zeros.
+
+The proof states the hints `have : 0 ≤ (ℓ)^2 := Mathilda.sqnn` and `have : 0 ≤ (ℓ)^2 * (g) := Mathilda.mulnn Mathilda.sqnn hg`, then the explicit identity `have : p - q = Σ d (ℓ)^2 (g) := (by grind)`, and closes with `grind`.
+
+`Certify[Minimize[{f, cons…}, vars]]`:
+1. Linear equalities are solved for the last variable with a constant coefficient. In Lean this is `have : v = … := (by grind); subst`.
+2. At the optimum `x*`, the multipliers `λ_j ≥ 0` of the active inequalities `g_j ≥ 0` solve `∇f = Σ λ_j ∇g_j` exactly (`LinearSolve`). Inactive constraints get 0, and a negative multiplier means no certificate.
+3. `σ = f - m - Σ λ_j g_j` must be a sum of squares, as above.
+
+The theorem is `(∀ x, cons → f ≥ m) ∧ cons(x*) ∧ f(x*) = m`, with `≤` for `Maximize`. `"Certificate"` holds `"Multipliers"` (one per inequality), `"Squares"`, `"Eliminated"` and `"LinearProgram"`. When `σ ≡ 0`, the problem is an LP and the multipliers are its dual certificate: weak duality plus attainment is optimality.
+
+Both kinds are proved over `Rat` in Tier 0. The identity inside the proof is a polynomial identity, so the bound also holds over the reals; that transfer is the one `"TrustedSteps"` entry.
+
+```mathematica
+In[1]:= c = Certify[Maximize[{3 x + 2 y, x + y <= 4, x + 3 y <= 6, x >= 0, y >= 0}, {x, y}]];
+In[2]:= {c["Verified"], c["Certificate"]["Multipliers"], c["Certificate"]["LinearProgram"]}
+Out[2]= {True, {3, 0, 0, 1}, True}
+
+In[3]:= Certify[ForAll[{x, y}, x^2 + y^2 >= 2 x y]]["ProofScript"]
+Out[3]= "by
+  intro x y
+  have mth_s1 : 0 ≤ (x - y) ^ 2 := Mathilda.sqnn
+  have mth_e : x ^ 2 - 2 * x * y + y ^ 2 = (1) * (x - y) ^ 2 := (by grind)
+  grind"
+```
+
+### Primality
+A flat Pratt certificate lists steps `(p, a, factors of p - 1)` in dependency order, with 2 as the base. The kernel evaluates the prelude's `Mathilda.prattCheck` with `decide +kernel`. The witness `a` is `PrimitiveRoot[p]`, or the first `a ≥ 2` that satisfies Lucas's conditions (checked with `PowerMod`).
+
+- `Certify[FactorInteger[n]]` emits one lemma `theorem mathilda_cert_1_pratt_i : Mathilda.PrattCertifies p cert` per odd prime factor. The theorem is `n = Π p^k ∧ (∃ c, Mathilda.PrattCertifies p c) ∧ …`.
+- `Certify[PrimeQ[n]]` proves `Mathilda.PrattCertifies n cert` for a prime `n`. For a composite `n` it proves `¬ PrimeQ[n]` through a factor witness `n = a * b ∧ 1 < a ∧ a < n`; for `n < 2` it proves `n < 2`.
+- `"TrustedSteps"`: Lucas's theorem. Lean checks the certificate, not the theorem that a valid certificate implies primality. Proving that through Mathlib is a follow-up.
+
+```mathematica
+In[1]:= c = Certify[FactorInteger[2^64 + 1]];
+In[2]:= {c["Verified"], c["LeanTheorem"]}
+Out[2]= {True, "18446744073709551617 = 274177 * 67280421310721 ∧ (∃ c, Mathilda.PrattCertifies 274177 c) ∧ (∃ c, Mathilda.PrattCertifies 67280421310721 c)"}
+```
+
+### Closed-form sums
+`Certify[Sum[t, {k, a, n}]]` takes a non-negative integer `a` and a term `t` that is a polynomial in `k`, or a polynomial times `c^k` for a rational `c`. It certifies Mathilda's closed form. For a claim `Sum[t, {k, a, n}] == closed`, it certifies the claimed form instead. Lean defines
+
+```lean
+def mathilda_cert_1_t (k1 : Nat) : Rat := …
+def mathilda_cert_1_S : Nat → Rat
+  | 0 => mathilda_cert_1_t a
+  | m1 + 1 => mathilda_cert_1_S m1 + mathilda_cert_1_t (m1 + 1 + a)
+```
+
+and proves `∀ m1 : Nat, mathilda_cert_1_S m1 = closed(m1 + a)` by induction (`simp only`, `push_cast`, `grind`). Every `c^(α n + β)` becomes `(c^α)^m1 · c^(αa + β)`, so the exponent is always the `Nat` binder. Every other occurrence of the variable becomes `(m1 : Rat)`. `"Theorem"` is `ForAll[n, n >= a, Sum[t, {k, a, n}] == closed]`, and `"TrustedSteps" -> {}`.
+
+```mathematica
+In[1]:= Certify[Sum[k 2^k, {k, 0, n}]]["LeanTheorem"]
+Out[1]= "∀ m1 : Nat, mathilda_cert_1_S m1 = 2 + 2 ^ m1 * 2 * ((m1 : Rat) - 1)"
+
+In[2]:= Quiet[Certify[Sum[k^3, {k, 1, n}] == n^2 (n + 1)^2/4 + 1]["Verified"]]
+Out[2]= False
 ```
 
 **Options** (`Options[Certify]`; `SetOptions` works):
@@ -127,13 +209,13 @@ Out[6]= {True, True, False}
 
 | Property | Content |
 |---|---|
-| `"Kind"` | `"Identity"`, `"Factorization"`, `"Antiderivative"`, `"Bezout"`, `"IdealMembership"`, `"Roots"`, `"MatrixInverse"`, `"Determinant"`, `"LinearSolve"` or `"NullSpace"` |
+| `"Kind"` | `"Identity"`, `"Factorization"`, `"Antiderivative"`, `"Bezout"`, `"IdealMembership"`, `"Roots"`, `"MatrixInverse"`, `"Determinant"`, `"LinearSolve"`, `"NullSpace"`, `"Nonnegativity"`, `"Optimality"`, `"Primality"` or `"ClosedFormSum"` |
 | `"Input"` | `HoldForm` of the computation or the claim |
 | `"Result"` | The computation's value; for a claim, the claim with evaluated sides |
 | `"Theorem"` | The certified statement as a held Mathilda expression (`ForAll[{x}, …]`) |
 | `"LeanTheorem"` | The statement as Lean text |
 | `"ProofScript"` | The tactic block, e.g. `by intros; grind` |
-| `"LeanSource"` | The complete Lean file: header, prelude, `theorem mathilda_cert_1` (`mathilda_cert_k` in a batch), `#print axioms` |
+| `"LeanSource"` | The complete Lean file: header, prelude, any auxiliary definitions or lemmas (`mathilda_cert_1_S`, `mathilda_cert_1_pratt_1`, …), `theorem mathilda_cert_1` (`mathilda_cert_k` in a batch), `#print axioms` |
 | `"Certificate"` | Raw Mathilda data, per kind: e.g. `"Form"` and `"Variables"` for identities, `"Cofactors"` for Bezout and ideal membership, `"Terms"`, `"Surds"` and `"PreCheck"` for antiderivatives, `"Roots"` and `"Completeness"` for `Solve` |
 | `"Verified"` | `True`, `False`, `Missing["NotChecked"]` (`Verify -> False`) or `Missing["NotAvailable"]` (no Lean found) |
 | `"Engine"`, `"Tier"`, `"Domain"` | As the options; `"Tier"` is `"Heuristic"` for `Engine -> "Mathilda"` |

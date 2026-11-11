@@ -1238,4 +1238,20 @@ void reduce_init(void) {
 
     reduce_qe_init();
     reduce_companions_init();
+
+    /* The exact certificate behind the SOS stage, for Lean certification
+     * (src/internal/lean/Lean.m).  In the Reduce` context, which is never on
+     * $ContextPath, so no user short name is captured. */
+    symtab_add_builtin("Reduce`SOSCertificate", builtin_reduce_sos_certificate);
+    symtab_get_def("Reduce`SOSCertificate")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Reduce`SOSCertificate",
+        "Reduce`SOSCertificate[q, {g1, ...}, {x1, ...}]\n"
+        "\tgives an exact Putinar certificate that the polynomial q is\n"
+        "\tnon-negative where every gi >= 0: a list of blocks {m, b, Q} with\n"
+        "\tm = 1 or gi, b a list of basis polynomials and Q an exact rational\n"
+        "\tpositive semidefinite Gram matrix, such that q equals\n"
+        "\tSum[m b.Q.b] identically.  The same engine as Reduce's\n"
+        "\tsum-of-squares stage (numeric SDP guide, exact rational\n"
+        "\tverification).  $Failed when no certificate is found, the degree\n"
+        "\texceeds 8, or LAPACK is unavailable.");
 }

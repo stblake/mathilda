@@ -105,6 +105,9 @@ static void test_strict(void) {
     check_str("Lean`Internal`ToLean[HoldForm[2 + 2 == 4], \"Int\", True, {}]", "(2 + 2 : Int) = 4");
     check_str("Lean`Internal`ToLean[HoldForm[S[n] == n^2], None, True, {\"S\"}]", "S n = n ^ 2");
     check_str("Lean`Internal`ToLean[Log[x], \"Real\", False, {}]", "Real.log x");
+    /* A symbol exponent only when the generator declares it (Nat binder). */
+    check_str("Lean`Internal`ToLean[HoldForm[2^k (k + 1)], \"Rat\", True, {\"k\"}]",
+              "2 ^ k * (k + 1)");
     /* Refusals give $Failed and LeanForm::untrans. */
     test_mute_messages();
     assert_eval_eq("Lean`Internal`ToLean[Log[x], \"Rat\", True, {}]", "$Failed", 0);
@@ -113,6 +116,8 @@ static void test_strict(void) {
     assert_eval_eq("Lean`Internal`ToLean[1.5, \"Rat\", True, {}]", "$Failed", 0);
     assert_eval_eq("Lean`Internal`ToLean[x/2, \"Int\", True, {}]", "$Failed", 0);
     assert_eval_eq("Lean`Internal`ToLean[x^(1/3), \"Rat\", True, {}]", "$Failed", 0);
+    assert_eval_eq("Lean`Internal`ToLean[2^k, \"Rat\", True, {}]", "$Failed", 0);
+    assert_eval_eq("Lean`Internal`ToLean[2^(k + 1), \"Rat\", True, {\"k\"}]", "$Failed", 0);
     assert_eval_eq("Lean`Internal`ToLean[Pi, \"Real\", True, {}]", "$Failed", 0);
     assert_eval_eq("Lean`Internal`ToLean[Infinity, \"Real\", False, {}]", "$Failed", 0);
     assert_eval_eq("Lean`Internal`ToLean[f[x], \"Rat\", True, {}]", "$Failed", 0);
