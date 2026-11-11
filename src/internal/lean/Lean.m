@@ -22,9 +22,12 @@ BeginPackage["Lean`"];
 
 Certify::usage =
   "Certify[comp] evaluates the computation comp (Expand, Factor, FactorTerms, Collect, \
-Together, Apart, Cancel, Simplify, FullSimplify) and certifies its result with the Lean 4 \
-kernel; Certify[a == b] certifies the claim a == b. The result is a ProofObject whose \
-\"Verified\" property is True only when Lean accepted the theorem.";
+Together, Apart, Cancel, Simplify, FullSimplify, Integrate over Q(x), \
+PolynomialExtendedGCD, PolynomialReduce, Solve, Inverse, Det, LinearSolve, NullSpace) and \
+certifies its result with the Lean 4 kernel; Certify[a == b] certifies the claim a == b and \
+Certify[Implies[p1 == q1 && ..., p == q]] an ideal membership. Certify[{c1, c2, ...}] \
+certifies a batch in one Lean run. The result is a ProofObject whose \"Verified\" property \
+is True only when Lean accepted the theorem.";
 
 ProofObject::usage =
   "ProofObject[<|...|>] is a Lean 4 certificate produced by Certify; obj[\"prop\"] gives a \
@@ -351,6 +354,432 @@ generate[HoldComplete[(h_Symbol)[e_, rest___]], o_] /;
       If[MemberQ[$factorHeads, h], {"irreducibility of the factors (not certified)"}, {}],
       o]];
 
+(* ---------------------------------------------------------------------- *)
+(* Shared helpers for the structured certificates (rows 4-10)              *)
+(* ---------------------------------------------------------------------- *)
+
+(* Prelude functions in statements are written with private placeholder
+   heads and renamed after translation.  A symbol in a context on
+   $ContextPath (Mathilda`matMul) would capture the user's short name. *)
+$preludeHeads = {"Lean.Private.matMul" -> "Mathilda.matMul",
+  "Lean.Private.matVec" -> "Mathilda.matVec", "Lean.Private.idMat" -> "Mathilda.idMat",
+  "Lean.Private.det" -> "Mathilda.det"};
+
+(* Private generator variables (the surd symbols s1, s2, ...) print as
+   <<Lean`Private`s1>>; they are renamed to their bare names. *)
+leanRename[s_String] := StringReplace[StringReplace[s, $preludeHeads],
+  "\[LeftGuillemet]Lean`Private`" ~~ n:(LetterCharacter ~~ DigitCharacter..) ~~
+    "\[RightGuillemet]" :> n];
+leanRename[other_] := other;
+
+(* Strict Tier 0 translation of a held statement over type ty. *)
+leanStmt[held_HoldForm, ty_String] := leanRename[toLean[held, ty, True, Keys[$preludeHeads]]];
+
+(* Lean name of a binder variable. *)
+leanVar[v_Symbol] := With[{s = leanStmt[HoldForm[v], "Rat"]}, If[StringQ[s], s, "_"]];
+
+introLine[{}] := "";
+introLine[vars_List] := "\n  intro " <> StringRiffle[leanVar /@ vars, " "];
+
+(* Inert heads keep a structured expression (p' q - p q', (q^2 + p^2) ...)
+   from being normalised; inertHeld turns it into the held statement. *)
+$inertRules = {iPlus -> Plus, iTimes -> Times, iPower -> Power, iEqual -> Equal,
+  iUnequal -> Unequal, iAnd -> And, iOr -> Or, iImplies -> Implies,
+  iEquivalent -> Equivalent};
+inertValue[e_] := e /. $inertRules;
+inertHeld[e_] := With[{x = e}, HoldForm[x]] /. $inertRules;
+
+(* iTimes / iPlus that drop unit factors and zero terms. *)
+iProd[fs___] := With[{l = DeleteCases[{fs}, 1]},
+  Which[l === {}, 1, Length[l] === 1, First[l], True, iTimes @@ l]];
+iSum[ts___] := With[{l = DeleteCases[{ts}, 0]},
+  Which[l === {}, 0, Length[l] === 1, First[l], True, iPlus @@ l]];
+
+(* ForAll[vars, s] around a held statement s (vars may be empty). *)
+forAllHeld[held_HoldForm, {}] := held;
+forAllHeld[held_HoldForm, vars_List] := With[{vs = vars},
+  held /. HoldForm[s_] :> HoldForm[ForAll[vs, s]]];
+
+ratNumberQ[e_] := MatchQ[e, _Integer | _Rational];
+ratMatrixQ[m_] := MatrixQ[m] && AllTrue[Flatten[m], ratNumberQ];
+ratVectorQ[v_] := VectorQ[v] && AllTrue[v, ratNumberQ];
+
+(* The generator association every structured kind returns. *)
+structGen[kind_, input_, result_, held_, stmt_, proof_, cert_, trusted_, hyps_, claim_,
+    dom_:Rationals] := <|"Kind" -> kind, "Input" -> input, "Result" -> result,
+  "Theorem" -> held, "Statement" -> stmt, "Proof" -> proof, "Certificate" -> cert,
+  "TrustedSteps" -> trusted, "Hypotheses" -> hyps, "Tier" -> 0, "Domain" -> dom,
+  "Claim" -> claim|>;
+
+nocert[input_] := (Message[Certify::nocert, input]; $Failed);
+
+(* ---------------------------------------------------------------------- *)
+(* Row 4: Integrate[f, x], f in Q(x) -- the Tier 0 cleared chain-rule       *)
+(* identity (plan section 3.2)                                             *)
+(* ---------------------------------------------------------------------- *)
+
+(* Test-only hook: when not None, this expression replaces the antiderivative
+   Integrate computed (it must be in the integration variable).  Used to
+   check that Lean rejects a wrong antiderivative. *)
+$antiderivOverride = None;
+
+(* d^(n/2) with n odd, as d^((n-1)/2) * Sqrt[d], where Sqrt[d] is written over
+   the primes: Prod p^Floor[k/2] * Prod_{k odd} sq[p], sq[p] standing for
+   Sqrt[p].  Prime generators matter: Q[s_p]/(s_p^2 - p) is the field
+   Q(Sqrt[p], ...), so reduction modulo the relations decides zero exactly
+   (independent symbols for Sqrt[2], Sqrt[3] and Sqrt[6] would lose
+   Sqrt[2] Sqrt[3] = Sqrt[6]). *)
+surdPow[1, _] := 1;
+surdPow[d_Integer, e_Rational] := d^((Numerator[e] - 1)/2) *
+  Times @@ (#[[1]]^Quotient[#[[2]], 2] * If[OddQ[#[[2]]], sq[#[[1]]], 1] & /@
+    FactorInteger[d]);
+
+$surdRules = {
+  Power[r_Rational?Positive, e_Rational] /; Denominator[e] === 2 :>
+    surdPow[Numerator[r], e] * surdPow[Denominator[r], -e],
+  Power[d_Integer?Positive, e_Rational] /; Denominator[e] === 2 :> surdPow[d, e]};
+
+(* F is built from the variables by Plus, Times, integer Power and one level
+   of Log / ArcTan / ArcTanh. *)
+elemQ[e_] := MatchQ[e, (Log | ArcTan | ArcTanh)[_]];
+allowedQ[e_, vars_] := Which[
+  ratNumberQ[e], True,
+  Head[e] === Symbol, MemberQ[vars, e],
+  MatchQ[e, _Plus | _Times], AllTrue[List @@ e, allowedQ[#, vars] &],
+  MatchQ[e, Power[_, _Integer]], allowedQ[e[[1]], vars],
+  elemQ[e], allowedQ[e[[1]], vars] && FreeQ[e[[1]], Log | ArcTan | ArcTanh],
+  True, False];
+
+(* The derivative of c * phi(p/q) as {c, N, D} (N/D = d/dx phi(p/q)), with N
+   and D in structured, unexpanded form. *)
+elemPiece[c_, h_, u_, x_, vars_] := Module[{tu, p, q, pp, qq},
+  tu = Together[u]; p = Numerator[tu]; q = Denominator[tu];
+  If[!polyQ[p, vars] || !polyQ[q, vars], Return[$Failed, Module]];
+  pp = D[p, x]; qq = D[q, x];
+  {c, iPlus[iTimes[pp, q], iTimes[-1, p, qq]],
+   Switch[h,
+     Log, iTimes[p, q],
+     ArcTan, iPlus[iPower[q, 2], iPower[p, 2]],
+     ArcTanh, iPlus[iPower[q, 2], iTimes[-1, iPower[p, 2]]]],
+   h, p, q}];
+
+antiderivGen[input_, f_, x_Symbol, o_] := Module[{F, tf, a, b, Fs, bases, svars, vars,
+    sub, terms, rpart = 0, elems = {}, pieces, tr, r, w, dens, lhs, lhsV, rels, red,
+    ks, rem, rhs, held, stmt, nonzero, hyps, back, fs, ph, cf},
+  F = If[$antiderivOverride =!= None, $antiderivOverride, Integrate[f, x]];
+  If[!FreeQ[F, Integrate], Return[nocert[input], Module]];
+  (* The integrand must be a rational function of x over Q. *)
+  tf = Together[f]; a = Numerator[tf]; b = Denominator[tf];
+  If[!polyQ[a, {x}] || !polyQ[b, {x}] || !SubsetQ[{x}, Variables[{a, b}]] ||
+     !FreeQ[{a, b}, _Complex | _Real],
+    Return[nocert[input], Module]];
+  (* Quadratic surds Sqrt[d] become fresh variables s_j (relation s_j^2 = d_j). *)
+  Fs = F /. $surdRules;
+  bases = Union[Cases[Fs, sq[d_] :> d, {0, Infinity}]];
+  svars = Table[Symbol["Lean`Private`" <>
+      If[StringMatchQ[SymbolName[x], "s" ~~ DigitCharacter..], "r", "s"] <> ToString[j]],
+    {j, Length[bases]}];
+  sub = Thread[(sq /@ bases) -> svars];
+  Fs = Fs /. sub;
+  vars = Join[{x}, svars];
+  If[!allowedQ[Fs, vars], Message[Certify::tier, input]; Return[$Failed, Module]];
+  (* Decompose F = R + Sum c_i phi_i(u_i), each c_i free of x. *)
+  terms = If[Head[Fs] === Plus, List @@ Fs, {Fs}];
+  Do[
+    If[FreeQ[t, Log | ArcTan | ArcTanh], rpart += t,
+      fs = If[Head[t] === Times, List @@ t, {t}];
+      ph = Select[fs, elemQ]; cf = Times @@ Select[fs, !elemQ[#] &];
+      If[Length[ph] =!= 1 || !FreeQ[cf, x], Return[nocert[input], Module]];
+      AppendTo[elems, {cf, Head[First[ph]], First[First[ph]]}]],
+    {t, terms}];
+  pieces = elemPiece[#[[1]], #[[2]], #[[3]], x, vars] & /@ elems;
+  If[MemberQ[pieces, $Failed], Return[nocert[input], Module]];
+  tr = Together[rpart]; r = Numerator[tr]; w = Denominator[tr];
+  If[!polyQ[r, vars] || !polyQ[w, vars], Return[nocert[input], Module]];
+  If[r =!= 0, AppendTo[pieces, If[FreeQ[w, x],
+    {1, D[r, x], w, "Rational", r, w},
+    {1, iPlus[iTimes[D[r, x], w], iTimes[-1, r, D[w, x]]], iPower[w, 2], "Rational", r, w}]]];
+  (* Structured cleared identity:
+       (Sum_i c_i N_i Prod_{j != i} D_j) b - a Prod_j D_j = Sum_j (s_j^2 - d_j) K_j *)
+  dens = pieces[[All, 3]];
+  lhs = iSum[Sequence @@ Table[
+      iProd[pieces[[i, 1]], pieces[[i, 2]], Sequence @@ Delete[dens, i], b],
+      {i, Length[pieces]}],
+    iProd[-1, a, Sequence @@ dens]];
+  rels = MapThread[#1^2 - #2 &, {svars, bases}];
+  red[e_] := If[svars === {}, {{}, Expand[e]},
+    PolynomialReduce[Expand[e], rels, vars]];
+  lhsV = Expand[inertValue[lhs]];
+  {ks, rem} = red[lhsV];
+  (* Mathilda-side checks: a denominator that vanishes identically would make
+     the cleared identity vacuous, so there is no certificate. *)
+  back = Thread[svars -> (Sqrt /@ bases)];
+  nonzero[e_] := Last[red[inertValue[e]]] =!= 0 &&
+    Expand[inertValue[e] /. back] =!= 0;
+  If[!AllTrue[dens, nonzero], Return[nocert[input], Module]];
+  rhs = iSum @@ MapThread[If[#3 === 0, 0, iTimes[iPlus[iPower[#1, 2], -#2], #3]] &,
+    {svars, bases, ks}];
+  held = forAllHeld[inertHeld[iEqual[lhs, rhs]], vars];
+  stmt = leanStmt[held, "Rat"];
+  If[!StringQ[stmt], Return[nocert[input], Module]];
+  hyps = DeleteDuplicates[Cases[Append[dens, b],
+    d_ /; !NumberQ[inertValue[d]] :> (inertHeld[iUnequal[d, 0]] /. back)]];
+  structGen["Antiderivative", input, F, held, stmt,
+    "by" <> introLine[vars] <> "\n  grind",
+    <|"Form" -> "ClearedDerivative", "Variable" -> x, "Integrand" -> {a, b},
+      "Terms" -> Map[<|"Coefficient" -> #[[1]], "Function" -> #[[4]],
+          "Numerator" -> #[[5]], "Denominator" -> #[[6]]|> &, pieces],
+      "Surds" -> Thread[svars -> (Sqrt /@ bases)], "SurdCofactors" -> ks,
+      "PreCheck" -> (rem === 0)|>,
+    {"elementary derivative rules d log u = u'/u, d arctan u = u'/(1 + u^2), \
+d artanh u = u'/(1 - u^2) and the quotient rule (applied symbolically by Mathilda; Lean \
+checks only the resulting polynomial identity)",
+     "polynomial differentiation by Mathilda's D (the derivatives written into the \
+statement)",
+     "Together normal form of the integrand (f = a/b) and of each argument u_i = p_i/q_i",
+     "the cleared denominators are not identically zero (checked by Mathilda; listed in \
+\"Hypotheses\")"},
+    hyps, {D[F, x], f}]];
+
+generate[HoldComplete[Integrate[f_, x_Symbol]], o_] :=
+  antiderivGen[HoldForm[Integrate[f, x]], f, x, o];
+
+(* ---------------------------------------------------------------------- *)
+(* Row 5: PolynomialExtendedGCD (Bezout)                                   *)
+(* ---------------------------------------------------------------------- *)
+
+generate[HoldComplete[PolynomialExtendedGCD[a_, b_, x_Symbol]], o_] :=
+  Module[{input = HoldForm[PolynomialExtendedGCD[a, b, x]], av = a, bv = b, res, g, s, t,
+      qa, qb, held, ty, stmt},
+  If[!polyQ[av, {x}] || !polyQ[bv, {x}] || !SubsetQ[{x}, Variables[{av, bv}]],
+    Return[nocert[input], Module]];
+  res = PolynomialExtendedGCD[av, bv, x];
+  If[!MatchQ[res, {_, {_, _}}], Return[nocert[input], Module]];
+  {g, {s, t}} = res;
+  qa = PolynomialQuotient[av, g, x]; qb = PolynomialQuotient[bv, g, x];
+  held = forAllHeld[inertHeld[iAnd[
+      iEqual[iPlus[iTimes[s, av], iTimes[t, bv]], g],
+      iEqual[av, iTimes[g, qa]], iEqual[bv, iTimes[g, qb]]]], {x}];
+  ty = autoDomain[{av, bv, g, s, t, qa, qb}];
+  stmt = leanStmt[held, ty];
+  If[!StringQ[stmt], Return[nocert[input], Module]];
+  structGen["Bezout", input, res, held, stmt,
+    "by" <> introLine[{x}] <> "\n  refine And.intro ?_ (And.intro ?_ ?_) <;> grind",
+    <|"GCD" -> g, "Cofactors" -> {s, t}, "Quotients" -> {qa, qb},
+      "PreCheck" -> (Expand[s av + t bv - g] === 0 && Expand[av - g qa] === 0 &&
+        Expand[bv - g qb] === 0)|>,
+    {}, {}, {{s av + t bv, av, bv}, {g, g qa, g qb}}, leanType[ty]]];
+
+(* ---------------------------------------------------------------------- *)
+(* Row 6: PolynomialReduce and ideal membership Implies[p1 == 0 && ..., q == 0] *)
+(* ---------------------------------------------------------------------- *)
+
+monomials[vars_List, d_Integer] := Times @@ (vars^#) & /@
+  Select[Tuples[Range[0, d], Length[vars]], Total[#] <= d &];
+
+(* Cofactors c with q == c . ps: PolynomialReduce first, then a degree-bounded
+   ansatz c_i = Sum_{|alpha| <= d} u_{i,alpha} x^alpha (d = 0..dmax) whose
+   coefficient equations are solved with LinearSolve (free parameters 0). *)
+cofactors[q_, ps_List, vars_List, dmax_Integer:4] := Module[{pr, monos, cols, rules,
+    qr, keys, vec, sol, nm, cs},
+  pr = Quiet[PolynomialReduce[q, ps, vars]];
+  If[MatchQ[pr, {_List, _}] && Expand[q - pr[[1]] . ps] === 0, Return[pr[[1]], Module]];
+  vec[rl_] := Replace[#, Append[rl, _ -> 0]] & /@ keys;
+  Do[
+    monos = monomials[vars, d]; nm = Length[monos];
+    cols = Flatten[Table[Expand[m p], {p, ps}, {m, monos}], 1];
+    rules = CoefficientRules[#, vars] & /@ cols;
+    qr = CoefficientRules[Expand[q], vars];
+    keys = Union @@ Join[(First /@ #) & /@ rules, {First /@ qr}];
+    sol = Quiet[LinearSolve[Transpose[vec /@ rules], vec[qr]]];
+    If[VectorQ[sol],
+      cs = Table[sol[[(i - 1) nm + 1 ;; i nm]] . monos, {i, Length[ps]}];
+      If[Expand[q - cs . ps] === 0, Return[cs, Module]]],
+    {d, 0, dmax}];
+  $Failed];
+
+generate[HoldComplete[PolynomialReduce[q_, ps_List, vs_List]], o_] :=
+  Module[{input = HoldForm[PolynomialReduce[q, ps, vs]], qv = q, psv = ps, res, cs, r,
+      vars, held, ty, stmt},
+  vars = Sort[Union[Variables[{qv, psv}], vs]];
+  If[!AllTrue[vars, Head[#] === Symbol &] || !polyQ[qv, vars] ||
+     !AllTrue[psv, polyQ[#, vars] &], Return[nocert[input], Module]];
+  res = PolynomialReduce[qv, psv, vs];
+  If[!MatchQ[res, {_List, _}], Return[nocert[input], Module]];
+  {cs, r} = res;
+  held = forAllHeld[inertHeld[iEqual[qv,
+      iSum[Sequence @@ MapThread[iTimes, {cs, psv}], r]]], vars];
+  ty = autoDomain[{qv, psv, cs, r}];
+  stmt = leanStmt[held, ty];
+  If[!StringQ[stmt], Return[nocert[input], Module]];
+  structGen["IdealMembership", input, res, held, stmt,
+    "by" <> introLine[vars] <> "\n  grind",
+    <|"Cofactors" -> cs, "Remainder" -> r, "Divisors" -> psv,
+      "PreCheck" -> (Expand[qv - cs . psv - r] === 0)|>,
+    {"that the remainder is fully reduced with respect to the divisors (not certified; \
+the division identity is)"},
+    {}, {qv, cs . psv + r}, leanType[ty]]];
+
+(* Hypotheses l_i == r_i, goal l == r: q = l - r lies in the ideal of the
+   p_i = l_i - r_i.  Proof shape (plan section 0.1): have k_i : p_i = 0,
+   have hc : q = Sum c_i * p_i, rw [k_i] at hc, grind. *)
+membershipGen[input_, hs_List, {l_, r_}, o_] := Module[{ps, q, vars, cs, eq, held, ty,
+    stmt, ptxt, qtxt, ctxt, proof, k},
+  ps = Expand[#[[1]] - #[[2]]] & /@ hs; q = Expand[l - r];
+  vars = Sort[Variables[{ps, q}]];
+  If[!AllTrue[vars, Head[#] === Symbol &] || !AllTrue[Append[ps, q], polyQ[#, vars] &],
+    Return[nocert[input], Module]];
+  cs = cofactors[q, ps, vars];
+  If[cs === $Failed, Return[nocert[input], Module]];
+  eq[{a_, b_}] := iEqual[a, b];
+  held = forAllHeld[inertHeld[Fold[iImplies[#2, #1] &, eq[{l, r}], Reverse[eq /@ hs]]],
+    vars];
+  ty = autoDomain[{ps, q, cs}];
+  stmt = leanStmt[held, ty];
+  ptxt = leanStmt[inertHeld[iPlus[#[[1]], iTimes[-1, #[[2]]]]], ty] & /@ hs;
+  qtxt = leanStmt[inertHeld[iPlus[l, iTimes[-1, r]]], ty];
+  ctxt = leanStmt[HoldForm[#], ty] & /@ cs;
+  If[!StringQ[stmt] || !AllTrue[Join[ptxt, ctxt, {qtxt}], StringQ],
+    Return[nocert[input], Module]];
+  k = Length[ps];
+  proof = If[MemberQ[ptxt, qtxt], "by" <> introLine[vars] <> "\n  intros\n  grind",
+    StringJoin["by", introLine[vars], "\n  intros",
+      Table["\n  have mth_k" <> ToString[i] <> " : " <> ptxt[[i]] <> " = 0 := (by grind)",
+        {i, k}],
+      "\n  have mth_hc : ", qtxt, " = ",
+      StringRiffle[Table["(" <> ctxt[[i]] <> ") * (" <> ptxt[[i]] <> ")", {i, k}], " + "],
+      " := (by grind)",
+      "\n  rw [", StringRiffle[Table["mth_k" <> ToString[i], {i, k}], ", "], "] at mth_hc",
+      "\n  grind"]];
+  structGen["IdealMembership", input, cs, held, stmt, proof,
+    <|"Cofactors" -> cs, "Generators" -> ps, "Goal" -> q|>, {}, {}, {q, cs . ps},
+    leanType[ty]]];
+
+generate[HoldComplete[Implies[And[hs__Equal], Equal[l_, r_]]], o_] :=
+  membershipGen[HoldForm[Implies[And[hs], l == r]],
+    Cases[HoldComplete[hs], HoldPattern[Equal[a_, b_]] :> {a, b}], {l, r}, o];
+
+generate[HoldComplete[Implies[h_Equal, Equal[l_, r_]]], o_] :=
+  membershipGen[HoldForm[Implies[h, l == r]],
+    Cases[HoldComplete[h], HoldPattern[Equal[a_, b_]] :> {a, b}], {l, r}, o];
+
+(* ---------------------------------------------------------------------- *)
+(* Row 7: Solve -- completeness for univariate polynomials with rational   *)
+(* roots, soundness (each solution satisfies each equation) otherwise      *)
+(* ---------------------------------------------------------------------- *)
+
+(* Multiplicity of the rational root rt of p. *)
+rootMultiplicity[p_, x_, rt_] := Module[{m = 0, f = p},
+  While[f =!= 0 && Expand[PolynomialRemainder[f, x - rt, x]] === 0,
+    m++; f = PolynomialQuotient[f, x - rt, x]];
+  m];
+
+solveGen[input_, eqs_List, vars_List, sol_, o_] := Module[{x, p, roots, lc, mult, fact,
+    held, stmt, ftxt, etxt, l, r, alts, sound},
+  If[!MatchQ[sol, {{__Rule} ..}] || !AllTrue[Flatten[vars /. sol], ratNumberQ],
+    Return[nocert[input], Module]];
+  (* Completeness: one univariate polynomial equation that splits over Q. *)
+  If[Length[vars] === 1 && Length[eqs] === 1,
+    x = First[vars]; {l, r} = First[eqs]; p = Expand[l - r];
+    If[polyQ[p, {x}] && SubsetQ[{x}, Variables[p]] && Exponent[p, x] > 0,
+      roots = DeleteDuplicates[x /. sol];
+      lc = Coefficient[p, x, Exponent[p, x]];
+      mult = rootMultiplicity[p, x, #] & /@ roots;
+      fact = iProd[lc, Sequence @@ MapThread[
+        If[#2 === 1, iPlus[x, -#1], iPower[iPlus[x, -#1], #2]] &, {roots, mult}]];
+      If[Expand[p - inertValue[fact]] === 0,
+        alts = iEqual[x, #] & /@ roots;
+        held = forAllHeld[inertHeld[iEquivalent[iEqual[l, r],
+            If[Length[alts] === 1, First[alts], iOr @@ alts]]], {x}];
+        stmt = leanStmt[held, "Rat"];
+        ftxt = leanStmt[inertHeld[fact], "Rat"];
+        etxt = leanStmt[inertHeld[iEqual[l, r]], "Rat"];
+        If[StringQ[stmt] && StringQ[ftxt] && StringQ[etxt],
+          Return[structGen["Roots", input, sol, held, stmt,
+            StringJoin["by", introLine[{x}],
+              "\n  have mth_e : ", leanStmt[inertHeld[iPlus[l, iTimes[-1, r]]], "Rat"],
+              " = ", ftxt, " := (by grind)",
+              "\n  have mth_h : (", etxt, ") \[LeftRightArrow] ", ftxt,
+              " = 0 := (by rw [\[LeftArrow] mth_e]; grind)",
+              "\n  rw [mth_h]\n  grind"],
+            <|"Completeness" -> True, "Factorization" -> inertValue[fact],
+              "Roots" -> roots, "Multiplicities" -> mult|>,
+            {}, {}, {Flatten[(l - r) /. sol], 0}], Module]]]]];
+  (* Soundness: substitute every solution into every equation (held, so the
+     substitution reaches Lean) and let the kernel evaluate. *)
+  sound = With[{e = If[Length[eqs] === 1, iEqual @@ First[eqs], iAnd @@ (iEqual @@@ eqs)]},
+    HoldForm[e]];
+  held = inertHeld[If[Length[sol] === 1, sound /. First[sol], iAnd @@ ((sound /. #) & /@ sol)]];
+  stmt = leanStmt[held, "Rat"];
+  If[!StringQ[stmt], Return[nocert[input], Module]];
+  structGen["Roots", input, sol, held, stmt, "by\n  decide +kernel",
+    <|"Completeness" -> False, "Solutions" -> sol|>,
+    {"completeness: that Solve returned every solution (only soundness -- each solution \
+satisfies each equation -- is certified)"},
+    {}, {Flatten[Table[(#[[1]] - #[[2]]) & /@ eqs /. s, {s, sol}]], 0}]];
+
+generate[HoldComplete[Solve[eqs_, vs_]], o_] := Module[{input = HoldForm[Solve[eqs, vs]],
+    el, vars, sol},
+  el = Cases[HoldComplete[eqs] /. {HoldPattern[And[e___]] :> {e}},
+    HoldPattern[Equal[a_, b_]] :> {a, b}, {0, 2}];
+  vars = Flatten[{vs}];
+  If[el === {} || !AllTrue[vars, Head[#] === Symbol &], Return[nocert[input], Module]];
+  sol = Quiet[Solve[eqs, vs]];
+  solveGen[input, el, vars, sol, o]];
+
+(* ---------------------------------------------------------------------- *)
+(* Rows 8-10: Inverse, Det (n <= 6), LinearSolve, NullSpace over Q,        *)
+(* checked by the kernel evaluating the prelude's matMul / det / matVec    *)
+(* ---------------------------------------------------------------------- *)
+
+matrixGen[kind_, input_, result_, held_, cert_, trusted_, claim_] := With[
+  {stmt = leanStmt[held, "Rat"]},
+  If[!StringQ[stmt], nocert[input],
+    structGen[kind, input, result, held, stmt, "by\n  decide +kernel", cert, trusted, {},
+      claim]]];
+
+generate[HoldComplete[Inverse[m_]], o_] := Module[{input = HoldForm[Inverse[m]], a = m,
+    b, n},
+  If[!ratMatrixQ[a] || Length[a] =!= Length[First[a]], Return[nocert[input], Module]];
+  b = Quiet[Inverse[a]];
+  If[!ratMatrixQ[b], Return[nocert[input], Module]];
+  n = Length[a];
+  matrixGen["MatrixInverse", input, b,
+    With[{aa = a, bb = b, k = n},
+      HoldForm[matMul[aa, bb] == idMat[k] && matMul[bb, aa] == idMat[k]]],
+    <|"Matrix" -> a, "Inverse" -> b|>, {}, {{a . b, b . a}, {IdentityMatrix[n], IdentityMatrix[n]}}]];
+
+generate[HoldComplete[Det[m_]], o_] := Module[{input = HoldForm[Det[m]], a = m, d},
+  If[!ratMatrixQ[a] || Length[a] =!= Length[First[a]] || Length[a] > 6,
+    Return[nocert[input], Module]];
+  d = Det[a];
+  matrixGen["Determinant", input, d, With[{aa = a, dd = d}, HoldForm[det[aa] == dd]],
+    <|"Matrix" -> a, "Method" -> "Laplace expansion along row 0 (prelude Mathilda.det)"|>,
+    {}, {d, Det[a]}]];
+
+generate[HoldComplete[LinearSolve[m_, v_]], o_] := Module[{input = HoldForm[LinearSolve[m, v]],
+    a = m, b = v, x},
+  If[!ratMatrixQ[a] || !ratVectorQ[b] || Length[b] =!= Length[a],
+    Return[nocert[input], Module]];
+  x = Quiet[LinearSolve[a, b]];
+  If[!ratVectorQ[x], Return[nocert[input], Module]];
+  matrixGen["LinearSolve", input, x, With[{aa = a, xx = x, bb = b}, HoldForm[matVec[aa, xx] == bb]],
+    <|"Matrix" -> a, "RightHandSide" -> b, "Solution" -> x|>, {}, {a . x, b}]];
+
+generate[HoldComplete[NullSpace[m_]], o_] := Module[{input = HoldForm[NullSpace[m]], a = m,
+    vs, zero},
+  If[!ratMatrixQ[a], Return[nocert[input], Module]];
+  vs = NullSpace[a];
+  If[!MatchQ[vs, {__}] || !AllTrue[vs, ratVectorQ], Return[nocert[input], Module]];
+  zero = ConstantArray[0, Length[a]];
+  matrixGen["NullSpace", input, vs,
+    inertHeld[If[Length[vs] === 1, First[#], iAnd @@ #] &[
+      With[{aa = a, z = zero}, iEqual[matVec[aa, #], z]] & /@ vs]],
+    <|"Matrix" -> a, "Basis" -> vs|>,
+    {"completeness: that the vectors are independent and span the whole null space \
+(only A.v = 0 for each v is certified)"},
+    {a . Transpose[vs], ConstantArray[0, {Length[a], Length[vs]}]}]];
+
 (* Anything else: a symbol or call holding a supported shape (c = a == b;
    Certify[c]) is evaluated once and dispatched again; a fixed point that
    matches no rule has no certificate. *)
@@ -380,15 +809,12 @@ mkProofObject[g_, v_, engine_, tierShown_, lv_, source_, lt_] := With[{a = <|
   "Verified" -> v["Verified"], "Engine" -> engine, "Tier" -> tierShown,
   "Domain" -> g["Domain"], "Hypotheses" -> g["Hypotheses"],
   "TrustedSteps" -> g["TrustedSteps"], "Axioms" -> v["Axioms"], "Logs" -> v["Logs"],
-  "Timing" -> v["Timing"], "Cached" -> False, "LeanVersion" -> lv|>},
+  "Timing" -> v["Timing"], "Cached" -> TrueQ[v["Cached"]], "LeanVersion" -> lv|>},
   ProofObject[a]];  (* With: the held slot receives the evaluated Association *)
 
-certify[hc_HoldComplete, opts_List] := Module[{o, g, engine, tier, chunk, exe, proj,
-    v, src, lv, t},
-  o = certOptions[opts];
-  engine = o["Engine"];
-  If[!MemberQ[{"Lean", "Mathilda"}, engine],
-    Message[Certify::engine, engine]; Return[$Failed, Module]];
+(* The generator association of one item plus the tier it runs at
+   ("TierUsed"), or $Failed (after a message). *)
+prepare[hc_HoldComplete, o_] := Module[{g, tier, proj},
   g = generate[hc, o];
   If[!AssociationQ[g], Return[$Failed, Module]];
   (* Tier: the generator's natural tier, unless the caller insists. *)
@@ -400,29 +826,82 @@ certify[hc_HoldComplete, opts_List] := Module[{o, g, engine, tier, chunk, exe, p
     Return[$Failed, Module]];
   If[o["Tier"] === 0 && g["Tier"] === 1,
     Message[Certify::tier, g["Input"]]; Return[$Failed, Module]];
-  chunk = theoremChunk["mathilda_cert_1", g["Statement"], g["Proof"],
-    heartbeats[o["TimeConstraint"]]];
-  src = First[assembleFile[{chunk}, tier]];
-  Which[
-    engine === "Mathilda",
-      t = First[AbsoluteTiming[
-        v = With[{d = g["Claim"][[1]] - g["Claim"][[2]]},
-          TrueQ[Quiet[PossibleZeroQ[d]]] || TrueQ[Quiet[Simplify[d]] === 0]]]];
-      With[{gh = Append[g, "TrustedSteps" ->
-            {"Mathilda's PossibleZeroQ / Simplify (a heuristic check, not a proof)"}]},
-        mkProofObject[gh, <|"Verified" -> v, "Axioms" -> {}, "Logs" -> {}, "Timing" -> t|>,
-          "Mathilda", "Heuristic", Missing["NotChecked"], src, g["Statement"]]],
-    !TrueQ[o["Verify"]],
-      mkProofObject[g, <|"Verified" -> Missing["NotChecked"], "Axioms" -> {}, "Logs" -> {},
-          "Timing" -> 0.|>, "Lean", tier, Missing["NotChecked"], src, g["Statement"]],
-    True,
-      exe = leanExe[o["LeanExecutable"]];
-      v = First[runBatch[{chunk}, tier, exe, proj]];
-      lv = If[MissingQ[v["Verified"]], Missing["NotAvailable"], leanVersionOf[exe]];
-      If[v["Verified"] === False, Message[Certify::rejected, g["Input"]]];
-      mkProofObject[g, v, "Lean", tier, lv, v["Source"], g["Statement"]]]];
+  Append[g, "TierUsed" -> tier]];
 
-Certify[c_, opts:OptionsPattern[]] := certify[HoldComplete[c], {opts}];
+(* Engine -> "Mathilda": PossibleZeroQ / Simplify on lhs - rhs of the claim
+   (lists compare entrywise); a kind with no claim is not checked. *)
+heuristicZeroQ[d_] := TrueQ[Quiet[PossibleZeroQ[d]]] || TrueQ[Quiet[Simplify[d]] === 0];
+heuristicVerdict[g_] := Module[{v = Missing["NotChecked"], t = 0.},
+  If[ListQ[g["Claim"]],
+    t = First[AbsoluteTiming[v = AllTrue[
+      Flatten[{g["Claim"][[1]] - g["Claim"][[2]]}], heuristicZeroQ]]]];
+  <|"Verified" -> v, "Axioms" -> {}, "Logs" -> {}, "Timing" -> t|>];
+
+(* Session cache of Lean verdicts, keyed by the theorem text under a fixed
+   name (so a theorem is found whatever its position in a batch), the tier,
+   the executable and the project.  Only definitive verdicts are stored. *)
+$certCache = <||>;
+cacheKey[g_, hb_, exe_, proj_] := Hash[{
+  theoremChunk["mathilda_cert", g["Statement"], g["Proof"], hb]["Text"],
+  g["TierUsed"], exe, If[g["TierUsed"] === 1, proj, None]}];
+
+(* Certify a list of held items with one Lean run per tier.  The result is
+   aligned with the input; an item without a certificate gives $Failed. *)
+certifyItems[hcs_List, opts_List] := Module[{o, engine, gens, hb, chunks, out, exe, proj,
+    idx, src, keys, todo, fresh, vs, v, lv},
+  o = certOptions[opts];
+  engine = o["Engine"];
+  If[!MemberQ[{"Lean", "Mathilda"}, engine],
+    Message[Certify::engine, engine]; Return[$Failed, Module]];
+  gens = prepare[#, o] & /@ hcs;
+  hb = heartbeats[o["TimeConstraint"]];
+  chunks = Table[If[AssociationQ[gens[[k]]],
+      theoremChunk["mathilda_cert_" <> ToString[k], gens[[k]]["Statement"],
+        gens[[k]]["Proof"], hb], None], {k, Length[gens]}];
+  out = ConstantArray[$Failed, Length[gens]];
+  proj = leanProject[o["LeanProject"]];
+  exe = leanExe[o["LeanExecutable"]];
+  Do[
+    idx = Select[Range[Length[gens]],
+      AssociationQ[gens[[#]]] && gens[[#]]["TierUsed"] === tier &];
+    If[idx =!= {},
+      src = First[assembleFile[chunks[[idx]], tier]];
+      Which[
+        engine === "Mathilda",
+          Do[With[{g = gens[[k]]},
+              out[[k]] = mkProofObject[Append[g, "TrustedSteps" ->
+                  {"Mathilda's PossibleZeroQ / Simplify (a heuristic check, not a proof)"}],
+                heuristicVerdict[g], "Mathilda", "Heuristic", Missing["NotChecked"], src,
+                g["Statement"]]], {k, idx}],
+        !TrueQ[o["Verify"]],
+          Do[out[[k]] = mkProofObject[gens[[k]], <|"Verified" -> Missing["NotChecked"],
+                "Axioms" -> {}, "Logs" -> {}, "Timing" -> 0.|>, "Lean", tier,
+                Missing["NotChecked"], src, gens[[k]]["Statement"]], {k, idx}],
+        True,
+          keys = AssociationThread[idx -> (cacheKey[gens[[#]], hb, exe, proj] & /@ idx)];
+          todo = Select[idx, !KeyExistsQ[$certCache, keys[#]] &];
+          fresh = <||>;
+          If[todo =!= {},
+            vs = runBatch[chunks[[todo]], tier, exe, proj];
+            fresh = AssociationThread[todo -> vs];
+            Do[If[BooleanQ[fresh[k]["Verified"]],
+                $certCache = Append[$certCache, keys[k] -> fresh[k]]], {k, todo}]];
+          Do[
+            v = If[KeyExistsQ[fresh, k], Append[fresh[k], "Cached" -> False],
+              Append[$certCache[keys[k]], "Cached" -> True]];
+            lv = If[MissingQ[v["Verified"]], Missing["NotAvailable"], leanVersionOf[exe]];
+            If[v["Verified"] === False, Message[Certify::rejected, gens[[k]]["Input"]]];
+            out[[k]] = mkProofObject[gens[[k]], v, "Lean", tier, lv, v["Source"],
+              gens[[k]]["Statement"]],
+            {k, idx}]]],
+    {tier, {0, 1}}];
+  out];
+
+(* Certify[{c1, c2, ...}] certifies a batch in one Lean run (per tier). *)
+Certify[{cs___}, opts:OptionsPattern[]] := certifyItems[Thread[HoldComplete[{cs}]], {opts}];
+
+Certify[c_, opts:OptionsPattern[]] := With[{r = certifyItems[{HoldComplete[c]}, {opts}]},
+  If[ListQ[r], First[r], r]];
 
 SetAttributes[ProofObject, HoldFirst];
 

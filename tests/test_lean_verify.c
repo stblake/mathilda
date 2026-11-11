@@ -79,6 +79,71 @@ static void test_leanverify(void) {
                "[\"ExitCode\"] =!= 0");
 }
 
+/* Phase 2 kinds: antiderivatives, Bezout, ideal membership, Solve, matrices. */
+static void test_phase2_positive(void) {
+    assert_eval_eq("leanR = Certify[Integrate[(x^4-3x^2+6)/(x^6-5x^4+5x^2+4), x]]; Null",
+                   "Null", 0);
+    check_true("leanR[\"Verified\"] === True && leanR[\"Tier\"] === 0");
+    check_true("leanR[\"Result\"] === ArcTan[x] + ArcTan[x^3] + ArcTan[(x - 3 x^3 + x^5)/2]");
+    check_true("leanR[\"TrustedSteps\"] =!= {} && leanR[\"Timing\"] < 5");
+    check_true("Certify[Integrate[1/(x^2-1), x]][\"Verified\"] === True");
+    check_true("Certify[Integrate[1/(x^2+2), x]][\"Verified\"] === True");
+    check_true("Certify[Integrate[1/(3x^2-2), x]][\"Verified\"] === True");
+    check_true("Certify[Integrate[(2x+3)/(x^2+3x+2), x]][\"Verified\"] === True");
+    assert_eval_eq("leanB = Certify[PolynomialExtendedGCD[x^3-1, x^2-1, x]]; Null", "Null", 0);
+    check_true("leanB[\"Verified\"] === True && leanB[\"Kind\"] === \"Bezout\"");
+    check_true("leanB[\"Certificate\"][\"Cofactors\"] == {1, -x}");
+    check_true("Certify[PolynomialReduce[x^2 y + x y^2 + y^2, {x y - 1, y^2 - 1}, {x, y}]]"
+               "[\"Verified\"] === True");
+    check_true("Certify[Implies[x^2+y^2 == 1 && x == y, 2 y^2 == 1]][\"Verified\"] === True");
+    assert_eval_eq("leanQ = Certify[Solve[x^3-6x^2+11x-6 == 0, x]]; Null", "Null", 0);
+    check_true("leanQ[\"Verified\"] === True && "
+               "StringContainsQ[leanQ[\"LeanTheorem\"], \"\xE2\x86\x94\"]");
+    check_true("Certify[Solve[(x-1)^2 (2x+1) == 0, x]][\"Verified\"] === True");
+    check_true("Certify[Solve[{2x+y == 3, x+3y == 5}, {x, y}]][\"Verified\"] === True");
+    check_true("Certify[Inverse[{{1,2,0},{0,1,3},{4,0,1}}]][\"Verified\"] === True");
+    check_true("Certify[Det[{{2,1},{1,1}}]][\"Verified\"] === True");
+    check_true("Certify[LinearSolve[{{2,1},{1,3}},{3,5}]][\"Verified\"] === True");
+    check_true("Certify[NullSpace[{{1,2,3},{2,4,6}}]][\"Verified\"] === True");
+}
+
+static void test_phase2_negative(void) {
+    test_mute_messages();
+    /* A wrong antiderivative (test hook): Mathilda's pre-check fails, the
+     * theorem is still emitted, and Lean refutes it. */
+    assert_eval_eq("Lean`Private`$antiderivOverride = ArcTan[x] + ArcTan[x^3]; "
+                   "leanW = Certify[Integrate[(x^4-3x^2+6)/(x^6-5x^4+5x^2+4), x]]; "
+                   "Lean`Private`$antiderivOverride = None; Null", "Null", 0);
+    check_true("leanW[\"Verified\"] === False && leanW[\"Certificate\"][\"PreCheck\"] === False");
+    /* A perturbed inverse entry. */
+    check_true("LeanVerify[StringReplace[Certify[Inverse[{{1,2,0},{0,1,3},{4,0,1}}], "
+               "Verify -> False][\"LeanSource\"], \"(12 / 25 : Rat)\" -> \"(13 / 25 : Rat)\"]]"
+               "[\"Success\"] === False");
+}
+
+/* Row 11: one Lean run for a batch, the session cache, line-span verdicts. */
+static void test_batch(void) {
+    test_mute_messages();
+    assert_eval_eq("Lean`Private`$certCache = <||>; "
+                   "leanT1 = First[AbsoluteTiming[Certify[Factor[x^8 - 1]]]]; "
+                   "{leanTB, leanBa} = AbsoluteTiming[Certify[{Factor[x^6-1], "
+                   "Inverse[{{2,1},{1,1}}], PolynomialExtendedGCD[x^3-1,x^2-1,x]}]]; Null",
+                   "Null", 0);
+    check_true("Length[leanBa] === 3 && AllTrue[leanBa, #[\"Verified\"] === True &]");
+    check_true("NoneTrue[leanBa, #[\"Cached\"] &]");
+    check_true("leanTB < 1.5 leanT1");
+    assert_eval_eq("leanBb = Certify[{Factor[x^6-1], Inverse[{{2,1},{1,1}}], "
+                   "PolynomialExtendedGCD[x^3-1,x^2-1,x]}]; Null", "Null", 0);
+    check_true("AllTrue[leanBb, #[\"Cached\"] && #[\"Verified\"] === True &]");
+    check_true("leanBb[[1]][\"Timing\"] === leanBa[[1]][\"Timing\"]");
+    /* One bad member: only it is False. */
+    assert_eval_eq("leanBc = Certify[{Factor[x^5-1], (x+1)^2 == x^2 + 1, Det[{{3,1},{1,1}}]}]; "
+                   "Null", "Null", 0);
+    check_true("(#[\"Verified\"] & /@ leanBc) === {True, False, True}");
+    check_true("Length[leanBc[[2]][\"Logs\"]] > 0 && "
+               "NoneTrue[leanBc[[1]][\"Logs\"], #[\"Severity\"] === \"error\" &]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -89,6 +154,9 @@ int main(void) {
     TEST(test_positive);
     TEST(test_negative);
     TEST(test_leanverify);
+    TEST(test_phase2_positive);
+    TEST(test_phase2_negative);
+    TEST(test_batch);
     printf("All Lean verification tests passed.\n");
     return 0;
 }

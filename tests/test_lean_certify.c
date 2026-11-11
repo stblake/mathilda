@@ -118,7 +118,112 @@ static void test_errors(void) {
                    "\"nomathlib\"", 0);
     assert_eval_eq("Check[Certify[x == x, Domain -> Reals, LeanProject -> None], \"tier\"]",
                    "\"tier\"", 0);
-    assert_eval_eq("Certify[Integrate[x, x], Verify -> False]", "$Failed", 0);
+    /* Not in Q(x): no Tier 0 antiderivative certificate. */
+    assert_eval_eq("Certify[Integrate[Sin[x], x], Verify -> False]", "$Failed", 0);
+    assert_eval_eq("Check[Certify[Solve[x^2 == 2, x], Verify -> False], \"nocert\"]",
+                   "\"nocert\"", 0);
+    assert_eval_eq("Certify[Inverse[{{1, a}, {0, 1}}], Verify -> False]", "$Failed", 0);
+    assert_eval_eq("Certify[Det[IdentityMatrix[7]], Verify -> False]", "$Failed", 0);
+}
+
+/* Row 4: the cleared chain-rule identity for an antiderivative. */
+static void test_antiderivative(void) {
+    assert_eval_eq("leanR = Certify[Integrate[(x^4-3x^2+6)/(x^6-5x^4+5x^2+4), x], "
+                   "Verify -> False]; Null", "Null", 0);
+    check_true("leanR[\"Kind\"] === \"Antiderivative\" && leanR[\"Tier\"] === 0 && "
+               "leanR[\"Domain\"] === Rationals");
+    check_true("leanR[\"Result\"] === ArcTan[x] + ArcTan[x^3] + ArcTan[(x - 3 x^3 + x^5)/2]");
+    check_true("Length[leanR[\"TrustedSteps\"]] === 4");
+    check_true("leanR[\"Certificate\"][\"PreCheck\"] === True");
+    check_true("leanR[\"Certificate\"][\"Form\"] === \"ClearedDerivative\"");
+    check_true("Length[leanR[\"Hypotheses\"]] === 4");
+    /* The structured pieces are visible: q^2 + p^2 of the third ArcTan and
+     * p' q - p q' of its argument. */
+    check_true("StringContainsQ[leanR[\"LeanTheorem\"], "
+               "\"(2 ^ 2 + (x - 3 * x ^ 3 + x ^ 5) ^ 2)\"]");
+    check_true("StringContainsQ[leanR[\"LeanTheorem\"], "
+               "\"((1 - 9 * x ^ 2 + 5 * x ^ 4) * 2 - (x - 3 * x ^ 3 + x ^ 5) * 0)\"]");
+    check_true("StringEndsQ[leanR[\"LeanTheorem\"], \" = 0\"]");
+    /* Surds: Sqrt[2] becomes s1 and the identity holds modulo s1^2 - 2 as an
+     * unconditional polynomial identity -- never a vacuous s1^2 = 2 -> ... */
+    assert_eval_eq("leanS = Certify[Integrate[1/(x^2+2), x], Verify -> False]; Null", "Null", 0);
+    check_true("StringStartsQ[leanS[\"LeanTheorem\"], \"\xE2\x88\x80 x s1 : Rat, \"]");
+    check_true("StringContainsQ[leanS[\"LeanTheorem\"], \"(s1 ^ 2 - 2) * \"]");
+    check_true("!StringContainsQ[leanS[\"LeanSource\"], \"s1 ^ 2 = 2 \xE2\x86\x92\"]");
+    check_true("leanS[\"Certificate\"][\"Surds\"][[1, 2]] === Sqrt[2]");
+    /* Prime surd generators: Sqrt[3/2] and Sqrt[6] share s1 = Sqrt[2], s2 = Sqrt[3]. */
+    check_true("Certify[Integrate[1/(3x^2-2), x], Verify -> False][\"Certificate\"]"
+               "[\"Surds\"][[All, 2]] === {Sqrt[2], Sqrt[3]}");
+    check_true("Certify[Integrate[1/(x^2-1), x], Verify -> False][\"Certificate\"]"
+               "[\"PreCheck\"] === True");
+    /* Test hook: a wrong antiderivative fails the local pre-check but is still
+     * emitted, so that Lean (not Mathilda) refutes it. */
+    assert_eval_eq("Lean`Private`$antiderivOverride = ArcTan[x] + ArcTan[x^3]; "
+                   "leanW = Certify[Integrate[(x^4-3x^2+6)/(x^6-5x^4+5x^2+4), x], "
+                   "Verify -> False]; Lean`Private`$antiderivOverride = None; Null", "Null", 0);
+    check_true("leanW[\"Certificate\"][\"PreCheck\"] === False");
+    check_true("StringContainsQ[leanW[\"LeanSource\"], \"theorem mathilda_cert_1\"]");
+}
+
+/* Rows 5-7: Bezout, ideal membership, Solve. */
+static void test_algebra(void) {
+    assert_eval_eq("leanB = Certify[PolynomialExtendedGCD[x^3-1, x^2-1, x], Verify -> False]; "
+                   "Null", "Null", 0);
+    check_true("leanB[\"Kind\"] === \"Bezout\" && leanB[\"TrustedSteps\"] === {}");
+    check_true("leanB[\"Certificate\"][\"Cofactors\"] === {1, -x}");
+    check_true("leanB[\"Certificate\"][\"PreCheck\"] === True");
+    check_true("StringCount[leanB[\"LeanTheorem\"], \"\xE2\x88\xA7\"] === 2");
+    check_true("Certify[PolynomialReduce[x^2 y + x y^2 + y^2, {x y - 1, y^2 - 1}, {x, y}], "
+               "Verify -> False][\"Kind\"] === \"IdealMembership\"");
+    /* Ideal membership: PolynomialReduce leaves a remainder, so the cofactors
+     * come from the degree-bounded ansatz. */
+    assert_eval_eq("leanI = Certify[Implies[x^2+y^2 == 1 && x == y, 2 y^2 == 1], "
+                   "Verify -> False]; Null", "Null", 0);
+    check_true("Expand[leanI[\"Certificate\"][\"Cofactors\"] . {x^2+y^2-1, x-y} - "
+               "(2 y^2 - 1)] === 0");
+    check_true("StringContainsQ[leanI[\"ProofScript\"], \"rw [mth_k1, mth_k2] at mth_hc\"]");
+    check_true("Lean`Private`cofactors[x^2 - y^2, {x - y}, {x, y}] === {x + y}");
+    assert_eval_eq("leanQ = Certify[Solve[x^3-6x^2+11x-6 == 0, x], Verify -> False]; Null",
+                   "Null", 0);
+    check_true("leanQ[\"Kind\"] === \"Roots\" && leanQ[\"Certificate\"][\"Completeness\"]");
+    check_true("StringContainsQ[leanQ[\"LeanTheorem\"], \"\xE2\x86\x94\"]");
+    check_true("Certify[Solve[(x-1)^2 (2x+1) == 0, x], Verify -> False][\"Certificate\"]"
+               "[\"Multiplicities\"] === {1, 2}");
+    assert_eval_eq("leanL = Certify[Solve[{2x+y == 3, x+3y == 5}, {x, y}], Verify -> False]; "
+                   "Null", "Null", 0);
+    check_true("leanL[\"Certificate\"][\"Completeness\"] === False");
+    check_true("leanL[\"ProofScript\"] === \"by\\n  decide +kernel\"");
+    check_true("Length[leanL[\"TrustedSteps\"]] === 1");
+}
+
+/* Rows 8-10: matrices, checked by kernel evaluation of the prelude. */
+static void test_matrices(void) {
+    check_str("Certify[Det[{{2,1},{1,1}}], Verify -> False][\"LeanTheorem\"]",
+              "Mathilda.det [[2, 1], [1, 1]] = 1");
+    check_str("Certify[LinearSolve[{{2,1},{1,3}},{3,5}], Verify -> False][\"LeanTheorem\"]",
+              "Mathilda.matVec [[2, 1], [1, 3]] [(4 / 5 : Rat), (7 / 5 : Rat)] = [3, 5]");
+    check_true("StringStartsQ[Certify[Inverse[{{2,1},{1,1}}], Verify -> False]"
+               "[\"LeanTheorem\"], \"Mathilda.matMul [[2, 1], [1, 1]] [[1, -1], [-1, 2]] = "
+               "Mathilda.idMat 2 \xE2\x88\xA7 \"]");
+    check_true("Certify[NullSpace[{{1,2,3},{2,4,6}}], Verify -> False][\"Kind\"] === "
+               "\"NullSpace\"");
+    check_true("Certify[Inverse[{{2,1},{1,1}}], Verify -> False][\"ProofScript\"] === "
+               "\"by\\n  decide +kernel\"");
+    /* The prelude placeholders never leak a symbol onto $ContextPath. */
+    check_true("Context[matMul] === \"Global`\"");
+}
+
+/* Row 11: batches (generation only; Lean runs are in test_lean_verify.c). */
+static void test_batch(void) {
+    assert_eval_eq("leanBa = Certify[{Factor[x^6-1], Inverse[{{2,1},{1,1}}], Sin[x] == 1}, "
+                   "Verify -> False]; Null", "Null", 0);
+    check_true("Length[leanBa] === 3 && leanBa[[3]] === $Failed");
+    check_true("StringContainsQ[leanBa[[2]][\"LeanSource\"], \"theorem mathilda_cert_1\"] && "
+               "StringContainsQ[leanBa[[2]][\"LeanSource\"], \"theorem mathilda_cert_2\"]");
+    check_true("leanBa[[1]][\"LeanSource\"] === leanBa[[2]][\"LeanSource\"]");
+    check_true("Certify[{}] === {}");
+    check_true("Certify[{x == x, Integrate[1/x, x]}, Engine -> \"Mathilda\"][[2]]"
+               "[\"Verified\"] === True");
 }
 
 static void test_heuristic_engine(void) {
@@ -148,6 +253,10 @@ int main(void) {
     TEST(test_rational_identity);
     TEST(test_options);
     TEST(test_errors);
+    TEST(test_antiderivative);
+    TEST(test_algebra);
+    TEST(test_matrices);
+    TEST(test_batch);
     TEST(test_heuristic_engine);
     TEST(test_attributes);
     printf("All Lean certificate generation tests passed.\n");

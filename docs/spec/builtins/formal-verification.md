@@ -51,12 +51,56 @@ Out[3]= "[fun x => x + 1, (3 / 4) * a, Real.log b, f (-3)]"
 ## Certify
 - `Certify[comp]`: evaluates the computation `comp` and certifies its result.
 - `Certify[a == b]`: certifies the claim `a == b`.
+- `Certify[{c1, c2, …}]`: certifies a batch in one Lean run and gives a list.
 - Supported in this release (`"Kind"`):
   - `"Identity"`: claims `a == b`, and `Expand`, `Collect`, `Together`, `Apart`, `Cancel`, `Simplify`, `FullSimplify`. For a computation, the claim is `input == result`, with the input taken from the held call, so it is the user's expression that is proved equal.
   - `"Factorization"`: `Factor`, `FactorTerms`. `"TrustedSteps" -> {"irreducibility of the factors (not certified)"}`.
 - **Polynomial identities** are stated as `∀ x y : T, a = b` over the sorted `Variables`, with `T` being `Int` when every coefficient is an integer and there is no division, and `Rat` otherwise. The proof is `by intros; grind`.
 - **Rational-function identities** are cleared: with `a = na/da` and `b = nb/db` (`Together`), the theorem is the polynomial identity `na * db = nb * da`. `"Hypotheses"` records `da ≠ 0` and `db ≠ 0` (informational in Tier 0), and `"TrustedSteps"` records the `Together` normal form.
+- `"Antiderivative"`: `Integrate[f, x]` with `f` a rational function of `x` over ℚ (see [Antiderivatives](#antiderivatives-tier-0)).
+  - `"Bezout"`: `PolynomialExtendedGCD[a, b, x]` → `{g, {s, t}}`. The theorem is `∀ x, s·a + t·b = g ∧ a = g·qa ∧ b = g·qb`, with the quotients from `PolynomialQuotient`. It proves that `g` is a common divisor and a combination of `a` and `b`, so every common divisor divides `g`: `g` is a gcd. `"TrustedSteps" -> {}`.
+  - `"IdealMembership"`: `PolynomialReduce[q, {p1, …}, vars]` → `{{c1, …}, r}` is certified as the division identity `∀ vars, q = c1·p1 + … + r` (`"TrustedSteps"` notes that the remainder being fully reduced is not certified). The claim `Implies[p1 == q1 && …, p == q]` is certified with cofactors `c_i` such that `p - q = Σ c_i (p_i - q_i)`: from `PolynomialReduce` when its remainder is 0, otherwise from a degree-bounded ansatz (degree 0 to 4) whose coefficient equations are solved by `LinearSolve`. The proof is `have k_i : p_i - q_i = 0`, `have hc : p - q = Σ c_i * (p_i - q_i)`, `rw [k_i] at hc`, `grind`.
+  - `"Roots"`: `Solve[eqs, vars]` with rational solutions. A single univariate polynomial equation that splits over ℚ is certified **complete**: `∀ x : Rat, lhs = rhs ↔ x = r1 ∨ … ∨ x = rk`, through the factorization `lhs - rhs = lc · Π (x - r_i)^m_i` (`"Certificate"` has `"Roots"` and `"Multiplicities"`). Otherwise (systems, or a polynomial with irreducible non-linear factors) only **soundness** is certified: every solution substituted into every equation, checked by `decide +kernel`, with completeness listed in `"TrustedSteps"`. Radical or complex roots have no certificate yet.
+  - `"MatrixInverse"`, `"Determinant"`, `"LinearSolve"`, `"NullSpace"`: `Inverse[A]`, `Det[A]` (n ≤ 6), `LinearSolve[A, b]` and `NullSpace[A]` for matrices of rational numbers. The theorems use the prelude's `Mathilda.matMul`, `Mathilda.idMat`, `Mathilda.det` (Laplace expansion) and `Mathilda.matVec`, and the kernel evaluates them (`decide +kernel`): `matMul A B = idMat n ∧ matMul B A = idMat n`, `det A = d`, `matVec A x = b`, and `matVec A v = 0` for each basis vector (`NullSpace`'s completeness is a trusted step).
+- **Batches.** `Certify[{c1, c2, …}]` gives a list of `ProofObject`s from **one** Lean run (per tier). The theorems are `mathilda_cert_1`, `mathilda_cert_2`, … in input order, every object's `"LeanSource"` is the shared file, and each theorem gets its own verdict from the messages in its own line span, so one bad member is `False` while its siblings stay `True`. An item with no certificate gives `$Failed` in its slot.
+- **Session cache.** A Lean verdict (`True` or `False`) is remembered for the session, keyed by the theorem text, the tier, the executable and the project. Certifying the same thing again, alone or inside a batch, gives `"Cached" -> True` with the original `"Timing"` and does not run Lean.
 - Both sides of a claim are evaluated by Mathilda first. A symbol that holds a claim (`c = a == b; Certify[c]`) is evaluated and then dispatched. Anything else (a transcendental claim, an unsupported head) issues `Certify::nocert` and returns `$Failed`.
+
+### Antiderivatives (Tier 0)
+`Certify[Integrate[f, x]]` computes `F = Integrate[f, x]` and proves, in core Lean, that `f` equals the formal derivative of `F`:
+
+1. Each quadratic surd in `F` is written over primes, `Sqrt[d] = Π p^⌊k/2⌋ · Π s_p`, and `s_p` becomes a fresh variable (`s1, s2, …`; `"Certificate"["Surds"]` maps them back). Prime generators keep `Sqrt[2] Sqrt[3] = Sqrt[6]` visible.
+2. `F` must be built from `x`, the surds and rational numbers by `Plus`, `Times`, integer powers and one level of `Log`, `ArcTan` or `ArcTanh`. It is split as `R + Σ c_i φ_i(u_i)` with each `c_i` free of `x`. Anything else (`RootSum`, `Root`, `I`, other functions) issues `Certify::tier`, because it needs a Tier 1 (Mathlib) certificate.
+3. With `u_i = p_i/q_i`, `R = r/w` and `f = a/b` (`Together`), and derivatives of **polynomials only** taken by `D`, each term contributes `N_i/D_i`: `(p'q - pq')/(pq)` for `Log`, `(p'q - pq')/(q² + p²)` for `ArcTan`, `(p'q - pq')/(q² - p²)` for `ArcTanh`, and `(r'w - rw')/w²` for `R`.
+4. The theorem is the cleared identity, with every piece written in its structured, unexpanded form so that it can be traced back to `F`:
+   `∀ x s1 … : Rat, (Σ_i c_i N_i Π_{j≠i} D_j) b - a Π_j D_j = Σ_k (s_k^2 - d_k) K_k`.
+   The cofactors `K_k` come from `PolynomialReduce` modulo `s_k^2 - d_k`. This is an **unconditional** polynomial identity in `ℚ[x, s…]`; it never assumes `s^2 = 2` over `ℚ` (which would be vacuous, since `√2 ∉ ℚ`). Mapping `s_k ↦ √d_k` is a ring homomorphism, so the identity holds for the real surds. The proof is `grind`.
+5. Mathilda checks the identity itself first and records the result as `"Certificate"["PreCheck"]`. A failed pre-check does **not** suppress the theorem: it is still emitted, and Lean refutes it. A denominator `D_i` that vanishes identically would make the identity vacuous, so in that case there is no certificate.
+
+What Lean proves is that the integrand equals the formal derivative of the antiderivative, as an identity of rational functions over `ℚ(√d…)`, cleared of denominators. Lean does **not** check the following, which `"TrustedSteps"` lists: the elementary derivative rules and the quotient rule (applied symbolically by Mathilda), the polynomial derivatives written into the statement (Mathilda's `D`), the `Together` normal forms `f = a/b` and `u_i = p_i/q_i`, and that the cleared denominators are not identically zero (checked by Mathilda). `"Hypotheses"` lists the denominators `≠ 0`, with the surds written back as `Sqrt[d]`; they are informational in Tier 0. A Tier 1 certificate (`HasDerivAt` in Mathlib, nothing trusted) is a separate, later kind.
+
+```mathematica
+In[1]:= c = Certify[Integrate[(x^4 - 3 x^2 + 6)/(x^6 - 5 x^4 + 5 x^2 + 4), x]];
+In[2]:= {c["Result"], c["Verified"], c["Tier"]}
+Out[2]= {ArcTan[x] + ArcTan[x^3] + ArcTan[(x - 3 x^3 + x^5)/2], True, 0}
+
+In[3]:= Certify[Integrate[1/(x^2 + 2), x]]["LeanTheorem"]
+Out[3]= "∀ x s1 : Rat, (1 / 2 : Rat) * s1 * (s1 * 2 - s1 * x * 0) * (2 + x ^ 2) - (2 ^ 2 + (s1 * x) ^ 2) = (s1 ^ 2 - 2) * 2"
+```
+
+`` Lean`Private`$antiderivOverride `` is a test hook: when it is not `None`, its value replaces the antiderivative that `Integrate` returned, so that a test can check that Lean rejects a wrong one.
+
+```mathematica
+In[4]:= Certify[Implies[x^2 + y^2 == 1 && x == y, 2 y^2 == 1]]["Certificate"]["Cofactors"]
+Out[4]= {1, -x - y}
+
+In[5]:= Certify[Solve[x^3 - 6 x^2 + 11 x - 6 == 0, x]]["LeanTheorem"]
+Out[5]= "∀ x : Rat, 11 * x - 6 - 6 * x ^ 2 + x ^ 3 = 0 ↔ x = 1 ∨ x = 2 ∨ x = 3"
+
+In[6]:= #["Verified"] & /@ Certify[{Factor[x^6 - 1], Inverse[{{2, 1}, {1, 1}}], (x + 1)^2 == x^2 + 1}]
+Certify::rejected: Lean rejected the certificate for (x + 1)^2 == x^2 + 1; see obj["Logs"]
+Out[6]= {True, True, False}
+```
 
 **Options** (`Options[Certify]`; `SetOptions` works):
 
@@ -83,14 +127,14 @@ Out[3]= "[fun x => x + 1, (3 / 4) * a, Real.log b, f (-3)]"
 
 | Property | Content |
 |---|---|
-| `"Kind"` | `"Identity"` or `"Factorization"` (more kinds come with later releases) |
+| `"Kind"` | `"Identity"`, `"Factorization"`, `"Antiderivative"`, `"Bezout"`, `"IdealMembership"`, `"Roots"`, `"MatrixInverse"`, `"Determinant"`, `"LinearSolve"` or `"NullSpace"` |
 | `"Input"` | `HoldForm` of the computation or the claim |
 | `"Result"` | The computation's value; for a claim, the claim with evaluated sides |
 | `"Theorem"` | The certified statement as a held Mathilda expression (`ForAll[{x}, …]`) |
 | `"LeanTheorem"` | The statement as Lean text |
 | `"ProofScript"` | The tactic block, e.g. `by intros; grind` |
-| `"LeanSource"` | The complete Lean file: header, prelude, `theorem mathilda_cert_1`, `#print axioms` |
-| `"Certificate"` | Raw Mathilda data: `"Form"` (`"Polynomial"` or `"ClearedDenominators"`), `"Variables"`, and the numerators and denominators when cleared |
+| `"LeanSource"` | The complete Lean file: header, prelude, `theorem mathilda_cert_1` (`mathilda_cert_k` in a batch), `#print axioms` |
+| `"Certificate"` | Raw Mathilda data, per kind: e.g. `"Form"` and `"Variables"` for identities, `"Cofactors"` for Bezout and ideal membership, `"Terms"`, `"Surds"` and `"PreCheck"` for antiderivatives, `"Roots"` and `"Completeness"` for `Solve` |
 | `"Verified"` | `True`, `False`, `Missing["NotChecked"]` (`Verify -> False`) or `Missing["NotAvailable"]` (no Lean found) |
 | `"Engine"`, `"Tier"`, `"Domain"` | As the options; `"Tier"` is `"Heuristic"` for `Engine -> "Mathilda"` |
 | `"Hypotheses"` | Side conditions such as denominators `≠ 0` |
@@ -98,7 +142,7 @@ Out[3]= "[fun x => x + 1, (3 / 4) * a, Real.log b, f (-3)]"
 | `"Axioms"` | The theorem's axioms, from `#print axioms` |
 | `"Logs"` | Lean's messages for the theorem: `<|"Severity", "Line", "Text"|>` |
 | `"Timing"` | Lean's wall time in seconds |
-| `"Cached"` | Whether the verdict came from the session cache (always `False` in this release) |
+| `"Cached"` | Whether the verdict came from the session cache |
 | `"LeanVersion"` | `lean --version` of the checker that ran |
 
 **The `"Verified" -> True` contract.** All of these must hold: Lean's exit code is 0; no message has severity `error`; no message has kind `hasSorry`; and the theorem's `#print axioms` report (appended by the generator) names only `propext`, `Classical.choice` and `Quot.sound`. `sorryAx`, and the auxiliary axiom that `native_decide` adds, both fail the last test. An error in the theorem's own lines, or outside every theorem (the header or the prelude), makes it `False`.
