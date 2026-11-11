@@ -3,6 +3,7 @@
  * Message builtins.  See message.h for rationale.
  */
 #include "message.h"
+#include "term/term_interrupt.h"
 #include "expr.h"
 #include "symtab.h"
 #include "eval.h"
@@ -277,6 +278,10 @@ void mth_message_v(int extra_mute, const char* head, const char* tag,
      * silence the print of a real message, so the firing is still noted, and a
      * Check[] inside the Quiet still sees it (the Quiet[Check[...]] idiom). */
     if (extra_mute) return;
+    /* An interactive interrupt is unwinding (src/term/term_interrupt.h):
+     * whatever a declining kernel or a cleanup path says now is noise, so it is
+     * neither printed nor noted. Inside AbortProtect messages still print. */
+    if (mth_interrupt_should_stop()) return;
     /* Off[head::tag]: the message does not exist for this session -- neither
      * printed nor seen by Check. */
     if (mth_msg_is_off(head, tag)) return;
@@ -348,6 +353,7 @@ void mth_message_linev(int extra_mute, const char* fmt, va_list ap) {
 
 void mth_message_cont(int extra_mute, const char* fmt, ...) {
     if (extra_mute || mth_msg_suppressed()) return;    /* no note: already fired */
+    if (mth_interrupt_should_stop()) return;           /* as in mth_message_v */
     va_list ap;
     va_start(ap, fmt);
     vfprintf(stderr, fmt, ap);

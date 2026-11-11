@@ -6608,7 +6608,8 @@ endif()
 # The readline adapter (term_readline.c) is deliberately absent: tests link no
 # readline, exactly as libmathilda.a omits it.
 target_sources(mathilda_common PRIVATE
-    ../src/term/term_lex.c)
+    ../src/term/term_lex.c
+    ../src/term/term_interrupt.c)
 add_executable(term_lex_tests test_term_lex.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(term_lex_tests PRIVATE ../src)
 if(USE_ECM)
@@ -6618,3 +6619,12 @@ else()
     target_link_libraries(term_lex_tests gmp m)
 endif()
 add_test(NAME term_lex_tests COMMAND term_lex_tests)
+add_executable(interrupt_tests test_interrupt.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(interrupt_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(interrupt_tests gmp m ${ECM_LIB})
+    add_dependencies(interrupt_tests build_ecm)
+else()
+    target_link_libraries(interrupt_tests gmp m)
+endif()
+add_test(NAME interrupt_tests COMMAND interrupt_tests)

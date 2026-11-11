@@ -21,6 +21,7 @@
  */
 
 #include "root_numeric.h"
+#include "term/term_interrupt.h"   /* no memoising a declined result */
 
 #include "expr.h"
 #include "common.h"
@@ -1113,7 +1114,9 @@ Expr* root_numericalize(const Expr* root_expr, NumericSpec spec) {
     unsigned long fired_before = mth_msg_fired_count();
     Expr* out = root_numericalize_uncached(root_expr, spec);
     int fired = (mth_msg_fired_count() != fired_before);
-    rnum_cache_put(root_expr, spec, h, out, fired);
+    /* An interactive interrupt makes the evaluations inside decline: that
+     * result is not this Root's value, so it is never memoised. */
+    if (!mth_interrupt_pending()) rnum_cache_put(root_expr, spec, h, out, fired);
     return out;
 }
 

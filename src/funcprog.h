@@ -29,6 +29,8 @@ Expr* builtin_abort(Expr* res);
 Expr* builtin_checkabort(Expr* res);
 Expr* builtin_abortprotect(Expr* res);
 void abort_init(void);
+/* Current AbortProtect nesting depth (0 outside every AbortProtect). */
+int abort_protect_depth(void);
 Expr* builtin_goto(Expr* res);
 Expr* builtin_label(Expr* res);
 Expr* builtin_all_true(Expr* res);

@@ -39,6 +39,7 @@
 #include "numeric.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "core.h"      /* tc_deadline_passed / tc_check_deadline */
+#include "term/term_interrupt.h"   /* once-per-session warnings */
 
 #include "mp_parallel.h"
 
@@ -955,7 +956,9 @@ Expr* lu_mpfr_dispatch(Expr* m, int rows, int cols)
     }
 
     if (singular) {
-        if (!sing_warn_counter) {
+        /* While an interrupt unwinds, the message is muted (message.c), so
+         * the once-per-session flag must not be spent on it. */
+        if (!sing_warn_counter && !mth_interrupt_pending()) {
             sing_warn_counter = 1;
             char* s = expr_to_string(m);
             mth_message("LUDecomposition", "sing", "Matrix %s is singular.", s);
@@ -1000,7 +1003,7 @@ Expr* lu_mpfr_dispatch(Expr* m, int rows, int cols)
         if (nonsing) mpfr_mul(cond, anorm, inv_norm, MPFR_RNDN);
         else         mpfr_set_inf(cond, 1);
 
-        if (nonsing && !luc_warn_counter) {
+        if (nonsing && !luc_warn_counter && !mth_interrupt_pending()) {
             /* threshold = 2^(bits).  Compare cond > threshold. */
             mpfr_t threshold;
             mpfr_init2(threshold, bits);

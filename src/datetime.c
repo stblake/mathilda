@@ -17,6 +17,7 @@
 #include "message.h"
 #include "print.h"
 #include "mtime.h"   /* mth_mono_seconds / mth_wall_seconds / mth_sleep_seconds */
+#include "term/term_interrupt.h"   /* Pause: an interrupt ends the sleep */
 #include "core.h"    /* tc_deadline_remaining / tc_check_deadline (Pause under TimeConstrained) */
 #include <time.h>
 #include <errno.h>
@@ -955,6 +956,19 @@ static int pause_seconds(const Expr* e, double* out) {
  * TimeConstrained[Pause[10], 1] gives $Aborted after 1 s, not 10 s.  The sleep
  * uses no CPU, so the CPU-time wake-up timer could never interrupt it.
  */
+/* Sleep in <= 50 ms slices so an interactive interrupt (src/term/term_interrupt.h) ends the
+ * pause promptly; the evaluator's next poll then raises the abort. With no interrupt
+ * pending this sleeps the full duration, so the "at least n seconds" contract holds. */
+static void pause_sleep(double seconds) {
+    double end = mth_mono_seconds() + seconds;
+    for (;;) {
+        if (mth_interrupt_should_stop()) return;
+        double left = end - mth_mono_seconds();
+        if (left <= 0.0) return;
+        mth_sleep_seconds(left < 0.05 ? left : 0.05);
+    }
+}
+
 Expr* builtin_pause(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) {
         return NULL;
@@ -969,14 +983,14 @@ Expr* builtin_pause(Expr* res) {
     if (seconds > 0.0 && isfinite(seconds)) {
         double left = tc_deadline_remaining();
         if (left >= 0.0 && left < seconds) {
-            mth_sleep_seconds(left);
+            pause_sleep(left);
             tc_check_deadline();            /* deadline reached: unwinds */
             /* Not reached unless the clock disagrees; finish the wait. */
             left = tc_deadline_remaining();
-            if (left > 0.0) mth_sleep_seconds(left);
+            if (left > 0.0) pause_sleep(left);
             tc_check_deadline();
         } else {
-            mth_sleep_seconds(seconds);
+            pause_sleep(seconds);
         }
     }
 

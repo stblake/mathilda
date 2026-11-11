@@ -217,6 +217,7 @@ static bool parse_control_spec(const Expr* e, ManipCtrl* out) {
 #ifdef USE_GRAPHICS
 #include <raylib.h>
 #include "label_font.h"
+#include "term/term_interrupt.h"   /* a Ctrl-C closes the window loop */
 
 #define ROW_H        30.0f   /* height of each control row                 */
 #define FOOTER_H     28.0f   /* Reset button + Esc hint row                */
@@ -407,7 +408,7 @@ static void graphics_manipulate(const Expr* body, ManipCtrl* ctrls, int n_ctrls)
     float reset_x = PAD;
     float reset_y = footer_y + (FOOTER_H - RESET_BTN_H) * 0.5f;
 
-    while (!WindowShouldClose()) {
+    while (!WindowShouldClose() && !mth_interrupt_pending()) {
         /* ---- Evaluate body at current control values ---- */
         IterShadow saved[MAX_CTRLS];
         for (int k = 0; k < n_ctrls; k++) {

@@ -3,6 +3,7 @@
 #include "funcprog.h"
 #include "sparse/sparse.h"   /* Thread over a SparseArray */
 #include "core.h"        /* tc_register_unwind_counter */
+#include "term/term_interrupt.h" /* the interactive interrupt flag */
 #include "permutations.h" /* perm_group_elements: Permute[expr, group] */
 #include "eval.h"
 #include "arithmetic.h"
@@ -1235,6 +1236,8 @@ Expr* builtin_label(Expr* res) {
 static int g_abort_protect_depth = 0;
 static bool g_abort_pending = false;
 
+int abort_protect_depth(void) { return g_abort_protect_depth; }
+
 /* Abort[] -- abort the current evaluation.  The unevaluated Abort[] node is
  * the in-flight sentinel (eval_is_inflight_abort): it short-circuits every
  * enclosing call on the ordinary return path until a CheckAbort or the top
@@ -1258,6 +1261,7 @@ Expr* builtin_checkabort(Expr* res) {
     Expr* r = evaluate(res->data.function.args[0]);
     if (!eval_is_inflight_abort(r)) return r;
     eval_unwind_consumed();
+    mth_interrupt_clear();   /* an interactive interrupt is consumed here too */
     expr_free(r);
     return evaluate(res->data.function.args[1]);
 }
@@ -1270,7 +1274,9 @@ Expr* builtin_abortprotect(Expr* res) {
     g_abort_protect_depth++;
     Expr* r = evaluate(res->data.function.args[0]);
     g_abort_protect_depth--;
-    if (g_abort_protect_depth == 0 && g_abort_pending) {
+    /* An interactive interrupt raised inside is deferred the same way; its flag
+     * stays set until the top level or a CheckAbort consumes the abort. */
+    if (g_abort_protect_depth == 0 && (g_abort_pending || mth_interrupt_pending())) {
         g_abort_pending = false;
         expr_free(r);
         return expr_new_function(expr_new_symbol(SYM_Abort), NULL, 0);
