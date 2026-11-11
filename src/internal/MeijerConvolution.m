@@ -125,21 +125,58 @@ MeijerConvolution`Run[f_, x_Symbol, assum_] := Catch[Module[
      discontinuous where the frequencies cross (Weber-Schafheitlin), and the
      theorem's G holds only on the side where its argument w2/w1 is below 1.
      Build both orientations and choose by that side; the order of the factors
-     in the product must not decide the answer. *)
+     in the product must not decide the answer.  The crossing q == 1 itself is
+     neither side: there the oscillations cancel to a non-oscillating tail
+     x^(alpha+e1+e2), so the integral converges iff that exponent is < -1, and
+     then (absolute convergence, uniform near q == 1) it is continuous in q
+     with the value of the theorem at argument 1.  Where it diverges the
+     convergence condition excludes q == 1.  No branch may fall through to
+     Piecewise's implicit 0. *)
   If[K1[[7]] === "osc" && K2[[7]] === "osc" && !TrueQ[Simplify[K1[[8]]^2 == K2[[8]]^2, assum]],
-    Module[{q = K2[[4]]/K1[[4]], lt, gt},
+    Module[{q = K2[[4]]/K1[[4]], lt, gt, le, ge, ceq, cq, rb, r12, r21, f12, f21},
       lt = MeijerConvolution`Prove[q < 1, assum];
       gt = MeijerConvolution`Prove[q > 1, assum];
       res = Which[
         lt === True, MeijerConvolution`Conv[K1, K2, C, s, assum],
         gt === True, MeijerConvolution`Conv[K2, K1, C, s, assum],
-        True, With[{r12 = MeijerConvolution`Conv[K1, K2, C, s, assum],
-                    r21 = MeijerConvolution`Conv[K2, K1, C, s, assum],
-                    c12 = Simplify[q < 1, assum], c21 = Simplify[q > 1, assum]},
-          Piecewise[{{r12, c12}, {r21, c21}}]]]],
+        True,
+          ceq = MeijerConvolution`Prove[alpha + K1[[6]] + K2[[6]] < -1, assum];
+          If[ceq =!= True,
+            cq = MeijerConvolution`Prove[q != 1 || ceq, assum];
+            cond = Which[cond === True, cq, cq === True, cond,
+                         True, MeijerConvolution`Prove[cond && cq, assum]];
+            If[cond === False, Throw[$Failed, MeijerConvolution`fail]]];
+          rb = If[ceq === False, Indeterminate,
+                 MeijerConvolution`Conv[K1, ReplacePart[K2, 4 -> K1[[4]]], C, s, assum]];
+          le = MeijerConvolution`Prove[q <= 1, assum];
+          ge = MeijerConvolution`Prove[q >= 1, assum];
+          r12 = If[ge === True, None, MeijerConvolution`Conv[K1, K2, C, s, assum]];
+          r21 = If[le === True, None, MeijerConvolution`Conv[K2, K1, C, s, assum]];
+          f12 = ceq === True && MeijerConvolution`AtCrossingQ[r12, rb, K1[[8]], K2[[8]], assum];
+          f21 = ceq === True && !f12 && MeijerConvolution`AtCrossingQ[r21, rb, K1[[8]], K2[[8]], assum];
+          (* Piecewise is HoldAll: hand it evaluated pieces, not locals *)
+          Which[
+            le === True && ge === True, rb,
+            le === True, If[f12, r12, Piecewise @@ {{{r12, Simplify[q < 1, assum]}}, rb}],
+            ge === True, If[f21, r21, Piecewise @@ {{{r21, Simplify[q > 1, assum]}}, rb}],
+            True, Piecewise @@ {{{r12, Simplify[If[f12, q <= 1, q < 1], assum]},
+                                 {r21, Simplify[If[f21, q >= 1, q > 1], assum]}}, rb}]]],
     res = MeijerConvolution`Conv[K1, K2, C, s, assum]];
   If[cond === True, res, ConditionalExpression[res, cond]]],
   MeijerConvolution`fail];
+
+(* Does the one-sided closed form r, continued to the crossing of the
+   frequencies f1 == f2, equal the crossing value rb there?  Then r's branch
+   owns the boundary and no separate boundary branch is needed. *)
+MeijerConvolution`AtCrossingQ[r_, rb_, f1_, f2_, assum_] := Module[{vs, sub, d},
+  If[r === None || rb === Indeterminate, Return[False]];
+  vs = Variables[f2];
+  If[vs === {}, vs = Variables[f1]];
+  If[vs === {}, Return[False]];
+  sub = Quiet[Solve[f2 == f1, First[vs]]];
+  If[!MatchQ[sub, {{_Rule}, ___}], Return[False]];
+  d = Quiet[Simplify[(r - rb) /. First[sub], assum]];
+  d === 0];
 
 (* The convolution theorem with u^(s-1) absorbed into the first kernel. *)
 MeijerConvolution`Conv[K1_, K2_, C_, s_, assum_] := Module[

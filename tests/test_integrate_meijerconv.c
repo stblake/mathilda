@@ -102,6 +102,48 @@ static void test_named_results(void) {
              "Assumptions -> a > 0 && b > 0 && b < a]", "ArcSin[b/a]");
 }
 
+/* Two oscillating kernels whose frequencies cross (Weber-Schafheitlin):
+ * the q < 1 and q > 1 closed forms do not cover q == 1 itself. There the
+ * integral converges iff the non-oscillating tail x^(alpha+e1+e2) decays
+ * faster than 1/x, and is then continuous with the theorem's value at
+ * argument 1; otherwise q == 1 must be excluded by the condition. It used
+ * to fall through to Piecewise's implicit default 0 (G&R 3.741.3, 3.828.2,
+ * 6.693.1, 6.693.2; issue #132). References: mpmath quadosc, 20 digits. */
+static void test_frequency_crossing(void) {
+    /* G&R 3.741.3: Pi min(a, b)/2, the boundary a == b included */
+    check_value("Integrate[Sin[a x] Sin[b x]/x^2, {x, 0, Infinity}, "
+                "Assumptions -> 0 < a <= b] /. {a -> 7/4, b -> 7/4}", "7 Pi/8");
+    check_value("Integrate[Sin[a x] Sin[b x]/x^2, {x, 0, Infinity}, "
+                "Assumptions -> 0 < a <= b] /. {a -> 5/8, b -> 7/4}", "5 Pi/16");
+    /* G&R 3.828.2: side undecided -- both branches plus the boundary */
+    check_value("Integrate[Sin[a x] Sin[b x]/x^2, {x, 0, Infinity}, "
+                "Assumptions -> a > 0 && b > 0] /. {a -> 5/8, b -> 5/8}", "5 Pi/16");
+    check_value("Integrate[Sin[a x] Sin[b x]/x^2, {x, 0, Infinity}, "
+                "Assumptions -> a > 0 && b > 0] /. {a -> 7/3, b -> 1/5}", "Pi/10");
+    /* G&R 6.693.1: Sin[nu Pi/2]/nu at beta == alpha */
+    check_value("Integrate[BesselJ[nu, alpha x] Sin[beta x]/x, {x, 0, Infinity}, "
+                "Assumptions -> beta >= alpha && Re[nu] > -1 && alpha > 0] /. "
+                "{alpha -> 5/6, beta -> 5/6, nu -> 5/4}", "Sin[5 Pi/8]/(5/4)");
+    check_value("Integrate[BesselJ[nu, alpha x] Sin[beta x]/x, {x, 0, Infinity}, "
+                "Assumptions -> beta <= alpha && Re[nu] > -1 && alpha > 0 && beta > 0] /. "
+                "{alpha -> 5/4, beta -> 5/4, nu -> 3/8}", "Sin[3 Pi/16]/(3/8)");
+    /* G&R 6.693.2: Cos[nu Pi/2]/nu at beta == alpha */
+    check_value("Integrate[BesselJ[nu, alpha x] Cos[beta x]/x, {x, 0, Infinity}, "
+                "Assumptions -> beta <= alpha && Re[nu] > 0 && alpha > 0 && beta > 0] /. "
+                "{alpha -> 5/6, beta -> 5/6, nu -> 5/4}", "Cos[5 Pi/8]/(5/4)");
+    check_value("Integrate[BesselJ[1, a x] BesselJ[1, b x]/x, {x, 0, Infinity}, "
+                "Assumptions -> a > 0 && b > 0] /. {a -> 7/4, b -> 7/4}", "1/2");
+    /* divergent at the crossing (Sin^2/x, J0 Sin ~ 1/Sqrt[b^2 - a^2]): the
+       boundary is excluded, never a finite number */
+    check_eq("Integrate[Sin[a x] Sin[b x]/x, {x, 0, Infinity}, "
+             "Assumptions -> a > 0 && b > 0] /. {a -> 1, b -> 1}", "Undefined");
+    check_eq("Integrate[BesselJ[0, a x] Sin[b x], {x, 0, Infinity}, "
+             "Assumptions -> a > 0 && b > 0] /. {a -> 1, b -> 1}", "Undefined");
+    check_value("Integrate[BesselJ[0, a x] Sin[b x], {x, 0, Infinity}, "
+                "Assumptions -> a > 0 && b > 0] /. {a -> 5/8, b -> 7/4}",
+                "1/Sqrt[(7/4)^2 - (5/8)^2]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -110,6 +152,7 @@ int main(void) {
     TEST(test_symbolic);
     TEST(test_declines);
     TEST(test_named_results);
+    TEST(test_frequency_crossing);
 
     printf("All Integrate MeijerConvolution tests passed!\n");
     return 0;
