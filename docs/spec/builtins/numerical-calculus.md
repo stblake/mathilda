@@ -919,6 +919,21 @@ convergence test (factors are checked for `-> 1`; a divergent product such as
 because `Exp` turns the exponent's absolute error into the product's relative
 error.
 
+**Infinite products sum a cancellation-free logarithm.** A convergent product
+has factors `f = 1 + g` with `g -> 0`, and `Log[f]` in floating point keeps
+only the digits of `g` that survive `1 + g` (an exact `0` once `g < 1e-16`).
+For an infinite range NProduct therefore sums `2 ArcTanh[g/(2 + g)]`, which
+equals `Log[1 + g]` on the principal branch, with `g = f - 1` formed
+symbolically (over a common denominator when the `1` does not cancel by itself).
+The Euler–Maclaurin derivatives are taken of the equal `Log[f]`, so they stay
+compact. A factor `E^h` sums `h`. That form is singular at a factor of exactly
+`-1`. When the leading factors (probed until 16 in a row have `|g| < 1/2`)
+include one, they are multiplied out directly and the sum starts after them.
+`NProduct[1 + 1/k^2, {k, 10^6 + 1, Infinity}]` is `1.000001`
+(`1 + 9.9999999999967e-7`). It was `1 + 8e-11` with `NSum::ncvg` through
+v0.6513. Messages from the internal sum carry the `NProduct` head, and
+`ncvg` names `NProductExtraFactors`.
+
 Like the reference, NProduct can miss the divergence of slowly diverging products
 (e.g. `∏(1+1/k)`, whose log-sum is the harmonic series) and may leave a harmless
 `+0. I` residue on products of real negative factors.

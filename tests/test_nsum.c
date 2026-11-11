@@ -736,9 +736,36 @@ static void test_count_iterator(void) {
     free(s);
 }
 
+/* Infinite sums whose range starts far out (the tail of NProduct's log-sum
+ * from 10^6 is one): the Euler–Maclaurin base, tail integral and alternating
+ * and geometric routes must hold at a large start index.  Closed forms:
+ * PolyGamma[1, n] = Sum_{k>=n} 1/k^2, Zeta[s, n] = Sum_{k>=n} 1/k^s,
+ * Sum_{k>=n} (-1)^k/k = (-1)^n (PolyGamma[0, (n+1)/2] - PolyGamma[0, n/2])/2,
+ * Sum_{k>=1} r^k = r/(1 - r).  No call may emit a message. */
+static void test_far_start_tails(void) {
+    ASSERT_CLOSE("Check[NSum[1/k^2, {k, 10^6 + 1, Infinity}], \"msg\"]",
+                 "N[PolyGamma[1, 10^6 + 1], 30]", 1e-21);
+    ASSERT_CLOSE("Check[NSum[1/k^3, {k, 10^4, Infinity}], \"msg\"]",
+                 "N[Zeta[3, 10^4], 30]", 1e-23);
+    ASSERT_CLOSE("Check[NSum[1/k^1.5, {k, 10^5, Infinity}], \"msg\"]",
+                 "N[Zeta[3/2, 10^5], 30]", 1e-16);
+    ASSERT_CLOSE("Check[NSum[(-1)^k/k, {k, 10^6, Infinity}], \"msg\"]",
+                 "N[(PolyGamma[0, (10^6 + 1)/2] - PolyGamma[0, 10^6/2])/2, 30]", 1e-21);
+    ASSERT_CLOSE("Check[NSum[Exp[-k/10^5], {k, 1, Infinity}], \"msg\"]",
+                 "N[1/(Exp[1/10^5] - 1), 30]", 1e-9);
+    ASSERT_CLOSE("Check[NSum[1/k^2, {k, 10^6 + 1, Infinity}, WorkingPrecision -> 30], \"msg\"]",
+                 "N[PolyGamma[1, 10^6 + 1], 40]", 1e-34);
+    ASSERT_CLOSE("Check[NSum[1/k^3, {k, 10^4, Infinity}, WorkingPrecision -> 30], \"msg\"]",
+                 "N[Zeta[3, 10^4], 40]", 1e-36);
+    ASSERT_CLOSE("Check[NSum[Exp[-k/10^5], {k, 1, Infinity}, WorkingPrecision -> 30], \"msg\"]",
+                 "N[1/(Exp[1/10^5] - 1), 40]", 1e-24);
+}
+
 int main(void) {
     symtab_init();
     core_init();
+
+    TEST(test_far_start_tails);
 
     TEST(test_direct_finite);
     TEST(test_count_iterator);

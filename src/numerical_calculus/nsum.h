@@ -26,4 +26,11 @@
 Expr* builtin_nsum(Expr* res);
 void  nsum_init(void);
 
+/* Evaluate (and free) an NSum[...] call made on behalf of NProduct, so the
+ * messages it emits carry the NProduct head.  `deriv_body` (borrowed, may be
+ * NULL) is an expression equal to the summand as a function of the index whose
+ * symbolic derivatives the Euler–Maclaurin corrections use instead of the
+ * summand's own.  Returns the evaluated result. */
+Expr* nsum_eval_for_nproduct(Expr* nsum_call, Expr* deriv_body);
+
 #endif /* MATHILDA_NSUM_H */

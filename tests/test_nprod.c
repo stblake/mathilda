@@ -208,9 +208,72 @@ static void test_count_iterator(void) {
     free(s);
 }
 
+/* Infinite products whose factors are 1 + g with g far below the machine
+ * epsilon in the tail.  Log[1 + g] in floating point keeps only the digits of
+ * g that survive the addition, and is an exact 0 from g < 1e-16 on, so the
+ * tail integral NSum samples far out saw a summand that stops dead:
+ * NProduct[1 + 1/k^2, {k, 10^6 + 1, Infinity}] was 1 + 8e-11 (true 1 + 1e-6)
+ * with NSum::ncvg and NSum::accgl, and from k = 1 the value was off in the
+ * ninth digit.  The log-sum now uses 2 ArcTanh[g/(2 + g)].  Every call is
+ * wrapped in Check: a spurious message fails the comparison.
+ *
+ * Closed forms: Prod_{k>n} (1 + 1/k^2) = Gamma(n+1)^2 / (Gamma(n+1+I)
+ * Gamma(n+1-I)) (from (k+I)(k-I)/k^2 and Gamma(1+I) Gamma(1-I) = Pi/Sinh[Pi]);
+ * Prod_{k>=1} (1 - z^2/k^2) = Sin[Pi z]/(Pi z), with z^2 = 2 for 1 - 2/k^2
+ * and z^2 = -I for 1 + I/k^2. */
+#define NP_TAIL_1E6 "Exp[2 LogGamma[N[10^6+1,50]] - LogGamma[N[10^6+1+I,50]]" \
+                    " - LogGamma[N[10^6+1-I,50]]]"
+static void test_far_tail(void) {
+    ASSERT_CLOSE("Check[NProduct[1 + 1/k^2, {k, 10^6 + 1, Infinity}], \"msg\"]",
+                 NP_TAIL_1E6, 4e-16);
+    ASSERT_CLOSE("Check[NProduct[1 + 1/k^2, {k, 10^6 + 1, Infinity}, "
+                 "WorkingPrecision -> 30], \"msg\"]", NP_TAIL_1E6, 1e-29);
+    ASSERT_CLOSE("Check[NProduct[1 + 1/k^2, {k, 1, Infinity}], \"msg\"]",
+                 "Sinh[Pi]/Pi", 4e-15);
+    ASSERT_CLOSE("Check[NProduct[1 + 1/k^2, {k, 1, Infinity}, WorkingPrecision -> 30], \"msg\"]",
+                 "N[Sinh[Pi]/Pi, 40]", 1e-28);
+    /* the 1 cancels only over a common denominator (Together) */
+    ASSERT_CLOSE("Check[NProduct[(k^2 + 1)/k^2, {k, 1, Infinity}], \"msg\"]",
+                 "Sinh[Pi]/Pi", 4e-15);
+    ASSERT_CLOSE("Check[NProduct[1 - 1/k^2, {k, 2, Infinity}], \"msg\"]", "1/2", 1e-15);
+    /* a factor -1 (k = 1) is multiplied out; the sum starts after it */
+    ASSERT_CLOSE("Check[NProduct[1 - 2/k^2, {k, 1, Infinity}], \"msg\"]",
+                 "Sin[Sqrt[2] Pi]/(Sqrt[2] Pi)", 1e-15);
+    ASSERT_CLOSE("Check[NProduct[1 - 2/k^2, {k, 1, Infinity}, WorkingPrecision -> 30], \"msg\"]",
+                 "N[Sin[Sqrt[2] Pi]/(Sqrt[2] Pi), 40]", 1e-28);
+    ASSERT_CLOSE("Check[NProduct[1 + I/k^2, {k, 1, Infinity}], \"msg\"]",
+                 "Sin[Pi Exp[-I Pi/4]]/(Pi Exp[-I Pi/4])", 1e-14);
+    /* E^h: the exponent is summed, no Log */
+    ASSERT_CLOSE("Check[NProduct[Exp[1/k^2], {k, 1, Infinity}], \"msg\"]",
+                 "Exp[Pi^2/6]", 1e-14);
+    /* a global value of the index must not leak into the rewrite */
+    ASSERT_CLOSE("Block[{k = 7}, Check[NProduct[1 + 1/k^2, {k, 1, Infinity}], \"msg\"]]",
+                 "Sinh[Pi]/Pi", 4e-15);
+}
+
+/* Messages from the internal log-sum carry the NProduct head (as the
+ * reference's do); an NSum around an NProduct keeps its own. */
+static void test_message_head(void) {
+    char* s = eval_str("Quiet[Check[NProduct[1 + 1/k^2, {k, 10^6 + 1, Infinity}, "
+                       "Method -> \"WynnEpsilon\"], \"msg\", NProduct::accgl]]");
+    ASSERT_MSG(strcmp(s, "\"msg\"") == 0, "NProduct::accgl expected, got %s", s);
+    free(s);
+    s = eval_str("Quiet[Check[NProduct[1 + 1/k^2, {k, 10^6 + 1, Infinity}, "
+                 "Method -> \"WynnEpsilon\"], \"msg\", NSum::accgl]]");
+    ASSERT_MSG(strcmp(s, "\"msg\"") != 0, "no NSum::accgl expected, got %s", s);
+    free(s);
+    s = eval_str("Quiet[Check[NSum[1/k^2, {k, 1, Infinity}, Method -> \"WynnEpsilon\"], "
+                 "\"msg\", NSum::accgl]]");
+    ASSERT_MSG(strcmp(s, "\"msg\"") == 0, "NSum::accgl expected, got %s", s);
+    free(s);
+}
+
 int main(void) {
     symtab_init();
     core_init();
+
+    TEST(test_far_tail);
+    TEST(test_message_head);
 
     TEST(test_infinite_euler_maclaurin);
     TEST(test_finite);

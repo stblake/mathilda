@@ -79,11 +79,38 @@
  * (ns_wynn_nonsmooth): its messages are muted and kept out of Check[]. */
 static int g_ns_quiet = 0;
 
+/* The head NSum's messages carry.  NProduct is computed as Exp[NSum[Log[f]]]
+ * (nprod.c); a message about that internal sum is about the user's NProduct
+ * and must say so.  nsum_eval_for_nproduct raises g_ns_pending_nprod for the
+ * one NSum call it evaluates, and builtin_nsum moves it into g_ns_as_nprod for
+ * the extent of that call (an NSum nested in the factor starts afresh). */
+static int g_ns_pending_nprod = 0;
+static int g_ns_as_nprod = 0;
+/* The derivative twin handed over with the pending call (see NsOpts); read
+ * only while g_ns_pending_nprod is raised, so a timeout that unwinds past
+ * nsum_eval_for_nproduct (restoring the flag) can never expose it stale. */
+static Expr* g_ns_pending_deriv = NULL;
+static Expr* g_ns_cur_deriv = NULL;
+
+static const char* ns_head(void) { return g_ns_as_nprod ? "NProduct" : "NSum"; }
+static const char* ns_extra_opt(void) {
+    return g_ns_as_nprod ? "NProductExtraFactors" : "NSumExtraTerms";
+}
+
 static void ns_warn(const char* tag, const char* fmt, ...) {
     va_list ap;
     va_start(ap, fmt);
-    mth_message_v(g_ns_quiet > 0, "NSum", tag, fmt, ap);
+    mth_message_v(g_ns_quiet > 0, ns_head(), tag, fmt, ap);
     va_end(ap);
+}
+
+Expr* nsum_eval_for_nproduct(Expr* nsum_call, Expr* deriv_body) {
+    g_ns_pending_nprod = 1;
+    g_ns_pending_deriv = deriv_body;
+    Expr* r = eval_and_free(nsum_call);
+    g_ns_pending_nprod = 0;
+    g_ns_pending_deriv = NULL;
+    return r;
 }
 
 /* ------------------------------------------------------------------ *
@@ -434,7 +461,21 @@ typedef struct {
     long  target_bits;      /* user-requested precision; result rounded back to it */
     double acc_goal;        /* AccuracyGoal digits (-1 => Infinity)               */
     double prec_goal;       /* PrecisionGoal digits (-1 => Automatic)            */
+    /* Derivative twin (borrowed, may be NULL): an expression equal to the
+     * top-level summand `deriv_of` as a function of the index, whose symbolic
+     * derivatives the Euler–Maclaurin corrections take in its place.  NProduct
+     * sums a cancellation-free 2 ArcTanh[g/(2 + g)] for accurate values, but
+     * the derivatives of that form balloon (and push the corrections onto the
+     * contour, ~10x dearer at MPFR), whereas those of the equal Log[1 + g] are
+     * f'/f, compact and cancellation-free. */
+    const Expr* deriv_of;
+    Expr* deriv_body;
 } NsOpts;
+
+/* The expression whose symbolic derivatives stand for those of c's summand. */
+static Expr* ns_deriv_source(const NsCtx* c, const NsOpts* o) {
+    return (o->deriv_body && c->body == o->deriv_of) ? o->deriv_body : c->body;
+}
 
 static bool ns_is_known_option(const char* s) {
     return s == SYM_Method || s == SYM_WorkingPrecision || s == SYM_NSumTerms
@@ -695,13 +736,13 @@ static Expr* ns_wynn_machine(NsCtx* c, long count, const NsOpts* o, double* err_
     free(P);
     if (!got) { ns_warn("ndterm", "not enough terms for WynnEpsilon"); return NULL; }
     if (!ns_accept(cabs(result), step, maxsample)) {
-        ns_warn("ncvg", "failed to converge; try more NSumExtraTerms or higher WorkingPrecision");
+        ns_warn("ncvg", "failed to converge; try more %s or higher WorkingPrecision", ns_extra_opt());
         return NULL;
     }
     if (err_out) *err_out = step;
     else if (ns_goal_active(o)) {
         double tol = nc_combined_tol(o->acc_goal, o->prec_goal, cabs(result), ns_wp_digits(o));
-        if (step > tol) nc_warn_goal("NSum", step, tol);
+        if (step > tol) nc_warn_goal(ns_head(), step, tol);
     }
     return ns_from_complex_d(result);
 }
@@ -756,11 +797,11 @@ static Expr* ns_wynn_mpfr(NsCtx* c, long count, const NsOpts* o, double* err_out
             if (err_out) *err_out = step;
             else if (ns_goal_active(o)) {
                 double tol = nc_combined_tol(o->acc_goal, o->prec_goal, ns_l1_d(rr, ri), ns_wp_digits(o));
-                if (step > tol) nc_warn_goal("NSum", step, tol);
+                if (step > tol) nc_warn_goal(ns_head(), step, tol);
             }
             out = ns_from_complex_mpfr(rr, ri);
         } else
-            ns_warn("ncvg", "failed to converge; try more NSumExtraTerms or higher WorkingPrecision");
+            ns_warn("ncvg", "failed to converge; try more %s or higher WorkingPrecision", ns_extra_opt());
         mpfr_clear(rr); mpfr_clear(ri);
     } else {
         ns_warn("nnum", "summand is not numerical at a term");
@@ -817,12 +858,12 @@ static Expr* ns_levin_machine(NsCtx* c, long count, const NsOpts* o) {
     free(P);
     if (!got) { ns_warn("ndterm", "not enough terms for Levin"); return NULL; }
     if (!ns_accept(cabs(result), step, maxsample)) {
-        ns_warn("ncvg", "failed to converge; try more NSumExtraTerms or higher WorkingPrecision");
+        ns_warn("ncvg", "failed to converge; try more %s or higher WorkingPrecision", ns_extra_opt());
         return NULL;
     }
     if (ns_goal_active(o)) {
         double tol = nc_combined_tol(o->acc_goal, o->prec_goal, cabs(result), ns_wp_digits(o));
-        if (step > tol) nc_warn_goal("NSum", step, tol);
+        if (step > tol) nc_warn_goal(ns_head(), step, tol);
     }
     return ns_from_complex_d(result);
 }
@@ -876,11 +917,11 @@ static Expr* ns_levin_mpfr(NsCtx* c, long count, const NsOpts* o) {
         if (got && finite && ns_accept(ns_l1_d(rr, ri), step, maxsample)) {
             if (ns_goal_active(o)) {
                 double tol = nc_combined_tol(o->acc_goal, o->prec_goal, ns_l1_d(rr, ri), ns_wp_digits(o));
-                if (step > tol) nc_warn_goal("NSum", step, tol);
+                if (step > tol) nc_warn_goal(ns_head(), step, tol);
             }
             out = ns_from_complex_mpfr(rr, ri);
         } else
-            ns_warn("ncvg", "failed to converge; try more NSumExtraTerms or higher WorkingPrecision");
+            ns_warn("ncvg", "failed to converge; try more %s or higher WorkingPrecision", ns_extra_opt());
         mpfr_clear(rr); mpfr_clear(ri);
     } else {
         ns_warn("nnum", "summand is not numerical at a term");
@@ -1597,7 +1638,7 @@ static Expr* ns_em_machine(NsCtx* c, const char* var, NsOpts* o, long settle) {
     double _Complex* a = NULL;            /* contour coeffs, computed on demand */
     bool a_tried = false, a_ok = false;
     ns_bind_clear_temp(symtab_get_def(var));
-    Expr* dcur = expr_copy(c->body);
+    Expr* dcur = expr_copy(ns_deriv_source(c, o));
     int cur = 0;
     bool ballooned = false;
     int napplied = 0;
@@ -1657,7 +1698,7 @@ static Expr* ns_em_machine(NsCtx* c, const char* var, NsOpts* o, long settle) {
     {
         double est = abserr;
         if (!met && napplied > 0 && isfinite(prev_mag)) est += prev_mag;
-        if (ns_goal_active(o) && est > tol) nc_warn_goal("NSum", est, tol);
+        if (ns_goal_active(o) && est > tol) nc_warn_goal(ns_head(), est, tol);
     }
     free(a);
     expr_free(dcur);
@@ -1934,7 +1975,7 @@ static Expr* ns_em_mpfr(NsCtx* c, const char* var, NsOpts* o, long settle) {
                                      ns_wp_digits(o));
         bool met = false;
         ns_bind_clear_temp(symtab_get_def(var));
-        Expr* dcur = expr_copy(c->body);
+        Expr* dcur = expr_copy(ns_deriv_source(c, o));
         int cur = 0;
         bool ballooned = false, bail = false;
         int napplied = 0;
@@ -2010,7 +2051,7 @@ static Expr* ns_em_mpfr(NsCtx* c, const char* var, NsOpts* o, long settle) {
             out = ns_from_complex_mpfr(tr, ti);
             double est = tail_err
                          + ((!met && napplied > 0 && isfinite(prev_mag)) ? prev_mag : 0.0);
-            if (ns_goal_active(o) && est > tol) nc_warn_goal("NSum", est, tol);
+            if (ns_goal_active(o) && est > tol) nc_warn_goal(ns_head(), est, tol);
         }
     }
 
@@ -2377,7 +2418,7 @@ static Expr* ns_wynn_nonsmooth(NsCtx* c, const NsOpts* o, double* err_out) {
     if (ns_goal_active(o)) {
         double tol = nc_combined_tol(o->acc_goal, o->prec_goal, ns_expr_mag(out),
                                      ns_wp_digits(o));
-        if (err > tol) nc_warn_goal("NSum", err, tol);
+        if (err > tol) nc_warn_goal(ns_head(), err, tol);
     }
     return out;
 }
@@ -2458,7 +2499,7 @@ static Expr* ns_integer_only(NsCtx* c, const NsOpts* o) {
         /* A verified block structure is exactly what Wynn has no model for: its
          * estimate (and its error) would be a guess against a measurement. */
         if (levels > 0) {
-            nc_warn_goal("NSum", eb, tol);
+            nc_warn_goal(ns_head(), eb, tol);
             return ob;
         }
     }
@@ -2475,7 +2516,7 @@ static Expr* ns_integer_only(NsCtx* c, const NsOpts* o) {
     else return NULL;
     if (ns_goal_active(o)) {
         tol = nc_combined_tol(o->acc_goal, o->prec_goal, ns_expr_mag(out), ns_wp_digits(o));
-        if (err > tol) nc_warn_goal("NSum", err, tol);
+        if (err > tol) nc_warn_goal(ns_head(), err, tol);
     }
     return out;
 }
@@ -2886,7 +2927,7 @@ static Expr* ns_finite(NsCtx* c, long count, const NsOpts* o) {
     if (em == 0 && err <= 1e-8 * (cabs(v) + 1e-300)) {
         double tol = nc_combined_tol(o->acc_goal, o->prec_goal, cabs(v),
                                      NUMERIC_MACHINE_PRECISION_DIGITS);
-        nc_warn_goal("NSum", err, tol);
+        nc_warn_goal(ns_head(), err, tol);
         if (fabs(cimag(v)) <= 1e-15 * fabs(creal(v))) v = creal(v);
         return ns_from_complex_d(v);
     }
@@ -3410,7 +3451,7 @@ static Expr* ns_phase_split(Expr* body, const char* var, Expr* imin,
                 if (ns_goal_active(o)) {
                     double tol = nc_combined_tol(o->acc_goal, o->prec_goal, ns_expr_mag(out),
                                                  ns_wp_digits(o));
-                    if (err > tol) nc_warn_goal("NSum", err, tol);
+                    if (err > tol) nc_warn_goal(ns_head(), err, tol);
                 }
             }
         }
@@ -3683,7 +3724,22 @@ static bool ns_is_spec(Expr* e) {
  *  Entry point                                                        *
  * ------------------------------------------------------------------ */
 
+static Expr* ns_builtin(Expr* res);
+
 Expr* builtin_nsum(Expr* res) {
+    int saved = g_ns_as_nprod;
+    Expr* saved_deriv = g_ns_cur_deriv;
+    g_ns_as_nprod = g_ns_pending_nprod;
+    g_ns_cur_deriv = g_ns_pending_nprod ? g_ns_pending_deriv : NULL;
+    g_ns_pending_nprod = 0;
+    g_ns_pending_deriv = NULL;
+    Expr* r = ns_builtin(res);
+    g_ns_as_nprod = saved;
+    g_ns_cur_deriv = saved_deriv;
+    return r;
+}
+
+static Expr* ns_builtin(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 2) return NULL;
@@ -3701,7 +3757,7 @@ Expr* builtin_nsum(Expr* res) {
         Expr* rw = iter_numeric_count_specs(res, pos_end, "NSum", "NSum`Private`count$", &declined);
         if (declined) return NULL;
         if (rw) {
-            Expr* r = builtin_nsum(rw);
+            Expr* r = ns_builtin(rw);
             expr_free(rw);
             return r;
         }
@@ -3724,6 +3780,9 @@ Expr* builtin_nsum(Expr* res) {
     o.target_bits = 0;
     o.acc_goal = NC_GOAL_MACHINE; /* AccuracyGoal -> MachinePrecision */
     o.prec_goal = NC_GOAL_AUTO;                    /* PrecisionGoal -> Automatic */
+    o.deriv_of = body;
+    o.deriv_body = g_ns_cur_deriv;
+    g_ns_cur_deriv = NULL;          /* this call's alone, not a nested NSum's */
     for (size_t i = pos_end; i < argc; i++)
         if (!ns_apply_option(res->data.function.args[i], &o)) return NULL;
 
@@ -3834,4 +3893,6 @@ void nsum_init(void) {
     /* a timeout inside the muted second estimate must not leave NSum silent */
     tc_register_unwind_counter(&g_ns_quiet);
     tc_register_unwind_counter(&g_ns_nactive);
+    tc_register_unwind_counter(&g_ns_pending_nprod);
+    tc_register_unwind_counter(&g_ns_as_nprod);
 }
