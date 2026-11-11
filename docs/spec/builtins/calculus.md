@@ -1363,7 +1363,23 @@ remaining child crashes from earlier runs are eliminated, while
   `2 c ArcTanh[(A + B)/(B - A)]` when the simplified argument is
   rational in x.  Beautifies the output without affecting
   differentiation.
-- **Algebraic constants in normal form** (v0.6504, `intsimp_reduce_algebraic_constants`).
+- **Complex coefficients** (v0.6508). Rioboo's `LogToReal` turns the log sum
+  over a conjugate-closed set of residues into real `ArcTan`/`Log` terms. That
+  is valid only when the coefficients are real.
+  - **The bug.** With `I` among the integrand's coefficients, the
+    conjugate-pair branch cancelled against itself.
+    `Integrate[1/(x^2 + I), x]` was `0`. `1/(x^2 + I x + 1)`, `1/(x^3 + I)` and
+    `(x + I)/(x^2 + 2 x + 2 + I)` gave nonzero but wrong answers, as did 53 of
+    158 random Gaussian-coefficient integrands.
+  - **The fix.** Such an integrand now takes the plain complex log sum: first
+    the linear closer, then `NaiveLogPart`. `NaiveLogPart`'s root expansion now
+    also accepts symbolic parameters for a complex linear or quadratic factor,
+    so `1/(x^2 + I a)` keeps a closed form.
+  - **Examples.** `Integrate[1/(x^2 + I), x]` is
+    `-(2 ArcTanh[(2 x)/Sqrt[-4*I]])/Sqrt[-4*I]`.
+  - **Unchanged.** The transcendental callers, which use `t = E^(I x)` for trig
+    integrands, keep `LogToReal`: there `I` is part of the real reconstruction.
+- **Algebraic constants in normal form** (v0.6506, `intsimp_reduce_algebraic_constants`).
   The log part computes with algebraic constants (`Sqrt[2]`, `2^(1/4)`, nested
   radicals) and nothing rationalises them, so the answers used to carry
   unreduced quotients. For example, `Integrate[1/(x^2 + 3 + 2 Sqrt[2]), x]` was

@@ -986,6 +986,57 @@ static void test_algebraic_constant_normal_form(void) {
            "Log[1 - Sqrt[2] x + x^2]/(4 Sqrt[2]) + Log[1 + Sqrt[2] x + x^2]/(4 Sqrt[2])");
 }
 
+/* Complex coefficients.  Rioboo's LogToReal is valid only over a real field
+ * (the conjugate of a residue must be a residue, S(conj a) = conj S(a)); with
+ * I among the coefficients its conjugate-pair branch cancelled against itself.
+ * Integrate[1/(x^2 + I), x] was 0, and 1/(x^2 + I x + 1), 1/(x^3 + I),
+ * (x + I)/(x^2 + 2 x + 2 + I) were nonzero but wrong -- 53 of 158 random
+ * Gaussian-coefficient integrands.  LogToReal now declines and the complex
+ * log sum (with explicit roots) is used.  Checked numerically at points off
+ * the real axis too, since PossibleZeroQ alone could hide a branch error. */
+static void assert_integral_numeric(const char* f) {
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+        "TimeConstrained[Module[{F = Integrate[%s, x], g = %s}, FreeQ[F, Integrate] && "
+        "Max[Table[Abs[N[(D[F, x] - g) /. x -> p, 30]], {p, {1/3, 7/5, -2/7, 2 + I/3}}]] < 10^-20], "
+        "30, $Aborted]", f, f);
+    Expr* e = parse_expression(buf);
+    Expr* res = evaluate(e);
+    char* got = expr_to_string(res);
+    if (strcmp(got, "True") != 0) printf("FAIL: complex-coefficient Integrate[%s, x]: %s\n", f, got);
+    ASSERT_STR_EQ(got, "True");
+    free(got); expr_free(e); expr_free(res);
+}
+
+static void test_complex_coefficient_log_part(void) {
+    const char* fs[] = {
+        "1/(x^2 + I)", "1/(x^2 - I)", "1/(x^2 + 2 I)", "1/(x^2 + 1 + I)",
+        "1/(x^2 + I x + 1)", "x/(x^2 + I)", "1/(x^3 + I)",
+        "(x + I)/(x^2 + 2 x + 2 + I)", "1/(x^4 + I)", "1/((x - I) (x - 2 I))",
+        "I/(x^2 + 1)", "1/(x^2 + 2 I x - 2)", "(3 - I x)/(x^3 + (1 + I) x + 2)",
+    };
+    for (size_t i = 0; i < sizeof(fs) / sizeof(fs[0]); i++) assert_integral_numeric(fs[i]);
+    /* a symbolic parameter with a complex coefficient keeps a closed form */
+    run_eq("FreeQ[Integrate[1/(x^2 + I a), x], RootSum | Integrate]", "True");
+    run_eq("Module[{F = Integrate[1/(x^2 + I a), x]}, "
+           "Abs[N[(D[F, x] - 1/(x^2 + I a)) /. {x -> 1/3, a -> 3/5}, 30]] < 10^-20]", "True");
+    /* the 0 is gone */
+    run_eq("Integrate[1/(x^2 + I), x] =!= 0", "True");
+    /* a seeded random family of Gaussian-coefficient integrands, as in the sweep */
+    run_eq("Module[{gc, rp, fs, ok}, SeedRandom[133]; "
+           "gc[] := RandomInteger[{-3, 3}] + I RandomInteger[{-2, 2}]; "
+           "rp[d_] := Sum[gc[] x^k, {k, 0, d - 1}] + x^d; "
+           "fs = Select[Table[Sum[gc[] x^k, {k, 0, RandomInteger[{0, 2}]}]/rp[RandomInteger[{2, 3}]], {40}], "
+           "!FreeQ[#, Complex] && FreeQ[#, ComplexInfinity] &]; "
+           "Select[fs, Function[f, !TrueQ[TimeConstrained[Module[{F = Integrate[f, x]}, FreeQ[F, Integrate] && "
+           "(!FreeQ[F, RootSum] || "
+           "Max[Table[Abs[N[(D[F, x] - f) /. x -> p, 30]], {p, {1/3, 7/5, 2 + I/3}}]] < 10^-20)], 30, False]]]]]",
+           "{}");
+    /* A held RootSum (an irreducible complex cubic) is a correct answer, but N
+     * does not yet evaluate Root objects with non-real coefficients, so it
+     * cannot be checked numerically; the closed forms above all are. */
+}
+
 static void test_opaque_parameter_log_part(void) {
     assert_integral_correct("1/(c[2] - x^2)");
     assert_integral_correct("1/(C[2] - x^2)");
@@ -1085,6 +1136,7 @@ int main(void) {
     TEST(test_issue133_primitive_polynomial_content);
     TEST(test_issue133_quadratic_surd_denesting);
     TEST(test_algebraic_constant_normal_form);
+    TEST(test_complex_coefficient_log_part);
 
     printf("All Phase 1-7 (full BronsteinRational pipeline) tests passed!\n");
     return 0;

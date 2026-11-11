@@ -1534,8 +1534,17 @@ static Expr* expand_palindromic_quartic_real(
  * Once Solve / ToRadicals lands, this routine is superseded by a
  * call to Solve[poly == 0, bvar, Reals] followed by the same body
  * substitution loop. */
+static bool intrat_contains_complex(const Expr* e);
+
 static Expr* expand_simple_rootsum(Expr* poly, Expr* bvar, Expr* body) {
-    if (!poly_only_uses(poly, bvar)) return NULL;
+    /* Parameters are allowed only for a complex-coefficient linear or
+     * quadratic factor: that is the factor LogToReal now declines (it is valid
+     * only over a real field), and the root formula holds for any
+     * coefficients, so 1/(x^2 + I a) keeps a closed form.  Real parametric
+     * factors keep their RootSum, as before. */
+    if (!poly_only_uses(poly, bvar)
+        && (!intrat_contains_complex(poly) || get_degree_poly(poly, bvar) > 2))
+        return NULL;
 
     Expr* cl_call = expr_new_function(expr_new_symbol(SYM_CoefficientList),
         (Expr*[]){ expr_copy(poly), expr_copy(bvar) }, 2);
@@ -3365,6 +3374,7 @@ fail:
 static Expr* intrat_log_to_real(Expr* r, Expr* s, Expr* x, Expr* t) {
     intrat_trace("LogToReal", "IN", r);
 
+
     Expr* factored = internal_factor((Expr*[]){expr_copy(r)}, 1);
     Expr* factored_e = evaluate(factored);
     expr_free(factored);
@@ -3608,8 +3618,20 @@ static Expr* try_lrt_close(Expr* num, Expr* den, Expr* x) {
 
     Expr* result = NULL;
     if (pairs) {
-        /* LRT consumer 1: Rioboo LogToReal on every pair. */
-        result = intrat_log_to_real_pairs(pairs, x, t_sym);
+        /* LRT consumer 1: Rioboo LogToReal on every pair.  It turns the log
+         * sum over a conjugate-closed set of residues into real ArcTan/Log
+         * terms, which is valid only over a REAL coefficient field: the
+         * conjugate of a residue must be a residue and S(conj a, x) =
+         * conj S(a, x).  With I among the integrand's coefficients its
+         * conjugate-pair branch cancelled against itself --
+         * Integrate[1/(x^2 + I), x] was 0, and 1/(x^2 + I x + 1), 1/(x^3 + I)
+         * were nonzero but wrong (53 of 158 random Gaussian-coefficient
+         * integrands).  Such an integrand takes the plain complex log sum
+         * (linear closer, then NaiveLogPart with explicit roots).  The
+         * transcendental callers (t = E^(I x) for trig integrands) keep
+         * LogToReal: their I is part of the real reconstruction. */
+        if (!intrat_contains_complex(h_eval))
+            result = intrat_log_to_real_pairs(pairs, x, t_sym);
         /* LRT consumer 2: linear-Q closer (factor each Q_i over Q). */
         if (!result) result = intrat_linear_q_closer(pairs, x, t_sym);
         expr_free(pairs);
