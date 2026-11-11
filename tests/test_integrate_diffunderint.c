@@ -43,6 +43,19 @@ static void assert_eval_hard(const char* input, const char* expected) {
  * definite cascade answered Pi Log[1 + a] -- so Check[] took its failure branch
  * for a call that succeeded.  The message is now held until the outermost
  * definite call is done and printed only if it declined. */
+/* Issue #132 (G&R 17.34.21a): the Leibniz base a = 0 lies inside the interval
+ * the assumptions give a alone (a > 0), but outside the slice a > xi/2 the
+ * coupled constraint 0 < xi < 2 a leaves -- the inner integral I'(a) changes
+ * closed form at a = xi/2, so anchoring at a = 0 lost the -Pi xi/4 term and
+ * returned a Pi/2.  The base must lie in the closure of the parameter's slice
+ * for every admissible value of the other parameters.  Ref Pi (2 a - xi)/4. */
+static void test_coupled_base_domain(void) {
+    assert_eval_hard("With[{r = Integrate[Cos[x xi] Sin[a x]^2/x^2, {x, 0, Infinity}, "
+                     "Assumptions -> a > 0 && 0 < xi < 2 a]}, "
+                     "Chop[N[{r /. {a -> 3/8, xi -> 1/5}, r /. {a -> 5/4, xi -> 3/8}} - "
+                     "{0.4319689898685965, 1.668971097219577}, 12]]]", "{0, 0}");
+}
+
 static void test_no_spurious_nonelem(void) {
     assert_eval_hard(
         "Check[Integrate[Log[1 + a^2 x^2]/(1 + x^2), {x, 0, Infinity}, "
@@ -406,6 +419,7 @@ void test_integrate_diffunderint(void) {
     TEST(test_repeated_quadrature);
     TEST(test_finalize_quality);
     TEST(test_no_spurious_nonelem);
+    TEST(test_coupled_base_domain);
 
     printf("All Integrate DiffUnderInt tests passed!\n");
 }

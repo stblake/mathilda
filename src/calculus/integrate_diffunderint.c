@@ -553,12 +553,43 @@ static double pick_rep(double lo, double hi, size_t idx) {
  * x = -1 is exponentially divergent and its inner Integrate leaked
  * Integrate::idiv while the stage ground on.  Unbounded parameters (no
  * assumption) accept every candidate, as before. */
-static bool base_in_domain(const ParamBound* pb, size_t np, const Expr* p, long c) {
+/* True iff the base p = c lies in the closure of p's slice of the assumed
+ * region for EVERY admissible value of the other parameters.  The per-parameter
+ * interval alone misses a COUPLED constraint: under a > 0 && 0 < xi < 2 a the
+ * interval of a is (0, Inf), yet a = 0 is outside the slice a > xi/2 for every
+ * admissible xi, so anchoring I(a) at a = 0 integrates I'(a) across the kink at
+ * a = xi/2 (where the inner integral changes closed form) and returns a wrong
+ * constant (Integrate[Cos[x xi] Sin[a x]^2/x^2, {x, 0, Inf}] -> a Pi/2).
+ * Strict relations are relaxed to their closures, Unequal is dropped, p -> c is
+ * substituted, and the remainder must Refine to True under the assumptions. */
+static bool base_in_closure(const Expr* assumptions, const Expr* p, long c) {
+    if (!assumptions) return true;
+    Expr* relax = mk_fn2("List",
+        mk_fn2("Rule", mk_sym("Less"), mk_sym("LessEqual")),
+        mk_fn2("Rule", mk_sym("Greater"), mk_sym("GreaterEqual")));
+    Expr* r1 = ev2("ReplaceAll", expr_copy((Expr*)assumptions), relax);
+    if (!r1) return false;
+    Expr* r2 = ev2("ReplaceAll", r1,
+                   mk_fn2("Rule", mk_fn1("Unequal",
+                                 expr_new_function(mk_sym("BlankSequence"), NULL, 0)),
+                          mk_sym("True")));
+    if (!r2) return false;
+    Expr* r3 = ev2("ReplaceAll", r2, mk_fn2("Rule", expr_copy((Expr*)p), mk_int(c)));
+    if (!r3) return false;
+    Expr* q = ev2("Refine", r3, expr_copy((Expr*)assumptions));
+    bool ok = q && q->type == EXPR_SYMBOL && q->data.symbol.name == SYM_True;
+    if (q) expr_free(q);
+    return ok;
+}
+
+static bool base_in_domain(const ParamBound* pb, size_t np, const Expr* p, long c,
+                           const Expr* assumptions) {
     for (size_t i = 0; i < np; i++) {
         if (pb[i].sym != p->data.symbol.name) continue;
-        return (double)c >= pb[i].lo && (double)c <= pb[i].hi;
+        if (!((double)c >= pb[i].lo && (double)c <= pb[i].hi)) return false;
+        break;
     }
-    return true;
+    return base_in_closure(assumptions, p, c);
 }
 
 /* -------------------------------------------------------------------------
@@ -1357,7 +1388,7 @@ static bool find_base(const Expr* f, const Expr* x, const Expr* a, const Expr* b
     /* 2. numeric zero base: f|_{p->c} identically 0 in x, c in {0, 1, -1}. */
     static const long CS[] = { 0, 1, -1 };
     for (size_t i = 0; i < sizeof(CS)/sizeof(CS[0]); i++) {
-        if (!base_in_domain(pb, np, p, CS[i])) continue;
+        if (!base_in_domain(pb, np, p, CS[i], assumptions)) continue;
         Expr* c = mk_int(CS[i]);
         Expr* fc = subst(f, p, c);
         bool zero = fc && is_zero_q(fc);
@@ -1376,7 +1407,7 @@ static bool find_base(const Expr* f, const Expr* x, const Expr* a, const Expr* b
      *    integral, so it is deliberately excluded here (the zero-integrand
      *    other-parameter base above already covers the q-collapse cases). */
     Expr* cands[2]; size_t nc = 0;
-    if (base_in_domain(pb, np, p, 0)) cands[nc++] = mk_int(0);
+    if (base_in_domain(pb, np, p, 0, assumptions)) cands[nc++] = mk_int(0);
     bool found = false;
     for (size_t i = 0; i < nc && !found; i++) {
         Expr* fp0 = subst(f, p, cands[i]);
@@ -2536,7 +2567,7 @@ static bool multi_base(const Expr* f, const Expr* x, const Expr* a, const Expr* 
                        Expr** out_p0, Expr** vals) {
     static const long CS[] = { 0, 1, -1 };
     for (size_t c = 0; c < sizeof(CS)/sizeof(CS[0]); c++) {
-        if (!base_in_domain(pb, np, p, CS[c])) continue;
+        if (!base_in_domain(pb, np, p, CS[c], assumptions)) continue;
         Expr* p0 = mk_int(CS[c]);
         Expr* tmp[8]; long got = 0; bool ok = true;
         for (long j = 0; j < order && ok; j++) {
