@@ -250,8 +250,113 @@ bool intsimp_zero_q(Expr* e) {
  *   Power[base, k]      -> base^(k/2) when k is even and base > 0,
  *                          base^((k-1)/2) Sqrt[base] for odd positive k
  *   Times[f1, f2, ...]  -> product of recursive results
+ *   a + b Sqrt[c]       -> Sqrt[(a+d)/2] + sgn(b) Sqrt[(a-d)/2] when
+ *                          d = Sqrt[a^2 - b^2 c] is rational (denesting)
  *   anything else       -> Sqrt[anything] (irreducible)
  */
+
+/* Exact rational (Integer, BigInt or Rational) — no inexact numbers. */
+static bool intsimp_is_exact_rational(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
+    return e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Rational;
+}
+
+/* Match `b * c^(±1/2)` with b an exact rational and c a positive integer,
+ * returning b' and c such that the term equals b' * Sqrt[c]
+ * (c^(-1/2) = Sqrt[c]/c).  *b_out is owned by the caller. */
+static bool intsimp_match_rational_surd(const Expr* t, Expr** b_out,
+                                        const Expr** c_out) {
+    const Expr* coef = NULL;
+    const Expr* pw = t;
+    if (t->type == EXPR_FUNCTION && t->data.function.head->type == EXPR_SYMBOL
+        && t->data.function.head->data.symbol.name == SYM_Times
+        && t->data.function.arg_count == 2
+        && intsimp_is_exact_rational(t->data.function.args[0])) {
+        coef = t->data.function.args[0];
+        pw = t->data.function.args[1];
+    }
+    if (!(pw->type == EXPR_FUNCTION && pw->data.function.head->type == EXPR_SYMBOL
+          && pw->data.function.head->data.symbol.name == SYM_Power
+          && pw->data.function.arg_count == 2))
+        return false;
+    const Expr* c = pw->data.function.args[0];
+    const Expr* ex = pw->data.function.args[1];
+    if (!(c->type == EXPR_INTEGER && c->data.integer > 1)) return false;
+    if (!(ex->type == EXPR_FUNCTION && ex->data.function.head->type == EXPR_SYMBOL
+          && ex->data.function.head->data.symbol.name == SYM_Rational
+          && ex->data.function.arg_count == 2
+          && ex->data.function.args[0]->type == EXPR_INTEGER
+          && ex->data.function.args[1]->type == EXPR_INTEGER
+          && ex->data.function.args[1]->data.integer == 2))
+        return false;
+    int64_t num = ex->data.function.args[0]->data.integer;
+    if (num != 1 && num != -1) return false;
+    Expr* b = coef ? expr_copy((Expr*)coef) : expr_new_integer(1);
+    if (num == -1)
+        b = eval_and_free(internal_divide((Expr*[]){b, expr_copy((Expr*)c)}, 2));
+    *b_out = b;
+    *c_out = c;
+    return true;
+}
+
+/* Denest Sqrt[a + b Sqrt[c]] for exact rationals a > 0, b and integer c > 1:
+ * when a^2 - b^2 c = d^2 with d rational (necessarily 0 <= d < a),
+ *     Sqrt[a + b Sqrt[c]] = Sqrt[(a+d)/2] + sgn(b) Sqrt[(a-d)/2].
+ * Both radicands are non-negative rationals, so the right side is the
+ * positive real root.  Returns NULL when `e` is not of that shape or does
+ * not denest.  The residue roots of a biquadratic Rothstein-Trager resultant
+ * (e.g. 256 t^4 + 96 t^2 + 1 for (x^2+x+1)/(x^4+1), issue #133) land here:
+ * Sqrt[3/4 - 1/Sqrt[2]] = 1/Sqrt[2] - 1/2. */
+static Expr* intsimp_denest_quadratic_surd(const Expr* e) {
+    if (!(e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+          && e->data.function.head->data.symbol.name == SYM_Plus
+          && e->data.function.arg_count == 2))
+        return NULL;
+    const Expr* a = NULL;
+    const Expr* sterm = NULL;
+    for (int i = 0; i < 2; i++) {
+        if (intsimp_is_exact_rational(e->data.function.args[i])) {
+            a = e->data.function.args[i];
+            sterm = e->data.function.args[1 - i];
+        }
+    }
+    if (!a || intsimp_sign_pos_assumption((Expr*)a) <= 0) return NULL;
+    Expr* b = NULL;
+    const Expr* c = NULL;
+    if (!intsimp_match_rational_surd(sterm, &b, &c)) return NULL;
+
+    /* d^2 = a^2 - b^2 c (an exact rational). */
+    Expr* d2 = eval_and_free(internal_plus((Expr*[]){
+        internal_power((Expr*[]){expr_copy((Expr*)a), expr_new_integer(2)}, 2),
+        internal_times((Expr*[]){expr_new_integer(-1),
+            internal_power((Expr*[]){expr_copy(b), expr_new_integer(2)}, 2),
+            expr_copy((Expr*)c)}, 3)}, 2));
+    Expr* d = NULL;
+    if (intsimp_is_exact_rational(d2) && intsimp_sign_pos_assumption(d2) >= 0) {
+        Expr* sd = intsimp_pos_sqrt_factor(d2);
+        if (intsimp_is_exact_rational(sd)) d = sd; else expr_free(sd);
+    }
+    expr_free(d2);
+    if (!d) { expr_free(b); return NULL; }
+
+    int bsign = intsimp_sign_pos_assumption(b);
+    expr_free(b);
+    Expr* half_p = eval_and_free(internal_divide((Expr*[]){
+        internal_plus((Expr*[]){expr_copy((Expr*)a), expr_copy(d)}, 2),
+        expr_new_integer(2)}, 2));
+    Expr* half_m = eval_and_free(internal_divide((Expr*[]){
+        internal_subtract((Expr*[]){expr_copy((Expr*)a), d}, 2),
+        expr_new_integer(2)}, 2));
+    Expr* r1 = intsimp_pos_sqrt_factor(half_p);
+    Expr* r2 = intsimp_pos_sqrt_factor(half_m);
+    expr_free(half_p); expr_free(half_m);
+    if (bsign < 0)
+        r2 = eval_and_free(internal_times((Expr*[]){expr_new_integer(-1), r2}, 2));
+    return eval_and_free(internal_plus((Expr*[]){r1, r2}, 2));
+}
 
 Expr* intsimp_pos_sqrt_factor(Expr* e) {
     if (e->type == EXPR_INTEGER) {
@@ -325,6 +430,9 @@ Expr* intsimp_pos_sqrt_factor(Expr* e) {
         return expr_new_function(expr_new_symbol(SYM_Sqrt),
             (Expr*[]){expr_copy(e)}, 1);
     }
+    /* Quadratic surd a + b Sqrt[c]: denest when possible. */
+    Expr* dn = intsimp_denest_quadratic_surd(e);
+    if (dn) return dn;
     /* Fallback: no structural simplification. */
     return expr_new_function(expr_new_symbol(SYM_Sqrt),
         (Expr*[]){expr_copy(e)}, 1);

@@ -1811,6 +1811,7 @@ Gives the greatest common divisor of the polynomials.
 - Treats algebraic numbers (like `I`) as independent variables or constants seamlessly during complex arithmetic evaluations.
 - Pre-extracts common factors before falling back to a full primitive Euclidean algorithm computation.
 - **Option `Extension -> alpha`** (Phase 0 of the Integrate plan): computes the GCD over `Q(alpha)` for `alpha` ∈ {`Sqrt[c]`, `c^(1/n)`, `I`} via lifting both inputs into the QAUPoly substrate (`src/poly/qaupoly.h`) and folding `qaupoly_gcd`. Extension support requires univariate inputs (after stripping the alpha-render symbol). Defaults `Extension -> None` and `Extension -> Automatic` work over the rationals and treat algebraic numbers as opaque variables. `Extension -> {alpha_1, ..., alpha_n}` (tower form) currently falls back to the no-extension path; tower-aware GCD is a Phase 0.5 follow-up.
+- **Known deficiency: nested radicals (wrong answer).** Since algebraic numbers are opaque atoms, a gcd over a nested-radical field can be missed: with `q = Sqrt[3/4 - 1/Sqrt[2]]` and `d1 = 7 + 5 Sqrt[2] - 4 x q`, `PolynomialGCD[Expand[d1 (3 - Sqrt[2] x + q^3)], Expand[d1^2]]` is `1` (correct: `d1`), with or without `Extension -> Automatic`. `Expand` applies only some of the atoms' relations (`q q -> 3/4 - 1/Sqrt[2]`), so the indeterminate model no longer sees the common factor. One-level radicals are fine. Reproducer and fix direction: `tasks/polygcd_together_deficiencies/` (found via issue #133).
 
 ```mathematica
 In[1]:= PolynomialGCD[(1+x)^2(2+x)(4+x), (1+x)(2+x)(3+x)]

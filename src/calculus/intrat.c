@@ -353,11 +353,47 @@ static Expr* intrat_primitive(Expr* p, Expr* x) {
         if (c) expr_free(c);
         return expr_copy(p);
     }
-    Expr* div = internal_divide(
-        (Expr*[]){expr_copy(p), c}, 2);
-    Expr* expanded = expr_expand(div);
-    expr_free(div);
-    return expanded;
+    if (expr_is_numeric_like(c)) {
+        Expr* div = internal_divide(
+            (Expr*[]){expr_copy(p), c}, 2);
+        Expr* expanded = expr_expand(div);
+        expr_free(div);
+        return expanded;
+    }
+    /* Polynomial content (in the other variables, e.g. the residue variable
+     * t of a subresultant).  Expand[p/c] does NOT divide: it distributes 1/c
+     * over the terms and leaves each one an uncancelled fraction, so the
+     * "primitive part" comes back a rational function in t.  Downstream
+     * (PrimitivePart_mod, LogToReal) then substitutes algebraic residue roots
+     * into those denominators, and Together/PolynomialGCD over the resulting
+     * nested-radical field stalls (issue #133: (x^2+x+1)/(x^4+1) hung).  The
+     * content divides every coefficient exactly, so divide coefficient-wise
+     * with Cancel and rebuild the polynomial in x. */
+    Expr* cl = eval_and_free(internal_coefficientlist(
+        (Expr*[]){expr_copy(p), expr_copy(x)}, 2));
+    if (!cl || !head_is(cl, SYM_List)) {
+        if (cl) expr_free(cl);
+        expr_free(c);
+        return expr_copy(p);
+    }
+    size_t n = cl->data.function.arg_count;
+    Expr** terms = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t k = 0; k < n; k++) {
+        Expr* q = eval_and_free(internal_cancel((Expr*[]){
+            internal_divide((Expr*[]){
+                expr_copy(cl->data.function.args[k]), expr_copy(c)}, 2)}, 1));
+        Expr* qe = expr_expand(q); expr_free(q);
+        terms[k] = internal_times((Expr*[]){qe,
+            internal_power((Expr*[]){expr_copy(x),
+                expr_new_integer((int64_t)k)}, 2)}, 2);
+    }
+    expr_free(cl);
+    expr_free(c);
+    Expr* sum = internal_plus(terms, n);
+    free(terms);
+    Expr* out = expr_expand(sum);
+    expr_free(sum);
+    return out;
 }
 
 /* monic[p, x] = p / lc[p, x], expanded.  When p is free of x we

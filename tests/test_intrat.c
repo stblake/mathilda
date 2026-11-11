@@ -756,6 +756,41 @@ static void test_number_field_repeated_residues(void) {
     assert_integral_pzq("((1 + Sqrt[3]) x^2 - 4 Sqrt[3] + 4)/((9 + 5 Sqrt[3]) x^4 + 24 x^2 - 80 Sqrt[3] + 144)");
 }
 
+/* Issue #133: Integrate[(x^2 + x + 1)/(x^4 + 1), x] hung.  The Rothstein-
+ * Trager resultant 256 t^4 + 96 t^2 + 1 is biquadratic; the subresultant S at
+ * degree 1 has the t-polynomial content 16 t^2 + 64 t^3, and intrat_primitive
+ * "divided" it out with Expand[p/c], which leaves every term an uncancelled
+ * fraction in t.  LogToReal then substituted the nested-radical residues
+ * +-I Sqrt[3/4 -+ 1/Sqrt[2]] into those denominators and Together/PolynomialGCD
+ * over that field never finished.  The content now divides exactly, and
+ * Sqrt[a + b Sqrt[c]] denests, so the answer is fast and lives in Q(Sqrt[2]).
+ * TimeConstrained keeps a regression a failure, not a hung suite. */
+static void test_issue133_biquadratic_resultant(void) {
+    const char* fs[] = {
+        "(x^2 + x + 1)/(x^4 + 1)",
+        "(x^2 + 3 x + 1)/(x^4 + 1)",
+        "(2 x^2 + x + 2)/(x^4 + 1)",
+        "(x^2 + 2 x + 1)/(x^4 + 1)",
+    };
+    for (size_t i = 0; i < sizeof(fs) / sizeof(fs[0]); i++) {
+        char buf[1024];
+        snprintf(buf, sizeof(buf),
+            "TimeConstrained[Module[{r = Integrate[%s, x]}, "
+            "FreeQ[r, Integrate | Indeterminate | RootSum] && FreeQ[r, Sqrt[_Plus]] "
+            "&& PossibleZeroQ[D[r, x] - (%s)]], 30, $Aborted]", fs[i], fs[i]);
+        Expr* e = parse_expression(buf);
+        Expr* res = evaluate(e);
+        char* got = expr_to_string(res);
+        if (strcmp(got, "True") != 0) printf("FAIL: issue #133 %s -> %s\n", fs[i], got);
+        ASSERT_STR_EQ(got, "True");
+        free(got); expr_free(e); expr_free(res);
+    }
+    run_eq("TimeConstrained[Integrate[(x^2 + x + 1)/(x^4 + 1), x, "
+           "Method -> \"BronsteinRational\"] === Integrate[(x^2 + x + 1)/(x^4 + 1), x], 30, $Aborted]",
+           "True");
+    run_eq("Integrate[(x^2 + x + 1)/(x^4 + 1), {x, -Infinity, Infinity}]", "Sqrt[2] Pi");
+}
+
 static void test_opaque_parameter_log_part(void) {
     assert_integral_correct("1/(c[2] - x^2)");
     assert_integral_correct("1/(C[2] - x^2)");
@@ -846,6 +881,7 @@ int main(void) {
     TEST(test_opaque_parameter_log_part);
     TEST(test_number_field_repeated_residues);
     TEST(test_square_through_symbolic_radical);
+    TEST(test_issue133_biquadratic_resultant);
 
     printf("All Phase 1-7 (full BronsteinRational pipeline) tests passed!\n");
     return 0;

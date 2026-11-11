@@ -265,6 +265,15 @@ Out[7]= -(2 x)/(k^(2/3) - x^2)
   generalises the sqrt-only combiner to any index. The same path serves `Cancel`;
   single-fraction relation-dependent cancellations (`(x^3-k)/(x-k^(1/3))`) still
   go through the relation-aware GCD path.
+- **Known deficiency: nested-radical coefficient fields (no termination).** A
+  rational function of `x` with coefficients in `Q(I, Sqrt[2], Sqrt[3/4 - 1/Sqrt[2]])`
+  (4639 leaves, value ≈ 1.4714 at `x = 1/3`) does not finish in `Together` or
+  `Simplify` within 20 s, with or without `Extension -> Automatic`. The time goes in
+  `cancel_recursive -> PolynomialGCD -> pseudo_rem` over the multi-atom ring, and the
+  field is really just `Q(I, Sqrt[2])`, because the inner radical denests. It is the
+  same root cause as `PolynomialGCD`'s nested-radical deficiency. Reproducer:
+  `tasks/polygcd_together_deficiencies/` (found via issue #133, where `Integrate` hung
+  on this input. Integrate is fixed separately and no longer builds it).
 
 ## RootReduce
 
