@@ -86,6 +86,11 @@ static bool af_is_int_exponent(const Expr* e) {
     return e->type == EXPR_INTEGER;
 }
 
+#ifdef USE_FLINT
+/* The number-field path's helpers (af_constant_radical, af_depth) are compiled
+ * only with FLINT: an unused static is an error under
+ * -Werror=unused-function in the no-FLINT builds (Windows, USE_MPFR=0). */
+
 /* A radical b^(p/q) whose base is a constant algebraic number. */
 static bool af_constant_radical(const Expr* e, int64_t* p, int64_t* q) {
     if (!head_is(e, SYM_Power) || e->data.function.arg_count != 2) return false;
@@ -111,6 +116,7 @@ static int af_depth(const Expr* e) {
     }
     return m;
 }
+#endif /* USE_FLINT */
 
 /* Does `e` hold a radical (a power with a non-integer rational exponent) or a
  * Root object? */
