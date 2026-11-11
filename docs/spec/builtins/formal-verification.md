@@ -273,3 +273,59 @@ Out[2]= False
 - `$LeanExecutable`: `Automatic`, or a path. `Automatic` tries, in order, the environment variable `MATHILDA_LEAN`, the newest `~/.elan/toolchains/*/bin/lean` (called directly, so no `lean-toolchain` file is needed), and `lean` on `PATH`. The first hit is remembered for the session.
 - `$LeanProject`: `None`, or the directory of a Lake project with Mathlib built, used for `Tier -> 1`. It defaults to the environment variable `MATHILDA_LEAN_PROJECT`.
 - `$LeanVersion`: the `lean --version` string, or `Missing["NotAvailable"]`.
+
+## Using Mathilda from Lean
+
+The other direction: the core-only Lake package in [`lean/`](../../../lean/README.md) gives Lean 4 tactics that ask Mathilda for a certificate and then check it in Lean. Mathilda is still the untrusted oracle. It only supplies data (cofactors, squares, a Pratt certificate), the tactic turns that data into ordinary proof steps, and the Lean kernel checks them. A wrong answer makes the tactic fail; it never proves a false goal. The package imports only `Lean` (no Mathlib), and its `Mathilda/Prelude.lean` is a byte-for-byte mirror of `src/internal/lean/Prelude.lean` (the `lean_prelude_sync` test enforces this).
+
+| Tactic / command | Goal | Mathilda supplies | Lean checks |
+|---|---|---|---|
+| `mathilda_linear_combination` | `a = b`, from hypotheses `hᵢ : lᵢ = rᵢ` of the same type | cofactors `cᵢ` with `a - b = Σ cᵢ (lᵢ - rᵢ)` | `have kᵢ : lᵢ - rᵢ = 0`, the identity by `grind`, `rw [kᵢ] at hc`, `grind` |
+| `mathilda_sos` | `0 ≤ p`, `p ≤ q` or `p ≥ q`, from hypotheses `0 ≤ gᵢ` | triples `(d, ℓ, i)` with `q - p = Σ d ℓ² gᵢ` (`g₀ = 1`) | hints `0 ≤ ℓ²` / `0 ≤ ℓ² gᵢ`, the identity by `grind`, `grind` |
+| `mathilda_prime` | `∃ c, Mathilda.PrattCertifies p c` | a flat Pratt certificate | `decide +kernel` (no axioms at all) |
+| `#mathilda "expr"` | — | the `LeanForm` of the evaluated `expr` | nothing: it is an information message and proves nothing |
+
+```lean
+import Mathilda
+
+example (x y : Rat) (h1 : x^2 + y^2 = 1) (h2 : x = y) : 2*y^2 = 1 := by
+  mathilda_linear_combination
+
+example (x y : Rat) : 2*x*y ≤ x^2 + y^2 := by
+  mathilda_sos
+
+example : ∃ c, Mathilda.PrattCertifies 274177 c := by
+  mathilda_prime
+
+#mathilda "Factor[x^10-1]"
+-- (x - 1) * (1 + x) * (1 - x + x ^ 2 - x ^ 3 + x ^ 4) * (1 + x + x ^ 2 + x ^ 3 + x ^ 4)
+```
+
+**Features**:
+- Goals over any type with `Lean.Grind.CommRing` (and `Lean.Grind.OrderedRing` for `mathilda_sos`): `Int`, `Rat`, and `ℝ` when the user's project has Mathlib. The serializer accepts `+ - * /`, unary `-`, `^` with a natural-number literal exponent, numerals, `Nat.cast` / `Int.cast`, and local variables; anything else is `mathilda: unsupported term …`. Hypotheses that do not serialize are skipped.
+- Local variables are sent as `v1, v2, …`. Mathilda answers with a closed lambda `fun (v1 v2 : _) => ([…] : List _)`, which Lean elaborates at the goal's type and applies to its own variables, so no textual renaming happens on the Lean side.
+- When Mathilda finds no certificate, the tactic fails with `mathilda: Mathilda found no certificate: <reason>`. When Lean rejects a certificate, it fails with `<tactic>: Lean rejected the certificate returned by Mathilda (…)`. Error recovery is switched off while the certificate is checked, so a failing step is an error, never a `sorry`.
+- Each call writes a temporary script, runs `Mathilda -file <script>` with a null stdin through `IO.Process.output`, and reads the answer between the sentinels `@@MATHILDA-BEGIN@@` / `@@MATHILDA-END@@`. A tactic call costs about 0.05 s of Mathilda time.
+- The Mathilda binary is the environment variable `MATHILDA_BIN`, else `set_option mathilda.path "…"`, else a `Mathilda` file in the working directory or its parent (the repository layout), else `Mathilda` on `PATH`. A binary that cannot be run gives an error that names these settings.
+
+### `` Lean`Oracle ``
+- `` Lean`Oracle[kind, args…] ``: the server side of the tactics. It returns a Lean term as a String, or `"MATHILDA-FAIL: <reason>"`. It needs no Lean installation.
+
+| Query | Answer |
+|---|---|
+| `` Lean`Oracle["LinearCombination", {a, b}, {{l1, r1}, …}, {v1, …}] `` | `fun (v1 … : _) => ([c1, …] : List _)` |
+| `` Lean`Oracle["SOS", {p, q}, {g1, …}, {v1, …}] `` | `fun (v1 … : _) => ([(d, ℓ, i), …] : List (_ × _ × Nat))` for `p ≤ q` |
+| `` Lean`Oracle["Pratt", p] `` | `[(q, a, [(r, k), …]), …]` |
+| `` Lean`Oracle["Eval", "input"] `` | the `LeanForm` of the evaluated input |
+
+The cofactors come from `PolynomialReduce`, else a degree-bounded ansatz (up to degree 4) solved with `LinearSolve`; the squares come from the same engine as `Certify[ForAll[vars, p >= q]]`; the Pratt certificate is the one `Certify[PrimeQ[p]]` uses. Coefficients are translated with no numeric type, so Lean elaborates them at the goal's type.
+
+```mathematica
+In[1]:= Lean`Oracle["LinearCombination", {2 v2^2, 1}, {{v1^2 + v2^2, 1}, {v1, v2}}, {v1, v2}]
+Out[1]= "fun (v1 v2 : _) => ([1, -v1 - v2] : List _)"
+
+In[2]:= Lean`Oracle["Pratt", 274179]
+Out[2]= "MATHILDA-FAIL: 274179 is not prime"
+```
+
+**Tests.** `lean_tactics_tests` (`tests/scripts/lean_tactics.sh`) builds the package and elaborates `lean/test/Tactics.lean` (every tactic, `#print axioms` of each, `#mathilda`, and false goals that must fail), `lean/test/Untrusted.lean` (run against `lean/test/bad_oracle.sh`, a fake Mathilda that returns wrong certificates: Lean rejects all three) and `lean/test/Missing.lean` (a missing binary). It is Skipped (exit 77) when no `lake` or no built `Mathilda` is found.

@@ -74,6 +74,15 @@ LeanExecutable::usage =
 LeanProject::usage =
   "LeanProject is an option of Certify and LeanVerify that overrides $LeanProject.";
 
+Oracle::usage =
+  "Oracle[kind, args...] is the server side of the Lean 4 tactics in the lean/ package \
+(mathilda_linear_combination, mathilda_sos, mathilda_prime, #mathilda). It answers with a \
+Lean term as a String: Oracle[\"LinearCombination\", {a, b}, {{l1, r1}, ...}, vars] gives \
+cofactors c with a - b == Sum c_i (l_i - r_i); Oracle[\"SOS\", {p, q}, {g1, ...}, vars] gives \
+(d, l, i) triples with q - p == Sum d l^2 g_i (g_0 = 1); Oracle[\"Pratt\", p] gives a flat \
+Pratt certificate; Oracle[\"Eval\", \"input\"] gives the LeanForm of the evaluated input. \
+A failure gives \"MATHILDA-FAIL: reason\". The answers are untrusted: Lean re-checks them.";
+
 KeepFiles::usage =
   "KeepFiles is an option of LeanVerify: True keeps the temporary .lean file \
 (its path is returned as \"SourceFile\").";
@@ -1500,6 +1509,67 @@ Format[ProofObject[a_?AssociationQ]] := SequenceForm @ StringJoin[
   ToString[a["Verified"]], " | ",
   If[a["Engine"] === "Lean", "Lean Tier " <> ToString[a["Tier"]], "Mathilda Heuristic"],
   " | ", timingText[a["Timing"]], "]"];
+
+(* ---------------------------------------------------------------------- *)
+(* Lean -> Mathilda oracle (server side of the lean/ package tactics)      *)
+(* ---------------------------------------------------------------------- *)
+
+(* Every answer is a Lean term as a String (or "MATHILDA-FAIL: reason").  The
+   variables are the v1, v2, ... the Lean serializer sends; a polynomial answer
+   is wrapped in fun (v1 ... : _) => (... : ty) so Lean applies it to its own
+   free variables (plan section 6.2).  Coefficients are translated with no
+   numeric type: Lean elaborates them at the goal's type.  Nothing here is
+   trusted; the tactic re-checks the certificate in the Lean kernel. *)
+
+oracleFail[why_String] := "MATHILDA-FAIL: " <> why;
+
+(* Strict text of an evaluated polynomial, no type ascription. *)
+oracleText[e_] := With[{x = e}, toLean[HoldForm[x], None, True, {}]];
+
+oracleLambda[vars_List, body_String, ty_String] := If[vars === {},
+  "(" <> body <> " : " <> ty <> ")",
+  "fun (" <> StringRiffle[ToString /@ vars, " "] <> " : _) => (" <> body <> " : " <> ty <> ")"];
+
+oracleVarsQ[vars_List] := AllTrue[vars, Head[#] === Symbol &];
+
+Oracle["LinearCombination", {a_, b_}, hs_List, vars_List] /;
+    oracleVarsQ[vars] && AllTrue[hs, MatchQ[#, {_, _}] &] :=
+  Module[{q = Expand[a - b], ps = Expand[#[[1]] - #[[2]]] & /@ hs, cs, txt},
+  If[!AllTrue[Append[ps, q], polyQ[#, vars] &],
+    Return[oracleFail["the goal and hypotheses must be polynomial in the variables"], Module]];
+  cs = Which[q === 0, ConstantArray[0, Length[ps]], ps === {}, $Failed,
+    True, cofactors[q, ps, vars]];
+  If[cs === $Failed, Return[oracleFail["the goal is not a polynomial combination of the \
+hypotheses (no cofactors up to degree 4)"], Module]];
+  txt = oracleText /@ cs;
+  If[!AllTrue[txt, StringQ], Return[oracleFail["cofactors not translatable to Lean"], Module]];
+  oracleLambda[vars, "[" <> StringRiffle[txt, ", "] <> "]", "List _"]];
+
+Oracle["SOS", {p_, q_}, gs_List, vars_List] /; oracleVarsQ[vars] :=
+  Module[{f = Expand[q - p], gx = Expand /@ gs, r, idx, txt},
+  If[!AllTrue[Append[gx, f], polyQ[#, vars] &],
+    Return[oracleFail["the goal and hypotheses must be polynomial in the variables"], Module]];
+  r = sosTerms[f, gx, vars];
+  If[r === $Failed, Return[oracleFail["no sum-of-squares certificate found"], Module]];
+  (* 0 for a plain square, i for the multiplier g_i, -1 if mult is neither. *)
+  idx[m_] := If[m === 1, 0,
+    First[FirstPosition[gx, _?(Expand[# - m] === 0 &), {-1}, {1}]]];
+  txt = ({oracleText[#[[1]]], oracleText[#[[2]]], idx[#[[3]]]} &) /@ First[r];
+  If[!AllTrue[Flatten[txt[[All, 1 ;; 2]]], StringQ] || MemberQ[txt[[All, 3]], -1],
+    Return[oracleFail["squares not translatable to Lean"], Module]];
+  oracleLambda[vars, "[" <> StringRiffle[("(" <> #[[1]] <> ", " <> #[[2]] <> ", " <>
+      ToString[#[[3]]] <> ")" &) /@ txt, ", "] <> "]", "List (_ \[Times] _ \[Times] Nat)"]];
+
+Oracle["Pratt", p_Integer] := Which[
+  p === 2, oracleFail["2 is the base of the Pratt scheme (PrattCertifies needs an odd prime)"],
+  !PrimeQ[p], oracleFail[ToString[p] <> " is not prime"],
+  True, With[{c = pratt[p]}, If[ListQ[c], prattText[c],
+    oracleFail["no Lucas witness found for " <> ToString[p]]]]];
+
+Oracle["Eval", s_String] := With[{r = Quiet[ToExpression[s]]},
+  If[r === $Failed, oracleFail["cannot parse " <> s], ToString[r, LeanForm]]];
+
+Oracle[args___] := oracleFail["unsupported query " <> ToString[{args}, InputForm]];
 
 End[];
 

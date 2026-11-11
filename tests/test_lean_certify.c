@@ -355,6 +355,39 @@ static void test_tier1_generation(void) {
                    "\"nomathlib\"]", "\"nomathlib\"", 0);
 }
 
+/* Lean`Oracle: the server side of the lean/ tactics (plan section 6). */
+static void test_oracle(void) {
+    check_str("Lean`Oracle[\"LinearCombination\", {2 v2^2, 1}, {{v1^2 + v2^2, 1}, {v1, v2}}, "
+              "{v1, v2}]",
+              "fun (v1 v2 : _) => ([1, -v1 - v2] : List _)");
+    /* Every cofactor list really is a certificate: a - b == Sum c_i (l_i - r_i). */
+    check_true("Expand[(2 v2^2 - 1) - {1, -v1 - v2} . {v1^2 + v2^2 - 1, v1 - v2}] === 0");
+    check_str("Lean`Oracle[\"LinearCombination\", {v1, 2}, {{v1, 1}}, {v1}]",
+              "MATHILDA-FAIL: the goal is not a polynomial combination of the hypotheses "
+              "(no cofactors up to degree 4)");
+    check_str("Lean`Oracle[\"LinearCombination\", {v1 + 1, 1 + v1}, {}, {v1}]",
+              "fun (v1 : _) => ([] : List _)");
+    check_str("Lean`Oracle[\"SOS\", {2 v1 v2, v1^2 + v2^2}, {}, {v1, v2}]",
+              "fun (v1 v2 : _) => ([(1, v1 - v2, 0)] : List (_ \xC3\x97 _ \xC3\x97 Nat))");
+    check_str("Lean`Oracle[\"SOS\", {0, v1^3}, {v1}, {v1}]",
+              "fun (v1 : _) => ([(1, v1, 1)] : List (_ \xC3\x97 _ \xC3\x97 Nat))");
+    check_str("Lean`Oracle[\"SOS\", {0, v1^4 - 2 v1^2 + 1 + v2^2}, {}, {v1, v2}]",
+              "fun (v1 v2 : _) => ([(1, 1 - v1 ^ 2, 0), (1, v2, 0)] : "
+              "List (_ \xC3\x97 _ \xC3\x97 Nat))");
+    check_str("Lean`Oracle[\"SOS\", {v1, 1}, {}, {v1}]",
+              "MATHILDA-FAIL: no sum-of-squares certificate found");
+    check_str("Lean`Oracle[\"Pratt\", 274177]",
+              "[(3, 2, [(2, 1)]), (7, 3, [(2, 1), (3, 1)]), (17, 3, [(2, 4)]), "
+              "(274177, 5, [(2, 8), (3, 2), (7, 1), (17, 1)])]");
+    check_str("Lean`Oracle[\"Pratt\", 274179]", "MATHILDA-FAIL: 274179 is not prime");
+    check_true("StringStartsQ[Lean`Oracle[\"Pratt\", 2], \"MATHILDA-FAIL:\"]");
+    check_str("Lean`Oracle[\"Eval\", \"Factor[x^4 - 1]\"]",
+              "(x - 1) * (1 + x) * (1 + x ^ 2)");
+    check_true("StringStartsQ[Lean`Oracle[\"Eval\", \"Factor[\"], \"MATHILDA-FAIL:\"]");
+    check_true("StringStartsQ[Lean`Oracle[\"Nope\", 1], \"MATHILDA-FAIL: unsupported query\"]");
+    assert_eval_eq("Context[Oracle]", "\"Lean`\"", 0);
+}
+
 static void test_attributes(void) {
     assert_eval_eq("Attributes[Certify]", "{HoldFirst, Protected}", 0);
     assert_eval_eq("Attributes[ProofObject]", "{HoldFirst, Protected}", 0);
@@ -380,6 +413,7 @@ int main(void) {
     TEST(test_pratt);
     TEST(test_sums);
     TEST(test_tier1_generation);
+    TEST(test_oracle);
     TEST(test_attributes);
     printf("All Lean certificate generation tests passed.\n");
     return 0;

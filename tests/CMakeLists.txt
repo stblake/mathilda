@@ -6365,6 +6365,19 @@ foreach(_lean_t lean_form lean_certify lean_verify lean_mathlib)
     add_test(NAME ${_lean_t}_tests COMMAND ${_lean_t}_tests)
 endforeach()
 set_tests_properties(lean_verify_tests lean_mathlib_tests PROPERTIES SKIP_RETURN_CODE 77)
+# Lean -> Mathilda: the core-only Lake package lean/ (tactics shelling out to the
+# built ../Mathilda binary).  Exits 77 (Skipped) when no lake or no binary is found.
+# RUN_SERIAL: it builds into lean/.lake.
+if(NOT WIN32)
+    add_test(NAME lean_tactics_tests
+             COMMAND sh ${CMAKE_SOURCE_DIR}/scripts/lean_tactics.sh ${CMAKE_SOURCE_DIR}/../Mathilda)
+    set_tests_properties(lean_tactics_tests PROPERTIES SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+endif()
+# The Lean-side prelude is a byte-for-byte mirror of the one inlined into Certify files.
+add_test(NAME lean_prelude_sync
+         COMMAND ${CMAKE_COMMAND} -E compare_files
+                 ${CMAKE_SOURCE_DIR}/../src/internal/lean/Prelude.lean
+                 ${CMAKE_SOURCE_DIR}/../lean/Mathilda/Prelude.lean)
 
 add_executable(time_constrained_tests test_time_constrained.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(time_constrained_tests PRIVATE ../src)
