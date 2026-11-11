@@ -6536,6 +6536,14 @@ add_executable(bronstein_rde_tests test_bronstein_rde.c $<TARGET_OBJECTS:mathild
 target_include_directories(bronstein_rde_tests PRIVATE ../src)
 add_test(NAME bronstein_rde_tests COMMAND bronstein_rde_tests)
 
+add_executable(bronstein_tower_tests test_bronstein_tower.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(bronstein_tower_tests PRIVATE ../src)
+add_test(NAME bronstein_tower_tests COMMAND bronstein_tower_tests)
+
+add_executable(bronstein_curve_tests test_bronstein_curve.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(bronstein_curve_tests PRIVATE ../src)
+add_test(NAME bronstein_curve_tests COMMAND bronstein_curve_tests)
+
 # Nightly: Integrate[..., Method -> "Trager" / "TragerKauers"] against FriCAS on
 # a corpus of simple-radical integrands (tools/trager_fricas_stress.py). Skipped
 # (exit 0 with a note) when fricas or python3 is not installed.

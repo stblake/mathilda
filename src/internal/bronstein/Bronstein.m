@@ -29,6 +29,9 @@
 (*                                                                            *)
 (*   Common.m      failure protocol (Trager's), options                       *)
 (*   RDE.m         tri-state Risch DE over the tower (Risch`RischDECertified) *)
+(*   Tower.m       surface kernels -> monomials, radical, shape, flattening   *)
+(*   Poly.m        k[theta]: content, normal/special split, derivation        *)
+(*   Curve.m       canonical form over k(theta), component curves Y^m = G     *)
 (*                                                                            *)
 (* Further stages (Tower, Poly, Curve, RDE, LimitedIntegrate, Hermite,        *)
 (* Special, Puiseux, Residues, Divisors, Specialize, LogPart, AlgebraicPart,  *)
@@ -47,6 +50,9 @@ $ContextPath = Append[$ContextPath, "Trager`Private`"];
 
 LoadModule["bronstein/Common.m"];
 LoadModule["bronstein/RDE.m"];
+LoadModule["bronstein/Tower.m"];
+LoadModule["bronstein/Poly.m"];
+LoadModule["bronstein/Curve.m"];
 
 End[];
 EndPackage[];

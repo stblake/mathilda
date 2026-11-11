@@ -484,7 +484,7 @@ antiderivative.** The generator is `tools/integral_generator/generate.m`, run by
   - (c) Audit `Risch`RischDE` paths and add `Risch`RischDECertified`.
   - (d) Confirm `Risch`SplitFactor`/`Derivation` on tower expressions with θ as a symbol.
   - Suites `field_fn`, `rde`. Commit, v+0.0001.
-- [ ] **2. Tower and Curve.** `Tower.m`, `Poly.m`, `Curve.m`, linear-radicand flattening.
+- [x] **2. Tower and Curve.** `Tower.m`, `Poly.m`, `Curve.m`, linear-radicand flattening.
   Suites `tower`, `curve`.
 - [ ] **3. Hermite and special places.** `Hermite.m`, `Special.m`, `LimitedIntegrate.m`.
   Suite `hermite_special`. [B] p.134 and p.158 close end to end through a temporary driver.
@@ -599,4 +599,29 @@ Notes for the next session:
   - weak-normalise `f` in `brRischDE` (in `.m`) before the call;
   - implement the limited-integration bound (`LimitedIntegrate.m`).
 - Next: Phase 2 (`Tower.m`, `Poly.m`, `Curve.m`).
+
+### 2026-11-12 — Phase 2 (session 1)
+
+Done:
+- **`Tower.m`** (`brTower`): kernels → symbols `brT<i>` innermost-first.
+  - Exp relations come from `Risch`ExpReducible`. Integer relations are
+    rewritten (an identity); a fractional one re-bases the exp monomial
+    (`brRebaseExp`, `E^b = (E^(b/q))^q`).
+  - A reducible log declines, because it is not an identity on every branch.
+  - The radical is found by `brDetectRadical`. The shape is one of Rational /
+    Transcendental / Algebraic / A / B; for A, θ is moved to the top, and a
+    monomial above θ that depends on it declines.
+  - `brFlattenLinear` handles a Möbius radicand in x.
+- **`Poly.m`**: content in k, `brSplit`/`brSplitSquarefree`/`brNormalQ`/`brSpecialQ`
+  (θ-free counts as special: `Risch`SpecialQ[1]` is False),
+  `brSpecialPlaces`.
+- **`Curve.m`**: `brCanonicalForm` over k(θ) (Trager's power-basis inverse),
+  `brComponentCurve` (Trager's `componentCurve` with θ as the curve variable,
+  plus the two constant-field-extension declines), `brCurve`
+  (`s = (1/m) DG/G`, content, Trager basis), `brReducedCurveQ`.
+- Suites: `bronstein_tower_tests` (107 assertions), `bronstein_curve_tests` (27).
+- Pitfall hit again: `Return` inside `With` inside `Module` only leaves the
+  `With`. Use `Which`/`If` values instead.
+- Deferred: the Kummer split for a compositum declines for now; plan it in
+  Phase 12.
 
