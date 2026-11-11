@@ -53,7 +53,7 @@ example (x y : Rat) : y ≤ x + 1001 := by
 -- ... and its file write did not happen.
 /-- info: false -/
 #guard_msgs in
-#eval System.FilePath.pathExists "/tmp/mathilda_untrusted_pwned"
+#eval System.FilePath.pathExists "mathilda_untrusted_pwned"
 
 /--
 error: mathilda_sos: Lean could not parse the certificate returned by Mathilda (the identifier `sorry` is not a variable v1, v2, …); Mathilda is an untrusted oracle and its answer is not used

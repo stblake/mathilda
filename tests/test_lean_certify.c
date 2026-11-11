@@ -128,7 +128,7 @@ static void test_options(void) {
               "by\n  intros\n  omega");
     check_true("Certify[x + 1 == 1 + x, Domain -> Rationals, Verify -> False][\"Domain\"] === "
                "Rationals");
-    check_true("Options[Certify][[1]] === (Engine -> \"Lean\")");
+    check_true("Options[Certify][[1]] === (\"Engine\" -> \"Lean\")");
     /* A symbol holding a claim has a value: refused (v0.6521), unless the
      * caller asks for the value explicitly with Evaluate. */
     assert_eval_eq("leanC = (x + 1)^2 == x^2 + 2 x + 1; Check[Certify[leanC, Verify -> False], "
@@ -409,38 +409,40 @@ static void test_tier1_generation(void) {
                    "\"nomathlib\"]", "\"nomathlib\"", 0);
 }
 
-/* Lean`Oracle: the server side of the lean/ tactics (plan section 6).  Answers
+/* Lean`Internal`Oracle: the server side of the lean/ tactics (plan section 6).  Answers
  * are plain data (numerals, v<i>, + - * / ^, lists, tuples), which the Lean
  * side parses with its own parser and never elaborates as Lean syntax. */
 static void test_oracle(void) {
-    check_str("Lean`Oracle[\"LinearCombination\", {2 v2^2, 1}, {{v1^2 + v2^2, 1}, {v1, v2}}, "
+    check_str("Lean`Internal`Oracle[\"LinearCombination\", {2 v2^2, 1}, {{v1^2 + v2^2, 1}, {v1, v2}}, "
               "{v1, v2}]",
               "[1, -v1 - v2]");
     /* Every cofactor list really is a certificate: a - b == Sum c_i (l_i - r_i). */
     check_true("Expand[(2 v2^2 - 1) - {1, -v1 - v2} . {v1^2 + v2^2 - 1, v1 - v2}] === 0");
-    check_str("Lean`Oracle[\"LinearCombination\", {v1, 2}, {{v1, 1}}, {v1}]",
+    check_str("Lean`Internal`Oracle[\"LinearCombination\", {v1, 2}, {{v1, 1}}, {v1}]",
               "MATHILDA-FAIL: the goal is not a polynomial combination of the hypotheses "
               "(no cofactors up to degree 4)");
-    check_str("Lean`Oracle[\"LinearCombination\", {v1 + 1, 1 + v1}, {}, {v1}]",
+    check_str("Lean`Internal`Oracle[\"LinearCombination\", {v1 + 1, 1 + v1}, {}, {v1}]",
               "[]");
-    check_str("Lean`Oracle[\"SOS\", {2 v1 v2, v1^2 + v2^2}, {}, {v1, v2}]",
+    check_str("Lean`Internal`Oracle[\"SOS\", {2 v1 v2, v1^2 + v2^2}, {}, {v1, v2}]",
               "[(1, v1 - v2, 0)]");
-    check_str("Lean`Oracle[\"SOS\", {0, v1^3}, {v1}, {v1}]",
+    check_str("Lean`Internal`Oracle[\"SOS\", {0, v1^3}, {v1}, {v1}]",
               "[(1, v1, 1)]");
-    check_str("Lean`Oracle[\"SOS\", {0, v1^4 - 2 v1^2 + 1 + v2^2}, {}, {v1, v2}]",
+    check_str("Lean`Internal`Oracle[\"SOS\", {0, v1^4 - 2 v1^2 + 1 + v2^2}, {}, {v1, v2}]",
               "[(1, 1 - v1 ^ 2, 0), (1, v2, 0)]");
-    check_str("Lean`Oracle[\"SOS\", {v1, 1}, {}, {v1}]",
+    check_str("Lean`Internal`Oracle[\"SOS\", {v1, 1}, {}, {v1}]",
               "MATHILDA-FAIL: no sum-of-squares certificate found");
-    check_str("Lean`Oracle[\"Pratt\", 274177]",
+    check_str("Lean`Internal`Oracle[\"Pratt\", 274177]",
               "[(3, 2, [(2, 1)]), (7, 3, [(2, 1), (3, 1)]), (17, 3, [(2, 4)]), "
               "(274177, 5, [(2, 8), (3, 2), (7, 1), (17, 1)])]");
-    check_str("Lean`Oracle[\"Pratt\", 274179]", "MATHILDA-FAIL: 274179 is not prime");
-    check_true("StringStartsQ[Lean`Oracle[\"Pratt\", 2], \"MATHILDA-FAIL:\"]");
-    check_str("Lean`Oracle[\"Eval\", \"Factor[x^4 - 1]\"]",
+    check_str("Lean`Internal`Oracle[\"Pratt\", 274179]", "MATHILDA-FAIL: 274179 is not prime");
+    check_true("StringStartsQ[Lean`Internal`Oracle[\"Pratt\", 2], \"MATHILDA-FAIL:\"]");
+    check_str("Lean`Internal`Oracle[\"Eval\", \"Factor[x^4 - 1]\"]",
               "(x - 1) * (1 + x) * (1 + x ^ 2)");
-    check_true("StringStartsQ[Lean`Oracle[\"Eval\", \"Factor[\"], \"MATHILDA-FAIL:\"]");
-    check_true("StringStartsQ[Lean`Oracle[\"Nope\", 1], \"MATHILDA-FAIL: unsupported query\"]");
-    assert_eval_eq("Context[Oracle]", "\"Lean`\"", 0);
+    check_true("StringStartsQ[Lean`Internal`Oracle[\"Eval\", \"Factor[\"], \"MATHILDA-FAIL:\"]");
+    check_true("StringStartsQ[Lean`Internal`Oracle[\"Nope\", 1], \"MATHILDA-FAIL: unsupported query\"]");
+    /* The oracle is reached by its full name only: Lean`Internal` is not on
+     * $ContextPath, so the short name Oracle stays the user's. */
+    assert_eval_eq("Context[Oracle]", "\"Global`\"", 0);
 }
 
 /* Soundness hardening (generation side; the Lean verdicts are in
@@ -1049,6 +1051,52 @@ static void test_review6_assumptions(void) {
                "SetOptions[Certify, Assumptions -> {}]; leanD8 === ProofObject");
 }
 
+/* Refusal messages name what was written (v0.6523).  Sum[t, {k, n}] is read
+ * as Sum[t, {k, 1, n}], as Sum defines it. */
+static void test_refusals(void) {
+    test_mute_messages();
+    check_true("leanSn = Certify[Sum[k^2, {k, n}], Verify -> False]; "
+               "leanSn[\"Kind\"] === \"ClosedFormSum\" && "
+               "leanSn[\"Certificate\"][\"LowerLimit\"] === 1");
+    check_true("Certify[Sum[k^2, {k, n}] == n (n + 1) (2 n + 1)/6, Verify -> False]"
+               "[\"Certificate\"][\"PreCheck\"] === True");
+    assert_eval_eq("Check[Certify[Integrate[1/Sqrt[x], x], Verify -> False], \"fracpow\"]",
+                   "\"fracpow\"", 0);
+    check_true("Certify[Solve[x^3 + x == 0, x, Reals], Verify -> False] === $Failed");
+    check_true("Certify[x == x, Domain -> \"Complexes\", Verify -> False] === $Failed");
+}
+
+/* Option names (v0.6523): Certify's options are matched by name, so the
+ * package creates no Engine / Tier / Domain / Verify / ... symbols of its own
+ * (in Lean`, on $ContextPath, they captured the user's symbols, which then
+ * survived ClearAll["Global`*"]).  A symbol or a string of that name works;
+ * an unknown name, or a name symbol that has a value, is refused.  Runs last:
+ * it clears Global`. */
+static void test_option_names(void) {
+    test_mute_messages();
+    check_true("Context /@ {Engine, Tier, Domain, Verify, KeepFiles, LeanExecutable, "
+               "LeanProject, Oracle} === ConstantArray[\"Global`\", 8]");
+    check_true("Sort[Names[\"Lean`*\"]] === Sort[{\"$LeanExecutable\", \"$LeanProject\", \"$LeanVersion\", "
+               "\"Certify\", \"LeanVerify\", \"ProofObject\"}]");
+    check_true("Certify[x + 1 == 1 + x, Engine -> \"Mathilda\"][\"Engine\"] === \"Mathilda\"");
+    check_true("Certify[x + 1 == 1 + x, \"Engine\" -> \"Mathilda\"][\"Engine\"] === \"Mathilda\"");
+    check_true("Certify[x + 1 == 1 + x, Verify -> False][\"Verified\"] === Missing[\"NotChecked\"]");
+    check_true("Certify[x + 1 == 1 + x, \"Verify\" -> False, \"Domain\" -> Rationals]"
+               "[\"Domain\"] === Rationals");
+    assert_eval_eq("Check[Certify[x == x, Teir -> 1, Verify -> False], \"optx\"]", "\"optx\"", 0);
+    assert_eval_eq("Check[LeanVerify[\"theorem t : True := trivial\", Keepfiles -> True], "
+                   "\"optx\"]", "\"optx\"", 0);
+    /* A name symbol with a value: refused while the option is still held. */
+    assert_eval_eq("Engine = \"zzz\"; leanE = Check[Certify[x == x, Engine -> \"Lean\", "
+                   "Verify -> False], \"optvalue\"]; Clear[Engine]; leanE", "\"optvalue\"", 0);
+    check_true("Engine = \"zzz\"; leanE = Certify[x == x, \"Engine\" -> \"Mathilda\"]"
+               "[\"Engine\"]; Clear[Engine]; leanE === \"Mathilda\"");
+    /* The user's definitions of these names are ordinary Global` ones. */
+    assert_eval_eq("Domain = 7; Verify[x_] := x + 1; Tier = 2; ClearAll[\"Global`*\"]; "
+                   "{Domain, Verify[1], Tier}", "{Domain, Verify[1], Tier}", 0);
+    check_true("Certify[x + 1 == 1 + x, Engine -> \"Mathilda\"][\"Engine\"] === \"Mathilda\"");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1083,6 +1131,8 @@ int main(void) {
     TEST(test_review6_proofobject);
     TEST(test_review6_trusted);
     TEST(test_review6_assumptions);
+    TEST(test_refusals);
+    TEST(test_option_names);
     printf("All Lean certificate generation tests passed.\n");
     return 0;
 }

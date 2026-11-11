@@ -223,10 +223,10 @@ Print["    example : ∃ c, Mathilda.PrattCertifies 274177 c := by"];
 Print["      mathilda_prime"];
 Print["    #mathilda \"Factor[x^10-1]\""];
 Print[""];
-Print["    The oracle answers (Lean`Oracle) for the three tactics above:"];
-Print["      ", Lean`Oracle["LinearCombination", {2 v2^2, 1}, {{v1^2 + v2^2, 1}, {v1, v2}}, {v1, v2}]];
-Print["      ", Lean`Oracle["SOS", {2 v1 v2, v1^2 + v2^2}, {}, {v1, v2}]];
-Print["      ", Lean`Oracle["Pratt", 274177]];
+Print["    The oracle answers (Lean`Internal`Oracle) for the three tactics above:"];
+Print["      ", Lean`Internal`Oracle["LinearCombination", {2 v2^2, 1}, {{v1^2 + v2^2, 1}, {v1, v2}}, {v1, v2}]];
+Print["      ", Lean`Internal`Oracle["SOS", {2 v1 v2, v1^2 + v2^2}, {}, {v1, v2}]];
+Print["      ", Lean`Internal`Oracle["Pratt", 274177]];
 Print["    Running: sh tests/scripts/lean_tactics.sh ./Mathilda"];
 t20 = AbsoluteTiming[tac = Lean`Internal`RunProcess[{"sh",
      FileNameJoin[{$demoRoot, "tests", "scripts", "lean_tactics.sh"}],

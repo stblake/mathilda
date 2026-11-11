@@ -85,7 +85,7 @@ the `set_option` at the top of the file.
    `v1, v2, …`. A hypothesis that does not serialize is skipped. A goal that
    does not serialize is an error.
 2. `Mathilda.Oracle.callMathilda` writes a temporary script
-   `Print["@@MATHILDA-BEGIN@@"]; Print[Lean`Oracle[…]]; Print["@@MATHILDA-END@@"]`,
+   `Print["@@MATHILDA-BEGIN@@"]; Print[Lean`Internal`Oracle[…]]; Print["@@MATHILDA-END@@"]`,
    runs `Mathilda -file <script>` with a null stdin, takes the text between the
    sentinels, and deletes the script. A call takes about 0.05 s.
 3. Mathilda answers with data, for example `[1, -v1 - v2]`.

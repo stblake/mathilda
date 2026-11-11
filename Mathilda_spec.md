@@ -64,7 +64,7 @@ Each category lives in [`docs/spec/builtins/`](docs/spec/builtins/):
 | LAPACK context (`` LAPACK`dgesv ``, `` LAPACK`dgeqrf ``, `` LAPACK`dgesdd ``, `` LAPACK`dgeev ``, ...) — direct access to the LAPACK drivers | [`builtins/lapack.md`](docs/spec/builtins/lapack.md) |
 | Image processing (`Image`, `ImageQ`, `ImageDimensions`, `ImageChannels`, `ImageType`, `ImageData`) — the raster representation and its accessors | [`builtins/image-processing.md`](docs/spec/builtins/image-processing.md) |
 | Experimental context (`` Experimental`FeynCalc`DiracTr ``) — native C kernels matching a reference Wolfram-language definition exactly | [`builtins/experimental.md`](docs/spec/builtins/experimental.md) |
-| Formal verification (`LeanForm`, `Certify`, `ProofObject`, `LeanVerify`, `$LeanExecutable`, `$LeanProject`, `$LeanVersion`, `` Lean`Oracle ``) — Lean 4 certificates for Mathilda's results, judged by the Lean kernel, and the Lean-side tactics in `lean/` | [`builtins/formal-verification.md`](docs/spec/builtins/formal-verification.md) |
+| Formal verification (`LeanForm`, `Certify`, `ProofObject`, `LeanVerify`, `$LeanExecutable`, `$LeanProject`, `$LeanVersion`, `` Lean`Internal`Oracle ``) — Lean 4 certificates for Mathilda's results, judged by the Lean kernel, and the Lean-side tactics in `lean/` | [`builtins/formal-verification.md`](docs/spec/builtins/formal-verification.md) |
 
 ## Changelog
 

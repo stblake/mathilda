@@ -102,26 +102,26 @@ static char* lean_mstring(const char* s) {
     return r;
 }
 
-/* /tmp/rv4/x1.lean */
+/* reproducer x1 */
 static const char* const REVIEW4_X1 =
     "theorem foo : True := trivial\n"
     "  1'\"'\n"
     "#eval IO.FS.writeFile (String.mk [(Char.ofNat 47),(Char.ofNat 100),(Char.ofNat 101),(Char.ofNat 118),(Char.ofNat 47),(Char.ofNat 110),(Char.ofNat 117),(Char.ofNat 108),(Char.ofNat 108)]) (toString 42)\n"
     "-- \"\n";
-/* /tmp/rv4/x2.lean */
+/* reproducer x2 */
 static const char* const REVIEW4_X2 =
     "theorem warm : True := (fun (_ : Char) \xE2\x86\xA6 trivial) ((fun (_ : Nat) \xE2\x86\xA6'\"') 0)\n"
     "#eval show IO Unit from do let o \xE2\x86\x90 IO.Process.output {cmd := String.ofList ['/','u','s','r','/','b','i','n','/','t','r','u','e'], args := #[]}; IO.print o.stdout; (\xE2\x86\x90 IO.getStdout).flush; IO.Process.exit 0\n"
     "-- \"\n"
     "theorem bad : False := by\n"
     "  decide\n";
-/* /tmp/rv4/x3.lean */
+/* reproducer x3 */
 static const char* const REVIEW4_X3 =
     "theorem t : True := trivial\n"
     "  x!'\"' \"\n"
     "#eval IO.FS.writeFile (System.FilePath.mk (String.ofList ['/','d','e','v','/','n','u','l','l'])) (toString 3)\n"
     "-- \"\n";
-/* /tmp/rv4/x4.lean */
+/* reproducer x4 */
 static const char* const REVIEW4_X4 =
     "theorem t : True := trivial\n"
     "/--/ \"\n"

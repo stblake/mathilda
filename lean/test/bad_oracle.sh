@@ -11,7 +11,7 @@ case "$q" in
     # Lean code (the reviewer's by_elab exploit plus a file write): must never run.
     cat <<'ANS'
 (by_elab do
-   IO.FS.writeFile "/tmp/mathilda_untrusted_pwned" "x"
+   IO.FS.writeFile "mathilda_untrusted_pwned" "x"
    let ty ← Lean.Elab.Term.elabTerm (← `(∀ a b : Rat, a - b = 0)) none
    Lean.withOptions (fun o => o.setBool `debug.skipKernelTC true) <|
      Lean.addDecl (.thmDecl { name := `bogus.evil, levelParams := [], type := ty, value := Lean.mkConst ``True.intro })

@@ -53,6 +53,24 @@ static void test_tier1_negative(void) {
     check_true("leanT1N[\"Verified\"] === False");
 }
 
+/* A Tier 1 statement whose hypothesis d != 0 is identically false on R under
+ * Real.log (Real.log x = log |x|) would be vacuous, so it is refused: before
+ * v0.6523, x^2/2 + 1/(Log[x^2] - 2 Log[x]) was "Verified" as an antiderivative
+ * of x.  A hypothesis with Log that has a witness point is accepted, with the
+ * numeric witness check listed as a trusted step. */
+static void test_tier1_vacuous_hypotheses(void) {
+    test_mute_messages();
+    check_true("Certify[Integrate[x, x] == x^2/2 + 1/(Log[x^2] - 2 Log[x]), Tier -> 1] === $Failed");
+    check_true("Certify[Integrate[x, x] == x^3 + 1/(Log[x^2] - 2 Log[x]), Tier -> 1] === $Failed");
+    check_true("Certify[Integrate[x, x] == x^2/2 + 1/(Log[x - 3] - Log[3 - x]), Tier -> 1] === $Failed");
+    check_true("Check[Certify[Integrate[x, x] == x^2/2 + 1/(Log[x^2] - 2 Log[x]), Tier -> 1], "
+               "\"vac\", Certify::vacuous] === \"vac\"");
+    assert_eval_eq("leanT1W = Certify[Integrate[x, x] == x^2/2 + 1/Log[x^2 + 1], Tier -> 1, "
+                   "Verify -> False]; Null", "Null", 0);
+    check_true("leanT1W[\"Certificate\"][\"HypothesisWitness\"] === 3");
+    check_true("AnyTrue[leanT1W[\"TrustedSteps\"], StringContainsQ[#, \"Real.log semantics\"] &]");
+}
+
 /* Third review (v0.6520): with a project, LeanVerify accepts `import Mathlib`
  * (and `lemma`), and still refuses every other import. */
 static void test_review3_mathlib_grammar(void) {
@@ -107,6 +125,7 @@ int main(void) {
     }
     TEST(test_tier1_antiderivatives);
     TEST(test_tier1_negative);
+    TEST(test_tier1_vacuous_hypotheses);
     TEST(test_review3_mathlib_grammar);
     TEST(test_review4_mathlib_surface);
     printf("All Lean Tier 1 (Mathlib) tests passed.\n");

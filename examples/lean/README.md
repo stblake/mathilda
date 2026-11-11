@@ -82,7 +82,10 @@ With a Mathlib project configured, row 2 reads:
 ## Trust model
 
 - Mathilda is an **untrusted oracle**, and the Lean kernel is the **trusted checker**. A bug
-  in Mathilda can make a certificate fail. It cannot make Lean accept a false theorem.
+  in Mathilda can make a certificate fail. It cannot make Lean accept a false theorem; it
+  can make the theorem differ from the claim only through the listed `"TrustedSteps"` and
+  Mathilda's arithmetic normalisation of the claim (Plus / Times / Power canonical form,
+  applied before translation). `"LeanTheorem"` shows exactly what Lean proved.
 - `"Verified" -> True` means: Lean exited 0, reported no error and no `sorry`, the
   theorem's `#print axioms` lists only `propext`, `Classical.choice` and `Quot.sound`
   (so `native_decide` does not count), and a kernel replay of the compiled file in a

@@ -60,8 +60,9 @@ run() {
     fi
 }
 run "tactics close their goals" "$BIN" test/Tactics.lean
-# Untrusted.lean checks that a hostile answer's file write never happened.
-rm -f /tmp/mathilda_untrusted_pwned
+# Untrusted.lean checks that a hostile answer's file write (relative to the
+# package directory, the working directory here) never happened.
+rm -f mathilda_untrusted_pwned
 run "wrong certificates are rejected" "$PKG/test/bad_oracle.sh" test/Untrusted.lean
 run "missing binary is a clear error" /nonexistent/Mathilda test/Missing.lean
 exit $fail

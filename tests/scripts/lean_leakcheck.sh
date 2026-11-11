@@ -1,14 +1,14 @@
 #!/bin/sh
 # lean_leakcheck.sh -- leak gate for the Lean 4 integration (LeanForm, the
 # strict translator, every Certify generator, Reduce`SOSCertificate,
-# Lean`Oracle, and the Lean runner).
+# Lean`Internal`Oracle, and the Lean runner).
 #
 # The C test binaries cannot detect a leak on their own, so this is the real
 # gate.  It drives, in loops:
 #   - LeanForm / ToString[_, LeanForm] and Lean`Internal`ToLean (with refusals),
 #   - every certificate generator with Verify -> False (no Lean needed),
 #   - Reduce`SOSCertificate (success and $Failed),
-#   - Lean`Oracle, all four query kinds plus their failure answers,
+#   - Lean`Internal`Oracle, all four query kinds plus their failure answers,
 # and, when a Lean executable is found ($LeanVersion is a string), also
 #   - real Certify runs (True and a refuted False), a batch, cache hits,
 #     user-Method items (one file each), LeanVerify (accepted, sorry,
@@ -92,17 +92,17 @@ Do[Reduce`SOSCertificate[x^4 + y^4 - x^2 y^2 + 1, {}, {x, y}];
    Reduce`SOSCertificate[x^4 - 2 x^2 + 1 + y^2, {}, {x, y}];
    Reduce`SOSCertificate[x^2 - 1, {}, {x}], {3}];
 
-(* --- Lean`Oracle: all four kinds and their failures --- *)
-Do[Lean`Oracle["LinearCombination", {2 v2^2, 1}, {{v1^2 + v2^2, 1}, {v1, v2}}, {v1, v2}];
-   Lean`Oracle["LinearCombination", {v1, 2}, {{v1, 1}}, {v1}];
-   Lean`Oracle["SOS", {2 v1 v2, v1^2 + v2^2}, {}, {v1, v2}];
-   Lean`Oracle["SOS", {0, v1^3}, {v1}, {v1}];
-   Lean`Oracle["SOS", {v1, 1}, {}, {v1}];
-   Lean`Oracle["Pratt", 274177];
-   Lean`Oracle["Pratt", 274179];
-   Lean`Oracle["Eval", "Factor[x^10 - 1]"];
-   Lean`Oracle["Eval", "Factor["];
-   Lean`Oracle["Nope", 1], {10}];
+(* --- Lean`Internal`Oracle: all four kinds and their failures --- *)
+Do[Lean`Internal`Oracle["LinearCombination", {2 v2^2, 1}, {{v1^2 + v2^2, 1}, {v1, v2}}, {v1, v2}];
+   Lean`Internal`Oracle["LinearCombination", {v1, 2}, {{v1, 1}}, {v1}];
+   Lean`Internal`Oracle["SOS", {2 v1 v2, v1^2 + v2^2}, {}, {v1, v2}];
+   Lean`Internal`Oracle["SOS", {0, v1^3}, {v1}, {v1}];
+   Lean`Internal`Oracle["SOS", {v1, 1}, {}, {v1}];
+   Lean`Internal`Oracle["Pratt", 274177];
+   Lean`Internal`Oracle["Pratt", 274179];
+   Lean`Internal`Oracle["Eval", "Factor[x^10 - 1]"];
+   Lean`Internal`Oracle["Eval", "Factor["];
+   Lean`Internal`Oracle["Nope", 1], {10}];
 
 (* --- v0.6520: the source check, claim rewriting, real-variable rule --- *)
 Quiet[Do[
@@ -156,6 +156,21 @@ Quiet[Do[
    SetOptions[Certify, Assumptions -> {}];
    ProofObject[<|"Verified" -> True|>]["Verified"];
    Certify[Sum[k, {k, 1, n}], Verify -> False]["TrustedSteps"], {3}]];
+
+(* --- v0.6523: option names by text, unknown / valued option names, Sum
+   {k, n}, refusal messages, Tier 1 witness and vacuous hypotheses --- *)
+Quiet[Do[
+   Certify[x + 1 == 1 + x, "Engine" -> "Mathilda"];
+   Certify[x + 1 == 1 + x, Engine -> "Mathilda", "Verify" -> False];
+   Certify[x == x, Teir -> 1, Verify -> False];
+   LeanVerify["theorem t : True := trivial", Keepfiles -> True];
+   leakE = "zzz"; Certify[x == x, leakE -> "Lean", Verify -> False]; Clear[leakE];
+   Certify[Sum[k^2, {k, n}], Verify -> False];
+   Certify[Integrate[1/Sqrt[x], x], Verify -> False];
+   Certify[Solve[x^3 + x == 0, x, Reals], Verify -> False];
+   Certify[x == x, Domain -> "Complexes", Verify -> False];
+   Certify[Integrate[x, x] == x^2/2 + 1/(Log[x^2] - 2 Log[x]), Tier -> 1, Verify -> False];
+   Certify[Integrate[x, x] == x^2/2 + 1/Log[x^2 + 1], Tier -> 1, Verify -> False], {3}]];
 
 (* --- real Lean runs, when Lean is installed --- *)
 If[StringQ[$LeanVersion],

@@ -29,7 +29,12 @@ kernel; Certify[a == b] certifies the claim a == b, Certify[Implies[p1 == q1 && 
 p == q]] an ideal membership and Certify[ForAll[vars, p >= q]] a nonnegativity (sum of \
 squares). Tier -> 1 gives Mathlib HasDerivAt antiderivatives. Certify[{c1, c2, ...}] \
 certifies a batch in one Lean run. The result is a ProofObject whose \"Verified\" property \
-is True only when Lean accepted the theorem.";
+is True only when Lean accepted the theorem. Options (see Options[Certify]; a name is matched \
+by its text, so \"Engine\" -> v and Engine -> v are the same): \"Engine\" (\"Lean\" or \
+\"Mathilda\", a heuristic check whose \"Verified\" is never True), \"Tier\" (0, 1 or \
+Automatic), \"Domain\" (Automatic, Complexes, Reals, Rationals, Integers), Method (a tactic \
+script), TimeConstraint, Assumptions, \"Verify\" (False: generate the source only), \
+\"LeanExecutable\", \"LeanProject\".";
 
 ProofObject::usage =
   "ProofObject[<|...|>] is a Lean 4 certificate produced by Certify; obj[\"prop\"] gives a \
@@ -45,7 +50,9 @@ for every declaration (examples are named so they are checked too). Only sources
 user-defined code are run: no imports (core Lean) or only import Mathlib with a project, and \
 only theorem / example / section / variable / universe / numeric \
 set_option commands; anything else (def, instance, macro, attribute, #eval, native_decide, \
-sorry, ...) is refused unrun.";
+sorry, ...) is refused unrun. Options: \"LeanExecutable\", \"LeanProject\" (override \
+$LeanExecutable / $LeanProject) and \"KeepFiles\" (True keeps the .lean file, returned as \
+\"SourceFile\").";
 
 $LeanExecutable::usage =
   "$LeanExecutable is the Lean 4 executable used by Certify and LeanVerify: Automatic \
@@ -58,44 +65,6 @@ Tier -> 1 certificates. It defaults to the environment variable MATHILDA_LEAN_PR
 $LeanVersion::usage =
   "$LeanVersion gives the version string of the Lean executable, or \
 Missing[\"NotAvailable\"] when none is found.";
-
-Engine::usage =
-  "Engine is an option of Certify and ProofObject: \"Lean\" (the Lean kernel judges) or \
-\"Mathilda\" (a heuristic PossibleZeroQ / Simplify check, for contrast; its \"Verified\" is \
-Missing[\"Heuristic\", True | False], never True).";
-
-Tier::usage =
-  "Tier is an option of Certify: 0 (core Lean), 1 (Mathlib, needs $LeanProject) or \
-Automatic.";
-
-Domain::usage =
-  "Domain is an option of Certify for identity claims: Automatic (Mathematica's default, \
-complex variables), Complexes (every field of characteristic 0), Reals (every ordered \
-field), Rationals (Rat) or Integers (Int); any other value is refused (Certify::domain).";
-
-Verify::usage =
-  "Verify is an option of Certify: False generates the Lean source without running Lean \
-(\"Verified\" -> Missing[\"NotChecked\"]).";
-
-LeanExecutable::usage =
-  "LeanExecutable is an option of Certify and LeanVerify that overrides $LeanExecutable.";
-
-LeanProject::usage =
-  "LeanProject is an option of Certify and LeanVerify that overrides $LeanProject.";
-
-Oracle::usage =
-  "Oracle[kind, args...] is the server side of the Lean 4 tactics in the lean/ package \
-(mathilda_linear_combination, mathilda_sos, mathilda_prime, #mathilda). It answers with \
-plain data as a String (numerals, v1, v2, ..., + - * / ^, lists and tuples), which the Lean \
-side parses itself and never elaborates as Lean syntax: Oracle[\"LinearCombination\", {a, b}, {{l1, r1}, ...}, vars] gives \
-cofactors c with a - b == Sum c_i (l_i - r_i); Oracle[\"SOS\", {p, q}, {g1, ...}, vars] gives \
-(d, l, i) triples with q - p == Sum d l^2 g_i (g_0 = 1); Oracle[\"Pratt\", p] gives a flat \
-Pratt certificate; Oracle[\"Eval\", \"input\"] gives the LeanForm of the evaluated input. \
-A failure gives \"MATHILDA-FAIL: reason\". The answers are untrusted: Lean re-checks them.";
-
-KeepFiles::usage =
-  "KeepFiles is an option of LeanVerify: True keeps the temporary .lean file \
-(its path is returned as \"SourceFile\").";
 
 Begin["`Private`"];
 
@@ -125,6 +94,11 @@ Certify::element = "the assumption `1` cannot be stated for Domain -> `2`; only 
 Certify::optdefault = "the default Assumptions -> `1` was set with SetOptions[Certify, ...], which evaluated it before Certify could check it; pass Assumptions in the call instead, or reset it with SetOptions[Certify, Assumptions -> {}]";
 Certify::antideriv = "`1` is certified as `2`: the claimed F is an antiderivative of f; the equation itself holds only up to an additive locally constant term (see \"TrustedSteps\")";
 Certify::realvars = "the claim `1` has order relations, but `2` is not constrained to be real; add Element[`2`, Reals] (or an order relation on it) to the assumptions";
+Certify::optvalue = "the option name `1` is a symbol with the value `2`, which would replace the name; Clear[`1`] or write the name as the string \"`3`\"";
+Certify::optx = "unknown option `1`; the options of Certify are `2`";
+LeanVerify::optx = "unknown option `1`; the options of LeanVerify are `2`";
+Certify::fracpow = "no Lean certificate is available for `1`: the integrand has a fractional power of the variable, and antiderivatives are certified only for integrands in Q(x)";
+Certify::vacuous = "no Lean certificate is available for `1`: the hypothesis `2` != 0 of the Tier 1 statement is zero at every test point under Lean's Real.log (Real.log x = log |x|), so the theorem could be vacuous";
 Certify::optignored = "`1` is ignored for a `2` certificate (only identity claims read Domain, Assumptions and Method)";
 
 (* ---------------------------------------------------------------------- *)
@@ -302,13 +276,20 @@ anchoredAxioms[r_, name_, line_] := With[{rep = Select[Lookup[r, "AxiomReports",
      #["Theorem"] === name && #["Line"] === line &]},
   If[Length[rep] === 1, rep[[1]]["Axioms"], Missing["NotReported"]]];
 
-Options[LeanVerify] = {LeanExecutable -> Automatic, LeanProject -> Automatic,
-  KeepFiles -> False};
+(* Option names are strings (v0.6523): OptionValue matches a name by its
+   text, so the user's Engine -> v (a Global` symbol) and "Engine" -> v both
+   work, and the package creates no option-name symbols of its own -- a
+   symbol in Lean` would sit on $ContextPath and capture the user's (or a
+   later package's) Engine, Tier, Domain, ... .  Method, TimeConstraint and
+   Assumptions are System` symbols. *)
+Options[LeanVerify] = {"LeanExecutable" -> Automatic, "LeanProject" -> Automatic,
+  "KeepFiles" -> False};
 
 LeanVerify[src_String, opts:OptionsPattern[]] := Module[{exe, proj, full, lines, r, chk,
     ok},
-  exe = leanExe[OptionValue[LeanExecutable]];
-  proj = leanProject[OptionValue[LeanProject]];
+  If[optionNameProblem[LeanVerify, {opts}] =!= None, Return[$Failed, Module]];
+  exe = leanExe[OptionValue["LeanExecutable"]];
+  proj = leanProject[OptionValue["LeanProject"]];
   chk = checkSource[src, StringQ[proj], False];
   If[!AssociationQ[chk], Return[$Failed, Module]];
   If[!TrueQ[chk["OK"]],
@@ -319,7 +300,7 @@ LeanVerify[src_String, opts:OptionsPattern[]] := Module[{exe, proj, full, lines,
       "Axioms" -> <||>, "AxiomReports" -> {}, "Timing" -> 0., "Command" -> "",
       "Rejected" -> {chk["What"]}|>, Module]];
   {full, lines} = withAxiomReports[chk["Source"], chk["Theorems"]];
-  r = Lean`Internal`VerifySource[full, exe, proj, TrueQ[OptionValue[KeepFiles]],
+  r = Lean`Internal`VerifySource[full, exe, proj, TrueQ[OptionValue["KeepFiles"]],
     replayScript[]];
   If[!AssociationQ[r], Return[$Failed, Module]];
   If[missingLeanQ[r], Message[LeanVerify::nolean]];
@@ -865,6 +846,12 @@ cwClaim[Equal[Integrate[f_, x_Symbol], F_]] :=
   inert[Equal, inert[Integrate, cw[f], csym[x]], Block[{$cwAnti = True}, cw[F]]];
 cwClaim[Equal[F_, Integrate[f_, x_Symbol]]] :=
   inert[Equal, inert[Integrate, cw[f], csym[x]], Block[{$cwAnti = True}, cw[F]]];
+(* Sum[t, {k, n}] is Sum[t, {k, 1, n}] (the iterator's definition, as in
+   Sum itself), so it is read as that form. *)
+cwClaim[Equal[Sum[t_, {k_Symbol, n_}], r_]] := Block[{$cwAnyPow = True},
+  inert[Equal, inert[Sum, cw[t], inert[List, csym[k], cw[1], cw[n]]], cw[r]]];
+cwClaim[Sum[t_, {k_Symbol, n_}]] := Block[{$cwAnyPow = True},
+  inert[Sum, cw[t], inert[List, csym[k], cw[1], cw[n]]]];
 cwClaim[Equal[Sum[t_, {k_Symbol, a_, n_}], r_]] := Block[{$cwAnyPow = True},
   inert[Equal, inert[Sum, cw[t], inert[List, csym[k], cw[a], cw[n]]], cw[r]]];
 cwClaim[(h_Symbol)[a___]] /; MemberQ[$cwComputations, h] && h =!= Sum := inert[h, cwl[a]];
@@ -889,8 +876,20 @@ rewriteInput[hc:HoldComplete[c_]] := Module[{t, bad},
     If[bad =!= {}, symbolMessage @@ First[bad]; Return[$Failed, Module]];
     bad = Cases[{t}, cfail[h_] :> h, Infinity];
     If[bad =!= {},
-      Message[Certify::eval, HoldForm[c], First[bad]]; Return[$Failed, Module]];
+      If[First[bad] === Power && fracPowIntegrandQ[hc],
+        Message[Certify::fracpow, HoldForm[c]],
+        Message[Certify::eval, HoldForm[c], First[bad]]];
+      Return[$Failed, Module]];
     {cwHeld[t], $cwNotes, $cwTrusted}]];
+
+(* True when an Integrate in the held input has an integrand with a
+   non-integer power of a base that depends on the variable (Sqrt[x],
+   x^(1/3), ...): outside Q(x), where no certificate exists, rather than a
+   claim that "applies Power".  Only the integrand is evaluated, and only to
+   choose the message. *)
+fracPowIntegrandQ[hc_HoldComplete] := AnyTrue[
+  Cases[hc, HoldPattern[Integrate[f_, x_Symbol]] :> {f, x}, {1, 3}],
+  !FreeQ[Quiet[#[[1]]], Power[b_, e_] /; !IntegerQ[e] && !FreeQ[b, #[[2]]]] &];
 
 (* Mathilda's own evaluation of the two sides of an Equal input (for the
    heuristic engine and "Result"), never used for the Lean statement. *)
@@ -1136,7 +1135,7 @@ and of the rational part R = r/w of the antiderivative",
 (* The Tier 1 generator, or $Failed after Certify::nocert (Tier -> 1
    requested) / Certify::tier (no certificate at either tier). *)
 tier1Or[input_, F_, f_, x_, o_] := With[{g = tier1AntiderivGen[input, F, f, x, o]},
-  If[AssociationQ[g], g,
+  Which[AssociationQ[g], g, g === "vacuous", $Failed, True,
     If[o["Tier"] === 1, Message[Certify::nocert, input], Message[Certify::tier, input]];
     $Failed]];
 
@@ -1969,9 +1968,22 @@ hdHyp[body_String, d_] := Module[{old = SelectFirst[$hdHyps,
     With[{nm = "mth_h" <> ToString[Length[$hdHyps] + 1]},
       AppendTo[$hdHyps, {nm, body, d}]; nm]]];
 
+(* Real.log semantics for the witness check: Real.log u = Log[Abs[u]],
+   Real.log 0 = 0. *)
+realLogAt[u_?NumericQ] := If[PossibleZeroQ[u], 0, Log[Abs[u]]];
+$witnessPoints = {3, 7/2, 11, 1/3, 5/7, -3, -7/2, -11, -1/3, 17/5, 23, -13/4};
+(* A test point x0 at which every d (in x) is nonzero under Lean's Real
+   semantics, or $Failed.  The value is decided numerically at 40 digits
+   (|d(x0)| > 10^-20); for a hypothesis outside the polynomials in x this is
+   recorded as a trusted step (a nonzero polynomial is never identically 0). *)
+hypWitness[ds_List, x_Symbol] := SelectFirst[$witnessPoints, Function[x0,
+    AllTrue[ds, With[{v = Quiet[N[(# /. Log -> realLogAt) /. x -> x0, 40]]},
+      NumericQ[v] && Im[v] == 0 && Abs[v] > 10^-20] &]], $Failed];
+$hdWitness = None;
+
 tier1AntiderivGen[input_, F_, f_, x_Symbol, o_] := Module[{p, ftxt, b, hb, hyps, stmt, held,
     xs, proof},
-  $hdHyps = {};
+  $hdHyps = {}; $hdWitness = None;
   $hdVar = xs = leanVar[x];
   p = hd[F, x];
   ftxt = toLean[HoldForm[f], "Real", False, {}];
@@ -1987,6 +1999,18 @@ tier1AntiderivGen[input_, F_, f_, x_Symbol, o_] := Module[{p, ftxt, b, hb, hyps,
       {fc, FactorList[d][[All, 1]]}],
     {d, $hdHyps[[All, 3]]}];
   hyps = $hdHyps;
+  (* The statement is vacuous if some hypothesis d != 0 fails at every real
+     x: Log[x^2] - 2 Log[x] is never 0 over C for x < 0 but is identically 0
+     under Real.log (Real.log x = log |x|), so "∀ x, d ≠ 0 → ..." would hold
+     for any F.  Require a witness point where every hypothesis is nonzero
+     under Lean's semantics. *)
+  If[hyps =!= {},
+    With[{w = hypWitness[hyps[[All, 3]], x]},
+      If[w === $Failed,
+        Message[Certify::vacuous, input,
+          SelectFirst[hyps[[All, 3]], hypWitness[{#}, x] === $Failed &, hyps[[1, 3]]]];
+        Return["vacuous", Module]];
+      $hdWitness = w]];
   stmt = StringJoin["\[ForAll] ", xs, " : Real, ",
     (#[[2]] <> " \[NotEqual] 0 \[RightArrow] ") & /@ hyps,
     "HasDerivAt (fun ", xs, " : Real => ", p[[1]], ") ((", ftxt, " : Real)) ", xs];
@@ -2003,13 +2027,25 @@ tier1AntiderivGen[input_, F_, f_, x_Symbol, o_] := Module[{p, ftxt, b, hb, hyps,
   held = With[{FF = F, ff = f, xx = x, cond = And @@ (Unequal[#[[3]], 0] & /@ hyps)},
     HoldForm[ForAll[xx, cond, D[FF, xx] == ff]]];
   Join[structGen["Antiderivative", input, F, held, stmt, proof,
-    <|"Form" -> "HasDerivAt", "Variable" -> x, "ProofTerm" -> p[[2]]|>, {},
+    <|"Form" -> "HasDerivAt", "Variable" -> x, "ProofTerm" -> p[[2]],
+      "HypothesisWitness" -> $hdWitness|>,
+    If[$hdWitness === None || AllTrue[hyps[[All, 3]], PolynomialQ[#, x] &], {},
+      {"the hypotheses are satisfiable: each is nonzero at " <>
+      ToString[x] <> " = " <> ToString[$hdWitness, InputForm] <> " under Real.log semantics \
+(checked by Mathilda numerically, 40 digits; not by Lean)"}],
     With[{d = #[[3]]}, HoldForm[d != 0]] & /@ hyps, {D[F, x], f}, Reals],
     <|"Tier" -> 1|>]];
 
 (* Anything else: a symbol or call holding a supported shape (c = a == b;
    Certify[c]) is evaluated once and dispatched again; a fixed point that
    matches no rule has no certificate. *)
+(* A supported computation head in a form no generator above takes (an
+   extra argument, as in Solve[eqs, x, Reals]) has no certificate; it is
+   not evaluated and re-dispatched, so the message names the input as
+   written, not its value. *)
+generate[HoldComplete[c:(h_Symbol)[___]], o_] /; MemberQ[$cwComputations, h] :=
+  nocert[HoldForm[c]];
+
 generate[HoldComplete[c_], o_] := With[{v = c},
   If[HoldComplete[v] =!= HoldComplete[c], generate[HoldComplete[v], o],
     Message[Certify::nocert, HoldForm[c]]; $Failed]];
@@ -2018,9 +2054,9 @@ generate[HoldComplete[c_], o_] := With[{v = c},
 (* Certify / ProofObject                                                   *)
 (* ---------------------------------------------------------------------- *)
 
-Options[Certify] = {Engine -> "Lean", Tier -> Automatic, Domain -> Automatic,
-  Method -> Automatic, TimeConstraint -> 60, Assumptions -> {}, Verify -> True,
-  LeanExecutable -> Automatic, LeanProject -> Automatic};
+Options[Certify] = {"Engine" -> "Lean", "Tier" -> Automatic, "Domain" -> Automatic,
+  Method -> Automatic, TimeConstraint -> 60, Assumptions -> {}, "Verify" -> True,
+  "LeanExecutable" -> Automatic, "LeanProject" -> Automatic};
 
 (* HoldAll (v0.6521): the claim is held (it is certified as written), and so
    are the options until the Assumptions have been checked like the claim:
@@ -2042,8 +2078,17 @@ SetAttributes[Certify, HoldAll];
    (Certify::optdefault) unless the call gives its own Assumptions. *)
 SetAttributes[heldOptionProblem, HoldAllComplete];
 heldOptionProblem[opts___] := Module[{as, t, bad, def},
-  as = Cases[HoldComplete[opts], (Rule | RuleDelayed)[Assumptions, a_] :> HoldComplete[a],
+  (* An option name that is a symbol with a value would be replaced by that
+     value when the options are evaluated (Engine = "zzz" turns Engine -> v
+     into "zzz" -> v): refuse it while the name is still held. *)
+  bad = Cases[HoldComplete[opts], (Rule | RuleDelayed)[s_Symbol, _] /;
+      OwnValues[s] =!= {} :> {HoldForm[s], ToString[OwnValues[s][[1, 2]], InputForm], SymbolName[Unevaluated[s]]},
     {1, 2}];
+  If[bad =!= {},
+    Message[Certify::optvalue, Sequence @@ bad[[1]]];
+    Return[$Failed, Module]];
+  as = Cases[HoldComplete[opts], (Rule | RuleDelayed)[Assumptions | "Assumptions", a_] :>
+    HoldComplete[a], {1, 2}];
   If[as === {},
     def = Options[Certify, Assumptions];
     If[!MatchQ[def, {Assumptions -> ({} | True)}],
@@ -2063,9 +2108,22 @@ heldOptionProblem[opts___] := Module[{as, t, bad, def},
     {a, as}];
   None];
 
-certOptions[opts_List] := Module[{keys = {Engine, Tier, Domain, Method, TimeConstraint,
-    Assumptions, Verify, LeanExecutable, LeanProject}},
-  AssociationThread[SymbolName /@ keys, OptionValue[Certify, opts, #] & /@ keys]];
+certOptions[opts_List] := Module[{keys = {"Engine", "Tier", "Domain", "Method",
+    "TimeConstraint", "Assumptions", "Verify", "LeanExecutable", "LeanProject"}},
+  If[optionNameProblem[Certify, opts] =!= None, Return[$Failed, Module]];
+  AssociationThread[keys, OptionValue[Certify, opts, #] & /@ keys]];
+
+(* None, or $Failed after f::optx, when an evaluated option's name is not
+   one of Options[f] (compared by text, so a symbol or a string of that name
+   is accepted).  A typo such as Teir -> 1 must not be ignored silently. *)
+optionNameProblem[f_, opts_List] := Module[{known = optText /@ Keys[Options[f]], bad},
+  bad = Select[Flatten[opts], !MatchQ[#, (Rule | RuleDelayed)[n_, _] /;
+      MemberQ[known, optText[n]]] &];
+  If[bad === {}, None,
+    Message[MessageName[f, "optx"], bad[[1]], StringRiffle[known, ", "]]; $Failed]];
+optText[s_String] := s;
+optText[s_Symbol] := SymbolName[Unevaluated[s]];
+optText[_] := None;
 
 (* The ProofObject association from a generator and a verdict. *)
 mkProofObject[g_, v_, engine_, tierShown_, lv_, source_, lt_] := With[{a = <|
@@ -2124,7 +2182,7 @@ prepare[hc_HoldComplete, o_] := Module[{g, tier, proj, rw, sides, ign},
      say so when another kind ignores them (ignoring a hypothesis gives a
      stronger theorem, so it is sound, but it must not be silent). *)
   If[!MemberQ[{"Identity", "Factorization"}, g["Kind"]],
-    ign = Select[{Domain -> o["Domain"], Assumptions -> o["Assumptions"],
+    ign = Select[{"Domain" -> o["Domain"], Assumptions -> o["Assumptions"],
         Method -> o["Method"]},
       !MatchQ[#[[2]], Automatic | {} | True] &];
     Do[Message[Certify::optignored, r, g["Kind"]], {r, ign}]];
@@ -2166,13 +2224,14 @@ cacheKey[g_, hb_, exe_, proj_] := {
 certifyItems[hcs_List, opts_List] := Module[{o, engine, gens, hb, chunks, out, exe, proj,
     idx, src, keys, todo, fresh, vs, v, lv, named},
   o = certOptions[opts];
+  If[o === $Failed, Return[$Failed, Module]];
   engine = o["Engine"];
   If[!MemberQ[{"Lean", "Mathilda"}, engine],
     Message[Certify::engine, engine]; Return[$Failed, Module]];
   (* Every Domain value has one stated meaning ($domains); anything else
      (Algebraics, "Complexes", ...) is refused rather than silently mapped. *)
   If[!AnyTrue[$domains, # === o["Domain"] &],
-    Message[Certify::domain, o["Domain"]]; Return[$Failed, Module]];
+    Message[Certify::domain, ToString[o["Domain"], InputForm]]; Return[$Failed, Module]];
   With[{why = methodProblem[o["Method"]]},
     If[why =!= None, Message[Certify::method, o["Method"], why]; Return[$Failed, Module]]];
   gens = prepare[#, o] & /@ hcs;
@@ -2267,6 +2326,20 @@ Format[ProofObject[a_?AssociationQ]] := SequenceForm @ StringJoin[
    Coefficients carry no type: Lean builds them at the goal's type.  Nothing
    here is trusted; the tactic re-checks the certificate in the Lean kernel. *)
 
+(* The entry point is Lean`Internal`Oracle, called by its full name from the
+   lean/ tactics (Mathilda.Tactics); Lean`Internal` is not on $ContextPath, so
+   it does not capture a user's (or a later package's) symbol Oracle. *)
+Lean`Internal`Oracle::usage =
+  "Lean`Internal`Oracle[kind, args...] is the server side of the Lean 4 tactics in the lean/ \
+package (mathilda_linear_combination, mathilda_sos, mathilda_prime, #mathilda). It answers \
+with plain data as a String (numerals, v1, v2, ..., + - * / ^, lists and tuples), which the \
+Lean side parses itself and never elaborates as Lean syntax: kind \"LinearCombination\" \
+({a, b}, {{l1, r1}, ...}, vars) gives cofactors c with a - b == Sum c_i (l_i - r_i); \"SOS\" \
+({p, q}, {g1, ...}, vars) gives (d, l, i) triples with q - p == Sum d l^2 g_i (g_0 = 1); \
+\"Pratt\" (p) gives a flat Pratt certificate; \"Eval\" (\"input\") gives the LeanForm of the \
+evaluated input. A failure gives \"MATHILDA-FAIL: reason\". The answers are untrusted: Lean \
+re-checks them.";
+
 oracleFail[why_String] := "MATHILDA-FAIL: " <> why;
 
 (* Strict text of an evaluated polynomial, no type ascription. *)
@@ -2274,7 +2347,7 @@ oracleText[e_] := With[{x = e}, toLean[HoldForm[x], None, True, {}]];
 
 oracleVarsQ[vars_List] := AllTrue[vars, Head[#] === Symbol &];
 
-Oracle["LinearCombination", {a_, b_}, hs_List, vars_List] /;
+Lean`Internal`Oracle["LinearCombination", {a_, b_}, hs_List, vars_List] /;
     oracleVarsQ[vars] && AllTrue[hs, MatchQ[#, {_, _}] &] :=
   Module[{q = Expand[a - b], ps = Expand[#[[1]] - #[[2]]] & /@ hs, cs, txt},
   If[!AllTrue[Append[ps, q], polyQ[#, vars] &],
@@ -2287,7 +2360,7 @@ hypotheses (no cofactors up to degree 4)"], Module]];
   If[!AllTrue[txt, StringQ], Return[oracleFail["cofactors not translatable to Lean"], Module]];
   "[" <> StringRiffle[txt, ", "] <> "]"];
 
-Oracle["SOS", {p_, q_}, gs_List, vars_List] /; oracleVarsQ[vars] :=
+Lean`Internal`Oracle["SOS", {p_, q_}, gs_List, vars_List] /; oracleVarsQ[vars] :=
   Module[{f = Expand[q - p], gx = Expand /@ gs, r, idx, txt},
   If[!AllTrue[Append[gx, f], polyQ[#, vars] &],
     Return[oracleFail["the goal and hypotheses must be polynomial in the variables"], Module]];
@@ -2302,16 +2375,16 @@ Oracle["SOS", {p_, q_}, gs_List, vars_List] /; oracleVarsQ[vars] :=
   "[" <> StringRiffle[("(" <> #[[1]] <> ", " <> #[[2]] <> ", " <>
       ToString[#[[3]]] <> ")" &) /@ txt, ", "] <> "]"];
 
-Oracle["Pratt", p_Integer] := Which[
+Lean`Internal`Oracle["Pratt", p_Integer] := Which[
   p === 2, oracleFail["2 is the base of the Pratt scheme (PrattCertifies needs an odd prime)"],
   !PrimeQ[p], oracleFail[ToString[p] <> " is not prime"],
   True, With[{c = pratt[p]}, If[ListQ[c], prattText[c],
     oracleFail["no Lucas witness found for " <> ToString[p]]]]];
 
-Oracle["Eval", s_String] := With[{r = Quiet[ToExpression[s]]},
+Lean`Internal`Oracle["Eval", s_String] := With[{r = Quiet[ToExpression[s]]},
   If[r === $Failed, oracleFail["cannot parse " <> s], ToString[r, LeanForm]]];
 
-Oracle[args___] := oracleFail["unsupported query " <> ToString[{args}, InputForm]];
+Lean`Internal`Oracle[args___] := oracleFail["unsupported query " <> ToString[{args}, InputForm]];
 
 End[];
 

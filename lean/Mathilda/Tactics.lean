@@ -135,7 +135,7 @@ elab "mathilda_linear_combination" : tactic => withMainContext do
   let (as, st) ← (toMathilda a).run #[]
   let (bs, st) ← (toMathilda b).run st
   let (hyps, st) ← collectHyps ty (fun t => return (t.eq?.map fun (_, l, r) => (l, r))) st
-  let query := "Lean`Oracle[\"LinearCombination\", " ++ mlist [as, bs] ++ ", " ++
+  let query := "Lean`Internal`Oracle[\"LinearCombination\", " ++ mlist [as, bs] ++ ", " ++
     mlist (hyps.toList.map fun (_, _, _, ls, rs) => mlist [ls, rs]) ++ ", " ++
     varList st.size ++ "]"
   let tac := "mathilda_linear_combination"
@@ -190,7 +190,7 @@ elab "mathilda_sos" : tactic => withMainContext do
   let (los, st) ← (toMathilda lo).run #[]
   let (his, st) ← (toMathilda hi).run st
   let (hyps, st) ← collectHyps ty (fun t => return nonnegFact? t) st
-  let query := "Lean`Oracle[\"SOS\", " ++ mlist [los, his] ++ ", " ++
+  let query := "Lean`Internal`Oracle[\"SOS\", " ++ mlist [los, his] ++ ", " ++
     mlist (hyps.toList.map fun (_, _, _, _, gs) => gs) ++ ", " ++ varList st.size ++ "]"
   let tac := "mathilda_sos"
   let .list xs ← parseAns tac (← oracle query)
@@ -248,7 +248,7 @@ elab "mathilda_prime" : tactic => withMainContext do
     | throwError "mathilda_prime: the goal must be `∃ c, Mathilda.PrattCertifies p c`, got{indentExpr goal}"
   let some n ← (evalNat p).run
     | throwError "mathilda_prime: `{p}` is not a natural-number literal"
-  let ans ← oracle s!"Lean`Oracle[\"Pratt\", {n}]"
+  let ans ← oracle s!"Lean`Internal`Oracle[\"Pratt\", {n}]"
   let tac := "mathilda_prime"
   let num (a : Answer.Ans) : TacticM Term := match a with
     | .poly (.num k) => pure (Syntax.mkNumLit (toString k))
@@ -269,7 +269,7 @@ elab "mathilda_prime" : tactic => withMainContext do
 /-- `#mathilda "expr"` evaluates the Mathilda expression `expr` and logs the
     result in `LeanForm` as an information message.  It proves nothing. -/
 elab "#mathilda " s:str : command => do
-  let ans ← callMathilda ("Lean`Oracle[\"Eval\", " ++ mathildaString s.getString ++ "]")
+  let ans ← callMathilda ("Lean`Internal`Oracle[\"Eval\", " ++ mathildaString s.getString ++ "]")
     (← getOptions)
   logInfo ans
 
