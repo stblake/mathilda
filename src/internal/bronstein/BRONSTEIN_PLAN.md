@@ -74,7 +74,9 @@ Sections used:
 - [B] p.134: `∫(x+1)/((x Log[x]+x^2) Sqrt[x+Log[x]]) = −2/Sqrt[x+Log[x]]`. Hermite only.
 - [B] p.139: `Log[1+E^x]^(1/3)/(1+Log[1+E^x])` is **not elementary** (resultant criterion,
   tower `x, γ=e^x, θ=log(1+γ)`, `y³=θ`).
-- [B] p.147: `((x²+x+1)Sqrt[x+Log x] + (3x+1)Log x + 3x² + x)/((x Log x + x²)Sqrt[x+Log x] + x² Log x + x³)`
+- [B] p.147 (**corrected 2026-11-12**; the surface form first written here was a mis-transcription that
+  does not match the answer): use the paper's θ-form
+  `(((3x+1)Log[x] − x³ + x²)Sqrt[x+Log x] − (2x² − x − 1)Log[x] − 2x³ + x² + x)/(x Log[x]² − (x³ − 2x²)Log[x] − x⁴ + x³)`
   `= 2 Sqrt[x+Log x] + 2 Log[x + Sqrt[x+Log x]]`. Log case: residue at ∞, divisor `p₂ − p_∞`.
 - [B] p.158: `(3(x+E^x)^(1/3) + (2x²+3x)E^x + 5x²)/(x (x+E^x)^(1/3)) = 3x(x+E^x)^(2/3) + 3 Log[x]`.
   Exp case: special-place reduction via `S_exp2`.
@@ -488,7 +490,7 @@ antiderivative.** The generator is `tools/integral_generator/generate.m`, run by
   Suites `tower`, `curve`.
 - [x] **3. Hermite and special places.** `Hermite.m`, `Special.m`, `LimitedIntegrate.m`.
   Suite `hermite_special`. [B] p.134 and p.158 close end to end through a temporary driver.
-- [ ] **4. Residues.** `Puiseux.m`, `Residues.m` (normal, log-∞, exp-0/∞). Suite `residues`.
+- [x] **4. Residues.** `Puiseux.m`, `Residues.m` (normal, log-∞, exp-0/∞). Suite `residues`.
   The p.139 certificate.
 - [ ] **5. Divisors and torsion.** `Divisors.m`, `Specialize.m`. Suite `divisors_torsion`.
 - [ ] **6. Log and algebraic parts.** `LogPart.m`, `AlgebraicPart.m`. The p.147 example
@@ -679,4 +681,45 @@ Next: Phase 4.
   non-constant non-m-th-power lc declines for now.
 - Then read [B] pp.148–158 for the exp special places (Def 2.21) before writing
   them.
+
+### 2026-11-12 — Phase 4 (session 1)
+
+- `Puiseux.m`: Laurent coefficients at θ = 0 and ∞ (`brSeriesCoefficients`,
+  power-series division, with no `Series` call), binomial series (Miller
+  recurrence), and place data at 0 and ∞ (count, ramification, lc/G0).
+- **`Special.m` is back, for the EXPONENTIAL case only.** Def 2.21 needs a
+  *reduced* f.
+  - In one coordinate each step is a Risch DE in k for the extreme Laurent
+    coefficient: `c1' + (s(0) − μη')c1 = a` at 0, and
+    `c1' + (s(∞) + dη')c1 = a` at ∞.
+  - It is valid even at ramified places, with fractional exponents: the
+    homogeneous solution is not in k̄, and Lemma 2.16 applies.
+  - "NoSolution" certifies (Prop 2.18).
+  - p.158 reduces to 0, so its algebraic part `3x` is found here.
+- `Residues.m`:
+  - **R(z)** uses Trager's branch-free `Bp` and the derivative of the full
+    normal denominator. Prop 2.9 gives the certificate, and p.139 is certified.
+  - **Log, θ = ∞:** τ = 0 when m ∤ deg G. Otherwise limited integration of the
+    θ⁻¹ coefficient, giving τ_ζ = −ζκ^{1/m}λ.
+  - **Exp, special places:** values at unramified places, and τ_p = εr(c_p − c_p̄)
+    with p̄ the ζ = 1 place above 0. This agrees with the true divisor up to
+    div(θ), which is principal. Coordinate 0 absorbs the resulting θ factor of
+    the generator.
+  - The algebraic constants γ are supported only as κ^{1/m}·u, u ∈ k; otherwise
+    the stage declines.
+- **p.147 ground truth corrected.** The surface integrand in the plan was
+  mis-transcribed; its residue at the y = ±x places was non-constant, which
+  looked like a "false certificate". The paper's θ-form is right. The
+  y-component has residues ±1, i.e. `log((x+y)/(x−y))`, and the rest of
+  `2 log(x+y)` is coordinate 0.
+- Pitfall: `FirstPosition[list, pat]` has default level spec `{0, Infinity}` and
+  can match the whole list. Use an explicit scan.
+- Suite `bronstein_residues_tests` (82 assertions).
+
+Next: Phase 5.
+- `Divisors.m`: finite places via `residueIdeal` over `fieldFn`.
+- Special places by a shift (log ∞: θ = 1/u; exp 0/∞). Initially support only
+  divisors supported at finite normal places, and decline when a special
+  residue is nonzero; record it.
+- `Specialize.m`: torsion by specialisation.
 

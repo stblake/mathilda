@@ -35,6 +35,9 @@
 (*   LimitedIntegrate.m  integration in k: parametric / limited integration *)
 (*   Hermite.m     Hermite reduction at the normal places                     *)
 (*   AlgebraicPart.m  D b + s b = c over k(theta) (certified)                 *)
+(*   Puiseux.m     expansions at theta = 0 and infinity (binomial series)     *)
+(*   Special.m     reduction at the special places (exponential theta)        *)
+(*   Residues.m    R(z) and the resultant criterion; special-place residues   *)
 (*                                                                            *)
 (* Further stages (Tower, Poly, Curve, RDE, LimitedIntegrate, Hermite,        *)
 (* Special, Puiseux, Residues, Divisors, Specialize, LogPart, AlgebraicPart,  *)
@@ -59,6 +62,9 @@ LoadModule["bronstein/Curve.m"];
 LoadModule["bronstein/LimitedIntegrate.m"];
 LoadModule["bronstein/Hermite.m"];
 LoadModule["bronstein/AlgebraicPart.m"];
+LoadModule["bronstein/Puiseux.m"];
+LoadModule["bronstein/Special.m"];
+LoadModule["bronstein/Residues.m"];
 
 End[];
 EndPackage[];

@@ -6,7 +6,7 @@ Living plan: src/internal/bronstein/BRONSTEIN_PLAN.md (phases, design, progress 
 - [x] 1. Spikes and substrate: fieldFn (Trager Field.m), context bridge, Risch`RischDECertified, Risch` builtins on a theta symbol
 - [x] 2. Tower.m, Poly.m, Curve.m
 - [x] 3. Hermite.m, LimitedIntegrate.m, AlgebraicPart.m (Special.m folded in)
-- [ ] 4. Puiseux.m, Residues.m
+- [x] 4. Puiseux.m, Special.m (exp), Residues.m
 - [ ] 5. Divisors.m, Specialize.m
 - [ ] 6. LogPart.m, AlgebraicPart.m
 - [ ] 7. Pipeline.m + Method -> "Bronstein"
