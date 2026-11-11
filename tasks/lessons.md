@@ -5189,3 +5189,10 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
 - Trap: generated records must not share the engine's context. A Do iterator is not renamed like a Module local, so {s, sols} met G&R 17.13.30's parameter s, recursed to $RecursionLimit, and the unwinding left the engine's Module half evaluated (an unbound local returned as the answer).
 - Trap: the book's CONDITIONS can be too weak even when the formula verifies at its two oracle points (3.197.7: Re mu > 0 for mu > 1/2). Audit conditions by sampling the stated domain (tools/gr/condaudit.py) before serving symbolic answers.
 - Trap: a unit suite that does not load init.m tests a non-production cascade; with the table last, it supplied an antiderivative the production cascade gets elsewhere. Load init.m (test_load_init_m) in Integrate suites.
+
+## 2026-11-11 — PDE corpus: day-one wrong answers, and what let them ship
+- Trap: a method that classifies by reading the coefficients of the terms it NAMES (u_tt, u_xx, u_x, u) without checking that the residual has nothing ELSE accepts any extra term silently: d'Alembert and the heat kernel solved forced and u_xxxx equations as homogeneous. Rule: after reading coefficients, rebuild the model operator and require residual - model == 0.
+- Trap: a verifier that rebuilds the answer with test data (f = Cos, g = Sin) or checks only the kernel never sees the user's equation, so it cannot catch a misclassification. Verify against the actual PDE and every condition.
+- Trap: substituting into an unevaluated Integrate[g(W), W] makes the integration variable an expression (Integrate[.., x + y[x]]). Use a definite Inactive[Integrate][g(K), {K, 1, s}] over a SYMBOL dummy; D's Leibniz rule handles that, not an indexed K[1] (yet).
+- Trap (again, see 2026-11-10): Do iterators are not renamed; a corpus record spelling r (Black-Scholes) recursed forever under Do[.., {r, recs}]. Prefix every iterator in corpus-driving .m scripts.
+- Pattern: a corpus whose FAIL count is gated separately from non-PASS finds wrong answers on day one (11 here); the ODE gate lumps them together and its prelude accepts implicit answers unverified.

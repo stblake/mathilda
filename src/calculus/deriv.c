@@ -3732,8 +3732,7 @@ static bool parse_var_spec(Expr* spec, Expr** var, int64_t* order,
         /* Scalar specs: {var}, {var, n} or {var, k}.  The one-element
          * {var} is the first derivative, D[f, {x}] == D[f, x] — the
          * spelling the PDE-in-CAS corpus uses throughout
-         * (D[u[x, t], {t}] + D[u[x, t], {x}] == 0, solved by the reference
-         * system).  Any other shape ({x, y, z}, {}) is a malformed
+         * (D[u[x, t], {t}] + D[u[x, t], {x}] == 0).  Any other shape ({x, y, z}, {}) is a malformed
          * multiple-derivative specifier; reject so the caller can emit
          * D::dvar and leave the call unevaluated. */
         if (ac == 1) {

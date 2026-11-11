@@ -33,16 +33,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
-#include <signal.h>
-#include <sys/types.h>
-#include <sys/wait.h>
-#include <time.h>
 
 void symtab_init(void);
 void core_init(void);
 
 #include "expr.h"
+#include "corpus_fork.h"   /* fork-per-case core shared with the PDE runner */
 
 extern char* expr_to_string(struct Expr*);
 
@@ -59,21 +55,6 @@ enum {
     DS_CODE_SKIP   = 'S',  /* verdict 3: system_of_ODEs (not counted)      */
     DS_CODE_BADVAL = 'X',  /* dsolveCheckCode returned a non-integer       */
 };
-
-static char* slurp(const char* path) {
-    FILE* f = fopen(path, "rb");
-    if (!f) return NULL;
-    fseek(f, 0, SEEK_END);
-    long sz = ftell(f);
-    fseek(f, 0, SEEK_SET);
-    if (sz < 0) { fclose(f); return NULL; }
-    char* buf = (char*)malloc((size_t)sz + 1);
-    if (!buf) { fclose(f); return NULL; }
-    size_t rd = fread(buf, 1, (size_t)sz, f);
-    buf[rd] = '\0';
-    fclose(f);
-    return buf;
-}
 
 /* extract a plain string field (label / classif) for the TSV, best-effort. */
 static char* field_str(Expr* rec, size_t idx) {
@@ -113,7 +94,7 @@ int main(int argc, char** argv) {
     if (get_res) expr_free(get_res);
 
     fprintf(stderr, "==> corpus:  %s\n", corpus_file);
-    char* fbuf = slurp(corpus_file);
+    char* fbuf = corpus_slurp(corpus_file);
     if (!fbuf) {
         fprintf(stderr, "FAIL: cannot read %s\n", corpus_file);
         ASSERT(false);
@@ -151,82 +132,27 @@ int main(int argc, char** argv) {
         char* classif_str = field_str(rec, 4);
         fprintf(stderr, "  [%4zu/%zu] %s\n", i + 1, n, label_str ? label_str : "?");
 
-        int pipefd[2];
-        if (pipe(pipefd) != 0) { crashed++; free(label_str); free(classif_str); continue; }
-        pid_t pid = fork();
-        if (pid < 0) { close(pipefd[0]); close(pipefd[1]); crashed++;
-                       free(label_str); free(classif_str); continue; }
-
-        if (pid == 0) {
-            /* --- Child --- */
-            close(pipefd[0]);
-            char code = DS_CODE_UNEVAL;
-            alarm(DSOLVE_PER_CASE_TIMEOUT_SEC);
-            Expr* call = expr_new_function(expr_new_symbol("dsolveCheckCode"),
-                (Expr*[]){
-                    expr_copy(rec->data.function.args[0]),
-                    expr_copy(rec->data.function.args[1]),
-                    expr_copy(rec->data.function.args[2]),
-                    expr_copy(rec->data.function.args[3]),
-                    expr_copy(rec->data.function.args[4])
-                }, 5);
-            Expr* verdict = evaluate(call);
-            expr_free(call);
-            if (verdict && verdict->type == EXPR_INTEGER) {
-                switch (verdict->data.integer) {
-                    case 0: code = DS_CODE_PASS;   break;
-                    case 1: code = DS_CODE_FAIL;   break;
-                    case 2: code = DS_CODE_UNEVAL; break;
-                    case 3: code = DS_CODE_SKIP;   break;
-                    default: code = DS_CODE_BADVAL; break;
-                }
-            } else {
-                code = DS_CODE_BADVAL;
-            }
-            alarm(0);
-            if (verdict) expr_free(verdict);
-            ssize_t w = write(pipefd[1], &code, 1);
-            (void)w;
-            close(pipefd[1]);
-            _exit(0);
-        }
-
-        /* --- Parent --- */
-        close(pipefd[1]);
-        time_t deadline = time(NULL) + DSOLVE_PER_CASE_TIMEOUT_SEC + 2;
-        int status = 0; bool reaped = false;
-        while (time(NULL) < deadline) {
-            pid_t r = waitpid(pid, &status, WNOHANG);
-            if (r == pid) { reaped = true; break; }
-            if (r < 0) break;
-            usleep(50000);
-        }
+        static const char verdict_bytes[] = {
+            DS_CODE_PASS, DS_CODE_FAIL, DS_CODE_UNEVAL, DS_CODE_SKIP };
+        Expr* call = expr_new_function(expr_new_symbol("dsolveCheckCode"),
+            (Expr*[]){
+                expr_copy(rec->data.function.args[0]),
+                expr_copy(rec->data.function.args[1]),
+                expr_copy(rec->data.function.args[2]),
+                expr_copy(rec->data.function.args[3]),
+                expr_copy(rec->data.function.args[4])
+            }, 5);
         char code = 0;
-        if (!reaped) {
-            kill(pid, SIGKILL);
-            waitpid(pid, &status, 0);
-            close(pipefd[0]);
-            timed_out++;
-            fprintf(stderr, "      -> TIMEOUT (>%ds)\n", DSOLVE_PER_CASE_TIMEOUT_SEC);
-            printf("U\t%s\t%s\n", label_str ? label_str : "?", classif_str ? classif_str : "");
-            fflush(stdout);
-            free(label_str); free(classif_str);
-            continue;
-        }
-        ssize_t r = read(pipefd[0], &code, 1);
-        close(pipefd[0]);
-        if (r != 1 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-            if (WIFSIGNALED(status) && WTERMSIG(status) == SIGALRM) {
+        CorpusOutcome oc = corpus_run_case(call, DSOLVE_PER_CASE_TIMEOUT_SEC,
+                                           verdict_bytes, 4, DS_CODE_BADVAL, &code);
+        expr_free(call);
+        if (oc != CORPUS_RAN) {
+            if (oc == CORPUS_TIMEOUT) {
                 timed_out++;
-                printf("U\t%s\t%s\n", label_str ? label_str : "?", classif_str ? classif_str : "");
-                fflush(stdout);
-                free(label_str); free(classif_str);
-                continue;
+                fprintf(stderr, "      -> TIMEOUT (>%ds)\n", DSOLVE_PER_CASE_TIMEOUT_SEC);
+            } else {
+                crashed++;
             }
-            crashed++;
-            fprintf(stderr, "      -> CRASH (exit %d, sig %d)\n",
-                    WIFEXITED(status) ? WEXITSTATUS(status) : -1,
-                    WIFSIGNALED(status) ? WTERMSIG(status) : 0);
             printf("U\t%s\t%s\n", label_str ? label_str : "?", classif_str ? classif_str : "");
             fflush(stdout);
             free(label_str); free(classif_str);

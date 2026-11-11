@@ -1,0 +1,2 @@
+# N	reason
+392	references `bc`, which this block never assigns

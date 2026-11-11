@@ -4920,6 +4920,21 @@ if(USE_ECM)
 else()
     target_link_libraries(dsolve_corpus_tests gmp m)
 endif()
+# PDE corpus (DSolve_test_status/pde/): N. Abbasi's "PDE in CAS", 2011 problems in
+# 14 chapter files, verified by back-substitution (dsolve_pde_corpus_prelude.m).
+# argv = <corpus> <prelude> <nonpass-baseline> <FAIL-baseline>; the two gates are
+# separate, so a new wrong answer cannot hide behind a new solve.  Per-chapter
+# tests (dsolve_pde_corpus_<chap>_tests) are registered after the ODE sections.
+add_executable(dsolve_pde_corpus_tests ../DSolve_test_status/pde/test_dsolve_pde_corpus.c
+               $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(dsolve_pde_corpus_tests PRIVATE
+                           ${CMAKE_CURRENT_SOURCE_DIR} ../src ../src/calculus)
+if(USE_ECM)
+    target_link_libraries(dsolve_pde_corpus_tests gmp m ${ECM_LIB})
+    add_dependencies(dsolve_pde_corpus_tests build_ecm)
+else()
+    target_link_libraries(dsolve_pde_corpus_tests gmp m)
+endif()
 # Per-section dashboards.  argv = <corpus> <prelude> <baseline>.  Baselines are
 # the checked-in high-water marks recorded in DSolve_test_status/STATUS.md.
 # Baseline 580 (M60 generalised Airy + operator-factor reducibility).  Measured 634 PASS /
@@ -5951,6 +5966,81 @@ add_test(NAME dsolve_corpus_2_2_65_tests
          COMMAND dsolve_corpus_tests
                  ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_2265.m
                  ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 34)
+# PDE corpus gates (DSolve_test_status/pde/, N. Abbasi "PDE in CAS"; see README.md and
+# DSOLVE_PDE_PLAN.md).  argv = <corpus> <prelude> <nonpass-baseline> <FAIL-baseline>.  Baselines
+# measured 2026-11-11 on v0.6499 (after the day-one wrong-answer fixes): non-PASS = measured
+# + max(2, timeouts) load margin; FAIL = 0 everywhere, asserted empty -- a wrong answer fails the
+# gate on its own, it cannot hide behind a new solve.  Each method wave LOWERS the first number.
+# chapter 2: 35/149 PASS, 114 non-PASS (1 timed out under load).
+add_test(NAME dsolve_pde_corpus_2_tests
+         COMMAND dsolve_pde_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/DE_PDE_2.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/dsolve_pde_corpus_prelude.m 116 0)
+# chapter 3: 6/130 PASS, 124 non-PASS (1 timed out under load).
+add_test(NAME dsolve_pde_corpus_3_tests
+         COMMAND dsolve_pde_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/DE_PDE_3.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/dsolve_pde_corpus_prelude.m 126 0)
+# chapter 4: 0/53 PASS, 53 non-PASS (0 timed out under load).
+add_test(NAME dsolve_pde_corpus_4_tests
+         COMMAND dsolve_pde_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/DE_PDE_4.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/dsolve_pde_corpus_prelude.m 55 0)
+# chapter 5: 11/82 PASS, 71 non-PASS (0 timed out under load).
+add_test(NAME dsolve_pde_corpus_5_tests
+         COMMAND dsolve_pde_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/DE_PDE_5.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/dsolve_pde_corpus_prelude.m 73 0)
+# chapter 6.1: 0/6 PASS, 6 non-PASS (0 timed out under load).
+add_test(NAME dsolve_pde_corpus_6_1_tests
+         COMMAND dsolve_pde_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/DE_PDE_6_1.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/dsolve_pde_corpus_prelude.m 8 0)
+# chapter 6.2: 131/420 PASS, 289 non-PASS (6 timed out under load).
+add_test(NAME dsolve_pde_corpus_6_2_tests
+         COMMAND dsolve_pde_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/DE_PDE_6_2.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/dsolve_pde_corpus_prelude.m 295 0)
+# chapter 6.3: 85/178 PASS, 93 non-PASS (2 timed out under load).
+add_test(NAME dsolve_pde_corpus_6_3_tests
+         COMMAND dsolve_pde_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/DE_PDE_6_3.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/dsolve_pde_corpus_prelude.m 95 0)
+# chapter 6.4: 85/176 PASS, 91 non-PASS (2 timed out under load).
+add_test(NAME dsolve_pde_corpus_6_4_tests
+         COMMAND dsolve_pde_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/DE_PDE_6_4.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/dsolve_pde_corpus_prelude.m 93 0)
+# chapter 6.5: 18/171 PASS, 153 non-PASS (6 timed out under load).
+add_test(NAME dsolve_pde_corpus_6_5_tests
+         COMMAND dsolve_pde_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/DE_PDE_6_5.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/dsolve_pde_corpus_prelude.m 159 0)
+# chapter 6.6: 0/212 PASS, 212 non-PASS (0 timed out under load).
+add_test(NAME dsolve_pde_corpus_6_6_tests
+         COMMAND dsolve_pde_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/DE_PDE_6_6.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/dsolve_pde_corpus_prelude.m 214 0)
+# chapter 6.7: 0/171 PASS, 171 non-PASS (0 timed out under load).
+add_test(NAME dsolve_pde_corpus_6_7_tests
+         COMMAND dsolve_pde_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/DE_PDE_6_7.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/dsolve_pde_corpus_prelude.m 173 0)
+# chapter 6.8: 0/169 PASS, 169 non-PASS (0 timed out under load).
+add_test(NAME dsolve_pde_corpus_6_8_tests
+         COMMAND dsolve_pde_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/DE_PDE_6_8.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/dsolve_pde_corpus_prelude.m 171 0)
+# chapter 6.9: 0/82 PASS, 82 non-PASS (0 timed out under load).
+add_test(NAME dsolve_pde_corpus_6_9_tests
+         COMMAND dsolve_pde_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/DE_PDE_6_9.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/dsolve_pde_corpus_prelude.m 84 0)
+# chapter 7: 0/12 PASS, 12 non-PASS (0 timed out under load).
+add_test(NAME dsolve_pde_corpus_7_tests
+         COMMAND dsolve_pde_corpus_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/DE_PDE_7.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/pde/dsolve_pde_corpus_prelude.m 14 0)
 
 # Semantic stress corpus for Reduce[].  Loads reduce_corpus.m (a List of
 # {label, expr, vars, dom, expected} records) held, forks per case, and verifies
@@ -6469,6 +6559,7 @@ get_property(_mathilda_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
 foreach(_t IN LISTS _mathilda_targets)
     if(_t MATCHES "_tests$" AND NOT TEST ${_t}
        AND NOT _t STREQUAL "dsolve_corpus_tests"
+       AND NOT _t STREQUAL "dsolve_pde_corpus_tests"
        AND NOT _t STREQUAL "mathar_corpus_tests")
         get_target_property(_type ${_t} TYPE)
         get_target_property(_exclude ${_t} EXCLUDE_FROM_ALL)

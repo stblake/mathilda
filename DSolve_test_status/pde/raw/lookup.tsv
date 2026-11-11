@@ -1,0 +1,2014 @@
+# N	section	category	description	mma	mma_time	maple	maple_time
+# scraped from https://www.12000.org/my_notes/pde_in_CAS/maple_2026_1_and_mma_15/Ch1.S4.htm
+1	2.1.1	General first order	Transport equation u_{t}+u_{x}=0	Y	0.076	Y	0.04
+2	2.1.2	General first order	Transport equation u_{t}-3u_{x}=0 IC u(0,x)=e^{-x^{2}}. Peter Olver textbook, 2.2.2 (a)	Y	0.01	Y	0.081
+3	2.1.3	General first order	Transport equation u_{t}+2u_{x}=0 IC u(-1,x)=\frac{x}{1+x^{2}}. Peter Olver textbook, 2.2.2 (b)	Y	0.006	Y	0.066
+4	2.1.4	General first order	Transport equation u_{t}+u_{x}+\frac{1}{2}u=0 IC u(0,x)=\arctan(x). Peter Olver textbook, 2.2.2 (c)	Y	0.003	Y	0.089
+5	2.1.5	General first order	Transport equation u_{t}-4u_{x}+u=0 IC u(0,x)=\frac{1}{1+x^{2}}. Peter Olver textbook, 2.2.2 (d)	Y	0.003	Y	0.038
+6	2.1.6	General first order	Transport equation u_{t}+2u_{x}=\sin x IC u(0,x)=\sin x. Peter Olver textbook, 2.2.5	Y	0.027	Y	0.147
+7	2.1.7	General first order	Transport equation u_{t}+\frac{1}{1+x^{2}}u_{x}=0 IC u(x,0)=\frac{1}{1+(3+x)^{2}}. Peter Olver textbook, page 27	Y	0.012	Y	0.247
+8	2.1.8	General first order	Transport equation u_{t}-xu_{x}=0 IC u(x,0)=\frac{1}{1+x^{2}}. Peter Olver textbook, problem 2.2.17	Y	0.005	Y	0.145
+9	2.1.9	General first order	Transport equation u_{t}+(1-2t)u_{x}=0 IC u(x,0)=\frac{1}{1+x^{2}}. Peter Olver textbook, problem 2.2.29	Y	0.051	Y	0.191
+10	2.1.10	General first order	Transport equation u_{t}+\frac{1}{x^{2}+4}u_{x}=0 IC u(x,0)=e^{x^{3}+12x}	Y	0.007	Y	0.128
+11	2.1.11	General first order	3u_{x}+5u_{y}=x	Y	0.003	Y	0.043
+12	2.1.12	General first order	xu_{y}+yu_{x}=-4xyu and u(x,0)=e^{-x^{2}}	Y	0.015	Y	0.125
+13	2.1.13	General first order	u_{t}+u_{x}=0 and u(x,0)=\sin x and u(0,t)=0	Y	0.114	Y	0.264
+14	2.1.14	General first order	u_{t}+cu_{x}=0 and u(x,0)=e^{-x^{2}}	Y	0.004	Y	0.034
+15	2.1.15	General first order	(Haberman 12.2.2) \omega_{t}-3\omega_{x}=0 and \omega(x,0)=\cos x	Y	0.003	Y	0.035
+16	2.1.16	General first order	(Haberman 12.2.4) \omega_{t}+c\omega_{x}=0 and \omega(x,0)=f(x) and \omega(0,t)=h(t)	N	3.357	Y	0.283
+17	2.1.17	General first order	(Haberman 12.2.5 (a)) \omega_{t}+c\omega_{x}=e^{2x} and \omega(x,0)=f(x)	Y	0.047	Y	0.098
+18	2.1.18	General first order	(Haberman 12.2.5 (d)) \omega_{t}+3t\omega_{x}=\omega(x,t) and \omega(x,0)=f(x)	Y	0.049	Y	0.164
+19	2.1.19	General first order	2u_{x}+5u_{y}=u^{2}(x,y)+1	Y	0.067	Y	0.091
+20	2.1.20	General first order	Clairaut equation xu_{x}+yu_{y}+\frac{1}{2}((u_{x})^{2}+(u_{y})^{2})=0	Y	0.055	Y	0.17
+21	2.1.21	General first order	Clairaut equation. xu_{x}+yu_{y}+\frac{1}{2}((u_{x})^{2}+(u_{y})^{2})=0 with u(x,0)=\frac{1}{2}(1-x^{2})	Y	0.009	Y	0.641
+22	2.1.22	General first order	Clairaut equation. u=xu_{x}+yu_{y}+\sin(u_{x}+u_{y})	Y	0.029	Y	0.056
+23	2.1.23	General first order	Recover a function from its gradient vector	Y	0.033	Y	0.112
+24	2.1.24	General first order	xf_{y}-f_{x}=\frac{g(x)}{h(y)}f^{2}	Y	0.038	Y	0.087
+25	2.1.25	General first order	f_{x}+(f_{y})^{2}=f(x,y,z)+z	Y	0.055	Y	0.335
+26	2.1.26	General first order	xu_{x}+yu_{y}=u (Example 3.5.1 in Lokenath Debnath)	Y	0.014	Y	0.046
+27	2.1.27	General first order	xu_{x}+yu_{y}=nu Example 3.5.2 in Lokenath Debnath	Y	0.01	Y	0.023
+28	2.1.28	General first order	x^{2}u_{x}+y^{2}u_{y}=(x+y)u Example 3.5.3 in Lokenath Debnath	Y	0.052	Y	0.078
+29	2.1.29	General first order	(y-z)u_{x}+(z-x)u_{y}+(x-y)u_{z}=0 (Example 3.5.4 in Lokenath Debnath)	Y	7.205	Y	3.98
+30	2.1.30	General first order	u(x+y)u_{x}+u(x-y)u_{y}=x^{2}+y^{2} (Example 3.5.5 in Lokenath Debnath)	Y	0.236	Y	0.607
+31	2.1.31	General first order	u_{x}-u_{y}=1 with u(x,0)=x^{2} Example 3.5.6 in Lokenath Debnath	Y	0.003	Y	0.029
+32	2.1.32	General first order	yu_{x}+xu_{y}=u with u(x,0)=x^{3} and u(0,y)=y^{3} Example 3.5.8 in Lokenath Debnath	N	1.318	N	0.354
+33	2.1.33	General first order	xu_{x}+yu_{y}=xe^{-u} with u=0 on y=x^{2} Example 3.5.10 in Lokenath Debnath	Y	0.073	Y	0.063
+34	2.1.34	General first order	u_{t}+uu_{x}=x with u(x,0)=f(x) Example 3.5.11 in Lokenath Debnath.	N	2.901	Y	0.312
+35	2.1.35	General first order	u_{x}=0 Problem 3.3(a) Lokenath Debnath	Y	0.003	Y	0.034
+36	2.1.36	General first order	au_{x}+bu_{y}=0 Problem 3.3(b) Lokenath Debnath	Y	0.007	Y	0.017
+37	2.1.37	General first order	u_{x}+yu_{y}=0 Problem 3.3(c) Lokenath Debnath	Y	0.018	Y	0.027
+38	2.1.38	General first order	(1+x^{2})u_{x}+u_{y}=0 Problem 3.3(d) Lokenath Debnath	Y	0.007	Y	0.045
+39	2.1.39	General first order	2xyu_{x}+(x^{2}+y^{2})u_{y}=0 Problem 3.3(e) Lokenath Debnath	Y	0.068	Y	0.092
+40	2.1.40	General first order	(y+u)u_{x}+yu_{y}=x-y Problem 3.3(f) Lokenath Debnath	Y	6.959	Y	0.371
+41	2.1.41	General first order	y^{2}u_{x}-xyu_{y}=x(u-2y) Problem 3.3(g) Lokenath Debnath	Y	0.085	Y	0.11
+42	2.1.42	General first order	yu_{y}-xu_{x}=1 Problem 3.3(h) Lokenath Debnath	Y	0.012	Y	0.021
+43	2.1.43	General first order	u_{x}+2xy^{2}u_{y}=0 Problem 3.4 Lokenath Debnath	Y	0.046	Y	0.049
+44	2.1.44	General first order	3u_{x}+2u_{y}=0 with u(x,0)=\sin x. Problem 3.5(a) Lokenath Debnath	Y	0.004	Y	0.059
+45	2.1.45	General first order	yu_{x}+xu_{y}=0 with u(0,y)=e^{-y^{2}}. Problem 3.5(b) Lokenath Debnath	Y	0.014	Y	0.1
+46	2.1.46	General first order	xu_{x}+yu_{y}=2xy with u=2 on y=x^{2}. Problem 3.5(c) Lokenath Debnath	Y	0.011	Y	0.02
+47	2.1.47	General first order	u_{x}+xu_{y}=0 with u(0,y)=\sin y. Problem 3.5(d) Lokenath Debnath	Y	0.003	Y	0.037
+48	2.1.48	General first order	yu_{x}+xu_{y}=xy with u(0,y)=e^{-y^{2}},u(x,0)=e^{-x^{2}}. Problem 3.5(e) Lokenath Debnath	N	2.888	N	0.329
+49	2.1.49	General first order	u_{x}+xu_{y}=(y-\frac{1}{2}x^{2})^{2} with u(0,y)=e^{y}. Problem 3.5(f) Lokenath Debnath	Y	0.01	Y	0.039
+50	2.1.50	General first order	xu_{x}+yu_{y}=u+1 with u=x^{2} on y=x^{2} Problem 3.5(g) Lokenath Debnath	Y	0.013	Y	0.023
+51	2.1.51	General first order	uu_{x}-uu_{y}=u^{2}+(x+y)^{2} with u(x,0)=1 Problem 3.5(h) Lokenath Debnath	Y	0.028	Y	0.125
+52	2.1.52	General first order	xu_{x}+(x+y)u_{y}=u+1 with u(x,0)=x^{2} Problem 3.5(i) Lokenath Debnath	Y	0.018	Y	0.141
+53	2.1.53	General first order	xu_{x}+yu_{y}+zu_{z}=0 Problem 3.8(a) .Lokenath Debnath	Y	0.021	Y	0.02
+54	2.1.54	General first order	x^{2}u_{x}+y^{2}u_{y}+z(x+y)u_{z}=0 Problem 3.8(b) Lokenath Debnath	Y	0.033	Y	0.068
+55	2.1.55	General first order	x(y-z)u_{x}+y(z-x)u_{y}+z(x-y)u_{z}=0 Problem 3.8(c) Lokenath Debnath	Y	0.02	Y	0.649
+56	2.1.56	General first order	yzu_{x}-xzu_{y}+xy(x^{2}+y^{2})u_{z}=0 Problem 3.8(d) Lokenath Debnath	Y	0.057	Y	0.111
+57	2.1.57	General first order	x(y^{2}-z^{2})u_{x}+y(z^{2}-y^{2})u_{y}+z(x^{2}-y^{2})u_{z}=0 Problem 3.8(e) Lokenath Debnath	N	35.018	N	0.177
+58	2.1.58	General first order	u_{x}+xu_{y}=y with u(0,y)=y^{2} Problem 3.9(a) Lokenath Debnath	Y	0.005	Y	0.034
+59	2.1.59	General first order	u_{x}+xu_{y}=y with u(1,y)=2y Problem 3.9(b) Lokenath Debnath	Y	0.004	Y	0.032
+60	2.1.60	General first order	(u_{x}+u_{y})^{2}-u^{2}=0. Problem 3.10 Lokenath Debnath	Y	0.006	Y	0.055
+61	2.1.61	General first order	(y+u)u_{x}+yu_{y}=x-y with u(x,1)=1+x. Problem 3.11 Lokenath Debnath	Y	11.168	N	0.831
+62	2.1.62	General first order	2xu_{x}+(x+1)u_{y}=y with u(1,y)=2y. Problem 3.14(d) Lokenath Debnath	Y	0.022	Y	0.067
+63	2.1.63	General first order	xu_{x}+yu_{y}=x^{2}+y^{2} with u(x,1)=x^{2}. Problem 3.14(e) Lokenath Debnath	Y	0.019	Y	0.073
+64	2.1.64	General first order	y^{2}u_{x}+(xy)u_{y}=x with u(x,1)=x^{2}. Problem 3.14(f) Lokenath Debnath	Y	0.022	Y	0.128
+65	2.1.65	General first order	xu_{x}+yu_{y}=xy with u=\frac{x^{2}}{2} at y=x. Problem 3.14(g) Lokenath Debnath	Y	0.014	Y	0.025
+66	2.1.66	General first order	u_{x}+uu_{y}=1 with u(0,y)=ay. Problem 3.16(a) Lokenath Debnath	Y	0.054	Y	0.077
+67	2.1.67	General first order	(y+u)u_{x}+(x+u)u_{y}=x+y. Problem 3.17(a) Lokenath Debnath	N	226.083	N	600.
+68	2.1.68	General first order	xu(u^{2}+xy)u_{x}-yu(u^{2}+xy)u_{y}=x^{4}. Problem 3.17(b) Lokenath Debnath	Y	0.026	Y	0.076
+69	2.1.69	General first order	(x+y)u_{x}+(x-y)u_{y}=0. Problem 3.17(c) Lokenath Debnath	Y	0.031	Y	0.694
+70	2.1.70	General first order	yu_{x}-xu_{y}=e^{u} with u(0,y)=y^{2}-1	Y	0.071	Y	0.315
+71	2.1.71	General first order	yu_{x}-xu_{y}=e^{u}	Y	0.035	Y	0.181
+72	2.1.72	General first order	u_{t}+xu_{x}=0 with u(x,0)=x^{2}. Math 5587	Y	0.005	Y	0.111
+73	2.1.73	General first order	u_{t}+tu_{x}=0 with u(x,0)=e^{x}	Y	0.013	Y	0.115
+74	2.1.74	General first order	2u_{x}+3u_{y}=1	Y	0.005	Y	0.043
+75	2.1.75	General first order	xu_{t}-tu_{x}=0	Y	0.013	Y	0.098
+76	2.1.76	General first order	u_{t}+u_{x}=0 with u(x,1)=\frac{x}{1+x^{2}}	Y	0.004	Y	0.038
+77	2.1.77	General first order	u_{x}u_{y}=1	Y	0.002	Y	0.066
+78	2.1.78	General first order	u_{x}u_{y}=u with u(x,0)=0,u(0,y)=0	Y	0.839	Y	0.196
+79	2.2.1	Solved by factoring into two transport equations	u_{xx}+u_{xt}-6u_{tt}=0	Y	0.04	Y	0.109
+80	2.2.2	Solved by factoring into two transport equations	u_{xx}-u_{xt}-12u_{tt}=0	Y	0.005	Y	0.252
+81	2.2.3	Solved by factoring into two transport equations	u_{xx}-3u_{xt}-4u_{tt}=0	Y	0.006	Y	1.521
+82	2.2.4	Solved by factoring into two transport equations	u_{tt}-2u_{xt}-3u_{xx}=0 with u(0,x)=x^{2},u_{t}(x,0)=e^{x}	Y	0.007	Y	1.424
+83	2.3.1	Schrodinger PDE	Logan textbook, page 30	Y	0.272	Y	0.407
+84	2.3.2	Schrodinger PDE	In a square, zero potential	Y	0.319	Y	2.977
+85	2.3.3	Schrodinger PDE	From Mathematica help pages	Y	0.342	Y	1.01
+86	2.3.4	Schrodinger PDE	From Mathematica help pages	Y	0.017	N	1.547
+87	2.3.5	Schrodinger PDE	David Griffiths, page 47	Y	30.576	Y	0.822
+88	2.3.6	Schrodinger PDE	David Griffiths, page 47	Y	0.313	Y	0.407
+89	2.3.7	Schrodinger PDE	In a square	Y	0.3	Y	3.3
+90	2.4.1	Beam PDE	Beam PDE u_{tt}+u_{xxxx}=0	Y	1.222	Y	0.123
+91	2.5.1	Burger’s PDE	Inviscid Burgers u_{x}+uu_{y}=0	Y	0.039	Y	0.029
+92	2.5.2	Burger’s PDE	Inviscid Burgers with I.C. u_{x}+uu_{y}=0 and u(x,0)=\frac{1}{x+1}	Y	0.008	Y	0.05
+93	2.5.3	Burger’s PDE	u_{t}+uu_{x}=\mu u_{xx}	Y	0.037	Y	0.082
+94	2.5.4	Burger’s PDE	u_{t}+uu_{x}+\mu u_{xx} with IC	Y	9.02	N	0.314
+95	2.5.5	Burger’s PDE	u_{t}+uu_{x}+\mu u_{xx} IC as UnitBox	Y	19.51	N	0.334
+96	2.6.1	Black Scholes PDE	classic Black Scholes model from finance, European call version	Y	4.289	Y	0.61
+97	2.6.2	Black Scholes PDE	Boundary value problem for the Black Scholes equation	Y	1.673	Y	1.236
+98	2.7.1	Korteweg-deVries PDE	u_{xxx}+u_{t}-6uu_{x}=0	Y	0.024	Y	0.111
+99	2.8.1	Tricomi PDE	u_{xx}+yu_{yy}=0 with u(x,0)=0,u_{y}(x,0)=x^{2}	Y	8.8	Y	2.044
+100	2.8.2	Tricomi PDE	u_{xx}+xu_{yy}=0	N	0.008	Y	1.016
+101	2.9.1	Keldysh equation	xu_{xx}+u_{yy}=0	N	0.006	Y	1.069
+102	2.10.1	Euler-Poisson-Darboux equation	u_{xx}+u_{yy}+\frac{\beta}{x}u_{x}=0	N	0.009	Y	0.165
+103	2.10.2	Euler-Poisson-Darboux equation	u_{xx}-u_{yy}+\frac{\beta}{x}u_{x}=0	N	0.008	Y	0.327
+104	2.10.3	Euler-Poisson-Darboux equation	u_{tt}-u_{xx}-\frac{2}{x}u_{x}=0 with u(x,0)=0,u_{t}(x,0)=g(x)	N	2.417	Y	1.938
+105	2.11.1	Chaplygin’s equation	u_{\theta\theta}+\frac{v^{2}}{1-\frac{v^{2}}{c^{2}}}u_{vv}+vu_{v}=0	N	0.039	Y	0.615
+106	2.12.1	Cauchy Riemann PDE’s	Cauchy Riemann PDE with Prescribe the values of u and v on the x axis	Y	0.022	Y	0.096
+107	2.12.2	Cauchy Riemann PDE’s	Cauchy Riemann PDE With extra term on right side	N	0.002	Y	0.098
+108	2.13.1	Hamilton-Jacobi PDE	Hamilton-Jacobi type PDE	N	0.041	Y	0.191
+109	2.14.1	Airy PDE	u_{t}+u_{xxx}=0	Y	0.04	Y	0.115
+110	2.15.1	Nonlinear PDE’s	Bateman-Burgers u_{t}+uu_{x}=\nu u_{xx}	Y	0.018	Y	0.067
+111	2.15.2	Nonlinear PDE’s	Benjamin Bona Mahony u_{t}+u_{x}+uu+x-u_{xxt}=0	Y	0.024	Y	0.075
+112	2.15.3	Nonlinear PDE’s	Benjamin Ono u_{t}+Hu_{xx}+uu_{x}=0	Y	0.017	Y	0.067
+113	2.15.4	Nonlinear PDE’s	Born Infeld (1-u_{t}^{2})u_{xx}+2u_{x}u_{t}u_{xt}-(1+u_{x}^{2})u_{tt}=0	Y	0.01	Y	0.114
+114	2.15.5	Nonlinear PDE’s	Boussinesq u_{tt}-u_{xx}-u_{xxxx}-3(u^{2})_{xx}=0	Y	0.034	Y	0.084
+115	2.15.6	Nonlinear PDE’s	Boussinesq type u_{tt}-u_{xx}-2\alpha(uu_{x})_{x}-\beta u_{xxtt}=0	Y	0.032	Y	0.105
+116	2.15.7	Nonlinear PDE’s	Buckmaster u_{t}=(u^{4})_{xx}+(u^{3})_{x}	N	0.117	Y	0.274
+117	2.15.8	Nonlinear PDE’s	Camassa Holm u_{t}+2ku_{x}-u_{xxt}+3uu_{x}=2u_{x}u_{xx}+uu_{xxx}	N	0.116	Y	1.255
+118	2.15.9	Nonlinear PDE’s	Chaffee Infante u_{t}=u_{xx}+\lambda(u^{3}-u)=0	N	0.105	Y	0.141
+119	2.15.10	Nonlinear PDE’s	Clarke. \left(\theta_{t}-\gamma e^{\theta}\right)_{tt}=\left(\theta_{t}-e^{\theta}\right)_{xx}	N	0.008	N	0.028
+120	2.15.11	Nonlinear PDE’s	Degasperis Procesi u_{t}-u_{xxt}+4uu_{x}=3u_{x}u_{x}x+uu_{xxx}	N	0.117	Y	0.372
+121	2.15.12	Nonlinear PDE’s	Dym equation u_{t}=u^{3}u_{xxx}	N	0.066	Y	0.426
+122	2.15.13	Nonlinear PDE’s	Estevez Mansfield Clarkson u_{tyyy}+\beta u_{y}u_{yt}+\beta u_{yy}u_{t}+u_{tt}=0	Y	0.027	Y	0.093
+123	2.15.14	Nonlinear PDE’s	Fisher’s u_{t}=u(1-u)+u_{xx}	Y	0.036	Y	0.099
+124	2.15.15	Nonlinear PDE’s	Hunter Saxton \left(u_{t}+uu_{x})\right)_{x}=\frac{1}{2}(u_{x})^{2}	N	0.042	Y	0.214
+125	2.15.16	Nonlinear PDE’s	Kadomtsev Petviashvili \left(u_{t}+uu_{x}+\epsilon^{2}u_{xxx}\right)_{x}+\lambda u_{yy}=0	Y	0.058	Y	0.097
+126	2.15.17	Nonlinear PDE’s	Klein Gordon u_{xx}+u_{yy}+\lambda u^{p}=0	N	0.005	N	0.044
+127	2.15.18	Nonlinear PDE’s	Klein Gordon u_{xx}+u_{yy}+u^{2}=0	N	0.16	Y	0.212
+128	2.15.19	Nonlinear PDE’s	Khokhlov Zabolotskaya u_{xt}-(uu_{x})_{x}=u_{yy}	N	0.054	Y	0.164
+129	2.15.20	Nonlinear PDE’s	Korteweg de Vries (KdV) u_{t}+(u_{x})^{3}+6uu_{x}=0	Y	0.025	Y	0.096
+130	2.15.21	Nonlinear PDE’s	Lin Tsien 2u_{tx}+u_{x}u_{xx}-u_{yy}=0	N	0.125	Y	0.173
+131	2.15.22	Nonlinear PDE’s	Liouville u_{xx}+u_{yy}+e^{\lambda u}=0	N	0.006	N	0.021
+132	2.15.23	Nonlinear PDE’s	Plateau (1+u_{y}^{2})u_{xx}-2u_{x}u_{y}y_{xy}+(1+u_{x}^{2})u_{yy}=0	N	0.033	Y	0.119
+133	2.15.24	Nonlinear PDE’s	Rayleigh u_{tt}-u_{xx}=\epsilon(u_{t}-u_{t}^{3})	N	0.116	Y	0.166
+134	2.15.25	Nonlinear PDE’s	Sawada Kotera u_{t}+45u^{2}u_{x}+15u_{x}u_{xx}+15uu_{xxx}+u_{xxxxx}=0	Y	0.066	Y	0.104
+135	2.15.26	Nonlinear PDE’s	Sine Gordon \phi_{tt}-\phi_{xx}+\sin\phi=0	N	0.006	N	0.018
+136	2.15.27	Nonlinear PDE’s	Sinh Gordon u_{xt}=\sinh u	N	0.006	N	0.031
+137	2.15.28	Nonlinear PDE’s	Sinh Poisson u_{xx}+u_{yy}+\sinh u=0	N	0.005	N	0.018
+138	2.15.29	Nonlinear PDE’s	Thomas equation u_{xy}+\alpha u_{x}+\beta u_{y}+\nu u_{x}u_{y}=0	N	0.089	Y	0.501
+139	2.15.30	Nonlinear PDE’s	phi equation \phi_{tt}-\phi_{xx}-\phi+\phi^{3}=0	Y	0.029	Y	0.08
+140	2.16.1	more miscellaneous	SS_{xy}+S_{x}S_{y}=1	N	0.03	Y	0.053
+141	2.16.2	more miscellaneous	u_{rr}+u_{\theta\theta}=0	Y	29.825	Y	0.333
+142	2.16.3	more miscellaneous	u_{xx}+yu_{yy}=0	Y	8.802	Y	1.67
+143	2.16.4	more miscellaneous	u_{t}+u_{xxx}=0	Y	0.134	Y	2.118
+144	2.16.5	more miscellaneous	u_{xy}=\sin(x)\sin(y)	Y	2.058	Y	0.243
+145	2.16.6	more miscellaneous	w_{t}=w_{x_{1}x_{1}}+w_{x_{2}x_{2}}+w_{x_{3}x_{3}}	Y	1.341	Y	0.47
+146	2.16.7	more miscellaneous	Linear PDE, initial conditions at t=t_{0}	Y	1.694	Y	0.266
+147	2.16.8	more miscellaneous	second order in time, Linear PDE, initial conditions at t=t_{0}	Y	1.23	Y	0.977
+148	2.16.9	more miscellaneous	Einstein-Weiner u_{t}=-\beta u_{x}+Du_{xx}	Y	0.029	Y	0.148
+149	2.16.10	more miscellaneous	Using integral transforms.	Y	38.065	Y	0.878
+150	3.1.1.1	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	General initial conditions	Y	78.44	Y	0.974
+151	3.1.1.2	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Specific initial condition	Y	23.032	Y	0.548
+152	3.1.1.3	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	IC u=x(1-x)	Y	32.957	Y	0.556
+153	3.1.1.4	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Haberman 2.3.3 (a)	Y	0.064	Y	2.019
+154	3.1.1.5	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	IC hat function	Y	55.317	Y	0.852
+155	3.1.1.6	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Haberman 2.3.3 (b)	Y	0.775	Y	2.384
+156	3.1.1.7	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Haberman 2.3.3 (c)	Y	92.621	Y	3.131
+157	3.1.1.8	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Haberman 2.3.3 (d)	N	600.	Y	4.116
+158	3.1.1.9	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	domain from -1 to +1	Y	44.362	Y	0.614
+159	3.1.1.10	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	domain from -1 to +1	Y	92.056	Y	0.69
+160	3.1.1.11	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	with source that depends on space only (general case)	Y	99.387	Y	1.326
+161	3.1.1.12	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	with source that depends on space only (special case)	Y	89.168	Y	1.338
+162	3.1.1.13	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	with source that depends on space and time (general case)	Y	62.346	Y	2.221
+163	3.1.1.14	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	with source that depends on space and time (special case)	Y	95.332	Y	2.563
+164	3.1.1.15	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Math 4567 Exam	Y	27.119	Y	1.164
+165	3.1.1.16	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	With source	Y	64.996	Y	4.01
+166	3.1.1.17	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	special initial condition	Y	2.526	Y	2.
+167	3.1.1.18	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Diffusion Reaction and Euler-Cauchy Sturm-Liouville	Y	26.937	Y	1.501
+168	3.1.1.19	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Diffusion Reaction. Using growth form reaction term	Y	152.231	Y	0.539
+169	3.1.1.20	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Diffusion Reaction, using logistic form for reaction term	Y	3.077	N	1.612
+170	3.1.1.21	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Diffusion Reaction, using Aleee form for reaction term	Y	5.036	N	2.146
+171	3.1.1.22	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Diffusion Reaction. Haberman 2.3.8	Y	93.619	Y	1.002
+172	3.1.1.23	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Diffusion Reaction	Y	92.835	Y	0.981
+173	3.1.1.24	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Diffusion Reaction	Y	0.444	Y	1.004
+174	3.1.1.25	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Diffusion Reaction	N	39.576	Y	0.687
+175	3.1.1.26	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Diffusion convection (general case)	Y	32.11	Y	1.133
+176	3.1.1.27	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Diffusion convection (special case)	Y	92.089	Y	0.783
+177	3.1.1.28	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Haberman 2.4.2 (general case)	Y	0.982	Y	1.193
+178	3.1.1.29	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Left end zero, right end insulated, no source	Y	17.549	Y	1.204
+179	3.1.1.30	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	One end insulated	Y	1.246	Y	1.332
+180	3.1.1.31	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Haberman 2.3.7 (general case)	Y	0.964	Y	0.946
+181	3.1.1.32	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	specific case	Y	0.976	Y	0.68
+182	3.1.1.33	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Haberman 2.4.1 (a)	Y	1.207	Y	3.586
+183	3.1.1.34	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Both ends insulated, no source	Y	1.722	Y	0.95
+184	3.1.1.35	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Haberman 2.4.1 (b) (special case)	Y	1.07	Y	2.391
+185	3.1.1.36	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Haberman 2.4.1 (c) (special case)	Y	1.719	Y	2.762
+186	3.1.1.37	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Haberman 2.4.1 (d)	Y	1.172	Y	2.129
+187	3.1.1.38	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	both ends insulated	Y	61.411	Y	1.553
+188	3.1.1.39	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	convection heat loss	Y	2.101	Y	0.622
+189	3.1.1.40	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Pinchover and Rubinstein 6.25	Y	28.281	Y	2.937
+190	3.1.1.41	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	external source	Y	19.396	Y	9.542
+191	3.1.1.42	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Diffusion Reaction (general case)	Y	61.356	Y	0.587
+192	3.1.1.43	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Pinchover and Rubinstein 6.23	Y	64.15	Y	3.253
+193	3.1.1.44	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Pinchover and Rubinstein 6.21	Y	63.311	Y	1.534
+194	3.1.1.45	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Diffusion Reaction. Euler-Cauchy Sturm-Liouville	Y	1.999	N	600.
+195	3.1.1.46	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	convection heat loss	Y	27.018	Y	1.09
+196	3.1.1.47	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Mixed BC	Y	32.575	Y	2.5
+197	3.1.1.48	Diffusion in 1DFinite domain (bar), Both ends homogeneous BC	Haberman 8.2.1 (f)	Y	62.462	Y	2.153
+198	3.1.2.1	Diffusion in 1DFinite domain (bar), left end homogeneous, right end not	left end insulated (general case)	Y	2.561	Y	1.552
+199	3.1.2.2	Diffusion in 1DFinite domain (bar), left end homogeneous, right end not	left end insulated (special case)	Y	1.412	Y	0.759
+200	3.1.2.3	Diffusion in 1DFinite domain (bar), left end homogeneous, right end not	right end nonhomogeneous BC (general case)	Y	97.247	Y	1.123
+201	3.1.2.4	Diffusion in 1DFinite domain (bar), left end homogeneous, right end not	right end nonhomogeneous BC (special case)	Y	0.009	Y	0.939
+202	3.1.2.5	Diffusion in 1DFinite domain (bar), left end homogeneous, right end not	right end nonhomogeneous BC, special case	Y	17.657	Y	0.687
+203	3.1.2.6	Diffusion in 1DFinite domain (bar), left end homogeneous, right end not	convection heat loss	Y	10.872	N	600.
+204	3.1.2.7	Diffusion in 1DFinite domain (bar), left end homogeneous, right end not	nonhomogeneous BC	N	1.422	Y	1.586
+205	3.1.2.8	Diffusion in 1DFinite domain (bar), left end homogeneous, right end not	nonhomogeneous BC	Y	61.986	Y	0.622
+206	3.1.2.9	Diffusion in 1DFinite domain (bar), left end homogeneous, right end not	nonhomogeneous BC	Y	67.702	Y	2.881
+207	3.1.3.1	Diffusion in 1DFinite domain (bar), right end homogeneous, left end not	left end BC depends on time (general case)	Y	66.122	Y	3.236
+208	3.1.3.2	Diffusion in 1DFinite domain (bar), right end homogeneous, left end not	left end BC depends on time (special case)	Y	64.96	Y	2.194
+209	3.1.3.3	Diffusion in 1DFinite domain (bar), right end homogeneous, left end not	left end BC depends on time (special case)	Y	65.698	Y	1.969
+210	3.1.3.4	Diffusion in 1DFinite domain (bar), right end homogeneous, left end not	Haberman 8.3.6 (special case)	Y	155.652	Y	2.329
+211	3.1.3.5	Diffusion in 1DFinite domain (bar), right end homogeneous, left end not	BC depends on time (special case)	Y	25.702	Y	0.983
+212	3.1.4.1	Diffusion in 1DFinite domain (bar), Periodic BC	Periodic BC (general case). IC given	Y	4.718	Y	3.032
+213	3.1.4.2	Diffusion in 1DFinite domain (bar), Periodic BC	Periodic BC (general case). No IC given	Y	0.013	N	0.32
+214	3.1.4.3	Diffusion in 1DFinite domain (bar), Periodic BC	Periodic BC (general case). Damped heat PDE. No IC given	N	0.028	N	0.431
+215	3.1.5.1	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	both ends non-homogeneous BC (general case)	Y	93.136	Y	1.225
+216	3.1.5.2	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	non-homogeneous BC (special case)	Y	32.58	Y	0.648
+217	3.1.5.3	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	Articolo 8.4.1 (special case)	Y	92.456	Y	0.621
+218	3.1.5.4	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	With source that depends on space only (general case)	Y	109.661	Y	1.401
+219	3.1.5.5	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	With source that depends on space only (special case)	Y	155.551	Y	0.796
+220	3.1.5.6	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	With source that depends on space and time only (general case)	Y	60.375	Y	2.018
+221	3.1.5.7	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	Both ends depend on time (general case)	Y	98.715	Y	3.084
+222	3.1.5.8	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	Both ends depend on time (special case)	Y	96.861	Y	2.457
+223	3.1.5.9	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	both ends nonhomogeneous	Y	63.339	Y	2.189
+224	3.1.5.10	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	Haberman 8.2.1 (a) (general case)	Y	36.177	Y	1.484
+225	3.1.5.11	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	Haberman 8.2.1 (d) (general solution)	Y	110.025	Y	1.226
+226	3.1.5.12	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	Both ends depend on time with source that depends on space only (general solution)	Y	139.368	N	600.
+227	3.1.5.13	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	Both ends depend on time with source that depends on space only (special case)	Y	164.034	Y	3.34
+228	3.1.5.14	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	Both ends depend on time with source that depends on time and space (general solution)	Y	70.354	Y	2.882
+229	3.1.5.15	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	Both ends depend on time with source present (special case)	Y	175.667	Y	8.29
+230	3.1.5.16	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	Pinchover and Rubinstein 6.17	N	14.128	Y	1.651
+231	3.1.5.17	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	nonhomogeneous BC	Y	172.871	Y	3.355
+232	3.1.5.18	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	Haberman 8.2.2. (a)	Y	97.328	Y	2.895
+233	3.1.5.19	Diffusion in 1DFinite domain (bar), Both ends nonhomogeneous BC	Articolo 8.4.3	Y	24.72	Y	2.591
+234	3.1.6.1	Diffusion in 1DSemi-infinite domain	left end constant (general case)	Y	60.032	Y	0.459
+235	3.1.6.2	Diffusion in 1DSemi-infinite domain	left end constant (special case)	Y	45.474	Y	0.388
+236	3.1.6.3	Diffusion in 1DSemi-infinite domain	Logan p. 76. Left end general function of time (general case)	Y	0.489	Y	0.572
+237	3.1.6.4	Diffusion in 1DSemi-infinite domain	Left end function of time (special case)	Y	60.036	Y	0.949
+238	3.1.6.5	Diffusion in 1DSemi-infinite domain	nonhomogeneous BC	Y	60.022	Y	0.209
+239	3.1.6.6	Diffusion in 1DSemi-infinite domain	I.C. not zero	Y	11.566	Y	0.411
+240	3.1.6.7	Diffusion in 1DSemi-infinite domain	nonhomogeneous BC	Y	60.058	Y	0.24
+241	3.1.6.8	Diffusion in 1DSemi-infinite domain	nonhomogeneous BC	Y	60.046	Y	1.263
+242	3.1.6.9	Diffusion in 1DSemi-infinite domain	nonhomogeneous B.C.	Y	60.031	Y	0.62
+243	3.1.6.10	Diffusion in 1DSemi-infinite domain	Unit triangle I.C.	Y	31.906	Y	0.673
+244	3.1.6.11	Diffusion in 1DSemi-infinite domain	I.C. not at t=0	Y	5.149	Y	0.649
+245	3.1.6.12	Diffusion in 1DSemi-infinite domain	Diffusion with advection	Y	2.322	Y	0.961
+246	3.1.6.13	Diffusion in 1DSemi-infinite domain	Practice exam problem	Y	60.052	Y	0.399
+247	3.1.7.1	Diffusion in 1DInfinite domain	Inverse exponential I.C.	Y	17.133	Y	0.421
+248	3.1.7.2	Diffusion in 1DInfinite domain	Advection term	Y	0.336	Y	0.374
+249	3.1.7.3	Diffusion in 1DInfinite domain	UnitBox I.C.	Y	0.122	Y	0.476
+250	3.1.7.4	Diffusion in 1DInfinite domain	No source	Y	1.361	Y	0.76
+251	3.1.7.5	Diffusion in 1DInfinite domain	constant as source	Y	30.42	Y	0.462
+252	3.1.7.6	Diffusion in 1DInfinite domain	No intial conditions	Y	0.004	Y	0.092
+253	3.1.7.7	Diffusion in 1DInfinite domain	piecewise I.C.	Y	90.173	Y	0.68
+254	3.1.7.8	Diffusion in 1DInfinite domain	Practice exam problem	Y	18.851	Y	0.292
+255	3.2.1.1	Diffusion in 2DCartesian coordinates (Rectangle, Square)	No source	Y	4.696	Y	1.346
+256	3.2.1.2	Diffusion in 2DCartesian coordinates (Rectangle, Square)	Internal source term	Y	5.064	Y	1.769
+257	3.2.1.3	Diffusion in 2DCartesian coordinates (Rectangle, Square)	Articolo 6.6.3	Y	5.598	Y	3.804
+258	3.2.2.1	Diffusion in 2DPolar coordinates (disk, sector, annulus)	no \theta dependency, insulated (General solution)	Y	0.985	Y	5.332
+259	3.2.2.2	Diffusion in 2DPolar coordinates (disk, sector, annulus)	no \theta dependency, insulated (Specific solution)	Y	2.318	Y	2.232
+260	3.2.2.3	Diffusion in 2DPolar coordinates (disk, sector, annulus)	no \theta dependency	Y	0.239	Y	1.185
+261	3.2.2.4	Diffusion in 2DPolar coordinates (disk, sector, annulus)	no \theta dependency	Y	1.241	Y	0.392
+262	3.2.2.5	Diffusion in 2DPolar coordinates (disk, sector, annulus)	Haberman 8.3.5 (General solution)	Y	109.928	Y	0.765
+263	3.2.2.6	Diffusion in 2DPolar coordinates (disk, sector, annulus)	Specific example of the above	Y	3.384	Y	0.863
+264	3.2.2.7	Diffusion in 2DPolar coordinates (disk, sector, annulus)	Specific example of the above	Y	2.891	Y	0.798
+265	3.2.2.8	Diffusion in 2DPolar coordinates (disk, sector, annulus)	Articolo 6.9.1	Y	3.057	N	0.52
+266	3.2.2.9	Diffusion in 2DPolar coordinates (disk, sector, annulus)	Articolo 6.9.2	Y	2.925	Y	4.991
+267	3.2.2.10	Diffusion in 2DPolar coordinates (disk, sector, annulus)	Haberman 8.2.5 with \theta dependency (General case)	Y	416.45	N	0.203
+268	3.2.2.11	Diffusion in 2DPolar coordinates (disk, sector, annulus)	With \theta dependency (Specific example)	Y	4.839	N	0.561
+269	3.2.2.12	Diffusion in 2DPolar coordinates (disk, sector, annulus)	With \theta dependency (specific example)	Y	5.701	N	0.605
+270	3.2.2.13	Diffusion in 2DPolar coordinates (disk, sector, annulus)	Insulated with \theta dependency (General solution)	Y	4.238	N	1.377
+271	3.2.2.14	Diffusion in 2DPolar coordinates (disk, sector, annulus)	Insulated with \theta dependency (Specific example)	Y	10.269	N	1.437
+272	3.2.2.15	Diffusion in 2DPolar coordinates (disk, sector, annulus)	Insulated with \theta dependency (Specific example)	N	600.	N	1.458
+273	3.3.1.1	Diffusion in 3DSpherical coordinates	No angle dependencies	Y	61.271	Y	0.315
+274	3.3.2.1	Diffusion in 3DCylinderical coordinates	Haberman 7.9.4 (a)	Y	2.543	Y	9.2
+275	3.3.2.2	Diffusion in 3DCylinderical coordinates	Haberman 7.9.4 (b)	Y	7.444	N	3.817
+276	3.3.2.3	Diffusion in 3DCylinderical coordinates	Haberman 7.9.4 (c)	Y	6.254	N	5.86
+277	3.3.2.4	Diffusion in 3DCylinderical coordinates	Haberman 7.9.3 (a)	N	0.011	N	0.716
+278	3.3.2.5	Diffusion in 3DCylinderical coordinates	Haberman 7.9.3 (b)	N	0.009	N	0.812
+279	3.3.2.6	Diffusion in 3DCylinderical coordinates	Haberman 7.9.3 (c)	N	0.01	N	0.726
+280	4.1.1.1	Laplace in 2DCartesian coordinates	Rectangle, 3 edges zero, buttom edge not	Y	0.999	Y	22.185
+281	4.1.1.2	Laplace in 2DCartesian coordinates	Rectangle, 3 edges zero, right edge not	Y	1.009	Y	1.016
+282	4.1.1.3	Laplace in 2DCartesian coordinates	Rectangle, 3 edges zero, buttom edge has impulse	Y	3.248	Y	9.062
+283	4.1.1.4	Laplace in 2DCartesian coordinates	Haberman 2.5.1 (a)	Y	0.532	Y	22.765
+284	4.1.1.5	Laplace in 2DCartesian coordinates	Haberman 2.5.1 (b)	Y	0.542	Y	21.725
+285	4.1.1.6	Laplace in 2DCartesian coordinates	Haberman 2.5.1 (c)	Y	3.004	Y	21.809
+286	4.1.1.7	Laplace in 2DCartesian coordinates	Haberman 2.5.1 (d)	Y	2.435	Y	35.293
+287	4.1.1.8	Laplace in 2DCartesian coordinates	Haberman 2.5.1 (e)	Y	11.602	Y	22.062
+288	4.1.1.9	Laplace in 2DCartesian coordinates	Unit triangle B.C.	Y	0.516	Y	1.663
+289	4.1.1.10	Laplace in 2DCartesian coordinates	Top edge at infinity	Y	3.121	Y	1.273
+290	4.1.1.11	Laplace in 2DCartesian coordinates	Top edge at infinity	Y	2.878	Y	1.2
+291	4.1.1.12	Laplace in 2DCartesian coordinates	Right edge at infinity	Y	2.804	Y	1.224
+292	4.1.1.13	Laplace in 2DCartesian coordinates	Right edge at infinity	Y	82.077	Y	5.577
+293	4.1.1.14	Laplace in 2DCartesian coordinates	Right edge at infinity	Y	1.692	Y	4.101
+294	4.1.1.15	Laplace in 2DCartesian coordinates	Laplace PDE in 2D Cartessian with boundary condition as Dirac function	Y	0.029	Y	0.274
+295	4.1.1.16	Laplace in 2DCartesian coordinates	One side homogeneous	Y	0.901	Y	2.996
+296	4.1.1.17	Laplace in 2DCartesian coordinates	In right half plane	Y	12.366	Y	0.461
+297	4.1.1.18	Laplace in 2DCartesian coordinates	Right edge at infinity	Y	2.92	Y	2.038
+298	4.1.1.19	Laplace in 2DCartesian coordinates	Dirichlet problem Upper half	Y	0.741	Y	0.396
+299	4.1.1.20	Laplace in 2DCartesian coordinates	Right half-plane	Y	15.29	Y	0.418
+300	4.1.1.21	Laplace in 2DCartesian coordinates	First quadrant	Y	10.712	N	2.439
+301	4.1.1.22	Laplace in 2DCartesian coordinates	Neumann problem upper half-plane	Y	3.353	Y	0.698
+302	4.1.1.23	Laplace in 2DCartesian coordinates	Dirichlet problem in a rectangle	Y	1.298	Y	0.965
+303	4.1.1.24	Laplace in 2DCartesian coordinates	Strip in upper half	Y	60.15	Y	0.968
+304	4.1.1.25	Laplace in 2DCartesian coordinates	in Rectangle, right edge at infinity	Y	3.108	Y	1.903
+305	4.1.2.1	Laplace in 2DPolar coordinates	Laplace PDE inside quarter disk, Neumann BC at edge	Y	2.069	Y	0.412
+306	4.1.2.2	Laplace in 2DPolar coordinates	r=4 and u=x^{4} at boundary of disk	Y	4.839	Y	2.261
+307	4.1.2.3	Laplace in 2DPolar coordinates	r=1 and u_{r}=x at boundary of disk	N	0.555	N	0.203
+308	4.1.2.4	Laplace in 2DPolar coordinates	Laplace inside disk. General solution	Y	0.272	Y	0.853
+309	4.1.2.5	Laplace in 2DPolar coordinates	Laplace inside disk. Specific boundary conditions	Y	1.411	Y	1.405
+310	4.1.2.6	Laplace in 2DPolar coordinates	Haberman 2.5.5 (c)	N	2.389	Y	0.38
+311	4.1.2.7	Laplace in 2DPolar coordinates	semi-circle	Y	1.188	Y	0.403
+312	4.1.2.8	Laplace in 2DPolar coordinates	Haberman 2.5.8 (b)	Y	5.643	Y	75.988
+313	4.1.2.9	Laplace in 2DPolar coordinates	Circular annulus	Y	0.322	Y	1.121
+314	4.1.2.10	Laplace in 2DPolar coordinates	Outside a disk	Y	3.764	Y	0.915
+315	4.1.2.11	Laplace in 2DPolar coordinates	Outside a disk	Y	1.574	Y	1.632
+316	4.2.1.1	Laplace in 3DSpherical coordinates	In a sphere	Y	0.021	Y	0.527
+317	4.2.2.1	Laplace in 3DCylinderical coordinates	Haberman 7.9.1 (a)	N	0.014	N	0.434
+318	4.2.2.2	Laplace in 3DCylinderical coordinates	Haberman 7.9.1 (b)	N	0.011	N	0.51
+319	4.2.2.3	Laplace in 3DCylinderical coordinates	Haberman 7.9.1 (c)	N	0.01	N	0.545
+320	4.2.2.4	Laplace in 3DCylinderical coordinates	Haberman 7.9.1 (d)	N	0.01	N	0.598
+321	4.2.2.5	Laplace in 3DCylinderical coordinates	Haberman 7.9.1 (e)	N	0.01	N	0.539
+322	4.2.2.6	Laplace in 3DCylinderical coordinates	Haberman 7.9.2 (a)	N	0.011	N	0.604
+323	4.2.2.7	Laplace in 3DCylinderical coordinates	Haberman 7.9.2 (b)	N	0.013	N	4.583
+324	4.2.2.8	Laplace in 3DCylinderical coordinates	Haberman 7.9.2 (c)	N	0.015	N	4.203
+325	4.2.2.9	Laplace in 3DCylinderical coordinates	Haberman 7.9.2 (d)	N	0.01	N	0.627
+326	4.3.1.1	Poisson in 2DCartesian coordinates	All boundaries at zero	N	0.012	Y	5.737
+327	4.3.1.2	Poisson in 2DCartesian coordinates	Dirichlet problem in a rectangle	Y	0.907	Y	0.112
+328	4.3.1.3	Poisson in 2DCartesian coordinates	Poisson PDE in whole 2D plane	Y	30.538	Y	0.041
+329	4.4.0.1	Helmholtz in 2DCartesian coordinates	In rectangle	Y	62.07	Y	2.092
+330	4.4.0.2	Helmholtz in 2DCartesian coordinates	On whole plane	Y	0.004	Y	0.176
+331	4.4.0.3	Helmholtz in 2DCartesian coordinates	Reduced Helmholtz Inside square	Y	61.721	Y	2.561
+332	4.5.1.1	Helmholtz in 3DSpherical coordinates	Chain reaction PDE	N	0.085	N	0.501
+333	5.1.1.1	Wave PDE in 1DFinite length string	General solution for both ends fixed. Domain is 0\dots L	Y	53.122	Y	2.72
+334	5.1.1.2	Wave PDE in 1DFinite length string	both ends fixed, inital position zero (special case)	Y	1.78	Y	0.901
+335	5.1.1.3	Wave PDE in 1DFinite length string	both ends fixed, inital velocity zero (special case)	Y	1.46	Y	0.934
+336	5.1.1.4	Wave PDE in 1DFinite length string	both ends fixed but domain is -\pi\dots\pi. zero intial position, non zero initial velocity	Y	6.162	Y	4.372
+337	5.1.1.5	Wave PDE in 1DFinite length string	both ends fixed but domain is -1\dots 1. intial position is an impulse, zero initial velocity	Y	0.51	Y	1.303
+338	5.1.1.6	Wave PDE in 1DFinite length string	Logan book, page 28. Both ends fixed	Y	0.782	Y	0.288
+339	5.1.1.7	Wave PDE in 1DFinite length string	non-zero initial velocity. Both ends fixed	Y	103.445	Y	0.661
+340	5.1.1.8	Wave PDE in 1DFinite length string	Logan book page 149)	Y	12.854	Y	0.73
+341	5.1.1.9	Wave PDE in 1DFinite length string	Haberman 8.5.2 (a)	Y	14.688	Y	4.622
+342	5.1.1.10	Wave PDE in 1DFinite length string	Haberman 8.5.2 (b)	Y	65.228	Y	3.5
+343	5.1.1.11	Wave PDE in 1DFinite length string	Both I.C. not zero	Y	34.25	Y	1.212
+344	5.1.1.12	Wave PDE in 1DFinite length string	With constant source	Y	64.713	Y	3.083
+345	5.1.1.13	Wave PDE in 1DFinite length string	Logan page 213	Y	3.194	Y	2.405
+346	5.1.1.14	Wave PDE in 1DFinite length string	Telegraphy PDE	Y	121.723	Y	1.284
+347	5.1.1.15	Wave PDE in 1DFinite length string	Dispersion term present (general case)	Y	93.635	Y	2.238
+348	5.1.1.16	Wave PDE in 1DFinite length string	Dispersion term present	Y	153.726	Y	3.666
+349	5.1.1.17	Wave PDE in 1DFinite length string	Dispersion term present (specific case)	Y	154.372	Y	1.553
+350	5.1.1.18	Wave PDE in 1DFinite length string	non-zero initial position	Y	5.079	Y	3.846
+351	5.1.1.19	Wave PDE in 1DFinite length string	With source	Y	6.029	Y	3.434
+352	5.1.1.20	Wave PDE in 1DFinite length string	Right end free (general case)	Y	23.262	Y	3.615
+353	5.1.1.21	Wave PDE in 1DFinite length string	Right end free, zero initial velocity (general case)	Y	10.238	Y	2.962
+354	5.1.1.22	Wave PDE in 1DFinite length string	Right end free, zero initial velocity (special case)	Y	62.189	Y	1.286
+355	5.1.1.23	Wave PDE in 1DFinite length string	Right end free, zero initial velocity, damping present (general case)	Y	41.335	Y	5.547
+356	5.1.1.24	Wave PDE in 1DFinite length string	Right end free, zero initial velocity, damping present (special case, underdamped)	Y	63.428	Y	2.593
+357	5.1.1.25	Wave PDE in 1DFinite length string	Right end free, zero initial velocity, damping present (special case, critical damped)	Y	63.491	Y	2.578
+358	5.1.1.26	Wave PDE in 1DFinite length string	Right end free, zero initial velocity, damping present (special case, over damped)	Y	63.552	Y	2.782
+359	5.1.1.27	Wave PDE in 1DFinite length string	I.C. at different times, right end free, with source	N	33.308	Y	29.459
+360	5.1.1.28	Wave PDE in 1DFinite length string	Right end oscillates	Y	75.767	Y	3.291
+361	5.1.1.29	Wave PDE in 1DFinite length string	Perioidic B.C.	N	1.723	N	0.264
+362	5.1.1.30	Wave PDE in 1DFinite length string	Mixed B.C.	N	2.097	N	0.207
+363	5.1.1.31	Wave PDE in 1DFinite length string	Left end fixed, right end non-homogeneous Neumann BC. Zero initial conditions	Y	63.386	Y	3.211
+364	5.1.2.1	Wave PDE in 1DSemi-infinite domain	Left end fixed, (general case)	Y	8.057	Y	0.266
+365	5.1.2.2	Wave PDE in 1DSemi-infinite domain	Left end fixed with specific initial position	Y	14.906	Y	0.78
+366	5.1.2.3	Wave PDE in 1DSemi-infinite domain	Logan page 115, left end fixed with source	Y	6.103	Y	0.248
+367	5.1.2.4	Wave PDE in 1DSemi-infinite domain	Left moving boundary condition	Y	1.035	Y	0.22
+368	5.1.2.5	Wave PDE in 1DSemi-infinite domain	moving Left end	Y	2.666	Y	0.602
+369	5.1.2.6	Wave PDE in 1DSemi-infinite domain	I.C. at t=1	Y	9.125	Y	0.234
+370	5.1.2.7	Wave PDE in 1DSemi-infinite domain	B.C. at x=1	Y	62.844	Y	0.238
+371	5.1.2.8	Wave PDE in 1DSemi-infinite domain	Left end free. zero initial velocity (general solution)	Y	5.083	Y	0.177
+372	5.1.2.9	Wave PDE in 1DSemi-infinite domain	Left end free. zero initial velocity (Special solution)	Y	0.998	Y	0.269
+373	5.1.2.10	Wave PDE in 1DSemi-infinite domain	Left end fixed. zero initial velocity (Special solution)	Y	3.431	Y	0.255
+374	5.1.2.11	Wave PDE in 1DSemi-infinite domain	Left end free. zero initial position (general solution)	Y	6.111	Y	0.212
+375	5.1.2.12	Wave PDE in 1DSemi-infinite domain	Left end free. Non zero initial position and velocity (general solution)	Y	29.152	Y	0.228
+376	5.1.2.13	Wave PDE in 1DSemi-infinite domain	Left end free with source	Y	0.933	Y	0.149
+377	5.1.3.1	Wave PDE in 1DInfinite domain	General case. u_{tt}=u_{xx} with u(x,0)=f(x),u_{t}(x,0)=g(x)	Y	0.02	Y	0.126
+378	5.1.3.2	Wave PDE in 1DInfinite domain	General case. No IC given. u_{tt}+u_{xt}=c^{2}u_{xx}	Y	0.004	Y	0.164
+379	5.1.3.3	Wave PDE in 1DInfinite domain	u_{tt}=c^{2}u_{xx}+f(x,t), IC at t=1,u(x,1)=g(x),u_{t}(x,1)=h(x)	Y	0.105	Y	0.583
+380	5.1.3.4	Wave PDE in 1DInfinite domain	No source. u_{tt}=u_{xx}, with u(x,0)=e^{-x^{2}},u_{t}(x,0)=1	Y	0.002	Y	0.093
+381	5.1.3.5	Wave PDE in 1DInfinite domain	With source term. u_{tt}=u_{xx}+m	Y	0.01	Y	0.124
+382	5.1.3.6	Wave PDE in 1DInfinite domain	non-linear (Solitons) u_{t}+6u(x,t)u_{x}+u_{xxx}=0	Y	0.026	Y	0.09
+383	5.1.3.7	Wave PDE in 1DInfinite domain	Inhomogeneous PDE 3u_{xx}-u_{tt}+u_{xt}=1	Y	0.003	Y	0.099
+384	5.1.3.8	Wave PDE in 1DInfinite domain	Practice exam problem Math 5587	Y	0.038	Y	0.13
+385	5.1.3.9	Wave PDE in 1DInfinite domain	Practice exam problem Math 5587	Y	0.002	Y	0.099
+386	5.1.3.10	Wave PDE in 1DInfinite domain	Practice exam problem Math 5587	Y	15.	Y	0.107
+387	5.1.3.11	Wave PDE in 1DInfinite domain	zero initial velocity	Y	0.002	Y	0.081
+388	5.1.3.12	Wave PDE in 1DInfinite domain	zero initial velocity	Y	0.003	Y	0.151
+389	5.1.3.13	Wave PDE in 1DInfinite domain	General case u_{tt}=u_{xx} with u(x,0)=\sin x,u_{t}(x,0)=-2xe^{-x^{2}}	Y	0.111	Y	0.129
+390	5.1.3.14	Wave PDE in 1DInfinite domain	General case. u_{tt}=u_{xx} dAlembert solution, box function as initial position	Y	0.003	Y	0.089
+391	5.1.3.15	Wave PDE in 1DInfinite domain	u_{tt}=4u_{xx}+\cos(t) dAlembert solution with u(x,0)=\sin x,u_{t}(x,0)=\cos x	Y	0.117	Y	0.128
+392	5.1.3.16	Wave PDE in 1DInfinite domain	u_{tt}=c^{2}u_{xx} dAlembert solution with u(x,0)=\delta(x-a),u_{t}(x,0)=0	Y	61.144	Y	0.075
+393	5.1.3.17	Wave PDE in 1DInfinite domain	system of 2 inhomogeneous linear hyperbolic system with constant coefficients	Y	0.185	N	0.22
+394	5.2.1.1	Wave PDE in 2DCartesian coordinates	Rectangular membrane. Fixed on all edges, General solution	Y	1.728	Y	62.451
+395	5.2.1.2	Wave PDE in 2DCartesian coordinates	Rectangular membrane. Fixed on all edges, zero velocity. Specific example	Y	0.288	Y	1.918
+396	5.2.1.3	Wave PDE in 2DCartesian coordinates	All 4 edges fixed, zero initial velocity, Specific example	Y	26.865	Y	1.799
+397	5.2.1.4	Wave PDE in 2DCartesian coordinates	All 4 edges fixed, zero initial velocity, Specific example, delta in center	Y	8.358	Y	4.813
+398	5.2.1.5	Wave PDE in 2DCartesian coordinates	All 4 edges fixed	Y	4.176	Y	1.73
+399	5.2.1.6	Wave PDE in 2DCartesian coordinates	All edges fixed (Haberman 8.5.5 (a)	Y	28.107	N	0.105
+400	5.2.1.7	Wave PDE in 2DCartesian coordinates	2 edgs fixed, 2 free, zero initial velocity	Y	9.922	Y	2.017
+401	5.2.1.8	Wave PDE in 2DCartesian coordinates	All 4 edges fixed, zero initial velocity, general solution	Y	1.242	Y	174.329
+402	5.2.1.9	Wave PDE in 2DCartesian coordinates	With damping	Y	5.236	Y	5.666
+403	5.2.1.10	Wave PDE in 2DCartesian coordinates	On the whole plane	Y	0.126	N	0.126
+404	5.2.2.1	Wave PDE in 2DPolar coordinates	no \theta dependency, fixed boundary, general case	Y	32.249	Y	0.424
+405	5.2.2.2	Wave PDE in 2DPolar coordinates	no \theta dependency. Specific example. Both initial conditions not zero	Y	32.241	Y	92.538
+406	5.2.2.3	Wave PDE in 2DPolar coordinates	no \theta dependency. Specific example. Both initial conditions not zero	Y	31.964	Y	1.412
+407	5.2.2.4	Wave PDE in 2DPolar coordinates	no \theta dependency. Using integral transforms. Source present. Specific example	Y	3.604	Y	1.04
+408	5.2.2.5	Wave PDE in 2DPolar coordinates	no \theta dependency. Using integral transforms. Source present. Specific example	N	2.394	Y	0.367
+409	5.2.2.6	Wave PDE in 2DPolar coordinates	\theta dependency, fixed on edges, general solution	Y	11.328	N	1.026
+410	5.2.2.7	Wave PDE in 2DPolar coordinates	\theta dependency, fixed on edges, zero initial velocity, general solution	Y	4.676	N	1.071
+411	5.2.2.8	Wave PDE in 2DPolar coordinates	\theta dependency, fixed on edges, zero initial velocity, specific example	Y	12.523	N	0.576
+412	5.2.2.9	Wave PDE in 2DPolar coordinates	\theta dependency, fixed on edges, zero initial position, specific example	Y	4.09	N	0.576
+413	5.2.2.10	Wave PDE in 2DPolar coordinates	\theta dependency, fixed on edges, zero initial position with internal source (Haberman 8.5.5. (b)	N	0.034	N	0.143
+414	5.3.1.1	Wave PDE in 3DSpherical coordinates	No I.C. no B.C.	Y	0.033	Y	1.043
+415	5.3.2.1	Wave PDE in 3DCylindrical coordinates	No I.C. no B.C.	Y	0.005	Y	0.383
+416	6.1.1	chapter 1	problem number 1	Y	0.028	Y	0.021
+417	6.1.2	chapter 1	problem number 2	Y	0.021	Y	0.02
+418	6.1.3	chapter 1	problem number 3	Y	0.027	Y	0.023
+419	6.1.4	chapter 1	problem number 4	Y	0.025	Y	0.024
+420	6.1.5	chapter 1	problem number 5	Y	0.038	Y	0.036
+421	6.1.6	chapter 1	problem number 6	Y	0.037	Y	0.059
+422	6.2.1.1	chapter 22.1	problem number 1	Y	0.006	Y	0.04
+423	6.2.1.2	chapter 22.1	problem number 2	Y	0.01	Y	0.019
+424	6.2.1.3	chapter 22.1	problem number 3	Y	0.073	Y	0.069
+425	6.2.1.4	chapter 22.1	problem number 4	Y	0.017	Y	0.032
+426	6.2.1.5	chapter 22.1	problem number 5	Y	0.021	Y	0.15
+427	6.2.1.6	chapter 22.1	problem number 6	Y	0.042	Y	0.217
+428	6.2.1.7	chapter 22.1	problem number 7	Y	0.047	Y	1.627
+429	6.2.1.8	chapter 22.1	problem number 8	N	2.404	Y	1.148
+430	6.2.2.1	chapter 22.2	problem number 1	Y	0.009	Y	0.02
+431	6.2.2.2	chapter 22.2	problem number 2	Y	0.174	Y	0.135
+432	6.2.2.3	chapter 22.2	problem number 3	Y	0.142	Y	0.047
+433	6.2.2.4	chapter 22.2	problem number 4	Y	0.569	Y	0.159
+434	6.2.2.5	chapter 22.2	problem number 5	Y	0.491	Y	0.251
+435	6.2.2.6	chapter 22.2	problem number 6	Y	0.394	Y	0.148
+436	6.2.2.7	chapter 22.2	problem number 7	Y	0.394	Y	0.213
+437	6.2.2.8	chapter 22.2	problem number 8	Y	0.5	Y	0.201
+438	6.2.2.9	chapter 22.2	problem number 9	Y	0.217	Y	0.178
+439	6.2.2.10	chapter 22.2	problem number 10	Y	0.124	Y	0.128
+440	6.2.2.11	chapter 22.2	problem number 11	Y	0.201	Y	0.132
+441	6.2.2.12	chapter 22.2	problem number 12	Y	0.536	Y	0.332
+442	6.2.2.13	chapter 22.2	problem number 13	Y	0.081	Y	0.03
+443	6.2.2.14	chapter 22.2	problem number 14	Y	0.2	Y	0.248
+444	6.2.2.15	chapter 22.2	problem number 15	Y	0.49	Y	0.2
+445	6.2.2.16	chapter 22.2	problem number 16	Y	0.73	Y	0.258
+446	6.2.2.17	chapter 22.2	problem number 17	Y	0.757	Y	0.31
+447	6.2.2.18	chapter 22.2	problem number 18	Y	0.2	Y	0.172
+448	6.2.2.19	chapter 22.2	problem number 19	Y	0.326	Y	0.216
+449	6.2.2.20	chapter 22.2	problem number 20	N	0.241	Y	0.284
+450	6.2.2.21	chapter 22.2	problem number 21	Y	0.141	Y	0.592
+451	6.2.2.22	chapter 22.2	problem number 22	Y	0.363	Y	0.399
+452	6.2.2.23	chapter 22.2	problem number 23	Y	0.312	Y	0.235
+453	6.2.2.24	chapter 22.2	problem number 24	N	0.33	Y	0.301
+454	6.2.2.25	chapter 22.2	problem number 25	N	600.	N	180.703
+455	6.2.2.26	chapter 22.2	problem number 26	N	201.639	N	18.516
+456	6.2.2.27	chapter 22.2	problem number 27	N	101.207	N	0.953
+457	6.2.2.28	chapter 22.2	problem number 28	N	0.597	Y	0.1
+458	6.2.2.29	chapter 22.2	problem number 29	N	101.911	N	0.842
+459	6.2.2.30	chapter 22.2	problem number 30	N	0.313	Y	0.161
+460	6.2.2.31	chapter 22.2	problem number 31, Hesse’s equation	N	228.935	N	600.
+461	6.2.3.1	chapter 22.3	problem number 1	Y	0.541	Y	0.394
+462	6.2.3.2	chapter 22.3	problem number 2	Y	0.231	Y	0.207
+463	6.2.3.3	chapter 22.3	problem number 3	Y	0.239	Y	0.827
+464	6.2.3.4	chapter 22.3	problem number 4	N	0.352	Y	0.451
+465	6.2.3.5	chapter 22.3	problem number 5	Y	1.156	Y	0.114
+466	6.2.3.6	chapter 22.3	problem number 6	N	0.38	Y	0.078
+467	6.2.3.7	chapter 22.3	problem number 7	Y	0.169	Y	0.189
+468	6.2.3.8	chapter 22.3	problem number 8	Y	0.193	Y	0.212
+469	6.2.3.9	chapter 22.3	problem number 9	N	600.	Y	0.065
+470	6.2.4.1	chapter 22.4	problem number 1	Y	0.02	Y	0.047
+471	6.2.4.2	chapter 22.4	problem number 2	Y	0.194	Y	0.293
+472	6.2.4.3	chapter 22.4	problem number 3	Y	0.147	Y	0.296
+473	6.2.4.4	chapter 22.4	problem number 4	Y	0.304	Y	0.309
+474	6.2.4.5	chapter 22.4	problem number 5	N	0.376	N	600.
+475	6.2.4.6	chapter 22.4	problem number 6	Y	1.011	Y	0.406
+476	6.2.4.7	chapter 22.4	problem number 7	Y	2.644	Y	5.217
+477	6.2.5.1	chapter 22.5	problem number 1	Y	0.06	Y	0.147
+478	6.2.5.2	chapter 22.5	problem number 2	Y	0.192	Y	0.348
+479	6.2.5.3	chapter 22.5	problem number 3	Y	1.007	Y	0.186
+480	6.2.5.4	chapter 22.5	problem number 4	Y	0.613	Y	0.631
+481	6.2.5.5	chapter 22.5	problem number 5	Y	0.683	Y	0.458
+482	6.2.5.6	chapter 22.5	problem number 6	N	0.999	Y	0.579
+483	6.2.5.7	chapter 22.5	problem number 7	Y	0.364	Y	0.227
+484	6.2.5.8	chapter 22.5	problem number 8	Y	1.523	Y	0.892
+485	6.2.5.9	chapter 22.5	problem number 9	N	1.497	Y	0.726
+486	6.2.5.10	chapter 22.5	problem number 10	N	2.113	Y	0.922
+487	6.2.5.11	chapter 22.5	problem number 11	Y	24.575	N	3.907
+488	6.2.5.12	chapter 22.5	problem number 12	N	24.186	N	3.423
+489	6.2.5.13	chapter 22.5	problem number 13	N	31.077	N	4.243
+490	6.2.5.14	chapter 22.5	problem number 14	N	0.587	Y	0.135
+491	6.2.5.15	chapter 22.5	problem number 15	Y	1.251	Y	1.572
+492	6.2.5.16	chapter 22.5	problem number 16	N	46.96	N	24.851
+493	6.2.5.17	chapter 22.5	problem number 17	N	1.387	Y	0.495
+494	6.2.5.18	chapter 22.5	problem number 18	N	1.41	Y	0.638
+495	6.2.5.19	chapter 22.5	problem number 19	Y	0.5	Y	1.73
+496	6.2.5.20	chapter 22.5	problem number 20	Y	0.194	Y	0.203
+497	6.2.5.21	chapter 22.5	problem number 21	Y	0.365	Y	0.246
+498	6.2.5.22	chapter 22.5	problem number 22	Y	0.383	Y	0.196
+499	6.2.5.23	chapter 22.5	problem number 23	N	23.489	Y	0.239
+500	6.2.5.24	chapter 22.5	problem number 24	Y	0.175	Y	0.186
+501	6.2.5.25	chapter 22.5	problem number 25	Y	0.486	Y	0.173
+502	6.2.5.26	chapter 22.5	problem number 26	Y	1.044	Y	0.212
+503	6.2.5.27	chapter 22.5	problem number 27	Y	0.349	Y	0.348
+504	6.2.5.28	chapter 22.5	problem number 28	N	0.675	Y	0.163
+505	6.2.5.29	chapter 22.5	problem number 29	N	0.68	Y	0.184
+506	6.2.5.30	chapter 22.5	problem number 30	N	0.975	Y	0.733
+507	6.2.5.31	chapter 22.5	problem number 31	N	7.005	Y	1.361
+508	6.2.5.32	chapter 22.5	problem number 32	N	82.326	N	21.887
+509	6.2.5.33	chapter 22.5	problem number 33	Y	0.493	Y	0.286
+510	6.2.5.34	chapter 22.5	problem number 34	Y	0.31	Y	0.224
+511	6.2.5.35	chapter 22.5	problem number 35	Y	0.146	Y	0.218
+512	6.2.5.36	chapter 22.5	problem number 36	Y	0.519	Y	0.344
+513	6.2.5.37	chapter 22.5	problem number 37	Y	2.375	Y	0.468
+514	6.2.5.38	chapter 22.5	problem number 38	Y	1.729	Y	0.288
+515	6.2.5.39	chapter 22.5	problem number 39	Y	0.187	Y	0.31
+516	6.2.5.40	chapter 22.5	problem number 40	N	94.987	N	23.711
+517	6.2.5.41	chapter 22.5	problem number 41	Y	1.189	Y	0.395
+518	6.2.5.42	chapter 22.5	problem number 42	N	7.6	Y	0.564
+519	6.2.5.43	chapter 22.5	problem number 43	N	1.164	Y	2.158
+520	6.2.5.44	chapter 22.5	problem number 44	N	26.81	N	9.046
+521	6.2.5.45	chapter 22.5	problem number 45	N	25.69	N	10.993
+522	6.2.5.46	chapter 22.5	problem number 46	N	6.569	Y	3.438
+523	6.2.5.47	chapter 22.5	problem number 47	Y	0.793	Y	0.182
+524	6.2.5.48	chapter 22.5	problem number 48	Y	11.383	Y	0.708
+525	6.2.5.49	chapter 22.5	problem number 49	N	5.949	N	6.414
+526	6.2.5.50	chapter 22.5	problem number 50	N	14.677	N	5.228
+527	6.2.5.51	chapter 22.5	problem number 51	N	1.045	Y	0.318
+528	6.2.5.52	chapter 22.5	problem number 52	N	2.199	N	2.019
+529	6.2.5.53	chapter 22.5	problem number 53	N	1.273	Y	0.591
+530	6.2.5.54	chapter 22.5	problem number 54	N	1.313	N	1.959
+531	6.2.5.55	chapter 22.5	problem number 55	N	5.462	N	3.774
+532	6.2.5.56	chapter 22.5	problem number 56	N	1.42	Y	0.953
+533	6.2.6.1	chapter 23.1	problem number 1	Y	0.015	Y	0.029
+534	6.2.6.2	chapter 23.1	problem number 2	Y	0.015	Y	0.053
+535	6.2.6.3	chapter 23.1	problem number 3	Y	0.142	Y	0.505
+536	6.2.6.4	chapter 23.1	problem number 4	Y	0.631	Y	0.335
+537	6.2.6.5	chapter 23.1	problem number 5	N	1.007	Y	0.423
+538	6.2.6.6	chapter 23.1	problem number 6	Y	0.148	Y	0.129
+539	6.2.6.7	chapter 23.1	problem number 7	Y	0.331	Y	0.073
+540	6.2.6.8	chapter 23.1	problem number 8	Y	0.453	Y	0.655
+541	6.2.6.9	chapter 23.1	problem number 9	Y	0.323	Y	0.215
+542	6.2.6.10	chapter 23.1	problem number 10	N	0.668	Y	0.742
+543	6.2.6.11	chapter 23.1	problem number 11	N	1.877	N	1.808
+544	6.2.7.1	chapter 23.2	problem number 1	Y	0.415	Y	0.281
+545	6.2.7.2	chapter 23.2	problem number 2	Y	0.692	Y	0.282
+546	6.2.7.3	chapter 23.2	problem number 3	Y	0.33	Y	0.191
+547	6.2.7.4	chapter 23.2	problem number 4	Y	0.321	Y	0.217
+548	6.2.7.5	chapter 23.2	problem number 5	Y	0.219	Y	0.166
+549	6.2.7.6	chapter 23.2	problem number 6	N	2.932	N	5.55
+550	6.2.7.7	chapter 23.2	problem number 7	Y	0.374	Y	0.187
+551	6.2.7.8	chapter 23.2	problem number 8	N	1.629	Y	0.23
+552	6.2.7.9	chapter 23.2	problem number 9	Y	0.921	Y	0.38
+553	6.2.7.10	chapter 23.2	problem number 10	Y	1.211	Y	0.378
+554	6.2.7.11	chapter 23.2	problem number 11	N	3.299	Y	0.645
+555	6.2.7.12	chapter 23.2	problem number 12	Y	1.744	Y	0.292
+556	6.2.7.13	chapter 23.2	problem number 13	Y	0.499	Y	0.157
+557	6.2.7.14	chapter 23.2	problem number 14	N	30.902	N	4.01
+558	6.2.7.15	chapter 23.2	problem number 15	N	1.717	Y	0.603
+559	6.2.7.16	chapter 23.2	problem number 16	N	22.707	N	3.619
+560	6.2.7.17	chapter 23.2	problem number 17	Y	1.384	Y	0.69
+561	6.2.7.18	chapter 23.2	problem number 18	N	26.747	N	3.359
+562	6.2.7.19	chapter 23.2	problem number 19	Y	0.421	Y	0.322
+563	6.2.7.20	chapter 23.2	problem number 20	Y	22.301	N	3.539
+564	6.2.7.21	chapter 23.2	problem number 21	N	24.135	N	4.924
+565	6.2.7.22	chapter 23.2	problem number 22	Y	1.898	Y	0.369
+566	6.2.7.23	chapter 23.2	problem number 23	Y	0.826	Y	0.176
+567	6.2.7.24	chapter 23.2	problem number 24	N	6.406	N	2.194
+568	6.2.7.25	chapter 23.2	problem number 25	Y	0.367	Y	0.237
+569	6.2.7.26	chapter 23.2	problem number 26	Y	0.441	Y	0.333
+570	6.2.7.27	chapter 23.2	problem number 27	N	1.436	Y	0.193
+571	6.2.7.28	chapter 23.2	problem number 28	Y	0.393	Y	0.318
+572	6.2.7.29	chapter 23.2	problem number 29	Y	0.351	Y	0.223
+573	6.2.7.30	chapter 23.2	problem number 30	Y	2.741	Y	0.293
+574	6.2.7.31	chapter 23.2	problem number 31	N	30.503	Y	6.891
+575	6.2.7.32	chapter 23.2	problem number 32	Y	0.167	Y	0.166
+576	6.2.7.33	chapter 23.2	problem number 33	Y	0.783	Y	0.209
+577	6.2.7.34	chapter 23.2	problem number 34	N	1.339	Y	4.736
+578	6.2.7.35	chapter 23.2	problem number 35	N	0.923	Y	2.004
+579	6.2.7.36	chapter 23.2	problem number 36	N	1.026	Y	5.095
+580	6.2.8.1	chapter 24.1	problem number 1	Y	0.017	Y	0.046
+581	6.2.8.2	chapter 24.1	problem number 2	Y	0.06	Y	0.198
+582	6.2.8.3	chapter 24.1	problem number 3	Y	1.563	Y	0.88
+583	6.2.8.4	chapter 24.1	problem number 4	N	43.706	Y	0.393
+584	6.2.8.5	chapter 24.1	problem number 5	Y	10.764	Y	1.122
+585	6.2.8.6	chapter 24.1	problem number 6	Y	0.116	Y	0.287
+586	6.2.8.7	chapter 24.1	problem number 7	Y	0.017	Y	0.121
+587	6.2.9.1	chapter 24.2	problem number 1	Y	0.013	Y	0.045
+588	6.2.9.2	chapter 24.2	problem number 2	Y	0.052	Y	0.165
+589	6.2.9.3	chapter 24.2	problem number 3	Y	10.887	Y	1.105
+590	6.2.9.4	chapter 24.2	problem number 4	Y	13.307	Y	0.934
+591	6.2.9.5	chapter 24.2	problem number 5	N	1.242	Y	1.3
+592	6.2.9.6	chapter 24.2	problem number 6	N	1.783	Y	4.507
+593	6.2.9.7	chapter 24.2	problem number 7	N	56.449	Y	1.701
+594	6.2.9.8	chapter 24.2	problem number 8	Y	0.112	Y	0.166
+595	6.2.10.1	chapter 24.3	problem number 1	Y	0.015	Y	0.065
+596	6.2.10.2	chapter 24.3	problem number 2	Y	0.085	Y	0.062
+597	6.2.10.3	chapter 24.3	problem number 3	Y	1.304	Y	0.792
+598	6.2.10.4	chapter 24.3	problem number 4	N	60.505	Y	5.354
+599	6.2.10.5	chapter 24.3	problem number 5	N	1.46	Y	1.73
+600	6.2.10.6	chapter 24.3	problem number 6	N	2.695	N	600.
+601	6.2.10.7	chapter 24.3	problem number 7	N	7.166	Y	1.891
+602	6.2.10.8	chapter 24.3	problem number 8	Y	0.216	Y	0.279
+603	6.2.11.1	chapter 24.4	problem number 1	Y	0.011	Y	0.051
+604	6.2.11.2	chapter 24.4	problem number 2	Y	0.09	Y	0.369
+605	6.2.11.3	chapter 24.4	problem number 3	Y	1.3	Y	0.606
+606	6.2.11.4	chapter 24.4	problem number 4	N	2.549	Y	0.694
+607	6.2.12.1	chapter 24.5	problem number 1	Y	0.138	Y	0.196
+608	6.2.12.2	chapter 24.5	problem number 2	Y	0.122	Y	0.258
+609	6.2.12.3	chapter 24.5	problem number 3	Y	1.129	Y	0.695
+610	6.2.12.4	chapter 24.5	problem number 4	Y	21.131	Y	3.579
+611	6.2.12.5	chapter 24.5	problem number 5	Y	0.119	Y	0.16
+612	6.2.12.6	chapter 24.5	problem number 6	N	92.224	Y	2.648
+613	6.2.13.1	chapter 25.1	problem number 1	Y	0.063	Y	0.064
+614	6.2.13.2	chapter 25.1	problem number 3	Y	1.353	Y	0.09
+615	6.2.13.3	chapter 25.1	problem number 4	Y	3.442	Y	0.128
+616	6.2.14.1	chapter 25.2	problem number 1	Y	0.182	Y	0.197
+617	6.2.14.2	chapter 25.2	problem number 2	Y	0.159	Y	0.126
+618	6.2.14.3	chapter 25.2	problem number 3	N	0.933	Y	0.269
+619	6.2.14.4	chapter 25.2	problem number 4	Y	0.56	Y	0.21
+620	6.2.14.5	chapter 25.2	problem number 5	N	23.654	N	2.431
+621	6.2.14.6	chapter 25.2	problem number 6	Y	1.753	Y	0.913
+622	6.2.14.7	chapter 25.2	problem number 7	N	27.976	N	2.54
+623	6.2.14.8	chapter 25.2	problem number 8	N	23.902	N	2.629
+624	6.2.14.9	chapter 25.2	problem number 9	Y	0.661	Y	0.242
+625	6.2.14.10	chapter 25.2	problem number 10	N	2.199	Y	0.907
+626	6.2.14.11	chapter 25.2	problem number 11	Y	0.126	Y	0.218
+627	6.2.14.12	chapter 25.2	problem number 12	N	11.688	N	1.105
+628	6.2.14.13	chapter 25.2	problem number 13	N	25.41	N	1.686
+629	6.2.14.14	chapter 25.2	problem number 14	N	23.542	N	1.25
+630	6.2.14.15	chapter 25.2	problem number 15	Y	0.413	Y	0.35
+631	6.2.14.16	chapter 25.2	problem number 16	Y	0.353	Y	0.167
+632	6.2.14.17	chapter 25.2	problem number 17	Y	0.712	Y	0.2
+633	6.2.14.18	chapter 25.2	problem number 18	Y	0.583	Y	0.36
+634	6.2.14.19	chapter 25.2	problem number 19	N	2.643	Y	1.192
+635	6.2.14.20	chapter 25.2	problem number 20	N	2.489	Y	1.174
+636	6.2.14.21	chapter 25.2	problem number 21	Y	0.126	Y	0.206
+637	6.2.14.22	chapter 25.2	problem number 22	Y	0.457	Y	0.596
+638	6.2.14.23	chapter 25.2	problem number 23	Y	0.521	Y	0.289
+639	6.2.15.1	chapter 26.1	problem number 1	Y	0.299	Y	0.184
+640	6.2.15.2	chapter 26.1	problem number 2	Y	5.214	Y	0.493
+641	6.2.15.3	chapter 26.1	problem number 3	Y	0.803	Y	0.793
+642	6.2.15.4	chapter 26.1	problem number 4	Y	9.044	Y	0.762
+643	6.2.15.5	chapter 26.1	problem number 5	Y	0.672	Y	0.823
+644	6.2.15.6	chapter 26.1	problem number 6	N	3.299	Y	0.352
+645	6.2.15.7	chapter 26.1	problem number 7	Y	18.905	Y	2.975
+646	6.2.15.8	chapter 26.1	problem number 8	N	42.6	Y	0.479
+647	6.2.15.9	chapter 26.1	problem number 9	N	43.668	Y	2.228
+648	6.2.15.10	chapter 26.1	problem number 10	Y	8.779	Y	1.305
+649	6.2.15.11	chapter 26.1	problem number 11	Y	2.181	Y	6.789
+650	6.2.15.12	chapter 26.1	problem number 12	N	83.047	N	600.
+651	6.2.15.13	chapter 26.1	problem number 13	Y	0.52	Y	0.934
+652	6.2.15.14	chapter 26.1	problem number 14	N	4.533	Y	1.612
+653	6.2.16.1	chapter 26.2	problem number 1	Y	0.292	Y	0.241
+654	6.2.16.2	chapter 26.2	problem number 2	Y	2.746	Y	0.36
+655	6.2.16.3	chapter 26.2	problem number 3	Y	0.304	Y	1.395
+656	6.2.16.4	chapter 26.2	problem number 4	Y	3.505	Y	0.597
+657	6.2.16.5	chapter 26.2	problem number 5	Y	0.555	Y	0.661
+658	6.2.16.6	chapter 26.2	problem number 6	N	42.459	Y	0.587
+659	6.2.16.7	chapter 26.2	problem number 7	Y	6.676	Y	1.479
+660	6.2.16.8	chapter 26.2	problem number 8	Y	3.559	Y	1.268
+661	6.2.16.9	chapter 26.2	problem number 9	N	31.356	Y	2.372
+662	6.2.16.10	chapter 26.2	problem number 10	N	0.63	Y	2.552
+663	6.2.16.11	chapter 26.2	problem number 11	N	0.772	Y	6.66
+664	6.2.16.12	chapter 26.2	problem number 12	N	11.386	Y	3.472
+665	6.2.17.1	chapter 26.3	problem number 1	Y	0.019	Y	0.044
+666	6.2.17.2	chapter 26.3	problem number 2	Y	0.23	Y	0.27
+667	6.2.17.3	chapter 26.3	problem number 3	Y	1.143	Y	0.681
+668	6.2.17.4	chapter 26.3	problem number 4	Y	0.845	Y	0.696
+669	6.2.17.5	chapter 26.3	problem number 5	Y	3.176	Y	0.835
+670	6.2.17.6	chapter 26.3	problem number 6	Y	0.438	Y	1.104
+671	6.2.17.7	chapter 26.3	problem number 7	Y	1.248	Y	3.83
+672	6.2.17.8	chapter 26.3	problem number 8	N	50.689	N	600.
+673	6.2.17.9	chapter 26.3	problem number 9	N	87.075	Y	21.317
+674	6.2.17.10	chapter 26.3	problem number 10	Y	0.338	Y	0.558
+675	6.2.17.11	chapter 26.3	problem number 11	N	21.727	Y	9.342
+676	6.2.17.12	chapter 26.3	problem number 12	N	6.385	Y	2.26
+677	6.2.17.13	chapter 26.3	problem number 13	N	0.674	Y	2.298
+678	6.2.17.14	chapter 26.3	problem number 14	N	0.856	N	600.
+679	6.2.17.15	chapter 26.3	problem number 15	N	4.11	Y	2.446
+680	6.2.18.1	chapter 26.4	problem number 1	Y	0.241	Y	0.324
+681	6.2.18.2	chapter 26.4	problem number 2	Y	0.289	Y	0.474
+682	6.2.18.3	chapter 26.4	problem number 3	Y	1.513	Y	0.713
+683	6.2.18.4	chapter 26.4	problem number 4	N	47.564	Y	0.779
+684	6.2.18.5	chapter 26.4	problem number 5	Y	1.962	Y	0.85
+685	6.2.18.6	chapter 26.4	problem number 6	Y	0.283	Y	0.211
+686	6.2.18.7	chapter 26.4	problem number 7	Y	0.304	Y	0.601
+687	6.2.18.8	chapter 26.4	problem number 8	Y	0.278	Y	0.559
+688	6.2.18.9	chapter 26.4	problem number 9	Y	2.305	Y	1.23
+689	6.2.18.10	chapter 26.4	problem number 10	Y	2.809	Y	1.474
+690	6.2.18.11	chapter 26.4	problem number 11	Y	0.283	Y	0.549
+691	6.2.18.12	chapter 26.4	problem number 12	Y	1.39	Y	0.746
+692	6.2.19.1	chapter 26.5	problem number 1	Y	0.751	Y	0.654
+693	6.2.19.2	chapter 26.5	problem number 2	Y	2.048	Y	0.627
+694	6.2.19.3	chapter 26.5	problem number 3	Y	0.382	Y	1.032
+695	6.2.19.4	chapter 26.5	problem number 4	N	25.168	N	98.644
+696	6.2.19.5	chapter 26.5	problem number 5	N	37.049	Y	0.747
+697	6.2.19.6	chapter 26.5	problem number 6	N	80.269	Y	1.338
+698	6.2.19.7	chapter 26.5	problem number 7	N	15.636	N	118.616
+699	6.2.19.8	chapter 26.5	problem number 8	N	25.08	Y	0.71
+700	6.2.19.9	chapter 26.5	problem number 9	N	25.029	Y	0.705
+701	6.2.19.10	chapter 26.5	problem number 10	N	1.467	Y	1.063
+702	6.2.19.11	chapter 26.5	problem number 11	N	7.463	Y	1.072
+703	6.2.20.1	chapter 27.1	problem number 1	Y	0.037	Y	0.185
+704	6.2.20.2	chapter 27.1	problem number 2	Y	0.113	Y	0.233
+705	6.2.20.3	chapter 27.1	problem number 3	Y	0.356	Y	0.385
+706	6.2.20.4	chapter 27.1	problem number 4	Y	0.099	Y	0.353
+707	6.2.20.5	chapter 27.1	problem number 5	N	0.905	Y	0.897
+708	6.2.20.6	chapter 27.1	problem number 6	Y	0.255	Y	1.781
+709	6.2.20.7	chapter 27.1	problem number 7	N	24.34	Y	5.279
+710	6.2.20.8	chapter 27.1	problem number 8	N	0.866	Y	0.883
+711	6.2.20.9	chapter 27.1	problem number 9	N	52.508	N	37.565
+712	6.2.20.10	chapter 27.1	problem number 10	N	39.895	N	47.19
+713	6.2.20.11	chapter 27.1	problem number 11	Y	0.476	Y	0.356
+714	6.2.20.12	chapter 27.1	problem number 12	Y	0.314	Y	1.339
+715	6.2.21.1	chapter 27.2	problem number 1	Y	0.039	Y	0.184
+716	6.2.21.2	chapter 27.2	problem number 2	Y	0.115	Y	0.244
+717	6.2.21.3	chapter 27.2	problem number 3	Y	0.601	Y	0.344
+718	6.2.21.4	chapter 27.2	problem number 4	Y	0.109	Y	0.398
+719	6.2.21.5	chapter 27.2	problem number 5	N	1.065	N	600.
+720	6.2.21.6	chapter 27.2	problem number 6	N	23.758	N	9.588
+721	6.2.21.7	chapter 27.2	problem number 7	N	33.778	Y	4.494
+722	6.2.21.8	chapter 27.2	problem number 8	N	1.577	N	600.
+723	6.2.21.9	chapter 27.2	problem number 9	N	30.512	N	35.02
+724	6.2.21.10	chapter 27.2	problem number 10	N	46.198	N	45.814
+725	6.2.21.11	chapter 27.2	problem number 11	Y	0.458	Y	0.388
+726	6.2.21.12	chapter 27.2	problem number 12	Y	0.301	Y	0.997
+727	6.2.22.1	chapter 27.3	problem number 1	Y	0.038	Y	0.309
+728	6.2.22.2	chapter 27.3	problem number 2	Y	0.114	Y	0.361
+729	6.2.22.3	chapter 27.3	problem number 3	Y	0.691	Y	0.481
+730	6.2.22.4	chapter 27.3	problem number 4	Y	0.107	Y	0.616
+731	6.2.22.5	chapter 27.3	problem number 5	N	1.144	Y	1.51
+732	6.2.22.6	chapter 27.3	problem number 6	Y	0.42	Y	1.083
+733	6.2.22.7	chapter 27.3	problem number 7	N	31.51	Y	3.157
+734	6.2.22.8	chapter 27.3	problem number 8	Y	0.26	Y	0.254
+735	6.2.22.9	chapter 27.3	problem number 9	N	30.403	N	6.802
+736	6.2.22.10	chapter 27.3	problem number 10	N	40.62	N	14.433
+737	6.2.22.11	chapter 27.3	problem number 11	Y	0.473	Y	0.405
+738	6.2.22.12	chapter 27.3	problem number 12	Y	0.308	Y	0.917
+739	6.2.23.1	chapter 27.4	problem number 1	Y	0.039	Y	0.245
+740	6.2.23.2	chapter 27.4	problem number 2	Y	0.118	Y	0.324
+741	6.2.23.3	chapter 27.4	problem number 3	Y	0.71	Y	0.398
+742	6.2.23.4	chapter 27.4	problem number 4	Y	0.102	Y	0.438
+743	6.2.23.5	chapter 27.4	problem number 5	N	1.161	Y	2.708
+744	6.2.23.6	chapter 27.4	problem number 6	Y	0.43	Y	1.216
+745	6.2.23.7	chapter 27.4	problem number 7	N	32.254	Y	4.411
+746	6.2.23.8	chapter 27.4	problem number 8	N	30.475	N	4.345
+747	6.2.23.9	chapter 27.4	problem number 9	N	30.136	N	7.03
+748	6.2.23.10	chapter 27.4	problem number 10	N	39.688	N	14.556
+749	6.2.23.11	chapter 27.4	problem number 11	Y	0.459	Y	0.412
+750	6.2.23.12	chapter 27.4	problem number 12	Y	0.302	Y	0.881
+751	6.2.24.1	chapter 28.1	problem number 1	Y	0.059	Y	0.065
+752	6.2.24.2	chapter 28.1	problem number 2	Y	0.189	Y	0.186
+753	6.2.24.3	chapter 28.1	problem number 3	N	0.362	Y	0.161
+754	6.2.24.4	chapter 28.1	problem number 4	Y	0.158	Y	0.14
+755	6.2.24.5	chapter 28.1	problem number 5	N	22.288	Y	0.701
+756	6.2.24.6	chapter 28.1	problem number 6	N	0.517	Y	0.174
+757	6.2.24.7	chapter 28.1	problem number 7	N	22.489	N	2.645
+758	6.2.24.8	chapter 28.1	problem number 8	N	26.455	N	2.198
+759	6.2.24.9	chapter 28.1	problem number 9	N	0.523	Y	0.167
+760	6.2.24.10	chapter 28.1	problem number 10	N	30.385	N	7.376
+761	6.2.24.11	chapter 28.1	problem number 11	N	27.952	N	7.61
+762	6.2.24.12	chapter 28.1	problem number 12	Y	0.2	Y	0.202
+763	6.2.24.13	chapter 28.1	problem number 13	N	1.334	Y	0.182
+764	6.2.25.1	chapter 28.2	problem number 1	Y	0.674	Y	0.385
+765	6.2.25.2	chapter 28.2	problem number 2	Y	21.271	N	2.466
+766	6.2.25.3	chapter 28.2	problem number 3	N	22.762	N	2.566
+767	6.2.25.4	chapter 28.2	problem number 4	Y	0.21	Y	0.264
+768	6.2.25.5	chapter 28.2	problem number 5	N	22.341	N	2.776
+769	6.2.25.6	chapter 28.2	problem number 6	N	1.086	Y	0.178
+770	6.2.25.7	chapter 28.2	problem number 7	N	26.369	N	4.046
+771	6.2.25.8	chapter 28.2	problem number 8	N	27.728	N	4.395
+772	6.2.25.9	chapter 28.2	problem number 9	N	24.486	N	2.737
+773	6.2.25.10	chapter 28.2	problem number 10	Y	0.233	Y	0.226
+774	6.2.25.11	chapter 28.2	problem number 11	N	0.308	Y	0.315
+775	6.2.26.1	chapter 28.3	problem number 1	N	29.425	N	13.71
+776	6.2.26.2	chapter 28.3	problem number 2	N	33.558	N	9.731
+777	6.2.26.3	chapter 28.3	problem number 3	N	32.988	N	10.173
+778	6.2.27.1	chapter 28.4	problem number 1	N	21.601	Y	0.809
+779	6.2.27.2	chapter 28.4	problem number 2	N	21.407	N	2.038
+780	6.2.27.3	chapter 28.4	problem number 3	N	21.902	N	1.049
+781	6.2.27.4	chapter 28.4	problem number 4	Y	0.152	Y	0.146
+782	6.2.28.1	chapter 28.5	problem number 1	N	22.907	Y	1.157
+783	6.2.28.2	chapter 28.5	problem number 2	N	25.994	N	13.72
+784	6.2.28.3	chapter 28.5	problem number 3	N	26.568	N	14.138
+785	6.2.28.4	chapter 28.5	problem number 4	N	30.901	N	14.934
+786	6.2.28.5	chapter 28.5	problem number 5	N	31.44	N	13.695
+787	6.2.29.1	chapter 28.6	problem number 1	N	20.786	N	1.783
+788	6.2.29.2	chapter 28.6	problem number 2	N	20.786	Y	0.458
+789	6.2.29.3	chapter 28.6	problem number 3	Y	0.102	Y	0.115
+790	6.2.29.4	chapter 28.6	problem number 4	N	0.329	Y	0.418
+791	6.2.29.5	chapter 28.6	problem number 5	N	21.102	N	1.245
+792	6.2.29.6	chapter 28.6	problem number 6	N	0.249	Y	0.171
+793	6.2.29.7	chapter 28.6	problem number 7	N	0.41	Y	0.112
+794	6.2.29.8	chapter 28.6	problem number 8	Y	0.184	Y	0.207
+795	6.2.29.9	chapter 28.6	problem number 9	N	0.649	Y	0.161
+796	6.2.29.10	chapter 28.6	problem number 10	N	2.118	Y	1.85
+797	6.2.29.11	chapter 28.6	problem number 11	N	0.566	Y	0.228
+798	6.2.29.12	chapter 28.6	problem number 12	Y	21.54	Y	0.838
+799	6.2.30.1	chapter 29.1	problem number 1	Y	0.059	Y	0.049
+800	6.2.30.2	chapter 29.1	problem number 2	N	0.186	Y	0.161
+801	6.2.30.3	chapter 29.1	problem number 3	N	0.38	Y	0.402
+802	6.2.30.4	chapter 29.1	problem number 4	N	0.974	N	0.81
+803	6.2.30.5	chapter 29.1	problem number 5	N	1.117	N	1.77
+804	6.2.31.1	chapter 29.2	problem number 1	Y	0.213	Y	0.117
+805	6.2.31.2	chapter 29.2	problem number 2	N	0.066	Y	0.121
+806	6.2.31.3	chapter 29.2	problem number 3	N	0.471	Y	0.184
+807	6.2.31.4	chapter 29.2	problem number 4	N	0.287	Y	0.174
+808	6.2.31.5	chapter 29.2	problem number 5	N	0.413	Y	0.885
+809	6.2.31.6	chapter 29.2	problem number 6	N	0.262	Y	0.14
+810	6.2.31.7	chapter 29.2	problem number 7	N	0.336	Y	0.226
+811	6.2.31.8	chapter 29.2	problem number 8	N	0.236	Y	0.219
+812	6.2.31.9	chapter 29.2	problem number 9	N	0.269	Y	0.233
+813	6.2.31.10	chapter 29.2	problem number 10	N	0.445	Y	0.397
+814	6.2.31.11	chapter 29.2	problem number 11	N	0.424	Y	0.25
+815	6.2.31.12	chapter 29.2	problem number 12	N	0.624	N	1.57
+816	6.2.31.13	chapter 29.2	problem number 13	N	0.722	N	1.266
+817	6.2.31.14	chapter 29.2	problem number 14	N	0.579	Y	0.443
+818	6.2.31.15	chapter 29.2	problem number 15	N	0.278	Y	0.318
+819	6.2.31.16	chapter 29.2	problem number 16	N	0.302	Y	0.316
+820	6.2.32.1	chapter 29.3	problem number 1	N	1.199	Y	2.819
+821	6.2.32.2	chapter 29.3	problem number 2	N	0.969	N	1.622
+822	6.2.32.3	chapter 29.3	problem number 3	N	2.95	N	4.043
+823	6.2.32.4	chapter 29.3	problem number 4	N	1.038	N	3.853
+824	6.2.32.5	chapter 29.3	problem number 5	N	1.022	N	3.619
+825	6.2.32.6	chapter 29.3	problem number 6	N	7.951	N	2.638
+826	6.2.32.7	chapter 29.3	problem number 7	N	7.372	N	2.799
+827	6.2.32.8	chapter 29.3	problem number 8	N	3.656	N	6.054
+828	6.2.32.9	chapter 29.3	problem number 9	N	0.116	Y	0.057
+829	6.2.32.10	chapter 29.3	problem number 11	N	0.374	Y	0.25
+830	6.2.32.11	chapter 29.3	problem number 12	N	0.994	Y	2.987
+831	6.2.32.12	chapter 29.3	problem number 13	N	2.251	N	2.165
+832	6.2.32.13	chapter 29.3	problem number 14	N	2.216	N	2.203
+833	6.2.32.14	chapter 29.3	problem number 15	N	4.793	N	2.658
+834	6.2.32.15	chapter 29.3	problem number 16	N	4.702	N	2.636
+835	6.2.32.16	chapter 29.3	problem number 17	N	0.756	N	1.596
+836	6.2.32.17	chapter 29.3	problem number 18	N	7.812	N	2.31
+837	6.2.32.18	chapter 29.3	problem number 19	N	7.314	N	2.281
+838	6.2.32.19	chapter 29.3	problem number 20	N	9.939	N	600.
+839	6.2.32.20	chapter 29.3	problem number 21	N	32.497	N	36.308
+840	6.2.32.21	chapter 29.3	problem number 22	N	3.844	N	10.507
+841	6.2.32.22	chapter 29.3	problem number 23	N	1.672	N	18.547
+842	6.3.1.1	chapter 3Examples	Example 1	Y	0.016	Y	0.04
+843	6.3.1.2	chapter 3Examples	Example 2	Y	0.047	Y	0.064
+844	6.3.1.3	chapter 3Examples	Example 3	Y	0.005	Y	0.043
+845	6.3.2.1	chapter 32.1	Problem 1	Y	0.007	Y	0.021
+846	6.3.2.2	chapter 32.1	Problem 2	Y	0.014	Y	0.052
+847	6.3.2.3	chapter 32.1	Problem 3	Y	0.026	Y	0.059
+848	6.3.2.4	chapter 32.1	Problem 4	Y	0.005	Y	0.026
+849	6.3.2.5	chapter 32.1	Problem 5	Y	0.228	Y	0.098
+850	6.3.2.6	chapter 32.1	Problem 6	Y	0.114	Y	0.156
+851	6.3.2.7	chapter 32.1	Problem 7	Y	0.065	Y	0.182
+852	6.3.2.8	chapter 32.1	Problem 8	Y	0.047	Y	0.173
+853	6.3.3.1	chapter 32.2	Problem 1	Y	0.04	Y	0.033
+854	6.3.3.2	chapter 32.2	Problem 2	Y	0.197	Y	0.06
+855	6.3.3.3	chapter 32.2	Problem 3	Y	0.182	Y	0.196
+856	6.3.3.4	chapter 32.2	Problem 4	Y	0.37	Y	0.086
+857	6.3.3.5	chapter 32.2	Problem 5	Y	0.023	Y	0.075
+858	6.3.3.6	chapter 32.2	Problem 6	Y	0.177	Y	0.198
+859	6.3.3.7	chapter 32.2	Problem 7	Y	0.062	Y	0.182
+860	6.3.4.1	chapter 32.3	Problem 1	Y	0.03	Y	0.082
+861	6.3.4.2	chapter 32.3	Problem 2	Y	0.149	Y	0.07
+862	6.3.4.3	chapter 32.3	Problem 3	Y	0.133	Y	0.187
+863	6.3.4.4	chapter 32.3	Problem 4	Y	0.478	Y	0.111
+864	6.3.4.5	chapter 32.3	Problem 5	Y	0.017	Y	0.028
+865	6.3.4.6	chapter 32.3	Problem 6	Y	0.078	Y	0.196
+866	6.3.5.1	chapter 32.4	Problem 1	Y	0.08	Y	0.081
+867	6.3.5.2	chapter 32.4	Problem 2	Y	0.046	Y	0.063
+868	6.3.5.3	chapter 32.4	Problem 3	Y	0.023	Y	0.068
+869	6.3.5.4	chapter 32.4	Problem 4	Y	0.028	Y	0.067
+870	6.3.5.5	chapter 32.4	Problem 5	Y	0.059	Y	0.13
+871	6.3.5.6	chapter 32.4	Problem 6	Y	0.114	Y	0.092
+872	6.3.5.7	chapter 32.4	Problem 7	Y	0.693	Y	1.234
+873	6.3.5.8	chapter 32.4	Problem 8	Y	0.945	Y	0.321
+874	6.3.5.9	chapter 32.4	Problem 9	Y	4.515	Y	0.316
+875	6.3.5.10	chapter 32.4	Problem 10	N	1.176	Y	22.246
+876	6.3.5.11	chapter 32.4	Problem 11	Y	0.365	Y	1.128
+877	6.3.6.1	chapter 33.1	Problem 1	Y	0.084	Y	0.044
+878	6.3.6.2	chapter 33.1	Problem 2	Y	0.043	Y	0.042
+879	6.3.6.3	chapter 33.1	Problem 3	Y	0.143	Y	0.176
+880	6.3.6.4	chapter 33.1	Problem 4	Y	0.189	Y	0.137
+881	6.3.6.5	chapter 33.1	Problem 5	Y	0.418	Y	0.154
+882	6.3.6.6	chapter 33.1	Problem 6	Y	0.453	Y	0.209
+883	6.3.6.7	chapter 33.1	Problem 7	Y	0.719	Y	0.331
+884	6.3.6.8	chapter 33.1	Problem 8	N	2.031	Y	1.327
+885	6.3.6.9	chapter 33.1	Problem 9	N	1.29	Y	1.235
+886	6.3.6.10	chapter 33.1	Problem 10	Y	1.655	Y	0.957
+887	6.3.6.11	chapter 33.1	Problem 11	Y	0.396	Y	0.716
+888	6.3.7.1	chapter 33.2	Problem 1	Y	0.171	Y	0.049
+889	6.3.7.2	chapter 33.2	Problem 2	Y	0.04	Y	0.119
+890	6.3.7.3	chapter 33.2	Problem 3	Y	0.068	Y	0.059
+891	6.3.7.4	chapter 33.2	Problem 4	Y	0.36	Y	0.205
+892	6.3.7.5	chapter 33.2	Problem 5	Y	0.54	Y	0.85
+893	6.3.7.6	chapter 33.2	Problem 6	Y	0.045	Y	0.04
+894	6.3.7.7	chapter 33.2	Problem 7	Y	0.047	Y	0.071
+895	6.3.7.8	chapter 33.2	Problem 8	Y	0.535	Y	0.204
+896	6.3.7.9	chapter 33.2	Problem 9	Y	0.879	Y	0.646
+897	6.3.7.10	chapter 33.2	Problem 10	Y	0.515	Y	0.273
+898	6.3.7.11	chapter 33.2	Problem 11	Y	0.346	Y	0.319
+899	6.3.8.1	chapter 34.1	Problem 1	Y	0.26	Y	0.069
+900	6.3.8.2	chapter 34.1	Problem 2	Y	0.203	Y	0.07
+901	6.3.8.3	chapter 34.1	Problem 3	Y	0.424	Y	0.077
+902	6.3.8.4	chapter 34.1	Problem 4	Y	0.087	Y	4.098
+903	6.3.8.5	chapter 34.1	Problem 5	Y	17.28	Y	5.762
+904	6.3.9.1	chapter 34.2	Problem 1	Y	0.283	Y	0.069
+905	6.3.9.2	chapter 34.2	Problem 2	Y	0.17	Y	0.086
+906	6.3.9.3	chapter 34.2	Problem 3	Y	0.419	Y	0.076
+907	6.3.9.4	chapter 34.2	Problem 4	Y	89.972	Y	1.163
+908	6.3.9.5	chapter 34.2	Problem 5	Y	48.157	Y	1.766
+909	6.3.10.1	chapter 34.3	Problem 1	Y	0.087	Y	0.117
+910	6.3.10.2	chapter 34.3	Problem 2	Y	0.046	Y	0.071
+911	6.3.10.3	chapter 34.3	Problem 3	Y	0.04	Y	0.089
+912	6.3.10.4	chapter 34.3	Problem 4	Y	74.823	Y	1.076
+913	6.3.10.5	chapter 34.3	Problem 5	Y	42.576	Y	1.128
+914	6.3.11.1	chapter 34.4	Problem 1	Y	0.094	Y	0.121
+915	6.3.11.2	chapter 34.4	Problem 2	Y	0.059	Y	0.073
+916	6.3.11.3	chapter 34.4	Problem 3	Y	0.044	Y	0.177
+917	6.3.11.4	chapter 34.4	Problem 4	Y	73.9	Y	1.138
+918	6.3.11.5	chapter 34.4	Problem 5	Y	42.578	Y	1.16
+919	6.3.12.1	chapter 34.5	Problem 1	Y	0.327	Y	0.078
+920	6.3.12.2	chapter 34.5	Problem 2	Y	0.085	Y	0.092
+921	6.3.12.3	chapter 34.5	Problem 3	Y	0.814	Y	0.085
+922	6.3.12.4	chapter 34.5	Problem 4	Y	0.092	Y	0.204
+923	6.3.12.5	chapter 34.5	Problem 5	Y	0.08	Y	0.217
+924	6.3.13.1	chapter 35.1	Problem 1	Y	0.069	Y	0.082
+925	6.3.13.2	chapter 35.1	Problem 2	Y	0.024	Y	0.06
+926	6.3.13.3	chapter 35.1	Problem 3	Y	0.193	Y	0.61
+927	6.3.13.4	chapter 35.1	Problem 4	Y	0.068	Y	0.217
+928	6.3.13.5	chapter 35.1	Problem 5	Y	0.223	Y	0.254
+929	6.3.13.6	chapter 35.1	Problem 6	Y	0.482	Y	18.692
+930	6.3.14.1	chapter 35.2	Problem 1	Y	0.091	Y	0.085
+931	6.3.14.2	chapter 35.2	Problem 2	Y	0.066	Y	0.323
+932	6.3.14.3	chapter 35.2	Problem 3	Y	0.06	Y	0.295
+933	6.3.15.1	chapter 35.3	Problem 4	Y	0.07	Y	0.145
+934	6.3.15.2	chapter 35.3	Problem 5	Y	0.085	Y	0.163
+935	6.3.15.3	chapter 35.3	Problem 6	Y	0.845	Y	0.742
+936	6.3.16.1	chapter 36.1	Problem 1	Y	0.36	Y	0.074
+937	6.3.16.2	chapter 36.1	Problem 2	Y	0.138	Y	0.069
+938	6.3.16.3	chapter 36.1	Problem 3	Y	0.037	Y	0.059
+939	6.3.16.4	chapter 36.1	Problem 4	Y	45.986	Y	2.328
+940	6.3.16.5	chapter 36.1	Problem 5	Y	51.153	Y	3.46
+941	6.3.17.1	chapter 36.2	Problem 1	Y	0.573	Y	0.076
+942	6.3.17.2	chapter 36.2	Problem 2	Y	0.155	Y	0.072
+943	6.3.17.3	chapter 36.2	Problem 3	Y	0.048	Y	0.059
+944	6.3.17.4	chapter 36.2	Problem 4	Y	51.878	Y	1.871
+945	6.3.17.5	chapter 36.2	Problem 5	Y	38.789	Y	2.741
+946	6.3.18.1	chapter 36.3	Problem 1	Y	0.099	Y	0.073
+947	6.3.18.2	chapter 36.3	Problem 2	Y	0.051	Y	0.052
+948	6.3.18.3	chapter 36.3	Problem 3	Y	0.043	Y	0.048
+949	6.3.18.4	chapter 36.3	Problem 4	Y	21.191	Y	2.877
+950	6.3.18.5	chapter 36.3	Problem 5	Y	23.477	Y	4.654
+951	6.3.19.1	chapter 36.4	Problem 1	Y	0.106	Y	0.143
+952	6.3.19.2	chapter 36.4	Problem 2	Y	0.061	Y	0.135
+953	6.3.19.3	chapter 36.4	Problem 3	Y	0.046	Y	0.117
+954	6.3.19.4	chapter 36.4	Problem 4	Y	22.054	Y	2.605
+955	6.3.19.5	chapter 36.4	Problem 5	Y	24.161	Y	4.282
+956	6.3.20.1	chapter 36.5	Problem 1	Y	0.369	Y	0.076
+957	6.3.20.2	chapter 36.5	Problem 2	Y	0.129	Y	0.102
+958	6.3.20.3	chapter 36.5	Problem 3	Y	0.904	Y	0.14
+959	6.3.20.4	chapter 36.5	Problem 4	Y	0.117	Y	0.492
+960	6.3.20.5	chapter 36.5	Problem 5	Y	0.287	Y	0.408
+961	6.3.20.6	chapter 36.5	Problem 6	Y	0.077	Y	0.413
+962	6.3.21.1	chapter 37.1	Problem 1	Y	0.616	Y	0.148
+963	6.3.21.2	chapter 37.1	Problem 2	Y	0.612	Y	0.162
+964	6.3.21.3	chapter 37.1	Problem 3	Y	0.082	Y	0.062
+965	6.3.21.4	chapter 37.1	Problem 4	Y	0.099	Y	1.504
+966	6.3.21.5	chapter 37.1	Problem 5	Y	0.424	Y	0.921
+967	6.3.22.1	chapter 37.2	Problem 1	Y	0.632	Y	0.171
+968	6.3.22.2	chapter 37.2	Problem 2	Y	0.978	Y	0.151
+969	6.3.22.3	chapter 37.2	Problem 3	Y	0.101	Y	0.038
+970	6.3.22.4	chapter 37.2	Problem 4	Y	0.101	Y	0.989
+971	6.3.22.5	chapter 37.2	Problem 5	Y	0.417	Y	0.608
+972	6.3.23.1	chapter 37.3	Problem 1	Y	0.086	Y	0.226
+973	6.3.23.2	chapter 37.3	Problem 2	Y	0.136	Y	0.1
+974	6.3.23.3	chapter 37.3	Problem 3	Y	0.04	Y	0.071
+975	6.3.23.4	chapter 37.3	Problem 4	Y	0.126	Y	2.319
+976	6.3.23.5	chapter 37.3	Problem 5	Y	0.334	Y	1.516
+977	6.3.24.1	chapter 37.4	Problem 1	Y	0.069	Y	0.236
+978	6.3.24.2	chapter 37.4	Problem 2	Y	0.129	Y	0.095
+979	6.3.24.3	chapter 37.4	Problem 3	Y	0.046	Y	0.098
+980	6.3.24.4	chapter 37.4	Problem 4	Y	0.116	Y	0.754
+981	6.3.24.5	chapter 37.4	Problem 5	Y	0.334	Y	2.002
+982	6.3.25.1	chapter 38.1	Problem 1	Y	0.007	Y	0.056
+983	6.3.25.2	chapter 38.1	Problem 2	Y	0.017	Y	0.038
+984	6.3.25.3	chapter 38.1	Problem 3	Y	0.032	Y	0.043
+985	6.3.25.4	chapter 38.1	Problem 4	Y	0.029	Y	0.133
+986	6.3.25.5	chapter 38.1	Problem 5	Y	0.022	Y	0.081
+987	6.3.25.6	chapter 38.1	Problem 6	Y	0.047	Y	0.054
+988	6.3.25.7	chapter 38.1	Problem 7	Y	0.116	Y	0.13
+989	6.3.25.8	chapter 38.1	Problem 8	Y	0.119	Y	0.109
+990	6.3.25.9	chapter 38.1	Problem 9	Y	0.112	Y	0.046
+991	6.3.25.10	chapter 38.1	Problem 10	Y	0.082	Y	0.047
+992	6.3.25.11	chapter 38.1	Problem 11	Y	0.218	Y	0.189
+993	6.3.25.12	chapter 38.1	Problem 12	Y	0.309	Y	0.181
+994	6.3.25.13	chapter 38.1	Problem 13	N	0.36	Y	0.392
+995	6.3.25.14	chapter 38.1	Problem 14	Y	0.29	Y	0.279
+996	6.3.25.15	chapter 38.1	Problem 15	Y	0.866	Y	0.317
+997	6.3.25.16	chapter 38.1	Problem 16	Y	0.056	Y	0.05
+998	6.3.26.1	chapter 38.2	Problem 1	Y	0.023	Y	0.04
+999	6.3.26.2	chapter 38.2	Problem 2	Y	0.014	Y	0.037
+1000	6.3.26.3	chapter 38.2	Problem 3	Y	0.065	Y	0.085
+1001	6.3.26.4	chapter 38.2	Problem 4	Y	0.277	Y	0.099
+1002	6.3.26.5	chapter 38.2	Problem 5	Y	0.336	Y	0.198
+1003	6.3.26.6	chapter 38.2	Problem 6	Y	0.048	Y	0.037
+1004	6.3.26.7	chapter 38.2	Problem 7	N	0.227	Y	0.086
+1005	6.3.27.1	chapter 38.3	Problem 1	Y	0.026	Y	0.043
+1006	6.3.27.2	chapter 38.3	Problem 2	Y	0.013	Y	0.026
+1007	6.3.27.3	chapter 38.3	Problem 3	Y	0.027	Y	0.047
+1008	6.3.27.4	chapter 38.3	Problem 4	Y	0.035	Y	0.072
+1009	6.3.27.5	chapter 38.3	Problem 5	Y	0.037	Y	0.177
+1010	6.3.27.6	chapter 38.3	Problem 6	Y	0.042	Y	0.11
+1011	6.3.27.7	chapter 38.3	Problem 7	Y	0.078	Y	0.077
+1012	6.3.27.8	chapter 38.3	Problem 8	Y	0.185	Y	0.26
+1013	6.3.28.1	chapter 38.4	Problem 1	Y	0.017	Y	0.06
+1014	6.3.28.2	chapter 38.4	Problem 2	Y	0.07	Y	0.053
+1015	6.3.28.3	chapter 38.4	Problem 3	Y	0.074	Y	0.076
+1016	6.3.28.4	chapter 38.4	Problem 4	Y	0.178	Y	0.128
+1017	6.3.28.5	chapter 38.4	Problem 5	Y	0.799	Y	0.284
+1018	6.3.28.6	chapter 38.4	Problem 6	N	0.47	Y	0.514
+1019	6.3.28.7	chapter 38.4	Problem 7	N	0.174	Y	0.086
+1020	6.4.1.1	chapter 41.1	Example 1	Y	0.032	Y	0.053
+1021	6.4.1.2	chapter 41.1	Example 2	Y	0.077	Y	0.047
+1022	6.4.1.3	chapter 41.1	Example 3	Y	0.006	Y	0.026
+1023	6.4.2.1	chapter 42.1	Problem 1	Y	0.008	Y	0.026
+1024	6.4.2.2	chapter 42.1	Problem 2	Y	0.023	Y	0.037
+1025	6.4.2.3	chapter 42.1	Problem 3	Y	0.015	Y	0.047
+1026	6.4.2.4	chapter 42.1	Problem 4	Y	0.029	Y	0.036
+1027	6.4.2.5	chapter 42.1	Problem 5	Y	0.014	Y	0.028
+1028	6.4.2.6	chapter 42.1	Problem 6	Y	0.024	Y	0.028
+1029	6.4.2.7	chapter 42.1	Problem 7	N	0.261	N	8.211
+1030	6.4.3.1	chapter 42.2	Problem 1	Y	0.031	Y	0.063
+1031	6.4.3.2	chapter 42.2	Problem 2	Y	0.027	Y	0.074
+1032	6.4.3.3	chapter 42.2	Problem 3	Y	0.174	Y	0.076
+1033	6.4.3.4	chapter 42.2	Problem 4	Y	0.167	Y	0.07
+1034	6.4.3.5	chapter 42.2	Problem 5	Y	0.267	Y	0.117
+1035	6.4.3.6	chapter 42.2	Problem 6	Y	0.087	Y	0.089
+1036	6.4.3.7	chapter 42.2	Problem 7	N	0.497	Y	0.683
+1037	6.4.3.8	chapter 42.2	Problem 8	N	3.496	Y	0.664
+1038	6.4.4.1	chapter 42.3	Problem 1	Y	0.024	Y	0.073
+1039	6.4.4.2	chapter 42.3	Problem 2	Y	0.034	Y	0.099
+1040	6.4.4.3	chapter 42.3	Problem 3	Y	0.02	Y	0.041
+1041	6.4.4.4	chapter 42.3	Problem 4	Y	0.145	Y	0.109
+1042	6.4.4.5	chapter 42.3	Problem 5	Y	0.141	Y	0.148
+1043	6.4.4.6	chapter 42.3	Problem 6	Y	0.487	Y	0.194
+1044	6.4.5.1	chapter 42.4	Problem 1	Y	0.109	Y	0.083
+1045	6.4.5.2	chapter 42.4	Problem 2 case n\neq-1,n\neq-2	Y	0.045	Y	0.074
+1046	6.4.5.3	chapter 42.4	Problem 2 case n=-1	Y	0.049	Y	0.069
+1047	6.4.5.4	chapter 42.4	Problem 2 case n=-2	Y	0.078	Y	0.072
+1048	6.4.5.5	chapter 42.4	Problem 3	Y	0.029	Y	0.075
+1049	6.4.5.6	chapter 42.4	Problem 4	Y	0.042	Y	0.072
+1050	6.4.5.7	chapter 42.4	Problem 5	Y	0.07	Y	0.072
+1051	6.4.5.8	chapter 42.4	Problem 6	Y	0.147	Y	0.072
+1052	6.4.5.9	chapter 42.4	Problem 7	Y	1.006	Y	1.737
+1053	6.4.5.10	chapter 42.4	Problem 8	Y	0.798	Y	0.448
+1054	6.4.5.11	chapter 42.4	Problem 9	Y	4.112	Y	13.349
+1055	6.4.5.12	chapter 42.4	Problem 10	Y	3.717	Y	2.406
+1056	6.4.5.13	chapter 42.4	Problem 11	Y	0.682	Y	1.519
+1057	6.4.5.14	chapter 42.4	Problem 12	N	0.963	N	600.
+1058	6.4.5.15	chapter 42.4	Problem 13	N	1.003	N	600.
+1059	6.4.6.1	chapter 43.1	Problem 1	Y	0.111	Y	0.045
+1060	6.4.6.2	chapter 43.1	Problem 2	Y	0.122	Y	0.055
+1061	6.4.6.3	chapter 43.1	Problem 3	Y	0.18	Y	0.146
+1062	6.4.6.4	chapter 43.1	Problem 4	Y	0.278	Y	0.145
+1063	6.4.6.5	chapter 43.1	Problem 5	Y	1.386	Y	0.227
+1064	6.4.6.6	chapter 43.1	Problem 6	Y	0.942	Y	0.27
+1065	6.4.6.7	chapter 43.1	Problem 7	N	1.743	Y	1.233
+1066	6.4.6.8	chapter 43.1	Problem 8	N	1.509	Y	1.28
+1067	6.4.6.9	chapter 43.1	Problem 9	Y	1.927	Y	0.985
+1068	6.4.6.10	chapter 43.1	Problem 10	Y	0.383	Y	0.057
+1069	6.4.7.1	chapter 43.2	Problem 1	Y	0.307	Y	0.059
+1070	6.4.7.2	chapter 43.2	Problem 2	Y	0.064	Y	0.066
+1071	6.4.7.3	chapter 43.2	Problem 3	Y	0.059	Y	0.045
+1072	6.4.7.4	chapter 43.2	Problem 4	Y	0.269	Y	0.171
+1073	6.4.7.5	chapter 43.2	Problem 5	Y	6.435	Y	0.739
+1074	6.4.7.6	chapter 43.2	Problem 6	Y	0.305	Y	0.284
+1075	6.4.7.7	chapter 43.2	Problem 7	Y	0.522	Y	0.318
+1076	6.4.8.1	chapter 44.1	Problem 1	Y	0.335	Y	0.075
+1077	6.4.8.2	chapter 44.1	Problem 2	Y	0.459	Y	0.088
+1078	6.4.8.3	chapter 44.1	Problem 3	Y	0.067	Y	0.057
+1079	6.4.8.4	chapter 44.1	Problem 4	Y	103.854	Y	0.995
+1080	6.4.8.5	chapter 44.1	Problem 5	Y	102.326	Y	1.25
+1081	6.4.9.1	chapter 44.2	Problem 1	Y	0.348	Y	0.076
+1082	6.4.9.2	chapter 44.2	Problem 2	Y	0.417	Y	0.087
+1083	6.4.9.3	chapter 44.2	Problem 3	Y	0.062	Y	0.059
+1084	6.4.9.4	chapter 44.2	Problem 4	Y	101.395	Y	0.805
+1085	6.4.9.5	chapter 44.2	Problem 5	Y	53.319	Y	1.123
+1086	6.4.10.1	chapter 44.3	Problem 1	Y	0.117	Y	0.097
+1087	6.4.10.2	chapter 44.3	Problem 2	Y	0.07	Y	0.089
+1088	6.4.10.3	chapter 44.3	Problem 3	Y	0.071	Y	0.08
+1089	6.4.10.4	chapter 44.3	Problem 4	Y	85.252	Y	1.227
+1090	6.4.10.5	chapter 44.3	Problem 5	Y	50.854	Y	1.537
+1091	6.4.11.1	chapter 44.4	Problem 1	Y	0.126	Y	0.12
+1092	6.4.11.2	chapter 44.4	Problem 2	Y	0.079	Y	0.093
+1093	6.4.11.3	chapter 44.4	Problem 3	Y	0.064	Y	0.089
+1094	6.4.11.4	chapter 44.4	Problem 4	Y	81.87	Y	1.263
+1095	6.4.11.5	chapter 44.4	Problem 5	Y	50.861	Y	1.615
+1096	6.4.12.1	chapter 44.5	Problem 1	Y	0.454	Y	0.078
+1097	6.4.12.2	chapter 44.5	Problem 2	Y	0.119	Y	0.122
+1098	6.4.12.3	chapter 44.5	Problem 3	Y	0.099	Y	0.291
+1099	6.4.12.4	chapter 44.5	Problem 4	Y	0.05	Y	0.203
+1100	6.4.12.5	chapter 44.5	Problem 5	Y	0.167	Y	0.592
+1101	6.4.12.6	chapter 44.5	Problem 6	Y	0.481	Y	0.491
+1102	6.4.13.1	chapter 45.1	Problem 1	Y	0.093	Y	0.137
+1103	6.4.13.2	chapter 45.1	Problem 2	Y	0.039	Y	0.093
+1104	6.4.13.3	chapter 45.1	Problem 3	Y	0.105	Y	0.23
+1105	6.4.13.4	chapter 45.1	Problem 4	Y	0.318	Y	0.362
+1106	6.4.13.5	chapter 45.1	Problem 5	Y	0.208	Y	0.211
+1107	6.4.13.6	chapter 45.1	Problem 6	N	0.407	Y	34.452
+1108	6.4.14.1	chapter 45.2	Problem 1	Y	0.127	Y	1.638
+1109	6.4.14.2	chapter 45.2	Problem 2	Y	0.118	Y	0.422
+1110	6.4.14.3	chapter 45.2	Problem 3	Y	0.109	Y	0.291
+1111	6.4.14.4	chapter 45.2	Problem 4	Y	0.1	Y	0.147
+1112	6.4.14.5	chapter 45.2	Problem 5	Y	0.082	Y	0.176
+1113	6.4.14.6	chapter 45.2	Problem 6	Y	1.138	Y	12.353
+1114	6.4.15.1	chapter 46.1	Problem 1	Y	0.402	Y	0.066
+1115	6.4.15.2	chapter 46.1	Problem 2	Y	0.54	Y	0.077
+1116	6.4.15.3	chapter 46.1	Problem 3	Y	0.064	Y	0.082
+1117	6.4.15.4	chapter 46.1	Problem 4	Y	53.737	Y	1.683
+1118	6.4.15.5	chapter 46.1	Problem 5	Y	51.865	Y	2.133
+1119	6.4.16.1	chapter 46.2	Problem 1	Y	0.393	Y	0.091
+1120	6.4.16.2	chapter 46.2	Problem 2	Y	0.774	Y	0.075
+1121	6.4.16.3	chapter 46.2	Problem 3	Y	0.062	Y	0.059
+1122	6.4.16.4	chapter 46.2	Problem 4	Y	60.143	Y	1.366
+1123	6.4.16.5	chapter 46.2	Problem 5	Y	41.393	Y	1.766
+1124	6.4.17.1	chapter 46.3	Problem 1	Y	0.078	Y	0.139
+1125	6.4.17.2	chapter 46.3	Problem 2	Y	0.123	Y	0.135
+1126	6.4.17.3	chapter 46.3	Problem 3	Y	0.064	Y	0.092
+1127	6.4.17.4	chapter 46.3	Problem 4	Y	23.798	Y	1.613
+1128	6.4.17.5	chapter 46.3	Problem 5	Y	25.656	Y	1.873
+1129	6.4.18.1	chapter 46.4	Problem 1	Y	0.08	Y	0.151
+1130	6.4.18.2	chapter 46.4	Problem 2	Y	0.129	Y	0.158
+1131	6.4.18.3	chapter 46.4	Problem 3	Y	0.059	Y	0.113
+1132	6.4.18.4	chapter 46.4	Problem 4	Y	24.527	Y	1.926
+1133	6.4.18.5	chapter 46.4	Problem 5	Y	25.7	Y	2.336
+1134	6.4.19.1	chapter 46.5	Problem 1	Y	0.237	Y	0.092
+1135	6.4.19.2	chapter 46.5	Problem 2	Y	0.454	Y	0.116
+1136	6.4.19.3	chapter 46.5	Problem 3	Y	0.106	Y	0.523
+1137	6.4.19.4	chapter 46.5	Problem 4	Y	0.33	Y	0.424
+1138	6.4.19.5	chapter 46.5	Problem 5	Y	0.262	Y	0.207
+1139	6.4.19.6	chapter 46.5	Problem 6	Y	0.162	Y	0.175
+1140	6.4.20.1	chapter 47.1	Problem 1	Y	0.84	Y	0.166
+1141	6.4.20.2	chapter 47.1	Problem 2	Y	0.695	Y	0.159
+1142	6.4.20.3	chapter 47.1	Problem 3	Y	1.913	Y	0.154
+1143	6.4.20.4	chapter 47.1	Problem 4	Y	0.131	Y	4.149
+1144	6.4.20.5	chapter 47.1	Problem 5	Y	0.52	Y	4.168
+1145	6.4.21.1	chapter 47.2	Problem 1	Y	0.941	Y	0.192
+1146	6.4.21.2	chapter 47.2	Problem 2	Y	1.036	Y	0.153
+1147	6.4.21.3	chapter 47.2	Problem 3	Y	2.12	Y	0.187
+1148	6.4.21.4	chapter 47.2	Problem 4	Y	0.144	Y	2.02
+1149	6.4.21.5	chapter 47.2	Problem 5	Y	0.521	Y	2.372
+1150	6.4.22.1	chapter 47.3	Problem 1	Y	0.111	Y	0.242
+1151	6.4.22.2	chapter 47.3	Problem 2	Y	0.165	Y	0.199
+1152	6.4.22.3	chapter 47.3	Problem 3	Y	0.144	Y	0.217
+1153	6.4.22.4	chapter 47.3	Problem 4	Y	0.166	Y	1.491
+1154	6.4.22.5	chapter 47.3	Problem 5	Y	0.456	Y	1.675
+1155	6.4.23.1	chapter 47.4	Problem 1	Y	0.108	Y	0.255
+1156	6.4.23.2	chapter 47.4	Problem 2	Y	0.158	Y	0.193
+1157	6.4.23.3	chapter 47.4	Problem 3	Y	0.137	Y	0.204
+1158	6.4.23.4	chapter 47.4	Problem 4	Y	0.168	Y	1.5
+1159	6.4.23.5	chapter 47.4	Problem 5	Y	0.447	Y	1.664
+1160	6.4.24.1	chapter 48.1	Problem 1	Y	0.008	Y	0.062
+1161	6.4.24.2	chapter 48.1	Problem 2	Y	0.026	Y	0.044
+1162	6.4.24.3	chapter 48.1	Problem 3	Y	0.037	Y	0.051
+1163	6.4.24.4	chapter 48.1	Problem 4	Y	0.041	Y	0.138
+1164	6.4.24.5	chapter 48.1	Problem 5	Y	0.03	Y	0.058
+1165	6.4.24.6	chapter 48.1	Problem 6	Y	0.055	Y	0.052
+1166	6.4.24.7	chapter 48.1	Problem 7	Y	0.172	Y	0.145
+1167	6.4.24.8	chapter 48.1	Problem 8	Y	0.131	Y	0.138
+1168	6.4.24.9	chapter 48.1	Problem 9	Y	0.184	Y	0.076
+1169	6.4.24.10	chapter 48.1	Problem 10	Y	0.092	Y	0.065
+1170	6.4.24.11	chapter 48.1	Problem 11	Y	0.318	Y	0.164
+1171	6.4.24.12	chapter 48.1	Problem 12	Y	0.373	Y	0.212
+1172	6.4.24.13	chapter 48.1	Problem 13	N	20.764	N	2.711
+1173	6.4.24.14	chapter 48.1	Problem 14	Y	0.361	Y	0.282
+1174	6.4.24.15	chapter 48.1	Problem 15	Y	0.234	Y	0.173
+1175	6.4.25.1	chapter 48.2	Problem 1	Y	0.024	Y	0.043
+1176	6.4.25.2	chapter 48.2	Problem 2	Y	0.02	Y	0.067
+1177	6.4.25.3	chapter 48.2	Problem 3	Y	0.096	Y	0.106
+1178	6.4.25.4	chapter 48.2	Problem 4	N	0.116	Y	0.082
+1179	6.4.25.5	chapter 48.2	Problem 5	N	20.524	N	1.454
+1180	6.4.25.6	chapter 48.2	Problem 6	N	0.193	Y	0.095
+1181	6.4.25.7	chapter 48.2	Problem 7	N	0.104	Y	0.122
+1182	6.4.26.1	chapter 48.3	Problem 1	Y	0.038	Y	0.048
+1183	6.4.26.2	chapter 48.3	Problem 2	Y	0.016	Y	0.029
+1184	6.4.26.3	chapter 48.3	Problem 3	Y	0.038	Y	0.076
+1185	6.4.26.4	chapter 48.3	Problem 4	Y	0.103	Y	0.234
+1186	6.4.26.5	chapter 48.3	Problem 5	Y	0.085	Y	0.108
+1187	6.4.26.6	chapter 48.3	Problem 6	Y	0.101	Y	0.101
+1188	6.4.26.7	chapter 48.3	Problem 7	Y	0.069	Y	0.327
+1189	6.4.27.1	chapter 48.4	Problem 1	Y	0.015	Y	0.043
+1190	6.4.27.2	chapter 48.4	Problem 2	Y	0.074	Y	0.057
+1191	6.4.27.3	chapter 48.4	Problem 3	Y	0.079	Y	0.07
+1192	6.4.27.4	chapter 48.4	Problem 4	Y	0.192	Y	0.126
+1193	6.4.27.5	chapter 48.4	Problem 5	Y	0.753	Y	0.283
+1194	6.4.27.6	chapter 48.4	Problem 6	N	20.85	N	2.104
+1195	6.4.27.7	chapter 48.4	Problem 7	N	0.188	Y	0.095
+1196	6.5.1.1	chapter 52.1	Problem 1	Y	0.022	Y	0.059
+1197	6.5.1.2	chapter 52.1	Problem 2	Y	0.03	Y	0.027
+1198	6.5.1.3	chapter 52.1	Problem 3	Y	0.065	Y	0.046
+1199	6.5.1.4	chapter 52.1	Problem 4	Y	0.041	Y	0.08
+1200	6.5.1.5	chapter 52.1	Problem 5	Y	0.406	Y	0.095
+1201	6.5.1.6	chapter 52.1	Problem 6	Y	0.359	Y	0.059
+1202	6.5.1.7	chapter 52.1	Problem 7	Y	7.607	Y	466.582
+1203	6.5.1.8	chapter 52.1	Problem 8	Y	29.892	Y	0.522
+1204	6.5.2.1	chapter 52.2	Problem 1	Y	0.147	Y	0.043
+1205	6.5.2.2	chapter 52.2	Problem 2	Y	0.26	Y	0.067
+1206	6.5.2.3	chapter 52.2	Problem 3	Y	0.025	Y	0.034
+1207	6.5.2.4	chapter 52.2	Problem 4	Y	0.3	Y	0.083
+1208	6.5.2.5	chapter 52.2	Problem 5	Y	49.173	Y	352.866
+1209	6.5.2.6	chapter 52.2	Problem 6	Y	50.061	Y	12.132
+1210	6.5.2.7	chapter 52.2	Problem 7	N	41.407	Y	0.73
+1211	6.5.2.8	chapter 52.2	Problem 8	N	12.608	Y	10.852
+1212	6.5.3.1	chapter 52.3	Problem 1	Y	0.345	Y	0.184
+1213	6.5.3.2	chapter 52.3	Problem 2	Y	0.604	Y	0.111
+1214	6.5.3.3	chapter 52.3	Problem 3	Y	12.415	Y	0.227
+1215	6.5.3.4	chapter 52.3	Problem 4	Y	10.25	Y	0.253
+1216	6.5.3.5	chapter 52.3	Problem 5	Y	1.081	Y	0.254
+1217	6.5.3.6	chapter 52.3	Problem 6	Y	0.163	Y	0.341
+1218	6.5.3.7	chapter 52.3	Problem 7	Y	4.103	Y	0.404
+1219	6.5.4.1	chapter 52.4	Problem 1	Y	0.108	Y	0.273
+1220	6.5.4.2	chapter 52.4	Problem 2	Y	0.208	Y	0.129
+1221	6.5.4.3	chapter 52.4	Problem 3	Y	0.073	Y	0.144
+1222	6.5.4.4	chapter 52.4	Problem 4	Y	0.226	Y	0.151
+1223	6.5.4.5	chapter 52.4	Problem 5	Y	0.3	Y	0.669
+1224	6.5.4.6	chapter 52.4	Problem 6	Y	0.373	Y	0.648
+1225	6.5.4.7	chapter 52.4	Problem 7	Y	0.234	Y	0.195
+1226	6.5.4.8	chapter 52.4	Problem 8	Y	0.25	Y	0.21
+1227	6.5.4.9	chapter 52.4	Problem 9	Y	4.324	Y	3.474
+1228	6.5.4.10	chapter 52.4	Problem 10	Y	6.313	Y	7.427
+1229	6.5.4.11	chapter 52.4	Problem 11	Y	1.134	Y	2.156
+1230	6.5.4.12	chapter 52.4	Problem 12	Y	6.858	Y	1.601
+1231	6.5.5.1	chapter 53.1	Problem 1	Y	0.981	Y	0.155
+1232	6.5.5.2	chapter 53.1	Problem 2	Y	1.551	Y	0.161
+1233	6.5.5.3	chapter 53.1	Problem 3	Y	4.303	Y	0.411
+1234	6.5.5.4	chapter 53.1	Problem 4	N	1.665	Y	1.296
+1235	6.5.5.5	chapter 53.1	Problem 5	N	1.407	Y	1.371
+1236	6.5.5.6	chapter 53.1	Problem 6	Y	16.864	Y	1.86
+1237	6.5.5.7	chapter 53.1	Problem 7	Y	0.234	Y	0.079
+1238	6.5.5.8	chapter 53.1	Problem 8	Y	0.229	Y	0.14
+1239	6.5.6.1	chapter 53.2	Problem 1	Y	0.145	Y	0.113
+1240	6.5.6.2	chapter 53.2	Problem 2	Y	0.111	Y	0.094
+1241	6.5.6.3	chapter 53.2	Problem 3	Y	0.104	Y	0.137
+1242	6.5.6.4	chapter 53.2	Problem 4	Y	0.567	Y	0.704
+1243	6.5.6.5	chapter 53.2	Problem 5	Y	0.642	Y	0.171
+1244	6.5.6.6	chapter 53.2	Problem 6	Y	0.395	Y	0.101
+1245	6.5.6.7	chapter 53.2	Problem 7	Y	15.452	Y	0.773
+1246	6.5.6.8	chapter 53.2	Problem 8	Y	0.075	Y	0.052
+1247	6.5.6.9	chapter 53.2	Problem 9	Y	1.795	Y	0.445
+1248	6.5.6.10	chapter 53.2	Problem 10	Y	1.646	Y	0.227
+1249	6.5.7.1	chapter 54.1	Problem 1	Y	1.1	Y	4.752
+1250	6.5.7.2	chapter 54.1	Problem 2	Y	38.927	Y	0.362
+1251	6.5.7.3	chapter 54.1	Problem 3	Y	90.008	Y	3.594
+1252	6.5.7.4	chapter 54.1	Problem 4	Y	0.254	Y	3.9
+1253	6.5.7.5	chapter 54.1	Problem 5	Y	0.257	Y	3.802
+1254	6.5.8.1	chapter 54.2	Problem 1	Y	1.073	Y	4.178
+1255	6.5.8.2	chapter 54.2	Problem 2	Y	17.187	Y	0.343
+1256	6.5.8.3	chapter 54.2	Problem 3	Y	89.526	Y	2.883
+1257	6.5.8.4	chapter 54.2	Problem 4	Y	0.104	Y	0.097
+1258	6.5.8.5	chapter 54.2	Problem 5	Y	0.45	Y	3.203
+1259	6.5.8.6	chapter 54.2	Problem 6	Y	0.399	Y	3.297
+1260	6.5.9.1	chapter 54.3	Problem 1	Y	2.947	Y	1.001
+1261	6.5.9.2	chapter 54.3	Problem 2	Y	19.984	Y	0.341
+1262	6.5.9.3	chapter 54.3	Problem 3	Y	63.657	Y	2.742
+1263	6.5.9.4	chapter 54.3	Problem 4	Y	0.445	Y	1.757
+1264	6.5.9.5	chapter 54.3	Problem 5	Y	0.521	Y	2.248
+1265	6.5.10.1	chapter 54.4	Problem 1	Y	2.837	Y	0.988
+1266	6.5.10.2	chapter 54.4	Problem 2	Y	18.185	Y	0.347
+1267	6.5.10.3	chapter 54.4	Problem 3	Y	62.904	Y	2.835
+1268	6.5.10.4	chapter 54.4	Problem 4	Y	0.488	Y	2.171
+1269	6.5.10.5	chapter 54.4	Problem 5	Y	0.536	Y	2.253
+1270	6.5.11.1	chapter 54.5	Problem 1	Y	2.127	Y	3.898
+1271	6.5.11.2	chapter 54.5	Problem 2	Y	1.139	Y	3.585
+1272	6.5.11.3	chapter 54.5	Problem 3	Y	0.303	Y	0.243
+1273	6.5.11.4	chapter 54.5	Problem 4	Y	0.084	Y	0.606
+1274	6.5.11.5	chapter 54.5	Problem 5	Y	0.274	Y	3.94
+1275	6.5.11.6	chapter 54.5	Problem 6	Y	0.667	Y	2.745
+1276	6.5.12.1	chapter 55.1	Problem 1	Y	0.14	Y	0.375
+1277	6.5.12.2	chapter 55.1	Problem 2	Y	0.046	Y	0.148
+1278	6.5.12.3	chapter 55.1	Problem 3	Y	0.632	Y	0.675
+1279	6.5.12.4	chapter 55.1	Problem 4	Y	0.455	Y	0.17
+1280	6.5.12.5	chapter 55.1	Problem 5	Y	0.17	Y	170.746
+1281	6.5.12.6	chapter 55.1	Problem 6	Y	0.266	Y	100.778
+1282	6.5.13.1	chapter 55.2	Problem 1	Y	0.256	Y	0.269
+1283	6.5.13.2	chapter 55.2	Problem 2	Y	0.106	Y	0.35
+1284	6.5.13.3	chapter 55.2	Problem 3	Y	0.169	Y	0.194
+1285	6.5.13.4	chapter 55.2	Problem 4	Y	0.373	Y	0.337
+1286	6.5.13.5	chapter 55.2	Problem 5	Y	0.419	Y	0.287
+1287	6.5.13.6	chapter 55.2	Problem 6	Y	6.645	Y	1.719
+1288	6.5.13.7	chapter 55.2	Problem 7	Y	1.198	Y	1.691
+1289	6.5.14.1	chapter 56.1	Problem 1	Y	0.764	Y	0.089
+1290	6.5.14.2	chapter 56.1	Problem 2	Y	11.732	Y	7.174
+1291	6.5.14.3	chapter 56.1	Problem 3	Y	21.055	Y	6.332
+1292	6.5.14.4	chapter 56.1	Problem 4	Y	0.262	Y	0.28
+1293	6.5.14.5	chapter 56.1	Problem 5	Y	0.183	Y	0.418
+1294	6.5.14.6	chapter 56.1	Problem 6	Y	0.316	Y	7.517
+1295	6.5.14.7	chapter 56.1	Problem 7	Y	0.389	Y	8.612
+1296	6.5.15.1	chapter 56.2	Problem 1	Y	0.748	Y	0.086
+1297	6.5.15.2	chapter 56.2	Problem 2	Y	12.588	Y	3.817
+1298	6.5.15.3	chapter 56.2	Problem 3	Y	10.775	Y	4.66
+1299	6.5.15.4	chapter 56.2	Problem 4	Y	0.251	Y	0.301
+1300	6.5.15.5	chapter 56.2	Problem 5	Y	0.191	Y	0.315
+1301	6.5.15.6	chapter 56.2	Problem 6	Y	0.347	Y	5.792
+1302	6.5.16.1	chapter 56.3	Problem 1	Y	0.911	Y	0.175
+1303	6.5.16.2	chapter 56.3	Problem 2	Y	1.999	Y	1.118
+1304	6.5.16.3	chapter 56.3	Problem 3	Y	0.516	Y	2.419
+1305	6.5.16.4	chapter 56.3	Problem 4	Y	0.672	Y	0.95
+1306	6.5.16.5	chapter 56.3	Problem 5	Y	0.388	Y	0.257
+1307	6.5.16.6	chapter 56.3	Problem 6	Y	0.476	Y	4.518
+1308	6.5.16.7	chapter 56.3	Problem 7	Y	0.618	Y	5.391
+1309	6.5.17.1	chapter 56.4	Problem 1	Y	2.051	Y	0.2
+1310	6.5.17.2	chapter 56.4	Problem 2	Y	2.248	Y	1.115
+1311	6.5.17.3	chapter 56.4	Problem 3	Y	0.487	Y	2.455
+1312	6.5.17.4	chapter 56.4	Problem 4	Y	0.874	Y	1.934
+1313	6.5.17.5	chapter 56.4	Problem 5	Y	0.393	Y	0.25
+1314	6.5.17.6	chapter 56.4	Problem 6	Y	0.501	Y	5.117
+1315	6.5.17.7	chapter 56.4	Problem 7	Y	0.611	Y	6.77
+1316	6.5.18.1	chapter 56.5	Problem 1	Y	2.43	Y	4.915
+1317	6.5.18.2	chapter 56.5	Problem 2	Y	20.998	Y	4.339
+1318	6.5.18.3	chapter 56.5	Problem 3	Y	0.236	Y	1.545
+1319	6.5.18.4	chapter 56.5	Problem 4	Y	0.36	Y	2.296
+1320	6.5.18.5	chapter 56.5	Problem 5	Y	0.789	Y	0.945
+1321	6.5.18.6	chapter 56.5	Problem 6	Y	0.325	Y	6.26
+1322	6.5.18.7	chapter 56.5	Problem 7	Y	0.234	Y	1.615
+1323	6.5.19.1	chapter 57.1	Problem 1	Y	0.9	Y	0.517
+1324	6.5.19.2	chapter 57.1	Problem 2	Y	0.398	Y	0.467
+1325	6.5.19.3	chapter 57.1	Problem 3	Y	4.344	Y	0.481
+1326	6.5.19.4	chapter 57.1	Problem 4	Y	0.139	Y	4.332
+1327	6.5.19.5	chapter 57.1	Problem 5	Y	0.245	Y	22.273
+1328	6.5.20.1	chapter 57.2	Problem 1	Y	1.056	Y	0.318
+1329	6.5.20.2	chapter 57.2	Problem 2	Y	0.392	Y	0.28
+1330	6.5.20.3	chapter 57.2	Problem 3	Y	5.398	Y	0.385
+1331	6.5.20.4	chapter 57.2	Problem 4	Y	0.139	Y	1.927
+1332	6.5.20.5	chapter 57.2	Problem 5	Y	0.236	N	600.
+1333	6.5.21.1	chapter 57.3	Problem 1	Y	0.496	Y	0.895
+1334	6.5.21.2	chapter 57.3	Problem 2	Y	0.273	Y	63.117
+1335	6.5.21.3	chapter 57.3	Problem 3	Y	1.363	Y	4.108
+1336	6.5.21.4	chapter 57.3	Problem 4	Y	0.19	Y	1.882
+1337	6.5.21.5	chapter 57.3	Problem 5	Y	0.286	Y	2.005
+1338	6.5.22.1	chapter 57.4	Problem 1	Y	0.611	Y	0.783
+1339	6.5.22.2	chapter 57.4	Problem 2	Y	0.274	Y	38.68
+1340	6.5.22.3	chapter 57.4	Problem 3	Y	1.422	Y	4.168
+1341	6.5.22.4	chapter 57.4	Problem 4	Y	0.193	Y	1.687
+1342	6.5.22.5	chapter 57.4	Problem 5	Y	0.297	Y	2.058
+1343	6.5.23.1	chapter 58.1	Problem 1	Y	0.026	Y	0.047
+1344	6.5.23.2	chapter 58.1	Problem 2	Y	0.1	Y	0.065
+1345	6.5.23.3	chapter 58.1	Problem 3	Y	0.127	Y	0.062
+1346	6.5.23.4	chapter 58.1	Problem 4	Y	0.063	Y	0.057
+1347	6.5.23.5	chapter 58.1	Problem 5	Y	0.128	Y	0.09
+1348	6.5.23.6	chapter 58.1	Problem 6	Y	0.053	Y	0.055
+1349	6.5.23.7	chapter 58.1	Problem 7	Y	0.175	Y	0.075
+1350	6.5.23.8	chapter 58.1	Problem 8	Y	0.182	Y	0.146
+1351	6.5.23.9	chapter 58.1	Problem 9	Y	0.894	Y	0.274
+1352	6.5.23.10	chapter 58.1	Problem 10	N	0.522	Y	0.49
+1353	6.5.23.11	chapter 58.1	Problem 11	Y	0.805	Y	0.322
+1354	6.5.23.12	chapter 58.1	Problem 12	Y	0.579	Y	0.194
+1355	6.5.24.1	chapter 58.2	Problem 1	Y	0.03	Y	0.04
+1356	6.5.24.2	chapter 58.2	Problem 2	Y	0.165	Y	0.05
+1357	6.5.24.3	chapter 58.2	Problem 3	Y	0.027	Y	0.051
+1358	6.5.24.4	chapter 58.2	Problem 4	Y	0.136	Y	0.073
+1359	6.5.24.5	chapter 58.2	Problem 5	Y	0.095	Y	0.056
+1360	6.5.24.6	chapter 58.2	Problem 6	Y	0.263	Y	0.12
+1361	6.5.25.1	chapter 58.3	Problem 1	Y	0.05	Y	0.072
+1362	6.5.25.2	chapter 58.3	Problem 2	Y	0.242	Y	0.106
+1363	6.5.25.3	chapter 58.3	Problem 3	Y	0.125	Y	0.087
+1364	6.5.25.4	chapter 58.3	Problem 4	Y	0.479	Y	0.176
+1365	6.5.25.5	chapter 58.3	Problem 5	Y	3.96	Y	0.317
+1366	6.5.25.6	chapter 58.3	Problem 6	N	20.883	N	2.037
+1367	6.6.1.1	chapter 62.1	Problem 1	Y	0.007	Y	0.02
+1368	6.6.1.2	chapter 62.1	Problem 2	Y	0.011	Y	0.023
+1369	6.6.1.3	chapter 62.1	Problem 3	Y	0.04	Y	0.038
+1370	6.6.1.4	chapter 62.1	Problem 4	Y	0.074	Y	0.177
+1371	6.6.1.5	chapter 62.1	Problem 5	Y	0.026	Y	0.041
+1372	6.6.1.6	chapter 62.1	Problem 6	Y	0.084	Y	0.173
+1373	6.6.1.7	chapter 62.1	Problem 7	Y	0.07	Y	0.107
+1374	6.6.1.8	chapter 62.1	Problem 8	N	0.031	Y	0.042
+1375	6.6.1.9	chapter 62.1	Problem 9	Y	0.148	Y	0.801
+1376	6.6.1.10	chapter 62.1	Problem 10	Y	0.137	Y	0.141
+1377	6.6.1.11	chapter 62.1	Problem 11	N	1.298	N	3.997
+1378	6.6.1.12	chapter 62.1	Problem 12	N	0.263	N	0.102
+1379	6.6.1.13	chapter 62.1	Problem 13	Y	0.034	Y	0.026
+1380	6.6.1.14	chapter 62.1	Problem 14	Y	31.389	N	3.417
+1381	6.6.1.15	chapter 62.1	Problem 15	Y	8.875	Y	5.965
+1382	6.6.1.16	chapter 62.1	Problem 16	Y	9.095	Y	5.56
+1383	6.6.1.17	chapter 62.1	Problem 17	N	600.	N	600.
+1384	6.6.1.18	chapter 62.1	Problem 18	Y	9.134	N	5.086
+1385	6.6.1.19	chapter 62.1	Problem 19	N	0.648	N	0.198
+1386	6.6.1.20	chapter 62.1	Problem 20	N	2.351	N	0.196
+1387	6.6.1.21	chapter 62.1	Problem 21	N	0.052	N	0.248
+1388	6.6.2.1	chapter 62.2	Problem 1	Y	0.39	Y	0.215
+1389	6.6.2.2	chapter 62.2	Problem 2	Y	0.272	Y	0.158
+1390	6.6.2.3	chapter 62.2	Problem 3	N	600.	Y	1.001
+1391	6.6.2.4	chapter 62.2	Problem 4	Y	0.454	Y	0.203
+1392	6.6.2.5	chapter 62.2	Problem 5	Y	0.027	Y	0.173
+1393	6.6.2.6	chapter 62.2	Problem 6	Y	0.029	Y	0.027
+1394	6.6.2.7	chapter 62.2	Problem 7	Y	0.019	Y	0.027
+1395	6.6.2.8	chapter 62.2	Problem 8	Y	0.027	Y	0.051
+1396	6.6.2.9	chapter 62.2	Problem 9	Y	0.159	Y	0.041
+1397	6.6.2.10	chapter 62.2	Problem 10	Y	0.03	Y	0.028
+1398	6.6.2.11	chapter 62.2	Problem 11	Y	0.111	Y	0.161
+1399	6.6.2.12	chapter 62.2	Problem 12	Y	0.011	Y	0.185
+1400	6.6.2.13	chapter 62.2	Problem 13	Y	0.028	Y	0.05
+1401	6.6.2.14	chapter 62.2	Problem 14	Y	0.097	Y	0.148
+1402	6.6.2.15	chapter 62.2	Problem 15	Y	0.037	Y	0.055
+1403	6.6.2.16	chapter 62.2	Problem 16	Y	0.029	Y	0.132
+1404	6.6.2.17	chapter 62.2	Problem 17	Y	0.039	Y	0.165
+1405	6.6.2.18	chapter 62.2	Problem 18	Y	0.054	Y	0.159
+1406	6.6.2.19	chapter 62.2	Problem 19	Y	0.05	Y	0.266
+1407	6.6.2.20	chapter 62.2	Problem 20	Y	0.036	Y	0.16
+1408	6.6.2.21	chapter 62.2	Problem 21	Y	0.042	Y	0.169
+1409	6.6.2.22	chapter 62.2	Problem 22	Y	0.036	N	0.157
+1410	6.6.2.23	chapter 62.2	Problem 23	N	0.423	Y	0.745
+1411	6.6.2.24	chapter 62.2	Problem 24	Y	0.077	Y	0.76
+1412	6.6.2.25	chapter 62.2	Problem 25	Y	0.372	Y	0.631
+1413	6.6.2.26	chapter 62.2	Problem 26	N	183.606	N	0.215
+1414	6.6.2.27	chapter 62.2	Problem 27	N	0.68	Y	0.693
+1415	6.6.2.28	chapter 62.2	Problem 28	Y	0.291	Y	0.282
+1416	6.6.2.29	chapter 62.2	Problem 29	N	0.182	N	0.804
+1417	6.6.3.1	chapter 62.3	Problem 1	N	159.939	N	0.221
+1418	6.6.3.2	chapter 62.3	Problem 2	Y	0.068	Y	0.069
+1419	6.6.3.3	chapter 62.3	Problem 3	Y	0.028	Y	0.229
+1420	6.6.3.4	chapter 62.3	Problem 4	N	0.024	Y	0.636
+1421	6.6.3.5	chapter 62.3	Problem 5	N	271.473	N	0.235
+1422	6.6.3.6	chapter 62.3	Problem 6	N	0.508	Y	0.957
+1423	6.6.3.7	chapter 62.3	Problem 7	N	0.207	Y	1.592
+1424	6.6.3.8	chapter 62.3	Problem 8	N	0.127	N	0.276
+1425	6.6.3.9	chapter 62.3	Problem 9	N	0.024	Y	0.648
+1426	6.6.3.10	chapter 62.3	Problem 10	Y	0.037	Y	0.079
+1427	6.6.3.11	chapter 62.3	Problem 11	N	0.028	Y	0.302
+1428	6.6.3.12	chapter 62.3	Problem 12	N	0.041	N	1.286
+1429	6.6.3.13	chapter 62.3	Problem 13	N	0.701	N	600.
+1430	6.6.4.1	chapter 62.4	Problem 1	Y	15.403	Y	2.108
+1431	6.6.4.2	chapter 62.4	Problem 2	Y	2.179	Y	1.324
+1432	6.6.4.3	chapter 62.4	Problem 3	Y	0.794	Y	0.622
+1433	6.6.4.4	chapter 62.4	Problem 4	Y	3.182	Y	3.603
+1434	6.6.4.5	chapter 62.4	Problem 5	Y	4.615	Y	3.185
+1435	6.6.4.6	chapter 62.4	Problem 6	Y	0.452	Y	0.352
+1436	6.6.4.7	chapter 62.4	Problem 7	N	0.427	Y	1.609
+1437	6.6.4.8	chapter 62.4	Problem 8	N	0.036	Y	0.791
+1438	6.6.5.1	chapter 63.1	Problem 1	Y	0.222	Y	0.054
+1439	6.6.5.2	chapter 63.1	Problem 2	Y	0.155	Y	0.145
+1440	6.6.5.3	chapter 63.1	Problem 3	Y	0.176	Y	0.151
+1441	6.6.5.4	chapter 63.1	Problem 4	N	0.54	Y	0.734
+1442	6.6.5.5	chapter 63.1	Problem 5	Y	0.317	Y	0.181
+1443	6.6.5.6	chapter 63.1	Problem 6	Y	0.351	Y	0.273
+1444	6.6.5.7	chapter 63.1	Problem 7	Y	0.846	Y	0.8
+1445	6.6.5.8	chapter 63.1	Problem 8	Y	0.768	Y	0.688
+1446	6.6.6.1	chapter 63.2	Problem 1	Y	0.478	Y	0.494
+1447	6.6.6.2	chapter 63.2	Problem 2	N	0.226	Y	0.51
+1448	6.6.6.3	chapter 63.2	Problem 3	Y	1.464	Y	0.608
+1449	6.6.6.4	chapter 63.2	Problem 4	Y	1.64	Y	0.387
+1450	6.6.6.5	chapter 63.2	Problem 5	N	14.118	N	22.322
+1451	6.6.6.6	chapter 63.2	Problem 6	N	14.136	N	600.
+1452	6.6.6.7	chapter 63.2	Problem 7	N	7.107	N	77.28
+1453	6.6.6.8	chapter 63.2	Problem 8	N	4.704	N	146.911
+1454	6.6.6.9	chapter 63.2	Problem 9	N	1.212	Y	0.622
+1455	6.6.6.10	chapter 63.2	Problem 10	N	1.844	Y	0.675
+1456	6.6.6.11	chapter 63.2	Problem 11	N	1.467	Y	0.506
+1457	6.6.6.12	chapter 63.2	Problem 12	N	25.573	N	3.765
+1458	6.6.6.13	chapter 63.2	Problem 13	Y	1.066	Y	0.31
+1459	6.6.6.14	chapter 63.2	Problem 14	N	0.865	Y	0.596
+1460	6.6.6.15	chapter 63.2	Problem 15	Y	1.416	Y	1.38
+1461	6.6.6.16	chapter 63.2	Problem 16	N	1.642	Y	9.263
+1462	6.6.6.17	chapter 63.2	Problem 17	N	25.118	N	3.035
+1463	6.6.6.18	chapter 63.2	Problem 18	N	21.53	N	4.47
+1464	6.6.7.1	chapter 64.1	Problem 1	Y	0.029	Y	0.059
+1465	6.6.7.2	chapter 64.1	Problem 2	Y	0.132	Y	0.237
+1466	6.6.7.3	chapter 64.1	Problem 3	Y	0.164	Y	0.26
+1467	6.6.7.4	chapter 64.1	Problem 4	Y	0.288	Y	0.347
+1468	6.6.7.5	chapter 64.1	Problem 5	Y	0.383	Y	1.437
+1469	6.6.7.6	chapter 64.1	Problem 6	N	0.223	Y	0.352
+1470	6.6.8.1	chapter 64.2	Problem 1	Y	0.03	Y	0.054
+1471	6.6.8.2	chapter 64.2	Problem 2	Y	0.045	Y	0.056
+1472	6.6.8.3	chapter 64.2	Problem 3	Y	0.12	Y	0.181
+1473	6.6.8.4	chapter 64.2	Problem 4	Y	0.144	Y	0.204
+1474	6.6.8.5	chapter 64.2	Problem 5	Y	0.294	Y	0.266
+1475	6.6.8.6	chapter 64.2	Problem 6	Y	0.481	Y	4.143
+1476	6.6.9.1	chapter 64.3	Problem 1	Y	0.151	Y	0.746
+1477	6.6.9.2	chapter 64.3	Problem 2	Y	0.048	Y	0.066
+1478	6.6.9.3	chapter 64.3	Problem 3	Y	0.401	Y	0.762
+1479	6.6.9.4	chapter 64.3	Problem 4	Y	1.289	Y	1.332
+1480	6.6.9.5	chapter 64.3	Problem 5	N	1.354	Y	0.752
+1481	6.6.9.6	chapter 64.3	Problem 6	N	0.274	Y	1.964
+1482	6.6.10.1	chapter 64.4	Problem 1	Y	0.162	Y	0.414
+1483	6.6.10.2	chapter 64.4	Problem 2	Y	0.05	Y	0.09
+1484	6.6.10.3	chapter 64.4	Problem 3	Y	0.422	Y	0.558
+1485	6.6.10.4	chapter 64.4	Problem 4	Y	1.284	Y	0.631
+1486	6.6.10.5	chapter 64.4	Problem 5	N	11.389	Y	0.757
+1487	6.6.10.6	chapter 64.4	Problem 6	N	0.282	Y	1.282
+1488	6.6.11.1	chapter 64.5	Problem 1	Y	0.312	Y	0.339
+1489	6.6.11.2	chapter 64.5	Problem 2	Y	0.191	Y	0.221
+1490	6.6.11.3	chapter 64.5	Problem 3	N	0.303	Y	0.241
+1491	6.6.11.4	chapter 64.5	Problem 4	Y	1.129	Y	3.237
+1492	6.6.11.5	chapter 64.5	Problem 5	N	0.28	Y	1.994
+1493	6.6.11.6	chapter 64.5	Problem 6	N	0.278	Y	1.294
+1494	6.6.12.1	chapter 65.1	Problem 1	Y	0.046	Y	0.281
+1495	6.6.12.2	chapter 65.1	Problem 2	Y	0.01	Y	0.049
+1496	6.6.12.3	chapter 65.1	Problem 3	Y	0.205	Y	0.898
+1497	6.6.12.4	chapter 65.1	Problem 4	Y	0.204	Y	0.185
+1498	6.6.13.1	chapter 65.2	Problem 1	Y	0.032	Y	0.055
+1499	6.6.13.2	chapter 65.2	Problem 2	Y	0.302	Y	0.232
+1500	6.6.13.3	chapter 65.2	Problem 3	Y	0.203	Y	0.725
+1501	6.6.13.4	chapter 65.2	Problem 4	Y	0.28	Y	0.512
+1502	6.6.13.5	chapter 65.2	Problem 5	Y	0.116	Y	0.297
+1503	6.6.13.6	chapter 65.2	Problem 6	Y	0.934	Y	0.526
+1504	6.6.14.1	chapter 66.1	Problem 1	Y	0.123	Y	0.412
+1505	6.6.14.2	chapter 66.1	Problem 2	Y	0.141	Y	0.524
+1506	6.6.14.3	chapter 66.1	Problem 3	Y	0.097	Y	3.8
+1507	6.6.14.4	chapter 66.1	Problem 4	N	0.222	Y	1.319
+1508	6.6.14.5	chapter 66.1	Problem 5	Y	2.054	Y	1.602
+1509	6.6.15.1	chapter 66.2	Problem 1	Y	0.118	Y	0.417
+1510	6.6.15.2	chapter 66.2	Problem 2	Y	0.123	Y	0.553
+1511	6.6.15.3	chapter 66.2	Problem 3	Y	0.11	Y	2.823
+1512	6.6.15.4	chapter 66.2	Problem 4	Y	0.08	Y	2.832
+1513	6.6.15.5	chapter 66.2	Problem 5	Y	2.055	Y	1.033
+1514	6.6.16.1	chapter 66.3	Problem 1	Y	0.164	Y	0.395
+1515	6.6.16.2	chapter 66.3	Problem 2	Y	0.416	Y	0.361
+1516	6.6.16.3	chapter 66.3	Problem 3	Y	1.46	Y	0.581
+1517	6.6.16.4	chapter 66.3	Problem 4	Y	0.41	Y	0.592
+1518	6.6.16.5	chapter 66.3	Problem 5	N	2.022	Y	1.366
+1519	6.6.17.1	chapter 66.4	Problem 1	Y	0.183	Y	0.377
+1520	6.6.17.2	chapter 66.4	Problem 2	Y	0.435	Y	0.578
+1521	6.6.17.3	chapter 66.4	Problem 3	Y	1.449	Y	0.692
+1522	6.6.17.4	chapter 66.4	Problem 4	Y	0.426	Y	0.707
+1523	6.6.17.5	chapter 66.4	Problem 5	Y	2.242	Y	1.065
+1524	6.6.18.1	chapter 66.5	Problem 1	Y	45.118	Y	2.258
+1525	6.6.18.2	chapter 66.5	Problem 2	Y	0.13	Y	0.495
+1526	6.6.18.3	chapter 66.5	Problem 3	Y	0.365	Y	0.511
+1527	6.6.18.4	chapter 66.5	Problem 4	Y	19.325	Y	1.529
+1528	6.6.18.5	chapter 66.5	Problem 5	Y	0.434	Y	0.385
+1529	6.6.18.6	chapter 66.5	Problem 6	Y	11.842	Y	1.928
+1530	6.6.19.1	chapter 67.1	Problem 1	Y	0.195	Y	0.378
+1531	6.6.19.2	chapter 67.1	Problem 2	Y	0.812	Y	0.704
+1532	6.6.19.3	chapter 67.1	Problem 3	Y	0.062	Y	0.299
+1533	6.6.19.4	chapter 67.1	Problem 4	Y	0.163	Y	1.806
+1534	6.6.19.5	chapter 67.1	Problem 5	Y	0.204	Y	0.385
+1535	6.6.20.1	chapter 67.2	Problem 1	Y	0.2	Y	0.381
+1536	6.6.20.2	chapter 67.2	Problem 2	Y	0.757	Y	0.527
+1537	6.6.20.3	chapter 67.2	Problem 3	Y	0.064	Y	0.27
+1538	6.6.20.4	chapter 67.2	Problem 4	Y	0.16	Y	2.951
+1539	6.6.20.5	chapter 67.2	Problem 5	Y	0.179	Y	0.382
+1540	6.6.21.1	chapter 67.3	Problem 1	Y	0.168	Y	0.579
+1541	6.6.21.2	chapter 67.3	Problem 2	Y	0.571	Y	62.168
+1542	6.6.21.3	chapter 67.3	Problem 3	Y	0.061	Y	0.447
+1543	6.6.21.4	chapter 67.3	Problem 4	Y	0.145	Y	0.968
+1544	6.6.21.5	chapter 67.3	Problem 5	Y	0.198	Y	0.658
+1545	6.6.22.1	chapter 67.4	Problem 1	Y	0.17	Y	0.437
+1546	6.6.22.2	chapter 67.4	Problem 2	Y	0.541	Y	36.726
+1547	6.6.22.3	chapter 67.4	Problem 3	Y	0.055	Y	0.31
+1548	6.6.22.4	chapter 67.4	Problem 4	Y	0.145	Y	1.008
+1549	6.6.22.5	chapter 67.4	Problem 5	Y	0.175	Y	0.656
+1550	6.6.23.1	chapter 68.1	Problem 1	Y	0.029	Y	0.066
+1551	6.6.23.2	chapter 68.1	Problem 2	Y	0.174	Y	0.092
+1552	6.6.23.3	chapter 68.1	Problem 3	Y	0.105	Y	0.06
+1553	6.6.23.4	chapter 68.1	Problem 4	Y	0.225	Y	0.156
+1554	6.6.23.5	chapter 68.1	Problem 5	Y	0.159	Y	0.103
+1555	6.6.23.6	chapter 68.1	Problem 6	N	0.011	N	0.531
+1556	6.6.23.7	chapter 68.1	Problem 7	Y	2.223	Y	1.052
+1557	6.6.23.8	chapter 68.1	Problem 8	Y	0.555	Y	0.237
+1558	6.6.23.9	chapter 68.1	Problem 9	N	0.355	Y	0.385
+1559	6.6.23.10	chapter 68.1	Problem 10	N	0.536	Y	0.562
+1560	6.6.24.1	chapter 68.2	Problem 1	Y	0.043	Y	0.081
+1561	6.6.24.2	chapter 68.2	Problem 2	Y	0.599	Y	0.207
+1562	6.6.24.3	chapter 68.2	Problem 3	Y	2.09	Y	0.972
+1563	6.6.24.4	chapter 68.2	Problem 4	N	0.184	Y	0.237
+1564	6.6.24.5	chapter 68.2	Problem 5	Y	0.137	Y	0.056
+1565	6.6.24.6	chapter 68.2	Problem 6	Y	0.163	Y	0.094
+1566	6.6.24.7	chapter 68.2	Problem 7	N	0.103	Y	0.2
+1567	6.6.25.1	chapter 68.3	Problem 1	Y	0.03	Y	0.062
+1568	6.6.25.2	chapter 68.3	Problem 2	Y	0.032	Y	0.064
+1569	6.6.25.3	chapter 68.3	Problem 3	Y	0.038	Y	0.044
+1570	6.6.25.4	chapter 68.3	Problem 4	Y	0.097	Y	0.053
+1571	6.6.25.5	chapter 68.3	Problem 5	Y	0.074	Y	0.074
+1572	6.6.25.6	chapter 68.3	Problem 6	Y	0.595	Y	0.201
+1573	6.6.25.7	chapter 68.3	Problem 7	Y	19.972	Y	0.632
+1574	6.6.25.8	chapter 68.3	Problem 8	N	53.902	N	185.601
+1575	6.6.25.9	chapter 68.3	Problem 9	N	0.201	Y	0.997
+1576	6.6.25.10	chapter 68.3	Problem 10	N	0.113	Y	1.434
+1577	6.6.25.11	chapter 68.3	Problem 11	N	33.501	N	0.628
+1578	6.6.25.12	chapter 68.3	Problem 12	N	1.072	N	0.645
+1579	6.7.1.1	chapter 72.1	Problem 1	Y	0.048	Y	0.026
+1580	6.7.1.2	chapter 72.1	Problem 2	Y	0.141	Y	0.28
+1581	6.7.1.3	chapter 72.1	Problem 3	Y	0.044	Y	0.028
+1582	6.7.1.4	chapter 72.1	Problem 4	Y	2.22	Y	0.069
+1583	6.7.1.5	chapter 72.1	Problem 5	Y	0.166	Y	0.058
+1584	6.7.1.6	chapter 72.1	Problem 6	Y	0.141	Y	0.076
+1585	6.7.1.7	chapter 72.1	Problem 7	Y	0.135	Y	0.185
+1586	6.7.1.8	chapter 72.1	Problem 8	Y	0.119	Y	0.872
+1587	6.7.1.9	chapter 72.1	Problem 9	Y	0.726	Y	0.088
+1588	6.7.2.1	chapter 72.2	Problem 1	Y	0.094	Y	0.032
+1589	6.7.2.2	chapter 72.2	Problem 2	Y	0.037	Y	0.03
+1590	6.7.2.3	chapter 72.2	Problem 3	Y	0.216	Y	0.081
+1591	6.7.2.4	chapter 72.2	Problem 4	Y	0.093	Y	0.055
+1592	6.7.2.5	chapter 72.2	Problem 5	Y	0.207	Y	0.074
+1593	6.7.2.6	chapter 72.2	Problem 6	Y	0.217	Y	0.084
+1594	6.7.2.7	chapter 72.2	Problem 7	Y	0.132	Y	0.079
+1595	6.7.2.8	chapter 72.2	Problem 8	Y	0.121	Y	0.044
+1596	6.7.2.9	chapter 72.2	Problem 9	Y	0.149	Y	0.062
+1597	6.7.3.1	chapter 72.3	Problem 1	Y	0.032	Y	0.027
+1598	6.7.3.2	chapter 72.3	Problem 2	Y	0.041	Y	0.03
+1599	6.7.3.3	chapter 72.3	Problem 3	Y	0.052	Y	0.046
+1600	6.7.3.4	chapter 72.3	Problem 4	Y	0.118	Y	0.288
+1601	6.7.3.5	chapter 72.3	Problem 5	Y	0.261	Y	0.052
+1602	6.7.4.1	chapter 72.4	Problem 1	Y	0.242	Y	0.091
+1603	6.7.4.2	chapter 72.4	Problem 2	Y	0.199	Y	0.08
+1604	6.7.4.3	chapter 72.4	Problem 3	Y	0.088	Y	0.331
+1605	6.7.4.4	chapter 72.4	Problem 4	Y	0.164	Y	0.553
+1606	6.7.4.5	chapter 72.4	Problem 5	Y	0.117	Y	0.287
+1607	6.7.4.6	chapter 72.4	Problem 6	Y	0.121	Y	0.934
+1608	6.7.4.7	chapter 72.4	Problem 7	N	1.374	Y	1.795
+1609	6.7.4.8	chapter 72.4	Problem 8	Y	4.491	Y	2.093
+1610	6.7.4.9	chapter 72.4	Problem 9	Y	6.616	Y	3.231
+1611	6.7.4.10	chapter 72.4	Problem 10	Y	2.691	Y	1.883
+1612	6.7.4.11	chapter 72.4	Problem 11	Y	5.001	Y	2.997
+1613	6.7.4.12	chapter 72.4	Problem 12	Y	0.054	Y	0.104
+1614	6.7.4.13	chapter 72.4	Problem 13	N	0.041	Y	0.29
+1615	6.7.5.1	chapter 73.1	Problem 1	Y	0.033	Y	0.062
+1616	6.7.5.2	chapter 73.1	Problem 2	Y	0.527	Y	0.225
+1617	6.7.5.3	chapter 73.1	Problem 3	Y	3.299	Y	1.157
+1618	6.7.5.4	chapter 73.1	Problem 4	N	0.402	Y	0.782
+1619	6.7.5.5	chapter 73.1	Problem 5	Y	0.399	Y	0.194
+1620	6.7.5.6	chapter 73.1	Problem 6	Y	0.312	Y	0.306
+1621	6.7.5.7	chapter 73.1	Problem 7	Y	0.893	Y	0.79
+1622	6.7.5.8	chapter 73.1	Problem 8	Y	0.782	Y	0.756
+1623	6.7.6.1	chapter 73.2	Problem 1	Y	0.668	Y	0.395
+1624	6.7.6.2	chapter 73.2	Problem 2	Y	0.592	Y	0.477
+1625	6.7.6.3	chapter 73.2	Problem 3	Y	0.3	Y	0.055
+1626	6.7.6.4	chapter 73.2	Problem 4	Y	0.455	Y	0.337
+1627	6.7.6.5	chapter 73.2	Problem 5	Y	0.58	Y	5.371
+1628	6.7.6.6	chapter 73.2	Problem 6	N	13.534	N	26.512
+1629	6.7.6.7	chapter 73.2	Problem 7	N	4.778	N	601.018
+1630	6.7.6.8	chapter 73.2	Problem 8	N	4.45	Y	33.449
+1631	6.7.6.9	chapter 73.2	Problem 9	Y	1.12	Y	0.309
+1632	6.7.6.10	chapter 73.2	Problem 10	N	6.924	N	17.161
+1633	6.7.6.11	chapter 73.2	Problem 11	Y	1.668	Y	1.544
+1634	6.7.7.1	chapter 74.1	Problem 1	Y	0.376	Y	0.283
+1635	6.7.7.2	chapter 74.1	Problem 2	Y	0.272	Y	0.863
+1636	6.7.7.3	chapter 74.1	Problem 3	Y	1.002	Y	0.555
+1637	6.7.7.4	chapter 74.1	Problem 4	Y	0.181	Y	0.645
+1638	6.7.7.5	chapter 74.1	Problem 5	Y	0.53	Y	506.985
+1639	6.7.8.1	chapter 74.2	Problem 1	Y	0.41	Y	0.211
+1640	6.7.8.2	chapter 74.2	Problem 2	Y	0.244	Y	0.837
+1641	6.7.8.3	chapter 74.2	Problem 3	Y	1.035	Y	0.451
+1642	6.7.8.4	chapter 74.2	Problem 4	Y	0.153	Y	0.648
+1643	6.7.8.5	chapter 74.2	Problem 5	Y	0.203	Y	0.212
+1644	6.7.8.6	chapter 74.2	Problem 6	Y	0.563	Y	288.599
+1645	6.7.9.1	chapter 74.3	Problem 1	Y	0.29	Y	0.223
+1646	6.7.9.2	chapter 74.3	Problem 2	Y	4.339	Y	3.545
+1647	6.7.9.3	chapter 74.3	Problem 3	Y	0.708	Y	0.497
+1648	6.7.9.4	chapter 74.3	Problem 4	N	0.241	Y	111.774
+1649	6.7.9.5	chapter 74.3	Problem 5	Y	1.622	Y	1.328
+1650	6.7.9.6	chapter 74.3	Problem 6	N	1.186	Y	0.711
+1651	6.7.9.7	chapter 74.3	Problem 7	Y	1.083	Y	25.638
+1652	6.7.10.1	chapter 74.4	Problem 1	Y	0.273	Y	0.266
+1653	6.7.10.2	chapter 74.4	Problem 2	Y	4.383	Y	3.609
+1654	6.7.10.3	chapter 74.4	Problem 3	Y	0.702	Y	0.546
+1655	6.7.10.4	chapter 74.4	Problem 4	N	0.234	Y	1.147
+1656	6.7.10.5	chapter 74.4	Problem 5	Y	1.767	Y	0.752
+1657	6.7.10.6	chapter 74.4	Problem 6	Y	1.213	Y	25.751
+1658	6.7.11.1	chapter 74.5	Problem 1	Y	3.161	Y	1.939
+1659	6.7.11.2	chapter 74.5	Problem 2	Y	0.761	Y	0.531
+1660	6.7.11.3	chapter 74.5	Problem 3	Y	29.304	Y	1.137
+1661	6.7.11.4	chapter 74.5	Problem 4	Y	0.598	Y	0.54
+1662	6.7.11.5	chapter 74.5	Problem 5	Y	0.368	Y	0.37
+1663	6.7.12.1	chapter 75.1	Problem 1	Y	0.031	Y	0.069
+1664	6.7.12.2	chapter 75.1	Problem 2	N	0.093	Y	0.321
+1665	6.7.12.3	chapter 75.1	Problem 3	Y	0.055	Y	0.081
+1666	6.7.12.4	chapter 75.1	Problem 4	Y	0.439	Y	0.38
+1667	6.7.12.5	chapter 75.1	Problem 5	N	0.685	Y	0.322
+1668	6.7.13.1	chapter 75.2	Problem 1	Y	0.44	Y	1.204
+1669	6.7.13.2	chapter 75.2	Problem 2	Y	2.176	Y	1.07
+1670	6.7.13.3	chapter 75.2	Problem 3	Y	0.174	Y	0.399
+1671	6.7.13.4	chapter 75.2	Problem 4	N	0.287	Y	0.298
+1672	6.7.13.5	chapter 75.2	Problem 5	Y	2.788	Y	0.512
+1673	6.7.14.1	chapter 76.1	Problem 1	Y	0.379	Y	0.346
+1674	6.7.14.2	chapter 76.1	Problem 2	Y	0.558	Y	0.678
+1675	6.7.14.3	chapter 76.1	Problem 3	Y	0.742	Y	0.795
+1676	6.7.14.4	chapter 76.1	Problem 4	Y	67.235	Y	3.971
+1677	6.7.14.5	chapter 76.1	Problem 5	Y	0.086	Y	0.849
+1678	6.7.14.6	chapter 76.1	Problem 6	N	600.	Y	3.898
+1679	6.7.15.1	chapter 76.2	Problem 1	Y	0.371	Y	0.301
+1680	6.7.15.2	chapter 76.2	Problem 2	Y	0.535	Y	0.766
+1681	6.7.15.3	chapter 76.2	Problem 3	Y	0.906	Y	0.57
+1682	6.7.15.4	chapter 76.2	Problem 4	Y	67.992	Y	2.808
+1683	6.7.15.5	chapter 76.2	Problem 5	Y	0.08	Y	0.773
+1684	6.7.15.6	chapter 76.2	Problem 6	N	600.	Y	3.211
+1685	6.7.16.1	chapter 76.3	Problem 1	Y	0.293	Y	0.344
+1686	6.7.16.2	chapter 76.3	Problem 2	Y	0.261	Y	0.424
+1687	6.7.16.3	chapter 76.3	Problem 3	Y	0.674	Y	0.746
+1688	6.7.16.4	chapter 76.3	Problem 4	Y	39.093	Y	4.643
+1689	6.7.16.5	chapter 76.3	Problem 5	N	600.	Y	2.156
+1690	6.7.17.1	chapter 76.4	Problem 1	Y	0.313	Y	0.336
+1691	6.7.17.2	chapter 76.4	Problem 2	Y	0.331	Y	0.448
+1692	6.7.17.3	chapter 76.4	Problem 3	Y	0.721	Y	0.763
+1693	6.7.17.4	chapter 76.4	Problem 4	Y	41.074	Y	4.167
+1694	6.7.17.5	chapter 76.4	Problem 5	Y	0.94	Y	2.961
+1695	6.7.18.1	chapter 76.2	Problem 6	N	600.	Y	2.548
+1696	6.7.19.1	chapter 76.5	Problem 1	Y	0.975	Y	0.707
+1697	6.7.19.2	chapter 76.5	Problem 2	Y	29.878	Y	3.43
+1698	6.7.19.3	chapter 76.5	Problem 3	Y	21.731	Y	7.062
+1699	6.7.19.4	chapter 76.5	Problem 4	N	600.	Y	4.29
+1700	6.7.19.5	chapter 76.5	Problem 5	N	6.235	Y	2.62
+1701	6.7.20.1	chapter 77.1	Problem 1	Y	0.035	Y	0.222
+1702	6.7.20.2	chapter 77.1	Problem 2	Y	1.02	Y	0.207
+1703	6.7.20.3	chapter 77.1	Problem 3	N	0.181	Y	0.443
+1704	6.7.20.4	chapter 77.1	Problem 4	N	0.21	Y	0.702
+1705	6.7.20.5	chapter 77.1	Problem 5	Y	0.387	Y	1.914
+1706	6.7.20.6	chapter 77.1	Problem 6	Y	0.127	Y	1.842
+1707	6.7.21.1	chapter 77.2	Problem 1	Y	0.036	Y	0.198
+1708	6.7.21.2	chapter 77.2	Problem 2	Y	0.9	Y	0.197
+1709	6.7.21.3	chapter 77.2	Problem 3	N	0.173	Y	0.388
+1710	6.7.21.4	chapter 77.2	Problem 4	Y	0.373	Y	3.06
+1711	6.7.21.5	chapter 77.2	Problem 5	N	0.26	Y	0.388
+1712	6.7.22.1	chapter 77.3	Problem 1	Y	0.031	Y	0.292
+1713	6.7.22.2	chapter 77.3	Problem 2	Y	0.36	Y	0.299
+1714	6.7.22.3	chapter 77.3	Problem 3	N	0.159	Y	0.746
+1715	6.7.22.4	chapter 77.3	Problem 4	Y	0.262	Y	61.489
+1716	6.7.22.5	chapter 77.3	Problem 5	Y	0.356	Y	1.099
+1717	6.7.23.1	chapter 77.4	Problem 1	Y	0.031	Y	0.24
+1718	6.7.23.2	chapter 77.4	Problem 2	Y	0.241	Y	0.314
+1719	6.7.23.3	chapter 77.4	Problem 3	N	0.174	Y	0.572
+1720	6.7.23.4	chapter 77.4	Problem 4	N	0.183	Y	38.702
+1721	6.7.23.5	chapter 77.4	Problem 5	Y	0.314	Y	1.121
+1722	6.7.24.1	chapter 78.1	Problem 1	Y	0.034	Y	0.091
+1723	6.7.24.2	chapter 78.1	Problem 2	Y	0.171	Y	0.085
+1724	6.7.24.3	chapter 78.1	Problem 3	Y	0.102	Y	0.064
+1725	6.7.24.4	chapter 78.1	Problem 4	Y	0.288	Y	0.338
+1726	6.7.24.5	chapter 78.1	Problem 5	N	0.144	N	0.564
+1727	6.7.24.6	chapter 78.1	Problem 6	N	29.238	Y	41.856
+1728	6.7.24.7	chapter 78.1	Problem 7	Y	0.566	Y	0.26
+1729	6.7.24.8	chapter 78.1	Problem 8	N	0.261	Y	0.445
+1730	6.7.24.9	chapter 78.1	Problem 9	N	0.388	Y	0.554
+1731	6.7.25.1	chapter 78.2	Problem 1	N	0.138	Y	0.067
+1732	6.7.25.2	chapter 78.2	Problem 2	N	0.139	Y	0.184
+1733	6.7.25.3	chapter 78.2	Problem 3	N	0.158	Y	0.086
+1734	6.7.25.4	chapter 78.2	Problem 4	Y	0.302	Y	0.222
+1735	6.7.25.5	chapter 78.2	Problem 5	Y	1.711	Y	0.563
+1736	6.7.25.6	chapter 78.2	Problem 6	N	23.278	N	18.327
+1737	6.7.25.7	chapter 78.2	Problem 7	N	0.195	Y	0.853
+1738	6.7.25.8	chapter 78.2	Problem 8	N	0.165	Y	1.184
+1739	6.7.26.1	chapter 78.3	Problem 1	Y	0.077	Y	0.071
+1740	6.7.26.2	chapter 78.3	Problem 2	N	0.036	Y	0.091
+1741	6.7.26.3	chapter 78.3	Problem 3	Y	0.06	Y	0.076
+1742	6.7.26.4	chapter 78.3	Problem 4	N	0.099	Y	0.099
+1743	6.7.26.5	chapter 78.3	Problem 5	Y	15.441	Y	0.325
+1744	6.7.26.6	chapter 78.3	Problem 6	N	600.	Y	0.839
+1745	6.7.26.7	chapter 78.3	Problem 7	N	1.572	Y	2.046
+1746	6.7.26.8	chapter 78.3	Problem 8	N	0.168	Y	1.556
+1747	6.7.26.9	chapter 78.3	Problem 9	N	0.123	Y	2.065
+1748	6.7.26.10	chapter 78.3	Problem 10	N	30.148	N	0.668
+1749	6.7.26.11	chapter 78.3	Problem 11	N	0.076	N	0.675
+1750	6.8.1.1	chapter 82.1	Problem 1	Y	0.059	Y	0.048
+1751	6.8.1.2	chapter 82.1	Problem 2	Y	0.071	Y	0.32
+1752	6.8.1.3	chapter 82.1	Problem 3	Y	0.079	Y	0.051
+1753	6.8.1.4	chapter 82.1	Problem 4	Y	0.494	Y	0.094
+1754	6.8.1.5	chapter 82.1	Problem 5	Y	0.078	Y	0.057
+1755	6.8.1.6	chapter 82.1	Problem 6	Y	0.088	Y	0.066
+1756	6.8.1.7	chapter 82.1	Problem 7	Y	0.097	Y	0.205
+1757	6.8.1.8	chapter 82.1	Problem 8	Y	0.085	Y	0.862
+1758	6.8.1.9	chapter 82.1	Problem 9	Y	0.64	Y	0.112
+1759	6.8.2.1	chapter 82.2	Problem 1	Y	0.075	Y	0.056
+1760	6.8.2.2	chapter 82.2	Problem 2	Y	0.074	Y	0.051
+1761	6.8.2.3	chapter 82.2	Problem 3	Y	0.067	Y	0.062
+1762	6.8.2.4	chapter 82.2	Problem 4	Y	0.872	Y	0.352
+1763	6.8.2.5	chapter 82.2	Problem 5	Y	0.208	Y	0.06
+1764	6.8.2.6	chapter 82.2	Problem 6	Y	0.157	Y	0.075
+1765	6.8.2.7	chapter 82.2	Problem 7	Y	0.093	Y	0.081
+1766	6.8.2.8	chapter 82.2	Problem 8	Y	0.088	Y	0.05
+1767	6.8.2.9	chapter 82.2	Problem 9	Y	0.156	Y	0.073
+1768	6.8.3.1	chapter 82.3	Problem 1	Y	0.026	Y	0.049
+1769	6.8.3.2	chapter 82.3	Problem 2	Y	0.033	Y	0.051
+1770	6.8.3.3	chapter 82.3	Problem 3	Y	0.04	Y	0.053
+1771	6.8.3.4	chapter 82.3	Problem 4	Y	0.042	Y	0.184
+1772	6.8.3.5	chapter 82.3	Problem 5	Y	0.232	Y	0.073
+1773	6.8.4.1	chapter 82.4	Problem 1	Y	0.248	Y	0.101
+1774	6.8.4.2	chapter 82.4	Problem 2	Y	0.193	Y	0.117
+1775	6.8.4.3	chapter 82.4	Problem 3	Y	0.068	Y	0.408
+1776	6.8.4.4	chapter 82.4	Problem 4	Y	0.123	Y	0.549
+1777	6.8.4.5	chapter 82.4	Problem 5	Y	0.087	Y	0.329
+1778	6.8.4.6	chapter 82.4	Problem 6	Y	0.076	Y	0.98
+1779	6.8.4.7	chapter 82.4	Problem 7	N	1.253	Y	1.8
+1780	6.8.4.8	chapter 82.4	Problem 8	Y	3.984	Y	4.66
+1781	6.8.4.9	chapter 82.4	Problem 9	Y	6.121	Y	3.659
+1782	6.8.4.10	chapter 82.4	Problem 10	Y	2.599	Y	1.864
+1783	6.8.4.11	chapter 82.4	Problem 11	N	5.604	Y	58.428
+1784	6.8.4.12	chapter 82.4	Problem 12	Y	0.05	Y	0.09
+1785	6.8.4.13	chapter 82.4	Problem 13	N	0.038	Y	0.263
+1786	6.8.5.1	chapter 83.1	Problem 1	Y	0.031	Y	0.042
+1787	6.8.5.2	chapter 83.1	Problem 2	Y	0.366	Y	0.072
+1788	6.8.5.3	chapter 83.1	Problem 3	Y	3.803	Y	1.202
+1789	6.8.5.4	chapter 83.1	Problem 4	N	1.069	Y	0.721
+1790	6.8.5.5	chapter 83.1	Problem 5	Y	0.379	Y	0.211
+1791	6.8.5.6	chapter 83.1	Problem 6	N	1.3	Y	0.312
+1792	6.8.5.7	chapter 83.1	Problem 7	Y	0.866	Y	0.785
+1793	6.8.5.8	chapter 83.1	Problem 8	Y	0.784	Y	0.662
+1794	6.8.6.1	chapter 83.2	Problem 1	Y	1.21	Y	0.819
+1795	6.8.6.2	chapter 83.2	Problem 2	Y	1.043	Y	0.481
+1796	6.8.6.3	chapter 83.2	Problem 3	Y	0.411	Y	0.139
+1797	6.8.6.4	chapter 83.2	Problem 4	Y	0.92	Y	0.447
+1798	6.8.6.5	chapter 83.2	Problem 5	Y	0.649	N	600.
+1799	6.8.6.6	chapter 83.2	Problem 6	N	15.214	Y	74.712
+1800	6.8.6.7	chapter 83.2	Problem 7	N	5.087	N	600.
+1801	6.8.6.8	chapter 83.2	Problem 8	N	4.788	Y	210.181
+1802	6.8.6.9	chapter 83.2	Problem 9	Y	1.33	Y	0.308
+1803	6.8.6.10	chapter 83.2	Problem 10	N	0.837	Y	0.536
+1804	6.8.6.11	chapter 83.2	Problem 11	Y	1.834	Y	1.477
+1805	6.8.7.1	chapter 84.1	Problem 1	Y	0.583	Y	0.269
+1806	6.8.7.2	chapter 84.1	Problem 2	Y	0.145	Y	0.264
+1807	6.8.7.3	chapter 84.1	Problem 3	Y	6.069	Y	0.556
+1808	6.8.7.4	chapter 84.1	Problem 4	Y	0.244	Y	0.415
+1809	6.8.7.5	chapter 84.1	Problem 5	N	1.619	Y	1.999
+1810	6.8.8.1	chapter 84.2	Problem 1	Y	0.575	Y	0.247
+1811	6.8.8.2	chapter 84.2	Problem 2	Y	0.13	Y	0.28
+1812	6.8.8.3	chapter 84.2	Problem 3	Y	2.379	Y	0.557
+1813	6.8.8.4	chapter 84.2	Problem 4	Y	0.187	Y	0.36
+1814	6.8.8.5	chapter 84.2	Problem 5	N	1.645	Y	1.601
+1815	6.8.9.1	chapter 84.3	Problem 1	Y	0.215	Y	0.225
+1816	6.8.9.2	chapter 84.3	Problem 2	Y	2.952	Y	1.365
+1817	6.8.9.3	chapter 84.3	Problem 3	Y	0.51	Y	0.549
+1818	6.8.9.4	chapter 84.3	Problem 4	N	0.272	Y	1.872
+1819	6.8.9.5	chapter 84.3	Problem 5	Y	1.727	Y	1.318
+1820	6.8.9.6	chapter 84.3	Problem 6	N	2.225	Y	1.221
+1821	6.8.10.1	chapter 84.4	Problem 1	Y	0.215	Y	0.252
+1822	6.8.10.2	chapter 84.4	Problem 2	Y	2.826	Y	1.446
+1823	6.8.10.3	chapter 84.4	Problem 3	Y	0.536	Y	0.51
+1824	6.8.10.4	chapter 84.4	Problem 4	N	0.277	Y	1.204
+1825	6.8.10.5	chapter 84.4	Problem 5	Y	1.768	Y	0.694
+1826	6.8.10.6	chapter 84.4	Problem 6	N	1.31	Y	1.194
+1827	6.8.11.1	chapter 84.5	Problem 1	Y	19.428	Y	1.924
+1828	6.8.11.2	chapter 84.5	Problem 2	Y	4.916	Y	0.48
+1829	6.8.11.3	chapter 84.5	Problem 3	Y	40.92	Y	1.194
+1830	6.8.11.4	chapter 84.5	Problem 4	Y	0.502	Y	0.541
+1831	6.8.11.5	chapter 84.5	Problem 5	Y	0.367	Y	0.378
+1832	6.8.12.1	chapter 85.1	Problem 1	Y	0.013	Y	0.097
+1833	6.8.12.2	chapter 85.1	Problem 2	Y	0.099	Y	0.119
+1834	6.8.12.3	chapter 85.1	Problem 3	Y	0.058	Y	0.108
+1835	6.8.12.4	chapter 85.1	Problem 4	Y	0.067	Y	0.166
+1836	6.8.12.5	chapter 85.1	Problem 5	N	0.028	Y	0.314
+1837	6.8.13.1	chapter 85.2	Problem 1	Y	0.295	Y	0.841
+1838	6.8.13.2	chapter 85.2	Problem 2	Y	2.217	Y	1.042
+1839	6.8.13.3	chapter 85.2	Problem 3	Y	0.203	N	600.
+1840	6.8.13.4	chapter 85.2	Problem 4	N	0.289	Y	0.552
+1841	6.8.13.5	chapter 85.2	Problem 5	Y	1.071	Y	0.581
+1842	6.8.14.1	chapter 86.1	Problem 1	Y	0.578	Y	0.41
+1843	6.8.14.2	chapter 86.1	Problem 2	Y	0.667	Y	0.745
+1844	6.8.14.3	chapter 86.1	Problem 3	N	1.999	Y	2.234
+1845	6.8.14.4	chapter 86.1	Problem 4	Y	54.227	Y	5.165
+1846	6.8.14.5	chapter 86.1	Problem 5	Y	18.727	Y	41.589
+1847	6.8.14.6	chapter 86.1	Problem 6	N	600.	Y	3.347
+1848	6.8.15.1	chapter 86.2	Problem 1	Y	1.	Y	0.262
+1849	6.8.15.2	chapter 86.2	Problem 2	Y	0.577	Y	0.733
+1850	6.8.15.3	chapter 86.2	Problem 3	Y	1.881	Y	0.576
+1851	6.8.15.4	chapter 86.2	Problem 4	Y	54.317	Y	4.466
+1852	6.8.15.5	chapter 86.2	Problem 5	Y	13.583	Y	42.334
+1853	6.8.15.6	chapter 86.2	Problem 6	N	600.	Y	2.8
+1854	6.8.16.1	chapter 86.3	Problem 1	Y	0.242	Y	0.347
+1855	6.8.16.2	chapter 86.3	Problem 2	Y	0.272	Y	0.443
+1856	6.8.16.3	chapter 86.3	Problem 3	Y	0.495	Y	0.766
+1857	6.8.16.4	chapter 86.3	Problem 4	Y	20.531	Y	1.155
+1858	6.8.16.5	chapter 86.3	Problem 5	N	600.	Y	1.967
+1859	6.8.17.1	chapter 86.4	Problem 1	Y	0.389	Y	0.364
+1860	6.8.17.2	chapter 86.4	Problem 2	Y	0.37	Y	0.48
+1861	6.8.17.3	chapter 86.4	Problem 3	Y	0.499	Y	0.808
+1862	6.8.17.4	chapter 86.4	Problem 4	Y	29.099	Y	13.735
+1863	6.8.17.5	chapter 86.4	Problem 5	N	600.	Y	2.296
+1864	6.8.18.1	chapter 86.5	Problem 1	Y	4.968	Y	0.773
+1865	6.8.18.2	chapter 86.5	Problem 2	Y	51.044	Y	4.318
+1866	6.8.18.3	chapter 86.5	Problem 3	Y	44.039	Y	9.106
+1867	6.8.18.4	chapter 86.5	Problem 4	N	600.	Y	2.891
+1868	6.8.18.5	chapter 86.5	Problem 5	N	600.	Y	2.294
+1869	6.8.19.1	chapter 87.1	Problem 1	Y	0.022	Y	0.231
+1870	6.8.19.2	chapter 87.1	Problem 2	Y	1.468	Y	0.265
+1871	6.8.19.3	chapter 87.1	Problem 3	N	0.212	Y	0.385
+1872	6.8.19.4	chapter 87.1	Problem 4	N	0.222	Y	0.711
+1873	6.8.19.5	chapter 87.1	Problem 5	Y	0.417	Y	1.933
+1874	6.8.19.6	chapter 87.1	Problem 6	N	0.22	Y	0.415
+1875	6.8.20.1	chapter 87.2	Problem 1	Y	0.035	Y	0.204
+1876	6.8.20.2	chapter 87.2	Problem 2	Y	1.378	Y	0.215
+1877	6.8.20.3	chapter 87.2	Problem 3	N	0.202	Y	0.377
+1878	6.8.20.4	chapter 87.2	Problem 4	N	0.231	Y	0.534
+1879	6.8.20.5	chapter 87.2	Problem 5	Y	0.413	Y	3.119
+1880	6.8.20.6	chapter 87.2	Problem 6	N	0.223	Y	0.418
+1881	6.8.21.1	chapter 87.3	Problem 1	Y	0.02	Y	0.318
+1882	6.8.21.2	chapter 87.3	Problem 2	Y	0.391	Y	0.33
+1883	6.8.21.3	chapter 87.3	Problem 3	N	0.197	Y	0.634
+1884	6.8.21.4	chapter 87.3	Problem 4	N	0.188	Y	63.748
+1885	6.8.21.5	chapter 87.3	Problem 5	Y	0.362	Y	1.115
+1886	6.8.22.1	chapter 87.4	Problem 1	Y	0.02	Y	0.253
+1887	6.8.22.2	chapter 87.4	Problem 2	Y	0.258	Y	0.352
+1888	6.8.22.3	chapter 87.4	Problem 3	N	0.188	Y	0.49
+1889	6.8.22.4	chapter 87.4	Problem 4	N	0.194	Y	38.446
+1890	6.8.22.5	chapter 87.4	Problem 5	Y	0.376	Y	1.192
+1891	6.8.23.1	chapter 88.1	Problem 1	Y	0.048	Y	0.086
+1892	6.8.23.2	chapter 88.1	Problem 2	Y	0.161	Y	0.071
+1893	6.8.23.3	chapter 88.1	Problem 3	Y	0.094	Y	0.067
+1894	6.8.23.4	chapter 88.1	Problem 4	Y	0.421	Y	0.352
+1895	6.8.23.5	chapter 88.1	Problem 5	Y	0.361	Y	0.212
+1896	6.8.23.6	chapter 88.1	Problem 6	Y	2.333	Y	1.229
+1897	6.8.23.7	chapter 88.1	Problem 7	Y	0.584	Y	0.247
+1898	6.8.23.8	chapter 88.1	Problem 8	N	0.281	Y	0.426
+1899	6.8.23.9	chapter 88.1	Problem 9	N	0.41	Y	0.599
+1900	6.8.24.1	chapter 88.2	Problem 1	N	0.144	Y	0.121
+1901	6.8.24.2	chapter 88.2	Problem 2	N	0.141	Y	0.193
+1902	6.8.24.3	chapter 88.2	Problem 3	N	0.159	Y	0.106
+1903	6.8.24.4	chapter 88.2	Problem 4	Y	0.202	Y	0.151
+1904	6.8.24.5	chapter 88.2	Problem 5	Y	1.902	N	2.498
+1905	6.8.24.6	chapter 88.2	Problem 6	N	0.328	Y	0.641
+1906	6.8.24.7	chapter 88.2	Problem 7	N	20.444	N	2.461
+1907	6.8.24.8	chapter 88.2	Problem 8	N	20.212	N	2.671
+1908	6.8.25.1	chapter 88.3	Problem 1	Y	0.087	Y	0.049
+1909	6.8.25.2	chapter 88.3	Problem 2	N	0.039	Y	0.074
+1910	6.8.25.3	chapter 88.3	Problem 3	Y	0.093	Y	0.073
+1911	6.8.25.4	chapter 88.3	Problem 4	N	0.094	Y	0.084
+1912	6.8.25.5	chapter 88.3	Problem 5	Y	7.839	Y	0.328
+1913	6.8.25.6	chapter 88.3	Problem 6	N	600.	Y	0.927
+1914	6.8.25.7	chapter 88.3	Problem 7	N	54.897	N	190.27
+1915	6.8.25.8	chapter 88.3	Problem 8	N	20.317	N	2.065
+1916	6.8.25.9	chapter 88.3	Problem 9	N	20.216	N	2.136
+1917	6.8.25.10	chapter 88.3	Problem 10	N	33.47	Y	0.309
+1918	6.8.25.11	chapter 88.3	Problem 11	N	1.094	N	1.245
+1919	6.9.1.1	chapter 92.1	Problem 1	Y	0.253	Y	0.088
+1920	6.9.1.2	chapter 92.1	Problem 2	Y	0.308	Y	0.579
+1921	6.9.1.3	chapter 92.1	Problem 3	Y	0.211	Y	0.074
+1922	6.9.1.4	chapter 92.1	Problem 4	Y	0.069	Y	0.065
+1923	6.9.1.5	chapter 92.1	Problem 5	Y	0.156	Y	0.093
+1924	6.9.1.6	chapter 92.1	Problem 6	Y	18.667	N	600.
+1925	6.9.1.7	chapter 92.1	Problem 7	Y	0.15	Y	0.158
+1926	6.9.1.8	chapter 92.1	Problem 8	Y	0.068	Y	0.178
+1927	6.9.1.9	chapter 92.1	Problem 9	Y	0.374	Y	0.555
+1928	6.9.2.1	chapter 92.2	Problem 1	Y	0.206	Y	0.098
+1929	6.9.2.2	chapter 92.2	Problem 2	Y	0.132	Y	0.045
+1930	6.9.2.3	chapter 92.2	Problem 3	Y	0.176	Y	0.098
+1931	6.9.2.4	chapter 92.2	Problem 4	N	600.	Y	45.07
+1932	6.9.2.5	chapter 92.2	Problem 5	Y	0.044	Y	0.049
+1933	6.9.2.6	chapter 92.2	Problem 6	Y	0.032	Y	0.056
+1934	6.9.2.7	chapter 92.2	Problem 7	Y	0.296	Y	0.173
+1935	6.9.3.1	chapter 92.3	Problem 1	Y	0.387	Y	0.062
+1936	6.9.3.2	chapter 92.3	Problem 2	Y	0.161	Y	0.073
+1937	6.9.3.3	chapter 92.3	Problem 3	Y	0.168	Y	0.064
+1938	6.9.3.4	chapter 92.3	Problem 4	N	600.	Y	19.374
+1939	6.9.3.5	chapter 92.3	Problem 5	Y	0.326	Y	0.211
+1940	6.9.4.1	chapter 92.4	Problem 1	Y	0.163	Y	0.179
+1941	6.9.4.2	chapter 92.4	Problem 2	Y	0.13	Y	0.187
+1942	6.9.4.3	chapter 92.4	Problem 3	Y	0.246	Y	0.858
+1943	6.9.4.4	chapter 92.4	Problem 4	Y	0.135	Y	0.175
+1944	6.9.4.5	chapter 92.4	Problem 5	Y	0.047	Y	0.133
+1945	6.9.4.6	chapter 92.4	Problem 6	Y	0.317	Y	0.276
+1946	6.9.4.7	chapter 92.4	Problem 7	Y	17.447	Y	11.212
+1947	6.9.4.8	chapter 92.4	Problem 8	Y	16.149	Y	4.127
+1948	6.9.4.9	chapter 92.4	Problem 9	N	12.241	Y	40.486
+1949	6.9.4.10	chapter 92.4	Problem 10	Y	0.067	Y	0.145
+1950	6.9.4.11	chapter 92.4	Problem 11	Y	0.183	Y	0.621
+1951	6.9.4.12	chapter 92.4	Problem 12	Y	0.219	Y	1.256
+1952	6.9.4.13	chapter 92.4	Problem 13	Y	1.225	Y	2.07
+1953	6.9.4.14	chapter 92.4	Problem 14	Y	0.584	Y	0.472
+1954	6.9.5.1	chapter 93.1	Problem 1	Y	0.05	Y	0.094
+1955	6.9.5.2	chapter 93.1	Problem 2	Y	0.055	Y	0.075
+1956	6.9.5.3	chapter 93.1	Problem 3	Y	0.186	Y	0.081
+1957	6.9.5.4	chapter 93.1	Problem 4	Y	0.161	Y	0.159
+1958	6.9.5.5	chapter 93.1	Problem 5	N	0.673	Y	1.638
+1959	6.9.5.6	chapter 93.1	Problem 6	Y	1.999	Y	1.174
+1960	6.9.5.7	chapter 93.1	Problem 7	N	26.636	N	600.
+1961	6.9.6.1	chapter 93.2	Problem 1	Y	0.042	Y	0.078
+1962	6.9.6.2	chapter 93.2	Problem 2	Y	0.058	Y	0.105
+1963	6.9.6.3	chapter 93.2	Problem 3	N	0.137	Y	0.246
+1964	6.9.6.4	chapter 93.2	Problem 4	N	1.032	Y	3.188
+1965	6.9.6.5	chapter 93.2	Problem 5	Y	3.152	Y	1.513
+1966	6.9.6.6	chapter 93.2	Problem 6	N	0.653	Y	1.572
+1967	6.9.6.7	chapter 93.2	Problem 7	Y	0.258	Y	0.133
+1968	6.9.6.8	chapter 93.2	Problem 8	Y	3.96	Y	0.366
+1969	6.9.6.9	chapter 93.2	Problem 9	N	600.	Y	1.184
+1970	6.9.6.10	chapter 93.2	Problem 10	N	1.336	Y	1.115
+1971	6.9.7.1	chapter 94.1	Problem 1	Y	30.39	Y	0.401
+1972	6.9.7.2	chapter 94.1	Problem 2	Y	0.263	Y	0.798
+1973	6.9.7.3	chapter 94.1	Problem 3	Y	0.851	Y	0.46
+1974	6.9.7.4	chapter 94.1	Problem 4	Y	30.838	Y	0.865
+1975	6.9.7.5	chapter 94.1	Problem 5	Y	58.978	Y	2.383
+1976	6.9.8.1	chapter 94.2	Problem 1	Y	27.488	Y	0.299
+1977	6.9.8.2	chapter 94.2	Problem 2	Y	0.174	Y	0.69
+1978	6.9.8.3	chapter 94.2	Problem 3	Y	0.708	Y	0.339
+1979	6.9.8.4	chapter 94.2	Problem 4	Y	31.603	Y	0.667
+1980	6.9.8.5	chapter 94.2	Problem 5	Y	45.873	Y	2.023
+1981	6.9.9.1	chapter 94.3	Problem 1	Y	17.84	Y	0.353
+1982	6.9.9.2	chapter 94.3	Problem 2	Y	1.176	Y	0.904
+1983	6.9.9.3	chapter 94.3	Problem 3	Y	0.403	Y	0.469
+1984	6.9.9.4	chapter 94.3	Problem 4	Y	28.917	Y	0.869
+1985	6.9.9.5	chapter 94.3	Problem 5	Y	42.862	Y	1.061
+1986	6.9.10.1	chapter 94.4	Problem 1	Y	15.901	Y	0.32
+1987	6.9.10.2	chapter 94.4	Problem 2	Y	1.6	Y	3.554
+1988	6.9.10.3	chapter 94.4	Problem 3	Y	0.325	Y	0.493
+1989	6.9.10.4	chapter 94.4	Problem 4	Y	24.623	Y	0.865
+1990	6.9.10.5	chapter 94.4	Problem 5	Y	39.046	Y	1.079
+1991	6.9.11.1	chapter 94.5	Problem 1	Y	27.675	Y	0.354
+1992	6.9.11.2	chapter 94.5	Problem 2	Y	12.964	Y	0.315
+1993	6.9.11.3	chapter 94.5	Problem 3	Y	29.079	Y	0.424
+1994	6.9.11.4	chapter 94.5	Problem 4	Y	0.311	Y	0.467
+1995	6.9.11.5	chapter 94.5	Problem 5	Y	81.514	Y	2.192
+1996	6.9.12.1	chapter 95.1	Problem 1	Y	0.032	Y	0.118
+1997	6.9.12.2	chapter 95.1	Problem 2	Y	0.056	Y	0.151
+1998	6.9.12.3	chapter 95.1	Problem 3	Y	0.063	Y	0.21
+1999	6.9.12.4	chapter 95.1	Problem 4	N	0.161	Y	0.238
+2000	6.9.12.5	chapter 95.1	Problem 5	Y	0.237	Y	67.176
+2001	7.1.1.1	chapter 11.1	Problem 1	N	0.211	N	2.02
+2002	7.1.1.2	chapter 11.1	Problem 2	Y	0.044	Y	0.192
+2003	7.1.2.1	chapter 11.2	Problem 1	N	0.074	N	2.727
+2004	7.1.2.2	chapter 11.2	Problem 2	N	0.083	Y	0.175
+2005	7.1.2.3	chapter 11.2	Problem 3	N	0.152	Y	0.188
+2006	7.1.2.4	chapter 11.2	Problem 4	N	0.129	Y	0.205
+2007	7.1.2.5	chapter 11.2	Problem 5	N	0.457	Y	0.5
+2008	7.1.3.1	chapter 11.3	Problem 1	N	0.005	N	0.068
+2009	7.1.3.2	chapter 11.3	Problem 2	N	0.007	N	0.049
+2010	7.1.3.3	chapter 11.3	Problem 3	N	0.011	N	0.073
+2011	7.1.3.4	chapter 11.3	Problem 4	N	0.018	N	0.073
+2012	7.1.4.1	chapter 11.4	Problem 1	N	0.007	N	0.045

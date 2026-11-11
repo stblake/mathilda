@@ -1,3 +1,36 @@
+# DSolve PDE corpus + roadmap (started 2026-11-11)
+
+Plan: ~/.claude/plans/let-s-review-all-the-eventual-honey.md. Roadmap: DSOLVE_PDE_PLAN.md.
+Corpus: DSolve_test_status/pde/ (Abbasi "PDE in CAS", 2011 records; README.md, STATUS.md).
+
+- [x] Import: raw file + lookup.tsv (2012/2012 rows; Mma 1547, Maple 1802 match the site);
+  tools/pde_corpus/import_abbasi_pde.py -> 14 DE_PDE_*.m, 2011 converted, 1 refused (pde-392,
+  undefined `bc` in the source)
+- [x] Verifier prelude + selftest (16/16, incl. refusing wrong transport/wave/series answers)
+- [x] Runner test_dsolve_pde_corpus.c, shared ../corpus_fork.h (ODE runner refactored onto it)
+- [x] Classifier tools/pde_corpus/classify_pde_corpus.m -> classes.tsv; report tool with method buckets
+- [x] Wrong answers fixed: v0.6497 D[f,{x}]; v0.6498 wave/heat dropped forcing; v0.6499 fos
+  Integrate-wrt-expression + PossibleZeroQ value-keyed atoms
+- [x] Post-fix baseline (v0.6499): 371/2011 verified (18.4%; Mma 76.9%, Maple 89.6%), FAIL 0;
+  14 ctest gates dsolve_pde_corpus_<chap>_tests (nightly; nonpass = measured + max(2, timeouts), FAIL 0)
+- [x] valgrind cross-section (valgrind_dsolve_only.m, 50 records, NO TimeConstrained):
+  definitely lost 17,464 B (1x) -> 19,096 B (3x), essentially flat; PDE path clean
+  (dsolve_parse failure leak fixed v0.6501). Residual per-call growth is in core engines:
+  - [ ] ReplaceRepeated: do_replace_all < apply_replace_repeated_nested (~13 KB/pass)
+  - [ ] Together: rt_expand_exp_sums < rat_canon_build (~13 KB/pass)
+  - [ ] replace_bindings rb_rec < do_replace_all (~12 KB/pass)
+  - [ ] zero_test zt_exactify_reals make_rational_mpz (small)
+  - note: under TimeConstrained every abort abandons its nodes by design (time-and-date.md);
+    the verifier run (valgrind_sample.m) measures mostly that, not method leaks
+- [x] v0.6501: TimeConstrained timeout restores Begin/BeginPackage stack + $Context/$ContextPath
+- [ ] Waves W0..W9 (DSOLVE_PDE_PLAN.md §2), each to the §3 definition of done
+- Open (found here, out of scope):
+  - [ ] D[Integrate[g[K[1]], {K[1], 1, x+y}], x] -> malformed List; D of Inactive[Integrate] with K[1] dummy
+  - [ ] FirstCase[e, p, default, levelspec] (4-arg) unimplemented
+  - [ ] ODE corpus 2.2.1 red at v0.6496 (2.2.1-28, 2.2.1-32 UNEVAL); Chini stress case
+    tests/test_dsolve_stress.c:247 fails at v0.6496 -- both pre-date this session
+  - [ ] ODE prelude: implicit answers are "UNK"=PASS unverified; port the PDE implicit-function check
+
 # Gradshteyn & Ryzhik integral review: corpus + triage + GR table (started 2026-11-09)
 
 Plan: ~/.claude/plans/let-s-review-all-integrals-recursive-nygaard.md
