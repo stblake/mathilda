@@ -101,7 +101,11 @@ brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl,
     "A", brShapeA[T, f, x],
     _, throwInternal["brUnknownShape"]];
   If[!antiderivativeQ[f, F, x], throwInternal["AntiderivativeCheckFailed", <|"f" -> f, "F" -> F|>]];
-  presentable[f, F, x]];
+  brPresentable[f, F, x]];
+
+brPresentable::usage = "brPresentable[f, F, x] is Trager's real-form presentation of the verified antiderivative F, RE-VERIFIED: the presentation may rewrite logarithms (dropping a constant from Log[c u] is harmless at top level but wrong inside a radical, where Log[2 + 2x] -> Log[1 + x] changed the answer), so the presented form is returned only when antiderivativeQ confirms it, else F itself.";
+brPresentable[f_, F_, x_Symbol] := Module[{R = Quiet[presentable[f, F, x]]},
+  If[R === F || TrueQ[antiderivativeQ[f, R, x]], R, F]];
 
 BronsteinIntegrate[f_, x_Symbol] := Module[{r},
   r = brCatch[brIntegrateBody[f, x]];

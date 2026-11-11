@@ -37,6 +37,15 @@ static const char* const closes[] = {
     "Log[x]/Sqrt[x + 1]",                                                            /* Moebius flattening */
     "1/(x Sqrt[1 - x^3])",                                                           /* Trager hand-off */
     "x E^x + Log[x]",                                                                /* Risch hand-off */
+    /* stress regressions (2026-11-12): a log with a constant factor inside the
+     * radical (the presentation once dropped Log[2] there: a wrong answer); the
+     * exponential special places at 0 AND infinity; an ArcTan in a special value */
+    "(-1 - 4*x - 4*x^2 + 8*(-3 - 2*x + Log[2 + 2*x]) + 8*x*(-3 - 2*x + Log[2 + 2*x]))/"
+    "(4*(-3 - 2*x + Log[2 + 2*x])^(3/4) + 4*x*(-3 - 2*x + Log[2 + 2*x])^(3/4))",
+    "(2 + Log[3 + 3*x])/(Sqrt[2 + Log[3 + 3*x]^2] + x*Sqrt[2 + Log[3 + 3*x]^2])",
+    "(2*E^(4*x))/Sqrt[2 + E^(4*x)] - (2*E^(2*x)*(E^(2*x) + Sqrt[2 + E^(4*x)]))/(2 + E^(4*x) + E^(2*x)*Sqrt[2 + E^(4*x)])",
+    "(-2*E^x - 2*Sqrt[-3 + 2*E^x] + 2*(-3 + 2*E^x) + (-3 + 2*E^x)^(3/2) + 2*E^x*x + E^x*Sqrt[-3 + 2*E^x]*x + "
+    "(-3 + 2*E^x)*x + E^x*x^2)/(-3 + 2*E^x + 2*Sqrt[-3 + 2*E^x] + Sqrt[-3 + 2*E^x]*x)",
     NULL
 };
 
@@ -111,6 +120,9 @@ static void test_messages_and_glue(void) {
 }
 
 static void test_pipeline_routines(void) {
+    /* brPresentable re-verifies the presented form, falling back to F */
+    BR_EQ("brPresentable[1/x, Log[x], x]", "Log[x]");
+    BR_EQ("brPresentable[Log[2 + 2 x]/(x + 1), Log[2 + 2 x]^2/2, x] // Simplify // FreeQ[#, Log[1 + x]] &", "True");
     BR_EQ("brIntegrateTranscendental[x E^x, x]", "E^x (-1 + x)");
     BR_EQ("brIntegrateTranscendental[0, x]", "0");
     BR_THROWS("brIntegrateTranscendental[E^x/x, x]", "NonElementary", "transcendental part has no elementary integral (Risch)");

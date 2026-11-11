@@ -60,6 +60,13 @@ brLogPartFinish[T_Association, cv_Association, c_, F_Association, B_Association,
   If[fieldExtQ[F] && !FreeQ[rem, F["t"]], throwInternal["brLogPartRemainderNotRational", <|"rem" -> rem|>]];
   <|"terms" -> terms, "remainder" -> Together[rem], "F" -> F, "B" -> B|>];
 
+brRelevantLocations::usage = "brRelevantLocations[T, locs] keeps the special locations carrying a nonzero residue. Logarithm: those with lambda != 0. Exponential ([B] Def 2.21, pbar the first place above 0): with cbar = the value coefficient at pbar (nonzero only when 0 is unramified with c_0 != 0), every location when cbar != 0, else the unramified ones with c != 0.";
+brRelevantLocations[T_Association, locs_List] := Module[{z, cbarNonzero},
+  If[T["kind"] === "Log", Return[Select[locs, #["coef"] =!= 0 &]]];
+  z = SelectFirst[locs, #["where"] === "zero" &, None];
+  cbarNonzero = z =!= None && !z["ramified"] && z["coef"] =!= 0;
+  If[cbarNonzero, locs, Select[locs, !#["ramified"] && #["coef"] =!= 0 &]]];
+
 brComponentLogPartSpecial::usage = "brComponentLogPartSpecial[T, cv, c, nr, spec] is brComponentLogPart when some residue at a special place is nonzero (genus 0 only, see Divisors.m): residues at the finite and special places, a Q-basis of all of them, divisors on the shifted frame, principal generators (genus 0: always principal) mapped back to the theta-basis.";
 brComponentLogPartSpecial[T_Association, cv_Association, c_, nr_Association, spec_Association] := Module[
   {th = T["theta"], m = cv["m"], G = cv["G"], locs, z = nr["z"], polys, Pall, t = Unique["Bronstein`Private`brTau"],
@@ -67,7 +74,9 @@ brComponentLogPartSpecial[T_Association, cv_Association, c_, nr_Association, spe
    fr, F, Bth, ideals, I, gen, Yh = Unique["Bronstein`Private`brYh"], Y = Unique["Bronstein`Private`brYs"], expr, terms = {}, nfin},
   If[curveGenus[m, G, th] =!= 0,
     throwDecline["residues at a special place on a curve of positive genus (not yet supported)"]];
-  locs = Select[brSpecialLocations[T, cv, spec], #["ramified"] || #["coef"] =!= 0 || T["kind"] === "Exp" &];
+  locs = brRelevantLocations[T, brSpecialLocations[T, cv, spec]];
+  If[AnyTrue[locs, !#["ramified"] && #["kappa"] === None &],
+    throwDecline["residue at a special place over a radical extension of k"]];
   (* the field: finite residues and the m-th roots of every kappa *)
   polys = Join[If[nr["P"] === 1, {}, {nr["P"]}],
     (z^m - #["kappa"]) & /@ Select[locs, !#["ramified"] &]];

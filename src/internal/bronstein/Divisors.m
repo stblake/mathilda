@@ -113,7 +113,11 @@ brSpecialTaus[T_Association, cv_Association, locs_List, rhoLists_List] := Module
     Return[Flatten[MapThread[Function[{loc, rhos}, (-# loc["coef"]) & /@ rhos], {locs, rhoLists}]]]];
   (* exponential: values c_p, then tau = eps r (c_p - c_pbar) *)
   val[loc_, rho_] := If[loc["ramified"], 0, rho loc["coef"]];
-  cbar = With[{z = First[locs]}, val[z, If[z["ramified"], None, First[rhoLists[[1]]]]]];
+  (* pbar = the first place above 0: its value is rho-bar c_0 when 0 is an
+     unramified location with c_0 != 0, else 0 *)
+  cbar = With[{iz = FirstPosition[#["where"] & /@ locs, "zero", {None}, {1}][[1]]},
+    If[iz === None || locs[[iz]]["ramified"] || locs[[iz]]["coef"] === 0, 0,
+      First[rhoLists[[iz]]] locs[[iz]]["coef"]]];
   Do[
     With[{loc = locs[[i]], eps = If[locs[[i]]["where"] === "zero", 1, -1]},
       With[{r = If[loc["ramified"], m/GCD[m, If[loc["where"] === "zero",

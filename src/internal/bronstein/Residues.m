@@ -147,27 +147,50 @@ brLogInfinityResidues[T_Association, cv_Association, c_] := Module[{inf = brPlac
 brExpValueIntegral::usage = "brExpValueIntegral[T, w] decides whether the element w of k satisfies w = c eta' + Sum c_i d_i'/d_i (c, c_i constants, d_i in k-bar): it returns {\"Solution\", c}, {\"NoSolution\"} (proven) or {\"Unknown\", reason}. The k-part of Int w must be c eta + constant.";
 brExpValueIntegral[T_Association, w_] := Module[{TL = brLowerTower[T], r, sp, eta = Last[T["args"]], cc},
   If[Together[w] === 0, Return[{"Solution", 0}]];
-  r = brIntegrateInK[TL, w];
+  r = brIntegrateInKLogLike[TL, w];
   Switch[First[r],
     "NonElementary", Return[{"NoSolution"}],
     "Unknown", Return[r]];
-  sp = brSplitLogs[TL, r[[2]]];
-  If[sp === None, Return[{"Unknown", "value integral is not k-part plus logarithms"}]];
-  cc = Together[brD[TL, sp[[1]]]/brD[TL, eta]];
+  cc = Together[brD[TL, r[[2, 1]]]/brD[TL, eta]];
   (* a "no" only from a well-formed rational function of the tower *)
   If[!brRationalInQ[cc, Prepend[TL["syms"], T["x"]]], Return[{"Unknown", "value integral: malformed coefficient"}]];
   If[brDependsQ[cc, Prepend[TL["syms"], T["x"]]], {"NoSolution"}, {"Solution", cc}]];
+
+brIntegrateInKLogLike::usage = "brIntegrateInKLogLike[T, a] integrates a in the field of T and returns {\"Elementary\", {g0}} with g0 the k-PART of the antiderivative: every logarithm-like atom (Log[u] with u depending on x, ArcTan, ArcTanh, RootSum: logarithms with algebraic coefficients, allowed by [B] Def 2.21) must occur linearly with a constant coefficient and is dropped; or {\"NonElementary\"} (proven) or {\"Unknown\", reason}.";
+brIntegrateInKLogLike[T_Association, a_] := Module[{aS, G, q, x = T["x"], atoms, L, e, g0, vars},
+  If[Together[a] === 0, Return[{"Elementary", {0}}]];
+  aS = brToSurface[T, a];
+  G = Quiet[Integrate`RischTranscendental[aS, x]];
+  If[Head[G] === Integrate`RischTranscendental || !FreeQ[G, brNonElementaryHeads[]],
+    q = Quiet[Risch`ElementaryIntegralQ[aS, x]];
+    Return[If[q === False, {"NonElementary"}, {"Unknown", "integral in k not decided"}]]];
+  G = brFromSurface[T, G];
+  vars = Prepend[T["syms"], x];
+  atoms = DeleteDuplicates[Cases[G, (Log[u_] /; brDependsQ[u, vars]) | (ArcTan | ArcTanh)[__] | RootSum[__], {0, Infinity}]];
+  L = Table[Unique["Bronstein`Private`brL"], {Length[atoms]}];
+  e = Expand[G /. Thread[atoms -> L]];
+  If[L =!= {} && (!PolynomialQ[e, L] || Max[Exponent[e, #] & /@ L] > 1 ||
+       !AllTrue[Coefficient[e, #, 1] & /@ L, !brDependsQ[#, Join[vars, L]] &]),
+    Return[{"Unknown", "integral in k is not k-part plus logarithms"}]];
+  g0 = Together[e /. Thread[L -> 0]];
+  If[!brRationalInQ[g0, vars], Return[{"Unknown", "integral in k: k-part not rational"}]];
+  {"Elementary", {g0}}];
 
 brExpSpecialResidues::usage = "brExpSpecialResidues[T, cv, c] computes the residues at the special places of the REDUCED component c Y, theta an exponential ([B] Def 2.21). It returns <|\"zero\" -> data0, \"inf\" -> dataInf|>, each either <|\"ramified\" -> True|> (every place there has value 0) or <|\"ramified\" -> False, \"kappa\", \"u\", \"c\" -> c_w|> where the value at the place zeta is zeta kappa^(1/m) u w and Int w = c_w eta + logs; with pbar the place zeta = 1 above 0 (or above infinity when 0 is ramified), tau_p = eps r (c_p - c_pbar). Throws NonElementary when a value difference has no integral of the required form, Decline when undecided or an algebraic constant is unsupported.";
 brExpSpecialResidues[T_Association, cv_Association, c_] := Module[{z = brPlaceDataZero[T, cv], inf = brPlaceDataInf[T, cv], one},
   one[unram_, lc_, wfun_] := Module[{w, gf, r},
     If[!unram, Return[<|"ramified" -> True|>, Module]];
     w = wfun[];
-    If[w === 0, Return[<|"ramified" -> False, "kappa" -> 1, "u" -> 1, "c" -> 0, "w" -> 0|>, Module]];
     gf = brGammaForm[lc, cv["m"]];
+    (* the places' geometry (kappa, u) is kept even when the value is 0: another
+       special place may carry a residue, and then every special place enters
+       the divisor; None marks a radical gamma (decided later, see
+       brComponentLogPartSpecial) *)
+    If[w === 0, Return[<|"ramified" -> False, "kappa" -> If[gf === None, None, gf[[1]]],
+      "u" -> If[gf === None, None, gf[[2]]], "c" -> 0, "w" -> 0|>, Module]];
     If[gf === None,
       brRadicalValueCheck[T, lc, cv["m"], w, "Logarithmic"];
-      Return[<|"ramified" -> False, "kappa" -> 1, "u" -> 1, "c" -> 0, "w" -> 0|>, Module]];
+      Return[<|"ramified" -> False, "kappa" -> None, "u" -> None, "c" -> 0, "w" -> 0|>, Module]];
     r = brExpValueIntegral[T, Together[gf[[2]] w]];
     Switch[First[r],
       "NoSolution", throwNonElementary["residue at a special place undefined ([B] Def 2.21, Prop 2.22)"],

@@ -5223,3 +5223,16 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   `Trager`...`), or put that package's context on the path. Add a suite assertion that
   no capitalised short name lands in the private context: that is the signature of an
   unresolved call.
+
+## 2026-11-12 — Bronstein: a verified answer, then an unverified presentation (10 wrong answers)
+- Trap: `brIntegrateBody` checked `antiderivativeQ` and then returned Trager's
+  `presentable[f, F, x]`, whose fast path returns `realForm[F]` UNVERIFIED. realForm
+  normalised `Log[2 + 2x]` to `Log[1 + x]`. That drops a constant, which is harmless at
+  top level but wrong inside `(...)^(1/4)`. 10 of 600 stress cases (radicands with
+  `Log[c x + c]`) returned wrong antiderivatives through v0.6518–v0.6519.
+- Rule: verification must apply to the exact expression returned. Any presentation,
+  simplification or real-form step after the check is either re-verified (falling
+  back to the verified form) or done before the check.
+- Found by `tools/bronstein_stress` (random derivatives, the PZQ check). Neither the
+  hand-picked suites nor the random-derivative unit property (seed 91) had a
+  `Log[c x + c]` radicand. Generators need constant factors inside kernels.
