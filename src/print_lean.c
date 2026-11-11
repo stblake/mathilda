@@ -350,11 +350,29 @@ static const char* const LEAN_KEYWORDS[] = {
     "Sort", "Type", NULL
 };
 
+/* Length of a Greek letter that Lean reads as an identifier character (UTF-8,
+ * U+0391-U+03A9 and U+03B1-U+03C9 without lambda, Pi and Sigma, which Lean
+ * reserves) at p, else 0.  These are also inside LeanVerify's lexical surface,
+ * so a Greek variable is written plainly, not as an escaped identifier. */
+static size_t greek_ident_len(const char* p) {
+    const unsigned char* u = (const unsigned char*)p;
+    if (u[0] == 0xCE && u[1] >= 0x91 && u[1] <= 0xA9 && u[1] != 0xA0 && u[1] != 0xA2 &&
+        u[1] != 0xA3)
+        return 2;                                   /* U+0391..U+03A9 */
+    if (u[0] == 0xCE && u[1] >= 0xB1 && u[1] <= 0xBF && u[1] != 0xBB) return 2;  /* a..o */
+    if (u[0] == 0xCF && u[1] >= 0x80 && u[1] <= 0x89) return 2;                 /* p..w */
+    return 0;
+}
+
 static bool is_plain_ident(const char* s) {
-    if (!s || !((*s >= 'a' && *s <= 'z') || (*s >= 'A' && *s <= 'Z'))) return false;
-    for (const char* p = s; *p; p++)
+    if (!s || !((*s >= 'a' && *s <= 'z') || (*s >= 'A' && *s <= 'Z') || greek_ident_len(s)))
+        return false;
+    for (const char* p = s; *p; p++) {
+        size_t g = greek_ident_len(p);
+        if (g) { p += g - 1; continue; }
         if (!((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9')))
             return false;
+    }
     for (size_t i = 0; LEAN_KEYWORDS[i]; i++)
         if (strcmp(s, LEAN_KEYWORDS[i]) == 0) return false;
     return true;

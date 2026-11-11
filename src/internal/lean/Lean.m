@@ -111,10 +111,11 @@ Certify::rejected = "Lean rejected the certificate for `1`; see obj[\"Logs\"]";
 Certify::method = "Method `1` is not accepted: `2`; give a plain tactic script (see ?Certify)";
 LeanVerify::unsafe = "the source uses `1`, which can run code at elaboration time, bypass or forge the kernel check; not run";
 LeanVerify::import = "the source has `1`; LeanVerify accepts no imports (core Lean) or, with a LeanProject, only import Mathlib / import Mathlib.<Path>; not run";
-LeanVerify::cmd = "the source uses the command `1`; LeanVerify accepts only theorem, example, open, namespace, section, end, variable, universe, numeric set_option and #print axioms commands (lemma with Mathlib), each starting at column 0; not run";
-LeanVerify::lex = "the source contains `1`, which LeanVerify cannot scan unambiguously; not run";
+LeanVerify::cmd = "the source uses the command `1`; LeanVerify accepts only theorem, example, open (namespace names only), namespace, section, end, variable, universe and numeric / Boolean set_option commands (lemma with Mathlib), each starting at column 0; not run";
+LeanVerify::lex = "line `2`: the source contains `1`, which is outside LeanVerify's minimal lexical surface (no strings, comments, character literals, #, $, %, backquotes, backslashes, @[, French quotes or unlisted Unicode); not run";
 Certify::unsafe = "the generated Lean source failed the LeanVerify source check (`1`); not run";
 Certify::eval = "the claim `1` applies `2`, which Mathilda would have to evaluate before Lean sees the claim; certify the computation itself (e.g. Certify[Simplify[...]]) or state the claim with arithmetic only";
+Certify::value = "`1` has a value (`2`); Clear[`1`], or certify the value-substituted claim explicitly (write it out, or Certify[Evaluate[claim]]); a claim is certified as written, never with values substituted";
 Certify::realvars = "the claim `1` has order relations, but `2` is not constrained to be real; add Element[`2`, Reals] (or an order relation on it) to the assumptions";
 Certify::optignored = "`1` is ignored for a `2` certificate (only identity claims read Domain, Assumptions and Method)";
 
@@ -140,6 +141,46 @@ $replayFile = If[StringQ[$InputFileName] && $InputFileName =!= "",
 
 replayScript[] := If[StringQ[$replayFile] && FileExistsQ[$replayFile], $replayFile, None];
 
+(* The core-only prelude (Prelude.lean; no imports, no Mathlib), inlined
+   into every generated certificate file and mirrored byte-for-byte as
+   lean/Mathilda/Prelude.lean for the Lean-side package (ctest
+   lean_prelude_sync).  It carries NO comments or strings: LeanVerify's
+   checker skips it as trusted text, and a prelude without any span that Lean
+   skips guarantees that Lean's lexer is at the top level where it ends
+   (CheckSource refuses a prelude with a string, comment or char literal).
+   Its documentation therefore lives here.  Everything is a computable
+   definition that the kernel evaluates under `decide +kernel`: recursion is
+   structural (an explicit fuel argument where the natural measure is not),
+   never well-founded, so the kernel reduces it.
+     powModAux fuel b e m acc  square-and-multiply b^e mod m; fuel bounds the
+                               loop steps.
+     powMod b e m              b^e mod m for every e: the loop halves e and
+                               stops at 0, so it runs log2 e + 1 <= e + 1
+                               steps and fuel e + 1 never runs out (a fixed
+                               fuel silently truncated large exponents; the
+                               kernel only peels as many successors off the
+                               fuel literal as there are steps).
+     prodPow fs                the product of q^k over [(q, k), ...].
+     lucasStep known p a fs    one Lucas step: a has order p - 1 mod p, the
+                               factor list multiplies out to p - 1, every
+                               prime factor q is already known prime.
+     prattCheck known steps    a flat Pratt certificate, steps (p, a, factors
+                               of p - 1) in dependency order; 2 is known.
+     IsPrime n                 the definition: 2 <= n and the only divisors
+                               of n are 1 and n (Certify proves IsPrime 2 and
+                               Not IsPrime n for n < 2 and composites).
+     PrattCertifies p cert     cert is checked and its last step is p.
+     Mat, matMul, matVec       dense Rat matrices as row lists; the column
+                               count of matMul is taken from B's first row.
+     HasShape A r c, HasLength v n
+                               exact shapes (matMul / matVec / det use
+                               zipWith and getD, which silently truncate or
+                               pad ragged input, so every matrix statement
+                               states the shapes).
+     idMat n, dropCol j A, detAux, det
+                               identity; column removal; Laplace expansion
+                               along row 0 with the dimension as fuel.
+     sqnn, mulnn               Lean.Grind.OrderedRing.sq_nonneg / mul_nonneg. *)
 prelude[] := prelude[] = If[StringQ[$preludeFile] && FileExistsQ[$preludeFile],
   ReadString[$preludeFile], ""];
 
@@ -201,32 +242,43 @@ $unsafeWords = {"axiom", "native_decide", "implemented_by", "extern", "unsafe",
   "skipKernelTC", "command_elab", "term_elab", "tactic_elab", "setEnv", "modifyEnv",
   "withOptions", "native"};
 
-(* Identifier-like words of a source ("Lean.Elab.x" gives Lean, Elab, x). *)
+(* The words of a source as LeanVerify's checker splits them: maximal runs of
+   [A-Za-z0-9_] ("Lean.Elab.x'" gives Lean, Elab, x), finer than Lean's own
+   identifiers. *)
 sourceWords[src_String] := DeleteDuplicates[StringCases[src,
-   RegularExpression["[A-Za-z_][A-Za-z0-9_'!?]*"]]];
+   RegularExpression["[A-Za-z0-9_]+"]]];
 
 (* The structural source check (src/lean_check.c).  The guarantee of
    LeanVerify (and of Certify) holds only for sources that cannot run
    user-controlled code while Lean elaborates them: code run at elaboration
    time can forge everything the elaborating process produces, including the
-   .olean that the kernel replay reads.  So a source is accepted only if it
-   fits an ALLOWLIST grammar -- no imports (core Lean only), or only
-   `import Mathlib[.Path]` with a project; only theorem / lemma (Mathlib) /
-   example / open / namespace / section / end / variable / universe /
-   numeric set_option / #print axioms commands at column 0; none of the
-   meta-level escapes (by_elab, run_tac, native_decide, sorry, ...) inside --
-   and the trusted prelude (Prelude.lean, byte-identical) is skipped.  With
-   certify -> True the generator auxiliaries `def mathilda_cert_<k>_<x>` are
-   accepted too.  Gives the C checker's association. *)
+   .olean that the kernel replay reads.  So a source is accepted only if
+   (A) it stays inside a minimal lexical surface -- no strings, comments,
+   character literals, #, $, %, backquotes, backslashes, @[, French quotes,
+   control characters or Unicode outside a short list of mathematical symbols
+   and Greek letters -- so that no span exists whose content Lean would skip
+   and the checker need not reproduce Lean's lexer; (B) none of its
+   [A-Za-z0-9_] words is a command-leading word of Lean's parser (outside the
+   allowed command starters at column 0; the list is derived from Lean's
+   parser tables, src/lean_check_tokens.h) or an escape word (by_elab,
+   native_decide, sorry, eval, IO, ...); and (C) it fits an ALLOWLIST grammar
+   -- no imports (core Lean only), or only `import Mathlib[.Path]` with a
+   project; only theorem / lemma (Mathlib) / example / open NAMES / namespace
+   / section / end / variable / universe / numeric or Boolean set_option
+   commands at column 0.  The trusted prelude (Prelude.lean, byte-identical,
+   itself free of strings and comments) is skipped.  With certify -> True the
+   generator auxiliaries `def mathilda_cert_<k>_<x>` and the footer lines
+   `#print axioms mathilda_cert_<k>_footer` are accepted too.  Gives the C
+   checker's association. *)
 checkSource[src_String, mathlib_, certify_] :=
   Lean`Internal`CheckSource[src, TrueQ[mathlib], TrueQ[certify],
     With[{p = prelude[]}, If[StringQ[p] && p =!= "", p, None]]];
 
 (* The message of each refusal kind. *)
-refusalMessage["import", w_] := Message[LeanVerify::import, w];
-refusalMessage["cmd", w_] := Message[LeanVerify::cmd, w];
-refusalMessage["token", w_] := Message[LeanVerify::unsafe, w];
-refusalMessage[_, w_] := Message[LeanVerify::lex, w];
+refusalMessage["import", w_, _] := Message[LeanVerify::import, w];
+refusalMessage["cmd", w_, _] := Message[LeanVerify::cmd, w];
+refusalMessage["token", w_, _] := Message[LeanVerify::unsafe, w];
+refusalMessage[_, w_, l_] := Message[LeanVerify::lex, w, l];
 
 (* src (examples already renamed by the checker) followed by a trusted footer:
    one `#print axioms` line per declared name.  Returns {source, <|name ->
@@ -252,7 +304,7 @@ LeanVerify[src_String, opts:OptionsPattern[]] := Module[{exe, proj, full, lines,
   chk = checkSource[src, StringQ[proj], False];
   If[!AssociationQ[chk], Return[$Failed, Module]];
   If[!TrueQ[chk["OK"]],
-    refusalMessage[chk["Kind"], chk["What"]];
+    refusalMessage[chk["Kind"], chk["What"], chk["Line"]];
     Return[<|"Success" -> False, "ExitCode" -> Missing["NotRun"],
       "Messages" -> {<|"Severity" -> "error", "Kind" -> "mathilda." <> chk["Kind"],
         "Line" -> chk["Line"], "Text" -> "not run: the source uses " <> chk["What"]|>},
@@ -292,12 +344,15 @@ heartbeats[_] := 0;
 (* ---- User-supplied Method strings ----------------------------------------
    A Method string is pasted into the generated file as a tactic block, so it
    must not be able to leave that block or change how later text is read.
-   Accepted: printable text (no tab or carriage return); no French quotes,
-   backquotes, $, #, @[, "--", "/-" or string quotes; and none of the command
-   keywords and meta-level escapes below as a word.  Every line is indented
-   by two spaces, so no line reaches column 0; and Certify runs every item
-   with a user Method in a Lean file of its own (certifyItems), after which
-   the trusted footer re-checks the theorem's statement and axioms. *)
+   It must satisfy LeanVerify's own rules (A) and (B) above: methodProblem
+   runs the C checker on `theorem t : True := by` followed by the script,
+   indented by two spaces, so the script inherits the minimal lexical surface
+   (no strings, comments, #, $, %, @[, backquotes, ...) and the refusal of
+   every command-leading and escape word.  On top of that the words below
+   (Lean, IO, axiom, ...) are refused, and every line is indented by two
+   spaces, so no line reaches column 0; Certify runs every item with a user
+   Method in a Lean file of its own (certifyItems), after which the trusted
+   footer re-checks the theorem's statement and axioms. *)
 $methodBannedWords = Join[$unsafeWords, {"theorem", "lemma", "def", "abbrev", "instance",
   "example", "structure", "class", "inductive", "notation", "infix", "infixl", "infixr",
   "prefix", "postfix", "set_option", "attribute", "open", "export", "namespace",
@@ -305,9 +360,9 @@ $methodBannedWords = Join[$unsafeWords, {"theorem", "lemma", "def", "abbrev", "i
   "partial", "private", "protected", "noncomputable", "omit", "include", "scoped",
   "local", "sorry", "admit", "Lean", "IO"}];
 $methodBannedText = {"\[LeftGuillemet]", "\[RightGuillemet]", "`", "$", "#", "@[", "--",
-  "/-", "\"", "\t", "\r"};
+  "/-", "-/", "\"", "\t", "\r", "%", "\\"};
 
-methodProblem[m_String] := Module[{w, t},
+methodProblem[m_String] := Module[{w, t, chk},
   If[StringTrim[m] === "", Return["the script is empty", Module]];
   t = Select[$methodBannedText, StringContainsQ[m, #] &];
   If[t =!= {}, Return["it contains " <> ToString[First[t], InputForm], Module]];
@@ -315,6 +370,10 @@ methodProblem[m_String] := Module[{w, t},
     Return["it contains a control character", Module]];
   w = Intersection[sourceWords[m], $methodBannedWords];
   If[w =!= {}, Return["it uses the keyword " <> First[w], Module]];
+  chk = Lean`Internal`CheckSource["theorem mathilda_method : True := by\n" <>
+    StringRiffle[("  " <> #) & /@ StringSplit[m, "\n"], "\n"] <> "\n", False, False, None];
+  If[!TrueQ[chk["OK"]], Return["it uses " <> ToString[chk["What"]] <>
+    " (LeanVerify's source rules apply to Method scripts)", Module]];
   None];
 methodProblem[m_] := If[MemberQ[{Automatic, "grind", "decide", "omega"}, m], None,
   "Method must be Automatic, \"grind\", \"decide\", \"omega\" or a tactic script string"];
@@ -354,10 +413,7 @@ footerText[c_] := StringJoin["theorem ", footerName[c], " :\n    ", c["Statement
 fileHeader[tier_] := StringJoin[
   If[tier === 1, "import Mathlib\nset_option linter.unusedTactic false\n\
 set_option linter.unreachableTactic false\n", ""],
-  "set_option autoImplicit false\n\n",
-  "/- Mathilda ", ToString[$VersionNumber], " certificate (",
-  If[tier === 1, "Tier 1, Mathlib", "Tier 0, core Lean"],
-  "). Generated: Lean is the judge; Mathilda is an untrusted oracle. -/\n\n"];
+  "set_option autoImplicit false\n\n"];
 
 (* The file for a list of chunks plus, per chunk, its line spans {{first,
    last} of the chunk, {first, last} of its footer} and the line of its
@@ -534,7 +590,7 @@ rawFraction[e_] := {e, 1};
 (* The same, read off a HELD side (before Mathilda's arithmetic could cancel
    x/x to 1 or x^2/x to x): each numerator and denominator is a polynomial
    expression, whose evaluation is ring arithmetic only. *)
-SetAttributes[{rawH, rawHl}, HoldAll];
+SetAttributes[{rawH, rawHl}, HoldAllComplete];
 rawH[Plus[ts__]] := Fold[{#1[[1]] #2[[2]] + #2[[1]] #1[[2]], #1[[2]] #2[[2]]} &,
   {rawHl[ts]}];
 rawH[Times[fs__]] := Fold[{#1[[1]] #2[[1]], #1[[2]] #2[[2]]} &, {1, 1}, {rawHl[fs]}];
@@ -659,7 +715,18 @@ $factorHeads = {Factor, FactorTerms};
      - the outermost head of a computation (Certify[Simplify[e]]) is kept;
      - anything else (Simplify, Refine, Limit, Mod, Exp, Log, Sqrt, a definite
        Integrate, a user function, ...) inside the input: Certify::eval. *)
-SetAttributes[{cw, cwl, cwClaim, hk}, HoldAll];
+(* HoldAllComplete (finding 4, v0.6521): with HoldAll, an Evaluate[...]
+   inside the claim was evaluated as soon as the walker received it, so
+   Evaluate[Simplify[(x^2 - 1)/(x - 1)]] == x + 1 became a tautology.  Under
+   HoldAllComplete nothing in the claim is evaluated by the walker, and
+   Evaluate itself is refused (Certify::eval) like any other head.  A symbol
+   with a value (x = 5) is refused with Certify::value (finding 5): the claim
+   is certified as written, never with values substituted. *)
+SetAttributes[{cw, cwl, cwClaim, hk, valuedQ, cvalue}, HoldAllComplete];
+(* Does the (held) symbol s have a value that evaluation would substitute?
+   Protected (System) symbols are constants, not user values. *)
+valuedQ[s_Symbol] := OwnValues[s] =!= {} && !MemberQ[Attributes[s], Protected];
+valuedQ[_] := False;
 $cwKeep = {Plus, Times, Subtract, Divide, Minus, Equal, Unequal, Less, LessEqual, Greater,
   GreaterEqual, And, Implies, Inequality, ForAll, List, Element};
 $cwComputations = {Expand, Collect, Together, Apart, Cancel, Simplify, FullSimplify,
@@ -674,7 +741,9 @@ cw[e_Integer] := e;
 cw[e_Rational] := e;
 cw[e_Real] := e;
 cw[e_String] := e;
+cw[s_Symbol] /; valuedQ[s] := cvalue[s, OwnValues[s][[1, 2]]];
 cw[s_Symbol] := hk[s];
+cw[Evaluate[___]] := cfail[Evaluate];
 cw[Power[b_, n_Integer]] := inert[Power, cw[b], n];
 cw[Power[b_, e_]] /; $cwAnti || $cwAnyPow := inert[Power, cw[b], cw[e]];
 cw[(h:Sqrt | Log | ArcTan | ArcTanh)[u_]] /; $cwAnti := inert[h, cw[u]];
@@ -683,7 +752,7 @@ cw[(h:Expand | Together | Cancel | Factor | FactorTerms)[e_]] :=
 cw[(h:Apart | Collect)[e_, v_]] /; MatchQ[Unevaluated[v], _Symbol | {__Symbol}] :=
   ($cwNotes = Append[$cwNotes, h]; cw[e]);
 cw[D[f_, x_Symbol]] := Module[{fv = cwValue[cw[f]], d},
-  If[!FreeQ[fv, cfail] || !polyQ[fv, Variables[fv]] || !FreeQ[fv, _Real | _Complex],
+  If[!FreeQ[fv, cfail | cvalue] || !polyQ[fv, Variables[fv]] || !FreeQ[fv, _Real | _Complex],
     cfail[D],
     d = D[fv, x];
     $cwTrusted = Append[$cwTrusted, "Mathilda's differentiation: D[" <>
@@ -711,17 +780,21 @@ cwClaim[Sum[t_, {k_Symbol, a_, n_}]] := Block[{$cwAnyPow = True},
 cwClaim[e_] := cw[e];
 
 cwHeld[t_] := HoldComplete @@ {t} //. {inert[h_, a___] :> h[a], hk[x_] :> x, hval[v_] :> v};
-cwValue[t_] := If[FreeQ[t, cfail], ReleaseHold[cwHeld[t]], t];
+cwValue[t_] := If[FreeQ[t, cfail | cvalue], ReleaseHold[cwHeld[t]], t];
 
 (* {HoldComplete[rewritten input], stripped heads, trusted steps}, or
-   $Failed after Certify::eval.  A symbol holding the input (c = a == b;
-   Certify[c]) is evaluated once first. *)
-rewriteInput[HoldComplete[c_Symbol]] := With[{v = c},
-  If[HoldComplete[v] =!= HoldComplete[c], rewriteInput[HoldComplete[v]],
-    {HoldComplete[c], {}, {}}]];
+   $Failed after Certify::eval / Certify::value.  A symbol holding the input
+   (c = a == b; Certify[c]) is refused like any other symbol with a value:
+   its value was computed when it was assigned, so it is not the claim as
+   written (Certify[Evaluate[c]] certifies the value explicitly). *)
+rewriteInput[HoldComplete[c_Symbol]] /; valuedQ[c] :=
+  (Message[Certify::value, HoldForm[c], OwnValues[c][[1, 2]]]; $Failed);
 rewriteInput[hc:HoldComplete[c_]] := Module[{t, bad},
   Block[{$cwNotes = {}, $cwTrusted = {}},
     t = cwClaim[c];
+    bad = Cases[{t}, cvalue[s_, v_] :> HoldForm[s] -> v, Infinity];
+    If[bad =!= {},
+      Message[Certify::value, bad[[1, 1]], bad[[1, 2]]]; Return[$Failed, Module]];
     bad = Cases[{t}, cfail[h_] :> h, Infinity];
     If[bad =!= {},
       Message[Certify::eval, HoldForm[c], First[bad]]; Return[$Failed, Module]];
@@ -1825,7 +1898,27 @@ Options[Certify] = {Engine -> "Lean", Tier -> Automatic, Domain -> Automatic,
   Method -> Automatic, TimeConstraint -> 60, Assumptions -> {}, Verify -> True,
   LeanExecutable -> Automatic, LeanProject -> Automatic};
 
-SetAttributes[Certify, HoldFirst];
+(* HoldAll (v0.6521): the claim is held (it is certified as written), and so
+   are the options until the Assumptions have been checked like the claim:
+   an Evaluate or a symbol with a value in them is refused (heldOptionProblem)
+   before the options are evaluated. *)
+SetAttributes[Certify, HoldAll];
+
+(* None, or $Failed after Certify::eval / Certify::value, for the held
+   options of a call. *)
+SetAttributes[heldOptionProblem, HoldAllComplete];
+heldOptionProblem[opts___] := Module[{as, bad},
+  as = Cases[HoldComplete[opts], (Rule | RuleDelayed)[Assumptions, a_] :> HoldComplete[a],
+    {1, 2}];
+  Do[
+    bad = Cases[a, s_Symbol /; valuedQ[s] :> (HoldForm[s] -> OwnValues[s][[1, 2]]),
+      {0, Infinity}];
+    If[bad =!= {}, Message[Certify::value, bad[[1, 1]], bad[[1, 2]]]; Return[$Failed, Module]];
+    If[!FreeQ[a, Evaluate],
+      Message[Certify::eval, Replace[a, HoldComplete[e_] :> HoldForm[Assumptions -> e]], Evaluate];
+      Return[$Failed, Module]],
+    {a, as}];
+  None];
 
 certOptions[opts_List] := Module[{keys = {Engine, Tier, Domain, Method, TimeConstraint,
     Assumptions, Verify, LeanExecutable, LeanProject}},
@@ -1976,12 +2069,13 @@ certifyItems[hcs_List, opts_List] := Module[{o, engine, gens, hb, chunks, out, e
   out];
 
 (* Certify[{c1, c2, ...}] certifies a batch in one Lean run (per tier). *)
-Certify[{cs___}, opts:OptionsPattern[]] := certifyItems[Thread[HoldComplete[{cs}]], {opts}];
+Certify[{cs___}, opts:OptionsPattern[]] := If[heldOptionProblem[opts] === $Failed, $Failed,
+  certifyItems[Thread[HoldComplete[{cs}]], {opts}]];
 
-Certify[c_, opts:OptionsPattern[]] := With[{r = certifyItems[{HoldComplete[c]}, {opts}]},
-  If[ListQ[r], First[r], r]];
+Certify[c_, opts:OptionsPattern[]] := If[heldOptionProblem[opts] === $Failed, $Failed,
+  With[{r = certifyItems[{HoldComplete[c]}, {opts}]}, If[ListQ[r], First[r], r]]];
 
-SetAttributes[ProofObject, HoldFirst];
+SetAttributes[ProofObject, HoldAll];
 
 ProofObject[e_, o:OptionsPattern[]] /; !AssociationQ[Unevaluated[e]] := Certify[e, o];
 

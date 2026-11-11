@@ -26,6 +26,8 @@
 #include <sys/types.h>
 #endif
 
+#include "lean_check_corpus.h"
+
 static void check_true(const char* input) {
     assert_eval_eq(input, "True", 0);
 }
@@ -121,9 +123,9 @@ static void test_phase2_negative(void) {
                    "Lean`Private`$antiderivOverride = None; Null", "Null", 0);
     check_true("leanW[\"Verified\"] === False && leanW[\"Certificate\"][\"PreCheck\"] === False");
     /* A perturbed inverse entry. */
-    check_true("LeanVerify[StringReplace[Certify[Inverse[{{1,2,0},{0,1,3},{4,0,1}}], "
-               "Verify -> False][\"LeanSource\"], \"(12 / 25 : Rat)\" -> \"(13 / 25 : Rat)\"]]"
-               "[\"Success\"] === False");
+    check_true("leanRan[LeanVerify[leanNoFooter[StringReplace[Certify[Inverse[{{1,2,0},{0,1,3},"
+               "{4,0,1}}], Verify -> False][\"LeanSource\"], \"(12 / 25 : Rat)\" -> "
+               "\"(13 / 25 : Rat)\"]]]][\"Success\"] === False");
 }
 
 /* Phase 3, Tier 0: SOS, optimality, Pratt, sums. */
@@ -159,8 +161,9 @@ static void test_phase3_negative(void) {
     /* A Pratt certificate whose witness is a square (never a generator). */
     check_true("With[{s = Certify[PrimeQ[1000003], Verify -> False][\"LeanSource\"], "
                "a = Lean`Private`pratt[1000003][[-1, 2]]}, "
-               "LeanVerify[StringReplace[s, \"(1000003, \" <> ToString[a] <> \",\" -> "
-               "\"(1000003, \" <> ToString[Mod[a^2, 1000003]] <> \",\"]][\"Success\"]] === False");
+               "leanRan[LeanVerify[leanNoFooter[StringReplace[s, \"(1000003, \" <> ToString[a] <> "
+               "\",\" -> \"(1000003, \" <> ToString[Mod[a^2, 1000003]] <> \",\"]]]][\"Success\"]] "
+               "=== False");
     assert_eval_eq("leanSN = Certify[Sum[k^3,{k,1,n}] == n^2 (n+1)^2/4 + 1]; Null", "Null", 0);
     check_true("leanSN[\"Verified\"] === False && Length[leanSN[\"Logs\"]] > 0");
 }
@@ -244,9 +247,9 @@ static void test_review_solve(void) {
     check_true("Certify[Solve[x^2 == 1 && x != 1, x]][\"Verified\"] === True");
     /* A wrong solution set for a constrained system is caught by the
      * inequality conjunct (the equation alone holds at x = -1). */
-    check_true("LeanVerify[StringReplace[Certify[Solve[x^2 == 1 && x > 0, x], Verify -> False]"
-               "[\"LeanSource\"], \"(1 ^ 2 : Rat) = 1 \xE2\x88\xA7 (1 : Rat) > 0\" -> "
-               "\"((-1) ^ 2 : Rat) = 1 \xE2\x88\xA7 (-1 : Rat) > 0\"]][\"Success\"] === False");
+    check_true("leanRan[LeanVerify[leanNoFooter[StringReplace[Certify[Solve[x^2 == 1 && x > 0, x], "
+               "Verify -> False][\"LeanSource\"], \"(1 ^ 2 : Rat) = 1 \xE2\x88\xA7 (1 : Rat) > 0\" -> "
+               "\"((-1) ^ 2 : Rat) = 1 \xE2\x88\xA7 (-1 : Rat) > 0\"]]]][\"Success\"] === False");
 }
 
 static void test_review_pratt(void) {
@@ -576,11 +579,12 @@ static void test_review3_allowlist(void) {
 #endif
     remove("lean_review3_pwn.lean");
     remove("lean_review3_race.lean");
-    /* Accepted sources still verify: the trusted prelude prefix, examples
-     * in a namespace, open ... in, numeric set_option ... in, #print axioms. */
-    check_true("LeanVerify[\"namespace A\\nexample : 1 + 1 = 2 := rfl\\nopen Nat in\\n"
+    /* Accepted sources still verify: examples in a namespace, open,
+     * numeric set_option ... in (open ... in and #print axioms are refused
+     * since v0.6521). */
+    check_true("LeanVerify[\"namespace A\\nexample : 1 + 1 = 2 := rfl\\nopen Nat\\n"
                "set_option maxHeartbeats 400000 in\\ntheorem t : True := by\\n  trivial\\n"
-               "end A\\n#print axioms A.t\\n\"][\"Success\"] === True");
+               "end A\\n\"][\"Success\"] === True");
     /* Refused, unrun: user definitions, attributes, commands and escapes. */
     check_true("LeanVerify[\"def f : Nat := 1\\ntheorem t : f = 1 := rfl\\n\"][\"Rejected\"] === "
                "{\"def\"}");
@@ -613,6 +617,83 @@ static void test_review3_domains(void) {
     check_true("Certify[(1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x][\"Verified\"] === False");
 }
 
+/* Fourth review round (v0.6521). */
+
+/* Evaluate `fmt` with %s replaced by a Mathilda string literal of src. */
+static Expr* eval_with_source(const char* fmt, const char* src) {
+    char* lit = lean_mstring(src);
+    size_t n = strlen(lit) + strlen(fmt) + 1;
+    char* in = malloc(n);
+    if (!in) abort();
+    snprintf(in, n, fmt, lit);
+    Expr* e = parse_expression(in);
+    Expr* r = e ? evaluate(e) : NULL;
+    if (e) expr_free(e);
+    free(in);
+    free(lit);
+    return r;
+}
+
+static bool eval_true_with_source(const char* fmt, const char* src) {
+    Expr* r = eval_with_source(fmt, src);
+    bool ok = r && r->type == EXPR_SYMBOL && strcmp(r->data.symbol.name, "True") == 0;
+    if (r) expr_free(r);
+    return ok;
+}
+
+static void test_review4_verify(void) {
+    test_mute_messages();
+    /* Findings 1-3: the reproducers (x2 gave "Success" -> True for
+     * `theorem bad : False` in v0.6520) are refused before Lean runs. */
+    const char* xs[] = { REVIEW4_X1, REVIEW4_X2, REVIEW4_X3, REVIEW4_X4, NULL };
+    for (int i = 0; xs[i]; i++)
+        ASSERT(eval_true_with_source("With[{r = LeanVerify[%s]}, r[\"Success\"] === False && "
+                                     "r[\"ExitCode\"] === Missing[\"NotRun\"] && "
+                                     "Length[r[\"Rejected\"]] === 1]", xs[i]));
+    /* The whole corpus, as one source, is proved by Lean (and each source on
+     * its own is accepted by the checker: test_lean_certify.c). */
+    size_t len = 1;
+    for (int i = 0; LEAN_CORPUS[i]; i++) len += strlen(LEAN_CORPUS[i]);
+    char* all = malloc(len);
+    ASSERT(all != NULL);
+    all[0] = '\0';
+    for (int i = 0; LEAN_CORPUS[i]; i++) strcat(all, LEAN_CORPUS[i]);
+    ASSERT(eval_true_with_source("With[{r = LeanVerify[%s]}, r[\"Success\"] === True && "
+                                 "r[\"Replay\"] === True && Length[Keys[r[\"Axioms\"]]] >= 34]",
+                                 all));
+    /* Refused constructs inserted into an accepted source: not run. */
+    int nref = 0;
+    while (LEAN_REFUSED[nref]) nref++;
+    for (int j = 0; j < nref; j += 7) {
+        size_t n = strlen(LEAN_CORPUS[14]), m = strlen(LEAN_REFUSED[j]);
+        char* t = malloc(n + m + 1);
+        ASSERT(t != NULL);
+        memcpy(t, LEAN_CORPUS[14], n - 1);
+        memcpy(t + n - 1, LEAN_REFUSED[j], m);
+        strcpy(t + n - 1 + m, "\n");
+        if (!eval_true_with_source("LeanVerify[%s][\"ExitCode\"] === Missing[\"NotRun\"]", t)) {
+            Expr* r = eval_with_source("LeanVerify[%s]", t);
+            char* p = r ? expr_to_string(r) : NULL;
+            printf("FAIL: ran after inserting \"%s\": %s\n", LEAN_REFUSED[j], p ? p : "(null)");
+            free(p);
+            if (r) expr_free(r);
+            ASSERT(0);
+        }
+        free(t);
+    }
+    free(all);
+    /* A false theorem in the accepted surface is refuted by Lean. */
+    check_true("leanRan[LeanVerify[\"theorem f1 : 2 + 2 = 5 := by decide\\n\"]][\"Success\"] === "
+               "False");
+    check_true("leanRan[LeanVerify[\"theorem f2 (n : Nat) : n + 1 = n := by omega\\n\"]]"
+               "[\"Success\"] === False");
+    /* Findings 4-5 end to end: refused, so nothing reaches Lean. */
+    check_true("ProofObject[Evaluate[Simplify[(x^2 - 1)/(x - 1)]] == x + 1] === $Failed");
+    check_true("leanV4 = 5; With[{r = ProofObject[leanV4^2 == 25]}, Clear[leanV4]; r] === $Failed");
+    /* A Method script inside the surface still verifies. */
+    check_true("Certify[x + 0 == x, Method -> \"intro x\\ngrind\"][\"Verified\"] === True");
+}
+
 int main(void) {
 #ifdef __GNUC__
     /* The shared alarm(120) in test_utils.h is too short for this suite: every
@@ -626,6 +707,13 @@ int main(void) {
         printf("SKIP: no Lean 4 >= 4.35 found (set $LeanExecutable or MATHILDA_LEAN)\n");
         return 77;
     }
+    /* Certify sources end with the trusted footer's #print axioms lines,
+     * which only Certify's own check accepts: tamper tests give LeanVerify the
+     * source without them, and require that Lean actually ran. */
+    assert_eval_eq("leanNoFooter[s_String] := StringReplace[s, "
+                   "RegularExpression[\"#print axioms [^\\n]*\\n\"] -> \"\"]; "
+                   "leanRan[r_] := If[r[\"ExitCode\"] === Missing[\"NotRun\"], "
+                   "<|\"Success\" -> \"not run\"|>, r]; Null", "Null", 0);
     TEST(test_positive);
     TEST(test_negative);
     TEST(test_leanverify);
@@ -646,6 +734,7 @@ int main(void) {
     TEST(test_review2_low);
     TEST(test_review3_allowlist);
     TEST(test_review3_domains);
+    TEST(test_review4_verify);
     printf("All Lean verification tests passed.\n");
     return 0;
 }

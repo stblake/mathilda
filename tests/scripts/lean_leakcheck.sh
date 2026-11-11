@@ -123,6 +123,22 @@ Quiet[Do[
    Certify[Sum[1, {k, 1, Infinity}] == Infinity, Verify -> False];
    Certify[Sum[k, {k, 1, n}] == n (n + 1)/2, Assumptions -> n < 0, Verify -> False], {3}]];
 
+(* --- v0.6521: the minimal surface, glued tokens, Evaluate / values --- *)
+Quiet[Do[
+   Lean`Internal`CheckSource["theorem t : True := trivial\n  1'x'\n", False, False, None];
+   Lean`Internal`CheckSource["theorem t : True := trivial\n/--/ x\n", False, False, None];
+   Lean`Internal`CheckSource["theorem t : True := trivial \[CirclePlus]\n", False, False, None];
+   Lean`Internal`CheckSource["theorem t : True := trivial\n  2theorem\n", False, False, None];
+   Lean`Internal`CheckSource["theorem t : True := trivial\n  x \[RightArrow]orun_cmd\n", True, False, None];
+   Lean`Internal`CheckSource["theorem t : True := trivial\n#print axioms mathilda_cert_1_footer\n", False, True, None];
+   Lean`Internal`CheckSource["theorem t : True := trivial\n", False, False, "/- c -/\n"];
+   Lean`Internal`CheckSource["open Nat\ntheorem t (h' : \[Alpha] = \[Alpha]) : True := trivial\n", False, False, None];
+   leakX = 5; Certify[leakX^2 == 25, Verify -> False]; Clear[leakX];
+   Certify[Evaluate[Simplify[(x^2 - 1)/(x - 1)]] == x + 1, Verify -> False];
+   leakA = 0; Certify[y == 7, Assumptions -> y leakA == 1, Verify -> False]; Clear[leakA];
+   Certify[x == x, Method -> "simp -- c", Verify -> False];
+   Certify[\[Alpha]^2 == \[Alpha] \[Alpha] + 0, Verify -> False], {3}]];
+
 (* --- real Lean runs, when Lean is installed --- *)
 If[StringQ[$LeanVersion],
   Quiet[

@@ -47,9 +47,10 @@ The file is header (`set_option autoImplicit false`), prelude, theorem chunks, t
    read the checked run's own output; condition 5 reads only the `.olean`, which that run
    wrote. The replay is therefore defence in depth, not the foundation: the foundation is
    that the file contains **no user-defined code** (condition 0).
-0. **Source check.** The generated file passes the allowlist check of
-   `src/lean_check.c` (the same grammar as `LeanVerify`, plus the generator auxiliaries
-   `def mathilda_cert_<k>_<x>` and the byte-identical prelude). The only user-influenced
+0. **Source check.** The generated file passes the check of `src/lean_check.c` (the same
+   minimal lexical surface, word rule and grammar as `LeanVerify`, plus the generator
+   auxiliaries `def mathilda_cert_<k>_<x>`, the footer lines
+   `#print axioms mathilda_cert_<k>_footer` and the byte-identical, comment-free prelude). The only user-influenced
    text in it is the strictly translated statements and deny-listed `Method` scripts.
 
 The heuristic engine never reports `True`: its answer is `Missing["Heuristic", b]`.
@@ -204,27 +205,52 @@ Regression tests: `test_review3_*` in `tests/test_lean_verify.c` and
 | **Sum bound; silent options.** `Sum[1, {k, 1, Infinity}] == Infinity` matched `n_Symbol`; `Assumptions` were silently ignored by every kind but identities. | The upper bound must be a symbol outside ``System` `` that is neither `Protected` nor `Constant`. A kind that ignores `Domain`, `Assumptions` or `Method` issues `Certify::optignored` (ignoring a hypothesis proves a stronger theorem, so it was sound, but not silent any more). |
 | **Scratch leftovers.** `scratch_close` removed a fixed suffix list and missed `.ir.sig` (and anything else). | It removes the known names (now including `.ir.sig`, `.c`, `.hash`, `.trace`, …), then every remaining entry of the private directory via `readdir` (POSIX): entries are `unlink`ed (a symlink is removed, never followed), subdirectories only `rmdir`ed, never recursed into; nothing outside the directory is touched. |
 
+## Soundness hardening, fourth round (v0.6521)
+
+A fourth adversarial review found one more false `"Success" -> True` and two weaker holes.
+Regression tests: `test_review4_*` in `tests/test_lean_certify.c`, `tests/test_lean_verify.c`
+and `tests/test_lean_mathlib.c` (the reproducers' texts, with their payload paths
+neutralised, are in `tests/lean_check_corpus.h`), plus the ctests `lean_check_tokens_sync`
+and `lean_check_tokens_mathlib`.
+
+| Hole | Fix |
+|---|---|
+| **The checker's lexer disagreed with Lean's** (three ways). (a) A `'` after a digit or a non-ASCII byte was taken for an identifier prime, where Lean starts a character literal (`↦'"'`, `1'"'`); (b) identifiers with `!` / `?` (`x!'"' "`) were split differently; (c) `/--/` closed a comment for the checker but opens a doc comment in Lean. Each let a string or comment hide, for the checker, a column-0 `#eval` that Lean ran: `/tmp/rv4/x2.lean` (an `#eval` that ran a shell script forging the `.olean` and the output, then exited 0) gave `"Success" -> True` for `theorem bad : False`. | **A minimal lexical surface instead of a second lexer.** The root cause was the design: "the checker's lexer agrees with Lean's byte for byte" is a property no test can establish. It is replaced by a surface on which there is nothing to agree about. **(A)** Refused anywhere, `LeanVerify::lex` with the construct and its line: `"` (every kind of string), `/-`, `-/`, `--` (every comment), `«`, `»`, the backquote, `#` (no hash commands; `#print axioms` is dropped, the replay computes the axioms), `@[`, `$`, `%`, `\`, control characters, a `'` that is not an identifier prime (it must follow `[A-Za-z0-9_']` in a run starting with a letter or `_`: no character literal can occur), invalid or overlong UTF-8, and any non-ASCII character outside a fixed list of mathematical symbols and the Greek letters. With no string, comment or character literal there is no span whose content Lean skips, so every byte belongs to a token the checker sees. **(B)** Words are maximal runs of `[A-Za-z0-9_]`, every other byte separates them; Lean's identifiers are coarser, so every keyword Lean sees starts a word here, except after a numeric literal (`2theorem`; every suffix of a digit-led run is checked) and after a Mathlib notation token ending in a letter (`→otheorem` is `→o` then `theorem`; the list `LEAN_GLUED_TOKENS_MATHLIB` is checked) -- found by the token-table test below. Every command-leading word and every escape word is refused anywhere except an allowed starter in its starting position (at worst over-refusal, never a miss). **(C)** The grammar of v0.6520, minus `#print axioms`, minus `open ... in` and `open scoped` (namespace names only; this also avoids activating scoped notation and macros for a single command), and with each starter followed by a space or a newline (`variable?` is another command). **Derived, tested keyword list.** The command-leading words (`src/lean_check_tokens.h`) are not written by hand: `tools/lean_command_tokens.lean` reads the `command` category from `Lean.Parser.parserExtension` and prints the first tokens of every leading parser (and the token table); `tests/scripts/lean_check_tokens.sh` runs it and checks, against `` Lean`Internal`CheckSource `` itself, that every leading token is refused inside a command and (unless it is an allowed starter) at column 0, that no leading command parser is unindexed, and that a keyword glued to any token that ends in a letter is refused. With `import Lean` (core): 159 leading tokens, 120 words in the core list (the others carry `#`, `%`, `$`, `@[`, `/-`, which the surface refuses), 504 tokens, all covered; with `import Mathlib`: 248 leading tokens, 34 more words in the Mathlib supplement, 1148 tokens, 25 glued tokens inside the surface, all covered. The one exempt token is `?` (its parsers need `binder_predicate` or an antiquotation `$`, both refused). "Command list completeness" is therefore a tested property, not a trust item. **Prelude.** `Prelude.lean` (and its mirror `lean/Mathilda/Prelude.lean`) no longer has comments (its documentation moved to `Lean.m`); the checker refuses a prelude that contains a string, comment or character literal, so Lean's lexer is at the top level where the skipped prelude ends. Generated files lost their header comment. **Method** scripts satisfy (A) and (B) too: `methodProblem` runs the checker on the script as a theorem body, on top of its own list. **Greek variables** are printed as plain identifiers (`α`, not `«α»`), which the surface accepts. |
+| **`Evaluate` through the held walker.** `cw`, `cwl`, `cwClaim`, `hk`, `rawH`, `rawHl` were `HoldAll`, which still evaluates an `Evaluate[...]` argument: `ProofObject[Evaluate[Simplify[(x^2 - 1)/(x - 1)]] == x + 1]` was `True` with the theorem `1 + x == 1 + x` and no trusted step. | The claim-walking helpers are `HoldAllComplete`, and `Evaluate` itself is refused (`Certify::eval`). `Certify` and `ProofObject` are `HoldAll` (were `HoldFirst`), so a top-level `Certify[Evaluate[c]]` is still the explicit way to certify a computed claim. |
+| **Values substituted silently.** A symbol with an `OwnValue` was replaced by its value (`x = 5; ProofObject[x^2 == 25]` proved `(25 : Int) = 25`; `e = Simplify[...]; ProofObject[e == x + 1]` a tautology), while a `DownValue` gave `Certify::eval`. | A symbol with a value (an `OwnValue`, not `Protected`) anywhere in the claim, including a symbol holding the whole claim, is refused with `Certify::value` ("x has a value (5); Clear[x] or certify the value-substituted claim explicitly"). The `Assumptions` option is checked held for values and `Evaluate` before the options are evaluated (`a = 0; Certify[y == 7, Assumptions -> y a == 1]` would have made the hypothesis `False`). |
+
+Kernel replay and the private-directory checks of v0.6519 / v0.6520 stay, as defence in
+depth.
+
 ### The guarantee, precisely
 
-`LeanVerify[src]["Success"] -> True` means: `src` passed the allowlist grammar above; Lean
-elaborated it (with the trusted prelude, if present) with no error and no `sorry`; the
-compiled module, read by a fresh `lean` process, replayed declaration by declaration into a
-new kernel environment; every declaration of the module and every theorem / example the
-source declares depends only on `propext`, `Classical.choice` and `Quot.sound`; and the
-elaboration's own `#print axioms` reports agree. `Certify[...]["Verified"] -> True` means
-the same for the generated file and its footer theorem `mathilda_cert_k_footer`, whose
-statement is the faithful translation of the input as written; every unchecked step is in
-`"TrustedSteps"`.
+`LeanVerify[src]["Success"] -> True` means: `src` passed the source check (minimal lexical
+surface, word rule, allowlist grammar); Lean elaborated it (with the trusted prelude, if
+present) with no error and no `sorry`; the compiled module, read by a fresh `lean` process,
+replayed declaration by declaration into a new kernel environment; every declaration of the
+module and every theorem / example the source declares depends only on `propext`,
+`Classical.choice` and `Quot.sound`; and the elaboration's own `#print axioms` reports
+(appended by LeanVerify after the check) agree. `Certify[...]["Verified"] -> True` means the
+same for the generated file and its footer theorem `mathilda_cert_k_footer`, whose statement
+is the faithful translation of the input as written -- no computation in it evaluated, no
+value substituted; every unchecked step is in `"TrustedSteps"`.
 
-**Trust base.** The Lean kernel; the Lean toolchain (elaborator, compiler, `.olean`
-writer and reader) as installed; the imported compiled modules (core `Init`, and with a
-project Mathlib and its dependencies) as built; Mathilda's source checker
-(`src/lean_check.c`) agreeing with Lean on where commands, comments, strings and identifiers
-begin (it splits words at least as finely as Lean and refuses what it cannot scan); and,
-**with Mathlib imports**, that Mathlib's tactics and elaborators (trusted library code) do
-not let term or tactic syntax execute user-supplied code beyond the refused escapes. The
-replay additionally guards against an elaboration that skips the kernel. Mathilda's own
-algorithms are not trusted, except for the listed `"TrustedSteps"`.
+**Trust base.** The Lean kernel; the Lean toolchain (elaborator, compiler, `.olean` writer
+and reader) as installed; the imported compiled modules (core `Init`, and with a project
+Mathlib and its dependencies) as built; and the source check, which now rests on two things
+that are either trivially inspectable or tested: (1) the **minimal-surface rules** -- with
+no string, comment, character literal, `#`, `$`, `%`, `\`, backquote, `@[` or French quote,
+and only an allowlist of Unicode, no part of the source is skipped by Lean's lexer, so the
+checker does not need to reproduce that lexer; (2) the **command-keyword list**, derived
+from Lean's parser tables and tested against them for core Lean and, when a project is
+configured, for Mathlib (ctest `lean_check_tokens_sync` / `lean_check_tokens_mathlib`;
+re-run after a toolchain or Mathlib update). The remaining assumption, stated plainly: the
+**built-in (non-user) elaborators and tactics of core Lean and, with a project, of Mathlib
+do not execute user-supplied code through ordinary term and tactic syntax** (beyond the
+refused escape words such as `native_decide`, `by_elab`, `run_tac`, `plausible`, `eval`).
+That list of escape words is the one hand-maintained deny-list left; the replay additionally
+guards against an elaboration that skips the kernel. Mathilda's own algorithms are not
+trusted, except for the listed `"TrustedSteps"`.
 
 ## Configuration
 
@@ -255,9 +281,15 @@ algorithms are not trusted, except for the listed `"TrustedSteps"`.
   theorem are not proved (listed as trusted steps).
 - The Lean-side oracle starts one Mathilda process per tactic call (about 0.05 s).
 - `LeanVerify` renames `example`s to named defs so their axioms are checked. It runs only
-  sources without user-defined code (the allowlist grammar): no `def`, `instance`,
-  `structure`, `macro`, `attribute`, `#eval`, …, no imports beyond Mathlib. A development
-  with its own definitions has to be checked by Lean / Lake directly.
+  sources without user-defined code inside a minimal surface: no `def`, `instance`,
+  `structure`, `macro`, `attribute`, …, no imports beyond Mathlib, and no strings,
+  comments, character literals, `#` commands, `%` (write `n % 2` as `Nat.mod n 2` or
+  `HMod.hMod n 2`), `$` or Unicode outside the allowlist. Command and escape words are
+  refused as identifiers too (a variable named `end`, `local` or `alias`; `Polynomial.eval`
+  with Mathlib). A development with its own definitions has to be checked by Lean / Lake
+  directly.
+- `Certify` refuses a claim that mentions a symbol with a value (`Certify::value`),
+  including `c = a == b; Certify[c]`: use `Certify[Evaluate[c]]` to certify the value.
 
 ## Follow-ups
 

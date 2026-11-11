@@ -17,6 +17,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "lean_check_corpus.h"
+
 /* input must evaluate to True. */
 static void check_true(const char* input) {
     assert_eval_eq(input, "True", 0);
@@ -127,9 +129,11 @@ static void test_options(void) {
     check_true("Certify[x + 1 == 1 + x, Domain -> Rationals, Verify -> False][\"Domain\"] === "
                "Rationals");
     check_true("Options[Certify][[1]] === (Engine -> \"Lean\")");
-    /* A symbol holding a claim is evaluated, then dispatched. */
-    check_true("leanC = (x + 1)^2 == x^2 + 2 x + 1; Certify[leanC, Verify -> False][\"Kind\"] === "
-               "\"Identity\"");
+    /* A symbol holding a claim has a value: refused (v0.6521), unless the
+     * caller asks for the value explicitly with Evaluate. */
+    assert_eval_eq("leanC = (x + 1)^2 == x^2 + 2 x + 1; Check[Certify[leanC, Verify -> False], "
+                   "\"value\"]", "\"value\"", 0);
+    check_true("Certify[Evaluate[leanC], Verify -> False][\"Kind\"] === \"Identity\"");
 }
 
 static void test_errors(void) {
@@ -496,8 +500,8 @@ static void test_hardening(void) {
 }
 
 static void test_attributes(void) {
-    assert_eval_eq("Attributes[Certify]", "{HoldFirst, Protected}", 0);
-    assert_eval_eq("Attributes[ProofObject]", "{HoldFirst, Protected}", 0);
+    assert_eval_eq("Attributes[Certify]", "{HoldAll, Protected}", 0);
+    assert_eval_eq("Attributes[ProofObject]", "{HoldAll, Protected}", 0);
     assert_eval_eq("Attributes[LeanVerify]", "{Protected}", 0);
     assert_eval_eq("Context[Certify]", "\"Lean`\"", 0);
 }
@@ -511,23 +515,25 @@ static void test_review3_checksource(void) {
 #define CK(src) "Lean`Internal`CheckSource[\"" src "\", False, False, None]"
 #define CKM(src) "Lean`Internal`CheckSource[\"" src "\", True, False, None]"
     /* Accepted: theorem / example / namespace / section / open / variable /
-     * universe / numeric set_option / #print axioms, comments, strings. */
+     * universe / numeric set_option. */
     check_true(CK("theorem t : 1 + 1 = 2 := rfl\\n") "[\"Theorems\"] === {\"t\"}");
     check_true(CK("namespace A\\nexample : True := trivial\\nsection\\nvariable (n : Nat)\\n"
                   "theorem u : n = n := rfl\\nend\\nend A\\n") "[\"Theorems\"] === "
                "{\"mathilda_example_1\", \"A.u\"}");
     check_true("StringStartsQ[" CK("example : True := trivial\\n") "[\"Source\"], "
                "\"noncomputable def _root_.mathilda_example_1 : True\"]");
-    check_true(CK("universe u\\nopen Nat in\\nset_option maxHeartbeats 1000 in\\n"
-                  "theorem t : True := by\\n  trivial -- sorry in a comment\\n"
-                  "/- def /- nested -/ -/\\n#print axioms t\\n") "[\"OK\"]");
-    check_true(CK("theorem t : \\\"#eval\\\" = \\\"#eval\\\" := rfl\\n") "[\"OK\"]");
+    check_true(CK("universe u\\nopen Nat\\nset_option maxHeartbeats 1000 in\\n"
+                  "theorem t : True := by\\n  trivial\\n") "[\"OK\"]");
     check_true(CKM("import Mathlib\\nimport Mathlib.Tactic\\nlemma t : True := trivial\\n") "[\"OK\"]");
     /* The trusted prelude, byte-identical, is skipped (it has defs). */
     check_true("Lean`Internal`CheckSource[Lean`Private`prelude[] <> \"\\ntheorem t : True := "
                "trivial\\n\", False, False, Lean`Private`prelude[]][\"OK\"]");
     check_true("Lean`Internal`CheckSource[StringReplace[Lean`Private`prelude[], \"powMod\" -> "
-               "\"powMad\"], False, False, Lean`Private`prelude[]][\"Kind\"] === \"cmd\"");
+               "\"powMad\"], False, False, Lean`Private`prelude[]][\"Kind\"] === \"lex\"");
+    /* ... and must itself be free of strings and comments (v0.6521). */
+    check_true("Lean`Internal`CheckSource[\"theorem t : True := trivial\\n\", False, False, "
+               "\"/- a comment -/\\n\"][\"Kind\"] === \"lex\"");
+    check_true("!StringContainsQ[Lean`Private`prelude[], \"/-\" | \"--\" | \"\\\"\"]");
     /* Imports: none in Tier 0; only Mathlib with a project. */
     check_true(CK("import Lean\\ntheorem t : True := trivial\\n") "[\"Kind\"] === \"import\"");
     check_true(CKM("import Lean\\ntheorem t : True := trivial\\n") "[\"Kind\"] === \"import\"");
@@ -540,9 +546,7 @@ static void test_review3_checksource(void) {
     check_true(CK("abbrev f : Nat := 1\\n") "[\"What\"] === \"abbrev\"");
     check_true(CK("instance : Inhabited Nat := \\u27e81\\u27e9\\n") "[\"What\"] === \"instance\"");
     check_true(CK("axiom bad : False\\n") "[\"What\"] === \"axiom\"");
-    check_true(CK("macro \\\"x\\\" : term => pure 1\\n") "[\"What\"] === \"macro\"");
     check_true(CK("attribute [simp] Nat.add_comm\\n") "[\"What\"] === \"attribute\"");
-    check_true(CK("#check 1\\n") "[\"What\"] === \"#check\"");
     check_true(CK("module\\n") "[\"What\"] === \"module\"");
     check_true(CK("lemma t : True := trivial\\n") "[\"What\"] === \"lemma\"");
     check_true(CK("set_option debug.skipKernelTC true\\n") "[\"Kind\"] === \"cmd\"");
@@ -550,36 +554,63 @@ static void test_review3_checksource(void) {
     check_true(CK("open Lean.Elab\\n") "[\"What\"] === \"Elab\"");
     check_true(CK("theorem t : True := trivial\\n:= rfl\\n") "[\"What\"] === \":\"");
     check_true(CK("  theorem t : True := trivial\\n") "[\"Kind\"] === \"cmd\"");
+    /* open: namespace names only (v0.6521: no `in`, no `scoped`). */
+    check_true(CK("open Nat in\\ntheorem t : True := trivial\\n") "[\"Kind\"] === \"cmd\"");
+    check_true(CK("open scoped Nat\\n") "[\"Kind\"] === \"cmd\"");
+    check_true(CK("open Nat hiding add\\n") "[\"Kind\"] === \"cmd\"");
+    check_true(CK("open Nat (add)\\n") "[\"Kind\"] === \"cmd\"");
+    /* A starter glued to another character is another token. */
+    check_true(CK("variable? (n : Nat)\\n") "[\"Kind\"] === \"cmd\"");
+    check_true(CK("theorem' t : True := trivial\\n") "[\"Kind\"] === \"cmd\"");
     /* Escapes inside an accepted command, also on a continuation line. */
     check_true(CK("theorem t : 1 = 1 := by\\n  native_decide\\n") "[\"What\"] === \"native_decide\"");
     check_true(CK("theorem t : 1 = 1 := by\\n  decide +native\\n") "[\"What\"] === \"native\"");
     check_true(CK("theorem t : 1 = 1 := by\\n  sorry\\n") "[\"What\"] === \"sorry\"");
     check_true(CK("theorem t : 1 = 1 := by\\n  run_tac pure ()\\n") "[\"What\"] === \"run_tac\"");
     check_true(CK("theorem t : 1 = 1 := by_elab pure ()\\n") "[\"What\"] === \"by_elab\"");
-    check_true(CK("theorem t : 1 = 1 := rfl\\n  #eval 1\\n") "[\"What\"] === \"#eval\"");
     check_true(CK("theorem t : 1 = 1 := rfl\\n  def f := 1\\n") "[\"What\"] === \"def\"");
     check_true(CK("theorem t : True := by\\n  set_option debug.x true in trivial\\n")
                "[\"What\"] === \"set_option\"");
-    check_true(CK("theorem t : True := eval% trivial\\n") "[\"What\"] === \"eval%\"");
     check_true(CK("theorem t : True := (by exact (unsafeBaseIO (pure trivial)))\\n")
                "[\"What\"] === \"unsafeBaseIO\"");
+    /* A keyword after a numeric literal (Lean splits 2theorem into 2, theorem). */
+    check_true(CK("theorem t : True := trivial\\n  2theorem u : False := sorry\\n")
+               "[\"What\"] === \"theorem\"");
+    /* The minimal lexical surface: all of these are "lex" now. */
+    check_true(CK("theorem t : 1 = 1 := rfl\\n  #eval 1\\n") "[\"What\"] === \"#eval\"");
+    check_true(CK("#check 1\\n") "[\"What\"] === \"#check\"");
+    check_true(CK("theorem t : True := eval% trivial\\n") "[\"What\"] === \"eval%\"");
     check_true(CK("@[simp] theorem t : True := trivial\\n") "[\"What\"] === \"@[ (an attribute)\"");
-    check_true(CK("theorem t : `x = `x := rfl\\n") "[\"Kind\"] === \"token\"");
-    check_true(CK("theorem t : s!\\\"{1}\\\" = \\\"1\\\" := rfl\\n") "[\"Kind\"] === \"token\"");
-    /* Lexical ambiguity. */
+    check_true(CK("theorem t : `x = `x := rfl\\n") "[\"Kind\"] === \"lex\"");
+    check_true(CK("theorem t : s!\\\"{1}\\\" = \\\"1\\\" := rfl\\n") "[\"Kind\"] === \"lex\"");
+    check_true(CK("theorem t : \\\"#eval\\\" = \\\"#eval\\\" := rfl\\n") "[\"Kind\"] === \"lex\"");
+    check_true(CK("theorem t : True := trivial -- c\\n") "[\"Kind\"] === \"lex\"");
     check_true(CK("theorem t : True := trivial /- open\\n") "[\"Kind\"] === \"lex\"");
-    check_true(CK("theorem t : \\\"x = 1 := rfl\\n") "[\"Kind\"] === \"lex\"");
     check_true(CK("theorem t : True := trivial\\n\\tdef f := 1\\n") "[\"Kind\"] === \"lex\"");
     check_true(CK("theorem t : True := trivial\\r\\n") "[\"Kind\"] === \"lex\"");
-    check_true("Lean`Internal`CheckSource[\"theorem t : \\[LeftGuillemet]sorry\\[RightGuillemet] "
-               "= 1 := rfl\\n\", False, False, None][\"Kind\"] === \"token\"");
-    /* A char literal holding a quote does not open a string. */
-    check_true(CK("theorem t : '\\\"' = '\\\"' := rfl\\n") "[\"OK\"]");
-    /* Certify mode: the generator auxiliaries only. */
+    check_true(CK("theorem t : (fun x => x) $ True := trivial\\n") "[\"Kind\"] === \"lex\"");
+    check_true(CK("theorem t : 7 % 2 = 1 := rfl\\n") "[\"Kind\"] === \"lex\"");
+    check_true(CK("theorem t : (\\\\x => x) 1 = 1 := rfl\\n") "[\"Kind\"] === \"lex\"");
+    check_true("Lean`Internal`CheckSource[\"theorem t : \\[LeftGuillemet]x\\[RightGuillemet] "
+               "= 1 := rfl\\n\", False, False, None][\"Kind\"] === \"lex\"");
+    check_true(CK("theorem t : 'a' = 'a' := rfl\\n") "[\"Kind\"] === \"lex\"");
+    check_true(CK("theorem t (h' : True) : True := h'\\n") "[\"OK\"]");
+    check_true(CK("theorem t : \xE2\x8A\x95 = 1 := rfl\\n") "[\"What\"] === \"the character U+2295\"");
+    check_true("Lean`Internal`CheckSource[\"theorem t : \\[Alpha] = \\[Beta] := rfl\\n\", False, "
+               "False, None][\"OK\"]");
+    /* Certify mode: the generator auxiliaries and footer lines only. */
     check_true("Lean`Internal`CheckSource[\"def mathilda_cert_3_S : Nat := 1\\n\", False, True, "
                "None][\"OK\"]");
     check_true("Lean`Internal`CheckSource[\"def mathilda_cert_x : Nat := 1\\n\", False, True, "
                "None][\"OK\"] === False");
+    check_true("Lean`Internal`CheckSource[\"theorem t : True := trivial\\n#print axioms "
+               "mathilda_cert_2_footer\\n\", False, True, None][\"OK\"]");
+    check_true("Lean`Internal`CheckSource[\"theorem t : True := trivial\\n#print axioms "
+               "mathilda_cert_2_footer\\n\", False, False, None][\"Kind\"] === \"lex\"");
+    check_true("Lean`Internal`CheckSource[\"theorem t : True := trivial\\n#print axioms "
+               "mathilda_cert_2_footer x\\n\", False, True, None][\"Kind\"] === \"lex\"");
+    check_true("Lean`Internal`CheckSource[\"theorem t : True := trivial\\n  #print axioms "
+               "mathilda_cert_2_footer\\n\", False, True, None][\"Kind\"] === \"lex\"");
 #undef CK
 #undef CKM
     /* Every generated Certify file passes the check (the internal assertion). */
@@ -662,6 +693,152 @@ static void test_review3_claims(void) {
                "\"ClosedFormSum\"");
 }
 
+/* Fourth review round (v0.6521): no Lean needed. */
+
+/* CheckSource[src, mathlib, False, None]["OK"] for the bytes src. */
+static bool review4_ok(const char* src, bool mathlib) {
+    char* lit = lean_mstring(src);
+    size_t n = strlen(lit) + 96;
+    char* in = malloc(n);
+    if (!in) abort();
+    snprintf(in, n, "TrueQ[Lean`Internal`CheckSource[%s, %s, False, None][\"OK\"]]", lit,
+             mathlib ? "True" : "False");
+    Expr* e = parse_expression(in);
+    Expr* r = e ? evaluate(e) : NULL;
+    bool ok = r && r->type == EXPR_SYMBOL && strcmp(r->data.symbol.name, "True") == 0;
+    if (r) expr_free(r);
+    if (e) expr_free(e);
+    free(in);
+    free(lit);
+    return ok;
+}
+
+/* Findings 1-3: every reproducer hides a column-0 #eval inside what the
+ * v0.6520 checker took for a string / character literal / comment; with the
+ * minimal lexical surface each is refused before Lean runs, at the very
+ * construct that did the hiding. */
+static void test_review4_reproducers(void) {
+    const char* xs[] = { REVIEW4_X1, REVIEW4_X2, REVIEW4_X3, REVIEW4_X4, NULL };
+    for (int i = 0; xs[i]; i++) {
+        ASSERT(!review4_ok(xs[i], false));
+        ASSERT(!review4_ok(xs[i], true));
+    }
+    /* The constructs themselves, alone. */
+    const char* hide[] = {
+        "theorem t : True := trivial\n  1'\"'\n",              /* (a) quote after a digit */
+        "theorem t : True := (fun (_ : Nat) \xE2\x86\xA6'x') 0\n", /* (a) after non-ASCII */
+        "theorem t : True := trivial\n  x!'y'\n",             /* (b) identifier with ! */
+        "theorem t : True := trivial\n  x?'y'\n",             /* (b) identifier with ? */
+        "theorem t : True := trivial\n/--/ x\n-/\n",           /* (c) doc comment opener */
+        "theorem t : True := trivial\n  h.2'x'\n",            /* field index then quote */
+        NULL };
+    for (int i = 0; hide[i]; i++) ASSERT(!review4_ok(hide[i], false));
+    /* An identifier prime is still accepted. */
+    ASSERT(review4_ok("theorem t (h' h'' : True) : True := h''\n", false));
+    ASSERT(review4_ok("theorem t (x1' : Nat) : x1' = x1' := rfl\n", false));
+}
+
+/* Property: every corpus source is accepted; inserting any refused
+ * construct at any of several pseudo-random character boundaries makes the
+ * checker refuse it. */
+static void test_review4_property(void) {
+    unsigned long seed = 12345;
+    int tried = 0;
+    for (int i = 0; LEAN_CORPUS[i]; i++) {
+        const char* src = LEAN_CORPUS[i];
+        size_t n = strlen(src);
+        if (!review4_ok(src, false)) {
+            printf("FAIL: corpus source %d refused:\n%s", i, src);
+            ASSERT(0);
+        }
+        ASSERT(review4_ok(src, true));
+        for (int j = 0; LEAN_REFUSED[j]; j++) {
+            size_t m = strlen(LEAN_REFUSED[j]);
+            for (int k = 0; k < 3; k++) {
+                size_t pos;
+                do {
+                    seed = seed * 6364136223846793005UL + 1442695040888963407UL;
+                    pos = (size_t)((seed >> 33) % (n + 1));
+                } while (pos < n && ((unsigned char)src[pos] & 0xC0) == 0x80);
+                char* t = malloc(n + m + 1);
+                if (!t) abort();
+                memcpy(t, src, pos);
+                memcpy(t + pos, LEAN_REFUSED[j], m);
+                memcpy(t + pos + m, src + pos, n - pos + 1);
+                if (review4_ok(t, false)) {
+                    printf("FAIL: accepted after inserting \"%s\" at %zu:\n%s", LEAN_REFUSED[j],
+                           pos, t);
+                    ASSERT(0);
+                }
+                free(t);
+                tried++;
+            }
+        }
+    }
+    ASSERT(tried > 1000);
+    /* Strict UTF-8: overlong, surrogate, stray and truncated sequences, and
+     * codepoints outside the allowlist (a 4-byte letter, a zero-width space). */
+    const char* bad8[] = { "\xC0\x80", "\xE0\x80\xAF", "\xED\xA0\x80", "\xFF", "\x80",
+                           "\xE2\x88", "\xF0\x9D\x94\xB8", "\xE2\x80\x8B", NULL };
+    for (int i = 0; bad8[i]; i++) {
+        char t[96];
+        snprintf(t, sizeof t, "theorem t : True := trivial %s\n", bad8[i]);
+        ASSERT(!review4_ok(t, false));
+    }
+    ASSERT(review4_ok("theorem t (\xCE\xB1 \xCE\xA9 : Nat) : \xCE\xB1 + \xCE\xA9 = \xCE\xA9 + \xCE\xB1 := "
+                      "Nat.add_comm _ _\n", false));
+}
+
+/* Findings 4-5: Evaluate and symbols with values in a claim. */
+static void test_review4_claims(void) {
+    test_mute_messages();
+    /* 4: Evaluate inside a claim is refused, not evaluated. */
+    assert_eval_eq("Check[ProofObject[Evaluate[Simplify[(x^2 - 1)/(x - 1)]] == x + 1, "
+                   "Verify -> False], \"eval\"]", "\"eval\"", 0);
+    assert_eval_eq("Check[Certify[x + 1 == Evaluate[Simplify[(x^2 - 1)/(x - 1)]], "
+                   "Verify -> False], \"eval\"]", "\"eval\"", 0);
+    assert_eval_eq("Check[Certify[{Evaluate[Expand[(x + 1)^2]] == x^2 + 2 x + 1}, "
+                   "Verify -> False], \"eval\"]", "\"eval\"", 0);
+    assert_eval_eq("Check[Certify[Factor[Evaluate[x^2 - 1]], Verify -> False], \"eval\"]",
+                   "\"eval\"", 0);
+    /* ... the raw-fraction reader is HoldAllComplete as well. */
+    check_true("MemberQ[Attributes[Lean`Private`rawH], HoldAllComplete] && "
+               "MemberQ[Attributes[Lean`Private`cw], HoldAllComplete]");
+    /* 5: a symbol with a value is refused (Certify::value), not substituted. */
+    assert_eval_eq("leanX4 = 5; Check[ProofObject[leanX4^2 == 25, Verify -> False], "
+                   "\"value\"]", "\"value\"", 0);
+    assert_eval_eq("leanE4 = Simplify[(x^2 - 1)/(x - 1)]; Check[ProofObject[leanE4 == x + 1, "
+                   "Verify -> False], \"value\"]", "\"value\"", 0);
+    assert_eval_eq("leanG4 = 0; Check[Certify[(a^2 - leanG4^2)/(a - leanG4) == a + leanG4, "
+                   "Verify -> False], \"value\"]", "\"value\"", 0);
+    /* ... also in Assumptions, which are checked held before they evaluate. */
+    assert_eval_eq("leanA4 = 0; Check[Certify[y == 7, Assumptions -> y leanA4 == 1, "
+                   "Verify -> False], \"value\"]", "\"value\"", 0);
+    assert_eval_eq("Check[Certify[y == 7, Assumptions -> Evaluate[y == 7], Verify -> False], "
+                   "\"eval\"]", "\"eval\"", 0);
+    /* An explicit top-level Evaluate certifies the value, as asked. */
+    check_true("StringContainsQ[Certify[Evaluate[(leanX4 + x)^2 == x^2 + 10 x + 25], "
+               "Verify -> False][\"LeanTheorem\"], \"(5 + x) ^ 2\"]");
+    /* Constants are not values. */
+    check_true("Head[Certify[x + 0 == x, Verify -> False]] === ProofObject");
+    /* Cleared, the symbol is a variable again. */
+    check_true("Clear[leanX4]; StringContainsQ[Certify[(leanX4 + 1)^2 == leanX4^2 + 2 leanX4 + 1, "
+               "Verify -> False][\"LeanTheorem\"], \"(1 + leanX4) ^ 2\"]");
+    /* Method scripts satisfy the same source rules. */
+    assert_eval_eq("Check[Certify[x == x, Method -> \"simp -- c\", Verify -> False], \"m\"]",
+                   "\"m\"", 0);
+    assert_eval_eq("Check[Certify[x == x, Method -> \"exact (x 2theorem)\", Verify -> False], "
+                   "\"m\"]", "\"m\"", 0);
+    assert_eval_eq("Check[Certify[x == x, Method -> \"show 7 % 2 = 1\", Verify -> False], \"m\"]",
+                   "\"m\"", 0);
+    check_str("Certify[x == x, Method -> \"intro x\\nrfl\", Verify -> False][\"ProofScript\"]",
+              "by\n  intro x\n  rfl");
+    /* Every generated Certify file passes the new check (the internal
+     * assertion): no comment in the header, the comment-free prelude, the
+     * footer lines. */
+    check_true("!StringContainsQ[Certify[x == x, Verify -> False][\"LeanSource\"], \"/-\"]");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -685,6 +862,9 @@ int main(void) {
     TEST(test_attributes);
     TEST(test_review3_checksource);
     TEST(test_review3_claims);
+    TEST(test_review4_reproducers);
+    TEST(test_review4_property);
+    TEST(test_review4_claims);
     printf("All Lean certificate generation tests passed.\n");
     return 0;
 }

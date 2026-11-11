@@ -66,6 +66,25 @@ static void test_review3_mathlib_grammar(void) {
                "[\"Rejected\"] === {\"import Aesop\"}");
 }
 
+/* Fourth review (v0.6521): the minimal surface with Mathlib.  Ordinary
+ * Mathlib proofs verify; Mathlib's own command words and a keyword glued to
+ * one of its notation tokens (U+2192 `o`, `[MOD`, ...) are refused unrun. */
+static void test_review4_mathlib_surface(void) {
+    test_mute_messages();
+    assert_eval_eq("leanM4 = LeanVerify[\"import Mathlib\\nlemma m1 (x : \xE2\x84\x9D) : 0 \xE2\x89\xA4 x ^ 2 := by "
+                   "positivity\\ntheorem m2 (a b : \xE2\x84\x95) (h : a \xE2\x88\xA3 b) (hb : 0 < b) : a \xE2\x89\xA4 b := "
+                   "Nat.le_of_dvd hb h\\n\"]; Null", "Null", 0);
+    check_true("leanM4[\"Success\"] === True && leanM4[\"Replay\"] === True");
+    check_true("LeanVerify[\"import Mathlib\\nlemma t : True := trivial\\n  x \xE2\x86\x92orun_cmd y\\n\"]"
+               "[\"ExitCode\"] === Missing[\"NotRun\"]");
+    check_true("LeanVerify[\"import Mathlib\\nlemma t : True := trivial\\n  x [MODtheorem y\\n\"]"
+               "[\"ExitCode\"] === Missing[\"NotRun\"]");
+    check_true("LeanVerify[\"import Mathlib\\nlemma t : True := trivial\\n  sudo set_option x\\n\"]"
+               "[\"ExitCode\"] === Missing[\"NotRun\"]");
+    check_true("LeanVerify[\"import Mathlib\\nlemma t : True := by\\n  plausible\\n\"]"
+               "[\"ExitCode\"] === Missing[\"NotRun\"]");
+}
+
 int main(void) {
     const char* proj = getenv("MATHILDA_LEAN_PROJECT");
     if (!proj || !*proj) {
@@ -83,6 +102,7 @@ int main(void) {
     TEST(test_tier1_antiderivatives);
     TEST(test_tier1_negative);
     TEST(test_review3_mathlib_grammar);
+    TEST(test_review4_mathlib_surface);
     printf("All Lean Tier 1 (Mathlib) tests passed.\n");
     return 0;
 }

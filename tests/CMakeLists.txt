@@ -6374,6 +6374,18 @@ if(NOT WIN32)
              COMMAND sh ${CMAKE_SOURCE_DIR}/scripts/lean_tactics.sh ${CMAKE_SOURCE_DIR}/../Mathilda)
     set_tests_properties(lean_tactics_tests PROPERTIES SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
 endif()
+# LeanVerify's command-keyword list (src/lean_check_tokens.h) against Lean's own parser
+# tables (tools/lean_command_tokens.lean): core Lean (Skipped without Lean) and, with
+# MATHILDA_LEAN_PROJECT set to a Lake project with Mathlib, `import Mathlib` (read only).
+if(NOT WIN32)
+    add_test(NAME lean_check_tokens_sync
+             COMMAND sh ${CMAKE_SOURCE_DIR}/scripts/lean_check_tokens.sh ${CMAKE_SOURCE_DIR}/../Mathilda)
+    add_test(NAME lean_check_tokens_mathlib
+             COMMAND sh ${CMAKE_SOURCE_DIR}/scripts/lean_check_tokens.sh --mathlib
+                     ${CMAKE_SOURCE_DIR}/../Mathilda)
+    set_tests_properties(lean_check_tokens_sync lean_check_tokens_mathlib
+                         PROPERTIES SKIP_RETURN_CODE 77)
+endif()
 # The Lean-side prelude is a byte-for-byte mirror of the one inlined into Certify files.
 add_test(NAME lean_prelude_sync
          COMMAND ${CMAKE_COMMAND} -E compare_files

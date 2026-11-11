@@ -141,10 +141,12 @@ header[17, "Lean catches the CAS: a PossibleZeroQ false positive"];
 pz = PossibleZeroQ[(1 + x)^20 - Expand[(1 + x)^20] + 10^-25 x];
 Print["    In:        PossibleZeroQ[(1 + x)^20 - Expand[(1 + x)^20] + 10^-25 x]"];
 Print["    Result:    ", pz, "   (wrong: the expression is the polynomial x/10^25)"];
-claim = (1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x;
-heur = Certify[claim, Engine -> "Mathilda"];
+(* The claim is written out in each call: a symbol holding it has a value,
+   which Certify refuses (it certifies claims as written). *)
+heur = Certify[(1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x, Engine -> "Mathilda"];
 Print["    Engine -> \"Mathilda\":  Verified: ", heur["Verified"], "    Tier: ", heur["Tier"]];
-t17 = AbsoluteTiming[Quiet[Certify[claim, Engine -> "Lean"]]];
+t17 = AbsoluteTiming[Quiet[Certify[(1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x,
+  Engine -> "Lean"]]];
 lean17 = t17[[2]];
 Print["    Engine -> \"Lean\":      Verified: ", lean17["Verified"], "    Tier: ", lean17["Tier"],
   If[lean17["Verified"] === False, "", "   <-- UNEXPECTED (expected False)"]];
@@ -159,7 +161,9 @@ record[17, "Lean catches the CAS (the heuristic said " <> ToString[Last[heur["Ve
 
 header[18, "A deliberately wrong certificate is rejected"];
 good = Certify[Factor[x^10 - 1], Verify -> False];
-src = good["LeanSource"];
+(* LeanVerify is given the source without the trusted footer's #print axioms
+   lines (they are Certify's own; a LeanVerify source has no # commands). *)
+src = StringReplace[good["LeanSource"], RegularExpression["#print axioms [^\n]*\n"] -> ""];
 bad = StringReplace[src, "(1 + x + x ^ 2 + x ^ 3 + x ^ 4)" -> "(1 + x + 2 * x ^ 2 + x ^ 3 + x ^ 4)"];
 Print["    In:        LeanVerify[<the Factor[x^10 - 1] certificate with one coefficient changed>]"];
 Print["    Changed:   (1 + x + x ^ 2 + x ^ 3 + x ^ 4)  ->  (1 + x + 2 * x ^ 2 + x ^ 3 + x ^ 4)"];
@@ -172,7 +176,8 @@ firstErr = Select[v18["Messages"], #["Severity"] === "error" &];
 If[firstErr =!= {},
   Print["    Lean says: ", clip[StringReplace[First[StringSplit[firstErr[[1]]["Text"], "\n"]], "\t" -> " "]]]];
 Print["    Time:      Lean ", secs[v18["Timing"]], ", whole call ", secs[t18[[1]]]];
-record[18, "Tampered factorization certificate", v18["Success"], 0, t18[[1]],
+record[18, "Tampered factorization certificate",
+  If[v18["ExitCode"] === Missing["NotRun"], "not run", v18["Success"]], 0, t18[[1]],
   "n/a: a hand-edited source, checked as is by LeanVerify"];
 
 (* ---------------------------------------------------------------------- *)
