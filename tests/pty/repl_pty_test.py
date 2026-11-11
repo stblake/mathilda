@@ -39,6 +39,7 @@ import subprocess
 import sys
 import tempfile
 import termios
+import threading
 import time
 
 if os.name != "posix":
@@ -280,21 +281,26 @@ def run_capture(args, env, stdin_data=b"", stderr_pty=False, timeout=60.0):
         p = subprocess.Popen(argv(args), stdin=subprocess.PIPE,
                              stdout=subprocess.PIPE, stderr=slave, env=env)
         os.close(slave)
+        # Drain the pty while the child runs: macOS discards unread pty
+        # output once the last slave descriptor closes.
+        chunks = []
+
+        def pump():
+            while True:
+                try:
+                    chunk = os.read(master, 65536)
+                except OSError:      # EIO: the child closed the pty
+                    return
+                if not chunk:
+                    return
+                chunks.append(chunk)
+
+        reader = threading.Thread(target=pump, daemon=True)
+        reader.start()
         out = p.communicate(stdin_data, timeout=timeout * TIME_SCALE)[0]
-        err = b""
-        while True:
-            r, _, _ = select.select([master], [], [], 0.2)
-            if not r:
-                break
-            try:
-                chunk = os.read(master, 65536)
-            except OSError:
-                break
-            if not chunk:
-                break
-            err += chunk
+        reader.join(5.0 * TIME_SCALE)
         os.close(master)
-        return p.returncode, out, err
+        return p.returncode, out, b"".join(chunks)
     p = subprocess.run(argv(args), input=stdin_data, stdout=subprocess.PIPE,
                        stderr=subprocess.PIPE, env=env,
                        timeout=timeout * TIME_SCALE)
