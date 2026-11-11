@@ -436,8 +436,10 @@ static bool temp_try_reclaim(SymbolDef* d) {
      * unlink and free the node and its name. */
     /* Out of the dependency log, whatever its mark: a COMMITTED observation
      * (inert_observed == 2) also stays logged until the outermost frame's
-     * dep_log_release, which would read this freed node. */
-    if (d->inert_observed) eval_dep_forget(d);
+     * dep_log_release, which would read this freed node -- and so does one whose
+     * mark a binding bump reset to 0 (eval_clock_bump_binding), so the call is
+     * unconditional (it walks only d's own entries). */
+    eval_dep_forget(d);
     reset_node_payload(d);
     size_t idx = d->name_hash & (symtab_size - 1);
     for (SymbolDef** pp = &symtab[idx]; *pp; pp = &(*pp)->next) {

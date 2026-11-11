@@ -417,27 +417,53 @@ bool g_eval_dep_taint = false;
  * enclosing frame, whose own certificate covers it (its verdict rests on the
  * nested evaluation); when the outermost frame ends, every mark still 1 is
  * cleared. */
-static SymbolDef** g_dep_log = NULL;
-static size_t      g_dep_log_n = 0, g_dep_log_cap = 0;
+/* Each entry links to the previous entry of the SAME symbol (a symbol is
+ * re-logged by every nested frame that reads it while its mark is still
+ * tentative), so eval_dep_forget visits only that symbol's own entries.  It used
+ * to scan the whole log: the log lives as long as the outermost frame, and a
+ * DSolve cascade reclaiming thousands of Module locals over a log of 10^5+
+ * entries spent >90% of its time there -- the load-dependent dsolve_tests
+ * timeout. */
+#define DEP_LOG_NONE UINT32_MAX
+typedef struct { SymbolDef* d; uint32_t prev; } DepLogEntry;
+static DepLogEntry* g_dep_log = NULL;
+static size_t       g_dep_log_n = 0, g_dep_log_cap = 0;
 size_t             g_dep_frame_log0 = 0;
 
 void eval_dep_note_slow(SymbolDef* d) {
-    if (g_dep_log_n == g_dep_log_cap) {
+    if (g_dep_log_n == g_dep_log_cap || g_dep_log_n >= DEP_LOG_NONE) {
         size_t c = g_dep_log_cap ? 2 * g_dep_log_cap : 256;
-        SymbolDef** a = realloc(g_dep_log, c * sizeof(SymbolDef*));
+        DepLogEntry* a = g_dep_log_n >= DEP_LOG_NONE ? NULL
+                       : realloc(g_dep_log, c * sizeof(DepLogEntry));
         if (!a) { d->inert_observed = 2; return; }    /* unlogged: keep for good */
         g_dep_log = a;
         g_dep_log_cap = c;
     }
+    /* dep_log_idx may be stale (a previous outermost frame's log, or a fresh
+     * node's 0); eval_dep_forget validates every link it follows. */
+    g_dep_log[g_dep_log_n].d = d;
+    g_dep_log[g_dep_log_n].prev = d->dep_log_idx;
     d->inert_observed = 1;
     d->dep_log_idx = (uint32_t)g_dep_log_n;
-    g_dep_log[g_dep_log_n++] = d;
+    g_dep_log_n++;
 }
 
+/* Drop every log entry of `d` (about to be freed).  The chain from
+ * d->dep_log_idx runs through d's entries in strictly decreasing order; a link
+ * that is out of range, not decreasing, or lands on another symbol's slot is
+ * stale (left from an earlier log) and ends it: every entry d has in the
+ * current log was made after the first one, which is where a stale link can
+ * start.  Called whatever d's mark: bumping a committed binding resets the mark
+ * to 0 while its entries are still logged. */
 void eval_dep_forget(SymbolDef* d) {
-    if (g_dep_log_n == 0) return;
-    for (size_t i = 0; i < g_dep_log_n; i++)
-        if (g_dep_log[i] == d) g_dep_log[i] = NULL;
+    uint32_t i = d->dep_log_idx;
+    uint32_t bound = (uint32_t)g_dep_log_n;
+    while (i < bound && g_dep_log[i].d == d) {
+        g_dep_log[i].d = NULL;
+        bound = i;
+        i = g_dep_log[i].prev;
+    }
+    d->dep_log_idx = DEP_LOG_NONE;
 }
 
 /* ---- No-fire memo ---------------------------------------------------------
@@ -487,13 +513,13 @@ static void nofire_store(SymbolDef* d, Expr* e) {
 /* A certificate was issued: commit what its frame read. */
 static void dep_log_commit(size_t from) {
     for (size_t i = from; i < g_dep_log_n; i++)
-        if (g_dep_log[i] && g_dep_log[i]->inert_observed == 1) g_dep_log[i]->inert_observed = 2;
+        if (g_dep_log[i].d && g_dep_log[i].d->inert_observed == 1) g_dep_log[i].d->inert_observed = 2;
 }
 
 /* The outermost frame ended: clear the marks no certificate committed. */
 static void dep_log_release(void) {
     for (size_t i = 0; i < g_dep_log_n; i++)
-        if (g_dep_log[i] && g_dep_log[i]->inert_observed == 1) g_dep_log[i]->inert_observed = 0;
+        if (g_dep_log[i].d && g_dep_log[i].d->inert_observed == 1) g_dep_log[i].d->inert_observed = 0;
     g_dep_log_n = 0;
 }
 static const Expr* g_dep_cert_node = NULL;

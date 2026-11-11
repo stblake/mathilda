@@ -5196,3 +5196,13 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
 - Trap: substituting into an unevaluated Integrate[g(W), W] makes the integration variable an expression (Integrate[.., x + y[x]]). Use a definite Inactive[Integrate][g(K), {K, 1, s}] over a SYMBOL dummy; D's Leibniz rule handles that, not an indexed K[1] (yet).
 - Trap (again, see 2026-11-10): Do iterators are not renamed; a corpus record spelling r (Black-Scholes) recursed forever under Do[.., {r, recs}]. Prefix every iterator in corpus-driving .m scripts.
 - Pattern: a corpus whose FAIL count is gated separately from non-PASS finds wrong answers on day one (11 here); the ODE gate lumps them together and its prelude accepts implicit answers unverified.
+
+## 2026-11-11: sample a "hung" process before theorising (dsolve_tests t_m26, v0.6504)
+- Two sessions spent hours on a "heap/timing heisenbug" with theories about TimeConstrained
+  async-defer, the context stack, and re-entry guards. One `sample PID 5` of a live hung
+  process settled it in a minute: 93% of samples were in eval_dep_forget, an O(n^2) scan
+  whose n depends on earlier tests. "Vanishes when I add printf" plus "needs load" also
+  fits a superlinear cost close to the alarm, not only memory corruption.
+- Rule: for any hang or timeout, take a profile of the live process (macOS `sample`, Linux
+  `perf top -p`) and read the top-of-stack histogram BEFORE forming a hypothesis. A deep
+  stack truncates the call-graph root; the histogram is still exact.

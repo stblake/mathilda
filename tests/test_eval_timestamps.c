@@ -908,6 +908,36 @@ static void test_inert_trig_heads(void) {
     eval_str_is("Clear[te, tx, tk, ts, ty, tt, tz]", "Null");
 }
 
+/* Module locals reclaimed inside one long dispatch frame.  Each reclaimed local
+ * leaves the dependency log; eval_dep_forget used to scan the WHOLE log for it,
+ * and the log lives as long as the outermost frame, so a rule condition (or a
+ * DSolve cascade) reclaiming n locals cost O(n^2): t(80000)/t(40000) was 3.6,
+ * and dsolve_tests' t_m26 ran past its 400 s alarm on CI.  It now follows the
+ * local's own chain of entries: linear, a doubling ratio near 2.  The best of
+ * three runs per size keeps the ratio stable under load. */
+static double dep_reclaim_time(int n, int tag) {
+    char buf[160];
+    double best = 1e30;
+    for (int r = 0; r < 3; r++) {
+        snprintf(buf, sizeof buf, "First[AbsoluteTiming[bigR[%d, %d]]]", n, 10 * tag + r);
+        Expr* e = parse_expression(buf);
+        Expr* v = evaluate(e);
+        double t = v && v->type == EXPR_REAL ? v->data.real : 1e30;
+        if (t < best) best = t;
+        expr_free(v); expr_free(e);
+    }
+    return best;
+}
+static void test_dep_log_reclaim_linear(void) {
+    eval_str_is("bigR[n_, x_] /; (Do[Module[{m}, m = k; m + 1], {k, n}]; False) := 0; "
+                "bigR[3, 0]", "bigR[3, 0]");
+    double t1 = dep_reclaim_time(40000, 1), t2 = dep_reclaim_time(80000, 2);
+    if (!(t2 < 3.0 * t1))
+        fprintf(stderr, "  reclaim scaling: t(40000) = %g s, t(80000) = %g s\n", t1, t2);
+    ASSERT(t2 < 3.0 * t1);
+    eval_str_is("Clear[bigR]", "Null");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -938,6 +968,7 @@ int main(void) {
     TEST(test_inert_invalidated_by_what_it_relies_on);
     TEST(test_inert_trig_heads);
     TEST(test_dep_certified_call_invalidated_by_its_dependencies);
+    TEST(test_dep_log_reclaim_linear);
 
     printf("All eval-timestamp tests passed!\n");
     return 0;

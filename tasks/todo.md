@@ -26,16 +26,13 @@ Corpus: DSolve_test_status/pde/ (Abbasi "PDE in CAS", 2011 records; README.md, S
 - [ ] Waves W0..W9 (DSOLVE_PDE_PLAN.md §2), each to the §3 definition of done
 - [x] v0.6502: fit rebases indefinite integrals (Duhamel form; no Integrate[., 0]);
   LinearConstantCoefficients no longer declines such IVPs; g_nh_active registered for TC unwind
-- [ ] **dsolve_tests intermittent SIGALRM in t_m26_general_forcing (CI + local under load)** --
-  NOT fixed by v0.6502.  Heap/timing heisenbug: vanishes when printf probes are added or a
-  setvbuf is changed; needs ~100 earlier tests + parallel load.  Stalled stack (lldb):
-  check_true > builtin_dsolve > dsolve_run > dsolve_kovacic_try > second_solution >
-  kv_bounded > TimeConstrained > Integrate > try_parallelmixedspecial > integrate_pms >
-  TimeConstrained > .m (With/Block/Catch).  Peer trace: tc_async_deferred == 1 throughout
-  the hung process -> budgets cannot fire asynchronously.  Every t_m26 call is < 0.4 s in a
-  fresh process.  Next: ASan/UBSan dispatch (tests.yml `sanitize: true`, filter dsolve_tests)
-  and audit the tc_async_deferred increment/decrement pairs for an unwind that skips the
-  decrement.
+- [x] **dsolve_tests intermittent SIGALRM in t_m26_general_forcing** -- FIXED v0.6504.
+  It was not a stall: `sample` of a hung process showed 93% of samples in eval_dep_forget
+  (Module-local reclamation scanning the whole dependency log, O(n^2) under one long
+  dispatch frame; the log size depends on earlier tests, hence the heisenbug).  The log
+  now chains each symbol's entries, and removal is unconditional, which also closes a
+  use-after-free (a mark reset to 0 by a binding bump left dangling entries).
+  6 parallel runs: all 400 s alarms before, 152 s pass after.
 - Pre-existing ODE gate failures (identical at v0.6496 record by record, so not this session):
   2.2.1 (28, 32, 35), 2.2.16 (1505/1508/1573 UNEVAL, **1582 and 1592 FAIL** -- 1592 is the
   separable IVP y' == 2 x y (1 + y^2), y(0) == 1 returning a 0/0-at-0 branch pair), 2.2.35,
