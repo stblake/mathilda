@@ -571,6 +571,34 @@ static void nl_collect_poles(Expr* expr, Expr* x, Expr* a, Expr* b, PoleSet* s, 
     nl_collect_trig_poles(expr, x, a, b, s, as);
 }
 
+/* Branch points of the antiderivative: the interior real zeros of the
+ * argument of every Log[g] / ExpIntegralEi[g] in F.  Where the integrand is
+ * complex on part of (a, b) -- Log of a quantity that changes sign -- F's
+ * branch convention need not match f's across such a point: the antiderivative
+ * x Log[u] - E^(-5/6) Ei[u] of Log[u], u = 5/6 + Log[x], jumps by I Pi x0 at
+ * u(x0) = 0, because Ei is real on the negative axis while Log is not, so the
+ * telescoping F(b) - F(a) over [0, 1] loses the integral's I Pi E^(-5/6).
+ * Splitting at those points lets each piece be closed by one-sided limits.
+ * A point whose placement is undecidable is simply not added (the complex
+ * cross-check in step 4b' still guards the value). */
+static void nl_collect_branch_points(Expr* F, Expr* x, Expr* a, Expr* b,
+                                     PoleSet* s, Expr* as) {
+    if (!F || F->type != EXPR_FUNCTION) return;
+    if ((head_name_is(F, "Log") || head_name_is(F, "ExpIntegralEi")) &&
+        F->data.function.arg_count == 1 &&
+        contains_symbol(F->data.function.args[0], x)) {
+        PoleSet tmp; poleset_init(&tmp);
+        nl_add_zero_roots(F->data.function.args[0], x, a, b, &tmp, as);
+        if (!tmp.undecidable && !tmp.symbolic)
+            for (size_t i = 0; i < tmp.n; i++)
+                poleset_insert(s, expr_copy(tmp.pts[i]), tmp.vals[i]);
+        poleset_free(&tmp);
+    }
+    nl_collect_branch_points(F->data.function.head, x, a, b, s, as);
+    for (size_t i = 0; i < F->data.function.arg_count; i++)
+        nl_collect_branch_points(F->data.function.args[i], x, a, b, s, as);
+}
+
 /* -------------------------------------------------------------------------
  * Boundary evaluation of the antiderivative.
  * ---------------------------------------------------------------------- */
@@ -653,6 +681,31 @@ static Expr* nl_limit(Expr* F, Expr* x, Expr* target, NLDir dir, Expr* as) {
     return eval_take(call);
 }
 
+/* True when substituting x -> target into F evaluates some non-arithmetic
+ * head at an infinite argument: F = ExpIntegralEi[Log[x] - 7/3 I] at x = 0
+ * substitutes to Ei[-Infinity] = 0, but the argument tends to -Infinity BELOW
+ * Ei's branch cut and the true boundary value is -I Pi.  The evaluator's
+ * c + (-Infinity) = -Infinity has discarded the approach direction, so such a
+ * boundary must be closed by the Limit engine, which keeps it.  (A head that
+ * is continuous at that infinity gets the same value from Limit.) */
+static bool nl_head_at_infinite_arg(Expr* F, Expr* x, Expr* target) {
+    if (!F || F->type != EXPR_FUNCTION || !contains_symbol(F, x)) return false;
+    bool arith = head_name_is(F, "Plus") || head_name_is(F, "Times") ||
+                 head_name_is(F, "Power") || head_name_is(F, "List");
+    for (size_t i = 0; i < F->data.function.arg_count; i++) {
+        Expr* ai = F->data.function.args[i];
+        if (!contains_symbol(ai, x)) continue;
+        if (nl_head_at_infinite_arg(ai, x, target)) return true;
+        if (arith || F->data.function.head->type != EXPR_SYMBOL) continue;
+        Expr* v = eval_take(mk_fn1("Quiet", mk_fn2("ReplaceAll", expr_copy(ai),
+                                   mk_fn2("Rule", expr_copy(x), expr_copy(target)))));
+        bool inf = v && (nl_is_infinite(v) || head_name_is(v, "DirectedInfinity"));
+        if (v) expr_free(v);
+        if (inf) return true;
+    }
+    return false;
+}
+
 /* Evaluate F at `target`, approaching per `dir`.  Uses direct substitution
  * (Refine'd under `as`) at ordinary finite points and the Limit engine at
  * infinite / singular points (or when substitution is itself singular). */
@@ -686,7 +739,8 @@ static Expr* nl_eval_at(Expr* F, Expr* x, Expr* target, NLDir dir, Expr* as) {
              * path -- and it is a strictly better answer than the one-sided
              * Limit, which the engine may leave unevaluated. */
             out = sub;
-        } else if (nl_is_finite_closed(sub, x)) {
+        } else if (nl_is_finite_closed(sub, x) &&
+                   !nl_head_at_infinite_arg(F, x, target)) {
             out = sub;
         } else {
             if (sub) expr_free(sub);
@@ -1335,6 +1389,15 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
         }
     }
 
+    /* 2d. A real-looking integrand that is complex on part of (a, b): split
+     * also at the antiderivative's interior branch points (see
+     * nl_collect_branch_points); the value is then checked against a complex
+     * NIntegrate in step 4b'. */
+    bool f_complex_inside = !contains_head(f, "Complex") &&
+                            nl_complex_valued_inside(f, x, a, b);
+    if (f_complex_inside)
+        nl_collect_branch_points(F, x, a, b, &poles, assumptions);
+
     /* 3. Breakpoints [a, poles..., b] and the telescoping sum. */
     size_t nbp = poles.n + 2;
     Expr** bp = malloc(nbp * sizeof(*bp));
@@ -1412,12 +1475,21 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
          * value is complex legitimately, and is accepted only if it agrees with
          * a complex NIntegrate (the branch convention of the antiderivative
          * must match the integrand's on the whole interval). */
-        f_complex = nl_complex_valued_inside(f, x, a, b);
+        f_complex = f_complex_inside;
         if (!f_complex) {
             integrate_emit_idiv(f, a, b);
             expr_free(total);
             return NULL;
         }
+        if (!nl_crosscheck_complex_ok(f, x, a, b, total)) {
+            expr_free(total);
+            return NULL;
+        }
+    } else if (f_complex_inside) {
+        /* A REAL value for an integrand that is complex on part of (a, b): the
+         * imaginary parts may cancel, or the antiderivative's branch convention
+         * may have dropped them.  Only a complex NIntegrate can tell. */
+        f_complex = true;
         if (!nl_crosscheck_complex_ok(f, x, a, b, total)) {
             expr_free(total);
             return NULL;
