@@ -1699,6 +1699,100 @@ static Expr* asymptotic_expansion_2arg(const char* head, const Expr* order,
     return semi_expand_series(fd, d, arg, nterms);
 }
 
+/* True if e mentions an unresolved real/imaginary-part head (Re, Im, Arg,
+ * Conjugate, Abs): a Refine that left one behind could not decide it. */
+static bool has_reim_head(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, SYM_Re) || head_is(e, SYM_Im) || head_is(e, SYM_Arg) ||
+        head_is(e, SYM_Conjugate) || head_is(e, SYM_Abs))
+        return true;
+    if (has_reim_head(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_reim_head(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* The side of ExpIntegralEi's branch cut that its argument g approaches as
+ * x -> +oo: the eventual sign of Im[g] (-1, 0, +1), or 2 when it cannot be
+ * decided.  Ei's asymptotic expansion at infinity carries a constant that
+ * the Series E^y (1/y + 1/y^2 + ...) omits (DLMF 6.12.1 with 6.2.4):
+ *     Ei[z] ~ E^z/z (1 + 1/z + 2!/z^2 + ...) + I Pi Sign[Im[z]],
+ * uniformly in both directions |z| -> oo off the real axis; on the real axis
+ * (real g) the constant is 0.  So Ei[-x - c I] -> -I Pi for c > 0, not 0.
+ * x is real (the mrv variable); every other symbol must have its Im decided
+ * by the ambient $Assumptions (Limit's Assumptions), else 2. */
+static int ei_branch_side(const Expr* g, const Expr* x) {
+    Expr* assum = mk_fn2("And",
+        mk_fn2("Greater", expr_copy((Expr*)x), mk_int(0)),
+        mk_sym("$Assumptions"));
+    Expr* im = simp(mk_fn2("Refine", mk_fn1("Im", expr_copy((Expr*)g)), assum));
+    int s = 2;
+    if (!im) return 2;
+    if (is_lit_zero(im)) {
+        s = 0;
+    } else if (has_reim_head(im)) {
+        s = 2;
+    } else if (!has_x(im, x)) {
+        Expr* sg = simp(mk_fn1("Refine", mk_fn1("Sign", expr_copy(im))));
+        if (sg && sg->type == EXPR_INTEGER &&
+            sg->data.integer >= -1 && sg->data.integer <= 1)
+            s = (int)sg->data.integer;
+        if (sg) expr_free(sg);
+    } else {
+        int saved = g_fail; g_fail = 0;
+        int r = gz_sign(im, x);
+        if (!g_fail) s = r;
+        g_fail = saved;
+    }
+    expr_free(im);
+    return s;
+}
+
+/* Ei[g] -> its asymptotic expansion plus the branch constant I Pi side
+ * (ei_branch_side); NULL when the side is undecidable. Consumes nothing. */
+static Expr* ei_asymptotic(const Expr* g, const Expr* x, int nterms) {
+    int side = ei_branch_side(g, x);
+    if (side == 2) return NULL;
+    Expr* r = asymptotic_expansion(SYM_ExpIntegralEi, g, nterms);
+    if (side != 0)
+        r = simp(mk_plus(r, mk_times(mk_int(side),
+                                     mk_times(mk_sym("I"), mk_sym("Pi")))));
+    return r;
+}
+
+/* Ei[g] for g -> 0 (DLMF 6.6.1-6.6.2, Mathematica's branch convention):
+ *     Ei[z] = EulerGamma + (Log[z] - Log[1/z])/2 + Sum_{k>=1} z^k/(k k!),
+ * whose logarithmic part is Log[z] off the negative real axis and Log[-z] on
+ * it (Ei is real there).  The convergent tail is truncated at nterms and
+ * carries the remainder c g^(nterms+1) like every other isolated node.  NULL
+ * when the side of the cut g approaches from is undecidable. */
+static Expr* ei_at_zero(const Expr* g, const Expr* x, int nterms) {
+    int side = ei_branch_side(g, x);
+    if (side == 2) return NULL;
+    Expr* lg;
+    if (side == 0) {
+        int saved = g_fail; g_fail = 0;
+        int s = gz_sign(g, x);
+        bool bad = g_fail || s == 0;
+        g_fail = saved;
+        if (bad) return NULL;
+        lg = mk_log(s > 0 ? expr_copy((Expr*)g) : mk_neg(expr_copy((Expr*)g)));
+    } else {
+        lg = mk_log(expr_copy((Expr*)g));
+    }
+    Expr* r = mk_plus(mk_sym("EulerGamma"), lg);
+    int64_t fact = 1;
+    for (int k = 1; k <= nterms; k++) {
+        fact *= k;
+        Expr* term = mk_times(mk_pow(mk_int((int64_t)k * fact), mk_int(-1)),
+                              mk_pow(expr_copy((Expr*)g), mk_int(k)));
+        r = mk_plus(r, term);
+    }
+    r = mk_plus(r, mk_times(semi_remainder_coef(),
+                            mk_pow(expr_copy((Expr*)g), mk_int(nterms + 1))));
+    return simp(r);
+}
+
 /* Rewrite every semi-tractable node F[g] (g -> +/-oo) as its exp-log
  * asymptotic expansion; recurse bottom-up so nested arguments are isolated
  * first. Leaves the node untouched when g's limit is finite/undecidable. */
@@ -1721,6 +1815,7 @@ static Expr* isolate_semitractable(const Expr* e, const Expr* x, int nterms) {
             if (is_sym_name(L, "Infinity")) cls = 1;
             else if (is_neg_infinity(L))    cls = -1;
         }
+        bool L0_is_zero = !lfail && L && is_lit_zero(L);
         if (L) expr_free(L);
 
         bool is_loggamma = (hn == SYM_LogGamma);
@@ -1733,6 +1828,12 @@ static Expr* isolate_semitractable(const Expr* e, const Expr* x, int nterms) {
                                                     g2, nterms);
                 expr_free(g2);
                 return simp(r);
+            }
+            if (hn == SYM_ExpIntegralEi) {
+                Expr* r = ei_asymptotic(g2, x, nterms);
+                if (!r) return mk_fn1(hn, g2);   /* undecidable side: gap */
+                expr_free(g2);
+                return r;
             }
             if (hn == SYM_Gamma) {
                 /* Gamma[g] = Exp[LogGamma[g]]: build the additive Stirling tower
@@ -1749,8 +1850,9 @@ static Expr* isolate_semitractable(const Expr* e, const Expr* x, int nterms) {
         if (cls == -1 && !is_loggamma && !two_arg && !is_zeta) {
             if (hn == SYM_ExpIntegralEi) {
                 /* Ei's asymptotic series E^y(1/y+1/y^2+...) is valid for
-                 * y -> -oo as well (E^y -> 0). */
-                Expr* r = asymptotic_expansion(hn, g2, nterms);
+                 * y -> -oo as well (E^y -> 0), plus the branch constant. */
+                Expr* r = ei_asymptotic(g2, x, nterms);
+                if (!r) return mk_fn1(hn, g2);   /* undecidable side: gap */
                 expr_free(g2);
                 return r;
             }
@@ -1763,6 +1865,11 @@ static Expr* isolate_semitractable(const Expr* e, const Expr* x, int nterms) {
             return (hn == SYM_Erf)
                  ? simp(mk_neg(r))
                  : simp(mk_plus(mk_int(2), mk_neg(r)));
+        }
+        if (cls == 0 && hn == SYM_ExpIntegralEi && !lfail && L0_is_zero) {
+            /* Ei's logarithmic branch point: g -> 0. */
+            Expr* r = ei_at_zero(g2, x, nterms);
+            if (r) { expr_free(g2); return r; }
         }
         /* finite / undecidable / LogGamma at -oo / 2-arg heads at -oo (poles,
          * complex/oscillatory negative-argument regime): keep the node (honest

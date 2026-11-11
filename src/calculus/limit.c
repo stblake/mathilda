@@ -2044,6 +2044,22 @@ static Expr* layer_compose_at_infinity(Expr* f, LimitCtx* ctx) {
         return NULL;
     }
 
+    /* ExpIntegralEi has its branch cut on the negative real axis, so its value
+     * at -Infinity depends on the side the argument approaches from:
+     * Ei[-t + c I] -> I Pi Sign[c] (DLMF 6.12.1 with 6.2.4), and the fold
+     * Ei[-Infinity] = 0 holds only for a real argument.  Fold only when the
+     * inner argument is provably real (x real, plus the ambient assumptions);
+     * otherwise defer to the Gruntz layer, which adds the branch constant. */
+    if (head->data.symbol.name == SYM_ExpIntegralEi && is_neg_infinity(lim_inner)) {
+        Expr* assum = mk_fn2("And",
+            mk_fn2("Element", expr_copy(ctx->x), mk_sym("Reals")),
+            mk_sym("$Assumptions"));
+        Expr* im = simp(mk_fn2("Refine", mk_fn1("Im", expr_copy(inner)), assum));
+        bool real_arg = im && is_lit_zero(im);
+        if (im) expr_free(im);
+        if (!real_arg) { expr_free(lim_inner); return NULL; }
+    }
+
     /* Apply the head to the infinite inner limit and let the builtin evaluate
      * it. mk_fn1 adopts lim_inner (via expr_new_function). */
     Expr* val = simp(mk_fn1(head->data.symbol.name, lim_inner));
