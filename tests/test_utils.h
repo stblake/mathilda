@@ -158,6 +158,10 @@ static inline Expr* test_delist(Expr* r) {
 #ifdef __GNUC__
 __attribute__((constructor))
 static void set_timeout() {
+    /* Line-buffer stdout: under ctest stdout is a pipe (block-buffered), and a
+     * suite killed by SIGALRM loses the buffer -- the log then cannot name the
+     * test that was running (dsolve_tests on CI, 2026-11-10). */
+    setvbuf(stdout, NULL, _IOLBF, 0);
     alarm(120);
 }
 #endif

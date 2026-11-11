@@ -183,6 +183,20 @@ static bool hg_eq(const Expr* u, const Expr* v) {
  * then the formal value, as for symbolic parameters). */
 static int hg_re_positive(const Expr* e) {
     if (!expr_is_numeric_quantity(e)) return -1;
+#ifndef USE_MPFR
+    /* No-MPFR build: decide on the machine value's real part. */
+    Expr* mv = numericalize_machine_unplanned(e);
+    const Expr* r = mv;
+    if (r && r->type == EXPR_FUNCTION && r->data.function.arg_count == 2
+        && r->data.function.head->type == EXPR_SYMBOL
+        && r->data.function.head->data.symbol.name == SYM_Complex)
+        r = r->data.function.args[0];
+    int ms = -1;
+    if (r && r->type == EXPR_REAL)    ms = r->data.real > 0.0 ? 1 : 0;
+    if (r && r->type == EXPR_INTEGER) ms = r->data.integer > 0 ? 1 : 0;
+    if (mv) expr_free(mv);
+    return ms;
+#else
     mpfr_t re, im;
     mpfr_init2(re, 128); mpfr_init2(im, 128);
     bool inexact = false;
@@ -196,6 +210,7 @@ static int hg_re_positive(const Expr* e) {
     mpfr_clear(re); mpfr_clear(im);
     if (nv) expr_free(nv);
     return s;
+#endif
 }
 
 /* Gate a closed form on the convergence condition Re(s) > 0, s owned. */

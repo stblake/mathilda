@@ -103,6 +103,12 @@ static const Probe PROBES[] = {
     { "Rescale",           "Rescale[x, {0., 4.}]" },
     { "HypergeometricPFQ", "HypergeometricPFQ[{1.5}, {2.5}, x]" },
     { "MeijerG", "MeijerG[{{1/3}, {1/4}}, {{1/5, 1/6}, {1/7}}, x]" },
+    /* 6- and 7-ary: beyond PROBE_MAXARITY, so the generic probe never forms
+     * a call with the right arity and reports a gap that is not there. */
+    { "AppellF1", "AppellF1[0.5, 0.2, 0.3, 1.5, x, 0.1]" },
+    { "AppellF2", "AppellF2[0.5, 0.2, 0.3, 1.5, 1.7, x, 0.1]" },
+    { "AppellF3", "AppellF3[0.5, 0.2, 0.3, 0.4, 1.5, x, 0.1]" },
+    { "AppellF4", "AppellF4[0.5, 0.2, 1.3, 1.5, x, 0.01]" },
 };
 static const char* probe_for(const char* nm) {
     for (size_t i = 0; i < sizeof PROBES / sizeof PROBES[0]; i++)

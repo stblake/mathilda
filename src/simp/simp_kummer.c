@@ -50,6 +50,47 @@
 #define KF_MAX_N      12
 #define KF_BITS       320
 
+/* ------------------------------------- helpers shared by every build -- */
+
+/* The field engine below needs MPFR and FLINT; these expression helpers
+ * are also used by simp_root_to_radicals, which is built unconditionally. */
+
+static bool kf_head(const Expr* e, const char* h) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == h;
+}
+
+static bool kf_rational(const Expr* e, mpq_t out) {
+    if (e->type == EXPR_INTEGER) { mpq_set_si(out, (long)e->data.integer, 1); return true; }
+    if (e->type == EXPR_BIGINT)  { mpq_set_z(out, e->data.bigint); return true; }
+    if (kf_head(e, SYM_Rational) && e->data.function.arg_count == 2) {
+        mpq_t a, b; mpq_init(a); mpq_init(b);
+        bool ok = kf_rational(e->data.function.args[0], a) && kf_rational(e->data.function.args[1], b)
+               && mpq_sgn(b);
+        if (ok) mpq_div(out, a, b);
+        mpq_clear(a); mpq_clear(b);
+        return ok;
+    }
+    return false;
+}
+
+
+static int64_t kf_gcd(int64_t a, int64_t b) { if (a < 0) a = -a; while (b) { int64_t t = a % b; a = b; b = t; } return a; }
+
+static Expr* kf_fn2(const char* h, Expr* a, Expr* b) {
+    return expr_new_function(expr_new_symbol(h), (Expr*[]){ a, b }, 2);
+}
+/* an integer node, machine-sized when it fits (a BigInt 2 is not the
+ * Integer 2: Sqrt[BigInt 2] would never cancel against Sqrt[2]) */
+static Expr* kf_z_expr(const mpz_t z) { return expr_bigint_normalize(expr_new_bigint_from_mpz(z)); }
+static Expr* kf_q_expr(const mpq_t q) {
+    Expr* n = kf_z_expr(mpq_numref(q));
+    if (mpz_cmp_ui(mpq_denref(q), 1) == 0) return n;
+    return kf_fn2(SYM_Times, n, kf_fn2(SYM_Power, kf_z_expr(mpq_denref(q)), expr_new_integer(-1)));
+}
+
+#if defined(USE_MPFR) && defined(USE_FLINT)
+
 /* ---------------------------------------------------------------- field -- */
 
 typedef struct {
@@ -210,27 +251,6 @@ static int kf_val(const mpq_t q, int64_t p) {
     return v;
 }
 
-/* ------------------------------------------------------- reading an Expr -- */
-
-static bool kf_head(const Expr* e, const char* h) {
-    return e && e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol.name == h;
-}
-
-static bool kf_rational(const Expr* e, mpq_t out) {
-    if (e->type == EXPR_INTEGER) { mpq_set_si(out, (long)e->data.integer, 1); return true; }
-    if (e->type == EXPR_BIGINT)  { mpq_set_z(out, e->data.bigint); return true; }
-    if (kf_head(e, SYM_Rational) && e->data.function.arg_count == 2) {
-        mpq_t a, b; mpq_init(a); mpq_init(b);
-        bool ok = kf_rational(e->data.function.args[0], a) && kf_rational(e->data.function.args[1], b)
-               && mpq_sgn(b);
-        if (ok) mpq_div(out, a, b);
-        mpq_clear(a); mpq_clear(b);
-        return ok;
-    }
-    return false;
-}
-
 /* Factor |z| over small primes; false if a cofactor > 1 remains. */
 static bool kf_factor_small(const mpz_t z, int64_t* ps, int* vs, int* np, int cap) {
     mpz_t t; mpz_init_set(t, z); mpz_abs(t, t);
@@ -262,7 +282,6 @@ static bool kf_radical_atom(const Expr* e, mpq_t q, int64_t* a, int64_t* b) {
     return *b > 1;
 }
 
-static int64_t kf_gcd(int64_t a, int64_t b) { if (a < 0) a = -a; while (b) { int64_t t = a % b; a = b; b = t; } return a; }
 
 /* Collect the generator primes and degrees of e's radicals. */
 static bool kf_collect(const Expr* e, KField* F) {
@@ -370,7 +389,6 @@ static bool kf_read(const KField* F, const Expr* e, KElt* out) {
     return ok;
 }
 
-#if defined(USE_MPFR) && defined(USE_FLINT)
 
 /* basis values: prod p^(e/m) */
 static void kf_basis_values(const KField* F, mpfr_t* bv) {
@@ -444,19 +462,6 @@ static bool kf_recognise(const KField* F, mpfr_t u, mpfr_t* bv, KElt* out) {
     return found;
 }
 
-/* ------------------------------------------------------ building the answer */
-
-static Expr* kf_fn2(const char* h, Expr* a, Expr* b) {
-    return expr_new_function(expr_new_symbol(h), (Expr*[]){ a, b }, 2);
-}
-/* an integer node, machine-sized when it fits (a BigInt 2 is not the
- * Integer 2: Sqrt[BigInt 2] would never cancel against Sqrt[2]) */
-static Expr* kf_z_expr(const mpz_t z) { return expr_bigint_normalize(expr_new_bigint_from_mpz(z)); }
-static Expr* kf_q_expr(const mpq_t q) {
-    Expr* n = kf_z_expr(mpq_numref(q));
-    if (mpz_cmp_ui(mpq_denref(q), 1) == 0) return n;
-    return kf_fn2(SYM_Times, n, kf_fn2(SYM_Power, kf_z_expr(mpq_denref(q)), expr_new_integer(-1)));
-}
 
 /* c^(1/n) * u, term by term: each term a rational times ONE radical of an
  * integer (exponents per prime summed, whole parts pulled out). */
