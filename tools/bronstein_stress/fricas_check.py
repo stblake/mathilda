@@ -28,7 +28,9 @@ def fricas(f, timeout=60):
         return "TIMEOUT"
     out = p.stdout.split("(1) ->", 1)[-1]
     if ">> Error" in out: return "ERROR"
-    if "integral" in out: return "UNEVAL"
+    # an unevaluated integral prints as the integral sign with a dummy variable
+    # (d%A), not as the word "integral"
+    if "integral" in out or "%A" in out or "++" in out: return "UNEVAL"
     if "Type:" in out: return "CLOSED"
     return "ERROR"
 

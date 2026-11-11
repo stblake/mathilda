@@ -790,3 +790,133 @@ Next: Phase 8 (cascade).
   Rerun it on a reduced corpus (no symbolic parameters, one process per
   integrand), then set the budgets from the data.
 
+## Stress campaign and open-gap plan (2026-11-12, after v0.6520)
+
+### What the stress testing found
+
+Tooling: `tools/bronstein_stress/`.
+- `gen.m` is a seeded generator of KNOWN-elementary `f = D[F]` across six families
+  (`alg`, `logxy`, `asinh`, `genus1`, `algres`, `ratb`). `FAMILY=random` gives
+  random `R(x,θ)·Y^k` of unknown verdict.
+- `run.m` runs a batch; `stress.py` is the memory-safe driver, one process per
+  batch, with timeouts.
+- `fricas_check.py` asks FriCAS 1.3.6 about every certificate and decline.
+
+| Run | Cases | Result |
+|---|---|---|
+| Method→Bronstein, seeds 1–3 | 45 | 41 OK, 3 DECLINE, 1 TIMEOUT |
+| Method→Bronstein, seeds 10–39 | 600 | 571 OK, **10 WRONG**, 12 TIMEOUT, 7 DECLINE |
+| the 29 non-OK of that run, after v0.6520 fixes | 29 | 15 OK, 2 DECLINE (genus-1 special residue), 12 TIMEOUT |
+| random family + FriCAS, seeds 100–107 | 160 | 160 certificates; FriCAS agrees on all 160 (unevaluated or "implementation incomplete") |
+| plain Integrate (cascade), seeds 200–207, 60 s | 120 | 109 OK, 0 WRONG, **11 TIMEOUT** (cases Method→Bronstein closes in 0.02–4 s) |
+
+Bugs fixed (v0.6520):
+- a wrong answer from an unverified presentation (`Log[2 + 2x]` → `Log[1 + x]`
+  inside a radical);
+- missing geometry for exponential special places that have value 0;
+- ArcTan in a special-place value integral.
+
+Earlier, in v0.6518, a false certificate came from an unresolved package name.
+
+**FriCAS observations.** FriCAS 1.3.6 answers "implementation incomplete (constant
+residues)" on many mixed integrands, e.g. `Sqrt[Log[x]]` and `1/Sqrt[Log[x]]`. So it
+can neither close nor certify them. These are N3 material for the benchmark.
+
+### Open gaps, by priority
+
+**P0 — soundness hardening** (before anything else):
+1. **Verified-form invariant in Trager too.** `TragerIntegrate` also returns
+   `presentable[...]`, whose fast path is unverified. Trager's integrands have no
+   log inside a radical, so the hazard is latent, but it must be closed. Re-verify
+   or fall back, as `brPresentable` does. Add a regression test.
+2. **Certificate-site audit.** There are 12 `throwNonElementary` sites. Each must be
+   reached only from a validated positive answer (a shape check). Each site gets a
+   unit test that feeds a malformed or unevaluated sub-answer and asserts
+   Decline/Internal, never NonElementary.
+3. **Generator coverage:**
+   - constant factors in every kernel argument (`Log[c x + c]`, `E^(c x + d)`);
+   - two-level towers (`Log[1 + E^x]`, `E^(Log[x]^2)`-type);
+   - a non-constant `lc(G)` and content `d ∈ k` (`x θ + 1`, `x^2 θ^2 + 1`);
+   - exponential cube roots with special residues;
+   - a **perturbed** family (an elementary f plus a non-elementary piece that keeps
+     the residues constant). This exercises the deeper certificates: algebraic
+     part, special reduction, torsion. Each such certificate is checked against
+     FriCAS where FriCAS decides.
+4. **Nightly ctests**:
+   - `bronstein_stress`: fixed seeds, assert zero WRONG/FALSE_CERT/CRASH, with a
+     ratcheting baseline of closes;
+   - `bronstein_fricas_stress`: zero DISAGREE.
+5. **Coverage gate** `tools/check_bronstein_test_coverage.py` with
+   `make check-bronstein-coverage`. This is required by the testing policy and not
+   built yet: every `::usage` name and new builtin must be called from a suite.
+
+**P1 — user-visible quality:**
+6. **Performance of m ≥ 3 answers.** This covers all 12 stress timeouts
+   (`E^(x²)` cube and fourth roots). The components take about 3 s; the time goes
+   to assembling, verifying and presenting huge ζ-laden logs. Plan:
+   - (a) shrink generators: remove k-content and normalise coordinates;
+   - (b) emit conjugate log families as one `RootSum` (Trager's per-orbit form)
+     instead of m explicit ζ-logs;
+   - (c) verify per component (the identity in k(θ)(Y) is already exact),
+     leaving a lighter final PossibleZeroQ;
+   - (d) a presentation budget.
+
+   Acceptance: no stress timeout at 30 s.
+7. **Presentation.** All re-verified:
+   - `Log[-E^x]` → `x`;
+   - `Log[x^6]/2` → `3 Log[x]`;
+   - for m = 2, the pair `c Log[u] − (c/2) Log[N(u)]` → `(c/2) Log[u/σu]`;
+   - drop constant logs;
+   - real ArcTan forms.
+8a. **Cascade grind before the decision procedures.** All 11 cascade timeouts are
+    integrands Bronstein closes in under 5 s. The stage profile names
+    **DerivativeDivides** (stage 12): 89.7 s of a 90 s run, one aborted call,
+    before stages 15b/15c are reached. Fix options, cheapest first:
+    - (a) gate DerivativeDivides' Eliminate/Solve search off when
+      `Integrate\`CascadeGateQ["Bronstein"|"Trager", f, x]` holds. This is the
+      pattern already used to keep PMT off pseudo-elliptic shapes;
+    - (b) move the gated Trager/Bronstein stages ahead of DerivativeDivides for
+      gate-matching integrands only.
+
+    Either must be measured: a reordering can expose latent grind elsewhere, and
+    the closed-form shape of integrands that DerivativeDivides closes today must be
+    kept. Acceptance: the cascade stress run (seeds 200–207) with no timeout at
+    60 s, and `ctest -LE nightly` green.
+8. **Cascade budgets.** Rerun the stage profile on a reduced corpus (no symbolic
+   parameters, one process per integrand). Set `$TragerCascadeBudget` /
+   `$BronsteinCascadeBudget` from the data.
+
+**P2 — coverage inside Shape A** (each a decline today, never a wrong answer):
+9. **Special-place residues on genus ≥ 1.** Two stress declines. Carry the special
+   places through the specialised torsion computation: Trager's
+   `torsionOrderWith[ctx, mk]` accepts an ideal *builder*. Pass one that also
+   builds the point and ramified-place ideals on the shifted frame, mod p. Then
+   test generic principality on the frame (code exists for genus 0).
+10. **Log-like atoms with algebraic coefficients** (ArcTan, RootSum, complex logs)
+    in `brLimitedIntegrate`/`brParamIntegrate`, i.e. the log-case Def 2.10 and the
+    coefficient integrations. Generalise `brLogBasisReduce` to logs over `k(t)`.
+11. **Undecided Risch DE sub-cases in the exponential case** (`RdeSpecialDenomExp`
+    / `RdeBoundDegreeExp` parametric-log-derivative marks). Write `brPolyRDEExp`,
+    a top-down Laurent-polynomial solve analogous to `brPolyRDELog`. Its leading
+    equations never cancel: the homogeneous solution needs θ^(j+g/m) ∈ k̄.
+12. **m ≥ 3 log parts with weight-≥2 coordinates.** Not seen in the stress runs so
+    far. The general projection `(1/m) Σ ζ^{-k} σ^k L` needs ζ adjoined to the
+    residue field.
+13. **Reducible logarithms** (`Log[x^2]` beside `Log[x]`). Today they decline.
+    Rewrite derivative-equivalently with an explicit constant
+    (`Log[x^2] = 2 θ + c`, with c recovered numerically and checked exactly) and let
+    the final verification decide.
+14. **Compositum of radicals.** Use the Kummer split, as Trager's pipeline does.
+15. **Radical γ at special places over a non-empty lower tower.** This needs
+    integration of an algebraic function over k, which is Shape B. It follows #16.
+
+**P3 — scope extensions** (the original plan's later phases):
+16. **Shape B** (Phases 10–11): the radical over Q(x) below the tower. This also
+    unlocks #15.
+17. **Integral generator and benchmark 256** (Phase 9b). The stress generator is
+    its seed: add the N1/N2/N3 filters, the frozen corpus and the benchmark files.
+18. **Phase 12**: a TrigToExp front end with real forms; the [B] pp.155–157 case
+    where η' is a linear combination of logarithmic derivatives.
+
+**Order of work:** 1–5 → 8a → 8 → 6–7 → 9 → 10 → 11 → 13–14 → 17 → 16 (with 15) → 12 → 18.
+
