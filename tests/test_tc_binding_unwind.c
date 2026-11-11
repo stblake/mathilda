@@ -37,7 +37,7 @@ static void test_iterators_unset(void) {
     /* Several iterators, list iterators, real iterators. */
     assert_eval_eq("{TimeConstrained[Table[" SLOW("a1 b1") ", {a1, 1000}, {b1, 1000}], 0.1, ab], a1, b1}",
                    "{ab, a1, b1}", 0);
-    assert_eval_eq("{TimeConstrained[Do[" SLOW("c1") ", {c1, Range[10^5]}], 0.1, ab], c1}",
+    assert_eval_eq("{TimeConstrained[Do[" SLOW("c1") ", {c1, Range[10^6]}], 0.1, ab], c1}",
                    "{ab, c1}", 0);
     assert_eval_eq("{TimeConstrained[Do[" SLOW("r1") ", {r1, 0.5, 10^6}], 0.1, ab], r1}",
                    "{ab, r1}", 0);
