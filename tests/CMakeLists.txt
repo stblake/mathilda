@@ -6354,7 +6354,9 @@ add_test(NAME fortran_form_tests COMMAND fortran_form_tests)
 # lean_form_tests and lean_certify_tests need no Lean; lean_verify_tests runs the
 # real Lean kernel and exits 77 (Skipped) when no Lean 4 >= 4.35 is found;
 # lean_mathlib_tests (Tier 1) also exits 77 unless MATHILDA_LEAN_PROJECT is set.
-foreach(_lean_t lean_form lean_certify lean_verify lean_mathlib)
+# lean_golden_tests needs no Lean: byte identity of every generated certificate
+# against tests/lean_golden/golden.txt (LEAN_GOLDEN_UPDATE=1 rewrites it).
+foreach(_lean_t lean_form lean_certify lean_verify lean_mathlib lean_golden)
     add_executable(${_lean_t}_tests test_${_lean_t}.c $<TARGET_OBJECTS:mathilda_common>)
     target_include_directories(${_lean_t}_tests PRIVATE ../src)
     if(USE_ECM)
@@ -6366,6 +6368,8 @@ foreach(_lean_t lean_form lean_certify lean_verify lean_mathlib)
     add_test(NAME ${_lean_t}_tests COMMAND ${_lean_t}_tests)
 endforeach()
 set_tests_properties(lean_verify_tests lean_mathlib_tests PROPERTIES SKIP_RETURN_CODE 77)
+target_compile_definitions(lean_golden_tests PRIVATE
+    LEAN_GOLDEN_DIR="${CMAKE_CURRENT_SOURCE_DIR}/lean_golden/")
 # Lean -> Mathilda: the core-only Lake package lean/ (tactics shelling out to the
 # built ../Mathilda binary).  Exits 77 (Skipped) when no lake or no binary is found.
 # RUN_SERIAL: it builds into lean/.lake.
