@@ -194,6 +194,8 @@ Out[2]= False
 | `Method` | `Automatic` | The tactic: `"grind"`, `"decide"`, `"omega"`, or any Lean tactic string. It goes into the Lean source file only, never into a shell command. |
 | `TimeConstraint` | `60` | Seconds, mapped to `set_option maxHeartbeats (40000 t) in` on the theorem. This is a deterministic resource bound, not a wall-clock kill. |
 | `Assumptions` | `{}` | Extra hypotheses: `Assumptions -> {x == 1}` gives `∀ x : Int, x = 1 → …`. |
+
+`Domain`, `Method` and `Assumptions` apply to identity claims (`a == b` and the `"Identity"` / `"Factorization"` computations). The other kinds choose their own proof script and number type, and take their hypotheses from the claim itself (`Implies[...]`, `ForAll[vars, cond, ...]`).
 | `Verify` | `True` | `False` generates the source without running Lean (`"Verified" -> Missing["NotChecked"]`). |
 | `LeanExecutable` | `Automatic` | Overrides `$LeanExecutable` for one call. |
 | `LeanProject` | `Automatic` | Overrides `$LeanProject` for one call (`None` forces no project). |
@@ -327,5 +329,7 @@ Out[1]= "fun (v1 v2 : _) => ([1, -v1 - v2] : List _)"
 In[2]:= Lean`Oracle["Pratt", 274179]
 Out[2]= "MATHILDA-FAIL: 274179 is not prime"
 ```
+
+**Demo and design.** [`examples/lean/showcase.m`](../../../examples/lean/README.md) runs every certificate kind end to end with timings, including the "Lean catches the CAS" case, a tampered certificate and the tactics. [`docs/design/lean_integration.md`](../../design/lean_integration.md) explains the architecture, the shell-safety argument and the TrustedSteps of each kind. `tests/scripts/lean_leakcheck.sh` is the leak gate.
 
 **Tests.** `lean_tactics_tests` (`tests/scripts/lean_tactics.sh`) builds the package and elaborates `lean/test/Tactics.lean` (every tactic, `#print axioms` of each, `#mathilda`, and false goals that must fail), `lean/test/Untrusted.lean` (run against `lean/test/bad_oracle.sh`, a fake Mathilda that returns wrong certificates: Lean rejects all three) and `lean/test/Missing.lean` (a missing binary). It is Skipped (exit 77) when no `lake` or no built `Mathilda` is found.
