@@ -791,6 +791,159 @@ static void test_issue133_biquadratic_resultant(void) {
     run_eq("Integrate[(x^2 + x + 1)/(x^4 + 1), {x, -Infinity, Infinity}]", "Sqrt[2] Pi");
 }
 
+/* ---- Issue #133 sweep: rational functions whose log part could carry a
+ * polynomial-in-t content.  The bug class is "the subresultant S(t, x) has a
+ * content that is a polynomial in the residue variable t, and dividing it out
+ * leaves t in a denominator", which then stalls LogToReal over the residue
+ * field.  Each family below is evaluated inside ONE Mathilda expression that
+ * returns the list of failing integrands, so a failure names its inputs.
+ *
+ * A case passes when, within the budget, Integrate returns an answer free of
+ * Integrate / Indeterminate / ComplexInfinity, PossibleZeroQ certifies
+ * D[F, x] == f, and the call took under 3 s (the pre-fix code also had cases
+ * that finished in ~3.7 s instead of hanging -- the slow tail of the same bug).
+ * Every Integrate and PossibleZeroQ call is under TimeConstrained, so a
+ * regression fails the test instead of hanging the suite.
+ *
+ * Coverage was chosen from a 15,500-case sweep (30 denominators x numerators
+ * with small coefficients, default and BronsteinRational routes; all clean
+ * after the fix).  Against the pre-fix binary that sweep flagged exactly the
+ * x^4 + 1 family below (2 timeouts, 3 slow), so the full x^4 + 1 grid is kept;
+ * the other families are slices that pin the surrounding shapes. */
+static const char* ISSUE133_OK_DEF =
+    "Issue133`ok[f_, m_] := Module[{r = AbsoluteTiming[TimeConstrained["
+    "If[m === None, Integrate[f, x], Integrate[f, x, Method -> m]], 15, $Aborted]]}, "
+    "r[[1]] < 3 && FreeQ[r[[2]], Integrate | Indeterminate | ComplexInfinity | $Aborted] && "
+    "TrueQ[TimeConstrained[PossibleZeroQ[D[r[[2]], x] - f], 15, False]]]";
+
+/* Evaluate `Select[list, !ok[#, method]&]` and require {} (no failures). */
+static void assert_issue133_family(const char* label, const char* list_expr,
+                                   const char* method) {
+    Expr* d = parse_expression(ISSUE133_OK_DEF);
+    expr_free(evaluate(d)); expr_free(d);
+    char buf[4096];
+    snprintf(buf, sizeof(buf), "Select[%s, !Issue133`ok[#, %s] &]", list_expr, method);
+    Expr* e = parse_expression(buf);
+    Expr* res = evaluate(e);
+    char* got = expr_to_string(res);
+    if (strcmp(got, "{}") != 0)
+        printf("FAIL: issue #133 family %s (Method %s) failing integrands: %s\n",
+               label, method, got);
+    ASSERT_STR_EQ(got, "{}");
+    free(got); expr_free(e); expr_free(res);
+}
+
+/* Every numerator a + b x + c x^2 + d x^3, a..d in {-1, 0, 1}, over x^4 + 1 --
+ * the family the original bug lived in -- by both routes. */
+static void test_issue133_sweep_x4p1_grid(void) {
+    const char* grid =
+        "(DeleteCases[Flatten[Table[a + b x + c x^2 + d x^3, {a, -1, 1}, {b, -1, 1}, "
+        "{c, -1, 1}, {d, -1, 1}]], 0]/(x^4 + 1))";
+    assert_issue133_family("x^4+1 grid", grid, "None");
+    assert_issue133_family("x^4+1 grid", grid, "\"BronsteinRational\"");
+}
+
+/* Other irreducible / Q-reducible quartics: biquadratics with each sign of the
+ * inner discriminant, scaled leading/constant coefficients, cyclotomic and
+ * palindromic quartics, a non-palindromic irreducible quartic. */
+static void test_issue133_sweep_quartics(void) {
+    const char* fam =
+        "Flatten[Outer[Divide, "
+        "{1 + x + x^2, 1 - x + x^2, 2 + x + x^2, 1 + x + 2 x^2, -1 + x + x^2, "
+        " 1 + 2 x - x^2, x + x^2, 1 + x, 2 - x + x^2}, "
+        "{x^4 + 4, x^4 + 2, 2 x^4 + 1, x^4 + 1/4, x^4 + x^2 + 1, x^4 - x^2 + 1, "
+        " x^4 + 3 x^2 + 1, x^4 + 6 x^2 + 1, x^4 + 4 x^2 + 2, x^4 + 5 x^2 + 5, "
+        " x^4 + x^3 + x^2 + x + 1, x^4 + 2 x^3 + 3 x^2 + 2 x + 2}]]";
+    assert_issue133_family("quartics", fam, "\"BronsteinRational\"");
+}
+
+/* Higher degree and non-squarefree denominators built on the #133 quartic:
+ * a Hermite part ((x^4+1)^2), mixed factors, a pole at 0, sextics, the octic
+ * x^8 + 1 and the quintics x^5 +- 1. */
+static void test_issue133_sweep_higher_degree(void) {
+    const char* fam =
+        "Flatten[Outer[Divide, "
+        "{1 + x + x^2, 1 - x^2 + x^3, 2 + x + x^2 - x^3, x + x^2 + x^3}, "
+        "{(x^4 + 1)^2, (x^2 + 1) (x^4 + 1), x^3 (x^4 + 1), (x - 1) (x^4 + 1), "
+        " (x^4 + x^2 + 1)^2, x^6 + 1, x^6 + x^3 + 1, x^6 - x^3 + 1, x^6 + 3, "
+        " x^6 + x^4 + x^2 + 1, x^8 + 1, x^5 + 1, x^5 - 1}]]";
+    assert_issue133_family("higher degree", fam, "None");
+}
+
+/* Symbolic parameters in the numerator, the denominator, or both. */
+static void test_issue133_sweep_parametric(void) {
+    const char* fam =
+        "{(x^2 + x + 1)/(x^4 + a), (x^2 + b x + 1)/(x^4 + 1), (x^2 + x + 1)/(a x^4 + 1), "
+        " (x^2 + x + 1)/(x^4 + a^4), (x^2 + x + a)/(x^4 + 1), (a x^2 + x + 1)/(x^4 + 1), "
+        " (x^2 + x + 1)/(x^4 + a x^2 + 1), (x^2 + x + 1)/(x^4 + 4 a^4)}";
+    assert_issue133_family("parametric", fam, "None");
+}
+
+/* The invariant itself, below Integrate: the log-part polynomials S_i(t, x)
+ * that IntRationalLogPart hands to LogToReal are polynomials in t and x
+ * (no t in a denominator), across the denominators whose subresultants carry
+ * a t-polynomial content. */
+static void test_issue133_logpart_s_is_polynomial(void) {
+    run_eq("Module[{fs = Flatten[Outer[Divide, "
+           "{1 + x + x^2, 1 - x + x^2, 2 + 2 x + 2 x^2, 1 + 3 x + x^2, x + x^2 + x^3}, "
+           "{x^4 + 1, x^4 + 4, x^4 + x^2 + 1, x^6 + 1, x^8 + 1}]]}, "
+           "Select[fs, Function[f, !TrueQ[TimeConstrained[AllTrue["
+           "Integrate`IntRationalLogPart[f, x, t, RootSum -> False], "
+           "PolynomialQ[#[[2]], {t, x}] &], 15, False]]]]]",
+           "{}");
+    /* the #133 pair, exactly */
+    run_eq("Integrate`IntRationalLogPart[(x^2 + x + 1)/(x^4 + 1), x, t, RootSum -> False]",
+           "{{1 + 96 t^2 + 256 t^4, 3 + 28 t + 16 t^2 + 64 t^3 + 4 x}}");
+}
+
+/* intrat_primitive divides a non-numeric content EXACTLY (it used Expand[p/c],
+ * which leaves every term an uncancelled fraction). */
+static void test_issue133_primitive_polynomial_content(void) {
+    /* the #133 subresultant: content 16 t^2 + 64 t^3 */
+    run_eq("Integrate`Helpers`Content[-16 t^2 - 128 t^3 - 256 t^4 - 16 t^2 x + 256 t^4 x, x]",
+           "16 t^2 + 64 t^3");
+    run_eq("Integrate`Helpers`Primitive[-16 t^2 - 128 t^3 - 256 t^4 - 16 t^2 x + 256 t^4 x, x]",
+           "-1 - 4 t - x + 4 t x");
+    /* a squared factor in the content, and symbolic contents */
+    run_eq("Integrate`Helpers`Primitive[Expand[t (2 t + 1)^2 (x^3 + x/(2 t + 1))], x]",
+           "x + x^3 + 2 t x^3");
+    run_eq("Integrate`Helpers`Primitive[Expand[(t^2 + 1) (x^2 + t x + 1)], x]",
+           "1 + t x + x^2");
+    run_eq("Integrate`Helpers`Primitive[Expand[(a + b) (x - a) (x + 1)], x]",
+           "-a + x - a x + x^2");
+    /* the result is always a polynomial (no negative powers survive) */
+    run_eq("PolynomialQ[Integrate`Helpers`Primitive[Expand[(3 + a) (x^2 - 2 a x) + (3 + a)^2 x], x], {a, x}]",
+           "True");
+    /* numeric content: unchanged behaviour */
+    run_eq("Integrate`Helpers`Primitive[6 x^2 + 4 x + 2, x]", "1 + 2 x + 3 x^2");
+}
+
+/* intsimp_pos_sqrt's quadratic-surd denesting, observed through Integrate:
+ * these quadratics put Sqrt[a + b Sqrt[c]] into the ArcTan scale.  The
+ * answer must be free of nested radicals when the surd denests, and keep
+ * the nested radical (and stay correct) when it does not. */
+static void test_issue133_quadratic_surd_denesting(void) {
+    /* 3/4 - 1/Sqrt[2] = (1/Sqrt[2] - 1/2)^2 ; 3 + 2 Sqrt[2] = (1 + Sqrt[2])^2 ;
+     * 5 - 2 Sqrt[6] = (Sqrt[3] - Sqrt[2])^2 */
+    const char* denest[] = {
+        "1/(x^2 + 3/4 - 1/Sqrt[2])",
+        "1/(x^2 + 3 + 2 Sqrt[2])",
+        "1/(x^2 + 5 - 2 Sqrt[6])",
+    };
+    for (size_t i = 0; i < sizeof(denest) / sizeof(denest[0]); i++) {
+        char buf[1024];
+        snprintf(buf, sizeof(buf),
+            "TimeConstrained[Module[{r = Integrate[%s, x]}, FreeQ[r, Sqrt[_Plus]] "
+            "&& PossibleZeroQ[D[r, x] - (%s)]], 30, $Aborted]", denest[i], denest[i]);
+        run_eq(buf, "True");
+    }
+    /* 1 + Sqrt[2]: a^2 - b^2 c = -1 is not a square, so no denesting -- a
+     * nested radical (it prints as Sqrt[16 + 16 Sqrt[2]]) must remain */
+    run_eq("TimeConstrained[Module[{r = Integrate[1/(x^2 + 1 + Sqrt[2]), x]}, "
+           "!FreeQ[r, Sqrt[_Plus]] && PossibleZeroQ[D[r, x] - 1/(x^2 + 1 + Sqrt[2])]], 30, $Aborted]",
+           "True");
+}
+
 static void test_opaque_parameter_log_part(void) {
     assert_integral_correct("1/(c[2] - x^2)");
     assert_integral_correct("1/(C[2] - x^2)");
@@ -882,6 +1035,13 @@ int main(void) {
     TEST(test_number_field_repeated_residues);
     TEST(test_square_through_symbolic_radical);
     TEST(test_issue133_biquadratic_resultant);
+    TEST(test_issue133_sweep_x4p1_grid);
+    TEST(test_issue133_sweep_quartics);
+    TEST(test_issue133_sweep_higher_degree);
+    TEST(test_issue133_sweep_parametric);
+    TEST(test_issue133_logpart_s_is_polynomial);
+    TEST(test_issue133_primitive_polynomial_content);
+    TEST(test_issue133_quadratic_surd_denesting);
 
     printf("All Phase 1-7 (full BronsteinRational pipeline) tests passed!\n");
     return 0;
