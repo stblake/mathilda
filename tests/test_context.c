@@ -21,15 +21,16 @@ static void test_initial_state(void) {
      * Each EndPackage prepends its package context to $ContextPath, so the
      * exported symbols (FullSimplify, RegisterTransforms,
      * SeparablePolynomialDecomposition) resolve under their short names. The
-     * later load comes first. The current context returns to Global` and
-     * System` stays last. */
+     * later load comes first; the Lean 4 package (Lean`) loads last. The
+     * current context returns to Global` and System` stays last. */
     ASSERT_STR_EQ(context_current(), "Global`");
-    ASSERT(context_path_count() == 5);
-    ASSERT_STR_EQ(context_path_at(0), "SeparablePolynomialDecomposition`");
-    ASSERT_STR_EQ(context_path_at(1), "FullSimplify`");
-    ASSERT_STR_EQ(context_path_at(2), "Global`");
-    ASSERT_STR_EQ(context_path_at(3), "Mathilda`");   /* Mathilda-only builtins */
-    ASSERT_STR_EQ(context_path_at(4), "System`");
+    ASSERT(context_path_count() == 6);
+    ASSERT_STR_EQ(context_path_at(0), "Lean`");
+    ASSERT_STR_EQ(context_path_at(1), "SeparablePolynomialDecomposition`");
+    ASSERT_STR_EQ(context_path_at(2), "FullSimplify`");
+    ASSERT_STR_EQ(context_path_at(3), "Global`");
+    ASSERT_STR_EQ(context_path_at(4), "Mathilda`");   /* Mathilda-only builtins */
+    ASSERT_STR_EQ(context_path_at(5), "System`");
 }
 
 static void test_resolve_bare_builtin(void) {
@@ -131,7 +132,7 @@ static void test_dollar_context_and_path(void) {
      * by core_init, leave their contexts on $ContextPath (see
      * test_initial_state). */
     assert_eval_eq("$ContextPath",
-                   "{\"SeparablePolynomialDecomposition`\", \"FullSimplify`\", \"Global`\", \"Mathilda`\", \"System`\"}", 0);
+                   "{\"Lean`\", \"SeparablePolynomialDecomposition`\", \"FullSimplify`\", \"Global`\", \"Mathilda`\", \"System`\"}", 0);
 }
 
 static void test_begin_changes_context(void) {

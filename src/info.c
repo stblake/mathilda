@@ -4656,6 +4656,13 @@ void info_init(void) {
         "FormatType -> FortranForm, PageWidth -> n]), an expression wider than the page\n"
         "is laid out as fixed-form Fortran with \"     -\" continuation lines.\n"
         "Format[f[...], FortranForm] := rhs rules apply.");
+    symtab_set_docstring("LeanForm",
+        "LeanForm[expr]\n"
+        "\tprints as Lean 4 syntax for expr: x ^ 2, a * b, (3 / 4) for rationals,\n"
+        "\t= ≠ < ≤ ∧ ∨ ¬ → ↔, ∀ x y, body for ForAll, fun x => b for Function,\n"
+        "\t[a, b] for lists, Real.log x for Log[x], f x y for f[x, y]; other symbols as\n"
+        "\t«name». ToString[expr, LeanForm] gives the text as a string.\n"
+        "Format[f[...], LeanForm] := rhs rules apply.");
     symtab_set_docstring("CForm",
         "CForm[expr]\n"
         "\tprints as a C language version of expr: Power(x,2), f(x,y), Complex(0,1),\n"

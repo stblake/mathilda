@@ -886,10 +886,11 @@ install: $(TARGET) libmathilda.a $(SHLIB)
 	$(INSTALL) -d "$(DESTDIR)$(bindir)"
 	$(INSTALL_PROGRAM) $(TARGET) "$(DESTDIR)$(bindir)/$(TARGET)"
 	@# Recreate the runtime module tree, preserving simp/, simp/transforms/,
-	@# mixed/. Only *.m files are copied (editor backups etc. are skipped).
+	@# mixed/, lean/. Only *.m files (and lean/'s *.lean prelude) are copied
+	@# (editor backups etc. are skipped).
 	cd $(SRC_DIR)/internal && find . -type d \
 	    -exec $(INSTALL) -d "$(DESTDIR)$(pkgdatadir)/internal/{}" \;
-	cd $(SRC_DIR)/internal && find . -type f -name '*.m' \
+	cd $(SRC_DIR)/internal && find . -type f \( -name '*.m' -o -name '*.lean' \) \
 	    -exec $(INSTALL_DATA) '{}' "$(DESTDIR)$(pkgdatadir)/internal/{}" \;
 	@# Embedding API (issue #88): header, static + shared library, pkg-config.
 	$(INSTALL) -d "$(DESTDIR)$(includedir)" "$(DESTDIR)$(libdir)" "$(DESTDIR)$(pkgconfigdir)"

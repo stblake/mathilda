@@ -479,6 +479,8 @@ set(COMMON_SRC
     ../src/print.c
     ../src/print_latex.c
     ../src/print_fortran.c
+    ../src/print_lean.c
+    ../src/lean_run.c
     ../src/plus.c
     ../src/times.c
     ../src/arithmetic.c
@@ -6346,6 +6348,22 @@ else()
     target_link_libraries(fortran_form_tests gmp m)
 endif()
 add_test(NAME fortran_form_tests COMMAND fortran_form_tests)
+
+# Lean 4 integration (src/print_lean.c, src/lean_run.c, src/internal/lean/Lean.m).
+# lean_form_tests and lean_certify_tests need no Lean; lean_verify_tests runs the
+# real Lean kernel and exits 77 (Skipped) when no Lean 4 >= 4.35 is found.
+foreach(_lean_t lean_form lean_certify lean_verify)
+    add_executable(${_lean_t}_tests test_${_lean_t}.c $<TARGET_OBJECTS:mathilda_common>)
+    target_include_directories(${_lean_t}_tests PRIVATE ../src)
+    if(USE_ECM)
+        target_link_libraries(${_lean_t}_tests gmp m ${ECM_LIB})
+        add_dependencies(${_lean_t}_tests build_ecm)
+    else()
+        target_link_libraries(${_lean_t}_tests gmp m)
+    endif()
+    add_test(NAME ${_lean_t}_tests COMMAND ${_lean_t}_tests)
+endforeach()
+set_tests_properties(lean_verify_tests PROPERTIES SKIP_RETURN_CODE 77)
 
 add_executable(time_constrained_tests test_time_constrained.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(time_constrained_tests PRIVATE ../src)

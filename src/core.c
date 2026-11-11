@@ -157,6 +157,7 @@
 #include "flint_num_bridge.h"   /* flint_cert_binding_clear (timeout unwind) */
 #include "print.h"
 #include "print_fortran.h"
+#include "print_lean.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -902,6 +903,7 @@ void core_init(void) {
     symtab_add_builtin("TeXForm", builtin_texform);
     symtab_add_builtin("FortranForm", builtin_texform);   /* inert wrapper; rendered by print_fortran.c */
     symtab_add_builtin("CForm", builtin_texform);         /* inert wrapper; rendered by print_fortran.c */
+    symtab_add_builtin("LeanForm", builtin_texform);      /* inert wrapper; rendered by print_lean.c */
     symtab_add_builtin("TraditionalForm", builtin_display_form);
     symtab_add_builtin("StandardForm", builtin_display_form);
     symtab_add_builtin("Information", builtin_information);
@@ -969,6 +971,7 @@ void core_init(void) {
     symtab_get_def("TeXForm")->attributes |= ATTR_PROTECTED;
     symtab_get_def("FortranForm")->attributes |= ATTR_PROTECTED;
     symtab_get_def("CForm")->attributes |= ATTR_PROTECTED;
+    symtab_get_def("LeanForm")->attributes |= ATTR_PROTECTED;
     symtab_get_def("TraditionalForm")->attributes |= ATTR_PROTECTED;
     symtab_get_def("StandardForm")->attributes |= ATTR_PROTECTED;
     symtab_get_def("HoldForm")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
@@ -1297,6 +1300,12 @@ void core_init(void) {
     void compiled_function_init(void);   /* registers Compile[] / CompiledFunction */
     compiled_function_init();
 
+    /* Lean 4 integration, C side: Lean`Internal`ToLean (strict LeanForm translator) and
+     * the process runner Lean`Internal`RunProcess / Lean`Internal`VerifySource (src/lean_run.c).
+     * The Certify / ProofObject layer is the Lean.m package loaded below. */
+    void lean_init(void);
+    lean_init();
+
     /* Options/SetOptions/OptionValue + the default-options registry. Runs last
      * so every option-name symbol used by the registry is already interned. */
     void options_builtin_init(void);
@@ -1354,6 +1363,12 @@ void core_init(void) {
      * callable from the REPL; it loads in ~0.2 ms. FullSimplify's Separable
      * transformation (simp/FullSimplify.m) calls it by its full name. */
     mathilda_load_module("simp/SeparablePolynomialDecomposition.m");
+
+    /* The Lean 4 certification package (Certify, ProofObject, LeanVerify,
+     * $LeanExecutable, ...): BeginPackage["Lean`"], self-documenting via
+     * ::usage and self-protecting, like the two above. It defines rules only
+     * (no Lean process is started at load), so the cost is parse-only. */
+    mathilda_load_module("lean/Lean.m");
 
     /* Builtins that only evaluate the code they are given do not count in the
      * builtin nesting depth (eval_builtin_depth): Together[...] inside
@@ -4779,6 +4794,8 @@ Expr* builtin_tostring(Expr* res) {
     if (form_name == SYM_FortranForm || form_name == SYM_CForm) {
         str = fortran_form_string(expr, form_name == SYM_CForm ? FORM_LANG_C : FORM_LANG_FORTRAN,
                                   page_width);
+    } else if (form_name == SYM_LeanForm) {
+        str = lean_form_string(expr);
     } else if (form_name == SYM_FullForm) {
         str = expr_to_string_fullform(expr);
     } else if (form_name == SYM_TeXForm) {

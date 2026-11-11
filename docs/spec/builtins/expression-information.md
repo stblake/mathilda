@@ -1511,7 +1511,7 @@ Out[2]= 1, 2, 3
 ## ToString
 - `ToString[expr]`: returns a `String` containing the printed form of `expr` in `OutputForm`, as in the reference: strings appear as their characters, without quotes -- `ToString["hello"]` is `"hello"`, `ToString[{"a", 1}]` is `"{a, 1}"`. (Mathilda's `OutputForm` is linear: `ToString[1/2]` is `"1/2"`.)
 - `ToString[expr, form]`: returns the printed form for the specified form. Supported forms are `OutputForm` (default), `InputForm` (strings quoted, with `\"` and `\\` escaped, so the result re-reads; `HoldForm` is kept, `ToString[HoldForm[1 + 1], InputForm]` is `"HoldForm[1 + 1]"`, and a held non-canonical product prints as written, `HoldForm[1*x]`; `Format[..., InputForm]` rules apply), `FullForm`, and `TeXForm` (strings as `\text{abc}`). `StandardForm` is accepted as an alias for `InputForm`.
-- `ToString[expr, form, opts]` / `ToString[expr, opts]`: the options `FormatType -> form` (the same as the positional form) and `PageWidth -> n` (used by `FortranForm` and `CForm`: an expression wider than `n` is broken into continuation lines; the default is unbounded). `FortranForm` and `CForm` are accepted as forms.
+- `ToString[expr, form, opts]` / `ToString[expr, opts]`: the options `FormatType -> form` (the same as the positional form) and `PageWidth -> n` (used by `FortranForm` and `CForm`: an expression wider than `n` is broken into continuation lines; the default is unbounded). `FortranForm`, `CForm` and `LeanForm` (Lean 4 syntax; see [formal-verification.md](formal-verification.md)) are accepted as forms.
 
 **Features**:
 - `Protected`.

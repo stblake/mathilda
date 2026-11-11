@@ -9,6 +9,7 @@
 
 #include "print.h"
 #include "print_fortran.h"
+#include "print_lean.h"
 #include "expr.h"
 #include "arithmetic.h"
 #include "context.h"
@@ -1129,6 +1130,11 @@ static void print_standard(Expr* e, int parent_prec) {
                  e->data.function.arg_count == 1) {
             char* txt = fortran_form_string(e->data.function.args[0],
                                             head == SYM_CForm ? FORM_LANG_C : FORM_LANG_FORTRAN, 0);
+            printf("%s", txt);
+            free(txt);
+        }
+        else if (head == SYM_LeanForm && e->data.function.arg_count == 1) {
+            char* txt = lean_form_string(e->data.function.args[0]);
             printf("%s", txt);
             free(txt);
         }
