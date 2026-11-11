@@ -226,6 +226,7 @@ Out[2]= False
 | `"Verify"` | `True` | `False` generates the source without running Lean (`"Verified" -> Missing["NotChecked"]`). |
 | `"LeanExecutable"` | `Automatic` | Overrides `$LeanExecutable` for one call. |
 | `"LeanProject"` | `Automatic` | Overrides `$LeanProject` for one call (`None` forces no project). |
+| `"Counterexample"` | `Automatic` | What happens when a kernel engine **rejects** an item (v0.6526): `Automatic` searches a counterexample for at most 2 s and, if one is found, refutes the claim (see [Counterexamples](#counterexamples)); a positive number is the search budget in seconds; `False` turns the search off (the object then has the usual keys only). `Verify -> False`, a missing Lean and the non-kernel engines never trigger it. |
 
 `Domain`, `Method` and `Assumptions` apply to identity claims (`a == b` and the `"Identity"` / `"Factorization"` computations). The other kinds choose their own proof script and number type (and issue `Certify::optignored` when one of these options is given), and take their hypotheses from the claim itself (`Implies[...]`, `ForAll[vars, cond, ...]`); a claim with hypotheses is stated over every field of characteristic 0 (equations) or every ordered field (inequalities, `Minimize` / `Maximize`), never over `Int` or `Rat` alone. (`Solve` soundness statements are closed rational facts and stay over `Rat`.)
 
@@ -263,12 +264,32 @@ In[3]:= Certify[FactorInteger[2^64 + 1], Engine -> "Exact"]["Verified"]
 Out[3]= Missing["Exact", True]
 ```
 
+### Counterexamples
+Since v0.6526 a kernel **rejection** is followed by a bounded counterexample search (`"Counterexample" -> Automatic`, 2 s per item; `False` turns it off). When a witness is found and Mathilda's exact arithmetic confirms it, the claim is refuted: Lean's kernel checks the theorem `¬ S`, where `S` is the certified statement (what Certify tried to prove, generic binders included), proved from the witness by `fun h => absurd (h w…) (by decide +kernel)`. All refutations of one call run in one Lean file. The object keeps `"Verified" -> False` and the rejected `"LeanSource"`, and gains:
+
+| Key | Content |
+|---|---|
+| `"Counterexample"` | The witness, `{x -> -1, …}` (`{}` for a closed statement such as a `Solve` soundness fact) |
+| `"Refuted"` | `True` (the kernel accepted `¬ S`) or `Missing["Exact", True]` (the witness is checked by exact arithmetic only: an algebraic witness, a claimed antiderivative, or a refutation run that did not succeed) |
+| `"RefutationTheorem"` | `HoldForm[!S]` |
+| `"RefutationSource"` | The Lean file of the refutation (only when it ran) |
+
+It issues `Certify::refuted` and displays as `ProofObject[«Identity» Refuted: {x -> -1} | Lean Tier 0 | …]`. The search and the faithfulness rules are those of [Refute](#refute). Nothing is searched for primality, Tier 1 (Mathlib) or `Minimize` / `Maximize` certificates (a rejection there is a certificate or translation bug, not a false claim).
+
+```mathematica
+In[1]:= ToString[Quiet[Certify[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1]]]
+Out[1]= "ProofObject[«Identity» Refuted: {x -> -1} | Lean Tier 0 | 0.63 s]"
+
+In[2]:= %%["RefutationTheorem"]   (* of the object *)
+Out[2]= !ForAll[{x}, (1 + x)^3 == 1 + 2 x + 3 x^2 + x^3]
+```
+
 ## ProofObject
 - `ProofObject[<|...|>]`: the result of `Certify`.
 - `ProofObject[comp, opts]`, with `comp` not an `Association`: the same as `Certify[comp, opts]`, so `ProofObject[Factor[x^2 - 1], Engine -> "Lean"]` works.
 - `obj["prop"]`: a property. `obj["Properties"]` gives the sorted list, and an unknown name gives `Missing["UnknownProperty", name]`.
 - Attributes `HoldAll`, `Protected` (and the same for `Certify`; `HoldAll` since v0.6521, so that the `Assumptions` option is checked before it evaluates).
-- It displays as `ProofObject[«Factorization» Verified: True | Lean Tier 0 | 0.51 s]`.
+- It displays as `ProofObject[«Factorization» Verified: True | Lean Tier 0 | 0.51 s]`; a refuted object (a kernel rejection with a counterexample, v0.6526) as `ProofObject[«Identity» Refuted: {x -> -1} | Lean Tier 0 | 0.63 s]`.
 - **Authentication** (v0.6522). `ProofObject[assoc]` is an inert container, so anyone can write `ProofObject[<|"Verified" -> True, …|>]`. Every association `Certify` produces is registered by its `Hash` for the session, and `obj["Verified"]` (and the summary box) reports the stored verdict only for a registered object; a hand-made or edited one gives `Missing["Unauthenticated"]` (its other properties are still readable). This guards against minted objects in ordinary code, not against code that deliberately writes `` Lean`Private` `` internals, and an object from another session (saved and read back) is unauthenticated too: re-run `Certify`, or check `obj["LeanSource"]` with `LeanVerify`.
 
 | Property | Content |
@@ -317,6 +338,32 @@ Out[3]= False
 In[4]:= c = (1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x;
 In[5]:= {Certify[c, Engine -> "Mathilda"]["Verified"], Quiet[Certify[c]["Verified"]]}
 Out[5]= {Missing["Heuristic", True], False}
+```
+
+## Refute
+`Refute[claim, opts]` (v0.6526) searches a counterexample to `claim` and proves the **negation** of its certified statement `S` from the witness. It gives a `ProofObject` of Kind `"Refutation"`, or `$Failed`.
+- Claims: an identity `a == b` (with `"Domain"` and `Assumptions` as in `Certify`), an implication of equations `Implies[p1 == q1 && …, p == q]`, a `ForAll[vars, (cond,) p >= q]` or bare inequality, `Sum[t, {k, a, n}] == C`, and `Integrate[f, x] == F` (exact only). Anything else (`PrimeQ[7]`, a computation such as `Integrate[x, x]` or `Factor[…]`) is `Refute::nostmt`. The claim and the `Assumptions` are walked held exactly as in `Certify` (`Certify::eval`, `Certify::value`).
+- `S` is the statement `Certify` would prove (`"RefutedStatement"`), `"Theorem"` is `HoldForm[!S]`, and `"LeanTheorem"` is `¬ (S)` in Lean text with `"ProofScript"` `fun h => absurd (h w…) (by decide +kernel)`: `(K := Rat)` first for the generic char-0 / ordered-field statements, then the witness values `(-1 : Int)` / `(1/2 : Rat)`, then one `(by decide +kernel)` per antecedent of `S`; a sum's statement `∀ m : Nat, S m = C (m + a)` is refuted by `h m₀` with the preamble's definitions; a closed statement by `decide +kernel`.
+- **Faithfulness.** A witness must lie in `S`'s quantifier domain: integers for `Int`, rationals for `Rat` and for the generic forms (ℚ is a field of characteristic 0 and an ordered field, so a rational witness refutes "for every such field"; since ℚ ⊂ ℂ and ℚ ⊂ ℝ, the claim is refuted under Mathematica's semantics too). Every hypothesis of `S` holds there, its conclusion fails, and every denominator of the claim is nonzero there: a point where a rational claim is undefined is no counterexample, even when it falsifies the cleared statement (`Refute[1/x == 1]` gives `x -> -1`, not the pole `x -> 0`). Mathilda checks all of it by exact arithmetic before a refutation is built. `FindInstance`'s domain argument is not trusted: it can return `x -> -2 I` for `Rationals`.
+- **Search** (deterministic): sums at `n = a, …, a + 30`; an exact grid by increasing height (integers `−5..5`, or `0, ±1, ±2, ±3, ±1/2, ±3/2, ±1/3, ±2/3` for the rational forms; at most 4000 points; points where a denominator vanishes are skipped); `FindInstance` over `Integers` / `Rationals`; then, exact only, `FindInstance` over ℂ (char-0 form) or the reals (ordered form). An algebraic witness (`-2 I`, `-Sqrt[2]`) has no kernel proof in core Lean: the result is the Exact object with `"Verified" -> Missing["Exact", True]` (nonzero tests by `RootReduce` and a 50-digit value, listed in `"TrustedSteps"`). A claimed antiderivative is refuted where `D[F, x]` and `f` are different rational numbers (never at a surd or transcendental value). No witness within the bounds: `Refute::none` and `$Failed` — not a proof of the claim.
+- Options: `"Engine"` (`"Lean"`, default, or `"Exact"`: the witness re-checked exactly, `Missing["Exact", True]`; anything else `Refute::engine`), `"Domain"`, `Assumptions`, `TimeConstraint` (60), `"Verify"` (`False`: the source is built, nothing runs, `Missing["NotChecked"]`), `"SearchTime"` (5 s), `"LeanExecutable"`, `"LeanProject"`; an unknown name is `Refute::optx`. Attributes `HoldAll`, `Protected`.
+- Properties (Lean): `Axioms, Cached, Certificate, Counterexample, Domain, Engine, Hypotheses, Input, Kind, LeanSource, LeanTheorem, LeanVersion, Logs, ProofScript, RefutedStatement, Result, Theorem, Tier, Timing, TrustedSteps, Verified`; the Exact variant drops the Lean keys and adds `"Checks"`. `"Certificate"` holds the witness, the form, the refuted kind, the domain form and the antecedent count.
+
+```mathematica
+In[1]:= r = Refute[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1];
+In[2]:= {ToString[r], r["Counterexample"], r["LeanTheorem"]}
+Out[2]= {"ProofObject[«Refutation» Verified: True | Lean Tier 0 | 2.05 s]", {x -> -1},
+         "¬ (∀ x : Int, (1 + x) ^ 3 = 1 + 2 * x + 3 * x ^ 2 + x ^ 3)"}
+
+In[3]:= Refute[ForAll[{x, y}, x^2 + y^2 >= 2 x y + 1/10]]["ProofScript"]
+Out[3]= "fun h => absurd (h (K := Rat) (0 : Rat) (0 : Rat)) (by decide +kernel)"
+
+In[4]:= Refute[Implies[x^2 + 4 == 0, x == 7]]["Verified"]   (* x -> -2 I: exact only *)
+Out[4]= Missing["Exact", True]
+
+In[5]:= Refute[ForAll[{x, y}, x^4 y^2 + x^2 y^4 - 3 x^2 y^2 + 1 >= 0]]
+Refute::none: no counterexample to ... was found within the search bounds; this is not a proof of the claim
+Out[5]= $Failed
 ```
 
 ## LeanVerify

@@ -359,8 +359,24 @@ exactPresent[item_, v_, o_] := With[{g = item["G"]}, With[{a = <|
   $issued[Hash[a]] = True;
   ProofObject[a]]];
 
+(* A refutation (Refute.m): the witness re-checked exactly (domain,
+   denominators, hypotheses True and conclusion False), under the same time
+   limit as the other checks; Missing["Exact", True] when it holds, else
+   Missing["NotChecked"] (never a refutation on a doubtful check). *)
+exactRefuteCheck[rir_, o_] := Module[{text, ok, t},
+  text = "the statement is False at " <> ToString[rir["Witness"], InputForm] <>
+    " (every hypothesis True, the conclusion False, every denominator nonzero, the \
+witness in the statement's domain), by exact arithmetic";
+  If[!TrueQ[o["Verify"]], Return[<|"Verified" -> Missing["NotChecked"], "Timing" -> 0.,
+    "Logs" -> {}, "Cached" -> False, "Checks" -> {text -> Missing["NotChecked"]}|>, Module]];
+  t = First[AbsoluteTiming[ok = TimeConstrained[witnessOK[rir["Problem"], rir["Witness"]],
+    Min[o["TimeConstraint"], 10], $exactTimeout]]];
+  <|"Verified" -> If[ok === True, Missing["Exact", True], Missing["NotChecked"]],
+    "Timing" -> t, "Logs" -> {}, "Cached" -> False,
+    "Checks" -> {text -> If[BooleanQ[ok], ok, Missing["NotChecked"]]}|>];
+
 registerBackend["Exact", <|"Name" -> "Exact", "Trust" -> "ExactArithmetic",
-  "Encode" -> exactEncode, "Run" -> exactRun, "Present" -> exactPresent,
+  "Encode" -> exactEncode, "Run" -> exactRun, "Present" -> exactPresent, "Refute" -> exactRefuteCheck,
   "Label" -> ("Exact" &), "TrustedSteps" -> exactTrusted,
   "Options" -> {"TimeConstraint"}|>];
 

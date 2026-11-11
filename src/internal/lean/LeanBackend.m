@@ -704,6 +704,17 @@ cacheKey[g_, hb_, exe_, proj_] := {
 (* The entry point is Lean`Internal`Oracle, called by its full name from the
    lean/ tactics (Mathilda.Tactics); Lean`Internal` is not on $ContextPath, so
    it does not capture a user's (or a later package's) symbol Oracle. *)
+Lean`Internal`Oracle::usage =
+  "Lean`Internal`Oracle[kind, args...] is the server side of the Lean 4 tactics in the lean/ \
+package (mathilda_linear_combination, mathilda_sos, mathilda_prime, #mathilda). It answers \
+with plain data as a String (numerals, v1, v2, ..., + - * / ^, lists and tuples), which the \
+Lean side parses itself and never elaborates as Lean syntax: kind \"LinearCombination\" \
+({a, b}, {{l1, r1}, ...}, vars) gives cofactors c with a - b == Sum c_i (l_i - r_i); \"SOS\" \
+({p, q}, {g1, ...}, vars) gives (d, l, i) triples with q - p == Sum d l^2 g_i (g_0 = 1); \
+\"Pratt\" (p) gives a flat Pratt certificate; \"Eval\" (\"input\") gives the LeanForm of the \
+evaluated input. A failure gives \"MATHILDA-FAIL: reason\". The answers are untrusted: Lean \
+re-checks them.";
+
 oracleFail[why_String] := "MATHILDA-FAIL: " <> why;
 
 (* Strict text of an evaluated polynomial, no type ascription. *)
@@ -1034,8 +1045,31 @@ leanRun[items_List, o_] := Module[{gs = #["G"] & /@ items, chunks, out, hb, exe,
 leanPresent[item_, v_, o_] := With[{g = leanNamed[item]},
   mkProofObject[g, v, "Lean", g["TierUsed"], v["LeanVersion"], v["Source"], g["Statement"]]];
 
+(* A refutation (Refute.m): the theorem not (S), S the statement text as the
+   footer states it (generic binders included, so the theorem itself has
+   none), proved from the witness:
+     fun h => absurd (h [(K := Rat)] w1 ... [(by decide +kernel) per
+       antecedent]) (by decide +kernel)
+   a closed statement by decide +kernel, a sum by h m0 (m0 = n0 - a, the
+   preamble's definitions reused).  The result is a generator association
+   for leanRun. *)
+leanRefuteEncode[rir_, o_] := Module[{p = rir["Problem"], w = rir["Witness"], ty, gen, proof},
+  ty = If[p["DomainForm"] === "Int", "Int", "Rat"];
+  gen = MemberQ[{"CharZeroField", "OrderedField"}, p["DomainForm"]];
+  proof = Switch[p["Form"],
+    "Closed", "by\n  decide +kernel",
+    "Induction", "fun h => absurd (h " <> ToString[w[[1, 2]] - p["Shift"]] <>
+      ") (by decide +kernel)",
+    _, StringJoin["fun h => absurd (h", If[gen, " (K := Rat)", ""],
+      (" (" <> refValueText[#, ty] <> " : " <> ty <> ")") & /@ w[[All, 2]],
+      ConstantArray[" (by decide +kernel)", p["Antecedents"]], ") (by decide +kernel)"]];
+  <|"Statement" -> "\[Not] (" <> rir["LeanStatement"] <> ")", "Proof" -> proof,
+    "Preamble" -> rir["Preamble"], "Tier" -> 0, "TierUsed" -> 0, "UserProof" -> False,
+    "Input" -> rir["Input"]|>];
+refValueText[v_, ty_] := With[{s = toLean[HoldForm[v], ty, True, {}]}, If[StringQ[s], s, "0"]];
+
 registerBackend["Lean", <|"Name" -> "Lean", "Trust" -> "Kernel", "Encode" -> leanEncode,
-  "Run" -> leanRun, "Present" -> leanPresent,
+  "Run" -> leanRun, "Present" -> leanPresent, "Refute" -> leanRefuteEncode,
   "Label" -> ("Lean Tier " <> ToString[#["Tier"]] &),
   "Options" -> {"Tier", "Method", "TimeConstraint", "LeanExecutable", "LeanProject"}|>];
 

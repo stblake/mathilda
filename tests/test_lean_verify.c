@@ -748,6 +748,69 @@ static void test_multi_engine_verify(void) {
     check_true("leanMF[\"Engines\"] === <|\"Lean\" -> False, \"Exact\" -> Missing[\"Exact\", False]|>");
 }
 
+/* Counterexamples (v0.6526): a kernel rejection triggers a bounded search;
+ * a rational witness gives a kernel-checked refutation not (S). */
+static void test_refute_verify(void) {
+    test_mute_messages();
+    assert_eval_eq("leanCX = Check[Certify[(x+1)^3 == x^3+3x^2+2x+1], \"refuted\", "
+                   "Certify::refuted]; Null", "Null", 0);
+    check_true("leanCX === \"refuted\"");
+    assert_eval_eq("leanCX = Quiet[Certify[(x+1)^3 == x^3+3x^2+2x+1]]; Null", "Null", 0);
+    check_true("leanCX[\"Verified\"] === False && leanCX[\"Refuted\"] === True");
+    check_true("leanCX[\"Counterexample\"] === {x -> -1}");
+    check_true("leanCX[\"RefutationTheorem\"] === HoldForm[!ForAll[{x}, (1 + x)^3 == "
+               "1 + 2 x + 3 x^2 + x^3]]");
+    check_true("leanCX[\"Properties\"] === Sort[{\"Axioms\", \"Cached\", \"Certificate\", "
+               "\"Counterexample\", \"Domain\", \"Engine\", \"Hypotheses\", \"Input\", \"Kind\", "
+               "\"LeanSource\", \"LeanTheorem\", \"LeanVersion\", \"Logs\", \"ProofScript\", "
+               "\"RefutationSource\", \"RefutationTheorem\", \"Refuted\", \"Result\", \"Theorem\", "
+               "\"Tier\", \"Timing\", \"TrustedSteps\", \"Verified\"}]");
+    check_true("StringStartsQ[ToString[leanCX], \"ProofObject[\\[LeftGuillemet]Identity"
+               "\\[RightGuillemet] Refuted: {x -> -1} | Lean Tier 0 |\"]");
+    /* The refutation source is accepted by LeanVerify on its own. */
+    check_true("LeanVerify[leanNoFooter[leanCX[\"RefutationSource\"]]][\"Success\"] === True");
+    check_true("Length[Quiet[Certify[(x+1)^3 == x^3+3x^2+2x+1, \"Counterexample\" -> False]]"
+               "[\"Properties\"]] === 19");
+    /* Showcase row 17's claim. */
+    assert_eval_eq("leanC17 = Quiet[Certify[(1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x]]; Null",
+                   "Null", 0);
+    check_true("leanC17[\"Refuted\"] === True && leanC17[\"Counterexample\"] === {x -> -1}");
+    /* Refute with Lean: each form kernel-checked, standard axioms. */
+    assert_eval_eq("leanRL = Quiet[{Refute[(x+1)^3 == x^3+3x^2+2x+1], "
+                   "Refute[ForAll[{x, y}, x^2 + y^2 >= 2 x y + 1/10]], "
+                   "Refute[x^2 == x, Assumptions -> x^2 == 2 x], "
+                   "Refute[Implies[x^2 + y^2 == 2 && x == y, x == 1]], "
+                   "Refute[x^3 + y^3 == (x + y)^3, \"Domain\" -> Integers], "
+                   "Refute[1/x == 1], "
+                   "Refute[Sum[k^3, {k, 1, n}] == n^2 (n+1)^2/4 + 1]}]; Null", "Null", 0);
+    check_true("AllTrue[leanRL, #[\"Verified\"] === True &]");
+    check_true("AllTrue[leanRL, SubsetQ[{\"propext\", \"Classical.choice\", \"Quot.sound\"}, "
+               "#[\"Axioms\"]] &]");
+    check_true("StringContainsQ[ToString[First[leanRL]], \"Refutation\\[RightGuillemet] "
+               "Verified: True | Lean Tier 0 |\"]");
+    /* An algebraic witness has no kernel proof: Exact-only. */
+    check_true("Quiet[Refute[Implies[x^2 + 4 == 0, x == 7]]][\"Verified\"] === "
+               "Missing[\"Exact\", True]");
+    /* A closed fact (Solve's spurious root zeroes a denominator). */
+    assert_eval_eq("leanCS = Quiet[Certify[Solve[(x - 1)/(x^2 - 1) == (x - 1)/(2 x - 2), x]]]; "
+                   "Null", "Null", 0);
+    check_true("leanCS[\"Verified\"] === False && leanCS[\"Refuted\"] === True && "
+               "leanCS[\"Counterexample\"] === {}");
+    /* A wrong antiderivative claim: Exact-only refutation, no Lean source. */
+    assert_eval_eq("leanCA = Quiet[Certify[Integrate[2 x, x] == x^2 + x]]; Null", "Null", 0);
+    check_true("leanCA[\"Refuted\"] === Missing[\"Exact\", True] && "
+               "!KeyExistsQ[First[leanCA], \"RefutationSource\"]");
+    /* With the Exact engine listed. */
+    check_true("Quiet[Certify[(x+1)^3 == x^3+3x^2+2x+1, Engine -> {\"Lean\", \"Exact\"}]]"
+               "[\"Refuted\"] === True");
+    /* Failure injection: a non-witness is refused, so nothing is attached. */
+    assert_eval_eq("Lean`Private`$witnessOverride = {x -> 0}; "
+                   "leanCW = Quiet[Certify[(x+1)^3 == x^3+3x^2+2x+1]]; "
+                   "Lean`Private`$witnessOverride = None; Null", "Null", 0);
+    check_true("leanCW[\"Verified\"] === False && !KeyExistsQ[First[leanCW], \"Refuted\"] && "
+               "!KeyExistsQ[First[leanCW], \"Counterexample\"]");
+}
+
 int main(void) {
 #ifdef __GNUC__
     /* The shared alarm(120) in test_utils.h is too short for this suite: every
@@ -791,6 +854,7 @@ int main(void) {
     TEST(test_review4_verify);
     TEST(test_review6_verify);
     TEST(test_multi_engine_verify);
+    TEST(test_refute_verify);
     printf("All Lean verification tests passed.\n");
     return 0;
 }

@@ -37,7 +37,8 @@ by its text, so \"Engine\" -> v and Engine -> v are the same): \"Engine\" (\"Lea
 in \"Engines\", True only when a kernel accepted), \"Tier\" (0, 1 or \
 Automatic), \"Domain\" (Automatic, Complexes, Reals, Rationals, Integers), Method (a tactic \
 script), TimeConstraint, Assumptions, \"Verify\" (False: generate the source only), \
-\"LeanExecutable\", \"LeanProject\".";
+\"LeanExecutable\", \"LeanProject\", \"Counterexample\" (Automatic: a kernel rejection is \
+followed by a 2 s counterexample search and a kernel-checked refutation; False: none).";
 
 ProofObject::usage =
   "ProofObject[<|...|>] is a Lean 4 certificate produced by Certify; obj[\"prop\"] gives a \
@@ -68,6 +69,13 @@ Tier -> 1 certificates. It defaults to the environment variable MATHILDA_LEAN_PR
 $LeanVersion::usage =
   "$LeanVersion gives the version string of the Lean executable, or \
 Missing[\"NotAvailable\"] when none is found.";
+
+Refute::usage =
+  "Refute[claim] searches a counterexample to claim (an identity, an implication of equations, \
+a ForAll / inequality, Sum[...] == C, Integrate[f, x] == F) and proves the negation of its \
+certified statement from the witness; a ProofObject of Kind \"Refutation\" (\"Counterexample\", \
+\"Theorem\" -> !S), or $Failed. Options: \"Engine\" (\"Lean\" or \"Exact\"), \"Domain\", \
+Assumptions, TimeConstraint, \"Verify\", \"SearchTime\" (5 s), \"LeanExecutable\", \"LeanProject\".";
 
 Begin["`Private`"];
 
@@ -531,6 +539,7 @@ neutralGen[kind_, input_, result_, held_, obligation_, cert_, trusted_, hyps_, c
   "DomainForm" -> df, "Method" -> Automatic, "Requires" -> {}|>;
 
 nocert[input_] := (Message[Certify::nocert, input]; $Failed);
+$statementOnly = False;  (* True (Refute.m): generators skip the certificate search *)
 
 (* ---------------------------------------------------------------------- *)
 (* Row 4: Integrate[f, x], f in Q(x) -- the Tier 0 cleared chain-rule       *)
@@ -796,7 +805,7 @@ membershipGen[input_, hs_List, {l_, r_}, o_] := Module[{ps, q, vars, cs, eq, hel
   vars = Sort[Variables[{ps, q}]];
   If[!AllTrue[vars, Head[#] === Symbol &] || !AllTrue[Append[ps, q], polyQ[#, vars] &],
     Return[nocert[input], Module]];
-  cs = cofactors[q, ps, vars];
+  cs = If[$statementOnly, 0 ps, cofactors[q, ps, vars]];  (* Refute: statement only *)
   If[cs === $Failed, Return[nocert[input], Module]];
   eq[{a_, b_}] := iEqual[a, b];
   held = forAllHeld[inertHeld[Fold[iImplies[#2, #1] &, eq[{l, r}], Reverse[eq /@ hs]]],
@@ -1082,7 +1091,7 @@ sosClaimGen[input_, vars_List, conds_List, rel_, a_, b_, o_] := Module[{p, q, gs
   If[MemberQ[gs, $Failed] || !AllTrue[Append[gs, target], polyQ[#, vars] &] ||
      !SubsetQ[vars, Variables[Append[gs, target]]] || !FreeQ[{gs, target}, _Real | _Complex],
     Return[nocert[input], Module]];
-  st = sosTerms[target, DeleteCases[gs, _?NumberQ], vars];
+  st = If[$statementOnly, {{}, "None"}, sosTerms[target, DeleteCases[gs, _?NumberQ], vars]];
   If[st === $Failed, Return[nocert[input], Module]];
   terms = st[[1]];
   used = DeleteCases[Union[terms[[All, 3]]], 1];
@@ -1341,7 +1350,7 @@ generate[HoldComplete[c_], o_] := With[{v = c},
 
 Options[Certify] = {"Engine" -> "Lean", "Tier" -> Automatic, "Domain" -> Automatic,
   Method -> Automatic, TimeConstraint -> 60, Assumptions -> {}, "Verify" -> True,
-  "LeanExecutable" -> Automatic, "LeanProject" -> Automatic};
+  "LeanExecutable" -> Automatic, "LeanProject" -> Automatic, "Counterexample" -> Automatic};
 
 (* HoldAll (v0.6521): the claim is held (it is certified as written), and so
    are the options until the Assumptions have been checked like the claim:
@@ -1362,7 +1371,8 @@ SetAttributes[Certify, HoldAll];
    by SetOptions itself, so it cannot be checked as written: it is refused
    (Certify::optdefault) unless the call gives its own Assumptions. *)
 SetAttributes[heldOptionProblem, HoldAllComplete];
-heldOptionProblem[opts___] := Module[{as, t, bad, def},
+heldOptionProblem[opts___] := heldOptionProblemFor[Certify, HoldComplete[opts]];
+heldOptionProblemFor[f_, HoldComplete[opts___]] := Module[{as, t, bad, def},
   (* An option name that is a symbol with a value would be replaced by that
      value when the options are evaluated (Engine = "zzz" turns Engine -> v
      into "zzz" -> v): refuse it while the name is still held. *)
@@ -1370,14 +1380,14 @@ heldOptionProblem[opts___] := Module[{as, t, bad, def},
       OwnValues[s] =!= {} :> {HoldForm[s], ToString[OwnValues[s][[1, 2]], InputForm], SymbolName[Unevaluated[s]]},
     {1, 2}];
   If[bad =!= {},
-    Message[Certify::optvalue, Sequence @@ bad[[1]]];
+    Message[MessageName[f, "optvalue"], Sequence @@ bad[[1]]];
     Return[$Failed, Module]];
   as = Cases[HoldComplete[opts], (Rule | RuleDelayed)[Assumptions | "Assumptions", a_] :>
     HoldComplete[a], {1, 2}];
   If[as === {},
-    def = Options[Certify, Assumptions];
+    def = Options[f, Assumptions];
     If[!MatchQ[def, {Assumptions -> ({} | True)}],
-      Message[Certify::optdefault, Replace[def, {(Rule | RuleDelayed)[_, v_]} :> HoldForm[v]]];
+      Message[MessageName[f, "optdefault"], Replace[def, {(Rule | RuleDelayed)[_, v_]} :> HoldForm[v]]];
       Return[$Failed, Module]]];
   Do[
     t = Block[{$cwAssum = True, $cwNotes = {}, $cwTrusted = {}},
@@ -1394,7 +1404,7 @@ heldOptionProblem[opts___] := Module[{as, t, bad, def},
   None];
 
 certOptions[opts_List] := Module[{keys = {"Engine", "Tier", "Domain", "Method",
-    "TimeConstraint", "Assumptions", "Verify", "LeanExecutable", "LeanProject"}},
+    "TimeConstraint", "Assumptions", "Verify", "LeanExecutable", "LeanProject", "Counterexample"}},
   If[optionNameProblem[Certify, opts] =!= None, Return[$Failed, Module]];
   AssociationThread[keys, OptionValue[Certify, opts, #] & /@ keys]];
 
@@ -1541,7 +1551,9 @@ certifyItems[hcs_List, opts_List] := Module[{o, engines, gens, items, vs, out},
     Do[out[[items[[j]]["Index"]]] = If[ListQ[o["Engine"]],
         mkMultiObject[items[[j]], #[[j]] & /@ vs, engines, o],
         $backends[First[engines]]["Present"][items[[j]], vs[[1, j]], o]],
-      {j, Length[items]}]];
+      {j, Length[items]}];
+    (* A kernel rejection: search a counterexample and refute (Refute.m). *)
+    If[o["Counterexample"] =!= False, out = refuteAfterRejection[out, items, vs, engines, o]]];
   out];
 
 (* Certify[{c1, c2, ...}] certifies a batch in one Lean run (per tier). *)
@@ -1565,21 +1577,11 @@ engineLabel[e_, a_] := If[StringQ[e] && KeyExistsQ[$backends, e], $backends[e]["
   "Mathilda Heuristic"];
 
 Format[ProofObject[a_?AssociationQ]] := SequenceForm @ StringJoin[
-  "ProofObject[\[LeftGuillemet]", ToString[a["Kind"]], "\[RightGuillemet] Verified: ",
-  ToString[verdictOf[a]], " | ",
+  "ProofObject[\[LeftGuillemet]", ToString[a["Kind"]], "\[RightGuillemet] ",
+  If[KeyExistsQ[a, "Refuted"] && authenticQ[a], "Refuted: " <> ToString[a["Counterexample"]],
+    "Verified: " <> ToString[verdictOf[a]]], " | ",
   StringRiffle[engineLabel[#, a] & /@ Flatten[{a["Engine"]}], " + "],
   " | ", timingText[a["Timing"]], "]"];
-
-Lean`Internal`Oracle::usage =
-  "Lean`Internal`Oracle[kind, args...] is the server side of the Lean 4 tactics in the lean/ \
-package (mathilda_linear_combination, mathilda_sos, mathilda_prime, #mathilda). It answers \
-with plain data as a String (numerals, v1, v2, ..., + - * / ^, lists and tuples), which the \
-Lean side parses itself and never elaborates as Lean syntax: kind \"LinearCombination\" \
-({a, b}, {{l1, r1}, ...}, vars) gives cofactors c with a - b == Sum c_i (l_i - r_i); \"SOS\" \
-({p, q}, {g1, ...}, vars) gives (d, l, i) triples with q - p == Sum d l^2 g_i (g_0 = 1); \
-\"Pratt\" (p) gives a flat Pratt certificate; \"Eval\" (\"input\") gives the LeanForm of the \
-evaluated input. A failure gives \"MATHILDA-FAIL: reason\". The answers are untrusted: Lean \
-re-checks them.";
 
 End[];
 
@@ -1589,5 +1591,6 @@ EndPackage[];
 LoadModule["lean/LeanBackend.m"];
 LoadModule["lean/ExactBackend.m"];
 LoadModule["lean/Engines.m"];
+LoadModule["lean/Refute.m"];
 
-SetAttributes[{Lean`Certify, Lean`ProofObject, Lean`LeanVerify}, Protected];
+SetAttributes[{Lean`Certify, Lean`ProofObject, Lean`LeanVerify, Lean`Refute}, Protected];

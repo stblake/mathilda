@@ -10,8 +10,10 @@
 #   - Reduce`SOSCertificate (success and $Failed),
 #   - Lean`Internal`Oracle, all four query kinds plus their failure answers,
 #   - the Exact engine, multi-engine consensus and engine options (v0.6525),
+#   - the counterexample search, Refute (Verify -> False, Exact) (v0.6526),
 # and, when a Lean executable is found ($LeanVersion is a string), also
 #   - real Certify runs (True and a refuted False), a batch, cache hits,
+#     automatic refutations after a rejection and Refute (v0.6526),
 #     user-Method items (one file each), LeanVerify (accepted, sorry,
 #     native_decide, a refused axiom, named examples in a namespace), the
 #     kernel replay (a rejected module, a file with no .olean) and
@@ -211,6 +213,31 @@ Quiet[Do[
      Lean`Private`consensus[g, {Missing["NotAvailable"], Missing["Exact", True]}, {"Lean", "Exact"}]];
    Lean`Private`expPolyZeroQ[(-1)^(n + 2) - (-1)^n + 4^n - 2^(2 n), n], {3}]];
 
+(* --- v0.6526: counterexample search (6+ claims), Refute with Verify -> False
+   and with the Exact engine, refusals, the witness hook --- *)
+Quiet[Do[
+   Refute[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1, "Verify" -> False]["LeanSource"];
+   Refute[ForAll[{x, y}, x^2 + y^2 >= 2 x y + 1/10], "Verify" -> False];
+   Refute[x^2 == x, Assumptions -> x^2 == 2 x, "Verify" -> False];
+   Refute[Implies[x^2 + y^2 == 2 && x == y, x == 1], "Verify" -> False];
+   Refute[x^3 + y^3 == (x + y)^3, "Domain" -> Integers, "Verify" -> False];
+   Refute[1/x == 1, "Verify" -> False];
+   Refute[(x^2 - 1)/(x - 1) == x + 2, "Verify" -> False];
+   Refute[Sum[k^3, {k, 1, n}] == n^2 (n + 1)^2/4 + 1, "Verify" -> False];
+   ToString[Refute[Implies[x^2 + 4 == 0, x == 7]]];
+   Refute[Integrate[2 x, x] == x^2 + x];
+   Refute[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1, "Engine" -> "Exact"]["Checks"];
+   Refute[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1, "Engine" -> "Exact", "Verify" -> False];
+   Refute[ForAll[{x, y}, x^4 y^2 + x^2 y^4 - 3 x^2 y^2 + 1 >= 0], "SearchTime" -> 1];
+   Refute[(x + 1)^2 == x^2 + 2 x + 1, "Verify" -> False];
+   Refute[PrimeQ[7]]; Refute[Integrate[x, x]]; Refute[x == x + 1, Foo -> 1];
+   Refute[x == x + 1, "Engine" -> "Z3"]; Refute[Simplify[x] == x + 1];
+   Lean`Private`$witnessOverride = {x -> 0};
+   Refute[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1, "Verify" -> False];
+   Lean`Private`$witnessOverride = None;
+   Lean`Private`refZero[(1 + Sqrt[2])^2 - 3 - 2 Sqrt[2]]; Lean`Private`refZero[-1 - Sqrt[2]];
+   Certify[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1, "LeanExecutable" -> "/nonexistent/lean"], {3}]];
+
 (* --- real Lean runs, when Lean is installed --- *)
 If[StringQ[$LeanVersion],
   Quiet[
@@ -232,6 +259,14 @@ If[StringQ[$LeanVersion],
     Certify[Solve[(x - 1)/(x^2 - 1) == (x - 1)/(2 x - 2), x]];
     Certify[Factor[x^10 - 1], Engine -> {"Lean", "Exact"}];
     Certify[(1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x, Engine -> {"Lean", "Exact"}];
+    (* v0.6526: automatic refutations after a rejection, and Refute *)
+    ToString[Certify[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1]];
+    Certify[{(x + 1)^3 == x^3 + 3 x^2 + 2 x + 2, Sum[k^3, {k, 1, n}] == n^2 (n + 1)^2/4 + 1,
+      Integrate[2 x, x] == x^2 + x}];
+    Certify[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1, "Counterexample" -> False];
+    Refute[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1];
+    Refute[ForAll[{x, y}, x^2 + y^2 >= 2 x y + 1/10]];
+    Refute[Sum[k^3, {k, 1, n}] == n^2 (n + 1)^2/4 + 1];
     (* kernel replay: a rejected module, and a file with no .olean *)
     Lean`Internal`VerifySource["import Lean\nset_option debug.skipKernelTC true in\nrun_cmd Lean.Elab.Command.liftCoreM <| Lean.addDecl (.thmDecl { name := `bad, levelParams := [], type := Lean.mkConst ``False, value := Lean.mkConst ``True.intro })\n",
       Lean`Private`leanExe[Automatic], None, False, Lean`Private`replayScript[]];
