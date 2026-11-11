@@ -1,6 +1,6 @@
 # File I/O
 
-Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`StringToStream`/`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, `Directory`, `SetDirectory`, `ResetDirectory`, `DirectoryStack`, `Environment`, `ParentDirectory`, `FileNameTake`, `AbsoluteFileName`, `FileType`, `DirectoryQ`, `ToFileName`, `DeleteFile`, and the `$InputFileName` / `$HomeDirectory` / `$TemporaryDirectory` / `$BaseDirectory` / `$UserBaseDirectory` / `$PreferencesDirectory` / `$UserDocumentsDirectory` / `$PathnameSeparator` system variables).
+Builtins implemented in `src/readwrite.c` (`Get`/`Put`/`PutAppend`), the `src/io/` stream layer — `src/io/read.c` (`Read`, the shared reading engine) and `src/io/streams.c` (`StringToStream`/`OpenRead`/`OpenWrite`/`OpenAppend`/`Close`/`Streams`/`StreamPosition`/`SetStreamPosition`/`Write`/`WriteString`, plus the inert `InputStream`/`OutputStream`/`File` objects) — `src/io/readlist.c` (`ReadList`), and `src/files.c` (`FileExistsQ`, `FileSize`, `FileExtension`, `FileBaseName`, `FileNameJoin`, `FileNameSplit`, `FilePrint`, `DirectoryName`, `FileNames`, `Directory`, `SetDirectory`, `ResetDirectory`, `DirectoryStack`, `Environment`, `ParentDirectory`, `FileNameTake`, `AbsoluteFileName`, `FileType`, `DirectoryQ`, `ToFileName`, `DeleteFile`, and the `$InputFileName` / `$HomeDirectory` / `$TemporaryDirectory` / `$BaseDirectory` / `$UserBaseDirectory` / `$PreferencesDirectory` / `$UserDocumentsDirectory` / `$InitialDirectory` / `$RootDirectory` / `$PathnameSeparator` system variables).
 
 ## Get
 Reads a sequence of Mathilda expressions from a file, evaluates each in order, and returns the value of the last one.
@@ -876,6 +876,21 @@ multi-user systems, the main directory of the current user. It is read from
 ```
 $HomeDirectory   (* "/Users/user" *)
 ```
+
+## $InitialDirectory
+The working directory when Mathilda was started, as a string. It is recorded
+once at startup (`files_init`, `src/files.c`) and is not changed by
+`SetDirectory` / `ResetDirectory`. `Protected`.
+
+```
+SetDirectory["/tmp"]; {$InitialDirectory, Directory[]}
+(* {"/Users/user/project", "/private/tmp"} *)
+```
+
+## $RootDirectory
+The root directory of the file system, as a string: `"/"` on Unix and macOS;
+on Windows the system drive's root (`SystemDrive` followed by `\`, by default
+`"C:\"`). `Protected`.
 
 ## $InstallationDirectory
 The top-level directory in which the Mathilda installation resides, as the full

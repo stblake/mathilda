@@ -747,6 +747,7 @@ set(COMMON_SRC
     ../src/interp_mpfr.c
     ../src/purefunc.c
     ../src/minus.c
+    ../src/undocumented.c
     ../src/opform.c
     ../src/modular.c
     ../src/sort.c
@@ -6244,6 +6245,16 @@ else()
     target_link_libraries(readwrite_tests gmp m)
 endif()
 add_test(NAME readwrite_tests COMMAND readwrite_tests)
+
+add_executable(undocumented_tests test_undocumented.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(undocumented_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(undocumented_tests gmp m ${ECM_LIB})
+    add_dependencies(undocumented_tests build_ecm)
+else()
+    target_link_libraries(undocumented_tests gmp m)
+endif()
+add_test(NAME undocumented_tests COMMAND undocumented_tests)
 
 add_executable(files_tests test_files.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(files_tests PRIVATE ../src)

@@ -15,6 +15,7 @@ static int64_t module_number = 1;
 void modular_init(void) {
     symtab_add_builtin("Module", builtin_module);
     symtab_add_builtin("Block", builtin_block);
+    symtab_add_builtin("Internal`InheritedBlock", builtin_inheritedblock);
     symtab_add_builtin("With", builtin_with);
     symtab_add_builtin("Unique", builtin_unique);
 
@@ -1055,11 +1056,46 @@ void mth_block_depth_unwind(int depth) {
     if (!block_stack) block_depth = 0;
 }
 
+/* Deep copy of a rule list, order preserved.  A Rule owns only its pattern
+ * and replacement; every other field is a scalar, an interned name or an
+ * inline array, so a struct copy plus two expr_copy calls is a full clone
+ * (the counterpart of blk_free_rules_now). */
+static Rule* blk_clone_rules(const Rule* r, size_t* count) {
+    Rule* head = NULL;
+    Rule** tail = &head;
+    for (; r; r = r->next) {
+        Rule* c = malloc(sizeof *c);
+        if (!c) break;
+        *c = *r;
+        c->pattern = expr_copy(r->pattern);
+        c->replacement = expr_copy(r->replacement);
+        c->next = NULL;
+        *tail = c;
+        tail = &c->next;
+        if (count) (*count)++;
+    }
+    return head;
+}
+
+static void* block_enter_impl(Expr* const* specs, size_t n, bool inherit);
+
 /* Localise the symbols named by specs[0..n): each a Symbol (left unset) or
  * Set[sym, value] (value evaluated, in order, after the earlier symbols are
  * already localised -- the order Block uses). Pushes and returns the frame;
  * mth_block_leave pops it. Specs of any other shape are skipped. */
 void* mth_block_enter(Expr* const* specs, size_t n) {
+    return block_enter_impl(specs, n, false);
+}
+
+/* As mth_block_enter, but each symbol keeps its current definitions inside
+ * the frame (Internal`InheritedBlock): the body sees -- and may modify -- a
+ * private copy of the own/down/up values, attributes and builtin, and the
+ * originals come back untouched when the frame is left. */
+void* mth_inherited_block_enter(Expr* const* specs, size_t n) {
+    return block_enter_impl(specs, n, true);
+}
+
+static void* block_enter_impl(Expr* const* specs, size_t n, bool inherit) {
     BlockFrame* frame = malloc(sizeof(BlockFrame));
     frame->saved = calloc(n ? n : 1, sizeof(BlockSavedVar));
     frame->count = n;
@@ -1092,6 +1128,28 @@ void* mth_block_enter(Expr* const* specs, size_t n) {
              * what it writes to the symbol is gone again before they end. */
             frame->saved[i].old_dep_scoped = def->dep_scoped;
             if (g_eval_dep_depth > 0) def->dep_scoped = g_eval_dep_depth;
+            if (inherit) {
+                /* The body works on copies; the saved originals are restored
+                 * by blk_restore_frame exactly as for Block.  Attributes and
+                 * the builtin stay in force (restored on exit too). */
+                def->own_values  = blk_clone_rules(frame->saved[i].old_own, NULL);
+                def->down_values = blk_clone_rules(frame->saved[i].old_down, NULL);
+#if UP_VALUES
+                /* The clones are live upvalues: count them, so the restore
+                 * (which uncounts whatever list it frees) balances. */
+                frame->saved[i].old_up = def->up_values;
+                {
+                    size_t k = 0;
+                    def->up_values = blk_clone_rules(frame->saved[i].old_up, &k);
+                    symtab_up_value_count += k;
+                }
+#endif
+                if (init_val) {
+                    symtab_add_own_value(name, v->data.function.args[0], init_val);
+                    expr_free(init_val);
+                }
+                continue;
+            }
             bool had_values = def->own_values || def->down_values;
             def->own_values  = NULL;   /* the body sees the symbol unset ... */
             def->down_values = NULL;   /* ... in BOTH rule lists */
@@ -1143,14 +1201,15 @@ void mth_block_leave(void* f) {
     }
 }
 
-Expr* builtin_block(Expr* res) {
+static Expr* block_common(Expr* res, bool inherit) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* vars = res->data.function.args[0];
     Expr* body = res->data.function.args[1];
 
     if (vars->type != EXPR_FUNCTION || vars->data.function.head->data.symbol.name != SYM_List) return NULL;
 
-    void* frame = mth_block_enter(vars->data.function.args, vars->data.function.arg_count);
+    void* frame = block_enter_impl(vars->data.function.args,
+                                   vars->data.function.arg_count, inherit);
 
     Expr* final_res = evaluate(body);
 
@@ -1167,6 +1226,13 @@ Expr* builtin_block(Expr* res) {
     mth_block_leave(frame);
     return final_res;
 }
+
+Expr* builtin_block(Expr* res) { return block_common(res, false); }
+
+/* Internal`InheritedBlock[{x, y = v, ...}, body] -- like Block, but the
+ * localised symbols start with their current definitions, attributes and
+ * builtin behaviour; anything the body changes is undone on exit. */
+Expr* builtin_inheritedblock(Expr* res) { return block_common(res, true); }
 
 Expr* builtin_with(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;

@@ -4203,6 +4203,10 @@ void info_init(void) {
     symtab_set_docstring("CompoundExpression", "expr1; expr2; ... evaluates its arguments in sequence, returning the last result.");
     symtab_set_docstring("Module", "Module[{x, y, ...}, expr] specifies that x, y, ... are local variables.");
     symtab_set_docstring("Block", "Block[{x, y, ...}, expr] evaluates expr with local values for x, y, ....");
+    symtab_set_docstring("Internal`InheritedBlock",
+        "Internal`InheritedBlock[{x, y = v, ...}, expr]\n"
+        "\tevaluates expr like Block, but x, y, ... keep their current values, definitions and\n"
+        "\tattributes inside; any change made to them in expr is undone on exit.");
     symtab_set_docstring("With", "With[{x = x0, ...}, expr] specifies that x should be replaced by x0 throughout expr.");
     symtab_set_docstring("Unique", "Unique[x] generates a new symbol x$nnn (numbered by $ModuleNumber); Unique[\"x\"] generates xnnn; Unique[] generates $nnn; Unique[{x, ...}] gives a list of fresh symbols. Each is Temporary and never previously used.");
     symtab_set_docstring("Return",
@@ -4577,6 +4581,14 @@ void info_init(void) {
         "$UserDocumentsDirectory\n"
         "\tgives the user's default directory for documents, as a string: ~/Documents (or\n"
         "\tXDG_DOCUMENTS_DIR on Unix), else the home directory when there is no Documents folder.");
+    symtab_set_docstring("$InitialDirectory",
+        "$InitialDirectory\n"
+        "\tgives the initial working directory when Mathilda was started, as a string.\n"
+        "\tSetDirectory changes Directory[] but never $InitialDirectory.");
+    symtab_set_docstring("$RootDirectory",
+        "$RootDirectory\n"
+        "\tgives the root directory of the file system, as a string: \"/\" on Unix and macOS,\n"
+        "\tthe system drive's root (e.g. \"C:\\\\\") on Windows.");
     symtab_set_docstring("$TemporaryDirectory",
         "$TemporaryDirectory\n"
         "\tgives the directory for temporary files, from TMPDIR (or TEMP / TMP), else /tmp.");

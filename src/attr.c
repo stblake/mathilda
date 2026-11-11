@@ -98,6 +98,7 @@ static SymbolAttr builtin_attrs[] = {
     {"Table", ATTR_HOLDALL | ATTR_PROTECTED},
     {"Module", ATTR_HOLDALL | ATTR_PROTECTED},
     {"Block", ATTR_HOLDALL | ATTR_PROTECTED},
+    {"Internal`InheritedBlock", ATTR_HOLDALL | ATTR_PROTECTED},
     {"With", ATTR_HOLDALL | ATTR_PROTECTED},
     {"Unique", ATTR_PROTECTED},
     {"Range", ATTR_LISTABLE | ATTR_PROTECTED},

@@ -1089,6 +1089,7 @@ void core_init(void) {
     attr_init();
     purefunc_init();
     void minus_init(void);  minus_init();   /* Minus[x] -> Times[-1, x] */
+    void undocumented_init(void);  undocumented_init();   /* Indexed, Internal` utilities */
     stats_init();
     partitions_init();
     poly_init();
@@ -1359,7 +1360,7 @@ void core_init(void) {
      * builtin nesting depth (eval_builtin_depth): Together[...] inside
      * Module/If/Table/Map is a user-level call, inside Integrate it is not. */
     static const char* const transparent[] = {
-        "CompoundExpression", "Module", "Block", "With", "If", "Which", "Switch",
+        "CompoundExpression", "Module", "Block", "Internal`InheritedBlock", "With", "If", "Which", "Switch",
         "Do", "For", "While", "Table", "Map", "MapIndexed", "MapThread", "MapAt",
         "Apply", "Scan", "Nest", "NestList", "NestWhile", "NestWhileList",
         "FixedPoint", "FixedPointList", "Fold", "FoldList", "Select", "Array",
@@ -1417,7 +1418,7 @@ void core_init(void) {
          * DiracChain rule's condition, uses both: every failed dispatch was
          * tainted, and an already-evaluated chain re-ran the condition on each
          * wrap -- 18x as many FCI calls as the reference in Chisholm.) */
-        "Dispatch", "With", "Block", NULL };
+        "Dispatch", "With", "Block", "Internal`InheritedBlock", NULL };
     for (const char* const* n = pure; *n; n++) {
         SymbolDef* d = symtab_lookup(*n);
         if (d) d->eval_pure = 1;

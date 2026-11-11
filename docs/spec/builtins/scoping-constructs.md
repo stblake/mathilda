@@ -85,6 +85,29 @@ Implements dynamic scoping by temporarily overriding symbol values.
   made while the symbol was blocked survived the restore, so these came back
   as `x + y` and `f[3]`.
 
+## Internal`InheritedBlock
+`Block` that keeps the current definitions. Implemented in `src/modular.c`
+alongside `Block` (it shares the frame machinery, so `TimeConstrained` unwinds
+and `Return` behave the same way).
+- `Internal`InheritedBlock[{x, y = v, ...}, expr]`
+
+**Features**:
+- Each localised symbol starts with a *copy* of its current own values, down
+  values, up values, attributes and builtin behaviour (`Block` starts from an
+  unset symbol with no attributes). `y = v` then assigns a new local value.
+- Everything the body does to the symbols (new definitions, `Unprotect`,
+  `ClearAttributes`, ...) is undone on exit.
+- The usual idiom: temporary rules for a system symbol,
+  `Internal`InheritedBlock[{Plus}, Unprotect[Plus]; Plus[a, b] = 0; a + b]` is
+  `0`, and afterwards `a + b` is unchanged and `Plus` is `Protected` again.
+- Attributes: `HoldAll`, `Protected`.
+
+```
+f[x_] := x^2; y = 7;
+Internal`InheritedBlock[{f, y}, f[x_] := x^3; y++; {f[2], y}]   (* {8, 8} *)
+{f[2], y}                                                       (* {4, 7} *)
+```
+
 ## With
 Defines local constants by lexical substitution.
 - `With[{x = x0, ...}, expr]`

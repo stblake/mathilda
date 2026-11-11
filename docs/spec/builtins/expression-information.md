@@ -242,6 +242,36 @@ objects, transcendental `Root[{f, x0}]`, and (since v0.6129) algebraic
 coefficients, as in the reference: `NumericQ[Root[-1 + 6 #1 + 22 #1^2 +
 16 #1^3 &, 2]]` is `True`, `NumericQ[Root[#1^2 - a &, 1]]` is `False`.
 
+## Internal`ExceptionFreeQ
+Does an expression contain no exceptional value? Implemented in
+`src/undocumented.c`.
+- `Internal`ExceptionFreeQ[expr]`
+
+**Features**:
+- `False` when `Indeterminate`, an infinity (`DirectedInfinity[...]`, so also
+  `Infinity`, `-Infinity`, `ComplexInfinity`), `Overflow[]`, `Underflow[]` or a
+  non-finite machine real occurs anywhere in `expr`, heads included; `True`
+  otherwise. Purely structural: nothing is evaluated.
+
+```
+Internal`ExceptionFreeQ /@ {{1, x}, {1, Infinity}, f[Indeterminate]}   (* {True, False, False} *)
+```
+
+## Internal`PositiveIntegerQ, Internal`NonNegativeIntegerQ
+Syntactic integer tests, implemented in `src/undocumented.c`:
+`Internal`PositiveIntegerQ[e]` is `True` for an integer `> 0` (machine or
+big), `Internal`NonNegativeIntegerQ[e]` for an integer `>= 0`; anything else
+(including `1.0` and symbols) is `False`.
+
+## Internal`RealValuedNumberQ, Internal`RealValuedNumericQ
+Real-valuedness tests, implemented in `src/undocumented.c`.
+- `Internal`RealValuedNumberQ[e]`: `True` for an `Integer`, `Rational` or
+  `Real` number; `False` for `Complex` numbers and non-numbers (`Pi` is not a
+  number).
+- `Internal`RealValuedNumericQ[e]`: `True` for a `NumericQ` quantity whose
+  numerical value is real (`Pi`, `Sqrt[2]`, `Log[3]`); `False` for `I`,
+  `Sqrt[-2]` and anything non-numeric.
+
 ## PossibleZeroQ
 Hybrid symbolic-numeric test for whether `expr` is identically zero.
 The general problem is undecidable (Richardson 1968); `PossibleZeroQ`

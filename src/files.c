@@ -1855,6 +1855,23 @@ static char* documentsdir_from_env(void) {
     return r;
 }
 
+/* $RootDirectory: the root of the file system -- "/" on Unix and macOS; on
+ * Windows the system drive's root (SystemDrive, e.g. "C:\\", default "C:\\").
+ * Caller frees. */
+static char* rootdir_from_env(void) {
+#if defined(_WIN32)
+    const char* d = getenv("SystemDrive");
+    if (!d || !*d) d = "C:";
+    char* r = malloc(strlen(d) + 2);
+    if (r) { strcpy(r, d); strcat(r, "\\"); }
+    return r;
+#else
+    char* r = malloc(2);
+    if (r) { r[0] = '/'; r[1] = '\0'; }
+    return r;
+#endif
+}
+
 /* Install `value` (consumed; may be NULL = leave unset) as the OwnValue of the
  * Protected system variable `name`. */
 static void set_dir_variable(const char* name, char* value) {
@@ -1958,6 +1975,10 @@ void files_init(void) {
      * system on every platform; MATHILDA_USERBASE therefore moves both. */
     set_dir_variable("$PreferencesDirectory", userbasedir_from_env());
     set_dir_variable("$UserDocumentsDirectory", documentsdir_from_env());
+    /* $InitialDirectory: the working directory when the kernel started
+     * (files_init runs during startup, before any SetDirectory). */
+    set_dir_variable("$InitialDirectory", cwd_dup());
+    set_dir_variable("$RootDirectory", rootdir_from_env());
 
     /* $PathnameSeparator: the host separator FileNameJoin uses by default. */
     {

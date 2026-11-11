@@ -362,6 +362,32 @@ In[3]:= Catenate[Values[GroupBy[Range[6], EvenQ]]]
 Out[3]= {1, 3, 5, 2, 4, 6}
 ```
 
+## Indexed
+A symbolic indexed component. Implemented in `src/undocumented.c`.
+- `Indexed[expr, i]`: the `i`-th component of `expr`.
+- `Indexed[expr, {i, j, ...}]`: the component with indices `i, j, ...`.
+
+**Features**:
+- When `expr` is a list deep enough for the (machine-integer) indices,
+  `Indexed` evaluates to the part: `Indexed[{a, b, c}, 2]` is `b`,
+  `Indexed[{{1, 2}, {3, 4}}, {2, 1}]` is `3`; negative indices count from the
+  end.
+- Otherwise it stays as an inert symbolic component that algebra treats like a
+  variable: `Indexed[x, 1] + Indexed[x, 1]` is `2 Indexed[x, 1]`. An
+  out-of-range index on a list also stays unevaluated.
+- Attributes: `NHoldRest`, `Protected` (`N` leaves the indices alone).
+
+## Internal`PartitionRagged
+Split a list into consecutive sublists of given lengths. Implemented in
+`src/undocumented.c`.
+- `Internal`PartitionRagged[list, {n1, n2, ...}]`
+
+**Features**:
+- `Internal`PartitionRagged[{a, b, c, d, e, f}, {1, 2, 3}]` is
+  `{{a}, {b, c}, {d, e, f}}`; zero lengths give empty sublists.
+- The `ni` must be non-negative integers that sum to `Length[list]`; otherwise
+  the call stays unevaluated.
+
 ## Partition
 Partitions a list into sublists.
 - `Partition[list, n]`: Non-overlapping sublists of length `n`.
