@@ -104,7 +104,7 @@ reducedRows[F_Association, Bt_Association, rows0_List] := Module[
   {t = Bt["x"], R = rows0, n = Length[rows0], cols, ords, clash, i, j, lo, hi, s, f, it = 0, cap, nat},
   (* the order at P of c w_j is -(m deg c + shift_j), shift_j = -m deg d_j + j deg G: *)
   (* the native kernel runs the same reduction on those shifted degrees            *)
-  If[nativeQ[],
+  If[nativeQ[F],
     nat = FLINT`PolynomialWeakPopovForm[rows0, t,
       Table[-Bt["m"] Exponent[Bt["d"][[j + 1]], t] + j Bt["deg"], {j, 0, Bt["m"] - 1}],
       "DegreeScale" -> Bt["m"], Sequence @@ nativeOpts[F]];
@@ -132,7 +132,7 @@ idealNormDegree[F_Association, B_Association, I_Association] :=
 elementInverse::usage = "elementInverse[F, B, h] is {num, den, det} with 1/h = num/den: num the first row of the adjugate of the multiplication matrix of h times the norm cofactor, den the norm of h over the prime field (h with polynomial coordinates), and det the determinant of the multiplication matrix of h (the norm of h down to F[x]).";
 elementInverse[F_Association, B_Association, h_List] := Module[{x = B["x"], M, det, adj1, nrm, cof, nat},
   (* the multiplication matrix of h: rows w_k h, formed by the kernel itself *)
-  nat = If[nativeQ[], FLINT`PolynomialDetAdjugate[IdentityMatrix[B["m"]], x,
+  nat = If[nativeQ[F], FLINT`PolynomialDetAdjugate[IdentityMatrix[B["m"]], x,
     "Products" -> {{h}, B["mult"]}, Sequence @@ nativeOpts[F]], None];
   If[ListQ[nat],
     det = nat[[1]]; adj1 = nat[[2, 1]],

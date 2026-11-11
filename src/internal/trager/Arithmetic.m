@@ -94,8 +94,8 @@ afInverse[B_Association, a_List] := Module[{M = afMultMatrix[fieldQ[], B, a], L,
   adj1 = If[B["m"] === 1, {1}, Table[(-1)^(1 + j) Det[Drop[P, {j}, {1}]], {j, B["m"]}]];
   Together[# L/det] & /@ adj1];
 
-afPolynomialQ::usage = "afPolynomialQ[F, a] is True when every coordinate of a is a polynomial in x (a is integral over K[x]).";
-afPolynomialQ[F_Association, a_List] := AllTrue[a, FreeQ[Denominator[rc[F, #]], _Symbol] &];
+afPolynomialQ::usage = "afPolynomialQ[F, a] is True when every coordinate of a is a polynomial in x (a is integral over K[x]): its denominator involves no symbol other than the scalars of F (fieldScalarSymbols; the symbols of a rational function field fieldFn are constants here).";
+afPolynomialQ[F_Association, a_List] := AllTrue[a, fieldScalarQ[F, Denominator[rc[F, #]]] &];
 
 basisMod::usage = "basisMod[B, p] reduces the basis descriptor B (over Q) modulo the prime p: G, d_i, s_i and the multiplication factors are reduced over GF(p). Under good reduction ([T] p.68) the result is the integral basis of the reduced curve.";
 basisMod[B_Association, p_Integer] := Module[{F = fieldGF[p], x = B["x"]},

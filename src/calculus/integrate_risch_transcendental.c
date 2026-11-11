@@ -757,6 +757,58 @@ static Expr* builtin_risch_rischde(Expr* res) {
     return rde_base(f, g, x);
 }
 
+/* Risch`RischDECertified[f, g, x] / [f, g, x, {kernels}] — the tri-state
+ * Risch DE used by the Bronstein package (src/internal/bronstein/RDE.m), whose
+ * non-elementary certificates need a PROVEN "no solution".  Solves
+ * D[y] + f y = g in C(x) or in the tower of the Log/Exp kernels of f, g and the
+ * optional kernel list, inside a certification scope (rde_cert_begin), and
+ * returns
+ *     y             a solution (the same one Risch`RischDE finds);
+ *     "NoSolution"  no solution exists in that field -- every NULL path taken
+ *                   was an authoritative one (Bronstein Ch.6 theorems);
+ *     $Failed       undecided: an out-of-scope input or an unimplemented
+ *                   sub-case (Risch`RischDECertifiedReason[] names the first).
+ * Inputs must be rational in x and the tower kernels (numeric constants
+ * allowed); anything else is $Failed. */
+static const char* g_rde_cert_last_reason = NULL;
+
+static Expr* builtin_risch_rischde_certified(Expr* res) {
+    size_t ac = (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0;
+    if (ac != 3 && ac != 4) return NULL;
+    Expr* f = res->data.function.args[0];
+    Expr* g = res->data.function.args[1];
+    Expr* x = res->data.function.args[2];
+    Expr* extra = (ac == 4) ? res->data.function.args[3] : NULL;
+    if (x->type != EXPR_SYMBOL) return NULL;
+    if (extra && !rt_head_is(extra, "List")) return NULL;
+    bool has_kernel = rt_find_exp_of_x(f, x) || rt_find_log_of_x(f, x)
+                   || rt_find_exp_of_x(g, x) || rt_find_log_of_x(g, x)
+                   || (extra && (rt_find_exp_of_x(extra, x) || rt_find_log_of_x(extra, x)));
+    RdeCertState saved = rde_cert_begin();
+    Expr* y = NULL;
+    if (has_kernel) {
+        y = rde_solve_tower_ext(f, g, x, (extra && extra->data.function.arg_count) ? extra : NULL);
+    } else {
+        Expr* xl = expr_new_function(expr_new_symbol("List"), (Expr*[]){ expr_copy(x) }, 1);
+        if (rde_rational_in(f, xl) && rde_rational_in(g, xl)) y = rde_base(f, g, x);
+        else rde_cert_mark("base: coefficients not rational in x");
+        expr_free(xl);
+    }
+    bool unc = rde_cert_uncertain();
+    g_rde_cert_last_reason = y ? NULL : (unc ? rde_cert_reason() : NULL);
+    rde_cert_end(saved);
+    if (y) return y;
+    return unc ? expr_new_symbol("$Failed") : expr_new_string("NoSolution");
+}
+
+/* Risch`RischDECertifiedReason[] — the first uncertain path of the last
+ * Risch`RischDECertified call that returned $Failed (a String), or None. */
+static Expr* builtin_risch_rischde_certified_reason(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 0) return NULL;
+    return g_rde_cert_last_reason ? expr_new_string(g_rde_cert_last_reason)
+                                  : expr_new_symbol("None");
+}
+
 /* Risch`SPDE[a, b, c, x, n] — Rothstein's SPDE box (Bronstein §6.4, base field
  * C(x)): degree-reducing reduction of a Dq + b q = c to a bounded polynomial
  * equation.  Returns {b', c', m, alpha, beta} (any solution q of degree <= n is
@@ -824,6 +876,18 @@ void integrate_risch_transcendental_init(void) {
         "and the polynomial non-cancellation solve, with the derivation lifted to\n"
         "the tower.  Returns y (0 when g is 0), or stays unevaluated when no\n"
         "rational solution exists.  Coefficients may be Gaussian (C(i)(x)).");
+    rt_install("Risch`RischDECertified", builtin_risch_rischde_certified,
+        "Risch`RischDECertified[f, g, x] solves D[y] + f y == g like Risch`RischDE,\n"
+        "but distinguishes a proof from a give-up: it returns a solution y, the\n"
+        "string \"NoSolution\" when no solution exists in C(x) or in the tower of the\n"
+        "Log/Exp kernels of f and g (every decision taken is a theorem of Bronstein\n"
+        "Chapter 6), or $Failed when undecided (an unimplemented sub-case or input\n"
+        "outside rational functions of x and the kernels).\n"
+        "Risch`RischDECertified[f, g, x, {k1, ...}] adds the kernels k_i to the tower,\n"
+        "so the solution field is the caller's whole tower.");
+    rt_install("Risch`RischDECertifiedReason", builtin_risch_rischde_certified_reason,
+        "Risch`RischDECertifiedReason[] names the first undecided path of the last\n"
+        "Risch`RischDECertified call that returned $Failed (a String), or None.");
     rt_install("Risch`SPDE", builtin_risch_spde,
         "Risch`SPDE[a, b, c, x, n] applies Rothstein's SPDE reduction (Bronstein\n"
         "§6.4) to a D[q] + b q == c over C(x): returns {b', c', m, alpha, beta}\n"

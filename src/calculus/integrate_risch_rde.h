@@ -65,6 +65,36 @@ int rde_spde_field(Expr* a, Expr* b, Expr* c, RdeCtx* C, long n, RdeSpde* out);
 /* PolyRischDENoCancel over k(x)[tau] (§6.5, deg_tau(b) >= 1): q (owned) or NULL. */
 Expr* rde_polyrischde_nocancel_field(Expr* b, Expr* c, RdeCtx* C, long n);
 
+/* ---- Certification of "no solution" (Risch`RischDECertified) -------------
+ *
+ * The solvers above return NULL both for a PROVEN "no solution" and for a path
+ * that merely gave out (an unimplemented cancellation sub-case, a degree bound
+ * that is only exact outside its resonance cases, a tower the builder could not
+ * form, a non-weakly-normalized f in the tower).  While a certification scope is
+ * open, every non-authoritative NULL path records itself with rde_cert_mark, so
+ * the caller can tell the two apart: a NULL with no mark is a theorem (Bronstein
+ * Ch.6), a NULL with a mark is "unknown".  Marking is conservative: a mark set
+ * on a sub-path that did not decide the outcome only downgrades a certificate
+ * to "unknown", never the reverse.  Outside a scope marks are ignored and the
+ * extra checks (weak normalization in the tower) are skipped, so the integrator
+ * pays nothing. */
+typedef struct { int active; int uncertain; const char* why; } RdeCertState;
+RdeCertState rde_cert_begin(void);            /* open a scope; returns the outer state */
+void rde_cert_end(RdeCertState saved);        /* close it, restoring the outer state   */
+bool rde_cert_active(void);
+bool rde_cert_uncertain(void);
+const char* rde_cert_reason(void);            /* first mark of the scope, or NULL       */
+void rde_cert_mark(const char* why);          /* record a non-authoritative path        */
+
+/* rde_solve_tower with extra tower kernels (a List of Log/Exp kernels, or NULL)
+ * joined to those of f and g, so the solution field is the caller's tower even
+ * when f and g mention only part of it. */
+Expr* rde_solve_tower_ext(Expr* f, Expr* g, Expr* x, Expr* extra);
+
+/* Is e a rational function of the symbols in the List vars only (numeric
+ * constants allowed)?  The certification gate on the solvers' inputs. */
+bool rde_rational_in(Expr* e, Expr* vars);
+
 /* Small shared eval/predicate/poly helpers (rt_head_is, rt_eval1..3,
  * rt_is_poly, rt_degree, rt_coeff, rt_is_zero, ...) are declared in
  * risch_util.h; rt_tower_deriv in risch_tower.h — both included above. */

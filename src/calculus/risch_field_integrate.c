@@ -1699,12 +1699,46 @@ Expr* rt_recursive_tower_case(Expr* f, Expr* x) {
  * solution in the tower field / out of the 1a scope).  Exposed to the REPL via
  * Risch`RischDE for direct unit testing at depth. */
 Expr* rde_solve_tower(Expr* f, Expr* g, Expr* x) {
-    Expr* fg = expr_new_function(expr_new_symbol("Plus"),
-        (Expr*[]){ expr_copy(f), expr_copy(g) }, 2);
+    return rde_solve_tower_ext(f, g, x, NULL);
+}
+
+/* Is e a rational function of the symbols in the List `vars` alone (numeric
+ * constants allowed, no other symbol, no radical or kernel of a variable)?
+ * Certification gate: the solvers' "no solution" theorems are about K(vars). */
+bool rde_rational_in(Expr* e, Expr* vars) {
+    Expr* tog = rt_eval1("Together", expr_copy(e));
+    Expr* num = rt_eval1("Numerator", expr_copy(tog));
+    Expr* den = rt_eval1("Denominator", tog);
+    Expr* pn = rt_eval2("PolynomialQ", expr_copy(num), expr_copy(vars));
+    Expr* pd = rt_eval2("PolynomialQ", expr_copy(den), expr_copy(vars));
+    Expr* vv = rt_eval1("Variables", expr_new_function(expr_new_symbol("List"),
+        (Expr*[]){ num, den }, 2));
+    Expr* extra = rt_eval2("Complement", vv, expr_copy(vars));
+    bool ok = rt_head_is(extra, "List") && extra->data.function.arg_count == 0
+        && pn->type == EXPR_SYMBOL && pn->data.symbol.name == intern_symbol("True")
+        && pd->type == EXPR_SYMBOL && pd->data.symbol.name == intern_symbol("True");
+    expr_free(pn); expr_free(pd); expr_free(extra);
+    return ok;
+}
+
+/* rde_solve_tower over the tower of the kernels of f, g AND the List `extra` of
+ * Log/Exp kernels (NULL: none): the solution field is then the caller's whole
+ * tower, which matters for a certified "no solution" -- y' = 1/x has none in
+ * C(x) but Log[x] in C(x, Log[x]).  Every out-of-scope NULL is recorded with
+ * rde_cert_mark. */
+Expr* rde_solve_tower_ext(Expr* f, Expr* g, Expr* x, Expr* extra) {
+    Expr* fg = extra
+        ? expr_new_function(expr_new_symbol("List"),
+              (Expr*[]){ expr_copy(f), expr_copy(g), expr_copy(extra) }, 3)
+        : expr_new_function(expr_new_symbol("Plus"),
+              (Expr*[]){ expr_copy(f), expr_copy(g) }, 2);
     Expr* fgx = rt_expand_exp_sums(fg);
     expr_free(fg);
     RtTower T;
-    if (!rt_tower_build_min(fgx, x, &T, 1)) { rt_tower_free(&T); expr_free(fgx); return NULL; }
+    if (!rt_tower_build_min(fgx, x, &T, 1)) {
+        rde_cert_mark("tower: could not be built");
+        rt_tower_free(&T); expr_free(fgx); return NULL;
+    }
     expr_free(fgx);
     Expr* fx = rt_expand_exp_sums(f);
     Expr* gx = rt_expand_exp_sums(g);
@@ -1716,8 +1750,18 @@ Expr* rde_solve_tower(Expr* f, Expr* g, Expr* x) {
         && rt_find_exp_of_x(fs, x) == NULL && rt_find_log_of_x(fs, x) == NULL
         && rt_find_exp_of_x(gs, x) == NULL && rt_find_log_of_x(gs, x) == NULL) {
         RdeCtx C = { &T, (long)T.n - 1, x, T.t[T.n - 1] };
+        if (rde_cert_active()) {
+            Expr** vv = malloc((T.n + 1) * sizeof(Expr*));
+            vv[0] = expr_copy(x);
+            for (size_t i = 0; i < T.n; i++) vv[i + 1] = expr_copy(T.t[i]);
+            Expr* vl = expr_new_function(expr_new_symbol("List"), vv, T.n + 1);
+            free(vv);
+            if (!rde_rational_in(fs, vl) || !rde_rational_in(gs, vl))
+                rde_cert_mark("tower: coefficients not rational in the tower");
+            expr_free(vl);
+        }
         q = rde_tower(fs, gs, &C);
-    }
+    } else rde_cert_mark("tower: kernels left after substitution");
     if (fs) expr_free(fs);
     if (gs) expr_free(gs);
     Expr* y = NULL;

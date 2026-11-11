@@ -1,3 +1,20 @@
+# Bronstein integration campaign (started 2026-11-12)
+
+Living plan: src/internal/bronstein/BRONSTEIN_PLAN.md (phases, design, progress log).
+
+- [x] 0. Bookkeeping (plan copied, this section)
+- [x] 1. Spikes and substrate: fieldFn (Trager Field.m), context bridge, Risch`RischDECertified, Risch` builtins on a theta symbol
+- [ ] 2. Tower.m, Poly.m, Curve.m
+- [ ] 3. Hermite.m, Special.m, LimitedIntegrate.m
+- [ ] 4. Puiseux.m, Residues.m
+- [ ] 5. Divisors.m, Specialize.m
+- [ ] 6. LogPart.m, AlgebraicPart.m
+- [ ] 7. Pipeline.m + Method -> "Bronstein"
+- [ ] 8. Trager + Bronstein cascade stages
+- [ ] 9 / 9b. FriCAS stress; integral generator + benchmark 256
+- [ ] 10-11. Shape B
+- [ ] 13. Close-out
+
 # DSolve PDE corpus + roadmap (started 2026-11-11)
 
 Plan: ~/.claude/plans/let-s-review-all-the-eventual-honey.md. Roadmap: DSOLVE_PDE_PLAN.md.

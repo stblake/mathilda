@@ -131,6 +131,24 @@ void rde_spde_free(RdeSpde* s) {
  * 0 for "no solution" (the equation has no solution of degree <= n in k[x]).
  * Each level reduces the degree bound by deg(a) via one ExtendedEuclidean, so
  * it terminates in O(n / deg(a)) steps — no dense linear solve. */
+/* ---- Certification scope (see integrate_risch_rde.h) -------------------- */
+static RdeCertState g_rde_cert = { 0, 0, NULL };
+
+RdeCertState rde_cert_begin(void) {
+    RdeCertState saved = g_rde_cert;
+    g_rde_cert.active = 1; g_rde_cert.uncertain = 0; g_rde_cert.why = NULL;
+    return saved;
+}
+void rde_cert_end(RdeCertState saved) { g_rde_cert = saved; }
+bool rde_cert_active(void) { return g_rde_cert.active != 0; }
+bool rde_cert_uncertain(void) { return g_rde_cert.uncertain != 0; }
+const char* rde_cert_reason(void) { return g_rde_cert.why; }
+void rde_cert_mark(const char* why) {
+    if (!g_rde_cert.active) return;
+    if (!g_rde_cert.uncertain) g_rde_cert.why = why;
+    g_rde_cert.uncertain = 1;
+}
+
 static int rde_spde(Expr* a, Expr* b, Expr* c, Expr* x, long n, RdeSpde* out) {
     out->b = out->c = out->alpha = out->beta = NULL; out->m = 0;
     if (n < 0) {
@@ -169,7 +187,12 @@ static int rde_spde(Expr* a, Expr* b, Expr* c, Expr* x, long n, RdeSpde* out) {
         if (cof && cof->type == EXPR_FUNCTION && cof->data.function.arg_count == 2)
             s = cof->data.function.args[0];
     }
-    if (!s) { if (eg) expr_free(eg); expr_free(a1); expr_free(b1); expr_free(c1); return 0; }
+    if (!s) {
+        rde_cert_mark("SPDE: extended gcd unavailable");
+        if (eg) expr_free(eg);
+        expr_free(a1); expr_free(b1); expr_free(c1);
+        return 0;
+    }
     Expr* sc = rde_mul(s, c1);
     Expr* r = rde_rem(sc, a1, x);
     expr_free(sc);
@@ -301,6 +324,8 @@ static Expr* rde_weak_normalizer(Expr* f, Expr* x) {
         }
         /* Only the common gg == 1 case yields the clean residue formula; else
          * leave w = 1 (weak normalization is a no-op that at worst declines). */
+        if (!(s && gg && gg->type == EXPR_INTEGER && gg->data.integer == 1))
+            rde_cert_mark("WeakNormalizer: residue formula unavailable");
         if (s && gg && gg->type == EXPR_INTEGER && gg->data.integer == 1) {
             Expr* sa = rde_mul(s, num);
             Expr* a = rde_rem(sa, d1, x);           /* a = s*num mod d1 */
@@ -315,6 +340,10 @@ static Expr* rde_weak_normalizer(Expr* f, Expr* x) {
             /* Positive integer roots of res in rmWNz. */
             Expr* roots = rt_eval2("Solve", expr_new_function(expr_new_symbol("Equal"),
                 (Expr*[]){ res, expr_new_integer(0) }, 2), expr_new_symbol("rmWNz"));
+            if (!(roots && roots->type == EXPR_FUNCTION
+                  && roots->data.function.head->type == EXPR_SYMBOL
+                  && roots->data.function.head->data.symbol.name == intern_symbol("List")))
+                rde_cert_mark("WeakNormalizer: residues not solved");
             if (roots && roots->type == EXPR_FUNCTION
                 && roots->data.function.head->type == EXPR_SYMBOL
                 && roots->data.function.head->data.symbol.name == intern_symbol("List")) {
@@ -381,7 +410,7 @@ Expr* rde_base(Expr* f, Expr* g, Expr* x) {
     /* 1. Weak normalization: f <- f - Dw/w, g <- w g, y = z/w. */
     Expr* w = rde_weak_normalizer(f, x);
     Expr* fbar;
-    if (rt_is_zero(w)) { expr_free(w); return NULL; }
+    if (rt_is_zero(w)) { rde_cert_mark("WeakNormalizer: zero"); expr_free(w); return NULL; }
     if (w->type == EXPR_INTEGER && w->data.integer == 1) {
         fbar = expr_copy(f);
     } else {
@@ -430,6 +459,8 @@ Expr* rde_base(Expr* f, Expr* g, Expr* x) {
         Expr* cc = rde_mul(dnh2_en, num_g);         /* (dn h^2 / en) num_g */
         expr_free(num_f); expr_free(num_g); expr_free(dh); expr_free(dndh);
         expr_free(hnf); expr_free(dnh2_en);
+        if (!(rt_is_poly(aa, x) && rt_is_poly(bb, x) && rt_is_poly(cc, x)))
+            rde_cert_mark("base: reduced equation not polynomial");
         if (rt_is_poly(aa, x) && rt_is_poly(bb, x) && rt_is_poly(cc, x)) {
             /* 3. Degree bound (RdeBoundDegreeBase, p.199). */
             long da = rt_degree(aa, x), db = rt_degree(bb, x), dc = rt_degree(cc, x);
@@ -495,7 +526,7 @@ Expr* rde_base(Expr* f, Expr* g, Expr* x) {
         bool good = exn && rt_is_zero(exn);
         expr_free(dy); expr_free(fy); expr_free(s1);
         if (exn) expr_free(exn);
-        if (!good) { expr_free(result); result = NULL; }
+        if (!good) { rde_cert_mark("base: identity gate"); expr_free(result); result = NULL; }
     }
     return result;
 }
@@ -746,9 +777,14 @@ static void rde_special_denom_exp(Expr* a, Expr* b, Expr* c, RdeCtx* C,
             if (cand && cand->type == EXPR_INTEGER) {
                 long cv = (long)cand->data.integer;
                 if (cv < n) n = cv;                  /* n = min(n, resonance) */
+            } else if (!(cand && rt_is_zero(cand))) {
+                /* alpha = -b(0)/a(0) may still be m eta + Dz/z with z NOT a
+                 * constant (ParametricLogarithmicDerivative, not implemented):
+                 * the pole order is unproven.  alpha = 0 forces m = 0. */
+                rde_cert_mark("RdeSpecialDenomExp: parametric log-derivative case");
             }
             if (cand) expr_free(cand);
-        }
+        } else rde_cert_mark("RdeSpecialDenomExp: a(0) = 0");
         if (a0) expr_free(a0);
     }
     long N = 0;
@@ -799,9 +835,13 @@ static long rde_bound_degree_exp(Expr* a, Expr* b, Expr* c, RdeCtx* C) {
             if (cand && cand->type == EXPR_INTEGER) {
                 long cv = (long)cand->data.integer;
                 if (cv > n) n = cv;                  /* n = max(n, resonance) */
+            } else {
+                /* -lc(b)/lc(a) = m eta + Dz/z with non-constant z is not tested
+                 * (ParametricLogarithmicDerivative): the bound is unproven. */
+                rde_cert_mark("RdeBoundDegreeExp: parametric log-derivative case");
             }
             if (cand) expr_free(cand);
-        }
+        } else rde_cert_mark("RdeBoundDegreeExp: lc(a) = 0");
         if (lca) expr_free(lca);
         if (lcb) expr_free(lcb);
     }
@@ -814,6 +854,13 @@ static long rde_bound_degree_exp(Expr* a, Expr* b, Expr* c, RdeCtx* C) {
  * bound, so an over-estimate only wastes SPDE/NoCancel iterations. */
 static long rde_bound_degree_prim(Expr* a, Expr* b, Expr* c, RdeCtx* C) {
     long da = rc_deg(a, C), db = rc_deg(b, C), dc = rc_deg(c, C);
+    /* The leading terms of a Dq and b q can cancel when db = da - 1 (then
+     * -lc(b)/lc(a) = m Dtau + Dz, a limited-integration problem) or db = da
+     * (then -lc(b)/lc(a) = Dz/z): Bronstein's RdeBoundDegreePrim, p.199.  The
+     * integer test below is only the base-field (Dtau = 1, z constant) shadow of
+     * those, so in either case the bound is unproven. */
+    if (C->m >= 0 && (db == da - 1 || db == da))
+        rde_cert_mark("RdeBoundDegreePrim: cancellation case");
     long mx = (db > da - 1) ? db : (da - 1);
     long n = dc - mx; if (n < 0) n = 0;
     if (db == da - 1 && da >= 1) {                  /* cancellation sub-case */
@@ -872,7 +919,12 @@ int rde_spde_field(Expr* a, Expr* b, Expr* c, RdeCtx* C, long n, RdeSpde* out) {
         if (cof && cof->type == EXPR_FUNCTION && cof->data.function.arg_count == 2)
             s = cof->data.function.args[0];
     }
-    if (!s) { if (eg) expr_free(eg); expr_free(a1); expr_free(b1); expr_free(c1); return 0; }
+    if (!s) {
+        rde_cert_mark("SPDE(field): extended gcd unavailable");
+        if (eg) expr_free(eg);
+        expr_free(a1); expr_free(b1); expr_free(c1);
+        return 0;
+    }
     Expr* sc = rde_mul(s, c1);
     Expr* r = rc_rem(sc, a1, C);
     expr_free(sc);
@@ -930,7 +982,12 @@ Expr* rde_polyrischde_nocancel_field(Expr* b, Expr* c, RdeCtx* C, long n) {
         Expr* bp = rde_mul(b, p);
         Expr* t1 = rde_sub(cc, dp);
         Expr* t2 = rde_sub(t1, bp);
-        expr_free(cc); cc = t2;
+        /* Canonicalize: Expand alone leaves a cancelled leading coefficient as
+         * a sum of k(x)-fractions that is zero only after Together
+         * (x^2 t^2/(1+x)^2 + 2x t^2/(1+x)^2 + t^2/(1+x)^2 - t^2), so the
+         * CoefficientList degree stays put and the loop reported a false "no
+         * solution" (y = E^x + 1/(1+x) for f = E^x). */
+        expr_free(cc); cc = rde_canon(t2); expr_free(t2);
         expr_free(dp); expr_free(bp); expr_free(t1); expr_free(p);
         n = m - 1;
     }
@@ -1012,17 +1069,117 @@ static Expr* rde_polyrischde_cancel(Expr* b, Expr* c, RdeCtx* C, long n) {
         Expr* Dstm = rc_D(stm, C);
         Expr* bstm = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
             (Expr*[]){ expr_copy(b), expr_copy(stm) }, 2));
-        cc = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Plus"),
-            (Expr*[]){ cc, expr_new_function(expr_new_symbol("Times"),
-                (Expr*[]){ expr_new_integer(-1), bstm }, 2),
-              expr_new_function(expr_new_symbol("Times"),
-                (Expr*[]){ expr_new_integer(-1), Dstm }, 2) }, 3));  /* adopts cc, bstm, Dstm */
+        {   /* cc -= b stm + D stm, canonicalized (Cancel works term by term on a
+             * sum, leaving a cancelled leading coefficient unreduced). */
+            Expr* sum = expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ cc, expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(-1), bstm }, 2),
+                  expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(-1), Dstm }, 2) }, 3);  /* adopts cc, bstm, Dstm */
+            cc = rde_canon(sum);
+            expr_free(sum);
+        }
         expr_free(stm);
         n = m - 1;
     }
     expr_free(cc);
-    if (fail) { expr_free(q); return NULL; }
+    if (fail) {
+        /* The b = Dz/z (primitive) / -b = Dz/z + m eta (exponential) branch of
+         * PolyRischDECancel is not implemented, so a failed top-down pass is not
+         * a proof. */
+        rde_cert_mark("PolyRischDECancel: log-derivative branch");
+        expr_free(q); return NULL;
+    }
     return q;
+}
+
+/* Is the tower coefficient f weakly normalized (Bronstein §6.1, p.183): no
+ * NORMAL simple pole p with a positive-integer residue (a/(E Dp)) mod p?  Only
+ * then is RdeNormalDenominator's bound h exact (Thm 6.1.2), so this decides
+ * whether a NULL from the tower path can certify "no solution".  Residues at
+ * the simple-pole part d1 of the normal denominator are the roots of
+ *     R(z) = Res_tau(d1, A - z E Dd1),   f = A/(E d1),
+ * a polynomial in z over k; an integer root of R is a common root of all its
+ * coefficients over Q(k's symbols), so it is found among the roots of the gcd
+ * over Q[z] of the coefficients of R.  Returns true when no positive integer
+ * root exists (weakly normalized), false otherwise or when undecided. */
+static bool rc_pos_int_root_free(Expr* R, Expr* z) {
+    Expr* tog = rt_eval1("Together", expr_copy(R));
+    Expr* num = tog ? rt_eval1("Numerator", tog) : NULL;
+    num = num ? rt_eval1("Expand", num) : NULL;
+    if (!num || rt_is_zero(num)) { if (num) expr_free(num); return false; }
+    Expr* vars = rt_eval1("Variables", expr_copy(num));
+    Expr* zl = expr_new_function(expr_new_symbol("List"), (Expr*[]){ expr_copy(z) }, 1);
+    Expr* rest = vars ? rt_eval2("Complement", vars, zl) : NULL;
+    if (!vars) expr_free(zl);
+    Expr* cs = NULL;
+    if (rest && rest->type == EXPR_FUNCTION && rest->data.function.arg_count == 0) {
+        expr_free(rest);
+        cs = expr_new_function(expr_new_symbol("List"), (Expr*[]){ num }, 1);
+    } else if (rest) {
+        Expr* cr = rt_eval2("CoefficientRules", num, rest);
+        cs = cr ? rt_eval1("Values", cr) : NULL;
+    } else expr_free(num);
+    if (!cs) return false;
+    Expr* gcd = rt_eval2("Apply", expr_new_symbol("PolynomialGCD"), cs);
+    if (!gcd) return false;
+    Expr* fq = rt_eval2("FreeQ", expr_copy(gcd), expr_copy(z));
+    bool free_z = fq && fq->type == EXPR_SYMBOL && fq->data.symbol.name == intern_symbol("True");
+    if (fq) expr_free(fq);
+    if (free_z) { bool nz = !rt_is_zero(gcd); expr_free(gcd); return nz; }
+    Expr* sol = rt_eval2("Solve", expr_new_function(expr_new_symbol("Equal"),
+        (Expr*[]){ gcd, expr_new_integer(0) }, 2), expr_copy(z));
+    bool ok = sol && rt_head_is(sol, "List");
+    if (ok) {
+        for (size_t i = 0; i < sol->data.function.arg_count && ok; i++) {
+            Expr* s1 = sol->data.function.args[i];
+            if (!rt_head_is(s1, "List") || s1->data.function.arg_count < 1) { ok = false; break; }
+            Expr* rule = s1->data.function.args[0];
+            if (!rt_head_is(rule, "Rule") || rule->data.function.arg_count != 2) { ok = false; break; }
+            Expr* v = rule->data.function.args[1];
+            if (v->type == EXPR_INTEGER && v->data.integer >= 1) ok = false;
+            if (v->type == EXPR_BIGINT) ok = false;   /* conservative */
+        }
+    }
+    if (sol) expr_free(sol);
+    return ok;
+}
+
+static bool rc_weakly_normalized(Expr* f, RdeCtx* C) {
+    if (C->m < 0) return true;                      /* rde_base normalizes itself */
+    Expr* den = rc_den(f, C);
+    Expr* dn = rc_normal_part(den, C);
+    bool ok = false;
+    if (rc_deg(dn, C) <= 0) ok = true;
+    else {
+        Expr* ddn = rc_D(dn, C);
+        Expr* g = rc_gcd(dn, ddn, C);
+        Expr* dstar = rc_quot(dn, g, C);
+        Expr* gds = rc_gcd(dstar, g, C);
+        Expr* d1 = rc_quot(dstar, gds, C);
+        expr_free(ddn); expr_free(g); expr_free(dstar); expr_free(gds);
+        if (rc_deg(d1, C) <= 0) ok = true;
+        else {
+            Expr* A = rt_eval1("Together", expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_copy(f), expr_copy(den) }, 2));
+            Expr* E = rc_quot(den, d1, C);
+            Expr* Dd1 = rc_D(d1, C);
+            Expr* z = expr_new_symbol("Risch`Private`rdeWNz");
+            Expr* P = rt_eval1("Together", expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ A, expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(-1), expr_copy(z), E, Dd1 }, 4) }, 2));
+            Expr* Pn = P ? rt_eval1("Numerator", P) : NULL;
+            Expr* d1t = rt_eval1("Together", expr_copy(d1));
+            Expr* d1n = d1t ? rt_eval1("Numerator", d1t) : NULL;
+            Expr* R = (Pn && d1n) ? rt_eval3("Resultant", d1n, Pn, expr_copy(C->tau)) : NULL;
+            ok = R && rc_pos_int_root_free(R, z);
+            if (R) expr_free(R);
+            expr_free(z);
+        }
+        expr_free(d1);
+    }
+    expr_free(dn); expr_free(den);
+    return ok;
 }
 
 /* Recursive Risch DE driver: solve D_tower[y] + f y = g for y in K_m (Bronstein
@@ -1042,7 +1199,11 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
      * reachable over towers and verified), so this branch is never the deciding path
      * for a constructible elementary integrand.  See RISCH_BRONSTEIN_GAPS.md / the
      * RT_TAN piece-(c) determination.  Kept as an authoritative decline (Gap 3). */
-    if (kind != RT_LOG && kind != RT_EXP) return NULL;
+    if (kind != RT_LOG && kind != RT_EXP) { rde_cert_mark("tower: tangent top"); return NULL; }
+    /* Certification only: RdeNormalDenominator's bound (and so every "no
+     * solution" below) assumes f weakly normalized in tau. */
+    if (rde_cert_active() && !rde_cert_uncertain() && !rc_weakly_normalized(f, C))
+        rde_cert_mark("tower: f not weakly normalized");
 
     Expr *a, *b, *c, *h;
     if (!rde_normal_denominator_field(f, g, C, &a, &b, &c, &h)) return NULL;
@@ -1056,6 +1217,8 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
         a = na; b = nb; c = nc; h_s = nhs;
     }
     Expr* result = NULL;
+    if (!(rc_ispoly(a, C) && rc_ispoly(b, C) && rc_ispoly(c, C)))
+        rde_cert_mark("tower: reduced equation not polynomial");
     if (rc_ispoly(a, C) && rc_ispoly(b, C) && rc_ispoly(c, C)) {
         long n = (kind == RT_EXP) ? rde_bound_degree_exp(a, b, c, C)
                                   : rde_bound_degree_prim(a, b, c, C);
@@ -1078,6 +1241,7 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
                     if (rem) expr_free(rem);
                     if (ok) H = Hc;
                     else if (Hc) expr_free(Hc);
+                    if (!H) rde_cert_mark("tower: antidifferentiation D H = c");
                 }
             } else if (rc_deg(sp.b, C) >= 1) {
                 /* Non-cancellation (deg_tau(b) >= 1): the leading terms of D[q] and
@@ -1118,7 +1282,7 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
         Expr* rexp = rnum ? rt_eval1("Expand", rnum) : NULL;
         bool good = rexp && rt_is_zero(rexp);
         if (rexp) expr_free(rexp);
-        if (!good) { expr_free(result); result = NULL; }
+        if (!good) { rde_cert_mark("tower: identity gate"); expr_free(result); result = NULL; }
     }
     return result;
 }

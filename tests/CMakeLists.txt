@@ -6526,6 +6526,16 @@ add_executable(trager_torsion_stress_tests test_trager_torsion_stress.c $<TARGET
 target_include_directories(trager_torsion_stress_tests PRIVATE ../src)
 add_test(NAME trager_torsion_stress_tests COMMAND trager_torsion_stress_tests)
 
+# Bronstein integration (src/internal/bronstein/, BRONSTEIN_PLAN.md): one suite
+# per module, all on the push tier.
+add_executable(bronstein_field_fn_tests test_bronstein_field_fn.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(bronstein_field_fn_tests PRIVATE ../src)
+add_test(NAME bronstein_field_fn_tests COMMAND bronstein_field_fn_tests)
+
+add_executable(bronstein_rde_tests test_bronstein_rde.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(bronstein_rde_tests PRIVATE ../src)
+add_test(NAME bronstein_rde_tests COMMAND bronstein_rde_tests)
+
 # Nightly: Integrate[..., Method -> "Trager" / "TragerKauers"] against FriCAS on
 # a corpus of simple-radical integrands (tools/trager_fricas_stress.py). Skipped
 # (exit 0 with a note) when fricas or python3 is not installed.

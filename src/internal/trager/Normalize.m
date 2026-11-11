@@ -31,7 +31,7 @@
 hnf::usage = "hnf[F, rows, x] is the Hermite normal form over F[x] of the K[x]-module spanned by the polynomial row vectors rows: an upper-triangular m x m matrix (m = number of columns) with monic diagonal and entries above each pivot of lower degree. The module must have full rank m; otherwise this is an internal error.";
 hnf[F_Association, rows0_List, x_Symbol] := Module[
   {M, nr, nc, piv, a, b, eg, g, s, t, r1, r2, q, inv, nat},
-  If[nativeQ[],
+  If[nativeQ[F],
     nat = FLINT`PolynomialHermiteForm[rows0, x, Sequence @@ nativeOpts[F]];
     If[ListQ[nat], Return[nat]]];
   M = Map[kc[F, #] &, rows0, {2}];
@@ -66,7 +66,7 @@ hnfModDet::usage = "hnfModDet[F, rows, x, D] is hnf[F, rows, x] when D is a mult
 hnfModDet[F_Association, rows0_List, x_Symbol, D_] := Module[
   {m = Length[First[rows0]], Dm = kMonic[F, D, x], M, nr, piv, a, b, g, s, t, r1, r2, q, inv, red, nat},
   If[kDeg[F, Dm, x] <= 0, Return[hnf[F, rows0, x]]];
-  If[nativeQ[],
+  If[nativeQ[F],
     nat = FLINT`PolynomialHermiteForm[rows0, x, "DeterminantMultiple" -> Dm, Sequence @@ nativeOpts[F]];
     If[ListQ[nat], Return[nat]]];
   red[row_, j_] := MapIndexed[If[First[#2] > j, kRem[F, #1, Dm, x], kc[F, #1]] &, row];

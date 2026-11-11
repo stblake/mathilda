@@ -262,6 +262,12 @@ static void test_tower_exp(void) {
     assert_rde_y("E^x", "1/(1 + E^x)^2");           /* repeated normal pole */
     assert_rde_y("2 E^x", "1/(3 + E^x)");
     assert_rde_y("E^x", "E^x");                     /* q_bar polynomial in tau */
+    /* The non-cancellation loop must canonicalize c after each pass: with
+     * k(x)-fraction coefficients a cancelled leading term stayed as a sum that
+     * is zero only after Together, and the loop reported "no solution". */
+    assert_rde_y("E^x", "E^x + 1/(1 + x)");
+    assert_rde_y("E^x", "(-2 + E^(2 x) + 3 x)/(1 + x)");
+    assert_rde_y("-2 + E^x", "(-2 E^x - 2 E^(2 x) - x)/(1 + 2 x)");
     assert_rde_y("E^x", "E^(2 x)/(1 + E^x)");
     /* depth-2 exp-over-exp: tau = E^(E^x), eta = E^x — the derivation
      * abstraction must generalise (k = C(x, E^x) itself carries an exponential). */

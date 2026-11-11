@@ -4619,6 +4619,52 @@ The intermediate Chapter-6 boxes are exposed for direct testing:
 `{b', c', m, alpha, beta}` or `$Failed`) and `Risch`PolyRischDENoCancel[b, c, x, n]`
 (the non-cancellation polynomial solve, §6.5, returns `q` or `$Failed`).
 
+## Risch`RischDECertified — the Risch DE with a proven "no solution"
+
+`Risch`RischDE` stays unevaluated both when no solution exists and when a sub-case
+is not implemented, so its "no" cannot back a non-elementary certificate.
+`Risch`RischDECertified[f, g, x]` solves the same equation and tells the two
+apart:
+
+- `y` is a solution, the same one `Risch`RischDE` finds.
+- `"NoSolution"` means no solution exists in `C(x)`, or in the tower of the
+  `Log`/`Exp` kernels of `f` and `g`. It is returned only when every decision on
+  the path was a theorem of Bronstein, *Symbolic Integration I*, Ch. 6.
+- `$Failed` means undecided. `Risch`RischDECertifiedReason[]` names the first
+  undecided path.
+
+`Risch`RischDECertified[f, g, x, {k1, ...}]` adds the kernels `k_i` to the tower,
+so the solution field is the caller's whole tower. This matters: `y' = 1/x` has no
+solution in `Q(x)`, but has `Log[x]` in `Q(x, Log[x])`.
+
+Undecided, and so `$Failed`:
+- inputs that are not rational in `x` and the kernels;
+- a tangent top;
+- in the tower, an `f` that is not weakly normalized (a normal simple pole with a
+  positive-integer residue);
+- the cancellation sub-cases of the degree bounds and of the special denominator
+  (`RdeBoundDegreePrim` with `deg b ∈ {deg a − 1, deg a}`, and the
+  parametric-logarithmic-derivative case for an exponential top);
+- the log-derivative branch of `PolyRischDECancel`;
+- the antidifferentiation branch when the field integrator gives no answer.
+
+```
+In[1]:= Risch`RischDECertified[0, 1/x, x]                     (* Log[x] is not in Q(x) *)
+Out[1]= "NoSolution"
+
+In[2]:= Risch`RischDECertified[0, 1/x, x, {Log[x]}]
+Out[2]= Log[x]
+
+In[3]:= Risch`RischDECertified[0, 1/Log[x], x]                (* li is not elementary *)
+Out[3]= "NoSolution"
+
+In[4]:= {Risch`RischDECertified[1 + 1/x, Log[x], x], Risch`RischDECertifiedReason[]}
+Out[4]= {$Failed, "RdeBoundDegreePrim: cancellation case"}
+```
+
+This is the Risch DE used by the Bronstein integration package
+(`src/internal/bronstein/RDE.m`, `BRONSTEIN_PLAN.md`).
+
 ## PolynomialQuotientRemainder
 
 Single-pass companion to `PolynomialQuotient` / `PolynomialRemainder`.

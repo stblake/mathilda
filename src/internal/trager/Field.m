@@ -13,7 +13,17 @@
 (*                 the embedding (a Root object) used when the answer is       *)
 (*                 printed;                                                   *)
 (*   GF(p)      -- the reductions modulo p used to bound torsion orders       *)
-(*                 ([T] Ch 6 Sec 2-3).                                        *)
+(*                 ([T] Ch 6 Sec 2-3);                                        *)
+(*   Fn         -- a rational function field k = Q(v_1..v_r) or Q(theta)(v..)  *)
+(*                 (fieldFn): the constant field of a curve over a            *)
+(*                 transcendental tower, used by the Bronstein package        *)
+(*                 (src/internal/bronstein/).  An element is a rational       *)
+(*                 function in the SYMBOLS v_i (Together form), over Q(theta)  *)
+(*                 its numerator reduced modulo mu(t) and its denominator     *)
+(*                 free of t.  Polynomials over Fn in the curve variable are   *)
+(*                 kept collected in that variable, one Together'd            *)
+(*                 coefficient per power, so Exponent/Coefficient read them    *)
+(*                 directly.  No FLINT path (nativeQ[F] is False).            *)
 (*                                                                            *)
 (* A field is an Association with key "Type" -> "Q" | "NF" | "GF".  All       *)
 (* polynomial routines take the field first and the variable x explicitly;    *)
@@ -37,8 +47,27 @@ fieldNF[t_Symbol, mu_, theta_] := <|"Type" -> "NF", "t" -> t, "mu" -> Expand[mu]
 fieldGF::usage = "fieldGF[p] is the prime field GF(p).";
 fieldGF[p_Integer] := <|"Type" -> "GF", "p" -> p|>;
 
-fieldDegree::usage = "fieldDegree[F] is [F : prime field]: 1 for Q and GF(p), deg mu for Q(theta).";
-fieldDegree[F_Association] := If[F["Type"] === "NF", Exponent[F["mu"], F["t"]], 1];
+fieldFn::usage = "fieldFn[vars] is the rational function field Q(vars) (vars a list of symbols, e.g. {x, t1}); fieldFn[vars, {t, mu, theta}] is Q(theta)(vars) with Q(theta) = Q[t]/(mu(t)) as in fieldNF. It is the coefficient field of a curve whose variable is a transcendental monomial over Q(vars) (Bronstein, Shape A). Elements are rational functions in vars (and polynomials in t of degree < deg mu), with denominators free of t.";
+fieldFn[vars_List] := <|"Type" -> "Fn", "vars" -> vars|>;
+fieldFn[vars_List, None] := fieldFn[vars];
+fieldFn[vars_List, {t_Symbol, mu_, theta_}] :=
+  <|"Type" -> "Fn", "vars" -> vars, "t" -> t, "mu" -> Expand[mu], "theta" -> theta|>;
+
+fieldExtQ::usage = "fieldExtQ[F] is True when F carries an algebraic generator t modulo mu(t): Q(theta) (fieldNF) or Q(theta)(vars) (fieldFn with an extension).";
+fieldExtQ[F_Association] := KeyExistsQ[F, "t"];
+
+fieldScalarSymbols::usage = "fieldScalarSymbols[F] is the list of symbols that belong to the scalars of F rather than to a polynomial variable: the generator t of an extension and, for fieldFn, the transcendental symbols vars.";
+fieldScalarSymbols[F_Association] := Join[Lookup[F, "vars", {}], If[fieldExtQ[F], {F["t"]}, {}]];
+
+fieldScalarQ::usage = "fieldScalarQ[F, e] is True when the expression e involves no variable other than the scalar symbols of F (fieldScalarSymbols): e is a scalar of F, not a polynomial in a curve variable.";
+fieldScalarQ[F_Association, e_] := Complement[Variables[e], fieldScalarSymbols[F]] === {};
+
+fieldBase::usage = "fieldBase[F] is F without its algebraic extension: fieldFn[vars] for fieldFn[vars, ext], fieldQ[] for Q(theta), F itself otherwise.";
+fieldBase[F_Association] := Switch[F["Type"],
+  "Fn", fieldFn[F["vars"]], "NF", fieldQ[], _, F];
+
+fieldDegree::usage = "fieldDegree[F] is [F : base field]: 1 for Q, GF(p) and Q(vars), deg mu for Q(theta) and Q(theta)(vars).";
+fieldDegree[F_Association] := If[fieldExtQ[F], Exponent[F["mu"], F["t"]], 1];
 
 nativeOpts::usage = "nativeOpts[F] is the option list naming the field F to the FLINT` polynomial kernels (flint_polymat.c): {} for Q, {Modulus -> p} for GF(p), {Extension -> {t, mu}} for Q(theta).";
 nativeOpts[F_Association] := Switch[F["Type"],
@@ -48,6 +77,8 @@ nativeOpts[F_Association] := Switch[F["Type"],
 
 nativeQ::usage = "nativeQ[] is True when the FLINT` polynomial kernels are to be tried first (tragerOption[\"NativeKernels\"]).";
 nativeQ[] := TrueQ[tragerOption["NativeKernels"]];
+nativeQ::usage = nativeQ::usage <> " nativeQ[F] is nativeQ[] restricted to the fields the kernels support: always False for a rational function field fieldFn (its coefficients are not numbers).";
+nativeQ[F_Association] := F["Type"] =!= "Fn" && nativeQ[];
 
 (* -------------------------------------------------------------------------- *)
 (* Scalars and polynomials: canonical forms.                                  *)
@@ -61,7 +92,33 @@ kc::usage = "kc[F, e] is the canonical form of the polynomial expression e over 
 kc[F_Association, e_] := Switch[F["Type"],
   "Q", Expand[e],
   "NF", Expand[PolynomialRemainder[Expand[e], F["mu"], F["t"]]],
-  "GF", gfMod[e, F["p"]]];
+  "GF", gfMod[e, F["p"]],
+  "Fn", kcFn[F, e]];
+
+fnInvertT::usage = "fnInvertT[F, num, den] is {num', den'} with num'/den' = num/den over the extension field F (fieldFn with t, or fieldNF) and den' free of t: the t-part of den is inverted modulo mu(t) by the extended Euclidean algorithm over the rational functions in the other symbols. A den that is a zero divisor modulo mu (not possible over a field: mu is irreducible) is an internal error.";
+fnInvertT[F_Association, num_, den_] := Module[{t = F["t"], eg, tt},
+  If[FreeQ[den, t], Return[{num, den}]];
+  eg = PolynomialExtendedGCD[den, F["mu"], t];
+  If[!FreeQ[eg[[1]], t] || eg[[1]] === 0, throwInternal["fnInvertTNotUnit", <|"den" -> den|>]];
+  tt = Together[num eg[[2, 1]]/eg[[1]]];
+  If[!FreeQ[Denominator[tt], t], throwInternal["fnInvertTResidualT", <|"den" -> den|>]];
+  {Numerator[tt], Denominator[tt]}];
+
+fnCollect::usage = "fnCollect[F, num, den] is the canonical form over fieldFn F of the polynomial num/den (den free of the curve variables): num reduced modulo mu(t) when F has an extension, then collected in the non-scalar symbols with each coefficient put through Together. The zero polynomial maps to 0.";
+fnCollect[F_Association, num0_, den_] := Module[{num = Expand[num0], pv, rules},
+  If[fieldExtQ[F], num = Expand[PolynomialRemainder[num, F["mu"], F["t"]]]];
+  If[num === 0, Return[0]];
+  pv = Complement[Variables[num], fieldScalarSymbols[F]];
+  If[pv === {}, Return[Together[num/den]]];
+  rules = CoefficientRules[num, pv];
+  Total[(Together[#[[2]]/den] Times @@ (pv^#[[1]])) & /@ rules]];
+
+kcFn::usage = "kcFn[F, e] is kc over a rational function field fieldFn: e must be a polynomial in the curve variable(s) with coefficients in F (a denominator involving a non-scalar symbol is an internal error).";
+kcFn[F_Association, e_] := Module[{tt = Together[e], num, den},
+  {num, den} = {Numerator[tt], Denominator[tt]};
+  If[fieldExtQ[F], {num, den} = fnInvertT[F, num, den]];
+  If[!fieldScalarQ[F, den], throwInternal["kcFnNotPolynomial", <|"e" -> e|>]];
+  fnCollect[F, num, den]];
 
 kZeroQ::usage = "kZeroQ[F, e] is True when the polynomial e is zero over F (exact).";
 kZeroQ[F_Association, e_] := kc[F, e] === 0;
@@ -76,7 +133,11 @@ kInv[F_Association, c_] := Switch[F["Type"],
     If[FreeQ[cc, F["t"]], 1/cc,
       eg = PolynomialExtendedGCD[cc, F["mu"], F["t"]];
       If[!FreeQ[eg[[1]], F["t"]], throwInternal["kInvNotUnit", <|"c" -> cc|>]];
-      kc[F, eg[[2, 1]]/eg[[1]]]]]];
+      kc[F, eg[[2, 1]]/eg[[1]]]]],
+  "Fn", Module[{cc = kc[F, c]},
+    If[cc === 0, throwInternal["kInvZero"]];
+    If[!fieldScalarQ[F, cc], throwInternal["kInvNotScalar", <|"c" -> cc|>]];
+    kc[F, 1/cc]]];
 
 kDeg::usage = "kDeg[F, p, x] is the degree in x of the polynomial p over F (-Infinity for zero).";
 kDeg[F_Association, p_, x_Symbol] := Module[{q = kc[F, p]}, If[q === 0, -Infinity, Exponent[q, x]]];
@@ -98,13 +159,13 @@ kDivRem[F_Association, a_, b_, x_Symbol] := Switch[F["Type"],
   "Q", {Expand[PolynomialQuotient[a, b, x]], Expand[PolynomialRemainder[a, b, x]]},
   "GF", {gfMod[PolynomialQuotient[gfMod[a, F["p"]], gfMod[b, F["p"]], x, Modulus -> F["p"]], F["p"]],
          gfMod[PolynomialRemainder[gfMod[a, F["p"]], gfMod[b, F["p"]], x, Modulus -> F["p"]], F["p"]]},
-  "NF", kDivRemNF[F, a, b, x]];
+  "NF" | "Fn", kDivRemNF[F, a, b, x]];
 
-kDivRemNF::usage = "kDivRemNF[F, a, b, x] is division with remainder over Q(theta): the FLINT` kernel when nativeQ[], else schoolbook long division; kDivRem dispatches to it.";
+kDivRemNF::usage = "kDivRemNF[F, a, b, x] is division with remainder over Q(theta) or a rational function field fieldFn: the FLINT` kernel when nativeQ[F], else schoolbook long division; kDivRem dispatches to it.";
 kDivRemNF[F_Association, a_, b_, x_Symbol] := Module[
   {r = kc[F, a], bb = kc[F, b], db, inv, q = 0, dr, term, nat},
   If[bb === 0, throwInternal["kDivRemByZero"]];
-  If[nativeQ[],
+  If[nativeQ[F],
     nat = FLINT`PolynomialQuotientRemainder[r, bb, x, Sequence @@ nativeOpts[F]];
     If[ListQ[nat], Return[nat]]];
   db = Exponent[bb, x];
@@ -145,7 +206,7 @@ kExtGCD[F_Association, a0_, b0_, x_Symbol] := Module[{a = kc[F, a0], b = kc[F, b
 kExtGCDEuclid::usage = "kExtGCDEuclid[F, a, b, x] is the extended Euclidean algorithm over any field F (used for Q(theta)): the FLINT` kernel when nativeQ[], else the package loop.";
 kExtGCDEuclid[F_Association, a_, b_, x_Symbol] := Module[
   {r0 = kc[F, a], r1 = kc[F, b], s0 = 1, s1 = 0, t0 = 0, t1 = 1, q, r2, inv, nat},
-  If[nativeQ[],
+  If[nativeQ[F],
     nat = FLINT`PolynomialExtendedGCD[r0, r1, x, Sequence @@ nativeOpts[F]];
     If[ListQ[nat], Return[{nat[[1]], nat[[2, 1]], nat[[2, 2]]}]]];
   While[r1 =!= 0,
@@ -158,7 +219,14 @@ kExtGCDEuclid[F_Association, a_, b_, x_Symbol] := Module[
 
 kGCD::usage = "kGCD[F, a, b, x] is the monic gcd of a and b over F. Over Q(theta), with the native kernels, the certified modular gcd (FLINT`PolynomialFieldGCD): the Euclidean remainders and Bezout cofactors over a field of high degree grow far larger than the gcd.";
 kGCD[F_Association, a_, b_, x_Symbol] := Module[{nat, p = kc[F, a], q = kc[F, b]},
-  If[F["Type"] === "NF" && nativeQ[],
+  If[F["Type"] === "Fn" && !fieldExtQ[F],
+    (* Q(vars)[x]: the gcd of the cleared numerators over Q[vars, x], made    *)
+    (* monic in x (Gauss's lemma), instead of a Euclidean remainder sequence  *)
+    (* with rational-function coefficients.                                   *)
+    Return[Which[p === 0 && q === 0, 0,
+      p === 0, kMonic[F, q, x], q === 0, kMonic[F, p, x],
+      True, kMonic[F, PolynomialGCD[Numerator[Together[p]], Numerator[Together[q]]], x]]]];
+  If[F["Type"] === "NF" && nativeQ[F],
     (* one division first when the degrees differ: the modular gcd then works *)
     (* on two polynomials of the smaller degree (2.4x on residue-field towers) *)
     If[p =!= 0 && q =!= 0 && Exponent[p, x] < Exponent[q, x], {p, q} = {q, p}];
@@ -168,12 +236,16 @@ kGCD[F_Association, a_, b_, x_Symbol] := Module[{nat, p = kc[F, a], q = kc[F, b]
   First[kExtGCD[F, a, b, x]]];
 
 kTrace::usage = "kTrace[F, a] is the trace of the element a of F down to the prime field: the trace of multiplication by a on the power basis 1, t, ..., t^(n-1) of Q(theta); a itself over Q and GF(p).";
-kTrace[F_Association, a_] := If[F["Type"] =!= "NF", kc[F, a],
+kTrace[F_Association, a_] := If[!fieldExtQ[F], kc[F, a],
   Module[{t = F["t"]}, Sum[Coefficient[kc[F, a t^i], t, i], {i, 0, fieldDegree[F] - 1}]]];
 
-kNorm::usage = "kNorm[F, p] is the norm of p from K[x] down to the prime-field polynomial ring: Resultant over t against mu for Q(theta), p itself for Q and GF(p).";
-kNorm[F_Association, p_] := If[F["Type"] === "NF",
-  Expand[Resultant[kc[F, p], F["mu"], F["t"]]], kc[F, p]];
+kNorm::usage = "kNorm[F, p] is the norm of p from K[x] down to the base polynomial ring (fieldBase): Resultant over t against mu for Q(theta) and Q(theta)(vars) (mu monic, so the cleared denominator comes out as its deg-mu power), p itself otherwise.";
+kNorm[F_Association, p_] := Which[
+  F["Type"] === "NF", Expand[Resultant[kc[F, p], F["mu"], F["t"]]],
+  F["Type"] === "Fn" && fieldExtQ[F],
+    Module[{tt = Together[kc[F, p]]},
+      kc[fieldBase[F], Resultant[Expand[Numerator[tt]], F["mu"], F["t"]]/Denominator[tt]^fieldDegree[F]]],
+  True, kc[F, p]];
 
 (* -------------------------------------------------------------------------- *)
 (* Rational functions over K with base-field denominators.                    *)
@@ -185,7 +257,16 @@ rc[F_Association, e_] := Switch[F["Type"],
   "GF", Module[{t = Together[e, Modulus -> F["p"]], num, den},
     num = gfMod[Numerator[t], F["p"]]; den = gfMod[Denominator[t], F["p"]];
     If[num === 0, 0, rcGFMonic[num, den, F["p"]]]],
-  "NF", rcNF[F, e]];
+  "NF", rcNF[F, e],
+  "Fn", rcFn[F, e]];
+
+rcFn::usage = "rcFn[F, e] is rc over a rational function field fieldFn: Together, a t-dependent denominator inverted modulo mu (fnInvertT), the numerator reduced modulo mu. The denominator is a polynomial over Q in the curve variable and the symbols of F; zero, and only zero, maps to 0.";
+rcFn[F_Association, e_] := Module[{tt = Together[e], num, den},
+  {num, den} = {Numerator[tt], Denominator[tt]};
+  If[fieldExtQ[F],
+    {num, den} = fnInvertT[F, num, den];
+    num = Expand[PolynomialRemainder[Expand[num], F["mu"], F["t"]]]];
+  If[num === 0, 0, Together[num/den]]];
 
 rcGFMonic::usage = "rcGFMonic[num, den, p] scales num/den over GF(p) so that the denominator is monic in its variable.";
 rcGFMonic[num_, den_, p_Integer] := Module[{v = Variables[den], lc, inv},

@@ -115,7 +115,7 @@ idealTimes[F_Association, B_Association, I_Association, J_Association] := Module
 
 nativeIdeal::usage = "nativeIdeal[F, B, rows, gens, D, den] is the ideal <|\"M\" -> H, \"den\" -> d|> of the module spanned by the products r g (r in rows, g in gens, both coordinate lists of integral elements) divided by den, in lowest terms -- one call of the FLINT` Hermite-form kernel (products by the multiplication table B[\"mult\"], elimination modulo D unless D is None, common factors of den removed) -- or None when the kernels are off or decline (the caller then runs the package routines). The products, the Hermite form and idealReduce of the package routines in one step, with the same result.";
 nativeIdeal[F_Association, B_Association, rows_List, gens_List, D_, den_] := Module[{r},
-  If[!nativeQ[], Return[None]];
+  If[!nativeQ[F], Return[None]];
   r = FLINT`PolynomialHermiteForm[rows, B["x"], "Products" -> {gens, B["mult"]},
     Sequence @@ If[D === None, {}, {"DeterminantMultiple" -> D}], "Denominator" -> den,
     Sequence @@ nativeOpts[F]];
@@ -146,6 +146,7 @@ idealInverse[F_Association, B_Association, I_Association] := Module[
   (* make the denominator a prime-field polynomial: det -> its norm *)
   nrm = kMonic[F, kNorm[F, det], x];
   If[F["Type"] === "NF", nrm = Expand[nrm]];
+  If[F["Type"] === "Fn", nrm = kMonic[fieldBase[F], nrm, x]];
   cof = kExactQuo[F, nrm, det, x];
   rows = Map[kc[F, # cof I["den"]] &, adjT, {2}];
   idealReduce[F, B, <|"M" -> hnf[F, rows, x], "den" -> nrm|>]];
@@ -153,7 +154,7 @@ idealInverse[F_Association, B_Association, I_Association] := Module[
 polyAdjugate::usage = "polyAdjugate[F, H, x] is the adjugate of the square polynomial matrix H over F[x] (the FLINT` kernel when nativeQ[], else cofactor expansion; H is small).";
 polyAdjugate[F_Association, H_List, x_Symbol] := Module[{n = Length[H], nat},
   If[n === 1, Return[{{1}}]];
-  If[nativeQ[],
+  If[nativeQ[F],
     nat = FLINT`PolynomialDetAdjugate[H, x, Sequence @@ nativeOpts[F]];
     If[ListQ[nat], Return[nat[[2]]]]];
   Table[kc[F, (-1)^(i + j) Det[Drop[H, {j}, {i}]]], {i, n}, {j, n}]];
@@ -161,11 +162,21 @@ polyAdjugate[F_Association, H_List, x_Symbol] := Module[{n = Length[H], nat},
 idealReduce::usage = "idealReduce[F, B, I] removes from I = M/den every irreducible prime-field factor q of den that divides all entries of M, so that the representation stays small.";
 idealReduce[F_Association, B_Association, I_Association] := Module[{x = B["x"], M = I["M"], den = I["den"], g, nat},
   If[FreeQ[den, x], Return[<|"M" -> M, "den" -> den|>]];
-  If[nativeQ[],
+  If[nativeQ[F],
     nat = FLINT`PolynomialHermiteForm[M, x, "Denominator" -> den, Sequence @@ nativeOpts[F]];
     If[ListQ[nat], Return[<|"M" -> nat[[1]], "den" -> nat[[2]]|>]]];
   (* Over Q and GF(p) the common factor of den and every entry is a gcd:     *)
   (* divide it out, repeatedly (a square in den may need two passes).        *)
+  If[F["Type"] === "Fn" && fieldExtQ[F],
+    (* Q(theta)(vars): as over Q(theta) below, the common factor of den (a   *)
+    (* polynomial over the base field Q(vars)) and the entries is a gcd over  *)
+    (* the base field of den and every t-coefficient of every entry.          *)
+    g = commonDenFactorFn[F, den, M, x];
+    While[kDeg[fieldBase[F], g, x] > 0,
+      M = Map[kExactQuo[F, #, g, x] &, M, {2}]; den = kExactQuo[fieldBase[F], den, g, x];
+      g = commonDenFactorFn[F, den, M, x]];
+    den = kMonic[fieldBase[F], den, x];
+    Return[<|"M" -> hnf[F, M, x], "den" -> den|>]];
   If[F["Type"] =!= "NF",
     g = Fold[kGCD[F, #1, #2, x] &, den, Select[Flatten[M], # =!= 0 &]];
     While[kDeg[F, g, x] > 0,
@@ -189,6 +200,11 @@ commonDenFactor::usage = "commonDenFactor[F, den, M, x] is the gcd over Q of the
 commonDenFactor[F_Association, den_, M_List, x_Symbol] :=
   Fold[PolynomialGCD, den,
     Select[Flatten[If[# === 0, {}, CoefficientList[kc[F, #], F["t"]]] & /@ Flatten[M]], # =!= 0 &]];
+
+commonDenFactorFn::usage = "commonDenFactorFn[F, den, M, x] is commonDenFactor over a rational function field with an extension, fieldFn[vars, {t, mu, theta}]: the monic gcd over Q(vars)[x] of den and every t-coefficient of every entry of M.";
+commonDenFactorFn[F_Association, den_, M_List, x_Symbol] := Module[{K0 = fieldBase[F], t = F["t"], cs},
+  cs = Flatten[If[# === 0, {}, Table[kc[K0, Coefficient[Expand[kc[F, #]], t, i]], {i, 0, fieldDegree[F] - 1}]] & /@ Flatten[M]];
+  Fold[kGCD[K0, #1, #2, x] &, den, Select[cs, # =!= 0 &]]];
 
 twoGenerators::usage = "twoGenerators[F, B, I] is {{D w_0, r}, D}: two generators of the numerator module of I (D = its determinant, which lies in it by the adjugate, and r a pseudo-random F[x]-combination of its rows), checked to generate the module (a Hermite form modulo D); None when the first eight choices of r fail. Products with I then cost 2m element products instead of m^2.";
 twoGenerators[F_Association, B_Association, I_Association] := Module[
