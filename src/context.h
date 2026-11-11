@@ -88,6 +88,26 @@ bool context_begin_package(const char* ctx,
 bool context_end(char** out_ended_ctx);
 bool context_end_package(char** out_ended_ctx);
 
+/* Depth of the Begin / BeginPackage frame stack, and a forced unwind back to a
+ * saved depth (each popped frame restores its saved $Context / $ContextPath).
+ * For non-local exits only: a TimeConstrained timeout that siglongjmps out of
+ * a package being read (a lazily loaded src/internal package) never reaches its
+ * End[] / EndPackage[], and without the unwind the session is left in the
+ * package's private context -- every later bare symbol then resolves to a fresh
+ * Private` symbol, so user variables appear to vanish. */
+size_t context_stack_depth(void);
+void   context_unwind_to(size_t depth);
+/* The current $Context and $ContextPath values, captured and later put back --
+ * for the same non-local exits: internal packages also ASSIGN
+ * $ContextPath = {"System`"} before their Begin, which the frame stack alone
+ * cannot undo.  The capture is two reference-count bumps (no allocation: it
+ * runs on every TimeConstrained body and Integrate probe); context_restore
+ * consumes both, context_release drops them on a normal exit.  Either may be
+ * NULL. */
+void context_capture(Expr** ctx, Expr** path);
+void context_restore(Expr* ctx, Expr* path);
+void context_release(Expr* ctx, Expr* path);
+
 /* True when `ctx` is listed in $Packages (the contexts of loaded packages;
  * BeginPackage prepends to it).  Needs loads only contexts not yet listed. */
 bool context_packages_contains(const char* ctx);

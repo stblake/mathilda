@@ -582,7 +582,22 @@ static bool ds_three_vars(Expr* const* v, const Expr* eqs, const Expr* funcs) {
     return ds_has_call3(funcs, v) || ds_has_call3(eqs, v);
 }
 
+static bool dsolve_parse_impl(Expr* res, DSolveProblem* P);
+
+/* Parse a DSolve call into P.  On failure P is released and zeroed here: eight
+ * pinned-method wrappers `if (!dsolve_parse(res, &P)) return NULL;` never
+ * freed it, and a parse that fails late (no equation left after the conditions
+ * are split off -- every condition-only or condition-misread PDE problem) had
+ * already allocated the residual / condition arrays and the option values, a
+ * per-call leak the PDE corpus valgrind audit measured.  Callers that also call
+ * dsolve_problem_free on failure stay correct: the struct is zeroed. */
 bool dsolve_parse(Expr* res, DSolveProblem* P) {
+    if (dsolve_parse_impl(res, P)) return true;
+    dsolve_problem_free(P);
+    return false;
+}
+
+static bool dsolve_parse_impl(Expr* res, DSolveProblem* P) {
     memset(P, 0, sizeof(*P));
     P->param_head = "C";
     if (!res || res->type != EXPR_FUNCTION) return false;

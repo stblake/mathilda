@@ -5527,6 +5527,18 @@ static TC_NOINLINE Expr* tc_run_guarded_mode(Expr* body, int savemask) {
      * that installs a temporary rewrite hook and is unwound mid-body would
      * otherwise leave that hook installed permanently. */
     volatile int          saved_blkdep = mth_block_depth_save();
+    /* The Begin / BeginPackage stack.  A timeout landing while a package is
+     * being read -- Integrate's lazily loaded Roach engine, say -- skips its
+     * End[] / EndPackage[]: the session stayed in Roach`Private` with
+     * $ContextPath {System`}, and every later bare symbol resolved to a new
+     * Private` symbol (a corpus driver's own globals read back unevaluated).
+     * Restored on the unwound path only: a body may legitimately leave a
+     * Begin open. */
+    volatile size_t       saved_ctxdep = context_stack_depth();
+    Expr* saved_ctx0; Expr* saved_path0;                /* + the values themselves */
+    context_capture(&saved_ctx0, &saved_path0);
+    Expr* volatile        saved_ctx = saved_ctx0;
+    Expr* volatile        saved_path = saved_path0;
     /* Registered nesting counters (tc_register_unwind_counter), volatile like the
      * saved state above: -O3 does not keep a plain local intact across the jump. */
     /* The rule head a `/;` guard resolves OptionValue against (a name: after a
@@ -5544,6 +5556,8 @@ static TC_NOINLINE Expr* tc_run_guarded_mode(Expr* body, int savemask) {
         tc_body_live = 0; \
         for (int i = 0; i < n_ctr; i++) *tc_unwind_counters[i] = saved_ctr[i]; \
         match_set_rule_head(saved_rule_head); \
+        context_unwind_to(saved_ctxdep); \
+        context_restore(saved_ctx, saved_path); saved_ctx = NULL; saved_path = NULL; \
         flint_cert_binding_clear(); \
         TC_MPFR_STATE_RESET(); } while (0)
     /* setjmp may only be a whole controlling expression (C99 7.13.1.1), so the
@@ -5555,6 +5569,7 @@ static TC_NOINLINE Expr* tc_run_guarded_mode(Expr* body, int savemask) {
     }
 #undef TC_GUARDED_RUN
 #undef TC_GUARDED_UNWOUND
+    context_release(saved_ctx, saved_path);   /* normal completion: nothing to undo */
     mth_block_depth_unwind(saved_blkdep);
     tc_async_deferred = saved_defer;
     mth_msg_suppress_depth_load(saved_msgdep);

@@ -442,6 +442,36 @@ static bool frame_pop(char** out_closed_ctx) {
     return true;
 }
 
+size_t context_stack_depth(void) {
+    size_t n = 0;
+    for (const CtxFrame* f = g_stack; f; f = f->next) n++;
+    return n;
+}
+
+void context_unwind_to(size_t depth) {
+    size_t n = context_stack_depth();
+    while (n > depth && frame_pop(NULL)) n--;
+}
+
+void context_capture(Expr** ctx, Expr** path) {
+    Expr* c = own_value("$Context");
+    Expr* p = own_value("$ContextPath");
+    *ctx  = c ? expr_copy(c) : NULL;
+    *path = p ? expr_copy(p) : NULL;
+}
+
+void context_restore(Expr* ctx, Expr* path) {
+    if (ctx && ctx->type == EXPR_STRING) publish_own("$Context", ctx);
+    else if (ctx) expr_free(ctx);
+    if (path && is_list(path)) publish_own("$ContextPath", path);
+    else if (path) expr_free(path);
+}
+
+void context_release(Expr* ctx, Expr* path) {
+    if (ctx) expr_free(ctx);
+    if (path) expr_free(path);
+}
+
 bool context_begin(const char* ctx) {
     if (!ctx || !ends_with_tick(ctx)) return false;
     /* Relative context: extend the current one. */

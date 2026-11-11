@@ -141,6 +141,27 @@ static void test_numerical_methods_slow_body(void) {
     assert_eval_eq("{Table[u, {u, 2}], i5}", "{{1, 2}, i5}", 0);
 }
 
+/* v0.6501: a timeout inside a package being read -- Begin / BeginPackage, and
+ * the internal packages' direct `$ContextPath = {"System`"}` -- must not leave
+ * the session in that context.  It did (Integrate's lazily loaded Roach engine
+ * left Roach`Private` and {System`}), and every later bare symbol then resolved
+ * to a fresh Private` symbol: a script's own globals read back unevaluated. */
+static void test_context_restored_after_timeout(void) {
+    assert_eval_eq("cp0 = $ContextPath; {TimeConstrained[$ContextPath = {\"System`\"}; "
+                   "Begin[\"TcPkg`Private`\"]; Do[" SLOW("k") ", {k, 10^6}], 0.1, ab], "
+                   "$Context === \"Global`\", $ContextPath === cp0}",
+                   "{ab, True, True}", 0);
+    assert_eval_eq("cp0 = $ContextPath; {TimeConstrained[BeginPackage[\"TcPkg2`\"]; "
+                   "Do[" SLOW("k") ", {k, 10^6}], 0.1, ab], $Context === \"Global`\", $ContextPath === cp0}",
+                   "{ab, True, True}", 0);
+    /* a body that COMPLETES keeps what it did (a Begin may be left open) */
+    assert_eval_eq("TimeConstrained[Begin[\"TcOpen`\"], 10]; {$Context === \"TcOpen`\", End[]; $Context === \"Global`\"}",
+                   "{True, True}", 0);
+    assert_eval_eq("keepv = 42; Do[TimeConstrained[$ContextPath = {\"System`\"}; "
+                   "Begin[\"TcPkg3`Private`\"]; Do[" SLOW("k") ", {k, 10^6}], 0.05, ab], {2}]; "
+                   "Global`keepv === keepv", "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -151,6 +172,7 @@ int main(void) {
     TEST(test_numerical_methods);
     TEST(test_numerical_methods_slow_body);
     TEST(test_mpfr_constant_cache_after_timeout);
+    TEST(test_context_restored_after_timeout);
     printf("All tc_binding_unwind tests passed.\n");
     return 0;
 }
