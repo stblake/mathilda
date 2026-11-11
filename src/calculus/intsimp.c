@@ -29,6 +29,7 @@
 #include "attr.h"
 #include "symtab.h"
 #include "numeric.h"
+#include "common.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -1405,5 +1406,295 @@ Expr* intsimp_finalize(Expr* r, Expr* x) {
     else if (alg_sum) out = alg_sum;
     else if (trn_sum) out = trn_sum;
     else out = expr_new_integer(0);
+    return out;
+}
+
+/* ====================================================================
+ * Algebraic-constant reduction — intsimp_reduce_algebraic_constants.
+ * ====================================================================
+ *
+ * The Rothstein-Trager / LogToReal pipeline does its arithmetic on
+ * algebraic constants (Sqrt[2], 2^(1/4), ...) without normalising them:
+ * like the reference, the evaluator never rationalises a denominator, so
+ * Integrate[1/(x^2 + 3 + 2 Sqrt[2]), x] came out as
+ *   (4 ArcTan[(3 x + 2 Sqrt[2] x)/(7 + 5 Sqrt[2])])/(12 + 8 Sqrt[2])
+ *     + (4 Sqrt[2] ArcTan[(3 x + 2 Sqrt[2] x)/(7 + 5 Sqrt[2])])/(12 + 8 Sqrt[2])
+ * (leaf count 82) for (-1 + Sqrt[2]) ArcTan[(-1 + Sqrt[2]) x] (14).
+ *
+ * This pass rewrites a closed rational-function antiderivative so that
+ *   - the argument of every Log / ArcTan / ArcTanh kernel is a polynomial
+ *     in x (or a ratio of polynomials, denominator made monic), each
+ *     coefficient an exact algebraic constant in RootReduce normal form;
+ *   - terms sharing one kernel are merged, and the summed coefficient is
+ *     put in RootReduce normal form.
+ * Every step is an exact identity on numbers (RootReduce / ToRadicals).  A
+ * coefficient is replaced only when its normal form is radical (no Root[]
+ * object; see ar_reduce_const for the ToRadicals fallback past degree 2) and
+ * no larger; the
+ * rewritten antiderivative is kept only if its leaf count does not grow.
+ * Results with no algebraic constant, or with inexact numbers, are
+ * returned unchanged at the cost of one tree walk.
+ */
+
+static bool ar_is_exact_rational(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
+    return e->type == EXPR_FUNCTION && head_is(e, SYM_Rational);
+}
+
+/* Contains a Power[rational, non-integer rational] (Sqrt[2], 2^(1/4), ...). */
+static bool ar_contains_algebraic(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2
+        && ar_is_exact_rational(e->data.function.args[0])
+        && e->data.function.args[1]->type == EXPR_FUNCTION
+        && head_is(e->data.function.args[1], SYM_Rational))
+        return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ar_contains_algebraic(e->data.function.args[i])) return true;
+    return false;
+}
+
+static bool ar_contains_inexact_or_root(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (e->type != EXPR_FUNCTION) return false;
+    if (head_is(e, SYM_Root)) return true;
+    if (ar_contains_inexact_or_root(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ar_contains_inexact_or_root(e->data.function.args[i])) return true;
+    return false;
+}
+
+static int64_t ar_leaves(Expr* e) { return leaf_count_internal(e, false); }
+
+static bool ar_polyq(Expr* p /* borrowed */, Expr* x) {
+    Expr* r = eval_and_free(expr_new_function(expr_new_symbol(SYM_PolynomialQ),
+        (Expr*[]){ expr_copy(p), expr_copy(x) }, 2));
+    bool ok = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True;
+    if (r) expr_free(r);
+    return ok;
+}
+
+static Expr* ar_call1(const char* head, Expr* a /* owned */) {
+    return eval_and_free(expr_new_function(expr_new_symbol(head), (Expr*[]){ a }, 1));
+}
+
+static Expr* ar_call2(const char* head, Expr* a /* owned */, Expr* b /* owned */) {
+    return eval_and_free(expr_new_function(expr_new_symbol(head), (Expr*[]){ a, b }, 2));
+}
+
+/* ToRadicals fallbacks allowed per antiderivative (see ar_reduce_const). */
+#define AR_RADICAL_BUDGET 32
+
+/* Denest every Sqrt[a + b Sqrt[c]] (and its reciprocal) in `e` that
+ * intsimp_denest_quadratic_surd can open.  Borrows e, returns a new tree. */
+static Expr* ar_denest_walk(Expr* e /* borrowed */) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy(e);
+    if (head_is(e, SYM_Power) && e->data.function.arg_count == 2) {
+        Expr* ex = e->data.function.args[1];
+        bool half = ex->type == EXPR_FUNCTION && head_is(ex, SYM_Rational)
+            && ex->data.function.args[0]->type == EXPR_INTEGER
+            && ex->data.function.args[1]->type == EXPR_INTEGER
+            && ex->data.function.args[1]->data.integer == 2
+            && (ex->data.function.args[0]->data.integer == 1
+                || ex->data.function.args[0]->data.integer == -1);
+        if (half) {
+            Expr* base = ar_denest_walk(e->data.function.args[0]);
+            Expr* be = expr_expand(base);
+            expr_free(base);
+            Expr* d = intsimp_denest_quadratic_surd(be);
+            if (d) {
+                expr_free(be);
+                if (ex->data.function.args[0]->data.integer == 1) return d;
+                return eval_and_free(internal_power((Expr*[]){ d, expr_new_integer(-1) }, 2));
+            }
+            return eval_and_free(internal_power((Expr*[]){ be, expr_copy(ex) }, 2));
+        }
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** args = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) args[i] = ar_denest_walk(e->data.function.args[i]);
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return eval_and_free(out);
+}
+
+/* Normal form of an x-free algebraic constant, when radical and no larger.
+ * RootReduce (sub-millisecond) is canonical for a quadratic field:
+ * (4 + 4 Sqrt[2])/(12 + 8 Sqrt[2]) -> -1 + Sqrt[2].  Past degree 2 it
+ * answers a Root[] object, never acceptable in an antiderivative; then the
+ * Root is converted back with ToRadicals and its quadratic surds denested
+ * (about 1 ms, at most *budget times per antiderivative):
+ *   (4 Sqrt[3] - 4 Sqrt[2])/(20 - 8 Sqrt[6]) -> Root[1 - 10 #1^2 + #1^4 &, 4]
+ *     -> Sqrt[5 + 2 Sqrt[6]] -> Sqrt[2] + Sqrt[3]
+ *   Sqrt[16 + 16 Sqrt[2]]/(4 + 4 Sqrt[2]) -> Sqrt[-1 + Sqrt[2]].
+ * Simplify finds the same forms but costs ~10 ms per constant, which
+ * doubled the integrator's time on biquadratic answers. */
+static Expr* ar_reduce_const(Expr* c /* borrowed */, int* budget) {
+    if (!ar_contains_algebraic(c)) return expr_copy(c);
+    Expr* r = ar_call1("RootReduce", expr_copy(c));
+    if (r && head_is(r, SYM_Root) && *budget > 0) {
+        (*budget)--;
+        Expr* rad = ar_call1("ToRadicals", r);
+        r = rad ? ar_denest_walk(rad) : NULL;
+        if (rad) expr_free(rad);
+    }
+    if (!r || ar_contains_inexact_or_root(r) || ar_leaves(r) > ar_leaves(c)) {
+        if (r) expr_free(r);
+        return expr_copy(c);
+    }
+    return r;
+}
+
+/* p a polynomial in x: rebuild Sum[reduce(c_k) x^k].  Returns NULL when p
+ * is not polynomial in x. */
+static Expr* ar_poly_coeffs(Expr* p /* borrowed */, Expr* x, int* budget) {
+    Expr* pe = expr_expand(p);
+    if (!ar_polyq(pe, x)) { expr_free(pe); return NULL; }
+    Expr* cl = ar_call2("CoefficientList", pe, expr_copy(x));
+    if (!cl || !head_is(cl, SYM_List)) { if (cl) expr_free(cl); return NULL; }
+    size_t n = cl->data.function.arg_count;
+    Expr** terms = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t k = 0; k < n; k++) {
+        Expr* c = ar_reduce_const(cl->data.function.args[k], budget);
+        terms[k] = internal_times((Expr*[]){ c,
+            internal_power((Expr*[]){ expr_copy(x), expr_new_integer((int64_t)k) }, 2) }, 2);
+    }
+    expr_free(cl);
+    Expr* out = eval_and_free(internal_plus(terms, n));
+    free(terms);
+    return out;
+}
+
+/* A kernel argument (rational function of x): normalise its coefficients.
+ * Falls back to a copy of `a` when that does not shrink it. */
+static Expr* ar_tidy_arg(Expr* a /* borrowed */, Expr* x, int* budget) {
+    if (!ar_contains_algebraic(a)) return expr_copy(a);
+    if (intrat_freeq_test(a, x)) return ar_reduce_const(a, budget);
+    Expr* tg = ar_call1("Together", expr_copy(a));
+    Expr* num = tg ? ar_call1("Numerator", expr_copy(tg)) : NULL;
+    Expr* den = tg ? ar_call1("Denominator", expr_copy(tg)) : NULL;
+    if (tg) expr_free(tg);
+    Expr* out = NULL;
+    if (num && den && intrat_freeq_test(den, x)) {
+        Expr* q = eval_and_free(internal_divide((Expr*[]){ expr_copy(num), expr_copy(den) }, 2));
+        out = ar_poly_coeffs(q, x, budget);
+        expr_free(q);
+    } else if (num && den && ar_polyq(den, x)) {
+        /* make the denominator monic in x, then normalise both sides */
+        int dd = get_degree_poly(den, x);
+        Expr* lc = dd > 0 ? get_coeff(den, x, dd) : NULL;
+        if (lc && intrat_freeq_test(lc, x)) {
+            Expr* nq = eval_and_free(internal_divide((Expr*[]){ expr_copy(num), expr_copy(lc) }, 2));
+            Expr* dq = eval_and_free(internal_divide((Expr*[]){ expr_copy(den), expr_copy(lc) }, 2));
+            Expr* n2 = ar_poly_coeffs(nq, x, budget);
+            Expr* d2 = ar_poly_coeffs(dq, x, budget);
+            expr_free(nq); expr_free(dq);
+            if (n2 && d2) out = eval_and_free(internal_divide((Expr*[]){ n2, d2 }, 2));
+            else { if (n2) expr_free(n2); if (d2) expr_free(d2); }
+        }
+        if (lc) expr_free(lc);
+    }
+    if (num) expr_free(num);
+    if (den) expr_free(den);
+    if (!out || ar_leaves(out) > ar_leaves(a)) {
+        if (out) expr_free(out);
+        return expr_copy(a);
+    }
+    return out;
+}
+
+static bool ar_is_kernel(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION
+        && (head_is(e, SYM_Log) || head_is(e, SYM_ArcTan) || head_is(e, SYM_ArcTanh));
+}
+
+/* Rebuild every kernel with tidied arguments (a kernel inside a kernel's
+ * argument is not expected in a rational antiderivative and is left). */
+static Expr* ar_tidy_kernels(Expr* e /* borrowed */, Expr* x, int* budget) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy(e);
+    size_t n = e->data.function.arg_count;
+    Expr** args = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    bool kern = ar_is_kernel(e);
+    for (size_t i = 0; i < n; i++)
+        args[i] = kern ? ar_tidy_arg(e->data.function.args[i], x, budget)
+                       : ar_tidy_kernels(e->data.function.args[i], x, budget);
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), args, n);
+    free(args);
+    return eval_and_free(out);
+}
+
+/* Split a summand into (x-free coefficient) * (rest); both owned. */
+static void ar_split_term(Expr* t /* borrowed */, Expr* x, Expr** coef, Expr** rest) {
+    if (intrat_freeq_test(t, x)) { *coef = expr_copy(t); *rest = expr_new_integer(1); return; }
+    if (!(t->type == EXPR_FUNCTION && head_is(t, SYM_Times))) {
+        *coef = expr_new_integer(1); *rest = expr_copy(t); return;
+    }
+    size_t n = t->data.function.arg_count;
+    Expr** cf = (Expr**)malloc(sizeof(Expr*) * n);
+    Expr** rf = (Expr**)malloc(sizeof(Expr*) * n);
+    size_t nc = 0, nr = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* f = t->data.function.args[i];
+        if (intrat_freeq_test(f, x)) cf[nc++] = expr_copy(f);
+        else rf[nr++] = expr_copy(f);
+    }
+    *coef = nc ? eval_and_free(internal_times(cf, nc)) : expr_new_integer(1);
+    *rest = nr ? eval_and_free(internal_times(rf, nr)) : expr_new_integer(1);
+    free(cf); free(rf);
+}
+
+Expr* intsimp_reduce_algebraic_constants(Expr* e /* borrowed */, Expr* x) {
+    if (!e || !ar_contains_algebraic(e) || ar_contains_inexact_or_root(e)
+        || it_contains_integrate(e))
+        return expr_copy(e);
+    int budget = AR_RADICAL_BUDGET;
+    Expr* k = ar_tidy_kernels(e, x, &budget);
+    if (!k) return expr_copy(e);
+
+    /* Merge summands that share their x-dependent part. */
+    Expr* out = NULL;
+    if (k->type == EXPR_FUNCTION && head_is(k, SYM_Plus)) {
+        size_t n = k->data.function.arg_count;
+        Expr** rests = (Expr**)malloc(sizeof(Expr*) * n);
+        Expr** coefs = (Expr**)malloc(sizeof(Expr*) * n);
+        size_t ng = 0;
+        for (size_t i = 0; i < n; i++) {
+            Expr *c = NULL, *r = NULL;
+            ar_split_term(k->data.function.args[i], x, &c, &r);
+            size_t g = 0;
+            while (g < ng && !expr_eq(rests[g], r)) g++;
+            if (g < ng) {
+                coefs[g] = eval_and_free(internal_plus((Expr*[]){ coefs[g], c }, 2));
+                expr_free(r);
+            } else {
+                rests[ng] = r; coefs[ng] = c; ng++;
+            }
+        }
+        Expr** terms = (Expr**)malloc(sizeof(Expr*) * (ng ? ng : 1));
+        for (size_t g = 0; g < ng; g++) {
+            Expr* c = ar_reduce_const(coefs[g], &budget);
+            expr_free(coefs[g]);
+            terms[g] = internal_times((Expr*[]){ c, rests[g] }, 2);
+        }
+        out = eval_and_free(internal_plus(terms, ng));
+        free(terms); free(rests); free(coefs);
+        expr_free(k);
+    } else {
+        Expr *c = NULL, *r = NULL;
+        ar_split_term(k, x, &c, &r);
+        Expr* c2 = ar_reduce_const(c, &budget);
+        expr_free(c);
+        out = eval_and_free(internal_times((Expr*[]){ c2, r }, 2));
+        expr_free(k);
+    }
+    if (!out || ar_leaves(out) > ar_leaves(e)) {
+        if (out) expr_free(out);
+        return expr_copy(e);
+    }
     return out;
 }

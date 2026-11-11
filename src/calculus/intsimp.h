@@ -68,6 +68,13 @@ Expr* intsimp_strip_log_constants(Expr* e, Expr* x);
 Expr* intsimp_distribute_plus(Expr* e);
 Expr* intsimp_normalize_inverse_trig_signs(Expr* e);
 
+/* Normalise the algebraic constants of a closed rational antiderivative:
+ * kernel (Log/ArcTan/ArcTanh) arguments get RootReduce-normal coefficients,
+ * terms sharing a kernel are merged.  Exact; kept only when it does not
+ * grow the leaf count; no-op without algebraic constants.  Borrows `e`,
+ * returns a new tree. */
+Expr* intsimp_reduce_algebraic_constants(Expr* e, Expr* x);
+
 /* Final normalisation applied once to every closed antiderivative, scoped
  * to radical-bearing results (those carrying a Power[f(x), p/q] of the
  * integration variable).  For such results it flattens x-free

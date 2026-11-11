@@ -3819,8 +3819,13 @@ static Expr* intrat_integrate_rational(Expr* f, Expr* x) {
         expr_free(simplified);
         Expr* simplified3 = intsimp_strip_log_constants(simplified2, x);
         expr_free(simplified2);
-        Expr* result = intsimp_normalize_inverse_trig_signs(simplified3);
+        /* Normalise the algebraic constants (Sqrt[2], ...) the log part
+         * leaves unreduced: kernel arguments get RootReduce-normal
+         * coefficients and terms sharing a kernel merge. */
+        Expr* reduced = intsimp_reduce_algebraic_constants(simplified3, x);
         expr_free(simplified3);
+        Expr* result = intsimp_normalize_inverse_trig_signs(reduced);
+        expr_free(reduced);
         intrat_trace("BronsteinRational", "OUT", result);
         return result;
     }

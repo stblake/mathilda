@@ -776,7 +776,7 @@ static void test_issue133_biquadratic_resultant(void) {
         char buf[1024];
         snprintf(buf, sizeof(buf),
             "TimeConstrained[Module[{r = Integrate[%s, x]}, "
-            "FreeQ[r, Integrate | Indeterminate | RootSum] && FreeQ[r, Sqrt[_Plus]] "
+            "FreeQ[r, Integrate | Indeterminate | RootSum] && FreeQ[r, Power[_Plus, _Rational]] "
             "&& PossibleZeroQ[D[r, x] - (%s)]], 30, $Aborted]", fs[i], fs[i]);
         Expr* e = parse_expression(buf);
         Expr* res = evaluate(e);
@@ -933,15 +933,54 @@ static void test_issue133_quadratic_surd_denesting(void) {
     for (size_t i = 0; i < sizeof(denest) / sizeof(denest[0]); i++) {
         char buf[1024];
         snprintf(buf, sizeof(buf),
-            "TimeConstrained[Module[{r = Integrate[%s, x]}, FreeQ[r, Sqrt[_Plus]] "
+            "TimeConstrained[Module[{r = Integrate[%s, x]}, FreeQ[r, Power[_Plus, _Rational]] "
             "&& PossibleZeroQ[D[r, x] - (%s)]], 30, $Aborted]", denest[i], denest[i]);
         run_eq(buf, "True");
     }
     /* 1 + Sqrt[2]: a^2 - b^2 c = -1 is not a square, so no denesting -- a
-     * nested radical (it prints as Sqrt[16 + 16 Sqrt[2]]) must remain */
+     * nested radical must remain (and stay correct) */
     run_eq("TimeConstrained[Module[{r = Integrate[1/(x^2 + 1 + Sqrt[2]), x]}, "
-           "!FreeQ[r, Sqrt[_Plus]] && PossibleZeroQ[D[r, x] - 1/(x^2 + 1 + Sqrt[2])]], 30, $Aborted]",
+           "!FreeQ[r, Power[_Plus, _Rational]] && PossibleZeroQ[D[r, x] - 1/(x^2 + 1 + Sqrt[2])]], 30, $Aborted]",
            "True");
+}
+
+/* intsimp_reduce_algebraic_constants: the rational integrator's answers have
+ * their algebraic constants in normal form (kernel arguments polynomial in x
+ * with RootReduce-normal coefficients, terms on one kernel merged).  Before,
+ * Integrate[1/(x^2 + 3 + 2 Sqrt[2]), x] was
+ *   (4 ArcTan[(3 x + 2 Sqrt[2] x)/(7 + 5 Sqrt[2])])/(12 + 8 Sqrt[2])
+ *     + (4 Sqrt[2] ArcTan[(3 x + 2 Sqrt[2] x)/(7 + 5 Sqrt[2])])/(12 + 8 Sqrt[2]). */
+static void assert_integral_form(const char* f, const char* expected) {
+    char buf[1024];
+    snprintf(buf, sizeof(buf), "TimeConstrained[Integrate[%s, x], 30, $Aborted]", f);
+    run_eq(buf, expected);
+    assert_integral_pzq(f);
+}
+
+static void test_algebraic_constant_normal_form(void) {
+    /* quadratic field: RootReduce */
+    assert_integral_form("1/(x^2 + 3 + 2 Sqrt[2])", "(-1 + Sqrt[2]) ArcTan[(-1 + Sqrt[2]) x]");
+    assert_integral_form("1/(x^2 + 3/4 - 1/Sqrt[2])", "(2 + 2 Sqrt[2]) ArcTan[(2 + 2 Sqrt[2]) x]");
+    assert_integral_form("1/(x^2 + 4 + 2 Sqrt[3])", "1/2 (-1 + Sqrt[3]) ArcTan[1/2 (-1 + Sqrt[3]) x]");
+    assert_integral_form("1/(x^2 - 3 - 2 Sqrt[2])", "(-1 + Sqrt[2]) ArcTanh[(1 - Sqrt[2]) x]");
+    assert_integral_form("1/(x^2 + 2 x + 4 + 2 Sqrt[2])",
+                         "(-1 + Sqrt[2]) ArcTan[-1 + Sqrt[2] + (-1 + Sqrt[2]) x]");
+    /* the #133 integrand: kernels merged, ArcTan arguments polynomial in x */
+    assert_integral_form("(x^2 + x + 1)/(x^4 + 1)",
+                         "(1/2 + 1/Sqrt[2]) ArcTan[-1 + Sqrt[2] x] + (-1/2 + 1/Sqrt[2]) ArcTan[1 + Sqrt[2] x]");
+    /* past degree 2: Root -> ToRadicals -> quadratic-surd denesting */
+    assert_integral_form("1/(x^2 + 5 - 2 Sqrt[6])", "(Sqrt[2] + Sqrt[3]) ArcTan[(Sqrt[2] + Sqrt[3]) x]");
+    assert_integral_form("1/(x^2 + 1 + Sqrt[2])", "Sqrt[-1 + Sqrt[2]] ArcTan[Sqrt[-1 + Sqrt[2]] x]");
+    /* a Hermite (rational) part alongside */
+    assert_integral_pzq("1/(x^2 + 3 + 2 Sqrt[2])^2");
+    run_eq("FreeQ[Integrate[1/(x^2 + 3 + 2 Sqrt[2])^2, x], ArcTan[(3 x + 2 Sqrt[2] x)/(7 + 5 Sqrt[2])]]", "True");
+    /* unchanged: rational, symbolic and inexact coefficients */
+    run_eq("Integrate[1/(x^2 + 2), x]", "ArcTan[x/Sqrt[2]]/Sqrt[2]");
+    run_eq("Integrate[1/(x^2 + a), x]", "ArcTan[x/Sqrt[a]]/Sqrt[a]");
+    run_eq("Integrate[1/(x^2 + 2.5), x]", "0.632456 ArcTan[0.632456 x]");
+    run_eq("Integrate[1/(x^4 + 1), x]",
+           "ArcTan[-1 + Sqrt[2] x]/(2 Sqrt[2]) + ArcTan[1 + Sqrt[2] x]/(2 Sqrt[2]) - "
+           "Log[1 - Sqrt[2] x + x^2]/(4 Sqrt[2]) + Log[1 + Sqrt[2] x + x^2]/(4 Sqrt[2])");
 }
 
 static void test_opaque_parameter_log_part(void) {
@@ -1042,6 +1081,7 @@ int main(void) {
     TEST(test_issue133_logpart_s_is_polynomial);
     TEST(test_issue133_primitive_polynomial_content);
     TEST(test_issue133_quadratic_surd_denesting);
+    TEST(test_algebraic_constant_normal_form);
 
     printf("All Phase 1-7 (full BronsteinRational pipeline) tests passed!\n");
     return 0;

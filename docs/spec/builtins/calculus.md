@@ -1363,6 +1363,28 @@ remaining child crashes from earlier runs are eliminated, while
   `2 c ArcTanh[(A + B)/(B - A)]` when the simplified argument is
   rational in x.  Beautifies the output without affecting
   differentiation.
+- **Algebraic constants in normal form** (v0.6504, `intsimp_reduce_algebraic_constants`).
+  The log part computes with algebraic constants (`Sqrt[2]`, `2^(1/4)`, nested
+  radicals) and nothing rationalises them, so the answers used to carry
+  unreduced quotients. For example, `Integrate[1/(x^2 + 3 + 2 Sqrt[2]), x]` was
+  `(4 ArcTan[(3 x + 2 Sqrt[2] x)/(7 + 5 Sqrt[2])])/(12 + 8 Sqrt[2]) + (4 Sqrt[2] ArcTan[(3 x + 2 Sqrt[2] x)/(7 + 5 Sqrt[2])])/(12 + 8 Sqrt[2])`
+  (leaf count 82). It is now `(-1 + Sqrt[2]) ArcTan[(-1 + Sqrt[2]) x]` (18).
+  The final pass, run before the sign normalisation, does three things:
+  - It writes each `Log`/`ArcTan`/`ArcTanh` argument as a polynomial in x, or
+    as a ratio with a monic denominator.
+  - It puts every coefficient in normal form. In a quadratic field it uses
+    `RootReduce`. Past degree 2 `RootReduce` answers a `Root` object, so the
+    pass converts that back with `ToRadicals` and denests the quadratic surds:
+    `1/(x^2 + 5 - 2 Sqrt[6])` gives `(Sqrt[2] + Sqrt[3]) ArcTan[(Sqrt[2] + Sqrt[3]) x]`.
+  - It merges terms that share a kernel. The #133 answer is now
+    `(1/2 + 1/Sqrt[2]) ArcTan[-1 + Sqrt[2] x] + (-1/2 + 1/Sqrt[2]) ArcTan[1 + Sqrt[2] x]`.
+
+  Each rewrite is an exact identity. A coefficient is replaced only by a
+  radical form (never a `Root`) that is no larger, and the answer is kept only
+  if its leaf count does not grow. Answers with rational, symbolic or inexact
+  coefficients are unchanged (`ArcTan[x/Sqrt[2]]/Sqrt[2]`,
+  `ArcTan[x/Sqrt[a]]/Sqrt[a]`). Cost: about 2% on a biquadratic-quartic sweep;
+  `Simplify` would have doubled it.
 - **Phase 7 ArcTan/ArcTanh sign normalisation and option parsing** —
   the final pass strips a leading minus sign from `ArcTan` and
   `ArcTanh` arguments (`ArcTan[-arg] -> -ArcTan[arg]`).  The package
