@@ -145,3 +145,32 @@ Two existing expectations changed, both value-equal:
   Sqrt[2]) x]`), because an inner `Together` now returns the reduced
   `-(4 x)/Sqrt[48 + 32 Sqrt[2]]`. It is the reference's
   `-(ArcTanh[x/Sqrt[3 + 2 Sqrt[2]]]/Sqrt[3 + 2 Sqrt[2]])` with the radical denested.
+
+## D3: open — many unrelated nested radicals at once (stress, timeouts only)
+
+After the D1 (v0.6505) and D2 (v0.6507) fixes I ran a randomised stress check.
+It uses 30 random sums of 1 to 3 fractions whose coefficients mix up to three of
+`Sqrt[2]`, `Sqrt[3]`, `I`, `Sqrt[3/4 - 1/Sqrt[2]]`, `Sqrt[1 + Sqrt[2]]`,
+`Sqrt[3 + 2 Sqrt[2]]`, `Sqrt[5 - 2 Sqrt[6]]`, `(3/4 - 1/Sqrt[2])^(3/2)`,
+`(2 + Sqrt[3])^(1/3)` and `2^(1/3)`. The inputs are in `d3_stress_inputs.m`.
+Run them with `./Mathilda -file tasks/polygcd_together_deficiencies/d3_stress.m`.
+
+Every result was checked numerically at 3 points (30 digits), and no wrong
+answer was found. The table counts calls that finished within 10 s:
+
+| Operation | v0.6506 | v0.6507 |
+|---|---|---|
+| `Together` | 12 / 30 | 20 / 30 |
+| `Together`, `Extension -> Automatic` | 13 / 30 | 15 / 30 |
+| `Cancel` | 17 / 30 | 25 / 30 |
+| `Cancel`, `Extension -> Automatic` | 17 / 30 | 17 / 30 |
+| `Simplify` | 1 / 30 | 1 / 30 |
+
+The remaining timeouts all predate these fixes. Their coefficient fields have
+degree in the hundreds, e.g. `Q(I, Sqrt[2], Sqrt[3], Sqrt[1 + Sqrt[2]],
+(2 + Sqrt[3])^(1/3))`.
+
+Directions to investigate:
+- a field-degree cap with an early, cheap decline, so `Simplify` returns its
+  input instead of timing out;
+- a tower (per-generator) representation instead of one primitive element.
