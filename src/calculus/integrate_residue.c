@@ -750,6 +750,39 @@ static bool res_has_param(const Expr* e, const Expr* x) {
     return false;
 }
 
+static bool res_region_neg(Expr* e);
+static bool res_region_pos(Expr* e);
+
+/* The kernel frequency whose SIGN the assumptions leave undecided (owned, or
+ * NULL).  The sign picks the closing half-plane (Jordan's lemma), so a Fourier
+ * family must never read it off the single instantiation point: when it is not
+ * certified over the whole assumed region the family declines and records the
+ * frequency here, and the outermost integrate_residue_try frame re-runs the
+ * integral under `w > 0` and `w < 0` separately and assembles a Piecewise. */
+static Expr* g_split_freq = NULL;
+
+static void res_note_split_freq(Expr* w) {
+    if (!g_split_freq && w) g_split_freq = expr_copy(w);
+}
+
+/* Sign of the real frequency w of the kernel argument u (u = w x for Cos/Sin,
+ * u = I w x for Exp) over the WHOLE assumed region: +1 / -1 when certified, 0
+ * when undecided (the frequency is recorded for the Piecewise split).  A
+ * parameter-free frequency keeps the sign `freq` already read numerically. */
+static int res_fourier_freq_sign(Expr* u, Expr* x, KernelKind kind, double freq) {
+    if (!res_has_param(u, x)) return freq > 0.0 ? 1 : -1;
+    Expr* w = eval_take(mk_fn3("Coefficient", expr_copy(u), expr_copy(x), mk_int(1)));
+    if (w && kind == KERN_EXP)
+        w = ev1("Simplify", mk_fn2("Times", mk_fn2("Times", mk_int(-1), mk_sym(SYM_I)), w));
+    if (!w) return 0;
+    int sgn = 0;
+    if (res_region_pos(w))      sgn = 1;
+    else if (res_region_neg(w)) sgn = -1;
+    else res_note_split_freq(w);
+    expr_free(w);
+    return sgn;
+}
+
 static Expr* residue_family_fourier(Expr* f, Expr* x, Expr* a, Expr* b) {
     if (!is_neg_pos_infinity(a, b)) return NULL;
 
@@ -809,7 +842,14 @@ static Expr* residue_family_fourier(Expr* f, Expr* x, Expr* a, Expr* b) {
     expr_free(R);
     if (!g) { expr_free(Q); return NULL; }
 
-    bool up = freq > 0.0;   /* close upper (a>0) or lower (a<0) half-plane */
+    /* Close the upper (frequency > 0) or lower (< 0) half-plane.  A symbolic
+     * frequency must have its sign PROVEN over the assumed region -- the
+     * instantiation point alone would silently pick one branch (e.g. xi -> -1
+     * for Element[xi, Reals]) and return that branch's closed form as if it
+     * held everywhere. */
+    int fsgn = res_fourier_freq_sign(u, x, kind, freq);
+    if (fsgn == 0) { expr_free(g); expr_free(Q); return NULL; }
+    bool up = fsgn > 0;
 
     ExprVec roots; ExprVec keep; ExprVec realp;
     ev_init(&keep); ev_init(&realp);
@@ -985,7 +1025,10 @@ static Expr* residue_family_fourier_sum(Expr* f, Expr* x, Expr* a, Expr* b) {
         bool okw = c1 && res_reim(c1, &wre, &wim) && fabs(wim) < RES_TOL && fabs(wre) > RES_TOL;
         if (c1) expr_free(c1);
         if (!okw) { expr_free(C); expr_free(u); bad = true; break; }
-        int s = wre > 0.0 ? 1 : -1;
+        /* The sign must hold over the whole assumed region (see
+         * res_fourier_freq_sign), not merely at the instantiation point. */
+        int s = res_fourier_freq_sign(u, x, k2, wre);
+        if (s == 0) { expr_free(C); expr_free(u); bad = true; break; }
         if (sgn == 0) sgn = s; else if (sgn != s) { expr_free(C); expr_free(u); bad = true; break; }
         Expr* term = eval_take(mk_fn2("Times", C,
                          mk_fn1("Exp", mk_fn2("Times", mk_sym(SYM_I), u))));
@@ -3840,6 +3883,110 @@ static bool res_verify_regions(Expr* value, Expr* f, Expr* x, Expr* a, Expr* b,
     return ok;
 }
 
+/* For a recorded undecided frequency w = c s (c a nonzero number, s a single
+ * parameter symbol), the parameter symbol s (borrowed from w), else NULL. */
+static Expr* res_split_symbol(Expr* w, Expr* x) {
+    if (w->type == EXPR_SYMBOL && w->data.symbol.name != x->data.symbol.name)
+        return w;
+    if (head_name_is(w, "Times") && w->data.function.arg_count == 2) {
+        Expr* c = w->data.function.args[0];
+        Expr* s = w->data.function.args[1];
+        double v;
+        if (s->type == EXPR_SYMBOL && s->data.symbol.name != x->data.symbol.name &&
+            numeric_double(c, &v) && v != 0.0)
+            return s;
+    }
+    return NULL;
+}
+
+/* True iff the rational f0 provably diverges on (-Inf, Inf) / [0, Inf) at
+ * infinity: deg(den) - deg(num) < 2.  Used only to recognise the
+ * zero-frequency integral of a Jordan integrand (x/(a^2+x^2) at xi = 0). */
+static bool res_rational_tail_diverges(Expr* f0, Expr* x) {
+    Expr* P; Expr* Q;
+    if (!res_num_den(f0, &P, &Q)) return false;
+    bool ok = contains_symbol(Q, x) && res_polyq(P, x) && res_polyq(Q, x);
+    int dP = ok ? res_degree(P, x) : -1, dQ = ok ? res_degree(Q, x) : -1;
+    expr_free(P); expr_free(Q);
+    return ok && dP >= 0 && dQ >= 0 && dQ - dP < 2;
+}
+
+static int g_split_depth = 0;
+
+/* Piecewise split on the sign of an undecided Fourier frequency w (consumed).
+ * Each branch is a full residue evaluation under the strengthened assumptions
+ * (`w > 0` closes up, `w < 0` closes down); the w == 0 branch is the
+ * zero-frequency integral (Indeterminate when that one diverges).  NULL when
+ * any branch fails -- never a one-branch guess. */
+static Expr* res_split_on_frequency(Expr* w, Expr* f, Expr* x, Expr* a, Expr* b,
+                                    Expr* assumptions, bool pv) {
+    Expr* s = res_split_symbol(w, x);
+    if (!s || g_split_depth >= 2) { expr_free(w); return NULL; }
+    g_split_depth++;
+    Expr* vv[2] = { NULL, NULL };
+    const char* rel[2] = { "Greater", "Less" };
+    bool ok = true;
+    for (int k = 0; k < 2 && ok; k++) {
+        Expr* aug = mk_fn2("And", expr_copy(assumptions),
+                           mk_fn2(rel[k], expr_copy(w), mk_int(0)));
+        bool d = false;
+        vv[k] = integrate_residue_try(f, x, a, b, aug, &d, pv);
+        expr_free(aug);
+        if (!vv[k]) ok = false;
+    }
+    Expr* v0 = NULL;
+    if (ok) {
+        Expr* f0 = eval_take(mk_fn2("ReplaceAll", expr_copy(f),
+                                    mk_fn2("Rule", expr_copy(s), mk_int(0))));
+        if (f0 && f0->type == EXPR_INTEGER && f0->data.integer == 0) v0 = mk_int(0);
+        else if (f0 && res_rational_tail_diverges(f0, x)) {
+            v0 = mk_sym(SYM_Indeterminate);   /* x/(a^2+x^2) at xi = 0 */
+        } else if (f0) {
+            /* R is absolutely integrable (the families admit no real-axis pole
+             * of R outside PrincipalValue unless the kernel vanishes there, the
+             * f0 = 0 case above), so by dominated convergence the integral is
+             * continuous in w: its w = 0 value is the w -> 0+ limit of the
+             * w > 0 closed form.  Read it by substitution when that is finite,
+             * else integrate the zero-frequency integrand directly. */
+            if (!pv) {
+                Expr* lim = eval_take(mk_fn1("Quiet", mk_fn2("ReplaceAll", expr_copy(vv[0]),
+                                      mk_fn2("Rule", expr_copy(s), mk_int(0)))));
+                if (lim && !contains_head(lim, "DirectedInfinity") &&
+                    !contains_head(lim, "Piecewise") &&
+                    !(lim->type == EXPR_SYMBOL &&
+                      (lim->data.symbol.name == SYM_Indeterminate ||
+                       lim->data.symbol.name == SYM_ComplexInfinity)))
+                    v0 = lim;
+                else if (lim) expr_free(lim);
+            }
+            if (!v0) {
+                bool d = false;
+                v0 = integrate_residue_try(f0, x, a, b, assumptions, &d, pv);
+            }
+        }
+        if (f0) expr_free(f0);
+        if (!v0) ok = false;
+    }
+    g_split_depth--;
+    if (!ok) {
+        for (int k = 0; k < 2; k++) if (vv[k]) expr_free(vv[k]);
+        if (v0) expr_free(v0);
+        expr_free(w);
+        return NULL;
+    }
+    /* Piecewise[{{v+, w > 0}, {v-, w < 0}}, v0] */
+    /* Simplify only tidies the condition's spelling (-p > 0 -> p < 0). */
+    Expr* raw1 = mk_fn2("Greater", expr_copy(w), mk_int(0));
+    Expr* raw2 = mk_fn2("Less", w, mk_int(0));
+    Expr* g1 = ev1("Simplify", expr_copy(raw1));
+    Expr* g2 = ev1("Simplify", expr_copy(raw2));
+    if (g1) expr_free(raw1); else g1 = raw1;
+    if (g2) expr_free(raw2); else g2 = raw2;
+    Expr* c1 = mk_fn2("List", vv[0], g1);
+    Expr* c2 = mk_fn2("List", vv[1], g2);
+    return eval_take(mk_fn2("Piecewise", mk_fn2("List", c1, c2), v0));
+}
+
 Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
                             Expr* assumptions, bool* diverges,
                             bool principal_value) {
@@ -3862,6 +4009,10 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
         if (built_here) g_assume = expr_copy(assumptions);
     }
 
+    /* The undecided-frequency note belongs to THIS frame's dispatch only. */
+    Expr* split_prev = g_split_freq;
+    if (built_here) g_split_freq = NULL;
+
     Expr* value = residue_dispatch(f, x, a, b, diverges);
     if (built_here && value && !res_verify_regions(value, f, x, a, b, assumptions)) {
         expr_free(value);
@@ -3875,6 +4026,13 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
     if (built_here) {
         expr_free(g_inst); g_inst = NULL; g_nbounds = 0; g_coupled = false;
         if (g_assume) { expr_free(g_assume); g_assume = NULL; }
+        /* A Fourier family declined only because its frequency sign is not
+         * fixed by the assumptions: evaluate each sign branch separately. */
+        Expr* w = g_split_freq;
+        g_split_freq = split_prev;
+        if (!value && w && !(diverges && *diverges))
+            value = res_split_on_frequency(w, f, x, a, b, assumptions, principal_value);
+        else if (w) expr_free(w);
     }
     g_pv = pv_prev;
     return value;

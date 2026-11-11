@@ -251,6 +251,55 @@ static void test_assumptions_option(void) {
 /* -------------------------------------------------------------------------
  * Family B with symbolic parameters (Fourier/Jordan under Assumptions).
  * ---------------------------------------------------------------------- */
+/* -------------------------------------------------------------------------
+ * Issue #132 (G&R group C): Fourier integrals of rational functions with
+ * symbolic parameters.
+ *  - The kernel frequency's SIGN decides the closing half-plane; it was read
+ *    off the single FindInstance point (xi -> -1 for Element[xi, Reals]) and
+ *    that branch's closed form returned as if it held everywhere.  An
+ *    undecided sign now splits into a Piecewise over w > 0 / w < 0.
+ *  - Nested-radical poles (c^2 + (b^2 + x^2)^2) got a residue of 0 from the
+ *    series engine, so Cos[a x]/(c^2 + (b^2 + x^2)^2) integrated to 0.
+ * Every value is pinned numerically against NIntegrate / mpmath references.
+ * ---------------------------------------------------------------------- */
+static void test_gr132_fourier_sign_and_radical_poles(void) {
+    /* G&R 3.354.5: Pi/Abs[a] E^(-Abs[a p]). */
+    check_eq("With[{r = Integrate[E^(-I p x)/(a^2 + x^2), {x, -Infinity, Infinity}, "
+             "Assumptions -> a != 0 && Element[a, Reals] && Element[p, Reals]]}, "
+             "Chop[N[{r /. {a -> 5/8, p -> 3/8}, r /. {a -> 5/4, p -> 5/6}, "
+             "r /. {a -> -5/4, p -> -5/6}} - {3.976326945213576, 0.8868491913697098, "
+             "0.8868491913697098}, 12]]]", "{0, 0, 0}");
+    /* G&R 17.23.14: Pi/a E^(-a Abs[xi]), both signs of xi. */
+    check_eq("With[{r = Integrate[E^(I x xi)/(a^2 + x^2), {x, -Infinity, Infinity}, "
+             "Assumptions -> Re[a] > 0 && Element[xi, Reals]]}, "
+             "Chop[N[{r /. {a -> 5/6, xi -> 1/5}, r /. {a -> 5/6, xi -> -1/5}} "
+             "- {3.191160921977243, 3.191160921977243}, 12]]]", "{0, 0}");
+    /* G&R 17.23.15: I Pi Sign[xi] E^(-a Abs[xi]). */
+    check_eq("With[{r = Integrate[x E^(I x xi)/(a^2 + x^2), {x, -Infinity, Infinity}, "
+             "Assumptions -> Re[a] > 0 && Element[xi, Reals]]}, "
+             "Chop[N[{r /. {a -> 5/8, xi -> 7/4}, r /. {a -> 5/8, xi -> -7/4}} "
+             "- {1.052301726914921 I, -1.052301726914921 I}, 12]]]", "{0, 0}");
+    /* Real frequency of unknown sign on a Cos kernel: Pi E^(-Abs[k]). */
+    check_eq("With[{r = Integrate[Cos[k x]/(1 + x^2), {x, -Infinity, Infinity}, "
+             "Assumptions -> Element[k, Reals]]}, "
+             "Chop[N[{r /. k -> 2, r /. k -> -2, r /. k -> 0} - {Pi/E^2, Pi/E^2, Pi}]]]",
+             "{0, 0, 0}");
+    /* G&R 3.731.1-4: nested-radical poles, formerly 0. */
+    check_eq("With[{r = Integrate[Cos[a x]/(c^2 + (b^2 + x^2)^2), {x, 0, Infinity}, "
+             "Assumptions -> a > 0 && b > 0 && c > 0]}, "
+             "Chop[N[{r /. {a -> 3/8, b -> 5/6, c -> 5/8}, r /. {a -> 5/4, b -> 7/4, c -> 5/4}} "
+             "- {0.8826184817894607, 0.0438235917490203}, 12]]]", "{0, 0}");
+    check_eq("With[{r = Integrate[x Sin[a x]/(c^2 + (b^2 + x^2)^2), {x, 0, Infinity}, "
+             "Assumptions -> a > 0 && b > 0 && c > 0]}, "
+             "Chop[N[{r /. {a -> 7/4, b -> 5/8, c -> 5/4}, r /. {a -> 5/4, b -> 3, c -> 7/4}} "
+             "- {0.2320209226065788, 0.0073632324841691}, 12]]]", "{0, 0}");
+    /* G&R 3.724.3: poles E^(+-I t) with symbolic t. */
+    check_eq("With[{r = Integrate[((Cos[(b - 1) t] - x Cos[b t]) Cos[a x])/(1 + x^2 - 2 x Cos[t]), "
+             "{x, -Infinity, Infinity}, Assumptions -> a > 0 && t^2 < Pi^2 && b > 0]}, "
+             "Chop[N[{r /. {a -> 3/8, b -> 1/5, t -> 5/4}, r /. {a -> 5/8, b -> 1/5, t -> 3/8}} "
+             "- {0.7922742838753855, 1.525269424043014}, 12]]]", "{0, 0}");
+}
+
 static void test_fourier_symbolic(void) {
     /* Integrate[Cos[k x]/(x^2+a^2)] = (Pi/a) E^{-a k},  a>0, k>0. */
     check_eq("Integrate[Cos[k x]/(x^2+a^2), {x, -Infinity, Infinity}, "
@@ -794,6 +843,7 @@ int main(void) {
     TEST(test_regression_finite);
     TEST(test_assumptions_option);
     TEST(test_fourier_symbolic);
+    TEST(test_gr132_fourier_sign_and_radical_poles);
     TEST(test_rectangular);
     TEST(test_mellin);
     TEST(test_mellin_symbolic_exponent);
