@@ -23,19 +23,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-/* Does e carry an active Integrate[f, x] whose second argument is a bare
- * variable (indefinite), not a {s, a, b} range? */
-static bool cc_has_indefinite_integrate(const Expr* e) {
-    if (!e || e->type != EXPR_FUNCTION) return false;
-    const Expr* h = e->data.function.head;
-    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Integrate &&
-        e->data.function.arg_count >= 2 &&
-        e->data.function.args[1]->type == EXPR_SYMBOL) return true;
-    for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (cc_has_indefinite_integrate(e->data.function.args[i])) return true;
-    return false;
-}
-
 Expr** dsolve_constcoeff_try(DSolveProblem* P, size_t* nbranch) {
     if (P->nfun != 1 || P->neq != 1) return NULL;
     const char* xvar = P->ind_names[0];
@@ -88,13 +75,14 @@ Expr** dsolve_constcoeff_try(DSolveProblem* P, size_t* nbranch) {
                 general = Hgen;
             } else {
                 Expr* yp = dsolve_variation_of_parameters(basis, (size_t)n, g, a[n], xvar);
-                /* An IVP cannot be fitted through an INDEFINITE Integrate that did
-                 * not close: the fit substitutes x -> x0 into it, capturing its
-                 * bound variable (a malformed Integrate[., 0]).  Decline; the
-                 * definite (convolution) form is fine -- it is 0 at x0. */
-                if (yp && P->ncond > 0 && cc_has_indefinite_integrate(yp)) {
-                    expr_free(yp); yp = NULL;
-                }
+                /* An INDEFINITE Integrate that did not close is fine for an IVP
+                 * too: since v0.6502 the shared fit rebases it at the condition
+                 * point (the Duhamel form) before evaluating there.  This method
+                 * used to decline such an IVP -- the old fit captured the bound
+                 * variable, Integrate[., 0] -- which sent y'' + 4 y == f[t] with
+                 * zero ICs past every heavy, budget-bounded method of the
+                 * cascade to a late VoP backstop; under load those budgets ran
+                 * out at different points and dsolve_tests' t_m26 timed out. */
                 if (yp) general = eval_and_free(ds_call2(SYM_Plus, Hgen, yp));
                 else expr_free(Hgen);
             }

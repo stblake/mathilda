@@ -36,6 +36,7 @@
 #include "../symtab.h"
 #include "../attr.h"
 #include "../common.h"
+#include "../core.h"   /* tc_register_unwind_counter */
 #include <stdlib.h>
 #include <stdio.h>
 #include <time.h>
@@ -316,6 +317,11 @@ static Expr* builtin_dsolve_nonhomog_vop(Expr* res){
 }
 
 void dsolve_nonhomog_vop_init(void){
+    /* the re-entry guard is restored on a TimeConstrained unwind: a timeout
+     * inside the sub-solve skips its g_nh_active--, and a guard left raised
+     * disables this method -- and SpecialForm's exemption keyed on it -- for
+     * the rest of the session (the one DSolve guard not yet registered) */
+    tc_register_unwind_counter(&g_nh_active);
     symtab_add_builtin("DSolve`VariationOfParameters", builtin_dsolve_nonhomog_vop);
     symtab_get_def("DSolve`VariationOfParameters")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("DSolve`VariationOfParameters",

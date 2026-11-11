@@ -885,6 +885,34 @@ static void t_m26_general_forcing(void) {
     /* real-root kernel must not hang and must probe-verify (f -> t) */
     check_true("With[{b = (y[t] /. DSolve[{y''[t]+6 y'[t]+8 y[t]==f[t], y[0]==0, y'[0]==0}, y, t][[1]]) "
                "/. f -> (# &)}, PossibleZeroQ[Simplify[D[b, {t,2}] + 6 D[b, t] + 8 b - t]]]");
+    /* v0.6502: the fit used to substitute t -> 0 into the indefinite integrals of
+     * the general solution, variable slot included -- Integrate[(-I/4) f[0], 0], an
+     * integral with respect to 0 -- and the residual-only probes above could not
+     * see it (those terms are constants times homogeneous solutions).  The
+     * integrals are now rebased at the condition point (Duhamel form): none is
+     * taken with respect to a non-symbol, and the CONDITIONS hold. */
+    check_true("FreeQ[DSolve[{y''[t]+4 y[t]==f[t], y[0]==0, y'[0]==0}, y, t], "
+               "Integrate[_, v_ /; !MatchQ[v, _Symbol | _List]]]");
+    check_true("!FreeQ[DSolve[{y''[t]+4 y[t]==f[t], y[0]==0, y'[0]==0}, y, t], Integrate[_, {_, 0, t}]]");
+    check_true("With[{b = (y[t] /. DSolve[{y''[t]+4 y[t]==f[t], y[0]==0, y'[0]==0}, y, t][[1]]) "
+               "/. f -> (Exp[#] &)}, AllTrue[Simplify[{D[b, {t,2}] + 4 b - Exp[t], b /. t -> 0, "
+               "D[b, t] /. t -> 0}], PossibleZeroQ]]");
+    /* nonzero initial values */
+    check_true("With[{b = (y[t] /. DSolve[{y''[t]+4 y[t]==f[t], y[0]==1, y'[0]==3}, y, t][[1]]) "
+               "/. f -> (# &)}, Simplify[{D[b, {t,2}] + 4 b - t, b /. t -> 0, D[b, t] /. t -> 0}] "
+               "=== {0, 1, 3}]");
+    /* ...and the constant-coefficient method answers it ITSELF (it used to
+     * decline such an IVP, sending it past every budget-bounded method of the
+     * cascade -- the load-dependent t_m26 timeout on CI) */
+    check_true("With[{r = DSolve`LinearConstantCoefficients[{y''[t]+4 y[t]==f[t], y[0]==0, "
+               "y'[0]==0}, y, t]}, ListQ[r] && With[{b = (y[t] /. r[[1]]) /. f -> (Exp[#] &)}, "
+               "AllTrue[Simplify[{D[b, {t,2}] + 4 b - Exp[t], b /. t -> 0, D[b, t] /. t -> 0}], "
+               "PossibleZeroQ]]]");
+    check_true("First[AbsoluteTiming[DSolve[{y''[t]+9 y[t]==g[t], y[0]==0, y'[0]==0}, y, t]]] < 5");
+    /* a BVP: conditions at two points, the rebased integrals evaluate at both */
+    check_true("With[{b = (y[t] /. DSolve[{y''[t]+y[t]==f[t], y[0]==0, y[1]==0}, y, t][[1]]) "
+               "/. f -> (#^2 &)}, AllTrue[Simplify[{D[b, {t,2}] + b - t^2, b /. t -> 0, b /. t -> 1}], "
+               "PossibleZeroQ]]");
 }
 
 /* ---- M27: corpus harness now VERIFIES systems (back-substitution) ---- */

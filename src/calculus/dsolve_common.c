@@ -1818,8 +1818,152 @@ static Expr* ds_real_form(const DSolveProblem* P, Expr* fitted) {
     return fitted;
 }
 
+/* Rebase every UNEVALUATED indefinite integral Integrate[g(x), x] of the body at
+ * the point x0: Integrate[g(K), {K, x0, x}].  An indefinite antiderivative is
+ * fixed only up to a constant, which the generated C[k] absorb, so the two
+ * bodies span the same solution set -- but only the definite one has a VALUE at
+ * a point.  The fit below evaluates the body at each condition point by plain
+ * substitution x -> x0, which also rewrote the integration VARIABLE of an
+ * indefinite integral: y'' + 4 y == f[t], y[0] == y'[0] == 0 came back carrying
+ * Integrate[(-I/4) f[0], 0], an integral with respect to 0 that no later
+ * evaluation can give a meaning to.  Rebased, the integral is 0 at x0, D applies
+ * the Leibniz rule to it, and the answer is the Duhamel form
+ * Integrate[G(t, K) f(K), {K, 0, t}].  The dummy is a SYMBOL (D does not yet
+ * handle an indexed K[1]).
+ *
+ * The rebased integrals are INERT (Inactive[Integrate]) while the fit and the
+ * real-form pass run, and dsolve_run activates them once afterwards
+ * (ds_activate_integrals).  Active, every rewrite ds_real_form made of an
+ * integrand re-ran the definite-integration cascade: a forced y'' + y == f IVP
+ * or BVP took 15-30 s once earlier calls had loaded that cascade's later
+ * stages.  D applies the Leibniz rule to the inert form, and an inert
+ * integral over an empty range is read as 0 at the condition point
+ * (ds_zero_empty_inert_integrals). */
+static Expr* ds_rebase_indefinite_integrals(const Expr* e, const char* x, const Expr* x0,
+                                            const char* K, bool* changed) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (head_is((Expr*)e, SYM_Integrate) && e->data.function.arg_count == 2
+        && e->data.function.args[1]->type == EXPR_SYMBOL
+        && e->data.function.args[1]->data.symbol.name == x) {
+        Expr* g = ds_subst(expr_copy(e->data.function.args[0]),
+                           expr_new_symbol(x), expr_new_symbol(K));
+        Expr* lim = expr_new_function(expr_new_symbol(SYM_List), (Expr*[]){
+            expr_new_symbol(K), expr_copy((Expr*)x0), expr_new_symbol(x) }, 3);
+        *changed = true;
+        Expr* inert = expr_new_function(expr_new_symbol(SYM_Inactive),
+                          (Expr*[]){ expr_new_symbol(SYM_Integrate) }, 1);
+        return expr_new_function(inert, (Expr*[]){ g, lim }, 2);
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++)
+        a[i] = ds_rebase_indefinite_integrals(e->data.function.args[i], x, x0, K, changed);
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return out;
+}
+
+static bool ds_is_inert_integrate(const Expr* e) {
+    const Expr* h = (e && e->type == EXPR_FUNCTION) ? e->data.function.head : NULL;
+    return h && h->type == EXPR_FUNCTION && head_is((Expr*)h, SYM_Inactive)
+        && h->data.function.arg_count == 1
+        && h->data.function.args[0]->type == EXPR_SYMBOL
+        && h->data.function.args[0]->data.symbol.name == SYM_Integrate;
+}
+
+static bool ds_is_fit_integral(const Expr* e);
+
+/* The fit's Inactive[Integrate][_, {fitK, a, a}] -> 0 throughout `e` (consumed). */
+static Expr* ds_zero_empty_inert_integrals(Expr* e) {
+    if (e->type != EXPR_FUNCTION) return e;
+    if (ds_is_fit_integral(e)) {
+        const Expr* lim = e->data.function.args[1];
+        if (head_is((Expr*)lim, SYM_List) && lim->data.function.arg_count == 3
+            && expr_eq(lim->data.function.args[1], lim->data.function.args[2])) {
+            expr_free(e);
+            return expr_new_integer(0);
+        }
+        return e;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        e->data.function.args[i] = ds_zero_empty_inert_integrals(e->data.function.args[i]);
+    return e;
+}
+
+/* Is `e` one of the fit's rebased integrals, Inactive[Integrate][g, {fitK, a, b}]? */
+static bool ds_is_fit_integral(const Expr* e) {
+    if (!ds_is_inert_integrate(e) || e->data.function.arg_count != 2) return false;
+    const Expr* lim = e->data.function.args[1];
+    return head_is((Expr*)lim, SYM_List) && lim->data.function.arg_count == 3
+        && lim->data.function.args[0]->type == EXPR_SYMBOL
+        && lim->data.function.args[0]->data.symbol.name == intern_symbol("DSolve`fitK");
+}
+
+/* The fit's rebased integrals -> active Integrate[...] throughout `e`
+ * (borrowed); every other Inactive[Integrate] is left alone.  The caller
+ * evaluates the result. */
+static Expr* ds_activate_fit_integrals_walk(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = ds_activate_fit_integrals_walk(e->data.function.args[i]);
+    Expr* head = ds_is_fit_integral(e) ? expr_new_symbol(SYM_Integrate)
+                                       : ds_activate_fit_integrals_walk(e->data.function.head);
+    Expr* out = expr_new_function(head, a, n);
+    free(a);
+    return out;
+}
+
+static bool ds_has_fit_integral(const Expr* e) {
+    if (ds_is_fit_integral(e)) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (ds_has_fit_integral(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ds_has_fit_integral(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Activate the fit's integrals and give their dummy its display name K (when
+ * the answer does not already use K).  Consumes `e`. */
+static Expr* ds_activate_integrals(Expr* e) {
+    if (!ds_has_fit_integral(e)) return e;
+    Expr* act = ds_activate_fit_integrals_walk(e);
+    expr_free(e);
+    const char* fk = intern_symbol("DSolve`fitK");
+    const char* k = intern_symbol("K");
+    if (!ds_contains(act, k))
+        act = ds_subst(act, expr_new_symbol(fk), expr_new_symbol(k));
+    return eval_and_free(act);
+}
+
+static Expr* dsolve_fit_constants_impl(const DSolveProblem* P, const Expr* body,
+                                       bool* no_solution, int* fit_state);
+
 static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
                                   bool* no_solution, int* fit_state) {
+    if (P->ncond == 0 || !ds_has_head(body, SYM_Integrate))
+        return dsolve_fit_constants_impl(P, body, no_solution, fit_state);
+    const char* x = P->ind_names[0];
+    const Expr* x0 = P->conds[0].point;
+    /* a PRIVATE dummy marks the fit's own integrals: only these are activated
+     * afterwards (a method's deliberate Inactive[Integrate] -- the inert VoP
+     * family, FirstOrderSubstitution -- must stay inert); renamed to K at
+     * activation when the answer is free of K */
+    const char* K = intern_symbol("DSolve`fitK");
+    bool changed = false;
+    Expr* based = ds_rebase_indefinite_integrals(body, x, x0, K, &changed);
+    if (!changed) {
+        expr_free(based);
+        return dsolve_fit_constants_impl(P, body, no_solution, fit_state);
+    }
+    based = eval_and_free(based);
+    Expr* r = dsolve_fit_constants_impl(P, based, no_solution, fit_state);
+    expr_free(based);
+    return r;   /* still inert: dsolve_run activates after ds_real_form */
+}
+
+static Expr* dsolve_fit_constants_impl(const DSolveProblem* P, const Expr* body,
+                                       bool* no_solution, int* fit_state) {
     if (no_solution) *no_solution = false;
     if (fit_state) *fit_state = FIT_OK;
     if (P->ncond == 0) return expr_copy((Expr*)body);
@@ -1904,6 +2048,8 @@ static Expr* dsolve_fit_constants(const DSolveProblem* P, const Expr* body,
         for (int d = 0; d < P->conds[c].order; d++)
             bexpr = ds_d(bexpr, expr_new_symbol(xvar));
         Expr* atpt = ds_subst(expr_copy(bexpr), expr_new_symbol(xvar), expr_copy(P->conds[c].point));
+        if (ds_has_head(atpt, SYM_Inactive))   /* a rebased integral at its base point */
+            atpt = eval_and_free(ds_zero_empty_inert_integrals(atpt));
         if (ds_contains(atpt, SYM_Indeterminate) || ds_contains(atpt, SYM_ComplexInfinity)
             || ds_contains(atpt, SYM_DirectedInfinity) || ds_contains(atpt, SYM_Infinity)) {
             /* The basis is singular AT the point as written -- (x^2/2)^(1/4)/Sqrt[x]
@@ -2851,6 +2997,11 @@ Expr* dsolve_run(DSolveProblem* P, DSolveTryFn fn) {
         if (!fitted) continue;
         if (st == FIT_UNDEF) { expr_free(fitted); continue; }   /* never a solution */
         if (st == FIT_OK) fitted = ds_real_form(P, fitted);
+        /* Activate the integrals the fit rebased (inert so far, so that the real
+         * form -- which rewrites every subexpression -- did not re-run the
+         * definite-integration cascade on each rewrite: 15 s for a forced
+         * y'' + y == f IVP once that cascade's later stages were loaded). */
+        if (ds_has_head(fitted, SYM_Inactive)) fitted = ds_activate_integrals(fitted);
         /* Drop a first-order explicit branch the corpus harness itself would score BAD
          * (a wrong root, or a form valid only on a sub-interval the grid overshoots):
          * declining lets a later cascade method's verifiable (often implicit) form win,
