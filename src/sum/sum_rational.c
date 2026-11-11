@@ -1,5 +1,5 @@
 /*
- * sum_rational.c -- Sum`Rational: infinite summation of rational functions.
+ * sum_rational.c -- Sum`Rational: summation of rational functions.
  *
  * For a summand p(i)/q(i) that is a rational function of the index i, with the
  * convergence condition deg q >= deg p + 2, the infinite sum from a concrete
@@ -26,10 +26,11 @@
  * higher-degree factor (complex / radical pole) is left for the extension path;
  * encountering one makes this stage fall through (NULL) so the Sum stays held.
  *
- * Only the infinite case with a concrete integer lower bound is handled; every
- * other shape (indefinite, finite imax, symbolic/non-integer imin, a
- * non-rational summand, or a divergent deg q < deg p + 2 series) falls through
- * unevaluated.
+ * The infinite case needs a concrete integer lower bound.  A FINITE range with
+ * exact integer bounds is summed by sr_finite (polygamma differences, no
+ * convergence condition; see there).  Every other shape (indefinite, symbolic
+ * finite bounds, symbolic/non-integer imin, a non-rational summand, or a
+ * divergent deg q < deg p + 2 series) falls through unevaluated.
  *
  * Memory contract: builtin_sum_rational takes ownership of res but must not
  * free it; every Expr* allocated here is freed on all paths.
@@ -41,9 +42,11 @@
 #include "expr.h"
 #include "attr.h"
 #include "poly.h"
-#include "arithmetic.h"   /* is_infinity_sym */
+#include "arithmetic.h"   /* is_infinity_sym, make_rational_mpz */
 #include "sym_names.h"
 #include "simp.h"         /* simp_default_complexity */
+#include "rationalize.h"  /* internal_contains_inexact */
+#include <gmp.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -467,6 +470,293 @@ static Expr* sr_generators(Expr* den, Expr* var) {
     return list;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Finite ranges: Sum[p(i)/q(i), {i, imin, imax}] with integer bounds  */
+/* ------------------------------------------------------------------ */
+
+/* PolyGamma[m, a] (owned args). */
+static Expr* sr_polygamma(int m, Expr* a) {
+    return expr_new_function(expr_new_symbol(SYM_PolyGamma),
+                             (Expr*[]){ sum_int(m), a }, 2);
+}
+
+/* Head test without evaluation. */
+static bool sr_head_is(const Expr* e, const char* name) {
+    return e && e->type == EXPR_FUNCTION
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == name;
+}
+
+/* The finite sum  sum_{i=imin}^{imax} 1/(i - rho)^k  as a difference of two
+ * polygamma values at A = imin - rho and B = imax + 1 - rho:
+ *
+ *   k == 1:  PolyGamma[0, B] - PolyGamma[0, A]
+ *   k >= 2:  (-1)^k/(k-1)! (PolyGamma[k-1, A] - PolyGamma[k-1, B])
+ *
+ * (Zeta[k, A] - Zeta[k, B] with Zeta[k, x] = (-1)^k PolyGamma[k-1, x]/(k-1)!;
+ * both are the telescoped digamma recurrence psi(x+1) - psi(x) = 1/x.)  These
+ * are the reference's forms; at a small positive-integer A or B the PolyGamma
+ * evaluates to its exact harmonic value, elsewhere it stays symbolic.  Returns
+ * an owned, unevaluated expression.  A, B are consumed. */
+static Expr* sr_finite_pole_sum(int k, Expr* A, Expr* B) {
+    if (k == 1) {
+        Expr* neg = expr_new_function(expr_new_symbol(SYM_Times),
+                        (Expr*[]){ sum_int(-1), sr_polygamma(0, A) }, 2);
+        return expr_new_function(expr_new_symbol(SYM_Plus),
+                   (Expr*[]){ sr_polygamma(0, B), neg }, 2);
+    }
+    mpz_t fact;
+    mpz_init(fact);
+    mpz_fac_ui(fact, (unsigned long)(k - 1));
+    if (k % 2) mpz_neg(fact, fact);              /* (-1)^k (k-1)! */
+    mpz_t one;
+    mpz_init_set_ui(one, 1);
+    Expr* coef = make_rational_mpz(one, fact);   /* (-1)^k/(k-1)! */
+    mpz_clears(fact, one, (mpz_ptr)0);
+    Expr* negB = expr_new_function(expr_new_symbol(SYM_Times),
+                     (Expr*[]){ sum_int(-1), sr_polygamma(k - 1, B) }, 2);
+    Expr* diff = expr_new_function(expr_new_symbol(SYM_Plus),
+                     (Expr*[]){ sr_polygamma(k - 1, A), negB }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times),
+               (Expr*[]){ coef, diff }, 2);
+}
+
+/* Contribution of one linear pole term c0/base^k (base = b1 i + b0) to the
+ * finite sum: c0 b1^(-k) times sr_finite_pole_sum at rho = -b0/b1.  Sets
+ * *in_range when rho is a real rational in [imin, imax] -- the summand itself
+ * is singular at an index of the range, so there is no finite value to give.
+ * Returns NULL when base is not linear.  c0 is consumed, base borrowed. */
+static Expr* sr_finite_linear_term(Expr* c0, Expr* base, int k, Expr* var,
+                                   Expr* imin, Expr* imax, bool* in_range) {
+    if (sr_pdeg(base, var) != 1) { expr_free(c0); return NULL; }
+    Expr* zero = sum_int(0);
+    Expr* one  = sum_int(1);
+    Expr* b0 = sum_subst(base, var, zero);
+    Expr* b_at1 = sum_subst(base, var, one);
+    expr_free(zero); expr_free(one);
+    Expr* b1 = sum_sub(b_at1, b0);
+    expr_free(b_at1);
+
+    Expr* rho = sum_eval("Times",
+                    (Expr*[]){ sum_int(-1), b0,
+                               expr_new_function(expr_new_symbol(SYM_Power),
+                                   (Expr*[]){ expr_copy(b1), sum_int(-1) }, 2) }, 3);
+    /* A pole at a non-integer rational is never hit by an integer index. */
+    if (expr_is_integer_like(rho)) {
+        Expr* c = sum_eval("LessEqual", (Expr*[]){ expr_copy(imin), expr_copy(rho),
+                                                    expr_copy(imax) }, 3);
+        if (c->type == EXPR_SYMBOL && c->data.symbol.name == SYM_True) *in_range = true;
+        expr_free(c);
+    }
+    Expr* A = sum_sub(imin, rho);
+    Expr* imax1 = sum_eval("Plus", (Expr*[]){ expr_copy(imax), sum_int(1) }, 2);
+    Expr* B = sum_sub(imax1, rho);
+    expr_free(imax1);
+    expr_free(rho);
+
+    Expr* c = sum_eval("Times",
+                  (Expr*[]){ c0,
+                             expr_new_function(expr_new_symbol(SYM_Power),
+                                 (Expr*[]){ b1, sum_int(-k) }, 2) }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Times),
+               (Expr*[]){ c, sr_finite_pole_sum(k, A, B) }, 2);
+}
+
+/* Contribution of a simple pole term A(i)/q(i), q irreducible over Q of degree
+ * >= 2 with roots the field-generator search cannot express by radicals
+ * (Root objects): sum over the roots r of q of the residue R(r) = A(r)/q'(r)
+ * times the digamma difference, as a RootSum (the reference's form):
+ *
+ *   RootSum[q(#)&, R(#) PolyGamma[0, imax + 1 - #]&]
+ *     - RootSum[q(#)&, R(#) PolyGamma[0, imin - #]&]
+ *
+ * R is reduced to a polynomial of degree < deg q:  R = A s mod q, where
+ * s q' + t q = g (PolynomialExtendedGCD, g a nonzero constant since q is
+ * squarefree).  Returns NULL when q is not squarefree-coprime to q' or the
+ * pieces fail to come back polynomial.  term and base are borrowed. */
+static Expr* sr_finite_rootsum_term(Expr* term, Expr* base, Expr* var,
+                                    Expr* imin, Expr* imax) {
+    Expr* numer = sr_residue(term, base, 1, var);           /* A(i) */
+    if (!sr_poly_in(numer, var)) { expr_free(numer); return NULL; }
+    Expr* dq = sum_eval("D", (Expr*[]){ expr_copy(base), expr_copy(var) }, 2);
+    Expr* eg = sum_eval("PolynomialExtendedGCD",
+                   (Expr*[]){ dq, expr_copy(base), expr_copy(var) }, 3);
+    /* eg = {g, {s, t}} */
+    if (!sr_head_is(eg, SYM_List) || eg->data.function.arg_count != 2
+        || !sr_head_is(eg->data.function.args[1], SYM_List)
+        || eg->data.function.args[1]->data.function.arg_count != 2
+        || !sum_free_of(eg->data.function.args[0], var)) {
+        expr_free(eg); expr_free(numer); return NULL;
+    }
+    Expr* g = expr_copy(eg->data.function.args[0]);
+    Expr* s = expr_copy(eg->data.function.args[1]->data.function.args[0]);
+    expr_free(eg);
+    Expr* as = sum_eval("Expand", (Expr*[]){
+                   sum_eval("Times", (Expr*[]){ numer, s,
+                       expr_new_function(expr_new_symbol(SYM_Power),
+                           (Expr*[]){ g, sum_int(-1) }, 2) }, 3) }, 1);
+    Expr* R = sum_eval("PolynomialRemainder",
+                  (Expr*[]){ as, expr_copy(base), expr_copy(var) }, 3);
+    if (!sr_poly_in(R, var)) { expr_free(R); return NULL; }
+
+    Expr* slot = expr_new_function(expr_new_symbol(SYM_Slot),
+                                   (Expr*[]){ sum_int(1) }, 1);
+    Expr* q_s = sum_subst(base, var, slot);
+    Expr* R_s = sum_subst(R, var, slot);
+    expr_free(R);
+
+    Expr* imax1 = sum_eval("Plus", (Expr*[]){ expr_copy(imax), sum_int(1) }, 2);
+    Expr* ends[2] = { imax1, expr_copy(imin) };
+    Expr* rs[2];
+    for (int e = 0; e < 2; e++) {
+        Expr* arg = expr_new_function(expr_new_symbol(SYM_Plus),
+                        (Expr*[]){ ends[e],
+                                   expr_new_function(expr_new_symbol(SYM_Times),
+                                       (Expr*[]){ sum_int(-1), expr_copy(slot) }, 2) }, 2);
+        Expr* body = expr_new_function(expr_new_symbol(SYM_Times),
+                         (Expr*[]){ expr_copy(R_s), sr_polygamma(0, arg) }, 2);
+        Expr* fq = expr_new_function(expr_new_symbol(SYM_Function),
+                       (Expr*[]){ expr_copy(q_s) }, 1);
+        Expr* fb = expr_new_function(expr_new_symbol(SYM_Function),
+                       (Expr*[]){ body }, 1);
+        rs[e] = expr_new_function(expr_new_symbol(SYM_RootSum),
+                    (Expr*[]){ fq, fb }, 2);
+    }
+    expr_free(slot); expr_free(q_s); expr_free(R_s);
+    Expr* neg = expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ sum_int(-1), rs[1] }, 2);
+    return expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ rs[0], neg }, 2);
+}
+
+/*
+ * Decompose f with Apart (over Q, or over `ext` when non-NULL -- consumed) and
+ * sum every additive piece over the finite range: the polynomial part through
+ * Sum`Polynomial, each linear pole through sr_finite_linear_term, and -- only
+ * when allow_rootsum -- each simple pole at an irreducible non-linear factor
+ * through sr_finite_rootsum_term.  On a non-linear pole that is not handled,
+ * sets *needs_ext (when non-NULL) and returns NULL.  Sets *in_range when a pole
+ * of the summand lies on an index of the range.
+ */
+static Expr* sr_finite_decompose(Expr* f, Expr* var, Expr* imin, Expr* imax,
+                                 Expr* ext, bool allow_rootsum,
+                                 bool* needs_ext, bool* in_range) {
+    Expr* apart;
+    if (ext) {
+        Expr* opt = expr_new_function(expr_new_symbol(SYM_Rule),
+                        (Expr*[]){ expr_new_symbol(SYM_Extension), ext }, 2);
+        apart = sum_eval("Apart", (Expr*[]){ expr_copy(f), expr_copy(var), opt }, 3);
+    } else {
+        apart = sum_eval("Apart", (Expr*[]){ expr_copy(f), expr_copy(var) }, 2);
+    }
+    Expr** terms;
+    size_t nterms;
+    if (sr_head_is(apart, SYM_Plus)) {
+        nterms = apart->data.function.arg_count;
+        terms = apart->data.function.args;
+    } else {
+        nterms = 1;
+        terms = &apart;
+    }
+
+    Expr** contribs = malloc(sizeof(Expr*) * (nterms + 1));
+    Expr** polys = malloc(sizeof(Expr*) * (nterms + 1));
+    size_t nc = 0, np = 0;
+    bool ok = true;
+    for (size_t i = 0; i < nterms && ok; i++) {
+        Expr *base = NULL; int k = 0;
+        int npoles = sr_find_pole(terms[i], var, &base, &k);
+        if (npoles == 0) {
+            if (!sr_poly_in(terms[i], var)) { ok = false; break; }
+            polys[np++] = expr_copy(terms[i]);
+            continue;
+        }
+        if (npoles != 1) { ok = false; break; }
+        Expr* contrib = NULL;
+        int d = sr_pdeg(base, var);
+        if (d == 1) {
+            Expr* c0 = sr_residue(terms[i], base, k, var);
+            contrib = sr_finite_linear_term(c0, base, k, var, imin, imax, in_range);
+        } else if (d >= 2 && k == 1 && allow_rootsum) {
+            contrib = sr_finite_rootsum_term(terms[i], base, var, imin, imax);
+        } else if (needs_ext && !ext) {
+            *needs_ext = true;
+        }
+        if (!contrib) { ok = false; break; }
+        contribs[nc++] = contrib;
+    }
+    expr_free(apart);
+
+    if (ok && np > 0) {
+        /* The polynomial part sums in closed form (Faulhaber). */
+        Expr* p = expr_new_function(expr_new_symbol(SYM_Plus), polys, np);
+        np = 0;
+        Expr* ps = sum_eval("Sum`Polynomial",
+                       (Expr*[]){ p, expr_copy(var), expr_copy(imin), expr_copy(imax) }, 4);
+        if (!ps || sr_head_is(ps, "Sum`Polynomial")) {
+            if (ps) expr_free(ps);
+            ok = false;
+        } else {
+            contribs[nc++] = ps;
+        }
+    }
+    for (size_t i = 0; i < np; i++) expr_free(polys[i]);
+    free(polys);
+    if (!ok || *in_range) {
+        for (size_t i = 0; i < nc; i++) expr_free(contribs[i]);
+        free(contribs);
+        return NULL;
+    }
+    Expr* total = expr_new_function(expr_new_symbol(SYM_Plus), contribs, nc);
+    free(contribs);
+    Expr* r = evaluate(total);
+    expr_free(total);
+    return r;
+}
+
+/*
+ * Finite Sum`Rational: imin and imax exact integers, f a rational function of
+ * var.  Unlike the infinite case there is no convergence condition: every
+ * rational summand without a pole on the range has a closed form in
+ * polygamma values, and its cost does not depend on the width of the range --
+ * the term-by-term sum of Sum[1/(k + 3/7), {k, 12, 3*10^6}] is a rational of
+ * millions of digits, built by millions of big-number additions.
+ *
+ * Over Q first; then, for a denominator whose roots are radicals or complex
+ * (k^2 + 1, k^2 - 2), Apart over the generated extension so every pole is
+ * linear (PolyGamma at algebraic arguments, the reference's form); finally,
+ * for roots only expressible as Root objects (k^3 + k + 1), a RootSum per
+ * irreducible simple factor.  A pole on an index of the range, a repeated
+ * non-linear irreducible factor, or a non-rational summand returns NULL.
+ */
+static Expr* sr_finite(Expr* f, Expr* var, Expr* imin, Expr* imax) {
+    if (!expr_is_integer_like(imin) || !expr_is_integer_like(imax)) return NULL;
+    /* An inexact summand (1.0/k, N[1/k]) is summed numerically by the caller's
+     * compiled loop: Apart would rationalise it and return an exact form. */
+    if (internal_contains_inexact(f)) return NULL;
+    Expr* tog = sum_eval("Together", (Expr*[]){ expr_copy(f) }, 1);
+    Expr* num = sum_eval("Numerator", (Expr*[]){ expr_copy(tog) }, 1);
+    Expr* den = sum_eval("Denominator", (Expr*[]){ tog }, 1);
+    bool rational = sr_poly_in(num, var) && sr_poly_in(den, var)
+                 && sr_pdeg(den, var) >= 1;
+    expr_free(num);
+    if (!rational) { expr_free(den); return NULL; }
+
+    bool needs_ext = false, in_range = false;
+    Expr* result = sr_finite_decompose(f, var, imin, imax, NULL, false,
+                                       &needs_ext, &in_range);
+    if (!result && needs_ext && !in_range) {
+        Expr* ext = sr_generators(den, var);
+        if (ext)
+            result = sr_finite_decompose(f, var, imin, imax, ext, false,
+                                         NULL, &in_range);
+        else
+            result = sr_finite_decompose(f, var, imin, imax, NULL, true,
+                                         NULL, &in_range);
+    }
+    expr_free(den);
+    return result;
+}
+
 Expr* builtin_sum_rational(Expr* res);
 
 Expr* builtin_sum_rational(Expr* res) {
@@ -475,8 +765,10 @@ Expr* builtin_sum_rational(Expr* res) {
     if (!sum_stage_args(res, &f, &var, &imin, &imax, &definite)) return NULL;
     if (!definite) return NULL;
 
-    /* Only infinite sums with a concrete integer lower bound. */
-    if (!is_infinity_sym(imax)) return NULL;
+    /* A finite range with exact integer bounds: the polygamma closed form. */
+    if (!is_infinity_sym(imax)) return sr_finite(f, var, imin, imax);
+
+    /* Infinite sums with a concrete integer lower bound. */
     if (imin->type != EXPR_INTEGER) return NULL;
 
     /* --- Convergence gate (before the expensive Apart). ---
@@ -516,7 +808,9 @@ void sum_rational_init(void) {
     symtab_set_docstring("Sum`Rational",
         "Sum`Rational[f, i, imin, Infinity] gives the closed form of an infinite "
         "sum of a rational function f of i (deg of denominator >= deg of "
-        "numerator + 2). Decomposes into linear partial fractions and sums each "
-        "term via Hurwitz Zeta / PolyGamma. Returns unevaluated for finite, "
-        "indefinite, non-rational, or divergent inputs.");
+        "numerator + 2); Sum`Rational[f, i, imin, imax] with integer bounds gives "
+        "the finite sum. Decomposes into partial fractions and sums each term via "
+        "Hurwitz Zeta / PolyGamma (RootSum for poles at Root objects). Returns "
+        "unevaluated for symbolic finite bounds, indefinite, non-rational, or "
+        "divergent inputs, or a pole on the range.");
 }

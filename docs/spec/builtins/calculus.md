@@ -4679,6 +4679,27 @@ each algorithm also exposed as a context-qualified builtin
   - **Single evaluation.** Each term is evaluated exactly once. The compiled
     machine loop's inexactness probe is reused as the first term instead of
     being recomputed.
+- **A longer range tries the closed form first, for any exact step.** A
+  non-unit step is reindexed, `Sum[f(i), {i, a, b, d}] = Sum[f(a + d j), {j, 0,
+  Floor[(b - a)/d]}]`, so `Sum[1/(k + 3/7), {k, 12, 3000000, 2}]` is
+  `1/2 (-PolyGamma[0, 87/14] + PolyGamma[0, 21000017/14])` at once. A rational
+  summand closes in polygamma values (`Sum`Rational`, finite case below), so
+  `Sum[1/(k + 3/7), {k, 12, 3000000}]` is `-PolyGamma[0, 87/7] + PolyGamma[0,
+  21000010/7]` in 2 ms; it used to enumerate and never finish.
+  - **Inexact terms stay inexact.** The stages see the body at a symbolic
+    index, where `N[1/k]` is `1/k`. An exact closed form is rejected when the
+    body is inexact at the first index, and the compiled machine loop sums the
+    terms: `Sum[N[1/k], {k, 1, 10^7}]` is `16.695311365857272`, as in the
+    reference. An inexact closed form (`Sum[1.0 k^2, {k, 1, 10^9}]`) is kept.
+- **Exact enumeration is not quadratic.** A `Plus` of 64 or more exact
+  rationals sums them as a balanced tree (see `Plus`), so enumerating `n`
+  rationals with distinct denominators costs `O(M(S) log n)` instead of
+  `O(n S)`, `S` the size of the total. `Sum[1/k, {k, 1, 10^6}]` (enumerated, an
+  exact rational of 434,000 digits) takes 2.3 s, and the 3 * 10^6-term sum above
+  enumerates in 19 s when forced. A range with no closed form is still
+  enumerated, as in the reference, with no cap below `10^8` terms; its cost is
+  the honest cost of the answer (`Sum[(-1)^k/k, {k, 1, 10^7}]` is 52 s, where
+  the reference gives up at 40 s).
 
 ### Forms
 
@@ -4710,8 +4731,9 @@ tries the closed-form method cascade below — its cost is independent of
 the span width, so `Sum[i^2, {i, 1, 100000}]` is as cheap as the
 symbolic-bound form rather than 100000 term evaluations.  When no closed
 form applies (a non-summable body, e.g. `Sum[Prime[i], {i, 1, 6}]`), or
-the step is not `1`, or the body iterates an explicit list, the sum falls
-back to direct term-by-term expansion (empty ranges fold to `0`).
+the body iterates an explicit list, the sum falls back to direct
+term-by-term expansion (empty ranges fold to `0`). A long range with a
+non-unit exact step is reindexed to a unit step first (above).
 Symbolic bounds and the indefinite form go straight to the cascade; if
 none applies the `Sum[...]` is returned unevaluated.  The cascade has no
 step-aware closed form, so a symbolic (or otherwise non-expandable) range
@@ -4876,9 +4898,39 @@ real partial-fraction form: its constant-numerator (symmetric) part collapses to
 sum. A factor with **real radical** roots (`disc >= 0`) is split over the
 auto-detected field extension (`Apart[f, i, Extension -> {I, Sqrt[...], ...}]`),
 giving `PolyGamma` at radical/complex arguments. Symbolic-coefficient
-denominators and finite/indefinite rational sums are out of scope (left
+denominators and indefinite rational sums are out of scope (left
 unevaluated). Dispatched in the `Automatic` cascade ahead of
 `Sum`Hypergeometric`; `Method -> "Rational"` forces it.
+
+**Finite ranges** (exact integer `imin`, `imax`; no convergence condition).
+Each pole term telescopes through `PolyGamma[m, x + 1] - PolyGamma[m, x] =
+(-1)^m m!/x^(m+1)`, with `A = imin - rho`, `B = imax + 1 - rho`:
+
+- `k == 1`: `c (PolyGamma[0, B] - PolyGamma[0, A])`;
+- `k >= 2`: `c (-1)^k/(k-1)! (PolyGamma[k-1, A] - PolyGamma[k-1, B])`;
+- the polynomial part goes to `Sum`Polynomial`;
+- complex or radical poles (`k^2 + 1`, `k^2 - 2`) are split over the extension
+  field, giving `PolyGamma` at algebraic arguments;
+- a simple pole at an irreducible factor `q` whose roots are only `Root`
+  objects (`k^3 + k + 1`) gives `RootSum[q, R(#) PolyGamma[0, B - #] &] -
+  RootSum[q, R(#) PolyGamma[0, A - #] &]`, where the residue `R = A/q'` is
+  reduced mod `q` with `PolynomialExtendedGCD`.
+
+These are the reference's forms. At a small positive integer the `PolyGamma`
+evaluates to its harmonic rational, so `Sum[1/k, {k, 1, 10^7}]` is
+`EulerGamma + PolyGamma[0, 10000001]` (the reference expands it to an exact
+rational in 49 s). The stage declines when the summand has a pole on an index of
+the range, on an inexact summand, and on symbolic finite bounds. `Sum` calls the
+cascade before enumerating only for a range of more than `10^6` terms.
+
+```mathematica
+In[1]:= Sum[1/(k + 3/7), {k, 12, 3000000}]
+Out[1]= -PolyGamma[0, 87/7] + PolyGamma[0, 21000010/7]
+In[2]:= Sum[1/k^3, {k, 1, 10^7}]
+Out[2]= 1/2 (-PolyGamma[2, 1] + PolyGamma[2, 10000001])
+In[3]:= Sum[1/(k^3 + k + 1), {k, 1, 10^7}]
+Out[3]= -RootSum[1 + #1 + #1^3 &, (4/31 - 9/31 #1 + 6/31 #1^2) PolyGamma[0, 1 - #1] &] + RootSum[1 + #1 + #1^3 &, (4/31 - 9/31 #1 + 6/31 #1^2) PolyGamma[0, 10000001 - #1] &]
+```
 
 ```mathematica
 In[1]:= Sum[1/i^2, {i, 1, Infinity}]

@@ -38,6 +38,7 @@
 #include "arithmetic.h"   /* is_rational, make_complex */
 #include "sym_names.h"
 #include "compile/autocompile.h"   /* machine fast path for finite numeric sums */
+#include "rationalize.h"   /* internal_contains_inexact */
 #include <string.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -580,6 +581,86 @@ static Expr* sum_try_compiled(Expr* f, const IterSpec* s,
                      : make_complex(expr_new_real(re), expr_new_real(im));
 }
 
+/*
+ * A closed form of a finite numeric range must be as exact as its terms.  The
+ * stages see the body at a SYMBOLIC index, where an explicit numericalisation
+ * can vanish -- N[1/k] is 1/k -- so Sum[N[1/k], {k, 1, 10^7}] would come back
+ * as the exact EulerGamma + PolyGamma[0, 10000001] although every term is a
+ * machine number.  When the closed form is exact, evaluate the body at the
+ * first index: an inexact term rejects it (consumed; NULL), and the caller's
+ * compiled machine loop sums the terms, as the reference does.  An inexact
+ * closed form (Sum[1.0 k^2, ...]) or an exact term keeps it.
+ */
+static Expr* sum_keep_inexact(Expr* cf, Expr* f, const IterSpec* s) {
+    if (!cf || internal_contains_inexact(cf)) return cf;
+    IterShadow saved = iter_spec_shadow(s->var);
+    iter_bind(s->var, s->imin);
+    Expr* probe = evaluate(f);
+    iter_spec_restore(s->var, saved);
+    bool inexact = internal_contains_inexact(probe);
+    expr_free(probe);
+    if (inexact) { expr_free(cf); return NULL; }
+    return cf;
+}
+
+/*
+ * Closed form of a finite sum with an exact, non-unit step,
+ *
+ *     Sum[f(i), {i, imin, imax, di}]  =  Sum[f(imin + di j), {j, 0, M}],
+ *     M = Floor[(imax - imin)/di],
+ *
+ * the reindexing that turns any arithmetic progression into a unit-step range
+ * the closed-form stages accept (they assume di == 1).  It is exact for every
+ * body, so a long stepped range costs what its unit-step twin costs instead of
+ * one evaluation (and one big-number addition) per term.  The body is
+ * evaluated once at the symbolic index -- what the stages do themselves -- with
+ * the iterator shadowed, then reindexed.  NULL when M is not a non-negative
+ * integer (an empty range must fold to 0 by enumeration), no stage applies, or
+ * the answer still mentions the dummy index.
+ */
+static Expr* sum_closed_form_stepped(SumMethod method, Expr* f, const IterSpec* s) {
+    if (s->var->type != EXPR_SYMBOL) return NULL;
+    Expr* span = eval_and_free(expr_new_function(expr_new_symbol(SYM_Floor),
+        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Times),
+            (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Plus),
+                           (Expr*[]){ expr_copy(s->imax),
+                                      expr_new_function(expr_new_symbol(SYM_Times),
+                                          (Expr*[]){ expr_new_integer(-1),
+                                                     expr_copy(s->imin) }, 2) }, 2),
+                       expr_new_function(expr_new_symbol(SYM_Power),
+                           (Expr*[]){ expr_copy(s->di), expr_new_integer(-1) }, 2) }, 2) }, 1));
+    bool span_ok = expr_is_integer_like(span);
+    if (span_ok) {
+        span_ok = span->type == EXPR_INTEGER ? span->data.integer >= 0
+                                             : mpz_sgn(span->data.bigint) >= 0;
+    }
+    if (!span_ok) { expr_free(span); return NULL; }
+    const char* jname = "Sum`Private`step$";
+    Expr* j = expr_new_symbol(jname);
+
+    IterShadow saved = iter_spec_shadow(s->var);
+    Expr* body = evaluate(f);
+    /* i -> imin + di j */
+    Expr* at = expr_new_function(expr_new_symbol(SYM_Plus),
+                   (Expr*[]){ expr_copy(s->imin),
+                              expr_new_function(expr_new_symbol(SYM_Times),
+                                  (Expr*[]){ expr_copy(s->di), expr_copy(j) }, 2) }, 2);
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule),
+                     (Expr*[]){ expr_copy(s->var), at }, 2);
+    Expr* reindexed = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+                          (Expr*[]){ body, rule }, 2));
+    Expr* zero = expr_new_integer(0);
+    Expr* cf = dispatch_def(method, reindexed, j, zero, span);
+    iter_spec_restore(s->var, saved);
+
+    if (cf && iter_expr_mentions_symbol(cf, jname)) { expr_free(cf); cf = NULL; }
+    expr_free(zero);
+    expr_free(span);
+    expr_free(reindexed);
+    expr_free(j);
+    return cf;
+}
+
 static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
     /* Indefinite form Sum[f, i]: spec is a bare symbol. */
     if (spec->type == EXPR_SYMBOL) {
@@ -696,6 +777,15 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
             IterShadow saved = iter_spec_shadow(s.var);
             Expr* cf = dispatch_def(method, f, s.var, s.imin, s.imax);
             iter_spec_restore(s.var, saved);
+            cf = sum_keep_inexact(cf, f, &s);
+            if (cf) { iter_spec_free(&s); return cf; }
+        }
+        /* The same for a long range with an exact non-unit step: the closed
+         * form of the reindexed unit-step sum (sum_closed_form_stepped). */
+        if (!is_real && di_val != 1.0 && !enumerate_first
+            && !short_expensive_body && !index_pred_body && !short_symbolic_lattice
+            && !short_opaque_index_body) {
+            Expr* cf = sum_keep_inexact(sum_closed_form_stepped(method, f, &s), f, &s);
             if (cf) { iter_spec_free(&s); return cf; }
         }
         /* No closed form: before the slow evaluate()-per-term enumeration, try

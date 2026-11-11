@@ -114,6 +114,76 @@ int main(void) {
     nclose("Sum[1/(i (i^2 + 1)), {i, 1, Infinity}]",
            "Sum[1/(i (i^2 + 1)), {i, 1, 3000}]", 4);
 
+    /* ---- Finite ranges: polygamma closed form, cost independent of width ----
+     * A range of more than 10^6 terms tries the closed form before enumerating;
+     * Sum[1/(k + 3/7), {k, 12, 3*10^6}] used to enumerate 3*10^6 big rationals
+     * and never finish.  Forms are the reference's. */
+    check("Sum[1/(k + 3/7), {k, 12, 3000000}]",
+          "-PolyGamma[0, 87/7] + PolyGamma[0, 21000010/7]");
+    check("Sum[1/k, {k, 1, 10^7}]", "EulerGamma + PolyGamma[0, 10000001]");
+    check("Sum[1/k^2, {k, 1, 10^8}]", "1/6 Pi^2 - PolyGamma[1, 100000001]");
+    check("Sum[1/k^3, {k, 1, 10^7}]",
+          "1/2 (-PolyGamma[2, 1] + PolyGamma[2, 10000001])");
+    check("Sum[1/(2 k + 1), {k, 0, 10^7}]",
+          "1/2 (-PolyGamma[0, 1/2] + PolyGamma[0, 20000003/2])");
+    check("Sum[1/(k + a), {k, 1, 2*10^6}]",
+          "-PolyGamma[0, 1 + a] + PolyGamma[0, 2000001 + a]");
+    /* telescoping bodies still go to Gosper first */
+    check("Sum[1/(k (k + 1)), {k, 1, 10^7}]", "10000000/10000001");
+    /* irreducible cubic: RootSum over the Root poles, residue reduced mod q */
+    check("Sum[1/(k^3 + k + 1), {k, 1, 10^7}]",
+          "-RootSum[1 + #1 + #1^3 &, (4/31 - 9/31 #1 + 6/31 #1^2) PolyGamma[0, 1 - #1] &]"
+          " + RootSum[1 + #1 + #1^3 &, (4/31 - 9/31 #1 + 6/31 #1^2) PolyGamma[0, 10000001 - #1] &]");
+    /* the 10^7 value against the infinite sum: the tail is 1/(2 10^14) + O(10^-21) */
+    nclose("Sum[1/(k^3 + k + 1), {k, 1, 10^7}] + 1/(2 10^14)",
+           "Sum[1/(k^3 + k + 1), {k, 1, Infinity}]", 20);
+
+    /* The stage itself on short ranges, against term-by-term enumeration:
+     * exact where the polygammas evaluate (integer arguments), else to 10^-20. */
+    check("Sum`Rational[1/k^2, k, 1, 300] == HarmonicNumber[300, 2]", "True");
+    check("Sum`Rational[(k^2 + 1)/(k^2 + 3 k), k, 1, 300] == "
+          "Sum[(j^2 + 1)/(j^2 + 3 j), {j, 1, 300}]", "True");
+    check("Sum`Rational[1/(2 k + 1)^2, k, 0, 300] == Sum[1/(2 j + 1)^2, {j, 0, 300}]", "True");
+    nclose("Sum`Rational[1/(k + 3/7), k, 12, 300]", "Sum[1/(j + 3/7), {j, 12, 300}]", 20);
+    nclose("Sum`Rational[1/(k^2 + 1), k, 1, 300]", "Sum[1/(j^2 + 1), {j, 1, 300}]", 20);
+    nclose("Sum`Rational[1/(k^2 + 1)^2, k, 1, 300]", "Sum[1/(j^2 + 1)^2, {j, 1, 300}]", 20);
+    nclose("Sum`Rational[k/(k^2 + 1), k, 1, 300]", "Sum[j/(j^2 + 1), {j, 1, 300}]", 20);
+    nclose("Sum`Rational[1/(k^2 - 2), k, 2, 300]", "Sum[1/(j^2 - 2), {j, 2, 300}]", 20);
+    nclose("Sum`Rational[1/(k^3 + k + 1), k, 5, 300]", "Sum[1/(j^3 + j + 1), {j, 5, 300}]", 20);
+    nclose("Sum`Rational[1/(k^5 + k + 1), k, 1, 200]", "Sum[1/(j^5 + j + 1), {j, 1, 200}]", 20);
+    nclose("Sum`Rational[1/((k^3 + k + 1) (k^2 + 2)), k, 1, 200]",
+           "Sum[1/((j^3 + j + 1) (j^2 + 2)), {j, 1, 200}]", 20);
+    nclose("Sum`Rational[(3 k^4 - k + 2)/((k + 1/2)^2 (k^2 + k + 1)), k, -5, 300]",
+           "Sum[(3 j^4 - j + 2)/((j + 1/2)^2 (j^2 + j + 1)), {j, -5, 300}]", 18);
+    nclose("Sum`Rational[k^3/(k + 1/3)^3, k, -20, 200]", "Sum[j^3/(j + 1/3)^3, {j, -20, 200}]", 18);
+    nclose("Sum`Rational[1/(k + 1/2), k, -300, -2]", "Sum[1/(j + 1/2), {j, -300, -2}]", 20);
+    /* a pole on an index of the range has no finite value: the stage declines */
+    check("Sum`Rational[1/(k - 5), k, 1, 100]", "Sum`Rational[1/(-5 + k), k, 1, 100]");
+    /* symbolic finite bounds are not handled by this stage */
+    check("Sum`Rational[1/(k + 3/7), k, 12, n]", "Sum`Rational[1/(3/7 + k), k, 12, n]");
+
+    /* ---- Non-unit step: reindexed to a unit-step range first ---- */
+    check("Sum[1/(k + 3/7), {k, 12, 3000000, 2}]",
+          "1/2 (-PolyGamma[0, 87/14] + PolyGamma[0, 21000017/14])");
+    check("Sum[1/(k + 3/7), {k, 12, 3000000, 3/2}]",
+          "2/3 (-PolyGamma[0, 58/7] + PolyGamma[0, 14000009/7])");
+    check("Sum[1/k, {k, 1, 10^7, 3}]",
+          "1/3 (-PolyGamma[0, 1/3] + PolyGamma[0, 10000003/3])");
+    check("Sum[k^2, {k, 1, 10^9, 7}]", "47619047404761904500000000");
+    check("Sum[k^2, {k, 10^9, 1, -7}] == Sum[k^2, {k, 6, 10^9, 7}]", "True");
+
+    /* ---- Inexact terms keep the numeric path (no exact closed form) ---- */
+    check("Head[Sum[1.0/k, {k, 1, 10^7}]]", "Real");
+    check("Head[Sum[N[1/k], {k, 1, 2*10^6}]]", "Real");
+    nclose("Sum[1.0/k, {k, 1, 10^7}]", "EulerGamma + PolyGamma[0, 10000001]", 9);
+    check("Head[Sum[1.0 k^2, {k, 1, 10^9}]]", "Real");
+
+    /* ---- Short ranges still enumerate to exact rationals ---- */
+    check("Sum[1/k, {k, 1, 10}]", "7381/2520");
+    check("Sum[1/(k + 3/7), {k, 12, 3000}] == Sum[1/(j + 3/7), {j, 12, 3000}]", "True");
+    check("Head[Sum[1/(k^3 + k + 1), {k, 1, 1000}]]", "Rational");
+    check("Sum[x^i, {i, 0, 5}]", "1 + x + x^2 + x^3 + x^4 + x^5");
+
     if (failures) {
         fprintf(stderr, "\n%d/%d sum_rational checks FAILED\n", failures, checks);
         return 1;

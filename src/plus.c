@@ -483,6 +483,94 @@ static Expr* algnum_plus_combine(Expr** args, size_t n) {
     return eval_and_free(result);
 }
 
+/* ------------------------------------------------------------------ */
+/*  Product-tree summation of many exact rationals                     */
+/* ------------------------------------------------------------------ */
+
+/* Below this many exact rational (Integer / BigInt / Rational) summands the
+ * left-to-right accumulation in the grouping loop is cheapest. */
+#define PLUS_RATIONAL_TREE_MIN 64
+
+static void plus_set_mpz(const Expr* e, mpz_ptr out) {
+    if (e->type == EXPR_INTEGER) { mpz_set_si(out, e->data.integer); return; }
+    mpz_set(out, e->data.bigint);
+}
+
+/* Load an exact rational Expr (plus_is_rational_number) into an initialised
+ * mpq. */
+static void plus_rational_to_mpq(const Expr* e, mpq_t out) {
+    if (e->type == EXPR_FUNCTION) {          /* Rational[n, d], canonical */
+        plus_set_mpz(e->data.function.args[0], mpq_numref(out));
+        plus_set_mpz(e->data.function.args[1], mpq_denref(out));
+    } else {
+        plus_set_mpz(e, mpq_numref(out));
+        mpz_set_ui(mpq_denref(out), 1);
+    }
+}
+
+/* out = sum of terms[lo..hi), summed as a balanced binary tree.
+ *
+ * Left-to-right accumulation of n rationals costs O(n * S) word operations
+ * where S is the size of the running total, which for distinct denominators
+ * (1/k, 1/(k + 3/7), ...) grows linearly in n: the whole sum is O(n^2) in bit
+ * cost, and an enumerated Sum of 3*10^6 such terms never finishes.  Pairing the
+ * terms instead keeps the operands of each level balanced, so every level
+ * costs about one multiplication of the full-size result and the sum is
+ * O(M(S) log n) -- with GMP's FFT multiply, seconds rather than hours.
+ * mpq_add reduces at every node (Henrici), which keeps the intermediate
+ * denominators near the lcm rather than the product of the denominators. */
+static void plus_rational_tree(Expr** terms, size_t lo, size_t hi, mpq_t out) {
+    if (hi - lo == 1) { plus_rational_to_mpq(terms[lo], out); return; }
+    size_t mid = lo + (hi - lo) / 2;
+    mpq_t right;
+    mpq_init(right);
+    plus_rational_tree(terms, lo, mid, out);
+    plus_rational_tree(terms, mid, hi, right);
+    mpq_add(out, out, right);
+    mpq_clear(right);
+}
+
+/* When a Plus carries at least PLUS_RATIONAL_TREE_MIN exact rational terms,
+ * return a fresh Plus whose first term is their single exact sum (computed by
+ * plus_rational_tree), followed by the other terms in their original order --
+ * or that sum alone when every term was rational.  NULL when there are too
+ * few rationals.  `args` is only read (res may be shared).  The arithmetic is
+ * the grouping loop's own -- exact rationals add exactly -- so the value is
+ * identical; only the order of the additions, which exact arithmetic cannot
+ * see, changes. */
+static Expr* plus_collapse_rationals(Expr** args, size_t n) {
+    size_t count = 0;
+    for (size_t i = 0; i < n; i++)
+        if (plus_is_rational_number(args[i])) count++;
+    if (count < PLUS_RATIONAL_TREE_MIN) return NULL;
+
+    Expr** rats = malloc(sizeof(Expr*) * count);
+    Expr** rest = malloc(sizeof(Expr*) * (n - count + 1));
+    size_t r = 0, w = 1;
+    for (size_t i = 0; i < n; i++) {
+        if (plus_is_rational_number(args[i])) rats[r++] = args[i];
+        else rest[w++] = expr_copy(args[i]);
+    }
+    mpq_t total;
+    mpq_init(total);
+    plus_rational_tree(rats, 0, count, total);
+    free(rats);
+    /* mpq_add keeps `total` canonical: build the node without a second gcd. */
+    Expr* num = expr_bigint_normalize(expr_new_bigint_from_mpz(mpq_numref(total)));
+    if (mpz_cmp_ui(mpq_denref(total), 1) == 0) {
+        rest[0] = num;
+    } else {
+        Expr* den = expr_bigint_normalize(expr_new_bigint_from_mpz(mpq_denref(total)));
+        rest[0] = expr_new_function(expr_new_symbol(SYM_Rational),
+                                    (Expr*[]){ num, den }, 2);
+    }
+    mpq_clear(total);
+    if (w == 1) { Expr* only = rest[0]; free(rest); return only; }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_Plus), rest, w);
+    free(rest);
+    return out;
+}
+
 Expr* builtin_plus(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
 
@@ -711,6 +799,13 @@ Expr* builtin_plus(Expr* res) {
     }
 
     plus_grouping:;   /* fused special-case guard jumps here for an ordinary sum */
+    /* Many exact rationals: one product-tree sum instead of n sequential
+     * additions (see plus_rational_tree).  After the contagion pass, so an
+     * inexact term has already numericalised them and this finds none. */
+    if (n >= PLUS_RATIONAL_TREE_MIN) {
+        Expr* collapsed = plus_collapse_rationals(res->data.function.args, n);
+        if (collapsed) return collapsed;   /* re-evaluated: < MIN rationals now */
+    }
     /* Plus is Orderless by default, but a user may ClearAttributes it. Then
      * the reference keeps the terms in order: numbers still collect into one
      * leading term, but like terms combine only with their immediate

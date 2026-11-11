@@ -323,6 +323,13 @@ Symbolic sum.
   so an exact recurrence over 4000-digit integers (`Fold[{#1[[2]], 2 #1[[2]] +
   #2 #1[[1]]} &, {1, 1}, list]`, 10^4 steps) costs ~30 ms instead of ~42 ms.
   Rationals with denominators past 32 bits reduce with a binary gcd.
+- A sum of 64 or more exact rationals (Integer, BigInt, Rational) adds them as a
+  balanced binary tree, reducing at every node, and then collects the remaining
+  terms as usual. Left-to-right addition of `n` rationals with distinct
+  denominators is `O(n^2)` in bit cost, because the running total grows with
+  every term; the tree is `O(M(S) log n)`. `Total[Table[1/k, {k, 10^6}]]` takes
+  2.3 s. An enumerated `Sum` of 3 * 10^6 terms used to run for hours. The value
+  is the same: exact addition does not depend on the order.
 - Two-operand `Plus` / `Times` threaded over flat Lists of machine numbers
   (`{2, 1} - {0.5, 0.1}`, `p + t v`) are computed in place when every element
   pair holds a machine Real: no per-element `Plus` call is built and evaluated

@@ -186,6 +186,31 @@ static void test_bigint_arith_borrow_move(void) {
                    "True", 0);
 }
 
+/* A Plus of many exact rationals sums them as a balanced product tree (one
+ * full-size addition per level) instead of left to right, which is O(n^2) in
+ * bit cost for distinct denominators.  The value must equal the sequential
+ * Fold, the non-rational terms must survive in place, and the result must be
+ * canonical (Integer when the denominators cancel). */
+static void test_plus_rational_tree(void) {
+    assert_eval_eq("Total[Table[1/k, {k, 1, 2000}]] == Fold[Plus, 0, Table[1/k, {k, 1, 2000}]]",
+                   "True", 0);
+    assert_eval_eq("Total[Table[1/k, {k, 1, 2000}]] == HarmonicNumber[2000]", "True", 0);
+    assert_eval_eq("Plus @@ Table[(-1)^k/(k + 3/7), {k, 1, 500}] == "
+                   "Fold[Plus, 0, Table[(-1)^k/(k + 3/7), {k, 1, 500}]]", "True", 0);
+    /* cancelling denominators: an Integer, demoted to int64 */
+    assert_eval_eq("Plus @@ Join[Table[1/3, {300}], Table[2^70/7, {70}], Table[-2^70/7, {70}]]",
+                   "100", 0);
+    assert_eval_eq("Head[Plus @@ Join[Table[1/3, {301}], {2/3}]]", "Integer", 0);
+    /* mixed with symbols: the rationals collapse, the symbols collect */
+    assert_eval_eq("Plus @@ Join[Table[1/k, {k, 1, 100}], {x, y, x}] - HarmonicNumber[100]",
+                   "2 x + y", 0);
+    /* mixed with an inexact term: contagion happens first, result is a Real */
+    assert_eval_eq("Head[Plus @@ Append[Table[1/k, {k, 1, 100}], 0.5]]", "Real", 0);
+    /* exact enumeration past 10^6 terms finishes (it used to be quadratic) */
+    assert_eval_eq("Sum[1/(k + 3/7), {k, 12, 3000}] == Total[Table[1/(k + 3/7), {k, 12, 3000}]]",
+                   "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -203,6 +228,7 @@ int main(void) {
     TEST(test_abs_bigint);
     TEST(test_plus_rational_with_bigint_parts);
     TEST(test_bigint_arith_borrow_move);
+    TEST(test_plus_rational_tree);
     TEST(test_squfof);
     TEST(test_ecm_semiprime);
 
