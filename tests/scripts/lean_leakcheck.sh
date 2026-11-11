@@ -139,6 +139,24 @@ Quiet[Do[
    Certify[x == x, Method -> "simp -- c", Verify -> False];
    Certify[\[Alpha]^2 == \[Alpha] \[Alpha] + 0, Verify -> False], {3}]];
 
+(* --- v0.6522: domains, Integrate claims, symbol values, private context,
+   held Assumptions, SetOptions defaults, ProofObject authentication --- *)
+Quiet[Do[
+   Certify[x == 7, Assumptions -> x^2 == -4, Domain -> Complexes, Verify -> False];
+   Certify[x == 7, Assumptions -> x^2 == -4, Domain -> Reals, Verify -> False];
+   Certify[(x + 1)^2 == x^2 + 2 x + 1, Domain -> Complexes, Verify -> False];
+   Certify[x == 7, Domain -> Algebraics, Verify -> False];
+   Certify[x == 1, Assumptions -> x^3 == 1 && Element[x, Integers], Verify -> False];
+   Certify[Integrate[2 x, x] == x^2 + 5, Verify -> False];
+   Certify[Integrate[1/(x^2 + 2), x], Verify -> False];
+   leakT /: leakT^2 = -1; Certify[leakT^2 == -1, Verify -> False]; Clear[leakT];
+   Certify[Integrate[2, x] == Sqrt[2] Lean`Private`s1 x, Verify -> False];
+   Certify[x == 1, Assumptions -> Reduce[x^2 == 1 && x > 0, x], Verify -> False];
+   SetOptions[Certify, Assumptions -> x > 0]; Certify[x == x, Verify -> False];
+   SetOptions[Certify, Assumptions -> {}];
+   ProofObject[<|"Verified" -> True|>]["Verified"];
+   Certify[Sum[k, {k, 1, n}], Verify -> False]["TrustedSteps"], {3}]];
+
 (* --- real Lean runs, when Lean is installed --- *)
 If[StringQ[$LeanVersion],
   Quiet[

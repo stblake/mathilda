@@ -145,8 +145,12 @@ static void test_errors(void) {
                    "\"nocert\"", 0);
     assert_eval_eq("Check[Certify[x == x, Tier -> 1, LeanProject -> None], \"nomathlib\"]",
                    "\"nomathlib\"", 0);
-    assert_eval_eq("Check[Certify[x == x, Domain -> Reals, LeanProject -> None], \"tier\"]",
-                   "\"tier\"", 0);
+    /* Domain -> Reals is the Tier 0 ordered-field form (v0.6522; it used to
+     * need Mathlib); an unknown Domain is refused. */
+    check_true("Certify[x == x, Domain -> Reals, LeanProject -> None, Verify -> False]"
+               "[\"Tier\"] === 0");
+    assert_eval_eq("Check[Certify[x == x, Domain -> Algebraics, Verify -> False], \"domain\"]",
+                   "\"domain\"", 0);
     /* Not in Q(x): no Tier 0 antiderivative certificate. */
     assert_eval_eq("Certify[Integrate[Sin[x], x], Verify -> False]", "$Failed", 0);
     assert_eval_eq("Check[Certify[Solve[x^2 == 2, x], Verify -> False], \"nocert\"]",
@@ -514,15 +518,15 @@ static void test_review3_checksource(void) {
     test_mute_messages();
 #define CK(src) "Lean`Internal`CheckSource[\"" src "\", False, False, None]"
 #define CKM(src) "Lean`Internal`CheckSource[\"" src "\", True, False, None]"
-    /* Accepted: theorem / example / namespace / section / open / variable /
-     * universe / numeric set_option. */
+    /* Accepted: theorem / example / section / variable / universe / numeric
+     * set_option (namespace and open are refused since v0.6522). */
     check_true(CK("theorem t : 1 + 1 = 2 := rfl\\n") "[\"Theorems\"] === {\"t\"}");
-    check_true(CK("namespace A\\nexample : True := trivial\\nsection\\nvariable (n : Nat)\\n"
-                  "theorem u : n = n := rfl\\nend\\nend A\\n") "[\"Theorems\"] === "
-               "{\"mathilda_example_1\", \"A.u\"}");
+    check_true(CK("example : True := trivial\\nsection\\nvariable (n : Nat)\\n"
+                  "theorem u : n = n := rfl\\nend\\n") "[\"Theorems\"] === "
+               "{\"mathilda_example_1\", \"u\"}");
     check_true("StringStartsQ[" CK("example : True := trivial\\n") "[\"Source\"], "
                "\"noncomputable def _root_.mathilda_example_1 : True\"]");
-    check_true(CK("universe u\\nopen Nat\\nset_option maxHeartbeats 1000 in\\n"
+    check_true(CK("universe u\\nset_option maxHeartbeats 1000 in\\n"
                   "theorem t : True := by\\n  trivial\\n") "[\"OK\"]");
     check_true(CKM("import Mathlib\\nimport Mathlib.Tactic\\nlemma t : True := trivial\\n") "[\"OK\"]");
     /* The trusted prelude, byte-identical, is skipped (it has defs). */
@@ -551,10 +555,10 @@ static void test_review3_checksource(void) {
     check_true(CK("lemma t : True := trivial\\n") "[\"What\"] === \"lemma\"");
     check_true(CK("set_option debug.skipKernelTC true\\n") "[\"Kind\"] === \"cmd\"");
     check_true(CK("set_option maxHeartbeats true\\n") "[\"Kind\"] === \"cmd\"");
-    check_true(CK("open Lean.Elab\\n") "[\"What\"] === \"Elab\"");
+    check_true(CK("open Lean.Elab\\n") "[\"Kind\"] === \"cmd\"");
     check_true(CK("theorem t : True := trivial\\n:= rfl\\n") "[\"What\"] === \":\"");
     check_true(CK("  theorem t : True := trivial\\n") "[\"Kind\"] === \"cmd\"");
-    /* open: namespace names only (v0.6521: no `in`, no `scoped`). */
+    /* open: refused in every form (v0.6522). */
     check_true(CK("open Nat in\\ntheorem t : True := trivial\\n") "[\"Kind\"] === \"cmd\"");
     check_true(CK("open scoped Nat\\n") "[\"Kind\"] === \"cmd\"");
     check_true(CK("open Nat hiding add\\n") "[\"Kind\"] === \"cmd\"");
@@ -713,6 +717,26 @@ static bool review4_ok(const char* src, bool mathlib) {
     return ok;
 }
 
+/* Fifth review: `open X` and `namespace X` activate X's scoped extensions
+ * (scoped command syntax included, e.g. Lean.PostprocessTraces), which the
+ * parser-table-derived keyword list cannot see; both are refused outright. */
+static void test_review5_scoped(void) {
+    const char* srcs[] = {
+        "open Lean.PostprocessTraces\ntheorem t : True := trivial\n",
+        "open Nat\ntheorem c22 : succ 1 = 2 := rfl\n",
+        "namespace Lean.PostprocessTraces\ntheorem t : True := trivial\nend Lean.PostprocessTraces\n",
+        "namespace Foo\ntheorem bar : True := trivial\nend Foo\n",
+        "theorem t : True := trivial\nopen Lean\ntheorem u : True := trivial\n",
+        NULL };
+    for (int i = 0; srcs[i]; i++) {
+        ASSERT(!review4_ok(srcs[i], false));
+        ASSERT(!review4_ok(srcs[i], true));
+    }
+    /* The qualified-name rewrites stay accepted. */
+    ASSERT(review4_ok("theorem c22 : Nat.succ 1 = 2 := rfl\n", false));
+    ASSERT(review4_ok("section Foo\ntheorem bar : True := trivial\nend Foo\n", false));
+}
+
 /* Findings 1-3: every reproducer hides a column-0 #eval inside what the
  * v0.6520 checker took for a string / character literal / comment; with the
  * minimal lexical surface each is refused before Lean runs, at the very
@@ -839,6 +863,192 @@ static void test_review4_claims(void) {
     check_true("!StringContainsQ[Certify[x == x, Verify -> False][\"LeanSource\"], \"/-\"]");
 }
 
+/* Sixth review (v0.6522): no Lean needed. */
+
+#define BIND_CHAR0 "\xE2\x88\x80 {K : Type} [Lean.Grind.Field K] [Lean.Grind.IsCharP K 0], "
+#define BIND_ORD "\xE2\x88\x80 {K : Type} [Lean.Grind.Field K] [LE K] [LT K] " \
+    "[Std.LawfulOrderLT K] [Std.IsLinearOrder K] [Lean.Grind.OrderedRing K], "
+
+/* Finding 1: every Domain value has one meaning, any other is refused. */
+static void test_review6_domain(void) {
+    test_mute_messages();
+    /* The reproducer: Complexes with a hypothesis was stated over Rat. */
+    check_str("Certify[x == 7, Assumptions -> x^2 == -4, Domain -> Complexes, Verify -> False]"
+              "[\"LeanTheorem\"]", BIND_CHAR0 "\xE2\x88\x80 x : K, x ^ 2 = -4 \xE2\x86\x92 x = 7");
+    check_true("Certify[x == 7, Assumptions -> x^2 == -4, Domain -> Complexes, Verify -> False]"
+               "[\"Domain\"] === Complexes");
+    /* Complexes without hypotheses: the generic form too. */
+    check_str("Certify[(x + 1)^2 == x^2 + 2 x + 1, Domain -> Complexes, Verify -> False]"
+              "[\"LeanTheorem\"]",
+              BIND_CHAR0 "\xE2\x88\x80 x : K, (1 + x) ^ 2 = 1 + 2 * x + x ^ 2");
+    /* Complexes: an order relation needs every variable real. */
+    assert_eval_eq("Check[Certify[x == 7, Assumptions -> x^2 + 4 == 0 && y > 0, "
+                   "Domain -> Complexes, Verify -> False], \"realvars\"]", "\"realvars\"", 0);
+    /* Reals: every ordered field, hypotheses or not (Tier 0, no Mathlib). */
+    check_str("Certify[x == 7, Assumptions -> x^2 == -4, Domain -> Reals, Verify -> False]"
+              "[\"LeanTheorem\"]", BIND_ORD "\xE2\x88\x80 x : K, x ^ 2 = -4 \xE2\x86\x92 x = 7");
+    check_true("With[{c = Certify[x == x, Domain -> Reals, Verify -> False]}, "
+               "c[\"Domain\"] === Reals && c[\"Tier\"] === 0]");
+    /* Rationals / Integers: Rat / Int, labelled. */
+    check_str("Certify[x == 7, Assumptions -> x^2 == -4, Domain -> Rationals, Verify -> False]"
+              "[\"LeanTheorem\"]", "\xE2\x88\x80 x : Rat, x ^ 2 = -4 \xE2\x86\x92 x = 7");
+    check_str("Certify[x == 7, Assumptions -> x^2 == -4, Domain -> Integers, Verify -> False]"
+              "[\"LeanTheorem\"]", "\xE2\x88\x80 x : Int, x ^ 2 = -4 \xE2\x86\x92 x = 7");
+    /* Automatic, hypothesis-free: Int / Rat (equivalent), unchanged. */
+    check_true("Certify[x + 1 == 1 + x, Verify -> False][\"Domain\"] === Integers");
+    /* Anything else is refused, before any generator runs. */
+    const char* bad[] = { "Algebraics", "\"Complexes\"", "Booleans", "Primes", "_",
+                          "{Reals}", NULL };
+    for (int i = 0; bad[i]; i++) {
+        char buf[256];
+        snprintf(buf, sizeof buf, "Check[Certify[x == 7, Assumptions -> x^2 == -4, "
+                 "Domain -> %s, Verify -> False], \"domain\"]", bad[i]);
+        assert_eval_eq(buf, "\"domain\"", 0);
+    }
+    assert_eval_eq("Check[Certify[Inverse[{{2, 1}, {1, 1}}], Domain -> Algebraics, "
+                   "Verify -> False], \"domain\"]", "\"domain\"", 0);
+    /* Element declarations are read the same way on every path. */
+    check_true("Certify[x == 1, Assumptions -> x^3 == 1 && Element[x, Reals], "
+               "Domain -> Complexes, Verify -> False][\"Domain\"] === Reals");
+    check_true("Certify[x == 1, Assumptions -> x^3 == 1 && Element[x, Reals], "
+               "Verify -> False][\"Domain\"] === Reals");
+    check_str("Certify[x == 1, Assumptions -> x^3 == 1 && Element[x, Reals], "
+              "Domain -> Rationals, Verify -> False][\"LeanTheorem\"]",
+              "\xE2\x88\x80 x : Rat, x ^ 3 = 1 \xE2\x86\x92 x = 1");
+    check_str("Certify[x == 1, Assumptions -> x^3 == 1 && Element[x, Integers], "
+              "Domain -> Integers, Verify -> False][\"LeanTheorem\"]",
+              "\xE2\x88\x80 x : Int, x ^ 3 = 1 \xE2\x86\x92 x = 1");
+    assert_eval_eq("Check[Certify[x == 1, Assumptions -> x^3 == 1 && Element[x, Integers], "
+                   "Verify -> False], \"element\"]", "\"element\"", 0);
+    assert_eval_eq("Check[Certify[x == 1, Assumptions -> x^3 == 1 && Element[x, Integers], "
+                   "Domain -> Reals, Verify -> False], \"element\"]", "\"element\"", 0);
+    /* The generic form's K cannot capture a variable named K or Rat. */
+    assert_eval_eq("Check[Certify[K == Rat, Assumptions -> K^2 == Rat^2, Verify -> False], "
+                   "\"nocert\"]", "\"nocert\"", 0);
+}
+
+/* Finding 2: Integrate[f, x] == F is certified as D[F, x] == f, and says so. */
+static void test_review6_integrate_claim(void) {
+    test_mute_messages();
+    assert_eval_eq("Check[Certify[Integrate[2 x, x] == x^2 + 5, Verify -> False], "
+                   "\"antideriv\"]", "\"antideriv\"", 0);
+    assert_eval_eq("leanI6 = Quiet[Certify[Integrate[2 x, x] == x^2 + 5, Verify -> False]]; Null",
+                   "Null", 0);
+    check_true("leanI6[\"Input\"] === HoldForm[Integrate[2 x, x] == x^2 + 5]");
+    check_true("leanI6[\"Theorem\"] === HoldForm[ForAll[x, D[x^2 + 5, x] == 2 x]]");
+    check_true("AnyTrue[leanI6[\"TrustedSteps\"], StringStartsQ[#, \"the claim Integrate[f, x] "
+               "== F is certified as D[F, x] == f\"] && StringContainsQ[#, \"locally constant\"] &]");
+    assert_eval_eq("leanI7 = Quiet[Certify[Integrate[-1/(1 + x^2), x] == ArcTan[1/x], "
+                   "Verify -> False]]; Null", "Null", 0);
+    check_true("leanI7[\"Theorem\"] === HoldForm[ForAll[x, D[ArcTan[1/x], x] == -1/(1 + x^2)]]");
+    /* Certify[Integrate[f, x]] itself (Mathilda's own F) is unchanged. */
+    check_true("!AnyTrue[Certify[Integrate[2 x, x], Verify -> False][\"TrustedSteps\"], "
+               "StringContainsQ[#, \"locally constant\"] &]");
+}
+
+/* Finding 3: a symbol must be a plain variable (no value of any kind). */
+static void test_review6_values(void) {
+    test_mute_messages();
+    const char* cases[] = {
+        "leanP1 = Simplify[(x^2 - 1)/(x - 1)]; Protect[leanP1]; Certify[leanP1 == x + 1, "
+            "Verify -> False]",
+        "leanP2 /: leanP2^2 = -1; Certify[leanP2^2 == -1, Verify -> False]",
+        "leanP3 /: leanP3 + 1 = 0; Certify[leanP3 + 1 == 0, Verify -> False]",
+        "leanP4 = 5; Protect[leanP4]; Certify[Integrate[2 w, w] == w^2 + leanP4, Verify -> False]",
+        "leanP5 = 3; Certify[Integrate[2 leanP5, leanP5] == leanP5^2, Verify -> False]",
+        "leanP6[y_] := y; Certify[leanP6 == leanP6, Verify -> False]",
+        "leanP7[a_][b_] := a; Certify[leanP7 + 1 == 1 + leanP7, Verify -> False]",
+        "N[leanP8] = 2; Certify[leanP8 == leanP8, Verify -> False]",
+        "SetAttributes[leanP9, Constant]; Certify[leanP9 + 1 == 1 + leanP9, Verify -> False]",
+        "leanP10 = 2; Certify[Sum[leanP10, {leanP10, 1, n}] == n (n + 1)/2, Verify -> False]",
+        NULL };
+    for (int i = 0; cases[i]; i++) {
+        char buf[512];
+        snprintf(buf, sizeof buf, "Check[%s, \"value\"]", cases[i]);
+        assert_eval_eq(buf, "\"value\"", 0);
+    }
+    /* The message names the kind of value. */
+    check_true("Clear[leanM6]; leanM6 /: leanM6^2 = -1; "
+               "StringContainsQ[ToString[Lean`Private`symbolProblem[leanM6]], \"UpValues\"]");
+    /* Protected alone is harmless; System constants are not values. */
+    check_true("Protect[leanQ6]; Head[Certify[leanQ6 + 1 == 1 + leanQ6, Verify -> False]] === "
+               "ProofObject");
+    check_str("Certify[I^2 == -1, Verify -> False][\"LeanTheorem\"]", "(-1 : Int) = -1");
+}
+
+/* Finding 4: generator-private symbols cannot be named in a claim. */
+static void test_review6_private(void) {
+    test_mute_messages();
+    assert_eval_eq("Check[Certify[Integrate[2, x] == Sqrt[2] Lean`Private`s1 x, Verify -> False], "
+                   "\"context\"]", "\"context\"", 0);
+    assert_eval_eq("Check[Certify[x == Lean`Internal`foo, Verify -> False], \"context\"]",
+                   "\"context\"", 0);
+    assert_eval_eq("Check[Certify[x == 1, Assumptions -> Lean`Private`s1 == 1, "
+                   "Verify -> False], \"context\"]", "\"context\"", 0);
+    /* The surd variables are fresh per call (printed s1, s2, ... in Lean). */
+    check_true("With[{a = Keys[Certify[Integrate[1/(x^2 + 2), x], Verify -> False]"
+               "[\"Certificate\"][\"Surds\"]], b = Keys[Certify[Integrate[1/(x^2 + 2), x], "
+               "Verify -> False][\"Certificate\"][\"Surds\"]]}, a =!= b && "
+               "Context @@ a === \"Lean`Private`\"]");
+    check_true("StringStartsQ[Certify[Integrate[1/(x^2 + 2), x], Verify -> False]"
+               "[\"LeanTheorem\"], \"\\[ForAll] x s1 : Rat, \"]");
+}
+
+/* Finding 5: hand-made ProofObjects are not authenticated. */
+static void test_review6_proofobject(void) {
+    check_true("ProofObject[<|\"Verified\" -> True, \"Input\" -> HoldForm[1 == 2]|>]"
+               "[\"Verified\"] === Missing[\"Unauthenticated\"]");
+    check_true("With[{p = Certify[x == x, Verify -> False]}, p[\"Verified\"] === "
+               "Missing[\"NotChecked\"]]");
+    /* Editing a genuine object's data unauthenticates it. */
+    check_true("With[{a = Append[First[Certify[x == x, Verify -> False]], \"Verified\" -> True]}, "
+               "ProofObject[a]][\"Verified\"] === Missing[\"Unauthenticated\"]");
+    check_true("StringContainsQ[ToString[ProofObject[<|\"Verified\" -> True, \"Kind\" -> "
+               "\"Identity\", \"Engine\" -> \"Lean\", \"Tier\" -> 0, \"Timing\" -> 0.|>]], "
+               "\"Unauthenticated\"]");
+}
+
+/* Finding 6: the named trusted steps. */
+static void test_review6_trusted(void) {
+    check_true("MemberQ[Certify[Integrate[1/x + 1/(x + 1), x], Verify -> False]"
+               "[\"TrustedSteps\"], s_String /; StringContainsQ[s, \"rational part R = r/w\"]]");
+    check_true("MemberQ[Certify[Sum[k, {k, 1, n}], Verify -> False][\"TrustedSteps\"], "
+               "s_String /; StringStartsQ[s, \"the closed form is proved for integer n >= 1 "
+               "only\"]]");
+}
+
+/* Finding 7: Assumptions are walked held; SetOptions defaults are refused. */
+static void test_review6_assumptions(void) {
+    test_mute_messages();
+    const char* evals[] = {
+        "Reduce[x^2 == 1 && x > 0, x]", "Simplify[x^2 == 1 && x > 0]", "x == leanF6[2]",
+        "D[x^2, x] == 2 x", "x == y + Simplify[(1 + z)^20 - Expand[(1 + z)^20] + 10^-25 z]",
+        "Evaluate[x == 1]", NULL };
+    assert_eval_eq("leanF6[y_] := y^2; Null", "Null", 0);
+    for (int i = 0; evals[i]; i++) {
+        char buf[512];
+        snprintf(buf, sizeof buf, "Check[Certify[x == 1, Assumptions -> %s, Verify -> False], "
+                 "\"eval\"]", evals[i]);
+        assert_eval_eq(buf, "\"eval\"", 0);
+    }
+    /* Relations, connectives and Element pass, as written. */
+    check_str("Certify[x == 1, Assumptions -> x == 1 || x == 2, Verify -> False]"
+              "[\"LeanTheorem\"]",
+              BIND_CHAR0 "\xE2\x88\x80 x : K, x = 1 \xE2\x88\xA8 x = 2 \xE2\x86\x92 x = 1");
+    check_true("Certify[x == 1, Assumptions -> 0 < x < 2, Verify -> False][\"Domain\"] === Reals");
+    /* A default set with SetOptions was evaluated by SetOptions: refused. */
+    assert_eval_eq("SetOptions[Certify, Assumptions -> x > 0]; "
+                   "leanD6 = Check[Certify[x == x, Verify -> False], \"optdefault\"]; "
+                   "SetOptions[Certify, Assumptions -> {}]; leanD6", "\"optdefault\"", 0);
+    assert_eval_eq("SetOptions[Certify, Assumptions :> Reduce[x^2 == 1 && x > 0, x]]; "
+                   "leanD7 = Check[Certify[x == 1, Verify -> False], \"optdefault\"]; "
+                   "SetOptions[Certify, Assumptions -> {}]; leanD7", "\"optdefault\"", 0);
+    /* ... unless the call gives its own Assumptions. */
+    check_true("SetOptions[Certify, Assumptions -> x > 0]; "
+               "leanD8 = Head[Certify[x == x, Assumptions -> {}, Verify -> False]]; "
+               "SetOptions[Certify, Assumptions -> {}]; leanD8 === ProofObject");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -864,7 +1074,15 @@ int main(void) {
     TEST(test_review3_claims);
     TEST(test_review4_reproducers);
     TEST(test_review4_property);
+    TEST(test_review5_scoped);
     TEST(test_review4_claims);
+    TEST(test_review6_domain);
+    TEST(test_review6_integrate_claim);
+    TEST(test_review6_values);
+    TEST(test_review6_private);
+    TEST(test_review6_proofobject);
+    TEST(test_review6_trusted);
+    TEST(test_review6_assumptions);
     printf("All Lean certificate generation tests passed.\n");
     return 0;
 }

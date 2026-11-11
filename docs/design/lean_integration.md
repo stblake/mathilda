@@ -64,10 +64,11 @@ refutation, so it is never `False`.
 | Kind | Tier | `"TrustedSteps"` |
 |---|---|---|
 | Identity (polynomial) | 0 | none |
-| Identity (with `Assumptions`) | 0 | none: stated over every char-0 field (or every ordered field) |
+| Identity (with `Assumptions`, or `Domain -> Complexes` / `Reals`) | 0 | none: stated over every char-0 field (or every ordered field); `Domain -> Rationals` / `Integers` over `Rat` / `Int`, as labelled |
 | Identity (rational function) | 0 | field algebra from the cross-multiplied identity (unreduced numerators and denominators) to the rational identity where the denominators are nonzero |
 | Factorization | 0 | irreducibility of the factors |
-| Antiderivative | 0 | the elementary derivative rules and quotient rule (applied symbolically); polynomial derivatives by `D`; the `Together` forms of the integrand and of each `u_i`; that the cleared denominators are not identically zero (checked by Mathilda) |
+| Antiderivative | 0 | the elementary derivative rules and quotient rule (applied symbolically); polynomial derivatives by `D`; the `Together` forms of the integrand, of each `u_i` and of the rational part `R = r/w`; that the cleared denominators are not identically zero (checked by Mathilda) |
+| Antiderivative claim `Integrate[f, x] == F` | 0 / 1 | as the row above (Tier 0) or none (Tier 1), plus: the claim is certified as `D[F, x] == f` (`"Theorem"`); `Integrate[f, x] == F` itself holds only up to an additive locally constant term |
 | Antiderivative | 1 (Mathlib) | none: `HasDerivAt (fun x => F) f x` on the stated domain |
 | Bezout | 0 | none |
 | IdealMembership (`Implies[...]`) | 0 | none (every char-0 field) |
@@ -80,7 +81,7 @@ refutation, so it is never `False`.
 | Primality (Pratt) | 0 | Lucas's theorem (Lean evaluates the certificate checker, it does not prove that a valid certificate implies primality) |
 | Primality (`PrimeQ[2]`) | 0 | none: `Mathilda.IsPrime 2` |
 | Primality (composite, `n < 2`) | 0 | none: `¬ Mathilda.IsPrime n` |
-| ClosedFormSum | 0 | none |
+| ClosedFormSum | 0 | the closed form is proved for integer `n >= a` only (Lean's statement is over `n = a + m`, `m : Nat`) |
 
 ### Tiers
 
@@ -222,6 +223,33 @@ and `lean_check_tokens_mathlib`.
 Kernel replay and the private-directory checks of v0.6519 / v0.6520 stay, as defence in
 depth.
 
+**Fifth review (v0.6521, follow-up fix).** In Lean 4 a plain `open X` -- not only
+`open scoped X` -- and likewise `namespace X` activate X's scoped extensions, scoped
+*command* syntax included (for example `Lean.PostprocessTraces` declares
+`scoped syntax "postprocess_traces " term " in" command`, whose elaborator evaluates the
+term). The keyword list is derived with nothing open, so such keywords were outside the
+tested property. LeanVerify sources may therefore no longer use `open` or `namespace` at
+all; proofs use fully qualified names. The generators never emitted either (the trusted
+prelude's `namespace Mathilda` is part of the byte-identical prefix), so `Certify` is
+unaffected.
+
+## Soundness hardening, sixth review (v0.6522)
+
+A sixth adversarial review of the `Certify` path found two false `"Verified" -> True`
+results against the contract (one through `Domain`, one through `Integrate[f, x] == F`) and
+five weaker holes. Regression tests: `test_review6_*` in `tests/test_lean_certify.c` (no Lean)
+and `test_review6_verify` in `tests/test_lean_verify.c`.
+
+| Hole | Fix |
+|---|---|
+| **`Domain` values fell back silently.** `domainType[_, ...]` mapped every unlisted value to the automatic rules, but the generic char-0 / ordered-field form was chosen only for `Domain -> Automatic`, and `Element[x, Reals]` was dropped on that path: `Certify[x == 7, Assumptions -> x^2 == -4, Domain -> Complexes, Method -> …]` proved `∀ x : Rat, x ^ 2 = -4 → x = 7` (false over ℂ). | **One meaning per value** (`$domains` in `Lean.m`): `Automatic` -- Mathematica's default (hypothesis-free: `Int` / `Rat`, equivalent for polynomial identities; with hypotheses: as `Complexes`); `Complexes` -- every char-0 field, hypotheses or not (every ordered field when every variable is declared real; `Certify::realvars` otherwise); `Reals` -- every ordered field (Tier 0; it used to be Mathlib's `Real`); `Rationals` -- `Rat`; `Integers` -- `Int`. Anything else (`Algebraics`, the string `"Complexes"`, …) is `Certify::domain` before any generator runs. `Element` assumptions follow the same rules on every path (`Element[x, Reals]` declares realness, implied memberships are dropped, any other `Element` is `Certify::element`). Variables printed `K` or `Rat` are refused in the generic form (the type variable is `K`). The identity generator is the only one that reads `Domain`; the others issue `Certify::optignored`. |
+| **`Integrate[f, x] == F` certified up to a constant.** `Certify[Integrate[2 x, x] == x^2 + 5]` and `Certify[Integrate[-1/(1 + x^2), x] == ArcTan[1/x]]` were `True`; in Mathematica both claims are `False` (`Integrate` returns one antiderivative; `ArcTan[1/x]` differs from `-ArcTan[x]` by `±Pi/2`, a different constant on each side of 0). | The claim is not certifiable as written: Lean cannot know which antiderivative `Integrate` returns without evaluating it. It is now certified **as the honest claim** `D[F, x] == f`: `"Theorem"` is `ForAll[x, D[F, x] == f]` (Tier 1: the `HasDerivAt` statement), `"Input"` stays as written, `Certify::antideriv` is issued, and `"TrustedSteps"` gains "the claim Integrate[f, x] == F is certified as D[F, x] == f …; Integrate[f, x] == F itself holds only up to an additive term with derivative 0, which is locally constant (constant on each interval where F and f are defined …)". |
+| **Values beyond `OwnValues`; `Protected` exempt.** `valuedQ` exempted every `Protected` symbol and looked at `OwnValues` only: `e = Simplify[...]; Protect[e]; Certify[e == x + 1]` was a tautology, `t /: t^2 = -1; Certify[t^2 == -1]` proved `(-1 : Int) = -1`, `v = 5; Protect[v]; Certify[Integrate[2 w, w] == w^2 + v]` substituted `v`; the variable slots of `Integrate` / `Sum` / `D` were not checked at all. | `symbolProblem`: a non-``System` `` symbol in a claim or its `Assumptions` must have no `OwnValues`, `DownValues`, `UpValues`, `SubValues`, `NValues` or `DefaultValues` and no attribute beyond `Protected` / `ReadProtected` / `Locked` / `Temporary`; ``System` `` symbols (the heads and constants the walker and translator understand) are accepted unless a user gave one an `OwnValue` or `UpValue` (`I :> I` excepted). The exemption is by context, not by `Protected`. The variable slots are checked like every other symbol. `Certify::value` names the kind ("t has UpValues (…)"). |
+| **Private surd capture.** `Certify[Integrate[2, x] == Sqrt[2] Lean`Private`s1 x]` was `True`: the claim named the generator's surd variable, so `s1^2 - 2 = (s1^2 - 2) * 1`. | Symbols of `` Lean`Private` `` / `` Lean`Internal` `` are refused in claims and `Assumptions` (`Certify::context`), and the surd variables are fresh per call (`` Lean`Private`s<j>$<n> ``, printed `s<j>`), so capture is impossible by name or by coincidence. |
+| **Minted ProofObjects.** `ProofObject[<|"Verified" -> True, …|>]["Verified"]` was `True`. | A session registry: `mkProofObject` stores the `Hash` of every association it produces; `obj["Verified"]` and the summary box report the verdict only for a registered object, `Missing["Unauthenticated"]` otherwise. Documented limits: code that deliberately writes `` Lean`Private` `` internals can forge the registry, and objects from another session are unauthenticated (re-run `Certify`, or `LeanVerify[obj["LeanSource"]]`). |
+| **Unnamed trusted steps.** `Together[rpart]` for the rational part `R = r/w` of an antiderivative; a closed-form `Sum` is proved for integers `n >= a` only. | Both are now in `"TrustedSteps"` (table above). |
+| **Computed `Assumptions`.** `Certify[x == 1, Assumptions -> Reduce[x^2 == 1 && x > 0, x]]` used the hypothesis `x == 1` computed by `Reduce`, with `"TrustedSteps" -> {}` (likewise `Simplify[...]`, a user function `x == f[2]`). | `heldOptionProblem` walks the `Assumptions` held with the claim walker (arithmetic, relations, `And` / `Or` / `Not` / `Implies`, `Element`, lists, the value-preserving heads); anything else, `D` included, is `Certify::eval`. A `SetOptions[Certify, Assumptions -> …]` default was evaluated by `SetOptions` before `Certify` could see it, so a default other than `{}` is refused (`Certify::optdefault`) unless the call gives its own `Assumptions`. `Domain` and `Method` defaults need no such rule: they are checked by value (`$domains`, `methodProblem`). |
+
 ### The guarantee, precisely
 
 `LeanVerify[src]["Success"] -> True` means: `src` passed the source check (minimal lexical
@@ -233,7 +261,11 @@ module and every theorem / example the source declares depends only on `propext`
 (appended by LeanVerify after the check) agree. `Certify[...]["Verified"] -> True` means the
 same for the generated file and its footer theorem `mathilda_cert_k_footer`, whose statement
 is the faithful translation of the input as written -- no computation in it evaluated, no
-value substituted; every unchecked step is in `"TrustedSteps"`.
+value substituted, over the `Domain` it shows; every unchecked step is in `"TrustedSteps"`.
+The one deliberate exception is a claim `Integrate[f, x] == F`, which is certified as
+`D[F, x] == f`: `"Theorem"` shows that statement, `Certify::antideriv` says so, and
+`"TrustedSteps"` states that the equation itself holds only up to a locally constant term.
+`"Verified"` is reported only for a `ProofObject` that `Certify` produced in this session.
 
 **Trust base.** The Lean kernel; the Lean toolchain (elaborator, compiler, `.olean` writer
 and reader) as installed; the imported compiled modules (core `Init`, and with a project
@@ -264,13 +296,14 @@ trusted, except for the listed `"TrustedSteps"`.
 ## Limitations
 
 - Tier 0 statements are over `Int`/`Rat`, or over a generic char-0 / ordered field (statements
-  with hypotheses, SOS, optimality). Real-analytic content (derivatives of `Log`,
+  with hypotheses, `Domain -> Complexes` / `Reals`, SOS, optimality). Real-analytic content (derivatives of `Log`,
   `ArcTan`) is either reduced to a cleared polynomial identity (Tier 0, with the trusted
   steps above) or proved in Mathlib (Tier 1).
 - Antiderivatives must be built from rational functions, quadratic surds, and one level of
   `Log`/`ArcTan`/`ArcTanh`. `RootSum`, `Root` and complex results have no certificate (F9).
 - `Det` is limited to n ≤ 6 (Laplace expansion in the kernel; 6×6 takes about 1.5 s).
-- `Domain`, `Method` and `Assumptions` apply to identity claims. Other kinds take their
+- `Domain` (`Automatic`, `Complexes`, `Reals`, `Rationals`, `Integers`; anything else is
+  `Certify::domain`), `Method` and `Assumptions` apply to identity claims. Other kinds take their
   hypotheses from the claim itself (`Implies[...]`, `ForAll[vars, cond, ...]`) and pick their
   own proof script; they issue `Certify::optignored` when these options are given.
 - A claim may contain arithmetic, `Expand` / `Together` / `Cancel` / `Apart` / `Factor` /
@@ -288,8 +321,10 @@ trusted, except for the listed `"TrustedSteps"`.
   refused as identifiers too (a variable named `end`, `local` or `alias`; `Polynomial.eval`
   with Mathlib). A development with its own definitions has to be checked by Lean / Lake
   directly.
-- `Certify` refuses a claim that mentions a symbol with a value (`Certify::value`),
-  including `c = a == b; Certify[c]`: use `Certify[Evaluate[c]]` to certify the value.
+- `Certify` refuses a claim that mentions a symbol with a value of any kind or an
+  evaluation-changing attribute (`Certify::value`), including `c = a == b; Certify[c]`: use
+  `Certify[Evaluate[c]]` to certify the value. `Assumptions` set with `SetOptions` are
+  refused (`Certify::optdefault`): pass them in the call.
 
 ## Follow-ups
 

@@ -33,8 +33,9 @@ is True only when Lean accepted the theorem.";
 
 ProofObject::usage =
   "ProofObject[<|...|>] is a Lean 4 certificate produced by Certify; obj[\"prop\"] gives a \
-property and obj[\"Properties\"] lists them. ProofObject[comp, opts] (comp not an \
-Association) is the same as Certify[comp, opts].";
+property and obj[\"Properties\"] lists them; obj[\"Verified\"] is \
+Missing[\"Unauthenticated\"] for an object Certify did not produce in this session. \
+ProofObject[comp, opts] (comp not an Association) is the same as Certify[comp, opts].";
 
 LeanVerify::usage =
   "LeanVerify[src] checks the Lean 4 source string src with the Lean executable and gives \
@@ -42,7 +43,7 @@ LeanVerify::usage =
 \"Command\"|>. Success requires exit code 0, no error, no sorry, and only the standard axioms \
 for every declaration (examples are named so they are checked too). Only sources with no \
 user-defined code are run: no imports (core Lean) or only import Mathlib with a project, and \
-only theorem / example / open / namespace / section / variable / universe / numeric \
+only theorem / example / section / variable / universe / numeric \
 set_option commands; anything else (def, instance, macro, attribute, #eval, native_decide, \
 sorry, ...) is refused unrun.";
 
@@ -68,7 +69,9 @@ Tier::usage =
 Automatic.";
 
 Domain::usage =
-  "Domain is an option of Certify: Integers, Rationals, Reals (Tier 1) or Automatic.";
+  "Domain is an option of Certify for identity claims: Automatic (Mathematica's default, \
+complex variables), Complexes (every field of characteristic 0), Reals (every ordered \
+field), Rationals (Rat) or Integers (Int); any other value is refused (Certify::domain).";
 
 Verify::usage =
   "Verify is an option of Certify: False generates the Lean source without running Lean \
@@ -111,11 +114,16 @@ Certify::rejected = "Lean rejected the certificate for `1`; see obj[\"Logs\"]";
 Certify::method = "Method `1` is not accepted: `2`; give a plain tactic script (see ?Certify)";
 LeanVerify::unsafe = "the source uses `1`, which can run code at elaboration time, bypass or forge the kernel check; not run";
 LeanVerify::import = "the source has `1`; LeanVerify accepts no imports (core Lean) or, with a LeanProject, only import Mathlib / import Mathlib.<Path>; not run";
-LeanVerify::cmd = "the source uses the command `1`; LeanVerify accepts only theorem, example, open (namespace names only), namespace, section, end, variable, universe and numeric / Boolean set_option commands (lemma with Mathlib), each starting at column 0; not run";
+LeanVerify::cmd = "the source uses the command `1`; LeanVerify accepts only theorem, example, section, end, variable, universe and numeric / Boolean set_option commands (lemma with Mathlib), each starting at column 0; not run";
 LeanVerify::lex = "line `2`: the source contains `1`, which is outside LeanVerify's minimal lexical surface (no strings, comments, character literals, #, $, %, backquotes, backslashes, @[, French quotes or unlisted Unicode); not run";
 Certify::unsafe = "the generated Lean source failed the LeanVerify source check (`1`); not run";
 Certify::eval = "the claim `1` applies `2`, which Mathilda would have to evaluate before Lean sees the claim; certify the computation itself (e.g. Certify[Simplify[...]]) or state the claim with arithmetic only";
-Certify::value = "`1` has a value (`2`); Clear[`1`], or certify the value-substituted claim explicitly (write it out, or Certify[Evaluate[claim]]); a claim is certified as written, never with values substituted";
+Certify::value = "`1` has `2`; Clear[`1`], or certify the value-substituted claim explicitly (write it out, or Certify[Evaluate[claim]]); a claim is certified as written, never with values substituted";
+Certify::context = "`1` is in the context `2`, which is reserved for Certify's own generator symbols; use a symbol of your own";
+Certify::domain = "Domain -> `1` is not supported; use Automatic, Complexes, Reals, Rationals or Integers";
+Certify::element = "the assumption `1` cannot be stated for Domain -> `2`; only Element[vars, Reals] / Element[vars, Complexes] (and Element[vars, d] implied by the domain d) are accepted";
+Certify::optdefault = "the default Assumptions -> `1` was set with SetOptions[Certify, ...], which evaluated it before Certify could check it; pass Assumptions in the call instead, or reset it with SetOptions[Certify, Assumptions -> {}]";
+Certify::antideriv = "`1` is certified as `2`: the claimed F is an antiderivative of f; the equation itself holds only up to an additive locally constant term (see \"TrustedSteps\")";
 Certify::realvars = "the claim `1` has order relations, but `2` is not constrained to be real; add Element[`2`, Reals] (or an order relation on it) to the assumptions";
 Certify::optignored = "`1` is ignored for a `2` certificate (only identity claims read Domain, Assumptions and Method)";
 
@@ -263,8 +271,8 @@ sourceWords[src_String] := DeleteDuplicates[StringCases[src,
    parser tables, src/lean_check_tokens.h) or an escape word (by_elab,
    native_decide, sorry, eval, IO, ...); and (C) it fits an ALLOWLIST grammar
    -- no imports (core Lean only), or only `import Mathlib[.Path]` with a
-   project; only theorem / lemma (Mathlib) / example / open NAMES / namespace
-   / section / end / variable / universe / numeric or Boolean set_option
+   project; only theorem / lemma (Mathlib) / example (no open / namespace:
+   they activate scoped syntax) / section / end / variable / universe / numeric or Boolean set_option
    commands at column 0.  The trusted prelude (Prelude.lean, byte-identical,
    itself free of strings and comments) is skipped.  With certify -> True the
    generator auxiliaries `def mathilda_cert_<k>_<x>` and the footer lines
@@ -529,11 +537,24 @@ runBatch[chunks_List, tier_, exe_, proj_] := Module[{src, lay, r, res, clean, ch
 autoDomain[stmt_] := If[FreeQ[stmt, _Rational] && FreeQ[stmt, Power[_, _?Negative]],
   "Int", "Rat"];
 
-domainType[Automatic, stmt_, hyps_:False] := If[TrueQ[hyps], "Rat", autoDomain[stmt]];
-domainType[Integers, stmt_, hyps_:False] := "Int";
-domainType[Rationals, stmt_, hyps_:False] := "Rat";
-domainType[Reals, stmt_, hyps_:False] := "Real";
-domainType[_, stmt_, hyps_:False] := domainType[Automatic, stmt, hyps];
+(* The Domain option (sixth review, v0.6522).  Each accepted value has one
+   meaning, applied by identityGen (the only generator that reads it):
+     Automatic  Mathematica's default (variables complex unless an order
+                relation or Element[v, Reals] makes them real): a
+                hypothesis-free identity over Int (integer polynomial) or Rat
+                (equivalent: a polynomial identity with rational
+                coefficients holding on all of Z or Q holds in Q[x], hence in
+                every field of characteristic 0); with hypotheses the generic
+                char-0 / ordered-field form, as for Complexes.
+     Complexes  every field of characteristic 0 (C among them), hypotheses or
+                not; the ordered-field form when every variable is declared
+                real; order relations on a variable that is not real are
+                refused (Certify::realvars).
+     Reals      every ordered field (R among them): all variables real by
+                declaration.
+     Rationals  Rat.      Integers  Int.
+   Anything else is refused up front (Certify::domain). *)
+$domains = {Automatic, Complexes, Reals, Rationals, Integers};
 
 (* Generic domains.  Mathematica's variables are complex unless an inequality
    makes them real, so a statement with hypotheses is proved for EVERY field
@@ -637,17 +658,32 @@ $orderHeads = Less | Greater | LessEqual | GreaterEqual;
 orderVariables[assum_List] := Union[Variables[Join[
   Cases[assum, ($orderHeads)[xs__] :> {xs}, {0, Infinity}],
   Cases[assum, HoldPattern[Inequality[xs___]] :> Take[{xs}, {1, -1, 2}], {0, Infinity}]]]];
-(* {other assumptions, variables declared real} of a list of assumptions. *)
-splitRealDecls[assum_List] := {
-  DeleteCases[assum, Element[_, Reals]],
-  Union[Flatten[Cases[assum, Element[v_, Reals] :> {v}]]]};
+(* {other assumptions, variables declared real} of a list of assumptions, or
+   $Failed after Certify::element.  The same rules hold for every Domain:
+   Element[v, Reals] declares v real (a generic domain then uses the
+   ordered-field form; over Int / Rat it is implied and dropped);
+   Element[v, Complexes] is implied by every domain and dropped (dropping a
+   hypothesis can only strengthen the statement); Element[v, Rationals] is
+   implied over Rat and Int, Element[v, Integers] over Int; any other
+   Element cannot be stated and is refused. *)
+splitRealDecls[assum_List, dom_:Automatic] := Module[{implied, bad},
+  implied = Switch[dom, Integers, Integers | Rationals | Reals | Complexes,
+    Rationals, Rationals | Reals | Complexes, _, Complexes];
+  bad = Select[assum, MatchQ[#, Element[_, _]] && !MatchQ[#, Element[_, Reals]] &&
+      !MatchQ[#, Element[_, implied]] &];
+  If[bad =!= {}, Message[Certify::element, First[bad], dom]; Return[$Failed, Module]];
+  {DeleteCases[assum, Element[_, Reals | implied]],
+   If[MemberQ[{Integers, Rationals}, dom], {},
+     Union[Flatten[Cases[assum, Element[v_, Reals] :> {v}]]]]}];
 
 (* Generator for an identity a == b (rows 1-2).  Returns the generator
    association, or $Failed after a message. *)
 identityGen[kind_, input_HoldForm, result_, a_, b_, trusted_List, o_, raw_:Automatic] :=
-  Module[{vars, st, ty, held, assum, lean, tier, gk, reals, ordered, notReal},
-  {assum, reals} = splitRealDecls[DeleteCases[
-    Flatten[{o["Assumptions"]} /. And -> List], True]];
+  Module[{vars, st, ty, held, assum, lean, tier, gk, reals, ordered, notReal, dom, sp, auto},
+  dom = o["Domain"];
+  sp = splitRealDecls[DeleteCases[Flatten[{o["Assumptions"]} /. And -> List], True], dom];
+  If[sp === $Failed, Return[$Failed, Module]];
+  {assum, reals} = sp;
   If[!AllTrue[reals, Head[#] === Symbol &],
     Message[Certify::nocert, input]; Return[$Failed, Module]];
   vars = Sort[Union[Variables[{a, b}], If[ListQ[raw], Variables[raw], {}],
@@ -656,20 +692,31 @@ identityGen[kind_, input_HoldForm, result_, a_, b_, trusted_List, o_, raw_:Autom
     Message[Certify::nocert, input]; Return[$Failed, Module]];
   st = identityStatement[a, b, vars, raw];
   If[st === $Failed, Message[Certify::nocert, input]; Return[$Failed, Module]];
-  ty = domainType[o["Domain"], First[st], assum =!= {}];
-  tier = If[ty === "Real", 1, 0];
-  (* Automatic domain with hypotheses: every char-0 field (variables complex,
-     as in Mathematica), or every ordered field when every variable is real.
-     Order relations with a variable that is not real: no certificate. *)
+  tier = 0;
+  (* The statement's domain ($domains above).  Mathematica's semantics
+     (Automatic with hypotheses, Complexes): every char-0 field (variables
+     complex), or every ordered field when every variable is real; order
+     relations with a variable that is not real: no certificate. *)
   ordered = orderedQ[{assum, st[[2]]}];
   notReal = Complement[vars, orderVariables[assum], reals];
-  gk = If[o["Domain"] === Automatic && assum =!= {},
-    Which[
-      ordered && notReal =!= {},
-        Message[Certify::realvars, input, If[Length[notReal] === 1, First[notReal], notReal]];
-        Return[$Failed, Module],
-      ordered || (reals =!= {} && notReal === {}), "Ordered",
-      True, "CharZero"], None];
+  auto := Which[
+    ordered && notReal =!= {},
+      Message[Certify::realvars, input, If[Length[notReal] === 1, First[notReal], notReal]];
+      $Failed,
+    ordered || (reals =!= {} && notReal === {}), "Ordered",
+    True, "CharZero"];
+  gk = Switch[dom,
+    Automatic, If[assum === {}, None, auto],
+    Complexes, auto,
+    Reals, "Ordered",
+    _, None];
+  If[gk === $Failed, Return[$Failed, Module]];
+  (* The generic form writes the type variable K for the word Rat: a
+     variable printed as K or Rat would be captured by it. *)
+  If[gk =!= None && AnyTrue[vars, MemberQ[{"K", "Rat"}, SymbolName[#]] &],
+    Message[Certify::nocert, input]; Return[$Failed, Module]];
+  ty = Switch[dom, Integers, "Int", Automatic, If[gk === None, autoDomain[First[st]], "Rat"],
+    _, "Rat"];
   (* Bind the variables (and assumptions) around the held statement without
      ever evaluating it: Equal of two identical sides would become True. *)
   held = With[{vs = vars, h = If[Length[assum] === 1, First[assum], And @@ assum]},
@@ -722,11 +769,50 @@ $factorHeads = {Factor, FactorTerms};
    Evaluate itself is refused (Certify::eval) like any other head.  A symbol
    with a value (x = 5) is refused with Certify::value (finding 5): the claim
    is certified as written, never with values substituted. *)
-SetAttributes[{cw, cwl, cwClaim, hk, valuedQ, cvalue}, HoldAllComplete];
-(* Does the (held) symbol s have a value that evaluation would substitute?
-   Protected (System) symbols are constants, not user values. *)
-valuedQ[s_Symbol] := OwnValues[s] =!= {} && !MemberQ[Attributes[s], Protected];
-valuedQ[_] := False;
+SetAttributes[{cw, cwl, cwClaim, hk, csym, valuedQ, symbolProblem, cvalue}, HoldAllComplete];
+(* Why the (held) symbol s cannot stand for itself in a claim or in the
+   Assumptions, or None (sixth review, v0.6522; before, Protected symbols
+   were exempt and only OwnValues were looked at, so Protect[e] or an
+   UpValue t /: t^2 = -1 turned a claim into a tautology).
+     - Context Lean`Private` / Lean`Internal`: Certify's own generator
+       symbols (surd variables, prelude placeholders, sum binders); a claim
+       naming one could capture them -> {"context", ctx}.
+     - System` symbols are the built-in heads and constants the walker and
+       the strict translator already understand (Plus, Power, Pi, I,
+       Reals, True, ...); they are accepted unless one has an OwnValue or an
+       UpValue a user gave it (I's own OwnValue I :> I is not a value).
+     - Every other symbol must be a plain variable: no OwnValues,
+       DownValues, UpValues, SubValues, NValues or DefaultValues, and no
+       attribute that changes how it evaluates or differentiates
+       (Constant, NumericFunction, Flat, Orderless, Listable, Hold*, ...);
+       Protected, ReadProtected, Locked and Temporary are harmless. *)
+$systemValueAllowed = {"I"};  (* names: I itself evaluates to Complex[0, 1] *)
+$inertAttributes = {Protected, ReadProtected, Locked, Temporary};
+symbolProblem[s_Symbol] := Module[{ctx = Context[s], k},
+  Which[
+    StringStartsQ[ctx, "Lean`Private`" | "Lean`Internal`"], {"context", ctx},
+    ctx === "System`",
+      Which[
+        MemberQ[$systemValueAllowed, SymbolName[Unevaluated[s]]], None,
+        OwnValues[s] =!= {}, {"value", "a value (" <> ToString[OwnValues[s][[1, 2]], InputForm] <> ")"},
+        UpValues[s] =!= {}, {"value", "UpValues (" <> ToString[UpValues[s], InputForm] <> ")"},
+        True, None],
+    True,
+      k = SelectFirst[{{"a value", OwnValues[s]}, {"DownValues", DownValues[s]},
+          {"UpValues", UpValues[s]}, {"SubValues", SubValues[s]}, {"NValues", NValues[s]},
+          (* DefaultValues only where it is a HoldAll built-in: never evaluate s. *)
+          {"DefaultValues", If[MemberQ[Attributes[DefaultValues], HoldAll],
+            With[{d = Quiet[DefaultValues[s]]}, If[ListQ[d], d, {}]], {}]},
+          {"the attributes", Complement[Attributes[s], $inertAttributes]}},
+        #[[2]] =!= {} &, None];
+      Which[
+        k === None, None,
+        k[[1]] === "a value", {"value", "a value (" <> ToString[k[[2, 1, 2]], InputForm] <> ")"},
+        True, {"value", k[[1]] <> " (" <> ToString[k[[2]], InputForm] <> ")"}]]];
+symbolProblem[_] := None;
+valuedQ[s_] := symbolProblem[s] =!= None;
+symbolMessage[s_HoldForm, {"context", ctx_}] := Message[Certify::context, s, ctx];
+symbolMessage[s_HoldForm, {_, what_}] := Message[Certify::value, s, what];
 $cwKeep = {Plus, Times, Subtract, Divide, Minus, Equal, Unequal, Less, LessEqual, Greater,
   GreaterEqual, And, Implies, Inequality, ForAll, List, Element};
 $cwComputations = {Expand, Collect, Together, Apart, Cancel, Simplify, FullSimplify,
@@ -734,6 +820,7 @@ $cwComputations = {Expand, Collect, Together, Apart, Cancel, Simplify, FullSimpl
   Det, LinearSolve, NullSpace, Minimize, Maximize, FactorInteger, PrimeQ, Sum};
 $cwAnti = False;    (* inside a claimed antiderivative: surds, Log, ArcTan, ArcTanh *)
 $cwAnyPow = False;  (* inside a sum: c^k with a symbolic exponent *)
+$cwAssum = False;   (* walking the Assumptions option *)
 $cwNotes = {};      (* heads stripped / trusted steps added during one walk *)
 $cwTrusted = {};
 
@@ -741,8 +828,11 @@ cw[e_Integer] := e;
 cw[e_Rational] := e;
 cw[e_Real] := e;
 cw[e_String] := e;
-cw[s_Symbol] /; valuedQ[s] := cvalue[s, OwnValues[s][[1, 2]]];
+cw[s_Symbol] /; valuedQ[s] := cvalue[s, symbolProblem[s]];
 cw[s_Symbol] := hk[s];
+(* A variable slot (the x of Integrate[f, x], the k of a Sum) is checked
+   like any other symbol of the claim. *)
+csym[s_Symbol] := If[valuedQ[s], cvalue[s, symbolProblem[s]], hk[s]];
 cw[Evaluate[___]] := cfail[Evaluate];
 cw[Power[b_, n_Integer]] := inert[Power, cw[b], n];
 cw[Power[b_, e_]] /; $cwAnti || $cwAnyPow := inert[Power, cw[b], cw[e]];
@@ -751,6 +841,7 @@ cw[(h:Expand | Together | Cancel | Factor | FactorTerms)[e_]] :=
   ($cwNotes = Append[$cwNotes, h]; cw[e]);
 cw[(h:Apart | Collect)[e_, v_]] /; MatchQ[Unevaluated[v], _Symbol | {__Symbol}] :=
   ($cwNotes = Append[$cwNotes, h]; cw[e]);
+cw[D[f_, x_Symbol]] /; valuedQ[x] := cvalue[x, symbolProblem[x]];
 cw[D[f_, x_Symbol]] := Module[{fv = cwValue[cw[f]], d},
   If[!FreeQ[fv, cfail | cvalue] || !polyQ[fv, Variables[fv]] || !FreeQ[fv, _Real | _Complex],
     cfail[D],
@@ -760,6 +851,8 @@ cw[D[f_, x_Symbol]] := Module[{fv = cwValue[cw[f]], d},
       ToString[d, InputForm] <> " (Lean checks the claim with this derivative written in)"];
     hval[d]]];
 cw[(h_Symbol)[a___]] /; MemberQ[$cwKeep, h] := inert[h, cwl[a]];
+(* Assumptions may also use || and ! (the identity generator states them). *)
+cw[(h:Or | Not)[a___]] /; $cwAssum := inert[h, cwl[a]];
 cw[(h_)[___]] := cfail[h];
 cw[e_] := cfail[e];
 cwl[] := Sequence[];
@@ -769,14 +862,14 @@ cwl[a_, r___] := Sequence[cw[a], cwl[r]];
    other side is the claimed antiderivative) or a Sum (the other side is the
    claimed closed form).  Integrate is put on the left. *)
 cwClaim[Equal[Integrate[f_, x_Symbol], F_]] :=
-  inert[Equal, inert[Integrate, cw[f], hk[x]], Block[{$cwAnti = True}, cw[F]]];
+  inert[Equal, inert[Integrate, cw[f], csym[x]], Block[{$cwAnti = True}, cw[F]]];
 cwClaim[Equal[F_, Integrate[f_, x_Symbol]]] :=
-  inert[Equal, inert[Integrate, cw[f], hk[x]], Block[{$cwAnti = True}, cw[F]]];
+  inert[Equal, inert[Integrate, cw[f], csym[x]], Block[{$cwAnti = True}, cw[F]]];
 cwClaim[Equal[Sum[t_, {k_Symbol, a_, n_}], r_]] := Block[{$cwAnyPow = True},
-  inert[Equal, inert[Sum, cw[t], inert[List, hk[k], cw[a], cw[n]]], cw[r]]];
+  inert[Equal, inert[Sum, cw[t], inert[List, csym[k], cw[a], cw[n]]], cw[r]]];
 cwClaim[(h_Symbol)[a___]] /; MemberQ[$cwComputations, h] && h =!= Sum := inert[h, cwl[a]];
 cwClaim[Sum[t_, {k_Symbol, a_, n_}]] := Block[{$cwAnyPow = True},
-  inert[Sum, cw[t], inert[List, hk[k], cw[a], cw[n]]]];
+  inert[Sum, cw[t], inert[List, csym[k], cw[a], cw[n]]]];
 cwClaim[e_] := cw[e];
 
 cwHeld[t_] := HoldComplete @@ {t} //. {inert[h_, a___] :> h[a], hk[x_] :> x, hval[v_] :> v};
@@ -788,13 +881,12 @@ cwValue[t_] := If[FreeQ[t, cfail | cvalue], ReleaseHold[cwHeld[t]], t];
    its value was computed when it was assigned, so it is not the claim as
    written (Certify[Evaluate[c]] certifies the value explicitly). *)
 rewriteInput[HoldComplete[c_Symbol]] /; valuedQ[c] :=
-  (Message[Certify::value, HoldForm[c], OwnValues[c][[1, 2]]]; $Failed);
+  (symbolMessage[HoldForm[c], symbolProblem[c]]; $Failed);
 rewriteInput[hc:HoldComplete[c_]] := Module[{t, bad},
   Block[{$cwNotes = {}, $cwTrusted = {}},
     t = cwClaim[c];
-    bad = Cases[{t}, cvalue[s_, v_] :> HoldForm[s] -> v, Infinity];
-    If[bad =!= {},
-      Message[Certify::value, bad[[1, 1]], bad[[1, 2]]]; Return[$Failed, Module]];
+    bad = Cases[{t}, cvalue[s_, v_] :> {HoldForm[s], v}, Infinity];
+    If[bad =!= {}, symbolMessage @@ First[bad]; Return[$Failed, Module]];
     bad = Cases[{t}, cfail[h_] :> h, Infinity];
     If[bad =!= {},
       Message[Certify::eval, HoldForm[c], First[bad]]; Return[$Failed, Module]];
@@ -835,11 +927,13 @@ $preludeHeads = {"Lean.Private.matMul" -> "Mathilda.matMul",
   "Lean.Private.det" -> "Mathilda.det", "Lean.Private.hasShape" -> "Mathilda.HasShape",
   "Lean.Private.hasLength" -> "Mathilda.HasLength"};
 
-(* Private generator variables (the surd symbols s1, s2, ...) print as
-   <<Lean`Private`s1>>; they are renamed to their bare names. *)
+(* Private generator variables (the surd symbols s1$n, s2$n, ...) print as
+   <<Lean`Private`s1$n>>; they are renamed to their bare names s1, s2, ... *)
 leanRename[s_String] := StringReplace[StringReplace[StringReplace[s, $preludeHeads],
-  "\[LeftGuillemet]Lean`Private`" ~~ n:(LetterCharacter ~~ DigitCharacter..) ~~
-    "\[RightGuillemet]" :> n],
+  {"\[LeftGuillemet]Lean`Private`" ~~ n:(LetterCharacter ~~ DigitCharacter..) ~~
+     "$" ~~ DigitCharacter.. ~~ "\[RightGuillemet]" :> n,
+   "\[LeftGuillemet]Lean`Private`" ~~ n:(LetterCharacter ~~ DigitCharacter..) ~~
+     "\[RightGuillemet]" :> n}],
   (* Lean`Private`ratCast[m1]: the Nat binder m1 used as a rational value. *)
   "Lean.Private.ratCast " ~~ n:(LetterCharacter ~~ DigitCharacter..) :>
     "(" <> n <> " : Rat)"];
@@ -905,6 +999,7 @@ nocert[input_] := (Message[Certify::nocert, input]; $Failed);
    Integrate computed (it must be in the integration variable).  Used to
    check that Lean rejects a wrong antiderivative. *)
 $antiderivOverride = None;
+$surdSerial = 0;
 
 (* d^(n/2) with n odd, as d^((n-1)/2) * Sqrt[d], where Sqrt[d] is written over
    the primes: Prod p^Floor[k/2] * Prod_{k odd} sq[p], sq[p] standing for
@@ -964,8 +1059,14 @@ antiderivGen[input_, f_, x_Symbol, o_, claimed_:None] := Module[{F, tf, a, b, Fs
   (* Quadratic surds Sqrt[d] become fresh variables s_j (relation s_j^2 = d_j). *)
   Fs = F /. $surdRules;
   bases = Union[Cases[Fs, sq[d_] :> d, {0, Infinity}]];
+  (* Fresh symbols per call (sixth review): Lean`Private`s<j>$<serial>,
+     printed as s<j> by leanRename.  A claim cannot name them (symbols of
+     the Lean`Private` context are refused in claims, Certify::context), and
+     being fresh they cannot coincide with anything that exists already. *)
+  $surdSerial++;
   svars = Table[Symbol["Lean`Private`" <>
-      If[StringMatchQ[SymbolName[x], "s" ~~ DigitCharacter..], "r", "s"] <> ToString[j]],
+      If[StringMatchQ[SymbolName[x], "s" ~~ DigitCharacter..], "r", "s"] <> ToString[j] <>
+      "$" <> ToString[$surdSerial]],
     {j, Length[bases]}];
   sub = Thread[(sq /@ bases) -> svars];
   Fs = Fs /. sub;
@@ -1026,7 +1127,8 @@ d artanh u = u'/(1 - u^2) and the quotient rule (applied symbolically by Mathild
 checks only the resulting polynomial identity)",
      "polynomial differentiation by Mathilda's D (the derivatives written into the \
 statement)",
-     "Together normal form of the integrand (f = a/b) and of each argument u_i = p_i/q_i",
+     "Together normal form of the integrand (f = a/b), of each argument u_i = p_i/q_i \
+and of the rational part R = r/w of the antiderivative",
      "the cleared denominators are not identically zero (checked by Mathilda; listed in \
 \"Hypotheses\")"},
     hyps, {D[F, x], f}]];
@@ -1042,11 +1144,30 @@ generate[HoldComplete[Integrate[f_, x_Symbol]], o_] :=
   antiderivGen[HoldForm[Integrate[f, x]], f, x, o];
 
 (* The claim Integrate[f, x] == F (rewriteInput puts Integrate on the left):
-   F, the user's antiderivative, is checked -- not Mathilda's.  An
-   antiderivative is determined up to a constant, and that is what is
-   certified: D[F, x] == f. *)
-generate[HoldComplete[Equal[Integrate[f_, x_Symbol], F_]], o_] :=
-  antiderivGen[HoldForm[Integrate[f, x] == F], f, x, o, F];
+   F, the user's antiderivative, is checked -- not Mathilda's.  The claim as
+   written is NOT what is certified (sixth review, v0.6522): in Mathematica
+   Integrate[2 x, x] == x^2 + 5 is False, since Integrate returns one
+   particular antiderivative, and Lean cannot decide which one without
+   evaluating Integrate.  What Lean checks is that F is an antiderivative of
+   f, i.e. the claim D[F, x] == f; that is what "Theorem" shows, with
+   "Input" still the claim as written, a Certify::antideriv message, and a
+   trusted step that states the gap: Integrate[f, x] == F holds only up to
+   an additive term whose derivative is 0 -- locally constant, i.e.
+   constant on each interval where F and f are defined, and possibly
+   different across a singularity (ArcTan[1/x] and -ArcTan[x] differ by
+   Pi/2 for x > 0 and by -Pi/2 for x < 0). *)
+generate[HoldComplete[Equal[Integrate[f_, x_Symbol], F_]], o_] := Module[{g},
+  g = antiderivGen[HoldForm[Integrate[f, x] == F], f, x, o, F];
+  If[!AssociationQ[g], Return[g, Module]];
+  Message[Certify::antideriv, HoldForm[Integrate[f, x] == F], HoldForm[D[F, x] == f]];
+  Join[g, <|
+    "Theorem" -> If[g["Tier"] === 1, g["Theorem"], HoldForm[ForAll[x, D[F, x] == f]]],
+    "TrustedSteps" -> Append[g["TrustedSteps"],
+      "the claim Integrate[f, x] == F is certified as D[F, x] == f (F is an antiderivative \
+of f, shown in \"Theorem\"); Integrate[f, x] == F itself holds only up to an additive term \
+with derivative 0, which is locally constant (constant on each interval where F and f are \
+defined; it may differ across a point where they are not, as ArcTan[1/x] and -ArcTan[x] \
+do at x = 0), not checked"]|>]];
 
 (* ---------------------------------------------------------------------- *)
 (* Row 5: PolynomialExtendedGCD (Bezout)                                   *)
@@ -1756,7 +1877,10 @@ sumGen[input_, t_, k_Symbol, a_, n_Symbol, cl0_, o_] := Module[{tl, cl, ttxt, ct
     <|"Term" -> t, "Variable" -> k, "LowerLimit" -> av, "ClosedForm" -> closed,
       "PreCheck" -> (Expand[(closed /. n -> av) - (t /. k -> av)] === 0 &&
         Expand[(closed /. n -> n + 1) - closed - (t /. k -> n + 1)] === 0)|>,
-    {}, {}, {Sum @@ {t, {k, av, n}}, closed}],
+    {"the closed form is proved for integer n >= " <> ToString[av] <> " only (Lean's \
+statement is over n = " <> If[av === 0, "", ToString[av] <> " + "] <> "m with m : Nat), as \
+\"Theorem\" states"},
+    {}, {Sum @@ {t, {k, av, n}}, closed}],
     "Preamble" -> pre]];
 
 (* The held input is passed whole (s, c): wrapping a held Sum in With would
@@ -1904,18 +2028,37 @@ Options[Certify] = {Engine -> "Lean", Tier -> Automatic, Domain -> Automatic,
    before the options are evaluated. *)
 SetAttributes[Certify, HoldAll];
 
-(* None, or $Failed after Certify::eval / Certify::value, for the held
-   options of a call. *)
+(* None, or $Failed after a message, for the held options of a call.  The
+   Assumptions are walked held with the claim walker (sixth review, v0.6522):
+   arithmetic, relations, And / Or / Not / Implies, Element[vars, domain] and
+   lists are kept, and the value-preserving rational-function heads
+   (Expand, Together, ...) read through, exactly as in a claim; any other
+   head (Reduce, Simplify, a user function, Evaluate, D) is Certify::eval,
+   and a symbol with a value (or in a reserved context) is Certify::value /
+   Certify::context, before the options are evaluated -- a hypothesis
+   computed by Reduce or Simplify is not the hypothesis as written.  A
+   default set with SetOptions[Certify, Assumptions -> ...] was evaluated
+   by SetOptions itself, so it cannot be checked as written: it is refused
+   (Certify::optdefault) unless the call gives its own Assumptions. *)
 SetAttributes[heldOptionProblem, HoldAllComplete];
-heldOptionProblem[opts___] := Module[{as, bad},
+heldOptionProblem[opts___] := Module[{as, t, bad, def},
   as = Cases[HoldComplete[opts], (Rule | RuleDelayed)[Assumptions, a_] :> HoldComplete[a],
     {1, 2}];
+  If[as === {},
+    def = Options[Certify, Assumptions];
+    If[!MatchQ[def, {Assumptions -> ({} | True)}],
+      Message[Certify::optdefault, Replace[def, {(Rule | RuleDelayed)[_, v_]} :> HoldForm[v]]];
+      Return[$Failed, Module]]];
   Do[
-    bad = Cases[a, s_Symbol /; valuedQ[s] :> (HoldForm[s] -> OwnValues[s][[1, 2]]),
-      {0, Infinity}];
-    If[bad =!= {}, Message[Certify::value, bad[[1, 1]], bad[[1, 2]]]; Return[$Failed, Module]];
-    If[!FreeQ[a, Evaluate],
-      Message[Certify::eval, Replace[a, HoldComplete[e_] :> HoldForm[Assumptions -> e]], Evaluate];
+    t = Block[{$cwAssum = True, $cwNotes = {}, $cwTrusted = {}},
+      With[{w = Replace[a, HoldComplete[e_] :> cw[e]]},
+        If[$cwTrusted =!= {}, cfail[D], w]]];
+    bad = Cases[{t}, cvalue[s_, v_] :> {HoldForm[s], v}, Infinity];
+    If[bad =!= {}, symbolMessage @@ First[bad]; Return[$Failed, Module]];
+    bad = Cases[{t}, cfail[h_] :> h, Infinity];
+    If[bad =!= {},
+      Message[Certify::eval, Replace[a, HoldComplete[e_] :> HoldForm[Assumptions -> e]],
+        First[bad]];
       Return[$Failed, Module]],
     {a, as}];
   None];
@@ -1933,7 +2076,23 @@ mkProofObject[g_, v_, engine_, tierShown_, lv_, source_, lt_] := With[{a = <|
   "Domain" -> g["Domain"], "Hypotheses" -> g["Hypotheses"],
   "TrustedSteps" -> g["TrustedSteps"], "Axioms" -> v["Axioms"], "Logs" -> v["Logs"],
   "Timing" -> v["Timing"], "Cached" -> TrueQ[v["Cached"]], "LeanVersion" -> lv|>},
+  $issued[Hash[a]] = True;
   ProofObject[a]];  (* With: the held slot receives the evaluated Association *)
+
+(* Authentication (sixth review, v0.6522).  ProofObject[assoc] is an inert
+   container: anyone can write ProofObject[<|"Verified" -> True, ...|>].  So
+   every association Certify produces is registered by its Hash in this
+   session, and obj["Verified"] (and the summary box) reports the stored
+   verdict only for a registered object; any other ProofObject gives
+   Missing["Unauthenticated"].  This guards against minted or edited objects
+   in ordinary code, not against code that deliberately writes Lean`Private`
+   internals; an object from another session (saved and read back) is
+   unauthenticated too -- re-run Certify, or check obj["LeanSource"] with
+   LeanVerify. *)
+$issued[_] = False;
+authenticQ[a_] := TrueQ[$issued[Hash[a]]];
+verdictOf[a_] := If[authenticQ[a], Lookup[a, "Verified", Missing["UnknownProperty", "Verified"]],
+  Missing["Unauthenticated"]];
 
 (* The generator association of one item plus the tier it runs at
    ("TierUsed"), or $Failed (after a message). *)
@@ -2010,6 +2169,10 @@ certifyItems[hcs_List, opts_List] := Module[{o, engine, gens, hb, chunks, out, e
   engine = o["Engine"];
   If[!MemberQ[{"Lean", "Mathilda"}, engine],
     Message[Certify::engine, engine]; Return[$Failed, Module]];
+  (* Every Domain value has one stated meaning ($domains); anything else
+     (Algebraics, "Complexes", ...) is refused rather than silently mapped. *)
+  If[!AnyTrue[$domains, # === o["Domain"] &],
+    Message[Certify::domain, o["Domain"]]; Return[$Failed, Module]];
   With[{why = methodProblem[o["Method"]]},
     If[why =!= None, Message[Certify::method, o["Method"], why]; Return[$Failed, Module]]];
   gens = prepare[#, o] & /@ hcs;
@@ -2080,14 +2243,15 @@ SetAttributes[ProofObject, HoldAll];
 ProofObject[e_, o:OptionsPattern[]] /; !AssociationQ[Unevaluated[e]] := Certify[e, o];
 
 ProofObject[a_?AssociationQ]["Properties"] := Sort[Keys[a]];
-ProofObject[a_?AssociationQ][k_String] := Lookup[a, k, Missing["UnknownProperty", k]];
+ProofObject[a_?AssociationQ][k_String] :=
+  If[k === "Verified", verdictOf[a], Lookup[a, k, Missing["UnknownProperty", k]]];
 
 timingText[t_?NumericQ] := ToString[Round[t, 0.01]] <> " s";
 timingText[_] := "- s";
 
 Format[ProofObject[a_?AssociationQ]] := SequenceForm @ StringJoin[
   "ProofObject[\[LeftGuillemet]", ToString[a["Kind"]], "\[RightGuillemet] Verified: ",
-  ToString[a["Verified"]], " | ",
+  ToString[verdictOf[a]], " | ",
   If[a["Engine"] === "Lean", "Lean Tier " <> ToString[a["Tier"]], "Mathilda Heuristic"],
   " | ", timingText[a["Timing"]], "]"];
 

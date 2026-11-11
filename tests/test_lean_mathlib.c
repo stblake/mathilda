@@ -86,6 +86,12 @@ static void test_review4_mathlib_surface(void) {
 }
 
 int main(void) {
+#ifdef __GNUC__
+    /* The shared alarm(120) in test_utils.h is too short for this suite: each
+     * Tier 1 run imports Mathlib (10-38 s) and is then replayed by a fresh
+     * kernel under `lake env` (about 9.5 s); the suite takes about 110 s alone. */
+    alarm(900);
+#endif
     const char* proj = getenv("MATHILDA_LEAN_PROJECT");
     if (!proj || !*proj) {
         printf("SKIP: MATHILDA_LEAN_PROJECT is not set (Tier 1 needs a Mathlib project)\n");

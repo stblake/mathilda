@@ -496,9 +496,11 @@ static bool check_command(const char* s, size_t a, size_t b, CmdState* cs, Check
         free(nm);
         if (!ok) return cmd_err(err, s, a, "def");
     } else if (is_text(s, a, we, "namespace")) {
-        size_t m = skip_ws(s, we, b), me = name_end(s, m, b, false);
-        if (me == m || !blank(s, me, b)) return cmd_err(err, s, a, "namespace");
-        ss_push(&cs->st, copy_n(s + m, me - m));
+        /* Refused: `namespace X` (like `open X`) activates X's scoped
+         * extensions, including scoped *command* syntax that the
+         * parser-table-derived keyword list cannot see (it is derived with
+         * nothing open).  Use fully qualified names instead. */
+        return cmd_err(err, s, a, "namespace (activates scoped syntax; use qualified names)");
     } else if (is_text(s, a, we, "section") || is_text(s, a, we, "noncomputable")) {
         size_t m = skip_ws(s, we, b);
         if (is_text(s, a, we, "noncomputable")) {
@@ -518,17 +520,10 @@ static bool check_command(const char* s, size_t a, size_t b, CmdState* cs, Check
     } else if (is_text(s, a, we, "variable") || is_text(s, a, we, "universe")) {
         /* the body is scanned below */
     } else if (is_text(s, a, we, "open")) {
-        size_t m = skip_ws(s, we, b);
-        if (m == b) return cmd_err(err, s, a, "open (a namespace name must follow)");
-        while (m < b) {
-            size_t me = name_end(s, m, b, false);
-            if (me == m || !name_stops(s, me, b, "") || is_text(s, m, me, "in") ||
-                is_text(s, m, me, "scoped") || is_text(s, m, me, "hiding") ||
-                is_text(s, m, me, "renaming"))
-                return cmd_err(err, s, a, "open (only namespace names may follow: no in, "
-                                          "scoped, hiding, renaming or (...))");
-            m = skip_ws(s, me, b);
-        }
+        /* Refused: a plain `open X` activates X's scoped extensions, scoped
+         * command syntax included (e.g. Lean.PostprocessTraces), which the
+         * derived keyword list does not cover.  Use qualified names. */
+        return cmd_err(err, s, a, "open (activates scoped syntax; use qualified names)");
     } else if (is_text(s, a, we, "set_option")) {
         if (!option_ok(s, we, b)) {
             size_t e = a;

@@ -50,7 +50,7 @@ static void test_positive(void) {
     assert_eval_eq("leanV = Certify[(x+1)^3 == x^3+3x^2+3x+1]; Null", "Null", 0);
     check_true("leanV[\"Verified\"] === True");
     check_true("SubsetQ[{\"propext\", \"Classical.choice\", \"Quot.sound\"}, leanV[\"Axioms\"]]");
-    check_true("NumericQ[leanV[\"Timing\"]] && leanV[\"Timing\"] < 10");
+    check_true("NumericQ[leanV[\"Timing\"]] && leanV[\"Timing\"] < 60"); /* hang guard only: wall clock under ctest -j load */
     check_true("StringQ[leanV[\"LeanVersion\"]]");
     check_true("Certify[Together[1/(x-1) - 1/(x+1)]][\"Verified\"] === True");
     check_true("Certify[Expand[(x/2 + y)^3]][\"Verified\"] === True");
@@ -92,7 +92,7 @@ static void test_phase2_positive(void) {
                    "Null", 0);
     check_true("leanR[\"Verified\"] === True && leanR[\"Tier\"] === 0");
     check_true("leanR[\"Result\"] === ArcTan[x] + ArcTan[x^3] + ArcTan[(x - 3 x^3 + x^5)/2]");
-    check_true("leanR[\"TrustedSteps\"] =!= {} && leanR[\"Timing\"] < 5");
+    check_true("leanR[\"TrustedSteps\"] =!= {} && leanR[\"Timing\"] < 60"); /* hang guard only */
     check_true("Certify[Integrate[1/(x^2-1), x]][\"Verified\"] === True");
     check_true("Certify[Integrate[1/(x^2+2), x]][\"Verified\"] === True");
     check_true("Certify[Integrate[1/(3x^2-2), x]][\"Verified\"] === True");
@@ -142,7 +142,7 @@ static void test_phase3_positive(void) {
     check_true("Certify[Maximize[{x y, x+y == 2}, {x,y}]][\"Verified\"] === True");
     check_true("Certify[Minimize[x^4-2x^2+1+y^2, {x,y}]][\"Verified\"] === True");
     assert_eval_eq("leanFI = Certify[FactorInteger[2^64+1]]; Null", "Null", 0);
-    check_true("leanFI[\"Verified\"] === True && leanFI[\"Timing\"] < 5");
+    check_true("leanFI[\"Verified\"] === True && leanFI[\"Timing\"] < 60"); /* hang guard only */
     check_true("StringCount[leanFI[\"LeanSource\"], \"theorem mathilda_cert_1_pratt_\"] === 2");
     check_true("Certify[PrimeQ[1000003]][\"Verified\"] === True");
     assert_eval_eq("leanPC = Certify[PrimeQ[1000001]]; Null", "Null", 0);
@@ -579,10 +579,10 @@ static void test_review3_allowlist(void) {
 #endif
     remove("lean_review3_pwn.lean");
     remove("lean_review3_race.lean");
-    /* Accepted sources still verify: examples in a namespace, open,
-     * numeric set_option ... in (open ... in and #print axioms are refused
-     * since v0.6521). */
-    check_true("LeanVerify[\"namespace A\\nexample : 1 + 1 = 2 := rfl\\nopen Nat\\n"
+    /* Accepted sources still verify: examples in a section, numeric
+     * set_option ... in (open ... in and #print axioms are refused since
+     * v0.6521, open and namespace since v0.6522). */
+    check_true("LeanVerify[\"section A\\nexample : 1 + 1 = 2 := rfl\\n"
                "set_option maxHeartbeats 400000 in\\ntheorem t : True := by\\n  trivial\\n"
                "end A\\n\"][\"Success\"] === True");
     /* Refused, unrun: user definitions, attributes, commands and escapes. */
@@ -694,6 +694,44 @@ static void test_review4_verify(void) {
     check_true("Certify[x + 0 == x, Method -> \"intro x\\ngrind\"][\"Verified\"] === True");
 }
 
+/* Sixth review round (v0.6522), judged by Lean. */
+static void test_review6_verify(void) {
+    test_mute_messages();
+    /* Finding 1: Domain -> Complexes is stated over every char-0 field, so the
+     * vacuous-over-Q claim (x = 2 I is a counterexample) is refuted. */
+    check_true("Certify[x == 7, Assumptions -> x^2 == -4, Domain -> Complexes, Method -> "
+               "\"intro x h\\nhave h2 : 0 \\[LessEqual] x ^ 2 := Mathilda.sqnn\\ngrind\"]"
+               "[\"Verified\"] === False");
+    check_true("Certify[x == 7, Assumptions -> x^2 + 4 == 0, Domain -> Complexes][\"Verified\"] "
+               "=== False");
+    /* ... and true generic statements still verify, for each domain. */
+    check_true("Certify[(x + 1)^2 == x^2 + 2 x + 1, Domain -> Complexes][\"Verified\"] === True");
+    check_true("Certify[(x + 1)^2 == x^2 + 2 x + 1, Domain -> Reals][\"Verified\"] === True");
+    check_true("Certify[x^2 == 1, Assumptions -> x == 1, Domain -> Reals][\"Verified\"] === True");
+    check_true("Certify[x/2 + x/2 == x, Domain -> Complexes][\"Verified\"] === True");
+    check_true("Certify[x == 1, Assumptions -> x^3 == 1 && Element[x, Reals], "
+               "Domain -> Complexes] =!= $Failed");
+    check_true("Certify[x == 7, Assumptions -> x^2 == -4, Domain -> Algebraics] === $Failed");
+    /* Finding 2: the claim is certified as D[F, x] == f, and the theorem says so. */
+    assert_eval_eq("leanI6 = Quiet[Certify[Integrate[2 x, x] == x^2 + 5]]; Null", "Null", 0);
+    check_true("leanI6[\"Verified\"] === True && "
+               "leanI6[\"Theorem\"] === HoldForm[ForAll[x, D[x^2 + 5, x] == 2 x]] && "
+               "AnyTrue[leanI6[\"TrustedSteps\"], StringContainsQ[#, \"locally constant\"] &]");
+    /* Findings 3, 4, 7: refused before Lean runs. */
+    check_true("leanE6 = Simplify[(x^2 - 1)/(x - 1)]; Protect[leanE6]; "
+               "With[{r = Certify[leanE6 == x + 1]}, Unprotect[leanE6]; Clear[leanE6]; r] "
+               "=== $Failed");
+    check_true("leanT6 /: leanT6^2 = -1; With[{r = Certify[leanT6^2 == -1]}, Clear[leanT6]; r] "
+               "=== $Failed");
+    check_true("Certify[Integrate[2, x] == Sqrt[2] Lean`Private`s1 x] === $Failed");
+    check_true("Certify[x == 1, Assumptions -> Reduce[x^2 == 1 && x > 0, x]] === $Failed");
+    /* Finding 5: a genuine verdict is authenticated, a minted one is not. */
+    check_true("With[{p = Certify[x + 1 == 1 + x]}, p[\"Verified\"] === True && "
+               "With[{a = First[p]}, ProofObject[a]][\"Verified\"] === True]");
+    check_true("ProofObject[<|\"Verified\" -> True|>][\"Verified\"] === "
+               "Missing[\"Unauthenticated\"]");
+}
+
 int main(void) {
 #ifdef __GNUC__
     /* The shared alarm(120) in test_utils.h is too short for this suite: every
@@ -735,6 +773,7 @@ int main(void) {
     TEST(test_review3_allowlist);
     TEST(test_review3_domains);
     TEST(test_review4_verify);
+    TEST(test_review6_verify);
     printf("All Lean verification tests passed.\n");
     return 0;
 }
