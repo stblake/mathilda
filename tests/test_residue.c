@@ -246,6 +246,18 @@ static void test_scaled_trig_high_order_poles(void) {
  * w^j e^(a w + b/w) -- a modified Bessel function -- or b^nu/nu! when a = 0.
  * e^(1/z) = sum z^-n/n!: Residue[E^(1/z)] = 1, Residue[z E^(1/z)] = 1/2;
  * z^2 E^(1/(z-1)) = (1 + w)^2 e^(1/w): 1 + 2 (1/2) + 1/6 = 13/6. */
+/* Entire numerator over a polynomial denominator at a NESTED-RADICAL simple
+ * pole: the series engine cannot see Q(z0) == 0 there and used to return 0
+ * (issue #132, G&R 3.731.1).  Res = N(z0)/Q'(z0). */
+static void test_entire_over_poly_radical_pole(void) {
+    check_eq("With[{z0 = Sqrt[(-2 b^2 + Sqrt[4 b^4 - 4 (b^4 + c^2)])/2]}, "
+             "Chop[N[(Residue[E^(I a x)/(c^2 + (b^2 + x^2)^2), {x, z0}] - "
+             "E^(I a z0)/(4 z0 (b^2 + z0^2))) /. {a -> 37/100, b -> 13/10, c -> 3/5}]]]",
+             "0");
+    check_eq("FreeQ[Residue[E^(I a x)/(c^2 + (b^2 + x^2)^2), "
+             "{x, Sqrt[(-2 b^2 + Sqrt[4 b^4 - 4 (b^4 + c^2)])/2]}], Residue]", "True");
+}
+
 static void test_essential_singularities(void) {
     check_eq("Residue[Exp[1/z], {z, 0}]", "1");
     check_eq("Residue[z Exp[1/z], {z, 0}]", "1/2");
@@ -279,6 +291,7 @@ int main(void) {
     TEST(test_rational_over_q_poles);
     TEST(test_scaled_trig_high_order_poles);
     TEST(test_essential_singularities);
+    TEST(test_entire_over_poly_radical_pole);
 
     printf("All Residue tests passed!\n");
     return 0;

@@ -595,6 +595,50 @@ done:
     return out;
 }
 
+/* True iff `e` is an ENTIRE function of z built syntactically from entire
+ * pieces: z-free leaves, z, Plus/Times, Power with a non-negative integer
+ * exponent or with a z-free base (E^g, c^g), and Exp/Sin/Cos/Sinh/Cosh of an
+ * entire argument.  Conservative: any other head is "not known entire". */
+static bool residue_entire_in(const Expr* e, const Expr* z) {
+    if (!e) return false;
+    if (e->type != EXPR_FUNCTION) return true;           /* atom: z or z-free */
+    if (residue_free_of(e, z)) return true;
+    if (e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if (h == SYM_Plus || h == SYM_Times) {
+        for (size_t i = 0; i < n; i++)
+            if (!residue_entire_in(e->data.function.args[i], z)) return false;
+        return true;
+    }
+    if (h == SYM_Power && n == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* p = e->data.function.args[1];
+        if (p->type == EXPR_INTEGER && p->data.integer >= 0)
+            return residue_entire_in(b, z);
+        return residue_free_of(b, z) && residue_entire_in(p, z);
+    }
+    if ((h == SYM_Exp || h == SYM_Sin || h == SYM_Cos || h == SYM_Sinh ||
+         h == SYM_Cosh) && n == 1)
+        return residue_entire_in(e->data.function.args[0], z);
+    return false;
+}
+
+/* True iff Together[f] = N/Q with Q a polynomial in z and N entire in z (e.g.
+ * E^(I a z)/(c^2 + (b^2 + z^2)^2), the Jordan-lemma integrand): every
+ * singularity of f is a zero of Q, so at a simple zero z0 of Q the residue is
+ * exactly N(z0)/Q'(z0). */
+static bool residue_entire_over_poly(Expr* f, Expr* z) {
+    Expr* tog = residue_eval1("Together", expr_copy(f));
+    if (!tog) return false;
+    Expr* num = residue_eval1("Numerator", expr_copy(tog));
+    Expr* den = residue_eval1("Denominator", tog);   /* consumes tog */
+    bool ok = num && den && residue_polyq(den, z) && residue_entire_in(num, z);
+    if (num) expr_free(num);
+    if (den) expr_free(den);
+    return ok;
+}
+
 Expr* residue_compute(Expr* f, Expr* z, Expr* z0) {
     if (!f || !z || !z0 || z->type != EXPR_SYMBOL) return NULL;
 
@@ -634,6 +678,19 @@ Expr* residue_compute(Expr* f, Expr* z, Expr* z0) {
         return result;
     }
 
+    /* Entire numerator over a polynomial denominator (the Jordan-lemma
+     * integrand E^(I a z) R(z)): at a simple zero of Q the residue is
+     * N(z0)/Q'(z0), exactly as in the rational fast path.  The series engine
+     * below decides "is z0 a pole" by evaluating Q(z0), which does not
+     * auto-simplify to 0 for a nested-radical root (z0 =
+     * Sqrt[(-2 b^2 + Sqrt[-4 c^2])/2] of c^2 + (b^2 + z^2)^2) -- it then reads
+     * an analytic expansion and reports a WRONG residue 0. */
+    bool entire_poly = residue_entire_over_poly(f, z);
+    if (entire_poly) {
+        Expr* fast = residue_simple_pole(f, z, z0);
+        if (fast) return fast;
+    }
+
     /* An essential singularity of e^(b/(z - z0)) type: no Laurent series with
      * a finite principal part exists, so the residue is read in closed form. */
     {
@@ -671,6 +728,22 @@ Expr* residue_compute(Expr* f, Expr* z, Expr* z0) {
                 return r2;
             }
             if (r2) expr_free(r2);
+        }
+        /* Entire/polynomial integrand at a higher-order algebraic pole: the
+         * shifted integrand still hides the vanishing constant term of
+         * Q(z0 + w) behind unexpanded radicals.  Expand numerator and
+         * denominator about z0 separately (as for a rational f) so the pole
+         * is exposed as an explicit power of w. */
+        if (entire_poly) {
+            Expr* form = residue_shift_form(f, z, z0, w);
+            Expr* r3 = form ? residue_extract(form, w, zero) : NULL;
+            if (form) expr_free(form);
+            if (r3 && !(r3->type == EXPR_INTEGER && r3->data.integer == 0)) {
+                expr_free(r);
+                expr_free(w); expr_free(zero);
+                return r3;
+            }
+            if (r3) expr_free(r3);
         }
         expr_free(w); expr_free(zero);
     }
