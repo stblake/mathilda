@@ -134,6 +134,66 @@ void test_hn_complex() {
     assert_complex_close("N[HarmonicNumber[27, 5 - I]]", 1.02598, 0.0251513, 1e-4);
 }
 
+/* ---- large n: exact binary splitting and the analytic route ----------
+ *
+ * Reference digits were computed independently: the Euler-Maclaurin series
+ * H_n = log n + gamma + 1/(2n) - Sum_k B_2k/(2k n^2k) (60 terms, 140 digits),
+ * the tail form Zeta[r] - Sum_{i>n} i^-r for general r, and the exact rational
+ * sum at n = 2000; all agree to well past the digits asserted here.
+ * N[HarmonicNumber[10^5], 30] used to hang (the exact value was built as a
+ * 10^5-term Plus), as did any order at n near 10^5. */
+
+void test_hn_large_n() {
+    /* exact at the cap, and genuinely exact */
+    assert_eval_eq("HarmonicNumber[100000] - HarmonicNumber[99999]",
+                   "1/100000", 0);
+    assert_eval_eq("Head[HarmonicNumber[100000]]", "Rational", 0);
+    assert_eval_startswith("N[HarmonicNumber[2000], 50]",
+                           "8.17836810361028240957765657164169368793546674091");
+    assert_eval_startswith("N[HarmonicNumber[10^4], 30]",
+                           "9.787606036044382264178477904");
+    assert_eval_startswith("N[HarmonicNumber[10^5], 30]",
+                           "12.09014612986342794736321936");
+    assert_eval_startswith("N[HarmonicNumber[10^5], 100]",
+        "12.0901461298634279473632193635042195007936989417822011016275294159381819822823");
+    assert_close("N[HarmonicNumber[10^5]]", 12.090146129863428, 4e-15);
+    /* past the cap: symbolic, numericized by N through PolyGamma */
+    assert_eval_startswith("N[HarmonicNumber[10^6], 30]",
+                           "14.39272672286572363138112749");
+    assert_eval_startswith("N[HarmonicNumber[10^9], 100]",
+        "21.3004815023479440166851018489083469661270727335988803831017500896247672456240");
+    assert_close("N[HarmonicNumber[10^9]]", 21.300481502347944, 8e-15);
+
+    /* general order */
+    assert_eval_startswith("N[HarmonicNumber[2000, 3], 50]",
+                           "1.20205677822207866040104024451926263724925956718");
+    assert_eval_startswith("N[HarmonicNumber[10^5, 3], 30]",
+                           "1.20205690310959478539723816151");
+    assert_eval_startswith("N[HarmonicNumber[10^5, 1/2], 30]",
+                           "630.996758662378748084826619557");
+    assert_eval_startswith("N[HarmonicNumber[10^9, 5/2], 50]",
+                           "1.34148725725089609790571771554135973115094272172");
+    assert_close("HarmonicNumber[10^5, 2.5]", 1.3414872361692242, 4e-16);
+    assert_close("HarmonicNumber[2000, 2.5]", 1.3414798064854948, 4e-16);
+    assert_eval_startswith("HarmonicNumber[10^5, 2.5`30]",
+                           "1.34148723616922422519177471980");
+    /* r <= 0 is Faulhaber whatever n is: Sum i^2 = n(n+1)(2n+1)/6 */
+    assert_eval_eq("HarmonicNumber[100000, -2]", "333338333350000", 0);
+    assert_eval_eq("HarmonicNumber[10^12, -1]", "500000000000500000000000", 0);
+
+    /* A non-integer exact order expands only for n <= 4, as the reference
+     * does; past that it stays symbolic and N[] takes the analytic route. */
+    assert_eval_eq("HarmonicNumber[5, r]", "HarmonicNumber[5, r]", 0);
+    assert_eval_eq("HarmonicNumber[100000, 1/2]",
+                   "HarmonicNumber[100000, 1/2]", 0);
+    assert_eval_eq("HarmonicNumber[3, -1/2]", "1 + Sqrt[2] + Sqrt[3]", 0);
+
+    /* machine scalar == packed buffer (one helper behind both) */
+    assert_eval_eq("HarmonicNumber[100000.] === "
+                   "First[HarmonicNumber[Developer`ToPackedArray[{100000., 2.}]]]",
+                   "True", 0);
+}
+
 /* ---- symbolic passthrough ------------------------------------------- */
 
 void test_hn_symbolic() {
@@ -203,6 +263,7 @@ int main() {
     TEST(test_hn_machine);
     TEST(test_hn_highprec);
     TEST(test_hn_complex);
+    TEST(test_hn_large_n);
     TEST(test_hn_symbolic);
     TEST(test_hn_derivatives);
     TEST(test_hn_listable);

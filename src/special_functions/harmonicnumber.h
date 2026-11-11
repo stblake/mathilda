@@ -11,10 +11,11 @@
  * Evaluation strategy (see harmonicnumber.c for detail).  The function leans on
  * existing primitives (Zeta, PolyGamma, EulerGamma, BernoulliB) rather than
  * carrying its own numeric kernels:
- *   - n a non-negative integer (<= cap): expand to the explicit finite sum
- *     Sum_{i=1}^n i^-r and evaluate.  Integer r combines to an exact rational;
- *     symbolic/complex r leaves an explicit Plus (HarmonicNumber[4, r] ->
- *     1 + 2^-r + 3^-r + 4^-r).  HarmonicNumber[0, r] is 0.
+ *   - n a non-negative integer, r a positive integer (n <= 10^5): the exact
+ *     rational, by GMP binary splitting.  Any other order expands to the
+ *     explicit Plus only for n <= 4 (HarmonicNumber[4, r] -> 1 + 2^-r + 3^-r +
+ *     4^-r); past that an inexact numeric order takes the analytic form below
+ *     and anything else stays symbolic.  HarmonicNumber[0, r] is 0.
  *   - n -> Infinity: HarmonicNumber[Infinity, r] = Zeta[r]
  *     (so HarmonicNumber[Infinity, 2] -> Pi^2/6; r == 1 -> ComplexInfinity).
  *   - r a non-positive integer: the Faulhaber polynomial Sum_{i=1}^n i^(-r),
