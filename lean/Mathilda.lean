@@ -7,4 +7,5 @@
 import Mathilda.Prelude
 import Mathilda.Serialize
 import Mathilda.Oracle
+import Mathilda.Answer
 import Mathilda.Tactics

@@ -2,10 +2,16 @@
   Tactics that ask Mathilda for a certificate and check it in Lean.
 
   Mathilda is an untrusted oracle: it only ever supplies *data* (cofactors,
-  squares, a Pratt certificate).  Each tactic turns that data into ordinary
-  Lean proof steps (`have … := by grind`, `decide +kernel`) and the kernel
-  checks them.  A wrong or malicious answer makes the tactic fail; it can never
-  produce a proof of a false goal.
+  squares, a Pratt certificate).  Its answer is never elaborated as Lean
+  syntax: `Mathilda.Answer.parse` (a hand-written parser, a pure function on
+  `String`) reads it into a data AST of numerals, variables `v<i>`, `+ - * / ^`,
+  lists and tuples, and refuses everything else (`by`, `fun`, `sorry`, any other
+  identifier, ...).  Each tactic builds the certificate's terms from that AST
+  (fixed quotations, numerals and the goal's own free variables), turns them
+  into ordinary Lean proof steps (`have … := by grind`, `decide +kernel`) and
+  the kernel checks them.  A wrong, malformed or malicious answer makes the
+  tactic fail with an error; it can never produce a proof of a false goal, and
+  nothing in it is run.
 
   * `mathilda_linear_combination` — goal `a = b`; hypotheses `hᵢ : lᵢ = rᵢ` of
     the same type in the local context.  Mathilda returns cofactors `cᵢ` with
@@ -24,6 +30,7 @@ import Lean
 import Mathilda.Prelude
 import Mathilda.Serialize
 import Mathilda.Oracle
+import Mathilda.Answer
 
 namespace Mathilda
 
@@ -33,37 +40,41 @@ open Lean Elab Tactic Meta
 def oracle (query : String) : TacticM String := do
   callMathilda query (← getOptions)
 
-/-- Parse a term returned by Mathilda. -/
-def parseAnswer (ans : String) : TacticM Syntax := do
-  match Parser.runParserCategory (← getEnv) `term ans with
-  | .ok stx => return stx
-  | .error e => throwError "mathilda: cannot parse Mathilda's answer `{ans}`: {e}"
+/-- The error for an answer that is not a well-formed certificate. -/
+def badAnswer {α} (tac why : String) : TacticM α :=
+  throwError "{tac}: Lean could not parse the certificate returned by Mathilda ({why}); \
+    Mathilda is an untrusted oracle and its answer is not used"
 
-/-- The elements of a list literal `[a, b, …]` (after `whnfR` at each cons cell). -/
-partial def listElems (e : Expr) : MetaM (List Expr) := do
-  let e ← whnfR (← instantiateMVars e)
-  match e.getAppFnArgs with
-  | (``List.nil, #[_]) => return []
-  | (``List.cons, #[_, a, rest]) => return a :: (← listElems rest)
-  | _ => throwError "mathilda: expected a list literal from Mathilda, got {e}"
+/-- Parse Mathilda's answer as data (never as Lean syntax). -/
+def parseAns (tac ans : String) : TacticM Answer.Ans :=
+  match Answer.parse ans with
+  | .ok a => pure a
+  | .error e => badAnswer tac e
 
-/-- Elaborate Mathilda's answer `fun (v1 … vn : _) => (list : List τ)` against
-    `∀ vᵢ : type(fvᵢ), List elemTy`, apply it to the fvars and return the list
-    elements (beta-reduced, so they mention the real fvars). -/
-def elabAnswer (ans : String) (fvs : Array Expr) (elemTy : Expr) : TacticM (List Expr) := do
-  let stx ← parseAnswer ans
-  let listTy ← mkAppM ``List #[elemTy]
-  let ty ← fvs.foldrM (fun fv acc => do mkArrow (← inferType fv) acc) listTy
-  let f ← Tactic.elabTermEnsuringType stx (some ty)
+/-- The syntax of a parsed term: fixed quotations over numerals and the
+    goal's variables `vars` (`v<i>` is `vars[i-1]`). -/
+partial def polySyntax (tac : String) (vars : Array Term) : Answer.Poly → TacticM Term
+  | .num n => pure (Syntax.mkNumLit (toString n))
+  | .var i =>
+    if h : 0 < i ∧ i ≤ vars.size then pure vars[i - 1]
+    else badAnswer tac s!"v{i} names no variable of the goal"
+  | .add a b => do `(($(← polySyntax tac vars a) + $(← polySyntax tac vars b)))
+  | .sub a b => do `(($(← polySyntax tac vars a) - $(← polySyntax tac vars b)))
+  | .mul a b => do `(($(← polySyntax tac vars a) * $(← polySyntax tac vars b)))
+  | .div a b => do `(($(← polySyntax tac vars a) / $(← polySyntax tac vars b)))
+  | .neg a => do `((-$(← polySyntax tac vars a)))
+  | .pow a k => do `(($(← polySyntax tac vars a) ^ $(Syntax.mkNumLit (toString k))))
+
+/-- Elaborate a parsed term at type `ty`. -/
+def elabPoly (tac : String) (vars : Array Term) (ty : Expr) (p : Answer.Poly) :
+    TacticM Expr := do
+  let stx ← polySyntax tac vars p
+  let e ← Tactic.elabTermEnsuringType stx (some ty)
   Term.synthesizeSyntheticMVarsNoPostponing
-  let f ← instantiateMVars f
-  listElems (mkAppN f fvs).headBeta
+  instantiateMVars e
 
-/-- The components of a pair `(a, b)` (`Prod.mk a b`, after `whnfR`). -/
-def pairOf? (e : Expr) : MetaM (Option (Expr × Expr)) := do
-  match (← whnfR (← instantiateMVars e)).getAppFnArgs with
-  | (``Prod.mk, #[_, _, a, b]) => return some (a, b)
-  | _ => return none
+/-- The goal's variables as terms, for `polySyntax`. -/
+def varTerms (fvs : Array Expr) : TacticM (Array Term) := fvs.mapM fun e => Term.exprToSyntax e
 
 /-- Mathilda text of the serialized fvars: `{v1, v2, …}`. -/
 def varList (n : Nat) : String :=
@@ -127,7 +138,13 @@ elab "mathilda_linear_combination" : tactic => withMainContext do
   let query := "Lean`Oracle[\"LinearCombination\", " ++ mlist [as, bs] ++ ", " ++
     mlist (hyps.toList.map fun (_, _, _, ls, rs) => mlist [ls, rs]) ++ ", " ++
     varList st.size ++ "]"
-  let cs ← elabAnswer (← oracle query) st ty
+  let tac := "mathilda_linear_combination"
+  let .list xs ← parseAns tac (← oracle query)
+    | badAnswer tac "expected a list of cofactors"
+  let vars ← varTerms st
+  let cs ← xs.toList.mapM fun
+    | .poly p => elabPoly tac vars ty p
+    | _ => badAnswer tac "a cofactor must be a term"
   unless cs.length == hyps.size do
     throwError "mathilda_linear_combination: Mathilda returned {cs.length} cofactors \
       for {hyps.size} hypotheses"
@@ -175,16 +192,19 @@ elab "mathilda_sos" : tactic => withMainContext do
   let (hyps, st) ← collectHyps ty (fun t => return nonnegFact? t) st
   let query := "Lean`Oracle[\"SOS\", " ++ mlist [los, his] ++ ", " ++
     mlist (hyps.toList.map fun (_, _, _, _, gs) => gs) ++ ", " ++ varList st.size ++ "]"
-  let triple ← mkAppM ``Prod #[ty, ← mkAppM ``Prod #[ty, mkConst ``Nat]]
-  let ts ← elabAnswer (← oracle query) st triple
+  let tac := "mathilda_sos"
+  let .list xs ← parseAns tac (← oracle query)
+    | badAnswer tac "expected a list of (d, l, i) triples"
+  let vars ← varTerms st
+  let ts ← xs.toList.mapM fun
+    | .tuple #[.poly d, .poly l, .poly (.num i)] => do
+      return (← elabPoly tac vars ty d, ← elabPoly tac vars ty l, i)
+    | _ => badAnswer tac "an entry must be a triple (d, l, i) with a numeral i"
   let mut steps : Array (TSyntax `tactic) := #[]
   let mut terms : Array Term := #[]
   let mut k := 0
-  for t in ts do
+  for (d, l, i) in ts do
     k := k + 1
-    let some (d, rest) ← pairOf? t | throwError "mathilda_sos: malformed certificate entry {t}"
-    let some (l, idx) ← pairOf? rest | throwError "mathilda_sos: malformed certificate entry {t}"
-    let some i ← (evalNat idx).run | throwError "mathilda_sos: non-literal index {idx}"
     let ds ← Term.exprToSyntax d
     let lsx ← Term.exprToSyntax l
     let s := hname "s" k
@@ -193,7 +213,7 @@ elab "mathilda_sos" : tactic => withMainContext do
       terms := terms.push (← `($ds * ($lsx) ^ 2))
     else
       let some (hfv, _, g, _, _) := hyps[i - 1]?
-        | throwError "mathilda_sos: certificate index {i} names no hypothesis"
+        | badAnswer tac s!"index {i} names no hypothesis"
       let gs ← Term.exprToSyntax g
       let hs ← Term.exprToSyntax hfv
       steps := steps.push (← `(tactic| have $s : 0 ≤ ($lsx) ^ 2 * ($gs) :=
@@ -207,7 +227,8 @@ elab "mathilda_sos" : tactic => withMainContext do
   let e := mkIdent `mth_e
   steps := steps.push (← `(tactic| have $e : $his' - $los' = $sum := (by grind)))
   steps := steps.push (← `(tactic| grind))
-  checkCertificate "mathilda_sos" m!"squares {ts}" steps
+  let shown : List MessageData := ts.map fun (d, l, i) => m!"({d}, {l}, {i})"
+  checkCertificate "mathilda_sos" m!"squares {shown}" steps
 
 /-- The prime `p` of a goal `∃ c, Mathilda.PrattCertifies p c`. -/
 def prattGoal? (goal : Expr) : MetaM (Option Expr) := do
@@ -228,7 +249,20 @@ elab "mathilda_prime" : tactic => withMainContext do
   let some n ← (evalNat p).run
     | throwError "mathilda_prime: `{p}` is not a natural-number literal"
   let ans ← oracle s!"Lean`Oracle[\"Pratt\", {n}]"
-  let cert : Term := ⟨← parseAnswer ans⟩
+  let tac := "mathilda_prime"
+  let num (a : Answer.Ans) : TacticM Term := match a with
+    | .poly (.num k) => pure (Syntax.mkNumLit (toString k))
+    | _ => badAnswer tac "expected a natural-number literal"
+  let .list steps ← parseAns tac ans
+    | badAnswer tac "expected a list of Pratt steps"
+  let steps ← steps.mapM fun
+    | .tuple #[q, a, .list fs] => do
+      let fs ← fs.mapM fun
+        | .tuple #[r, k] => do `(($(← num r), $(← num k)))
+        | _ => badAnswer tac "a factor must be a pair (q, k)"
+      `(($(← num q), $(← num a), [$fs,*]))
+    | _ => badAnswer tac "a Pratt step must be a triple (p, a, [(q, k), ...])"
+  let cert ← `([$steps,*])
   checkCertificate "mathilda_prime" m!"Pratt certificate {ans}"
     #[← `(tactic| exact ⟨$cert, by decide +kernel⟩)]
 

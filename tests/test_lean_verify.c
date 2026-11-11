@@ -226,7 +226,7 @@ static void test_review_domain(void) {
     check_true("Certify[x^2 == x, Assumptions -> {x == 1}][\"Verified\"] === True");
     assert_eval_eq("leanIM = Certify[Implies[x^2+y^2 == 1 && x == y, 2 y^2 == 1]]; Null",
                    "Null", 0);
-    check_true("leanIM[\"Verified\"] === True && leanIM[\"Domain\"] === Rationals");
+    check_true("leanIM[\"Verified\"] === True && leanIM[\"Domain\"] === Complexes");
 }
 
 static void test_review_solve(void) {
@@ -322,7 +322,140 @@ static void test_review_shapes(void) {
     check_true("Certify[Det[{{1,2,0},{0,1,3},{4,0,1}}]][\"Verified\"] === True");
 }
 
+
+/* Second review round.  Each reproducer must now fail closed. */
+
+/* A source that defeats LeanVerify's textual deny-list: a tactic
+ * elaborator, attached with `attribute [tactic ...]`, runs a command built
+ * from strings that adds a theorem `1 = 0` under debug.skipKernelTC.  Lean
+ * itself reports no error and "does not depend on any axioms"; only the
+ * kernel replay of the compiled module catches it. */
+static const char* const REPLAY_EXPLOIT =
+    "import Lean\n"
+    "open Lean Elab Tactic Meta\n"
+    "\n"
+    "def evilDecide : Tactic := fun _ => do\n"
+    "  let g ← getMainGoal\n"
+    "  let src := \"set_option de\" ++ \"bug.skip\" ++ \"KernelTC true in\\nrun_\" ++ \"cmd Lean.Elab.Command.liftCoreM <| Lean.add\" ++\n"
+    "    \"Decl (.thmDecl { name := `one_eq_zero.evil_aux, levelParams := [], \" ++\n"
+    "    \"type := Lean.mkApp3 (Lean.mkConst ``Eq [Lean.Level.one]) (Lean.mkConst ``Nat) \" ++\n"
+    "    \"(Lean.mkNatLit 1) (Lean.mkNatLit 0), value := Lean.mkConst ``True.intro })\"\n"
+    "  let env ← getEnv\n"
+    "  match Parser.runParserCategory env `command src with\n"
+    "  | .ok stx => liftCommandElabM (Command.elabCommand stx)\n"
+    "  | .error e => throwError e\n"
+    "  g.assign (mkConst `one_eq_zero.evil_aux)\n"
+    "\n"
+    "attribute [tactic Lean.Parser.Tactic.decide] evilDecide\n"
+    "\n"
+    "theorem one_eq_zero : (1 : Nat) = 0 := by decide\n";
+
+/* The reviewer's lv2.lean: the same attack through @[tactic ...] and addDecl. */
+static const char* const REVIEW2_LV2 =
+    "import Lean\n"
+    "open Lean Elab Tactic Meta\n"
+    "\n"
+    "@[tactic Lean.Parser.Tactic.decide] def evilDecide : Tactic := fun _ => do\n"
+    "  let g ← getMainGoal\n"
+    "  let ty ← instantiateMVars (← g.getType)\n"
+    "  let nm := (← Term.getDeclName?).getD `anon ++ `aux\n"
+    "  let o := Name.mkStr (Name.mkStr .anonymous (\"de\" ++ \"bug\")) \"skipKernelTC\"\n"
+    "  withOptions (fun opts => opts.setBool o true) do\n"
+    "    addDecl (.thmDecl { name := nm, levelParams := [], type := ty, value := mkConst ``True.intro })\n"
+    "  g.assign (mkConst nm)\n"
+    "\n"
+    "theorem one_eq_zero : (1 : Nat) = 0 := by decide\n";
+
+/* Write text to a fixed file name in the working directory; 1 on success. */
+static int write_fixture(const char* path, const char* text) {
+    FILE* f = fopen(path, "wb");
+    if (!f) return 0;
+    fputs(text, f);
+    return fclose(f) == 0;
+}
+
+static void test_review2_replay(void) {
+    test_mute_messages();
+    /* Finding A: the guarantee is the kernel replay. */
+    ASSERT(write_fixture("lean_review2_replay.lean", REPLAY_EXPLOIT));
+    ASSERT(write_fixture("lean_review2_lv2.lean", REVIEW2_LV2));
+    assert_eval_eq("leanRP = LeanVerify[ReadString[\"lean_review2_replay.lean\"]]; Null",
+                   "Null", 0);
+    check_true("!KeyExistsQ[leanRP, \"Rejected\"]");          /* the deny-list missed it */
+    check_true("leanRP[\"ExitCode\"] === 0");                  /* Lean's own run was clean */
+    check_true("leanRP[\"Success\"] === False");
+    check_true("StringQ[leanRP[\"Replay\"]] && "
+               "StringContainsQ[leanRP[\"Replay\"], \"declaration type mismatch\"]");
+    /* lv2.lean is refused early by the deny-list ... */
+    check_true("LeanVerify[ReadString[\"lean_review2_lv2.lean\"]][\"Success\"] === False");
+    /* ... and, run past the deny-list, by the replay. */
+    assert_eval_eq("leanRP2 = Lean`Internal`VerifySource[ReadString[\"lean_review2_lv2.lean\"], "
+                   "Lean`Private`leanExe[Automatic], None, False, Lean`Private`replayScript[]]; Null",
+                   "Null", 0);
+    check_true("leanRP2[\"ExitCode\"] === 0 && leanRP2[\"Success\"] === False && "
+               "StringQ[leanRP2[\"Replay\"]]");
+    remove("lean_review2_replay.lean");
+    remove("lean_review2_lv2.lean");
+    /* The replay's own axiom report: an unused axiom or a sorry anywhere in
+     * the module fails, an honest file passes with Replay -> True. */
+    assert_eval_eq("leanRP3 = LeanVerify[\"theorem t : 2 + 2 = 4 := by decide\\n\"]; Null",
+                   "Null", 0);
+    check_true("leanRP3[\"Success\"] === True && leanRP3[\"Replay\"] === True && "
+               "leanRP3[\"ReplayAxioms\"][\"t\"] === {}");
+    /* Finding A (Mathilda route): the tactic package and its options are refused. */
+    check_true("MemberQ[LeanVerify[\"import Mathilda\\ntheorem t : 1 = 1 := rfl\\n\"]"
+               "[\"Rejected\"], \"import Mathilda\"]");
+    check_true("LeanVerify[\"set_option mathilda.path \\\"/bin/sh\\\"\\ntheorem t : 1 = 1 := rfl\\n\"]"
+               "[\"Success\"] === False");
+    /* Certify: every Lean run is replayed too; a batch with a rejected chunk
+     * (whose file Lean does not compile) re-runs the clean chunks. */
+    assert_eval_eq("leanRB = Certify[{x + 0 == x, x == x + 1, 2 x == x + x}]; Null", "Null", 0);
+    check_true("(#[\"Verified\"] & /@ leanRB) === {True, False, True}");
+}
+
+static void test_review2_domain(void) {
+    test_mute_messages();
+    /* Finding C: hypotheses no rational satisfies made the statement vacuous
+     * over Rat.  Over every char-0 field, x = 2 I (resp. Sqrt[2]) refutes them. */
+    check_true("Certify[x == 7, Assumptions -> x^2 + 4 == 0, Method -> \"intro x h\\n"
+               "have h2 : 0 \\[LessEqual] x ^ 2 := Mathilda.sqnn\\ngrind\"][\"Verified\"] === False");
+    check_true("Certify[x == 0, Assumptions -> x^2 == -1, Method -> \"intro x h\\n"
+               "have h2 : 0 \\[LessEqual] x ^ 2 := Mathilda.sqnn\\ngrind\"][\"Verified\"] === False");
+    check_true("Certify[x == 7, Assumptions -> x^2 == 2][\"Verified\"] === False");
+    /* Honest statements stay True in the generic forms. */
+    check_true("Certify[x^2 == 4, Assumptions -> x == 2][\"Verified\"] === True");
+    assert_eval_eq("leanGD = Certify[ForAll[{x, y}, x^2 + y^2 >= 2 x y]]; Null", "Null", 0);
+    check_true("leanGD[\"Verified\"] === True && leanGD[\"Domain\"] === Reals && "
+               "leanGD[\"TrustedSteps\"] === {}");
+    check_true("Certify[Minimize[{x^2 + y^2, x + y >= 1}, {x, y}]][\"Verified\"] === True");
+}
+
+static void test_review2_low(void) {
+    test_mute_messages();
+    /* Finding D(i): the unreduced denominators are cross-multiplied, so Lean
+     * checks (x^2 - 1) = (x - 1)(x + 1), not 1 + x = 1 + x. */
+    assert_eval_eq("leanD1 = Certify[(x^2 - 1)/(x - 1) == x + 1]; Null", "Null", 0);
+    check_true("leanD1[\"Verified\"] === True && "
+               "leanD1[\"LeanTheorem\"] === \"\\[ForAll] x : Int, x ^ 2 - 1 = (x - 1) * (1 + x)\"");
+    check_true("leanD1[\"Hypotheses\"] === {HoldForm[-1 + x != 0]}");
+    check_true("Certify[(x^3 - 1)/(x - 1) == x^2 + x + 2][\"Verified\"] === False");
+    /* Finding D(ii): not prime / prime by the definition Mathilda.IsPrime. */
+    assert_eval_eq("leanD2 = Certify[PrimeQ[0]]; Null", "Null", 0);
+    check_true("leanD2[\"Verified\"] === True && leanD2[\"Result\"] === False && "
+               "leanD2[\"LeanTheorem\"] === \"\\[Not] Mathilda.IsPrime 0\"");
+    check_true("Certify[PrimeQ[1]][\"Verified\"] === True");
+    check_true("Certify[PrimeQ[2]][\"Verified\"] === True && "
+               "Certify[PrimeQ[2]][\"TrustedSteps\"] === {}");
+    check_true("Certify[PrimeQ[1000001]][\"Verified\"] === True");
+}
+
 int main(void) {
+#ifdef __GNUC__
+    /* The shared alarm(120) in test_utils.h is too short for this suite: every
+     * Lean run is now also replayed by a fresh kernel (about 1.1 s each, v0.6519),
+     * for about 90 runs. */
+    alarm(600);
+#endif
     symtab_init();
     core_init();
     if (!lean_available()) {
@@ -344,6 +477,9 @@ int main(void) {
     TEST(test_review_leanverify);
     TEST(test_review_tempfiles);
     TEST(test_review_shapes);
+    TEST(test_review2_replay);
+    TEST(test_review2_domain);
+    TEST(test_review2_low);
     printf("All Lean verification tests passed.\n");
     return 0;
 }

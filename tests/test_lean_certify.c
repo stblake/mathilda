@@ -85,26 +85,36 @@ static void test_rational_identity(void) {
     assert_eval_eq("leanT = Certify[Together[1/(x-1) - 1/(x+1)], Verify -> False]; Null", "Null", 0);
     check_true("leanT[\"Certificate\"][\"Form\"] === \"ClearedDenominators\"");
     check_true("Length[leanT[\"Hypotheses\"]] === 2");
-    check_true("leanT[\"TrustedSteps\"] === {\"Together normal form of each side "
-               "(num/den used to clear denominators)\"}");
+    check_true("Length[leanT[\"TrustedSteps\"]] === 1 && "
+               "StringStartsQ[First[leanT[\"TrustedSteps\"]], \"field algebra: the cross-multiplied\"]");
     check_true("!StringContainsQ[leanT[\"LeanTheorem\"], \"/\"]");
     check_true("Certify[Apart[(x^2+1)/(x^2-1)], Verify -> False][\"Certificate\"][\"Form\"] === "
                "\"ClearedDenominators\"");
 }
 
 static void test_options(void) {
-    /* Hypotheses: the automatic domain is Rat (over Int an implication can be
-     * vacuous); Domain -> Integers is honoured and labelled. */
+    /* Hypotheses: the automatic domain is every field of characteristic 0
+     * (over Int or Rat an implication can be vacuous: x^2 + 4 == 0 has no
+     * rational solution, but x = 2 I is one in C); an order relation makes it
+     * every ordered field.  Domain -> Integers is honoured and labelled. */
     check_str("Certify[x^2 == x, Assumptions -> {x == 1}, Verify -> False][\"LeanTheorem\"]",
-              "\xE2\x88\x80 x : Rat, x = 1 \xE2\x86\x92 x ^ 2 = x");
+              "\xE2\x88\x80 {K : Type} [Lean.Grind.Field K] [Lean.Grind.IsCharP K 0], \xE2\x88\x80 x : K, x = 1 \xE2\x86\x92 x ^ 2 = x");
     check_true("Certify[x == 0, Assumptions -> 2 x == 1, Verify -> False][\"Domain\"] === "
-               "Rationals");
+               "Complexes");
+    check_true("Certify[x == 0, Assumptions -> 2 x == 1, Domain -> Rationals, Verify -> False]"
+               "[\"Domain\"] === Rationals");
     check_true("Certify[x == 0, Assumptions -> 2 x == 1, Domain -> Integers, Verify -> False]"
                "[\"Domain\"] === Integers");
     check_true("Certify[x + 1 == 1 + x, Verify -> False][\"Domain\"] === Integers");
     /* Variables that occur only in the assumptions are bound too. */
     check_str("Certify[x == x, Assumptions -> y > 0, Verify -> False][\"LeanTheorem\"]",
-              "\xE2\x88\x80 x y : Rat, y > 0 \xE2\x86\x92 x = x");
+              "\xE2\x88\x80 {K : Type} [Lean.Grind.Field K] [LE K] [LT K] [Std.LawfulOrderLT K] "
+              "[Std.IsLinearOrder K] [Lean.Grind.OrderedRing K], \xE2\x88\x80 x y : K, y > 0 \xE2\x86\x92 x = x");
+    check_true("Certify[x == x, Assumptions -> y > 0, Verify -> False][\"Domain\"] === Reals");
+    /* The theorem takes the generic binders as parameters; the footer states
+     * the full statement. */
+    check_true("StringContainsQ[Certify[x^2 == x, Assumptions -> {x == 1}, Verify -> False]"
+               "[\"LeanSource\"], \"theorem mathilda_cert_1 {K : Type} [Lean.Grind.Field K] \"]");
     check_true("StringContainsQ[Certify[x == x, TimeConstraint -> 5, Verify -> False]"
                "[\"LeanSource\"], \"set_option maxHeartbeats 200000 in\"]");
     check_str("Certify[x == x, Method -> \"omega\", Verify -> False][\"ProofScript\"]",
@@ -286,17 +296,19 @@ static void test_sos_certificate(void) {
 static void test_sos_optimality(void) {
     assert_eval_eq("leanP = Certify[ForAll[{x,y}, x^4-2x^2+1+y^2 >= 0], Verify -> False]; Null",
                    "Null", 0);
-    check_true("leanP[\"Kind\"] === \"Nonnegativity\" && leanP[\"Domain\"] === Rationals");
+    check_true("leanP[\"Kind\"] === \"Nonnegativity\" && leanP[\"Domain\"] === Reals");
     check_true("StringContainsQ[leanP[\"ProofScript\"], \":= Mathilda.sqnn\"]");
     check_true("StringContainsQ[leanP[\"ProofScript\"], \"have mth_e : \"]");
-    check_true("Length[leanP[\"TrustedSteps\"]] === 1");
+    /* Stated over every ordered field: no Rat -> Real transfer step. */
+    check_true("leanP[\"TrustedSteps\"] === {}");
     /* The quadratic path never calls Reduce`SOSCertificate. */
     assert_eval_eq("Lean`Private`$sosCalls = 0; "
                    "leanQ2 = Certify[ForAll[{x,y}, x^2+y^2 >= 2 x y], Verify -> False]; "
                    "Lean`Private`$sosCalls", "0", 0);
     check_true("leanQ2[\"Certificate\"][\"Method\"] === \"Quadratic\"");
     check_true("leanQ2[\"Certificate\"][\"Squares\"] === {{1, x - y, 1}}");
-    check_str("leanQ2[\"LeanTheorem\"]", "\xE2\x88\x80 x y : Rat, x ^ 2 + y ^ 2 \xE2\x89\xA5 2 * x * y");
+    check_str("leanQ2[\"LeanTheorem\"]", "\xE2\x88\x80 {K : Type} [Lean.Grind.Field K] [LE K] [LT K] [Std.LawfulOrderLT K] "
+              "[Std.IsLinearOrder K] [Lean.Grind.OrderedRing K], \xE2\x88\x80 x y : K, x ^ 2 + y ^ 2 \xE2\x89\xA5 2 * x * y");
     /* Putinar: a multiplier block uses the hypothesis 0 <= g. */
     check_true("StringContainsQ[Certify[ForAll[{x}, x >= 0, x^3 + x >= 0], Verify -> False]"
                "[\"ProofScript\"], \"Mathilda.mulnn Mathilda.sqnn mth_g1\"]");
@@ -305,6 +317,7 @@ static void test_sos_optimality(void) {
     check_true("leanM[\"Kind\"] === \"Optimality\" && leanM[\"Certificate\"][\"Multipliers\"] === {1}");
     check_true("leanM[\"Result\"] === {1/2, {x -> 1/2, y -> 1/2}}");
     check_true("leanM[\"Certificate\"][\"PreCheck\"] === True");
+    check_true("leanM[\"Domain\"] === Reals && leanM[\"TrustedSteps\"] === {}");
     assert_eval_eq("leanLP = Certify[Maximize[{3x+2y, x+y<=4, x+3y<=6, x>=0, y>=0}, {x,y}], "
                    "Verify -> False]; Null", "Null", 0);
     check_true("leanLP[\"Certificate\"][\"Multipliers\"] === {3, 0, 0, 1} && "
@@ -333,8 +346,13 @@ static void test_pratt(void) {
     check_true("!StringContainsQ[leanFI[\"LeanSource\"], \"@NAME@\"]");
     check_true("Certify[PrimeQ[1000001], Verify -> False][\"Theorem\"] === "
                "HoldForm[!PrimeQ[1000001]]");
+    /* Not prime: stated with the definition Mathilda.IsPrime, proved from a factor
+     * (composites) or from 2 <= n (n < 2). */
     check_str("Certify[PrimeQ[1000001], Verify -> False][\"LeanTheorem\"]",
-              "1000001 = 101 * 9901 \xE2\x88\xA7 1 < 101 \xE2\x88\xA7 101 < 1000001");
+              "\xC2\xAC Mathilda.IsPrime 1000001");
+    check_str("Certify[PrimeQ[1], Verify -> False][\"LeanTheorem\"]", "\xC2\xAC Mathilda.IsPrime 1");
+    check_str("Certify[PrimeQ[2], Verify -> False][\"LeanTheorem\"]", "Mathilda.IsPrime 2");
+    check_true("Certify[PrimeQ[0], Verify -> False][\"TrustedSteps\"] === {}");
     check_true("StringStartsQ[Certify[PrimeQ[1000003], Verify -> False][\"LeanTheorem\"], "
                "\"Mathilda.PrattCertifies 1000003 [\"]");
 }
@@ -378,25 +396,26 @@ static void test_tier1_generation(void) {
                    "\"nomathlib\"]", "\"nomathlib\"", 0);
 }
 
-/* Lean`Oracle: the server side of the lean/ tactics (plan section 6). */
+/* Lean`Oracle: the server side of the lean/ tactics (plan section 6).  Answers
+ * are plain data (numerals, v<i>, + - * / ^, lists, tuples), which the Lean
+ * side parses with its own parser and never elaborates as Lean syntax. */
 static void test_oracle(void) {
     check_str("Lean`Oracle[\"LinearCombination\", {2 v2^2, 1}, {{v1^2 + v2^2, 1}, {v1, v2}}, "
               "{v1, v2}]",
-              "fun (v1 v2 : _) => ([1, -v1 - v2] : List _)");
+              "[1, -v1 - v2]");
     /* Every cofactor list really is a certificate: a - b == Sum c_i (l_i - r_i). */
     check_true("Expand[(2 v2^2 - 1) - {1, -v1 - v2} . {v1^2 + v2^2 - 1, v1 - v2}] === 0");
     check_str("Lean`Oracle[\"LinearCombination\", {v1, 2}, {{v1, 1}}, {v1}]",
               "MATHILDA-FAIL: the goal is not a polynomial combination of the hypotheses "
               "(no cofactors up to degree 4)");
     check_str("Lean`Oracle[\"LinearCombination\", {v1 + 1, 1 + v1}, {}, {v1}]",
-              "fun (v1 : _) => ([] : List _)");
+              "[]");
     check_str("Lean`Oracle[\"SOS\", {2 v1 v2, v1^2 + v2^2}, {}, {v1, v2}]",
-              "fun (v1 v2 : _) => ([(1, v1 - v2, 0)] : List (_ \xC3\x97 _ \xC3\x97 Nat))");
+              "[(1, v1 - v2, 0)]");
     check_str("Lean`Oracle[\"SOS\", {0, v1^3}, {v1}, {v1}]",
-              "fun (v1 : _) => ([(1, v1, 1)] : List (_ \xC3\x97 _ \xC3\x97 Nat))");
+              "[(1, v1, 1)]");
     check_str("Lean`Oracle[\"SOS\", {0, v1^4 - 2 v1^2 + 1 + v2^2}, {}, {v1, v2}]",
-              "fun (v1 v2 : _) => ([(1, 1 - v1 ^ 2, 0), (1, v2, 0)] : "
-              "List (_ \xC3\x97 _ \xC3\x97 Nat))");
+              "[(1, 1 - v1 ^ 2, 0), (1, v2, 0)]");
     check_str("Lean`Oracle[\"SOS\", {v1, 1}, {}, {v1}]",
               "MATHILDA-FAIL: no sum-of-squares certificate found");
     check_str("Lean`Oracle[\"Pratt\", 274177]",
@@ -432,8 +451,9 @@ static void test_hardening(void) {
     check_str("Certify[x == x, Method -> \"intros\\ngrind\", Verify -> False][\"ProofScript\"]",
               "by\n  intros\n  grind");
     check_true("Certify[x == x, Method -> \"intros\\ngrind\", Verify -> False]"
-               "[\"LeanSource\"] // StringContainsQ[\"example :\\n    \\[ForAll] x : Int, x = x "
-               ":=\\n  mathilda_cert_1\\n#print axioms mathilda_cert_1\"]");
+               "[\"LeanSource\"] // StringContainsQ[\"theorem mathilda_cert_1_footer :\\n    "
+               "\\[ForAll] x : Int, x = x :=\\n  mathilda_cert_1\\n"
+               "#print axioms mathilda_cert_1_footer\"]");
     /* Every generated file disables auto-bound implicits. */
     check_true("StringContainsQ[Certify[x == x, Verify -> False][\"LeanSource\"], "
                "\"set_option autoImplicit false\"]");

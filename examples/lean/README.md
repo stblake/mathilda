@@ -8,7 +8,7 @@ theorem holds. `showcase.m` runs every kind of certificate end to end and times 
 
 ```sh
 make -j8                                   # build ./Mathilda
-./Mathilda -file examples/lean/showcase.m  # about 15-21 s with a warm Lean
+./Mathilda -file examples/lean/showcase.m  # about 35-40 s with a warm Lean
 sh tests/scripts/lean_tactics.sh ./Mathilda   # the Lean -> Mathilda tactics on their own
 ```
 
@@ -46,8 +46,9 @@ Skipped when no `lake` is found.
 ## Recorded output
 
 [`showcase_output.txt`](showcase_output.txt) is a full run on an Apple M-series machine
-(Lean v4.35.0-rc3, no Mathlib). Total wall time was 15.0 s; the first Lean run of a
-session is about 1–3 s cold, and later runs are about 0.5 s each. Excerpt:
+(Lean v4.35.0-rc3, no Mathlib). Total wall time was 42.5 s; each Lean run is about 0.5 s
+warm plus about 1.1 s for the kernel replay (v0.6519; it was 15-25 s before the replay), and
+the first run of a session is 1-3 s slower. Excerpt (timings from an earlier run):
 
 ```
 [1] Risch/Rioboo antiderivative, certified in core Lean (Tier 0)
@@ -82,9 +83,14 @@ With a Mathlib project configured, row 2 reads:
 
 - Mathilda is an **untrusted oracle**, and the Lean kernel is the **trusted checker**. A bug
   in Mathilda can make a certificate fail. It cannot make Lean accept a false theorem.
-- `"Verified" -> True` means: Lean exited 0, reported no error and no `sorry`, and the
+- `"Verified" -> True` means: Lean exited 0, reported no error and no `sorry`, the
   theorem's `#print axioms` lists only `propext`, `Classical.choice` and `Quot.sound`
-  (so `native_decide` does not count).
+  (so `native_decide` does not count), and a kernel replay of the compiled file in a
+  fresh `lean` process (`src/internal/lean/Replay.lean`) re-checked every declaration
+  and found the same. The replay costs about 1.1 s per Lean run.
+- Statements with hypotheses (ideal membership, `Assumptions`) are proved for every field
+  of characteristic 0, so for ℚ, ℝ and ℂ alike; inequalities (rows 11-13) for every
+  ordered field, so for ℝ.
 - `"TrustedSteps"` lists what Lean did **not** check for that kind of certificate, such as
   the irreducibility of `Factor`'s factors, or Lucas's theorem behind a Pratt certificate.
   An empty list means the theorem is the whole claim. The summary at the end of the

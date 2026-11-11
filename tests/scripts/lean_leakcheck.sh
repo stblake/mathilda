@@ -12,7 +12,8 @@
 # and, when a Lean executable is found ($LeanVersion is a string), also
 #   - real Certify runs (True and a refuted False), a batch, cache hits,
 #     user-Method items (one file each), LeanVerify (accepted, sorry,
-#     native_decide, a refused axiom, named examples in a namespace) and
+#     native_decide, a refused axiom, named examples in a namespace), the
+#     kernel replay (a rejected module, a file with no .olean) and
 #     Lean`Internal`RunProcess.
 # It FAILS on any leaked byte.
 #
@@ -119,6 +120,11 @@ If[StringQ[$LeanVersion],
     LeanVerify["namespace A\nexample : 1 + 1 = 2 := rfl\ntheorem t : True := trivial\nend A\n"];
     Certify[{x + 1 == 1 + x, x == x + 1}, Method -> "intros\ngrind"];
     Certify[Solve[(x - 1)/(x^2 - 1) == (x - 1)/(2 x - 2), x]];
+    (* kernel replay: a rejected module, and a file with no .olean *)
+    Lean`Internal`VerifySource["import Lean\nset_option debug.skipKernelTC true in\nrun_cmd Lean.Elab.Command.liftCoreM <| Lean.addDecl (.thmDecl { name := `bad, levelParams := [], type := Lean.mkConst ``False, value := Lean.mkConst ``True.intro })\n",
+      Lean`Private`leanExe[Automatic], None, False, Lean`Private`replayScript[]];
+    Lean`Internal`VerifySource["theorem s : 2 + 2 = 5 := by decide\n",
+      Lean`Private`leanExe[Automatic], None, False, Lean`Private`replayScript[]];
     Lean`Internal`RunProcess[{"sh", "-c", "echo out; echo err 1>&2; exit 3"}, None]];
   Print["lean_leakcheck: real Lean runs included"],
   Print["lean_leakcheck: no Lean found; real Lean runs skipped"]];

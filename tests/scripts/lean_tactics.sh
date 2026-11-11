@@ -7,7 +7,8 @@
 #   lean/test/Tactics.lean   (MATHILDA_BIN = the real binary: every tactic closes
 #                             its goal, only standard axioms, false goals fail),
 #   lean/test/Untrusted.lean (MATHILDA_BIN = lean/test/bad_oracle.sh, a fake
-#                             oracle with wrong certificates: Lean rejects all),
+#                             oracle with wrong, malformed and hostile answers:
+#                             Lean rejects all, and runs none of them),
 #   lean/test/Missing.lean   (MATHILDA_BIN = a missing path: a clear error).
 # Each file pins its expected messages with #guard_msgs, so `lean` exiting 0
 # means every check passed.
@@ -59,6 +60,8 @@ run() {
     fi
 }
 run "tactics close their goals" "$BIN" test/Tactics.lean
+# Untrusted.lean checks that a hostile answer's file write never happened.
+rm -f /tmp/mathilda_untrusted_pwned
 run "wrong certificates are rejected" "$PKG/test/bad_oracle.sh" test/Untrusted.lean
 run "missing binary is a clear error" /nonexistent/Mathilda test/Missing.lean
 exit $fail

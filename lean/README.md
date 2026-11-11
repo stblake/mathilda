@@ -5,11 +5,15 @@ the Mathilda computer algebra system for a certificate and then check that
 certificate in Lean.
 
 **Trust model.** Mathilda is an untrusted oracle. It only ever supplies data:
-cofactors, squares, or a Pratt certificate. Each tactic turns the data into
+cofactors, squares, or a Pratt certificate. The answer is never elaborated as
+Lean syntax: `Mathilda/Answer.lean` parses it with a small hand-written parser
+into numerals, variables `v<i>`, `+ - * / ^`, lists and tuples, and refuses
+anything else. Each tactic builds terms from that data and turns them into
 ordinary Lean proof steps (`have … := by grind`, `decide +kernel`), and the Lean
-kernel checks them. A wrong or malicious answer makes the tactic fail. It never
-produces a proof of a false goal (`test/Untrusted.lean` runs the tactics
-against a fake Mathilda that returns wrong certificates).
+kernel checks them. A wrong, malformed or malicious answer makes the tactic
+fail, and nothing in it is run. It never produces a proof of a false goal
+(`test/Untrusted.lean` runs the tactics against a fake Mathilda that returns
+wrong certificates and hostile answers such as Lean code).
 
 | Tactic / command | Goal | Mathilda supplies | Lean checks with |
 |---|---|---|---|
@@ -84,10 +88,14 @@ the `set_option` at the top of the file.
    `Print["@@MATHILDA-BEGIN@@"]; Print[Lean`Oracle[…]]; Print["@@MATHILDA-END@@"]`,
    runs `Mathilda -file <script>` with a null stdin, takes the text between the
    sentinels, and deletes the script. A call takes about 0.05 s.
-3. Mathilda answers with a closed lambda, for example
-   `fun (v1 v2 : _) => ([1, -v1 - v2] : List _)`. Lean elaborates it at the
-   goal's type and applies it to the real variables, so no renaming is done on
-   the Lean side. An answer `MATHILDA-FAIL: <reason>` becomes the error
+3. Mathilda answers with data, for example `[1, -v1 - v2]`.
+   `Mathilda.Answer.parse` reads it (bounded: 10⁶ characters, numerals of at
+   most 2000 digits, exponents at most 10⁴, nesting at most 100); the tactic maps
+   each `v<i>` to the goal's i-th variable and builds the terms with fixed
+   quotations, elaborated at the goal's type. An answer that does not parse, or
+   names a variable the goal does not have, fails with
+   `<tactic>: Lean could not parse the certificate returned by Mathilda (…)`.
+   An answer `MATHILDA-FAIL: <reason>` becomes the error
    `mathilda: Mathilda found no certificate: <reason>`.
 4. The tactic runs the proof steps with error recovery switched off. If Lean
    rejects them, the state is restored and the tactic fails with
@@ -101,9 +109,10 @@ the `set_option` at the top of the file.
 | `Mathilda/Prelude.lean` | byte-for-byte copy of `src/internal/lean/Prelude.lean` (`prattCheck`, `PrattCertifies`, `sqnn`, `mulnn`, …); the ctest `lean_prelude_sync` enforces this |
 | `Mathilda/Serialize.lean` | `toMathilda : Expr → …` |
 | `Mathilda/Oracle.lean` | `callMathilda`, the `mathilda.path` option |
+| `Mathilda/Answer.lean` | the parser for the oracle's answer (data only) |
 | `Mathilda/Tactics.lean` | the three tactics and `#mathilda` |
 | `test/Tactics.lean` | positive examples, `#print axioms` of each, false goals |
-| `test/Untrusted.lean`, `test/bad_oracle.sh` | wrong certificates from a fake oracle are rejected |
+| `test/Untrusted.lean`, `test/bad_oracle.sh` | wrong certificates from a fake oracle are rejected; hostile answers (`by_elab` code, `sorry`, foreign identifiers, huge exponents / numerals, malformed tokens) are refused unread |
 | `test/Missing.lean` | a missing binary is a clear error |
 
 Each call starts a fresh Mathilda process. A persistent oracle over Mathilda's

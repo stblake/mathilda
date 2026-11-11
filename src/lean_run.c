@@ -6,7 +6,7 @@
  *       Internal (used for `lean --version` and by tests); there is no public
  *       RunProcess.
  *
- *   Lean`Internal`VerifySource[src, exe, project | None, keep]
+ *   Lean`Internal`VerifySource[src, exe, project | None, keep, replay | None]
  *       Writes src to a fresh temp .lean file, runs `exe --json FILE` (with a
  *       project: `cd project && <lake> env exe --json FILE`, <lake> being the
  *       lake binary beside exe), parses the NDJSON message stream and the
@@ -18,15 +18,19 @@
  *       `sorry` (kind hasSorry), and every reported axiom list a subset of
  *       {propext, Classical.choice, Quot.sound} -- so sorryAx and
  *       Lean.ofReduceBool (native_decide) fail it.  Per-theorem attribution
- *       lives in Lean.m.
+ *       lives in Lean.m.  With `replay` (the path of Replay.lean) the source
+ *       is also compiled to MathildaCert.olean and, after a clean run,
+ *       replayed by `exe --run replay <olean>` in a fresh process; Success
+ *       then also needs "Replay" -> True and standard axioms for every
+ *       declaration of the module ("ReplayAxioms").
  *
  * Each run gets a private directory made by mkdtemp (mode 0700) under
- * $TemporaryDirectory, holding run.lean (created with O_CREAT | O_EXCL |
- * O_NOFOLLOW, mode 0600), run.out and run.err (created by the shell's
+ * $TemporaryDirectory, holding MathildaCert.lean (created with O_CREAT | O_EXCL |
+ * O_NOFOLLOW, mode 0600), MathildaCert.out / .err and check.out / .err (created by the shell's
  * redirections under set -C).  No other user can plant a file or a symlink
  * there, so the .out parsed afterwards is the one Lean's run wrote (its
  * absence is reported as a failure).  The directory and its files are
- * removed unless keep is True (then run.lean and the directory are kept and
+ * removed unless keep is True (then the .lean file and the directory are kept and
  * the path is returned as "SourceFile").  _WIN32 has no mkdtemp in its C
  * runtime and keeps a best-effort probed fresh name in the temp directory.
  * mkdtemp / open / fdopen / rmdir need POSIX.1-2008, hence the feature-test
@@ -139,7 +143,8 @@ static bool file_exists(const char* path) {
 /* Where one run keeps its files: <stem>.lean, <stem>.out, <stem>.err.
  *
  * POSIX: `dir` is a fresh directory made by mkdtemp (mode 0700, owned by this
- * process's user), and stem is <dir>/run.  Nobody else can create, replace or
+ * process's user), and stem is <dir>/MathildaCert (the module name of the
+ * compiled .olean).  Nobody else can create, replace or
  * symlink a file in it, so a file found there after the run was written by
  * this run.  _WIN32: there is no mkdtemp in the C runtime; `dir` is NULL and
  * stem is a fresh name in the temp directory, probed as absent (the old,
@@ -158,7 +163,7 @@ static bool scratch_open(Scratch* sc) {
     sc->dir = b.s;
     RBuf st = {0};
     rb_puts(&st, sc->dir);
-    rb_puts(&st, LEAN_SEP "run");
+    rb_puts(&st, LEAN_SEP "MathildaCert");
     sc->stem = rb_take(&st);
     return true;
 #else
@@ -198,8 +203,12 @@ static char* with_ext(const char* stem, const char* ext) {
 /* Remove the run's files (all but .lean when keep_source) and, when nothing
  * is kept, its directory. */
 static void scratch_close(Scratch* sc, bool keep_source) {
-    const char* ext[3] = { ".out", ".err", ".lean" };
-    for (int i = 0; i < (keep_source ? 2 : 3); i++) {
+    /* The source (.lean) last: it is the one entry kept by keep_source.  The
+     * compiled module (.olean and its optional parts) never is. */
+    const char* ext[] = { ".out", ".err", ".olean", ".olean.server", ".olean.private",
+                          ".ilean", ".ir", ".lean" };
+    const int n = (int)(sizeof ext / sizeof ext[0]);
+    for (int i = 0; i < (keep_source ? n - 1 : n); i++) {
         char* p = with_ext(sc->stem, ext[i]);
         remove(p);
         free(p);
@@ -709,16 +718,134 @@ static char* lake_beside(const char* exe) {
     return rb_take(&b);
 }
 
-/* Lean`Internal`VerifySource[src, exe, project | None, keep] */
+/* Kernel replay (src/internal/lean/Replay.lean) of the compiled module.
+ *
+ * The checker prints "C <name>" per declaration of the module, followed by
+ * "A <axiom>" per axiom it depends on, between MATHILDA-REPLAY-BEGIN and
+ * MATHILDA-REPLAY-OK; MATHILDA-REPLAY-FAIL <why> on a kernel rejection. */
+typedef struct {
+    bool ran;           /* the checker was started */
+    bool ok;            /* replay accepted every declaration */
+    bool all_std;       /* every declaration depends on standard axioms only */
+    Expr* axioms;       /* Association name -> {axioms...} (owned) */
+    char* why;          /* a failure reason, or NULL (owned) */
+    double seconds;
+} ReplayResult;
+
+/* The marker the checker reports for a declaration it could not replay
+ * (unsafe / partial implementation detail). */
+#define NOT_REPLAYED "mathilda.notReplayed."
+
+static void replay_parse(const char* out, ReplayResult* rr) {
+    EList rules = {0}, ax = {0};
+    char* cur = NULL;          /* the current declaration */
+    bool begun = false, ok = false;
+    rr->all_std = true;
+    const char* p = out;
+    while (p && *p) {
+        const char* nl = strchr(p, '\n');
+        size_t n = nl ? (size_t)(nl - p) : strlen(p);
+        if (n == strlen("MATHILDA-REPLAY-BEGIN") && strncmp(p, "MATHILDA-REPLAY-BEGIN", n) == 0) {
+            begun = true;
+        } else if (begun && n == strlen("MATHILDA-REPLAY-OK") &&
+                   strncmp(p, "MATHILDA-REPLAY-OK", n) == 0) {
+            ok = true;
+        } else if (strncmp(p, "MATHILDA-REPLAY-FAIL", strlen("MATHILDA-REPLAY-FAIL")) == 0 &&
+                   !rr->why) {
+            const char* w = p + strlen("MATHILDA-REPLAY-FAIL");
+            while (*w == ' ' && w < p + n) w++;
+            rr->why = malloc((size_t)(p + n - w) + 1);
+            if (!rr->why) abort();
+            memcpy(rr->why, w, (size_t)(p + n - w));
+            rr->why[p + n - w] = '\0';
+        } else if (begun && !ok && n > 2 && (p[0] == 'C' || p[0] == 'A') && p[1] == ' ') {
+            Expr* s = expr_new_string_n(p + 2, n - 2);
+            if (p[0] == 'C') {
+                if (cur) { el_push(&rules, mk_rule(cur, el_list(&ax))); free(cur); }
+                cur = str_copy(s->data.string);
+                expr_free(s);
+            } else if (cur) {
+                const char* a = s->data.string;
+                /* A declaration's own not-replayed marker is no axiom: such a
+                 * declaration is an unsafe implementation detail, and any
+                 * safe declaration that uses it carries the marker too. */
+                bool self = strncmp(a, NOT_REPLAYED, strlen(NOT_REPLAYED)) == 0 &&
+                            strcmp(a + strlen(NOT_REPLAYED), cur) == 0;
+                if (!standard_axiom(a) && !self) rr->all_std = false;
+                el_push(&ax, s);
+            } else {
+                expr_free(s);
+            }
+        }
+        p = nl ? nl + 1 : NULL;
+    }
+    if (cur) { el_push(&rules, mk_rule(cur, el_list(&ax))); free(cur); }
+    free(ax.v);
+    rr->ok = ok && !rr->why;
+    if (!rr->ok && !rr->why) rr->why = str_copy("the replay checker gave no verdict");
+    rr->axioms = mk_assoc(rules.v, rules.n);
+    free(rules.v);
+}
+
+/* Replay <stem>.olean with `exe --run script` (through `lake env` in the
+ * project); the checker's output goes to <dir>/check.out / .err. */
+static void replay_module(const Scratch* sc, const char* exe, const char* lake,
+                          const char* project, const char* script, ReplayResult* rr) {
+    memset(rr, 0, sizeof *rr);
+    char* olean = with_ext(sc->stem, ".olean");
+    if (!file_exists(olean)) {
+        rr->why = str_copy("Lean wrote no compiled module (the source has errors)");
+        rr->axioms = mk_assoc(NULL, 0);
+        free(olean);
+        return;
+    }
+    RBuf cs = {0};
+    if (sc->dir) { rb_puts(&cs, sc->dir); rb_puts(&cs, LEAN_SEP "check"); }
+    else { rb_puts(&cs, sc->stem); rb_puts(&cs, "-check"); }
+    const char* argv[6];
+    int argc = 0;
+    if (project) { argv[argc++] = lake; argv[argc++] = "env"; }
+    argv[argc++] = exe;
+    argv[argc++] = "--run";
+    argv[argc++] = script;
+    argv[argc++] = olean;
+    LeanProcResult r;
+    const char* why = NULL;
+    rr->ran = run_in(cs.s, argv, argc, project, &r, &why) == 0;
+    free(cs.s);
+    free(olean);
+    if (!rr->ran) {
+        rr->why = str_copy(why ? why : "the replay checker could not be started");
+        rr->axioms = mk_assoc(NULL, 0);
+        return;
+    }
+    rr->seconds = r.seconds;
+    replay_parse(r.out, rr);
+    if (r.exit_code != 0) rr->ok = false;
+    if (!rr->ok && !rr->why) rr->why = str_copy("the replay checker failed");
+    lean_proc_result_free(&r);
+}
+
+/* Lean`Internal`VerifySource[src, exe, project | None, keep, replay | None]
+ *
+ * replay: the path of src/internal/lean/Replay.lean.  The source is then also
+ * compiled to <dir>/MathildaCert.olean (`-R <dir> -o ...`), and after a clean
+ * Lean run the checker replays it in a fresh `lean` process; "Success" then
+ * also needs the replay to pass and every declaration of the module to depend
+ * on the standard axioms only (as computed by the checker, not by the
+ * checked file's own output). */
 static Expr* builtin_lean_verifysource(Expr* res) {
-    if (res->data.function.arg_count != 4) return NULL;
+    size_t nargs = res->data.function.arg_count;
+    if (nargs != 4 && nargs != 5) return NULL;
     Expr* const* a = res->data.function.args;
     if (a[0]->type != EXPR_STRING || a[1]->type != EXPR_STRING) return NULL;
     if (!(a[2]->type == EXPR_STRING || is_sym(a[2], SYM_None))) return NULL;
     if (!is_sym(a[3], SYM_True) && !is_sym(a[3], SYM_False)) return NULL;
+    if (nargs == 5 && !(a[4]->type == EXPR_STRING || is_sym(a[4], SYM_None))) return NULL;
     bool keep = is_sym(a[3], SYM_True);
     const char* exe = a[1]->data.string;
     const char* project = a[2]->type == EXPR_STRING ? a[2]->data.string : NULL;
+    const char* script = (nargs == 5 && a[4]->type == EXPR_STRING) ? a[4]->data.string : NULL;
 
     Scratch sc;
     if (!scratch_open(&sc)) {
@@ -736,26 +863,40 @@ static Expr* builtin_lean_verifysource(Expr* res) {
     }
 
     char* lake = project ? lake_beside(exe) : NULL;
-    const char* argv[5];
+    char* olean = with_ext(sc.stem, ".olean");
+    const char* argv[9];
     int argc = 0;
     if (project) { argv[argc++] = lake; argv[argc++] = "env"; }
     argv[argc++] = exe;
     argv[argc++] = "--json";
+    if (script) {
+        if (sc.dir) { argv[argc++] = "-R"; argv[argc++] = sc.dir; }
+        argv[argc++] = "-o";
+        argv[argc++] = olean;
+    }
     argv[argc++] = src;
 
     LeanProcResult r;
     const char* why = NULL;
     int rc = run_in(sc.stem, argv, argc, project, &r, &why);
     char* shown = display_command(argv, argc, project);
+    ReplayResult rr;
+    memset(&rr, 0, sizeof rr);
+    if (rc == 0 && script && r.exit_code == 0)
+        replay_module(&sc, exe, lake, project, script, &rr);
+    else if (script)
+        rr.axioms = mk_assoc(NULL, 0);
     free(lake);
+    free(olean);
     scratch_close(&sc, keep && rc == 0);
     if (rc != 0) {
         mth_message("LeanVerify", "fail", "Lean process could not be started: %s.", why);
+        if (rr.axioms) expr_free(rr.axioms);
+        free(rr.why);
         free(shown);
         free(src);
         return expr_new_symbol(SYM_DollarFailed);
     }
-
     EList msgs = {0}, axr = {0}, reps = {0};
     bool any_error = false, any_sorry = false, axioms_ok = true;
     for (char* line = r.out; line && *line; ) {
@@ -809,11 +950,12 @@ static Expr* builtin_lean_verifysource(Expr* res) {
         el_push(&msgs, mk_assoc(fields, 4));
     }
     bool success = r.exit_code == 0 && !any_error && !any_sorry && axioms_ok;
+    if (script) success = success && rr.ok && rr.all_std;
 
     size_t nax = axr.n;
     Expr* axioms = mk_assoc(axr.v, nax);
     free(axr.v);
-    Expr* rules[9];
+    Expr* rules[12];
     size_t k = 0;
     rules[k++] = mk_rule("Success", mk_bool(success));
     rules[k++] = mk_rule("ExitCode", expr_new_integer(r.exit_code));
@@ -823,6 +965,16 @@ static Expr* builtin_lean_verifysource(Expr* res) {
     rules[k++] = mk_rule("Timing", expr_new_real(r.seconds));
     rules[k++] = mk_rule("Command", expr_new_string(shown));
     if (keep) rules[k++] = mk_rule("SourceFile", expr_new_string(src));
+    if (script) {
+        /* "Replay": True, or the reason it failed; "ReplayAxioms": per
+         * declaration of the module, the axioms the checker found. */
+        rules[k++] = mk_rule("Replay", rr.ok ? mk_bool(true)
+                                     : expr_new_string(rr.why ? rr.why : "not run"));
+        rules[k++] = mk_rule("ReplayAxioms", rr.axioms);
+        rules[k++] = mk_rule("ReplayTiming", expr_new_real(rr.seconds));
+        rr.axioms = NULL;
+    }
+    free(rr.why);
     free(shown);
     free(src);
     lean_proc_result_free(&r);
@@ -850,10 +1002,12 @@ void lean_init(void) {
 
     symtab_add_builtin("Lean`Internal`VerifySource", builtin_lean_verifysource);
     symtab_set_docstring("Lean`Internal`VerifySource",
-        "Lean`Internal`VerifySource[src, exe, project, keep]\n"
+        "Lean`Internal`VerifySource[src, exe, project, keep, replay]\n"
         "\twrites the Lean 4 source src to a temp file, checks it with exe --json (in\n"
         "\tthe Lake project directory project via lake env, unless project is None) and\n"
         "\tgives <|\"Success\", \"ExitCode\", \"Messages\", \"Axioms\", \"Timing\",\n"
-        "\t\"Command\"|>. keep -> True keeps the source file (\"SourceFile\").");
+        "\t\"Command\"|>. keep -> True keeps the source file (\"SourceFile\").\n"
+        "\treplay (optional): the kernel-replay script; the module is compiled and\n"
+        "\treplayed in a fresh lean process (\"Replay\", \"ReplayAxioms\").");
     symtab_get_def("Lean`Internal`VerifySource")->attributes |= ATTR_PROTECTED;
 }

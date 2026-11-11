@@ -8,8 +8,8 @@
 
   Local variables are sent as `v1, v2, …` (never by their Lean names, which may
   be `x₁`, shadowed, or otherwise not valid Mathilda symbols).  The fvars are
-  returned in the same order, so a closed lambda `fun v1 v2 => …` sent back by
-  Mathilda can be applied to them directly (see `Mathilda.Oracle`).
+  returned in the same order, so the `v<i>` in Mathilda's answer (parsed as
+  data by `Mathilda.Answer`) map back to them.
 -/
 import Lean
 

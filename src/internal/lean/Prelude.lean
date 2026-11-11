@@ -40,6 +40,11 @@ def prattCheck : List Nat → List (Nat × Nat × List (Nat × Nat)) → Bool
   | _, [] => true
   | known, (p, a, fs) :: rest => lucasStep known p a fs && prattCheck (p :: known) rest
 
+/-- `n` is prime, by the definition (not by a certificate): `2 ≤ n` and its only
+    divisors are `1` and `n`.  `Certify` proves `¬ IsPrime n` for `n < 2` and for
+    composites (from a factor), and `IsPrime 2`. -/
+def IsPrime (n : Nat) : Prop := 2 ≤ n ∧ ∀ d, d ∣ n → d = 1 ∨ d = n
+
 /-- `cert` is a checked Pratt certificate whose last step is `p`. -/
 abbrev PrattCertifies (p : Nat) (cert : List (Nat × Nat × List (Nat × Nat))) : Prop :=
   prattCheck [2] cert = true ∧ (cert.getLast?.map (·.1)) = some p
