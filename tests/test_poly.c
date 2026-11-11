@@ -280,6 +280,67 @@ void test_polynomialgcd_compound_variables() {
              "Plus[Power[m, 2], Pair[p, q]]");
 }
 
+/* `cofactor_is_unit`: g is a non-trivial gcd equal to `d` up to a nonzero
+ * constant -- Exponent[g, x] is `deg` and d/g takes one value at two rational
+ * points (checked to 30 digits), so g is d times a unit of K. */
+static void check_gcd_is_unit_multiple(const char* setup, const char* gcd_call,
+                                       const char* d, int deg) {
+    char buf[4096];
+    snprintf(buf, sizeof buf,
+             "Module[{g}, %s; g = %s; "
+             "Exponent[g, x] == %d && "
+             "Abs[N[(%s)/g /. x -> 1/3, 40] - N[(%s)/g /. x -> 7/5, 40]] < 10^-30]",
+             setup, gcd_call, deg, d, d);
+    run_test(buf, "True");
+}
+
+/* Coefficients with RELATED algebraic atoms (tasks/polygcd_together_deficiencies
+ * D1).  After Expand the operands mix q = Sqrt[3/4 - 1/Sqrt[2]], q^3, the
+ * unexpanded (3/4 - 1/Sqrt[2])^2 and Sqrt[2] -- atoms tied by relations an
+ * indeterminate model does not know (q denests to 1/Sqrt[2] - 1/2), so the
+ * common factor was invisible and the gcd came back 1.  Now the dependent atoms
+ * are mapped into one number field and the gcd is computed (and certified)
+ * there.  Guards below pin that one-level radicals, a single nested atom and
+ * rational inputs keep their existing answers. */
+void test_polynomialgcd_dependent_algebraic_atoms() {
+    const char* D1 = "q = Sqrt[3/4 - 1/Sqrt[2]]; d1 = 7 + 5 Sqrt[2] - 4 x q; "
+                     "d2 = 3 - Sqrt[2] x + q^3";
+    /* the documented case, default and Extension -> Automatic */
+    check_gcd_is_unit_multiple(D1, "PolynomialGCD[Expand[d1 d2], Expand[d1^2]]", "d1", 1);
+    check_gcd_is_unit_multiple(D1,
+        "PolynomialGCD[Expand[d1 d2], Expand[d1^2], Extension -> Automatic]", "d1", 1);
+    run_test("Module[{q = Sqrt[3/4 - 1/Sqrt[2]], d1, d2}, d1 = 7 + 5 Sqrt[2] - 4 x q; "
+             "d2 = 3 - Sqrt[2] x + q^3; PolynomialGCD[Expand[d1 d2], Expand[d1^2]]]",
+             "Plus[Rational[-17, 2], Times[-6, Power[2, Rational[1, 2]]], x]");
+    /* powers q, q^3 of one radical, mixed */
+    check_gcd_is_unit_multiple("q = Sqrt[3/4 - 1/Sqrt[2]]",
+        "PolynomialGCD[Expand[(x - q^3) (x - q)], Expand[(x - q^3) (x + 1)]]", "x - q^3", 1);
+    /* another denestable nested radical: Sqrt[3 + 2 Sqrt[2]] = 1 + Sqrt[2] */
+    check_gcd_is_unit_multiple("r = Sqrt[3 + 2 Sqrt[2]]",
+        "PolynomialGCD[Expand[(x - r^3 + Sqrt[2]) (x + r)], Expand[(x - r^3 + Sqrt[2])^2]]",
+        "x - r^3 + Sqrt[2]", 1);
+    /* a NON-denestable nested radical s = Sqrt[1 + Sqrt[2]] (degree 4) with a
+     * planted common factor, the cofactors bringing in s^3 and Sqrt[2] */
+    check_gcd_is_unit_multiple("s = Sqrt[1 + Sqrt[2]]",
+        "PolynomialGCD[Expand[(x - s^3) (x - 3)], Expand[(x - s^3) (x + s)]]", "x - s^3", 1);
+    check_gcd_is_unit_multiple("s = Sqrt[1 + Sqrt[2]]",
+        "PolynomialGCD[Expand[(x^2 + s x + Sqrt[2]) (x - 3)], Expand[(x^2 + s x + Sqrt[2]) (x + s)]]",
+        "x^2 + s x + Sqrt[2]", 2);
+    /* coprime over the field: the certified answer is 1 */
+    run_test("Module[{s = Sqrt[1 + Sqrt[2]]}, "
+             "PolynomialGCD[Expand[(x - s^3) (x - 3)], Expand[(x + s^3) (x + s)]]]", "1");
+    /* guards: unchanged answers */
+    run_test("PolynomialGCD[Expand[(x - Sqrt[2]) (x + 3)], Expand[(x - Sqrt[2]) (x + 5)]]",
+             "Plus[Times[-1, Power[2, Rational[1, 2]]], x]");
+    run_test("PolynomialGCD[Expand[(x - Sqrt[3 - Sqrt[2]]) (x + 1)], Expand[(x - Sqrt[3 - Sqrt[2]]) (x + 2)]]",
+             "Plus[Times[-1, Power[Plus[3, Times[-1, Power[2, Rational[1, 2]]]], Rational[1, 2]]], x]");
+    run_test("PolynomialGCD[x^2 - 2^(2/3), x - 2^(1/3)]",
+             "Plus[Times[-1, Power[2, Rational[1, 3]]], x]");
+    run_test("PolynomialGCD[Expand[(x + 1)^3 (x - 2)], Expand[(x + 1)^2 (x + 5)]]",
+             "Plus[1, Times[2, x], Power[x, 2]]");
+    run_test("PolynomialGCD[x^2 - 1, x^3 - 1, x^4 - 1]", "Plus[-1, x]");
+}
+
 /* Powers with a symbolic exponent are polynomial generators: b^(n + k t) is
  * b^n (b^t)^k (expected values are the reference's). FeynCalc's FactorList2
  * reads FactorList's split. */
@@ -323,6 +384,7 @@ int main() {
     TEST(test_expand_coeff);
     TEST(test_polynomialgcd);
     TEST(test_polynomialgcd_compound_variables);
+    TEST(test_polynomialgcd_dependent_algebraic_atoms);
     TEST(test_exponent_generators);
     TEST(test_polynomialextendedgcd);
     TEST(test_polynomiallcm);

@@ -7141,6 +7141,45 @@ static slong fg_split_count(const nmod_poly_t Mp, slong n) {
     return r;
 }
 
+/* Memo for fg_split_count over the shared prime pool.  The split count of M
+ * mod the i'th prime is a constant of (M, i), yet the prime scan in
+ * fg_modular_gcd re-derived it -- a degree-n factorisation per scanned prime,
+ * up to FG_PRIME_SCAN of them per gcd -- on every call.  For small operands
+ * that scan, not the residue-field gcds, was the whole cost (about 3/4 of the
+ * samples of a univariate gcd over a degree-6 field), and the same few minimal
+ * polynomials recur across thousands of gcds.  Bounded, process lifetime, keyed
+ * by the coefficient list and confirmed with expr_eq. */
+#define FG_SPLIT_SLOTS  16
+#define FG_SPLIT_PRIMES 64
+typedef struct { uint64_t hash; Expr* mp; signed char r[FG_SPLIT_PRIMES]; } FgSplitSlot;
+static FgSplitSlot g_fg_split_memo[FG_SPLIT_SLOTS];
+
+/* fg_split_count of mp modulo fg_prime(pi) == q, memoised for the first
+ * FG_SPLIT_PRIMES primes.  -1 when mp has a non-integer coefficient. */
+static slong fg_split_count_memo(const Expr* mp, int pi, ulong q, slong n) {
+    FgSplitSlot* sl = NULL;
+    if (pi >= 0 && pi < FG_SPLIT_PRIMES) {
+        uint64_t h = expr_hash(mp);
+        sl = &g_fg_split_memo[h % FG_SPLIT_SLOTS];
+        if (!(sl->mp && sl->hash == h && expr_eq(sl->mp, (Expr*)mp))) {
+            Expr* key = expr_copy((Expr*)mp);
+            if (key) {
+                if (sl->mp) expr_free(sl->mp);
+                sl->mp = key; sl->hash = h;
+                memset(sl->r, -1, sizeof sl->r);
+            } else {
+                sl = NULL;
+            }
+        }
+        if (sl && sl->r[pi] >= 0) return sl->r[pi];
+    }
+    nmod_poly_t Mc; nmod_poly_init(Mc, q);
+    slong r = fg_minpoly_mod(Mc, mp, q) ? fg_split_count(Mc, n) : -1;
+    nmod_poly_clear(Mc);
+    if (sl && r >= 0 && r < 127) sl->r[pi] = (signed char)r;
+    return r;
+}
+
 /* The leading gens-monomial of P (term 0 under LEX), tau entry dropped. */
 static void fg_lead_mon(ulong* out, const fmpq_mpoly_t P,
                         const fmpq_mpoly_ctx_struct* qctx, slong ngens) {
@@ -7372,13 +7411,12 @@ static int fg_modular_gcd(fmpq_mpoly_t G, const fmpq_mpoly_t A, const fmpq_mpoly
         ulong bestp = 0; slong bestr = 0;
         nmod_poly_t Mp;
         for (int s = 0; s < FG_PRIME_SCAN; s++) {
+            int qi = pi;
             ulong q = fg_prime(pi++);
             if (q == 0) { out_of_primes = 1; break; }
             if (g_fg_stats_on > 0) g_fg_stats.primes_tried++;
-            nmod_poly_t Mc; nmod_poly_init(Mc, q);
-            if (!fg_minpoly_mod(Mc, mp, q)) { nmod_poly_clear(Mc); out_of_primes = 1; break; }
-            slong r = fg_split_count(Mc, n);
-            nmod_poly_clear(Mc);
+            slong r = fg_split_count_memo(mp, qi, q, n);
+            if (r < 0) { out_of_primes = 1; break; }
             if (r > 0 && (bestr == 0 || r < bestr)) { bestr = r; bestp = q; }
             if (bestr == 1 || (rmin > 0 && bestr == rmin)) break;
         }
@@ -7656,12 +7694,55 @@ static int fg_collect_atoms(const Expr* e, Expr*** atoms, size_t* na, size_t* ca
  * (it is a property of the tower, not of the operands), so it is cached by atom
  * list, the same way the .m layer's FieldDataMemo caches FieldData. */
 #define FG_FIELD_CACHE 64
-typedef struct { uint64_t hash; Expr* key; Expr* imgs; } FgFieldSlot;
+typedef struct {
+    uint64_t hash; Expr* key; Expr* imgs;
+    int dep;            /* fg_atoms_dependent verdict: -1 not yet computed */
+} FgFieldSlot;
 static FgFieldSlot g_fg_field_cache[FG_FIELD_CACHE];
 
+/* Are the algebraic atoms of an input DEPENDENT over Q?  `n` is [K:Q] for the
+ * common field K = Q(atoms).  Independent atoms have a product basis of size
+ * prod(deg alpha_i) == n; anything larger means some atom is a polynomial in
+ * the others (q^3 in q, 1/Sqrt[2] in Sqrt[2], a denestable nested radical in
+ * the radicals of its radicand), i.e. a relation the indeterminate model of the
+ * classical gcd does not see.  An atom whose degree is unknown counts as
+ * dependent: routing it to the certified engine is never wrong, only slower. */
+static int fg_atoms_dependent(Expr* const* atoms, size_t natoms, slong n) {
+    slong prod = 1;
+    for (size_t i = 0; i < natoms; i++) {
+        Expr* am = flint_qqbar_gen_minpoly_coeffs(atoms[i]);
+        slong d = (am && am->type == EXPR_FUNCTION && am->data.function.arg_count >= 2)
+                ? (slong)am->data.function.arg_count - 1 : 0;
+        expr_free(am);
+        if (d < 1) return 1;
+        prod *= d;
+        if (prod > n) return 1;                  /* stop before any overflow */
+    }
+    return prod > n;
+}
+
+/* [K:Q] read off the images: the degree of the primitive element theta of the
+ * first AlgebraicNumber image (all images share theta).  0 when none has one. */
+static slong fg_images_field_degree(const Expr* imgs) {
+    for (size_t i = 0; i < imgs->data.function.arg_count; i++) {
+        const Expr* im = imgs->data.function.args[i];
+        if (im->type != EXPR_FUNCTION || fn_head_name(im) != SYM_AlgebraicNumber ||
+            im->data.function.arg_count != 2) continue;
+        Expr* mp = flint_qqbar_gen_minpoly_coeffs(im->data.function.args[0]);
+        slong n = (mp && mp->type == EXPR_FUNCTION && mp->data.function.arg_count >= 2)
+                ? (slong)mp->data.function.arg_count - 1 : 0;
+        expr_free(mp);
+        return n;
+    }
+    return 0;
+}
+
 /* The common-field images of `atoms`, cached.  Returns a borrowed Expr (a List
- * parallel to atoms), or NULL when the field could not be built. */
-static const Expr* fg_field_images(Expr* const* atoms, size_t na) {
+ * parallel to atoms), or NULL when the field could not be built.  When `dep` is
+ * non-NULL it receives whether the atoms are algebraically dependent (see
+ * fg_atoms_dependent), computed once per atom set and cached with the images,
+ * so the univariate gate of flint_field_gcd costs a cache hit on a repeat. */
+static const Expr* fg_field_images_dep(Expr* const* atoms, size_t na, int* dep) {
     Expr** keyargs = malloc(sizeof(Expr*) * (na ? na : 1));
     if (!keyargs) return NULL;
     for (size_t i = 0; i < na; i++) keyargs[i] = expr_copy(atoms[i]);
@@ -7679,6 +7760,11 @@ static const Expr* fg_field_images(Expr* const* atoms, size_t na) {
     FgFieldSlot* sl = &g_fg_field_cache[h % FG_FIELD_CACHE];
     if (sl->key && sl->hash == h && expr_eq(sl->key, key)) {
         expr_free(key);
+        if (dep && sl->imgs) {
+            if (sl->dep < 0)
+                sl->dep = fg_atoms_dependent(atoms, na, fg_images_field_degree(sl->imgs));
+            *dep = sl->dep;
+        }
         return sl->imgs;                         /* may be NULL: a cached decline */
     }
     Expr* imgs = flint_qqbar_to_number_field_common((const Expr* const*)atoms, na, 0);
@@ -7688,8 +7774,16 @@ static const Expr* fg_field_images(Expr* const* atoms, size_t na) {
     }
     if (sl->key) expr_free(sl->key);
     if (sl->imgs) expr_free(sl->imgs);
-    sl->key = key; sl->hash = h; sl->imgs = imgs;
+    sl->key = key; sl->hash = h; sl->imgs = imgs; sl->dep = -1;
+    if (dep && imgs) {
+        sl->dep = fg_atoms_dependent(atoms, na, fg_images_field_degree(imgs));
+        *dep = sl->dep;
+    }
     return imgs;
+}
+
+static const Expr* fg_field_images(Expr* const* atoms, size_t na) {
+    return fg_field_images_dep(atoms, na, NULL);
 }
 
 /* Replace each atom by its image; every other node copied structurally. */
@@ -8004,17 +8098,31 @@ Expr* flint_field_gcd(const Expr* a, const Expr* b) {
     /* 0. Two cheap gates before anything expensive, because this is called from
      * poly_gcd_internal on EVERY gcd and declines on almost all of them.
      *   - no algebraic constant anywhere: not our case at all;
-     *   - fewer than two polynomial variables: the univariate case is already
-     *     correct and faster elsewhere (gr_poly over antic for radicals, and the
-     *     classical PRS for AlgebraicNumber, where a single variable means the
-     *     un-stripped K-content only scales the answer).  This engine exists for
-     *     the multivariate case nothing else can do. */
+     *   - no polynomial variable at all: a gcd of constants.
+     * A univariate input is usually correct and faster elsewhere (gr_poly over
+     * antic for radicals, and the classical PRS for AlgebraicNumber, where a
+     * single variable means the un-stripped K-content only scales the answer),
+     * so it is taken only in the one regime those get wrong -- see below. */
     if (!fg_has_algebraic(a) && !fg_has_algebraic(b)) return NULL;
+    /* UNIVARIATE INPUT is taken only when its algebraic atoms are DEPENDENT --
+     * the one univariate regime the other engines get wrong.  They all treat
+     * each distinct radical as an independent indeterminate, while Expand
+     * applies only SOME of the relations between related atoms: with
+     * q = Sqrt[3/4 - 1/Sqrt[2]] it folds q q into 3/4 - 1/Sqrt[2] but leaves
+     * q^3 = (3/4 - 1/Sqrt[2])^(3/2) and Sqrt[2] as further "independent"
+     * symbols, so a common factor that exists over K = Q(Sqrt[2]) (q denests
+     * to 1/Sqrt[2] - 1/2) is invisible and the gcd came back 1 -- a wrong
+     * answer.  Dependence is decided below, once the common field is known:
+     * the atoms are dependent iff the product of their degrees exceeds [K:Q].
+     * A univariate input with at most one atom, or with independent atoms,
+     * keeps its existing (faster) route. */
+    int univariate = 0;
     {
         const char* seen[2]; size_t ns = 0;
         fg_count_syms(a, seen, &ns, 2);
         fg_count_syms(b, seen, &ns, 2);
-        if (ns < 2) return NULL;
+        if (ns == 0) return NULL;
+        univariate = (ns == 1);
     }
 
     /* Past the cheap gates this input really is ours, so from here a NULL return
@@ -8041,13 +8149,17 @@ Expr* flint_field_gcd(const Expr* a, const Expr* b) {
         FieldScan fs; memset(&fs, 0, sizeof fs);
         field_scan(a, &fs); field_scan(b, &fs);
         if (fs.conflict) return NULL;
+        if (univariate && fs.have_alg) return NULL;   /* canonical: never dependent */
         if (!fs.have_alg) {
             /* No AlgebraicNumber: look for radicals/Root objects to normalise. */
             size_t cap = 0;
             if (!fg_collect_atoms(a, &atoms, &natoms, &cap) ||
                 !fg_collect_atoms(b, &atoms, &natoms, &cap) || natoms == 0) FG_BAIL();
-            cimgs = fg_field_images(atoms, natoms);
+            if (univariate && natoms < 2) FG_BAIL();  /* one atom: nothing to relate */
+            int dep = 1;
+            cimgs = fg_field_images_dep(atoms, natoms, univariate ? &dep : NULL);
             if (!cimgs) FG_BAIL();
+            if (univariate && !dep) FG_BAIL();       /* independent: existing route */
             na_ = fg_subst_atoms(a, atoms, cimgs->data.function.args, natoms);
             nb_ = fg_subst_atoms(b, atoms, cimgs->data.function.args, natoms);
             if (!na_ || !nb_) FG_BAIL();

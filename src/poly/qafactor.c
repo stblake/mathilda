@@ -3596,7 +3596,11 @@ static QAExt* qa_resolve_nested_radical(const Expr* alpha_expr,
         }
         expr_free(atom_in_gamma_int);
     }
-    Expr* base_canon = evaluate(expr_expand(base_internal));
+    /* evaluate() borrows its argument: the expanded tree is ours to free
+     * (it leaked once per nested-radical extension resolution). */
+    Expr* base_expanded = expr_expand(base_internal);
+    Expr* base_canon = evaluate(base_expanded);
+    expr_free(base_expanded);
     expr_free(base_internal);
     base_internal = base_canon;
 
