@@ -213,6 +213,17 @@ In[2]:= Quiet[Certify[Sum[k^3, {k, 1, n}] == n^2 (n + 1)^2/4 + 1]["Verified"]]
 Out[2]= False
 ```
 
+**Fibonacci** (v0.6527). The term may contain `Fibonacci[k + j]` (an integer shift `j >= 0`) and the closed form `Fibonacci[n + j]` (`a + j >= 0`), e.g. `Sum[Fibonacci[k]^2, {k, 1, n}] == Fibonacci[n] Fibonacci[n + 1]`. The source then also defines
+
+```lean
+def mathilda_cert_1_F : Nat → Rat
+  | 0 => 0
+  | 1 => 1
+  | n + 2 => mathilda_cert_1_F n + mathilda_cert_1_F (n + 1)
+```
+
+before `_t`, `Fibonacci[n + j]` becomes `mathilda_cert_1_F (m1 + a + j)` and both `simp only` lists gain `mathilda_cert_1_F`. `"TrustedSteps"` gains "the Lean function _F of the source (F 0 = 0, F 1 = 1, F (n + 2) = F n + F (n + 1)) is Mathilda's Fibonacci on the naturals (checked by Mathilda at n = 0..29, not by Lean)". Sums without `Fibonacci` are unchanged. Other arguments (`Fibonacci[2 k]`, a negative shift in the term) have no certificate; `Fibonacci` outside a sum claim is `Certify::eval` as before. The Exact engine checks the step with `Fibonacci[n + j] = F(j - 1) f0 + F(j) f1` (valid for every integer `j`), a polynomial identity in fresh `f0 = F(n)`, `f1 = F(n + 1)`.
+
 **Options** (`Options[Certify]`; `SetOptions` works). Option names are matched by their text, as `OptionValue` does: `Engine -> "Mathilda"` (the user's own symbol `Engine`) and `"Engine" -> "Mathilda"` are the same option. `Options[Certify]` lists the package's names as strings (`"Engine"`, `"Tier"`, `"Domain"`, `"Verify"`, `"LeanExecutable"`, `"LeanProject"`) next to the System symbols `Method`, `TimeConstraint` and `Assumptions`. The package creates no option-name symbols (v0.6523; before, `Engine`, `Tier`, `Domain`, `Verify`, … lived in `` Lean` `` on `$ContextPath`, captured the user's symbols of those names and survived `ClearAll["Global`*"]`). An unknown name is `Certify::optx`. A name symbol with a value (`Engine = "zzz"`) would turn `Engine -> "Lean"` into `"zzz" -> "Lean"`, so `Certify` checks the held options first and issues `Certify::optvalue`; use `Clear[Engine]` or the string form.
 
 | Option | Default | Meaning |
@@ -364,6 +375,31 @@ Out[4]= Missing["Exact", True]
 In[5]:= Refute[ForAll[{x, y}, x^4 y^2 + x^2 y^4 - 3 x^2 y^2 + 1 >= 0]]
 Refute::none: no counterexample to ... was found within the search bounds; this is not a proof of the claim
 Out[5]= $Failed
+```
+
+## Conjecture
+`Conjecture[expr, n, opts]` (v0.6527) runs an experiment, guesses a closed form in `n`, tests it and certifies it. It gives a `ProofObject` of Kind `"Conjecture"`, or `$Failed`. Attributes `HoldAll`, `Protected`.
+1. **Experiment.** `expr` (held) is evaluated exactly at `n = s, s + 1, …` for `"FitPoints"` (12) plus `"TestPoints"` (40) values. `"Start" -> Automatic` is the lower limit `a` of an outer `Sum[t, {k, a, n}]` (1 for `{k, n}`), else 0. Every value must be an integer or a rational, else `Conjecture::nonexact`.
+2. **Guess**, from the fit values, by the first form (in this order, `"Forms"` may restrict them) that reproduces every fit value exactly and then every test value: `"Polynomial"` (`InterpolatingPolynomial`, degree ≤ 10, `Factor`ed); `"Geometric"` (the smallest linear recurrence with constant coefficients, order ≤ 6, from the exact `NullSpace` of the Hankel matrix; a characteristic polynomial with nonzero rational roots `r` of multiplicity `μ` gives the ansatz `Σ p_r(n) r^n`, deg `p_r` < `μ`, fitted exactly); `"Fibonacci"` (only when `expr` contains `Fibonacci`: the smallest subset of `{1, n, (-1)^n, F(n), F(n+1), F(n)², F(n) F(n+1), F(n+1)²}` that fits); `"Rational"` (`p(n)/q(n)`, degrees ≤ 4, from an exact `NullSpace`); `"Hypergeometric"` (`Binomial[2 n, n]`, `Binomial[2 n, n]/(n + 1)`, `n!`, `(2 n)!` times `c^n`, else a term ratio that is a rational function with rational roots, written with `Pochhammer`). None: `Conjecture::noguess`, `$Failed`.
+3. **Certify** the claim `expr == guess` as written (the user's iterator names are kept) with `Certify`'s pipeline and the options `"Engine"` (`{"Lean", "Exact"}`), `"Verify"`, `TimeConstraint`, `"LeanExecutable"`, `"LeanProject"`; every message of that run is quieted.
+
+`"Status"`: `"Proved"` (a kernel accepted: `"Verified" -> True`), `"Checked"` (no kernel verdict, e.g. Lean absent or `"Engine" -> "Exact"`, and the exact re-check passed), `"Refuted"` (the certification found a counterexample), `"Tested"` (anything else: no certificate kind, `"Verify" -> False`). A guess is only ever reported as tested on the points in `"TestedOn"` unless it is certified. `"Verified"` is the certification's verdict, or `Missing["NoCertificate", "Certify::eval"]` (the name of the message that refused it) when there is no certificate; `"Proof"` is the nested `ProofObject` or `Missing["NoCertificate"]`; `"Theorem"` is the proof's, else `HoldForm[ForAll[n, n >= s, expr == guess]]`.
+
+Properties: `Engine, FittedOn, Form, Guess, Input, Kind, Proof, Status, TestedOn, Theorem, Timing, Variable, Verified`. Other messages: `Conjecture::var` (`n` not a symbol, or a symbol with a value), `Conjecture::badopt` (an invalid option value), `Conjecture::optx` / `Conjecture::optvalue` (option names).
+
+```mathematica
+In[1]:= c = Conjecture[Sum[k^4, {k, 1, n}], n];
+In[2]:= ToString[c]
+Out[2]= "ProofObject[«Conjecture» Proved: Sum[k^4, {k, 1, n}] == 1/30 n (1 + n) (1 + 2 n) (-1 + 3 n + 3 n^2) | Lean Tier 0 + Exact | 2.27 s]"
+
+In[3]:= {c["Form"], c["FittedOn"], c["TestedOn"], c["Proof"]["Engines"]}
+Out[3]= {"Polynomial", {1, 12}, {1, 52}, <|"Lean" -> True, "Exact" -> Missing["Exact", True]|>}
+
+In[4]:= Conjecture[Sum[Fibonacci[k]^2, {k, 1, n}], n]["Guess"]
+Out[4]= Fibonacci[n] Fibonacci[1 + n]
+
+In[5]:= c = Conjecture[Sum[Binomial[n, k]^2, {k, 0, n}], n]; {c["Guess"], c["Status"], c["Verified"]}
+Out[5]= {Binomial[2 n, n], "Tested", Missing["NoCertificate", "Certify::eval"]}
 ```
 
 ## LeanVerify

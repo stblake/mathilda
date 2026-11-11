@@ -14,6 +14,68 @@ BeginPackage["Lean`"];
 Begin["`Private`"];
 
 (* ---------------------------------------------------------------------- *)
+(* Option checks of Certify, Refute and Conjecture (moved from Lean.m)     *)
+(* ---------------------------------------------------------------------- *)
+
+(* None, or $Failed after a message, for the held options of a call.  The
+   Assumptions are walked held with the claim walker (sixth review, v0.6522):
+   arithmetic, relations, And / Or / Not / Implies, Element[vars, domain] and
+   lists are kept, and the value-preserving rational-function heads
+   (Expand, Together, ...) read through, exactly as in a claim; any other
+   head (Reduce, Simplify, a user function, Evaluate, D) is Certify::eval,
+   and a symbol with a value (or in a reserved context) is Certify::value /
+   Certify::context, before the options are evaluated -- a hypothesis
+   computed by Reduce or Simplify is not the hypothesis as written.  A
+   default set with SetOptions[Certify, Assumptions -> ...] was evaluated
+   by SetOptions itself, so it cannot be checked as written: it is refused
+   (Certify::optdefault) unless the call gives its own Assumptions. *)
+SetAttributes[heldOptionProblem, HoldAllComplete];
+heldOptionProblem[opts___] := heldOptionProblemFor[Certify, HoldComplete[opts]];
+heldOptionProblemFor[f_, HoldComplete[opts___]] := Module[{as, t, bad, def},
+  (* An option name that is a symbol with a value would be replaced by that
+     value when the options are evaluated (Engine = "zzz" turns Engine -> v
+     into "zzz" -> v): refuse it while the name is still held. *)
+  bad = Cases[HoldComplete[opts], (Rule | RuleDelayed)[s_Symbol, _] /;
+      OwnValues[s] =!= {} :> {HoldForm[s], ToString[OwnValues[s][[1, 2]], InputForm], SymbolName[Unevaluated[s]]},
+    {1, 2}];
+  If[bad =!= {},
+    Message[MessageName[f, "optvalue"], Sequence @@ bad[[1]]];
+    Return[$Failed, Module]];
+  as = Cases[HoldComplete[opts], (Rule | RuleDelayed)[Assumptions | "Assumptions", a_] :>
+    HoldComplete[a], {1, 2}];
+  (* (A function without an Assumptions option, e.g. Conjecture, has no default to check.) *)
+  If[as === {} && MemberQ[Keys[Options[f]], Assumptions],
+    def = Options[f, Assumptions];
+    If[!MatchQ[def, {Assumptions -> ({} | True)}],
+      Message[MessageName[f, "optdefault"], Replace[def, {(Rule | RuleDelayed)[_, v_]} :> HoldForm[v]]];
+      Return[$Failed, Module]]];
+  Do[
+    t = Block[{$cwAssum = True, $cwNotes = {}, $cwTrusted = {}},
+      With[{w = Replace[a, HoldComplete[e_] :> cw[e]]},
+        If[$cwTrusted =!= {}, cfail[D], w]]];
+    bad = Cases[{t}, cvalue[s_, v_] :> {HoldForm[s], v}, Infinity];
+    If[bad =!= {}, symbolMessage @@ First[bad]; Return[$Failed, Module]];
+    bad = Cases[{t}, cfail[h_] :> h, Infinity];
+    If[bad =!= {},
+      Message[Certify::eval, Replace[a, HoldComplete[e_] :> HoldForm[Assumptions -> e]],
+        First[bad]];
+      Return[$Failed, Module]],
+    {a, as}];
+  None];
+
+(* None, or $Failed after f::optx, when an evaluated option's name is not
+   one of Options[f] (compared by text, so a symbol or a string of that name
+   is accepted).  A typo such as Teir -> 1 must not be ignored silently. *)
+optionNameProblem[f_, opts_List] := Module[{known = optText /@ Keys[Options[f]], bad},
+  bad = Select[Flatten[opts], !MatchQ[#, (Rule | RuleDelayed)[n_, _] /;
+      MemberQ[known, optText[n]]] &];
+  If[bad === {}, None,
+    Message[MessageName[f, "optx"], bad[[1]], StringRiffle[known, ", "]]; $Failed]];
+optText[s_String] := s;
+optText[s_Symbol] := SymbolName[Unevaluated[s]];
+optText[_] := None;
+
+(* ---------------------------------------------------------------------- *)
 (* Engine selection                                                        *)
 (* ---------------------------------------------------------------------- *)
 

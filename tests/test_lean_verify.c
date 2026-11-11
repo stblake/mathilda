@@ -816,6 +816,23 @@ static void test_refute_verify(void) {
                "!KeyExistsQ[First[leanCW], \"Counterexample\"]");
 }
 
+/* Conjecture (v0.6527): guessed, tested and proved by induction in Lean. */
+static void test_conjecture_verify(void) {
+    test_mute_messages();
+    assert_eval_eq("leanJ = {Conjecture[Sum[k^4, {k, 1, n}], n], "
+                   "Conjecture[Sum[Fibonacci[k]^2, {k, 1, n}], n]}; Null", "Null", 0);
+    check_true("AllTrue[leanJ, #[\"Status\"] === \"Proved\" && #[\"Verified\"] === True &]");
+    check_true("AllTrue[leanJ, #[\"Proof\"][\"Verified\"] === True && "
+               "#[\"Proof\"][\"Engines\"][\"Lean\"] === True &]");
+    check_true("leanJ[[2]][\"Form\"] === \"Fibonacci\" && "
+               "SubsetQ[{\"propext\", \"Classical.choice\", \"Quot.sound\"}, "
+               "leanJ[[2]][\"Proof\"][\"Axioms\"]]");
+    check_true("StringStartsQ[ToString[leanJ[[1]]], \"ProofObject[\\[LeftGuillemet]Conjecture"
+               "\\[RightGuillemet] Proved: Sum[k^4, {k, 1, n}] == \"] && "
+               "StringContainsQ[ToString[leanJ[[1]]], \"| Lean Tier 0 + Exact |\"]");
+    check_true("Certify[Sum[Fibonacci[k], {k, 0, n}] == Fibonacci[n + 2] - 1][\"Verified\"] === True");
+}
+
 int main(void) {
 #ifdef __GNUC__
     /* The shared alarm(120) in test_utils.h is too short for this suite: every
@@ -860,6 +877,7 @@ int main(void) {
     TEST(test_review6_verify);
     TEST(test_multi_engine_verify);
     TEST(test_refute_verify);
+    TEST(test_conjecture_verify);
     printf("All Lean verification tests passed.\n");
     return 0;
 }

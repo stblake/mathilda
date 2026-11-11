@@ -463,8 +463,8 @@ leanRename[s_String] := StringReplace[StringReplace[StringReplace[s, $preludeHea
    "\[LeftGuillemet]Lean`Private`" ~~ n:(LetterCharacter ~~ DigitCharacter..) ~~
      "\[RightGuillemet]" :> n}],
   (* Lean`Private`ratCast[m1]: the Nat binder m1 used as a rational value. *)
-  "Lean.Private.ratCast " ~~ n:(LetterCharacter ~~ DigitCharacter..) :>
-    "(" <> n <> " : Rat)"];
+  {"Lean.Private.ratCast " ~~ n:(LetterCharacter ~~ DigitCharacter..) :>
+    "(" <> n <> " : Rat)", "Lean.Private.fib" -> "@NAME@_F"}];
 leanRename[other_] := other;
 
 (* Strict Tier 0 translation of a held (sub)term over type ty; its free
@@ -526,12 +526,18 @@ natPower[c_, ex_, v_, b_, sh_] := Module[{al = Coefficient[Expand[ex], v, 1], be
    sh: exponents become b (natPower), every other v the rational (b + sh). *)
 natForm[e_, v_, b_, sh_] := Module[{r},
   r = e /. Power[c_?ratNumberQ, ex_] /; !FreeQ[ex, v] :> natPower[c, ex, v, b, sh];
+  r = r /. Fibonacci[u_] :> natFib[Expand[u - v] + sh, b];
   If[!FreeQ[r, $Failed], Return[$Failed, Module]];
   r /. v -> If[sh === 0, ratCast[b], iPlus[ratCast[b], sh]]];
 
+(* Fibonacci[v + j] as the source's _F applied to the Nat binder plus the
+   natural shift j + sh (placeholder fib, renamed by leanRename). *)
+natFib[j_Integer, b_] /; j >= 0 := If[j === 0, fib[b], fib[iPlus[b, j]]];
+natFib[_, _] := $Failed;
+
 $sumBinder = Lean`Private`m1;
 $termBinder = Lean`Private`k1;
-$sumPass = {"Lean.Private.ratCast", "Lean.Private.m1", "Lean.Private.k1"};
+$sumPass = {"Lean.Private.ratCast", "Lean.Private.m1", "Lean.Private.k1", "Lean.Private.fib"};
 
 (* ---------------------------------------------------------------------- *)
 (* Row 17: Tier 1 antiderivative (Mathlib) -- HasDerivAt F f x, the proof   *)
@@ -941,7 +947,7 @@ rcases d with _ | _ | _ | d <;>\n      first | exact absurd (Nat.eq_zero_of_zero
 (* A closed-form sum: Lean defines t and S by recursion from the lower limit
    a and proves forall m : Nat, S m = closed(m + a) by induction. *)
 leanEncodeType["Induction", ir_, o_] := Module[{ob = ir["Obligation"], t, k, av, n, closed,
-    tl, cl, ttxt, ctxt},
+    tl, cl, ttxt, ctxt, fq},
   t = ob["Term"]; k = ob["Variable"]; av = ob["LowerLimit"]; n = ob["SumVariable"];
   closed = ob["ClosedForm"];
   tl = natForm[t, k, $termBinder, 0];
@@ -950,7 +956,12 @@ leanEncodeType["Induction", ir_, o_] := Module[{ob = ir["Obligation"], t, k, av,
   ttxt = leanStmt[inertHeld[tl], "Rat", $sumPass];
   ctxt = leanStmt[inertHeld[cl], "Rat", $sumPass];
   If[!StringQ[ttxt] || !StringQ[ctxt], Return[nocert[ir["Input"]], Module]];
+  (* Fibonacci (v0.6527): the recursive _F first, and in both simp lists;
+     every other sum is unchanged. *)
+  fq = !FreeQ[{t, closed}, Fibonacci];
   <|"Preamble" -> StringJoin[
+      If[fq, "def @NAME@_F : Nat \[RightArrow] Rat\n  | 0 => 0\n  | 1 => 1\n" <>
+        "  | n + 2 => @NAME@_F n + @NAME@_F (n + 1)\n", ""],
       "def @NAME@_t (k1 : Nat) : Rat := ", ttxt, "\n",
       "def @NAME@_S : Nat \[RightArrow] Rat\n",
       "  | 0 => @NAME@_t ", ToString[av], "\n",
@@ -958,8 +969,10 @@ leanEncodeType["Induction", ir_, o_] := Module[{ob = ir["Obligation"], t, k, av,
       ")\n"],
     "Statement" -> "\[ForAll] m1 : Nat, @NAME@_S m1 = " <> ctxt,
     "Proof" -> StringJoin["by\n  intro m1\n  induction m1 with",
-      "\n  | zero => simp only [@NAME@_S, @NAME@_t] <;> (try push_cast) <;> grind",
-      "\n  | succ m1 ih => simp only [@NAME@_S, @NAME@_t, ih] <;> (try push_cast) <;> grind"],
+      "\n  | zero => simp only [@NAME@_S, @NAME@_t", If[fq, ", @NAME@_F", ""],
+      "] <;> (try push_cast) <;> grind",
+      "\n  | succ m1 ih => simp only [@NAME@_S, @NAME@_t, ", If[fq, "@NAME@_F, ", ""],
+      "ih] <;> (try push_cast) <;> grind"],
     "Tier" -> 0|>];
 
 (* Tier 1: the HasDerivAt walk; Certify::nocert when Tier -> 1 was

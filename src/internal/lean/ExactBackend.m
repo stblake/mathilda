@@ -182,12 +182,19 @@ expPolyZeroQ[e_, n_] := Module[{r},
   r = Expand[r] /. Power[ez[-1], k_Integer] :> ez[-1]^Mod[k, 2];
   Together[Expand[r]] === 0];
 
+(* Fibonacci[n + j] = F(j - 1) f0 + F(j) f1 for every integer j (F(-1) = 1),
+   f0 = F(n) and f1 = F(n + 1) fresh: a Fibonacci step becomes a polynomial
+   identity in f0, f1.  Other Fibonacci arguments are left alone. *)
+exFibLin[e_, n_] := e /. Fibonacci[u_] /; IntegerQ[Expand[u - n]] :>
+  With[{j = Expand[u - n]}, Fibonacci[j - 1] exFib0 + Fibonacci[j] exFib1];
+
 (* Base and step of the induction; when the step is not an exponential-
    polynomial identity, the claim at n = a .. a + 10 decides: a concrete
    mismatch is False, otherwise not decided. *)
 exSumBaseQ[t_, k_, a_, n_, c_] := Together[(c /. n -> a) - (t /. k -> a)] === 0;
 exSumStepQ[t_, k_, a_, n_, c_] := Module[{bad},
-  If[expPolyZeroQ[(c /. n -> n + 1) - c - (t /. k -> n + 1), n], Return[True, Module]];
+  If[expPolyZeroQ[exFibLin[(c /. n -> n + 1) - c - (t /. k -> n + 1), n], n],
+    Return[True, Module]];
   bad = SelectFirst[Range[a, a + 10],
     Together[Total[Table[t /. k -> j, {j, a, #}]] - (c /. n -> #)] =!= 0 &, None];
   If[bad === None, Missing["NotChecked"], False]];

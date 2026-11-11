@@ -11,9 +11,12 @@
 #   - Lean`Internal`Oracle, all four query kinds plus their failure answers,
 #   - the Exact engine, multi-engine consensus and engine options (v0.6525),
 #   - the counterexample search, Refute (Verify -> False, Exact) (v0.6526),
+#   - Conjecture (every guesser, Exact, Verify -> False, refusals) and
+#     Fibonacci sum certificates (v0.6527),
 # and, when a Lean executable is found ($LeanVersion is a string), also
 #   - real Certify runs (True and a refuted False), a batch, cache hits,
 #     automatic refutations after a rejection and Refute (v0.6526),
+#     a Proved Conjecture and a Fibonacci sum (v0.6527),
 #     user-Method items (one file each), LeanVerify (accepted, sorry,
 #     native_decide, a refused axiom, named examples in a namespace), the
 #     kernel replay (a rejected module, a file with no .olean) and
@@ -238,6 +241,24 @@ Quiet[Do[
    Lean`Private`refZero[(1 + Sqrt[2])^2 - 3 - 2 Sqrt[2]]; Lean`Private`refZero[-1 - Sqrt[2]];
    Certify[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1, "LeanExecutable" -> "/nonexistent/lean"], {3}]];
 
+(* --- v0.6527: Conjecture (each guesser, Exact, Verify -> False, refusals),
+   Fibonacci sums, the Domain / Assumptions rule of the search --- *)
+Quiet[Do[
+   ToString[Conjecture[Sum[k^4, {k, 1, n}], n, "Engine" -> "Exact"]];
+   Conjecture[Sum[k^2 2^k, {k, 0, n}], n, "Engine" -> "Exact"];
+   Conjecture[Sum[Fibonacci[k]^2, {k, 1, n}], n, "Engine" -> "Exact"];
+   ToString[Conjecture[Sum[Binomial[n, k]^2, {k, 0, n}], n, "Engine" -> "Exact"]];
+   Conjecture[Sum[1/(k (k + 1)), {k, 1, n}], n, "Engine" -> "Exact"];
+   Conjecture[Product[(2 k - 1)/(2 k), {k, 1, n}], n, "Engine" -> "Exact"];
+   Conjecture[Sum[k^4, {k, 1, n}], n, "Verify" -> False]["Proof"]["LeanSource"];
+   Conjecture[Sum[Fibonacci[k]^2, {k, 1, n}], n, "Verify" -> False]["Proof"]["LeanSource"];
+   Conjecture[Sum[1.5^k, {k, 0, n}], n]; Conjecture[Sum[Prime[k], {k, 1, n}], n];
+   Conjecture[Sum[k, {k, 1, n}], n, Foo -> 1]; Conjecture[Sum[k, {k, 1, n}], 2 n];
+   Certify[Sum[Fibonacci[k], {k, 0, n}] == Fibonacci[n + 2] - 1, "Engine" -> "Exact"];
+   Certify[Sum[Fibonacci[k], {k, 0, n}] == Fibonacci[n + 2], "Engine" -> "Exact"];
+   Refute[x^2 >= x, Assumptions -> Element[x, Integers], "Verify" -> False, "SearchTime" -> 1];
+   Refute[Sum[k, {k, 1, n}] == n^2, Assumptions -> n > 3, "Verify" -> False], {3}]];
+
 (* --- real Lean runs, when Lean is installed --- *)
 If[StringQ[$LeanVersion],
   Quiet[
@@ -267,6 +288,10 @@ If[StringQ[$LeanVersion],
     Refute[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1];
     Refute[ForAll[{x, y}, x^2 + y^2 >= 2 x y + 1/10]];
     Refute[Sum[k^3, {k, 1, n}] == n^2 (n + 1)^2/4 + 1];
+    (* v0.6527: a Proved conjecture, a Fibonacci sum, an Assumptions-aware refutation *)
+    ToString[Conjecture[Sum[k^4, {k, 1, n}], n]];
+    Certify[Sum[Fibonacci[k]^2, {k, 1, n}] == Fibonacci[n] Fibonacci[n + 1]];
+    Certify[Sum[k, {k, 1, n}] == n^2, Assumptions -> n > 3];
     (* kernel replay: a rejected module, and a file with no .olean *)
     Lean`Internal`VerifySource["import Lean\nset_option debug.skipKernelTC true in\nrun_cmd Lean.Elab.Command.liftCoreM <| Lean.addDecl (.thmDecl { name := `bad, levelParams := [], type := Lean.mkConst ``False, value := Lean.mkConst ``True.intro })\n",
       Lean`Private`leanExe[Automatic], None, False, Lean`Private`replayScript[]];

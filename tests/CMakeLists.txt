@@ -6358,7 +6358,9 @@ add_test(NAME fortran_form_tests COMMAND fortran_form_tests)
 # against tests/lean_golden/golden.txt (LEAN_GOLDEN_UPDATE=1 rewrites it).
 # lean_exact_tests needs no Lean: the Exact backend and multi-engine consensus.
 # lean_refute_tests needs no Lean: counterexample search, refutations, Refute.
-foreach(_lean_t lean_form lean_certify lean_verify lean_mathlib lean_golden lean_exact lean_refute)
+# lean_conjecture_tests needs no Lean: the guessers, statuses, Fibonacci sums.
+foreach(_lean_t lean_form lean_certify lean_verify lean_mathlib lean_golden lean_exact lean_refute
+        lean_conjecture)
     add_executable(${_lean_t}_tests test_${_lean_t}.c $<TARGET_OBJECTS:mathilda_common>)
     target_include_directories(${_lean_t}_tests PRIVATE ../src)
     if(USE_ECM)

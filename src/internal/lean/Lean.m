@@ -16,7 +16,8 @@
 (* This file: claim walker, domains, generators (neutral IR), backend      *)
 (* registry, pipeline, ProofObject.  Loaded at the end: LeanBackend.m (the  *)
 (* Lean backend: discovery, LeanVerify, encoders, runs), ExactBackend.m     *)
-(* (exact re-checks), Engines.m (engine lists, heuristic, consensus).       *)
+(* (exact re-checks), Engines.m (engine lists, heuristic, consensus, the   *)
+(* option checks), Refute.m (counterexamples), Conjecture.m (guessers).    *)
 (* ====================================================================== *)
 
 BeginPackage["Lean`"];
@@ -76,6 +77,15 @@ a ForAll / inequality, Sum[...] == C, Integrate[f, x] == F) and proves the negat
 certified statement from the witness; a ProofObject of Kind \"Refutation\" (\"Counterexample\", \
 \"Theorem\" -> !S), or $Failed. Options: \"Engine\" (\"Lean\" or \"Exact\"), \"Domain\", \
 Assumptions, TimeConstraint, \"Verify\", \"SearchTime\" (5 s), \"LeanExecutable\", \"LeanProject\".";
+
+Conjecture::usage =
+  "Conjecture[expr, n] evaluates expr (e.g. Sum[t, {k, a, n}]) exactly at n = s, s + 1, ..., \
+guesses a closed form in n (\"Polynomial\", \"Geometric\", \"Fibonacci\", \"Rational\", \
+\"Hypergeometric\"), tests it at further points and certifies expr == guess; a ProofObject of \
+Kind \"Conjecture\" (\"Guess\", \"Form\", \"Status\" -> \"Proved\" | \"Checked\" | \"Tested\" | \
+\"Refuted\", \"Proof\"), or $Failed. Options: \"Engine\" ({\"Lean\", \"Exact\"}), \"FitPoints\" (12), \
+\"TestPoints\" (40), \"Start\" (Automatic), \"Forms\" (All), \"Verify\", TimeConstraint, \
+\"LeanExecutable\", \"LeanProject\".";
 
 Begin["`Private`"];
 
@@ -402,6 +412,7 @@ csym[s_Symbol] := If[valuedQ[s], cvalue[s, symbolProblem[s]], hk[s]];
 cw[Evaluate[___]] := cfail[Evaluate];
 cw[Power[b_, n_Integer]] := inert[Power, cw[b], n];
 cw[Power[b_, e_]] /; $cwAnti || $cwAnyPow := inert[Power, cw[b], cw[e]];
+cw[Fibonacci[u_]] /; $cwAnyPow := inert[Fibonacci, cw[u]];  (* sum claims: sumGen checks it *)
 cw[(h:Sqrt | Log | ArcTan | ArcTanh)[u_]] /; $cwAnti := inert[h, cw[u]];
 cw[(h:Expand | Together | Cancel | Factor | FactorTerms)[e_]] :=
   ($cwNotes = Append[$cwNotes, h]; cw[e]);
@@ -1301,7 +1312,8 @@ sumGen[input_, t_, k_Symbol, a_, n_Symbol, cl0_, o_] := Module[{av, held, closed
   If[!IntegerQ[av] || av < 0 || k === n || !FreeQ[closed, Sum] ||
      !SubsetQ[{k}, Union[Cases[t, _Symbol, {0, Infinity}]]] ||
      !SubsetQ[{n}, Union[Cases[closed, _Symbol, {0, Infinity}]]] ||
-     !FreeQ[{t, closed}, _Real | _Complex],
+     !FreeQ[{t, closed}, _Real | _Complex] ||
+     !(fibArgsQ[t, k, 0] && fibArgsQ[closed, n, av] && fibDefQ),
     Return[nocert[input], Module]];
   (* A denominator in k (or in n in the closed form) can vanish inside the
      range, where Lean's x / 0 = 0 would give the sum a junk value; such
@@ -1316,11 +1328,21 @@ sumGen[input_, t_, k_Symbol, a_, n_Symbol, cl0_, o_] := Module[{av, held, closed
       "LowerLimit" -> av, "SumVariable" -> n, "ClosedForm" -> closed|>,
     <|"Term" -> t, "Variable" -> k, "LowerLimit" -> av, "ClosedForm" -> closed,
       "PreCheck" -> (Expand[(closed /. n -> av) - (t /. k -> av)] === 0 &&
-        Expand[(closed /. n -> n + 1) - closed - (t /. k -> n + 1)] === 0)|>,
+        Expand[exFibLin[(closed /. n -> n + 1) - closed - (t /. k -> n + 1), n]] === 0)|>,
     {"the closed form is proved for integer n >= " <> ToString[av] <> " only (Lean's \
 statement is over n = " <> If[av === 0, "", ToString[av] <> " + "] <> "m with m : Nat), as \
-\"Theorem\" states"},
+\"Theorem\" states", If[FreeQ[{t, closed}, Fibonacci], Nothing, $fibStep]},
     {}, {Sum @@ {t, {k, av, n}}, closed}, Rationals, "Int"]];
+
+(* Fibonacci in a sum (v0.6527): Fibonacci[v + j] with an integer shift j
+   and lo + j >= 0 (the term over k1 : Nat from 0, the closed form over
+   n = m1 + a), Lean's recursive @NAME@_F on the naturals. *)
+fibArgsQ[e_, v_, lo_] := AllTrue[Cases[{e}, _Fibonacci, Infinity],
+  MatchQ[#, Fibonacci[u_] /; IntegerQ[Expand[u - v]] && lo + Expand[u - v] >= 0] &];
+fibDefQ := FoldList[{#1[[2]], Total[#1]} &, {0, 1}, Range[29]][[All, 1]] ===
+  Table[Fibonacci[j], {j, 0, 29}];
+$fibStep = "the Lean function _F of the source (F 0 = 0, F 1 = 1, F (n + 2) = F n + \
+F (n + 1)) is Mathilda's Fibonacci on the naturals (checked by Mathilda at n = 0..29, not by Lean)";
 
 (* The held input is passed whole (s, c): wrapping a held Sum in With would
    rename its iterator. *)
@@ -1354,71 +1376,14 @@ Options[Certify] = {"Engine" -> "Lean", "Tier" -> Automatic, "Domain" -> Automat
 
 (* HoldAll (v0.6521): the claim is held (it is certified as written), and so
    are the options until the Assumptions have been checked like the claim:
-   an Evaluate or a symbol with a value in them is refused (heldOptionProblem)
-   before the options are evaluated. *)
+   an Evaluate or a symbol with a value in them is refused (heldOptionProblem,
+   Engines.m) before the options are evaluated. *)
 SetAttributes[Certify, HoldAll];
-
-(* None, or $Failed after a message, for the held options of a call.  The
-   Assumptions are walked held with the claim walker (sixth review, v0.6522):
-   arithmetic, relations, And / Or / Not / Implies, Element[vars, domain] and
-   lists are kept, and the value-preserving rational-function heads
-   (Expand, Together, ...) read through, exactly as in a claim; any other
-   head (Reduce, Simplify, a user function, Evaluate, D) is Certify::eval,
-   and a symbol with a value (or in a reserved context) is Certify::value /
-   Certify::context, before the options are evaluated -- a hypothesis
-   computed by Reduce or Simplify is not the hypothesis as written.  A
-   default set with SetOptions[Certify, Assumptions -> ...] was evaluated
-   by SetOptions itself, so it cannot be checked as written: it is refused
-   (Certify::optdefault) unless the call gives its own Assumptions. *)
-SetAttributes[heldOptionProblem, HoldAllComplete];
-heldOptionProblem[opts___] := heldOptionProblemFor[Certify, HoldComplete[opts]];
-heldOptionProblemFor[f_, HoldComplete[opts___]] := Module[{as, t, bad, def},
-  (* An option name that is a symbol with a value would be replaced by that
-     value when the options are evaluated (Engine = "zzz" turns Engine -> v
-     into "zzz" -> v): refuse it while the name is still held. *)
-  bad = Cases[HoldComplete[opts], (Rule | RuleDelayed)[s_Symbol, _] /;
-      OwnValues[s] =!= {} :> {HoldForm[s], ToString[OwnValues[s][[1, 2]], InputForm], SymbolName[Unevaluated[s]]},
-    {1, 2}];
-  If[bad =!= {},
-    Message[MessageName[f, "optvalue"], Sequence @@ bad[[1]]];
-    Return[$Failed, Module]];
-  as = Cases[HoldComplete[opts], (Rule | RuleDelayed)[Assumptions | "Assumptions", a_] :>
-    HoldComplete[a], {1, 2}];
-  If[as === {},
-    def = Options[f, Assumptions];
-    If[!MatchQ[def, {Assumptions -> ({} | True)}],
-      Message[MessageName[f, "optdefault"], Replace[def, {(Rule | RuleDelayed)[_, v_]} :> HoldForm[v]]];
-      Return[$Failed, Module]]];
-  Do[
-    t = Block[{$cwAssum = True, $cwNotes = {}, $cwTrusted = {}},
-      With[{w = Replace[a, HoldComplete[e_] :> cw[e]]},
-        If[$cwTrusted =!= {}, cfail[D], w]]];
-    bad = Cases[{t}, cvalue[s_, v_] :> {HoldForm[s], v}, Infinity];
-    If[bad =!= {}, symbolMessage @@ First[bad]; Return[$Failed, Module]];
-    bad = Cases[{t}, cfail[h_] :> h, Infinity];
-    If[bad =!= {},
-      Message[Certify::eval, Replace[a, HoldComplete[e_] :> HoldForm[Assumptions -> e]],
-        First[bad]];
-      Return[$Failed, Module]],
-    {a, as}];
-  None];
 
 certOptions[opts_List] := Module[{keys = {"Engine", "Tier", "Domain", "Method",
     "TimeConstraint", "Assumptions", "Verify", "LeanExecutable", "LeanProject", "Counterexample"}},
   If[optionNameProblem[Certify, opts] =!= None, Return[$Failed, Module]];
   AssociationThread[keys, OptionValue[Certify, opts, #] & /@ keys]];
-
-(* None, or $Failed after f::optx, when an evaluated option's name is not
-   one of Options[f] (compared by text, so a symbol or a string of that name
-   is accepted).  A typo such as Teir -> 1 must not be ignored silently. *)
-optionNameProblem[f_, opts_List] := Module[{known = optText /@ Keys[Options[f]], bad},
-  bad = Select[Flatten[opts], !MatchQ[#, (Rule | RuleDelayed)[n_, _] /;
-      MemberQ[known, optText[n]]] &];
-  If[bad === {}, None,
-    Message[MessageName[f, "optx"], bad[[1]], StringRiffle[known, ", "]]; $Failed]];
-optText[s_String] := s;
-optText[s_Symbol] := SymbolName[Unevaluated[s]];
-optText[_] := None;
 
 (* Authentication (sixth review, v0.6522).  ProofObject[assoc] is an inert
    container: anyone can write ProofObject[<|"Verified" -> True, ...|>].  So
@@ -1576,12 +1541,13 @@ timingText[_] := "- s";
 engineLabel[e_, a_] := If[StringQ[e] && KeyExistsQ[$backends, e], $backends[e]["Label"][a],
   "Mathilda Heuristic"];
 
-Format[ProofObject[a_?AssociationQ]] := SequenceForm @ StringJoin[
+Format[ProofObject[a_?AssociationQ]] := SequenceForm @ If[a["Kind"] === "Conjecture",
+  conjectureText[a], StringJoin[
   "ProofObject[\[LeftGuillemet]", ToString[a["Kind"]], "\[RightGuillemet] ",
   If[KeyExistsQ[a, "Refuted"] && authenticQ[a], "Refuted: " <> ToString[a["Counterexample"]],
     "Verified: " <> ToString[verdictOf[a]]], " | ",
   StringRiffle[engineLabel[#, a] & /@ Flatten[{a["Engine"]}], " + "],
-  " | ", timingText[a["Timing"]], "]"];
+  " | ", timingText[a["Timing"]], "]"]];
 
 End[];
 
@@ -1592,5 +1558,7 @@ LoadModule["lean/LeanBackend.m"];
 LoadModule["lean/ExactBackend.m"];
 LoadModule["lean/Engines.m"];
 LoadModule["lean/Refute.m"];
+LoadModule["lean/Conjecture.m"];
 
-SetAttributes[{Lean`Certify, Lean`ProofObject, Lean`LeanVerify, Lean`Refute}, Protected];
+SetAttributes[{Lean`Certify, Lean`ProofObject, Lean`LeanVerify, Lean`Refute, Lean`Conjecture},
+  Protected];

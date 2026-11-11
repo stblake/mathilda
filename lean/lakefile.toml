@@ -1,5 +1,5 @@
 name = "mathilda"
-version = "0.6526.0"
+version = "0.6527.0"
 defaultTargets = ["Mathilda"]
 
 # Core-only: no `require`, so the package has no dependencies (no Mathlib).
