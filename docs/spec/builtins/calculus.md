@@ -2468,6 +2468,11 @@ monotonically down.
   - `"TragerKauers"` — `Integrate\`TragerKauers[f, x]`: the same pipeline with the
     logarithmic part found by Kauers' Groebner-basis heuristic (2008). It is faster
     on many inputs but incomplete: it declines where the heuristic does not close.
+  - `"Bronstein"` — `Integrate\`Bronstein[f, x]`: Bronstein's algorithm (1990) for
+    mixed integrands with ONE radical on top of a Log/Exp tower. It is a decision
+    procedure in its scope: an elementary antiderivative is found if one exists, and
+    otherwise `Integrate::nonelem` is issued with a proof. Written in Mathilda's own
+    language (`src/internal/bronstein/`). See `### Integrate\`Bronstein` below.
   - `"ParallelMixedSpecial"` — `Integrate\`ParallelMixedSpecial[f, x]` (the same
     over a mixed tower with **special-function kernels**, so the answer may carry
     `ExpIntegralEi`, `LogIntegral`, `Erf`/`Erfc`/`Erfi`, the incomplete
@@ -3767,6 +3772,72 @@ longer instead of declining; a time limit is the caller's (`TimeConstrained`).
 `(1/k) RootSum[q, # Log[p] &]`. The result is checked exactly by traces over
 Q[Z]/(q). Where the heuristic does not close (e.g. `(x^4 + 1)^(-1/4)`) the method
 declines. Its non-elementarity certificates come only from the shared stages 3–6.
+
+### Integrate`Bronstein
+
+`Integrate[f, x, Method -> "Bronstein"]` (and `Integrate\`Bronstein[f, x]`)
+integrates an elementary function built from rational operations, logarithms,
+exponentials and ONE radical `y = P^(1/n)`, where the radicand `P` involves the top
+transcendental monomial θ of the tower. Examples are `Sqrt[x + Log[x]]`,
+`(x + E^x)^(1/3)` and `Log[1 + E^x]^(1/3)`. This is M. Bronstein, *Integration of
+elementary functions*, J. Symbolic Computation 9 (1990) 117–173, Part 2,
+restricted to n-th roots. The design is in `src/internal/bronstein/BRONSTEIN_PLAN.md`.
+
+**Hand-offs.** Other integrands are routed elsewhere:
+- one without a radical goes to `Integrate\`RischTranscendental`;
+- one without a Log/Exp kernel goes to `Method -> "Trager"`;
+- one whose radicand is a Möbius function of x is changed to the variable
+  `u = P^(1/n)`, which removes the radical.
+
+All of these are verified like the main path.
+
+**Pipeline.** The integrand is split into its components `a_i y^i`, each one on its
+curve `Y^m = G(θ)` over `k = Q(x)(lower monomials)`. Trager's thesis, Appendix A,
+shows that `f` is elementary iff every component is.
+
+1. **Hermite reduction** at the normal places: the system (S) of [B] pp.132–134 in
+   the component's one coordinate.
+2. **Reduction at the special places** of an exponential θ (θ = 0, ∞): one Risch DE
+   in k per leading coefficient ([B] Prop 2.18).
+3. **Residues** at the normal places, with the resultant criterion ([B] Prop 2.9).
+   Residues at θ = ∞ for a logarithm (Def 2.10), and at θ = 0, ∞ for an
+   exponential (Def 2.21).
+4. **Residue divisors** over `k(t)` (`t` generating the residues) by Trager's ideal
+   arithmetic, on a rational-function coefficient field. Places above the special
+   points are moved to finite ones by `θ = a + 1/u`.
+5. **Torsion orders by specialization.** x and the lower monomials are set to
+   rationals that preserve the curve's shape, and Trager's mod-p order is
+   computed there. Principality of `N δ` is then tested generically.
+6. **The log part** `Σ (β_j/N_j) Log[u_j]`, projected to the component's weight. For
+   a square root this is `(β/(2N)) Log[u/σ(u)]`.
+7. **The algebraic part.** This is the Risch DE `D b + s b = c` over `k(θ)`, with
+   `s = DG/(mG)`. It is solved by `Risch\`RischDECertified`, and for a logarithmic θ
+   by the top-down polynomial solve of [B] Prop 2.15.
+
+Every certificate is a theorem of [B]/[T] applied to a decided sub-step: a Risch DE
+"NoSolution" from the certified solver, `Risch\`ElementaryIntegralQ` False, an
+infinite-order divisor at a good specialization. Every antiderivative is checked
+by `PossibleZeroQ[D[F, x] - f]` before it is returned.
+
+**Declined (no verdict):**
+- nested radicals;
+- two radicands;
+- a monomial above θ that depends on it;
+- trigonometric kernels;
+- the radical below the tower (Shape B), unless the Möbius change of variable
+  removes it;
+- residues at special places on a curve of positive genus;
+- algebraic constants at special places beyond `κ^(1/m) u` (u ∈ k), except over `Q(x)`.
+
+| Input | Output |
+|---|---|
+| `Integrate[(x + 1)/((x Log[x] + x^2) Sqrt[x + Log[x]]), x, Method -> "Bronstein"]` ([B] p.134) | `-2/Sqrt[x + Log[x]]` |
+| `Integrate[(3 (x + E^x)^(1/3) + (2 x^2 + 3 x) E^x + 5 x^2)/(x (x + E^x)^(1/3)), x, Method -> "Bronstein"]` ([B] p.158) | `3 x (E^x + x)^(2/3) + 3 Log[x]` |
+| `Integrate[1/(x Sqrt[Log[x]^2 + 1]), x, Method -> "Bronstein"]` | `-Log[Log[x] - Sqrt[1 + Log[x]^2]]` |
+| `Integrate[E^x/Sqrt[E^(2 x) + 1], x, Method -> "Bronstein"]` | `-Log[-E^x + Sqrt[1 + E^(2 x)]]` |
+| `Integrate[Log[1 + E^x]^(1/3)/(1 + Log[1 + E^x]), x, Method -> "Bronstein"]` ([B] p.139) | `Integrate::nonelem` (resultant criterion) |
+| `Integrate[Sqrt[Log[x]], x, Method -> "Bronstein"]` | `Integrate::nonelem` (no algebraic part) |
+| `Integrate[5/(x (Log[x] - 3) Sqrt[Log[x]^3 - 2]), x, Method -> "Bronstein"]` | `Integrate::nonelem` (residue divisor of infinite order) |
 
 ### Integrate`GRTable
 

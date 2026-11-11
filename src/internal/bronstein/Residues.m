@@ -51,6 +51,9 @@ brResultantR[T_Association, cv_Association, c_, z_Symbol] := Module[
 
 brResultantCriterion::usage = "brResultantCriterion[T, R, z] applies [B] Prop 2.9: it returns {\"Constant\", P} with P(z) the monic polynomial of R (whose coefficients are then constants: free of x and the tower symbols), or {\"NonConstant\", Rmonic} when some coefficient of the monic R is not constant -- a certificate that the integral is not elementary.";
 brResultantCriterion[T_Association, R_, z_Symbol] := Module[{vars = Prepend[T["syms"], T["x"]], d, P},
+  (* a certificate only from a well-formed polynomial in z over Q[x, lower] *)
+  If[!brRationalInQ[R, Append[vars, z]] || !PolynomialQ[Expand[R], z],
+    throwInternal["brResultantCriterionMalformed", <|"R" -> R|>]];
   If[FreeQ[R, z], Return[{"Constant", 1}]];
   d = Exponent[R, z];
   P = Expand[Together[R/Coefficient[R, z, d]]];
@@ -102,13 +105,39 @@ brCoefficientAtZero[T_Association, cv_Association, c_, j_Integer] := Module[{th 
   rho = brBinomialSeries[Together[Rest[CoefficientList[Expand[G], th]]/G0], 1/cv["m"], u, Max[0, j - v]];
   Together[Total[(#[[2]] If[j - #[[1]] >= 0, rho[[j - #[[1]] + 1]], 0]) & /@ lau]]];
 
+brRadicalValueCheck::usage = "brRadicalValueCheck[T, lc, m, w, need] decides the special-place condition when the algebraic constant gamma = lc^(1/m) is NOT a constant times an element of k (k = Q(x) only: the lower tower must be empty). By the Galois weight of gamma w the eta-coefficient c of [B] Def 2.10 / 2.21 is 0, so the residues there vanish, and the condition becomes one about the algebraic function gamma w over Q(x), decided by Trager's algorithm: need \"Algebraic\" (Def 2.10: Int gamma w is algebraic, no logarithm) or \"Logarithmic\" (Def 2.21: Int gamma w is a sum of logarithms, no algebraic part). Returns True, or throws NonElementary (the condition fails: tau undefined) or Decline.";
+brRadicalValueCheck[T_Association, lc_, m_Integer, w_, need_String] := Module[{x = T["x"], cc, r, alg},
+  If[Together[w] === 0, Return[True]];
+  If[brLowerTower[T]["syms"] =!= {} || !rationalFunctionQ[lc, x] || !rationalFunctionQ[w, x],
+    throwDecline["special value over a radical extension of k"]];
+  (* gamma = lc^(1/m) = q^(-1) yh with yh^m = q^(m-1) num(lc); reduce to a curve Y^m' = G *)
+  With[{p = Numerator[Together[lc]], q = Denominator[Together[lc]]},
+    cc = componentCurve[m, Expand[q^(m - 1) p], 1, x];
+    If[cc["m"] === 1, Return[True]];   (* gamma is a rational multiple of an element of Q(x) *)
+    r = Trager`TragerIntegrateCurve[Together[w cc["s"]/q], x, cc["m"], cc["G"], "Trager"]];
+  (* A certificate only from a recognised answer: anything else (an unevaluated  *)
+  (* call, a malformed result) is an internal error -- a decline, never a proof. *)
+  If[!(MatchQ[r, {"not elementary" | "failed", _String}] ||
+       (AssociationQ[r] && KeyExistsQ[r, "Algebraic"] && KeyExistsQ[r, "Logs"] && ListQ[r["Logs"]])),
+    throwInternal["brRadicalValueCheckUnexpected", <|"r" -> r|>]];
+  Which[
+    MatchQ[r, {"not elementary", _}], throwNonElementary["special residue undefined: " <> r[[2]]],
+    MatchQ[r, {"failed", _}], throwDecline["special residue: " <> r[[2]]],
+    need === "Algebraic" && r["Logs"] =!= {},
+      throwNonElementary["residue at infinity undefined ([B] Def 2.10): a logarithm over a radical extension of k"],
+    need === "Logarithmic" && !FreeQ[Together[r["Algebraic"]], x],
+      throwNonElementary["residue at a special place undefined ([B] Def 2.21): an algebraic part over a radical extension of k"],
+    True, True]];
+
 brLogInfinityResidues::usage = "brLogInfinityResidues[T, cv, c] is the list of the residues tau_p at the places above theta = infinity of the normal component c Y, theta a logarithm ([B] Def 2.10). It returns <|\"ramified\" -> True, \"tau\" -> 0|> when m does not divide deg G (no theta^-1 term: tau = 0 at every such place), or <|\"ramified\" -> False, \"kappa\" -> kappa, \"u\" -> u, \"lambda\" -> lambda|> meaning tau_(p_zeta) = -zeta kappa^(1/m) lambda at the place where Y/theta^(g/m) -> zeta kappa^(1/m) u. Throws NonElementary when a = v' + c eta'/eta has no solution, Decline when undecided or when lc(G) is not a constant times an m-th power in k.";
 brLogInfinityResidues[T_Association, cv_Association, c_] := Module[{inf = brPlaceDataInf[T, cv], gf, a1, li},
   If[!inf["unramified"], Return[<|"ramified" -> True, "tau" -> 0|>]];
   a1 = brCoefficientAtInf[T, cv, c, -1];
   If[a1 === 0, Return[<|"ramified" -> False, "kappa" -> 1, "u" -> 1, "lambda" -> 0|>]];
   gf = brGammaForm[inf["lc"], cv["m"]];
-  If[gf === None, throwDecline["residue at infinity over a radical extension of k (lc(G) not an m-th power)"]];
+  If[gf === None,
+    brRadicalValueCheck[T, inf["lc"], cv["m"], a1, "Algebraic"];
+    Return[<|"ramified" -> False, "kappa" -> 1, "u" -> 1, "lambda" -> 0|>]];
   li = brLimitedIntegrate[brLowerTower[T], Together[gf[[2]] a1], brEta[T]];
   Switch[First[li],
     "NoSolution", throwNonElementary["residue at infinity undefined ([B] Def 2.10, Prop 2.11)"],
@@ -125,6 +154,8 @@ brExpValueIntegral[T_Association, w_] := Module[{TL = brLowerTower[T], r, sp, et
   sp = brSplitLogs[TL, r[[2]]];
   If[sp === None, Return[{"Unknown", "value integral is not k-part plus logarithms"}]];
   cc = Together[brD[TL, sp[[1]]]/brD[TL, eta]];
+  (* a "no" only from a well-formed rational function of the tower *)
+  If[!brRationalInQ[cc, Prepend[TL["syms"], T["x"]]], Return[{"Unknown", "value integral: malformed coefficient"}]];
   If[brDependsQ[cc, Prepend[TL["syms"], T["x"]]], {"NoSolution"}, {"Solution", cc}]];
 
 brExpSpecialResidues::usage = "brExpSpecialResidues[T, cv, c] computes the residues at the special places of the REDUCED component c Y, theta an exponential ([B] Def 2.21). It returns <|\"zero\" -> data0, \"inf\" -> dataInf|>, each either <|\"ramified\" -> True|> (every place there has value 0) or <|\"ramified\" -> False, \"kappa\", \"u\", \"c\" -> c_w|> where the value at the place zeta is zeta kappa^(1/m) u w and Int w = c_w eta + logs; with pbar the place zeta = 1 above 0 (or above infinity when 0 is ramified), tau_p = eps r (c_p - c_pbar). Throws NonElementary when a value difference has no integral of the required form, Decline when undecided or an algebraic constant is unsupported.";
@@ -134,7 +165,9 @@ brExpSpecialResidues[T_Association, cv_Association, c_] := Module[{z = brPlaceDa
     w = wfun[];
     If[w === 0, Return[<|"ramified" -> False, "kappa" -> 1, "u" -> 1, "c" -> 0, "w" -> 0|>, Module]];
     gf = brGammaForm[lc, cv["m"]];
-    If[gf === None, throwDecline["special value over a radical extension of k"]];
+    If[gf === None,
+      brRadicalValueCheck[T, lc, cv["m"], w, "Logarithmic"];
+      Return[<|"ramified" -> False, "kappa" -> 1, "u" -> 1, "c" -> 0, "w" -> 0|>, Module]];
     r = brExpValueIntegral[T, Together[gf[[2]] w]];
     Switch[First[r],
       "NoSolution", throwNonElementary["residue at a special place undefined ([B] Def 2.21, Prop 2.22)"],

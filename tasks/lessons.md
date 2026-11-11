@@ -5206,3 +5206,20 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
 - Rule: for any hang or timeout, take a profile of the live process (macOS `sample`, Linux
   `perf top -p`) and read the top-of-stack histogram BEFORE forming a hypothesis. A deep
   stack truncates the call-graph root; the histogram is still exact.
+
+## 2026-11-12 — Bronstein: a false "not elementary" from an unresolved package name
+- Trap: inside `Bronstein`Private`` the unqualified public name `TragerIntegrateCurve` did not
+  resolve: `Trager`` was not on the package's `$ContextPath`, only `Trager`Private``. The parser
+  created a new, undefined `Bronstein`Private`TragerIntegrateCurve`, so the call stayed
+  unevaluated. `r["Algebraic"]` of that unevaluated call "contained x", and the stage issued
+  a NonElementary certificate for four integrands that are elementary by construction.
+  The random-derivative property test caught it, not a hand-picked example.
+- Rule: a certificate (or any "no") must come from a RECOGNISED positive answer: a
+  `{"not elementary", _}` list, `ElementaryIntegralQ` False, `LogReducible` False, an
+  inconsistent linear system. Validate the shape of every result a certificate is read
+  from (an Association with the expected keys, a polynomial in the expected variables).
+  Treat an unexpected shape as Internal (a decline). Never treat "not of the good form" as "proved bad".
+- Rule: in a `.m` package, qualify every public name of another package (`Risch`...`,
+  `Trager`...`), or put that package's context on the path. Add a suite assertion that
+  no capitalised short name lands in the private context: that is the signature of an
+  unresolved call.

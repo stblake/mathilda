@@ -7,9 +7,9 @@ Living plan: src/internal/bronstein/BRONSTEIN_PLAN.md (phases, design, progress 
 - [x] 2. Tower.m, Poly.m, Curve.m
 - [x] 3. Hermite.m, LimitedIntegrate.m, AlgebraicPart.m (Special.m folded in)
 - [x] 4. Puiseux.m, Special.m (exp), Residues.m
-- [ ] 5. Divisors.m, Specialize.m
-- [ ] 6. LogPart.m, AlgebraicPart.m
-- [ ] 7. Pipeline.m + Method -> "Bronstein"
+- [x] 5. Divisors.m, Specialize.m
+- [x] 6. LogPart.m
+- [x] 7. Pipeline.m + Method -> "Bronstein" (v0.6518)
 - [ ] 8. Trager + Bronstein cascade stages
 - [ ] 9 / 9b. FriCAS stress; integral generator + benchmark 256
 - [ ] 10-11. Shape B

@@ -1531,6 +1531,74 @@ static Expr* try_trager(Expr* f, Expr* x, const char* head) {
 }
 
 /* ------------------------------------------------------------------------- *
+ * Method: Bronstein.
+ * ------------------------------------------------------------------------- *
+ * Bronstein's algorithm for mixed algebraic-transcendental integrands with ONE
+ * radical on top of a Log/Exp tower (Bronstein 1990, "Integration of
+ * elementary functions"; Integrate[f, x, Method -> "Bronstein"]).  Written in
+ * Mathilda's own language in src/internal/bronstein/ and loaded on first use
+ * (it loads the Trager package, which it builds on).  The worker
+ * Bronstein`BronsteinIntegrate[f, x] returns the antiderivative (verified by
+ * PossibleZeroQ before it is returned), {"not elementary", reason} -- a proof
+ * -- or {"failed", reason}. */
+static unsigned bronstein_load_gen = 0;   /* symtab_generation() of the attempt */
+static bool bronstein_load_succeeded = false;
+
+static void bronstein_lazy_load(void) {
+    if (bronstein_load_gen == symtab_generation()) return;
+    bronstein_load_gen = symtab_generation();
+    if (mathilda_load_module("bronstein/Bronstein.m")) {
+        bronstein_load_succeeded = true;
+        return;
+    }
+    mth_message("Integrate`Bronstein", "nofile",
+        "cannot locate src/internal/bronstein/Bronstein.m on disk.");
+}
+
+/* Integrate`Bronstein[f, x]: same async-defer / message-suppression discipline
+ * as the Trager symbol; a {"not elementary", ...} certificate is announced as
+ * Integrate::nonelem after both regions are popped. */
+static Expr* builtin_integrate_bronstein(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    if (tc_async_region_active()) return NULL;   /* no nested heavy method */
+    bronstein_lazy_load();
+    if (!bronstein_load_succeeded) return NULL;
+
+    Expr* args[2] = { expr_copy(res->data.function.args[0]),
+                      expr_copy(res->data.function.args[1]) };
+    Expr* call = expr_new_function(expr_new_symbol("Bronstein`BronsteinIntegrate"), args, 2);
+    tc_async_defer_push();
+    mth_msg_suppress_push();
+    Expr* result = integrate_method_eval_guarded(call);
+    mth_msg_suppress_pop();
+    tc_async_defer_pop();
+    expr_free(call);
+    if (pmt_is_nonelementary_certificate(result))
+        integrate_announce_nonelementary(res->data.function.args[0],
+                                         res->data.function.args[1]);
+    return result;   /* antiderivative, or a {"not elementary"|"failed", reason} List */
+}
+
+/* Method -> "Bronstein" stage: decline (leave Integrate unevaluated) unless
+ * the method symbol returned an antiderivative. */
+static Expr* try_bronstein(Expr* f, Expr* x) {
+    const char* head = "Integrate`Bronstein";
+    Expr* result = call_stage(head, f, x);
+    if (!result) return NULL;
+    bool decline =
+        result_is_unresolved(result, head) ||
+        (result->type == EXPR_FUNCTION &&
+         result->data.function.head->type == EXPR_SYMBOL &&
+         result->data.function.head->data.symbol.name == SYM_List) ||
+        result_contains_head(result, "Bronstein`BronsteinIntegrate");
+    if (decline) {
+        expr_free(result);
+        return NULL;
+    }
+    return result;
+}
+
+/* ------------------------------------------------------------------------- *
  * Stage: ParallelMixedSpecial.
  * ------------------------------------------------------------------------- *
  * The SPECIAL-FUNCTION stage of the same parallel (Risch-Norman) method: the
@@ -1756,6 +1824,7 @@ typedef enum {
     METHOD_PARALLEL_MIXED_SPECIAL,
     METHOD_TRAGER,           /* Trager's algorithm, simple radicals (src/internal/trager) */
     METHOD_TRAGER_KAUERS,    /* the same with Kauers' log-part heuristic */
+    METHOD_BRONSTEIN,        /* Bronstein 1990: one radical over a Log/Exp tower (src/internal/bronstein) */
     METHOD_UNDEFINED,
     METHOD_NEWTON_LEIBNIZ,   /* definite-only: selects the real-axis FTC mechanism */
     METHOD_LINE_INTEGRAL,    /* definite-only: selects the complex contour mechanism */
@@ -1799,6 +1868,7 @@ static IntegrateMethod method_from_string(const char* s) {
     if (strcmp(s, "ParallelMixedSpecial") == 0) return METHOD_PARALLEL_MIXED_SPECIAL;
     if (strcmp(s, "Trager") == 0) return METHOD_TRAGER;
     if (strcmp(s, "TragerKauers") == 0) return METHOD_TRAGER_KAUERS;
+    if (strcmp(s, "Bronstein") == 0) return METHOD_BRONSTEIN;
     if (strcmp(s, "Undefined")   == 0) return METHOD_UNDEFINED;
     if (strcmp(s, "NewtonLeibniz") == 0) return METHOD_NEWTON_LEIBNIZ;
     if (strcmp(s, "LineIntegral") == 0) return METHOD_LINE_INTEGRAL;
@@ -3205,7 +3275,7 @@ Expr* builtin_integrate(Expr* res) {
             static uint64_t last_warned_hash = 0;
             uint64_t h = expr_hash(res);
             if (h != last_warned_hash) {
-                mth_message("Integrate", "method", "Method option value is not one of \"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", \"LinearRadicals\", \"QuadraticRadicals\", \"LinearRatioRadicals\", \"ChebychevAlgebraic\", \"GoursatAlgebraic\", \"Weierstrass\", \"RischTranscendental\", \"CRCTable\", \"GRTable\", \"ParallelMixedTower\", \"ParallelMixedSpecial\", \"Trager\", \"TragerKauers\", \"NewtonLeibniz\", \"LineIntegral\".");
+                mth_message("Integrate", "method", "Method option value is not one of \"Automatic\", \"BronsteinRational\", \"DerivativeDivides\", \"LinearRadicals\", \"QuadraticRadicals\", \"LinearRatioRadicals\", \"ChebychevAlgebraic\", \"GoursatAlgebraic\", \"Weierstrass\", \"RischTranscendental\", \"CRCTable\", \"GRTable\", \"ParallelMixedTower\", \"ParallelMixedSpecial\", \"Trager\", \"TragerKauers\", \"Bronstein\", \"NewtonLeibniz\", \"LineIntegral\".");
                 last_warned_hash = h;
             }
             return NULL;
@@ -3510,6 +3580,9 @@ Expr* builtin_integrate(Expr* res) {
         case METHOD_TRAGER_KAUERS:
             result = try_trager(effective_f, x, "Integrate`TragerKauers");
             break;
+        case METHOD_BRONSTEIN:
+            result = try_bronstein(effective_f, x);
+            break;
         case METHOD_UNDEFINED:
             result = try_undefined(effective_f, x);
             break;
@@ -3637,6 +3710,20 @@ void integrate_init(void) {
         "incomplete: it returns {\"failed\", reason} where the heuristic does not "
         "close. Non-elementarity certificates come only from the shared Hermite and "
         "residue stages.");
+    /* The Bronstein method symbol (lazy-loads src/internal/bronstein/Bronstein.m). */
+    symtab_add_builtin("Integrate`Bronstein", builtin_integrate_bronstein);
+    symtab_get_def("Integrate`Bronstein")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Integrate`Bronstein",
+        "Integrate`Bronstein[f, x] integrates f, an elementary function of x built from "
+        "rational operations, logarithms, exponentials and one radical whose radicand "
+        "involves the top transcendental monomial, by Bronstein's algorithm (Bronstein "
+        "1990): Hermite reduction at the normal places, reduction at the special places, "
+        "residues and the resultant criterion, residue divisors over the coefficient "
+        "field Q(x, ...) with torsion orders by specialization, and the algebraic part "
+        "by a certified Risch differential equation. Purely algebraic integrands go to "
+        "Trager's algorithm, purely transcendental ones to the transcendental Risch "
+        "algorithm. It returns the antiderivative (verified), {\"not elementary\", "
+        "reason} -- a proof, also announced as Integrate::nonelem -- or {\"failed\", reason}.");
     /* The ParallelMixedSpecial method symbol (lazy-loads
      * src/internal/ParallelMixedSpecial.m, which loads Part II itself). */
     symtab_add_builtin("Integrate`ParallelMixedSpecial", builtin_integrate_pms);
@@ -3684,6 +3771,7 @@ void integrate_init(void) {
         "  \"Trager\"             — Integrate`Trager (Trager 1984: complete algorithm for one radical r(x)^(1/n) over Q;\n"
         "                          decides elementarity, torsion by reduction mod p; not in the Automatic cascade)\n"
         "  \"TragerKauers\"       — Integrate`TragerKauers (the same with Kauers' 2008 Groebner heuristic for the log part)\n"
+        "  \"Bronstein\"          — Integrate`Bronstein (Bronstein 1990: one radical over a Log/Exp tower; decides elementarity)\n"
         "  \"Undefined\"          — Integrate`Undefined (unknown functions u[x], u'[x]; Roach §1.7)\n"
         "  \"NewtonLeibniz\"       — real definite integrals via F(b)-F(a) (implicit for the {x,a,b} form)\n"
         "  \"LineIntegral\"        — complex contour integrals (implicit for the {x,z0,...,zn} form)\n"

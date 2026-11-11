@@ -142,7 +142,7 @@ elementInverse[F_Association, B_Association, h_List] := Module[{x = B["x"], M, d
   If[det === 0, throwInternal["elementInverseZero"]];
   nrm = kMonic[F, kNorm[F, det], x];
   (* over a prime field the norm is det itself: the cofactor is a constant *)
-  cof = If[F["Type"] === "NF", kExactQuo[F, nrm, det, x], kInv[F, kLC[F, det, x]]];
+  cof = If[fieldExtQ[F], kExactQuo[F, nrm, det, x], kInv[F, kLC[F, det, x]]];
   {kc[F, # cof] & /@ adj1, nrm, det}];
 
 jacReduce::usage = "jacReduce[F, Bt, J, n, track] reduces the degree-0 divisor D = D_fin + n P, given J = I(-D_fin): it returns {Jnew, s, h} with D + div(h) = A - s P, A >= 0 of degree s, Jnew = I(-A) = h^(-1) J, and h (coordinates over F[t], divided by J's denominator) the element of greatest order at P in J (None unless track, default True).";

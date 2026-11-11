@@ -38,21 +38,28 @@
 (*   Puiseux.m     expansions at theta = 0 and infinity (binomial series)     *)
 (*   Special.m     reduction at the special places (exponential theta)        *)
 (*   Residues.m    R(z) and the resultant criterion; special-place residues   *)
+(*   Divisors.m    residue divisors over k(t), principal generators           *)
+(*   Specialize.m  torsion order by specialization of k                       *)
+(*   LogPart.m     log part, weight-1 projection, remainder                   *)
+(*   Pipeline.m    components, reassembly, verification, BronsteinIntegrate  *)
 (*                                                                            *)
-(* Further stages (Tower, Poly, Curve, RDE, LimitedIntegrate, Hermite,        *)
-(* Special, Puiseux, Residues, Divisors, Specialize, LogPart, AlgebraicPart,  *)
-(* Pipeline) land phase by phase; see BRONSTEIN_PLAN.md.                      *)
+(* Shape B (radical below the tower) is a later phase; see BRONSTEIN_PLAN.md. *)
 (* ========================================================================== *)
 
 LoadModule["trager/Trager.m"];
 BeginPackage["Bronstein`", {"Mathilda`"}];
 
+BronsteinIntegrate::usage = "BronsteinIntegrate[f, x] integrates f, an elementary function of x built from rational operations, logarithms, exponentials and ONE radical (n-th root) whose radicand involves the top transcendental monomial (Bronstein 1990). It returns an antiderivative (verified), {\"not elementary\", reason} (a certificate), or {\"failed\", reason} (out of scope or undecided).";
+
 Begin["`Private`"];
 
-(* Short names of Trager's private routines resolve while the siblings are    *)
-(* read.  Every Bronstein definition is br-prefixed, so no Trager symbol is   *)
-(* (re)defined from here.                                                     *)
-$ContextPath = Append[$ContextPath, "Trager`Private`"];
+(* Short names of Trager's public and private routines resolve while the     *)
+(* siblings are read.  Every Bronstein definition is br-prefixed, so no Trager *)
+(* symbol is (re)defined from here.  A public name of another package that is *)
+(* NOT on this path would silently become a new, undefined Bronstein`Private` *)
+(* symbol (an unevaluated call): qualify such names (Risch`..., Integrate`...) *)
+(* -- the suites assert that no capitalised symbol lands in this context.    *)
+$ContextPath = Join[$ContextPath, {"Trager`", "Trager`Private`"}];
 
 LoadModule["bronstein/Common.m"];
 LoadModule["bronstein/RDE.m"];
@@ -65,6 +72,10 @@ LoadModule["bronstein/AlgebraicPart.m"];
 LoadModule["bronstein/Puiseux.m"];
 LoadModule["bronstein/Special.m"];
 LoadModule["bronstein/Residues.m"];
+LoadModule["bronstein/Divisors.m"];
+LoadModule["bronstein/Specialize.m"];
+LoadModule["bronstein/LogPart.m"];
+LoadModule["bronstein/Pipeline.m"];
 
 End[];
 EndPackage[];

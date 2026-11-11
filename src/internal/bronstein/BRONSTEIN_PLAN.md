@@ -492,10 +492,10 @@ antiderivative.** The generator is `tools/integral_generator/generate.m`, run by
   Suite `hermite_special`. [B] p.134 and p.158 close end to end through a temporary driver.
 - [x] **4. Residues.** `Puiseux.m`, `Residues.m` (normal, log-∞, exp-0/∞). Suite `residues`.
   The p.139 certificate.
-- [ ] **5. Divisors and torsion.** `Divisors.m`, `Specialize.m`. Suite `divisors_torsion`.
-- [ ] **6. Log and algebraic parts.** `LogPart.m`, `AlgebraicPart.m`. The p.147 example
+- [x] **5. Divisors and torsion.** `Divisors.m`, `Specialize.m`. Suite `divisors_torsion`.
+- [x] **6. Log and algebraic parts.** `LogPart.m`, `AlgebraicPart.m`. The p.147 example
   closes.
-- [ ] **7. Pipeline and C method glue.** `Pipeline.m`, `Bronstein.m`; `Method -> "Bronstein"`,
+- [x] **7. Pipeline and C method glue.** `Pipeline.m`, `Bronstein.m`; `Method -> "Bronstein"`,
   `Integrate`Bronstein`; suite `integrate`. Docs: `docs/spec/builtins/calculus.md` (Method
   list plus an `Integrate`Bronstein` subsection: algorithm, scope, decline rules, examples),
   the changelog `docs/spec/changelog/2026-11-09.md` (or the current week's), the Integrate
@@ -722,4 +722,57 @@ Next: Phase 5.
   divisors supported at finite normal places, and decline when a special
   residue is nonzero; record it.
 - `Specialize.m`: torsion by specialisation.
+
+### 2026-11-12 — Phases 5–7 (session 1), v0.6518
+
+- **`Divisors.m`**:
+  - residue field = Trager's `residueField` and `qBasis` (over Q), lifted to
+    `fieldFn[{x, lower}, {t, mu, theta}]`;
+  - divisor ideals = Trager's `divisorIdeal` with the tower-derivative `Ep`;
+  - principality = Trager's `principalGenerator`.
+- **Special-place divisors (genus 0).** Shift frame θ = a + 1/u, Ŷ = Y u^k:
+  - unramified special places are point ideals (u − u0, Ŷ − w);
+  - ramified ones use Trager's `placeIdealAt`;
+  - finite residue places are rewritten in the frame (`residueIdeal` with
+    `(N̂, Ê)`);
+  - the field also contains the roots of `z^m − κ`.
+
+  Genus ≥ 1 with nonzero special residues declines; it would need the special
+  places carried through the specialised torsion computation.
+- **`Specialize.m`**: torsion order by a good specialisation. The goodness checks
+  are deg G, the squarefree profile, Bp degree/squarefree/coprime, denominators,
+  and the residue-place degrees. Trager's `torsionOrderSpec` gets a context with
+  `N̄ ≡ N·Bp'/(DE) mod Bp`, so its d/dθ frames carry the same places. Then
+  generic principality of N·δ.
+  - Order 3 over Q(x) is found (`y² = θ³ + x²`).
+  - The lifted Nagell–Lutz point is certified.
+- **`LogPart.m`**: L = Σ(β/N) log u, projected to weight 1 as L − (1/m)Σ log Norm(u);
+  m ≥ 3 with nonzero weight-≥2 coordinates declines.
+- **`Pipeline.m`**: `BronsteinIntegrate`, with these hand-offs:
+  - no radical → transcendental Risch;
+  - no kernel → Trager;
+  - Shape B with a Möbius radicand → flattened;
+  - otherwise Shape B declines.
+
+  Components are assembled and the final check is `antiderivativeQ`.
+- **C**: `METHOD_BRONSTEIN`, `Integrate`Bronstein`, `try_bronstein`.
+- **Exp special values with γ = G0^{1/m} ∉ C·k** (`brRadicalValueCheck`). By the
+  Galois weight of γ, the η-coefficient is 0, and the condition becomes "∫γw is
+  pure logs" (Def 2.21) or "∫γ a1 is purely algebraic" (Def 2.10), decided by
+  Trager over Q(x). For a non-empty lower tower it declines.
+- **FALSE CERTIFICATE found and fixed.** An unqualified `TragerIntegrateCurve`
+  stayed unevaluated because `Trager`` was not on the package path; see
+  `tasks/lessons.md` and memory `feedback-certificate-from-positive-evidence`.
+  Two other certificate sites (`brExpValueIntegral`, `brResultantCriterion`) now
+  validate shapes too.
+- Suites: `bronstein_divisors_torsion_tests` (51), `bronstein_integrate_tests` (68,
+  including 16 random derivatives with 0 wrong verdicts).
+
+Next: Phase 8 (cascade).
+- The patch is prepared in this session: gates `Integrate`CascadeGateQ`, budgets
+  `$TragerCascadeBudget`/`$BronsteinCascadeBudget` (default 10 s), and a
+  `cascade_nonelem` local flag that skips PMT/Goursat. The suite is
+  `tests/test_integrate_cascade_trager_bronstein.c`.
+- Then measure the stage profile and run the full ctest.
+- Presentation polish: `Log[-E^x]` → x; `Log[x^6]/2` → 3 Log[x].
 
