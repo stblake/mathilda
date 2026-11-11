@@ -49,6 +49,9 @@
 /* Upper bound on the number of factors a finite explicit expansion will
  * multiply before giving up (a runaway guard, not a correctness limit). */
 #define PRODUCT_MAX_FINITE_TERMS 100000000LL
+/* Ranges of at most this many factors are enumerated before the closed-form
+ * cascade (see product_one_spec). */
+#define PRODUCT_ENUMERATE_MAX 10000.0
 
 /* Ceiling for the compiled machine fast path (product_try_compiled), well above
  * PRODUCT_MAX_FINITE_TERMS: the compiled accumulator allocates nothing per
@@ -222,12 +225,31 @@ static Expr* dispatch_indef(ProdMethod method, Expr* f, Expr* var) {
 
 /* Build Times[terms...] from a count of owned term Expr*, evaluate, and free
  * the array.  An empty product is 1 (the multiplicative identity). */
+/* Multiply terms[0..count) by balanced binary splitting: one flat Times[...]
+ * multiplies its numbers in sequence, which is quadratic in the size of the
+ * running product (Product[1 + 1/k^2, {k, 1, 9000}] took 11 s), while halving
+ * keeps the operands of equal size.  Times is Flat and Orderless, so the
+ * canonical result is the same.  Consumes the terms (not the array). */
+#define FOLD_TIMES_LEAF 32
+static Expr* fold_times_range(Expr** terms, size_t count) {
+    if (count <= FOLD_TIMES_LEAF) {
+        Expr** args = malloc(sizeof(Expr*) * (count ? count : 1));
+        for (size_t i = 0; i < count; i++) args[i] = terms[i];
+        Expr* times = expr_new_function(expr_new_symbol(SYM_Times), args, count);
+        free(args);
+        return eval_and_free(times);
+    }
+    size_t h = count / 2;
+    Expr* left = fold_times_range(terms, h);
+    Expr* right = fold_times_range(terms + h, count - h);
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times),
+                                           (Expr*[]){ left, right }, 2));
+}
+
 static Expr* fold_times(Expr** terms, size_t count) {
     if (count == 0) { free(terms); return expr_new_integer(1); }
-    Expr* times = expr_new_function(expr_new_symbol(SYM_Times), terms, count);
+    Expr* r = fold_times_range(terms, count);
     free(terms);
-    Expr* r = evaluate(times);
-    expr_free(times);
     return r;
 }
 
@@ -256,9 +278,22 @@ static Expr* expand_list(Expr* f, Expr* var, Expr* list) {
  * Exact value stepping mirrors Do/Sum: curr_e is advanced via Plus[curr_e, di]
  * while a synchronised double drives the termination test.
  */
+static Expr* expand_range_first(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
+                                double min_val, double max_val, double di_val,
+                                bool is_real, Expr* first);
 static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
                           double min_val, double max_val, double di_val,
                           bool is_real) {
+    return expand_range_first(f, var, imin, imax, di, min_val, max_val, di_val,
+                              is_real, NULL);
+}
+
+/* expand_range with the first factor already evaluated (the compiled path's
+ * probe, owned here; NULL when none): each factor is evaluated exactly once,
+ * as in the reference. */
+static Expr* expand_range_first(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
+                                double min_val, double max_val, double di_val,
+                                bool is_real, Expr* first) {
     size_t cap = 16, count = 0;
     Expr** terms = malloc(sizeof(Expr*) * cap);
 
@@ -271,11 +306,16 @@ static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
                                val, max_val, di_val)) {
         if ((int64_t)count >= PRODUCT_MAX_FINITE_TERMS) { overflow = true; break; }
 
-        Expr* i_val = is_real ? expr_new_real(val) : expr_copy(curr_e);
-        iter_bind(var, i_val);
         if (count == cap) { cap *= 2; terms = realloc(terms, sizeof(Expr*) * cap); }
-        terms[count++] = evaluate(f);
-        expr_free(i_val);
+        if (first) {
+            terms[count++] = first;
+            first = NULL;
+        } else {
+            Expr* i_val = is_real ? expr_new_real(val) : expr_copy(curr_e);
+            iter_bind(var, i_val);
+            terms[count++] = evaluate(f);
+            expr_free(i_val);
+        }
 
         /* advance curr_e and val */
         Expr* nargs[2] = { expr_copy(curr_e), expr_copy(di) };
@@ -291,6 +331,7 @@ static Expr* expand_range(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr* di,
     }
     expr_free(curr_e);
     iter_spec_restore(var, saved);
+    if (first) expr_free(first);   /* empty range: the probe is not a factor */
 
     if (overflow) {
         for (size_t i = 0; i < count; i++) expr_free(terms[i]);
@@ -460,9 +501,13 @@ static Expr* product_try_compiled_mpfr(Expr* f, const IterSpec* s, long bits,
  * the interpreter, and declines the empty range so expand_range folds the
  * identity 1.
  */
+/* `first_out` (may be NULL) receives the probe -- the body's value at the
+ * first index -- so an enumeration after a decline does not evaluate that
+ * term a second time (a body with side effects must run once per index).
+ * The caller owns it, and frees it when this returns a result. */
 static Expr* product_try_compiled(Expr* f, const IterSpec* s,
                                   double min_val, double max_val, double di_val,
-                                  bool is_real) {
+                                  bool is_real, Expr** first_out) {
     if (!autocompile_enabled() || s->var->type != EXPR_SYMBOL) return NULL;
 
     bool nonempty = (di_val > 0) ? (min_val <= max_val + 1e-14)
@@ -480,7 +525,7 @@ static Expr* product_try_compiled(Expr* f, const IterSpec* s,
 #ifdef USE_MPFR
     long mbits = inexact ? 0 : prod_probe_mpfr_bits(probe);
 #endif
-    expr_free(probe);
+    if (first_out) *first_out = probe; else expr_free(probe);
     expr_free(first_val);
     iter_spec_restore(s->var, saved);
 #ifdef USE_MPFR
@@ -544,8 +589,28 @@ static Expr* product_one_spec(Expr* f, Expr* spec, ProdMethod method) {
     IterSpec s;
     if (!iter_spec_parse_lattice(spec, &s)) return NULL;
 
-    /* Product needs a named iterator; a bare-count {n} is not a valid spec. */
-    if (s.kind == ITER_KIND_COUNT) { iter_spec_free(&s); return NULL; }
+    /* A single-element iterator {c}: c copies of the body (c real), or the
+     * indefinite form (c a free symbol); see iter_count_spec_for_sum.  A
+     * bare count without braces stays unevaluated, as in the reference. */
+    if (s.kind == ITER_KIND_COUNT) {
+        Expr* conv = NULL;
+        IterCountKind k = iter_count_spec_for_sum(spec, &s, "Product", "Product`Private`count$", &conv);
+        iter_spec_free(&s);
+        Expr* r = NULL;
+        if (k == ITER_COUNT_INDEFINITE) {
+            r = dispatch_indef(method, f, conv);
+        } else if (k == ITER_COUNT_RANGE) {
+            r = product_one_spec(f, conv, method);
+            /* the dummy never occurs in f, so an answer that mentions it is an
+             * unevaluated range form: keep the original call instead */
+            if (r && iter_expr_mentions_symbol(r, conv->data.function.args[0]->data.symbol.name)) {
+                expr_free(r);
+                r = NULL;
+            }
+        }
+        if (conv) expr_free(conv);
+        return r;
+    }
 
     if (s.kind == ITER_KIND_LIST) {
         Expr* r = expand_list(f, s.var, s.list);
@@ -593,16 +658,28 @@ static Expr* product_one_spec(Expr* f, Expr* spec, ProdMethod method) {
          * microseconds -- the whole cost of a contour integral that samples
          * such a product thousands of times.  An exact body declines at the
          * one-term probe and keeps the exact closed form. */
-        Expr* comp = product_try_compiled(f, &s, min_val, max_val, di_val, is_real);
-        if (comp) { iter_spec_free(&s); return comp; }
-        if (!is_real && di_val == 1.0 && min_val <= max_val && !index_pred_body) {
+        Expr* first = NULL;
+        Expr* comp = product_try_compiled(f, &s, min_val, max_val, di_val, is_real, &first);
+        if (comp) { if (first) expr_free(first); iter_spec_free(&s); return comp; }
+        /* A short range is enumerated before the closed-form cascade, as the
+         * reference does ("i is assigned a sequence of values, with f
+         * evaluated for each"): the cascade evaluates the body at a symbolic
+         * index, so a body with side effects ran the wrong number of times
+         * (k = 0; Product[k++; 2, {i, 4}] left k == 3).  Longer ranges keep the
+         * closed form first, where it is far cheaper than multiplying out
+         * every exact factor (Product[k, {k, 10^5}] is a Factorial). */
+        double nterms = (max_val - min_val) / di_val + 1.0;
+        bool enumerate_first = nterms <= (double)PRODUCT_ENUMERATE_MAX;
+        if (!is_real && di_val == 1.0 && min_val <= max_val && !index_pred_body
+            && !enumerate_first) {
+            if (first) { expr_free(first); first = NULL; }
             IterShadow saved = iter_spec_shadow(s.var);
             Expr* cf = dispatch_def(method, f, s.var, s.imin, s.imax);
             iter_spec_restore(s.var, saved);
             if (cf) { iter_spec_free(&s); return cf; }
         }
-        Expr* r = expand_range(f, s.var, s.imin, s.imax, s.di,
-                               min_val, max_val, di_val, is_real);
+        Expr* r = expand_range_first(f, s.var, s.imin, s.imax, s.di,
+                                     min_val, max_val, di_val, is_real, first);
         if (r) { iter_spec_free(&s); return r; }
         /* Span too large to enumerate: an ordinary body may still telescope, but
          * an index-predicate body would give the wrong closed form, so leave the

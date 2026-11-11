@@ -4684,6 +4684,13 @@ each algorithm also exposed as a context-qualified builtin
 
 - `Sum[f, {i, imax}]` — sum of `f` for `i` from `1` to `imax`.
 - `Sum[f, {i, imin, imax}]` — `i` from `imin` to `imax`.
+- `Sum[f, {n}]` — `n` copies of `f`, each evaluated separately (v0.6509):
+  `Sum[a, {3}]` is `3 a`, `Block[{k = 0}, Sum[k++, {4}]]` is `6`. A real `n` takes
+  `Floor[n]` terms (`{Pi}` gives 3, `{2.5}` gives 2, `{n <= 0}` gives `0`). A free
+  symbol is the indefinite sum, so `Sum[n^2, {n}]` is `Sum[n^2, n]`. Any other
+  `n` (a string, `-n`, a non-real number) gives `Sum::vloc` (`Sum::iterb` for a
+  non-real number) and the call stays unevaluated. A bare `Sum[f, 3]` without
+  braces stays unevaluated, as in the reference.
 - `Sum[f, {i, imin, imax, di}]` — step `di`.
 - `Sum[f, {i, {i1, i2, ...}}]` — successive values from an explicit list.
 - `Sum[f, {i, ...}, {j, ...}, ...]` — multiple (nested) sums; the
@@ -5025,14 +5032,23 @@ each exposed as a context-qualified builtin (`Product`Telescoping`,
 
 - `Product[f, {i, imax}]` — product of `f` for `i` from `1` to `imax`.
 - `Product[f, {i, imin, imax}]` — `i` from `imin` to `imax`.
+- `Product[f, {n}]` — `n` copies of `f` (v0.6509), read as for `Sum`:
+  `Product[a, {3}]` is `a^3`. For a free symbol it is the indefinite product,
+  so `Product[a, {n}]` is `a^(-1 + n)`, the reference's convention.
 - `Product[f, {i, imin, imax, di}]` — step `di`.
 - `Product[f, {i, {i1, i2, ...}}]` — successive values from a list.
 - `Product[f, {i, ...}, {j, ...}, ...]` — multiple (nested) products.
 - `Product[f, i]` — the indefinite product (anti-quotient).
 
-A finite, unit-step, integer range with a closed-form body first tries
-the method cascade below (cost independent of span width); otherwise the
-product expands term-by-term.  **Empty or reversed ranges fold to `1`**
+A finite numeric range of at most 10^4 factors is enumerated, and each factor
+is evaluated exactly once (v0.6509), as in the reference:
+`Block[{k = 0}, Product[k++; 2, {i, 4}]; k]` is `4`. It was `3`, because the
+compiled path's probe and the closed-form cascade had also evaluated the body.
+The factors are multiplied by balanced binary splitting, so
+`Product[1 + 1/k^2, {k, 1, 9000}]` takes 0.05 s; multiplied in sequence it
+took 11 s. A longer unit-step, integer range with a closed-form body first
+tries the method cascade below (cost independent of span width); otherwise
+the product expands term-by-term.  **Empty or reversed ranges fold to `1`**
 (the multiplicative identity), not `0`.  Symbolic bounds, the indefinite
 form, and `imax == Infinity` go to the cascade; if none applies the
 `Product[...]` is returned unevaluated.  The `Automatic` cascade runs

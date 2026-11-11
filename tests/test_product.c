@@ -241,6 +241,30 @@ int main(void) {
     /* precision is kept */
     check("With[{z = N[Exp[I/3]/2, 50]}, Precision[Product[1 - z^k, {k, 1, 30}]]]", "50.0");
 
+    /* A single-element iterator {c} (see test_sum.c): c copies of the factor,
+     * or the indefinite product for a free symbol (the reference's
+     * a^(-1 + n), the standard indefinite-product convention). */
+    check("Product[a, {3}]", "a^3");
+    check("Product[a, {0}]", "1");
+    check("Product[a, {2.9}]", "a^2");
+    check("Product[a, {n}]", "a^(-1 + n)");
+    check("Product[n, {n}] === Product[n, n]", "True");
+    check("Check[Product[a, {\"s\"}], \"msg\"]", "\"msg\"");
+    /* Each factor is evaluated exactly once, as in the reference: the
+     * compiled path's probe and the closed-form cascade evaluated the body
+     * as well, so k = 0; Product[k++; 2, {i, 4}] left k == 3. */
+    check("Block[{k = 0}, {Product[k++; 2, {i, 1, 4}], k}]", "{16, 4}");
+    check("Block[{k = 0}, {Product[k++; 2, {4}], k}]", "{16, 4}");
+    check("Block[{k = 0}, {Product[k++; 2.5, {i, 1, 3}], k}]", "{15.625, 3}");
+    /* short ranges enumerate; the forms are the usual ones */
+    check("Product[x - i, {i, 1, 4}]", "(-4 + x) (-3 + x) (-2 + x) (-1 + x)");
+    check("Product[(2 k - 1)/(2 k), {k, 1, 6}]", "231/1024");
+    check("Product[i^2, {i, 1, n}]", "Factorial[n]^2");
+    /* balanced multiplication: 9000 exact rational factors (11 s when they
+     * were multiplied in sequence) */
+    check("Module[{t = First[AbsoluteTiming[p = Product[1 + 1/k^2, {k, 1, 9000}]]]}, "
+          "{t < 2, p === Times @@ Table[1 + 1/k^2, {k, 1, 9000}]}]", "{True, True}");
+
     if (failures) {
         fprintf(stderr, "\n%d/%d product checks FAILED\n", failures, checks);
         return 1;

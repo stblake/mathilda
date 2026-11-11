@@ -254,6 +254,34 @@ int main(void) {
      * closed form is still valid and must NOT be blocked. */
     check("Sum[If[PrimeQ[7], k, -k], {k, 1, 10}]", "55");
 
+    /* A single-element iterator {c}, as in the reference: a real c is c
+     * copies of the summand, each evaluated separately (Floor[c] of them, none
+     * for c <= 0); a free symbol n is the indefinite sum Sum[f, n]; anything
+     * else (a string, -n, a non-real number) is Sum::vloc / Sum::iterb and
+     * stays unevaluated.  Bare Sum[f, 3] (no braces) stays unevaluated. */
+    check("Sum[a, {3}]", "3 a");
+    check("Sum[a, {0}]", "0");
+    check("Sum[a, {-2}]", "0");
+    check("Sum[a, {2.5}]", "2 a");
+    check("Sum[a, {Pi}]", "3 a");
+    check("Sum[a, {3/2}]", "a");
+    check("Sum[a, {1 + 2}]", "3 a");
+    check("Sum[a, {x, 2}, {3}]", "6 a");
+    check("Sum[i j, {i, 2}, {3}]", "9 j");
+    check("Sum[Sum[b, {2}], {3}]", "6 b");
+    check("Sum[a, {10^9}]", "1000000000 a");
+    check("Sum[a, {n}]", "a n");
+    check("Sum[n^2, {n}] === Sum[n^2, n]", "True");
+    check("Module[{m = 4}, Sum[a, {m}]]", "4 a");
+    check("Block[{k = 0}, {Sum[k++, {4}], k}]", "{6, 4}");
+    check("Module[{r}, SeedRandom[1]; r = Table[Sum[RandomInteger[{1, 10^6}], {3}], {5}]; Length[Union[r]]]", "5");
+    check("Quiet[Sum[a, {-n}]]", "Sum[a, {-n}]");
+    check("Check[Sum[a, {-n}], \"msg\"]", "\"msg\"");
+    check("Check[Sum[a, {3 + I}], \"msg\"]", "\"msg\"");
+    check("Sum[a, 3]", "Sum[a, 3]");
+    /* the private dummy iterator never leaks into an answer */
+    check("FreeQ[{Sum[f[q], {2}], Sum[a, {m}]}, _Symbol?(StringMatchQ[SymbolName[#], \"count$*\"] &)]", "True");
+
     if (failures) {
         fprintf(stderr, "\n%d/%d sum checks FAILED\n", failures, checks);
         return 1;

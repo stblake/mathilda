@@ -590,8 +590,28 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
     IterSpec s;
     if (!iter_spec_parse_lattice(spec, &s)) return NULL;
 
-    /* Sum needs a named iterator; a bare-count {n} is not a valid Sum spec. */
-    if (s.kind == ITER_KIND_COUNT) { iter_spec_free(&s); return NULL; }
+    /* A single-element iterator {c}: c copies of the body (c real), or the
+     * indefinite form (c a free symbol); see iter_count_spec_for_sum.  A
+     * bare count without braces stays unevaluated, as in the reference. */
+    if (s.kind == ITER_KIND_COUNT) {
+        Expr* conv = NULL;
+        IterCountKind k = iter_count_spec_for_sum(spec, &s, "Sum", "Sum`Private`count$", &conv);
+        iter_spec_free(&s);
+        Expr* r = NULL;
+        if (k == ITER_COUNT_INDEFINITE) {
+            r = dispatch_indef(method, f, conv);
+        } else if (k == ITER_COUNT_RANGE) {
+            r = sum_one_spec(f, conv, method);
+            /* the dummy never occurs in f, so an answer that mentions it is an
+             * unevaluated range form: keep the original call instead */
+            if (r && iter_expr_mentions_symbol(r, conv->data.function.args[0]->data.symbol.name)) {
+                expr_free(r);
+                r = NULL;
+            }
+        }
+        if (conv) expr_free(conv);
+        return r;
+    }
 
     if (s.kind == ITER_KIND_LIST) {
         Expr* r = expand_list(f, s.var, s.list);

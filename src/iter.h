@@ -93,6 +93,29 @@ bool iter_spec_resolve_numeric(const IterSpec* s, bool allow_inf,
 bool iter_real_value(const Expr* e, double* out);
 
 /*
+ * Sum / Product with a single-element iterator {c} (a COUNT spec from
+ * iter_spec_parse, whose imax holds the evaluated c), read as the reference
+ * does:
+ *   - c a real number (3, 5/2, Pi, 10^9): c copies of the summand, each
+ *     evaluated separately -- *out is the range spec {dummy, 1, c} over a
+ *     fresh private symbol `dummy_name`, so the caller's range engine
+ *     enumerates (side effects run once per term) or takes a closed form;
+ *   - c an unprotected symbol with no value (n): the indefinite form, so
+ *     Sum[n^2, {n}] is Sum[n^2, n] -- *out is a copy of the symbol;
+ *   - anything else ("s", -n, 3 + I, Infinity): `head`::vloc (or ::iterb for
+ *     a non-real number), the call stays unevaluated.
+ * Bare `Sum[f, 3]` (no braces) is not handled here and stays unevaluated.
+ * `spec` is the held spec, `s` its parse; neither is consumed.
+ */
+typedef enum { ITER_COUNT_DECLINE, ITER_COUNT_RANGE, ITER_COUNT_INDEFINITE } IterCountKind;
+IterCountKind iter_count_spec_for_sum(const Expr* spec, const IterSpec* s,
+                                      const char* head, const char* dummy_name,
+                                      Expr** out);
+
+/* True when the symbol named `name` (interned) occurs anywhere in `e`. */
+bool iter_expr_mentions_symbol(const Expr* e, const char* name);
+
+/*
  * Normalise a range {imin, imax, di} whose bounds are not all explicit numbers
  * but are all real numeric (Table[x, {x, 0, 2 Pi, 1.}], {x, Pi, 5},
  * {x, 0, 2 Pi, Pi/2}): replace *imax with the exact last point reached,

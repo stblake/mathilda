@@ -40,6 +40,9 @@
 
 #include "modular.h"
 #include "iter.h"
+#include "message.h"
+#include "print.h"
+#include "attr.h"
 #include "sparse/sparse.h"   /* {i, s}: iterate a SparseArray */
 #include "symtab.h"
 #include "eval.h"
@@ -149,6 +152,48 @@ bool iter_normalize_bounds(const Expr* imin, Expr** imax, const Expr* di) {
     expr_free(*imax);
     *imax = hi_e;
     return true;
+}
+
+bool iter_expr_mentions_symbol(const Expr* e, const char* name) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == name;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (iter_expr_mentions_symbol(e->data.function.head, name)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (iter_expr_mentions_symbol(e->data.function.args[i], name)) return true;
+    return false;
+}
+
+IterCountKind iter_count_spec_for_sum(const Expr* spec, const IterSpec* s,
+                                      const char* head, const char* dummy_name,
+                                      Expr** out) {
+    *out = NULL;
+    if (!spec || !is_list_expr((Expr*)spec) || spec->data.function.arg_count != 1
+        || s->kind != ITER_KIND_COUNT || !s->imax)
+        return ITER_COUNT_DECLINE;
+    const Expr* c = s->imax;
+    double v;
+    if (iter_real_value(c, &v)) {
+        Expr* parts[3] = { expr_new_symbol(dummy_name), expr_new_integer(1),
+                           expr_copy((Expr*)c) };
+        *out = expr_new_function(expr_new_symbol(SYM_List), parts, 3);
+        return ITER_COUNT_RANGE;
+    }
+    if (c->type == EXPR_SYMBOL) {
+        SymbolDef* def = symtab_lookup(c->data.symbol.name);
+        if (!def || !(def->attributes & ATTR_PROTECTED)) {
+            *out = expr_copy((Expr*)c);
+            return ITER_COUNT_INDEFINITE;
+        }
+    }
+    char* cs = expr_to_string((Expr*)c);
+    if (c->type == EXPR_FUNCTION && head_is(c, SYM_Complex))
+        mth_message(head, "iterb", "Iterator {%s} does not have appropriate bounds.", cs ? cs : "");
+    else
+        mth_message(head, "vloc", "The variable %s cannot be localized so that it can be "
+                    "assigned to numerical values.", cs ? cs : "");
+    free(cs);
+    return ITER_COUNT_DECLINE;
 }
 
 /* Set by iter_spec_parse_lattice while it parses: Table, Do, Sum and Product
