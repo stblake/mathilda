@@ -36,6 +36,7 @@
 #include <string.h>
 
 #include "attr.h"
+#include "iter.h"
 #include "eval.h"
 #include "numeric.h"
 #include "sym_names.h"
@@ -202,6 +203,20 @@ Expr* builtin_nprod(Expr* res) {
     size_t pos_end = argc;
     while (pos_end > 0 && np_is_option_arg(args[pos_end - 1])) pos_end--;
     if (pos_end < 2) return NULL;                       /* need f + >=1 spec */
+
+    /* Single-element iterators {c}, by the Product convention: a real c is
+     * c terms, {dummy, 1, c}; anything else is NProduct::itraw (see
+     * iter_numeric_count_specs). */
+    {
+        bool declined = false;
+        Expr* rw = iter_numeric_count_specs(res, pos_end, "NProduct", "NProduct`Private`count$", &declined);
+        if (declined) return NULL;
+        if (rw) {
+            Expr* r = builtin_nprod(rw);
+            expr_free(rw);
+            return r;
+        }
+    }
 
     Expr* body = args[0];
     for (size_t i = 1; i < pos_end; i++)

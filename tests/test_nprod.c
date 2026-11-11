@@ -178,12 +178,25 @@ static void test_memory_loop(void) {
         }
 }
 
+/* Single-element iterators {c}, by the Product convention (v0.6511): a real c
+ * is Floor[c] factors, each evaluated once; anything else is NProduct::itraw. */
+static void test_count_iterator(void) {
+    ASSERT_CLOSE("NProduct[2, {3}]", "8", 1e-12);
+    ASSERT_CLOSE("NProduct[2, {Pi}]", "8", 1e-12);
+    ASSERT_CLOSE("NProduct[3, {0}]", "1", 1e-12);
+    ASSERT_CLOSE("NProduct[1 + 1/k^2, {k, 1, Infinity}, {2}]", "(Sinh[Pi]/Pi)^2", 1e-6);
+    char* s = eval_str("Check[NProduct[2, {n}], \"msg\"]");
+    ASSERT_MSG(strcmp(s, "\"msg\"") == 0, "NProduct[2, {n}] -> %s", s);
+    free(s);
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
     TEST(test_infinite_euler_maclaurin);
     TEST(test_finite);
+    TEST(test_count_iterator);
     TEST(test_step_di);
     TEST(test_method_wynn);
     TEST(test_multidim);

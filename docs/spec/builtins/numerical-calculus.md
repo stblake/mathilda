@@ -546,6 +546,11 @@ residual from a true zero -- `Chop` when needed.
 
 - `NSum[f, {i, imin, imax}]` -- sum with unit step (`{i, imax}` means
   `imin = 1`).
+- `NSum[f, {n}]` -- `Floor[n]` numeric copies of `f`, each evaluated once, by
+  the `Sum[f, {n}]` convention (v0.6511): `NSum[1/2, {4}]` is `2.0` and
+  `NSum[1, {Pi}]` is `3.0`. A non-real `n`, or a symbol (a numeric sum has no
+  indefinite form), gives `NSum::itraw` and the call stays unevaluated. The
+  reference rejects every `{n}` with `::itraw`; Mathilda follows its own `Sum`.
 - `NSum[f, {i, imin, imax, di}]` -- step `di`; terms are reindexed to
   `x_k = imin + k di`.
 - `NSum[f, {i, ...}, {j, ...}, ...]` -- multidimensional sum; an inner bound
@@ -853,7 +858,9 @@ Numerical multiplication.  `NProduct[f, {i, imin, imax}]` gives a numerical
 approximation to the product of `f` for `i` from `imin` to `imax` (which may be
 `Infinity`); `NProduct[f, {i, imin, imax, di}]` uses step `di`, and
 `NProduct[f, {i,…}, {j,…}, …]` is multidimensional (an inner bound may depend on
-an outer index).  Implemented in `src/numerical_calculus/nprod.{c,h}`.
+an outer index). `NProduct[f, {n}]` is `Floor[n]` numeric factors, by the
+`Product[f, {n}]` convention (v0.6511): `NProduct[2, {3}]` is `8.0`. Anything
+else gives `NProduct::itraw`.  Implemented in `src/numerical_calculus/nprod.{c,h}`.
 Attributes: `HoldAll, Protected`.
 
 Per Keiper (1992) the product is evaluated as `Exp[NSum[Log[f], …]]`, reusing

@@ -196,6 +196,53 @@ IterCountKind iter_count_spec_for_sum(const Expr* spec, const IterSpec* s,
     return ITER_COUNT_DECLINE;
 }
 
+Expr* iter_numeric_count_specs(const Expr* call, size_t pos_end, const char* head,
+                               const char* dummy_prefix, bool* declined) {
+    *declined = false;
+    if (!call || call->type != EXPR_FUNCTION) return NULL;
+    size_t argc = call->data.function.arg_count;
+    if (pos_end > argc) pos_end = argc;
+    bool any = false;
+    for (size_t i = 1; i < pos_end; i++) {
+        const Expr* a = call->data.function.args[i];
+        if (is_list_expr((Expr*)a) && a->data.function.arg_count == 1) { any = true; break; }
+    }
+    if (!any) return NULL;
+
+    Expr** args = (Expr**)malloc(sizeof(Expr*) * (argc ? argc : 1));
+    for (size_t i = 0; i < argc; i++) {
+        const Expr* a = call->data.function.args[i];
+        if (i >= 1 && i < pos_end && is_list_expr((Expr*)a) && a->data.function.arg_count == 1) {
+            Expr* c = evaluate(a->data.function.args[0]);
+            double v;
+            if (c && iter_real_value(c, &v)) {
+                char name[96];
+                snprintf(name, sizeof(name), "%s%zu", dummy_prefix, i);
+                /* Floor[c] terms, as Sum[f, {c}] takes ({Pi} is 3): the
+                 * numeric engines want an integer span. */
+                Expr* fl = eval_and_free(expr_new_function(expr_new_symbol(SYM_Floor),
+                                                           (Expr*[]){ c }, 1));
+                Expr* parts[3] = { expr_new_symbol(name), expr_new_integer(1), fl };
+                args[i] = expr_new_function(expr_new_symbol(SYM_List), parts, 3);
+                continue;
+            }
+            char* cs = c ? expr_to_string(c) : NULL;
+            mth_message(head, "itraw", "Raw object %s cannot be used as an iterator.",
+                        cs ? cs : "");
+            free(cs);
+            if (c) expr_free(c);
+            for (size_t j = 0; j < i; j++) expr_free(args[j]);
+            free(args);
+            *declined = true;
+            return NULL;
+        }
+        args[i] = expr_copy((Expr*)a);
+    }
+    Expr* out = expr_new_function(expr_copy(call->data.function.head), args, argc);
+    free(args);
+    return out;
+}
+
 /* Set by iter_spec_parse_lattice while it parses: Table, Do, Sum and Product
  * accept an indexed iterator variable (v[1], ll[k]); the plotters do not. */
 static bool g_iter_allow_indexed = false;

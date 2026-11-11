@@ -112,6 +112,18 @@ IterCountKind iter_count_spec_for_sum(const Expr* spec, const IterSpec* s,
                                       const char* head, const char* dummy_name,
                                       Expr** out);
 
+/*
+ * NSum / NProduct with single-element iterators, by the same convention as
+ * Sum / Product: each spec {c} among call's arguments [1, pos_end) whose c
+ * evaluates to a real number becomes {dummy_i, 1, Floor[c]} over a fresh private
+ * symbol `<dummy_prefix><i>`.  Returns the rewritten copy of `call` (caller
+ * owns it), or NULL when no argument is a single-element spec.  A {c} whose c
+ * is not real (a symbol: a numeric sum has no indefinite form) emits
+ * `head`::itraw and sets *declined (the call then stays unevaluated).
+ */
+Expr* iter_numeric_count_specs(const Expr* call, size_t pos_end, const char* head,
+                               const char* dummy_prefix, bool* declined);
+
 /* True when the symbol named `name` (interned) occurs anywhere in `e`. */
 bool iter_expr_mentions_symbol(const Expr* e, const char* name);
 

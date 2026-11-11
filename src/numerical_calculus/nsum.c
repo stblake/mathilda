@@ -21,6 +21,7 @@
  */
 
 #include "nsum.h"
+#include "iter.h"
 #include "../modular.h"
 
 #include <complex.h>
@@ -3367,6 +3368,20 @@ Expr* builtin_nsum(Expr* res) {
     size_t pos_end = argc;
     while (pos_end > 0 && ns_is_option_arg(res->data.function.args[pos_end - 1])) pos_end--;
     if (pos_end < 2) return NULL;                       /* need f + >=1 spec */
+
+    /* Single-element iterators {c}, by the Sum convention: a real c is
+     * c terms, {dummy, 1, c}; anything else is NSum::itraw (see
+     * iter_numeric_count_specs). */
+    {
+        bool declined = false;
+        Expr* rw = iter_numeric_count_specs(res, pos_end, "NSum", "NSum`Private`count$", &declined);
+        if (declined) return NULL;
+        if (rw) {
+            Expr* r = builtin_nsum(rw);
+            expr_free(rw);
+            return r;
+        }
+    }
     Expr* body = res->data.function.args[0];
     /* positional args [1 .. pos_end) must all be iterator specs. */
     for (size_t i = 1; i < pos_end; i++)

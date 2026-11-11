@@ -572,11 +572,33 @@ static void test_n_of_unevaluated_sum(void) {
     free(s);
 }
 
+/* Single-element iterators {c}, by the Sum convention (v0.6511): a real c is
+ * Floor[c] terms, each evaluated once ({Pi} is 3); anything else (a free
+ * symbol: a numeric sum has no indefinite form) is NSum::itraw. */
+static void test_count_iterator(void) {
+    ASSERT_CLOSE("NSum[1/2, {4}]", "2", 1e-12);
+    ASSERT_CLOSE("NSum[1, {Pi}]", "3", 1e-12);
+    ASSERT_CLOSE("NSum[1, {2.5}]", "2", 1e-12);
+    ASSERT_CLOSE("NSum[1, {0}]", "0", 1e-12);
+    /* the same accuracy as the named form {j, 1, 2} gives */
+    ASSERT_CLOSE("NSum[1/k^2, {k, 1, Infinity}, {2}]", "Pi^2/3", 1e-6);
+    char* s = eval_str("Block[{c = 0}, {NSum[c++, {4}], c}]");
+    ASSERT_MSG(strcmp(s, "{6.0, 4}") == 0, "side effects: %s", s);
+    free(s);
+    s = eval_str("Check[NSum[1, {n}], \"msg\"]");
+    ASSERT_MSG(strcmp(s, "\"msg\"") == 0, "NSum[1, {n}] -> %s", s);
+    free(s);
+    s = eval_str("Quiet[NSum[1, {\"s\"}]]");
+    ASSERT_MSG(strncmp(s, "NSum[", 5) == 0, "NSum[1, {\"s\"}] -> %s", s);
+    free(s);
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
     TEST(test_direct_finite);
+    TEST(test_count_iterator);
     TEST(test_infinite_monotone);
     TEST(test_integer_only_summand);
     TEST(test_alternating);
