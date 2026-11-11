@@ -1436,3 +1436,23 @@ Source: the open items of the sparse linear algebra review (complex Cholesky 76x
 - [x] CharacteristicPolynomial all-rational: FLINT fmpq_mat_charpoly. 40x40: 1.25 → 0.002 s (sympy 0.22).
 - [x] Tests in test_packed_list, test_matfunc, test_eigensystem, test_minors_adjugate, test_characteristicpolynomial, test_cholesky.
 - Open: CharacteristicPolynomial[m, non-symbol] evaluates where the reference gives General::ivar (pre-existing). Complex Cholesky still 2.7x scipy (load + Hermitian check + copy).
+
+## REPL modernisation PR 1: Ctrl-C to $Aborted, persistent history, Tab completion, colour (started 2026-11-11)
+
+Plan: thoughts/shared/plans/2026-11-11-repl-modernize-pr1.md. Research: thoughts/shared/research/2026-11-11-repl-modernize-pr1.md.
+Branch feat/repl-modernize (worktree mathilda-repl). Rules for this PR:
+- No version bump, and no version in commit titles. Versions are assigned at rebase.
+- Shared files get append-only edits: one appended block in tests/CMakeLists.txt, its own REPL changelog heading, no sym_names edits.
+- In core.c, only tc_deadline_passed is touched.
+- The src/term/term_interrupt.h API (mth_interrupt_pending / mth_interrupt_request) is fixed for other branches.
+
+- [ ] Phase 0: baseline worktree /tmp/mathilda-pr1-base (7e7bc9fb) built; tests/pty/repl_pty_test.py; goldens recorded from baseline; appended CMake block with repl_pty_test (skip 77); harness_can_fail seen failing
+- [ ] Phase 1: makefile SRC += src/term, LIB_OBJ filters term_readline.o; term_lex (mth_input_complete moved, lexer context); term_lex_tests; nm libmathilda.a has no rl_ refs
+- [ ] Phase 2: term_interrupt.{c,h} flag API (§4.1); eval poll (loop + stamp fast path); CheckAbort clears; AbortProtect honours; top-level clear; tc_deadline_passed interrupt-aware after the 44-site audit (A/B table in commit body); message gate; Pause sliced; Raylib loops; interrupt_tests (13 cases); kernel suites; perf gate ≤ +1% or noise floor
+- [ ] Phase 3: term_interrupt handler (SA_RESTART, 3 states, double Ctrl-C within 1 s gives _Exit(130)); term_input seam + stdio backend; term_readline (GNU signal hook, libedit degraded); repl.c single loop and Dialog reader; banner; term_interrupt_tests; pty ctrlc_* cases; USE_READLINE=0 builds; manual libedit check
+- [ ] Phase 4: term_history (own escaped format, 0600, truncate at load, MATHILDA_HISTFILE / MATHILDA_HISTSIZE); readline feed; Dialog entries; term_history_tests; pty history_* cases
+- [ ] Phase 5: names_complete; term_complete (symbols, context-aware, options of enclosing head, no evaluate); readline adapter; term_complete_tests; pty complete_* cases
+- [ ] Phase 6: term_color decision (NO_COLOR, CLICOLOR_FORCE, TERM, per-stream isatty; interactive only); mth_message_set_style; coloured In/Out (\001/\002 on GNU); "took" line ≥ 1 s on a tty; term_color_tests; pty color_* and took_line; check-pipe-protocol
+- [ ] Phase 7: docs/spec/repl.md + Mathilda_spec.md row; control-flow.md and time-and-date.md (Pause) updates; Pause docstring; changelog 2026-11-09.md REPL heading; SPEC.md §2/§11; building.md; tutorial + book banner; build.yml pty step
+- [ ] Verify: make clean && make; check-c99/messages/packed-aware/menu-ids/pipe-protocol; USE_READLINE=0 build; ctest -LE nightly (0 FAIL, grep ^FAIL); pty test; valgrind (docker) + leaks vs baseline; reference-name grep on the diff
+- [ ] Review section: audit table, benchmark medians and noise floor, libedit findings, leak numbers, ctest count, follow-ups for PRs 2-4

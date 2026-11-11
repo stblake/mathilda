@@ -6592,3 +6592,16 @@ add_test(NAME osp_famous_tests COMMAND osp_famous_tests)
 add_executable(dsolve_pde_ivp_tests test_dsolve_pde_ivp.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(dsolve_pde_ivp_tests PRIVATE ../src)
 add_test(NAME dsolve_pde_ivp_tests COMMAND dsolve_pde_ivp_tests)
+
+# ---- Interactive terminal layer (src/term/, REPL PR 1) ----------------------
+# Appended as one block so parallel branches never conflict inside COMMON_SRC.
+# repl_pty_test drives the interactive REPL through a pseudo-terminal
+# (tests/pty/), and pins pipe-mode and -file output to goldens recorded from the
+# pre-PR binary. It skips (77) when ./Mathilda has not been built or the host
+# has no pty.
+if(PYTHON3_EXE)
+    add_test(NAME repl_pty_test
+             COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/pty/repl_pty_test.py
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    set_tests_properties(repl_pty_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+endif()

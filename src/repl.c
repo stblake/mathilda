@@ -22,6 +22,7 @@
 #include "version.h"
 #include "quit.h"
 #include "dialog.h"
+#include "term/term_lex.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -158,60 +159,19 @@ void process_input(const char* input, int line_number) {
 
 #ifndef NO_READLINE
 
-/* True when `s` is a syntactically complete Mathilda input: no unterminated
- * "..." string or (* ... *) comment, and every '(', '[' or '{' has a matching
- * closer. Newlines are whitespace to the lexer, so a balanced multi-line
- * buffer parses exactly as its single-line spelling. An *over*-closed buffer
- * (a stray ')') reports complete on purpose: appending text cannot repair it,
- * so it should submit now and let the parser flag the error rather than trap
- * the user on an endlessly growing line. The empty string is complete —
- * submitting it is a harmless no-op the caller skips. This is the predicate
- * behind the smart Return key: complete -> evaluate, incomplete -> open a
- * fresh continuation line.
- *
- * The string/comment lexing here mirrors find_unterminated() exactly (a '"'
- * inside a comment and a "(*" inside a string are both just text, and a
- * backslash escapes the next character inside a string) so the completeness
- * check never disagrees with the real lexer on where a token ends. */
-static int mth_input_complete(const char* s) {
-    int depth = 0;      /* net (), [], {} nesting outside strings/comments   */
-    int comment = 0;    /* (* ... *) nesting depth                           */
-    int in_string = 0;  /* inside a "..." literal                            */
-    for (const char* p = s; *p; ) {
-        if (in_string) {
-            if (*p == '\\' && p[1]) { p += 2; continue; }
-            if (*p == '"') in_string = 0;
-            p++;
-        } else if (comment > 0) {
-            if (p[0] == '(' && p[1] == '*') { comment++; p += 2; }
-            else if (p[0] == '*' && p[1] == ')') { comment--; p += 2; }
-            else p++;
-        } else if (p[0] == '(' && p[1] == '*') {
-            comment++; p += 2;
-        } else if (*p == '"') {
-            in_string = 1; p++;
-        } else {
-            if (*p == '(' || *p == '[' || *p == '{') depth++;
-            else if (*p == ')' || *p == ']' || *p == '}') depth--;
-            p++;
-        }
-    }
-    return !in_string && comment == 0 && depth <= 0;
-}
-
 /* Return key handler: evaluate the buffer once it forms a complete
  * expression, otherwise open a new line so the user can keep typing. This is
  * the terminal-native substitute for a notebook's Shift+Enter — it needs no
  * enhanced-keyboard protocol and works on every terminal. */
 static int mth_smart_return(int count, int key) {
-    if (mth_input_complete(rl_line_buffer ? rl_line_buffer : ""))
+    if (term_lex_input_complete(rl_line_buffer ? rl_line_buffer : ""))
         return rl_newline(count, key);   /* accept the whole buffer */
     rl_insert_text("\n");                /* still open: continue editing */
     return 0;
 }
 
 /* Esc-Return (and Alt/Meta-Return, where the terminal sends it) forces the
- * buffer to be evaluated even while mth_input_complete() still considers it
+ * buffer to be evaluated even while term_lex_input_complete() still considers it
  * open. The escape hatch for a genuine syntax error the user wants to see,
  * so an unbalanced buffer can never trap them on a growing line. */
 static int mth_force_return(int count, int key) {

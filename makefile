@@ -688,7 +688,7 @@ ifeq ($(USE_FFTW), 1)
 endif
 
 SRC_DIR = src
-SRC = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/solve/*.c) $(wildcard $(SRC_DIR)/list/*.c) $(wildcard $(SRC_DIR)/ml/*.c) $(wildcard $(SRC_DIR)/linalg/*.c) $(wildcard $(SRC_DIR)/numbertheory/*.c) $(wildcard $(SRC_DIR)/numbertheory/factorinteger/*.c) $(wildcard $(SRC_DIR)/poly/*.c) $(wildcard $(SRC_DIR)/simp/*.c) $(wildcard $(SRC_DIR)/stats/*.c) $(wildcard $(SRC_DIR)/calculus/*.c) $(wildcard $(SRC_DIR)/sum/*.c) $(wildcard $(SRC_DIR)/product/*.c) $(wildcard $(SRC_DIR)/special_functions/*.c) $(wildcard $(SRC_DIR)/compile/*.c) $(wildcard $(SRC_DIR)/numerical_calculus/*.c) $(wildcard $(SRC_DIR)/numerical_roots/*.c) $(wildcard $(SRC_DIR)/graphics/*.c) $(wildcard $(SRC_DIR)/graph/*.c) $(wildcard $(SRC_DIR)/strings/*.c) $(wildcard $(SRC_DIR)/strings/regex/*.c) $(wildcard $(SRC_DIR)/io/*.c) $(wildcard $(SRC_DIR)/bitwise/*.c) $(wildcard $(SRC_DIR)/sparse/*.c) $(wildcard $(SRC_DIR)/experimental/feyncalc/*.c)
+SRC = $(wildcard $(SRC_DIR)/*.c) $(wildcard $(SRC_DIR)/solve/*.c) $(wildcard $(SRC_DIR)/list/*.c) $(wildcard $(SRC_DIR)/ml/*.c) $(wildcard $(SRC_DIR)/linalg/*.c) $(wildcard $(SRC_DIR)/numbertheory/*.c) $(wildcard $(SRC_DIR)/numbertheory/factorinteger/*.c) $(wildcard $(SRC_DIR)/poly/*.c) $(wildcard $(SRC_DIR)/simp/*.c) $(wildcard $(SRC_DIR)/stats/*.c) $(wildcard $(SRC_DIR)/calculus/*.c) $(wildcard $(SRC_DIR)/sum/*.c) $(wildcard $(SRC_DIR)/product/*.c) $(wildcard $(SRC_DIR)/special_functions/*.c) $(wildcard $(SRC_DIR)/compile/*.c) $(wildcard $(SRC_DIR)/numerical_calculus/*.c) $(wildcard $(SRC_DIR)/numerical_roots/*.c) $(wildcard $(SRC_DIR)/graphics/*.c) $(wildcard $(SRC_DIR)/graph/*.c) $(wildcard $(SRC_DIR)/strings/*.c) $(wildcard $(SRC_DIR)/strings/regex/*.c) $(wildcard $(SRC_DIR)/io/*.c) $(wildcard $(SRC_DIR)/bitwise/*.c) $(wildcard $(SRC_DIR)/sparse/*.c) $(wildcard $(SRC_DIR)/experimental/feyncalc/*.c) $(wildcard $(SRC_DIR)/term/*.c)
 ifneq ($(USE_GRAPHICS), 1)
 SRC := $(filter-out $(SRC_DIR)/graphics/render.c $(SRC_DIR)/graphics/render3d.c $(SRC_DIR)/graphics/label_font.c, $(SRC))
 endif
@@ -741,8 +741,11 @@ $(TARGET): $(OBJ)
 #
 # iOS/Android sandboxes forbid spawning the `mathilda` sidecar, so the kernel is
 # linked directly into the host app via src/ffi/mathilda_ffi.c. The archive is
-# every kernel object EXCEPT repl.o (which carries main() + readline + the stdio
-# pipe loop — none of which belong in an embedded library). The host links this
+# every kernel object EXCEPT repl.o and the readline adapter
+# (src/term/term_readline.o): repl.o carries main() and the stdio pipe loop, the
+# adapter is the only object that calls readline, and none of that belongs in an
+# embedded library. The rest of src/term/ (the interrupt flag, colour, history,
+# completion) is readline-free and stays in. The host links this
 # .a plus -lgmp and provides its own entry point.
 #
 # The default host build works as-is. For a minimal, dependency-light kernel
@@ -750,7 +753,7 @@ $(TARGET): $(OBJ)
 #   make libmathilda.a USE_READLINE=0 USE_THREADS=0 USE_ECM=0 USE_MPFR=0 \
 #        USE_LAPACK=0 USE_GRAPHICS=0 USE_FLINT=0 USE_REGEX=0 USE_FFTW=0
 AR ?= ar
-LIB_OBJ = $(filter-out $(SRC_DIR)/repl.o,$(OBJ)) $(FFI_OBJ)
+LIB_OBJ = $(filter-out $(SRC_DIR)/repl.o $(SRC_DIR)/term/term_readline.o,$(OBJ)) $(FFI_OBJ)
 # Remove any existing archive first: `ar rcs` MERGES into an existing .a rather
 # than replacing it, so without this a cross-arch rebuild (iOS/Android) would
 # leave stale host-arch members (render.o, label_font.o, …) behind, producing
