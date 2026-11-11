@@ -29,7 +29,7 @@ Mathilda is an **untrusted oracle**. The Lean 4 kernel is the **trusted checker*
 The file is header (`set_option autoImplicit false`), prelude, theorem chunks, then a
 **trusted footer** with, per theorem, `example : <statement> := mathilda_cert_k` and
 `#print axioms mathilda_cert_k`. All of the following hold, as checked by
-`` Lean`Internal`VerifySource `` and by the per-theorem attribution in `Lean.m`:
+`` Lean`Internal`VerifySource `` and by the per-theorem attribution in `LeanBackend.m`:
 
 1. No message with severity `error` or kind `hasSorry` falls in the theorem's chunk or its
    footer lines.
@@ -99,7 +99,7 @@ refutation, so it is never `False`.
 ## Architecture
 
 ```
-Certify[comp] ──► Lean.m generator ──► Lean source ──► lean --json ──► verdict ──► ProofObject
+Certify[comp] ──► Lean.m generator (IR) ──► LeanBackend.m encoder ──► Lean source ──► lean --json ──► verdict ──► ProofObject
    (HoldFirst)      (pure .m:            (LeanForm      (system(),       (NDJSON +
                      D, Together,         strict          temp files)     #print axioms)
                      FactorInteger,       translator)
@@ -111,7 +111,8 @@ Certify[comp] ──► Lean.m generator ──► Lean source ──► lean --
 | `LeanForm` | `src/print_lean.c` | display form, and the strict translator `` Lean`Internal`ToLean `` that refuses anything whose Lean text would mean something else (inexact numbers, Int division, Mathlib-only heads in Tier 0, unknown heads) |
 | runner | `src/lean_run.c` | `` Lean`Internal`RunProcess ``, `` Lean`Internal`VerifySource ``: temp files, `system()`, NDJSON parsing, axiom extraction, the replay run and its report |
 | replay checker | `src/internal/lean/Replay.lean` | `lean --run` script: replays the compiled module in a fresh kernel environment, prints each declaration's axioms |
-| package | `src/internal/lean/Lean.m` | settings and discovery, one generator per certificate kind, batching, the session cache, `ProofObject`, `` Lean`Internal`Oracle `` |
+| package | `src/internal/lean/Lean.m` | the prover-neutral core: claim walker, one generator per certificate kind (a neutral IR: result, theorem, typed proof obligation), the backend registry, the pipeline, `ProofObject`, the heuristic engine |
+| Lean backend | `src/internal/lean/LeanBackend.m` | settings and discovery, `LeanVerify`, the per-obligation Lean encoders, batching, the session cache, `` Lean`Internal`Oracle `` |
 | SOS engine | `src/solve/reduce_sos.c` | `` Reduce`SOSCertificate ``: the exact Gram blocks of `Reduce`'s Putinar stage (an additive wrapper; `Reduce` is unchanged) |
 | Lean package | `lean/` | `mathilda_linear_combination`, `mathilda_sos`, `mathilda_prime`, `#mathilda`; `Mathilda/Answer.lean` parses the oracle's answer as data |
 

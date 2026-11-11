@@ -1,5 +1,5 @@
 (* ====================================================================== *)
-(* Lean.m -- Lean 4 certification: Certify, ProofObject, LeanVerify.       *)
+(* Lean.m -- Certify, ProofObject, LeanVerify: the prover-neutral core.   *)
 (*                                                                          *)
 (* Loaded at startup by core_init (after FullSimplify.m and                 *)
 (* SeparablePolynomialDecomposition.m).  Defines rules only: no Lean process *)
@@ -13,9 +13,9 @@
 (* certificate, the facts Lean did NOT check (e.g. the Together normal form *)
 (* used to clear denominators).                                             *)
 (*                                                                          *)
-(* The C side (src/print_lean.c, src/lean_run.c) supplies Lean`Internal`ToLean (the  *)
-(* strict LeanForm translator), Lean`Internal`RunProcess and Lean`Internal`VerifySource (the  *)
-(* system()-based runner and NDJSON parser).                                *)
+(* This file: claim walker, domains, generators (neutral IR), backend      *)
+(* registry, pipeline, ProofObject, heuristic engine.  LeanBackend.m (loaded *)
+(* at the end): the Lean backend (discovery, LeanVerify, encoders, runs).   *)
 (* ====================================================================== *)
 
 BeginPackage["Lean`"];
@@ -101,408 +101,7 @@ Certify::fracpow = "no Lean certificate is available for `1`: the integrand has 
 Certify::vacuous = "no Lean certificate is available for `1`: the hypothesis `2` != 0 of the Tier 1 statement is zero at every test point under Lean's Real.log (Real.log x = log |x|), so the theorem could be vacuous";
 Certify::optignored = "`1` is ignored for a `2` certificate (only identity claims read Domain, Assumptions and Method)";
 
-(* ---------------------------------------------------------------------- *)
-(* Settings and discovery                                                  *)
-(* ---------------------------------------------------------------------- *)
-
-$LeanExecutable = Automatic;
-
-$LeanProject = With[{e = Environment["MATHILDA_LEAN_PROJECT"]},
-  If[StringQ[e] && e =!= "", e, None]];
-
-(* The Prelude sits beside this file; $InputFileName is only set while the
-   package loads, so the path is captured now (the file is read lazily). *)
-$preludeFile = If[StringQ[$InputFileName] && $InputFileName =!= "",
-  FileNameJoin[{DirectoryName[$InputFileName], "Prelude.lean"}], $Failed];
-
-(* The kernel-replay checker (Replay.lean, beside this file): every Lean run
-   of Certify and LeanVerify compiles the source to an .olean and replays it
-   in a fresh lean process (Lean`Internal`VerifySource's fifth argument). *)
-$replayFile = If[StringQ[$InputFileName] && $InputFileName =!= "",
-  FileNameJoin[{DirectoryName[$InputFileName], "Replay.lean"}], $Failed];
-
-replayScript[] := If[StringQ[$replayFile] && FileExistsQ[$replayFile], $replayFile, None];
-
-(* The core-only prelude (Prelude.lean; no imports, no Mathlib), inlined
-   into every generated certificate file and mirrored byte-for-byte as
-   lean/Mathilda/Prelude.lean for the Lean-side package (ctest
-   lean_prelude_sync).  It carries NO comments or strings: LeanVerify's
-   checker skips it as trusted text, and a prelude without any span that Lean
-   skips guarantees that Lean's lexer is at the top level where it ends
-   (CheckSource refuses a prelude with a string, comment or char literal).
-   Its documentation therefore lives here.  Everything is a computable
-   definition that the kernel evaluates under `decide +kernel`: recursion is
-   structural (an explicit fuel argument where the natural measure is not),
-   never well-founded, so the kernel reduces it.
-     powModAux fuel b e m acc  square-and-multiply b^e mod m; fuel bounds the
-                               loop steps.
-     powMod b e m              b^e mod m for every e: the loop halves e and
-                               stops at 0, so it runs log2 e + 1 <= e + 1
-                               steps and fuel e + 1 never runs out (a fixed
-                               fuel silently truncated large exponents; the
-                               kernel only peels as many successors off the
-                               fuel literal as there are steps).
-     prodPow fs                the product of q^k over [(q, k), ...].
-     lucasStep known p a fs    one Lucas step: a has order p - 1 mod p, the
-                               factor list multiplies out to p - 1, every
-                               prime factor q is already known prime.
-     prattCheck known steps    a flat Pratt certificate, steps (p, a, factors
-                               of p - 1) in dependency order; 2 is known.
-     IsPrime n                 the definition: 2 <= n and the only divisors
-                               of n are 1 and n (Certify proves IsPrime 2 and
-                               Not IsPrime n for n < 2 and composites).
-     PrattCertifies p cert     cert is checked and its last step is p.
-     Mat, matMul, matVec       dense Rat matrices as row lists; the column
-                               count of matMul is taken from B's first row.
-     HasShape A r c, HasLength v n
-                               exact shapes (matMul / matVec / det use
-                               zipWith and getD, which silently truncate or
-                               pad ragged input, so every matrix statement
-                               states the shapes).
-     idMat n, dropCol j A, detAux, det
-                               identity; column removal; Laplace expansion
-                               along row 0 with the dimension as fuel.
-     sqnn, mulnn               Lean.Grind.OrderedRing.sq_nonneg / mul_nonneg. *)
-prelude[] := prelude[] = If[StringQ[$preludeFile] && FileExistsQ[$preludeFile],
-  ReadString[$preludeFile], ""];
-
-(* The newest ~/.elan toolchain's lean binary, called directly so no
-   lean-toolchain file is needed; None when there is none. *)
-toolchainVersion[dir_String] := With[{v = StringCases[dir,
-     RegularExpression["v(\\d+)\\.(\\d+)\\.(\\d+)"] -> {"$1", "$2", "$3"}]},
-  If[v === {}, {0, 0, 0}, ToExpression[First[v]]]];
-
-elanLean[] := Module[{dirs, bins},
-  dirs = FileNames["*", FileNameJoin[{$HomeDirectory, ".elan", "toolchains"}]];
-  bins = Select[Flatten[{FileNameJoin[{#, "bin", "lean"}],
-       FileNameJoin[{#, "bin", "lean.exe"}]} & /@ SortBy[dirs, toolchainVersion]],
-    FileExistsQ];
-  If[bins === {}, None, Last[bins]]];
-
-(* Automatic discovery, memoized on the first hit. *)
-autoLean[] := autoLean[] = Module[{env = Environment["MATHILDA_LEAN"], tc},
-  Which[
-    StringQ[env] && env =!= "", env,
-    (tc = elanLean[]) =!= None, tc,
-    True, "lean"]];
-
-leanExe[override_] := Which[
-  StringQ[override], override,
-  StringQ[$LeanExecutable], $LeanExecutable,
-  True, autoLean[]];
-
-leanProject[override_] := Which[
-  StringQ[override], override,
-  override === None, None,
-  StringQ[$LeanProject], $LeanProject,
-  True, None];
-
-leanVersionOf[exe_String] := leanVersionOf[exe] = Module[{r},
-  r = Quiet[Lean`Internal`RunProcess[{exe, "--version"}, None]];
-  If[AssociationQ[r] && r["ExitCode"] === 0 && StringQ[r["StandardOutput"]],
-    StringTrim[r["StandardOutput"]], Missing["NotAvailable"]]];
-
-$LeanVersion := leanVersionOf[leanExe[Automatic]];
-
-(* A run that never reached Lean: the shell could not find or execute it. *)
-missingLeanQ[r_?AssociationQ] := MemberQ[{126, 127, 9009}, r["ExitCode"]] &&
-  AllTrue[r["Messages"], #["Kind"] === "process" &];
-missingLeanQ[_] := False;
-
-(* ---------------------------------------------------------------------- *)
-(* LeanVerify                                                              *)
-(* ---------------------------------------------------------------------- *)
-
-$standardAxioms = {"propext", "Classical.choice", "Quot.sound"};
-
-(* Words a user Method script may not use (Certify; see methodProblem).
-   LeanVerify no longer relies on a word list: see checkSource below. *)
-$unsafeWords = {"axiom", "native_decide", "implemented_by", "extern", "unsafe",
-  "ofReduceBool", "trustCompiler", "debug", "run_cmd", "run_tac", "run_elab", "run_meta",
-  "by_elab", "elab", "elab_rules", "macro", "macro_rules", "syntax", "declare_syntax_cat",
-  "initialize", "builtin_initialize", "addDeclWithoutChecking", "addDecl", "addAndCompile",
-  "skipKernelTC", "command_elab", "term_elab", "tactic_elab", "setEnv", "modifyEnv",
-  "withOptions", "native"};
-
-(* The words of a source as LeanVerify's checker splits them: maximal runs of
-   [A-Za-z0-9_] ("Lean.Elab.x'" gives Lean, Elab, x), finer than Lean's own
-   identifiers. *)
-sourceWords[src_String] := DeleteDuplicates[StringCases[src,
-   RegularExpression["[A-Za-z0-9_]+"]]];
-
-(* The structural source check (src/lean_check.c).  The guarantee of
-   LeanVerify (and of Certify) holds only for sources that cannot run
-   user-controlled code while Lean elaborates them: code run at elaboration
-   time can forge everything the elaborating process produces, including the
-   .olean that the kernel replay reads.  So a source is accepted only if
-   (A) it stays inside a minimal lexical surface -- no strings, comments,
-   character literals, #, $, %, backquotes, backslashes, @[, French quotes,
-   control characters or Unicode outside a short list of mathematical symbols
-   and Greek letters -- so that no span exists whose content Lean would skip
-   and the checker need not reproduce Lean's lexer; (B) none of its
-   [A-Za-z0-9_] words is a command-leading word of Lean's parser (outside the
-   allowed command starters at column 0; the list is derived from Lean's
-   parser tables, src/lean_check_tokens.h) or an escape word (by_elab,
-   native_decide, sorry, eval, IO, ...); and (C) it fits an ALLOWLIST grammar
-   -- no imports (core Lean only), or only `import Mathlib[.Path]` with a
-   project; only theorem / lemma (Mathlib) / example (no open / namespace:
-   they activate scoped syntax) / section / end / variable / universe / numeric or Boolean set_option
-   commands at column 0.  The trusted prelude (Prelude.lean, byte-identical,
-   itself free of strings and comments) is skipped.  With certify -> True the
-   generator auxiliaries `def mathilda_cert_<k>_<x>` and the footer lines
-   `#print axioms mathilda_cert_<k>_footer` are accepted too.  Gives the C
-   checker's association. *)
-checkSource[src_String, mathlib_, certify_] :=
-  Lean`Internal`CheckSource[src, TrueQ[mathlib], TrueQ[certify],
-    With[{p = prelude[]}, If[StringQ[p] && p =!= "", p, None]]];
-
-(* The message of each refusal kind. *)
-refusalMessage["import", w_, _] := Message[LeanVerify::import, w];
-refusalMessage["cmd", w_, _] := Message[LeanVerify::cmd, w];
-refusalMessage["token", w_, _] := Message[LeanVerify::unsafe, w];
-refusalMessage[_, w_, l_] := Message[LeanVerify::lex, w, l];
-
-(* src (examples already renamed by the checker) followed by a trusted footer:
-   one `#print axioms` line per declared name.  Returns {source, <|name ->
-   footer line|>}; only a report printed on its own footer line counts (a
-   report elsewhere could be forged). *)
-withAxiomReports[src_String, names_List] := Module[{base, l0},
-  base = If[StringEndsQ[src, "\n"] || src === "", src, src <> "\n"];
-  l0 = StringCount[base, "\n"] + 1;
-  {StringJoin[base, ("#print axioms " <> # <> "\n") & /@ names],
-   AssociationThread[names -> Range[l0, l0 + Length[names] - 1]]}];
-
-anchoredAxioms[r_, name_, line_] := With[{rep = Select[Lookup[r, "AxiomReports", {}],
-     #["Theorem"] === name && #["Line"] === line &]},
-  If[Length[rep] === 1, rep[[1]]["Axioms"], Missing["NotReported"]]];
-
-(* Option names are strings (v0.6523): OptionValue matches a name by its
-   text, so the user's Engine -> v (a Global` symbol) and "Engine" -> v both
-   work, and the package creates no option-name symbols of its own -- a
-   symbol in Lean` would sit on $ContextPath and capture the user's (or a
-   later package's) Engine, Tier, Domain, ... .  Method, TimeConstraint and
-   Assumptions are System` symbols. *)
-Options[LeanVerify] = {"LeanExecutable" -> Automatic, "LeanProject" -> Automatic,
-  "KeepFiles" -> False};
-
-LeanVerify[src_String, opts:OptionsPattern[]] := Module[{exe, proj, full, lines, r, chk,
-    ok},
-  If[optionNameProblem[LeanVerify, {opts}] =!= None, Return[$Failed, Module]];
-  exe = leanExe[OptionValue["LeanExecutable"]];
-  proj = leanProject[OptionValue["LeanProject"]];
-  chk = checkSource[src, StringQ[proj], False];
-  If[!AssociationQ[chk], Return[$Failed, Module]];
-  If[!TrueQ[chk["OK"]],
-    refusalMessage[chk["Kind"], chk["What"], chk["Line"]];
-    Return[<|"Success" -> False, "ExitCode" -> Missing["NotRun"],
-      "Messages" -> {<|"Severity" -> "error", "Kind" -> "mathilda." <> chk["Kind"],
-        "Line" -> chk["Line"], "Text" -> "not run: the source uses " <> chk["What"]|>},
-      "Axioms" -> <||>, "AxiomReports" -> {}, "Timing" -> 0., "Command" -> "",
-      "Rejected" -> {chk["What"]}|>, Module]];
-  {full, lines} = withAxiomReports[chk["Source"], chk["Theorems"]];
-  r = Lean`Internal`VerifySource[full, exe, proj, TrueQ[OptionValue["KeepFiles"]],
-    replayScript[]];
-  If[!AssociationQ[r], Return[$Failed, Module]];
-  If[missingLeanQ[r], Message[LeanVerify::nolean]];
-  (* Success: Lean's own run was clean, the kernel replay of the compiled
-     module accepted every declaration with standard axioms, and every
-     theorem / example the SOURCE TEXT declares (names from the checker, not
-     from Lean's output) is among the replayed declarations with standard
-     axioms and has a standard report on its own footer line -- so a module
-     that drops or renames a declaration fails. *)
-  ok = TrueQ[r["Success"]] && r["Replay"] === True && AllTrue[Keys[lines], Function[nm,
-    With[{ax = anchoredAxioms[r, nm, lines[nm]], rax = Lookup[r["ReplayAxioms"], nm]},
-      ListQ[ax] && SubsetQ[$standardAxioms, ax] &&
-        ListQ[rax] && SubsetQ[$standardAxioms, rax]]]];
-  Join[<|"Success" -> ok|>, KeyDrop[r, "Success"]]];
-
-(* ---------------------------------------------------------------------- *)
-(* Translation and source assembly                                         *)
-(* ---------------------------------------------------------------------- *)
-
 leanType["Int"] = Integers; leanType["Rat"] = Rationals; leanType["Real"] = Reals;
-
-(* Strict translation of a held statement; $Failed (quietly) when refused.
-   closed -> True (every theorem statement) refuses free symbols. *)
-toLean[held_HoldForm, ty_, coreOnly_, pass_List:{}, closed_:False] :=
-  Quiet[Lean`Internal`ToLean[held, ty, coreOnly, pass, TrueQ[closed]]];
-
-heartbeats[t_?NumericQ] /; t > 0 := Round[40000 t];
-heartbeats[_] := 0;
-
-(* ---- User-supplied Method strings ----------------------------------------
-   A Method string is pasted into the generated file as a tactic block, so it
-   must not be able to leave that block or change how later text is read.
-   It must satisfy LeanVerify's own rules (A) and (B) above: methodProblem
-   runs the C checker on `theorem t : True := by` followed by the script,
-   indented by two spaces, so the script inherits the minimal lexical surface
-   (no strings, comments, #, $, %, @[, backquotes, ...) and the refusal of
-   every command-leading and escape word.  On top of that the words below
-   (Lean, IO, axiom, ...) are refused, and every line is indented by two
-   spaces, so no line reaches column 0; Certify runs every item with a user
-   Method in a Lean file of its own (certifyItems), after which the trusted
-   footer re-checks the theorem's statement and axioms. *)
-$methodBannedWords = Join[$unsafeWords, {"theorem", "lemma", "def", "abbrev", "instance",
-  "example", "structure", "class", "inductive", "notation", "infix", "infixl", "infixr",
-  "prefix", "postfix", "set_option", "attribute", "open", "export", "namespace",
-  "section", "end", "universe", "variable", "import", "mutual", "deriving", "opaque",
-  "partial", "private", "protected", "noncomputable", "omit", "include", "scoped",
-  "local", "sorry", "admit", "Lean", "IO"}];
-$methodBannedText = {"\[LeftGuillemet]", "\[RightGuillemet]", "`", "$", "#", "@[", "--",
-  "/-", "-/", "\"", "\t", "\r", "%", "\\"};
-
-methodProblem[m_String] := Module[{w, t, chk},
-  If[StringTrim[m] === "", Return["the script is empty", Module]];
-  t = Select[$methodBannedText, StringContainsQ[m, #] &];
-  If[t =!= {}, Return["it contains " <> ToString[First[t], InputForm], Module]];
-  If[StringContainsQ[m, RegularExpression["[\\x00-\\x09\\x0B-\\x1F\\x7F]"]],
-    Return["it contains a control character", Module]];
-  w = Intersection[sourceWords[m], $methodBannedWords];
-  If[w =!= {}, Return["it uses the keyword " <> First[w], Module]];
-  chk = Lean`Internal`CheckSource["theorem mathilda_method : True := by\n" <>
-    StringRiffle[("  " <> #) & /@ StringSplit[m, "\n"], "\n"] <> "\n", False, False, None];
-  If[!TrueQ[chk["OK"]], Return["it uses " <> ToString[chk["What"]] <>
-    " (LeanVerify's source rules apply to Method scripts)", Module]];
-  None];
-methodProblem[m_] := If[MemberQ[{Automatic, "grind", "decide", "omega"}, m], None,
-  "Method must be Automatic, \"grind\", \"decide\", \"omega\" or a tactic script string"];
-
-(* A user script: each line indented by two spaces under `by`. *)
-userMethodQ[m_] := StringQ[m] && !MemberQ[{"grind", "decide", "omega"}, m];
-
-proofScript[method_] := Which[
-  method === Automatic || method === "grind", "by\n  intros\n  grind",
-  method === "decide", "by\n  decide",
-  method === "omega", "by\n  intros\n  omega",
-  StringQ[method], "by\n" <> StringRiffle[("  " <> #) & /@ StringSplit[method, "\n"], "\n"],
-  True, "by\n  intros\n  grind"];
-
-(* One theorem chunk: <|"Name", "Text", "Statement"|>.  A generator may also
-   supply a "Preamble" (auxiliary defs / lemmas placed before the theorem).
-   The statement, proof and preamble name their auxiliary declarations
-   @NAME@_..., replaced here by the theorem's name.  The chunk's
-   `#print axioms` is not in the chunk: it is in the trusted footer
-   (footerText), after all user-influenced text. *)
-theoremChunk[name_String, stmt_String, proof_String, hb_Integer, pre_String:""] :=
-  With[{sp = splitGeneric[stmt]}, <|
-  "Name" -> name,
-  "Statement" -> StringReplace[stmt, "@NAME@" -> name],
-  "Text" -> StringReplace[StringJoin[pre,
-    If[hb > 0, "set_option maxHeartbeats " <> ToString[hb] <> " in\n", ""],
-    "theorem ", name, sp[[1]], " :\n    ", sp[[2]], " := ", proof, "\n"],
-    "@NAME@" -> name]|>];
-
-(* The footer lines of one chunk: the statement is re-elaborated and checked
-   against the theorem (so a chunk cannot pass by declaring something else
-   under that name), then its axioms are reported. *)
-footerName[c_] := c["Name"] <> "_footer";
-footerText[c_] := StringJoin["theorem ", footerName[c], " :\n    ", c["Statement"], " :=\n  ",
-  c["Name"], "\n", "#print axioms ", footerName[c], "\n"];
-
-fileHeader[tier_] := StringJoin[
-  If[tier === 1, "import Mathlib\nset_option linter.unusedTactic false\n\
-set_option linter.unreachableTactic false\n", ""],
-  "set_option autoImplicit false\n\n"];
-
-(* The file for a list of chunks plus, per chunk, its line spans {{first,
-   last} of the chunk, {first, last} of its footer} and the line of its
-   footer's `#print axioms`. *)
-assembleFile[chunks_List, tier_] := Module[{head, line, spans = {}, body = {}, foot = {},
-    fspans = {}, axl = {}},
-  head = fileHeader[tier] <> prelude[] <> "\n";
-  line = StringCount[head, "\n"] + 1;
-  Do[
-    With[{t = c["Text"]},
-      AppendTo[spans, {line, line + StringCount[t, "\n"] - 1}];
-      AppendTo[body, t <> "\n"];
-      line += StringCount[t, "\n"] + 1],
-    {c, chunks}];
-  Do[
-    With[{t = footerText[c]},
-      AppendTo[fspans, {line, line + StringCount[t, "\n"] - 1}];
-      AppendTo[axl, line + StringCount[t, "\n"] - 1];
-      AppendTo[foot, t];
-      line += StringCount[t, "\n"]],
-    {c, chunks}];
-  {StringJoin[head, body, foot], Transpose[{Transpose[{spans, fspans}], axl}]}];
-
-(* ---------------------------------------------------------------------- *)
-(* Running Lean and attributing verdicts (the Verified contract)           *)
-(* ---------------------------------------------------------------------- *)
-
-badMessageQ[m_] := m["Severity"] === "error" || m["Kind"] === "hasSorry";
-inSpanQ[m_, {a_, b_}] := a <= m["Line"] <= b;
-inSpansQ[m_, sp_List] := AnyTrue[sp, inSpanQ[m, #] &];
-
-(* Verdict of the theorem `name`, given its layout {spans, axiom line} and
-   the spans of every chunk in the file.  True needs all of:
-     - no error / sorry inside its own spans (its chunk and its footer);
-     - no error / sorry outside every chunk's spans (prelude, header);
-     - the `#print axioms` report printed on its own footer line (a report
-       anywhere else is ignored), naming only the standard axioms;
-     - Lean exited with code 0, or every error it reported lies in some
-       chunk (then the non-zero exit is explained by other chunks);
-     - the kernel replay of the compiled file (Replay.lean, a fresh lean
-       process that runs none of the file's code) accepted every
-       declaration, and found only standard axioms under the footer theorem.
-   A file with an error in some chunk is not compiled, so it cannot be
-   replayed: runBatch then re-runs the clean chunks on their own. *)
-attribute[r_, name_, {span_, axLine_}, spans_] := Module[{bad, own, stray, ax, rax, logs},
-  bad = Select[r["Messages"], badMessageQ];
-  own = Select[bad, inSpansQ[#, span] &];
-  stray = Select[bad, Function[m, NoneTrue[spans, inSpansQ[m, #] &]]];
-  ax = anchoredAxioms[r, name <> "_footer", axLine];
-  rax = If[r["Replay"] === True, Lookup[r["ReplayAxioms"], name <> "_footer"], Missing[]];
-  logs = Function[m, <|"Severity" -> m["Severity"], "Line" -> m["Line"],
-      "Text" -> m["Text"]|>] /@
-    Select[r["Messages"], Function[m, inSpansQ[m, span] ||
-        (badMessageQ[m] && NoneTrue[spans, inSpansQ[m, #] &])]];
-  <|"Verified" -> (own === {} && stray === {} && ListQ[ax] &&
-      SubsetQ[$standardAxioms, ax] && (r["ExitCode"] === 0 || bad =!= {}) &&
-      ListQ[rax] && SubsetQ[$standardAxioms, rax]),
-    "Axioms" -> If[ListQ[ax], ax, {}], "Logs" -> logs|>];
-
-(* Run one file of chunks; a list of per-chunk verdict associations.  When
-   Lean rejected some chunks, the file was not compiled and so not replayed;
-   the chunks with no error of their own are then run again in a file of
-   their own (their verdict needs the replay), the others stay False. *)
-runBatch[chunks_List, tier_, exe_, proj_] := Module[{src, lay, r, res, clean, chk},
-  {src, lay} = assembleFile[chunks, tier];
-  (* Internal assertion: the generated file passes the same allowlist check as
-     a LeanVerify source (with the trusted prelude, the Tier 1 Mathlib import
-     and the generator auxiliaries def mathilda_cert_<k>_<x>).  The only
-     user-influenced text in it is a Method script (deny-listed) and the
-     strictly translated statements. *)
-  chk = checkSource[src, tier === 1, True];
-  If[!TrueQ[chk["OK"]],
-    Message[Certify::unsafe, chk["What"]];
-    Return[Table[<|"Verified" -> False, "Axioms" -> {},
-      "Logs" -> {<|"Severity" -> "error", "Line" -> chk["Line"],
-        "Text" -> "not run: the source check refused " <> ToString[chk["What"]]|>},
-      "Timing" -> 0., "Source" -> src|>, {Length[chunks]}], Module]];
-  r = Lean`Internal`VerifySource[src, exe, If[tier === 1, proj, None], False, replayScript[]];
-  If[AssociationQ[r] && !missingLeanQ[r] && r["Replay"] =!= True && r["ExitCode"] =!= 0 &&
-      Length[chunks] > 1,
-    res = MapThread[attribute[r, #1["Name"], #2, lay[[All, 1]]] &, {chunks, lay}];
-    clean = Select[Range[Length[chunks]], Function[k, NoneTrue[res[[k]]["Logs"],
-      badMessageQ[Append[#, "Kind" -> ""]] &]]];
-    If[0 < Length[clean] < Length[chunks],
-      Return[Module[{again = AssociationThread[clean -> runBatch[chunks[[clean]], tier, exe, proj]]},
-        Table[If[KeyExistsQ[again, k], again[k],
-          Join[res[[k]], <|"Verified" -> False, "Timing" -> r["Timing"], "Source" -> src|>]],
-          {k, Length[chunks]}]], Module]]];
-  Which[
-    !AssociationQ[r],
-      Table[<|"Verified" -> Missing["NotAvailable"], "Axioms" -> {}, "Logs" -> {},
-        "Timing" -> 0., "Source" -> src|>, {Length[chunks]}],
-    missingLeanQ[r],
-      Message[LeanVerify::nolean];
-      Table[<|"Verified" -> Missing["NotAvailable"], "Axioms" -> {},
-        "Logs" -> (KeyDrop[#, "Kind"] & /@ r["Messages"]), "Timing" -> r["Timing"],
-        "Source" -> src|>, {Length[chunks]}],
-    True,
-      MapThread[Join[attribute[r, #1["Name"], #2, lay[[All, 1]]],
-          <|"Timing" -> r["Timing"] + Lookup[r, "ReplayTiming", 0.], "Source" -> src|>] &, {chunks, lay}]]];
 
 (* ---------------------------------------------------------------------- *)
 (* Certificate generators (no Lean call)                                   *)
@@ -543,28 +142,9 @@ $domains = {Automatic, Complexes, Reals, Rationals, Integers};
    involves an order, for EVERY ordered field (R among them).  A hypothesis
    that only Q cannot satisfy (x^2 == 2, x^2 + 4 == 0) no longer makes the
    statement vacuous: forall x, x^2 + 4 = 0 -> x = 7 is false in C, so Lean
-   cannot prove it.  The statement is first translated over Rat and then
-   generalised: the word Rat becomes the type variable K, bound by
-   $charZeroBinders / $orderedBinders (core Lean's grind classes).  The
-   theorem takes them as parameters; the footer states the full
-   forall {K : Type} [...], ... form. *)
-$charZeroBinders = "{K : Type} [Lean.Grind.Field K] [Lean.Grind.IsCharP K 0]";
-$orderedBinders = "{K : Type} [Lean.Grind.Field K] [LE K] [LT K] [Std.LawfulOrderLT K] \
-[Std.IsLinearOrder K] [Lean.Grind.OrderedRing K]";
+   cannot prove it.  (The Lean encoding: LeanBackend.m, genericStmt.) *)
 $genericDomain["CharZero"] = Complexes; $genericDomain["Ordered"] = Reals;
-genericBinders["CharZero"] = $charZeroBinders; genericBinders["Ordered"] = $orderedBinders;
-
-(* Rat (as a whole word, not Rat.f) -> K, in a statement or a proof script. *)
-genericText[s_String] := StringReplace[s,
-  RegularExpression["(?<![A-Za-z0-9_.'])Rat(?![A-Za-z0-9_.'])"] -> "K"];
-genericText[other_] := other;
-genericStmt[s_String, kind_String] := "\[ForAll] " <> genericBinders[kind] <> ", " <> genericText[s];
-genericStmt[other_, _] := other;
-
-(* {binders, body} of a generic statement; {"", s} for any other. *)
-splitGeneric[s_String] := Module[{b = SelectFirst[{$charZeroBinders, $orderedBinders},
-     StringStartsQ[s, "\[ForAll] " <> # <> ", "] &, None]},
-  If[b === None, {"", s}, {" " <> b, StringDrop[s, StringLength["\[ForAll] " <> b <> ", "]]}]];
+$domainForm["CharZero"] = "CharZeroField"; $domainForm["Ordered"] = "OrderedField";
 
 (* An order relation anywhere in e makes the statement real. *)
 orderedQ[e_] := !FreeQ[e, Less | Greater | LessEqual | GreaterEqual | iLess | iGreater |
@@ -660,7 +240,7 @@ splitRealDecls[assum_List, dom_:Automatic] := Module[{implied, bad},
 (* Generator for an identity a == b (rows 1-2).  Returns the generator
    association, or $Failed after a message. *)
 identityGen[kind_, input_HoldForm, result_, a_, b_, trusted_List, o_, raw_:Automatic] :=
-  Module[{vars, st, ty, held, assum, lean, tier, gk, reals, ordered, notReal, dom, sp, auto},
+  Module[{vars, st, ty, held, assum, gk, reals, ordered, notReal, dom, sp, auto},
   dom = o["Domain"];
   sp = splitRealDecls[DeleteCases[Flatten[{o["Assumptions"]} /. And -> List], True], dom];
   If[sp === $Failed, Return[$Failed, Module]];
@@ -673,7 +253,6 @@ identityGen[kind_, input_HoldForm, result_, a_, b_, trusted_List, o_, raw_:Autom
     Message[Certify::nocert, input]; Return[$Failed, Module]];
   st = identityStatement[a, b, vars, raw];
   If[st === $Failed, Message[Certify::nocert, input]; Return[$Failed, Module]];
-  tier = 0;
   (* The statement's domain ($domains above).  Mathematica's semantics
      (Automatic with hypotheses, Complexes): every char-0 field (variables
      complex), or every ordered field when every variable is real; order
@@ -692,10 +271,6 @@ identityGen[kind_, input_HoldForm, result_, a_, b_, trusted_List, o_, raw_:Autom
     Reals, "Ordered",
     _, None];
   If[gk === $Failed, Return[$Failed, Module]];
-  (* The generic form writes the type variable K for the word Rat: a
-     variable printed as K or Rat would be captured by it. *)
-  If[gk =!= None && AnyTrue[vars, MemberQ[{"K", "Rat"}, SymbolName[#]] &],
-    Message[Certify::nocert, input]; Return[$Failed, Module]];
   ty = Switch[dom, Integers, "Int", Automatic, If[gk === None, autoDomain[First[st]], "Rat"],
     _, "Rat"];
   (* Bind the variables (and assumptions) around the held statement without
@@ -706,16 +281,12 @@ identityGen[kind_, input_HoldForm, result_, a_, b_, trusted_List, o_, raw_:Autom
       vs === {}, First[st] /. HoldForm[s_] :> HoldForm[Implies[h, s]],
       assum === {}, First[st] /. HoldForm[s_] :> HoldForm[ForAll[vs, s]],
       True, First[st] /. HoldForm[s_] :> HoldForm[ForAll[vs, h, s]]]];
-  lean = toLean[held, ty, tier === 0, {}, True];
-  If[!StringQ[lean], Message[Certify::nocert, input]; Return[$Failed, Module]];
-  If[gk =!= None, lean = genericStmt[lean, gk]];
-  <|"Kind" -> kind, "Input" -> input, "Result" -> result, "Theorem" -> held,
-    "Statement" -> lean, "Proof" -> proofScript[o["Method"]],
-    "UserProof" -> userMethodQ[o["Method"]],
-    "Certificate" -> Join[<|"Form" -> st[[3]], "Variables" -> vars|>, st[[4]]],
-    "TrustedSteps" -> Join[trusted, st[[5]]], "Hypotheses" -> st[[2]],
-    "Tier" -> tier, "Domain" -> If[gk =!= None, $genericDomain[gk], leanType[ty]],
-    "Claim" -> {a, b}|>];
+  Join[neutralGen[kind, input, result, held,
+    <|"Type" -> "Identity", "Statement" -> held, "Variables" -> vars,
+      "Pairs" -> {{a, b}}, "Assumptions" -> assum, "Generic" -> gk, "Ring" -> ty|>,
+    Join[<|"Form" -> st[[3]], "Variables" -> vars|>, st[[4]]], Join[trusted, st[[5]]],
+    st[[2]], {a, b}, If[gk =!= None, $genericDomain[gk], leanType[ty]],
+    If[gk =!= None, $domainForm[gk], ty]], <|"Method" -> o["Method"]|>]];
 
 $identityHeads = {Expand, Collect, Together, Apart, Cancel, Simplify, FullSimplify};
 $factorHeads = {Factor, FactorTerms};
@@ -918,43 +489,6 @@ generate[HoldComplete[(h_Symbol)[e_, rest___]], o_] /;
 (* Shared helpers for the structured certificates (rows 4-10)              *)
 (* ---------------------------------------------------------------------- *)
 
-(* Prelude functions in statements are written with private placeholder
-   heads and renamed after translation.  A symbol in a context on
-   $ContextPath (Mathilda`matMul) would capture the user's short name. *)
-$preludeHeads = {"Lean.Private.matMul" -> "Mathilda.matMul",
-  "Lean.Private.matVec" -> "Mathilda.matVec", "Lean.Private.idMat" -> "Mathilda.idMat",
-  "Lean.Private.det" -> "Mathilda.det", "Lean.Private.hasShape" -> "Mathilda.HasShape",
-  "Lean.Private.hasLength" -> "Mathilda.HasLength"};
-
-(* Private generator variables (the surd symbols s1$n, s2$n, ...) print as
-   <<Lean`Private`s1$n>>; they are renamed to their bare names s1, s2, ... *)
-leanRename[s_String] := StringReplace[StringReplace[StringReplace[s, $preludeHeads],
-  {"\[LeftGuillemet]Lean`Private`" ~~ n:(LetterCharacter ~~ DigitCharacter..) ~~
-     "$" ~~ DigitCharacter.. ~~ "\[RightGuillemet]" :> n,
-   "\[LeftGuillemet]Lean`Private`" ~~ n:(LetterCharacter ~~ DigitCharacter..) ~~
-     "\[RightGuillemet]" :> n}],
-  (* Lean`Private`ratCast[m1]: the Nat binder m1 used as a rational value. *)
-  "Lean.Private.ratCast " ~~ n:(LetterCharacter ~~ DigitCharacter..) :>
-    "(" <> n <> " : Rat)"];
-leanRename[other_] := other;
-
-(* Strict Tier 0 translation of a held (sub)term over type ty; its free
-   symbols are the caller's business (proof-script pieces under intro). *)
-leanStmt[held_HoldForm, ty_String, extra_List:{}] :=
-  leanRename[toLean[held, ty, True, Join[Keys[$preludeHeads], extra]]];
-
-(* The same for a whole theorem statement: every symbol must be bound by a
-   quantifier of the statement (a free `default` would be Lean's
-   Inhabited.default, a free parameter an unknown identifier). *)
-leanThm[held_HoldForm, ty_String, extra_List:{}] :=
-  leanRename[toLean[held, ty, True, Join[Keys[$preludeHeads], extra], True]];
-
-(* Lean name of a binder variable. *)
-leanVar[v_Symbol] := With[{s = leanStmt[HoldForm[v], "Rat"]}, If[StringQ[s], s, "_"]];
-
-introLine[{}] := "";
-introLine[vars_List] := "\n  intro " <> StringRiffle[leanVar /@ vars, " "];
-
 (* Inert heads keep a structured expression (p' q - p q', (q^2 + p^2) ...)
    from being normalised; inertHeld turns it into the held statement. *)
 $inertRules = {iPlus -> Plus, iTimes -> Times, iPower -> Power, iEqual -> Equal,
@@ -980,12 +514,15 @@ ratNumberQ[e_] := MatchQ[e, _Integer | _Rational];
 ratMatrixQ[m_] := MatrixQ[m] && AllTrue[Flatten[m], ratNumberQ];
 ratVectorQ[v_] := VectorQ[v] && AllTrue[v, ratNumberQ];
 
-(* The generator association every structured kind returns. *)
-structGen[kind_, input_, result_, held_, stmt_, proof_, cert_, trusted_, hyps_, claim_,
-    dom_:Rationals] := <|"Kind" -> kind, "Input" -> input, "Result" -> result,
-  "Theorem" -> held, "Statement" -> stmt, "Proof" -> proof, "Certificate" -> cert,
-  "TrustedSteps" -> trusted, "Hypotheses" -> hyps, "Tier" -> 0, "Domain" -> dom,
-  "Claim" -> claim|>;
+(* The neutral generator association (the IR): what was computed and what a
+   backend must prove.  "Obligation" holds the held proposition ("Statement")
+   and the encoder's data, by "Type"; "Theorem" is what the ProofObject shows.
+   No prover text: Lean's "Encode" adds "Statement", "Proof", "Tier", ... *)
+neutralGen[kind_, input_, result_, held_, obligation_, cert_, trusted_, hyps_, claim_,
+    dom_:Rationals, df_:"Rat"] := <|"Kind" -> kind, "Input" -> input, "Result" -> result,
+  "Theorem" -> held, "Obligation" -> obligation, "Certificate" -> cert,
+  "TrustedSteps" -> trusted, "Hypotheses" -> hyps, "Domain" -> dom, "Claim" -> claim,
+  "DomainForm" -> df, "Method" -> Automatic, "Requires" -> {}|>;
 
 nocert[input_] := (Message[Certify::nocert, input]; $Failed);
 
@@ -1054,7 +591,7 @@ antiderivGen[input_, f_, x_Symbol, o_, claimed_:None] := Module[{F, tf, a, b, Fs
      !FreeQ[{a, b}, _Complex | _Real],
     Return[nocert[input], Module]];
   (* Tier -> 1: the analytic HasDerivAt statement (row 17). *)
-  If[o["Tier"] === 1, Return[tier1Or[input, F, f, x, o], Module]];
+  If[o["Tier"] === 1, Return[hasDerivAtIR[input, F, f, x], Module]];
   (* Quadratic surds Sqrt[d] become fresh variables s_j (relation s_j^2 = d_j). *)
   Fs = F /. $surdRules;
   bases = Union[Cases[Fs, sq[d_] :> d, {0, Infinity}]];
@@ -1072,7 +609,7 @@ antiderivGen[input_, f_, x_Symbol, o_, claimed_:None] := Module[{F, tf, a, b, Fs
   vars = Join[{x}, svars];
   (* Outside the Tier 0 shape: Tier 1 when its HasDerivAt builder applies
      (prepare then needs a project), Certify::tier otherwise. *)
-  If[!allowedQ[Fs, vars], Return[tier1Or[input, F, f, x, o], Module]];
+  If[!allowedQ[Fs, vars], Return[hasDerivAtIR[input, F, f, x], Module]];
   (* Decompose F = R + Sum c_i phi_i(u_i), each c_i free of x. *)
   terms = If[Head[Fs] === Plus, List @@ Fs, {Fs}];
   Do[
@@ -1110,12 +647,11 @@ antiderivGen[input_, f_, x_Symbol, o_, claimed_:None] := Module[{F, tf, a, b, Fs
   rhs = iSum @@ MapThread[If[#3 === 0, 0, iTimes[iPlus[iPower[#1, 2], -#2], #3]] &,
     {svars, bases, ks}];
   held = forAllHeld[inertHeld[iEqual[lhs, rhs]], vars];
-  stmt = leanThm[held, "Rat"];
-  If[!StringQ[stmt], Return[nocert[input], Module]];
   hyps = DeleteDuplicates[Cases[Append[dens, b],
     d_ /; !NumberQ[inertValue[d]] :> (inertHeld[iUnequal[d, 0]] /. back)]];
-  structGen["Antiderivative", input, F, held, stmt,
-    "by" <> introLine[vars] <> "\n  grind",
+  neutralGen["Antiderivative", input, F, held,
+    <|"Type" -> "PolyIdentities", "Statement" -> held, "Variables" -> vars,
+      "Pairs" -> {{lhs, rhs}}, "Ring" -> "Rat"|>,
     <|"Form" -> "ClearedDerivative", "Variable" -> x, "Integrand" -> {a, b},
       "Terms" -> Map[<|"Coefficient" -> #[[1]], "Function" -> #[[4]],
           "Numerator" -> #[[5]], "Denominator" -> #[[6]]|> &, pieces],
@@ -1132,12 +668,14 @@ and of the rational part R = r/w of the antiderivative",
 \"Hypotheses\")"},
     hyps, {D[F, x], f}]];
 
-(* The Tier 1 generator, or $Failed after Certify::nocert (Tier -> 1
-   requested) / Certify::tier (no certificate at either tier). *)
-tier1Or[input_, F_, f_, x_, o_] := With[{g = tier1AntiderivGen[input, F, f, x, o]},
-  Which[AssociationQ[g], g, g === "vacuous", $Failed, True,
-    If[o["Tier"] === 1, Message[Certify::nocert, input], Message[Certify::tier, input]];
-    $Failed]];
+(* HasDerivAt F f x over R (Tier 1, Mathlib): statement, hypotheses and
+   witness come from the backend's encoder, replacing these defaults. *)
+hasDerivAtIR[input_, F_, f_, x_] := Append[neutralGen["Antiderivative", input, F,
+    HoldForm[ForAll[x, D[F, x] == f]],
+    <|"Type" -> "HasDerivAt", "Statement" -> HoldForm[ForAll[x, D[F, x] == f]], "F" -> F,
+      "f" -> f, "Variable" -> x|>,
+    <|"Form" -> "HasDerivAt", "Variable" -> x|>, {}, {}, {D[F, x], f}, Reals, "Real"],
+  "Requires" -> {"Mathlib"}];
 
 generate[HoldComplete[Integrate[f_, x_Symbol]], o_] :=
   antiderivGen[HoldForm[Integrate[f, x]], f, x, o];
@@ -1155,18 +693,19 @@ generate[HoldComplete[Integrate[f_, x_Symbol]], o_] :=
    constant on each interval where F and f are defined, and possibly
    different across a singularity (ArcTan[1/x] and -ArcTan[x] differ by
    Pi/2 for x > 0 and by -Pi/2 for x < 0). *)
+(* The claim's work is done by postEncode, after the backend encoded the
+   obligation, so a failed encoding (Certify::tier) is the only message. *)
 generate[HoldComplete[Equal[Integrate[f_, x_Symbol], F_]], o_] := Module[{g},
   g = antiderivGen[HoldForm[Integrate[f, x] == F], f, x, o, F];
   If[!AssociationQ[g], Return[g, Module]];
-  Message[Certify::antideriv, HoldForm[Integrate[f, x] == F], HoldForm[D[F, x] == f]];
-  Join[g, <|
-    "Theorem" -> If[g["Tier"] === 1, g["Theorem"], HoldForm[ForAll[x, D[F, x] == f]]],
-    "TrustedSteps" -> Append[g["TrustedSteps"],
-      "the claim Integrate[f, x] == F is certified as D[F, x] == f (F is an antiderivative \
+  Append[g, "ClaimForm" -> <|"Type" -> "Antiderivative",
+    "Message" -> {HoldForm[Integrate[f, x] == F], HoldForm[D[F, x] == f]},
+    "Theorem" -> HoldForm[ForAll[x, D[F, x] == f]],
+    "TrustedStep" -> "the claim Integrate[f, x] == F is certified as D[F, x] == f (F is an antiderivative \
 of f, shown in \"Theorem\"); Integrate[f, x] == F itself holds only up to an additive term \
 with derivative 0, which is locally constant (constant on each interval where F and f are \
 defined; it may differ across a point where they are not, as ArcTan[1/x] and -ArcTan[x] \
-do at x = 0), not checked"]|>]];
+do at x = 0), not checked"|>]];
 
 (* ---------------------------------------------------------------------- *)
 (* Row 5: PolynomialExtendedGCD (Bezout)                                   *)
@@ -1185,14 +724,14 @@ generate[HoldComplete[PolynomialExtendedGCD[a_, b_, x_Symbol]], o_] :=
       iEqual[iPlus[iTimes[s, av], iTimes[t, bv]], g],
       iEqual[av, iTimes[g, qa]], iEqual[bv, iTimes[g, qb]]]], {x}];
   ty = autoDomain[{av, bv, g, s, t, qa, qb}];
-  stmt = leanThm[held, ty];
-  If[!StringQ[stmt], Return[nocert[input], Module]];
-  structGen["Bezout", input, res, held, stmt,
-    "by" <> introLine[{x}] <> "\n  refine And.intro ?_ (And.intro ?_ ?_) <;> grind",
+  neutralGen["Bezout", input, res, held,
+    <|"Type" -> "PolyIdentities", "Statement" -> held, "Variables" -> {x},
+      "Pairs" -> {{iPlus[iTimes[s, av], iTimes[t, bv]], g}, {av, iTimes[g, qa]},
+        {bv, iTimes[g, qb]}}, "Ring" -> ty|>,
     <|"GCD" -> g, "Cofactors" -> {s, t}, "Quotients" -> {qa, qb},
       "PreCheck" -> (Expand[s av + t bv - g] === 0 && Expand[av - g qa] === 0 &&
         Expand[bv - g qb] === 0)|>,
-    {}, {}, {{s av + t bv, av, bv}, {g, g qa, g qb}}, leanType[ty]]];
+    {}, {}, {{s av + t bv, av, bv}, {g, g qa, g qb}}, leanType[ty], ty]];
 
 (* ---------------------------------------------------------------------- *)
 (* Row 6: PolynomialReduce and ideal membership Implies[p1 == 0 && ..., q == 0] *)
@@ -1234,21 +773,19 @@ generate[HoldComplete[PolynomialReduce[q_, ps_List, vs_List]], o_] :=
   held = forAllHeld[inertHeld[iEqual[qv,
       iSum[Sequence @@ MapThread[iTimes, {cs, psv}], r]]], vars];
   ty = autoDomain[{qv, psv, cs, r}];
-  stmt = leanThm[held, ty];
-  If[!StringQ[stmt], Return[nocert[input], Module]];
-  structGen["IdealMembership", input, res, held, stmt,
-    "by" <> introLine[vars] <> "\n  grind",
+  neutralGen["IdealMembership", input, res, held,
+    <|"Type" -> "PolyIdentities", "Statement" -> held, "Variables" -> vars,
+      "Pairs" -> {{qv, iSum[Sequence @@ MapThread[iTimes, {cs, psv}], r]}}, "Ring" -> ty|>,
     <|"Cofactors" -> cs, "Remainder" -> r, "Divisors" -> psv,
       "PreCheck" -> (Expand[qv - cs . psv - r] === 0)|>,
     {"that the remainder is fully reduced with respect to the divisors (not certified; \
 the division identity is)"},
-    {}, {qv, cs . psv + r}, leanType[ty]]];
+    {}, {qv, cs . psv + r}, leanType[ty], ty]];
 
 (* Hypotheses l_i == r_i, goal l == r: q = l - r lies in the ideal of the
    p_i = l_i - r_i.  Proof shape (plan section 0.1): have k_i : p_i = 0,
    have hc : q = Sum c_i * p_i, rw [k_i] at hc, grind. *)
-membershipGen[input_, hs_List, {l_, r_}, o_] := Module[{ps, q, vars, cs, eq, held, ty,
-    stmt, ptxt, qtxt, ctxt, proof, k},
+membershipGen[input_, hs_List, {l_, r_}, o_] := Module[{ps, q, vars, cs, eq, held},
   ps = Expand[#[[1]] - #[[2]]] & /@ hs; q = Expand[l - r];
   vars = Sort[Variables[{ps, q}]];
   If[!AllTrue[vars, Head[#] === Symbol &] || !AllTrue[Append[ps, q], polyQ[#, vars] &],
@@ -1262,26 +799,11 @@ membershipGen[input_, hs_List, {l_, r_}, o_] := Module[{ps, q, vars, cs, eq, hel
      intended (fewer points satisfy them), so the statement is over every
      field of characteristic 0; the cofactor identity proved inside it holds
      in every commutative ring. *)
-  ty = "Rat";
-  stmt = leanThm[held, ty];
-  ptxt = leanStmt[inertHeld[iPlus[#[[1]], iTimes[-1, #[[2]]]]], ty] & /@ hs;
-  qtxt = leanStmt[inertHeld[iPlus[l, iTimes[-1, r]]], ty];
-  ctxt = leanStmt[HoldForm[#], ty] & /@ cs;
-  If[!StringQ[stmt] || !AllTrue[Join[ptxt, ctxt, {qtxt}], StringQ],
-    Return[nocert[input], Module]];
-  k = Length[ps];
-  proof = If[MemberQ[ptxt, qtxt], "by" <> introLine[vars] <> "\n  intros\n  grind",
-    StringJoin["by", introLine[vars], "\n  intros",
-      Table["\n  have mth_k" <> ToString[i] <> " : " <> ptxt[[i]] <> " = 0 := (by grind)",
-        {i, k}],
-      "\n  have mth_hc : ", qtxt, " = ",
-      StringRiffle[Table["(" <> ctxt[[i]] <> ") * (" <> ptxt[[i]] <> ")", {i, k}], " + "],
-      " := (by grind)",
-      "\n  rw [", StringRiffle[Table["mth_k" <> ToString[i], {i, k}], ", "], "] at mth_hc",
-      "\n  grind"]];
-  structGen["IdealMembership", input, cs, held, genericStmt[stmt, "CharZero"],
-    genericText[proof], <|"Cofactors" -> cs, "Generators" -> ps, "Goal" -> q|>, {}, {},
-    {q, cs . ps}, $genericDomain["CharZero"]]];
+  neutralGen["IdealMembership", input, cs, held,
+    <|"Type" -> "IdealImplication", "Statement" -> held, "Variables" -> vars,
+      "Hypotheses" -> hs, "Goal" -> {l, r}, "Cofactors" -> cs|>,
+    <|"Cofactors" -> cs, "Generators" -> ps, "Goal" -> q|>, {}, {},
+    {q, cs . ps}, $genericDomain["CharZero"], "CharZeroField"]];
 
 generate[HoldComplete[Implies[And[hs__Equal], Equal[l_, r_]]], o_] :=
   membershipGen[HoldForm[Implies[And[hs], l == r]],
@@ -1322,7 +844,7 @@ denominatorBases[e_] := DeleteDuplicates[Cases[{e}, Power[b_, _?Negative] :> b,
   {0, Infinity}]];
 
 solveGen[input_, cons_List, vars_List, sol_, o_] := Module[{x, p, roots, lc, mult, fact,
-    held, stmt, ftxt, etxt, l, r, alts, sound, dens, eqs},
+    held, l, r, alts, sound, dens, eqs, complete = None, soundIR},
   If[!MatchQ[sol, {{__Rule} ..}] || !AllTrue[Flatten[vars /. sol], ratNumberQ],
     Return[nocert[input], Module]];
   eqs = Select[cons, #[[1]] === Equal &][[All, 2 ;; 3]];
@@ -1341,36 +863,30 @@ solveGen[input_, cons_List, vars_List, sol_, o_] := Module[{x, p, roots, lc, mul
         alts = iEqual[x, #] & /@ roots;
         held = forAllHeld[inertHeld[iEquivalent[iEqual[l, r],
             If[Length[alts] === 1, First[alts], iOr @@ alts]]], {x}];
-        stmt = leanThm[held, "Rat"];
-        ftxt = leanStmt[inertHeld[fact], "Rat"];
-        etxt = leanStmt[inertHeld[iEqual[l, r]], "Rat"];
-        If[StringQ[stmt] && StringQ[ftxt] && StringQ[etxt],
-          Return[structGen["Roots", input, sol, held, stmt,
-            StringJoin["by", introLine[{x}],
-              "\n  have mth_e : ", leanStmt[inertHeld[iPlus[l, iTimes[-1, r]]], "Rat"],
-              " = ", ftxt, " := (by grind)",
-              "\n  have mth_h : (", etxt, ") \[LeftRightArrow] ", ftxt,
-              " = 0 := (by rw [\[LeftArrow] mth_e]; grind)",
-              "\n  rw [mth_h]\n  grind"],
-            <|"Completeness" -> True, "Factorization" -> inertValue[fact],
-              "Roots" -> roots, "Multiplicities" -> mult|>,
-            {}, {}, {Flatten[(l - r) /. sol], 0}], Module]]]]];
+        complete = neutralGen["Roots", input, sol, held,
+          <|"Type" -> "RootsComplete", "Statement" -> held, "Variable" -> x,
+            "Equation" -> {l, r}, "Factorization" -> fact|>,
+          <|"Completeness" -> True, "Factorization" -> inertValue[fact],
+            "Roots" -> roots, "Multiplicities" -> mult|>,
+          {}, {}, {Flatten[(l - r) /. sol], 0}]]]];
   (* Soundness: substitute every solution into every constraint (held, so
      the substitution reaches Lean) and let the kernel evaluate.  Lean's
      x / 0 = 0 would accept a "solution" that zeroes a denominator, so each
-     denominator of the system is also stated nonzero at each solution. *)
+     denominator of the system is also stated nonzero at each solution.  It
+     is also the fallback of the completeness obligation, for a backend that
+     cannot state the latter. *)
   dens = denominatorBases[cons[[All, 2 ;; 3]]];
   sound = With[{e = iAnd @@ Join[iUnequal[#, 0] & /@ dens,
        (#[[1]] /. $solveRels) @@ #[[2 ;; 3]] & /@ cons]},
     HoldForm[e]] /. iAnd[c_] :> c;
   held = inertHeld[If[Length[sol] === 1, sound /. First[sol], iAnd @@ ((sound /. #) & /@ sol)]];
-  stmt = leanThm[held, "Rat"];
-  If[!StringQ[stmt], Return[nocert[input], Module]];
-  structGen["Roots", input, sol, held, stmt, "by\n  decide +kernel",
+  soundIR = neutralGen["Roots", input, sol, held,
+    <|"Type" -> "ClosedFact", "Statement" -> held|>,
     <|"Completeness" -> False, "Solutions" -> sol, "Denominators" -> dens|>,
     {"completeness: that Solve returned every solution (only soundness -- each solution \
 satisfies each constraint, with every denominator nonzero -- is certified)"},
-    {}, {Flatten[Table[(#[[1]] - #[[2]]) & /@ eqs /. s, {s, sol}]], 0}]];
+    {}, {Flatten[Table[(#[[1]] - #[[2]]) & /@ eqs /. s, {s, sol}]], 0}, Rationals, "Closed"];
+  If[complete === None, soundIR, Append[complete, "Fallback" -> soundIR]]];
 
 generate[HoldComplete[Solve[eqs_, vs_]], o_] := Module[{input = HoldForm[Solve[eqs, vs]],
     cons, vars, sol},
@@ -1386,11 +902,10 @@ generate[HoldComplete[Solve[eqs_, vs_]], o_] := Module[{input = HoldForm[Solve[e
 (* checked by the kernel evaluating the prelude's matMul / det / matVec    *)
 (* ---------------------------------------------------------------------- *)
 
-matrixGen[kind_, input_, result_, held_, cert_, trusted_, claim_] := With[
-  {stmt = leanThm[held, "Rat"]},
-  If[!StringQ[stmt], nocert[input],
-    structGen[kind, input, result, held, stmt, "by\n  decide +kernel", cert, trusted, {},
-      claim]]];
+(* A closed rational fact about the matrices: the kernel evaluates it. *)
+matrixGen[kind_, input_, result_, held_, cert_, trusted_, claim_] :=
+  neutralGen[kind, input, result, held, <|"Type" -> "ClosedFact", "Statement" -> held|>,
+    cert, trusted, {}, claim, Rationals, "Closed"];
 
 generate[HoldComplete[Inverse[m_]], o_] := Module[{input = HoldForm[Inverse[m]], a = m,
     b, n},
@@ -1540,19 +1055,6 @@ sosTerms[p_, gs_List, vars_List] := Module[{q = Expand[p], terms = $Failed, meth
   If[ListQ[terms] && Expand[q - Total[(#[[1]] #[[2]]^2 #[[3]]) & /@ terms]] === 0,
     {terms, method}, $Failed]];
 
-ratText[e_] := leanStmt[HoldForm[e], "Rat"];
-
-(* Lean `have` lines for the square hints; gnames maps each multiplier g to
-   the name of its hypothesis 0 <= g. *)
-sqHints[terms_, gnames_] := Table[With[{t = terms[[k]]},
-    "\n  have mth_s" <> ToString[k] <> " : 0 \[LessEqual] (" <> ratText[t[[2]]] <> ") ^ 2" <>
-      If[t[[3]] === 1, " := Mathilda.sqnn",
-        " * (" <> ratText[t[[3]]] <> ") := Mathilda.mulnn Mathilda.sqnn " <> (t[[3]] /. gnames)]],
-  {k, Length[terms]}];
-
-sqSum[terms_] := StringRiffle[("(" <> ratText[#[[1]]] <> ") * (" <> ratText[#[[2]]] <> ") ^ 2" <>
-    If[#[[3]] === 1, "", " * (" <> ratText[#[[3]]] <> ")"]) & /@ terms, " + "];
-
 (* Hypotheses g >= 0 (or >, <=, <) as polynomials g; $Failed otherwise. *)
 ineqPoly[GreaterEqual[a_, b_] | Greater[a_, b_]] := a - b;
 ineqPoly[LessEqual[a_, b_] | Less[a_, b_]] := b - a;
@@ -1566,7 +1068,7 @@ inertRel[GreaterEqual, a_, b_] := iGreaterEqual[a, b];
 inertRel[LessEqual, a_, b_] := iLessEqual[a, b];
 
 sosClaimGen[input_, vars_List, conds_List, rel_, a_, b_, o_] := Module[{p, q, gs, target,
-    st, terms, gnames, held, stmt, proof, ghints, used},
+    st, terms, held, used},
   If[!AllTrue[vars, Head[#] === Symbol &] || vars === {}, Return[nocert[input], Module]];
   {p, q} = If[rel === GreaterEqual, {a, b}, {b, a}];
   gs = Expand[ineqPoly /@ conds];
@@ -1578,22 +1080,15 @@ sosClaimGen[input_, vars_List, conds_List, rel_, a_, b_, o_] := Module[{p, q, gs
   If[st === $Failed, Return[nocert[input], Module]];
   terms = st[[1]];
   used = DeleteCases[Union[terms[[All, 3]]], 1];
-  gnames = Table[used[[i]] -> "mth_g" <> ToString[i], {i, Length[used]}];
   held = inertHeld[If[conds === {}, iForAll[vars, inertRel[rel, a, b]],
     iForAll[vars, If[Length[conds] === 1, First[conds], iAnd @@ conds], inertRel[rel, a, b]]]];
-  stmt = leanThm[held, "Rat"];
-  If[!StringQ[stmt], Return[nocert[input], Module]];
-  ghints = Table["\n  have mth_g" <> ToString[i] <> " : 0 \[LessEqual] " <> ratText[used[[i]]] <>
-    " := (by grind)", {i, Length[used]}];
-  proof = StringJoin["by", introLine[vars], If[conds === {}, "", "\n  intros"], ghints,
-    sqHints[terms, gnames],
-    "\n  have mth_e : ", ratText[target], " = ", If[terms === {}, "0", sqSum[terms]],
-    " := (by grind)", "\n  grind"];
-  structGen["Nonnegativity", input, True, held, genericStmt[stmt, "Ordered"],
-    genericText[proof],
+  neutralGen["Nonnegativity", input, True, held,
+    <|"Type" -> "WeightedSOS", "Statement" -> held, "Variables" -> vars,
+      "Conditions" -> conds, "Relation" -> rel, "Target" -> target, "Squares" -> terms,
+      "Multipliers" -> used|>,
     <|"Squares" -> terms, "Method" -> st[[2]], "Target" -> target, "Multipliers" -> used,
       "PreCheck" -> True|>,
-    {}, {}, None, $genericDomain["Ordered"]]];
+    {}, {}, None, $genericDomain["Ordered"], "OrderedField"]];
 
 generate[HoldComplete[ForAll[vs_, (r:GreaterEqual | LessEqual)[a_, b_]]], o_] :=
   sosClaimGen[HoldForm[ForAll[vs, r[a, b]]], Flatten[{vs}], {}, r, a, b, o];
@@ -1634,7 +1129,7 @@ optCons[c_] := Module[{l = condList[c] /. {LessEqual[x_, y_, z_] :> Sequence[x <
 
 optimalityGen[input_, h_, spec_, vars_List, o_] := Module[{f, cons, res, m, xs, sgn, F, M,
     subs = {}, red, eqHyps = {}, hh, v, cf, sl, ineqs, gr, Fr, act, lam, G, gradF,
-    sigma, st, terms, used, held, stmt, proof, rel, feas, value, lamFull},
+    sigma, st, terms, held, rel, feas, value, lamFull},
   If[!AllTrue[vars, Head[#] === Symbol &] || vars === {}, Return[nocert[input], Module]];
   {f, cons} = If[ListQ[spec], {First[spec], optCons[And @@ Rest[spec]]}, {spec, {}}];
   If[MemberQ[cons, $Failed] || !AllTrue[Append[cons[[All, 2]], f], polyQ[#, vars] &] ||
@@ -1690,34 +1185,17 @@ optimalityGen[input_, h_, spec_, vars_List, o_] := Module[{f, cons, res, m, xs, 
     {If[cons === {}, iForAll[vars, rel],
       iForAll[vars, If[Length[cons] === 1, cons[[1, 3]], iAnd @@ cons[[All, 3]]], rel]]},
     feas, {value}]];
-  stmt = leanThm[held, "Rat"];
-  If[!StringQ[stmt], Return[nocert[input], Module]];
-  used = Select[Range[Length[gr]], lamFull[[#]] =!= 0 &];
-  proof = StringJoin["by",
-    "\n  refine And.intro ?_ ", nestAnd[Length[feas] + 1],
-    introLine[vars], If[cons === {}, "", "\n  intros"],
-    Table["\n  have mth_v" <> ToString[i] <> " : " <> leanVar[eqHyps[[i, 1]]] <> " = " <>
-      ratText[eqHyps[[i, 2]]] <> " := (by grind)\n  subst mth_v" <> ToString[i],
-      {i, Length[eqHyps]}],
-    Table["\n  have mth_g" <> ToString[j] <> " : 0 \[LessEqual] " <> ratText[gr[[j]]] <>
-      " := (by grind)", {j, used}],
-    sqHints[terms, {}],
-    "\n  have mth_e : ", ratText[Expand[Fr - M]], " = ",
-    StringRiffle[Join[
-      ("(" <> ratText[lamFull[[#]]] <> ") * (" <> ratText[gr[[#]]] <> ")") & /@ used,
-      If[terms === {}, {}, {sqSum[terms]}]] /. {} -> {"0"}, " + "],
-    " := (by grind)", "\n  grind"];
-  structGen["Optimality", input, res, held, genericStmt[stmt, "Ordered"], genericText[proof],
+  neutralGen["Optimality", input, res, held,
+    <|"Type" -> "KKT", "Statement" -> held, "Variables" -> vars, "Objective" -> f,
+      "Value" -> m, "Minimizer" -> xs, "Sign" -> sgn, "Constraints" -> cons,
+      "Eliminated" -> eqHyps, "Reduced" -> gr, "Multipliers" -> lamFull, "Squares" -> terms,
+      "Gap" -> Expand[Fr - M], "Facts" -> Length[feas] + 1|>,
     <|"Value" -> m, "Minimizer" -> xs, "Multipliers" -> lamFull,
       "Constraints" -> ineqs[[All, 3]] /. $inertRules, "Eliminated" -> (Rule @@@ eqHyps),
       "Squares" -> terms, "Method" -> st[[2]], "LinearProgram" -> (sigma === 0),
       "PreCheck" -> (Expand[F /. xs] === M && AllTrue[ineqs[[All, 2]] /. xs, # >= 0 &] &&
         AllTrue[Select[cons, #[[1]] === "eq" &][[All, 2]] /. xs, # === 0 &])|>,
-    {}, {}, None, $genericDomain["Ordered"]]];
-
-(* The remaining conjuncts (feasibility, value) are closed rational facts. *)
-nestAnd[1] := "(by grind)";
-nestAnd[n_Integer] := "(And.intro (by grind) " <> nestAnd[n - 1] <> ")";
+    {}, {}, None, $genericDomain["Ordered"], "OrderedField"]];
 
 generate[HoldComplete[(h:Minimize | Maximize)[spec_, vs_]], o_] := With[{sv = spec},
   optimalityGen[HoldForm[h[spec, vs]], h, sv, Flatten[{vs}], o]];
@@ -1745,69 +1223,50 @@ prattSteps[p_Integer] := Module[{fs = FactorInteger[p - 1], a, sub},
   If[MemberQ[sub, $Failed], $Failed, Append[Flatten[sub, 1], {p, a, fs}]]];
 pratt[p_Integer] := With[{s = prattSteps[p]}, If[ListQ[s], DeleteDuplicates[s], $Failed]];
 
-prattPair[{q_, k_}] := "(" <> ToString[q] <> ", " <> ToString[k] <> ")";
-prattStep[{p_, a_, fs_}] := "(" <> ToString[p] <> ", " <> ToString[a] <> ", [" <>
-  StringRiffle[prattPair /@ fs, ", "] <> "])";
-prattText[cert_List] := "[" <> StringRiffle[prattStep /@ cert, ", "] <> "]";
-
-$lucasStep = "Lucas's primality theorem (Tier 0 checks the Pratt certificate: Lean evaluates \
-Mathilda.prattCheck, it does not prove Lucas's theorem; 2 is the base of the scheme)";
-
-nestAndTerms[{t_}] := t;
-nestAndTerms[{t_, r__}] := "And.intro (" <> t <> ") (" <> nestAndTerms[{r}] <> ")";
-
-factorPow[{p_, 1}] := ToString[p];
-factorPow[{p_, k_}] := ToString[p] <> " ^ " <> ToString[k];
-
 generate[HoldComplete[FactorInteger[n_]], o_] := Module[{input = HoldForm[FactorInteger[n]],
-    nv = n, fi, odd, certs, pre, stmt, held},
+    nv = n, fi, odd, certs, held},
   If[!IntegerQ[nv] || nv < 2, Return[nocert[input], Module]];
   fi = FactorInteger[nv];
   odd = DeleteCases[fi[[All, 1]], 2];
   certs = pratt /@ odd;
   If[MemberQ[certs, $Failed], Return[nocert[input], Module]];
-  pre = StringJoin[Table["theorem @NAME@_pratt_" <> ToString[i] <> " : Mathilda.PrattCertifies " <>
-      ToString[odd[[i]]] <> " " <> prattText[certs[[i]]] <> " := by decide +kernel\n",
-    {i, Length[odd]}]];
-  stmt = StringRiffle[Join[{ToString[nv] <> " = " <> StringRiffle[factorPow /@ fi, " * "]},
-    ("(\[Exists] c, Mathilda.PrattCertifies " <> ToString[#] <> " c)") & /@ odd],
-    " \[And] "];
   held = inertHeld[iAnd @@ Join[{iEqual[nv, iProd @@ (If[#[[2]] === 1, #[[1]], iPower @@ #] & /@ fi)]},
     iPrimeQ /@ fi[[All, 1]]]];
-  Append[structGen["Primality", input, fi, held, stmt,
-    "by\n  exact " <> nestAndTerms[Join[{"by decide +kernel"},
-      Table["Exists.intro _ @NAME@_pratt_" <> ToString[i], {i, Length[odd]}]]],
+  neutralGen["Primality", input, fi, held, primalityOb["Factorization", nv, held,
+      "Factorization" -> fi, "Certificates" -> certs],
     <|"Factorization" -> fi, "Pratt" -> AssociationThread[odd -> certs]|>,
     {$lucasStep},
-    {}, {Times @@ (#[[1]]^#[[2]] & /@ fi), nv}, Integers],
-    "Preamble" -> pre]];
+    {}, {Times @@ (#[[1]]^#[[2]] & /@ fi), nv}, Integers, "Closed"]];
+
+(* The "Primality" obligation: n is prime (a flat Pratt certificate per odd
+   prime), 2 is prime, n < 2 or a composite n is not prime. *)
+primalityOb[form_, nv_, held_, data___Rule] := <|"Type" -> "Primality", "Statement" -> held,
+  "Form" -> form, "N" -> nv, data|>;
 
 generate[HoldComplete[PrimeQ[n_]], o_] := Module[{input = HoldForm[PrimeQ[n]], nv = n, a, cert},
   If[!IntegerQ[nv] || nv < 0, Return[nocert[input], Module]];
   Which[
     nv < 2,
-      structGen["Primality", input, False, With[{x = nv}, HoldForm[!PrimeQ[x]]],
-        "\[Not] Mathilda.IsPrime " <> ToString[nv], "fun h => absurd h.1 (by decide)",
-        <|"Witness" -> "n < 2"|>, {}, {}, None, Integers],
+      With[{h = With[{x = nv}, HoldForm[!PrimeQ[x]]]},
+        neutralGen["Primality", input, False, h, primalityOb["Small", nv, h],
+          <|"Witness" -> "n < 2"|>, {}, {}, None, Integers, "Closed"]],
     nv === 2,
-      structGen["Primality", input, True, HoldForm[PrimeQ[2]], "Mathilda.IsPrime 2",
-        "And.intro (by decide) (fun d h => by\n    have hle := Nat.le_of_dvd (by decide) h\n    \
-rcases d with _ | _ | _ | d <;>\n      first | exact absurd (Nat.eq_zero_of_zero_dvd h) (by decide) \
-| exact Or.inl rfl | exact Or.inr rfl | omega)",
-        <|"Witness" -> "the divisors of 2"|>, {}, {}, None, Integers],
+      neutralGen["Primality", input, True, HoldForm[PrimeQ[2]],
+        primalityOb["Two", nv, HoldForm[PrimeQ[2]]],
+        <|"Witness" -> "the divisors of 2"|>, {}, {}, None, Integers, "Closed"],
     PrimeQ[nv],
       cert = pratt[nv];
       If[cert === $Failed, Return[nocert[input], Module]];
-      structGen["Primality", input, True, With[{x = nv}, HoldForm[PrimeQ[x]]],
-        "Mathilda.PrattCertifies " <> ToString[nv] <> " " <> prattText[cert],
-        "by decide +kernel", <|"Pratt" -> cert|>, {$lucasStep}, {}, None, Integers],
+      With[{h = With[{x = nv}, HoldForm[PrimeQ[x]]]},
+        neutralGen["Primality", input, True, h,
+          primalityOb["Prime", nv, h, "Certificates" -> {cert}],
+          <|"Pratt" -> cert|>, {$lucasStep}, {}, None, Integers, "Closed"]],
     True,
       a = FactorInteger[nv][[1, 1]];
-      structGen["Primality", input, False, With[{x = nv}, HoldForm[!PrimeQ[x]]],
-        "\[Not] Mathilda.IsPrime " <> ToString[nv],
-        "fun h => absurd (h.2 " <> ToString[a] <> " (Exists.intro " <> ToString[nv/a] <>
-          " (by decide +kernel))) (by decide +kernel)",
-        <|"Factor" -> {a, nv/a}|>, {}, {}, None, Integers]]];
+      With[{h = With[{x = nv}, HoldForm[!PrimeQ[x]]]},
+        neutralGen["Primality", input, False, h,
+          primalityOb["Composite", nv, h, "Divisor" -> a],
+          <|"Factor" -> {a, nv/a}|>, {}, {}, None, Integers, "Closed"]]]];
 
 (* ---------------------------------------------------------------------- *)
 (* Row 16: Sum[t, {k, a, n}] with t = polynomial(k) c^k (c rational) or a   *)
@@ -1815,26 +1274,7 @@ rcases d with _ | _ | _ | d <;>\n      first | exact absurd (Nat.eq_zero_of_zero
 (* forall m : Nat, S m = closed(m + a) by induction.                        *)
 (* ---------------------------------------------------------------------- *)
 
-(* c^(alpha v + beta) (c rational, alpha, beta integers) with v -> B + sh as
-   (c^alpha)^B * c^(alpha sh + beta): the exponent is the Nat binder B only. *)
-natPower[c_, ex_, v_, b_, sh_] := Module[{al = Coefficient[Expand[ex], v, 1], be},
-  be = Expand[ex - al v];
-  If[c =!= 0 && IntegerQ[al] && IntegerQ[be] && FreeQ[be, v],
-    iProd[iPower[c^al, b], c^(al sh + be)], $Failed]];
-
-(* e with the summation variable v replaced by the Nat binder b shifted by
-   sh: exponents become b (natPower), every other v the rational (b + sh). *)
-natForm[e_, v_, b_, sh_] := Module[{r},
-  r = e /. Power[c_?ratNumberQ, ex_] /; !FreeQ[ex, v] :> natPower[c, ex, v, b, sh];
-  If[!FreeQ[r, $Failed], Return[$Failed, Module]];
-  r /. v -> If[sh === 0, ratCast[b], iPlus[ratCast[b], sh]]];
-
-$sumBinder = Lean`Private`m1;
-$termBinder = Lean`Private`k1;
-$sumPass = {"Lean.Private.ratCast", "Lean.Private.m1", "Lean.Private.k1"};
-
-sumGen[input_, t_, k_Symbol, a_, n_Symbol, cl0_, o_] := Module[{tl, cl, ttxt, ctxt, av,
-    held, stmt, pre, proof, closed},
+sumGen[input_, t_, k_Symbol, a_, n_Symbol, cl0_, o_] := Module[{av, held, closed},
   av = a;
   (* Sum @@ {...}: a literal Sum[t, {k, ...}] here would scope (rename) the
      iterator instead of substituting the argument k. *)
@@ -1854,33 +1294,18 @@ sumGen[input_, t_, k_Symbol, a_, n_Symbol, cl0_, o_] := Module[{tl, cl, ttxt, ct
   If[denominatorBases[t] =!= {} && !FreeQ[denominatorBases[t], k] ||
      denominatorBases[closed] =!= {} && !FreeQ[denominatorBases[closed], n],
     Return[nocert[input], Module]];
-  tl = natForm[t, k, $termBinder, 0];
-  cl = natForm[closed, n, $sumBinder, av];
-  If[tl === $Failed || cl === $Failed, Return[nocert[input], Module]];
-  ttxt = leanStmt[inertHeld[tl], "Rat", $sumPass];
-  ctxt = leanStmt[inertHeld[cl], "Rat", $sumPass];
-  If[!StringQ[ttxt] || !StringQ[ctxt], Return[nocert[input], Module]];
-  pre = StringJoin[
-    "def @NAME@_t (k1 : Nat) : Rat := ", ttxt, "\n",
-    "def @NAME@_S : Nat \[RightArrow] Rat\n",
-    "  | 0 => @NAME@_t ", ToString[av], "\n",
-    "  | m1 + 1 => @NAME@_S m1 + @NAME@_t (m1 + 1", If[av === 0, "", " + " <> ToString[av]],
-    ")\n"];
-  stmt = "\[ForAll] m1 : Nat, @NAME@_S m1 = " <> ctxt;
-  proof = StringJoin["by\n  intro m1\n  induction m1 with",
-    "\n  | zero => simp only [@NAME@_S, @NAME@_t] <;> (try push_cast) <;> grind",
-    "\n  | succ m1 ih => simp only [@NAME@_S, @NAME@_t, ih] <;> (try push_cast) <;> grind"];
   (* Inert heads, not With: With renames the iterator of a held Sum. *)
   held = inertHeld[iForAll[n, iGreaterEqual[n, av], iEqual[iSumOp[t, {k, av, n}], closed]]];
-  Append[structGen["ClosedFormSum", input, closed, held, stmt, proof,
+  neutralGen["ClosedFormSum", input, closed, held,
+    <|"Type" -> "Induction", "Statement" -> held, "Term" -> t, "Variable" -> k,
+      "LowerLimit" -> av, "SumVariable" -> n, "ClosedForm" -> closed|>,
     <|"Term" -> t, "Variable" -> k, "LowerLimit" -> av, "ClosedForm" -> closed,
       "PreCheck" -> (Expand[(closed /. n -> av) - (t /. k -> av)] === 0 &&
         Expand[(closed /. n -> n + 1) - closed - (t /. k -> n + 1)] === 0)|>,
     {"the closed form is proved for integer n >= " <> ToString[av] <> " only (Lean's \
 statement is over n = " <> If[av === 0, "", ToString[av] <> " + "] <> "m with m : Nat), as \
 \"Theorem\" states"},
-    {}, {Sum @@ {t, {k, av, n}}, closed}],
-    "Preamble" -> pre]];
+    {}, {Sum @@ {t, {k, av, n}}, closed}, Rationals, "Int"]];
 
 (* The held input is passed whole (s, c): wrapping a held Sum in With would
    rename its iterator. *)
@@ -1889,152 +1314,6 @@ generate[HoldComplete[s:Sum[t_, {k_Symbol, a_, n_Symbol}]], o_] :=
 
 generate[HoldComplete[c:Equal[Sum[t_, {k_Symbol, a_, n_Symbol}], rhs_]], o_] :=
   sumGen[HoldForm[c], t, k, a, n, rhs, o];
-
-
-(* ---------------------------------------------------------------------- *)
-(* Row 17: Tier 1 antiderivative (Mathlib) -- HasDerivAt F f x, the proof   *)
-(* term built structurally from F's tree (plan section 3.3) and closed by   *)
-(* congr_deriv + field_simp / ring.  The function body is written by the    *)
-(* same walk, so it matches the proof term's shape exactly.                 *)
-(* ---------------------------------------------------------------------- *)
-
-(* Lean text of a constant (free of x) as a Real; $Failed if untranslatable. *)
-realConst[c_] := With[{s = toLean[HoldForm[c], "Real", False, {}, True]},
-  If[StringQ[s], "(" <> s <> " : Real)", $Failed]];
-
-(* {body, proof term} for e (in x); hypotheses d != 0 are appended to the
-   private list $hdHyps as {name, body of d, d}.  $Failed outside the table. *)
-hd[e_, x_] /; FreeQ[e, x] := With[{c = realConst[e]},
-  If[c === $Failed, $Failed, {c, "(hasDerivAt_const " <> $hdVar <> " " <> c <> ")"}]];
-hd[x_Symbol, x_Symbol] := {$hdVar, "(hasDerivAt_id' " <> $hdVar <> ")"};
-hd[e_Plus, x_] := Module[{ps = hd[#, x] & /@ (List @@ e)},
-  If[MemberQ[ps, $Failed], $Failed,
-    Fold[{"(" <> #1[[1]] <> " + " <> #2[[1]] <> ")", "(" <> #1[[2]] <> ".add " <> #2[[2]] <> ")"} &,
-      First[ps], Rest[ps]]]];
-hd[e_Times, x_] := Module[{fs = List @@ e, cs, num, den, n, d, pn, pd, h},
-  cs = Select[fs, FreeQ[#, x] &];
-  den = Cases[fs, Power[b_, k_Integer?Negative] /; !FreeQ[b, x] :> b^(-k)];
-  num = Select[fs, !FreeQ[#, x] && !MatchQ[#, Power[b_, _Integer?Negative] /; !FreeQ[b, x]] &];
-  Which[
-    den =!= {},
-      pn = hd[Times @@ Join[cs, num], x]; pd = hd[Times @@ den, x];
-      If[pn === $Failed || pd === $Failed, Return[$Failed, Module]];
-      h = hdHyp[pd[[1]], Times @@ den];
-      {"(" <> pn[[1]] <> " / " <> pd[[1]] <> ")", "(" <> pn[[2]] <> ".div " <> pd[[2]] <> " " <> h <> ")"},
-    cs =!= {},
-      n = realConst[Times @@ cs]; pn = hd[Times @@ num, x];
-      If[n === $Failed || pn === $Failed, Return[$Failed, Module]];
-      {"(" <> n <> " * " <> pn[[1]] <> ")", "(" <> pn[[2]] <> ".const_mul " <> n <> ")"},
-    True,
-      pn = hd[#, x] & /@ num;
-      If[MemberQ[pn, $Failed], Return[$Failed, Module]];
-      Fold[{"(" <> #1[[1]] <> " * " <> #2[[1]] <> ")", "(" <> #1[[2]] <> ".mul " <> #2[[2]] <> ")"} &,
-        First[pn], Rest[pn]]]];
-hd[Power[x_Symbol, k_Integer?Positive], x_Symbol] :=
-  {"(" <> $hdVar <> " ^ " <> ToString[k] <> ")",
-   "(hasDerivAt_pow " <> ToString[k] <> " " <> $hdVar <> ")"};
-hd[Power[u_, k_Integer?Positive], x_] := With[{p = hd[u, x]},
-  If[p === $Failed, $Failed,
-    {"(" <> p[[1]] <> " ^ " <> ToString[k] <> ")", "(" <> p[[2]] <> ".pow " <> ToString[k] <> ")"}]];
-hd[Power[u_, k_Integer?Negative], x_] := Module[{p = hd[u^(-k), x], h},
-  If[p === $Failed, Return[$Failed, Module]];
-  h = hdHyp[p[[1]], u^(-k)];
-  {"(1 / " <> p[[1]] <> ")", "((hasDerivAt_const " <> $hdVar <> " (1 : Real)).div " <> p[[2]] <> " " <> h <> ")"}];
-hd[Log[u_], x_] := Module[{p = hd[u, x], h},
-  If[p === $Failed, Return[$Failed, Module]];
-  h = hdHyp[p[[1]], u];
-  {"Real.log " <> p[[1]], "(" <> p[[2]] <> ".log " <> h <> ")"}];
-hd[ArcTan[u_], x_] := With[{p = hd[u, x]},
-  If[p === $Failed, $Failed, {"Real.arctan " <> p[[1]], "(" <> p[[2]] <> ".arctan)"}]];
-(* Mathlib has no Real.artanh: artanh u = (log (1 + u) - log (1 - u)) / 2. *)
-hd[ArcTanh[u_], x_] := Module[{p = hd[u, x], h1, h2, a, b},
-  If[p === $Failed, Return[$Failed, Module]];
-  a = "(1 + " <> p[[1]] <> ")"; b = "(1 - " <> p[[1]] <> ")";
-  h1 = hdHyp[a, 1 + u]; h2 = hdHyp[b, 1 - u];
-  {"((Real.log " <> a <> " - Real.log " <> b <> ") / 2)",
-   "((((" <> p[[2]] <> ".const_add 1).log " <> h1 <> ").sub ((" <> p[[2]] <>
-     ".const_sub 1).log " <> h2 <> ")).div_const 2)"}];
-hd[_, _] := $Failed;
-
-$hdHyps = {};
-$hdVar = "x";
-
-(* The hypothesis d != 0 for a polynomial d, by its Lean text; its name. *)
-realHyp[d_] := With[{s = toLean[With[{dd = d}, HoldForm[dd]], "Real", False, {}]},
-  If[StringQ[s], hdHyp["(" <> s <> ")", d], $Failed]];
-hdHyp[body_String, d_] := Module[{old = SelectFirst[$hdHyps,
-    #[[2]] === body || Expand[#[[3]] - d] === 0 &, None]},
-  If[old =!= None, old[[1]],
-    With[{nm = "mth_h" <> ToString[Length[$hdHyps] + 1]},
-      AppendTo[$hdHyps, {nm, body, d}]; nm]]];
-
-(* Real.log semantics for the witness check: Real.log u = Log[Abs[u]],
-   Real.log 0 = 0. *)
-realLogAt[u_?NumericQ] := If[PossibleZeroQ[u], 0, Log[Abs[u]]];
-$witnessPoints = {3, 7/2, 11, 1/3, 5/7, -3, -7/2, -11, -1/3, 17/5, 23, -13/4};
-(* A test point x0 at which every d (in x) is nonzero under Lean's Real
-   semantics, or $Failed.  The value is decided numerically at 40 digits
-   (|d(x0)| > 10^-20); for a hypothesis outside the polynomials in x this is
-   recorded as a trusted step (a nonzero polynomial is never identically 0). *)
-hypWitness[ds_List, x_Symbol] := SelectFirst[$witnessPoints, Function[x0,
-    AllTrue[ds, With[{v = Quiet[N[(# /. Log -> realLogAt) /. x -> x0, 40]]},
-      NumericQ[v] && Im[v] == 0 && Abs[v] > 10^-20] &]], $Failed];
-$hdWitness = None;
-
-tier1AntiderivGen[input_, F_, f_, x_Symbol, o_] := Module[{p, ftxt, b, hb, hyps, stmt, held,
-    xs, proof},
-  $hdHyps = {}; $hdWitness = None;
-  $hdVar = xs = leanVar[x];
-  p = hd[F, x];
-  ftxt = toLean[HoldForm[f], "Real", False, {}];
-  If[p === $Failed || !StringQ[ftxt] || !FreeQ[F, Complex | Root | RootSum],
-    Return[$Failed, Module]];
-  (* field_simp also needs the integrand's denominator to be nonzero. *)
-  b = Denominator[Together[f]];
-  hb = If[FreeQ[b, x], None, realHyp[b]];
-  If[hb === $Failed, Return[$Failed, Module]];
-  (* Each irreducible factor of a hypothesis is nonzero as well (implied, so
-     the statement is not weakened); field_simp needs them one by one. *)
-  Do[Do[If[!FreeQ[fc, x] && realHyp[fc] === $Failed, Return[$Failed, Module]],
-      {fc, FactorList[d][[All, 1]]}],
-    {d, $hdHyps[[All, 3]]}];
-  hyps = $hdHyps;
-  (* The statement is vacuous if some hypothesis d != 0 fails at every real
-     x: Log[x^2] - 2 Log[x] is never 0 over C for x < 0 but is identically 0
-     under Real.log (Real.log x = log |x|), so "∀ x, d ≠ 0 → ..." would hold
-     for any F.  Require a witness point where every hypothesis is nonzero
-     under Lean's semantics. *)
-  If[hyps =!= {},
-    With[{w = hypWitness[hyps[[All, 3]], x]},
-      If[w === $Failed,
-        Message[Certify::vacuous, input,
-          SelectFirst[hyps[[All, 3]], hypWitness[{#}, x] === $Failed &, hyps[[1, 3]]]];
-        Return["vacuous", Module]];
-      $hdWitness = w]];
-  stmt = StringJoin["\[ForAll] ", xs, " : Real, ",
-    (#[[2]] <> " \[NotEqual] 0 \[RightArrow] ") & /@ hyps,
-    "HasDerivAt (fun ", xs, " : Real => ", p[[1]], ") ((", ftxt, " : Real)) ", xs];
-  proof = StringJoin["by\n  intro ", xs, (" " <> #[[1]]) & /@ hyps,
-    "\n  have mth_d := ", p[[2]],
-    "\n  refine mth_d.congr_deriv ?_",
-    (* HasDerivAt.add etc. state the function as f + g: apply it pointwise. *)
-    "\n  try simp only [Pi.add_apply, Pi.sub_apply, Pi.mul_apply, Pi.div_apply]",
-    If[hb === None, "", "\n  try rw [eq_div_iff " <> hb <> "]"],
-    "\n  try field_simp",
-    (* ring1 (ring would fall back to ring_nf without failing), then ring_nf +
-       Real.sq_sqrt for surd coefficients such as 1 / Real.sqrt 2. *)
-    "\n  all_goals first\n  | ring1\n  | (ring_nf; norm_num [Real.sq_sqrt]; try ring_nf)"];
-  held = With[{FF = F, ff = f, xx = x, cond = And @@ (Unequal[#[[3]], 0] & /@ hyps)},
-    HoldForm[ForAll[xx, cond, D[FF, xx] == ff]]];
-  Join[structGen["Antiderivative", input, F, held, stmt, proof,
-    <|"Form" -> "HasDerivAt", "Variable" -> x, "ProofTerm" -> p[[2]],
-      "HypothesisWitness" -> $hdWitness|>,
-    If[$hdWitness === None || AllTrue[hyps[[All, 3]], PolynomialQ[#, x] &], {},
-      {"the hypotheses are satisfiable: each is nonzero at " <>
-      ToString[x] <> " = " <> ToString[$hdWitness, InputForm] <> " under Real.log semantics \
-(checked by Mathilda numerically, 40 digits; not by Lean)"}],
-    With[{d = #[[3]]}, HoldForm[d != 0]] & /@ hyps, {D[F, x], f}, Reals],
-    <|"Tier" -> 1|>]];
 
 (* Anything else: a symbol or call holding a supported shape (c = a == b;
    Certify[c]) is evaluated once and dispatched again; a fixed point that
@@ -2125,18 +1404,6 @@ optText[s_String] := s;
 optText[s_Symbol] := SymbolName[Unevaluated[s]];
 optText[_] := None;
 
-(* The ProofObject association from a generator and a verdict. *)
-mkProofObject[g_, v_, engine_, tierShown_, lv_, source_, lt_] := With[{a = <|
-  "Kind" -> g["Kind"], "Input" -> g["Input"], "Result" -> g["Result"],
-  "Theorem" -> g["Theorem"], "LeanTheorem" -> lt, "ProofScript" -> g["Proof"],
-  "LeanSource" -> source, "Certificate" -> g["Certificate"],
-  "Verified" -> v["Verified"], "Engine" -> engine, "Tier" -> tierShown,
-  "Domain" -> g["Domain"], "Hypotheses" -> g["Hypotheses"],
-  "TrustedSteps" -> g["TrustedSteps"], "Axioms" -> v["Axioms"], "Logs" -> v["Logs"],
-  "Timing" -> v["Timing"], "Cached" -> TrueQ[v["Cached"]], "LeanVersion" -> lv|>},
-  $issued[Hash[a]] = True;
-  ProofObject[a]];  (* With: the held slot receives the evaluated Association *)
-
 (* Authentication (sixth review, v0.6522).  ProofObject[assoc] is an inert
    container: anyone can write ProofObject[<|"Verified" -> True, ...|>].  So
    every association Certify produces is registered by its Hash in this
@@ -2152,6 +1419,40 @@ authenticQ[a_] := TrueQ[$issued[Hash[a]]];
 verdictOf[a_] := If[authenticQ[a], Lookup[a, "Verified", Missing["UnknownProperty", "Verified"]],
   Missing["Unauthenticated"]];
 
+(* ---------------------------------------------------------------------- *)
+(* Backends and the pipeline                                               *)
+(* ---------------------------------------------------------------------- *)
+
+(* The backend registry: name -> spec, registered at load by the file that
+   defines the backend.  Spec keys: "Name", "Trust" (Kernel | ExactArithmetic
+   | Heuristic), "Encode" ([ir, o] -> artefacts | $Failed after a message |
+   "Untranslatable" when the IR has a "Fallback"), "Run" ([items, o] ->
+   verdicts; item <|"Index", "G"|>), "Present" ([item, v, o] -> ProofObject),
+   "Label" ([assoc] -> the summary box's third field). *)
+$backends = <||>;
+$backendKeys = {"Name", "Trust", "Encode", "Run", "Present", "Label"};
+registerBackend[name_String, spec_Association] := If[
+  SubsetQ[Keys[spec], $backendKeys] && spec["Name"] === name &&
+    MemberQ[{"Kernel", "ExactArithmetic", "Heuristic"}, spec["Trust"]],
+  $backends = Append[$backends, name -> spec]; name, $Failed];
+
+(* The IR joined with the engine's artefacts, or $Failed after a message; run
+   right after the generator, so an encoding refusal keeps its position. *)
+encodeFor[ir_, engine_, o_] := With[{art = $backends[engine]["Encode"][ir, o]},
+  Which[
+    art === "Untranslatable" && KeyExistsQ[ir, "Fallback"], encodeFor[ir["Fallback"], engine, o],
+    art === "Untranslatable", nocert[ir["Input"]],
+    AssociationQ[art], Join[ir, art],
+    True, $Failed]];
+
+(* The claim-form work deferred until the obligation is encoded: the claim
+   Integrate[f, x] == F is certified as D[F, x] == f (Certify::antideriv,
+   the Tier 0 "Theorem", the trusted step on the gap). *)
+postEncode[g_] := If[!KeyExistsQ[g, "ClaimForm"], g, With[{cf = g["ClaimForm"]},
+  Message[Certify::antideriv, Sequence @@ cf["Message"]];
+  Join[g, <|"Theorem" -> If[g["Tier"] === 1, g["Theorem"], cf["Theorem"]],
+    "TrustedSteps" -> Append[g["TrustedSteps"], cf["TrustedStep"]]|>]]];
+
 (* The generator association of one item plus the tier it runs at
    ("TierUsed"), or $Failed (after a message). *)
 prepare[hc_HoldComplete, o_] := Module[{g, tier, proj, rw, sides, ign},
@@ -2161,6 +1462,9 @@ prepare[hc_HoldComplete, o_] := Module[{g, tier, proj, rw, sides, ign},
   If[rw === $Failed, Return[$Failed, Module]];
   g = generate[First[rw], o];
   If[!AssociationQ[g], Return[$Failed, Module]];
+  g = encodeFor[g, o["Engine"], o];
+  If[!AssociationQ[g], Return[$Failed, Module]];
+  g = postEncode[g];
   If[MemberQ[rw[[2]], Factor | FactorTerms],
     g = Join[g, <|"Kind" -> If[g["Kind"] === "Identity", "Factorization", g["Kind"]],
       "TrustedSteps" -> DeleteDuplicates[Append[g["TrustedSteps"],
@@ -2208,25 +1512,26 @@ heuristicVerdict[g_] := Module[{v = Missing["NotChecked"], t = 0.},
       Flatten[{g["Claim"][[1]] - g["Claim"][[2]]}], heuristicZeroQ]]]]];
   <|"Verified" -> v, "Axioms" -> {}, "Logs" -> {}, "Timing" -> t|>];
 
-(* Session cache of Lean verdicts, keyed by the theorem text under a fixed
-   name (so a theorem is found whatever its position in a batch), the tier,
-   the executable and the project.  Only definitive verdicts are stored. *)
-$certCache = <||>;
-(* The key is the full text itself (not a hash), so two different theorems
-   can never share a verdict. *)
-cacheKey[g_, hb_, exe_, proj_] := {
-  theoremChunk["mathilda_cert", g["Statement"], g["Proof"], hb,
-    Lookup[g, "Preamble", ""]]["Text"],
-  g["TierUsed"], exe, If[g["TierUsed"] === 1, proj, None]};
+(* The heuristic shows the Lean statement and batch source. *)
+heuristicRun[items_List, o_] := MapThread[Append[heuristicVerdict[#1["G"]], "Source" -> #2] &,
+  {items, leanBatchSources[items, o]}];
+heuristicPresent[item_, v_, o_] := With[{g = leanNamed[item]},
+  mkProofObject[Append[g, "TrustedSteps" ->
+      {"Mathilda's PossibleZeroQ / Simplify (a heuristic check, not a proof)"}],
+    v, "Mathilda", "Heuristic", Missing["NotChecked"], v["Source"], g["Statement"]]];
 
-(* Certify a list of held items with one Lean run per tier.  The result is
-   aligned with the input; an item without a certificate gives $Failed. *)
-certifyItems[hcs_List, opts_List] := Module[{o, engine, gens, hb, chunks, out, exe, proj,
-    idx, src, keys, todo, fresh, vs, v, lv, named},
+registerBackend["Mathilda", <|"Name" -> "Mathilda", "Trust" -> "Heuristic",
+  "Encode" -> leanEncode, "Run" -> heuristicRun, "Present" -> heuristicPresent,
+  "Label" -> ("Mathilda Heuristic" &), "Options" -> {}|>];
+
+(* Certify a list of held items with the engine's backend (Lean: one run per
+   tier), aligned with the input ($Failed: no certificate).  Only a kernel
+   backend's True is shown as True. *)
+certifyItems[hcs_List, opts_List] := Module[{o, engine, gens, items, vs, v, out},
   o = certOptions[opts];
   If[o === $Failed, Return[$Failed, Module]];
   engine = o["Engine"];
-  If[!MemberQ[{"Lean", "Mathilda"}, engine],
+  If[!StringQ[engine] || !KeyExistsQ[$backends, engine],
     Message[Certify::engine, engine]; Return[$Failed, Module]];
   (* Every Domain value has one stated meaning ($domains); anything else
      (Algebraics, "Complexes", ...) is refused rather than silently mapped. *)
@@ -2235,59 +1540,17 @@ certifyItems[hcs_List, opts_List] := Module[{o, engine, gens, hb, chunks, out, e
   With[{why = methodProblem[o["Method"]]},
     If[why =!= None, Message[Certify::method, o["Method"], why]; Return[$Failed, Module]]];
   gens = prepare[#, o] & /@ hcs;
-  hb = heartbeats[o["TimeConstraint"]];
-  chunks = Table[If[AssociationQ[gens[[k]]],
-      theoremChunk["mathilda_cert_" <> ToString[k], gens[[k]]["Statement"],
-        gens[[k]]["Proof"], hb, Lookup[gens[[k]], "Preamble", ""]], None],
-    {k, Length[gens]}];
-  (* The cache keys use the generators as they are (auxiliary names still
-     @NAME@); the ProofObjects show them under the theorem's actual name. *)
-  named[k_] := With[{g = gens[[k]], nm = "mathilda_cert_" <> ToString[k]},
-    Join[g, AssociationMap[StringReplace[g[#], "@NAME@" -> nm] &,
-      Select[{"Statement", "Proof", "Preamble"}, StringQ[g[#]] &]]]];
+  items = Table[<|"Index" -> k, "G" -> gens[[k]]|>,
+    {k, Select[Range[Length[gens]], AssociationQ[gens[[#]]] &]}];
   out = ConstantArray[$Failed, Length[gens]];
-  proj = leanProject[o["LeanProject"]];
-  exe = leanExe[o["LeanExecutable"]];
-  Do[
-    idx = Select[Range[Length[gens]],
-      AssociationQ[gens[[#]]] && gens[[#]]["TierUsed"] === tier &];
-    If[idx =!= {},
-      src = First[assembleFile[chunks[[idx]], tier]];
-      Which[
-        engine === "Mathilda",
-          Do[With[{g = named[k]},
-              out[[k]] = mkProofObject[Append[g, "TrustedSteps" ->
-                  {"Mathilda's PossibleZeroQ / Simplify (a heuristic check, not a proof)"}],
-                heuristicVerdict[g], "Mathilda", "Heuristic", Missing["NotChecked"], src,
-                g["Statement"]]], {k, idx}],
-        !TrueQ[o["Verify"]],
-          Do[out[[k]] = mkProofObject[named[k], <|"Verified" -> Missing["NotChecked"],
-                "Axioms" -> {}, "Logs" -> {}, "Timing" -> 0.|>, "Lean", tier,
-                Missing["NotChecked"], src, named[k]["Statement"]], {k, idx}],
-        True,
-          keys = AssociationThread[idx -> (cacheKey[gens[[#]], hb, exe, proj] & /@ idx)];
-          todo = Select[idx, !KeyExistsQ[$certCache, keys[#]] &];
-          fresh = <||>;
-          If[todo =!= {},
-            (* Items whose proof is a user Method script each get a Lean file
-               of their own: no chunk can influence another one's verdict. *)
-            With[{shared = Select[todo, !TrueQ[gens[[#]]["UserProof"]] &],
-                own = Select[todo, TrueQ[gens[[#]]["UserProof"]] &]},
-              If[shared =!= {},
-                fresh = AssociationThread[shared -> runBatch[chunks[[shared]], tier, exe, proj]]];
-              Do[fresh = Append[fresh, k -> First[runBatch[chunks[[{k}]], tier, exe, proj]]],
-                {k, own}]];
-            Do[If[BooleanQ[fresh[k]["Verified"]],
-                $certCache = Append[$certCache, keys[k] -> fresh[k]]], {k, todo}]];
-          Do[
-            v = If[KeyExistsQ[fresh, k], Append[fresh[k], "Cached" -> False],
-              Append[$certCache[keys[k]], "Cached" -> True]];
-            lv = If[MissingQ[v["Verified"]], Missing["NotAvailable"], leanVersionOf[exe]];
-            If[v["Verified"] === False, Message[Certify::rejected, gens[[k]]["Input"]]];
-            out[[k]] = mkProofObject[named[k], v, "Lean", tier, lv, v["Source"],
-              named[k]["Statement"]],
-            {k, idx}]]],
-    {tier, {0, 1}}];
+  If[items =!= {},
+    vs = $backends[engine]["Run"][items, o];
+    Do[
+      v = vs[[j]];
+      If[v["Verified"] === True && $backends[engine]["Trust"] =!= "Kernel",
+        v = Append[v, "Verified" -> Missing[engine, True]]];
+      out[[items[[j]]["Index"]]] = $backends[engine]["Present"][items[[j]], v, o],
+      {j, Length[items]}]];
   out];
 
 (* Certify[{c1, c2, ...}] certifies a batch in one Lean run (per tier). *)
@@ -2311,24 +1574,10 @@ timingText[_] := "- s";
 Format[ProofObject[a_?AssociationQ]] := SequenceForm @ StringJoin[
   "ProofObject[\[LeftGuillemet]", ToString[a["Kind"]], "\[RightGuillemet] Verified: ",
   ToString[verdictOf[a]], " | ",
-  If[a["Engine"] === "Lean", "Lean Tier " <> ToString[a["Tier"]], "Mathilda Heuristic"],
+  With[{e = a["Engine"]}, If[StringQ[e] && KeyExistsQ[$backends, e],
+    $backends[e]["Label"][a], "Mathilda Heuristic"]],
   " | ", timingText[a["Timing"]], "]"];
 
-(* ---------------------------------------------------------------------- *)
-(* Lean -> Mathilda oracle (server side of the lean/ package tactics)      *)
-(* ---------------------------------------------------------------------- *)
-
-(* Every answer is plain data as a String (or "MATHILDA-FAIL: reason"):
-   numerals, the variables v1, v2, ... that the Lean serializer sent,
-   + - * / ^ (natural-number exponents), lists [..] and tuples (..).  The
-   Lean side (lean/Mathilda/Answer.lean) parses it with its own small parser
-   and never elaborates it as Lean syntax; anything else is refused.
-   Coefficients carry no type: Lean builds them at the goal's type.  Nothing
-   here is trusted; the tactic re-checks the certificate in the Lean kernel. *)
-
-(* The entry point is Lean`Internal`Oracle, called by its full name from the
-   lean/ tactics (Mathilda.Tactics); Lean`Internal` is not on $ContextPath, so
-   it does not capture a user's (or a later package's) symbol Oracle. *)
 Lean`Internal`Oracle::usage =
   "Lean`Internal`Oracle[kind, args...] is the server side of the Lean 4 tactics in the lean/ \
 package (mathilda_linear_combination, mathilda_sos, mathilda_prime, #mathilda). It answers \
@@ -2340,54 +1589,11 @@ Lean side parses itself and never elaborates as Lean syntax: kind \"LinearCombin
 evaluated input. A failure gives \"MATHILDA-FAIL: reason\". The answers are untrusted: Lean \
 re-checks them.";
 
-oracleFail[why_String] := "MATHILDA-FAIL: " <> why;
-
-(* Strict text of an evaluated polynomial, no type ascription. *)
-oracleText[e_] := With[{x = e}, toLean[HoldForm[x], None, True, {}]];
-
-oracleVarsQ[vars_List] := AllTrue[vars, Head[#] === Symbol &];
-
-Lean`Internal`Oracle["LinearCombination", {a_, b_}, hs_List, vars_List] /;
-    oracleVarsQ[vars] && AllTrue[hs, MatchQ[#, {_, _}] &] :=
-  Module[{q = Expand[a - b], ps = Expand[#[[1]] - #[[2]]] & /@ hs, cs, txt},
-  If[!AllTrue[Append[ps, q], polyQ[#, vars] &],
-    Return[oracleFail["the goal and hypotheses must be polynomial in the variables"], Module]];
-  cs = Which[q === 0, ConstantArray[0, Length[ps]], ps === {}, $Failed,
-    True, cofactors[q, ps, vars]];
-  If[cs === $Failed, Return[oracleFail["the goal is not a polynomial combination of the \
-hypotheses (no cofactors up to degree 4)"], Module]];
-  txt = oracleText /@ cs;
-  If[!AllTrue[txt, StringQ], Return[oracleFail["cofactors not translatable to Lean"], Module]];
-  "[" <> StringRiffle[txt, ", "] <> "]"];
-
-Lean`Internal`Oracle["SOS", {p_, q_}, gs_List, vars_List] /; oracleVarsQ[vars] :=
-  Module[{f = Expand[q - p], gx = Expand /@ gs, r, idx, txt},
-  If[!AllTrue[Append[gx, f], polyQ[#, vars] &],
-    Return[oracleFail["the goal and hypotheses must be polynomial in the variables"], Module]];
-  r = sosTerms[f, gx, vars];
-  If[r === $Failed, Return[oracleFail["no sum-of-squares certificate found"], Module]];
-  (* 0 for a plain square, i for the multiplier g_i, -1 if mult is neither. *)
-  idx[m_] := If[m === 1, 0,
-    First[FirstPosition[gx, _?(Expand[# - m] === 0 &), {-1}, {1}]]];
-  txt = ({oracleText[#[[1]]], oracleText[#[[2]]], idx[#[[3]]]} &) /@ First[r];
-  If[!AllTrue[Flatten[txt[[All, 1 ;; 2]]], StringQ] || MemberQ[txt[[All, 3]], -1],
-    Return[oracleFail["squares not translatable to Lean"], Module]];
-  "[" <> StringRiffle[("(" <> #[[1]] <> ", " <> #[[2]] <> ", " <>
-      ToString[#[[3]]] <> ")" &) /@ txt, ", "] <> "]"];
-
-Lean`Internal`Oracle["Pratt", p_Integer] := Which[
-  p === 2, oracleFail["2 is the base of the Pratt scheme (PrattCertifies needs an odd prime)"],
-  !PrimeQ[p], oracleFail[ToString[p] <> " is not prime"],
-  True, With[{c = pratt[p]}, If[ListQ[c], prattText[c],
-    oracleFail["no Lucas witness found for " <> ToString[p]]]]];
-
-Lean`Internal`Oracle["Eval", s_String] := With[{r = Quiet[ToExpression[s]]},
-  If[r === $Failed, oracleFail["cannot parse " <> s], ToString[r, LeanForm]]];
-
-Lean`Internal`Oracle[args___] := oracleFail["unsupported query " <> ToString[{args}, InputForm]];
-
 End[];
 
-SetAttributes[{Certify, ProofObject, LeanVerify}, Protected];
-
 EndPackage[];
+
+(* The backends (each opens Lean`Private` itself; no Lean` symbol). *)
+LoadModule["lean/LeanBackend.m"];
+
+SetAttributes[{Lean`Certify, Lean`ProofObject, Lean`LeanVerify}, Protected];
