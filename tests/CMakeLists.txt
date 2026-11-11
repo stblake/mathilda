@@ -6356,7 +6356,8 @@ add_test(NAME fortran_form_tests COMMAND fortran_form_tests)
 # lean_mathlib_tests (Tier 1) also exits 77 unless MATHILDA_LEAN_PROJECT is set.
 # lean_golden_tests needs no Lean: byte identity of every generated certificate
 # against tests/lean_golden/golden.txt (LEAN_GOLDEN_UPDATE=1 rewrites it).
-foreach(_lean_t lean_form lean_certify lean_verify lean_mathlib lean_golden)
+# lean_exact_tests needs no Lean: the Exact backend and multi-engine consensus.
+foreach(_lean_t lean_form lean_certify lean_verify lean_mathlib lean_golden lean_exact)
     add_executable(${_lean_t}_tests test_${_lean_t}.c $<TARGET_OBJECTS:mathilda_common>)
     target_include_directories(${_lean_t}_tests PRIVATE ../src)
     if(USE_ECM)

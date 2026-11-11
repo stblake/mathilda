@@ -113,6 +113,8 @@ Certify[comp] ──► Lean.m generator (IR) ──► LeanBackend.m encoder �
 | replay checker | `src/internal/lean/Replay.lean` | `lean --run` script: replays the compiled module in a fresh kernel environment, prints each declaration's axioms |
 | package | `src/internal/lean/Lean.m` | the prover-neutral core: claim walker, one generator per certificate kind (a neutral IR: result, theorem, typed proof obligation), the backend registry, the pipeline, `ProofObject`, the heuristic engine |
 | Lean backend | `src/internal/lean/LeanBackend.m` | settings and discovery, `LeanVerify`, the per-obligation Lean encoders, batching, the session cache, `` Lean`Internal`Oracle `` |
+| Exact backend | `src/internal/lean/ExactBackend.m` | `Engine -> "Exact"`: per-obligation exact re-checks by Mathilda's own arithmetic (`Missing["Exact", True \| False]`, never `True`) |
+| engines | `src/internal/lean/Engines.m` | `"Engine"` values and lists, the heuristic `"Mathilda"` engine, multi-engine consensus (`"Engines"`, `"EngineDetails"`; only a kernel makes `"Verified"` `True`) |
 | SOS engine | `src/solve/reduce_sos.c` | `` Reduce`SOSCertificate ``: the exact Gram blocks of `Reduce`'s Putinar stage (an additive wrapper; `Reduce` is unchanged) |
 | Lean package | `lean/` | `mathilda_linear_combination`, `mathilda_sos`, `mathilda_prime`, `#mathilda`; `Mathilda/Answer.lean` parses the oracle's answer as data |
 

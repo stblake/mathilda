@@ -13,7 +13,10 @@
 (* MATHILDA_LEAN or ~/.elan).  Row 2 (Mathlib HasDerivAt) runs only when     *)
 (* MATHILDA_LEAN_PROJECT names a Lake project with Mathlib built; row 20     *)
 (* (Lean -> Mathilda tactics) only when `lake` is found.  Both say SKIPPED   *)
-(* otherwise.  Rows 17 and 18 are False by design.                          *)
+(* otherwise.  Rows 17 and 18 are False by design.  The summary's Exact     *)
+(* column re-runs each row with Engine -> "Exact" (Mathilda's exact re-check *)
+(* of the certificate, Missing["Exact", b]: b is shown; never a kernel      *)
+(* verdict).                                                                *)
 (* ====================================================================== *)
 
 $demoRoot = FileNameJoin[{DirectoryName[$InputFileName], "..", ".."}];
@@ -29,9 +32,20 @@ header[n_, title_] := (Print[""];
   Print["[", n, "] ", title];
   Print["    ", StringJoin[Table["-", {StringLength[title] + 4}]]]);
 
-(* Record a row for the summary table at the end. *)
-record[n_, title_, verdict_, tier_, t_, trusted_] :=
-  AppendTo[$rows, {n, title, verdict, tier, t, trusted}];
+(* Record a row for the summary table at the end (exact: the row's
+   verdict under Engine -> "Exact", "-" when not run). *)
+record[n_, title_, verdict_, tier_, t_, trusted_, exact_:"-"] :=
+  AppendTo[$rows, {n, title, verdict, tier, t, trusted, exact}];
+
+(* The held call of a row re-run with Engine -> "Exact" (replacing any
+   Engine option), for the summary's Exact column. *)
+SetAttributes[exactVerdict, HoldAll];
+exactVerdict[h_[a_, opts___]] := With[{os = DeleteCases[{opts}, (Engine | "Engine") -> _]},
+  exactShow[Quiet[ReleaseHold[Hold[h[a, "Engine" -> "Exact", $opts]] /.
+    $opts -> Sequence @@ os]]["Verified"]]];
+exactShow[Missing["Exact", b_]] := ToString[b];
+exactShow[Missing[w_]] := w;
+exactShow[v_] := ToString[v];
 
 (* Print one certified row.  `input` is the literal Mathilda input (held). *)
 report[n_, title_, input_String, obj_ProofObject, wall_, expect_:True] := Module[{v},
@@ -49,9 +63,11 @@ report[n_, title_, input_String, obj_ProofObject, wall_, expect_:True] := Module
   obj];
 
 SetAttributes[demo, HoldAll];
-demo[n_, title_, call_, expect_:True] := Module[{t},
+demo[n_, title_, call_, expect_:True] := Module[{t, obj},
   t = AbsoluteTiming[call];
-  report[n, title, ToString[Unevaluated[call], InputForm], t[[2]], t[[1]], expect]];
+  obj = report[n, title, ToString[Unevaluated[call], InputForm], t[[2]], t[[1]], expect];
+  $rows = Append[Most[$rows], ReplacePart[Last[$rows], 7 -> exactVerdict[call]]];
+  obj];
 
 skipped[n_, title_, why_] := (header[n, title];
   Print["    SKIPPED: ", why];
@@ -153,7 +169,8 @@ Print["    Engine -> \"Lean\":      Verified: ", lean17["Verified"], "    Tier: 
 Print["    Lean:      ", clip[lean17["LeanTheorem"]]];
 Print["    Time:      Lean ", secs[lean17["Timing"]], ", whole Certify call ", secs[t17[[1]]]];
 record[17, "Lean catches the CAS (the heuristic said " <> ToString[Last[heur["Verified"]]] <> ")",
-  lean17["Verified"], lean17["Tier"], t17[[1]], lean17["TrustedSteps"]];
+  lean17["Verified"], lean17["Tier"], t17[[1]], lean17["TrustedSteps"],
+  exactVerdict[Certify[(1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x]]];
 
 (* ---------------------------------------------------------------------- *)
 (* 18. A tampered certificate is rejected.                                 *)
@@ -253,10 +270,11 @@ Print[""];
 Print["Summary"];
 Print["======="];
 Print[StringPadLeft["#", 3], "  ", StringPadRight["Showcase", 74], StringPadRight["Verdict", 9],
-  StringPadRight["Tier", 6], "seconds"];
+  StringPadRight["Tier", 6], StringPadRight["Exact", 7], "seconds"];
 Scan[Print[StringPadLeft[ToString[#[[1]]], 3], "  ",
     StringPadRight[StringTake[#[[2]], UpTo[72]], 74],
-    StringPadRight[ToString[#[[3]]], 9], StringPadRight[ToString[#[[4]]], 6], secs[#[[5]]]] &,
+    StringPadRight[ToString[#[[3]]], 9], StringPadRight[ToString[#[[4]]], 6],
+    StringPadRight[ToString[#[[7]]], 7], secs[#[[5]]]] &,
   $rows];
 Print[""];
 Print["What Lean did NOT check (TrustedSteps), per row:"];

@@ -732,6 +732,22 @@ static void test_review6_verify(void) {
                "Missing[\"Unauthenticated\"]");
 }
 
+/* Engine -> {"Lean", "Exact"} (v0.6525): True only when the kernel accepted;
+ * on a false claim both engines say False and they do not disagree. */
+static void test_multi_engine_verify(void) {
+    test_mute_messages();
+    assert_eval_eq("leanME = Certify[(x+1)^3 == x^3+3x^2+3x+1, Engine -> {\"Lean\", \"Exact\"}]; "
+                   "Null", "Null", 0);
+    check_true("leanME[\"Verified\"] === True");
+    check_true("leanME[\"Engines\"] === <|\"Lean\" -> True, \"Exact\" -> Missing[\"Exact\", True]|>");
+    check_true("StringContainsQ[ToString[leanME], \"Verified: True | Lean Tier 0 + Exact |\"]");
+    check_true("Check[leanMF = Certify[(1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x, "
+               "Engine -> {\"Lean\", \"Exact\"}]; \"none\", \"disagree\", Certify::disagree] === "
+               "\"none\"");
+    check_true("leanMF[\"Verified\"] === False");
+    check_true("leanMF[\"Engines\"] === <|\"Lean\" -> False, \"Exact\" -> Missing[\"Exact\", False]|>");
+}
+
 int main(void) {
 #ifdef __GNUC__
     /* The shared alarm(120) in test_utils.h is too short for this suite: every
@@ -774,6 +790,7 @@ int main(void) {
     TEST(test_review3_domains);
     TEST(test_review4_verify);
     TEST(test_review6_verify);
+    TEST(test_multi_engine_verify);
     printf("All Lean verification tests passed.\n");
     return 0;
 }

@@ -14,8 +14,9 @@
 (* used to clear denominators).                                             *)
 (*                                                                          *)
 (* This file: claim walker, domains, generators (neutral IR), backend      *)
-(* registry, pipeline, ProofObject, heuristic engine.  LeanBackend.m (loaded *)
-(* at the end): the Lean backend (discovery, LeanVerify, encoders, runs).   *)
+(* registry, pipeline, ProofObject.  Loaded at the end: LeanBackend.m (the  *)
+(* Lean backend: discovery, LeanVerify, encoders, runs), ExactBackend.m     *)
+(* (exact re-checks), Engines.m (engine lists, heuristic, consensus).       *)
 (* ====================================================================== *)
 
 BeginPackage["Lean`"];
@@ -30,8 +31,10 @@ p == q]] an ideal membership and Certify[ForAll[vars, p >= q]] a nonnegativity (
 squares). Tier -> 1 gives Mathlib HasDerivAt antiderivatives. Certify[{c1, c2, ...}] \
 certifies a batch in one Lean run. The result is a ProofObject whose \"Verified\" property \
 is True only when Lean accepted the theorem. Options (see Options[Certify]; a name is matched \
-by its text, so \"Engine\" -> v and Engine -> v are the same): \"Engine\" (\"Lean\" or \
-\"Mathilda\", a heuristic check whose \"Verified\" is never True), \"Tier\" (0, 1 or \
+by its text, so \"Engine\" -> v and Engine -> v are the same): \"Engine\" (\"Lean\"; \
+\"Exact\", Mathilda's exact re-check of the certificate, Verified Missing[\"Exact\", True | False]; \
+\"Mathilda\", a heuristic check whose \"Verified\" is never True; or a list of them, combined \
+in \"Engines\", True only when a kernel accepted), \"Tier\" (0, 1 or \
 Automatic), \"Domain\" (Automatic, Complexes, Reals, Rationals, Integers), Method (a tactic \
 script), TimeConstraint, Assumptions, \"Verify\" (False: generate the source only), \
 \"LeanExecutable\", \"LeanProject\".";
@@ -76,7 +79,10 @@ LeanVerify::nolean = "no Lean 4 executable found; set $LeanExecutable or MATHILD
 LeanVerify::badpath = "path `1` cannot be passed safely to the shell on this platform";
 LeanVerify::fail = "Lean process could not be started: `1`";
 Certify::nocert = "no Lean certificate is available for `1`";
-Certify::engine = "unknown Engine `1`; use \"Lean\" or \"Mathilda\"";
+Certify::engine = "unknown Engine `1`; use \"Lean\", \"Exact\", \"Mathilda\" or a list of them";
+Certify::engineopt = "`1` is ignored by the `2` engine";
+Certify::exactfail = "Mathilda's exact re-check of the certificate for `1` failed; see obj[\"Checks\"]";
+Certify::disagree = "the engines disagree on `1`: `2`; a checker or a translation is wrong, or a kernel ran out of time (see obj[\"EngineDetails\"])";
 Certify::tier = "`1` needs Tier 1 (Mathlib); set $LeanProject";
 Certify::nomathlib = "Tier -> 1 requested but $LeanProject is not set";
 Certify::rejected = "Lean rejected the certificate for `1`; see obj[\"Logs\"]";
@@ -1436,14 +1442,20 @@ registerBackend[name_String, spec_Association] := If[
     MemberQ[{"Kernel", "ExactArithmetic", "Heuristic"}, spec["Trust"]],
   $backends = Append[$backends, name -> spec]; name, $Failed];
 
-(* The IR joined with the engine's artefacts, or $Failed after a message; run
-   right after the generator, so an encoding refusal keeps its position. *)
-encodeFor[ir_, engine_, o_] := With[{art = $backends[engine]["Encode"][ir, o]},
-  Which[
-    art === "Untranslatable" && KeyExistsQ[ir, "Fallback"], encodeFor[ir["Fallback"], engine, o],
-    art === "Untranslatable", nocert[ir["Input"]],
-    AssociationQ[art], Join[ir, art],
-    True, $Failed]];
+(* The IR joined with the artefacts of every distinct encoder of the engines
+   (Lean's once for "Lean" and "Mathilda"), or $Failed after a message; run
+   right after the generator, so an encoding refusal keeps its position.
+   "Untranslatable" switches every encoder to the IR's "Fallback". *)
+encodeFor[ir_, engines_List, o_] := Module[{arts = {}, art},
+  Do[art = enc[ir, o];
+    Which[
+      art === "Untranslatable" && KeyExistsQ[ir, "Fallback"],
+        Return[encodeFor[ir["Fallback"], engines, o], Module],
+      art === "Untranslatable", Return[nocert[ir["Input"]], Module],
+      !AssociationQ[art], Return[$Failed, Module]];
+    AppendTo[arts, art],
+    {enc, DeleteDuplicates[$backends[#]["Encode"] & /@ engines]}];
+  Join[ir, Sequence @@ arts]];
 
 (* The claim-form work deferred until the obligation is encoded: the claim
    Integrate[f, x] == F is certified as D[F, x] == f (Certify::antideriv,
@@ -1462,7 +1474,7 @@ prepare[hc_HoldComplete, o_] := Module[{g, tier, proj, rw, sides, ign},
   If[rw === $Failed, Return[$Failed, Module]];
   g = generate[First[rw], o];
   If[!AssociationQ[g], Return[$Failed, Module]];
-  g = encodeFor[g, o["Engine"], o];
+  g = encodeFor[g, o["Engines"], o];
   If[!AssociationQ[g], Return[$Failed, Module]];
   g = postEncode[g];
   If[MemberQ[rw[[2]], Factor | FactorTerms],
@@ -1490,7 +1502,9 @@ prepare[hc_HoldComplete, o_] := Module[{g, tier, proj, rw, sides, ign},
         Method -> o["Method"]},
       !MatchQ[#[[2]], Automatic | {} | True] &];
     Do[Message[Certify::optignored, r, g["Kind"]], {r, ign}]];
-  (* Tier: the generator's natural tier, unless the caller insists. *)
+  (* Tier: the generator's natural tier, unless the caller insists; no Lean
+     encoding (an Exact-only call): no tier. *)
+  If[!KeyExistsQ[g, "Tier"], Return[Append[g, "TierUsed" -> "Exact"], Module]];
   tier = Switch[o["Tier"], 0, g["Tier"], 1, 1, _, g["Tier"]];
   proj = leanProject[o["LeanProject"]];
   If[tier === 1 && proj === None,
@@ -1501,55 +1515,32 @@ prepare[hc_HoldComplete, o_] := Module[{g, tier, proj, rw, sides, ign},
     Message[Certify::tier, g["Input"]]; Return[$Failed, Module]];
   Append[g, "TierUsed" -> tier]];
 
-(* Engine -> "Mathilda": PossibleZeroQ / Simplify on lhs - rhs of the claim
-   (lists compare entrywise); a kind with no claim is not checked. *)
-heuristicZeroQ[d_] := TrueQ[Quiet[PossibleZeroQ[d]]] || TrueQ[Quiet[Simplify[d]] === 0];
-(* "Verified" is never True without Lean: the heuristic's own answer is
-   carried as Missing["Heuristic", True | False]. *)
-heuristicVerdict[g_] := Module[{v = Missing["NotChecked"], t = 0.},
-  If[ListQ[g["Claim"]],
-    t = First[AbsoluteTiming[v = Missing["Heuristic", AllTrue[
-      Flatten[{g["Claim"][[1]] - g["Claim"][[2]]}], heuristicZeroQ]]]]];
-  <|"Verified" -> v, "Axioms" -> {}, "Logs" -> {}, "Timing" -> t|>];
-
-(* The heuristic shows the Lean statement and batch source. *)
-heuristicRun[items_List, o_] := MapThread[Append[heuristicVerdict[#1["G"]], "Source" -> #2] &,
-  {items, leanBatchSources[items, o]}];
-heuristicPresent[item_, v_, o_] := With[{g = leanNamed[item]},
-  mkProofObject[Append[g, "TrustedSteps" ->
-      {"Mathilda's PossibleZeroQ / Simplify (a heuristic check, not a proof)"}],
-    v, "Mathilda", "Heuristic", Missing["NotChecked"], v["Source"], g["Statement"]]];
-
-registerBackend["Mathilda", <|"Name" -> "Mathilda", "Trust" -> "Heuristic",
-  "Encode" -> leanEncode, "Run" -> heuristicRun, "Present" -> heuristicPresent,
-  "Label" -> ("Mathilda Heuristic" &), "Options" -> {}|>];
-
-(* Certify a list of held items with the engine's backend (Lean: one run per
+(* Certify a list of held items with each engine's backend (Lean: one run per
    tier), aligned with the input ($Failed: no certificate).  Only a kernel
-   backend's True is shown as True. *)
-certifyItems[hcs_List, opts_List] := Module[{o, engine, gens, items, vs, v, out},
+   backend's True is shown as True; a list of engines is combined by
+   consensus (Engines.m). *)
+certifyItems[hcs_List, opts_List] := Module[{o, engines, gens, items, vs, out},
   o = certOptions[opts];
   If[o === $Failed, Return[$Failed, Module]];
-  engine = o["Engine"];
-  If[!StringQ[engine] || !KeyExistsQ[$backends, engine],
-    Message[Certify::engine, engine]; Return[$Failed, Module]];
+  engines = engineList[o["Engine"]];
+  If[engines === $Failed, Message[Certify::engine, o["Engine"]]; Return[$Failed, Module]];
+  o = Append[o, "Engines" -> engines];
   (* Every Domain value has one stated meaning ($domains); anything else
      (Algebraics, "Complexes", ...) is refused rather than silently mapped. *)
   If[!AnyTrue[$domains, # === o["Domain"] &],
     Message[Certify::domain, ToString[o["Domain"], InputForm]]; Return[$Failed, Module]];
   With[{why = methodProblem[o["Method"]]},
     If[why =!= None, Message[Certify::method, o["Method"], why]; Return[$Failed, Module]]];
+  engineOptMessages[o, engines];
   gens = prepare[#, o] & /@ hcs;
   items = Table[<|"Index" -> k, "G" -> gens[[k]]|>,
     {k, Select[Range[Length[gens]], AssociationQ[gens[[#]]] &]}];
   out = ConstantArray[$Failed, Length[gens]];
   If[items =!= {},
-    vs = $backends[engine]["Run"][items, o];
-    Do[
-      v = vs[[j]];
-      If[v["Verified"] === True && $backends[engine]["Trust"] =!= "Kernel",
-        v = Append[v, "Verified" -> Missing[engine, True]]];
-      out[[items[[j]]["Index"]]] = $backends[engine]["Present"][items[[j]], v, o],
+    vs = guardVerdicts[#, $backends[#]["Run"][items, o]] & /@ engines;
+    Do[out[[items[[j]]["Index"]]] = If[ListQ[o["Engine"]],
+        mkMultiObject[items[[j]], #[[j]] & /@ vs, engines, o],
+        $backends[First[engines]]["Present"][items[[j]], vs[[1, j]], o]],
       {j, Length[items]}]];
   out];
 
@@ -1570,12 +1561,13 @@ ProofObject[a_?AssociationQ][k_String] :=
 
 timingText[t_?NumericQ] := ToString[Round[t, 0.01]] <> " s";
 timingText[_] := "- s";
+engineLabel[e_, a_] := If[StringQ[e] && KeyExistsQ[$backends, e], $backends[e]["Label"][a],
+  "Mathilda Heuristic"];
 
 Format[ProofObject[a_?AssociationQ]] := SequenceForm @ StringJoin[
   "ProofObject[\[LeftGuillemet]", ToString[a["Kind"]], "\[RightGuillemet] Verified: ",
   ToString[verdictOf[a]], " | ",
-  With[{e = a["Engine"]}, If[StringQ[e] && KeyExistsQ[$backends, e],
-    $backends[e]["Label"][a], "Mathilda Heuristic"]],
+  StringRiffle[engineLabel[#, a] & /@ Flatten[{a["Engine"]}], " + "],
   " | ", timingText[a["Timing"]], "]"];
 
 Lean`Internal`Oracle::usage =
@@ -1595,5 +1587,7 @@ EndPackage[];
 
 (* The backends (each opens Lean`Private` itself; no Lean` symbol). *)
 LoadModule["lean/LeanBackend.m"];
+LoadModule["lean/ExactBackend.m"];
+LoadModule["lean/Engines.m"];
 
 SetAttributes[{Lean`Certify, Lean`ProofObject, Lean`LeanVerify}, Protected];

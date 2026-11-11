@@ -9,6 +9,7 @@
 #   - every certificate generator with Verify -> False (no Lean needed),
 #   - Reduce`SOSCertificate (success and $Failed),
 #   - Lean`Internal`Oracle, all four query kinds plus their failure answers,
+#   - the Exact engine, multi-engine consensus and engine options (v0.6525),
 # and, when a Lean executable is found ($LeanVersion is a string), also
 #   - real Certify runs (True and a refuted False), a batch, cache hits,
 #     user-Method items (one file each), LeanVerify (accepted, sorry,
@@ -172,6 +173,44 @@ Quiet[Do[
    Certify[Integrate[x, x] == x^2/2 + 1/(Log[x^2] - 2 Log[x]), Tier -> 1, Verify -> False];
    Certify[Integrate[x, x] == x^2/2 + 1/Log[x^2 + 1], Tier -> 1, Verify -> False], {3}]];
 
+(* --- v0.6525: the Exact engine (every obligation type, False, NotChecked),
+   multi-engine with Verify -> False, consensus rules, engine options --- *)
+Quiet[Do[
+   Certify[{(x + 1)^3 == x^3 + 3 x^2 + 3 x + 1, Together[1/(x - 1) - 1/(x + 1)],
+     PolynomialExtendedGCD[x^4 - 1, x^3 + 2 x^2 + 2 x + 1, x],
+     PolynomialReduce[x^3 y - x y^2, {x^2 - y, x y - 1}, {x, y}],
+     Integrate[1/(x^2 + 2), x], Integrate[2 x, x] == x^2 + 5,
+     Implies[x^2 + y^2 == 1 && x == y, 2 y^2 == 1],
+     Solve[(x - 1)^2 (x + 2) == 0, x], Solve[{x + y == 3, x - y == 1}, {x, y}],
+     Solve[(x - 1)/(x^2 - 1) == (x - 1)/(2 x - 2), x],
+     Inverse[{{2, 1, 0}, {1, 3, 1}, {0, 1, 4}}],
+     Det[{{2, -1, 0, 3}, {1, 4, 2, 0}, {0, 5, -2, 1}, {3, 0, 1, 1}}],
+     LinearSolve[{{2, 1}, {1, 3}}, {1, 2}], NullSpace[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}],
+     ForAll[{x, y}, x^4 - 2 x^2 + 1 + y^2 >= 0], Implies[x >= 0, x^3 >= 0],
+     Minimize[{x^2 + y^2, x + y == 1}, {x, y}],
+     Maximize[{3 x + 2 y, x + y <= 4, x + 3 y <= 6, x >= 0, y >= 0}, {x, y}],
+     FactorInteger[2^64 + 1], PrimeQ[2], PrimeQ[274177], PrimeQ[274179], PrimeQ[1],
+     Sum[k 2^k, {k, 0, n}], Sum[(-1)^k k, {k, 0, n}], Sum[k, {k, 1, n}] == n (n + 1)/2 + 1,
+     (1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x}, Engine -> "Exact"];
+   Certify[x^2 == 1, Assumptions -> x == 1, Engine -> "Exact"];
+   Certify[x^2 == x, Assumptions -> {x > 0}, Engine -> "Exact"];
+   Certify[Integrate[(1 + x)/(1 + x^2), x], Engine -> "Exact", "Tier" -> 1];
+   Certify[x == x, Engine -> "Exact", Method -> "omega"];
+   Certify[x + 1 == 1 + x, Engine -> "Exact", Verify -> False];
+   ToString[Certify[(x + 1)^3 == x^3 + 3 x^2 + 3 x + 1, Engine -> {"Lean", "Exact"},
+     Verify -> False]];
+   Certify[{Factor[x^10 - 1], Sum[k^3, {k, 1, n}]}, Engine -> {"Lean", "Exact", "Mathilda"},
+     Verify -> False]["EngineDetails"];
+   Certify[(x + 1)^3 == x^3 + 3 x^2 + 3 x + 1, Engine -> {"Exact", "Mathilda"}];
+   Certify[x == x, Engine -> {"Lean", "Lean"}];
+   With[{g = <|"Input" -> HoldForm[a == b]|>},
+     Lean`Private`consensus[g, {True, Missing["Exact", False]}, {"Lean", "Exact"}];
+     Lean`Private`consensus[g, {False, Missing["Exact", True]}, {"Lean", "Exact"}];
+     Lean`Private`consensus[g, {True, Missing["NotChecked"]}, {"Lean", "Exact"}];
+     Lean`Private`consensus[g, {Missing["Exact", True]}, {"Exact"}];
+     Lean`Private`consensus[g, {Missing["NotAvailable"], Missing["Exact", True]}, {"Lean", "Exact"}]];
+   Lean`Private`expPolyZeroQ[(-1)^(n + 2) - (-1)^n + 4^n - 2^(2 n), n], {3}]];
+
 (* --- real Lean runs, when Lean is installed --- *)
 If[StringQ[$LeanVersion],
   Quiet[
@@ -191,6 +230,8 @@ If[StringQ[$LeanVersion],
     Certify[x == 7, Assumptions -> x^2 + 4 == 0 && Element[x, Reals]];
     Certify[{x + 1 == 1 + x, x == x + 1}, Method -> "intros\ngrind"];
     Certify[Solve[(x - 1)/(x^2 - 1) == (x - 1)/(2 x - 2), x]];
+    Certify[Factor[x^10 - 1], Engine -> {"Lean", "Exact"}];
+    Certify[(1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x, Engine -> {"Lean", "Exact"}];
     (* kernel replay: a rejected module, and a file with no .olean *)
     Lean`Internal`VerifySource["import Lean\nset_option debug.skipKernelTC true in\nrun_cmd Lean.Elab.Command.liftCoreM <| Lean.addDecl (.thmDecl { name := `bad, levelParams := [], type := Lean.mkConst ``False, value := Lean.mkConst ``True.intro })\n",
       Lean`Private`leanExe[Automatic], None, False, Lean`Private`replayScript[]];
