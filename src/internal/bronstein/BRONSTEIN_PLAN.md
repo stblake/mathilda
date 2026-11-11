@@ -486,7 +486,7 @@ antiderivative.** The generator is `tools/integral_generator/generate.m`, run by
   - Suites `field_fn`, `rde`. Commit, v+0.0001.
 - [x] **2. Tower and Curve.** `Tower.m`, `Poly.m`, `Curve.m`, linear-radicand flattening.
   Suites `tower`, `curve`.
-- [ ] **3. Hermite and special places.** `Hermite.m`, `Special.m`, `LimitedIntegrate.m`.
+- [x] **3. Hermite and special places.** `Hermite.m`, `Special.m`, `LimitedIntegrate.m`.
   Suite `hermite_special`. [B] p.134 and p.158 close end to end through a temporary driver.
 - [ ] **4. Residues.** `Puiseux.m`, `Residues.m` (normal, log-∞, exp-0/∞). Suite `residues`.
   The p.139 certificate.
@@ -624,4 +624,59 @@ Done:
   `With`. Use `Which`/`If` values instead.
 - Deferred: the Kummer split for a compositum declines for now; plan it in
   Phase 12.
+
+### 2026-11-12 — Phase 3 (session 1) and a design revision
+
+**Design revision: no `Special.m`.** Re-reading [B] pp.140–146 changed two
+things.
+- The special-place residue of the log case (Def 2.10) needs only the θ⁻¹
+  coefficient of the Puiseux expansion of the *normal* f. Nothing has to be
+  reduced at ∞ first.
+- For an n-th root the whole algebraic part is the coordinate system `S_log2`
+  (Prop 2.15), and its solution is a POLYNOMIAL in θ (Prop 2.14).
+
+So the [T] App A special-place reductions are subsumed by `AlgebraicPart.m`:
+- **(1)** `Risch`RischDECertified` over the whole tower. It decides the exp case
+  (p.158 certified).
+- **(2)** When (1) is undecided and θ is a log, `brPolyRDELog`. The C log case is
+  always "RdeBoundDegreePrim: cancellation case", because `s = DG/(mG)` has
+  `deg b = deg a − 1`. `brPolyRDELog` is the top-down coefficient solve, with:
+  - N = ⌊max(deg c + 1, 1 − deg G/m)⌋;
+  - one Risch DE in k per coefficient (β = lcG'/(m lcG));
+  - when lcG = const·u^m, a homogeneous solution h = 1/u, so each coefficient is
+    a parametric integration in k with a free constant, and the lower
+    equations become a linear system for the constants.
+
+**`LimitedIntegrate.m`** (`brIntegrateInK`, `brSplitLogs`, `brLogBasisReduce`,
+`brParamIntegrate`, `brLimitedIntegrate`):
+- each piece is integrated by `Integrate`RischTranscendental`;
+- new logs are reduced to a k-independent basis by `Risch`LogReducible`;
+- the constants then solve a linear system.
+
+A "no" is certified only from `ElementaryIntegralQ` False, LogReducible False or
+an inconsistent system. ArcTan/RootSum answers give Unknown.
+
+`Tower.m` gained `brFromSurface` (C answers back to symbols), `brLowerTower` (the
+record of k) and a `"monos"` key.
+
+Results:
+- p.134 closes by Hermite alone;
+- p.158's algebraic part is `3x`, and a temporary driver closes both end to end
+  (PZQ-verified);
+- p.147's special-place quantity gives λ = 1, v = x − x².
+
+Suite `bronstein_hermite_special_tests` (76 assertions).
+
+**Harness trap.** A `br_run` string that both creates a tower and mentions
+`brT1` is parsed before `Bronstein`Private`brT1` exists, so the parser makes
+`Global`brT1`, which shadows it for the rest of the run. Create the towers in
+their own `br_run` (the suite asserts `Context[brT1]`).
+
+Next: Phase 4.
+- `Residues.m`: R(z) and the Prop 2.9 criterion.
+- Puiseux at θ = ∞ for the log case. For a component Y (i ≥ 1), m ∤ deg G gives
+  τ = 0; m | deg G with a constant lc(G) gives limited integration. A
+  non-constant non-m-th-power lc declines for now.
+- Then read [B] pp.148–158 for the exp special places (Def 2.21) before writing
+  them.
 

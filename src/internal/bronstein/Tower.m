@@ -21,6 +21,8 @@
 (*                                                                            *)
 (* The record (an Association):                                               *)
 (*   "x"        the integration variable                                      *)
+(*   "monos"    the monomial Associations (sym, kind, arg, D, kernel), in     *)
+(*              tower order                                                   *)
 (*   "syms"     {t_1, ..., t_r}, in tower order (theta last for Shape A)      *)
 (*   "kinds"    {"Log" | "Exp", ...}                                          *)
 (*   "args"     {a_i}: t_i = Log[a_i] or E^a_i, a_i in the symbols before t_i *)
@@ -198,13 +200,28 @@ brTower[f0_, x_Symbol] := Module[{f, fs, monos, vars, rad, shape, theta = None, 
     monos = Join[Delete[monos, pos], {monos[[pos]]}];
     kind = Last[monos]["kind"];
     lower = Most[#["sym"] & /@ monos]];
-  <|"x" -> x, "syms" -> (#["sym"] & /@ monos), "kinds" -> (#["kind"] & /@ monos),
+  <|"x" -> x, "monos" -> monos, "syms" -> (#["sym"] & /@ monos), "kinds" -> (#["kind"] & /@ monos),
     "args" -> (#["arg"] & /@ monos), "rules" -> brRules[x, monos],
     "back" -> brBack[monos], "kernels" -> (#["kernel"] & /@ monos),
     "f" -> fs, "radical" -> rad, "shape" -> shape, "theta" -> theta, "kind" -> kind,
     "lower" -> lower|>];
 
 brRadicalPlaceholder::usage = "brRadicalPlaceholder is the inert symbol standing for the radical while brTower checks that the integrand is rational in the tower and the radical.";
+
+brFromSurface::usage = "brFromSurface[T, e] writes the surface expression e (in x and Log/Exp kernels, e.g. an answer of the C integrator) in the tower symbols of T: every kernel of T is replaced by its symbol and every other exponential reducible over the tower is rewritten (brExpRewrite). Kernels that are not in the tower (a new logarithm) are left in place.";
+brFromSurface[T_Association, e_] := Module[{r = e /. Exp[a_] :> E^a, monos = T["monos"], ks},
+  r = r /. ((#["kernel"] -> #["sym"]) & /@ monos);
+  r = r /. Power[E, b_] /; brDependsQ[b, Prepend[T["syms"], T["x"]]] :>
+    With[{st = brExpRewrite[T["x"], monos, b /. ((#["kernel"] -> #["sym"]) & /@ monos)]},
+      If[First[st] === "rewrite", st[[2]], Power[E, b]]];
+  r];
+
+brLowerTower::usage = "brLowerTower[T] is the tower record of k alone (T without theta): the monomials below theta, with their rules, symbols and kernels; shape \"Lower\".";
+brLowerTower[T_Association] := Module[{monos = If[T["theta"] === None, T["monos"], Most[T["monos"]]]},
+  <|"x" -> T["x"], "monos" -> monos, "syms" -> (#["sym"] & /@ monos), "kinds" -> (#["kind"] & /@ monos),
+    "args" -> (#["arg"] & /@ monos), "rules" -> brRules[T["x"], monos], "back" -> brBack[monos],
+    "kernels" -> (#["kernel"] & /@ monos), "f" -> None, "radical" -> None, "shape" -> "Lower",
+    "theta" -> None, "kind" -> None, "lower" -> (#["sym"] & /@ monos)|>];
 
 brTowerD::usage = "brTowerD[T, e] is the tower derivation of e (in x and the symbols of T): Risch`Derivation[e, T[\"rules\"]].";
 brTowerD[T_Association, e_] := Risch`Derivation[e, T["rules"]];

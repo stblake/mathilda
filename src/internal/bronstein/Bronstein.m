@@ -32,6 +32,9 @@
 (*   Tower.m       surface kernels -> monomials, radical, shape, flattening   *)
 (*   Poly.m        k[theta]: content, normal/special split, derivation        *)
 (*   Curve.m       canonical form over k(theta), component curves Y^m = G     *)
+(*   LimitedIntegrate.m  integration in k: parametric / limited integration *)
+(*   Hermite.m     Hermite reduction at the normal places                     *)
+(*   AlgebraicPart.m  D b + s b = c over k(theta) (certified)                 *)
 (*                                                                            *)
 (* Further stages (Tower, Poly, Curve, RDE, LimitedIntegrate, Hermite,        *)
 (* Special, Puiseux, Residues, Divisors, Specialize, LogPart, AlgebraicPart,  *)
@@ -53,6 +56,9 @@ LoadModule["bronstein/RDE.m"];
 LoadModule["bronstein/Tower.m"];
 LoadModule["bronstein/Poly.m"];
 LoadModule["bronstein/Curve.m"];
+LoadModule["bronstein/LimitedIntegrate.m"];
+LoadModule["bronstein/Hermite.m"];
+LoadModule["bronstein/AlgebraicPart.m"];
 
 End[];
 EndPackage[];
