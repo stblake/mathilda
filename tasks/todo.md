@@ -1468,3 +1468,16 @@ Commits: cd687569 (phase 0), eaeb8ecd (1), 6e296319 (2), 5b0e2e5a (3), 86282ac6 
 - **Leaks (macOS leaks; Docker daemon not running, so no valgrind):** term_lex, term_history, term_complete, term_color, term_interrupt, interrupt suites: 0 leaks each. Interactive session (common script) baseline 0 / branch 0; full script with two Ctrl-C aborts, a prompt Ctrl-C, completion, history recall and the took line: 0 leaks.
 - **libedit** (make HOMEBREW= MACPORTS=, links /usr/lib/libedit.3.dylib): Ctrl-C during Do, While, Pause, FactorInteger, CheckAbort, AbortProtect, TimeConstrained and Dialog gives $Aborted; double Ctrl-C exits 130; Ctrl-C at the prompt is ignored (no exit, no submit, line kept); Symbol and unique option completion work; Tab-Tab does not list; prompts are uncoloured; Out and messages are coloured. Multi-line input does not work on libedit (pre-existing: the RET rebinding is ignored there), so the multi-line history and continuation cases fail there as before. The "bind: Invalid command enable-bracketed-paste" line on libedit is pre-existing.
 - **Follow-ups:** classic Buchberger fallback after FLINT declines, and GMP-ECM stage 2, ignore the interrupt (finish their step; double Ctrl-C works). Ctrl-C during `$Post`/printing aborts the print evaluation only. PR 2: in-tree editor (would give libedit users line clearing and multi-line), token lexer/highlighting, replace find_unterminated / mathilda_ffi_is_complete with term_lex. PR 3: status line/spinner. PR 4: init.m, themes ($-symbols), slash commands. Pipe-mode (notebook) interrupt is still out of scope.
+
+## REPL PR 2: the input editor (feat/repl-editor, stacked on feat/repl-modernize)
+Plan: thoughts/shared/plans/2026-11-11-repl-modernize-pr2.md. Research: thoughts/shared/research/2026-11-11-repl-modernize-pr2.md.
+Rules: no version bump; append-only edits to tests/CMakeLists.txt, the changelog and docs/spec/repl.md; term_color.{c,h} untouched; repl.c edits limited to the reader selection, the banner and one result-print line.
+
+- [x] Phase 1: term_width, term_highlight (incremental per-line lexer, symbol classes, styles); unit tests; CMake block
+- [ ] Phase 2: term_render (grid diff, one write), term_editor (multi-line, keymap, history edges, smart/forced Return, kill/yank, undo, paste, brackets), term_editor_tty (raw mode, restore paths, SIGWINCH, DSR, MATHILDA_EDITOR); repl.c wiring; unit + pty tests; milestone 1
+- [ ] Phase 3: completion popup (Tab, filter, docstring row, options first, placement, degradation); tests
+- [ ] Phase 4: Ctrl-R history list; tests
+- [ ] Phase 5: result colouring (expr_print_to_string, safe subset); tests
+- [ ] Phase 6: latency gate test (200 lines, < 2 ms, one write, 0 allocs); resize / narrow / UTF-8 / restore pty cases
+- [ ] Phase 7: docs/spec/repl.md, changelog, SPEC.md
+- [ ] Verify: clean build, checks, USE_READLINE=0, ctest -LE nightly, pty suite, byte-identical pipe/-file, leaks, latency numbers, readline fallback; /tmp/pr2-body.md

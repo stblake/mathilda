@@ -6668,3 +6668,22 @@ else()
     target_link_libraries(term_color_tests gmp m)
 endif()
 add_test(NAME term_color_tests COMMAND term_color_tests)
+
+# ---- Interactive terminal layer: the in-tree editor (REPL PR 2) -------------
+# Appended as one block, like the PR 1 block above. The editor core is driven
+# through an in-memory terminal sink, so none of these needs a tty; the pty
+# cases for the editor live in tests/pty/repl_pty_test.py (repl_pty_test).
+target_sources(mathilda_common PRIVATE
+    ../src/term/term_width.c
+    ../src/term/term_highlight.c)
+foreach(_mth_term_suite term_highlight)
+    add_executable(${_mth_term_suite}_tests test_${_mth_term_suite}.c $<TARGET_OBJECTS:mathilda_common>)
+    target_include_directories(${_mth_term_suite}_tests PRIVATE ../src)
+    if(USE_ECM)
+        target_link_libraries(${_mth_term_suite}_tests gmp m ${ECM_LIB})
+        add_dependencies(${_mth_term_suite}_tests build_ecm)
+    else()
+        target_link_libraries(${_mth_term_suite}_tests gmp m)
+    endif()
+    add_test(NAME ${_mth_term_suite}_tests COMMAND ${_mth_term_suite}_tests)
+endforeach()
