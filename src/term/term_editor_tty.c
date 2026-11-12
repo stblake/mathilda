@@ -339,6 +339,7 @@ TermReader* term_reader_open_editor(const TermEditorOptions* o) {
     cfg.color = im->opt.color;
     cfg.history = im->opt.history;
     cfg.classify = term_hl_classify_symtab;
+    cfg.doc = term_hl_doc_symtab;
     cfg.write = tty_write;
     im->ed = term_editor_new(&cfg);
     if (!im->ed) { free(rd); free(im); return NULL; }

@@ -55,6 +55,11 @@ typedef int (*TermHlClassify)(const char* s, size_t len, void* ctx);
  * is_system -> builtin; values, rules or a C builtin -> user. */
 int term_hl_classify_symtab(const char* s, size_t len, void* ctx);
 
+/* The docstring of symbol s[0, len) (from symtab_lookup: never creates a
+ * symbol), leading blank lines skipped, or NULL. The editor shows its first
+ * line as the completion popup's description. */
+const char* term_hl_doc_symtab(const char* s, size_t len, void* ctx);
+
 static inline TermHlState term_hl_state_initial(void) {
     TermHlState st = { 0, 0, 0 };
     return st;

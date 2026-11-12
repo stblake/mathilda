@@ -299,6 +299,118 @@ static void test_resize_and_tall(void) {
     term_editor_free(g_ed);
 }
 
+static TermEditor* open_pop(int cols, int rows) {
+    vt_init(&g_vt, cols, rows);
+    TermEditorConfig cfg;
+    memset(&cfg, 0, sizeof(cfg));
+    cfg.cols = cols;
+    cfg.rows = rows;
+    cfg.classify = term_hl_classify_symtab;
+    cfg.doc = term_hl_doc_symtab;
+    cfg.write = vt_write_cb;
+    cfg.write_ctx = &g_vt;
+    TermEditor* ed = term_editor_new(&cfg);
+    ASSERT(ed != NULL);
+    return ed;
+}
+
+/* The screen row holding `needle`, or -1. */
+static int find_row(const char* needle) {
+    for (int r = 0; r < g_vt.rows; r++) if (strstr(vt_row(&g_vt, r), needle)) return r;
+    return -1;
+}
+
+/* The row whose text, leading spaces dropped, is exactly `item`, or -1. */
+static int find_item(const char* item) {
+    for (int r = 0; r < g_vt.rows; r++) {
+        const char* t = vt_row(&g_vt, r);
+        while (*t == ' ') t++;
+        if (strcmp(t, item) == 0) return r;
+    }
+    return -1;
+}
+
+static void test_popup(void) {
+    g_ed = open_pop(80, 20);
+    term_editor_begin(g_ed, "In[1]:= ", 0, 0);
+    feed("Si");
+    feed("n\t");                                     /* Sin, SinIntegral, Sinc, ... */
+    ASSERT_MSG(strcmp(text(), "Sin") == 0, "%s", text());
+    int r = find_item(">Sin");                        /* selected, marked without colour */
+    ASSERT_MSG(r == 1, "popup row %d", r);
+    ASSERT(find_row(" SinIntegral") == 2);
+    /* The description row: Sin's docstring, first line. */
+    const char* doc = term_hl_doc_symtab("Sin", 3, NULL);
+    ASSERT(doc != NULL);
+    char first[24];
+    size_t fl = strcspn(doc, "\n");
+    if (fl > 20) fl = 20;
+    memcpy(first, doc, fl); first[fl] = '\0';
+    ASSERT_MSG(find_row(first) > r, "no description row for \"%s\"", first);
+    feed("\t");                                      /* Tab moves the selection */
+    ASSERT(find_row(">SinIntegral") == 2);
+    feed("\x1b[A");                                  /* Up moves it back */
+    ASSERT(find_item(">Sin") == 1);
+    feed("\x1b[B\r");                               /* Down, Enter accepts */
+    ASSERT_MSG(strcmp(text(), "SinIntegral") == 0, "%s", text());
+    ASSERT(find_row(">") == -1);                      /* popup gone */
+    ASSERT(find_row("Sinc") == -1);
+    feed("[");
+    ASSERT(strcmp(text(), "SinIntegral[") == 0);      /* Enter did not submit */
+
+    /* Typing filters; a non-word key closes without accepting. */
+    feed("Sin\t");
+    ASSERT(find_row(" Sinc") >= 1);
+    feed("h");
+    ASSERT(find_row(">Sinh") >= 1 && find_row(" SinhIntegral") >= 1 && find_row(" Sinc") == -1);
+    feed(" ");
+    ASSERT_MSG(strcmp(text(), "SinIntegral[Sinh ") == 0, "%s", text());
+    ASSERT(find_row(">") == -1);
+    /* Backspace past the queried word re-queries. */
+    feed("Sinh\t");
+    feed("\x7f");
+    ASSERT(find_row(" Sinc") >= 1);
+    feed("\x1b");
+    term_editor_timeout(g_ed);
+    term_editor_free(g_ed);
+
+    /* Option names first inside a call's argument position. */
+    g_ed = open_pop(80, 20);
+    term_editor_begin(g_ed, "In[1]:= ", 0, 0);
+    feed("NIntegrate[f, {x, 0, 1}, Work\t");
+    ASSERT_MSG(strcmp(text(), "NIntegrate[f, {x, 0, 1}, WorkingPrecision -> ") == 0, "%s", text());
+    feed("\x15");
+    feed("NIntegrate[f, {x, 0, 1}, \t");             /* empty word: the options */
+    ASSERT(find_row("AccuracyGoal ->") >= 1);
+    feed("\x1b");
+    ASSERT(term_editor_timeout(g_ed) == TERM_ED_CONTINUE);   /* Esc closes */
+    ASSERT(find_row("AccuracyGoal") == -1);
+    term_editor_free(g_ed);
+
+    /* At the bottom of the screen with room above: the popup goes above. */
+    g_ed = open_pop(80, 14);
+    g_vt.row = 3;                                     /* the prompt is on row 3 */
+    term_editor_begin(g_ed, "> ", 3, 0);
+    feed("\x1b[200~a\nb\nc\nd\ne\nf\ng\nh\ni\n\x1b[201~");
+    feed("Sin\t");
+    int cur = g_vt.row;
+    ASSERT(cur == 12);                                /* one row left below */
+    r = find_item(">Sin");
+    ASSERT_MSG(r >= 0 && r < cur, "popup row %d, cursor row %d", r, cur);
+    term_editor_free(g_ed);
+
+    /* Too small for a popup: Tab cycles inline. */
+    g_ed = open_pop(14, 4);
+    term_editor_begin(g_ed, "> ", 0, 0);
+    feed("Sin\t");
+    ASSERT_MSG(strcmp(text(), "Sin") == 0, "%s", text());
+    feed("\t");
+    ASSERT_MSG(strcmp(text(), "SinIntegral") == 0, "%s", text());
+    feed("x");
+    ASSERT(strcmp(text(), "SinIntegralx") == 0);
+    term_editor_free(g_ed);
+}
+
 static void test_select(void) {
     ASSERT(term_editor_select(NULL, "xterm-256color", true, true));
     ASSERT(term_editor_select("", "xterm", true, true));
@@ -325,6 +437,7 @@ int main(void) {
     TEST(test_colour_and_brackets);
     TEST(test_one_write_per_batch);
     TEST(test_resize_and_tall);
+    TEST(test_popup);
     TEST(test_select);
     printf("All term_editor tests passed.\n");
     return 0;

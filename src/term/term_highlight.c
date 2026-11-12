@@ -53,6 +53,19 @@ int term_hl_classify_symtab(const char* s, size_t len, void* ctx) {
     return TERM_HL_PLAIN;
 }
 
+const char* term_hl_doc_symtab(const char* s, size_t len, void* ctx) {
+    (void)ctx;
+    char name[256];
+    if (len == 0 || len >= sizeof(name)) return NULL;
+    memcpy(name, s, len);
+    name[len] = '\0';
+    SymbolDef* d = symtab_lookup(name);
+    if (!d || !d->docstring) return NULL;
+    const char* doc = d->docstring;
+    while (*doc == ' ' || *doc == '\n') doc++;
+    return *doc ? doc : NULL;
+}
+
 static bool is_digit(char c) { return c >= '0' && c <= '9'; }
 static bool is_alnum(char c) {
     return is_digit(c) || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z');

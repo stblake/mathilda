@@ -96,6 +96,14 @@ void term_screen_begin_frame(TermScreen* s, int rows) {
     for (size_t i = 0; i < n; i++) s->grid[i] = BLANK;
 }
 
+void term_screen_extend_frame(TermScreen* s, int rows) {
+    if (rows > s->rows) rows = s->rows;
+    if (rows <= s->frame_rows) return;
+    for (size_t i = (size_t)s->frame_rows * (size_t)s->cols; i < (size_t)rows * (size_t)s->cols; i++)
+        s->grid[i] = BLANK;
+    s->frame_rows = rows;
+}
+
 void term_screen_put(TermScreen* s, int row, int col, const char* bytes, size_t len,
                      int width, int style) {
     if (row < 0 || row >= s->frame_rows || col < 0 || col >= s->cols || len == 0 || len > 4)

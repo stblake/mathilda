@@ -141,8 +141,22 @@ struct TermEditor {
     size_t       bad[BR_MAX_BAD];
     size_t       nbad;
 
+    /* The completion popup (Tab). */
+    bool            pop_open;
+    bool            pop_inline;              /* too small to draw: Tab cycles */
+    TermCompletions pop_c;
+    size_t*         pop_vis;                 /* indices of pop_c.items shown  */
+    size_t          pop_nvis, pop_viscap;
+    size_t          pop_sel, pop_top;
+    size_t          pop_word;                /* word start in the buffer      */
+    size_t          pop_qlen;                /* word length when queried      */
+
     TermEdStatus status;
 };
+
+/* Defined with the popup, used by rendering and finish(). */
+static void pop_close(TermEditor* ed);
+static void pop_draw(TermEditor* ed, int crow, int wcol);
 
 /* ---- lines and relexing ---------------------------------------------------- */
 
@@ -640,6 +654,15 @@ static void render(TermEditor* ed) {
         }
         vbase += rows;
     }
+    if (ed->pop_open && !ed->pop_inline && !ed->final_frame) {
+        /* The column of the word's start, when it is on the cursor's row. */
+        int wrow = 0, wcol = 0;
+        size_t wpos = ed->pop_word < ed->lstart[cl] ? ed->lstart[cl] : ed->pop_word;
+        (void)walk_line(ed, cl, g0, gn, wpos, &wrow, &wcol);
+        wcol += (cl == 0 && wrow == 0) ? g0 : gn;
+        if (wrow != crow) wcol = ccol;
+        pop_draw(ed, cvrow - ed->vtop, wcol);
+    }
     term_screen_render(s, cvrow - ed->vtop, ccol);
 }
 
@@ -689,6 +712,7 @@ static void dump_buffer(TermEditor* ed) {
  * below the buffer. */
 static void finish(TermEditor* ed, TermEdStatus st) {
     TermScreen* s = &ed->scr;
+    pop_close(ed);
     ed->status = st;
     ed->final_frame = true;
     int g0, gn;
@@ -709,31 +733,255 @@ static void finish(TermEditor* ed, TermEdStatus st) {
     term_screen_raw(s, "\033[J", 3);
 }
 
-/* ---- completion (inline; the popup replaces this in a later phase) ----------- */
+/* ---- completion popup ------------------------------------------------------------ */
 
+#define POP_MAX_ROWS 8
+
+static void pop_close(TermEditor* ed) {
+    if (!ed->pop_open) return;
+    term_completions_free(&ed->pop_c);
+    ed->pop_open = false;
+    ed->pop_inline = false;
+    ed->pop_nvis = 0;
+}
+
+static bool pop_query(TermEditor* ed) {
+    term_completions_free(&ed->pop_c);
+    if (ed->cfg.complete) ed->cfg.complete(ed->text, ed->cur, &ed->pop_c);
+    else term_complete(ed->text, ed->cur, &ed->pop_c);
+    ed->pop_word = ed->pop_c.word_start;
+    ed->pop_qlen = ed->cur - ed->pop_c.word_start;
+    if (ed->pop_c.count > ed->pop_viscap) {
+        size_t nc = ed->pop_viscap ? ed->pop_viscap : 64;
+        while (nc < ed->pop_c.count) nc *= 2;
+        size_t* nv = ed_realloc(ed->pop_vis, nc * sizeof(size_t));
+        if (!nv) return false;
+        ed->pop_vis = nv;
+        ed->pop_viscap = nc;
+    }
+    return ed->pop_c.count > 0;
+}
+
+/* Recompute the visible candidates for the word now typed, keeping the
+ * selected item when it is still among them. */
+static void pop_filter(TermEditor* ed) {
+    size_t keep = ed->pop_nvis ? ed->pop_vis[ed->pop_sel] : SIZE_MAX;
+    size_t wlen = ed->cur - ed->pop_word;
+    const char* w = ed->text + ed->pop_word;
+    ed->pop_nvis = 0;
+    ed->pop_sel = 0;
+    for (size_t i = 0; i < ed->pop_c.count; i++) {
+        if (strncmp(ed->pop_c.items[i], w, wlen) != 0) continue;
+        if (i == keep) ed->pop_sel = ed->pop_nvis;
+        ed->pop_vis[ed->pop_nvis++] = i;
+    }
+    if (ed->pop_nvis == 0) { pop_close(ed); return; }
+    /* A single candidate already typed out in full: nothing left to offer. */
+    if (ed->pop_nvis == 1 && strlen(ed->pop_c.items[ed->pop_vis[0]]) == wlen) pop_close(ed);
+}
+
+static void pop_replace_word(TermEditor* ed, const char* item) {
+    size_t n = strlen(item);
+    if (ed_replace(ed, ed->pop_word, ed->cur - ed->pop_word, item, n, EK_OTHER))
+        ed->cur = ed->pop_word + n;
+}
+
+static void pop_accept(TermEditor* ed) {
+    if (ed->pop_nvis) pop_replace_word(ed, ed->pop_c.items[ed->pop_vis[ed->pop_sel]]);
+    pop_close(ed);
+}
+
+static void pop_move(TermEditor* ed, int d) {
+    if (!ed->pop_nvis) return;
+    if (d > 0) ed->pop_sel = (ed->pop_sel + 1) % ed->pop_nvis;
+    else ed->pop_sel = ed->pop_sel ? ed->pop_sel - 1 : ed->pop_nvis - 1;
+    if (ed->pop_inline) pop_replace_word(ed, ed->pop_c.items[ed->pop_vis[ed->pop_sel]]);
+}
+
+/* Tab with the popup closed: a single candidate is inserted at once; several
+ * insert their common prefix and open the popup (or, on a terminal too small
+ * for one, start inline cycling); none at the start of a line indents. */
 static void do_complete(TermEditor* ed) {
-    TermCompletions c;
-    if (ed->cfg.complete) ed->cfg.complete(ed->text, ed->cur, &c);
-    else term_complete(ed->text, ed->cur, &c);
-    if (c.count == 0) {
-        /* Nothing to complete at the start of a line: indent. */
+    if (!pop_query(ed)) {
         size_t a = ed->lstart[line_of(ed, ed->cur)];
         bool blank = true;
         for (size_t i = a; i < ed->cur; i++) if (ed->text[i] != ' ') blank = false;
         if (blank) insert(ed, "  ", 2, EK_OTHER);
-        term_completions_free(&c);
+        term_completions_free(&ed->pop_c);
         return;
     }
-    size_t lcp = strlen(c.items[0]);
-    for (size_t i = 1; i < c.count; i++) {
+    TermCompletions* c = &ed->pop_c;
+    if (c->count == 1) {
+        pop_replace_word(ed, c->items[0]);
+        term_completions_free(c);
+        return;
+    }
+    size_t lcp = strlen(c->items[0]);
+    for (size_t i = 1; i < c->count; i++) {
         size_t k = 0;
-        while (k < lcp && c.items[i][k] == c.items[0][k]) k++;
+        while (k < lcp && c->items[i][k] == c->items[0][k]) k++;
         lcp = k;
     }
-    size_t wlen = ed->cur - c.word_start;
-    if (lcp > wlen && ed_replace(ed, c.word_start, wlen, c.items[0], lcp, EK_OTHER))
-        ed->cur = c.word_start + lcp;
-    term_completions_free(&c);
+    size_t wlen = ed->cur - ed->pop_word;
+    if (lcp > wlen && ed_replace(ed, ed->pop_word, wlen, c->items[0], lcp, EK_OTHER))
+        ed->cur = ed->pop_word + lcp;
+    ed->pop_open = true;
+    ed->pop_nvis = 0;
+    ed->pop_top = 0;
+    pop_filter(ed);
+    if (ed->pop_open && (ed->scr.cols < 16 || ed->scr.rows < 5)) {
+        ed->pop_inline = true;
+        ed->pop_sel = 0;
+        pop_replace_word(ed, c->items[ed->pop_vis[0]]);
+    }
+}
+
+/* Keys while the popup is open. Returns true when the key was used. */
+static bool pop_key(TermEditor* ed, const Key* k) {
+    switch (k->code) {
+    case K_TAB:   pop_move(ed, +1); return true;
+    case K_BTAB:  pop_move(ed, -1); return true;
+    case K_DOWN:  if (ed->pop_inline) break; pop_move(ed, +1); return true;
+    case K_UP:    if (ed->pop_inline) break; pop_move(ed, -1); return true;
+    case K_ENTER:
+        if (ed->pop_inline) { pop_close(ed); return true; }
+        pop_accept(ed);
+        return true;
+    case K_ESC:   pop_close(ed); return true;
+    case K_CTRL:
+        if (k->b[0] == 'n' && !ed->pop_inline) { pop_move(ed, +1); return true; }
+        if (k->b[0] == 'p' && !ed->pop_inline) { pop_move(ed, -1); return true; }
+        if (k->b[0] == 'g') { pop_close(ed); return true; }
+        break;
+    case K_CHAR:
+        if (!ed->pop_inline && word_byte(k->b[0])) {
+            insert(ed, k->b, k->n, EK_INSERT);
+            pop_filter(ed);
+            return true;
+        }
+        break;
+    case K_BS:
+        if (!ed->pop_inline && ed->cur > ed->pop_word) {
+            size_t p = prev_char(ed, ed->cur);
+            if (ed_replace(ed, p, ed->cur - p, "", 0, EK_DEL_BACK)) ed->cur = p;
+            if (ed->cur == ed->pop_word) { pop_close(ed); return true; }
+            if (ed->cur - ed->pop_word < ed->pop_qlen) {
+                /* Shorter than the query: candidates may have been missed. */
+                if (!pop_query(ed)) { pop_close(ed); return true; }
+                ed->pop_nvis = 0;
+            }
+            pop_filter(ed);
+            return true;
+        }
+        break;
+    default: break;
+    }
+    pop_close(ed);              /* any other key closes it, then acts */
+    return false;
+}
+
+/* The name a candidate describes: its leading symbol characters. */
+static size_t item_name_len(const char* item) {
+    size_t n = 0;
+    while (item[n] && term_lex_is_word_char(item[n])) n++;
+    return n;
+}
+
+/* Put text into a row from column c, at most `maxw` columns, control
+ * characters as spaces; returns the column after it. An ellipsis marks a
+ * cut. */
+static int put_text(TermScreen* s, int row, int c, const char* t, size_t n, int maxw, int style) {
+    if (maxw <= 0) return c;
+    bool cut = (int)term_text_width(t, n) > maxw;
+    int end = c + (cut ? maxw - 1 : maxw);
+    size_t i = 0;
+    while (i < n) {
+        uint32_t cp;
+        size_t j = term_utf8_next(t, n, i, &cp);
+        int w = term_cp_width(cp);
+        if (w != 0) {
+            if (w < 0) w = 1;
+            if (c + w > end) break;
+            if (term_cp_width(cp) < 0) term_screen_put(s, row, c, " ", 1, 1, style);
+            else term_screen_put(s, row, c, t + i, j - i, w, style);
+            c += w;
+        }
+        i = j;
+    }
+    if (cut) term_screen_put(s, row, c++, "\xE2\x80\xA6", 3, 1, style);
+    return c;
+}
+
+/* Lay out and draw the popup for a cursor on frame row `crow`, word column
+ * `wcol`; may grow the frame. Called with the buffer already drawn. */
+static void pop_draw(TermEditor* ed, int crow, int wcol) {
+    TermScreen* s = &ed->scr;
+    int cols = s->cols;
+    int h = (int)(ed->pop_nvis < POP_MAX_ROWS ? ed->pop_nvis : POP_MAX_ROWS);
+    bool doc_row = cols >= 40 && ed->cfg.doc;
+    const char* doc = NULL;
+    size_t doc_len = 0;
+    if (doc_row) {
+        const char* item = ed->pop_c.items[ed->pop_vis[ed->pop_sel]];
+        doc = ed->cfg.doc(item, item_name_len(item), ed->cfg.doc_ctx);
+        if (doc) { const char* nl = strchr(doc, '\n'); doc_len = nl ? (size_t)(nl - doc) : strlen(doc); }
+    }
+    bool counter = ed->pop_nvis > (size_t)h;
+    if (!doc_row) doc_row = counter && cols >= 20;
+    int ph = h + (doc_row ? 1 : 0);
+    if (ph > s->rows - 1) { h = s->rows - 1 - (doc_row ? 1 : 0); ph = s->rows - 1; }
+    if (h < 1) return;
+
+    /* Above the cursor when the rows below are not on screen but the area
+     * has room above; otherwise below (the screen scrolls if it must). */
+    int below = term_screen_rows_below(s, crow);
+    int top;
+    if (below >= ph || crow < ph) top = crow + 1;
+    else top = crow - ph;
+    if (top + ph > s->rows) top = s->rows - ph;
+    if (top + ph > s->frame_rows) term_screen_extend_frame(s, top + ph);
+
+    /* Keep the selection in the visible window. */
+    if (ed->pop_sel < ed->pop_top) ed->pop_top = ed->pop_sel;
+    if (ed->pop_sel >= ed->pop_top + (size_t)h) ed->pop_top = ed->pop_sel - (size_t)h + 1;
+    if (ed->pop_top + (size_t)h > ed->pop_nvis) ed->pop_top = ed->pop_nvis - (size_t)h;
+
+    int iw = 0;
+    for (size_t i = 0; i < ed->pop_nvis; i++) {
+        int w = (int)term_text_width(ed->pop_c.items[ed->pop_vis[i]], strlen(ed->pop_c.items[ed->pop_vis[i]]));
+        if (w > iw) iw = w;
+    }
+    if (iw > cols - 3) iw = cols - 3;
+    if (iw > 48) iw = 48;
+    int pw = iw + 2;
+    int x = wcol - 1;
+    if (x + pw > cols) x = cols - pw;
+    if (x < 0) x = 0;
+
+    bool plain = !s->color;
+    for (int r = 0; r < h; r++) {
+        size_t idx = ed->pop_top + (size_t)r;
+        bool sel = idx == ed->pop_sel;
+        int st = sel ? TERM_HL_POPUP_SEL : TERM_HL_POPUP;
+        int row = top + r;
+        for (int c = x; c < x + pw; c++) term_screen_put(s, row, c, " ", 1, 1, st);
+        if (plain && sel) term_screen_put(s, row, x, ">", 1, 1, st);
+        const char* item = ed->pop_c.items[ed->pop_vis[idx]];
+        put_text(s, row, x + 1, item, strlen(item), iw, st);
+    }
+    if (doc_row) {
+        int row = top + h;
+        int dw = cols - x;
+        if (dw > 72) dw = 72;
+        if (dw < pw) dw = pw;
+        if (x + dw > cols) dw = cols - x;
+        for (int c = x; c < x + dw; c++) term_screen_put(s, row, c, " ", 1, 1, TERM_HL_POPUP_DOC);
+        char cnt[32] = "";
+        int cl = 0;
+        if (counter) cl = snprintf(cnt, sizeof(cnt), " %zu/%zu", ed->pop_sel + 1, ed->pop_nvis);
+        if (doc && doc_len) put_text(s, row, x + 1, doc, doc_len, dw - 2 - cl, TERM_HL_POPUP_DOC);
+        if (cl) term_screen_puts(s, row, x + dw - cl - 1, cnt, TERM_HL_POPUP_DOC);
+    }
 }
 
 /* ---- key handling --------------------------------------------------------------- */
@@ -796,6 +1044,11 @@ static void handle_key(TermEditor* ed, const Key* k) {
     ed->goal_keep = false;
     ed->this_kill = 0;
     size_t l;
+    if (ed->pop_open && pop_key(ed, k)) {
+        if (!ed->edited) ed->last_kind = EK_NONE;
+        ed->last_kill = 0;
+        return;
+    }
     switch (k->code) {
     case K_CHAR:
         insert(ed, k->b, k->n, EK_INSERT);
@@ -1068,6 +1321,8 @@ void term_editor_free(TermEditor* ed) {
     free(ed->lstart); free(ed->lstate); free(ed->lrows);
     free(ed->inq.p); free(ed->draft.p); free(ed->kill.p);
     free(ed->ops); free(ed->arena.p);
+    term_completions_free(&ed->pop_c);
+    free(ed->pop_vis);
     free(ed);
 }
 
@@ -1089,6 +1344,7 @@ void term_editor_begin(TermEditor* ed, const char* prompt, int cursor_abs_row, i
     ed->final_frame = false;
     ed->br_dirty = true;
     ed->in_paste = false;
+    pop_close(ed);
     ed->status = TERM_ED_CONTINUE;
     size_t pl = strlen(prompt);
     if (pl >= sizeof(ed->prompt)) pl = sizeof(ed->prompt) - 1;

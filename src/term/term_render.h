@@ -73,6 +73,8 @@ bool term_screen_resize(TermScreen* s, int cols, int rows);
 
 /* Start a frame of `rows` rows (clamped to the screen), all blank. */
 void term_screen_begin_frame(TermScreen* s, int rows);
+/* Grow the current frame to `rows` rows (clamped), the new rows blank. */
+void term_screen_extend_frame(TermScreen* s, int rows);
 /* Put one character: `width` 1 or 2 (a wide character that does not fit at
  * the row's end is not drawn). Out-of-range positions are ignored. */
 void term_screen_put(TermScreen* s, int row, int col, const char* bytes, size_t len,

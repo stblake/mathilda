@@ -1079,6 +1079,44 @@ def editor_resize(tmp):
         s.close()
 
 
+@case
+def popup_select_accept(tmp):
+    """Tab opens the list with a description; Down and Enter accept."""
+    s = interactive(tmp, extra=NOHIST)
+    try:
+        s.send("Sin\t")
+        s.expect(r"SinIntegral")
+        s.expect(r"Sin\[z\]")                 # the description row
+        s.send("\x1b[B")                       # Down: SinIntegral
+        s.drain(0.2)
+        s.send("\r")                           # Enter accepts, does not submit
+        s.drain(0.3)
+        check(b"Out[1]" not in s.buf, "Enter in the popup submitted the line")
+        s.send("[1.]\r")
+        s.expect(r"Out\[1\]= 0\.946")       # SinIntegral[1.], not Sin[1.]
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def popup_options(tmp):
+    """Inside a call, option names come first."""
+    s = interactive(tmp, extra=NOHIST)
+    try:
+        s.send("NIntegrate[x, {x, 0, 1}, \t")
+        s.expect(r"AccuracyGoal -> ")
+        s.send("\x1b")
+        s.drain(0.2)
+        s.send("WorkingPrec\t")               # unique: inserted at once
+        s.expect(r"WorkingPrecision -> ")
+        s.send("20]\r")
+        s.expect(r"Out\[1\]= 0\.5")
+        quit_session(s)
+    finally:
+        s.close()
+
+
 def tty_flags(fd):
     attrs = termios.tcgetattr(fd)
     return attrs[3]               # lflag
