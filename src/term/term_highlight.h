@@ -10,8 +10,8 @@
  * a backslash escapes the next character inside a string.
  *
  * The style ids double as the editor's render styles: the lexer classes come
- * first, then the editor's own (bracket match, popup, ...). The SGR table is
- * private to this module so term_color.{c,h} stay untouched.
+ * first, then the editor's own (bracket match, popup, ...). Each maps to a
+ * role of the current theme (term_theme.h).
  */
 #ifndef MATHILDA_TERM_HIGHLIGHT_H
 #define MATHILDA_TERM_HIGHLIGHT_H
@@ -38,6 +38,10 @@ typedef enum {
     TERM_HL_POPUP_SEL,
     TERM_HL_POPUP_DOC,
     TERM_HL_DIM,
+    TERM_HL_OUT,            /* Out[n]= (theme previews)                 */
+    TERM_HL_MSG,            /* Head::tag (theme previews)               */
+    TERM_HL_SPIN,           /* status glyph and bar (theme previews)    */
+    TERM_HL_LABEL,          /* status label (theme previews)            */
     TERM_HL_COUNT
 } TermHlStyle;
 

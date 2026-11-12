@@ -9,13 +9,14 @@
  *
  * Layout, left to right (segments separated by " · ", or " | " in ASCII):
  *
- *   <glyph> <label> [<live head>] · <progress> [· eta 6s] · 3.2s · cpu 3.1s
- *     · mem 412 MB (2.5%) · peak 1.2 GB · 4 threads
+ *   <glyph> <label> [<live head>] · <progress> [· <monitor>] [· eta 6s] · 3.2s
+ *     · cpu 3.1s · mem 412 MB (2.5%) · peak 1.2 GB · 4 threads
  *
  * When the line does not fit in `cols - 1` cells (the last column is never
  * written, so the terminal cannot auto-wrap), whole segments are dropped in
- * this order: live head, peak, cpu, threads, eta, mem, progress, elapsed; then
- * the label is cut. With colour, the glyph and bar are cyan, the label bold,
+ * this order: live head, peak, cpu, threads, eta, mem, progress, monitor,
+ * elapsed; then the label is cut. The monitor text is first cut to half the
+ * line. With colour, the glyph and bar are cyan, the label bold,
  * the rest dim, and memory turns yellow at 60 % of the budget, red at 85 %.
  * Without colour no escape sequence is produced at all. Without Unicode the
  * glyph is |/-\ and the bar [#####.....].
@@ -51,6 +52,7 @@ typedef struct {
     uint64_t peak;          /* peak resident bytes; 0 unknown      */
     uint64_t budget;        /* RAM or memory limit; 0 unknown      */
     int workers;            /* worker threads running              */
+    const char* monitor;    /* Monitor[expr, mon]'s text; may be NULL */
 } TermSpinnerSnap;
 
 /* Render the line into buf (NUL-terminated, truncated to cap). Returns the

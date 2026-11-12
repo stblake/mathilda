@@ -76,6 +76,9 @@ def base_env(home, term="xterm-256color", extra=None, drop=()):
             env[k] = os.environ[k]
     env["HOME"] = home
     env["MATHILDA_NO_WINDOW"] = "1"
+    # The colour cases pin the 16-colour SGR codes (the default theme at 16
+    # colours); the theme cases set their own depth.
+    env["MATHILDA_COLOR_DEPTH"] = "16"
     if term is not None:
         env["TERM"] = term
     if extra:
@@ -951,7 +954,8 @@ NOHIST = {"MATHILDA_HISTFILE": ""}
 def editor_is_default(tmp):
     s = interactive(tmp, extra=NOHIST)
     try:
-        check("Tab completes, Ctrl-R" in s.text(), "the editor banner line is missing")
+        check("Tab completes," in s.text() and "Type / for commands" in s.text(),
+              "the editor banner lines are missing")
         check(b"\x1b[?2004h" in s.buf, "bracketed paste not enabled")
         quit_session(s)
     finally:
@@ -1277,7 +1281,7 @@ def editor_readline_fallback(tmp):
     """MATHILDA_EDITOR=readline gives PR 1's readline session."""
     s = interactive(tmp, extra=dict(NOHIST, MATHILDA_EDITOR="readline"))
     try:
-        check("Tab completes, Ctrl-R" not in s.text(), "editor banner with the readline fallback")
+        check("Type / for commands" not in s.text(), "editor banner with the readline fallback")
         check(b"\x1b[6n" not in s.buf, "the editor ran despite MATHILDA_EDITOR=readline")
         s.send("f[\r")
         s.drain(0.2)

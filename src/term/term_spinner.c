@@ -218,6 +218,16 @@ int term_spinner_render(const TermSpinnerSnap* s, int cols, TermSpinnerStyle st,
     }
     seg(&g[n++], 60, true, term_tone_on(TERM_TONE_BAR, st.color), t);
 
+    /* Monitor[expr, mon]: what the user asked to watch, kept until only the
+     * elapsed time and the label are left; cut to half the line first. */
+    t[0] = '\0';
+    if (s->monitor && *s->monitor) {
+        snprintf(t, sizeof t, "%s", s->monitor);
+        int keep = room / 2 > 16 ? room / 2 : 16;
+        if (term_display_width(t) > keep) cut_cells(t, keep);
+    }
+    seg(&g[n++], 80, true, term_tone_on(TERM_TONE_LABEL, st.color), t);
+
     /* the builtin running now, when it adds something */
     const char* live = s->live;
     if (live && (!*live || strcmp(live, label) == 0 ||

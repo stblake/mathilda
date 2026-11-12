@@ -7,6 +7,7 @@
 #endif
 
 #include "term_color.h"
+#include "term_theme.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,13 +16,8 @@
 #include <unistd.h>
 #endif
 
-/* Indexed by TermStyle; static so a later theme can make it settable. */
-static const char* const STYLE_SGR[TERM_STYLE_COUNT] = {
-    "\033[1;34m",   /* In   : bold blue    */
-    "\033[1;35m",   /* Out  : bold magenta */
-    "\033[1;31m",   /* Head::tag : bold red */
-    "\033[2m",      /* dim  */
-};
+/* The SGR of every style and tone comes from the current theme
+ * (term_theme.h); before a theme is chosen these are the original colours. */
 static const char STYLE_RESET[] = "\033[0m";
 
 TermColorDecision term_color_decide(const TermColorEnv* e) {
@@ -68,7 +64,7 @@ bool term_tty_stdout(void)   { return g_tty_out; }
 
 const char* term_style_on(TermStyle s, bool enabled) {
     if (!enabled || (int)s < 0 || (int)s >= (int)TERM_STYLE_COUNT) return "";
-    return STYLE_SGR[s];
+    return term_theme_sgr((TermRole)(TERM_ROLE_STYLE_BASE + (int)s));
 }
 
 const char* term_style_off(bool enabled) {
@@ -97,16 +93,7 @@ int term_format_elapsed(char* buf, size_t cap, double seconds) {
 
 /* ---- tones for the live status line (REPL PR 3) -------------------------- */
 
-static const char* const TONE_SGR[TERM_TONE_COUNT] = {
-    "\033[36m",     /* spin  : cyan   */
-    "\033[1m",      /* label : bold   */
-    "\033[2m",      /* dim            */
-    "\033[36m",     /* bar   : cyan   */
-    "\033[33m",     /* warn  : yellow */
-    "\033[31m",     /* alert : red    */
-};
-
 const char* term_tone_on(TermTone t, bool enabled) {
     if (!enabled || (int)t < 0 || (int)t >= (int)TERM_TONE_COUNT) return "";
-    return TONE_SGR[t];
+    return term_theme_sgr((TermRole)(TERM_ROLE_TONE_BASE + (int)t));
 }

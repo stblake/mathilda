@@ -19,6 +19,7 @@
 #define MATHILDA_TERM_EDITOR_TTY_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include "term_input.h"
 
 struct TermHistory;
@@ -26,6 +27,7 @@ struct TermHistory;
 typedef struct {
     struct TermHistory* history;   /* the session's store, or NULL       */
     bool                color;     /* the session's stdout colour choice */
+    bool                slash;     /* '/' opens the slash-command menu   */
 } TermEditorOptions;
 
 /* Whether the interactive session should use the in-tree editor:
@@ -37,6 +39,13 @@ bool        term_editor_select(const char* env_editor, const char* env_term,
 
 /* The editor backend, or NULL (not a terminal, Windows, out of memory). */
 TermReader* term_reader_open_editor(const TermEditorOptions* o);
+
+/* Run a picker (term_editor.h) on the editor's terminal: raw mode for its
+ * duration, the cursor hidden. TERM_READ_OK with the chosen index in *out,
+ * TERM_READ_INTERRUPTED when cancelled, TERM_READ_EOF when the reader is not
+ * the editor (the caller falls back to text) or the input went away. */
+struct TermPick;
+TermReadStatus term_reader_pick(TermReader* rd, const struct TermPick* p, size_t* out);
 
 /* True while an editor reader is open: the session draws with the editor,
  * so its results may be coloured (term_result_print). */

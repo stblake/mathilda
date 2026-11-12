@@ -4,6 +4,7 @@
 #include "term_highlight.h"
 #include "term_lex.h"
 #include "term_color.h"
+#include "term_theme.h"
 
 #include "symtab.h"
 #include "expr.h"
@@ -12,30 +13,33 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* 16-colour SGR only, so every terminal that is not "dumb" shows them. Each
- * entry starts from a reset state (the renderer emits "\033[0m" first). */
-static const char* const HL_SGR[TERM_HL_COUNT] = {
-    "",                 /* PLAIN                                   */
-    "\033[36m",         /* BUILTIN  cyan                           */
-    "\033[34m",         /* USER     blue                           */
-    "\033[35m",         /* NUMBER   magenta                        */
-    "\033[32m",         /* STRING   green                          */
-    "\033[90m",         /* COMMENT  bright black                   */
-    "\033[33m",         /* PATTERN  yellow                         */
-    "",                 /* BRACKET  plain                          */
-    "\033[1;4m",        /* BRACKET_MATCH  bold underline           */
-    "\033[1;31m",       /* BRACKET_BAD    bold red                 */
-    NULL,               /* PROMPT: term_color's In style           */
-    "\033[97;100m",     /* POPUP      white on grey                */
-    "\033[1;97;44m",    /* POPUP_SEL  bold white on blue           */
-    "\033[37;100m",     /* POPUP_DOC  light grey on grey           */
-    "\033[2m",          /* DIM                                     */
+/* Each style's theme role (term_theme.h); the SGR selects it from a reset
+ * state (the renderer emits "\033[0m" before switching away from a style). */
+static const signed char HL_ROLE[TERM_HL_COUNT] = {
+    -1,                     /* PLAIN          */
+    TERM_ROLE_BUILTIN,
+    TERM_ROLE_USER,
+    TERM_ROLE_NUMBER,
+    TERM_ROLE_STRING,
+    TERM_ROLE_COMMENT,
+    TERM_ROLE_PATTERN,
+    TERM_ROLE_BRACKET,
+    TERM_ROLE_MATCH,
+    TERM_ROLE_BAD,
+    TERM_ROLE_IN,           /* PROMPT: the In[n]:= style */
+    TERM_ROLE_POPUP,
+    TERM_ROLE_POPUP_SEL,
+    TERM_ROLE_POPUP_DOC,
+    TERM_ROLE_HL_DIM,
+    TERM_ROLE_OUT,          /* OUT: the Out[n]= style      */
+    TERM_ROLE_MSG_HEAD,     /* MSG: a message's Head::tag  */
+    TERM_ROLE_SPIN,         /* SPIN: the status glyph/bar  */
+    TERM_ROLE_LABEL,        /* LABEL: the status label     */
 };
 
 const char* term_hl_sgr(int id) {
-    if (id <= 0 || id >= (int)TERM_HL_COUNT) return "";
-    if (id == TERM_HL_PROMPT) return term_style_on(TERM_STYLE_IN, true);
-    return HL_SGR[id];
+    if (id <= 0 || id >= (int)TERM_HL_COUNT || HL_ROLE[id] < 0) return "";
+    return term_theme_sgr((TermRole)HL_ROLE[id]);
 }
 
 int term_hl_classify_symtab(const char* s, size_t len, void* ctx) {
@@ -195,13 +199,13 @@ bool term_hl_fputs(const char* s, size_t n, FILE* f, TermHlClassify cls, void* c
         if (v != cur) {
             fwrite(s + run, 1, i - run, f);
             run = i;
-            fputs("\033[0m", f);
+            if (*term_hl_sgr(cur)) fputs("\033[0m", f);   /* leave the old style */
             fputs(term_hl_sgr(v), f);
             cur = v;
         }
     }
     fwrite(s + run, 1, n - run, f);
-    if (cur != TERM_HL_PLAIN) fputs("\033[0m", f);
+    if (*term_hl_sgr(cur)) fputs("\033[0m", f);
     free(sty);
     return true;
 }

@@ -91,6 +91,8 @@ const char* term_status_label_of(const Expr* e) {
         const char* h = e->data.function.head->data.symbol.name;
         size_t n = e->data.function.arg_count;
         if ((h == SYM_Set || h == SYM_SetDelayed) && n == 2) { e = e->data.function.args[1]; continue; }
+        /* Monitor[expr, mon] shows mon in the line; the label is expr's */
+        if (h == SYM_Monitor && n == 2) { e = e->data.function.args[0]; continue; }
         if (h == SYM_CompoundExpression && n > 0) {
             const Expr* pick = NULL;
             for (size_t i = n; i > 0; i--) {
@@ -177,6 +179,7 @@ static volatile sig_atomic_t g_sig_tty = -1;
 static volatile sig_atomic_t g_sig_color = 0;
 static volatile sig_atomic_t g_sig_exiting = 0;   /* an exit path owns the tty now */
 static volatile sig_atomic_t g_sig_width = 0;     /* cells of the visible line     */
+static volatile sig_atomic_t g_sig_stopped = 0;   /* Ctrl-Z: stopped, do not draw  */
 static const char SPACES[256 + 1] =
     "                                                                "
     "                                                                "
@@ -227,7 +230,7 @@ typedef struct {
 } Fwd;
 
 static void draw(Fwd* f, double now, const char* label, double t0, double c0) {
-    if (g_sig_exiting) return;
+    if (g_sig_exiting || g_sig_stopped) return;
     TermSpinnerSnap s;
     memset(&s, 0, sizeof s);
     s.frame = f->frame++;
@@ -257,6 +260,11 @@ static void draw(Fwd* f, double now, const char* label, double t0, double c0) {
     uint64_t lim = mth_progress_memory_limit();
     s.budget = lim ? lim : f->budget;
     s.workers = mth_progress_workers();
+    char mon[MTH_MONITOR_TEXT];
+    if (mth_monitor_active()) {
+        g_mth_monitor_due = 1;               /* the main thread refreshes it */
+        if (mth_monitor_text(mon, sizeof mon)) s.monitor = mon;
+    }
 
     char line[1024];
     TermSpinnerStyle st = { g_color, g_unicode };
@@ -493,6 +501,52 @@ static void install_fatal(void) {
     }
 }
 
+/* Ctrl-Z during an evaluation (ISIG is on, so the tty sends SIGTSTP to the
+ * main thread): erase the line and give the shell back its echoing terminal,
+ * stop with the default action, and on SIGCONT put ECHO-off back; the
+ * forwarder redraws on its next tick. Outside an evaluation (the editor
+ * raises SIGTSTP itself after restoring the terminal) it is a plain stop. */
+static struct sigaction g_tstp_old;
+static bool g_tstp_installed = false;
+
+static void on_tstp(int sig) {
+    int saved_errno = errno;
+    bool echo_was_off = g_sig_echo_off != 0;
+    g_sig_stopped = 1;
+    sig_cleanup();
+    struct sigaction dfl, ours;
+    memset(&dfl, 0, sizeof dfl);
+    dfl.sa_handler = SIG_DFL;
+    sigemptyset(&dfl.sa_mask);
+    sigaction(SIGTSTP, &dfl, &ours);
+    sigset_t m;
+    sigemptyset(&m);
+    sigaddset(&m, SIGTSTP);
+    raise(sig);                                  /* pending: blocked in here */
+    pthread_sigmask(SIG_UNBLOCK, &m, NULL);      /* delivered: stopped       */
+    pthread_sigmask(SIG_BLOCK, &m, NULL);        /* continued                */
+    sigaction(SIGTSTP, &ours, NULL);
+    if (echo_was_off && S.echo_fd >= 0) {
+        struct termios t = g_tio_saved;
+        t.c_lflag &= ~(tcflag_t)ECHO;
+        if (tcsetattr(S.echo_fd, TCSANOW, &t) == 0) g_sig_echo_off = 1;
+    }
+    g_sig_stopped = 0;
+    errno = saved_errno;
+}
+
+static void install_tstp(void) {
+    struct sigaction cur;
+    if (sigaction(SIGTSTP, NULL, &cur) != 0) return;
+    if (cur.sa_handler != SIG_DFL || (cur.sa_flags & SA_SIGINFO)) return;   /* someone else's */
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_handler = on_tstp;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART;
+    if (sigaction(SIGTSTP, &sa, &g_tstp_old) == 0) g_tstp_installed = true;
+}
+
 static void at_exit_cleanup(void) {
     if (g_nest > 0 && S.redirected) {
         TermStatusStats st;
@@ -586,6 +640,7 @@ void term_status_init(bool interactive) {
     if (!term_status_open(&c)) { close(c.tty_fd); return; }
     term_interrupt_set_exit_fn(status_exit_fn);
     install_fatal();
+    install_tstp();
     atexit(at_exit_cleanup);
 }
 
@@ -692,6 +747,7 @@ void term_status_shutdown(void) {
     S.open = false;
     g_enabled = false;
     term_interrupt_set_exit_fn(NULL);
+    if (g_tstp_installed) { sigaction(SIGTSTP, &g_tstp_old, NULL); g_tstp_installed = false; }
 }
 
 #else  /* !TS_LIVE: no thread -- begin/end only measure */

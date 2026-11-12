@@ -753,7 +753,7 @@ $(TARGET): $(OBJ)
 #   make libmathilda.a USE_READLINE=0 USE_THREADS=0 USE_ECM=0 USE_MPFR=0 \
 #        USE_LAPACK=0 USE_GRAPHICS=0 USE_FLINT=0 USE_REGEX=0 USE_FFTW=0
 AR ?= ar
-LIB_OBJ = $(filter-out $(SRC_DIR)/repl.o $(SRC_DIR)/term/term_readline.o,$(OBJ)) $(FFI_OBJ)
+LIB_OBJ = $(filter-out $(SRC_DIR)/repl.o $(SRC_DIR)/repl_cmds.o $(SRC_DIR)/term/term_readline.o,$(OBJ)) $(FFI_OBJ)
 # Remove any existing archive first: `ar rcs` MERGES into an existing .a rather
 # than replacing it, so without this a cross-arch rebuild (iOS/Android) would
 # leave stale host-arch members (render.o, label_font.o, …) behind, producing

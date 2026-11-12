@@ -22,6 +22,7 @@
 #include "term_editor.h"
 #include "term_history.h"
 #include "term_highlight.h"
+#include "term_slash.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -49,6 +50,11 @@ TermReader* term_reader_open_editor(const TermEditorOptions* o) {
     return NULL;
 }
 
+TermReadStatus term_reader_pick(TermReader* rd, const TermPick* p, size_t* out) {
+    (void)rd; (void)p; (void)out;
+    return TERM_READ_EOF;
+}
+
 #else /* POSIX */
 
 #include <errno.h>
@@ -65,6 +71,7 @@ TermReader* term_reader_open_editor(const TermEditorOptions* o) {
 static struct termios        g_saved;          /* the termios of the read's start */
 static volatile sig_atomic_t g_raw = 0;        /* raw mode is on                  */
 static volatile sig_atomic_t g_winch = 0;      /* SIGWINCH arrived                */
+static volatile sig_atomic_t g_hidden = 0;     /* the cursor is hidden (picker)   */
 static bool                  g_atexit = false;
 
 static const int CRASH_SIGS[] = { SIGTERM, SIGHUP, SIGQUIT, SIGSEGV, SIGBUS, SIGFPE, SIGILL, SIGABRT };
@@ -77,9 +84,16 @@ static const char PASTE_ON[]  = "\033[?2004h";
 static const char PASTE_OFF[] = "\033[?2004l";
 
 /* Async-signal-safe: write() and tcsetattr() only. */
+static const char CURSOR_SHOW[] = "\033[?25h";
+static const char CURSOR_HIDE[] = "\033[?25l";
+
 static void restore_terminal(void) {
     if (!g_raw) return;
     g_raw = 0;
+    if (g_hidden) {
+        g_hidden = 0;
+        if (write(STDOUT_FILENO, CURSOR_SHOW, sizeof(CURSOR_SHOW) - 1) < 0) { /* nothing to do */ }
+    }
     if (write(STDOUT_FILENO, PASTE_OFF, sizeof(PASTE_OFF) - 1) < 0) { /* nothing to do */ }
     tcsetattr(STDIN_FILENO, TCSANOW, &g_saved);
 }
@@ -170,7 +184,9 @@ typedef struct {
     TermEditor*       ed;
     char*             pre;          /* bytes read while waiting for a DSR reply */
     size_t            pre_len, pre_cap;
-    int               dsr_failures; /* after two, stop asking                  */
+    int               dsr_failures; /* unanswered queries; after two, stop asking */
+    bool              dsr_ok;       /* the terminal has answered one          */
+    long              dsr_sent_ms;  /* when the last unanswered query went out */
 } EdImpl;
 
 static void pre_add(EdImpl* im, const char* s, size_t n) {
@@ -194,14 +210,13 @@ static long now_ms(void) {
 
 /* Ask the terminal where the cursor is (ESC [ 6 n). Bytes that are not the
  * reply (typeahead) are kept for the editor. Returns false on no reply. */
-static bool query_cursor(EdImpl* im, int* row, int* col) {
+static bool query_cursor(EdImpl* im, int* row, int* col, bool send, long timeout_ms) {
     *row = -1;
     *col = 0;
-    if (im->dsr_failures >= 2) return false;
-    write_all("\033[6n", 4);
+    if (send) write_all("\033[6n", 4);
     char buf[256];
     size_t n = 0;
-    long deadline = now_ms() + 80;
+    long deadline = now_ms() + timeout_ms;
     for (;;) {
         long left = deadline - now_ms();
         if (left <= 0) break;
@@ -228,6 +243,7 @@ static bool query_cursor(EdImpl* im, int* row, int* col) {
             *row = a - 1;
             *col = b - 1;
             im->dsr_failures = 0;
+            im->dsr_ok = true;
             return true;
         }
         if (n >= sizeof(buf) - 1) break;
@@ -237,26 +253,27 @@ static bool query_cursor(EdImpl* im, int* row, int* col) {
     return false;
 }
 
-static TermReadStatus ed_read(TermReader* rd, const char* prompt, char** out) {
-    EdImpl* im = (EdImpl*)rd->impl;
+/* Raw mode, bracketed paste, handlers: the editor owns the terminal. */
+static bool take_terminal(void) {
     fflush(stdout);
     fflush(stderr);
-    if (!enter_raw()) return TERM_READ_EOF;
+    if (!enter_raw()) return false;
     install_handlers();
     write_all(PASTE_ON, sizeof(PASTE_ON) - 1);
+    if (g_hidden) write_all(CURSOR_HIDE, sizeof(CURSOR_HIDE) - 1);
+    return true;
+}
 
-    int cols, rows;
-    term_size(&cols, &rows);
-    term_editor_set_size(im->ed, cols, rows);
-    int row, col;
-    im->pre_len = 0;
-    (void)query_cursor(im, &row, &col);
-    term_editor_begin(im->ed, prompt, row, col);
-    TermEdStatus st = term_editor_feed(im->ed, im->pre, im->pre_len);
-    im->pre_len = 0;
+static void give_terminal(void) {
+    leave_raw();                    /* also switches bracketed paste off */
+    remove_handlers();
+}
 
+/* Feed keys until the read ends. *hangup is set when the input went away. */
+static TermEdStatus run_loop(EdImpl* im, TermEdStatus st, bool* hangup) {
     char buf[4096];
-    bool hangup = false;
+    int cols, rows;
+    *hangup = false;
     while (st == TERM_ED_CONTINUE) {
         if (g_winch) {
             g_winch = 0;
@@ -267,29 +284,73 @@ static TermReadStatus ed_read(TermReader* rd, const char* prompt, char** out) {
         int pr = poll(&pfd, 1, term_editor_pending(im->ed) ? 50 : -1);
         if (pr < 0) {
             if (errno == EINTR) continue;
-            hangup = true;
+            *hangup = true;
             break;
         }
         if (pr == 0) { st = term_editor_timeout(im->ed); continue; }
         long r = (long)read(STDIN_FILENO, buf, sizeof(buf));
         if (r < 0 && (errno == EINTR || errno == EAGAIN)) continue;
-        if (r <= 0) { hangup = true; break; }
+        if (r <= 0) { *hangup = true; break; }
         st = term_editor_feed(im->ed, buf, (size_t)r);
         if (st == TERM_ED_SUSPEND) {
-            leave_raw();
-            remove_handlers();
+            /* Ctrl-Z: the shell gets a cooked terminal, the cursor shown;
+             * on fg raw mode comes back and the area is redrawn. */
+            bool hidden = g_hidden != 0;
+            give_terminal();
             raise(SIGTSTP);                 /* stops here until fg */
-            if (!enter_raw()) { hangup = true; break; }
-            install_handlers();
-            write_all(PASTE_ON, sizeof(PASTE_ON) - 1);
+            g_hidden = hidden ? 1 : 0;
+            if (!take_terminal()) { *hangup = true; break; }
             term_size(&cols, &rows);
             term_editor_set_size(im->ed, cols, rows);
             term_editor_redraw(im->ed, false);
             st = TERM_ED_CONTINUE;
         }
     }
-    leave_raw();                    /* also switches bracketed paste off */
-    remove_handlers();
+    return st;
+}
+
+static TermReadStatus ed_read(TermReader* rd, const char* prompt, char** out) {
+    EdImpl* im = (EdImpl*)rd->impl;
+    if (!take_terminal()) return TERM_READ_EOF;
+
+    int cols, rows;
+    term_size(&cols, &rows);
+    term_editor_set_size(im->ed, cols, rows);
+    int row = -1, col = 0;
+    im->pre_len = 0;
+    /* Where is the cursor? A terminal that has answered before answers in a
+     * millisecond or two, so it is asked and waited for. One that has not
+     * yet is asked without waiting: the reply, if any, arrives among the
+     * keys and the editor takes it from there. After two unanswered queries
+     * it is not asked again, so a terminal that never answers costs nothing. */
+    bool async = false;
+    if (im->dsr_ok) {
+        (void)query_cursor(im, &row, &col, true, 80);
+    } else if (im->dsr_failures < 2) {
+        write_all("\033[6n", 4);
+        im->dsr_sent_ms = now_ms();
+        async = true;
+    }
+    term_editor_begin(im->ed, prompt, row, col);
+    if (async) term_editor_expect_cpr(im->ed);
+    TermEdStatus st = term_editor_feed(im->ed, im->pre, im->pre_len);
+    im->pre_len = 0;
+
+    bool hangup = false;
+    st = run_loop(im, st, &hangup);
+    if (async) {
+        if (term_editor_cpr_seen(im->ed)) {
+            im->dsr_ok = true;
+            im->dsr_failures = 0;
+        } else if (!hangup) {
+            /* The read ended at once (typeahead): give a late reply a moment
+             * so it is not left for the evaluation to echo. */
+            long left = im->dsr_sent_ms + 100 - now_ms();
+            int r2, c2;
+            if (left <= 0 || !query_cursor(im, &r2, &c2, false, left)) im->dsr_failures++;
+        }
+    }
+    give_terminal();
 
     if (hangup) return TERM_READ_EOF;
     if (st == TERM_ED_EOF) return TERM_READ_EOF;
@@ -300,6 +361,26 @@ static TermReadStatus ed_read(TermReader* rd, const char* prompt, char** out) {
     if (!copy) return TERM_READ_EOF;
     memcpy(copy, text, n + 1);
     *out = copy;
+    return TERM_READ_OK;
+}
+
+TermReadStatus term_reader_pick(TermReader* rd, const TermPick* p, size_t* out) {
+    if (!rd || rd->kind != TERM_BACKEND_EDITOR || !p || p->count == 0) return TERM_READ_EOF;
+    EdImpl* im = (EdImpl*)rd->impl;
+    if (!take_terminal()) return TERM_READ_EOF;
+    int cols, rows;
+    term_size(&cols, &rows);
+    term_editor_set_size(im->ed, cols, rows);
+    g_hidden = 1;
+    term_editor_pick_begin(im->ed, p, -1);
+    bool hangup = false;
+    TermEdStatus st = run_loop(im, TERM_ED_CONTINUE, &hangup);
+    if (hangup) write_all(CURSOR_SHOW, sizeof(CURSOR_SHOW) - 1);
+    g_hidden = 0;
+    give_terminal();
+    if (hangup || st == TERM_ED_EOF) return TERM_READ_EOF;
+    if (st != TERM_ED_ACCEPT) return TERM_READ_INTERRUPTED;
+    *out = term_editor_pick_index(im->ed);
     return TERM_READ_OK;
 }
 
@@ -322,6 +403,11 @@ static void ed_close(TermReader* rd) {
 
 static const TermReaderOps ED_OPS = { ed_read, ed_history_add, ed_close };
 
+static const char* slash_doc(const char* name, size_t len, void* ctx) {
+    (void)ctx;
+    return term_slash_summary(name, len);
+}
+
 TermReader* term_reader_open_editor(const TermEditorOptions* o) {
     if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO)) return NULL;
     struct termios probe;
@@ -340,6 +426,8 @@ TermReader* term_reader_open_editor(const TermEditorOptions* o) {
     cfg.history = im->opt.history;
     cfg.classify = term_hl_classify_symtab;
     cfg.doc = term_hl_doc_symtab;
+    cfg.slash_complete = im->opt.slash ? term_slash_complete : NULL;
+    cfg.slash_doc = im->opt.slash ? slash_doc : NULL;
     cfg.write = tty_write;
     im->ed = term_editor_new(&cfg);
     if (!im->ed) { free(rd); free(im); return NULL; }

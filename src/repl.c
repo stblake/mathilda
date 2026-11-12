@@ -31,6 +31,9 @@
 #include "term/term_color.h"
 #include "term/term_status.h"
 #include "term/term_spinner.h"
+#include "term/term_theme.h"
+#include "term/term_config.h"
+#include "repl_cmds.h"
 #include "mtime.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -142,7 +145,7 @@ void process_input(const char* input, int line_number) {
     if (is_info_query) fputs(to_print->data.string, stdout);
     else if (!(c && term_editor_session_active() && term_hl_print_result(to_print)))
         expr_print(to_print);
-    if (term_tty_stdout() && took >= 1.0) {
+    if (term_tty_stdout() && repl_cmds_show_took(took)) {   /* /timing; default >= 1 s */
         /* A dim note on its own line, under the result. */
         char tl[256];
         TermSpinnerStyle tst = { c, term_status_unicode() };
@@ -195,14 +198,20 @@ static void repl_process(const char* line, int line_number) {
 
 static void repl_banner(TermBackendKind kind) {
     printf("\nMathilda " MATHILDA_VERSION_STRING " - A small, open source computer algebra system.\n\n");
-    if (kind != TERM_BACKEND_STDIO) {
+    if (kind == TERM_BACKEND_EDITOR) {
+        /* Short: everything else is one / away. */
+        const char* d = term_style_on(TERM_STYLE_DIM, term_color_stdout());
+        const char* o = term_style_off(term_color_stdout());
+        printf("%sFree, open source software with ABSOLUTELY NO WARRANTY.%s\n\n", d, o);
+        printf("Return evaluates (Esc Return forces an incomplete input); Tab completes,\n");
+        printf("Ctrl-R searches the history, Ctrl-C interrupts (twice quits).\n");
+        printf("Type / for commands and /help for keys; Ctrl-D or Quit[] exits.\n\n");
+    } else if (kind != TERM_BACKEND_STDIO) {
         printf("This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.\n\n");
         printf("Press Return to evaluate. An open bracket, string or comment continues\n");
         printf("on the next line; press Esc then Return to force evaluation.\n");
-        if (kind == TERM_BACKEND_EDITOR)
-            printf("Tab completes, Ctrl-R searches the history, Ctrl-_ undoes.\n");
         printf("Ctrl-C interrupts an evaluation (twice within a second force-quits).\n");
-        printf("Exit by evaluating Quit[] or pressing Ctrl-D.\n\n");
+        printf("Exit by evaluating Quit[] or pressing Ctrl-D; /help lists the commands.\n\n");
     } else {
         printf("Exit by evaluating Quit[] or pressing Ctrl+Z (Windows) / Ctrl+D (Unix).\n\n");
     }
@@ -214,6 +223,7 @@ static void repl_banner(TermBackendKind kind) {
  * expression, so no accumulation buffer is needed. */
 void repl_loop(TermReader* rd) {
     repl_banner(term_reader_kind(rd));
+    repl_cmds_load_mods();                                /* init.m, mods/ (after the banner) */
     int line_number = 1;
     char prompt[64];
     for (;;) {
@@ -229,7 +239,12 @@ void repl_loop(TermReader* rd) {
         if (line[0] == '\0') { free(line); continue; }
         /* Before evaluating: a crash or a forced quit keeps the entry. */
         term_reader_history_add(rd, line);
-        repl_process(line, line_number++);
+        if (line[0] == '/' && repl_cmds_enabled()) {
+            /* A slash command: never evaluated, no In[n] (repl_cmds.h). */
+            repl_cmds_run(line);
+        } else {
+            repl_process(line, line_number++);
+        }
         free(line);
         if (mth_quit_requested()) {
             /* Quit[] / Quit[n] evaluated anywhere in the input (a bare
@@ -1446,6 +1461,7 @@ int main(int argc, char** argv) {
     TermReader* rd = NULL;
     TermHistory* hist = NULL;
     bool interactive_rl = false;   /* the full interactive readline session */
+    char* cfg_dir = NULL;          /* ~/.mathilda (term_config.h), interactive only */
     if (!pipe_mode) {
         dio.interactive = isatty(fileno(stdin)) != 0;
         dio.read = dialog_read_stdin;
@@ -1457,6 +1473,11 @@ int main(int argc, char** argv) {
             if (!script) {
                 /* Colour is decided once, here, for this session only. */
                 term_color_init(true);
+                /* The per-user directory: the theme now, mods after the banner. */
+                cfg_dir = term_config_dir(getenv("MATHILDA_CONFIG_DIR"), getenv("HOME"));
+                char* cfg = term_config_join(cfg_dir, "config");
+                term_theme_init(cfg);
+                free(cfg);
                 if (term_color_stderr())
                     mth_message_set_style(term_style_on(TERM_STYLE_MSG_HEAD, true),
                                           term_style_off(true));
@@ -1473,7 +1494,7 @@ int main(int argc, char** argv) {
              * declined (MATHILDA_EDITOR=readline, TERM=dumb) or cannot open. */
             if (!script && term_editor_select(getenv("MATHILDA_EDITOR"), getenv("TERM"),
                                               dio.interactive, isatty(fileno(stdout)) != 0)) {
-                TermEditorOptions eo = { hist, term_color_stdout() };
+                TermEditorOptions eo = { hist, term_color_stdout(), true };
                 rd = term_reader_open_editor(&eo);
             }
             if (!rd) {
@@ -1481,6 +1502,7 @@ int main(int argc, char** argv) {
                 rd = term_reader_open_readline(&ro);
             }
             interactive_rl = rd && !script;
+            if (interactive_rl) repl_cmds_init(rd, hist, cfg_dir);
         }
 #endif
         if (!rd && !script) rd = term_reader_open_stdio();
@@ -1504,6 +1526,7 @@ int main(int argc, char** argv) {
         repl_loop(rd);
         term_status_shutdown();
         if (interactive_rl) term_interrupt_uninstall();
+        repl_cmds_shutdown();
         if (mth_quit_requested()) rc = mth_quit_status();
     }
     if (rd) {
@@ -1511,6 +1534,7 @@ int main(int argc, char** argv) {
         term_reader_close(rd);
     }
     term_history_close(hist);
+    free(cfg_dir);
     /* Tear down the context subsystem so its $Context / $ContextPath strings and
      * any open package frames are freed rather than lingering as leaks at exit.
      * context_init() is called from core_init(); this is its symmetric partner,

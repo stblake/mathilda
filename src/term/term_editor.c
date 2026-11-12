@@ -65,13 +65,14 @@ static bool bytes_set(Bytes* b, const char* s, size_t n) {
 enum {
     K_NONE = 0, K_CHAR, K_ENTER, K_FORCE_ENTER, K_TAB, K_BTAB, K_BS, K_DEL,
     K_UP, K_DOWN, K_LEFT, K_RIGHT, K_HOME, K_END, K_PGUP, K_PGDN,
-    K_WLEFT, K_WRIGHT, K_ESC, K_PASTE, K_ALT_BS, K_ALT, K_CTRL
+    K_WLEFT, K_WRIGHT, K_ESC, K_PASTE, K_ALT_BS, K_ALT, K_CTRL, K_CPR
 };
 
 typedef struct {
     int    code;
     char   b[4];     /* K_CHAR: the UTF-8 bytes; K_ALT / K_CTRL: the letter */
     size_t n;
+    int    p1, p2;   /* K_CPR: the reported row and column (1-based)      */
 } Key;
 
 /* ---- undo ----------------------------------------------------------------- */
@@ -163,6 +164,15 @@ struct TermEditor {
     size_t          srch_hidx[1024];
 
     TermEdStatus status;
+
+    bool            pop_slash;               /* the popup lists slash commands */
+    size_t          nredo;                   /* ops[nops, nredo) can be redone */
+    bool            cpr_wait, cpr_seen;      /* cursor-position reply          */
+
+    /* The picker (term_editor_pick_begin). */
+    bool            pick_open;
+    TermPick        pick;
+    size_t          pick_sel, pick_top;
 };
 
 static const char SRCH_LABEL[] = "search: ";
@@ -231,6 +241,7 @@ static void undo_compact(TermEditor* ed) {
     /* Drop the oldest half, at a group boundary. */
     size_t k = ed->nops / 2;
     while (k < ed->nops && k > 0 && ed->ops[k].group == ed->ops[k - 1].group) k++;
+    ed->nredo = 0;
     if (k == 0 || k >= ed->nops) { ed->nops = 0; ed->arena.len = 0; return; }
     size_t base = ed->ops[k].del_off;
     memmove(ed->arena.p, ed->arena.p + base, ed->arena.len - base);
@@ -245,6 +256,7 @@ static void undo_compact(TermEditor* ed) {
 
 static void undo_record(TermEditor* ed, size_t pos, size_t dlen, const char* ins,
                         size_t ilen, int kind) {
+    ed->nredo = 0;                       /* a new edit ends the redo chain */
     UndoOp* last = ed->nops ? &ed->ops[ed->nops - 1] : NULL;
     bool same = last && kind != EK_OTHER && kind == ed->last_kind;
     if (same && kind == EK_INSERT && dlen == 0 && last->pos + last->ins_len == pos
@@ -367,27 +379,6 @@ static int char_cols(uint32_t cp) {
     return w < 0 ? 2 : w;
 }
 
-/* Display column of byte offset `pos` within its logical line. */
-static int col_in_line(const TermEditor* ed, size_t pos) {
-    size_t a = ed->lstart[line_of(ed, pos)];
-    return (int)term_text_width(ed->text + a, pos - a);
-}
-
-/* Byte offset in line `l` nearest to display column `goal` (not past it). */
-static size_t pos_at_col(const TermEditor* ed, size_t l, int goal) {
-    size_t i = ed->lstart[l], e = line_end(ed, l);
-    int col = 0;
-    while (i < e) {
-        uint32_t cp;
-        size_t j = term_utf8_next(ed->text, e, i, &cp);
-        int w = char_cols(cp);
-        if (col + w > goal) break;
-        col += w;
-        i = j;
-    }
-    return i;
-}
-
 /* ---- kill ring and history --------------------------------------------------- */
 
 static void kill_range(TermEditor* ed, size_t a, size_t b, int dir) {
@@ -445,12 +436,61 @@ static void history_down(TermEditor* ed) {
     if (ed->hidx >= n) ed->hbrowse = false;
 }
 
+/* Defined with the layout code. */
+static void gutters(const TermEditor* ed, int* g0, int* gn);
+static uint32_t walk_line(const TermEditor* ed, size_t l, int g0, int gn, size_t upto,
+                          int* crow, int* ccol);
+
+/* The byte offset on visual row `vrow` of line l nearest to screen column
+ * `goal` (not past it): the rule of pos_at_col, per wrapped row. */
+static size_t pos_at_visual(const TermEditor* ed, size_t l, int vrow, int goal, int g0, int gn) {
+    int cols = ed->scr.cols;
+    int avail = (l == 0 ? cols - g0 : cols - gn), availn = cols - gn;
+    if (avail < 1) avail = 1;
+    if (availn < 1) availn = 1;
+    int gut = (l == 0 ? g0 : gn);
+    size_t i = ed->lstart[l], e = line_end(ed, l), last = i;
+    int row = 0, col = 0;
+    while (i < e) {
+        uint32_t cp;
+        size_t j = term_utf8_next(ed->text, e, i, &cp);
+        int w = char_cols(cp);
+        if (col + w > avail) { row++; col = 0; avail = availn; gut = gn; }
+        if (row > vrow) return last;
+        if (row == vrow) {
+            if (gut + col + w > goal) return i;
+            last = i;
+        }
+        col += w;
+        i = j;
+    }
+    if (col >= avail) row++;                  /* the end sits on a row of its own */
+    return row <= vrow ? e : last;
+}
+
+/* Up/Down: to the neighbouring visual row of a wrapped line first, then to
+ * the next or previous line (its last / first row), then history. The goal
+ * is a screen column, kept across a run of vertical moves. */
 static void move_vertical(TermEditor* ed, int dir) {
     size_t l = line_of(ed, ed->cur);
-    if (dir < 0 && l == 0) { history_up(ed); return; }
-    if (dir > 0 && l + 1 >= ed->nlines) { history_down(ed); return; }
-    if (!ed->goal_ok) { ed->goal = col_in_line(ed, ed->cur); ed->goal_ok = true; }
-    ed->cur = pos_at_col(ed, dir < 0 ? l - 1 : l + 1, ed->goal);
+    int g0, gn;
+    gutters(ed, &g0, &gn);
+    int crow = 0, ccol = 0;
+    int nrows = (int)walk_line(ed, l, g0, gn, ed->cur, &crow, &ccol);
+    int scol = ccol + ((l == 0 && crow == 0) ? g0 : gn);
+    if (!ed->goal_ok) { ed->goal = scol; ed->goal_ok = true; }
+    if (dir < 0 && crow > 0) {
+        ed->cur = pos_at_visual(ed, l, crow - 1, ed->goal, g0, gn);
+    } else if (dir > 0 && crow + 1 < nrows) {
+        ed->cur = pos_at_visual(ed, l, crow + 1, ed->goal, g0, gn);
+    } else if (dir < 0) {
+        if (l == 0) { history_up(ed); return; }
+        int pr = (int)walk_line(ed, l - 1, g0, gn, SIZE_MAX, NULL, NULL);
+        ed->cur = pos_at_visual(ed, l - 1, pr - 1, ed->goal, g0, gn);
+    } else {
+        if (l + 1 >= ed->nlines) { history_down(ed); return; }
+        ed->cur = pos_at_visual(ed, l + 1, 0, ed->goal, g0, gn);
+    }
     ed->goal_keep = true;
 }
 
@@ -458,6 +498,7 @@ static void move_vertical(TermEditor* ed, int dir) {
 
 static void undo(TermEditor* ed) {
     if (ed->nops == 0) return;
+    if (ed->nredo < ed->nops) ed->nredo = ed->nops;
     unsigned g = ed->ops[ed->nops - 1].group;
     size_t k = ed->nops;
     while (k > 0 && ed->ops[k - 1].group == g) k--;
@@ -471,6 +512,26 @@ static void undo(TermEditor* ed) {
     if (ed->cur > ed->len) ed->cur = ed->len;
     ed->arena.len = ed->ops[k].del_off;
     ed->nops = k;
+    ed->last_kind = EK_NONE;
+}
+
+/* Re-apply the group undo() last took back. The undone operations and their
+ * text are still in ops[] and the arena (undo only shortened them), until a
+ * new edit records over them. */
+static void redo(TermEditor* ed) {
+    if (ed->nredo <= ed->nops) return;
+    unsigned g = ed->ops[ed->nops].group;
+    size_t k = ed->nops;
+    ed->undoing = true;
+    while (k < ed->nredo && ed->ops[k].group == g) {
+        const UndoOp* op = &ed->ops[k];
+        if (ed_replace(ed, op->pos, op->del_len, ed->arena.p + op->ins_off, op->ins_len, EK_OTHER))
+            ed->cur = op->pos + op->ins_len;
+        k++;
+    }
+    ed->undoing = false;
+    ed->nops = k;
+    ed->arena.len = ed->ops[k - 1].ins_off + ed->ops[k - 1].ins_len;
     ed->last_kind = EK_NONE;
 }
 
@@ -625,8 +686,11 @@ static void draw_line(TermEditor* ed, size_t l, int vbase, int g0, int gn, size_
     }
 }
 
+static void pick_render(TermEditor* ed);
+
 static void render(TermEditor* ed) {
     TermScreen* s = &ed->scr;
+    if (ed->pick_open) { pick_render(ed); return; }
     if (ed->srch_open && !ed->final_frame) {
         ed->vtop = 0;
         term_screen_begin_frame(s, srch_rows(ed));
@@ -965,6 +1029,7 @@ static void srch_draw(TermEditor* ed) {
 #define POP_MAX_ROWS 8
 
 static void pop_close(TermEditor* ed) {
+    ed->pop_slash = false;
     if (!ed->pop_open) return;
     term_completions_free(&ed->pop_c);
     ed->pop_open = false;
@@ -974,8 +1039,13 @@ static void pop_close(TermEditor* ed) {
 
 static bool pop_query(TermEditor* ed) {
     term_completions_free(&ed->pop_c);
-    if (ed->cfg.complete) ed->cfg.complete(ed->text, ed->cur, &ed->pop_c);
-    else term_complete(ed->text, ed->cur, &ed->pop_c);
+    if (ed->pop_slash) {
+        if (ed->cfg.slash_complete) ed->cfg.slash_complete(ed->text, ed->cur, &ed->pop_c);
+    } else if (ed->cfg.complete) {
+        ed->cfg.complete(ed->text, ed->cur, &ed->pop_c);
+    } else {
+        term_complete(ed->text, ed->cur, &ed->pop_c);
+    }
     ed->pop_word = ed->pop_c.word_start;
     ed->pop_qlen = ed->cur - ed->pop_c.word_start;
     if (ed->pop_c.count > ed->pop_viscap) {
@@ -1063,8 +1133,44 @@ static void do_complete(TermEditor* ed) {
     }
 }
 
+/* The slash-command menu: open it over the commands matching the buffer
+ * ("/" or "/na"). */
+static void slash_open(TermEditor* ed) {
+    pop_close(ed);
+    ed->pop_slash = true;
+    if (!pop_query(ed)) { term_completions_free(&ed->pop_c); ed->pop_slash = false; return; }
+    ed->pop_open = true;
+    ed->pop_nvis = 0;
+    ed->pop_top = 0;
+    ed->pop_sel = 0;
+    pop_filter(ed);
+}
+
+/* Should the menu be (re)opened after this edit? A command name being typed:
+ * the buffer is '/' plus letters and digits, the cursor at its end. */
+static bool slash_wanted(const TermEditor* ed) {
+    if (!ed->cfg.slash_complete || ed->len == 0 || ed->text[0] != '/' || ed->cur != ed->len) return false;
+    for (size_t i = 1; i < ed->len; i++) {
+        char c = ed->text[i];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) return false;
+    }
+    return true;
+}
+
 /* Keys while the popup is open. Returns true when the key was used. */
 static bool pop_key(TermEditor* ed, const Key* k) {
+    if (ed->pop_slash) {
+        if (k->code == K_ENTER || k->code == K_FORCE_ENTER) {   /* run the command */
+            pop_accept(ed);
+            finish(ed, TERM_ED_ACCEPT);
+            return true;
+        }
+        if (k->code == K_TAB) {                                  /* complete the name */
+            pop_accept(ed);
+            insert(ed, " ", 1, EK_INSERT);
+            return true;
+        }
+    }
     switch (k->code) {
     case K_TAB:   pop_move(ed, +1); return true;
     case K_BTAB:  pop_move(ed, -1); return true;
@@ -1145,7 +1251,10 @@ static void pop_draw(TermEditor* ed, int crow, int wcol) {
     TermScreen* s = &ed->scr;
     int cols = s->cols;
     int h = (int)(ed->pop_nvis < POP_MAX_ROWS ? ed->pop_nvis : POP_MAX_ROWS);
-    bool doc_row = cols >= 40 && ed->cfg.doc;
+    /* The command menu shows each command's summary beside it instead of a
+     * description row. */
+    bool slash = ed->pop_slash && ed->cfg.slash_doc && cols >= 30;
+    bool doc_row = !slash && cols >= 40 && ed->cfg.doc;
     const char* doc = NULL;
     size_t doc_len = 0;
     if (doc_row) {
@@ -1181,6 +1290,21 @@ static void pop_draw(TermEditor* ed, int crow, int wcol) {
     if (iw > cols - 3) iw = cols - 3;
     if (iw > 48) iw = 48;
     int pw = iw + 2;
+    int dw = 0;                                   /* the summary column (slash) */
+    if (slash) {
+        for (size_t i = 0; i < ed->pop_nvis; i++) {
+            const char* it = ed->pop_c.items[ed->pop_vis[i]];
+            const char* d = ed->cfg.slash_doc(it, strlen(it), ed->cfg.slash_doc_ctx);
+            int w = d ? (int)term_text_width(d, strlen(d)) : 0;
+            if (w > dw) dw = w;
+        }
+        if (dw > 0) {
+            int room = (cols < 80 ? cols : 80) - (wcol > 1 ? wcol - 1 : 0) - pw - 2;
+            if (dw > room) dw = room;
+            if (dw < 8) dw = 0;
+            if (dw) pw += 2 + dw;
+        }
+    }
     int x = wcol - 1;
     if (x + pw > cols) x = cols - pw;
     if (x < 0) x = 0;
@@ -1195,6 +1319,10 @@ static void pop_draw(TermEditor* ed, int crow, int wcol) {
         if (plain && sel) term_screen_put(s, row, x, ">", 1, 1, st);
         const char* item = ed->pop_c.items[ed->pop_vis[idx]];
         put_text(s, row, x + 1, item, strlen(item), iw, st);
+        if (dw) {
+            const char* d = ed->cfg.slash_doc(item, strlen(item), ed->cfg.slash_doc_ctx);
+            if (d) put_text(s, row, x + 1 + iw + 2, d, strlen(d), dw, sel ? st : TERM_HL_POPUP_DOC);
+        }
     }
     if (doc_row) {
         int row = top + h;
@@ -1209,6 +1337,154 @@ static void pop_draw(TermEditor* ed, int crow, int wcol) {
         if (doc && doc_len) put_text(s, row, x + 1, doc, doc_len, dw - 2 - cl, TERM_HL_POPUP_DOC);
         if (cl) term_screen_puts(s, row, x + dw - cl - 1, cnt, TERM_HL_POPUP_DOC);
     }
+}
+
+/* ---- the picker ------------------------------------------------------------------ */
+
+static void pick_select(TermEditor* ed, size_t i) {
+    if (i >= ed->pick.count || i == ed->pick_sel) return;
+    ed->pick_sel = i;
+    if (ed->pick.on_move) {
+        ed->pick.on_move(i, ed->pick.ctx);
+        term_screen_invalidate(&ed->scr);    /* the styles' colours changed */
+    }
+}
+
+static void pick_move(TermEditor* ed, int d) {
+    size_t n = ed->pick.count;
+    if (n == 0) return;
+    pick_select(ed, d > 0 ? (ed->pick_sel + 1) % n : (ed->pick_sel ? ed->pick_sel - 1 : n - 1));
+}
+
+/* End the picker: erase it, show the cursor again. */
+static void pick_finish(TermEditor* ed, TermEdStatus st) {
+    TermScreen* s = &ed->scr;
+    ed->pick_open = false;
+    ed->status = st;
+    term_screen_reset_style(s);
+    term_screen_move(s, 0, 0);
+    term_screen_raw(s, "\r\033[J\033[?25h", 10);
+    term_screen_reset_area(s, s->top_abs, s->top_known);
+}
+
+static void pick_key(TermEditor* ed, const Key* k) {
+    switch (k->code) {
+    case K_UP: case K_BTAB: case K_LEFT:   pick_move(ed, -1); break;
+    case K_DOWN: case K_TAB: case K_RIGHT: pick_move(ed, +1); break;
+    case K_HOME: case K_PGUP: pick_select(ed, 0); break;
+    case K_END: case K_PGDN:  if (ed->pick.count) pick_select(ed, ed->pick.count - 1); break;
+    case K_ENTER: case K_FORCE_ENTER: pick_finish(ed, TERM_ED_ACCEPT); break;
+    case K_ESC: pick_finish(ed, TERM_ED_INTERRUPT); break;
+    case K_PASTE: ed->in_paste = true; ed->paste_cr = false; break;   /* ignored */
+    case K_CTRL:
+        switch (k->b[0]) {
+        case 'p': pick_move(ed, -1); break;
+        case 'n': pick_move(ed, +1); break;
+        case 'c': case 'g': pick_finish(ed, TERM_ED_INTERRUPT); break;
+        case 'd': pick_finish(ed, TERM_ED_EOF); break;
+        case 'z': ed->status = TERM_ED_SUSPEND; break;
+        case 'l': term_screen_raw(&ed->scr, "\033[H\033[2J", 7); term_screen_reset_area(&ed->scr, 0, true); break;
+        default: break;
+        }
+        break;
+    case K_CHAR:
+        if (k->b[0] == 'k') pick_move(ed, -1);
+        else if (k->b[0] == 'j') pick_move(ed, +1);
+        else if (k->b[0] == 'q') pick_finish(ed, TERM_ED_INTERRUPT);
+        else if (k->b[0] >= '1' && k->b[0] <= '9') pick_select(ed, (size_t)(k->b[0] - '1'));
+        break;
+    default: break;
+    }
+}
+
+/* One preview line from column 2 of `row`. */
+static void pick_preview(TermEditor* ed, int row, const TermPreviewLine* pv) {
+    TermScreen* s = &ed->scr;
+    int cols = s->cols;
+    int c = 2;
+    const char* lab = pv->label ? pv->label : "";
+    int lst = pv->kind == TERM_PV_INPUT ? TERM_HL_PROMPT
+            : pv->kind == TERM_PV_OUTPUT ? TERM_HL_OUT
+            : pv->kind == TERM_PV_STATUS ? TERM_HL_SPIN : TERM_HL_PLAIN;
+    c = put_text(s, row, c, lab, strlen(lab), cols - c, lst);
+    const char* t = pv->text ? pv->text : "";
+    size_t n = strlen(t);
+    if (pv->kind == TERM_PV_INPUT || pv->kind == TERM_PV_OUTPUT) {
+        uint8_t sty[256];
+        if (n > sizeof sty) n = sizeof sty;
+        (void)term_hl_line(t, n, term_hl_state_initial(), sty, ed->cfg.classify, ed->cfg.classify_ctx);
+        size_t i = 0;
+        while (i < n) {
+            uint32_t cp;
+            size_t j = term_utf8_next(t, n, i, &cp);
+            int w = term_cp_width(cp);
+            if (w < 1) w = 1;
+            if (c + w > cols) break;
+            term_screen_put(s, row, c, t + i, j - i, w, sty[i] == TERM_HL_BRACKET ? TERM_HL_PLAIN : sty[i]);
+            c += w;
+            i = j;
+        }
+    } else if (pv->kind == TERM_PV_MESSAGE) {
+        const char* colon = strstr(t, ": ");
+        size_t hn = colon ? (size_t)(colon - t) : 0;
+        c = put_text(s, row, c, t, hn, cols - c, TERM_HL_MSG);
+        put_text(s, row, c, t + hn, n - hn, cols - c, TERM_HL_PLAIN);
+    } else {
+        put_text(s, row, c, t, n, cols - c, pv->kind == TERM_PV_STATUS || pv->kind == TERM_PV_NOTE
+                                                 ? TERM_HL_DIM : TERM_HL_PLAIN);
+    }
+}
+
+static void pick_render(TermEditor* ed) {
+    TermScreen* s = &ed->scr;
+    int cols = s->cols;
+    int maxr = s->rows - 1 > 1 ? s->rows - 1 : 1;
+    int n = (int)ed->pick.count;
+    int npv = (int)ed->pick.npreview;
+    int h = n;
+    if (1 + h + (npv ? 1 + npv : 0) > maxr) npv = 0;     /* the preview goes first */
+    if (1 + h > maxr) h = maxr - 1;
+    if (h < 1) h = 1;
+    term_screen_begin_frame(s, 1 + h + (npv ? 1 + npv : 0));
+
+    int c = term_screen_puts(s, 0, 0, ed->pick.title ? ed->pick.title : "", TERM_HL_LABEL);
+    static const char HINT[] = "   \xE2\x86\x91\xE2\x86\x93 preview \xC2\xB7 Enter apply \xC2\xB7 Esc cancel";
+    if (cols - c > 20) put_text(s, 0, c, HINT, sizeof(HINT) - 1, cols - c - 1, TERM_HL_DIM);
+
+    if (ed->pick_sel < ed->pick_top) ed->pick_top = ed->pick_sel;
+    if (ed->pick_sel >= ed->pick_top + (size_t)h) ed->pick_top = ed->pick_sel - (size_t)h + 1;
+
+    int iw = 0, dw = 0;
+    for (int i = 0; i < n; i++) {
+        int w = (int)term_text_width(ed->pick.items[i], strlen(ed->pick.items[i]));
+        if (w > iw) iw = w;
+        if (ed->pick.docs && ed->pick.docs[i]) {
+            w = (int)term_text_width(ed->pick.docs[i], strlen(ed->pick.docs[i]));
+            if (w > dw) dw = w;
+        }
+    }
+    if (iw > 24) iw = 24;
+    int pw = 2 + iw + (dw ? 2 + dw : 0) + 1;
+    if (pw > cols) pw = cols;
+    if (pw > 76) pw = 76;
+    bool plain = !s->color;
+    for (int r = 0; r < h; r++) {
+        size_t idx = ed->pick_top + (size_t)r;
+        if (idx >= (size_t)n) break;
+        bool sel = idx == ed->pick_sel;
+        int st = sel ? TERM_HL_POPUP_SEL : TERM_HL_POPUP;
+        int row = 1 + r;
+        for (int x = 0; x < pw; x++) term_screen_put(s, row, x, " ", 1, 1, st);
+        if (plain && sel) term_screen_put(s, row, 0, ">", 1, 1, st);
+        const char* it = ed->pick.items[idx];
+        put_text(s, row, 2, it, strlen(it), iw < pw - 2 ? iw : pw - 2, st);
+        if (dw && ed->pick.docs[idx] && 2 + iw + 2 < pw - 1) {
+            const char* d = ed->pick.docs[idx];
+            put_text(s, row, 2 + iw + 2, d, strlen(d), pw - 1 - (2 + iw + 2), sel ? st : TERM_HL_POPUP_DOC);
+        }
+    }
+    for (int i = 0; i < npv; i++) pick_preview(ed, 2 + h + i, &ed->pick.preview[i]);
+    term_screen_render(s, 0, c < cols ? c : cols - 1);
 }
 
 /* ---- key handling --------------------------------------------------------------- */
@@ -1267,7 +1543,19 @@ static void handle_ctrl(TermEditor* ed, char k) {
     }
 }
 
+static void pick_key(TermEditor* ed, const Key* k);
+
 static void handle_key(TermEditor* ed, const Key* k) {
+    if (k->code == K_CPR) {                 /* a cursor-position reply, not a key */
+        if (ed->cpr_wait) {
+            ed->cpr_wait = false;
+            ed->cpr_seen = true;
+            ed->scr.top_abs = k->p1 - 1;
+            ed->scr.top_known = true;
+        }
+        return;
+    }
+    if (ed->pick_open) { pick_key(ed, k); return; }
     ed->edited = false;
     ed->goal_keep = false;
     ed->this_kill = 0;
@@ -1287,7 +1575,9 @@ static void handle_key(TermEditor* ed, const Key* k) {
         insert(ed, k->b, k->n, EK_INSERT);
         break;
     case K_ENTER:
-        if (term_lex_input_complete(ed->text)) finish(ed, TERM_ED_ACCEPT);
+        /* A slash command is one line: Return always runs it. */
+        if ((ed->cfg.slash_complete && ed->len && ed->text[0] == '/')
+            || term_lex_input_complete(ed->text)) finish(ed, TERM_ED_ACCEPT);
         else insert(ed, "\n", 1, EK_OTHER);
         break;
     case K_FORCE_ENTER: finish(ed, TERM_ED_ACCEPT); break;
@@ -1322,6 +1612,7 @@ static void handle_key(TermEditor* ed, const Key* k) {
         case 'b': case 'B': ed->cur = word_left(ed, ed->cur); break;
         case 'f': case 'F': ed->cur = word_right(ed, ed->cur); break;
         case 'd': case 'D': kill_range(ed, ed->cur, word_right(ed, ed->cur), +1); break;
+        case '_': redo(ed); break;
         case '<':
             if (hist_count(ed)) {
                 if (!ed->hbrowse) { bytes_set(&ed->draft, ed->text, ed->len); ed->hbrowse = true; }
@@ -1341,6 +1632,10 @@ static void handle_key(TermEditor* ed, const Key* k) {
     if (!ed->edited) ed->last_kind = EK_NONE;
     if (!ed->goal_keep) ed->goal_ok = false;
     ed->last_kill = ed->this_kill;
+    /* Typing a command name (re)opens the slash menu. */
+    if (ed->edited && (k->code == K_CHAR || k->code == K_BS) && ed->status == TERM_ED_CONTINUE
+        && !ed->pop_open && !ed->srch_open && slash_wanted(ed))
+        slash_open(ed);
 }
 
 /* ---- input parsing ---------------------------------------------------------------- */
@@ -1390,7 +1685,11 @@ static size_t parse_key(const char* ps, size_t n, bool final, Key* k) {
                 while (j < i && p[j] >= '0' && p[j] <= '9') mod = mod * 10 + (p[j++] - '0');
             }
             int code = csi_letter(f);
-            if (code != K_NONE) {
+            if (f == 'R' && num > 0 && mod > 0) {         /* ESC [ row ; col R */
+                k->code = K_CPR;
+                k->p1 = num;
+                k->p2 = mod;
+            } else if (code != K_NONE) {
                 bool ctrl = mod == 5 || mod == 6 || mod == 7 || mod == 8;
                 bool alt = mod == 3 || mod == 4 || mod == 7 || mod == 8;
                 if ((ctrl || alt) && code == K_LEFT) code = K_WLEFT;
@@ -1569,9 +1868,11 @@ void term_editor_begin(TermEditor* ed, const char* prompt, int cursor_abs_row, i
     ed->lstate[0] = term_hl_state_initial();
     ed->lrows[0] = 0;
     ed->nops = 0;
+    ed->nredo = 0;
     ed->arena.len = 0;
     ed->last_kind = EK_NONE;
     ed->hbrowse = false;
+    ed->pick_open = false;
     ed->goal_ok = false;
     ed->last_kill = 0;
     ed->vtop = 0;
@@ -1651,6 +1952,30 @@ void term_editor_redraw(TermEditor* ed, bool clear) {
     render(ed);
     term_screen_commit(s);
 }
+
+void term_editor_pick_begin(TermEditor* ed, const TermPick* p, int cursor_abs_row) {
+    pop_close(ed);
+    ed->srch_open = false;
+    ed->pick = *p;
+    ed->pick_open = true;
+    ed->pick_sel = p->selected < p->count ? p->selected : 0;
+    ed->pick_top = 0;
+    ed->status = TERM_ED_CONTINUE;
+    ed->final_frame = false;
+    ed->in_paste = false;
+    TermScreen* s = &ed->scr;
+    term_screen_reset_area(s, cursor_abs_row, cursor_abs_row >= 0);
+    s->cur_col = s->cols;
+    term_screen_raw(s, "\033[?25l", 6);           /* the selection is the cursor */
+    render(ed);
+    term_screen_commit(s);
+}
+
+size_t term_editor_pick_index(const TermEditor* ed) { return ed->pick_sel; }
+
+void term_editor_expect_cpr(TermEditor* ed) { ed->cpr_wait = true; }
+bool term_editor_cpr_seen(const TermEditor* ed) { return ed->cpr_seen; }
+bool term_editor_cpr_pending(const TermEditor* ed) { return ed->cpr_wait; }
 
 const char* term_editor_text(const TermEditor* ed, size_t* len) {
     if (len) *len = ed->len;

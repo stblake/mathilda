@@ -39,6 +39,7 @@
 #include <math.h>    /* isfinite, fabs */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "term/term_interrupt.h" /* interactive interrupt (Ctrl-C) poll */
+#include "term/term_progress.h"  /* g_mth_monitor_due, mth_monitor_tick (Monitor) */
 #include "sparse/sparse.h" /* EXPR_SPARSE (SparseArray raw objects) */
 #include "linalg/linsolvefn.h" /* LinearSolveFunction[...][b] */
 
@@ -4562,7 +4563,11 @@ static Expr* evaluate_core(Expr* e) {
          * uniform sampling rate across all nested evaluate() frames. */
         {
             static unsigned tc_check_tick = 0;
-            if ((tc_check_tick++ & 127u) == 0) tc_check_deadline();
+            if ((tc_check_tick++ & 127u) == 0) {
+                tc_check_deadline();
+                /* Monitor[expr, mon]: the status line asked for a fresh mon. */
+                if (g_mth_monitor_due) mth_monitor_tick();
+            }
         }
 
         /* Interactive interrupt (Ctrl-C): the REPL's SIGINT handler only sets a flag

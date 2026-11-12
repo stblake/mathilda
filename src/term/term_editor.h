@@ -13,9 +13,18 @@
  *     buffer is complete, else opens a new line; Esc then Return (or
  *     Alt-Return) always evaluates. Continuation lines are drawn under the
  *     first one, indented by the prompt's width (visual only).
+ *   - Up/Down first move between the visual rows of a wrapped line, then
+ *     between lines.
  *   - Emacs keys (Ctrl-A/E/B/F/D/H/K/U/W/Y/T/L, Alt-B/F/D/Backspace, Home,
- *     End, Delete, Ctrl/Alt-arrows), undo (Ctrl-_ or Ctrl-/), bracketed paste,
- *     Tab completion, Ctrl-R history search.
+ *     End, Delete, Ctrl/Alt-arrows), undo (Ctrl-_ or Ctrl-/) and redo
+ *     (Alt-_), bracketed paste, Tab completion, Ctrl-R history search.
+ *   - With a slash-command source configured, '/' typed into an empty buffer
+ *     opens the command menu (the completion popup over the commands);
+ *     typing filters it, Tab completes the name, Return runs the selected
+ *     command. A buffer that starts with '/' is always accepted by Return.
+ *   - A picker (term_editor_pick_begin): a list with optional preview lines,
+ *     Up/Down move (calling back so the caller can preview), Return accepts,
+ *     Esc / Ctrl-C / Ctrl-G cancel. The theme menu uses it.
  *   - Ctrl-C clears the whole buffer (TERM_ED_INTERRUPT); Ctrl-D on an empty
  *     buffer is end of input (TERM_ED_EOF); Ctrl-Z asks the driver to suspend.
  *   - Live colouring through term_highlight, relexing only from the edited
@@ -63,7 +72,42 @@ typedef struct {
     void*               write_ctx;
     /* Completion candidates; NULL uses term_complete (the symbol table). */
     void (*complete)(const char* buf, size_t cursor, TermCompletions* out);
+    /* The slash-command menu: candidates for a buffer that starts with '/'
+     * (term_slash_complete), and their one-line summaries. NULL: no menu,
+     * and a leading '/' is ordinary input. */
+    void (*slash_complete)(const char* buf, size_t cursor, TermCompletions* out);
+    TermDocFn           slash_doc;
+    void*               slash_doc_ctx;
 } TermEditorConfig;
+
+/* ---- the picker ---------------------------------------------------------- */
+
+typedef enum {
+    TERM_PV_INPUT,      /* "In[1]:= " + coloured code  */
+    TERM_PV_OUTPUT,     /* "Out[1]= " + coloured code  */
+    TERM_PV_MESSAGE,    /* "Head::tag: text"           */
+    TERM_PV_NOTE,       /* dim text (the took note)    */
+    TERM_PV_STATUS      /* label in the status colour, then dim text */
+} TermPreviewKind;
+
+typedef struct {
+    TermPreviewKind kind;
+    const char*     label;   /* the prompt / status label; may be NULL */
+    const char*     text;
+} TermPreviewLine;
+
+typedef struct TermPick {
+    const char*            title;      /* first row, e.g. "Theme"            */
+    const char* const*     items;      /* names                              */
+    const char* const*     docs;       /* one line per item, or NULL         */
+    size_t                 count;
+    size_t                 selected;   /* initial selection                  */
+    const TermPreviewLine* preview;    /* drawn under the list, or NULL      */
+    size_t                 npreview;
+    /* Called with the new selection whenever it moves (before the redraw). */
+    void                 (*on_move)(size_t index, void* ctx);
+    void*                  ctx;
+} TermPick;
 
 typedef struct TermEditor TermEditor;
 
@@ -97,6 +141,24 @@ void         term_editor_resize(TermEditor* ed, int cols, int rows);
 /* Redraw from scratch at the cursor's line (after a suspend), or after
  * clearing the screen (clear = true, as Ctrl-L does). */
 void         term_editor_redraw(TermEditor* ed, bool clear);
+
+/* Start a picker instead of a line read (the caller keeps `p` and what it
+ * points to alive until the picker ends). Feeding then returns
+ * TERM_ED_ACCEPT (term_editor_pick_index() is the choice) or
+ * TERM_ED_INTERRUPT (cancelled); TERM_ED_EOF on Ctrl-D. The picker is erased
+ * from the screen when it ends; the cursor is left where it started. */
+void         term_editor_pick_begin(TermEditor* ed, const TermPick* p, int cursor_abs_row);
+size_t       term_editor_pick_index(const TermEditor* ed);
+
+/* The terminal is expected to answer a cursor-position query sent just
+ * before this read started (ESC [ 6 n, sent without waiting): when the reply
+ * (ESC [ row ; col R) arrives among the keys it gives the area's absolute
+ * row instead of being taken as a key. */
+void         term_editor_expect_cpr(TermEditor* ed);
+/* True once such a reply has been seen by this editor. */
+bool         term_editor_cpr_seen(const TermEditor* ed);
+/* True while a reply is still expected. */
+bool         term_editor_cpr_pending(const TermEditor* ed);
 
 /* The buffer (NUL-terminated) after TERM_ED_ACCEPT. */
 const char*  term_editor_text(const TermEditor* ed, size_t* len);

@@ -20,6 +20,7 @@
 #include <stdarg.h>    /* tc_flint_throw: the FLINT exception hook */
 #include "message.h"    /* message_init(): Quiet / Check / Message */
 #include "dialog.h"     /* dialog_init(): Dialog */
+#include "frontend.h"   /* frontend_init(): SlashCommand, Monitor */
 #include "permutations.h" /* permutations_init(): Cycles, PermutationGroup */
 #include "tc_unwind_safe.h" /* may the SIGPROF handler unwind here? */
 #include "parse.h"
@@ -404,6 +405,7 @@ void core_init(void) {
     system_constants_init();
     repl_hooks_init();
     dialog_init();           /* Dialog, DialogSymbols, DialogProlog, $IgnoreEOF */
+    frontend_init();         /* SlashCommand, Monitor */
     parfrac_init();
     contfrac_init();
     modular_init();

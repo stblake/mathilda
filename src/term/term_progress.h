@@ -35,6 +35,7 @@
 #define MATHILDA_TERM_PROGRESS_H
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 #define MTH_PROGRESS_SLOTS 16
@@ -71,9 +72,16 @@ static inline int mth_progress_push(const char* head, long total) {
     return d;
 }
 
-/* `done` steps of the loop `tok` have completed. */
+/* Monitor[expr, mon] (below): set by the status thread when mon is due for
+ * a refresh; mth_monitor_tick (frontend.c) evaluates it on this thread. */
+extern volatile int g_mth_monitor_due;
+void mth_monitor_tick(void);
+
+/* `done` steps of the loop `tok` have completed. A loop step is where loop
+ * variables change, so a due Monitor is refreshed here too (one load). */
 static inline void mth_progress_step(int tok, long done) {
     if (tok >= 0 && tok < MTH_PROGRESS_SLOTS) g_mth_progress[tok].done = done;
+    if (g_mth_monitor_due) mth_monitor_tick();
 }
 
 /* End the loop `tok` (and anything a missed pop left above it). */
@@ -109,5 +117,22 @@ int  mth_progress_workers(void);
  * future MemoryConstrained; nothing sets it today. */
 void     mth_progress_set_memory_limit(uint64_t bytes);
 uint64_t mth_progress_memory_limit(void);
+
+/* ---- Monitor[expr, mon] ------------------------------------------------
+ *
+ * While a Monitor is active and the status line is drawing, the status
+ * thread sets g_mth_monitor_due about ten times a second. The evaluator
+ * looks at it on its periodic check (every 128 evaluation steps, next to the
+ * TimeConstrained deadline check, so the common path pays nothing) and, when
+ * it is set, evaluates `mon` on the main thread and publishes its text here;
+ * the status thread copies the text into the line. Loop steps
+ * (mth_progress_step) check it as well. Without a status line nothing sets
+ * the flag and `mon` is never evaluated. */
+#define MTH_MONITOR_TEXT 256
+
+void mth_monitor_publish(const char* text);      /* main thread; NULL clears   */
+bool mth_monitor_text(char* buf, size_t cap);    /* any thread; false if none  */
+void mth_monitor_set_active(int depth);          /* Monitor nesting depth      */
+bool mth_monitor_active(void);
 
 #endif /* MATHILDA_TERM_PROGRESS_H */
