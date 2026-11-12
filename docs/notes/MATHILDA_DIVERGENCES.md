@@ -36,14 +36,14 @@ historical record. Verified against the live binary, most of section A is now fi
 | A15b `Coefficient[…, x, i]` symbolic exponent | **FIXED** | v0.211 |
 | A16 `PolynomialGCD[p, e, Extension -> Automatic]`, `e` an unexpanded algebraic constant equal to 0 | **OPEN** | returns 1 (found on the v0.216 corpus re-run, 2026-09-27 late); `.m` expands and reduces before every extension gcd |
 | A17 `RowReduce[m, Method -> "OneStepRowReduction"]` with parametric entries | **OPEN** | does not finish on a 20 x 15 system linear in two parameters; `.m` uses the default method when parameters are present |
-| A18 a `Do` iterator inside a package captures a caller's same-named symbol | **FIXED** (v0.238) | and it was never only `Do` -- `Sum` and `Product` too; only `Table` was registered as a scoping construct. `is_iterator_scope_head` (`src/modular.c`) now covers all four, so the `.m` renames `ma`/`ent`/`ne` are no longer needed. See F3. |
+| A18 a `Do` iterator inside a package captures a caller's same-named symbol | **RESOLVED by contexts; v0.238 fix REVERTED in v0.6525** | v0.238 made `Table`/`Do`/`Sum`/`Product` lexical scoping constructs (alpha-renamed under rule substitution). The reference does not: they scope dynamically, and `g[f_] := Sum[f, {k, 1, 3}]; g[1/k]` is `11/6` there (it gave `3/k`). A package iterator lives in the package's private context, so it never shares a symbol with the caller's; v0.6525 removed the iterator heads from the scoping list. See F3. |
 | A19 `FreeQ[e, Complex]` is True on a complex atom | **OPEN** | found 2026-09-28 porting logrewrite; `logrewrite.m` tests `_Complex` everywhere |
 | A20 `ComplexExpand` writes a real nested radical as `Cos[Arg[...]]`, `Arg[1 - Sqrt[5]]` unevaluated | **FIXED** (certified-sign Arg/Abs, see below) | `logrewrite.m` puts constants in rectangular form by rules (`RectPow`); `RRad` of the package inherits the hazard |
 | A21 `CountRoots` not implemented | **OPEN** | `SturmCount` in `logrewrite.m` |
 | A22 `$InputFileName`, `DirectoryName` not implemented | **OPEN** | a package cannot `Get` a sibling file; `LoadModule["mixed/logrewrite.m"]` instead |
 | A23 `NumericQ[Root[...]]` is False; `ToRadicals` gives the Ferrari form for every quartic | **OPEN** | `RootRadicals` in `logrewrite.m` (biquadratic / palindromic forms, root picked numerically) |
 | A24 `Can`'s field detour returned a `Dot[{}, Inverse[{}], {}]` coefficient | **OPEN** (state-dependent, no standalone repro) | `logrewrite.m` canonicalises with `CanRaw` |
-| A18 (re-checked on v0.221) | **FIXED** (v0.238) | `g[v_] := Module[{s = 0}, Do[s += v, {k, 2}]; s]; g[k]` gave 3, now gives `2 k` |
+| A18 (re-checked on v0.221) | **reference gives 3** (v0.6525) | `g[v_] := Module[{s = 0}, Do[s += v, {k, 2}]; s]; g[k]` is 3 in the reference (checked with wolframscript 2026-11-12); v0.238 had made it `2 k` on a wrong expectation, v0.6525 restores 3 |
 | B7 an outer `TimeConstrained` cannot interrupt an inner one | **OPEN** (behavioural) | the package budget cannot cut the rewrite's own `TimeConstrained` short |
 | B1 `ToNumberField` non-canonical primitive element | **OPEN** (behavioural, by design) | `.m` reads whatever theta comes back |
 | B2–B6 | behavioural; see each entry | mostly by-design / hard |
@@ -837,11 +837,14 @@ what it means to rebind. Renaming the local defeated the construct, and the
 visible symptom was that a held body handed into a hook-installing `Block` kept
 reaching the *original* symbol.
 
-### F3. `Sum` and `Product` iterators captured a caller's symbol  (FIXED, v0.238)
+### F3. `Sum` and `Product` iterators captured a caller's symbol  (v0.238; REVERTED v0.6525)
 
-The other half of A18. `Sum[v, {k, 2}]` with `v = k` gave 3 (Mathematica `2 k`)
-and `Product[v, {k, 2}]` gave 2 (Mathematica `k^2`). Only `Table` was listed as a
-scoping construct; all four iterator heads are structurally identical and now are.
+The other half of A18. v0.238 believed `Sum[v, {k, 2}]` with `v = k` should give
+`2 k` and made all four iterator heads lexical scoping constructs. That
+expectation was wrong: the reference scopes iterators dynamically and gives 3
+(and `Product` gives 2), so `g[f_] := Sum[f, {k, 1, 3}]; g[1/k]` is `11/6`.
+v0.6525 removed `Table`, `Do`, `Sum` and `Product` from the scoping list
+(`src/modular.c`); package code is protected by its private context instead.
 
 ### F4. Nested `Association` element assignment was a silent no-op  (FIXED, v0.238)
 

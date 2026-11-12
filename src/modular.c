@@ -32,23 +32,21 @@ typedef struct ScopingEnv {
     struct ScopingEnv* next;
 } ScopingEnv;
 
-/* The ITERATOR family: head[body, {i, ...}, ...] -- body in arg 0, one or more
- * iterator specs after it, each binding its first element. Table, Do, Sum and
- * Product are structurally identical here and bind their iterator the same way,
- * so capture-avoidance must treat them alike. Only Table used to be listed,
- * which is exactly docs/notes/MATHILDA_DIVERGENCES.md A18: `g[v_] := Module[{s = 0},
- * Do[s += v, {k, 2}]; s]; g[k]` gave 3 where Mathematica gives 2 k, because the
- * caller's `k` was injected into a body whose `Do` then bound it. Sum and
- * Product had it too (`Sum[v, {k, 2}]` → 3, `Product` → 2). */
-static bool is_iterator_scope_head(const char* h) {
-    return h == SYM_Table || h == SYM_Do || h == SYM_Sum || h == SYM_Product;
-}
+/* Table, Do, Sum and Product are NOT scoping constructs here.  They localise
+ * their iterator dynamically, as Block does, so a rule substitutes into their
+ * body and iterator specs like into any other expression, and an inner With or
+ * Module neither renames nor shadows the iterator:
+ *   g[f_] := Sum[f, {k, 1, 3}];  g[1/k]            -> 11/6
+ *   With[{k = 2}, Table[k, {k, 3}]]                -> Table[2, {2, 3}]
+ * which is what the reference gives.  They used to be listed (v0.238,
+ * docs/notes/MATHILDA_DIVERGENCES.md A18), on the belief that the reference
+ * renames them; it does not, and the listing turned g[1/k] into 3/k. */
 
 static bool is_scoping_construct(Expr* e) {
     if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
     const char* h = e->data.function.head->data.symbol.name;
     return h == SYM_Module || h == SYM_Block || h == SYM_With ||
-           h == SYM_Function || is_iterator_scope_head(h);
+           h == SYM_Function;
 }
 
 // Does this construct carry its bound names in argument 0?
@@ -66,11 +64,9 @@ static bool is_scoping_construct(Expr* e) {
 //                                    Scan[(c = c + 1) &, ...]]` incremented the
 //                                    *global* c (self-referentially, hence
 //                                    $RecursionLimit) and left the local at 0.
-//   Table[body, {i, ...}]            NO -- it binds in the iterators, args 1..
 static bool scoping_binds_in_arg0(Expr* e) {
     if (!is_scoping_construct(e)) return false;
     const char* h = e->data.function.head->data.symbol.name;
-    if (is_iterator_scope_head(h)) return false;   /* arg 0 is the body */
     if (h == SYM_Function) return e->data.function.arg_count >= 2;
     return e->data.function.arg_count >= 1;
 }
@@ -89,51 +85,30 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
     }
     if (e->type != EXPR_FUNCTION) return expr_copy(e);
 
-    // The iterator family (Table/Do/Sum/Product) binds its iterator variables in
-    // the *iterator* specs (args 1..), each of the form {var, ...}; arg 0 is the
-    // body. Every other scoping construct (Module/Block/With/Function) binds in
-    // arg 0. They therefore need completely different substitution handling, so
-    // detect the iterator shape here.
-    bool binds_in_iterators = is_scoping_construct(e)
-        && is_iterator_scope_head(e->data.function.head->data.symbol.name);
-
     // Handle shadowing in scoping constructs
     ScopingEnv* filtered_env = env;
 
-    if (binds_in_iterators || scoping_binds_in_arg0(e)) {
+    if (scoping_binds_in_arg0(e)) {
         // Collect the names this construct binds, so they are removed from the
         // env we push into the body (lexical shadowing).
         const char* shadow_buf[64];
         size_t nshadow = 0;
-        if (binds_in_iterators) {
-            for (size_t k = 1; k < e->data.function.arg_count && nshadow < 64; k++) {
-                Expr* it = e->data.function.args[k];
-                if (it->type == EXPR_FUNCTION
-                    && it->data.function.head->type == EXPR_SYMBOL
-                    && it->data.function.head->data.symbol.name == SYM_List
-                    && it->data.function.arg_count >= 2   /* {n} is a count, binds nothing */
-                    && it->data.function.args[0]->type == EXPR_SYMBOL) {
-                    shadow_buf[nshadow++] = it->data.function.args[0]->data.symbol.name;
+        Expr* vars = e->data.function.args[0];
+        if (vars->type == EXPR_SYMBOL) {
+            // Function[x, body] -- a single bare parameter still binds `x`,
+            // so it must shadow an enclosing local of the same name.
+            shadow_buf[nshadow++] = vars->data.symbol.name;
+        } else if (vars->type == EXPR_FUNCTION
+                   && vars->data.function.head->type == EXPR_SYMBOL
+                   && vars->data.function.head->data.symbol.name == SYM_List) {
+            for (size_t i = 0; i < vars->data.function.arg_count && nshadow < 64; i++) {
+                Expr* v = vars->data.function.args[i];
+                const char* nm = NULL;
+                if (v->type == EXPR_SYMBOL) nm = v->data.symbol.name;
+                else if (v->type == EXPR_FUNCTION && v->data.function.head->data.symbol.name == SYM_Set && v->data.function.arg_count == 2) {
+                    if (v->data.function.args[0]->type == EXPR_SYMBOL) nm = v->data.function.args[0]->data.symbol.name;
                 }
-            }
-        } else {
-            Expr* vars = e->data.function.args[0];
-            if (vars->type == EXPR_SYMBOL) {
-                // Function[x, body] -- a single bare parameter still binds `x`,
-                // so it must shadow an enclosing local of the same name.
-                shadow_buf[nshadow++] = vars->data.symbol.name;
-            } else if (vars->type == EXPR_FUNCTION
-                       && vars->data.function.head->type == EXPR_SYMBOL
-                       && vars->data.function.head->data.symbol.name == SYM_List) {
-                for (size_t i = 0; i < vars->data.function.arg_count && nshadow < 64; i++) {
-                    Expr* v = vars->data.function.args[i];
-                    const char* nm = NULL;
-                    if (v->type == EXPR_SYMBOL) nm = v->data.symbol.name;
-                    else if (v->type == EXPR_FUNCTION && v->data.function.head->data.symbol.name == SYM_Set && v->data.function.arg_count == 2) {
-                        if (v->data.function.args[0]->type == EXPR_SYMBOL) nm = v->data.function.args[0]->data.symbol.name;
-                    }
-                    if (nm) shadow_buf[nshadow++] = nm;
-                }
+                if (nm) shadow_buf[nshadow++] = nm;
             }
         }
 
@@ -160,44 +135,6 @@ static Expr* substitute_scoping(Expr* e, ScopingEnv* env) {
     Expr** new_args = e->data.function.arg_count <= 8 ? args_stack
                     : malloc(sizeof(Expr*) * e->data.function.arg_count);
     for (size_t i = 0; i < e->data.function.arg_count; i++) {
-        // Table: arg 0 is the body (substitute normally with the shadowed
-        // env); args 1.. are iterator specs {var, lim...} where `var` is a
-        // binding occurrence (copied) and the limits are substituted.
-        if (binds_in_iterators) {
-            if (i == 0) {
-                new_args[i] = substitute_scoping(e->data.function.args[i], filtered_env);
-            } else {
-                Expr* it = e->data.function.args[i];
-                // A length-1 spec {n} is an iteration COUNT, not a binding: `n`
-                // must be substituted (With[{n=3}, Table[x, {n}]] -> {x,x,x}).
-                // Only {i, lim, ...} (length >= 2) binds `i` as an iterator var.
-                if (it->type == EXPR_FUNCTION
-                    && it->data.function.head->type == EXPR_SYMBOL
-                    && it->data.function.head->data.symbol.name == SYM_List
-                    && it->data.function.arg_count >= 2
-                    && it->data.function.args[0]->type == EXPR_SYMBOL) {
-                    size_t na = it->data.function.arg_count;
-                    Expr** nb = malloc(sizeof(Expr*) * na);
-                    nb[0] = expr_copy(it->data.function.args[0]);
-                    for (size_t j = 1; j < na; j++)
-                        nb[j] = substitute_scoping(it->data.function.args[j], filtered_env);
-                    bool same = true;
-                    for (size_t j = 1; j < na && same; j++)
-                        same = nb[j] == it->data.function.args[j];
-                    if (same) {
-                        for (size_t j = 0; j < na; j++) expr_free(nb[j]);
-                        new_args[i] = expr_copy(it);
-                    } else {
-                        Expr* lhead = expr_copy(it->data.function.head);
-                        new_args[i] = expr_new_function(lhead, nb, na);
-                    }
-                    free(nb);
-                } else {
-                    new_args[i] = substitute_scoping(it, filtered_env);
-                }
-            }
-            continue;
-        }
         // First argument of scoping constructs is the variable list:
         // substitute into each binding's RHS (which sees the outer
         // scope, i.e. the original env -- the rebound names propagate
@@ -440,27 +377,12 @@ bool expr_is_binding_scope(Expr* e) {
     if (!is_scoping_construct(e)) return false;
     const char* h = e->data.function.head->data.symbol.name;
     if (h == SYM_Block) return false;                          /* dynamic scope */
-    if (is_iterator_scope_head(h)) return e->data.function.arg_count >= 2; /* body + iterator(s) */
     return scoping_binds_in_arg0(e);
 }
 
 /* Collect the names `e` binds into out[0..*n) (bounded by cap). Mirrors the
  * shadow-name collection in substitute_scoping. */
 static void scoping_collect_locals(Expr* e, const char** out, size_t* n, size_t cap) {
-    const char* h = e->data.function.head->data.symbol.name;
-    if (is_iterator_scope_head(h)) {
-        for (size_t k = 1; k < e->data.function.arg_count && *n < cap; k++) {
-            Expr* it = e->data.function.args[k];
-            if (it->type == EXPR_FUNCTION
-                && it->data.function.head->type == EXPR_SYMBOL
-                && it->data.function.head->data.symbol.name == SYM_List
-                && it->data.function.arg_count >= 2
-                && it->data.function.args[0]->type == EXPR_SYMBOL) {
-                out[(*n)++] = it->data.function.args[0]->data.symbol.name;
-            }
-        }
-        return;
-    }
     Expr* vars = e->data.function.args[0];
     if (vars->type == EXPR_SYMBOL) {                    /* Function[x, body] */
         if (*n < cap) out[(*n)++] = vars->data.symbol.name;
@@ -514,27 +436,7 @@ static Expr* scoping_apply_rename(Expr* e, ScopingEnv* ren) {
     size_t argc = e->data.function.arg_count;
     Expr** na = malloc(sizeof(Expr*) * (argc > 0 ? argc : 1));
 
-    if (is_iterator_scope_head(h)) {
-        na[0] = substitute_scoping(e->data.function.args[0], ren);   /* body */
-        for (size_t i = 1; i < argc; i++) {
-            Expr* it = e->data.function.args[i];
-            if (it->type == EXPR_FUNCTION
-                && it->data.function.head->type == EXPR_SYMBOL
-                && it->data.function.head->data.symbol.name == SYM_List
-                && it->data.function.arg_count >= 2
-                && it->data.function.args[0]->type == EXPR_SYMBOL) {
-                size_t nn = it->data.function.arg_count;
-                Expr** nb = malloc(sizeof(Expr*) * nn);
-                nb[0] = rename_bound_symbol(it->data.function.args[0], ren);
-                for (size_t j = 1; j < nn; j++)
-                    nb[j] = substitute_scoping(it->data.function.args[j], ren);
-                na[i] = expr_new_function(expr_copy(it->data.function.head), nb, nn);
-                free(nb);
-            } else {
-                na[i] = substitute_scoping(it, ren);
-            }
-        }
-    } else if (h == SYM_Function) {
+    if (h == SYM_Function) {
         Expr* params = e->data.function.args[0];
         if (params->type == EXPR_FUNCTION
             && params->data.function.head->type == EXPR_SYMBOL

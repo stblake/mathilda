@@ -285,6 +285,31 @@ void test_module_locals_reclaimed() {
     run_test("Clear[rlocals, rcl0, rcn0, rck, rkeep, rcnt, rgx, rhx, rmk, rff, rkept, rfib]", "Null");
 }
 
+/* Table / Do / Sum / Product scope their iterator dynamically (like Block), so a
+ * rule substitutes an argument that mentions the iterator into the body as is,
+ * and the iterator then binds it; an enclosing With neither renames nor shadows
+ * it.  Every expected value here is the reference's. */
+void test_iterator_heads_not_lexical() {
+    run_test("itg[f_] := Sum[f, {k, 1, 3}]; itg[1/k]", "Rational[11, 6]");
+    run_test("ith[f_] := Table[f, {k, 1, 3}]; ith[k^2]", "List[1, 4, 9]");
+    run_test("itl[f_] := Sum[f, {k, 1, 3}]; itl[k]", "6");
+    run_test("itp[f_] := Product[f, {k, 1, 3}]; itp[k]", "6");
+    run_test("itd[v_] := Module[{s = 0}, Do[s += v, {k, 2}]; s]; itd[k]", "3");
+    run_test("it2[f_] := Table[f, {k, 1, 3}, {j, 1, 2}]; it2[k + j]",
+             "List[List[2, 3], List[3, 4], List[4, 5]]");
+    run_test("it3[f_] := Table[f, {k, {a, b}}]; it3[k]", "List[a, b]");
+    run_test("it4[f_, n_] := Sum[f, {k, 1, n}]; it4[k^2, 3]", "14");
+    run_test("ReplaceAll[itq[1/k], itq[f_] :> Sum[f, {k, 1, 3}]]", "Rational[11, 6]");
+    run_test("itf[x_] := Hold[Table[x, {k, 3}]]; itf[k]", "Hold[Table[k, List[k, 3]]]");
+    run_test("Quiet[With[{k = 2}, Hold[Table[k, {k, 3}]]]]", "Hold[Table[2, List[2, 3]]]");
+    run_test("Quiet[Function[k, Hold[Table[k, {k, 3}]]][7]]", "Hold[Table[7, List[7, 3]]]");
+    /* still lexical: Module renames, With and Function substitute */
+    run_test("itm[f_] := Module[{k}, Sum[f, {k, 1, 3}]]; itm[k]", "Times[3, k]");
+    run_test("With[{f = 1/k}, Sum[f, {k, 1, 3}]]", "Rational[11, 6]");
+    run_test("With[{n = 3}, Table[itx, {n}]]", "List[itx, itx, itx]");
+    run_test("Clear[itg, ith, itl, itp, itd, it2, it3, it4, itf, itm]", "Null");
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -293,6 +318,7 @@ int main() {
     TEST(test_module);
     TEST(test_with);
     TEST(test_slot_function_scoping);
+    TEST(test_iterator_heads_not_lexical);
     TEST(test_module_locals_reclaimed);
     TEST(test_powermod);
     TEST(test_powermod_identities);

@@ -2968,8 +2968,8 @@ static void rb_collect_symbol_names(Expr* e, const char** out, size_t* n, size_t
  * It is built LAZILY and at most ONCE per top-level call.  Building it walks
  * every binding value, and the overwhelming majority of rule applications have
  * no scoping construct in the RHS at all, so the walk is pure cost there; the
- * set is materialised only when rb_rec actually meets a Module/With/Block/
- * Function/Table-style binder.  (Before this, it was rebuilt on every NODE of
+ * set is materialised only when rb_rec actually meets a Module/With/
+ * Function binder.  (Before this, it was rebuilt on every NODE of
  * the RHS -- rb_rec recursed into arguments through the public entry point --
  * which is what made the small Charlwood rows double in cost when the A11 fix
  * landed in v0.212.) */

@@ -439,8 +439,9 @@ void test_scoping_count_iterator() {
     assert_eval_eq("Block[{n = 2}, Table[5, {n}]]", "{5, 5}", 0);
     /* the count expression is substituted, then evaluated */
     assert_eval_eq("With[{n = 2}, Length[Table[0, {2 n}]]]", "4", 0);
-    /* an iterator VARIABLE {i, ...} is still shadowed, not substituted */
-    assert_eval_eq("With[{i = 99}, Table[i, {i, 3}]]", "{1, 2, 3}", 0);
+    /* Table is not lexical: With substitutes into its iterator spec too, as in
+     * the reference (Table::itraw, left unevaluated) */
+    assert_eval_eq("Quiet[With[{i = 99}, Table[i, {i, 3}]]]", "Table[99, {99, 3}]", 0);
     /* the range bound {j, n} still gets the With value */
     assert_eval_eq("With[{n = 3}, Table[j, {j, n}]]", "{1, 2, 3}", 0);
     /* nested counts */
@@ -455,7 +456,8 @@ void test_scoping_count_iterator() {
 void test_scoping_capture_avoid() {
     assert_eval_eq("g[v_] := Module[{e = 1}, v + e]; g[e + 1]", "2 + e", 0);
     assert_eval_eq("gw[v_] := With[{e = 1}, v + e]; gw[e + 1]", "2 + e", 0);
-    assert_eval_eq("gt[v_] := Table[v + e, {e, 1, 2}]; gt[e]", "{1 + e, 2 + e}", 0);
+    /* Table scopes dynamically: the argument's e IS the iterator (reference) */
+    assert_eval_eq("gt[v_] := Table[v + e, {e, 1, 2}]; gt[e]", "{2, 4}", 0);
     assert_eval_eq("gf[v_] := Function[e, v + e][1]; gf[e]", "1 + e", 0);
     /* Block is dynamic: inside it the argument's e is 1 too, so (e + 1) + e is 3. */
     assert_eval_eq("gb[v_] := Block[{e = 1}, v + e]; gb[e + 1]", "3", 0);
