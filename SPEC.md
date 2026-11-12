@@ -71,6 +71,9 @@ src/
   attr.{c,h}        Attribute bitflags
   print.{c,h}       Expression formatting
   repl.c            REPL entry point + main()
+  term/             Interactive terminal layer (colour, history, completion,
+                    interrupt, reader seam); term_readline.c is the only
+                    file that includes readline
   core.{c,h}        Core builtins and module initialization hub
   plus.c / times.c / power.c / arithmetic.c   Arithmetic heads
   part.c / sort.c                             Part + sort (structural ops)
@@ -251,6 +254,10 @@ For a bare symbol, step is: try `OwnValues`; return the replacement if any.
 
 Helpers: `evaluate_step`, `eval_flatten_args(e, head_name)`,
 `eval_sort_args(e)`.
+
+Each fixed-point iteration also polls the interactive interrupt flag
+(`src/term/term_interrupt.h`, set by the REPL's Ctrl-C handler) and turns it
+into the ordinary `Abort[]` sentinel, outside `AbortProtect`.
 
 ### 3.6 Pattern matcher (`match.{c,h}`)
 
@@ -653,7 +660,17 @@ see below), parses to an `Expr*`, evaluates to a fixed point, stores
 `In[n]`/`Out[n]` as DownValues for back-reference, prints the result, and frees
 both trees. Exits on `Quit[]` or EOF.
 
-**Completeness-driven Return.** Return is rebound (`mth_smart_return`) so a
+The interactive session (only) adds: Ctrl-C during an evaluation aborts it to
+`$Aborted` (a second within a second exits 130), Ctrl-C at the prompt clears
+the line; a persistent, escaped multi-line history file
+(`~/.mathilda_history`, `MATHILDA_HISTFILE`, `MATHILDA_HISTSIZE`); Tab
+completion of symbols and of the enclosing call's option names, without
+evaluating; and coloured prompts and message heads (`NO_COLOR`,
+`CLICOLOR_FORCE`, `TERM`). The loop reads through the `src/term/term_input.h`
+seam. Details: [`docs/spec/repl.md`](docs/spec/repl.md).
+
+**Completeness-driven Return.** Return is rebound (`mth_smart_return`, in
+`src/term/term_readline.c`, using `term_lex_input_complete`) so a
 single `readline()` call returns a whole, possibly multi-line, expression:
 pressing Return *evaluates* only when the buffer forms a complete expression —
 no unterminated `"..."` string or `(* ... *)` comment and every `(`/`[`/`{`

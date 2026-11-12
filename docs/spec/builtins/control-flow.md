@@ -567,6 +567,9 @@ numeric loop never reaches.
 - `AbortProtect[expr]` runs `expr` to completion even if `Abort[]` is called
   inside it. The abort then takes effect when the outermost `AbortProtect`
   returns. `HoldAll`.
+- In the interactive REPL, Ctrl-C during an evaluation raises the same abort:
+  the result is `$Aborted`, `CheckAbort` catches it, and `AbortProtect` defers
+  it to the end of its body (see [`docs/spec/repl.md`](../repl.md)).
 - `Abort[]` itself is the in-flight sentinel, like a `Throw` node. It rides the
   ordinary return path, so every frame's cleanup runs (no `longjmp`).
 - `Interrupt[]` is not implemented: outside a notebook it ends the session in
