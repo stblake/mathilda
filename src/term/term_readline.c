@@ -15,6 +15,7 @@ typedef int term_readline_unused_;   /* keep the translation unit non-empty */
 #include "term_interrupt.h"
 #include "term_lex.h"
 #include "term_history.h"
+#include "term_complete.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -85,6 +86,56 @@ static int term_rl_on_signal(void) {
 }
 #endif
 
+/* ---- Tab completion ------------------------------------------------------ */
+
+/* Longest common prefix of the candidates, as readline's match[0]. */
+static char* common_prefix(char** items, size_t n) {
+    size_t len = strlen(items[0]);
+    for (size_t i = 1; i < n; i++) {
+        size_t k = 0;
+        while (k < len && items[i][k] == items[0][k]) k++;
+        len = k;
+    }
+    char* r = malloc(len + 1);
+    if (!r) return NULL;
+    memcpy(r, items[0], len);
+    r[len] = '\0';
+    return r;
+}
+
+static char** term_rl_complete(const char* text, int start, int end) {
+    (void)text; (void)end;
+    rl_attempted_completion_over = 1;              /* never fall back to file names */
+    rl_completion_append_character = '\0';         /* GNU resets it per attempt      */
+    TermCompletions c;
+    term_complete(rl_line_buffer, (size_t)rl_point, &c);
+    if (c.count == 0 || c.word_start != (size_t)start) { term_completions_free(&c); return NULL; }
+    /* readline's contract: [0] = longest common prefix, [1..n] = matches, NULL. */
+    char** m = malloc((c.count + 2) * sizeof(char*));
+    char* lcp = m ? common_prefix(c.items, c.count) : NULL;
+    if (!m || !lcp) { free(m); term_completions_free(&c); return NULL; }
+    m[0] = lcp;
+    for (size_t i = 0; i < c.count; i++) m[i + 1] = c.items[i];   /* ownership moves */
+    m[c.count + 1] = NULL;
+    free(c.items);                                  /* the array only */
+    return m;
+}
+
+/* Word breaks: every ASCII character outside [A-Za-z0-9$`], so readline's
+ * `start` is the term_lex word start (after a '"', which is a break). */
+static void term_rl_setup_completion(void) {
+    static char breaks[128];
+    size_t k = 0;
+    for (int ch = 1; ch < 128; ch++)
+        if (!term_lex_is_word_char((char)ch)) breaks[k++] = (char)ch;
+    breaks[k] = '\0';
+    rl_completer_word_break_characters = breaks;
+    rl_attempted_completion_function = term_rl_complete;
+#ifndef TERM_RL_GNU
+    rl_completion_append_character = '\0';
+#endif
+}
+
 static TermReadStatus rl_read(TermReader* rd, const char* prompt, char** out) {
     (void)rd;
     char* line = readline(prompt);
@@ -139,6 +190,7 @@ TermReader* term_reader_open_readline(const TermReadlineOptions* o) {
     }
     if (im->opt.interactive_features) {
         mth_setup_readline();
+        term_rl_setup_completion();
 #ifdef TERM_RL_GNU
         rl_signal_event_hook = term_rl_on_signal;
 #endif

@@ -132,7 +132,7 @@ Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tier
   - [ ] Packed arrays inside a plain List materialise when ragged/mixed (transparency-gate design; needs a redesign decision)
   - [ ] D2: bd2.7 nested digit sums 0 d; nested cases ending at 0-1 d now ~300-450 ms (original D2 1.6 -> 303 ms) -- honest but slow
   - [ ] C3/C5 speed; D19/D20 remainder (see Phase 5 open lines)
-- [ ] Phase 5: fix waves (W wrong / X absent / D fewer digits / S slower)
+- [x] Phase 5: fix waves (W wrong / X absent / D fewer digits / S slower)
   - [x] v0.6378 NDSolve BVP by shooting (silent wrong answer on two-point conditions)
   - [x] v0.6379 WhenEvent (all integration loops; d12 12d/274ms, d12.wp50 50d, hd12 20/20), v0.6380 NDSolveValue, v0.6381 unlisted unknowns (d13.wp50 50d)
   - [x] v0.6382-86 linalg: MPFR LU honours TimeConstrained; sparse band solver (hc7.2 7.3 s -> 2 ms); exact sparse fill-column wrong answer; MPFR sparse by iterative refinement (hc7 wp50 all 50d, fastest); Norm[m,2] MPFR
@@ -1451,7 +1451,7 @@ Branch feat/repl-modernize (worktree mathilda-repl). Rules for this PR:
 - [x] Phase 2: term_interrupt.{c,h} flag API (§4.1); eval poll (loop + stamp fast path); CheckAbort clears; AbortProtect honours; top-level clear; tc_deadline_passed interrupt-aware after the 44-site audit (A/B table in commit body); message gate; Pause sliced; Raylib loops; interrupt_tests (13 cases); kernel suites; perf gate ≤ +1% or noise floor
 - [x] Phase 3: term_interrupt handler (SA_RESTART, 3 states, double Ctrl-C within 1 s gives _Exit(130)); term_input seam + stdio backend; term_readline (GNU signal hook, libedit degraded); repl.c single loop and Dialog reader; banner; term_interrupt_tests; pty ctrlc_* cases; USE_READLINE=0 builds; manual libedit check
 - [x] Phase 4: term_history (own escaped format, 0600, truncate at load, MATHILDA_HISTFILE / MATHILDA_HISTSIZE); readline feed; Dialog entries; term_history_tests; pty history_* cases
-- [ ] Phase 5: names_complete; term_complete (symbols, context-aware, options of enclosing head, no evaluate); readline adapter; term_complete_tests; pty complete_* cases
+- [x] Phase 5: names_complete; term_complete (symbols, context-aware, options of enclosing head, no evaluate); readline adapter; term_complete_tests; pty complete_* cases
 - [ ] Phase 6: term_color decision (NO_COLOR, CLICOLOR_FORCE, TERM, per-stream isatty; interactive only); mth_message_set_style; coloured In/Out (\001/\002 on GNU); "took" line ≥ 1 s on a tty; term_color_tests; pty color_* and took_line; check-pipe-protocol
 - [ ] Phase 7: docs/spec/repl.md + Mathilda_spec.md row; control-flow.md and time-and-date.md (Pause) updates; Pause docstring; changelog 2026-11-09.md REPL heading; SPEC.md §2/§11; building.md; tutorial + book banner; build.yml pty step
 - [ ] Verify: make clean && make; check-c99/messages/packed-aware/menu-ids/pipe-protocol; USE_READLINE=0 build; ctest -LE nightly (0 FAIL, grep ^FAIL); pty test; valgrind (docker) + leaks vs baseline; reference-name grep on the diff

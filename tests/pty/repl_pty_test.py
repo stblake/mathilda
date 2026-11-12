@@ -761,6 +761,69 @@ def history_dialog(tmp):
     check(b"inDialog = 3\n" in data, "dialog line missing from history: %r" % data)
 
 
+@case
+def complete_symbol(tmp):
+    s = interactive(tmp, extra={"MATHILDA_HISTFILE": ""})
+    try:
+        s.send("Integr\t")
+        s.expect(r"Integrate")
+        s.send("[x, x]\r")
+        s.expect(r"Out\[1\]= 1/2 x\^2")
+        wait_prompt(s, 2)
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def complete_option(tmp):
+    s = interactive(tmp, extra={"MATHILDA_HISTFILE": ""})
+    try:
+        s.send("ReplaceRepeated[x, {}, MaxI\t")
+        s.expect(r"MaxIterations -> ")
+        s.send("5]\r")
+        s.expect(r"Out\[1\]= x")
+        check(b"ReplaceRepeated[x, {}, MaxIterations -> 5]" in s.buf,
+              "the option was not inserted whole")
+        wait_prompt(s, 2)
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def complete_user_option(tmp):
+    s = interactive(tmp, extra={"MATHILDA_HISTFILE": ""})
+    try:
+        s.send("Options[myf] = {Alpha -> 1};\r")
+        wait_prompt(s, 2)
+        s.send("myf[Al\t\t")           # ambiguous (All, ...): the second Tab lists
+        s.expect(r"Alpha -> ")
+        s.send("pha -> 2]\r")
+        s.expect(r"Out\[2\]= myf\[Alpha -> 2\]")
+        wait_prompt(s, 3)
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def complete_no_eval(tmp):
+    s = interactive(tmp, extra={"MATHILDA_HISTFILE": ""})
+    try:
+        s.send("f[x_] := (Print[\"SIDE\"]; x)\r")
+        wait_prompt(s, 2)
+        start = len(s.buf)
+        s.send("f[1][Op\t")
+        s.drain(0.5)
+        check(b"SIDE" not in s.buf[start:], "completion evaluated f[1]")
+        s.send("\x03")               # abandon the line
+        wait_prompt(s, 2)
+        quit_session(s)
+    finally:
+        s.close()
+
+
 def harness_can_fail(tmp):
     """Deliberately wrong expectation: must FAIL (MATHILDA_PTY_SELFTEST=1)."""
     s = new_session(tmp)
