@@ -27,6 +27,8 @@
 #include "term/term_readline.h"
 #include "term/term_history.h"
 #include "term/term_color.h"
+#include "term/term_status.h"
+#include "term/term_spinner.h"
 #include "mtime.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -80,9 +82,13 @@ void process_input(const char* input, int line_number) {
     /* $Pre: applied to the parsed expression. Consumes our reference
      * to `parsed`; we treat the result as the new input to evaluate. */
     Expr* pre_input = repl_apply_pre(expr_copy(parsed));
-    double t0 = mth_mono_seconds();
+    /* The status thread owns the terminal for exactly the evaluation (a
+     * no-op that only measures outside the interactive session). */
+    term_status_begin(term_status_label_of(pre_input));
     Expr* evaluated = evaluate(pre_input);
-    double took = mth_mono_seconds() - t0;
+    TermStatusStats stats;
+    term_status_end(&stats);
+    double took = stats.elapsed;
     expr_free(pre_input);
     mth_block_graveyard_flush();   /* top-level boundary: nothing in flight */
 
@@ -135,11 +141,13 @@ void process_input(const char* input, int line_number) {
     else               expr_print(to_print);
     if (term_tty_stdout() && took >= 1.0) {
         /* A dim note on its own line, under the result. */
-        char el[64];
-        term_format_elapsed(el, sizeof(el), took);
-        printf("%stook %s%s\n", term_style_on(TERM_STYLE_DIM, c), el, term_style_off(c));
+        char tl[256];
+        TermSpinnerStyle tst = { c, term_status_unicode() };
+        term_took_line(tl, sizeof(tl), took, stats.cpu, stats.peak, tst);
+        fputs(tl, stdout);
     }
     printf("\n"); // extra blank line
+    term_status_print_statusline(took);   /* MATHILDA_STATUSLINE=1 only */
 
     /* Mathematica's front end auto-displays a top-level Graphics[...] (or
      * Graphics3D[...], from Plot3D) result. This REPL is the sole "front
@@ -1324,14 +1332,18 @@ static int run_script_file(const char* path) {
  * the line and asks again; accepted lines go into the reader's history. */
 static char* dialog_read_term(const char* prompt, void* ctx) {
     TermReader* rd = (TermReader*)ctx;
+    /* The reader owns the terminal for the read: hand it over and back. */
+    term_status_suspend();
+    char* line = NULL;
     for (;;) {
-        char* line = NULL;
         TermReadStatus st = term_read(rd, prompt, &line);
         if (st == TERM_READ_INTERRUPTED) continue;
-        if (st == TERM_READ_EOF) return NULL;
+        if (st == TERM_READ_EOF) { line = NULL; break; }
         term_reader_history_add(rd, line);
-        return line;
+        break;
     }
+    term_status_resume();
+    return line;
 }
 #endif
 
@@ -1473,7 +1485,10 @@ int main(int argc, char** argv) {
         /* Ctrl-C handling only for the readline session: the fgets loop of a
          * NO_READLINE build keeps the default (Ctrl-C ends the process). */
         if (interactive_rl) term_interrupt_install();
+        /* The live status line: interactive session only (after colour). */
+        if (interactive_rl) term_status_init(true);
         repl_loop(rd);
+        term_status_shutdown();
         if (interactive_rl) term_interrupt_uninstall();
         if (mth_quit_requested()) rc = mth_quit_status();
     }

@@ -6676,8 +6676,9 @@ add_test(NAME term_color_tests COMMAND term_color_tests)
 # for the terminal.
 target_sources(mathilda_common PRIVATE
     ../src/term/term_progress.c
-    ../src/term/term_spinner.c)
-foreach(_pr3_suite term_progress term_spinner)
+    ../src/term/term_spinner.c
+    ../src/term/term_status.c)
+foreach(_pr3_suite term_progress term_spinner term_status)
     add_executable(${_pr3_suite}_tests test_${_pr3_suite}.c $<TARGET_OBJECTS:mathilda_common>)
     target_include_directories(${_pr3_suite}_tests PRIVATE ../src)
     if(USE_ECM)
