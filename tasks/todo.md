@@ -1479,5 +1479,5 @@ Rules: no version bump; append-only edits to tests/CMakeLists.txt, the changelog
 - [x] Phase 4: Ctrl-R history list; tests
 - [x] Phase 5: result colouring (expr_print_to_string, safe subset); tests
 - [x] Phase 6: latency gate test (200 lines, < 2 ms, one write, 0 allocs); resize / narrow / UTF-8 / restore pty cases
-- [ ] Phase 7: docs/spec/repl.md, changelog, SPEC.md
+- [x] Phase 7: docs/spec/repl.md, changelog, SPEC.md
 - [ ] Verify: clean build, checks, USE_READLINE=0, ctest -LE nightly, pty suite, byte-identical pipe/-file, leaks, latency numbers, readline fallback; /tmp/pr2-body.md

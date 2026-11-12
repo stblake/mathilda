@@ -669,6 +669,13 @@ evaluating; and coloured prompts and message heads (`NO_COLOR`,
 `CLICOLOR_FORCE`, `TERM`). The loop reads through the `src/term/term_input.h`
 seam. Details: [`docs/spec/repl.md`](docs/spec/repl.md).
 
+On a terminal the seam is backed by an in-tree line editor
+(`src/term/term_editor*.c`) instead of readline: multi-line editing with
+Up/Down between lines, live syntax colouring, a Tab completion popup with
+docstring summaries, a Ctrl-R history list, under 2 ms per keystroke.
+`MATHILDA_EDITOR=readline` or `TERM=dumb` keeps readline, whose smart Return
+is described next; the editor implements the same completeness rule.
+
 **Completeness-driven Return.** Return is rebound (`mth_smart_return`, in
 `src/term/term_readline.c`, using `term_lex_input_complete`) so a
 single `readline()` call returns a whole, possibly multi-line, expression:

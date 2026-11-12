@@ -106,3 +106,114 @@ creates a symbol.
 Completion and the history file work. A Ctrl-C at the prompt does not clear
 the line (it is ignored, and never exits or submits). Prompts are not
 coloured; `Out` and messages are.
+
+## The line editor
+
+On a terminal (stdin and stdout both ttys, `TERM` set and not `dumb`) the
+session reads its input with Mathilda's own editor rather than readline. The
+rest of this page up to here applies to both; the sections below are the
+editor's.
+
+- `MATHILDA_EDITOR=readline` (also `libedit`, `plain`, `none`, `off`, `0`)
+  selects readline instead, as does `TERM=dumb`. Builds without readline
+  (`USE_READLINE=0`) keep their plain line reader.
+- The banner says "Tab completes, Ctrl-R searches the history, Ctrl-_
+  undoes" when the editor is in use.
+
+### Keys
+
+| Key | Action |
+|---|---|
+| Return | evaluate when the input is complete, else a new line |
+| Esc then Return, Alt-Return | evaluate now, complete or not |
+| Up / Down, Ctrl-P / Ctrl-N | previous / next line; on the first / last line, previous / next history entry |
+| Alt-< / Alt-> | oldest history entry / back to what you were typing |
+| Left / Right, Ctrl-B / Ctrl-F | character left / right |
+| Alt-B / Alt-F, Ctrl- or Alt-arrows | word left / right |
+| Home / End, Ctrl-A / Ctrl-E | start / end of the line |
+| PageUp / PageDown | start / end of the input |
+| Backspace, Delete, Ctrl-D | delete before / at the cursor |
+| Ctrl-K, Ctrl-U | kill to the end / start of the line (Ctrl-K at a line's end joins the next) |
+| Ctrl-W, Alt-Backspace, Alt-D | kill the word before (to whitespace / word characters), the word after |
+| Ctrl-Y | yank the last kill (consecutive kills accumulate) |
+| Ctrl-T | transpose characters |
+| Ctrl-_ (Ctrl-/) | undo (typing runs and deletion runs undo as one step) |
+| Tab | completion (below) |
+| Ctrl-R | history search (below) |
+| Ctrl-L | clear the screen |
+| Ctrl-C | discard the input, also a multi-line one; the same `In[n]:=` |
+| Ctrl-D on an empty input | end the session |
+| Ctrl-Z | suspend (`fg` resumes and redraws) |
+
+- A pasted block (bracketed paste) is inserted as typed text: its line breaks
+  never submit it, tabs become four spaces.
+- Continuation lines are indented under the prompt on screen only; the
+  input sent to the evaluator and to the history is exactly what was typed.
+- Long lines wrap; an input taller than the screen scrolls with the cursor
+  and is written out whole when it is evaluated.
+
+### Colouring
+
+As you type: builtins (cyan), symbols with a value or rules (blue), numbers
+(magenta), strings (green), comments (grey) and patterns such as `x_`,
+`_Integer`, `x__`, `#2` (yellow). The bracket at or before the cursor and its
+partner are bold and underlined; a closing bracket that matches nothing, or the
+wrong opener, is red. An unclosed opener is not marked: it is still being
+typed. Results (`Out[n]=`) are coloured the same way, with the same characters
+as uncoloured output. Colour follows the rules of "Colour" above; without it
+the editor emits no SGR at all.
+
+### Completion popup
+
+- Tab with a single candidate inserts it. With several it inserts their
+  common prefix and opens a list under the word (above it when the input
+  sits at the bottom of the screen and has room above; otherwise the screen
+  scrolls up).
+- The row under the list shows the first line of the selected name's
+  documentation (`?Name`), and a position counter when the list scrolls.
+- Tab / Down / Ctrl-N and Shift-Tab / Up / Ctrl-P move the selection; Enter
+  inserts it (it does not evaluate); Esc closes the list.
+- Typing letters narrows the list; any other key closes it without
+  inserting and then does what it normally does, so typing straight on never
+  picks a name.
+- Inside a call, the call's option names come first (`NIntegrate[f, {x, 0,
+  1}, ` then Tab lists `AccuracyGoal -> `, ...).
+- The list opens only on Tab, never by itself while typing.
+- Below 40 columns the description row is left out; below 16 columns or 5
+  rows there is no list, and each Tab inserts the next candidate instead.
+
+### History search (Ctrl-R)
+
+Ctrl-R shows `search:` and the history, newest first, each distinct input
+once. Typing filters it (substring match, highlighted); a multi-line input is
+shown whole. Ctrl-R / Up go to older matches, Ctrl-S / Down to newer ones.
+Enter puts the selected input into the editor for editing (Enter again
+evaluates it); Esc or Ctrl-G puts back what was there before; any other key
+takes the selected input and then acts on it.
+
+### The terminal
+
+- While an input is being read the terminal is in raw mode, so Ctrl-C and
+  Ctrl-Z are keys. Before an input is evaluated the terminal settings are
+  restored exactly, so the evaluation (and Ctrl-C to interrupt it) sees the
+  usual terminal.
+- The terminal is also restored when the session exits, and if it is killed
+  or crashes while reading (SIGTERM, SIGHUP, SIGQUIT, SIGSEGV, SIGBUS,
+  SIGFPE, SIGILL, SIGABRT).
+- A resize redraws the input at the new width. Wide (CJK, emoji) and
+  combining characters take their proper columns.
+- Keys typed while an evaluation runs become the start of the next input.
+
+### For contributors
+
+- The state machine (`term_editor.c`) is terminal-free: bytes in through
+  `term_editor_feed`, drawing out through a write callback, one write per
+  batch. `term_editor_tty.c` puts it on a terminal. `tests/term_vt.h` is a
+  small VT emulator the unit tests draw into.
+- Hand-over: the editor owns the terminal from the start of `term_read()` to
+  its return. Anything that draws during an evaluation (a status line) owns
+  it from then until the next `term_read()`, which can also come from a
+  `Dialog[]` inside the evaluation.
+- Performance gate: `tests/test_term_editor_latency.c` (200-line buffer,
+  slowest keystroke under 2 ms, at most one write per keystroke, no
+  allocation in steady-state editing).
