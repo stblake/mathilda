@@ -92,6 +92,11 @@ static void test_cascade_certificates(void) {
 
 /* A budget expiry declines: the cascade continues to the later stages. */
 static void test_budgets(void) {
+    /* a timeout inside a NESTED Integrate (the DerivativeDivides candidate bound)
+     * once left the cascade depth raised for the session, silencing every later
+     * Integrate::nonelem: the depth is now restored across the unwind */
+    br_run("TimeConstrained[Integrate[(x + 1)/((x Log[x] + x^2) Sqrt[x + Log[x]]) + Sqrt[Sin[x]]/(Sin[x]^2 + 1), x], 1/2, 0]; True");
+    BR_EQ("Check[Integrate[Sqrt[Log[x]]/(1 + Log[x]), x], \"msg\"]", "\"msg\"");
     BR_EQ("Block[{$TragerCascadeBudget = 1/1000}, Head[Integrate[1/(x Sqrt[1 - x^3]), x]]] =!= Hold", "True");
     BR_TRUE("Block[{$BronsteinCascadeBudget = 1/1000},"
             " Module[{F = Integrate[1/(x Sqrt[Log[x]^2 + 1]), x]},"

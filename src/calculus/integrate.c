@@ -350,8 +350,8 @@ static bool has_pseudoelliptic_radical(const Expr* e, const Expr* x);
 static bool has_elliptic_sqrt_kernel(const Expr* f, const Expr* x);
 static Expr* try_derivdivides(Expr* f, Expr* x) {
     if (has_pseudoelliptic_radical(f, x) || has_elliptic_sqrt_kernel(f, x))
-        return integrate_derivdivides_try(f, x);
-    return integrate_derivdivides_full(f, x);
+        return integrate_derivdivides_try_cascade(f, x);
+    return integrate_derivdivides_full_cascade(f, x);
 }
 
 /* Stage 1c: linear-radical substitution.  Recognises a rational function of x
@@ -2930,7 +2930,7 @@ static const char* const ip_stage_name[IP_NSTAGES] = {
     "07 Fresnel", "08 GammaPower", "09 Linearity", "10 LinearArgSubst",
     "11 Weierstrass", "12 DerivativeDivides", "13 RischTranscendental",
     "14 CRCTable", "20 GRTable", "14b PolyLogLadder", "14c Holonomic", "14d BesselHypergeometric", "15 LogByParts",
-    "15b Trager", "15c Bronstein", "16 ParallelMixedTower", "17 GoursatAlgebraic", "18 ParallelMixedSpecial",
+    "08b Trager", "08c Bronstein", "16 ParallelMixedTower", "17 GoursatAlgebraic", "18 ParallelMixedSpecial",
     "19 RoachMeijerG"
 };
 static long   g_ip_entries = 0;   /* cascade passes over one integrand */
@@ -3568,6 +3568,23 @@ Expr* builtin_integrate(Expr* res) {
              * x^n E^(-x)); gated to a symbolic exponent, so nothing with a numeric
              * one is diverted from its elementary / Erf answer below. */
             IP_STAGE(IP_GAMMAPOWER,   try_gammapower(effective_f, x));
+            /* The complete decision procedures for one radical: Trager (algebraic)
+             * and Bronstein (a radical over a Log/Exp tower).  After the cheap
+             * specialised radical stages (which give the familiar closed forms for
+             * linear, quadratic and Chebychev radicals) and BEFORE the general
+             * search stages -- Linearity's term-by-term split, DerivativeDivides'
+             * substitution search, RischTranscendental -- which on these shapes
+             * only grind: the 2026-11-12 cascade stress run timed out at 60 s in
+             * exactly those three stages on integrands Bronstein closes in under
+             * a second (term-by-term splitting also breaks the cancellation
+             * between non-elementary terms that the whole integrand relies on).
+             * Gated (structural, microseconds) and budgeted; a decline is fast and
+             * the cascade continues unchanged; a certificate skips the remaining
+             * elementary-only stages.  Skipped under g_integrate_no_special. */
+            if (!g_integrate_no_special) {
+                IP_STAGE(IP_TRAGER,    try_trager_cascade(effective_f, x, &cascade_nonelem));
+                IP_STAGE(IP_BRONSTEIN, try_bronstein_cascade(effective_f, x, &cascade_nonelem));
+            }
             /* Weierstrass before derivative-divides: it is a domain-specific,
              * deterministic algorithm for rational trig/hyperbolic integrands
              * that is guaranteed to close (and verified by construction), so it
@@ -3614,15 +3631,6 @@ Expr* builtin_integrate(Expr* res) {
              * Bessel-product antiderivative exists. */
             IP_STAGE(IP_BESSELHYPER,  try_besselhyper(effective_f, x));
             IP_STAGE(IP_LOGBYPARTS,   try_logbyparts(effective_f, x));
-            /* The complete decision procedures for one radical: Trager (algebraic)
-             * and Bronstein (a radical over a Log/Exp tower).  Gated and
-             * budgeted (see try_cascade_decider); a certificate skips the
-             * remaining elementary-only stages below.  Skipped under
-             * g_integrate_no_special like the other heavy tail stages. */
-            if (!g_integrate_no_special) {
-                IP_STAGE(IP_TRAGER,    try_trager_cascade(effective_f, x, &cascade_nonelem));
-                IP_STAGE(IP_BRONSTEIN, try_bronstein_cascade(effective_f, x, &cascade_nonelem));
-            }
             /* The parallel Risch-Norman integrator over a mixed tower.  After
              * the CRC table so a tabled integral is answered cleanly and
              * cheaply rather than paying this stage's package load and search
@@ -3850,6 +3858,13 @@ void integrate_init(void) {
      * inside one left it raised for the rest of the session (every later
      * Integrate::nonelem silenced, and the Risch stage gated on it skipped). */
     tc_register_unwind_counter(&g_integrate_quiet);
+    /* The cascade depth: a timeout inside a NESTED Integrate (e.g. a
+     * DerivativeDivides candidate's bounded sub-integral) left it raised, so every
+     * later top-level Integrate ran as "nested" -- Integrate::nonelem silenced for
+     * the rest of the session, and the depth-1 bookkeeping skipped. */
+    tc_register_unwind_counter(&g_integrate_depth);
+    /* LogByParts' speculative sub-integral guard, same shape. */
+    tc_register_unwind_counter(&g_integrate_no_special);
 
     /* The ParallelMixedTower method symbol (lazy-loads src/internal/mixed/
      * ParallelMixed.m on first use).  Registered here so the qualified-symbol

@@ -55,6 +55,7 @@
 #endif
 
 #include "integrate_derivdivides.h"
+#include "core.h"   /* tc_register_unwind_counter */
 
 #include "mtime.h"   /* mth_mono_seconds */
 #include "expr.h"
@@ -194,9 +195,13 @@ static bool differentiates_back(const Expr* r, const Expr* f, const Expr* x) {
 
 /* Recurse into the full integrator: Integrate[g, u].  Returns the closed
  * antiderivative, or NULL if it does not close.  Borrows g and u. */
+static Expr* dd_eval_bounded(Expr* call);
 static Expr* integrate_in(const Expr* g, const Expr* u) {
-    Expr* r = eval_take(mk_fn2("Integrate", expr_copy((Expr*)g),
-                               expr_copy((Expr*)u)));
+    /* bounded by what is left of the deadline (the per-candidate one in the
+     * cascade): the sub-integral re-enters the whole cascade, whose other
+     * stages do not consult dd_deadline */
+    Expr* r = dd_eval_bounded(mk_fn2("Integrate", expr_copy((Expr*)g),
+                                     expr_copy((Expr*)u)));
     if (!r) return NULL;
     if (contains_unintegrated(r)) { expr_free(r); return NULL; }
     return r;
@@ -331,6 +336,17 @@ static int dd_depth = 0;
  * the fan-out, i.e. by the very thing being bounded.
  * ---------------------------------------------------------------------- */
 static double dd_deadline = HUGE_VAL;
+
+/* Per-candidate budget (seconds) of the AUTOMATIC cascade; 0 = none (the
+ * explicit Method -> "DerivativeDivides" surface).  The outermost frame gives
+ * each candidate kernel its own deadline, min(dd_deadline, now + budget), which
+ * every nested frame and sub-integral inherits: a kernel whose substitution does
+ * not close almost at once is not the substitution this stage exists for, and
+ * the decision procedures later in the cascade (Trager, Bronstein, ...) must not
+ * wait behind it (stress run 2026-11-12: 89.7 s of a 90 s cascade spent here
+ * on integrands Bronstein closes in 0.05 s). */
+#define DD_CASCADE_CANDIDATE_SECONDS 0.2
+static double dd_candidate_budget = 0.0;
 
 /* Monotonic seconds; CLOCK_MONOTONIC is immune to NTP steps, with the CPU clock
  * as fallback.  Mirrors simp_mono_seconds() / dt_wall_seconds(). */
@@ -742,17 +758,36 @@ static Expr* dd_core(Expr* f, Expr* x, bool use_eliminate,
 
     dd_depth++;
 
+    /* In the cascade the outermost frame bounds every candidate separately
+     * (dd_candidate_budget); the overall deadline is restored after each. */
+    double outer_deadline = dd_deadline;
+    bool per_candidate = outermost && dd_candidate_budget > 0.0;
+#define DD_CANDIDATE_BEGIN() do { if (per_candidate) { \
+        double cd = dd_mono_seconds() + dd_candidate_budget; \
+        dd_deadline = cd < outer_deadline ? cd : outer_deadline; } } while (0)
+#define DD_CANDIDATE_END() do { if (per_candidate) dd_deadline = outer_deadline; } while (0)
+
     /* Pass 1: the cheap, quiet, branch-correct direct quotient. */
-    for (size_t i = 0; i < kernels.n && !result && !dd_expired(); i++)
+    for (size_t i = 0; i < kernels.n && !result; i++) {
+        if (outer_deadline < HUGE_VAL && dd_mono_seconds() >= outer_deadline) break;
+        DD_CANDIDATE_BEGIN();
         result = try_direct_kernel(f, x, kernels.items[i]);
+        DD_CANDIDATE_END();
+    }
 
     /* Pass 2: the thorough Eliminate/Solve search.  Heavyweight (~0.1-1s per
      * kernel), so it runs only on the outermost integrand; reduced sub-integrals
      * are finished by the direct strategy above and the rest of the cascade.
      * See the recursion-guard note above for why. */
     if (!result && use_eliminate && outermost)
-        for (size_t i = 0; i < kernels.n && !result && !dd_expired(); i++)
+        for (size_t i = 0; i < kernels.n && !result; i++) {
+            if (outer_deadline < HUGE_VAL && dd_mono_seconds() >= outer_deadline) break;
+            DD_CANDIDATE_BEGIN();
             result = try_eliminate_kernel(f, x, kernels.items[i]);
+            DD_CANDIDATE_END();
+        }
+#undef DD_CANDIDATE_BEGIN
+#undef DD_CANDIDATE_END
 
     dd_depth--;
     vec_free(&kernels);
@@ -775,9 +810,26 @@ Expr* integrate_derivdivides_try(Expr* f, Expr* x) {
 
 Expr* integrate_derivdivides_full(Expr* f, Expr* x) {
     /* Explicit Method -> "DerivativeDivides": direct strategy, then the
-     * thorough Eliminate/Solve branch-search. */
+     * thorough Eliminate/Solve branch-search, no per-candidate budget (reset in
+     * case a timeout unwound a cascade call before it restored it). */
+    if (dd_depth == 0) dd_candidate_budget = 0.0;
     return dd_core(f, x, true, NULL);
 }
+
+/* The Automatic cascade's entry points: the same strategies, every candidate
+ * kernel bounded by DD_CASCADE_CANDIDATE_SECONDS (see dd_candidate_budget).
+ * A nested cascade pass (dd_depth > 0) keeps the deadline it inherited. */
+static Expr* dd_cascade(Expr* f, Expr* x, bool use_eliminate) {
+    if (dd_depth > 0) return dd_core(f, x, use_eliminate, NULL);
+    double saved = dd_candidate_budget;
+    dd_candidate_budget = DD_CASCADE_CANDIDATE_SECONDS;
+    Expr* r = dd_core(f, x, use_eliminate, NULL);
+    dd_candidate_budget = saved;
+    return r;
+}
+
+Expr* integrate_derivdivides_try_cascade(Expr* f, Expr* x) { return dd_cascade(f, x, false); }
+Expr* integrate_derivdivides_full_cascade(Expr* f, Expr* x) { return dd_cascade(f, x, true); }
 
 Expr* integrate_derivdivides_with_sub(Expr* f, Expr* x, Expr* sub) {
     /* Explicit Method -> {"DerivativeDivides", "Substitution" -> sub}: trial
@@ -796,6 +848,8 @@ Expr* builtin_integrate_derivdivides(Expr* res) {
 }
 
 void integrate_derivdivides_init(void) {
+    /* restored across a TimeConstrained unwind (see core.h) */
+    tc_register_unwind_counter(&dd_depth);
     symtab_add_builtin("Integrate`DerivativeDivides", builtin_integrate_derivdivides);
     symtab_get_def("Integrate`DerivativeDivides")->attributes |=
         ATTR_PROTECTED;

@@ -52,6 +52,11 @@ Expr* integrate_derivdivides_try(Expr* f, Expr* x);
  * Eliminate's ::ifun / ::alg diagnostics.  Does NOT take ownership of `f`/`x`. */
 Expr* integrate_derivdivides_full(Expr* f, Expr* x);
 
+/* The Automatic cascade's entry points: integrate_derivdivides_try / _full with
+ * every candidate kernel bounded by 0.2 s (its substitution and sub-integral). */
+Expr* integrate_derivdivides_try_cascade(Expr* f, Expr* x);
+Expr* integrate_derivdivides_full_cascade(Expr* f, Expr* x);
+
 /* Explicit `Method -> {"DerivativeDivides", "Substitution" -> sub}` entry.
  * Trials only the user-pinned kernel `sub` (no automatic kernel search),
  * running the direct strategy and then the Eliminate/Solve branch-search.

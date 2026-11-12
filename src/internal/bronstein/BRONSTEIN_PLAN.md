@@ -920,3 +920,19 @@ can neither close nor certify them. These are N3 material for the benchmark.
 
 **Order of work:** 1–5 → 8a → 8 → 6–7 → 9 → 10 → 11 → 13–14 → 17 → 16 (with 15) → 12 → 18.
 
+### 2026-11-12 — cascade grind fixed (v0.6521)
+
+Plan item 8a is done. The fixes:
+- DerivativeDivides has a 0.2 s budget per candidate in the cascade (user
+  direction), with its sub-integral bounded.
+- Trager and Bronstein moved ahead of Linearity, DerivativeDivides and
+  RischTranscendental: stages "08b"/"08c".
+- `g_integrate_depth`, `g_integrate_no_special` and `dd_depth` are registered
+  unwind counters. A nested-timeout depth leak was silencing `Integrate::nonelem`
+  for the whole session.
+
+Cascade stress (seeds 200–207): 120/120 OK.
+
+Next: the exact per-component verification (the Method→Bronstein m ≥ 3 timeouts
+are 98 s spent in the final PossibleZeroQ), then the P0 items.
+
