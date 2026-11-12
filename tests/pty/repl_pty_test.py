@@ -667,7 +667,31 @@ def double_ctrlc_exit(tmp):
 HIST_HEADER = b"#mathilda-history v1\n"
 
 
+IDLE_PROMPT = re.compile(rb"In\[\d+\]:=\s*$")
+
+
+def wait_idle(s, timeout=5.0):
+    """Wait until the transcript ends at a prompt, i.e. the REPL is reading.
+
+    Keys sent before that land while the tty is still canonical, and Linux
+    turns a canonical-mode ^D (an EOF marker) into a NUL byte when the reader
+    then switches to raw mode, so a ^D sent too early is lost. The editor and
+    readline both enter raw mode before drawing the prompt. Best effort: on
+    timeout the caller sends anyway and its own check reports the failure."""
+    deadline = time.monotonic() + timeout * TIME_SCALE
+    while not IDLE_PROMPT.search(strip_esc(s.buf)):
+        left = deadline - time.monotonic()
+        if left <= 0:
+            return False
+        try:
+            s._read_some(min(left, 0.2))
+        except EOFError:
+            return False
+    return True
+
+
 def quit_session(s):
+    wait_idle(s)
     s.send("\x04")
     check(s.exit_code() == 0, "Ctrl-D did not exit 0")
 

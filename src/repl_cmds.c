@@ -132,9 +132,12 @@ static void load_one(const char* name, const char* path) {
     }
 }
 
+#ifndef _WIN32
+/* qsort comparator for the mods/ directory listing (POSIX branch only). */
 static int cmp_str(const void* a, const void* b) {
     return strcmp(*(const char* const*)a, *(const char* const*)b);
 }
+#endif
 
 void repl_cmds_load_mods(void) {
     if (!g_on || !g_dir) return;

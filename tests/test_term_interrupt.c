@@ -109,7 +109,11 @@ static void test_real_signal(void) {
     term_interrupt_uninstall();
     sigaction(SIGINT, NULL, &after);
     ASSERT(after.sa_handler == before.sa_handler);
-    ASSERT(after.sa_flags == before.sa_flags);
+    /* Only the POSIX flags: glibc's sigaction() adds its private SA_RESTORER
+     * bit to every action it installs, so a faithfully restored default
+     * handler reads back with that bit set where the untouched one had 0. */
+    const int portable = SA_RESTART | SA_SIGINFO | SA_NOCLDSTOP;
+    ASSERT((after.sa_flags & portable) == (before.sa_flags & portable));
     reset();
 }
 
