@@ -1760,6 +1760,482 @@ def combo_sigterm_under_spinner(tmp):
         s.close()
 
 
+# ---------------------------------------------------------------------------
+# REPL PR 4: slash commands, themes, mods, Monitor
+# ---------------------------------------------------------------------------
+
+def strip_esc(b):
+    """The transcript without escape sequences."""
+    return re.sub(rb"\x1b\[[0-9;?]*[A-Za-z]", b"", b)
+
+
+@case
+def slash_menu(tmp):
+    """'/' on an empty buffer opens the menu; Return runs the selection; no
+    In[n] is used and nothing is evaluated."""
+    s = interactive(tmp, extra=NOHIST)
+    try:
+        s.send("/")
+        s.expect(r">/help +list the commands")
+        s.expect(r"/theme +choose a colour theme")
+        s.send("hi")                              # filter: /history
+        s.drain(0.2)
+        s.send("\r")
+        s.expect(r" 1  /history\r\n")              # commands are history entries
+        wait_prompt(s, 1)                         # the same In[1] again
+        s.send("1+1\r")
+        s.expect(r"Out\[1\]= 2")
+        check(b"Out[0]" not in s.buf and b"$Failed" not in s.buf, "a command was evaluated")
+        s.send("/help\r")
+        s.expect(r"Commands\r\n  /help ")
+        s.expect(r"Keys\r\n")
+        wait_prompt(s, 2)
+        s.send("/nope\r")
+        s.expect(r"Unknown command /nope")
+        wait_prompt(s, 2)
+        s.send("%\r")                             # Out[1], not a command result
+        s.expect(r"Out\[2\]= 2")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def slash_ordinary_operators(tmp):
+    """'/' mid-expression, '/.', '//.' and '//' stay operators; no menu."""
+    s = interactive(tmp, extra=NOHIST)
+    try:
+        start = len(s.buf)
+        s.send("x^2 /. x -> 3\r")
+        s.expect(r"Out\[1\]= 9")
+        s.send("{a, b} //. a -> b\r")
+        s.expect(r"Out\[2\]= \{b, b\}")
+        s.send("16 // Sqrt\r")
+        s.expect(r"Out\[3\]= 4")
+        s.send("6/3\r")
+        s.expect(r"Out\[4\]= 2")
+        check(b">/help" not in s.buf[start:], "the menu opened inside an expression")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def slash_quit_and_readline(tmp):
+    """/quit ends the session with status 0; the readline session runs
+    commands too (no menu)."""
+    s = interactive(tmp, extra=NOHIST)
+    try:
+        s.send("/quit\r")
+        check(s.exit_code() == 0, "/quit did not exit 0")
+    finally:
+        s.close()
+    s = interactive(tmp, extra=dict(NOHIST, MATHILDA_EDITOR="readline"))
+    try:
+        s.send("/timing off\r")
+        s.expect(r"Timing notes off\.")
+        wait_prompt(s, 1)
+        s.send("/theme\r")                        # no picker: the list
+        s.expect(r"Themes\r\n")
+        s.expect(r"/theme NAME chooses one")
+        wait_prompt(s, 1)
+        s.send("2+2\r")
+        s.expect(r"Out\[1\]= 4")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+def theme_session(tmp, depth="24", **kw):
+    extra = dict(NOHIST, MATHILDA_COLOR_DEPTH=depth, **(kw.pop("extra", None) or {}))
+    return interactive(tmp, extra=extra, drop=("NO_COLOR",), **kw)
+
+
+DARK_OUT = b"\x1b[1;38;2;198;120;221mOut["
+LIGHT_OUT = b"\x1b[1;38;2;130;80;223mOut["
+
+
+@case
+def theme_picker_apply(tmp):
+    """The picker previews live, Return applies and saves the theme, and the
+    next session starts with it."""
+    s = theme_session(tmp)
+    try:
+        s.send("1+1\r")
+        s.expect(r"Out\[1\]=")
+        check(DARK_OUT in s.buf, "the default theme is not dark at 24-bit")
+        s.send("/theme\r")
+        s.expect(r"Theme\x1b\[0m")
+        s.expect(r"(?s)Power::infy.*took 3\.21 s")   # the preview
+        s.drain(0.2)
+        start = len(s.buf)
+        s.send("\x1b[B")                            # Down: light, previewed
+        s.drain(0.3)
+        check(b"38;2;130;80;223m" in s.buf[start:], "no live preview of light")
+        s.send("\r")
+        s.expect(r"Theme \x1b\[1mlight\x1b\[0m.*saved in ~/\.mathilda/config")
+        check(b"\x1b[?25h" in s.buf[start:], "the cursor was not shown again")
+        wait_prompt(s, 2)
+        s.send("2+2\r")
+        s.expect(r"Out\[2\]=")
+        check(LIGHT_OUT in s.buf, "the result is not in the light theme")
+        quit_session(s)
+    finally:
+        s.close()
+    with open(os.path.join(tmp, ".mathilda", "config")) as f:
+        check(f.read().strip() == "theme = light", "config not written")
+    s = theme_session(tmp)
+    try:
+        s.send("1+1\r")
+        s.expect(r"Out\[1\]=")
+        check(LIGHT_OUT in s.buf, "the saved theme was not loaded")
+        quit_session(s)
+    finally:
+        s.close()
+    s = theme_session(tmp, extra={"MATHILDA_THEME": "mono"})
+    try:
+        s.send("1+1\r")
+        s.expect(r"Out\[1\]=")
+        check(b"\x1b[1mOut[1]=" in s.buf, "MATHILDA_THEME did not override the file")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def theme_picker_cancel(tmp):
+    """Esc reverts the preview and writes nothing."""
+    s = theme_session(tmp)
+    try:
+        s.send("/theme\r")
+        s.expect(r"took 3\.21 s")
+        s.send("\x1b[B\x1b[B")
+        s.drain(0.3)
+        s.send("\x1b")
+        s.expect(r"\x1b\[\?25h")                     # the picker is gone
+        s.drain(0.2)
+        s.send("1+1\r")
+        m = s.expect(rb"Out\[1\]=\x1b\[0m \x1b\[[0-9;]*m2")   # the result, not the preview
+        i = m.start()
+        check(DARK_OUT in s.buf[i - 40:i + 8], "Esc did not revert to dark: %r" % s.buf[i - 40:i + 8])
+        check(not os.path.exists(os.path.join(tmp, ".mathilda", "config")), "Esc saved the theme")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def theme_depths(tmp):
+    """256 colours, 16 colours, and NO_COLOR (no escape sequence at all)."""
+    s = theme_session(tmp, depth="256")
+    try:
+        s.send("1+1\r")
+        s.expect(r"Out\[1\]=")
+        check(re.search(rb"\x1b\[1;38;5;\d+mOut\[1\]=", s.buf), "no 256-colour Out")
+        quit_session(s)
+    finally:
+        s.close()
+    s = theme_session(tmp, depth="16")
+    try:
+        s.send("1+1\r")
+        s.expect(r"Out\[1\]=")
+        check(b"\x1b[1;35mOut[1]=" in s.buf, "16-colour Out is not the original colour")
+        quit_session(s)
+    finally:
+        s.close()
+    s = interactive(tmp, extra=dict(NOHIST, MATHILDA_COLOR_DEPTH="24", MATHILDA_THEME="light"))
+    try:                                          # NO_COLOR is set by default here
+        s.send("/theme high-contrast\r")
+        s.expect(r"Colour is off in this session")
+        s.send("1+1\r")
+        s.expect(r"Out\[1\]= 2")
+        check(no_sgr(s.buf), "SGR with NO_COLOR")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+MOD_INIT = r'''
+greet[s_] := "Hello, " <> If[s == "", "world", s] <> "!";
+SlashCommand["greet", greet, "say hello: /greet [name]"];
+$Post = (# &);
+'''
+MOD_BAD = "SlashCommand[\"help\", Print];\n1/0;\n"
+MOD_QUIT = "SlashCommand[\"boom\", (Message[General::ovfl]; Abort[]) &, \"always fails\"];\nQuit[];\n"
+
+
+def write_mods(tmp):
+    d = os.path.join(tmp, ".mathilda")
+    os.makedirs(os.path.join(d, "mods"), exist_ok=True)
+    with open(os.path.join(d, "init.m"), "w") as f:
+        f.write(MOD_INIT)
+    with open(os.path.join(d, "mods", "bad.m"), "w") as f:
+        f.write(MOD_BAD)
+    with open(os.path.join(d, "mods", "quitter.m"), "w") as f:
+        f.write(MOD_QUIT)
+
+
+@case
+def mods_load_and_list(tmp):
+    """init.m and mods/*.m load after the banner; failures are reported and
+    the session carries on; /mods lists files, commands and hooks."""
+    write_mods(tmp)
+    s = new_session(tmp, extra=NOHIST)
+    try:
+        s.expect(r"Type / for commands")
+        s.expect(r"SlashCommand::builtin: /help is a built-in command")
+        s.expect(r"mods/bad\.m reported messages; the session continues")
+        s.expect(r"mods/quitter\.m called Quit\[\], ignored")
+        wait_prompt(s, 1)
+        s.send("/greet Ann\r")
+        s.expect(r"Hello, Ann!\r\n")             # text, unquoted
+        wait_prompt(s, 1)
+        s.send("/mods\r")
+        s.expect(r"init\.m +loaded \xc2\xb7 /greet \xc2\xb7 sets \$Post")
+        s.expect(r"mods/bad\.m +2 messages")
+        s.expect(r"mods/quitter\.m +Quit\[\] ignored \xc2\xb7 /boom")
+        s.send("/boom\r")
+        s.expect(r"General::ovfl")
+        s.expect(r"/boom: aborted")
+        wait_prompt(s, 1)
+        s.send("/\x1b[A")                         # the menu lists mod commands too
+        s.expect(r"/greet +say hello")
+        s.send("\x03")
+        s.send("SlashCommand[\"greet\", None]; 1+1\r")
+        s.expect(r"Out\[1\]= 2")
+        s.send("/greet\r")
+        s.expect(r"Unknown command /greet")
+        quit_session(s)
+    finally:
+        s.close()
+    s = interactive(tmp, extra=dict(NOHIST, MATHILDA_MODS="0"))
+    try:
+        check(b"reported messages" not in s.buf, "MATHILDA_MODS=0 still loaded mods")
+        s.send("/mods\r")
+        s.expect(r"MATHILDA_MODS=0: no mods were loaded")
+        quit_session(s)
+    finally:
+        s.close()
+    s = interactive(tmp, extra=dict(NOHIST, MATHILDA_CONFIG_DIR=""))
+    try:
+        s.send("/mods\r")
+        s.expect(r"Mods are off: MATHILDA_CONFIG_DIR is empty")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def monitor_status_line(tmp):
+    """Monitor[expr, mon] shows mon's value in the status line."""
+    s = spinner_session(tmp, colour=False)
+    try:
+        s.send("Monitor[Do[Pause[0.05], {i, 30}], {i, \"of 30\"}]\r")
+        s.expect(r"Out\[1\]= Null", 10.0)
+        vals = [int(v) for v in re.findall(rb"Do \d+/30 [^\r]*?\{(\d+), \"of 30\"\}", s.buf)]
+        check(len(vals) >= 5, "no monitor text in the frames: %r" % s.buf[-600:])
+        check(vals == sorted(vals) and vals[-1] > vals[0], "monitor not advancing: %r" % vals)
+        s.send("Monitor[Total[Range[10]], Print[\"x\"]]\r")   # quick: mon never evaluated
+        s.expect(r"Out\[2\]= 55")
+        check(b"\r\nx\r\n" not in s.buf, "mon was evaluated for a quick input")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def timing_and_statusline_commands(tmp):
+    s = interactive(tmp, extra=NOHIST)
+    try:
+        s.send("/timing off\r")
+        s.expect(r"Timing notes off\.")
+        s.send("Pause[1.1]\r")
+        s.expect(r"Out\[1\]= Null")
+        wait_prompt(s, 2)
+        check(b"took " not in s.buf, "took note with /timing off")
+        s.send("/timing always\r")
+        s.expect(r"every result")
+        s.send("1+1\r")
+        s.expect(r"Out\[2\]= 2\r\ntook \d\.\d\d s")
+        s.send("/statusline\r")
+        s.expect(r"Status line on")
+        s.send("2+2\r")
+        s.expect(r"last \d+\.\d\d s")
+        s.send("/statusline off\r")
+        s.expect(r"Status line off")
+        s.send("/clear\r")
+        s.expect(r"\x1b\[H\x1b\[2J")
+        wait_prompt(s, 4)
+        quit_session(s)
+    finally:
+        s.close()
+
+
+# Ctrl-Z needs job control: pty.fork() makes the child a session leader whose
+# process group is orphaned, and the kernel discards stop signals there. A
+# tiny "shell" runs Mathilda in its own foreground group, reports a stop, and
+# brings it back (tcsetpgrp, then SIGCONT) on SIGUSR1.
+JOB_SHELL = r'''
+import os, signal, sys
+signal.signal(signal.SIGTTOU, signal.SIG_IGN)
+pid = os.fork()
+if pid == 0:
+    os.setpgid(0, 0)
+    os.tcsetpgrp(0, os.getpgrp())
+    os.execv(sys.argv[1], sys.argv[1:])
+try:
+    os.setpgid(pid, pid)
+except OSError:
+    pass
+try:
+    os.tcsetpgrp(0, pid)
+except OSError:
+    pass
+def fg(sig, frame):
+    os.tcsetpgrp(0, pid)
+    os.kill(pid, signal.SIGCONT)
+signal.signal(signal.SIGUSR1, fg)
+os.write(1, b"[job %d]\r\n" % pid)
+while True:
+    p, st = os.waitpid(pid, os.WUNTRACED)
+    if os.WIFSTOPPED(st):
+        os.tcsetpgrp(0, os.getpgrp())
+        os.write(1, b"[stopped]\r\n")
+        continue
+    os._exit(os.WEXITSTATUS(st) if os.WIFEXITED(st) else 128 + os.WTERMSIG(st))
+'''
+
+
+def job_session(tmp, **kw):
+    global WRAPPER
+    path = os.path.join(tmp, "jobshell.py")
+    with open(path, "w") as f:
+        f.write(JOB_SHELL)
+    saved = WRAPPER
+    WRAPPER = [sys.executable, path] + saved
+    try:
+        s = new_session(tmp, **kw)
+    finally:
+        WRAPPER = saved
+    s.expect(r"\[job (\d+)\]")
+    wait_prompt(s, 1)
+    return s
+
+
+@case
+def ctrl_z_at_prompt(tmp):
+    """Ctrl-Z at the prompt: cooked terminal and paste mode off while stopped;
+    on fg raw mode again and the buffer redrawn."""
+    s = job_session(tmp, extra=NOHIST)
+    try:
+        s.send("abc")
+        s.drain(0.2)
+        s.send("\x1a")
+        s.expect(r"\[stopped\]")
+        lf = tty_flags(s.fd)
+        check((lf & termios.ICANON) and (lf & termios.ECHO), "terminal not cooked while stopped")
+        check(b"\x1b[?2004l" in s.buf[-80:], "bracketed paste left on while stopped")
+        start = len(s.buf)
+        os.kill(s.pid, signal.SIGUSR1)
+        s.expect(r"In\[1\]:= (\x1b\[K)?abc")
+        s.drain(0.2)
+        check(not (tty_flags(s.fd) & termios.ICANON), "not raw after fg")
+        check(b"\x1b[?2004h" in s.buf[start:], "paste mode not back after fg")
+        s.send("+1\r")
+        s.expect(r"Out\[1\]= 1 \+ abc")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def ctrl_z_under_spinner(tmp):
+    """Ctrl-Z during an evaluation: the line erased and ECHO back while
+    stopped; on fg ECHO off again, the spinner resumes, the result arrives."""
+    s = job_session(tmp, extra={"MATHILDA_HISTFILE": "", "NO_COLOR": "1"})
+    try:
+        s.send("Pause[2]\r")
+        s.drain(0.7)
+        check(BRAILLE.search(s.buf), "spinner not running")
+        check(not (tty_flags(s.fd) & termios.ECHO), "ECHO on under the spinner")
+        s.send("\x1a")
+        s.expect(r"\[stopped\]")
+        check((tty_flags(s.fd) & termios.ECHO), "ECHO not restored while stopped")
+        before = s.buf[:s.buf.rfind(b"[stopped]")]
+        last_frame = before.rfind(b"\xe2\xa0")
+        check(re.search(rb"\r +\r", before[last_frame:]), "spinner line not erased before the stop")
+        quiet = len(s.buf)
+        s.drain(0.5)
+        check(not BRAILLE.search(s.buf[quiet:]), "drew while stopped")
+        os.kill(s.pid, signal.SIGUSR1)
+        s.drain(0.6)
+        check(BRAILLE.search(s.buf[quiet:]), "spinner did not resume")
+        check(not (tty_flags(s.fd) & termios.ECHO), "ECHO not cleared again after fg")
+        s.expect(r"Out\[1\]= Null", 10.0)
+        wait_prompt(s, 2)
+        s.send("1+1\r")
+        s.expect(r"Out\[2\]= 2")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def cursor_query_no_wait(tmp):
+    """A terminal that never answers ESC [ 6 n costs nothing: the query is
+    not waited for, and after two unanswered ones it is not sent again."""
+    s = interactive(tmp, extra=NOHIST)
+    try:
+        gaps = []
+        for n in range(1, 6):
+            s.send("%d\r" % n)
+            s.expect(r"Out\[%d\]= %d" % (n, n))
+            t0 = time.monotonic()
+            wait_prompt(s, n + 1)
+            gaps.append(time.monotonic() - t0)
+        check(s.buf.count(b"\x1b[6n") <= 2, "queried %d times" % s.buf.count(b"\x1b[6n"))
+        gaps.sort()
+        check(gaps[2] < 0.06, "prompts took %r s (a blocking query waits 80 ms)" % gaps)
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def cursor_query_answered(tmp):
+    """A terminal that answers: the reply is consumed, never typed."""
+    s = new_session(tmp, extra=NOHIST)
+    try:
+        s.expect(r"\x1b\[6n")
+        s.send("\x1b[24;1R")                     # the reply, after the prompt
+        wait_prompt(s, 1)
+        s.send("7\r")
+        s.expect(r"Out\[1\]= 7")
+        s.expect(r"\x1b\[6n")                    # answered once: asked again
+        s.send("\x1b[24;1R")
+        wait_prompt(s, 2)
+        s.send("8\r")
+        s.expect(r"Out\[2\]= 8")
+        check(b"24;1R" not in strip_esc(s.buf).replace(b"\x1b", b""), "the reply was typed")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def redo_key(tmp):
+    s = interactive(tmp, extra=NOHIST)
+    try:
+        s.send("1+2")
+        s.send("\x1f")                            # undo
+        s.send("\x1b_")                           # Alt-_: redo
+        s.send("\r")
+        s.expect(r"Out\[1\]= 3")
+        quit_session(s)
+    finally:
+        s.close()
+
+
 def harness_can_fail(tmp):
     """Deliberately wrong expectation: must FAIL (MATHILDA_PTY_SELFTEST=1)."""
     s = new_session(tmp)

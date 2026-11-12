@@ -6711,3 +6711,23 @@ foreach(_pr3_suite term_progress term_spinner term_status)
     endif()
     add_test(NAME ${_pr3_suite}_tests COMMAND ${_pr3_suite}_tests)
 endforeach()
+
+# ---- REPL commands, themes and mods (REPL PR 4) -----------------------------
+# term_theme / term_config / term_slash are part of the terminal layer every
+# suite links (term_color reads the theme); frontend.c holds the SlashCommand
+# and Monitor builtins core_init registers. term_menus_tests drives the
+# editor's slash menu and picker through the VT emulator.
+target_sources(mathilda_common PRIVATE
+    ../src/term/term_theme.c
+    ../src/term/term_config.c
+    ../src/term/term_slash.c
+    ../src/frontend.c)
+add_executable(term_menus_tests test_term_menus.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(term_menus_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(term_menus_tests gmp m ${ECM_LIB})
+    add_dependencies(term_menus_tests build_ecm)
+else()
+    target_link_libraries(term_menus_tests gmp m)
+endif()
+add_test(NAME term_menus_tests COMMAND term_menus_tests)
