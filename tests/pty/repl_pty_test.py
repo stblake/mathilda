@@ -1182,6 +1182,58 @@ def result_colour(tmp):
         check(SGR.sub(b"", c) == p, "coloured %r differs from plain %r" % (c, p))
 
 
+@case
+def editor_narrow(tmp):
+    """On a 14-column terminal the popup gives way to inline cycling."""
+    s = new_session(tmp, extra=NOHIST, cols=14)
+    try:
+        wait_prompt(s, 1)
+        s.send("Sin\t\t")                     # Sin, then SinIntegral
+        s.drain(0.3)
+        s.send("[1.]\r")
+        s.expect(r"0\.946")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def editor_latency_e2e(tmp):
+    """Key written to the pty -> the editor's redraw read back, with a
+    200-line buffer. Reported, not gated: the scheduler of a loaded machine
+    dominates it (tests/test_term_editor_latency.c is the gate)."""
+    s = interactive(tmp, extra=NOHIST)
+    try:
+        lines = ",\n".join("f%d[x_] := Sin[x] + %d x^2 (* line %d *)" % (i, i, i) for i in range(200))
+        data = ("\x1b[200~{" + lines + "\x1b[201~").encode()
+        for i in range(0, len(data), 512):     # in chunks: the redraw must be read
+            s.send(data[i:i + 512])            # meanwhile, or both sides block
+            s.drain(0.02)
+        s.drain(0.5)
+        for _ in range(100):
+            s.send("\x1b[A")
+        s.drain(0.5)
+        times = []
+        for i in range(200):
+            key = b"a" if i % 2 == 0 else b"\x7f"
+            mark = len(s.buf)
+            t0 = time.monotonic()
+            s.send(key)
+            deadline = t0 + 2.0
+            while len(s.buf) == mark and time.monotonic() < deadline:
+                s._read_some(0.05)
+            times.append((time.monotonic() - t0) * 1000.0)
+            s.drain(0.002)
+        times.sort()
+        print("    e2e keystroke->redraw (ms): p50 %.2f  p95 %.2f  max %.2f"
+              % (times[len(times) // 2], times[len(times) * 95 // 100], times[-1]))
+        s.send("\x03")
+        wait_prompt(s, 1)
+        quit_session(s)
+    finally:
+        s.close()
+
+
 def tty_flags(fd):
     attrs = termios.tcgetattr(fd)
     return attrs[3]               # lflag

@@ -6679,7 +6679,7 @@ target_sources(mathilda_common PRIVATE
     ../src/term/term_render.c
     ../src/term/term_editor.c
     ../src/term/term_editor_tty.c)
-foreach(_mth_term_suite term_highlight term_editor)
+foreach(_mth_term_suite term_highlight term_editor term_editor_latency)
     add_executable(${_mth_term_suite}_tests test_${_mth_term_suite}.c $<TARGET_OBJECTS:mathilda_common>)
     target_include_directories(${_mth_term_suite}_tests PRIVATE ../src)
     if(USE_ECM)
