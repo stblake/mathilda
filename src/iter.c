@@ -40,6 +40,7 @@
 
 #include "modular.h"
 #include "iter.h"
+#include "term/term_progress.h"   /* the REPL spinner's loop progress */
 #include "message.h"
 #include "print.h"
 #include "attr.h"
@@ -660,7 +661,9 @@ Expr* builtin_do(Expr* res) {
     if (is_n_times) {
         /* Pure repeat-N-times form. */
         int64_t n = is_inf ? 0 : imax_e->data.integer;
+        int ptok = mth_progress_push(SYM_Do, (long)n);
         for (int64_t i = 0; is_inf || i < n; i++) {
+            mth_progress_step(ptok, (long)i);
             Expr* eval_expr = evaluate(expr);
             Expr* rv = NULL;
             IterFlowAction f = iter_flow_classify(eval_expr, SYM_Do, &rv);
@@ -670,9 +673,12 @@ Expr* builtin_do(Expr* res) {
             if (f == ITER_FLOW_CONTINUE)   {                            expr_free(eval_expr); continue; }
             expr_free(eval_expr);
         }
+        mth_progress_pop(ptok);
     } else if (is_list_iter) {
         /* {i, {a, b, c, ...}} -- iterate over explicit list elements. */
+        int ptok = mth_progress_push(SYM_Do, (long)list_e->data.function.arg_count);
         for (size_t i = 0; i < list_e->data.function.arg_count; i++) {
+            mth_progress_step(ptok, (long)i);
             iter_bind(var_sym, list_e->data.function.args[i]);
             Expr* eval_expr = evaluate(expr);
             Expr* rv = NULL;
@@ -683,6 +689,7 @@ Expr* builtin_do(Expr* res) {
             if (f == ITER_FLOW_CONTINUE)   {                            expr_free(eval_expr); continue; }
             expr_free(eval_expr);
         }
+        mth_progress_pop(ptok);
     } else {
         /*
          * {i, imin, imax, di} -- arithmetic progression.
@@ -696,7 +703,10 @@ Expr* builtin_do(Expr* res) {
          */
         double val = min_val;
         Expr* curr_e = expr_copy(imin_e);
+        int ptok = mth_progress_push(SYM_Do, is_inf ? 0 : mth_progress_range_count(min_val, max_val, di_val));
+        long pdone = 0;
         while (iter_range_continue(is_real, is_inf, curr_e, imax_e, val, max_val, di_val)) {
+            mth_progress_step(ptok, pdone++);
             Expr* i_val = is_real ? expr_new_real(val) : expr_copy(curr_e);
             iter_bind(var_sym, i_val);
 
@@ -741,6 +751,7 @@ Expr* builtin_do(Expr* res) {
 
             if (is_real || !iter_real_value(curr_e, &val)) val += di_val;
         }
+        mth_progress_pop(ptok);
         if (curr_e) expr_free(curr_e);
     }
 

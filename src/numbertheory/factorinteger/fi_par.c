@@ -35,6 +35,7 @@
 #endif
 
 #include "fi_internal.h"
+#include "term/term_progress.h"   /* worker count for the REPL spinner */
 #include "core.h"
 
 #include <stdlib.h>
@@ -87,6 +88,7 @@ void fi_run_parallel(void (*fn)(void*), void* jobs, size_t stride, int n) {
         sigfillset(&all);
         pthread_sigmask(SIG_SETMASK, &all, &old);
         tc_async_defer_push();
+        mth_progress_workers_add(n);
         for (int i = 0; i < n; i++) {
             job[i].fn = fn;
             job[i].arg = (char*)jobs + (size_t)i * stride;
@@ -94,6 +96,7 @@ void fi_run_parallel(void (*fn)(void*), void* jobs, size_t stride, int n) {
         }
         pthread_sigmask(SIG_SETMASK, &old, NULL);
         for (int i = 0; i < n; i++) if (started[i]) pthread_join(th[i], NULL);
+        mth_progress_workers_add(-n);
         for (int i = 0; i < n; i++) if (!started[i]) fn(job[i].arg);
         tc_async_defer_pop();
         tc_check_deadline();               /* a timeout due now unwinds here */

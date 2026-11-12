@@ -15,7 +15,7 @@ This file is the entry point. Detailed material lives under [`docs/spec/`](docs/
 | Known limitations | [`docs/spec/limitations.md`](docs/spec/limitations.md) |
 | Technical implementation details | [`docs/spec/architecture.md`](docs/spec/architecture.md) |
 | Performance notes (poly, deriv, limit) | [`docs/spec/performance.md`](docs/spec/performance.md) |
-| Interactive REPL (line editor, interrupt, history, completion, colour) | [`docs/spec/repl.md`](docs/spec/repl.md) |
+| Interactive REPL (line editor, interrupt, history, completion, colour, status line) | [`docs/spec/repl.md`](docs/spec/repl.md) |
 
 For a deeper architectural treatment (subsystem boundaries, evaluation pipeline, memory ownership rules, extension recipes), see the top-level [`SPEC.md`](SPEC.md).
 

@@ -3,6 +3,7 @@
 #include "funcprog.h"
 #include "sparse/sparse.h"   /* Thread over a SparseArray */
 #include "core.h"        /* tc_register_unwind_counter */
+#include "term/term_progress.h"   /* the REPL spinner's loop progress */
 #include "term/term_interrupt.h" /* the interactive interrupt flag */
 #include "permutations.h" /* perm_group_elements: Permute[expr, group] */
 #include "eval.h"
@@ -3270,14 +3271,19 @@ static IterRunResult iter_run(ExprBuf* buf, IterStepFn step_fn, void* ctx,
                               size_t max_history, Expr** out_early) {
     *out_early = NULL;
     int64_t apps = 0;
+    /* Progress for the spinner, labelled with the builtin that called us
+     * (Nest, NestList, Fold, FixedPoint, ...); a safety cap is no total. */
+    int ptok = mth_progress_push(eval_dispatch_head(), limit_is_safety ? 0 : (long)limit);
+    IterRunResult rr = ITER_RUN_OK;
     while (1) {
         if (apps >= limit) {
             if (limit_is_safety) {
                 ebuf_free_all(buf);
-                return ITER_RUN_SAFETY;
+                rr = ITER_RUN_SAFETY;
             }
-            return ITER_RUN_OK;
+            break;
         }
+        mth_progress_step(ptok, (long)apps);
         Expr* next = NULL;
         IterStep s = step_fn(buf, ctx, &next);
         /* Catch/Throw: an in-flight Throw produced by the step (via f applied
@@ -3287,7 +3293,8 @@ static IterRunResult iter_run(ExprBuf* buf, IterStepFn step_fn, void* ctx,
         if (next && eval_is_inflight_unwind(next)) {
             ebuf_free_all(buf);
             *out_early = next;
-            return ITER_RUN_EARLY;
+            rr = ITER_RUN_EARLY;
+            break;
         }
         if (s == ITER_STEP_CONT) {
             ebuf_push(buf, next);
@@ -3299,15 +3306,18 @@ static IterRunResult iter_run(ExprBuf* buf, IterStepFn step_fn, void* ctx,
                 ebuf_drop_front(buf, buf->count - max_history);
         } else if (s == ITER_STEP_HALT_ADD) {
             ebuf_push(buf, next);
-            return ITER_RUN_OK;
+            break;
         } else if (s == ITER_STEP_RETURN) {
             ebuf_free_all(buf);
             *out_early = next;
-            return ITER_RUN_EARLY;
+            rr = ITER_RUN_EARLY;
+            break;
         } else { /* ITER_STEP_HALT */
-            return ITER_RUN_OK;
+            break;
         }
     }
+    mth_progress_pop(ptok);
+    return rr;
 }
 
 /* ------------------- Nest / NestList ------------------- */

@@ -1250,9 +1250,15 @@ def editor_restores_terminal(tmp):
         s.send("Pause[1]\r")
         s.drain(0.4)
         lflag = tty_flags(s.fd)
-        check((lflag & termios.ICANON) and (lflag & termios.ISIG) and (lflag & termios.ECHO),
+        # cooked during the evaluation; ECHO is off because the status line
+        # owns the terminal then (it echoes ^C itself)
+        check((lflag & termios.ICANON) and (lflag & termios.ISIG),
               "cooked mode not restored during the evaluation")
+        check(not (lflag & termios.ECHO), "ECHO left on under the status line")
         wait_prompt(s, 2)
+        lflag = tty_flags(s.fd)
+        check(not (lflag & termios.ICANON) and not (lflag & termios.ISIG),
+              "not back in raw mode at the next prompt")
         os.kill(s.pid, signal.SIGTERM)
         st = s.finish(5)
         check(os.WIFSIGNALED(st) and os.WTERMSIG(st) == signal.SIGTERM,
@@ -1289,6 +1295,463 @@ def editor_readline_fallback(tmp):
         s.expect(r"\^C")
         wait_prompt(s, 3)
         quit_session(s)
+    finally:
+        s.close()
+
+
+# ---------------------------------------------------------------------------
+# REPL PR 3: the live status line (spinner), progress, took note, status line
+# ---------------------------------------------------------------------------
+
+BRAILLE = re.compile(rb"\xe2\xa0[\x80-\xbf]")
+EL = b"\x1b[2K"
+
+
+def spinner_session(tmp, colour=True, **kw):
+    extra = dict({"MATHILDA_HISTFILE": ""}, **(kw.pop("extra", None) or {}))
+    drop = tuple(kw.pop("drop", ())) + (("NO_COLOR",) if colour else ())
+    if not colour:
+        extra.setdefault("NO_COLOR", "1")
+    return interactive(tmp, extra=extra, drop=drop, **kw)
+
+
+def segment(s, start):
+    """The transcript from `start` to the current match position."""
+    return s.buf[start:s.pos]
+
+
+def frames(data):
+    """The spinner frames drawn in `data` (colour mode): text after EL up to
+    the next \r."""
+    out = []
+    for chunk in data.split(EL)[1:]:
+        f = chunk.split(b"\r")[0]
+        if BRAILLE.search(f):
+            out.append(f)
+    return out
+
+
+def strip_sgr(b):
+    return re.sub(rb"\x1b\[[0-9;]*m", b"", b)
+
+
+@case
+def spinner_shows(tmp):
+    s = spinner_session(tmp)
+    try:
+        start = len(s.buf)
+        s.send("Pause[1]\r")
+        s.expect(r"Out\[1\]=")
+        seg = segment(s, start)
+        fs = frames(seg)
+        check(len(fs) >= 5, "expected ~8 frames in 1 s, got %d: %r" % (len(fs), seg[-400:]))
+        plain = strip_sgr(fs[-1])
+        check(b"Pause" in plain and b"cpu" in plain and b"mem" in plain,
+              "frame lacks label/cpu/mem: %r" % plain)
+        # the line is erased before Out[1]
+        check(seg.rstrip(b"\x1b[1;35mOut[1]=").endswith(b"\r" + EL) or
+              (b"\r" + EL + b"\x1b[1;35mOut[1]=") in s.buf, "spinner not erased before Out")
+        s.expect(r"took 1\.\d\d s")
+        wait_prompt(s, 2)
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def spinner_quick_no_flicker(tmp):
+    s = spinner_session(tmp)
+    try:
+        start = len(s.buf)
+        for n, inp in enumerate(("1+1", 'Print["hi"]; 2', "Table[i^2, {i, 1000}];",
+                                 "Expand[(1 + x)^20];"), 1):
+            s.send(inp + "\r")
+            s.expect(r"Out\[%d\]=" % n)
+            wait_prompt(s, n + 1)
+        seg = s.buf[start:]
+        check(not BRAILLE.search(seg) and EL not in seg,
+              "a quick result drew the spinner: %r" % seg[-500:])
+        check(b"hi\r\n" in seg, "Print output missing")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def spinner_print_coexist(tmp):
+    s = spinner_session(tmp)
+    try:
+        s.send('Do[Print["line", i]; Pause[0.15], {i, 8}]\r')
+        s.expect(r"Out\[1\]=")
+        seg = s.buf
+        # every printed line arrives whole, at the start of a line, after an erase
+        # of the spinner (or right after the input)
+        for i in range(1, 9):
+            m = re.search(rb"(\r\n|\r\x1b\[2K|\r|\x1b\[\?2004l)line%d\r\n" % i, seg)
+            check(m, "line%d not printed cleanly: %r" % (i, seg[-600:]))
+        # no frame is glued to printed text
+        check(not re.search(rb"line\d[^\r]*\xe2\xa0", seg), "spinner overwrote output")
+        check(len(frames(seg)) >= 3, "no spinner between prints")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def spinner_stderr_order(tmp):
+    s = spinner_session(tmp, colour=False)
+    try:
+        s.send('f::m = "err `1`"; Do[Print["out", i]; Message[f::m, i]; Pause[0.1], {i, 5}]\r')
+        s.expect(r"Out\[1\]=")
+        text = s.buf.decode("utf-8", "replace")
+        order = re.findall(r"out\d|err \d", text)
+        want = [x for i in range(1, 6) for x in ("out%d" % i, "err %d" % i)]
+        check(order == want, "stdout/stderr order %r, want %r" % (order, want))
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def spinner_progress(tmp):
+    s = spinner_session(tmp, colour=False)
+    try:
+        s.send("Do[Pause[0.04], {i, 40}]\r")
+        s.expect(r"Out\[1\]=", 10.0)
+        m = re.findall(rb"Do (\d+)/40 \xe2\x96\x95[^\r]*?\xe2\x96\x8f +(\d+)%", s.buf)
+        check(len(m) >= 5, "no progress bar frames: %r" % s.buf[-500:])
+        done = [int(a) for a, _ in m]
+        check(done == sorted(done) and done[-1] > done[0], "progress not advancing: %r" % done)
+        # nested: the outer loop and the one inside it
+        s.send("Table[Pause[0.02]; i j, {i, 3}, {j, 10}];\r")
+        s.expect(r"Out\[2\]=", 10.0)
+        check(re.search(rb"Table \d/3 \xe2\x96\xb8 Table \d+/10", s.buf), "no nested progress")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def spinner_ctrlc(tmp):
+    s = spinner_session(tmp)
+    try:
+        s.send("Do[i, {i, 10^9}]\r")
+        s.drain(0.7)
+        check(frames(s.buf), "spinner not running before Ctrl-C")
+        t0 = time.monotonic()
+        s.send("\x03")
+        s.expect(r"Out\[1\]=\S* (\x1b\[[0-9;]*m)*\$Aborted", 2.0)
+        check(time.monotonic() - t0 < 1.0, "abort took too long")
+        # the transcript is PR 1's: ^C, newline, then the result -- the spinner
+        # line erased first and no stale frame left behind
+        check(re.search(rb"\r\x1b\[2K\^C\r\n\x1b\[1;35mOut\[1\]=", s.buf),
+              "unexpected Ctrl-C transcript: %r" % s.buf[-300:])
+        s.send("1+1\r")
+        s.expect(r"Out\[2\]=\S* (\x1b\[[0-9;]*m)*2")
+        wait_prompt(s, 3)
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def spinner_double_ctrlc(tmp):
+    s = spinner_session(tmp, colour=False)
+    try:
+        s.send("AbortProtect[Pause[20]]\r")
+        s.drain(0.5)
+        s.send("\x03")
+        s.drain(0.3)
+        s.send("\x03")
+        code = s.exit_code(timeout=2.0)
+        check(code == 130, "double Ctrl-C exit status %d, want 130" % code)
+        tail_b = s.buf[-200:]
+        check(tail_b.endswith(b"^C\r\n"), "did not end with ^C newline: %r" % tail_b)
+        # each Ctrl-C shows as "^C" + newline (the tty echo is off under the
+        # spinner), and no frame is left on screen: anything drawn after the
+        # first one was blanked (\r spaces \r) before the second
+        first = s.buf.find(b"^C\r\n")
+        check(first > 0 and s.buf.count(b"^C\r\n") == 2, "want two ^C lines: %r" % tail_b)
+        after = s.buf[first + 4:-4]
+        if BRAILLE.search(after):
+            check(re.search(rb"\r +\r$", after), "stale frame left: %r" % tail_b)
+    finally:
+        s.close()
+
+
+@case
+def spinner_no_color_plain(tmp):
+    s = spinner_session(tmp, colour=False)
+    try:
+        s.send("Pause[0.6]\r")
+        s.expect(r"Out\[1\]=")
+        wait_prompt(s, 2)
+        quit_session(s)
+        check(BRAILLE.search(s.buf), "no plain spinner with NO_COLOR")
+        check(no_sgr(s.buf), "escape sequence with NO_COLOR")
+    finally:
+        s.close()
+
+
+@case
+def spinner_dumb_off(tmp):
+    s = spinner_session(tmp, colour=False, term="dumb")
+    try:
+        s.send("Pause[0.6]\r")
+        s.expect(r"Out\[1\]= Null")
+        wait_prompt(s, 2)
+        quit_session(s)
+        check(not BRAILLE.search(s.buf) and b"\r\r" not in s.buf.split(b"Pause[0.6]")[1].split(b"Out[1]")[0],
+              "spinner with TERM=dumb: %r" % s.buf[-300:])
+    finally:
+        s.close()
+
+
+@case
+def spinner_disabled_env(tmp):
+    s = spinner_session(tmp, extra={"MATHILDA_SPINNER": "0"})
+    try:
+        s.send("Pause[0.6]\r")
+        s.expect(r"Out\[1\]=")
+        wait_prompt(s, 2)
+        quit_session(s)
+        check(not BRAILLE.search(s.buf) and EL not in s.buf, "spinner with MATHILDA_SPINNER=0")
+    finally:
+        s.close()
+
+
+@case
+def spinner_ascii_locale(tmp):
+    s = spinner_session(tmp, colour=False, extra={"LANG": "C", "LC_ALL": "C", "LC_CTYPE": "C"})
+    try:
+        s.send("Pause[0.6]\r")
+        s.expect(r"Out\[1\]=")
+        wait_prompt(s, 2)
+        quit_session(s)
+        check(not BRAILLE.search(s.buf), "braille in a C locale")
+        check(re.search(rb"\r[|/\\-] Pause \| ", s.buf), "no ASCII spinner: %r" % s.buf[-300:])
+    finally:
+        s.close()
+
+
+@case
+def spinner_narrow(tmp):
+    s = spinner_session(tmp, colour=False, cols=30)
+    try:
+        s.send("Do[Pause[0.05], {i, 20}]\r")
+        s.expect(r"Out\[1\]=", 10.0)
+        lines = [l for l in s.buf.split(b"\r") if BRAILLE.search(l)]
+        check(lines, "no frames at 30 columns")
+        for l in lines:
+            w = len(l.decode("utf-8").rstrip(" "))
+            check(w <= 29, "frame %d cells wide at 30 columns: %r" % (w, l))
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def spinner_dialog(tmp):
+    s = spinner_session(tmp, colour=False)
+    try:
+        s.send("Dialog[]\r")
+        s.expect(r"In\[\d+\]:= ")
+        start = len(s.buf)
+        s.send("Pause[0.5]; 5\r")
+        s.expect(r"Out\[\d+\]= 5")
+        check(BRAILLE.search(s.buf[start:]), "no spinner inside Dialog")
+        s.expect(r"In\[\d+\]:= ")
+        s.send("Return[7]\r")
+        s.expect(r"Out\[1\]= 7", 5.0)
+        then_still_works(s, 2)
+    finally:
+        s.close()
+
+
+@case
+def statusline_env(tmp):
+    s = spinner_session(tmp, colour=False)
+    try:
+        s.send("1+1\r")
+        s.expect(r"Out\[1\]= 2")
+        wait_prompt(s, 2)
+        check(b"last " not in s.buf, "status line shown by default")
+        quit_session(s)
+    finally:
+        s.close()
+    s = spinner_session(tmp, colour=False, extra={"MATHILDA_STATUSLINE": "1"})
+    try:
+        s.send("1+1\r")
+        s.expect(r"Out\[1\]= 2")
+        s.expect(r"last \d+\.\d\d s \xc2\xb7 mem \d+ [KMG]B \xc2\xb7 Global`\r\n")
+        wait_prompt(s, 2)
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def took_line_cpu(tmp):
+    s = spinner_session(tmp, colour=False)
+    try:
+        s.send("Do[Null, {2*10^6}]; Pause[1]\r")
+        s.expect(r"Out\[1\]=")
+        s.expect(r"took 1\.\d\d s \xc2\xb7 cpu 0\.\d\d s( \xc2\xb7 peak \d+ [KMG]B)?\r\n")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+# ---------------------------------------------------------------------------
+# The editor and the status line together: the editor owns the terminal while
+# reading, the status thread while evaluating, and each hands it back cleanly.
+# ---------------------------------------------------------------------------
+
+def is_raw(fd):
+    lf = tty_flags(fd)
+    return not (lf & termios.ICANON) and not (lf & termios.ISIG)
+
+
+@case
+def combo_multiline_then_spinner(tmp):
+    """A multi-line edit, then a slow evaluation: frames drawn, erased before
+    Out, and the next prompt is the editor again (raw, history recall)."""
+    s = spinner_session(tmp)
+    try:
+        s.send("Do[Pause[0.1],\r")
+        s.drain(0.2)
+        s.send("{i, 6}]")
+        s.drain(0.1)
+        start = len(s.buf)
+        s.send("\r")
+        s.expect(r"Out\[1\]=")
+        seg = segment(s, start)
+        check(len(frames(seg)) >= 3, "no spinner after a multi-line edit: %r" % seg[-300:])
+        check(b"\r\x1b[2K\x1b[1;35mOut[1]=" in seg, "spinner not erased before Out")
+        wait_prompt(s, 2)
+        s.drain(0.1)
+        check(is_raw(s.fd), "the editor did not get the terminal back")
+        s.send("\x1b[A")                 # Up on an empty buffer: history
+        s.drain(0.2)
+        check(b"{i, 6}]" in strip_sgr(s.buf[s.pos:]), "history recall after the spinner failed")
+        s.send("\x03")                   # Ctrl-C at the prompt clears the buffer
+        s.send("1+1\r")
+        s.expect(r"Out\[2\]=\S* (\x1b\[[0-9;]*m)*2")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def combo_print_after_edit(tmp):
+    """Print under the spinner, after an edited input, arrives whole and in
+    order with the messages."""
+    s = spinner_session(tmp, colour=False)
+    try:
+        s.send('Do[Print["p", i]; Message[General::ovfl]; Pause[0.12],\r')
+        s.drain(0.2)
+        s.send("{i, 4}]")
+        s.drain(0.2)
+        start = len(s.buf)
+        s.send("\r")
+        s.expect(r"Out\[1\]=", 10.0)
+        text = s.buf[start:].decode("utf-8", "replace")
+        order = re.findall(r"p\d(?=\r\n)|General::ovfl(?=:)", text)
+        want = [x for i in range(1, 5) for x in ("p%d" % i, "General::ovfl")]
+        check(order == want, "order %r, want %r" % (order, want))
+        for i in range(1, 5):
+            check(re.search(rb"(\r\n|\r|\x1b\[\?2004l)p%d\r\n" % i, s.buf), "p%d not on its own line" % i)
+        wait_prompt(s, 2)
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def combo_dialog_editor(tmp):
+    """Dialog[] under the spinner reads through the editor: the spinner is
+    suspended (no frames while the dialog prompt waits, raw mode there) and
+    resumed for the dialog's own evaluations."""
+    s = spinner_session(tmp, colour=False, extra={"MATHILDA_SPINNER_DELAY_MS": "0"})
+    try:
+        s.send("Pause[0.3]; Dialog[]\r")
+        s.expect(r"In\[\d+\]:= ", 5.0)
+        quiet = len(s.buf)
+        s.drain(0.5)
+        check(not BRAILLE.search(s.buf[quiet:]), "spinner drew over the dialog prompt")
+        check(is_raw(s.fd), "the dialog prompt is not the editor")
+        s.send("f[\r")                  # the dialog's input is multi-line too
+        s.drain(0.2)
+        s.send("Pause[0.4]; 5]\r")
+        s.expect(r"Out\[\d+\]= f\[5\]", 5.0)
+        check(BRAILLE.search(s.buf[quiet:]), "no spinner for the dialog's evaluation")
+        s.expect(r"In\[\d+\]:= ")
+        s.send("Return[7]\r")
+        s.expect(r"Out\[1\]= 7", 5.0)
+        then_still_works(s, 2)
+    finally:
+        s.close()
+
+
+@case
+def combo_ctrlc_multiline(tmp):
+    """Ctrl-C under the spinner after a multi-line input: $Aborted, the
+    PR 1 transcript, the editor back in raw mode with an empty buffer."""
+    s = spinner_session(tmp)
+    try:
+        s.send("Do[i,\r")
+        s.drain(0.2)
+        s.send("{i, 10^9}]\r")
+        s.drain(0.7)
+        check(frames(s.buf), "spinner not running before Ctrl-C")
+        s.send("\x03")
+        s.expect(r"Out\[1\]=\S* (\x1b\[[0-9;]*m)*\$Aborted", 2.0)
+        check(re.search(rb"\r\x1b\[2K\^C\r\n\x1b\[1;35mOut\[1\]=", s.buf),
+              "unexpected Ctrl-C transcript: %r" % s.buf[-300:])
+        wait_prompt(s, 2)
+        s.drain(0.1)
+        check(is_raw(s.fd), "editor not in raw mode after the abort")
+        s.send("2+2\r")
+        s.expect(r"Out\[2\]=\S* (\x1b\[[0-9;]*m)*4")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def combo_double_ctrlc_restores(tmp):
+    """A double Ctrl-C exit under the spinner leaves a cooked, echoing
+    terminal with bracketed paste off."""
+    s = spinner_session(tmp, colour=False)
+    try:
+        s.send("AbortProtect[Pause[20]]\r")
+        s.drain(0.5)
+        s.send("\x03")
+        s.drain(0.3)
+        s.send("\x03")
+        code = s.exit_code(timeout=2.0)
+        check(code == 130, "exit status %d, want 130" % code)
+        lf = tty_flags(s.fd)
+        check((lf & termios.ICANON) and (lf & termios.ECHO) and (lf & termios.ISIG),
+              "terminal not restored after the double Ctrl-C")
+    finally:
+        s.close()
+
+
+@case
+def combo_sigterm_under_spinner(tmp):
+    """SIGTERM during a spinner evaluation: terminal restored (ECHO back)."""
+    s = spinner_session(tmp, colour=False)
+    try:
+        s.send("Pause[5]\r")
+        s.drain(0.6)
+        check(not (tty_flags(s.fd) & termios.ECHO), "ECHO not off under the spinner")
+        os.kill(s.pid, signal.SIGTERM)
+        st = s.finish(5)
+        check(os.WIFSIGNALED(st) and os.WTERMSIG(st) == signal.SIGTERM,
+              "SIGTERM did not end the process by the signal: %r" % st)
+        lf = tty_flags(s.fd)
+        check((lf & termios.ICANON) and (lf & termios.ECHO), "terminal not restored")
     finally:
         s.close()
 

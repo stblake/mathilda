@@ -83,4 +83,12 @@ bool      term_interrupt_take_reading(void);
 void      term_interrupt_on_signal_at(long now_ms);
 void      term_interrupt_set_exit_fn(void (*fn)(int status));
 
+/* ---- for the REPL status thread (PR 3) ------------------------------------
+ * The number of Ctrl-Cs the handler has taken while EVALUATING (first taps
+ * only; the double tap exits). One sig_atomic_t store per keypress, read
+ * racily by the status thread, which prints the "^C" the tty no longer
+ * echoes while it owns the terminal. Independent of the pending flag, which
+ * the evaluator may consume before the status thread looks. */
+long term_interrupt_eval_count(void);
+
 #endif /* MATHILDA_TERM_INTERRUPT_H */

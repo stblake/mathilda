@@ -217,3 +217,73 @@ takes the selected input and then acts on it.
 - Performance gate: `tests/test_term_editor_latency.c` (200-line buffer,
   slowest keystroke under 2 ms, at most one write per keystroke, no
   allocation in steady-state editing).
+
+## Status line while evaluating (spinner)
+
+An evaluation that runs longer than 200 ms gets one live line at the bottom
+of the terminal, redrawn about ten times a second and erased before the
+result:
+
+```
+⠹ Integrate · Together · 3.2s · cpu 3.1s · mem 412 MB (2.5%) · peak 1.17 GB
+⠼ Table 3400/10000 ▕███▍      ▏ 34% · eta 6.4s · 2.1s · cpu 2.1s · mem 96 MB (0.6%)
+```
+
+- **What it shows:** the head of the input (the right-hand side of `x = ...`,
+  the last call of a `;` sequence), the builtin running now, loop progress,
+  elapsed and CPU time, resident memory as a share of the machine's RAM, the
+  peak, and the number of running worker threads (FactorInteger, NDArray and
+  multiprecision linear-algebra kernels). Memory turns yellow at 60 % and red
+  at 85 %.
+- **Progress:** `Do`, `Table`, `Sum`, `Product`, `Nest`, `NestList`, `Fold`,
+  `FoldList`, `NestWhile` and `FixedPoint` report their step and total. For
+  nested loops the outer loop and the one directly inside it are shown
+  (`Table 2/3 ▸ Table 4/10`), and the bar is their combined fraction. An ETA
+  appears after one second of progress. An unknown total (`Do[..., Infinity]`)
+  shows a count and no bar. `Map` is not tracked: it builds `f[e1], f[e2], ...`
+  and the evaluator evaluates them afterwards. Numeric fast paths (compiled
+  `Do`/`Table` bodies) finish without reporting.
+- **Output while it runs:** `Print`, messages and anything else written to
+  stdout or stderr (including C libraries and `Run[]` children) go through the
+  status thread, which erases the line, writes the output and redraws, so they
+  never overwrite each other. The order of stdout and stderr is kept. A
+  partial line (`WriteString` without a newline) is never drawn over.
+- **Quick results** draw nothing: the output is byte-for-byte what it was
+  without the spinner.
+- **Narrow terminals:** the line never exceeds the width minus one column.
+  Segments are dropped in this order: running builtin, peak, cpu, threads,
+  eta, memory, progress, elapsed; then the label is cut. The width is re-read
+  on every frame, so resizing works.
+- **Ctrl-C** behaves exactly as described above. The line is erased and `^C`
+  is printed before `Out[n]= $Aborted`. Typed-ahead text is not echoed while
+  the line is shown; it appears at the next prompt.
+- **When it is off:** `MATHILDA_SPINNER=0`; `TERM` unset, empty or `dumb`; any
+  of stdin, stdout and stderr not a terminal, or stdout and stderr on
+  different terminals; builds without threads or readline; pipe mode and
+  `-file`. With `NO_COLOR` the line is plain and uses no escape sequences.
+  Without a UTF-8 locale it uses ASCII (`| Integrate | 3.2s | ...`,
+  `[###.......]`).
+
+## The took note and the status line
+
+- The dim note under a result that took at least one second also gives the
+  CPU time and the peak resident memory during the evaluation:
+  `took 3.21 s · cpu 3.18 s · peak 412 MB`.
+- `MATHILDA_STATUSLINE=1` prints a dim line after every result:
+  `last 0.02 s · mem 96 MB · Global``. It is off by default.
+
+## For contributors: the terminal handover and progress hooks
+
+- The line editor owns the terminal from the prompt until it returns a line.
+  `term_status_begin()` and `term_status_end()` (`src/term/term_status.c`),
+  called immediately around `evaluate` in `process_input`, own it during the
+  evaluation. At both handover points the tty is in its cooked mode, fd 1 and
+  fd 2 are the terminal, and the cursor is at column 0. A reader called
+  during an evaluation (Dialog) calls `term_status_suspend()` and
+  `term_status_resume()` around the read.
+- A loop reports progress with `mth_progress_push(head, total)`, once per
+  iteration `mth_progress_step(tok, done)` (one store), and
+  `mth_progress_pop(tok)` (`src/term/term_progress.h`). A parallel driver
+  brackets its threads with `mth_progress_workers_add(n)` and `(-n)`.
+  `mth_progress_set_memory_limit()` is there for a future
+  `MemoryConstrained`.

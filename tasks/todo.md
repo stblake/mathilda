@@ -1491,3 +1491,25 @@ Commits: c30f8472 (phase 1), 45bb2573 (2), 52e9fe72 (3), 6fdc5a2a (4), 226139ee 
 - **Latency gate** (200-line buffer, 120x40, colour, 3000 keys): mean 22.6 us, p50 25 us, p99 29 us, max 34 us; whole-buffer relex 69 us; 0 allocations; never more than one write per key. End-to-end through a pty: p50 0.05-0.07 ms, p95 0.10 ms, max 0.22 ms.
 - **Leaks (macOS leaks):** term_highlight, term_editor, term_editor_latency suites 0; interactive session (multi-line, popup, Ctrl-R, undo, paste, Ctrl-C, resize, Dialog, coloured results) 0.
 - **Follow-ups:** Up/Down move by logical line, not by wrapped row; a resize on terminals that reflow may leave a stale row above the area; Dialog reads during an evaluation need PR 3's status line paused (their side of the hand-over).
+
+## REPL PR 3: spinner, status line, progress (branch feat/repl-status)
+Plan: thoughts/shared/plans/2026-11-11-repl-modernize-pr3.md. Research: thoughts/shared/research/2026-11-11-repl-modernize-pr3.md.
+Stacked on feat/repl-modernize (a0c27991). Shared files append-only: own CMake block, own changelog heading, own repl.md sections; term_color append-only; term_interrupt one counter.
+- [x] Phase 1: term_progress stack; hooks in Do, Table, Sum, Product, iter_run (Nest/NestList/Fold/FoldList/NestWhile/FixedPoint); worker counter in five parallel drivers; term_progress_tests; perf check
+- [x] Phase 2: term_spinner layout (fit/drop order, colour/plain/ASCII, bar, ETA, took and status lines); TermTone appended to term_color; term_spinner_tests
+- [x] Phase 3: term_status forwarder thread (pipe for fd 1/2, ECHO off, 200 ms delay, 10 Hz, col-0 rule), Ctrl-C ^C/quiet period, double-tap exit fn, fatal-signal and atexit cleanup, Dialog suspend/resume, took/status lines in repl.c; term_status_tests; 15 new pty cases
+- [x] Phase 4: docs/spec/repl.md sections, changelog heading, Mathilda_spec.md row
+- [x] Verify: make clean && make; check-*; USE_READLINE=0; ctest -LE nightly; pty; pipe/-file invariance vs PR 1; leaks; perf gate; TSan driver
+
+### Review (REPL PR 3, 2026-11-11)
+Commits: b6abee2e (progress stack), e5ff0bb9 (layout), 985c4f3e (forwarder + REPL), a4697067 (docs), 72db8cb6 (check-c99 guard).
+- **Build:** make clean && make: the 6 FLINT header warnings only, none new. USE_READLINE=0 scratch build: same warnings, no readline linked, fgets loop unchanged, no spinner.
+- **check-*:** check-c99 (after 72db8cb6), check-messages, check-packed-aware, check-menu-ids, check-pipe-protocol pass.
+- **ctest -LE nightly:** 648/648 (PR 1: 645 + term_progress/term_spinner/term_status), 0 FAIL. Built with -DCMAKE_C_FLAGS=-O2 -j4 for disk space.
+- **pty:** 47/47 (32 PR 1 + 15 new).
+- **Invariance vs PR 1 (a0c27991):** 500-request NDJSON and 600-statement -file corpora: stdout and stderr byte-identical, no ESC bytes; pty goldens from 7e7bc9fb pass.
+- **Leaks (macOS leaks):** interactive session with spinner/Print/progress/Dialog/Ctrl-C: 0 (PR 1: 0). term_spinner_tests 0, term_status_tests 0, term_progress_tests 7 nodes / 480 B: the deliberate TimeConstrained timeout through nested loops (documented siglongjmp leak) plus one 64 B node in a Nest case that does not reproduce in isolation or in the binary.
+- **Perf (median of 9 interleaved -file runs, PR 1 vs branch; A/A in brackets):** fib +0.87% (+0.32%), Do 4M -0.33% (+0.59%), Expand -0.08% (+1.69%), Integrate x12 +1.04% (-0.93%). Loop extras: FoldList 1.5M -0.34% (+1.22%), NestList 1.5M +1.07% (+1.06%), 1000 Nest calls -0.04% (-1.71%).
+- **TSan** (Apple clang, driver over term_status/spinner/progress with stubs): only the 4 by-design racy reads (progress depth/slots, worker count, dispatch head); 0 with those suppressed.
+- **Deviations:** no MemoryConstrained exists (memory share is of RAM; hook provided); Map not tracked (does not evaluate its elements); status line off by default; NO_READLINE builds get no spinner.
+- **Rough edges / follow-ups:** Run[] children see a non-tty stdout during evaluation; Ctrl-Z mid-evaluation leaves the line and ECHO-off until resume/shell reset; SIGKILL cannot restore ECHO; the live head can flicker between builtins; Linux not run locally (CI runs the pty suite); FoldList[g, x, Range[300000]] segfaults (deep nesting) in PR 1 and here alike.

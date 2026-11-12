@@ -27,6 +27,7 @@
  */
 
 #include "sum.h"
+#include "term/term_progress.h"   /* the REPL spinner's loop progress */
 #include "checked_int.h"   /* ci_add_i64: integer index step */
 #include "sum_internal.h"   /* sum_body_has_opaque_index — shared with sum_gosper.c */
 #include "ndarray.h"   /* is_ndarray — see sum_body_is_array */
@@ -248,10 +249,13 @@ static Expr* expand_list(Expr* f, Expr* var, Expr* list) {
     size_t count = 0;
 
     IterShadow saved = iter_spec_shadow(var);
+    int ptok = mth_progress_push(SYM_Sum, (long)n);
     for (size_t i = 0; i < n; i++) {
+        mth_progress_step(ptok, (long)i);
         iter_bind(var, list->data.function.args[i]);
         terms[count++] = evaluate(f);
     }
+    mth_progress_pop(ptok);
     iter_spec_restore(var, saved);
 
     return fold_plus(terms, count);
@@ -290,8 +294,10 @@ static Expr* expand_range_first(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr
     Expr* curr_e = expr_copy(imin);
     bool overflow = false;
 
+    int ptok = mth_progress_push(SYM_Sum, mth_progress_range_count(min_val, max_val, di_val));
     while (iter_range_continue(is_real, /*is_inf=*/false, curr_e, imax,
                                val, max_val, di_val)) {
+        mth_progress_step(ptok, (long)count);
         if ((int64_t)count >= SUM_MAX_FINITE_TERMS) { overflow = true; break; }
 
         if (count == cap) { cap *= 2; terms = realloc(terms, sizeof(Expr*) * cap); }
@@ -325,6 +331,7 @@ static Expr* expand_range_first(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr
          * the loop always advances. */
         if (is_real || !iter_real_value(curr_e, &val)) val += di_val;
     }
+    mth_progress_pop(ptok);
     expr_free(curr_e);
     expr_free(first);   /* unused only on an empty range */
     iter_spec_restore(var, saved);

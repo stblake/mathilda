@@ -53,6 +53,8 @@ static volatile sig_atomic_t g_last_ms = 0;
 /* stderr is a terminal: cached at install time because isatty() is not
  * async-signal-safe. Used to end the tty's echoed "^C" with a newline. */
 static volatile sig_atomic_t g_stderr_tty = 0;
+/* First-tap Ctrl-Cs while EVALUATING (term_interrupt_eval_count). */
+static volatile sig_atomic_t g_eval_interrupts = 0;
 
 static void default_exit(int status) { _Exit(status); }
 static void (*g_exit_fn)(int) = default_exit;
@@ -93,6 +95,7 @@ void term_interrupt_on_signal_at(long now_ms) {
             g_exit_fn(130);
             break;   /* reached only with a test exit function */
         }
+        g_eval_interrupts = (sig_atomic_t)((g_eval_interrupts + 1) & 0x3fffffff);
         mth_interrupt_request();
 #ifndef _WIN32
         /* The tty driver echoes "^C" with no newline; without this the
@@ -164,3 +167,9 @@ void term_interrupt_uninstall(void) {
 }
 
 #endif
+
+/* ---- for the REPL status thread (PR 3) ----------------------------------- */
+
+long term_interrupt_eval_count(void) {
+    return (long)g_eval_interrupts;
+}

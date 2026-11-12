@@ -51,6 +51,7 @@
 #include "mathieu_arb.h"
 #include "sf_machine_mathieu.h"
 #include "core.h"            /* tc_async_defer_push / pop, tc_check_deadline */
+#include "term/term_progress.h"   /* worker count for the REPL spinner */
 
 #include <math.h>
 #include <stdlib.h>
@@ -104,10 +105,12 @@ static void mathieu_par2(void (*fn)(void*), void* a0, void* a1, int par) {
         tc_async_defer_push();
         job[0].fn = fn; job[0].arg = a0;
         job[1].fn = fn; job[1].arg = a1;
+        mth_progress_workers_add(2);
         for (int i = 0; i < 2; i++)
             started[i] = pthread_create(&th[i], NULL, mathieu_job_run, &job[i]) == 0;
         pthread_sigmask(SIG_SETMASK, &old, NULL);
         for (int i = 0; i < 2; i++) if (started[i]) pthread_join(th[i], NULL);
+        mth_progress_workers_add(-2);
         for (int i = 0; i < 2; i++) if (!started[i]) fn(job[i].arg);
         tc_async_defer_pop();
         tc_check_deadline();               /* a timeout due now unwinds here */
