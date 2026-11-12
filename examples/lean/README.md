@@ -56,7 +56,8 @@ Skipped when no `lake` is found.
 ## Recorded output
 
 [`showcase_output.txt`](showcase_output.txt) is a full run on an Apple M-series machine
-(Lean v4.35.0-rc3, no Mathlib). Total wall time was 42.5 s; each Lean run is about 0.5 s
+(Lean v4.35.0-rc3, no Mathlib), regenerated with rows 21-29 on a loaded machine (load
+average 13-35): total wall time 118.3 s, about 60-65 s at load average 6-10; each Lean run is about 0.5 s
 warm plus about 1.1 s for the kernel replay (v0.6519; it was 15-25 s before the replay), and
 the first run of a session is 1-3 s slower. Excerpt (timings from an earlier run):
 
