@@ -27,6 +27,15 @@ brLogPartDerivative::usage = "brLogPartDerivative[T, cv, F, B, terms] is Sum c (
 brLogPartDerivative[T_Association, cv_Association, F_Association, B_Association, terms_List] :=
   Fold[afPlus[F, #1, afScale[F, #2[[1]], brLogDerivative[T, cv, F, B, #2[[2]]]]] &, afZero[B], terms];
 
+brNormalizeGenerator::usage = "brNormalizeGenerator[F, B, u, vars] divides the generator u (coordinates over F) by the common content of its coordinates -- the lcm of their denominators over the gcd of their numerators, a polynomial in vars (x, the tower symbols, theta) and the residue-field generator. The weight-1 log term Log[u] - (1/m) Log[Norm(u)] is unchanged by scaling u by any element of k(theta) (Log[g] and (1/m) Log[g^m] cancel), so this only shrinks the answer.";
+brNormalizeGenerator[F_Association, B_Association, u_List, vars_List] := Module[{t = Together /@ u, dens, L, nums, g},
+  dens = Denominator /@ t;
+  L = Fold[PolynomialLCM, 1, dens];
+  nums = Expand[Together[# L]] & /@ t;
+  g = Fold[PolynomialGCD, 0, Select[nums, # =!= 0 &]];
+  If[g === 0, Return[u]];
+  rc[F, Together[#/g]] & /@ nums];
+
 brComponentLogPart::usage = "brComponentLogPart[T, cv, c] is the log part of the normal (reduced) component c Y: <|\"terms\" -> {{coef, u, normU}, ...} (L1 = Sum coef (Log[u] - Log[normU]/m), u a coordinate list, normU its norm), \"remainder\" -> c - [L']_1 (in k(theta)), \"F\" -> field, \"B\" -> basis|>. Throws NonElementary from the resultant criterion or a residue divisor of infinite order, Decline when special-place residues are nonzero (not yet supported) or a residue/specialization step is undecided.";
 brComponentLogPart[T_Association, cv_Association, c_] := Module[
   {nr, spec, rs, F, B, terms = {}, Nj, u, Lp, rem, vars},
@@ -44,6 +53,7 @@ brComponentLogPart[T_Association, cv_Association, c_] := Module[
     If[u === None,
       throwNonElementary["residue divisor is not torsion (N delta not principal at the only possible order N)",
         <|"N" -> Nj|>]];
+    u = brNormalizeGenerator[F, B, u, rs["vars"]];
     AppendTo[terms, {kc[F, rs["basis"][[j]]/Nj], u, afNorm[F, B, u]}],
     {j, Length[rs["basis"]]}];
   Lp = brLogPartDerivative[T, cv, F, B, terms[[All, {1, 2}]]];
@@ -118,7 +128,7 @@ brComponentLogPartSpecial[T_Association, cv_Association, c_, nr_Association, spe
     If[gen === None, throwInternal["brGenus0DivisorNotPrincipal"]];
     (* back to theta: u -> 1/(theta - a), Yh -> Y (theta - a)^(-k) *)
     expr = Together[(afToY[fr["Bu"], gen, Yh] /. {u -> 1/(th - a)}) /. Yh -> Y (th - a)^(-fr["k"])];
-    gen = afFromY[F, Bth, expr, Y];
+    gen = brNormalizeGenerator[F, Bth, afFromY[F, Bth, expr, Y], vars];
     AppendTo[terms, {kc[F, qb["basis"][[j]]], gen, afNorm[F, Bth, gen]}],
     {j, Length[qb["basis"]]}];
   brLogPartFinish[T, cv, c, F, Bth, terms]];

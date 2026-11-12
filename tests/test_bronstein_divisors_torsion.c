@@ -105,6 +105,19 @@ static void test_log_part(void) {
     BR_TRUE("Module[{lp = brComponentLogPart[T147, cv147, c147], F, B},"
             " F = lp[\"F\"]; B = lp[\"B\"];"
             " Head[brLogPartFinish[T147, cv147, c147, F, B, lp[\"terms\"]]] === Association]");
+    /* brNormalizeGenerator: the k(theta)-content of the coordinates is divided out */
+    BR_EQ("brNormalizeGenerator[fieldFn[{x}], cv147[\"B\"], {2 x (x + brT1), 2 x}, {x, brT1}]", "{brT1 + x, 1}");
+    BR_EQ("brNormalizeGenerator[fieldFn[{x}], cv147[\"B\"], {(x + brT1)/x, 1/x}, {x, brT1}]", "{brT1 + x, 1}");
+    BR_EQ("brNormalizeGenerator[fieldFn[{x}], cv147[\"B\"], {0, 3/x}, {x, brT1}]", "{0, 1}");
+    BR_EQ("brNormalizeGenerator[fieldFn[{x}], cv147[\"B\"], {0, 0}, {x, brT1}]", "{0, 0}");
+    BR_EQ("brNormalizeGenerator[fieldFn[{x}], cv147[\"B\"], {x + brT1, 1}, {x, brT1}]", "{brT1 + x, 1}");
+    /* property: the ratio to the input is free of the curve (an element of k(theta)) and
+     * the weight-1 log term's derivative is unchanged */
+    BR_TRUE("SeedRandom[82]; And @@ Table[Module[{u = {RandomInteger[{1, 3}] x + RandomInteger[{-2, 2}] brT1 + 1, RandomInteger[{1, 2}]},"
+            "   g = (RandomInteger[{1, 3}] x + brT1)/(x + RandomInteger[{1, 4}]), v},"
+            "   v = brNormalizeGenerator[fieldFn[{x}], cv147[\"B\"], g u, {x, brT1}];"
+            "   Together[v[[1]] u[[2]] - v[[2]] u[[1]]] === 0],"
+            " {20}]");
     /* property: the y-component of D Log[p + q y] has a log part leaving remainder 0 */
     BR_TRUE("SeedRandom[81]; And @@ Table[Module[{p = RandomInteger[{1, 3}] x + RandomInteger[{-2, 2}] brT1 + RandomInteger[{1, 3}],"
             "   q = RandomInteger[{1, 2}], f, cY},"

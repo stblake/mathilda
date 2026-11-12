@@ -948,3 +948,16 @@ are 98 s spent in the final PossibleZeroQ), then the P0 items.
 - Stress (600): 592 OK, 2 DECLINE (genus-1 special residues, gap #9), 6 SLOWCHECK
   (5–6k-leaf m ≥ 3 answers, gap #6/#7). Cascade 120/120.
 
+
+### 2026-11-12 — generator content removal (v0.6523, gap #6/#7 part 1)
+
+- `brNormalizeGenerator` (LogPart.m) divides each log generator u by the
+  k(θ)-content of its coordinates (lcm of the denominators over the gcd of the
+  numerators). The weight-1 term Log[u] − (1/m) Log[Norm u] does not change when u
+  is scaled by g ∈ k(θ), because Log[g] − (1/m) Log[g^m] is a constant. So this only
+  shrinks the answer, and the exact per-component verification still runs on the
+  normalised form.
+- Worst m = 4 case: log arguments of 342/375 leaves become 60/75; the answer goes
+  from ~6k to 1.8k leaves.
+- Stress (600): 598 OK, 2 DECLINE (gap #9), **0 SLOWCHECK**.
+- Still open under #6/#7: RootSum per-orbit presentation; `Log[-E^x]` → x.
