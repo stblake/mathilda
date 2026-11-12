@@ -4,7 +4,7 @@
  * The REPL loop and Dialog read their lines through a TermReader, never
  * through readline or fgets directly, so the backend can be swapped: the
  * stdio backend here (the NO_READLINE fgets loop), the readline adapter
- * (term_readline.h), and later an in-tree editor. Pure C99, no readline.
+ * (term_readline.h), and the in-tree editor (term_editor_tty.h). Pure C99, no readline.
  */
 #ifndef MATHILDA_TERM_INPUT_H
 #define MATHILDA_TERM_INPUT_H
@@ -12,7 +12,11 @@
 #include <stdbool.h>
 
 typedef enum { TERM_READ_OK, TERM_READ_EOF, TERM_READ_INTERRUPTED } TermReadStatus;
-typedef enum { TERM_BACKEND_STDIO, TERM_BACKEND_READLINE } TermBackendKind;
+typedef enum {
+    TERM_BACKEND_STDIO,
+    TERM_BACKEND_READLINE,
+    TERM_BACKEND_EDITOR       /* the in-tree editor, term_editor_tty.h */
+} TermBackendKind;
 
 typedef struct TermReader TermReader;
 

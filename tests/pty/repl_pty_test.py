@@ -826,12 +826,13 @@ def complete_no_eval(tmp):
         s.close()
 
 
-# Readline's own bracketed-paste toggles, already emitted before this work.
-BRACKETED_PASTE = re.compile(rb"\x1b\[\?2004[hl]")
+# Colour is SGR (ESC [ ... m). The in-tree editor also emits cursor movement,
+# erase and position-report sequences, which are not colour.
+SGR = re.compile(rb"\x1b\[[0-9;]*m")
 
 
 def no_sgr(data):
-    return b"\x1b[" not in BRACKETED_PASTE.sub(b"", data)
+    return SGR.search(data) is None
 
 
 def colour_session(tmp, **kw):
@@ -933,6 +934,205 @@ def took_line(tmp):
         s.expect(r"Out\[2\]=.*2")
         wait_prompt(s, 3)
         check(b"took" not in s.buf[start:], "took shown for a fast result")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+# ---------------------------------------------------------------------------
+# The in-tree editor (REPL PR 2). It is the default on a terminal; the cases
+# above already run through it. These cover what only the editor does.
+# ---------------------------------------------------------------------------
+
+NOHIST = {"MATHILDA_HISTFILE": ""}
+
+
+@case
+def editor_is_default(tmp):
+    s = interactive(tmp, extra=NOHIST)
+    try:
+        check("Tab completes, Ctrl-R" in s.text(), "the editor banner line is missing")
+        check(b"\x1b[?2004h" in s.buf, "bracketed paste not enabled")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def editor_multiline_updown(tmp):
+    """Up moves between the buffer's lines; editing there keeps the rest."""
+    s = interactive(tmp, extra=NOHIST)
+    try:
+        s.send("f[\r")
+        s.drain(0.2)
+        s.send("2]")
+        s.drain(0.2)
+        s.send("\x1b[A")            # Up: into the first line, not history
+        s.send("\x05")              # Ctrl-E
+        s.send("1,")
+        s.drain(0.2)
+        s.send("\r")
+        s.expect(r"Out\[1\]= f\[1, 2\]")
+        wait_prompt(s, 2)
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def editor_force_return(tmp):
+    """Esc then Return evaluates an incomplete buffer."""
+    s = interactive(tmp, extra=NOHIST)
+    try:
+        s.send("f[")
+        s.drain(0.2)
+        s.send("\x1b\r")
+        wait_prompt(s, 2, timeout=10)
+        check(b"Out[1]" not in s.buf, "an incomplete input produced a result")
+        s.send("1+1\r")
+        s.expect(r"Out\[2\]= 2")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def editor_emacs_keys(tmp):
+    s = interactive(tmp, extra=NOHIST)
+    try:
+        s.send("+1\x01")             # Ctrl-A: to the start
+        s.send("1")
+        s.send("\r")
+        s.expect(r"Out\[1\]= 2")
+        wait_prompt(s, 2)
+        s.send("x + junk\x17\x17")  # Ctrl-W twice: "x "
+        s.send("40\r")
+        s.expect(r"Out\[2\]= 40 x")
+        wait_prompt(s, 3)
+        s.send("2+2\x1f")           # Ctrl-_ undoes the typing
+        s.send("3+3\r")
+        s.expect(r"Out\[3\]= 6")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def editor_paste(tmp):
+    """A pasted Return does not submit; the pasted block is one input."""
+    s = interactive(tmp, extra=NOHIST)
+    try:
+        s.send("\x1b[200~f[\r1]\x1b[201~")
+        s.drain(0.4)
+        check(b"Out[1]" not in s.buf, "the paste was submitted")
+        s.send("\r")
+        s.expect(r"Out\[1\]= f\[1\]")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def editor_typeahead(tmp):
+    """Keys typed during an evaluation become the next input."""
+    s = interactive(tmp, extra=NOHIST)
+    try:
+        s.send("Pause[0.6]\r")
+        s.drain(0.1)
+        s.send("1+1\r")
+        s.expect(r"Out\[2\]= 2", 10)
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def editor_utf8(tmp):
+    s = interactive(tmp, extra=NOHIST)
+    try:
+        s.send("\"\u4e2d\" <> \"a\"\r".encode("utf-8"))
+        s.expect('Out\\[1\\]= "\u4e2da"'.encode("utf-8"))
+        quit_session(s)
+    finally:
+        s.close()
+
+
+@case
+def editor_resize(tmp):
+    """A resize redraws the buffer at the new width."""
+    s = interactive(tmp, extra=NOHIST)
+    try:
+        s.send("abc")
+        s.drain(0.2)
+        mark = len(s.buf)
+        fcntl.ioctl(s.fd, termios.TIOCSWINSZ, struct.pack("HHHH", 20, 60, 0, 0))
+        try:
+            os.kill(s.pid, signal.SIGWINCH)
+        except OSError:
+            pass
+        s.drain(0.4)
+        check(b"In[1]:= abc" in s.buf[mark:], "no redraw after the resize: %r" % s.buf[mark:])
+        s.send("\r")
+        s.expect(r"Out\[1\]= abc")
+        quit_session(s)
+    finally:
+        s.close()
+
+
+def tty_flags(fd):
+    attrs = termios.tcgetattr(fd)
+    return attrs[3]               # lflag
+
+
+@case
+def editor_restores_terminal(tmp):
+    """Raw mode while reading; cooked mode while evaluating and after a SIGTERM."""
+    s = interactive(tmp, extra=NOHIST)
+    try:
+        lflag = tty_flags(s.fd)
+        check(not (lflag & termios.ICANON) and not (lflag & termios.ISIG),
+              "not in raw mode at the prompt")
+        s.send("Pause[1]\r")
+        s.drain(0.4)
+        lflag = tty_flags(s.fd)
+        check((lflag & termios.ICANON) and (lflag & termios.ISIG) and (lflag & termios.ECHO),
+              "cooked mode not restored during the evaluation")
+        wait_prompt(s, 2)
+        os.kill(s.pid, signal.SIGTERM)
+        st = s.finish(5)
+        check(os.WIFSIGNALED(st) and os.WTERMSIG(st) == signal.SIGTERM,
+              "SIGTERM did not end the process by the signal: %r" % st)
+        lflag = tty_flags(s.fd)
+        check((lflag & termios.ICANON) and (lflag & termios.ECHO),
+              "terminal left in raw mode after SIGTERM")
+        check(s.buf.endswith(b"\x1b[?2004l") or b"\x1b[?2004l" in s.buf[-64:],
+              "bracketed paste left on after SIGTERM")
+    finally:
+        s.close()
+
+
+@case
+def editor_readline_fallback(tmp):
+    """MATHILDA_EDITOR=readline gives PR 1's readline session."""
+    s = interactive(tmp, extra=dict(NOHIST, MATHILDA_EDITOR="readline"))
+    try:
+        check("Tab completes, Ctrl-R" not in s.text(), "editor banner with the readline fallback")
+        check(b"\x1b[6n" not in s.buf, "the editor ran despite MATHILDA_EDITOR=readline")
+        s.send("f[\r")
+        s.drain(0.2)
+        s.send("1]\r")
+        s.expect(r"Out\[1\]= f\[1\]")
+        wait_prompt(s, 2)
+        s.send("Integr\t")
+        s.expect(r"Integrate")
+        s.send("[x, x]\r")
+        s.expect(r"Out\[2\]= 1/2 x\^2")
+        wait_prompt(s, 3)
+        s.send("1+")
+        s.drain(0.2)
+        s.send("\x03")
+        s.expect(r"\^C")
+        wait_prompt(s, 3)
         quit_session(s)
     finally:
         s.close()

@@ -1474,7 +1474,7 @@ Plan: thoughts/shared/plans/2026-11-11-repl-modernize-pr2.md. Research: thoughts
 Rules: no version bump; append-only edits to tests/CMakeLists.txt, the changelog and docs/spec/repl.md; term_color.{c,h} untouched; repl.c edits limited to the reader selection, the banner and one result-print line.
 
 - [x] Phase 1: term_width, term_highlight (incremental per-line lexer, symbol classes, styles); unit tests; CMake block
-- [ ] Phase 2: term_render (grid diff, one write), term_editor (multi-line, keymap, history edges, smart/forced Return, kill/yank, undo, paste, brackets), term_editor_tty (raw mode, restore paths, SIGWINCH, DSR, MATHILDA_EDITOR); repl.c wiring; unit + pty tests; milestone 1
+- [x] Phase 2: term_render (grid diff, one write), term_editor (multi-line, keymap, history edges, smart/forced Return, kill/yank, undo, paste, brackets), term_editor_tty (raw mode, restore paths, SIGWINCH, DSR, MATHILDA_EDITOR); repl.c wiring; unit + pty tests; milestone 1
 - [ ] Phase 3: completion popup (Tab, filter, docstring row, options first, placement, degradation); tests
 - [ ] Phase 4: Ctrl-R history list; tests
 - [ ] Phase 5: result colouring (expr_print_to_string, safe subset); tests

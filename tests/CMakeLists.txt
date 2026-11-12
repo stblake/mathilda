@@ -6675,8 +6675,11 @@ add_test(NAME term_color_tests COMMAND term_color_tests)
 # cases for the editor live in tests/pty/repl_pty_test.py (repl_pty_test).
 target_sources(mathilda_common PRIVATE
     ../src/term/term_width.c
-    ../src/term/term_highlight.c)
-foreach(_mth_term_suite term_highlight)
+    ../src/term/term_highlight.c
+    ../src/term/term_render.c
+    ../src/term/term_editor.c
+    ../src/term/term_editor_tty.c)
+foreach(_mth_term_suite term_highlight term_editor)
     add_executable(${_mth_term_suite}_tests test_${_mth_term_suite}.c $<TARGET_OBJECTS:mathilda_common>)
     target_include_directories(${_mth_term_suite}_tests PRIVATE ../src)
     if(USE_ECM)

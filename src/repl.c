@@ -25,6 +25,7 @@
 #include "term/term_input.h"
 #include "term/term_interrupt.h"
 #include "term/term_readline.h"
+#include "term/term_editor_tty.h"
 #include "term/term_history.h"
 #include "term/term_color.h"
 #include "mtime.h"
@@ -184,10 +185,12 @@ static void repl_process(const char* line, int line_number) {
 
 static void repl_banner(TermBackendKind kind) {
     printf("\nMathilda " MATHILDA_VERSION_STRING " - A small, open source computer algebra system.\n\n");
-    if (kind == TERM_BACKEND_READLINE) {
+    if (kind != TERM_BACKEND_STDIO) {
         printf("This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.\n\n");
         printf("Press Return to evaluate. An open bracket, string or comment continues\n");
         printf("on the next line; press Esc then Return to force evaluation.\n");
+        if (kind == TERM_BACKEND_EDITOR)
+            printf("Tab completes, Ctrl-R searches the history, Ctrl-_ undoes.\n");
         printf("Ctrl-C interrupts an evaluation (twice within a second force-quits).\n");
         printf("Exit by evaluating Quit[] or pressing Ctrl-D.\n\n");
     } else {
@@ -1452,8 +1455,17 @@ int main(int argc, char** argv) {
                 free(hp);
                 if (!hist) hist = term_history_open(NULL, hmax);
             }
-            TermReadlineOptions ro = { !script, hist };
-            rd = term_reader_open_readline(&ro);
+            /* The in-tree editor on a capable terminal; readline when it is
+             * declined (MATHILDA_EDITOR=readline, TERM=dumb) or cannot open. */
+            if (!script && term_editor_select(getenv("MATHILDA_EDITOR"), getenv("TERM"),
+                                              dio.interactive, isatty(fileno(stdout)) != 0)) {
+                TermEditorOptions eo = { hist, term_color_stdout() };
+                rd = term_reader_open_editor(&eo);
+            }
+            if (!rd) {
+                TermReadlineOptions ro = { !script, hist };
+                rd = term_reader_open_readline(&ro);
+            }
             interactive_rl = rd && !script;
         }
 #endif
