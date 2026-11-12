@@ -3917,8 +3917,11 @@ stages come after `LogByParts` and before `ParallelMixedTower`, as profile stage
 `Integrate\`CascadeGateQ["Trager" | "Bronstein", f, x]` exposes the gates:
 - Trager: an x-dependent radical, and nothing but rational operations and rational
   powers, with no algebraic constant;
-- Bronstein: a radical whose radicand contains a `Log`/`Exp` kernel of x, and no
-  other functions.
+- Bronstein: only rational operations, rational powers, `Log` and `Exp`, no
+  algebraic constant. Then either a radical whose radicand contains a `Log`/`Exp`
+  kernel of x (Shape A), or, since v0.6529, a radical of x together with any
+  `Log`/`Exp` kernel of x, in either nesting (Shape B: `Log[x] Sqrt[1 + x^3]`,
+  `E^(x Sqrt[x^3 + 1])/x`).
 
 **Budgets.** `$TragerCascadeBudget` and `$BronsteinCascadeBudget` hold the
 wall-clock budget in seconds (default 10 each; `Infinity` removes it). When a budget

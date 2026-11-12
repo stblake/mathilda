@@ -924,6 +924,20 @@ can neither close nor certify them. These are N3 material for the benchmark.
 
 **Order of work:** 1–5 → 8a → 8 → 6–7 → 9 → 10 → 11 → 13–14 → 17 → 16 (with 15) → 12 → 18.
 
+### 2026-11-12 — Shape B in the cascade, benchmark (v0.6529)
+
+- The cascade gate admits Shape B.
+- The shootout's class B has the `bgenus` and `bcurve` families.
+  - The elementary families close 70/70.
+  - Hard failures: 0. The one FALSE_CERT found was fixed at its root, in the C
+    field decision's handling of a non-canonical log argument.
+- **Remaining Shape B gaps:**
+  - **Compositum** (#14). The perturbed families add a second radical, and Trager's
+    KummerSplit does not yet reach Bronstein.
+  - **A curve-monomial kernel with further monomials.**
+  - **Non-elementary class-B integrals with a special-function answer.** Wolfram
+    gives Erf or elliptic forms on 11/34 bgenus-perturbed cases.
+
 ### 2026-11-12 — Shape B, curve-monomial case and the Risch DE on a curve (v0.6528)
 
 - `RDEAlgebraic.m` implements Part 3 over `Q(x)(Y)` with valid bounds and

@@ -27,9 +27,12 @@ static const char* const bronstein_accept[] = {
     "1/(x Sqrt[Log[x]^2 + 1])", "E^x/Sqrt[E^(2 x) + 1]", "1/Sqrt[E^x + 1]",
     "Log[x] Sqrt[Log[x] + x]", "Sqrt[Log[x]]", "E^x Sqrt[1 + E^x]", "1/Sqrt[E^(x^2) + x]",
     "Sqrt[Log[Log[x]]]", "x Sqrt[E^x - 1]", "(Log[x] + 1)^(2/3)/x", "Sqrt[E^x + Log[x]]",
-    "E^(2 x)/Sqrt[1 - E^(2 x)]", NULL };
+    "E^(2 x)/Sqrt[1 - E^(2 x)]",
+    /* Shape B: a radical of x with a Log/Exp kernel (v0.6527-28) */
+    "Log[x] Sqrt[x^2 + 1]", "E^x/Sqrt[x^2 + 1]", "Log[x + Sqrt[x^3 + 1]]", "E^(x Sqrt[x^3 + 1])/x",
+    "Sqrt[x] E^x", NULL };
 static const char* const bronstein_reject[] = {
-    "Sqrt[x]", "Log[x]", "E^x", "Log[x] Sqrt[x^2 + 1]", "E^x/Sqrt[x^2 + 1]",
+    "Sqrt[x]", "Log[x]", "E^x", "Sqrt[2] Log[x]", "Log[2] Sqrt[x]",
     "Sin[x] Sqrt[Log[x]]", "Sqrt[Log[x]] + Tan[x]", "Sqrt[2] Sqrt[Log[x]]",
     "Erf[x] Sqrt[Log[x]]", "1.5 Sqrt[Log[x]]", "Sqrt[Log[x]]^Sqrt[3]", NULL };
 

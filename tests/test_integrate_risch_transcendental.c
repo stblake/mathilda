@@ -1305,6 +1305,22 @@ static void test_hyperbolic_integration(void) {
     assert_rm_diff_zero("1/(2 + Cosh[x])");
 }
 
+/* A log argument left as an uncombined sum: Log[(x^2 - 1)/(2 x) + (x^2 + 1)/(2 x)]
+ * is Log[x].  The field decision used to return a FALSE "not elementary" on it
+ * (Bronstein's Euler substitution produced exactly this; integration shootout
+ * 2026-11-12, bbottom-3-9); every Log argument is now put through Together
+ * first (rt_canon_log_args), an identity. */
+static void test_uncombined_log_argument(void) {
+    const char* g = "(-Log[(-1 + x^2)/(2*x)] + x^2*Log[(-1 + x^2)/(2*x)] + Log[(-1 + x^2)/(2*x) + (1 + x^2)/(2*x)]"
+                    " + x^2*Log[(-1 + x^2)/(2*x) + (1 + x^2)/(2*x)])/(x*(-1 + x^2))";
+    char buf[1024];
+    snprintf(buf, sizeof buf, "Risch`ElementaryIntegralQ[%s, x]", g);
+    assert_eval_eq(buf, "True", 0);
+    assert_rm_diff_zero(g);
+    snprintf(buf, sizeof buf, "FreeQ[Integrate`RischTranscendental[%s, x], Integrate`RischTranscendental]", g);
+    assert_eval_eq(buf, "True", 0);
+}
+
 void test_integrate_risch_transcendental(void) {
     symtab_init();
     core_init();
@@ -1359,6 +1375,7 @@ void test_integrate_risch_transcendental(void) {
     /* Trigonometric and hyperbolic integration suites. */
     TEST(test_circular_trig_integration);
     TEST(test_hyperbolic_integration);
+    TEST(test_uncombined_log_argument);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }

@@ -47,6 +47,10 @@ static void test_genus0(void) {
     BR_ANTIDERIV("D[Log[x] Log[x + Sqrt[x^2 + 2]], x]", "Bronstein");
     BR_ANTIDERIV("Log[x] Log[x + Sqrt[x^2 + 2]]", "Bronstein");
     BR_ANTIDERIV("D[x Log[1 + Sqrt[x + 3]], x]", "Bronstein");
+    /* Euler substitution with u = x + Sqrt[1 + x^2]: Log[x] becomes Log[(u^2 - 1)/(2 u)]
+     * and Log[x + Sqrt[1 + x^2]] an uncombined Log[u]; the transcendental decision
+     * gave a FALSE certificate on that spelling (shootout bbottom-3-9) */
+    BR_ANTIDERIV("D[Log[x] Log[x + Sqrt[1 + x^2]], x]", "Bronstein");
     BR_TRUE("BronsteinIntegrate[D[x Log[1 + Sqrt[x + 3]], x], x] === x Log[1 + Sqrt[3 + x]]");
 }
 

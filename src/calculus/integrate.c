@@ -1657,9 +1657,16 @@ static bool cg_algebraic_only(const Expr* e, const Expr* x, bool* has_rad) {
     return false;
 }
 
-/* Bronstein gate: only Plus/Times/Power/Log over x and numbers; at least one
- * radical whose base contains a Log or an E-power kernel of x. */
-static bool cg_mixed_only(const Expr* e, const Expr* x, bool* has_mixed_rad) {
+/* Bronstein gate: only Plus/Times/Power/Log over x and numbers.  Records
+ *   *has_mixed_rad -- a radical whose base contains a Log or an E-power kernel
+ *                     of x (Shape A, the radical on top);
+ *   *has_x_rad     -- a radical whose base depends on x;
+ *   *has_kernel    -- a Log or E-power kernel of x anywhere (inside a radical
+ *                     base or not).
+ * Shape B (the radical below the tower, v0.6527-28) is has_x_rad together with
+ * a kernel: a radical of x and a Log/Exp of x, in either nesting. */
+static bool cg_mixed_only(const Expr* e, const Expr* x, bool* has_mixed_rad,
+                          bool* has_x_rad, bool* has_kernel) {
     if (!e) return false;
     switch (e->type) {
         case EXPR_INTEGER: case EXPR_BIGINT: return true;
@@ -1668,25 +1675,32 @@ static bool cg_mixed_only(const Expr* e, const Expr* x, bool* has_mixed_rad) {
         default: return false;
     }
     if (rt_head_is(e, "Rational")) return true;
+    if (rt_head_is(e, "Log") && e->data.function.arg_count == 1 &&
+        depends_on_var(e->data.function.args[0], x))
+        *has_kernel = true;
     if (rt_head_is(e, "Plus") || rt_head_is(e, "Times") ||
         (rt_head_is(e, "Log") && e->data.function.arg_count == 1)) {
         for (size_t i = 0; i < e->data.function.arg_count; i++)
-            if (!cg_mixed_only(e->data.function.args[i], x, has_mixed_rad)) return false;
+            if (!cg_mixed_only(e->data.function.args[i], x, has_mixed_rad, has_x_rad, has_kernel))
+                return false;
         return true;
     }
     if (rt_head_is(e, "Power") && e->data.function.arg_count == 2) {
         const Expr* b = e->data.function.args[0];
         const Expr* r = e->data.function.args[1];
-        if (b->type == EXPR_SYMBOL && b->data.symbol.name == intern_symbol("E"))
-            return cg_mixed_only(r, x, has_mixed_rad);
+        if (b->type == EXPR_SYMBOL && b->data.symbol.name == intern_symbol("E")) {
+            if (depends_on_var(r, x)) *has_kernel = true;
+            return cg_mixed_only(r, x, has_mixed_rad, has_x_rad, has_kernel);
+        }
         bool rat = rt_head_is(r, "Rational");
         if (!(r->type == EXPR_INTEGER || rat)) return false;
         if (rat) {
             if (!depends_on_var(b, x)) return false;   /* algebraic constant */
+            *has_x_rad = true;
             if (rt_find_exp_of_x((Expr*)b, (Expr*)x) || rt_find_log_of_x((Expr*)b, (Expr*)x))
                 *has_mixed_rad = true;
         }
-        return cg_mixed_only(b, x, has_mixed_rad);
+        return cg_mixed_only(b, x, has_mixed_rad, has_x_rad, has_kernel);
     }
     return false;
 }
@@ -1697,8 +1711,9 @@ static bool cascade_gate_trager(const Expr* f, const Expr* x) {
 }
 
 static bool cascade_gate_bronstein(const Expr* f, const Expr* x) {
-    bool has_mixed = false;
-    return cg_mixed_only(f, x, &has_mixed) && has_mixed;
+    bool has_mixed = false, has_x_rad = false, has_kernel = false;
+    if (!cg_mixed_only(f, x, &has_mixed, &has_x_rad, &has_kernel)) return false;
+    return has_mixed || (has_x_rad && has_kernel);     /* Shape A, or Shape B */
 }
 
 /* Integrate`CascadeGateQ["Trager" | "Bronstein", f, x] -- the cascade gates,

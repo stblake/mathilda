@@ -1,18 +1,18 @@
 {
  "quick": {
-  "Mathilda:Automatic/A": 29,
-  "Mathilda:Automatic/B": 4,
-  "Mathilda:Automatic/M": 42,
+  "Mathilda:Automatic/A": 28,
+  "Mathilda:Automatic/B": 11,
+  "Mathilda:Automatic/M": 43,
   "Mathilda:Automatic/R": 9,
-  "Mathilda:Automatic/T": 27,
-  "Mathilda:Bronstein/B": 1,
-  "Mathilda:Bronstein/M": 40,
-  "Mathilda:ParallelMixedTower/A": 29,
-  "Mathilda:ParallelMixedTower/B": 2,
-  "Mathilda:ParallelMixedTower/M": 40,
+  "Mathilda:Automatic/T": 25,
+  "Mathilda:Bronstein/B": 9,
+  "Mathilda:Bronstein/M": 41,
+  "Mathilda:ParallelMixedTower/A": 28,
+  "Mathilda:ParallelMixedTower/B": 9,
+  "Mathilda:ParallelMixedTower/M": 39,
   "Mathilda:ParallelMixedTower/T": 18,
   "Mathilda:RischTranscendental/R": 9,
   "Mathilda:RischTranscendental/T": 18,
-  "Mathilda:Trager/A": 29
+  "Mathilda:Trager/A": 28
  }
 }

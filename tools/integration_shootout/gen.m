@@ -114,6 +114,23 @@ Do[Module[{th = theta[], n = RandomChoice[{2, 2, 3}], fam = RandomChoice[Take[mi
    emit[StringJoin["mperturb-", ToString[seed], "-", ToString[i]], "M", "mperturb", "unknown",
      Together[D[F, x] + RandomChoice[{x Y, Y/x, th Y, Y/(x + 1)}]], None]],
   {i, count}];
+(* B, Shape B on curves of genus >= 1 and cube roots (Bronstein's component and
+   curve-monomial methods, v0.6527-28).  Generated AFTER every older family, so
+   adding them left the earlier families' random draws, and their cases, as
+   they were. *)
+shapeBFamilies = {
+  "bgenus" -> Function[{}, With[{a = nz[1, 3]}, pick[{E^x Sqrt[1 + x^3], x Log[x] (x^3 + a)^(1/3),
+    Log[x]^2 Sqrt[x^4 + a], Log[Log[x] + Sqrt[x^3 + a]], E^(2 x) (x^2 + a)^(1/3)/x,
+    Sqrt[x^3 - x + a] Log[1 + x], E^x Log[x] Sqrt[1 + x^3]}]]],
+  "bcurve" -> Function[{}, With[{a = nz[1, 3]}, pick[{E^(x Sqrt[x^3 + a])/x, x Log[x + Sqrt[x^3 + a]],
+    Log[x + Sqrt[x^3 + a]]^2, Sqrt[x^3 + a] E^Sqrt[x^3 + a], (x + Sqrt[x^4 + a]) Log[x^2 + Sqrt[x^4 + a]],
+    (2 + 2 Sqrt[x^3 + 1]) E^(x Sqrt[x^3 + 1])/x}]]]
+};
+perturbBG[] := pick[{E^x/Sqrt[1 + x^3], Log[x] Sqrt[1 + x^3], Log[x]/Sqrt[x^3 + 2], E^Sqrt[1 + x^3],
+  Log[x + Sqrt[1 + x^3]], E^x (x^2 + 1)^(1/3)}];
+Do[genFamily["B", fm[[1]], fm[[2]], "elem", None], {fm, shapeBFamilies}];
+genFamily["B", "bgenus", shapeBFamilies[[1, 2]], "unknown", Function[{}, perturbBG[]]];
+genFamily["B", "bcurve", shapeBFamilies[[2, 2]], "unknown", Function[{}, perturbBG[]]];
 (* theorem-labelled classics, and the Trager corpus (first seed only) *)
 If[seed === 1,
   Do[emit["classic-" <> ToString[i], classicNonelem[[i, 1]], "classic-nonelem", "nonelem", classicNonelem[[i, 2]], None],

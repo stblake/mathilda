@@ -1,34 +1,34 @@
 # Integration shootout (2026-11-12)
 
-1151 cases, timeout 30 s per run, wall 12.4 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check.
+1266 cases, timeout 30 s per run, wall 12.5 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check.
 
 ## Closed (elementary + special) by class
 
-| run | R rational (72) | T transcendental (217) | A algebraic (400) | M mixed (radical on top) (408) | B radical at the bottom (54) | all |
+| run | R rational (72) | T transcendental (217) | A algebraic (400) | M mixed (radical on top) (408) | B radical at the bottom (169) | all |
 |---|---|---|---|---|---|---|
-| Mathilda:Automatic | 100% (72) | 97% (210) | 57% (228) | 84% (342) | 48% (26) | 76% (878) |
-| Mathilda:ParallelMixedTower | 0% (0) | 64% (138) | 52% (208) | 79% (322) | 37% (20) | 60% (688) |
+| Mathilda:Automatic | 100% (72) | 97% (210) | 57% (228) | 84% (342) | 45% (76) | 73% (928) |
+| Mathilda:ParallelMixedTower | 0% (0) | 64% (138) | 52% (208) | 79% (322) | 40% (68) | 58% (736) |
 | Mathilda:RischTranscendental | 100% (72) | 66% (143) | · | · | · | 74% (215) |
 | Mathilda:Trager | · | · | 53% (211) | · | · | 53% (211) |
-| Mathilda:Bronstein | · | · | · | 83% (337) | 11% (6) | 74% (343) |
-| FriCAS | 99% (71) | 94% (204) | 51% (204) | 40% (165) | 41% (22) | 58% (666) |
-| Maxima | 100% (72) | 77% (167) | 36% (145) | 42% (170) | 43% (23) | 50% (577) |
-| sympy | 100% (72) | 80% (174) | 32% (130) | 13% (54) | 24% (13) | 38% (443) |
-| Wolfram | 100% (72) | 100% (216) | 83% (331) | 61% (250) | 72% (39) | 79% (908) |
+| Mathilda:Bronstein | · | · | · | 83% (337) | 41% (70) | 71% (407) |
+| FriCAS | 99% (71) | 94% (204) | 51% (204) | 40% (165) | 43% (72) | 57% (716) |
+| Maxima | 100% (72) | 77% (167) | 36% (145) | 42% (170) | 33% (55) | 48% (609) |
+| sympy | 100% (72) | 80% (174) | 32% (130) | 13% (54) | 15% (26) | 36% (456) |
+| Wolfram | 100% (72) | 100% (216) | 83% (331) | 61% (250) | 64% (108) | 77% (977) |
 
 ## Outcome counts
 
 | run | elem | special | cert | uneval | timeout | error | unverified | wrong | median s (closed) |
 |---|---|---|---|---|---|---|---|---|---|
-| Mathilda:Automatic | 778 | 100 | 208 | 55 | 10 | 0 | 0 | 0 | 0.07 |
-| Mathilda:ParallelMixedTower | 688 | 0 | 244 | 167 | 52 | 0 | 0 | 0 | 0.05 |
+| Mathilda:Automatic | 828 | 100 | 212 | 117 | 9 | 0 | 0 | 0 | 0.05 |
+| Mathilda:ParallelMixedTower | 736 | 0 | 260 | 217 | 53 | 0 | 0 | 0 | 0.05 |
 | Mathilda:RischTranscendental | 208 | 7 | 63 | 11 | 0 | 0 | 0 | 0 | 0.00 |
 | Mathilda:Trager | 211 | 0 | 189 | 0 | 0 | 0 | 0 | 0 | 0.03 |
-| Mathilda:Bronstein | 343 | 0 | 52 | 66 | 1 | 0 | 0 | 0 | 0.12 |
-| FriCAS | 597 | 69 | 0 | 185 | 43 | 256 | 0 | 1 | 0.07 |
-| Maxima | 527 | 50 | 0 | 570 | 2 | 0 | 0 | 2 | 0.02 |
-| sympy | 348 | 95 | 0 | 427 | 240 | 1 | 8 | 32 | 0.12 |
-| Wolfram | 657 | 251 | 0 | 227 | 13 | 0 | 1 | 2 | 0.15 |
+| Mathilda:Bronstein | 407 | 0 | 55 | 114 | 1 | 0 | 0 | 0 | 0.10 |
+| FriCAS | 647 | 69 | 0 | 240 | 52 | 257 | 0 | 1 | 0.07 |
+| Maxima | 559 | 50 | 0 | 650 | 5 | 0 | 0 | 2 | 0.02 |
+| sympy | 361 | 95 | 0 | 480 | 289 | 1 | 8 | 32 | 0.13 |
+| Wolfram | 704 | 273 | 0 | 269 | 13 | 0 | 1 | 6 | 0.16 |
 
 ## Closed by family (Mathilda = best of its methods)
 
@@ -59,6 +59,10 @@
 | M | expcube | 36 | 36 | 34 | 36 | 35 | 36 |
 | M | mrandom | 33 | 0 | 0 | 0 | 0 | 0 |
 | M | mperturb | 34 | 4 | 2 | 0 | 1 | 3 |
+| B | bgenus | 24 | 24 | 24 | 24 | 0 | 21 |
+| B | bcurve | 26 | 26 | 26 | 8 | 13 | 26 |
+| B | bgenus-perturbed | 34 | 0 | 0 | 0 | 0 | 11 |
+| B | bcurve-perturbed | 31 | 0 | 0 | 0 | 0 | 11 |
 | T | classic-nonelem | 8 | 7 | 6 | 7 | 5 | 7 |
 | M | classic-nonelem | 3 | 2 | 0 | 2 | 2 | 2 |
 | A | classic-nonelem | 2 | 2 | 0 | 0 | 1 | 2 |
@@ -103,6 +107,7 @@
 - sympy `tlogp-1-6`: `(x^2*Log[x] + 2*x*Log[1 + x] - Log[1 + x]^2 - x*Log[1 + x]^2)/(x^2*(1 + x))`
 - sympy `texpp-1-8`: `(E^x*x + Log[x] + x*Log[x])/(1 + x)^2`
 - sympy `texpp-1-11`: `(1 + E^x + x - E^x*x^2 + Log[x] + 2*E^x*Log[x] + E^(2*x)*Log[x])/((1 + E^x)^2*(1 + x))`
+- Wolfram `bcurvep-1-10`: `(6*E^(x*Sqrt[3 + x^3])*x + 5*E^(x*Sqrt[3 + x^3])*x^4 - 2*E^(x*Sqrt[3 + x^3])*Sqrt[3 + x^3] + 2*x^2*Sqrt[3 + x^3]*Log[x + Sqrt[1 + x^3]])/(2*x^2*Sqrt[3 + x^3])`
 - sympy `classic-5`: `Log[x]/(1 + x)`
 - sympy `trager-binom-008`: `x^3/(-1 + x^3)^(1/4)`
 - sympy `trager-binom-009`: `x/(-1 + x^4)^(1/3)`
@@ -134,6 +139,9 @@
 - FriCAS `trager-random-048`: `(2 + 3*x - 3*x^2)/(Sqrt[1 + 2*x]*(2 - x + 3*x^2))`
 - sympy `tlogp-2-6`: `(Log[x] + 6*x*Log[1 + x] + 3*Log[1 + x]^2 + 3*x*Log[1 + x]^2)/(1 + x)`
 - sympy `texpp-2-5`: `(2*E^(2*x)*x + 4*E^(2*x)*x^2 + 2*E^(2*x)*x^3 + Log[x])/(1 + x)`
+- Wolfram `bgenusp-2-11`: `(-3*E^(2*x) + 6*E^(2*x)*x - E^(2*x)*x^2 + 6*E^(2*x)*x^3 + 3*x^2*(1 + x^2)^(2/3)*Log[x + Sqrt[1 + x^3]])/(3*x^2*(1 + x^2)^(2/3))`
+- Wolfram `bcurvep-2-3`: `(2*E^(x*Sqrt[1 + x^3])*x + 5*E^(x*Sqrt[1 + x^3])*x^4 - 2*E^(x*Sqrt[1 + x^3])*Sqrt[1 + x^3] + 2*x^2*Sqrt[1 + x^3]*Log[x + Sqrt[1 + x^3]])/(2*x^2*Sqrt[1 + x^3])`
 - sympy `tlogp-3-12`: `(3*Log[x] + 2*x*Log[x] + 6*Log[3 + 2*x]^2 + 12*x*Log[3 + 2*x]^2 + 6*x^2*Log[3 + 2*x]^2 + 3*Log[3 + 2*x]^3 + 5*x*Log[3 + 2*x]^3 + 2*x^2*Log[3 + 2*x]^3)/((1 + x)*`
 - sympy `texpp-3-1`: `(3*E^(x/2) + 3*E^(x/2)*x + 2*Log[x] + 6*E^(x/2)*Log[x])/(2*(1 + 3*E^(x/2))*(1 + x))`
 - sympy `texpp-3-5`: `(-3 - 4*x - x^2 + 4*E^x*Log[x] + 4*E^x*x*Log[x] + E^x*x^2*Log[x])/(E^x*(1 + x)*(2 + x)^2)`
+- Wolfram `bcurvep-3-6`: `(2*E^(x*Sqrt[1 + x^3])*x + 5*E^(x*Sqrt[1 + x^3])*x^4 - 2*E^(x*Sqrt[1 + x^3])*Sqrt[1 + x^3] + 2*x^2*Sqrt[1 + x^3]*Log[x + Sqrt[1 + x^3]])/(2*x^2*Sqrt[1 + x^3])`

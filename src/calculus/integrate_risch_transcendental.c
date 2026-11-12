@@ -535,6 +535,34 @@ static Expr* rt_try_kernel_radical(Expr* f, Expr* x) {
  *                           extensions, tower-builder rejects, or a genuine gap).
  * Sound by construction: an ELEMENTARY / NONELEMENTARY verdict is emitted only
  * behind an exact certificate — otherwise UNKNOWN. */
+/* Every Log[a] (a depending on x) rewritten as Log[Together[a]], innermost
+ * first; returns a new expression (f is borrowed).  An identity (the same
+ * value), and NECESSARY for the field decision: with a log argument left as an
+ * uncombined sum -- Log[(u^2 - 1)/(2 u) + (u^2 + 1)/(2 u)], which is Log[u],
+ * as Bronstein's Euler substitution produced it (integration shootout
+ * 2026-11-12, bbottom-3-9) -- the decision returned a FALSE "not elementary"
+ * for D[Log[(u^2 - 1)/(2 u)] Log[u], u], while the canonical spelling decides
+ * True and integrates. */
+static Expr* rt_canon_log_args(const Expr* e, const Expr* x) {
+    if (!e) return NULL;
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = rt_canon_log_args(e->data.function.args[i], x);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    if (rt_head_is(r, "Log") && n == 1 && !rt_free_of_x(r->data.function.args[0], (Expr*)x)) {
+        Expr* t = rt_eval1("Together", expr_copy(r->data.function.args[0]));
+        if (t) {
+            Expr* l = expr_new_function(expr_new_symbol("Log"), (Expr*[]){ t }, 1);
+            expr_free(r);
+            r = l;
+        }
+    }
+    return r;
+}
+
+static RtDecision rt_decide_field_canon(Expr* f, Expr* x);
 static RtDecision rt_decide_field(Expr* f, Expr* x) {
     /* Scope guard: an algebraic function of x (radical / Surd / Root) puts the
      * integrand outside the purely-transcendental tower the field decision is a
@@ -542,6 +570,13 @@ static RtDecision rt_decide_field(Expr* f, Expr* x) {
      * certificate.  Checked on the ORIGINAL f (Sqrt[x] survives inside Cos[Sqrt[x]]
      * and E^Sqrt[x] alike), before exponentialization. */
     if (rt_has_algebraic_of_x(f, x)) return RT_DEC_UNKNOWN;
+    Expr* fc = rt_canon_log_args(f, x);       /* canonical log arguments: see the helper */
+    RtDecision vc = rt_decide_field_canon(fc, x);
+    expr_free(fc);
+    return vc;
+}
+
+static RtDecision rt_decide_field_canon(Expr* f, Expr* x) {
     /* Mirror the integrator's trig/hyperbolic front-end (rt_trig_frontend) so the
      * DECISION routes trig integrands through the SAME Gaussian exponential tower
      * the True side uses.  Without this the tower builder cannot form a Risch tower
@@ -681,6 +716,10 @@ Expr* builtin_rischtranscendental(Expr* res) {
      * antiderivative.  Surfacing Power::infy from them would be spurious (as it
      * is in Mathematica's Integrate). */
     arith_warnings_mute_push();
+    /* canonical log arguments (rt_canon_log_args): an identity, and the tower
+     * and the decision both need it */
+    Expr* fcanon = rt_canon_log_args(f, x);
+    f = fcanon;
     Expr* result = rt_integrate(f, x);
     /* Decision half (P3): when the recursive algorithm produced no elementary
      * antiderivative, consult the authoritative field decision.  If it PROVES the
@@ -703,9 +742,10 @@ Expr* builtin_rischtranscendental(Expr* res) {
          * stay byte-identical and cannot double-print in the Automatic cascade.
          * The cheap depth/quiet gate above stays here to avoid the expensive
          * rt_decide_field call on internal recursions; the helper re-checks it. */
-        integrate_announce_nonelementary(f, x);
+        integrate_announce_nonelementary(res->data.function.args[0], x);
     }
     arith_warnings_mute_pop();
+    expr_free(fcanon);
     return result;
 }
 
