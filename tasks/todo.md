@@ -1468,3 +1468,25 @@ Commits: cd687569 (phase 0), eaeb8ecd (1), 6e296319 (2), 5b0e2e5a (3), 86282ac6 
 - **Leaks (macOS leaks; Docker daemon not running, so no valgrind):** term_lex, term_history, term_complete, term_color, term_interrupt, interrupt suites: 0 leaks each. Interactive session (common script) baseline 0 / branch 0; full script with two Ctrl-C aborts, a prompt Ctrl-C, completion, history recall and the took line: 0 leaks.
 - **libedit** (make HOMEBREW= MACPORTS=, links /usr/lib/libedit.3.dylib): Ctrl-C during Do, While, Pause, FactorInteger, CheckAbort, AbortProtect, TimeConstrained and Dialog gives $Aborted; double Ctrl-C exits 130; Ctrl-C at the prompt is ignored (no exit, no submit, line kept); Symbol and unique option completion work; Tab-Tab does not list; prompts are uncoloured; Out and messages are coloured. Multi-line input does not work on libedit (pre-existing: the RET rebinding is ignored there), so the multi-line history and continuation cases fail there as before. The "bind: Invalid command enable-bracketed-paste" line on libedit is pre-existing.
 - **Follow-ups:** classic Buchberger fallback after FLINT declines, and GMP-ECM stage 2, ignore the interrupt (finish their step; double Ctrl-C works). Ctrl-C during `$Post`/printing aborts the print evaluation only. PR 2: in-tree editor (would give libedit users line clearing and multi-line), token lexer/highlighting, replace find_unterminated / mathilda_ffi_is_complete with term_lex. PR 3: status line/spinner. PR 4: init.m, themes ($-symbols), slash commands. Pipe-mode (notebook) interrupt is still out of scope.
+
+## REPL PR 3: spinner, status line, progress (branch feat/repl-status)
+Plan: thoughts/shared/plans/2026-11-11-repl-modernize-pr3.md. Research: thoughts/shared/research/2026-11-11-repl-modernize-pr3.md.
+Stacked on feat/repl-modernize (a0c27991). Shared files append-only: own CMake block, own changelog heading, own repl.md sections; term_color append-only; term_interrupt one counter.
+- [x] Phase 1: term_progress stack; hooks in Do, Table, Sum, Product, iter_run (Nest/NestList/Fold/FoldList/NestWhile/FixedPoint); worker counter in five parallel drivers; term_progress_tests; perf check
+- [x] Phase 2: term_spinner layout (fit/drop order, colour/plain/ASCII, bar, ETA, took and status lines); TermTone appended to term_color; term_spinner_tests
+- [x] Phase 3: term_status forwarder thread (pipe for fd 1/2, ECHO off, 200 ms delay, 10 Hz, col-0 rule), Ctrl-C ^C/quiet period, double-tap exit fn, fatal-signal and atexit cleanup, Dialog suspend/resume, took/status lines in repl.c; term_status_tests; 15 new pty cases
+- [x] Phase 4: docs/spec/repl.md sections, changelog heading, Mathilda_spec.md row
+- [x] Verify: make clean && make; check-*; USE_READLINE=0; ctest -LE nightly; pty; pipe/-file invariance vs PR 1; leaks; perf gate; TSan driver
+
+### Review (REPL PR 3, 2026-11-11)
+Commits: b6abee2e (progress stack), e5ff0bb9 (layout), 985c4f3e (forwarder + REPL), a4697067 (docs), 72db8cb6 (check-c99 guard).
+- **Build:** make clean && make: the 6 FLINT header warnings only, none new. USE_READLINE=0 scratch build: same warnings, no readline linked, fgets loop unchanged, no spinner.
+- **check-*:** check-c99 (after 72db8cb6), check-messages, check-packed-aware, check-menu-ids, check-pipe-protocol pass.
+- **ctest -LE nightly:** 648/648 (PR 1: 645 + term_progress/term_spinner/term_status), 0 FAIL. Built with -DCMAKE_C_FLAGS=-O2 -j4 for disk space.
+- **pty:** 47/47 (32 PR 1 + 15 new).
+- **Invariance vs PR 1 (a0c27991):** 500-request NDJSON and 600-statement -file corpora: stdout and stderr byte-identical, no ESC bytes; pty goldens from 7e7bc9fb pass.
+- **Leaks (macOS leaks):** interactive session with spinner/Print/progress/Dialog/Ctrl-C: 0 (PR 1: 0). term_spinner_tests 0, term_status_tests 0, term_progress_tests 7 nodes / 480 B: the deliberate TimeConstrained timeout through nested loops (documented siglongjmp leak) plus one 64 B node in a Nest case that does not reproduce in isolation or in the binary.
+- **Perf (median of 9 interleaved -file runs, PR 1 vs branch; A/A in brackets):** fib +0.87% (+0.32%), Do 4M -0.33% (+0.59%), Expand -0.08% (+1.69%), Integrate x12 +1.04% (-0.93%). Loop extras: FoldList 1.5M -0.34% (+1.22%), NestList 1.5M +1.07% (+1.06%), 1000 Nest calls -0.04% (-1.71%).
+- **TSan** (Apple clang, driver over term_status/spinner/progress with stubs): only the 4 by-design racy reads (progress depth/slots, worker count, dispatch head); 0 with those suppressed.
+- **Deviations:** no MemoryConstrained exists (memory share is of RAM; hook provided); Map not tracked (does not evaluate its elements); status line off by default; NO_READLINE builds get no spinner.
+- **Rough edges / follow-ups:** Run[] children see a non-tty stdout during evaluation; Ctrl-Z mid-evaluation leaves the line and ECHO-off until resume/shell reset; SIGKILL cannot restore ECHO; the live head can flicker between builtins; Linux not run locally (CI runs the pty suite); FoldList[g, x, Range[300000]] segfaults (deep nesting) in PR 1 and here alike.
