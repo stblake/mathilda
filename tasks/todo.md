@@ -1513,3 +1513,26 @@ Commits: b6abee2e (progress stack), e5ff0bb9 (layout), 985c4f3e (forwarder + REP
 - **TSan** (Apple clang, driver over term_status/spinner/progress with stubs): only the 4 by-design racy reads (progress depth/slots, worker count, dispatch head); 0 with those suppressed.
 - **Deviations:** no MemoryConstrained exists (memory share is of RAM; hook provided); Map not tracked (does not evaluate its elements); status line off by default; NO_READLINE builds get no spinner.
 - **Rough edges / follow-ups:** Run[] children see a non-tty stdout during evaluation; Ctrl-Z mid-evaluation leaves the line and ECHO-off until resume/shell reset; SIGKILL cannot restore ECHO; the live head can flicker between builtins; Linux not run locally (CI runs the pty suite); FoldList[g, x, Range[300000]] segfaults (deep nesting) in PR 1 and here alike.
+
+## REPL PR 4: slash commands, themes, mods, Monitor; PR 2 + PR 3 merged (branch feat/repl-menus)
+Stacked on feat/repl-editor (PR 2) with feat/repl-status (PR 3, 8c9ac092) merged in.
+- [x] Merge PR 3 into PR 2: conflicts in Mathilda_spec.md, tests/CMakeLists.txt, changelog, todo, repl.md, pty harness; editor/spinner hand-over verified; 6 combo_* pty cases
+- [x] Slash-command menu (leading '/' on an empty buffer only; never evaluated): /help /theme /history /timing /statusline /clear /mods /quit + mod commands
+- [x] Themes dark/light/high-contrast/mono/ansi; 24-bit/256/16/none from COLORTERM/TERM; NO_COLOR wins; /theme picker with live preview (Return applies and saves, Esc reverts); ~/.mathilda/config; MATHILDA_THEME
+- [x] Mods: ~/.mathilda/init.m + mods/*.m; SlashCommand[]; $PreRead/$Pre/$Post/$PrePrint; /mods; failures reported once
+- [x] Monitor[expr, mon] in the status line
+- [x] Polish: Ctrl-Z at the prompt and under the spinner; no cursor-query wait; Up/Down by wrapped row; redo (Alt-_); banner; docs/spec/repl.md rewritten
+- [x] Verify (below)
+
+### Review (REPL PR 4, 2026-11-12)
+Commits: 097dd288 (merge), f9073acb (PR 4 core), bb8c6ba4 (tests), ad060249 (docs/polish), 2eacd69b (dark palette below 24-bit, latency gate with the thread).
+- **Build:** make clean && make: only the pre-existing FLINT acb.h warnings. USE_READLINE=0 scratch build: same, no readline linked, stdio loop unchanged ("/help" is a parse error there, as before).
+- **check-*:** c99, messages, packed-aware, menu-ids, pipe-protocol pass.
+- **ctest -LE nightly:** 652/652 (PR 1 645 + PR 2's 3 + PR 3's 3 + term_menus_tests), 0 failures.
+- **pty:** 83/83 (PR 1 32, PR 2 16, PR 3 15, 6 combo, 14 PR 4).
+- **Invariance vs PR 1 (a0c27991), doc-example corpus, streamed through sha256:** pipe stdout identical (8251 lines, c94f4ce5...); -file stdout identical (3999 lines, 7aebd3f0...); no ESC bytes. Stderr (157602 / 157554 lines) differs on 11 lines in each mode, all `[x ms]` timing lines; PR 1 vs PR 1 differs on 18 / 13.
+- **Leaks (macOS):** term_menus, term_editor, term_highlight, term_spinner, term_status: 0. term_progress: 7 nodes / 416 B, the documented TimeConstrained siglongjmp case from PR 3. Interactive session (slash menu, theme picker apply/cancel, mods incl. failing ones, mod commands, Monitor, Dialog, Ctrl-C, resize): 0, via `leaks <pid>` on the live process.
+- **Latency:** term_editor_latency_tests p50 26 us, p99 35 us, max 82 us, 0 allocations. Pty e2e with the status thread started: p50 0.04 ms, p95 0.05 ms, max 0.12 ms.
+- **Perf (-file, medians, PR 1 vs branch, A/A in brackets):** 9 rounds: fib +1.22% (+0.71%), Do 4M +0.45% (-0.54%), Expand +1.80% (+3.75%), Integrate -1.82% (-0.49%). 15 rounds: fib +0.02% (-0.54%), Do +1.70% (+0.00%), Expand -1.33% (-2.45%), Integrate -3.35% (-2.29%). Focused Do 4M, 15 rounds: branch +0.86%, PR 3 +0.12%, A/A +0.74%.
+- **Deviations:** Ctrl-Z pty case runs under a job-control wrapper (a pty child's group is orphaned); dark uses the terminal palette below 24-bit; commands go into history; Monitor updates on loop steps and the 128-step evaluator tick; key-hint footer and input box not done.
+- **Rough edges / follow-ups:** no OSC 11 background detection; Monitor text is shown in InputForm (strings quoted); a late cursor-position reply after very fast typeahead might echo; the spinner clears with EL before each frame.
