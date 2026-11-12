@@ -137,7 +137,7 @@ void term_status_print_statusline(double last) {
     fflush(stdout);
 }
 
-#if TS_LIVE
+#if TS_LIVE && !defined(_WIN32)   /* TS_LIVE implies it; spelled out for check-c99 */
 
 /* ---- the forwarder --------------------------------------------------------- */
 
