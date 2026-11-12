@@ -6572,6 +6572,30 @@ if(PYTHON3_EXE)
     add_test(NAME trager_fricas_stress
              COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/trager_fricas_stress.py --check
              WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    # Bronstein (BRONSTEIN_PLAN.md gap #4).  The coverage gate (every routine
+    # of the campaign has a direct unit test) is push tier; the three stress
+    # runs are nightly by name.  bronstein_stress: 600 known-elementary cases
+    # under Method -> "Bronstein", zero WRONG / FALSE_CERT / CRASH, at most 8
+    # open (2 genus-one special-place declines, gap #9; 6 lccontent declines: torsion past the Weil bound, special value or content over a radical extension); the cascade run is
+    # the same families through plain Integrate; the FriCAS run cross-checks
+    # every certificate of the random (mostly non-elementary) family.
+    add_test(NAME bronstein_test_coverage
+             COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_bronstein_test_coverage.py
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    add_test(NAME bronstein_stress
+             COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/bronstein_stress/stress.py
+                     --seeds 10-39 --count 20 --budget 30 --max-open 8
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    add_test(NAME bronstein_cascade_stress
+             COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/bronstein_stress/stress.py
+                     --seeds 200-205 --count 20 --budget 60 --method Automatic --max-open 0
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    add_test(NAME bronstein_fricas_stress
+             COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/bronstein_stress/stress.py
+                     --family random --seeds 1-8 --count 20 --budget 30 --fricas
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    set_tests_properties(bronstein_stress bronstein_cascade_stress bronstein_fricas_stress
+                         PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 7200)
     # Linear algebra on SparseArray against recorded reference / scipy /
     # maxima answers (tools/sparse_linalg_oracle.py): --quick replays 150
     # recorded cases with no oracle installed (per push); the stress run

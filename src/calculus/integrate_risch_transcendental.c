@@ -104,6 +104,11 @@ static Expr* rt_transcendental_case(Expr* f, Expr* x) {
     if (r) return r;
     r = rt_trig_frontend(f, x);
     if (r) return r;
+    /* Single-kernel field recursion: a proper part in t plus a k-part whose
+     * integral is a new logarithm over k (1/(1 + x) + 1/(x (1 + Log[x]))), which
+     * no flat single-kernel case above covers; exactly verified. */
+    r = rt_recursive_tower_case_single(f, x);
+    if (r) return r;
     /* Dependent-logarithm fallback.  When every case above declined, the
      * integrand may carry Q-linearly DEPENDENT logarithmic generators that no
      * single case models — e.g. Log[x/(1+x)] + Log[1+x], two distinct Log

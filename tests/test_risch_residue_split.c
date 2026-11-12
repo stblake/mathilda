@@ -126,16 +126,20 @@ static void test_partial_log_mixed(void) {
              "FreeQ[#, Integrate] &] - Log[Log[x]]]", "0");
 }
 
-/* Scope boundary: the EXPONENTIAL (hyperexponential) monomial does not yet
- * surface a partial log part — the §5.9 coupled Laurent reconciliation of the
- * exponential proper-part pipeline cannot carry a proper simple remainder, so a
- * mixed exp resultant declines (refuses the partial) rather than emitting a
- * wrong or half-reconciled form.  Pinned so a future extension flips it
- * deliberately.  (Via linearity the user-facing Integrate still splits an
- * explicit SUM of an elementary and a non-elementary exp term.) */
+static void assert_numeric_diff_zero_via(const char* head, const char* f, const char* xval);
+
+/* The EXPONENTIAL monomial now surfaces a partial log part too: the flat
+ * single-kernel cases decline the mixed exp resultant, and the single-kernel
+ * field recursion (rt_recursive_tower_case_single, v0.6524 -- this pin was
+ * flipped deliberately) returns the constant-residue part x - Log[1 + E^x]
+ * plus Integrate[1/(x + E^x), x], verified exactly in the tower variables. */
 static void test_exp_partial_out_of_scope(void) {
-    assert_head_unevaluated("Integrate`RischTranscendental",
-                            "(1 + x + 2 E^x)/((1 + E^x) (x + E^x))");
+    const char* f = "(1 + x + 2 E^x)/((1 + E^x) (x + E^x))";
+    assert_integrate_presence("Integrate`RischTranscendental", f, false);
+    assert_numeric_diff_zero_via("Integrate`RischTranscendental", f, "0.7");
+    assert_numeric_diff_zero_via("Integrate`RischTranscendental", f, "1.3");
+    run_test("Quiet[Select[Integrate`RischTranscendental[(1 + x + 2 E^x)/((1 + E^x) (x + E^x)), x],"
+             " FreeQ[#, Integrate] &]]", "Plus[x, Times[-1, Log[Plus[1, Power[E, x]]]]]");
 }
 
 /* ---- Non-regression: all-constant residues stay fully elementary --------- */

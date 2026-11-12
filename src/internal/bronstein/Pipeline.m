@@ -34,6 +34,26 @@ brIntegrateTranscendental[f_, x_Symbol] := Module[{F, q},
 brTermExpression::usage = "brTermExpression[F, e] is the expression e over the field F with the residue-field generator replaced by its algebraic number (Trager's fieldValue for a number field; the theta of a fieldFn extension).";
 brTermExpression[F_, e_] := If[F === None || !fieldExtQ[F], e, rc[F, e] /. F["t"] -> F["theta"]];
 
+brSplitLogs::usage = "brSplitLogs[F, logs, Y, vars] rewrites the log terms {{c, u}, ...} of a component (u over the residue field F, its generator t a symbol) in fewer, smaller logarithms: an argument free of the curve generator Y (a norm term, an element of k(theta)(t)) is split into its irreducible factors over Q[vars, t], c Log[u] -> Sum e_i c Log[p_i], dropping the factors free of vars (x and the tower symbols: they change F only by a constant); then terms with the same argument are merged (coefficients added in F, zero sums dropped). Every step changes Sum c Log[u] by a constant at most, so its derivative -- what brComponentIdentityQ checks -- is unchanged.";
+brSplitLogs[F_, logs_List, Y_Symbol, vars_List] := Module[{out = {}, fl, t, merged},
+  Do[
+    If[!FreeQ[lg[[2]], Y], AppendTo[out, lg]; Continue[]];
+    t = Together[lg[[2]]];
+    fl = Join[FactorList[Numerator[t]], {#[[1]], -#[[2]]} & /@ FactorList[Denominator[t]]];
+    Do[If[brDependsQ[q[[1]], vars], AppendTo[out, {lg[[1]] q[[2]], q[[1]]}]], {q, fl}],
+    {lg, logs}];
+  merged = {#[[1, 2]], #} & /@ GatherBy[out, #[[2]] &];
+  merged = {If[F === None, Together[Total[#[[2, All, 1]]]], kc[F, Together[Total[#[[2, All, 1]]]]]], #[[1]]} & /@ merged;
+  Select[merged, Together[#[[1]]] =!= 0 &]];
+
+brCollectLogTerms::usage = "brCollectLogTerms[e, x] merges the logarithms of an antiderivative written as a sum: the terms c Log[a] with c free of x are grouped by their argument a and their coefficients added (a zero sum drops the term). An identity.";
+brCollectLogTerms[e_, x_Symbol] := Module[{terms = If[Head[e] === Plus, List @@ e, {e}], logs, rest, g},
+  logs = Select[terms, MatchQ[#, (c_. Log[a_]) /; FreeQ[c, x] && !FreeQ[a, x]] &];
+  rest = Complement[terms, logs];
+  logs = Replace[#, c_. Log[a_] :> {c, a}] & /@ logs;
+  g = GatherBy[logs, #[[2]] &];
+  Total[rest] + Total[With[{c = Together[Total[#[[All, 1]]]]}, If[c === 0, 0, c Log[#[[1, 2]]]]] & /@ g]];
+
 brIntegrateComponent::usage = "brIntegrateComponent[T, cv, c] integrates the component c Y on the curve cv (Y^m = G). It returns <|\"Algebraic\" -> b, \"Logs\" -> {{coef, arg}, ...}|> with Int c Y = b Y + Sum coef Log[arg], arg expressions in the tower symbols and the symbol Ysym of cv (\"Y\" -> Ysym); it throws the failures of its stages.";
 brIntegrateComponent[T_Association, cv_Association, c_] := Module[{hr, sr, lp, ap, b, Ys = Unique["Bronstein`Private`brYc"], logs = {}, F, B},
   If[!brReducedCurveQ[T, cv["m"], cv["G"]], throwInternal["brCurveNotReduced", <|"m" -> cv["m"], "G" -> cv["G"]|>]];
@@ -51,6 +71,7 @@ brIntegrateComponent[T_Association, cv_Association, c_] := Module[{hr, sr, lp, a
       {t[[1]], afToY[B, t[[2]], Ys]},
       {-t[[1]]/cv["m"], t[[3]]}}],
     {t, lp["terms"]}];
+  logs = brSplitLogs[F, logs, Ys, Prepend[T["syms"], T["x"]]];
   (* raw: coefficients and logands over F (the residue-field generator t still a
      symbol), as the exact verification needs them; "Logs" the presented ones *)
   <|"Algebraic" -> b, "RawLogs" -> logs, "Field" -> F,
@@ -100,7 +121,7 @@ brShapeA[T_Association, f_, x_Symbol] := Module[{cf, n, g, yh, total, cc, cv, re
           rho = brToSurface[T, (cf["yexpr"]^i/cc["s"])/Yexpr]];
         total = total + rho brAssembleComponent[T, res, Yexpr, x]]],
     {i, 1, n - 1}];
-  <|"F" -> total, "verified" -> exact|>];
+  <|"F" -> brCollectLogTerms[total, x], "verified" -> exact|>];
 
 brIntegrateBody::usage = "brIntegrateBody[f, x] is the body of BronsteinIntegrate: it throws instead of returning failure lists.";
 brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl, u = Unique["Bronstein`Private`brUf"], verified = False},

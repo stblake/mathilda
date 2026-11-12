@@ -3,9 +3,15 @@
 
 Generates seeded batches (gen.m), runs each batch in its own Mathilda process
 (run.m) under a wall-clock timeout, and aggregates RESULT lines by class,
-family and decline reason.  A FALSE_CERT or WRONG anywhere exits 1.
+family and decline reason.  A FALSE_CERT, WRONG or CRASH anywhere exits 1;
+--max-open N also fails when more than N cases end DECLINE/TIMEOUT/UNEVAL (a
+coverage ratchet).  --family random generates the mostly non-elementary random
+family, and --fricas cross-checks every "not elementary" verdict and every
+decline against FriCAS (fricas_check.py): a DISAGREE exits 1.  Exits 77 (ctest
+SKIP) when ./Mathilda, or FriCAS for --fricas, is not installed.
 
     python3 tools/bronstein_stress/stress.py --seeds 1-10 --count 20 [--method Automatic]
+    python3 tools/bronstein_stress/stress.py --family random --seeds 1-8 --fricas
 """
 import argparse, collections, os, subprocess, sys, tempfile, json
 
@@ -27,11 +33,22 @@ def main():
     ap.add_argument("--method", default="Bronstein")
     ap.add_argument("--budget", type=int, default=30)
     ap.add_argument("--json", default=None)
+    ap.add_argument("--family", default=None)
+    ap.add_argument("--max-open", type=int, default=None)
+    ap.add_argument("--fricas", action="store_true")
     a = ap.parse_args()
+    if not os.access(MATH, os.X_OK):
+        print("SKIP: ./Mathilda not built"); sys.exit(77)
+    if a.fricas:
+        sys.path.insert(0, HERE)
+        import fricas_check
+        if not os.access(fricas_check.FRICAS, os.X_OK):
+            print("SKIP: FriCAS not installed at " + fricas_check.FRICAS); sys.exit(77)
     lo, hi = (int(v) for v in a.seeds.split("-"))
     results = []
     for seed in range(lo, hi + 1):
         env = dict(os.environ, SEED=str(seed), COUNT=str(a.count))
+        if a.family: env["FAMILY"] = a.family
         cases = [l for l in run([MATH, "-file", os.path.join(HERE, "gen.m")], env, 600).splitlines() if l.startswith("CASE\t")]
         with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False) as fh:
             fh.write("\n".join(cases) + "\n"); path = fh.name
@@ -60,10 +77,20 @@ def main():
     for w, n in why.most_common(): print(f"  {n:4d}  {w}")
     slow = sorted(results, key=lambda r: -r["secs"])[:8]
     print("\nslowest:"); [print(f"  {r['secs']:7.2f}  {r['cls']:9s} {r['fam']:8s} {r['f'][:110]}") for r in slow]
-    bad = [r for r in results if r["cls"] in ("FALSE_CERT", "WRONG", "CRASH")]
+    # on the random family (mostly NOT elementary) a certificate is a claim for
+    # FriCAS to check, not a failure; on the known-elementary families it is wrong
+    hard = ("WRONG", "CRASH") if a.family == "random" else ("FALSE_CERT", "WRONG", "CRASH")
+    bad = [r for r in results if r["cls"] in hard]
     for r in bad: print(f"\n*** {r['cls']} {r['id']} {r['fam']}: {r['f']}\n    {r['detail'][:300]}")
     if a.json: json.dump(results, open(a.json, "w"), indent=1)
-    sys.exit(1 if any(r["cls"] in ("FALSE_CERT", "WRONG") for r in results) else 0)
+    fail = bool(bad)
+    nopen = sum(cls[k] for k in ("DECLINE", "TIMEOUT", "UNEVAL"))
+    if a.max_open is not None and nopen > a.max_open:
+        print(f"\n*** {nopen} open cases (DECLINE/TIMEOUT/UNEVAL) exceed --max-open {a.max_open}"); fail = True
+    if a.fricas:
+        n = fricas_check.check(results)
+        if n["DISAGREE"]: fail = True
+    sys.exit(1 if fail else 0)
 
 if __name__ == "__main__":
     main()

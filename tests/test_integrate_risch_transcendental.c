@@ -754,6 +754,21 @@ static void test_recursive_tower_case(void) {
     assert_rm_diff_zero("1/(x Log[x] (Log[Log[x]]^2 + 4))");
     assert_rm_diff_zero("(1 + Log[Log[x]])/(x Log[x] (Log[Log[x]]^2 + 1))");
     assert_rm_diff_zero("1/(x Log[x] (Log[Log[x]]^3 + 1))");
+    /* Single-kernel field recursion (rt_recursive_tower_case_single): a proper
+     * part in t plus a k-part whose integral is a NEW logarithm over k, which no
+     * flat single-kernel case covered (all stayed unevaluated, although
+     * Risch`ElementaryIntegralQ said True) -- found through the Bronstein stress
+     * family "lccontent", whose coordinate 0 has exactly this shape. */
+    assert_rm_diff_zero("1/(1 + x) + 1/(x (1 + Log[x]))");
+    assert_rm_diff_zero("(1 + 2 x + x Log[x])/(x (1 + x) (1 + Log[x]))");
+    assert_rm_diff_zero("1/x + 1/(x (1 + Log[x]))");
+    assert_rm_diff_zero("1/(1 + x) + E^x/(1 + E^x)");
+    assert_rm_diff_zero("1/(1 + x^2) + 1/(x (1 + Log[x]))");
+    assert_rm_diff_zero("1/(1 + x) + 1/(x Log[x])");
+    assert_rm_diff_zero("(2 x^2 - 2 Log[x] - 2 x Log[x] - x Log[x]^2)/(2 x (1 + x) (-1 + x - Log[x]^2))");
+    /* ... and the non-elementary member of the family stays unevaluated */
+    assert_head_unevaluated("Quiet[Integrate`RischTranscendental[(1 + 2 x + x Log[x])/(x (1 + Log[x])), x]]",
+                            "Integrate`RischTranscendental");
 }
 
 /* ================= SPECIAL FUNCTIONS =================

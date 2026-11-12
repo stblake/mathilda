@@ -34,8 +34,9 @@ def fricas(f, timeout=60):
     if "Type:" in out: return "CLOSED"
     return "ERROR"
 
-def main():
-    res = json.load(open(sys.argv[1]))
+def check(res):
+    """Cross-check the stress results res (a list of dicts with cls/f/detail);
+    returns the tag counts."""
     n = {"DISAGREE": 0, "AGREE": 0, "FRICAS-ONLY": 0, "BOTH-OPEN": 0}
     for r in res:
         if r["cls"] not in ("FALSE_CERT", "DECLINE", "TIMEOUT"): continue
@@ -48,6 +49,10 @@ def main():
         if tag in ("DISAGREE", "FRICAS-ONLY"):
             print(f"{tag:11s} fricas={fr:7s} ours={r['cls']}:{r['detail'][:80]}\n    {r['f'][:200]}", flush=True)
     print(n)
+    return n
+
+def main():
+    n = check(json.load(open(sys.argv[1])))
     sys.exit(1 if n["DISAGREE"] else 0)
 
 if __name__ == "__main__":

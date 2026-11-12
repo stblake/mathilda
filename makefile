@@ -1014,6 +1014,14 @@ check-packed-aware:
 check-messages:
 	python3 tools/check_message_routing.py
 
+# `make check-bronstein-coverage` -- every routine of the Bronstein campaign
+# (each ::usage in src/internal/bronstein/*.m, the Trager Fn-field routines and
+# the new C builtins) is called by a unit suite; assert-empty with an EXEMPT
+# list (tools/check_bronstein_test_coverage.py).  Also the push-tier ctest
+# bronstein_test_coverage.
+check-bronstein-coverage:
+	python3 tools/check_bronstein_test_coverage.py
+
 # `make check-feyncalc` — FeynCalc's ~14k upstream unit tests, run UNMODIFIED
 # under a minimal MUnit`Test (tools/feyncalc/run_fc_tests.m), one process per
 # .test file, ratcheted against the local pass baseline: a test that passed must
@@ -1241,7 +1249,7 @@ print-flags:
 print-libs:
 	@echo "$(PC_LIBS_PRIVATE)"
 
-.PHONY: bench-osp-famous all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-feyncalc check-differentialforms check-interval check-packed-aware \
+.PHONY: bench-osp-famous all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-bronstein-coverage check-feyncalc check-differentialforms check-interval check-packed-aware \
         check-messages check-corpus-indvar \
         check-array-exactness check-nd-surfaces check-compile-coverage \
         check-refine-stress \

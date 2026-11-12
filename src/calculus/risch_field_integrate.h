@@ -38,6 +38,9 @@ extern RtDecision g_rt_decision;
 
 /* Genuine one-extension-at-a-time recursive Risch over a depth->=2 tower. */
 Expr* rt_recursive_tower_case(Expr* f, Expr* x);
+/* The recursion on a single-kernel tower (min_n = 1): the driver's last
+ * single-kernel case, after the flat ones decline. */
+Expr* rt_recursive_tower_case_single(Expr* f, Expr* x);
 
 /* Flat multi-kernel bounded-ansatz fallbacks (Phase B). */
 Expr* rt_log_tower_case(Expr* f, Expr* x);

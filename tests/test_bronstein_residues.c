@@ -152,6 +152,48 @@ static void test_special_residues(void) {
     BR_FALSE("brSpecialResiduesZeroQ[TE1, brExpSpecialResidues[TE1, cvE1, 1/(1 + brT1)]]");
 }
 
+/* brIntegrateInKLogLike, brRadicalValueCheck, brRelevantLocations, brOption */
+static void test_value_helpers(void) {
+    br_run("TL0 = brLowerTower[TE1]; TL139 = brLowerTower[T139]; True");
+    BR_EQ("brIntegrateInKLogLike[TL0, 2 x + 1/x]", "{\"Elementary\", {x^2}}");
+    BR_EQ("brIntegrateInKLogLike[TL0, 1/(1 + x^2)]", "{\"Elementary\", {0}}");
+    BR_EQ("brIntegrateInKLogLike[TL0, 0]", "{\"Elementary\", {0}}");
+    BR_EQ("brIntegrateInKLogLike[TL139, brT1/x]", "{\"NonElementary\"}");
+    BR_EQ("brIntegrateInKLogLike[TL139, x brT1]", "{\"Elementary\", {-brT1 + brT1 x}}");
+    BR_EQ("brIntegrateInKLogLike[TL139, brT1/(1 + brT1)]", "{\"Elementary\", {0}}");
+    /* property: for a = D g + c D Log[u], the k-part is g up to a constant */
+    BR_TRUE("SeedRandom[91]; And @@ Table[Module[{g = RandomInteger[{1, 4}] x^RandomInteger[{1, 3}] + RandomInteger[{-3, 3}]/(x + RandomInteger[{1, 3}]),"
+            "   u = x^2 + RandomInteger[{1, 5}], r},"
+            "   r = brIntegrateInKLogLike[TL0, Together[D[g, x] + RandomInteger[{1, 3}] D[u, x]/u]];"
+            "   First[r] === \"Elementary\" && FreeQ[Together[r[[2, 1]] - g], x]], {20}]");
+    /* gamma = Sqrt[x]: Int Sqrt[x] is algebraic, Int Sqrt[x]/(x (x + 1)) a logarithm */
+    BR_TRUE("brRadicalValueCheck[TL1, x, 2, 1, \"Algebraic\"]");
+    BR_THROWS("brRadicalValueCheck[TL1, x, 2, 1, \"Logarithmic\"]", "NonElementary",
+              "residue at a special place undefined ([B] Def 2.21): an algebraic part over a radical extension of k");
+    BR_THROWS("brRadicalValueCheck[TL1, x, 2, 1/(x (x + 1)), \"Algebraic\"]", "NonElementary",
+              "residue at infinity undefined ([B] Def 2.10): a logarithm over a radical extension of k");
+    BR_TRUE("brRadicalValueCheck[TL1, x, 2, 1/(x (x + 1)), \"Logarithmic\"]");
+    /* gamma rational (x^2 = x^2): no radical condition (a Return-in-With once declined it) */
+    BR_TRUE("brRadicalValueCheck[TL1, x^2, 2, 1, \"Algebraic\"]");
+    BR_TRUE("brRadicalValueCheck[TL1, x, 2, 0, \"Algebraic\"]");
+    BR_THROWS("brRadicalValueCheck[T139, x, 2, 1, \"Algebraic\"]", "Decline", "special value over a radical extension of k");
+    /* Int 1/Sqrt[x^3 + 1] is elliptic: Trager's certificate carries over */
+    BR_EQ("First[brCatch[brRadicalValueCheck[TL1, x^3 + 1, 2, 1/(x^3 + 1), \"Logarithmic\"]]]", "\"NonElementary\"");
+    /* relevant special locations */
+    BR_EQ("brRelevantLocations[TL1, {<|\"coef\" -> 0, \"where\" -> \"inf\", \"ramified\" -> False|>,"
+          " <|\"coef\" -> 2, \"where\" -> \"inf\", \"ramified\" -> False|>}][[All, \"coef\"]]", "{2}");
+    BR_EQ("brRelevantLocations[TE1, {<|\"coef\" -> 1, \"where\" -> \"zero\", \"ramified\" -> False|>,"
+          " <|\"coef\" -> 0, \"where\" -> \"inf\", \"ramified\" -> False|>}][[All, \"coef\"]]", "{1, 0}");
+    BR_EQ("brRelevantLocations[TE1, {<|\"coef\" -> 0, \"where\" -> \"zero\", \"ramified\" -> False|>,"
+          " <|\"coef\" -> 0, \"where\" -> \"inf\", \"ramified\" -> False|>,"
+          " <|\"coef\" -> 3, \"where\" -> \"inf\", \"ramified\" -> False|>}][[All, \"coef\"]]", "{3}");
+    BR_EQ("brRelevantLocations[TE1, {<|\"coef\" -> 1, \"where\" -> \"zero\", \"ramified\" -> True|>,"
+          " <|\"coef\" -> 3, \"where\" -> \"inf\", \"ramified\" -> True|>}]", "{}");
+    BR_EQ("brRelevantLocations[TE1, {}]", "{}");
+    BR_EQ("{brOption[\"PresentationTime\"], IntegerQ[brOption[\"SpecializationTries\"]], IntegerQ[brOption[\"SpecializationHeight\"]]}",
+          "{5, True, True}");
+}
+
 int main(void) {
     br_init();
     setup();
@@ -160,6 +202,7 @@ int main(void) {
     test_special_reduce();
     test_normal_residues();
     test_special_residues();
+    test_value_helpers();
     BR_DONE("bronstein_residues_tests");
     return 0;
 }

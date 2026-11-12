@@ -1565,7 +1565,25 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
 
 
 
+static Expr* rt_recursive_tower_case_min(Expr* f, Expr* x, int min_n);
+
 Expr* rt_recursive_tower_case(Expr* f, Expr* x) {
+    /* min_n = 2: single-kernel integrands are handled by the dedicated flat-tower
+     * cases; the general recursion takes depth >= 2 towers first. */
+    return rt_recursive_tower_case_min(f, x, 2);
+}
+
+/* The same recursion on a SINGLE-kernel tower, for the transcendental driver to
+ * run after every flat single-kernel case has declined.  Those cases do not
+ * cover a proper part in t plus a k-part whose integral is a NEW logarithm over
+ * k -- 1/(1 + x) + 1/(x (1 + Log[x])), Log[1 + x] + Log[1 + Log[x]] -- which the
+ * field recursion (RT_DEC_ELEMENTARY in rt_decide_field) integrates; the result
+ * is verified exactly in the tower variables, as for n >= 2. */
+Expr* rt_recursive_tower_case_single(Expr* f, Expr* x) {
+    return rt_recursive_tower_case_min(f, x, 1);
+}
+
+static Expr* rt_recursive_tower_case_min(Expr* f, Expr* x, int min_n) {
     /* Split any evaluator-merged exponential monomial back into an independent
      * tower basis before building the tower (see rt_expand_exp_sums).  Circular/
      * hyperbolic trig of a tangent argument is rationalised to the tower variable
@@ -1579,9 +1597,7 @@ Expr* rt_recursive_tower_case(Expr* f, Expr* x) {
     Expr* fx = rt_expand_exp_sums(fp);
     expr_free(fp);
     RtTower T;
-    /* min_n = 2: single-kernel integrands are handled by the dedicated flat-tower
-     * cases above; the general recursion only takes depth->=2 towers. */
-    if (!rt_tower_build_min(fx, x, &T, 2)) { rt_tower_free(&T); expr_free(fx); return NULL; }
+    if (!rt_tower_build_min(fx, x, &T, min_n)) { rt_tower_free(&T); expr_free(fx); return NULL; }
 
     /* Alias the kernels to tower variables structurally (NOT via an evaluated
      * ReplaceAll, which would re-merge a split exponential product before
@@ -1651,6 +1667,15 @@ Expr* rt_recursive_tower_case(Expr* f, Expr* x) {
                     result = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
                         (Expr*[]){ Q, bl }, 2));                   /* adopts Q, bl */
                     if (result) result = rt_eval1("Cancel", result);
+                    /* Cancel does not reach inside a logarithm: a log argument can
+                     * come back as an uncombined sum over a spurious common
+                     * denominator (-2/(-2 + x) - 2 E^x/(-2 + x) + ... = 1 + E^x).
+                     * Together each argument (an identity). */
+                    if (result) {
+                        Expr* lt = parse_expression("{Log[a_] :> Log[Together[a]]}");
+                        if (lt) result = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                            (Expr*[]){ result, lt }, 2));          /* adopts result, lt */
+                    }
                     /* Surface the unintegrated non-constant-residue part as a
                      * genuine Integrate[rem, x] in the original kernels (a
                      * separate back-rule list — ReplaceAll consumes its list).

@@ -61,6 +61,18 @@ static void test_kc(void) {
     BR_TRUE("Module[{r = fnInvertT[F2, 1, t + 1]}, FreeQ[r[[2]], t] &&"
             " kc[F2, r[[1]] (t + 1)/r[[2]]] === 1]");
     BR_THROWS("fnInvertT[fieldFn[{x}, {t, t^2 - 1, 1}], 1, t - 1]", "Internal", "fnInvertTNotUnit");
+    /* kcFn / rcFn directly: the Fn arms of kc / rc */
+    BR_EQ("kcFn[F, (x th^2 + th)/x + th^2]", "2 th^2 + th/x");
+    BR_EQ("kcFn[F, 0]", "0");
+    BR_EQ("kcFn[F2, t^2 th]", "2 th");
+    BR_THROWS("kcFn[F, 1/th]", "Internal", "kcFnNotPolynomial");
+    BR_EQ("rcFn[F, (x^2 - 1)/(x - 1)]", "1 + x");
+    BR_EQ("rcFn[F, 0]", "0");
+    BR_EQ("rcFn[F2, t^2 + x]", "2 + x");
+    BR_TRUE("FreeQ[Denominator[rcFn[F2, 1/(t + x)]], t]");
+    BR_TRUE("PossibleZeroQ[(rcFn[F2, (t th + 1)/(t + x)] - (t th + 1)/(t + x)) /. t -> Sqrt[2]]");
+    BR_TRUE("SeedRandom[17]; And @@ Table[Module[{e = (RandomInteger[{-3, 3}] t + x th + RandomInteger[{1, 3}])/"
+            "(t + RandomInteger[{1, 4}] x + 1)}, kcFn[F2, e] === kc[F2, e] && rcFn[F2, e] === rc[F2, e]], {20}]");
     /* fnCollect directly */
     BR_EQ("fnCollect[F, th^2 x + th, x]", "th^2 + th/x");
     BR_EQ("fnCollect[F, 0, x]", "0");

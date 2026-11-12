@@ -99,6 +99,32 @@ static void test_properties(void) {
 }
 
 /* RDE.m wrappers. */
+/* A non-constant theta-leading coefficient in k with a root other than x = 0:
+ * RdeNormalDenominator's tower derivative of the monic denominator
+ * (1 + t^2 + x t^2)/(1 + x) kept a zero t^2 coefficient unreduced, so the
+ * Euclidean gcd divided by 0, h became Indeterminate and the guard en | dn h^2
+ * returned a CERTIFIED "NoSolution" (a false Bronstein certificate on
+ * ((x + 1) Log[1 + x^2]^2 + 1)^(1/3)/x).  Every case below has the solution b. */
+static void test_nonconstant_leading_coefficient(void) {
+    BR_EQ("With[{G = 1 + (1 + x) Log[1 + x^2]^2, b = 1/x}, With[{f = Together[D[G, x]/(3 G)]},"
+          " Risch`RischDECertified[f, Together[D[b, x] + f b], x]]]", "1/x");
+    BR_EQ("With[{G = 1 + (1 + x) Log[x]^2, b = 1/x}, With[{f = Together[D[G, x]/(2 G)]},"
+          " Risch`RischDECertified[f, Together[D[b, x] + f b], x]]]", "1/x");
+    BR_EQ("With[{G = 1 + (1 + x) Log[x]^2, b = 1/(2 + x)}, With[{f = Together[D[G, x]/(2 G)]},"
+          " Risch`RischDECertified[f, Together[D[b, x] + f b], x]]]", "1/(2 + x)");
+    BR_EQ("With[{G = 1 + (x^2 + 1) E^(2 x), b = x}, With[{f = Together[D[G, x]/(2 G)]},"
+          " Risch`RischDECertified[f, Together[D[b, x] + f b], x]]]", "x");
+    /* property: G = 1 + l(x) theta^k + c theta with l a random non-constant
+     * polynomial, b random in Q(x): the certified solver returns b */
+    BR_TRUE("SeedRandom[211]; And @@ Table[Module[{th = RandomChoice[{Log[x], Log[1 + x^2], Log[x + 2], E^x}],"
+            "   l = RandomInteger[{1, 3}] x + RandomInteger[{1, 3}], G, b, f, r},"
+            "   G = 1 + l th^RandomInteger[{1, 2}] + RandomInteger[{0, 2}] th;"
+            "   b = RandomChoice[{1/x, 1/(x + RandomInteger[{1, 3}]), x, x^2 + 1, 1}];"
+            "   f = Together[D[G, x]/(RandomInteger[{2, 3}] G)];"
+            "   r = Risch`RischDECertified[f, Together[D[b, x] + f b], x];"
+            "   Together[r - b] === 0], {24}]");
+}
+
 static void test_wrappers(void) {
     BR_EQ("brRischDE[1, x, x, {}]", "{\"Solution\", -1 + x}");
     BR_EQ("brRischDE[0, 1/x, x, {}]", "{\"NoSolution\"}");
@@ -119,6 +145,7 @@ static void test_wrappers(void) {
 
 int main(void) {
     br_init();
+    test_nonconstant_leading_coefficient();
     test_solutions();
     test_certificates();
     test_undecided();

@@ -585,10 +585,32 @@ static Expr* rc_lc(Expr* e, RdeCtx* C) {
 /* Derivation D (d/dx at base; the full tower derivation for m >= 0 — correct on
  * any element of K_m since d/dt_j vanishes for j > m). */
 static Expr* rc_D(Expr* e, RdeCtx* C) {
-    return (C->m < 0) ? rde_dx(e, C->x) : rt_tower_deriv(e, C->T, C->x);
+    if (C->m < 0) return rde_dx(e, C->x);
+    /* canonical: the raw tower derivative of a monic (1 + t^2 + x t^2)/(1 + x)
+     * keeps a t^2 coefficient 1/(1 + x) - (1 + x)/(1 + x)^2 that is 0 but not
+     * written as 0, so rc_deg overstated the degree and rc_gcd divided by it */
+    Expr* d = rt_tower_deriv(e, C->T, C->x);
+    if (!d) return d;
+    Expr* r = rde_canon(d); expr_free(d); return r;
 }
-static Expr* rc_quot(Expr* a, Expr* b, RdeCtx* C) { return rde_quot(a, b, C->tau); }
-static Expr* rc_rem(Expr* a, Expr* b, RdeCtx* C)  { return rde_rem(a, b, C->tau); }
+/* Quotient / remainder in tau over k(x), CANONICAL (rde_canon).  At m >= 0 the
+ * coefficients are rational functions of the lower field, and PolynomialRemainder
+ * leaves them uncombined: a remainder that is 0 in k(x)[tau] then fails
+ * rt_is_zero, so the en | dn h^2 guard of RdeNormalDenominator reported a false,
+ * CERTIFIED "no solution", and the Euclidean gcd divided by a zero leading
+ * coefficient (1/0).  Shape: Risch`RischDECertified[f, D[1/x] + f/x, x] with
+ * f = D[G]/(2 G), G = 1 + (1 + x) Log[x]^2.  At the base field (m < 0) the
+ * coefficients are rational numbers and the plain operation is exact. */
+static Expr* rc_quot(Expr* a, Expr* b, RdeCtx* C) {
+    Expr* q = rde_quot(a, b, C->tau);
+    if (C->m < 0 || !q) return q;
+    Expr* r = rde_canon(q); expr_free(q); return r;
+}
+static Expr* rc_rem(Expr* a, Expr* b, RdeCtx* C) {
+    Expr* q = rde_rem(a, b, C->tau);
+    if (C->m < 0 || !q) return q;
+    Expr* r = rde_canon(q); expr_free(q); return r;
+}
 static Expr* rc_xgcd(Expr* a, Expr* b, RdeCtx* C) {
     return rt_eval3("PolynomialExtendedGCD", expr_copy(a), expr_copy(b), expr_copy(C->tau));
 }
@@ -597,8 +619,10 @@ static Expr* rc_xgcd(Expr* a, Expr* b, RdeCtx* C) {
  * so compute the monic Euclidean gcd in tau explicitly (R1). */
 static Expr* rc_gcd(Expr* a, Expr* b, RdeCtx* C) {
     if (C->m < 0) return rde_gcd(a, b, C->x);
-    Expr* u = rt_eval1("Cancel", expr_copy(a));
-    Expr* v = rt_eval1("Cancel", expr_copy(b));
+    /* canonical operands (rde_canon, not Cancel): a zero leading coefficient left
+     * unreduced makes the monic step below divide by 0 (see rc_rem) */
+    Expr* u = rde_canon(a);
+    Expr* v = rde_canon(b);
     while (!rt_is_zero(v)) {
         Expr* r = rc_rem(u, v, C);
         expr_free(u); u = v; v = r;

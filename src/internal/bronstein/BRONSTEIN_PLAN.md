@@ -961,3 +961,29 @@ are 98 s spent in the final PossibleZeroQ), then the P0 items.
   from ~6k to 1.8k leaves.
 - Stress (600): 598 OK, 2 DECLINE (gap #9), **0 SLOWCHECK**.
 - Still open under #6/#7: RootSum per-orbit presentation; `Log[-E^x]` → x.
+
+### 2026-11-12 — P0 #3–#5: generator coverage, nightly ctests, coverage gate (v0.6524)
+
+- **#5 done**: `tools/check_bronstein_test_coverage.py` / `make check-bronstein-coverage`
+  / push-tier ctest `bronstein_test_coverage`. It covers 140 routines, with 1 exempt
+  (an inert symbol). It found `brRadicalValueCheck` returning from inside `With`
+  (a rational γ declined instead of passing); fixed and tested.
+- **#4 done**: nightly ctests `bronstein_stress` (600 cases, `--max-open 8`),
+  `bronstein_cascade_stress` (Automatic, `--max-open 0`) and `bronstein_fricas_stress`
+  (random plus perturbed, zero DISAGREE).
+- **#3 done**: four new families (constk, tower2, lccontent, expcube), plus a
+  perturbed near-miss half in the random family. On their first run they found:
+  - **a false certificate**: the `Risch`RischDECertified` canonical-arithmetic bug,
+    with a non-constant θ-leading coefficient (fixed in C);
+  - `Integrate`RischTranscendental` declining a single-kernel proper part plus a
+    new k-log (fixed: single-kernel field recursion);
+  - norm terms left as Log[const·p] and never merged (fixed: `brSplitLogs`,
+    `brCollectLogTerms`; expcube went from 61 s and an unverifiable PZQ to 1.3 s).
+- Stress (600, 10 families): 592 OK, 0 WRONG/FALSE_CERT, 8 DECLINE:
+  - 2 genus-1 special residues (#9);
+  - 3 `TorsionBeyondWeilBound` (lccontent, new);
+  - 2 special values over a radical extension of k (#15);
+  - 1 non-constant content over a radical constant field.
+- Still open under #6/#7: presentation of conjugate pairs (an ArcTan pair summing
+  to a constant survives the real form). Next: #8 cascade budgets, then the
+  lccontent declines.

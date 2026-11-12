@@ -106,15 +106,16 @@ brCoefficientAtZero[T_Association, cv_Association, c_, j_Integer] := Module[{th 
   Together[Total[(#[[2]] If[j - #[[1]] >= 0, rho[[j - #[[1]] + 1]], 0]) & /@ lau]]];
 
 brRadicalValueCheck::usage = "brRadicalValueCheck[T, lc, m, w, need] decides the special-place condition when the algebraic constant gamma = lc^(1/m) is NOT a constant times an element of k (k = Q(x) only: the lower tower must be empty). By the Galois weight of gamma w the eta-coefficient c of [B] Def 2.10 / 2.21 is 0, so the residues there vanish, and the condition becomes one about the algebraic function gamma w over Q(x), decided by Trager's algorithm: need \"Algebraic\" (Def 2.10: Int gamma w is algebraic, no logarithm) or \"Logarithmic\" (Def 2.21: Int gamma w is a sum of logarithms, no algebraic part). Returns True, or throws NonElementary (the condition fails: tau undefined) or Decline.";
-brRadicalValueCheck[T_Association, lc_, m_Integer, w_, need_String] := Module[{x = T["x"], cc, r, alg},
+brRadicalValueCheck[T_Association, lc_, m_Integer, w_, need_String] := Module[{x = T["x"], cc, r, p, q},
   If[Together[w] === 0, Return[True]];
   If[brLowerTower[T]["syms"] =!= {} || !rationalFunctionQ[lc, x] || !rationalFunctionQ[w, x],
     throwDecline["special value over a radical extension of k"]];
   (* gamma = lc^(1/m) = q^(-1) yh with yh^m = q^(m-1) num(lc); reduce to a curve Y^m' = G *)
-  With[{p = Numerator[Together[lc]], q = Denominator[Together[lc]]},
-    cc = componentCurve[m, Expand[q^(m - 1) p], 1, x];
-    If[cc["m"] === 1, Return[True]];   (* gamma is a rational multiple of an element of Q(x) *)
-    r = Trager`TragerIntegrateCurve[Together[w cc["s"]/q], x, cc["m"], cc["G"], "Trager"]];
+  p = Numerator[Together[lc]]; q = Denominator[Together[lc]];
+  cc = componentCurve[m, Expand[q^(m - 1) p], 1, x];
+  (* gamma is a rational multiple of an element of Q(x): no radical condition *)
+  If[cc["m"] === 1, Return[True]];
+  r = Trager`TragerIntegrateCurve[Together[w cc["s"]/q], x, cc["m"], cc["G"], "Trager"];
   (* A certificate only from a recognised answer: anything else (an unevaluated  *)
   (* call, a malformed result) is an internal error -- a decline, never a proof. *)
   If[!(MatchQ[r, {"not elementary" | "failed", _String}] ||

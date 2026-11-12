@@ -151,6 +151,24 @@ static void test_pipeline_routines(void) {
     BR_THROWS("brIntegrateBody[Sqrt[Log[x]], x]", "NonElementary",
               "no algebraic part: the Risch DE D b + s b = c has no solution ([B] Prop 2.15/2.18)");
     BR_EQ("BronsteinIntegrate[x^2, x]", "1/3 x^3");
+    /* brSplitLogs: a Y-free argument is split into factors (constants dropped),
+     * equal arguments merged, zero sums dropped; a Y-argument is kept */
+    BR_EQ("brSplitLogs[None, {{1, 6 x^2 (1 + x)}}, brYq, {x}]", "{{2, x}, {1, 1 + x}}");
+    BR_EQ("brSplitLogs[None, {{1, x^2}, {-2, 3 x}}, brYq, {x}]", "{}");
+    BR_EQ("brSplitLogs[None, {{1/2, (x + 1)/x}, {1/2, x}}, brYq, {x}]", "{{1/2, 1 + x}}");
+    BR_EQ("brSplitLogs[None, {{1, x + brYq}, {1, x}}, brYq, {x}]", "{{1, brYq + x}, {1, x}}");
+    BR_EQ("brSplitLogs[None, {}, brYq, {x}]", "{}");
+    BR_EQ("brSplitLogs[fieldFn[{x}, {t, t^2 + 3, I Sqrt[3]}], {{t, 2 t x}, {-t, x}}, brYq, {x}]", "{}");
+    /* property: the derivative of Sum c Log[u] is unchanged */
+    BR_TRUE("SeedRandom[33]; And @@ Table[Module[{L = Table[{RandomInteger[{-2, 2}], RandomInteger[{1, 5}] x^RandomInteger[{0, 2}] (x + RandomInteger[{1, 3}])^RandomInteger[{-1, 2}]}, {3}], S},"
+            "   S = brSplitLogs[None, L, brYq, {x}];"
+            "   Together[D[Total[#[[1]] Log[#[[2]]] & /@ L] - Total[#[[1]] Log[#[[2]]] & /@ S], x]] === 0], {20}]");
+    /* brCollectLogTerms: equal logarithms merged at the surface */
+    BR_EQ("brCollectLogTerms[2/3 Log[1 + x] + x - 2/3 Log[1 + x], x]", "x");
+    BR_EQ("brCollectLogTerms[Log[1 + x] + Log[1 + x]/2 + Sqrt[x], x]", "Sqrt[x] + 3/2 Log[1 + x]");
+    BR_EQ("brCollectLogTerms[Log[2] + Log[x], x]", "Log[2] + Log[x]");
+    BR_EQ("brCollectLogTerms[Log[x], x]", "Log[x]");
+    BR_EQ("brCollectLogTerms[0, x]", "0");
     /* every public name of another package is resolved (an unresolved one becomes an
      * undefined capitalised Bronstein`Private` symbol: an unevaluated call that once
      * produced a false certificate) */

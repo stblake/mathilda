@@ -1693,7 +1693,15 @@ monotonically down.
      towers (`∫12x⁴+5x⁴ log(x¹²cos x)−x⁵ tan x = x⁵ log(x¹²cos x)`), and deeper
      nested exponentials — including a constant-plus-rational inner exponent
      (`∫… = x e^(x e^(1+1/x))`) and a nested exp inside a circular kernel
-     (`∫e^(e^x)(1+x e^x) cos(x e^(e^x)) = sin(x e^(e^x))`).  Arithmetic warnings
+     (`∫e^(e^x)(1+x e^x) cos(x e^(e^x)) = sin(x e^(e^x))`).  A **single-kernel**
+     integrand that the flat single-extension cases decline is then integrated by
+     the same one-extension field recursion that serves deeper towers, verified
+     exactly in the tower variables. This covers a proper part in `t` plus a
+     `k`-part whose integral is a **new logarithm over k**, which used to stay
+     unevaluated although `Risch\`ElementaryIntegralQ` said `True`:
+     `∫ 1/(1+x) + 1/(x(1+log x)) dx = log(1+x) + log(1+log x)`, and
+     `∫ 1/(1+x) + e^x/(1+e^x) dx`. An exponential one also surfaces its partial
+     log part: `∫ (1+x+2e^x)/((1+e^x)(x+e^x)) dx = x − log(1+e^x) + ∫ dx/(x+e^x)`.  Arithmetic warnings
      from transient internal singular expressions are muted (as in Mathematica).
      When the integrand carries an inverse-trig factor it is exponentialised to
      complex logs; the real reconstruction renders the arctangent part in the
@@ -4767,6 +4775,16 @@ Out[4]= {$Failed, "RdeBoundDegreePrim: cancellation case"}
 
 This is the Risch DE used by the Bronstein integration package
 (`src/internal/bronstein/RDE.m`, `BRONSTEIN_PLAN.md`).
+
+
+**Canonical tower arithmetic (v0.6524).** Every remainder, quotient, tower
+derivative and gcd operand over `k(x)[t]` is now canonicalized. Before this, a θ-leading
+coefficient in `k` with a root other than `x = 0` (`G = 1 + (1 + x) Log[x]^2`)
+left a zero `t²` coefficient unreduced in `D(den)`. The Euclidean gcd then
+divided by it, and RdeNormalDenominator reported a **false certified
+`"NoSolution"`** for `D b + (DG/(2G)) b = D(1/x) + (DG/(2G))/x`, whose solution
+is `1/x`. Through `Integrate\`Bronstein` this was a false "not elementary" on
+`((x + 1) Log[1 + x^2]^2 + 1)^(1/3)/x`.
 
 ## PolynomialQuotientRemainder
 
