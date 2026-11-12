@@ -936,3 +936,15 @@ Cascade stress (seeds 200–207): 120/120 OK.
 Next: the exact per-component verification (the Method→Bronstein m ≥ 3 timeouts
 are 98 s spent in the final PossibleZeroQ), then the P0 items.
 
+### 2026-11-12 — exact verification, P0 items 1–2 (v0.6522)
+
+- `brComponentIdentityQ`: exact per-component verification on Y^m = G, replacing
+  the global PZQ (97 s → 3.4 s).
+- A core `With`/`Module`/`Block` initializer-Throw bug was found through the
+  Bronstein certificates and fixed in `src/modular.c`.
+- P0 #1 (Trager presentation re-verified) and P0 #2 (certificate-site audit:
+  11/12 already read explicit answers, and the constant-system "no" is now
+  shape-checked) are done.
+- Stress (600): 592 OK, 2 DECLINE (genus-1 special residues, gap #9), 6 SLOWCHECK
+  (5–6k-leaf m ≥ 3 answers, gap #6/#7). Cascade 120/120.
+

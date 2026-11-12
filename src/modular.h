@@ -31,6 +31,9 @@ Expr* scoping_capture_avoid(Expr* e, const char** danger, size_t ndanger);
  * does, and restore them. Every enter is paired with one leave; the frame
  * also unwinds with mth_block_depth_unwind like a Block's. Used by Dialog. */
 void* mth_block_enter(Expr* const* specs, size_t n);
+/* The in-flight Throw an initializer of the frame raised (caller owns it), or
+ * NULL: a Block-like caller then skips its body and calls mth_block_leave. */
+Expr* mth_block_thrown(void* frame);
 void  mth_block_leave(void* frame);
 /* Depth of the dynamic-scope stacks (Block frames + binding frames, below). */
 int  mth_block_depth_save(void);

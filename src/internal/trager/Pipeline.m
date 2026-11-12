@@ -274,7 +274,11 @@ presentable[f_, Fx_, x_Symbol] := Module[{real},
   (* The real form is presentation only (Fx is already verified): skip it on *)
   (* large answers and bound its time, rather than spend minutes in Together *)
   (* over nested radicals.                                                   *)
-  If[FreeQ[Fx, Complex] && FreeQ[Fx, RootSum], Return[Quiet[realForm[Fx, x]]]];
+  (* the real form rewrites logarithms; returned only when it is verified again
+     (Bronstein campaign 2026-11-12: an unverified presentation rewrote a log
+     inside a radical -- latent here, closed for the same reason) *)
+  If[FreeQ[Fx, Complex] && FreeQ[Fx, RootSum],
+    Return[With[{rf = Quiet[realForm[Fx, x]]}, If[rf === Fx || antiderivativeQ[f, rf, x], rf, Fx]]]];
   If[LeafCount[Fx] > tragerOption["RealFormMaxLeaves"], Return[Fx]];
   real = TimeConstrained[Quiet[realForm[Fx, x]], tragerOption["RealFormTime"], Fx];
   If[real =!= Fx && antiderivativeQ[f, real, x], real, Fx]];

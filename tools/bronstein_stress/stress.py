@@ -43,7 +43,8 @@ def main():
                 p = l.split("\t") + [""] * 6
                 got[p[1]] = dict(id=p[1], fam=p[2], cls=p[3], secs=float(p[4] or 0), detail=p[5])
         for c in cases:
-            _, cid, fam, f = c.split("\t", 3)
+            parts = c.split("\t")
+            cid, fam, f = parts[1], parts[2], parts[3]
             r = got.get(cid, dict(id=cid, fam=fam, cls="CRASH", secs=0.0, detail=""))
             r["f"] = f
             results.append(r)

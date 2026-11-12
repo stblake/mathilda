@@ -97,6 +97,24 @@ void test_uncaught() {
     assert_eval_eq("Catch[Throw[a, x], y]", "Hold[Throw[a, x]]", 0);  /* tag miss */
 }
 
+/* A Throw out of a scoping initializer leaves the construct at once: the body
+ * never runs (it used to, with the unevaluated Throw bound to the variable, and a
+ * body that only applied the variable -- s["F"] -- never re-raised it). */
+void test_scoping_initializers() {
+    assert_eval_eq("g$ct[] := Throw[1, \"t\"]; Catch[With[{s = g$ct[]}, s[\"F\"]], \"t\"]", "1", 0);
+    assert_eval_eq("Catch[Module[{s = g$ct[]}, s[\"F\"]], \"t\"]", "1", 0);
+    assert_eval_eq("Catch[Block[{s = g$ct[]}, s[\"F\"]], \"t\"]", "1", 0);
+    assert_eval_eq("ran$ct = 0; Catch[With[{s = g$ct[]}, ran$ct = 1; s], \"t\"]; ran$ct", "0", 0);
+    assert_eval_eq("ran$ct = 0; Catch[Module[{a = 1, b = Throw[9], c = (ran$ct = 2)}, ran$ct = 1; a]]", "9", 0);
+    assert_eval_eq("ran$ct", "0", 0);
+    /* Block restores what it localised before the throw */
+    assert_eval_eq("x$ct = 5; Catch[Block[{x$ct = 7, y$ct = Throw[3]}, x$ct]]", "3", 0);
+    assert_eval_eq("x$ct", "5", 0);
+    assert_eval_eq("Catch[With[{a = 1, b = Throw[8]}, a]]", "8", 0);
+    /* untouched when nothing throws */
+    assert_eval_eq("Module[{a = 2}, With[{b = a + 1}, Block[{c = b^2}, c]]]", "9", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -109,6 +127,7 @@ int main() {
     TEST(test_module_local_tag);
     TEST(test_handler_form);
     TEST(test_uncaught);
+    TEST(test_scoping_initializers);
 
     printf("All catch/throw tests passed!\n");
     symtab_clear();

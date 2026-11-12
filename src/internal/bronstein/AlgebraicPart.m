@@ -110,6 +110,8 @@ brPolyRDELog[T_Association, cv_Association, c_] := Module[
   rest = Together[(cl[[# + 1]] /. known)] & /@ Range[0, g + du - 1];
   eqs = Join[cons, Flatten[brIdenticallyZero[#, vars] & /@ rest]];
   eqs = DeleteCases[eqs, True];
+  (* a "no" only from a well-formed linear system over the constants *)
+  If[!brLinearConstantSystemQ[eqs, kappas], Return[{"Unknown", "constant system not well formed"}]];
   If[MemberQ[eqs, False], Return[{"NoSolution"}]];
   B = Sum[(bs[[j + 1]] /. known) th^j, {j, 0, N}];
   If[eqs =!= {},
@@ -124,3 +126,12 @@ brPolyRDELog[T_Association, cv_Association, c_] := Module[
 brIdenticallyZero::usage = "brIdenticallyZero[e, vars] is the list of equations (over the constants: symbols not in vars) that make the rational function e of vars vanish identically: every coefficient of its numerator, as a polynomial in vars, equal to 0.";
 brIdenticallyZero[e_, vars_List] := Module[{num = Expand[Numerator[Together[e]]]},
   If[num === 0, {}, (# == 0) & /@ (Last /@ CoefficientRules[num, vars])]];
+
+brLinearConstantSystemQ::usage = "brLinearConstantSystemQ[eqs, kappas] is True when every element of eqs is True, False or lhs == rhs with lhs - rhs a polynomial of degree <= 1 in the symbols kappas whose coefficients are explicit numbers (algebraic constants allowed): the only systems from which an inconsistency is read as a proof.";
+brLinearConstantSystemQ[eqs_List, kappas_List] := AllTrue[eqs,
+  Function[e, e === True || e === False ||
+    (Head[e] === Equal && Length[e] === 2 &&
+      With[{d = Expand[e[[1]] - e[[2]]]},
+        PolynomialQ[d, kappas] && (kappas === {} || Max[Exponent[d, #] & /@ kappas] <= 1) &&
+        Complement[Variables[d], kappas] === {} && FreeQ[d, Integrate | Risch`Derivation]])]];
+

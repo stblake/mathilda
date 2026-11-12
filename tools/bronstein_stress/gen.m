@@ -39,5 +39,5 @@ If[Environment["FAMILY"] === "random",
 Do[Module[{fam = RandomChoice[families], th = theta[], n = RandomChoice[{2, 2, 2, 3, 3, 4}], F, f},
    F = fam[[2]][th, n];
    f = Together[D[F, x]];
-   Print["CASE\t", seed, "-", i, "\t", fam[[1]], "\t", ToString[InputForm[f]]]],
+   Print["CASE\t", seed, "-", i, "\t", fam[[1]], "\t", ToString[InputForm[f]], "\t", ToString[InputForm[F]]]],
   {i, count}];

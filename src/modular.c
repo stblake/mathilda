@@ -643,6 +643,7 @@ Expr* builtin_module(Expr* res) {
         SymbolDef* temp;   /* the fresh local, counted for reclamation; NULL if not */
     } VarInfo;
     VarInfo* info = calloc(var_count, sizeof(VarInfo));
+    Expr* module_thrown = NULL;   /* an initializer's in-flight Throw */
 
     for (size_t i = 0; i < var_count; i++) {
         Expr* v = vars->data.function.args[i];
@@ -655,6 +656,9 @@ Expr* builtin_module(Expr* res) {
             if (v->data.function.args[0]->type == EXPR_SYMBOL) {
                 orig_name = v->data.function.args[0]->data.symbol.name;
                 init_val = evaluate(v->data.function.args[1]);
+                /* A Throw out of an initializer leaves the Module at once (the
+                 * body is skipped); the locals made so far are released below. */
+                if (eval_is_inflight_throw(init_val)) { module_thrown = init_val; break; }
             }
         }
 
@@ -686,9 +690,14 @@ Expr* builtin_module(Expr* res) {
         }
     }
 
-    Expr* substituted_body = substitute_scoping(body, env);
-    Expr* final_res = evaluate(substituted_body);
-    expr_free(substituted_body);
+    Expr* final_res;
+    if (module_thrown) {
+        final_res = module_thrown;
+    } else {
+        Expr* substituted_body = substitute_scoping(body, env);
+        final_res = evaluate(substituted_body);
+        expr_free(substituted_body);
+    }
 
     /* Trap Return targeting this Module. Return[v] (1-arg) is consumed
      * unconditionally; Return[v, h] is consumed only when h == Module,
@@ -769,6 +778,7 @@ typedef struct BlockFrame {
     BlockSavedVar*     saved;
     size_t             count;
     struct BlockFrame* next;
+    Expr*              thrown;   /* an initializer's in-flight Throw, or NULL */
 } BlockFrame;
 
 static BlockFrame* block_stack = NULL;
@@ -1063,6 +1073,7 @@ void* mth_block_enter(Expr* const* specs, size_t n) {
     BlockFrame* frame = malloc(sizeof(BlockFrame));
     frame->saved = calloc(n ? n : 1, sizeof(BlockSavedVar));
     frame->count = n;
+    frame->thrown = NULL;
     frame->next  = block_stack;
     block_stack  = frame;
     block_depth++;
@@ -1078,6 +1089,9 @@ void* mth_block_enter(Expr* const* specs, size_t n) {
             if (v->data.function.args[0]->type == EXPR_SYMBOL) {
                 name = v->data.function.args[0]->data.symbol.name;
                 init_val = evaluate(v->data.function.args[1]);
+                /* A Throw out of an initializer: stop localising; the caller
+                 * (mth_block_thrown) skips the body and restores the frame. */
+                if (eval_is_inflight_throw(init_val)) { frame->thrown = init_val; break; }
             }
         }
 
@@ -1130,6 +1144,16 @@ void* mth_block_enter(Expr* const* specs, size_t n) {
     return frame;
 }
 
+/* The in-flight Throw an initializer of the frame raised (ownership passes to
+ * the caller), or NULL. */
+Expr* mth_block_thrown(void* f) {
+    BlockFrame* frame = f;
+    if (!frame) return NULL;
+    Expr* t = frame->thrown;
+    frame->thrown = NULL;
+    return t;
+}
+
 /* Pop and restore a frame from mth_block_enter. An inner Block always pops
  * before its outer one, so the frame is on top; one a TimeConstrained unwind
  * already drained (mth_block_depth_unwind) is no longer there and is left
@@ -1152,7 +1176,8 @@ Expr* builtin_block(Expr* res) {
 
     void* frame = mth_block_enter(vars->data.function.args, vars->data.function.arg_count);
 
-    Expr* final_res = evaluate(body);
+    Expr* thrown = mth_block_thrown(frame);
+    Expr* final_res = thrown ? thrown : evaluate(body);
 
     /* Trap Return targeting this Block. Symmetric to the Module path. */
     {
@@ -1190,6 +1215,19 @@ Expr* builtin_with(Expr* res) {
                     name = v->data.function.args[0]->data.symbol.name;
                     if (h == SYM_Set) {
                         val = evaluate(v->data.function.args[1]);
+                        /* A Throw out of an initializer leaves the With at once:
+                         * the body must not run (it ran, with the unevaluated
+                         * Throw bound to the variable -- and a body that only
+                         * applies the variable, s["F"], never re-raised it). */
+                        if (eval_is_inflight_throw(val)) {
+                            while (env) {
+                                ScopingEnv* next = env->next;
+                                expr_free(env->replacement);
+                                free(env);
+                                env = next;
+                            }
+                            return val;
+                        }
                     } else {
                         val = expr_copy(v->data.function.args[1]);
                     }

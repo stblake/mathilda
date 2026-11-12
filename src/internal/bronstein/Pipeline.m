@@ -48,10 +48,13 @@ brIntegrateComponent[T_Association, cv_Association, c_] := Module[{hr, sr, lp, a
   F = lp["F"]; B = lp["B"];
   Do[
     logs = Join[logs, {
-      {brTermExpression[F, t[[1]]], brTermExpression[F, afToY[B, t[[2]], Ys]]},
-      {brTermExpression[F, -t[[1]]/cv["m"]], brTermExpression[F, t[[3]]]}}],
+      {t[[1]], afToY[B, t[[2]], Ys]},
+      {-t[[1]]/cv["m"], t[[3]]}}],
     {t, lp["terms"]}];
-  <|"Algebraic" -> b, "Logs" -> logs, "Y" -> Ys|>];
+  (* raw: coefficients and logands over F (the residue-field generator t still a
+     symbol), as the exact verification needs them; "Logs" the presented ones *)
+  <|"Algebraic" -> b, "RawLogs" -> logs, "Field" -> F,
+    "Logs" -> ({brTermExpression[F, #[[1]]], brTermExpression[F, #[[2]]]} & /@ logs), "Y" -> Ys|>];
 
 brAssembleComponent::usage = "brAssembleComponent[T, res, Yexpr, x] writes the component integral res (brIntegrateComponent) in the surface: the curve generator replaced by Yexpr (an expression in the tower symbols), the tower symbols by their kernels; logarithms of arguments free of x (constants of integration) are dropped.";
 brAssembleComponent[T_Association, res_Association, Yexpr_, x_Symbol] := Module[{Y = res["Y"], alg, logs},
@@ -60,30 +63,47 @@ brAssembleComponent[T_Association, res_Association, Yexpr_, x_Symbol] := Module[
       #[[1]] Log[brToSurface[T, Together[#[[2]] /. Y -> Yexpr]]]] & /@ res["Logs"]];
   alg + logs];
 
+brComponentIdentityQ::usage = "brComponentIdentityQ[T, cv, c, res] verifies EXACTLY that res integrates the component c Y on its curve Y^m = G (cv): with the tower derivation extended by D Y = s Y, s = DG/(mG), the numerator of D(b Y + Sum c_j Log[u_j]) - c Y reduces to 0 modulo Y^m - G and the residue field's minimal polynomial mu(t). This is an algebraic identity in k(theta)(Y); writing Y as yh^i/s (or G^(1/m)) and the symbols as surface kernels preserves derivatives (every kernel's derivative is its rule), so it is the statement PossibleZeroQ[D[F, x] - f] tests, decided exactly.";
+brComponentIdentityQ[T_Association, cv_Association, c_, res_Association] := Module[
+  {Y = res["Y"], m = cv["m"], G = cv["G"], rules, Fi, R, num, F = res["Field"]},
+  rules = Append[T["rules"], Y -> cv["s"] Y];
+  Fi = res["Algebraic"] Y + Total[(#[[1]] Log[#[[2]]]) & /@ res["RawLogs"]];
+  R = Risch`Derivation[Fi, rules] - c Y;
+  num = Expand[Numerator[Together[R]]];
+  num = Expand[PolynomialRemainder[num, Y^m - G, Y]];
+  If[F =!= None && fieldExtQ[F], num = Expand[PolynomialRemainder[num, F["mu"], F["t"]]]];
+  Together[num] === 0];
+
 brShapeA::usage = "brShapeA[T, f, x] integrates the Shape A integrand f (tower record T): coordinate 0 by the transcendental Risch algorithm, every component by brIntegrateComponent; it returns the (unverified) antiderivative.";
-brShapeA[T_Association, f_, x_Symbol] := Module[{cf, n, g, yh, total, cc, cv, res, Yexpr, rho},
+brShapeA[T_Association, f_, x_Symbol] := Module[{cf, n, g, yh, total, cc, cv, res, Yexpr, rho, a0, exact = True},
   cf = brCanonicalForm[T];
   n = cf["n"]; g = cf["g"]; yh = cf["y"];
-  total = brIntegrateTranscendental[brToSurface[T, cf["coeffs"][[1]]], x];
+  a0 = brToSurface[T, cf["coeffs"][[1]]];
+  total = brIntegrateTranscendental[a0, x];
+  (* coordinate 0 is small: checked on its own *)
+  If[!TrueQ[antiderivativeQ[a0, total, x]], throwInternal["brCoordinate0Check", <|"a0" -> a0|>]];
   Do[
     If[cf["coeffs"][[i + 1]] =!= 0,
       cc = brComponentCurve[T, n, g, i];
       If[cc["m"] === 1,
         (* the component is rational in theta times the locally constant rho *)
         rho = brToSurface[T, (cf["yexpr"]^i/cc["s"])/cc["G"]^(1/cc["m"])];
+        exact = False;
         total = total + rho brIntegrateTranscendental[brToSurface[T, Together[cf["coeffs"][[i + 1]] cc["s"] cc["G"]]], x],
         cv = brCurve[T, cc["m"], cc["G"]];
         res = brIntegrateComponent[T, cv, Together[cf["coeffs"][[i + 1]] cc["s"]]];
+        If[!brComponentIdentityQ[T, cv, Together[cf["coeffs"][[i + 1]] cc["s"]], res],
+          throwInternal["brComponentIdentity", <|"i" -> i|>]];
         If[cc["exact"],
           rho = 1; Yexpr = Together[cf["yexpr"]^i/cc["s"]],
           Yexpr = cc["G"]^(1/cc["m"]);
           rho = brToSurface[T, (cf["yexpr"]^i/cc["s"])/Yexpr]];
         total = total + rho brAssembleComponent[T, res, Yexpr, x]]],
     {i, 1, n - 1}];
-  total];
+  <|"F" -> total, "verified" -> exact|>];
 
 brIntegrateBody::usage = "brIntegrateBody[f, x] is the body of BronsteinIntegrate: it throws instead of returning failure lists.";
-brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl, u = Unique["Bronstein`Private`brUf"]},
+brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl, u = Unique["Bronstein`Private`brUf"], verified = False},
   T = brTower[f, x];
   F = Switch[T["shape"],
     "Rational" | "Transcendental", brIntegrateTranscendental[f, x],
@@ -98,14 +118,14 @@ brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl,
       If[fl === None, throwDecline["radical over Q(x) below the transcendental tower (Shape B, a later phase)"]];
       r = brIntegrateTranscendental[fl["g"], u];
       r /. fl["back"],
-    "A", brShapeA[T, f, x],
+    "A", With[{sa = brShapeA[T, f, x]}, If[sa["verified"], verified = True]; sa["F"]],
     _, throwInternal["brUnknownShape"]];
-  If[!antiderivativeQ[f, F, x], throwInternal["AntiderivativeCheckFailed", <|"f" -> f, "F" -> F|>]];
+  If[!verified && !antiderivativeQ[f, F, x], throwInternal["AntiderivativeCheckFailed", <|"f" -> f, "F" -> F|>]];
   brPresentable[f, F, x]];
 
 brPresentable::usage = "brPresentable[f, F, x] is Trager's real-form presentation of the verified antiderivative F, RE-VERIFIED: the presentation may rewrite logarithms (dropping a constant from Log[c u] is harmless at top level but wrong inside a radical, where Log[2 + 2x] -> Log[1 + x] changed the answer), so the presented form is returned only when antiderivativeQ confirms it, else F itself.";
-brPresentable[f_, F_, x_Symbol] := Module[{R = Quiet[presentable[f, F, x]]},
-  If[R === F || TrueQ[antiderivativeQ[f, R, x]], R, F]];
+brPresentable[f_, F_, x_Symbol] := Module[{R = Quiet[TimeConstrained[presentable[f, F, x], brOption["PresentationTime"], F]]},
+  If[R === F || TrueQ[TimeConstrained[antiderivativeQ[f, R, x], brOption["PresentationTime"], False]], R, F]];
 
 BronsteinIntegrate[f_, x_Symbol] := Module[{r},
   r = brCatch[brIntegrateBody[f, x]];

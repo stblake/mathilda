@@ -106,6 +106,12 @@ static void test_param_limited(void) {
 }
 
 static void test_algebraic_part(void) {
+    /* constant systems: a "no" only from a well-formed linear system */
+    BR_TRUE("brLinearConstantSystemQ[{brK1 + 2 == 0, False, True}, {brK1}]");
+    BR_TRUE("brLinearConstantSystemQ[{Sqrt[2] brK1 - brK2 == 0}, {brK1, brK2}]");
+    BR_FALSE("brLinearConstantSystemQ[{brK1^2 == 1}, {brK1}]");
+    BR_FALSE("brLinearConstantSystemQ[{x brK1 == 0}, {brK1}]");
+    BR_FALSE("brLinearConstantSystemQ[{Risch`Derivation[foo, {}] == 0}, {}]");
     BR_EQ("brMthPowerCofactor[4 x^2, 2]", "x");
     BR_EQ("brMthPowerCofactor[x, 2]", "None");
     BR_EQ("brMthPowerCofactor[3, 2]", "1");

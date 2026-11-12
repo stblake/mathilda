@@ -133,7 +133,17 @@ static void test_pipeline_routines(void) {
     br_run("cv134 = brCurve[T134, 2, brT1 + x]; res134 = brIntegrateComponent[T134, cv134, (1 + x)/(x (brT1 + x)^2)]; True");
     BR_EQ("{res134[\"Algebraic\"], res134[\"Logs\"]}", "{-2/(brT1 + x), {}}");
     BR_EQ("brAssembleComponent[T134, res134, Sqrt[brT1 + x], x]", "-2/Sqrt[x + Log[x]]");
-    BR_EQ("brShapeA[T134, (x + 1)/((x Log[x] + x^2) Sqrt[x + Log[x]]), x]", "-2/Sqrt[x + Log[x]]");
+    BR_EQ("brShapeA[T134, (x + 1)/((x Log[x] + x^2) Sqrt[x + Log[x]]), x][\"F\"]", "-2/Sqrt[x + Log[x]]");
+    BR_TRUE("brShapeA[T134, (x + 1)/((x Log[x] + x^2) Sqrt[x + Log[x]]), x][\"verified\"]");
+    /* the exact per-component identity: accepts the true integral, rejects a wrong one */
+    BR_TRUE("brComponentIdentityQ[T134, cv134, (1 + x)/(x (brT1 + x)^2), res134]");
+    BR_FALSE("brComponentIdentityQ[T134, cv134, (1 + x)/(x (brT1 + x)^2), Join[res134, <|\"Algebraic\" -> -3/(brT1 + x)|>]]");
+    BR_FALSE("brComponentIdentityQ[T134, cv134, 1/x, res134]");
+    /* with logarithms over a residue field: the arcsinh component */
+    br_run("TL1b = brTower[1/(x Sqrt[Log[x]^2 + 1]), x]; True");
+    br_run("cvL1b = brCurve[TL1b, 2, brT1^2 + 1]; resL1b = brIntegrateComponent[TL1b, cvL1b, 1/((1 + brT1^2) x)]; True");
+    BR_TRUE("brComponentIdentityQ[TL1b, cvL1b, 1/((1 + brT1^2) x), resL1b]");
+    BR_FALSE("brComponentIdentityQ[TL1b, cvL1b, 2/((1 + brT1^2) x), resL1b]");
     BR_THROWS("brIntegrateComponent[T134, cv134, 1/x]", "NonElementary",
               "no algebraic part: the Risch DE D b + s b = c has no solution ([B] Prop 2.15/2.18)");
     BR_THROWS("brIntegrateComponent[T134, <|\"m\" -> 2, \"G\" -> (brT1 + x)^2, \"s\" -> 0|>, 1]", "Internal", "brCurveNotReduced");

@@ -99,6 +99,7 @@ brParamIntegrate[T_Association, rho_, sigmas_List] := Module[{pieces, ints, spli
   kappas = Table[Symbol["Bronstein`Private`brKappa" <> ToString[i]], {i, Length[sigmas]}];
   eqs = If[nbs === 0, {}, Table[logc[[1, l]] + Sum[kappas[[i]] logc[[i + 1, l]], {i, Length[sigmas]}] == 0, {l, nbs}]];
   eqs = DeleteCases[eqs, True];
+  If[!brLinearConstantSystemQ[eqs, kappas], Return[{"Unknown", "constant system not well formed"}]];
   If[MemberQ[eqs, False], Return[{"NoSolution"}]];
   If[eqs =!= {} && kappas =!= {} && (sol = Solve[eqs, kappas]) === {}, Return[{"NoSolution"}]];
   If[eqs =!= {} && kappas === {}, Return[{"NoSolution"}]];
