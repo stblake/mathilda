@@ -50,6 +50,9 @@ static volatile sig_atomic_t g_state = TERM_STATE_IDLE;
 static volatile sig_atomic_t g_reading_interrupt = 0;
 static volatile sig_atomic_t g_have_last = 0;
 static volatile sig_atomic_t g_last_ms = 0;
+/* stderr is a terminal: cached at install time because isatty() is not
+ * async-signal-safe. Used to end the tty's echoed "^C" with a newline. */
+static volatile sig_atomic_t g_stderr_tty = 0;
 
 static void default_exit(int status) { _Exit(status); }
 static void (*g_exit_fn)(int) = default_exit;
@@ -91,6 +94,11 @@ void term_interrupt_on_signal_at(long now_ms) {
             break;   /* reached only with a test exit function */
         }
         mth_interrupt_request();
+#ifndef _WIN32
+        /* The tty driver echoes "^C" with no newline; without this the
+         * result prints on that line ("^COut[3]= $Aborted"). */
+        if (g_stderr_tty && write(2, "\n", 1) < 0) { /* best effort */ }
+#endif
         g_have_last = 1;
         g_last_ms = (sig_atomic_t)now;
         break;
@@ -118,6 +126,7 @@ static bool g_installed = false;
 
 void term_interrupt_install(void) {
     if (g_installed) return;
+    g_stderr_tty = isatty(2) ? 1 : 0;
     struct sigaction sa;
     sa.sa_handler = on_sigint;
     sigemptyset(&sa.sa_mask);
