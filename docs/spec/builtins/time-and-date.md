@@ -120,6 +120,20 @@ In[5]:= AbsoluteTiming[TimeConstrained[Pause[3], 0.3]]
 Out[5]= {0.300412, $Aborted}
 ```
 
+## Internal`TimeConstrainedRemaining
+The seconds left before the innermost active `TimeConstrained` deadline.
+- `Internal`TimeConstrainedRemaining[]`
+
+**Features**:
+- `Protected`. Returns a Real: `0.` once the deadline has passed, and `Infinity` outside any `TimeConstrained`.
+- A nested budget is already clamped to the outer one, so the value is the time the
+  *enclosing* computation has left: `TimeConstrained[TimeConstrained[Internal`TimeConstrainedRemaining[], 50], 2]`
+  is about `2.`.
+- For package code that holds a verified answer and has an optional step to spend time on.
+  When a nested `TimeConstrained` expires because the outer budget is exhausted, the
+  *outer* call aborts, and the answer is lost with it. Bronstein's real-form presentation
+  therefore takes at most a third of what is left (v0.6526).
+
 ## AbsoluteTime
 Gives the total number of seconds since the beginning of January 1, 1900.
 - `AbsoluteTime[]` -- current wall-clock time, in the local time zone, as a machine real with sub-second resolution (so `AbsoluteTime[] - t0` times a computation).

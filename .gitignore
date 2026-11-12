@@ -89,3 +89,7 @@ AGENTS.md
 /a3.txt
 /s6.txt
 /mathilda_plot.png
+
+# The integration shootout run cache (resumable, large); results/<date>.json is tracked.
+benchmarks/256-integration-shootout/results/cache.jsonl
+benchmarks/256-integration-shootout/REPORT-partial.md

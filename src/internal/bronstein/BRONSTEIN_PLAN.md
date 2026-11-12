@@ -913,12 +913,41 @@ can neither close nor certify them. These are N3 material for the benchmark.
 **P3 — scope extensions** (the original plan's later phases):
 16. **Shape B** (Phases 10–11): the radical over Q(x) below the tower. This also
     unlocks #15.
-17. **Integral generator and benchmark 256** (Phase 9b). The stress generator is
-    its seed: add the N1/N2/N3 filters, the frozen corpus and the benchmark files.
+17. **Integral generator and benchmark 256** (Phase 9b). **Done 2026-11-12, as the
+    integration shootout** (`benchmarks/256-integration-shootout/`,
+    `tools/integration_shootout/`): 1151 cases in five classes, every applicable
+    Mathilda method beside FriCAS, Maxima, sympy and Wolfram, each answer checked by
+    its own system. Nightly ctest `integration_shootout_stress` with a ratchet
+    baseline. Shape B items join it after Phase 11.
 18. **Phase 12**: a TrigToExp front end with real forms; the [B] pp.155–157 case
     where η' is a linear combination of logarithmic derivatives.
 
 **Order of work:** 1–5 → 8a → 8 → 6–7 → 9 → 10 → 11 → 13–14 → 17 → 16 (with 15) → 12 → 18.
+
+### 2026-11-12 — integration shootout (v0.6526)
+
+First full run: Mathilda `Automatic` closed 870 of 1151 (Wolfram 908, FriCAS 666,
+Maxima 577, sympy 443), with 5 wrong answers and no false certificates. Fixed:
+- the 5 wrong answers: the cubic Legendre form in ParallelMixedSpecial had a
+  piecewise sign (`CubicData` now orders the roots for a constant sign);
+- the one AUTO-GAP (`lccontent-2-3`): Bronstein's optional presentation overran the
+  cascade budget and lost the verified answer (`brPresentationTime`);
+- a garbage answer (`$Failed + tragerFail[..]`): a `$RecursionLimit` overflow in
+  ParallelMixedSpecial left the evaluator degraded for the rest of the cascade
+  (contained at each stage now).
+
+Final run: 878 closed, 0 WRONG / FALSE_CERT / DISAGREE / AUTO-GAP. Targets it
+leaves (see `REPORT.md`):
+- **A, algebraic, 57% vs Wolfram 83%:** torsion-heavy (0/18), genus hyper/super,
+  Chebyshev and binomial families. Wolfram's extra closes there are mostly
+  hypergeometric, which no Mathilda method produces for algebraic integrands.
+- **B, radical at the bottom, 48% vs 72%:** Bronstein declines this shape, so it
+  needs Shape B (#16).
+- **M random/perturbed:** 0/33 `mrandom` for every system (most are presumably
+  non-elementary, unproven).
+- **Why ParallelMixedSpecial overflows `$RecursionLimit`** on
+  `9/(x (-3 + 2x + Log[1+x^2])^(3/2) + x^3 (..)^(3/2))`: contained, not yet
+  explained.
 
 ### 2026-11-12 — cascade grind fixed (v0.6521)
 

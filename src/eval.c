@@ -93,6 +93,15 @@ static uint64_t g_pack_gate_ticks = 0;
 int  eval_get_recursion_limit(void) { return eval_recursion_limit; }
 int  eval_get_recursion_depth(void) { return eval_recursion_depth; }
 bool eval_overflow_fired(void) { return eval_overflow; }
+/* A caller that CONTAINS an overflow -- it ran a nested computation that hit
+ * $RecursionLimit and has turned that computation's result into a decline --
+ * clears the sticky flag, so the evaluation around it is not left in the
+ * one-rewrite degraded mode (every enclosing fixed-point loop bailing after a
+ * single step).  Left set, that mode made Integrate's cascade accept
+ * Quiet[GRTable`Private`runIndef[...]] -- one rewrite of a declining table
+ * lookup -- as an antiderivative, and Linearity sum the failure objects of its
+ * sub-integrals into "the answer" (integration shootout, 2026-11-12). */
+void eval_overflow_clear(void) { eval_overflow = false; }
 void eval_set_recursion_limit(int n) {
     eval_recursion_limit = (n >= MIN_RECURSION_LIMIT) ? n : DEFAULT_RECURSION_LIMIT;
 }

@@ -128,6 +128,85 @@ static void test_kernel_elliptic(void) {
                     "the elliptic pencil answers with an elliptic integral");
 }
 
+/* The cubic Legendre presentation must be an antiderivative on the WHOLE real
+ * domain, not merely at the three verification samples.  With complex roots
+ * (y^2 = 1 + x^3) the old root ordering made d/dx of the EllipticF form equal
+ * -f for x < 1/2 and +f beyond, and the samples {x0, 9/4, 13/5} all lay beyond
+ * the flip: five wrong answers in the 2026-11-12 integration shootout
+ * (classic-12, trager-third-012..014, trager-ratrad-005).  CubicData now puts
+ * the real root last, which keeps the sign constant on the whole line.  The
+ * residual is asserted at points on both sides of the old flip, including
+ * x0 = 1/2, where the old form also met a branch cut of EllipticPi. */
+static void assert_solves_on(const char* f, const char* pts) {
+    char buf[2048];
+    snprintf(buf, sizeof(buf),
+        "Module[{r = Integrate`ParallelMixedSpecial[%s, x]},"
+        " Head[r] =!= Integrate`ParallelMixedSpecial && Head[r] =!= List &&"
+        " AllTrue[%s, Abs[N[(D[r, x] - (%s)) /. x -> #, 30]] < 10^-20 &]]", f, pts, f);
+    char* s = eval_str(buf);
+    ASSERT_MSG(strcmp(s, "True") == 0,
+               "ParallelMixedSpecial(%s): expected an answer differentiating "
+               "back at every x in %s, got %s", f, pts, s);
+    free(s);
+}
+
+static void test_cubic_branch_whole_line(void) {
+    const char* pts = "{-9/10, -1/2, 1/10, 1/3, 1/2, 7/10, 9/4, 7}";
+    assert_solves_on("1/Sqrt[1 + x^3]", pts);
+    assert_solves_on("x/Sqrt[1 + x^3]", pts);
+    assert_solves_on("1/((x - 2) Sqrt[1 + x^3])", "{-9/10, -1/2, 1/3, 1/2, 7/10, 9/4, 7}");
+    assert_solves_on("1/((x - 3) Sqrt[1 + x^3])", "{-9/10, -1/2, 1/3, 1/2, 7/10, 9/4, 7}");
+    assert_solves_on("x^3 (1 + x^3)^(3/2)/(x - 2)", "{-9/10, -1/2, 1/3, 1/2, 7/10, 9/4, 7}");
+    assert_solves_on("1/Sqrt[2 - x^3]", "{-3, -1/2, 1/2, 1}");
+    assert_solves_on("1/Sqrt[x^3 - x]", "{-7/10, -1/3, 7/5, 4}");
+    /* the ordering itself: the real root of 1 + g^3 is e3, and the sign is the
+     * exact constant (+-1), never a radical expression */
+    assert_true_msg("Module[{cd = ParallelMixed`Private`CubicData[g, 1 + g^3]},"
+                    " cd[[4]] === -1 && MemberQ[{1, -1}, cd[[8]]]]",
+                    "CubicData puts the real root of 1 + g^3 last, constant sign");
+    /* three real roots: some ordering has one sign on the whole line, and
+     * EllInt built on it differentiates back wherever q > 0 */
+    assert_true_msg("Module[{cd = ParallelMixed`Private`CubicData[g, g^3 - g]},"
+                    " Sort[cd[[2 ;; 4]]] === {-1, 0, 1} && MemberQ[{1, -1}, cd[[8]]]]",
+                    "CubicData on g^3 - g: a constant-sign ordering");
+    assert_true_msg("Module[{e = ParallelMixed`Private`EllInt[g, g^3 - g, 0]},"
+                    " AllTrue[{-7/10, -1/3, 7/5, 4}, Abs[N[(D[e, g] - 1/Sqrt[g^3 - g]) /. g -> #, 30]] < 10^-20 &]]",
+                    "EllInt[g, g^3 - g, 0] is an antiderivative on both real intervals");
+    /* CubicSign on the old ordering of 1 + g^3 (real root first): the sign flips
+     * on the line, so it is None in both modes */
+    assert_true_msg("Module[{e1 = -1, e2 = (-1)^(1/3), e3 = -(-1)^(2/3)},"
+                    " ParallelMixed`Private`CubicSign[g, 1 + g^3, 1, Sqrt[e1 - e3],"
+                    " (e2 - e3)/(e1 - e3), ArcSin[Sqrt[(e1 - e3)/(g - e3)]], #] & /@"
+                    " {True, False}] === {None, None}",
+                    "CubicSign rejects the ordering whose sign flips");
+}
+
+/* A $RecursionLimit overflow inside a stage is contained at the stage
+ * (stage_contain_overflow in integrate.c): ParallelMixedSpecial overflows on this
+ * integrand, and the evaluator's overflow flag, sticky for the rest of the
+ * top-level evaluation, used to leave every later stage stopping after one
+ * rewrite.  The GR table's lookup then came back as
+ * Quiet[GRTable`Private`runIndef[..]] and passed as an answer, and Integrate
+ * returned $Failed + 9 Trager`Private`tragerFail[..] + ... (integration
+ * shootout 2026-11-12, mperturb-2-1 / mperturb-2-2). */
+static void test_overflow_contained(void) {
+    assert_true_msg("Module[{r = Integrate[9/(x (-3 + 2 x + Log[1 + x^2])^(3/2) + "
+                    "x^3 (-3 + 2 x + Log[1 + x^2])^(3/2)), x]},"
+                    " Head[r] === Integrate && FreeQ[r, $Failed]]",
+                    "the overflowing integrand stays unevaluated, no failure tokens");
+    assert_true_msg("Module[{r = Integrate[(x - x^4 + x (-3 + 2 x + Log[1 + x^2]) + "
+                    "x^3 (-3 + 2 x + Log[1 + x^2]) + (-3 + 2 x + Log[1 + x^2])^2 + "
+                    "x^2 (-3 + 2 x + Log[1 + x^2])^2)/(x (-3 + 2 x + Log[1 + x^2])^(3/2) + "
+                    "x^3 (-3 + 2 x + Log[1 + x^2])^(3/2)), x]},"
+                    " FreeQ[r, $Failed] && FreeQ[r, s_Symbol /; StringContainsQ[Context[s], \"Private`\"]]]",
+                    "Linearity never sums failure objects into an answer");
+    /* the rest of the SAME top-level evaluation runs normally after a method
+     * that overflowed */
+    assert_eval("Module[{t = 9/(x (-3 + 2 x + Log[1 + x^2])^(3/2) + x^3 (-3 + 2 x + Log[1 + x^2])^(3/2))},"
+                " Quiet[Integrate[t, x, Method -> \"ParallelMixedSpecial\"]];"
+                " {StringLength[ToString[ab]], Total[Table[k, {k, 4}]]}]", "{2, 10}");
+}
+
 /* An elementary integrand must come back elementary -- a special function here
  * would mean the stage reached for a kernel it did not need (Section 8.1, E1). */
 static void test_elementary_stays_elementary(void) {
@@ -495,6 +574,8 @@ int main(void) {
     TEST(test_kernel_li);
     TEST(test_kernel_sici);
     TEST(test_kernel_elliptic);
+    TEST(test_cubic_branch_whole_line);
+    TEST(test_overflow_contained);
     TEST(test_elementary_stays_elementary);
     TEST(test_certificate_now_released);
     TEST(test_tangent_tower_kernels);

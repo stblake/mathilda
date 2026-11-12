@@ -6596,6 +6596,21 @@ if(PYTHON3_EXE)
              WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
     set_tests_properties(bronstein_stress bronstein_cascade_stress bronstein_fricas_stress
                          PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 7200)
+    # The integration shootout (benchmarks/256-integration-shootout): every
+    # applicable Mathilda Integrate method and FriCAS/Maxima/sympy/Wolfram on one
+    # corpus, each system verifying its own answers.  The harness unit tests
+    # (parser, emitters, translation round trips, verdict truth tables) are push
+    # tier; the nightly runs the quick subset (every 8th case) through Mathilda's
+    # methods and FriCAS, failing on a WRONG / FALSE_CERT / DISAGREE or a closed
+    # count below baseline.json.
+    add_test(NAME integration_shootout_harness_tests
+             COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/integration_shootout/test_shootout.py
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    add_test(NAME integration_shootout_stress
+             COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/integration_shootout/shootout.py
+                     --quick --systems mathilda,fricas --check
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    set_tests_properties(integration_shootout_stress PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 7200)
     # Linear algebra on SparseArray against recorded reference / scipy /
     # maxima answers (tools/sparse_linalg_oracle.py): --quick replays 150
     # recorded cases with no oracle installed (per push); the stress run

@@ -144,9 +144,12 @@ brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl,
   If[!verified && !antiderivativeQ[f, F, x], throwInternal["AntiderivativeCheckFailed", <|"f" -> f, "F" -> F|>]];
   brPresentable[f, F, x]];
 
-brPresentable::usage = "brPresentable[f, F, x] is Trager's real-form presentation of the verified antiderivative F, RE-VERIFIED: the presentation may rewrite logarithms (dropping a constant from Log[c u] is harmless at top level but wrong inside a radical, where Log[2 + 2x] -> Log[1 + x] changed the answer), so the presented form is returned only when antiderivativeQ confirms it, else F itself.";
-brPresentable[f_, F_, x_Symbol] := Module[{R = Quiet[TimeConstrained[presentable[f, F, x], brOption["PresentationTime"], F]]},
-  If[R === F || TrueQ[TimeConstrained[antiderivativeQ[f, R, x], brOption["PresentationTime"], False]], R, F]];
+brPresentable::usage = "brPresentable[f, F, x] is Trager's real-form presentation of the verified antiderivative F (presentable, which returns the real form only when antiderivativeQ confirms it: the presentation may rewrite logarithms, and Log[2 + 2x] -> Log[1 + x] inside a radical changed the answer), else F itself. It is optional, so it is bounded by brPresentationTime[]: a presentation that overran an enclosing budget (the Automatic cascade's $BronsteinCascadeBudget) aborted the whole call and lost the verified answer -- lccontent-2-3 in the 2026-11-12 shootout, solved in 2.1 s, spent 5 s proving its ArcTan form and missed the 10 s budget under load.";
+brPresentable[f_, F_, x_Symbol] := Quiet[TimeConstrained[presentable[f, F, x], brPresentationTime[], F]];
+
+brPresentationTime::usage = "brPresentationTime[] is the time the real-form presentation may take: brOption[\"PresentationTime\"], and at most a third of what is left of an enclosing TimeConstrained (Internal`TimeConstrainedRemaining[]).";
+brPresentationTime[] := With[{left = Internal`TimeConstrainedRemaining[]},
+  If[NumericQ[left], Min[brOption["PresentationTime"], Max[left/3, 0.01]], brOption["PresentationTime"]]];
 
 BronsteinIntegrate[f_, x_Symbol] := Module[{r},
   r = brCatch[brIntegrateBody[f, x]];

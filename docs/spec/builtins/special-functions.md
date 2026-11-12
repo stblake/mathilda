@@ -5272,6 +5272,21 @@ In[6]:= EllipticE[0.3 + 0.4 I]
 Out[6]= 1.46251 - 0.175161*I
 ```
 
+
+**Known deficiencies** (found by the integration shootout, 2026-11-12; reproducer in
+`tasks/elliptic_branch_cut_deficiencies/`). Both occur where `1 - m Sin[phi]^2` is
+exactly `-1`, on the branch cut of the integrand:
+- `N[EllipticF[ArcSin[Sqrt[1 + I Sqrt[3]]], (1 - I Sqrt[3])/2], 30]` returns
+  `0.3937261347... + 1.4694059390... I`. The machine-precision value, mpmath's
+  `ellipf` and the reference system all give `1.8663879592... + 0.7907081549... I`.
+  The arbitrary-precision path takes the other side of the cut, so the two
+  precisions disagree. An exact input also emits `N::meprec`.
+- `N[EllipticPi[-I/Sqrt[3], phi, (1 - I Sqrt[3])/2], 20]` does not return when
+  phi is the same amplitude spelled `ArcSin[Sqrt[(-1 + (-1)^(2/3))/(1/2 + (-1)^(2/3))]]`.
+  Spelled `ArcSin[Sqrt[1 + I Sqrt[3]]]`, it answers. The same call on 30-digit numbers answers
+  `2.3118298015... - 0.2402478141... I` in 0.07 s. The likely cause is that N raises
+  the precision repeatedly against an indeterminate Arb ball.
+
 ## Surd
 
 `Surd[x, n]` is the real-valued n-th root of a real `x` (v0.477; new): `Sign[x]

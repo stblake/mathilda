@@ -1565,6 +1565,19 @@ monotonically down.
   (`1/Sqrt[x^3-x]` → `-Sqrt[2] EllipticF[ArcSin[Sqrt[2]/Sqrt[1+x]], 1/2]`).  The
   cascade calls only its complete-answer surface, so plain `Integrate[f, x]` can
   never return a partial `answer + Inactive[Integrate][remainder, x]`.
+  **Cubic Legendre form (v0.6526).** On a cubic `y^2 = lc (g - e1)(g - e2)(g - e3)`,
+  the stage writes `∫ dg/y = -2/(Sqrt[e1 - e3] Sqrt[lc]) F(phi | m)` with
+  `Sin[phi]^2 = (e1 - e3)/(g - e3)`; `EllipticE` and `EllipticPi` share the same
+  `phi` and `m`. Which root plays `e3` decides whether the principal branches
+  combine to `+f` everywhere. With the real root of `1 + x^3` as `e1`, the
+  derivative was `-f` for `x < 1/2`, and the verification samples all lay beyond
+  that point. `CubicData` now tries the root orderings and keeps the first whose
+  sign is one constant at every real probe, preferring a constant on the whole
+  line and otherwise on `q > 0`. That constant `±1` multiplies every elliptic term.
+  With no such ordering the stage leaves the integral unevaluated. So
+  `Integrate[1/Sqrt[1 + x^3], x]` is
+  `-2 EllipticF[ArcSin[Sqrt[(1 - (-1)^(2/3))/(1 + x)]], (1 + I Sqrt[3])/2]/Sqrt[1 - (-1)^(2/3)]`,
+  an antiderivative on the whole of `x > -1`.
   1. `Integrate\`Undefined[f, x]` — when `f` contains an undefined-function
      derivative (e.g. `f'[x]`); see below.
   2. `Integrate\`BronsteinRational[f, x]` — when `PolynomialQ[f, x] ||

@@ -116,6 +116,7 @@ int  eval_get_recursion_depth(void);
  * to one rewrite).  A caller that runs a heavy sub-evaluation reads it before
  * and after to tell whether its result was produced in that degraded mode. */
 bool eval_overflow_fired(void);
+void eval_overflow_clear(void);   /* a caller that contained an overflow; see eval.c */
 
 /* Force the internal recursion-depth counter back to `n`, clearing the
  * sticky overflow flag.  Intended ONLY for siglongjmp-based unwinds

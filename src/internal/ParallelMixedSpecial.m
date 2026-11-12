@@ -1081,16 +1081,58 @@ FirstKindBack[A_, g_, q_, first_] := Module[{z, kap, J0, Fs, Fa, alpha, beta},
   If[alpha === 0 || ! FreeQ[beta, Fa], Return[A]];
   Expand[A /. Fa -> (z/kap - beta)/alpha]];
 
-CubicData[g_, q_] := Module[{lc, rts, e1, e2, e3, lam, mm, phi},
+(* CubicData[g, q]: {lc, e1, e2, e3, lam, mm, phi, sig} for the Legendre form
+   on the cubic q = lc (g - e1)(g - e2)(g - e3): int dg/Sqrt[q] =
+   sig (-2/(lam Sqrt[lc])) F(phi | mm), Sin[phi]^2 = (e1 - e3)/(g - e3).
+
+   The form differentiates to sig'/Sqrt[q] with sig' = +-1 only LOCALLY
+   constant: the principal branches of Sqrt[w], Sqrt[1 - w], Sqrt[1 - mm w] and
+   Sqrt[q] need not combine the same way everywhere.  Which root plays e3
+   decides it.  On q = 1 + g^3 with the real root as e1 the form was -f for
+   g < 1/2 and f beyond, and three samples beyond the flip verified it (shootout
+   2026-11-12, five wrong answers).  With the REAL root as e3 the sign is one
+   constant on the whole real domain; with three real roots the descending order
+   already is.  So the orderings are tried in that preference and the first whose
+   sign takes ONE value at every real probe is kept (failing that, at every real
+   probe with q > 0), with sig that exact +-1.  F, E and Pi of the same (phi | mm) share the radical signature
+   (dE = (1 - mm w) dF, dPi = dF/(1 - n w) exactly), so one sig serves all
+   three.  No ordering with a constant sign: None, and the caller leaves the
+   integral unevaluated rather than present a piecewise-wrong form. *)
+CubicData[g_, q_] := Module[{lc, rts, real, cplx, orders, e1, e2, e3, lam, mm, phi, sig},
   lc = Coefficient[q, g, Exponent[q, g]];
   rts = RootsOf[q, g];
   If[Length[rts] != 3, Return[None]];
-  If[AllTrue[rts, Im[N[#]] == 0 &], rts = SortBy[rts, -N[#] &]];
-  {e1, e2, e3} = rts;
-  lam = Sqrt[e1 - e3];
-  mm = Simplify[(e2 - e3)/(e1 - e3)];
-  phi = ArcSin[Sqrt[(e1 - e3)/(g - e3)]];
-  {lc, e1, e2, e3, lam, mm, phi}];
+  real = Select[rts, Im[N[#]] == 0 &];
+  orders = If[Length[real] == 3,
+    With[{d = SortBy[rts, -N[#] &]}, Prepend[DeleteCases[Permutations[d], d], d]],
+    cplx = Complement[rts, real];
+    Join[If[Length[real] == 1, {Append[cplx, real[[1]]], Append[Reverse[cplx], real[[1]]]}, {}], Permutations[rts]]];
+  orders = DeleteDuplicates[orders];
+  Do[Do[{e1, e2, e3} = ord;
+      lam = Sqrt[e1 - e3];
+      mm = Simplify[(e2 - e3)/(e1 - e3)];
+      phi = ArcSin[Sqrt[(e1 - e3)/(g - e3)]];
+      sig = CubicSign[g, q, lc, lam, mm, phi, whole];
+      If[sig =!= None, Return[{lc, e1, e2, e3, lam, mm, phi, sig}, Module]],
+      {ord, orders}],
+    {whole, {True, False}}];
+  None];
+
+(* CubicSign[.., whole]: the constant +-1 that -2/(lam Sqrt[lc]) D[F(phi | mm), g]
+   Sqrt[q] takes at every real probe -- on the whole line when whole (the
+   kernel's samples may sit where q < 0 and it is imaginary; with complex roots
+   one ordering achieves this), otherwise where q > 0 -- or None *)
+CubicSign[g_, q_, lc_, lam_, mm_, phi_, whole_] := Module[{s, pts, vals},
+  s = QuietCheck[-2/(lam Sqrt[lc]) D[EllipticF[phi, mm], g] Sqrt[q], $Failed];
+  If[s === $Failed, Return[None]];
+  pts = Select[Range[-60, 60]/7 + 1/101, whole || TrueQ[N[q /. g -> #] > 0] &];
+  (* machine precision suffices: the value is +-1 or something else, never close *)
+  vals = Select[Quiet[N[s /. g -> N[#]]] & /@ pts, NumericQ];
+  Which[
+    Length[vals] < Min[3, Length[pts]] || vals === {}, None,
+    AllTrue[vals, Abs[# - 1] < 10^-8 &], 1,
+    AllTrue[vals, Abs[# + 1] < 10^-8 &], -1,
+    True, None]];
 
 (* LegendreQuartic[g, q]: {c, k} when q = c (1 - g^2)(1 - k g^2), the Legendre normal form *)
 LegendreQuartic[g_, q_] := Module[{c0, Q, kk},
@@ -1106,7 +1148,7 @@ LegendreQuartic[g_, q_] := Module[{c0, Q, kk},
 (* EllInt[g, q, i]: int g^i dg / Sqrt[q]: Legendre form on a cubic for i = 0, 1
    (valid for g beyond the largest real root; the branch fixed at the surface),
    the Legendre quartic for i = 0, 2, otherwise unevaluated *)
-EllInt[g_, q_, i_] := Module[{leg, c0, kk, F, E0, cd, lc, e1, e2, e3, lam, mm, phi, y},
+EllInt[g_, q_, i_] := Module[{leg, c0, kk, F, E0, cd, lc, e1, e2, e3, lam, mm, phi, sig, y},
   leg = LegendreQuartic[g, q];
   If[leg =!= None && MemberQ[{0, 2}, i],
     {c0, kk} = leg;
@@ -1114,22 +1156,22 @@ EllInt[g_, q_, i_] := Module[{leg, c0, kk, F, E0, cd, lc, e1, e2, e3, lam, mm, p
     Return[If[i == 0, F, (F - E0)/kk]/Sqrt[c0]]];
   cd = If[Exponent[q, g] == 3, CubicData[g, q], None];
   If[cd === None || i > 1, Return[Inactive[Integrate][g^i/Sqrt[q], g]]];
-  {lc, e1, e2, e3, lam, mm, phi} = cd;
+  {lc, e1, e2, e3, lam, mm, phi, sig} = cd;
   F = EllipticF[phi, mm]; E0 = EllipticE[phi, mm];
   y = Sqrt[q];
-  If[i == 0, -2/lam F/Sqrt[lc],
-    (-2/lam (e3 + lam^2) F + 2 lam E0)/Sqrt[lc] + 2 y/(lc (g - e3))]];
+  If[i == 0, -2/lam sig F/Sqrt[lc],
+    sig (-2/lam (e3 + lam^2) F + 2 lam E0)/Sqrt[lc] + 2 y/(lc (g - e3))]];
 
 (* ThirdInt[g, q, c, p]: int c(g) dg / (p(g) Sqrt[q]) by partial fractions over
    the roots of p: Legendre Pi on a cubic, otherwise unevaluated *)
-ThirdInt[g_, q_, c_, p_] := Module[{cd, lc, e1, e2, e3, lam, mm, phi, out = 0, dp, w, n, Pi0},
+ThirdInt[g_, q_, c_, p_] := Module[{cd, lc, e1, e2, e3, lam, mm, phi, sig, out = 0, dp, w, n, Pi0},
   cd = If[Exponent[q, g] == 3, CubicData[g, q], None];
   If[cd === None, Return[Inactive[Integrate][c/(p Sqrt[q]), g]]];
-  {lc, e1, e2, e3, lam, mm, phi} = cd;
+  {lc, e1, e2, e3, lam, mm, phi, sig} = cd;
   dp = D[p, g];
   Do[w = Simplify[(c /. g -> rho)/(dp /. g -> rho)];
     n = Simplify[(rho - e3)/lam^2];
-    Pi0 = 2/(lam (rho - e3)) (EllipticF[phi, mm] - EllipticPi[n, phi, mm])/Sqrt[lc];
+    Pi0 = 2 sig/(lam (rho - e3)) (EllipticF[phi, mm] - EllipticPi[n, phi, mm])/Sqrt[lc];
     out += w Pi0,
     {rho, RootsOf[p, g]}];
   out];
@@ -1522,19 +1564,19 @@ PresentSpecial[res_, integrandN_, x_, T_, back_, samples_, strict_, verbose_, de
   If[! SpecialResultQ[res],
     Return[If[ListQ[res], Map[If[ExprQ[#] && ! StringQ[#], SubstituteBack[#, back], #] &, res], res]]];
   total = SubstituteBack[res["elementary"], back];
-  Do[anti = SubstituteBack[KernelAntiderivative[t[[2]]], back];
+  Do[anti = PMStage["KernelAntiderivative", SubstituteBack[KernelAntiderivative[t[[2]]], back]];
     kern = t[[2]]["col"][[1]] + If[T["q"] =!= None, t[[2]]["col"][[2]] yExpr, 0];
     kern = SubstituteBack[kern, back];
-    fixed = FixBranch[t[[1]] anti, t[[1]] kern, x, samples, t[[2]]];
+    fixed = PMStage["FixBranch", FixBranch[t[[1]] anti, t[[1]] kern, x, samples, t[[2]]]];
     If[fixed === None,
       If[verbose, Print["  WARNING: branch of ", KernelRepr[t[[2]]], " not fixed numerically"]];
       fixed = t[[1]] anti];
     total += fixed,
     {t, res["terms"]}];
-  total = HalfAngleFold[Present[total], back];
+  total = PMStage["Present", HalfAngleFold[Present[total], back]];
   (* the fold is INSIDE the verify: what the caller gets back is the form that
      was checked against the integrand, never a prettier unchecked cousin *)
-  {total, ver} = ConjugateIfBetter[total, integrandN, x, samples];
+  {total, ver} = PMStage["ConjugateIfBetter", ConjugateIfBetter[total, integrandN, x, samples]];
   If[strict && ! res["certified"], Return[{"failed", "special answer found, but the integrand is not certified non-elementary", total}]];
   If[details, {total, ver, res}, {total, ver}]];
 

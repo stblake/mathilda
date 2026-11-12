@@ -377,6 +377,8 @@ static void system_constants_init(void) {
         "$VersionNumber\n\tgives the Mathilda version number as a real number.");
 }
 
+static Expr* builtin_timeconstrained_remaining(Expr* res);   /* defined with the TimeConstrained deadline state */
+
 void core_init(void) {
     /* Route GMP/MPFR allocation through the guarded wrappers before anything
      * else can allocate a bignum, so TimeConstrained's async abort can never
@@ -464,6 +466,12 @@ void core_init(void) {
     symtab_get_def("DivideBy")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
     symtab_add_builtin("TimeConstrained", builtin_time_constrained);
     symtab_get_def("TimeConstrained")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
+    symtab_add_builtin("Internal`TimeConstrainedRemaining", builtin_timeconstrained_remaining);
+    symtab_get_def("Internal`TimeConstrainedRemaining")->attributes |= ATTR_PROTECTED;
+    symtab_set_docstring("Internal`TimeConstrainedRemaining",
+        "Internal`TimeConstrainedRemaining[] gives the seconds left before the innermost "
+        "active TimeConstrained deadline (0. once it has passed), or Infinity outside "
+        "any TimeConstrained.");
     symtab_add_builtin("Chop", builtin_chop);
     symtab_get_def("Chop")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Clip", builtin_clip);
@@ -5432,6 +5440,20 @@ double tc_deadline_remaining(void) {
     if (!tc_deadline_active) return -1.0;
     double left = tc_deadline_sec - mth_mono_seconds();
     return left > 0.0 ? left : 0.0;
+}
+
+/* Internal`TimeConstrainedRemaining[]: the seconds left before the innermost
+ * active TimeConstrained deadline (0 once it has passed), or Infinity when none
+ * is active.  For package code that has a verified answer in hand and an
+ * OPTIONAL step to spend time on (Bronstein's real-form presentation): a nested
+ * TimeConstrained is clamped to the outer budget and, when that expires, the
+ * OUTER call aborts -- the answer already found is lost with it.  Reading the
+ * remaining time lets the optional step take only part of it. */
+static Expr* builtin_timeconstrained_remaining(Expr* res) {
+    if (res->data.function.arg_count != 0) return NULL;
+    double left = tc_deadline_remaining();
+    if (left < 0.0) return expr_new_symbol(SYM_Infinity);
+    return expr_new_real(left);
 }
 
 /* Portable "do not inline" hint.  GCC/Clang both define __GNUC__. */

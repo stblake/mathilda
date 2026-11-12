@@ -1214,10 +1214,26 @@ static int pmt_in_cascade = 0;
 /* Evaluate a heavy method's package call (borrowed) under a recovery point:
  * a FLINT exception raised inside (FLINT::exc) becomes the failure tuple
  * {"failed", "internal error: FLINT exception"} -- a decline, so the cascade
- * moves on -- instead of aborting the whole top-level evaluation. */
+ * moves on -- instead of aborting the whole top-level evaluation.
+ *
+ * A $RecursionLimit overflow inside does not abort: it leaves every enclosing
+ * loop in a one-rewrite degraded mode, in which the package's own decline
+ * branches can be skipped, so nothing produced in that state is evidence of
+ * anything -- neither an antiderivative nor a certificate.  It becomes the
+ * failure tuple, and the overflow, now contained, is cleared: left set, the
+ * REST of the cascade ran degraded (the GR table's lookup stopped after one
+ * rewrite and was accepted as an answer). */
 static Expr* integrate_method_eval_guarded(Expr* call) {
     bool faulted = false;
+    bool overflow_before = eval_overflow_fired();
     Expr* r = tc_evaluate_fault_guarded(call, &faulted);
+    if (!overflow_before && eval_overflow_fired()) {
+        if (r) expr_free(r);
+        eval_overflow_clear();
+        return expr_new_function(expr_new_symbol(SYM_List),
+            (Expr*[]){ expr_new_string("failed"),
+                       expr_new_string("internal error: $RecursionLimit exceeded") }, 2);
+    }
     if (r) return r;
     return expr_new_function(expr_new_symbol(SYM_List),
         (Expr*[]){ expr_new_string("failed"),
@@ -1240,7 +1256,6 @@ static Expr* builtin_integrate_pmt(Expr* res) {
      * user.  The fired-counter that the package's internal Check reads still
      * advances while suppressed, so its failure detection is unaffected. */
     mth_msg_suppress_push();
-    bool overflow_before = eval_overflow_fired();
     Expr* result;
     if (cascade) {
         Expr* call = expr_new_function(
@@ -1275,18 +1290,7 @@ static Expr* builtin_integrate_pmt(Expr* res) {
     }
     mth_msg_suppress_pop();
     tc_async_defer_pop();
-    /* A $RecursionLimit overflow inside the package does not abort: it leaves
-     * every enclosing loop in a one-rewrite degraded mode, in which the
-     * package's own decline branches can be skipped.  Nothing produced in that
-     * state is evidence of anything -- neither an antiderivative nor a
-     * certificate -- so it becomes a failure tuple (a List: the cascade and
-     * the Method stage treat it as a decline). */
-    if (!overflow_before && eval_overflow_fired()) {
-        if (result) expr_free(result);
-        result = expr_new_function(expr_new_symbol(SYM_List),
-            (Expr*[]){ expr_new_string("failed"),
-                       expr_new_string("internal error: $RecursionLimit exceeded") }, 2);
-    }
+    /* $RecursionLimit inside the package: integrate_method_eval_guarded. */
     /* A {"not elementary", ...} certificate is the package's PROOF that no
      * elementary antiderivative exists -- report it Mathematica-style, exactly
      * as RischTranscendental does for its own field decision.  Emitted after the
@@ -3026,22 +3030,47 @@ static void ip_account(int stage, double t0, bool closed) {
  * Time one cascade stage. Only the OUTERMOST frame is accounted: a stage that
  * recurses into Integrate would otherwise be charged its callees' time too and
  * the shares would not sum. */
+/* Every stage is also an overflow boundary (stage_contain_overflow): a stage
+ * whose evaluation tripped $RecursionLimit declines, and the flag is cleared so
+ * the stages after it run normally. */
 #define IP_STAGE(stage, callexpr)                                            \
     do {                                                                     \
         if (!result) {                                                       \
+            bool _ip_ovf0 = eval_overflow_fired();                           \
             if (ip_enabled()) {                                              \
                 double _ip_t0 = ip_mono_seconds();                           \
                 if (g_integrate_depth == 1) {                                \
                     g_ip_cur = (stage); g_ip_cur_t0 = _ip_t0;                \
                 }                                                            \
                 result = (callexpr);                                         \
+                result = stage_contain_overflow(result, _ip_ovf0);           \
                 if (g_integrate_depth == 1) g_ip_cur = -1;                   \
                 ip_account((stage), _ip_t0, result != NULL);                 \
             } else {                                                         \
                 result = (callexpr);                                         \
+                result = stage_contain_overflow(result, _ip_ovf0);           \
             }                                                                \
         }                                                                    \
     } while (0)
+
+/* A cascade stage is the boundary at which a $RecursionLimit overflow is
+ * contained.  The evaluator's overflow flag is sticky for the rest of the
+ * top-level evaluation and makes every fixed-point loop stop after one rewrite,
+ * so a stage that overflowed may hand back a half-evaluated value, and every
+ * stage after it runs degraded: in the 2026-11-12 shootout ParallelMixedSpecial
+ * overflowed on 9/(x (..)^(3/2) + x^3 (..)^(3/2)), the GR table's lookup then
+ * stopped at Quiet[GRTable`Private`runIndef[..]], which passed as an answer and
+ * evaluated to $Failed, and Linearity summed that with its other terms'
+ * Trager failure objects into the user's result.  So the stage's result is
+ * dropped (a decline -- nothing computed in that state is evidence) and the
+ * flag is cleared, unless it was already set when the stage began (an
+ * enclosing frame's overflow, not ours to contain). */
+static Expr* stage_contain_overflow(Expr* result, bool overflow_before) {
+    if (overflow_before || !eval_overflow_fired()) return result;
+    if (result) expr_free(result);
+    eval_overflow_clear();
+    return NULL;
+}
 
 /* Speculative-integration suppression counter (see integrate.h). */
 int g_integrate_quiet = 0;
@@ -3349,7 +3378,19 @@ static void intg_fail_record(uint64_t hf, uint64_t hx, int method) {
     intg_fail_count++;
 }
 
+static Expr* builtin_integrate_body(Expr* res);
+
+/* Integrate as a whole is an overflow boundary too (stage_contain_overflow):
+ * the cascade contains each stage's overflow, and this covers what runs
+ * outside it -- an explicit Method, the definite-integral front ends -- so a
+ * $RecursionLimit inside Integrate never degrades the user's evaluation around
+ * the call.  The overflowed call is left unevaluated. */
 Expr* builtin_integrate(Expr* res) {
+    bool overflow_before = eval_overflow_fired();
+    return stage_contain_overflow(builtin_integrate_body(res), overflow_before);
+}
+
+static Expr* builtin_integrate_body(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
     if (argc < 2) return NULL;

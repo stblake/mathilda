@@ -1022,6 +1022,13 @@ check-messages:
 check-bronstein-coverage:
 	python3 tools/check_bronstein_test_coverage.py
 
+# `make bench-integrate` -- the integration shootout (benchmarks/256-integration-
+# shootout): every applicable Mathilda Integrate method plus FriCAS, Maxima,
+# sympy and wolframscript (whichever are installed) on the 1151-case corpus;
+# writes REPORT.md, results/<date>.json and history.jsonl.  Resumable (cache).
+bench-integrate:
+	python3 tools/integration_shootout/shootout.py
+
 # `make check-feyncalc` — FeynCalc's ~14k upstream unit tests, run UNMODIFIED
 # under a minimal MUnit`Test (tools/feyncalc/run_fc_tests.m), one process per
 # .test file, ratcheted against the local pass baseline: a test that passed must
@@ -1249,7 +1256,7 @@ print-flags:
 print-libs:
 	@echo "$(PC_LIBS_PRIVATE)"
 
-.PHONY: bench-osp-famous all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-bronstein-coverage check-feyncalc check-differentialforms check-interval check-packed-aware \
+.PHONY: bench-osp-famous all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-bronstein-coverage bench-integrate check-feyncalc check-differentialforms check-interval check-packed-aware \
         check-messages check-corpus-indvar \
         check-array-exactness check-nd-surfaces check-compile-coverage \
         check-refine-stress \

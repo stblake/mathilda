@@ -123,6 +123,14 @@ static void test_pipeline_routines(void) {
     /* brPresentable re-verifies the presented form, falling back to F */
     BR_EQ("brPresentable[1/x, Log[x], x]", "Log[x]");
     BR_EQ("brPresentable[Log[2 + 2 x]/(x + 1), Log[2 + 2 x]^2/2, x] // Simplify // FreeQ[#, Log[1 + x]] &", "True");
+    /* the presentation is optional: bounded by the option, and by a third of an
+     * enclosing budget, so it can never abort a caller holding a verified answer */
+    BR_EQ("brPresentationTime[]", "5");
+    BR_TRUE("TimeConstrained[0.9 < brPresentationTime[] <= 1., 3]");
+    BR_TRUE("TimeConstrained[brPresentationTime[] == 5, 60]");
+    BR_TRUE("Internal`TimeConstrainedRemaining[] === Infinity");
+    BR_TRUE("TimeConstrained[TimeConstrained[Internal`TimeConstrainedRemaining[], 50], 2] <= 2.");
+    BR_EQ("TimeConstrained[brPresentable[1/x, Log[x], x], 0.5]", "Log[x]");
     BR_EQ("brIntegrateTranscendental[x E^x, x]", "E^x (-1 + x)");
     BR_EQ("brIntegrateTranscendental[0, x]", "0");
     BR_THROWS("brIntegrateTranscendental[E^x/x, x]", "NonElementary", "transcendental part has no elementary integral (Risch)");
