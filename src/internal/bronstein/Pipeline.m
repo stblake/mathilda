@@ -124,7 +124,17 @@ brShapeA[T_Association, f_, x_Symbol] := Module[{cf, n, g, yh, total, cc, cv, re
   <|"F" -> brCollectLogTerms[total, x], "verified" -> exact|>];
 
 brIntegrateBody::usage = "brIntegrateBody[f, x] is the body of BronsteinIntegrate: it throws instead of returning failure lists.";
-brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl, u = Unique["Bronstein`Private`brUf"], verified = False},
+brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl, g0, u = Unique["Bronstein`Private`brUf"], verified = False},
+  (* Shape B with a radical inside a kernel, on a genus-0 curve: a rational
+     change of variable removes the radical, kernels and all, and the
+     transcendental algorithm in u decides.  With radical-free kernels the
+     component method (brShapeB) keeps the user's kernels instead. *)
+  brCheckHeads[f, x];
+  g0 = If[FreeQ[f, (Log[a_] | Power[E, a_]) /; brRadicalQ[a, {x}]], None, brGenus0Flatten[f, x, u]];
+  If[g0 =!= None,
+    F = brCurveCanon[brIntegrateTranscendental[g0["g"], u] /. g0["back"], x, g0["b"], g0["n"]];
+    If[!antiderivativeQ[f, F, x], throwInternal["AntiderivativeCheckFailed", <|"f" -> f, "F" -> F|>]];
+    Return[brPresentable[f, F, x], Module]];
   T = brTower[f, x];
   F = Switch[T["shape"],
     "Rational" | "Transcendental", brIntegrateTranscendental[f, x],
@@ -134,11 +144,8 @@ brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl,
         MatchQ[r, {"not elementary", _}], throwNonElementary["Trager: " <> r[[2]]],
         MatchQ[r, {"failed", _}], throwDecline["Trager: " <> r[[2]]],
         True, r],
-    "B",
-      fl = brFlattenLinear[f, x, T["radical"]["b"] /. T["back"], T["radical"]["n"], u];
-      If[fl === None, throwDecline["radical over Q(x) below the transcendental tower (Shape B, a later phase)"]];
-      r = brIntegrateTranscendental[fl["g"], u];
-      r /. fl["back"],
+    "B", With[{sb = brShapeB[T, f, x]}, sb["F"]],
+    "BCurve", throwDecline["kernel with a radical argument (Shape B curve-monomial method, a later phase)"],
     "A", With[{sa = brShapeA[T, f, x]}, If[sa["verified"], verified = True]; sa["F"]],
     _, throwInternal["brUnknownShape"]];
   If[!verified && !antiderivativeQ[f, F, x], throwInternal["AntiderivativeCheckFailed", <|"f" -> f, "F" -> F|>]];

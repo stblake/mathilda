@@ -3841,13 +3841,45 @@ Every certificate is a theorem of [B]/[T] applied to a decided sub-step: a Risch
 infinite-order divisor at a good specialization. Every antiderivative is checked
 by `PossibleZeroQ[D[F, x] - f]` before it is returned.
 
+**Shape B: the radical below the tower (v0.6527).** In Shape B the radicand
+`b(x)` is rational in x, so `y = b^(1/n)` sits under the Log/Exp monomials. This is
+the transcendental Risch algorithm over the algebraic base `k0 = Q(x)(y)`.
+
+- **Kernel arguments free of y (the component method, `BaseAlgebraic.m`).** Each
+  component `a_i y^i` lies in a space `k(θ)·Y` that D preserves, because
+  `D(βY) = (β' + sβ)Y` with `s = G'/(mG)`. Per component, with θ the top
+  monomial:
+  - Hermite reduction at the normal places;
+  - Rothstein–Trager over the field k0. The residue criterion of [B] Prop 2.9
+    gives the certificate, and the logands are gcds in `k0[θ]` (`K0.m`);
+  - for the polynomial part, one Risch DE `β' + (s + jη')β = e_j` over k per
+    coefficient, solved by the certified C solver. The weight rules out
+    constants, so there is no limited integration;
+  - the `θ^0` coefficient: the same method one level down, ending in Trager's
+    `TragerIntegrateCurve`.
+- **A kernel argument containing the radical, on a genus-0 curve.** A Möbius
+  radicand, or the square root of a quadratic with a rational point (Euler's
+  substitution through it), is parametrised rationally, `Q(x)(y) = Q(u)`. The
+  transcendental algorithm in u then decides. The answer is written back in
+  `Q(x)(y)` canonically (`brCurveCanon`).
+- **A kernel argument containing the radical, genus ≥ 1** (the curve-monomial
+  case): declines for now.
+
+| Input | Output |
+|---|---|
+| `Integrate[D[Log[x] Sqrt[1 + x^3], x], x, Method -> "Bronstein"]` | `Sqrt[1 + x^3] Log[x]` |
+| `Integrate[D[Log[Log[x] + Sqrt[1 + x^3]], x], x, Method -> "Bronstein"]` | logs over `k0` |
+| `Integrate[E^x/Sqrt[1 + x^2], x, Method -> "Bronstein"]` | `Integrate::nonelem` (no solution of the coefficient Risch DE) |
+| `Integrate[Log[x] Sqrt[1 + x^3], x, Method -> "Bronstein"]` | `Integrate::nonelem` |
+| `Integrate[Log[x] Log[x + Sqrt[x^2 + 2]], x, Method -> "Bronstein"]` | closed after Euler's substitution |
+
 **Declined (no verdict):**
 - nested radicals;
 - two radicands;
 - a monomial above θ that depends on it;
 - trigonometric kernels;
-- the radical below the tower (Shape B), unless the Möbius change of variable
-  removes it;
+- a kernel containing the radical on a curve of genus ≥ 1, or over another
+  monomial;
 - residues at special places on a curve of positive genus;
 - algebraic constants at special places beyond `κ^(1/m) u` (u ∈ k), except over `Q(x)`.
 

@@ -43,7 +43,8 @@
 (*   LogPart.m     log part, weight-1 projection, remainder                   *)
 (*   Pipeline.m    components, reassembly, verification, BronsteinIntegrate  *)
 (*                                                                            *)
-(* Shape B (radical below the tower) is a later phase; see BRONSTEIN_PLAN.md. *)
+(*   K0.m          Shape B: arithmetic in k0 = k(Y) and k0[theta]             *)
+(*   BaseAlgebraic.m  Shape B, the component method (radical below the tower) *)
 (* ========================================================================== *)
 
 LoadModule["trager/Trager.m"];
@@ -75,6 +76,8 @@ LoadModule["bronstein/Residues.m"];
 LoadModule["bronstein/Divisors.m"];
 LoadModule["bronstein/Specialize.m"];
 LoadModule["bronstein/LogPart.m"];
+LoadModule["bronstein/K0.m"];
+LoadModule["bronstein/BaseAlgebraic.m"];
 LoadModule["bronstein/Pipeline.m"];
 
 End[];

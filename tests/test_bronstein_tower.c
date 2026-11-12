@@ -71,7 +71,9 @@ static void test_kernels_to_symbols(void) {
     BR_EQ("brKernelsToSymbols[E^(x/2) + E^x, x][[1]]", "brT1 + brT1^2");
     BR_EQ("brKernelsToSymbols[x^2, x]", "{x^2, {}}");
     BR_THROWS("brKernelsToSymbols[Log[x] + Log[x^2], x]", "Decline", "reducible logarithm (not an identity on every branch)");
-    BR_THROWS("brKernelsToSymbols[Log[Sqrt[x] + 1], x]", "Decline", "radical inside a logarithm or exponential");
+    /* a radical inside a kernel: admitted as the single curve monomial (Shape B,
+     * test_bronstein_shapeb.c), declined over the tower */
+    BR_THROWS("brKernelsToSymbols[Log[Sqrt[Log[x]] + 1], x]", "Decline", "radical inside a logarithm or exponential");
 }
 
 static void test_detect_radical(void) {

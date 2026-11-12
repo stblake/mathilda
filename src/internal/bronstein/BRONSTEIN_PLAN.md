@@ -924,6 +924,21 @@ can neither close nor certify them. These are N3 material for the benchmark.
 
 **Order of work:** 1–5 → 8a → 8 → 6–7 → 9 → 10 → 11 → 13–14 → 17 → 16 (with 15) → 12 → 18.
 
+### 2026-11-12 — Shape B, component method (v0.6527)
+
+Shape B is redesigned around the component split. With radical-free kernel
+arguments, each component `a_i y^i` stays in `k(θ)Y` under D.
+- **Phase 10 shrinks.** Every Risch DE Shape B needs is then a Risch DE over k,
+  which the certified C solver handles. The Part 3 curve RDE is needed only in the
+  curve-monomial case (a kernel argument containing y).
+- **Phase 11 is done for that case** (`BaseAlgebraic.m`, `K0.m`), with the genus-0
+  substitution for radical-argument kernels.
+- **Remaining:**
+  - `RDEAlgebraic.m` (Part 3 over `Q(x)(Y)`) and `BaseCurve.m`, for the
+    curve-monomial case at genus ≥ 1;
+  - the cascade gate;
+  - the class-B benchmark extension.
+
 ### 2026-11-12 — integration shootout (v0.6526)
 
 First full run: Mathilda `Automatic` closed 870 of 1151 (Wolfram 908, FriCAS 666,
