@@ -1480,4 +1480,14 @@ Rules: no version bump; append-only edits to tests/CMakeLists.txt, the changelog
 - [x] Phase 5: result colouring (expr_print_to_string, safe subset); tests
 - [x] Phase 6: latency gate test (200 lines, < 2 ms, one write, 0 allocs); resize / narrow / UTF-8 / restore pty cases
 - [x] Phase 7: docs/spec/repl.md, changelog, SPEC.md
-- [ ] Verify: clean build, checks, USE_READLINE=0, ctest -LE nightly, pty suite, byte-identical pipe/-file, leaks, latency numbers, readline fallback; /tmp/pr2-body.md
+- [x] Verify: clean build, checks, USE_READLINE=0, ctest -LE nightly, pty suite, byte-identical pipe/-file, leaks, latency numbers, readline fallback; /tmp/pr2-body.md
+
+### Review (REPL PR 2, 2026-11-11)
+Commits: c30f8472 (phase 1), 45bb2573 (2), 52e9fe72 (3), 6fdc5a2a (4), 226139ee (5), 7d04dbee (6), f1aff3e4 (7), on PR 1's a0c27991.
+- **Build:** make clean && make: only the pre-existing FLINT acb.h -Wstringop-overread warnings; none from the new code. check-c99, check-messages, check-packed-aware, check-menu-ids, check-pipe-protocol pass. USE_READLINE=0 (scratch copy, -j4): warning-free, no readline linked, invariance pty cases pass, stdio banner as PR 1.
+- **ctest -LE nightly:** 648/648 pass (PR 1: 645 + term_highlight, term_editor, term_editor_latency).
+- **pty:** 48/48 (PR 1's 32, two adjusted only for readline specifics: no_sgr checks SGR only; the second-Tab listing is the popup). Readline fallback (MATHILDA_EDITOR=readline): smart Return, Tab, ^C as PR 1.
+- **Byte-identical vs PR 1 (a0c27991):** pipe mode over 5157 doc examples: 5151 responses identical, stderr identical; the 6 that differ are RandomReal examples that also differ PR 1 vs PR 1. -file over 4989 parsable examples wrapped in Print (5026 stdout lines, 152451 stderr lines): stderr identical, stdout identical but for one RandomReal line that also differs PR 1 vs PR 1. Goldens (pipe, pipe+tty stderr, -file, -file on a tty) identical.
+- **Latency gate** (200-line buffer, 120x40, colour, 3000 keys): mean 22.6 us, p50 25 us, p99 29 us, max 34 us; whole-buffer relex 69 us; 0 allocations; never more than one write per key. End-to-end through a pty: p50 0.05-0.07 ms, p95 0.10 ms, max 0.22 ms.
+- **Leaks (macOS leaks):** term_highlight, term_editor, term_editor_latency suites 0; interactive session (multi-line, popup, Ctrl-R, undo, paste, Ctrl-C, resize, Dialog, coloured results) 0.
+- **Follow-ups:** Up/Down move by logical line, not by wrapped row; a resize on terminals that reflow may leave a stale row above the area; Dialog reads during an evaluation need PR 3's status line paused (their side of the hand-over).
