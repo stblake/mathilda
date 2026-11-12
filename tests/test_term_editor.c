@@ -411,6 +411,53 @@ static void test_popup(void) {
     term_editor_free(g_ed);
 }
 
+static void test_search(void) {
+    TermHistory* h = term_history_open(NULL, 100);
+    ASSERT(term_history_add(h, "a = 1"));
+    ASSERT(term_history_add(h, "Plot[Sin[x],\n {x, 0, 1}]"));
+    ASSERT(term_history_add(h, "b = 2"));
+    ASSERT(term_history_add(h, "a = 1"));            /* not consecutive: kept */
+    g_ed = open_ed(60, 20, false, h);
+    term_editor_begin(g_ed, "In[5]:= ", 0, 0);
+    feed("draft");
+    feed("\x12");                                    /* Ctrl-R */
+    ROW(0, "search:");
+    ROW(1, "> a = 1");                                /* newest first, once */
+    ROW(2, "  b = 2");
+    ROW(3, "  Plot[Sin[x],");
+    ROW(4, "     {x, 0, 1}]");                        /* multi-line: whole */
+    ROW(5, "");
+    feed("Sin");                                      /* filter */
+    ROW(0, "search: Sin");
+    ROW(1, "> Plot[Sin[x],");
+    ROW(2, "     {x, 0, 1}]");
+    ROW(3, "");
+    ASSERT(g_vt.row == 0 && g_vt.col == 11);
+    ASSERT(feed("\r") == TERM_ED_CONTINUE);          /* into the buffer, not run */
+    ASSERT(strcmp(text(), "Plot[Sin[x],\n {x, 0, 1}]") == 0);
+    ROW(0, "In[5]:= Plot[Sin[x],");
+    ROW(1, "         {x, 0, 1}]");
+    ROW(2, "");
+
+    feed("\x12zzz");                                 /* no match, Esc restores */
+    ROW(1, "  (no match)");
+    feed("\x1b");
+    term_editor_timeout(g_ed);
+    ASSERT(strcmp(text(), "Plot[Sin[x],\n {x, 0, 1}]") == 0);
+
+    feed("\x15\x15\x08");                           /* clear (two lines) */
+    feed("\x01\x0b\x0b\x0b");
+    ASSERT_MSG(strcmp(text(), "") == 0, "%s", text());
+    feed("\x12\x12");                               /* Ctrl-R again: older */
+    ROW(2, "> b = 2");
+    feed("\x1b[D");                                  /* another key: take it, then act */
+    ASSERT(strcmp(text(), "b = 2") == 0);
+    ASSERT(term_editor_cursor(g_ed) == 4);
+    ASSERT(feed("\r") == TERM_ED_ACCEPT);
+    term_editor_free(g_ed);
+    term_history_close(h);
+}
+
 static void test_select(void) {
     ASSERT(term_editor_select(NULL, "xterm-256color", true, true));
     ASSERT(term_editor_select("", "xterm", true, true));
@@ -438,6 +485,7 @@ int main(void) {
     TEST(test_one_write_per_batch);
     TEST(test_resize_and_tall);
     TEST(test_popup);
+    TEST(test_search);
     TEST(test_select);
     printf("All term_editor tests passed.\n");
     return 0;

@@ -1117,6 +1117,37 @@ def popup_options(tmp):
         s.close()
 
 
+@case
+def ctrl_r_search(tmp):
+    """Ctrl-R lists matching inputs, multi-line ones whole; Enter edits it."""
+    hist = os.path.join(tmp, "h")
+    with open(hist, "wb") as f:
+        f.write(HIST_HEADER + b"alpha = 1\nf[\\n  2]\nbeta = 3\n")
+    s = interactive(tmp, extra={"MATHILDA_HISTFILE": hist})
+    try:
+        s.send("\x12")
+        s.expect(r"search: ")
+        s.expect(r"beta = 3")
+        s.expect(r"      2\]")                # a multi-line entry, shown whole
+        s.send("f[")                           # filter: only the f[ entry is left
+        s.drain(0.3)
+        check(b"(no match)" not in s.buf, "the filter lost the entry")
+        s.send("\r")
+        s.drain(0.3)
+        check(b"Out[1]" not in s.buf, "Ctrl-R's Enter submitted the entry")
+        s.send("\r")
+        s.expect(r"Out\[1\]= f\[2\]")
+        wait_prompt(s, 2)
+        s.send("\x12zzz")
+        s.expect(r"\(no match\)")
+        s.send("\x07")                         # Ctrl-G: cancel
+        s.send("7\r")
+        s.expect(r"Out\[2\]= 7")
+        quit_session(s)
+    finally:
+        s.close()
+
+
 def tty_flags(fd):
     attrs = termios.tcgetattr(fd)
     return attrs[3]               # lflag

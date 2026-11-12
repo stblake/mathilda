@@ -151,12 +151,29 @@ struct TermEditor {
     size_t          pop_word;                /* word start in the buffer      */
     size_t          pop_qlen;                /* word length when queried      */
 
+    /* Ctrl-R history search. */
+    bool            srch_open;
+    Bytes           srch_q;
+    size_t*         srch_hits;               /* history indices, newest first */
+    size_t          srch_nhits, srch_hitcap;
+    size_t          srch_sel, srch_top;
+    Bytes           srch_saved;              /* the buffer before the search  */
+    size_t          srch_saved_cur;
+    uint32_t        srch_hash[1024];         /* dedupe table: hash, 0 = free  */
+    size_t          srch_hidx[1024];
+
     TermEdStatus status;
 };
+
+static const char SRCH_LABEL[] = "search: ";
 
 /* Defined with the popup, used by rendering and finish(). */
 static void pop_close(TermEditor* ed);
 static void pop_draw(TermEditor* ed, int crow, int wcol);
+static void srch_draw(TermEditor* ed);
+static int  srch_rows(const TermEditor* ed);
+static void srch_cancel(TermEditor* ed);
+static int  put_text(TermScreen* s, int row, int c, const char* t, size_t n, int maxw, int style);
 
 /* ---- lines and relexing ---------------------------------------------------- */
 
@@ -610,6 +627,15 @@ static void draw_line(TermEditor* ed, size_t l, int vbase, int g0, int gn, size_
 
 static void render(TermEditor* ed) {
     TermScreen* s = &ed->scr;
+    if (ed->srch_open && !ed->final_frame) {
+        ed->vtop = 0;
+        term_screen_begin_frame(s, srch_rows(ed));
+        srch_draw(ed);
+        int qc = (int)(sizeof(SRCH_LABEL) - 1)
+               + (int)term_text_width(ed->srch_q.p ? ed->srch_q.p : "", ed->srch_q.len);
+        term_screen_render(s, 0, qc < s->cols ? qc : s->cols - 1);
+        return;
+    }
     int g0, gn;
     gutters(ed, &g0, &gn);
     if (g0 != ed->lay_g0 || gn != ed->lay_gn || s->cols != ed->lay_cols) {
@@ -713,6 +739,7 @@ static void dump_buffer(TermEditor* ed) {
 static void finish(TermEditor* ed, TermEdStatus st) {
     TermScreen* s = &ed->scr;
     pop_close(ed);
+    if (ed->srch_open) srch_cancel(ed);
     ed->status = st;
     ed->final_frame = true;
     int g0, gn;
@@ -731,6 +758,206 @@ static void finish(TermEditor* ed, TermEdStatus st) {
     if (st == TERM_ED_INTERRUPT) term_screen_raw(s, "^C", 2);
     if (st != TERM_ED_EOF) term_screen_raw(s, "\r\n", 2);
     term_screen_raw(s, "\033[J", 3);
+}
+
+/* ---- Ctrl-R: history search ------------------------------------------------------- */
+
+#define SRCH_MAX_ROWS 12
+
+static uint32_t str_hash(const char* s) {
+    uint32_t h = 2166136261u;
+    for (; *s; s++) h = (h ^ (unsigned char)*s) * 16777619u;
+    return h ? h : 1;
+}
+
+/* Matching entries, newest first, each distinct text once. */
+static void srch_run(TermEditor* ed) {
+    size_t n = hist_count(ed);
+    ed->srch_nhits = 0;
+    ed->srch_sel = ed->srch_top = 0;
+    if (n > ed->srch_hitcap) {
+        size_t nc = ed->srch_hitcap ? ed->srch_hitcap : 256;
+        while (nc < n) nc *= 2;
+        size_t* nh = ed_realloc(ed->srch_hits, nc * sizeof(size_t));
+        if (!nh) return;
+        ed->srch_hits = nh;
+        ed->srch_hitcap = nc;
+    }
+    memset(ed->srch_hash, 0, sizeof(ed->srch_hash));
+    const char* q = ed->srch_q.p ? ed->srch_q.p : "";
+    for (size_t k = n; k > 0; k--) {
+        const char* e = term_history_get(ed->cfg.history, k - 1);
+        if (*q && !strstr(e, q)) continue;
+        uint32_t h = str_hash(e);
+        size_t slot = h & 1023u, probes = 0;
+        bool dup = false;
+        while (ed->srch_hash[slot] && probes < 1024) {
+            if (ed->srch_hash[slot] == h
+                && strcmp(term_history_get(ed->cfg.history, ed->srch_hidx[slot]), e) == 0) { dup = true; break; }
+            slot = (slot + 1) & 1023u;
+            probes++;
+        }
+        if (dup) continue;
+        if (probes < 1024) { ed->srch_hash[slot] = h; ed->srch_hidx[slot] = k - 1; }
+        ed->srch_hits[ed->srch_nhits++] = k - 1;
+    }
+}
+
+static void srch_start(TermEditor* ed) {
+    if (!ed->cfg.history) return;
+    pop_close(ed);
+    bytes_set(&ed->srch_saved, ed->text, ed->len);
+    ed->srch_saved_cur = ed->cur;
+    bytes_set(&ed->srch_q, "", 0);
+    ed->srch_open = true;
+    srch_run(ed);
+}
+
+static void srch_close(TermEditor* ed) { ed->srch_open = false; }
+
+static void srch_cancel(TermEditor* ed) {
+    if (!ed->srch_open) return;
+    srch_close(ed);
+    if (ed->len != ed->srch_saved.len || memcmp(ed->text, ed->srch_saved.p, ed->len) != 0)
+        set_buffer(ed, ed->srch_saved.p, ed->srch_saved.len);
+    ed->cur = ed->srch_saved_cur <= ed->len ? ed->srch_saved_cur : ed->len;
+}
+
+static void srch_accept(TermEditor* ed) {
+    srch_close(ed);
+    if (ed->srch_nhits == 0) return;
+    const char* e = term_history_get(ed->cfg.history, ed->srch_hits[ed->srch_sel]);
+    set_buffer(ed, e, strlen(e));
+    ed->last_kind = EK_NONE;
+    ed->hbrowse = false;
+}
+
+/* Keys while searching. Returns true when the key was used. */
+static bool srch_key(TermEditor* ed, const Key* k) {
+    switch (k->code) {
+    case K_CHAR:
+        bytes_append(&ed->srch_q, k->b, k->n);
+        srch_run(ed);
+        return true;
+    case K_BS:
+        if (ed->srch_q.len) {
+            ed->srch_q.len = term_utf8_prev(ed->srch_q.p, ed->srch_q.len);
+            ed->srch_q.p[ed->srch_q.len] = '\0';
+            srch_run(ed);
+        }
+        return true;
+    case K_UP:
+        if (ed->srch_sel + 1 < ed->srch_nhits) ed->srch_sel++;
+        return true;
+    case K_DOWN:
+        if (ed->srch_sel > 0) ed->srch_sel--;
+        return true;
+    case K_ENTER: case K_TAB:
+        srch_accept(ed);
+        return true;
+    case K_ESC:
+        srch_cancel(ed);
+        return true;
+    case K_CTRL:
+        switch (k->b[0]) {
+        case 'r': case 'p': if (ed->srch_sel + 1 < ed->srch_nhits) ed->srch_sel++; return true;
+        case 's': case 'n': if (ed->srch_sel > 0) ed->srch_sel--; return true;
+        case 'g': srch_cancel(ed); return true;
+        case 'c': srch_cancel(ed); return false;      /* then Ctrl-C clears */
+        default: break;
+        }
+        break;
+    default: break;
+    }
+    srch_accept(ed);            /* anything else: take the entry, then act */
+    return false;
+}
+
+/* Rows of entry `e` in the list. */
+static int entry_rows(const char* e) {
+    return 1 + (int)count_nl(e, strlen(e));
+}
+
+static int srch_rows(const TermEditor* ed) {
+    int maxr = ed->scr.rows - 1 < SRCH_MAX_ROWS ? ed->scr.rows - 1 : SRCH_MAX_ROWS;
+    if (maxr < 1) maxr = 1;
+    int r = 0;
+    for (size_t i = 0; i < ed->srch_nhits && r < maxr; i++)
+        r += entry_rows(term_history_get(ed->cfg.history, ed->srch_hits[i]));
+    if (ed->srch_nhits == 0) r = 1;
+    return 1 + (r < maxr ? r : maxr);
+}
+
+/* One line of an entry, coloured, clipped with an ellipsis. */
+static void srch_line(TermEditor* ed, int row, int col, const char* t, size_t n,
+                      TermHlState* st, size_t qpos, size_t qlen) {
+    TermScreen* s = &ed->scr;
+    uint8_t sty[512];
+    size_t ln = n < sizeof(sty) ? n : sizeof(sty);
+    *st = term_hl_line(t, ln, *st, sty, ed->cfg.classify, ed->cfg.classify_ctx);
+    int end = s->cols;
+    size_t i = 0;
+    while (i < ln) {
+        uint32_t cp;
+        size_t j = term_utf8_next(t, ln, i, &cp);
+        int w = term_cp_width(cp);
+        if (w < 0) { cp = '?'; w = 1; }
+        if (w == 0) { i = j; continue; }
+        if (col + w > end - 1 && j < ln) { term_screen_put(s, row, col, "\xE2\x80\xA6", 3, 1, TERM_HL_DIM); return; }
+        int stl = sty[i] == TERM_HL_BRACKET ? TERM_HL_PLAIN : sty[i];
+        if (i >= qpos && i < qpos + qlen) stl = TERM_HL_BRACKET_MATCH;
+        if (term_cp_width(cp) < 0) term_screen_put(s, row, col, "?", 1, 1, stl);
+        else term_screen_put(s, row, col, t + i, j - i, w, stl);
+        col += w;
+        i = j;
+    }
+}
+
+static void srch_draw(TermEditor* ed) {
+    TermScreen* s = &ed->scr;
+    int maxr = s->frame_rows - 1;
+    /* Keep the selected entry in view. */
+    if (ed->srch_sel < ed->srch_top) ed->srch_top = ed->srch_sel;
+    for (;;) {
+        int r = 0;
+        for (size_t i = ed->srch_top; i <= ed->srch_sel && i < ed->srch_nhits; i++)
+            r += entry_rows(term_history_get(ed->cfg.history, ed->srch_hits[i]));
+        if (r <= maxr || ed->srch_top >= ed->srch_sel) break;
+        ed->srch_top++;
+    }
+    int c = term_screen_puts(s, 0, 0, SRCH_LABEL, TERM_HL_PROMPT);
+    const char* q = ed->srch_q.p ? ed->srch_q.p : "";
+    put_text(s, 0, c, q, ed->srch_q.len, s->cols - c - 1, TERM_HL_PLAIN);
+    if (ed->srch_nhits == 0) {
+        term_screen_puts(s, 1, 2, "(no match)", TERM_HL_DIM);
+        return;
+    }
+    int row = 1;
+    for (size_t i = ed->srch_top; i < ed->srch_nhits && row <= maxr; i++) {
+        bool sel = i == ed->srch_sel;
+        const char* e = term_history_get(ed->cfg.history, ed->srch_hits[i]);
+        const char* qp = *q ? strstr(e, q) : NULL;
+        size_t qoff = qp ? (size_t)(qp - e) : SIZE_MAX;
+        TermHlState st = term_hl_state_initial();
+        size_t a = 0, n = strlen(e);
+        bool first = true;
+        while (row <= maxr) {
+            const char* nl = memchr(e + a, '\n', n - a);
+            size_t b = nl ? (size_t)(nl - e) : n;
+            if (sel) term_screen_style_range(s, row, 0, 2, TERM_HL_POPUP_SEL);
+            term_screen_puts(s, row, 0, first ? (sel ? "> " : "  ") : "  ", sel ? TERM_HL_POPUP_SEL : TERM_HL_PLAIN);
+            size_t qp_line = (qoff >= a && qoff < b) ? qoff - a : SIZE_MAX;
+            srch_line(ed, row, first ? 2 : 4, e + a, b - a, &st, qp_line, ed->srch_q.len);
+            row++;
+            first = false;
+            if (!nl) break;
+            a = b + 1;
+            if (row > maxr) {                       /* cut: mark it */
+                term_screen_puts(s, maxr, s->cols - 2, "\xE2\x80\xA6", TERM_HL_DIM);
+                break;
+            }
+        }
+    }
 }
 
 /* ---- completion popup ------------------------------------------------------------ */
@@ -1033,6 +1260,7 @@ static void handle_ctrl(TermEditor* ed, char k) {
     case 'c': finish(ed, TERM_ED_INTERRUPT); break;
     case 'z': finish(ed, TERM_ED_SUSPEND); break;
     case '_': undo(ed); break;
+    case 'r': srch_start(ed); break;
     case 'p': move_vertical(ed, -1); break;
     case 'n': move_vertical(ed, +1); break;
     default: break;
@@ -1044,6 +1272,11 @@ static void handle_key(TermEditor* ed, const Key* k) {
     ed->goal_keep = false;
     ed->this_kill = 0;
     size_t l;
+    if (ed->srch_open && srch_key(ed, k)) {
+        if (!ed->edited) ed->last_kind = EK_NONE;
+        ed->last_kill = 0;
+        return;
+    }
     if (ed->pop_open && pop_key(ed, k)) {
         if (!ed->edited) ed->last_kind = EK_NONE;
         ed->last_kill = 0;
@@ -1323,6 +1556,7 @@ void term_editor_free(TermEditor* ed) {
     free(ed->ops); free(ed->arena.p);
     term_completions_free(&ed->pop_c);
     free(ed->pop_vis);
+    free(ed->srch_q.p); free(ed->srch_saved.p); free(ed->srch_hits);
     free(ed);
 }
 
@@ -1345,6 +1579,7 @@ void term_editor_begin(TermEditor* ed, const char* prompt, int cursor_abs_row, i
     ed->br_dirty = true;
     ed->in_paste = false;
     pop_close(ed);
+    ed->srch_open = false;
     ed->status = TERM_ED_CONTINUE;
     size_t pl = strlen(prompt);
     if (pl >= sizeof(ed->prompt)) pl = sizeof(ed->prompt) - 1;
