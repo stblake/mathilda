@@ -10,6 +10,7 @@
 #include "parse.h"
 #include "eval.h"
 #include "expr.h"
+#include "sym_names.h"
 #include "term/term_progress.h"
 
 #include <math.h>
@@ -29,7 +30,7 @@ static MthProgressView g_seen_outer, g_seen_inner;
 static Expr* builtin_probe(Expr* res) {
     (void)res;
     g_seen_depth = term_progress_sample(&g_seen_outer, &g_seen_inner);
-    return expr_new_symbol("Null");
+    return expr_new_symbol(SYM_Null);
 }
 
 static void test_tokens(void) {
