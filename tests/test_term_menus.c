@@ -82,7 +82,10 @@ static void test_theme_depths_and_apply(void) {
     ASSERT_MSG(strcmp(buf, "\033[1;38;2;198;120;221m") == 0, "%s", buf + 1);
     term_theme_sgr_for(dark, TERM_ROLE_POPUP_SEL, TERM_DEPTH_24BIT, buf, sizeof buf);
     ASSERT_MSG(strcmp(buf, "\033[1;38;2;255;255;255;48;2;61;111;180m") == 0, "%s", buf + 1);
+    /* dark keeps the terminal's palette at 256; the others map to 256 */
     term_theme_sgr_for(dark, TERM_ROLE_OUT, TERM_DEPTH_256, buf, sizeof buf);
+    ASSERT_MSG(strcmp(buf, "\033[1;35m") == 0, "%s", buf + 1);
+    term_theme_sgr_for(1, TERM_ROLE_OUT, TERM_DEPTH_256, buf, sizeof buf);
     ASSERT_MSG(strncmp(buf, "\033[1;38;5;", 9) == 0, "%s", buf + 1);
     term_theme_sgr_for(dark, TERM_ROLE_OUT, TERM_DEPTH_NONE, buf, sizeof buf);
     ASSERT(buf[0] == '\0');

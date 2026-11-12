@@ -20,7 +20,8 @@
  *
  * Shipped themes: "dark" (the default), "light", "high-contrast", "mono"
  * (attributes only) and "ansi" (the terminal's own 16-colour palette; also
- * what "dark" becomes at 16 colours). The choice is read from
+ * what "dark" is below 24-bit colour, so a light 256-colour terminal still
+ * gets colours that suit its background). The choice is read from
  * MATHILDA_THEME, else the "theme" key of the config file (term_config.h),
  * and saved there by /theme.
  *

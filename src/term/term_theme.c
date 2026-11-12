@@ -25,13 +25,18 @@ typedef struct {
 typedef struct {
     const char* name;
     const char* summary;
+    /* Use the 24-bit colours only on a 24-bit terminal; at 256 colours keep
+     * the 16-colour codes, i.e. the terminal's own palette, which follows
+     * its background. The default theme does this: a 256-colour terminal
+     * (macOS Terminal, many others) is as often light as dark. */
+    bool rgb_24bit_only;
     RoleSpec role[TERM_ROLE_COUNT];
 } Theme;
 
 /* 16-colour codes of "dark" (and all of "ansi") are the REPL's original
  * colours, so a 16-colour terminal looks exactly as it did before themes. */
 static const Theme THEMES[] = {
-    { "dark", "the default, for dark backgrounds", {
+    { "dark", "the default, for dark backgrounds", true, {
         S(A_BOLD, 34, 0, 0x61AFEF, N),      /* In            */
         S(A_BOLD, 35, 0, 0xC678DD, N),      /* Out           */
         S(A_BOLD, 31, 0, 0xE06C75, N),      /* Head::tag     */
@@ -56,7 +61,7 @@ static const Theme THEMES[] = {
         S(0,      37, 100, 0x9DA5B4, 0x2C313A),          /* popup doc */
         S(A_DIM,   0, 0, N, N),             /* editor dim    */
     } },
-    { "light", "for light backgrounds", {
+    { "light", "for light backgrounds", false, {
         S(A_BOLD, 34, 0, 0x0550AE, N),
         S(A_BOLD, 35, 0, 0x8250DF, N),
         S(A_BOLD, 31, 0, 0xCF222E, N),
@@ -81,17 +86,17 @@ static const Theme THEMES[] = {
         S(0,      90, 47, 0x57606A, 0xEAEEF2),
         S(0,      90, 0, 0x6E7781, N),
     } },
-    { "high-contrast", "bright, bold and never dim", {
+    { "high-contrast", "bright, bold and never dim", false, {
         S(A_BOLD, 94, 0, 0x5FAFFF, N),
         S(A_BOLD, 95, 0, 0xFF87FF, N),
-        S(A_BOLD, 91, 0, 0xFF5F5F, N),
+        S(A_BOLD, 91, 0, 0xFF8787, N),
         S(0,      37, 0, 0xD0D0D0, N),
         S(A_BOLD, 96, 0, 0x00FFFF, N),
         S(A_BOLD, 97, 0, 0xFFFFFF, N),
         S(0,      37, 0, 0xD0D0D0, N),
         S(A_BOLD, 96, 0, 0x00FFFF, N),
         S(A_BOLD, 93, 0, 0xFFFF00, N),
-        S(A_BOLD, 91, 0, 0xFF5F5F, N),
+        S(A_BOLD, 91, 0, 0xFF8787, N),
         S(0,      96, 0, 0x00FFFF, N),
         S(0,      94, 0, 0x5FAFFF, N),
         S(0,      95, 0, 0xFF87FF, N),
@@ -100,13 +105,13 @@ static const Theme THEMES[] = {
         S(0,      93, 0, 0xFFFF00, N),
         S(A_BOLD,  0, 0, N, N),
         S(A_BOLD | A_UNDER | A_REV, 0, 0, N, N),
-        S(A_BOLD | A_UNDER, 91, 0, 0xFF5F5F, N),
+        S(A_BOLD | A_UNDER, 91, 0, 0xFF8787, N),
         S(0,      97, 40, 0xFFFFFF, 0x000000),
         S(A_BOLD, 30, 103, 0x000000, 0xFFFF00),
         S(0,      97, 40, 0xFFFFFF, 0x000000),
         S(0,      37, 0, 0xD0D0D0, N),
     } },
-    { "mono", "no colour: bold, dim, underline and reverse only", {
+    { "mono", "no colour: bold, dim, underline and reverse only", false, {
         S(A_BOLD, 0, 0, N, N),
         S(A_BOLD, 0, 0, N, N),
         S(A_BOLD, 0, 0, N, N),
@@ -131,7 +136,7 @@ static const Theme THEMES[] = {
         S(A_DIM,  0, 0, N, N),
         S(A_DIM,  0, 0, N, N),
     } },
-    { "ansi", "the terminal's own 16-colour palette", {
+    { "ansi", "the terminal's own 16-colour palette", false, {
         S(A_BOLD, 34, 0, N, N),
         S(A_BOLD, 35, 0, N, N),
         S(A_BOLD, 31, 0, N, N),
@@ -236,8 +241,9 @@ static void param(char* list, size_t cap, const char* piece) {
     snprintf(list + n, cap - n, "%s%s", n ? ";" : "", piece);
 }
 
-static int build(const RoleSpec* r, TermDepth depth, char* buf, size_t cap) {
+static int build(const RoleSpec* r, TermDepth depth, bool rgb_24bit_only, char* buf, size_t cap) {
     if (!cap) return 0;
+    if (rgb_24bit_only && depth == TERM_DEPTH_256) depth = TERM_DEPTH_16;
     buf[0] = '\0';
     if (depth == TERM_DEPTH_NONE) return 0;
     char list[64] = "";
@@ -266,7 +272,7 @@ static int build(const RoleSpec* r, TermDepth depth, char* buf, size_t cap) {
 int term_theme_sgr_for(size_t i, TermRole role, TermDepth depth, char* buf, size_t cap) {
     if (i >= N_THEMES) i = 0;
     if ((int)role < 0 || role >= TERM_ROLE_COUNT) { if (cap) buf[0] = '\0'; return 0; }
-    return build(&THEMES[i].role[role], depth, buf, cap);
+    return build(&THEMES[i].role[role], depth, THEMES[i].rgb_24bit_only, buf, cap);
 }
 
 /* ---- the current theme --------------------------------------------------- */
@@ -280,7 +286,7 @@ static TermDepth g_depth = TERM_DEPTH_16;
 void term_theme_apply(size_t i, TermDepth depth) {
     if (i >= N_THEMES) i = 0;
     for (int r = 0; r < TERM_ROLE_COUNT; r++)
-        build(&THEMES[i].role[r], depth, g_sgr[r], SGR_CAP);
+        build(&THEMES[i].role[r], depth, THEMES[i].rgb_24bit_only, g_sgr[r], SGR_CAP);
     g_theme = i;
     g_depth = depth;
     g_applied = true;

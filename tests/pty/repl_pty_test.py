@@ -1205,9 +1205,14 @@ def editor_narrow(tmp):
 def editor_latency_e2e(tmp):
     """Key written to the pty -> the editor's redraw read back, with a
     200-line buffer. Reported, not gated: the scheduler of a loaded machine
-    dominates it (tests/test_term_editor_latency.c is the gate)."""
+    dominates it (tests/test_term_editor_latency.c is the gate); the median
+    is checked against the 2 ms target. Measured with the status line's
+    thread already started (it idles between evaluations)."""
     s = interactive(tmp, extra=NOHIST)
     try:
+        s.send("Pause[0.4]\r")                 # starts the status thread
+        s.expect(r"Out\[1\]= Null")
+        wait_prompt(s, 2)
         lines = ",\n".join("f%d[x_] := Sin[x] + %d x^2 (* line %d *)" % (i, i, i) for i in range(200))
         data = ("\x1b[200~{" + lines + "\x1b[201~").encode()
         for i in range(0, len(data), 512):     # in chunks: the redraw must be read
@@ -1231,8 +1236,9 @@ def editor_latency_e2e(tmp):
         times.sort()
         print("    e2e keystroke->redraw (ms): p50 %.2f  p95 %.2f  max %.2f"
               % (times[len(times) // 2], times[len(times) * 95 // 100], times[-1]))
+        check(times[len(times) // 2] < 2.0, "median keystroke latency %.2f ms" % times[len(times) // 2])
         s.send("\x03")
-        wait_prompt(s, 1)
+        wait_prompt(s, 2)
         quit_session(s)
     finally:
         s.close()
@@ -1929,11 +1935,19 @@ def theme_picker_cancel(tmp):
 @case
 def theme_depths(tmp):
     """256 colours, 16 colours, and NO_COLOR (no escape sequence at all)."""
-    s = theme_session(tmp, depth="256")
+    s = theme_session(tmp, depth="256", extra={"MATHILDA_THEME": "light"})
     try:
         s.send("1+1\r")
         s.expect(r"Out\[1\]=")
         check(re.search(rb"\x1b\[1;38;5;\d+mOut\[1\]=", s.buf), "no 256-colour Out")
+        quit_session(s)
+    finally:
+        s.close()
+    s = theme_session(tmp, depth="256")          # dark: the terminal's palette
+    try:
+        s.send("1+1\r")
+        s.expect(r"Out\[1\]=")
+        check(b"\x1b[1;35mOut[1]=" in s.buf, "dark at 256 colours is not the 16-colour palette")
         quit_session(s)
     finally:
         s.close()

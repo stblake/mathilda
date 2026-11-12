@@ -179,8 +179,10 @@ the status line, syntax colouring, brackets, popups -- comes from the theme.
 | `mono` | no colour: bold, dim, underline and reverse only |
 | `ansi` | the terminal's own 16-colour palette |
 
-At 16 colours `dark` is exactly the REPL's original palette, and `ansi` is
-that palette at every depth.
+`dark` uses its 24-bit colours only on a 24-bit terminal; below that it is
+exactly the REPL's original 16-colour palette, which follows the terminal's
+own (light or dark) colours. `ansi` is that palette at every depth. On a
+light terminal with 24-bit colour, choose `light` once with `/theme`.
 
 **Choosing.** `/theme` opens a picker: Up/Down (or `j`/`k`, or a digit) move
 through the themes, and the picker and its preview -- a prompt, a result, a
