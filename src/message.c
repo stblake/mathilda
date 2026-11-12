@@ -266,6 +266,16 @@ static void message_list_append(const char* head, const char* tag) {
 /* The single choke-point for user-facing diagnostics: note (always), then
  * print "Head::tag: <formatted>\n" unless Quiet[] (or an extra local mute) is
  * active.  See message.h. */
+/* The interactive REPL's style for the printed Head::tag (borrowed static
+ * strings; "" -- byte-identical output -- unless the REPL sets them). */
+static const char* g_msg_on = "";
+static const char* g_msg_off = "";
+
+void mth_message_set_style(const char* head_on, const char* head_off) {
+    g_msg_on = head_on ? head_on : "";
+    g_msg_off = head_off ? head_off : "";
+}
+
 void mth_message_v(int extra_mute, const char* head, const char* tag,
                    const char* fmt, va_list ap) {
     /* extra_mute is a subsystem-local *probe* mute (g_arith_warnings_muted,
@@ -293,7 +303,7 @@ void mth_message_v(int extra_mute, const char* head, const char* tag,
     message_list_append(head, tag);
     /* FeynCalc`DiracTrick::failmsg prints as DiracTrick::failmsg while
      * FeynCalc` is on $ContextPath, as the reference prints it. */
-    fprintf(stderr, "%s::%s: ", context_display_name(head), tag);
+    fprintf(stderr, "%s%s::%s%s: ", g_msg_on, context_display_name(head), tag, g_msg_off);
     vfprintf(stderr, fmt, ap);
     fputc('\n', stderr);
 }

@@ -221,7 +221,9 @@ def wait_prompt(s, n, timeout=30.0):
 
 
 def new_session(home, **kw):
-    extra = kw.pop("extra", None)
+    # Plain output unless a case asks for colour (drop=("NO_COLOR",)), so the
+    # regexes below match the text, not the SGR codes around it.
+    extra = dict({"NO_COLOR": "1"}, **(kw.pop("extra", None) or {}))
     term = kw.pop("term", "xterm-256color")
     drop = kw.pop("drop", ())
     return Session(base_env(home, term=term, extra=extra, drop=drop), **kw)
@@ -819,6 +821,118 @@ def complete_no_eval(tmp):
         check(b"SIDE" not in s.buf[start:], "completion evaluated f[1]")
         s.send("\x03")               # abandon the line
         wait_prompt(s, 2)
+        quit_session(s)
+    finally:
+        s.close()
+
+
+# Readline's own bracketed-paste toggles, already emitted before this work.
+BRACKETED_PASTE = re.compile(rb"\x1b\[\?2004[hl]")
+
+
+def no_sgr(data):
+    return b"\x1b[" not in BRACKETED_PASTE.sub(b"", data)
+
+
+def colour_session(tmp, **kw):
+    s = interactive(tmp, **kw)
+    s.send("1+1\r")
+    s.expect(r"Out\[1\]=.*2")
+    s.send("1/0\r")
+    s.expect(r"ComplexInfinity")
+    s.drain(0.3)
+    quit_session(s)
+    return s
+
+
+@case
+def color_on(tmp):
+    s = colour_session(tmp, extra={"MATHILDA_HISTFILE": ""}, drop=("NO_COLOR", "CLICOLOR_FORCE"))
+    try:
+        b = s.buf
+        check(b"\x1b[1;34m" in b, "no coloured In prompt")
+        check(b"\x1b[1;35mOut[1]=\x1b[0m" in b, "no coloured Out")
+        check(b"\x1b[1;31mPower::infy" in b, "no coloured message head")
+    finally:
+        s.close()
+
+
+@case
+def color_no_color(tmp):
+    s = colour_session(tmp, extra={"MATHILDA_HISTFILE": "", "NO_COLOR": "1"})
+    try:
+        check(no_sgr(s.buf), "SGR with NO_COLOR=1")
+    finally:
+        s.close()
+
+
+@case
+def color_dumb(tmp):
+    s = colour_session(tmp, term="dumb", extra={"MATHILDA_HISTFILE": ""}, drop=("NO_COLOR",))
+    try:
+        check(no_sgr(s.buf), "SGR with TERM=dumb")
+    finally:
+        s.close()
+
+
+def run_stdout_pipe(tmp, extra):
+    """stdin and stderr on a pty, stdout a pipe."""
+    master, slave = pty.openpty()
+    fcntl.ioctl(slave, termios.TIOCSWINSZ, struct.pack("HHHH", ROWS, COLS, 0, 0))
+    env = base_env(tmp, extra=dict({"MATHILDA_HISTFILE": ""}, **extra))
+    p = subprocess.Popen(argv([]), stdin=slave, stdout=subprocess.PIPE,
+                         stderr=slave, env=env)
+    os.close(slave)
+    chunks = []
+
+    def pump():
+        while True:
+            try:
+                c = os.read(master, 65536)
+            except OSError:
+                return
+            if not c:
+                return
+            chunks.append(c)
+
+    t = threading.Thread(target=pump, daemon=True)
+    t.start()
+    time.sleep(1.0 * TIME_SCALE)
+    os.write(master, b"1+1\r")
+    time.sleep(0.5 * TIME_SCALE)
+    os.write(master, b"\x04")
+    out = p.communicate(timeout=10 * TIME_SCALE)[0]
+    t.join(2)
+    os.close(master)
+    return out
+
+
+@case
+def color_stdout_pipe(tmp):
+    out = run_stdout_pipe(tmp, {})
+    check(b"Out[1]= 2" in out, "no result on the stdout pipe: %r" % out[-300:])
+    check(no_sgr(out), "SGR on a piped stdout")
+
+
+@case
+def color_force(tmp):
+    out = run_stdout_pipe(tmp, {"CLICOLOR_FORCE": "1"})
+    check(b"\x1b[1;35mOut[1]=\x1b[0m 2" in out, "CLICOLOR_FORCE did not colour: %r" % out[-300:])
+
+
+@case
+def took_line(tmp):
+    s = interactive(tmp, extra={"MATHILDA_HISTFILE": ""})
+    try:
+        s.send("Pause[1.2]\r")
+        s.expect(r"Out\[1\]=")
+        s.expect(r"took 1\.2\d s")
+        wait_prompt(s, 2)
+        start = len(s.buf)
+        s.send("1+1\r")
+        s.expect(r"Out\[2\]=.*2")
+        wait_prompt(s, 3)
+        check(b"took" not in s.buf[start:], "took shown for a fast result")
         quit_session(s)
     finally:
         s.close()

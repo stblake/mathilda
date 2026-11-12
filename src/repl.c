@@ -26,6 +26,8 @@
 #include "term/term_interrupt.h"
 #include "term/term_readline.h"
 #include "term/term_history.h"
+#include "term/term_color.h"
+#include "mtime.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -78,7 +80,9 @@ void process_input(const char* input, int line_number) {
     /* $Pre: applied to the parsed expression. Consumes our reference
      * to `parsed`; we treat the result as the new input to evaluate. */
     Expr* pre_input = repl_apply_pre(expr_copy(parsed));
+    double t0 = mth_mono_seconds();
     Expr* evaluated = evaluate(pre_input);
+    double took = mth_mono_seconds() - t0;
     expr_free(pre_input);
     mth_block_graveyard_flush();   /* top-level boundary: nothing in flight */
 
@@ -123,9 +127,18 @@ void process_input(const char* input, int line_number) {
         && parsed->data.function.head->data.symbol.name == SYM_Information
         && to_print && to_print->type == EXPR_STRING;
 
-    printf("Out[%d]= ", line_number);
+    /* Colour (and the elapsed-time note) only in the interactive session:
+     * term_color_init runs nowhere else, so these are "" / false in -file. */
+    bool c = term_color_stdout();
+    printf("%sOut[%d]=%s ", term_style_on(TERM_STYLE_OUT, c), line_number, term_style_off(c));
     if (is_info_query) fputs(to_print->data.string, stdout);
     else               expr_print(to_print);
+    if (term_tty_stdout() && took >= 1.0) {
+        /* A dim note on its own line, under the result. */
+        char el[64];
+        term_format_elapsed(el, sizeof(el), took);
+        printf("%stook %s%s\n", term_style_on(TERM_STYLE_DIM, c), el, term_style_off(c));
+    }
     printf("\n"); // extra blank line
 
     /* Mathematica's front end auto-displays a top-level Graphics[...] (or
@@ -1425,6 +1438,11 @@ int main(int argc, char** argv) {
              * run from a terminal gets the plain reader its Dialog always
              * had (readline and in-memory history, nothing else). */
             if (!script) {
+                /* Colour is decided once, here, for this session only. */
+                term_color_init(true);
+                if (term_color_stderr())
+                    mth_message_set_style(term_style_on(TERM_STYLE_MSG_HEAD, true),
+                                          term_style_off(true));
                 /* The history file: $MATHILDA_HISTFILE (empty disables it)
                  * or ~/.mathilda_history, $MATHILDA_HISTSIZE entries. With
                  * no file the store still filters the session's history. */

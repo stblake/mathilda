@@ -6612,7 +6612,8 @@ target_sources(mathilda_common PRIVATE
     ../src/term/term_interrupt.c
     ../src/term/term_input.c
     ../src/term/term_history.c
-    ../src/term/term_complete.c)
+    ../src/term/term_complete.c
+    ../src/term/term_color.c)
 add_executable(term_lex_tests test_term_lex.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(term_lex_tests PRIVATE ../src)
 if(USE_ECM)
@@ -6658,3 +6659,12 @@ else()
     target_link_libraries(term_complete_tests gmp m)
 endif()
 add_test(NAME term_complete_tests COMMAND term_complete_tests)
+add_executable(term_color_tests test_term_color.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(term_color_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(term_color_tests gmp m ${ECM_LIB})
+    add_dependencies(term_color_tests build_ecm)
+else()
+    target_link_libraries(term_color_tests gmp m)
+endif()
+add_test(NAME term_color_tests COMMAND term_color_tests)

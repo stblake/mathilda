@@ -16,6 +16,7 @@ typedef int term_readline_unused_;   /* keep the translation unit non-empty */
 #include "term_lex.h"
 #include "term_history.h"
 #include "term_complete.h"
+#include "term_color.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -137,7 +138,19 @@ static void term_rl_setup_completion(void) {
 }
 
 static TermReadStatus rl_read(TermReader* rd, const char* prompt, char** out) {
-    (void)rd;
+    RlImpl* im = (RlImpl*)rd->impl;
+    char styled[256];
+#ifdef TERM_RL_GNU
+    /* The coloured prompt, with every SGR inside \001...\002 so readline
+     * does not count it as width. libedit: plain (its support for the
+     * markers is unverified, and a garbled redraw is worse than no colour). */
+    if (im && im->opt.interactive_features && term_color_stdout()
+        && term_style_wrap(styled, sizeof(styled), TERM_STYLE_IN, prompt, true, true)
+           < (int)sizeof(styled))
+        prompt = styled;
+#else
+    (void)im; (void)styled;
+#endif
     char* line = readline(prompt);
     if (!line) {
         /* libedit has no signal hook: a Ctrl-C there can end readline() with
