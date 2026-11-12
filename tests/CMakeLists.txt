@@ -6675,8 +6675,9 @@ add_test(NAME term_color_tests COMMAND term_color_tests)
 # drives the forwarder thread through its test seam, with a pipe standing in
 # for the terminal.
 target_sources(mathilda_common PRIVATE
-    ../src/term/term_progress.c)
-foreach(_pr3_suite term_progress)
+    ../src/term/term_progress.c
+    ../src/term/term_spinner.c)
+foreach(_pr3_suite term_progress term_spinner)
     add_executable(${_pr3_suite}_tests test_${_pr3_suite}.c $<TARGET_OBJECTS:mathilda_common>)
     target_include_directories(${_pr3_suite}_tests PRIVATE ../src)
     if(USE_ECM)

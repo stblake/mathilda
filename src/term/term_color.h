@@ -61,4 +61,18 @@ int term_style_wrap(char* buf, size_t cap, TermStyle s, const char* text,
 /* "1.23 s", "1 min 15 s", "1 h 2 min". */
 int term_format_elapsed(char* buf, size_t cap, double seconds);
 
+/* ---- tones for the live status line (REPL PR 3) --------------------------
+ * Appended rather than added to TermStyle so PR 2 / PR 4 edits of the enum
+ * above do not collide. Same contract: "" when !enabled. */
+typedef enum {
+    TERM_TONE_SPIN,     /* spinner glyph : cyan   */
+    TERM_TONE_LABEL,    /* evaluated head: bold   */
+    TERM_TONE_DIM,      /* times, memory : dim    */
+    TERM_TONE_BAR,      /* progress      : cyan   */
+    TERM_TONE_WARN,     /* memory >= 60% : yellow */
+    TERM_TONE_ALERT,    /* memory >= 85% : red    */
+    TERM_TONE_COUNT
+} TermTone;
+const char* term_tone_on(TermTone t, bool enabled);
+
 #endif /* MATHILDA_TERM_COLOR_H */

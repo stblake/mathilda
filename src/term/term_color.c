@@ -94,3 +94,19 @@ int term_format_elapsed(char* buf, size_t cap, double seconds) {
     if (t < 3600) return snprintf(buf, cap, "%ld min %ld s", t / 60, t % 60);
     return snprintf(buf, cap, "%ld h %ld min", t / 3600, (t % 3600) / 60);
 }
+
+/* ---- tones for the live status line (REPL PR 3) -------------------------- */
+
+static const char* const TONE_SGR[TERM_TONE_COUNT] = {
+    "\033[36m",     /* spin  : cyan   */
+    "\033[1m",      /* label : bold   */
+    "\033[2m",      /* dim            */
+    "\033[36m",     /* bar   : cyan   */
+    "\033[33m",     /* warn  : yellow */
+    "\033[31m",     /* alert : red    */
+};
+
+const char* term_tone_on(TermTone t, bool enabled) {
+    if (!enabled || (int)t < 0 || (int)t >= (int)TERM_TONE_COUNT) return "";
+    return TONE_SGR[t];
+}
