@@ -24,9 +24,16 @@ get_filename_component(MATHILDA_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
 set(MATHILDA_ROOT "${MATHILDA_ROOT}" CACHE PATH "Path to the Mathilda source tree")
 
 # Extra `make` flags used when (re)building libmathilda.a, e.g. to drop
-# optional dependencies for a leaner, headless kernel:
+# optional dependencies for a leaner, headless kernel. Either spelling works:
+#   -DMATHILDA_MAKE_FLAGS="USE_GRAPHICS=0 USE_FFTW=0 USE_ECM=0"
 #   -DMATHILDA_MAKE_FLAGS="USE_GRAPHICS=0;USE_FFTW=0;USE_ECM=0"
+# The value is split shell-style into separate `make` arguments: passed through
+# unsplit, a space-separated value reached make as ONE word, which make reads
+# as the single assignment USE_GRAPHICS="0 USE_FFTW=0 ..." and every later flag
+# was silently lost. Quote a value containing spaces: PREFIX="/opt/my env".
 set(MATHILDA_MAKE_FLAGS "" CACHE STRING "Extra flags passed to `make libmathilda.a`")
+string(REPLACE ";" " " _mth_make_flags_str "${MATHILDA_MAKE_FLAGS}")
+separate_arguments(_mth_make_flags UNIX_COMMAND "${_mth_make_flags_str}")
 
 # --- xeus toolchain --------------------------------------------------------
 # Both xeus 5.x and 6.x are supported; src/mathilda_interpreter.hpp picks the
@@ -62,7 +69,7 @@ endif()
 # full path, so CMake relinks it whenever make rewrites the file.
 set(MATHILDA_LIB "${MATHILDA_ROOT}/libmathilda.a")
 add_custom_target(mathilda_lib
-    COMMAND make -C "${MATHILDA_ROOT}" libmathilda.a ${MATHILDA_MAKE_FLAGS}
+    COMMAND make -C "${MATHILDA_ROOT}" libmathilda.a ${_mth_make_flags}
     BYPRODUCTS "${MATHILDA_LIB}"
     WORKING_DIRECTORY "${MATHILDA_ROOT}"
     COMMENT "make libmathilda.a (incremental)"
@@ -90,7 +97,7 @@ if(MATHILDA_EXTRA_LIBS)
 else()
     execute_process(
         COMMAND make -s --no-print-directory -C "${MATHILDA_ROOT}"
-                print-libs ${MATHILDA_MAKE_FLAGS}
+                print-libs ${_mth_make_flags}
         OUTPUT_VARIABLE _mth_line
         ERROR_QUIET
         RESULT_VARIABLE _mth_rc
