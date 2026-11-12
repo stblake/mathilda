@@ -741,8 +741,9 @@ $(TARGET): $(OBJ)
 #
 # iOS/Android sandboxes forbid spawning the `mathilda` sidecar, so the kernel is
 # linked directly into the host app via src/ffi/mathilda_ffi.c. The archive is
-# every kernel object EXCEPT repl.o and the readline adapter
-# (src/term/term_readline.o): repl.o carries main() and the stdio pipe loop, the
+# every kernel object EXCEPT repl.o, repl_cmds.o and the readline adapter
+# (src/term/term_readline.o): repl.o carries main() and the stdio pipe loop,
+# repl_cmds.o the interactive session's slash commands and mod loading, the
 # adapter is the only object that calls readline, and none of that belongs in an
 # embedded library. The rest of src/term/ (the interrupt flag, colour, history,
 # completion) is readline-free and stays in. The host links this

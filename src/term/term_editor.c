@@ -1437,6 +1437,10 @@ static void pick_preview(TermEditor* ed, int row, const TermPreviewLine* pv) {
 
 static void pick_render(TermEditor* ed) {
     TermScreen* s = &ed->scr;
+    /* A move can redraw every row (a new theme): synchronized output keeps
+     * terminals that support it (DEC mode 2026) from showing a half frame;
+     * the others ignore it. */
+    term_screen_raw(s, "\033[?2026h", 8);
     int cols = s->cols;
     int maxr = s->rows - 1 > 1 ? s->rows - 1 : 1;
     int n = (int)ed->pick.count;
@@ -1485,6 +1489,7 @@ static void pick_render(TermEditor* ed) {
     }
     for (int i = 0; i < npv; i++) pick_preview(ed, 2 + h + i, &ed->pick.preview[i]);
     term_screen_render(s, 0, c < cols ? c : cols - 1);
+    term_screen_raw(s, "\033[?2026l", 8);
 }
 
 /* ---- key handling --------------------------------------------------------------- */

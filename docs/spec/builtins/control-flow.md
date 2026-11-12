@@ -498,6 +498,65 @@ In[3]:= {r, x, $Line}
 Out[3]= {25, 1, 3}
 ```
 
+## Monitor
+Shows the progress of an evaluation in the interactive REPL's status line.
+- `Monitor[expr, mon]`: evaluates `expr` and returns its value. While it runs
+  in the interactive session with the status line on (an evaluation longer
+  than 200 ms), the current value of `mon` is shown in the line and refreshed
+  about ten times a second.
+- `mon` is evaluated on the main thread, at a loop step (`Do`, `Table`,
+  `Sum`, `Product`, `Nest`, ...) or the evaluator's periodic check, only when
+  the line asks for a fresh value; its messages are suppressed and its text is
+  cut to fit. A quick `expr`, pipe mode, `-file` and an embedding host never
+  evaluate `mon`, so there `Monitor[expr, mon]` is just `expr`.
+- Nested `Monitor`s show the innermost `mon`.
+
+**Attributes**: `HoldAll, Protected`. `Monitor::argrx` for a wrong number of
+arguments (the call stays unevaluated).
+
+```mathematica
+In[1]:= Monitor[Table[Pause[0.01]; Prime[k], {k, 300}], {k, Prime[k]}] // Length
+⠼ Table 140/300 ▕████▋     ▏ 46% · {140, 809} · 1.4s · cpu 0.0s · mem 96 MB (0.6%)
+Out[1]= 300
+```
+
+## SlashCommand
+Adds commands to the interactive REPL (see [`../repl.md`](../repl.md#slash-commands)).
+A line typed at the prompt that starts with `/` is a command, never input.
+- `SlashCommand["name", f, "summary"]`: `/name text` evaluates `f["text"]`,
+  where `"text"` is the trimmed rest of the line (`""` when there is none),
+  and prints the result unless it is `Null` (a string as plain text). The
+  summary is shown in the `/` menu and in `/help`. Returns `"/name"`.
+- `SlashCommand["name", f]`: the same without a summary.
+- `SlashCommand["name", None]`: removes the command.
+- `SlashCommand["name"]`: its summary, or `None` when there is no such
+  command.
+- `SlashCommand[]`: every command, built-in ones first, as
+  `{"/help" -> "list the commands and keys", ...}`.
+- A leading `/` in the name is ignored. Names are a letter followed by
+  letters and digits; defining a name again replaces it. A command defined
+  while a mod (`~/.mathilda/init.m`, `~/.mathilda/mods/*.m`) loads is
+  listed under that mod by `/mods` and `/help`.
+- A command's messages are printed and an abort prints `/name: aborted`;
+  either way the session returns to the prompt. Outside the interactive
+  session the commands are recorded but nothing runs them.
+
+**Messages**: `SlashCommand::name` (not a valid name) and
+`SlashCommand::builtin` (a built-in command: `/help`, `/theme`, `/history`,
+`/timing`, `/statusline`, `/clear`, `/mods`, `/quit`) return `$Failed`;
+`SlashCommand::string` (a name or summary that is not a string) and
+`SlashCommand::argb` (more than 3 arguments) leave the call unevaluated.
+
+**Attributes**: `Protected`. Context: `Mathilda``.
+
+```mathematica
+(* ~/.mathilda/init.m *)
+SlashCommand["n", Function[s, N[ToExpression[s], 30]], "30 digits: /n Pi"];
+
+In[1]:= /n Pi
+3.14159265358979323846264338328
+```
+
 ## Catch / Throw
 Non-local exit: `Throw` stops evaluation and hands a value to the nearest
 enclosing `Catch`. Unlike `Return` (which only escapes a scope boundary), a

@@ -43,6 +43,11 @@ static void test_theme_depth(void) {
     ASSERT(term_theme_depth_decide("256", NULL, "xterm") == TERM_DEPTH_256);
     ASSERT(term_theme_depth_decide("0", NULL, "xterm") == TERM_DEPTH_NONE);
     ASSERT(term_theme_depth_decide("bogus", NULL, "xterm") == TERM_DEPTH_16);
+    ASSERT(term_theme_light_background("0;15"));
+    ASSERT(term_theme_light_background("0;default;7"));
+    ASSERT(!term_theme_light_background("15;0"));
+    ASSERT(!term_theme_light_background("default;default"));
+    ASSERT(!term_theme_light_background(NULL));
 }
 
 /* At 16 colours the default theme is the REPL's original palette. */

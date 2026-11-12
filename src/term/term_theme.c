@@ -306,5 +306,15 @@ void term_theme_init(const char* config_path) {
         char name[64];
         if (term_config_get(config_path, "theme", name, sizeof name)) t = term_theme_find(name);
     }
+    if (t < 0 && term_theme_light_background(getenv("COLORFGBG"))) t = term_theme_find("light");
     term_theme_apply(t < 0 ? 0 : (size_t)t, d);
+}
+
+bool term_theme_light_background(const char* colorfgbg) {
+    if (!colorfgbg || !*colorfgbg) return false;
+    const char* bg = strrchr(colorfgbg, ';');
+    bg = bg ? bg + 1 : colorfgbg;
+    if (*bg < '0' || *bg > '9') return false;
+    int v = atoi(bg);
+    return v == 7 || v == 15;
 }

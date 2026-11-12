@@ -1744,20 +1744,22 @@ def combo_double_ctrlc_restores(tmp):
 
 @case
 def combo_sigterm_under_spinner(tmp):
-    """SIGTERM during a spinner evaluation: terminal restored (ECHO back)."""
-    s = spinner_session(tmp, colour=False)
-    try:
-        s.send("Pause[5]\r")
-        s.drain(0.6)
-        check(not (tty_flags(s.fd) & termios.ECHO), "ECHO not off under the spinner")
-        os.kill(s.pid, signal.SIGTERM)
-        st = s.finish(5)
-        check(os.WIFSIGNALED(st) and os.WTERMSIG(st) == signal.SIGTERM,
-              "SIGTERM did not end the process by the signal: %r" % st)
-        lf = tty_flags(s.fd)
-        check((lf & termios.ICANON) and (lf & termios.ECHO), "terminal not restored")
-    finally:
-        s.close()
+    """SIGTERM or SIGHUP (the crash-signal path) during a spinner evaluation:
+    the process ends by the signal and the terminal is restored."""
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        s = spinner_session(tmp, colour=False)
+        try:
+            s.send("Pause[5]\r")
+            s.drain(0.6)
+            check(not (tty_flags(s.fd) & termios.ECHO), "ECHO not off under the spinner")
+            os.kill(s.pid, sig)
+            st = s.finish(5)
+            check(os.WIFSIGNALED(st) and os.WTERMSIG(st) == sig,
+                  "signal %d did not end the process by the signal: %r" % (sig, st))
+            lf = tty_flags(s.fd)
+            check((lf & termios.ICANON) and (lf & termios.ECHO), "terminal not restored")
+        finally:
+            s.close()
 
 
 # ---------------------------------------------------------------------------

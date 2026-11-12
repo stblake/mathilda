@@ -83,7 +83,12 @@ int         term_theme_sgr_for(size_t i, TermRole role, TermDepth depth, char* b
 int         term_theme_rgb_to_256(unsigned long rgb);
 
 /* The session's start-up choice: MATHILDA_THEME, else the config file's
- * "theme" key, else "dark"; the depth from the environment. Applies it. */
+ * "theme" key, else "light" when COLORFGBG says the background is light,
+ * else "dark"; the depth from the environment. Applies it. */
 void        term_theme_init(const char* config_path);
+
+/* COLORFGBG ("fg;bg", set by rxvt, Konsole and some others) names a light
+ * background (7 or 15). Pure. */
+bool        term_theme_light_background(const char* colorfgbg);
 
 #endif /* MATHILDA_TERM_THEME_H */

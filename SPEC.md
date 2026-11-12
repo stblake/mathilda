@@ -71,9 +71,11 @@ src/
   attr.{c,h}        Attribute bitflags
   print.{c,h}       Expression formatting
   repl.c            REPL entry point + main()
-  term/             Interactive terminal layer (colour, history, completion,
-                    interrupt, reader seam); term_readline.c is the only
-                    file that includes readline
+  repl_cmds.c       Slash commands, the theme picker, mod loading
+  term/             Interactive terminal layer (editor, colour themes,
+                    history, completion, interrupt, status line, reader
+                    seam); term_readline.c is the only file that includes
+                    readline
   core.{c,h}        Core builtins and module initialization hub
   plus.c / times.c / power.c / arithmetic.c   Arithmetic heads
   part.c / sort.c                             Part + sort (structural ops)
@@ -675,6 +677,17 @@ Up/Down between lines, live syntax colouring, a Tab completion popup with
 docstring summaries, a Ctrl-R history list, under 2 ms per keystroke.
 `MATHILDA_EDITOR=readline` or `TERM=dumb` keeps readline, whose smart Return
 is described next; the editor implements the same completeness rule.
+
+During an evaluation a background thread (`src/term/term_status.c`) owns the
+terminal: after 200 ms it draws a status line (elapsed and CPU time, memory,
+loop progress from `term_progress.h`, `Monitor[expr, mon]`), with fd 1 and
+fd 2 routed through it so output and the line never collide. A line starting
+with `/` is a slash command (`src/repl_cmds.c`: `/help`, `/theme`, `/mods`,
+...), never evaluated; `/` in an empty editor input opens their menu. Every
+colour is a role of the current theme (`src/term/term_theme.c`; 24-bit, 256
+or 16 colours; `~/.mathilda/config`). `~/.mathilda/init.m` and
+`~/.mathilda/mods/*.m` are loaded after the banner and may add commands with
+`SlashCommand`.
 
 **Completeness-driven Return.** Return is rebound (`mth_smart_return`, in
 `src/term/term_readline.c`, using `term_lex_input_complete`) so a
