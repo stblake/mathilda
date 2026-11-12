@@ -924,6 +924,17 @@ can neither close nor certify them. These are N3 material for the benchmark.
 
 **Order of work:** 1–5 → 8a → 8 → 6–7 → 9 → 10 → 11 → 13–14 → 17 → 16 (with 15) → 12 → 18.
 
+### 2026-11-12 — Shape B, curve-monomial case and the Risch DE on a curve (v0.6528)
+
+- `RDEAlgebraic.m` implements Part 3 over `Q(x)(Y)` with valid bounds and
+  undetermined coefficients, the bounds checked by widening.
+- `BaseCurve.m` handles one kernel whose argument contains Y, at any genus.
+- **Remaining:**
+  - a curve-monomial kernel with further monomials. This needs Part 3 over a
+    transcendental k (non-constant x_l), or an RDE over k0(θ_1).
+  - the cascade gate;
+  - the class-B benchmark extension.
+
 ### 2026-11-12 — Shape B, component method (v0.6527)
 
 Shape B is redesigned around the component split. With radical-free kernel

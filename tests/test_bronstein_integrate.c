@@ -62,7 +62,7 @@ static const char* const declines[] = {
     "Log[x] + Sqrt[Log[x] + Sqrt[Log[x]]]",                                          /* nested */
     "Sqrt[Log[x]] Sqrt[Log[x] + 1]",                                                 /* compositum */
     "Tan[x] Sqrt[Log[x]]",
-    "E^(x Sqrt[x^3 + 1])/x",                                                         /* Shape B, curve monomial (genus 1) */
+    "Log[x] E^(x Sqrt[x^3 + 1])",                                                    /* Shape B, curve monomial over a tower */
     NULL
 };
 
@@ -96,8 +96,8 @@ static void test_declines(void) {
         BR_EQ(buf, "Integrate");
     }
     BR_EQ("BronsteinIntegrate[Log[x] + Sqrt[Log[x] + Sqrt[Log[x]]], x]", "{\"failed\", \"nested radicals\"}");
-    BR_EQ("BronsteinIntegrate[E^(x Sqrt[x^3 + 1])/x, x]",
-          "{\"failed\", \"kernel with a radical argument (Shape B curve-monomial method, a later phase)\"}");
+    BR_EQ("BronsteinIntegrate[Log[x] E^(x Sqrt[x^3 + 1]), x]",
+          "{\"failed\", \"a further monomial over a kernel with a radical argument (Shape B, curve-monomial case, takes one kernel)\"}");
 }
 
 static void test_messages_and_glue(void) {

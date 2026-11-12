@@ -45,6 +45,8 @@
 (*                                                                            *)
 (*   K0.m          Shape B: arithmetic in k0 = k(Y) and k0[theta]             *)
 (*   BaseAlgebraic.m  Shape B, the component method (radical below the tower) *)
+(*   RDEAlgebraic.m   the Risch DE over Q(x)(Y) ([B] Part 3)                  *)
+(*   BaseCurve.m      Shape B, a kernel whose argument contains the radical   *)
 (* ========================================================================== *)
 
 LoadModule["trager/Trager.m"];
@@ -77,7 +79,9 @@ LoadModule["bronstein/Divisors.m"];
 LoadModule["bronstein/Specialize.m"];
 LoadModule["bronstein/LogPart.m"];
 LoadModule["bronstein/K0.m"];
+LoadModule["bronstein/RDEAlgebraic.m"];
 LoadModule["bronstein/BaseAlgebraic.m"];
+LoadModule["bronstein/BaseCurve.m"];
 LoadModule["bronstein/Pipeline.m"];
 
 End[];

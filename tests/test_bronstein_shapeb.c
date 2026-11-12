@@ -74,6 +74,11 @@ static void test_k0(void) {
     BR_TRUE("brK0PolyGCD[Fk, Bk, {th, 0}, {th + 1, 0}, th] === {1, 0}");
     BR_TRUE("brK0PolyGCD[Fk, Bk, {0, 0}, {0, 0}, th] === {0, 0}");
     BR_TRUE("brK0Trace[brK0Field[Tk, {tt, tt^2 - 2, Sqrt[2]}], tt^2 x + tt] === 4 x");
+    /* s a + t b = g: (theta - Y) and (theta + Y) are coprime in k0[theta] */
+    BR_TRUE("Module[{e = brK0PolyExtGCD[Fk, Bk, {th, -1}, {th, 1}, th]},"
+            " e[[1]] === {1, 0} && afZeroQ[Fk, afMinus[Fk, afPlus[Fk, brK0Times[Fk, Bk, e[[2]], {th, -1}],"
+            "   brK0Times[Fk, Bk, e[[3]], {th, 1}]], {1, 0}]]]");
+    BR_TRUE("brK0PolyExtGCD[Fk, Bk, {th^2 - 1 - x^3, 0}, {th, 1}, th][[1]] === {th, 1}");
 }
 
 static void test_component_routines(void) {

@@ -132,9 +132,13 @@ brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl,
   brCheckHeads[f, x];
   g0 = If[FreeQ[f, (Log[a_] | Power[E, a_]) /; brRadicalQ[a, {x}]], None, brGenus0Flatten[f, x, u]];
   If[g0 =!= None,
-    F = brCurveCanon[brIntegrateTranscendental[g0["g"], u] /. g0["back"], x, g0["b"], g0["n"]];
-    If[!antiderivativeQ[f, F, x], throwInternal["AntiderivativeCheckFailed", <|"f" -> f, "F" -> F|>]];
-    Return[brPresentable[f, F, x], Module]];
+    (* a certificate of the parametrised integral is one for f (Q(x)(y) = Q(u));
+       a decline falls through to the curve-monomial method below *)
+    r = brCatch[brCurveCanon[brIntegrateTranscendental[g0["g"], u] /. g0["back"], x, g0["b"], g0["n"]]];
+    If[brFailQ[r] && First[brFailTag[r]] =!= "Decline", Throw[r, "TragerFail"]];
+    If[!brFailQ[r],
+      If[!antiderivativeQ[f, r, x], throwInternal["AntiderivativeCheckFailed", <|"f" -> f, "F" -> r|>]];
+      Return[brPresentable[f, r, x], Module]]];
   T = brTower[f, x];
   F = Switch[T["shape"],
     "Rational" | "Transcendental", brIntegrateTranscendental[f, x],
@@ -145,7 +149,7 @@ brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl,
         MatchQ[r, {"failed", _}], throwDecline["Trager: " <> r[[2]]],
         True, r],
     "B", With[{sb = brShapeB[T, f, x]}, sb["F"]],
-    "BCurve", throwDecline["kernel with a radical argument (Shape B curve-monomial method, a later phase)"],
+    "BCurve", With[{sb = brShapeBMono[T, f, x]}, sb["F"]],
     "A", With[{sa = brShapeA[T, f, x]}, If[sa["verified"], verified = True]; sa["F"]],
     _, throwInternal["brUnknownShape"]];
   If[!verified && !antiderivativeQ[f, F, x], throwInternal["AntiderivativeCheckFailed", <|"f" -> f, "F" -> F|>]];

@@ -94,3 +94,23 @@ brK0Trace::usage = "brK0Trace[Ft, e] is the trace from Q(t)(vars) down to Q(vars
 brK0Trace[Ft_Association, e_] := Module[{t = Ft["t"], r},
   Together[Sum[r = Together[rc[Ft, e t^i]]; Coefficient[Expand[Numerator[r]], t, i]/Denominator[r],
     {i, 0, fieldDegree[Ft] - 1}]]];
+
+brK0PolyExtGCD::usage = "brK0PolyExtGCD[F, B, a, b, th] is {g, s, t} with s a + t b = g, g the monic gcd of a and b in k0[theta] (the extended Euclidean algorithm over the field k0).";
+brK0PolyExtGCD[F_Association, B_Association, a0_List, b0_List, th_Symbol] := Module[
+  {r0 = a0, r1 = b0, s0 = afOne[B], s1 = afZero[B], t0 = afZero[B], t1 = afOne[B], q, r2, guard = 0, da, db, lcInv, lead, inv},
+  While[!afZeroQ[F, r1],
+    If[++guard > 1000, throwInternal["brK0PolyExtGCDNoProgress"]];
+    (* q = quotient of r0 by r1 *)
+    q = afZero[B]; r2 = r0;
+    db = brK0Degree[r1, th];
+    lcInv = brK0Inverse[F, B, brK0Coefficient[F, r1, th, db]];
+    While[(da = brK0Degree[r2, th]) >= db,
+      lead = afScale[F, th^(da - db), brK0Times[F, B, brK0Coefficient[F, r2, th, da], lcInv]];
+      q = afPlus[F, q, lead];
+      r2 = afMinus[F, r2, brK0Times[F, B, lead, r1]]];
+    {r0, r1} = {r1, r2};
+    {s0, s1} = {s1, afMinus[F, s0, brK0Times[F, B, q, s1]]};
+    {t0, t1} = {t1, afMinus[F, t0, brK0Times[F, B, q, t1]]}];
+  If[afZeroQ[F, r0], Return[{afZero[B], afZero[B], afZero[B]}]];
+  inv = brK0Inverse[F, B, brK0Coefficient[F, r0, th, brK0Degree[r0, th]]];
+  {brK0Times[F, B, r0, inv], brK0Times[F, B, s0, inv], brK0Times[F, B, t0, inv]}];

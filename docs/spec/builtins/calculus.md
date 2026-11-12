@@ -3863,7 +3863,22 @@ the transcendental Risch algorithm over the algebraic base `k0 = Q(x)(y)`.
   transcendental algorithm in u then decides. The answer is written back in
   `Q(x)(y)` canonically (`brCurveCanon`).
 - **A kernel argument containing the radical, genus ≥ 1** (the curve-monomial
-  case): declines for now.
+  case, `BaseCurve.m`, v0.6528). The integrand is `Q(x)(Y)(θ)` with one
+  `θ = Log[h]` or `E^h`, where `h ∈ Q(x)(Y)` involves Y. This is the
+  transcendental algorithm over the field k0, with every coefficient operation done
+  modulo `Y^m − G`:
+  - Hermite reduction over `k0[θ]`;
+  - Rothstein–Trager with `R(z) = Res_θ(a − z Dd, d)` reduced into k0;
+  - for an exponential θ, the Risch DE on the curve, `b' + j h' b = e_j`
+    (`RDEAlgebraic.m`: [B] Part 3 bounds, then undetermined coefficients; a
+    certified "no solution" is a proof);
+  - for a logarithmic θ, limited integration over k0 through Trager.
+
+  Bronstein's ISSAC'91 example closes:
+  `∫ [((5x⁴+2x−2)/x²)(1 + 1/√(x³+1)) + x/√(x³+1)] E^(x√(x³+1)) dx =
+  (2 + 2√(x³+1)) E^(x√(x³+1))/x`. `E^Sqrt[1+x^3]` and `Log[x + Sqrt[1+x^3]]`
+  are certified non-elementary. Such a kernel over or under another monomial
+  declines.
 
 | Input | Output |
 |---|---|
@@ -3878,8 +3893,7 @@ the transcendental Risch algorithm over the algebraic base `k0 = Q(x)(y)`.
 - two radicands;
 - a monomial above θ that depends on it;
 - trigonometric kernels;
-- a kernel containing the radical on a curve of genus ≥ 1, or over another
-  monomial;
+- a kernel containing the radical over or under another monomial;
 - residues at special places on a curve of positive genus;
 - algebraic constants at special places beyond `κ^(1/m) u` (u ∈ k), except over `Q(x)`.
 
