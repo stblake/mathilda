@@ -8,6 +8,7 @@
 #endif
 
 #include "mp_parallel.h"
+#include "term/term_progress.h"   /* worker count for the REPL spinner */
 #include "core.h"
 
 #include <stdbool.h>
@@ -90,11 +91,13 @@ int mp_parallel_for(MpRangeFn fn, void* ctx, int64_t n, double work)
         pthread_attr_t attr;
         int have_attr = pthread_attr_init(&attr) == 0;
         if (have_attr) pthread_attr_setstacksize(&attr, (size_t)64 << 20);
+        mth_progress_workers_add(nj);
         for (int i = 0; i < nj; i++)
             started[i] = pthread_create(&th[i], have_attr ? &attr : NULL, mp_job_run, &job[i]) == 0;
         if (have_attr) pthread_attr_destroy(&attr);
         pthread_sigmask(SIG_SETMASK, &old, NULL);
         for (int i = 0; i < nj; i++) if (started[i]) pthread_join(th[i], NULL);
+        mth_progress_workers_add(-nj);
         for (int i = 0; i < nj; i++) if (!started[i]) fn(ctx, job[i].lo, job[i].hi, i);
         tc_async_defer_pop();
         return nj;

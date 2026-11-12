@@ -29,6 +29,7 @@
  */
 
 #include "product.h"
+#include "term/term_progress.h"   /* the REPL spinner's loop progress */
 #include "product_internal.h"   /* g_product_verify_convergence */
 #include "symtab.h"
 #include "eval.h"
@@ -261,10 +262,13 @@ static Expr* expand_list(Expr* f, Expr* var, Expr* list) {
     size_t count = 0;
 
     IterShadow saved = iter_spec_shadow(var);
+    int ptok = mth_progress_push(SYM_Product, (long)n);
     for (size_t i = 0; i < n; i++) {
+        mth_progress_step(ptok, (long)i);
         iter_bind(var, list->data.function.args[i]);
         terms[count++] = evaluate(f);
     }
+    mth_progress_pop(ptok);
     iter_spec_restore(var, saved);
 
     return fold_times(terms, count);
@@ -302,8 +306,10 @@ static Expr* expand_range_first(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr
     Expr* curr_e = expr_copy(imin);
     bool overflow = false;
 
+    int ptok = mth_progress_push(SYM_Product, mth_progress_range_count(min_val, max_val, di_val));
     while (iter_range_continue(is_real, /*is_inf=*/false, curr_e, imax,
                                val, max_val, di_val)) {
+        mth_progress_step(ptok, (long)count);
         if ((int64_t)count >= PRODUCT_MAX_FINITE_TERMS) { overflow = true; break; }
 
         if (count == cap) { cap *= 2; terms = realloc(terms, sizeof(Expr*) * cap); }
@@ -329,6 +335,7 @@ static Expr* expand_range_first(Expr* f, Expr* var, Expr* imin, Expr* imax, Expr
          * the loop always advances. */
         if (is_real || !iter_real_value(curr_e, &val)) val += di_val;
     }
+    mth_progress_pop(ptok);
     expr_free(curr_e);
     iter_spec_restore(var, saved);
     if (first) expr_free(first);   /* empty range: the probe is not a factor */

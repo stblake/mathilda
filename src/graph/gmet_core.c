@@ -39,6 +39,7 @@
 #include "expr.h"
 #include "pack.h"
 #include "core.h"
+#include "term/term_progress.h"   /* worker count for the REPL spinner */
 #include "sym_names.h"
 #include <stdlib.h>
 #include <string.h>
@@ -222,6 +223,7 @@ void gmet_parallel_for(int64_t n, int64_t chunk, int nthreads,
         sigfillset(&all);
         pthread_sigmask(SIG_SETMASK, &all, &old);
         tc_async_defer_push();
+        mth_progress_workers_add(nthreads - 1);
         for (int i = 1; i < nthreads; i++) {
             wk[i].team = &t; wk[i].tid = i;
             started[i] = pthread_create(&th[i], NULL, team_thread, &wk[i]) == 0;
@@ -229,6 +231,7 @@ void gmet_parallel_for(int64_t n, int64_t chunk, int nthreads,
         pthread_sigmask(SIG_SETMASK, &old, NULL);
         team_loop(&t, 0);
         for (int i = 1; i < nthreads; i++) if (started[i]) pthread_join(th[i], NULL);
+        mth_progress_workers_add(-(nthreads - 1));
         tc_async_defer_pop();
         pthread_mutex_destroy(&t.mu);
         return;

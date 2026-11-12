@@ -11,6 +11,7 @@
 #include "common.h"
 #include "arithmetic.h"   /* arith_warnings_muted() */
 #include "eval.h"         /* eval_clock_get() — dedup warnings within one eval */
+#include "term/term_progress.h"   /* worker count for the REPL spinner */
 #include "mth_machine_pow.h"   /* the one machine Power, shared with the scalar builtin and the VM */
 #include <stdio.h>
 #include <stdlib.h>
@@ -1498,12 +1499,13 @@ bool nd_parallel_for(size_t n, nd_chunk_fn fn, void* ctx) {
             jb[nc].fn = fn; jb[nc].ctx = ctx; jb[nc].lo = lo; jb[nc].hi = hi;
             jb[nc].ok = true;
             threaded[nc] = (pthread_create(&th[nc], NULL, nd_thread_run, &jb[nc]) == 0);
+            if (threaded[nc]) mth_progress_workers_add(1);
             if (!threaded[nc]) jb[nc].ok = fn(ctx, lo, hi); /* spawn failed: inline */
             nc++;
         }
         bool all = true;
         for (int t = 0; t < nc; t++) {
-            if (threaded[t]) pthread_join(th[t], NULL);
+            if (threaded[t]) { pthread_join(th[t], NULL); mth_progress_workers_add(-1); }
             all = all && jb[t].ok;
         }
         return all;
@@ -1544,11 +1546,12 @@ int nd_parallel_reduce(size_t n, nd_reduce_chunk_fn fn, void* ctx,
             jb[nc].fn = fn; jb[nc].ctx = ctx; jb[nc].lo = lo; jb[nc].hi = hi;
             jb[nc].slot = slots + (size_t)nc * (size_t)ncomp;
             threaded[nc] = (pthread_create(&th[nc], NULL, nd_reduce_run, &jb[nc]) == 0);
+            if (threaded[nc]) mth_progress_workers_add(1);
             if (!threaded[nc]) fn(ctx, lo, hi, jb[nc].slot); /* spawn failed: inline */
             nc++;
         }
         for (int t = 0; t < nc; t++)
-            if (threaded[t]) pthread_join(th[t], NULL);
+            if (threaded[t]) { pthread_join(th[t], NULL); mth_progress_workers_add(-1); }
         return nc;
     }
 #endif

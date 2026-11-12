@@ -6668,3 +6668,22 @@ else()
     target_link_libraries(term_color_tests gmp m)
 endif()
 add_test(NAME term_color_tests COMMAND term_color_tests)
+
+# ---- REPL status line, spinner and loop progress (src/term/, REPL PR 3) ----
+# Appended as its own block. term_progress.c is kernel code (the iterators
+# write the progress stack), so every suite links it; term_status_tests
+# drives the forwarder thread through its test seam, with a pipe standing in
+# for the terminal.
+target_sources(mathilda_common PRIVATE
+    ../src/term/term_progress.c)
+foreach(_pr3_suite term_progress)
+    add_executable(${_pr3_suite}_tests test_${_pr3_suite}.c $<TARGET_OBJECTS:mathilda_common>)
+    target_include_directories(${_pr3_suite}_tests PRIVATE ../src)
+    if(USE_ECM)
+        target_link_libraries(${_pr3_suite}_tests gmp m ${ECM_LIB})
+        add_dependencies(${_pr3_suite}_tests build_ecm)
+    else()
+        target_link_libraries(${_pr3_suite}_tests gmp m)
+    endif()
+    add_test(NAME ${_pr3_suite}_tests COMMAND ${_pr3_suite}_tests)
+endforeach()

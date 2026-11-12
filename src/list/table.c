@@ -1,5 +1,6 @@
 #include "list_common.h"
 #include "table.h"
+#include "../term/term_progress.h"   /* the REPL spinner's loop progress */
 #include "compile/autocompile.h"
 #include "iter.h"
 #include "../pack.h"
@@ -973,11 +974,14 @@ Expr* builtin_table(Expr* res) {
 
     if (is_n_times) {
         int64_t n = imax_e->data.integer;
+        int ptok = mth_progress_push(SYM_Table, (long)n);
         for (int64_t i = 0; i < n; i++) {
+            mth_progress_step(ptok, (long)i);
             Expr* eval_expr = evaluate(expr);
             if (results_count == results_cap) { results_cap *= 2; results = realloc(results, sizeof(Expr*) * results_cap); }
             results[results_count++] = eval_expr;
         }
+        mth_progress_pop(ptok);
     } else if (is_list_iter) {
         /* A list of arbitrary-precision reals at one precision (the abscissae
          * of a high-precision sweep): the body is compiled once in MPFR at that
@@ -991,7 +995,9 @@ Expr* builtin_table(Expr* res) {
         if (lbits > 0 && var_sym->type == EXPR_SYMBOL)
             acp = autocompile_new_prec(expr, (const Expr* const*)&var_sym, 1, lbits);
 #endif
+        int ptok = mth_progress_push(SYM_Table, (long)nl);
         for (size_t i = 0; i < nl; i++) {
+            mth_progress_step(ptok, (long)i);
             const Expr* xe = list_e->data.function.args[i];
             Expr* eval_expr = NULL;
 #ifdef USE_MPFR
@@ -1005,6 +1011,7 @@ Expr* builtin_table(Expr* res) {
             if (results_count == results_cap) { results_cap *= 2; results = realloc(results, sizeof(Expr*) * results_cap); }
             results[results_count++] = eval_expr;
         }
+        mth_progress_pop(ptok);
         autocompiled_free(acp);
     } else {
         /* Auto-compile fast path — ONLY for an inexact (machine-real) iterator,
@@ -1080,8 +1087,11 @@ Expr* builtin_table(Expr* res) {
             }
         }
 
+        /* results_count is the step count (the packed abandon above resumes it) */
+        int ptok = mth_progress_push(SYM_Table, mth_progress_range_count(min_val, max_val, di_val));
         while (iter_range_continue(is_real, /*is_inf=*/false, curr_e, imax_e,
                                    val, max_val, di_val)) {
+            mth_progress_step(ptok, (long)results_count);
             if ((int64_t)results_count >= TABLE_MAX_FINITE_ELEMENTS) { overflow = true; break; }
             /* Boxed (not _eval_real) so an integer-valued body stays an Integer
              * — the element type is user-visible in the returned list. */
@@ -1116,6 +1126,7 @@ Expr* builtin_table(Expr* res) {
 
             val += di_val;
         }
+        mth_progress_pop(ptok);
         if (curr_e) expr_free(curr_e);
         autocompiled_free(ac);
         autocompiled_free(acp);
