@@ -83,4 +83,11 @@ const char* term_hl_sgr(int id);
  * the end). Returns false, writing nothing, when it cannot allocate. */
 bool term_hl_fputs(const char* s, size_t n, FILE* f, TermHlClassify cls, void* ctx);
 
+/* Print a result as expr_print would, with syntax colouring: the same bytes
+ * plus SGR sequences, then a newline. Returns false, having printed nothing,
+ * when the text is over 64 KiB or cannot be built; the caller then uses
+ * expr_print. The interactive editor session's results only. */
+struct Expr;
+bool term_hl_print_result(struct Expr* e);
+
 #endif /* MATHILDA_TERM_HIGHLIGHT_H */

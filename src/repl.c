@@ -26,6 +26,7 @@
 #include "term/term_interrupt.h"
 #include "term/term_readline.h"
 #include "term/term_editor_tty.h"
+#include "term/term_highlight.h"
 #include "term/term_history.h"
 #include "term/term_color.h"
 #include "mtime.h"
@@ -133,7 +134,8 @@ void process_input(const char* input, int line_number) {
     bool c = term_color_stdout();
     printf("%sOut[%d]=%s ", term_style_on(TERM_STYLE_OUT, c), line_number, term_style_off(c));
     if (is_info_query) fputs(to_print->data.string, stdout);
-    else               expr_print(to_print);
+    else if (!(c && term_editor_session_active() && term_hl_print_result(to_print)))
+        expr_print(to_print);
     if (term_tty_stdout() && took >= 1.0) {
         /* A dim note on its own line, under the result. */
         char el[64];

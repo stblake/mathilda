@@ -1148,6 +1148,40 @@ def ctrl_r_search(tmp):
         s.close()
 
 
+RESULT_INPUTS = ["Sin[x] + 2/3 y^2", "{\"str (* x\", 1.5, f[_, x__]}", "Expand[(a+b)^3]",
+                 "Format[fmt[x_]] := \"F\"[x]; fmt[1]", "x -> 2"]
+
+
+def result_lines(tmp, colour):
+    extra = dict(NOHIST)
+    drop = ("NO_COLOR", "CLICOLOR_FORCE") if colour else ()
+    s = new_session(tmp, extra=extra, drop=drop) if colour else new_session(tmp, extra=extra)
+    try:
+        wait_prompt(s, 1)
+        outs = []
+        for i, inp in enumerate(RESULT_INPUTS):
+            s.send(inp + "\r")
+            m = s.expect(r"Out\[%d\]=(?:\x1b\[0m)? (.*?)\r?\n" % (i + 1))
+            outs.append(m.group(1))
+            wait_prompt(s, i + 2)
+        quit_session(s)
+        return outs
+    finally:
+        s.close()
+
+
+@case
+def result_colour(tmp):
+    """Results are coloured in the editor session, with the same characters."""
+    coloured = result_lines(tmp, True)
+    plain = result_lines(tmp, False)
+    check(b"\x1b[36mSin" in coloured[0], "no builtin colour in %r" % coloured[0])
+    check(b"\x1b[35m" in coloured[0], "no number colour in %r" % coloured[0])
+    for c, p in zip(coloured, plain):
+        check(no_sgr(p), "SGR in a NO_COLOR result: %r" % p)
+        check(SGR.sub(b"", c) == p, "coloured %r differs from plain %r" % (c, p))
+
+
 def tty_flags(fd):
     attrs = termios.tcgetattr(fd)
     return attrs[3]               # lflag

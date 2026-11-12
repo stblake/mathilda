@@ -1477,7 +1477,7 @@ Rules: no version bump; append-only edits to tests/CMakeLists.txt, the changelog
 - [x] Phase 2: term_render (grid diff, one write), term_editor (multi-line, keymap, history edges, smart/forced Return, kill/yank, undo, paste, brackets), term_editor_tty (raw mode, restore paths, SIGWINCH, DSR, MATHILDA_EDITOR); repl.c wiring; unit + pty tests; milestone 1
 - [x] Phase 3: completion popup (Tab, filter, docstring row, options first, placement, degradation); tests
 - [x] Phase 4: Ctrl-R history list; tests
-- [ ] Phase 5: result colouring (expr_print_to_string, safe subset); tests
+- [x] Phase 5: result colouring (expr_print_to_string, safe subset); tests
 - [ ] Phase 6: latency gate test (200 lines, < 2 ms, one write, 0 allocs); resize / narrow / UTF-8 / restore pty cases
 - [ ] Phase 7: docs/spec/repl.md, changelog, SPEC.md
 - [ ] Verify: clean build, checks, USE_READLINE=0, ctest -LE nightly, pty suite, byte-identical pipe/-file, leaks, latency numbers, readline fallback; /tmp/pr2-body.md

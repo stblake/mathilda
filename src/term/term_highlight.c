@@ -6,6 +6,8 @@
 #include "term_color.h"
 
 #include "symtab.h"
+#include "expr.h"
+#include "print.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -201,5 +203,24 @@ bool term_hl_fputs(const char* s, size_t n, FILE* f, TermHlClassify cls, void* c
     fwrite(s + run, 1, n - run, f);
     if (cur != TERM_HL_PLAIN) fputs("\033[0m", f);
     free(sty);
+    return true;
+}
+
+/* A result is coloured only below this size: beyond it the plain printer's
+ * streaming output is the better deal. */
+#define TERM_HL_RESULT_MAX (64u * 1024u)
+
+bool term_hl_print_result(struct Expr* e) {
+    /* expr_to_string_display renders exactly what expr_print prints (the
+     * same printer with Format rules on), minus expr_print's newline. */
+    char* s = expr_to_string_display(e);
+    if (!s) return false;
+    size_t n = strlen(s);
+    if (n > TERM_HL_RESULT_MAX || !term_hl_fputs(s, n, stdout, term_hl_classify_symtab, NULL)) {
+        free(s);
+        return false;
+    }
+    fputc('\n', stdout);
+    free(s);
     return true;
 }
