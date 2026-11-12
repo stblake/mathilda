@@ -145,6 +145,56 @@ static void test_fibonacci_sums(void) {
                "=== 0");
 }
 
+/* Adversarial review (v0.6528): a Sum whose iterator the closed-form sum
+ * generator does not take ({k, 1, n - 2}, {k, 1, n + 1}, {k, 1, 2 n},
+ * {k, n, 2 n}) used to fall to the identity generator, which evaluated both
+ * sides: Mathilda's own Sum output was certified against itself (Lean:
+ * "Proved", the theorem a tautology, no trusted step; false at n = 0 for
+ * {k, 1, n - 2}).  Such a claim has no certificate: "Tested". */
+static void test_review_unsupported_sums(void) {
+    test_mute_messages();
+    assert_eval_eq("leanJu = {Conjecture[Sum[k, {k, 1, n - 2}], n, \"Start\" -> 2, "
+                   "\"Engine\" -> \"Exact\"], Conjecture[Sum[k, {k, 1, n + 1}], n, "
+                   "\"Engine\" -> \"Exact\"], Conjecture[Sum[k, {k, 1, 2 n}], n, "
+                   "\"Engine\" -> \"Exact\"], Conjecture[Sum[k, {k, n, 2 n}], n, "
+                   "\"Engine\" -> \"Exact\"], Conjecture[Sum[k, {k, 1, n - 1}], n, "
+                   "\"Start\" -> 1, \"Engine\" -> \"Exact\"]}; Null", "Null", 0);
+    check_true("AllTrue[leanJu, #[\"Status\"] === \"Tested\" && "
+               "#[\"Verified\"] === Missing[\"NoCertificate\", \"Certify::nocert\"] && "
+               "#[\"Proof\"] === Missing[\"NoCertificate\"] &]");
+    /* The theorem shown is the claim as written, not a tautology. */
+    check_true("leanJu[[1]][\"Theorem\"] === HoldForm[ForAll[n, n >= 2, "
+               "Sum[k, {k, 1, n - 2}] == 1/2 (-2 + n) (-1 + n)]]");
+    /* The supported shape is still certified. */
+    check_true("Conjecture[Sum[k, {k, 1, n}], n, \"Engine\" -> \"Exact\"][\"Status\"] === "
+               "\"Checked\"");
+}
+
+/* Adversarial review (v0.6528): every verdict-bearing key is authenticated,
+ * not only "Verified". */
+static void test_review_verdict_keys(void) {
+    test_mute_messages();
+    assert_eval_eq("leanJa = Conjecture[Sum[k, {k, 1, n}], n, \"Engine\" -> \"Exact\"]; Null",
+                   "Null", 0);
+    check_true("leanJa[\"Status\"] === \"Checked\"");
+    check_true("With[{a = Append[First[leanJa], \"Timing\" -> 0]}, "
+               "ProofObject[a][\"Status\"]] === Missing[\"Unauthenticated\"]");
+    check_true("With[{a = Append[First[leanJa], \"Status\" -> \"Proved\"]}, "
+               "ProofObject[a][\"Status\"]] === Missing[\"Unauthenticated\"]");
+    assert_eval_eq("leanJb = Certify[(x+1)^2 == x^2+2x+1, \"Engine\" -> \"Exact\"]; Null",
+                   "Null", 0);
+    check_true("With[{a = Join[First[leanJb], <|\"Refuted\" -> True, "
+               "\"Counterexample\" -> {x -> 1}, \"RefutationTheorem\" -> HoldForm[False]|>]}, "
+               "{ProofObject[a][\"Refuted\"], ProofObject[a][\"Counterexample\"], "
+               "ProofObject[a][\"RefutationTheorem\"]}] === "
+               "ConstantArray[Missing[\"Unauthenticated\"], 3]");
+    /* Keys that carry no verdict are still readable. */
+    check_true("With[{a = Append[First[leanJa], \"Timing\" -> 0]}, "
+               "ProofObject[a][\"Guess\"]] === 1/2 n (1 + n)");
+    /* An authentic object reports them. */
+    check_true("Refute[x^2 == x, \"Engine\" -> \"Exact\"][\"Counterexample\"] === {x -> -1}");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -153,6 +203,8 @@ int main(void) {
     TEST(test_verify_false);
     TEST(test_refusals);
     TEST(test_fibonacci_sums);
+    TEST(test_review_unsupported_sums);
+    TEST(test_review_verdict_keys);
     printf("All Lean conjecture tests passed.\n");
     return 0;
 }

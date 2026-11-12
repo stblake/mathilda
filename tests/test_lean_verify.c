@@ -833,6 +833,41 @@ static void test_conjecture_verify(void) {
     check_true("Certify[Sum[Fibonacci[k], {k, 0, n}] == Fibonacci[n + 2] - 1][\"Verified\"] === True");
 }
 
+/* Adversarial review (v0.6528), with Lean. */
+static void test_review7_verify(void) {
+    test_mute_messages();
+    /* Finding 1: an unsupported Sum iterator was "Proved" (a tautology of
+     * Mathilda's Sum output, no trusted step); now "Tested", no certificate. */
+    assert_eval_eq("leanR7 = Conjecture[Sum[k, {k, 1, n - 2}], n, \"Start\" -> 2]; Null",
+                   "Null", 0);
+    check_true("leanR7[\"Status\"] === \"Tested\" && "
+               "leanR7[\"Proof\"] === Missing[\"NoCertificate\"]");
+    check_true("AllTrue[{Conjecture[Sum[k, {k, 1, n + 1}], n], Conjecture[Sum[k, {k, 1, 2 n}], n], "
+               "Conjecture[Sum[k, {k, n, 2 n}], n]}, #[\"Status\"] === \"Tested\" &]");
+    assert_eval_eq("Check[Certify[Sum[k, {k, 1, n + 1}] == (n + 1) (n + 2)/2], \"nocert\", "
+                   "Certify::nocert]", "\"nocert\"", 0);
+    /* Finding 2: no wrong counterexample (n -> -3 held the claim). */
+    check_true("Quiet[Refute[Sum[k, {k, 1, n + 1}] == (n + 1) (n + 2)/2 + "
+               "n (n + 1) (n - 1) (n + 2) (n - 2)/120]] === $Failed");
+    /* The supported shape is still proved. */
+    check_true("Conjecture[Sum[k, {k, 1, n}], n][\"Status\"] === \"Proved\"");
+    /* Finding 3: a tampered Conjecture / refutation object is unauthenticated. */
+    check_true("With[{a = Append[First[leanR7], \"Status\" -> \"Proved\"]}, "
+               "ProofObject[a][\"Status\"]] === Missing[\"Unauthenticated\"]");
+    assert_eval_eq("leanR7c = Quiet[Certify[(x+1)^3 == x^3+3x^2+2x+1]]; Null", "Null", 0);
+    check_true("leanR7c[\"Refuted\"] === True && With[{a = Append[First[leanR7c], "
+               "\"Timing\" -> 0]}, {ProofObject[a][\"Refuted\"], ProofObject[a][\"Counterexample\"]}] "
+               "=== {Missing[\"Unauthenticated\"], Missing[\"Unauthenticated\"]}");
+    /* Finding 4: a claim variable K, kernel-checked (refutation and proof). */
+    check_true("Quiet[Refute[ForAll[K, K^2 >= K + 1/10]]][\"Verified\"] === True");
+    check_true("Certify[ForAll[K, K^2 + 1 >= 2 K]][\"Verified\"] === True");
+    /* Finding 5: Not[y > 0 && y > 1/2] is one assumption. */
+    assert_eval_eq("leanR7n = Quiet[Refute[ForAll[{x, y}, x^2 >= y], "
+                   "Assumptions -> Not[y > 0 && y > 1/2]]]; Null", "Null", 0);
+    check_true("leanR7n[\"Verified\"] === True && "
+               "leanR7n[\"Counterexample\"] === {x -> 0, y -> 1/2}");
+}
+
 int main(void) {
 #ifdef __GNUC__
     /* The shared alarm(120) in test_utils.h is too short for this suite: every
@@ -878,6 +913,7 @@ int main(void) {
     TEST(test_multi_engine_verify);
     TEST(test_refute_verify);
     TEST(test_conjecture_verify);
+    TEST(test_review7_verify);
     printf("All Lean verification tests passed.\n");
     return 0;
 }

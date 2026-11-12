@@ -495,10 +495,15 @@ mathildaSides[HoldComplete[c_Symbol]] := With[{v = c},
 mathildaSides[_] := None;
 
 (* Dispatcher: one rule per supported computation / claim shape. *)
-generate[HoldComplete[Equal[a_, b_]], o_] := Module[{av = a, bv = b},
+(* A held Sum here is one the closed-form sum generator does not take (its
+   iterator is not {k, a, n} with n a variable: {k, 1, n + 1}, {k, n, 2 n},
+   ...): no certificate.  Evaluating it would certify Mathilda's own Sum
+   output against itself (v0.6528). *)
+generate[HoldComplete[c:Equal[a_, b_]], o_] := If[!FreeQ[HoldComplete[a, b], Sum],
+  nocert[HoldForm[c]], Module[{av = a, bv = b},
   With[{x = av, y = bv},
     identityGen["Identity", HoldForm[a == b], HoldForm[x == y], av, bv, {}, o,
-      {rawH[a], rawH[b]}]]];
+      {rawH[a], rawH[b]}]]]];
 
 generate[HoldComplete[(h_Symbol)[e_, rest___]], o_] /;
     MemberQ[Join[$identityHeads, $factorHeads], h] :=
@@ -1397,7 +1402,11 @@ certOptions[opts_List] := Module[{keys = {"Engine", "Tier", "Domain", "Method",
    LeanVerify. *)
 $issued[_] = False;
 authenticQ[a_] := TrueQ[$issued[Hash[a]]];
-verdictOf[a_] := If[authenticQ[a], Lookup[a, "Verified", Missing["UnknownProperty", "Verified"]],
+(* Every verdict-bearing key is gated, not only "Verified" (v0.6528):
+   Conjecture's "Status", a refutation's "Refuted" / "Counterexample" /
+   "RefutationTheorem". *)
+$verdictKeys = {"Verified", "Status", "Refuted", "Counterexample", "RefutationTheorem"};
+verdictOf[a_, k_:"Verified"] := If[authenticQ[a], Lookup[a, k, Missing["UnknownProperty", k]],
   Missing["Unauthenticated"]];
 
 (* ---------------------------------------------------------------------- *)
@@ -1534,7 +1543,7 @@ ProofObject[e_, o:OptionsPattern[]] /; !AssociationQ[Unevaluated[e]] := Certify[
 
 ProofObject[a_?AssociationQ]["Properties"] := Sort[Keys[a]];
 ProofObject[a_?AssociationQ][k_String] :=
-  If[k === "Verified", verdictOf[a], Lookup[a, k, Missing["UnknownProperty", k]]];
+  If[MemberQ[$verdictKeys, k], verdictOf[a, k], Lookup[a, k, Missing["UnknownProperty", k]]];
 
 timingText[t_?NumericQ] := ToString[Round[t, 0.01]] <> " s";
 timingText[_] := "- s";

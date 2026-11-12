@@ -169,9 +169,15 @@ withAssume[prob_, ir_, o_] := Module[{c = {}},
   If[MemberQ[{Integers, Rationals, Reals, Complexes}, o["Domain"]],
     c = Join[c, Element[#, o["Domain"]] & /@ prob["Vars"]]];
   If[!MatchQ[o["Assumptions"], {} | True | Automatic],
-    c = Join[c, Flatten[{o["Assumptions"]} /. And -> List]]];
+    c = Join[c, topConjuncts[o["Assumptions"]]]];
   If[c === {}, prob, Join[prob, <|"Assume" -> Hold @@ {And @@ c},
     "AssumeText" -> ToString[And @@ c, InputForm]|>]]];
+(* The conjuncts of the Assumptions: a list and a top-level And are split,
+   an And inside Not / Or / Implies is not (v0.6528: And -> List rewrote
+   Not[a && b] into Not[{a, b}]). *)
+topConjuncts[l_List] := Join @@ (topConjuncts /@ l);
+topConjuncts[a_And] := Join @@ (topConjuncts /@ List @@ a);
+topConjuncts[e_] := {e};
 assumeOK[prob_, w_] := !KeyExistsQ[prob, "Assume"] ||
   TrueQ[Quiet[ReleaseHold[prob["Assume"] /. w /. $refRelations]]];
 

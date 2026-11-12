@@ -426,25 +426,44 @@ runBatch[chunks_List, tier_, exe_, proj_] := Module[{src, lay, r, res, clean, ch
           <|"Timing" -> r["Timing"] + Lookup[r, "ReplayTiming", 0.], "Source" -> src|>] &, {chunks, lay}]]];
 
 (* The generic form (Lean.m, identityGen): a statement translated over Rat
-   is generalised, the word Rat becoming the type variable K bound by
+   is generalised, the word Rat becoming the type variable bound by
    $charZeroBinders / $orderedBinders (core Lean's grind classes).  The
    theorem takes them as parameters; the footer states the full
-   forall {K : Type} [...], ... form. *)
+   forall {K : Type} [...], ... form.  The type variable is K unless the
+   statement or proof already uses the word K (a claim variable K would be
+   captured by it, v0.6528): then the first of K1, K2, ... that neither
+   uses; leanRefuteEncode reads the name back from the statement. *)
 $charZeroBinders = "{K : Type} [Lean.Grind.Field K] [Lean.Grind.IsCharP K 0]";
 $orderedBinders = "{K : Type} [Lean.Grind.Field K] [LE K] [LT K] [Std.LawfulOrderLT K] \
 [Std.IsLinearOrder K] [Lean.Grind.OrderedRing K]";
 genericBinders["CharZero"] = $charZeroBinders; genericBinders["Ordered"] = $orderedBinders;
+leanWord[w_String] := RegularExpression["(?<![A-Za-z0-9_.'])" <> w <> "(?![A-Za-z0-9_.'])"];
+genericBinders[kind_String, v_String] := StringReplace[genericBinders[kind], leanWord["K"] -> v];
+genericVar[texts___] := SelectFirst[Prepend["K" <> ToString[#] & /@ Range[100], "K"],
+  Function[v, NoneTrue[Select[{texts}, StringQ], StringContainsQ[#, leanWord[v]] &]], $Failed];
 
-(* Rat (as a whole word, not Rat.f) -> K, in a statement or a proof script. *)
-genericText[s_String] := StringReplace[s,
-  RegularExpression["(?<![A-Za-z0-9_.'])Rat(?![A-Za-z0-9_.'])"] -> "K"];
-genericText[other_] := other;
-genericStmt[s_String, kind_String] := "\[ForAll] " <> genericBinders[kind] <> ", " <> genericText[s];
-genericStmt[other_, _] := other;
+(* Rat (as a whole word, not Rat.f) -> the type variable v. *)
+genericText[s_String, v_String] := StringReplace[s, leanWord["Rat"] -> v];
+genericText[other_, _] := other;
+genericStmt[s_String, kind_String, v_String] :=
+  "\[ForAll] " <> genericBinders[kind, v] <> ", " <> genericText[s, v];
+genericStmt[other_, __] := other;
+(* The encoder fields of a generic statement and its proof script. *)
+genericPair[stmt_String, proof_String, kind_String] := With[{v = genericVar[stmt, proof]},
+  If[v === $Failed, $Failed,
+    <|"Statement" -> genericStmt[stmt, kind, v], "Proof" -> genericText[proof, v]|>]];
+genericPair[__] := $Failed;
+genericOut[ir_, stmt_, proof_, kind_] := With[{gp = genericPair[stmt, proof, kind]},
+  If[AssociationQ[gp], Append[gp, "Tier" -> 0], nocert[ir["Input"]]]];
+(* The type variable of a generic statement text, or None. *)
+genericVarOf[s_String] := With[{c = StringCases[s,
+    RegularExpression["^\[ForAll] \\{([A-Za-z0-9]+) : Type\\}"] -> "$1"]},
+  If[c === {}, None, First[c]]];
 
 (* {binders, body} of a generic statement; {"", s} for any other. *)
-splitGeneric[s_String] := Module[{b = SelectFirst[{$charZeroBinders, $orderedBinders},
-     StringStartsQ[s, "\[ForAll] " <> # <> ", "] &, None]},
+splitGeneric[s_String] := Module[{v = genericVarOf[s], b = None},
+  If[v =!= None, b = SelectFirst[genericBinders[#, v] & /@ {"CharZero", "Ordered"},
+     StringStartsQ[s, "\[ForAll] " <> # <> ", "] &, None]];
   If[b === None, {"", s}, {" " <> b, StringDrop[s, StringLength["\[ForAll] " <> b <> ", "]]}]];
 
 (* Prelude functions in statements are written with private placeholder
@@ -802,7 +821,7 @@ leanEncodeType["Identity", ir_, o_] := Module[{ob = ir["Obligation"], gk, lean},
     Return[nocert[ir["Input"]], Module]];
   lean = toLean[ob["Statement"], ob["Ring"], True, {}, True];
   If[!StringQ[lean], Return[nocert[ir["Input"]], Module]];
-  If[gk =!= None, lean = genericStmt[lean, gk]];
+  If[gk =!= None, lean = genericStmt[lean, gk, "K"]];
   <|"Statement" -> lean, "Proof" -> proofScript[ir["Method"]],
     "UserProof" -> userMethodQ[ir["Method"]], "Tier" -> 0|>];
 
@@ -841,8 +860,7 @@ leanEncodeType["IdealImplication", ir_, o_] := Module[{ob = ir["Obligation"], hs
       " := (by grind)",
       "\n  rw [", StringRiffle[Table["mth_k" <> ToString[i], {i, k}], ", "], "] at mth_hc",
       "\n  grind"]];
-  <|"Statement" -> genericStmt[stmt, "CharZero"], "Proof" -> genericText[proof],
-    "Tier" -> 0|>];
+  genericOut[ir, stmt, proof, "CharZero"]];
 
 (* Solve completeness: l - r = factorization, then the equivalence; a text
    that does not translate falls back to the soundness obligation. *)
@@ -879,7 +897,7 @@ leanEncodeType["WeightedSOS", ir_, o_] := Module[{ob = ir["Obligation"], vars, t
     ghints, sqHints[terms, gnames],
     "\n  have mth_e : ", ratText[ob["Target"]], " = ", If[terms === {}, "0", sqSum[terms]],
     " := (by grind)", "\n  grind"];
-  <|"Statement" -> genericStmt[stmt, "Ordered"], "Proof" -> genericText[proof], "Tier" -> 0|>];
+  genericOut[ir, stmt, proof, "Ordered"]];
 
 (* KKT optimality: the bound for every feasible x (equalities eliminated by
    subst, the multiplier and square hints), then the closed facts. *)
@@ -904,7 +922,7 @@ leanEncodeType["KKT", ir_, o_] := Module[{ob = ir["Obligation"], vars, eqHyps, g
       ("(" <> ratText[lamFull[[#]]] <> ") * (" <> ratText[gr[[#]]] <> ")") & /@ used,
       If[terms === {}, {}, {sqSum[terms]}]] /. {} -> {"0"}, " + "],
     " := (by grind)", "\n  grind"];
-  <|"Statement" -> genericStmt[stmt, "Ordered"], "Proof" -> genericText[proof], "Tier" -> 0|>];
+  genericOut[ir, stmt, proof, "Ordered"]];
 
 (* Primality: flat Pratt certificates checked by decide +kernel (the
    factorization's odd primes in a preamble of auxiliary theorems), the
@@ -1073,12 +1091,15 @@ leanRefuteEncode[rir_, o_] := Module[{p = rir["Problem"], w = rir["Witness"], ty
     "Closed", "by\n  decide +kernel",
     "Induction", "fun h => absurd (h " <> ToString[w[[1, 2]] - p["Shift"]] <>
       ") (by decide +kernel)",
-    _, StringJoin["fun h => absurd (h", If[gen, " (K := Rat)", ""],
+    _, StringJoin["fun h => absurd (h", If[gen, " (" <> genericTypeVar[rir["LeanStatement"]] <>
+        " := Rat)", ""],
       (" (" <> refValueText[#, ty] <> " : " <> ty <> ")") & /@ w[[All, 2]],
       ConstantArray[" (by decide +kernel)", p["Antecedents"]], ") (by decide +kernel)"]];
   <|"Statement" -> "\[Not] (" <> rir["LeanStatement"] <> ")", "Proof" -> proof,
     "Preamble" -> rir["Preamble"], "Tier" -> 0, "TierUsed" -> 0, "UserProof" -> False,
     "Input" -> rir["Input"]|>];
+(* The statement's type variable (K, or K1, ... when the claim uses K). *)
+genericTypeVar[s_] := With[{v = If[StringQ[s], genericVarOf[s], None]}, If[v === None, "K", v]];
 refValueText[v_, ty_] := With[{s = toLean[HoldForm[v], ty, True, {}]}, If[StringQ[s], s, "0"]];
 
 registerBackend["Lean", <|"Name" -> "Lean", "Trust" -> "Kernel", "Encode" -> leanEncode,

@@ -215,6 +215,51 @@ static void test_certify_no_lean(void) {
                "Lean`Private`searchBudget[0.5] === 0.5");
 }
 
+/* Adversarial review (v0.6528). */
+static void test_review(void) {
+    test_mute_messages();
+    /* Finding 1/2: a Sum with an iterator the sum generator does not take
+     * is not stated by evaluating it (that refuted Mathilda's evaluation of
+     * the claim, not the claim: n -> -3 where the claim holds, n -> -1/2, a
+     * non-integer upper limit).  No certificate, no refutation. */
+    assert_eval_eq("Check[Refute[Sum[k, {k, 1, n + 1}] == (n + 1) (n + 2)/2 + "
+                   "n (n + 1) (n - 1) (n + 2) (n - 2)/120, \"Verify\" -> False], \"nocert\", "
+                   "Certify::nocert]", "\"nocert\"", 0);
+    assert_eval_eq("Check[Refute[Sum[k, {k, 1, 2 n}] == n (2 n + 1) + n^3, "
+                   "\"Verify\" -> False], \"nocert\", Certify::nocert]", "\"nocert\"", 0);
+    check_true("Quiet[Refute[Sum[k, {k, n, 2 n}] == 0, \"Engine\" -> \"Exact\"]] === $Failed");
+    /* Certify: the same claims have no certificate (any engine). */
+    assert_eval_eq("Check[Certify[Sum[k, {k, 1, n + 1}] == (n + 1) (n + 2)/2, "
+                   "\"Verify\" -> False], \"nocert\", Certify::nocert]", "\"nocert\"", 0);
+    check_true("AllTrue[{Hold[Sum[k, {k, 1, n + 1}] == (n + 1) (n + 2)/2], "
+               "Hold[Sum[k, {k, 1, n - 1}] == n (n - 1)/2], Hold[Sum[k, {k, 1, 2 n}] == n (2 n + 1)], "
+               "Hold[Sum[k, {k, n, 2 n}] == 3 n (n + 1)/2], Hold[Sum[k, {k, 1, n - 2}] == "
+               "(n - 2) (n - 1)/2]}, Function[h, Quiet[ReleaseHold[h /. Equal[a_, b_] :> "
+               "Certify[Equal[a, b], \"Engine\" -> \"Exact\"]]] === $Failed]]");
+    /* The supported shape is unchanged. */
+    check_witness("Sum[k, {k, 1, n}] == n^2", "{n -> 2}");
+    /* Finding 4: a claim variable named K is not captured by the generic
+     * type variable (K1 here). */
+    assert_eval_eq("leanT5 = Refute[ForAll[K, K^2 >= K + 1/10], \"Verify\" -> False]; Null",
+                   "Null", 0);
+    check_true("leanT5[\"ProofScript\"] === \"fun h => absurd (h (K1 := Rat) (0 : Rat)) "
+               "(by decide +kernel)\"");
+    check_true("StringStartsQ[leanT5[\"LeanTheorem\"], \"\\[Not] (\\[ForAll] {K1 : Type} "
+               "[Lean.Grind.Field K1]\"] && StringContainsQ[leanT5[\"LeanTheorem\"], "
+               "\"\\[ForAll] K : K1, K ^ 2\"]");
+    check_true("TrueQ[Lean`Private`checkSource[leanT5[\"LeanSource\"], False, True][\"OK\"]]");
+    check_true("Lean`Private`genericVar[\"x + K\", \"K1\"] === \"K2\" && "
+               "Lean`Private`genericVar[\"Kx + xK + K.f\"] === \"K\"");
+    check_true("Lean`Private`splitGeneric[\"\\[ForAll] \" <> "
+               "Lean`Private`genericBinders[\"CharZero\", \"K3\"] <> \", body\"] === "
+               "{\" \" <> Lean`Private`genericBinders[\"CharZero\", \"K3\"], \"body\"}");
+    /* Finding 5: only a top-level And of the Assumptions is split. */
+    check_witness("ForAll[{x, y}, x^2 >= y], Assumptions -> Not[y > 0 && y > 1/2]",
+                  "{x -> 0, y -> 1/2}");
+    check_true("Lean`Private`topConjuncts[{a && b, Not[c && d] && (e || (f && g))}] === "
+               "{a, b, Not[c && d], e || (f && g)}");
+}
+
 /* The pieces of the search on their own. */
 static void test_helpers(void) {
     check_true("Lean`Private`refZero[(-2 I)^2 + 4] === True");
@@ -237,6 +282,7 @@ int main(void) {
     TEST(test_domain_assumptions);
     TEST(test_certify_no_lean);
     TEST(test_helpers);
+    TEST(test_review);
     printf("All Lean refutation tests passed.\n");
     return 0;
 }
