@@ -292,6 +292,44 @@ static void test_branch_structure(void) {
 }
 
 /* -------------------------------------------------------------------------
+ * Differentiation under the integral sign.  The inner families read an
+ * exponent or a partial-fraction base by Coefficient[., v, k], which drops any
+ * term of another degree (-mu x^4 in a "Gaussian", the 1/x^2 of
+ * E^(-a/x^2 - mu x^2), a quartic denominator read as a quadratic), so the
+ * result was a Taylor polynomial or another integral; a derivative's base value
+ * was the integral at a boundary point where differentiation under the integral
+ * sign fails; and a package loop variable captured the user's parameter g.
+ * ---------------------------------------------------------------------- */
+static void test_diff_under_int(void) {
+    check_val("Integrate[E^(-2*nu*x^2 - mu*x^4), {x, 0, Infinity}, "
+              "Assumptions -> (Re[mu] >= 0) && (Re[nu] > 0)]",
+              "{{mu -> 7/3, nu -> 1/5}, {mu -> 5/8, nu -> 5/8}}",
+              "{0.6742393862812157, 0.6797967033913561}");              /* 3.469.1 S */
+    check_val("Integrate[E^(-(a/x^2) - mu*x^2)*x^2, {x, 0, Infinity}, "
+              "Assumptions -> (Re[mu] > 0) && (Re[a] > 0)]",
+              "{{a -> 5/8, mu -> 5/8}, {a -> 5/6, mu -> 3/8}}",
+              "{0.5781084731486058, 1.336118497869591}");               /* 3.472.2 S */
+    check_val("Integrate[(x*ArcTan[q*x])/(p^2 + x^2)^2, {x, 0, Infinity}, "
+              "Assumptions -> (p > 0) && (q >= 0)]",
+              "{{p -> 5/8, q -> 7/4}, {p -> 5/8, q -> 5/8}}",
+              "{1.050323514035990, 0.5647807017689515}");               /* 4.535.11 */
+    check_val("Integrate[Log[a^2 + b^2*x^2]/(c^2 + g^2*x^2)^2, {x, 0, Infinity}, "
+              "Assumptions -> (a > 0) && (b > 0) && (c > 0) && (g > 0)]",
+              "{{a -> 5/4, b -> 7/4, c -> 3/8, g -> 5/8}, {a -> 5/6, b -> 5/8, c -> 5/6, g -> 3}}",
+              "{17.93829303735380, -0.1497348556966778}");              /* 4.295.25 */
+    check_val("Integrate[(x^2*Log[a^2 + b^2*x^2])/(c^2 + g^2*x^2)^2, {x, 0, Infinity}, "
+              "Assumptions -> (a > 0) && (b > 0) && (c > 0) && (g > 0)]",
+              "{{a -> 5/8, b -> 7/3, c -> 7/3, g -> 5/4}, {a -> 3, b -> 3/8, c -> 7/3, g -> 1/5}}",
+              "{0.8548188503423852, 218.0587517815153}");               /* 4.295.26 */
+    /* a formula valid off the integers, instantiated at an integer, is no
+     * value (Mathar M7296): the integral stays unevaluated, never a
+     * ComplexInfinity product */
+    check_val("Boole[FreeQ[Integrate[E^(n*x - beta*Sinh[x]), {x, 0, Infinity}, "
+              "Assumptions -> (Element[n, Integers] && n >= 1) && (beta > 0)], "
+              "ComplexInfinity | Indeterminate]]", "{{}}", "{1}");
+}
+
+/* -------------------------------------------------------------------------
  * Rows already correct when this suite was written (fixed by earlier work);
  * pinned so they stay that way.
  * ---------------------------------------------------------------------- */
@@ -334,6 +372,7 @@ int main(void) {
     TEST(test_radical_branches);
     TEST(test_symbolic_poles);
     TEST(test_branch_structure);
+    TEST(test_diff_under_int);
     TEST(test_already_fixed);
 
     if (g_failures) {

@@ -145,6 +145,45 @@ static bool has_nonlinear_x_power(const Expr* e, const Expr* x) {
     return false;
 }
 
+/* e is a polynomial in v of degree <= d.  Every reader below takes an
+ * exponent / base apart by Coefficient[e, v, k] for k <= d, which silently
+ * DROPS any other term: -2 nu x^2 - mu x^4 read as a Gaussian -2 nu x^2,
+ * -a/x^2 - mu x^2 as -mu x^2 (Coefficient[., x, 0] does not see 1/x^2), so the
+ * "inner integral" was a different integral and the stage returned the
+ * first-order Taylor polynomial of the true answer (G&R 3.469.1, 3.472.2). */
+static bool poly_deg_le(const Expr* e, const Expr* v, long d) {
+    Expr* q = eval_take(mk_fn2("PolynomialQ", expr_copy((Expr*)e), expr_copy((Expr*)v)));
+    bool poly = q && q->type == EXPR_SYMBOL && q->data.symbol.name == SYM_True;
+    if (q) expr_free(q);
+    if (!poly) return false;
+    Expr* ex = eval_take(mk_fn2("Exponent", expr_copy((Expr*)e), expr_copy((Expr*)v)));
+    bool ok = ex && ex->type == EXPR_INTEGER && ex->data.integer <= d;
+    if (ex) expr_free(ex);
+    return ok;
+}
+
+/* Split a partial-fraction denominator c * base^m (c free of v) into its
+ * v-free cofactor *c (owned) and base^m (owned *core).  Apart leaves the
+ * constant beside the power -- (-1 + p q)(1 + p q)(p^2 + x^2)^2 -- and reading
+ * the whole product as one base made a quartic look like a quadratic.  False
+ * when more than one factor depends on v. */
+static bool split_den(const Expr* den, const Expr* v, Expr** c, Expr** core) {
+    *c = NULL; *core = NULL;
+    if (!head_name_is(den, "Times")) { *c = mk_int(1); *core = expr_copy((Expr*)den); return true; }
+    size_t n = den->data.function.arg_count, nv = 0, iv = 0;
+    for (size_t i = 0; i < n; i++)
+        if (contains_symbol(den->data.function.args[i], v)) { nv++; iv = i; }
+    if (nv != 1) return false;
+    Expr** cs = malloc(n * sizeof(Expr*));
+    size_t w = 0;
+    for (size_t i = 0; i < n; i++)
+        if (i != iv) cs[w++] = expr_copy(den->data.function.args[i]);
+    *c = eval_take(expr_new_function(mk_sym("Times"), cs, w));
+    free(cs);
+    *core = expr_copy(den->data.function.args[iv]);
+    return true;
+}
+
 /* True iff `e` contains an exponential Exp[g] / E^g whose exponent g is
  * nonlinear or singular in x (a Gaussian e^{-x^2}, e^{-a^2/x^2}, ...).  The
  * indefinite/definite integrator currently HANGS on these forms, so the
@@ -1024,7 +1063,14 @@ static Expr* rational_halfline(const Expr* g, const Expr* x,
             if (!is_zero_q(T)) { ok = false; break; }   /* divergent */
             continue;                                    /* zero -> skip */
         }
-        Expr* num = ev1("Numerator", expr_copy(T));
+        Expr* num0 = ev1("Numerator", expr_copy(T));
+        Expr* dc = NULL; Expr* dcore = NULL;
+        if (!split_den(den, v, &dc, &dcore)) {
+            expr_free(den); expr_free(num0); ok = false; break;
+        }
+        expr_free(den);
+        Expr* num = ev1("Together", t_mul(num0, t_pow(dc, -1)));
+        den = dcore;
         /* den = base^m (m>=1). */
         Expr* base; long m;
         if (head_name_is(den, "Power") && den->data.function.arg_count == 2 &&
@@ -1037,8 +1083,9 @@ static Expr* rational_halfline(const Expr* g, const Expr* x,
         /* base must be linear in v (alpha v + beta), num free of v. */
         Expr* alpha = ev1("Simplify", mk_fn3("Coefficient", expr_copy(base), expr_copy(v), mk_int(1)));
         Expr* beta  = ev1("Simplify", mk_fn3("Coefficient", expr_copy(base), expr_copy(v), mk_int(0)));
+        bool basepoly = poly_deg_le(base, v, 1);
         Expr* quad  = ev1("Simplify", mk_fn3("Coefficient", base, expr_copy(v), mk_int(2)));
-        bool lin = quad && is_zero_q(quad);
+        bool lin = quad && is_zero_q(quad) && basepoly;
         if (quad) expr_free(quad);
         Expr* d = (alpha && beta) ? ev1("Simplify", mk_fn2("Times", expr_copy(beta),
                         mk_fn2("Power", expr_copy(alpha), mk_int(-1)))) : NULL;
@@ -1108,8 +1155,15 @@ static Expr* rational_halfline_general(const Expr* g, const Expr* s,
             if (!is_zero_q(T)) ok = false;         /* nonzero const -> divergent */
             continue;
         }
-        Expr* num = ev1("Numerator", expr_copy(T));
-        /* den = base^m (base linear or irreducible quadratic in s). */
+        Expr* num0 = ev1("Numerator", expr_copy(T));
+        /* den = c base^m (c free of s; base linear or irreducible quadratic) */
+        Expr* dc = NULL; Expr* dcore = NULL;
+        if (!split_den(den, s, &dc, &dcore)) {
+            expr_free(den); expr_free(num0); ok = false; break;
+        }
+        expr_free(den);
+        Expr* num = ev1("Together", t_mul(num0, t_pow(dc, -1)));
+        den = dcore;
         Expr* base; long m;
         if (head_name_is(den, "Power") && den->data.function.arg_count == 2 &&
             den->data.function.args[1]->type == EXPR_INTEGER &&
@@ -1118,6 +1172,9 @@ static Expr* rational_halfline_general(const Expr* g, const Expr* s,
             m = (long)den->data.function.args[1]->data.integer;
         } else { base = ev1("Expand", expr_copy(den)); m = 1; }
         expr_free(den);
+        if (!poly_deg_le(base, s, 2)) {
+            expr_free(base); expr_free(num); ok = false; break;
+        }
 
         Expr* a2  = coeff_of(base, s, 2);
         Expr* a1  = coeff_of(base, s, 1);
@@ -1253,9 +1310,11 @@ static Expr* gaussian_halfline(const Expr* g, const Expr* x,
         Expr* p   = ev1("Simplify", t_neg(mk_fn3("Coefficient", expr_copy(exparg), expr_copy((Expr*)x), mk_int(2))));
         Expr* lin = ev1("Simplify", mk_fn3("Coefficient", expr_copy(exparg), expr_copy((Expr*)x), mk_int(1)));
         Expr* off = ev1("Simplify", mk_fn3("Coefficient", expr_copy(exparg), expr_copy((Expr*)x), mk_int(0)));
-        expr_free(exparg);
-        bool pform = lin && is_zero_q(lin) && p && real_positive(p, pb, np);
+        Expr* exparg_chk = exparg;
+        bool pform = lin && is_zero_q(lin) && p && real_positive(p, pb, np) &&
+                     poly_deg_le(exparg_chk, x, 2);
         if (lin) expr_free(lin);
+        expr_free(exparg_chk);
         /* rest = c x^n. */
         Expr* restc = ev1("Simplify", rest);
         long n = x_monomial_degree(restc, x);
@@ -1332,9 +1391,11 @@ static Expr* integrate_gaussian_param(const Expr* J, const Expr* p) {
         Expr* k   = ev1("Simplify", t_neg(mk_fn3("Coefficient", expr_copy(exparg), expr_copy((Expr*)p), mk_int(2))));
         Expr* lin = ev1("Simplify", mk_fn3("Coefficient", expr_copy(exparg), expr_copy((Expr*)p), mk_int(1)));
         Expr* off = ev1("Simplify", mk_fn3("Coefficient", expr_copy(exparg), expr_copy((Expr*)p), mk_int(0)));
-        expr_free(exparg);
+        Expr* exparg_p = exparg;
         double kv;
-        bool kok = lin && is_zero_q(lin) && k && numeric_double(k, &kv) && kv > 1e-12;
+        bool kok = lin && is_zero_q(lin) && k && numeric_double(k, &kv) && kv > 1e-12 &&
+                   poly_deg_le(exparg_p, p, 2);
+        expr_free(exparg_p);
         if (lin) expr_free(lin);
         /* rest must be a p-free constant c (poly x Gaussian antiderivatives are
          * not elementary in general). */
@@ -2598,10 +2659,78 @@ static Expr* deriv_k(const Expr* f, const Expr* p, long k, const Expr* assumptio
 
 /* Pin I(p0),...,I^(order-1)(p0) at one p0 in {0,1,-1}: each derivative's integrand
  * at p0 is an exact 0 (zero-integrand) or a directly-integrable inner integral. */
+/* Limit[J, p -> p0] taken from the side of p0 the assumed region lies on
+ * (FromAbove when the assumptions give p > p0, FromBelow when p < p0,
+ * two-sided otherwise), under the assumptions.  Owned, or NULL. */
+static Expr* limit_into_region(const Expr* J, const Expr* p, const Expr* p0,
+                               const Expr* assumptions) {
+    const char* dir = NULL;
+    if (assumptions) {
+        Expr* up = eval_take(mk_fn2("Refine", mk_fn2("Greater", expr_copy((Expr*)p), expr_copy((Expr*)p0)),
+                                    expr_copy((Expr*)assumptions)));
+        Expr* dn = eval_take(mk_fn2("Refine", mk_fn2("Less", expr_copy((Expr*)p), expr_copy((Expr*)p0)),
+                                    expr_copy((Expr*)assumptions)));
+        if (up && up->type == EXPR_SYMBOL && up->data.symbol.name == SYM_True) dir = "FromAbove";
+        else if (dn && dn->type == EXPR_SYMBOL && dn->data.symbol.name == SYM_True) dir = "FromBelow";
+        if (up) expr_free(up);
+        if (dn) expr_free(dn);
+    }
+    size_t n = 2;
+    Expr* args[4];
+    args[0] = expr_copy((Expr*)J);
+    args[1] = mk_fn2("Rule", expr_copy((Expr*)p), expr_copy((Expr*)p0));
+    if (dir) args[n++] = mk_fn2("Rule", mk_sym("Direction"), expr_new_string(dir));
+    if (assumptions) args[n++] = mk_fn2("Rule", mk_sym("Assumptions"), expr_copy((Expr*)assumptions));
+    Expr* r = eval_take(expr_new_function(mk_sym("Limit"), args, n));
+    if (!r) return NULL;
+    Expr* sr = simplify_with(r, assumptions);
+    expr_free(r);
+    return sr;
+}
+
+/* N[I] at a generic point of the assumed region equals NIntegrate[f] there
+ * (relative 1e-6).  The point: per-parameter generic values from the bounds,
+ * kept only if the assumptions hold there; else FindInstance.  False when no
+ * point or no quadrature is available -- an unconfirmed value is not used. */
+static bool numeric_agrees(const Expr* I, const Expr* f, const Expr* x, const Expr* a,
+                           const Expr* b, const Expr* assumptions,
+                           const ParamBound* pb, size_t np) {
+    Expr** rules = malloc((np ? np : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < np; i++)
+        rules[i] = mk_fn2("Rule", mk_sym(pb[i].sym),
+                          expr_new_real(pick_rep(pb[i].lo, pb[i].hi, i)));
+    Expr* inst = expr_new_function(mk_sym("List"), rules, np);
+    free(rules);
+    bool holds = true;
+    if (assumptions) {
+        Expr* h = eval_take(mk_fn2("ReplaceAll", expr_copy((Expr*)assumptions), expr_copy(inst)));
+        holds = h && h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_True;
+        if (h) expr_free(h);
+    }
+    if (!holds) { expr_free(inst); return false; }
+    Expr* vi = eval_take(mk_fn1("N", mk_fn2("ReplaceAll", expr_copy((Expr*)I), expr_copy(inst))));
+    Expr* vq = eval_take(mk_fn1("Quiet", mk_fn2("NIntegrate",
+                   mk_fn2("ReplaceAll", expr_copy((Expr*)f), expr_copy(inst)),
+                   mk_fn3("List", expr_copy((Expr*)x), expr_copy((Expr*)a), expr_copy((Expr*)b)))));
+    expr_free(inst);
+    bool ok = false;
+    if (vi && vq) {
+        Expr* d = eval_take(mk_fn1("N", mk_fn1("Abs", mk_fn2("Plus", expr_copy(vi), t_neg(expr_copy(vq))))));
+        Expr* m = eval_take(mk_fn1("N", mk_fn2("Max", mk_int(1), mk_fn1("Abs", expr_copy(vq)))));
+        double dv, mv;
+        ok = d && m && numeric_double(d, &dv) && numeric_double(m, &mv) && dv <= 1e-6 * mv;
+        if (d) expr_free(d);
+        if (m) expr_free(m);
+    }
+    if (vi) expr_free(vi);
+    if (vq) expr_free(vq);
+    return ok;
+}
+
 static bool multi_base(const Expr* f, const Expr* x, const Expr* a, const Expr* b,
                        const Expr* assumptions, const Expr* p,
                        const ParamBound* pb, size_t np, long order,
-                       Expr** out_p0, Expr** vals) {
+                       Expr** out_p0, Expr** vals, bool* needs_check) {
     static const long CS[] = { 0, 1, -1 };
     for (size_t c = 0; c < sizeof(CS)/sizeof(CS[0]); c++) {
         if (!base_in_domain(pb, np, p, CS[c], assumptions)) continue;
@@ -2609,6 +2738,31 @@ static bool multi_base(const Expr* f, const Expr* x, const Expr* a, const Expr* 
         Expr* tmp[8]; long got = 0; bool ok = true;
         for (long j = 0; j < order && ok; j++) {
             Expr* dj  = deriv_k(f, p, j, assumptions);
+            if (j >= 1 && dj) {
+                /* I^(j)(p0) is the LIMIT of J_j(p) = Integral of d^j f/dp^j as
+                 * p -> p0 from inside the region, not the integral of the
+                 * derivative AT p0: differentiation under the integral sign
+                 * can fail at a boundary point where the convergence is not
+                 * uniform.  d/db of x^2 Log[a^2 + b^2 x^2]/(c^2 + g^2 x^2)^2
+                 * vanishes identically at b = 0, while I'(b) -> Pi/(a g^4) as
+                 * b -> 0+; pinning I'(0) = 0 made the result wrong by that
+                 * linear term (G&R 4.295.26). */
+                Expr* Jj = inner_definite(dj, x, a, b, assumptions, pb, np);
+                if (Jj) { Expr* s2 = simplify_with(Jj, assumptions); expr_free(Jj); Jj = s2; }
+                if (Jj && !contains_head(Jj, "Integrate") && is_finite_value(Jj)) {
+                    expr_free(dj);
+                    Expr* v = limit_into_region(Jj, p, p0, assumptions);
+                    expr_free(Jj);
+                    if (v && !contains_head(v, "Limit") && is_finite_value(v)) tmp[got++] = v;
+                    else { if (v) expr_free(v); ok = false; }
+                    continue;
+                }
+                if (Jj) expr_free(Jj);
+                /* J_j(p) is out of the families' reach: fall back to the
+                 * integral at p0, which the caller must then confirm
+                 * numerically (*needs_check). */
+                if (needs_check) *needs_check = true;
+            }
             Expr* djp = dj ? subst(dj, p, p0) : NULL;
             if (dj) expr_free(dj);
             if (!djp) { ok = false; break; }
@@ -2642,7 +2796,8 @@ static Expr* stage_repeated_quadrature(const Expr* f, const Expr* x, const Expr*
             if (Jk) { Expr* s = simplify_with(Jk, assumptions); expr_free(Jk); Jk = s; }
             if (!Jk || contains_head(Jk, "Integrate") || !is_finite_value(Jk)) { if (Jk) expr_free(Jk); continue; }
             Expr* p0 = NULL; Expr* vals[8];
-            if (!multi_base(f, x, a, b, assumptions, p, pb, np, k, &p0, vals)) { expr_free(Jk); continue; }
+            bool needs_check = false;
+            if (!multi_base(f, x, a, b, assumptions, p, pb, np, k, &p0, vals, &needs_check)) { expr_free(Jk); continue; }
             Expr* Jkeep = expr_copy(Jk);
             Expr* I = Jk;                          /* I^(k) = Jk */
             bool ok = true;
@@ -2666,6 +2821,12 @@ static Expr* stage_repeated_quadrature(const Expr* f, const Expr* x, const Expr*
                 bool verified = chk && is_zero_with(chk, assumptions);
                 if (chk) expr_free(chk);
                 expr_free(Jkeep);
+                /* D^k I == J_k cannot see a wrong base value (it is a
+                 * polynomial of degree < k in p); a base taken at p0 without
+                 * its limit is confirmed against a quadrature at a generic
+                 * interior point of the region. */
+                if (verified && needs_check)
+                    verified = numeric_agrees(I, f, x, a, b, assumptions, pb, np);
                 if (verified) {
                     expr_free(p);
                     Expr* cl = diui_finalize(I, assumptions);
@@ -2757,7 +2918,7 @@ static bool is_gamma_shape(const Expr* h, const Expr* x,
         if (ea) {
             Expr* c2 = ev1("Simplify", mk_fn3("Coefficient", expr_copy((Expr*)ea), expr_copy((Expr*)x), mk_int(2)));
             Expr* c1 = ev1("Simplify", mk_fn3("Coefficient", expr_copy((Expr*)ea), expr_copy((Expr*)x), mk_int(1)));
-            bool linear = c2 && is_zero_q(c2);
+            bool linear = c2 && is_zero_q(c2) && poly_deg_le(ea, x, 1);
             bool decay  = c1 && real_positive(t_neg(expr_copy(c1)), pb, np);
             if (c2) expr_free(c2);
             if (c1) expr_free(c1);

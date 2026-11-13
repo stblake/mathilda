@@ -1078,6 +1078,25 @@ static bool gr_lazy_load(void) {
 
 /* Evaluate one engine call (consumed); NULL on a decline.  The depth guard
  * stops a table answer whose self-check integrates from re-entering. */
+/* r holds ComplexInfinity or Indeterminate anywhere inside.  A table or
+ * convolution formula valid off a set of parameter values (Csc[nu Pi] for
+ * non-integer nu) instantiated ON that set is a 0 * Infinity husk, not a
+ * value: Integrate[E^(n x - beta Sinh[x]), {x, 0, Infinity}, Assumptions ->
+ * Element[n, Integers] && n >= 1 && beta > 0] returned
+ * -(-1)^n Pi (AngerJ[-n, beta] - BesselJ[-n, beta]) ComplexInfinity
+ * (Mathar M7296).  The stage declines; the cascade goes on. */
+static bool result_has_singular_value(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL)
+        return e->data.symbol.name == SYM_ComplexInfinity ||
+               e->data.symbol.name == SYM_Indeterminate;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (result_has_singular_value(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (result_has_singular_value(e->data.function.args[i])) return true;
+    return false;
+}
+
 static Expr* gr_run(Expr* call, const char* engine_head) {
     if (gr_depth >= MAX_GR_DEPTH) { expr_free(call); return NULL; }
     gr_depth++;
@@ -1090,6 +1109,7 @@ static Expr* gr_run(Expr* call, const char* engine_head) {
     if ((r->type == EXPR_SYMBOL && (r->data.symbol.name == SYM_DollarFailed ||
                                     r->data.symbol.name == SYM_Indeterminate ||
                                     r->data.symbol.name == SYM_ComplexInfinity)) ||
+        result_has_singular_value(r) ||
         result_contains_head(r, engine_head) ||
         result_contains_head(r, "Integrate")) {
         expr_free(r);
@@ -2345,6 +2365,7 @@ static Expr* try_meijer_convolution(Expr* f, Expr* x, Expr* a, Expr* b, Expr* as
     if ((r->type == EXPR_SYMBOL && (r->data.symbol.name == SYM_DollarFailed ||
                                     r->data.symbol.name == SYM_Indeterminate ||
                                     r->data.symbol.name == SYM_ComplexInfinity)) ||
+        result_has_singular_value(r) ||
         result_contains_head(r, "Integrate") ||
         result_contains_head(r, "MeijerConvolution`Run") ||
         result_contains_head(r, "Throw")) {
@@ -2394,6 +2415,7 @@ static Expr* try_roach(Expr* f, Expr* x, Expr* a, Expr* b, Expr* assumptions, in
     if ((r->type == EXPR_SYMBOL && (r->data.symbol.name == SYM_DollarFailed ||
                                     r->data.symbol.name == SYM_Indeterminate ||
                                     r->data.symbol.name == SYM_ComplexInfinity)) ||
+        result_has_singular_value(r) ||
         result_contains_head(r, "Integrate") ||
         result_contains_head(r, "Roach`Run") ||
         result_contains_head(r, "Roach`RunPV") ||
@@ -2452,6 +2474,7 @@ static Expr* try_roach_indefinite(Expr* f, Expr* x, int budget) {
     if ((r->type == EXPR_SYMBOL && (r->data.symbol.name == SYM_DollarFailed ||
                                     r->data.symbol.name == SYM_Indeterminate ||
                                     r->data.symbol.name == SYM_ComplexInfinity)) ||
+        result_has_singular_value(r) ||
         result_contains_head(r, "Integrate") ||
         result_contains_head(r, "Roach`RunIndefinite") ||
         result_contains_head(r, "MeijerG") ||
@@ -2855,9 +2878,20 @@ static Expr* integrate_definite(Expr* res) {
         if (refined) {
             if (nl_numeric_is_complex(refined) && !nl_numeric_is_complex(cur))
                 expr_free(refined);                 /* reject: refinement went complex */
+            else if (result_has_singular_value(refined) && !result_has_singular_value(cur)) {
+                /* The refinement exposed a 0 * Infinity husk: the closed form
+                 * holds off the assumed set (Csc[nu Pi] at integer nu), so
+                 * the unrefined form is not a value there either. */
+                expr_free(refined);
+                expr_free(cur);
+                return NULL;
+            }
             else { expr_free(cur); cur = refined; }
         }
     }
+    /* A value carrying ComplexInfinity / Indeterminate is no value (see
+     * result_has_singular_value): leave the integral unevaluated. */
+    if (cur && result_has_singular_value(cur)) { expr_free(cur); return NULL; }
     return cur;
 }
 

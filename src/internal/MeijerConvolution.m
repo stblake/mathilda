@@ -71,7 +71,12 @@ MeijerConvolution`Kernel2[k_, x_] := Module[{nu, b, p, a, r},
 MeijerConvolution`LinQ[e_, x_] := PolynomialQ[e, x] && Exponent[e, x] == 1 && Coefficient[e, x, 0] === 0;
 
 (* Split f = C x^alpha K1 K2 (exactly two x-dependent kernels). *)
-MeijerConvolution`Split[f_, x_] := Module[{fs, C = 1, alpha = 0, ks = {}},
+(* The iterator g is a Module local: the package has no private context, so a
+   bare g is the user's Global`g, and Do binds it dynamically -- with the
+   integrand's own parameter named g (Log[a^2 + b^2 x^2]/(c^2 + g^2 x^2)^2,
+   G&R 4.295.25) the factor being bound contained g and evaluation recursed
+   to $RecursionLimit, which the cascade paid as a 40 s timeout. *)
+MeijerConvolution`Split[f_, x_] := Module[{fs, C = 1, alpha = 0, ks = {}, g},
   fs = If[Head[f] === Times, List @@ f, {f}];
   Do[
     Which[

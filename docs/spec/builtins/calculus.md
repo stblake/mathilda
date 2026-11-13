@@ -4614,6 +4614,28 @@ answer is multiplied by that factor:
 `2 Sqrt[1 - x] Sqrt[x] Sqrt[1 + x] EllipticF[ArcSin[Sqrt[x]], -1]/Sqrt[x^3 - x]`,
 valid on all four intervals.
 
+#### DiffUnderInt: exact readers, boundary limits, numeric confirmation (v0.6543)
+
+- The inner families read an exponent or a partial-fraction base by
+  `Coefficient[e, v, k]`, which silently drops a term of another degree. Each
+  reader now requires `e` to be a polynomial of the expected degree
+  (`-2 nu x^2 - mu x^4` is not a Gaussian; `-a/x^2 - mu x^2` is not
+  `-mu x^2`), and a partial-fraction denominator's `v`-free cofactor is split
+  off before its base is read (`(-1 + p q)(1 + p q)(p^2 + x^2)^2` is a constant
+  times `(p^2 + x^2)^2`, not a quartic base).
+- Repeated quadrature pins `I^(j)(p0)`, `j >= 1`, as the one-sided limit (from
+  the side of the region) of `J_j(p)`, not as the integral of the derivative at
+  `p0`: differentiation under the integral sign fails at a boundary point where
+  the convergence is not uniform. When `J_j(p)` is out of reach the value at
+  `p0` is used and the final result must agree with a quadrature at a generic
+  interior point.
+- A base point must lie in the closure of the assumed region for every assumed
+  point (`a = 0` is no anchor under `0 < xi < 2 a`).
+
+A definite result that carries `ComplexInfinity` or `Indeterminate` is no value:
+a closed form valid off a set of parameter values (`Csc[nu Pi]` at integer `nu`)
+leaves the integral unevaluated.
+
 ### InterpolatingFunction integrands
 
 `Integrate[InterpolatingFunction[...][x], x]` returns the antiderivative as a
