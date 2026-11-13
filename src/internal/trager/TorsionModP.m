@@ -44,7 +44,7 @@ denominatorsPrimeToQ[expr_, p_Integer] :=
 nonzeroModQ::usage = "nonzeroModQ[c, p] is True when the rational number c is nonzero modulo p (p-integral by assumption).";
 nonzeroModQ[c_, p_Integer] := gfMod[c, p] =!= 0;
 
-goodPrime::usage = "goodPrime[ctx, p] tests the prime p for good reduction of the component data ctx (keys \"B\", \"genus\", \"F\", \"residues\", \"N\", \"Ep\", \"Bp\"). It returns <|\"p\" -> p, \"rho\" -> rho, \"a\" -> a|> (rho the image of the residue-field generator, None over Q; a the centre of the reduced frame mod p: the image of ctx[\"alpha\"] when given, else a root of G mod p of multiplicity prime to m) or None.";
+goodPrime::usage = "goodPrime[ctx, p] tests the prime p for good reduction of the component data ctx (keys \"B\", \"genus\", \"F\", \"residues\", \"N\", \"Ep\", \"Bp\"; an optional \"goodQ\" -> Function[{p, rho}, ...] adds the caller's own conditions). It returns <|\"p\" -> p, \"rho\" -> rho, \"a\" -> a|> (rho the image of the residue-field generator, None over Q; a the centre of the reduced frame mod p: the image of ctx[\"alpha\"] when given, else a root of G mod p of multiplicity prime to m) or None.";
 goodPrime[ctx_Association, p_Integer] := Module[
   {B = ctx["B"], x, m, G, Gs, Bp = ctx["Bp"], Ep = ctx["Ep"], F = ctx["F"], rho = None, lin, alphas, a},
   x = B["x"]; m = B["m"]; G = B["G"];
@@ -64,6 +64,9 @@ goodPrime[ctx_Association, p_Integer] := Module[
     rho = gfMod[-Coefficient[lin[[1, 1]], F["t"], 0] PowerMod[Coefficient[lin[[1, 1]], F["t"], 1], -1, p], p]];
   alphas = reduceResidue[F, #, p, rho] & /@ ctx["residues"];
   If[MemberQ[alphas, 0] || !DuplicateFreeQ[alphas], Return[None]];
+  (* a caller's further good-reduction conditions (Bronstein's special places,
+     Specialize.m brSpecialTorsionOrder): goodQ[p, rho] *)
+  If[KeyExistsQ[ctx, "goodQ"] && !TrueQ[ctx["goodQ"][p, rho]], Return[None]];
   (* With the residue polynomial at hand, require it to stay squarefree with  *)
   (* no zero root mod p: then NO two residues (of any factor) collide, which  *)
   (* the per-orbit construction needs (its ctx lists only its own residue).   *)

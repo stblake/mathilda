@@ -4025,6 +4025,16 @@ verified against the user's own integrand. The proofs are in
 | `Integrate[(Sqrt[x] + (x + 1)^(1/3))/(x (x + 1)), x, Method -> "Bronstein"]` | an antiderivative in `Sqrt[x]`, `(x + 1)^(1/3)` |
 | `Integrate[E^(x + Log[x]/2)/x, x, Method -> "Bronstein"]` | `Integrate::nonelem` (`E^x/Sqrt[x]`) |
 | `Integrate[(Log[x^2] - 2 Log[x]) Sqrt[Log[x]], x, Method -> "Bronstein"]` | `Integrate::nonelem` |
+
+**Special places on curves of positive genus (v0.6548).** A log part with residues
+at `theta = infinity` (a logarithm) or `theta = 0, infinity` (an exponential), on a
+curve of genus at least 1, is decided:
+- the order of the residue divisor is found by specialisation and reduction
+  modulo two primes, with the special places included;
+- `N delta` is then tested for principality.
+
+For example, `Integrate[1/(x (1 + Log[x]^3)^(1/3)), x, Method -> "Bronstein"]` is
+an antiderivative. The theory is E3 in `docs/notes/bronstein_extensions.tex`.
 | `Integrate[Sqrt[x + Sqrt[x]]/x^2, x]` | closed by an earlier stage, no message |
 
 **Shape B: the radical below the tower (v0.6527).** In Shape B the radicand

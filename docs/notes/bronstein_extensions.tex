@@ -220,7 +220,7 @@ E2 & Transcendental Risch over an algebraic base $k_j(y)(t_{j+1},\dots)$: the
   recursion through the differential-field record, and Liouville's theorem for a
   radical in the middle of the tower & Phase 5 & open \\
 E3 & Torsion by specialisation with the special places included: goodness
-  conditions, injectivity in characteristic~0 & Phase 3 & open \\
+  conditions, injectivity in characteristic~0 & \code{LogPart:special-genus} & v0.6548 \\
 E4 & Symbolic parameters: the verdicts are generic, and which zero tests may be
   generic & Phase 4 & open \\
 E5 & Ideals of the $d=\gcd(e,m)$ ramified places above one special point &
@@ -243,6 +243,149 @@ The same reading refuted a suspected false certificate in
 \code{brIntegrateInKLogLike}: Def.~2.21 of [B] allows logarithms of any element
 of $k$.
 \end{remark}
+
+\section*{E3. Torsion with the special places included (\code{brSpecialTorsionOrder})}
+\addcontentsline{toc}{section}{E3. Torsion with special places}
+
+\paragraph{Setting.} A component $cY$ lies on the curve $\mathcal C: Y^m=G(\theta)$
+over $k(\theta)$, where $k=\Q(x)(t_1,\dots,t_r)$ and $\theta$ is the top monomial.
+Its log part needs the order of the class of
+\[ \delta=\sum_i b_i\,\Delta(\alpha_i)+\sum_l b'_l\,P_l \]
+in $\operatorname{Pic}^0(\mathcal C)$. Here the $\Delta(\alpha_i)$ are the finite
+residue divisors, and the $P_l$ are the places over the special points of
+$\theta$: $\infty$ for a logarithm, $0$ and $\infty$ for an exponential
+([B] Def.~2.21). Their residues $\tau_l$ enter the $\Q$-basis with the finite
+ones. In genus~0 every degree-0 divisor is principal (v0.6533). In positive
+genus, [B] gives no algorithm for the order of a divisor with special places;
+this section supplies one.
+
+\paragraph{The frame.} All divisors are written on the frame $\theta=a+1/u$
+(\code{brShiftFrame}), with $a\in\Z$ ordinary. On this frame both special points
+are finite: $\theta=\infty$ is $u=0$, and $\theta=0$ is $u=-1/a$. A special
+place is then an ordinary finite place. It is unramified ($Y=\rho\,u_0$, with
+$\rho^m=\kappa$) or totally ramified, and its prime ideal is built by
+\code{brPointPlaceIdeal} or \code{placeIdealAt}. Every construction is generic
+in the coefficient field, so the same code builds $\delta$ over $k$, over
+$\Q$, or over $\mathrm{GF}(p)$.
+
+\begin{definition}[good specialisation]
+A point $\sigma\in\Q^{r+1}$ for $(x,t_1,\dots,t_r)$ is \emph{good} if it keeps
+all of the following:
+\begin{enumerate}
+\item the degree and squarefree profile of $G$, hence the genus and the shape of
+  the integral basis;
+\item the degree of the branch-free denominator $B_p$, its squarefreeness, and
+  its coprimality with $G$ and with $E'$;
+\item the degree of every finite residue place $\Delta(\alpha_i)$
+  (\code{brGoodSpecializationQ});
+\item at each special location, a finite nonzero frame value $u_0$; at
+  $\theta=0$, the multiplicity of $G$, and $B_p(0)\neq0$ when it holds
+  generically (\code{brSpecialLocationsGoodQ});
+\item the frame point $\theta=a$ ($u=\infty$) stays ordinary: $G_\sigma(a)$,
+  $E_\sigma(a)\neq0$, and every polynomial of the frame ($G_u$, $B_{p,u}$, and
+  the residue data $N_u$, $E_u$) keeps its $u$-degree
+  (\code{brFrameDegreesKeptQ}). Without this a finite residue place can move to
+  $u=\infty$ and leave the divisor.
+\end{enumerate}
+\end{definition}
+
+\begin{theorem}\label{thm:E3}
+Let $\sigma$ be good, and let $\delta_\sigma$ be the divisor built from the
+specialised data on $\mathcal C_\sigma: Y^m=G_\sigma$ over $\Q$.
+\begin{enumerate}
+\item If $\delta_\sigma$ has infinite order, so has $\delta$.
+\item If $\delta$ has finite order $N$, then $\delta_\sigma$ has order exactly $N$.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+Conditions (1)--(2) say that the plane model has the same singularity pattern
+along the fibres over a neighbourhood $U$ of $\sigma$. The integral basis
+specialises to the integral basis, so the normalisations form a smooth proper
+family $\mathcal X\to U$ whose fibre over $\sigma$ is the normalisation of
+$\mathcal C_\sigma$.
+
+Conditions (3)--(4) say that each place in the support of $\delta$ specialises
+to a place, or a set of places, of the same degree and multiplicity, and that
+distinct places stay distinct. The special places stay over the same special
+point and keep their ramification, and $u_0\neq0$ keeps the $m$ unramified
+places apart. So $\delta$ extends to a relative divisor on $\mathcal X$ whose
+fibre at $\sigma$ is $\delta_\sigma$. Equivalently, the ideal of $\delta$ built
+over $k$ specialises to the ideal built from specialised data.
+
+Specialisation $\operatorname{Pic}^0(\mathcal X_{\bar\eta})\to\operatorname{Pic}^0(\mathcal X_\sigma)$
+is a group homomorphism, and in characteristic~0 it is injective on torsion:
+for every $N$ the $N$-torsion of the relative Jacobian is a finite étale group
+scheme over $U$, so its fibres all have the same order $N^{2g}$ and
+specialisation is a bijection on them. Part~(2) follows, since the order
+cannot drop. For part~(1), a relation $N\delta=\operatorname{div}(f)$ over
+$k$ would specialise to $N\delta_\sigma=\operatorname{div}(f_\sigma)$.
+\end{proof}
+
+\paragraph{The order of $\delta_\sigma$.} We use Trager's two-prime method
+([T] Ch.~6 \S2--3; \code{torsionOrderWith}) on $\mathcal C_\sigma$ over the
+residue field $F_0$. A builder reconstructs $\delta_\sigma$ modulo $p$ with the
+same field-generic code. A prime $p$ is good when Trager's conditions hold
+(\code{goodPrime}) and also, for each special place (the \code{goodQ} hook):
+\begin{itemize}
+\item the frame value $u_0$ and the point $u=\mathrm{pt}$ are $p$-integral with
+  $u_0\not\equiv0$;
+\item $B_p(\mathrm{pt})\not\equiv0$, so the place does not collide with a finite
+  residue place;
+\item for an unramified place, $G_u(\mathrm{pt})\not\equiv0$ and the roots $\rho$
+  stay distinct and nonzero;
+\item for a ramified place, the multiplicity of $G_u$ at $\mathrm{pt}$ is kept.
+\end{itemize}
+Each of these is the reduction of a characteristic-0 non-vanishing, which is
+checked first (\code{brSpecialPlaceDegenerate}). So all but finitely many primes
+are good, and the prime search ends.
+
+Under these conditions $\delta_\sigma\bmod p$ is the reduction of
+$\delta_\sigma$. Trager's theorem (injectivity on prime-to-$p$ torsion) then
+gives the only possible order $N$, or a certificate of infinite order when the
+prime-to-$pq$ parts disagree.
+
+\paragraph{Safeguards.}
+\begin{itemize}
+\item Before any order is computed, the specialised divisor is checked to have
+  degree~0 on the frame: $\deg_u\det M-m\deg_u(\mathrm{den})=0$
+  (\code{brFrameIdealDegree}). A lost or moved place is then an Internal error,
+  never a certificate.
+\item Trager's reduced arithmetic needs a root of $G_u$ of multiplicity prime to
+  $m$. When characteristic~0 has none, no prime has one either, so the site stays
+  \code{TorsionModP:frame-root} instead of an endless prime search.
+\item Every characteristic-0 non-vanishing behind \code{goodQ} is checked first
+  (\code{brSpecialPlaceDegenerate}).
+\end{itemize}
+
+\paragraph{Review (2026-11-14).} The independent review found a false
+certificate in the first version. That version lacked condition~(5): for
+$\frac{d}{dx}\log\bigl((L^3+L-x+59/5)^{1/3}-L\bigr)$ with $L=\log x$, the first
+candidate $x\mapsto64/5$ put the residue place $\theta=x-59/5$ on the frame
+point $\theta=a=1$. The fix is condition~(5) and the degree guard, and the
+example is now a regression test. The review confirmed the rest:
+\begin{itemize}
+\item the theorem, given the corrected conditions;
+\item leaving the $\tau_l$ out of Trager's distinct-residue condition (the
+  divisor is defined by places);
+\item the decision step.
+\end{itemize}
+
+\paragraph{Decision.} With $N$ in hand, $N\delta$ is tested for principality
+\emph{generically}, over $k$ (\code{principalGenerator}).
+\begin{itemize}
+\item If $N\delta=\operatorname{div}(u)$, the log term is
+  $(\beta_j/N)(\log u-\tfrac1m\log\operatorname{Norm}u)$.
+\item If not, $\delta$ is not torsion. Indeed, a torsion $\delta$ has order
+  exactly $N$ by Theorem~\ref{thm:E3}(2). The integral is then not elementary
+  ([B] Prop.~2.13, [T] Ch.~6).
+\end{itemize}
+
+\paragraph{Tests.} \code{test\_special\_genus} in
+\code{tests/test\_bronstein\_phase3.c} has direct calls of every routine, six
+elementary integrals on genus-1 curves, and one certificate. Before v0.6548 all
+of them stopped at \code{LogPart:special-genus}. In a 36-integrand sweep of
+$m\ge3$ components, that site was the most frequent gap (6 of 36).
 
 \section*{E6a. Reducible logarithms (\code{brReducibleLogSplit}, \code{brIntegrateKappaSplit})}
 \addcontentsline{toc}{section}{E6a. Reducible logarithms}

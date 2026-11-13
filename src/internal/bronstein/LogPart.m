@@ -159,13 +159,11 @@ brRelevantLocations[T_Association, locs_List] := Module[{z, cbarNonzero},
   cbarNonzero = z =!= None && !z["ramified"] && z["coef"] =!= 0;
   If[cbarNonzero, locs, Select[locs, !#["ramified"] && #["coef"] =!= 0 &]]];
 
-brComponentLogPartSpecial::usage = "brComponentLogPartSpecial[T, cv, c, nr, spec] is brComponentLogPart when some residue at a special place is nonzero (genus 0 only, see Divisors.m): residues at the finite and special places, a Q-basis of all of them, divisors on the shifted frame, principal generators (genus 0: always principal) mapped back to the theta-basis.";
-brComponentLogPartSpecial[T_Association, cv_Association, c_, nr_Association, spec_Association] := Module[
+brComponentLogPartSpecial::usage = "brComponentLogPartSpecial[T, cv, c, nr, spec] is brComponentLogPart when some residue at a special place is nonzero: residues at the finite and special places, a Q-basis of all of them, divisors on the shifted frame (brSpecialDivisorIdeal), principal generators mapped back to the theta-basis. Genus 0: every such divisor is principal. Positive genus: the only possible order N by specialization and reduction mod p (brSpecialTorsionOrder, bronstein_extensions.tex E3); N delta not principal is a certificate.";
+brSpecialSetup::usage = "brSpecialSetup[T, cv, c, nr, spec] is the data of the log part of the component c Y with nonzero residues at special places: <|\"genus\", \"locs\" (relevant special locations), \"rhoLists\" (the roots rho of z^m - kappa per unramified location), \"finRoots\" (finite residues), \"F0\" / \"Fk\" (the residue field over Q / over k), \"qb\" (Q-basis of all residues, finite then special), \"fr\" (the shifted frame theta = a + 1/u), \"rsF\" (finite residue data in theta for the specialization), \"vars\"|>, or \"Zero\" when every residue vanishes.";
+brSpecialSetup[T_Association, cv_Association, c_, nr_Association, spec_Association] := Module[
   {th = T["theta"], m = cv["m"], G = cv["G"], locs, z = nr["z"], polys, Pall, t = Unique["Bronstein`Private`brTau"],
-   rf, F0, Fk, vars, finRoots, rhoLists, taus, allRes, qb, tc, N, E, Ep, En, Bp, rs, a, u = Unique["Bronstein`Private`brU"],
-   fr, F, Bth, ideals, I, gen, Yh = Unique["Bronstein`Private`brYh"], Y = Unique["Bronstein`Private`brYs"], expr, terms = {}, nfin},
-  If[curveGenus[m, G, th] =!= 0,
-    throwUnimplemented["LogPart:special-genus", "residues at a special place on a curve of positive genus"]];
+   rf, F0, Fk, vars, finRoots, rhoLists, taus, allRes, qb, tc, N, E, Ep, En, Bp, a, u = Unique["Bronstein`Private`brU"]},
   locs = brRelevantLocations[T, brSpecialLocations[T, cv, spec]];
   If[AnyTrue[locs, !#["ramified"] && #["kappa"] === None &],
     throwUnimplemented["LogPart:special-radical", "residue at a special place over a radical extension of k"]];
@@ -178,39 +176,46 @@ brComponentLogPartSpecial[T_Association, cv_Association, c_, nr_Association, spe
   vars = Prepend[T["lower"], T["x"]];
   Fk = If[F0["Type"] === "NF", fieldFn[vars, {F0["t"], F0["mu"], F0["theta"]}], fieldFn[vars]];
   finRoots = If[nr["P"] === 1, {}, Select[rf["roots"], kc[F0, nr["P"] /. z -> #] === 0 &]];
-  rhoLists = If[#["ramified"], {}, Select[rf["roots"], kc[F0, #^m] === kc[F0, #["kappa"]] &]] & /@ locs;
-  rhoLists = MapThread[If[#1["ramified"], {}, Select[rf["roots"], Function[r, kc[F0, r^m - #1["kappa"]] === 0]]] &, {locs, rhoLists}];
+  rhoLists = MapThread[If[#1["ramified"], {}, Select[rf["roots"], Function[r, kc[F0, r^m - #1["kappa"]] === 0]]] &,
+    {locs, locs}];
   taus = kc[F0, #] & /@ brSpecialTaus[T, cv, locs, rhoLists];
   allRes = Join[finRoots, taus];
-  If[AllTrue[allRes, # === 0 &], Return[<|"terms" -> {}, "remainder" -> Together[c], "F" -> None, "B" -> cv["B"]|>]];
+  If[AllTrue[allRes, # === 0 &], Return["Zero"]];
   qb = qBasis[F0, allRes];
   (* residue data in theta and the frame *)
   tc = Together[c]; N = Expand[Numerator[tc]]; E = Expand[Denominator[tc]];
   Ep = Together[brD[T, E]];
   En = Numerator[Together[First[brSplit[T, E]]]];
   Bp = If[FreeQ[En, th], 1, Expand[Numerator[Together[En/PolynomialGCD[En, G]]]]];
-  rs = <|"N" -> N, "Ep" -> Ep, "Bp" -> Bp|>;
   a = firstOrdinaryInteger[Join[{Expand[G], E}, If[T["kind"] === "Exp", {th}, {}]], th];
   If[a === 0, a = firstOrdinaryInteger[{Expand[G] , E, th}, th]];
-  fr = brShiftFrame[T, cv, rs, a, u];
-  F = Fk; Bth = cv["B"];
-  ideals = brSpecialPlaceIdeals[F, fr, #[[1]], #[[2]]] & /@ Transpose[{locs, rhoLists}];
-  ideals = Flatten[ideals, 1];
-  nfin = Length[finRoots];
+  <|"genus" -> curveGenus[m, G, th], "locs" -> locs, "rhoLists" -> rhoLists, "finRoots" -> finRoots,
+    "F0" -> F0, "Fk" -> Fk, "qb" -> qb, "vars" -> vars,
+    "fr" -> brShiftFrame[T, cv, <|"N" -> N, "Ep" -> Ep, "Bp" -> Bp|>, a, u],
+    "rsF" -> <|"N" -> N, "E" -> E, "Ep" -> Ep, "Bp" -> Bp, "F0" -> F0, "Fk" -> Fk, "B" -> cv["B"],
+      "roots" -> finRoots, "vars" -> vars|>|>];
+
+brComponentLogPartSpecial[T_Association, cv_Association, c_, nr_Association, spec_Association] := Module[
+  {th = T["theta"], ss, fr, F, Bth, I, gen, Yh = Unique["Bronstein`Private`brYh"], Y = Unique["Bronstein`Private`brYs"],
+   expr, terms = {}, cj, Nj, u, a},
+  ss = brSpecialSetup[T, cv, c, nr, spec];
+  If[ss === "Zero", Return[<|"terms" -> {}, "remainder" -> Together[c], "F" -> None, "B" -> cv["B"]|>]];
+  fr = ss["fr"]; u = fr["u"]; a = fr["a"];
+  F = ss["Fk"]; Bth = cv["B"];
   Do[
-    I = idealUnit[fr["Bu"]];
-    Do[If[qb["coeffs"][[i, j]] =!= 0,
-         I = idealTimes[F, fr["Bu"], I, idealPower[F, fr["Bu"],
-           residueIdeal[F, fr["Bu"], finRoots[[i]], fr["Nh"], fr["Eh"], fr["Bph"]], qb["coeffs"][[i, j]]]]],
-      {i, nfin}];
-    Do[If[qb["coeffs"][[nfin + l, j]] =!= 0,
-         I = idealTimes[F, fr["Bu"], I, idealPower[F, fr["Bu"], ideals[[l, 1]], qb["coeffs"][[nfin + l, j]]]]],
-      {l, Length[ideals]}];
-    gen = principalGenerator[F, fr["Bu"], I];
-    If[gen === None, throwInternal["brGenus0DivisorNotPrincipal"]];
+    cj = ss["qb"]["coeffs"][[All, j]];
+    I = brSpecialDivisorIdeal[F, fr, ss["finRoots"], ss["locs"], ss["rhoLists"], cj];
+    (* genus 0: every degree-0 divisor is principal; positive genus: the only
+       possible order by specialization and reduction mod p (E3) *)
+    Nj = If[ss["genus"] === 0, 1, brSpecialTorsionOrder[T, cv, ss["rsF"], fr, ss["locs"], ss["rhoLists"], cj]];
+    gen = principalGenerator[F, fr["Bu"], idealPower[F, fr["Bu"], I, Nj]];
+    If[gen === None,
+      If[ss["genus"] === 0, throwInternal["brGenus0DivisorNotPrincipal"],
+        throwNonElementary["residue divisor with special places is not torsion (N delta not principal at the only possible order N)",
+          <|"N" -> Nj|>]]];
     (* back to theta: u -> 1/(theta - a), Yh -> Y (theta - a)^(-k) *)
     expr = Together[(afToY[fr["Bu"], gen, Yh] /. {u -> 1/(th - a)}) /. Yh -> Y (th - a)^(-fr["k"])];
-    gen = brNormalizeGenerator[F, Bth, afFromY[F, Bth, expr, Y], vars];
-    AppendTo[terms, {kc[F, qb["basis"][[j]]], gen, afNorm[F, Bth, gen]}],
-    {j, Length[qb["basis"]]}];
+    gen = brNormalizeGenerator[F, Bth, afFromY[F, Bth, expr, Y], ss["vars"]];
+    AppendTo[terms, {kc[F, ss["qb"]["basis"][[j]]/Nj], gen, afNorm[F, Bth, gen]}],
+    {j, Length[ss["qb"]["basis"]]}];
   brLogPartFinish[T, cv, c, F, Bth, terms]];

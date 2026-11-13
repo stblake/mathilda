@@ -12,6 +12,10 @@
  *    f = Sum K^j g_j (brReducibleLogSplit, brIntegrateKappaSplit,
  *    brNonzeroSomewhereQ); the C dependent-logarithm retry checked against the
  *    original integrand (Int Log[x^2]/x was Log[x]^2).
+ *  - LogPart:special-genus (#9): residues at special places on a curve of
+ *    positive genus -- torsion by specialization with the special places
+ *    included (brSpecialSetup, brSpecialDivisorIdeal, brSpecialLocationsGoodQ,
+ *    brSpecialTorsionOrder, brLowOrder; bronstein_extensions.tex E3).
  */
 #include "bronstein_test_utils.h"
 
@@ -133,6 +137,48 @@ static void test_reducible_log(void) {
     BR_TRUE("PossibleZeroQ[D[Integrate[Log[x^2]/x, x], x] - Log[x^2]/x]");
 }
 
+static void test_special_genus(void) {
+    BR_EQ("brLowOrder[t^2 + t^3, t]", "2");
+    BR_EQ("brLowOrder[1 + t, t]", "0");
+    BR_EQ("brLowOrder[0, t]", "Infinity");
+    /* the component of D Log[Log[x] + (1 + Log[x] + Log[x]^3)^(1/3)] on y^3 = theta^3 + theta + 1 (genus 1) */
+    br_run("T9 = brTower[Together[D[Log[Log[x] + (1 + Log[x] + Log[x]^3)^(1/3)], x]], x]; cf9 = brCanonicalForm[T9];"
+           " cc9 = brComponentCurve[T9, cf9[\"n\"], cf9[\"g\"], 1]; cv9 = brCurve[T9, cc9[\"m\"], cc9[\"G\"]];"
+           " c9 = brSpecialReduce[T9, cv9, brHermiteReduce[T9, cv9, Together[cf9[\"coeffs\"][[2]] cc9[\"s\"]]][\"Remainder\"]][\"Remainder\"];"
+           " ss9 = brSpecialSetup[T9, cv9, c9, brNormalResidues[T9, cv9, c9], brLogInfinityResidues[T9, cv9, c9]]; True");
+    BR_EQ("ss9[\"genus\"]", "1");
+    BR_EQ("Length[ss9[\"finRoots\"]]", "3");
+    BR_TRUE("brSpecialLocationsGoodQ[T9, cv9, ss9[\"rsF\"], ss9[\"locs\"], {x -> 3}]");
+    BR_TRUE("KeyExistsQ[brSpecialDivisorIdeal[ss9[\"Fk\"], ss9[\"fr\"], ss9[\"finRoots\"], ss9[\"locs\"], ss9[\"rhoLists\"],"
+            " ss9[\"qb\"][\"coeffs\"][[All, 1]]], \"M\"]");
+    BR_EQ("brSpecialTorsionOrder[T9, cv9, ss9[\"rsF\"], ss9[\"fr\"], ss9[\"locs\"], ss9[\"rhoLists\"], ss9[\"qb\"][\"coeffs\"][[All, 1]]]", "1");
+    /* a frame-degenerate special location is caught in characteristic 0 */
+    BR_FALSE("brSpecialLocationsGoodQ[T9, cv9, ss9[\"rsF\"], {<|\"where\" -> \"inf\", \"u\" -> 1/x|>}, {x -> 0}]");
+    /* review finding (2026-11-14): x -> 64/5 puts the residue place theta = x - 59/5
+       on the frame point theta = a = 1, so the divisor lost a place and a false
+       "orders disagree" certificate came out; the frame degrees now gate it */
+    br_run("Rv = Together[D[Log[(Log[x]^3 + Log[x] - x + 59/5)^(1/3) - Log[x]], x]]; Tv = brTower[Rv, x]; cfv = brCanonicalForm[Tv];"
+           " ccv = brComponentCurve[Tv, cfv[\"n\"], cfv[\"g\"], 1]; cvv = brCurve[Tv, ccv[\"m\"], ccv[\"G\"]];"
+           " cv0 = brSpecialReduce[Tv, cvv, brHermiteReduce[Tv, cvv, Together[cfv[\"coeffs\"][[2]] ccv[\"s\"]]][\"Remainder\"]][\"Remainder\"];"
+           " ssv = brSpecialSetup[Tv, cvv, cv0, brNormalResidues[Tv, cvv, cv0], brLogInfinityResidues[Tv, cvv, cv0]]; True");
+    BR_FALSE("brFrameDegreesKeptQ[ssv[\"fr\"], {x -> 64/5}]");
+    BR_TRUE("brFrameDegreesKeptQ[ssv[\"fr\"], {x -> 3}]");
+    BR_EQ("Table[brSpecialTorsionOrder[Tv, cvv, ssv[\"rsF\"], ssv[\"fr\"], ssv[\"locs\"], ssv[\"rhoLists\"], ssv[\"qb\"][\"coeffs\"][[All, j]]],"
+          " {j, Length[ssv[\"qb\"][\"basis\"]]}]", "{1, 1}");
+    BR_EQ("brFrameIdealDegree[idealUnit[ss9[\"fr\"][\"Bu\"]], ss9[\"fr\"][\"u\"], 3]", "0");
+    BR_EQ("brFrameIdealDegree[brSpecialDivisorIdeal[ss9[\"Fk\"], ss9[\"fr\"], ss9[\"finRoots\"], ss9[\"locs\"], ss9[\"rhoLists\"],"
+          " ss9[\"qb\"][\"coeffs\"][[All, 1]]], ss9[\"fr\"][\"u\"], 3]", "0");
+    /* integrals that stopped at LogPart:special-genus: elementary (Chebyshev, derivatives) */
+    BR_ANTIDERIV("1/(x (1 + Log[x]^3)^(1/3))", "Bronstein");
+    BR_ANTIDERIV("E^x/(1 + E^(3 x))^(1/3)", "Bronstein");
+    BR_ANTIDERIV("1/(x (2 + Log[x]^3)^(1/3))", "Bronstein");
+    BR_ANTIDERIV("Together[D[Log[Log[x] + (1 + Log[x] + Log[x]^3)^(1/3)], x]]", "Bronstein");
+    BR_ANTIDERIV("Together[D[x + Log[-E^x + (1 + E^(3 x))^(1/3)], x]]", "Bronstein");
+    BR_ANTIDERIV("Together[D[(1 + Log[x] + Log[x]^3)^(1/3) + Log[Log[x] + (1 + Log[x] + Log[x]^3)^(1/3)], x]]", "Bronstein");
+    /* and a certificate: the residue divisor has infinite order */
+    BR_EQ("BronsteinIntegrate[(1 + Log[x])/(x (1 + Log[x] + Log[x]^3)^(1/3)), x][[1]]", "\"not elementary\"");
+}
+
 int main(void) {
     br_init();
     test_kummer_vectors();
@@ -141,6 +187,7 @@ int main(void) {
     test_compositum_integrate();
     test_exp_of_log();
     test_reducible_log();
+    test_special_genus();
     BR_DONE("bronstein_phase3_tests");
     return 0;
 }

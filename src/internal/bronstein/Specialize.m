@@ -114,3 +114,108 @@ brOrbitOrder[T_Association, cv_Association, rs_Association, spec_Association, re
     brFailQ[r] && First[brFailTag[r]] === "NonElementary", $Failed,
     brFailQ[r], Throw[r, "TragerFail"],
     True, r]];
+
+(* -------------------------------------------------------------------------- *)
+(* Torsion with the special places included (gap #9, LogPart:special-genus;  *)
+(* docs/notes/bronstein_extensions.tex, E3).  The divisor lives on the       *)
+(* shifted frame theta = a + 1/u of the genus-0 construction, where the      *)
+(* special places (theta = infinity: u = 0; theta = 0: u = -1/a) are finite.  *)
+(* A good specialization keeps the shape of the curve, of the finite residue  *)
+(* places (brGoodSpecializationQ) AND of the special places: the frame values *)
+(* of their Y-coordinates stay finite and nonzero, the multiplicity of G at   *)
+(* theta = 0 is kept, and a branch-free denominator coprime to theta stays    *)
+(* so.  The order of the specialized class is then Trager's torsionOrderWith  *)
+(* with a builder that constructs the same divisor over GF(p).               *)
+(* -------------------------------------------------------------------------- *)
+
+brLowOrder::usage = "brLowOrder[p, th] is the multiplicity of th = 0 as a root of the polynomial p (0 when p(0) != 0).";
+brLowOrder[p_, th_Symbol] := Module[{cl = CoefficientList[Expand[p], th]},
+  If[AllTrue[cl, # === 0 &], Infinity, LengthWhile[cl, # === 0 &]]];
+
+brSpecialLocationsGoodQ::usage = "brSpecialLocationsGoodQ[T, cv, rs, locs, sigma] is True when the specialization sigma keeps the special locations locs (brSpecialLocations) of the component: every location's frame coefficient u stays finite and nonzero, and at theta = 0 (exponential) the multiplicity of G and the non-vanishing of Bp are kept.";
+brSpecialLocationsGoodQ[T_Association, cv_Association, rs_Association, locs_List, sigma_List] := Module[{th = T["theta"]},
+  AllTrue[locs, With[{v = brSpecializeValue[#["u"], sigma]}, v =!= $Failed && v =!= 0] &] &&
+  If[AnyTrue[locs, #["where"] === "zero" &],
+    brLowOrder[brSpecializeValue[cv["G"], sigma], th] === brLowOrder[cv["G"], th] &&
+    (brLowOrder[rs["Bp"], th] =!= 0 || brLowOrder[brSpecializeValue[rs["Bp"], sigma], th] === 0),
+    True]];
+
+brFrameDegreesKeptQ::usage = "brFrameDegreesKeptQ[fr, sigma] is True when the specialization sigma keeps the u-degree of every polynomial of the shifted frame fr (the curve Gu, the branch-free denominator Bph, the residue data Nh, Eh) and keeps Bph and Eh nonzero: no place moves to u = infinity (theta = a) and the divisor built from the specialized frame is the specialization of the divisor.";
+brFrameDegreesKeptQ[fr_Association, sigma_List] := Module[{u = fr["u"]},
+  AllTrue[{fr["Bu"]["G"], fr["Bph"], fr["Nh"], fr["Eh"]},
+    Function[p, With[{ps = brSpecializeValue[p, sigma]},
+      ps =!= $Failed && Together[ps] =!= 0 && Exponent[Expand[Numerator[Together[ps]]], u] === Exponent[Expand[Numerator[Together[p]]], u]]]]];
+
+brFrameIdealDegree::usage = "brFrameIdealDegree[I, u, m] is the degree of the divisor of the fractional ideal I = M/den (Hermite form on an integral basis of rank m in the curve variable u): deg_u det M - m deg_u den. On the shifted frame a divisor avoiding u = infinity has this degree; a residue divisor's is 0.";
+brFrameIdealDegree[I_Association, u_Symbol, m_Integer] :=
+  Exponent[Expand[Numerator[Together[Det[I["M"]]]]], u] - Exponent[Expand[Denominator[Together[Det[I["M"]]]]], u] -
+    m (Exponent[Expand[Numerator[Together[I["den"]]]], u] - Exponent[Expand[Denominator[Together[I["den"]]]], u]);
+
+brSpecialDivisorIdeal::usage = "brSpecialDivisorIdeal[F, fr, finRoots, locs, rhoLists, cj] is the ideal over F, on the frame fr (brShiftFrame: \"Bu\", \"Nh\", \"Eh\", \"Bph\", \"u\", \"a\", \"k\"), of the divisor Sum_i cj_i Delta(alpha_i) + Sum_l cj_(nfin + l) P_l: the finite residue places of the residues finRoots and the special places P_l of the locations locs (in the order of brSpecialPlaceIdeals, one per root in rhoLists for an unramified location). Field-generic: the same construction over GF(p) builds the reduced divisor.";
+brSpecialDivisorIdeal[F_Association, fr_Association, finRoots_List, locs_List, rhoLists_List, cj_List] := Module[
+  {B = fr["Bu"], I, ideals, nfin = Length[finRoots]},
+  ideals = Flatten[brSpecialPlaceIdeals[F, fr, #[[1]], #[[2]]] & /@ Transpose[{locs, rhoLists}], 1];
+  I = idealUnit[B];
+  Do[If[cj[[i]] =!= 0,
+      I = idealTimes[F, B, I, idealPower[F, B, residueIdeal[F, B, finRoots[[i]], fr["Nh"], fr["Eh"], fr["Bph"]], cj[[i]]]]],
+    {i, nfin}];
+  Do[If[cj[[nfin + l]] =!= 0,
+      I = idealTimes[F, B, I, idealPower[F, B, ideals[[l, 1]], cj[[nfin + l]]]]],
+    {l, Length[ideals]}];
+  I];
+
+brSpecialTorsionOrder::usage = "brSpecialTorsionOrder[T, cv, rs, fr, locs, rhoLists, cj] is the only possible order of the class of the divisor of brSpecialDivisorIdeal (finite residues rs[\"roots\"] over rs[\"F0\"], special places of locs, coefficients cj) on the positive-genus curve of the component: specialize x and the lower monomials (brGoodSpecializationQ and brSpecialLocationsGoodQ), then Trager's torsionOrderWith on the specialized frame, with the special places' good-reduction conditions (frame values p-adic units, distinct roots rho, the point off the branch-free denominator, the multiplicity of the frame curve at the point kept) as its goodQ. It throws NonElementary when the orders modulo two primes disagree: the specialized divisor, and so the divisor, has infinite order.";
+brSpecialTorsionOrder[T_Association, cv_Association, rs_Association, fr_Association, locs_List, rhoLists_List, cj_List] := Module[
+  {sigma = None, s, m = cv["m"], u = fr["u"], F0 = rs["F0"], frs, locsS, g, pts, goodQ, ctx, mk, Gu0},
+  Do[
+    s = brSpecializationPoint[rs["vars"], try];
+    (* the frame theta = a + 1/u must keep every u-degree: a residue place
+       moved onto theta = a would leave the divisor (review, 2026-11-14:
+       Bp_sigma(a) = 0 gave a divisor of nonzero degree and a false certificate) *)
+    If[brGoodSpecializationQ[T, cv, rs, s, fr["a"]] && brSpecialLocationsGoodQ[T, cv, rs, locs, s] &&
+       brFrameDegreesKeptQ[fr, s], sigma = s; Break[]],
+    {try, 1, brOption["SpecializationTries"] brOption["SpecializationRounds"]}];
+  If[sigma === None, throwInternal["NoGoodSpecialization", <|"vars" -> rs["vars"], "special" -> True|>]];
+  Gu0 = Expand[brSpecializeValue[fr["Bu"]["G"], sigma]];
+  frs = <|"u" -> u, "a" -> fr["a"], "k" -> fr["k"], "Bu" -> curveBasis[m, Gu0, u],
+    "Nh" -> Expand[brSpecializeValue[fr["Nh"], sigma]], "Eh" -> Expand[brSpecializeValue[fr["Eh"], sigma]],
+    "Bph" -> Expand[brSpecializeValue[fr["Bph"], sigma]]|>;
+  locsS = Join[#, <|"u" -> brSpecializeValue[#["u"], sigma]|>] & /@ locs;
+  g = curveGenus[m, Gu0, u];
+  If[g === 0, Return[1]];
+  (* Trager's reduced class arithmetic needs a root of Gu of multiplicity
+     prime to m; with none in characteristic 0, no prime ever has one and the
+     prime search would not end *)
+  If[!AnyTrue[Select[FactorSquareFreeList[Gu0], !FreeQ[#[[1]], u] &], GCD[#[[2]], m] === 1 &],
+    throwUnimplemented["TorsionModP:frame-root", "no root of the frame curve of multiplicity prime to m"]];
+  pts = If[#["where"] === "inf", 0, -1/fr["a"]] & /@ locsS;
+  (* the goodQ conditions must hold in characteristic 0, else no prime meets
+     them and the (unbounded, Chebotarev) prime search would never end *)
+  Do[
+    If[Together[frs["Bph"] /. u -> pts[[l]]] === 0 ||
+       (!locsS[[l]]["ramified"] && (Together[Gu0 /. u -> pts[[l]]] === 0 ||
+          !DuplicateFreeQ[kc[F0, #] & /@ rhoLists[[l]]] || MemberQ[kc[F0, #] & /@ rhoLists[[l]], 0])),
+      throwInternal["brSpecialPlaceDegenerate", <|"location" -> locsS[[l]]|>]],
+    {l, Length[locsS]}];
+  goodQ = Function[{p, rho}, Module[{red = Function[e, reduceResidue[F0, e, p, rho]]},
+    AllTrue[Range[Length[locsS]], Function[l,
+      denominatorsPrimeToQ[{locsS[[l]]["u"], pts[[l]], locsS[[l]]["kappa"], rhoLists[[l]]}, p] && red[locsS[[l]]["u"]] =!= 0 &&
+      red[frs["Bph"] /. u -> pts[[l]]] =!= 0 &&
+      If[locsS[[l]]["ramified"],
+        rootMultiplicity[fieldGF[p], gfMod[Gu0, p], gfMod[pts[[l]], p], u] === rootMultiplicity[F0, Gu0, pts[[l]], u],
+        red[Gu0 /. u -> pts[[l]]] =!= 0 &&
+          With[{rr = red /@ rhoLists[[l]]}, !MemberQ[rr, 0] && DuplicateFreeQ[rr]]]]]]];
+  (* a degree-0 divisor stays one: any mismatch between the specialized data
+     and the divisor (a place lost or moved) is an Internal error here, never
+     a certificate from the order test below *)
+  With[{d = brFrameIdealDegree[brSpecialDivisorIdeal[F0, frs, rs["roots"], locsS, rhoLists, cj], u, m]},
+    If[d =!= 0, throwInternal["brSpecialDivisorDegree", <|"degree" -> d, "sigma" -> sigma|>]]];
+  ctx = <|"B" -> frs["Bu"], "genus" -> g, "F" -> F0, "residues" -> rs["roots"],
+    "N" -> frs["Nh"], "Ep" -> frs["Eh"], "Bp" -> frs["Bph"], "goodQ" -> goodQ|>;
+  mk = Function[{Fx, Bx, red},
+    brSpecialDivisorIdeal[Fx,
+      Join[frs, <|"Bu" -> Bx, "Nh" -> red[frs["Nh"]], "Eh" -> red[frs["Eh"]], "Bph" -> red[frs["Bph"]]|>],
+      red /@ rs["roots"],
+      Map[Join[#, <|"u" -> red[#["u"]], "kappa" -> If[#["kappa"] === None, None, red[#["kappa"]]]|>] &, locsS],
+      Map[red, rhoLists, {2}], cj]];
+  torsionOrderWith[ctx, mk]];

@@ -1570,7 +1570,9 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [ ] compositum up to a locally constant sign (Sqrt[x^2(x+1)], Sqrt[x+1]); multi-kappa / kappa-in-denominator certificates
   - [ ] C: Log[x^2] as its own monomial (RischTranscendental leaves Int Log[x^2]/x unevaluated now)
   - [ ] PRE-EXISTING (found by the E6a review, also on main): PossibleZeroQ[Log[E^x] - x] is True (false zero; -2 Pi I for Im x in (Pi, 3 Pi]) so Integrate[(Log[E^x]-x) Sqrt[Log[x]] + 1/x, x] = Log[x] (wrong); Integrate[(Log[x^2]-2Log[x]) Exp[x^2], x] = Indeterminate (Automatic cascade; Method->Bronstein certifies); Integrate[Exp[x + Log[x^2]/4], x] -> uncaught Throw[..., "PIM"]
-  - [ ] brParamIntegrate -> LimitedIntegrate; #12 weights (zeta adjoined); #9 genus >= 1 special places; LogPart:171; Divisors multi-ramified (E5); Tower:logrel/exprel robustness
+  - [x] #9 genus >= 1 special places (E3: specialization + two primes with special places; goodQ hook) — v0.6548
+  - [ ] perf: D[Log[y+u] + 2 Log[y^2+u y+u^2]] on y^3 = u^3+u+1 takes 225 s (profile the torsion/principal steps)
+  - [ ] brParamIntegrate -> LimitedIntegrate; #12 weights (RootSum over w^m = 1, derivative = coordinate 1); LogPart:171; Divisors multi-ramified (E5); Tower:logrel/exprel robustness
 - [ ] Phase 4: constant fields (NF, Q(i)+trig, parameters)
 - [ ] Phase 5: radical anywhere (brDField, transcendental Risch over algebraic base, RDE on a curve over a tower)
 - [ ] Theory note docs/notes/bronstein_extensions.tex (E1–E6; LaTeX per user 2026-11-14), each adversarially reviewed — E6a–c written v0.6547, review pending

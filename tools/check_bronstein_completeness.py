@@ -43,7 +43,6 @@ BASELINE_M = {
     "Curve:radical-of-k",            # a radical below theta -> Phase 5
     "Divisors:multi-ramified",       # d = gcd(e, m) places over a special point -> Phase 3
     "LimitedIntegrate:logrel",       # undecided log relation -> Phase 0/2 structure theorem
-    "LogPart:special-genus",         # special residues, genus >= 1 -> Phase 3 (#9)
     "LogPart:special-radical",       # special residue over a radical extension of k -> Phase 3
     "LogPart:weights",               # m >= 3, weight >= 2 coordinates -> Phase 3 (#12)
     "Pipeline:transcendental",       # RischTranscendental undecided -> Phase 2

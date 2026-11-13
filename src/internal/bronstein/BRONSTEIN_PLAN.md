@@ -1472,3 +1472,7 @@ and a numeric sanity check before its phase starts.
     (`Int Log[x^2]/x = Log[x]^2`).
   - Sites: 40 → 39 (`Tower:exp-of-log-radical` gone; `cyclic-compositum` and
     `reducible-log` narrowed to the sign / multi-kappa cases).
+- **Phase 3, part 2 (v0.6548).** Gap #9 (`LogPart:special-genus`): residues at
+  special places on curves of positive genus. The torsion order comes from
+  specialisation plus Trager's two primes, with the special places on the
+  shifted frame and a `goodQ` hook in `goodPrime`. Theory E3. Sites: 39 → 38.

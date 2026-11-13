@@ -153,8 +153,10 @@ static void test_special_divisors(void) {
     BR_TRUE("Together[brComponentLogPart[TL1, cvL1, 1/((1 + brT1^2) x)][\"remainder\"]] === 0");
     BR_TRUE("Together[brComponentLogPart[TE2, cvE2, brT1/(1 + brT1^2)][\"remainder\"]] === 0");
     BR_TRUE("Together[brComponentLogPart[TE1, cvE1, 1/(1 + brT1)][\"remainder\"]] === 0");
-    BR_THROWS("brComponentLogPartSpecial[TG, cvG, 1/x, <|\"P\" -> 1, \"z\" -> z|>, <|\"ramified\" -> False, \"lambda\" -> 1|>]",
-              "Unimplemented", "residues at a special place on a curve of positive genus");
+    /* inconsistent data (the place at infinity of y^2 = theta^3 - 2 is
+       ramified) is an Internal error, never an endless prime search */
+    BR_THROWS("brComponentLogPartSpecial[TG, cvG, 1/x, <|\"P\" -> 1, \"z\" -> z|>, <|\"ramified\" -> False, \"kappa\" -> 1, \"u\" -> 1, \"lambda\" -> 1|>]",
+              "Internal", "brPointPlaceNotOnCurve");
 }
 
 static void test_log_part(void) {
