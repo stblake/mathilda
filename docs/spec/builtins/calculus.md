@@ -791,6 +791,22 @@ Limit[ExpIntegralEi[t - I], t -> -Infinity]                  (* -I Pi *)
 Limit[ExpIntegralEi[t - I a], t -> -Infinity, Assumptions -> a > 0]   (* -I Pi *)
 ```
 
+### ExpIntegralEi / CosIntegral / CoshIntegral at a zero of the argument (v0.6542)
+
+At `g = 0` these heads are `EulerGamma` plus a logarithm plus a convergent
+power series in `g`: `Ei[g] = EulerGamma + (Log[g] - Log[1/g])/2 + Sum g^k/(k k!)`
+(real on both sides of 0, since Ei is real on the negative axis),
+`Ci[g] = EulerGamma + Log[g] + ...`, `Chi[g] = EulerGamma + Log[g] + ...`. A limit
+at a zero of `g` substitutes the expansion truncated at two orders and accepts the
+result only when both agree. `Series[ExpIntegralEi[x], {x, 0, n}]` with no side
+given uses the two-sided log term; `Series` of `ExpIntegralEi[g]` with `g(x0) = 0`
+expands that representation.
+
+```
+Limit[ExpIntegralEi[y] - Log[-y], y -> 0, Direction -> "FromBelow"]   (* EulerGamma *)
+Series[ExpIntegralEi[x], {x, 0, 1}]   (* EulerGamma + (Log[x] - Log[1/x])/2 + x + O[x]^2 *)
+```
+
 ## LaplaceTransform
 `LaplaceTransform[f, t, s]` and `LaplaceTransform[f, t, s, Assumptions -> a]`
 give the one-sided transform ∫₀^∞ f(t) e^(−st) dt. Attributes: `Protected`.
@@ -3249,6 +3265,24 @@ after the imaginary part has been absorbed.
 Integrate[Sin[x] Sin[11 x]/(26/25 - 2/5 Cos[2 x]), {x, 0, Pi}]   (* 0.000418879 *)
 Integrate[1/(49/9 + Log[x]^2), {x, 0, 1}]                         (* 0.152514 *)
 ```
+
+#### Branch points of a real Log argument; periodic branches on a half-line (v0.6542)
+
+- The real zeros of the argument of `Log`, `Arg` or a fractional power in `F`
+  (a sign change of a real argument is a branch point: `Log` jumps by `I Pi`) are
+  breakpoints too: `Integrate[Log[5/6 + Log[x]], {x, 0, 1}]` carries the
+  `I Pi E^(-5/6)` from `(0, E^(-5/6))`.
+- The piecewise stage (Abs/Sign/step integrands) records when a breakpoint could
+  not be placed (a periodic root family on an infinite range, a Solve that does
+  not answer, a root still in `x`) and then declines rather than resolving a
+  piece at one test point. A symbolic periodic family on a finite range is placed
+  by ratio (`k` strictly between `(a - base)/P` and `(b - base)/P`). On a
+  half-line `[a, Infinity)` an integrand `E^(lam x) P(x)` with `P` periodic of
+  period `T` (checked by `PossibleZeroQ`) and `Re[lam] < 0` closes as
+  `Integrate[f, {x, a, a + T}]/(1 - E^(lam T))`:
+  `Integrate[Abs[Sin[a x]] E^(-s x), {x, 0, Infinity}, Assumptions -> a > 0 && s > 0]`
+  is `a (1 + E^(-Pi s/a))^2/((1 - E^(-2 Pi s/a)) (a^2 + s^2))`, and
+  `LaplaceTransform[Abs[Sin[t]], t, s]` is `(1 + E^(Pi s))/((-1 + E^(Pi s)) (1 + s^2))`.
 
 ### Complex line / contour integration
 

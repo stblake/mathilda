@@ -226,12 +226,85 @@ static void collect_bare_vars(const Expr* e, Expr*** vars, size_t* n, size_t* ca
  * such as "Reals" or "Complexes"). Returns 1 iff Reduce proves it False
  * (unsatisfiable); 0 otherwise (satisfiable, a residual formula, out of reach,
  * or no usable variables). `stmt` is consumed. */
+static int reduce_is_unsat(Expr* stmt, const char* domain, RefineBudget* b);
+
+/* A conjunction whose conjuncts fall into groups sharing no variable is
+ * unsatisfiable iff one of the groups is.  Deciding the groups apart keeps an
+ * irrelevant fact out of each Reduce call: Refine[Pi/a > 0, a > 0 && s > 0]
+ * asked Reduce[a > 0 && s > 0 && Pi/a <= 0, {a, s}, Reals], which the
+ * multivariate CAD leaves unevaluated (a transcendental coefficient), although
+ * the group {a > 0, Pi/a <= 0} alone is decided False.  Returns 1 (some group
+ * unsatisfiable), 0 (none proved), or -1 when the statement is not split
+ * (a single group); consumes stmt only when it returns 0 or 1. */
+static int reduce_unsat_by_components(Expr* stmt, const char* domain, RefineBudget* b) {
+    if (!stmt || stmt->type != EXPR_FUNCTION || head_name(stmt) != SYM_And) return -1;
+    size_t n = stmt->data.function.arg_count;
+    if (n < 2 || n > 64) return -1;
+    Expr*** cv = calloc(n, sizeof(Expr**));
+    size_t* cn = calloc(n, sizeof(size_t));
+    int* comp = malloc(n * sizeof(int));
+    for (size_t i = 0; i < n; i++) {
+        size_t cap = 0;
+        collect_bare_vars(stmt->data.function.args[i], &cv[i], &cn[i], &cap);
+        comp[i] = (int)i;
+    }
+    /* union conjuncts that share a variable (union-find, path halving) */
+    for (size_t i = 0; i < n; i++)
+        for (size_t j = i + 1; j < n; j++) {
+            bool share = false;
+            for (size_t p = 0; p < cn[i] && !share; p++)
+                for (size_t q = 0; q < cn[j] && !share; q++)
+                    if (expr_eq(cv[i][p], cv[j][q])) share = true;
+            if (!share) continue;
+            int ri = (int)i, rj = (int)j;
+            while (comp[ri] != ri) ri = comp[ri] = comp[comp[ri]];
+            while (comp[rj] != rj) rj = comp[rj] = comp[comp[rj]];
+            if (ri != rj) comp[rj] = ri;
+        }
+    int nroots = 0;
+    for (size_t i = 0; i < n; i++) {
+        int r = (int)i;
+        while (comp[r] != r) r = comp[r];
+        comp[i] = r;
+        if (r == (int)i) nroots++;
+    }
+    int result = -1;
+    if (nroots >= 2) {
+        result = 0;
+        for (size_t r = 0; r < n && result == 0; r++) {
+            if (comp[r] != (int)r) continue;
+            size_t m = 0;
+            for (size_t i = 0; i < n; i++) if (comp[i] == (int)r) m++;
+            Expr** part = malloc(m * sizeof(Expr*));
+            size_t k = 0;
+            for (size_t i = 0; i < n; i++)
+                if (comp[i] == (int)r) part[k++] = expr_copy(stmt->data.function.args[i]);
+            Expr* g = (m == 1) ? part[0]
+                               : expr_new_function(expr_new_symbol(SYM_And), part, m);
+            free(part);
+            if (reduce_is_unsat(g, domain, b) == 1) result = 1;
+        }
+        expr_free(stmt);
+    }
+    for (size_t i = 0; i < n; i++) {
+        for (size_t p = 0; p < cn[i]; p++) expr_free(cv[i][p]);
+        free(cv[i]);
+    }
+    free(cv); free(cn); free(comp);
+    return result;
+}
+
 static int reduce_is_unsat(Expr* stmt, const char* domain, RefineBudget* b) {
     if (!budget_ok(b)) { expr_free(stmt); return 0; }
 
     /* A statement that already evaluated to a literal decides directly. */
     if (is_false_sym(stmt)) { expr_free(stmt); return 1; }
     if (is_true_sym(stmt))  { expr_free(stmt); return 0; }
+
+    {
+        int c = reduce_unsat_by_components(stmt, domain, b);
+        if (c >= 0) return c;
+    }
 
     Expr** vars = NULL; size_t nv = 0, cap = 0;
     collect_bare_vars(stmt, &vars, &nv, &cap);

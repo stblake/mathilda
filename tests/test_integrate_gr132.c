@@ -235,6 +235,63 @@ static void test_symbolic_poles(void) {
 }
 
 /* -------------------------------------------------------------------------
+ * Branch structure the pieces could not see.
+ *  - Abs of a periodic function on a half-line: the breakpoints form an
+ *    infinite family, the piece was resolved at one test point and Abs was
+ *    dropped; now the piecewise stage declines unless the integrand is a
+ *    periodic function times a decaying exponential, which closes as one
+ *    period over 1 - E^(lam T).
+ *  - Two frequencies that may coincide (a <= b): the Meijer-G convolution's
+ *    Piecewise defaulted to 0 at a = b; the boundary is now integrated as its
+ *    own integral.
+ *  - Differentiation under the integral sign anchored at a base outside the
+ *    coupled region (a = 0 under 0 < xi < 2 a).
+ * ---------------------------------------------------------------------- */
+static void test_branch_structure(void) {
+    check_val("Integrate[Abs[Sin[(5*x)/8]]/E^((7*x)/4), {x, 0, Infinity}]", "{{}}",
+              "{0.1810502409365988}");                                  /* 17.13.34 */
+    check_val("Integrate[Abs[Cos[(5*x)/6]]/E^((3*x)/8), {x, 0, Infinity}]", "{{}}",
+              "{1.749778731619250}");                                   /* 17.13.35 */
+    check_val("Integrate[Abs[Sin[a x]] E^(-s x), {x, 0, Infinity}, Assumptions -> a > 0 && s > 0]",
+              "{{a -> 5/8, s -> 7/4}}", "{0.1810502409365988}");
+    check_val("LaplaceTransform[Abs[Sin[t]], t, s]", "{{s -> 2}}", "{0.2007483746}");
+    check_val("Integrate[(Sin[a*x]*Sin[b*x])/x^2, {x, 0, Infinity}, Assumptions -> (0 < a <= b)]",
+              "{{a -> 7/4, b -> 7/4}, {a -> 5/8, b -> 7/4}}",
+              "{2.748893571891069, 0.9817477042468103}");               /* 3.741.3a */
+    check_val("Integrate[(Sin[a*x]*Sin[b*x])/x^2, {x, 0, Infinity}, Assumptions -> (a > 0) && (b > 0)]",
+              "{{a -> 7/3, b -> 1/5}, {a -> 5/8, b -> 5/8}}",
+              "{0.3141592653589793, 0.9817477042468103}");              /* 3.828.2 */
+    check_val("Integrate[(BesselJ[nu, alpha*x]*Sin[beta*x])/x, {x, 0, Infinity}, "
+              "Assumptions -> (beta >= alpha) && (Re[nu] > -1) && (alpha > 0)]",
+              "{{alpha -> 5/6, beta -> 5/6, nu -> 5/4}, {alpha -> 5/4, beta -> 3, nu -> 7/4}}",
+              "{0.7391036260090294, 0.0152404552072658}");              /* 6.693.1b */
+    check_val("Integrate[(BesselJ[nu, alpha*x]*Sin[beta*x])/x, {x, 0, Infinity}, "
+              "Assumptions -> (beta <= alpha) && (Re[nu] > -1) && (alpha > 0) && (beta > 0)]",
+              "{{alpha -> 5/4, beta -> 5/4, nu -> 3/8}, {alpha -> 7/3, beta -> 5/8, nu -> 7/3}}",
+              "{1.481520621385605, 0.2534336185426715}");               /* 6.693.1a */
+    check_val("Integrate[(BesselJ[nu, alpha*x]*Cos[beta*x])/x, {x, 0, Infinity}, "
+              "Assumptions -> (beta <= alpha) && (Re[nu] > 0) && (alpha > 0) && (beta > 0)]",
+              "{{alpha -> 5/6, beta -> 5/6, nu -> 5/4}, {alpha -> 7/4, beta -> 1/5, nu -> 5/8}}",
+              "{-0.3061467458920718, 1.595902222475566}");              /* 6.693.2a */
+    check_val("Integrate[(Cos[x*xi]*Sin[a*x]^2)/x^2, {x, 0, Infinity}, "
+              "Assumptions -> (a > 0) && (0 < xi < 2*a)]",
+              "{{a -> 3/8, xi -> 1/5}, {a -> 5/4, xi -> 3/8}}",
+              "{0.4319689898685965, 1.668971097219577}");               /* 17.34.21a */
+    /* A real Log argument changing sign inside the range: the antiderivative
+     * jumps by I Pi x0 there (Newton-Leibniz now splits at the real zeros of
+     * a Log/power argument, and Limit expands Ei/Ci/Chi at a zero of their
+     * argument with the series that is real on both sides). */
+    check_val("Integrate[Log[5/6 + Log[x]], {x, 0, 1}]", "{{}}",
+              "{-0.8080422555200458 + 1.365330539109122 I}");          /* 4.229.5 */
+    check_val("Integrate[Log[x - 1], {x, 0, 2}]", "{{}}", "{-2 + Pi I}");
+    check_val("Limit[ExpIntegralEi[y] - Log[-y], y -> 0, Direction -> \"FromBelow\"]",
+              "{{}}", "{0.5772156649015329}");
+    check_val("Limit[CosIntegral[x] - Log[x], x -> 0]", "{{}}", "{0.5772156649015329}");
+    /* Refine with an irrelevant extra fact */
+    check_val("Boole[Refine[Pi/a > 0, a > 0 && s > 0]]", "{{}}", "{1}");
+}
+
+/* -------------------------------------------------------------------------
  * Rows already correct when this suite was written (fixed by earlier work);
  * pinned so they stay that way.
  * ---------------------------------------------------------------------- */
@@ -276,6 +333,7 @@ int main(void) {
     TEST(test_branch_cut_jumps);
     TEST(test_radical_branches);
     TEST(test_symbolic_poles);
+    TEST(test_branch_structure);
     TEST(test_already_fixed);
 
     if (g_failures) {

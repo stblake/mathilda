@@ -553,12 +553,79 @@ static double pick_rep(double lo, double hi, size_t idx) {
  * x = -1 is exponentially divergent and its inner Integrate leaked
  * Integrate::idiv while the stage ground on.  Unbounded parameters (no
  * assumption) accept every candidate, as before. */
-static bool base_in_domain(const ParamBound* pb, size_t np, const Expr* p, long c) {
+/* The closure of the assumed region with p -> c is nonempty.  The per-parameter
+ * bounds above miss a COUPLED region: under 0 < xi < 2 a the base a = 0 passes
+ * a's own bound a >= 0, but no point of the region has a = 0 (it forces
+ * 0 < xi < 0), and the back-integration from a = 0 crosses a = xi/2, where
+ * d/da Integral Cos[xi x] Sin[a x]^2/x^2 changes formula -- the stage returned
+ * a Pi/2 for Pi (2 a - xi)/4 (G&R 17.34.21a).  Strict relations are relaxed to
+ * their closures (the base may sit on the boundary). */
+static Expr* closure_of(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    const char* h = e->data.function.head->type == EXPR_SYMBOL
+                  ? e->data.function.head->data.symbol.name : NULL;
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) {
+        const Expr* ai = e->data.function.args[i];
+        if (h && strcmp(h, "Inequality") == 0 && (i & 1) && ai->type == EXPR_SYMBOL) {
+            const char* o = ai->data.symbol.name;
+            a[i] = mk_sym(strcmp(o, "Less") == 0 ? "LessEqual"
+                        : strcmp(o, "Greater") == 0 ? "GreaterEqual" : o);
+        } else a[i] = closure_of(ai);
+    }
+    const char* nh = h;
+    if (h && strcmp(h, "Less") == 0) nh = "LessEqual";
+    else if (h && strcmp(h, "Greater") == 0) nh = "GreaterEqual";
+    Expr* r = expr_new_function(nh ? mk_sym(nh) : expr_copy(e->data.function.head), a, n);
+    free(a);
+    return r;
+}
+
+static bool base_in_region(const Expr* assumptions, const Expr* p, const Expr* c) {
+    if (!assumptions) return true;
+    /* The base must be in the closure FOR EVERY assumed point (each point's
+     * p-segment to the base stays in the closure of its own slice): under
+     * 0 < xi < 2 a, the base a = 0 needs 0 <= xi <= 0, which the assumptions
+     * do not imply. */
+    /* a List of facts is their conjunction */
+    Expr* as_and = NULL;
+    if (head_name_is(assumptions, "List")) {
+        size_t n = assumptions->data.function.arg_count;
+        Expr** v = malloc((n ? n : 1) * sizeof(Expr*));
+        for (size_t i = 0; i < n; i++) v[i] = expr_copy(assumptions->data.function.args[i]);
+        as_and = eval_take(expr_new_function(mk_sym("And"), v, n));
+        free(v);
+    }
+    const Expr* A = as_and ? as_and : assumptions;
+    Expr* cl = closure_of(A);
+    Expr* sub = subst(cl, p, c);
+    expr_free(cl);
+    if (!sub) { if (as_and) expr_free(as_and); return false; }
+    Expr* r = eval_take(mk_fn2("Refine", expr_copy(sub), expr_copy((Expr*)A)));
+    bool ok = r && r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_True;
+    if (r) expr_free(r);
+    if (!ok) {
+        Expr* s2 = eval_take(mk_fn2("Simplify", expr_copy(sub), expr_copy((Expr*)A)));
+        ok = s2 && s2->type == EXPR_SYMBOL && s2->data.symbol.name == SYM_True;
+        if (s2) expr_free(s2);
+    }
+    expr_free(sub);
+    if (as_and) expr_free(as_and);
+    return ok;
+}
+
+static bool base_in_domain(const ParamBound* pb, size_t np, const Expr* p, long c,
+                           const Expr* assumptions) {
     for (size_t i = 0; i < np; i++) {
         if (pb[i].sym != p->data.symbol.name) continue;
-        return (double)c >= pb[i].lo && (double)c <= pb[i].hi;
+        if (!((double)c >= pb[i].lo && (double)c <= pb[i].hi)) return false;
+        break;
     }
-    return true;
+    Expr* ce = mk_int(c);
+    bool ok = base_in_region(assumptions, p, ce);
+    expr_free(ce);
+    return ok;
 }
 
 /* -------------------------------------------------------------------------
@@ -1348,6 +1415,7 @@ static bool find_base(const Expr* f, const Expr* x, const Expr* a, const Expr* b
     for (size_t i = 0; i < np; i++) {
         if (pb[i].sym == p->data.symbol.name) continue;
         Expr* q = mk_sym(pb[i].sym);
+        if (!base_in_region(assumptions, p, q)) { expr_free(q); continue; }
         Expr* fq = subst(f, p, q);
         bool zero = fq && is_zero_q(fq);
         if (fq) expr_free(fq);
@@ -1357,7 +1425,7 @@ static bool find_base(const Expr* f, const Expr* x, const Expr* a, const Expr* b
     /* 2. numeric zero base: f|_{p->c} identically 0 in x, c in {0, 1, -1}. */
     static const long CS[] = { 0, 1, -1 };
     for (size_t i = 0; i < sizeof(CS)/sizeof(CS[0]); i++) {
-        if (!base_in_domain(pb, np, p, CS[i])) continue;
+        if (!base_in_domain(pb, np, p, CS[i], assumptions)) continue;
         Expr* c = mk_int(CS[i]);
         Expr* fc = subst(f, p, c);
         bool zero = fc && is_zero_q(fc);
@@ -1376,7 +1444,7 @@ static bool find_base(const Expr* f, const Expr* x, const Expr* a, const Expr* b
      *    integral, so it is deliberately excluded here (the zero-integrand
      *    other-parameter base above already covers the q-collapse cases). */
     Expr* cands[2]; size_t nc = 0;
-    if (base_in_domain(pb, np, p, 0)) cands[nc++] = mk_int(0);
+    if (base_in_domain(pb, np, p, 0, assumptions)) cands[nc++] = mk_int(0);
     bool found = false;
     for (size_t i = 0; i < nc && !found; i++) {
         Expr* fp0 = subst(f, p, cands[i]);
@@ -2536,7 +2604,7 @@ static bool multi_base(const Expr* f, const Expr* x, const Expr* a, const Expr* 
                        Expr** out_p0, Expr** vals) {
     static const long CS[] = { 0, 1, -1 };
     for (size_t c = 0; c < sizeof(CS)/sizeof(CS[0]); c++) {
-        if (!base_in_domain(pb, np, p, CS[c])) continue;
+        if (!base_in_domain(pb, np, p, CS[c], assumptions)) continue;
         Expr* p0 = mk_int(CS[c]);
         Expr* tmp[8]; long got = 0; bool ok = true;
         for (long j = 0; j < order && ok; j++) {

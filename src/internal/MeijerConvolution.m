@@ -136,10 +136,42 @@ MeijerConvolution`Run[f_, x_Symbol, assum_] := Catch[Module[
         True, With[{r12 = MeijerConvolution`Conv[K1, K2, C, s, assum],
                     r21 = MeijerConvolution`Conv[K2, K1, C, s, assum],
                     c12 = Simplify[q < 1, assum], c21 = Simplify[q > 1, assum]},
-          Piecewise[{{r12, c12}, {r21, c21}}]]]],
+          MeijerConvolution`WithBoundary[
+            DeleteCases[{{r12, c12}, {r21, c21}}, {_, False}], q, f, x, assum]]]],
     res = MeijerConvolution`Conv[K1, K2, C, s, assum]];
   If[cond === True, res, ConditionalExpression[res, cond]]],
   MeijerConvolution`fail];
+
+(* The two orientations cover q < 1 and q > 1; the frequencies meet at q = 1,
+   where the integrand is a different integral (equal frequencies: a
+   non-oscillating part appears) and the theorem gives neither side's G.  A
+   Piecewise without that point read 0 there -- Integrate[Sin[a x] Sin[b x]/x^2,
+   {x, 0, Infinity}, Assumptions -> 0 < a <= b] was 0 at a = b, where it is
+   a Pi/2 (G&R 3.741.3a, 3.828.2, 6.693.1-2).  So q == 1 is solved for one
+   parameter, the boundary integrand integrated on its own, and its value is
+   the Piecewise default (the only point the arms leave); when the boundary
+   does not close, the point is excluded by ConditionalExpression instead. *)
+MeijerConvolution`WithBoundary[arms_, q_, f_, x_, assum_] := Module[
+  {vars, sols, sol, b0, as0},
+  If[arms === {}, Throw[$Failed, MeijerConvolution`fail]];
+  vars = Select[Variables[q], FreeQ[#, x] &];
+  sols = Quiet[Solve[q == 1, vars]];
+  (* a solution whose substituted assumptions are satisfiable: a = -b solves
+     q == 1 too, but 0 < -b <= b has no point *)
+  sol = If[ListQ[sols],
+    SelectFirst[sols, (ListQ[#] && With[{a0 = Simplify[assum /. #]},
+        a0 =!= False && (a0 === True ||
+          With[{fi = Quiet[FindInstance[a0, Union[Cases[a0, sy_Symbol /; Context[sy] =!= "System`",
+                                                          {0, Infinity}, Heads -> False]]]]},
+            ListQ[fi] && fi =!= {}])]) &, None], None];
+  If[sol =!= None,
+    as0 = Simplify[assum /. sol];
+    b0 = Quiet[Integrate[f /. sol, {x, 0, Infinity}, Assumptions -> as0]];
+    If[FreeQ[b0, Integrate | Indeterminate | ComplexInfinity | DirectedInfinity] && FreeQ[b0, x],
+      (* the boundary value, written in the original parameters *)
+      Return[Piecewise[arms, Evaluate[b0]], Module]]];
+  With[{pw = If[Length[arms] == 1, arms[[1, 1]], Piecewise[Evaluate[Most[arms]], Evaluate[arms[[-1, 1]]]]]},
+    ConditionalExpression[pw, q != 1]]];
 
 (* The convolution theorem with u^(s-1) absorbed into the first kernel. *)
 MeijerConvolution`Conv[K1_, K2_, C_, s_, assum_] := Module[

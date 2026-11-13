@@ -1614,17 +1614,19 @@ static void test_series_expintegralei_at_zero(void) {
     setup_full();
     assert_fullform(
         "Series[ExpIntegralEi[x], {x, 0, 2}]",
+        /* no side given: the log term valid on both sides of 0 (Ei is real
+         * on the negative axis), Log[x] off it and Log[Abs[x]] on it */
         "SeriesData[x, 0, "
-        "List[Plus[EulerGamma, Log[x]], 1, Rational[1, 4]], 0, 3, 1]");
+        "List[Plus[EulerGamma, Times[Rational[1, 2], Plus[Times[-1, Log[Power[x, -1]]], Log[x]]]], 1, Rational[1, 4]], 0, 3, 1]");
     /* Higher order exercises 1/(k k!): 1/18, 1/96, 1/600. */
     assert_fullform(
         "Series[ExpIntegralEi[x], {x, 0, 5}]",
-        "SeriesData[x, 0, List[Plus[EulerGamma, Log[x]], 1, Rational[1, 4], "
+        "SeriesData[x, 0, List[Plus[EulerGamma, Times[Rational[1, 2], Plus[Times[-1, Log[Power[x, -1]]], Log[x]]]], 1, Rational[1, 4], "
         "Rational[1, 18], Rational[1, 96], Rational[1, 600]], 0, 6, 1]");
     /* Order 0: just the constant + log term. */
     assert_fullform(
         "Series[ExpIntegralEi[x], {x, 0, 0}]",
-        "SeriesData[x, 0, List[Plus[EulerGamma, Log[x]]], 0, 1, 1]");
+        "SeriesData[x, 0, List[Plus[EulerGamma, Times[Rational[1, 2], Plus[Times[-1, Log[Power[x, -1]]], Log[x]]]]], 0, 1, 1]");
     /* Assumptions -> x < 0: the branch term becomes EulerGamma + Log[-x];
      * the regular Taylor coefficients are unchanged. */
     assert_fullform(

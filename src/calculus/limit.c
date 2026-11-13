@@ -352,6 +352,7 @@ static bool  contains_head_symbol(Expr* e, const char* head_sym);
 static Expr* layer_maxmin_bounded(Expr* f, LimitCtx* ctx);
 static Expr* layer_param_power(Expr* f, LimitCtx* ctx);
 static Expr* layer_branch_cut_side(Expr* f, LimitCtx* ctx);
+static Expr* layer_logsingular_special(Expr* f, LimitCtx* ctx);
 #define LIMIT_UNKNOWN_GROWTH INT64_MAX
 static int64_t growth_exponent_upper(Expr* e, Expr* x);
 static int64_t growth_exponent_exact(Expr* e, Expr* x);
@@ -4558,6 +4559,7 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
      * limit point, approached by a non-real argument: substitution reads the
      * principal value on the cut, which is one side only. Must pre-empt every
      * substituting layer below. */
+    TRY(LIMIT_M_SUBSTITUTION, layer_logsingular_special(f, ctx));
     TRY(LIMIT_M_SUBSTITUTION, layer_branch_cut_side(f, ctx));
     TRY(LIMIT_M_SUBSTITUTION, layer_param_power(f, ctx));
 
@@ -5191,6 +5193,97 @@ static Expr* cut_one_sided(Expr* f, const CutSet* cs, LimitCtx* ctx, int side) {
     for (size_t i = 0; i < cs->n; i++) if (repl[i]) expr_free(repl[i]);
     free(repl);
     return r;
+}
+
+/* ---------------------------------------------------------------------- */
+/* Layer -- Ei / Ci / Chi at a zero of their argument                      */
+/*                                                                         */
+/* At g = 0 these heads are EulerGamma + a logarithm + a convergent power  */
+/* series in g (DLMF 6.6.1-2, 6.6.5):                                      */
+/*   Ei[g]  = EulerGamma + (Log[g] - Log[1/g])/2 + Sum g^k/(k k!)          */
+/*   Ci[g]  = EulerGamma + Log[g] + Sum (-1)^k g^(2k)/(2k (2k)!)           */
+/*   Chi[g] = EulerGamma + Log[g] + Sum g^(2k)/(2k (2k)!)                  */
+/* (Ei is real on the negative axis, hence the symmetric log; Ci and Chi   */
+/* take the principal Log there.)  A limit in which the log singularity    */
+/* cancels against another log -- an antiderivative x Log[g] - c Ei[g] at  */
+/* a zero of g -- is then an ordinary limit of logarithms.  The series is  */
+/* truncated at two orders and the limit accepted only when they agree, so */
+/* a factor that amplifies the remainder is caught as a disagreement.      */
+/* ---------------------------------------------------------------------- */
+static Expr* ls_find(Expr* e, LimitCtx* ctx, int* kind) {
+    if (!e || e->type != EXPR_FUNCTION || free_of(e, ctx->x)) return NULL;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) {
+        Expr* r = ls_find(e->data.function.args[i], ctx, kind);
+        if (r) return r;
+    }
+    if (e->data.function.arg_count != 1) return NULL;
+    int k = head_is(e, SYM_ExpIntegralEi) ? 1 : head_is(e, SYM_CosIntegral) ? 2
+          : head_is(e, SYM_CoshIntegral) ? 3 : 0;
+    if (!k) return NULL;
+    Expr* g = e->data.function.args[0];
+    if (free_of(g, ctx->x)) return NULL;
+    Expr* g0 = subst_eval(g, ctx->x, ctx->point);
+    bool z = g0 && is_lit_zero(g0);
+    if (g0) expr_free(g0);
+    if (!z) return NULL;
+    *kind = k;
+    return e;
+}
+
+static Expr* ls_expansion(Expr* g, int kind, int K) {
+    Expr* lg = mk_fn1("Log", expr_copy(g));
+    Expr* logpart = (kind == 1)
+        ? mk_times(make_rational(1, 2),
+                   mk_fn2("Plus", lg, mk_neg(mk_fn1("Log", mk_fn2("Power", expr_copy(g), mk_int(-1))))))
+        : lg;
+    Expr* acc = mk_fn2("Plus", mk_sym("EulerGamma"), logpart);
+    for (int k = 1; k <= K; k++) {
+        int p = (kind == 1) ? k : 2 * k;
+        Expr* fact = simp(mk_fn1("Factorial", mk_int(p)));
+        Expr* den = mk_times(mk_int(p), fact);
+        Expr* term = mk_times(mk_fn2("Power", den, mk_int(-1)),
+                              mk_fn2("Power", expr_copy(g), mk_int(p)));
+        if (kind == 2 && (k & 1)) term = mk_neg(term);
+        acc = mk_fn2("Plus", acc, term);
+    }
+    return acc;
+}
+
+static Expr* layer_logsingular_special(Expr* f, LimitCtx* ctx) {
+    if (!is_numeric_literal_point(ctx->point) &&
+        !(expr_is_numeric_quantity(ctx->point) && cut_numeric_sign(ctx->point) != 2))
+        return NULL;
+    if (ctx->depth > 40) return NULL;
+    int kind = 0;
+    Expr* node = ls_find(f, ctx, &kind);
+    if (!node) return NULL;
+    Expr* g = node->data.function.args[0];
+    Expr* lim[2] = { NULL, NULL };
+    static const int KS[2] = { 3, 6 };
+    for (int t = 0; t < 2; t++) {
+        Expr* rep = ls_expansion(g, kind, KS[t]);
+        CutSet one = { NULL, 0, 0 };
+        cut_push(&one, node, CUT_LOG, mk_int(0));
+        Expr* reps[1] = { rep };
+        Expr* f2 = simp(cut_replace_all(f, &one, reps));
+        cut_set_free(&one);
+        expr_free(rep);
+        LimitCtx sub = *ctx; sub.depth += 1;
+        lim[t] = f2 ? compute_limit(f2, &sub) : NULL;
+        if (f2) expr_free(f2);
+        if (!lim[t]) break;
+    }
+    Expr* out = NULL;
+    if (lim[0] && lim[1]) {
+        Expr* d = simp(mk_fn2("Plus", expr_copy(lim[0]), mk_neg(expr_copy(lim[1]))));
+        bool same = expr_eq(lim[0], lim[1]) || is_lit_zero(d) ||
+                    (d && zero_test_decide(d) == ZERO_TEST_TRUE);
+        if (d) expr_free(d);
+        if (same) { out = lim[1]; lim[1] = NULL; }
+    }
+    if (lim[0]) expr_free(lim[0]);
+    if (lim[1]) expr_free(lim[1]);
+    return out;
 }
 
 static Expr* layer_branch_cut_side(Expr* f, LimitCtx* ctx) {

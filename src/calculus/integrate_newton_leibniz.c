@@ -584,6 +584,14 @@ static void nl_collect_poles(Expr* expr, Expr* x, Expr* a, Expr* b, PoleSet* s, 
  * changes nothing, so the set may over-approximate the cuts.  A crossing set
  * the root finder cannot decide leaves s->undecidable for the caller, which
  * then forces the numeric cross-check rather than trusting F(b) - F(a). */
+/* g is a polynomial in x (PolynomialQ). */
+static bool nl_is_polynomial_in(const Expr* g, Expr* x) {
+    Expr* r = eval_take(mk_fn2("PolynomialQ", expr_copy((Expr*)g), expr_copy(x)));
+    bool ok = r && r->type == EXPR_SYMBOL && strcmp(r->data.symbol.name, "True") == 0;
+    if (r) expr_free(r);
+    return ok;
+}
+
 /* True iff F holds a node nl_collect_cuts would scan for crossings. */
 static bool nl_has_cut_node(const Expr* e, Expr* x) {
     if (!e || e->type != EXPR_FUNCTION || !contains_symbol(e, x)) return false;
@@ -609,12 +617,22 @@ static void nl_collect_cuts(Expr* e, Expr* x, Expr* a, Expr* b, PoleSet* s, Expr
                  !contains_symbol(e->data.function.args[1], x) &&
                  (head_name_is(e->data.function.args[1], "Rational") ||
                   e->data.function.args[1]->type == EXPR_REAL))) &&
-               contains_head(e->data.function.args[0], "Complex")) {
-        Expr* im = eval_take(mk_fn2("Refine",
-                       mk_fn1("ComplexExpand", mk_fn1("Im", expr_copy(e->data.function.args[0]))),
-                       mk_fn2("Element", expr_copy(x), mk_sym("Reals"))));
-        if (im && contains_symbol(im, x)) nl_add_zero_roots(im, x, a, b, s, as);
-        if (im) expr_free(im);
+               contains_symbol(e->data.function.args[0], x)) {
+        Expr* g = e->data.function.args[0];
+        if (contains_head(g, "Complex")) {
+            Expr* im = eval_take(mk_fn2("Refine",
+                           mk_fn1("ComplexExpand", mk_fn1("Im", expr_copy(g))),
+                           mk_fn2("Element", expr_copy(x), mk_sym("Reals"))));
+            if (im && contains_symbol(im, x)) nl_add_zero_roots(im, x, a, b, s, as);
+            if (im) expr_free(im);
+        } else if (!head_name_is(e, "Power") || !nl_is_polynomial_in(g, x)) {
+            /* A REAL argument is on the cut where it is negative: the branch
+             * jumps (by I Pi for Log, by the root's phase for a power) where
+             * the argument changes sign.  x Log[5 + 6 Log[x]] jumps by
+             * I Pi E^(-5/6) at x = E^(-5/6) (G&R 4.229.5).  (A polynomial
+             * radicand's zeros are already the radical-hazard check's.) */
+            nl_add_zero_roots(g, x, a, b, s, as);
+        }
     }
     for (size_t i = 0; i < ac; i++)
         nl_collect_cuts(e->data.function.args[i], x, a, b, s, as);

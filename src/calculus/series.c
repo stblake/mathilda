@@ -6397,12 +6397,25 @@ static Expr* try_series_ei_at_zero(Expr* f, Expr* x, int64_t n, int x_sign) {
 
     size_t ncoef = (size_t)n + 1;            /* exponents 0 .. n */
     Expr** coefs = calloc(ncoef, sizeof(Expr*));
-    /* x^0 coefficient: EulerGamma + Log[x] on the principal (x > 0) branch,
-     * or EulerGamma + Log[-x] when the Assumptions option forces x < 0. */
-    Expr* logarg = (x_sign < 0)
-                 ? mk_times(expr_new_integer(-1), expr_copy(x))
-                 : expr_copy(x);
-    coefs[0] = simp(mk_plus(mk_symbol("EulerGamma"), mk_fn1("Log", logarg)));
+    /* x^0 coefficient.  Ei is REAL on the negative axis (Ei(x) for x < 0 is
+     * -E1(-x)), so EulerGamma + Log[x] is its expansion only for x > 0; for
+     * x < 0 it carries a spurious I Pi.  With the side known the log is
+     * Log[x] or Log[-x]; otherwise the expansion valid on both sides and off
+     * the axis is EulerGamma + (Log[x] - Log[1/x])/2 (= Log[x] off the
+     * negative axis, Log[Abs[x]] on it).  Before, Limit[F, x -> x0] for an
+     * antiderivative carrying Ei[g] - g-scaled Log[g] picked up -I Pi from
+     * above the zero of g (G&R 4.229.5). */
+    Expr* logpart;
+    if (x_sign < 0)
+        logpart = mk_fn1("Log", mk_times(expr_new_integer(-1), expr_copy(x)));
+    else if (x_sign > 0)
+        logpart = mk_fn1("Log", expr_copy(x));
+    else
+        logpart = mk_times(make_rational(1, 2),
+                    mk_plus(mk_fn1("Log", expr_copy(x)),
+                            mk_times(expr_new_integer(-1),
+                                     mk_fn1("Log", mk_power(expr_copy(x), expr_new_integer(-1))))));
+    coefs[0] = simp(mk_plus(mk_symbol("EulerGamma"), logpart));
     /* x^k coefficient: 1/(k*k!), exact rational via the bigint Factorial. */
     for (int64_t k = 1; k <= n; k++) {
         Expr* kfact = eval_and_free(mk_fn1("Factorial", expr_new_integer(k)));
@@ -7225,6 +7238,7 @@ static Expr* meijerg_series_find(const Expr* f, Expr* x, bool at0, const Expr** 
     return NULL;
 }
 
+static Expr* series_subst_structural(const Expr* e, const Expr* from, const Expr* to);
 static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leading_only,
                               const AssumeCtx* assume) {
     /* Sign of the expansion variable under the assumptions: -1 forces the
@@ -7731,6 +7745,47 @@ static Expr* do_series_single(Expr* f, Expr* x, Expr* x0, int64_t n, bool leadin
      * whose x^1 coefficient is a series in 1/Log[x]. Emit it directly so
      * naive Taylor-via-D does not hit (and leak) the 1/0 pole of the second
      * derivative. */
+    /* ExpIntegralEi[g] with g(x0) = 0 and g not the bare variable: expand the
+     * explicit representation EulerGamma + (Log[g] - Log[1/g])/2 +
+     * Sum_{k>=1} g^k/(k k!) (valid on both sides of g's zero and off the axis;
+     * see try_series_ei_at_zero), whose pieces the composition rules expand.
+     * Without it Series[ExpIntegralEi[(5 + 6 Log[x])/6], {x, E^(-5/6), 1}]
+     * stayed unevaluated and Limit fell back on a form with a spurious I Pi. */
+    if (!leading_only && has_symbol_head(f_eval, "ExpIntegralEi") &&
+        f_eval->data.function.arg_count == 1 &&
+        !expr_eq(f_eval->data.function.args[0], x) &&
+        !expr_free_of(f_eval->data.function.args[0], x) &&
+        !has_infinity(x0_eval)) {
+        Expr* g = f_eval->data.function.args[0];
+        Expr* g0 = simp(series_subst_structural(g, x, x0_eval));
+        bool vanishes = g0 && is_lit_zero(g0);
+        if (g0) expr_free(g0);
+        if (vanishes) {
+            int64_t nt = (n < 0 ? 0 : n) + 1;
+            Expr** terms = calloc((size_t)nt + 2, sizeof(Expr*));
+            size_t nterm = 0;
+            terms[nterm++] = mk_symbol("EulerGamma");
+            terms[nterm++] = mk_times(make_rational(1, 2),
+                mk_plus(mk_fn1("Log", expr_copy(g)),
+                        mk_times(expr_new_integer(-1),
+                                 mk_fn1("Log", mk_power(expr_copy(g), expr_new_integer(-1))))));
+            for (int64_t k = 1; k <= nt; k++) {
+                Expr* kfact = eval_and_free(mk_fn1("Factorial", expr_new_integer(k)));
+                Expr* denom = eval_and_free(mk_times(expr_new_integer(k), kfact));
+                terms[nterm++] = mk_times(mk_power(denom, expr_new_integer(-1)),
+                                          mk_power(expr_copy(g), expr_new_integer(k)));
+            }
+            Expr* rep = simp(expr_new_function(mk_symbol("Plus"), terms, nterm));
+            free(terms);
+            Expr* r = rep ? do_series_single(rep, x, x0_eval, n, leading_only, assume) : NULL;
+            if (rep) expr_free(rep);
+            if (r) {
+                expr_free(f_eval);
+                expr_free(x0_eval);
+                return r;
+            }
+        }
+    }
     if (is_lit_zero(x0_eval)) {
         Expr* li = try_series_logintegral_at_zero(f_eval, x, leading_only ? 1 : n, x_sign);
         if (li) {

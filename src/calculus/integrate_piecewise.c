@@ -35,6 +35,10 @@ static Expr* mk_fn1(const char* head, Expr* a) {
 static Expr* mk_fn2(const char* head, Expr* a, Expr* b) {
     Expr* args[2] = { a, b }; return mk_fn(head, args, 2);
 }
+static Expr* mk_fn3(const char* head, Expr* a, Expr* b, Expr* c) {
+    Expr* args[3] = { a, b, c }; return mk_fn(head, args, 3);
+}
+static Expr* mk_sym(const char* s) { return expr_new_symbol(s); }
 static Expr* neg_of(Expr* g) { return mk_fn2("Times", expr_new_integer(-1), g); }
 
 /* Evaluate `call` (taking ownership) and return the result. */
@@ -132,10 +136,21 @@ static bool lt_bound(const Expr* lo, const Expr* c, const Expr* as) {
 
 /* ---- breakpoint set ----------------------------------------------------- */
 
-typedef struct { Expr** pts; int n, cap; } BPSet;
+/* `incomplete`: some breakpoint could not be placed -- a periodic root family
+ * on an infinite (or non-numeric) range, a Solve that did not answer, a root
+ * that still mentions x.  The pieces between the known breakpoints are then
+ * not branch-constant, and resolving one at its test point would silently pick
+ * one branch for the whole piece: Integrate[Abs[Sin[x]] E^-x, {x, 0, Infinity}]
+ * was 1/2, the integral of Sin[x] E^-x (G&R 17.13.34-35). */
+typedef struct { Expr** pts; int n, cap; bool incomplete;
+                 /* a periodic family's numeric period, when one was seen */
+                 double period; bool has_period; Expr* period_exact; } BPSet;
 
-static void bp_init(BPSet* s) { s->pts = NULL; s->n = 0; s->cap = 0; }
+static void bp_init(BPSet* s) { s->pts = NULL; s->n = 0; s->cap = 0; s->incomplete = false;
+                                 s->period = 0.0; s->has_period = false;
+                                 s->period_exact = NULL; }
 static void bp_free(BPSet* s) {
+    if (s->period_exact) { expr_free(s->period_exact); s->period_exact = NULL; }
     for (int i = 0; i < s->n; i++) expr_free(s->pts[i]);
     free(s->pts);
     s->pts = NULL; s->n = 0; s->cap = 0;
@@ -203,9 +218,7 @@ static const Expr* integer_param_of(const Expr* cond) {
 static void enum_periodic_root(const Expr* body, const Expr* param,
                                const Expr* a, const Expr* b, BPSet* s) {
     double av, bv;
-    if (!num_double(a, &av) || !num_double(b, &bv)) return;
-    if (bv < av) { double t = av; av = bv; bv = t; }
-
+    bool afin = num_double(a, &av), bfin = num_double(b, &bv);
     Expr* z = expr_new_integer(0);
     Expr* one = expr_new_integer(1);
     Expr* base = subst(body, param, z);
@@ -214,15 +227,66 @@ static void enum_periodic_root(const Expr* body, const Expr* param,
     double basev, b1v;
     bool okb = base && num_double(base, &basev);
     bool ok1 = b1 && num_double(b1, &b1v);
+    if (!okb || !ok1) {
+        /* A symbolic family (x = Pi/a + 2 Pi k/a).  The period is recorded for
+         * the half-line rule, which proves its sign under the assumptions.  On a
+         * finite range the members are still placeable by RATIO: base + k P lies
+         * strictly inside (a, b) iff k lies strictly between (a - base)/P and
+         * (b - base)/P, and those ratios are numbers whenever the range is
+         * measured in periods ([0, 2 Pi/a] for Sin[a x]). */
+        Expr* P = (base && b1) ? eval_take(mk_fn2("Plus", cp(b1), neg_of(cp(base)))) : NULL;
+        if (P && !s->period_exact) s->period_exact = cp(P);
+        bool placed = false;
+        if (P && !is_pos_infinity(a) && !is_neg_infinity(a) &&
+            !is_pos_infinity(b) && !is_neg_infinity(b)) {
+            Expr* r0 = eval_take(mk_fn1("Simplify", mk_fn2("Times", mk_fn2("Plus", cp(a), neg_of(cp(base))),
+                                          mk_fn2("Power", cp(P), expr_new_integer(-1)))));
+            Expr* r1 = eval_take(mk_fn1("Simplify", mk_fn2("Times", mk_fn2("Plus", cp(b), neg_of(cp(base))),
+                                          mk_fn2("Power", cp(P), expr_new_integer(-1)))));
+            double k0, k1;
+            if (r0 && r1 && num_double(r0, &k0) && num_double(r1, &k1) &&
+                fabs(k1 - k0) < 100000.0) {
+                double lo = fmin(k0, k1), hi = fmax(k0, k1);
+                for (long k = (long)floor(lo) - 1; k <= (long)ceil(hi) + 1; k++) {
+                    if ((double)k <= lo + 1e-9 || (double)k >= hi - 1e-9) continue;
+                    Expr* kk = expr_new_integer((int64_t)k);
+                    Expr* root = subst(body, param, kk);
+                    expr_free(kk);
+                    if (root) bp_add(s, root);
+                }
+                placed = true;
+            }
+            if (r0) expr_free(r0);
+            if (r1) expr_free(r1);
+        }
+        if (P) expr_free(P);
+        if (base) expr_free(base);
+        if (b1) expr_free(b1);
+        if (!placed) s->incomplete = true;
+        return;
+    }
     if (base) expr_free(base);
     if (b1) expr_free(b1);
-    if (!okb || !ok1) return;
 
     double period = b1v - basev;
-    if (fabs(period) < 1e-12) return;
+    if (fabs(period) < 1e-12) { s->incomplete = true; return; }
+    if (!s->has_period || fabs(fabs(period) - s->period) > 1e-12) {
+        /* exact period |body(1) - body(0)|; two families of different
+         * periods leave the one seen last (the caller checks periodicity) */
+        Expr* z0 = expr_new_integer(0), *o1 = expr_new_integer(1);
+        Expr* e0 = subst(body, param, z0), *e1 = subst(body, param, o1);
+        expr_free(z0); expr_free(o1);
+        if (e0 && e1) {
+            if (s->period_exact) expr_free(s->period_exact);
+            s->period_exact = eval_take(mk_fn1("Abs", mk_fn2("Plus", e1, neg_of(e0))));
+        } else { if (e0) expr_free(e0); if (e1) expr_free(e1); }
+    }
+    s->period = fabs(period); s->has_period = true;
+    if (!afin || !bfin) { s->incomplete = true; return; }   /* infinitely many */
+    if (bv < av) { double t = av; av = bv; bv = t; }
     double k0 = (av - basev) / period, k1 = (bv - basev) / period;
     double klo = floor(fmin(k0, k1)) - 1.0, khi = ceil(fmax(k0, k1)) + 1.0;
-    if (khi - klo > 100000.0) return;        /* refuse an absurd range */
+    if (khi - klo > 100000.0) { s->incomplete = true; return; }   /* absurd range */
     for (long k = (long)klo; k <= (long)khi; k++) {
         double pt = basev + period * (double)k;
         if (pt <= av + 1e-9 || pt >= bv - 1e-9) continue;   /* strict interior */
@@ -259,13 +323,17 @@ static void solve_roots(const Expr* g, const Expr* x, const Expr* a,
                     if (param && !contains_symbol(body, x) &&
                         !contains_head(body, "Complex"))
                         enum_periodic_root(body, param, a, b, s);
+                    else if (!contains_head(body, "Complex"))
+                        s->incomplete = true;
                     continue;
                 }
-                if (contains_head(root, "Complex") || contains_symbol(root, x))
-                    continue;
+                if (contains_head(root, "Complex")) continue;   /* not real */
+                if (contains_symbol(root, x)) { s->incomplete = true; continue; }
                 bp_add(s, cp(root));
             }
         }
+    } else {
+        s->incomplete = true;                       /* Solve did not answer */
     }
     if (sol) expr_free(sol);
 }
@@ -545,6 +613,119 @@ static Expr* integrate_piece(const Expr* piece, const Expr* x,
     return v;
 }
 
+/* Integrate[f, {x, a, Infinity}] for f = E^(lam x) P(x) with P periodic of
+ * period T and Re[lam] < 0:
+ *     Integral_a^Infinity f = Integral_a^(a+T) f / (1 - E^(lam T)),
+ * the sum over periods of a geometric series (each period is the first one
+ * times E^(lam k T)).  P may carry Abs/Sign/step heads whose breakpoints form
+ * an infinite periodic family (Abs[Sin[a x]]), which the piece-by-piece path
+ * cannot enumerate; the single period [a, a + T] it can.  NULL unless the
+ * shape is certified: lam from the exponential factors (x-linear exponents),
+ * P(x + T) - P(x) == 0 by PossibleZeroQ, Re[lam] < 0 under the assumptions,
+ * and the one-period integral closes. */
+static void collect_exp_rate(const Expr* e, const Expr* x, Expr** acc, bool* ok) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (head_name_is(e, "Times")) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            collect_exp_rate(e->data.function.args[i], x, acc, ok);
+        return;
+    }
+    if (head_name_is(e, "Power") && e->data.function.arg_count == 2 &&
+        sym_is(e->data.function.args[0], "E") &&
+        contains_symbol(e->data.function.args[1], x)) {
+        Expr* c = eval_take(mk_fn2("Coefficient", cp(e->data.function.args[1]), cp((Expr*)x)));
+        Expr* rest = eval_take(mk_fn1("Expand", mk_fn2("Plus", cp(e->data.function.args[1]),
+                                     neg_of(mk_fn2("Times", cp(c), cp((Expr*)x))))));
+        if (!c || !rest || contains_symbol(c, x) || contains_symbol(rest, x)) *ok = false;
+        else *acc = eval_take(mk_fn2("Plus", *acc, cp(c)));
+        if (c) expr_free(c);
+        if (rest) expr_free(rest);
+    }
+}
+
+static bool has_free_param(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL)
+        return !(sym_is(e, "Pi") || sym_is(e, "E") || sym_is(e, "I"));
+    if (e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_free_param(e->data.function.args[i])) return true;
+    return false;
+}
+static size_t leaf_count(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 1;
+    size_t n = 1;
+    for (size_t i = 0; i < e->data.function.arg_count; i++) n += leaf_count(e->data.function.args[i]);
+    return n;
+}
+
+static Expr* periodic_exponential_halfline(const Expr* f, const Expr* x, const Expr* a,
+                                           const Expr* b, const Expr* T_in,
+                                           const Expr* assumptions) {
+    if (!is_pos_infinity((Expr*)b) || is_neg_infinity((Expr*)a) || contains_symbol(a, x))
+        return NULL;
+    /* T > 0 (a symbolic period |2 Pi/a| is refined under the assumptions) */
+    Expr* Tp = eval_take(assumptions ? mk_fn2("Refine", mk_fn1("Abs", cp(T_in)), cp((Expr*)assumptions))
+                                     : mk_fn1("Abs", cp(T_in)));
+    if (!Tp || !refine_true(mk_fn2("Greater", cp(Tp), expr_new_integer(0)), assumptions)) {
+        if (Tp) expr_free(Tp);
+        return NULL;
+    }
+    Expr* T = Tp;   /* owned from here: freed on every exit below */
+    Expr* lam = expr_new_integer(0);
+    bool ok = true;
+    collect_exp_rate(f, x, &lam, &ok);
+    if (!ok || (lam->type == EXPR_INTEGER && lam->data.integer == 0)) {
+        expr_free(lam); expr_free(T); return NULL;
+    }
+    /* Re[lam] < 0 over the whole region */
+    Expr* neg = mk_fn2("Less", mk_fn1("Re", cp(lam)), expr_new_integer(0));
+    if (!refine_true(neg, assumptions)) { expr_free(lam); expr_free(T); return NULL; }
+    Expr* P = eval_take(mk_fn2("Times", cp((Expr*)f),
+                  mk_fn2("Power", mk_sym("E"), neg_of(mk_fn2("Times", cp(lam), cp((Expr*)x))))));
+    Expr* xT = eval_take(mk_fn2("Plus", cp((Expr*)x), cp(T)));
+    Expr* shifted = subst(P, x, xT);
+    expr_free(xT);
+    Expr* diff = eval_take(mk_fn1("PossibleZeroQ", mk_fn2("Plus", shifted, neg_of(cp(P)))));
+    bool periodic = diff && sym_is(diff, "True");
+    if (diff) expr_free(diff);
+    expr_free(P);
+    if (!periodic) { expr_free(lam); expr_free(T); return NULL; }
+    Expr* top = eval_take(mk_fn2("Plus", cp((Expr*)a), cp(T)));
+    /* the one-period integral through the full Integrate: its breakpoints on
+     * the finite [a, a + T] enumerate, so the branch machinery closes it */
+    Expr* spec = mk_fn3("List", cp((Expr*)x), cp((Expr*)a), top);
+    Expr* call = assumptions
+        ? expr_new_function(mk_sym("Integrate"), (Expr*[]){ cp((Expr*)f), spec,
+              mk_fn2("Rule", mk_sym("Assumptions"), cp((Expr*)assumptions)) }, 3)
+        : mk_fn2("Integrate", cp((Expr*)f), spec);
+    Expr* one = eval_take(mk_fn1("Quiet", call));
+    if (!one || contains_head(one, "Integrate") || contains_symbol(one, x)) {
+        if (one) expr_free(one);
+        expr_free(lam); expr_free(T); return NULL;
+    }
+    Expr* den = mk_fn2("Plus", expr_new_integer(1),
+                       neg_of(mk_fn2("Power", mk_sym("E"), mk_fn2("Times", lam, cp(T)))));
+    Expr* v = eval_take(mk_fn2("Times", one, mk_fn2("Power", den, expr_new_integer(-1))));
+    Expr* sv = v ? eval_take(mk_fn1("Quiet", assumptions
+                       ? mk_fn2("Simplify", v, cp((Expr*)assumptions))
+                       : mk_fn1("Simplify", v))) : NULL;
+    /* A parameter-free value carries E^((c - I) Pi)-type factors from the
+     * period boundary; ComplexExpand collapses them.  Kept only if it is the
+     * same number and no larger. */
+    if (sv && contains_head(sv, "Complex") && !has_free_param(sv)) {
+        Expr* ce = eval_take(mk_fn1("Quiet", mk_fn1("Simplify", mk_fn1("ComplexExpand", cp(sv)))));
+        Expr* dz = ce ? eval_take(mk_fn1("PossibleZeroQ", mk_fn2("Plus", cp(ce), neg_of(cp(sv))))) : NULL;
+        if (ce && dz && sym_is(dz, "True") && leaf_count(ce) <= leaf_count(sv)) {
+            expr_free(sv); sv = ce; ce = NULL;
+        }
+        if (ce) expr_free(ce);
+        if (dz) expr_free(dz);
+    }
+    expr_free(T);
+    return sv;
+}
+
 Expr* integrate_piecewise_try(Expr* f, Expr* x, Expr* a, Expr* b,
                               Expr* assumptions) {
     if (!f || !x || !a || !b || x->type != EXPR_SYMBOL) return NULL;
@@ -560,6 +741,16 @@ Expr* integrate_piecewise_try(Expr* f, Expr* x, Expr* a, Expr* b,
     /* 1. Collect breakpoints, keep the strictly-interior ones. */
     BPSet all; bp_init(&all);
     collect_breakpoints(ff, x, a, b, &all);
+    if (all.incomplete) {
+        /* The pieces are not branch-constant.  The one closed case: a periodic
+         * branch structure on a half-line, damped by an exponential. */
+        Expr* v = all.period_exact
+                ? periodic_exponential_halfline(ff, x, a, b, all.period_exact, assumptions)
+                : NULL;
+        bp_free(&all);
+        if (fn) expr_free(fn);
+        return v;
+    }
     BPSet inside; bp_init(&inside);
     for (int i = 0; i < all.n; i++) {
         if (lt_bound(a, all.pts[i], assumptions) &&
