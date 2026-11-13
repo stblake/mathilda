@@ -640,6 +640,9 @@ static RtDecision rt_decide_field_canon(Expr* f, Expr* x) {
              * were a polynomial.  Demote it to UNKNOWN (see risch_util.c). */
             if (verdict == RT_DEC_NONELEMENTARY && g_rt_prim_unevaluated != prim0)
                 verdict = RT_DEC_UNKNOWN;
+            /* a certificate presupposes algebraically independent monomials */
+            if (verdict == RT_DEC_NONELEMENTARY && T.dependent)
+                verdict = RT_DEC_UNKNOWN;
             if (Q) expr_free(Q);
             if (rem) expr_free(rem);
             g_rt_decide_mode = save_mode;

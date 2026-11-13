@@ -1784,6 +1784,7 @@ Expr* rde_solve_tower_ext(Expr* f, Expr* g, Expr* x, Expr* extra) {
         rde_cert_mark("tower: could not be built");
         rt_tower_free(&T); expr_free(fgx); return NULL;
     }
+    if (T.dependent) rde_cert_mark("tower: dependent monomials");
     expr_free(fgx);
     Expr* fx = rt_expand_exp_sums(f);
     Expr* gx = rt_expand_exp_sums(g);

@@ -56,6 +56,13 @@ typedef struct {
     Expr** marg;     /* the member exponent w                    (owned) */
     long*  mprim;    /* tower index of the class primitive              */
     long*  mmult;    /* integer multiplier k (w = k * arg[mprim])       */
+    /* True when the Log/Exp monomials are NOT algebraically independent (the
+     * structure theorem finds Dcoef_i in the Q-span of the earlier ones, e.g.
+     * E^(x + x^2) beside E^x and E^(x^2)), or when that could not be decided.
+     * Integration over such a tower still verifies its answers, but every
+     * "no solution" / non-elementarity theorem presupposes independence, so a
+     * certificate read off a dependent tower is demoted to undecided. */
+    bool dependent;
 } RtTower;
 
 /* ---- Tower construction & structural operations (defined in risch_tower.c) - */

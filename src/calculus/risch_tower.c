@@ -29,6 +29,7 @@
  */
 
 #include "risch_tower.h"
+#include "risch_structure.h"
 #include "integrate_risch_rde.h"
 
 #include "expr.h"
@@ -373,7 +374,7 @@ void rt_collect_tangents(Expr* e, Expr* x, Expr*** args, long** sigs,
 bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     T->kind = NULL; T->kernel = NULL; T->arg = NULL; T->t = NULL; T->Dcoef = NULL;
     T->tsg = NULL; T->marg = NULL; T->mprim = NULL; T->mmult = NULL;
-    T->subrules = NULL; T->n = 0; T->nm = 0;
+    T->subrules = NULL; T->n = 0; T->nm = 0; T->dependent = false;
 
     /* Knowles Liouvillian primitives (Erf/Erfi/Erfc/ExpIntegralEi/LogIntegral).
      * Collect them FIRST: when present, a merged prim-bearing exponential must be
@@ -702,6 +703,35 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
         if (rt_find_exp_of_x(ds, x) != NULL || rt_find_log_of_x(ds, x) != NULL) ok = false;
         for (size_t j = i; j < n && ok; j++)
             if (!rt_free_of_x(ds, T->t[j])) ok = false;
+    }
+    /* Algebraic independence of the Log/Exp monomials (Risch structure
+     * theorem, Bronstein Thm 9.3.x): E^w_i or Log[u_i] is a new monomial over
+     * the earlier ones iff Dcoef_i (w_i' or u_i'/u_i) is NOT in the Q-span of
+     * their Dcoef.  The builder's own commensurability classes catch rational
+     * multiples of one exponent only; a sum of exponents (E^(x + x^2) beside
+     * E^x and E^(x^2)) slips through.  Checking each monomial against those
+     * before it finds any dependence in the set. */
+    if (ok && n >= 2) {
+        size_t nv = n + 1;
+        Expr** vv = malloc(nv * sizeof(Expr*));
+        vv[0] = expr_copy(x);
+        for (size_t j2 = 0; j2 < n; j2++) vv[j2 + 1] = expr_copy(T->t[j2]);
+        Expr* vars = expr_new_function(expr_new_symbol("List"), vv, nv);
+        free(vv);
+        Expr** gens = malloc(n * sizeof(Expr*));
+        size_t ng = 0;
+        for (size_t i2 = 0; i2 < n && !T->dependent; i2++) {
+            if (T->kind[i2] != RT_LOG && T->kind[i2] != RT_EXP) continue;
+            if (ng > 0) {
+                bool failed = false;
+                Expr* co = risch_rational_span(T->Dcoef[i2], gens, ng, vars, &failed);
+                if (co || failed) T->dependent = true;
+                if (co) expr_free(co);
+            }
+            gens[ng++] = T->Dcoef[i2];                 /* borrowed */
+        }
+        free(gens);
+        expr_free(vars);
     }
     return ok;
 }

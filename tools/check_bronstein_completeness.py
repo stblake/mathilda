@@ -80,19 +80,19 @@ BASELINE_M = {
 
 # rde_cert_mark reasons that are mathematical gaps of the C Risch DE (Phase 2).
 BASELINE_C = {
-    "PolyRischDECancel: log-derivative branch",
+    # an answer of the field integrator outside K (a new logarithm) is not yet
+    # reduced to K by the structure theorem -> ParamRischDE / LimitedIntegrate
+    "PolyRischDECancel: log-derivative branch integral undecided",
+    "RdeBoundDegreePrim: limited integration undecided",
+    # Log/Exp monomials that are algebraically dependent (E^(x + x^2) beside E^x,
+    # E^(x^2)): the tower builder must rewrite them into an independent tower
+    "tower: dependent monomials",
     "RdeBoundDegreeExp: lc(a) = 0",
-    "RdeBoundDegreeExp: parametric log-derivative case",
-    "RdeBoundDegreePrim: cancellation case",
     "RdeSpecialDenomExp: a(0) = 0",
-    "RdeSpecialDenomExp: parametric log-derivative case",
-    "WeakNormalizer: residue formula unavailable",
-    "WeakNormalizer: residues not solved",
     "WeakNormalizer: zero",
     "base: identity gate",
     "base: reduced equation not polynomial",
     "tower: antidifferentiation D H = c",
-    "tower: f not weakly normalized",
     "tower: identity gate",
     "tower: reduced equation not polynomial",
     "tower: tangent top",
@@ -101,6 +101,15 @@ BASELINE_C = {
 # rde_cert_mark reasons that are permanent: a computation the CAS could not do,
 # or an input outside the solver's scope, not a missing branch of the algorithm.
 CAS_FAILURE_MARKS = {
+    # the decision is complete; only a factorisation / linear solve that did not
+    # evaluate, or a residue beyond the machine range, leaves it undecided
+    "WeakNormalizer: residues not decided",
+    "tower: WeakNormalizer residues not decided",
+    "RdeSpecialDenomExp: parametric log-derivative undecided",
+    "RdeBoundDegreeExp: parametric log-derivative undecided",
+    "RdeBoundDegreePrim: log-derivative undecided",
+    "RdeBoundDegreePrim: limited integration out of range",
+    "PolyRischDECancel: log-derivative test undecided",
     "SPDE: extended gcd unavailable",
     "SPDE(field): extended gcd unavailable",
     "tower: could not be built",

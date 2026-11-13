@@ -48,12 +48,19 @@ static void test_undecided(void) {
     BR_EQ("Risch`RischDECertifiedReason[]", "\"base: coefficients not rational in x\"");
     BR_EQ("Risch`RischDECertified[1, E^x/x, x]", "$Failed");
     BR_EQ("Risch`RischDECertifiedReason[]", "\"tower: antidifferentiation D H = c\"");
-    BR_EQ("Risch`RischDECertified[1 + 1/x, Log[x], x]", "$Failed");
-    BR_EQ("Risch`RischDECertifiedReason[]", "\"RdeBoundDegreePrim: cancellation case\"");
-    /* f with a normal simple pole of positive-integer residue (1 at Log x = 0):
-     * RdeNormalDenominator's bound is unproven */
-    BR_EQ("Risch`RischDECertified[1/(x Log[x]), x, x]", "$Failed");
-    BR_EQ("Risch`RischDECertifiedReason[]", "\"tower: f not weakly normalized\"");
+    /* decided since v0.6546 (completion campaign Phase 2): the primitive
+     * cancellation case (deg b = deg a, -lc(b)/lc(a) = -(1 + 1/x) is not Dz/z:
+     * a certified bound; the theta^0 coefficient needs Int -(x - 1) E^x / x,
+     * which is not elementary) ... */
+    BR_EQ("Risch`RischDECertified[1 + 1/x, Log[x], x]", "\"NoSolution\"");
+    BR_EQ("Risch`RischDECertifiedReason[]", "None");
+    /* ... and a normal simple pole of positive-integer residue (1 at Log x = 0),
+     * removed by the tower WeakNormalizer (q = Log[x]) */
+    BR_TRUE("With[{y = Risch`RischDECertified[1/(x Log[x]), x, x]}, PossibleZeroQ[D[y, x] + y/(x Log[x]) - x]]");
+    BR_EQ("Risch`RischDECertifiedReason[]", "None");
+    /* a dependent tower (E^(x + x^2) beside E^x and E^(x^2)) certifies nothing */
+    BR_EQ("Risch`RischDECertified[E^x, E^x^2 + E^(x + x^2) x + 2 E^x^2 x^2, x]", "$Failed");
+    BR_EQ("Risch`RischDECertifiedReason[]", "\"tower: dependent monomials\"");
     BR_EQ("Risch`RischDECertified[1, Sin[x], x]", "$Failed");
     /* malformed calls stay unevaluated */
     BR_EQ("Head[Risch`RischDECertified[1, x]]", "Risch`RischDECertified");
@@ -125,12 +132,35 @@ static void test_nonconstant_leading_coefficient(void) {
             "   Together[r - b] === 0], {24}]");
 }
 
+/* Phase 2 (completion campaign): the parametric logarithmic derivative and the
+ * cancellation branches, decided exactly over the tower. */
+static void test_phase2_decisions(void) {
+    /* PolyRischDECancel, log-derivative branch: -b = 1/x = Dx/x, w = x,
+       q = w Int c/w */
+    BR_TRUE("With[{y = Risch`RischDECertified[-1/x, x E^x, x]}, PossibleZeroQ[D[y, x] - y/x - x E^x]]");
+    /* RdeSpecialDenomExp resonance: -b(0)/a(0) = -1 + 1/x = -1 eta + Dx/x, m = -1:
+       the solution may carry a tau^-1 pole (the homogeneous x E^-x) */
+    BR_TRUE("With[{y = Risch`RischDECertified[1 - 1/x, (2 - 1/x) E^x, x]},"
+            " PossibleZeroQ[D[y, x] + (1 - 1/x) y - (2 - 1/x) E^x]]");
+    BR_EQ("Risch`RischDECertifiedReason[]", "None");
+    /* exponential cancellation with no log-derivative branch: a failed
+       top-down pass is a proof (y' + 2 y = E^x has y = E^x/3; E^(2x)/x has none) */
+    BR_TRUE("With[{y = Risch`RischDECertified[2, E^x, x]}, PossibleZeroQ[D[y, x] + 2 y - E^x]]");
+    BR_EQ("Risch`RischDECertified[2 x, E^x/x, x]", "\"NoSolution\"");
+    /* primitive deg b = deg a with cancellation (alpha = Dz/z): y = Log[x]^2/x */
+    BR_TRUE("With[{y = Risch`RischDECertified[1/x, 2 Log[x]/x^2, x]}, PossibleZeroQ[y - Log[x]^2/x]]");
+    BR_EQ("Risch`RischDECertifiedReason[]", "None");
+    /* WeakNormalizer on a pole of residue 2: y' + 2 y/(x Log x) = 1 */
+    BR_TRUE("With[{y = Risch`RischDECertified[2/(x Log[x]), 1, x]},"
+            " PossibleZeroQ[y - (x - 2 x/Log[x] + 2 x/Log[x]^2)]]");
+}
+
 static void test_wrappers(void) {
     BR_EQ("brRischDE[1, x, x, {}]", "{\"Solution\", -1 + x}");
     BR_EQ("brRischDE[0, 1/x, x, {}]", "{\"NoSolution\"}");
     BR_EQ("brRischDE[0, 1/x, x, {Log[x]}]", "{\"Solution\", Log[x]}");
     BR_EQ("brRischDE[1, Sqrt[x], x, {}]", "{\"Unknown\", \"base: coefficients not rational in x\"}");
-    BR_EQ("brRischDE[1 + 1/x, Log[x], x, {Log[x]}]", "{\"Unknown\", \"RdeBoundDegreePrim: cancellation case\"}");
+    BR_EQ("brRischDE[1 + 1/x, Log[x], x, {Log[x]}]", "{\"NoSolution\"}");
     BR_EQ("brRischDE[1/x, 1/x + Log[x], x, {Log[x]}]", "{\"Solution\", 1/4 (4 - x + 2 x Log[x])}");
     BR_TRUE("brRDEResidualZeroQ[1, x, x, x - 1]");
     BR_FALSE("brRDEResidualZeroQ[1, x, x, x]");
@@ -150,6 +180,7 @@ int main(void) {
     test_certificates();
     test_undecided();
     test_properties();
+    test_phase2_decisions();
     test_wrappers();
     BR_DONE("bronstein_rde_tests");
     return 0;

@@ -1425,3 +1425,37 @@ and a numeric sanity check before its phase starts.
   - `Sqrt[2] Sqrt[Log[x]]` and `Sin[x] Sqrt[1 + Cos[x]]` are decided;
   - a parametric example `Sqrt[a + Log[x]]/x` gives a generic answer.
 - `valgrind --leak-check=full ./Mathilda -file <examples>`: no growth beyond the startup baseline.
+
+#### Progress log
+
+**2026-11-14, session 1. Phases 0–1 shipped (v0.6545); Phase 2 part 1 (v0.6546).**
+- **Phase 0, soundness.**
+  - `rt_field_integrate` runs both Risch DE routes in certification scopes.
+  - The `Cos[E^x]` surface-argument bug: `rde_base` was handed `I E^x` and its
+    NULL was a certificate by accident.
+  - The structure-theorem builtins are tri-state.
+  - Suspected hole (c) was refuted: [B] Def 2.21 admits logs of any `k`-element.
+- **Phase 1.**
+  - Five failure classes and `Integrate::incomplete`, from the method and from
+    the cascade (`BronsteinScope`).
+  - `brKummerCyclicQ` tells a cyclic compositum (in scope) from a genuine one.
+  - `tragerRetryableQ`.
+  - Two consumers took the new list for an answer: KummerIntegrate and PMT's
+    Trager wrapper (PMT lost its `Sqrt[Log[x]]` certificate). Both fixed; lesson
+    recorded.
+  - Growing specialization.
+  - `make check-bronstein-completeness`: 40 sites + 16 C paths.
+- **Phase 2, part 1.**
+  - Tower WeakNormalizer.
+  - Exact ParametricLogarithmicDerivative.
+  - Every cancellation case except limited integration with a new logarithm.
+  - Dependent-tower detection: `E^(x + x^2)` beside `E^x`, `E^(x^2)` was
+    accepted as a new monomial.
+  - Derivations: `docs/notes/bronstein_extensions.md`, Part A.
+  - A property run caught the `deg b = deg a` off-by-one before it shipped.
+  - C uncertain paths: 16 → 12.
+- **Next.**
+  - Rewrite dependent towers.
+  - ParamRischDE + LimitedIntegrate (Ch. 7).
+  - `rt_field_integrate` completeness.
+  - Then Phase 3.

@@ -5012,15 +5012,26 @@ apart:
 so the solution field is the caller's whole tower. This matters: `y' = 1/x` has no
 solution in `Q(x)`, but has `Log[x]` in `Q(x, Log[x])`.
 
-Undecided, and so `$Failed`:
+Decided since v0.6546 (completion campaign, Phase 2; derivations in
+`docs/notes/bronstein_extensions.md`, Part A):
+- **weak normalization in the tower** (`WeakNormalizer`, Bronstein §6.1): a normal
+  simple pole with a positive-integer residue is removed by `q`, and the equation
+  is solved for `q y`;
+- **the parametric logarithmic derivative** `f = m η + Dz/z` (§7.3), decided
+  exactly: the candidate z-factors are the irreducible factors of the
+  denominators, and the generators are Q-independent in a valid tower;
+- through it, the cancellation cases of `RdeSpecialDenomExp`, of
+  `RdeBoundDegreeExp`, and the `deg b = deg a` case of `RdeBoundDegreePrim`;
+- the **log-derivative branch of `PolyRischDECancel`**: `q = w ∫ c/w` with
+  `w = z θ^m`; when that branch is ruled out, a failed top-down pass is a proof.
+
+Still undecided, and so `$Failed`:
 - inputs that are not rational in `x` and the kernels;
 - a tangent top;
-- in the tower, an `f` that is not weakly normalized (a normal simple pole with a
-  positive-integer residue);
-- the cancellation sub-cases of the degree bounds and of the special denominator
-  (`RdeBoundDegreePrim` with `deg b ∈ {deg a − 1, deg a}`, and the
-  parametric-logarithmic-derivative case for an exponential top);
-- the log-derivative branch of `PolyRischDECancel`;
+- a tower whose `Log`/`Exp` monomials are algebraically dependent
+  (`E^(x + x^2)` beside `E^x` and `E^(x^2)`: "tower: dependent monomials");
+- limited integration against one primitive (`RdeBoundDegreePrim` with
+  `deg b = deg a − 1`) when the field integrator's answer has a new logarithm;
 - the antidifferentiation branch when the field integrator gives no answer.
 
 ```
@@ -5033,8 +5044,11 @@ Out[2]= Log[x]
 In[3]:= Risch`RischDECertified[0, 1/Log[x], x]                (* li is not elementary *)
 Out[3]= "NoSolution"
 
-In[4]:= {Risch`RischDECertified[1 + 1/x, Log[x], x], Risch`RischDECertifiedReason[]}
-Out[4]= {$Failed, "RdeBoundDegreePrim: cancellation case"}
+In[4]:= Risch`RischDECertified[1 + 1/x, Log[x], x]            (* needs Int (1 - x) E^x / x *)
+Out[4]= "NoSolution"
+
+In[5]:= Risch`RischDECertified[1/x, 2 Log[x]/x^2, x]          (* cancellation, deg q = dc - da + 1 *)
+Out[5]= Log[x]^2/x
 ```
 
 This is the Risch DE used by the Bronstein integration package

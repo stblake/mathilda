@@ -1558,9 +1558,13 @@ Commits: 097dd288 (merge), f9073acb (PR 4 core), bb8c6ba4 (tests), ad060249 (doc
 
 Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion campaign".
 
-- [ ] Phase 0: soundness — reproduce + fix (a) rt_decide_field uncertified nonelem, (b) LogReducible/ExpReducible False-on-failure, (c) brIntegrateInKLogLike drops reducible logs
-- [ ] Phase 1: failure taxonomy (Incomplete / Unimplemented / Resource / Internal), Integrate::incomplete (Method + cascade), completeness gate
-- [ ] Phase 2: C substrate (WeakNormalizer over k(t), ParametricLogarithmicDerivative, cancellation cases, ParamRischDE, LimitedIntegrate, rt_field_integrate completeness, constant fields)
+- [x] Phase 0: soundness — (a) rt_field_integrate certification scopes + Cos[E^x] surface-arg bug fixed, (b) structure theorem tri-state, (c) refuted (Def 2.21 allows logs of any k-element) — v0.6545
+- [x] Phase 1: failure taxonomy, Integrate::incomplete (Method + cascade), completeness gate — v0.6545
+- [ ] Phase 2: C substrate
+  - [x] WeakNormalizer over k(t); ParametricLogarithmicDerivative (exact); RdeSpecialDenomExp / RdeBoundDegreeExp / RdeBoundDegreePrim(db=da) cancellation; PolyRischDECancel log-derivative branch; dependent-tower detection — v0.6546
+  - [ ] rewrite dependent Log/Exp monomials into an independent tower
+  - [ ] ParamRischDE (Ch. 7) + LimitedIntegrate with new logarithms (removes "limited integration undecided", "log-derivative branch integral undecided")
+  - [ ] rt_field_integrate completeness (m > 1 new logs, mixed resultants); constant fields in C
 - [ ] Phase 3: Shape A completion (.m)
 - [ ] Phase 4: constant fields (NF, Q(i)+trig, parameters)
 - [ ] Phase 5: radical anywhere (brDField, transcendental Risch over algebraic base, RDE on a curve over a tower)
