@@ -143,7 +143,7 @@ autoDomain[stmt_] := If[FreeQ[stmt, _Rational] && FreeQ[stmt, Power[_, _?Negativ
 
 (* The Domain option (sixth review, v0.6522).  Each accepted value has one
    meaning, applied by identityGen (the only generator that reads it):
-     Automatic  Mathematica's default (variables complex unless an order
+     Automatic  Mathilda's default (variables complex unless an order
                 relation or Element[v, Reals] makes them real): a
                 hypothesis-free identity over Int (integer polynomial) or Rat
                 (equivalent: a polynomial identity with rational
@@ -160,7 +160,7 @@ autoDomain[stmt_] := If[FreeQ[stmt, _Rational] && FreeQ[stmt, Power[_, _?Negativ
    Anything else is refused up front (Certify::domain). *)
 $domains = {Automatic, Complexes, Reals, Rationals, Integers};
 
-(* Generic domains.  Mathematica's variables are complex unless an inequality
+(* Generic domains.  Mathilda's variables are complex unless an inequality
    makes them real, so a statement with hypotheses is proved for EVERY field
    of characteristic 0 (it then holds in Q, R and C alike), or, when it
    involves an order, for EVERY ordered field (R among them).  A hypothesis
@@ -234,8 +234,8 @@ wherever every denominator is nonzero (listed in \"Hypotheses\")"}}]];
 
 (* Real variables (finding B, v0.6520).  The ordered-field form
    (forall ordered fields K, forall x y : K, ...) is faithful to
-   Mathematica's semantics only when every bound variable is real: in
-   Mathematica an order relation makes ITS variables real, not the others
+   the assumption semantics only when every bound variable is real: an
+   order relation makes ITS variables real, not the others
    (x^2 + 4 == 0 && y > 0 has the complex solution x = 2 I).  A variable is
    real when it occurs in an order relation of the assumptions or is
    declared with Element[v, Reals] / Element[{v, ...}, Reals]. *)
@@ -277,7 +277,7 @@ identityGen[kind_, input_HoldForm, result_, a_, b_, trusted_List, o_, raw_:Autom
     Message[Certify::nocert, input]; Return[$Failed, Module]];
   st = identityStatement[a, b, vars, raw];
   If[st === $Failed, Message[Certify::nocert, input]; Return[$Failed, Module]];
-  (* The statement's domain ($domains above).  Mathematica's semantics
+  (* The statement's domain ($domains above).  Mathilda's assumption semantics
      (Automatic with hypotheses, Complexes): every char-0 field (variables
      complex), or every ordered field when every variable is real; order
      relations with a variable that is not real: no certificate. *)
@@ -713,8 +713,8 @@ generate[HoldComplete[Integrate[f_, x_Symbol]], o_] :=
 
 (* The claim Integrate[f, x] == F (rewriteInput puts Integrate on the left):
    F, the user's antiderivative, is checked -- not Mathilda's.  The claim as
-   written is NOT what is certified (sixth review, v0.6522): in Mathematica
-   Integrate[2 x, x] == x^2 + 5 is False, since Integrate returns one
+   written is NOT what is certified (sixth review, v0.6522): as an equation
+   Integrate[2 x, x] == x^2 + 5 is false, since Integrate returns one
    particular antiderivative, and Lean cannot decide which one without
    evaluating Integrate.  What Lean checks is that F is an antiderivative of
    f, i.e. the claim D[F, x] == f; that is what "Theorem" shows, with
