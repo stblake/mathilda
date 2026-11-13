@@ -362,18 +362,29 @@ static void test_already_fixed(void) {
               "{0.0909637787288092}");                                  /* 7.244.2 */
 }
 
+/* Built twice (tests/CMakeLists.txt): GR132_PART 1 and 2 split the groups so
+ * each executable stays well inside test_utils.h's 120 s alarm under a
+ * parallel ctest; without the macro every group runs. */
+#ifndef GR132_PART
+#define GR132_PART 0
+#endif
+
 int main(void) {
     symtab_init();
     core_init();
 
-    TEST(test_ei_connection);
-    TEST(test_fourier_sign_split);
-    TEST(test_branch_cut_jumps);
-    TEST(test_radical_branches);
-    TEST(test_symbolic_poles);
-    TEST(test_branch_structure);
-    TEST(test_diff_under_int);
-    TEST(test_already_fixed);
+    if (GR132_PART != 2) {
+        TEST(test_ei_connection);
+        TEST(test_fourier_sign_split);
+        TEST(test_branch_cut_jumps);
+        TEST(test_radical_branches);
+        TEST(test_symbolic_poles);
+    }
+    if (GR132_PART != 1) {
+        TEST(test_branch_structure);
+        TEST(test_diff_under_int);
+        TEST(test_already_fixed);
+    }
 
     if (g_failures) {
         printf("%d integrate_gr132 check(s) FAILED.\n", g_failures);

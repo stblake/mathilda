@@ -5045,8 +5045,14 @@ static bool cut_has_param(const Expr* e, const Expr* x) {
 /* The imaginary part of g for real x (owned): ComplexExpand when g holds no
  * parameter (x is the only symbol, and real), else Refine under x real and
  * the ambient assumptions, which does not presume a parameter real. */
-static Expr* cut_imag_part(Expr* g, Expr* x) {
-    Expr* xr = mk_fn2("Element", expr_copy(x), mk_sym("Reals"));
+static Expr* cut_imag_part(Expr* g, Expr* x, Expr* point) {
+    /* Near a nonzero point x has the point's sign: under Element[x, Reals]
+     * alone Im[Log[x]] is Arg[x], which made every real Log argument look
+     * non-real and sent it down the side-sign machinery (minutes per limit). */
+    int ps = cut_numeric_sign(point);
+    Expr* xr = ps > 0 ? mk_fn2("Greater", expr_copy(x), mk_int(0))
+             : ps < 0 ? mk_fn2("Less", expr_copy(x), mk_int(0))
+             : mk_fn2("Element", expr_copy(x), mk_sym("Reals"));
     Expr* im;
     if (!cut_has_param(g, x))
         im = simp(mk_fn2("Refine", mk_fn1("ComplexExpand", mk_fn1("Im", expr_copy(g))), xr));
@@ -5101,7 +5107,7 @@ static void cut_find_all(Expr* e, LimitCtx* ctx, CutSet* cs) {
     bool neg = cut_numeric_sign(g0) == -1;
     expr_free(g0);
     if (!neg) return;
-    Expr* im = cut_imag_part(g, ctx->x);
+    Expr* im = cut_imag_part(g, ctx->x, ctx->point);
     if (!im || is_lit_zero(im)) { if (im) expr_free(im); return; }   /* real g */
     cut_push(cs, e, k, im);
 }
@@ -5230,9 +5236,16 @@ static Expr* ls_find(Expr* e, LimitCtx* ctx, int* kind) {
     return e;
 }
 
-static Expr* ls_expansion(Expr* g, int kind, int K) {
+static Expr* ls_expansion(Expr* g, int kind, int K, int gsign) {
     Expr* lg = mk_fn1("Log", expr_copy(g));
-    Expr* logpart = (kind == 1)
+    /* gsign = the sign of a REAL g on the approach side (0: unknown): Ei's log
+     * term is then the plain real Log[gsign g] -- the symmetric form's
+     * Log[1/g] costs the later layers minutes at a log singularity. */
+    if (kind == 1 && gsign != 0) {
+        expr_free(lg);
+        lg = mk_fn1("Log", mk_times(mk_int(gsign), expr_copy(g)));
+    }
+    Expr* logpart = (kind == 1 && gsign == 0)
         ? mk_times(make_rational(1, 2),
                    mk_fn2("Plus", lg, mk_neg(mk_fn1("Log", mk_fn2("Power", expr_copy(g), mk_int(-1))))))
         : lg;
@@ -5258,10 +5271,19 @@ static Expr* layer_logsingular_special(Expr* f, LimitCtx* ctx) {
     Expr* node = ls_find(f, ctx, &kind);
     if (!node) return NULL;
     Expr* g = node->data.function.args[0];
+    int gsign = 0;
+    if (kind == 1 && (ctx->dir == LIMIT_DIR_FROMABOVE || ctx->dir == LIMIT_DIR_FROMBELOW)) {
+        Expr* im = cut_imag_part(g, ctx->x, ctx->point);
+        if (im && is_lit_zero(im)) gsign = cut_side_sign(g, ctx, ctx->dir);
+        if (im) expr_free(im);
+    }
     Expr* lim[2] = { NULL, NULL };
-    static const int KS[2] = { 3, 6 };
+    /* Orders 1 and 2: the power terms vanish at g = 0, so the agreement of
+     * two low orders is the check; high orders only multiply the cost of
+     * the nested limits (g^6 of 5 + 6 Log[x] cost minutes). */
+    static const int KS[2] = { 1, 2 };
     for (int t = 0; t < 2; t++) {
-        Expr* rep = ls_expansion(g, kind, KS[t]);
+        Expr* rep = ls_expansion(g, kind, KS[t], gsign);
         CutSet one = { NULL, 0, 0 };
         cut_push(&one, node, CUT_LOG, mk_int(0));
         Expr* reps[1] = { rep };

@@ -5236,3 +5236,46 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
 - Found by `tools/bronstein_stress` (random derivatives, the PZQ check). Neither the
   hand-picked suites nor the random-derivative unit property (seed 91) had a
   `Log[c x + c]` radicand. Generators need constant factors inside kernels.
+
+## 2026-11-13/14 — Issue #132 (G&R corpus): the general rules behind 46 wrong Integrate results
+- Trap: `Coefficient[e, v, k]` for k = 0..2 silently DROPS every other term. DiffUnderInt
+  read `-2 nu x^2 - mu x^4` as a Gaussian, `-a/x^2 - mu x^2` as `-mu x^2`, and Apart's
+  `c (p^2 + x^2)^2` denominator as a quadratic base; the answers were Taylor polynomials
+  or different integrals that still "verified" (the check compared against the same
+  wrong inner J). Rule: every Coefficient-based reader first proves the shape
+  (`PolynomialQ` + `Exponent <= d`), and splits a v-free cofactor off a denominator
+  before reading its base.
+- Trap: classifying at ONE representative point of an assumed region (residue
+  half-planes, closure of a Fourier integral) is valid only if the classified signs
+  are constant on the region. A real parameter whose sign the assumptions leave open
+  (`Element[xi, Reals]`, `a != 0`) crosses the boundary; FindInstance's "simple" point
+  (a = b = 1) sits exactly where poles coincide. Rule: split by the sign orthants of
+  sign-free real parameters (Piecewise, boundary integrated on its own or excluded by
+  ConditionalExpression); move a FindInstance point to a generic nearby one; decline
+  for a parameter the assumptions never mention.
+- Trap: a Piecewise built from the arms a stage could prove has an implicit default of
+  0, which is a value. `Piecewise[{{G12, q < 1}, {G21, q > 1}}]` was 0 at q = 1.
+  Rule: every Piecewise a stage returns must cover the region: integrate the boundary
+  integrand separately, or exclude it with ConditionalExpression.
+- Trap: substitution is not a limit on a branch cut. `-Infinity - I` is `-Infinity`,
+  so `Ei[g]` at an infinite end, `ArcTan[u, v]` at `v = 0`, `Log[g]` where a real g
+  changes sign all lose the side. Rule: one-sided limits at a cut take the branch of
+  the approach side (Limit layer `layer_branch_cut_side`); Newton-Leibniz splits at
+  every cut crossing of F (zeros of v, of Im g, of a real Log argument) and evaluates
+  F there by one-sided limits.
+- Trap: differentiation under the integral sign fails at a boundary point where the
+  convergence is not uniform; the integral of the derivative AT the base point is then
+  not the derivative's value there (`I'(0) = 0` vs `Pi/(a g^4)`). And a base point that
+  passes a parameter's own bound can lie outside the coupled region (`a = 0` under
+  `0 < xi < 2 a`). Rule: derivative bases are one-sided limits of J_j(p) (else confirmed
+  by a quadrature at a generic interior point); a base must be in the closure of the
+  region for every assumed point.
+- Trap: in an internal `.m` file without a private context, a non-Module name (a `Do`
+  iterator `g`) is the user's Global symbol; Do scopes dynamically, so an integrand with
+  a parameter `g` recursed to $RecursionLimit. Rule: every iterator and temporary is a
+  Module local (or the package runs in its own private context).
+- Trap: a stage's numeric verification at samples that all lie on one sign interval of
+  a radicand certifies a branch constant valid only there. Rule: verify at spread
+  points too; an answer off by a LOCALLY CONSTANT factor (zero derivative, e.g.
+  `Sqrt[x] Sqrt[x^2 - 1]/Sqrt[x^3 - x]`) is multiplied by it, which is valid on every
+  interval.

@@ -97,9 +97,14 @@ static const char* MC_HELPERS[] = {
     "MatharCorpus`strip[r_] := r //. ConditionalExpression[c_, _] :> c",
     "MatharCorpus`deferr[r_, inst_, ref_] := "
     "N[Abs[(MatharCorpus`strip[r] /. inst) - ref]/Max[1, Abs[ref]]]",
+    /* The sample point is MatharCorpus`pt, not p: Table binds its iterator
+     * dynamically, and the G&R records name a parameter p -- f's p became the
+     * sample point before /. inst could substitute it, and every record with
+     * a parameter p was mismeasured (the 2.595 / 2.597 / 2.613 "WRONG"s). */
     "MatharCorpus`indeferr[r_, f_, x_, inst_] := Module[{g = D[MatharCorpus`strip[r], x]}, "
-    "Max[Table[N[Abs[((g - f) /. inst) /. x -> p]/Max[1, Abs[(f /. inst) /. x -> p]]], "
-    "{p, {31/100, 77/100, 143/100}}]]]",
+    "Max[Table[N[Abs[((g - f) /. inst) /. x -> MatharCorpus`pt]/"
+    "Max[1, Abs[(f /. inst) /. x -> MatharCorpus`pt]]], "
+    "{MatharCorpus`pt, {31/100, 77/100, 143/100}}]]]",
     NULL
 };
 
