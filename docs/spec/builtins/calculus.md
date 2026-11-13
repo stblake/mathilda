@@ -757,6 +757,40 @@ detected. Such a quotient is then resolved by L'Hôpital, up to three
 derivatives, ahead of Series:
 `Limit[(-a (x a^2)^(1/3) + Sqrt[2 x a^3 - x^4])/(a - (a x^3)^(1/4)), x -> a, Assumptions -> a > 0] = 16 a/9`.
 
+### One-sided limits at a branch cut (v0.6539)
+
+`Log[g]`, `Arg[g]`, `g^p` (p not an integer) and `ArcTan[u, v]` are
+discontinuous across their branch cut. When the cut passes through the limit
+point (`g` negative real there; `v = 0` with `u < 0`) and `g` is not real near
+the point, the limit depends on which side of the cut `g` approaches from: the
+sign `s` of `Im g` (of `v`) on the approach side, read from its leading term.
+On that side `Log[g] = Log[-g] + s I Pi`, `Arg[g] = Arg[-g] + s Pi`,
+`ArcTan[u, v] = ArcTan[-u, -v] + s Pi` and `g^p = (-g)^p E^(s I Pi p)`, each
+continuous at the point, so the limit is taken of that form. A two-sided limit
+takes both sides and is `Indeterminate` when they differ. A real `g`
+(`Log[x - 2]` at `x = 1`) stays on its cut and keeps the principal value.
+
+```
+Limit[ArcTan[-1, y], y -> 0, Direction -> "FromBelow"]      (* -Pi *)
+Limit[ArcTan[-1, y], y -> 0]                                 (* Indeterminate *)
+Limit[Log[-1 + I y], y -> 0, Direction -> "FromBelow"]       (* -I Pi *)
+Limit[ArcTan[Cos[2x], -Sin[2x]], x -> Pi/2, Direction -> "FromBelow"]   (* -Pi *)
+```
+
+### ExpIntegralEi at an infinite argument off the real axis (v0.6539)
+
+`Ei(z) = -E1(-z) + I Pi Sign[Im z]` off the real axis, so as `Re z -> -Infinity`
+with `Im z` of one sign, `Ei(z) -> I Pi Sign[Im z]`, not 0. The Gruntz
+expansion of `Ei` now carries that connection constant, and the
+composition layer no longer folds `head[Limit[g]]` for a head whose two
+boundary values on a cut reaching infinity are finite and different
+(`ExpIntegralEi`, `CosIntegral`, `ArcTanh`) when `g` is not real.
+
+```
+Limit[ExpIntegralEi[t - I], t -> -Infinity]                  (* -I Pi *)
+Limit[ExpIntegralEi[t - I a], t -> -Infinity, Assumptions -> a > 0]   (* -I Pi *)
+```
+
 ## LaplaceTransform
 `LaplaceTransform[f, t, s]` and `LaplaceTransform[f, t, s, Assumptions -> a]`
 give the one-sided transform ∫₀^∞ f(t) e^(−st) dt. Attributes: `Protected`.
@@ -3197,6 +3231,25 @@ In[7]:= Integrate`SingularPoints[1/((x - 1)(x - 2)), {x, 0, 3}]
 Out[7]= {1, 2}
 ```
 
+#### Branch-cut crossings of the antiderivative (v0.6539)
+
+A smooth integrand can antidifferentiate to `F` containing a two-argument
+`ArcTan[u, v]` (it jumps by `2 Pi` where `v` changes sign with `u < 0`), or a
+`Log`, `Arg` or fractional power of a non-real argument (it jumps where the
+imaginary part changes sign). Each real zero of `v` (of the imaginary part)
+inside `(a, b)` is a breakpoint at which `F` is taken by its one-sided limits,
+and a finite endpoint of such an `F` is taken by its one-sided limit too. A
+crossing that cannot be located forces the numeric cross-check. Likewise a
+boundary substitution that sends the argument of a cut head
+(`ExpIntegralEi`, `CosIntegral`, `ArcTanh`) to infinity is replaced by the
+one-sided limit, since `Ei[Log[0] - 7 I/3]` evaluates to `Ei[-Infinity] = 0`
+after the imaginary part has been absorbed.
+
+```
+Integrate[Sin[x] Sin[11 x]/(26/25 - 2/5 Cos[2 x]), {x, 0, Pi}]   (* 0.000418879 *)
+Integrate[1/(49/9 + Log[x]^2), {x, 0, 1}]                         (* 0.152514 *)
+```
+
 ### Complex line / contour integration
 
 When a `{x, a, b}` spec has a **non-real endpoint**, or when a spec lists more
@@ -3643,6 +3696,30 @@ Roach §1.7), and the unit-test helpers `Integrate`Helpers`Content`,
 `...`Primitive`, `...`Monic`, `...`LeadingCoefficient`,
 `...`SquareFree`, `...`ExtractConstants`, `...`ApartList`.  All are
 `Protected`.
+
+#### Parameters of undetermined sign (v0.6539)
+
+In symbolic-parameter mode every half-plane and closure decision is read off one
+point of the assumed region. A real parameter whose sign the assumptions leave
+open (`Element[xi, Reals]`, `a != 0 && Element[a, Reals]`, an interval
+straddling 0) can flip a closure, so the region is cut into the sign orthants of
+those parameters (up to three). In each nonempty orthant two generic points are
+classified afresh and the value re-derived; the original closed form is kept
+when it agrees everywhere, otherwise the answer is the `Piecewise` of the
+per-orthant forms, with conditions minimised over the sign cube. A boundary
+`p = 0` is integrated as its own integral; one that does not close is cut out by
+`ConditionalExpression[..., p != 0]`. An orthant whose emptiness cannot be
+decided (FindInstance, then its real relaxation), or in which no family closes,
+withdraws the value.
+
+```
+Integrate[E^(I x xi)/(a^2 + x^2), {x, -Infinity, Infinity},
+  Assumptions -> Re[a] > 0 && Element[xi, Reals]]
+  (* Piecewise[{{Pi/(a E^(a xi)), xi > 0}, {E^(a xi) Pi/a, xi < 0}}, Pi/a] *)
+Integrate[x E^(I x xi)/(a^2 + x^2), {x, -Infinity, Infinity},
+  Assumptions -> Re[a] > 0 && Element[xi, Reals]]
+  (* ConditionalExpression[Piecewise[{{I Pi/E^(a xi), xi > 0}}, -I E^(a xi) Pi], xi != 0] *)
+```
 
 ### Integrate`Trager
 

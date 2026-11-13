@@ -38,6 +38,7 @@
 #define MATHILDA_LIMIT_H
 
 #include "expr.h"
+#include <stdbool.h>
 
 /* Register Limit with the symbol table. Idempotent. */
 void limit_init(void);
@@ -48,5 +49,12 @@ void limit_init(void);
  *   - return a freshly allocated Expr* to replace `res` (caller frees `res`).
  */
 Expr* builtin_limit(Expr* res);
+
+/* True for a head with a branch cut along the real axis out to +/-Infinity
+ * whose boundary values there are finite and differ on the two sides
+ * (ExpIntegralEi, CosIntegral, ArcTanh). head[g] with g -> a real infinity
+ * is then decided by the sign of Im g, which Limit[g] and the evaluator's
+ * finite + Infinity -> Infinity folding both discard. name is interned. */
+bool limit_head_has_finite_cut_at_infinity(const char* name);
 
 #endif /* MATHILDA_LIMIT_H */

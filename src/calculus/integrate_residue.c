@@ -3840,6 +3840,387 @@ static bool res_verify_regions(Expr* value, Expr* f, Expr* x, Expr* a, Expr* b,
     return ok;
 }
 
+/* -------------------------------------------------------------------------
+ * Sign-orthant split for real parameters of undetermined sign.
+ *
+ * The families read every half-plane / closure decision off ONE point of the
+ * assumed region.  res_verify_regions re-derives the value at further points
+ * of the same per-parameter intervals, but it cannot see a parameter whose
+ * sign the assumptions leave open: Element[xi, Reals] (Fourier frequency) or
+ * a != 0 && Element[a, Reals] (pole +/- I a) put the representative point in
+ * one sign orthant, and the closure chosen there -- the upper half-plane for
+ * xi > 0 -- was returned for the whole line.  Integrate[E^(I x xi)/(a^2+x^2),
+ * {x,-Infinity,Infinity}, Assumptions -> Re[a] > 0 && Element[xi, Reals]]
+ * gave Pi E^(a xi)/a, wrong for every xi > 0 (G&R 17.23.14, 3.354.5).
+ *
+ * The sign of such a parameter is exactly what can flip a closure, so the
+ * region is cut into its sign orthants.  In each feasible orthant two points
+ * (FindInstance) are classified afresh and the residue value re-derived there;
+ * the original closed form is kept when it agrees at every point, otherwise
+ * the answer is the Piecewise of the per-orthant closed forms (each checked at
+ * its second point).  On a boundary p = 0 the integrand is a different
+ * integral (no oscillation, a coalesced pole) and is integrated as such.  An
+ * orthant whose feasibility FindInstance cannot decide, or in which no family
+ * closes, withdraws the value: a region the answer has not been derived on is
+ * not covered by it.
+ * ---------------------------------------------------------------------- */
+
+/* True iff `fact` states that the symbol `sym` is real: Element[sym, dom] for
+ * a real domain (or Element[{.., sym, ..}, dom]), or a real inequality whose
+ * only free symbol is sym (sym > 0, t^2 < Pi^2) with no Re/Im/Abs/Arg inside
+ * -- an order relation between expressions in sym alone makes sym real. */
+static bool res_fact_symbols_only(const Expr* e, const char* sym, bool* saw) {
+    if (!e) return true;
+    if (e->type == EXPR_SYMBOL) {
+        if (e->data.symbol.name == sym) { *saw = true; return true; }
+        double tmp;
+        return numeric_double((Expr*)e, &tmp);
+    }
+    if (e->type != EXPR_FUNCTION) return true;
+    if (head_name_is(e, "Re") || head_name_is(e, "Im") ||
+        head_name_is(e, "Abs") || head_name_is(e, "Arg") ||
+        head_name_is(e, "Conjugate")) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!res_fact_symbols_only(e->data.function.args[i], sym, saw)) return false;
+    return true;
+}
+static bool res_param_known_real(const char* sym, const Expr* fact) {
+    if (!fact || fact->type != EXPR_FUNCTION) return false;
+    size_t ac = fact->data.function.arg_count;
+    if (head_name_is(fact, "And") || head_name_is(fact, "List")) {
+        for (size_t i = 0; i < ac; i++)
+            if (res_param_known_real(sym, fact->data.function.args[i])) return true;
+        return false;
+    }
+    if (head_name_is(fact, "Element") && ac == 2) {
+        const Expr* dom = fact->data.function.args[1];
+        if (!(dom->type == EXPR_SYMBOL &&
+              (strcmp(dom->data.symbol.name, "Reals") == 0 ||
+               strcmp(dom->data.symbol.name, "Integers") == 0 ||
+               strcmp(dom->data.symbol.name, "Rationals") == 0 ||
+               strcmp(dom->data.symbol.name, "Primes") == 0))) return false;
+        const Expr* v = fact->data.function.args[0];
+        if (v->type == EXPR_SYMBOL) return v->data.symbol.name == sym;
+        if (head_name_is(v, "List") || head_name_is(v, "Alternatives")) {
+            for (size_t i = 0; i < v->data.function.arg_count; i++) {
+                const Expr* w = v->data.function.args[i];
+                if (w->type == EXPR_SYMBOL && w->data.symbol.name == sym) return true;
+            }
+        }
+        return false;
+    }
+    static const char* rel[] = { "Less", "LessEqual", "Greater", "GreaterEqual",
+                                 "Inequality" };
+    for (size_t k = 0; k < sizeof(rel) / sizeof(rel[0]); k++) {
+        if (!head_name_is(fact, rel[k])) continue;
+        bool saw = false;
+        for (size_t i = 0; i < ac; i++) {
+            const Expr* t = fact->data.function.args[i];
+            if (k == 4 && (i & 1)) continue;          /* Inequality's operators */
+            if (!res_fact_symbols_only(t, sym, &saw)) return false;
+        }
+        return saw;
+    }
+    return false;
+}
+
+/* v1 and v2 agree numerically at the current instantiation g_inst. */
+static bool res_agree_here(Expr* v1, Expr* v2) {
+    Expr* n1 = apply_inst(v1);
+    Expr* n2 = apply_inst(v2);
+    double r1, i1, r2, i2;
+    bool ok = n1 && n2 && res_reim(n1, &r1, &i1) && res_reim(n2, &r2, &i2);
+    if (ok) {
+        double scale = 1.0 + fabs(r2) + fabs(i2);
+        ok = fabs(r1 - r2) <= 1e-7 * scale && fabs(i1 - i2) <= 1e-7 * scale;
+    }
+    if (n1) expr_free(n1);
+    if (n2) expr_free(n2);
+    return ok;
+}
+
+#define RES_SPLIT_MAX 3
+
+/* assumptions with every Element[_, dom] conjunct replaced by True. */
+static Expr* res_drop_domain_facts(const Expr* e) {
+    if (head_name_is(e, "Element")) return mk_sym("True");
+    if (head_name_is(e, "And")) {
+        size_t n = e->data.function.arg_count;
+        Expr** a = malloc(n * sizeof(Expr*));
+        for (size_t i = 0; i < n; i++) a[i] = res_drop_domain_facts(e->data.function.args[i]);
+        Expr* r = eval_take(expr_new_function(mk_sym("And"), a, n));
+        free(a);
+        return r;
+    }
+    return expr_copy((Expr*)e);
+}
+
+/* Two points of sign orthant `o` (bit k set: parameter S[k] < 0, clear: > 0)
+ * of the assumed region, as a List of instantiations; {} when the orthant is
+ * empty; NULL when that cannot be decided.  Generic points of the absorbed
+ * per-parameter intervals come first -- the same irrational-fraction picks
+ * the main instantiation uses, so an exponent never lands on an integer where
+ * a family's closed form has a removable pole (x^a/(1+x)^3 at a = 1) -- and
+ * are kept only if the assumptions hold there.  A coupled region falls back
+ * to FindInstance. */
+static Expr* res_orthant_points(const ParamBound* pb, size_t np, const size_t* S,
+                                size_t ns, size_t o, Expr* assumptions,
+                                Expr* vars, Expr* cond) {
+    Expr* pts[2] = { NULL, NULL };
+    bool generic_ok = true;
+    for (size_t j = 0; j < 2 && generic_ok; j++) {
+        Expr** rules = malloc(np * sizeof(*rules));
+        for (size_t i = 0; i < np; i++) {
+            double lo = pb[i].lo, hi = pb[i].hi;
+            for (size_t k = 0; k < ns; k++)
+                if (S[k] == i) {
+                    if ((o >> k) & 1) { if (hi > 0.0) hi = 0.0; }
+                    else              { if (lo < 0.0) lo = 0.0; }
+                }
+            double v = pick_representative(lo, hi, i + 3 * j + 1);
+            rules[i] = mk_fn2("Rule", mk_sym(pb[i].sym), expr_new_real(v));
+        }
+        pts[j] = expr_new_function(mk_sym("List"), rules, np);
+        free(rules);
+        Expr* holds = eval_take(mk_fn2("ReplaceAll",
+                          mk_fn2("And", expr_copy(assumptions), expr_copy(cond)),
+                          expr_copy(pts[j])));
+        generic_ok = holds && holds->type == EXPR_SYMBOL &&
+                     strcmp(holds->data.symbol.name, "True") == 0;
+        if (holds) expr_free(holds);
+    }
+    if (generic_ok)
+        return expr_new_function(mk_sym("List"), pts, 2);
+    for (size_t j = 0; j < 2; j++) if (pts[j]) expr_free(pts[j]);
+    Expr* fi = eval_take(mk_fn3("FindInstance",
+                                mk_fn2("And", expr_copy(assumptions), expr_copy(cond)),
+                                expr_copy(vars), mk_int(2)));
+    if (fi && head_name_is(fi, "List")) return fi;
+    /* Undecided.  The real relaxation (domain conjuncts Element[p, Integers]
+     * etc. dropped) contains the region, so if it is empty the orthant is:
+     * n >= m + 1 && m >= 0 && n < 0 has no real point. */
+    Expr* relaxed = res_drop_domain_facts(assumptions);
+    Expr* fr = eval_take(expr_new_function(mk_sym("FindInstance"),
+                   (Expr*[]){ mk_fn2("And", relaxed, expr_copy(cond)),
+                              expr_copy(vars), mk_sym("Reals") }, 3));
+    if (fr && head_name_is(fr, "List") && fr->data.function.arg_count == 0) {
+        if (fi) expr_free(fi);
+        return fr;                                   /* {}: empty orthant */
+    }
+    if (fr) expr_free(fr);
+    return fi;
+}
+
+/* Consumes `value`; returns the value (unchanged, or the Piecewise of the
+ * per-orthant forms), or NULL to decline.  Runs at the frame that built the
+ * instantiation, with g_inst/g_assume set. */
+static Expr* res_sign_split(Expr* value, Expr* f, Expr* x, Expr* a, Expr* b,
+                            Expr* assumptions) {
+    if (!assumptions) return value;
+    ParamBound pb[16];
+    size_t np = collect_params(f, x, pb, 16, 0);
+    absorb_fact(pb, np, assumptions);
+    size_t S[RES_SPLIT_MAX], ns = 0;
+    for (size_t i = 0; i < np; i++) {
+        if (!(pb[i].lo < 0.0 && pb[i].hi > 0.0)) continue;   /* sign is pinned */
+        if (!res_param_known_real(pb[i].sym, assumptions)) continue;
+        if (ns == RES_SPLIT_MAX) return value;   /* too many: unchanged */
+        S[ns++] = i;
+    }
+    if (ns == 0) return value;
+
+    Expr** vs = malloc(np * sizeof(*vs));
+    for (size_t i = 0; i < np; i++) vs[i] = mk_sym(pb[i].sym);
+    Expr* vars = expr_new_function(mk_sym("List"), vs, np);
+    free(vs);
+
+    Expr* saved_inst = g_inst;
+    bool saved_coupled = g_coupled;
+    g_coupled = true;                 /* FindInstance points, not intervals */
+    size_t north = (size_t)1 << ns;
+    Expr** arm_val  = calloc(north, sizeof(Expr*));
+    Expr** arm_cond = calloc(north, sizeof(Expr*));
+    bool* infeasible = calloc(north, sizeof(bool));
+    bool single = true, fail = false;
+
+    for (size_t o = 0; o < north && !fail; o++) {
+        Expr** cj = malloc(ns * sizeof(Expr*));
+        for (size_t k = 0; k < ns; k++)
+            cj[k] = mk_fn2(((o >> k) & 1) ? "Less" : "Greater",
+                           mk_sym(pb[S[k]].sym), mk_int(0));
+        Expr* cond = ns == 1 ? cj[0] : expr_new_function(mk_sym("And"), cj, ns);
+        free(cj);
+        Expr* fi = res_orthant_points(pb, np, S, ns, o, assumptions, vars, cond);
+        if (getenv("RES_SPLIT_DEBUG")) fprintf(stderr, "split o=%zu fi=%s n=%zu\n", o, fi ? (head_name_is(fi, "List") ? "List" : "other") : "NULL", fi && head_name_is(fi,"List") ? fi->data.function.arg_count : 0);
+        if (!fi || !head_name_is(fi, "List")) { fail = true; }      /* undecided */
+        else if (fi->data.function.arg_count == 0) { infeasible[o] = true; }
+        else {
+            for (size_t j = 0; j < fi->data.function.arg_count && !fail; j++) {
+                g_inst = fi->data.function.args[j];
+                bool d2 = false;
+                Expr* vj = residue_dispatch(f, x, a, b, &d2);
+                if (getenv("RES_SPLIT_DEBUG")) { fprintf(stderr, "split o=%zu j=%zu vj=%s agree=%d\n", o, j, vj ? "ok" : "NULL", vj && value ? res_agree_here(value, vj) : -1); }
+                if (!vj) { fail = true; break; }
+                if (!value || !res_agree_here(value, vj)) single = false;
+                if (!arm_val[o]) {
+                    /* The families hand back an unevaluated assembly; the arm
+                     * is stored as a value (Piecewise holds its arms). */
+                    Expr* ve = evaluate(vj);
+                    expr_free(vj);
+                    arm_val[o] = ve;
+                    arm_cond[o] = expr_copy(cond);
+                }
+                else {
+                    if (!res_agree_here(arm_val[o], vj)) fail = true;
+                    expr_free(vj);
+                }
+            }
+            g_inst = saved_inst;
+        }
+        if (fi) expr_free(fi);
+        expr_free(cond);
+    }
+    g_inst = saved_inst;
+    g_coupled = saved_coupled;
+
+    Expr* out = NULL;
+    if (fail) {
+        out = NULL;
+    } else if (single) {
+        out = value; value = NULL;
+    } else {
+        /* Piecewise[{{v_o, cond_o}..., {I_p, p == 0}...}, I_last]: the strict
+         * orthants, then the boundary integrals p = 0, the last as default. */
+        size_t narms = 0;
+        Expr** arms = malloc((north + ns) * sizeof(Expr*));
+        for (size_t o = 0; o < north; o++) {
+            if (!arm_val[o]) continue;
+            /* Orthants with the same closed form share one arm.  A sign is
+             * dropped from the arm's condition when flipping it never leaves
+             * the group (or lands in an infeasible orthant): p > 0 && a > 0 ||
+             * p > 0 && a < 0 is p > 0. */
+            bool* in = calloc(north, sizeof(bool));
+            in[o] = true;
+            for (size_t q = o + 1; q < north; q++)
+                if (arm_val[q] && expr_eq(arm_val[q], arm_val[o])) {
+                    in[q] = true;
+                    expr_free(arm_val[q]); arm_val[q] = NULL;
+                }
+            size_t dc = 0;                      /* don't-care sign bits */
+            for (size_t k = 0; k < ns; k++) {
+                bool free_k = true;
+                for (size_t q = 0; q < north && free_k; q++)
+                    if (in[q] && !in[q ^ ((size_t)1 << k)] &&
+                        !infeasible[q ^ ((size_t)1 << k)]) free_k = false;
+                if (free_k) dc |= (size_t)1 << k;
+            }
+            Expr** ors = malloc(north * sizeof(Expr*));
+            size_t nor = 0;
+            bool* seen = calloc(north, sizeof(bool));
+            for (size_t q = 0; q < north; q++) {
+                if (!in[q] || seen[q & ~dc]) continue;
+                seen[q & ~dc] = true;
+                Expr* cj[RES_SPLIT_MAX];
+                size_t ncj = 0;
+                for (size_t k = 0; k < ns; k++)
+                    if (!(dc & ((size_t)1 << k)))
+                        cj[ncj++] = mk_fn2(((q >> k) & 1) ? "Less" : "Greater",
+                                           mk_sym(pb[S[k]].sym), mk_int(0));
+                ors[nor++] = ncj == 0 ? mk_sym("True")
+                           : ncj == 1 ? cj[0]
+                           : expr_new_function(mk_sym("And"), cj, ncj);
+            }
+            free(seen); free(in);
+            for (size_t q = 0; q < north; q++)
+                if (arm_cond[q] && (q == o || !arm_val[q])) {
+                    expr_free(arm_cond[q]); arm_cond[q] = NULL;
+                }
+            Expr* c = nor == 1 ? ors[0]
+                    : expr_new_function(mk_sym("Or"), ors, nor);
+            free(ors);
+            /* The same sound cleanup the unsplit value gets, under the arm's
+             * own condition (Abs[a] -> a on a > 0, Sqrt[-a^2] -> I Abs[a]). */
+            Expr* as_o = mk_fn2("And", expr_copy(assumptions), expr_copy(c));
+            Expr* v = res_refine_final(arm_val[o], as_o);
+            expr_free(as_o);
+            arms[narms++] = mk_fn2("List", v, c);
+            arm_val[o] = NULL;
+        }
+        /* Boundaries p = 0: integrate the boundary integrand on its own.
+         * One that does not close (x/(a^2 + x^2) at xi = 0 diverges) is cut
+         * out of the answer's region: ConditionalExpression[..., xi != 0]. */
+        Expr* excl[RES_SPLIT_MAX];
+        size_t nexcl = 0;
+        for (size_t k = 0; k < ns; k++) {
+            Expr* rule = mk_fn2("Rule", mk_sym(pb[S[k]].sym), mk_int(0));
+            Expr* as0 = eval_take(mk_fn1("Simplify",
+                            mk_fn2("ReplaceAll", expr_copy(assumptions), expr_copy(rule))));
+            bool bnd_excluded = as0 && as0->type == EXPR_SYMBOL &&
+                                strcmp(as0->data.symbol.name, "False") == 0;
+            if (!bnd_excluded) {
+                Expr* f0 = eval_take(mk_fn2("ReplaceAll", expr_copy(f), expr_copy(rule)));
+                Expr* opt = mk_fn2("Rule", mk_sym("Assumptions"), expr_copy(as0));
+                /* Quiet: an internal probe -- a divergent boundary must not
+                 * surface Integrate::idiv for the integral actually asked. */
+                Expr* i0 = eval_take(mk_fn1("Quiet",
+                               expr_new_function(mk_sym("Integrate"),
+                                   (Expr*[]){ f0, mk_fn3("List", expr_copy(x), expr_copy(a),
+                                                         expr_copy(b)), opt }, 3)));
+                bool closed = i0 && !contains_head(i0, "Integrate") &&
+                              !contains_head(i0, "DirectedInfinity") &&
+                              !(i0->type == EXPR_SYMBOL &&
+                                (strcmp(i0->data.symbol.name, "Indeterminate") == 0 ||
+                                 strcmp(i0->data.symbol.name, "ComplexInfinity") == 0));
+                if (closed)
+                    arms[narms++] = mk_fn2("List", i0,
+                                    mk_fn2("Equal", mk_sym(pb[S[k]].sym), mk_int(0)));
+                else {
+                    if (i0) expr_free(i0);
+                    excl[nexcl++] = mk_fn2("Unequal", mk_sym(pb[S[k]].sym), mk_int(0));
+                }
+            }
+            if (as0) expr_free(as0);
+            expr_free(rule);
+        }
+        if (narms == 0) {                 /* nothing derived anywhere */
+            for (size_t k = 0; k < nexcl; k++) expr_free(excl[k]);
+            free(arms);
+            goto done;
+        }
+        /* Every point of the (conditioned) region falls in a derived orthant
+         * or a closed boundary, so the last arm's condition is implied by the
+         * failure of the others: it becomes the default. */
+        Expr* last = arms[--narms];
+        Expr* dval = expr_copy(last->data.function.args[0]);
+        expr_free(last);
+        Expr* pw;
+        if (narms == 0) {
+            free(arms);
+            pw = dval;
+        } else {
+            Expr* lst = expr_new_function(mk_sym("List"), arms, narms);
+            free(arms);
+            pw = mk_fn2("Piecewise", lst, dval);
+        }
+        if (nexcl > 0) {
+            Expr* cond = nexcl == 1 ? excl[0]
+                       : expr_new_function(mk_sym("And"), excl, nexcl);
+            pw = mk_fn2("ConditionalExpression", pw, cond);
+        }
+        out = eval_take(pw);
+    }
+
+done:
+    for (size_t o = 0; o < north; o++) {
+        if (arm_val[o])  expr_free(arm_val[o]);
+        if (arm_cond[o]) expr_free(arm_cond[o]);
+    }
+    free(arm_val); free(arm_cond); free(infeasible);
+    expr_free(vars);
+    if (value) expr_free(value);
+    return out;
+}
+
 Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
                             Expr* assumptions, bool* diverges,
                             bool principal_value) {
@@ -3866,6 +4247,15 @@ Expr* integrate_residue_try(Expr* f, Expr* x, Expr* a, Expr* b,
     if (built_here && value && !res_verify_regions(value, f, x, a, b, assumptions)) {
         expr_free(value);
         value = NULL;
+    }
+    if (built_here && value) value = res_sign_split(value, f, x, a, b, assumptions);
+    else if (built_here && g_coupled) {
+        /* The representative point can sit on a sign boundary (FindInstance
+         * picks xi = 0), where the integral is a different one -- often
+         * divergent (x/(a^2 + x^2)) -- and no family closes.  The orthants
+         * off the boundary are still integrals in their own right. */
+        Expr* split = res_sign_split(NULL, f, x, a, b, assumptions);
+        if (split) { value = split; if (diverges) *diverges = false; }
     }
 
     /* Sound assumption-aware cleanup, once, at the outermost frame (where this

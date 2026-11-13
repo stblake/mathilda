@@ -49,6 +49,7 @@
 #include "sym_names.h"
 #include "print.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "limit.h"     /* limit_head_has_finite_cut_at_infinity */
 
 #include <stdbool.h>
 #include <stdlib.h>
@@ -571,6 +572,54 @@ static void nl_collect_poles(Expr* expr, Expr* x, Expr* a, Expr* b, PoleSet* s, 
     nl_collect_trig_poles(expr, x, a, b, s, as);
 }
 
+/* Branch-cut crossings of the ANTIDERIVATIVE inside (a, b).  A smooth f can
+ * antidifferentiate to F with a two-argument ArcTan[u, v] = Arg[u + I v],
+ * which jumps by 2 Pi where v changes sign with u < 0 -- e.g.
+ * Sin[x] Sin[11 x]/(26/25 - 2/5 Cos[2 x]) gives ArcTan[Cos[2 x], -Sin[2 x]],
+ * whose cut sits at x = Pi/2 -- or a Log / fractional power / Arg of a
+ * non-real argument, which jumps where Im g changes sign.  F(b) - F(a)
+ * telescopes across such a jump.  Every real zero of v (resp. Im g) inside
+ * (a, b) is therefore a breakpoint at which F is evaluated by its ONE-SIDED
+ * limits; a zero where F happens to be continuous costs one extra limit and
+ * changes nothing, so the set may over-approximate the cuts.  A crossing set
+ * the root finder cannot decide leaves s->undecidable for the caller, which
+ * then forces the numeric cross-check rather than trusting F(b) - F(a). */
+/* True iff F holds a node nl_collect_cuts would scan for crossings. */
+static bool nl_has_cut_node(const Expr* e, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION || !contains_symbol(e, x)) return false;
+    size_t ac = e->data.function.arg_count;
+    if (head_name_is((Expr*)e, "ArcTan") && ac == 2 &&
+        contains_symbol(e->data.function.args[1], x)) return true;
+    if ((head_name_is((Expr*)e, "Log") || head_name_is((Expr*)e, "Arg") ||
+         head_name_is((Expr*)e, "Power")) && ac >= 1 &&
+        contains_head(e->data.function.args[0], "Complex")) return true;
+    for (size_t i = 0; i < ac; i++)
+        if (nl_has_cut_node(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+static void nl_collect_cuts(Expr* e, Expr* x, Expr* a, Expr* b, PoleSet* s, Expr* as) {
+    if (!e || e->type != EXPR_FUNCTION || !contains_symbol(e, x)) return;
+    size_t ac = e->data.function.arg_count;
+    if (head_name_is(e, "ArcTan") && ac == 2 &&
+        contains_symbol(e->data.function.args[1], x)) {
+        nl_add_zero_roots(e->data.function.args[1], x, a, b, s, as);
+    } else if ((head_name_is(e, "Log") || head_name_is(e, "Arg") ||
+                (head_name_is(e, "Power") && ac == 2 &&
+                 !contains_symbol(e->data.function.args[1], x) &&
+                 (head_name_is(e->data.function.args[1], "Rational") ||
+                  e->data.function.args[1]->type == EXPR_REAL))) &&
+               contains_head(e->data.function.args[0], "Complex")) {
+        Expr* im = eval_take(mk_fn2("Refine",
+                       mk_fn1("ComplexExpand", mk_fn1("Im", expr_copy(e->data.function.args[0]))),
+                       mk_fn2("Element", expr_copy(x), mk_sym("Reals"))));
+        if (im && contains_symbol(im, x)) nl_add_zero_roots(im, x, a, b, s, as);
+        if (im) expr_free(im);
+    }
+    for (size_t i = 0; i < ac; i++)
+        nl_collect_cuts(e->data.function.args[i], x, a, b, s, as);
+}
+
 /* -------------------------------------------------------------------------
  * Boundary evaluation of the antiderivative.
  * ---------------------------------------------------------------------- */
@@ -630,6 +679,30 @@ static bool nl_is_finite_closed(Expr* v, const Expr* x) {
     return true;
 }
 
+/* True iff F holds a cut head (limit_head_has_finite_cut_at_infinity) whose
+ * argument becomes infinite at x = target.  Substitution then is not the
+ * boundary value: F = c Ei[Log[x] - 7 I/3] at x = 0 evaluates
+ * Ei[-Infinity - 7 I/3] -> Ei[-Infinity] -> 0, but the side of Ei's cut is
+ * in the imaginary part the Plus discarded, and the one-sided limit is
+ * c (-I Pi).  The same holds for Ei[-Tan[x] p I]-type arguments at a pole. */
+static bool nl_cut_head_arg_diverges(const Expr* F, Expr* x, Expr* target) {
+    if (!F || F->type != EXPR_FUNCTION) return false;
+    const Expr* h = F->data.function.head;
+    if (h->type == EXPR_SYMBOL && F->data.function.arg_count == 1 &&
+        limit_head_has_finite_cut_at_infinity(h->data.symbol.name) &&
+        contains_symbol(F->data.function.args[0], x)) {
+        Expr* v = eval_take(mk_fn1("Quiet",
+                      mk_fn2("ReplaceAll", expr_copy(F->data.function.args[0]),
+                             mk_fn2("Rule", expr_copy(x), expr_copy(target)))));
+        bool inf = v && (nl_is_infinite(v) || nl_contains_singular(v));
+        if (v) expr_free(v);
+        if (inf) return true;
+    }
+    for (size_t i = 0; i < F->data.function.arg_count; i++)
+        if (nl_cut_head_arg_diverges(F->data.function.args[i], x, target)) return true;
+    return false;
+}
+
 /* Limit[F, x -> target, Direction -> dir, Assumptions -> as]. */
 static Expr* nl_limit(Expr* F, Expr* x, Expr* target, NLDir dir, Expr* as) {
     Expr* rule = mk_fn2("Rule", expr_copy(x), expr_copy(target));
@@ -686,7 +759,8 @@ static Expr* nl_eval_at(Expr* F, Expr* x, Expr* target, NLDir dir, Expr* as) {
              * path -- and it is a strictly better answer than the one-sided
              * Limit, which the engine may leave unevaluated. */
             out = sub;
-        } else if (nl_is_finite_closed(sub, x)) {
+        } else if (nl_is_finite_closed(sub, x) &&
+                   !nl_cut_head_arg_diverges(F, x, target)) {
             out = sub;
         } else {
             if (sub) expr_free(sub);
@@ -1335,18 +1409,56 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
         }
     }
 
+    /* 2d. Branch-cut crossings of F (nl_collect_cuts) join the breakpoints;
+     * F is taken there by its one-sided limits, never by substitution. */
+    PoleSet cuts; poleset_init(&cuts);
+    nl_collect_cuts(F, x, a, b, &cuts, assumptions);
+    if (cuts.undecidable || cuts.symbolic) {
+        force_validate = true;
+    } else if (!poles.symbolic) {
+        for (size_t i = 0; i < cuts.n; i++)
+            poleset_insert(&poles, expr_copy(cuts.pts[i]), cuts.vals[i]);
+    }
+
     /* 3. Breakpoints [a, poles..., b] and the telescoping sum. */
     size_t nbp = poles.n + 2;
     Expr** bp = malloc(nbp * sizeof(*bp));
+    bool* bp_cut = calloc(nbp, sizeof(bool));
     bp[0] = a;                                  /* borrowed */
-    for (size_t i = 0; i < poles.n; i++) bp[i + 1] = poles.pts[i]; /* borrowed */
+    for (size_t i = 0; i < poles.n; i++) {
+        bp[i + 1] = poles.pts[i];               /* borrowed */
+        for (size_t j = 0; j < cuts.n && !cuts.undecidable && !cuts.symbolic; j++)
+            if (fabs(poles.vals[i] - cuts.vals[j]) <= 1e-12 * (1.0 + fabs(cuts.vals[j])))
+                bp_cut[i + 1] = true;
+    }
     bp[nbp - 1] = b;                            /* borrowed */
+    /* A finite endpoint can itself sit on a cut (ArcTan[-1 + ..., -5 Sin[2x]]
+     * at x = 0): there too F's value is its one-sided limit, not the principal
+     * value substitution reads on the cut. */
+    if (nl_has_cut_node(F, x)) {
+        if (!nl_is_infinite(a)) bp_cut[0] = true;
+        if (!nl_is_infinite(b)) bp_cut[nbp - 1] = true;
+    }
 
     Expr* total = expr_new_integer(0);
     bool failed = false;
     for (size_t i = 0; i + 1 < nbp && !failed; i++) {
-        Expr* lo = nl_eval_at(F, x, bp[i],     NL_DIR_ABOVE, assumptions);
-        Expr* hi = nl_eval_at(F, x, bp[i + 1], NL_DIR_BELOW, assumptions);
+        Expr* lo = bp_cut[i]
+                 ? nl_limit(F, x, bp[i], NL_DIR_ABOVE, assumptions)
+                 : nl_eval_at(F, x, bp[i],     NL_DIR_ABOVE, assumptions);
+        Expr* hi = bp_cut[i + 1]
+                 ? nl_limit(F, x, bp[i + 1], NL_DIR_BELOW, assumptions)
+                 : nl_eval_at(F, x, bp[i + 1], NL_DIR_BELOW, assumptions);
+        /* An endpoint whose one-sided limit did not close falls back to the
+         * ordinary evaluation (substitution is the limit off a cut). */
+        if (bp_cut[i] && (!lo || !nl_is_finite_closed(lo, x))) {
+            if (lo) expr_free(lo);
+            lo = (i == 0) ? nl_eval_at(F, x, bp[i], NL_DIR_ABOVE, assumptions) : NULL;
+        }
+        if (bp_cut[i + 1] && (!hi || !nl_is_finite_closed(hi, x))) {
+            if (hi) expr_free(hi);
+            hi = (i + 1 == nbp - 1) ? nl_eval_at(F, x, bp[i + 1], NL_DIR_BELOW, assumptions) : NULL;
+        }
         if (!lo || !hi) {
             if (lo) expr_free(lo);
             if (hi) expr_free(hi);
@@ -1364,7 +1476,9 @@ Expr* integrate_newton_leibniz_try_pv(Expr* f, Expr* x, Expr* a, Expr* b,
     }
 
     free(bp);
+    free(bp_cut);
     poleset_free(&poles);
+    poleset_free(&cuts);
 
     /* Capture F's continuity-risk fingerprint before releasing it: a step head,
      * an inverse-trig node over a pole-bearing trig head, or a radical whose

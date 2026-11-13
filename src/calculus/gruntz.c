@@ -1699,6 +1699,62 @@ static Expr* asymptotic_expansion_2arg(const char* head, const Expr* order,
     return semi_expand_series(fd, d, arg, nterms);
 }
 
+/* The connection constant of Ei's asymptotic expansion.
+ *
+ * Ei(z) ~ E^z (1/z + 1/z^2 + 2/z^3 + ...) holds only on the real axis. Off
+ * it, Ei(z) = -E1(-z) + I Pi Sign[Im z], and E1's expansion is the one valid
+ * in every direction, so for |z| -> oo with Im z != 0
+ *     Ei(z) ~ E^z (1/z + 1/z^2 + ...) + I Pi Sign[Im z]      (DLMF 6.2.4,
+ *                                                              6.12.1).
+ * Where E^z decays (Re z -> -oo) the constant is the whole limit:
+ * Ei[t - I] -> -I Pi as t -> -oo, not 0. Dropping it turned every
+ * Newton-Leibniz evaluation of an E^(c t)/(t - I a) antiderivative at an
+ * infinite end into a wrong answer -- e.g. Integrate[1/(a^2 + Log[x]^2),
+ * {x, 0, 1}] and the Laplace transforms of 1/(t^2 + a^2) behind
+ * Integrate[E^(-p Tan[x]), {x, 0, Pi/2}].
+ *
+ * Returns the sign of Im g for the limit variable x -> +oo (so x > 0):
+ * 0 when g is real, +1/-1 when Im g is eventually of one sign, 2 when it
+ * cannot be decided (the caller then keeps the node: an honest gap). */
+static int ei_connection_sign(const Expr* g, const Expr* x) {
+    Expr* assum = mk_fn2("And",
+        mk_fn2("Greater", expr_copy((Expr*)x), mk_int(0)),
+        mk_sym("$Assumptions"));
+    Expr* im = simp(mk_fn2("Refine", mk_fn1("Im", expr_copy((Expr*)g)),
+                           expr_copy(assum)));
+    int s = 2;
+    if (!im) { expr_free(assum); return 2; }
+    if (is_lit_zero(im)) s = 0;
+    else if (has_x(im, x)) {
+        int saved = g_fail; g_fail = 0;
+        int r = gz_sign(im, x);
+        bool failed = g_fail;
+        g_fail = saved;
+        if (!failed && (r == 1 || r == -1 || r == 0)) s = r;
+    } else {
+        Expr* sg = simp(mk_fn2("Refine", mk_fn1("Sign", expr_copy(im)),
+                               expr_copy(assum)));
+        if (sg && sg->type == EXPR_INTEGER &&
+            sg->data.integer >= -1 && sg->data.integer <= 1)
+            s = (int)sg->data.integer;
+        if (sg) expr_free(sg);
+    }
+    expr_free(im);
+    expr_free(assum);
+    return s;
+}
+
+/* Ei's expansion at an infinite argument with its connection constant
+ * (see ei_connection_sign). NULL when Im g's sign is undecidable. */
+static Expr* ei_asymptotic_expansion(const Expr* g, const Expr* x, int nterms) {
+    int s = ei_connection_sign(g, x);
+    if (s == 2) return NULL;
+    Expr* r = asymptotic_expansion("ExpIntegralEi", g, nterms);
+    if (s == 0 || !r) return r;
+    return simp(mk_plus(r, mk_times(mk_int(s),
+                                    mk_times(mk_sym("I"), mk_sym("Pi")))));
+}
+
 /* Rewrite every semi-tractable node F[g] (g -> +/-oo) as its exp-log
  * asymptotic expansion; recurse bottom-up so nested arguments are isolated
  * first. Leaves the node untouched when g's limit is finite/undecidable. */
@@ -1742,6 +1798,12 @@ static Expr* isolate_semitractable(const Expr* e, const Expr* x, int nterms) {
                 expr_free(g2);
                 return simp(mk_exp(lg));
             }
+            if (hn == SYM_ExpIntegralEi) {
+                Expr* r = ei_asymptotic_expansion(g2, x, nterms);
+                if (!r) return mk_fn1(hn, g2);   /* Im g undecided: keep */
+                expr_free(g2);
+                return r;
+            }
             Expr* r = asymptotic_expansion(hn, g2, nterms);
             expr_free(g2);
             return simp(r);
@@ -1749,8 +1811,10 @@ static Expr* isolate_semitractable(const Expr* e, const Expr* x, int nterms) {
         if (cls == -1 && !is_loggamma && !two_arg && !is_zeta) {
             if (hn == SYM_ExpIntegralEi) {
                 /* Ei's asymptotic series E^y(1/y+1/y^2+...) is valid for
-                 * y -> -oo as well (E^y -> 0). */
-                Expr* r = asymptotic_expansion(hn, g2, nterms);
+                 * y -> -oo as well (E^y -> 0), plus the connection constant
+                 * I Pi Sign[Im y] off the real axis -- the whole limit. */
+                Expr* r = ei_asymptotic_expansion(g2, x, nterms);
+                if (!r) return mk_fn1(hn, g2);   /* Im g undecided: keep */
                 expr_free(g2);
                 return r;
             }

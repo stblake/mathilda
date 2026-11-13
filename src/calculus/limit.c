@@ -351,6 +351,7 @@ static bool  contains_bounded_head(Expr* e);
 static bool  contains_head_symbol(Expr* e, const char* head_sym);
 static Expr* layer_maxmin_bounded(Expr* f, LimitCtx* ctx);
 static Expr* layer_param_power(Expr* f, LimitCtx* ctx);
+static Expr* layer_branch_cut_side(Expr* f, LimitCtx* ctx);
 #define LIMIT_UNKNOWN_GROWTH INT64_MAX
 static int64_t growth_exponent_upper(Expr* e, Expr* x);
 static int64_t growth_exponent_exact(Expr* e, Expr* x);
@@ -2022,6 +2023,33 @@ static bool contains_head_symbol(Expr* e, const char* head_sym) {
 /* Interval layers (which return Indeterminate). Restricting to +/-Infinity  */
 /* (not ComplexInfinity) avoids direction-ambiguous folds.                  */
 /* ---------------------------------------------------------------------- */
+/* Heads with a branch cut running along the real axis out to +/-Infinity
+ * whose two boundary values there are FINITE and differ: approached from
+ * above the cut and from below it the head tends to different constants,
+ *     Ei(-oo +/- I 0) = +/- I Pi,   Ci(-oo +/- I 0) = +/- I Pi,
+ *     ArcTanh(+/-oo + I 0) - ArcTanh(+/-oo - I 0) = I Pi.
+ * Folding head[Limit[g]] is sound for them only when g is real: the finite
+ * imaginary part of g (t - I, Log[x] + 7 I/3) is exactly what picks the side,
+ * and Limit[g] = -Infinity has already discarded it. Heads whose cut values
+ * diverge there (Log, Sqrt, ExpIntegralE, Gamma[a, z]) fold to the same
+ * infinite answer from either side and need no guard. */
+bool limit_head_has_finite_cut_at_infinity(const char* hn) {
+    return hn == SYM_ExpIntegralEi || hn == SYM_CosIntegral ||
+           hn == SYM_ArcTanh;
+}
+
+/* True unless g is provably real for real x (Im[g] refines to 0 under
+ * Element[x, Reals] and the ambient $Assumptions). */
+static bool lim_arg_maybe_nonreal(const Expr* g, const Expr* x) {
+    Expr* assum = mk_fn2("And",
+        mk_fn2("Element", expr_copy((Expr*)x), mk_sym("Reals")),
+        mk_sym("$Assumptions"));
+    Expr* im = simp(mk_fn2("Refine", mk_fn1("Im", expr_copy((Expr*)g)), assum));
+    bool nonreal = !is_lit_zero(im);
+    expr_free(im);
+    return nonreal;
+}
+
 static Expr* layer_compose_at_infinity(Expr* f, LimitCtx* ctx) {
     if (f->type != EXPR_FUNCTION || f->data.function.arg_count != 1) return NULL;
     Expr* head = f->data.function.head;
@@ -2035,6 +2063,15 @@ static Expr* layer_compose_at_infinity(Expr* f, LimitCtx* ctx) {
     if (expr_contains(lim_inner, ctx->x)) { expr_free(lim_inner); return NULL; }
 
     bool inner_real_inf = is_infinity_sym(lim_inner) || is_neg_infinity(lim_inner);
+    /* A cut head at a real infinity reached by a non-real argument: the side
+     * of the cut is in the discarded imaginary part (see
+     * limit_head_has_finite_cut_at_infinity). Leave it to the Gruntz layer, whose
+     * Ei expansion carries the connection constant I Pi Sign[Im g]. */
+    if (inner_real_inf && limit_head_has_finite_cut_at_infinity(head->data.symbol.name) &&
+        lim_arg_maybe_nonreal(inner, ctx->x)) {
+        expr_free(lim_inner);
+        return NULL;
+    }
     /* A directionless (ComplexInfinity) or directed (DirectedInfinity[d])
      * inner limit is also foldable when the head has a definite value there,
      * e.g. ArcTan[DirectedInfinity[I Sqrt[2]]] = Pi/2. */
@@ -4517,6 +4554,11 @@ static Expr* compute_limit(Expr* f_in, LimitCtx* ctx) {
      * scope and f is exactly a power, and it must pre-empt the continuous-
      * substitution fast path, which would otherwise return the useless husk
      * 0^n for x^n at x -> 0. Inert (NULL) when no assumption is present. */
+    /* A branch cut of Log / Arg / ArcTan[u, v] / a fractional power ON the
+     * limit point, approached by a non-real argument: substitution reads the
+     * principal value on the cut, which is one side only. Must pre-empt every
+     * substituting layer below. */
+    TRY(LIMIT_M_SUBSTITUTION, layer_branch_cut_side(f, ctx));
     TRY(LIMIT_M_SUBSTITUTION, layer_param_power(f, ctx));
 
     /* Special-function leading asymptotics (Gamma ratio -> x^a, Hurwitz Zeta,
@@ -4950,6 +4992,239 @@ static Expr* limit_var_power(Expr* f, Expr* lim_var, Expr* point, int dir,
  * they run for recursive sub-limits too (e.g. the 1/x^p the bounded envelope
  * hands back for Sin[x]/x^p), not only at the top level. Inert without an
  * assumption in scope. */
+/* ---------------------------------------------------------------------- */
+/* Layer -- one-sided limits at a branch cut                               */
+/*                                                                         */
+/* Log[g], Arg[g], g^p (p not an integer) and ArcTan[u, v] = Arg[u + I v]  */
+/* are discontinuous across their cut (g on the negative real axis; v = 0  */
+/* with u < 0). When g(x0) lies on the cut but g is not real near x0, the  */
+/* side of the cut g approaches from is the sign s of Im g on the approach */
+/* side, and on that side                                                  */
+/*     Log[g]       = Log[-g] + s I Pi                                     */
+/*     Arg[g]       = Arg[-g] + s Pi                                       */
+/*     ArcTan[u, v] = ArcTan[-u, -v] + s Pi                                */
+/*     g^p          = (-g)^p E^(s I Pi p)                                  */
+/* each continuous at x0. Substituting x0 instead read the principal value */
+/* on the cut, which is the s = +1 side whatever the direction:            */
+/* Limit[ArcTan[-1, y], y -> 0, Direction -> "FromBelow"] was Pi (-Pi),    */
+/* Limit[Log[-1 + I y], y -> 0, Direction -> "FromBelow"] was I Pi (-I Pi), */
+/* and every Newton-Leibniz evaluation of an ArcTan[Cos[2x], -Sin[2x]]     */
+/* antiderivative at x = Pi/2 telescoped across a 2 Pi jump.               */
+/* A two-sided limit takes both sides and agrees only if they do. A g that */
+/* is real near x0 (Log[x - 2] at x = 1) stays on the cut, where the       */
+/* principal value IS the limit, and is left to substitution.              */
+/* ---------------------------------------------------------------------- */
+typedef enum { CUT_LOG, CUT_ARG, CUT_ATAN2, CUT_POW } CutKind;
+
+/* +1 / -1 for a numeric real of that sign, 0 for an exact or numeric zero,
+ * 2 otherwise (symbolic, complex, unknown). */
+static int cut_numeric_sign(Expr* v) {
+    if (!v) return 2;
+    Expr* n = simp(mk_fn1("N", expr_copy(v)));
+    int r = 2;
+    if (n && n->type == EXPR_INTEGER) r = n->data.integer > 0 ? 1 : n->data.integer < 0 ? -1 : 0;
+    else if (n && n->type == EXPR_REAL) r = n->data.real > 0 ? 1 : n->data.real < 0 ? -1 : 0;
+    if (n) expr_free(n);
+    return r;
+}
+
+/* True iff e has a symbol other than x that is not a numeric constant. */
+static bool cut_has_param(const Expr* e, const Expr* x) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL)
+        return e->data.symbol.name != x->data.symbol.name &&
+               !expr_is_numeric_quantity(e);
+    if (e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (cut_has_param(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+/* The imaginary part of g for real x (owned): ComplexExpand when g holds no
+ * parameter (x is the only symbol, and real), else Refine under x real and
+ * the ambient assumptions, which does not presume a parameter real. */
+static Expr* cut_imag_part(Expr* g, Expr* x) {
+    Expr* xr = mk_fn2("Element", expr_copy(x), mk_sym("Reals"));
+    Expr* im;
+    if (!cut_has_param(g, x))
+        im = simp(mk_fn2("Refine", mk_fn1("ComplexExpand", mk_fn1("Im", expr_copy(g))), xr));
+    else
+        im = simp(mk_fn2("Refine", mk_fn1("Im", expr_copy(g)),
+                         mk_fn2("And", xr, mk_sym("$Assumptions"))));
+    return im;
+}
+
+/* The cut nodes of f on their cut at the point, collected post-order
+ * (innermost first).  Each entry carries its kind and the quantity q (owned)
+ * whose side sign picks the branch: v for ArcTan[u, v], Im g otherwise. */
+typedef struct { Expr* node; CutKind kind; Expr* q; } CutNode;
+typedef struct { CutNode* v; size_t n, cap; } CutSet;
+
+static void cut_push(CutSet* cs, Expr* node, CutKind k, Expr* q) {
+    if (cs->n == cs->cap) {
+        cs->cap = cs->cap ? 2 * cs->cap : 8;
+        cs->v = realloc(cs->v, cs->cap * sizeof(CutNode));
+    }
+    cs->v[cs->n].node = node; cs->v[cs->n].kind = k; cs->v[cs->n].q = q;
+    cs->n++;
+}
+
+static void cut_find_all(Expr* e, LimitCtx* ctx, CutSet* cs) {
+    if (!e || e->type != EXPR_FUNCTION || free_of(e, ctx->x)) return;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        cut_find_all(e->data.function.args[i], ctx, cs);
+    size_t ac = e->data.function.arg_count;
+    Expr* g = NULL;
+    CutKind k = CUT_LOG;
+    if (head_is(e, SYM_Log) && ac == 1) { g = e->data.function.args[0]; k = CUT_LOG; }
+    else if (head_is(e, SYM_Arg) && ac == 1) { g = e->data.function.args[0]; k = CUT_ARG; }
+    else if (head_is(e, SYM_Power) && ac == 2 && free_of(e->data.function.args[1], ctx->x)) {
+        Expr* p = e->data.function.args[1];
+        bool frac = (p->type == EXPR_REAL && p->data.real != floor(p->data.real)) ||
+                    head_is(p, SYM_Rational);
+        if (frac) { g = e->data.function.args[0]; k = CUT_POW; }
+    } else if (head_is(e, SYM_ArcTan) && ac == 2) {
+        Expr* u = e->data.function.args[0];
+        Expr* v = e->data.function.args[1];
+        if (free_of(v, ctx->x)) return;
+        Expr* u0 = subst_eval(u, ctx->x, ctx->point);
+        Expr* v0 = subst_eval(v, ctx->x, ctx->point);
+        bool on = cut_numeric_sign(u0) == -1 && cut_numeric_sign(v0) == 0;
+        expr_free(u0); expr_free(v0);
+        if (on) cut_push(cs, e, CUT_ATAN2, expr_copy(v));
+        return;
+    }
+    if (!g || free_of(g, ctx->x)) return;
+    Expr* g0 = subst_eval(g, ctx->x, ctx->point);
+    bool neg = cut_numeric_sign(g0) == -1;
+    expr_free(g0);
+    if (!neg) return;
+    Expr* im = cut_imag_part(g, ctx->x);
+    if (!im || is_lit_zero(im)) { if (im) expr_free(im); return; }   /* real g */
+    cut_push(cs, e, k, im);
+}
+
+static void cut_set_free(CutSet* cs) {
+    for (size_t i = 0; i < cs->n; i++) expr_free(cs->v[i].q);
+    free(cs->v);
+}
+
+/* Sign of q on the approach side (side = +1 from above, -1 from below) from
+ * its leading term c (x - x0)^k: sign(c) side^k. 0 when undecided. */
+static int cut_side_sign(Expr* q, LimitCtx* ctx, int side) {
+    for (int k = 1; k <= 6; k++) {
+        Expr* d = mk_fn2("Plus", expr_copy(ctx->x), mk_neg(expr_copy(ctx->point)));
+        Expr* r = simp(mk_fn2("Times", expr_copy(q),
+                              mk_fn2("Power", d, mk_int(-k))));
+        LimitCtx sub = *ctx; sub.depth += 1; sub.dir = side;
+        Expr* c = compute_limit(r, &sub);
+        expr_free(r);
+        if (!c) return 0;
+        int sg = cut_numeric_sign(c);
+        expr_free(c);
+        if (sg == 0) continue;                       /* vanishes faster */
+        if (sg == 2) return 0;
+        return (k % 2 == 1 && side < 0) ? -sg : sg;
+    }
+    return 0;
+}
+
+/* The side-continuous branch of one cut node (owned). */
+static Expr* cut_branch(const CutNode* c, int s) {
+    Expr* node = c->node;
+    if (c->kind == CUT_ATAN2)
+        return mk_fn2("Plus",
+                   mk_fn2("ArcTan", mk_neg(expr_copy(node->data.function.args[0])),
+                                    mk_neg(expr_copy(node->data.function.args[1]))),
+                   mk_times(mk_int(s), mk_sym("Pi")));
+    Expr* g = node->data.function.args[0];
+    if (c->kind == CUT_LOG)
+        return mk_fn2("Plus", mk_fn1("Log", mk_neg(expr_copy(g))),
+                      mk_times(mk_times(mk_int(s), mk_sym("I")), mk_sym("Pi")));
+    if (c->kind == CUT_ARG)
+        return mk_fn2("Plus", mk_fn1("Arg", mk_neg(expr_copy(g))),
+                      mk_times(mk_int(s), mk_sym("Pi")));
+    Expr* p = node->data.function.args[1];
+    return mk_times(mk_fn2("Power", mk_neg(expr_copy(g)), expr_copy(p)),
+                    mk_fn2("Power", mk_sym("E"),
+                           mk_times(mk_times(mk_times(mk_int(s), mk_sym("I")),
+                                             mk_sym("Pi")), expr_copy(p))));
+}
+
+/* e with each cut node (pointer identity) replaced by its branch (copied). */
+static Expr* cut_replace_all(Expr* e, const CutSet* cs, Expr** repl) {
+    for (size_t i = 0; i < cs->n; i++)
+        if (e == cs->v[i].node) return expr_copy(repl[i]);
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = n ? malloc(n * sizeof(Expr*)) : NULL;
+    for (size_t i = 0; i < n; i++) a[i] = cut_replace_all(e->data.function.args[i], cs, repl);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return r;
+}
+
+/* The limit from one side: every cut node replaced at once by its branch on
+ * that side (outermost replacement wins, so a node nested inside another
+ * cut node is subsumed -- its own branch is re-derived by the recursion). */
+static Expr* cut_one_sided(Expr* f, const CutSet* cs, LimitCtx* ctx, int side) {
+    Expr** repl = calloc(cs->n, sizeof(Expr*));
+    int* sgn = calloc(cs->n, sizeof(int));
+    bool ok = true;
+    for (size_t i = 0; i < cs->n && ok; i++) {
+        int s = 0;
+        for (size_t j = 0; j < i && !s; j++)     /* the same q: the same sign */
+            if (expr_eq(cs->v[j].q, cs->v[i].q)) s = sgn[j];
+        if (!s) s = cut_side_sign(cs->v[i].q, ctx, side);
+        if (s != 1 && s != -1) { ok = false; break; }
+        sgn[i] = s;
+        repl[i] = cut_branch(&cs->v[i], s);
+    }
+    free(sgn);
+    Expr* r = NULL;
+    if (ok) {
+        Expr* f2 = simp(cut_replace_all(f, cs, repl));
+        LimitCtx sub = *ctx; sub.depth += 1; sub.dir = side;
+        r = compute_limit(f2, &sub);
+        expr_free(f2);
+    }
+    for (size_t i = 0; i < cs->n; i++) if (repl[i]) expr_free(repl[i]);
+    free(repl);
+    return r;
+}
+
+static Expr* layer_branch_cut_side(Expr* f, LimitCtx* ctx) {
+    /* A finite numeric point: a literal, or an exact constant like Pi/2. */
+    if (!is_numeric_literal_point(ctx->point) &&
+        !(expr_is_numeric_quantity(ctx->point) && cut_numeric_sign(ctx->point) != 2))
+        return NULL;
+    if (ctx->dir != LIMIT_DIR_FROMABOVE && ctx->dir != LIMIT_DIR_FROMBELOW &&
+        ctx->dir != LIMIT_DIR_TWOSIDED && ctx->dir != LIMIT_DIR_REALS) return NULL;
+    if (ctx->depth > 40) return NULL;
+    CutSet cs = { NULL, 0, 0 };
+    cut_find_all(f, ctx, &cs);
+    if (cs.n == 0) { free(cs.v); return NULL; }
+    Expr* out = NULL;
+    if (ctx->dir == LIMIT_DIR_FROMABOVE || ctx->dir == LIMIT_DIR_FROMBELOW) {
+        out = cut_one_sided(f, &cs, ctx, ctx->dir);
+    } else {
+        Expr* up = cut_one_sided(f, &cs, ctx, LIMIT_DIR_FROMABOVE);
+        Expr* dn = up ? cut_one_sided(f, &cs, ctx, LIMIT_DIR_FROMBELOW) : NULL;
+        if (up && dn) {
+            Expr* d = simp(mk_fn2("Plus", expr_copy(up), mk_neg(expr_copy(dn))));
+            bool same = is_lit_zero(d) ||
+                        (d && zero_test_decide(d) == ZERO_TEST_TRUE);
+            if (d) expr_free(d);
+            if (same) { out = up; up = NULL; }
+            else out = mk_sym("Indeterminate");   /* the two sides differ */
+        }
+        if (up) expr_free(up);
+        if (dn) expr_free(dn);
+    }
+    cut_set_free(&cs);
+    return out;
+}
+
 static Expr* layer_param_power(Expr* f, LimitCtx* ctx) {
     if (!ctx->assume) return NULL;
     Expr* r = limit_var_power(f, ctx->x, ctx->point, ctx->dir, ctx->assume);
