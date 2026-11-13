@@ -21,18 +21,20 @@
 
 brResidueSetup::usage = "brResidueSetup[T, cv, c, nr] gathers the data of the log part of the normal component c Y whose nonzero-residue polynomial is nr[\"P\"] (brNormalResidues): <|\"F0\" -> residue field over Q (fieldQ or fieldNF), \"Fk\" -> the same over k (fieldFn), \"roots\" -> residues (elements of F0), \"basis\" -> Q-basis beta_j, \"coeffs\" -> b, \"N\", \"E\", \"Ep\", \"Bp\" (residue data in theta), \"B\" -> the integral basis descriptor, \"vars\" -> {x, lower...}|>.";
 brResidueSetup[T_Association, cv_Association, c_, nr_Association] := Module[
-  {th = T["theta"], tc = Together[c], N, E, Ep, En, Bp, t = Unique["Bronstein`Private`brTau"], rf, F0, Fk, qb, vars},
-  N = Expand[Numerator[tc]]; E = Expand[Denominator[tc]];
-  Ep = Together[brD[T, E]];
-  En = Numerator[Together[First[brSplit[T, E]]]];
-  Bp = Numerator[Together[En/PolynomialGCD[En, cv["G"]]]];
+  {rd = brResidueData[T, cv, c], t = Unique["Bronstein`Private`brTau"], rf, F0, Fk, qb},
   rf = residueField[nr["P"], nr["z"], t];
   F0 = rf["F"];
-  vars = Prepend[T["lower"], T["x"]];
-  Fk = If[F0["Type"] === "NF", fieldFn[vars, {F0["t"], F0["mu"], F0["theta"]}], fieldFn[vars]];
+  Fk = If[F0["Type"] === "NF", fieldFn[rd["vars"], {F0["t"], F0["mu"], F0["theta"]}], fieldFn[rd["vars"]]];
   qb = qBasis[F0, rf["roots"]];
-  <|"F0" -> F0, "Fk" -> Fk, "roots" -> rf["roots"], "basis" -> qb["basis"], "coeffs" -> qb["coeffs"],
-    "N" -> N, "E" -> E, "Ep" -> Ep, "Bp" -> Expand[Bp], "B" -> cv["B"], "vars" -> vars|>];
+  Join[rd, <|"F0" -> F0, "Fk" -> Fk, "roots" -> rf["roots"], "basis" -> qb["basis"], "coeffs" -> qb["coeffs"]|>]];
+
+brResidueData::usage = "brResidueData[T, cv, c] is the residue data of the normal component c Y that does not depend on a residue field: <|\"N\", \"E\" (numerator and denominator of c), \"Ep\" -> D E (tower derivative), \"Bp\" -> the branch-free part of the normal part of E, \"B\" -> the integral basis descriptor, \"vars\" -> {x, lower...}|>. Shared by brResidueSetup (field of all residues) and the per-orbit construction (one field per orbit).";
+brResidueData[T_Association, cv_Association, c_] := Module[{tc = Together[c], N, E, En, Bp},
+  N = Expand[Numerator[tc]]; E = Expand[Denominator[tc]];
+  En = Numerator[Together[First[brSplit[T, E]]]];
+  Bp = Numerator[Together[En/PolynomialGCD[En, cv["G"]]]];
+  <|"N" -> N, "E" -> E, "Ep" -> Together[brD[T, E]], "Bp" -> Expand[Bp], "B" -> cv["B"],
+    "vars" -> Prepend[T["lower"], T["x"]]|>];
 
 brDivisorIdeal::usage = "brDivisorIdeal[rs, b] is the ideal (over rs[\"Fk\"], on the basis rs[\"B\"]) of the divisor Sum_i b_i Delta(alpha_i), alpha_i = rs[\"roots\"] (Trager's divisorIdeal with the tower-derivative residue data of rs).";
 brDivisorIdeal[rs_Association, b_List] :=

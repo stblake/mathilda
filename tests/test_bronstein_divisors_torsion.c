@@ -76,6 +76,55 @@ static void test_specialized_frame(void) {
     BR_ANTIDERIV("E^x/((1 + E^x) Log[1 + E^x] (2 + Log[1 + E^x]^4)^(2/3))", "Bronstein");
 }
 
+/* The per-orbit log part (LogPart.m brOrbitLogPart): one Galois orbit of
+ * residues at a time over Q(gamma), not over the field of all residues.
+ * Y^3 = 2 + theta, theta = E^(2x): P(z) = Q(z^3) with Q quadratic, one orbit of
+ * degree 6 whose splitting field has degree 36 (benchmark 257, cM-2-105: over
+ * 200 s on the Q-basis path, now well under a second).  Positive genus:
+ * Y^3 = 2 + theta^4 (genus 3), the orbit divisor of order 4 (cM-1-74). */
+static void test_orbit_log_part(void) {
+    br_run("TO = brTower[(2 E^(2 x) (1 + E^(2 x)) (2 + E^(2 x))^(1/3))/(2 + E^(2 x) + E^(4 x)), x];"
+           " cvO = brCurve[TO, 3, 2 + brT1]; cO = (4 brT1^2)/((2 + brT1) (2 + brT1 + brT1^2));"
+           " nrO = brNormalResidues[TO, cvO, cO]; True");
+    BR_TRUE("brOrbitFirstQ[nrO]");
+    BR_FALSE("brOrbitFirstQ[<|\"P\" -> z^2 - 9, \"z\" -> z|>]");           /* rational residues */
+    BR_FALSE("brOrbitFirstQ[<|\"P\" -> z^2 + 1, \"z\" -> z|>]");           /* splitting field = Q(gamma) */
+    BR_TRUE("brOrbitFirstQ[<|\"P\" -> z^3 - 2, \"z\" -> z|>]");
+    BR_EQ("Sort[Keys[brResidueData[TO, cvO, cO]]]", "{\"B\", \"Bp\", \"E\", \"Ep\", \"N\", \"vars\"}");
+    BR_TRUE("Module[{rd = brResidueData[TO, cvO, cO], rs = brResidueSetup[TO, cvO, cO, nrO]},"
+            " AllTrue[{\"N\", \"E\", \"Ep\", \"Bp\"}, Together[rd[#] - rs[#]] === 0 &]]");
+    /* a reference point is ordinary after specialization: G(c) != 0 */
+    BR_FALSE("brGoodSpecializationQ[T147, cv147, rs147, {x -> 5}, -5]");   /* theta + 5 at theta = -5 */
+    BR_TRUE("brGoodSpecializationQ[T147, cv147, rs147, {x -> 5}, 7]");
+    br_run("lpO = brComponentLogPart[TO, cvO, cO]; True");
+    BR_TRUE("Length[lpO[\"orbits\"]] === 1 && lpO[\"terms\"] === {} && lpO[\"remainder\"] === 0");
+    BR_TRUE("Module[{r = lpO[\"orbits\"][[1]]}, r[\"ext\"] && Together[r[\"coef\"]/r[\"t\"]] === 1/3 &&"
+            " Exponent[r[\"q\"], r[\"z\"]] === 6 && r[\"D\"][[1]] === 0]");
+    BR_TRUE("Together[lpO[\"orbitD\"][[2]] - cO] === 0 && lpO[\"orbitD\"][[3]] === 0");
+    BR_TRUE("Module[{e = brOrbitLogExpression[cvO[\"B\"], lpO[\"orbits\"][[1]], yy]},"
+            " e[[1]] === 1 && e[[3]] === \"RootSum\" && Head[e[[2]]] === RootSum &&"
+            " FreeQ[e[[2]], lpO[\"orbits\"][[1]][\"t\"]] && !FreeQ[e[[2]], yy]]");
+    /* the orbit order by specialization: 1 in genus 0 */
+    BR_TRUE("Module[{rd = brResidueData[TO, cvO, cO], q = nrO[\"P\"], z = nrO[\"z\"], t, rs},"
+            " t = Unique[\"tt\"]; rs = Join[rd, <|\"F0\" -> fieldNF[t, q /. z -> t, None],"
+            " \"Fk\" -> fieldFn[rd[\"vars\"], {t, q /. z -> t, None}], \"roots\" -> {t}|>];"
+            " brOrbitOrder[TO, cvO, rs, <|\"res\" -> {t}, \"b\" -> {3}, \"ref\" -> {\"R0\", 1, -brPlaceDegree[rs, t]}|>, 1, nrO] === 1]");
+    /* the orbit term alone */
+    BR_TRUE("Module[{r = brOrbitTerm[TO, cvO, brResidueData[TO, cvO, cO], nrO, nrO[\"P\"], 1]},"
+            " AssociationQ[r] && Length[r[\"u\"]] === 3 && FreeQ[r[\"normU\"], yy]]");
+    /* genus 3: the orbit divisor 3 Delta(gamma) - (theta - c)_0 has order 4 */
+    br_run("lpW = brComponentLogPart[TW, cvW, cW]; True");
+    BR_TRUE("Length[lpW[\"orbits\"]] === 1 && Together[lpW[\"orbits\"][[1]][\"t\"]/(3 lpW[\"orbits\"][[1]][\"coef\"])] === 4");
+    /* an orbit divisor of infinite order is $Failed, NOT a certificate (the
+       Q-basis construction decides: brComponentLogPart throws NonElementary) */
+    BR_EQ("brOrbitLogPart[TG, cvG, 5/(x (brT1 - 3)), brNormalResidues[TG, cvG, 5/(x (brT1 - 3))]]", "$Failed");
+    /* the four benchmark-257 AUTO-GAP integrands */
+    BR_ANTIDERIV("((1 + E^(-x))^(1/4) (1 - 2 E^x))/(-2 - 2 E^x + E^(2 x))", "Bronstein");
+    BR_ANTIDERIV("(2 E^(2 x) (1 + E^(2 x)) (2 + E^(2 x))^(1/3))/(2 + E^(2 x) + E^(4 x))", "Bronstein");
+    BR_ANTIDERIV("(-2 E^x^2 (1 + E^x^2) (3 + E^x^2)^(1/4) x)/(1 + 2 E^x^2 - E^(2 x^2))", "Bronstein");
+    BR_ANTIDERIV("(2 (1 + Log[1 + 2 x]) (3 + Log[1 + 2 x])^(2/3))/((1 + 2 x) (-2 + Log[1 + 2 x]^2))", "Bronstein");
+}
+
 static void test_genus_one(void) {
     /* lifted Nagell-Lutz: (3, 5) on y^2 = theta^3 - 2 has infinite order */
     BR_THROWS("brComponentLogPart[TG, cvG, 5/(x (brT1 - 3))]", "NonElementary",
@@ -152,6 +201,7 @@ int main(void) {
     test_setup_and_ideals();
     test_specialization();
     test_specialized_frame();
+    test_orbit_log_part();
     test_genus_one();
     test_special_divisors();
     test_log_part();

@@ -45,6 +45,11 @@ brComponentLogPart[T_Association, cv_Association, c_] := Module[
   If[!brSpecialResiduesZeroQ[T, spec],
     Return[brComponentLogPartSpecial[T, cv, c, nr, spec]]];
   If[nr["P"] === 1, Return[<|"terms" -> {}, "remainder" -> Together[c], "F" -> None, "B" -> cv["B"]|>]];
+  (* the field of all residues may be much larger than that of one orbit:
+     try one orbit at a time first; $Failed (an orbit divisor of infinite
+     order) is not a verdict, the Q-basis construction below decides *)
+  If[brOrbitFirstQ[nr],
+    With[{orb = brOrbitLogPart[T, cv, c, nr]}, If[orb =!= $Failed, Return[orb, Module]]]];
   rs = brResidueSetup[T, cv, c, nr];
   F = rs["Fk"]; B = rs["B"];
   Do[
@@ -61,7 +66,84 @@ brComponentLogPart[T_Association, cv_Association, c_] := Module[
     throwDecline["log part with components of other weights (m >= 3)"]];
   brLogPartFinish[T, cv, c, F, B, terms]];
 
-brLogPartFinish::usage = "brLogPartFinish[T, cv, c, F, B, terms] checks the log terms {{coef, u, normU}, ...} (coordinates on the theta-basis B over F) of the component c Y and returns the brComponentLogPart Association: coordinates 2..m-1 of L' must vanish (else Decline), and the remainder c - [L']_1 must be free of the residue-field generator (else Internal).";
+(* -------------------------------------------------------------------------- *)
+(* The log part one Galois orbit of residues at a time (Trager's per-orbit    *)
+(* construction, TragerLogTerms.m, on the curve over k(theta)).               *)
+(*                                                                            *)
+(* For an irreducible factor q of the residue polynomial and gamma a root of  *)
+(* q, the orbit divisor                                                       *)
+(*     delta_gamma = m Delta(gamma) - kappa (theta - c)_0,                    *)
+(* kappa = deg Delta(gamma), c an ordinary integer, has degree 0 and is      *)
+(* defined over k(gamma), of degree deg q -- not over the field of all       *)
+(* residues (degree 36 for P(z) = Q(z^3), Q quadratic, where deg q = 6).     *)
+(* If N delta_gamma = div(u_gamma), the weight-1 log part                     *)
+(*     Sum_q Sum_{q(gamma)=0} gamma/(m N_q) (Log[u_gamma] - Log[Norm u]/m)    *)
+(* has residue gamma at Delta(gamma); over theta = c the residues sum to      *)
+(* -(1/m) Sum gamma kappa_gamma = 0 (the residue theorem: every special-place *)
+(* residue is zero on this path).  The automorphism sigma: Y -> omega Y maps  *)
+(* Delta(gamma) to Delta(omega gamma); all m of these lie over the roots of   *)
+(* A_gamma = gcd(Bp, N^m G - gamma^m Ep^m), which is defined over k(gamma),   *)
+(* so Norm(u) = Prod sigma^k(u) is an element of k(gamma)(theta) and omega is *)
+(* never adjoined.  An orbit's contribution to the derivative is the trace    *)
+(* from k(gamma) of gamma/(m N) [u'/u] (coordinate 0 cancels against the norm *)
+(* term); its log terms are RootSums over q.                                  *)
+(* -------------------------------------------------------------------------- *)
+
+brOrbitFirstQ::usage = "brOrbitFirstQ[nr] is True when the per-orbit construction should run before the Q-basis one: the residue polynomial nr[\"P\"] has an irreducible factor of degree >= 2 and the crude bound Prod deg(q)! on the degree of the field of all residues exceeds the largest orbit field Max deg(q).";
+brOrbitFirstQ[nr_Association] := Module[{degs},
+  degs = Exponent[#[[1]], nr["z"]] & /@ Select[FactorList[nr["P"]], !FreeQ[#[[1]], nr["z"]] &];
+  degs =!= {} && Max[degs] >= 2 && Times @@ (Factorial /@ degs) > Max[degs]];
+
+brOrbitTerm::usage = "brOrbitTerm[T, cv, rd, nr, q, refc] is the log term of the orbit of the roots of the monic irreducible factor q(z) of the residue polynomial (residue data rd, brResidueData; reference point theta = refc): <|\"ext\" -> deg q > 1, \"Fk\" -> k(gamma), \"t\" -> the generator (gamma = t, or the rational root), \"coef\" -> gamma/(m N), \"u\" -> generator of N delta_gamma (coordinates over Fk), \"normU\", \"D\" -> the orbit's contribution to the derivative of the weight-1 log part (coordinate list over k(theta), coordinate 0 zero)|>, or $Failed when N delta_gamma is not principal (not a certificate).";
+brOrbitTerm[T_Association, cv_Association, rd_Association, nr_Association, q_, refc_] := Module[
+  {z = nr["z"], m = cv["m"], B = rd["B"], t = Unique["Bronstein`Private`brTo"], ext, F0, Fk, g, rs, kappa, spec, Nq, I, u, coef, Lp, D},
+  ext = Exponent[q, z] > 1;
+  If[ext,
+    F0 = fieldNF[t, q /. z -> t, None];
+    Fk = fieldFn[rd["vars"], {t, q /. z -> t, Root[Function[Evaluate[q /. z -> #]], 1]}]; g = t,
+    F0 = fieldQ[]; Fk = fieldFn[rd["vars"]]; g = -Coefficient[q, z, 0]];
+  rs = Join[rd, <|"F0" -> F0, "Fk" -> Fk, "roots" -> {g}|>];
+  kappa = brPlaceDegree[rs, g];
+  spec = <|"res" -> {g}, "b" -> {m}, "ref" -> {"R0", refc, -kappa}|>;
+  Nq = brOrbitOrder[T, cv, rs, spec, refc, nr];
+  If[Nq === $Failed, Return[$Failed, Module]];
+  I = specIdealX[<|"F" -> Fk, "B" -> B, "N" -> rd["N"], "Ep" -> rd["Ep"], "Bp" -> rd["Bp"]|>, scaleSpec[spec, Nq]];
+  u = principalGenerator[Fk, B, I];
+  If[u === None, Return[$Failed, Module]];
+  u = brNormalizeGenerator[Fk, B, u, rd["vars"]];
+  coef = g/(m Nq);
+  Lp = brLogDerivative[T, cv, Fk, B, u];
+  D = If[ext, brK0Trace[Fk, rc[Fk, coef #]] & /@ Lp, Together[coef #] & /@ Lp];
+  <|"ext" -> ext, "Fk" -> Fk, "t" -> t, "q" -> q, "z" -> z, "coef" -> coef, "u" -> u,
+    "normU" -> afNorm[Fk, B, u], "D" -> ReplacePart[D, 1 -> 0]|>];
+
+brOrbitLogPart::usage = "brOrbitLogPart[T, cv, c, nr] is brComponentLogPart one Galois orbit of residues at a time (see above): the rational orbits as ordinary \"terms\" (F None), the others in \"orbits\" (brOrbitTerm records, rendered as RootSums), \"orbitD\" -> the derivative contribution of those (coordinate list over k(theta)), and the remainder c - [L']_1; or $Failed when some orbit divisor has no principal multiple. Declines (as the Q-basis construction does) when coordinates 2..m-1 of L' are nonzero.";
+brOrbitLogPart[T_Association, cv_Association, c_, nr_Association] := Module[
+  {rd = brResidueData[T, cv, c], th = T["theta"], m = cv["m"], z = nr["z"], refc, facs, recs = {}, r, Dall, Dext},
+  refc = firstOrdinaryInteger[Join[{Expand[cv["G"]], rd["E"]}, If[T["kind"] === "Exp", {th}, {}]], th];
+  facs = (Expand[#/Coefficient[#, z, Exponent[#, z]]] &) /@ (First /@ Select[FactorList[nr["P"]], !FreeQ[#[[1]], z] &]);
+  Do[
+    r = brOrbitTerm[T, cv, rd, nr, q, refc];
+    If[r === $Failed, Return[$Failed, Module]];
+    AppendTo[recs, r],
+    {q, facs}];
+  Dall = Together /@ Total[#["D"] & /@ recs];
+  Dext = Together /@ Total[Append[#["D"] & /@ Select[recs, #["ext"] &], Table[0, {m}]]];
+  If[m > 2 && !AllTrue[Dall[[3 ;;]], # === 0 &],
+    throwDecline["log part with components of other weights (m >= 3)"]];
+  <|"terms" -> ({#["coef"], #["u"], #["normU"]} & /@ Select[recs, !#["ext"] &]),
+    "orbits" -> Select[recs, #["ext"] &], "orbitD" -> Dext,
+    "remainder" -> Together[c - Dall[[2]]], "F" -> None, "B" -> cv["B"]|>];
+
+brOrbitLogExpression::usage = "brOrbitLogExpression[B, rec, Y] is the weight-1 log term of the orbit record rec (brOrbitTerm) as {1, RootSum[q, (#/(m N)) (Log[u(#)] - Log[Norm u(#)]/m) &], \"RootSum\"}, u written in the curve generator Y.";
+brOrbitLogExpression[B_Association, rec_Association, Y_Symbol] := Module[
+  {t = rec["t"], m = B["m"], uY, nU, body},
+  uY = Together[afToY[B, rec["u"], Y]]; nU = Together[rec["normU"]];
+  body = rec["coef"] (Log[uY] - Log[nU]/m);
+  With[{qf = rec["q"] /. rec["z"] -> Slot[1], bf = body /. t -> Slot[1]},
+    {1, RootSum[Function[qf], Function[bf]], "RootSum"}]];
+
+brLogPartFinish::usage ="brLogPartFinish[T, cv, c, F, B, terms] checks the log terms {{coef, u, normU}, ...} (coordinates on the theta-basis B over F) of the component c Y and returns the brComponentLogPart Association: coordinates 2..m-1 of L' must vanish (else Decline), and the remainder c - [L']_1 must be free of the residue-field generator (else Internal).";
 brLogPartFinish[T_Association, cv_Association, c_, F_Association, B_Association, terms_List] := Module[{Lp, rem},
   Lp = brLogPartDerivative[T, cv, F, B, terms[[All, {1, 2}]]];
   If[B["m"] > 2 && !AllTrue[Lp[[3 ;;]], rcZeroQ[F, #] &],

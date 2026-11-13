@@ -55,7 +55,7 @@ brCollectLogTerms[e_, x_Symbol] := Module[{terms = If[Head[e] === Plus, List @@ 
   Total[rest] + Total[With[{c = Together[Total[#[[All, 1]]]]}, If[c === 0, 0, c Log[#[[1, 2]]]]] & /@ g]];
 
 brIntegrateComponent::usage = "brIntegrateComponent[T, cv, c] integrates the component c Y on the curve cv (Y^m = G). It returns <|\"Algebraic\" -> b, \"Logs\" -> {{coef, arg}, ...}|> with Int c Y = b Y + Sum coef Log[arg], arg expressions in the tower symbols and the symbol Ysym of cv (\"Y\" -> Ysym); it throws the failures of its stages.";
-brIntegrateComponent[T_Association, cv_Association, c_] := Module[{hr, sr, lp, ap, b, Ys = Unique["Bronstein`Private`brYc"], logs = {}, F, B},
+brIntegrateComponent[T_Association, cv_Association, c_] := Module[{hr, sr, lp, ap, b, Ys = Unique["Bronstein`Private`brYc"], logs = {}, F, B, orbits},
   If[!brReducedCurveQ[T, cv["m"], cv["G"]], throwInternal["brCurveNotReduced", <|"m" -> cv["m"], "G" -> cv["G"]|>]];
   hr = brHermiteReduce[T, cv, c];
   sr = brSpecialReduce[T, cv, hr["Remainder"]];
@@ -72,16 +72,22 @@ brIntegrateComponent[T_Association, cv_Association, c_] := Module[{hr, sr, lp, a
       {-t[[1]]/cv["m"], t[[3]]}}],
     {t, lp["terms"]}];
   logs = brSplitLogs[F, logs, Ys, Prepend[T["syms"], T["x"]]];
+  (* per-orbit log terms (brOrbitLogPart): RootSums over the orbit
+     polynomials, each over its own field; the exact check takes their
+     traced derivative "OrbitD" instead of differentiating them *)
+  orbits = brOrbitLogExpression[B, #, Ys] & /@ Lookup[lp, "orbits", {}];
   (* raw: coefficients and logands over F (the residue-field generator t still a
      symbol), as the exact verification needs them; "Logs" the presented ones *)
   <|"Algebraic" -> b, "RawLogs" -> logs, "Field" -> F,
-    "Logs" -> ({brTermExpression[F, #[[1]]], brTermExpression[F, #[[2]]]} & /@ logs), "Y" -> Ys|>];
+    "OrbitD" -> Lookup[lp, "orbitD", None], "OrbitLogs" -> orbits,
+    "Logs" -> Join[({brTermExpression[F, #[[1]]], brTermExpression[F, #[[2]]]} & /@ logs), orbits], "Y" -> Ys|>];
 
 brAssembleComponent::usage = "brAssembleComponent[T, res, Yexpr, x] writes the component integral res (brIntegrateComponent) in the surface: the curve generator replaced by Yexpr (an expression in the tower symbols), the tower symbols by their kernels; logarithms of arguments free of x (constants of integration) are dropped.";
 brAssembleComponent[T_Association, res_Association, Yexpr_, x_Symbol] := Module[{Y = res["Y"], alg, logs},
   alg = brToSurface[T, Together[res["Algebraic"] Y /. Y -> Yexpr]];
   logs = Total[If[FreeQ[brToSurface[T, #[[2]] /. Y -> Yexpr], x], 0,
-      #[[1]] Log[brToSurface[T, Together[#[[2]] /. Y -> Yexpr]]]] & /@ res["Logs"]];
+      If[Length[#] === 3, #[[1]] brToSurface[T, #[[2]] /. Y -> Yexpr],
+        #[[1]] Log[brToSurface[T, Together[#[[2]] /. Y -> Yexpr]]]]] & /@ res["Logs"]];
   alg + logs];
 
 brComponentIdentityQ::usage = "brComponentIdentityQ[T, cv, c, res] verifies EXACTLY that res integrates the component c Y on its curve Y^m = G (cv): with the tower derivation extended by D Y = s Y, s = DG/(mG), the numerator of D(b Y + Sum c_j Log[u_j]) - c Y reduces to 0 modulo Y^m - G and the residue field's minimal polynomial mu(t). This is an algebraic identity in k(theta)(Y); writing Y as yh^i/s (or G^(1/m)) and the symbols as surface kernels preserves derivatives (every kernel's derivative is its rule), so it is the statement PossibleZeroQ[D[F, x] - f] tests, decided exactly.";
@@ -90,6 +96,9 @@ brComponentIdentityQ[T_Association, cv_Association, c_, res_Association] := Modu
   rules = Append[T["rules"], Y -> cv["s"] Y];
   Fi = res["Algebraic"] Y + Total[(#[[1]] Log[#[[2]]]) & /@ res["RawLogs"]];
   R = Risch`Derivation[Fi, rules] - c Y;
+  (* per-orbit RootSum terms: their derivative, traced exactly from each
+     orbit field (brOrbitLogPart), on the basis w_i = Y^i/d_i *)
+  If[ListQ[res["OrbitD"]], R = R + afToY[cv["B"], res["OrbitD"], Y]];
   num = Expand[Numerator[Together[R]]];
   num = Expand[PolynomialRemainder[num, Y^m - G, Y]];
   If[F =!= None && fieldExtQ[F], num = Expand[PolynomialRemainder[num, F["mu"], F["t"]]]];
@@ -115,6 +124,9 @@ brShapeA[T_Association, f_, x_Symbol] := Module[{cf, n, g, yh, total, cc, cv, re
         res = brIntegrateComponent[T, cv, Together[cf["coeffs"][[i + 1]] cc["s"]]];
         If[!brComponentIdentityQ[T, cv, Together[cf["coeffs"][[i + 1]] cc["s"]], res],
           throwInternal["brComponentIdentity", <|"i" -> i|>]];
+        (* RootSum terms: the identity used their traced derivative, so the
+           assembled answer is checked by PossibleZeroQ as well *)
+        If[res["OrbitLogs"] =!= {}, exact = False];
         If[cc["exact"],
           rho = 1; Yexpr = Together[cf["yexpr"]^i/cc["s"]],
           Yexpr = cc["G"]^(1/cc["m"]);

@@ -1,16 +1,16 @@
 # Integration shootout: 257-compact-integrals (2026-11-13)
 
-1000 cases, timeout 30 s per run, wall 13.7 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check.
+1000 cases, timeout 30 s per run, wall 10.3 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check.
 
 ## Closed (elementary + special) by class
 
 | run | R rational (100) | T transcendental (150) | A algebraic (300) | M mixed (radical on top) (250) | B radical at the bottom (200) | all |
 |---|---|---|---|---|---|---|
-| Mathilda:Automatic | 100% (100) | 100% (150) | 100% (300) | 98% (246) | 100% (200) | 100% (996) |
+| Mathilda:Automatic | 100% (100) | 100% (150) | 100% (300) | 100% (250) | 100% (200) | 100% (1000) |
 | Mathilda:ParallelMixedTower | 0% (0) | 99% (148) | 99% (297) | 95% (237) | 84% (168) | 85% (850) |
 | Mathilda:RischTranscendental | 100% (100) | 82% (123) | · | · | · | 89% (223) |
 | Mathilda:Trager | · | · | 99% (297) | · | · | 99% (297) |
-| Mathilda:Bronstein | · | · | · | 86% (216) | 96% (193) | 91% (409) |
+| Mathilda:Bronstein | · | · | · | 90% (226) | 96% (193) | 93% (419) |
 | FriCAS | 100% (100) | 95% (143) | 85% (255) | 84% (211) | 95% (190) | 90% (899) |
 | Maxima | 39% (39) | 75% (112) | 60% (179) | 66% (164) | 93% (186) | 68% (680) |
 | sympy | 61% (61) | 45% (68) | 30% (91) | 25% (63) | 20% (40) | 32% (323) |
@@ -20,11 +20,11 @@
 
 | run | elem | special | cert | uneval | timeout | error | unverified | wrong | median s (closed) |
 |---|---|---|---|---|---|---|---|---|---|
-| Mathilda:Automatic | 996 | 0 | 0 | 0 | 4 | 0 | 0 | 0 | 0.02 |
+| Mathilda:Automatic | 1000 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0.02 |
 | Mathilda:ParallelMixedTower | 850 | 0 | 0 | 106 | 44 | 0 | 0 | 0 | 0.07 |
-| Mathilda:RischTranscendental | 223 | 0 | 0 | 9 | 18 | 0 | 0 | 0 | 0.01 |
-| Mathilda:Trager | 297 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0.19 |
-| Mathilda:Bronstein | 409 | 0 | 0 | 20 | 21 | 0 | 0 | 0 | 0.26 |
+| Mathilda:RischTranscendental | 223 | 0 | 0 | 10 | 17 | 0 | 0 | 0 | 0.00 |
+| Mathilda:Trager | 297 | 0 | 0 | 0 | 3 | 0 | 0 | 0 | 0.06 |
+| Mathilda:Bronstein | 419 | 0 | 0 | 20 | 11 | 0 | 0 | 0 | 0.14 |
 | FriCAS | 899 | 0 | 0 | 0 | 4 | 36 | 22 | 39 | 0.09 |
 | Maxima | 680 | 0 | 0 | 320 | 0 | 0 | 0 | 0 | 0.02 |
 | sympy | 256 | 67 | 0 | 316 | 278 | 44 | 17 | 22 | 0.69 |
@@ -53,12 +53,8 @@
 ## CORPUS? (0)
 
 
-## AUTO-GAP (4)
+## AUTO-GAP (0)
 
-- `cM-2-97` AUTO-GAP Mathilda:ParallelMixedTower: `((1 + E^(-x))^(1/4)*(1 - 2*E^x))/(-2 - 2*E^x + E^(2*x))`
-- `cM-2-105` AUTO-GAP Mathilda:ParallelMixedTower: `(2*E^(2*x)*(1 + E^(2*x))*(2 + E^(2*x))^(1/3))/(2 + E^(2*x) + E^(4*x))`
-- `cM-3-20` AUTO-GAP Mathilda:ParallelMixedTower: `(-2*E^x^2*(1 + E^x^2)*(3 + E^x^2)^(1/4)*x)/(1 + 2*E^x^2 - E^(2*x^2))`
-- `cM-4-234` AUTO-GAP Mathilda:ParallelMixedTower: `(2*(1 + Log[1 + 2*x])*(3 + Log[1 + 2*x])^(2/3))/((1 + 2*x)*(-2 + Log[1 + 2*x]^2))`
 
 ## Only one system closes it
 

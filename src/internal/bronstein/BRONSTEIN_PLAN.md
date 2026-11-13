@@ -924,6 +924,48 @@ can neither close nor certify them. These are N3 material for the benchmark.
 
 **Order of work:** 1–5 → 8a → 8 → 6–7 → 9 → 10 → 11 → 13–14 → 17 → 16 (with 15) → 12 → 18.
 
+### 2026-11-13 — the log part one Galois orbit at a time; AUTO-GAP closed (v0.6534)
+
+- **`brOrbitLogPart`** (LogPart.m) is Trager's per-orbit construction on the
+  curve over k(θ). For each irreducible factor q of the residue polynomial it
+  works over `Q(γ) = Q[t]/(q)`:
+  - **The orbit divisor** is `m Δ(γ) − κ (θ − c)₀`, where κ = deg Δ(γ) and c is
+    an ordinary integer. Ordinary means G and E are nonzero at c, and the
+    specialization keeps them so (`brGoodSpecializationQ[…, refc]`).
+  - **Its order** comes from `brOrbitOrder`: Trager's `torsionOrderSpec` and
+    `torsionScreen` on the specialized curve, and 1 in genus 0.
+  - **Its generator** is `specIdealX` + `principalGenerator` over k(γ).
+  - **The answer** is `RootSum[q, #/(m N) (Log[u(#)] − Log[Norm u(#)]/m) &]`.
+- **Why ω is never adjoined.** The σ-conjugates Δ(ω^k γ) lie over the roots of
+  `A_γ = gcd(Bp, N^m G − γ^m Ep^m)`, which is defined over k(γ). So Norm(u) is in
+  k(γ)(θ).
+- **The derivative** is the trace from k(γ) (`brK0Trace`), and the remainder
+  `c − [L']₁` is in k(θ).
+- **Verification.** `brComponentIdentityQ` adds the traced orbit derivative, and
+  the final `antiderivativeQ` always runs on a RootSum answer.
+- **When it runs.** `brOrbitFirstQ` tries this first when P has a factor of
+  degree ≥ 2 and `Π deg(q)! > Max deg(q)`, a crude bound for the splitting field
+  being larger than one orbit's field.
+  - `$Failed`, an orbit divisor with no principal multiple, is never a
+    certificate. The Q-basis construction decides then, because an individual
+    orbit can have infinite order while every Q-basis combination is torsion.
+- `brResidueData` is factored out of `brResidueSetup`, and carries no residue
+  field.
+- **Result.** The four benchmark-257 AUTO-GAP cases took more than 200 s each in
+  Bronstein. They now close in 0.3–0.7 s, Bronstein and Automatic alike, with
+  PZQ-verified answers.
+
+  | | before | after |
+  |---|---|---|
+  | Automatic | 996/1000 | 1000/1000 |
+  | Bronstein | 409/450 | 419/450 (M 226/250) |
+  | AUTO-GAP | 4 | 0 |
+
+  Hard failures stay at 0. cM-1-74 (genus 3, N = 4) also takes the orbit path.
+- **Tests.** `test_orbit_log_part`. The nightlies `bronstein_stress`,
+  `bronstein_cascade_stress` and `trager_torsion_stress` pass, and the 256 and
+  257 quick checks pass (the 257 baseline is ratcheted).
+
 ### 2026-11-13 — benchmark 257: compact integrands, large integrals
 
 - **Corpus.** `benchmarks/257-compact-integrals` holds 1000 cases found by search

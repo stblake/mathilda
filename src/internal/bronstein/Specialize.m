@@ -43,7 +43,7 @@ brSpecializeValue[e_, sigma_List] := Module[{t = Together[e], d},
   If[Together[d] === 0, $Failed, Together[(Numerator[t] /. sigma)/d]]];
 
 brGoodSpecializationQ::usage = "brGoodSpecializationQ[T, cv, rs, sigma] is True when sigma preserves the shape of the curve and of the residue data rs (see the header).";
-brGoodSpecializationQ[T_Association, cv_Association, rs_Association, sigma_List] := Module[
+brGoodSpecializationQ[T_Association, cv_Association, rs_Association, sigma_List, refc_ : None] := Module[
   {th = T["theta"], G = cv["G"], m = cv["m"], Gs, Ns, Es, Eps, Bps, ok = True, F0 = rs["F0"], Fk = rs["Fk"], B = rs["B"]},
   Gs = brSpecializeValue[G, sigma]; Ns = brSpecializeValue[rs["N"], sigma];
   Es = brSpecializeValue[rs["E"], sigma]; Eps = brSpecializeValue[rs["Ep"], sigma];
@@ -53,6 +53,9 @@ brGoodSpecializationQ[T_Association, cv_Association, rs_Association, sigma_List]
   If[Exponent[Bps, th] =!= Exponent[rs["Bp"], th] || Exponent[Es, th] =!= Exponent[rs["E"], th], Return[False]];
   If[Exponent[Bps, th] > 0 && (Exponent[PolynomialGCD[Bps, D[Bps, th]], th] > 0 ||
        Exponent[PolynomialGCD[Bps, Gs], th] > 0 || Resultant[Bps, Eps, th] === 0), Return[False]];
+  (* a reference point theta = refc (orbit divisors) stays ordinary: unramified
+     and off every residue place *)
+  If[refc =!= None && (Together[Gs /. th -> refc] === 0 || Together[Es /. th -> refc] === 0), Return[False]];
   (* every residue place keeps its degree *)
   Do[
     If[brPlaceDegree[rs, a] =!= kDeg[F0, kGCD[F0, Bps, kc[F0, Ns^m Gs - a^m Eps^m], th], th], ok = False],
@@ -60,10 +63,10 @@ brGoodSpecializationQ[T_Association, cv_Association, rs_Association, sigma_List]
   ok];
 
 brGoodSpecialization::usage = "brGoodSpecialization[T, cv, rs] is the first good specialization (brGoodSpecializationQ) among brOption[\"SpecializationTries\"] deterministic candidates; it throws a Decline when none is found (never a certificate).";
-brGoodSpecialization[T_Association, cv_Association, rs_Association] := Module[{s},
+brGoodSpecialization[T_Association, cv_Association, rs_Association, refc_ : None] := Module[{s},
   Do[
     s = brSpecializationPoint[rs["vars"], try];
-    If[brGoodSpecializationQ[T, cv, rs, s], Return[s, Module]],
+    If[brGoodSpecializationQ[T, cv, rs, s, refc], Return[s, Module]],
     {try, 1, brOption["SpecializationTries"]}];
   throwDecline["no good specialization found"]];
 
@@ -96,3 +99,16 @@ brTorsionOrder[T_Association, cv_Association, rs_Association, b_List] := Module[
   ctx = brSpecializedContext[T, cv, rs, sigma];
   If[ctx["genus"] === 0, Return[1]];
   torsionOrderSpec[ctx, <|"res" -> rs["roots"], "b" -> b, "ref" -> None|>]];
+
+brOrbitOrder::usage = "brOrbitOrder[T, cv, rs, spec, refc, nr] is the only possible order of the orbit divisor spec (m Delta(gamma) - kappa (theta - refc)_0, residue data rs over Q(gamma)) by specialization, as brTorsionOrder (1 in genus 0), or $Failed when the specialized divisor is shown of infinite order (orders modulo two primes disagree, or the order is refuted at a further good prime, torsionScreen). $Failed is NOT a certificate: an individual orbit divisor may have infinite order while every Q-basis combination is torsion; the caller falls back to the Q-basis construction.";
+brOrbitOrder[T_Association, cv_Association, rs_Association, spec_Association, refc_, nr_Association] := Module[
+  {sigma, ctx, r},
+  sigma = brGoodSpecialization[T, cv, rs, refc];
+  ctx = brSpecializedContext[T, cv, rs, sigma];
+  If[ctx["genus"] === 0, Return[1]];
+  ctx = Join[ctx, <|"refc" -> refc, "alpha" -> None, "R" -> nr["P"], "Z" -> nr["z"]|>];
+  r = brCatch[Module[{n = torsionOrderSpec[ctx, spec]}, If[torsionScreen[ctx, spec, n], n, $Failed]]];
+  Which[
+    brFailQ[r] && First[brFailTag[r]] === "NonElementary", $Failed,
+    brFailQ[r], Throw[r, "TragerFail"],
+    True, r]];
