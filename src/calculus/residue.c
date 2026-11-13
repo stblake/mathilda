@@ -157,6 +157,64 @@ static bool residue_is_rational_in(Expr* f, Expr* z) {
     return ok;
 }
 
+/* True iff e is ENTIRE in z: built from z-free terms, z, Plus / Times / Power
+ * with a nonnegative integer exponent, and Exp / Sin / Cos / Sinh / Cosh of
+ * such an expression.  A numerator and denominator of that kind are analytic
+ * at every z0, so the simple-pole formula P(z0)/Q'(z0) holds whenever Q has a
+ * simple zero there -- for R(z) E^(I a z) as well as for a rational R. */
+static bool residue_contains(const Expr* e, const Expr* z) {
+    if (!e) return false;
+    if (expr_eq((Expr*)e, (Expr*)z)) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    if (residue_contains(e->data.function.head, z)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (residue_contains(e->data.function.args[i], z)) return true;
+    return false;
+}
+
+static bool residue_entire_in(const Expr* e, const Expr* z) {
+    if (!e) return false;
+    if (e->type != EXPR_FUNCTION) return true;     /* atoms, z included */
+    const Expr* h = e->data.function.head;
+    if (h->type != EXPR_SYMBOL) return false;
+    const char* hn = h->data.symbol.name;
+    size_t ac = e->data.function.arg_count;
+    bool has_z = false;
+    for (size_t i = 0; i < ac && !has_z; i++)
+        if (residue_contains(e->data.function.args[i], z)) has_z = true;
+    if (!has_z) return true;                       /* a z-free constant */
+    if (hn == SYM_Plus || hn == SYM_Times) {
+        for (size_t i = 0; i < ac; i++)
+            if (!residue_entire_in(e->data.function.args[i], z)) return false;
+        return true;
+    }
+    if (hn == SYM_Power && ac == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* p = e->data.function.args[1];
+        if (b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_E)
+            return residue_entire_in(p, z);        /* E^u */
+        return p->type == EXPR_INTEGER && p->data.integer >= 0 &&
+               residue_entire_in(b, z);
+    }
+    if ((hn == SYM_Exp || hn == SYM_Sin || hn == SYM_Cos || hn == SYM_Sinh ||
+         hn == SYM_Cosh) && ac == 1)
+        return residue_entire_in(e->data.function.args[0], z);
+    return false;
+}
+
+/* f = P/Q with P, Q entire in z (residue_entire_in) and Q not free of z. */
+static bool residue_entire_ratio_in(Expr* f, Expr* z) {
+    Expr* tog = residue_eval1("Together", expr_copy(f));
+    if (!tog) return false;
+    Expr* num = residue_eval1("Numerator", expr_copy(tog));
+    Expr* den = residue_eval1("Denominator", tog);
+    bool ok = num && den && residue_contains(den, z) &&
+              residue_entire_in(num, z) && residue_entire_in(den, z);
+    if (num) expr_free(num);
+    if (den) expr_free(den);
+    return ok;
+}
+
 /* Build head[a, b] and evaluate it, freeing the call.  `a`, `b` consumed. */
 static Expr* residue_eval2(const char* head, Expr* a, Expr* b) {
     Expr* call = expr_new_function(expr_new_symbol(head),
@@ -632,6 +690,17 @@ Expr* residue_compute(Expr* f, Expr* z, Expr* z0) {
         expr_free(w);
         expr_free(zero);
         return result;
+    }
+
+    /* A ratio of entire functions, R(z) E^(I a z) above all (the Fourier
+     * family's Jordan integrand): the same simple-pole formula.  The series
+     * engine cannot see a pole at a nested-radical z0 whose denominator does
+     * not simplify to zero there, reads the point as analytic and returns 0
+     * -- Residue[E^(I a z)/(c^2 + (b^2 + z^2)^2), {z, z0}] was 0 at every
+     * root z0, so every such Fourier integral was 0 (G&R 3.731.1-4). */
+    if (residue_entire_ratio_in(f, z)) {
+        Expr* fast = residue_simple_pole(f, z, z0);
+        if (fast) return fast;
     }
 
     /* An essential singularity of e^(b/(z - z0)) type: no Laurent series with

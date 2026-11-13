@@ -229,8 +229,48 @@ static bool res_reim(Expr* e, double* re, double* im) {
  * unit inside radical pole locations (Sqrt[-4 a^2] -> 2 I a) so downstream
  * residue arithmetic and conjugation stay explicit.  Consumes e, returns owned;
  * a no-op outside all-positive symbolic-parameter mode. */
+/*
+ * PowerExpand is not an identity: Sqrt[u v] -> Sqrt[u] Sqrt[v] and
+ * (u^p)^q -> u^(p q) hold only on part of the plane, and a pole location is a
+ * NESTED complex radical -- Sqrt[(-2 b^2 - Sqrt[4 b^4 - 4 (b^4 + c^2)])/2] for
+ * c^2 + (b^2 + x^2)^2 -- for which the expanded form can be a DIFFERENT root
+ * of the denominator, even one in the other half-plane.  The pole was
+ * classified (enclosed or not) as the original expression, so the cleaned
+ * form is kept only when it is numerically the same point at the
+ * instantiation and at two scaled copies of it; otherwise the original is
+ * returned.  Without the check Integrate[Cos[a x]/(c^2 + (b^2 + x^2)^2),
+ * {x, 0, Infinity}, Assumptions -> a > 0 && b > 0 && c > 0] summed residues
+ * at the wrong roots and returned 0 (G&R 3.731.1-4). */
+static bool res_same_point_scaled(Expr* p, Expr* q, double scale) {
+    Expr* inst = expr_copy(g_inst);
+    for (size_t i = 0; i < inst->data.function.arg_count; i++) {
+        Expr* r = inst->data.function.args[i];
+        double v;
+        if (head_name_is(r, "Rule") && r->data.function.arg_count == 2 &&
+            res_real_double(r->data.function.args[1], &v)) {
+            expr_free(r->data.function.args[1]);
+            r->data.function.args[1] = expr_new_real(v * scale);
+        }
+    }
+    Expr* ps = eval_take(mk_fn1("Quiet", mk_fn2("ReplaceAll", expr_copy(p), expr_copy(inst))));
+    Expr* qs = eval_take(mk_fn1("Quiet", mk_fn2("ReplaceAll", expr_copy(q), inst)));
+    double pr, pi, qr, qi;
+    bool same = ps && qs && res_reim_direct(ps, &pr, &pi) && res_reim_direct(qs, &qr, &qi) &&
+                fabs(pr - qr) + fabs(pi - qi) <= 1e-9 * (1.0 + fabs(pr) + fabs(pi));
+    if (ps) expr_free(ps);
+    if (qs) expr_free(qs);
+    return same;
+}
+
 static Expr* res_powerclean(Expr* e) {
-    if (g_inst && g_all_pos) return ev1("PowerExpand", e);
+    if (!(g_inst && g_all_pos)) return e;
+    Expr* c = ev1("PowerExpand", expr_copy(e));
+    if (c && res_same_point_scaled(e, c, 1.0) && res_same_point_scaled(e, c, 1.37) &&
+        res_same_point_scaled(e, c, 0.61)) {
+        expr_free(e);
+        return c;
+    }
+    if (c) expr_free(c);
     return e;
 }
 
@@ -1638,6 +1678,15 @@ static double pick_representative(double lo, double hi, size_t idx) {
  * classification would be a guess.  A one-sided or interval constraint pins the
  * relevant sign on a connected region, which a single interior point reads off
  * correctly. */
+static bool res_expr_contains(const Expr* e, const Expr* s) {
+    if (!e) return false;
+    if (expr_eq((Expr*)e, (Expr*)s)) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (res_expr_contains(e->data.function.args[i], s)) return true;
+    return false;
+}
+
 static Expr* build_instantiation_v(Expr* f, Expr* x, Expr* assumptions, size_t variant);
 static Expr* build_instantiation(Expr* f, Expr* x, Expr* assumptions) {
     return build_instantiation_v(f, x, assumptions, 0);
@@ -1669,6 +1718,16 @@ static Expr* build_instantiation_v(Expr* f, Expr* x, Expr* assumptions, size_t v
          * trig family's degenerate-point retry.  g_all_pos stays off (no global
          * positivity proof), so the radical-cleaning PowerExpand is not licensed. */
         if (!assumptions || variant > 0) return NULL;
+        /* A parameter the assumptions never mention is not coupled -- it is
+         * unconstrained (complex, any sign), and no single point of its range
+         * fixes the half-plane of a pole that depends on it. */
+        for (size_t i = 0; i < np; i++) {
+            if (!(pb[i].lo <= -HUGE_VAL && pb[i].hi >= HUGE_VAL)) continue;
+            Expr* ps = mk_sym(pb[i].sym);
+            bool mentioned = res_expr_contains(assumptions, ps);
+            expr_free(ps);
+            if (!mentioned) return NULL;
+        }
         Expr** vs = malloc(np * sizeof(*vs));
         for (size_t i = 0; i < np; i++) vs[i] = mk_sym(pb[i].sym);
         Expr* vars = expr_new_function(mk_sym("List"), vs, np);
@@ -1692,6 +1751,32 @@ static Expr* build_instantiation_v(Expr* f, Expr* x, Expr* assumptions, size_t v
         if (!ok) { expr_free(fi); return NULL; }
         Expr* g = expr_copy(sol);
         expr_free(fi);
+        /* FindInstance's point is a SIMPLE one -- a = b = 1 for a b > 0 -- and a
+         * simple point is where distinct poles coincide: Log[x]/((1 + x^2)
+         * (a^2 + b^2 x^2)) has the double pole x = I there, so the poles
+         * classified (and the residues summed) at that point described a
+         * different integral, and 4.234.6 came out 0.  Move to a generic
+         * nearby point (irrational-looking factors), kept only if the
+         * assumptions still hold there. */
+        {
+            static const double PERT[] = { 1.0414214, 1.0618034, 0.9681690,
+                                           1.0732051, 0.9458619, 1.0267949 };
+            Expr* gp = expr_copy(g);
+            for (size_t i = 0; i < gp->data.function.arg_count; i++) {
+                Expr* r = gp->data.function.args[i];
+                double v;
+                if (!numeric_double(r->data.function.args[1], &v)) continue;
+                double nv = v == 0.0 ? 0.0137 * PERT[i % 6] : v * PERT[i % 6];
+                expr_free(r->data.function.args[1]);
+                r->data.function.args[1] = expr_new_real(nv);
+            }
+            Expr* holds = eval_take(mk_fn2("ReplaceAll", expr_copy(assumptions), expr_copy(gp)));
+            bool keep = holds && holds->type == EXPR_SYMBOL &&
+                        strcmp(holds->data.symbol.name, "True") == 0;
+            if (holds) expr_free(holds);
+            if (keep) { expr_free(g); g = gp; }
+            else expr_free(gp);
+        }
         g_all_pos = false;
         g_coupled = true;
         /* Record the sound bounds absorb_fact found (unfound ones are +/-Inf). */

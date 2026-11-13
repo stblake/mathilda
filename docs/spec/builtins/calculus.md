@@ -3721,6 +3721,22 @@ Integrate[x E^(I x xi)/(a^2 + x^2), {x, -Infinity, Infinity},
   (* ConditionalExpression[Piecewise[{{I Pi/E^(a xi), xi > 0}}, -I E^(a xi) Pi], xi != 0] *)
 ```
 
+#### Symbolic radical poles and generic instantiation points (v0.6541)
+
+- `Residue[P[z]/Q[z], {z, z0}]` with `P`, `Q` entire in `z` (polynomials and
+  `Exp`/`Sin`/`Cos`/`Sinh`/`Cosh` of polynomials, so `R(z) E^(I a z)`) uses
+  `P(z0)/Q'(z0)` at a simple zero of `Q`. The series engine could not see a
+  pole at a nested-radical `z0` whose denominator does not simplify to 0 there,
+  and returned 0, so every Fourier integral over a quartic such as
+  `c^2 + (b^2 + x^2)^2` was 0.
+- A pole location is `PowerExpand`-cleaned only when the cleaned form is the
+  same point at the instantiation and at two scaled copies of it.
+- In the coupled (FindInstance) mode, the representative point is moved off
+  FindInstance's simple values to a generic nearby point that still satisfies
+  the assumptions: at `a = b = 1` the poles of
+  `Log[x]/((1 + x^2)(a^2 + b^2 x^2))` coincide. A parameter the assumptions never
+  mention leaves the region unconstrained, so the mode declines.
+
 ### Integrate`Trager
 
 `Integrate[f, x, Method -> "Trager"]` (and the method symbol `Integrate\`Trager[f, x]`)

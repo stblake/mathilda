@@ -193,6 +193,48 @@ static void test_radical_branches(void) {
 }
 
 /* -------------------------------------------------------------------------
+ * Residues at symbolic radical poles.  Residue[R[z] E^(I a z), {z, z0}] went
+ * to the series engine, which could not see the pole behind an unsimplified
+ * nested radical and returned 0, so every Fourier integral with a quartic
+ * denominator was 0; it now uses P(z0)/Q'(z0) for any ratio of entire
+ * functions.  A coupled instantiation (FindInstance) is moved off its simple
+ * point, where distinct poles coincide (a = b for Log[x]/((1+x^2)(a^2+b^2x^2))).
+ * ---------------------------------------------------------------------- */
+static void test_symbolic_poles(void) {
+    check_val("Integrate[Cos[a*x]/(c^2 + (b^2 + x^2)^2), {x, 0, Infinity}, "
+              "Assumptions -> (a > 0) && (b > 0) && (c > 0)]",
+              "{{a -> 3/8, b -> 5/6, c -> 5/8}, {a -> 5/4, b -> 7/4, c -> 5/4}}",
+              "{0.8826184817894607, 0.0438235917490203}");             /* 3.731.1 */
+    check_val("Integrate[(x*Sin[a*x])/(c^2 + (b^2 + x^2)^2), {x, 0, Infinity}, "
+              "Assumptions -> (a > 0) && (b > 0) && (c > 0)]",
+              "{{a -> 7/4, b -> 5/8, c -> 5/4}, {a -> 5/4, b -> 3, c -> 7/4}}",
+              "{0.2320209226065788, 0.0073632324841691}");             /* 3.731.2 */
+    check_val("Integrate[((b^2 + x^2)*Cos[a*x])/(c^2 + (b^2 + x^2)^2), {x, 0, Infinity}, "
+              "Assumptions -> (a > 0) && (b > 0) && (c > 0)]",
+              "{{a -> 7/4, b -> 7/4, c -> 5/8}, {a -> 3/8, b -> 5/6, c -> 7/4}}",
+              "{0.0374903777049518, 0.4733143563544693}");             /* 3.731.3 */
+    check_val("Integrate[(x*(b^2 + x^2)*Sin[a*x])/(c^2 + (b^2 + x^2)^2), {x, 0, Infinity}, "
+              "Assumptions -> (a > 0) && (b > 0) && (c > 0)]",
+              "{{a -> 5/8, b -> 5/8, c -> 5/6}, {a -> 3/8, b -> 1/5, c -> 7/3}}",
+              "{0.8984560846211483, 0.9609309819751004}");             /* 3.731.4 */
+    check_val("Integrate[((Cos[(-1 + b)*t] - x*Cos[b*t])*Cos[a*x])/(1 + x^2 - 2*x*Cos[t]), "
+              "{x, -Infinity, Infinity}, Assumptions -> (a > 0) && (t^2 < Pi^2) && (b > 0)]",
+              "{{a -> 3/8, b -> 1/5, t -> 5/4}, {a -> 5/8, b -> 1/5, t -> 3/8}}",
+              "{0.7922742838753855, 1.525269424043014}");              /* 3.724.3 */
+    check_val("Integrate[Log[x]/((1 + x^2)*(a^2 + b^2*x^2)), {x, 0, Infinity}, "
+              "Assumptions -> (a*b > 0)]",
+              "{{a -> 3/8, b -> 1/5}, {a -> 5/4, b -> 5/8}, {a -> -5/4, b -> -5/8}}",
+              "{-5.233510152014599, -0.4645516992647684, -0.4645516992647684}"); /* 4.234.6 */
+    check_val("Integrate[(x^2*Log[x])/((1 + x^2)*(a^2 + b^2*x^2)), {x, 0, Infinity}, "
+              "Assumptions -> (a*b > 0)]",
+              "{{a -> 5/4, b -> 5/6}, {a -> 1/5, b -> 3/8}}",
+              "{1.100568561050534, 5.233510152014599}");               /* 4.234.8 */
+    check_val("Residue[E^(I a z)/(c^2 + (b^2 + z^2)^2), "
+              "{z, -Sqrt[-2 b^2 - Sqrt[4 b^4 - 4 (b^4 + c^2)]]/Sqrt[2]}]",
+              "{{a -> 3/8, b -> 5/6, c -> 5/8}}", "{0.259432 - 0.140473 I}");
+}
+
+/* -------------------------------------------------------------------------
  * Rows already correct when this suite was written (fixed by earlier work);
  * pinned so they stay that way.
  * ---------------------------------------------------------------------- */
@@ -233,6 +275,7 @@ int main(void) {
     TEST(test_fourier_sign_split);
     TEST(test_branch_cut_jumps);
     TEST(test_radical_branches);
+    TEST(test_symbolic_poles);
     TEST(test_already_fixed);
 
     if (g_failures) {
