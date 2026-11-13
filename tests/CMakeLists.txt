@@ -6640,6 +6640,13 @@ if(PYTHON3_EXE)
                      --quick --systems mathilda,fricas --check
              WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
     set_tests_properties(integration_shootout_stress PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 7200)
+    # benchmark 257 (compact integrands, integrals >= 2x their leaf count): the
+    # same quick subset and gate, against its own baseline.json
+    add_test(NAME integration_compact_stress
+             COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/integration_shootout/shootout.py
+                     --bench benchmarks/257-compact-integrals --quick --systems mathilda,fricas --check
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    set_tests_properties(integration_compact_stress PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 7200)
     # Linear algebra on SparseArray against recorded reference / scipy /
     # maxima answers (tools/sparse_linalg_oracle.py): --quick replays 150
     # recorded cases with no oracle installed (per push); the stress run

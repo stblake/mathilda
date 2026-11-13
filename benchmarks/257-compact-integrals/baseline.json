@@ -1,0 +1,18 @@
+{
+ "quick": {
+  "Mathilda:Automatic/A": 37,
+  "Mathilda:Automatic/B": 25,
+  "Mathilda:Automatic/M": 29,
+  "Mathilda:Automatic/R": 13,
+  "Mathilda:Automatic/T": 19,
+  "Mathilda:Bronstein/B": 25,
+  "Mathilda:Bronstein/M": 26,
+  "Mathilda:ParallelMixedTower/A": 37,
+  "Mathilda:ParallelMixedTower/B": 21,
+  "Mathilda:ParallelMixedTower/M": 30,
+  "Mathilda:ParallelMixedTower/T": 19,
+  "Mathilda:RischTranscendental/R": 13,
+  "Mathilda:RischTranscendental/T": 16,
+  "Mathilda:Trager/A": 37
+ }
+}

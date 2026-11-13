@@ -924,6 +924,55 @@ can neither close nor certify them. These are N3 material for the benchmark.
 
 **Order of work:** 1–5 → 8a → 8 → 6–7 → 9 → 10 → 11 → 13–14 → 17 → 16 (with 15) → 12 → 18.
 
+### 2026-11-13 — benchmark 257: compact integrands, large integrals
+
+- **Corpus.** `benchmarks/257-compact-integrals` holds 1000 cases found by search
+  (`gen_compact.m`). Each integrand is in compact form, and its verified
+  antiderivative has at least twice the integrand's leaf count.
+- **Closed, of each method's slice:**
+
+  | method | closed |
+  |---|---|
+  | Automatic | 996/1000 |
+  | Wolfram | 998 |
+  | FriCAS | 899 |
+  | Maxima | 680 |
+  | sympy | 323 |
+  | ParallelMixedTower | 850/1000 |
+  | Trager | 297/300 |
+  | Bronstein | 409/450 (M 216/250, B 193/200) |
+  | RischTranscendental | 223/250 |
+
+  Hard failures for every Mathilda method: 0 WRONG, 0 FALSE_CERT, 0 DISAGREE.
+- **Fixed: a false TorsionBeyondWeilBound.** `Int 1/(x Log[x] (2+Log[x]^4)^(2/3))`
+  (cM-1-74) was the only case no Mathilda method closed.
+  - `brSpecializedContext` handed Trager the bare stand-in `Nbar/Bp`. That has a
+    pole at θ = ∞.
+  - jacFrame's `x = a + 1/t` maps that pole to `t = 0`. There it counted as a
+    spurious residue place, and the divisor got nonzero degree.
+  - The stand-in is now `(Nbar G mod Bp)/(Bp G)`. It has the same residues at
+    the roots of Bp, decays like `θ^(-1-deg G)`, and its other poles are on
+    branch points.
+  - Regression test: `test_specialized_frame`.
+- **Corpus errors caught by the shootout.** 9 generated cases with Erfc or
+  HypergeometricPFQ references were labelled elem. The certificates against them
+  were correct. The generator now uses a head allowlist, and the affected seeds
+  were rerun.
+- **ONLY-Mathilda (elementary): 4.**
+  - cM-4-306: no other system closes it.
+  - cM-1-129, cB-6-507 and cB-6-992: Wolfram returns special functions.
+- **AUTO-GAP: 4, an open performance gap.** cM-2-97, cM-2-105, cM-3-20 and
+  cM-4-234 time out in Automatic, while PMT closes them in about 0.2 s.
+  - The cause is Bronstein's log part in the splitting field of the residues:
+    - `brResidueSetup` takes 8.5 s on degree 36;
+    - `brTorsionOrder` and `brPrincipalGenerator` take 4–6 s per divisor.
+  - The Linearity stage then splits the integrand, and each term pays the 10 s
+    Bronstein budget again, so Automatic reaches 30 s before PMT runs.
+  - **Proposed fix:** work over `Q(α)`, one residue's field, and get the
+    conjugate divisors from the curve automorphism `Y → ωY` rather than adjoin
+    every residue. Separately, Linearity should not re-pay a decision procedure's
+    budget on terms of an integrand that the procedure already timed out on.
+
 ### 2026-11-12 — Shape B in the cascade, benchmark (v0.6529)
 
 - The cascade gate admits Shape B.

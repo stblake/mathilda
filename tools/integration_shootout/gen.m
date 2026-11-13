@@ -23,10 +23,8 @@ If[!IntegerQ[seed], seed = 1]; If[!IntegerQ[count], count = 40];
 SeedRandom[seed];
 here = DirectoryName[$InputFileName];
 Get[FileNameJoin[{here, "families.m"}]];
+Get[FileNameJoin[{here, "common.m"}]];
 
-pick[l_List] := RandomChoice[l];
-poly[d_] := Sum[r[-3, 3] x^k, {k, 0, d - 1}] + nz[1, 3] x^d;
-sqfreePoly[d_] := Module[{p}, While[True, p = poly[d]; If[Exponent[p, x] === d && PolynomialGCD[p, D[p, x]] === 1, Return[p]]]];
 
 (* ---------------- R: rational ---------------- *)
 ratFamilies = {
@@ -66,26 +64,6 @@ perturbB[] := pick[{E^x/Sqrt[1 + x^2], Log[x]/Sqrt[x^2 + 1], Sqrt[x] E^x, Log[x]
 classicNonelem = {"T" -> E^(x^2), "T" -> E^x/x, "T" -> 1/Log[x], "T" -> Sin[x]/x, "T" -> Log[x]/(x + 1),
   "T" -> E^(E^x) / x, "T" -> x Tan[x], "T" -> Log[Log[x]], "M" -> Sqrt[Log[x]], "M" -> 1/Sqrt[Log[x]],
   "M" -> Log[1 + E^x]^(1/3)/(1 + Log[1 + E^x]), "A" -> 1/Sqrt[x^3 + 1], "A" -> Sqrt[1 - x^4], "B" -> E^x/Sqrt[x]};
-
-(* ---------------- points and output ---------------- *)
-cands = {3/7, 5/4, 7/3, 13/5, 2/9, 11/3, 17/4, 6/5, 29/7, 1/11, 23/3, 31/9, 9/7, 8/3};
-okPoint[f_, p_] := Module[{bases, fv},
-  bases = Join[Cases[{f}, Power[b_, _Rational] :> b, {0, Infinity}], Cases[{f}, Log[u_] :> u, {0, Infinity}]];
-  fv = Quiet[N[f /. x -> p, 30]];
-  NumberQ[fv] && Im[fv] == 0 && Abs[fv] < 10^8 &&
-    AllTrue[Quiet[N[bases /. x -> p, 30]], NumberQ[#] && Im[#] == 0 && # > 1/100 &]];
-points[f_] := Take[Select[cands, okPoint[f, #] &], UpTo[3]];
-
-emitted = <||>;
-emit[id_, cls_, fam_, expect_, f0_, F_] := Module[{f = f0, pts, fv},
-  If[!FreeQ[f, x] && LeafCount[f] <= 600 && !KeyExistsQ[emitted, f],
-    pts = TimeConstrained[points[f], 30, {}];
-    If[Length[pts] === 3,
-      emitted[f] = True;
-      fv = N[f /. x -> #, 40] & /@ pts;
-      Print["CASE\t", id, "\t", cls, "\t", fam, "\t", expect, "\t", ToString[InputForm[f]], "\t",
-        If[F === None, "None", ToString[InputForm[F]]], "\t", ToString[InputForm[pts]], "\t",
-        ToString[InputForm[fv]], "\t", ToString[FullForm[f]]]]]];
 
 genFamily[cls_, fam_, fun_, expect_, pert_] := Do[
   Module[{F = Quiet[fun[]], f},

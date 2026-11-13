@@ -57,6 +57,25 @@ static void test_specialization(void) {
     BR_EQ("brTorsionOrder[T147, cv147, rs147, {1, -1}]", "1");
 }
 
+/* The specialized stand-in remainder must stay out of Trager's frame at infinity:
+ * Y^3 = 2 + theta^4 (genus 3), theta = Log[x], residues at theta = 0 (cube roots
+ * of 1/4).  The bare Nbar/Bp = 1/(2 theta) had a pole at infinity that the mod-p
+ * frame turned into a spurious residue place; the torsion order then ran past the
+ * Weil bound (an internal error).  Benchmark 257, cM-1-74. */
+static void test_specialized_frame(void) {
+    br_run("fW = 1/(x Log[x] (2 + Log[x]^4)^(2/3)); TW = brTower[fW, x]; cfW = brCanonicalForm[TW];"
+           " ccW = brComponentCurve[TW, cfW[\"n\"], cfW[\"g\"], 1]; cvW = brCurve[TW, ccW[\"m\"], ccW[\"G\"]];"
+           " cW = Together[cfW[\"coeffs\"][[2]] ccW[\"s\"]]; rsW = brResidueSetup[TW, cvW, cW, brNormalResidues[TW, cvW, cW]];"
+           " ctxW = brSpecializedContext[TW, cvW, rsW, brGoodSpecialization[TW, cvW, rsW]]; True");
+    BR_EQ("ctxW[\"genus\"]", "3");
+    BR_TRUE("Together[ctxW[\"E\"]/ctxW[\"Bp\"] - (2 + brT1^4)] === 0");                 /* Bp G */
+    /* the same residue at theta = 0: N/Ep there is 1/(D E)(0) = 1/2 */
+    BR_TRUE("Together[(ctxW[\"N\"]/ctxW[\"Ep\"] /. brT1 -> 0) - 1/2] === 0");
+    BR_EQ("brTorsionOrder[TW, cvW, rsW, rsW[\"coeffs\"][[All, 1]]]", "4");
+    BR_ANTIDERIV("1/(x Log[x] (2 + Log[x]^4)^(2/3))", "Bronstein");
+    BR_ANTIDERIV("E^x/((1 + E^x) Log[1 + E^x] (2 + Log[1 + E^x]^4)^(2/3))", "Bronstein");
+}
+
 static void test_genus_one(void) {
     /* lifted Nagell-Lutz: (3, 5) on y^2 = theta^3 - 2 has infinite order */
     BR_THROWS("brComponentLogPart[TG, cvG, 5/(x (brT1 - 3))]", "NonElementary",
@@ -132,6 +151,7 @@ int main(void) {
     setup();
     test_setup_and_ideals();
     test_specialization();
+    test_specialized_frame();
     test_genus_one();
     test_special_divisors();
     test_log_part();

@@ -63,6 +63,20 @@ def test_translate():
             except T.Untranslatable:
                 bad += 1
     eq(bad, 0, "untranslatable corpus cases")
+    # benchmark 257 too, when it has been generated
+    c257 = os.path.join(S.A.REPO, "benchmarks", "257-compact-integrals", "corpus.tsv")
+    if os.path.exists(c257):
+        bad = sum(1 for c in S.load_corpus(c257) for s in T.SYSTEMS
+                  if not _translates(c["tree"], s))
+        eq(bad, 0, "untranslatable corpus-257 cases")
+
+
+def _translates(tree, system):
+    try:
+        T.emit(tree, system)
+        return True
+    except T.Untranslatable:
+        return False
 
 
 def corpus_sample(n=40):

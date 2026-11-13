@@ -1,0 +1,186 @@
+{
+ "generators": [
+  {
+   "class": "R",
+   "seed": 1,
+   "summary": "class R: accepted 100, FriCAS candidates 0, attempts 133"
+  },
+  {
+   "class": "T",
+   "seed": 1,
+   "summary": "class T: accepted 75, FriCAS candidates 14, attempts 472"
+  },
+  {
+   "class": "T",
+   "seed": 2,
+   "summary": "class T: accepted 75, FriCAS candidates 14, attempts 546"
+  },
+  {
+   "class": "A",
+   "seed": 2,
+   "summary": "class A: accepted 75, FriCAS candidates 6, attempts 258"
+  },
+  {
+   "class": "B",
+   "seed": 5,
+   "summary": "class B: accepted 34, FriCAS candidates 214, attempts 1286"
+  },
+  {
+   "class": "A",
+   "seed": 4,
+   "summary": "class A: accepted 75, FriCAS candidates 40, attempts 370"
+  },
+  {
+   "class": "M",
+   "seed": 2,
+   "summary": "class M: accepted 63, FriCAS candidates 80, attempts 353"
+  },
+  {
+   "class": "M",
+   "seed": 4,
+   "summary": "class M: accepted 63, FriCAS candidates 78, attempts 342"
+  },
+  {
+   "class": "M",
+   "seed": 3,
+   "summary": "class M: accepted 63, FriCAS candidates 96, attempts 369"
+  },
+  {
+   "class": "M",
+   "seed": 1,
+   "summary": "class M: accepted 63, FriCAS candidates 87, attempts 375"
+  },
+  {
+   "class": "B",
+   "seed": 1,
+   "summary": "class B: accepted 34, FriCAS candidates 209, attempts 1318"
+  },
+  {
+   "class": "B",
+   "seed": 6,
+   "summary": "class B: accepted 34, FriCAS candidates 219, attempts 1264"
+  },
+  {
+   "class": "T",
+   "seed": 3,
+   "summary": "class T: accepted 20, FriCAS candidates 5, attempts 153"
+  },
+  {
+   "class": "A",
+   "seed": 1,
+   "summary": "class A: accepted 75, FriCAS candidates 35, attempts 304"
+  },
+  {
+   "class": "A",
+   "seed": 3,
+   "summary": "class A: accepted 75, FriCAS candidates 29, attempts 348"
+  },
+  {
+   "class": "B",
+   "seed": 2,
+   "summary": "class B: accepted 34, FriCAS candidates 206, attempts 1275"
+  },
+  {
+   "class": "B",
+   "seed": 3,
+   "summary": "class B: accepted 23, FriCAS candidates 209, attempts 1360"
+  },
+  {
+   "class": "B",
+   "seed": 4,
+   "summary": "class B: accepted 25, FriCAS candidates 214, attempts 1360"
+  },
+  {
+   "class": "B",
+   "seed": 8,
+   "summary": "class B: accepted 30, FriCAS candidates 0, attempts 265"
+  },
+  {
+   "class": "B",
+   "seed": 12,
+   "summary": "class B: accepted 30, FriCAS candidates 0, attempts 260"
+  },
+  {
+   "class": "B",
+   "seed": 10,
+   "summary": "class B: accepted 30, FriCAS candidates 0, attempts 240"
+  },
+  {
+   "class": "B",
+   "seed": 7,
+   "summary": "class B: accepted 30, FriCAS candidates 1, attempts 269"
+  },
+  {
+   "class": "B",
+   "seed": 11,
+   "summary": "class B: accepted 30, FriCAS candidates 0, attempts 348"
+  },
+  {
+   "class": "B",
+   "seed": 9,
+   "summary": "class B: accepted 30, FriCAS candidates 0, attempts 304"
+  }
+ ],
+ "fricas": {
+  "R": {
+   "candidates": 0,
+   "accepted": 0
+  },
+  "T": {
+   "candidates": 33,
+   "accepted": 0
+  },
+  "A": {
+   "candidates": 169,
+   "accepted": 0
+  },
+  "M": {
+   "candidates": 340,
+   "accepted": 12
+  },
+  "B": {
+   "candidates": 410,
+   "accepted": 0
+  }
+ },
+ "reruns": [
+  "A:1",
+  "A:3",
+  "B:2",
+  "B:3",
+  "B:4",
+  "B:10",
+  "B:11",
+  "B:12",
+  "B:7",
+  "B:8",
+  "B:9"
+ ],
+ "kept": {
+  "R": {
+   "available": 100,
+   "kept": 100,
+   "fricas_only": 0
+  },
+  "T": {
+   "available": 150,
+   "kept": 150,
+   "fricas_only": 0
+  },
+  "A": {
+   "available": 300,
+   "kept": 300,
+   "fricas_only": 0
+  },
+  "M": {
+   "available": 250,
+   "kept": 250,
+   "fricas_only": 12
+  },
+  "B": {
+   "available": 230,
+   "kept": 200,
+   "fricas_only": 0
+  }
+ }
+}

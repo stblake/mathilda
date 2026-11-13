@@ -93,3 +93,5 @@ AGENTS.md
 # The integration shootout run cache (resumable, large); results/<date>.json is tracked.
 benchmarks/256-integration-shootout/results/cache.jsonl
 benchmarks/256-integration-shootout/REPORT-partial.md
+benchmarks/257-compact-integrals/results/cache.jsonl
+benchmarks/257-compact-integrals/REPORT-partial.md

@@ -80,7 +80,8 @@ def mathilda_stamp():
                 newest = max(newest, os.path.getmtime(os.path.join(root, fn)))
     return str(int(newest))
 
-def load_corpus(path=CORPUS):
+def load_corpus(path=None):
+    path = path or CORPUS
     cases = []
     for ln in open(path):
         p = ln.rstrip("\n").split("\t")
@@ -183,9 +184,15 @@ def main():
     ap.add_argument("--check", action="store_true")
     ap.add_argument("--update-baseline", action="store_true")
     ap.add_argument("--fresh", action="store_true")
+    ap.add_argument("--bench", default=None, help="the benchmark folder (corpus.tsv, results/, REPORT.md, "
+                    "baseline.json); default benchmarks/256-integration-shootout")
     ap.add_argument("--report", default=None, help="REPORT.md path (default: the benchmark folder; "
                     "--quick/--limit runs write REPORT-partial.md)")
     a = ap.parse_args()
+    global BENCH, CORPUS
+    if a.bench:
+        BENCH = os.path.abspath(a.bench)
+        CORPUS = os.path.join(BENCH, "corpus.tsv")
 
     if not A.available("mathilda"):
         print("SKIP: ./Mathilda not built")
@@ -326,7 +333,7 @@ def pct(n, d):
 
 
 def write_report(path, rows, labels, wall, a):
-    L = [f"# Integration shootout ({datetime.date.today().isoformat()})", "",
+    L = [f"# Integration shootout: {os.path.basename(BENCH)} ({datetime.date.today().isoformat()})", "",
          f"{len(rows)} cases, timeout {a.timeout} s per run, wall {wall / 60:.1f} min. "
          "Every answer was verified by its own system (derivative at three points, 10^-20). "
          "`elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved "

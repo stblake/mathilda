@@ -69,14 +69,26 @@ brGoodSpecialization[T_Association, cv_Association, rs_Association] := Module[{s
 
 brSpecializedContext::usage = "brSpecializedContext[T, cv, rs, sigma] is the Trager component context of the specialized curve Y^m = G_sigma over Q with the residue data rewritten for d/dtheta (Nbar/Bp, see the header): keys \"B\", \"genus\", \"F\", \"residues\", \"N\", \"E\", \"Ep\", \"Bp\".";
 brSpecializedContext[T_Association, cv_Association, rs_Association, sigma_List] := Module[
-  {th = T["theta"], m = cv["m"], Gs, Ns, Eps, Bps, inv, Nbar},
+  {th = T["theta"], m = cv["m"], Gs, Ns, Eps, Bps, inv, Nbar, Nt},
   Gs = Expand[brSpecializeValue[cv["G"], sigma]];
   Ns = brSpecializeValue[rs["N"], sigma]; Eps = brSpecializeValue[rs["Ep"], sigma];
   Bps = Expand[brSpecializeValue[rs["Bp"], sigma]];
   inv = PolynomialExtendedGCD[Numerator[Together[Eps]], Bps, th];
   Nbar = Expand[PolynomialRemainder[Together[Ns D[Bps, th] Denominator[Together[Eps]] inv[[2, 1]]/inv[[1]]], Bps, th]];
+  (* The stand-in remainder is Nt/(Bps Gs), Nt = Nbar Gs mod Bps: the same
+     residues at the roots of Bps, its other poles on branch points (which
+     Trager's frame excludes from its residue places), and it decays like
+     theta^(-1 - deg G) at infinity.  The bare Nbar/Bps (decay theta^-1) was
+     wrong: Trager's mod-p frame (jacFrame) moves theta = infinity to t = 0,
+     and a pole there beyond the t-multiplicity of the frame's G becomes a
+     spurious residue place, a divisor of nonzero degree whose "order" runs
+     past the Weil bound -- Int 1/(x Log[x] (2 + Log[x]^4)^(2/3)) threw
+     TorsionBeyondWeilBound (benchmark 257, cM-1-74).  With the factor Gs the
+     pole order at t = 0 is at most k + 1 - deg G <= k m - deg G (k = Ceiling[
+     deg G/m], m >= 2), so the frame keeps it out of its residue places. *)
+  Nt = Expand[PolynomialRemainder[Nbar Gs, Bps, th]];
   <|"B" -> curveBasis[m, Gs, th], "genus" -> curveGenus[m, Gs, th], "F" -> rs["F0"],
-    "residues" -> rs["roots"], "N" -> Nbar, "E" -> Bps, "Ep" -> Expand[D[Bps, th]], "Bp" -> Bps|>];
+    "residues" -> rs["roots"], "N" -> Nt, "E" -> Expand[Bps Gs], "Ep" -> Expand[D[Bps Gs, th]], "Bp" -> Bps|>];
 
 brTorsionOrder::usage = "brTorsionOrder[T, cv, rs, b] is the only possible order of the class of delta = Sum_i b_i Delta(alpha_i): Trager's torsionOrderSpec on a good specialization (1 in genus 0). It throws NonElementary when the specialized divisor has infinite order (then so has delta).";
 brTorsionOrder[T_Association, cv_Association, rs_Association, b_List] := Module[{sigma, ctx},
