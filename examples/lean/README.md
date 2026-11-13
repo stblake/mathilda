@@ -8,7 +8,7 @@ theorem holds. `showcase.m` runs every kind of certificate end to end and times 
 
 ```sh
 make -j8                                   # build ./Mathilda
-./Mathilda -file examples/lean/showcase.m  # about 35-40 s with a warm Lean
+./Mathilda -file examples/lean/showcase.m  # about 60-65 s with a warm Lean
 sh tests/scripts/lean_tactics.sh ./Mathilda   # the Lean -> Mathilda tactics on their own
 ```
 
@@ -17,8 +17,10 @@ You need a Lean 4 toolchain, v4.35 or newer (core `grind`). Install it with
 then the environment variable `MATHILDA_LEAN`, then the newest `~/.elan/toolchains/*/bin/lean`,
 then `lean` on `PATH`. No Mathlib and no Lake project are needed for the default run.
 
-The script exits with status 1 if any row has an unexpected verdict. Rows 17 and 18 are
-`False` by design. Row 2 is Skipped unless a Mathlib project is configured, and row 20 is
+The script exits with status 1 if any row has an unexpected verdict. Rows 17, 18 and 21
+are `False` by design; rows 25-27 are `Proved` conjectures, row 28 is `Tested` (no
+certificate kind) and row 29 is `neither` (neither proved nor refuted, which is the honest
+answer). Row 2 is Skipped unless a Mathlib project is configured, and row 20 is
 Skipped when no `lake` is found.
 
 ## What it shows
@@ -42,11 +44,20 @@ Skipped when no `lake` is found.
 | 18 | A tampered certificate | one coefficient of the `Factor` certificate changed: Lean rejects it |
 | 19 | Batch | rows 4–10 in one Lean run, then a cache hit |
 | 20 | Lean -> Mathilda | the `lean/` tactics ask Mathilda for certificates and check them in Lean |
+| 21 | Consensus on row 17's claim, `Engine -> {"Lean", "Exact", "Mathilda"}` | Lean `False`, Exact `Missing["Exact", False]`, the heuristic's `True` does not count; the automatic search finds `x -> -1` and Lean proves `¬ S` |
+| 22 | `Refute[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1]` | `¬ (∀ x : Int, …)`, from the witness `x -> -1` |
+| 23 | `Refute[ForAll[{x, y}, x^2 + y^2 >= 2 x y + 1/10]]` | `¬` of the statement over every ordered field, instantiated at `K := Rat`, `x = y = 0` |
+| 24 | `Refute[x^3 + y^3 == (x + y)^3, "Domain" -> Integers]` | `¬ (∀ x y : Int, …)`, witness `x = y = -1` |
+| 25–26 | `Conjecture[Sum[k^4, …], n]`, `Conjecture[Sum[k^2 2^k, …], n]` | the guessed closed form (polynomial, recurrence), by induction |
+| 27 | `Conjecture[Sum[Fibonacci[k]^2, {k, 1, n}], n]` | `F(n) F(n+1)`, by induction over a Lean definition of `F` (one trusted step: that definition is Mathilda's `Fibonacci`) |
+| 28 | `Conjecture[Sum[Binomial[n, k]^2, {k, 0, n}], n]` | nothing: `Binomial[2 n, n]` is tested on 40 further values only (a WZ certificate is a follow-up) |
+| 29 | `Refute[x^2 >= x]` vs. the same with `Assumptions -> Element[x, Integers]` | `x -> 1/2` refutes the first; the second has no counterexample (`Refute::none`) and no certificate (`Certify::nocert`): "neither". A sum claim with `Assumptions -> n > 3` is refuted at `n -> 4`, not `n -> 2` |
 
 ## Recorded output
 
 [`showcase_output.txt`](showcase_output.txt) is a full run on an Apple M-series machine
-(Lean v4.35.0-rc3, no Mathlib). Total wall time was 42.5 s; each Lean run is about 0.5 s
+(Lean v4.35.0-rc3, no Mathlib), regenerated with rows 21-29 on a loaded machine (load
+average 13-35): total wall time 118.3 s, about 60-65 s at load average 6-10; each Lean run is about 0.5 s
 warm plus about 1.1 s for the kernel replay (v0.6519; it was 15-25 s before the replay), and
 the first run of a session is 1-3 s slower. Excerpt (timings from an earlier run):
 

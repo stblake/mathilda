@@ -13,7 +13,16 @@
 (* MATHILDA_LEAN or ~/.elan).  Row 2 (Mathlib HasDerivAt) runs only when     *)
 (* MATHILDA_LEAN_PROJECT names a Lake project with Mathlib built; row 20     *)
 (* (Lean -> Mathilda tactics) only when `lake` is found.  Both say SKIPPED   *)
-(* otherwise.  Rows 17 and 18 are False by design.                          *)
+(* otherwise.  Rows 17 and 18 are False by design.  The summary's Exact     *)
+(* column re-runs each row with Engine -> "Exact" (Mathilda's exact re-check *)
+(* of the certificate, Missing["Exact", b]: b is shown; never a kernel      *)
+(* verdict).                                                                *)
+(*                                                                          *)
+(* Rows 21-29: multi-engine consensus with an automatic counterexample      *)
+(* (21, False by design), kernel-checked refutations with Refute (22-24),   *)
+(* conjectured closed forms proved by Lean (25-27), a conjecture with no    *)
+(* certificate kind (28, "Tested"), and refutations that honour Domain and  *)
+(* Assumptions (29: neither proved nor refuted, an honest outcome).         *)
 (* ====================================================================== *)
 
 $demoRoot = FileNameJoin[{DirectoryName[$InputFileName], "..", ".."}];
@@ -29,9 +38,20 @@ header[n_, title_] := (Print[""];
   Print["[", n, "] ", title];
   Print["    ", StringJoin[Table["-", {StringLength[title] + 4}]]]);
 
-(* Record a row for the summary table at the end. *)
-record[n_, title_, verdict_, tier_, t_, trusted_] :=
-  AppendTo[$rows, {n, title, verdict, tier, t, trusted}];
+(* Record a row for the summary table at the end (exact: the row's
+   verdict under Engine -> "Exact", "-" when not run). *)
+record[n_, title_, verdict_, tier_, t_, trusted_, exact_:"-"] :=
+  AppendTo[$rows, {n, title, verdict, tier, t, trusted, exact}];
+
+(* The held call of a row re-run with Engine -> "Exact" (replacing any
+   Engine option), for the summary's Exact column. *)
+SetAttributes[exactVerdict, HoldAll];
+exactVerdict[h_[a_, opts___]] := With[{os = DeleteCases[{opts}, (Engine | "Engine") -> _]},
+  exactShow[Quiet[ReleaseHold[Hold[h[a, "Engine" -> "Exact", $opts]] /.
+    $opts -> Sequence @@ os]]["Verified"]]];
+exactShow[Missing["Exact", b_]] := ToString[b];
+exactShow[Missing[w_]] := w;
+exactShow[v_] := ToString[v];
 
 (* Print one certified row.  `input` is the literal Mathilda input (held). *)
 report[n_, title_, input_String, obj_ProofObject, wall_, expect_:True] := Module[{v},
@@ -49,9 +69,11 @@ report[n_, title_, input_String, obj_ProofObject, wall_, expect_:True] := Module
   obj];
 
 SetAttributes[demo, HoldAll];
-demo[n_, title_, call_, expect_:True] := Module[{t},
+demo[n_, title_, call_, expect_:True] := Module[{t, obj},
   t = AbsoluteTiming[call];
-  report[n, title, ToString[Unevaluated[call], InputForm], t[[2]], t[[1]], expect]];
+  obj = report[n, title, ToString[Unevaluated[call], InputForm], t[[2]], t[[1]], expect];
+  $rows = Append[Most[$rows], ReplacePart[Last[$rows], 7 -> exactVerdict[call]]];
+  obj];
 
 skipped[n_, title_, why_] := (header[n, title];
   Print["    SKIPPED: ", why];
@@ -153,7 +175,8 @@ Print["    Engine -> \"Lean\":      Verified: ", lean17["Verified"], "    Tier: 
 Print["    Lean:      ", clip[lean17["LeanTheorem"]]];
 Print["    Time:      Lean ", secs[lean17["Timing"]], ", whole Certify call ", secs[t17[[1]]]];
 record[17, "Lean catches the CAS (the heuristic said " <> ToString[Last[heur["Verified"]]] <> ")",
-  lean17["Verified"], lean17["Tier"], t17[[1]], lean17["TrustedSteps"]];
+  lean17["Verified"], lean17["Tier"], t17[[1]], lean17["TrustedSteps"],
+  exactVerdict[Certify[(1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x]]];
 
 (* ---------------------------------------------------------------------- *)
 (* 18. A tampered certificate is rejected.                                 *)
@@ -246,6 +269,132 @@ Which[
 Print["    Time:      ", secs[t20[[1]]], " (lake build and the three test files)"];
 
 (* ---------------------------------------------------------------------- *)
+(* 21. Consensus of several engines, and the counterexample.               *)
+(* ---------------------------------------------------------------------- *)
+
+header[21, "Consensus: Lean, Exact and the heuristic on row 17's claim"];
+Print["    In:        Certify[(1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x, Engine -> {\"Lean\", \"Exact\", \"Mathilda\"}]"];
+t21 = AbsoluteTiming[Quiet[Certify[(1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x,
+  Engine -> {"Lean", "Exact", "Mathilda"}]]];
+c21 = t21[[2]];
+Print["    Engines:   ", c21["Engines"]];
+Print["    Verified:  ", c21["Verified"], If[c21["Verified"] === False, "", "   <-- UNEXPECTED (expected False)"],
+  "    (only a kernel verdict can be True; the heuristic's entry does not count)"];
+Print["    Counterexample: ", c21["Counterexample"], "    Refuted by the kernel: ", c21["Refuted"]];
+Print["    Refutation: ", clip[ToString[c21["RefutationTheorem"]]]];
+Print["    Object:    ", ToString[c21]];
+Print["    Time:      Lean ", secs[c21["Timing"]], ", whole Certify call (with the refutation run) ", secs[t21[[1]]]];
+record[21, "Consensus Lean + Exact + heuristic on row 17; counterexample found",
+  c21["Verified"], c21["Tier"], t21[[1]], c21["TrustedSteps"],
+  exactShow[Lookup[c21["Engines"], "Exact", Missing["NotRun"]]]];
+
+(* ---------------------------------------------------------------------- *)
+(* 22-24. Refute: a counterexample, checked by the Lean kernel as not S.   *)
+(* ---------------------------------------------------------------------- *)
+
+SetAttributes[refuteRow, HoldAll];
+refuteRow[n_, title_, call_] := Module[{t, r, v},
+  t = AbsoluteTiming[call];
+  r = t[[2]];
+  header[n, title];
+  Print["    In:        ", clip[ToString[Unevaluated[call], InputForm]]];
+  If[Head[r] =!= ProofObject,
+    Print["    Result:    ", r, "   <-- UNEXPECTED (expected a refutation)"];
+    record[n, title, r, "-", t[[1]], {}];
+    Return[r, Module]];
+  v = r["Verified"];
+  Print["    Counterexample: ", r["Counterexample"]];
+  Print["    Verified:  ", v, If[v === True, "", "   <-- UNEXPECTED (expected True)"],
+    "    Tier: ", r["Tier"], "    Kind: ", r["Kind"], "    TrustedSteps: ", Length[r["TrustedSteps"]]];
+  Print["    Lean:      ", clip[r["LeanTheorem"]]];
+  Print["    Time:      Lean ", secs[r["Timing"]], ", whole Refute call ", secs[t[[1]]]];
+  record[n, title, v, r["Tier"], t[[1]], r["TrustedSteps"], exactVerdict[call]];
+  r];
+
+refuteRow[22, "Refute a wrong expansion (integer witness)",
+  Refute[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1]];
+
+refuteRow[23, "Refute an inequality over every ordered field (witness in K := Rat)",
+  Refute[ForAll[{x, y}, x^2 + y^2 >= 2 x y + 1/10]]];
+
+refuteRow[24, "Refute the freshman's dream over the integers",
+  Refute[x^3 + y^3 == (x + y)^3, "Domain" -> Integers]];
+
+(* ---------------------------------------------------------------------- *)
+(* 25-28. Conjecture: guess a closed form, test it, certify it.            *)
+(* ---------------------------------------------------------------------- *)
+
+SetAttributes[conjRow, HoldAll];
+conjRow[n_, title_, call_, expect_] := Module[{t, r, p, s, pf},
+  t = AbsoluteTiming[call];
+  r = t[[2]];
+  header[n, title];
+  Print["    In:        ", clip[ToString[Unevaluated[call], InputForm]]];
+  If[Head[r] =!= ProofObject,
+    Print["    Result:    ", r, "   <-- UNEXPECTED (expected ", expect, ")"];
+    record[n, title, r, "-", t[[1]], {}];
+    Return[r, Module]];
+  s = r["Status"];
+  p = r["Proof"];
+  pf = Head[p] === ProofObject;
+  Print["    Guess:     ", clip[r["Guess"]], "    (", r["Form"], "; fitted on n in ", r["FittedOn"],
+    ", tested on n in ", r["TestedOn"], ")"];
+  Print["    Status:    ", s, If[s === expect, "", "   <-- UNEXPECTED (expected " <> ToString[expect] <> ")"],
+    "    Verified: ", r["Verified"]];
+  Print["    Theorem:   ", clip[ToString[r["Theorem"]]]];
+  If[pf, Print["    Lean:      ", clip[p["LeanTheorem"]]]];
+  Print["    Time:      ", If[pf, "Lean " <> secs[p["Timing"]] <> ", ", ""],
+    "whole Conjecture call ", secs[t[[1]]]];
+  record[n, title, s, If[pf, p["Tier"], "-"], t[[1]],
+    If[pf, p["TrustedSteps"], "n/a: no certificate (" <> ToString[r["Verified"]] <> ")"],
+    If[pf, exactShow[Lookup[p["Engines"], "Exact", Missing["NotRun"]]], "-"]];
+  r];
+
+conjRow[25, "Conjecture the closed form of Sum k^4 (polynomial guess)",
+  Conjecture[Sum[k^4, {k, 1, n}], n], "Proved"];
+
+conjRow[26, "Conjecture the closed form of Sum k^2 2^k (recurrence guess)",
+  Conjecture[Sum[k^2 2^k, {k, 0, n}], n], "Proved"];
+
+r27 = conjRow[27, "Conjecture Sum Fibonacci[k]^2 = F(n) F(n+1) (Fibonacci guess)",
+  Conjecture[Sum[Fibonacci[k]^2, {k, 1, n}], n], "Proved"];
+If[Head[r27] === ProofObject && Head[r27["Proof"]] === ProofObject,
+  Scan[Print["    Trusted:   ", #] &,
+    Select[r27["Proof"]["TrustedSteps"], StringContainsQ[#, "Fibonacci"] &]]];
+
+conjRow[28, "Conjecture Sum Binomial[n, k]^2 = Binomial[2 n, n] (no certificate kind)",
+  Conjecture[Sum[Binomial[n, k]^2, {k, 0, n}], n], "Tested"];
+Print["    Note:      tested on 40 further values, not proved; a WZ / Zeilberger certificate is a follow-up"];
+
+(* ---------------------------------------------------------------------- *)
+(* 29. Refutations honour Domain and Assumptions.                          *)
+(* ---------------------------------------------------------------------- *)
+
+header[29, "Refutations honour Domain and Assumptions: an honest \"neither\""];
+t29 = AbsoluteTiming[
+  r29a = Quiet[Refute[x^2 >= x]];
+  Print["    In:        Refute[x^2 >= x]"];
+  Print["    Out:       counterexample ", r29a["Counterexample"], ", Verified: ", r29a["Verified"]];
+  Print["    In:        Refute[x^2 >= x, Assumptions -> Element[x, Integers]]"];
+  r29b = Check[Refute[x^2 >= x, Assumptions -> Element[x, Integers]], "$Failed after Refute::none",
+    Refute::none];
+  Print["    Out:       ", r29b, "    (true over the integers; x -> 1/2 is not one)"];
+  Print["    In:        Certify[x^2 >= x, Assumptions -> Element[x, Integers]]"];
+  r29c = Check[Certify[x^2 >= x, Assumptions -> Element[x, Integers]], "$Failed after Certify::nocert",
+    Certify::nocert];
+  Print["    Out:       ", r29c, "    (no certificate kind for this inequality over the integers)"];
+  Print["    In:        Certify[Sum[k, {k, 1, n}] == n^2, Assumptions -> n > 3]"];
+  r29d = Quiet[Certify[Sum[k, {k, 1, n}] == n^2, Assumptions -> n > 3]];
+  Print["    Out:       ", ToString[r29d], "    (the automatic search skips n = 2, which violates n > 3)"]];
+v29 = If[Head[r29a] === ProofObject && r29a["Verified"] === True && r29b === "$Failed after Refute::none" &&
+    r29c === "$Failed after Certify::nocert" && Head[r29d] === ProofObject && r29d["Counterexample"] === {n -> 4},
+  "neither", False];
+Print["    Verdict:   ", v29, If[v29 === "neither", "", "   <-- UNEXPECTED (expected neither)"],
+  "    Time:      ", secs[t29[[1]]], " for the four calls"];
+record[29, "Domain/Assumptions respected: x^2 >= x on Integers, an honest neither",
+  v29, "-", t29[[1]], "as the refutations above; Refute::none and Certify::nocert are not verdicts"];
+
+(* ---------------------------------------------------------------------- *)
 (* Summary.                                                                *)
 (* ---------------------------------------------------------------------- *)
 
@@ -253,10 +402,11 @@ Print[""];
 Print["Summary"];
 Print["======="];
 Print[StringPadLeft["#", 3], "  ", StringPadRight["Showcase", 74], StringPadRight["Verdict", 9],
-  StringPadRight["Tier", 6], "seconds"];
+  StringPadRight["Tier", 6], StringPadRight["Exact", 7], "seconds"];
 Scan[Print[StringPadLeft[ToString[#[[1]]], 3], "  ",
     StringPadRight[StringTake[#[[2]], UpTo[72]], 74],
-    StringPadRight[ToString[#[[3]]], 9], StringPadRight[ToString[#[[4]]], 6], secs[#[[5]]]] &,
+    StringPadRight[ToString[#[[3]]], 9], StringPadRight[ToString[#[[4]]], 6],
+    StringPadRight[ToString[#[[7]]], 7], secs[#[[5]]]] &,
   $rows];
 Print[""];
 Print["What Lean did NOT check (TrustedSteps), per row:"];
@@ -269,9 +419,10 @@ Scan[Function[r, Print[StringPadLeft[ToString[r[[1]]], 3], "  ",
       True, ($seen[r[[6]]] = r[[1]]; StringRiffle[r[[6]], "; "])]]],
   Select[$rows, #[[3]] =!= "SKIPPED" &]];
 
-expected = Table[If[MemberQ[{17, 18}, r[[1]]], False, True], {r, $rows}];
+expected = Table[Which[MemberQ[{17, 18, 21}, r[[1]]], False, 25 <= r[[1]] <= 27, "Proved",
+  r[[1]] == 28, "Tested", r[[1]] == 29, "neither", True, True], {r, $rows}];
 ok = And @@ MapThread[#1[[3]] === "SKIPPED" || #1[[3]] === #2 &, {$rows, expected}];
 Print[""];
-Print["All rows as expected (17 and 18 False by design): ", ok];
+Print["All rows as expected (17, 18 and 21 False by design; 25-27 Proved, 28 Tested, 29 neither): ", ok];
 Print["Total wall time: ", secs[AbsoluteTime[] - $t0]];
 If[!ok, Exit[1]];

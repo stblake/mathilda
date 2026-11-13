@@ -9,8 +9,14 @@
 #   - every certificate generator with Verify -> False (no Lean needed),
 #   - Reduce`SOSCertificate (success and $Failed),
 #   - Lean`Internal`Oracle, all four query kinds plus their failure answers,
+#   - the Exact engine, multi-engine consensus and engine options (v0.6525),
+#   - the counterexample search, Refute (Verify -> False, Exact) (v0.6526),
+#   - Conjecture (every guesser, Exact, Verify -> False, refusals) and
+#     Fibonacci sum certificates (v0.6527),
 # and, when a Lean executable is found ($LeanVersion is a string), also
 #   - real Certify runs (True and a refuted False), a batch, cache hits,
+#     automatic refutations after a rejection and Refute (v0.6526),
+#     a Proved Conjecture and a Fibonacci sum (v0.6527),
 #     user-Method items (one file each), LeanVerify (accepted, sorry,
 #     native_decide, a refused axiom, named examples in a namespace), the
 #     kernel replay (a rejected module, a file with no .olean) and
@@ -172,6 +178,87 @@ Quiet[Do[
    Certify[Integrate[x, x] == x^2/2 + 1/(Log[x^2] - 2 Log[x]), Tier -> 1, Verify -> False];
    Certify[Integrate[x, x] == x^2/2 + 1/Log[x^2 + 1], Tier -> 1, Verify -> False], {3}]];
 
+(* --- v0.6525: the Exact engine (every obligation type, False, NotChecked),
+   multi-engine with Verify -> False, consensus rules, engine options --- *)
+Quiet[Do[
+   Certify[{(x + 1)^3 == x^3 + 3 x^2 + 3 x + 1, Together[1/(x - 1) - 1/(x + 1)],
+     PolynomialExtendedGCD[x^4 - 1, x^3 + 2 x^2 + 2 x + 1, x],
+     PolynomialReduce[x^3 y - x y^2, {x^2 - y, x y - 1}, {x, y}],
+     Integrate[1/(x^2 + 2), x], Integrate[2 x, x] == x^2 + 5,
+     Implies[x^2 + y^2 == 1 && x == y, 2 y^2 == 1],
+     Solve[(x - 1)^2 (x + 2) == 0, x], Solve[{x + y == 3, x - y == 1}, {x, y}],
+     Solve[(x - 1)/(x^2 - 1) == (x - 1)/(2 x - 2), x],
+     Inverse[{{2, 1, 0}, {1, 3, 1}, {0, 1, 4}}],
+     Det[{{2, -1, 0, 3}, {1, 4, 2, 0}, {0, 5, -2, 1}, {3, 0, 1, 1}}],
+     LinearSolve[{{2, 1}, {1, 3}}, {1, 2}], NullSpace[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}],
+     ForAll[{x, y}, x^4 - 2 x^2 + 1 + y^2 >= 0], Implies[x >= 0, x^3 >= 0],
+     Minimize[{x^2 + y^2, x + y == 1}, {x, y}],
+     Maximize[{3 x + 2 y, x + y <= 4, x + 3 y <= 6, x >= 0, y >= 0}, {x, y}],
+     FactorInteger[2^64 + 1], PrimeQ[2], PrimeQ[274177], PrimeQ[274179], PrimeQ[1],
+     Sum[k 2^k, {k, 0, n}], Sum[(-1)^k k, {k, 0, n}], Sum[k, {k, 1, n}] == n (n + 1)/2 + 1,
+     (1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x}, Engine -> "Exact"];
+   Certify[x^2 == 1, Assumptions -> x == 1, Engine -> "Exact"];
+   Certify[x^2 == x, Assumptions -> {x > 0}, Engine -> "Exact"];
+   Certify[Integrate[(1 + x)/(1 + x^2), x], Engine -> "Exact", "Tier" -> 1];
+   Certify[x == x, Engine -> "Exact", Method -> "omega"];
+   Certify[x + 1 == 1 + x, Engine -> "Exact", Verify -> False];
+   ToString[Certify[(x + 1)^3 == x^3 + 3 x^2 + 3 x + 1, Engine -> {"Lean", "Exact"},
+     Verify -> False]];
+   Certify[{Factor[x^10 - 1], Sum[k^3, {k, 1, n}]}, Engine -> {"Lean", "Exact", "Mathilda"},
+     Verify -> False]["EngineDetails"];
+   Certify[(x + 1)^3 == x^3 + 3 x^2 + 3 x + 1, Engine -> {"Exact", "Mathilda"}];
+   Certify[x == x, Engine -> {"Lean", "Lean"}];
+   With[{g = <|"Input" -> HoldForm[a == b]|>},
+     Lean`Private`consensus[g, {True, Missing["Exact", False]}, {"Lean", "Exact"}];
+     Lean`Private`consensus[g, {False, Missing["Exact", True]}, {"Lean", "Exact"}];
+     Lean`Private`consensus[g, {True, Missing["NotChecked"]}, {"Lean", "Exact"}];
+     Lean`Private`consensus[g, {Missing["Exact", True]}, {"Exact"}];
+     Lean`Private`consensus[g, {Missing["NotAvailable"], Missing["Exact", True]}, {"Lean", "Exact"}]];
+   Lean`Private`expPolyZeroQ[(-1)^(n + 2) - (-1)^n + 4^n - 2^(2 n), n], {3}]];
+
+(* --- v0.6526: counterexample search (6+ claims), Refute with Verify -> False
+   and with the Exact engine, refusals, the witness hook --- *)
+Quiet[Do[
+   Refute[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1, "Verify" -> False]["LeanSource"];
+   Refute[ForAll[{x, y}, x^2 + y^2 >= 2 x y + 1/10], "Verify" -> False];
+   Refute[x^2 == x, Assumptions -> x^2 == 2 x, "Verify" -> False];
+   Refute[Implies[x^2 + y^2 == 2 && x == y, x == 1], "Verify" -> False];
+   Refute[x^3 + y^3 == (x + y)^3, "Domain" -> Integers, "Verify" -> False];
+   Refute[1/x == 1, "Verify" -> False];
+   Refute[(x^2 - 1)/(x - 1) == x + 2, "Verify" -> False];
+   Refute[Sum[k^3, {k, 1, n}] == n^2 (n + 1)^2/4 + 1, "Verify" -> False];
+   ToString[Refute[Implies[x^2 + 4 == 0, x == 7]]];
+   Refute[Integrate[2 x, x] == x^2 + x];
+   Refute[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1, "Engine" -> "Exact"]["Checks"];
+   Refute[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1, "Engine" -> "Exact", "Verify" -> False];
+   Refute[ForAll[{x, y}, x^4 y^2 + x^2 y^4 - 3 x^2 y^2 + 1 >= 0], "SearchTime" -> 1];
+   Refute[(x + 1)^2 == x^2 + 2 x + 1, "Verify" -> False];
+   Refute[PrimeQ[7]]; Refute[Integrate[x, x]]; Refute[x == x + 1, Foo -> 1];
+   Refute[x == x + 1, "Engine" -> "Z3"]; Refute[Simplify[x] == x + 1];
+   Lean`Private`$witnessOverride = {x -> 0};
+   Refute[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1, "Verify" -> False];
+   Lean`Private`$witnessOverride = None;
+   Lean`Private`refZero[(1 + Sqrt[2])^2 - 3 - 2 Sqrt[2]]; Lean`Private`refZero[-1 - Sqrt[2]];
+   Certify[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1, "LeanExecutable" -> "/nonexistent/lean"], {3}]];
+
+(* --- v0.6527: Conjecture (each guesser, Exact, Verify -> False, refusals),
+   Fibonacci sums, the Domain / Assumptions rule of the search --- *)
+Quiet[Do[
+   ToString[Conjecture[Sum[k^4, {k, 1, n}], n, "Engine" -> "Exact"]];
+   Conjecture[Sum[k^2 2^k, {k, 0, n}], n, "Engine" -> "Exact"];
+   Conjecture[Sum[Fibonacci[k]^2, {k, 1, n}], n, "Engine" -> "Exact"];
+   ToString[Conjecture[Sum[Binomial[n, k]^2, {k, 0, n}], n, "Engine" -> "Exact"]];
+   Conjecture[Sum[1/(k (k + 1)), {k, 1, n}], n, "Engine" -> "Exact"];
+   Conjecture[Product[(2 k - 1)/(2 k), {k, 1, n}], n, "Engine" -> "Exact"];
+   Conjecture[Sum[k^4, {k, 1, n}], n, "Verify" -> False]["Proof"]["LeanSource"];
+   Conjecture[Sum[Fibonacci[k]^2, {k, 1, n}], n, "Verify" -> False]["Proof"]["LeanSource"];
+   Conjecture[Sum[1.5^k, {k, 0, n}], n]; Conjecture[Sum[Prime[k], {k, 1, n}], n];
+   Conjecture[Sum[k, {k, 1, n}], n, Foo -> 1]; Conjecture[Sum[k, {k, 1, n}], 2 n];
+   Certify[Sum[Fibonacci[k], {k, 0, n}] == Fibonacci[n + 2] - 1, "Engine" -> "Exact"];
+   Certify[Sum[Fibonacci[k], {k, 0, n}] == Fibonacci[n + 2], "Engine" -> "Exact"];
+   Refute[x^2 >= x, Assumptions -> Element[x, Integers], "Verify" -> False, "SearchTime" -> 1];
+   Refute[Sum[k, {k, 1, n}] == n^2, Assumptions -> n > 3, "Verify" -> False], {3}]];
+
 (* --- real Lean runs, when Lean is installed --- *)
 If[StringQ[$LeanVersion],
   Quiet[
@@ -191,6 +278,25 @@ If[StringQ[$LeanVersion],
     Certify[x == 7, Assumptions -> x^2 + 4 == 0 && Element[x, Reals]];
     Certify[{x + 1 == 1 + x, x == x + 1}, Method -> "intros\ngrind"];
     Certify[Solve[(x - 1)/(x^2 - 1) == (x - 1)/(2 x - 2), x]];
+    Certify[Factor[x^10 - 1], Engine -> {"Lean", "Exact"}];
+    Certify[(1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x, Engine -> {"Lean", "Exact"}];
+    (* v0.6526: automatic refutations after a rejection, and Refute *)
+    ToString[Certify[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1]];
+    Certify[{(x + 1)^3 == x^3 + 3 x^2 + 2 x + 2, Sum[k^3, {k, 1, n}] == n^2 (n + 1)^2/4 + 1,
+      Integrate[2 x, x] == x^2 + x}];
+    Certify[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1, "Counterexample" -> False];
+    Refute[(x + 1)^3 == x^3 + 3 x^2 + 2 x + 1];
+    Refute[ForAll[{x, y}, x^2 + y^2 >= 2 x y + 1/10]];
+    Refute[Sum[k^3, {k, 1, n}] == n^2 (n + 1)^2/4 + 1];
+    (* v0.6527: a Proved conjecture, a Fibonacci sum, an Assumptions-aware refutation *)
+    ToString[Conjecture[Sum[k^4, {k, 1, n}], n]];
+    Certify[Sum[Fibonacci[k]^2, {k, 1, n}] == Fibonacci[n] Fibonacci[n + 1]];
+    Certify[Sum[k, {k, 1, n}] == n^2, Assumptions -> n > 3];
+    (* the showcase's rows 21-29 not covered above *)
+    Certify[(1 + x)^20 == Expand[(1 + x)^20] - 10^-25 x, Engine -> {"Lean", "Exact", "Mathilda"}];
+    Refute[x^3 + y^3 == (x + y)^3, "Domain" -> Integers];
+    Refute[x^2 >= x];
+    Conjecture[Sum[Fibonacci[k]^2, {k, 1, n}], n];
     (* kernel replay: a rejected module, and a file with no .olean *)
     Lean`Internal`VerifySource["import Lean\nset_option debug.skipKernelTC true in\nrun_cmd Lean.Elab.Command.liftCoreM <| Lean.addDecl (.thmDecl { name := `bad, levelParams := [], type := Lean.mkConst ``False, value := Lean.mkConst ``True.intro })\n",
       Lean`Private`leanExe[Automatic], None, False, Lean`Private`replayScript[]];

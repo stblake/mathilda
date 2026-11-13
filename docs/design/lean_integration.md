@@ -29,7 +29,7 @@ Mathilda is an **untrusted oracle**. The Lean 4 kernel is the **trusted checker*
 The file is header (`set_option autoImplicit false`), prelude, theorem chunks, then a
 **trusted footer** with, per theorem, `example : <statement> := mathilda_cert_k` and
 `#print axioms mathilda_cert_k`. All of the following hold, as checked by
-`` Lean`Internal`VerifySource `` and by the per-theorem attribution in `Lean.m`:
+`` Lean`Internal`VerifySource `` and by the per-theorem attribution in `LeanBackend.m`:
 
 1. No message with severity `error` or kind `hasSorry` falls in the theorem's chunk or its
    footer lines.
@@ -91,7 +91,11 @@ refutation, so it is never `False`.
   `det`, `sqnn`, `mulnn`).
   Proofs are `grind` (polynomial identities, with SOS hints), `decide +kernel` (matrices,
   Pratt) or induction (sums). A warm run takes about 0.5 s, plus about 1.1 s for the kernel
-  replay.
+  replay. Whole-call timings measured for v0.6526-v0.6527 (load average about 8, not an idle
+  machine; an idle re-measurement is still owed): an accepted `Certify` 1.8 s; a rejection
+  followed by a kernel-checked refutation 2.3-2.4 s (the rejected file is not replayed, the
+  refutation is; `"Counterexample" -> False` gives 0.6 s); `Conjecture` with a Proved result
+  1.8-2.3 s.
 - **Tier 1** is opt-in and needs a Lake project with Mathlib built (`$LeanProject`). It is
   used for analytic statements that core Lean cannot express: `HasDerivAt` for
   antiderivatives with `Log`/`ArcTan`. `import Mathlib` costs 10–40 s per run.
@@ -99,19 +103,49 @@ refutation, so it is never `False`.
 ## Architecture
 
 ```
-Certify[comp] ──► Lean.m generator ──► Lean source ──► lean --json ──► verdict ──► ProofObject
-   (HoldFirst)      (pure .m:            (LeanForm      (system(),       (NDJSON +
-                     D, Together,         strict          temp files)     #print axioms)
-                     FactorInteger,       translator)
-                     SOS, LinearSolve)
+Certify[c, opts] ─► held option checks ─► engines = engineList["Engine"]
+  per item:   rewriteInput (claim walker, held)
+              ir = generate[...]          neutral IR: Kind, Theorem, Certificate, TrustedSteps,
+                                          "Obligation" (typed statement + data), "DomainForm"
+              g  = encodeFor[ir, engines] each distinct backend "Encode" hook, immediately
+                                          (Lean text, Exact checks); "Untranslatable" -> "Fallback"
+              g  = postEncode[g]          deferred claim-form work (antiderivative claims)
+  per engine: verdicts = $backends[e]["Run"][items, o]   (Lean: cache, one batched file,
+                                          lean --json, #print axioms, kernel replay)
+              guardVerdicts: True from a non-kernel backend -> Missing[e, True]
+  per item:   one engine -> its "Present"; a list -> consensus (Engines.m)
+              kernel False and "Counterexample" =!= False -> search, exact witness check,
+              one Lean run of the "not S" theorems (Refute.m)
 ```
+
+The package files (all in `src/internal/lean/`, loaded in this order):
+
+| File | Role |
+|---|---|
+| `Lean.m` | `BeginPackage["Lean`"]`: every public `::usage`, the shared messages, the claim walker, domain logic, one generator per certificate kind (the neutral IR), `registerBackend` / `$backends`, the pipeline (`prepare`, `encodeFor`, `certifyItems`), `ProofObject` and its summary box. Ends with `LoadModule` of the five siblings, then `Protect` |
+| `LeanBackend.m` | discovery (`$LeanExecutable`, `$LeanProject`, `$LeanVersion`), `LeanVerify`, the source check, translation (`toLean`, `leanThm`, ...), the per-obligation encoders `leanEncodeType[type, ...]`, batching (`runBatch`), `cacheKey` / `$certCache`, `leanRun`, `leanPresent`, `mkProofObject`, the refutation encoder `leanRefuteEncode`, `` Lean`Internal`Oracle ``; registers `"Lean"` |
+| `ExactBackend.m` | `exactEncode` (per-obligation checks as held tests), `exactRun`, `exactPresent`, `exactTrusted`, `exactRefuteCheck`, the Fibonacci rewrite `exFibLin`; registers `"Exact"` |
+| `Engines.m` | the option checks shared by Certify, Refute and Conjecture, `engineList`, `engineOptMessages`, `guardVerdicts`, the heuristic engine (registers `"Mathilda"`), `consensus`, `mkMultiObject` |
+| `Refute.m` | the refutation problem per obligation, `withAssume` (Domain / Assumptions), `searchCounterexample`, `witnessOK`, `refuteAfterRejection`, `Refute` and its messages |
+| `Conjecture.m` | the experiment, the guessers (Polynomial, Geometric, Fibonacci, Rational, Hypergeometric), `Conjecture` and its messages |
+
+A sibling opens the package itself (`BeginPackage["Lean`"]; Begin["`Private`"]; ... End[];
+EndPackage[];`) with nothing between `BeginPackage` and `Begin`, so it never creates a
+`` Lean` `` symbol: every public name has its `::usage` in `Lean.m`'s export section.
+Definitions are rules resolved at call time, so the order matters only for load-time side
+effects (`registerBackend` calls, the prelude path in `LeanBackend.m`).
 
 | Piece | File | Role |
 |---|---|---|
 | `LeanForm` | `src/print_lean.c` | display form, and the strict translator `` Lean`Internal`ToLean `` that refuses anything whose Lean text would mean something else (inexact numbers, Int division, Mathlib-only heads in Tier 0, unknown heads) |
 | runner | `src/lean_run.c` | `` Lean`Internal`RunProcess ``, `` Lean`Internal`VerifySource ``: temp files, `system()`, NDJSON parsing, axiom extraction, the replay run and its report |
 | replay checker | `src/internal/lean/Replay.lean` | `lean --run` script: replays the compiled module in a fresh kernel environment, prints each declaration's axioms |
-| package | `src/internal/lean/Lean.m` | settings and discovery, one generator per certificate kind, batching, the session cache, `ProofObject`, `` Lean`Internal`Oracle `` |
+| package | `src/internal/lean/Lean.m` | the prover-neutral core: claim walker, one generator per certificate kind (a neutral IR: result, theorem, typed proof obligation), the backend registry, the pipeline, `ProofObject` |
+| Lean backend | `src/internal/lean/LeanBackend.m` | settings and discovery, `LeanVerify`, the per-obligation Lean encoders, batching, the session cache, `` Lean`Internal`Oracle `` |
+| Exact backend | `src/internal/lean/ExactBackend.m` | `Engine -> "Exact"`: per-obligation exact re-checks by Mathilda's own arithmetic (`Missing["Exact", True \| False]`, never `True`) |
+| engines | `src/internal/lean/Engines.m` | `"Engine"` values and lists, the heuristic `"Mathilda"` engine, multi-engine consensus (`"Engines"`, `"EngineDetails"`; only a kernel makes `"Verified"` `True`) |
+| refutations | `src/internal/lean/Refute.m` | counterexample search after a kernel rejection, kernel-checked `¬ S` theorems, `Refute` |
+| conjectures | `src/internal/lean/Conjecture.m` | `Conjecture`: experiment, guess, test, certify |
 | SOS engine | `src/solve/reduce_sos.c` | `` Reduce`SOSCertificate ``: the exact Gram blocks of `Reduce`'s Putinar stage (an additive wrapper; `Reduce` is unchanged) |
 | Lean package | `lean/` | `mathilda_linear_combination`, `mathilda_sos`, `mathilda_prime`, `#mathilda`; `Mathilda/Answer.lean` parses the oracle's answer as data |
 
@@ -123,7 +157,8 @@ package is loaded eagerly and defines rules only: it adds about 2.5 ms to startu
 captures that short name in packages loaded later. The C builtins and private helpers
 therefore live in `` Lean`Internal` `` and `` Lean`Private` ``, which are not on the path.
 Only the public API is in `` Lean` ``: `Certify`, `ProofObject`, `LeanVerify`,
-`$LeanExecutable`, `$LeanProject`, `$LeanVersion` (v0.6523). Option names are strings
+`$LeanExecutable`, `$LeanProject`, `$LeanVersion` (v0.6523), `Refute` (v0.6526) and
+`Conjecture` (v0.6527). Option names are strings
 (`Options[Certify]` lists `"Engine"`, `"Tier"`, `"Domain"`, `"Verify"`, `"LeanExecutable"`,
 `"LeanProject"`, plus the System symbols `Method`, `TimeConstraint`, `Assumptions`), and
 `OptionValue` matches a name by its text, so the user's `Engine -> v` (a `` Global` ``
@@ -131,6 +166,115 @@ symbol) and `"Engine" -> v` are the same option. Before v0.6523 the option names
 exported from `` Lean` ``: they captured the user's `Domain`, `Verify`, … (which then
 survived `ClearAll["Global`*"]` and were missing from `Names["Global`*"]`). The tactic
 protocol entry is `` Lean`Internal`Oracle ``, called by its full name.
+
+## Prover backends
+
+`Certify` does not know Lean. Generators emit a prover-neutral IR whose `"Obligation"` is a
+typed statement (`"Identity"`, `"PolyIdentities"`, `"IdealImplication"`, `"RootsComplete"`,
+`"ClosedFact"`, `"WeightedSOS"`, `"KKT"`, `"Primality"`, `"Induction"`, `"HasDerivAt"`) plus
+the data a checker needs, and a `"DomainForm"` (`"Int"`, `"Rat"`, `"CharZeroField"`,
+`"OrderedField"`, `"Real"`, `"Closed"`) that says over what the statement quantifies.
+Backends are registered in `` Lean`Private`$backends `` by
+`registerBackend[name, spec]`, called at load by the file that defines the backend; it
+returns `$Failed` (and registers nothing) unless the required keys are present, `"Name"`
+equals `name` and `"Trust"` is one of the three allowed values.
+
+| Key | Signature | Lean | Exact | Mathilda (heuristic) |
+|---|---|---|---|---|
+| `"Name"` | String (required) | `"Lean"` | `"Exact"` | `"Mathilda"` |
+| `"Trust"` | `"Kernel"` \| `"ExactArithmetic"` \| `"Heuristic"` (required) | Kernel | ExactArithmetic | Heuristic |
+| `"Encode"` | `[ir, o]` -> association of artefacts, `$Failed` after a message, or `"Untranslatable"` (only with a `"Fallback"` IR) (required) | `leanEncode`: statement, proof, preamble, tier | `exactEncode`: `"Checks"` as held tests | Lean's encoder (it shows the Lean text) |
+| `"Run"` | `[items, o]` -> one verdict per item; item `<\|"Index", "G"\|>`; verdict `<\|"Verified", "Timing", "Logs", "Cached", ...\|>` (required) | `leanRun`: cache, one batched file per tier, replay, `"Axioms"`, `"Source"`, `"LeanVersion"` | `exactRun`: each check under `TimeConstrained`, `"Checks"` | `PossibleZeroQ` / `Simplify` |
+| `"Present"` | `[item, verdict, o]` -> `ProofObject` (required) | `leanPresent` | `exactPresent` | Lean's key list, `"Tier" -> "Heuristic"` |
+| `"Label"` | `[assoc]` -> summary box text (required) | `Lean Tier 0` | `Exact` | `Mathilda Heuristic` |
+| `"TrustedSteps"` | `[g]` -> backend-level steps (optional) | `{}` (its steps live in the generators) | `exactTrusted` | the `PossibleZeroQ` note |
+| `"Options"` | option names the engine reads (optional) | `Tier`, `Method`, `TimeConstraint`, `LeanExecutable`, `LeanProject` | `TimeConstraint` | `Tier`, `Method` |
+| `"Refute"` | refutation hook (optional) | `leanRefuteEncode`: `[rir, o]` -> a generator association for its own `"Run"` | `exactRefuteCheck`: `[rir, o]` -> a verdict | absent |
+
+**Trust is enforced, not declared.** A verdict `True` from a backend whose `"Trust"` is not
+`"Kernel"` is rewritten to `Missing[name, True]` (`guardVerdicts`) before it reaches a
+ProofObject. The Exact backend's verdicts are `Missing["Exact", True]` (every check
+passed), `Missing["Exact", False]` (a concrete exact computation failed;
+`Certify::exactfail`) or `Missing["NotChecked"]`. It is an exact re-check, recomputed from
+the obligation's statement and the certificate data (never from the generator's own
+`"PreCheck"`), by the same system that produced the certificate: useful as a second
+opinion and when Lean is absent, **not** a proof.
+
+**Consensus** (a list of engines, `Engines.m`): every engine runs, in list order; heuristic
+engines only add their entry. Over the rest, with K the kernel engines: any `False` /
+`Missing[_, False]` gives `False` (`Certify::disagree` when a kernel said `True`, or a kernel
+said `False` against a `Missing[_, True]`); else every kernel `True` gives `True`; with no
+kernel listed, `Missing["Consensus", True]` when every verdict is `Missing[_, True]`; else the
+first kernel verdict that is not `True`. The object gains `"Engines"` and
+`"EngineDetails"`; the label joins the engine labels (`Lean Tier 0 + Exact`).
+
+**Refutation faithfulness** (`Refute.m`). The statement refuted is always the obligation's
+statement S (what a backend would prove), never a re-reading of the user's text; the kernel
+theorem is `¬ S`. A witness must lie in S's quantifier domain (integers for `"Int"`,
+rationals for `"Rat"` and for the generic char-0 / ordered-field forms, instantiated at
+`K := Rat`: ℚ is such a field, and ℚ ⊂ ℂ, ℚ ⊂ ℝ, so the user's claim is refuted under
+Mathematica's semantics too), satisfy every hypothesis of S, falsify its conclusion, keep
+every denominator of the claim nonzero, and satisfy the call's `"Domain"` / `Assumptions`
+when S omits them (every kind but identities). All of it is checked by Mathilda's exact
+arithmetic before a refutation is built, and each such check is a listed trusted step.
+`FindInstance`'s domain argument is not trusted. Algebraic witnesses (`-2 I`, `-Sqrt[2]`)
+and claimed antiderivatives give exact-only refutations (`Missing["Exact", True]`).
+Primality, Tier 1 and `Minimize` / `Maximize` rejections are not searched: they are
+certificate or translation bugs, not false claims.
+
+### Adding a backend
+
+1. **Pick `"Trust"` honestly.** Only a checker with a small trusted kernel may say
+   `"Kernel"`; everything else (an exact re-check, a CAS, a solver whose answer you do not
+   replay) is `"ExactArithmetic"` or `"Heuristic"`. The pipeline enforces it: a non-kernel
+   `True` becomes `Missing[name, True]`.
+2. **New sibling file** `src/internal/lean/MyBackend.m` with the package skeleton
+   (`BeginPackage["Lean`"]; Begin["`Private`"]; ... End[]; EndPackage[];`, nothing between
+   `BeginPackage` and `Begin`), and a `LoadModule["lean/MyBackend.m"];` line in `Lean.m`'s
+   tail after `LeanBackend.m` / `ExactBackend.m` and before `Engines.m`, `Refute.m`,
+   `Conjecture.m`. `make install` copies every `*.m` under `src/internal` already. Public
+   names (rare for a backend) need their `::usage` in `Lean.m`'s export section.
+3. **Register** at the end of the file: `registerBackend["My", <|"Name" -> "My", "Trust" ->
+   ..., "Encode" -> ..., "Run" -> ..., "Present" -> ..., "Label" -> ..., "Options" ->
+   {...}|>]`. Update the text of `Certify::engine` (`Lean.m`) and, when the engine can
+   refute, `Refute`'s engine check and `Refute::engine` (`Refute.m`), which name the
+   engines.
+4. **`"Encode"`** dispatches on `ir["Obligation"]["Type"]` (see `leanEncodeType`,
+   `exactEncode`). Encode the types you support; for the others return an association that
+   your `"Run"` maps to `Missing["NotChecked"]` (Exact's `exUndecided`) -- never `False`, which would make
+   consensus reject a true claim. `$Failed` is only for a real refusal, after a message
+   (the Lean encoder uses `nocert[ir["Input"]]`); it fails the item for every engine.
+5. **A strict translator**, in the refusal discipline of `` Lean`Internal`ToLean ``
+   (`src/print_lean.c`): closed mode (refuse any head you do not know), one target name per
+   symbol, a pass-through allowlist, no inexact numbers, no operator whose target meaning
+   differs (integer division, `^` with a negative exponent). Rename variables to `v1, v2,
+   ...` as `` Lean`Internal`Oracle `` does, so user names cannot collide with the target
+   language's keywords.
+6. **`"Run"`** checks a list of items at once: batch them into one checker call where the
+   checker allows it, keep a session cache keyed by the exact artefact text plus the checker
+   version (as `cacheKey` / `$certCache` do), honour `Verify -> False`
+   (`Missing["NotChecked"]`, the artefacts still built) and return
+   `Missing["NotAvailable"]` when the checker is not installed.
+7. **External processes** follow the `` Lean`Internal`RunProcess `` pattern (an argument
+   list, no shell string; a private `mkdtemp` directory per run, removed afterwards; a
+   deterministic resource bound inside the checker, as Lean's heartbeats -- the runner has
+   no wall-clock kill, F7), and the generated text is checked before it runs (the role of
+   `checkSource` in `LeanBackend.m`: an allowlist of the surface the encoder emits, so a
+   translation bug cannot smuggle a command into the checker).
+8. **`"Present"` / `"Label"`**: build the ProofObject keys (`mkProofObject` for a Lean-like
+   shape, `exactPresent` for a minimal one) and a short label; issue the object only
+   through the pipeline, which registers it for authentication.
+9. **Trusted steps and DomainForm honesty.** Return backend-level steps from
+   `"TrustedSteps"` (what your checker takes on faith), and prove only what the
+   obligation's `"DomainForm"` says: an SMT solver over the reals proves "for all reals",
+   not "for every ordered field", and cannot check a `"CharZeroField"` statement with
+   hypotheses (it must encode ℂ or refuse). If your statement differs, add a trusted step
+   that says so.
+10. **Tests** that run without the checker (generation, `Verify -> False`, refusals, the
+    registry entry) in a `tests/test_lean_*.c` suite, plus gated ones that exit with skip
+    code 77 when the checker is absent (see `tests/test_lean_verify.c`), a multi-engine
+    case, and the golden corpus unchanged (`lean_golden_tests`: every existing artefact and
+    message stays byte-identical). Add your calls to `tests/scripts/lean_leakcheck.sh`.
 
 ## Why `system()`, and why it is safe
 
@@ -366,3 +510,10 @@ theorem; it can make the theorem differ from the claim only through the listed
 | F9 | `Root`/`RootSum`/complex antiderivatives and radical `Solve` roots in Tier 0 | Needs an algebraic-number encoding beyond quadratic surds. |
 | F10 | `NullSpace` completeness (rank witness) and eigenpairs | Needs a minor-based rank certificate. |
 | F11 | A core-Lean field lemma from the raw rational statement to the cleared identity | Removes the remaining "field algebra" trusted step of rational identities (the cross-multiplied identity now uses the unreduced denominators); core Lean lacks `div_add_div`. |
+| F12 | A z3 / SMT backend | A decision procedure with real semantics: it must report `"DomainForm" -> "Real"` and encode ℂ or refuse char-0 claims with hypotheses; factor a generic external runner out of `lean_run.c` when it lands. |
+| F13 | WZ / Zeilberger certificates (`Sum[Binomial[n, k]^2, …]` Proved instead of Tested) | Needs `Nat.choose` definitions in the prelude, or Mathlib. |
+| F14 | Public `FindLinearRecurrence`, `FindSequenceFunction`, `FindGeneratingFunction`, and `Conjecture[{…}, n]` on a sequence | The `Conjecture` guessers are their seeds; the public API needs its own spec. |
+| F15 | Best-constant conjectures `Conjecture[ForAll[x, p >= c q], c]` | Needs an SOS search over the constant. |
+| F16 | Tier 1 (Mathlib) refutations with `Real.sqrt` / `Complex` witnesses | Algebraic witnesses are exact-only today. |
+| F17 | A `mathilda?` Lean tactic answering conjecture / counterexample queries through `` Lean`Internal`Oracle `` | Protocol extension on both sides. |
+| F18 | Kernel-replay start-up cost; an idle-machine timing baseline | Every measurement for v0.6524-v0.6527 ran under load (load average 7-180); the replay may dominate small certificates. |

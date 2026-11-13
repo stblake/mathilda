@@ -1075,9 +1075,9 @@ static void test_refusals(void) {
 static void test_option_names(void) {
     test_mute_messages();
     check_true("Context /@ {Engine, Tier, Domain, Verify, KeepFiles, LeanExecutable, "
-               "LeanProject, Oracle} === ConstantArray[\"Global`\", 8]");
+               "LeanProject, Oracle, Counterexample, SearchTime} === ConstantArray[\"Global`\", 10]");
     check_true("Sort[Names[\"Lean`*\"]] === Sort[{\"$LeanExecutable\", \"$LeanProject\", \"$LeanVersion\", "
-               "\"Certify\", \"LeanVerify\", \"ProofObject\"}]");
+               "\"Certify\", \"Conjecture\", \"LeanVerify\", \"ProofObject\", \"Refute\"}]");
     check_true("Certify[x + 1 == 1 + x, Engine -> \"Mathilda\"][\"Engine\"] === \"Mathilda\"");
     check_true("Certify[x + 1 == 1 + x, \"Engine\" -> \"Mathilda\"][\"Engine\"] === \"Mathilda\"");
     check_true("Certify[x + 1 == 1 + x, Verify -> False][\"Verified\"] === Missing[\"NotChecked\"]");
