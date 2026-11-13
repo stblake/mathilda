@@ -4902,6 +4902,26 @@ endif()
 add_test(NAME solve_corpus_tests
          COMMAND solve_corpus_tests ${CMAKE_CURRENT_SOURCE_DIR}/solve_corpus.m ${CMAKE_CURRENT_SOURCE_DIR}/solve_check_prelude.m)
 
+# Sum / Product oracle (tests/sum_product_oracle/): every record is verified
+# independently of the closed-form stages -- symbolic-n answers against the
+# same input enumerated at concrete bounds, infinite ones against
+# mpmath-checked references -- and the run ratchets against baseline.txt
+# (labels known not to pass).  Push tier on purpose (no "corpus" in the name):
+# it is the guard for the Sum/Product soundness campaign.
+add_executable(sum_product_oracle_tests test_sum_product_oracle.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(sum_product_oracle_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(sum_product_oracle_tests gmp m ${ECM_LIB})
+    add_dependencies(sum_product_oracle_tests build_ecm)
+else()
+    target_link_libraries(sum_product_oracle_tests gmp m)
+endif()
+add_test(NAME sum_product_oracle_tests
+         COMMAND sum_product_oracle_tests
+                 ${CMAKE_CURRENT_SOURCE_DIR}/sum_product_oracle/prelude.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/sum_product_oracle/corpus.m
+                 ${CMAKE_CURRENT_SOURCE_DIR}/sum_product_oracle/baseline.txt)
+
 # Self-verifying stress corpus for DSolve[].  The whole subsystem lives in
 # ../DSolve_test_status/ (corpora DE_examples_N.m, the harness, the verifier
 # prelude, and STATUS.md -- the cross-session dashboard).  Each corpus is a List

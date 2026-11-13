@@ -1,0 +1,226 @@
+(* tests/sum_product_oracle/corpus.m
+
+   Oracle corpus for symbolic Sum[] and Product[].  One record per line:
+
+       {label, Hold[input], kind, data, subs}
+
+   kinds and the verifier are documented in prelude.m.  Labels are stable
+   keys: baseline.txt names the records that are known not to PASS, so a
+   fix deletes a baseline line and a regression fails the ctest.
+
+   Reference values of every "value" record were checked against an
+   independent 30-digit mpmath partial sum / nsum
+   (tests/sum_product_oracle/verify_refs.py); none is recalled.  "finite"
+   and "indef" records need no reference: they are checked against the
+   same input enumerated at concrete integer bounds.
+
+   Record sources: the 2026-11-13 Sum/Product review (probe battery + code
+   review), triage IDs S1..S10, P1..P7, H1, G0..G11 in the plan.
+*)
+{
+(* ---------------- finite numeric ranges ---------------- *)
+{"num-squares",        Hold[Sum[i^2, {i, 1, 10}]],                "value", 385, {}},
+{"num-step3",          Hold[Sum[i^2, {i, 1, 10, 3}]],             "value", 166, {}},
+{"num-negstep",        Hold[Sum[i^2, {i, 10, 1, -3}]],            "value", 166, {}},
+{"num-empty",          Hold[Sum[i^2, {i, 5, 1}]],                 "value", 0, {}},
+{"num-halfint",        Hold[Sum[i, {i, 1/2, 7/2}]],               "value", 8, {}},
+{"num-list",           Hold[Sum[i^2, {i, {a, b, c}}]],            "value", 30, {a -> 1, b -> 2, c -> 5}},
+{"num-wide-poly",      Hold[Sum[3/2 i^2 - i/2, {i, -10000, 10000}]], "value", 1000150005000, {}},
+{"num-1e5-basel",      Hold[Sum[1/k^2, {k, 1, 10^5}]],            "value", HarmonicNumber[10^5, 2], {}},
+{"num-empty-inf",      Hold[Sum[k, {k, Infinity, 1}]],            "value", 0, {}},
+{"num-zero-inf",       Hold[Sum[0, {k, 1, Infinity}]],            "value", 0, {}},
+{"num-prod-fact",      Hold[Product[k, {k, 1, 20}]],              "value", 2432902008176640000, {}},
+{"num-prod-step",      Hold[Product[k, {k, 1, 9, 2}]],            "value", 945, {}},
+{"num-prod-empty",     Hold[Product[k, {k, 5, 1}]],               "value", 1, {}},
+
+(* ---------------- Faulhaber (symbolic n) ---------------- *)
+{"faul-p0",            Hold[Sum[1, {k, 1, n}]],                   "finite", {n, 0, 8}, {}},
+{"faul-p1",            Hold[Sum[k, {k, 1, n}]],                   "finite", {n, 0, 8}, {}},
+{"faul-p2",            Hold[Sum[k^2, {k, 1, n}]],                 "finite", {n, 0, 8}, {}},
+{"faul-p3-from0",      Hold[Sum[k^3, {k, 0, n}]],                 "finite", {n, -1, 8}, {}},
+{"faul-p5",            Hold[Sum[k^5, {k, 1, n}]],                 "finite", {n, 0, 8}, {}},
+{"faul-p8",            Hold[Sum[k^8, {k, 1, n}]],                 "finite", {n, 0, 8}, {}},
+{"faul-p20",           Hold[Sum[k^20, {k, 1, n}]],                "finite", {n, 0, 30}, {}},
+{"faul-p25",           Hold[Sum[k^25, {k, 1, n}]],                "finite", {n, 0, 30}, {}},
+{"faul-m-to-n",        Hold[Sum[k^2, {k, m, n}]],                 "finite", {n, 2, 10}, {m -> 3}},
+{"faul-dependent-2d",  Hold[Sum[i j, {i, 1, n}, {j, 1, i}]],      "finite", {n, 0, 8}, {}},
+{"faul-step2",         Hold[Sum[i, {i, 1, n, 2}]],                "finite", {n, 0, 9}, {}},
+{"faul-step3",         Hold[Sum[i^2, {i, 1, n, 3}]],              "finite", {n, 0, 10}, {}},
+
+(* ---------------- Gosper / hypergeometric, symbolic n ---------------- *)
+{"gos-k-kfact",        Hold[Sum[k k!, {k, 0, n}]],                "finite", {n, -1, 8}, {}},
+{"gos-binom",          Hold[Sum[Binomial[n, k], {k, 0, n}]],      "finite", {n, 0, 8}, {}},
+{"gos-binom-alt",      Hold[Sum[(-1)^k Binomial[n, k], {k, 0, n}]], "finite", {n, 0, 8}, {}},
+{"gos-binom-sq",       Hold[Sum[Binomial[n, k]^2, {k, 0, n}]],    "finite", {n, 0, 8}, {}},
+{"gos-k-binom",        Hold[Sum[k Binomial[n, k], {k, 0, n}]],    "finite", {n, 0, 8}, {}},
+{"gos-k2-binom",       Hold[Sum[k^2 Binomial[n, k], {k, 0, n}]],  "finite", {n, 0, 8}, {}},
+{"gos-alt-k-binom",    Hold[Sum[(-1)^k k Binomial[n, k], {k, 0, n}]], "finite", {n, 0, 8}, {}},
+{"gos-telescope",      Hold[Sum[1/(k (k + 1)), {k, 1, n}]],       "finite", {n, 0, 8}, {}},
+{"gos-k-2k",           Hold[Sum[k 2^k, {k, 0, n}]],               "finite", {n, -1, 8}, {}},
+{"gos-geom-x",         Hold[Sum[x^k, {k, 0, n}]],                 "finite", {n, -1, 8}, {x -> 3/7}},
+{"gos-binom-km",       Hold[Sum[Binomial[k, m], {k, 0, n}]],      "finite", {n, 0, 8}, {m -> 2}},
+{"gos-binom-x",        Hold[Sum[Binomial[n, k] x^k, {k, 0, n}]],  "finite", {n, 0, 8}, {x -> 2/5}},
+{"gos-4k2m1",          Hold[Sum[1/(4 k^2 - 1), {k, 1, n}]],       "finite", {n, 0, 8}, {}},
+{"hyp-binom-from-m2",  Hold[Sum[Binomial[n, k], {k, -2, n}]],     "finite", {n, 0, 8}, {}},
+{"hyp-binom-ratio",    Hold[Sum[Binomial[n, k]/Binomial[2 n, k], {k, 0, n}]], "finite", {n, 0, 8}, {}},
+{"hyp-alt-binom-sq",   Hold[Sum[(-1)^k Binomial[n, k]^2, {k, 0, n}]], "finite", {n, 0, 8}, {}},
+{"hyp-dixon",          Hold[Sum[(-1)^k Binomial[n, k]^3, {k, 0, n}]], "finite", {n, 0, 8}, {}},
+{"hyp-binom-over-k1",  Hold[Sum[Binomial[n, k]/(k + 1), {k, 0, n}]], "finite", {n, 0, 8}, {}},
+{"hyp-binom-from1",    Hold[Sum[Binomial[n, k], {k, 1, n}]],      "finite", {n, 0, 8}, {}},
+{"hyp-binom-to-nm1",   Hold[Sum[Binomial[n, k], {k, 0, n - 1}]],  "finite", {n, 0, 8}, {}},
+{"zb-binom-2k",        Hold[Sum[Binomial[n, 2 k], {k, 0, n}]],    "finite", {n, 0, 8}, {}},
+{"zb-binom-2n-half",   Hold[Sum[Binomial[2 n, k], {k, 0, n}]],    "finite", {n, 0, 8}, {}},
+{"zb-binom-nk-2k",     Hold[Sum[Binomial[n + k, k]/2^k, {k, 0, n}]], "finite", {n, 0, 8}, {}},
+{"hyp-pochhammer",     Hold[Sum[Pochhammer[a, k]/k!, {k, 0, n}]], "finite", {n, -1, 8}, {a -> 2/3}},
+
+(* ---------------- rational summation, symbolic n (G1) ---------------- *)
+{"rat-harmonic",       Hold[Sum[1/k, {k, 1, n}]],                 "finite", {n, 0, 8}, {}},
+{"rat-harmonic2",      Hold[Sum[1/k^2, {k, 1, n}]],               "finite", {n, 0, 8}, {}},
+{"rat-harmonic3",      Hold[Sum[1/k^3, {k, 1, n}]],               "finite", {n, 0, 8}, {}},
+{"rat-half-shift",     Hold[Sum[1/(k + 1/2), {k, 0, n}]],         "finite", {n, -1, 8}, {}},
+{"rat-k2p1",           Hold[Sum[1/(k^2 + 1), {k, 1, n}]],         "finite", {n, 0, 8}, {}},
+{"rat-ab",             Hold[Sum[1/((k + a) (k + b)), {k, 0, n}]], "finite", {n, -1, 8}, {a -> 1/3, b -> 5/7}},
+{"rat-improper",       Hold[Sum[k^2/((k + 1) (k + 2)), {k, 0, n}]], "finite", {n, -1, 8}, {}},
+{"rat-alt-harmonic",   Hold[Sum[(-1)^k/(k + 1), {k, 0, n}]],      "finite", {n, -1, 8}, {}},
+{"rat-symbolic-p",     Hold[Sum[k^p, {k, 1, n}]],                 "finite", {n, 0, 8}, {p -> 3}},
+
+(* ---------------- other finite families (G6, G7, ...) ---------------- *)
+{"fin-fibonacci",      Hold[Sum[Fibonacci[k], {k, 1, n}]],        "finite", {n, 0, 8}, {}},
+{"fin-fibonacci-sq",   Hold[Sum[Fibonacci[k]^2, {k, 1, n}]],      "finite", {n, 0, 8}, {}},
+{"fin-sin-kx",         Hold[Sum[Sin[k x], {k, 1, n}]],            "finite", {n, 0, 8}, {x -> 1/3}},
+{"fin-cos-kx",         Hold[Sum[Cos[k x], {k, 0, n}]],            "finite", {n, -1, 8}, {x -> 1/3}},
+{"fin-log",            Hold[Sum[Log[k], {k, 1, n}]],              "finite", {n, 0, 8}, {}},
+{"fin-log-ratio",      Hold[Sum[Log[(k + 1)/k], {k, 1, n}]],      "finite", {n, 0, 8}, {}},
+{"fin-harmonic-sum",   Hold[Sum[HarmonicNumber[k], {k, 1, n}]],   "finite", {n, 0, 8}, {}},
+{"fin-k-harmonic",     Hold[Sum[k HarmonicNumber[k], {k, 1, n}]], "finite", {n, 0, 8}, {}},
+{"fin-xk-over-k",      Hold[Sum[x^k/k, {k, 1, n}]],               "finite", {n, 0, 8}, {x -> 1/2}},
+{"fin-2k-over-k",      Hold[Sum[2^k/k, {k, 1, n}]],               "finite", {n, 0, 8}, {}},
+{"fin-floor",          Hold[Sum[Floor[k/2], {k, 1, n}]],          "finite", {n, 0, 8}, {}},
+{"fin-mod",            Hold[Sum[Mod[k, 2], {k, 1, n}]],           "finite", {n, 0, 8}, {}},
+
+(* ---------------- poles inside the range (S1, S2) ---------------- *)
+{"pole-basel-from0",   Hold[Sum[1/k^2, {k, 0, Infinity}]],        "pole", Null, {}},
+{"pole-zeta3-from0",   Hold[Sum[1/k^3, {k, 0, Infinity}]],        "pole", Null, {}},
+{"pole-alt-from0",     Hold[Sum[(-1)^k/k, {k, 0, Infinity}]],     "pole", Null, {}},
+{"pole-alt2-from0",    Hold[Sum[(-1)^k/k^2, {k, 0, Infinity}]],   "pole", Null, {}},
+{"pole-shift-m1",      Hold[Sum[1/(k + 1)^2, {k, -1, Infinity}]], "pole", Null, {}},
+{"pole-basel-m1",      Hold[Sum[1/k^2, {k, -1, Infinity}]],       "pole", Null, {}},
+{"pole-basel-m5",      Hold[Sum[1/k^2, {k, -5, Infinity}]],       "pole", Null, {}},
+{"pole-k-2",           Hold[Sum[1/(k - 2)^2, {k, 1, Infinity}]],  "pole", Null, {}},
+{"pole-2k-2",          Hold[Sum[1/(2 k - 2)^2, {k, 1, Infinity}]], "pole", Null, {}},
+{"pole-k-3",           Hold[Sum[1/(k - 3)^2, {k, 1, Infinity}]],  "pole", Null, {}},
+{"pole-alt-k-3",       Hold[Sum[(-1)^k/(k - 3), {k, 1, Infinity}]], "pole", Null, {}},
+{"pole-tele-m1",       Hold[Sum[1/(k (k + 1)), {k, -1, n}]],      "pole", Null, {n -> 4}},
+{"pole-tele-m5",       Hold[Sum[1/(k (k + 1)), {k, -5, n}]],      "pole", Null, {n -> 4}},
+{"pole-tele-0",        Hold[Sum[1/(k (k + 1)), {k, 0, n}]],       "pole", Null, {n -> 4}},
+
+(* ---------------- infinite sums with a value ---------------- *)
+{"inf-basel",          Hold[Sum[1/k^2, {k, 1, Infinity}]],        "value", Pi^2/6, {}},
+{"inf-zeta3",          Hold[Sum[1/k^3, {k, 1, Infinity}]],        "value", Zeta[3], {}},
+{"inf-alt-log2",       Hold[Sum[(-1)^k/k, {k, 1, Infinity}]],     "value", -Log[2], {}},
+{"inf-k2p1",           Hold[Sum[1/(k^2 + 1), {k, 1, Infinity}]],  "value", (Pi Coth[Pi] - 1)/2, {}},
+{"inf-k2p1-from0",     Hold[Sum[1/(k^2 + 1), {k, 0, Infinity}]],  "value", (Pi Coth[Pi] + 1)/2, {}},
+{"inf-k2m1",           Hold[Sum[1/(k^2 - 1), {k, 2, Infinity}]],  "value", 3/4, {}},
+{"inf-k2m4",           Hold[Sum[1/(k^2 - 4), {k, 3, Infinity}]],  "value", 25/48, {}},
+{"inf-exp",            Hold[Sum[x^k/k!, {k, 0, Infinity}]],       "value", E^(1/3), {x -> 1/3}},
+{"inf-log",            Hold[Sum[x^k/k, {k, 1, Infinity}]],        "value", Log[3/2], {x -> 1/3}},
+{"inf-k2-xk",          Hold[Sum[k^2 x^k, {k, 0, Infinity}]],      "value", 3/2, {x -> 1/3}},
+{"inf-geom-sym",       Hold[Sum[x^k, {k, 0, Infinity}]],          "value", 3/2, {x -> 1/3}},
+{"inf-odd-sq",         Hold[Sum[1/(2 k + 1)^2, {k, 0, Infinity}]], "value", Pi^2/8, {}},
+{"inf-alt-cube",       Hold[Sum[(-1)^k/k^3, {k, 1, Infinity}]],   "value", -3 Zeta[3]/4, {}},
+{"inf-tele3",          Hold[Sum[1/(k (k + 1) (k + 2)), {k, 1, Infinity}]], "value", 1/4, {}},
+{"inf-central-binom",  Hold[Sum[1/Binomial[2 k, k], {k, 1, Infinity}]], "value", 1/3 + 2 Sqrt[3] Pi/27, {}},
+{"inf-euler-h-k2",     Hold[Sum[HarmonicNumber[k]/k^2, {k, 1, Infinity}]], "value", 2 Zeta[3], {}},
+{"inf-sin-k-over-k",   Hold[Sum[Sin[k]/k, {k, 1, Infinity}]],     "value", (Pi - 1)/2, {}},
+{"inf-cos-k-over-k2",  Hold[Sum[Cos[k]/k^2, {k, 1, Infinity}]],   "value", Pi^2/6 - Pi/2 + 1/4, {}},
+{"inf-k4k2p1",         Hold[Sum[1/(k^4 + k^2 + 1), {k, 1, Infinity}]], "value", -1/2 + Pi Tanh[Sqrt[3] Pi/2]/(2 Sqrt[3]), {}},
+{"inf-k-over-k4p4",    Hold[Sum[k/(k^4 + 4), {k, 1, Infinity}]],  "value", 3/8, {}},
+{"inf-bessel",         Hold[Sum[1/k!^2, {k, 0, Infinity}]],       "value", BesselI[0, 2], {}},
+{"inf-central-gf",     Hold[Sum[Binomial[2 k, k] x^k, {k, 0, Infinity}]], "value", Sqrt[2], {x -> 1/8}},
+{"inf-4k2m1",          Hold[Sum[1/(4 k^2 - 1), {k, 1, Infinity}]], "value", 1/2, {}},
+{"inf-interior-zero",  Hold[Sum[(k - 3)^2/k!, {k, 0, Infinity}]], "value", 5 E, {}},
+{"inf-interior-zero2", Hold[Sum[(k - 2) (k - 5)/k!, {k, 0, Infinity}]], "value", 5 E, {}},
+{"inf-zeta-s",         Hold[Sum[1/k^s, {k, 1, Infinity}]],        "value", Zeta[3], {s -> 3}},
+{"inf-zeta-3half",     Hold[Sum[1/k^(3/2), {k, 1, Infinity}]],    "value", Zeta[3/2], {}},
+{"inf-eta-half",       Hold[Sum[(-1)^k/Sqrt[k], {k, 1, Infinity}]], "value", (Sqrt[2] - 1) Zeta[1/2], {}},
+{"inf-eta-s",          Hold[Sum[(-1)^k/k^s, {k, 1, Infinity}]],   "value", -3 Zeta[3]/4, {s -> 3}},
+{"inf-polylog2",       Hold[Sum[x^k/k^2, {k, 1, Infinity}]],      "value", PolyLog[2, 1/3], {x -> 1/3}},
+{"inf-log-sinh",       Hold[Sum[Log[1 + 1/k^2], {k, 1, Infinity}]], "value", Log[Sinh[Pi]/Pi], {}},
+{"inf-double-ij3",     Hold[Sum[1/(i + j)^3, {i, 1, Infinity}, {j, 1, Infinity}]], "value", Zeta[2] - Zeta[3], {}},
+{"inf-kronecker",      Hold[Sum[KroneckerDelta[k, 3], {k, 1, Infinity}]], "value", 1, {}},
+{"inf-step2-basel",    Hold[Sum[1/k^2, {k, 1, Infinity, 2}]],     "value", Pi^2/8, {}},
+{"inf-step2-geom",     Hold[Sum[1/2^k, {k, 0, Infinity, 2}]],     "value", 4/3, {}},
+{"inf-deg6",           Hold[Sum[1/(k^6 + 1), {k, 0, Infinity}]],  "value", 1.5171007340332164261529076449024`30, {}},
+{"inf-deg7",           Hold[Sum[1/(k^7 + 1), {k, 0, Infinity}]],  "value", 1.508288502483395124375569118107`30, {}},
+{"inf-deg7-3",         Hold[Sum[1/(k^7 + 3), {k, 0, Infinity}]],  "value", 0.59150306042636785581602464121084`30, {}},
+
+(* ---------------- negative and two-sided ranges (S5) ---------------- *)
+{"rng-neg-basel",      Hold[Sum[1/k^2, {k, -Infinity, -1}]],      "value", Pi^2/6, {}},
+{"rng-2side-k2p1",     Hold[Sum[1/(k^2 + 1), {k, -Infinity, Infinity}]], "value", Pi Coth[Pi], {}},
+{"rng-2side-half",     Hold[Sum[1/(k + 1/2)^2, {k, -Infinity, Infinity}]], "value", Pi^2, {}},
+{"rng-2side-alt-half", Hold[Sum[(-1)^k/(k + 1/2), {k, -Infinity, Infinity}]], "value", Pi, {}},
+{"rng-2side-abs",      Hold[Sum[1/2^Abs[k], {k, -Infinity, Infinity}]], "value", 3, {}},
+{"rng-neg-geom",       Hold[Sum[x^k, {k, -Infinity, 0}]],         "value", 3/2, {x -> 3}},
+{"rng-neg-geom2",      Hold[Sum[2^k, {k, -Infinity, 0}]],         "value", 2, {}},
+
+(* ---------------- divergent (G3, S10) ---------------- *)
+{"div-harmonic",       Hold[Sum[1/k, {k, 1, Infinity}]],          "divergent", Null, {}},
+{"div-one",            Hold[Sum[1, {k, 1, Infinity}]],            "divergent", Null, {}},
+{"div-k",              Hold[Sum[k, {k, 1, Infinity}]],            "divergent", Null, {}},
+{"div-alt-one",        Hold[Sum[(-1)^k, {k, 0, Infinity}]],       "divergent", Null, {}},
+{"div-sqrt",           Hold[Sum[1/Sqrt[k], {k, 1, Infinity}]],    "divergent", Null, {}},
+{"div-2k",             Hold[Sum[2^k, {k, 1, Infinity}]],          "divergent", Null, {}},
+{"div-neg-4k",         Hold[Sum[1/4^k, {k, -Infinity, -1}]],      "divergent", Null, {}},
+{"div-assumed-x",      Hold[Sum[x^k, {k, 0, Infinity}, Assumptions -> x > 1]], "divergent", Null, {}},
+
+(* ---------------- finite products, symbolic n ---------------- *)
+{"prod-fact",          Hold[Product[k, {k, 1, n}]],               "finite", {n, 0, 8}, {}},
+{"prod-tele",          Hold[Product[(k + 1)/k, {k, 1, n}]],       "finite", {n, 0, 8}, {}},
+{"prod-odd",           Hold[Product[2 k - 1, {k, 1, n}]],         "finite", {n, 0, 8}, {}},
+{"prod-1m1k2",         Hold[Product[1 - 1/k^2, {k, 2, n}]],       "finite", {n, 1, 9}, {}},
+{"prod-a-k",           Hold[Product[a^k, {k, 1, n}]],             "finite", {n, 0, 8}, {a -> 3/2}},
+{"prod-k2p1",          Hold[Product[k^2 + 1, {k, 1, n}]],         "finite", {n, 0, 8}, {}},
+{"prod-k2pkp1",        Hold[Product[k^2 + k + 1, {k, 1, n}]],     "finite", {n, 0, 8}, {}},
+{"prod-qpoch",         Hold[Product[1 - q^k, {k, 1, n}]],         "finite", {n, 0, 8}, {q -> 1/3}},
+{"prod-q-bare",        Hold[Product[q^k (1 - q^k), {k, 1, n}]],   "finite", {n, 0, 8}, {q -> 1/3}},
+{"prod-x-bare",        Hold[Product[x^k (1 + x^k), {k, 1, n}]],   "finite", {n, 0, 8}, {x -> 1/3}},
+{"prod-hyperfact",     Hold[Product[k^k, {k, 1, n}]],             "finite", {n, 0, 8}, {}},
+{"prod-hyperfact-2",   Hold[Product[k^k, {k, 2, n}]],             "finite", {n, 1, 9}, {}},
+{"prod-gamma-2",       Hold[Product[Gamma[k], {k, 2, n}]],        "finite", {n, 1, 9}, {}},
+{"prod-tele-zero",     Hold[Product[(k - 3)/(k + 1), {k, 1, n}]], "finite", {n, 0, 8}, {}},
+{"prod-tele-pole",     Hold[Product[k/(k - 2), {k, 1, n}]],       "finite", {n, 0, 8}, {}},
+{"prod-1p1k-pow",      Hold[Product[(1 + 1/k)^k, {k, 1, n}]],     "finite", {n, 0, 8}, {}},
+{"prod-cantor-fin",    Hold[Product[1 + x^(2^k), {k, 0, n}]],     "finite", {n, -1, 7}, {x -> 1/3}},
+{"prod-viete-fin",     Hold[Product[Cos[x/2^k], {k, 1, n}]],      "finite", {n, 0, 8}, {x -> 1/3}},
+{"prod-halfint-span",  Hold[Product[k, {k, 1/2, n}]],             "finite", {n, 0, 8}, {}},
+{"prod-gamma-body",    Hold[Product[(k + 1)^k/k^(k - 1), {k, 1, n}]], "finite", {n, 0, 8}, {}},
+{"prod-indef-tele",    Hold[Product[(k + 2)/k, k]],               "indef", {k, 1, 8}, {}},
+{"prod-indef-fact",    Hold[Product[k, k]],                       "indef", {k, 1, 8}, {}},
+{"sum-indef-k",        Hold[Sum[k, k]],                           "indef", {k, 1, 8}, {}},
+{"sum-indef-tele",     Hold[Sum[1/(k (k + 1)), k]],               "indef", {k, 1, 8}, {}},
+
+(* ---------------- infinite products ---------------- *)
+{"iprod-sinh",         Hold[Product[1 + 1/k^2, {k, 1, Infinity}]], "value", Sinh[Pi]/Pi, {}},
+{"iprod-sin",          Hold[Product[1 - x^2/(k^2 Pi^2), {k, 1, Infinity}]], "value", 2 Sin[1/2], {x -> 1/2}},
+{"iprod-exp",          Hold[Product[Exp[1/k^2], {k, 1, Infinity}]], "value", E^(Pi^2/6), {}},
+{"iprod-cantor",       Hold[Product[1 + x^(2^k), {k, 0, Infinity}]], "value", 3/2, {x -> 1/3}},
+{"iprod-euler-zeta2",  Hold[Product[1/(1 - Prime[k]^-2), {k, 1, Infinity}]], "value", Pi^2/6, {}},
+{"iprod-euler-from2",  Hold[Product[1/(1 - Prime[k]^-2), {k, 2, Infinity}]], "value", Pi^2/8, {}},
+{"iprod-1m1k2",        Hold[Product[1 - 1/k^2, {k, 2, Infinity}]], "value", 1/2, {}},
+{"iprod-wallis",       Hold[Product[1 - 1/(4 k^2), {k, 1, Infinity}]], "value", 2/Pi, {}},
+{"iprod-zero-factor",  Hold[Product[1 - 4/k^2, {k, 1, Infinity}]], "value", 0, {}},
+{"iprod-zero-skip",    Hold[Product[1 - 4/k^2, {k, 3, Infinity}]], "value", 1/6, {}},
+{"iprod-k-3",          Hold[Product[k - 3, {k, 1, Infinity}]],    "value", 0, {}},
+{"iprod-half",         Hold[Product[1/2, {k, 1, Infinity}]],      "value", 0, {}},
+{"iprod-alt-pairs",    Hold[Product[1 + (-1)^k/k, {k, 2, Infinity}]], "value", 1, {}},
+{"iprod-div-1p1k",     Hold[Product[1 + 1/k, {k, 1, Infinity}]],  "divergent", Null, {}},
+{"iprod-div-k",        Hold[Product[k, {k, 1, Infinity}]],        "divergent", Null, {}},
+{"iprod-div-q2",       Hold[Product[1 - 2^k, {k, 1, Infinity}]],  "divergent", Null, {}},
+{"iprod-zero-1m1k",    Hold[Product[1 - 1/k, {k, 2, Infinity}]],  "zeroOrHeld", Null, {}},
+{"iprod-zero-exp",     Hold[Product[E^(-k), {k, 1, Infinity}]],   "zeroOrHeld", Null, {}},
+
+(* ---------------- must stay unevaluated ---------------- *)
+{"held-undefined",     Hold[Sum[f[k], {k, 1, n}]],                "held", Null, {}},
+{"held-undefined-p",   Hold[Product[f[k], {k, 1, n}]],            "held", Null, {}},
+{"count-iter-self",    Hold[Sum[k, {k}]],                         "value", k^2, {k -> 5}}
+}
