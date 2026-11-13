@@ -5321,3 +5321,10 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   radical-free integrands straight to the transcendental integrator bypassed the tower, and
   the tower is where `E^(x + Log[x]/2)` becomes a radical. Before short-circuiting, check
   what the skipped stage normalises.
+- **Adversarial review of a new proof pays for itself.** The E3 review (an agent given only the
+  note, the code and the papers) found a false certificate in the first version within one run:
+  a specialisation moved a residue place onto the frame point theta = a, the divisor lost a place,
+  and two mod-p "orders" disagreed for a divisor of nonzero degree. Rule: a specialisation must
+  keep EVERY polynomial of the frame at its degree (not just the theta-model's), and assert the
+  invariant the theorem needs (deg delta = 0) right before the step that turns it into a
+  certificate, so a mismatch is Internal, never a verdict.
