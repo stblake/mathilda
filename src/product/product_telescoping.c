@@ -228,6 +228,26 @@ Expr* builtin_product_telescoping(Expr* res) {
     }
     rcount = w;
 
+    /* g(imax+1)/g(imin) is the product only when no factor vanishes or blows
+     * up on the range: a root r of f's numerator or denominator at an integer
+     * imin <= r (<= imax when numeric) puts a 0 or a pole into g at the
+     * boundary.  Product[(k-3)/(k+1), {k,1,n}] came out 0 (it is 1/3 at
+     * n = 2), Product[k/(k-2), {k,1,n}] Indeterminate.  Decline, so the
+     * Pochhammer form of Product`Rational -- right for every n -- applies. */
+    if (definite && expr_is_integer_like(imin) && imin->type == EXPR_INTEGER) {
+        bool hit = false;
+        for (size_t i = 0; i < rcount && !hit; i++) {
+            const Expr* r = R[i].val;
+            if (r->type != EXPR_INTEGER || r->data.integer < imin->data.integer) continue;
+            hit = !(imax->type == EXPR_INTEGER && r->data.integer > imax->data.integer);
+        }
+        if (hit) {
+            for (size_t i = 0; i < rcount; i++) expr_free(R[i].val);
+            free(R);
+            return NULL;
+        }
+    }
+
     Expr* g = build_g(R, rcount, var);
     for (size_t i = 0; i < rcount; i++) expr_free(R[i].val);
     free(R);

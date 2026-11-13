@@ -32,6 +32,13 @@ bool sum_free_of(Expr* e, Expr* var);
  * form and only churns Simplify.  Defined in sum_gosper.c. */
 bool sum_body_has_opaque_index(Expr* e, Expr* var);
 
+/* Integer poles of the summand f (evaluated, var free): the integer roots of
+ * the linear factors (exact numeric coefficients) of Denominator[Together[f]].
+ * Writes up to cap roots to out and returns the count.  A root that depends on
+ * a parameter is not reported (an irreducible factor of degree >= 2 over Q has
+ * no rational root, so every integer pole is a linear factor's). */
+size_t sum_integer_poles(Expr* f, Expr* var, int64_t* out, size_t cap);
+
 /* Convenience: integer node. */
 Expr* sum_int(int64_t v);
 

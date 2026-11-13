@@ -20,7 +20,8 @@
                       digits.  subs is applied AFTER evaluation, so a
                       symbolic parameter (Zeta[s], 1/(1-x)) is genuinely
                       exercised.
-     "finite"         data = {n, nlo, nhi}.  The answer, a function of the
+     "finite"         data = {n, nlo, nhi} or {n, nlo, nhi, off} (sample at
+                      n = v + off).  The answer, a function of the
                       symbolic bound n, is compared at n = nlo..nhi with the
                       SAME input enumerated at that concrete integer bound
                       (a finite numeric range enumerates term by term, so
@@ -79,6 +80,16 @@ spoPoint[av_, ev_] := Which[
 spoWorst[vs_List] := Which[
   MemberQ[vs, "WRONG"], "WRONG", MemberQ[vs, "UNEVAL"], "UNEVAL",
   MemberQ[vs, "NOCHECK"], "NOCHECK", True, "PASS"];
+
+(* {n, nlo, nhi, off}: sample at n = v + off -- a range {k, 1/2, n} has its
+   upper bound on the lattice 1/2 + Integers (the convention is that
+   n - imin is an integer, as in the reference). *)
+spoCheckFinite[h_Hold, r_, {n_, nlo_, nhi_, off_}, subs_] :=
+  If[spoHeadQ[r], "UNEVAL",
+    spoWorst[Table[
+      spoPoint[Quiet[r /. subs /. n -> v + off],
+               Quiet[ReleaseHold[h /. n -> v + off /. subs]]],
+      {v, nlo, nhi}]]];
 
 spoCheckFinite[h_Hold, r_, {n_, nlo_, nhi_}, subs_] :=
   If[spoHeadQ[r], "UNEVAL",

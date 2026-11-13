@@ -661,6 +661,79 @@ static Expr* sum_closed_form_stepped(SumMethod method, Expr* f, const IterSpec* 
     return cf;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Poles inside the range                                             */
+/* ------------------------------------------------------------------ */
+
+#define SUM_POLE_SCAN_MAX 64     /* distinct integer poles inspected */
+
+typedef enum {
+    SUM_POLE_NONE,      /* no integer pole on the range: closed forms apply  */
+    SUM_POLE_VALUE,     /* a term is non-finite: the sum is that value       */
+    SUM_POLE_HOLD       /* a pole may lie on the range (symbolic bound): hold */
+} SumPoleVerdict;
+
+static bool sum_nonfinite(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL)
+        return e->data.symbol.name == SYM_ComplexInfinity
+            || e->data.symbol.name == SYM_Indeterminate;
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_DirectedInfinity;
+}
+
+/*
+ * Does a term of Sum[f, {var, imin, imax}] (unit step) sit on a pole?
+ *
+ * Every closed-form stage sums an analytic continuation -- F(imax+1) - F(imin),
+ * Zeta[s, imin - rho], a pFq read off t(imin) -- that is blind to a pole of the
+ * summand INSIDE the range.  Sum[1/k^2, {k, 0, Infinity}] came out Pi^2/6 and
+ * Sum[1/(k - 3)^2, {k, 1, Infinity}] 5/4 + Pi^2/6, where the k = 0 / k = 3
+ * term is 1/0; Sum[1/(k (k + 1)), {k, -1, n}] gave -1 - 1/(1 + n).
+ *
+ * The integer poles are read off the denominator's linear factors
+ * (sum_integer_poles).  For a concrete integer imin:
+ *   - a pole p >= imin with imax = Infinity or a concrete imax >= p: the term
+ *     there is evaluated (with its Power::infy) and, when it is non-finite,
+ *     becomes the value of the sum -- what enumerating the range gives;
+ *   - a pole p >= imin with a symbolic imax: whether the range reaches p
+ *     depends on the bound, so the Sum is held, as the reference does.
+ * A pole the term itself removes (a finite value at p) is no pole.  A symbolic
+ * or infinite imin is left to the stages (Sum[1/k^2, {k, m, Infinity}] is
+ * PolyGamma[1, m] there, as in the reference).  The body is expensive-checked
+ * by the caller; Together + Factor of a small body's denominator is cheap.
+ */
+static SumPoleVerdict sum_pole_verdict(Expr* f, Expr* var, Expr* imin, Expr* imax,
+                                       Expr** value) {
+    *value = NULL;
+    if (imin->type != EXPR_INTEGER || var->type != EXPR_SYMBOL) return SUM_POLE_NONE;
+    /* Upper bound class: unbounded (Infinity, or a big integer past every
+     * int64 pole), a machine integer, or anything else (symbolic: hold). */
+    bool imax_inf = (imax->type == EXPR_SYMBOL && imax->data.symbol.name == SYM_Infinity)
+                 || (imax->type == EXPR_BIGINT && mpz_sgn(imax->data.bigint) > 0);
+    bool imax_int = imax->type == EXPR_INTEGER;
+
+    IterShadow saved = iter_spec_shadow(var);
+    Expr* fe = evaluate(f);
+    int64_t poles[SUM_POLE_SCAN_MAX];
+    size_t np = sum_integer_poles(fe, var, poles, SUM_POLE_SCAN_MAX);
+    SumPoleVerdict v = SUM_POLE_NONE;
+    for (size_t i = 0; i < np && v == SUM_POLE_NONE; i++) {
+        int64_t p = poles[i];
+        if (p < imin->data.integer) continue;
+        if (imax_int && p > imax->data.integer) continue;
+        if (!imax_inf && !imax_int) { v = SUM_POLE_HOLD; break; }
+        Expr* pe = expr_new_integer(p);
+        Expr* t = sum_subst(fe, var, pe);
+        expr_free(pe);
+        if (sum_nonfinite(t)) { *value = t; v = SUM_POLE_VALUE; }
+        else if (t) expr_free(t);
+    }
+    expr_free(fe);
+    iter_spec_restore(var, saved);
+    return v;
+}
+
 static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
     /* Indefinite form Sum[f, i]: spec is a bare symbol. */
     if (spec->type == EXPR_SYMBOL) {
@@ -774,6 +847,9 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
         if (!is_real && di_val == 1.0 && min_val <= max_val && !enumerate_first
             && !short_expensive_body && !index_pred_body && !short_symbolic_lattice
             && !short_opaque_index_body) {
+            Expr* pv = NULL;
+            SumPoleVerdict pole = sum_pole_verdict(f, s.var, s.imin, s.imax, &pv);
+            if (pole == SUM_POLE_VALUE) { iter_spec_free(&s); return pv; }
             IterShadow saved = iter_spec_shadow(s.var);
             Expr* cf = dispatch_def(method, f, s.var, s.imin, s.imax);
             iter_spec_restore(s.var, saved);
@@ -808,6 +884,12 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
      * closed form here, so leave the Sum held rather than emit the wrong
      * step-1 result. */
     if (!is_unit_step(s.di)) { iter_spec_free(&s); return NULL; }
+
+    if (!sum_body_is_expensive(f)) {
+        Expr* pv = NULL;
+        SumPoleVerdict pole = sum_pole_verdict(f, s.var, s.imin, s.imax, &pv);
+        if (pole != SUM_POLE_NONE) { iter_spec_free(&s); return pv; }   /* NULL holds */
+    }
 
     Expr* r = dispatch_def(method, f, s.var, s.imin, s.imax);
     iter_spec_free(&s);

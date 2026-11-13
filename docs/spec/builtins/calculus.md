@@ -4996,6 +4996,29 @@ In[3]:= Sum[f[i, j], {i, 1, 3}, {j, 1, i}]
 Out[3]= f[1, 1] + f[2, 1] + f[2, 2] + f[3, 1] + f[3, 2] + f[3, 3]
 ```
 
+**Poles on the range (v0.6531).** Every closed-form stage sums an analytic
+continuation, which cannot see a pole of the summand inside the range. So before
+the cascade runs, the integer poles are read off the linear factors of the
+summand's denominator. Every integer pole of a rational function is one of these.
+With a concrete integer lower bound:
+- **A pole the range reaches** (upper bound `Infinity`, or a concrete bound at or
+  past it): the term there is evaluated, with its `Power::infy` message, and if it
+  is non-finite it is the value of the sum, which is what enumerating the range
+  gives.
+- **A pole that a symbolic upper bound may or may not reach:** the `Sum` is held.
+- **Concrete examples:** `Sum[1/k^2, {k, 0, Infinity}]` and
+  `Sum[1/(k - 3)^2, {k, 1, Infinity}]` are `ComplexInfinity`; before this they were
+  `Pi^2/6` and `5/4 + Pi^2/6`. `Sum[1/(k (k + 1)), {k, -1, n}]` stays unevaluated;
+  it was `-1 - 1/(1 + n)`.
+- **Scope:** a pole that depends on a parameter, a symbolic lower bound
+  (`Sum[1/k^2, {k, m, Infinity}]`), and a pole the term itself removes are left to
+  the stages.
+
+The conventions the oracle checks follow the reference. A symbolic upper bound
+`n` is assumed to lie on the lattice `imin + Integers`: `Product[k, {k, 1/2, n}]`
+is `Pochhammer[1/2, 1/2 + n]`. `Sum[f, {c}]`, with `c` the summand's own symbol,
+is the indefinite sum in `c`: `Sum[k, {k}]` is `(k - 1) k/2`.
+
 ### Sum`Polynomial
 
 Closed-form summation of polynomials via Newton forward differences in
@@ -5381,6 +5404,11 @@ Out[6]= Hyperfactorial[n]
 Rational products whose anti-quotient is itself rational (Gamma-free),
 via integer-spaced root chains: `Product[1 - 1/k^2, {k, 2, n}]`
 → `(1 + n)/(2 n)`.  Falls through when the anti-quotient is not rational.
+It also falls through when a root of the factor (a zero or a pole) is an integer
+on the range, where `g(imax+1)/g(imin)` would have a 0 or a pole at the boundary.
+`Product`Rational`'s Pochhammer form then applies and is right for every `n`:
+`Product[(k - 3)/(k + 1), {k, 1, n}]` is `Pochhammer[-2, n]/Pochhammer[2, n]`
+(v0.6531; it was `0`).
 
 ### Product`Rational
 

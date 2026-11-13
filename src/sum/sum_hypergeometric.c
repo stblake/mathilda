@@ -189,6 +189,26 @@ static Expr* hg_make_list(Expr** elems, size_t n) {
 
 Expr* builtin_sum_hypergeometric(Expr* res);
 
+/* Is the term f at var = at zero?  A Binomial with a negative-integer lower
+ * index stays symbolic (Binomial[n, -2], as in the reference) although it is 0
+ * for the admissible n, so the factorial expansion is consulted as well:
+ * n!/((-2)! (n + 2)!) has the pole (-2)! in its denominator and evaluates to 0.
+ * Without it Sum[Binomial[n, k], {k, -2, n}] was read off its first term,
+ * Binomial[n, -2] pFq(...), which is 0 at every n (the value is 2^n). */
+static bool hg_term_is_zero(Expr* f, Expr* var, Expr* at) {
+    Expr* t = sum_subst(f, var, at);
+    bool zero = t && t->type == EXPR_INTEGER && t->data.integer == 0;
+    if (!zero && t) {
+        Expr* tx = hg_expand_binomial(t);
+        Expr* te = evaluate(tx);
+        expr_free(tx);
+        zero = te && te->type == EXPR_INTEGER && te->data.integer == 0;
+        if (te) expr_free(te);
+    }
+    if (t) expr_free(t);
+    return zero;
+}
+
 /* Number of indices past a vanishing term that must also vanish before a
  * nonpositive-integer upper parameter is accepted as a genuine termination. */
 #define HG_TERMINATION_PROBE 8
@@ -202,10 +222,8 @@ Expr* builtin_sum_hypergeometric(Expr* res);
 static bool hg_terminates_genuinely(Expr* f, Expr* var, Expr* imin, int64_t N) {
     for (int64_t j = 0; j < HG_TERMINATION_PROBE; j++) {
         Expr* at = sum_eval("Plus", (Expr*[]){ expr_copy(imin), sum_int(N + 1 + j) }, 2);
-        Expr* t = sum_subst(f, var, at);
+        bool zero = hg_term_is_zero(f, var, at);
         expr_free(at);
-        bool zero = t && t->type == EXPR_INTEGER && t->data.integer == 0;
-        if (t) expr_free(t);
         if (!zero) return false;
     }
     return true;
@@ -576,10 +594,8 @@ Expr* builtin_sum_hypergeometric(Expr* res) {
         bool found = false;
         for (int64_t j = lo; j < lo + 64; j++) {
             Expr* jj = sum_int(j);
-            Expr* tj = sum_subst(f, var, jj);
+            bool zero = hg_term_is_zero(f, var, jj);
             expr_free(jj);
-            bool zero = tj && tj->type == EXPR_INTEGER && tj->data.integer == 0;
-            if (tj) expr_free(tj);
             if (!zero) { lo_eff = j; found = true; break; }
         }
         if (!found) break;

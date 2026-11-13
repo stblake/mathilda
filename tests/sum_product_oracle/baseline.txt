@@ -12,7 +12,6 @@ faul-step3               # UNEVAL  G4
 gos-binom-alt            # WRONG   S4
 gos-alt-k-binom          # WRONG   S4
 gos-binom-km             # UNEVAL  G5
-hyp-binom-from-m2        # WRONG   S3
 hyp-alt-binom-sq         # WRONG   S4
 hyp-dixon                # WRONG   S9
 hyp-binom-to-nm1         # UNEVAL  G5
@@ -41,19 +40,6 @@ fin-xk-over-k            # UNEVAL  G6/G7
 fin-2k-over-k            # UNEVAL  G6/G7
 fin-floor                # UNEVAL  G6/G7
 fin-mod                  # UNEVAL  G6/G7
-pole-basel-from0         # WRONG   S1
-pole-zeta3-from0         # WRONG   S1
-pole-alt-from0           # WRONG   S1
-pole-alt2-from0          # WRONG   S1
-pole-shift-m1            # WRONG   S1
-pole-basel-m1            # WRONG   S1
-pole-basel-m5            # WRONG   S1
-pole-k-2                 # WRONG   S1
-pole-2k-2                # WRONG   S1
-pole-k-3                 # WRONG   S1
-pole-alt-k-3             # WRONG   S1
-pole-tele-m1             # WRONG   S2
-pole-tele-m5             # WRONG   S2
 inf-zeta-s               # UNEVAL  G2
 inf-zeta-3half           # UNEVAL  G2
 inf-eta-half             # UNEVAL  G2
@@ -79,17 +65,14 @@ prod-k2p1                # UNEVAL  G8
 prod-k2pkp1              # UNEVAL  G8
 prod-hyperfact-2         # UNEVAL  G8
 prod-gamma-2             # UNEVAL  G8
-prod-tele-zero           # WRONG   P4
-prod-tele-pole           # WRONG   P4
 prod-1p1k-pow            # UNEVAL  G8
 prod-cantor-fin          # UNEVAL  G8
 prod-viete-fin           # UNEVAL  G8
-prod-halfint-span        # WRONG   P6
 prod-gamma-body          # UNEVAL  G8
 iprod-cantor             # UNEVAL  G8
 iprod-k-3                # UNEVAL  G8
 iprod-half               # UNEVAL  G8
 iprod-alt-pairs          # UNEVAL  G8
 iprod-div-q2             # WRONG   P3
-count-iter-self          # WRONG   S6
 hyp-interior-zero-fin    # UNEVAL  G0  (declines: an interior zero on a finite symbolic range)
+inf-hurwitz-sym          # UNEVAL  G2  (symbolic lower bound; reference: PolyGamma[1, m])

@@ -111,6 +111,8 @@
 {"pole-2k-2",          Hold[Sum[1/(2 k - 2)^2, {k, 1, Infinity}]], "pole", Null, {}},
 {"pole-k-3",           Hold[Sum[1/(k - 3)^2, {k, 1, Infinity}]],  "pole", Null, {}},
 {"pole-alt-k-3",       Hold[Sum[(-1)^k/(k - 3), {k, 1, Infinity}]], "pole", Null, {}},
+{"pole-long-range",    Hold[Sum[1/k^2, {k, 0, 10^7}]],            "pole", Null, {}},
+{"pole-sym-upper",     Hold[Sum[1/(k - 2), {k, 1, n}]],           "pole", Null, {n -> 4}},
 {"pole-tele-m1",       Hold[Sum[1/(k (k + 1)), {k, -1, n}]],      "pole", Null, {n -> 4}},
 {"pole-tele-m5",       Hold[Sum[1/(k (k + 1)), {k, -5, n}]],      "pole", Null, {n -> 4}},
 {"pole-tele-0",        Hold[Sum[1/(k (k + 1)), {k, 0, n}]],       "pole", Null, {n -> 4}},
@@ -144,6 +146,7 @@
 {"inf-dobinski10",     Hold[Sum[k^10/k!, {k, 0, Infinity}]],     "value", 115975 E, {}},
 {"inf-terminating",    Hold[Sum[Binomial[5, k] x^k, {k, 0, Infinity}]], "value", 1024/243, {x -> 1/3}},
 {"inf-zeta-s",         Hold[Sum[1/k^s, {k, 1, Infinity}]],        "value", Zeta[3], {s -> 3}},
+{"inf-hurwitz-sym",    Hold[Sum[1/k^2, {k, m, Infinity}]],        "value", PolyGamma[1, 3], {m -> 3}},
 {"inf-zeta-3half",     Hold[Sum[1/k^(3/2), {k, 1, Infinity}]],    "value", Zeta[3/2], {}},
 {"inf-eta-half",       Hold[Sum[(-1)^k/Sqrt[k], {k, 1, Infinity}]], "value", (Sqrt[2] - 1) Zeta[1/2], {}},
 {"inf-eta-s",          Hold[Sum[(-1)^k/k^s, {k, 1, Infinity}]],   "value", -3 Zeta[3]/4, {s -> 3}},
@@ -195,7 +198,8 @@
 {"prod-1p1k-pow",      Hold[Product[(1 + 1/k)^k, {k, 1, n}]],     "finite", {n, 0, 8}, {}},
 {"prod-cantor-fin",    Hold[Product[1 + x^(2^k), {k, 0, n}]],     "finite", {n, -1, 7}, {x -> 1/3}},
 {"prod-viete-fin",     Hold[Product[Cos[x/2^k], {k, 1, n}]],      "finite", {n, 0, 8}, {x -> 1/3}},
-{"prod-halfint-span",  Hold[Product[k, {k, 1/2, n}]],             "finite", {n, 0, 8}, {}},
+{"prod-halfint-span",  Hold[Product[k, {k, 1/2, n}]],             "finite", {n, -1, 8, 1/2}, {}},
+{"sum-halfint-span",   Hold[Sum[k^2, {k, 1/2, n}]],               "finite", {n, -1, 8, 1/2}, {}},
 {"prod-gamma-body",    Hold[Product[(k + 1)^k/k^(k - 1), {k, 1, n}]], "finite", {n, 0, 8}, {}},
 {"prod-indef-tele",    Hold[Product[(k + 2)/k, k]],               "indef", {k, 1, 8}, {}},
 {"prod-indef-fact",    Hold[Product[k, k]],                       "indef", {k, 1, 8}, {}},
@@ -229,5 +233,8 @@
 (* ---------------- must stay unevaluated ---------------- *)
 {"held-undefined",     Hold[Sum[f[k], {k, 1, n}]],                "held", Null, {}},
 {"held-undefined-p",   Hold[Product[f[k], {k, 1, n}]],            "held", Null, {}},
-{"count-iter-self",    Hold[Sum[k, {k}]],                         "value", k^2, {k -> 5}}
+(* {c} with c the body's own symbol is the indefinite sum in c, as in the
+   reference: Sum[k, {k}] == (k - 1) k/2. *)
+{"count-iter-self",    Hold[Sum[k, {k}]],                         "value", (k - 1) k/2, {k -> 5}},
+{"count-iter-copies",  Hold[Sum[x, {n}]],                         "value", n x, {n -> 4, x -> 3/7}}
 }

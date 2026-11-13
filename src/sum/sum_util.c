@@ -71,3 +71,48 @@ bool sum_stage_args(Expr* res, Expr** f, Expr** var,
     }
     return true;
 }
+
+/* Head test on an interned name. */
+static bool su_head(const Expr* e, const char* h) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == h;
+}
+
+/* Record the integer root of one irreducible factor b of a denominator, when
+ * b is linear in var with exact numeric coefficients: b = a var + c gives
+ * var = -c/a. */
+static void su_linear_integer_root(Expr* b, Expr* var, int64_t* out,
+                                   size_t cap, size_t* n) {
+    if (*n >= cap || sum_free_of(b, var)) return;
+    Expr* deg = sum_eval("Exponent", (Expr*[]){ expr_copy(b), expr_copy(var) }, 2);
+    bool linear = deg && deg->type == EXPR_INTEGER && deg->data.integer == 1;
+    if (deg) expr_free(deg);
+    if (!linear) return;
+    Expr* a = sum_eval("Coefficient", (Expr*[]){ expr_copy(b), expr_copy(var), sum_int(1) }, 3);
+    Expr* c = sum_eval("Coefficient", (Expr*[]){ expr_copy(b), expr_copy(var), sum_int(0) }, 3);
+    Expr* r = sum_eval("Times", (Expr*[]){ sum_int(-1), c,
+                  expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ a, sum_int(-1) }, 2) }, 3);
+    if (r && r->type == EXPR_INTEGER) out[(*n)++] = r->data.integer;
+    if (r) expr_free(r);
+}
+
+size_t sum_integer_poles(Expr* f, Expr* var, int64_t* out, size_t cap) {
+    Expr* tg = sum_eval("Together", (Expr*[]){ expr_copy(f) }, 1);
+    Expr* den = sum_eval("Denominator", (Expr*[]){ tg }, 1);
+    size_t n = 0;
+    if (!den || sum_free_of(den, var)) { if (den) expr_free(den); return 0; }
+    Expr* fac = sum_factor(den);
+    expr_free(den);
+    size_t nf = su_head(fac, SYM_Times) ? fac->data.function.arg_count : 1;
+    for (size_t i = 0; i < nf; i++) {
+        Expr* t = su_head(fac, SYM_Times) ? fac->data.function.args[i] : fac;
+        if (su_head(t, SYM_Power) && t->data.function.arg_count == 2
+            && t->data.function.args[1]->type == EXPR_INTEGER
+            && t->data.function.args[1]->data.integer > 0)
+            t = t->data.function.args[0];
+        su_linear_integer_root(t, var, out, cap, &n);
+    }
+    expr_free(fac);
+    return n;
+}
