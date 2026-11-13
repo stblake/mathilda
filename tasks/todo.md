@@ -1566,7 +1566,12 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [ ] ParamRischDE (Ch. 7) + LimitedIntegrate with new logarithms (removes "limited integration undecided", "log-derivative branch integral undecided")
   - [ ] rt_field_integrate completeness (m > 1 new logs, mixed resultants); constant fields in C
 - [ ] Phase 3: Shape A completion (.m)
+  - [x] front end: cyclic compositum as one radical (E6b), E^(r Log a) + log-linear exponent split + monomial pruning (E6c), reducible logs via kappa (E6a); fix C dependent-log retry wrong answer (Log[x^2]/x) — v0.6547
+  - [ ] compositum up to a locally constant sign (Sqrt[x^2(x+1)], Sqrt[x+1]); multi-kappa / kappa-in-denominator certificates
+  - [ ] C: Log[x^2] as its own monomial (RischTranscendental leaves Int Log[x^2]/x unevaluated now)
+  - [ ] PRE-EXISTING (found by the E6a review, also on main): PossibleZeroQ[Log[E^x] - x] is True (false zero; -2 Pi I for Im x in (Pi, 3 Pi]) so Integrate[(Log[E^x]-x) Sqrt[Log[x]] + 1/x, x] = Log[x] (wrong); Integrate[(Log[x^2]-2Log[x]) Exp[x^2], x] = Indeterminate (Automatic cascade; Method->Bronstein certifies); Integrate[Exp[x + Log[x^2]/4], x] -> uncaught Throw[..., "PIM"]
+  - [ ] brParamIntegrate -> LimitedIntegrate; #12 weights (zeta adjoined); #9 genus >= 1 special places; LogPart:171; Divisors multi-ramified (E5); Tower:logrel/exprel robustness
 - [ ] Phase 4: constant fields (NF, Q(i)+trig, parameters)
 - [ ] Phase 5: radical anywhere (brDField, transcendental Risch over algebraic base, RDE on a curve over a tower)
-- [ ] Theory note docs/notes/bronstein_extensions.md (E1–E6), each adversarially reviewed
+- [ ] Theory note docs/notes/bronstein_extensions.tex (E1–E6; LaTeX per user 2026-11-14), each adversarially reviewed — E6a–c written v0.6547, review pending
 - [ ] Close-out

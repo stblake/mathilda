@@ -59,7 +59,6 @@ BASELINE_M = {
     "Tower:compositum-undecided",    # Kummer group not decided -> Phase 3
     "Tower:curve-monomial-tower",    # monomials over a radical-argument kernel -> Phase 5
     "Tower:cyclic-compositum",       # one radical in disguise -> Phase 3
-    "Tower:exp-of-log-radical",      # E^(r Log a) as a radical -> Phase 3
     "Tower:exprel",                  # undecided exponential relation -> Phase 3
     "Tower:logrel",                  # undecided logarithm relation -> Phase 3
     "Tower:not-algebraic",           # irrational exponents, parameters -> Phase 4

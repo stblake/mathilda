@@ -144,7 +144,15 @@ void rde_cert_end(RdeCertState saved) { g_rde_cert = saved; }
 bool rde_cert_active(void) { return g_rde_cert.active != 0; }
 bool rde_cert_uncertain(void) { return g_rde_cert.uncertain != 0; }
 const char* rde_cert_reason(void) { return g_rde_cert.why; }
+/* MATHILDA_RDE_CERT_DEBUG=1 traces every uncertain path to stderr: the
+ * developer's view of which step of the campaign's ratchet blocked a verdict. */
+static int rde_cert_debug(void) {
+    static int cached = -1;
+    if (cached < 0) { const char* e = getenv("MATHILDA_RDE_CERT_DEBUG"); cached = (e && *e && *e != '0'); }
+    return cached;
+}
 void rde_cert_mark(const char* why) {
+    if (rde_cert_debug()) fprintf(stderr, "[rde-cert] %s%s\n", why, g_rde_cert.active ? "" : " (no scope)");
     if (!g_rde_cert.active) return;
     if (!g_rde_cert.uncertain) g_rde_cert.why = why;
     g_rde_cert.uncertain = 1;

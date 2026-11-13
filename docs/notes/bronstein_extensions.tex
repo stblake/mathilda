@@ -1,0 +1,477 @@
+% bronstein_extensions.tex -- the theory behind the Bronstein completion campaign
+% (src/internal/bronstein/BRONSTEIN_PLAN.md, "2026-11-14 -- Completion campaign").
+%
+% Every mathematical statement the implementation relies on beyond a direct
+% transcription of the sources lives here: Part A derives known results in the
+% exact form the code uses, Part B states and proves the extensions.  Each
+% result names the routine that implements it and the regression test that
+% pins it.  Build: latexmk -pdf bronstein_extensions.tex
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs,longtable}
+\usepackage[hidelinks]{hyperref}
+
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{claim}[theorem]{Claim}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+\newcommand{\Q}{\mathbb{Q}}
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\C}{\mathbb{C}}
+\newcommand{\Qbar}{\overline{\mathbb{Q}}}
+\newcommand{\lc}{\operatorname{lc}}
+\newcommand{\code}[1]{\texttt{#1}}
+
+\title{Extensions of Bronstein's algorithm for one simple radical\\
+\large The theory behind Mathilda's Bronstein completion campaign}
+\date{Started 2026-11-14}
+
+\begin{document}
+\maketitle
+
+\section*{Sources}
+\begin{itemize}
+\item[{[B]}] M.~Bronstein, \emph{Integration of elementary functions}, J.~Symbolic
+  Computation 9 (1990) 117--173.
+\item[{[B91]}] M.~Bronstein, \emph{The Risch differential equation on an algebraic
+  curve}, ISSAC~'91.
+\item[{[SI]}] M.~Bronstein, \emph{Symbolic Integration I}, 2nd ed., Springer 2005.
+\item[{[T]}] B.~Trager, \emph{Integration of algebraic functions}, PhD thesis, MIT 1984.
+\item[{[R]}] M.~Rosenlicht, \emph{Liouville's theorem on functions with elementary
+  integrals}, Pacific J.~Math.\ 24 (1968) 153--161.
+\end{itemize}
+
+Part~A derives results the sources contain. They are written out because the
+implementation depends on their exact form: the off-by-one in
+\S\ref{sec:A2} was a bug before it was a derivation. Part~B states results the
+sources do not contain, with proofs. Every proof in Part~B is reviewed
+adversarially before its phase starts, and every claim carries the regression
+test that pins it.
+
+\paragraph{Notation.} $k$ is a differential field of characteristic~0 with
+constant field $C$. $\theta$ is a monomial over $k$: either primitive,
+$D\theta=\eta\in k$, or hyperexponential, $D\theta/\theta=\eta\in k$. We write
+$K=k(\theta)$. For a polynomial $p$, $\lc(p)$ is its leading coefficient and
+$\deg p$ its degree in $\theta$.
+
+\part*{Part A. Derivations of known results, as implemented}
+\addcontentsline{toc}{part}{Part A}
+
+\section{Parametric logarithmic derivatives in a tower (\code{rc\_param\_log\_deriv})}
+\label{sec:A1}
+
+\paragraph{Problem.} We are given $f,\eta\in k=\Q(x)(t_0,\dots,t_{m-1})$, a
+Log/Exp tower with algebraically independent monomials, and
+$\theta=\exp(\int\eta)$ transcendental over $k$. Decide whether
+$f=m\eta+Dz/z$ with $m\in\Z$ and $z\in k^*$. When $\eta$ is omitted, $m=0$.
+
+\begin{claim}
+Let $P$ be the irreducible factors over $\Q$ of $\operatorname{den}(f)\operatorname{den}(\eta)$,
+as polynomials in $x,t_0,\dots,t_{m-1}$, excluding the exponential monomials
+$t_j$. Let $E$ be the exponential monomials of $k$. Then $f=m\eta+Dz/z$ has a
+solution if and only if $f$ lies in the $\Q$-span of
+\[ G=\{\eta\}\cup\{Dp/p : p\in P\}\cup\{Dt_j/t_j : t_j\in E\} \]
+with every coefficient an integer. The coefficients are then unique, and
+$z=c\prod p^{e_p}\prod t_j^{s_j}$.
+\end{claim}
+
+\begin{proof}
+Write $z=c\prod p^{e_p}\prod_{j\in E}t_j^{s_j}$, with $p$ running over the
+irreducibles of $\Q[x,t]$ other than the exponential monomials. Unique
+factorisation in $\Q[x,t]$ allows this, because the monomials are algebraically
+independent; a logarithmic monomial is an ordinary irreducible here. Then
+$Dz/z=\sum e_p\,Dp/p+\sum s_j\,Dt_j/t_j$.
+
+Each $p$ is normal at its top variable $v$. If $v$ is $x$ or a logarithmic
+monomial, then $Dv\in k_{<v}$. If $v$ is an exponential monomial other than $p$
+itself, the only special irreducible is $v$. Either way $p\nmid Dp$ in
+$k_{<v}[v]$.
+
+So $Dp/p$ has a simple pole along $p$ with residue~1. No other $Dq/q$ has a
+pole along $p$: those with the same top variable are coprime to $p$, those with
+a lower one are constants for the partial fraction decomposition in $v$, and
+$Dt_j/t_j\in k_{<t_j}$ has no pole at all.
+
+Hence $e_p\neq0$ puts $p$ in $\operatorname{den}(m\eta+Dz/z)=\operatorname{den}(f)$,
+unless the pole cancels against $m\eta$, in which case $p\mid\operatorname{den}(\eta)$.
+So every $p$ with $e_p\ne0$ lies in $P$, and the representation lies in the
+span of $G$ with integer coefficients.
+
+$G$ is $\Q$-linearly independent. A relation, cleared to integers, says that
+$\theta^a\prod p^b\prod t_j^c$ is a constant. For $a\neq0$ this makes $\theta$
+algebraic over $k$. For $a=0$ it contradicts unique factorisation in $\Q[x,t]$.
+\end{proof}
+
+The independence of the tower is a hypothesis: a tower with $E^{x+x^2}$ beside
+$E^x$ and $E^{x^2}$ breaks it. Since v0.6546 the tower builder detects this
+(\code{RtTower.dependent}), and certificates on such a tower are demoted.
+
+\section{RdeBoundDegree for a primitive monomial (\code{rde\_bound\_degree\_prim})}
+\label{sec:A2}
+
+We solve $a\,Dq+b\,q=c$ for $q\in k[\theta]$, with $D\theta=\eta\in k$. Write
+$q=\sum_{i\le n}q_i\theta^i$, so that
+$D(q_i\theta^i)=Dq_i\,\theta^i+i\,q_i\eta\,\theta^{i-1}$. Let $d_a,d_b,d_c$ be
+the degrees of $a,b,c$.
+
+\begin{itemize}
+\item $d_b>d_a$: the top term $\lc(b)q_n\theta^{d_b+n}$ meets nothing, so
+  $n\le d_c-d_b$.
+\item $d_b=d_a$, with $\alpha=-\lc(b)/\lc(a)$ not of the form $Dz/z$: the
+  $\theta^{d_a+n}$ coefficient $\lc(a)Dq_n+\lc(b)q_n$ vanishes if and only if
+  $Dq_n/q_n=\alpha$. So $n\le d_c-d_b$.
+\item $d_b=d_a$, with $\alpha=Dz/z$. Now $q_n=\gamma z$ ($\gamma$ a constant)
+  cancels the top coefficient, and then $\deg(\mathrm{lhs})\le d_a+n-1$. That
+  can equal $d_c$, so $n=d_c-d_a+1$ needs nothing more.
+
+  A larger $n$ also needs the $\theta^{d_a+n-1}$ coefficient to vanish. That
+  coefficient is
+  \[ \lc(a)(Dq_{n-1}+n q_n\eta)+a_{d_a-1}Dq_n+\lc(b)q_{n-1}+b_{d_b-1}q_n. \]
+  With $q_{n-1}=zu$ and $\lc(a)Dz+\lc(b)z=0$ it becomes
+  \[ \lc(a)z\,Du+\gamma\,(n\,\lc(a)\eta z+a_{d_a-1}Dz+b_{d_b-1}z). \]
+  It vanishes if and only if $-\beta=D(u/\gamma)+n\eta$, where
+  $\beta=(a_{d_a-1}Dz+b_{d_b-1}z)/(z\lc(a))$. This is a limited-integration
+  problem with a unique constant $s$, because two values would put $\theta$ in
+  $k+C$. So
+  \[ n\le\max(d_c-d_a+1,\;s), \]
+  with $s$ counted only when it is a positive integer.
+
+  The first implementation used $\max(d_c-d_a,s)$. It gave a false NoSolution
+  for $y'+y/x=2\log x/x^2$, whose solution $\log^2 x/x$ has degree
+  $d_c-d_a+1=2$. The regression test is in \code{tests/test\_bronstein\_rde.c}.
+\item $d_b=d_a-1$: the $\theta^{d_a+n}$ coefficient $\lc(a)Dq_n$ vanishes when
+  $q_n$ is a constant. The next coefficient then vanishes if and only if
+  $\alpha=D(q_{n-1}/q_n)+n\eta$. So $n\le\max(d_c-d_a+1,s)$, with
+  $s=\mathrm{LimitedIntegrate}(\alpha,\eta)$.
+\item $d_b<d_a-1$: if the top two coefficients both vanished, $\theta$ would
+  lie in $k+C$. So $n\le d_c-d_a+1$.
+\end{itemize}
+
+$\mathrm{LimitedIntegrate}(\alpha,\eta)$ against the one primitive $\theta$
+asks whether $\alpha$ has an antiderivative in $K$. Any such antiderivative is
+$z+s\theta+\text{const}$, and it is decided by the field integrator
+(\code{rc\_limited\_integrate\_prim}). An answer that carries a new logarithm
+is still reported as undecided, until ParamRischDE lands.
+
+\section{RdeBoundDegree for a hyperexponential monomial (\code{rde\_bound\_degree\_exp})}
+
+Here $D(q_n\theta^n)=(Dq_n+n\eta q_n)\theta^n$, so degrees are preserved.
+\begin{itemize}
+\item $d_a\ne d_b$: $n\le d_c-\max(d_a,d_b)$.
+\item $d_a=d_b$: the top coefficient vanishes if and only if
+  $-\lc(b)/\lc(a)=Dq_n/q_n+n\eta$. This is a parametric logarithmic derivative
+  (\S\ref{sec:A1}) with a unique $n=m$, so $n\le\max(d_c-d_a,m)$.
+\end{itemize}
+
+\section{RdeSpecialDenomExp (\code{rde\_special\_denom\_exp})}
+
+Suppose $q$ has a $\tau$-adic pole of order $n$. In $a\,Dq+b\,q$ its lowest
+coefficient is $(a(0)(Dq_{-n}-n\eta q_{-n})+b(0)q_{-n})\tau^{-n}$. When
+$\nu_\tau(b)=0$ this can vanish, if and only if $-b(0)/a(0)=Dq_{-n}/q_{-n}-n\eta$.
+That is a parametric logarithmic derivative with $m=-n$. Hence
+$n=\min(\nu(c)-\min(0,\nu(b)),m)$ when \S\ref{sec:A1} finds $m$.
+
+\section{PolyRischDECancel (\code{rde\_polyrischde\_cancel})}
+
+Here $b\in k^*$ and the equation is $Dq+bq=c$.
+\begin{itemize}
+\item The homogeneous equation is solvable in $K$ if and only if $-b=Dw/w$ with
+  $w=z\theta^m$, which by \S\ref{sec:A1} means $-b=m\eta+Dz/z$ ($m=0$ for a
+  primitive $\theta$). If it is solvable, $Dq+bq=w\,D(q/w)$, so
+  $q=w\int c/w+\lambda w$. The constant $\lambda$ is fixed by the one
+  coefficient $q$ must not have: a $\tau$-pole when $m<0$, or a degree beyond
+  $n$.
+\item If it is not solvable, each equation $Ds+(b+i\eta)s=\lc(c)$ in $k$ has at
+  most one solution, since a second would give a homogeneous solution. So the
+  top-down pass is forced, and a failed pass is a proof.
+\item If the test is undecided, a failed pass proves nothing, and it is marked.
+\end{itemize}
+
+\section{WeakNormalizer over a tower (\code{rc\_weak\_normalizer})}
+
+This is [SI]~\S6.1, transcribed for any monomial.
+\begin{itemize}
+\item Write $f=A/(E d_1)$, where $d_1$ collects the normal simple poles.
+\item The residues are the roots of $R(z)=\operatorname{Res}_\theta(d_1,A-zE\,Dd_1)$.
+\item Then $q=\prod_n\gcd(A-nE\,Dd_1,d_1)^n$, over the positive integer roots $n$
+  of $R$.
+\end{itemize}
+The integer roots of $R$ are common roots of all its coefficients as a
+polynomial in the tower variables. They are therefore the roots of the gcd of
+those coefficients over $\Q[z]$, read off its linear factors over $\Q$.
+
+\part*{Part B. Extensions beyond the sources}
+\addcontentsline{toc}{part}{Part B}
+
+\begin{longtable}{lp{0.5\textwidth}p{0.18\textwidth}l}
+\toprule
+& Result & Needed for & Status \\ \midrule
+E1 & The Risch DE $z'+fz=g$ on a simple radical curve $Y^m=G$ over a
+  transcendental tower $k(\theta)$: order bounds at the places over $k[\theta]$,
+  at $\theta=\infty$ and at the special places; reduction of the coefficient
+  system to parametric Risch DEs in $k$ & Phase 5 & open \\
+E2 & Transcendental Risch over an algebraic base $k_j(y)(t_{j+1},\dots)$: the
+  recursion through the differential-field record, and Liouville's theorem for a
+  radical in the middle of the tower & Phase 5 & open \\
+E3 & Torsion by specialisation with the special places included: goodness
+  conditions, injectivity in characteristic~0 & Phase 3 & open \\
+E4 & Symbolic parameters: the verdicts are generic, and which zero tests may be
+  generic & Phase 4 & open \\
+E5 & Ideals of the $d=\gcd(e,m)$ ramified places above one special point &
+  Phase 3 & open \\
+E6a & Reducible logarithms through a locally constant branch difference &
+  \code{Tower:reducible-log} & v0.6547 \\
+E6b & A cyclic radical compositum as one radical, pointwise &
+  \code{Tower:cyclic-compositum} & v0.6547 \\
+E6c & Exponents with a rational log-linear part &
+  \code{Tower:exp-of-log-radical} & v0.6547 \\
+\bottomrule
+\end{longtable}
+
+\begin{remark}[{[B] pp.~155--157}]
+This case needs $\eta'=\sum e_i\gamma_i'/\gamma_i$ with constants $e_i$. With
+rational $e_i$, $\theta$ would be algebraic over $k$, so over the constant
+field $\Q$ the case cannot occur in a valid tower. It does occur for irrational
+or transcendental exponents ($x^{\sqrt2}$, $x^a$), so it belongs to Phase~4.
+The same reading refuted a suspected false certificate in
+\code{brIntegrateInKLogLike}: Def.~2.21 of [B] allows logarithms of any element
+of $k$.
+\end{remark}
+
+\section*{E6a. Reducible logarithms (\code{brReducibleLogSplit}, \code{brIntegrateKappaSplit})}
+\addcontentsline{toc}{section}{E6a. Reducible logarithms}
+
+\paragraph{Setting.} $\log a$ is reducible over the tower $k$: $D\log a=DL_0$
+with $L_0=\sum r_i t_i+\sum s_j b_j$, where the $t_i=\log a_i$ are the
+logarithmic monomials, the $b_j$ the arguments of the exponential monomials
+$\theta_j=e^{b_j}$, and $r_i,s_j\in\Q$ (\code{Risch`LogReducible}). The rewrite
+$\log a=L_0$ is wrong off a region: $\log x^2\ne2\log x$ for $x<0$. All
+logarithms and powers are principal.
+
+\begin{lemma}\label{lem:kappa}
+The function $\kappa=\log a-L_0$ is locally constant. On each connected region
+of analyticity its value $\kappa_0$ is either $0$ or transcendental over $\Q$.
+\end{lemma}
+
+\begin{proof}
+$D\kappa=0$ off the branch cuts, so $\kappa$ is locally constant. Let $d\ge1$
+be an integer with $dr_i,ds_j\in\Z$. Consider
+\[ u=\frac{a^d}{\prod_i a_i^{dr_i}\prod_j\theta_j^{ds_j}}\in k. \]
+The powers are integer powers, so $u$ lies in $k$. Moreover
+$Du/u=d\,(Da/a-\sum r_iDa_i/a_i-\sum s_jDb_j)=d\,D\kappa=0$, so $u$ is a
+constant of $k$, a nonzero element of $\Q$ (or of $\Qbar$ with algebraic
+constants). As functions, $e^{d\log a}=a^d$, $e^{dr_i\log a_i}=a_i^{dr_i}$ and
+$e^{ds_jb_j}=\theta_j^{ds_j}$, so $e^{d\kappa}=u$ pointwise. On a region,
+$\lambda=d\kappa_0$ therefore satisfies $e^\lambda=u$ with $u$ algebraic. By the
+Hermite--Lindemann theorem, $e^\lambda$ is transcendental for every algebraic
+$\lambda\ne0$. So $\lambda$ is either $0$ or transcendental, and so is
+$\kappa_0=\lambda/d$.
+\end{proof}
+
+Let $k'$ be the tower \emph{without} $\log a$: the monomials $t_i,\theta_j$ in
+$L_0$ and everything else the integrand needs, but not $\log a$. We assume that
+no monomial of $k'$ and no radicand depends on $\log a$, so $\log\log x^2$,
+$e^{(\log x^2)^2}$ and $\sqrt{\log x^2}$ are all excluded. The field generated by
+$k'$ and $\log a$ is then $k'(\kappa)$. Let $y$ be the radical, if any. Let
+$f\in k'(y)[\log a]$ have degree $m$ in $\log a$. Expand it as
+$f=\sum_{j=0}^m\kappa^jg_j$, with every $g_j\in k'(y)$. This is the substitution
+$\log a\mapsto L_0+K$ followed by collecting powers of $K$.
+
+\begin{theorem}\label{thm:kappa}
+\leavevmode
+\begin{enumerate}
+\item If every $g_j$ has an elementary integral $G_j$, then
+  $F=\sum\kappa^jG_j$ is an antiderivative of $f$ on every region.
+\item On a region where $\kappa_0=0$, $f=g_0$, so $f$ is elementary there if
+  and only if $g_0$ is.
+\item On a region where $\kappa_0\ne0$, $f$ is elementary there if and only if
+  every $g_j$ is.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+Part (1) holds because $D\kappa=0$, and (2) is immediate.
+
+For (3), write $k$ for $k'(y)$ from here on. By Lemma~\ref{lem:kappa},
+$\kappa_0$ is transcendental over $\Q$. A constant algebraic over $k$ is
+algebraic over the constants of $k$ ([SI, Cor.~3.3.1]), so $\kappa_0$ is also
+transcendental over $k$. (That is false over the tower \emph{with} $\log a$,
+which contains $\kappa$; this is why $k'$ is needed.) Then
+$k(\kappa_0)\cong k(K)$, with $K$ a new constant indeterminate, and the
+isomorphism maps $f_K=\sum K^jg_j$ to $f$.
+
+Suppose $f$ has an elementary integral on the region. By the strong form of
+Liouville's theorem [R], [SI, Thm.~5.5.3],
+\[ f_K=v'+\sum_{i=1}^n c_i\frac{u_i'}{u_i}, \]
+with $c_i$ algebraic over $\Q(K)$, $v\in k(K)$, and
+$u_i\in k(K)(c_1,\dots,c_n)^*$.
+
+Now specialise. Let $\gamma$ be a primitive element of
+$\Q(K)(c_1,\dots,c_n)$ over $\Q(K)$, with minimal polynomial $P(K,Z)$, taken
+integral over $\Q[K]$. Then $P$ stays irreducible over $k(K)$, because in
+characteristic~0 the constant field of $k$ is algebraically closed in $k$
+([SI, Cor.~3.3.1]). So $L:=k(K)(c_1,\dots,c_n)=k(K)[Z]/(P)$, with basis
+$1,\gamma,\dots,\gamma^{e-1}$ over $k(K)$.
+
+For $q\in\Q$ outside the finitely many zeros of the discriminant of $P$ in $K$,
+pick a simple root $\gamma_q\in\Qbar$ of $P(q,Z)$. Let $\sigma_q$ be the map
+that sends $K\mapsto q$ and $\gamma\mapsto\gamma_q$. It is a ring homomorphism
+from the subring of elements whose basis coefficients have no pole at $K=q$
+into $k(\Qbar)$. Avoiding finitely many more $q$ puts $v$, the $u_i$, the
+$1/u_i$ and the $c_i$ in that subring.
+
+$\sigma_q$ commutes with $D$: $DK=0$, $D\gamma=0$, and $D$ acts on the basis
+coefficients, elements of $k(K)$, coefficientwise in $K$. Applying it gives
+\[ f_q=\sum q^jg_j=\sigma_q(v)'+\sum\sigma_q(c_i)\frac{\sigma_q(u_i)'}{\sigma_q(u_i)}. \]
+So $f_q$ has an elementary integral over $k(\Qbar)$, and therefore over $k$:
+the converse of Liouville's theorem needs only that the right-hand side is a
+derivative of an elementary expression.
+
+This holds for infinitely many $q$. Pick $m+1$ distinct ones,
+$q_0,\dots,q_m$. The Vandermonde matrix $(q_l^j)$ is invertible, so each $g_j$
+is a $\Q$-linear combination of $f_{q_0},\dots,f_{q_m}$, and hence elementary.
+
+The converse of (3) is (1).
+\end{proof}
+
+\paragraph{What a certificate means.} A certificate here says that no
+elementary expression is an antiderivative of $f$ on the whole domain. That is
+weaker than it may look. $(\log x^2-2\log x)\sqrt{\log x}$ is certified
+non-elementary, yet it vanishes identically on $\operatorname{Re}x>0$.
+Theorem~\ref{thm:kappa} makes the statement exact region by region.
+
+\paragraph{Decision, as implemented.}
+\begin{itemize}
+\item There is no ``$\kappa\equiv0$'' shortcut. A zero test cannot prove it:
+  \code{PossibleZeroQ[Log[E\^{}x] - x]} is \code{True}, yet the difference is
+  $-2\pi i$ wherever $\operatorname{Im}x\in(\pi,3\pi]$, as found in review.
+\item Every $g_j$ is integrated. If all are elementary, the answer is
+  $\sum\kappa^jG_j$, verified.
+\item A non-elementary $g_j$ is a certificate when there is exactly one
+  reducible logarithm and $\kappa$ is numerically nonzero at a sample point
+  (\code{brNonzeroSomewhereQ}: $|\kappa(x_0)|>1/10$ at 30 digits, with sample
+  points that include large imaginary parts). By
+  Lemma~\ref{lem:kappa} the values of $\kappa$ form a discrete set, so a value
+  that large is not a rounding artefact, and Theorem~\ref{thm:kappa}(3) applies
+  on that region.
+
+  If $g_0$ is the non-elementary one, (2) and (3) together certify $f$ on every
+  region, without the sample.
+\item A monomial or radicand that depends on $\log a$ violates the hypothesis on
+  $k'$, and the split declines (\code{brReducibleLogSplit} returns
+  \code{None}).
+\item Two or more reducible logarithms stay \code{Tower:reducible-log}: their
+  $\kappa_0$ may be algebraically dependent, so the specialisation argument does
+  not apply as stated. So does $K$ in a denominator, which makes $K$ a symbolic
+  parameter (Phase~4, E4).
+\end{itemize}
+
+\paragraph{Review (2026-11-14).} The independent adversarial review found no
+false certificate in about 30 probes. It found an unstated hypothesis (the field
+$k'$, now stated), a loose specialisation step (now done with a primitive
+element), and an unsound shortcut (``$\kappa\equiv0$'' by a zero test, now
+removed). It also found pre-existing lower-layer defects, recorded in
+\code{tasks/todo.md}: the false zero above, an \code{Indeterminate} result of the
+Automatic cascade for $(\log x^2-2\log x)e^{x^2}$, and an uncaught \code{Throw}
+for $\int e^{x+\log(x^2)/4}$.
+
+\paragraph{Tests.} \code{test\_reducible\_log} in
+\code{tests/test\_bronstein\_phase3.c}. The certificate for
+$(\log x^2-2\log x)\sqrt{\log x}$ uses Theorem~\ref{thm:kappa}(3) alone, with
+$g_0=0$ and $g_1=\sqrt{\log x}$.
+
+\section*{E6b. A cyclic radical compositum as one radical (\code{brCompositumPlan})}
+\addcontentsline{toc}{section}{E6b. Cyclic radical compositum}
+
+\paragraph{Setting.} We have radicals $\rho_i=b_i^{1/d_i}$ with
+$b_i\in\Q(\mathbf v)$, whose Kummer group $\Gamma\subset(\Q/\Z)^J$ is cyclic
+of order $N$ (\code{brKummerCyclicQ}). Here $\mathbf v$ is $x$ and the tower
+symbols, $v_i\in(\Q/\Z)^J$ is the exponent vector of $\rho_i$ over the
+irreducible factors of the $b_i$, and constant factors are ignored. As a field,
+$\Q(\mathbf v)(\rho_1,\dots)$ is then one simple radical extension. Pointwise
+presentations are another matter: a radicand $B$ with $B^{1/N}$ a generator need
+not satisfy $\rho_j=R_jB^{k_j/N}$ pointwise.
+
+\begin{proposition}
+Suppose integers $c_i\in[0,d_i)$ and $k_j$ satisfy
+\begin{enumerate}
+\item[(a)] $c_iN/d_i\in\Z$ for all $i$;
+\item[(b)] $(c_ik_j-\delta_{ij})/d_i\in\Z$ for all $i,j$;
+\item[(c)] the class $\sum c_iv_i$ has order $N$ in $\Gamma$.
+\end{enumerate}
+Let $y=\prod\rho_i^{c_i}$. Then the identities
+\[ y^N=B:=\prod b_i^{c_iN/d_i},\qquad \rho_j=R_j\,y^{k_j},\quad
+   R_j=\prod_i b_i^{-(c_ik_j-\delta_{ij})/d_i}, \]
+hold \emph{pointwise}, $B$ and the $R_j$ are rational, and $Y^N-B$ is
+irreducible over $\Q(\mathbf v)$.
+\end{proposition}
+
+\begin{proof}
+Only one identity is used: $(z^{1/d})^m=z^{m/d}$ for integer $m$, which holds
+for the principal power because both sides are $\exp(\tfrac md\log z)$. So
+$y^N=\prod_i\rho_i^{c_iN}=\prod_ib_i^{c_iN/d_i}$, an integer power of each
+$b_i$ by (a). Likewise
+$y^{k_j}/\rho_j=\prod_i\rho_i^{c_ik_j-\delta_{ij}}=\prod_ib_i^{(c_ik_j-\delta_{ij})/d_i}$,
+an integer power of each $b_i$ by (b).
+
+For irreducibility: by (c), the class of $B$ modulo $N$-th powers (constants
+ignored) has order $N$. So $B$ is not a $p$-th power for any prime $p\mid N$,
+and when $4\mid N$ it is not of the form $-4w^4$. By Capelli's theorem,
+$Y^N-B$ is irreducible.
+\end{proof}
+
+\paragraph{Use.}
+\begin{itemize}
+\item The integrand is integrated over $\Q(\mathbf v)(Y)$, $Y^N=B$, with $Y$
+  written as $B^{1/N}$.
+\item The answer is mapped back by $B^r\mapsto y^{rN}$ (\code{brCompositumBack}).
+  $Y\mapsto y$ is an embedding of differential fields: both satisfy $Y^N=B$ and
+  therefore $DY=Y\,DB/(NB)$. So the image of an antiderivative is an
+  antiderivative, and a certificate transfers.
+\item When no $c,k$ exist, the site stays \code{Tower:cyclic-compositum}. One
+  example is $\sqrt{x^2(x+1)}$ with $\sqrt{x+1}$, which agree only up to a
+  locally constant sign. Another is $\sqrt{2x}$ with $\sqrt x$, which needs a
+  constant field extension.
+\end{itemize}
+The search is over $\prod d_i\le20000$ tuples. Condition (c) follows from (b):
+$v_j=k_j\sum_ic_iv_i$, so $\sum c_iv_i$ generates $\Gamma$. It is kept as a
+cheap filter.
+
+The back-map is safe. It acts only on powers $B^r$ whose $rN$ is an integer, and
+anything it leaves (a CAS that split a constant out of $B^{1/N}$) is caught by
+the final verification against the user's integrand.
+
+\paragraph{Tests.} \code{test\_compositum\_plan},
+\code{test\_compositum\_rewrite} and \code{test\_compositum\_integrate} in
+\code{tests/test\_bronstein\_phase3.c}. They include a numeric pointwise check of
+the identities off the real axis, and the Chebyshev certificate for
+$\sqrt x\,(1+x)^{1/3}$.
+
+\section*{E6c. Exponents with a rational log-linear part (\code{brSplitLogExponent})}
+\addcontentsline{toc}{section}{E6c. Log-linear exponents}
+
+For rational $r_i$,
+\[ e^{u+\sum r_i\log a_i}=e^u\prod a_i^{r_i} \]
+holds pointwise: $\exp(v+w)=\exp(v)\exp(w)$, and $\exp(r\log a)=a^r$ is the
+definition of the principal power. So $E^{x+\log(x)/2}$ is $\sqrt x\,e^x$.
+Without the split it would be a new hyperexponential monomial over
+$\Q(x)(\log x)$, whose Risch DE needs a radical the tower does not have.
+
+The same identity with $u=0$ turns $E^{r\log a}$, found by
+\code{Risch`ExpReducible} with a fractional coefficient on a logarithm, into
+the radical $a^r$ (\code{brExpRewrite}).
+
+A monomial left unused by the rewrite is pruned (\code{brPruneMonomials}), so
+it cannot pose as a radical in the middle of the tower. For example,
+$\log\log x$ is unused once $E^{x+\log(\log x)/2}=\sqrt{\log x}\,e^x$.
+
+\paragraph{Tests.} \code{test\_exp\_of\_log} in
+\code{tests/test\_bronstein\_phase3.c}.
+
+\end{document}

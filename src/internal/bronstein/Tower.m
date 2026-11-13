@@ -107,17 +107,19 @@ brRebaseExp[x_Symbol, monos_List, i_Integer, q_Integer] := Module[{m = monos, ol
     {j, i + 1, Length[m]}];
   {m, rule}];
 
-brExpRewrite::usage = "brExpRewrite[x, monos, b] decides E^b over the tower monos. It returns {\"new\"} when E^b is a new monomial (Risch`ExpReducible: False), {\"rewrite\", e} with E^b = e an identity in the symbols, or {\"rebase\", i, q} when the relation has a fractional exponent on the exponential monomial i (re-base it as (E^(b_i/q))^q first). A fractional power of a logarithm's argument is a radical: Decline.";
+brExpRewrite::usage = "brExpRewrite[x, monos, b] decides E^b over the tower monos. It returns {\"new\"} when E^b is a new monomial (Risch`ExpReducible: False), {\"rewrite\", e} with E^b = e an identity in the symbols, or {\"rebase\", i, q} when the relation has a fractional exponent on the exponential monomial i (re-base it as (E^(b_i/q))^q first). A fractional multiple r of a logarithm Log[a] becomes the radical a^r (E^(r Log[a]) = a^r pointwise).";
 brExpRewrite[x_Symbol, monos_List, b_] := Module[{r, c, e, frac, i0},
   (* No Return inside With/If here: a nested Return only leaves the inner scope. *)
   r = If[monos === {}, False, Risch`ExpReducible[b, x, brMonoSpec[monos]]];
   If[r === False, {"new"},
     If[!ListQ[r] || Length[r] =!= Length[monos], throwUnimplemented["Tower:exprel", "exponential relation not decided"]];
-    frac = Select[Range[Length[monos]], !IntegerQ[r[[#]]] &];
+    (* a fractional exponent on an exponential monomial re-bases it; on a
+       logarithm Log[a] it is a radical: E^(r Log[a]) = a^r holds pointwise for
+       the principal branches (exp(r log a) is the definition of a^r) *)
+    frac = Select[Range[Length[monos]], !IntegerQ[r[[#]]] && monos[[#]]["kind"] === "Exp" &];
     i0 = If[frac === {}, None, First[frac]];
     Which[
-      i0 =!= None && monos[[i0]]["kind"] === "Exp", {"rebase", i0, Denominator[r[[i0]]]},
-      i0 =!= None, throwUnimplemented["Tower:exp-of-log-radical", "exponential of a fractional multiple of a logarithm (a radical in exponential form)"],
+      i0 =!= None, {"rebase", i0, Denominator[r[[i0]]]},
       True,
         c = Together[b - Sum[r[[i]] If[monos[[i]]["kind"] === "Exp", monos[[i]]["arg"], monos[[i]]["sym"]],
                             {i, Length[monos]}]];
@@ -126,6 +128,40 @@ brExpRewrite[x_Symbol, monos_List, b_] := Module[{r, c, e, frac, i0},
         e = E^c Product[If[monos[[i]]["kind"] === "Exp", monos[[i]]["sym"]^r[[i]], monos[[i]]["arg"]^r[[i]]],
                         {i, Length[monos]}];
         {"rewrite", e}]]];
+
+brSplitLogExponent::usage = "brSplitLogExponent[x, monos, b] splits the exponent b (in the tower symbols) as b = u + Sum r_i t_i, t_i the logarithm monomials of monos (t_i = Log[a_i], not radical-argument ones) with r_i rational and b linear in each such t_i, u the rest. It returns {u, Prod a_i^r_i} when some r_i is nonzero and u depends on x or a tower symbol, so that E^b = E^u Prod a_i^r_i holds pointwise (exp(v + w) = exp(v) exp(w), exp(r log a) = a^r for the principal branches); otherwise None (no log part, or E^b is a pure product the structure theorem handles).";
+brSplitLogExponent[x_Symbol, monos_List, b_] := Module[{be = Expand[b], logs, rs, u},
+  logs = Select[monos, #["kind"] === "Log" && !TrueQ[#["algebraic"]] &];
+  If[logs === {}, Return[None]];
+  rs = Function[m, With[{t = m["sym"]},
+      If[PolynomialQ[be, t] && Exponent[be, t] === 1 && MatchQ[Coefficient[be, t, 1], _Integer | _Rational],
+        Coefficient[be, t, 1], 0]]] /@ logs;
+  If[AllTrue[rs, # === 0 &], Return[None]];
+  u = Expand[be - rs . (#["sym"] & /@ logs)];
+  If[!brDependsQ[u, Prepend[#["sym"] & /@ monos, x]], Return[None]];
+  {u, Times @@ MapThread[Power[#1["arg"], #2] &, {logs, rs}]}];
+
+brKappaMode::usage = "brKappaMode is True inside brReducibleLogSplit: brKernelsToSymbols then replaces a reducible logarithm Log[a] = L0 + kappa by L0 + K (K a fresh constant symbol) and records {K, kappa} in brKappas, instead of throwing Tower:reducible-log.";
+brKappaMode = False;
+brKappas::usage = "brKappas is the list {{K, kappa}, ...} brKernelsToSymbols fills in brKappaMode: K the constant symbol, kappa = Log[a] - L0 its surface value (locally constant: D kappa = 0).";
+brKappas = {};
+
+brReducibleLogSplit::usage = "brReducibleLogSplit[f, x] splits the surface integrand f along its reducible logarithms (Tower:reducible-log). A logarithm Log[a] reducible over the tower, D Log[a] = D L0 with L0 = Sum r_i t_i + Sum s_j b_j (Risch`LogReducible), is Log[a] = L0 + kappa with kappa = Log[a] - L0 LOCALLY CONSTANT (a branch difference: 0 or a transcendental constant on each region). Writing kappa as a constant symbol K, f is a polynomial in the K's (else None: K in a denominator is a symbolic parameter, Phase 4). It returns <|\"kappas\" -> {{K, kappa}, ...}, \"terms\" -> {{K^alpha, g_alpha}, ...}|> with f = Sum K^alpha g_alpha, every g_alpha free of the reducible logarithms (surface form), or None when f has no reducible logarithm or a later monomial depends on one (K would enter the tower). Sum kappa^alpha Int g_alpha is an antiderivative of f (D kappa = 0); see brIntegrateBody for the certificates.";
+brReducibleLogSplit[f_, x_Symbol] := Module[{r, fs, monos, Ks, poly, rules, terms},
+  r = Block[{brKappaMode = True, brKappas = {}}, With[{kk = brCatch[brKernelsToSymbols[f, x]]}, {kk, brKappas}]];
+  If[brFailQ[r[[1]]] || r[[2]] === {}, Return[None]];
+  {fs, monos} = r[[1]];
+  Ks = First /@ r[[2]];
+  (* E6a needs k' free of Log[a]: nothing above the reducible logarithm may
+     depend on it (Log[Log[x^2]], E^(Log[x^2]^2) would put K in the tower) *)
+  If[AnyTrue[monos, !FreeQ[{#["arg"], #["D"], #["kernel"]}, Alternatives @@ Ks] &], Return[None]];
+  poly = Together[fs];
+  If[!FreeQ[Denominator[poly], Alternatives @@ Ks], Return[None]];
+  poly = Expand[Numerator[poly]];
+  If[!PolynomialQ[poly, Ks], Return[None]];
+  rules = CoefficientRules[poly, Ks];
+  terms = ({Times @@ (Ks^#[[1]]), Together[#[[2]]/Denominator[Together[fs]]] /. brBack[monos]} &) /@ rules;
+  <|"kappas" -> r[[2]], "terms" -> terms|>];
 
 brKernelsToSymbols::usage = "brKernelsToSymbols[f, x] replaces the Log/Exp kernels of f innermost first by tower monomials. It returns {fs, monos}: fs the integrand in x and the symbols, monos the monomial list (Associations with \"sym\", \"kind\", \"arg\", \"D\", \"kernel\"). Throws a Decline for a reducible logarithm, a radical inside a kernel, or a fractional power of a logarithm's argument.";
 brKernelsToSymbols[f0_, x_Symbol] := Module[{f = f0, monos = {}, vars, ks, k, arg, kind, step, t, res, rule, guard = 0},
@@ -157,10 +193,23 @@ brKernelsToSymbols[f0_, x_Symbol] := Module[{f = f0, monos = {}, vars, ks, k, ar
         If[lr =!= False && !ListQ[lr],
           throwUnimplemented["Tower:logrel", "logarithm relation not decided", <|"kernel" -> k|>]];
         If[ListQ[lr],
-          throwUnimplemented["Tower:reducible-log", "reducible logarithm (rewrite with an explicit constant)", <|"kernel" -> k|>]]];
+          (* Log[a] = L0 + kappa, L0 = Sum r_i (t_i | b_i), kappa locally
+             constant: in the kappa mode of brReducibleLogSplit the kernel is
+             replaced by L0 + K, K a fresh constant symbol standing for kappa *)
+          If[!TrueQ[brKappaMode],
+            throwUnimplemented["Tower:reducible-log", "reducible logarithm (rewrite with an explicit constant)", <|"kernel" -> k|>]];
+          With[{L0 = Sum[lr[[i]] If[monos[[i]]["kind"] === "Exp", monos[[i]]["arg"], monos[[i]]["sym"]], {i, Length[monos]}],
+                K = Symbol["Bronstein`Private`brKappa" <> ToString[Length[brKappas] + 1]]},
+            AppendTo[brKappas, {K, (k /. brBack[monos]) - (L0 /. brBack[monos])}];
+            f = f /. k -> L0 + K];
+          Continue[]]];
       {monos, t} = brAddMonomial[x, monos, "Log", Together[arg], k /. brBack[monos]];
       f = f /. k -> t,
-      (* Exp *)
+      (* Exp: first split off the part of the exponent that is a rational
+         combination of logarithm monomials, E^(u + r Log[a]) = E^u a^r
+         (pointwise), so E^(x + Log[x]/2) is Sqrt[x] E^x, not a new monomial *)
+      With[{sp = brSplitLogExponent[x, monos, arg]},
+        If[sp =!= None, f = f /. k -> E^sp[[1]] sp[[2]]; Continue[]]];
       step = brExpRewrite[x, monos, arg];
       Switch[First[step],
         "new",
@@ -170,7 +219,16 @@ brKernelsToSymbols[f0_, x_Symbol] := Module[{f = f0, monos = {}, vars, ks, k, ar
         "rebase",
           {monos, rule} = brRebaseExp[x, monos, step[[2]], step[[3]]];
           f = f /. rule]]];
-  {f, monos}];
+  {f, brPruneMonomials[f, monos]}];
+
+brPruneMonomials::usage = "brPruneMonomials[f, monos] drops the monomials that neither f nor a kept monomial (through its argument or derivative) involves: a kernel rewritten away after it entered the tower (Log[Log[x]] once E^(x + Log[Log[x]]/2) became Sqrt[Log[x]] E^x). The order of the rest is kept.";
+brPruneMonomials[f_, monos_List] := Module[{need, grow = True, syms = #["sym"] & /@ monos},
+  need = Select[syms, !FreeQ[f, #] &];
+  While[grow,
+    With[{more = Select[syms, Function[s, !MemberQ[need, s] &&
+        AnyTrue[Select[monos, MemberQ[need, #["sym"]] &], !FreeQ[{#["arg"], #["D"]}, s] &]]]},
+      grow = more =!= {}; need = Join[need, more]]];
+  Select[monos, MemberQ[need, #["sym"]] &]];
 
 brBack::usage = "brBack[monos] is the list of back-substitution rules t_i -> surface kernel (each surface kernel is written in x alone, so one ReplaceAll pass suffices).";
 brBack[monos_List] := (#["sym"] -> #["kernel"]) & /@ monos;
@@ -199,12 +257,16 @@ brDetectRadical[fs_, vars_List] := Module[{pows, bases, b0, exps, cyc},
     cyc = brKummerCyclicQ[Transpose[{bases, Last /@ pows}], vars];
     Which[
       cyc === False, throwIncomplete["several radicals generating a non-cyclic Kummer extension (not one simple radical)"],
-      cyc === True, throwUnimplemented["Tower:cyclic-compositum", "several radicands generating one simple radical extension (rewrite as a single radical)"],
+      (* brCompositumRewrite (run first by the pipeline) found no pointwise
+         single-radical presentation: the radicals agree with one radical only
+         up to a locally constant root of unity, or over a larger constant field *)
+      cyc === True, throwUnimplemented["Tower:cyclic-compositum", "several radicands generating one simple radical extension up to a locally constant unit or a constant field extension"],
       True, throwUnimplemented["Tower:compositum-undecided", "radical compositum whose Kummer group was not decided"]]];
   <|"b" -> b0, "n" -> LCM @@ (Denominator /@ exps)|>];
 
 brKummerCyclicQ::usage = "brKummerCyclicQ[{{b1, r1}, ...}, vars] decides whether the radicals b_i^r_i (b_i rational in vars, r_i rational) generate a CYCLIC Kummer extension of the field of vars over its constants, i.e. one simple radical extension: with the b_i factored into irreducibles p_j of Q[vars], the exponent vectors r_i e_ij mod 1 generate a subgroup of (Q/Z)^J, cyclic iff its order equals its exponent. Returns True, False, or $Failed (a non-rational constant factor, or a group too large to enumerate). Constant factors are ignored here: they change the constant field (Unimplemented elsewhere), not the Kummer group over it.";
-brKummerCyclicQ[rads_List, vars_List] := Module[{facs, ps, vecs, nn, gens, seen, frontier, new, ordG, expG},
+brKummerVectors::usage = "brKummerVectors[{{b1, r1}, ...}, vars] is the Kummer data of the radicals b_i^r_i (b_i rational in vars, r_i rational): with the b_i factored into the irreducibles p_j of Q[vars] (associates identified, constant factors dropped), it returns {vecs, nn}: vecs[[i]] the exponent vector r_i e_ij reduced mod 1, an element of (Q/Z)^J, and nn the lcm of their denominators. Constant factors change the constant field, not the Kummer group over it.";
+brKummerVectors[rads_List, vars_List] := Module[{facs, ps, vecs},
   facs = Map[Function[rb, Join[FactorList[Numerator[Together[rb[[1]]]]],
        Map[Function[fe, {fe[[1]], -fe[[2]]}], FactorList[Denominator[Together[rb[[1]]]]]]]], rads];
   facs = Select[#, brDependsQ[First[#], vars] &] & /@ facs;
@@ -215,10 +277,13 @@ brKummerCyclicQ[rads_List, vars_List] := Module[{facs, ps, vecs, nn, gens, seen,
     Function[{fl, r}, Table[r Total[Cases[fl, {q_, e_} /; NumberQ[Together[q/p]] :> e]], {p, ps}]],
     {facs, Last /@ rads}];
   vecs = Mod[#, 1] & /@ vecs;
-  nn = LCM @@ Denominator[Flatten[{vecs, 1}]];
+  {vecs, LCM @@ Denominator[Flatten[{vecs, 1}]]}];
+
+brKummerCyclicQ[rads_List, vars_List] := Module[{vecs, nn, gens, seen, frontier, new, ordG, expG},
+  {vecs, nn} = brKummerVectors[rads, vars];
   gens = Round[nn #] & /@ vecs;
   expG = LCM @@ (nn/GCD[nn, GCD @@ Append[#, nn]] & /@ gens);
-  seen = <|ConstantArray[0, Length[ps]] -> True|>; frontier = Keys[seen];
+  seen = <|ConstantArray[0, Length[First[vecs]]] -> True|>; frontier = Keys[seen];
   While[frontier =!= {},
     new = DeleteDuplicates[Flatten[Table[Mod[f + g, nn], {f, frontier}, {g, gens}], 1]];
     new = Select[new, !KeyExistsQ[seen, #] &];
@@ -227,6 +292,60 @@ brKummerCyclicQ[rads_List, vars_List] := Module[{facs, ps, vecs, nn, gens, seen,
     frontier = new];
   ordG = Length[seen];
   ordG === expG];
+
+brCompositumPlan::usage = "brCompositumPlan[{{b1, d1}, ...}, vars] rewrites the radical atoms rho_i = b_i^(1/d_i) (b_i rational in vars, distinct pairs) as ONE radical, using nothing but the identities rho_i^d_i = b_i and (z^r)^m = z^(r m) (m an integer), so that every step holds pointwise on every branch. It searches integers c_i in [0, d_i) and k_j in [0, N), N the order of the Kummer group, with (a) c_i N/d_i an integer, (b) (c_i k_j - delta_ij)/d_i an integer for all i, j, and (c) the Kummer class of y = Prod rho_i^c_i of order N. Then y^N = B = Prod b_i^(c_i N/d_i) is rational, Y^N - B is irreducible, and rho_j = R_j y^k_j with R_j = Prod_i b_i^(-(c_i k_j - delta_ij)/d_i) rational: Q(vars)(rho_1, ...) = Q(vars)(y) as functions. It returns <|\"B\" -> B, \"N\" -> N, \"c\" -> {c_i}, \"k\" -> {k_j}, \"R\" -> {R_j}|>, or None when no such monomial exists (the radicals agree with one radical only up to a locally constant root of unity, e.g. Sqrt[x^2 (x + 1)] and Sqrt[x + 1], or a constant field extension, e.g. Sqrt[2 x] and Sqrt[x]) or the search is too large.";
+brCompositumPlan[atoms_List, vars_List] := Module[{ds = Last /@ atoms, bs = First /@ atoms, vecs, nn, ordN, cs, ks, ok, res = None, n = Length[atoms]},
+  {vecs, nn} = brKummerVectors[{#[[1]], 1/#[[2]]} & /@ atoms, vars];
+  If[Times @@ ds > 20000, Return[None]];
+  (* the group order N: the subgroup generated by the vecs, enumerated *)
+  ordN = Module[{gens = Round[nn #] & /@ vecs, seen, frontier, new},
+    seen = <|ConstantArray[0, Length[First[vecs]]] -> True|>; frontier = Keys[seen];
+    While[frontier =!= {},
+      new = Select[DeleteDuplicates[Flatten[Table[Mod[f + g, nn], {f, frontier}, {g, gens}], 1]], !KeyExistsQ[seen, #] &];
+      Scan[(seen[#] = True) &, new]; frontier = new];
+    Length[seen]];
+  Do[
+    If[!AllTrue[Range[n], IntegerQ[cs[[#]] ordN/ds[[#]]] &], Continue[]];
+    If[LCM @@ Denominator[Append[Mod[cs . vecs, 1], 1]] =!= ordN, Continue[]];
+    ks = Table[SelectFirst[Range[0, ordN - 1],
+            Function[k, AllTrue[Range[n], IntegerQ[(cs[[#]] k - If[# === j, 1, 0])/ds[[#]]] &]], None], {j, n}];
+    If[MemberQ[ks, None], Continue[]];
+    res = <|"B" -> Together[Product[bs[[i]]^(cs[[i]] ordN/ds[[i]]), {i, n}]], "N" -> ordN, "c" -> cs, "k" -> ks,
+      "R" -> Table[Together[Product[bs[[i]]^(-(cs[[i]] ks[[j]] - If[i === j, 1, 0])/ds[[i]]), {i, n}]], {j, n}]|>;
+    Break[],
+    {cs, Tuples[Range[0, # - 1] & /@ ds]}];
+  res];
+
+brCompositumRewrite::usage = "brCompositumRewrite[f, x] is the front-end rewrite of a radical compositum that is one simple radical in disguise (Tower:cyclic-compositum): when the radicals of the surface integrand f (radicands rational in x and the tower's Log/Exp kernels, none inside a kernel) generate a cyclic Kummer extension and brCompositumPlan finds a pointwise single-radical presentation, it returns <|\"g\" -> g, \"B\" -> B, \"N\" -> N, \"y\" -> y|>: g is f with every radical written as R_j B^(k_j/N) (an algebraic identity of the field Q(...)(y), y^N = B), and y = Prod rho_i^c_i is the product of the user's own radicals that B^(1/N) stands for. An antiderivative G of g maps to one of f by brCompositumBack (B^(r) -> y^(r N)); a certificate for g is one for f (the same differential field). Otherwise None.";
+brCompositumRewrite[f_, x_Symbol] := Module[{ks, fs, monos, vars, pows, atoms, plan, Ysurf, g, y, toSurf},
+  If[!FreeQ[f, (Log[a_] | Power[E, a_]) /; brRadicalQ[a, {x}]], Return[None]];
+  ks = brCatch[brKernelsToSymbols[f, x]];
+  If[brFailQ[ks], Return[None]];
+  {fs, monos} = ks;
+  vars = Prepend[#["sym"] & /@ monos, x];
+  pows = DeleteDuplicates[Cases[fs, Power[b_, r_Rational] /; brDependsQ[b, vars], {0, Infinity}]];
+  If[Length[pows] < 2 || !FreeQ[First /@ pows, Power[_, _Rational]] ||
+     !AllTrue[First /@ pows, brRationalInQ[#, vars] &], Return[None]];
+  atoms = DeleteDuplicates[{Together[First[#]], Denominator[Last[#]]} & /@ pows,
+    (Together[#1[[1]] - #2[[1]]] === 0 && #1[[2]] === #2[[2]]) &];
+  If[Length[DeleteDuplicates[First /@ atoms, Together[#1 - #2] === 0 &]] < 2, Return[None]];
+  If[brKummerCyclicQ[{#[[1]], 1/#[[2]]} & /@ atoms, vars] =!= True, Return[None]];
+  plan = brCompositumPlan[atoms, vars];
+  If[plan === None, Return[None]];
+  toSurf = brBack[monos];
+  Ysurf = Power[plan["B"] /. toSurf, 1/plan["N"]];
+  g = fs /. Power[b_, r_Rational] /; brDependsQ[b, vars] :>
+    With[{j = SelectFirst[Range[Length[atoms]],
+               Together[atoms[[#, 1]] - b] === 0 && atoms[[#, 2]] === Denominator[r] &, None]},
+      If[j === None, Power[b, r],
+        ((plan["R"][[j]] /. toSurf) Ysurf^plan["k"][[j]])^Numerator[r]]];
+  y = Product[Power[atoms[[i, 1]] /. toSurf, 1/atoms[[i, 2]]]^plan["c"][[i]], {i, Length[atoms]}];
+  <|"g" -> (g /. toSurf), "B" -> (plan["B"] /. toSurf), "N" -> plan["N"], "y" -> y|>];
+
+brCompositumBack::usage = "brCompositumBack[rw, G] maps an expression G in the single radical B^(1/N) of the rewrite rw (brCompositumRewrite) back to the user's radicals: every B^r and (1/B)^r becomes y^(r N), y the product of the user's radicals with y^N = B. Since Y -> y is a differential embedding of Q(...)(Y), Y^N = B, the image of an antiderivative of g is an antiderivative of f.";
+brCompositumBack[rw_Association, G_] := Module[{B = rw["B"], N0 = rw["N"], y = rw["y"]},
+  G /. {Power[b_, r_Rational] /; Together[b - B] === 0 :> y^(r N0),
+        Power[b_, r_Rational] /; Together[b B - 1] === 0 :> y^(-r N0)}];
 
 brRadicalOverXQ::usage = "brRadicalOverXQ[e, x] is True when every radical b^r (r non-integer) in e has a radicand b rational in x alone (no kernel, no other symbol, no nested radical): e is then in Q(x)(y) for the radicals of e.";
 brRadicalOverXQ[e_, x_Symbol] := AllTrue[

@@ -53,6 +53,7 @@
  * fractional (Rothstein-Trager) log-part, the real hypertangent case, and the
  * trig/hyperbolic (TrigToExp) front-end.  The general Hermite reduction for
  * repeated poles lands in a subsequent increment. */
+static bool rt_logcombine_verified(Expr* r, Expr* f, Expr* x);
 static Expr* rt_transcendental_case(Expr* f, Expr* x) {
     Expr* r = rt_log_poly_case(f, x);
     if (r) return r;
@@ -117,9 +118,11 @@ static Expr* rt_transcendental_case(Expr* f, Expr* x) {
      * Log[b^p] -> p Log b); the evaluator then recombines the dependent pair
      * (Log[x/(1+x)] + Log[1+x] -> Log[x]), and rt_log_poly_case integrates the
      * collapsed Log[x]/x -> Log[x]^2/2.  Only runs after the original form failed
-     * (so it never changes an already-handled case's cleaner output), value-
-     * preserving (rt_expand_logs is an identity on the function's value), and
-     * guarded against re-entry so the retry itself cannot loop. */
+     * (so it never changes an already-handled case's cleaner output), and
+     * guarded against re-entry so the retry itself cannot loop.  The expansion
+     * is NOT an identity off the positive axis (Log[x^2] != 2 Log[x] for x < 0,
+     * so Int Log[x^2]/x came back as Log[x]^2), so the retry's answer is
+     * checked against the ORIGINAL integrand and dropped when it fails. */
     static int rt_in_logcombine = 0;
     if (!rt_in_logcombine) {
         Expr* fn = rt_eval_own(rt_expand_logs(f));
@@ -128,12 +131,29 @@ static Expr* rt_transcendental_case(Expr* f, Expr* x) {
             r = rt_transcendental_case(fn, x);
             rt_in_logcombine = 0;
             expr_free(fn);
+            if (r && !rt_logcombine_verified(r, f, x)) { expr_free(r); r = NULL; }
             if (r) return r;
         } else if (fn) {
             expr_free(fn);
         }
     }
     return NULL;
+}
+
+/* PossibleZeroQ[D[r, x] - f]: the check on the dependent-logarithm retry,
+ * whose integrand rt_expand_logs changed off the positive axis.  The
+ * project's verifier (PossibleZeroQ) also certifies the retries that ARE
+ * identities, Log[2 x] = Log[2] + Log[x], which Simplify does not reduce. */
+static bool rt_logcombine_verified(Expr* r, Expr* f, Expr* x) {
+    Expr* d = rt_eval2("D", expr_copy(r), expr_copy(x));
+    if (!d) return false;
+    Expr* diff = expr_new_function(expr_new_symbol("Plus"),
+        (Expr*[]){ d, expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(-1), expr_copy(f) }, 2) }, 2);
+    Expr* z = rt_eval1("PossibleZeroQ", diff);
+    bool ok = z && z->type == EXPR_SYMBOL && z->data.symbol.name == intern_symbol("True");
+    if (z) expr_free(z);
+    return ok;
 }
 
 /* ================================================================== */

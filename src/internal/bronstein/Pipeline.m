@@ -135,13 +135,45 @@ brShapeA[T_Association, f_, x_Symbol] := Module[{cf, n, g, yh, total, cc, cv, re
     {i, 1, n - 1}];
   <|"F" -> brCollectLogTerms[total, x], "verified" -> exact|>];
 
+brIntegrateKappaSplit::usage = "brIntegrateKappaSplit[f, x, rl] integrates f split along its reducible logarithms (rl = brReducibleLogSplit[f, x]): f = Sum K^alpha g_alpha, K standing for kappa = Log[a] - L0, locally constant. Every g_alpha is integrated (brIntegrateBody); when all are elementary, Sum kappa^alpha G_alpha is the verified antiderivative. Certificates: a non-elementary g_0 certifies f on every region. With ONE reducible logarithm and kappa nonzero at a sample point, kappa is a nonzero constant kappa0 on that region, and kappa0 is transcendental (a logarithm of an algebraic number other than 1, Hermite-Lindemann), so f = Sum kappa0^j g_j there is elementary iff every g_j is (docs/notes/bronstein_extensions.tex, E6a); a non-elementary g_j is then a certificate ("no elementary antiderivative on the whole domain"). Otherwise a non-elementary g_alpha leaves the integral undecided (Tower:reducible-log).";
+brIntegrateKappaSplit[f_, x_Symbol, rl_Association] := Module[{ks = rl["kappas"], terms = rl["terms"], res, F, kap},
+  (* No "kappa identically 0" shortcut: a zero test cannot prove it
+     (PossibleZeroQ[Log[E^x] - x] is True, yet the difference is -2 Pi I for
+     Im x in (Pi, 3 Pi]); every coefficient is integrated instead. *)
+  res = Map[{#[[1]], brCatch[brIntegrateBody[#[[2]], x]]} &, terms];
+  If[AnyTrue[res, brFailQ[#[[2]]] &],
+    With[{bad = SelectFirst[res, brFailQ[#[[2]]] &]},
+      If[First[brFailTag[bad[[2]]]] =!= "NonElementary", Throw[bad[[2]], "TragerFail"]];
+      (* a certificate needs one kappa, nonzero somewhere *)
+      kap = ks[[1, 2]];
+      If[Length[ks] === 1 && brNonzeroSomewhereQ[kap, x],
+        throwNonElementary["reducible logarithm: a coefficient of the locally constant branch difference is not elementary (" <> brFailTag[bad[[2]]][[2]] <> ")"],
+        throwUnimplemented["Tower:reducible-log", "reducible logarithm: a coefficient is not elementary and the branch difference was not decided"]]]];
+  F = Total[(#[[1]] /. (Rule @@@ ks)) #[[2]] & /@ res];
+  If[!antiderivativeQ[f, F, x], throwInternal["KappaCheckFailed", <|"f" -> f, "F" -> F|>]];
+  F];
+
+brNonzeroSomewhereQ::usage = "brNonzeroSomewhereQ[kappa, x] is True when the locally constant kappa (a branch difference of logarithms) is numerically far from 0 at one of a few fixed complex sample points (some with large imaginary parts, where Log[E^x] - x is no longer 0): |kappa(x0)| > 1/10 at 30 digits. Its values are logarithms of algebraic numbers, a discrete set, so a value that large is not a rounding artefact.";
+brNonzeroSomewhereQ[kappa_, x_Symbol] := AnyTrue[{-3 + I/7, -1/3 - 2 I, 5/2 + 3 I, -7 - I/2, 1/3 + 7 I, -2 - 11 I, 3/5 + 23 I},
+  Function[x0, With[{v = Quiet[N[kappa /. x -> x0, 30]]}, NumericQ[v] && Abs[v] > 1/10]]];
+
 brIntegrateBody::usage = "brIntegrateBody[f, x] is the body of BronsteinIntegrate: it throws instead of returning failure lists.";
-brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl, g0, u = Unique["Bronstein`Private`brUf"], verified = False},
+brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl, g0, rw, rl, u = Unique["Bronstein`Private`brUf"], verified = False},
   (* Shape B with a radical inside a kernel, on a genus-0 curve: a rational
      change of variable removes the radical, kernels and all, and the
      transcendental algorithm in u decides.  With radical-free kernels the
      component method (brShapeB) keeps the user's kernels instead. *)
   brCheckHeads[f, x];
+  (* several radicals that are one simple radical in disguise: integrate the
+     single-radical presentation and map the answer back (brCompositumRewrite) *)
+  (* reducible logarithms: f = Sum K^alpha g_alpha with K = kappa locally constant *)
+  rl = brReducibleLogSplit[f, x];
+  If[rl =!= None, Return[brPresentable[f, brIntegrateKappaSplit[f, x, rl], x], Module]];
+  rw = brCompositumRewrite[f, x];
+  If[rw =!= None,
+    F = brCompositumBack[rw, brIntegrateBody[rw["g"], x]];
+    If[!antiderivativeQ[f, F, x], throwInternal["CompositumCheckFailed", <|"f" -> f, "F" -> F|>]];
+    Return[brPresentable[f, F, x], Module]];
   g0 = If[FreeQ[f, (Log[a_] | Power[E, a_]) /; brRadicalQ[a, {x}]], None, brGenus0Flatten[f, x, u]];
   If[g0 =!= None,
     (* a certificate of the parametrised integral is one for f (Q(x)(y) = Q(u));
@@ -177,7 +209,8 @@ brPresentationTime[] := With[{left = Internal`TimeConstrainedRemaining[]},
 
 BronsteinScope[f_, x_Symbol] := Module[{r},
   If[FreeQ[f, Power[b_, _Rational] /; !FreeQ[b, x]] && FreeQ[f, Root | RootSum], Return["NotApplicable"]];
-  r = brCatch[brTower[f, x]];
+  r = brCatch[With[{rw = brCompositumRewrite[f /. Exp[a_] :> E^a, x]},
+    If[rw === None, brTower[f, x], brTower[rw["g"], x]]]];
   Which[
     !brFailQ[r], "InScope",
     MemberQ[{"Incomplete", "Unimplemented"}, First[brFailTag[r]]], failToList[r],

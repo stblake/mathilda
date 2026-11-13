@@ -5304,3 +5304,20 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
 - **`False` must never mean "could not decide".** The structure-theorem builtins
   returned `False` on a decode error or a `SolveAlways` give-up, and the caller
   read `False` as "new monomial", a premise of certificates. Tri-state (`$Failed`).
+
+## 2026-11-14 — Bronstein Phase 3 part 1
+
+- **User correction: new theory goes in LaTeX.** Any new theory or extension of Bronstein's
+  algorithm goes into `docs/notes/bronstein_extensions.tex` (theorem/proof environments,
+  compiled with `latexmk -pdf` before committing), not Markdown. The Markdown note was
+  migrated and deleted.
+- **"Value-preserving" log expansions are not.** `Log[a b] -> Log a + Log b` and
+  `Log[b^p] -> p Log b` change the *integrand* off a region, so an antiderivative of the
+  expanded form is not one of the original (`Int Log[x^2]/x` came back `Log[x]^2`). A
+  rewrite of the integrand that is only derivative-preserving needs its answer checked
+  against the ORIGINAL integrand, or the branch difference carried as a locally constant
+  `kappa` (E6a).
+- **A short-circuit that skips a stage also skips that stage's rewrites.** Routing
+  radical-free integrands straight to the transcendental integrator bypassed the tower, and
+  the tower is where `E^(x + Log[x]/2)` becomes a radical. Before short-circuiting, check
+  what the skipped stage normalises.

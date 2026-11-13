@@ -56,7 +56,8 @@ static void test_monomials(void) {
     BR_EQ("brExpRewrite[x, mX, x^2]", "{\"new\"}");
     BR_EQ("brExpRewrite[x, mX, x/3]", "{\"rebase\", 1, 3}");
     BR_EQ("brExpRewrite[x, mL, 2 brT1]", "{\"rewrite\", (1 + x)^2}");
-    BR_THROWS("brExpRewrite[x, mL, brT1/2]", "Unimplemented", "exponential of a fractional multiple of a logarithm (a radical in exponential form)");
+    /* E^(Log[x + 1]/2) is the radical Sqrt[x + 1] (pointwise) */
+    BR_EQ("brExpRewrite[x, mL, brT1/2]", "{\"rewrite\", Sqrt[1 + x]}");
     /* re-basing E^x as (E^(x/3))^3 */
     br_run("rb = brRebaseExp[x, Join[mX, First[brAddMonomial[x, mX, \"Log\", 1 + brT1, Log[1 + E^x]]][[{2}]]], 1, 3]; True");
     BR_EQ("rb[[2]]", "brT1 -> brT1r3^3");
@@ -85,8 +86,8 @@ static void test_detect_radical(void) {
     BR_EQ("brDetectRadical[x + t, {x, t}]", "None");
     BR_THROWS("brDetectRadical[Sqrt[x + Sqrt[t]], {x, t}]", "Incomplete", "nested radicals");
     BR_THROWS("brDetectRadical[Sqrt[x] + Sqrt[t], {x, t}]", "Incomplete", "several radicals generating a non-cyclic Kummer extension (not one simple radical)");
-    BR_THROWS("brDetectRadical[Sqrt[x^3] + Sqrt[x], {x, t}]", "Unimplemented", "several radicands generating one simple radical extension (rewrite as a single radical)");
-    BR_THROWS("brDetectRadical[Sqrt[x] + (t + 1)^(1/3), {x, t}]", "Unimplemented", "several radicands generating one simple radical extension (rewrite as a single radical)");
+    BR_THROWS("brDetectRadical[Sqrt[x^3] + Sqrt[x], {x, t}]", "Unimplemented", "several radicands generating one simple radical extension up to a locally constant unit or a constant field extension");
+    BR_THROWS("brDetectRadical[Sqrt[x] + (t + 1)^(1/3), {x, t}]", "Unimplemented", "several radicands generating one simple radical extension up to a locally constant unit or a constant field extension");
     BR_THROWS("brDetectRadical[Sqrt[2] Sqrt[x], {x, t}]", "Unimplemented", "algebraic constant in the integrand (a number-field constant field)");
 }
 

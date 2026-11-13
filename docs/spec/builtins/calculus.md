@@ -3986,7 +3986,7 @@ like `Integrate::nonelem`: never printed when a later stage answers or proves
 non-elementarity, never inside a definite integral, silenced by `Quiet` and caught
 by `Check`. Several radicals that generate a cyclic Kummer group are one simple
 radical in disguise (`Sqrt[x]` with `(x + 1)^(1/3)` is `y^6 = x^3 (x + 1)^2`), so
-they are Unimplemented, not Incomplete. The completion campaign drives the
+they are in scope, not Incomplete. The completion campaign drives the
 Unimplemented sites to zero; `make check-bronstein-completeness` lists them, with
 the uncertain steps of the C Risch DE, against a ratchet that only moves down.
 
@@ -3996,6 +3996,35 @@ the uncertain steps of the C Risch DE, against a ratchet that only moves down.
 | `Integrate[Sqrt[x] + Sqrt[x + 1], x, Method -> "Bronstein"]` | unevaluated, `Integrate::incomplete` (non-cyclic compositum) |
 | `Integrate[Sin[x] Sqrt[Log[x]], x, Method -> "Bronstein"]` | unevaluated, `Integrate::incomplete` (trigonometric kernel, not yet supported) |
 | `Integrate[Erf[x] Sqrt[Log[x]], x, Method -> "Bronstein"]` | unevaluated, no message |
+
+**Front-end rewrites (v0.6547).** Each is a pointwise identity, so the answer is
+verified against the user's own integrand. The proofs are in
+`docs/notes/bronstein_extensions.tex`, E6a–E6c.
+
+- **One radical in disguise.** Several radicals with a cyclic Kummer group are
+  written as one radical `B^(1/N)`, for example `Sqrt[x]` and `(x + 1)^(1/3)` as
+  `(x^3 (x + 1)^2)^(1/6)`. The rewrite uses only `rho_i^d_i = b_i`. The answer is
+  mapped back to the user's radicals (`B^(1/N) -> Sqrt[x] (x + 1)^(1/3)`), so it
+  holds on every branch. Radicals that agree with one radical only up to a
+  locally constant sign (`Sqrt[x^2 (x + 1)]`, `Sqrt[x + 1]`), or over a larger
+  constant field (`Sqrt[2 x]`, `Sqrt[x]`), are still not decided.
+- **Exponents with a log part.** `E^(x + Log[x]/2)` is `Sqrt[x] E^x` and
+  `E^(Log[a]/3)` is `a^(1/3)`. Before, they were a new monomial or a decline.
+- **Reducible logarithms.** `Log[x^2]` beside `Log[x]` is `2 Log[x] + kappa`,
+  with `kappa = Log[x^2] - 2 Log[x]` locally constant. The integrand is expanded
+  in `kappa`, and the answer carries it explicitly.
+  - Example: `Int Log[x^2] Sqrt[Log[x]]/x = 4/5 Log[x]^(5/2) + 2/3 Log[x]^(3/2) (Log[x^2] - 2 Log[x])`.
+  - A non-elementary coefficient is a certificate, because on each region
+    `kappa` is 0 or a transcendental constant (Hermite–Lindemann).
+  - Two reducible logarithms in one integrand, or one in a denominator, are not
+    yet decided.
+
+| Input | Result |
+|---|---|
+| `Integrate[Sqrt[x] (x + 1)^(1/3), x, Method -> "Bronstein"]` | `Integrate::nonelem` (Chebyshev's case, certified) |
+| `Integrate[(Sqrt[x] + (x + 1)^(1/3))/(x (x + 1)), x, Method -> "Bronstein"]` | an antiderivative in `Sqrt[x]`, `(x + 1)^(1/3)` |
+| `Integrate[E^(x + Log[x]/2)/x, x, Method -> "Bronstein"]` | `Integrate::nonelem` (`E^x/Sqrt[x]`) |
+| `Integrate[(Log[x^2] - 2 Log[x]) Sqrt[Log[x]], x, Method -> "Bronstein"]` | `Integrate::nonelem` |
 | `Integrate[Sqrt[x + Sqrt[x]]/x^2, x]` | closed by an earlier stage, no message |
 
 **Shape B: the radical below the tower (v0.6527).** In Shape B the radicand
@@ -5013,7 +5042,7 @@ so the solution field is the caller's whole tower. This matters: `y' = 1/x` has 
 solution in `Q(x)`, but has `Log[x]` in `Q(x, Log[x])`.
 
 Decided since v0.6546 (completion campaign, Phase 2; derivations in
-`docs/notes/bronstein_extensions.md`, Part A):
+`docs/notes/bronstein_extensions.tex`, Part A):
 - **weak normalization in the tower** (`WeakNormalizer`, Bronstein §6.1): a normal
   simple pole with a positive-integer residue is removed by `q`, and the equation
   is solved for `q y`;

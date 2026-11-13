@@ -1359,7 +1359,7 @@ spec entry and a changelog note.
 
 ### Theory deliverable (written before the code it justifies)
 
-`docs/notes/bronstein_extensions.md`. For each result: a statement, a full proof, where Bronstein
+`docs/notes/bronstein_extensions.tex`. For each result: a statement, a full proof, where Bronstein
 stops, and a worked example.
 
 | | Result |
@@ -1451,7 +1451,7 @@ and a numeric sanity check before its phase starts.
   - Every cancellation case except limited integration with a new logarithm.
   - Dependent-tower detection: `E^(x + x^2)` beside `E^x`, `E^(x^2)` was
     accepted as a new monomial.
-  - Derivations: `docs/notes/bronstein_extensions.md`, Part A.
+  - Derivations: `docs/notes/bronstein_extensions.tex`, Part A.
   - A property run caught the `deg b = deg a` off-by-one before it shipped.
   - C uncertain paths: 16 → 12.
 - **Next.**
@@ -1459,3 +1459,16 @@ and a numeric sanity check before its phase starts.
   - ParamRischDE + LimitedIntegrate (Ch. 7).
   - `rt_field_integrate` completeness.
   - Then Phase 3.
+- **Phase 3, part 1 (v0.6547).**
+  - Front-end rewrites, each a pointwise identity, proved in
+    `docs/notes/bronstein_extensions.tex` (now LaTeX, the home of all new theory):
+    - E6b: a cyclic compositum as one radical (`brCompositumPlan`);
+    - E6c: `E^(r Log a)` and log-linear exponents (`brSplitLogExponent`,
+      `brPruneMonomials`);
+    - E6a: reducible logarithms through the locally constant `kappa`
+      (`brReducibleLogSplit`, `brIntegrateKappaSplit`; certificates by
+      Hermite–Lindemann plus specialisation).
+  - Fixed a wrong answer in the C dependent-logarithm retry
+    (`Int Log[x^2]/x = Log[x]^2`).
+  - Sites: 40 → 39 (`Tower:exp-of-log-radical` gone; `cyclic-compositum` and
+    `reducible-log` narrowed to the sign / multi-kappa cases).
