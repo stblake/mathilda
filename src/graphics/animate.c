@@ -234,6 +234,7 @@ static bool parse_iter_spec(const Expr* e, const char** var_sym,
 #ifdef USE_GRAPHICS
 #include <raylib.h>
 #include "label_font.h"
+#include "term/term_interrupt.h"   /* a Ctrl-C closes the window loop */
 
 #define SLIDER_ROW_H   28.0f   /* height of each labeled-variable slider row */
 #define BTNS_ROW_H     34.0f   /* height of the playback button row          */
@@ -473,7 +474,7 @@ static void graphics_animate(const Expr* body,
         iters[k].t = iters[k].tmin + phi * span;
     }
 
-    while (!WindowShouldClose()) {
+    while (!WindowShouldClose() && !mth_interrupt_pending()) {
         double dt = (double)GetFrameTime();
 
         /* ---- Update phase ---- */

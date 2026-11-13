@@ -14,6 +14,13 @@ Expr* builtin_names(Expr* res);
 char** names_match_keys(Expr* pattern, size_t* n);
 void names_free_keys(char** keys, size_t n);
 
+/* Completion candidates for `prefix`: the display names of defined symbols
+ * that start with it (fully qualified names when the prefix has a backtick),
+ * sorted and de-duplicated, Module temporaries and context-hidden names left
+ * out. Never interns and never evaluates. Free with names_free_keys; NULL
+ * with *n = 0 when nothing matches. */
+char** names_complete(const char* prefix, size_t* n);
+
 void names_init(void);
 
 #endif /* NAMES_H */

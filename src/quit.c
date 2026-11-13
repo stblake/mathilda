@@ -23,6 +23,7 @@ static int g_quit_status = 0;
 
 int mth_quit_requested(void) { return g_quit_requested; }
 int mth_quit_status(void)    { return g_quit_status; }
+void mth_quit_cancel(void)   { g_quit_requested = 0; g_quit_status = 0; }
 
 Expr* builtin_quit(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;

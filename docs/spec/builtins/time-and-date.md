@@ -222,8 +222,9 @@ Pauses for at least `n` seconds, then returns `Null`.
   or `TimeUsed`. `Timing[Pause[1]]` reports ≈ 0; `AbsoluteTiming[Pause[1]]`
   reports ≈ 1.
 - Accurate down to a granularity of at least `$TimeUnit` seconds.
-- The sleep resumes across signal interruptions, so the full duration is always
-  observed ("at least `n` seconds").
+- The sleep resumes across signal interruptions, so the full duration is
+  observed ("at least `n` seconds"), except an interactive interrupt (Ctrl-C),
+  which ends it within 50 ms (not inside `AbortProtect`).
 - `n` may be any non-negative number: an integer, real, rational (`Pause[1/4]`),
   or a `NumericQ` symbolic form (`Pause[Pi]`). Zero or negative `n` returns
   immediately. A non-numeric argument leaves `Pause[x]` unevaluated.

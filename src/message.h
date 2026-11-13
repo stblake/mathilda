@@ -126,6 +126,11 @@ void mth_message_v(int extra_mute, const char* head, const char* tag,
  * fmt cannot express (built across a loop). */
 void mth_message_cont(int extra_mute, const char* fmt, ...) MTH_PRINTF_FMT(2, 3);
 
+/* Wrap the printed "Head::tag" of every message in head_on ... head_off (the
+ * interactive REPL's colour). The strings are borrowed and must be static;
+ * NULL or "" (the default) leaves the output unchanged. */
+void mth_message_set_style(const char* head_on, const char* head_off);
+
 /* Registers the Quiet / Check / Message builtins.  Called from core_init(). */
 void message_init(void);
 

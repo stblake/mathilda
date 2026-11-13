@@ -260,6 +260,80 @@ static void collect_visit(const char* name, SymbolDef* def, void* user) {
     c->names[c->count++] = emit;
 }
 
+/* ------------------------------------------------------------------ */
+/* Completion candidates (the REPL's Tab key, src/term/term_complete.c) */
+/* ------------------------------------------------------------------ */
+
+typedef struct {
+    const char* prefix;
+    size_t      plen;
+    int         qualified;   /* the prefix has a backtick: match full names */
+    char**      names;
+    size_t      count, cap;
+} NameComplete;
+
+/* A Module temporary: name$digits (x$123). */
+static int is_module_temporary(const char* s) {
+    const char* d = strrchr(s, '$');
+    if (!d || d == s || !d[1]) return 0;
+    for (const char* p = d + 1; *p; p++) if (*p < '0' || *p > '9') return 0;
+    return 1;
+}
+
+/* Something a user could mean: a builtin, attributes, any rule or value,
+ * options, or a System` / Mathilda` symbol. A name the parser merely
+ * interned (a typo, a bare unbound symbol) is not offered. */
+static int is_defined_for_completion(const SymbolDef* d) {
+    return d->builtin_func || d->attributes || d->own_values || d->down_values
+        || d->sub_values || d->up_values || d->default_options || d->is_system;
+}
+
+static void complete_visit(const char* name, SymbolDef* def, void* user) {
+    NameComplete* c = (NameComplete*)user;
+    if (!is_defined_for_completion(def)) return;
+    char* full = full_qualified_name(name, def);
+    if (!full) return;
+    const char* disp = context_display_name(full);   /* points into full */
+    const char* cand = c->qualified ? full : disp;
+    if (strncmp(cand, c->prefix, c->plen) != 0
+        || (!c->qualified && name_has_backtick(disp))
+        || is_module_temporary(disp)) {
+        free(full);
+        return;
+    }
+    char* emit = name_strdup(cand);
+    free(full);
+    if (!emit) return;
+    if (c->count == c->cap) {
+        size_t nc = c->cap ? c->cap * 2 : 64;
+        char** np = realloc(c->names, nc * sizeof(char*));
+        if (!np) { free(emit); return; }
+        c->names = np;
+        c->cap = nc;
+    }
+    c->names[c->count++] = emit;
+}
+
+static int cstr_cmp(const void* a, const void* b) {
+    return strcmp(*(char* const*)a, *(char* const*)b);
+}
+
+char** names_complete(const char* prefix, size_t* n) {
+    *n = 0;
+    if (!prefix) return NULL;
+    NameComplete c = { prefix, strlen(prefix), name_has_backtick(prefix), NULL, 0, 0 };
+    symtab_for_each(complete_visit, &c);
+    if (c.count == 0) { free(c.names); return NULL; }
+    qsort(c.names, c.count, sizeof(char*), cstr_cmp);
+    size_t k = 0;
+    for (size_t i = 0; i < c.count; i++) {
+        if (k > 0 && strcmp(c.names[k - 1], c.names[i]) == 0) free(c.names[i]);
+        else c.names[k++] = c.names[i];
+    }
+    *n = k;
+    return c.names;
+}
+
 /* Order two String Exprs by Mathilda's canonical comparison, so that the
  * result of Names[patt] is identical to Sort[Names[patt]]. */
 static int name_expr_cmp(const void* a, const void* b) {

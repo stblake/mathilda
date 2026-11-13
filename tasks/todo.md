@@ -149,7 +149,7 @@ Maxima / FriCAS, and time < 1.5x the fastest correct system; machine + wp50 tier
   - [ ] Packed arrays inside a plain List materialise when ragged/mixed (transparency-gate design; needs a redesign decision)
   - [ ] D2: bd2.7 nested digit sums 0 d; nested cases ending at 0-1 d now ~300-450 ms (original D2 1.6 -> 303 ms) -- honest but slow
   - [ ] C3/C5 speed; D19/D20 remainder (see Phase 5 open lines)
-- [ ] Phase 5: fix waves (W wrong / X absent / D fewer digits / S slower)
+- [x] Phase 5: fix waves (W wrong / X absent / D fewer digits / S slower)
   - [x] v0.6378 NDSolve BVP by shooting (silent wrong answer on two-point conditions)
   - [x] v0.6379 WhenEvent (all integration loops; d12 12d/274ms, d12.wp50 50d, hd12 20/20), v0.6380 NDSolveValue, v0.6381 unlisted unknowns (d13.wp50 50d)
   - [x] v0.6382-86 linalg: MPFR LU honours TimeConstrained; sparse band solver (hc7.2 7.3 s -> 2 ms); exact sparse fill-column wrong answer; MPFR sparse by iterative refinement (hc7 wp50 all 50d, fastest); Norm[m,2] MPFR
@@ -1004,8 +1004,8 @@ Plan: ~/.claude/plans/let-s-thoroughly-stress-test-indexed-hopcroft.md.
 - [x] Full suite A/B vs HEAD worktree (core evaluator change) before push -- clean after fixing the settled-step rule (pointer snapshot) and the eigen test; pushed v0.574-v0.581
 - [x] Phase 2a: native reductions (v0.577), structural ops (v0.578), Dot/SpGEMM/MatrixPower/Inner (v0.579)
 - [ ] Phase 2b: sparse LinearSolve direct+Krylov, Eigenvalues[s, k] Lanczos/Arnoldi (worker running)
-- [ ] Phase 3: benchmark 120 broadened, 3-way, every row <= 1.0x
-- [ ] Phase 4: docs, valgrind on the fuzz corpus, `make check-sparse`
+- [x] Phase 3: benchmark 120 broadened, 3-way, every row <= 1.0x
+- [x] Phase 4: docs, valgrind on the fuzz corpus, `make check-sparse`
 - [x] `x = rhs` re-evaluated its value after the assignment (double messages, Quiet leak) -- v0.581
 - [x] Fuzz/worker-found fixes: constructor NULL-side crash (v0.580), Unitize (v0.582), dense KroneckerProduct/triangularize/Transpose/Reverse/IdentityMatrix/Flatten (v0.583), MatrixRank generic rank (v0.575)
 - [ ] Follow-up (pre-existing): `Eigensystem` does not exist
@@ -1453,3 +1453,103 @@ Source: the open items of the sparse linear algebra review (complex Cholesky 76x
 - [x] CharacteristicPolynomial all-rational: FLINT fmpq_mat_charpoly. 40x40: 1.25 → 0.002 s (sympy 0.22).
 - [x] Tests in test_packed_list, test_matfunc, test_eigensystem, test_minors_adjugate, test_characteristicpolynomial, test_cholesky.
 - Open: CharacteristicPolynomial[m, non-symbol] evaluates where the reference gives General::ivar (pre-existing). Complex Cholesky still 2.7x scipy (load + Hermitian check + copy).
+
+## REPL modernisation PR 1: Ctrl-C to $Aborted, persistent history, Tab completion, colour (started 2026-11-11)
+
+Plan: thoughts/shared/plans/2026-11-11-repl-modernize-pr1.md. Research: thoughts/shared/research/2026-11-11-repl-modernize-pr1.md.
+Branch feat/repl-modernize (worktree mathilda-repl). Rules for this PR:
+- No version bump, and no version in commit titles. Versions are assigned at rebase.
+- Shared files get append-only edits: one appended block in tests/CMakeLists.txt, its own REPL changelog heading, no sym_names edits.
+- In core.c, only tc_deadline_passed is touched.
+- The src/term/term_interrupt.h API (mth_interrupt_pending / mth_interrupt_request) is fixed for other branches.
+
+- [x] Phase 0: baseline worktree /tmp/mathilda-pr1-base (7e7bc9fb) built; tests/pty/repl_pty_test.py; goldens recorded from baseline; appended CMake block with repl_pty_test (skip 77); harness_can_fail seen failing
+- [x] Phase 1: makefile SRC += src/term, LIB_OBJ filters term_readline.o; term_lex (mth_input_complete moved, lexer context); term_lex_tests; nm libmathilda.a has no rl_ refs
+- [x] Phase 2: term_interrupt.{c,h} flag API (§4.1); eval poll (loop + stamp fast path); CheckAbort clears; AbortProtect honours; top-level clear; tc_deadline_passed interrupt-aware after the 44-site audit (A/B table in commit body); message gate; Pause sliced; Raylib loops; interrupt_tests (13 cases); kernel suites; perf gate ≤ +1% or noise floor
+- [x] Phase 3: term_interrupt handler (SA_RESTART, 3 states, double Ctrl-C within 1 s gives _Exit(130)); term_input seam + stdio backend; term_readline (GNU signal hook, libedit degraded); repl.c single loop and Dialog reader; banner; term_interrupt_tests; pty ctrlc_* cases; USE_READLINE=0 builds; manual libedit check
+- [x] Phase 4: term_history (own escaped format, 0600, truncate at load, MATHILDA_HISTFILE / MATHILDA_HISTSIZE); readline feed; Dialog entries; term_history_tests; pty history_* cases
+- [x] Phase 5: names_complete; term_complete (symbols, context-aware, options of enclosing head, no evaluate); readline adapter; term_complete_tests; pty complete_* cases
+- [x] Phase 6: term_color decision (NO_COLOR, CLICOLOR_FORCE, TERM, per-stream isatty; interactive only); mth_message_set_style; coloured In/Out (\001/\002 on GNU); "took" line ≥ 1 s on a tty; term_color_tests; pty color_* and took_line; check-pipe-protocol
+- [x] Phase 7: docs/spec/repl.md + Mathilda_spec.md row; control-flow.md and time-and-date.md (Pause) updates; Pause docstring; changelog 2026-11-09.md REPL heading; SPEC.md §2/§11; building.md; tutorial + book banner; build.yml pty step
+- [x] Verify: make clean && make; check-c99/messages/packed-aware/menu-ids/pipe-protocol; USE_READLINE=0 build; ctest -LE nightly (0 FAIL, grep ^FAIL); pty test; valgrind (docker) + leaks vs baseline; reference-name grep on the diff
+- [x] Review section: audit table, benchmark medians and noise floor, libedit findings, leak numbers, ctest count, follow-ups for PRs 2-4
+
+### Review (REPL PR 1, 2026-11-11)
+Commits: cd687569 (phase 0), eaeb8ecd (1), 6e296319 (2), 5b0e2e5a (3), 86282ac6 (4), 534efef3 (5), f77c2351 (6), a2b899b9 (7), on the 3022bb76 checkpoint.
+- **tc_deadline_passed audit:** 36 call sites in 10 files, all class A (clean decline): numloop, reduce_cad (CAD_POLL x17), ludecomp_mpfr, nt_dlog, fi_par, nsum, sparse_la_mpsolve, gb_flint, gb_f4, facpoly_bz_uni. Guarded anyway: root_numeric's session cache (no memoising a declined Root), ludecomp_mpfr's once-per-session warning flags. Added: FactorInteger's split_auto stops climbing tiers on an interrupt (ECM stage 2 never polls, so a Ctrl-C took ~3.5 s; now < 1 s).
+- **Performance** (median of 9 interleaved -file runs, baseline 7e7bc9fb vs final branch; A/A noise in brackets): fib[28] -0.35% (-0.21%), Do[f[i], {i, 4*10^6}] +0.44% (+0.50%), Expand[(1+x+y+z)^60] -0.94% (+0.04%), 12 Integrate calls -1.51% (-0.19%). At phase 2: fib +0.91% (A/A +0.68%). Gate (<= +1%) holds; the poll is not throttled.
+- **ctest -LE nightly:** branch 645/645 pass, 0 `^FAIL`; baseline 638/638 (the 7 extra are the new suites and repl_pty_test). No pre-existing failures.
+- **pty test:** 32/32 on the branch. Invariance cases (pipe, pipe with tty stderr, -file, -file on a tty) byte-identical to goldens recorded from the baseline.
+- **Byte-for-byte corpus:** 4086 `In[n]:=` examples from docs/spec/builtins through pipe mode: stdout identical (859 MB); stderr identical except 17 lines of `[x.xx ms]` timing output. 3953 of them as one -file script: stdout (284 MB) and stderr identical after the same timing normalisation.
+- **Build:** make clean && make: the same 6 warnings as the baseline clean build (FLINT headers, reduce_companions), none new. check-c99, check-messages, check-packed-aware, check-menu-ids, check-pipe-protocol pass. libmathilda.a: 0 undefined rl_ symbols; T mth_interrupt_pending / mth_interrupt_request present. USE_READLINE=0 (scratch copy): warning-free, no readline linked, baseline fgets banner, Ctrl-C ends the process as before.
+- **Leaks (macOS leaks; Docker daemon not running, so no valgrind):** term_lex, term_history, term_complete, term_color, term_interrupt, interrupt suites: 0 leaks each. Interactive session (common script) baseline 0 / branch 0; full script with two Ctrl-C aborts, a prompt Ctrl-C, completion, history recall and the took line: 0 leaks.
+- **libedit** (make HOMEBREW= MACPORTS=, links /usr/lib/libedit.3.dylib): Ctrl-C during Do, While, Pause, FactorInteger, CheckAbort, AbortProtect, TimeConstrained and Dialog gives $Aborted; double Ctrl-C exits 130; Ctrl-C at the prompt is ignored (no exit, no submit, line kept); Symbol and unique option completion work; Tab-Tab does not list; prompts are uncoloured; Out and messages are coloured. Multi-line input does not work on libedit (pre-existing: the RET rebinding is ignored there), so the multi-line history and continuation cases fail there as before. The "bind: Invalid command enable-bracketed-paste" line on libedit is pre-existing.
+- **Follow-ups:** classic Buchberger fallback after FLINT declines, and GMP-ECM stage 2, ignore the interrupt (finish their step; double Ctrl-C works). Ctrl-C during `$Post`/printing aborts the print evaluation only. PR 2: in-tree editor (would give libedit users line clearing and multi-line), token lexer/highlighting, replace find_unterminated / mathilda_ffi_is_complete with term_lex. PR 3: status line/spinner. PR 4: init.m, themes ($-symbols), slash commands. Pipe-mode (notebook) interrupt is still out of scope.
+
+## REPL PR 2: the input editor (feat/repl-editor, stacked on feat/repl-modernize)
+Plan: thoughts/shared/plans/2026-11-11-repl-modernize-pr2.md. Research: thoughts/shared/research/2026-11-11-repl-modernize-pr2.md.
+Rules: no version bump; append-only edits to tests/CMakeLists.txt, the changelog and docs/spec/repl.md; term_color.{c,h} untouched; repl.c edits limited to the reader selection, the banner and one result-print line.
+
+- [x] Phase 1: term_width, term_highlight (incremental per-line lexer, symbol classes, styles); unit tests; CMake block
+- [x] Phase 2: term_render (grid diff, one write), term_editor (multi-line, keymap, history edges, smart/forced Return, kill/yank, undo, paste, brackets), term_editor_tty (raw mode, restore paths, SIGWINCH, DSR, MATHILDA_EDITOR); repl.c wiring; unit + pty tests; milestone 1
+- [x] Phase 3: completion popup (Tab, filter, docstring row, options first, placement, degradation); tests
+- [x] Phase 4: Ctrl-R history list; tests
+- [x] Phase 5: result colouring (expr_print_to_string, safe subset); tests
+- [x] Phase 6: latency gate test (200 lines, < 2 ms, one write, 0 allocs); resize / narrow / UTF-8 / restore pty cases
+- [x] Phase 7: docs/spec/repl.md, changelog, SPEC.md
+- [x] Verify: clean build, checks, USE_READLINE=0, ctest -LE nightly, pty suite, byte-identical pipe/-file, leaks, latency numbers, readline fallback; /tmp/pr2-body.md
+
+### Review (REPL PR 2, 2026-11-11)
+Commits: c30f8472 (phase 1), 45bb2573 (2), 52e9fe72 (3), 6fdc5a2a (4), 226139ee (5), 7d04dbee (6), f1aff3e4 (7), on PR 1's a0c27991.
+- **Build:** make clean && make: only the pre-existing FLINT acb.h -Wstringop-overread warnings; none from the new code. check-c99, check-messages, check-packed-aware, check-menu-ids, check-pipe-protocol pass. USE_READLINE=0 (scratch copy, -j4): warning-free, no readline linked, invariance pty cases pass, stdio banner as PR 1.
+- **ctest -LE nightly:** 648/648 pass (PR 1: 645 + term_highlight, term_editor, term_editor_latency).
+- **pty:** 48/48 (PR 1's 32, two adjusted only for readline specifics: no_sgr checks SGR only; the second-Tab listing is the popup). Readline fallback (MATHILDA_EDITOR=readline): smart Return, Tab, ^C as PR 1.
+- **Byte-identical vs PR 1 (a0c27991):** pipe mode over 5157 doc examples: 5151 responses identical, stderr identical; the 6 that differ are RandomReal examples that also differ PR 1 vs PR 1. -file over 4989 parsable examples wrapped in Print (5026 stdout lines, 152451 stderr lines): stderr identical, stdout identical but for one RandomReal line that also differs PR 1 vs PR 1. Goldens (pipe, pipe+tty stderr, -file, -file on a tty) identical.
+- **Latency gate** (200-line buffer, 120x40, colour, 3000 keys): mean 22.6 us, p50 25 us, p99 29 us, max 34 us; whole-buffer relex 69 us; 0 allocations; never more than one write per key. End-to-end through a pty: p50 0.05-0.07 ms, p95 0.10 ms, max 0.22 ms.
+- **Leaks (macOS leaks):** term_highlight, term_editor, term_editor_latency suites 0; interactive session (multi-line, popup, Ctrl-R, undo, paste, Ctrl-C, resize, Dialog, coloured results) 0.
+- **Follow-ups:** Up/Down move by logical line, not by wrapped row; a resize on terminals that reflow may leave a stale row above the area; Dialog reads during an evaluation need PR 3's status line paused (their side of the hand-over).
+
+## REPL PR 3: spinner, status line, progress (branch feat/repl-status)
+Plan: thoughts/shared/plans/2026-11-11-repl-modernize-pr3.md. Research: thoughts/shared/research/2026-11-11-repl-modernize-pr3.md.
+Stacked on feat/repl-modernize (a0c27991). Shared files append-only: own CMake block, own changelog heading, own repl.md sections; term_color append-only; term_interrupt one counter.
+- [x] Phase 1: term_progress stack; hooks in Do, Table, Sum, Product, iter_run (Nest/NestList/Fold/FoldList/NestWhile/FixedPoint); worker counter in five parallel drivers; term_progress_tests; perf check
+- [x] Phase 2: term_spinner layout (fit/drop order, colour/plain/ASCII, bar, ETA, took and status lines); TermTone appended to term_color; term_spinner_tests
+- [x] Phase 3: term_status forwarder thread (pipe for fd 1/2, ECHO off, 200 ms delay, 10 Hz, col-0 rule), Ctrl-C ^C/quiet period, double-tap exit fn, fatal-signal and atexit cleanup, Dialog suspend/resume, took/status lines in repl.c; term_status_tests; 15 new pty cases
+- [x] Phase 4: docs/spec/repl.md sections, changelog heading, Mathilda_spec.md row
+- [x] Verify: make clean && make; check-*; USE_READLINE=0; ctest -LE nightly; pty; pipe/-file invariance vs PR 1; leaks; perf gate; TSan driver
+
+### Review (REPL PR 3, 2026-11-11)
+Commits: b6abee2e (progress stack), e5ff0bb9 (layout), 985c4f3e (forwarder + REPL), a4697067 (docs), 72db8cb6 (check-c99 guard).
+- **Build:** make clean && make: the 6 FLINT header warnings only, none new. USE_READLINE=0 scratch build: same warnings, no readline linked, fgets loop unchanged, no spinner.
+- **check-*:** check-c99 (after 72db8cb6), check-messages, check-packed-aware, check-menu-ids, check-pipe-protocol pass.
+- **ctest -LE nightly:** 648/648 (PR 1: 645 + term_progress/term_spinner/term_status), 0 FAIL. Built with -DCMAKE_C_FLAGS=-O2 -j4 for disk space.
+- **pty:** 47/47 (32 PR 1 + 15 new).
+- **Invariance vs PR 1 (a0c27991):** 500-request NDJSON and 600-statement -file corpora: stdout and stderr byte-identical, no ESC bytes; pty goldens from 7e7bc9fb pass.
+- **Leaks (macOS leaks):** interactive session with spinner/Print/progress/Dialog/Ctrl-C: 0 (PR 1: 0). term_spinner_tests 0, term_status_tests 0, term_progress_tests 7 nodes / 480 B: the deliberate TimeConstrained timeout through nested loops (documented siglongjmp leak) plus one 64 B node in a Nest case that does not reproduce in isolation or in the binary.
+- **Perf (median of 9 interleaved -file runs, PR 1 vs branch; A/A in brackets):** fib +0.87% (+0.32%), Do 4M -0.33% (+0.59%), Expand -0.08% (+1.69%), Integrate x12 +1.04% (-0.93%). Loop extras: FoldList 1.5M -0.34% (+1.22%), NestList 1.5M +1.07% (+1.06%), 1000 Nest calls -0.04% (-1.71%).
+- **TSan** (Apple clang, driver over term_status/spinner/progress with stubs): only the 4 by-design racy reads (progress depth/slots, worker count, dispatch head); 0 with those suppressed.
+- **Deviations:** no MemoryConstrained exists (memory share is of RAM; hook provided); Map not tracked (does not evaluate its elements); status line off by default; NO_READLINE builds get no spinner.
+- **Rough edges / follow-ups:** Run[] children see a non-tty stdout during evaluation; Ctrl-Z mid-evaluation leaves the line and ECHO-off until resume/shell reset; SIGKILL cannot restore ECHO; the live head can flicker between builtins; Linux not run locally (CI runs the pty suite); FoldList[g, x, Range[300000]] segfaults (deep nesting) in PR 1 and here alike.
+
+## REPL PR 4: slash commands, themes, mods, Monitor; PR 2 + PR 3 merged (branch feat/repl-menus)
+Stacked on feat/repl-editor (PR 2) with feat/repl-status (PR 3, 8c9ac092) merged in.
+- [x] Merge PR 3 into PR 2: conflicts in Mathilda_spec.md, tests/CMakeLists.txt, changelog, todo, repl.md, pty harness; editor/spinner hand-over verified; 6 combo_* pty cases
+- [x] Slash-command menu (leading '/' on an empty buffer only; never evaluated): /help /theme /history /timing /statusline /clear /mods /quit + mod commands
+- [x] Themes dark/light/high-contrast/mono/ansi; 24-bit/256/16/none from COLORTERM/TERM; NO_COLOR wins; /theme picker with live preview (Return applies and saves, Esc reverts); ~/.mathilda/config; MATHILDA_THEME
+- [x] Mods: ~/.mathilda/init.m + mods/*.m; SlashCommand[]; $PreRead/$Pre/$Post/$PrePrint; /mods; failures reported once
+- [x] Monitor[expr, mon] in the status line
+- [x] Polish: Ctrl-Z at the prompt and under the spinner; no cursor-query wait; Up/Down by wrapped row; redo (Alt-_); banner; docs/spec/repl.md rewritten
+- [x] Verify (below)
+
+### Review (REPL PR 4, 2026-11-12)
+Commits: 097dd288 (merge), f9073acb (PR 4 core), bb8c6ba4 (tests), ad060249 (docs/polish), 2eacd69b (dark palette below 24-bit, latency gate with the thread).
+- **Build:** make clean && make: only the pre-existing FLINT acb.h warnings. USE_READLINE=0 scratch build: same, no readline linked, stdio loop unchanged ("/help" is a parse error there, as before).
+- **check-*:** c99, messages, packed-aware, menu-ids, pipe-protocol pass.
+- **ctest -LE nightly:** 652/652 (PR 1 645 + PR 2's 3 + PR 3's 3 + term_menus_tests), 0 failures.
+- **pty:** 83/83 (PR 1 32, PR 2 16, PR 3 15, 6 combo, 14 PR 4).
+- **Invariance vs PR 1 (a0c27991), doc-example corpus, streamed through sha256:** pipe stdout identical (8251 lines, c94f4ce5...); -file stdout identical (3999 lines, 7aebd3f0...); no ESC bytes. Stderr (157602 / 157554 lines) differs on 11 lines in each mode, all `[x ms]` timing lines; PR 1 vs PR 1 differs on 18 / 13.
+- **Leaks (macOS):** term_menus, term_editor, term_highlight, term_spinner, term_status: 0. term_progress: 7 nodes / 416 B, the documented TimeConstrained siglongjmp case from PR 3. Interactive session (slash menu, theme picker apply/cancel, mods incl. failing ones, mod commands, Monitor, Dialog, Ctrl-C, resize): 0, via `leaks <pid>` on the live process.
+- **Latency:** term_editor_latency_tests p50 26 us, p99 35 us, max 82 us, 0 allocations. Pty e2e with the status thread started: p50 0.04 ms, p95 0.05 ms, max 0.12 ms.
+- **Perf (-file, medians, PR 1 vs branch, A/A in brackets):** 9 rounds: fib +1.22% (+0.71%), Do 4M +0.45% (-0.54%), Expand +1.80% (+3.75%), Integrate -1.82% (-0.49%). 15 rounds: fib +0.02% (-0.54%), Do +1.70% (+0.00%), Expand -1.33% (-2.45%), Integrate -3.35% (-2.29%). Focused Do 4M, 15 rounds: branch +0.86%, PR 3 +0.12%, A/A +0.74%.
+- **Deviations:** Ctrl-Z pty case runs under a job-control wrapper (a pty child's group is orphaned); dark uses the terminal palette below 24-bit; commands go into history; Monitor updates on loop steps and the 128-step evaluator tick; key-hint footer and input box not done.
+- **Rough edges / follow-ups:** no OSC 11 background detection; Monitor text is shown in InputForm (strings quoted); a late cursor-position reply after very fast typeahead might echo; the spinner clears with EL before each frame.

@@ -22,6 +22,19 @@
 #include "version.h"
 #include "quit.h"
 #include "dialog.h"
+#include "term/term_input.h"
+#include "term/term_interrupt.h"
+#include "term/term_readline.h"
+#include "term/term_editor_tty.h"
+#include "term/term_highlight.h"
+#include "term/term_history.h"
+#include "term/term_color.h"
+#include "term/term_status.h"
+#include "term/term_spinner.h"
+#include "term/term_theme.h"
+#include "term/term_config.h"
+#include "repl_cmds.h"
+#include "mtime.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,10 +54,6 @@ void mth_block_graveyard_flush(void);   /* modular.c: free Block values parked b
   #include <unistd.h>
 #endif
 
-#ifndef NO_READLINE
-  #include <readline/readline.h>
-  #include <readline/history.h>
-#endif
 
 #define MAX_INPUT_LEN 10240
 
@@ -78,7 +87,13 @@ void process_input(const char* input, int line_number) {
     /* $Pre: applied to the parsed expression. Consumes our reference
      * to `parsed`; we treat the result as the new input to evaluate. */
     Expr* pre_input = repl_apply_pre(expr_copy(parsed));
+    /* The status thread owns the terminal for exactly the evaluation (a
+     * no-op that only measures outside the interactive session). */
+    term_status_begin(term_status_label_of(pre_input));
     Expr* evaluated = evaluate(pre_input);
+    TermStatusStats stats;
+    term_status_end(&stats);
+    double took = stats.elapsed;
     expr_free(pre_input);
     mth_block_graveyard_flush();   /* top-level boundary: nothing in flight */
 
@@ -123,10 +138,22 @@ void process_input(const char* input, int line_number) {
         && parsed->data.function.head->data.symbol.name == SYM_Information
         && to_print && to_print->type == EXPR_STRING;
 
-    printf("Out[%d]= ", line_number);
+    /* Colour (and the elapsed-time note) only in the interactive session:
+     * term_color_init runs nowhere else, so these are "" / false in -file. */
+    bool c = term_color_stdout();
+    printf("%sOut[%d]=%s ", term_style_on(TERM_STYLE_OUT, c), line_number, term_style_off(c));
     if (is_info_query) fputs(to_print->data.string, stdout);
-    else               expr_print(to_print);
+    else if (!(c && term_editor_session_active() && term_hl_print_result(to_print)))
+        expr_print(to_print);
+    if (term_tty_stdout() && repl_cmds_show_took(took)) {   /* /timing; default >= 1 s */
+        /* A dim note on its own line, under the result. */
+        char tl[256];
+        TermSpinnerStyle tst = { c, term_status_unicode() };
+        term_took_line(tl, sizeof(tl), took, stats.cpu, stats.peak, tst);
+        fputs(tl, stdout);
+    }
     printf("\n"); // extra blank line
+    term_status_print_statusline(took);   /* MATHILDA_STATUSLINE=1 only */
 
     /* Mathematica's front end auto-displays a top-level Graphics[...] (or
      * Graphics3D[...], from Plot3D) result. This REPL is the sole "front
@@ -156,125 +183,69 @@ void process_input(const char* input, int line_number) {
     expr_free(evaluated);
 }
 
-#ifndef NO_READLINE
-
-/* True when `s` is a syntactically complete Mathilda input: no unterminated
- * "..." string or (* ... *) comment, and every '(', '[' or '{' has a matching
- * closer. Newlines are whitespace to the lexer, so a balanced multi-line
- * buffer parses exactly as its single-line spelling. An *over*-closed buffer
- * (a stray ')') reports complete on purpose: appending text cannot repair it,
- * so it should submit now and let the parser flag the error rather than trap
- * the user on an endlessly growing line. The empty string is complete —
- * submitting it is a harmless no-op the caller skips. This is the predicate
- * behind the smart Return key: complete -> evaluate, incomplete -> open a
- * fresh continuation line.
- *
- * The string/comment lexing here mirrors find_unterminated() exactly (a '"'
- * inside a comment and a "(*" inside a string are both just text, and a
- * backslash escapes the next character inside a string) so the completeness
- * check never disagrees with the real lexer on where a token ends. */
-static int mth_input_complete(const char* s) {
-    int depth = 0;      /* net (), [], {} nesting outside strings/comments   */
-    int comment = 0;    /* (* ... *) nesting depth                           */
-    int in_string = 0;  /* inside a "..." literal                            */
-    for (const char* p = s; *p; ) {
-        if (in_string) {
-            if (*p == '\\' && p[1]) { p += 2; continue; }
-            if (*p == '"') in_string = 0;
-            p++;
-        } else if (comment > 0) {
-            if (p[0] == '(' && p[1] == '*') { comment++; p += 2; }
-            else if (p[0] == '*' && p[1] == ')') { comment--; p += 2; }
-            else p++;
-        } else if (p[0] == '(' && p[1] == '*') {
-            comment++; p += 2;
-        } else if (*p == '"') {
-            in_string = 1; p++;
-        } else {
-            if (*p == '(' || *p == '[' || *p == '{') depth++;
-            else if (*p == ')' || *p == ']' || *p == '}') depth--;
-            p++;
-        }
-    }
-    return !in_string && comment == 0 && depth <= 0;
+/* process_input for the interactive loop: the interrupt state is EVALUATING
+ * for its duration (a Ctrl-C aborts the evaluation), and no interrupt or
+ * top-level abort survives it in either direction -- a Ctrl-C that arrives
+ * after the result was printed must not abort the next input. */
+static void repl_process(const char* line, int line_number) {
+    TermState prev = term_interrupt_set_state(TERM_STATE_EVALUATING);
+    mth_interrupt_clear();
+    (void)eval_take_top_abort();
+    process_input(line, line_number);
+    mth_interrupt_clear();
+    term_interrupt_set_state(prev);
 }
 
-/* Return key handler: evaluate the buffer once it forms a complete
- * expression, otherwise open a new line so the user can keep typing. This is
- * the terminal-native substitute for a notebook's Shift+Enter — it needs no
- * enhanced-keyboard protocol and works on every terminal. */
-static int mth_smart_return(int count, int key) {
-    if (mth_input_complete(rl_line_buffer ? rl_line_buffer : ""))
-        return rl_newline(count, key);   /* accept the whole buffer */
-    rl_insert_text("\n");                /* still open: continue editing */
-    return 0;
-}
-
-/* Esc-Return (and Alt/Meta-Return, where the terminal sends it) forces the
- * buffer to be evaluated even while mth_input_complete() still considers it
- * open. The escape hatch for a genuine syntax error the user wants to see,
- * so an unbalanced buffer can never trap them on a growing line. */
-static int mth_force_return(int count, int key) {
-    return rl_newline(count, key);
-}
-
-/* Install the completeness-driven Return bindings. Called once, when the
- * interactive loop starts. Bracketed paste is (re)enabled so a pasted block
- * with embedded newlines is inserted verbatim rather than firing the Return
- * handler on every line and submitting a fragment mid-paste. */
-static void mth_setup_readline(void) {
-    rl_variable_bind("enable-bracketed-paste", "on");
-    rl_bind_key('\r', mth_smart_return);        /* RET / Ctrl-M */
-    rl_bind_key('\n', mth_smart_return);        /* LFD / Ctrl-J */
-    /* Esc-Return / Meta-Return force-submits an expression the completeness
-     * check still considers open. rl_bind_keyseq() is a GNU Readline entry
-     * point absent from Apple's libedit shim; RL_STATE_INITIALIZED is defined
-     * only by GNU Readline, so it doubles as the "real readline" probe. */
-#ifdef RL_STATE_INITIALIZED
-    rl_bind_keyseq("\\e\\r", mth_force_return); /* Esc then Return */
-    rl_bind_keyseq("\\e\\n", mth_force_return);
-#else
-    (void)mth_force_return;
-#endif
-}
-
-void repl_loop() {
+static void repl_banner(TermBackendKind kind) {
     printf("\nMathilda " MATHILDA_VERSION_STRING " - A small, open source computer algebra system.\n\n");
-    printf("This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.\n\n");
-    printf("Press Return to evaluate. An open bracket, string or comment continues\n");
-    printf("on the next line; press Esc then Return to force evaluation.\n");
-    printf("Exit by evaluating Quit[] or CONTROL-C.\n\n");
+    if (kind == TERM_BACKEND_EDITOR) {
+        /* Short: everything else is one / away. */
+        const char* d = term_style_on(TERM_STYLE_DIM, term_color_stdout());
+        const char* o = term_style_off(term_color_stdout());
+        printf("%sFree, open source software with ABSOLUTELY NO WARRANTY.%s\n\n", d, o);
+        printf("Return evaluates (Esc Return forces an incomplete input); Tab completes,\n");
+        printf("Ctrl-R searches the history, Ctrl-C interrupts (twice quits).\n");
+        printf("Type / for commands and /help for keys; Ctrl-D or Quit[] exits.\n\n");
+    } else if (kind != TERM_BACKEND_STDIO) {
+        printf("This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.\n\n");
+        printf("Press Return to evaluate. An open bracket, string or comment continues\n");
+        printf("on the next line; press Esc then Return to force evaluation.\n");
+        printf("Ctrl-C interrupts an evaluation (twice within a second force-quits).\n");
+        printf("Exit by evaluating Quit[] or pressing Ctrl-D; /help lists the commands.\n\n");
+    } else {
+        printf("Exit by evaluating Quit[] or pressing Ctrl+Z (Windows) / Ctrl+D (Unix).\n\n");
+    }
+}
 
-    mth_setup_readline();
-
+/* The interactive loop, over any line reader (term_input.h): readline with
+ * its smart Return key, or plain fgets in a NO_READLINE build. With the smart
+ * Return binding a single read returns the whole (possibly multi-line)
+ * expression, so no accumulation buffer is needed. */
+void repl_loop(TermReader* rd) {
+    repl_banner(term_reader_kind(rd));
+    repl_cmds_load_mods();                                /* init.m, mods/ (after the banner) */
     int line_number = 1;
     char prompt[64];
-
-    while (1) {
+    for (;;) {
         snprintf(prompt, sizeof(prompt), "In[%d]:= ", line_number);
-
-        /* With the smart Return binding a single readline() call returns the
-         * whole (possibly multi-line) expression, so no accumulation buffer
-         * is needed and readline owns the allocation. */
-        char* line = readline(prompt);
-        if (!line) {
+        char* line = NULL;
+        TermReadStatus st = term_read(rd, prompt, &line);
+        if (st == TERM_READ_INTERRUPTED) continue;        /* same In[n] again */
+        if (st == TERM_READ_EOF) {
             printf("\n");
-            /* EOF: run $Epilog before tearing down. */
-            repl_apply_epilog();
+            repl_apply_epilog();                          /* EOF: $Epilog first */
             break;
         }
-
-        if (strlen(line) == 0) {
-            free(line);
-            continue;
+        if (line[0] == '\0') { free(line); continue; }
+        /* Before evaluating: a crash or a forced quit keeps the entry. */
+        term_reader_history_add(rd, line);
+        if (line[0] == '/' && repl_cmds_enabled()) {
+            /* A slash command: never evaluated, no In[n] (repl_cmds.h). */
+            repl_cmds_run(line);
+        } else {
+            repl_process(line, line_number++);
         }
-
-        add_history(line);
-
-        process_input(line, line_number);
-        line_number++;
         free(line);
-
         if (mth_quit_requested()) {
             /* Quit[] / Quit[n] evaluated anywhere in the input (a bare
              * Quit[], If[c, Quit[]], a Get'd file, ...): run $Epilog first. */
@@ -282,41 +253,8 @@ void repl_loop() {
             break;
         }
     }
-
     printf("\n");
 }
-#else
-/* Fallback interactive loop when readline is not available (e.g. Windows).
- * Uses fgets; no history or line-editing. Pipe mode bypasses this entirely. */
-void repl_loop(void) {
-    printf("\nMathilda " MATHILDA_VERSION_STRING " - A small, open source computer algebra system.\n\n");
-    printf("Exit by evaluating Quit[] or pressing Ctrl+Z (Windows) / Ctrl+D (Unix).\n\n");
-
-    char line[MAX_INPUT_LEN];
-    int line_number = 1;
-
-    while (1) {
-        printf("In[%d]:= ", line_number);
-        fflush(stdout);
-        if (!fgets(line, sizeof(line), stdin)) {
-            printf("\n");
-            repl_apply_epilog();
-            break;
-        }
-        /* Strip trailing newline / carriage-return. */
-        size_t len = strlen(line);
-        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r'))
-            line[--len] = '\0';
-        if (len == 0) continue;
-        process_input(line, line_number++);
-        if (mth_quit_requested()) {
-            repl_apply_epilog();
-            break;
-        }
-    }
-    printf("\n");
-}
-#endif
 
 #include "core.h"
 #include "loadmodule.h"
@@ -1410,10 +1348,21 @@ static int run_script_file(const char* path) {
 /* Dialog[] input readers (see main). Each shows the prompt and returns one
  * malloc'd line, or NULL at end of input. */
 #ifndef NO_READLINE
-static char* dialog_read_readline(const char* prompt, void* ctx) {
-    (void)ctx;
-    char* line = readline(prompt);
-    if (line && *line) add_history(line);
+/* A terminal: the session's line reader (ctx). A Ctrl-C at the prompt clears
+ * the line and asks again; accepted lines go into the reader's history. */
+static char* dialog_read_term(const char* prompt, void* ctx) {
+    TermReader* rd = (TermReader*)ctx;
+    /* The reader owns the terminal for the read: hand it over and back. */
+    term_status_suspend();
+    char* line = NULL;
+    for (;;) {
+        TermReadStatus st = term_read(rd, prompt, &line);
+        if (st == TERM_READ_INTERRUPTED) continue;
+        if (st == TERM_READ_EOF) { line = NULL; break; }
+        term_reader_history_add(rd, line);
+        break;
+    }
+    term_status_resume();
     return line;
 }
 #endif
@@ -1509,12 +1458,56 @@ int main(int argc, char** argv) {
      * one, a script's stdin under -file, and nowhere in pipe mode, where stdin
      * is the protocol -- a dialog there sees end of input at once. */
     MthDialogIO dio = { NULL, NULL, NULL, false };
+    TermReader* rd = NULL;
+    TermHistory* hist = NULL;
+    bool interactive_rl = false;   /* the full interactive readline session */
+    char* cfg_dir = NULL;          /* ~/.mathilda (term_config.h), interactive only */
     if (!pipe_mode) {
         dio.interactive = isatty(fileno(stdin)) != 0;
-#ifndef NO_READLINE
-        dio.read = dio.interactive ? dialog_read_readline : dialog_read_stdin;
-#else
         dio.read = dialog_read_stdin;
+#ifndef NO_READLINE
+        if (!script || dio.interactive) {
+            /* The interactive session gets every terminal feature; a -file
+             * run from a terminal gets the plain reader its Dialog always
+             * had (readline and in-memory history, nothing else). */
+            if (!script) {
+                /* Colour is decided once, here, for this session only. */
+                term_color_init(true);
+                /* The per-user directory: the theme now, mods after the banner. */
+                cfg_dir = term_config_dir(getenv("MATHILDA_CONFIG_DIR"), getenv("HOME"));
+                char* cfg = term_config_join(cfg_dir, "config");
+                term_theme_init(cfg);
+                free(cfg);
+                if (term_color_stderr())
+                    mth_message_set_style(term_style_on(TERM_STYLE_MSG_HEAD, true),
+                                          term_style_off(true));
+                /* The history file: $MATHILDA_HISTFILE (empty disables it)
+                 * or ~/.mathilda_history, $MATHILDA_HISTSIZE entries. With
+                 * no file the store still filters the session's history. */
+                size_t hmax = term_history_size_from_env(getenv("MATHILDA_HISTSIZE"));
+                char* hp = term_history_resolve_path(getenv("MATHILDA_HISTFILE"), getenv("HOME"));
+                hist = term_history_open(hp, hmax);
+                free(hp);
+                if (!hist) hist = term_history_open(NULL, hmax);
+            }
+            /* The in-tree editor on a capable terminal; readline when it is
+             * declined (MATHILDA_EDITOR=readline, TERM=dumb) or cannot open. */
+            if (!script && term_editor_select(getenv("MATHILDA_EDITOR"), getenv("TERM"),
+                                              dio.interactive, isatty(fileno(stdout)) != 0)) {
+                TermEditorOptions eo = { hist, term_color_stdout(), true };
+                rd = term_reader_open_editor(&eo);
+            }
+            if (!rd) {
+                TermReadlineOptions ro = { !script, hist };
+                rd = term_reader_open_readline(&ro);
+            }
+            interactive_rl = rd && !script;
+            if (interactive_rl) repl_cmds_init(rd, hist, cfg_dir);
+        }
+#endif
+        if (!rd && !script) rd = term_reader_open_stdio();
+#ifndef NO_READLINE
+        if (rd && dio.interactive) { dio.read = dialog_read_term; dio.ctx = rd; }
 #endif
         mth_dialog_set_io(&dio);
     }
@@ -1525,9 +1518,23 @@ int main(int argc, char** argv) {
     } else if (pipe_mode) {
         pipe_mode_loop();
     } else {
-        repl_loop();
+        /* Ctrl-C handling only for the readline session: the fgets loop of a
+         * NO_READLINE build keeps the default (Ctrl-C ends the process). */
+        if (interactive_rl) term_interrupt_install();
+        /* The live status line: interactive session only (after colour). */
+        if (interactive_rl) term_status_init(true);
+        repl_loop(rd);
+        term_status_shutdown();
+        if (interactive_rl) term_interrupt_uninstall();
+        repl_cmds_shutdown();
         if (mth_quit_requested()) rc = mth_quit_status();
     }
+    if (rd) {
+        mth_dialog_set_io(NULL);
+        term_reader_close(rd);
+    }
+    term_history_close(hist);
+    free(cfg_dir);
     /* Tear down the context subsystem so its $Context / $ContextPath strings and
      * any open package frames are freed rather than lingering as leaks at exit.
      * context_init() is called from core_init(); this is its symmetric partner,

@@ -6764,3 +6764,142 @@ add_test(NAME osp_famous_tests COMMAND osp_famous_tests)
 add_executable(dsolve_pde_ivp_tests test_dsolve_pde_ivp.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(dsolve_pde_ivp_tests PRIVATE ../src)
 add_test(NAME dsolve_pde_ivp_tests COMMAND dsolve_pde_ivp_tests)
+
+# ---- Interactive terminal layer (src/term/, REPL PR 1) ----------------------
+# Appended as one block so parallel branches never conflict inside COMMON_SRC.
+# repl_pty_test drives the interactive REPL through a pseudo-terminal
+# (tests/pty/), and pins pipe-mode and -file output to goldens recorded from the
+# pre-PR binary. It skips (77) when ./Mathilda has not been built or the host
+# has no pty.
+if(PYTHON3_EXE)
+    add_test(NAME repl_pty_test
+             COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/pty/repl_pty_test.py
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    set_tests_properties(repl_pty_test PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 300)
+endif()
+# The readline adapter (term_readline.c) is deliberately absent: tests link no
+# readline, exactly as libmathilda.a omits it.
+target_sources(mathilda_common PRIVATE
+    ../src/term/term_lex.c
+    ../src/term/term_interrupt.c
+    ../src/term/term_input.c
+    ../src/term/term_history.c
+    ../src/term/term_complete.c
+    ../src/term/term_color.c)
+add_executable(term_lex_tests test_term_lex.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(term_lex_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(term_lex_tests gmp m ${ECM_LIB})
+    add_dependencies(term_lex_tests build_ecm)
+else()
+    target_link_libraries(term_lex_tests gmp m)
+endif()
+add_test(NAME term_lex_tests COMMAND term_lex_tests)
+add_executable(interrupt_tests test_interrupt.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(interrupt_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(interrupt_tests gmp m ${ECM_LIB})
+    add_dependencies(interrupt_tests build_ecm)
+else()
+    target_link_libraries(interrupt_tests gmp m)
+endif()
+add_test(NAME interrupt_tests COMMAND interrupt_tests)
+add_executable(term_interrupt_tests test_term_interrupt.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(term_interrupt_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(term_interrupt_tests gmp m ${ECM_LIB})
+    add_dependencies(term_interrupt_tests build_ecm)
+else()
+    target_link_libraries(term_interrupt_tests gmp m)
+endif()
+add_test(NAME term_interrupt_tests COMMAND term_interrupt_tests)
+add_executable(term_history_tests test_term_history.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(term_history_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(term_history_tests gmp m ${ECM_LIB})
+    add_dependencies(term_history_tests build_ecm)
+else()
+    target_link_libraries(term_history_tests gmp m)
+endif()
+add_test(NAME term_history_tests COMMAND term_history_tests)
+add_executable(term_complete_tests test_term_complete.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(term_complete_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(term_complete_tests gmp m ${ECM_LIB})
+    add_dependencies(term_complete_tests build_ecm)
+else()
+    target_link_libraries(term_complete_tests gmp m)
+endif()
+add_test(NAME term_complete_tests COMMAND term_complete_tests)
+add_executable(term_color_tests test_term_color.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(term_color_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(term_color_tests gmp m ${ECM_LIB})
+    add_dependencies(term_color_tests build_ecm)
+else()
+    target_link_libraries(term_color_tests gmp m)
+endif()
+add_test(NAME term_color_tests COMMAND term_color_tests)
+
+# ---- Interactive terminal layer: the in-tree editor (REPL PR 2) -------------
+# Appended as one block, like the PR 1 block above. The editor core is driven
+# through an in-memory terminal sink, so none of these needs a tty; the pty
+# cases for the editor live in tests/pty/repl_pty_test.py (repl_pty_test).
+target_sources(mathilda_common PRIVATE
+    ../src/term/term_width.c
+    ../src/term/term_highlight.c
+    ../src/term/term_render.c
+    ../src/term/term_editor.c
+    ../src/term/term_editor_tty.c)
+foreach(_mth_term_suite term_highlight term_editor term_editor_latency)
+    add_executable(${_mth_term_suite}_tests test_${_mth_term_suite}.c $<TARGET_OBJECTS:mathilda_common>)
+    target_include_directories(${_mth_term_suite}_tests PRIVATE ../src)
+    if(USE_ECM)
+        target_link_libraries(${_mth_term_suite}_tests gmp m ${ECM_LIB})
+        add_dependencies(${_mth_term_suite}_tests build_ecm)
+    else()
+        target_link_libraries(${_mth_term_suite}_tests gmp m)
+    endif()
+    add_test(NAME ${_mth_term_suite}_tests COMMAND ${_mth_term_suite}_tests)
+endforeach()
+
+# ---- REPL status line, spinner and loop progress (src/term/, REPL PR 3) ----
+# Appended as its own block. term_progress.c is kernel code (the iterators
+# write the progress stack), so every suite links it; term_status_tests
+# drives the forwarder thread through its test seam, with a pipe standing in
+# for the terminal.
+target_sources(mathilda_common PRIVATE
+    ../src/term/term_progress.c
+    ../src/term/term_spinner.c
+    ../src/term/term_status.c)
+foreach(_pr3_suite term_progress term_spinner term_status)
+    add_executable(${_pr3_suite}_tests test_${_pr3_suite}.c $<TARGET_OBJECTS:mathilda_common>)
+    target_include_directories(${_pr3_suite}_tests PRIVATE ../src)
+    if(USE_ECM)
+        target_link_libraries(${_pr3_suite}_tests gmp m ${ECM_LIB})
+        add_dependencies(${_pr3_suite}_tests build_ecm)
+    else()
+        target_link_libraries(${_pr3_suite}_tests gmp m)
+    endif()
+    add_test(NAME ${_pr3_suite}_tests COMMAND ${_pr3_suite}_tests)
+endforeach()
+
+# ---- REPL commands, themes and mods (REPL PR 4) -----------------------------
+# term_theme / term_config / term_slash are part of the terminal layer every
+# suite links (term_color reads the theme); frontend.c holds the SlashCommand
+# and Monitor builtins core_init registers. term_menus_tests drives the
+# editor's slash menu and picker through the VT emulator.
+target_sources(mathilda_common PRIVATE
+    ../src/term/term_theme.c
+    ../src/term/term_config.c
+    ../src/term/term_slash.c
+    ../src/frontend.c)
+add_executable(term_menus_tests test_term_menus.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(term_menus_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(term_menus_tests gmp m ${ECM_LIB})
+    add_dependencies(term_menus_tests build_ecm)
+else()
+    target_link_libraries(term_menus_tests gmp m)
+endif()
+add_test(NAME term_menus_tests COMMAND term_menus_tests)

@@ -127,6 +127,12 @@ jobs:
             exit 1
           }
 
+      # The interactive REPL through a pseudo-terminal: Ctrl-C, history,
+      # completion and colour, plus goldens pinning pipe-mode and -file output
+      # byte for byte.
+      - name: Interactive REPL (pty)
+        run: python3 tests/pty/repl_pty_test.py
+
       # The same protocol, exhaustively: both request modes, the per-statement
       # session history that makes `%` work, and the LaTeX the notebook renders.
       # Needs the built binary, so it runs after Build rather than with the

@@ -904,6 +904,8 @@ const char* SYM_DollarMessageList = NULL;
 const char* SYM_Dialog = NULL;
 const char* SYM_DialogSymbols = NULL;
 const char* SYM_DialogProlog = NULL;
+const char* SYM_Monitor = NULL;
+const char* SYM_SlashCommand = NULL;
 const char* SYM_DollarMaxExtraPrecision = NULL;
 const char* SYM_DollarModuleNumber = NULL;
 const char* SYM_DollarRecursionLimit = NULL;
@@ -2066,6 +2068,8 @@ void sym_names_init(void) {
     SYM_Dialog                     = intern_symbol("Dialog");
     SYM_DialogSymbols              = intern_symbol("DialogSymbols");
     SYM_DialogProlog               = intern_symbol("DialogProlog");
+    SYM_Monitor                    = intern_symbol("Monitor");
+    SYM_SlashCommand               = intern_symbol("SlashCommand");
     SYM_DollarMaxExtraPrecision    = intern_symbol("$MaxExtraPrecision");
     SYM_DollarModuleNumber         = intern_symbol("$ModuleNumber");
     SYM_DollarRecursionLimit       = intern_symbol("$RecursionLimit");
@@ -2437,7 +2441,8 @@ void sym_mark_mathilda_context(void) {
         "Image3DQ", "ListGradient", "LoadModule", "MachineIntegerQ", "ND",
         "NDArray", "NDArrayQ", "NLimit", "NResidue", "NSeries",
         "PackedArrayQ", "PDEClassify", "PolynomialSqrt", "RandomHypergraph", "RatCanonCancel",
-        "RatCanonNormalize", "RatCanonPrototype", "RationalQ", "SimplifyCount", "StronglyConnectedComponents",
+        "RatCanonNormalize", "RatCanonPrototype", "RationalQ", "SimplifyCount", "SlashCommand",
+        "StronglyConnectedComponents",
         "Subhypergraph", "ToNDArray", "ToPackedArray", "TransversalHypergraph", "UniformHypergraphQ"
     };
     for (size_t i = 0; i < sizeof mathilda_only / sizeof mathilda_only[0]; i++)

@@ -22,6 +22,7 @@
  * its parent's stage: the parent's search already ran over it.
  */
 #include "fi_internal.h"
+#include "term/term_interrupt.h"   /* split_auto stops on a Ctrl-C */
 
 #include <math.h>
 #include <stdlib.h>
@@ -480,6 +481,12 @@ static int split_auto(mpz_t d, Work* w, FiCtx* c) {
     size_t bits = mpz_sizeinbase(*mp, 2);
     int digits = (int)(bits * 0.30103) + 1;
     for (;;) {
+        /* An interactive interrupt: stop climbing the tiers. Each tier would
+         * otherwise run at least one ECM stage 2 (which never polls) before
+         * declining, so a Ctrl-C took seconds. The number is left incomplete
+         * and the evaluator discards the result. A TimeConstrained deadline
+         * keeps its own path (the jump after the parallel join). */
+        if (mth_interrupt_should_stop()) return 0;
         int s = w->stage;
         if (s >= ST_PM1 && digits <= AUTO_QS_MAX_DIGITS && !w->qs_tried &&
             7 * effort_digits(s) >= 2 * digits) {

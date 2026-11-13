@@ -38,8 +38,10 @@ Mathilda - A small, open source computer algebra system.
 
 This program is free, open source software and comes with ABSOLUTELY NO WARRANTY.
 
-End a line with '\' to enter a multiline expression. Press Return to evaluate.
-Exit by evaluating Quit[] or CONTROL-C.
+Press Return to evaluate. An open bracket, string or comment continues
+on the next line; press Esc then Return to force evaluation.
+Ctrl-C interrupts an evaluation (twice within a second force-quits).
+Exit by evaluating Quit[] or pressing Ctrl-D.
 
 In[1]:=
 ```

@@ -28,6 +28,7 @@
 #include <string.h>
 #include <math.h>
 #include <float.h>
+#include "term/term_interrupt.h"   /* a Ctrl-C closes the window loop */
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -2565,7 +2566,7 @@ void graphics_show(const Expr* graphics_expr) {
         else { cov_lo = range.xmin; cov_hi = range.xmax; }
     }
 
-    while (!WindowShouldClose()) {
+    while (!WindowShouldClose() && !mth_interrupt_pending()) {
         Vector2 mouse = GetMousePosition();
         int hover = tb_hit(mouse, (int)opts.width);
 
@@ -2658,7 +2659,7 @@ void graphics_show(const Expr* graphics_expr) {
          * away for a complex function.  Polling here lets us break before we
          * commit to another potentially-long resample. */
         PollInputEvents();
-        if (WindowShouldClose()) break;
+        if (WindowShouldClose() || mth_interrupt_pending()) break;
         if (IsKeyPressed(KEY_ESCAPE)) break;
 
         /* Re-sample the curve for the current x-window when the view has

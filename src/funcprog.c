@@ -3,6 +3,8 @@
 #include "funcprog.h"
 #include "sparse/sparse.h"   /* Thread over a SparseArray */
 #include "core.h"        /* tc_register_unwind_counter */
+#include "term/term_progress.h"   /* the REPL spinner's loop progress */
+#include "term/term_interrupt.h" /* the interactive interrupt flag */
 #include "permutations.h" /* perm_group_elements: Permute[expr, group] */
 #include "eval.h"
 #include "arithmetic.h"
@@ -1240,6 +1242,8 @@ Expr* builtin_label(Expr* res) {
 static int g_abort_protect_depth = 0;
 static bool g_abort_pending = false;
 
+int abort_protect_depth(void) { return g_abort_protect_depth; }
+
 /* Abort[] -- abort the current evaluation.  The unevaluated Abort[] node is
  * the in-flight sentinel (eval_is_inflight_abort): it short-circuits every
  * enclosing call on the ordinary return path until a CheckAbort or the top
@@ -1263,6 +1267,7 @@ Expr* builtin_checkabort(Expr* res) {
     Expr* r = evaluate(res->data.function.args[0]);
     if (!eval_is_inflight_abort(r)) return r;
     eval_unwind_consumed();
+    mth_interrupt_clear();   /* an interactive interrupt is consumed here too */
     expr_free(r);
     return evaluate(res->data.function.args[1]);
 }
@@ -1275,7 +1280,9 @@ Expr* builtin_abortprotect(Expr* res) {
     g_abort_protect_depth++;
     Expr* r = evaluate(res->data.function.args[0]);
     g_abort_protect_depth--;
-    if (g_abort_protect_depth == 0 && g_abort_pending) {
+    /* An interactive interrupt raised inside is deferred the same way; its flag
+     * stays set until the top level or a CheckAbort consumes the abort. */
+    if (g_abort_protect_depth == 0 && (g_abort_pending || mth_interrupt_pending())) {
         g_abort_pending = false;
         expr_free(r);
         return expr_new_function(expr_new_symbol(SYM_Abort), NULL, 0);
@@ -3269,14 +3276,19 @@ static IterRunResult iter_run(ExprBuf* buf, IterStepFn step_fn, void* ctx,
                               size_t max_history, Expr** out_early) {
     *out_early = NULL;
     int64_t apps = 0;
+    /* Progress for the spinner, labelled with the builtin that called us
+     * (Nest, NestList, Fold, FixedPoint, ...); a safety cap is no total. */
+    int ptok = mth_progress_push(eval_dispatch_head(), limit_is_safety ? 0 : (long)limit);
+    IterRunResult rr = ITER_RUN_OK;
     while (1) {
         if (apps >= limit) {
             if (limit_is_safety) {
                 ebuf_free_all(buf);
-                return ITER_RUN_SAFETY;
+                rr = ITER_RUN_SAFETY;
             }
-            return ITER_RUN_OK;
+            break;
         }
+        mth_progress_step(ptok, (long)apps);
         Expr* next = NULL;
         IterStep s = step_fn(buf, ctx, &next);
         /* Catch/Throw: an in-flight Throw produced by the step (via f applied
@@ -3286,7 +3298,8 @@ static IterRunResult iter_run(ExprBuf* buf, IterStepFn step_fn, void* ctx,
         if (next && eval_is_inflight_unwind(next)) {
             ebuf_free_all(buf);
             *out_early = next;
-            return ITER_RUN_EARLY;
+            rr = ITER_RUN_EARLY;
+            break;
         }
         if (s == ITER_STEP_CONT) {
             ebuf_push(buf, next);
@@ -3298,15 +3311,18 @@ static IterRunResult iter_run(ExprBuf* buf, IterStepFn step_fn, void* ctx,
                 ebuf_drop_front(buf, buf->count - max_history);
         } else if (s == ITER_STEP_HALT_ADD) {
             ebuf_push(buf, next);
-            return ITER_RUN_OK;
+            break;
         } else if (s == ITER_STEP_RETURN) {
             ebuf_free_all(buf);
             *out_early = next;
-            return ITER_RUN_EARLY;
+            rr = ITER_RUN_EARLY;
+            break;
         } else { /* ITER_STEP_HALT */
-            return ITER_RUN_OK;
+            break;
         }
     }
+    mth_progress_pop(ptok);
+    return rr;
 }
 
 /* ------------------- Nest / NestList ------------------- */

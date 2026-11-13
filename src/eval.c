@@ -38,6 +38,8 @@
 #include <float.h>   /* DBL_MIN: listable_machine_binary */
 #include <math.h>    /* isfinite, fabs */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "term/term_interrupt.h" /* interactive interrupt (Ctrl-C) poll */
+#include "term/term_progress.h"  /* g_mth_monitor_due, mth_monitor_tick (Monitor) */
 #include "sparse/sparse.h" /* EXPR_SPARSE (SparseArray raw objects) */
 #include "linalg/linsolvefn.h" /* LinearSolveFunction[...][b] */
 
@@ -4390,6 +4392,7 @@ static Expr* eval_report_uncaught_throw(Expr* thr) {
 static Expr* eval_report_uncaught_abort(Expr* ab) {
     expr_free(ab);
     g_top_abort = true;
+    mth_interrupt_clear();   /* an interactive interrupt ends here */
     return expr_new_symbol(SYM_DollarAborted);
 }
 
@@ -4484,7 +4487,10 @@ static Expr* evaluate_core(Expr* e) {
      * pre-check to FUNCTION nodes -- both to avoid an extra branch on
      * the common atom path and because atoms are never expensive to
      * "re-evaluate" anyway. */
-    if (e->type == EXPR_FUNCTION && eval_fixed_point_reusable(e)) {
+    /* Skipped while an interactive interrupt is pending, so execution falls
+     * into the loop below and its poll raises the abort: an inert stamped
+     * body (Do[f[i], ...]) would otherwise never reach a poll. */
+    if (e->type == EXPR_FUNCTION && !MTH_INTERRUPT_PENDING() && eval_fixed_point_reusable(e)) {
         /* An exact-clock stamp is valid for this clock only: a certificate
          * relying on it could outlive it (see dependency-recorded fixed points). */
         if (g_eval_dep_depth && !eval_inert_valid(e) && !eval_ground_valid(e)) {
@@ -4566,7 +4572,25 @@ static Expr* evaluate_core(Expr* e) {
          * uniform sampling rate across all nested evaluate() frames. */
         {
             static unsigned tc_check_tick = 0;
-            if ((tc_check_tick++ & 127u) == 0) tc_check_deadline();
+            if ((tc_check_tick++ & 127u) == 0) {
+                tc_check_deadline();
+                /* Monitor[expr, mon]: the status line asked for a fresh mon. */
+                if (g_mth_monitor_due) mth_monitor_tick();
+            }
+        }
+
+        /* Interactive interrupt (Ctrl-C): the REPL's SIGINT handler only sets a flag
+         * (src/term/term_interrupt.h); here it becomes the ordinary Abort[] sentinel, so every
+         * enclosing frame unwinds through its normal cleanup. The flag stays set until
+         * the abort is consumed (top level, CheckAbort), so a speculative probe that
+         * drops the sentinel is re-aborted at its next step. AbortProtect defers it. */
+        if (MTH_INTERRUPT_PENDING() && mth_interrupt_should_stop()) {
+            expr_free(current);
+            current = expr_new_function(expr_new_symbol(SYM_Abort), NULL, 0);
+            eval_recursion_depth--;
+            if (trace_here) { trace_clear_pending(); trace_frame_pop(); }
+            if (is_top_level) current = eval_report_uncaught(current);
+            return current;
         }
 
         /* In-loop timestamp fixed-point exit.  The entry short-circuit at the top

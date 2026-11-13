@@ -20,6 +20,7 @@
 #include <stdarg.h>    /* tc_flint_throw: the FLINT exception hook */
 #include "message.h"    /* message_init(): Quiet / Check / Message */
 #include "dialog.h"     /* dialog_init(): Dialog */
+#include "frontend.h"   /* frontend_init(): SlashCommand, Monitor */
 #include "permutations.h" /* permutations_init(): Cycles, PermutationGroup */
 #include "tc_unwind_safe.h" /* may the SIGPROF handler unwind here? */
 #include "parse.h"
@@ -407,6 +408,7 @@ void core_init(void) {
     system_constants_init();
     repl_hooks_init();
     dialog_init();           /* Dialog, DialogSymbols, DialogProlog, $IgnoreEOF */
+    frontend_init();         /* SlashCommand, Monitor */
     parfrac_init();
     contfrac_init();
     modular_init();
@@ -5444,14 +5446,21 @@ void tc_check_deadline(void) {
     TC_LONGJMP(tc_jmp_env);
 }
 
+#include "term/term_interrupt.h"   /* mth_interrupt_should_stop (kept beside its one use) */
+
 /* Non-jumping sibling of tc_check_deadline: report whether an active
- * TimeConstrained deadline has already passed, WITHOUT setting tc_timed_out or
- * siglongjmp'ing.  A heavy C routine (e.g. the CAD) polls this at its loop heads
+ * TimeConstrained deadline has already passed, or an interactive interrupt
+ * (Ctrl-C, src/term/term_interrupt.h) is pending outside AbortProtect, WITHOUT
+ * setting tc_timed_out or siglongjmp'ing.  A heavy C routine (e.g. the CAD) polls this at its loop heads
  * and clean-returns NULL through its own decline path -- freeing every local --
  * instead of being unwound mid-frame by the signal/jump (which would leak those
- * frames).  Returns false whenever no TimeConstrained is active, so a routine
- * that polls it runs completely unbounded outside a TimeConstrained scope. */
+ * frames).  Returns false whenever no TimeConstrained is active and no
+ * interrupt is pending, so a routine that polls it runs completely unbounded
+ * outside a TimeConstrained scope until the user interrupts it. */
 bool tc_deadline_passed(void) {
+    /* A declining kernel's value is discarded: the enclosing evaluate loop
+     * polls the same flag and turns it into Abort[] before the value is used. */
+    if (mth_interrupt_should_stop()) return true;
     if (!tc_deadline_active) return false;
     return mth_mono_seconds() >= tc_deadline_sec;
 }

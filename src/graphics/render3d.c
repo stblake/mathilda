@@ -33,6 +33,7 @@
 #include <string.h>
 #include <math.h>
 #include <float.h>
+#include "term/term_interrupt.h"   /* a Ctrl-C closes the window loop */
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -1033,7 +1034,7 @@ void graphics3d_show(const Expr* graphics3d_expr) {
     double slice_pos = (bb.xmin + bb.xmax) / 2.0; /* current plane position */
     bool slice_dragging = false;
 
-    while (!WindowShouldClose()) {
+    while (!WindowShouldClose() && !mth_interrupt_pending()) {
         /* Use the actual current window size every frame so toolbar hit
          * detection and 2D overlays stay correct if the OS resizes the window
          * (e.g. window manager placement, Mission Control animations). */

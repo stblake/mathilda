@@ -920,6 +920,8 @@ extern const char* SYM_DollarMessageList;
 extern const char* SYM_Dialog;
 extern const char* SYM_DialogSymbols;
 extern const char* SYM_DialogProlog;
+extern const char* SYM_Monitor;
+extern const char* SYM_SlashCommand;
 extern const char* SYM_DollarMaxExtraPrecision;
 extern const char* SYM_DollarModuleNumber;
 extern const char* SYM_DollarRecursionLimit;

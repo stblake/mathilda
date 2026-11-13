@@ -1,0 +1,17 @@
+{"id":1,"type":"expr","payload":"2","latex":"2","slatex":"\\htmlData{mp=0}{2}","sparts":["2"]}
+{"id":1,"type":"done","memory":N}
+hi
+{"id":2,"type":"expr","payload":"3","latex":"3","slatex":"\\htmlData{mp=0}{3}","sparts":["3"]}
+{"id":2,"type":"done","memory":N}
+{"id":3,"type":"expr","payload":"ComplexInfinity","latex":"\\tilde{\\infty}","slatex":"\\htmlData{mp=0}{\\mathrm{ComplexInfinity}}","sparts":["ComplexInfinity"]}
+{"id":3,"type":"done","memory":N}
+{"id":4,"type":"expr","payload":"$Aborted","latex":"$Aborted","slatex":"\\htmlData{mp=0}{\\mathrm{\\$Aborted}}","sparts":["$Aborted"]}
+{"id":4,"type":"done","memory":N}
+{"id":5,"type":"expr","payload":"25","latex":"25","slatex":"\\htmlData{mp=0}{25}","sparts":["25"]}
+{"id":5,"type":"done","memory":N}
+{"id":6,"type":"error","message":"Parse error: f[["}
+{"id":6,"type":"done","memory":N}
+{"id":7,"type":"expr","payload":"Null","latex":"\\text{Null}","slatex":"\\htmlData{mp=0}{\\mathrm{Null}}","sparts":["Null"]}
+{"id":7,"type":"done","memory":N}
+{"id":8,"type":"usage","payload":"x + y + ... or Plus[x, y, ...] represents a sum of terms.\nPlus is Flat, Orderless, OneIdentity, Listable, and NumericFunction:\nnested Plus is auto-flattened, terms are sorted into canonical order,\nlike terms are combined, and integer arguments are summed exactly via\nGMP (with int64 fast path and BigInt overflow promotion).","symbol":"Plus"}
+{"id":8,"type":"done","memory":N}
