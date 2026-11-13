@@ -30,7 +30,6 @@
 #include "poly.h"
 #include "sym_names.h"
 #include <stdlib.h>
-#include <stdint.h>
 
 /* Build the falling-factorial product i(i-1)...(i-k) = prod_{j=0}^{k}(i-j). */
 static Expr* falling_factorial(Expr* var, int k) {
@@ -85,14 +84,17 @@ static Expr* antidifference(Expr* f_in, Expr* var) {
     for (int m = 0; m <= d; m++) expr_free(vals[m]);
     free(vals);
 
-    /* F = sum_k delta0[k] * fallingfactorial(k) / (k+1)! */
+    /* F = sum_k delta0[k] * fallingfactorial(k) / (k+1)!
+     * (k+1)! is left to the evaluator as an exact Factorial[k+1]: an int64
+     * accumulator overflows from 21! on, which silently corrupted every
+     * coefficient of Sum[i^p, ...] for p >= 20. */
     Expr** terms = malloc(sizeof(Expr*) * (d + 1));
     for (int k = 0; k <= d; k++) {
-        int64_t fact = 1;
-        for (int j = 2; j <= k + 1; j++) fact *= j;   /* (k+1)! */
         Expr* prod = falling_factorial(var, k);
+        Expr* fact = expr_new_function(expr_new_symbol(SYM_Factorial),
+                        (Expr*[]){ sum_int(k + 1) }, 1);
         Expr* invf = expr_new_function(expr_new_symbol(SYM_Power),
-                        (Expr*[]){ sum_int(fact), sum_int(-1) }, 2);
+                        (Expr*[]){ fact, sum_int(-1) }, 2);
         terms[k] = expr_new_function(expr_new_symbol(SYM_Times),
                         (Expr*[]){ delta0[k], prod, invf }, 3);
     }

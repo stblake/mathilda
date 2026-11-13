@@ -71,6 +71,7 @@
 {"zb-binom-2k",        Hold[Sum[Binomial[n, 2 k], {k, 0, n}]],    "finite", {n, 0, 8}, {}},
 {"zb-binom-2n-half",   Hold[Sum[Binomial[2 n, k], {k, 0, n}]],    "finite", {n, 0, 8}, {}},
 {"zb-binom-nk-2k",     Hold[Sum[Binomial[n + k, k]/2^k, {k, 0, n}]], "finite", {n, 0, 8}, {}},
+{"hyp-interior-zero-fin", Hold[Sum[(k - 3)^2 Binomial[n, k], {k, 0, n}]], "finite", {n, 0, 8}, {}},
 {"hyp-pochhammer",     Hold[Sum[Pochhammer[a, k]/k!, {k, 0, n}]], "finite", {n, -1, 8}, {a -> 2/3}},
 
 (* ---------------- rational summation, symbolic n (G1) ---------------- *)
@@ -140,6 +141,8 @@
 {"inf-4k2m1",          Hold[Sum[1/(4 k^2 - 1), {k, 1, Infinity}]], "value", 1/2, {}},
 {"inf-interior-zero",  Hold[Sum[(k - 3)^2/k!, {k, 0, Infinity}]], "value", 5 E, {}},
 {"inf-interior-zero2", Hold[Sum[(k - 2) (k - 5)/k!, {k, 0, Infinity}]], "value", 5 E, {}},
+{"inf-dobinski10",     Hold[Sum[k^10/k!, {k, 0, Infinity}]],     "value", 115975 E, {}},
+{"inf-terminating",    Hold[Sum[Binomial[5, k] x^k, {k, 0, Infinity}]], "value", 1024/243, {x -> 1/3}},
 {"inf-zeta-s",         Hold[Sum[1/k^s, {k, 1, Infinity}]],        "value", Zeta[3], {s -> 3}},
 {"inf-zeta-3half",     Hold[Sum[1/k^(3/2), {k, 1, Infinity}]],    "value", Zeta[3/2], {}},
 {"inf-eta-half",       Hold[Sum[(-1)^k/Sqrt[k], {k, 1, Infinity}]], "value", (Sqrt[2] - 1) Zeta[1/2], {}},
@@ -206,6 +209,10 @@
 {"iprod-cantor",       Hold[Product[1 + x^(2^k), {k, 0, Infinity}]], "value", 3/2, {x -> 1/3}},
 {"iprod-euler-zeta2",  Hold[Product[1/(1 - Prime[k]^-2), {k, 1, Infinity}]], "value", Pi^2/6, {}},
 {"iprod-euler-from2",  Hold[Product[1/(1 - Prime[k]^-2), {k, 2, Infinity}]], "value", Pi^2/8, {}},
+{"iprod-euler-from4",  Hold[Product[1/(1 - Prime[k]^-2), {k, 4, Infinity}]], "value", 8 Pi^2/75, {}},
+{"iprod-chi4-from2",   Hold[Product[1/(1 - (-1)^((Prime[k] - 1)/2)/Prime[k]), {k, 2, Infinity}]], "value", Pi/4, {}},
+{"iprod-chi4-from3",   Hold[Product[1/(1 - (-1)^((Prime[k] - 1)/2)/Prime[k]), {k, 3, Infinity}]], "value", Pi/3, {}},
+{"iprod-chi4-from1",   Hold[Product[1/(1 - (-1)^((Prime[k] - 1)/2)/Prime[k]), {k, 1, Infinity}]], "value", (1/5 + I/10) Pi, {}},
 {"iprod-1m1k2",        Hold[Product[1 - 1/k^2, {k, 2, Infinity}]], "value", 1/2, {}},
 {"iprod-wallis",       Hold[Product[1 - 1/(4 k^2), {k, 1, Infinity}]], "value", 2/Pi, {}},
 {"iprod-zero-factor",  Hold[Product[1 - 4/k^2, {k, 1, Infinity}]], "value", 0, {}},

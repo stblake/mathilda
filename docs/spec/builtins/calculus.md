@@ -5001,7 +5001,9 @@ Out[3]= f[1, 1] + f[2, 1] + f[2, 2] + f[3, 1] + f[3, 2] + f[3, 3]
 Closed-form summation of polynomials via Newton forward differences in
 the falling-factorial basis (no Bernoulli numbers).  `Sum`Polynomial[f, i]`
 gives the antidifference; `Sum`Polynomial[f, i, imin, imax]` the definite
-sum `F(imax+1) - F(imin)`.
+sum `F(imax+1) - F(imin)`.  The `1/(k+1)!` weights are exact at every degree
+(they overflowed a machine integer from `21!` on, so `Sum[i^p, {i, 1, n}]` had
+wrong coefficients for `p >= 20` before v0.6530).
 
 ```mathematica
 In[1]:= Sum[i^3, {i, 1, n}]
@@ -5277,6 +5279,18 @@ under the log-divergence-cancellation conditions (else unevaluated).
   off its first term t(k₀); when the leading terms vanish it now starts at the first
   nonzero index. `Sum[k^10/k!, {k, 0, Infinity}]` is `115975 E` (Dobinski; it was
   `0`), `Sum[k^3 x^k/k!, {k, 0, Infinity}]` is `E^x x (1 + 3 x + x^2)` (Touchard).
+- **Interior zeros** (v0.6530). A nonpositive-integer upper parameter `-N` ends the
+  pFq series after `m = N`. That is accepted only when the summand really vanishes
+  from there on, as `Binomial[5, k]` does (checked over the next 8 indices). A zero
+  of a numerator factor kills one term only, so:
+  - an infinite series is summed explicitly up to the zero and restarted after it.
+    `Sum[(k - 3)^2/k!, {k, 0, Infinity}]` equals `5 E` (it was `27/2`, the three head
+    terms);
+  - a finite symbolic range with such a zero stays unevaluated.
+- **Poles at integer bounds** (v0.6530). A terminating sum to a symbolic bound is a
+  Gamma ratio in the bound, with balanced pole pairs regularised as for a symbolic
+  lower bound. `Sum[Binomial[n, k]/Binomial[2 n, k], {k, 0, n}]` is
+  `(1 + 2 n)/(1 + n)` (it was a ratio that is `Indeterminate` at every `n`).
 
 **Summation theorems and Lambert series (v0.6491).** Hypergeometric terms with
 Pochhammer factors, symbolic bounds (the lower bound is shifted to 0, and an upper
@@ -5389,6 +5403,11 @@ passed to `Together`/`Factor` (which loop on a symbolic exponent).  An
 
 Factors linear in `q^i` (`q` free of `i`) in terms of `QPochhammer`:
 `Product[1 - a q^i, {i, imin, imax}] = QPochhammer[a q^imin, q, imax-imin+1]`.
+A pure power factor `b q^i` (no constant term) is geometric, giving
+`b^count q^((imin + imax) count/2)`.
+`Product[q^k (1 - q^k), {k, 1, n}]` is `q^(n (1 + n)/2) QPochhammer[q, q, n]`
+(v0.6530; it divided by the zero constant term,
+`0^n QPochhammer[q ComplexInfinity, q, n]`).
 
 ### Product`Special
 
@@ -5445,6 +5464,15 @@ Euler products over the primes: bodies depending on the index only through
 `Pi^2/6`, `Pi^4/90`, …), and the `chi_4` product
 `Product[1/(1 - (-1)^((Prime[i]-1)/2)/Prime[i]), {i, 2, Infinity}]` → `Pi/4`
 (Dirichlet `L(1, chi_4)`).  A divergent (`s <= 1`) product stays unevaluated.
+
+Each template's value starts at its base index: the zeta product at `i = 1` (all
+primes), the `chi_4` product at `i = 2` (the odd primes). The body is not `chi_4`
+at `p = 2`, where `(-1)^(1/2) = I`. Any other integer lower bound divides out, or
+multiplies in, the leading factors. Examples (v0.6530):
+- `Product[1/(1 - Prime[k]^-2), {k, 2, Infinity}]` is `Pi^2/8` (it was `Pi^2/6`);
+- from `k = 4` it is `8 Pi^2/75`;
+- the `chi_4` product from `k = 3` is `Pi/3`;
+- the `chi_4` product from `k = 1` is `(1/5 + I/10) Pi` (it was `Pi/4`).
 
 ### Product`LogSum
 

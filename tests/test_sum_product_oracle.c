@@ -18,7 +18,8 @@
  *     (a stale line hides nothing and must be deleted);
  *   - REPORTS a baseline label that now passes, so its line can be deleted.
  * Each fix campaign therefore shrinks the baseline; it never grows except
- * when a newly added record is deliberately baselined.
+ * when a newly added record is deliberately baselined.  SPO_VERBOSE=1 also
+ * prints the current verdict of every baselined record.
  */
 #include "test_utils.h"
 
@@ -155,6 +156,11 @@ int main(int argc, char** argv) {
         return 1;
     }
 
+    /* SPO_VERBOSE=1 also lists every baselined record's current verdict,
+     * to keep the baseline's annotations in step. */
+    const char* venv = getenv("SPO_VERBOSE");
+    int verbose = venv && *venv && strcmp(venv, "0") != 0;
+
     size_t n = cases->data.function.arg_count;
     int counts[6] = {0};            /* PASS WRONG UNEVAL NOCHECK TIMEOUT CRASH */
     const char* names[6] = {"PASS", "WRONG", "UNEVAL", "NOCHECK", "TIMEOUT", "CRASH"};
@@ -176,6 +182,8 @@ int main(int argc, char** argv) {
         int pass = strcmp(v, "PASS") == 0;
         if (b) {
             b->seen = 1;
+            if (!pass && verbose)
+                fprintf(stderr, "  KNOWN   %-24s %s\n", label, v);
             if (pass) {
                 fixed++;
                 fprintf(stderr, "  FIXED   %-24s (delete it from the baseline)\n", label);

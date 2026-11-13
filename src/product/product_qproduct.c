@@ -77,6 +77,13 @@ static bool q_linear(Expr* base, Expr* var, Expr** alpha, Expr** beta, Expr** qb
         }
     }
     if (!kterm) { expr_free(asum); return false; }    /* free of k: not q-linear */
+    /* alpha == 0: base is the pure power beta q^k, not alpha + beta q^k.
+     * q_contribution divides by alpha, so this used to build
+     * 0^n QPochhammer[q ComplexInfinity, q, n]; the caller treats the pure
+     * power as a geometric factor instead. */
+    if (asum->type == EXPR_INTEGER && asum->data.integer == 0) {
+        expr_free(asum); return false;
+    }
 
     /* kterm = beta * Power[qbase, k]; pull out the q^k subfactor (any nesting). */
     Expr* qb = NULL; Expr* bprod = expr_new_integer(1);
@@ -329,6 +336,27 @@ Expr* builtin_product_qproduct(Expr* res) {
             expr_free(ec);
             out[nout++] = p;
             continue;
+        }
+        /* A pure power beta q^k (no constant part): prod_{k=imin}^{imax}
+         * beta q^k = beta^count q^((imin + imax) count / 2). */
+        {
+            Expr* qb = NULL; Expr* bprod = expr_new_integer(1);
+            if (!is_head(base, SYM_Plus) && split_qpow(base, var, &qb, &bprod) && qb) {
+                Expr* ksum = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+                    expr_new_integer(expo), expr_copy(count),
+                    expr_new_function(expr_new_symbol(SYM_Plus),
+                        (Expr*[]){ expr_copy(imin), expr_copy(imax) }, 2),
+                    expr_new_function(expr_new_symbol(SYM_Rational),
+                        (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2) }, 4);
+                Expr* bc = expr_new_function(expr_new_symbol(SYM_Times),
+                    (Expr*[]){ expr_new_integer(expo), expr_copy(count) }, 2);
+                out[nout++] = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){
+                    expr_new_function(expr_new_symbol(SYM_Power), (Expr*[]){ bprod, bc }, 2),
+                    expr_new_function(expr_new_symbol(SYM_Power),
+                        (Expr*[]){ expr_copy(qb), ksum }, 2) }, 2);
+                continue;
+            }
+            expr_free(bprod);
         }
         Expr *alpha = NULL, *beta = NULL, *qbase = NULL;
         if (!q_linear(base, var, &alpha, &beta, &qbase)) { bail = true; break; }

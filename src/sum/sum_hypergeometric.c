@@ -189,8 +189,35 @@ static Expr* hg_make_list(Expr** elems, size_t n) {
 
 Expr* builtin_sum_hypergeometric(Expr* res);
 
-/* The series from the (first nonzero) index imin; see builtin_sum_hypergeometric. */
-static Expr* hg_sum_from(Expr* f, Expr* var, Expr* imin, Expr* nterm) {
+/* Number of indices past a vanishing term that must also vanish before a
+ * nonpositive-integer upper parameter is accepted as a genuine termination. */
+#define HG_TERMINATION_PROBE 8
+
+/* Is f identically 0 at var = imin + N + 1 + j for j = 0..PROBE-1?  That is
+ * what a genuine termination looks like (Binomial[5, k], 1/Gamma[n - k + 1]):
+ * the term ratio's zero at m = N is a pole of the summand's denominator
+ * structure, so every later term vanishes too.  A zero of a numerator FACTOR
+ * ((k - 3)^2/k!) kills one term only; the ratio t(m+1)/t(m) then stops
+ * describing the series, and pFq would truncate it after the zero. */
+static bool hg_terminates_genuinely(Expr* f, Expr* var, Expr* imin, int64_t N) {
+    for (int64_t j = 0; j < HG_TERMINATION_PROBE; j++) {
+        Expr* at = sum_eval("Plus", (Expr*[]){ expr_copy(imin), sum_int(N + 1 + j) }, 2);
+        Expr* t = sum_subst(f, var, at);
+        expr_free(at);
+        bool zero = t && t->type == EXPR_INTEGER && t->data.integer == 0;
+        if (t) expr_free(t);
+        if (!zero) return false;
+    }
+    return true;
+}
+
+/* The series from the (first nonzero) index imin; see builtin_sum_hypergeometric.
+ * *split_at is set to N >= 0 (and NULL returned) when the summand has an
+ * interior zero at m = N + 1 (relative to imin) that is NOT a termination: the
+ * caller sums the head explicitly and restarts after it. */
+static Expr* hg_sum_from(Expr* f, Expr* var, Expr* imin, Expr* nterm,
+                         int64_t* split_at) {
+    *split_at = -1;
 
     /* Term ratio t(k+1)/t(k), reduced to a rational function num/den in var.
      * Binomials are first expanded to factorials so the ratio simplifies. */
@@ -255,6 +282,21 @@ static Expr* hg_sum_from(Expr* f, Expr* var, Expr* imin, Expr* nterm) {
     free(B);
     expr_free(one);
     if (!factorial_removed) up[up_n++] = sum_int(1);
+
+    /* A nonpositive-integer upper parameter -N ends the pFq series after
+     * m = N.  Accept it only when the summand genuinely terminates there;
+     * otherwise report the split point (infinite series) or decline (a
+     * finite symbolic range: splitting would need the bound >= N). */
+    for (size_t i = 0; i < up_n; i++) {
+        if (up[i]->type != EXPR_INTEGER || up[i]->data.integer > 0) continue;
+        int64_t N = -up[i]->data.integer;
+        if (hg_terminates_genuinely(f, var, imin, N)) continue;
+        if (!nterm) *split_at = N;
+        for (size_t a = 0; a < up_n; a++) expr_free(up[a]);
+        for (size_t b = 0; b < lo_n; b++) expr_free(lo[b]);
+        free(up); free(lo); expr_free(lcN); expr_free(lcD);
+        return NULL;
+    }
 
     /* z = lcN / lcD. */
     Expr* z = sum_eval("Times",
@@ -492,7 +534,9 @@ Expr* builtin_sum_hypergeometric(Expr* res) {
                        (Expr*[]){ expr_copy(imax), expr_new_function(expr_new_symbol(SYM_Times),
                            (Expr*[]){ sum_int(-1), expr_copy(imin) }, 2) }, 2) }, 1);
         Expr* zero = sum_int(0);
-        Expr* r = hg_sum_from(f2, var, zero, is_infinity_sym(hi) ? NULL : hi);
+        int64_t split_unused;
+        Expr* r = hg_sum_from(f2, var, zero, is_infinity_sym(hi) ? NULL : hi,
+                              &split_unused);
         expr_free(zero); expr_free(f2); expr_free(hi);
         if (r) {
             Expr* vs = sum_eval("Variables", (Expr*[]){ expr_copy(imin) }, 1);
@@ -511,29 +555,70 @@ Expr* builtin_sum_hypergeometric(Expr* res) {
                        (Expr*[]){ sum_int(-1), expr_copy(imin) }, 2) }, 2) }, 1);
     }
 
-    /* The series is read off from its first term t(imin): the closed form is
-     * t(imin) pFq(..).  When the leading terms VANISH -- k^m x^k/k! at k = 0,
+    /* The series is read off from its first term t(lo): the closed form is
+     * t(lo) pFq(..).  When the leading terms VANISH -- k^m x^k/k! at k = 0,
      * the Dobinski/Touchard sums -- that product is identically 0 (the bug was
      * Sum[k^10/k!, {k, 0, Infinity}] == 0, true value 115975 E).  Start instead
      * at the first index whose term is nonzero; the vanishing terms contribute
-     * nothing.  A term that is zero for every index scanned is left alone. */
-    Expr* imin_eff = NULL;
-    for (int64_t j = imin->data.integer; j < imin->data.integer + 64; j++) {
-        Expr* jj = sum_int(j);
-        Expr* tj = sum_subst(f, var, jj);
-        bool zero = tj && tj->type == EXPR_INTEGER && tj->data.integer == 0;
-        if (tj) expr_free(tj);
-        if (!zero) {
-            if (j != imin->data.integer) imin_eff = jj; else expr_free(jj);
-            break;
+     * nothing.  A term that is zero for every index scanned is left alone.
+     *
+     * An INTERIOR zero ((k - 3)^2/k! at k = 3) is reported by hg_sum_from as a
+     * split point: the terms up to it are summed explicitly and the series
+     * restarts after it (Sum[(k-3)^2/k!, {k,0,Infinity}] was 27/2, the three
+     * head terms only; the value is 5 E).  Each split consumes one root of the
+     * term ratio's numerator, so the loop is bounded by its degree; the
+     * iteration cap only guards a pathological input. */
+    int64_t lo = imin->data.integer;
+    Expr* head = NULL;          /* explicit sum of the split-off terms */
+    Expr* r = NULL;
+    for (int pass = 0; pass < SUM_HG_MAX_DEGREE; pass++) {
+        int64_t lo_eff = lo;
+        bool found = false;
+        for (int64_t j = lo; j < lo + 64; j++) {
+            Expr* jj = sum_int(j);
+            Expr* tj = sum_subst(f, var, jj);
+            expr_free(jj);
+            bool zero = tj && tj->type == EXPR_INTEGER && tj->data.integer == 0;
+            if (tj) expr_free(tj);
+            if (!zero) { lo_eff = j; found = true; break; }
         }
-        expr_free(jj);
+        if (!found) break;
+        Expr* nt = nterm ? sum_eval("Plus", (Expr*[]){ expr_copy(nterm), sum_int(imin->data.integer - lo_eff) }, 2)
+                         : NULL;
+        Expr* lo_e = sum_int(lo_eff);
+        int64_t split = -1;
+        r = hg_sum_from(f, var, lo_e, nt, &split);
+        expr_free(lo_e);
+        if (nt) expr_free(nt);
+        if (r || split < 0) break;
+        /* Sum the head f(lo_eff) .. f(lo_eff + split) explicitly. */
+        size_t nh = (size_t)split + 1 + (head ? 1 : 0), w = 0;
+        Expr** ht = malloc(sizeof(Expr*) * nh);
+        if (head) ht[w++] = head;
+        for (int64_t j = 0; j <= split; j++) {
+            Expr* jj = sum_int(lo_eff + j);
+            ht[w++] = sum_subst(f, var, jj);
+            expr_free(jj);
+        }
+        head = expr_new_function(expr_new_symbol(SYM_Plus), ht, w);
+        free(ht);
+        lo = lo_eff + split + 1;
     }
-    if (imin_eff && nterm)
-        nterm = sum_eval("Plus", (Expr*[]){ nterm, sum_int(imin->data.integer - imin_eff->data.integer) }, 2);
-    Expr* r = hg_sum_from(f, var, imin_eff ? imin_eff : imin, nterm);
-    if (imin_eff) expr_free(imin_eff);
     if (nterm) expr_free(nterm);
+    if (!r) { if (head) expr_free(head); return NULL; }
+    if (head) r = sum_eval("Plus", (Expr*[]){ head, r }, 2);
+    /* A terminating sum to a symbolic bound comes out of the Gauss / Kummer /
+     * Saalschutz theorems as a Gamma ratio in the bound's symbol, and the
+     * integer bound can sit on a pole of every factor:
+     * Sum[Binomial[n,k]/Binomial[2n,k], {k,0,n}] gave
+     * Gamma[-1-n] Gamma[-2n]/(Gamma[-1-2n] Gamma[-n]), Indeterminate at every
+     * n (the value is (2n+1)/(n+1)).  Regularise the balanced pole pairs, as
+     * the symbolic-lower-bound branch already did. */
+    if (!is_infinity_sym(imax)) {
+        Expr* vs = sum_eval("Variables", (Expr*[]){ expr_copy(imax) }, 1);
+        r = hg_regularise_poles(r, vs);
+        expr_free(vs);
+    }
     return r;
 }
 

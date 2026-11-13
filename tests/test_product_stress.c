@@ -117,10 +117,16 @@ int main(void) {
     {
         const char* hs[] = { "k", "(k + 1)", "(k + 1) (k + 2)", "k (k + 2)",
                              "(k + 1/2)", "(2 k + 1)" };
+        /* h(k + 1), written out.  The body used to be (h /. k -> k + 1)/h, but
+         * Product's iterator scopes dynamically (v0.6525, as the reference
+         * does): during enumeration k is already a number, the rule rewrites
+         * nothing, and the enumerated oracle was 1 for every family member. */
+        const char* hs1[] = { "(k + 1)", "(k + 2)", "(k + 2) (k + 3)", "(k + 1) (k + 3)",
+                              "(k + 3/2)", "(2 k + 3)" };
         for (int ih = 0; ih < 6; ih++) {
             char body[200];
-            /* (h /. k -> k+1) / h  -- a clean telescoping multiplicand */
-            snprintf(body, sizeof body, "(%s /. k -> k + 1)/(%s)", hs[ih], hs[ih]);
+            /* h(k+1) / h(k)  -- a clean telescoping multiplicand */
+            snprintf(body, sizeof body, "(%s)/(%s)", hs1[ih], hs[ih]);
             /* Telescoping output must be free of Gamma AND Pochhammer. */
             char cond[700];
             snprintf(cond, sizeof cond,

@@ -6,16 +6,13 @@
 # that now passes -- delete its line in the commit that fixes it.  Do not add
 # a line for an existing record to silence a regression.
 num-empty-inf            # WRONG   S5
-num-zero-inf             # WRONG   S5
-faul-p20                 # WRONG   S8
-faul-p25                 # WRONG   S8
+num-zero-inf             # UNEVAL  S5
 faul-step2               # UNEVAL  G4
 faul-step3               # UNEVAL  G4
 gos-binom-alt            # WRONG   S4
 gos-alt-k-binom          # WRONG   S4
 gos-binom-km             # UNEVAL  G5
 hyp-binom-from-m2        # WRONG   S3
-hyp-binom-ratio          # WRONG   S4
 hyp-alt-binom-sq         # WRONG   S4
 hyp-dixon                # WRONG   S9
 hyp-binom-to-nm1         # UNEVAL  G5
@@ -57,8 +54,6 @@ pole-k-3                 # WRONG   S1
 pole-alt-k-3             # WRONG   S1
 pole-tele-m1             # WRONG   S2
 pole-tele-m5             # WRONG   S2
-inf-interior-zero        # WRONG   S7
-inf-interior-zero2       # WRONG   S7
 inf-zeta-s               # UNEVAL  G2
 inf-zeta-3half           # UNEVAL  G2
 inf-eta-half             # UNEVAL  G2
@@ -82,8 +77,6 @@ div-neg-4k               # WRONG   S5
 div-assumed-x            # WRONG   S10
 prod-k2p1                # UNEVAL  G8
 prod-k2pkp1              # UNEVAL  G8
-prod-q-bare              # WRONG   P1
-prod-x-bare              # WRONG   P1
 prod-hyperfact-2         # UNEVAL  G8
 prod-gamma-2             # UNEVAL  G8
 prod-tele-zero           # WRONG   P4
@@ -94,9 +87,9 @@ prod-viete-fin           # UNEVAL  G8
 prod-halfint-span        # WRONG   P6
 prod-gamma-body          # UNEVAL  G8
 iprod-cantor             # UNEVAL  G8
-iprod-euler-from2        # WRONG   P2
 iprod-k-3                # UNEVAL  G8
 iprod-half               # UNEVAL  G8
 iprod-alt-pairs          # UNEVAL  G8
 iprod-div-q2             # WRONG   P3
 count-iter-self          # WRONG   S6
+hyp-interior-zero-fin    # UNEVAL  G0  (declines: an interior zero on a finite symbolic range)

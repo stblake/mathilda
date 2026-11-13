@@ -74,6 +74,8 @@ REFS = {
                           2*sin(mpf(1)/2)),
     "iprod-exp":         (lambda: exp(nsum(lambda k: 1/k**2, [1, inf])), exp(pi**2/6)),
     "iprod-cantor":      (lambda: nprod(lambda k: 1+X**(2**int(k)), [0, 12]), mpf(3)/2),
+    "inf-dobinski10":    (lambda: sum(mpf(k)**10/factorial(k) for k in range(120)), 115975*e),
+    "inf-terminating":   (lambda: sum(binomial(5, k)*X**k for k in range(6)), mpf(1024)/243),
     "iprod-1m1k2":       (lambda: nprod(lambda k: 1-1/k**2, [2, inf]), mpf(1)/2),
     "iprod-wallis":      (lambda: nprod(lambda k: 1-1/(4*k**2), [1, inf]), 2/pi),
     "iprod-zero-skip":   (lambda: nprod(lambda k: 1-4/k**2, [3, inf]), mpf(1)/6),
@@ -113,6 +115,29 @@ def main():
         ok = err < mpf(10)**-5      # partial product to 2e6: ~1e-7 tail
         bad += not ok
         print(f"{label:22s} {'ok ' if ok else 'BAD'} {mp.nstr(p, 12)}  err={mp.nstr(err, 3)}")
+    # chi_4 Euler products: the body (-1)^((p-1)/2) is I at p = 2.  The value
+    # over the odd primes is L(1, chi_4) = pi/4 (checked by the partial
+    # product, whose tail is O(1/log N) -- hence the loose tolerance); the
+    # other lower bounds follow by multiplying/dividing the leading factors,
+    # which is what the corpus references state.
+    ps = primes_below(2_000_000)
+    from mpmath import mpc
+    chi = lambda q: 1/(1 - (mpc(-1)**(mpf(q-1)/2))/q)
+    p_odd = mpf(1)
+    for q in ps[1:]:
+        p_odd *= chi(q)
+    for label, val, ref in (("iprod-chi4-from2", p_odd, pi/4),
+                            ("iprod-chi4-from3", p_odd/chi(3), pi/3),
+                            ("iprod-chi4-from1", p_odd*chi(2), (mpf(1)/5 + mpc(0, 1)/10)*pi)):
+        err = abs(val - ref)
+        ok = err < mpf(10)**-3
+        bad += not ok
+        print(f"{label:22s} {'ok ' if ok else 'BAD'} {mp.nstr(val, 10)}  err={mp.nstr(err, 3)}")
+    p4 = mpf(1)
+    for q in ps[3:]:
+        p4 /= (1 - mpf(q)**-2)
+    err = abs(p4 - 8*pi**2/75); ok = err < mpf(10)**-5; bad += not ok
+    print(f"{'iprod-euler-from4':22s} {'ok ' if ok else 'BAD'} {mp.nstr(p4, 12)}  err={mp.nstr(err, 3)}")
     print("BAD:", bad)
     return 1 if bad else 0
 
