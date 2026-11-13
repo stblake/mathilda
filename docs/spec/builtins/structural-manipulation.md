@@ -106,7 +106,23 @@ Returns the number of arguments in an expression.
 
 **Features**: 
 - Returns the count of top-level arguments for functions.
-- Returns `0` for all atomic expressions.
+- Returns `0` for all atomic expressions, including rational and complex
+  numbers (`Length[3/4]` and `Length[2 + 3 I]` are `0`).
+
+**Rational and Complex are atoms.** `3/4` and `2 + 3 I` are stored as
+two-argument `Rational`/`Complex` nodes, but every structural builtin treats
+them as atoms (shared helper `expr_is_number_atom`, `src/common.h`):
+
+| Builtin | Result on a number atom |
+|---|---|
+| `Dimensions`, `ArrayDepth` | `{}`, `0` |
+| `Apply`, `ReplacePart` | unchanged |
+| `Take`, `Drop`, `Append`, `Prepend`, `Sort`, `SortBy`, `Reverse`, `Flatten`, `Select` | `::normal`, unevaluated |
+| `Delete` | `::partw`, unevaluated |
+| `Insert` | `::ins`, unevaluated |
+
+Patterns still see the stored form: `MatchQ[1/2, Rational[a_, b_]]` and
+`MatchQ[1/2, h_[___]]` are `True`.
 
 ```mathematica
 In[1]:= Length[{a, b, c}]

@@ -867,7 +867,8 @@ Expr* builtin_sort(Expr* res) {
     /* Sort[ndarray]: sort the flat buffer directly (see ndstruct.c). */
     if (is_ndarray(list)) return ndstruct_sort(res);
 
-    if (list->type != EXPR_FUNCTION) return builtin_normal_error("Sort", res, 1);
+    /* a Rational/Complex number is an atom: Sort[3/4] is not 3/4 sorted as {3, 4} */
+    if (list->type != EXPR_FUNCTION || expr_is_number_atom(list)) return builtin_normal_error("Sort", res, 1);
 
     /* Sort[assoc] orders the entries by their values (keys follow). */
     if (res->data.function.arg_count == 1 && is_association(list))
@@ -1002,7 +1003,7 @@ Expr* builtin_sort_by(Expr* res) {
 
     Expr* coll = res->data.function.args[0];
     Expr* f    = res->data.function.args[1];
-    if (coll->type != EXPR_FUNCTION) return builtin_normal_error("SortBy", res, 1);
+    if (coll->type != EXPR_FUNCTION || expr_is_number_atom(coll)) return builtin_normal_error("SortBy", res, 1);
 
     bool assoc = is_association(coll);
     size_t n = coll->data.function.arg_count;

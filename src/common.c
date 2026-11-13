@@ -91,6 +91,13 @@ Expr* alg_thread_call(const Expr* res) {
     return out;
 }
 
+bool expr_is_number_atom(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
+           e->data.function.head->type == EXPR_SYMBOL &&
+           (e->data.function.head->data.symbol.name == SYM_Rational ||
+            e->data.function.head->data.symbol.name == SYM_Complex);
+}
+
 Expr* builtin_normal_error(const char* head, const Expr* call, int pos) {
     char* shown = expr_to_string((Expr*)call);
     mth_message(head, "normal", "Nonatomic expression expected at position %d in %s.",

@@ -281,6 +281,9 @@ Expr* builtin_apply(Expr* res) {
      * Provably equivalent to apply_at_level(f, expr, 0, {0,0}). Mirrors the
      * association fast path above. Explicit `0`/`{0}`/`{0,0}` parse to non-default
      * specs and keep the general path, so only the ls == NULL form lands here. */
+    /* a Rational/Complex number is an atom: g @@ (3/4) is 3/4 (the level
+     * walker below already leaves it alone at an explicit level) */
+    if (expr_is_number_atom(expr)) return expr_copy(expr);
     if (ls == NULL && expr->type == EXPR_FUNCTION) {
         size_t count = expr->data.function.arg_count;
         Expr** args = malloc(sizeof(Expr*) * (count ? count : 1));
@@ -993,6 +996,8 @@ Expr* builtin_select(Expr* res) {
      * Select[<|k -> v|>, p, n] keeps the first n such entries. */
     if (is_association(list))
         return assoc_select_values(crit, list, n_max);
+    /* a Rational/Complex number is an atom: ::normal, unevaluated */
+    if (expr_is_number_atom(list)) return builtin_normal_error("Select", res, 1);
 
     /* Compiled-predicate fast path (numloop.h). Falls through to the
      * materialising path below for any predicate outside the subset. */

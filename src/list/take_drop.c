@@ -115,7 +115,8 @@ bool get_seq_spec_indices(Expr* spec, int64_t len, int64_t** out_indices, size_t
 
 static Expr* apply_take_drop(Expr* expr, Expr** specs, size_t nspecs, bool is_take) {
     if (nspecs == 0) return expr_copy(expr);
-    if (expr->type != EXPR_FUNCTION) return NULL;
+    /* a Rational/Complex number is an atom (Take[3/4, 1] is not Rational[3]) */
+    if (expr->type != EXPR_FUNCTION || expr_is_number_atom(expr)) return NULL;
 
     int64_t len = (int64_t)expr->data.function.arg_count;
     size_t spec_count = 0;
@@ -174,11 +175,13 @@ Expr* builtin_take(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
     /* Take[ndarray, spec]: contiguous leading-axis slice on the buffer (ndstruct.c). */
     if (is_ndarray(res->data.function.args[0])) return ndstruct_take(res);
+    if (expr_is_number_atom(res->data.function.args[0])) return builtin_normal_error("Take", res, 1);
     return apply_take_drop(res->data.function.args[0], res->data.function.args + 1, res->data.function.arg_count - 1, true);
 }
 
 Expr* builtin_drop(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
     if (is_ndarray(res->data.function.args[0])) return ndstruct_drop(res);
+    if (expr_is_number_atom(res->data.function.args[0])) return builtin_normal_error("Drop", res, 1);
     return apply_take_drop(res->data.function.args[0], res->data.function.args + 1, res->data.function.arg_count - 1, false);
 }

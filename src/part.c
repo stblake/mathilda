@@ -1472,8 +1472,12 @@ static Expr* assoc_insert(Expr* assoc, Expr* elem, Expr* pos) {
     return result;
 }
 
+static Expr* number_atom_delete_insert(Expr* res, Expr* atom, Expr* spec, bool insert);
+
 Expr* builtin_insert(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    if (expr_is_number_atom(res->data.function.args[0]))
+        return number_atom_delete_insert(res, res->data.function.args[0], res->data.function.args[2], true);
     if (is_association(res->data.function.args[0]))
         return assoc_insert(res->data.function.args[0], res->data.function.args[1],
                             res->data.function.args[2]);
@@ -1658,8 +1662,43 @@ Expr* expr_delete(Expr* expr, Expr* pos) {
     return expr_copy(expr);
 }
 
+/* The integer the reference names in Delete::partw / Insert::ins for a
+ * position spec: n, {n, ...} -> n, {{...}, ..., {m, ...}} -> the first index of
+ * the LAST position (the reference processes a position list from the end). */
+static Expr* atom_spec_first_index(Expr* spec) {
+    if (spec->type == EXPR_FUNCTION && head_is(spec, SYM_List) && spec->data.function.arg_count > 0) {
+        Expr* last = spec->data.function.args[spec->data.function.arg_count - 1];
+        if (last->type == EXPR_FUNCTION && head_is(last, SYM_List)) {
+            return last->data.function.arg_count > 0 ? last->data.function.args[0] : NULL;
+        }
+        return spec->data.function.args[0];
+    }
+    return spec;
+}
+
+/* Delete/Insert on a Rational/Complex number (an atom, no parts): {} positions
+ * leave it unchanged; otherwise the reference's message and the call stays
+ * unevaluated. Returns the result, or NULL after the message. */
+static Expr* number_atom_delete_insert(Expr* res, Expr* atom, Expr* spec, bool insert) {
+    if (spec->type == EXPR_FUNCTION && head_is(spec, SYM_List) && spec->data.function.arg_count == 0)
+        return expr_copy(atom);
+    Expr* idx = atom_spec_first_index(spec);
+    char* is = idx ? expr_to_string(idx) : NULL;
+    char* as = expr_to_string(atom);
+    if (insert)
+        mth_message("Insert", "ins", "Cannot insert at position {%s} in %s", is ? is : "", as ? as : "");
+    else
+        mth_message("Delete", "partw", "Part %s of %s does not exist.", is ? is : "", as ? as : "");
+    free(is);
+    free(as);
+    (void)res;
+    return NULL;
+}
+
 Expr* builtin_delete(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    if (res->data.function.arg_count == 2 && expr_is_number_atom(res->data.function.args[0]))
+        return number_atom_delete_insert(res, res->data.function.args[0], res->data.function.args[1], false);
     if (res->data.function.arg_count == 1) {
         return NULL; // Operator form, stays unevaluated
     } else if (res->data.function.arg_count == 2) {

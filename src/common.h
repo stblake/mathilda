@@ -78,6 +78,15 @@ Expr* builtin_arg_error(const char* head, size_t got, size_t min, size_t max);
  * Sort[x], Union[x], Split[x], .... Borrows `call`. */
 Expr* builtin_normal_error(const char* head, const Expr* call, int pos);
 
+/* True for a Rational[p, q] or Complex[a, b] number. Both are stored as
+ * two-argument EXPR_FUNCTION nodes but are ATOMS (AtomQ is True): a
+ * structural builtin must not reach inside one -- Length[3/4] is 0,
+ * Apply[g, 3/4] and ReplacePart[3/4, 1 -> 5] are 3/4, Take/Append/Sort/...
+ * print ::normal and stay unevaluated. (Pattern matching is different:
+ * MatchQ[1/2, h_[___]] is True in the reference too, and the matcher keeps
+ * that.) */
+bool expr_is_number_atom(const Expr* e);
+
 /* The heads the algebraic transformations (Factor, Expand, Cancel, Apart,
  * Together, ...) thread over, as the reference does: a Rule, the relations
  * (Equal, Less, ..., Inequality) and the logical connectives (And, Or, Not,

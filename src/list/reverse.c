@@ -58,6 +58,8 @@ Expr* builtin_reverse(Expr* res) {
     if (is_ndarray(expr)) return ndstruct_reverse(res);
 
     Expr* level_spec = (res->data.function.arg_count == 2) ? res->data.function.args[1] : NULL;
+    /* a Rational/Complex number at the top is an atom: ::normal, unevaluated */
+    if (expr_is_number_atom(expr)) return builtin_normal_error("Reverse", res, 1);
 
     return reverse_rec(expr, level_spec, 1);
 }

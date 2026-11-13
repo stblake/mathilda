@@ -351,6 +351,11 @@ static Expr* replace_part_legacy(Expr* res) {
 
 Expr* builtin_replace_part(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
+    /* a Rational/Complex number is an atom with no parts: the reference returns
+     * it unchanged for every position, {} included (ReplacePart[3/4, 1 -> 5]
+     * and ReplacePart[3/4, {} -> 5] are both 3/4) */
+    if (res->data.function.arg_count >= 2 && expr_is_number_atom(res->data.function.args[0]))
+        return expr_copy(res->data.function.args[0]);
     if (res->data.function.arg_count == 3 || res->data.function.arg_count == 4)
         return replace_part_legacy(res);
     if (res->data.function.arg_count == 1) {

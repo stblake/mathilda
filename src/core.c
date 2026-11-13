@@ -1767,7 +1767,9 @@ Expr* builtin_length(Expr* res) {
     if (res->type == EXPR_FUNCTION && res->data.function.arg_count == 1) {
         Expr* arg = res->data.function.args[0];
         int64_t len = 0;
-        if (arg->type == EXPR_FUNCTION) {
+        if (expr_is_number_atom(arg)) {
+            len = 0;                 /* Rational/Complex: an atom, no parts */
+        } else if (arg->type == EXPR_FUNCTION) {
             len = (int64_t)arg->data.function.arg_count;
         } else if (arg->type == EXPR_NDARRAY) {
             /* numpy len(): the leading-axis length (rank >= 1 always). */
@@ -1858,8 +1860,9 @@ Expr* builtin_dimensions(Expr* res) {
         depth = arg->data.sparse->rank;
         if (depth > max_depth) depth = max_depth;
         for (int i = 0; i < depth; i++) dims[i] = arg->data.sparse->dims[i];
-    } else if (max_depth > 0 && arg->type == EXPR_FUNCTION &&
+    } else if (max_depth > 0 && arg->type == EXPR_FUNCTION && !expr_is_number_atom(arg) &&
         arg->data.function.head->type == EXPR_SYMBOL) {
+        /* a Rational/Complex number is an atom: Dimensions[3/4] is {} */
         depth = get_dimensions(arg, dims, max_depth, arg->data.function.head->data.symbol.name);
     }
 
@@ -2542,6 +2545,8 @@ Expr* builtin_append(Expr* res) {
          * holds it. */
         return nd ? nd : ndarray_delist_and_reeval(res);
     }
+    /* a Rational/Complex number is an atom: Append[3/4, 1] is not Rational[3, 4, 1] */
+    if (expr_is_number_atom(expr)) return builtin_normal_error("Append", res, 1);
     if (expr->type != EXPR_FUNCTION) return NULL;
     
     size_t new_count = expr->data.function.arg_count + 1;
@@ -2564,6 +2569,7 @@ Expr* builtin_prepend(Expr* res) {
         Expr* nd = ndstruct_append(res, true);
         return nd ? nd : ndarray_delist_and_reeval(res);
     }
+    if (expr_is_number_atom(expr)) return builtin_normal_error("Prepend", res, 1);
     if (expr->type != EXPR_FUNCTION) return NULL;
     
     size_t new_count = expr->data.function.arg_count + 1;
