@@ -479,6 +479,9 @@ set(COMMON_SRC
     ../src/print.c
     ../src/print_latex.c
     ../src/print_fortran.c
+    ../src/print_lean.c
+    ../src/lean_run.c
+    ../src/lean_check.c
     ../src/plus.c
     ../src/times.c
     ../src/arithmetic.c
@@ -6372,6 +6375,48 @@ else()
     target_link_libraries(fortran_form_tests gmp m)
 endif()
 add_test(NAME fortran_form_tests COMMAND fortran_form_tests)
+
+# Lean 4 integration (src/print_lean.c, src/lean_run.c, src/internal/lean/Lean.m).
+# lean_form_tests and lean_certify_tests need no Lean; lean_verify_tests runs the
+# real Lean kernel and exits 77 (Skipped) when no Lean 4 >= 4.35 is found;
+# lean_mathlib_tests (Tier 1) also exits 77 unless MATHILDA_LEAN_PROJECT is set.
+foreach(_lean_t lean_form lean_certify lean_verify lean_mathlib)
+    add_executable(${_lean_t}_tests test_${_lean_t}.c $<TARGET_OBJECTS:mathilda_common>)
+    target_include_directories(${_lean_t}_tests PRIVATE ../src)
+    if(USE_ECM)
+        target_link_libraries(${_lean_t}_tests gmp m ${ECM_LIB})
+        add_dependencies(${_lean_t}_tests build_ecm)
+    else()
+        target_link_libraries(${_lean_t}_tests gmp m)
+    endif()
+    add_test(NAME ${_lean_t}_tests COMMAND ${_lean_t}_tests)
+endforeach()
+set_tests_properties(lean_verify_tests lean_mathlib_tests PROPERTIES SKIP_RETURN_CODE 77)
+# Lean -> Mathilda: the core-only Lake package lean/ (tactics shelling out to the
+# built ../Mathilda binary).  Exits 77 (Skipped) when no lake or no binary is found.
+# RUN_SERIAL: it builds into lean/.lake.
+if(NOT WIN32)
+    add_test(NAME lean_tactics_tests
+             COMMAND sh ${CMAKE_SOURCE_DIR}/scripts/lean_tactics.sh ${CMAKE_SOURCE_DIR}/../Mathilda)
+    set_tests_properties(lean_tactics_tests PROPERTIES SKIP_RETURN_CODE 77 RUN_SERIAL TRUE)
+endif()
+# LeanVerify's command-keyword list (src/lean_check_tokens.h) against Lean's own parser
+# tables (tools/lean_command_tokens.lean): core Lean (Skipped without Lean) and, with
+# MATHILDA_LEAN_PROJECT set to a Lake project with Mathlib, `import Mathlib` (read only).
+if(NOT WIN32)
+    add_test(NAME lean_check_tokens_sync
+             COMMAND sh ${CMAKE_SOURCE_DIR}/scripts/lean_check_tokens.sh ${CMAKE_SOURCE_DIR}/../Mathilda)
+    add_test(NAME lean_check_tokens_mathlib
+             COMMAND sh ${CMAKE_SOURCE_DIR}/scripts/lean_check_tokens.sh --mathlib
+                     ${CMAKE_SOURCE_DIR}/../Mathilda)
+    set_tests_properties(lean_check_tokens_sync lean_check_tokens_mathlib
+                         PROPERTIES SKIP_RETURN_CODE 77)
+endif()
+# The Lean-side prelude is a byte-for-byte mirror of the one inlined into Certify files.
+add_test(NAME lean_prelude_sync
+         COMMAND ${CMAKE_COMMAND} -E compare_files
+                 ${CMAKE_SOURCE_DIR}/../src/internal/lean/Prelude.lean
+                 ${CMAKE_SOURCE_DIR}/../lean/Mathilda/Prelude.lean)
 
 add_executable(time_constrained_tests test_time_constrained.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(time_constrained_tests PRIVATE ../src)

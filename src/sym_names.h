@@ -658,6 +658,8 @@ extern const char* SYM_Definition;
 extern const char* SYM_DownValues;
 extern const char* SYM_OwnValues;
 #endif
+/* LeanForm display wrapper (print_lean.c); outside the UP_VALUES block. */
+extern const char* SYM_LeanForm;
 extern const char* SYM_ShanksSquareForms;
 extern const char* SYM_Shortest;
 extern const char* SYM_Sign;

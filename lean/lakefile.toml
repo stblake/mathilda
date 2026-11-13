@@ -1,0 +1,7 @@
+name = "mathilda"
+version = "0.6523.0"
+defaultTargets = ["Mathilda"]
+
+# Core-only: no `require`, so the package has no dependencies (no Mathlib).
+[[lean_lib]]
+name = "Mathilda"

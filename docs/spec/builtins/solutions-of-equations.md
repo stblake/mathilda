@@ -2013,6 +2013,37 @@ Out[4]= 4
 - Attributes: `Protected`. Symbolic (an Integer out), so no packed / NDArray /
   `Compile` surface.
 
+## Reduce`SOSCertificate
+
+The exact certificate behind `Reduce`'s sum-of-squares (Positivstellensatz)
+stage, exposed for Lean certification (`Certify`, see
+[formal verification](formal-verification.md)).
+- `` Reduce`SOSCertificate[q, {g1, …}, {x1, …}] ``
+
+**Features**:
+- `Protected`. Lives in the `` Reduce` `` context, which is never on
+  `$ContextPath`.
+- Proves `q >= 0` on `{g_i >= 0}` by a Putinar representation
+  `q == σ0 + Σ σ_i g_i` with every `σ` a sum of squares, found by the same
+  engine as `Reduce` (numeric SDP guide by alternating projection, facial
+  reduction at a rational zero, then exact rational verification).
+- The result is a list of blocks `{m, b, Q}`: `m` is `1` (for `σ0`) or the
+  multiplier `g_i`, `b` a list of basis polynomials (possibly shifted by the
+  facial reduction) and `Q` an exact rational positive semidefinite Gram
+  matrix, such that `q == Σ m b.Q.b` identically.
+- `$Failed` when no certificate is found (e.g. a point with `q < 0` on the
+  region, total degree above 8, a numeric guide that does not round to a
+  verified certificate) or when Mathilda was built without LAPACK.
+
+```mathematica
+In[1]:= c = Reduce`SOSCertificate[x^4 + y^4 - x^2 y^2 + 1, {}, {x, y}];
+In[2]:= Expand[Total[(#1 (#2 . #3 . #2)) & @@@ c] - (x^4 + y^4 - x^2 y^2 + 1)]
+Out[2]= 0
+
+In[3]:= Reduce`SOSCertificate[x^2 - 1, {}, {x}]
+Out[3]= $Failed
+```
+
 ## Solve`SolveLinearSystem
 
 The linear-system specialist invoked by `Solve` for multi-variable inputs

@@ -649,6 +649,7 @@ const char* SYM_Definition = NULL;
 const char* SYM_DownValues = NULL;
 const char* SYM_OwnValues = NULL;
 #endif
+const char* SYM_LeanForm = NULL;
 const char* SYM_ShanksSquareForms = NULL;
 const char* SYM_Shortest = NULL;
 const char* SYM_Sign = NULL;
@@ -1810,6 +1811,7 @@ void sym_names_init(void) {
     SYM_DownValues                 = intern_symbol("DownValues");
     SYM_OwnValues                  = intern_symbol("OwnValues");
 #endif
+    SYM_LeanForm                   = intern_symbol("LeanForm");
     SYM_ShanksSquareForms          = intern_symbol("ShanksSquareForms");
     SYM_Shortest                   = intern_symbol("Shortest");
     SYM_Sign                       = intern_symbol("Sign");

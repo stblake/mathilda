@@ -353,7 +353,59 @@ static bool sos_find_zero(const GBPoly* q, GBPoly** g, int ng, int nrv, mpq_t* z
     return ok;
 }
 
-static bool sos_certify(Expr* q_e, Expr** g_e, int ng, Expr** rvars, int nrv) {
+/* mpq -> Integer / BigInt / Rational expression. */
+static Expr* sos_mpq_expr(const mpq_t v) {
+    Expr* num = expr_bigint_normalize(expr_new_bigint_from_mpz(mpq_numref(v)));
+    if (mpz_cmp_ui(mpq_denref(v), 1) == 0) return num;
+    Expr* den = expr_bigint_normalize(expr_new_bigint_from_mpz(mpq_denref(v)));
+    return eval_and_free(expr_new_function(expr_new_symbol(SYM_Rational),
+                                           (Expr*[]){ num, den }, 2));
+}
+
+/* The verified certificate {{mult, {basis...}, Gram}, ...}: one entry per
+ * non-empty block, mult = 1 for sigma_0 and g_e[i-1] for sigma_i, the basis
+ * polynomials as expressions in rvars, and the exact rational Gram matrix
+ * (row-major from the solved Gram vector `vec`), so that
+ *        q == sum_blocks mult * basis^T . Gram . basis   exactly. */
+static Expr* sos_cert_expr(SosBlock** blk, int nblocks, mpq_t* vec, Expr** g_e,
+                           Expr** rvars) {
+    Expr** entries = calloc((size_t)nblocks, sizeof(Expr*));
+    int ne = 0, var = 0;
+    for (int bi = 0; bi < nblocks; bi++) {
+        SosBlock* B = blk[bi];
+        int n = B->nb;
+        if (n == 0) continue;
+        Expr** bas = malloc((size_t)n * sizeof(Expr*));
+        Expr** rows = malloc((size_t)n * sizeof(Expr*));
+        for (int a = 0; a < n; a++) bas[a] = gb_to_expr(B->basis[a], rvars);
+        for (int a = 0; a < n; a++) {
+            Expr** row = malloc((size_t)n * sizeof(Expr*));
+            for (int b = 0; b < n; b++) {
+                int lo = a < b ? a : b, hi = a < b ? b : a;
+                /* packed upper-triangle index of (lo, hi) within the block */
+                int off = lo * n - lo * (lo - 1) / 2 + (hi - lo);
+                row[b] = sos_mpq_expr(vec[var + off]);
+            }
+            rows[a] = expr_new_function(expr_new_symbol(SYM_List), row, (size_t)n);
+            free(row);
+        }
+        Expr* parts[3];
+        parts[0] = bi == 0 ? expr_new_integer(1) : expr_copy(g_e[bi - 1]);
+        parts[1] = expr_new_function(expr_new_symbol(SYM_List), bas, (size_t)n);
+        parts[2] = expr_new_function(expr_new_symbol(SYM_List), rows, (size_t)n);
+        free(bas); free(rows);
+        entries[ne++] = expr_new_function(expr_new_symbol(SYM_List), parts, 3);
+        var += n * (n + 1) / 2;
+    }
+    Expr* out = expr_new_function(expr_new_symbol(SYM_List), entries, (size_t)ne);
+    free(entries);
+    return out;
+}
+
+/* Prove q >= 0 on {g_e[i] >= 0}.  When cert_out is non-NULL and the proof
+ * succeeds, *cert_out receives the exact certificate (sos_cert_expr). */
+static bool sos_certify_ex(Expr* q_e, Expr** g_e, int ng, Expr** rvars, int nrv,
+                           Expr** cert_out) {
     bool proven = false;
     int D = 0;
     GBPoly* q = gb_from_expr(q_e, rvars, nrv, GB_ORDER_GREVLEX, 0, NULL);
@@ -714,7 +766,10 @@ static bool sos_certify(Expr* q_e, Expr** g_e, int ng, Expr** rvars, int nrv) {
                     var += n*(n+1)/2;
                 }
                 DBG("[sos] exact verify: rank=%d all_psd=%d\n", rank, all_psd);
-                if (all_psd) proven = true;
+                if (all_psd) {
+                    proven = true;
+                    if (cert_out) *cert_out = sos_cert_expr(blk, nblocks, vec, g_e, rvars);
+                }
                 for (int i = 0; i < V; i++) mpq_clear(vec[i]);
                 free(vec);
             } else DBG("[sos] exact system inconsistent (guide infeasible)\n");
@@ -737,6 +792,10 @@ cleanup:
     for (int i = 0; i < ng; i++) if (g[i]) gb_poly_free(g[i]);
     free(g);
     return proven;
+}
+
+static bool sos_certify(Expr* q_e, Expr** g_e, int ng, Expr** rvars, int nrv) {
+    return sos_certify_ex(q_e, g_e, ng, rvars, nrv, NULL);
 }
 
 /* ================================================================== *
@@ -890,11 +949,40 @@ Expr* reduce_sos(const RForm* F, Expr** vlist, int nv) {
     return result;
 }
 
+/* Reduce`SOSCertificate[q, {g...}, {vars...}] -- the exact certificate of
+ * q >= 0 on {g_i >= 0} that the Reduce stage above verifies, or $Failed. */
+Expr* builtin_reduce_sos_certificate(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    Expr* q = res->data.function.args[0];
+    Expr* gl = res->data.function.args[1];
+    Expr* vl = res->data.function.args[2];
+    if (!is_sym_name(gl->type == EXPR_FUNCTION ? gl->data.function.head : NULL, SYM_List) ||
+        !is_sym_name(vl->type == EXPR_FUNCTION ? vl->data.function.head : NULL, SYM_List))
+        return NULL;
+    int nrv = (int)vl->data.function.arg_count, ng = (int)gl->data.function.arg_count;
+    if (nrv < 1) return expr_new_symbol(SYM_DollarFailed);
+    Expr** rvars = vl->data.function.args;
+    for (int i = 0; i < nrv; i++)
+        if (rvars[i]->type != EXPR_SYMBOL) return NULL;
+    bool ok = poly_in_vars(q, rvars, nrv);
+    for (int i = 0; i < ng && ok; i++) ok = poly_in_vars(gl->data.function.args[i], rvars, nrv);
+    Expr* cert = NULL;
+    if (ok && sos_certify_ex(q, gl->data.function.args, ng, rvars, nrv, &cert) && cert)
+        return cert;
+    expr_free(cert);
+    return expr_new_symbol(SYM_DollarFailed);
+}
+
 #else /* !USE_LAPACK: the numeric guide is unavailable, so decline everything. */
 
 Expr* reduce_sos(const RForm* F, Expr** vlist, int nv) {
     (void)F; (void)vlist; (void)nv;
     return NULL;
+}
+
+Expr* builtin_reduce_sos_certificate(Expr* res) {
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    return expr_new_symbol(SYM_DollarFailed);
 }
 
 #endif /* USE_LAPACK */
