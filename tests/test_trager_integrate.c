@@ -60,7 +60,9 @@ static void ti_uneval(const char* f, const char* method, const char* file, int l
 static void ti_verdict(const char* sym, const char* f, const char* tag, const char* file, int line) {
     char buf[4096];
     snprintf(buf, sizeof buf,
-             "MatchQ[Quiet[%s[%s, x]], {\"%s\", _String}]", sym, f, tag);
+             "MatchQ[Quiet[%s[%s, x]], {\"%s\"%s, _String}]", sym, f, tag,
+             /* a decline is either kind of non-proof (v0.6545) */
+             strcmp(tag, "failed") == 0 ? " | \"implementation incomplete\"" : "");
     tr_eq(buf, "True", file, line);
 }
 #define TI_NONELEM(f) ti_verdict("Integrate`Trager", (f), "not elementary", __FILE__, __LINE__)
@@ -427,7 +429,7 @@ static void test_qualified_symbols(void) {
     TR_TRUE("Integrate`Trager[1/Sqrt[x^3 + 1], x] === {\"not elementary\", \"the Hermite remainder is a nonzero holomorphic differential (no residues)\"}");
     TR_TRUE("Integrate`TragerKauers[1/Sqrt[x^3 + 1], x] === {\"not elementary\", \"the Hermite remainder is a nonzero holomorphic differential (no residues)\"}");
     TR_TRUE("Integrate`TragerKauers[(x^4 + 1)^(-1/4), x] === {\"failed\", \"Kauers' heuristic: no principal power of the residue ideal\"}");
-    TR_TRUE("MatchQ[Integrate`Trager[Sqrt[x] + Sqrt[x + a], x], {\"failed\", _String}]");   /* the Kummer pieces lie over Q(a) */
+    TR_TRUE("MatchQ[Quiet[Integrate`Trager[Sqrt[x] + Sqrt[x + a], x]], {\"failed\" | \"implementation incomplete\", _String}]");   /* the Kummer pieces lie over Q(a) */
     TR_TRUE("Integrate`Trager[x^2, x] === x^3/3");   /* rational: integrated, not declined (v0.6094) */
     TR_TRUE("Integrate`Trager[1/(x^2 + 1), x] === ArcTan[x]");
     TR_TRUE("MatchQ[Integrate`Trager[5/((x - 3) Sqrt[x^3 - 2]), x], {\"not elementary\", s_String /; StringContainsQ[s, \"infinite order\"]}]");
@@ -468,9 +470,11 @@ static void test_messages(void) {
     /* Quiet silences it */
     TI_SILENT("Quiet[Integrate[1/Sqrt[x^3 + 1], x, Method -> \"Trager\"]]", "nonelem");
     TI_SILENT("Quiet[Integrate[1/Sqrt[x^3 + 1], x, Method -> \"Trager\"], Integrate::nonelem]", "nonelem");
-    /* declines are silent, and so is Kauers' "failed" */
+    /* declines are silent, and so is Kauers' "failed"; an integrand outside
+       Trager's class is "implementation incomplete" (v0.6545) */
     TI_SILENT("Integrate[Sqrt[x] + Sqrt[x + 1], x, Method -> \"Trager\"]", "Integrate::");
-    TI_SILENT("Integrate[Exp[x]/Sqrt[x], x, Method -> \"Trager\"]", "Integrate::");
+    TI_PRINTS("Integrate[Exp[x]/Sqrt[x], x, Method -> \"Trager\"]", "Integrate::incomplete");
+    TI_SILENT("Quiet[Integrate[Exp[x]/Sqrt[x], x, Method -> \"Trager\"]]", "Integrate::");
     TI_SILENT("Integrate[(x^4 + 1)^(-1/4), x, Method -> \"TragerKauers\"]", "Integrate::");
     TI_SILENT("Integrate[5/((x - 3) Sqrt[x^3 - 2]), x, Method -> \"TragerKauers\"]", "Integrate::");
     TI_SILENT("Integrate[1/Sqrt[x^2 + 1], x, Method -> \"Trager\"]", "Integrate::");

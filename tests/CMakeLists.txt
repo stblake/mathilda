@@ -6659,6 +6659,9 @@ add_test(NAME bronstein_divisors_torsion_tests COMMAND bronstein_divisors_torsio
 add_executable(bronstein_integrate_tests test_bronstein_integrate.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(bronstein_integrate_tests PRIVATE ../src)
 add_test(NAME bronstein_integrate_tests COMMAND bronstein_integrate_tests)
+add_executable(bronstein_completeness_tests test_bronstein_completeness.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(bronstein_completeness_tests PRIVATE ../src)
+add_test(NAME bronstein_completeness_tests COMMAND bronstein_completeness_tests)
 
 add_executable(integrate_cascade_trager_bronstein_tests test_integrate_cascade_trager_bronstein.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(integrate_cascade_trager_bronstein_tests PRIVATE ../src)
@@ -6681,6 +6684,11 @@ if(PYTHON3_EXE)
     # every certificate of the random (mostly non-elementary) family.
     add_test(NAME bronstein_test_coverage
              COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_bronstein_test_coverage.py
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    # The completeness ratchet (completion campaign, 2026-11-14): in-scope
+    # unimplemented branches and uncertain Risch DE steps only go down.
+    add_test(NAME bronstein_completeness
+             COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_bronstein_completeness.py
              WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
     add_test(NAME bronstein_stress
              COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/bronstein_stress/stress.py

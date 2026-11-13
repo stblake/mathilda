@@ -154,7 +154,7 @@ static void test_special_divisors(void) {
     BR_TRUE("Together[brComponentLogPart[TE2, cvE2, brT1/(1 + brT1^2)][\"remainder\"]] === 0");
     BR_TRUE("Together[brComponentLogPart[TE1, cvE1, 1/(1 + brT1)][\"remainder\"]] === 0");
     BR_THROWS("brComponentLogPartSpecial[TG, cvG, 1/x, <|\"P\" -> 1, \"z\" -> z|>, <|\"ramified\" -> False, \"lambda\" -> 1|>]",
-              "Decline", "residues at a special place on a curve of positive genus (not yet supported)");
+              "Unimplemented", "residues at a special place on a curve of positive genus");
 }
 
 static void test_log_part(void) {

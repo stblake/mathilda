@@ -40,17 +40,29 @@
 (*   "lower"    the monomials below theta (Shape A), else "syms"              *)
 (* ========================================================================== *)
 
-brUnsupportedHeads::usage = "brUnsupportedHeads[] is the pattern of heads the Bronstein front end declines (trigonometric, hyperbolic, inverse and special functions, Abs/Sign, derivatives, integrals, and approximate or complex numbers). Phase 12 may add a TrigToExp front end.";
-brUnsupportedHeads[] := Sin | Cos | Tan | Cot | Sec | Csc | ArcSin | ArcCos | ArcTan | ArcCot |
-  ArcSec | ArcCsc | Sinh | Cosh | Tanh | Coth | Sech | Csch | ArcSinh | ArcCosh | ArcTanh |
-  ArcCoth | ArcSech | ArcCsch | Erf | Erfc | Erfi | ExpIntegralEi | LogIntegral | PolyLog |
-  Gamma | Abs | Sign | Derivative | Integrate | RootSum | Root | Piecewise | Floor | Ceiling;
+brUnsupportedHeads::usage = "brUnsupportedHeads[] is the pattern of every head the Bronstein front end does not take: brElementaryUnimplementedHeads[] (elementary, not yet supported) | brAlgebraicGeneralHeads[] (a general algebraic function) | brNonElementaryHeads[] (outside elementary functions).";
+brUnsupportedHeads[] := brElementaryUnimplementedHeads[] | brAlgebraicGeneralHeads[] | brNonElementaryInputHeads[];
 
-brCheckHeads::usage = "brCheckHeads[f, x] throws a Decline when f contains a head outside the scope (brUnsupportedHeads), an approximate number, or a complex constant; otherwise returns True.";
+brElementaryUnimplementedHeads::usage = "brElementaryUnimplementedHeads[] are the elementary heads the front end does not yet rewrite (trigonometric, hyperbolic and their inverses; the TrigToExp front end over Q(i) of the completion campaign). An integrand with one of them is inside the decided class: implementation incomplete (Unimplemented).";
+brElementaryUnimplementedHeads[] := Sin | Cos | Tan | Cot | Sec | Csc | ArcSin | ArcCos | ArcTan | ArcCot |
+  ArcSec | ArcCsc | Sinh | Cosh | Tanh | Coth | Sech | Csch | ArcSinh | ArcCosh | ArcTanh |
+  ArcCoth | ArcSech | ArcCsch;
+
+brAlgebraicGeneralHeads::usage = "brAlgebraicGeneralHeads[] are the heads of a general algebraic function (Root, RootSum): outside one simple radical extension, so implementation incomplete (Incomplete).";
+brAlgebraicGeneralHeads[] := Root | RootSum;
+
+brNonElementaryInputHeads::usage = "brNonElementaryInputHeads[] are heads outside the elementary functions (special functions, Abs/Sign, piecewise and integer-valued functions, unevaluated derivatives and integrals): no elementary decision applies, a silent Decline.";
+brNonElementaryInputHeads[] := Erf | Erfc | Erfi | ExpIntegralEi | LogIntegral | PolyLog |
+  Gamma | Abs | Sign | Derivative | Integrate | Piecewise | Floor | Ceiling;
+
+brCheckHeads::usage = "brCheckHeads[f, x] classifies the heads and constants of f: a non-elementary head or an approximate number is a Decline (no elementary decision applies), a Root/RootSum is Incomplete (a general algebraic function), an elementary head not yet rewritten (trigonometric, hyperbolic, inverse) or a complex constant is Unimplemented (inside the decided class). Otherwise returns True.";
 brCheckHeads[f_, x_Symbol] := (
-  If[!FreeQ[f, brUnsupportedHeads[]], throwDecline["unsupported function in the integrand"]];
+  If[!FreeQ[f, brNonElementaryInputHeads[]], throwDecline["non-elementary function in the integrand"]];
   If[!FreeQ[f, _Real], throwDecline["approximate number in the integrand"]];
-  If[!FreeQ[f, _Complex], throwDecline["complex constant in the integrand"]];
+  If[!FreeQ[f, brAlgebraicGeneralHeads[]], throwIncomplete["a general algebraic function (Root/RootSum) in the integrand"]];
+  If[!FreeQ[f, brElementaryUnimplementedHeads[]],
+    throwUnimplemented["Tower:trig", "trigonometric or hyperbolic function (TrigToExp front end over Q(i))"]];
+  If[!FreeQ[f, _Complex], throwUnimplemented["Tower:complex", "complex constant in the integrand (constant field Q(i))"]];
   True);
 
 brKernelPattern::usage = "brKernelPattern[] matches a Log or Exp kernel, Log[a] or Power[E, b].";
@@ -100,12 +112,12 @@ brExpRewrite[x_Symbol, monos_List, b_] := Module[{r, c, e, frac, i0},
   (* No Return inside With/If here: a nested Return only leaves the inner scope. *)
   r = If[monos === {}, False, Risch`ExpReducible[b, x, brMonoSpec[monos]]];
   If[r === False, {"new"},
-    If[!ListQ[r] || Length[r] =!= Length[monos], throwDecline["exponential relation not decided"]];
+    If[!ListQ[r] || Length[r] =!= Length[monos], throwUnimplemented["Tower:exprel", "exponential relation not decided"]];
     frac = Select[Range[Length[monos]], !IntegerQ[r[[#]]] &];
     i0 = If[frac === {}, None, First[frac]];
     Which[
       i0 =!= None && monos[[i0]]["kind"] === "Exp", {"rebase", i0, Denominator[r[[i0]]]},
-      i0 =!= None, throwDecline["exponential of a fractional multiple of a logarithm (a radical)"],
+      i0 =!= None, throwUnimplemented["Tower:exp-of-log-radical", "exponential of a fractional multiple of a logarithm (a radical in exponential form)"],
       True,
         c = Together[b - Sum[r[[i]] If[monos[[i]]["kind"] === "Exp", monos[[i]]["arg"], monos[[i]]["sym"]],
                             {i, Length[monos]}]];
@@ -121,7 +133,7 @@ brKernelsToSymbols[f0_, x_Symbol] := Module[{f = f0, monos = {}, vars, ks, k, ar
     vars = Prepend[#["sym"] & /@ monos, x];
     ks = brInnermostKernels[f, vars];
     If[ks === {}, Break[]];
-    If[++guard > 200, throwDecline["tower too large"]];
+    If[++guard > 200, throwDecline["tower too large"]];  (* a resource bound *)
     k = First[ks];
     {kind, arg} = Switch[k, Log[_], {"Log", First[k]}, _, {"Exp", Last[k]}];
     (* A radical inside a kernel: Shape B's curve-monomial case (BaseCurve.m)
@@ -130,17 +142,22 @@ brKernelsToSymbols[f0_, x_Symbol] := Module[{f = f0, monos = {}, vars, ks, k, ar
        the relation y^n = b, so a radical argument is only admitted as the
        FIRST and ONLY monomial, and no monomial may follow it. *)
     If[AnyTrue[monos, TrueQ[#["algebraic"]] &],
-      throwDecline["a further monomial over a kernel with a radical argument (Shape B, curve-monomial case, takes one kernel)"]];
+      throwUnimplemented["Tower:curve-monomial-tower", "a further monomial over a kernel with a radical argument (transcendental Risch over an algebraic base)"]];
     If[brRadicalQ[arg, vars],
       If[monos =!= {} || !brRadicalOverXQ[arg, x],
-        throwDecline["radical inside a logarithm or exponential"]];
+        throwUnimplemented["Tower:radical-in-kernel", "radical inside a logarithm or exponential above other monomials (transcendental Risch over an algebraic base)"]];
       {monos, t} = brAddMonomial[x, monos, kind, Together[arg], k];
       monos[[-1]] = Append[monos[[-1]], "algebraic" -> True];
       f = f /. k -> t;
       Continue[]];
     If[kind === "Log",
-      If[monos =!= {} && Risch`LogReducible[arg, x, brMonoSpec[monos]] =!= False,
-        throwDecline["reducible logarithm (not an identity on every branch)", <|"kernel" -> k|>]];
+      (* LogReducible is tri-state: False is a proof of a new monomial, a list
+         a relation, $Failed an undecided relation (never read as "new") *)
+      With[{lr = If[monos === {}, False, Risch`LogReducible[arg, x, brMonoSpec[monos]]]},
+        If[lr =!= False && !ListQ[lr],
+          throwUnimplemented["Tower:logrel", "logarithm relation not decided", <|"kernel" -> k|>]];
+        If[ListQ[lr],
+          throwUnimplemented["Tower:reducible-log", "reducible logarithm (rewrite with an explicit constant)", <|"kernel" -> k|>]]];
       {monos, t} = brAddMonomial[x, monos, "Log", Together[arg], k /. brBack[monos]];
       f = f /. k -> t,
       (* Exp *)
@@ -161,23 +178,55 @@ brBack[monos_List] := (#["sym"] -> #["kernel"]) & /@ monos;
 brToSurface::usage = "brToSurface[T, e] is the expression e in the tower symbols of T written back in the surface kernels.";
 brToSurface[T_Association, e_] := e /. T["back"];
 
-brDetectRadical::usage = "brDetectRadical[fs, vars] finds the single radical of fs (in the symbols vars). It returns <|\"b\" -> b, \"n\" -> n|> with every radical subexpression a power of b^(1/n), or None; throws a Decline on nested radicals, several radicands (a compositum; a Kummer split is a later phase), or a radicand that is not rational in vars.";
-brDetectRadical[fs_, vars_List] := Module[{pows, bases, b0, exps},
+brDetectRadical::usage = "brDetectRadical[fs, vars] finds the single radical of fs (in the symbols vars). It returns <|\"b\" -> b, \"n\" -> n|> with every radical subexpression a power of b^(1/n), or None. Nested radicals, and several radicands whose Kummer group is not cyclic (brKummerCyclicQ), are outside one simple radical extension: Incomplete. A cyclic compositum (one simple radical in disguise), an algebraic constant, and a radicand that is not rational in vars are Unimplemented.";
+brDetectRadical[fs_, vars_List] := Module[{pows, bases, b0, exps, cyc},
   pows = DeleteDuplicates[Cases[fs, Power[b_, r_Rational] /; brDependsQ[b, vars], {0, Infinity}]];
   If[pows === {}, Return[None]];
-  If[!FreeQ[First /@ pows, Power[_, _Rational]], throwDecline["nested radicals"]];
+  If[!FreeQ[First /@ pows, Power[_, _Rational]], throwIncomplete["nested radicals"]];
   If[!FreeQ[fs, Power[c_, _Rational] /; !brDependsQ[c, vars]],
-    throwDecline["algebraic constant in the integrand"]];
+    throwUnimplemented["Tower:algebraic-constant", "algebraic constant in the integrand (a number-field constant field)"]];
   bases = Together[First[#]] & /@ pows;
   b0 = First[bases];
-  If[!brRationalInQ[b0, vars], throwDecline["radicand is not rational in the tower"]];
+  If[!brRationalInQ[b0, vars],
+    throwUnimplemented["Tower:radicand-not-rational", "radicand is not rational in the tower (symbolic parameter)"]];
   exps = MapThread[
     Which[
       Together[#1 - b0] === 0, #2,
       Together[#1 b0 - 1] === 0, -#2,
-      True, throwDecline["more than one radicand (a radical compositum)"]] &,
+      True, None] &,
     {bases, Last /@ pows}];
+  If[MemberQ[exps, None],
+    cyc = brKummerCyclicQ[Transpose[{bases, Last /@ pows}], vars];
+    Which[
+      cyc === False, throwIncomplete["several radicals generating a non-cyclic Kummer extension (not one simple radical)"],
+      cyc === True, throwUnimplemented["Tower:cyclic-compositum", "several radicands generating one simple radical extension (rewrite as a single radical)"],
+      True, throwUnimplemented["Tower:compositum-undecided", "radical compositum whose Kummer group was not decided"]]];
   <|"b" -> b0, "n" -> LCM @@ (Denominator /@ exps)|>];
+
+brKummerCyclicQ::usage = "brKummerCyclicQ[{{b1, r1}, ...}, vars] decides whether the radicals b_i^r_i (b_i rational in vars, r_i rational) generate a CYCLIC Kummer extension of the field of vars over its constants, i.e. one simple radical extension: with the b_i factored into irreducibles p_j of Q[vars], the exponent vectors r_i e_ij mod 1 generate a subgroup of (Q/Z)^J, cyclic iff its order equals its exponent. Returns True, False, or $Failed (a non-rational constant factor, or a group too large to enumerate). Constant factors are ignored here: they change the constant field (Unimplemented elsewhere), not the Kummer group over it.";
+brKummerCyclicQ[rads_List, vars_List] := Module[{facs, ps, vecs, nn, gens, seen, frontier, new, ordG, expG},
+  facs = Map[Function[rb, Join[FactorList[Numerator[Together[rb[[1]]]]],
+       Map[Function[fe, {fe[[1]], -fe[[2]]}], FactorList[Denominator[Together[rb[[1]]]]]]]], rads];
+  facs = Select[#, brDependsQ[First[#], vars] &] & /@ facs;
+  ps = DeleteDuplicates[Flatten[Map[First, facs, {2}]]];
+  (* identify associate factors (p and -p, or rational multiples) *)
+  ps = DeleteDuplicates[ps, NumberQ[Together[#1/#2]] &];
+  vecs = MapThread[
+    Function[{fl, r}, Table[r Total[Cases[fl, {q_, e_} /; NumberQ[Together[q/p]] :> e]], {p, ps}]],
+    {facs, Last /@ rads}];
+  vecs = Mod[#, 1] & /@ vecs;
+  nn = LCM @@ Denominator[Flatten[{vecs, 1}]];
+  gens = Round[nn #] & /@ vecs;
+  expG = LCM @@ (nn/GCD[nn, GCD @@ Append[#, nn]] & /@ gens);
+  seen = <|ConstantArray[0, Length[ps]] -> True|>; frontier = Keys[seen];
+  While[frontier =!= {},
+    new = DeleteDuplicates[Flatten[Table[Mod[f + g, nn], {f, frontier}, {g, gens}], 1]];
+    new = Select[new, !KeyExistsQ[seen, #] &];
+    Scan[(seen[#] = True) &, new];
+    If[Length[seen] > 100000, Return[$Failed, Module]];
+    frontier = new];
+  ordG = Length[seen];
+  ordG === expG];
 
 brRadicalOverXQ::usage = "brRadicalOverXQ[e, x] is True when every radical b^r (r non-integer) in e has a radicand b rational in x alone (no kernel, no other symbol, no nested radical): e is then in Q(x)(y) for the radicals of e.";
 brRadicalOverXQ[e_, x_Symbol] := AllTrue[
@@ -200,7 +249,7 @@ brTower[f0_, x_Symbol] := Module[{f, fs, monos, vars, rad, shape, theta = None, 
     throwInternal["brTowerKernelLeft", <|"f" -> fs|>]];
   rad = brDetectRadical[{fs, Select[monos, TrueQ[#["algebraic"]] &] /. a_Association :> a["arg"]}, vars];
   If[!brRationalInQ[fs /. Power[b_, r_Rational] /; brDependsQ[b, vars] :> brRadicalPlaceholder, Append[vars, brRadicalPlaceholder]],
-    throwDecline["integrand is not algebraic over the tower"]];
+    throwUnimplemented["Tower:not-algebraic", "integrand is not algebraic over the tower (irrational exponent or symbolic parameter)"]];
   shape = Which[
     rad === None && monos === {}, "Rational",
     rad === None, "Transcendental",
@@ -222,7 +271,7 @@ brTower[f0_, x_Symbol] := Module[{f, fs, monos, vars, rad, shape, theta = None, 
     (* a monomial above theta that depends on it: the radical sits in the   *)
     (* middle of the tower (theta, y, then something over both): out of scope *)
     If[AnyTrue[above, !FreeQ[{#["D"], #["arg"]}, theta] &],
-      throwDecline["a monomial above the radicand's top monomial depends on it"]];
+      throwUnimplemented["Tower:radical-mid-tower", "a monomial above the radicand's top monomial depends on it (radical in the middle of the tower)"]];
     monos = Join[Delete[monos, pos], {monos[[pos]]}];
     kind = Last[monos]["kind"];
     lower = Most[#["sym"] & /@ monos]];

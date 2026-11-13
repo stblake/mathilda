@@ -3968,6 +3968,36 @@ Every certificate is a theorem of [B]/[T] applied to a decided sub-step: a Risch
 infinite-order divisor at a good specialization. Every antiderivative is checked
 by `PossibleZeroQ[D[F, x] - f]` before it is returned.
 
+**Implementation incomplete (v0.6545).** Every stop that is neither an answer nor
+a certificate is one of three kinds, and only the first two are reported:
+
+| Kind | Meaning | Result | Message |
+|---|---|---|---|
+| Incomplete | outside one simple radical extension: nested radicals, several radicals whose Kummer group is not cyclic (`Sqrt[x] + Sqrt[x + 1]`), a general algebraic function (`Root`, `RootSum`) | `{"implementation incomplete", reason}` | `Integrate::incomplete` |
+| Unimplemented | inside it, on a branch of the algorithm not written yet (trigonometric kernels, algebraic or complex constants, a radical in the middle of the tower, ...) | `{"implementation incomplete", reason}` | `Integrate::incomplete` |
+| Decline | a non-elementary function in the input (`Erf`, `Abs`, ...), an approximate number, a resource bound | `{"failed", reason}` | none |
+
+`Integrate::incomplete` reads *The integrand f was not decided in x: implementation
+incomplete (reason).* It is issued by `Method -> "Bronstein"` and `Method ->
+"Trager"`, and by the Automatic cascade when every stage declined and the integrand
+is algebraic over an elementary tower but outside the decided class
+(`Bronstein\`BronsteinScope[f, x]` classifies it without integrating). It is held
+like `Integrate::nonelem`: never printed when a later stage answers or proves
+non-elementarity, never inside a definite integral, silenced by `Quiet` and caught
+by `Check`. Several radicals that generate a cyclic Kummer group are one simple
+radical in disguise (`Sqrt[x]` with `(x + 1)^(1/3)` is `y^6 = x^3 (x + 1)^2`), so
+they are Unimplemented, not Incomplete. The completion campaign drives the
+Unimplemented sites to zero; `make check-bronstein-completeness` lists them, with
+the uncertain steps of the C Risch DE, against a ratchet that only moves down.
+
+| Input | Result |
+|---|---|
+| `Integrate[Sqrt[Log[x] + Sqrt[Log[x]]], x]` | unevaluated, `Integrate::incomplete` (nested radicals) |
+| `Integrate[Sqrt[x] + Sqrt[x + 1], x, Method -> "Bronstein"]` | unevaluated, `Integrate::incomplete` (non-cyclic compositum) |
+| `Integrate[Sin[x] Sqrt[Log[x]], x, Method -> "Bronstein"]` | unevaluated, `Integrate::incomplete` (trigonometric kernel, not yet supported) |
+| `Integrate[Erf[x] Sqrt[Log[x]], x, Method -> "Bronstein"]` | unevaluated, no message |
+| `Integrate[Sqrt[x + Sqrt[x]]/x^2, x]` | closed by an earlier stage, no message |
+
 **Shape B: the radical below the tower (v0.6527).** In Shape B the radicand
 `b(x)` is rational in x, so `y = b^(1/n)` sits under the Log/Exp monomials. This is
 the transcendental Risch algorithm over the algebraic base `k0 = Q(x)(y)`.

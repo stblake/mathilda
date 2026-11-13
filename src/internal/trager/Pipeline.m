@@ -84,11 +84,11 @@ tragerLogPart[ctx_Association, r_List, Y_Symbol] := Module[{Z = ctx["Z"], degs, 
     catchTrager[tragerBasisLogPart[ctx, r, Y]],
     tragerFail["Decline", "skipped", <||>]];
   If[!tragerFailQ[attempt], Return[attempt]];
-  If[attempt[[1]] =!= "Decline", Throw[attempt, "TragerFail"]];
+  If[!tragerRetryableQ[attempt], Throw[attempt, "TragerFail"]];
   If[Max[degs] > 1,
     attempt = tragerOrbitLogPart[ctx, r, Y];
     If[attempt =!= $Failed, Return[attempt]]];
-  If[basisFirst, Throw[tragerFail["Decline", "logarithmic part: no construction applies", <||>], "TragerFail"]];
+  If[basisFirst, throwUnimplemented["Trager:logpart", "logarithmic part: no construction applies"]];
   tragerBasisLogPart[ctx, r, Y]];
 
 traceCertificate::usage = "traceCertificate[ctx] looks for a proof of non-elementarity that needs only the field Q(gamma) of ONE residue gamma, not the field of all of them. If the integral is elementary, r = Sum c_j du_j/u_j, and for every Q-linear lambda on the span of the residues Sum_i lambda(alpha_i) Delta(alpha_i) = Sum_j lambda(c_j) div(u_j) is a torsion divisor. lambda_gamma(alpha) = Tr(alpha gamma) is Q-linear and constant on the roots of each irreducible factor f_k of R over Q(gamma), so its divisor Sum_k lambda_k Delta(f_k) is defined over Q(gamma), of degree deg q instead of that of the splitting field. A residue gamma is taken from each irreducible factor q of R in turn; when its divisor is shown of infinite order (orders modulo two primes disagree, or the only possible order N fails torsionScreen) a NonElementary certificate is thrown. Otherwise (all lambda_gamma torsion, or zero) it returns Null without a verdict and the full construction follows.";
@@ -232,7 +232,7 @@ tragerIntegrateBody[f_, x_Symbol, method_String] := Module[
                                    If[tragerFailQ[r], failToList[r], r]]]}]},
         Switch[kr,
           {"not elementary", __}, throwNonElementary["Kummer piece: " <> kr[[2]]],
-          {"failed", __}, Null,
+          {"failed" | "implementation incomplete", __}, Null,
           _, Return[kr, Module]]]]];
   cf = canonicalForm[f, x];
   n = cf["n"]; coeffs = cf["coeffs"];

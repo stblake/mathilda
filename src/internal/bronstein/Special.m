@@ -52,7 +52,7 @@ brSpecialReduce[T_Association, cv_Association, c0_] := Module[
     sol = brKSolveRDE[TL, Together[brSValueZero[T, cv] - mu eta], a];
     Switch[First[sol],
       "NoSolution", throwNonElementary["no reduction at theta = 0 ([B] Prop 2.18)", <|"mu" -> mu|>],
-      "Unknown", throwDecline["reduction at theta = 0: " <> sol[[2]]]];
+      "Unknown", throwUnimplemented["Special:rde", "reduction at theta = 0: " <> sol[[2]]]];
     term = Together[sol[[2]] th^(-mu)];
     b = Together[b + term];
     c = Together[c - (brD[T, term] + s term)]];
@@ -63,7 +63,7 @@ brSpecialReduce[T_Association, cv_Association, c0_] := Module[
     sol = brKSolveRDE[TL, Together[brSValueInf[T, cv] + d eta], a];
     Switch[First[sol],
       "NoSolution", throwNonElementary["no reduction at theta = infinity ([B] Prop 2.18)", <|"d" -> d|>],
-      "Unknown", throwDecline["reduction at theta = infinity: " <> sol[[2]]]];
+      "Unknown", throwUnimplemented["Special:rde", "reduction at theta = infinity: " <> sol[[2]]]];
     term = Together[sol[[2]] th^d];
     b = Together[b + term];
     c = Together[c - (brD[T, term] + s term)]];

@@ -9,7 +9,9 @@
  * hand-offs; every answer is checked by PossibleZeroQ[D[F, x] - f].
  * Certificates: [B] p.139 (resultant criterion), Sqrt[Log x] (algebraic part),
  * lifted Nagell-Lutz (infinite-order residue divisor by specialization).
- * Declines: nested radicals, a compositum, trigonometric kernels, Shape B.
+ * Implementation incomplete: nested radicals and a non-cyclic compositum (outside
+ * one simple radical extension); trigonometric kernels and a further monomial
+ * over a radical-argument kernel (inside it, not implemented yet).
  * Message routing: Integrate::nonelem fires once, Quiet silences it, Check
  * sees it.  Property: derivatives of random elementary Shape A functions are
  * integrated or declined, never answered wrongly.
@@ -91,23 +93,29 @@ static void test_declines(void) {
     char buf[1024];
     for (int i = 0; declines[i]; i++) {
         snprintf(buf, sizeof buf, "First[BronsteinIntegrate[%s, x]]", declines[i]);
-        BR_EQ(buf, "\"failed\"");
-        snprintf(buf, sizeof buf, "Head[Integrate[%s, x, Method -> \"Bronstein\"]]", declines[i]);
+        BR_EQ(buf, "\"implementation incomplete\"");
+        snprintf(buf, sizeof buf, "Quiet[Head[Integrate[%s, x, Method -> \"Bronstein\"]]]", declines[i]);
         BR_EQ(buf, "Integrate");
     }
-    BR_EQ("BronsteinIntegrate[Log[x] + Sqrt[Log[x] + Sqrt[Log[x]]], x]", "{\"failed\", \"nested radicals\"}");
+    BR_EQ("BronsteinIntegrate[Log[x] + Sqrt[Log[x] + Sqrt[Log[x]]], x]", "{\"implementation incomplete\", \"nested radicals\"}");
     BR_EQ("BronsteinIntegrate[Log[x] E^(x Sqrt[x^3 + 1]), x]",
-          "{\"failed\", \"a further monomial over a kernel with a radical argument (Shape B, curve-monomial case, takes one kernel)\"}");
+          "{\"implementation incomplete\", \"a further monomial over a kernel with a radical argument (transcendental Risch over an algebraic base)\"}");
+    /* a non-elementary input is a silent decline, not "incomplete" */
+    BR_EQ("BronsteinIntegrate[Erf[x] Sqrt[Log[x]], x]", "{\"failed\", \"non-elementary function in the integrand\"}");
 }
 
 static void test_messages_and_glue(void) {
     /* a certificate is announced once as Integrate::nonelem: Check sees it, Quiet hides it */
     BR_EQ("Check[Integrate[Sqrt[Log[x]], x, Method -> \"Bronstein\"], \"msg\"]", "\"msg\"");
     BR_EQ("Check[Quiet[Integrate[Sqrt[Log[x]], x, Method -> \"Bronstein\"]]; \"ok\", \"msg\"]", "\"ok\"");
-    /* a decline is silent */
-    BR_EQ("Check[Integrate[Tan[x] Sqrt[Log[x]], x, Method -> \"Bronstein\"]; \"ok\", \"msg\"]", "\"ok\"");
+    /* "implementation incomplete" is announced as Integrate::incomplete:
+       Check sees it, Quiet hides it; a non-elementary input stays silent */
+    BR_EQ("Check[Integrate[Tan[x] Sqrt[Log[x]], x, Method -> \"Bronstein\"]; \"ok\", \"msg\"]", "\"msg\"");
+    BR_EQ("Check[Quiet[Integrate[Tan[x] Sqrt[Log[x]], x, Method -> \"Bronstein\"]]; \"ok\", \"msg\"]", "\"ok\"");
+    BR_EQ("Check[Integrate[Erf[x] Sqrt[Log[x]], x, Method -> \"Bronstein\"]; \"ok\", \"msg\"]", "\"ok\"");
     BR_EQ("Integrate`Bronstein[1/(x Sqrt[Log[x]]), x]", "2 Sqrt[Log[x]]");
-    BR_EQ("Integrate`Bronstein[Sin[x] Sqrt[Log[x]], x]", "{\"failed\", \"unsupported function in the integrand\"}");
+    BR_EQ("Quiet[Integrate`Bronstein[Sin[x] Sqrt[Log[x]], x]]",
+          "{\"implementation incomplete\", \"trigonometric or hyperbolic function (TrigToExp front end over Q(i))\"}");
     BR_EQ("Head[Integrate`Bronstein[x]]", "Integrate`Bronstein");
     BR_TRUE("MemberQ[Attributes[Integrate`Bronstein], Protected]");
     br_assertions++;

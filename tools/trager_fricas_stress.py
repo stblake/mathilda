@@ -453,7 +453,7 @@ def run_mathilda(mbin, case, method, timeout, tmpdir):
         rec.update(status="TIMEOUT", detail="TimeConstrained")
     elif st == "not elementary":
         rec.update(status="NONELEM", detail=rec["result"])
-    elif st in ("failed", "unevaluated"):
+    elif st in ("failed", "unevaluated", "implementation incomplete"):
         rec.update(status="DECLINE", detail=rec["result"])
     elif st == "elem":
         pzq = grab("PZQ")

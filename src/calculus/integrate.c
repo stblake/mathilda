@@ -1490,6 +1490,11 @@ static Expr* try_parallelmixedtower(Expr* f, Expr* x, bool cascade) {
  * exactly before it is returned), {"not elementary", reason} -- a proof -- or
  * {"failed", reason}.  Method -> "Trager" also runs in the Automatic cascade
  * (try_trager_cascade, gated and budgeted); TragerKauers does not. */
+/* Integrate::incomplete (defined with integrate_announce_nonelementary below):
+ * a decision method stopped because the integrand is outside the class it
+ * decides, or a branch of the algorithm is not implemented yet. */
+static void integrate_announce_incomplete(Expr* f, Expr* x, const Expr* result);
+
 static unsigned trager_load_gen = 0;   /* symtab_generation() of the attempt */
 static bool trager_load_succeeded = false;
 
@@ -1527,7 +1532,9 @@ static Expr* integrate_trager_common(Expr* res, const char* engine) {
     if (pmt_is_nonelementary_certificate(result))
         integrate_announce_nonelementary(res->data.function.args[0],
                                          res->data.function.args[1]);
-    return result;   /* antiderivative, or a {"not elementary"|"failed", reason} List */
+    integrate_announce_incomplete(res->data.function.args[0],
+                                  res->data.function.args[1], result);
+    return result;   /* antiderivative, or a {"not elementary"|"implementation incomplete"|"failed", reason} List */
 }
 
 static Expr* builtin_integrate_trager(Expr* res) {
@@ -1602,7 +1609,9 @@ static Expr* builtin_integrate_bronstein(Expr* res) {
     if (pmt_is_nonelementary_certificate(result))
         integrate_announce_nonelementary(res->data.function.args[0],
                                          res->data.function.args[1]);
-    return result;   /* antiderivative, or a {"not elementary"|"failed", reason} List */
+    integrate_announce_incomplete(res->data.function.args[0],
+                                  res->data.function.args[1], result);
+    return result;   /* antiderivative, or a {"not elementary"|"implementation incomplete"|"failed", reason} List */
 }
 
 /* Method -> "Bronstein" stage: decline (leave Integrate unevaluated) unless
@@ -3159,6 +3168,26 @@ static void intg_nonelem_pending_clear(void) {
     free(g_integrate_nonelem_pending_x); g_integrate_nonelem_pending_x = NULL;
 }
 
+/* Deferred Integrate::incomplete inside a cascade, held like the nonelem
+ * payload above and printed at the cascade exit only when nothing answered and
+ * no stage proved non-elementarity (a certificate is the stronger statement).
+ * The first stage that reports it wins. */
+static char* g_integrate_incomplete_pending_f = NULL;
+static char* g_integrate_incomplete_pending_x = NULL;
+static char* g_integrate_incomplete_pending_why = NULL;
+
+static void intg_incomplete_pending_clear(void) {
+    free(g_integrate_incomplete_pending_f);   g_integrate_incomplete_pending_f = NULL;
+    free(g_integrate_incomplete_pending_x);   g_integrate_incomplete_pending_x = NULL;
+    free(g_integrate_incomplete_pending_why); g_integrate_incomplete_pending_why = NULL;
+}
+
+static void intg_incomplete_message(const char* fs, const char* xs, const char* why) {
+    mth_message("Integrate", "incomplete",
+                "The integrand %s was not decided in %s: implementation incomplete (%s).",
+                fs ? fs : "?", xs ? xs : "?", why ? why : "?");
+}
+
 /* Nesting depth of the DEFINITE driver (integrate_definite_scoped).  A definite
  * integral first tries an indefinite antiderivative (Newton-Leibniz), and that
  * probe runs a complete top-level indefinite cascade (depth 0 -> 1 -> 0).  If
@@ -3378,6 +3407,97 @@ void integrate_announce_nonelementary(Expr* f, Expr* x) {
     if (g_integrate_definite_depth > 0) { intg_definite_pending_adopt(fs, xs); return; }
     mth_message("Integrate", "nonelem", "The integrand %s has no antiderivative elementary in %s.", fs ? fs : "?", xs ? xs : "?");
     free(fs); free(xs);
+}
+
+/* The reason string of a {"implementation incomplete", reason} method result,
+ * or NULL for any other value (borrowed from `r`). */
+static const char* incomplete_reason(const Expr* r) {
+    if (!r || r->type != EXPR_FUNCTION || r->data.function.head->type != EXPR_SYMBOL
+        || r->data.function.head->data.symbol.name != SYM_List
+        || r->data.function.arg_count < 2) return NULL;
+    const Expr* a0 = r->data.function.args[0];
+    const Expr* a1 = r->data.function.args[1];
+    if (a0->type != EXPR_STRING || strcmp(a0->data.string, "implementation incomplete") != 0)
+        return NULL;
+    return a1->type == EXPR_STRING ? a1->data.string : "unspecified";
+}
+
+/* Emit Integrate::incomplete for a {"implementation incomplete", reason} result
+ * of a decision method (Bronstein, Trager): the integrand is outside the class
+ * the method decides, or inside it on a branch not implemented yet.  Same
+ * gating as integrate_announce_nonelementary: silent in internal recursion and
+ * speculative integration; held until the cascade exit inside a cascade (a later
+ * stage may still answer); dropped inside a definite integral (its other stages
+ * may answer, and a spurious message would make Check[] fail a call that
+ * succeeds).  Routed through the mth_message funnel (Quiet / Check). */
+static void integrate_announce_incomplete(Expr* f, Expr* x, const Expr* result) {
+    const char* why = incomplete_reason(result);
+    if (!why) return;
+    if (g_integrate_depth > 1) return;
+    if (g_integrate_quiet != 0) return;
+    if (g_integrate_depth == 1 && g_integrate_named_f) f = g_integrate_named_f;
+    if (g_integrate_depth == 1) {
+        if (g_integrate_incomplete_pending_why) return;   /* the first stage wins */
+        g_integrate_incomplete_pending_f = expr_to_string(f);
+        g_integrate_incomplete_pending_x = expr_to_string(x);
+        g_integrate_incomplete_pending_why = strdup(why);
+        return;
+    }
+    if (g_integrate_definite_depth > 0) return;
+    char* fs = expr_to_string(f);
+    char* xs = expr_to_string(x);
+    intg_incomplete_message(fs, xs, why);
+    free(fs); free(xs);
+}
+
+/* True when e has a rational power of an x-dependent base, or a Root/RootSum:
+ * the cheap structural precondition for asking the Bronstein scope classifier. */
+static bool intg_has_algebraic_of_x(const Expr* e, const Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL &&
+        (h->data.symbol.name == intern_symbol("Root") || h->data.symbol.name == intern_symbol("RootSum"))
+        && depends_on_var(e, x))
+        return true;
+    if (h->type == EXPR_SYMBOL && h->data.symbol.name == SYM_Power && e->data.function.arg_count == 2) {
+        const Expr* ex = e->data.function.args[1];
+        bool rat = ex->type == EXPR_FUNCTION && ex->data.function.head->type == EXPR_SYMBOL
+                   && ex->data.function.head->data.symbol.name == intern_symbol("Rational");
+        if (rat && depends_on_var(e->data.function.args[0], x)) return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (intg_has_algebraic_of_x(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+/* The Automatic cascade declined and no stage reported: when the integrand is
+ * algebraic over an elementary tower but outside one simple radical extension
+ * (nested radicals, a non-cyclic compositum, a general algebraic function), or
+ * uses an in-scope construct the decision procedure does not yet take, say so
+ * (Integrate::incomplete) rather than leave the integral silently unevaluated.
+ * Asks Bronstein`BronsteinScope, which only builds the tower record. */
+static void intg_scope_incomplete(Expr* f, Expr* x) {
+    if (!intg_has_algebraic_of_x(f, x)) return;
+    if (tc_async_region_active()) return;
+    bronstein_lazy_load();
+    if (!bronstein_load_succeeded) return;
+    Expr* call = expr_new_function(expr_new_symbol("Bronstein`BronsteinScope"),
+        (Expr*[]){ expr_copy(f), expr_copy(x) }, 2);
+    tc_async_defer_push();
+    mth_msg_suppress_push();
+    Expr* r = integrate_method_eval_guarded(call);
+    mth_msg_suppress_pop();
+    tc_async_defer_pop();
+    expr_free(call);
+    const char* why = incomplete_reason(r);
+    if (why) {
+        Expr* fn = g_integrate_named_f ? g_integrate_named_f : f;
+        char* fs = expr_to_string(fn);
+        char* xs = expr_to_string(x);
+        intg_incomplete_message(fs, xs, why);
+        free(fs); free(xs);
+    }
+    if (r) expr_free(r);
 }
 
 /* Fail-memo: the indefinite integrands the method cascade has FAILED on
@@ -3618,6 +3738,7 @@ static Expr* builtin_integrate_body(Expr* res) {
     if (g_integrate_depth == 1) {
         g_integrate_nonelem_announced = 0;
         intg_nonelem_pending_clear();   /* drop anything a longjmp stranded */
+        intg_incomplete_pending_clear();
     }
 
     Expr* result = NULL;
@@ -3924,7 +4045,19 @@ static Expr* builtin_integrate_body(Expr* res) {
      * non-elementary, and warning about an answer we are about to print is
      * noise. */
     if (g_integrate_depth == 0) {
+        /* A certificate outranks "implementation incomplete": report the
+         * latter only when nothing answered and nothing was proved. */
+        bool proved = g_integrate_nonelem_pending_f != NULL || g_integrate_nonelem_announced;
         if (result) intg_nonelem_pending_clear(); else intg_nonelem_pending_flush();
+        if (!result && !proved && g_integrate_definite_depth == 0 && g_integrate_quiet == 0) {
+            if (g_integrate_incomplete_pending_why)
+                intg_incomplete_message(g_integrate_incomplete_pending_f,
+                                        g_integrate_incomplete_pending_x,
+                                        g_integrate_incomplete_pending_why);
+            else if (method == METHOD_AUTOMATIC)
+                intg_scope_incomplete(f, x);
+        }
+        intg_incomplete_pending_clear();
     }
 
     /* Record a failure so the fixed-point loop's redundant re-entry on the
@@ -3983,7 +4116,9 @@ void integrate_init(void) {
         "generators by normalisation at infinity, and torsion orders by reduction "
         "modulo two primes. It returns the antiderivative (verified exactly), "
         "{\"not elementary\", reason} -- a proof, also announced as Integrate::nonelem "
-        "-- or {\"failed\", reason}.");
+        "-- {\"implementation incomplete\", reason} -- outside one simple radical over "
+        "Q(x), or a branch not implemented yet, announced as Integrate::incomplete -- "
+        "or {\"failed\", reason}.");
     symtab_add_builtin("Integrate`TragerKauers", builtin_integrate_trager_kauers);
     symtab_get_def("Integrate`TragerKauers")->attributes |= ATTR_PROTECTED;
     symtab_set_docstring("Integrate`TragerKauers",
@@ -4007,7 +4142,10 @@ void integrate_init(void) {
         "by a certified Risch differential equation. Purely algebraic integrands go to "
         "Trager's algorithm, purely transcendental ones to the transcendental Risch "
         "algorithm. It returns the antiderivative (verified), {\"not elementary\", "
-        "reason} -- a proof, also announced as Integrate::nonelem -- or {\"failed\", reason}.");
+        "reason} -- a proof, also announced as Integrate::nonelem -- {\"implementation "
+        "incomplete\", reason} -- outside one simple radical extension, or a branch not "
+        "implemented yet, announced as Integrate::incomplete -- or {\"failed\", reason} "
+        "(a non-elementary input or a resource bound).");
     /* The Automatic-cascade gates of the Trager / Bronstein stages, and their budgets. */
     symtab_add_builtin("Integrate`CascadeGateQ", builtin_integrate_cascadegateq);
     symtab_get_def("Integrate`CascadeGateQ")->attributes |= ATTR_PROTECTED;

@@ -39,7 +39,7 @@ brBCContext[T_Association] := Module[
   n = cf["n"]; g = cf["g"]; yh = cf["y"];
   cc = componentCurve[n, g, 1, x];
   If[!cc["exact"] || cc["m"] =!= n || !reducedCurveQ[cc["m"], cc["G"], x],
-    throwDecline["curve-monomial case: the radical's curve is not reduced over Q(x)"]];
+    throwUnimplemented["BaseCurve:curve-not-reduced", "curve-monomial case: the radical's curve is not reduced over Q(x) (a constant-field extension)"]];
   s = cc["s"]; q = cf["q"];
   (* yh = s Y; the user's b^(1/n) = yh/q = s Y/q *)
   f = Total[Table[cf["coeffs"][[i + 1]] (s Y)^i, {i, 0, n - 1}]];
@@ -183,7 +183,8 @@ brBCIntegrateK0[C_Association, e_] := Module[{x = C["x"], s, r},
   r = Trager`TragerIntegrate[s, x, "Trager"];
   Which[
     MatchQ[r, {"not elementary", _}], throwNonElementary["algebraic base (Trager): " <> r[[2]]],
-    MatchQ[r, {"failed", _}], throwDecline["algebraic base (Trager): " <> r[[2]]],
+    MatchQ[r, {"implementation incomplete", _}], throwIncomplete["algebraic base (Trager): " <> r[[2]]],
+    MatchQ[r, {"failed", _}], throwUnimplemented["Trager", "algebraic base (Trager): " <> r[[2]]],
     True, r]];
 
 brBCFromSurface::usage = "brBCFromSurface[C, e] writes the surface expression e (in x and powers of the user's radicand b) in normal form in x and Y: b^(k/n) = (phi Y)^k with phi = s/q (b^(1/n) = yh/q, yh = s Y).";
@@ -217,7 +218,7 @@ brBCPolyExp[C_Association, L_List] := Module[{th = C["th"], B = C["B"], F0 = 0, 
       Switch[First[r],
         "Solution", alg = alg + brBCNorm[C, afToY[B, r[[2]], C["Y"]]] th^lj[[1]],
         "NoSolution", throwNonElementary["no algebraic part: the Risch DE D b + j h' b = c has no solution over the algebraic base ([B] Part 3)"],
-        _, throwDecline["Risch DE on the curve undecided: " <> ToString[Last[r]]]]],
+        _, throwUnimplemented["RDEAlgebraic:undecided", "Risch DE on the curve undecided: " <> ToString[Last[r]]]]],
     {lj, L}];
   {alg, brBCIntegrateK0[C, e0]}];
 

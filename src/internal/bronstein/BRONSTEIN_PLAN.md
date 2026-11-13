@@ -1147,3 +1147,281 @@ are 98 s spent in the final PossibleZeroQ), then the P0 items.
 - Still open under #6/#7: presentation of conjugate pairs (an ArcTan pair summing
   to a constant survives the real form). Next: #8 cascade budgets, then the
   lccontent declines.
+
+## 2026-11-14 — Completion campaign: a full decision procedure for one simple radical extension
+
+(User decisions 2026-11-14: radical anywhere in the tower; constants Q, number fields, Q(i)/trig, symbolic parameters; missing transcendental pieces in C; derive new theory where Bronstein stops; "implementation incomplete" reported outside the scope, by Method and by the Automatic cascade. Branch `bronstein-complete`, worktree `../Mathilda-bronstein`.)
+
+### Context
+
+`src/internal/bronstein/` implements Bronstein 1990 (JSC 9) for one radical `y^n = a`, with the radical
+on top of a Log/Exp tower (Shape A) or at the bottom over Q(x) (Shape B). It is not yet a decision
+procedure. Three exploration audits (2026-11-14) found:
+
+- **About 43 `throwDecline` sites and about 30 `{"Unknown"}` paths.** On those paths the integrand is
+  inside the domain, but the code gives up. With `Method -> "Bronstein"` a give-up is silent: the
+  result is unevaluated and no message is issued. FriCAS says "implementation incomplete" in the same
+  situation.
+- **The transcendental substrate underneath is incomplete in towers.** The C Risch DE
+  (`src/calculus/integrate_risch_rde.c`) is missing:
+  - a weak normalizer above the base field;
+  - ParametricLogarithmicDerivative;
+  - the cancellation branches (b = Dz/z);
+  - the parametric Risch DE and limited integration.
+
+  Its 21 `rde_cert_mark` sites return `$Failed`. `Integrate`RischTranscendental` is a chain of cases,
+  not a decision procedure.
+- **Three possible soundness holes (from reading the code, none reproduced yet):**
+  - `rt_decide_field` opens no certification scope, so an uncertified `rde_tower` NULL reaches
+    `rt_dec_nonelem()` (`risch_field_integrate.c:1526`). `ElementaryIntegralQ` then answers False
+    without a proof.
+  - `Risch`LogReducible`/`ExpReducible` return False on failure (decode error, `SolveAlways` giving
+    up; `risch_structure.c:113,279`), and the `.m` code reads that False as a proof.
+  - `brIntegrateInKLogLike` (`Residues.m:161`) drops Log atoms without reducing them by
+    `LogReducible`. That can turn a reducible log into a false NonElementary.
+
+**Goal (user decisions, 2026-11-14):**
+- One simple radical `y^n = a`, `a ∈ k_j`, may sit **anywhere** in an elementary Log/Exp tower.
+- Constant field: Q, number fields, Q(i) (trig and inverse trig through TrigToExp), and **symbolic
+  parameters** (generic answers).
+- For every such integrand the procedure returns either a verified antiderivative or a certified
+  non-elementary verdict.
+- The missing transcendental pieces are completed **in C** (book Ch. 6–7).
+- Wherever Bronstein's work stops short, **derive the missing theory**, write it up with proofs, and
+  implement it.
+- Outside the scope (nested radicals, a compositum, general algebraic y), both `Method -> "Bronstein"`
+  and the Automatic cascade report **"implementation incomplete"**.
+
+### Definition of done
+
+An integrand f is **in scope** when it lies in `K = Q(c…)(params)(x)(t_1..t_j)(y)(t_{j+1}..t_r)`:
+- each t_i is a Log or Exp monomial;
+- `y^n = a ∈ Q(…)(x)(t_1..t_j)`;
+- the constants c… are algebraic.
+
+For every in-scope f, `BronsteinIntegrate` ends in one of these:
+
+| Outcome | Meaning |
+|---|---|
+| antiderivative | PZQ-verified |
+| `NonElementary` | every sub-decision certified |
+| `Resource` | budget or time expiry; cascade only |
+| `Internal` | an invariant broke, which is a bug |
+
+**`Decline` disappears for in-scope input.** A completeness gate enforces this (Phase 1).
+
+### Failure taxonomy and "implementation incomplete" (Phase 1, built first because it drives the ratchet)
+
+- **New classes** in `trager/Common.m`, next to the existing ones:
+  - `throwIncomplete[reason]`: input outside the scope (nested radicals, a compositum, a general
+    algebraic y, non-elementary input heads). `failToList` maps it to
+    `{"implementation incomplete", reason}`.
+  - `throwUnimplemented[site, reason]`: a temporary class for in-scope gaps, one id per site.
+- **The `throwDecline` sites are reclassified.** Every one becomes Incomplete, Unimplemented,
+  Resource (`Specialize.m:71` becomes an unbounded growing-height loop, plus `throwInternal` if a
+  condition fails generically) or Internal (e.g. `LimitedIntegrate.m:118`, `RDEAlgebraic.m:157`).
+- **C side** (`src/calculus/integrate.c`):
+  - `try_bronstein` / `try_trager`, on an incomplete or unimplemented list, call
+    `mth_message("Integrate", "incomplete", "Implementation incomplete (`1`).")`.
+  - Automatic cascade: the deciders record the reason. If the cascade ends unevaluated and a decider
+    hit Incomplete or Unimplemented, it emits `Integrate::incomplete` once. A Resource outcome stays
+    silent.
+  - Everything routes through `mth_message`, so `Quiet` and `Check` work (`make check-messages`).
+  - Trager gets the same split, so the two methods stay consistent.
+- **Completeness gate.** `tools/check_bronstein_completeness.py` (`make check-bronstein-completeness`,
+  push-tier ctest) lists the `throwUnimplemented` ids against a `BASELINE`. It is a ratchet: each later
+  phase deletes ids, and the campaign ends when `BASELINE` is empty and the class itself is deleted.
+
+### Phase 0: soundness first
+
+For each of the three suspected holes:
+1. Write a reproducer test (e.g. a reducible `Log[x(1+x)]` beside `Log[x]` and `Log[1+x]`).
+2. Fix the root cause.
+3. Then add a unit test that feeds the malformed sub-answer and asserts that no certificate comes out.
+
+The fixes:
+- **`rt_decide_field`** runs inside `rde_cert_begin/end`. An uncertified NULL becomes UNKNOWN, not
+  nonelem.
+- **`LogReducible`/`ExpReducible`** become tri-state: a coefficient list, `False` only with a proof,
+  or `$Failed`. `SolveAlways` is replaced by exact linear algebra over the constants: extract the
+  coefficients in the tower's monomial basis and run the structure theorem's
+  `Σ r_i Dθ_i = Du/u` as a constant-coefficient system. All `.m` callers are updated.
+- **`brIntegrateInKLogLike`** reduces every Log atom by `brLogBasisReduce` before it takes the
+  k-part.
+
+### Phase 2: complete the transcendental substrate in C (Bronstein, *Symbolic Integration I*, Ch. 5–7, on towers)
+
+All of this goes in `integrate_risch_rde.c`, `risch_field_integrate.c` and `risch_structure.c`, each
+step behind a certified tri-state:
+1. **WeakNormalizer over k(t)** (§6.1). It needs the resultant's positive-integer roots over a tower
+   coefficient field. Plug it into `rde_tower`, replacing the `rc_weakly_normalized` check-only mark.
+2. **ParametricLogarithmicDerivative** (§7.3), built on the Phase 0 structure-theorem linear algebra.
+   It closes the marks at `rde.c:808` and `:865`.
+3. **Cancellation cases** (§6.6):
+   - PolyRischDECancelPrim and PolyRischDECancelExp, with the `b = Dz/z` branch;
+   - RdeBoundDegreePrim's limited-integration bound (§6.3). It closes `:887` and `:1114`, and stops
+     marking a proven lower-field "no".
+4. **Parametric Risch DE** (Ch. 7): ParamRdeNormalDenominator, ParamRdeSpecialDenominator,
+   ParamRdeBoundDegree, ParSPDE, ParamPolyRischDENoCancel/Cancel, constant linear constraints.
+   **LimitedIntegrate** (§7.2) is built on it and reachable from the RDE.
+5. **`rt_field_integrate` completeness:**
+   - limited integration with m > 1 new logs (replacing `rt_limited_field_integrate`);
+   - the mixed-resultant declines (`:1015`).
+
+   After this, `Integrate`RischTranscendental` decides every Log/Exp tower.
+6. **Constant fields in C.** Number-field constants, and parameters treated as constant monomials
+   (D = 0). **Spike first**: if the FLINT-backed tower arithmetic cannot carry them, parameters and
+   algebraic constants become extra polynomial variables with zero derivative. Record the decision in
+   the plan.
+
+New Protected, documented builtins:
+- `Risch`ParametricLogarithmicDerivative`
+- `Risch`ParamRischDE`
+- `Risch`LimitedIntegrate`
+
+Each one gets direct tests (each outcome, plus agreement on a corpus with the existing solver), a
+spec entry and a changelog note.
+
+### Phase 3: finish Shape A in `.m`
+
+- **Replace `brParamIntegrate` / `brLimitedIntegrate`** with `Risch`LimitedIntegrate`, which treats
+  the combination as a whole. That removes the per-σ give-up at `:85` and gap #10, because logs with
+  algebraic coefficients go through the constant-field extension.
+- **Simplify the algebraic part.** `AlgebraicPart.m` and `Special.m` use the now-complete
+  `Risch`RischDECertified`. Keep `brPolyRDELog` only if a cross-check shows it is still needed;
+  otherwise delete it.
+- **#12, m ≥ 3 with weight-≥2 coordinates.** Use the projection `(1/m) Σ ζ^{-k} σ^k L` with
+  `Cyclotomic[m]` adjoined to the residue field (`residueField`, `afScale`, `afNorm`, `brK0Trace`),
+  in `LogPart.m:66,133,150`.
+- **#9, genus ≥ 1 special places.**
+  - Wire Trager's unused `torsionOrderWith[ctx, mk]` (`TorsionModP.m:135`). It takes a mod-p builder
+    of `brSpecialPlaceIdeals`/`residueIdeal` on the specialised `Bu` frame.
+  - Add the special-point checks to `goodPrime` and `brGoodSpecializationQ`.
+  - Then reuse the genus-0 generator code (`LogPart.m:200`).
+  - If the linear `principalQ` search is slow, swap in baby-step giant-step.
+- **`LogPart.m:171`.** The τ-uniform fibre is the k-rational ideal `(u − pt)`; skip the
+  `z^m − κ` factor. Test it before relying on it.
+- **`Divisors.m:108`, d = gcd(e, m) places above one special point.** Generalise `placeIdealAt` and
+  emit one τ per place.
+- **[B] pp.155–157, η' in the Q-span of logarithmic derivatives.** Detect it with the tri-state
+  `LogReducible` and implement Bronstein's construction.
+- **Front end:**
+  - reducible logs (#13), rewritten with explicit constants;
+  - `E^(r Log a)` becomes a radical;
+  - `ExpReducible` failures are robust;
+  - the Kummer-free single-radical check marks a compositum as Incomplete.
+- **`Curve.m:60,62` and `brRadicalValueCheck` with a lower tower** go to the Phase 5 machinery
+  (they are Shape-B-over-tower components).
+
+### Phase 4: constant fields
+
+1. **Number fields.** Thread the constant field `Q(α)` through `fieldFn`, the tower, the curve, the
+   residue field and the torsion code (Trager's `fieldNF` already exists). This removes the
+   `Tower.m:53/170` declines.
+2. **Q(i) and trig.** A TrigToExp front end:
+   - Sin…Csc, Tan and the hyperbolic functions become Exp;
+   - ArcTan and friends become Log over Q(i);
+   - ArcSin and ArcSinh become Log plus a radical, which counts as *the* radical.
+
+   Then a real form of the answer (Trager's `realForm`/`presentable`, re-verified). The
+   `brUnsupportedHeads` list shrinks to genuinely non-elementary heads, which are Incomplete.
+3. **Symbolic parameters.** Parameters are transcendental constants: `fieldFn` variables with
+   D = 0. Answers and certificates are generic, valid outside a proper Zariski-closed set of
+   parameter values; the docs and docstring say so. Specialisation for torsion also specialises the
+   parameters. The Theory note (E4) proves this is sound.
+
+### Phase 5: the radical anywhere (largest; theory first)
+
+- **A differential-field record** (`brDField`, a new `DField.m`) abstracts the base field. Its
+  operations are arithmetic, D, zero test, RDE, ParamRDE, LimitedIntegrate, parametric log-derivative
+  and LogReducible. There are two implementations:
+  - a transcendental tower, delegating to the Phase 2 C builtins;
+  - a simple radical extension `k_j(y)` of such a tower (Phase 5 code).
+
+  The record lets the transcendental Risch algorithm in `.m` recurse over an algebraic base.
+- **Transcendental Risch over an algebraic base `k0 = k_j(y)(t_{j+1}..t_{s-1})`.** This generalises
+  `BaseAlgebraic.m` and `K0.m` from `Q(x)(y)` to the record:
+  - Hermite in t_s over k0;
+  - Rothstein–Trager with k0-norms;
+  - the polynomial and special parts through `brDField` RDE / ParamRDE;
+  - the base case is the Shape A integration in `k_j(y)`.
+- **The Risch DE on a simple-radical curve over a transcendental k**, i.e. `z' + f z = g` with
+  f, g ∈ k(θ)(y) and k a tower. Its coefficients couple the `y^i` coordinates. It extends Bronstein's
+  ISSAC'91 "The Risch differential equation on an algebraic curve" (PDF in the repo root) and
+  [B] Part 3:
+  - order bounds at the places over k[θ], at θ = ∞ and at the special places;
+  - then reduction of the coefficient system to parametric RDEs in k (recursive).
+
+  This generalises `RDEAlgebraic.m` (today only over `fieldQ[]`, θ = x). It also fixes
+  `RDEAlgebraic.m:76` with per-place values from the Newton polygon.
+- **What this closes:** `Tower.m:133,136,225`, `BaseCurve.m:220`, `BaseAlgebraic.m:174`,
+  `Curve.m:60,62`, `Residues.m:108–112` (gap #15).
+
+### Theory deliverable (written before the code it justifies)
+
+`docs/notes/bronstein_extensions.md`. For each result: a statement, a full proof, where Bronstein
+stops, and a worked example.
+
+| | Result |
+|---|---|
+| E1 | The RDE on a simple-radical curve over a transcendental tower: bounds and the recursive reduction |
+| E2 | Transcendental Risch over an algebraic base: correctness of the recursion through `brDField`, and the Liouville argument for a mid-tower radical |
+| E3 | Torsion by specialization when special places are included: the goodness conditions and injectivity in characteristic 0 |
+| E4 | Symbolic parameters: genericity of the verdicts, and which zero tests are generic |
+| E5 | Ideals for several ramified places above a special point |
+| E6 | Any further gap found during implementation |
+
+Each proof gets an independent adversarial review (a subagent given only the note and the papers)
+and a numeric sanity check before its phase starts.
+
+### Testing and gates (existing policy kept)
+
+- **Unit tests for every routine**, `.m` and C: at least 3 direct cases per routine plus a seeded
+  property test. `tools/check_bronstein_test_coverage.py` is extended to the new C builtins and
+  `.m` files.
+- **Every reclassified site** gets a test asserting its exact tag. `Integrate::incomplete` gets
+  tests under `Quiet`/`Check`, and cascade tests that it fires only outside the scope.
+- **Completeness stress.** The generator `tools/bronstein_stress/gen.m` gains families:
+  - mid-tower radicals;
+  - number-field, Q(i)/trig and parametric constants;
+  - genus ≥ 1 special places;
+  - m ≥ 3 weights;
+  - random in-scope `R(…)·y^k`.
+
+  Assertion: zero Decline/Unimplemented, zero WRONG/FALSE_CERT. Every certificate is cross-checked
+  against FriCAS where FriCAS decides (`bronstein_fricas_stress`).
+- **Benchmarks.** `benchmarks/256-integration-shootout` and `257-compact-integrals` must stay at
+  0 WRONG / FALSE_CERT / AUTO-GAP, and the Bronstein close counts are ratcheted.
+- **Repo gates:** `make check-c99`, `check-messages`, the no-FLINT build before push, valgrind on the
+  examples.
+
+### Execution and bookkeeping
+
+- **Order:** Phase 0 → 1 → 2 → 3 → 4 → 5 → close-out. The E-notes come before Phases 3 (E3, E5),
+  4 (E4) and 5 (E1, E2).
+- **At the start of execution:** append this plan as a dated section of
+  `src/internal/bronstein/BRONSTEIN_PLAN.md`, add a `tasks/todo.md` section, and keep a progress log
+  per session.
+- **Each substantive step:**
+  - spec in `docs/spec/builtins/calculus.md`;
+  - the weekly changelog `docs/spec/changelog/2026-11-09.md` (the current week);
+  - docstrings and attributes for new builtins;
+  - version +0.0001 and a tag, checking the tags right before each bump.
+- **Close-out:** a review section in `tasks/todo.md`, `tasks/lessons.md`, and the book's index if the
+  calculus chapter changes.
+
+### Verification
+
+- `make -j && make check-c99 check-messages check-bronstein-coverage check-bronstein-completeness`
+- `cd tests/build && cmake .. && make -j && ctest -R "bronstein|trager|risch" -LE nightly`, then
+  `ctest -LE nightly -j4`
+- Nightlies: `bronstein_stress`, `bronstein_cascade_stress`, `bronstein_fricas_stress`,
+  `integration_shootout_stress`
+- REPL spot checks:
+  - the four paper examples;
+  - `Sqrt[Log[x] + Sqrt[Log[x]]]` gives `Integrate::incomplete` under Automatic and under
+    `Method -> "Bronstein"`;
+  - a mid-tower radical, e.g. `Log[1 + Sqrt[Log[x]]]/x`, is decided;
+  - `Sqrt[2] Sqrt[Log[x]]` and `Sin[x] Sqrt[1 + Cos[x]]` are decided;
+  - a parametric example `Sqrt[a + Log[x]]/x` gives a generic answer.
+- `valgrind --leak-check=full ./Mathilda -file <examples>`: no growth beyond the startup baseline.

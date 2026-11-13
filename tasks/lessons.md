@@ -5279,3 +5279,28 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   points too; an answer off by a LOCALLY CONSTANT factor (zero derivative, e.g.
   `Sqrt[x] Sqrt[x^2 - 1]/Sqrt[x^3 - x]`) is multiplied by it, which is valid on every
   interval.
+
+## Bronstein completion campaign, Phases 0-1 (2026-11-14, v0.6545)
+
+- **A new result kind in a list protocol: audit every consumer for "anything but
+  failed is an answer".** Adding `{"implementation incomplete", reason}` beside
+  `{"failed", reason}` silently turned it into an *answer* in two consumers that
+  tested `!MatchQ[r, {"failed", ___}]` (KummerIntegrate, ParallelMixedTower's
+  KernelSubstitution): PMT lost its `Sqrt[Log[x]]` certificate because Trager's
+  new list was thrown as the result. Rule: before adding a status, grep every
+  `"failed"` pattern and every `Switch`/`Which` on the list head across `src/` and
+  `tools/`, and translate the new kind at the protocol boundary of a method that
+  keeps its own convention (PMT maps it back to `"failed"`).
+- **Retry predicates must cover every non-proof class.** Code that tries another
+  construction only on `"Decline"` stops trying when a site is reclassified to a
+  finer class; use one predicate (`tragerRetryableQ`) for "proves nothing".
+- **A solver NULL is a proof only if the solver actually ran.** `rde_base` was
+  handed `I E^x` (a lower monomial in SURFACE form) because the "free of the tower
+  variables" test looked for the symbol `t0`; it could not form its polynomial
+  equation, and its NULL was read as "no solution" -- a certificate by accident.
+  Test membership in the tower variables after `rt_subst_kernels`, and run every
+  "no solution" inside a certification scope (`rde_cert_begin/end`), propagating
+  an inner mark to the enclosing scope.
+- **`False` must never mean "could not decide".** The structure-theorem builtins
+  returned `False` on a decode error or a `SolveAlways` give-up, and the caller
+  read `False` as "new monomial", a premise of certificates. Tri-state (`$Failed`).

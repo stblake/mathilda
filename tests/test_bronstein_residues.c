@@ -130,7 +130,7 @@ static void test_special_residues(void) {
           "<|\"ramified\" -> False, \"kappa\" -> 1, \"u\" -> 1, \"lambda\" -> 1|>");
     BR_EQ("brLogInfinityResidues[TL1, cvL1, 1/(x brT1)][\"lambda\"]", "0");
     BR_EQ("brLogInfinityResidues[T147, cv147, c147]", "<|\"ramified\" -> True, \"tau\" -> 0|>");
-    BR_THROWS("brLogInfinityResidues[TL1, cvL1, 1/((1 + brT1^2) (x^2 + 1))]", "Decline",
+    BR_THROWS("brLogInfinityResidues[TL1, cvL1, 1/((1 + brT1^2) (x^2 + 1))]", "Unimplemented",
               "residue at infinity: integral in k with a non-rational logarithm");
     br_run("TL2 = brTower[Sqrt[Log[x]^2 + x], x]; True");
     br_run("cvL2 = brCurve[TL2, 2, brT1^2 + x]; True");
@@ -176,7 +176,7 @@ static void test_value_helpers(void) {
     /* gamma rational (x^2 = x^2): no radical condition (a Return-in-With once declined it) */
     BR_TRUE("brRadicalValueCheck[TL1, x^2, 2, 1, \"Algebraic\"]");
     BR_TRUE("brRadicalValueCheck[TL1, x, 2, 0, \"Algebraic\"]");
-    BR_THROWS("brRadicalValueCheck[T139, x, 2, 1, \"Algebraic\"]", "Decline", "special value over a radical extension of k");
+    BR_THROWS("brRadicalValueCheck[T139, x, 2, 1, \"Algebraic\"]", "Unimplemented", "special value over a radical extension of k");
     /* Int 1/Sqrt[x^3 + 1] is elliptic: Trager's certificate carries over */
     BR_EQ("First[brCatch[brRadicalValueCheck[TL1, x^3 + 1, 2, 1/(x^3 + 1), \"Logarithmic\"]]]", "\"NonElementary\"");
     /* relevant special locations */

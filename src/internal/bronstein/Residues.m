@@ -76,7 +76,7 @@ brNormalResidues[T_Association, cv_Association, c_] := Module[{z = Unique["Brons
     throwNonElementary["resultant criterion ([B] Prop 2.9): R(z) has non-constant coefficients", <|"R" -> R|>]];
   P = brNonzeroResiduePolynomial[crit[[2]], z];
   If[!FreeQ[P, _Complex | _Real] || (!FreeQ[P, z] && !AllTrue[CoefficientList[P, z], rationalNumberQ]),
-    throwDecline["residue polynomial with non-rational coefficients"]];
+    throwUnimplemented["Residues:nonrational", "residue polynomial with non-rational coefficients"]];
   <|"R" -> R, "P" -> P, "z" -> z|>];
 
 brGammaForm::usage = "brGammaForm[lc, m] writes gamma = lc^(1/m) as kappa^(1/m) u with kappa a rational constant and u in k, returning {kappa, u}, when lc = kappa u^m; None otherwise.";
@@ -109,7 +109,7 @@ brRadicalValueCheck::usage = "brRadicalValueCheck[T, lc, m, w, need] decides the
 brRadicalValueCheck[T_Association, lc_, m_Integer, w_, need_String] := Module[{x = T["x"], cc, r, p, q},
   If[Together[w] === 0, Return[True]];
   If[brLowerTower[T]["syms"] =!= {} || !rationalFunctionQ[lc, x] || !rationalFunctionQ[w, x],
-    throwDecline["special value over a radical extension of k"]];
+    throwUnimplemented["Residues:radical-value", "special value over a radical extension of k"]];
   (* gamma = lc^(1/m) = q^(-1) yh with yh^m = q^(m-1) num(lc); reduce to a curve Y^m' = G *)
   p = Numerator[Together[lc]]; q = Denominator[Together[lc]];
   cc = componentCurve[m, Expand[q^(m - 1) p], 1, x];
@@ -118,12 +118,13 @@ brRadicalValueCheck[T_Association, lc_, m_Integer, w_, need_String] := Module[{x
   r = Trager`TragerIntegrateCurve[Together[w cc["s"]/q], x, cc["m"], cc["G"], "Trager"];
   (* A certificate only from a recognised answer: anything else (an unevaluated  *)
   (* call, a malformed result) is an internal error -- a decline, never a proof. *)
-  If[!(MatchQ[r, {"not elementary" | "failed", _String}] ||
+  If[!(MatchQ[r, {"not elementary" | "failed" | "implementation incomplete", _String}] ||
        (AssociationQ[r] && KeyExistsQ[r, "Algebraic"] && KeyExistsQ[r, "Logs"] && ListQ[r["Logs"]])),
     throwInternal["brRadicalValueCheckUnexpected", <|"r" -> r|>]];
   Which[
     MatchQ[r, {"not elementary", _}], throwNonElementary["special residue undefined: " <> r[[2]]],
-    MatchQ[r, {"failed", _}], throwDecline["special residue: " <> r[[2]]],
+    MatchQ[r, {"implementation incomplete", _}], throwIncomplete["special residue: " <> r[[2]]],
+    MatchQ[r, {"failed", _}], throwUnimplemented["Trager", "special residue: " <> r[[2]]],
     need === "Algebraic" && r["Logs"] =!= {},
       throwNonElementary["residue at infinity undefined ([B] Def 2.10): a logarithm over a radical extension of k"],
     need === "Logarithmic" && !FreeQ[Together[r["Algebraic"]], x],
@@ -142,7 +143,7 @@ brLogInfinityResidues[T_Association, cv_Association, c_] := Module[{inf = brPlac
   li = brLimitedIntegrate[brLowerTower[T], Together[gf[[2]] a1], brEta[T]];
   Switch[First[li],
     "NoSolution", throwNonElementary["residue at infinity undefined ([B] Def 2.10, Prop 2.11)"],
-    "Unknown", throwDecline["residue at infinity: " <> li[[2]]]];
+    "Unknown", throwUnimplemented["Residues:infinity-limited", "residue at infinity: " <> li[[2]]]];
   <|"ramified" -> False, "kappa" -> gf[[1]], "u" -> gf[[2]], "lambda" -> li[[3]]|>];
 
 brExpValueIntegral::usage = "brExpValueIntegral[T, w] decides whether the element w of k satisfies w = c eta' + Sum c_i d_i'/d_i (c, c_i constants, d_i in k-bar): it returns {\"Solution\", c}, {\"NoSolution\"} (proven) or {\"Unknown\", reason}. The k-part of Int w must be c eta + constant.";
@@ -195,7 +196,7 @@ brExpSpecialResidues[T_Association, cv_Association, c_] := Module[{z = brPlaceDa
     r = brExpValueIntegral[T, Together[gf[[2]] w]];
     Switch[First[r],
       "NoSolution", throwNonElementary["residue at a special place undefined ([B] Def 2.21, Prop 2.22)"],
-      "Unknown", throwDecline["special residue: " <> r[[2]]]];
+      "Unknown", throwUnimplemented["Residues:special-value", "special residue: " <> r[[2]]]];
     <|"ramified" -> False, "kappa" -> gf[[1]], "u" -> gf[[2]], "c" -> r[[2]], "w" -> w|>];
   <|"zero" -> one[z["unramified"], z["G0"], brCoefficientAtZero[T, cv, c, 0] &],
     "inf" -> one[inf["unramified"], inf["lc"], brCoefficientAtInf[T, cv, c, 0] &]|>];

@@ -94,7 +94,7 @@ KummerIntegrate[pieces_, f_, x_Symbol, integrators_List] := Module[{total = 0, M
     r = {"failed", "no integrator"};
     Catch[Scan[Function[integ,
         r = integ[g P];
-        If[! MatchQ[r, {"failed", ___}], Throw[True, "kint"]]], integrators], "kint"];
+        If[! MatchQ[r, {"failed" | "implementation incomplete", ___}], Throw[True, "kint"]]], integrators], "kint"];
     If[MatchQ[r, {"not elementary", ___}],
       Return[If[single, r, {"failed", "a Kummer piece is not elementary, but its class has several monomials"}], Module]];
     If[ListQ[r], Return[r, Module]];

@@ -97,7 +97,7 @@ withFrameRoot::usage = "withFrameRoot[ctx, gp] adds a frame centre to a good-pri
 withFrameRoot[ctx_Association, gp_Association] := Module[{rts},
   If[KeyExistsQ[gp, "a"] && gp["a"] =!= None, Return[gp]];
   rts = frameRoots[fieldGF[gp["p"]], ctx["B"]["G"], ctx["B"]["m"], ctx["B"]["x"]];
-  If[rts === {}, throwDecline["no frame root modulo " <> ToString[gp["p"]]]];
+  If[rts === {}, throwUnimplemented["TorsionModP:frame-root", "no frame root modulo " <> ToString[gp["p"]]]];
   Join[gp, <|"a" -> First[rts]|>]];
 
 residueCombinationBuilder::usage = "residueCombinationBuilder[ctx, b] is the ideal builder (see orderModPWith) of the divisor Sum_i b_i Delta(alpha_i): a function of (F, B, red) returning the product of the residue ideals over F, every residue-field element and polynomial passed through red first.";
@@ -240,7 +240,7 @@ orderModPSpec[ctx_Association, spec_Association, gp_Association] := Module[{fr, 
   While[True,
     r = catchTrager[jacOrderGens[Fp, fr["B"], c, bound]];
     If[!tragerFailQ[r], Return[r, Module]];
-    If[r[[1]] =!= "Decline", Throw[r, "TragerFail"]];
+    If[!tragerRetryableQ[r], Throw[r, "TragerFail"]];
     If[bound >= weil, throwInternal["TorsionBeyondWeilBound", <|"p" -> gp["p"], "Bound" -> weil|>]];
     bound = Min[16 bound, weil]]];
 

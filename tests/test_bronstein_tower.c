@@ -10,10 +10,13 @@
 
 static void test_helpers(void) {
     BR_TRUE("brCheckHeads[Log[x] Sqrt[x], x]");
-    BR_THROWS("brCheckHeads[Sin[x] Log[x], x]", "Decline", "unsupported function in the integrand");
+    BR_THROWS("brCheckHeads[Sin[x] Log[x], x]", "Unimplemented", "trigonometric or hyperbolic function (TrigToExp front end over Q(i))");
     BR_THROWS("brCheckHeads[1.5 Log[x], x]", "Decline", "approximate number in the integrand");
-    BR_THROWS("brCheckHeads[I Log[x], x]", "Decline", "complex constant in the integrand");
-    BR_THROWS("brCheckHeads[ArcTan[x], x]", "Decline", "unsupported function in the integrand");
+    BR_THROWS("brCheckHeads[I Log[x], x]", "Unimplemented", "complex constant in the integrand (constant field Q(i))");
+    BR_THROWS("brCheckHeads[ArcTan[x], x]", "Unimplemented", "trigonometric or hyperbolic function (TrigToExp front end over Q(i))");
+    BR_THROWS("brCheckHeads[Erf[x] Log[x], x]", "Decline", "non-elementary function in the integrand");
+    BR_THROWS("brCheckHeads[Abs[x] Sqrt[x], x]", "Decline", "non-elementary function in the integrand");
+    BR_THROWS("brCheckHeads[Root[#^5 - # - x &, 1], x]", "Incomplete", "a general algebraic function (Root/RootSum) in the integrand");
     BR_TRUE("MatchQ[Log[x], brKernelPattern[]] && MatchQ[E^x, brKernelPattern[]]");
     BR_FALSE("MatchQ[x^2, brKernelPattern[]]");
     BR_TRUE("MatchQ[Sin[x], _?(!FreeQ[#, brUnsupportedHeads[]] &)]");
@@ -53,7 +56,7 @@ static void test_monomials(void) {
     BR_EQ("brExpRewrite[x, mX, x^2]", "{\"new\"}");
     BR_EQ("brExpRewrite[x, mX, x/3]", "{\"rebase\", 1, 3}");
     BR_EQ("brExpRewrite[x, mL, 2 brT1]", "{\"rewrite\", (1 + x)^2}");
-    BR_THROWS("brExpRewrite[x, mL, brT1/2]", "Decline", "exponential of a fractional multiple of a logarithm (a radical)");
+    BR_THROWS("brExpRewrite[x, mL, brT1/2]", "Unimplemented", "exponential of a fractional multiple of a logarithm (a radical in exponential form)");
     /* re-basing E^x as (E^(x/3))^3 */
     br_run("rb = brRebaseExp[x, Join[mX, First[brAddMonomial[x, mX, \"Log\", 1 + brT1, Log[1 + E^x]]][[{2}]]], 1, 3]; True");
     BR_EQ("rb[[2]]", "brT1 -> brT1r3^3");
@@ -70,19 +73,21 @@ static void test_kernels_to_symbols(void) {
     BR_EQ("brKernelsToSymbols[E^(2 x) + E^x, x][[1]]", "brT1 + brT1^2");
     BR_EQ("brKernelsToSymbols[E^(x/2) + E^x, x][[1]]", "brT1 + brT1^2");
     BR_EQ("brKernelsToSymbols[x^2, x]", "{x^2, {}}");
-    BR_THROWS("brKernelsToSymbols[Log[x] + Log[x^2], x]", "Decline", "reducible logarithm (not an identity on every branch)");
+    BR_THROWS("brKernelsToSymbols[Log[x] + Log[x^2], x]", "Unimplemented", "reducible logarithm (rewrite with an explicit constant)");
     /* a radical inside a kernel: admitted as the single curve monomial (Shape B,
      * test_bronstein_shapeb.c), declined over the tower */
-    BR_THROWS("brKernelsToSymbols[Log[Sqrt[Log[x]] + 1], x]", "Decline", "radical inside a logarithm or exponential");
+    BR_THROWS("brKernelsToSymbols[Log[Sqrt[Log[x]] + 1], x]", "Unimplemented", "radical inside a logarithm or exponential above other monomials (transcendental Risch over an algebraic base)");
 }
 
 static void test_detect_radical(void) {
     BR_EQ("brDetectRadical[Sqrt[t + x] + (t + x)^(1/3), {x, t}]", "<|\"b\" -> t + x, \"n\" -> 6|>");
     BR_EQ("brDetectRadical[1/Sqrt[1/(t + x)] + Sqrt[t + x], {x, t}]", "<|\"b\" -> 1/(t + x), \"n\" -> 2|>");
     BR_EQ("brDetectRadical[x + t, {x, t}]", "None");
-    BR_THROWS("brDetectRadical[Sqrt[x + Sqrt[t]], {x, t}]", "Decline", "nested radicals");
-    BR_THROWS("brDetectRadical[Sqrt[x] + Sqrt[t], {x, t}]", "Decline", "more than one radicand (a radical compositum)");
-    BR_THROWS("brDetectRadical[Sqrt[2] Sqrt[x], {x, t}]", "Decline", "algebraic constant in the integrand");
+    BR_THROWS("brDetectRadical[Sqrt[x + Sqrt[t]], {x, t}]", "Incomplete", "nested radicals");
+    BR_THROWS("brDetectRadical[Sqrt[x] + Sqrt[t], {x, t}]", "Incomplete", "several radicals generating a non-cyclic Kummer extension (not one simple radical)");
+    BR_THROWS("brDetectRadical[Sqrt[x^3] + Sqrt[x], {x, t}]", "Unimplemented", "several radicands generating one simple radical extension (rewrite as a single radical)");
+    BR_THROWS("brDetectRadical[Sqrt[x] + (t + 1)^(1/3), {x, t}]", "Unimplemented", "several radicands generating one simple radical extension (rewrite as a single radical)");
+    BR_THROWS("brDetectRadical[Sqrt[2] Sqrt[x], {x, t}]", "Unimplemented", "algebraic constant in the integrand (a number-field constant field)");
 }
 
 /* brTower on the paper examples and on every shape and decline. */
@@ -103,10 +108,10 @@ static void test_tower(void) {
           "{brT2, {brT1}, {E^x, Log[x]}}");
     BR_EQ("With[{T = brTower[Sqrt[Log[x]] + E^x, x]}, {T[\"theta\"], T[\"kernels\"]}]",
           "{brT2, {E^x, Log[x]}}");
-    BR_THROWS("brTower[Sqrt[x + Log[x]] Log[1 + Log[x]], x]", "Decline", "a monomial above the radicand's top monomial depends on it");
-    BR_THROWS("brTower[Log[x] + Sqrt[Log[x] + Sqrt[Log[x]]], x]", "Decline", "nested radicals");
-    BR_THROWS("brTower[Sqrt[x] Sqrt[x + 1] Log[x], x]", "Decline", "more than one radicand (a radical compositum)");
-    BR_THROWS("brTower[Tan[x] Sqrt[Log[x]], x]", "Decline", "unsupported function in the integrand");
+    BR_THROWS("brTower[Sqrt[x + Log[x]] Log[1 + Log[x]], x]", "Unimplemented", "a monomial above the radicand's top monomial depends on it (radical in the middle of the tower)");
+    BR_THROWS("brTower[Log[x] + Sqrt[Log[x] + Sqrt[Log[x]]], x]", "Incomplete", "nested radicals");
+    BR_THROWS("brTower[Sqrt[x] Sqrt[x + 1] Log[x], x]", "Incomplete", "several radicals generating a non-cyclic Kummer extension (not one simple radical)");
+    BR_THROWS("brTower[Tan[x] Sqrt[Log[x]], x]", "Unimplemented", "trigonometric or hyperbolic function (TrigToExp front end over Q(i))");
     BR_EQ("brTower[Exp[x] Sqrt[Exp[x] + 1], x][\"shape\"]", "\"A\"");
     /* brTowerD, brEta, brToSurface */
     BR_EQ("brTowerD[T139, brT2^2]", "(2 brT1 brT2)/(1 + brT1)");

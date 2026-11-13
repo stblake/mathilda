@@ -63,7 +63,7 @@ brComponentLogPart[T_Association, cv_Association, c_] := Module[
     {j, Length[rs["basis"]]}];
   Lp = brLogPartDerivative[T, cv, F, B, terms[[All, {1, 2}]]];
   If[B["m"] > 2 && !AllTrue[Lp[[3 ;;]], rcZeroQ[F, #] &],
-    throwDecline["log part with components of other weights (m >= 3)"]];
+    throwUnimplemented["LogPart:weights", "log part with components of other weights (m >= 3)"]];
   brLogPartFinish[T, cv, c, F, B, terms]];
 
 (* -------------------------------------------------------------------------- *)
@@ -130,7 +130,7 @@ brOrbitLogPart[T_Association, cv_Association, c_, nr_Association] := Module[
   Dall = Together /@ Total[#["D"] & /@ recs];
   Dext = Together /@ Total[Append[#["D"] & /@ Select[recs, #["ext"] &], Table[0, {m}]]];
   If[m > 2 && !AllTrue[Dall[[3 ;;]], # === 0 &],
-    throwDecline["log part with components of other weights (m >= 3)"]];
+    throwUnimplemented["LogPart:weights", "log part with components of other weights (m >= 3)"]];
   <|"terms" -> ({#["coef"], #["u"], #["normU"]} & /@ Select[recs, !#["ext"] &]),
     "orbits" -> Select[recs, #["ext"] &], "orbitD" -> Dext,
     "remainder" -> Together[c - Dall[[2]]], "F" -> None, "B" -> cv["B"]|>];
@@ -147,7 +147,7 @@ brLogPartFinish::usage ="brLogPartFinish[T, cv, c, F, B, terms] checks the log t
 brLogPartFinish[T_Association, cv_Association, c_, F_Association, B_Association, terms_List] := Module[{Lp, rem},
   Lp = brLogPartDerivative[T, cv, F, B, terms[[All, {1, 2}]]];
   If[B["m"] > 2 && !AllTrue[Lp[[3 ;;]], rcZeroQ[F, #] &],
-    throwDecline["log part with components of other weights (m >= 3)"]];
+    throwUnimplemented["LogPart:weights", "log part with components of other weights (m >= 3)"]];
   rem = rc[F, c - Lp[[2]]];
   If[fieldExtQ[F] && !FreeQ[rem, F["t"]], throwInternal["brLogPartRemainderNotRational", <|"rem" -> rem|>]];
   <|"terms" -> terms, "remainder" -> Together[rem], "F" -> F, "B" -> B|>];
@@ -165,10 +165,10 @@ brComponentLogPartSpecial[T_Association, cv_Association, c_, nr_Association, spe
    rf, F0, Fk, vars, finRoots, rhoLists, taus, allRes, qb, tc, N, E, Ep, En, Bp, rs, a, u = Unique["Bronstein`Private`brU"],
    fr, F, Bth, ideals, I, gen, Yh = Unique["Bronstein`Private`brYh"], Y = Unique["Bronstein`Private`brYs"], expr, terms = {}, nfin},
   If[curveGenus[m, G, th] =!= 0,
-    throwDecline["residues at a special place on a curve of positive genus (not yet supported)"]];
+    throwUnimplemented["LogPart:special-genus", "residues at a special place on a curve of positive genus"]];
   locs = brRelevantLocations[T, brSpecialLocations[T, cv, spec]];
   If[AnyTrue[locs, !#["ramified"] && #["kappa"] === None &],
-    throwDecline["residue at a special place over a radical extension of k"]];
+    throwUnimplemented["LogPart:special-radical", "residue at a special place over a radical extension of k"]];
   (* the field: finite residues and the m-th roots of every kappa *)
   polys = Join[If[nr["P"] === 1, {}, {nr["P"]}],
     (z^m - #["kappa"]) & /@ Select[locs, !#["ramified"] &]];

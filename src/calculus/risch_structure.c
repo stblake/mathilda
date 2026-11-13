@@ -68,7 +68,8 @@ static bool rs_is_list(const Expr* e) {
 /* ------------------------------------------------------------------ */
 
 Expr* risch_rational_span(const Expr* theta, Expr* const* gens, size_t m,
-                          const Expr* vars) {
+                          const Expr* vars, bool* failed) {
+    *failed = false;
     /* theta == 0 is in every span with all-zero coefficients. */
     Expr* th0 = rs_call1("Together", rs_cp(theta));
     bool theta_zero = rs_is_zero(th0);
@@ -109,8 +110,11 @@ Expr* risch_rational_span(const Expr* theta, Expr* const* gens, size_t m,
     arith_warnings_mute_pop();
 
     /* sol is a List of solution-rule-lists; {} means no solution (theta != 0 so
-     * it is a genuine contradiction, not the always-true degenerate case). */
+     * it is a genuine contradiction, not the always-true degenerate case) -- the
+     * only NULL that is a proof.  Anything that is not a List (SolveAlways left
+     * unevaluated or gave up) is an undecided answer. */
     Expr* result = NULL;
+    if (!rs_is_list(sol)) *failed = true;
     if (rs_is_list(sol) && sol->data.function.arg_count >= 1) {
         Expr* first = sol->data.function.args[0];   /* List of Rule[c_i, val] */
         Expr** res = malloc(m * sizeof(Expr*));
@@ -152,7 +156,13 @@ Expr* risch_rational_span(const Expr* theta, Expr* const* gens, size_t m,
         if (ok) {
             result = expr_new_function(expr_new_symbol("List"), res, m);
         } else {
+            /* A non-rational particular solution: over a rational coefficient
+             * field the affine solution space is defined over Q and its pinned
+             * point is rational, so this happens only with algebraic or
+             * symbolic constants, where a rational point may still exist.
+             * Undecided, not a proof. */
             for (size_t i = 0; i < m; i++) expr_free(res[i]);
+            *failed = true;
         }
         free(res);
     }
@@ -273,7 +283,8 @@ static size_t rs_decode_tower(const Expr* x, const Expr* mons,
  * Returns an owned List of rational coefficients in FULL monomial-list order
  * (0 at monomials outside the target's group), or NULL to signal "False". */
 static Expr* rs_structure_decide(const Expr* arg, const Expr* x, const Expr* mons,
-                                 int target) {
+                                 int target, bool* failed) {
+    *failed = true;   /* until the span decision runs, a NULL is not a proof */
     Expr** gens = NULL; int* kinds = NULL; Expr* vars = NULL; Expr* drules = NULL;
     size_t m = rs_decode_tower(x, mons, &gens, &kinds, NULL, &vars, &drules);
     if (m == (size_t)-1) return NULL;
@@ -310,7 +321,7 @@ static Expr* rs_structure_decide(const Expr* arg, const Expr* x, const Expr* mon
     for (size_t i = 0; i < m; i++)
         if (rs_kind_group(kinds[i]) == grp) { fg[fm] = gens[i]; idx[fm] = i; fm++; }
 
-    Expr* coeffs = risch_rational_span(theta, fg, fm, vars);
+    Expr* coeffs = risch_rational_span(theta, fg, fm, vars, failed);
 
     Expr* result = NULL;
     if (coeffs) {
@@ -352,7 +363,9 @@ static Expr* rs_structure_decide(const Expr* arg, const Expr* x, const Expr* mon
  * element (the form arising from integration); the full §5.12 recursive method
  * (which also admits radicals built from the log MONOMIALS themselves, e.g.
  * Bronstein's u = x^5 log(x)) is a strictly broader completeness item. */
-static Expr* rs_logderiv_radical(const Expr* f, const Expr* x, const Expr* mons) {
+static Expr* rs_logderiv_radical(const Expr* f, const Expr* x, const Expr* mons,
+                                 bool* failed) {
+    *failed = true;   /* until the span decision runs, a NULL is not a proof */
     Expr** gens = NULL; int* kinds = NULL; Expr** bases = NULL;
     Expr* vars = NULL; Expr* drules = NULL;
     size_t m = rs_decode_tower(x, mons, &gens, &kinds, &bases, &vars, &drules);
@@ -365,7 +378,7 @@ static Expr* rs_logderiv_radical(const Expr* f, const Expr* x, const Expr* mons)
     for (size_t i = 0; i < m; i++)
         if (rs_kind_group(kinds[i]) == 0) { fg[fm] = gens[i]; idx[fm] = i; fm++; }
 
-    Expr* coeffs = risch_rational_span(f, fg, fm, vars);
+    Expr* coeffs = risch_rational_span(f, fg, fm, vars, failed);
 
     Expr* result = NULL;
     if (coeffs) {
@@ -421,16 +434,18 @@ static Expr* builtin_risch_rationalspan(Expr* res) {
     Expr* vars = res->data.function.args[2];
     if (!rs_is_list(glist) || !rs_is_list(vars)) return NULL;
     size_t m = glist->data.function.arg_count;
-    Expr* r = risch_rational_span(theta, glist->data.function.args, m, vars);
-    return r ? r : expr_new_symbol("False");
+    bool failed;
+    Expr* r = risch_rational_span(theta, glist->data.function.args, m, vars, &failed);
+    return r ? r : expr_new_symbol(failed ? "$Failed" : "False");
 }
 
 /* The four structure-theorem reducibility builtins share one shape. */
 static Expr* rs_reducible_builtin(Expr* res, int target) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    bool failed;
     Expr* r = rs_structure_decide(res->data.function.args[0], res->data.function.args[1],
-                                  res->data.function.args[2], target);
-    return r ? r : expr_new_symbol("False");
+                                  res->data.function.args[2], target, &failed);
+    return r ? r : expr_new_symbol(failed ? "$Failed" : "False");
 }
 /* Risch`LogReducible[a, x, mons] / Risch`ExpReducible[b, x, mons]
  * / Risch`TanReducible[b, x, mons] / Risch`ArcTanReducible[b, x, mons]. */
@@ -442,9 +457,10 @@ static Expr* builtin_risch_arctanreducible(Expr* res) { return rs_reducible_buil
 /* Risch`LogarithmicDerivativeOfRadical[f, x, mons] -> {n, u} or False. */
 static Expr* builtin_risch_logderiv_radical(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
+    bool failed;
     Expr* r = rs_logderiv_radical(res->data.function.args[0], res->data.function.args[1],
-                                  res->data.function.args[2]);
-    return r ? r : expr_new_symbol("False");
+                                  res->data.function.args[2], &failed);
+    return r ? r : expr_new_symbol(failed ? "$Failed" : "False");
 }
 
 /* ------------------------------------------------------------------ */
@@ -461,32 +477,44 @@ void integrate_risch_structure_init(void) {
     rs_install("Risch`RationalSpan", builtin_risch_rationalspan,
         "Risch`RationalSpan[theta, {g1,...}, {vars}] returns {r1,...} of rational\n"
         "numbers with theta = Sum r_i g_i (coefficients matched over vars), or\n"
-        "False if theta is not in the rational span of the generators.");
+        "False if theta is not in the rational span of the generators, or\n"
+        " $Failed when the decision could not be made (a malformed tower, or the linear\n"
+        "solve gave up); False is returned only as a proof.");
     rs_install("Risch`LogReducible", builtin_risch_logreducible,
         "Risch`LogReducible[a, x, {{t, \"Exp\"|\"Log\", Dt}, ...}] applies the Risch\n"
         "structure theorem: returns the rational coefficients expressing Da/a in the\n"
         "monomial generators when Log[a] is reducible over the tower, else False\n"
-        "(Log[a] is a new, algebraically independent monomial).");
+        "(Log[a] is a new, algebraically independent monomial), or\n"
+        " $Failed when the decision could not be made (a malformed tower, or the linear\n"
+        "solve gave up); False is returned only as a proof.");
     rs_install("Risch`ExpReducible", builtin_risch_expreducible,
         "Risch`ExpReducible[b, x, {{t, \"Exp\"|\"Log\", Dt}, ...}] applies the Risch\n"
         "structure theorem: returns the rational coefficients expressing Db in the\n"
         "monomial generators when Exp[b] is reducible over the tower, else False\n"
-        "(Exp[b] is a new, algebraically independent monomial).");
+        "(Exp[b] is a new, algebraically independent monomial), or\n"
+        " $Failed when the decision could not be made (a malformed tower, or the linear\n"
+        "solve gave up); False is returned only as a proof.");
     rs_install("Risch`TanReducible", builtin_risch_tanreducible,
         "Risch`TanReducible[b, x, {{t, \"Tan\"|\"ArcTan\"|\"Exp\"|\"Log\", Dt}, ...}]\n"
         "applies the REAL Risch structure theorem (Cor. 9.3.2 iv, eq. 9.15): returns\n"
         "the rational coefficients over the tangent/arc-tangent generators when Tan[b]\n"
-        "is reducible over the tower, else False. Only T u A monomials participate.");
+        "is reducible over the tower, else False. Only T u A monomials participate.\n"
+        " $Failed when the decision could not be made (a malformed tower, or the linear\n"
+        "solve gave up); False is returned only as a proof.");
     rs_install("Risch`ArcTanReducible", builtin_risch_arctanreducible,
         "Risch`ArcTanReducible[b, x, {{t, \"Tan\"|\"ArcTan\"|\"Exp\"|\"Log\", Dt}, ...}]\n"
         "applies the REAL Risch structure theorem (Cor. 9.3.2 iii, eq. 9.14): returns\n"
         "the rational coefficients expressing Db/(b^2+1) over the tangent/arc-tangent\n"
-        "generators when ArcTan[b] is reducible over the tower, else False.");
+        "generators when ArcTan[b] is reducible over the tower, else False, or\n"
+        " $Failed when the decision could not be made (a malformed tower, or the linear\n"
+        "solve gave up); False is returned only as a proof.");
     rs_install("Risch`LogarithmicDerivativeOfRadical", builtin_risch_logderiv_radical,
         "Risch`LogarithmicDerivativeOfRadical[f, x, {{t, kind, Dt[, arg]}, ...}]\n"
         "decides whether f is the logarithmic derivative of a K-radical over the tower\n"
         "(Bronstein §5.12, structure-theorem test eq. 7.44/9.13): returns {n, u} with\n"
         "n a positive integer and u the witness radical such that D[u]/u == n f, else\n"
         "False. Only the Exp/Log (E u L) monomials participate; supply the log argument\n"
-        "as the optional 4th monomial element for the witness u.");
+        "as the optional 4th monomial element for the witness u.\n"
+        " $Failed when the decision could not be made (a malformed tower, or the linear\n"
+        "solve gave up); False is returned only as a proof.");
 }

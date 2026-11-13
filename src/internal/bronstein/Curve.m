@@ -43,7 +43,7 @@ brCanonicalForm[T_Association] := Module[{rad = T["radical"], vars, b, n, p, q, 
   y = Unique["Bronstein`Private`brY"]; yh = Unique["Bronstein`Private`brYh"];
   fy = brSubstituteRadical[T["f"], vars, b, n, y];
   If[!brRationalInQ[fy, Append[vars, y]],
-    throwDecline["integrand is not rational in the tower and the radical"]];
+    throwInternal["brCanonicalFormNotRational"]];
   t = Together[fy /. y -> yh/q];
   num = Numerator[t]; den = Denominator[t];
   numC = powerBasisCoords[num, yh, n, g];
@@ -57,9 +57,9 @@ brComponentCurve[T_Association, n_Integer, g_, i_Integer] := Module[{th = T["the
   fl = FactorList[g];
   c = Times @@ (#[[1]]^#[[2]] & /@ Select[fl, FreeQ[#[[1]], th] &]);
   If[!cc["exact"] && brDependsQ[c^i, Prepend[T["lower"], T["x"]]],
-    throwDecline["component over a radical extension of the constant field (non-constant content)"]];
+    throwUnimplemented["Curve:radical-content", "component over a radical extension of the constant field (non-constant content)"]];
   If[cc["exact"] && FreeQ[cc["G"], th] && brDependsQ[cc["G"], Prepend[T["lower"], T["x"]]],
-    throwDecline["component radical of an element of the constant field"]];
+    throwUnimplemented["Curve:radical-of-k", "component radical of an element of the constant field (a radical below theta)"]];
   cc];
 
 brCurve::usage = "brCurve[T, m, G] is the curve record of Y^m = G over k(theta): <|\"m\", \"G\", \"theta\", \"s\" -> (1/m) DG/G (so D Y = s Y, D the tower derivation), \"content\" -> d, \"primitive\" -> G0|> with G = d G0, d in k, G0 primitive in theta, and \"B\" -> Trager's basis descriptor curveBasis[m, G, theta] (the algebraic integral basis Y^i/d_i over k[theta]).";

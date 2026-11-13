@@ -28,7 +28,7 @@ brIntegrateTranscendental[f_, x_Symbol] := Module[{F, q},
   If[Head[F] === Integrate`RischTranscendental || !FreeQ[F, brNonElementaryHeads[]],
     q = Quiet[Risch`ElementaryIntegralQ[f, x]];
     If[q === False, throwNonElementary["transcendental part has no elementary integral (Risch)"],
-      throwDecline["transcendental part not decided"]]];
+      throwUnimplemented["Pipeline:transcendental", "transcendental part not decided (Integrate`RischTranscendental)"]]];
   F];
 
 brTermExpression::usage = "brTermExpression[F, e] is the expression e over the field F with the residue-field generator replaced by its algebraic number (Trager's fieldValue for a number field; the theta of a fieldFn extension).";
@@ -63,7 +63,7 @@ brIntegrateComponent[T_Association, cv_Association, c_] := Module[{hr, sr, lp, a
   ap = brAlgebraicPart[T, cv, lp["remainder"]];
   Switch[First[ap],
     "NoSolution", throwNonElementary["no algebraic part: the Risch DE D b + s b = c has no solution ([B] Prop 2.15/2.18)"],
-    "Unknown", throwDecline["algebraic part undecided: " <> ap[[2]]]];
+    "Unknown", throwUnimplemented["AlgebraicPart:undecided", "algebraic part undecided: " <> ap[[2]]]];
   b = Together[hr["Algebraic"] + sr["Algebraic"] + ap[[2]]];
   F = lp["F"]; B = lp["B"];
   Do[
@@ -147,7 +147,7 @@ brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl,
     (* a certificate of the parametrised integral is one for f (Q(x)(y) = Q(u));
        a decline falls through to the curve-monomial method below *)
     r = brCatch[brCurveCanon[brIntegrateTranscendental[g0["g"], u] /. g0["back"], x, g0["b"], g0["n"]]];
-    If[brFailQ[r] && First[brFailTag[r]] =!= "Decline", Throw[r, "TragerFail"]];
+    If[brFailQ[r] && !tragerRetryableQ[r], Throw[r, "TragerFail"]];
     If[!brFailQ[r],
       If[!antiderivativeQ[f, r, x], throwInternal["AntiderivativeCheckFailed", <|"f" -> f, "F" -> r|>]];
       Return[brPresentable[f, r, x], Module]]];
@@ -158,7 +158,8 @@ brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl,
       r = Trager`TragerIntegrate[f, x, "Trager"];
       Which[
         MatchQ[r, {"not elementary", _}], throwNonElementary["Trager: " <> r[[2]]],
-        MatchQ[r, {"failed", _}], throwDecline["Trager: " <> r[[2]]],
+        MatchQ[r, {"implementation incomplete", _}], throwIncomplete["Trager: " <> r[[2]]],
+        MatchQ[r, {"failed", _}], throwUnimplemented["Trager", "Trager: " <> r[[2]]],
         True, r],
     "B", With[{sb = brShapeB[T, f, x]}, sb["F"]],
     "BCurve", With[{sb = brShapeBMono[T, f, x]}, sb["F"]],
@@ -173,6 +174,14 @@ brPresentable[f_, F_, x_Symbol] := Quiet[TimeConstrained[presentable[f, F, x], b
 brPresentationTime::usage = "brPresentationTime[] is the time the real-form presentation may take: brOption[\"PresentationTime\"], and at most a third of what is left of an enclosing TimeConstrained (Internal`TimeConstrainedRemaining[]).";
 brPresentationTime[] := With[{left = Internal`TimeConstrainedRemaining[]},
   If[NumericQ[left], Min[brOption["PresentationTime"], Max[left/3, 0.01]], brOption["PresentationTime"]]];
+
+BronsteinScope[f_, x_Symbol] := Module[{r},
+  If[FreeQ[f, Power[b_, _Rational] /; !FreeQ[b, x]] && FreeQ[f, Root | RootSum], Return["NotApplicable"]];
+  r = brCatch[brTower[f, x]];
+  Which[
+    !brFailQ[r], "InScope",
+    MemberQ[{"Incomplete", "Unimplemented"}, First[brFailTag[r]]], failToList[r],
+    True, "NotApplicable"]];
 
 BronsteinIntegrate[f_, x_Symbol] := Module[{r},
   r = brCatch[brIntegrateBody[f, x]];

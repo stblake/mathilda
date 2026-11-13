@@ -140,6 +140,28 @@ static void test_structure_robustness(void) {
     run_test("Head[Risch`RationalSpan[1/x, {1/x}]] === Risch`RationalSpan", "True");/* arity */
 }
 
+/* ---- Tri-state: False is a proof, $Failed an undecided answer ---------
+ * Until v0.6545 every failure (a tower that does not decode, a linear solve that
+ * gave up, a non-rational particular solution) was reported as False, which the
+ * Bronstein package reads as "a new, algebraically independent monomial" -- a
+ * premise of its non-elementarity certificates.  A failure must never be False. */
+static void test_structure_tristate(void) {
+    /* malformed towers: an unknown monomial kind, a spec without its derivative */
+    run_test("Risch`LogReducible[x + 1, x, {{t1, \"Foo\", 1/x}}]", "$Failed");
+    run_test("Risch`ExpReducible[x, x, {{t1, \"Exp\"}}]", "$Failed");
+    run_test("Risch`TanReducible[x, x, {{t1, \"Foo\", 1}}]", "$Failed");
+    run_test("Risch`ArcTanReducible[x, x, {{t1, \"Foo\", 1}}]", "$Failed");
+    run_test("Risch`LogarithmicDerivativeOfRadical[1/x, x, {{t1, \"Bar\", 1}}]", "$Failed");
+    /* a non-rational particular solution: undecided over Q (a number-field
+     * coefficient field is the constant-field work of the completion campaign) */
+    run_test("Risch`RationalSpan[Sqrt[2]/x, {1/x}, {x}]", "$Failed");
+    /* proofs stay False */
+    run_test("Risch`LogReducible[x + 1, x, {{t1, \"Log\", 1/x}}]", "False");
+    run_test("Risch`RationalSpan[1/(x + 1), {1/x}, {x}]", "False");
+    run_test("Risch`RationalSpan[1/x, {}, {x}]", "False");
+    run_test("Risch`ExpReducible[x^2, x, {{t1, \"Exp\", t1}}]", "False");
+}
+
 int main(void) {
     core_init();
 
@@ -150,6 +172,7 @@ int main(void) {
     TEST(test_rational_span_more);
     TEST(test_deep_tower);
     TEST(test_structure_robustness);
+    TEST(test_structure_tristate);
 
     printf("All risch_structure tests passed.\n");
     return 0;

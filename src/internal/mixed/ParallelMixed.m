@@ -3125,7 +3125,11 @@ RationalImageIntegrate[x_] := Function[h, With[{r = Quiet[Integrate[h, x, Method
 
 kummerIntegrators[x_, opts___] := {
   Function[h, If[TrueQ[LoadModule["trager/Trager.m"]],
-    Quiet[Trager`TragerIntegrate[h, x, "Trager"]], {"failed", "Trager unavailable"}]],
+    (* Trager's "implementation incomplete" proves nothing: inside this method's
+       protocol it is a plain {"failed", ...} (callers test for "failed") *)
+    Replace[Quiet[Trager`TragerIntegrate[h, x, "Trager"]],
+      {"implementation incomplete", why_String} :> {"failed", "Trager: implementation incomplete (" <> why <> ")"}],
+    {"failed", "Trager unavailable"}]],
   Function[h, ParallelIntegrateMixed[h, x, opts]]};
 
 ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Check[Module[{bt, T, fpair, back, Y, res, surf, ok, sgn, den, branchUnit, surfC, fac, red, ownR, ks, integrand = integrand0},

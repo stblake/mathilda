@@ -105,7 +105,7 @@ brSpecialPlaceIdeals[F_Association, fr_Association, loc_Association, rhos_List] 
   pt = If[loc["where"] === "inf", 0, -1/a];
   If[loc["ramified"],
     If[GCD[rootMultiplicity[F, B["G"], pt, u], B["m"]] =!= 1,
-      throwDecline["several ramified places above a special point"]];
+      throwUnimplemented["Divisors:multi-ramified", "several ramified places above a special point"]];
     {{placeIdealAt[F, B, pt], None}},
     {brPointPlaceIdeal[F, B, kc[F, u - pt], kc[F, # loc["u"] If[loc["where"] === "inf", 1, (-1/a)^k]]], #} & /@ rhos]];
 

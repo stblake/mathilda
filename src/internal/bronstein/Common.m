@@ -13,9 +13,10 @@
 (* Risch`RischDECertified, never a $Failed).                                  *)
 (* ========================================================================== *)
 
-brOption::usage = "brOption[name] is the default value of an internal setting of the Bronstein package. \"SpecializationTries\": number of random specializations tried before a good one is declared unavailable (a decline, never a certificate); \"SpecializationHeight\": bound on the numerators/denominators of the random rationals substituted for x and the lower monomials; \"PresentationTime\": seconds for the real-form presentation and its re-verification (past it the exactly verified form is returned).";
+brOption::usage = "brOption[name] is the default value of an internal setting of the Bronstein package. \"SpecializationTries\": number of candidate specializations per round of the growing-height search; \"SpecializationHeight\": bound on the numerators of the first round of rationals substituted for x and the lower monomials (it doubles every round); \"SpecializationRounds\": rounds of the growing-height search before an Internal error; \"PresentationTime\": seconds for the real-form presentation and its re-verification (past it the exactly verified form is returned).";
 brOption["SpecializationTries"] = 12;
 brOption["SpecializationHeight"] = 97;
+brOption["SpecializationRounds"] = 8;
 brOption["PresentationTime"] = 5;
 
 brCatch::usage = "brCatch[expr] evaluates expr and returns its value, or the tragerFail[...] object thrown by any stage inside it (Trager's catchTrager).";

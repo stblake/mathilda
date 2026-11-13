@@ -25,7 +25,7 @@ static void test_canonical(void) {
     BR_EQ("With[{c = brCanonicalForm[brTower[Sqrt[Log[x]/(x + 1)], x]]}, {c[\"q\"], c[\"g\"], c[\"coeffs\"]}]",
           "{1 + x, brT1 + brT1 x, {0, 1/(1 + x)}}");
     BR_THROWS("brCanonicalForm[brTower[E^x + Log[x], x]]", "Internal", "brCanonicalFormNoRadical");
-    BR_THROWS("brCanonicalForm[brTower[1/(Sqrt[Log[x]^2] - Log[x]), x]]", "Decline",
+    BR_THROWS("brCanonicalForm[brTower[1/(Sqrt[Log[x]^2] - Log[x]), x]]", "Unimplemented",
               "the denominator is a zero divisor: the radical is reducible");
 }
 
@@ -36,9 +36,9 @@ static void test_components(void) {
     BR_EQ("brComponentCurve[T158, 3, brT1^4 (brT1 + x), 1]", "<|\"m\" -> 3, \"G\" -> brT1^2 + brT1 x, \"s\" -> brT1, \"exact\" -> True|>");
     /* d > 1 with a rational content: the locally constant rho is allowed */
     BR_EQ("brComponentCurve[T158, 4, 4 brT1^2, 1][\"exact\"]", "False");
-    BR_THROWS("brComponentCurve[T158, 4, x brT1^2, 1]", "Decline",
+    BR_THROWS("brComponentCurve[T158, 4, x brT1^2, 1]", "Unimplemented",
               "component over a radical extension of the constant field (non-constant content)");
-    BR_THROWS("brComponentCurve[T158, 2, x brT1^2, 1]", "Decline",
+    BR_THROWS("brComponentCurve[T158, 2, x brT1^2, 1]", "Unimplemented",
               "component over a radical extension of the constant field (non-constant content)");
     /* brCurve: s = (1/m) DG/G, content and primitive part, Trager basis over k[theta] */
     br_run("cv = brCurve[T134, 2, x^2 (brT1 + x)]; True");

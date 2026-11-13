@@ -1498,12 +1498,26 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
      * than diverted to the bounded-ansatz general path below (the former
      * rt_is_poly(p,x) guard was a spurious scope decline: it sent every rational-p
      * base RDE to SolveAlways). */
-    bool base = true;
+    /* T->arg[L] is the SURFACE exponent (I E^x for E^(I E^x)): test it in the
+     * tower variables, else a lower monomial written as E^x passes for "free of
+     * t_0" and the base solver -- which then cannot even form its polynomial
+     * equation -- is asked a question it never answers (v0.6545). */
+    Expr* ws = rt_subst_kernels(w, T);
+    bool base = ws != NULL;
     for (size_t j = 0; j < T->n && base; j++)
-        if (!rt_free_of_x(w, T->t[j]) || !rt_free_of_x(p, T->t[j])) base = false;
+        if (!rt_free_of_x(ws, T->t[j]) || !rt_free_of_x(p, T->t[j])) base = false;
+    if (ws) expr_free(ws);
     if (base) {
+        /* rde_base's "no solution" is authoritative (Ch.6) unless one of its
+         * steps could not be computed (extended gcd, weak normaliser, identity
+         * gate): those mark the certification scope, and then it proves nothing. */
+        RdeCertState saved = rde_cert_begin();
         Expr* q = rt_solve_rde(p, i, w, x);
-        if (!q) rt_dec_nonelem();   /* rde_base "no solution" is authoritative (Ch.6) */
+        bool uncertain = rde_cert_uncertain();
+        const char* why = rde_cert_reason();
+        rde_cert_end(saved);
+        if (uncertain) rde_cert_mark(why);   /* propagate into an enclosing scope */
+        if (!q && !uncertain) rt_dec_nonelem();
         return q;
     }
 
@@ -1520,16 +1534,22 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
         Expr* fco = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
             (Expr*[]){ expr_new_integer(i), expr_copy(T->Dcoef[L]) }, 2));
         RdeCtx C = { T, L - 1, x, T->t[L - 1] };
+        /* rde_tower runs inside a certification scope: its NULL is an
+         * authoritative "no rational solution in K_L" only when no step marked
+         * itself uncertain (a parametric log-derivative or cancellation case the
+         * Ch.6 stack does not yet decide, an extended gcd or weak normalisation
+         * that could not be computed, a failed identity gate).  Until v0.6545
+         * every NULL raised the certificate, so a CAS failure inside the solver
+         * read as a non-elementarity proof (ElementaryIntegralQ False). */
+        RdeCertState saved = rde_cert_begin();
         Expr* q = rde_tower(fco, p, &C);
+        bool uncertain = rde_cert_uncertain();
+        const char* why = rde_cert_reason();
+        rde_cert_end(saved);
+        if (uncertain) rde_cert_mark(why);   /* propagate into an enclosing scope */
         expr_free(fco);
         if (q) return q;
-        /* Gap 1e: the recursive Bronstein Chapter-6 solver (rde_tower) IS the
-         * decision procedure for the field Risch DE over a log/exp tower —
-         * normal/special denominator, exact degree bound, SPDE, non-cancellation,
-         * cancellation (recursive), antidifferentiation.  With a log/exp lower top
-         * it was actually run to completion, so its NULL is an authoritative
-         * "no rational solution in K_L". */
-        rt_dec_nonelem();
+        if (!uncertain) rt_dec_nonelem();
         return NULL;
     }
 

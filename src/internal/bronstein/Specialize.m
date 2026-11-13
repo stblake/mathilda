@@ -28,10 +28,12 @@
 (* places carry the same residues, so Delta(alpha) is unchanged.              *)
 (* ========================================================================== *)
 
-brSpecializationPoint::usage = "brSpecializationPoint[vars, try] is the deterministic try-th candidate specialization: a list of rules v -> rational for the symbols vars.";
-brSpecializationPoint[vars_List, try_Integer] := MapIndexed[
-  #1 -> (Mod[7919 First[#2]^2 + 104729 try + 31 First[#2] try^2, brOption["SpecializationHeight"]] + 2)/
-        (Mod[13 try + 5 First[#2], 7] + 1) &, vars];
+brSpecializationPoint::usage = "brSpecializationPoint[vars, try] is the deterministic try-th candidate specialization: a list of rules v -> rational for the symbols vars. The height grows with try: candidates of round r = Quotient[try - 1, brOption[\"SpecializationTries\"]] have numerators below brOption[\"SpecializationHeight\"] 2^r and denominators up to 7 2^r, so the search never cycles through a finite set.";
+brSpecializationPoint[vars_List, try_Integer] := Module[{r = Quotient[try - 1, brOption["SpecializationTries"]], h, d},
+  h = brOption["SpecializationHeight"] 2^r; d = 7 2^r;
+  MapIndexed[
+    #1 -> (Mod[7919 First[#2]^2 + 104729 try + 31 First[#2] try^2, h] + 2)/
+          (Mod[13 try + 5 First[#2], d] + 1) &, vars]];
 
 brSquarefreeProfile::usage = "brSquarefreeProfile[p, th] is the sorted list {{deg_th, multiplicity}, ...} of the squarefree factors of p involving th.";
 brSquarefreeProfile[p_, th_Symbol] := Sort[{Exponent[#[[1]], th], #[[2]]} & /@
@@ -62,13 +64,13 @@ brGoodSpecializationQ[T_Association, cv_Association, rs_Association, sigma_List,
     {a, rs["roots"]}];
   ok];
 
-brGoodSpecialization::usage = "brGoodSpecialization[T, cv, rs] is the first good specialization (brGoodSpecializationQ) among brOption[\"SpecializationTries\"] deterministic candidates; it throws a Decline when none is found (never a certificate).";
+brGoodSpecialization::usage = "brGoodSpecialization[T, cv, rs] is the first good specialization (brGoodSpecializationQ) among the deterministic candidates of growing height (brSpecializationPoint), at most brOption[\"SpecializationRounds\"] rounds of brOption[\"SpecializationTries\"]. Every goodness condition fails only on a thin set of points (Hilbert irreducibility for the place degrees, a proper hypersurface for the rest), so the search succeeds; exhausting it means a condition is false identically, an Internal error (never a certificate).";
 brGoodSpecialization[T_Association, cv_Association, rs_Association, refc_ : None] := Module[{s},
   Do[
     s = brSpecializationPoint[rs["vars"], try];
     If[brGoodSpecializationQ[T, cv, rs, s, refc], Return[s, Module]],
-    {try, 1, brOption["SpecializationTries"]}];
-  throwDecline["no good specialization found"]];
+    {try, 1, brOption["SpecializationTries"] brOption["SpecializationRounds"]}];
+  throwInternal["NoGoodSpecialization", <|"vars" -> rs["vars"]|>]];
 
 brSpecializedContext::usage = "brSpecializedContext[T, cv, rs, sigma] is the Trager component context of the specialized curve Y^m = G_sigma over Q with the residue data rewritten for d/dtheta (Nbar/Bp, see the header): keys \"B\", \"genus\", \"F\", \"residues\", \"N\", \"E\", \"Ep\", \"Bp\".";
 brSpecializedContext[T_Association, cv_Association, rs_Association, sigma_List] := Module[

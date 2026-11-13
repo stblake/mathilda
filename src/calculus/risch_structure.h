@@ -36,10 +36,13 @@
 
 /* Decide whether theta = Sum_i r_i gens[i] for rational r_i, matching
  * coefficients over the variables `vars` (a List Expr).  Returns an owned
- * List[r_0,...,r_{m-1}] of rational numbers on success, or NULL if theta is not
- * in the rational span of the generators. */
+ * List[r_0,...,r_{m-1}] of rational numbers on success, or NULL.  A NULL is a
+ * PROOF that theta is not in the rational span only when *failed is left false;
+ * *failed = true means the decision could not be made (the linear solve gave
+ * up, or its particular solution was not rational -- possible only over a
+ * non-rational coefficient field), and a caller must not read it as "False". */
 Expr* risch_rational_span(const Expr* theta, Expr* const* gens, size_t m,
-                          const Expr* vars);
+                          const Expr* vars, bool* failed);
 
 /* Register the Risch` structure-theorem builtins.  Called from integrate_init(). */
 void integrate_risch_structure_init(void);

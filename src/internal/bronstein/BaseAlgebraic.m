@@ -83,7 +83,8 @@ brShapeBBase[cv_Association, c_, Y_Symbol] := Module[{x = cv["x"], r, Yt},
   r = Trager`TragerIntegrateCurve[Together[c], x, cv["m"], cv["G"], "Trager"];
   Which[
     MatchQ[r, {"not elementary", _}], throwNonElementary["Trager (algebraic base): " <> r[[2]]],
-    MatchQ[r, {"failed", _}], throwDecline["Trager (algebraic base): " <> r[[2]]],
+    MatchQ[r, {"implementation incomplete", _}], throwIncomplete["Trager (algebraic base): " <> r[[2]]],
+    MatchQ[r, {"failed", _}], throwUnimplemented["Trager", "Trager (algebraic base): " <> r[[2]]],
     !AssociationQ[r], throwInternal["brShapeBBaseResult", <|"r" -> r|>]];
   Yt = r["Y"];
   brShapeBResult[r["Algebraic"] /. Yt -> Y, r["Logs"] /. Yt -> Y, 0, Y]];
@@ -171,7 +172,7 @@ brShapeBRDE[TL_Association, f_, g_, why_String] := Module[{r},
   Switch[First[r],
     "Solution", Together[brFromSurface[TL, r[[2]]]],
     "NoSolution", throwNonElementary[why],
-    _, throwDecline["Risch DE over the base undecided: " <> ToString[Last[r]]]]];
+    _, throwUnimplemented["RDE:base-undecided", "Risch DE over the base undecided: " <> ToString[Last[r]]]]];
 
 brShapeBPolyPart::usage = "brShapeBPolyPart[TB, cv, L, Y] integrates the weight-1 Laurent polynomial Sum_j e_j theta^j Y (L = {{j, e_j}, ...}) over the tower TB: the coefficients theta^j, j != 0, by Risch DEs over k (the weight forbids constants, so each is unique), the theta^0 coefficient by the component method one level down. It returns a component result.";
 brShapeBPolyPart[TB_Association, cv_Association, L_List, Y_Symbol] := Module[
@@ -236,7 +237,7 @@ brShapeB[T_Association, f_, x_Symbol] := Module[{cf, n, g, total, cc, cv, res, Y
         rho = (cf["yexpr"]^i/cc["s"])/cc["G"]^(1/cc["m"]);
         total = total + rho brFromSurface[T, brIntegrateTranscendental[
           brToSurface[T, Together[cf["coeffs"][[i + 1]] cc["s"] cc["G"]]], x]],
-        If[!reducedCurveQ[cc["m"], cc["G"], x], throwDecline["component curve not reduced over Q(x)"]];
+        If[!reducedCurveQ[cc["m"], cc["G"], x], throwUnimplemented["BaseAlgebraic:curve-not-reduced", "component curve not reduced over Q(x) (a constant-field extension)"]];
         cv = brShapeBCurve[cc["m"], cc["G"], x];
         Y = Unique["Bronstein`Private`brYB"];
         comp = brShapeBComponent[T, cv, Together[cf["coeffs"][[i + 1]] cc["s"]], Y];

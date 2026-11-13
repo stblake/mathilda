@@ -1027,6 +1027,15 @@ check-messages:
 check-bronstein-coverage:
 	python3 tools/check_bronstein_test_coverage.py
 
+# `make check-bronstein-completeness` -- the completeness ratchet of the
+# Bronstein completion campaign: every in-scope throwUnimplemented site of the
+# Bronstein/Trager packages and every uncertain step (rde_cert_mark) of the C
+# Risch DE, against a BASELINE that only moves down
+# (tools/check_bronstein_completeness.py).  Also the push-tier ctest
+# bronstein_completeness.
+check-bronstein-completeness:
+	python3 tools/check_bronstein_completeness.py
+
 # `make bench-integrate` -- the integration shootout (benchmarks/256-integration-
 # shootout): every applicable Mathilda Integrate method plus FriCAS, Maxima,
 # sympy and wolframscript (whichever are installed) on the 1151-case corpus;
@@ -1267,7 +1276,7 @@ print-flags:
 print-libs:
 	@echo "$(PC_LIBS_PRIVATE)"
 
-.PHONY: bench-osp-famous all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-bronstein-coverage bench-integrate bench-integrate-compact check-feyncalc check-differentialforms check-interval check-packed-aware \
+.PHONY: bench-osp-famous all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-bronstein-coverage check-bronstein-completeness bench-integrate bench-integrate-compact check-feyncalc check-differentialforms check-interval check-packed-aware \
         check-messages check-corpus-indvar \
         check-array-exactness check-nd-surfaces check-compile-coverage \
         check-refine-stress \

@@ -52,7 +52,9 @@
 LoadModule["trager/Trager.m"];
 BeginPackage["Bronstein`", {"Mathilda`"}];
 
-BronsteinIntegrate::usage = "BronsteinIntegrate[f, x] integrates f, an elementary function of x built from rational operations, logarithms, exponentials and ONE radical (n-th root) whose radicand involves the top transcendental monomial (Bronstein 1990). It returns an antiderivative (verified), {\"not elementary\", reason} (a certificate), or {\"failed\", reason} (out of scope or undecided).";
+BronsteinIntegrate::usage = "BronsteinIntegrate[f, x] integrates f, an elementary function of x built from rational operations, logarithms, exponentials and ONE radical (n-th root) whose radicand involves the top transcendental monomial (Bronstein 1990). It returns an antiderivative (verified), {\"not elementary\", reason} (a certificate), {\"implementation incomplete\", reason} (outside one simple radical extension, or a branch not implemented yet), or {\"failed\", reason} (a non-elementary input, a resource bound, or an internal error).";
+
+BronsteinScope::usage = "BronsteinScope[f, x] classifies the integrand f without integrating it: {\"implementation incomplete\", reason} when f is algebraic over an elementary tower but outside one simple radical extension (nested radicals, a non-cyclic radical compositum, a general algebraic function), or when the front end does not yet take an in-scope construct; \"InScope\" when the tower front end accepts f; \"NotApplicable\" when f has a non-elementary function, an approximate number, or no radical at all. The Automatic Integrate cascade asks it when every stage declined, to report Integrate::incomplete.";
 
 Begin["`Private`"];
 

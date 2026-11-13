@@ -77,7 +77,7 @@ static void test_integrals(void) {
         BR_TRUE(buf);
     }
     /* scope: a radical-argument kernel over or under another monomial declines */
-    BR_TRUE("First[BronsteinIntegrate[Log[x] E^(x Sqrt[x^3 + 1]), x]] === \"failed\"");
+    BR_TRUE("First[BronsteinIntegrate[Log[x] E^(x Sqrt[x^3 + 1]), x]] === \"implementation incomplete\"");
 }
 
 static void test_properties(void) {

@@ -20,10 +20,10 @@ static void test_front_end(void) {
     BR_TRUE("brTower[Log[x + Sqrt[1 + x^3]] x, x][\"shape\"] === \"BCurve\"");
     BR_TRUE("brTower[Log[x] Sqrt[1 + x^3], x][\"shape\"] === \"B\"");
     /* ... but not over or under another monomial, nor with a radical over the tower */
-    BR_TRUE("MemberQ[{{\"Decline\", \"radical inside a logarithm or exponential\"},"
-            " {\"Decline\", \"a further monomial over a kernel with a radical argument (Shape B, curve-monomial case, takes one kernel)\"}},"
+    BR_TRUE("MemberQ[{{\"Unimplemented\", \"radical inside a logarithm or exponential above other monomials (transcendental Risch over an algebraic base)\"},"
+            " {\"Unimplemented\", \"a further monomial over a kernel with a radical argument (transcendental Risch over an algebraic base)\"}},"
             " brFailTag[brCatch[brKernelsToSymbols[Log[x] + Log[Sqrt[x] + 1], x]]]]");
-    BR_THROWS("brKernelsToSymbols[Log[Sqrt[Log[x]] + 1], x]", "Decline", "radical inside a logarithm or exponential");
+    BR_THROWS("brKernelsToSymbols[Log[Sqrt[Log[x]] + 1], x]", "Unimplemented", "radical inside a logarithm or exponential above other monomials (transcendental Risch over an algebraic base)");
 }
 
 static void test_genus0(void) {

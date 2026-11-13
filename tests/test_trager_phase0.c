@@ -153,7 +153,7 @@ static void test_predicates(void) {
 /* ---- Validate.m: radical detection --------------------------------------- */
 #define DECLINE_REASON(f, reason) \
     TR_TRUE("Module[{e = catchTrager[detectRadical[" f ", x]]}," \
-            " MatchQ[e, tragerFail[\"Decline\", _, _]] && e[[2]] === \"" reason "\"]")
+            " MatchQ[e, tragerFail[\"Decline\" | \"Incomplete\" | \"Unimplemented\", _, _]] && e[[2]] === \"" reason "\"]")
 
 static void test_detect(void) {
     TR_TRUE("Sort[radicalPowers[x Sqrt[x + 1] + 1/(x + 1)^(1/3) + 2^(1/2), x]] ==="
@@ -177,24 +177,24 @@ static void test_detect(void) {
     TR_TRUE("detectRadical[Sqrt[x]/3 + 1/2, x] === <|\"b\" -> x, \"n\" -> 2|>");
     TR_TRUE("detectRadical[x^(2/5) + x^(3/10), x][\"n\"] === 10");
 
-    DECLINE_REASON("Sin[x] Sqrt[x]", "transcendental function in the integrand");
-    DECLINE_REASON("Exp[x] Sqrt[x]", "transcendental function in the integrand");
-    DECLINE_REASON("E^x Sqrt[x]", "transcendental function in the integrand");
-    DECLINE_REASON("Sqrt[x] Log[x]", "transcendental function in the integrand");
-    DECLINE_REASON("ArcTan[x] + Sqrt[x]", "transcendental function in the integrand");
-    DECLINE_REASON("Cosh[x]/x", "transcendental function in the integrand");
-    DECLINE_REASON("1.5 Sqrt[x]", "coefficients outside Q");
-    DECLINE_REASON("I Sqrt[x]", "coefficients outside Q");
-    DECLINE_REASON("Sqrt[x + I]", "coefficients outside Q");
-    DECLINE_REASON("Sqrt[2] Sqrt[x]", "algebraic constant in the integrand (coefficients must be rational)");
+    DECLINE_REASON("Sin[x] Sqrt[x]", "transcendental function in the integrand (outside Trager's class; Method -> \\\"Bronstein\\\" takes Log/Exp towers)");
+    DECLINE_REASON("Exp[x] Sqrt[x]", "transcendental function in the integrand (outside Trager's class; Method -> \\\"Bronstein\\\" takes Log/Exp towers)");
+    DECLINE_REASON("E^x Sqrt[x]", "transcendental function in the integrand (outside Trager's class; Method -> \\\"Bronstein\\\" takes Log/Exp towers)");
+    DECLINE_REASON("Sqrt[x] Log[x]", "transcendental function in the integrand (outside Trager's class; Method -> \\\"Bronstein\\\" takes Log/Exp towers)");
+    DECLINE_REASON("ArcTan[x] + Sqrt[x]", "transcendental function in the integrand (outside Trager's class; Method -> \\\"Bronstein\\\" takes Log/Exp towers)");
+    DECLINE_REASON("Cosh[x]/x", "transcendental function in the integrand (outside Trager's class; Method -> \\\"Bronstein\\\" takes Log/Exp towers)");
+    DECLINE_REASON("1.5 Sqrt[x]", "approximate number in the integrand");
+    DECLINE_REASON("I Sqrt[x]", "complex coefficients (constant field Q(i))");
+    DECLINE_REASON("Sqrt[x + I]", "complex coefficients (constant field Q(i))");
+    DECLINE_REASON("Sqrt[2] Sqrt[x]", "algebraic constant in the integrand (a number-field constant field)");
     /* x + 3^(1/3) has no radical in x: a rational function over Q(3^(1/3)),
      * routed to the rational integrator since v0.6094 (detectRadical -> None) */
-    DECLINE_REASON("Sqrt[x] + 3^(1/3)", "algebraic constant in the integrand (coefficients must be rational)");
+    DECLINE_REASON("Sqrt[x] + 3^(1/3)", "algebraic constant in the integrand (a number-field constant field)");
     DECLINE_REASON("Sqrt[1 + Sqrt[x]]", "nested radicals");
     DECLINE_REASON("(x + x^(1/3))^(1/2)", "nested radicals");
     DECLINE_REASON("Sqrt[x] + Sqrt[x + 1]", "more than one radicand (a radical compositum)");
     DECLINE_REASON("x^(1/3) + (x^2 + 1)^(1/3)", "more than one radicand (a radical compositum)");
-    DECLINE_REASON("Sqrt[x + a]", "radicand is not a rational function over Q");
+    DECLINE_REASON("Sqrt[x + a]", "radicand is not a rational function over Q (symbolic parameter)");
     /* the compositum decline carries both radicands */
     TR_TRUE("Sort[catchTrager[detectRadical[Sqrt[x] + Sqrt[x + 1], x]][[3]][\"Radicands\"]] === Sort[{x, 1 + x}]");
 }
@@ -233,9 +233,11 @@ static void test_power_basis(void) {
             " Together[powerBasisCoords[Expand[tq tinv . tyy^Range[0, 3]], tyy, 4, x^3 + 2]] === {1, 0, 0, 0}]");
     TR_TRUE("Module[{tq = x - tyy^2, tinv}, tinv = powerBasisInverse[tq, tyy, 3, x^2 + 1, x];"
             " Together[powerBasisCoords[Expand[tq tinv . tyy^Range[0, 2]], tyy, 3, x^2 + 1]] === {1, 0, 0}]");
-    /* a zero divisor (y^2 - x^2 is reducible) declines */
+    /* a zero divisor (y^2 - x^2 is reducible): an in-scope branch not
+       implemented yet (an Unimplemented stop with its site id) */
     TR_TRUE("catchTrager[powerBasisInverse[tyy - x, tyy, 2, x^2, x]] ==="
-            " tragerFail[\"Decline\", \"the denominator is a zero divisor: the radical is reducible\", <||>]");
+            " tragerFail[\"Unimplemented\", \"the denominator is a zero divisor: the radical is reducible\","
+            " <|\"site\" -> \"Trager:reducible-radical\"|>]");
 }
 
 /* ---- Validate.m: canonical form ------------------------------------------- */
@@ -295,10 +297,10 @@ static void test_canonical_form(void) {
 
     /* declines */
     TR_TRUE("catchTrager[canonicalForm[1/(Sqrt[x^2] - x), x]][[2]] === \"the denominator is a zero divisor: the radical is reducible\"");
-    TR_TRUE("catchTrager[canonicalForm[x + a, x]][[2]] === \"integrand is not algebraic over Q(x)\"");
+    TR_TRUE("catchTrager[canonicalForm[x + a, x]][[2]] === \"integrand is not algebraic over Q(x) (irrational exponent or symbolic parameter)\"");
     TR_TRUE("catchTrager[canonicalForm[Sqrt[x] + a, x]][[2]] === \"integrand is not a rational function of x and the radical over Q\"");
     TR_TRUE("catchTrager[canonicalForm[Sqrt[x] + Sqrt[x + 1], x]][[2]] === \"more than one radicand (a radical compositum)\"");
-    TR_TRUE("catchTrager[canonicalForm[Sin[x], x]][[1]] === \"Decline\"");
+    TR_TRUE("catchTrager[canonicalForm[Sin[x], x]][[1]] === \"Incomplete\"");   /* outside Trager's class */
 
     /* radicalExpression = q b^(1/n) */
     TR_TRUE("radicalExpression[canonicalForm[Sqrt[x/(x + 1)], x]] === (1 + x) Sqrt[x/(1 + x)]");

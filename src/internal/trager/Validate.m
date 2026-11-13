@@ -22,32 +22,33 @@ radicalPowers::usage = "radicalPowers[f, x] lists the distinct subexpressions b^
 radicalPowers[f_, x_Symbol] := DeleteDuplicates[
   Cases[f, Power[b_, r_Rational] /; !FreeQ[b, x], {0, Infinity}]];
 
-detectRadical::usage = "detectRadical[f, x] finds the single radical of f. It returns <|\"b\" -> b, \"n\" -> n|>, b in Q(x) and n >= 2, such that every radical subexpression of f is a power of b^(1/n); None when f has no radical; or throws a Decline when f is outside the scope (two different radicands, nested radicals, a transcendental function, a non-rational constant).";
+detectRadical::usage = "detectRadical[f, x] finds the single radical of f. It returns <|\"b\" -> b, \"n\" -> n|>, b in Q(x) and n >= 2, such that every radical subexpression of f is a power of b^(1/n); None when f has no radical; or throws: Incomplete outside one simple radical over Q(x) (two different radicands, nested radicals, a transcendental function), Unimplemented for an in-scope case not yet handled (a non-rational constant).";
 detectRadical[f_, x_Symbol] := Module[{pows, bases, b0, exps, n},
   If[!FreeQ[f, (Sin | Cos | Tan | Cot | Sec | Csc | Exp | Log | ArcTan | ArcSin |
         ArcCos | Sinh | Cosh | Tanh | Erf | Gamma | Power[E, _])],
-    throwDecline["transcendental function in the integrand"]];
-  If[!FreeQ[f, Complex] || !FreeQ[f, _Real],
-    throwDecline["coefficients outside Q"]];
+    throwIncomplete["transcendental function in the integrand (outside Trager's class; Method -> \"Bronstein\" takes Log/Exp towers)"]];
+  If[!FreeQ[f, _Real], throwDecline["approximate number in the integrand"]];
+  If[!FreeQ[f, Complex],
+    throwUnimplemented["Trager:constants", "complex coefficients (constant field Q(i))"]];
   pows = radicalPowers[f, x];
   (* no radical in x: a rational function, over Q or over a number field Q(theta)
      (algebraic constants are fine there -- canonicalForm routes it to the
      rational integrator) *)
   If[pows === {}, Return[None]];
   If[!FreeQ[f, Power[c_, _Rational] /; FreeQ[c, x]],
-    throwDecline["algebraic constant in the integrand (coefficients must be rational)"]];
+    throwUnimplemented["Trager:algebraic-constant", "algebraic constant in the integrand (a number-field constant field)"]];
   If[!FreeQ[First /@ pows, Power[_, _Rational]],
-    throwDecline["nested radicals"]];
+    throwIncomplete["nested radicals"]];
   (* Normalise each base; a base that is the reciprocal of another base is    *)
   (* the same radicand with the exponent negated.                             *)
   bases = Together[First[#]] & /@ pows;
   b0 = First[bases];
-  If[!rationalFunctionQ[b0, x], throwDecline["radicand is not a rational function over Q"]];
+  If[!rationalFunctionQ[b0, x], throwUnimplemented["Trager:radicand-not-rational", "radicand is not a rational function over Q (symbolic parameter)"]];
   exps = MapThread[
     Which[
       Together[#1 - b0] === 0, #2,
       Together[#1 b0 - 1] === 0, -#2,
-      True, throwDecline["more than one radicand (a radical compositum)",
+      True, throwIncomplete["more than one radicand (a radical compositum)",
               <|"Radicands" -> DeleteDuplicates[bases]|>]] &,
     {bases, Last /@ pows}];
   n = LCM @@ (Denominator /@ exps);
@@ -71,11 +72,11 @@ powerBasisCoords::usage = "powerBasisCoords[p, y, n, g] is the coordinate list {
 powerBasisCoords[p_, y_Symbol, n_Integer, g_] :=
   PadRight[CoefficientList[reduceYDegree[p, y, n, g], y], n];
 
-powerBasisInverse::usage = "powerBasisInverse[q, y, n, g, x] is the coordinate list of 1/q in the power basis 1, y, ..., y^(n-1) of Q(x)[y]/(y^n - g), q a nonzero polynomial in y with coefficients in Q(x). It solves the linear system c.M = e_0 with M the multiplication-by-q matrix. Throws a Decline when q is a zero divisor (y^n - g reducible over Q(x)).";
+powerBasisInverse::usage = "powerBasisInverse[q, y, n, g, x] is the coordinate list of 1/q in the power basis 1, y, ..., y^(n-1) of Q(x)[y]/(y^n - g), q a nonzero polynomial in y with coefficients in Q(x). It solves the linear system c.M = e_0 with M the multiplication-by-q matrix. Throws an Unimplemented stop when q is a zero divisor (y^n - g reducible over Q(x)).";
 powerBasisInverse[q_, y_Symbol, n_Integer, g_, x_Symbol] := Module[{M, sol},
   M = Table[powerBasisCoords[y^k q, y, n, g], {k, 0, n - 1}];
   If[Together[Det[M]] === 0,
-    throwDecline["the denominator is a zero divisor: the radical is reducible"]];
+    throwUnimplemented["Trager:reducible-radical", "the denominator is a zero divisor: the radical is reducible"]];
   sol = LinearSolve[Transpose[M], UnitVector[n, 1]];
   Together /@ sol];
 
@@ -83,7 +84,7 @@ canonicalForm::usage = "canonicalForm[f, x] validates the integrand f and return
 canonicalForm[f_, x_Symbol] := Module[{rad, b, n, p, q, g, y, yh, fy, t, num, den, numC, denInv, coeffs},
   rad = detectRadical[f, x];
   If[rad === None,
-    If[!algebraicRationalFunctionQ[f, x], throwDecline["integrand is not algebraic over Q(x)"]];
+    If[!algebraicRationalFunctionQ[f, x], throwUnimplemented["Trager:not-algebraic", "integrand is not algebraic over Q(x) (irrational exponent or symbolic parameter)"]];
     Return[<|"x" -> x, "b" -> 1, "n" -> 1, "q" -> 1, "g" -> 1, "y" -> None, "coeffs" -> {Together[f]}|>]];
   b = rad["b"]; n = rad["n"];
   p = Numerator[Together[b]]; q = Denominator[Together[b]];
@@ -91,7 +92,7 @@ canonicalForm[f_, x_Symbol] := Module[{rad, b, n, p, q, g, y, yh, fy, t, num, de
   y = Unique["y"]; yh = Unique["Y"];
   fy = substituteRadical[f, x, b, n, y];
   If[!rationalInXYQ[fy, x, y],
-    throwDecline["integrand is not a rational function of x and the radical over Q"]];
+    throwUnimplemented["Trager:not-algebraic", "integrand is not a rational function of x and the radical over Q"]];
   (* y = yh/q *)
   t = Together[fy /. y -> yh/q];
   num = Numerator[t]; den = Denominator[t];

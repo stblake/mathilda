@@ -1553,3 +1553,16 @@ Commits: 097dd288 (merge), f9073acb (PR 4 core), bb8c6ba4 (tests), ad060249 (doc
 - **Perf (-file, medians, PR 1 vs branch, A/A in brackets):** 9 rounds: fib +1.22% (+0.71%), Do 4M +0.45% (-0.54%), Expand +1.80% (+3.75%), Integrate -1.82% (-0.49%). 15 rounds: fib +0.02% (-0.54%), Do +1.70% (+0.00%), Expand -1.33% (-2.45%), Integrate -3.35% (-2.29%). Focused Do 4M, 15 rounds: branch +0.86%, PR 3 +0.12%, A/A +0.74%.
 - **Deviations:** Ctrl-Z pty case runs under a job-control wrapper (a pty child's group is orphaned); dark uses the terminal palette below 24-bit; commands go into history; Monitor updates on loop steps and the 128-step evaluator tick; key-hint footer and input box not done.
 - **Rough edges / follow-ups:** no OSC 11 background detection; Monitor text is shown in InputForm (strings quoted); a late cursor-position reply after very fast typeahead might echo; the spinner clears with EL before each frame.
+
+## Bronstein completion campaign (2026-11-14) — one simple radical, full decision procedure
+
+Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion campaign".
+
+- [ ] Phase 0: soundness — reproduce + fix (a) rt_decide_field uncertified nonelem, (b) LogReducible/ExpReducible False-on-failure, (c) brIntegrateInKLogLike drops reducible logs
+- [ ] Phase 1: failure taxonomy (Incomplete / Unimplemented / Resource / Internal), Integrate::incomplete (Method + cascade), completeness gate
+- [ ] Phase 2: C substrate (WeakNormalizer over k(t), ParametricLogarithmicDerivative, cancellation cases, ParamRischDE, LimitedIntegrate, rt_field_integrate completeness, constant fields)
+- [ ] Phase 3: Shape A completion (.m)
+- [ ] Phase 4: constant fields (NF, Q(i)+trig, parameters)
+- [ ] Phase 5: radical anywhere (brDField, transcendental Risch over algebraic base, RDE on a curve over a tower)
+- [ ] Theory note docs/notes/bronstein_extensions.md (E1–E6), each adversarially reviewed
+- [ ] Close-out

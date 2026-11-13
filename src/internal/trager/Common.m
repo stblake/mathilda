@@ -5,12 +5,20 @@
 (*                                                                            *)
 (* A stage that cannot continue THROWS a tragerFail[class, reason, info]       *)
 (* object with tag "TragerFail"; the public entry point catches it and turns   *)
-(* it into the list it returns.  There are three classes:                     *)
+(* it into the list it returns.  There are five classes:                      *)
 (*                                                                            *)
 (*   "NonElementary" -- a proof that the integral is not elementary (the      *)
 (*                      reason names the certificate);                        *)
-(*   "Decline"       -- out of scope, or a bound or heuristic gave out: no     *)
-(*                      verdict;                                              *)
+(*   "Incomplete"    -- the integrand is outside the class the procedure      *)
+(*                      decides (nested radicals, a radical compositum, a     *)
+(*                      general algebraic function): "implementation          *)
+(*                      incomplete", reported to the user;                    *)
+(*   "Unimplemented" -- inside that class, but a branch of the algorithm is    *)
+(*                      not written yet.  Reported like "Incomplete"; each    *)
+(*                      site carries an id that tools/check_bronstein_        *)
+(*                      completeness.py ratchets to zero;                     *)
+(*   "Decline"       -- a resource bound or a budget gave out: no verdict,    *)
+(*                      silent;                                               *)
 (*   "Internal"      -- an invariant failed.  This is a bug; the entry point   *)
 (*                      still only declines, so a bug can never become a       *)
 (*                      wrong answer or a false certificate.                  *)
@@ -26,6 +34,14 @@ throwDecline::usage = "throwDecline[reason, info] throws tragerFail[\"Decline\",
 throwDecline[reason_String, info_Association : <||>] :=
   Throw[tragerFail["Decline", reason, info], "TragerFail"];
 
+throwIncomplete::usage = "throwIncomplete[reason, info] throws tragerFail[\"Incomplete\", reason, info]: the integrand is outside the class the procedure decides (one simple radical over an elementary tower). Integrate reports it as \"implementation incomplete\".";
+throwIncomplete[reason_String, info_Association : <||>] :=
+  Throw[tragerFail["Incomplete", reason, info], "TragerFail"];
+
+throwUnimplemented::usage = "throwUnimplemented[site, reason, info] throws tragerFail[\"Unimplemented\", reason, <|\"site\" -> site, ...|>]: the integrand is inside the decided class but this branch of the algorithm is not implemented yet. Integrate reports it as \"implementation incomplete\". site is a stable id (\"File:tag\") counted by the completeness gate, which ratchets the sites to zero.";
+throwUnimplemented[site_String, reason_String, info_Association : <||>] :=
+  Throw[tragerFail["Unimplemented", reason, Append[info, "site" -> site]], "TragerFail"];
+
 throwInternal::usage = "throwInternal[invariant, info] throws tragerFail[\"Internal\", invariant, info]: an invariant that the mathematics guarantees has failed. The entry point declines on it, so a bug cannot become a wrong answer.";
 throwInternal[invariant_String, info_Association : <||>] :=
   Throw[tragerFail["Internal", invariant, info], "TragerFail"];
@@ -37,8 +53,14 @@ catchTrager[expr_] := Catch[expr, "TragerFail"];
 tragerFailQ::usage = "tragerFailQ[e] is True when e is a tragerFail[...] object.";
 tragerFailQ[e_] := MatchQ[e, _tragerFail];
 
-failToList::usage = "failToList[tragerFail[class, reason, info]] is the list returned to Integrate: {\"not elementary\", reason} for a certificate, {\"failed\", reason} otherwise (an internal error is reported as {\"failed\", \"internal: \" <> invariant}).";
+tragerRetryableQ::usage = "tragerRetryableQ[e] is True when e is a tragerFail[...] object that proves nothing (class Decline, Unimplemented or Incomplete), so that a caller may try another construction; False for a certificate (NonElementary), an Internal error, or a non-failure.";
+tragerRetryableQ[tragerFail["Decline" | "Unimplemented" | "Incomplete", _, _]] := True;
+tragerRetryableQ[_] := False;
+
+failToList::usage = "failToList[tragerFail[class, reason, info]] is the list returned to Integrate: {\"not elementary\", reason} for a certificate, {\"implementation incomplete\", reason} for an Incomplete or Unimplemented stop, {\"failed\", reason} otherwise (an internal error is reported as {\"failed\", \"internal: \" <> invariant}).";
 failToList[tragerFail["NonElementary", reason_, _]] := {"not elementary", reason};
+failToList[tragerFail["Incomplete", reason_, _]] := {"implementation incomplete", reason};
+failToList[tragerFail["Unimplemented", reason_, _]] := {"implementation incomplete", reason};
 failToList[tragerFail["Decline", reason_, _]] := {"failed", reason};
 failToList[tragerFail["Internal", reason_, _]] := {"failed", "internal: " <> reason};
 

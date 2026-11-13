@@ -66,7 +66,7 @@ brLogBasisReduce[T_Association, us_List] := Module[{x = T["x"], monos = T["monos
       AppendTo[coords, UnitVector[Length[basis], Length[basis]]];
       AppendTo[kpart, 0],
       If[!ListQ[r] || Length[r] =!= Length[spec],
-        throwDecline["logarithm relation not decided", <|"u" -> u|>]];
+        throwUnimplemented["LimitedIntegrate:logrel", "logarithm relation not decided", <|"u" -> u|>]];
       nm = Length[monos]; nb = Length[basis];
       kp = Sum[r[[i]] If[monos[[i]]["kind"] === "Exp", monos[[i]]["arg"], monos[[i]]["sym"]], {i, nm}];
       AppendTo[coords, Take[r, {nm + 1, nm + nb}]];
