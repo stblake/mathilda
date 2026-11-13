@@ -1790,8 +1790,71 @@ static bool tq_trig_pow(const Expr* e, const Expr* x, const char* trig, int64_t 
     return true;
 }
 
+/* Cos[u] (A + B Cos[u])^(-1/2) = ((A + B Cos[u])^(1/2) - A (A + B Cos[u])^(-1/2))/B:
+ * the first-degree numerator reduces to the two kernel forms below.  Without
+ * it the term Cos[u]/Sqrt[-Cos[u]] of G&R 2.619.2 fell to a later stage whose
+ * answer held on one sign interval of Cos only.  NULL unless f has exactly
+ * that shape (constant factors allowed) and both pieces close. */
+static Expr* tq_cos_times_invsqrt(Expr* f, Expr* x) {
+    if (!tq_head(f, SYM_Times)) return NULL;
+    size_t n = f->data.function.arg_count;
+    const Expr *cosf = NULL, *pw = NULL;
+    size_t nx = 0;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* fi = f->data.function.args[i];
+        if (!contains_sym(fi, x)) continue;
+        nx++;
+        if (tq_head(fi, SYM_Cos) && fi->data.function.arg_count == 1) cosf = fi;
+        else if (tq_head(fi, SYM_Power) && fi->data.function.arg_count == 2) pw = fi;
+    }
+    if (nx != 2 || !cosf || !pw) return NULL;
+    Expr* mhalf = make_rational(-1, 2);
+    bool inv = expr_eq(pw->data.function.args[1], mhalf);
+    expr_free(mhalf);
+    if (!inv) return NULL;
+    Expr* Q = pw->data.function.args[0];
+    Expr* B = tq_eval(expr_new_function(expr_new_symbol(SYM_Coefficient),
+                     (Expr*[]){ expr_copy(Q), expr_copy((Expr*)cosf) }, 2));
+    Expr* A = tq_eval(expr_new_function(expr_new_symbol(SYM_Expand),
+                     (Expr*[]){ tq_fn2(SYM_Plus, expr_copy(Q),
+                                tq_fn2(SYM_Times, expr_new_integer(-1),
+                                       tq_fn2(SYM_Times, expr_copy(B), expr_copy((Expr*)cosf)))) }, 1));
+    Expr* out = NULL;
+    bool ok = B && A && !contains_sym(A, x) && !contains_sym(B, x) &&
+              !(B->type == EXPR_INTEGER && B->data.integer == 0);
+    if (ok) {
+        /* constant cofactor c of Cos[u] Q^(-1/2) */
+        Expr** cs = malloc(sizeof(Expr*) * (n + 1));
+        size_t w = 0;
+        for (size_t i = 0; i < n; i++)
+            if (!contains_sym(f->data.function.args[i], x)) cs[w++] = expr_copy(f->data.function.args[i]);
+        cs[w++] = tq_fn2(SYM_Power, expr_copy(B), expr_new_integer(-1));
+        Expr* c = tq_eval(expr_new_function(expr_new_symbol(SYM_Times), cs, w));
+        free(cs);
+        Expr* t1 = tq_eval(tq_fn2(SYM_Times, expr_copy(c),
+                                  tq_fn2(SYM_Power, expr_copy(Q), make_rational(1, 2))));
+        Expr* t2 = tq_eval(tq_fn2(SYM_Times,
+                                  tq_fn2(SYM_Times, expr_new_integer(-1), tq_fn2(SYM_Times, c, expr_copy(A))),
+                                  tq_fn2(SYM_Power, expr_copy(Q), make_rational(-1, 2))));
+        bool t2zero = t2 && t2->type == EXPR_INTEGER && t2->data.integer == 0;
+        Expr* I1 = integrate_elliptic_trig_indefinite(t1, x);
+        Expr* I2 = !I1 ? NULL : t2zero ? expr_new_integer(0)
+                                       : integrate_elliptic_trig_indefinite(t2, x);
+        if (I1 && I2) out = tq_eval(tq_fn2(SYM_Plus, I1, I2));
+        else { if (I1) expr_free(I1); if (I2) expr_free(I2); }
+        expr_free(t1); expr_free(t2);
+    }
+    if (A) expr_free(A);
+    if (B) expr_free(B);
+    return out;
+}
+
 Expr* integrate_elliptic_trig_indefinite(Expr* f, Expr* x) {
     if (!f || !x || x->type != EXPR_SYMBOL) return NULL;
+    {
+        Expr* r = tq_cos_times_invsqrt(f, x);
+        if (r) return r;
+    }
     /* c Q^e: pull a constant factor */
     const Expr* core = f;
     Expr* cfac = NULL;
@@ -1875,7 +1938,32 @@ Expr* integrate_elliptic_trig_indefinite(Expr* f, Expr* x) {
                 S = AB;
                 scale = expr_new_integer(2);
             }
-            Expr* sq = tq_fn2(SYM_Power, S, inv ? make_rational(-1, 2) : make_rational(1, 2));
+            /* Sqrt[S (1 - m Sin[amp]^2)] = Sqrt[S] Sqrt[1 - m Sin[amp]^2] only
+             * for S > 0.  Otherwise (Sqrt[-Cos[x]]: S = -1) the factor that
+             * relates the integrand to the elliptic kernel is the LOCALLY
+             * CONSTANT ratio Sqrt[base]/Sqrt[base/S] -- +/-I or a real constant
+             * on each interval where base keeps its sign -- so the
+             * antiderivative is ratio * E (resp. F / ratio), which
+             * differentiates back to the integrand on every interval.  The
+             * bare Sqrt[S] form was right only where base/S > 0: Integrate[
+             * Sqrt[-Cos[x]], x] was 2 I EllipticE[x/2, 2], off by a sign
+             * wherever Cos[x] < 0 (G&R 2.619.2, 2.619.11). */
+            bool S_pos = ell_true(tq_eval(tq_fn2(SYM_Greater, expr_copy(S), expr_new_integer(0))))
+                || ell_true(tq_eval(expr_new_function(expr_new_symbol(SYM_Simplify),
+                       (Expr*[]){ tq_fn2(SYM_Greater, expr_copy(S), expr_new_integer(0)) }, 1)));
+            Expr* sq;
+            if (S_pos) {
+                sq = tq_fn2(SYM_Power, S, inv ? make_rational(-1, 2) : make_rational(1, 2));
+            } else {
+                Expr* base = core->data.function.args[0];
+                Expr* nb = tq_eval(expr_new_function(expr_new_symbol(SYM_Together),
+                               (Expr*[]){ tq_fn2(SYM_Times, expr_copy(base),
+                                                 tq_fn2(SYM_Power, S, expr_new_integer(-1))) }, 1));
+                Expr* rb = tq_fn2(SYM_Power, expr_copy(base), make_rational(1, 2));
+                Expr* rn = tq_fn2(SYM_Power, nb, make_rational(1, 2));
+                sq = inv ? tq_fn2(SYM_Times, rn, tq_fn2(SYM_Power, rb, expr_new_integer(-1)))
+                         : tq_fn2(SYM_Times, rb, tq_fn2(SYM_Power, rn, expr_new_integer(-1)));
+            }
             Expr* ell = expr_new_function(expr_new_symbol(inv ? SYM_EllipticF : SYM_EllipticE),
                                           (Expr*[]){ amp, m }, 2);
             Expr* kinv = k ? tq_fn2(SYM_Power, k, expr_new_integer(-1)) : expr_new_integer(1);

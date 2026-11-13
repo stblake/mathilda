@@ -175,6 +175,24 @@ static void test_branch_cut_jumps(void) {
 }
 
 /* -------------------------------------------------------------------------
+ * Radicals of a sign-changing radicand.  Sqrt[A + B Cos[u]] was factored as
+ * Sqrt[A + B] Sqrt[1 - m Sin[u/2]^2] for any A + B, which is the right
+ * antiderivative only where the second factor is positive; the locally
+ * constant ratio Sqrt[base]/Sqrt[base/S] replaces Sqrt[S] unless S > 0 is
+ * provable.  ParallelMixedSpecial verified a branch at samples that all lay on
+ * one sign interval; it now also checks spread points.
+ * ---------------------------------------------------------------------- */
+static void test_radical_branches(void) {
+    check_antideriv("Sqrt[-Cos[(5*x)/3]]");                             /* 2.619.11 */
+    check_antideriv("Cos[(5*x)/8]^2/Sqrt[-Cos[(5*x)/4]]");               /* 2.619.2 */
+    check_antideriv("Cos[x]/Sqrt[-Cos[x]]");
+    check_antideriv("Sqrt[2 - 3 Cos[x]]");
+    check_antideriv("1/Sqrt[1 + 3 Cos[2 x]]");
+    /* S > 0 keeps the plain form */
+    check_val("Integrate[Sqrt[Cos[x]], x] - 2 EllipticE[x/2, 2]", "{{x -> 1/3}}", "{0}");
+}
+
+/* -------------------------------------------------------------------------
  * Rows already correct when this suite was written (fixed by earlier work);
  * pinned so they stay that way.
  * ---------------------------------------------------------------------- */
@@ -214,6 +232,7 @@ int main(void) {
     TEST(test_ei_connection);
     TEST(test_fourier_sign_split);
     TEST(test_branch_cut_jumps);
+    TEST(test_radical_branches);
     TEST(test_already_fixed);
 
     if (g_failures) {

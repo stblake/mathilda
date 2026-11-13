@@ -1607,17 +1607,59 @@ FixBranch[anti_, kern_, x_, samples_, K_] := Module[{mults = {1, -1, I, -I}, k, 
    original -- VerifyAnswer at every sample.  Corpus #34,
    ArcSin[Sqrt[x+1]]/Sqrt[x], whose surface is 2 Sqrt[x] ArcSin[Sqrt[1+x]]
    - 2 I Sqrt[1+x] where the antiderivative has +2 I Sqrt[1+x]. *)
-ConjugateIfBetter[e_, integrand_, x_, samples_] := Module[{ver, ec},
+ConjugateIfBetter[e_, integrand_, x_, samples_] := Module[{ver, ec, er},
   ver = VerifyAnswer[e, integrand, x, samples];
-  If[ver || FreeQ[e, _Complex], Return[{e, ver}]];
-  ec = e /. Complex[re_, im_] :> Complex[re, -im];
-  If[TrueQ[VerifyAnswer[ec, integrand, x, samples]], {ec, True}, {e, ver}]];
+  If[ver, Return[{e, ver}]];
+  If[! FreeQ[e, _Complex],
+    ec = e /. Complex[re_, im_] :> Complex[re, -im];
+    If[TrueQ[VerifyAnswer[ec, integrand, x, samples]], Return[{ec, True}]]];
+  (* the branch of the whole answer against the SURFACE integrand: a locally
+     constant ratio (LocalBranchRatio) times e, accepted on the same evidence *)
+  er = LocalBranchFix[e, integrand, x];
+  If[er =!= None && TrueQ[VerifyAnswer[er, integrand, x, samples]], Return[{er, True}]];
+  {e, ver}];
 
+(* LocalBranchFix[e, f, x]: rho e when rho = f / (de/dx) is locally constant
+   -- rho^n a nonzero constant for some small n, so rho is constant on every
+   interval where it is defined -- else None.  The kernel radicals the tower
+   reads on their principal branches (Sqrt[x] Sqrt[x^2 - 1]) and the surface
+   radical of the integrand (Sqrt[x^3 - x]) agree up to such a factor, which
+   differs between the sign intervals of the radicand; multiplying by it turns
+   an answer valid on one interval into one valid on all of them. *)
+LocalBranchFix[e_, f_, x_] := Module[{d, rho},
+  d = QuietCheck[D[e, x], $Failed];
+  If[d === $Failed, Return[None]];
+  rho = Quiet[Together[f/d]];
+  If[FreeQ[rho, x] || ! FreeQ[rho, $Failed | Indeterminate | ComplexInfinity | DirectedInfinity],
+    Return[None]];
+  Do[With[{c = Quiet[Together[rho^n]]},
+      If[FreeQ[c, x] && NumericQ[c] && c =!= 0, Return[rho e, Module]]],
+    {n, {2, 3, 4, 6}}];
+  (* rho^n may not Together to its constant (a derivative with radical
+     factors that cancel only on simplification); D[rho] == 0 is the same
+     property stated directly *)
+  If[TrueQ[Quiet[PossibleZeroQ[D[rho, x]]]], Return[rho e]];
+  None];
+
+(* VerifyAnswer: d expr/dx == integrand at every sample, AND at the spread
+   points $VerifySpread wherever the integrand is defined there.  The samples
+   alone can all fall on one interval of a sign change of a radicand: the
+   branch FixBranch picks (a constant +-1, +-I) then holds only on that
+   interval, and Integrate[Cos[x]/Sqrt[-Cos[x]], x] was "verified" at x = 9/4,
+   13/5 -- both with Cos[x] < 0 -- and wrong wherever Cos[x] > 0 (G&R 2.619.2).
+   An antiderivative must differentiate back wherever the integrand is
+   analytic, so a spread point where the integrand has a value is evidence
+   like any other; one where it has none (a pole, outside a real domain the
+   numeric evaluator rejects) proves nothing and is skipped. *)
+$VerifySpread = {3/10, 3/4, 7/5, 4, 11/2, -9/10, -5/2};
 VerifyAnswer[expr_, integrand_, x_, samples_] := Module[{d, a, b},
   d = QuietCheck[D[expr, x], $Failed];
   If[d === $Failed, Return[False]];
   AllTrue[samples, (a = Quiet[Num[d, x, #]]; b = Quiet[Num[integrand, x, #]];
-    NumericQ[a] && NumericQ[b] && Abs[a - b] < 10^-15 (1 + Abs[b])) &]];
+    NumericQ[a] && NumericQ[b] && Abs[a - b] < 10^-15 (1 + Abs[b])) &] &&
+  AllTrue[Complement[$VerifySpread, samples], (b = Quiet[Num[integrand, x, #]];
+    ! NumericQ[b] || (a = Quiet[Num[d, x, #]];
+      NumericQ[a] && Abs[a - b] < 10^-12 (1 + Abs[b]))) &]];
 
 (* ------------------------------------------ bounds at the places (Section 5, S5) *)
 (* Part II decides the hypotheses of its Theorem 8.7 at a place by the criteria

@@ -4541,6 +4541,29 @@ objects (casus irreducibilis), a divergent integral.  When the harmonic pair
 of `Q1`, `Q2` is irrational the output carries nested radicals (correct, but
 not denested).
 
+#### Trig radicals of a sign-changing radicand (v0.6540)
+
+`Integrate[(A + B Cos[k x])^(+-1/2), x]` and `(A + B Sin[k x]^2)^(+-1/2)`
+factor the radicand as `S (1 - m Sin[phi]^2)`. `Sqrt[S]` comes out only when
+`S > 0` is provable; otherwise the antiderivative carries the locally constant
+ratio `Sqrt[base]/Sqrt[base/S]`, so it differentiates back on every interval
+where the radicand keeps its sign. `Cos[u] (A + B Cos[u])^(-1/2)` reduces to the
+two kernel forms.
+
+```
+Integrate[Sqrt[-Cos[x]], x]       (* 2 Sqrt[-Cos[x]] EllipticE[x/2, 2]/Sqrt[Cos[x]] *)
+Integrate[Sqrt[Cos[x]], x]        (* 2 EllipticE[x/2, 2] *)
+```
+
+The special-function stage (ParallelMixedSpecial) verifies an answer at its
+samples and also at spread points where the integrand is defined. When the
+answer and the integrand differ by a locally constant factor (one whose
+derivative vanishes, e.g. `Sqrt[x] Sqrt[x^2 - 1]` against `Sqrt[x^3 - x]`), the
+answer is multiplied by that factor:
+`Integrate[1/Sqrt[x^3 - x], x]` is
+`2 Sqrt[1 - x] Sqrt[x] Sqrt[1 + x] EllipticF[ArcSin[Sqrt[x]], -1]/Sqrt[x^3 - x]`,
+valid on all four intervals.
+
 ### InterpolatingFunction integrands
 
 `Integrate[InterpolatingFunction[...][x], x]` returns the antiderivative as a

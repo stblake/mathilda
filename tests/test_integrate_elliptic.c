@@ -168,9 +168,15 @@ static void test_default_cascade(void) {
              "{t[[1]] < 12, FreeQ[t[[2]], Integrate], "
              "Abs[N[t[[2]] - 2.6696301067066588095129015821`28, 30]] < 10^-20}]",
              "{True, True, True}");
-    /* the indefinite form declines (non-elementary) promptly */
-    check_eq("With[{t = AbsoluteTiming[Quiet[Integrate[Sqrt[z/((z - 1) (z - 2))], z]]]}, "
-             "{t[[1]] < 8, Head[t[[2]]]}]", "{True, Integrate}");
+    /* the indefinite form is answered promptly by the special-function stage
+     * (before v0.6540 it declined: its elliptic answer verified only on one
+     * sign interval of the radicand), and the answer differentiates back on
+     * every interval -- z < 0, (0, 1), (1, 2), z > 2 */
+    check_eq("With[{t = AbsoluteTiming[Quiet[Integrate[Sqrt[z/((z - 1) (z - 2))], z]]], "
+             "f = Sqrt[z/((z - 1) (z - 2))]}, "
+             "{t[[1]] < 8, FreeQ[t[[2]], Integrate], "
+             "And @@ Table[Abs[N[(D[t[[2]], z] - f) /. z -> p, 30]] < 10^-12, "
+             "{p, {-5/2, 3/10, 7/5, 5/2, 9}}]}]", "{True, True, True}");
 }
 
 int main(void) {
