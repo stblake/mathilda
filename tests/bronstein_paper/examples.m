@@ -68,6 +68,20 @@ bronsteinPaperExamples = {
   "kind" -> "Integrate", "f" -> Hold[Sqrt[Log[x]] (Log[x] + 1)^(1/3)/x], "expect" -> "nonelementary",
   "before" -> "implementation incomplete", "note" -> "the compositum over the transcendental tower Q(x)(Log[x])"|>,
 
+(* ---- E6d: one radical up to a locally constant sign (v0.6549) ----------- *)
+<|"id" -> "E6d-1", "gap" -> "Tower:cyclic-compositum (sign)", "theory" -> "E6d", "version" -> "v0.6549",
+  "kind" -> "Integrate", "f" -> Hold[Sqrt[x^2 (x + 1)]/x^2 + 1/Sqrt[x + 1]], "expect" -> "elementary",
+  "before" -> "implementation incomplete", "note" -> "Sqrt[x^2 (x+1)] = eps x Sqrt[x+1], eps = +-1 locally constant; the answer is a sum over sign regions"|>,
+<|"id" -> "E6d-2", "gap" -> "Tower:cyclic-compositum (sign)", "theory" -> "E6d", "version" -> "v0.6549",
+  "kind" -> "Integrate", "f" -> Hold[Sqrt[x^2 (x^3 + 1)] - x Sqrt[x^3 + 1]], "expect" -> "nonelementary",
+  "before" -> "implementation incomplete", "note" -> "identically 0 where eps = 1, the elliptic -2 x Sqrt[x^3+1] where eps = -1"|>,
+<|"id" -> "E6d-3", "gap" -> "Tower:cyclic-compositum (sign)", "theory" -> "E6d", "version" -> "v0.6549",
+  "kind" -> "Integrate", "f" -> Hold[Sqrt[x^2 (x^3 + 1)] Sqrt[x^3 + 1]/x], "expect" -> "elementary",
+  "before" -> "implementation incomplete", "note" -> "the product is eps (x^3 + 1): rational on each region"|>,
+<|"id" -> "E6d-4", "gap" -> "Tower:cyclic-compositum (sign)", "theory" -> "E6d", "version" -> "v0.6549",
+  "kind" -> "Integrate", "f" -> Hold[Sqrt[Log[x]^2 (Log[x] + 1)] + Sqrt[Log[x] + 1]/x], "expect" -> "nonelementary",
+  "before" -> "implementation incomplete", "note" -> "over the tower: Log[x] Sqrt[Log[x] + 1] on the region eps = 1"|>,
+
 (* ---- E6c: log-linear exponents (v0.6547) --------------------------------- *)
 <|"id" -> "E6c-1", "gap" -> "Tower:exp-of-log-radical", "theory" -> "E6c", "version" -> "v0.6547",
   "kind" -> "Integrate", "f" -> Hold[E^(x + Log[x]/2)/x], "expect" -> "nonelementary",

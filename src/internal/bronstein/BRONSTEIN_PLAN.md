@@ -1476,3 +1476,8 @@ and a numeric sanity check before its phase starts.
   special places on curves of positive genus. The torsion order comes from
   specialisation plus Trager's two primes, with the special places on the
   shifted frame and a `goodQ` hook in `goodPrime`. Theory E3. Sites: 39 → 38.
+- **Gap log (2026-11-14).** `tests/bronstein_paper/examples.m`, the JSC paper
+  corpus, is checked by ctest and rendered as Part C of the theory note. Every
+  fix adds its examples.
+- **Phase 3, part 3 (v0.6549).** E6d: one radical up to a locally constant sign
+  (sign-region split with indicators `(1 +- eps)/2`).

@@ -231,6 +231,8 @@ E6a & Reducible logarithms through a locally constant branch difference &
   \code{Tower:reducible-log} & v0.6547 \\
 E6b & A cyclic radical compositum as one radical, pointwise &
   \code{Tower:cyclic-compositum} & v0.6547 \\
+E6d & One radical up to a locally constant sign &
+  \code{Tower:cyclic-compositum} & v0.6549 \\
 E6c & Exponents with a rational log-linear part &
   \code{Tower:exp-of-log-radical} & v0.6547 \\
 \bottomrule
@@ -597,6 +599,62 @@ the final verification against the user's integrand.
 \code{tests/test\_bronstein\_phase3.c}. They include a numeric pointwise check of
 the identities off the real axis, and the Chebyshev certificate for
 $\sqrt x\,(1+x)^{1/3}$.
+
+\section*{E6d. One radical up to a locally constant sign (\code{brIntegrateSignSplit})}
+\addcontentsline{toc}{section}{E6d. Up to a sign}
+
+\paragraph{Setting.} This is E6b when the conditions there fail. The usual reason
+is a radicand with a square factor: $\sqrt{x^2(x+1)}$ and $\sqrt{x+1}$ generate
+the cyclic group $\Z/2$, yet $\sqrt{x^2(x+1)}=\pm x\sqrt{x+1}$ only up to a sign
+that changes between regions.
+
+\begin{proposition}
+Suppose $c,k$ satisfy (a) and (c) of E6b, and (b) is weakened to
+\begin{enumerate}
+\item[(b$'$)] $e_{ij}=(c_ik_j-\delta_{ij})/d_i\in\tfrac12\Z$, and for each $j$
+  the product $\prod_{i\in H_j}b_i$ over $H_j=\{i:e_{ij}\notin\Z\}$ equals
+  $s_j^2$ with $s_j\in\Q(\mathbf v)$.
+\end{enumerate}
+Then pointwise
+\[ \rho_j=\varepsilon_j\,R_j\,y^{k_j},\qquad
+   R_j=\Bigl(s_j\prod_ib_i^{\lfloor e_{ij}\rfloor}\Bigr)^{-1},\qquad
+   \varepsilon_j=\prod_{i\in H_j}b_i^{1/2}\big/s_j, \]
+and $\varepsilon_j$ is locally constant with values in $\{1,-1\}$.
+\end{proposition}
+
+\begin{proof}
+As in E6b, $y^{k_j}/\rho_j=\prod_ib_i^{e_{ij}}$ pointwise. Also
+$b^{n+1/2}=b^n b^{1/2}$ for the principal power. Hence
+$y^{k_j}/\rho_j=\prod_ib_i^{\lfloor e_{ij}\rfloor}\prod_{H_j}b_i^{1/2}$. The
+last product squares to $s_j^2$, so it equals $\varepsilon_js_j$ with
+$\varepsilon_j^2=1$. Being continuous wherever the radicals are analytic,
+$\varepsilon_j$ is locally constant.
+\end{proof}
+
+A constant factor must be a positive rational square
+(\code{brRationalSquareRoot}). Otherwise $\varepsilon_j$ would take values in
+$\{\pm\sqrt c\}$ or $\{\pm i\}$, which is a constant field extension (Phase~4),
+and so would roots of unity of order greater than~2.
+
+\paragraph{Decision.} Write $\varepsilon_j$ as a symbol $E_j$, and for each sign
+pattern $s\in\{\pm1\}^J$ let $f_s=g|_{E=s}$, an element of one simple radical
+extension. Distinct pairs $(H_j,s_j)$ give distinct symbols; the patterns that
+never occur are harmless for answers.
+\begin{itemize}
+\item If every $f_s$ has an elementary integral $F_s$, then
+  $F=\sum_s\prod_j\tfrac12(1+s_j\varepsilon_j)\,F_s$ is an antiderivative on
+  every region. The product is the indicator of the region where $\varepsilon=s$,
+  and its derivative is~0.
+\item If some $f_s$ is not elementary and a sample point exhibits the pattern
+  $s$ (\code{brSignPatternSeenQ}; the values are exactly $\pm1$), then $f=f_s$
+  on that region and $f$ has no elementary antiderivative on the whole domain.
+  The certificate means what it means in E6a.
+\item An unseen pattern with a non-elementary $f_s$ stays
+  \code{Tower:cyclic-compositum}.
+\end{itemize}
+
+\paragraph{Tests.} \code{test\_sign\_compositum} in
+\code{tests/test\_bronstein\_phase3.c}, and examples E6d-1 to E6d-4 in the gap log.
 
 \section*{E6c. Exponents with a rational log-linear part (\code{brSplitLogExponent})}
 \addcontentsline{toc}{section}{E6c. Log-linear exponents}

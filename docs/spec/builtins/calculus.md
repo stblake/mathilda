@@ -4005,9 +4005,12 @@ verified against the user's own integrand. The proofs are in
   written as one radical `B^(1/N)`, for example `Sqrt[x]` and `(x + 1)^(1/3)` as
   `(x^3 (x + 1)^2)^(1/6)`. The rewrite uses only `rho_i^d_i = b_i`. The answer is
   mapped back to the user's radicals (`B^(1/N) -> Sqrt[x] (x + 1)^(1/3)`), so it
-  holds on every branch. Radicals that agree with one radical only up to a
-  locally constant sign (`Sqrt[x^2 (x + 1)]`, `Sqrt[x + 1]`), or over a larger
-  constant field (`Sqrt[2 x]`, `Sqrt[x]`), are still not decided.
+  holds on every branch.
+  - Since v0.6549, radicals that agree with one radical only up to a locally
+    constant sign (`Sqrt[x^2 (x + 1)]`, `Sqrt[x + 1]`) are integrated one sign
+    region at a time. The answer carries the indicators `(1 +- eps)/2`.
+  - Radicals that agree only over a larger constant field (`Sqrt[2 x]`,
+    `Sqrt[x]`) are still not decided.
 - **Exponents with a log part.** `E^(x + Log[x]/2)` is `Sqrt[x] E^x` and
   `E^(Log[a]/3)` is `a^(1/3)`. Before, they were a new monomial or a decline.
 - **Reducible logarithms.** `Log[x^2]` beside `Log[x]` is `2 Log[x] + kappa`,

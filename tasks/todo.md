@@ -1567,7 +1567,8 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [ ] rt_field_integrate completeness (m > 1 new logs, mixed resultants); constant fields in C
 - [ ] Phase 3: Shape A completion (.m)
   - [x] front end: cyclic compositum as one radical (E6b), E^(r Log a) + log-linear exponent split + monomial pruning (E6c), reducible logs via kappa (E6a); fix C dependent-log retry wrong answer (Log[x^2]/x) — v0.6547
-  - [ ] compositum up to a locally constant sign (Sqrt[x^2(x+1)], Sqrt[x+1]); multi-kappa / kappa-in-denominator certificates
+  - [x] compositum up to a locally constant sign (E6d) — v0.6549
+  - [ ] multi-kappa / kappa-in-denominator certificates; units of order > 2 (Phase 4)
   - [ ] C: Log[x^2] as its own monomial (RischTranscendental leaves Int Log[x^2]/x unevaluated now)
   - [ ] PRE-EXISTING (found by the E6a review, also on main): PossibleZeroQ[Log[E^x] - x] is True (false zero; -2 Pi I for Im x in (Pi, 3 Pi]) so Integrate[(Log[E^x]-x) Sqrt[Log[x]] + 1/x, x] = Log[x] (wrong); Integrate[(Log[x^2]-2Log[x]) Exp[x^2], x] = Indeterminate (Automatic cascade; Method->Bronstein certifies); Integrate[Exp[x + Log[x^2]/4], x] -> uncaught Throw[..., "PIM"]
   - [x] #9 genus >= 1 special places (E3: specialization + two primes with special places; goodQ hook) — v0.6548

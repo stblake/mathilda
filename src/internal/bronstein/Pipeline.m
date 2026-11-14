@@ -157,6 +157,27 @@ brNonzeroSomewhereQ::usage = "brNonzeroSomewhereQ[kappa, x] is True when the loc
 brNonzeroSomewhereQ[kappa_, x_Symbol] := AnyTrue[{-3 + I/7, -1/3 - 2 I, 5/2 + 3 I, -7 - I/2, 1/3 + 7 I, -2 - 11 I, 3/5 + 23 I},
   Function[x0, With[{v = Quiet[N[kappa /. x -> x0, 30]]}, NumericQ[v] && Abs[v] > 1/10]]];
 
+brIntegrateSignSplit::usage = "brIntegrateSignSplit[f, x, rw] integrates f whose radicals are one radical only up to the locally constant signs eps_j = +-1 of rw[\"signs\"] (brCompositumRewrite, E6d): for every sign pattern s, f_s = g /. E_j -> s_j lies in one simple radical extension and is integrated (brIntegrateBody); when every F_s is elementary, Sum_s Prod_j (1 + s_j eps_j)/2 F_s is an antiderivative of f on every region (the product is the indicator of the region where eps = s; its derivative vanishes). A non-elementary f_s is a certificate when a sample point shows the pattern s (f = f_s on that region): brSignPatternSeenQ. Otherwise Tower:cyclic-compositum.";
+brIntegrateSignSplit[f_, x_Symbol, rw_Association] := Module[{syms = First /@ rw["signs"], epsE = Last /@ rw["signs"], pats, res, F},
+  pats = Tuples[{1, -1}, Length[syms]];
+  res = Map[Function[sp, {sp, brCatch[brCompositumBack[rw, brIntegrateBody[Together[rw["g"] /. Thread[syms -> sp]], x]]]}], pats];
+  Do[
+    If[brFailQ[r[[2]]],
+      If[First[brFailTag[r[[2]]]] =!= "NonElementary", Throw[r[[2]], "TragerFail"]];
+      If[brSignPatternSeenQ[epsE, r[[1]], x],
+        throwNonElementary["radicals equal up to a locally constant sign: the integrand on the region of sign pattern " <>
+          ToString[r[[1]]] <> " is not elementary (" <> brFailTag[r[[2]]][[2]] <> ")"],
+        throwUnimplemented["Tower:cyclic-compositum", "radicals equal up to a sign: a non-elementary sign pattern not seen at a sample point"]]],
+    {r, res}];
+  F = Total[Function[r, (Times @@ MapThread[(1 + #1 #2)/2 &, {r[[1]], epsE}]) r[[2]]] /@ res];
+  If[!antiderivativeQ[f, F, x], throwInternal["SignSplitCheckFailed", <|"f" -> f, "F" -> F|>]];
+  F];
+
+brSignPatternSeenQ::usage = "brSignPatternSeenQ[eps, s, x] is True when at one of a few fixed sample points (real and complex, positive and negative real parts) the locally constant signs eps (expressions with values +-1) take the values s, numerically at 30 digits (their values are +-1 exactly, so a distance below 1/10 identifies them).";
+brSignPatternSeenQ[eps_List, s_List, x_Symbol] := Length[eps] === Length[s] &&
+  AnyTrue[{3, -3, -1/2, 1/3 + 2 I, -2 - 3 I, -7 + I/5, 5 - 11 I, -1/5 - I/9},
+    Function[x0, With[{v = Quiet[N[eps /. x -> x0, 30]]}, TrueQ[AllTrue[v, NumericQ] && Max[Abs[v - s]] < 1/10]]]];
+
 brIntegrateBody::usage = "brIntegrateBody[f, x] is the body of BronsteinIntegrate: it throws instead of returning failure lists.";
 brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl, g0, rw, rl, u = Unique["Bronstein`Private`brUf"], verified = False},
   (* Shape B with a radical inside a kernel, on a genus-0 curve: a rational
@@ -170,6 +191,9 @@ brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl,
   rl = brReducibleLogSplit[f, x];
   If[rl =!= None, Return[brPresentable[f, brIntegrateKappaSplit[f, x, rl], x], Module]];
   rw = brCompositumRewrite[f, x];
+  If[rw =!= None && rw["signs"] =!= {},
+    F = brIntegrateSignSplit[f, x, rw];
+    Return[brPresentable[f, F, x], Module]];
   If[rw =!= None,
     F = brCompositumBack[rw, brIntegrateBody[rw["g"], x]];
     If[!antiderivativeQ[f, F, x], throwInternal["CompositumCheckFailed", <|"f" -> f, "F" -> F|>]];
@@ -210,7 +234,7 @@ brPresentationTime[] := With[{left = Internal`TimeConstrainedRemaining[]},
 BronsteinScope[f_, x_Symbol] := Module[{r},
   If[FreeQ[f, Power[b_, _Rational] /; !FreeQ[b, x]] && FreeQ[f, Root | RootSum], Return["NotApplicable"]];
   r = brCatch[With[{rw = brCompositumRewrite[f /. Exp[a_] :> E^a, x]},
-    If[rw === None, brTower[f, x], brTower[rw["g"], x]]]];
+    If[rw === None, brTower[f, x], brTower[rw["g"] /. ((#[[1]] -> 1) & /@ rw["signs"]), x]]]];
   Which[
     !brFailQ[r], "InScope",
     MemberQ[{"Incomplete", "Unimplemented"}, First[brFailTag[r]]], failToList[r],

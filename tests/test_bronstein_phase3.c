@@ -12,6 +12,9 @@
  *    f = Sum K^j g_j (brReducibleLogSplit, brIntegrateKappaSplit,
  *    brNonzeroSomewhereQ); the C dependent-logarithm retry checked against the
  *    original integrand (Int Log[x^2]/x was Log[x]^2).
+ *  - E6d: radicals equal to one radical up to a locally constant sign
+ *    (brRationalSquareRoot, brCompositumPlan[.., True], brIntegrateSignSplit,
+ *    brSignPatternSeenQ);
  *  - LogPart:special-genus (#9): residues at special places on a curve of
  *    positive genus -- torsion by specialization with the special places
  *    included (brSpecialSetup, brSpecialDivisorIdeal, brSpecialLocationsGoodQ,
@@ -52,7 +55,7 @@ static void test_compositum_plan(void) {
 static void test_compositum_rewrite(void) {
     BR_EQ("brCompositumRewrite[Sqrt[x] + Sqrt[x + 1], x]", "None");             /* not cyclic */
     BR_EQ("brCompositumRewrite[Sqrt[x], x]", "None");                          /* one radical */
-    BR_EQ("brCompositumRewrite[Sqrt[x^2 (x + 1)] + Sqrt[x + 1], x]", "None");  /* sign */
+    BR_EQ("brCompositumRewrite[Sqrt[2 x] + Sqrt[x], x]", "None");            /* Sqrt[2]: constant field */
     BR_EQ("brCompositumRewrite[Sqrt[x] (x + 1)^(1/3), x][\"N\"]", "6");
     BR_EQ("brCompositumRewrite[Sqrt[Log[x]] (Log[x] + 1)^(1/3), x][\"N\"]", "6");
     /* the rewrite is an identity of functions */
@@ -70,8 +73,8 @@ static void test_compositum_integrate(void) {
     BR_EQ("BronsteinIntegrate[Sqrt[x] (x + 1)^(1/3), x][[1]]", "\"not elementary\"");
     BR_EQ("BronsteinIntegrate[Sqrt[Log[x]] (Log[x] + 1)^(1/3)/x, x][[1]]", "\"not elementary\"");
     BR_EQ("BronsteinScope[Sqrt[x] (x + 1)^(1/3), x]", "\"InScope\"");
-    /* the sign case stays in scope but unimplemented, with its site */
-    BR_EQ("First[BronsteinScope[Sqrt[x^2 (x + 1)] + Sqrt[x + 1], x]]", "\"implementation incomplete\"");
+    /* a constant field extension stays in scope but unimplemented (Phase 4) */
+    BR_EQ("First[BronsteinScope[Sqrt[2 x] + Sqrt[x], x]]", "\"implementation incomplete\"");
 }
 
 static void test_exp_of_log(void) {
@@ -179,6 +182,27 @@ static void test_special_genus(void) {
     BR_EQ("BronsteinIntegrate[(1 + Log[x])/(x (1 + Log[x] + Log[x]^3)^(1/3)), x][[1]]", "\"not elementary\"");
 }
 
+static void test_sign_compositum(void) {
+    BR_EQ("brRationalSquareRoot[4 x^2/(x + 1)^2, {x}]", "(2 x)/(1 + x)");
+    BR_EQ("brRationalSquareRoot[2 x^2, {x}]", "None");                      /* Sqrt[2]: a constant field extension */
+    BR_EQ("brRationalSquareRoot[-x^2, {x}]", "None");                       /* +-I, not +-1 */
+    BR_EQ("brRationalSquareRoot[x^3, {x}]", "None");
+    BR_EQ("brCompositumPlan[{{x^2 (x + 1), 2}, {x + 1, 2}}, {x}, True][\"eps\"]", "{{{1, 2}, x (1 + x)}, None}");
+    BR_EQ("brCompositumPlan[{{2 x, 2}, {x, 2}}, {x}, True]", "None");
+    BR_TRUE("brSignPatternSeenQ[{Sqrt[x^2 (1 + x)]/(x Sqrt[1 + x])}, {-1}, x]");
+    BR_TRUE("brSignPatternSeenQ[{Sqrt[x^2 (1 + x)]/(x Sqrt[1 + x])}, {1}, x]");
+    BR_FALSE("brSignPatternSeenQ[{Sqrt[x^2]/x}, {1, 1}, x]");               /* wrong length: never seen */
+    BR_EQ("Length[brCompositumRewrite[Sqrt[x^2 (x + 1)] + Sqrt[x + 1], x][\"signs\"]]", "1");
+    BR_TRUE("With[{F = brIntegrateSignSplit[Sqrt[x^2 (x + 1)] + Sqrt[x + 1], x, brCompositumRewrite[Sqrt[x^2 (x + 1)] + Sqrt[x + 1], x]]},"
+            " PossibleZeroQ[D[F, x] - Sqrt[x^2 (x + 1)] - Sqrt[x + 1]]]");
+    BR_ANTIDERIV("Sqrt[x^2 (x + 1)]/x^2 + 1/Sqrt[x + 1]", "Bronstein");
+    BR_ANTIDERIV("Sqrt[x^2 (x^3 + 1)] Sqrt[x^3 + 1]/x", "Bronstein");
+    /* zero where eps = 1, -2 x Sqrt[x^3 + 1] (Chebyshev, not elementary) where eps = -1 */
+    BR_EQ("BronsteinIntegrate[Sqrt[x^2 (x^3 + 1)] - x Sqrt[x^3 + 1], x][[1]]", "\"not elementary\"");
+    BR_EQ("BronsteinIntegrate[Sqrt[Log[x]^2 (Log[x] + 1)] + Sqrt[Log[x] + 1]/x, x][[1]]", "\"not elementary\"");
+    BR_EQ("BronsteinScope[Sqrt[x^2 (x + 1)] + Sqrt[x + 1], x]", "\"InScope\"");
+}
+
 int main(void) {
     br_init();
     test_kummer_vectors();
@@ -188,6 +212,7 @@ int main(void) {
     test_exp_of_log();
     test_reducible_log();
     test_special_genus();
+    test_sign_compositum();
     BR_DONE("bronstein_phase3_tests");
     return 0;
 }
