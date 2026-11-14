@@ -113,7 +113,11 @@ brOrbitTerm[T_Association, cv_Association, rd_Association, nr_Association, q_, r
   u = brNormalizeGenerator[Fk, B, u, rd["vars"]];
   coef = g/(m Nq);
   Lp = brLogDerivative[T, cv, Fk, B, u];
-  D = If[ext, brK0Trace[Fk, rc[Fk, coef #]] & /@ Lp, Together[coef #] & /@ Lp];
+  (* the trace of the orbit is down to K0 = Q(constants), not to Q
+     (relTrace): an absolute trace adds the conjugate orbit (review of 4.3b) *)
+  D = Which[!ext, Together[coef #] & /@ Lp,
+    KeyExistsQ[Fk, "rel"], relTrace[Fk, rc[Fk, coef #]] & /@ Lp,
+    True, brK0Trace[Fk, rc[Fk, coef #]] & /@ Lp];
   <|"ext" -> ext, "Fk" -> Fk, "t" -> t, "q" -> q, "z" -> z, "coef" -> coef, "u" -> u,
     "normU" -> afNorm[Fk, B, u], "D" -> ReplacePart[D, 1 -> 0]|>];
 
@@ -138,9 +142,13 @@ brOrbitLogPart[T_Association, cv_Association, c_, nr_Association] := Module[
 
 brOrbitLogExpression::usage = "brOrbitLogExpression[B, rec, Y] is the weight-1 log term of the orbit record rec (brOrbitTerm) as {1, RootSum[q, (#/(m N)) (Log[u(#)] - Log[Norm u(#)]/m) &], \"RootSum\"}, u written in the curve generator Y.";
 brOrbitLogExpression[B_Association, rec_Association, Y_Symbol] := Module[
-  {t = rec["t"], m = B["m"], uY, nU, body},
+  {t = rec["t"], m = B["m"], uY, nU, body, Fk = rec["Fk"]},
   uY = Together[afToY[B, rec["u"], Y]]; nU = Together[rec["normU"]];
   body = rec["coef"] (Log[uY] - Log[nU]/m);
+  (* an absolute orbit field (constants): the summand written relative to K0
+     in the root symbol z of q, which the RootSum then runs over *)
+  If[KeyExistsQ[Fk, "rel"],
+    body = relToZ[Fk, rec["coef"]] (Log[relToZ[Fk, uY]] - Log[relToZ[Fk, nU]]/m); t = rec["z"]];
   With[{qf = rec["q"] /. rec["z"] -> Slot[1], bf = body /. t -> Slot[1]},
     {1, RootSum[Function[qf], Function[bf]], "RootSum"}]];
 

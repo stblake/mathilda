@@ -162,6 +162,10 @@ tragerOrbitLogTerms[ctx0_Association] := Module[
           r === $Failed, failed = True,
           True,
             (* gamma/(scale Nq) Log[Prod u^e]: one term per factor *)
-            out = Join[out, {qm, scale Nq/#[[1]], Together[afToY[B, #[[2]], ctx["Ysym"]]]} & /@ r]]]],
+            (* over a number field of constants the generator is absolute:
+               the log argument is written relative to K0, a polynomial in
+               the root symbol Z of qm (relToZ), as the orbit sum requires *)
+            out = Join[out, {qm, scale Nq/#[[1]],
+              With[{pe = Together[afToY[B, #[[2]], ctx["Ysym"]]]}, If[KeyExistsQ[K, "rel"], relToZ[K, pe], pe]]} & /@ r]]]],
     {q, facs}];
   If[failed, $Failed, out]];

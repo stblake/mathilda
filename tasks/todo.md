@@ -1600,7 +1600,8 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
               gfSqrtMinusOne); gfMod maps consts via reps; goodPrime adds disc(mu) / denominators; rho filter on the consts reps
         - [x] C6 Bronstein k arithmetic over K0 — v0.6564 (brSplitSquarefreeNF, Hermite over fieldFn+ext, brCancelK, tragerTogether fallback; 2 false certificates fixed). Was: brK0Field = fieldFn[syms, K0 ext]; brFieldOver keeps "consts"; Hermite/RDE over k (G-nf-5/9)
         - [x] C7 compositum over K0 (G-nf-2) — v0.6564 (tragerExtractRadicalContent; negative content G-nf-11 open)
-        - [ ] C8 remove nfDemoteCertificate; adversarial review of number-field certificates; theory note E4.3b
+        - [x] C8 part 1: adversarial review (14 false certificates in the orbit log part, fixed: relativeStructure/relToZ/relTrace, radical generators) — v0.6565
+        - [ ] C8 part 2: remove nfDemoteCertificate once the reruns are clean (reviewer sweeps 191 cases: 0 false; FriCAS + group-law cross-check of 34 certificates: all confirmed)
   - [ ] D scope: G-trig-1, G-qi-1, G-red-1, G-adv-t4, G-sign-1, G-core-4
   - [ ] E performance: G-perf-1/2/3, G-adv-t2/t3, G-adv-b5
   - later phases: G-param-1 + G-adv-c1 (4.4), G-mid-1 (5), G-adv-p1 (PMT tower independence)

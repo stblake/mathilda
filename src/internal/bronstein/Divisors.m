@@ -28,6 +28,7 @@ brFieldOver[vars_List, F0_Association] := Module[{F},
   (* the radical constants' representations travel with the field (Phase
      4.3b): fieldSubI writes literal constants of k-data in its generator *)
   If[F0["Type"] === "NF" && KeyExistsQ[F0, "consts"], F = Append[F, "consts" -> F0["consts"]]];
+  If[F0["Type"] === "NF" && KeyExistsQ[F0, "rel"], F = Append[F, "rel" -> F0["rel"]]];
   F];
 
 brResidueSetup::usage = "brResidueSetup[T, cv, c, nr] gathers the data of the log part of the normal component c Y whose nonzero-residue polynomial is nr[\"P\"] (brNormalResidues): <|\"F0\" -> residue field over Q (fieldQ or fieldNF), \"Fk\" -> the same over k (fieldFn), \"roots\" -> residues (elements of F0), \"basis\" -> Q-basis beta_j, \"coeffs\" -> b, \"N\", \"E\", \"Ep\", \"Bp\" (residue data in theta), \"B\" -> the integral basis descriptor, \"vars\" -> {x, lower...}|>.";

@@ -16,6 +16,7 @@
  *    false certificate on Sqrt[Tan[x]] (found while adding 4.3).
  */
 #include "bronstein_test_utils.h"
+#include <string.h>
 
 static void test_nf_primitives(void) {
     BR_EQ("Sort[tragerConstantsOf[Sqrt[x + Sqrt[2]] + 2^(1/3) x]]", "{2^(1/3), Sqrt[2]}");
@@ -172,6 +173,55 @@ static void test_nf_radical_content(void) {
     BR_EQ("First[BronsteinIntegrate[1/(Sqrt[2 x] Sqrt[x^3 + 1]) + Sqrt[x^3 + 1]/Sqrt[x], x]]", "\"implementation incomplete\"");
 }
 
+/* Adversarial review of 4.3b (2026-11-15): 14 false certificates from the
+ * per-orbit log part over Q(constants), hidden by nfDemoteCertificate.  Run
+ * with the demotion OFF: none may come back "not elementary". */
+static void test_nf_review_orbits(void) {
+    /* the relative structure of an absolute orbit field over K0 = Q(Sqrt[2]) */
+    BR_TRUE("Block[{tragerAlgConstants = {Sqrt[2]}}, fr8 = fieldOfRoot[Z^2 - Sqrt[2], Z, Z]; True]");
+    BR_FALSE("fr8[\"F\"][\"t\"] === Z");                                 /* never the root symbol itself */
+    BR_EQ("Block[{tragerAlgConstants = {Sqrt[2]}}, fr8[\"F\"][\"rel\"][\"d\"]]", "2");
+    BR_EQ("Block[{tragerAlgConstants = {Sqrt[2]}}, fr8[\"F\"][\"rel\"][\"m0\"]]", "2");
+    BR_EQ("Block[{tragerAlgConstants = {Sqrt[2]}}, relToZ[fr8[\"F\"], fr8[\"gamma\"]]]", "Z");
+    BR_EQ("Block[{tragerAlgConstants = {Sqrt[2]}}, tragerTogether[relToZ[fr8[\"F\"], fr8[\"gamma\"]^2] - Sqrt[2]]]", "0");
+    /* the relative trace: Tr(gamma) = 0, Tr(gamma^2) = 2 Sqrt[2] (an absolute trace would give 0) */
+    BR_EQ("Block[{tragerAlgConstants = {Sqrt[2]}}, relTrace[fr8[\"F\"], fr8[\"gamma\"]]]", "0");
+    BR_EQ("Block[{tragerAlgConstants = {Sqrt[2]}}, relTrace[fr8[\"F\"], fr8[\"gamma\"]^2]]", "2 Sqrt[2]");
+    BR_EQ("Block[{tragerAlgConstants = {Sqrt[2]}}, Length[First[relCoeffs[fr8[\"F\"], fr8[\"gamma\"]]]]]", "4");
+    BR_EQ("Block[{tragerAlgConstants = {Sqrt[2]}}, Keys[relativeStructure[fr8[\"F\"], fr8[\"gamma\"], Z^2 - Sqrt[2], Z, {Sqrt[2]}]]]",
+          "{\"Z\", \"q\", \"d\", \"theta0\", \"m0\", \"Minv\", \"s\"}");
+    /* the constant field's generator is written in the constants, never a Root object */
+    BR_EQ("gfConstField[{I, Sqrt[2]}][\"theta\"]", "I + Sqrt[2]");
+    BR_EQ("gfConstField[{Sqrt[2], Sqrt[3]}][\"theta\"]", "Sqrt[2] + Sqrt[3]");
+    /* an algebraic constant denominator whose image vanishes makes the prime bad:
+     * 3 - Sqrt[2] has norm 7, and at p = 7 the image of Sqrt[2] is 3 or 4 */
+    BR_TRUE("Block[{tragerAlgConstants = {Sqrt[2]}}, With[{r = gfConstImage[Sqrt[2], 7]}, "
+            "denominatorsPrimeToQ[x/(3 - Sqrt[2]), 7] === (Mod[3 - r, 7] =!= 0)]]");
+    const char* cases[] = {
+        "1/((x^2 - Sqrt[2]) Sqrt[x + 1])", "x/Sqrt[Expand[(x^2 - Sqrt[2])^2 (x + 1)]]",
+        "1/((x - I) Sqrt[x - Sqrt[2]])", "1/((x^2 + 1) Sqrt[x - Sqrt[2]])", "1/((x^2 + 1) Sqrt[x + Sqrt[2]])",
+        "1/((x^2 + 1) Sqrt[x + 1 + Sqrt[2]])", "1/((x^2 - 3) Sqrt[x + Sqrt[2]])", "1/((x^2 - Sqrt[2]) Sqrt[x])",
+        "1/((x^2 + Sqrt[2]) Sqrt[x + 1])", "x/((x^2 + x + 1) Sqrt[x - Sqrt[2]])",
+        "1/(x (Log[x]^2 + 1) Sqrt[Log[x] + Sqrt[2]])", "1/(x (Log[x]^2 - Sqrt[2]) Sqrt[Log[x]])",
+        "E^x/((E^(2 x) + 1) Sqrt[E^x + Sqrt[2]])", NULL };
+    for (int i = 0; cases[i]; i++) {
+        char buf[600];
+        snprintf(buf, sizeof buf,
+                 "!MatchQ[Block[{nfDemoteCertificate = Function[r, r]}, BronsteinIntegrate[%s, x]], {\"not elementary\", ___}]",
+                 cases[i]);
+        BR_TRUE(buf);
+        if (!strstr(cases[i], "Log") && !strstr(cases[i], "E^")) {
+            snprintf(buf, sizeof buf,
+                     "!MatchQ[Block[{nfDemoteCertificate = Function[r, r]}, Trager`TragerIntegrate[%s, x]], {\"not elementary\", ___}]",
+                     cases[i]);
+            BR_TRUE(buf);
+        }
+    }
+    BR_ANTIDERIV("1/((x^2 - Sqrt[2]) Sqrt[x + 1])", "Bronstein");
+    BR_ANTIDERIV("1/((x - I) Sqrt[x - Sqrt[2]])", "Bronstein");
+    BR_ANTIDERIV("1/(x (Log[x]^2 + 1) Sqrt[Log[x] + Sqrt[2]])", "Bronstein");
+}
+
 static void test_nf_integrals(void) {
     BR_ANTIDERIV("Sqrt[2] Sqrt[Log[x]]/x", "Bronstein");
     BR_ANTIDERIV("Sqrt[x + Sqrt[2]]/x", "Bronstein");
@@ -206,6 +256,7 @@ int main(void) {
     test_nf_monic();
     test_nf_k_arithmetic();
     test_nf_radical_content();
+    test_nf_review_orbits();
     test_nf_integrals();
     BR_DONE("bronstein_nf_tests");
     return 0;

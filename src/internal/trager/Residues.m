@@ -59,6 +59,9 @@ residueField[R_, Z_Symbol, t_Symbol] := Module[{fac, lin, nonlin, rts, nf, gen, 
   (* method, not a limit: the field is built whatever its degree.            *)
   If[crude > 50000,
     If[TrueQ[tragerConstantI], throwUnimplemented["Trager:residue-field-QI", "residue field over Q(i) beyond ToNumberField"]];
+    (* the tower method factors over Q and records no constants: not a field
+       over Q(constants) (review of 4.3b) *)
+    If[tragerAlgConstants =!= {}, throwUnimplemented["Trager:residue-field-NF", "residue field over a number field of constants beyond ToNumberField"]];
     Return[residueFieldTower[R, Z, t]]];
   rts = Join[
     Z /. Solve[# == 0, Z][[1]] & /@ lin,
@@ -74,6 +77,7 @@ residueField[R_, Z_Symbol, t_Symbol] := Module[{fac, lin, nonlin, rts, nf, gen, 
   (* on a large splitting field: build it algebraically, one root at a time. *)
   If[!ListQ[nf] || Length[nf] =!= Length[rts],
     If[TrueQ[tragerConstantI], throwUnimplemented["Trager:residue-field-QI", "residue field over Q(i) beyond ToNumberField"]];
+    If[tragerAlgConstants =!= {}, throwUnimplemented["Trager:residue-field-NF", "residue field over a number field of constants beyond ToNumberField"]];
     Return[residueFieldTower[R, Z, t]]];
   gen = SelectFirst[nf, Head[#] === AlgebraicNumber &, None];
   If[gen === None, throwInternal["ResidueFieldNoGenerator"]];
@@ -148,6 +152,9 @@ fieldOfRoot[q_, Z_Symbol, t_Symbol] := Module[{r1, gens, nf, gen, mu, F1, nc, ni
      sides, the relative presentation the Q(i) corpus certifies *)
   If[tragerAlgConstants === {} || FreeQ[q, Power[b_, _Rational] /; rationalNumberQ[b]],
     Return[<|"F" -> fieldNF[t, q /. Z -> t, None], "gamma" -> t|>]];
+  (* the absolute field's generator is never the root symbol Z itself: the
+     relative presentation (relToZ) writes elements as polynomials in Z *)
+  If[t === Z, Return[fieldOfRoot[q, Z, Unique["Trager`Private`tdelta"]]]];
   r1 = First[gaussianRootObjects[q, Z]];
   (* EVERY radical constant of q is recorded with its representation, not only
      those of the integrand: a residue factor over Q(i) can carry Sqrt[2]
@@ -167,7 +174,45 @@ fieldOfRoot[q_, Z_Symbol, t_Symbol] := Module[{r1, gens, nf, gen, mu, F1, nc, ni
   F1 = fieldNF[t, mu, gen];
   If[ni === 1, F1 = Append[F1, "I" -> algebraicToPoly[nf[[2]], gen, t]]];
   If[nc > 0, F1 = Append[F1, "consts" -> MapThread[#1 -> algebraicToPoly[#2, gen, t] &, {cs, Take[nf, -nc]}]]];
-  <|"F" -> F1, "gamma" -> algebraicToPoly[nf[[1]], gen, t]|>];
+  With[{gm = algebraicToPoly[nf[[1]], gen, t]},
+    (* the RELATIVE structure over K0 = Q(constants): the orbit is that of the
+       roots of q over K0, so traces and the emitted log terms are relative to
+       K0, not to Q (adversarial review of 4.3b: an absolute trace added the
+       conjugate orbit sqrt2 -> -sqrt2, and log terms written in the absolute
+       generator were read as polynomials in a root of q -- 14 false
+       certificates, hidden by nfDemoteCertificate) *)
+    F1 = Append[F1, "rel" -> relativeStructure[F1, gm, q, Z, Join[If[ni === 1, {I}, {}], cs]]];
+    <|"F" -> F1, "gamma" -> gm|>]];
+
+relativeStructure::usage = "relativeStructure[F, gm, q, Z, gens0] describes the absolute number field F = Q(delta) = K0(gamma) of fieldOfRoot relative to K0 = Q(gens0): gamma = gm (a polynomial in F's generator) a root of q(Z), irreducible of degree d over K0, and K0 with generator theta0 of degree m0. It returns <|"Z", "q", "d", "theta0", "m0", "Minv", "s"|>: Minv inverts the matrix of the basis theta0^i gamma^j (i < m0, j < d; index i + m0 j) in F's power basis, and s the power sums of the roots of q over K0 (s_j = Sum gamma_k^j, j < d) for the relative trace.";
+relativeStructure[F_Association, gm_, q_, Z_Symbol, gens0_List] := Module[
+  {cf0 = gfConstField[gens0], th0, m0, d = Exponent[q, Z], D0, t = F["t"], rep0, cols, M},
+  th0 = cf0["theta"]; m0 = Exponent[cf0["mu"], cf0["g"]];
+  D0 = Exponent[F["mu"], t];
+  If[m0 d =!= D0, throwInternal["relativeStructureDegree", <|"q" -> q, "m0" -> m0, "d" -> d, "D" -> D0|>]];
+  rep0 = fieldConstRep[F, th0];
+  cols = Flatten[Table[PadRight[CoefficientList[kc[F, rep0^i gm^j], t], D0], {j, 0, d - 1}, {i, 0, m0 - 1}], 1];
+  M = Transpose[cols];
+  If[Det[M] === 0, throwInternal["relativeStructureSingular", <|"q" -> q|>]];
+  <|"Z" -> Z, "q" -> q, "d" -> d, "theta0" -> th0, "m0" -> m0, "Minv" -> Inverse[M],
+    "s" -> Table[tragerTogether[Tr[MatrixPower[companionMatrix[q, Z], j]]], {j, 0, d - 1}]|>];
+
+relCoeffs::usage = "relCoeffs[F, e] is {a, den}: e (over the field F of fieldOfRoot, or a fieldFn over it) in canonical form num/den with den free of the generator, and a the list of coordinates of num on the basis theta0^i gamma^j of F over K0 (index i + m0 j; rational in the other symbols).";
+relCoeffs[F_Association, e_] := Module[{rel = F["rel"], t = F["t"], r, num, den, v, D0},
+  r = rc[F, e]; num = Expand[Numerator[r]]; den = Denominator[r];
+  D0 = rel["m0"] rel["d"];
+  v = Table[Coefficient[num, t, k], {k, 0, D0 - 1}];
+  {rel["Minv"] . v, den}];
+
+relToZ::usage = "relToZ[F, e] is the element e of the absolute field F (fieldOfRoot) written RELATIVE to K0: a polynomial in the root symbol Z of q with coefficients in K0 (radicals, through theta0), so that Sum over the roots of q of (expression in Z) is the orbit sum.";
+relToZ[F_Association, e_] := Module[{rel = F["rel"], a, den, m0},
+  {a, den} = relCoeffs[F, e]; m0 = rel["m0"];
+  Sum[a[[i + 1 + m0 j]] rel["theta0"]^i rel["Z"]^j, {j, 0, rel["d"] - 1}, {i, 0, m0 - 1}]/den];
+
+relTrace::usage = "relTrace[F, e] is the trace of e from the absolute field F (fieldOfRoot) down to K0 = Q(constants): Sum_j (Sum_i a_ij theta0^i) s_j, s_j the power sums of the roots of q (relativeStructure).";
+relTrace[F_Association, e_] := Module[{rel = F["rel"], a, den, m0},
+  {a, den} = relCoeffs[F, e]; m0 = rel["m0"];
+  tragerTogether[Sum[a[[i + 1 + m0 j]] rel["theta0"]^i rel["s"][[j + 1]], {j, 0, rel["d"] - 1}, {i, 0, m0 - 1}]/den]];
 
 rootObjects::usage = "rootObjects[q, Z] is the list of the Root objects Root[q(#)&, k], k = 1..deg q, of the polynomial q in Z.";
 gaussianRootObjects::usage = "gaussianRootObjects[q, Z] is the list of the roots of q, a polynomial with Gaussian-rational coefficients irreducible over Q(i), as Root objects of RATIONAL polynomials (ToNumberField takes those): the roots of the norm q qbar (qbar the complex conjugate coefficients), factored over Q, that are roots of q, picked numerically at 60 digits (q qbar is squarefree when q is irreducible over Q(i) and not a rational multiple of a real polynomial, so the roots are separated).";

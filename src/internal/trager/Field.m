@@ -98,7 +98,15 @@ gfConstField[gens_List] := gfConstField[gens] = Module[{nf, gen, g = Unique["Tra
      arithmetic with Root objects (Phase 4.3b C6) *)
   own = SelectFirst[SortBy[gens, LeafCount],
     Function[c, AllTrue[gens, Head[Quiet[ToNumberField[#, c]]] === AlgebraicNumber || rationalNumberQ[#] &]], None];
-  nf = If[own =!= None && own =!= I, Quiet[ToNumberField[#, own]] & /@ gens, ToNumberField[gens]];
+  (* no single constant generates the field (Q(i, Sqrt[2]), Q(Sqrt[2], Sqrt[3])):
+     an integer combination of the constants that does, so the generator maps
+     back to radicals and I, never to a Root object, which the arithmetic leaves
+     unreduced (a false certificate for 1/((x - I) Sqrt[x - Sqrt[2]]), review
+     of 4.3b) *)
+  If[own === None || own === I,
+    own = SelectFirst[Table[gens . Table[If[k === 1, 1, k^(j - 1)], {j, Length[gens]}], {k, 1, 4}],
+      Function[c, AllTrue[gens, Head[Quiet[ToNumberField[#, c]]] === AlgebraicNumber || rationalNumberQ[#] &]], None]];
+  nf = If[own =!= None, Quiet[ToNumberField[#, own]] & /@ gens, ToNumberField[gens]];
   (* radicals of rationals always have a primitive element: a failure is a bug *)
   If[!ListQ[nf] || Length[nf] =!= Length[gens], throwInternal["ConstantFieldToNumberField", <|"gens" -> gens|>]];
   gen = SelectFirst[nf, Head[#] === AlgebraicNumber &, None];
@@ -106,7 +114,7 @@ gfConstField[gens_List] := gfConstField[gens] = Module[{nf, gen, g = Unique["Tra
   gen = gen[[1]];
   (* the generator written as the constant itself (ToNumberField returns
      Root[-2 + #1^3 &, 1] for 2^(1/3)) once it is checked to be that number *)
-  If[own =!= None && own =!= I && RootReduce[gen - own] === 0, gen = own];
+  If[own =!= None && RootReduce[gen - own] === 0, gen = own];
   <|"g" -> g, "mu" -> minimalPolynomialIn[gen, g], "theta" -> gen,
     "reps" -> MapThread[#1 -> algebraicToPoly[#2, gen, g] &, {gens, nf}]|>];
 
@@ -114,7 +122,9 @@ gfConstRoot::usage = "gfConstRoot[p] is the image r in GF(p) of the primitive el
 gfConstRoot[p_Integer] := gfConstRoot[p, tragerExtension[]];
 gfConstRoot[p_Integer, gens_List] := gfConstRoot[p, gens] = Module[{cf = gfConstField[gens], mu, g, lin},
   mu = cf["mu"]; g = cf["g"];
-  If[!denominatorsPrimeToQ[{mu, Last /@ cf["reps"]}, p], Return[None]];
+  (* rational denominators only (not denominatorsPrimeToQ, which asks for the
+     images of algebraic denominators -- through gfConstRoot itself) *)
+  If[!AllTrue[Cases[{mu, Last /@ cf["reps"]}, r_Rational :> Denominator[r], {0, Infinity}], Mod[#, p] =!= 0 &], Return[None]];
   If[gfModQ[Discriminant[mu, g], p] === 0, Return[None]];
   lin = Select[FactorList[gfModQ[mu, p], Modulus -> p], Exponent[#[[1]], g] === 1 &];
   If[lin === {}, Return[None]];

@@ -79,6 +79,7 @@ BASELINE_M = {
     "TorsionModP:algebraic-constant",  # radical constants mod p (a degree-1 prime of the constant field) -> Phase 4.3b
     "Trager:constant-outside-field",   # a radical constant formed outside the residue field -> Phase 4.3b
     "Trager:residue-field-QI",       # residue field over Q(i) past ToNumberField (tower method) -> Phase 4.1
+    "Trager:residue-field-NF",       # residue field over Q(radical constants) past ToNumberField: the tower method ignores the constants (review of 4.3b) -> G-perf-4
 }
 
 # rde_cert_mark reasons that are mathematical gaps of the C Risch DE (Phase 2).

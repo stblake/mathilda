@@ -42,7 +42,13 @@ denominatorsPrimeToQ[expr_, p_Integer] :=
   AllTrue[Join[Cases[{expr}, r_Rational :> Denominator[r], {0, Infinity}],
       (* a Gaussian rational is an atom: look inside it *)
       Cases[{expr}, Complex[a_, b_] :> Denominator[{a, b}], {0, Infinity}] // Flatten],
-    Mod[#, p] =!= 0 &];
+    Mod[#, p] =!= 0 &] &&
+  (* a constant denominator with radicals (1/(3 - Sqrt[2]), norm 7) must not
+     vanish at the chosen degree-1 prime (review of 4.3b) *)
+  (tragerAlgConstants === {} || gfConstRoot[p] === None ||
+   AllTrue[DeleteDuplicates[Cases[{expr}, Power[b_, k_Integer] /; k < 0 && NumericQ[b] &&
+       !FreeQ[b, Power[c_, _Rational] /; rationalNumberQ[c]] :> b, {0, Infinity}]],
+     Quiet[Check[gfMod[#, p], 0]] =!= 0 &]);
 
 nonzeroModQ::usage = "nonzeroModQ[c, p] is True when the rational number c is nonzero modulo p (p-integral by assumption).";
 nonzeroModQ[c_, p_Integer] := gfMod[c, p] =!= 0;
