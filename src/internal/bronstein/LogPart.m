@@ -154,8 +154,16 @@ brLogPartFinish[T_Association, cv_Association, c_, F_Association, B_Association,
     If[special,
       throwUnimplemented["LogPart:weights", "log part with special-place residues: components of other weights (m >= 3)"],
       throwInternal["LogPartWeightNonzero", <|"path" -> "Q-basis"|>]]];
-  rem = rc[F, c - Lp[[2]]];
-  If[fieldExtQ[F] && !FreeQ[rem, F["t"]], throwInternal["brLogPartRemainderNotRational", <|"rem" -> rem|>]];
+  (* c carries the constant field's literal I (Q(i)); L' carries it as the
+     residue-field generator: write c in the generator too (fieldSubI), or the
+     two never cancel.  The remainder lies in k(theta) with constants in k's
+     constant field, so a generator left in it (I = t/2, say) is mapped back to
+     its value; only a generator that does not reduce to a constant of the
+     field (a Root) is an invariant violation. *)
+  rem = rc[F, If[fieldExtQ[F], fieldSubI[F, c], c] - Lp[[2]]];
+  If[fieldExtQ[F] && !FreeQ[rem, F["t"]],
+    rem = Together[rem /. F["t"] -> F["theta"]];
+    If[!FreeQ[rem, Root | F["t"]], throwInternal["brLogPartRemainderNotRational", <|"rem" -> rem|>]]];
   <|"terms" -> terms, "remainder" -> Together[rem], "F" -> F, "B" -> B|>];
 
 brRelevantLocations::usage = "brRelevantLocations[T, locs] keeps the special locations carrying a nonzero residue. Logarithm: those with lambda != 0. Exponential ([B] Def 2.21, pbar the first place above 0): with cbar = the value coefficient at pbar (nonzero only when 0 is unramified with c_0 != 0), every location when cbar != 0, else the unramified ones with c != 0.";

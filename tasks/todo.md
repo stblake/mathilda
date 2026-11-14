@@ -1582,9 +1582,9 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   goes there with an example the same day; closing one moves it to examples.m.
 - [x] Adversarial reviews of Bronstein / Trager / PMT (2026-11-14): false certificates in all three fixed (v0.6555); open findings in open_gaps.m
 - [ ] **Close the gap register (user, 2026-11-14), in batches, worst first:**
-  - [ ] A wrong answers / lower layers: G-core-1 PZQ Log[E^x]-x, G-nf-7 GoldenRatio 1/0, G-core-2 cascade Indeterminate,
-        G-core-3 uncaught PIM throw, G-core-7 Gather[list,test], G-core-6 Together+Root, G-core-5 ArcSech
-  - [ ] B internal errors: G-sign-2, G-adv-b2, G-adv-b3, G-nf-5, G-nf-9; PMT status protocol G-adv-p4
+  - [x] A wrong answers / lower layers: G-core-1 (policy), G-nf-7, G-core-2, G-core-3, G-core-5, G-core-7 — v0.6557; G-core-6 — v0.6558
+  - [x] B internal errors: G-sign-2 (PZQ ambiguous-cut re-draw), G-adv-b2, G-adv-b3 (explicit log expansion in the kappa split), G-adv-p4 — v0.6558;
+        G-nf-5 / G-nf-9 need field-aware arithmetic over Q(constants): moved to C (4.3b)
   - [ ] C Phase 4.3b: fieldNF constant field through Trager/Bronstein (G-nf-3/4/8), NF mod p (G-nf-6), compositum (G-nf-2)
   - [ ] D scope: G-trig-1, G-qi-1, G-red-1, G-adv-t4, G-sign-1, G-core-4
   - [ ] E performance: G-perf-1/2/3, G-adv-t2/t3, G-adv-b5
@@ -1595,7 +1595,7 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [x] 4.2 trig front end (TrigToExp) — v0.6554
   - [ ] presentation: Root objects in Sqrt[Tan[x]]-type answers -> radicals / real form; Trager:residue-field-QI (tower method over Q(i))
   - [ ] 4.3 general number fields (fieldFn[vars, {alpha, mu, theta}]); 4.4 symbolic parameters (E4)
-  - [ ] flaky under full parallel ctest load (seen 3x since v0.6548, never alone or in a fresh loaded process): integrate_cascade_trager_bronstein_tests:89, Check[Integrate[5/((x - 3) Sqrt[x^3 - 2]), x]; "ok", "msg"] gets "msg" in 1.9 s -- an order/state-dependent message in the same process, not a timeout; find the message name (wrap with a $MessageList print in the suite)
+  - [ ] flaky: integrate_cascade_trager_bronstein_tests:89 -- also seen ALONE (2026-11-14, ~1 in 3); $MessageList is EMPTY when it fires and no anonymous mth_msg_note_fired runs (lldb), and it passes under lldb: a timing-dependent Check frame marked without a recorded message (suspect: a TimeConstrained unwind around a Quiet/Check frame)
 - [ ] Phase 5: radical anywhere (brDField, transcendental Risch over algebraic base, RDE on a curve over a tower)
 - [ ] Theory note docs/notes/bronstein_extensions.tex (E1–E6; LaTeX per user 2026-11-14), each adversarially reviewed — E6a–c written v0.6547, review pending
 - [ ] Close-out

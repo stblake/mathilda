@@ -80,7 +80,7 @@ CertifyNonconstant::usage = "CertifyNonconstant[tau, gens] decides exactly wheth
   Undecided -- the expression contains more than one algebraic function, or a non-square-root algebraic function, and no verdict is issued.
 The decision reduces tau to the canonical form (a + b Sqrt[A]) / D0 with a, b, D0 rational in the generators; tau is constant iff b = 0 and a/D0 is free of the generators. A constant-in-disguise must never be mistaken for an obstruction, so a syntactic free-variable test is not used.";
 
-ParallelIntegrateMixed::usage = "ParallelIntegrateMixed[integrand, x, opts] integrates an expression in x built from rational operations, one square root of a polynomial (the radical y^2 = q), pure roots that flatten (Lemma 3.2: a root whose base is linear in a generator with a constant coefficient, such as Sqrt[x], Sqrt[x + Log[x]], (x + Exp[x])^(1/3), Sqrt[Log[x]]), and logarithms, exponentials and tangents of expressions in the field generated so far. The tower is constructed automatically (BuildTower), the integral computed by the pair form below, and the result returned in terms of x. Option \"Verify\" -> True additionally checks D[result, x] against the integrand numerically at three points.
+ParallelIntegrateMixed::usage = "ParallelIntegrateMixed[integrand, x, opts] returns an antiderivative, {\"not elementary\", ...} (independently confirmed) or {\"failed\", reason, ...}. It integrates an expression in x built from rational operations, one square root of a polynomial (the radical y^2 = q), pure roots that flatten (Lemma 3.2: a root whose base is linear in a generator with a constant coefficient, such as Sqrt[x], Sqrt[x + Log[x]], (x + Exp[x])^(1/3), Sqrt[Log[x]]), and logarithms, exponentials and tangents of expressions in the field generated so far. The tower is constructed automatically (BuildTower), the integral computed by the pair form below, and the result returned in terms of x. Option \"Verify\" -> True additionally checks D[result, x] against the integrand numerically at three points.
 ParallelIntegrateMixed[{f0, f1}, T, opts] integrates f = f0 + f1 y over the tower T by the parallel (Risch-Norman) method of the paper (Algorithm 4), with y = Sqrt[q]. It returns one of
   an expression in the generators and Sqrt[q]   -- the integral, verified inside the routine by re-differentiation;
   {\"not elementary\", p, tau}                    -- certified: the residue tau at a normal prime over p is not a constant (Proposition 9.2(a));
@@ -3203,6 +3203,12 @@ pmtGeneratorCount[f_, x_Symbol] := Module[{logs, expo, trig, inv, groups},
 
 pmtConfirmCertificate::usage = "pmtConfirmCertificate[f, x, r] passes the result r of the surface integrator through unless it is a non-elementarity certificate; a certificate stands only when an independent decider confirms it -- Risch`ElementaryIntegralQ[f, x] === False for a radical-free f, a certificate of Integrate`Bronstein[f, x] otherwise -- and becomes {\"failed\", ...} otherwise. The tower builder does not prove its generators independent (adversarial review 2026-11-14: E^((2+I) x) beside E^(2 x) and E^(I x), E^x beside a flattened Sqrt[E^x + 1], and x^(x-1) beside x^x on a rebuilt tower each gave a false certificate); both deciders treat a dependent tower as undecided.";
 pmtConfirmCertificate[f_, x_Symbol, r_] := Module[{c, ks},
+  (* the status protocol of the surface entry is: an antiderivative,
+     {"not elementary", ...} or {"failed", reason, ...}; the internal torsion
+     status (an elementary input whose torsion divisor is not realised) is a
+     failure of this implementation, so it leaves as one *)
+  If[MatchQ[r, {"needs torsion realisation (milestone iii)", ___}],
+    Return[{"failed", "torsion divisor not realised (milestone iii)", Rest[r]}]];
   If[! MatchQ[r, {"not elementary", ___}], Return[r]];
   (* radical constants: the arithmetic over Q is not exact for them (Phase 4.3,
      review: 1/(Sqrt[2] + x^2)^(3/2) was certified) -- no certificate *)

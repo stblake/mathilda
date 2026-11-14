@@ -123,12 +123,68 @@ static void test_arcsech_negative_real(void) {
     BR_TRUE("Max[Abs[Normal[ArcSech[NDArray[{-3.7, -0.5, 0.5, 2.}]]] - (ArcSech /@ {-3.7, -0.5, 0.5, 2.})]] == 0");
 }
 
+/* G-adv-b3: the transcendental integrator expands Log arguments (Log[x^2] ->
+ * 2 Log[x]) and drops the locally constant kappa; the kappa split now makes
+ * that expansion explicit (brLogExpand) */
+static void test_log_expansion_kappa(void) {
+    BR_EQ("brLogExpand[Log[x^2 (1 + x)]]", "2 Log[x] + Log[1 + x]");
+    BR_EQ("brLogExpand[Log[-x]]", "I Pi + Log[x]");
+    BR_EQ("brLogExpand[Log[1 + x]]", "Log[1 + x]");
+    BR_EQ("brLogExpand[Sin[x]]", "Sin[x]");
+    BR_TRUE("brLogExpandExactQ[3 x] && brLogExpandExactQ[x/2]");
+    BR_FALSE("brLogExpandExactQ[x^2] || brLogExpandExactQ[-x] || brLogExpandExactQ[2 x^2]");
+    BR_ANTIDERIV("Log[x^2]/(1 + x) + 2 Log[1 + x]/x", "Bronstein");
+    BR_ANTIDERIV("Log[-x]/(1 + x) + Log[1 + x]/x", "Bronstein");
+    BR_ANTIDERIV("Log[1/x]/(1 + x) - Log[1 + x]/x", "Bronstein");
+    BR_ANTIDERIV("Log[x^3]", "Bronstein");
+    /* one kappa, not a second (zero) one for Log[x] met again on the surface */
+    BR_EQ("Length[brReducibleLogSplit[(Log[x^2] - 2 Log[x]) Sqrt[Log[x]], x][\"kappas\"]]", "1");
+}
+
+/* G-sign-2: PossibleZeroQ read a residual as non-zero at a real point ON a
+ * radical's cut reached through complex arithmetic (Tan[x] as a TrigToExp
+ * quotient), where rounding picks the side at every precision; such a point
+ * is now re-drawn */
+static void test_ambiguous_cut_point(void) {
+    BR_ANTIDERIV("Sqrt[Tan[x]] + Sqrt[Cot[x]]", "Bronstein");
+    /* a cut reached through REAL arithmetic is still seen (x < -1) */
+    BR_FALSE("PossibleZeroQ[Sqrt[(1 - x)/(1 + x)] Sqrt[(1 + x)/(1 - x)] - 1, Assumptions -> Element[x, Complexes]]");
+}
+
+/* G-adv-p4: the PMT surface entry answers in its documented protocol only */
+static void test_pmt_status_protocol(void) {
+    BR_EQ("Quiet[Integrate`ParallelMixedTower[Together[D[ArcTan[Log[x]] + Sqrt[x^3 - x] (2 x - 3), x]], x]][[1]]",
+          "\"failed\"");
+}
+
+/* G-core-6: Together over Q(Root) (poly.c: Root content of a univariate gcd,
+ * exact division by a Root-carrying divisor) */
+static void test_together_root(void) {
+    BR_TRUE("With[{r = Root[1 + #1 + #1^4 &, 1]}, With[{e = 1/(1 + 2 t + t^2) + 1/(1 + t + 4 r^3 + 4 t r^3)},"
+            " Head[Together[e]] =!= Plus && PossibleZeroQ[Together[e] - e]]]");
+    BR_TRUE("With[{r = Root[1 + #1 + #1^4 &, 1]}, With[{e = D[(1 + t + 2 t r + 2 t r^2 + 4 r^3 + 4 t r^3 + 2 t r^5)/(1 + t + 4 r^3 + 4 t r^3), t]},"
+            " Head[Together[e]] =!= Plus && PossibleZeroQ[Together[e] - e]]]");
+}
+
+/* G-adv-b2: a literal I in the integrand, residues in Q(i), over a Log tower:
+ * the log-part remainder met I as a literal on one side and as the residue
+ * field's generator on the other */
+static void test_logpart_remainder_qi(void) {
+    BR_ANTIDERIV("(I/2)/(x Sqrt[Log[x]]) + 1/(2 x Sqrt[Log[x]] (1 + Log[x]))", "Bronstein");
+    BR_ANTIDERIV("I/(x Sqrt[Log[x]]) + 1/(x Sqrt[Log[x]] (1 + Log[x]))", "Bronstein");
+}
+
 int main(void) {
     br_init();
     test_zero_algebraic_constant();
     test_erf_constant_at_singular_point();
     test_pim_throw_caught();
     test_arcsech_negative_real();
+    test_log_expansion_kappa();
+    test_ambiguous_cut_point();
+    test_pmt_status_protocol();
+    test_together_root();
+    test_logpart_remainder_qi();
     test_pmt_root_residues();
     test_pmt_confirmation();
     test_eiq_transcendental_constant();

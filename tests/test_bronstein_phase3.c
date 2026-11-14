@@ -103,6 +103,13 @@ static void test_exp_of_log(void) {
 }
 
 static void test_reducible_log(void) {
+    /* the integrator's log-argument expansion, made explicit (G-adv-b3) */
+    BR_EQ("brLogExpand[Log[x^2 (1 + x)]]", "2 Log[x] + Log[1 + x]");
+    BR_EQ("brLogExpand[Log[1/x]]", "-Log[x]");
+    BR_EQ("brLogExpand[Log[1 + x]]", "Log[1 + x]");
+    BR_TRUE("brLogExpandExactQ[3 x]");
+    BR_FALSE("brLogExpandExactQ[x^2] || brLogExpandExactQ[-x]");
+    BR_ANTIDERIV("Log[x^2]/(1 + x) + 2 Log[1 + x]/x", "Bronstein");
     BR_EQ("brReducibleLogSplit[Sqrt[x] Log[x], x]", "None");                  /* nothing reducible */
     BR_EQ("Length[brReducibleLogSplit[Log[x^2] Log[x] Sqrt[Log[x]], x][\"terms\"]]", "2");
     BR_EQ("brReducibleLogSplit[Log[x^2] Log[x] Sqrt[Log[x]], x][\"kappas\"][[1, 2]]", "-2 Log[x] + Log[x^2]");

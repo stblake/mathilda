@@ -2163,7 +2163,66 @@ static bool assignment_conforms(const Expr** facts, size_t nfacts,
 }
 
 /* The verdict of one substituted point (screen or full ladder). */
+static ZeroTestResult zt_point_verdict_raw(const Expr* sub, bool screen, bool* out_overflow);
+#ifdef USE_MPFR
+/* Is the sample point `sub` (a substituted, unevaluated tree) ON the branch cut
+ * of one of its radicals or logarithms in a way no precision can resolve?  That
+ * is a radicand / Log argument b that is mathematically real and negative but
+ * reaches the cut only through complex arithmetic (TrigToExp forms: (I (E^(-I x)
+ * - E^(I x)))/(E^(-I x) + E^(I x)) is Tan[x], real at real x), so its computed
+ * imaginary part is rounding noise of either sign at every rung, and Sqrt or Log
+ * of it lands on either side of the cut: the point's value is undetermined.
+ * Read at 200 bits, such a b has Re b < 0 and 0 < |Im b| < 2^-150 |Re b| (a
+ * true zero leaves ~2^-190 relative).  A b computed EXACTLY real (Im == 0, as
+ * for (1 - x)/(1 + x) at a real x) is not ambiguous: the principal value is
+ * defined, and a failure on that cut is a genuine one the sampler must see. */
+static bool zt_on_ambiguous_cut(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    size_t n = e->data.function.arg_count;
+    const Expr* b = NULL;
+    if (h && h->type == EXPR_SYMBOL) {
+        const char* hn = h->data.symbol.name;
+        if (hn == SYM_Log && n == 1) b = e->data.function.args[0];
+        else if (hn == SYM_Power && n == 2) {
+            const Expr* p = e->data.function.args[1];
+            if (!(p->type == EXPR_INTEGER || p->type == EXPR_BIGINT)) b = e->data.function.args[0];
+        }
+    }
+    if (b && b->type == EXPR_FUNCTION) {
+        Expr* v = numericalize_at(b, 200);
+        Expr* re = NULL; Expr* im = NULL;
+        bool amb = false;
+        double r = 0.0, l2r = 0.0, l2i = 0.0;
+        if (v && is_complex(v, &re, &im) && expr_signed_double(re, &r) && r < 0.0 &&
+            expr_log2_abs(re, &l2r) && expr_log2_abs(im, &l2i) &&
+            l2i != -INFINITY && l2i < l2r - 150.0)
+            amb = true;
+        if (v) expr_free(v);
+        if (amb) return true;
+    }
+    for (size_t i = 0; i < n; i++)
+        if (zt_on_ambiguous_cut(e->data.function.args[i])) return true;
+    return false;
+}
+#endif
+
 static ZeroTestResult zt_point_verdict(const Expr* sub, bool screen, bool* out_overflow) {
+    ZeroTestResult r = zt_point_verdict_raw(sub, screen, out_overflow);
+#ifdef USE_MPFR
+    /* A non-zero reading at a point on an unresolvable cut (see
+     * zt_on_ambiguous_cut) is no evidence: send the point back for a re-draw,
+     * like an out-of-range coordinate.  Checked only on a FALSE, so the zero
+     * path pays nothing. */
+    if (r == ZERO_TEST_FALSE && out_overflow && zt_on_ambiguous_cut(sub)) {
+        *out_overflow = true;
+        return ZERO_TEST_UNKNOWN;
+    }
+#endif
+    return r;
+}
+
+static ZeroTestResult zt_point_verdict_raw(const Expr* sub, bool screen, bool* out_overflow) {
     ZeroTestResult r = decide_structural(sub);
     if (r == ZERO_TEST_UNKNOWN) {
         if (screen) {

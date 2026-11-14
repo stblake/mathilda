@@ -155,6 +155,16 @@ brSplitLogExponent[x_Symbol, monos_List, b_] := Module[{be = Expand[b], logs, rs
   If[!brDependsQ[u, Prepend[#["sym"] & /@ monos, x]], Return[None]];
   {u, Times @@ MapThread[Power[#1["arg"], #2] &, {logs, rs}]}];
 
+brLogExpand::usage = "brLogExpand[Log[a]] expands the argument of a logarithm the way the transcendental integrator does (rt_expand_logs): Log[a b] -> Log[a] + Log[b], Log[b^p] -> p Log[b], recursively; any other argument is kept. Equal to Log[a] up to a locally constant branch difference only.";
+brLogExpand[Log[a_]] := brLogArgExpand[a];
+brLogExpand[e_] := e;
+brLogArgExpand[a_Times] := Total[brLogArgExpand /@ List @@ a];
+brLogArgExpand[Power[b_, p_]] := p brLogArgExpand[b];
+brLogArgExpand[a_] := Log[a];
+
+brLogExpandExactQ::usage = "brLogExpandExactQ[a] is True when Log[a] = brLogExpand[Log[a]] exactly (no branch difference): a is a product c u of a positive rational c and a factor u kept whole (Log[c u] = Log[c] + Log[u] for every u off the cut).";
+brLogExpandExactQ[a_] := MatchQ[a, Times[c_Rational | c_Integer, u_] /; c > 0 && !MatchQ[u, _Times | _Power]];
+
 brKappaMode::usage = "brKappaMode is True inside brReducibleLogSplit: brKernelsToSymbols then replaces a reducible logarithm Log[a] = L0 + kappa by L0 + K (K a fresh constant symbol) and records {K, kappa} in brKappas, instead of throwing Tower:reducible-log.";
 brKappaMode = False;
 brKappas::usage = "brKappas is the list {{K, kappa}, ...} brKernelsToSymbols fills in brKappaMode: K the constant symbol, kappa = Log[a] - L0 its surface value (locally constant: D kappa = 0).";
@@ -200,6 +210,23 @@ brKernelsToSymbols[f0_, x_Symbol] := Module[{f = f0, monos = {}, vars, ks, k, ar
       monos[[-1]] = Append[monos[[-1]], "algebraic" -> True];
       f = f /. k -> t;
       Continue[]];
+    If[kind === "Log" && TrueQ[brKappaMode],
+      (* the transcendental integrator expands the argument of every logarithm
+         (Log[a b] -> Log[a] + Log[b], Log[b^p] -> p Log[b]: rt_expand_logs), an
+         identity only up to a locally constant kappa (Log[x^2] - 2 Log[x] is
+         -2 Pi I for Re x < 0), and kappa does not drop out: it multiplies
+         other terms.  So the expansion is made here, explicitly: Log[a] ->
+         L0 + K with kappa = Log[a] - L0 recorded, and the integrator only ever
+         sees expanded logarithms (E6a).  A factor that is a positive rational
+         splits off exactly, with no kappa. *)
+      With[{L0 = brLogExpand[k]},
+        If[L0 =!= k,
+          With[{kap = (k /. brBack[monos]) - (L0 /. brBack[monos]),
+                K = Symbol["Bronstein`Private`brKappa" <> ToString[Length[brKappas] + 1]]},
+            If[brLogExpandExactQ[First[k]] || kap === 0, f = f /. k -> L0,
+              AppendTo[brKappas, {K, kap}];
+              f = f /. k -> L0 + K]];
+          Continue[]]]];
     If[kind === "Log",
       (* LogReducible is tri-state: False is a proof of a new monomial, a list
          a relation, $Failed an undecided relation (never read as "new") *)
@@ -214,8 +241,12 @@ brKernelsToSymbols[f0_, x_Symbol] := Module[{f = f0, monos = {}, vars, ks, k, ar
             throwUnimplemented["Tower:reducible-log", "reducible logarithm (rewrite with an explicit constant)", <|"kernel" -> k|>]];
           With[{L0 = Sum[lr[[i]] If[monos[[i]]["kind"] === "Exp", monos[[i]]["arg"], monos[[i]]["sym"]], {i, Length[monos]}],
                 K = Symbol["Bronstein`Private`brKappa" <> ToString[Length[brKappas] + 1]]},
-            AppendTo[brKappas, {K, (k /. brBack[monos]) - (L0 /. brBack[monos])}];
-            f = f /. k -> L0 + K];
+            (* a kappa that is exactly 0 (a kernel already in the tower, met
+               again on the surface) is no constant: substitute L0 *)
+            With[{kap = Together[(k /. brBack[monos]) - (L0 /. brBack[monos])]},
+              If[kap === 0, f = f /. k -> L0,
+                AppendTo[brKappas, {K, kap}];
+                f = f /. k -> L0 + K]]];
           Continue[]]];
       {monos, t} = brAddMonomial[x, monos, "Log", Together[arg], k /. brBack[monos]];
       f = f /. k -> t,

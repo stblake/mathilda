@@ -496,6 +496,40 @@ is a $\Q$-linear combination of $f_{q_0},\dots,f_{q_m}$, and hence elementary.
 The converse of (3) is (1).
 \end{proof}
 
+\paragraph{The integrator's own expansion (v0.6558).}
+The transcendental integrator underneath normalises every logarithm by
+expanding its argument, $\log(ab)\mapsto\log a+\log b$ and
+$\log(b^p)\mapsto p\log b$ (\code{rt\_expand\_logs}). The two sides have the
+same derivative, but they differ by a locally constant $\kappa$ that does
+\emph{not} drop out: it multiplies the other terms. For example
+$\kappa=\log x^2-2\log x$ is $-2\pi i$ on $\Re x<0$, and in
+$\int\bigl(\log x^2/(1+x)+2\log(1+x)/x\bigr)\,dx$ it contributes
+$\kappa\log(1+x)$, not a constant. The integrator returned
+$2\log x\log(1+x)$, which is wrong off $\Re x>0$.
+
+The fix is the theorem above, applied to the expansion itself. Before the
+tower is built, the $\kappa$-mode replaces every $\log a$ whose expansion
+$L_0$ differs from it by $L_0+K$ and records $\kappa=\log a-L_0$. When $\kappa$
+is identically $0$, $\log a$ is replaced by $L_0$ alone. That happens for a
+positive rational factor ($\log(cu)=\log c+\log u$ off the cut) and for a
+kernel that is already in the tower and is met again on the surface. So the
+integrator only ever sees expanded logarithms, and Theorem~E6a decides the
+coefficients as before. The answer above is $\log x^2\log(1+x)$; see
+examples E6a-5 and E6a-6.
+
+\paragraph{Verification on a cut reached through complex arithmetic.}
+The verifier samples the real line as well, because an antiderivative must also
+hold on a real-axis cut where the integrand is defined. A TrigToExp radicand
+such as $i(e^{-ix}-e^{ix})/(e^{-ix}+e^{ix})=\tan x$ is real at real $x$, but it
+is \emph{computed} through complex arithmetic. On the cut ($\tan x<0$), its
+imaginary part is then rounding noise of either sign at every precision, so
+the sample's value is undetermined. \code{PossibleZeroQ} now treats a
+non-zero reading at such a point as uninformative and re-draws it. The test:
+some radicand or log argument $b$ has $\Re b<0$ and $0<|\Im b|<2^{-150}|\Re b|$
+at 200 bits. A radicand computed \emph{exactly} real, such as $(1-x)/(1+x)$,
+is still sampled on its cut. Example E6d-4 is
+$\int(\sqrt{\tan x}+\sqrt{\cot x})\,dx$.
+
 \paragraph{What a certificate means.} A certificate here says that no
 elementary expression is an antiderivative of $f$ on the whole domain. That is
 weaker than it may look. $(\log x^2-2\log x)\sqrt{\log x}$ is certified

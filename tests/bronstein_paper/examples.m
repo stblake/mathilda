@@ -195,5 +195,17 @@ bronsteinPaperExamples = {
   "before" -> "implementation incomplete (open-gap register G-nf-1)", "note" -> "closed by linearity: the constant factor leaves"|>,
 <|"id" -> "E43-5", "gap" -> "Tower:algebraic-constant", "theory" -> "E4.3", "version" -> "v0.6556",
   "kind" -> "Integrate", "f" -> Hold[Sqrt[2] Sqrt[Log[x]]], "expect" -> "nonelementary",
-  "before" -> "implementation incomplete", "note" -> "a constant factor leaves by linearity: decided over Q with a real certificate"|>
+  "before" -> "implementation incomplete", "note" -> "a constant factor leaves by linearity: decided over Q with a real certificate"|>,
+<|"id" -> "E6a-5", "gap" -> "Tower:reducible-log", "theory" -> "E6a", "version" -> "v0.6558",
+  "kind" -> "Integrate", "f" -> Hold[Log[x^2]/(1 + x) + 2 Log[1 + x]/x], "expect" -> "elementary",
+  "before" -> "internal (AntiderivativeCheckFailed)", "note" -> "the integrator's Log[x^2] -> 2 Log[x] made explicit: Log[x^2] = 2 Log[x] + kappa; answer Log[x^2] Log[1 + x]"|>,
+<|"id" -> "E6a-6", "gap" -> "Tower:reducible-log", "theory" -> "E6a", "version" -> "v0.6558",
+  "kind" -> "Integrate", "f" -> Hold[Log[-x]/(1 + x) + Log[1 + x]/x], "expect" -> "elementary",
+  "before" -> "internal (AntiderivativeCheckFailed)", "note" -> "Log[-x] = Log[x] + I Pi off the cut, kappa = Log[-x] - Log[x] - I Pi locally constant"|>,
+<|"id" -> "E41-7", "gap" -> "LogPart:remainder-QI", "theory" -> "E4.1", "version" -> "v0.6558",
+  "kind" -> "Integrate", "f" -> Hold[(I/2)/(x Sqrt[Log[x]]) + 1/(2 x Sqrt[Log[x]] (1 + Log[x]))], "expect" -> "elementary",
+  "before" -> "internal (brLogPartRemainderNotRational)", "note" -> "a literal I with residues in Q(i): I Sqrt[Log[x]] + an ArcTan as Q(i) logarithms"|>,
+<|"id" -> "E6d-4", "gap" -> "Tower:cyclic-compositum", "theory" -> "E6d", "version" -> "v0.6558",
+  "kind" -> "Integrate", "f" -> Hold[Sqrt[Tan[x]] + Sqrt[Cot[x]]], "expect" -> "elementary",
+  "before" -> "internal (SignSplitCheckFailed: a PossibleZeroQ false negative at a point on a cut)", "note" -> "Sqrt[Cot[x]] = eps/Sqrt[Tan[x]] with eps = +-1 locally constant; the verifier now re-draws points on an unresolvable cut"|>
 };

@@ -1869,6 +1869,120 @@ static bool is_rational_or_gaussian(const Expr* e) {
     return false;
 }
 
+#ifdef USE_FLINT
+/* ---- Root objects as polynomial indeterminates ----
+ *
+ * A Root object is a number-field constant the evaluator never reduces
+ * (Root[1 + #1 + #1^4 &, 1]^4 stays a fourth power), so wherever the classical
+ * polynomial code meets one -- collect_variables does not enrol it -- it is in
+ * effect computing in Q[r][x] with r an opaque indeterminate.  The RootLift
+ * helpers make that ring explicit for FLINT: each distinct Root becomes a fresh
+ * symbol, the computation runs over Q[syms, x], and the answer is mapped back.
+ * Anything proved there is true in K = Q(r) as well (substitution is a ring
+ * homomorphism); only relations of the minimal polynomial are invisible, which
+ * can cost a cancellation but never invents one. */
+typedef struct { Expr** atoms; Expr** syms; size_t n, cap; } RootLift;
+
+static void root_lift_collect(RootLift* L, const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Root) {
+        /* a Root's own interior (its Slot polynomial) is not entered */
+        for (size_t i = 0; i < L->n; i++) if (expr_eq(L->atoms[i], (Expr*)e)) return;
+        if (L->n == L->cap) {
+            L->cap = L->cap ? L->cap * 2 : 4;
+            L->atoms = realloc(L->atoms, sizeof(Expr*) * L->cap);
+        }
+        L->atoms[L->n++] = expr_copy((Expr*)e);
+        return;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        root_lift_collect(L, e->data.function.args[i]);
+}
+
+/* Collect the Root objects of polys[0..np) and give each a fresh symbol (one
+ * occurring in none of them).  L->n == 0 when there are none. */
+static void root_lift_init(RootLift* L, Expr* const* polys, size_t np) {
+    memset(L, 0, sizeof *L);
+    for (size_t i = 0; i < np; i++) root_lift_collect(L, polys[i]);
+    if (L->n == 0) return;
+    L->syms = malloc(sizeof(Expr*) * L->n);
+    char buf[48];
+    int k = 0;
+    for (size_t i = 0; i < L->n; i++) {
+        bool clash;
+        do {
+            snprintf(buf, sizeof(buf), "$pc_rootgen%d$", k++);
+            clash = false;
+            for (size_t j = 0; j < np && !clash; j++)
+                clash = walk_has_symbol_name(polys[j], buf);
+        } while (clash);
+        L->syms[i] = expr_new_symbol(buf);
+    }
+}
+
+static void root_lift_clear(RootLift* L) {
+    for (size_t i = 0; i < L->n; i++) { expr_free(L->atoms[i]); expr_free(L->syms[i]); }
+    free(L->atoms); free(L->syms);
+    memset(L, 0, sizeof *L);
+}
+
+/* Structural replace of from[i] by to[i] (no evaluation). */
+static Expr* root_lift_subst(const Expr* e, Expr* const* from, Expr* const* to, size_t n) {
+    for (size_t i = 0; i < n; i++) if (expr_eq((Expr*)e, from[i])) return expr_copy(to[i]);
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t m = e->data.function.arg_count;
+    Expr** a = malloc(sizeof(Expr*) * (m ? m : 1));
+    for (size_t i = 0; i < m; i++) a[i] = root_lift_subst(e->data.function.args[i], from, to, n);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, m);
+    free(a);
+    return r;
+}
+
+/* e with Root -> symbol (forward) or symbol -> Root (back), expanded and
+ * canonicalised (expr_expand alone can hand back an unevaluated Times[1, t]). */
+static Expr* root_lift_map(const RootLift* L, const Expr* e, bool forward) {
+    Expr* s = forward ? root_lift_subst(e, L->atoms, L->syms, L->n)
+                      : root_lift_subst(e, L->syms, L->atoms, L->n);
+    Expr* r = eval_and_free(expr_expand(s));
+    expr_free(s);
+    return r;
+}
+
+/* Does `e` mention any of the lift's symbols? */
+static bool root_lift_mentions(const RootLift* L, Expr* e) {
+    for (size_t i = 0; i < L->n; i++)
+        if (walk_has_symbol_name(e, L->syms[i]->data.symbol.name)) return true;
+    return false;
+}
+
+/* A / B computed exactly in Q[roots], or NULL (B carries no Root, B does not
+ * divide A there, or a coefficient FLINT does not model).  The base case of
+ * exact_poly_div below refuses every divisor that is not a rational/Gaussian
+ * unit or an AlgebraicNumber, Root-carrying ones included, so Together/Cancel
+ * could not divide d^2 by d for d = 1 + t + 4 r^3 + 4 t r^3: the leading
+ * coefficients (1 + 4 r^3)^2 / (1 + 4 r^3) never divided.  Here the quotient
+ * is COMPUTED (and certified by fmpq_mpoly_divides), not asserted, so the
+ * symbolic-radical blow-up that refusal guards against cannot follow. */
+static Expr* root_exact_div(Expr* A, Expr* B) {
+    RootLift L;
+    root_lift_init(&L, (Expr*[]){ A, B }, 2);
+    Expr* out = NULL;
+    if (L.n > 0) {
+        Expr* Bs = root_lift_map(&L, B, true);
+        if (root_lift_mentions(&L, Bs)) {
+            Expr* As = root_lift_map(&L, A, true);
+            Expr* q = flint_multivariate_divexact(As, Bs);
+            if (q) { out = root_lift_map(&L, q, false); expr_free(q); }
+            expr_free(As);
+        }
+        expr_free(Bs);
+    }
+    root_lift_clear(&L);
+    return out;
+}
+#endif
+
 /* Returns Q such that A = B * Q exactly (in K[vars]); otherwise NULL. */
 /* Used by `poly_gcd_internal` to extract primitive parts and to stage */
 /* GCD candidate division. The base case (var_count == 0) reduces to   */
@@ -1949,7 +2063,13 @@ Expr* exact_poly_div(Expr* A, Expr* B, Expr** vars, size_t var_count) {
         if (is_rational_or_gaussian(B) || head_is_algebraicnumber(B)) {
             return internal_times((Expr*[]){expr_copy(A), internal_power((Expr*[]){expr_copy(B), expr_new_integer(-1)}, 2)}, 2);
         }
+#ifdef USE_FLINT
+        /* A Root-carrying divisor: divide exactly in Q[roots], computed and
+         * certified (see root_exact_div). */
+        return root_exact_div(A, B);
+#else
         return NULL;
+#endif
     }
     
     Expr* x = vars[var_count - 1];
@@ -2741,6 +2861,94 @@ static Expr* gcd_strip_integer_content(Expr* P) {
     return r;
 }
 
+#ifdef USE_FLINT
+/* ---- Root coefficients: the content of a univariate gcd ----
+ *
+ * With Root coefficients (see RootLift above) the univariate PRS below runs
+ * over the fraction field Q(r)[x], so its answer is right only up to a
+ * CONTENT in Q[r], which get_int_content (integer content only) never strips;
+ * yet every consumer of the answer -- PolynomialLCM's A B / g, Together's and
+ * Cancel's exact divide-back -- divides in Q[r][x]:
+ *
+ *     gcd((1 + t)^2, (1 + 4 r^3)(1 + t))  came back as  (1 + 4 r^3)(1 + t).
+ *
+ * In K = Q(r) that is a right gcd (1 + 4 r^3 is a unit), but in Q[r][x] it
+ * does not divide (1 + t)^2, so the LCM came back as (1 + t)^2, the strict
+ * divide-back in together_recursive failed, and Together left
+ * 1/(1 + 2 t + t^2) + 1/(1 + t + 4 r^3 + 4 t r^3) uncombined (gap G-core-6).
+ *
+ * gcd_root_content_fix re-associates U to the gcd in Q[r][x] itself, by Gauss's
+ * lemma gcd(cont A, cont B) * pp(U), the contents taken over Q[r] (FLINT).
+ * That is still an associate of U over K (each content divides a nonzero
+ * leading coefficient, so its image in K is nonzero): nothing changes for a
+ * consumer working over K. */
+
+/* The content over Q[syms] of P (expanded, polynomial in x): the FLINT gcd of
+ * its x-coefficients, up to a rational factor -- 1 as soon as a coefficient is
+ * free of the syms (the integer content is the caller's business).  NULL when
+ * FLINT declines a coefficient. */
+static Expr* root_content(const RootLift* L, Expr* P, Expr* x) {
+    int d = get_degree_poly(P, x);
+    Expr* c = NULL;
+    for (int k = 0; k <= d; k++) {
+        Expr* ck = get_coeff(P, x, k);
+        if (is_zero_poly(ck)) { expr_free(ck); continue; }
+        if (!root_lift_mentions(L, ck)) {
+            expr_free(ck);
+            if (c) expr_free(c);
+            return expr_new_integer(1);
+        }
+        if (!c) { c = ck; continue; }
+        Expr* g = flint_multivariate_gcd_normalized(c, ck);
+        expr_free(c); expr_free(ck);
+        if (!g) return NULL;
+        c = g;
+    }
+    return c;
+}
+
+/* U (the PRS answer for gcd(A, B), univariate in x, integer content already
+ * stripped) re-associated to the gcd in Q[roots][x] -- see the note above.  A
+ * fresh expression; U itself (copied) when no Root content is involved or any
+ * step declines. */
+static Expr* gcd_root_content_fix(Expr* U, Expr* A, Expr* B, Expr* x) {
+    RootLift L;
+    root_lift_init(&L, (Expr*[]){ A, B, U }, 3);
+    if (L.n == 0) { root_lift_clear(&L); return expr_copy(U); }
+    Expr* out = NULL;
+    Expr* Us = root_lift_map(&L, U, true);
+    Expr* As = root_lift_map(&L, A, true);
+    Expr* Bs = root_lift_map(&L, B, true);
+    Expr* cU = get_degree_poly(Us, x) >= 1 ? root_content(&L, Us, x) : NULL;
+    Expr* cA = cU ? root_content(&L, As, x) : NULL;
+    Expr* cB = cA ? root_content(&L, Bs, x) : NULL;
+    Expr* cG = cB ? flint_multivariate_gcd_normalized(cA, cB) : NULL;
+    if (cG) {
+        /* the integer content is contGCD's, multiplied in by the caller */
+        Expr* cGp = gcd_strip_integer_content(cG);
+        expr_free(cG);
+        cG = cGp;
+    }
+    /* only when a Root content is actually involved: otherwise U stands */
+    if (cG && (root_lift_mentions(&L, cU) || root_lift_mentions(&L, cG))) {
+        Expr* V = flint_multivariate_divexact(Us, cU);       /* pp(U) */
+        if (V) {
+            Expr* W = internal_times((Expr*[]){ cG, V }, 2);
+            cG = NULL;                                       /* consumed */
+            out = root_lift_map(&L, W, false);
+            expr_free(W);
+        }
+    }
+    if (cG) expr_free(cG);
+    if (cU) expr_free(cU);
+    if (cA) expr_free(cA);
+    if (cB) expr_free(cB);
+    expr_free(Us); expr_free(As); expr_free(Bs);
+    root_lift_clear(&L);
+    return out ? out : expr_copy(U);
+}
+#endif
+
 /* Recursive multivariate gcd(A, B). `vars[k-1]` is the main variable; */
 /* coefficient gcds in K[vars[0..k-2]] are obtained by recursive       */
 /* descent. Outline:                                                   */
@@ -2923,7 +3131,18 @@ Expr* poly_gcd_internal(Expr* A, Expr* B, Expr** vars, size_t var_count) {
 #endif
         return expr_expand(contGCD);
     }
-    
+
+#ifdef USE_FLINT
+    /* Univariate with Root coefficients: the PRS answer is right over Q(r)[x]
+     * only up to a Q[r]-content; re-associate it to the gcd in Q[r][x], which
+     * is what the consumers divide in (see gcd_root_content_fix). */
+    if (var_count == 1 && (expr_has_field_constant(A) || expr_has_field_constant(B))) {
+        Expr* Uf = gcd_root_content_fix(U, A, B, x);
+        expr_free(U);
+        U = Uf;
+    }
+#endif
+
     // Normalize U to have positive leading coefficient
     Expr* lc = get_coeff(U, x, get_degree_poly(U, x));
     if (is_negative(lc)) {
