@@ -4010,7 +4010,16 @@ verified against the user's own integrand. The proofs are in
     constant sign (`Sqrt[x^2 (x + 1)]`, `Sqrt[x + 1]`) are integrated one sign
     region at a time. The answer carries the indicators `(1 +- eps)/2`.
   - Radicals that agree only over a larger constant field (`Sqrt[2 x]`,
-    `Sqrt[x]`) are still not decided.
+    `Sqrt[x]`) are one radical over Q(Sqrt[2]) since v0.6564.
+  - Since v0.6567, square roots that occur only as a product (`Sqrt[x - 1]
+    Sqrt[x + 1]`, which `TrigToExp` writes for `ArcCosh[x]`) are merged as
+    `eps Sqrt[x^2 - 1]`. A square root of a negative multiple of another
+    radicand is written as `Sqrt[-x] = eps I Sqrt[x]`. Both go through the sign
+    split, and the answer is presented over the user's radicals when that form
+    verifies: `Int ArcCosh[x]/Sqrt[x^2 - 1] = Sqrt[x - 1] Sqrt[x + 1]
+    Log[x + Sqrt[x - 1] Sqrt[x + 1]]^2/(2 Sqrt[x^2 - 1])`.
+  - A sign taken only on a branch cut never certifies:
+    `Sqrt[x + 1] Sqrt[1/(x + 1)]` is 1 on every open set.
 - **Exponents with a log part.** `E^(x + Log[x]/2)` is `Sqrt[x] E^x` and
   `E^(Log[a]/3)` is `a^(1/3)`. Before, they were a new monomial or a decline.
 - **Reducible logarithms.** `Log[x^2]` beside `Log[x]` is `2 Log[x] + kappa`,
@@ -4019,8 +4028,12 @@ verified against the user's own integrand. The proofs are in
   - Example: `Int Log[x^2] Sqrt[Log[x]]/x = 4/5 Log[x]^(5/2) + 2/3 Log[x]^(3/2) (Log[x^2] - 2 Log[x])`.
   - A non-elementary coefficient is a certificate, because on each region
     `kappa` is 0 or a transcendental constant (Hermite–Lindemann).
-  - Two reducible logarithms in one integrand, or one in a denominator, are not
-    yet decided.
+  - Since v0.6567, several reducible logarithms are decided when every
+    `kappa` is a rational multiple of `2 Pi I`, as for `Log[x^2] - 2 Log[x]`
+    and `Log[x^3] - 3 Log[x]`. On a region the integrand is a polynomial in the
+    one transcendental number `2 Pi I` (Lindemann). Other cases, such as
+    `Log[2] + 2 Pi I m`, would need Schanuel's conjecture and stay undecided.
+    So does a reducible logarithm in a denominator.
 
 | Input | Result |
 |---|---|
@@ -4028,6 +4041,8 @@ verified against the user's own integrand. The proofs are in
 | `Integrate[(Sqrt[x] + (x + 1)^(1/3))/(x (x + 1)), x, Method -> "Bronstein"]` | an antiderivative in `Sqrt[x]`, `(x + 1)^(1/3)` |
 | `Integrate[E^(x + Log[x]/2)/x, x, Method -> "Bronstein"]` | `Integrate::nonelem` (`E^x/Sqrt[x]`) |
 | `Integrate[(Log[x^2] - 2 Log[x]) Sqrt[Log[x]], x, Method -> "Bronstein"]` | `Integrate::nonelem` |
+| `Integrate[(Log[x^2] - 2 Log[x]) (Log[x^3] - 3 Log[x]) Sqrt[Log[x]], x, Method -> "Bronstein"]` | `Integrate::nonelem` (v0.6567) |
+| `Integrate[ArcCosh[x]/Sqrt[x^2 - 1], x, Method -> "Bronstein"]` | an antiderivative with the sign `Sqrt[x - 1] Sqrt[x + 1]/Sqrt[x^2 - 1]` (v0.6567) |
 
 **Trigonometric integrands (v0.6554).** Trigonometric and hyperbolic functions
 and their inverses are rewritten by `TrigToExp` and integrated over Q(i); the

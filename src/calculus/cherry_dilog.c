@@ -343,7 +343,18 @@ Expr* rt_cherry_dilog(Expr* f, Expr* x) {
              * constant Log[1/2] carried by the answer cancels — a plain
              * Simplify[PowerExpand[.]] cannot bridge Log[1+x/2] = Log[1/2]+Log[2+x]. */
             Expr* chk = rt_eval1("Simplify", normalize_logs(diff));
-            if (chk && chk->type == EXPR_INTEGER && chk->data.integer == 0) result = Q;
+            /* PowerExpand is not an identity off the positive axis (Log[x^2] -> 2 Log[x]):
+             * Int Log[x^2]/(1 + x) came back as 2 Log[x] Log[1 + x] + 2 PolyLog[2, -x],
+             * wrong for x < 0 (adversarial review of batch D).  The project's verifier,
+             * PossibleZeroQ against the ORIGINAL integrand, must also accept it. */
+            bool pzq = false;
+            if (chk && chk->type == EXPR_INTEGER && chk->data.integer == 0) {
+                Expr* z = rt_eval1("PossibleZeroQ", mk_plus2(rt_eval2("D", expr_copy(Q), expr_copy(x)),
+                                                            mk_neg(expr_copy(f))));
+                pzq = z && z->type == EXPR_SYMBOL && z->data.symbol.name == intern_symbol("True");
+                if (z) expr_free(z);
+            }
+            if (pzq) result = Q;
             else expr_free(Q);
             if (chk) expr_free(chk);
         } else if (Q) expr_free(Q);

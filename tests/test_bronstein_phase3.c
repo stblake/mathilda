@@ -146,7 +146,7 @@ static void test_reducible_log(void) {
     BR_EQ("BronsteinIntegrate[(Log[x^2] - 2 Log[x]) Sqrt[Log[x]], x][[1]]", "\"not elementary\"");
     /* the C dependent-logarithm retry no longer answers Log[x]^2 for Int Log[x^2]/x */
     BR_TRUE("With[{r = Integrate`RischTranscendental[Log[x^2]/x, x]}, Head[r] === Integrate`RischTranscendental || PossibleZeroQ[D[r, x] - Log[x^2]/x]]");
-    BR_EQ("Integrate`RischTranscendental[Log[2 x]/x, x]", "1/2 (2 Log[2] Log[x] + Log[x]^2)");
+    BR_TRUE("Integrate`RischTranscendental[Log[2 x]/x, x] === Log[2 x]^2/2");   /* the dependent log folded by its derivative (G-core-4) */
     BR_TRUE("PossibleZeroQ[D[Integrate[Log[x^2]/x, x], x] - Log[x^2]/x]");
 }
 

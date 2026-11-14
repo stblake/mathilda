@@ -6678,6 +6678,9 @@ add_test(NAME adversarial_regressions_tests COMMAND adversarial_regressions_test
 add_executable(bronstein_nf_tests test_bronstein_nf.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(bronstein_nf_tests PRIVATE ../src)
 add_test(NAME bronstein_nf_tests COMMAND bronstein_nf_tests)
+add_executable(bronstein_scope_tests test_bronstein_scope.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(bronstein_scope_tests PRIVATE ../src)
+add_test(NAME bronstein_scope_tests COMMAND bronstein_scope_tests)
 
 add_executable(integrate_cascade_trager_bronstein_tests test_integrate_cascade_trager_bronstein.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(integrate_cascade_trager_bronstein_tests PRIVATE ../src)

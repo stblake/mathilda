@@ -87,8 +87,9 @@ rationalFunctionQ::usage = "rationalFunctionQ[e, x] is True when e is a rational
 rationalFunctionQ[e_, x_Symbol] := Module[{t = Together[e]},
   rationalPolyQ[Numerator[t], x] && rationalPolyQ[Denominator[t], x]];
 
-algebraicNumberQ::usage = "algebraicNumberQ[c] is True when c is an explicit algebraic number: rationals combined with radicals of rationals by + - * / and rational powers (no symbol, no transcendental constant).";
-algebraicNumberQ[c_] := NumericQ[c] && FreeQ[c, Pi | E | EulerGamma | Catalan | _Log | _Exp | _Real | _Complex] &&
+algebraicNumberQ::usage = "algebraicNumberQ[c] is True when c is an explicit algebraic number: rationals and Gaussian rationals combined with radicals of rationals by + - * / and rational powers (no symbol, no transcendental constant, no inexact number).";
+algebraicNumberQ[c_] := NumericQ[c] && FreeQ[c, Pi | E | EulerGamma | Catalan | _Log | _Exp | _Real] &&
+  FreeQ[c, Complex[a_, b_] /; !(rationalNumberQ[a] && rationalNumberQ[b])] &&
   FreeQ[c, Power[b_, e_] /; !rationalNumberQ[e]];
 
 algebraicRationalFunctionQ::usage = "algebraicRationalFunctionQ[e, x] is True when e is a rational function of x whose coefficients are algebraic numbers (algebraicNumberQ): a rational function over a number field Q(theta).";

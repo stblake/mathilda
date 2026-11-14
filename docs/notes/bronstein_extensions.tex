@@ -1179,7 +1179,7 @@ any $u$, $(cu)^r=c^ru^r$ on every branch, because $\arg(cu)=\arg u$. Pulling the
 positive content out of each radicand therefore turns $\sqrt{2x}+\sqrt x$ into
 the single radical $\sqrt x$ over $\Q(\sqrt2)$. A negative content leaves
 $\sqrt{-u}=\varepsilon i\sqrt u$ with $\varepsilon=\pm1$ locally constant. That
-is the sign split of E6d over $\Q(i)$, still open (G-nf-11).
+is the sign split of E6d over $\Q(i)$, closed in batch~D (Lemma~\ref{lem:E6d1}).
 
 
 \paragraph{Certificates over a number field (v0.6566).} With the base field,
@@ -1192,6 +1192,238 @@ cross-check of 34 certificates found no false certificate. The cross-check used
 FriCAS, and, where FriCAS cannot decide, the group law together with the
 torsion bounds over quadratic and cubic fields (Kamienny--Kenku--Momose,
 Parent).
+
+
+\section*{Batch D. Scope extensions (v0.6567)}
+\addcontentsline{toc}{section}{Batch D. Scope extensions}
+
+Batch D of the gap register closes six scope gaps. Two need new results,
+E6a.3 (several branch differences) and E6d.1 (square roots equal up to a sign
+in the front end). The other three are corrections to existing steps: a limited
+integration decided by a derivative, Gaussian coefficients in limited
+integration, and rational integrands over $\Q(i)$ in Trager.
+
+None of them needs a tangent monomial. A trigonometric integrand is rewritten
+by \code{TrigToExp} into $\Q(i)(x)(e^{ix},\dots)$ (E4.2), where the exponential
+case of the algorithm decides it. The hypertangent monomial
+$\theta'=a(1+\theta^2)$ ([SI, \S5.10]) only avoids $i$; it decides nothing that
+the exponential case over $\Q(i)$ cannot, so it matters for presenting answers
+in real form (G-pres-1), not for the decision. The C integrator already has a
+real hypertangent case for rational functions of $\tan u$ (\code{rt\_hypertangent\_case}).
+
+\subsection*{E6a.3. Several branch differences in $2\pi i\Q$ (G-red-1)}
+
+\paragraph{Setting.} As in E6a, with $r\ge2$ reducible logarithms. Write
+$\kappa_j=\log a_j-L_{0,j}$ and
+$f=\sum_\alpha\kappa^\alpha g_\alpha$, $g_\alpha\in k'(y)$, where $k'$ omits all
+the $\log a_j$ and $\alpha$ runs over $\mathbf N^r$. Theorem~\ref{thm:kappa}(3)
+does not extend: its proof uses that \emph{one} nonzero $\kappa_0$ is
+transcendental. With several, the values $\kappa_{j,0}$ are logarithms of
+algebraic numbers (Lemma~\ref{lem:kappa}), and their algebraic independence is
+Schanuel's conjecture. Baker's theorem gives only their linear independence
+over $\Qbar$. The values that do reduce to one transcendental are the
+rational multiples of $2\pi i$, and those are what a reducible logarithm
+usually produces ($\log x^2-2\log x$).
+
+\begin{lemma}\label{lem:E6a3unit}
+Let $\kappa=\sum_ic_i\log w_i+\rho$ with $c_i\in\Q$ and $\rho$ free of
+logarithms be locally constant, let $N$ be a common denominator of the $c_i$,
+and let $u=\prod_iw_i^{Nc_i}\,e^{N\rho}$. If $u$ is a constant with $u^k=1$,
+then $e^{Nk\kappa}=1$ pointwise, so $\kappa\in\frac{2\pi i}{Nk}\Z$ on every region.
+\end{lemma}
+
+\begin{proof}
+The $Nc_i$ are integers, so $e^{Nc_i\log w_i}=w_i^{Nc_i}$ pointwise, and
+$e^{N\kappa}=u$. Then $e^{Nk\kappa}=u^k=1$.
+\end{proof}
+
+\code{brKappaUnitOrder} computes $u$ with \code{Together} and tests
+$u^k=1$ for $k\le24$ by \code{RootReduce}. It is exact; a $u$ it cannot reduce
+to a number gives no order, and the integral stays undecided.
+
+\begin{theorem}\label{thm:E6a3}
+Suppose every $\kappa_j$ satisfies Lemma~\ref{lem:E6a3unit}. On a region where
+$\kappa_j=2\pi i\,q_j$ ($q_j\in\Q$), put
+\[ G_m=\sum_{|\alpha|=m}q^\alpha g_\alpha\in k'(y). \]
+Then $f$ has an elementary integral on the region if and only if every $G_m$
+has one.
+\end{theorem}
+
+\begin{proof}
+On the region, $f=\sum_m(2\pi i)^mG_m$. The number $2\pi i$ is transcendental
+over $\Q$ (Lindemann), hence over $\Qbar$. Since the constants of $k'(y)$ are
+algebraic, it is also transcendental over $k'(y)$ ([SI, Cor.~3.3.1]). The proof
+of Theorem~\ref{thm:kappa}(3) now applies word for word, with $\kappa_0$
+replaced by $2\pi i$ and $g_j$ by $G_j$. The specialisation argument there
+uses only that the polynomial $\sum_jK^jG_j$ in a transcendental constant $K$
+has an elementary integral. The converse is linearity.
+\end{proof}
+
+\paragraph{Decision.} If every $g_\alpha$ is elementary, Theorem~\ref{thm:kappa}(1)
+still gives an answer. Otherwise \code{brKappaRegionCertificate} takes complex
+sample points where every $\kappa_j$ is stable under perturbations of size
+$10^{-6}$ in four directions, so the point is inside an open region. It reads
+off $q_j=\mathrm{round}(M_j\kappa_j/2\pi i)/M_j$ and integrates each nonzero
+$G_m$. A non-elementary $G_m$ is a certificate. Real points are not used: a
+real point can lie on a cut, and a value taken only on a cut never certifies
+(E6d-5). If no such region is found the integral stays \code{Tower:reducible-log}.
+
+\paragraph{Example.} For
+$f=(\log x^2-2\log x)(\log x^3-3\log x)\sqrt{\log x}$, both branch differences
+equal $-2\pi i$ when $\arg x\in(\pi/2,\pi)$. There $f=(2\pi i)^2\sqrt{\log x}$,
+which is not elementary. If all the branch differences were of the form
+$\log 2+2\pi im$, the integral would stay undecided.
+
+\subsection*{E6d.1. Square roots equal up to a sign, in the front end (G-trig-1, G-nf-11)}
+
+\begin{lemma}\label{lem:E6d1}
+Let $A$ and $C$ be analytic and nonvanishing on a connected open set $U$, with
+$A^2=C^2$. Then $\varepsilon=A/C$ is constant on $U$, with value $1$ or $-1$.
+\end{lemma}
+
+\begin{proof}
+$\varepsilon$ is continuous on $U$ and $\varepsilon^2=1$. A continuous map from
+a connected set to $\{1,-1\}$ is constant.
+\end{proof}
+
+\code{brSignMerge} applies the lemma to two configurations of principal square
+roots of rational functions $b_i$:
+\begin{enumerate}
+\item[(a)] a product inside one monomial,
+  $\prod_{i=1}^m b_i^{k_i/2}$ with $k_i$ odd, $m\ge2$ and the $b_i$ distinct.
+  For an orientation $e\in\{\pm1\}^m$, $b^{k/2}=b^{(k-e)/2}\sqrt b^{\,e}$, so
+  \[ A=\prod_i\sqrt{b_i}^{\,e_i},\qquad C=\sqrt{P},\ P=\prod_ib_i^{e_i},\qquad
+     \prod_ib_i^{k_i/2}=\varepsilon\,C\prod_ib_i^{(k_i-e_i)/2}. \]
+  The orientations tried are $e=(1,\dots,1)$ and then $e_i=\operatorname{sgn}k_i$.
+  A squarefree $P$ is preferred, for example
+  $\sqrt{x-1}\sqrt{x+1}/\sqrt{x^2-1}=\varepsilon$, with $P=1$. Otherwise the
+  square is taken out of the root (see below);
+\item[(b)] a radicand that is a negative rational multiple of another,
+  $b_i=c\,b_j$ with $c<0$:
+  \[ A=\sqrt{b_i},\qquad C=i\sqrt{-c}\,\sqrt{b_j}. \]
+\end{enumerate}
+In both cases $A^2=C^2$, and $b^{k/2}=b^{(k-1)/2}\sqrt b$ for the principal
+power. So the rewritten integrand $g$, in which every $A$ is replaced by
+$E\,C$ for a sign symbol $E$, equals $f$ pointwise when $E$ takes the value
+$\varepsilon=A/C$. One symbol stands for each distinct $A/C$. The rewrite is
+kept only when it lowers the number of distinct radicands and the remaining
+radicals generate a cyclic Kummer group.
+
+The rewritten integrand is decided by the sign split of E6d: one pattern
+$s\in\{\pm1\}^J$ at a time, each $f_s=g|_{E=s}$ over the constant field of
+$f_s$ ($\Q(i)$ after (b)), and certificates only for patterns seen on an open
+complex set. The construction differs from E6d in two ways. First, the
+radicals may sit inside a logarithm: \code{TrigToExp} turns $\operatorname{ArcCosh}x$
+into $\log(x+\sqrt{x-1}\sqrt{x+1})$. Second, the atom set may be non-cyclic,
+$\{x-1,x+1,x^2-1\}$, even though the radicals that actually occur generate
+$\Z/2$.
+
+\paragraph{Region-local certificates do not nest (review of batch D).} The
+certificates of the sign split (E6d), the kappa split (E6a) and E6a.3 each hold
+on \emph{one region}, the one where $\varepsilon=s$ or where $\kappa=\kappa_0$.
+Lifting a certificate for $f_s$ to $f$ needs $f_s$ to be non-elementary on the
+region where $\varepsilon=s$. A field certificate gives this: $f_s$ is an element
+of a differential field with no elementary integral, so it has none on any
+open set, by analytic continuation. A certificate that is itself local to a
+region $R'$ does not, because $R'$ need not meet $\{\varepsilon=s\}$.
+
+The review built integrands that are identically $0$ and carried such a
+certificate. One was
+$(\sqrt{x^2-1}+\sqrt{x-1}\sqrt{x+1})(\log x^2-2\log x)e^{x^2}$: its $\kappa$ is
+nonzero only where $\varepsilon=-1$, and there the integrand vanishes.
+
+Inside a region-local split (\code{brInRegion}) every region-local certificate
+is therefore demoted to Unimplemented, and only field certificates pass. The
+transcendence arguments of Theorem~\ref{thm:kappa}(3) and
+Theorem~\ref{thm:E6a3} also need the constants of every $g_\alpha$ to be
+algebraic. With $\pi$ in a coefficient they fail:
+$((\log(-x)-\log x)^2+\pi^2)\sqrt{\log x}$ is $0$. That hypothesis is now
+checked (\code{brAlgebraicConstantsOnlyQ}).
+
+In E6a.3 a constant $\pi$ need not be refused, because $\pi=T/(2i)$ with
+$T=2\pi i$, the transcendental number of the theorem. The certificate expands
+$f=\sum_\alpha(qT)^\alpha\,g_\alpha|_{\pi=T/2i}$ as a polynomial in $T$, and
+asks only that the coefficients $G_m$ have algebraic constants. For the
+example above that polynomial is
+$T^2(q^2-\tfrac14)\sqrt{\log x}=0$ (here $q=\pm\tfrac12$), so there is nothing
+to certify. Meanwhile
+$(\log(-x)-\log x)(\log x^2-2\log x)\sqrt{\log x}$ is certified.
+
+A merged radicand with a square factor, $P=s^2Q$, is written as
+$C=s\sqrt Q$ (\code{brSquareFreeSqrt}). Then $A^2=C^2$ still holds, there is
+one sign, and none is hidden in $\sqrt{s^2}$. For example
+$\sqrt{-1-x}\sqrt{-x}\sqrt x\sqrt{1+x}=\varepsilon\,x(1+x)$.
+
+\paragraph{Presentation.} The sign split returns
+$F=\sum_s\prod_j\tfrac12(1+s_j\varepsilon_j)F_s$. With a single sign,
+\code{brSignPresent} also tries $G$ and $\varepsilon G$, where $G$ is $F_s$
+with $\sqrt P$ written back as the user's $A$. It keeps the smallest candidate
+that \code{antiderivativeQ} confirms. Thus
+\[ \int\frac{\operatorname{ArcCosh}x}{\sqrt{x^2-1}}\,dx
+   =\frac{\sqrt{x-1}\sqrt{x+1}}{2\sqrt{x^2-1}}\,
+     \log^2\!\bigl(x+\sqrt{x-1}\sqrt{x+1}\bigr), \]
+which is $\varepsilon\operatorname{ArcCosh}(x)^2/2$. The form
+$\operatorname{ArcCosh}(x)^2/2$ is wrong for real $x<-1$, where $\varepsilon=-1$.
+
+\paragraph{What stays open.} G-sign-1 (E6d-5) is still undecided:
+$\sqrt{x+1}\sqrt{1/(x+1)}$ equals $1$ on every open set and $-1$ only on the cut
+$x<-1$. Closing it needs a proof that the pattern $-1$ occurs on no open set,
+which means finding the connected components of the complement of the cuts.
+
+\subsection*{D.3. Limited integration decided by a derivative (G-core-4)}
+
+In the C primitive-polynomial case ([SI, \S5.8], \code{rt\_log\_poly\_case}), each
+coefficient needs $\int r=s+c\theta$ with $s\in K$, $c$ constant and
+$\theta=\log u$. The old oracle matched $\log u$ \emph{syntactically}, so
+$\int 1/x=\log x$ did not fold into $\theta=\log x^2$.
+
+\begin{proposition}
+Let $\int r=S+L$, where $S$ is free of logarithms and $L$ collects the terms
+with logarithms. If $L'=c\,\theta'$ for a constant $c$, then $s=S$ and $c$
+solve the limited integration problem up to a locally constant function. That
+function does not affect the coefficient recursion
+$q_i'+(i+1)q_{i+1}\theta'=p_i$.
+\end{proposition}
+
+\begin{proof}
+$(L-c\theta)'=0$, so $L-c\theta$ is locally constant. The recursion involves
+only the derivatives of the $q_i$, so $q_i$ may change by a locally constant
+function. Changing the bottom coefficient $q_0$ that way changes the answer
+by a locally constant function, which is still an antiderivative.
+\end{proof}
+
+\code{rt\_limited\_fold\_dependent\_log} tests $c=\mathrm{Cancel}[L'/\theta']$
+for freedom from $x$. This gives $\int\log(x^2)/x\,dx=\tfrac14\log^2x^2$
+instead of no answer, and $\int\log(2x)/x\,dx=\tfrac12\log^2(2x)$ in place of
+$\log2\log x+\tfrac12\log^2x$. The caller still checks every answer by
+differentiation.
+
+\paragraph{The dilogarithm case.} The review also found a wrong answer in the
+C dilogarithm case (Cherry's method):
+$\int\log(x^2)/(1+x)\,dx=2\log x\log(1+x)+2\operatorname{Li}_2(-x)$, which is
+wrong for $x<0$. That case checked its answer with \code{PowerExpand}, which
+assumes $\log x^2=2\log x$. It now has to pass \code{PossibleZeroQ} against the
+original integrand as well.
+
+\subsection*{D.4. Gaussian coefficients in limited integration (G-qi-1)}
+
+Over $\Q(i)$, \code{brIntegrateInK} and \code{brSplitLogs} rejected every
+complex number, including $\int\frac i2\,dx=\frac i2x$, and read it as a
+logarithm with a non-rational coefficient. A Gaussian rational is a constant of
+the field, so the linear system over the constants is unchanged; $\arctan$ and
+$\operatorname{arctanh}$ are rewritten as logarithms (\code{TrigToExp}, an
+identity of the principal branches). As a result
+$\int\sqrt{i+\log^2x}\,dx$ has no algebraic part ([B] Prop.~2.15/2.18) and is
+not elementary, like its real twin $\sqrt{1+\log^2x}$.
+
+\subsection*{D.5. Rational integrands over $\Q(i)$ in Trager (G-adv-t4)}
+
+\code{algebraicNumberQ} now admits Gaussian rationals. A radical-free integrand
+such as $1/(x^2+i)$ therefore reaches the rational integrator instead of being
+read as ``not algebraic over $\Q(x)$''.
+
+\paragraph{Tests.} \code{tests/test\_bronstein\_scope.c} (70 assertions, the review's cases included), and
+examples ED-1 to ED-8 in the gap log.
 
 \part*{Part C. The gap log: what each extension closes}
 \addcontentsline{toc}{part}{Part C}

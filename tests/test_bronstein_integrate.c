@@ -62,7 +62,7 @@ static const char* const certificates[] = {
 
 static const char* const declines[] = {
     "Log[x] + Sqrt[Log[x] + Sqrt[Log[x]]]",                                          /* nested */
-    "Sqrt[Log[x]] Sqrt[Log[x] + 1]",                                                 /* compositum */
+    "Sqrt[Log[x]] + Sqrt[Log[x] + 1]",                                               /* compositum */
     "Log[x] E^(x Sqrt[x^3 + 1])",                                                    /* Shape B, curve monomial over a tower */
     NULL
 };

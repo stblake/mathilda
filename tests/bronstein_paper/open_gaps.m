@@ -45,19 +45,7 @@ bronsteinOpenGaps = {
 (* ---- Bronstein scope ----------------------------------------------------- *)
 <|"id" -> "G-sign-1", "area" -> "Bronstein", "gap" -> "radicals equal up to a sign seen only on a branch cut: undecided (E6d)",
   "kind" -> "Integrate", "f" -> Hold[(1 + E^(x^2))/2 + (1 - E^(x^2))/2 Sqrt[x + 1] Sqrt[1/(x + 1)]], "current" -> "incomplete", "budget" -> 60,
-  "followup" -> "prove eps = 1 on every open set (no open region with eps = -1) and integrate f_+ alone", "source" -> "review of E6d"|>,
-<|"id" -> "G-trig-1", "area" -> "Bronstein", "gap" -> "TrigToExp writes ArcCosh with Sqrt[x - 1] Sqrt[x + 1]: two radicals (E6d over a constant-sign split)",
-  "kind" -> "Integrate", "f" -> Hold[ArcCosh[x]/Sqrt[x^2 - 1]], "current" -> "incomplete", "budget" -> 60,
-  "followup" -> "a front-end rewrite Sqrt[x - 1] Sqrt[x + 1] = eps Sqrt[x^2 - 1] (E6d)", "source" -> "review of E4.2"|>,
-<|"id" -> "G-qi-1", "area" -> "Bronstein", "gap" -> "residue at infinity of a logarithm: the integral in k has a logarithm with non-rational coefficient (Q(i))",
-  "kind" -> "Integrate", "f" -> Hold[Sqrt[I + Log[x]^2]], "current" -> "incomplete", "budget" -> 60,
-  "followup" -> "brLimitedIntegrate over Q(i) with algebraic log coefficients (Phase 3 LimitedIntegrate)", "source" -> "Phase 4.1b battery"|>,
-<|"id" -> "G-nf-11", "area" -> "Bronstein", "gap" -> "a NEGATIVE radical content: Sqrt[-2 x] = Sqrt[2] Sqrt[-x], and Sqrt[-x] = eps I Sqrt[x] with eps = +-1 locally constant (a sign split over Q(i))",
-  "kind" -> "Integrate", "f" -> Hold[Sqrt[-2 x] + Sqrt[x]], "current" -> "incomplete", "budget" -> 60,
-  "followup" -> "E6d over Q(i): the sign split with I adjoined (brCompositumPlan with a Gaussian square root)", "source" -> "Phase 4.3b C7"|>,
-<|"id" -> "G-red-1", "area" -> "Bronstein", "gap" -> "two reducible logarithms: kappa values may be algebraically dependent (E6a needs one)",
-  "kind" -> "Integrate", "f" -> Hold[(Log[x^2] - 2 Log[x]) (Log[x^3] - 3 Log[x]) Sqrt[Log[x]]], "current" -> "incomplete", "budget" -> 60,
-  "followup" -> "E6a for several kappa (their values are logs of algebraic numbers: Baker's theorem on linear forms)", "source" -> "E6a"|>,
+  "followup" -> "prove eps = 1 on every open set (no open region with eps = -1: the connected components of the complement of the cuts, e.g. by a cylindrical decomposition in (Re x, Im x)) and integrate f_+ alone; brSignMerge (v0.6567) already reduces it to the single sign Sqrt[x + 1] Sqrt[1/(x + 1)]", "source" -> "review of E6d"|>,
 <|"id" -> "G-mid-1", "area" -> "Bronstein", "gap" -> "a radical in the middle of the tower",
   "kind" -> "Integrate", "f" -> Hold[Log[1 + Sqrt[Log[x]]]/x], "current" -> "incomplete", "budget" -> 60,
   "followup" -> "Phase 5 (E1, E2)", "source" -> "plan"|>,
@@ -77,9 +65,6 @@ bronsteinOpenGaps = {
 <|"id" -> "G-core-9", "area" -> "Core", "gap" -> "Together without Extension leaves a sum of fractions uncombined when their common denominator needs Sqrt[2]^2 = 2 (Trager now passes Extension -> Automatic)",
   "kind" -> "Expr", "f" -> Hold[Head[Together[3/(2 z^3 + 2 Sqrt[2] z^6) + (-3 + 3 z + z^2 - 3 Sqrt[2] z^3 - 2 Sqrt[2] z^5)/(2 z^3 - 2 z^4 + 4 Sqrt[2] z^6 - 2 Sqrt[2] z^7 + 4 z^9)]]], "current" -> "Plus", "budget" -> 60,
   "followup" -> "combine over Q(constants) when the divide-back over Q[constants] fails", "source" -> "Phase 4.3b"|>,
-<|"id" -> "G-core-4", "area" -> "Risch (C)", "gap" -> "Log[x^2] is not its own monomial in the C transcendental integrator (the retry fixed in v0.6547 no longer answers wrongly)",
-  "kind" -> "Expr", "f" -> Hold[Head[Integrate`RischTranscendental[Log[x^2]/x, x]]], "current" -> "Integrate`RischTranscendental", "budget" -> 60,
-  "followup" -> "tower builder: a logarithm of a power as a monomial, or the kappa split of E6a in C", "source" -> "Phase 3 part 1"|>,
 (* ---- found by the adversarial reviews of Bronstein, Trager and PMT (2026-11-14) *)
 <|"id" -> "G-adv-b5", "area" -> "Bronstein", "gap" -> "an inverse trig times a logarithm times out (elementary: D[ArcSin[x] Log[x]])",
   "kind" -> "Integrate", "f" -> Hold[Together[D[ArcSin[x] Log[x], x]]], "current" -> "timeout", "budget" -> 60,
@@ -95,10 +80,7 @@ bronsteinOpenGaps = {
   "followup" -> "make the dividend polynomial (clear the denominator) before kDivRem over Q(i)", "source" -> "adversarial review of Trager"|>,
 <|"id" -> "G-adv-t3", "area" -> "Trager", "gap" -> "a Gaussian binomial times out (elementary by Chebyshev)",
   "kind" -> "Integrate", "f" -> Hold[(1 + (1 + I) x^4)^(3/4)], "current" -> "timeout", "budget" -> 60,
-  "followup" -> "after G-adv-t2", "source" -> "adversarial review of Trager"|>,
-<|"id" -> "G-adv-t4", "area" -> "Trager", "gap" -> "a rational integrand over Q(i) is declined as not algebraic (the rational integrator is not reached)",
-  "kind" -> "Expr", "f" -> Hold[Trager`TragerIntegrate[1/(x^2 + I), x][[1]]], "current" -> "\"implementation incomplete\"", "budget" -> 60,
-  "followup" -> "route a radical-free Q(i) integrand to the rational integrator", "source" -> "adversarial review of Trager"|>
+  "followup" -> "after G-adv-t2", "source" -> "adversarial review of Trager"|>
 };
 
 openGapsStructural = {

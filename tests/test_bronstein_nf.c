@@ -169,8 +169,13 @@ static void test_nf_radical_content(void) {
     BR_ANTIDERIV("Sqrt[3 Log[x]] Sqrt[Log[x]]/x", "Bronstein");
     BR_ANTIDERIV("Sqrt[2 x + 2] Sqrt[x + 1] Log[x]", "Bronstein");
     BR_ANTIDERIV("Sqrt[2 x] + Sqrt[x]", "Trager");
-    /* genuinely two radicals: still Incomplete */
-    BR_EQ("First[BronsteinIntegrate[1/(Sqrt[2 x] Sqrt[x^3 + 1]) + Sqrt[x^3 + 1]/Sqrt[x], x]]", "\"implementation incomplete\"");
+    /* two radicals that occur only as a product: one radical up to a sign
+       (brSignMerge, batch D), f = eps (x^3 + 1 + 1/Sqrt[2])/Y on Y^2 = x^4 + x,
+       = eps (D Y/2 + (3/4 + 1/Sqrt[2])/Y): a nonzero holomorphic differential
+       on a genus-1 curve, not elementary */
+    BR_EQ("First[BronsteinIntegrate[1/(Sqrt[2 x] Sqrt[x^3 + 1]) + Sqrt[x^3 + 1]/Sqrt[x], x]]", "\"not elementary\"");
+    /* genuinely two radicals (a sum): still Incomplete */
+    BR_EQ("First[BronsteinIntegrate[1/Sqrt[2 x] + Sqrt[x^3 + 1], x]]", "\"implementation incomplete\"");
 }
 
 /* Adversarial review of 4.3b (2026-11-15): 14 false certificates from the

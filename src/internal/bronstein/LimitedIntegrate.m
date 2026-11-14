@@ -35,11 +35,18 @@ brIntegrateInK[T_Association, a_] := Module[{aS, G, q},
   If[Head[G] === Integrate`RischTranscendental || !FreeQ[G, brNonElementaryHeads[]],
     q = Quiet[Risch`ElementaryIntegralQ[aS, T["x"]]];
     Return[If[q === False, {"NonElementary"}, {"Unknown", "integral in k not decided"}]]];
-  If[!FreeQ[G, ArcTan | RootSum | Root | _Complex | ArcTanh],
+  (* over Q(i) (tragerConstantI) a Gaussian coefficient is a constant of the
+     field, and ArcTan / ArcTanh are logarithms there (TrigToExp, an identity
+     of the principal branches); a coefficient outside the constant field
+     (RootSum, Root, an irrational or inexact complex) is not decided here *)
+  If[TrueQ[tragerConstantI] && FreeQ[G, RootSum | Root] && FreeQ[G, c_Complex /; !brGaussianRationalQ[c]],
+    G = TrigToExp[G]];
+  If[!FreeQ[G, ArcTan | RootSum | Root | ArcTanh] || (!TrueQ[tragerConstantI] && !FreeQ[G, _Complex]) ||
+     !FreeQ[G, c_Complex /; !brGaussianRationalQ[c]],
     Return[{"Unknown", "integral in k with a non-rational logarithm"}]];
   {"Elementary", brFromSurface[T, G]}];
 
-brSplitLogs::usage = "brSplitLogs[T, G] writes G = g0 + Sum c_j Log[u_j] with g0 in the field of T, c_j rational constants and u_j depending on x or the symbols. It returns {g0, {{c_1, u_1}, ...}} or None when G is not of that form (a non-linear occurrence of a logarithm, a non-constant coefficient).";
+brSplitLogs::usage = "brSplitLogs[T, G] writes G = g0 + Sum c_j Log[u_j] with g0 in the field of T, c_j constants of the constant field (rational, or Gaussian rational over Q(i)) and u_j depending on x or the symbols. It returns {g0, {{c_1, u_1}, ...}} or None when G is not of that form (a non-linear occurrence of a logarithm, a non-constant coefficient).";
 brSplitLogs[T_Association, G_] := Module[{vars = Prepend[T["syms"], T["x"]], logs, L, e, cs, g0},
   logs = DeleteDuplicates[Cases[G, Log[u_] /; brDependsQ[u, vars], {0, Infinity}]];
   If[logs === {}, Return[If[brRationalInQ[G, vars], {Together[G], {}}, None]]];
@@ -48,7 +55,8 @@ brSplitLogs[T_Association, G_] := Module[{vars = Prepend[T["syms"], T["x"]], log
   If[!PolynomialQ[e, L] || Max[Exponent[e, #] & /@ L] > 1, Return[None]];
   cs = Coefficient[e, #, 1] & /@ L;
   g0 = Together[e /. Thread[L -> 0]];
-  If[!AllTrue[cs, FreeQ[#, Alternatives @@ Join[vars, L]] && FreeQ[#, _Complex] &], Return[None]];
+  If[!AllTrue[cs, FreeQ[#, Alternatives @@ Join[vars, L]] &&
+       (FreeQ[#, _Complex] || (TrueQ[tragerConstantI] && FreeQ[#, c_Complex /; !brGaussianRationalQ[c]])) &], Return[None]];
   If[!brRationalInQ[g0, vars], Return[None]];
   {g0, Transpose[{cs, First /@ logs}]}];
 

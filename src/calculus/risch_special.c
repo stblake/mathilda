@@ -428,6 +428,74 @@ Expr* rt_special_case(Expr* f, Expr* x) {
  * Integrate[(x^5-1) Log[x^2-x+1], x]) is a legitimate part of the answer, not a
  * decline.  At the bottom level we therefore accept the complete lower-field
  * antiderivative wholesale (s = R, c = 0).  The caller diff-back verifies. */
+/* The dependent-logarithm fold of limited integration.  When the integral R of
+ * r carries logarithms other than Log[u] literally, e.g. R = Log[x] for
+ * theta = Log[x^2], the limited-integration problem r = s' + c theta' may still
+ * be solvable: write R = S + L with S the log-free terms and L the terms with a
+ * logarithm, and test whether L' = c theta' for a constant c (Cancel[L'/eta]
+ * free of x).  Then L - c theta has derivative 0, so it is locally constant
+ * (Log[x] - Log[x^2]/2 is 0 or -I Pi on a half line), and dropping it changes
+ * the antiderivative coefficient only by a locally constant function, which
+ * leaves the coefficient recursion q_i' + (i+1) q_(i+1) eta = p_i intact.  This
+ * is exactly Bronstein's LimitedIntegrate with the one log derivative eta,
+ * decided by the derivative instead of by the syntax of the logarithm.
+ * S must be rational (free of Log and ArcTan) for the theta-coefficients above
+ * the bottom.  Returns 0 and sets *s_out / *c_out (owned) on success. */
+static int rt_limited_fold_dependent_log(Expr* r, Expr* x, Expr* u,
+                                         Expr** s_out, Expr** c_out) {
+    Expr* R = rt_eval_call("Integrate`BronsteinRational",
+        (Expr*[]){ expr_copy(r), expr_copy(x) }, 2);
+    if (!R) return -1;
+    if (rt_head_is(R, "Integrate`BronsteinRational")) { expr_free(R); return -1; }
+    Expr* Re = rt_eval1("Expand", R);
+    if (!Re) return -1;
+    size_t n = (Re->type == EXPR_FUNCTION && rt_head_is(Re, "Plus")) ? Re->data.function.arg_count : 1;
+    Expr** lt = malloc(n * sizeof(Expr*));
+    Expr** st = malloc(n * sizeof(Expr*));
+    size_t nl = 0, ns = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* t = (n == 1 && !(Re->type == EXPR_FUNCTION && rt_head_is(Re, "Plus")))
+            ? Re : Re->data.function.args[i];
+        if (rt_free_of_head(t, "Log") && rt_free_of_head(t, "ArcTan")) st[ns++] = expr_copy(t);
+        else lt[nl++] = expr_copy(t);
+    }
+    expr_free(Re);
+    int rc = -1;
+    if (nl == 0) {
+        /* No logarithm at all: s = R, c = 0 (the literal path declines this only
+         * when Log[u] itself was absent, which it is here). */
+        for (size_t i = 0; i < nl; i++) expr_free(lt[i]);
+        free(lt);
+        *s_out = rt_eval_own(expr_new_function(expr_new_symbol("Plus"), st, ns));
+        free(st);
+        *c_out = expr_new_integer(0);
+        return *s_out ? 0 : -1;
+    }
+    Expr* L = expr_new_function(expr_new_symbol("Plus"), lt, nl);
+    free(lt);
+    Expr* S = rt_eval_own(expr_new_function(expr_new_symbol("Plus"), st, ns));
+    free(st);
+    Expr* dL = rt_eval2("D", L, expr_copy(x));        /* adopts L */
+    Expr* eta = rt_eval2("D", expr_new_function(expr_new_symbol("Log"),
+        (Expr*[]){ expr_copy(u) }, 1), expr_copy(x));
+    if (S && dL && eta) {
+        Expr* c = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Together"),
+            (Expr*[]){ expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ dL, expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ eta, expr_new_integer(-1) }, 2) }, 2) }, 1));
+        dL = NULL; eta = NULL;
+        if (c && rt_free_of_x(c, x) && rt_free_of_head(c, "Log")) {
+            *s_out = S; *c_out = c; S = NULL; rc = 0;
+        } else if (c) {
+            expr_free(c);
+        }
+    }
+    if (dL) expr_free(dL);
+    if (eta) expr_free(eta);
+    if (S) expr_free(S);
+    return rc;
+}
+
 static int rt_limited_integrate(Expr* r, Expr* x, Expr* u, int is_bottom,
                                 Expr** s_out, Expr** c_out) {
     *s_out = NULL; *c_out = NULL;
@@ -455,6 +523,7 @@ static int rt_limited_integrate(Expr* r, Expr* x, Expr* u, int is_bottom,
     }
     expr_free(Rsub);
     expr_free(tsym);
+    if (rc != 0) rc = rt_limited_fold_dependent_log(r, x, u, s_out, c_out);
     return rc;
 }
 

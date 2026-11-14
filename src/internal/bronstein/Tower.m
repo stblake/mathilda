@@ -423,9 +423,76 @@ brCompositumRewrite[f_, x_Symbol] := Module[{ks, fs, monos, vars, pows, atoms, p
     "signs" -> MapThread[{#1, (Product[Sqrt[atoms[[i, 1]]], {i, #2[[1]]}]/#2[[2]]) /. toSurf} &, {epsSyms, epsKeys}]|>];
 
 brCompositumBack::usage = "brCompositumBack[rw, G] maps an expression G in the single radical B^(1/N) of the rewrite rw (brCompositumRewrite) back to the user's radicals: every B^r and (1/B)^r becomes y^(r N), y the product of the user's radicals with y^N = B. Since Y -> y is a differential embedding of Q(...)(Y), Y^N = B, the image of an antiderivative of g is an antiderivative of f.";
+brCompositumBack[rw_Association, G_] /; rw["B"] === None := G;
 brCompositumBack[rw_Association, G_] := Module[{B = rw["B"], N0 = rw["N"], y = rw["y"]},
   G /. {Power[b_, r_Rational] /; Together[b - B] === 0 :> y^(r N0),
         Power[b_, r_Rational] /; Together[b B - 1] === 0 :> y^(-r N0)}];
+
+brSignMerge::usage = "brSignMerge[f, x] is the front-end rewrite of square roots that are one radical only up to a locally constant sign (E6d, Lemma E6d.1: two functions A, C analytic and nonvanishing on a connected open set or interval with A^2 = C^2 have a constant ratio +-1). (a) A product of square roots Sqrt[b_1]^k_1 ... Sqrt[b_m]^k_m (k_i odd, b_i distinct, m >= 2) inside one Times becomes eps Prod b_i^((k_i - 1)/2) Sqrt[b_1 ... b_m]: TrigToExp writes ArcCosh[x] with Sqrt[x - 1] Sqrt[x + 1] beside the integrand's Sqrt[x^2 - 1] (G-trig-1). (b) A square root Sqrt[b_i] whose radicand is c b_j for another square-root radicand b_j and a NEGATIVE rational c becomes eps I Sqrt[-c] Sqrt[b_j] (G-nf-11: Sqrt[-x] beside Sqrt[x]; the constant field gains I). Each eps is a fresh symbol standing for the locally constant A/C. The rewrite is accepted only when it lowers the number of distinct radicands and leaves a cyclic Kummer group; it returns <|\"g\" -> g, \"signs\" -> {{eps, A/C}, ...}, \"B\" -> None, \"back\" -> {{P, A}, ...}|> for brIntegrateSignSplit (back: the merged radicand P with the user's expression A for Sqrt[P] on the region eps = 1, used only to present the answer), or None.";
+brSignMerge[f_, x_Symbol] := Module[{sqrtQ, nrad, g, signs = {}, epsFor, rads, cls, rule, h, cyc, back = {}},
+  sqrtQ[e_] := MatchQ[e, Power[b_, r_Rational] /; Denominator[r] === 2 && !FreeQ[b, x] && FreeQ[b, Power[_, _Rational] /; !FreeQ[b, x]]];
+  nrad[e_] := Length[DeleteDuplicates[Together[First[#]] & /@
+    Cases[e, Power[b_, _Rational] /; !FreeQ[b, x], {0, Infinity}],
+    Together[#1 - #2] === 0 || Together[#1 #2 - 1] === 0 &]];
+  If[nrad[f] < 2, Return[None]];
+  epsFor[a_, c_] := With[{key = Together[a/c]},
+    With[{old = SelectFirst[signs, #[[2]] === key &, None]},
+      If[old =!= None, old[[1]],
+        With[{e = Unique["Bronstein`Private`brSgn"]}, AppendTo[signs, {e, key}]; e]]]];
+  (* (a) products of square roots in one Times *)
+  g = f /. t_Times /; Count[List @@ t, _?sqrtQ] >= 2 :>
+    Module[{sq = Select[List @@ t, sqrtQ], rest = Select[List @@ t, !sqrtQ[#] &], A, C0, P, es, sqf},
+      (* b^r = b^(r - e/2) Sqrt[b]^e for e = +-1, so with A = Prod Sqrt[b_i]^e_i
+         and P = Prod b_i^e_i the product is Prod b_i^(r_i - e_i/2) eps Sqrt[P].
+         The orientations e tried: all +1 (1/(Sqrt[x] Sqrt[x + 1]) =
+         eps Sqrt[x^2 + x]/(x (x + 1))), then the signs of the exponents
+         (Sqrt[x - 1] Sqrt[x + 1]/Sqrt[x^2 - 1] = eps, P = 1).  A merged
+         radicand with a square factor keeps a hidden sign (Sqrt[(1 + x)^2])
+         whose own split is region-local, so a squarefree orientation is
+         preferred, and otherwise the square is taken out of the root
+         (brSquareFreeSqrt; review of batch D, class A1) *)
+      sqf[q_] := !AnyTrue[Join[tragerFactorList[Numerator[q]], tragerFactorList[Denominator[q]]],
+           !FreeQ[First[#], x] && Last[#] >= 2 &];
+      es = SelectFirst[{ConstantArray[1, Length[sq]], Sign[Last /@ sq]},
+        sqf[Together[Times @@ MapThread[First[#1]^#2 &, {sq, #}]]] &, ConstantArray[1, Length[sq]]];
+      A = Times @@ MapThread[Sqrt[First[#1]]^#2 &, {sq, es}];
+      P = Together[Times @@ MapThread[First[#1]^#2 &, {sq, es}]];
+      (* P = s^2 Q with Q squarefree: C = s Sqrt[Q], still A^2 = C^2, so ONE sign
+         eps = A/C and no hidden one (Sqrt[-1 - x] Sqrt[-x] Sqrt[x] Sqrt[1 + x]
+         = eps x (1 + x)) *)
+      C0 = brSquareFreeSqrt[P, x];
+      AppendTo[back, {Together[P], A}];
+      (Times @@ rest) (Times @@ MapThread[First[#1]^(Last[#1] - #2/2) &, {sq, es}]) epsFor[A, C0] C0];
+  (* (b) a square root of a negative rational multiple of another radicand *)
+  rads = DeleteDuplicates[Cases[g, p_?sqrtQ :> Together[First[p]], {0, Infinity}], Together[#1 - #2] === 0 &];
+  rule = {};
+  Do[If[FreeQ[rule, bi] ,
+      With[{bj = SelectFirst[rads, Function[b2, b2 =!= bi && FreeQ[rule[[All, 1]], b2] &&
+               With[{c = Together[bi/b2]}, rationalNumberQ[c] && c < 0]], None]},
+        If[bj =!= None, AppendTo[rule, bi -> {bj, Together[bi/bj]}]]]],
+    {bi, rads}];
+  If[rule =!= {},
+    g = g /. Power[b_, r_Rational] /; Denominator[r] === 2 && !FreeQ[b, x] &&
+         MemberQ[rule[[All, 1]], _?(Together[# - b] === 0 &)] :>
+      With[{bj = First[SelectFirst[rule, Together[#[[1]] - b] === 0 &][[2]]],
+            c = Last[SelectFirst[rule, Together[#[[1]] - b] === 0 &][[2]]]},
+        (AppendTo[back, {bj, Sqrt[b]/(I Sqrt[-c])}];
+         b^(r - 1/2) epsFor[Sqrt[b], I Sqrt[-c] Sqrt[bj]] I Sqrt[-c] Sqrt[bj])]];
+  If[signs === {} || nrad[g] >= nrad[f], Return[None]];
+  h = g /. ((#[[1]] -> 1) & /@ signs);
+  cyc = With[{pw = DeleteDuplicates[Cases[h, Power[b_, r_Rational] /; !FreeQ[b, x] :> {Together[b], r}, {0, Infinity}]]},
+    pw === {} || Length[DeleteDuplicates[First /@ pw, Together[#1 - #2] === 0 || Together[#1 #2 - 1] === 0 &]] === 1 ||
+      TrueQ[Quiet[brKummerCyclicQ[pw, {x}]]]];
+  If[!cyc, Return[None]];
+  <|"g" -> g, "signs" -> signs, "B" -> None, "back" -> DeleteDuplicates[back]|>];
+
+brSquareFreeSqrt::usage = "brSquareFreeSqrt[P, x] is s Sqrt[Q] with P = s^2 Q, s rational in x and Q squarefree in x (its constant content kept inside the root): a function C with C^2 = P whose radicand has no square factor, so that a sign eps = A/C (brSignMerge) carries no second, hidden sign.";
+brSquareFreeSqrt[P_, x_Symbol] := Module[{fl, s = 1, q = 1},
+  fl = Join[tragerFactorList[Numerator[Together[P]]], {#[[1]], -#[[2]]} & /@ tragerFactorList[Denominator[Together[P]]]];
+  Do[If[FreeQ[f[[1]], x], q = q f[[1]]^f[[2]],
+      s = s f[[1]]^Quotient[f[[2]], 2]; q = q f[[1]]^Mod[f[[2]], 2]], {f, fl}];
+  q = Together[q];
+  s Sqrt[Expand[Numerator[q]]/Expand[Denominator[q]]]];
 
 brRadicalOverXQ::usage = "brRadicalOverXQ[e, x] is True when every radical b^r (r non-integer) in e has a radicand b rational in x alone (no kernel, no other symbol, no nested radical): e is then in Q(x)(y) for the radicals of e.";
 brRadicalOverXQ[e_, x_Symbol] := AllTrue[

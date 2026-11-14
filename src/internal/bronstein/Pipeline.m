@@ -142,18 +142,83 @@ brIntegrateKappaSplit[f_, x_Symbol, rl_Association] := Module[{ks = rl["kappas"]
   (* No "kappa identically 0" shortcut: a zero test cannot prove it
      (PossibleZeroQ[Log[E^x] - x] is True, yet the difference is -2 Pi I for
      Im x in (Pi, 3 Pi]); every coefficient is integrated instead. *)
-  res = Map[{#[[1]], brCatch[brIntegrateBody[#[[2]], x]]} &, terms];
+  res = Block[{brInRegion = True}, Map[{#[[1]], brCatch[brIntegrateBody[#[[2]], x]]} &, terms]];
   If[AnyTrue[res, brFailQ[#[[2]]] &],
     With[{bad = SelectFirst[res, brFailQ[#[[2]]] &]},
       If[First[brFailTag[bad[[2]]]] =!= "NonElementary", Throw[bad[[2]], "TragerFail"]];
       (* a certificate needs one kappa, nonzero somewhere *)
       kap = ks[[1, 2]];
-      If[Length[ks] === 1 && brNonzeroSomewhereQ[kap, x],
-        throwNonElementary["reducible logarithm: a coefficient of the locally constant branch difference is not elementary (" <> brFailTag[bad[[2]]][[2]] <> ")"],
-        throwUnimplemented["Tower:reducible-log", "reducible logarithm: a coefficient is not elementary and the branch difference was not decided"]]]];
+      Which[
+        (* a certificate that holds on a region only cannot be lifted through
+           another region-local split (its region is not intersected with the
+           outer one: adversarial review of batch D, class A); and the
+           transcendence argument needs algebraic constants in every
+           coefficient (class B: Pi in a coefficient) *)
+        TrueQ[brInRegion],
+          throwUnimplemented["Tower:reducible-log", "reducible logarithm: a coefficient is not elementary and the branch difference was not decided (inside another region-local split)"],
+        Length[ks] === 1 && AllTrue[terms, brAlgebraicConstantsOnlyQ[#[[2]], x] &] && brNonzeroSomewhereQ[kap, x],
+          throwNonElementary["reducible logarithm: a coefficient of the locally constant branch difference is not elementary (" <> brFailTag[bad[[2]]][[2]] <> ")"],
+        (kap = brKappaRegionCertificate[ks, terms, x]) =!= None,
+          throwNonElementary["reducible logarithms: on the region where the branch differences are 2 Pi I " <> ToString[kap[[1]], InputForm] <>
+            ", the coefficient of (2 Pi I)^" <> ToString[kap[[2]]] <> " is not elementary (E6a.3)"],
+        True,
+          throwUnimplemented["Tower:reducible-log", "reducible logarithm: a coefficient is not elementary and the branch difference was not decided"]]]];
   F = Total[(#[[1]] /. (Rule @@@ ks)) #[[2]] & /@ res];
   If[!antiderivativeQ[f, F, x], throwInternal["KappaCheckFailed", <|"f" -> f, "F" -> F|>]];
   F];
+
+brInRegion::usage = "brInRegion is True while a region-local split (the sign split of E6d, the kappa split of E6a, the region coefficients of E6a.3) integrates its pieces. A certificate of such a split holds on a region only, so it may not be lifted through another one: inside, the region-local certificates are demoted to Unimplemented, and only the field certificates (which hold on every region by analytic continuation) pass through.";
+brInRegion = False;
+
+brAlgebraicConstantsOnlyQ::usage = "brAlgebraicConstantsOnlyQ[g, x] is True when the constants of g (its numeric subexpressions) are algebraic: no Pi, E as a constant, EulerGamma, Catalan, logarithm of a number or inexact number. The kappa certificates (Theorems E6a(3), E6a.3) need it: the transcendental constant kappa_0 or 2 Pi I must be transcendental over the constants of the coefficients.";
+brAlgebraicConstantsOnlyQ[g_, x_Symbol] := FreeQ[g, Pi | EulerGamma | Catalan | Khinchin | Glaisher | Degree | _Real] &&
+  FreeQ[g, Log[c_] /; NumericQ[c]] && FreeQ[g, Power[E, c_] /; NumericQ[c]] &&
+  FreeQ[g /. Power[E, a_] :> brExpPh[a], E] &&
+  FreeQ[g, (h_Symbol)[c__] /; NumericQ[{c}] && MemberQ[{Sin, Cos, Tan, Exp, ArcTan, Sinh, Cosh, Gamma, Zeta}, h]];
+
+brKappaUnitOrder::usage = "brKappaUnitOrder[kappa] is a positive integer M with M kappa in 2 Pi I Z, proved exactly, or None. kappa = Sum c_i Log[w_i] + r (c_i rational, r free of Log) is a locally constant branch difference, so E^kappa = Prod w_i^c_i E^r is a constant u; with N the lcm of the denominators of the c_i, u^N = Prod w_i^(N c_i) E^(N r) is a rational expression, simplified by Together, and when it is a root of unity of order k <= 24 (RootReduce[u^(N k)] === 1) then E^(N k kappa) = 1: M = N k. A kappa with a non-root-of-unity u (Log[2 x] - Log[x] = Log[2] + 2 Pi I m) gives None.";
+brKappaUnitOrder[kappa_] := Module[{e = Expand[kappa], ts, lg, rest, nn, u, k},
+  ts = If[Head[e] === Plus, List @@ e, {e}];
+  lg = Cases[ts, (c_. Log[w_]) /; rationalNumberQ[c] :> {c, w}];
+  rest = Total[Select[ts, FreeQ[#, Log] &]];
+  If[Length[lg] + Count[ts, _?(FreeQ[#, Log] &)] =!= Length[ts], Return[None]];
+  nn = LCM @@ (Denominator /@ Append[First /@ lg, 1]);
+  u = Together[(Times @@ (#[[2]]^(nn #[[1]]) & /@ lg)) E^(nn rest)];
+  If[!NumericQ[u] || !FreeQ[u, Log | E], Return[None]];
+  k = SelectFirst[Range[24], Quiet[RootReduce[u^#]] === 1 &, None];
+  If[k === None, None, nn k]];
+
+brKappaRegionCertificate::usage = "brKappaRegionCertificate[ks, terms, x] decides a non-elementary integrand f = Sum K^alpha g_alpha with one or several reducible logarithms (ks = {{K_j, kappa_j}}) when every kappa_j is a rational multiple of 2 Pi I (brKappaUnitOrder). On an open region (a complex sample point x0 where every kappa_j is stable under perturbations of 10^-6 in four directions) kappa_j = 2 Pi I q_j with q_j rational, so f = Sum_m (2 Pi I)^m G_m there, G_m = Sum_(|alpha| = m) q^alpha g_alpha (a constant Pi of a coefficient counted as (2 Pi I)/(2 I); every G_m must then have algebraic constants). Since 2 Pi I is transcendental (Lindemann) and the constants c for which Sum c_alpha g_alpha has an elementary integral form a vector space cut out by linear equations over the algebraic numbers (the parametric Risch problem, [B] Ch. 7), f is elementary on the region iff every G_m is (E6a, Theorem E6a.3). It returns {q, m} for the first region and degree with G_m non-elementary (proved by brIntegrateBody), or None.";
+brKappaRegionCertificate[ks_List, terms_List, x_Symbol] := Module[{Ks = First /@ ks, kap = Last /@ ks, ord, val, stable, pts, qs, G, r, H, Gs, T},
+  ord = brKappaUnitOrder /@ kap;
+  If[MemberQ[ord, None], Return[None]];
+  val[x0_] := Quiet[N[kap /. x -> x0, 30]];
+  stable[x0_, ds_] := With[{v0 = val[x0]}, AllTrue[v0, NumericQ] &&
+    AllTrue[ds, Function[d, With[{v1 = val[x0 + d]}, AllTrue[v1, NumericQ] && Max[Abs[v1 - v0]] < 10^-10]]]];
+  (* complex points only: a real point can sit on a cut, and a value taken
+     only on a cut never certifies (E6d-5, the convention of E6d) *)
+  pts = Select[{-3 + I/7, -1/3 - 2 I, 5/2 + 3 I, -7 - I/2, 1/3 + 7 I, -2 - 11 I, 3/5 + 23 I, -1 + 2 I, -2 - I, 1 - 3 I},
+    stable[#, {10^-6, -10^-6, 10^-6 I, -10^-6 I}] &];
+  qs = DeleteDuplicates[Map[Function[x0, MapThread[
+      With[{q = #1 #2/(2 Pi I)}, With[{qr = Round[q]}, If[Abs[q - qr] < 10^-10, qr/#2, $Failed]]] &, {val[x0], ord}]], pts]];
+  qs = Select[qs, FreeQ[#, $Failed] &];
+  (* on the region kappa_j = q_j T with T = 2 Pi I, and a constant Pi of a
+     coefficient is T/(2 I): f is a polynomial in T whose coefficients G_m
+     must have algebraic constants only (Theorem E6a.3; any other constant,
+     Pi alone being absorbed, refuses the certificate) *)
+  Do[
+    H = Expand[Total[(#[[1]] /. Thread[Ks -> q T]) (#[[2]] /. Pi -> T/(2 I)) & /@ terms]];
+    If[!PolynomialQ[H, T], Continue[]];
+    Gs = CoefficientList[H, T];
+    If[!AllTrue[Gs, brAlgebraicConstantsOnlyQ[#, x] &], Continue[]];
+    Do[
+      G = Together[Gs[[m + 1]]];
+      If[G === 0, Continue[]];
+      r = Block[{brInRegion = True}, brCatch[brIntegrateBody[G, x]]];
+      If[brFailQ[r] && First[brFailTag[r]] === "NonElementary", Return[{q, m}, Module]],
+      {m, 0, Length[Gs] - 1}],
+    {q, qs}];
+  None];
 
 brNonzeroSomewhereQ::usage = "brNonzeroSomewhereQ[kappa, x] is True when the locally constant kappa (a branch difference of logarithms) is numerically far from 0 at one of a few fixed complex sample points (some with large imaginary parts, where Log[E^x] - x is no longer 0): |kappa(x0)| > 1/10 at 30 digits. Its values are logarithms of algebraic numbers, a discrete set, so a value that large is not a rounding artefact.";
 brNonzeroSomewhereQ[kappa_, x_Symbol] := AnyTrue[{-3 + I/7, -1/3 - 2 I, 5/2 + 3 I, -7 - I/2, 1/3 + 7 I, -2 - 11 I, 3/5 + 23 I},
@@ -162,18 +227,27 @@ brNonzeroSomewhereQ[kappa_, x_Symbol] := AnyTrue[{-3 + I/7, -1/3 - 2 I, 5/2 + 3 
 brIntegrateSignSplit::usage = "brIntegrateSignSplit[f, x, rw] integrates f whose radicals are one radical only up to the locally constant signs eps_j = +-1 of rw[\"signs\"] (brCompositumRewrite, E6d): for every sign pattern s, f_s = g /. E_j -> s_j lies in one simple radical extension and is integrated (brIntegrateBody); when every F_s is elementary, Sum_s Prod_j (1 + s_j eps_j)/2 F_s is an antiderivative of f on every region (the product is the indicator of the region where eps = s; its derivative vanishes). A non-elementary f_s is a certificate when a sample point shows the pattern s (f = f_s on that region): brSignPatternSeenQ. Otherwise Tower:cyclic-compositum.";
 brIntegrateSignSplit[f_, x_Symbol, rw_Association] := Module[{syms = First /@ rw["signs"], epsE = Last /@ rw["signs"], pats, res, F},
   pats = Tuples[{1, -1}, Length[syms]];
-  res = Map[Function[sp, {sp, brCatch[brCompositumBack[rw, brIntegrateBody[Together[rw["g"] /. Thread[syms -> sp]], x]]]}], pats];
+  res = Block[{brInRegion = True}, Map[Function[sp, {sp, brCatch[brCompositumBack[rw, brIntegrateBody[Together[rw["g"] /. Thread[syms -> sp]], x]]]}], pats]];
   Do[
     If[brFailQ[r[[2]]],
       If[First[brFailTag[r[[2]]]] =!= "NonElementary", Throw[r[[2]], "TragerFail"]];
-      If[brSignPatternSeenQ[epsE, r[[1]], x],
+      If[!TrueQ[brInRegion] && brSignPatternSeenQ[epsE, r[[1]], x],
         throwNonElementary["radicals equal up to a locally constant sign: the integrand on the region of sign pattern " <>
           ToString[r[[1]]] <> " is not elementary (" <> brFailTag[r[[2]]][[2]] <> ")"],
         throwUnimplemented["Tower:cyclic-compositum", "radicals equal up to a sign: a non-elementary sign pattern not seen at a sample point"]]],
     {r, res}];
   F = Total[Function[r, (Times @@ MapThread[(1 + #1 #2)/2 &, {r[[1]], epsE}]) r[[2]]] /@ res];
   If[!antiderivativeQ[f, F, x], throwInternal["SignSplitCheckFailed", <|"f" -> f, "F" -> F|>]];
-  F];
+  brSignPresent[f, F, res, rw, x]];
+
+brSignPresent::usage = "brSignPresent[f, F, res, rw, x] presents the verified sign-split antiderivative F = Sum_s Prod_j (1 + s_j eps_j)/2 F_s of f: when rw carries the merged radicals of brSignMerge (\"back\": Sqrt[P] = A on the region eps = 1), the candidates G and eps G, G = F_s with Sqrt[P] written back as the user's A, and eps the sign itself, are tried smallest first; the first one that antiderivativeQ confirms against f (bounded by brPresentationTime[]) replaces F (Int ArcCosh[x]/Sqrt[x^2 - 1] = eps ArcCosh[x]^2/2 with eps = Sqrt[x - 1] Sqrt[x + 1]/Sqrt[x^2 - 1]). Otherwise F.";
+brSignPresent[f_, F_, res_List, rw_Association, x_Symbol] := Module[{bk = Lookup[rw, "back", {}], epsE = Last /@ rw["signs"], toA, cands},
+  If[bk === {} || Length[epsE] =!= 1, Return[F]];
+  toA[G_] := G /. Power[b_, r_Rational] /; Denominator[r] === 2 && MemberQ[bk[[All, 1]], _?(Together[# - b] === 0 &)] :>
+    With[{A = SelectFirst[bk, Together[#[[1]] - b] === 0 &][[2]]}, b^(r - 1/2) A];
+  cands = SortBy[DeleteDuplicates[Flatten[Function[r, With[{G = toA[r[[2]]]}, {G, epsE[[1]] G}]] /@ res]], LeafCount];
+  cands = Select[cands, LeafCount[#] < LeafCount[F] &];
+  SelectFirst[cands, TrueQ[Quiet[TimeConstrained[antiderivativeQ[f, #, x], brPresentationTime[], False]]] &, F]];
 
 brSignPatternSeenQ::usage = "brSignPatternSeenQ[eps, s, x] is True when the locally constant signs eps (expressions with values +-1) take the values s on an OPEN region: at one of a few fixed complex sample points x0 every radicand of eps is off its branch cut (-Infinity, 0] and the same values s are taken at four perturbations x0 +- 10^-6, x0 +- 10^-6 I (so x0 is off every cut, the tower's kernels' included). A point ON a cut does not count: there a product of principal radicals can take a value that no open region has (Sqrt[x + 1] Sqrt[1/(x + 1)] = -1 only for x < -1). Values at 30 digits; they are +-1 exactly, so a distance below 1/10 identifies them.";
 brSignPatternSeenQ[eps_List, s_List, x_Symbol] := Module[{rads, at, offCut},
@@ -239,7 +313,9 @@ brPresentationTime::usage = "brPresentationTime[] is the time the real-form pres
 brPresentationTime[] := With[{left = Internal`TimeConstrainedRemaining[]},
   If[NumericQ[left], Min[brOption["PresentationTime"], Max[left/3, 0.01]], brOption["PresentationTime"]]];
 
-BronsteinScope[f_, x_Symbol] := With[{g = tragerExtractRadicalContent[brTrigFrontEnd[f], x]},
+BronsteinScope[f_, x_Symbol] := With[{g = With[{g0 = tragerExtractRadicalContent[brTrigFrontEnd[f], x]},
+    With[{sm = brCatch[brSignMerge[g0, x]]},
+      If[sm === None || brFailQ[sm], g0, sm["g"] /. ((#[[1]] -> 1) & /@ sm["signs"])]]]},
   Block[{tragerConstantI = brConstantField[g] === "QI", tragerAlgConstants = brAlgConstantsOf[g]}, brScopeBody[g, x]]];
 
 brTrigFrontEnd::usage = "brTrigFrontEnd[f] is f with its trigonometric and hyperbolic functions and their inverses rewritten by TrigToExp into exponentials and logarithms (ArcSin[x] -> -I Log[I x + Sqrt[1 - x^2]]: a logarithm plus the radical), an identity on every branch the CAS uses; f itself when it has none of them (Phase 4.2).";
@@ -286,15 +362,22 @@ brAlgebraicConstantQ[c_] := NumericQ[c] &&
   FreeQ[c, Power[b_, e_] /; ! (rationalNumberQ[e] && (rationalNumberQ[b] || NumericQ[b]))] &&
   With[{cr = Quiet[RootReduce[c]]}, cr === 0 || (NumericQ[cr] && cr =!= ComplexInfinity && FreeQ[cr, Indeterminate])];
 
-BronsteinIntegrate[f_, x_Symbol] := Module[{r, gt = brTrigFrontEnd[f], g},
+BronsteinIntegrate[f_, x_Symbol] := Module[{r, gt = brTrigFrontEnd[f], g, sm},
   (* radicals equal over a larger constant field (Sqrt[2 x] = Sqrt[2] Sqrt[x]):
      positive rational contents pulled out, an identity (Phase 4.3b C7) *)
   g = tragerExtractRadicalContent[gt, x];
   (* the trigonometric front end (Phase 4.2): TrigToExp is an identity, so a
      certificate for g is one for f; the constant field is that of g (Q(i)
      when TrigToExp brought in I, Phase 4.1) *)
-  r = Block[{tragerConstantI = brConstantField[g] === "QI", tragerAlgConstants = brAlgConstantsOf[g]},
-    brCatch[brIntegrateBody[g, x]]];
+  (* square roots equal up to a locally constant sign (G-trig-1, G-nf-11):
+     brSignMerge writes them over one radical with sign symbols, and the
+     sign split integrates every pattern over the constant field of the
+     rewritten integrand (Q(i) when Sqrt[-x] = eps I Sqrt[x] brought in I) *)
+  sm = brCatch[brSignMerge[g, x]];
+  If[brFailQ[sm], sm = None];
+  r = With[{g1 = If[sm === None, g, sm["g"] /. ((#[[1]] -> 1) & /@ sm["signs"])]},
+    Block[{tragerConstantI = brConstantField[g1] === "QI", tragerAlgConstants = brAlgConstantsOf[g1]},
+      brCatch[If[sm === None, brIntegrateBody[g, x], brPresentable[g, brIntegrateSignSplit[g, x, sm], x]]]]];
   (* r is verified against g inside the pipeline, and g = TrigToExp[f] is an
      identity; a second numeric check against the trigonometric form only adds
      noise (Int Sqrt[Tan[x]]: the Root-laden answer is numerically unstable at
