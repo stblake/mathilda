@@ -20,10 +20,15 @@
 (* ========================================================================== *)
 
 brFieldOver::usage = "brFieldOver[vars, F0] is the residue field F0 (fieldQ or fieldNF) extended by the transcendentals vars: fieldFn[vars] or fieldFn[vars, {t, mu, theta}], carrying F0's representation of i when it has one (constant field Q(i)).";
-brFieldOver[vars_List, F0_Association] := Which[
-  F0["Type"] =!= "NF", fieldFn[vars],
-  KeyExistsQ[F0, "I"], fieldFn[vars, {F0["t"], F0["mu"], F0["theta"], F0["I"]}],
-  True, fieldFn[vars, {F0["t"], F0["mu"], F0["theta"]}]];
+brFieldOver[vars_List, F0_Association] := Module[{F},
+  F = Which[
+    F0["Type"] =!= "NF", fieldFn[vars],
+    KeyExistsQ[F0, "I"], fieldFn[vars, {F0["t"], F0["mu"], F0["theta"], F0["I"]}],
+    True, fieldFn[vars, {F0["t"], F0["mu"], F0["theta"]}]];
+  (* the radical constants' representations travel with the field (Phase
+     4.3b): fieldSubI writes literal constants of k-data in its generator *)
+  If[F0["Type"] === "NF" && KeyExistsQ[F0, "consts"], F = Append[F, "consts" -> F0["consts"]]];
+  F];
 
 brResidueSetup::usage = "brResidueSetup[T, cv, c, nr] gathers the data of the log part of the normal component c Y whose nonzero-residue polynomial is nr[\"P\"] (brNormalResidues): <|\"F0\" -> residue field over Q (fieldQ or fieldNF), \"Fk\" -> the same over k (fieldFn), \"roots\" -> residues (elements of F0), \"basis\" -> Q-basis beta_j, \"coeffs\" -> b, \"N\", \"E\", \"Ep\", \"Bp\" (residue data in theta), \"B\" -> the integral basis descriptor, \"vars\" -> {x, lower...}|>.";
 brResidueSetup[T_Association, cv_Association, c_, nr_Association] := Module[

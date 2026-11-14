@@ -96,15 +96,10 @@ bronsteinOpenGaps = {
 <|"id" -> "G-nf-3", "area" -> "Bronstein", "gap" -> "certificates over a number field are demoted (NF:certificate): Trager's base field is fieldQ with Expand, exact for Gaussian rationals but not for radicals (1/(1 + Sqrt[2]) is not rationalised)",
   "kind" -> "Integrate", "f" -> Hold[Sqrt[Sqrt[2] + Log[x]]], "current" -> "incomplete", "budget" -> 60,
   "followup" -> "Phase 4.3b: the constant field as fieldNF[t, mu, gamma] through Trager's integrateComponent and Bronstein's k arithmetic", "source" -> "Phase 4.3"|>,
-<|"id" -> "G-nf-5", "area" -> "Bronstein", "gap" -> "Internal brPointPlaceNotOnCurve: a special place over a number field (radical constant in the radicand of an exponential tower)",
-  "kind" -> "Integrate", "f" -> Hold[Sqrt[E^x + Sqrt[3]]], "current" -> "internal", "budget" -> 60,
-  "followup" -> "the special-place ideals with fieldSubI over a field containing the constants", "source" -> "Phase 4.3 battery"|>,
 <|"id" -> "G-nf-6", "area" -> "Trager", "gap" -> "torsion over a number field: decided at degree-1 primes of the constant field since v0.6559 (orders mod 17 and 71 disagree), but the certificate is still demoted (NF:certificate)",
   "kind" -> "Integrate", "f" -> Hold[1/((x - Sqrt[2]) Sqrt[x^3 + 1])], "current" -> "incomplete", "budget" -> 60,
   "followup" -> "Phase 4.3b C3/C6/C8: exact residue/log fields over K0, then remove the demotion after an adversarial review", "source" -> "Phase 4.3"|>,
-<|"id" -> "G-nf-9", "area" -> "Bronstein", "gap" -> "Internal errors with radical constants at special places / log parts (brComponentIdentity, brHermiteDenominatorNotCoprime, brResultantRZero, brCanonicalFormNotRational)",
-  "kind" -> "Integrate", "f" -> Hold[Together[D[Log[Sqrt[E^x + 2] + Sqrt[2]], x]]], "current" -> "internal", "budget" -> 60,
-  "followup" -> "Phase 4.3b: field-aware arithmetic over Q(constants)", "source" -> "review of Phase 4.3"|>
+
 };
 
 openGapsStructural = {

@@ -66,6 +66,35 @@ static void test_nf_base_field(void) {
              "Log[Sqrt[x^3 + Sqrt[2]] + x], x]], x]], {\"not elementary\", _}]");
 }
 
+/* Phase 4.3b C3: residue and log fields above the constant field */
+static void test_nf_residue_fields(void) {
+    /* without constants in use: the relative presentation, generator kept */
+    BR_EQ("Block[{tragerAlgConstants = {}}, fieldOfRoot[Z^2 - 2, Z, Z][\"gamma\"]]", "Z");
+    BR_EQ("Block[{tragerAlgConstants = {}}, fieldOfRoot[Z^2 - Sqrt[2], Z, Z][\"F\"][\"mu\"]]", "-Sqrt[2] + Z^2");
+    /* with Sqrt[2] in use: the absolute field Q(2^(1/4)), Sqrt[2] recorded */
+    BR_TRUE("Block[{tragerAlgConstants = {Sqrt[2]}}, With[{fr = fieldOfRoot[Z^2 - Sqrt[2], Z, t]}, "
+            "Exponent[fr[\"F\"][\"mu\"], t] === 4 && kc[fr[\"F\"], fr[\"gamma\"]^2 - Sqrt[2]] === 0]]");
+    BR_TRUE("Block[{tragerAlgConstants = {Sqrt[2]}}, KeyExistsQ[fieldOfRoot[Z^2 - Sqrt[2], Z, t][\"F\"], \"consts\"]]");
+    /* the constant field as a number field, and the canonical form over it */
+    BR_TRUE("Block[{tragerAlgConstants = {Sqrt[2]}}, With[{F = constNF[]}, Exponent[F[\"mu\"], F[\"t\"]] === 2]]");
+    BR_EQ("Block[{tragerAlgConstants = {Sqrt[2]}}, With[{d = -1/3*1/Sqrt[2] + (2*Sqrt[2])/27}, "
+          "kcConstQ[1 + 1/(3 Sqrt[2] d) - 2 Sqrt[2]/(27 d)]]]", "0");
+    BR_TRUE("Block[{tragerAlgConstants = {Sqrt[2]}}, With[{r = kcConstQ[x/(1 + Sqrt[2]) + 3]}, "
+            "FreeQ[Denominator[Together[r]], Sqrt[2]] && PossibleZeroQ[r - x/(1 + Sqrt[2]) - 3]]]");
+    BR_EQ("Block[{tragerAlgConstants = {Sqrt[2]}}, kc[fieldQ[], (x + 1)^2]]", "1 + 2 x + x^2");
+    /* integrands whose residue orbits carry the constant */
+    BR_ANTIDERIV("Together[D[Log[Sqrt[x^2 + 1] + x + Sqrt[2]], x]]", "Bronstein");
+    BR_ANTIDERIV("Together[D[Log[Sqrt[x^3 + 1] + Sqrt[2] x + 1], x]]", "Bronstein");
+    BR_ANTIDERIV("Together[D[Log[Sqrt[x^4 + 1] + Sqrt[2] x], x]]", "Bronstein");
+    BR_ANTIDERIV("Together[D[Log[Sqrt[E^x + 2] + Sqrt[2]], x]]", "Bronstein");
+    BR_ANTIDERIV("Sqrt[E^x + Sqrt[3]]", "Bronstein");
+    BR_ANTIDERIV("Together[D[2^(1/3) Log[(x^3 + 1)^(1/3) + 2^(1/3) x], x]]", "Bronstein");
+    /* the generator-rename trap: an orbit over Q(i) whose factor carries Sqrt[2] */
+    BR_ANTIDERIV("(1 + I) Sqrt[x]/(x^2 + I)", "Bronstein");
+    /* trace shortcut: no verdict over a number field of radical constants */
+    BR_EQ("Block[{tragerAlgConstants = {Sqrt[2]}}, traceCertificate[<|\"Z\" -> z, \"R\" -> z^2 - 2|>]]", "Null");
+}
+
 static void test_nf_integrals(void) {
     BR_ANTIDERIV("Sqrt[2] Sqrt[Log[x]]/x", "Bronstein");
     BR_ANTIDERIV("Sqrt[x + Sqrt[2]]/x", "Bronstein");
@@ -96,6 +125,7 @@ int main(void) {
     br_init();
     test_nf_primitives();
     test_nf_base_field();
+    test_nf_residue_fields();
     test_nf_integrals();
     BR_DONE("bronstein_nf_tests");
     return 0;

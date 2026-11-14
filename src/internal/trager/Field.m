@@ -165,10 +165,21 @@ fieldConstRep[F_Association, c_] := Module[{hit = c /. F["consts"], nf},
   algebraicToPoly[nf, F["theta"], F["t"]]];
 
 kc[F_Association, e_] := Switch[F["Type"],
-  "Q", Expand[e],
+  "Q", If[tragerAlgConstants === {} || FreeQ[e, Power[b_, _Rational] /; rationalNumberQ[b]], Expand[e], kcConstQ[e]],
   "NF", Expand[PolynomialRemainder[Expand[fieldSubI[F, e]], F["mu"], F["t"]]],
   "GF", gfMod[e, F["p"]],
   "Fn", kcFn[F, e]];
+
+constNF::usage = "constNF[] is the constant field Q(constants) of the radical constants in use (and I under Q(i)) as a number field fieldNF[g, mu, gamma] carrying the constants' representations (\"consts\", \"I\"): gfConstField[tragerExtension[]] in the form the field layer takes (Phase 4.3b).";
+constNF[] := Module[{cf = gfConstField[tragerExtension[]], F},
+  F = fieldNF[cf["g"], cf["mu"], cf["theta"]];
+  F = Append[F, "consts" -> Select[cf["reps"], #[[1]] =!= I &]];
+  If[MemberQ[First /@ cf["reps"], I], F = Append[F, "I" -> (I /. cf["reps"])]];
+  F];
+
+kcConstQ::usage = "kcConstQ[e] is the canonical form over Q of an expression e whose coefficients carry radical constants, the base field being really Q(constants) (Phase 4.3b): the constants written in the primitive element g of constNF[], the normal form over Q[g]/(mu) (rc: a denominator in g is rationalised by its norm), and g mapped back to gamma. Zero, and only zero, maps to 0; Expand alone left 1 + 1/(3 Sqrt[2] d) - 2 Sqrt[2]/(27 d) (= 0) unreduced, and Normalize.m saw no progress.";
+kcConstQ[e_] := Module[{F = constNF[]},
+  Expand[rc[F, e] /. F["t"] -> F["theta"]]];
 
 fnInvertT::usage = "fnInvertT[F, num, den] is {num', den'} with num'/den' = num/den over the extension field F (fieldFn with t, or fieldNF) and den' free of t: the t-part of den is inverted modulo mu(t) by the extended Euclidean algorithm over the rational functions in the other symbols. A den that is a zero divisor modulo mu (not possible over a field: mu is irreducible) is an internal error.";
 fnInvertT[F_Association, num_, den_] := Module[{t = F["t"], eg, tt},

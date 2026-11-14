@@ -1592,7 +1592,7 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
         - [x] C2 (part) base-field ops over K0 via Extension -> Automatic (tragerSquareFreeList/Together/GCD, rc[fieldQ]) — v0.6559
         - [ ] C2 rest: integrateComponent F = F0; hermiteReduce[F, B, f] / hermiteSolve via kGCD/kExtGCD/kDivRem;
               squarefree over K0 (Yun with kGCD); afInverse[F, B, a]; regularAtInfinityQ; rationalIntegral over K0
-        - [ ] C3 residue/log fields relative to K0: traceCertificateAt / tragerOrbitLogTerms / kauersTraceNF / brOrbitTerm build
+        - [x] C3 residue/log fields relative to K0 — v0.6562 (fieldOfRoot, kcConstQ/constNF, brFieldOver consts, trace shortcut off). Was: traceCertificateAt / tragerOrbitLogTerms / kauersTraceNF / brOrbitTerm build
               ABSOLUTE fields (residueField-style ToNumberField over q's roots + constants), never fieldNF[Z, q] with radical
               coefficients; residueFieldTower carries "consts"; factorOverField over a field containing K0
         - [ ] C4 monic normalisation over K0 at every FactorList / PolynomialGCD (G-nf-8)

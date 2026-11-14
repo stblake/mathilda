@@ -131,5 +131,6 @@ normalizeAtInfinity[F_Association, B_Association, M0_List, den_, x_Symbol] := Mo
     newRow = Sum[c[[i]] x^(ks[[i]] - ks[[i0]]) M[[i]], {i, nz}];
     M[[i0]] = kc[F, #] & /@ newRow;
     data[[i0]] = rowInfData[F, B, M[[i0]], den];
-    If[data[[i0, 1]] <= ks[[i0]], throwInternal["normalizeAtInfinityNoProgress"]]];
+    If[data[[i0, 1]] <= ks[[i0]], throwInternal["normalizeAtInfinityNoProgress",
+      <|"F" -> F, "rows" -> M, "k" -> ks, "den" -> den, "c" -> c, "new" -> data[[i0]]|>]]];
   <|"rows" -> M, "k" -> ks|>];

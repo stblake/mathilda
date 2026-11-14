@@ -1145,6 +1145,24 @@ and 71 disagree. Its certificate stays demoted until the residue and log
 fields above $K_0$ are exact as well (steps C3 and C6) and the whole path has
 had an adversarial review (C8).
 
+
+\paragraph{Residue and log fields above $K_0$ (v0.6562).} A residue factor $q$
+whose coefficients carry the constants has roots generating
+$K_0(\alpha)$. The relative presentation $\Q[Z]/(q)$ treats the literal
+constants as numbers, and $1/(1+\sqrt2)$ is never rationalised, so a zero can
+read as non-zero. The field of one root is therefore built \emph{absolute},
+$\Q(\alpha,c_1,\dots,c_r)=\Q(\delta)$ with $\delta$ a primitive element, and
+the constants' representations are recorded so that every literal constant is
+written in $\delta$ (\code{fieldOfRoot}). The same holds for the canonical form
+over the base: while constants are in use, \code{kc[fieldQ[], e]} is the normal
+form in the primitive element of $K_0$, with denominators rationalised by the
+norm (\code{kcConstQ}).
+
+The trace shortcut of [T] divides $\operatorname{Tr}_{\Q(\gamma)/\Q}$ by the
+relative degree. That is valid when $\Q(\gamma)$ is an extension of $\Q$ of
+that degree, not of $K_0$, so it gives no verdict over $K_0\ne\Q$, as already
+over $\Q(i)$; the complete construction decides instead.
+
 \part*{Part C. The gap log: what each extension closes}
 \addcontentsline{toc}{part}{Part C}
 

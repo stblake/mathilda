@@ -99,6 +99,10 @@ traceCertificate[ctx_Association] := Module[{Z = ctx["Z"], qs},
      elementary by Chebyshev, was certified NOT elementary).  This shortcut
      gives no verdict over Q(i); the complete construction follows. *)
   If[TrueQ[tragerConstantI], Return[Null]];
+  (* the same over a number field of radical constants (Phase 4.3b): the
+     functional below divides traces by the RELATIVE degree, justified only
+     over Q; no verdict here, the complete construction decides *)
+  If[tragerAlgConstants =!= {}, Return[Null]];
   qs = SortBy[Expand[#/Coefficient[#, Z, Exponent[#, Z]]] & /@ (First /@ Select[tragerFactorList[ctx["R"]], !FreeQ[#[[1]], Z] &]),
     Exponent[#, Z] &];
   Do[traceCertificateAt[ctx, q, qs], {q, qs}]];

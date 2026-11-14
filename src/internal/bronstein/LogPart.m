@@ -96,8 +96,11 @@ brOrbitTerm[T_Association, cv_Association, rd_Association, nr_Association, q_, r
   {z = nr["z"], m = cv["m"], B = rd["B"], t = Unique["Bronstein`Private`brTo"], ext, F0, Fk, g, rs, kappa, spec, Nq, I, u, coef, Lp, D},
   ext = Exponent[q, z] > 1;
   If[ext,
-    F0 = fieldNF[t, q /. z -> t, None];
-    Fk = fieldFn[rd["vars"], {t, q /. z -> t, Root[Function[Evaluate[q /. z -> #]], 1]}]; g = t,
+    If[tragerAlgConstants === {} || FreeQ[q, Power[b_, _Rational] /; rationalNumberQ[b]],
+      F0 = fieldNF[t, q /. z -> t, None];
+      Fk = fieldFn[rd["vars"], {t, q /. z -> t, Root[Function[Evaluate[q /. z -> #]], 1]}]; g = t,
+      (* radical constants in q (Phase 4.3b): the absolute field of one root *)
+      With[{fr = fieldOfRoot[q, z, t]}, F0 = fr["F"]; Fk = brFieldOver[rd["vars"], F0]; g = fr["gamma"]]],
     F0 = fieldQ[]; Fk = fieldFn[rd["vars"]]; g = -Coefficient[q, z, 0]];
   rs = Join[rd, <|"F0" -> F0, "Fk" -> Fk, "roots" -> {g}|>];
   kappa = brPlaceDegree[rs, g];

@@ -213,5 +213,17 @@ bronsteinPaperExamples = {
   "before" -> "a false verdict (demoted): FactorSquareFreeList over Q saw no repeated factor", "note" -> "squarefree decomposition over Q(2^(1/3)); answer 3 (x - 2^(1/3))^(1/3)"|>,
 <|"id" -> "E43b-2", "gap" -> "Trager:base-field-NF", "theory" -> "E4.3b", "version" -> "v0.6559",
   "kind" -> "Integrate", "f" -> Hold[Together[D[Sqrt[x^3 + Sqrt[2]] + Log[Sqrt[x^3 + Sqrt[2]] + x], x]]], "expect" -> "elementary",
-  "before" -> "a false verdict (demoted): Together over Q left a cancellation needing Sqrt[2]^2 = 2", "note" -> "genus 1 over Q(Sqrt[2]): Hermite over Q(Sqrt[2]), torsion at degree-1 primes of Q(Sqrt[2])"|>
+  "before" -> "a false verdict (demoted): Together over Q left a cancellation needing Sqrt[2]^2 = 2", "note" -> "genus 1 over Q(Sqrt[2]): Hermite over Q(Sqrt[2]), torsion at degree-1 primes of Q(Sqrt[2])"|>,
+<|"id" -> "E43b-3", "gap" -> "Trager:residue-field-NF", "theory" -> "E4.3b", "version" -> "v0.6562",
+  "kind" -> "Integrate", "f" -> Hold[Together[D[Log[Sqrt[x^2 + 1] + x + Sqrt[2]], x]]], "expect" -> "elementary",
+  "before" -> "internal (normalizeAtInfinityNoProgress: a zero coefficient over Q(Sqrt[2]) unreduced)", "note" -> "canonical form over Q(constants) via the primitive element (kcConstQ)"|>,
+<|"id" -> "E43b-4", "gap" -> "Trager:residue-field-NF", "theory" -> "E4.3b", "version" -> "v0.6562",
+  "kind" -> "Integrate", "f" -> Hold[Together[D[Log[Sqrt[x^3 + 1] + Sqrt[2] x + 1], x]]], "expect" -> "elementary",
+  "before" -> "internal (kExactQuoRemainder)", "note" -> "genus 1, a residue orbit over Q(Sqrt[2])"|>,
+<|"id" -> "E43b-5", "gap" -> "LogPart:residue-field-NF", "theory" -> "E4.3b", "version" -> "v0.6562",
+  "kind" -> "Integrate", "f" -> Hold[Sqrt[E^x + Sqrt[3]]], "expect" -> "elementary",
+  "before" -> "internal (brPointPlaceNotOnCurve)", "note" -> "Shape A over Q(Sqrt[3]): the residue field of one root is absolute, constants recorded (fieldOfRoot)"|>,
+<|"id" -> "E43b-6", "gap" -> "LogPart:residue-field-NF", "theory" -> "E4.3b", "version" -> "v0.6562",
+  "kind" -> "Integrate", "f" -> Hold[Together[D[Log[Sqrt[E^x + 2] + Sqrt[2]], x]]], "expect" -> "elementary",
+  "before" -> "internal (brComponentIdentity)", "note" -> "the constants' representations travel with k(theta) (brFieldOver keeps \"consts\")"|>
 };

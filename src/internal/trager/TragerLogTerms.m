@@ -145,7 +145,8 @@ tragerOrbitLogTerms[ctx0_Association] := Module[
       Module[{qm = Expand[q/Coefficient[q, Z, Exponent[q, Z]]], K, gamma, octx, I0, kappa, spec, scale, Nq, r},
         If[Exponent[qm, Z] === 1,
           K = fieldQ[]; gamma = -Coefficient[qm, Z, 0],
-          K = fieldNF[Z, qm, None]; gamma = Z];
+          (* the generator is Z itself, as the orbit construction below assumes *)
+          With[{fr = fieldOfRoot[qm, Z, Z]}, K = fr["F"]; gamma = fr["gamma"]]];
         I0 = residueIdeal[K, B, gamma, ctx["N"], ctx["Ep"], ctx["Bp"]];
         kappa = idealDegree[K, B, I0];
         If[ctx["alpha"] =!= None,

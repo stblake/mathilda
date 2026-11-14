@@ -5364,3 +5364,9 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   tag only after `git log -1` shows the commit, in a separate call.
 - Related: a binary older than its source after `git checkout` (make missed the timestamp) let a reverted change keep
   running for an hour. After any checkout of a C file, `touch` it and check `ls -l file.c file.o`.
+
+## 2026-11-14: a renamed field generator gave a false certificate
+- tragerOrbitLogTerms built K = fieldNF[Z, q, None] with gamma = Z, and code below it relies on the generator being Z.
+  Passing a fresh symbol to the new fieldOfRoot made (1 + I) Sqrt[x]/(x^2 + I) "not elementary" over Q(i), and only the
+  paper corpus (E41-4) caught it. Rule: when replacing a field constructor, keep the generator symbol the caller used,
+  and run the paper corpus (certificate paths) before the unit suites.
