@@ -294,7 +294,7 @@ BronsteinIntegrate[f_, x_Symbol] := Module[{r, gt = brTrigFrontEnd[f], g},
      certificate for g is one for f; the constant field is that of g (Q(i)
      when TrigToExp brought in I, Phase 4.1) *)
   r = Block[{tragerConstantI = brConstantField[g] === "QI", tragerAlgConstants = brAlgConstantsOf[g]},
-    nfDemoteCertificate[brCatch[brIntegrateBody[g, x]]]];
+    brCatch[brIntegrateBody[g, x]]];
   (* r is verified against g inside the pipeline, and g = TrigToExp[f] is an
      identity; a second numeric check against the trigonometric form only adds
      noise (Int Sqrt[Tan[x]]: the Root-laden answer is numerically unstable at

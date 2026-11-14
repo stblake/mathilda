@@ -243,5 +243,11 @@ bronsteinPaperExamples = {
   "before" -> "implementation incomplete (open-gap register G-nf-2)", "note" -> "Sqrt[2 x] = Sqrt[2] Sqrt[x] on every branch: one radical over Q(Sqrt[2])"|>,
 <|"id" -> "E43b-12", "gap" -> "Tower:cyclic-compositum", "theory" -> "E4.3b", "version" -> "v0.6564",
   "kind" -> "Integrate", "f" -> Hold[Sqrt[2 x + 2] Sqrt[x + 1] Log[x]], "expect" -> "elementary",
-  "before" -> "implementation incomplete", "note" -> "a positive rational content pulled out of the radicand: the product is rational"|>
+  "before" -> "implementation incomplete", "note" -> "a positive rational content pulled out of the radicand: the product is rational"|>,
+<|"id" -> "E43b-13", "gap" -> "NF:certificate", "theory" -> "E4.3b", "version" -> "v0.6566",
+  "kind" -> "Integrate", "f" -> Hold[Sqrt[Sqrt[2] + Log[x]]], "expect" -> "nonelementary",
+  "before" -> "implementation incomplete (every number-field verdict demoted)", "note" -> "a certificate over Q(Sqrt[2]): no algebraic part ([B] Prop 2.15/2.18), the Risch DE solved over k(K0)"|>,
+<|"id" -> "E43b-14", "gap" -> "NF:certificate", "theory" -> "E4.3b", "version" -> "v0.6566",
+  "kind" -> "Integrate", "f" -> Hold[1/((x - Sqrt[2]) Sqrt[x^3 + 1])], "expect" -> "nonelementary",
+  "before" -> "implementation incomplete (open-gap register G-nf-6)", "note" -> "torsion at degree-1 primes of Q(Sqrt[2]): the orders mod 17 and 71 disagree; cross-checked by the group law (no torsion up to 1000, bound 18)"|>
 };

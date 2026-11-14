@@ -29,9 +29,6 @@ bronsteinOpenGaps = {
 <|"id" -> "G-perf-4", "area" -> "Trager", "gap" -> "a residue field over Q(constants) of large degree: x/((2^(1/3) x^3 - 1) Sqrt[x^2 + 2]) (genus 0, elementary) times out, where x/((2 x^3 - 1) Sqrt[x^2 + 2]) takes 0.1 s and the linear 2^(1/3) x - 1 takes 2.6 s",
   "kind" -> "Integrate", "f" -> Hold[x/((2^(1/3) x^3 - 1) Sqrt[x^2 + 2])], "current" -> "timeout", "budget" -> 60,
   "followup" -> "the residue field of an orbit over K0 is relative of small degree; build it as a tower over K0 (or per orbit) instead of the absolute splitting field joined with the constants", "source" -> "Phase 4.3b C4 battery"|>,
-<|"id" -> "G-perf-5", "area" -> "Bronstein", "gap" -> "Shape A over a constant field of degree 4 (Q(Sqrt[2], Sqrt[3]), Q(Sqrt[3], 3 - Sqrt[2])): exact k(K0) arithmetic is slow; elementary integrands time out",
-  "kind" -> "Integrate", "f" -> Hold[Together[D[(E^x Sqrt[Sqrt[3] + E^x])/(-3 + Sqrt[2] + E^(2 x)), x]]], "current" -> "timeout", "budget" -> 60,
-  "followup" -> "profile the fieldFn-with-extension kernels (kGCD/kQuo over Q(x)(K0)); FLINT for multivariate number-field arithmetic", "source" -> "Phase 4.3b C6 random battery"|>,
 <|"id" -> "G-nf-10", "area" -> "Bronstein", "gap" -> "random elementary integrands over Q(constants) (seed 20261114, 40 cases): 17 verified, 15 time out, 6 internal (brResultantRZero, brComponentIdentity, brHermiteIterationBound before brCancelK), 2 undecided -- no wrong answer and no false certificate",
   "kind" -> "Expr", "f" -> Hold[Length[{}]], "current" -> "0", "budget" -> 10,
   "followup" -> "rerun the battery (scratch c6r.m pattern) after each 4.3b step; promote it to a nightly stress ctest", "source" -> "Phase 4.3b C6"|>,
@@ -101,14 +98,7 @@ bronsteinOpenGaps = {
   "followup" -> "after G-adv-t2", "source" -> "adversarial review of Trager"|>,
 <|"id" -> "G-adv-t4", "area" -> "Trager", "gap" -> "a rational integrand over Q(i) is declined as not algebraic (the rational integrator is not reached)",
   "kind" -> "Expr", "f" -> Hold[Trager`TragerIntegrate[1/(x^2 + I), x][[1]]], "current" -> "\"implementation incomplete\"", "budget" -> 60,
-  "followup" -> "route a radical-free Q(i) integrand to the rational integrator", "source" -> "adversarial review of Trager"|>,
-<|"id" -> "G-nf-3", "area" -> "Bronstein", "gap" -> "certificates over a number field are demoted (NF:certificate): Trager's base field is fieldQ with Expand, exact for Gaussian rationals but not for radicals (1/(1 + Sqrt[2]) is not rationalised)",
-  "kind" -> "Integrate", "f" -> Hold[Sqrt[Sqrt[2] + Log[x]]], "current" -> "incomplete", "budget" -> 60,
-  "followup" -> "Phase 4.3b: the constant field as fieldNF[t, mu, gamma] through Trager's integrateComponent and Bronstein's k arithmetic", "source" -> "Phase 4.3"|>,
-<|"id" -> "G-nf-6", "area" -> "Trager", "gap" -> "torsion over a number field: decided at degree-1 primes of the constant field since v0.6559 (orders mod 17 and 71 disagree), but the certificate is still demoted (NF:certificate)",
-  "kind" -> "Integrate", "f" -> Hold[1/((x - Sqrt[2]) Sqrt[x^3 + 1])], "current" -> "incomplete", "budget" -> 60,
-  "followup" -> "Phase 4.3b C3/C6/C8: exact residue/log fields over K0, then remove the demotion after an adversarial review", "source" -> "Phase 4.3"|>,
-
+  "followup" -> "route a radical-free Q(i) integrand to the rational integrator", "source" -> "adversarial review of Trager"|>
 };
 
 openGapsStructural = {

@@ -185,8 +185,10 @@ tragerExtension[] := Join[If[TrueQ[tragerConstantI], {I}, {}], tragerAlgConstant
 tragerConstantsOf::usage = "tragerConstantsOf[f] is the list of the radical constants of f: every Power[r, q] with r a rational number and q a non-integer rational (Sqrt[2], 2^(1/3), (-3)^(1/4)), DeleteDuplicates'd.";
 tragerConstantsOf[f_] := DeleteDuplicates[Cases[{f}, p : Power[r_, q_Rational] /; rationalNumberQ[r] :> p, Infinity]];
 
-nfDemoteCertificate::usage = "nfDemoteCertificate[r] is the failure r unchanged, except that a NonElementary certificate becomes Unimplemented (site NF:certificate) while radical constants are in use (tragerAlgConstants non-empty, Phase 4.3): the base-field arithmetic over Q is exact for Gaussian rationals but not for radicals (1/(1 + Sqrt[2]) is not rationalised), so a zero can read as nonzero and a verdict is not yet a proof. Answers are unaffected: they are verified.";
-nfDemoteCertificate[r_] := If[tragerAlgConstants =!= {} && tragerFailQ[r] && r[[1]] === "NonElementary",
-  tragerFail["Unimplemented", "non-elementarity over a number-field constant field is not yet certified (" <> r[[2]] <> ")",
-    <|"site" -> "NF:certificate"|>], r];
+(* nfDemoteCertificate (Phase 4.3: every non-elementarity verdict over a
+   number field of radical constants demoted to Unimplemented, site
+   NF:certificate) was removed in Phase 4.3b C8 (v0.6566), once the base-field,
+   residue-field, torsion and k arithmetic were exact over Q(constants) and an
+   adversarial review (191 sweeps), two elementary batteries (160 cases) and a
+   FriCAS / group-law cross-check of 34 certificates found no false one. *)
 

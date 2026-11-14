@@ -232,10 +232,12 @@ static void test_nf_integrals(void) {
     /* by linearity the constant leaves: a certificate over Q */
     BR_EQ("BronsteinIntegrate[Sqrt[2] Sqrt[Log[x]], x][[1]]", "\"not elementary\"");
     /* otherwise a verdict over a number field is not yet a proof */
+    /* since 4.3b C8 a verdict over a number field is a certificate */
     BR_EQ("BronsteinIntegrate[Sqrt[Sqrt[2] + Log[x]], x]",
-          "{\"implementation incomplete\", \"non-elementarity over a number-field constant field is not yet certified "
-          "(no algebraic part: the Risch DE D b + s b = c has no solution ([B] Prop 2.15/2.18))\"}");
-    BR_EQ("First[BronsteinIntegrate[1/((x - Sqrt[2]) Sqrt[x^3 + 1]), x]]", "\"implementation incomplete\"");
+          "{\"not elementary\", \"no algebraic part: the Risch DE D b + s b = c has no solution ([B] Prop 2.15/2.18)\"}");
+    /* a certificate since 4.3b C8: (Sqrt[2], Sqrt[2 Sqrt[2] + 1]) is not torsion on y^2 = x^3 + 1
+     * (orders mod 17 and 71 disagree; no torsion up to 1000 numerically, the bound over a quadratic field is 18) */
+    BR_EQ("First[BronsteinIntegrate[1/((x - Sqrt[2]) Sqrt[x^3 + 1]), x]]", "\"not elementary\"");
     BR_EQ("BronsteinScope[Sqrt[x + Sqrt[2]], x]", "\"InScope\"");               /* not nesting */
     /* review of 4.3: the linearity rule must not certify a zero factor */
     BR_EQ("BronsteinIntegrate[((1 + Sqrt[2])^2 - 3 - 2 Sqrt[2]) Sqrt[Log[x]], x]", "0");

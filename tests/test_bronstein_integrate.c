@@ -63,10 +63,14 @@ static const char* const certificates[] = {
 static const char* const declines[] = {
     "Log[x] + Sqrt[Log[x] + Sqrt[Log[x]]]",                                          /* nested */
     "Sqrt[Log[x]] Sqrt[Log[x] + 1]",                                                 /* compositum */
-    "Sqrt[Sqrt[2] + Log[x]]",                                                         /* a number-field certificate (Phase 4.3b) */
     "Log[x] E^(x Sqrt[x^3 + 1])",                                                    /* Shape B, curve monomial over a tower */
     NULL
 };
+
+/* since Phase 4.3b C8 a verdict over a number field is a certificate */
+static void test_nf_certificate(void) {
+    BR_EQ("First[BronsteinIntegrate[Sqrt[Sqrt[2] + Log[x]], x]]", "\"not elementary\"");
+}
 
 static void test_closes(void) {
     /* Tan[x] Sqrt[Log[x]] was a decline until the trig front end (v0.6554) */
@@ -209,6 +213,7 @@ static void test_random_derivatives(void) {
 
 int main(void) {
     br_init();
+    test_nf_certificate();
     test_closes();
     test_certificates();
     test_declines();

@@ -97,7 +97,9 @@ static void test_incomplete_message(void) {
     /* Method -> "Bronstein": out of scope, and in scope but unimplemented */
     BR_EQ("Check[Integrate[Sqrt[Log[x] + Sqrt[Log[x]]], x, Method -> \"Bronstein\"]; \"ok\", \"msg\"]", "\"msg\"");
     BR_EQ("Check[Integrate[Sqrt[Log[x] + Sqrt[Log[x]]], x, Method -> \"Bronstein\"]; \"ok\", \"msg\", Integrate::incomplete]", "\"msg\"");
-    BR_EQ("Check[Integrate[Sqrt[Sqrt[2] + Log[x]], x, Method -> \"Bronstein\"]; \"ok\", \"msg\", Integrate::incomplete]", "\"msg\"");
+    /* a number-field verdict is a certificate since 4.3b C8: nonelem, not incomplete */
+    BR_EQ("Check[Integrate[Sqrt[Sqrt[2] + Log[x]], x, Method -> \"Bronstein\"]; \"ok\", \"msg\", Integrate::incomplete]", "\"ok\"");
+    BR_EQ("Check[Integrate[Sqrt[Sqrt[2] + Log[x]], x, Method -> \"Bronstein\"]; \"ok\", \"msg\", Integrate::nonelem]", "\"msg\"");
     BR_EQ("Check[Quiet[Integrate[Sqrt[Log[x] + Sqrt[Log[x]]], x, Method -> \"Bronstein\"]]; \"ok\", \"msg\"]", "\"ok\"");
     /* Method -> "Trager": nested radicals are outside its class too */
     BR_EQ("Check[Integrate[Sqrt[x + Sqrt[x + 1]]/(x^2 + 3), x, Method -> \"Trager\"]; \"ok\", \"msg\", Integrate::incomplete]", "\"msg\"");

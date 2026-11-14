@@ -1181,6 +1181,18 @@ the single radical $\sqrt x$ over $\Q(\sqrt2)$. A negative content leaves
 $\sqrt{-u}=\varepsilon i\sqrt u$ with $\varepsilon=\pm1$ locally constant. That
 is the sign split of E6d over $\Q(i)$, still open (G-nf-11).
 
+
+\paragraph{Certificates over a number field (v0.6566).} With the base field,
+the residue fields, the orbit fields (written relative to $K_0$, with the trace
+down to $K_0$), the reduction at degree-1 primes and the $k$-arithmetic all
+exact over $K_0$, the demotion of E4.3 is removed. An adversarial review found
+14 false certificates in the orbit log part before that point. After the fix,
+its sweeps (191 integrands), two elementary batteries (160 integrands) and a
+cross-check of 34 certificates found no false certificate. The cross-check used
+FriCAS, and, where FriCAS cannot decide, the group law together with the
+torsion bounds over quadratic and cubic fields (Kamienny--Kenku--Momose,
+Parent).
+
 \part*{Part C. The gap log: what each extension closes}
 \addcontentsline{toc}{part}{Part C}
 

@@ -1585,7 +1585,7 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [x] A wrong answers / lower layers: G-core-1 (policy), G-nf-7, G-core-2, G-core-3, G-core-5, G-core-7 — v0.6557; G-core-6 — v0.6558
   - [x] B internal errors: G-sign-2 (PZQ ambiguous-cut re-draw), G-adv-b2, G-adv-b3 (explicit log expansion in the kappa split), G-adv-p4 — v0.6558;
         G-nf-5 / G-nf-9 need field-aware arithmetic over Q(constants): moved to C (4.3b)
-  - [ ] C Phase 4.3b: fieldNF constant field through Trager/Bronstein (G-nf-3/4/8), NF mod p (G-nf-6), compositum (G-nf-2)
+  - [x] C Phase 4.3b (C1-C8 done, v0.6559-v0.6566; open: G-nf-10/11, G-perf-4/5, G-core-8/9): fieldNF constant field through Trager/Bronstein (G-nf-3/4/8), NF mod p (G-nf-6), compositum (G-nf-2)
         Design (survey 2026-11-14): K0 = Q(gamma), gamma a primitive element of the constants, as F0 = fieldNF[g, mu, gamma]
         with "consts" reps; the field layer (kc/rc/kGCD/kExtGCD/kDivRem/af*) is already exact mod mu -- thread F0 above it.
         - [ ] C1 constantBaseField[] (Common/Residues): F0 from tragerAlgConstants (+ I); fieldConstRep into g; unit tests
@@ -1601,7 +1601,7 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
         - [x] C6 Bronstein k arithmetic over K0 — v0.6564 (brSplitSquarefreeNF, Hermite over fieldFn+ext, brCancelK, tragerTogether fallback; 2 false certificates fixed). Was: brK0Field = fieldFn[syms, K0 ext]; brFieldOver keeps "consts"; Hermite/RDE over k (G-nf-5/9)
         - [x] C7 compositum over K0 (G-nf-2) — v0.6564 (tragerExtractRadicalContent; negative content G-nf-11 open)
         - [x] C8 part 1: adversarial review (14 false certificates in the orbit log part, fixed: relativeStructure/relToZ/relTrace, radical generators) — v0.6565
-        - [ ] C8 part 2: remove nfDemoteCertificate once the reruns are clean (reviewer sweeps 191 cases: 0 false; FriCAS + group-law cross-check of 34 certificates: all confirmed)
+        - [x] C8 part 2: nfDemoteCertificate removed — v0.6566 (reruns clean: 191 review sweeps, 160 battery cases, 34 cross-checked certificates) (reviewer sweeps 191 cases: 0 false; FriCAS + group-law cross-check of 34 certificates: all confirmed)
   - [ ] D scope: G-trig-1, G-qi-1, G-red-1, G-adv-t4, G-sign-1, G-core-4
   - [ ] E performance: G-perf-1/2/3, G-adv-t2/t3, G-adv-b5
   - later phases: G-param-1 + G-adv-c1 (4.4), G-mid-1 (5), G-adv-p1 (PMT tower independence)
