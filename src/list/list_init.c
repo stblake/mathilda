@@ -77,7 +77,10 @@ void list_init(void) {
         "\toccurrence of their element, and elements keep their input order\n"
         "\twithin a sublist. Equal elements are collected from anywhere in the\n"
         "\tlist, not only from adjacent runs (unlike Split).\n"
-        "\tGather[list] is equivalent to GatherBy[list, Identity].");
+        "\tGather[list] is equivalent to GatherBy[list, Identity].\n"
+        "Gather[list, test]\n"
+        "\tgathers elements e1, e2 into one sublist when test[e1, e2] is True,\n"
+        "\tcomparing each element with the first element of each sublist.");
     symtab_add_builtin("Total", builtin_total);
     symtab_add_builtin("Accumulate", builtin_accumulate);
     symtab_add_builtin("Differences", builtin_differences);

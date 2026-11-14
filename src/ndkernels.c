@@ -186,7 +186,11 @@ UK_CLOSED(ArcCsch, asinh(1.0 / x),  casinh(1.0 / z));
 UK_ESC(ArcCosh, cacosh(z));
 UK_ESC_FLIP(ArcTanh, catanh(z));
 UK_ESC_RECIP_FLIP(ArcCoth, catanh(1.0 / z));
-UK_ESC(ArcSech, cacosh(1.0 / z));
+/* ArcSech[x] = ArcCosh[1/x] with 1/x REAL for real x: complex division
+ * 1/(x + 0 i) for x < 0 is 1/x - 0 i, a negative zero that puts cacosh on the
+ * lower side of its cut (ArcSech[-3.7] = -1.84 i instead of ArcCosh[-0.27] =
+ * +1.84 i).  Same expression as builtin_arcsech. */
+UK_ESC(ArcSech, (ai == 0.0 ? cacosh((1.0 / ar) + 0.0 * I) : cacosh(1.0 / z)));
 
 /* ---- projections & sign ------------------------------------------------- */
 /* Abs: written by hand (not UK_PROJ) so it leaves no unused projection

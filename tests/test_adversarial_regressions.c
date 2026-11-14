@@ -87,8 +87,48 @@ static void test_trager_gaussian_trace(void) {
     BR_EQ("Block[{tragerConstantI = True}, traceCertificate[<|\"Z\" -> z, \"R\" -> z^2 - I|>]]", "Null");
 }
 
+/* G-nf-7: an algebraic constant that is zero but unsimplified must not reach
+ * the integrator as a nonzero coefficient (E^(0 x^2)/(2*0) was returned and
+ * PossibleZeroQ accepted it) */
+static void test_zero_algebraic_constant(void) {
+    BR_TRUE("Integrate[Exp[(GoldenRatio^2 - GoldenRatio - 1) x^2] x + 1, x] === x + x^2/2");
+    BR_TRUE("Integrate[Exp[x^2 + (GoldenRatio^2 - GoldenRatio - 1) x] x, x] === E^x^2/2");
+    BR_TRUE("Integrate[Exp[(Sqrt[2]^2 - 2 + 1) x], x] === E^x");
+    BR_EQ("Integrate[((Sqrt[3] - 1) (Sqrt[3] + 1) - 2) Log[x], x]", "0");
+    /* the caller's integrand is not mutated (expr_copy is a refcount bump) */
+    BR_EQ("f0 = Exp[(GoldenRatio^2 - GoldenRatio - 1) x^2] x; Integrate[f0, x]; Head[f0]", "Times");
+}
+
+/* G-core-2: rt_try_erf took the constant factor as f|_{x=0}, a singular
+ * point of Log[2 x] - Log[x]: the "antiderivative" was Indeterminate */
+static void test_erf_constant_at_singular_point(void) {
+    BR_FALSE("FreeQ[Integrate[(Log[x^2] - 2 Log[x]) Exp[x^2], x], Erfi | Erf]");
+    BR_FALSE("Integrate[(Log[x^2] - 2 Log[x]) Exp[x^2], x] === Indeterminate");
+    BR_TRUE("With[{F = Integrate`RischTranscendental[(Log[2 x] - Log[x]) Exp[x^2], x]}, "
+            "!FreeQ[F, Erf] && PossibleZeroQ[D[F, x] - (Log[2 x] - Log[x]) Exp[x^2]]]");
+    BR_TRUE("!FreeQ[Integrate`RischTranscendental[c Exp[x^2], x], Erf]");
+}
+
+/* G-core-3: a Throw[..., "PIM"] from the ParallelMixed valuation routines
+ * escaped ParallelMixedSpecial to the top level */
+static void test_pim_throw_caught(void) {
+    BR_EQ("Check[Head[Integrate[Exp[x + Log[x^2]/4], x]], \"msg\"]", "Integrate");
+}
+
+/* G-core-5: machine ArcSech of a negative real took the lower side of the cut */
+static void test_arcsech_negative_real(void) {
+    BR_TRUE("Sign[Im[ArcSech[-3.7]]] == Sign[Im[N[ArcSech[-37/10], 20]]] == 1");
+    BR_TRUE("Abs[ArcSech[-0.5] - ArcCosh[-2.]] < 10^-14");
+    BR_TRUE("Abs[ArcSech[-0.5] - N[ArcSech[-1/2], 20]] < 10^-14");
+    BR_TRUE("Max[Abs[Normal[ArcSech[NDArray[{-3.7, -0.5, 0.5, 2.}]]] - (ArcSech /@ {-3.7, -0.5, 0.5, 2.})]] == 0");
+}
+
 int main(void) {
     br_init();
+    test_zero_algebraic_constant();
+    test_erf_constant_at_singular_point();
+    test_pim_throw_caught();
+    test_arcsech_negative_real();
     test_pmt_root_residues();
     test_pmt_confirmation();
     test_eiq_transcendental_constant();

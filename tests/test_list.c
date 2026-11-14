@@ -788,6 +788,13 @@ void test_gather() {
         {"Gather[{a, b, a}]", "{{a, a}, {b}}"},
         {"Gather[{3, 1, 3, 1, 2}]", "{{3, 3}, {1, 1}, {2}}"},
         {"Gather[{x, y, x, x}]", "{{x, x, x}, {y}}"},
+        /* Gather[list, test]: an element joins the first group whose first
+         * element passes test with it (G-core-7) */
+        {"Gather[{1, 2, 3, 4, 5}, Mod[#1, 2] == Mod[#2, 2] &]", "{{1, 3, 5}, {2, 4}}"},
+        {"Gather[{a, b, a}, SameQ]", "{{a, a}, {b}}"},
+        {"Gather[{}, SameQ]", "{}"},
+        {"Gather[{1, 2}, f]", "{{1}, {2}}"},
+        {"Gather[{1, 1.5, 3, 3.2}, Abs[#1 - #2] < 1 &]", "{{1, 1.5}, {3, 3.2}}"},
     };
 
     for (int i = 0; i < (int)(sizeof(tests) / sizeof(tests[0])); i++) {
@@ -815,9 +822,11 @@ void test_gather() {
         free(gb);
     }
 
-    /* Non-list arguments stay unevaluated; wrong arity does too. */
+    /* Non-list arguments stay unevaluated; wrong arity does too.  A test
+     * that does not give True never makes two elements equivalent. */
     assert_eval_eq("Gather[x]", "Gather[x]", 0);
-    assert_eval_eq("Gather[{1, 1}, foo]", "Gather[{1, 1}, foo]", 0);
+    assert_eval_eq("Gather[{1, 1}, foo]", "{{1}, {1}}", 0);
+    assert_eval_eq("Gather[{1, 1}, foo, bar]", "Gather[{1, 1}, foo, bar]", 0);
 }
 
 void test_subsets() {

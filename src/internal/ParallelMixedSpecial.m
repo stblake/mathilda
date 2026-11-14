@@ -1524,7 +1524,9 @@ Options[IntegrateSurfaceSpecial] = {"Verbose" -> False, "Tower" -> None, "Sample
    functions, substitute back, fix the branch constant of every special term
    against its kernel numerically, and verify the whole answer by
    differentiation.  {answer, verified} or a status list. *)
-IntegrateSurfaceSpecial[integrand_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Module[{verbose = TrueQ[OptionValue["Verbose"]],
+(* Catch "PIM": the ParallelMixed valuation routines (VP, Eta, ...) report a
+   failure with Throw[{"failed", ...}, "PIM"]; it is this entry's status. *)
+IntegrateSurfaceSpecial[integrand_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Catch[Module[{verbose = TrueQ[OptionValue["Verbose"]],
     tower = OptionValue["Tower"], integrandN = integrand /. PMExp -> Exp, bt, T, fp, back, Ysym, strict, res, samples, x0, yExpr, out, total, anti, kern, fixed, ver, blocks, sp},
   strict = If[OptionValue["Strict"] === None, $StrictSP, TrueQ[OptionValue["Strict"]]];
   (* the additive fast path.  Skipped when the caller pinned a tower (a tower
@@ -1550,7 +1552,7 @@ IntegrateSurfaceSpecial[integrand_, x_Symbol, opts : OptionsPattern[]] := TimeCo
   If[samples === None,
     x0 = SamplePoint[integrandN, x];
     samples = {If[x0 =!= None, x0, 7/5], 9/4, 13/5}];
-  PMStage["PresentSpecial", PresentSpecial[res, integrandN, x, T, back, samples, strict, verbose, TrueQ[OptionValue["Details"]]]]],
+  PMStage["PresentSpecial", PresentSpecial[res, integrandN, x, T, back, samples, strict, verbose, TrueQ[OptionValue["Details"]]]]], "PIM"],
   $SpecialTimeBudget, {"failed", "time budget exceeded"}];
 
 (* PresentSpecial: the surface form of a result of ParallelIntegrateSpecial: substitute
@@ -2344,7 +2346,9 @@ Options[IntegrateSurfacePartial] = {"Special" -> True, "Verbose" -> False, "Towe
 (* IntegrateSurfacePartial[f, x, opts]: IntegrateSurfaceSpecial with a partial
    answer I + Inactive[Integrate][r, x] when no complete one is found;
    {answer, verified} or a status *)
-IntegrateSurfacePartial[integrand_, x_Symbol, OptionsPattern[]] := TimeConstrained[Module[{special = TrueQ[OptionValue["Special"]], verbose = TrueQ[OptionValue["Verbose"]],
+(* Catch "PIM": the ParallelMixed valuation routines (VP, Eta, ...) report a
+   failure with Throw[{"failed", ...}, "PIM"]; it is this entry's status. *)
+IntegrateSurfacePartial[integrand_, x_Symbol, OptionsPattern[]] := TimeConstrained[Catch[Module[{special = TrueQ[OptionValue["Special"]], verbose = TrueQ[OptionValue["Verbose"]],
     tower = OptionValue["Tower"], samples = OptionValue["Samples"], integrandN = integrand /. PMExp -> Exp, bt, T, fp, back, Ysym, res, x0, yExpr, surf, total, anti, fixed, r, ok, d, blocks, sp},
   (* the additive fast path: integrate blocks of terms with pairwise-disjoint
      generator families on their own towers and sum.  Skipped when the caller
@@ -2387,7 +2391,7 @@ IntegrateSurfacePartial[integrand_, x_Symbol, OptionsPattern[]] := TimeConstrain
   If[d =!= $Failed,
     ok = AllTrue[samples, With[{a = Quiet[Num[d, x, #]], b = Quiet[Num[integrandN, x, #]]},
       NumericQ[a] && NumericQ[b] && Abs[a - b] < 10^-15 (1 + Abs[b])] &]];
-  {total + Inactive[Integrate][r, x], ok}],
+  {total + Inactive[Integrate][r, x], ok}], "PIM"],
   $SpecialTimeBudget, {"failed", "time budget exceeded"}];
 
 

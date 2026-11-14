@@ -772,7 +772,10 @@ Expr* builtin_arcsech(Expr* res) {
     }
 #endif
     if (get_approx(arg, &c, &inexact) && inexact) {
-        double complex s = cacosh(1.0 / c);
+        /* for real c take 1/c REAL (+0 i): complex 1/(c + 0 i) with c < 0 carries
+         * a negative-zero imaginary part and cacosh then lands on the lower side
+         * of its cut, contradicting ArcCosh[1/c] and the MPFR path (G-core-5) */
+        double complex s = cimag(c) == 0.0 ? cacosh((1.0 / creal(c)) + 0.0 * I) : cacosh(1.0 / c);
         if (cimag(c) == 0.0 && creal(c) > 0.0 && creal(c) <= 1.0) return expr_new_real(creal(s));
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }

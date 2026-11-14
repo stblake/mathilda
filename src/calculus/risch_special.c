@@ -95,6 +95,21 @@ static Expr* rt_try_erf(Expr* f, Expr* x) {
     Expr* kp = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
         (Expr*[]){ expr_copy(f), expr_new_function(expr_new_symbol("Rule"),
             (Expr*[]){ expr_copy(x), expr_new_integer(0) }, 2) }, 2));
+    /* x = 0 can be a singularity of a factor that is constant only as a whole
+     * (Log[2 x] - Log[x], or Log[x^2] - 2 Log[x]): f|_{x=0} is then
+     * Indeterminate / ComplexInfinity, and the "antiderivative" was that bare
+     * value.  The cofactor K' = f E^-((a2/2) x^2 + b1 x) is the same constant
+     * (f'/f is exactly a2 x + b1), so use it instead. */
+    if (kp && !(rt_free_of_head(kp, "DirectedInfinity") && rt_free_of_head(kp, "Indeterminate")
+                && rt_free_of_head(kp, "ComplexInfinity"))) {
+        expr_free(kp);
+        const char* cn[3] = { "rmA2", "rmB", "x" };
+        Expr* cv[3] = { a2, b1, x };
+        Expr* em = rt_template("E^(-(rmA2/2) x^2 - rmB x)", cn, cv, 3);
+        kp = em ? rt_eval1("Together", expr_new_function(expr_new_symbol("Times"),
+                      (Expr*[]){ expr_copy(f), em }, 2)) : NULL;
+        if (kp && rt_find_exp_of_x(kp, x)) { expr_free(kp); kp = NULL; }
+    }
     if (kp) {
         /* Integral of E^((a2/2)x^2 + b1 x), a = a2/2, b = b1:
          *   E^(-b^2/(4a)) * (-Sqrt[Pi] Erf[(b+2a x)/(2 Sqrt[-a])] / (2 Sqrt[-a]))

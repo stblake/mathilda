@@ -1581,6 +1581,14 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   docs/notes/bronstein_extensions.tex; nightly ctest bronstein_open_gaps_stress). Every newly found gap
   goes there with an example the same day; closing one moves it to examples.m.
 - [x] Adversarial reviews of Bronstein / Trager / PMT (2026-11-14): false certificates in all three fixed (v0.6555); open findings in open_gaps.m
+- [ ] **Close the gap register (user, 2026-11-14), in batches, worst first:**
+  - [ ] A wrong answers / lower layers: G-core-1 PZQ Log[E^x]-x, G-nf-7 GoldenRatio 1/0, G-core-2 cascade Indeterminate,
+        G-core-3 uncaught PIM throw, G-core-7 Gather[list,test], G-core-6 Together+Root, G-core-5 ArcSech
+  - [ ] B internal errors: G-sign-2, G-adv-b2, G-adv-b3, G-nf-5, G-nf-9; PMT status protocol G-adv-p4
+  - [ ] C Phase 4.3b: fieldNF constant field through Trager/Bronstein (G-nf-3/4/8), NF mod p (G-nf-6), compositum (G-nf-2)
+  - [ ] D scope: G-trig-1, G-qi-1, G-red-1, G-adv-t4, G-sign-1, G-core-4
+  - [ ] E performance: G-perf-1/2/3, G-adv-t2/t3, G-adv-b5
+  - later phases: G-param-1 + G-adv-c1 (4.4), G-mid-1 (5), G-adv-p1 (PMT tower independence)
 - [ ] Phase 4: constant fields (NF, Q(i)+trig, parameters)
   - [x] 4.1 Q(i) with a literal I: tragerFactorList, residue fields containing i (fieldSubI), mod-p refusal, Q(i) coefficient tests — v0.6551
   - [x] 4.1b I mod p (gfMod, goodPrime consistent root), Gaussian residue polynomials, Gaussian kappa — v0.6554

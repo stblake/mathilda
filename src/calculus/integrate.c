@@ -3554,8 +3554,95 @@ static Expr* builtin_integrate_body(Expr* res);
  * outside it -- an explicit Method, the definite-integral front ends -- so a
  * $RecursionLimit inside Integrate never degrades the user's evaluation around
  * the call.  The overflowed call is left unevaluated. */
+/* An x-free SUM of algebraic constants (GoldenRatio, radicals of numbers,
+ * Root, AlgebraicNumber) that is exactly zero but not simplified --
+ * GoldenRatio^2 - GoldenRatio - 1 -- is replaced by 0 before any stage runs.
+ * Otherwise the stages treat it as a nonzero constant: Int E^(g x^2) x came back
+ * E^(g x^2)/(2 g), a division by zero that the derivative check accepted (a
+ * rational identity in g).  RootReduce decides an algebraic constant exactly.
+ * Gap register G-nf-7 (review of Phase 4.3). */
+static bool int_algebraic_constant_marker(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == intern_symbol("GoldenRatio");
+    if (e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    const char* hn = (h && h->type == EXPR_SYMBOL) ? h->data.symbol.name : NULL;
+    if (hn == intern_symbol("Root") || hn == intern_symbol("AlgebraicNumber")) return true;
+    if (hn == intern_symbol("Power") && e->data.function.arg_count == 2) {
+        const Expr* p = e->data.function.args[1];
+        if (p->type == EXPR_FUNCTION && p->data.function.head->type == EXPR_SYMBOL &&
+            p->data.function.head->data.symbol.name == intern_symbol("Rational")) return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (int_algebraic_constant_marker(e->data.function.args[i])) return true;
+    return false;
+}
+static bool int_only_algebraic_atoms(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
+    if (e->type == EXPR_SYMBOL) return e->data.symbol.name == intern_symbol("GoldenRatio");
+    if (e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    const char* hn = (h && h->type == EXPR_SYMBOL) ? h->data.symbol.name : NULL;
+    if (hn == intern_symbol("Rational") || hn == intern_symbol("Complex") ||
+        hn == intern_symbol("Root") || hn == intern_symbol("AlgebraicNumber")) return true;
+    if (hn != intern_symbol("Plus") && hn != intern_symbol("Times") && hn != intern_symbol("Power")) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!int_only_algebraic_atoms(e->data.function.args[i])) return false;
+    return true;
+}
+/* Returns a NEW expression with every zero algebraic-constant sum replaced by 0,
+ * or NULL when nothing changed. */
+static Expr* int_zero_algebraic_constants(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return NULL;
+    const Expr* h = e->data.function.head;
+    const char* hn = (h && h->type == EXPR_SYMBOL) ? h->data.symbol.name : NULL;
+    if (hn == intern_symbol("Plus") && int_only_algebraic_atoms(e) && int_algebraic_constant_marker(e)) {
+        Expr* r = rt_eval1("RootReduce", expr_copy((Expr*)e));
+        bool zero = r && r->type == EXPR_INTEGER && r->data.integer == 0;
+        if (r) expr_free(r);
+        return zero ? expr_new_integer(0) : NULL;
+    }
+    /* expr_copy is a reference-count bump: never mutate a copy in place (that
+     * corrupted the caller's integrand) -- build a fresh node instead */
+    size_t n = e->data.function.arg_count;
+    Expr** nargs = NULL;
+    bool changed = false;
+    for (size_t i = 0; i < n; i++) {
+        Expr* ni = int_zero_algebraic_constants(e->data.function.args[i]);
+        if (ni) {
+            if (!nargs) {
+                nargs = malloc(sizeof(Expr*) * n);
+                for (size_t j = 0; j < n; j++) nargs[j] = NULL;
+            }
+            nargs[i] = ni; changed = true;
+        }
+    }
+    if (!changed) return NULL;
+    for (size_t j = 0; j < n; j++)
+        if (!nargs[j]) nargs[j] = expr_copy(e->data.function.args[j]);
+    Expr* out = expr_new_function(expr_copy(e->data.function.head), nargs, n);
+    free(nargs);
+    return out;
+}
+
 Expr* builtin_integrate(Expr* res) {
     bool overflow_before = eval_overflow_fired();
+    if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 2 &&
+        int_algebraic_constant_marker(res->data.function.args[0])) {
+        Expr* nf0 = int_zero_algebraic_constants(res->data.function.args[0]);
+        Expr* nf = NULL;
+        if (nf0) {                /* evaluate: Integrate holds its arguments, and a  */
+            nf = evaluate(nf0);   /* raw E^(0 x^2) crashed the rational canonicaliser */
+            expr_free(nf0);
+        }
+        if (nf) {
+            Expr* call = expr_copy(res);
+            expr_free(call->data.function.args[0]);
+            call->data.function.args[0] = nf;
+            return call;       /* re-evaluated by the evaluator with the zero simplified */
+        }
+    }
     return stage_contain_overflow(builtin_integrate_body(res), overflow_before);
 }
 

@@ -446,12 +446,20 @@ difference from [`Split`](structural-manipulation.md#split). Equivalent to
 (hash-indexed, O(n)) with the identity key applied directly rather than as `n`
 `Identity[x]` applications.
 
+`Gather[list, test]` takes the equivalence from `test`: each element joins the
+first sublist whose first element `e` gives `test[e, elem] === True`, else it
+opens a new sublist (O(n g) test calls for g sublists; a result other than
+`True` never joins two elements).
+
 ```mathematica
 In[1]:= Gather[{1, 7, 3, 7, 2, 3, 9}]
 Out[1]= {{1}, {7, 7}, {3, 3}, {2}, {9}}
 
 In[2]:= Gather[{a, b, a}]
 Out[2]= {{a, a}, {b}}
+
+In[3]:= Gather[{1, 2, 3, 4, 5}, Mod[#1, 2] == Mod[#2, 2] &]
+Out[3]= {{1, 3, 5}, {2, 4}}
 
 In[3]:= Gather[{}]
 Out[3]= {}
