@@ -837,6 +837,32 @@ certificate $\int\sqrt{\log x+i}\,dx$ was checked by hand: FriCAS reports
 $\int e^u\sqrt{u+i}\,du$, and the Risch DE $b'+b(1+\tfrac1{2(u+i)})=1$ has no
 rational solution.
 
+\paragraph{Review (2026-11-14): false certificates in v0.6551.} The independent
+review found that v0.6551 certified elementary integrals such as
+$\int\sqrt{e^x+i}\,dx$ non-elementary, among them $(e^x+i)^{1/3}$,
+$\sqrt{1+i\log^2x}/x$ and $e^x/\sqrt{1+ie^{2x}}$.
+\begin{itemize}
+\item \textbf{Cause.} \code{brGammaForm} decided whether $\kappa$ in
+  $\gamma=\kappa^{1/m}u$ is constant by \code{FreeQ[kappa, \_Symbol]}, which is
+  false for $\kappa=i$ (the head \code{Complex} is a symbol). The constant $i$
+  was taken for a radical $\gamma$, the special residue was set to~$0$ by a
+  Galois-weight argument that needs $\gamma$ \emph{not} constant, and the Risch
+  DE then ``proved'' that no algebraic part exists.
+\item \textbf{Fix (v0.6552).} A constant is \code{NumericQ}, and a non-real
+  Gaussian $\kappa$ is refused (\code{Residues:gaussian-kappa}) until special
+  residues over $\Q(i)(\kappa^{1/m})$ are implemented.
+\end{itemize}
+The review found three further faults, all fixed in v0.6552:
+\begin{itemize}
+\item a RootSum term passed through the real-form presentation leaked a private
+  symbol, and \code{PossibleZeroQ} accepted the result. Now \code{presentable}
+  skips integrands with complex constants and \code{realForm} skips RootSums;
+\item the tower branch of \code{residueField} ignored the flag. Now it refuses;
+\item the mod-$p$ refusal checked a fixed list of keys. Now \code{gfMod}, the
+  single choke point of every reduction, refuses complex data.
+\end{itemize}
+Proposition~\ref{prop:E41}(3) now holds at that choke point.
+
 \paragraph{Next.} Map $i$ to a square root of $-1$ modulo $p\equiv1\pmod4$ in
 the torsion code; then the trigonometric front end (\code{TrigToExp}); then
 general number fields through \code{fieldFn[vars, \{alpha, mu, theta\}]}.

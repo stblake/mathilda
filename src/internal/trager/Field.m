@@ -87,8 +87,13 @@ nativeQ[F_Association] := F["Type"] =!= "Fn" && nativeQ[];
 (* -------------------------------------------------------------------------- *)
 
 gfMod::usage = "gfMod[e, p] reduces the polynomial expression e (rational coefficients allowed, denominators prime to p) to its canonical form over GF(p): every coefficient in {0, ..., p-1}.";
-gfMod[e_, p_Integer] :=
-  PolynomialMod[Expand[e /. r_Rational :> Mod[Numerator[r] PowerMod[Denominator[r], -1, p], p]], p];
+gfMod[e_, p_Integer] := (
+  (* the single choke point of every reduction mod p: a literal I (constant
+     field Q(i)) has no image modulo p = 3 mod 4, and Mod would reduce it
+     meaninglessly -- refuse, never reduce (review of E4.1, 2026-11-14) *)
+  If[!FreeQ[e, _Complex],
+    throwUnimplemented["TorsionModP:complex", "reduction mod p of data with complex constants (constant field Q(i))"]];
+  PolynomialMod[Expand[e /. r_Rational :> Mod[Numerator[r] PowerMod[Denominator[r], -1, p], p]], p]);
 
 kc::usage = "kc[F, e] is the canonical form of the polynomial expression e over the field F: Expand over Q; the remainder modulo mu(t) over Q(theta); gfMod over GF(p). e may be a polynomial in x as well; only coefficients are reduced.";
 fieldSubI::usage = "fieldSubI[F, e] writes the Gaussian rationals of e in the generator of F when F is an absolute number field containing i (key \"I\" -> rep(t), set by residueField over Q(i)): a + b I -> a + b rep. Otherwise e.";

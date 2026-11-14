@@ -56,11 +56,32 @@ static void test_qi_battery(void) {
     BR_EQ("BronsteinIntegrate[Sqrt[Log[x] + I], x][[1]]", "\"not elementary\"");
 }
 
+static void test_qi_review_fixes(void) {
+    /* review of E4.1 (2026-11-14): kappa = I was read as non-constant
+       (FreeQ[I, _Symbol] is False), the special residue taken as 0, and these
+       elementary integrals certified NOT elementary.  Now refused. */
+    BR_EQ("brGammaForm[x^2, 2]", "{1, x}");
+    BR_EQ("brFailTag[brCatch[brGammaForm[I x^2, 2]]][[1]]", "\"Unimplemented\"");
+    BR_EQ("brGammaForm[x, 2]", "None");
+    BR_FALSE("MatchQ[BronsteinIntegrate[Sqrt[E^x + I], x], {\"not elementary\", _}]");
+    BR_FALSE("MatchQ[BronsteinIntegrate[(E^x + I)^(1/3), x], {\"not elementary\", _}]");
+    BR_FALSE("MatchQ[BronsteinIntegrate[Sqrt[1 + I Log[x]^2]/x, x], {\"not elementary\", _}]");
+    BR_FALSE("MatchQ[BronsteinIntegrate[E^x/Sqrt[1 + I E^(2 x)], x], {\"not elementary\", _}]");
+    /* a RootSum answer over Q(i) keeps no private symbol (complexSplit's ii leaked) */
+    BR_TRUE("With[{F = BronsteinIntegrate[Sqrt[x]/(x^2 - I), x]}, !ListQ[F] &&"
+            " FreeQ[F, s_Symbol /; StringContainsQ[Context[s], \"Private\"]] && PossibleZeroQ[D[F, x] - Sqrt[x]/(x^2 - I)]]");
+    BR_ANTIDERIV("Sqrt[x]/(x^4 + 1) + I/x", "Bronstein");
+    /* gfMod is the choke point: no reduction of a literal I */
+    BR_THROWS("gfMod[x + I, 5]", "Unimplemented", "reduction mod p of data with complex constants (constant field Q(i))");
+    BR_EQ("gfMod[x/2 + 3, 5]", "3 + 3 x");
+}
+
 int main(void) {
     br_init();
     test_qi_primitives();
     test_qi_scope();
     test_qi_battery();
+    test_qi_review_fixes();
     BR_DONE("bronstein_phase4_tests");
     return 0;
 }

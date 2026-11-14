@@ -83,7 +83,14 @@ brGammaForm::usage = "brGammaForm[lc, m] writes gamma = lc^(1/m) as kappa^(1/m) 
 brGammaForm[lc_, m_Integer] := Module[{u = brMthPowerCofactor[lc, m], kappa},
   If[u === None, Return[None]];
   kappa = Together[lc/u^m];
-  If[!FreeQ[kappa, _Symbol], Return[None]];
+  (* a constant is NumericQ: FreeQ[kappa, _Symbol] was wrong for kappa = I
+     (the head Complex is a symbol), so a Gaussian kappa was read as a radical
+     gamma and its special residue as 0 -- false certificates (review of E4.1,
+     2026-11-14: Int Sqrt[E^x + I]).  Special residues over Q(i)(kappa^(1/m))
+     are not implemented: a non-real Gaussian kappa is refused. *)
+  If[!NumericQ[kappa], Return[None]];
+  If[!FreeQ[kappa, _Complex],
+    throwUnimplemented["Residues:gaussian-kappa", "special place with a non-real Gaussian constant kappa (kappa^(1/m) over Q(i))"]];
   {kappa, u}];
 
 brCoefficientAtInf::usage = "brCoefficientAtInf[T, cv, c, j] is the coefficient w in k of theta^j in c theta^(g/m) Ghat^(1/m) (m | g): the expansion of c Y at a place p_zeta above infinity is zeta gamma Sum_j w_j theta^j.";

@@ -48,6 +48,7 @@ BASELINE_M = {
     "Pipeline:transcendental",       # RischTranscendental undecided -> Phase 2
     "RDE:base-undecided",            # Risch DE over the base undecided -> Phase 2
     "RDEAlgebraic:undecided",        # Risch DE on the curve -> Phase 5
+    "Residues:gaussian-kappa",       # special residues with kappa^(1/m), kappa in Q(i) \ Q -> Phase 4.1
     "Residues:infinity-limited",     # limited integration undecided -> Phase 2/3
     "Residues:nonrational",          # residue polynomial over a larger field -> Phase 4
     "Residues:radical-value",        # special value over a radical extension of k -> Phase 5

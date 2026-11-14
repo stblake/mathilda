@@ -5333,3 +5333,8 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   -1 only ON the cut x < -1, so the witness certified a region that does not exist (false
   certificate, caught by review). Rule: a sample point counts only if it is off every branch cut
   of the expression (radicands off (-oo, 0]) and the value is stable under small perturbations.
+- **`FreeQ[e, _Symbol]` is not "e is a constant".** `I` is `Complex[0, 1]` whose head is the
+  symbol `Complex`, so `FreeQ[I, _Symbol]` is False; a Gaussian constant was read as a non-constant,
+  a Galois-weight shortcut fired, and false certificates shipped in v0.6551 (caught by review). Use
+  `NumericQ` (or freeness of the actual variables) for constancy; when a constant field grows,
+  grep every "is constant" test.

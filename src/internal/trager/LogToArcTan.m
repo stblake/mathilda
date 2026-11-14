@@ -92,4 +92,7 @@ realForm[F_, x_Symbol] := Module[{G = expandRootSums[F], terms},
       MatchQ[t, c_ Log[_] /; FreeQ[c, Log]],
         With[{lg = First[Cases[t, Log[_], {0, 1}]]}, realFormTerm[Together[t/lg], First[lg], x]],
       FreeQ[t, Complex], t,
+      (* a RootSum keeps its held Function: complexSplit's I -> ii rule would
+         rewrite inside it and ii would leak (review of E4.1, 2026-11-14) *)
+      !FreeQ[t, RootSum], t,
       True, With[{cs = complexSplit[t]}, cs[[1]]]]] /@ terms]];

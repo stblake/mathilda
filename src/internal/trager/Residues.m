@@ -53,7 +53,9 @@ residueField[R_, Z_Symbol, t_Symbol] := Module[{fac, lin, nonlin, rts, nf, gen, 
   (* ToNumberField (numerical compositum) is quick on small fields; a large *)
   (* a-priori bound goes straight to the algebraic tower -- a choice of      *)
   (* method, not a limit: the field is built whatever its degree.            *)
-  If[crude > 50000, Return[residueFieldTower[R, Z, t]]];
+  If[crude > 50000,
+    If[TrueQ[tragerConstantI], throwUnimplemented["Trager:residue-field-QI", "residue field over Q(i) beyond ToNumberField"]];
+    Return[residueFieldTower[R, Z, t]]];
   rts = Join[
     Z /. Solve[# == 0, Z][[1]] & /@ lin,
     Flatten[rootObjects[#, Z] & /@ nonlin]];

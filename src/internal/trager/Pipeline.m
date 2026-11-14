@@ -274,6 +274,9 @@ evaluateRootSumBodies[e_] := e /. RootSum[q_, Function[b_]] :> Module[{s = Uniqu
 
 presentable::usage = "presentable[f, F, x] is the real form of the verified antiderivative F (LogToArcTan.m) when that passes antiderivativeQ, else F itself. The real form is not attempted on answers above tragerOption[\"RealFormMaxLeaves\"] leaves and is given tragerOption[\"RealFormTime\"] seconds.";
 presentable[f_, Fx_, x_Symbol] := Module[{real},
+  (* an integrand with complex constants (Q(i)) has a genuinely complex
+     antiderivative: its "real form" is not the same function *)
+  If[!FreeQ[f, _Complex], Return[Fx]];
   (* The real form is presentation only (Fx is already verified): skip it on *)
   (* large answers and bound its time, rather than spend minutes in Together *)
   (* over nested radicals.                                                   *)
