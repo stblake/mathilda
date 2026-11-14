@@ -100,6 +100,12 @@ BASELINE_C = {
     "tower: identity gate",
     "tower: reduced equation not polynomial",
     "tower: tangent top",
+    # a theta^(>=1) coefficient whose integral carries an ArcTan over a tower
+    # with a complex logarithm, and the derivative fold (ArcTan' = sum c_j t_j')
+    # did not absorb it: the dilogarithm obstruction (Thm 5.6.1(ii)) is proved
+    # only for real towers (batch E: it certified D[Log[(u - I)/(u + I)]^2] not
+    # elementary); the general case needs the structure theorem over Q(i)
+    "ArcTan over a complex tower: not folded",
 }
 
 # rde_cert_mark reasons that are permanent: a computation the CAS could not do,

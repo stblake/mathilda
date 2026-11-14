@@ -1604,7 +1604,8 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
         - [x] C8 part 2: nfDemoteCertificate removed — v0.6566 (reruns clean: 191 review sweeps, 160 battery cases, 34 cross-checked certificates) (reviewer sweeps 191 cases: 0 false; FriCAS + group-law cross-check of 34 certificates: all confirmed)
   - [x] D scope — v0.6567: G-trig-1 + G-nf-11 (brSignMerge, E6d.1), G-red-1 (E6a.3, kappas in 2 Pi I Q), G-qi-1 (Gaussian coefficients in limited integration), G-adv-t4 (algebraicNumberQ over Q(i)), G-core-4 (C limited integration by derivative); no tangent monomial needed (TrigToExp over Q(i) decides; hypertangent only for real-form presentation, G-pres-1)
         open: G-sign-1 (sign -1 only on a cut: needs the components of the complement of the cuts); kappas outside 2 Pi I Q (Schanuel)
-  - [ ] E performance: G-perf-1/2/3, G-adv-t2/t3, G-adv-b5
+  - [x] E performance — v0.6568: G-adv-t2 (Resultant cancels; logDerivativeNF numerator norm), G-adv-t3 (Root opaque in reduceRadicalPowers), G-perf-1 (powerBasisInverse shortcut), G-adv-b5 (C log/ArcTan fold by derivative); FALSE CERTIFICATE in the C ArcTan obstruction over complex towers fixed; G-perf-4 partial (norm generator, primitiveFieldByNorm)
+        open: G-perf-2/3 (idealTimes over Fn with an algebraic extension, 56 s per product), G-perf-4 rest (kNorm with radical coefficients: relative residue fields over K0)
   - later phases: G-param-1 + G-adv-c1 (4.4), G-mid-1 (5), G-adv-p1 (PMT tower independence)
 - [ ] Phase 4: constant fields (NF, Q(i)+trig, parameters)
   - [x] 4.1 Q(i) with a literal I: tragerFactorList, residue fields containing i (fieldSubI), mod-p refusal, Q(i) coefficient tests — v0.6551

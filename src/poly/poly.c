@@ -6196,6 +6196,27 @@ static Expr* resultant_internal(Expr* P, Expr* Q, Expr* var) {
     return result;
 }
 
+/* True when e has a factor Power[b, negative] with b not a number: a
+ * denominator that depends on a symbol. */
+static bool resultant_has_symbolic_denominator(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
+        e->data.function.arg_count == 2) {
+        const Expr* b = e->data.function.args[0];
+        const Expr* k = e->data.function.args[1];
+        bool neg = (k->type == EXPR_INTEGER && k->data.integer < 0);
+        bool numb = (b->type == EXPR_INTEGER || b->type == EXPR_BIGINT || b->type == EXPR_REAL ||
+                     (b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL &&
+                      (b->data.function.head->data.symbol.name == SYM_Rational ||
+                       b->data.function.head->data.symbol.name == SYM_Complex)));
+        if (neg && !numb) return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (resultant_has_symbolic_denominator(e->data.function.args[i])) return true;
+    return false;
+}
+
 Expr* builtin_resultant(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 3) return NULL;
     
@@ -6237,7 +6258,18 @@ Expr* builtin_resultant(Expr* res) {
     }
 #endif
 
-    return resultant_internal(p1, p2, var);
+    /* The resultant of two polynomials is a polynomial in the remaining
+     * symbols.  The PRS / Sylvester fallback can return it as an uncancelled
+     * fraction when the coefficients are Gaussian rationals (a sum of terms
+     * over 32 + 64 x + 32 x^2: Res_Z of x^2 - 1 + (4 - 4 I)(1 + x) Z^2 and a
+     * Gaussian quartic), and a caller dividing it as a polynomial then never
+     * terminated (Trager's logDerivativeNF, gap G-adv-t2).  Cancel it. */
+    Expr* r = resultant_internal(p1, p2, var);
+    if (r && resultant_has_symbolic_denominator(r)) {
+        Expr* t = internal_together((Expr*[]){ r }, 1);
+        r = internal_expand((Expr*[]){ t }, 1);
+    }
+    return r;
 }
 
 /* d/dvar of a univariate polynomial in already-expanded form. The     */

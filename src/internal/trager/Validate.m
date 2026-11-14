@@ -75,7 +75,15 @@ powerBasisCoords[p_, y_Symbol, n_Integer, g_] :=
   PadRight[CoefficientList[reduceYDegree[p, y, n, g], y], n];
 
 powerBasisInverse::usage = "powerBasisInverse[q, y, n, g, x] is the coordinate list of 1/q in the power basis 1, y, ..., y^(n-1) of Q(x)[y]/(y^n - g), q a nonzero polynomial in y with coefficients in Q(x). It solves the linear system c.M = e_0 with M the multiplication-by-q matrix. Throws an Unimplemented stop when q is a zero divisor (y^n - g reducible over Q(x)).";
-powerBasisInverse[q_, y_Symbol, n_Integer, g_, x_Symbol] := Module[{M, sol},
+powerBasisInverse[q_, y_Symbol, n_Integer, g_, x_Symbol] := Module[{M, sol, j, c},
+  (* a denominator free of y, or a monomial c y^j, is inverted directly:
+     1/(c y^j) = y^(n - j)/(c g); the n x n system below is the general case,
+     and on a degree-30 Kummer curve its determinant alone did not finish
+     (G-perf-1) *)
+  If[FreeQ[q, y], Return[PadRight[{tragerTogether[1/q]}, n]]];
+  If[MatchQ[Expand[q], (c0_. y^j0_.) /; FreeQ[c0, y] && IntegerQ[j0] && 0 < j0 < n],
+    {c, j} = Replace[Expand[q], (c0_. y^j0_.) :> {c0, j0}];
+    Return[ReplacePart[ConstantArray[0, n], (n - j + 1) -> tragerTogether[1/(c g)]]]];
   M = Table[powerBasisCoords[y^k q, y, n, g], {k, 0, n - 1}];
   If[tragerTogether[Det[M]] === 0,
     throwUnimplemented["Trager:reducible-radical", "the denominator is a zero divisor: the radical is reducible"]];

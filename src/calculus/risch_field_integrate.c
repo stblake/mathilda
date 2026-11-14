@@ -1344,6 +1344,128 @@ static bool rt_has_arctan_of_x(Expr* e, Expr* x) {
  * theta^{>=1} coefficient an x-dependent ArcTan (or other non-theta transcendental
  * the fold cannot absorb) is instead the dilogarithm obstruction and yields an
  * authoritative NON-elementary verdict. */
+/* True if e contains a Complex number. */
+static bool rt_expr_has_complex(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == intern_symbol("Complex")) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rt_expr_has_complex(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* True if a tower generator t_0..t_L has a complex argument (or derivative
+ * coefficient): its logarithms may then combine into an ArcTan. */
+static bool rt_tower_has_complex(RtTower* T, long L) {
+    for (long j = 0; j <= L && j < (long)T->n; j++)
+        if (rt_expr_has_complex(T->arg[j]) || rt_expr_has_complex(T->Dcoef[j])) return true;
+    return false;
+}
+
+/* Rs with its ArcTan/ArcCot/ArcTanh/ArcCoth terms and its terms with a
+ * logarithm of x (not a tower variable) dropped. */
+static Expr* rt_drop_arctan_terms(Expr* Rs, Expr* x) {
+    Expr* e = rt_eval1("Expand", expr_copy(Rs));
+    if (!e) return NULL;
+    bool plus = e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL
+                && e->data.function.head->data.symbol.name == intern_symbol("Plus");
+    size_t n = plus ? e->data.function.arg_count : 1;
+    Expr** keep = malloc((n ? n : 1) * sizeof(Expr*));
+    size_t nk = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* term = plus ? e->data.function.args[i] : e;
+        if (!rt_has_arctan_of_x(term, x) && !rt_find_log_of_x(term, x)) keep[nk++] = expr_copy(term);
+    }
+    expr_free(e);
+    Expr* out = rt_eval_own(expr_new_function(expr_new_symbol("Plus"), keep, nk));
+    free(keep);
+    return out;
+}
+
+/* The log fold: A the terms of Rs with an ArcTan or a logarithm of x that is
+ * not a tower variable (an expression in x), find
+ * constants c_j with A' = Sum_{j <= L, t_j a log} c_j t_j'.  Each t_j' is
+ * written in the tower variables (rt_subst_kernels); the constants solve the
+ * linear system SolveAlways[A' - Sum c_j t_j' == 0, {x, t_0..t_L}].  On success
+ * returns c_L (owned, possibly 0) and sets *lower (owned) to Sum_{j<L} c_j t_j,
+ * an element of the lower field K_L; else NULL. */
+static Expr* rt_arctan_fold_coeff(Expr* Rs, RtTower* T, long L, Expr* x, Expr** lower) {
+    *lower = NULL;
+    Expr* S = rt_drop_arctan_terms(Rs, x);
+    if (!S) return NULL;
+    Expr* A = rt_eval_own(expr_new_function(expr_new_symbol("Plus"),
+        (Expr*[]){ rt_eval1("Expand", expr_copy(Rs)),
+                   expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), S }, 2) }, 2));
+    if (!A) return NULL;
+    for (long j = 0; j < (long)T->n; j++)
+        if (!rt_free_of_x(A, T->t[j])) { expr_free(A); return NULL; }
+    Expr* dA0 = rt_eval2("D", A, expr_copy(x));
+    if (!dA0) return NULL;
+    Expr* dA = rt_subst_kernels(dA0, T);
+    expr_free(dA0);
+    if (!dA) return NULL;
+    /* unknowns c_j for the logarithmic generators j <= L */
+    long nL = L + 1 < (long)T->n ? L + 1 : (long)T->n;
+    Expr** cs = calloc((size_t)nL, sizeof(Expr*));
+    Expr** terms = malloc((size_t)(nL + 1) * sizeof(Expr*));
+    size_t nt = 0, nc = 0;
+    terms[nt++] = dA;
+    for (long j = 0; j < nL; j++) {
+        if (T->kind[j] != RT_LOG) continue;
+        char nm[32]; snprintf(nm, sizeof nm, "rtatc$%ld", j);
+        cs[j] = expr_new_symbol(nm); nc++;
+        Expr* eta = rt_subst_kernels(T->Dcoef[j], T);
+        terms[nt++] = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(-1), expr_copy(cs[j]), eta }, 3);
+    }
+    Expr* res = NULL;
+    if (nc > 0) {
+        Expr* lhs = rt_eval1("Together", expr_new_function(expr_new_symbol("Plus"), terms, nt));
+        Expr* num = lhs ? rt_eval1("Numerator", expr_copy(lhs)) : NULL;
+        if (num) {
+            Expr** vs = malloc((T->n + 1) * sizeof(Expr*));
+            size_t nv = 0;
+            vs[nv++] = expr_copy(x);
+            for (long j = 0; j < (long)T->n; j++) vs[nv++] = expr_copy(T->t[j]);
+            Expr* vl = expr_new_function(expr_new_symbol("List"), vs, nv);
+            free(vs);
+            Expr* eq = expr_new_function(expr_new_symbol("Equal"), (Expr*[]){ num, expr_new_integer(0) }, 2);
+            Expr* sol = rt_solve_always_quiet(eq, vl);
+            /* sol = {{c_j -> v_j, ...}} with every v_j a constant */
+            if (sol && sol->type == EXPR_FUNCTION && rt_head_is(sol, "List") && sol->data.function.arg_count == 1) {
+                Expr* rules = sol->data.function.args[0];
+                bool ok = true;
+                Expr* low = expr_new_integer(0);
+                Expr* cL = expr_new_integer(0);
+                for (long j = 0; j < nL && ok; j++) {
+                    if (!cs[j]) continue;
+                    Expr* v = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                        (Expr*[]){ expr_copy(cs[j]), expr_copy(rules) }, 2));
+                    if (!v || !rt_free_of_x(v, x)) { if (v) expr_free(v); ok = false; break; }
+                    for (long k = 0; k < nL; k++)
+                        if (cs[k] && !rt_free_of_x(v, cs[k])) ok = false;
+                    for (long k = 0; k < (long)T->n; k++)
+                        if (!rt_free_of_x(v, T->t[k])) ok = false;
+                    if (!ok) { expr_free(v); break; }
+                    if (j == L) { expr_free(cL); cL = v; }
+                    else low = rt_eval_own(expr_new_function(expr_new_symbol("Plus"),
+                        (Expr*[]){ low, expr_new_function(expr_new_symbol("Times"), (Expr*[]){ v, expr_copy(T->t[j]) }, 2) }, 2));
+                }
+                if (ok) { res = cL; *lower = low; }
+                else { expr_free(cL); expr_free(low); }
+            }
+            if (sol) expr_free(sol);
+        }
+        if (lhs) expr_free(lhs);
+    } else {
+        for (size_t k = 0; k < nt; k++) expr_free(terms[k]);
+    }
+    free(terms);
+    for (long j = 0; j < nL; j++) if (cs[j]) expr_free(cs[j]);
+    free(cs);
+    return res;
+}
+
 static int rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x, int is_bottom,
                                       Expr** s_out, Expr** c_out) {
     *s_out = NULL; *c_out = NULL;
@@ -1379,6 +1501,33 @@ static int rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x, int 
     }
     bool foreign = rt_find_exp_of_x(Rs, x) != NULL || rt_find_log_of_x(Rs, x) != NULL
                    || rt_has_arctan_of_x(Rs, x);
+    /* The log fold first: a new logarithm or ArcTan of x whose derivative is a
+     * constant combination of the tower's log derivatives is the tower in
+     * another form (Int D[Log[u/(1 + u)]] = Log[u] - Log[1 + u], Int 4 I/(1 + u^2)
+     * = 4 I ArcTan[u] = 2 Log[(u - I)/(u + I)] + const): A = c t_L + lower +
+     * a locally constant function, which the coefficient recursion does not
+     * see (found in batch E: products of two logarithms of quotients timed out
+     * in the flat ansatz, and D[Log[(u - I)/(u + I)]^2] was certified not
+     * elementary). */
+    if (foreign && rt_find_exp_of_x(Rs, x) == NULL) {
+        Expr* lower = NULL;
+        Expr* c = rt_arctan_fold_coeff(Rs, T, L, x, &lower);
+        if (c) {
+            Expr* S0 = rt_drop_arctan_terms(Rs, x);
+            Expr* S = S0 ? rt_eval_own(expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ S0, lower }, 2)) : NULL;
+            if (!S0) expr_free(lower);
+            if (S && !rt_find_log_of_x(S, x) && !rt_has_arctan_of_x(S, x)
+                && rt_is_poly(S, tL) && rt_degree(S, tL) <= 0) {
+                if (rt_is_zero(c)) { expr_free(c); *c_out = NULL; } else *c_out = c;
+                *s_out = S;
+                expr_free(Rs);
+                return 0;
+            }
+            if (S) expr_free(S);
+            expr_free(c);
+        }
+    }
     if (!foreign && rt_is_poly(Rs, tL) && rt_degree(Rs, tL) <= 1) {
         Expr* c = rt_coeff(Rs, tL, 1);
         Expr* s = rt_coeff(Rs, tL, 0);
@@ -1403,8 +1552,15 @@ static int rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x, int 
          * integral is complete (rational RHS), so this is an authoritative
          * non-elementary verdict, e.g. Integrate[(3x+1) Log[x^2+1]^5, x].  (A merely
          * unfolded x-dependent LOG is left as a plain decline — it can be a content /
-         * combination artifact of a reducible argument, not proven non-elementary.) */
-        rt_dec_nonelem();
+         * combination artifact of a reducible argument, not proven non-elementary.)
+         *
+         * The obstruction holds only when the ArcTan is independent of the tower.
+         * A logarithm with a REAL argument has equal residues at conjugate points,
+         * so no combination of such logs is an ArcTan; a tower log with a complex
+         * argument can be one, so there the fold above decides, and a failed fold
+         * leaves the step undecided. */
+        if (!rt_tower_has_complex(T, L)) rt_dec_nonelem();
+        else rde_cert_mark("ArcTan over a complex tower: not folded");
     }
     expr_free(Rs);
     return rc;

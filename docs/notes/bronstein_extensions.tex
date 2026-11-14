@@ -1425,6 +1425,98 @@ read as ``not algebraic over $\Q(x)$''.
 \paragraph{Tests.} \code{tests/test\_bronstein\_scope.c} (70 assertions, the review's cases included), and
 examples ED-1 to ED-8 in the gap log.
 
+
+\section*{Batch E. Performance, and a false certificate it uncovered (v0.6568)}
+\addcontentsline{toc}{section}{Batch E. Performance}
+
+Profiling the batch-E timeouts found three causes. Each was a computation in
+the wrong form, not a missing algorithm.
+
+\begin{enumerate}
+\item The core \code{Resultant} returned a Gaussian resultant as an
+  uncancelled fraction. Trager's \code{logDerivativeNF} then divided it as a
+  polynomial and never terminated (G-adv-t2). The resultant is now cancelled
+  to the polynomial it is. Independently, the determinant's norm is taken on
+  its polynomial numerator only.
+\item A presentation step applied \code{Together} to hundreds of copies of a
+  degree-8 \code{Root} (G-adv-t3). The \code{Root}s are now treated as opaque
+  symbols there.
+\item A denominator free of the radical was inverted by solving an
+  $n\times n$ symbolic system on the degree-30 Kummer curve of
+  $\sqrt x(x+1)^{1/5}(x+2)^{1/3}$ (G-perf-1). It is now inverted directly.
+\end{enumerate}
+
+In G-perf-4, the norm of a residue polynomial over $\Q(2^{1/3})$ treated
+$2^{1/3}$ and $2^{2/3}$ as independent constants, which gave degree 108
+instead of 18. The radicals of one base are now powers of one generator. The
+absolute field is built by Trager's primitive element
+(\code{primitiveFieldByNorm}): $\delta=\gamma+k\theta$ is a root of the
+squarefree norm $\operatorname{Res}_s(q(t-ks),m_\theta(s))$, and $\theta$ is
+read off the linear subresultant.
+
+\subsection*{E.1. Limited integration in a tower, decided by derivatives}
+
+\paragraph{Setting.} In the C primitive case at level $L\ge1$
+(\code{rt\_limited\_field\_integrate}), the coefficient of $t_L^i$, $i\ge1$,
+needs $\int r=s+c\,t_L$ with $s\in K_L$ and $c$ constant. The lower field
+returns $\int r=S+A$, where $A$ collects new logarithms and arctangents of
+$x$ in some form: $\log u-\log(1+u)$ for $t=\log\frac u{1+u}$, or
+$4i\arctan u$ for $t=\log\frac{u-i}{u+i}$.
+
+\begin{proposition}\label{prop:E1fold}
+If $A'=\sum_{j\le L}c_j\,t_j'$ over the logarithmic generators, with constants
+$c_j$, then $s=S+\sum_{j<L}c_jt_j\in K_L$ and $c=c_L$ solve the limited
+integration problem up to a locally constant function.
+\end{proposition}
+
+\begin{proof}
+$(A-\sum_jc_jt_j)'=0$, so $A$ differs from $\sum_jc_jt_j$ by a locally
+constant function. The coefficient recursion uses only derivatives, as in
+D.3.
+\end{proof}
+
+The $c_j$ are found from the numerator of $A'-\sum_jc_jt_j'$ by
+\code{SolveAlways} over $x$ and the tower variables. This fold closes the
+products of logarithms of quotients that previously reached the flat ansatz
+and timed out. Among them is G-adv-b5,
+$\int\frac{d}{dx}(\arcsin x\log x)\,dx$, which now takes 0.04~s.
+
+\begin{proposition}[the arctangent obstruction, restricted]\label{prop:E1arctan}
+Suppose every logarithmic generator of the tower has a real argument (real
+coefficients), and the integral of a coefficient of $t_L^i$, $i\ge1$,
+carries an $x$-dependent arctangent that the fold does not absorb. Then the
+integrand has no elementary integral ([SI, Thm.~5.6.1(ii)]).
+\end{proposition}
+
+\begin{proof}[Why the hypothesis is needed]
+An $x$-dependent $\arctan v$ has logarithmic derivative
+$\frac1{2i}\bigl(\frac{(1+iv)'}{1+iv}-\frac{(1-iv)'}{1-iv}\bigr)$. Its residues
+at a conjugate pair of points are \emph{opposite}. The logarithmic derivative
+of a logarithm with a real argument has \emph{equal} residues at a conjugate
+pair. So no constant combination of such logarithms can be an arctangent, and
+the arctangent is a new logarithm over the real tower. That is exactly the
+dilogarithm case of [SI, Thm.~5.6.1(ii)].
+
+A tower logarithm with a complex argument breaks this. With
+$t=\log\frac{u-i}{u+i}$ we have $t'=\frac{2i}{1+u^2}$, and
+$4i\arctan u=2t+\text{const}$. Before v0.6568 the decider declared
+$\int\frac{d}{du}t^2\,du$ \emph{not elementary}, a false certificate.
+\code{Risch`ElementaryIntegralQ} answered False on
+$\frac{d}{du}\bigl(\log\frac{u-i}{u+i}\bigr)^2$ and on six relatives. Over a
+complex tower the arctangent now goes to the fold, and when the fold fails the
+step is marked undecided (site ``ArcTan over a complex tower: not folded'' in
+the completeness ratchet).
+\end{proof}
+
+\paragraph{What stays open.} G-perf-2 and G-perf-3 spend their time in ideal
+arithmetic over a function field with an algebraic extension: one product of
+the special divisor takes about 56~s. G-perf-4 spends its time in norms with
+radical coefficients. Both need native arithmetic over those fields, or a
+residue field built relative to $K_0$.
+
+\paragraph{Tests.} \code{tests/test\_bronstein\_perf.c} (30 assertions), and
+examples EE-1 to EE-6 in the gap log.
+
 \part*{Part C. The gap log: what each extension closes}
 \addcontentsline{toc}{part}{Part C}
 
@@ -1447,9 +1539,6 @@ below, timings included (seconds, \code{Method -> "Bronstein"}, one core).
 
 \paragraph{Open performance limits} (examples kept out of the table until they close):
 \begin{itemize}
-\item a three-radical compositum with Kummer group $\Z/30$,
-  $\frac{d}{dx}\bigl(x^2\sqrt x\,(x+1)^{1/5}(x+2)^{1/3}\bigr)$: more than 300~s
-  on the degree-30 curve;
 \item $\frac{d}{dx}\bigl(\log(y+L)+2\log(y^2+Ly+L^2)\bigr)$ with $y^3=L^3+L+1$,
   $L=\log x$: 225~s.
 \end{itemize}

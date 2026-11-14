@@ -166,7 +166,13 @@ fieldOfRoot[q_, Z_Symbol, t_Symbol] := Module[{r1, gens, nf, gen, mu, F1, nc, ni
   ni = If[TrueQ[tragerConstantI] || !FreeQ[q, _Complex], 1, 0]; nc = Length[cs];
   gens = Join[{r1}, If[ni === 1, {I}, {}], cs];
   nf = ToNumberField[gens];
-  If[!ListQ[nf] || Length[nf] =!= Length[gens], throwInternal["FieldOfRootToNumberField", <|"q" -> q|>]];
+  If[!ListQ[nf] || Length[nf] =!= Length[gens],
+    (* ToNumberField gives up on a large absolute degree (a degree-6 residue
+       polynomial over Q(2^(1/3)), absolute degree 18: G-perf-4); Trager's
+       primitive element by the norm needs only a resultant and a subresultant *)
+    With[{pf = If[ni === 0, primitiveFieldByNorm[q, Z, t, r1, cs], None]},
+      If[pf =!= None, Return[pf, Module]]];
+    throwInternal["FieldOfRootToNumberField", <|"q" -> q|>]];
   gen = SelectFirst[nf, Head[#] === AlgebraicNumber &, None];
   If[gen === None, throwInternal["FieldOfRootNoGenerator", <|"q" -> q|>]];
   gen = gen[[1]];
@@ -183,6 +189,44 @@ fieldOfRoot[q_, Z_Symbol, t_Symbol] := Module[{r1, gens, nf, gen, mu, F1, nc, ni
        certificates, hidden by nfDemoteCertificate) *)
     F1 = Append[F1, "rel" -> relativeStructure[F1, gm, q, Z, Join[If[ni === 1, {I}, {}], cs]]];
     <|"F" -> F1, "gamma" -> gm|>]];
+
+primitiveFieldByNorm::usage = "primitiveFieldByNorm[q, Z, t, r1, cs] is fieldOfRoot's absolute field Q(delta) = K0(gamma) of a root gamma = r1 of q over K0 = Q(theta), theta = b^(1/L) the one generator of the radical constants cs of a single positive rational base b (every c in cs a power of theta), built by Trager's primitive element: delta = gamma + k theta for the first k = 0, 1, ... with the norm N(t) = Res_s(q(t - k s), m_theta(s)) squarefree; then theta = -S_10(delta)/S_11(delta) from the first subresultant S_1 = S_11 s + S_10 of q(t - k s) and m_theta in s, reduced modulo N. Returns the same Association as fieldOfRoot (\"F\" with \"consts\" and \"rel\", \"gamma\"), or None when the constants are not of that form.";
+primitiveFieldByNorm[q_, Z_Symbol, t_Symbol, r1_, cs_List] := Module[
+  {bs = DeleteDuplicates[First /@ cs], b, L, s = Unique["Trager`Private`pfs"], ms, qs, k, Nk, mu, sr, c1, c0, inv, h, gm, emb, F1, rep},
+  If[Length[bs] =!= 1 || !rationalNumberQ[bs[[1]]] || bs[[1]] <= 0, Return[None]];
+  b = bs[[1]]; L = LCM @@ (Denominator[#[[2]]] & /@ cs);
+  ms = MinimalPolynomial[b^(1/L), s];
+  If[Exponent[ms, s] =!= L, Return[None]];
+  qs = Expand[Numerator[Together[q /. Power[b, r_Rational] :> s^(r L)]]];
+  If[!PolynomialQ[qs, {s, Z}], Return[None]];
+  (* reduced modulo the monic m_theta: the same resultant, and the degree in s
+     below L, as SubresultantPolynomials needs *)
+  qs = Expand[PolynomialRemainder[qs, ms, s]];
+  k = SelectFirst[Range[0, 12], Function[kk,
+    With[{nk = Expand[Resultant[Expand[PolynomialRemainder[Expand[qs /. Z -> t - kk s], ms, s]], ms, s]]},
+      Nk = nk; Exponent[PolynomialGCD[nk, D[nk, t]], t] === 0]], None];
+  If[k === None, Return[None]];
+  mu = Expand[Nk/Coefficient[Nk, t, Exponent[Nk, t]]];
+  sr = SubresultantPolynomials[ms, Expand[PolynomialRemainder[Expand[qs /. Z -> t - k s], ms, s]], s];
+  If[Length[sr] < 2, Return[None]];
+  c1 = Coefficient[sr[[2]], s, 1]; c0 = Coefficient[sr[[2]], s, 0];
+  If[Exponent[sr[[2]], s] =!= 1, Return[None]];
+  inv = PolynomialExtendedGCD[Expand[c1], mu, t];
+  If[!FreeQ[inv[[1]], t], Return[None]];
+  h = PolynomialRemainder[Expand[-c0 inv[[2, 1]]/inv[[1]]], mu, t];
+  (* the embedding: delta = r1 + k theta numerically, the root of mu closest to it *)
+  emb = With[{v = N[r1 + k b^(1/L), 60]},
+    First[SortBy[Table[Root[Function[Evaluate[mu /. t -> Slot[1]]], j], {j, Exponent[mu, t]}], Abs[N[#, 60] - v] &]]];
+  F1 = fieldNF[t, mu, emb];
+  rep[c_] := With[{e = c[[2]] L},
+    If[e >= 0, PolynomialRemainder[Expand[h^e], mu, t],
+      Module[{g = PolynomialExtendedGCD[PolynomialRemainder[Expand[h^(-e)], mu, t], mu, t]}, PolynomialRemainder[Expand[g[[2, 1]]/g[[1]]], mu, t]]]];
+  F1 = Append[F1, "consts" -> ((# -> rep[#]) & /@ cs)];
+  (* any other power b^r (rL an integer) is h^(rL) mod mu: fieldConstRep *)
+  F1 = Append[F1, "constGen" -> {b, L, h}];
+  gm = PolynomialRemainder[t - k h, mu, t];
+  F1 = Append[F1, "rel" -> relativeStructure[F1, gm, q, Z, cs]];
+  <|"F" -> F1, "gamma" -> gm|>];
 
 relativeStructure::usage = "relativeStructure[F, gm, q, Z, gens0] describes the absolute number field F = Q(delta) = K0(gamma) of fieldOfRoot relative to K0 = Q(gens0): gamma = gm (a polynomial in F's generator) a root of q(Z), irreducible of degree d over K0, and K0 with generator theta0 of degree m0. It returns <|"Z", "q", "d", "theta0", "m0", "Minv", "s"|>: Minv inverts the matrix of the basis theta0^i gamma^j (i < m0, j < d; index i + m0 j) in F's power basis, and s the power sums of the roots of q over K0 (s_j = Sum gamma_k^j, j < d) for the relative trace.";
 relativeStructure[F_Association, gm_, q_, Z_Symbol, gens0_List] := Module[
@@ -216,10 +260,23 @@ relTrace[F_Association, e_] := Module[{rel = F["rel"], a, den, m0},
 
 rootObjects::usage = "rootObjects[q, Z] is the list of the Root objects Root[q(#)&, k], k = 1..deg q, of the polynomial q in Z.";
 gaussianRootObjects::usage = "gaussianRootObjects[q, Z] is the list of the roots of q, a polynomial with Gaussian-rational coefficients irreducible over Q(i), as Root objects of RATIONAL polynomials (ToNumberField takes those): the roots of the norm q qbar (qbar the complex conjugate coefficients), factored over Q, that are roots of q, picked numerically at 60 digits (q qbar is squarefree when q is irreducible over Q(i) and not a rational multiple of a real polynomial, so the roots are separated).";
-gaussianRootObjects[q_, Z_Symbol] := Module[{qb = q /. Complex[a_, b_] :> Complex[a, -b], nq, cands, cs, ss},
-  (* the norm over Q: Gaussian conjugation, and a resultant against the minimal
-     polynomial of each radical constant (Phase 4.3) *)
-  nq = Expand[q qb];
+gaussianRootObjects[q_, Z_Symbol] := Module[{qb = q /. Complex[a_, b_] :> Complex[a, -b], nq, cands, cs, ss, bases, gen},
+  (* the norm over Q: Gaussian conjugation (only when q has a complex
+     coefficient), and a resultant against the minimal polynomial of each
+     radical constant (Phase 4.3).  The radicals of one positive base b are
+     written as powers of ONE generator b^(1/L) (L the lcm of their
+     denominators; principal powers of a positive real are exact powers of its
+     principal root): 2^(1/3) and 2^(2/3) as independent symbols made the
+     norm of a degree-6 residue polynomial degree 108, not 18 (G-perf-4) *)
+  nq = If[FreeQ[q, _Complex], Expand[q], Expand[q qb]];
+  cs = DeleteDuplicates[Cases[{nq}, c : Power[b_, _Rational] /; rationalNumberQ[b], Infinity]];
+  bases = DeleteDuplicates[Select[First /@ cs, # > 0 &]];
+  Do[With[{L = LCM @@ (Denominator[#[[2]]] & /@ Cases[cs, Power[b, _]]), s = Unique["Trager`Private`cs"]},
+      nq = Expand[nq /. Power[b, r_Rational] :> s^(r L)];
+      (* negative powers of s: clear them (the numerator has the same roots in Z) *)
+      nq = Expand[Numerator[Together[nq]]];
+      nq = Expand[Resultant[nq, MinimalPolynomial[b^(1/L), s], s]]],
+    {b, bases}];
   cs = DeleteDuplicates[Cases[{nq}, c : Power[b_, _Rational] /; rationalNumberQ[b], Infinity]];
   If[cs =!= {},
     ss = Table[Unique["Trager`Private`cs"], {Length[cs]}];

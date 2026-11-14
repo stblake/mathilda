@@ -178,6 +178,29 @@ fieldSubI[F_Association, e_] := Module[{r = e},
 fieldConstRep::usage = "fieldConstRep[F, c] is the radical constant c (a power of a rational with a rational exponent) as a polynomial in the generator t of the absolute number field F (\"consts\" key: rules recorded by residueField, else computed by ToNumberField against the field's theta). A constant not in F is an Unimplemented decline, never a wrong reduction.";
 fieldConstRep[F_Association, c_] := Module[{hit = c /. F["consts"], nf},
   If[hit =!= c || FreeQ[hit, Power], Return[hit]];
+  (* a field built by primitiveFieldByNorm knows its constant generator
+     theta = b^(1/L) = h(t): b^r = h^(r L) for r L an integer *)
+  If[KeyExistsQ[F, "constGen"] && MatchQ[c, Power[F["constGen"][[1]], r_Rational /; IntegerQ[r F["constGen"][[2]]]]],
+    Return[With[{e = c[[2]] F["constGen"][[2]], h = F["constGen"][[3]], mu = F["mu"], t = F["t"]},
+      If[e >= 0, PolynomialRemainder[Expand[h^e], mu, t],
+        With[{g = PolynomialExtendedGCD[PolynomialRemainder[Expand[h^(-e)], mu, t], mu, t]},
+          PolynomialRemainder[Expand[g[[2, 1]]/g[[1]]], mu, t]]]], Module]];
+  (* a Root constant with a radical form (Root[-16 + #^3 &, 1] = 2 2^(1/3)):
+     its radicals written in the generator, when that form is all rational
+     powers of rationals *)
+  If[Head[c] === Root && KeyExistsQ[F, "constGen"],
+    With[{rad = Module[{w = Unique["Trager`Private`rw"], pol, n, a, v},
+        pol = Expand[c[[1]][w]]; n = Exponent[pol, w]; a = -Coefficient[pol, w, 0]/Coefficient[pol, w, n];
+        v = N[c, 30];
+        (* a real root of the binomial w^n - a, a > 0 rational: +-a^(1/n) *)
+        If[Expand[pol/Coefficient[pol, w, n]] === Expand[w^n - a] && rationalNumberQ[a] && a > 0 &&
+           Abs[Im[v]] < 10^-20,
+          With[{cand = Sign[Re[v]] a^(1/n)}, If[Abs[N[cand, 30] - v] < 10^-20, cand, Quiet[ToRadicals[c]]]],
+          Quiet[ToRadicals[c]]]]},
+      If[FreeQ[rad, Root] && FreeQ[rad, Complex] &&
+         FreeQ[rad /. Power[b_, _Rational] /; rationalNumberQ[b] :> 1, Power[_, _Rational]],
+        Return[PolynomialRemainder[Expand[rad /. p : Power[b_, _Rational] /; rationalNumberQ[b] :> fieldConstRep[F, p]],
+          F["mu"], F["t"]], Module]]]];
   nf = Quiet[ToNumberField[c, F["theta"]]];
   If[Head[nf] =!= AlgebraicNumber,
     throwUnimplemented["Trager:constant-outside-field", "a radical constant outside the residue field"]];

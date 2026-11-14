@@ -90,15 +90,20 @@ kauersTraceNF[ctx_Association, q_, p_] := Module[
 
 logDerivativeNF::usage = "logDerivativeNF[K, B, P, Y] is P'/P as an element over K (coordinates with prime-field denominators) for P a POLYNOMIAL in x, Y and the field generator: the inverse of P is the first row of the adjugate of its multiplication matrix over its determinant, and that determinant is rationalised by its norm.";
 logDerivativeNF[K_Association, B_Association, P_, Y_Symbol] := Module[
-  {x = B["x"], pa, M, det, adj1, nrm, cof, pinv},
+  {x = B["x"], pa, M, det, adj1, nrm, cof, pinv, dN, dD},
   If[FreeQ[P, x] && FreeQ[P, Y], Return[afZero[B]]];
   pa = afFromY[K, B, P, Y];
   M = afMultMatrix[K, B, pa];
-  det = kc[K, Det[M]];
+  (* det = dN/dD with dN, dD polynomials over K: 1/det = dD (Norm dN/dN)/Norm dN,
+     the exact quotient taken on the POLYNOMIAL numerator.  The integral basis
+     can give det a denominator ((1 + x)^2 for 1/((x^2 + I) Sqrt[x + 1])), and
+     schoolbook division of the rational Norm det over a Gaussian residue field
+     never terminated (G-adv-t2) *)
+  {dN, dD} = rcNumDen[K, Det[M]];
   adj1 = If[B["m"] === 1, {1}, Table[kc[K, (-1)^(1 + j) Det[Drop[M, {j}, {1}]]], {j, B["m"]}]];
-  nrm = kNorm[K, det];
-  cof = kExactQuo[K, nrm, det, x];
-  pinv = rc[K, # cof/nrm] & /@ adj1;
+  nrm = kNorm[K, dN];
+  cof = kExactQuo[K, nrm, dN, x];
+  pinv = rc[K, # dD cof/nrm] & /@ adj1;
   afTimes[K, B, afD[K, B, pa], pinv]];
 
 companionMatrix::usage = "companionMatrix[mu, Z] is the companion matrix of the monic polynomial mu(Z); Tr of its j-th power is the j-th power sum of the roots.";

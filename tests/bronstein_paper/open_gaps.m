@@ -28,19 +28,16 @@ bronsteinOpenGaps = {
 (* ---- performance --------------------------------------------------------- *)
 <|"id" -> "G-perf-4", "area" -> "Trager", "gap" -> "a residue field over Q(constants) of large degree: x/((2^(1/3) x^3 - 1) Sqrt[x^2 + 2]) (genus 0, elementary) times out, where x/((2 x^3 - 1) Sqrt[x^2 + 2]) takes 0.1 s and the linear 2^(1/3) x - 1 takes 2.6 s",
   "kind" -> "Integrate", "f" -> Hold[x/((2^(1/3) x^3 - 1) Sqrt[x^2 + 2])], "current" -> "timeout", "budget" -> 60,
-  "followup" -> "the residue field of an orbit over K0 is relative of small degree; build it as a tower over K0 (or per orbit) instead of the absolute splitting field joined with the constants", "source" -> "Phase 4.3b C4 battery"|>,
+  "followup" -> "batch E: the norm (one generator per base) and the field (primitiveFieldByNorm, Trager primitive element) are fast now; what remains is kNorm in logDerivativeNF, a resultant against a residue polynomial with radical coefficients (9 s per call): build the residue field relative to K0 and take norms over K0", "source" -> "Phase 4.3b C4 battery"|>,
 <|"id" -> "G-nf-10", "area" -> "Bronstein", "gap" -> "random elementary integrands over Q(constants) (seed 20261114, 40 cases): 17 verified, 15 time out, 6 internal (brResultantRZero, brComponentIdentity, brHermiteIterationBound before brCancelK), 2 undecided -- no wrong answer and no false certificate",
   "kind" -> "Expr", "f" -> Hold[Length[{}]], "current" -> "0", "budget" -> 10,
   "followup" -> "rerun the battery (scratch c6r.m pattern) after each 4.3b step; promote it to a nightly stress ctest", "source" -> "Phase 4.3b C6"|>,
-<|"id" -> "G-perf-1", "area" -> "Bronstein", "gap" -> "a three-radical compositum (Kummer group Z/30): Trager on the degree-30 curve is too slow",
-  "kind" -> "Integrate", "f" -> Hold[Sqrt[x] (x + 1)^(1/5) (x + 2)^(1/3)], "current" -> "timeout", "budget" -> 60,
-  "followup" -> "profile Trager on high-degree Kummer curves; smaller presentations of the compositum", "source" -> "gap log (E6b), 2026-11-14"|>,
 <|"id" -> "G-perf-2", "area" -> "Bronstein", "gap" -> "two log terms with special residues on a genus-1 cubic: 225 s",
   "kind" -> "Integrate", "f" -> Hold[Together[D[Log[Log[x] + (1 + Log[x] + Log[x]^3)^(1/3)] + 2 Log[Log[x]^2 + Log[x] (1 + Log[x] + Log[x]^3)^(1/3) + (1 + Log[x] + Log[x]^3)^(2/3)], x]]],
-  "current" -> "timeout", "budget" -> 60, "followup" -> "profile the E3 torsion / principal-generator steps", "source" -> "E3 tests, 2026-11-14"|>,
+  "current" -> "timeout", "budget" -> 60, "followup" -> "profiled in batch E: idealTimes over the residue function field (Fn with an algebraic extension) takes 56 s for one product of the special divisor; needs native ideal arithmetic over Fn (the FLINT Hermite kernel does not take symbolic coefficients)", "source" -> "E3 tests, 2026-11-14"|>,
 <|"id" -> "G-perf-3", "area" -> "Bronstein", "gap" -> "the fourth root of the tangent times out (13 of 120 random m = 3, 4 components also time out at 30 s)",
   "kind" -> "Integrate", "f" -> Hold[Tan[x]^(1/4)], "current" -> "timeout", "budget" -> 60,
-  "followup" -> "profile m = 4 over Q(i); the random-component sweep of E6e", "source" -> "review of E4.2; E6e sweep"|>,
+  "followup" -> "profiled in batch E: finishes in 154 s with a verified answer; the time is brSpecialDivisorIdeal / idealTimes over a degree-8 residue extension of the function field (as G-perf-2)", "source" -> "review of E4.2; E6e sweep"|>,
 
 (* ---- Bronstein scope ----------------------------------------------------- *)
 <|"id" -> "G-sign-1", "area" -> "Bronstein", "gap" -> "radicals equal up to a sign seen only on a branch cut: undecided (E6d)",
@@ -66,21 +63,12 @@ bronsteinOpenGaps = {
   "kind" -> "Expr", "f" -> Hold[Head[Together[3/(2 z^3 + 2 Sqrt[2] z^6) + (-3 + 3 z + z^2 - 3 Sqrt[2] z^3 - 2 Sqrt[2] z^5)/(2 z^3 - 2 z^4 + 4 Sqrt[2] z^6 - 2 Sqrt[2] z^7 + 4 z^9)]]], "current" -> "Plus", "budget" -> 60,
   "followup" -> "combine over Q(constants) when the divide-back over Q[constants] fails", "source" -> "Phase 4.3b"|>,
 (* ---- found by the adversarial reviews of Bronstein, Trager and PMT (2026-11-14) *)
-<|"id" -> "G-adv-b5", "area" -> "Bronstein", "gap" -> "an inverse trig times a logarithm times out (elementary: D[ArcSin[x] Log[x]])",
-  "kind" -> "Integrate", "f" -> Hold[Together[D[ArcSin[x] Log[x], x]]], "current" -> "timeout", "budget" -> 60,
-  "followup" -> "profile; the kappa split and the trig front end on reducible logs", "source" -> "adversarial review of Bronstein"|>,
 <|"id" -> "G-adv-c1", "area" -> "Risch (C)", "gap" -> "a transcendental constant (Log[2]) beside the tower: the C decider's no is now demoted to undecided, so this correct certificate is lost",
   "kind" -> "Expr", "f" -> Hold[Head[Quiet[Risch`ElementaryIntegralQ[Log[2]/(1 + u^2) + Log[u]/(1 + u^2), u]]]], "current" -> "Risch`ElementaryIntegralQ", "budget" -> 60,
   "followup" -> "treat transcendental constants as parameters of the constant field (Phase 4.4)", "source" -> "adversarial review of Bronstein"|>,
 <|"id" -> "G-adv-p1", "area" -> "ParallelMixedTower", "gap" -> "the tower builder does not prove its generators independent (Gaussian exponent combinations, an exponential beside a flattened radical, relations lost on rebuild); certificates now need independent confirmation, which drops PMT's unique ones",
   "kind" -> "Expr", "f" -> Hold[Quiet[Integrate`ParallelMixedTower[(I E^(I x) + 2 E^(2 x) + I E^((2 + I) x))/(1 + E^(2 x)), x]][[1]]], "current" -> "\"failed\"", "budget" -> 120,
-  "followup" -> "structure-theorem independence in BuildTower over Q(i) and with flattened radicals; then certify without confirmation", "source" -> "adversarial review of PMT"|>,
-<|"id" -> "G-adv-t2", "area" -> "Trager", "gap" -> "a hang over Q(i) with residue fields of degree >= 2: kDivRemNF is handed a rational (not polynomial) dividend in normalizeAtInfinity",
-  "kind" -> "Integrate", "f" -> Hold[1/((x^2 + I) Sqrt[x + 1])], "current" -> "timeout", "budget" -> 60,
-  "followup" -> "make the dividend polynomial (clear the denominator) before kDivRem over Q(i)", "source" -> "adversarial review of Trager"|>,
-<|"id" -> "G-adv-t3", "area" -> "Trager", "gap" -> "a Gaussian binomial times out (elementary by Chebyshev)",
-  "kind" -> "Integrate", "f" -> Hold[(1 + (1 + I) x^4)^(3/4)], "current" -> "timeout", "budget" -> 60,
-  "followup" -> "after G-adv-t2", "source" -> "adversarial review of Trager"|>
+  "followup" -> "structure-theorem independence in BuildTower over Q(i) and with flattened radicals; then certify without confirmation", "source" -> "adversarial review of PMT"|>
 };
 
 openGapsStructural = {

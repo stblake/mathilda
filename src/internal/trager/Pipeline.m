@@ -193,8 +193,16 @@ tidyRootSum[RootSum[q_, Function[body_]], tidy_] := Module[{s = Unique["s"], nb}
 tidyRootSum[e_, tidy_] := e;
 
 reduceRadicalPowers::usage = "reduceRadicalPowers[e, yh, n, g] rewrites the rational function e of x and the symbol yh, where yh^n = g, with numerator and denominator reduced modulo yh^n - g (every power of yh below n).";
-reduceRadicalPowers[e_, yh_Symbol, n_Integer, g_] := Module[{t = Together[e]},
-  Together[reduceYDegree[Numerator[t], yh, n, g]/reduceYDegree[Denominator[t], yh, n, g]]];
+reduceRadicalPowers[e_, yh_Symbol, n_Integer, g_] := Module[{roots, syms, t, r},
+  (* a Root of the residue field is opaque to this rewrite: Together over 217
+     copies of a degree-8 Root with 40-digit coefficients took minutes
+     ((1 + (1 + I) x^4)^(3/4), G-adv-t3); as a symbol it is a plain rational
+     simplification, an identity, and the Root is put back after *)
+  roots = DeleteDuplicates[Cases[e, _Root, {0, Infinity}]];
+  syms = Table[Unique["Trager`Private`rt"], {Length[roots]}];
+  t = Together[e /. Thread[roots -> syms]];
+  r = Together[reduceYDegree[Numerator[t], yh, n, g]/reduceYDegree[Denominator[t], yh, n, g]];
+  r /. Thread[syms -> roots]];
 
 TragerIntegrateCurve[a_, x_Symbol, m_Integer, G_, method_String : "Trager"] := Module[{r},
   r = catchTrager[integrateComponent[a, x, m, G, method]];
