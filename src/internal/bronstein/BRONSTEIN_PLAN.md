@@ -1330,6 +1330,92 @@ spec entry and a changelog note.
    parameter values; the docs and docstring say so. Specialisation for torsion also specialises the
    parameters. The Theory note (E4) proves this is sound.
 
+### Phase 4.5: efficient ideal and field arithmetic (added 2026-11-15, after batch E)
+
+**Why.** Batch E profiled the remaining timeouts. They all land in the same
+layer: arithmetic on fractional ideals of the curve's integral basis, and on
+the residue fields under them. None lands in the algorithms above that layer.
+
+| Gap | Where the time goes |
+|---|---|
+| G-perf-2 | `idealTimes` of the E3 special divisor: 56 s for one product |
+| G-perf-3 (`Tan[x]^(1/4)`) | `brSpecialDivisorIdeal`: 154 s in total, 10–25 s per divisor |
+| G-perf-4 | `kNorm` in `logDerivativeNF`, a resultant with radical coefficients: 9 s per call |
+
+The fast path (`nativeIdeal`, `FLINT`PolynomialHermiteForm`) covers only Q,
+GF(p) and NF. `nativeQ[F]` is False for a rational function field `fieldFn`.
+So every ideal over `Fn`, the residue fields over k(θ) of the E3 special
+places, runs the generic `.m` route: `hnfModDet` over symbolic coefficients.
+
+Phase 4.4 (symbolic parameters as transcendental constants) makes **every**
+field an `Fn`. So this phase comes **before 4.4**: without it, 4.4 turns
+today's slow cases into the common case.
+
+**Scope.** The operations of `src/internal/trager/Ideal.m` and the field
+layer under them, over every field type `fieldQ`, `fieldGF`, `fieldNF` (with
+"I", "consts", "rel") and `fieldFn` (with an algebraic extension):
+- ideal operations: `idealTimes`, `idealPower`, `idealInverse`,
+  `idealReduce`, `hnfModDet`, `twoGenerators`, `idealEqualQ`,
+  `residueIdeal`, `divisorIdeal`;
+- their consumers: `principalGenerator`, `normalizeAtInfinity`;
+- field operations: `kNorm`, `kExtGCD`, `kDivRem`, `rc`, the trace.
+
+**Design (to be confirmed by a spike, recorded below before the code).**
+1. **Measure first.** A benchmark harness, `tests/bronstein_bench/ideal_ops.m`:
+   - each operation on the frozen inputs of G-perf-2/3/4, the E3 tests and
+     the Trager corpus, timed per field type;
+   - a baseline table checked in;
+   - a ratchet ctest in the nightly tier (machine-independent ratios, as
+     `bench_assoc`).
+2. **Two-element representation.**
+   - Multiply ideals as `(a, α)·(b, β) = (ab, aβ, bα, αβ)`, then reduce, and
+     power them by repeated two-element squaring.
+   - This replaces the n²-row Hermite form of the full product. `twoGenerators`
+     exists already; make it the primary form, with Hermite form only for
+     equality and principal-generator tests.
+3. **A native kernel for `Fn`, by evaluation and interpolation.**
+   - Specialise the parameters (and x where it is a coefficient variable) to
+     points, and run the native NF/GF Hermite form there.
+   - Reconstruct by dense, or sparse (Ben-Or–Tiwari / Zippel), rational
+     function interpolation with early termination.
+   - Certify the result in characteristic 0: the Hermite form is unique, so a
+     reconstructed basis is checked by membership of the generators and
+     equality of determinants, never trusted.
+   - The alternative, a C kernel on FLINT `fmpz_mpoly_q` (fraction-field)
+     coefficients, is decided by the spike.
+4. **Residue fields relative to K0** (G-perf-4):
+   - a residue field over Q(constants) as a tower K0[Z]/(q), with norms and
+     traces down to K0 by resultants over K0's generator, not over Q with
+     literal radicals;
+   - absolute fields (`primitiveFieldByNorm`) only where a single primitive
+     element is genuinely needed (the torsion reduction mod p).
+5. **Modular norms.** `kNorm` / `Resultant` over NF and Fn by CRT over primes
+   (or evaluation points) with a degree bound, instead of the symbolic
+   subresultant over radical coefficients.
+
+**Theory (note section E7, before the code it justifies).**
+- Correctness of interpolation plus certification: the specialised Hermite
+  forms agree with the generic one outside a proper Zariski-closed set, and
+  the certificate checks the generic form exactly.
+- The two-element product and its reduction in a Dedekind domain.
+- The relative norm and trace over K0.
+- Each gets an adversarial review and a numeric check, as before.
+
+**Tests.**
+- Unit tests for every new routine, `.m` and C (the coverage gate).
+- A property test: random ideals over each field type, with the product,
+  power and inverse compared against the current generic route on small
+  cases.
+- A cross-check that the native route and the generic route agree on the
+  whole Trager and Bronstein corpora.
+
+**Exit criteria.**
+- G-perf-2 and G-perf-3 under 20 s each, and G-perf-4 closed.
+- No regression in the corpora, shootouts or ctests.
+- The ideal benchmark ratchet checked in.
+- Every new path certified, with no new uncertain site in the completeness
+  ratchet.
+
 ### Phase 5: the radical anywhere (largest; theory first)
 
 - **A differential-field record** (`brDField`, a new `DField.m`) abstracts the base field. Its
@@ -1397,7 +1483,7 @@ and a numeric sanity check before its phase starts.
 
 ### Execution and bookkeeping
 
-- **Order:** Phase 0 → 1 → 2 → 3 → 4 → 5 → close-out. The E-notes come before Phases 3 (E3, E5),
+- **Order:** Phase 0 → 1 → 2 → 3 → 4 (4.1–4.3) → 4.5 (efficient ideal and field arithmetic, added 2026-11-15) → 4.4 → 5 → close-out. The E-notes come before Phases 3 (E3, E5),
   4 (E4) and 5 (E1, E2).
 - **At the start of execution:** append this plan as a dated section of
   `src/internal/bronstein/BRONSTEIN_PLAN.md`, add a `tasks/todo.md` section, and keep a progress log

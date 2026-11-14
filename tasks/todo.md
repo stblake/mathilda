@@ -1614,6 +1614,13 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [ ] presentation: Root objects in Sqrt[Tan[x]]-type answers -> radicals / real form; Trager:residue-field-QI (tower method over Q(i))
   - [ ] 4.3 general number fields (fieldFn[vars, {alpha, mu, theta}]); 4.4 symbolic parameters (E4)
   - [ ] flaky: integrate_cascade_trager_bronstein_tests:89 -- also seen ALONE (2026-11-14, ~1 in 3); $MessageList is EMPTY when it fires and no anonymous mth_msg_note_fired runs (lldb), and it passes under lldb: a timing-dependent Check frame marked without a recorded message (suspect: a TimeConstrained unwind around a Quiet/Check frame)
+- [ ] Phase 4.5 (added 2026-11-15, user; before 4.4): efficient ideal and field arithmetic — plan in BRONSTEIN_PLAN.md "Phase 4.5"
+  - [ ] benchmark harness + baseline (ideal ops per field type on G-perf-2/3/4, E3, Trager corpus); nightly ratchet
+  - [ ] spike: Fn kernel by evaluation/interpolation + certification vs a C kernel on fmpz_mpoly_q; record the decision
+  - [ ] two-element representation as the primary ideal form (product, power)
+  - [ ] native Fn ideal kernel (the spike's choice), certified in characteristic 0
+  - [ ] residue fields relative to K0 (relative norms/traces); modular norms (kNorm/Resultant by CRT)
+  - [ ] theory note E7 + adversarial review; unit/property tests; exit: G-perf-2/3 < 20 s, G-perf-4 closed
 - [ ] Phase 5: radical anywhere (brDField, transcendental Risch over algebraic base, RDE on a curve over a tower)
 - [ ] Theory note docs/notes/bronstein_extensions.tex (E1–E6; LaTeX per user 2026-11-14), each adversarially reviewed — E6a–c written v0.6547, review pending
 - [ ] Close-out
