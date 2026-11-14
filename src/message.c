@@ -396,18 +396,31 @@ Expr* builtin_quiet(Expr* res) {
  * evaluated failexpr, otherwise expr's value.  HoldAll.  A Throw propagates
  * (it is not a message). */
 Expr* builtin_check(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2 ||
-        res->data.function.arg_count > 3) return NULL;
+    if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 2) return NULL;
+    size_t argc = res->data.function.arg_count;
     int frame = g_check_depth;
     if (!frames_reserve((void**)&g_checks, &g_checks_cap, frame, sizeof(CheckFrame)))
         return NULL;
+    /* Check[expr, failexpr, s1::t1, s2::t2, ...]: several names (or lists of
+     * names) are the List of them, as in the reference; spec_covers walks it.
+     * One name keeps borrowing the argument. */
+    Expr* owned_spec = NULL;
+    if (argc > 3) {
+        Expr** names = malloc(sizeof(Expr*) * (argc - 2));
+        if (!names) return NULL;
+        for (size_t i = 2; i < argc; i++) names[i - 2] = expr_copy(res->data.function.args[i]);
+        owned_spec = expr_new_function(expr_new_symbol(SYM_List), names, argc - 2);
+        free(names);
+    }
     g_checks[frame].quiet_height = g_msg_suppress_depth;
     g_checks[frame].fired = 0;
-    g_checks[frame].spec = res->data.function.arg_count == 3 ? res->data.function.args[2] : NULL;
+    g_checks[frame].spec = owned_spec ? owned_spec
+                         : argc == 3 ? res->data.function.args[2] : NULL;
     g_check_depth = frame + 1;
     Expr* val = evaluate(res->data.function.args[0]);
     int fired = g_check_depth > frame && g_checks[frame].fired;
     g_check_depth = frame;
+    if (owned_spec) expr_free(owned_spec);
     if (val && eval_is_inflight_unwind(val)) return val;
     if (fired) {
         if (val) expr_free(val);
@@ -641,7 +654,8 @@ void message_init(void) {
     symtab_set_docstring("Check",
         "Check[expr, failexpr] returns failexpr if a message is generated while "
         "evaluating expr, otherwise the value of expr.\n"
-        "Check[expr, failexpr, {s1::t1, ...}] checks only for the named messages.\n"
+        "Check[expr, failexpr, {s1::t1, ...}] or Check[expr, failexpr, s1::t1, s2::t2, ...] "
+        "checks only for the named messages.\n"
         "\tA message suppressed by a Quiet inside the Check does not count.");
 
     symtab_add_builtin("Message", builtin_message);

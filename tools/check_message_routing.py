@@ -196,6 +196,22 @@ def main():
     )
     stale = sorted(k for k in BASELINE if k not in detected)
 
+    # Second failure mode: a site that does route through the funnel but
+    # guards it with arith_warnings_muted().  That helper ORs in Quiet[], so
+    # under Quiet the site returns BEFORE the funnel and the message never
+    # reaches an enclosing Check[] -- Quiet[Check[Product[2, {k, 1, Infinity}],
+    # f]] returned the held Product, not f (found 2026-11-13 at 15 sites).
+    # Gate on the raw internal-probe flag g_arith_warnings_muted (or pass it
+    # to mth_message_gated) and let the funnel apply Quiet.  Assert-empty.
+    muted_guards = []
+    for path in all_sources():
+        rel = os.path.relpath(path, ROOT)
+        if rel == os.path.join("src", "arithmetic.h"):
+            continue                       # the definition itself
+        text = blank_comments(read(path))
+        for m in re.finditer(r"\barith_warnings_muted\s*\(\s*\)", text):
+            muted_guards.append(f"{rel}:{line_of(text, m.start())}")
+
     total_sites = sum(len(v) for v in detected.values())
     print(
         f"scanned src/ (excl external): {len(detected)} distinct raw Head::tag "
@@ -204,6 +220,17 @@ def main():
     print(f"EXEMPT={len(EXEMPT)}  BASELINE={len(BASELINE)}")
 
     failed = False
+    if muted_guards:
+        failed = True
+        print("\nmessage-routing audit FAILED -- Quiet-folding guard(s):\n", file=sys.stderr)
+        for k in muted_guards:
+            print(
+                f"  {k}\n"
+                f"    arith_warnings_muted() includes Quiet[], so the message never\n"
+                f"    reaches an enclosing Check[]. Test g_arith_warnings_muted (the raw\n"
+                f"    internal-probe mute) or use mth_message_gated(g_arith_warnings_muted, ...).\n",
+                file=sys.stderr,
+            )
     if problems:
         failed = True
         print("\nmessage-routing audit FAILED -- new raw diagnostic(s):\n", file=sys.stderr)

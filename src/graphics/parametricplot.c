@@ -327,7 +327,7 @@ static bool split_options_param(Expr* res, size_t opts_start, long default_plot_
             if (!parse_long_value(rhs, &v) || v < 0) PFAIL();
             sopts->max_recursion = (int)v;
         } else if (name == SYM_MaxPlotPoints) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             bool is_inf = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Infinity);
             long lv = -1;
             bool ok = is_inf;
@@ -336,7 +336,7 @@ static bool split_options_param(Expr* res, size_t opts_start, long default_plot_
             if (!ok) PFAIL();
             sopts->max_plot_points = lv;
         } else if (name == SYM_Mesh) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             bool on  = (v->type == EXPR_SYMBOL && (v->data.symbol.name == SYM_All  || v->data.symbol.name == SYM_True));
             bool off = (v->type == EXPR_SYMBOL && (v->data.symbol.name == SYM_None || v->data.symbol.name == SYM_False));
             expr_free(v);
@@ -347,7 +347,7 @@ static bool split_options_param(Expr* res, size_t opts_start, long default_plot_
         } else if (name == SYM_ColorFunction) {
             sopts->color_function = rhs;
         } else if (name == SYM_ColorFunctionScaling) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             sopts->color_function_scaling = !(v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False);
             expr_free(v);
         } else if (name == SYM_PlotStyle) {
@@ -659,7 +659,7 @@ static Expr* prescan_plotlegends(Expr* res, size_t opts_start) {
         if (!is_rule_arg(arg)) continue;
         Expr* lhs = arg->data.function.args[0];
         if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == SYM_PlotLegends)
-            return evaluate(expr_copy(arg->data.function.args[1]));
+            return evaluate(arg->data.function.args[1]);
     }
     return NULL;
 }

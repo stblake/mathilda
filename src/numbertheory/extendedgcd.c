@@ -38,7 +38,7 @@
 
 /* ExtendedGCD::exact -- an inexact (Real / MPFR) argument was supplied. */
 static Expr* egcd_emit_exact(Expr* arg, Expr* res) {
-    if (!arith_warnings_muted()) {
+    if (!g_arith_warnings_muted) {
         char* arg_str = expr_to_string(arg);
         char* call_str = expr_to_string(res);
         mth_message("ExtendedGCD", "exact", "Argument %s in %s is not an exact number.", arg_str ? arg_str : "?", call_str ? call_str : "?");
@@ -51,7 +51,7 @@ static Expr* egcd_emit_exact(Expr* arg, Expr* res) {
 /* ExtendedGCD::egcd -- every argument is exact but at least one is a
  * non-integer rational. */
 static Expr* egcd_emit_egcd(Expr* res) {
-    if (!arith_warnings_muted()) {
+    if (!g_arith_warnings_muted) {
         char* call_str = expr_to_string(res);
         mth_message("ExtendedGCD", "egcd", "Arguments in %s should be integers.", call_str ? call_str : "?");
         free(call_str);

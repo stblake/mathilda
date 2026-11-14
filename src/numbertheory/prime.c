@@ -211,7 +211,7 @@ static double prime_estimate(double n) {
 
 /* Emit `Prime::intpp: Positive integer argument expected in <call>.` */
 static Expr* prime_emit_intpp(Expr* res) {
-    if (!arith_warnings_muted()) {
+    if (!g_arith_warnings_muted) {
         char* call = expr_to_string(res);
         mth_message("Prime", "intpp", "Positive integer argument expected in %s.", call ? call : "?");
         free(call);
@@ -235,7 +235,7 @@ Expr* builtin_prime(Expr* res) {
     }
     size_t argc = res->data.function.arg_count;
     if (argc != 1) {
-        if (!arith_warnings_muted()) {
+        if (!g_arith_warnings_muted) {
             mth_message("Prime", "argx", "Prime called with %zu argument%s; 1 argument is expected.", argc, argc == 1 ? "" : "s");
         }
         return NULL;

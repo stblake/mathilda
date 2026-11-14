@@ -65,7 +65,7 @@ Expr* builtin_product_besselzero(Expr* res) {
     if (!definite || !bz_is_inf(imax)) return NULL;
     if (!(imin->type == EXPR_INTEGER && imin->data.integer == 1)) return NULL;
 
-    Expr* fn = evaluate(expr_copy(f));
+    Expr* fn = evaluate(f);
 
     /* f must be Plus[1, t] with t = -X2 * BesselJZero[nu,k]^-2. */
     if (!bz_is_head(fn, "Plus") || fn->data.function.arg_count != 2) {

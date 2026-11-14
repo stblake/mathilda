@@ -117,7 +117,7 @@ static bool parse_var_part(const Expr* first, const char** var_sym,
         const Expr* v = first->data.function.args[0];
         if (!v || v->type != EXPR_SYMBOL) return false;
         *var_sym = v->data.symbol.name;
-        *default_out = evaluate(expr_copy((Expr*)first->data.function.args[1]));
+        *default_out = evaluate((Expr*)first->data.function.args[1]);
         return true;
     }
     return false;
@@ -420,7 +420,7 @@ static void graphics_manipulate(const Expr* body, ManipCtrl* ctrls, int n_ctrls)
             symtab_add_own_value(ctrls[k].var->data.symbol.name, vpat, val);
             expr_free(vpat);
         }
-        Expr* result = evaluate(expr_copy((Expr*)body));
+        Expr* result = evaluate((Expr*)body);
         for (int k = n_ctrls - 1; k >= 0; k--)
             iter_spec_restore(ctrls[k].var, saved[k]);
         if (frame_expr) expr_free(frame_expr);
@@ -549,7 +549,7 @@ Expr* builtin_manipulate(Expr* res) {
     int n_ctrls = 0;
 
     for (size_t i = 1; i < argc && n_ctrls < MAX_CTRLS; i++) {
-        Expr* arg_ev = evaluate(expr_copy(res->data.function.args[i]));
+        Expr* arg_ev = evaluate(res->data.function.args[i]);
         ManipCtrl c;
         memset(&c, 0, sizeof(c));
         bool ok = parse_control_spec(arg_ev, &c);

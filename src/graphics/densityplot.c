@@ -73,20 +73,20 @@ static bool split_density_options(Expr* res, DensityOpts* o,
         } else if (name == SYM_ColorFunction) {
             o->color_function = rhs;          /* borrowed */
         } else if (name == SYM_ColorFunctionScaling) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             o->color_function_scaling = !(v->type == EXPR_SYMBOL
                                           && v->data.symbol.name == SYM_False);
             expr_free(v);
         } else if (name == SYM_RegionFunction) {
             o->region_function = rhs;          /* borrowed */
         } else if (name == SYM_PlotLegends) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             o->show_legend = !(v->type == EXPR_SYMBOL
                                && (v->data.symbol.name == SYM_None
                                    || v->data.symbol.name == SYM_False));
             expr_free(v);
         } else if (name == SYM_ScalingFunctions) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             parse_scaling_functions(v, &o->sf_x, &o->sf_y);
             expr_free(v);
         } else {
@@ -98,7 +98,7 @@ static bool split_density_options(Expr* res, DensityOpts* o,
                           || rhs->data.symbol.name == SYM_None)))
                     have_frame = true;
             }
-            Expr* val    = evaluate(expr_copy(rhs));
+            Expr* val    = evaluate(rhs);
             Expr* a[2]   = { expr_copy(lhs), val };
             pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         }

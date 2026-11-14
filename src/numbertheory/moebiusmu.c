@@ -26,7 +26,7 @@
 /* Emit the wrong-argument-count diagnostic for MoebiusMu and return NULL so the
  * call is left unevaluated.  WL expects exactly one argument. */
 static Expr* moebiusmu_emit_argx(size_t argc) {
-    if (!arith_warnings_muted()) {
+    if (!g_arith_warnings_muted) {
         mth_message("MoebiusMu", "argx", "MoebiusMu called with %zu argument%s; 1 argument is expected.", argc, argc == 1 ? "" : "s");
     }
     return NULL;

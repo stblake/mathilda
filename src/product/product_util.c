@@ -1,6 +1,8 @@
 /* product_util.c -- shared helpers for the Product sub-algorithms. */
 
 #include "product_internal.h"
+#include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "arithmetic.h"   /* arith_warnings_muted */
 #include "sym_names.h"
 #include "eval.h"
 #include "expr.h"
@@ -355,4 +357,21 @@ bool prod_linear_factors(Expr* e, Expr* var,
     *n_out = n;
     *all_linear_out = all_linear;
     return true;
+}
+
+/* Product::div, at most once per Product evaluation: several stages (the
+ * dispatcher's convergence gate, Product`Infinite, Product`RationalInfinite and
+ * its Real twin) can each conclude divergence for the same input, and the
+ * message used to print two to ten times.  The dispatcher resets the flag
+ * around each infinite product it evaluates. */
+int g_product_div_reported = 0;
+
+void prod_warn_div(void) {
+    /* Gated on the RAW internal-probe mute only: arith_warnings_muted() also
+     * folds in Quiet, and returning on it kept the message from the funnel,
+     * so Quiet[Check[Product[2, {k, 1, Infinity}], f]] never saw it (the stage
+     * emitters had the same bug).  The funnel applies Quiet itself. */
+    if (g_product_div_reported || g_arith_warnings_muted) return;
+    g_product_div_reported = 1;
+    mth_message_gated(g_arith_warnings_muted, "Product", "div", "Product does not converge.");
 }

@@ -5279,6 +5279,24 @@ With a concrete integer lower bound:
   (`Sum[1/k^2, {k, m, Infinity}]`), and a pole the term itself removes are left to
   the stages.
 
+**Convergence (v0.6553).** An infinite sum is classified before any stage runs
+(`src/sum/sum_converge.c`), because each stage sums an analytic continuation and
+cannot see divergence. Tests, in order:
+- **Hypergeometric terms:** an exact term ratio is built factor by factor from
+  polynomials, `c^k`, and `Factorial`, `Gamma`, `Binomial` or `Pochhammer` of
+  linear arguments. Then the ratio test applies, with Raabe's test on the unit
+  circle.
+- **Algebraic-log terms** (`k^a`, `Log[P(k)]^m`, `(-1)^k`, and `Sin` or `Cos` of
+  a linear argument): the p-test and Bertrand's test, or only the term test when
+  the term oscillates.
+- **A sum of terms:** decided term by term.
+
+A divergent series gives `Sum::div` and stays unevaluated, as in the reference
+(`1/k`, `1`, `(-1)^k`, `1/Sqrt[k]`, `2^k`, `1/(k Log[k])`, `Sin[k]`, `k!`,
+`(k + 1)/(k^2 + 3)`). An undecided term, such as a symbolic `x^k` or `k^-s`, is
+left to the stages: `Sum[x^k, {k, 0, Infinity}]` is `1/(1 - x)`, as in the
+reference. `VerifyConvergence -> False` skips the test.
+
 The conventions the oracle checks follow the reference. A symbolic upper bound
 `n` is assumed to lie on the lattice `imin + Integers`: `Product[k, {k, 1/2, n}]`
 is `Pochhammer[1/2, 1/2 + n]`. `Sum[f, {c}]`, with `c` the summand's own symbol,
@@ -5715,6 +5733,25 @@ products; convergent ones are evaluated as the limit of the finite closed
 form, and the Weierstrass family `Product[1 + c/k^2, {k, 1, Infinity}]`
 → `Sinh[Pi Sqrt[c]]/(Pi Sqrt[c])` is recognised directly.  A divergent
 product prints `Product::div` and stays unevaluated.
+
+**Convergence first (v0.6553).** The dispatcher classifies every infinite product
+before any stage runs:
+- A constant or rational factor is decided exactly.
+- Otherwise the term limit `L` and `lambda = lim k (f - 1)` are computed with a
+  time-limited `Limit`. Over analytic heads only, `Sum (f - 1)` (and `Sum (f - 1)^2`
+  when `f - 1` alternates) is classified as well.
+
+The results follow the reference:
+
+| The product … | Result |
+|---|---|
+| tends to 0 | `0`: `Product[E^(-k), …]`, `Product[1 - 1/k, {k, 2, Infinity}]`, `Product[(1 + 1/k)^k/E, …]`, `Product[1/2, …]` |
+| tends to Infinity, or has no limit | `Product::div`, held: `Product[1 + 1/k, …]`, `Product[k, …]`, `Product[2, …]`, `Product[1 - 2^k, …]`, which was `QPochhammer[2, 2]` |
+| depends on a symbolic `q` | left to the stages: `QPochhammer[q, q]` |
+
+A pole of the factor on the range keeps the 0 verdict from applying.
+`Product::div` is printed once per evaluation; it printed up to ten times. It is
+also visible to `Check` under `Quiet`.
 
 ### Product`RationalInfinite
 

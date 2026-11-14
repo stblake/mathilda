@@ -2455,7 +2455,7 @@ static Expr* builtin_simplify_core(Expr* res) {
             effective = combine_with_and(expr_copy(positional_assum),
                                          expr_copy(opt_assumptions));
         } else {
-            effective = evaluate(expr_copy(opt_assumptions));
+            effective = evaluate(opt_assumptions);
         }
     } else {
         Expr* dollar = read_dollar_assumptions();

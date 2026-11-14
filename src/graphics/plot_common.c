@@ -57,7 +57,7 @@ bool is_rule_arg(Expr* e) {
 }
 
 bool parse_long_value(Expr* rhs, long* out) {
-    Expr* v = evaluate(expr_copy(rhs));
+    Expr* v = evaluate(rhs);
     bool ok = (v->type == EXPR_INTEGER);
     if (ok) *out = (long)v->data.integer;
     expr_free(v);

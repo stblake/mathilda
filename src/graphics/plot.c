@@ -44,7 +44,7 @@ static bool list2_nums(Expr* e, double* a, double* b) {
  * untouched and returns false. The band is fed to the sampler as a clip frame;
  * see PlotSampleOpts. */
 static bool plotrange_yband(Expr* rhs, double* lo, double* hi) {
-    Expr* v = evaluate(expr_copy(rhs));
+    Expr* v = evaluate(rhs);
     double a, b;
     bool ok = false;
     if (v->type == EXPR_FUNCTION && v->data.function.head
@@ -195,7 +195,7 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
             if (!parse_long_value(rhs, &v) || v < 0) FAIL_CLEANUP();
             sopts->max_recursion = (int)v;
         } else if (name == SYM_MaxPlotPoints) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             bool is_inf = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Infinity);
             long lv = -1;
             bool ok = is_inf;
@@ -207,7 +207,7 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
             /* Mesh -> All (or True) overlays the evaluation points as dots;
              * None/False (the default) draws the line only. Consumed here, so
              * it never reaches the Graphics[...] result. */
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             bool on = (v->type == EXPR_SYMBOL
                        && (v->data.symbol.name == SYM_All || v->data.symbol.name == SYM_True));
             bool off = (v->type == EXPR_SYMBOL
@@ -222,7 +222,7 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
         } else if (name == SYM_ColorFunction) {
             sopts->color_function = rhs;
         } else if (name == SYM_ColorFunctionScaling) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             sopts->color_function_scaling = !(v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False);
             expr_free(v);
         } else if (name == SYM_Filling) {
@@ -230,7 +230,7 @@ static bool split_options(Expr* res, PlotSampleOpts* sopts,
         } else if (name == SYM_FillingStyle) {
             sopts->filling_style = rhs;
         } else if (name == SYM_ScalingFunctions) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             parse_scaling_functions(v, &sopts->sf_x, &sopts->sf_y);
             expr_free(v);
         } else if (name == SYM_PlotStyle) {
@@ -568,7 +568,7 @@ static Expr** sample_lines(Expr* body, Expr* var, double xmin, double xmax,
                     }
                     double baseline = filling_baseline(sopts->filling, run_ymin, run_ymax);
                     if (sopts->filling_style) {
-                        prims[prim_count++] = evaluate(expr_copy(sopts->filling_style));
+                        prims[prim_count++] = evaluate(sopts->filling_style);
                     } else {
                         Expr* op_arg[1] = { expr_new_real(0.3) };
                         prims[prim_count++] = expr_new_function(expr_new_symbol(SYM_Opacity), op_arg, 1);
@@ -842,7 +842,7 @@ Expr* builtin_plot(Expr* res) {
         if (!is_rule_arg(arg)) continue;
         Expr* lhs = arg->data.function.args[0];
         if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == SYM_PlotLegends) {
-            legends = evaluate(expr_copy(arg->data.function.args[1]));
+            legends = evaluate(arg->data.function.args[1]);
         }
     }
 

@@ -43,10 +43,6 @@ static bool head_sym_is(const Expr* e, const char* name) {
         && strcmp(e->data.function.head->data.symbol.name, name) == 0;
 }
 
-static void warn_div(void) {
-    if (!arith_warnings_muted())
-        mth_message("Product", "div", "Product does not converge.");
-}
 
 /* Rational convergence classifier: 1 converges, 0 diverges, -1 unknown
  * (non-rational; the .m table / limit route may still resolve it). */
@@ -135,7 +131,7 @@ Expr* builtin_product_infinite(Expr* res) {
 
     if (g_product_verify_convergence) {
         int conv = rational_converges(f, var);
-        if (conv == 0) { warn_div(); return NULL; }
+        if (conv == 0) { prod_warn_div(); return NULL; }
     }
 
     /* Transcendental Weierstrass sine/cosine family (closed form in C). */
@@ -170,7 +166,7 @@ Expr* builtin_product_infinite(Expr* res) {
     if ((out->type == EXPR_SYMBOL &&
          (out->data.symbol.name == SYM_Infinity || out->data.symbol.name == SYM_ComplexInfinity))
         || head_sym_is(out, "DirectedInfinity")) {
-        warn_div();
+        prod_warn_div();
         expr_free(out);
         return NULL;
     }

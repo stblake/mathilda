@@ -38,6 +38,7 @@
 #include "attr.h"
 #include "arithmetic.h"   /* is_rational, make_complex */
 #include "sym_names.h"
+#include "message.h"   /* mth_message: Sum::div through the Quiet/Check funnel */
 #include "compile/autocompile.h"   /* machine fast path for finite numeric sums */
 #include "rationalize.h"   /* internal_contains_inexact */
 #include <string.h>
@@ -741,6 +742,26 @@ static SumPoleVerdict sum_pole_verdict(Expr* f, Expr* var, Expr* imin, Expr* ima
     return v;
 }
 
+/* VerifyConvergence (default True) for the Sum being evaluated; the builtin
+ * sets it from the option and restores it, so a nested Sum sees its own. */
+static bool g_sum_verify_convergence = true;
+
+/* A divergent infinite series is held with Sum::div, as the reference does,
+ * instead of being handed to a stage that would sum its analytic
+ * continuation (Sum[2^k, ...] = -1).  The term is examined at a symbolic,
+ * shadowed index; UNKNOWN (a symbolic ratio x^k, k^-s) lets the stages run. */
+static bool sum_series_diverges(Expr* f, Expr* var) {
+    if (!g_sum_verify_convergence || var->type != EXPR_SYMBOL) return false;
+    IterShadow saved = iter_spec_shadow(var);
+    Expr* fe = evaluate(f);
+    SumConvergence c = sum_series_convergence(fe, var);
+    expr_free(fe);
+    iter_spec_restore(var, saved);
+    if (c != SUM_CONV_NO) return false;
+    mth_message("Sum", "div", "Sum does not converge.");
+    return true;
+}
+
 static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
     /* Indefinite form Sum[f, i]: spec is a bare symbol. */
     if (spec->type == EXPR_SYMBOL) {
@@ -897,6 +918,9 @@ static Expr* sum_one_spec(Expr* f, Expr* spec, SumMethod method) {
         SumPoleVerdict pole = sum_pole_verdict(f, s.var, s.imin, s.imax, &pv);
         if (pole != SUM_POLE_NONE) { iter_spec_free(&s); return pv; }   /* NULL holds */
     }
+    if (s.imax->type == EXPR_SYMBOL && s.imax->data.symbol.name == SYM_Infinity
+        && !sum_body_is_expensive(f)
+        && sum_series_diverges(f, s.var)) { iter_spec_free(&s); return NULL; }
 
     Expr* r = dispatch_def(method, f, s.var, s.imin, s.imax);
     iter_spec_free(&s);
@@ -917,8 +941,17 @@ Expr* builtin_sum(Expr* res) {
     /* Split trailing options from the leading body+specs. */
     SumMethod method = SUM_METHOD_AUTOMATIC;
     size_t nspecs_end = argc;            /* one past the last non-option arg */
+    bool verify = true;
     for (size_t i = argc; i > 1; i--) {
         if (is_option(a[i - 1])) {
+            const Expr* o = a[i - 1];
+            if (o->data.function.args[0]->type == EXPR_SYMBOL
+                && o->data.function.args[0]->data.symbol.name == SYM_VerifyConvergence) {
+                const Expr* v = o->data.function.args[1];
+                verify = !(v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False);
+                nspecs_end = i - 1;
+                continue;
+            }
             SumMethod m = parse_method_option(a[i - 1]);
             if (m == SUM_METHOD_INVALID) return NULL;
             if (m != SUM_METHOD_AUTOMATIC) method = m;
@@ -963,7 +996,11 @@ Expr* builtin_sum(Expr* res) {
         return r;
     }
 
-    return sum_one_spec(f, a[1], method);
+    bool saved_verify = g_sum_verify_convergence;
+    g_sum_verify_convergence = verify;
+    Expr* r = sum_one_spec(f, a[1], method);
+    g_sum_verify_convergence = saved_verify;
+    return r;
 }
 
 void sum_init(void) {

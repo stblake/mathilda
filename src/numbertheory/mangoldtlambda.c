@@ -85,7 +85,7 @@ Expr* builtin_mangoldtlambda(Expr* res) {
     /* Gated on the arithmetic-probe mute: NSum samples its summand at
      * non-integer points to learn whether it is continuous, and those trial
      * evaluations must stay silent (and invisible to Check). */
-    if (mangoldt_is_inexact_number(n) && !arith_warnings_muted()) {
+    if (mangoldt_is_inexact_number(n) && !g_arith_warnings_muted) {
         char* s = expr_to_string(n);
         char* c = expr_to_string(res);
         mth_message_gated(g_arith_warnings_muted, "MangoldtLambda", "exact",

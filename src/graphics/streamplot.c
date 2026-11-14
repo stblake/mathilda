@@ -400,7 +400,7 @@ static bool split_stream_options(Expr* res, StreamOpts* so,
         const char* name = (lhs->type == EXPR_SYMBOL) ? lhs->data.symbol.name : NULL;
 
         if (name == SYM_StreamPoints || name == SYM_PlotPoints) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             if (v->type == EXPR_INTEGER && v->data.integer >= 1) {
                 so->stream_points = (int)v->data.integer;
                 expr_free(v);
@@ -410,7 +410,7 @@ static bool split_stream_options(Expr* res, StreamOpts* so,
                 /* keep default */
             }
         } else if (name == SYM_StreamScale) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_None) {
                 so->stream_scale = -1.0; /* run to natural end */
             } else if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Automatic) {
@@ -429,11 +429,11 @@ static bool split_stream_options(Expr* res, StreamOpts* so,
         } else if (name == SYM_PlotLegends) {
             so->legends = rhs; /* borrowed */
         } else if (name == SYM_ScalingFunctions) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             parse_scaling_functions(v, &so->sf_x, &so->sf_y);
             expr_free(v);
         } else if (name == SYM_StreamAnimate) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             so->animate = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_True);
             expr_free(v);
         } else {
@@ -445,7 +445,7 @@ static bool split_stream_options(Expr* res, StreamOpts* so,
                       && (rhs->data.symbol.name == SYM_False || rhs->data.symbol.name == SYM_None)))
                     have_frame = true;
             }
-            Expr* val = evaluate(expr_copy(rhs));
+            Expr* val = evaluate(rhs);
             Expr* a[2] = { expr_copy(lhs), val };
             passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         }
@@ -921,7 +921,7 @@ Expr* builtin_streamplot(Expr* res) {
 
     /* If StreamStyle given, apply it once before all streams. */
     if (have_style) {
-        prims[nprim++] = evaluate(expr_copy(so.stream_style));
+        prims[nprim++] = evaluate(so.stream_style);
     }
 
     for (size_t i = 0; i < nstreams; i++) {
@@ -987,7 +987,7 @@ Expr* builtin_streamplot(Expr* res) {
      * is a continuous gradient bar, not a labeled-line list. */
     Expr* color_bar_meta = NULL;
     if (so.legends && use_speed_color) {
-        Expr* eval_legends = evaluate(expr_copy(so.legends));
+        Expr* eval_legends = evaluate(so.legends);
         bool want_legend = !(eval_legends->type == EXPR_SYMBOL
                              && (eval_legends->data.symbol.name == SYM_None
                               || eval_legends->data.symbol.name == SYM_False));

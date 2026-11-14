@@ -45,6 +45,12 @@ Variants:
   `Infinity::indet` on the `0·ComplexInfinity` probe internally, and `Check`
   must not catch it. Contrast `Quiet`, which is a *user* request to silence a
   *real* message — still noted, so `Quiet[Check[…]]` works.
+  **Never guard a site with `arith_warnings_muted()`**: that helper ORs in
+  `Quiet`, so under `Quiet` the site returns before the funnel and an enclosing
+  `Check` never sees the message (`Quiet[Check[Prime[0], f]]` returned
+  `Prime[0]`; 15 sites were fixed 2026-11-13). Test the raw
+  `g_arith_warnings_muted`. `make check-messages` rejects the helper's use
+  outside `arithmetic.h`.
 - **`mth_message_v(extra_mute, head, tag, fmt, va_list)`** — the shared core;
   per-subsystem helpers (`fs_msg`, `dt_msg`, `ops_msg`, `root_warn`, `fit_warn`,
   `fm_warn`, the `N*` warn helpers, …) delegate to it instead of re-implementing

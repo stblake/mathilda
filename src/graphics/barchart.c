@@ -79,7 +79,7 @@ static bool split_chart_options(Expr* res, size_t start_idx,
         } else {
             if (name == SYM_Axes)        have_axes   = true;
             if (name == SYM_AspectRatio) have_aspect = true;
-            Expr* val  = evaluate(expr_copy(rhs));
+            Expr* val  = evaluate(rhs);
             Expr* a[2] = { expr_copy(lhs), val };
             pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         }
@@ -106,14 +106,14 @@ static bool split_chart_options(Expr* res, size_t start_idx,
 
 static Expr* bar_color(Expr* chart_style, size_t i) {
     if (chart_style) {
-        Expr* cs = evaluate(expr_copy(chart_style));
+        Expr* cs = evaluate(chart_style);
         Expr* color = NULL;
         if (cs->type == EXPR_FUNCTION
             && cs->data.function.head->type == EXPR_SYMBOL
             && cs->data.function.head->data.symbol.name == SYM_List
             && cs->data.function.arg_count > 0) {
             size_t idx = i % cs->data.function.arg_count;
-            color = evaluate(expr_copy(cs->data.function.args[idx]));
+            color = evaluate(cs->data.function.args[idx]);
         } else {
             /* Single directive: use for all bars. */
             color = cs;
@@ -182,7 +182,7 @@ static bool extract_reals(Expr* list, double** vals_out, size_t* n_out) {
     double* v = malloc(sizeof(double) * (n > 0 ? n : 1));
     size_t k = 0;
     for (size_t i = 0; i < n; i++) {
-        Expr* ev = evaluate(expr_copy(list->data.function.args[i]));
+        Expr* ev = evaluate(list->data.function.args[i]);
         double x;
         if (expr_to_real_double(ev, &x)) v[k++] = x;
         expr_free(ev);
@@ -199,7 +199,7 @@ static bool extract_reals(Expr* list, double** vals_out, size_t* n_out) {
 Expr* builtin_barchart(Expr* res) {
     if (res->data.function.arg_count < 1) return NULL;
 
-    Expr* data_arg = evaluate(expr_copy(res->data.function.args[0]));
+    Expr* data_arg = evaluate(res->data.function.args[0]);
     if (!data_arg || data_arg->type != EXPR_FUNCTION
         || data_arg->data.function.head->type != EXPR_SYMBOL
         || data_arg->data.function.head->data.symbol.name != SYM_List) {
@@ -294,7 +294,7 @@ Expr* builtin_barchart(Expr* res) {
      * so the renderer can draw them in screen space (crisp, bold, fixed size)
      * below the x-axis, matching the style of axis tick numbers. */
     if (co.chart_labels) {
-        Expr* labels_ev = evaluate(expr_copy(co.chart_labels));
+        Expr* labels_ev = evaluate(co.chart_labels);
         if (labels_ev->type == EXPR_FUNCTION
             && labels_ev->data.function.head->type == EXPR_SYMBOL
             && labels_ev->data.function.head->data.symbol.name == SYM_List) {
@@ -378,7 +378,7 @@ static size_t histogram_parse_bins(Expr* res,
     Expr* spec = res->data.function.args[1];
     if (is_rule_arg(spec)) goto use_default;  /* opts start here */
 
-    Expr* ev = evaluate(expr_copy(spec));
+    Expr* ev = evaluate(spec);
     if (ev->type == EXPR_INTEGER) {
         int k = (int)ev->data.integer;
         expr_free(ev);
@@ -435,7 +435,7 @@ use_default:;
 Expr* builtin_histogram(Expr* res) {
     if (res->data.function.arg_count < 1) return NULL;
 
-    Expr* data_arg = evaluate(expr_copy(res->data.function.args[0]));
+    Expr* data_arg = evaluate(res->data.function.args[0]);
     double* vals   = NULL;
     size_t  n_vals = 0;
     if (!extract_reals(data_arg, &vals, &n_vals) || n_vals == 0) {

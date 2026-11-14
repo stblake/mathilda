@@ -345,7 +345,7 @@ static bool split_options_param3d(Expr* res, size_t opts_start, long default_plo
             if (!parse_long_value(rhs, &v) || v < 0) P3D_FAIL();
             sopts->max_recursion = (int)v;
         } else if (name == SYM_MaxPlotPoints) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             bool is_inf = (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Infinity);
             long lv = -1;
             bool ok = is_inf;
@@ -354,7 +354,7 @@ static bool split_options_param3d(Expr* res, size_t opts_start, long default_plo
             if (!ok) P3D_FAIL();
             sopts->max_plot_points = lv;
         } else if (name == SYM_Mesh) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             bool on  = (v->type == EXPR_SYMBOL
                         && (v->data.symbol.name == SYM_All || v->data.symbol.name == SYM_True));
             bool off = (v->type == EXPR_SYMBOL
@@ -367,21 +367,21 @@ static bool split_options_param3d(Expr* res, size_t opts_start, long default_plo
         } else if (name == SYM_ColorFunction) {
             sopts->color_function = rhs;
         } else if (name == SYM_ColorFunctionScaling) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             sopts->color_function_scaling =
                 !(v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False);
             expr_free(v);
         } else if (name == SYM_PlotStyle) {
             have_style = true;
             if (*single_color_out) expr_free(*single_color_out);
-            *single_color_out = evaluate(expr_copy(rhs));
+            *single_color_out = evaluate(rhs);
             Expr* a[2] = { expr_copy(lhs), expr_copy(*single_color_out) };
             pass[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         } else {
             /* AspectRatio: silently drop — no meaning for the orbit camera. */
             if (name == SYM_AspectRatio) continue;
             if (name == SYM_Axes) have_axes = true;
-            Expr* val = evaluate(expr_copy(rhs));
+            Expr* val = evaluate(rhs);
             Expr* a[2] = { expr_copy(lhs), val };
             pass[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         }
@@ -653,7 +653,7 @@ static Expr* prescan_plotlegends3d(Expr* res, size_t opts_start) {
         if (!is_rule_arg(arg)) continue;
         Expr* lhs = arg->data.function.args[0];
         if (lhs->type == EXPR_SYMBOL && lhs->data.symbol.name == SYM_PlotLegends)
-            return evaluate(expr_copy(arg->data.function.args[1]));
+            return evaluate(arg->data.function.args[1]);
     }
     return NULL;
 }

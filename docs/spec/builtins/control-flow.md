@@ -1258,6 +1258,7 @@ Out[2]= -Infinity
 Detects whether a message was generated while evaluating an expression.
 - `Check[expr, failexpr]`: Returns `failexpr` if any message is generated during the evaluation of `expr`, otherwise the value of `expr`.
 - `Check[expr, failexpr, spec]`: Same, but only the messages `spec` names count (`sym::tag`, `General::tag`, or a list).
+- `Check[expr, failexpr, s1::t1, s2::t2, ...]`: Several names (or lists of names) as separate arguments; any of them counts (v0.6553).
 
 **Features**:
 - `HoldAll`. A `Throw` inside `expr` propagates (it is not a message).

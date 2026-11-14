@@ -91,14 +91,14 @@ static bool split_cplot_options(Expr* res, size_t first_opt_idx, int default_plo
         } else if (name == SYM_ColorFunction) {
             o->color_function = rhs; /* borrowed */
         } else if (name == SYM_ColorFunctionScaling) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             o->color_function_scaling = !(v->type == EXPR_SYMBOL
                                            && v->data.symbol.name == SYM_False);
             expr_free(v);
         } else if (name == SYM_RegionFunction) {
             o->region_function = rhs; /* borrowed */
         } else if (name == SYM_PlotLegends) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             o->show_legend = !(v->type == EXPR_SYMBOL
                                && (v->data.symbol.name == SYM_None
                                    || v->data.symbol.name == SYM_False));
@@ -112,7 +112,7 @@ static bool split_cplot_options(Expr* res, size_t first_opt_idx, int default_plo
                           || rhs->data.symbol.name == SYM_None)))
                     have_frame = true;
             }
-            Expr* val  = evaluate(expr_copy(rhs));
+            Expr* val  = evaluate(rhs);
             Expr* a[2] = { expr_copy(lhs), val };
             pt[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         }
@@ -183,8 +183,8 @@ static bool parse_complex_iterator(Expr* iter, Expr** zvar_out,
     Expr* zvar = iter->data.function.args[0];
     if (!zvar || zvar->type != EXPR_SYMBOL) return false;
 
-    Expr* e_zmin = evaluate(expr_copy(iter->data.function.args[1]));
-    Expr* e_zmax = evaluate(expr_copy(iter->data.function.args[2]));
+    Expr* e_zmin = evaluate(iter->data.function.args[1]);
+    Expr* e_zmax = evaluate(iter->data.function.args[2]);
 
     double x0, y0, x1, y1;
     bool ok = bound_to_complex(e_zmin, &x0, &y0)
@@ -235,7 +235,7 @@ static bool cp_eval(const AutoCompiled* ac, Expr* zvar, Expr* body, double x, do
     Expr* zval  = expr_new_function(expr_new_symbol(SYM_Complex), ra, 2);
     symtab_add_own_value(zvar->data.symbol.name, zvar, zval);
 
-    Expr* result = evaluate(expr_copy(body));
+    Expr* result = evaluate(body);
     bool ok = false;
     double r = 0.0, i = 0.0;
 

@@ -1098,6 +1098,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_operator_factor.c
     ../src/sum/sum.c
     ../src/sum/sum_util.c
+    ../src/sum/sum_converge.c
     ../src/sum/sum_polynomial.c
     ../src/sum/sum_geometric.c
     ../src/sum/sum_gosper.c

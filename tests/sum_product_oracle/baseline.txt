@@ -71,8 +71,6 @@ prod-viete-fin           # UNEVAL  G8
 prod-gamma-body          # UNEVAL  G8
 iprod-cantor             # UNEVAL  G8
 iprod-k-3                # UNEVAL  G8
-iprod-half               # UNEVAL  G8
 iprod-alt-pairs          # UNEVAL  G8
-iprod-div-q2             # WRONG   P3
 hyp-interior-zero-fin    # UNEVAL  G0  (declines: an interior zero on a finite symbolic range)
 inf-hurwitz-sym          # UNEVAL  G2  (symbolic lower bound; reference: PolyGamma[1, m])

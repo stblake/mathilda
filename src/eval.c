@@ -2119,7 +2119,7 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
          * validated before the write and always stored evaluated (a
          * SetDelayed is evaluated here, once). An invalid value emits
          * ::cxset / ::cxlist and keeps the old one; Set still returns rhs. */
-        Expr* probe = is_delayed ? evaluate(expr_copy(rhs)) : expr_copy(rhs);
+        Expr* probe = is_delayed ? evaluate(rhs) : expr_copy(rhs);
         context_assign(lhs->data.symbol.name, probe);
         expr_free(probe);
         return true;
@@ -2136,14 +2136,14 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
          * the symbol back. If validation fails, the OwnValue is rolled back
          * to the current C-side limit. */
         if (lhs->data.symbol.name == SYM_DollarRecursionLimit) {
-            Expr* probe = is_delayed ? evaluate(expr_copy(rhs)) : expr_copy(rhs);
+            Expr* probe = is_delayed ? evaluate(rhs) : expr_copy(rhs);
             sync_recursion_limit_from_value(probe);
             expr_free(probe);
         } else if (lhs->data.symbol.name[0] == '$' &&
                    eval_is_sysflag(lhs->data.symbol.name)) {
             /* Sigil first so an ordinary symbol assignment pays one byte compare,
              * then the NAME -- never a probe for a symbol that is not a flag. */
-            Expr* probe = is_delayed ? evaluate(expr_copy(rhs)) : expr_copy(rhs);
+            Expr* probe = is_delayed ? evaluate(rhs) : expr_copy(rhs);
             eval_sync_sysflag(lhs->data.symbol.name, probe);
             expr_free(probe);
         }

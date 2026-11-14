@@ -47,7 +47,7 @@ static bool list2_nums3(Expr* e, double* a, double* b) {
  * list. Anything with a non-numeric (Automatic/All) z side leaves the
  * outputs untouched and returns false. */
 static bool plotrange_zband(Expr* rhs, double* lo, double* hi) {
-    Expr* v = evaluate(expr_copy(rhs));
+    Expr* v = evaluate(rhs);
     double a, b;
     bool ok = false;
     if (v->type == EXPR_FUNCTION && v->data.function.head
@@ -126,7 +126,7 @@ static bool split_options3(Expr* res, Plot3DSampleOpts* sopts,
         } else if (name == SYM_Mesh) {
             /* Default True (unlike Plot's default None) -- Mathematica's
              * Plot3D shows grid lines on the surface out of the box. */
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             bool on = (v->type == EXPR_SYMBOL
                        && (v->data.symbol.name == SYM_All || v->data.symbol.name == SYM_True
                            || v->data.symbol.name == SYM_Automatic));
@@ -140,20 +140,20 @@ static bool split_options3(Expr* res, Plot3DSampleOpts* sopts,
         } else if (name == SYM_ColorFunction) {
             sopts->color_function = rhs;
         } else if (name == SYM_ColorFunctionScaling) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             sopts->color_function_scaling = !(v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_False);
             expr_free(v);
         } else if (name == SYM_ExclusionStyle) {
             /* Store the raw rhs for use in the sampler; also pass through to
              * the Graphics3D options so the renderer can inspect it if needed. */
             sopts->exclusion_style = rhs;
-            Expr* val = evaluate(expr_copy(rhs));
+            Expr* val = evaluate(rhs);
             Expr* a[2] = { expr_copy(lhs), val };
             passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         } else if (name == SYM_PlotStyle) {
             have_style = true;
             if (*single_color_out) expr_free(*single_color_out);
-            *single_color_out = evaluate(expr_copy(rhs));
+            *single_color_out = evaluate(rhs);
             Expr* a[2] = { expr_copy(lhs), expr_copy(*single_color_out) };
             passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         } else {
@@ -167,7 +167,7 @@ static bool split_options3(Expr* res, Plot3DSampleOpts* sopts,
             /* Plot3D is HoldAll, so this option's value would otherwise
              * reach the Graphics3D[...] result unevaluated -- evaluate it
              * here once, exactly as split_options does for Plot. */
-            Expr* val = evaluate(expr_copy(rhs));
+            Expr* val = evaluate(rhs);
             Expr* a[2] = { expr_copy(lhs), val };
             passthrough[n++] = expr_new_function(expr_new_symbol(SYM_Rule), a, 2);
         }

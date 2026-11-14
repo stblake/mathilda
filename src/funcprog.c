@@ -1320,7 +1320,7 @@ Expr* builtin_catch(Expr* res) {
      * matches form. A tagless Throw[value] is never caught here. */
     bool matched = false;
     if (targc >= 2) {
-        Expr* tag_eval = evaluate(expr_copy(tag));   /* WL: tag re-evaluated */
+        Expr* tag_eval = evaluate(tag);   /* WL: tag re-evaluated */
         MatchEnv* env = env_new();
         matched = match(tag_eval, res->data.function.args[1], env);
         env_free(env);

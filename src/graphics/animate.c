@@ -134,7 +134,7 @@ static void parse_animate_opts(Expr** args, size_t start, size_t argc,
             else if (is_sym(rhs, SYM_ForwardBackward)) o->direction = ANIM_DIR_FORWARD_BACKWARD;
             else if (is_sym(rhs, SYM_BackwardForward)) o->direction = ANIM_DIR_BACKWARD_FORWARD;
         } else if (key == SYM_AnimationRate) {
-            Expr* ev = evaluate(expr_copy((Expr*)rhs));
+            Expr* ev = evaluate((Expr*)rhs);
             if (ev->type == EXPR_REAL)         o->rate = ev->data.real;
             else if (ev->type == EXPR_INTEGER) o->rate = (double)ev->data.integer;
             expr_free(ev);
@@ -142,7 +142,7 @@ static void parse_animate_opts(Expr** args, size_t start, size_t argc,
             if (is_sym(rhs, SYM_Infinity)) {
                 o->repetitions = -1;
             } else {
-                Expr* ev = evaluate(expr_copy((Expr*)rhs));
+                Expr* ev = evaluate((Expr*)rhs);
                 if (ev->type == EXPR_INTEGER) o->repetitions = (int)ev->data.integer;
                 expr_free(ev);
             }
@@ -150,7 +150,7 @@ static void parse_animate_opts(Expr** args, size_t start, size_t argc,
             if      (is_sym(rhs, SYM_True))  o->running = true;
             else if (is_sym(rhs, SYM_False)) o->running = false;
         } else if (key == SYM_DefaultDuration) {
-            Expr* ev = evaluate(expr_copy((Expr*)rhs));
+            Expr* ev = evaluate((Expr*)rhs);
             if (ev->type == EXPR_REAL)         o->duration = ev->data.real;
             else if (ev->type == EXPR_INTEGER) o->duration = (double)ev->data.integer;
             expr_free(ev);
@@ -158,7 +158,7 @@ static void parse_animate_opts(Expr** args, size_t start, size_t argc,
             if      (is_sym(rhs, SYM_Bottom)) o->placement = CTRL_BOTTOM;
             else if (is_sym(rhs, SYM_Top))    o->placement = CTRL_TOP;
         } else if (key == SYM_RefreshRate) {
-            Expr* ev = evaluate(expr_copy((Expr*)rhs));
+            Expr* ev = evaluate((Expr*)rhs);
             if (ev->type == EXPR_REAL)         o->refresh_rate = ev->data.real;
             else if (ev->type == EXPR_INTEGER) o->refresh_rate = (double)ev->data.integer;
             expr_free(ev);
@@ -541,7 +541,7 @@ static void graphics_animate(const Expr* body,
             expr_free(vpat);
             expr_free(tval);
         }
-        Expr* result = evaluate(expr_copy((Expr*)body));
+        Expr* result = evaluate((Expr*)body);
         for (int k = n_iters - 1; k >= 0; k--) mth_bind_pop(btok[k]);
         eval_clock_bump();
         if (frame_expr) expr_free(frame_expr);
@@ -806,7 +806,7 @@ Expr* builtin_animate(Expr* res) {
     size_t opts_start = 1;
 
     for (size_t i = 1; i < argc && n_iters < MAX_ITERS; i++) {
-        Expr* arg_ev = evaluate(expr_copy(res->data.function.args[i]));
+        Expr* arg_ev = evaluate(res->data.function.args[i]);
         const char* vs = NULL;
         double lo = 0.0, hi = 1.0;
         bool ok = parse_iter_spec(arg_ev, &vs, &lo, &hi);

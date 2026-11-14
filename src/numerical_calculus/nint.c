@@ -1330,7 +1330,7 @@ static void ni_effective_goals(const NiOpts* o, double* acc_digits,
  * warning mute (as ni_warn does), so an inner iterated integral's convergence
  * noise never reaches the user.  The caller keeps returning its best estimate. */
 static void ni_warn_goal(const NiOpts* o, double achieved_err, double result_mag) {
-    if (arith_warnings_muted()) return;
+    if (g_arith_warnings_muted) return;
     /* a machine pass that left the double range is re-run in MPFR, which
      * gives its own verdict; an MPFR pass (any sample of a machine-precision
      * geometry probe may have set the flag) is the final one and warns */
@@ -1349,7 +1349,7 @@ static void ni_warn_goal(const NiOpts* o, double achieved_err, double result_mag
 static void ni_warn_goal_mpfr(const NiOpts* o, bool in_range,
                               double achieved_err, double result_mag) {
     if (in_range) { ni_warn_goal(o, achieved_err, result_mag); return; }
-    if (arith_warnings_muted()) return;
+    if (g_arith_warnings_muted) return;
     mth_message("NIntegrate", "accgl",
                 "requested accuracy goal not met; returning the best "
                 "approximation obtained.");
@@ -6336,7 +6336,7 @@ Expr* builtin_nintegrate(Expr* res) {
      * the rules stop at the noise floor of those values (they no longer spin
      * through every level), and the shortfall is reported. */
     if (out && o.prec_mpfr && g_ni_sample_bits > 0
-        && g_ni_sample_bits < o.target_bits && !arith_warnings_muted())
+        && g_ni_sample_bits < o.target_bits && !g_arith_warnings_muted)
         ni_warn("precw", "the precision of the integrand values (%.3g digits) is "
                 "less than the WorkingPrecision (%.3g digits).",
                 numeric_bits_to_digits(g_ni_sample_bits),

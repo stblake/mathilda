@@ -26,7 +26,7 @@
 /* Emit the wrong-argument-count diagnostic for PrimeOmega and return NULL so
  * the call is left unevaluated. */
 static Expr* primeomega_emit_argt(size_t argc) {
-    if (!arith_warnings_muted()) {
+    if (!g_arith_warnings_muted) {
         mth_message("PrimeOmega", "argt", "PrimeOmega called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     }
     return NULL;

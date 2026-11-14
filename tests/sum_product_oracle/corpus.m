@@ -177,6 +177,13 @@
 {"div-sqrt",           Hold[Sum[1/Sqrt[k], {k, 1, Infinity}]],    "divergent", Null, {}},
 {"div-2k",             Hold[Sum[2^k, {k, 1, Infinity}]],          "divergent", Null, {}},
 {"div-neg-4k",         Hold[Sum[1/4^k, {k, -Infinity, -1}]],      "divergent", Null, {}},
+{"div-log",            Hold[Sum[1/(k Log[k]), {k, 2, Infinity}]], "divergent", Null, {}},
+{"div-sin",            Hold[Sum[Sin[k], {k, 1, Infinity}]],       "divergent", Null, {}},
+{"div-factorial",      Hold[Sum[k!, {k, 0, Infinity}]],           "divergent", Null, {}},
+{"div-rational",       Hold[Sum[(k + 1)/(k^2 + 3), {k, 1, Infinity}]], "divergent", Null, {}},
+{"conv-bertrand",      Hold[Sum[1/(k Log[k]^2), {k, 2, Infinity}]], "held", Null, {}},
+{"conv-alt-quad",      Hold[Sum[(-1)^k k^2/2^k, {k, 1, Infinity}]], "value", -2/27, {}},
+{"conv-verify-off",    Hold[Sum[k^2/2^k, {k, 1, Infinity}, VerifyConvergence -> False]], "value", 6, {}},
 {"div-assumed-x",      Hold[Sum[x^k, {k, 0, Infinity}, Assumptions -> x > 1]], "divergent", Null, {}},
 
 (* ---------------- finite products, symbolic n ---------------- *)
@@ -227,6 +234,9 @@
 {"iprod-div-1p1k",     Hold[Product[1 + 1/k, {k, 1, Infinity}]],  "divergent", Null, {}},
 {"iprod-div-k",        Hold[Product[k, {k, 1, Infinity}]],        "divergent", Null, {}},
 {"iprod-div-q2",       Hold[Product[1 - 2^k, {k, 1, Infinity}]],  "divergent", Null, {}},
+{"iprod-div-const",    Hold[Product[2, {k, 1, Infinity}]],        "divergent", Null, {}},
+{"iprod-zero-stirling", Hold[Product[(1 + 1/k)^k/E, {k, 1, Infinity}]], "zeroOrHeld", Null, {}},
+{"iprod-symbolic-q",   Hold[Product[1 - q^k, {k, 1, Infinity}]],  "value", QPochhammer[1/3, 1/3], {q -> 1/3}},
 {"iprod-zero-1m1k",    Hold[Product[1 - 1/k, {k, 2, Infinity}]],  "zeroOrHeld", Null, {}},
 {"iprod-zero-exp",     Hold[Product[E^(-k), {k, 1, Infinity}]],   "zeroOrHeld", Null, {}},
 

@@ -230,7 +230,7 @@ static bool split_options(Expr* res, ListPlotOpts* o,
                 FAIL_CLEANUP();
             }
         } else if (name == SYM_ScalingFunctions) {
-            Expr* v = evaluate(expr_copy(rhs));
+            Expr* v = evaluate(rhs);
             parse_scaling_functions(v, &o->sf_x, &o->sf_y);
             expr_free(v);
         } else if (name == SYM_PlotLegends) {

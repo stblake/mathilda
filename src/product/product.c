@@ -38,6 +38,8 @@
 #include "attr.h"
 #include "arithmetic.h"   /* is_rational, make_complex */
 #include "sym_names.h"
+#include "sum.h"            /* product_convergence */
+#include "sum_internal.h"   /* sum_integer_poles */
 #include "compile/autocompile.h"   /* machine fast path for finite numeric products */
 #include "numeric.h"   /* get_approx_mpfr */
 #include <string.h>
@@ -701,7 +703,43 @@ static Expr* product_one_spec(Expr* f, Expr* spec, ProdMethod method) {
      * step-1 result. */
     if (!is_unit_step(s.di)) { iter_spec_free(&s); return NULL; }
 
+    /* An infinite product is classified once, before any stage runs (the
+     * stages close continuations: Product[1 - 2^k, ...] was QPochhammer[2, 2],
+     * Product[E^(-k), ...] 0 with no gate).  As in the reference: a product
+     * that tends to 0 IS 0; one that tends to Infinity or has no limit is
+     * Product::div and stays held; UNKNOWN (a symbolic q) lets the stages run.
+     * A pole of the factor on the range keeps a "0" verdict from applying. */
+    int saved_div = g_product_div_reported;
+    g_product_div_reported = 0;
+    if (s.imax->type == EXPR_SYMBOL && s.imax->data.symbol.name == SYM_Infinity
+        && g_product_verify_convergence && s.var->type == EXPR_SYMBOL) {
+        IterShadow saved = iter_spec_shadow(s.var);
+        Expr* fe = evaluate(f);
+        ProductConvergence pc = product_convergence(fe, s.var);
+        bool pole_on_range = false;
+        if (pc == PROD_CONV_ZERO && s.imin->type == EXPR_INTEGER) {
+            int64_t poles[64];
+            size_t np = sum_integer_poles(fe, s.var, poles, 64);
+            for (size_t i = 0; i < np; i++)
+                if (poles[i] >= s.imin->data.integer) pole_on_range = true;
+        }
+        expr_free(fe);
+        iter_spec_restore(s.var, saved);
+        if (pc == PROD_CONV_DIV) {
+            prod_warn_div();
+            g_product_div_reported = saved_div;
+            iter_spec_free(&s);
+            return NULL;
+        }
+        if (pc == PROD_CONV_ZERO && !pole_on_range) {
+            g_product_div_reported = saved_div;
+            iter_spec_free(&s);
+            return expr_new_integer(0);
+        }
+    }
+
     Expr* r = dispatch_def(method, f, s.var, s.imin, s.imax);
+    g_product_div_reported = saved_div;
     iter_spec_free(&s);
     return r;
 }

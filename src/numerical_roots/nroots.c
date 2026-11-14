@@ -1263,7 +1263,7 @@ Expr* builtin_nroots(Expr* res) {
         return NULL;
     }
 
-    if (goal_short && !arith_warnings_muted())
+    if (goal_short && !g_arith_warnings_muted)
         nc_warn_goal("NRoots", goal_err, goal_tol);
 
     int* realf = (int*)malloc(sizeof(int) * (size_t)d);

@@ -361,7 +361,7 @@ static void warn_svars(uint64_t input_hash) {
     /* Internal decision procedures (e.g. the Risch structure-theorem Q-span
      * solve) legitimately hand SolveAlways underdetermined systems; honour the
      * shared warnings-mute counter so those probes stay quiet. */
-    if (arith_warnings_muted()) return;
+    if (g_arith_warnings_muted) return;
     static uint64_t last_warned_hash = 0;
     if (input_hash == last_warned_hash) return;
     last_warned_hash = input_hash;

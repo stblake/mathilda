@@ -32,7 +32,7 @@
 #include <math.h>
 
 /* evaluate() borrows its argument (it copies internally rather than
- * consuming what it's handed), so `evaluate(expr_copy(x))` with the copy
+ * consuming what it's handed), so `evaluate(x)` with the copy
  * inlined leaks that temporary -- the same bug class fixed for
  * guard_all_true in src/match.c. Every option value evaluated below routes
  * through this helper so the input copy is always freed. */

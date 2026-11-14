@@ -35,9 +35,10 @@
      "pole"           a pole of the summand lies inside the range: the
                       answer must be ComplexInfinity / non-finite, or the
                       input held.  A finite value is WRONG.
-     "divergent"      the series diverges: held or an infinity is PASS, any
+     "divergent"      the series diverges: Sum::div / Product::div (or an
+                      infinite value) is PASS, a silent hold UNEVAL, any
                       other value (finite number, Indeterminate, a
-                      symbolic expression) is WRONG.
+                      symbolic expression) WRONG.
      "zeroOrHeld"     a product that diverges to 0: 0 or held.
      "held"           must stay unevaluated (an undefined summand, a
                       malformed iterator).
@@ -112,14 +113,24 @@ spoCheckIndef[h_Hold, r_, {i_, ilo_, ihi_}, subs_] := Module[{isSum, body},
         Quiet[ReleaseHold[body /. i -> v /. subs]]],
       {v, ilo, ihi}]]]];
 
+(* A divergent series must say so: Sum::div / Product::div (the reference's
+   messages) or an infinite value.  A silent hold is UNEVAL (no verdict), a
+   finite value WRONG. *)
+spoCheckDivergent[h_Hold] := Module[{r},
+  r = Quiet[Check[ReleaseHold[h], $spoDivMessage, Sum::div, Product::div]];
+  Which[r === $spoDivMessage, "PASS",
+        MatchQ[r, Infinity | -Infinity | _DirectedInfinity | ComplexInfinity], "PASS",
+        spoHeadQ[r], "UNEVAL",
+        True, "WRONG"]];
+
+spoCheck[label_, h_Hold, "divergent", data_, subs_] := spoCheckDivergent[h];
+
 spoCheck[label_, h_Hold, kind_String, data_, subs_] := Module[{r = spoEval[h]},
   Switch[kind,
     "value",      spoCheckValue[r, data, subs],
     "finite",     spoCheckFinite[h, r, data, subs],
     "indef",      spoCheckIndef[h, r, data, subs],
     "pole",       If[spoHeadQ[r] || spoNonFinite[r /. subs], "PASS", "WRONG"],
-    "divergent",  If[spoHeadQ[r] || MatchQ[r, Infinity | -Infinity | _DirectedInfinity | ComplexInfinity],
-                     "PASS", "WRONG"],
     "zeroOrHeld", If[spoHeadQ[r] || r === 0, "PASS", "WRONG"],
     "held",       If[spoHeadQ[r], "PASS", "WRONG"],
     _,            "BADKIND"]];

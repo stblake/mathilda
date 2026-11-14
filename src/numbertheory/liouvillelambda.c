@@ -20,7 +20,7 @@
 /* Emit the wrong-argument-count diagnostic for LiouvilleLambda and return NULL
  * so the call is left unevaluated. */
 static Expr* liouville_emit_argt(size_t argc) {
-    if (!arith_warnings_muted()) {
+    if (!g_arith_warnings_muted) {
         mth_message("LiouvilleLambda", "argt", "LiouvilleLambda called with %zu argument%s; 1 or 2 arguments are expected.", argc, argc == 1 ? "" : "s");
     }
     return NULL;

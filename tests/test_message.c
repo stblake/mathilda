@@ -133,6 +133,21 @@ static void test_helper_warnings_routed(void) {
     assert_stderr("Quiet[Clip[{x}, {0, 1}]]", "");
 }
 
+/* A site guarded by arith_warnings_muted() returned before the funnel under
+ * Quiet, so an enclosing Check never saw it (Check took the wrong branch).
+ * These sites now gate on the raw internal mute; tools/check_message_routing.py
+ * rejects the old guard.  Check also takes several message names. */
+static void test_check_sees_quiet_guarded_sites(void) {
+    assert_eval_eq("Quiet[Check[Product[2, {k, 1, Infinity}], \"caught\"]]", "\"caught\"", 0);
+    assert_eval_eq("Quiet[Check[Sum[1/k, {k, 1, Infinity}], \"caught\"]]", "\"caught\"", 0);
+    assert_eval_eq("Quiet[Check[Prime[0], \"caught\"]]", "\"caught\"", 0);
+    assert_eval_eq("Quiet[Check[ExtendedGCD[3/2, 2], \"caught\"]]", "\"caught\"", 0);
+    assert_eval_eq("Quiet[Check[MoebiusMu[1, 2], \"caught\"]]", "\"caught\"", 0);
+    assert_eval_eq("Quiet[Check[1/0, \"caught\", Sum::div, Power::infy]]", "\"caught\"", 0);
+    assert_eval_eq("Quiet[Check[1/0, \"caught\", Sum::div, Product::div]]", "ComplexInfinity", 0);
+    assert_eval_eq("Quiet[Check[1/0, \"caught\", {Sum::div}, {Power::infy}]]", "\"caught\"", 0);
+}
+
 static void test_printtemporary(void) {
     assert_eval_eq("Quiet[PrintTemporary[]]; Attributes[PrintTemporary]", "{Protected}", 0);
 }
@@ -185,6 +200,7 @@ int main(void) {
     TEST(test_off_on);
     TEST(test_message_list);
     TEST(test_helper_warnings_routed);
+    TEST(test_check_sees_quiet_guarded_sites);
     TEST(test_printtemporary);
     TEST(test_style_outputform);
     TEST(test_check_quiet_nesting);

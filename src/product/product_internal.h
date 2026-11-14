@@ -17,6 +17,10 @@
  * (prod_has_symbolic_power, prod_linear_factors) gate the factoring stages.
  */
 
+/* Product::div once per Product evaluation (see product_util.c). */
+extern int g_product_div_reported;
+void prod_warn_div(void);
+
 /* Build head[args...] from `n` owned args, evaluate, free the call. */
 Expr* prod_eval(const char* head, Expr** args, size_t n);
 

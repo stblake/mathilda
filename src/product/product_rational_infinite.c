@@ -45,10 +45,6 @@ static bool is_inf_sym(const Expr* e) {
     return e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_Infinity;
 }
 
-static void warn_div(void) {
-    if (!arith_warnings_muted())
-        mth_message("Product", "div", "Product does not converge.");
-}
 
 /* evaluate(Head[a]) for a single copied arg. */
 static Expr* fn1(const char* head, Expr* a) {
@@ -162,7 +158,7 @@ Expr* builtin_product_rational_infinite(Expr* res) {
     int degN = 0, degD = 0;
     for (size_t i = 0; i < nN; i++) degN += multsN[i];
     for (size_t i = 0; i < nD; i++) degD += multsD[i];
-    if (degN != degD) { warn_div(); RI_CLEAN(); return NULL; }
+    if (degN != degD) { prod_warn_div(); RI_CLEAN(); return NULL; }
 
     /* root-sum balance: sum m_i alpha_i == sum n_j beta_j */
     Expr* sumN = expr_new_integer(0);
@@ -182,7 +178,7 @@ Expr* builtin_product_rational_infinite(Expr* res) {
     Expr* diffS = expr_new_function(expr_new_symbol(SYM_Plus),
                       (Expr*[]){ sumN, expr_new_function(expr_new_symbol(SYM_Times),
                                      (Expr*[]){ expr_new_integer(-1), sumD }, 2) }, 2); /* adopts */
-    if (!zeroq(diffS)) { warn_div(); RI_CLEAN(); return NULL; }
+    if (!zeroq(diffS)) { prod_warn_div(); RI_CLEAN(); return NULL; }
 
     /* --- Build the Gamma multiset:  Gamma(imin - beta)^+n / Gamma(imin - alpha)^+... --- */
     size_t ntcap = nN + nD;
