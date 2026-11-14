@@ -93,6 +93,12 @@ tragerLogPart[ctx_Association, r_List, Y_Symbol] := Module[{Z = ctx["Z"], degs, 
 
 traceCertificate::usage = "traceCertificate[ctx] looks for a proof of non-elementarity that needs only the field Q(gamma) of ONE residue gamma, not the field of all of them. If the integral is elementary, r = Sum c_j du_j/u_j, and for every Q-linear lambda on the span of the residues Sum_i lambda(alpha_i) Delta(alpha_i) = Sum_j lambda(c_j) div(u_j) is a torsion divisor. lambda_gamma(alpha) = Tr(alpha gamma) is Q-linear and constant on the roots of each irreducible factor f_k of R over Q(gamma), so its divisor Sum_k lambda_k Delta(f_k) is defined over Q(gamma), of degree deg q instead of that of the splitting field. A residue gamma is taken from each irreducible factor q of R in turn; when its divisor is shown of infinite order (orders modulo two primes disagree, or the only possible order N fails torsionScreen) a NonElementary certificate is thrown. Otherwise (all lambda_gamma torsion, or zero) it returns Null without a verdict and the full construction follows.";
 traceCertificate[ctx_Association] := Module[{Z = ctx["Z"], qs},
+  (* over Q(i) the trace kTrace is a trace down to Q(i), not Q: the functional
+     is not Q-valued and the "divisor" tested is not one -- a false
+     certificate (adversarial review 2026-11-14: Int x^2 (1 + I x^4)^(1/4),
+     elementary by Chebyshev, was certified NOT elementary).  This shortcut
+     gives no verdict over Q(i); the complete construction follows. *)
+  If[TrueQ[tragerConstantI], Return[Null]];
   qs = SortBy[Expand[#/Coefficient[#, Z, Exponent[#, Z]]] & /@ (First /@ Select[tragerFactorList[ctx["R"]], !FreeQ[#[[1]], Z] &]),
     Exponent[#, Z] &];
   Do[traceCertificateAt[ctx, q, qs], {q, qs}]];

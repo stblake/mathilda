@@ -519,6 +519,43 @@ ResFmt[v_] := With[{s = Simplify[v]}, If[NumericQ[s], RootReduce[s], s]];
    the conjugate of the denominator so that D0 is free of S, and read off
    a + b S.  If A is itself a perfect square in F(gens) the expression was
    rational after all and the test recurses on (a + b r)/D0.               *)
+pmtDependsModP::usage = "pmtDependsModP[tau, o, p, g] is True when the residue tau, an element of the residue field K[g]/(p) written with the other generators, really depends on the generator o: when p is free of o, the numerator of D[tau, o], reduced modulo p in g, is not 0 (a syntactic occurrence of o is not evidence); when p involves o, the syntactic reading. With algebraic-number coefficients the reduction is followed by RootReduce of its coefficients.";
+pmtDependsModP[tau_, o_, p_, g_] := Module[{rts, syms, back, d, n},
+  (* the partial derivative in o is the derivative of the residue only when the
+     prime p does not involve o (else g moves with o along p): then the
+     previous, syntactic reading is kept *)
+  If[! FreeQ[p, o], Return[! FreeQ[tau, o]]];
+  rts = DeleteDuplicates[Cases[{tau}, _Root | _AlgebraicNumber, Infinity]];
+  syms = Table[Unique["ParallelMixed`Private`pmtR"], {Length[rts]}];
+  back = Thread[syms -> rts];
+  d = Together[D[tau /. Thread[rts -> syms], o]];
+  If[d === 0, Return[False]];
+  n = Expand[PolynomialRemainder[Expand[Numerator[d]], p, g]];
+  If[n === 0, Return[False]];
+  If[rts =!= {}, Return[! pmtAlgebraicZeroQ[n /. back, Complement[Variables[n], syms]]]];
+  True];
+
+pmtAlgebraicZeroQ::usage = "pmtAlgebraicZeroQ[p, gens] is True when the polynomial p in the symbols gens, with algebraic-number coefficients (Root objects, radicals), is identically zero: every coefficient RootReduces to 0.";
+pmtAlgebraicZeroQ[p_, gens_] := Module[{rts, syms, back, pe, vars},
+  (* Together does not combine fractions that carry Root objects: give each
+     algebraic number a symbol, normalise as a rational function, and
+     RootReduce the coefficients of the numerator *)
+  rts = DeleteDuplicates[Cases[{p}, _Root | _AlgebraicNumber, Infinity]];
+  syms = Table[Unique["ParallelMixed`Private`pmtR"], {Length[rts]}];
+  back = Thread[syms -> rts];
+  pe = Expand[Numerator[Together[p /. Thread[rts -> syms]]]];
+  vars = Select[gens, ! FreeQ[pe, #] &];
+  If[vars === {}, Return[RootReduce[pe /. back] === 0]];
+  AllTrue[Flatten[{CoefficientList[pe, vars]}], RootReduce[# /. back] === 0 &]];
+
+pmtDerivNumeratorZeroQ::usage = "pmtDerivNumeratorZeroQ[e, g, gens] is True when D[e, g] is identically 0, e a rational function of the symbols gens with algebraic-number coefficients (Root objects named by symbols first: Together does not combine their fractions).";
+pmtDerivNumeratorZeroQ[e_, g_, gens_] := Module[{rts, syms, e2, n},
+  rts = DeleteDuplicates[Cases[{e}, _Root | _AlgebraicNumber, Infinity]];
+  syms = Table[Unique["ParallelMixed`Private`pmtR"], {Length[rts]}];
+  e2 = e /. Thread[rts -> syms];
+  n = Numerator[Together[D[e2, g]]];
+  pmtAlgebraicZeroQ[n /. Thread[syms -> rts], gens]];
+
 CertifyNonconstant[tau0_, gens_] := Module[{tau, G, pows, algs, A, S, e, n, d, red, nn, dd, dbar, NN, D0, a, b, r, isSq},
   G = Alternatives @@ gens;
   tau = Together[tau0];
@@ -528,6 +565,14 @@ CertifyNonconstant[tau0_, gens_] := Module[{tau, G, pows, algs, A, S, e, n, d, r
   algs = DeleteDuplicates[Cases[pows, Power[base_, ex_] /; Denominator[ex] == 2 :> base]];
   If[algs === {},
     e = Can[tau];
+    (* algebraic-number coefficients (residues at Root-valued roots): a
+       syntactic generator is not evidence -- (L - L r + L r^3) is 0 when
+       r^3 = r - 1.  Constant iff every partial derivative in the generators
+       vanishes, decided exactly by RootReduce of its numerator's coefficients
+       (adversarial review 2026-11-14: Int (3x^2-1)/(x^3-x+1) + Log[x] was
+       certified not elementary). *)
+    If[! FreeQ[e, Root | AlgebraicNumber | RootSum],
+      Return[AnyTrue[gens, ! pmtDerivNumeratorZeroQ[e, #, gens] &]]];
     Return[! FreeQ[Numerator[e], G] || ! FreeQ[Denominator[e], G]]];
   If[Length[algs] =!= 1, Return[Undecided]];
   A = First[algs]; S = Unique["S"];
@@ -542,7 +587,10 @@ CertifyNonconstant[tau0_, gens_] := Module[{tau, G, pows, algs, A, S, e, n, d, r
   r = PowerExpand[Sqrt[Factor[A]]];
   isSq = FreeQ[r, Power[base_, ex_] /; Denominator[ex] == 2 && ! FreeQ[base, G]];
   If[isSq, Return[CertifyNonconstant[Cancel[(a + b r)/D0], gens]]];
-  If[Can[b/D0] =!= 0, Return[True]];
+  (* the coefficient of the square root must be decided zero exactly when it
+     carries algebraic numbers (RootReduce), not syntactically *)
+  If[If[FreeQ[b, Root | AlgebraicNumber | RootSum], Can[b/D0] =!= 0,
+        ! pmtAlgebraicZeroQ[b, Join[gens, Variables[b /. (_Root | _AlgebraicNumber) -> 0]]]], Return[True]];
   CertifyNonconstant[Cancel[a/D0], gens]];
 
 (* ------------------------------------------------------------ the algorithm *)
@@ -1324,8 +1372,13 @@ ResidueClasses[T_, p_, tp_, Y_, verbose_: False] := Catch[Module[
   taus = Table[ModP[tp[[i]], p, g], {i, If[q === None, 1, T["n"]]}];
   If[MemberQ[taus, None], Throw[{"failed", "residue not reducible modulo the prime", p}, "rc"]];
   tau0 = taus[[1]]; tau1 = If[q === None || m =!= 2, 0, taus[[2]]];
-  If[Length[T["gens"]] > 1 && ! FreeQ[taus, others],
-    Throw[{"not elementary", p, ToY[T, PadRight[taus, T["n"]], Y]}, "rc"]];          (* the residue depends on another generator *)
+  (* the residue depends on another generator -- decided exactly: d tau/d o
+     reduced modulo p in g, not by syntax (adversarial review 2026-11-14: a
+     residue t g (1 + g + g^4) is 0 modulo p = g^4 + g + 1, yet it carried t,
+     and D[Log[x^2 + 1 + Sqrt[x]] + Log[E^x + 1]] was certified not elementary) *)
+  If[Length[T["gens"]] > 1 &&
+     AnyTrue[taus, Function[tt, AnyTrue[DeleteCases[T["gens"], g], pmtDependsModP[tt, #, p, g] &]]],
+    Throw[{"not elementary", p, ToY[T, PadRight[taus, T["n"]], Y]}, "rc"]];
   z = Unique["z"];
   R = Which[q === None, Resultant[p, z - tau0, g],
         m == 2, t1q = ModP[Expand[tau1^2 q], p, g]; Resultant[p, Expand[(z - tau0)^2 - t1q], g],
@@ -3132,7 +3185,44 @@ kummerIntegrators[x_, opts___] := {
     {"failed", "Trager unavailable"}]],
   Function[h, ParallelIntegrateMixed[h, x, opts]]};
 
-ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Check[Module[{bt, T, fpair, back, Y, res, surf, ok, sgn, den, branchUnit, surfC, fac, red, ownR, ks, integrand = integrand0},
+pmtGeneratorCount::usage = "pmtGeneratorCount[f, x] counts the transcendental generators the kernels of f need, an upper bound: logarithms by argument; exponentials, circular and hyperbolic functions by argument up to a RATIONAL factor (not a Gaussian one) (E^x and E^(-x), Sin[x] and Cos[x], Sin[2 x] and Cos[x] share one generator); every inverse circular or hyperbolic function and every other kernel counts once.";
+pmtGeneratorCount[f_, x_Symbol] := Module[{logs, expo, trig, inv, groups},
+  logs = DeleteDuplicates[Cases[{f}, Log[a_] /; ! FreeQ[a, x] :> Together[a], Infinity]];
+  expo = Cases[{f}, (Power[E, a_] | Exp[a_]) /; ! FreeQ[a, x] :> a, Infinity];
+  trig = Cases[{f}, (Sin | Cos | Tan | Cot | Sec | Csc | Sinh | Cosh | Tanh | Coth | Sech | Csch)[a_] /; ! FreeQ[a, x] :> {"t", a}, Infinity];
+  inv = DeleteDuplicates[Cases[{f}, (h : (ArcSin | ArcCos | ArcTan | ArcCot | ArcSec | ArcCsc | ArcSinh | ArcCosh | ArcTanh | ArcCoth | ArcSech | ArcCsch))[a_] /; ! FreeQ[a, x], Infinity]];
+  (* Gather with a test function is not implemented (core gap G-core-7): the
+     groups are counted by hand -- one representative per class *)
+  groups = Fold[Function[{reps, k},
+      (* one generator only for a RATIONAL ratio of exponents: E^(2 x) and
+         E^(I x) are independent (the ratio -2 I is a number, not a rational) *)
+      If[AnyTrue[reps, #[[1]] === k[[1]] && MatchQ[Together[#[[2]]/k[[2]]], _Integer | _Rational] &&
+           Together[#[[2]]/k[[2]]] =!= 0 &],
+        reps, Append[reps, k]]], {}, Join[{"e", #} & /@ expo, trig]];
+  Length[logs] + Length[groups] + Length[inv]];
+
+pmtConfirmCertificate::usage = "pmtConfirmCertificate[f, x, r] passes the result r of the surface integrator through unless it is a non-elementarity certificate; a certificate stands only when an independent decider confirms it -- Risch`ElementaryIntegralQ[f, x] === False for a radical-free f, a certificate of Integrate`Bronstein[f, x] otherwise -- and becomes {\"failed\", ...} otherwise. The tower builder does not prove its generators independent (adversarial review 2026-11-14: E^((2+I) x) beside E^(2 x) and E^(I x), E^x beside a flattened Sqrt[E^x + 1], and x^(x-1) beside x^x on a rebuilt tower each gave a false certificate); both deciders treat a dependent tower as undecided.";
+pmtConfirmCertificate[f_, x_Symbol, r_] := Module[{c, ks},
+  If[! MatchQ[r, {"not elementary", ___}], Return[r]];
+  (* at most one Log/Exp kernel: the tower has one transcendental generator
+     (a flattened radical replaces the kernel it is over), so there is no
+     relation between generators to miss; every false certificate the review
+     found had several (1/(x Log[x + Sqrt[x^2 + 1]]) keeps its own) *)
+  If[pmtGeneratorCount[f, x] <= 1, Return[r]];
+  c = If[FreeQ[f, Power[b_, _Rational] /; ! FreeQ[b, x]],
+    Quiet[Risch`ElementaryIntegralQ[f, x]] === False,
+    (* the package function directly: Integrate`Bronstein inside this stage
+       meets the integrator's recursion guard; load the package if needed *)
+    (If[Head[Bronstein`BronsteinIntegrate[1, x]] === Bronstein`BronsteinIntegrate,
+       Quiet[Integrate[x, x, Method -> "Bronstein"]]];
+     MatchQ[Quiet[Bronstein`BronsteinIntegrate[f, x]], {"not elementary", ___}])];
+  If[c, r, {"failed", "non-elementarity not independently confirmed (tower generators not proven independent)", Rest[r]}]];
+
+ParallelIntegrateMixed[integrand0_, x_Symbol, opts : OptionsPattern[]] :=
+  pmtConfirmCertificate[integrand0, x, pmtSurfaceBody[integrand0, x, opts]];
+
+pmtSurfaceBody::usage = "pmtSurfaceBody[integrand, x, opts] is the body of the surface entry ParallelIntegrateMixed[integrand, x, opts] before its certificate confirmation (pmtConfirmCertificate).";
+pmtSurfaceBody[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeConstrained[Check[Module[{bt, T, fpair, back, Y, res, surf, ok, sgn, den, branchUnit, surfC, fac, red, ownR, ks, integrand = integrand0},
   (* u = x^k first: the reduced integrand, if solved and verified for all
      complex x, is the answer; otherwise the normal path runs *)
   red = XPowerReduce[integrand0, x];
@@ -3332,6 +3422,7 @@ $ParallelMixedVerifyBudget = 15;
    immune to all four; this brings the ParallelMixedTower surface into line. *)
 Options[ParallelIntegrateMixed] = {"Bounds" -> None, "Verbose" -> False, "Verify" -> False, "SplitSpecials" -> Automatic, "SpecialExponent" -> 0,
   "StructureTheorem" -> True};
+Options[pmtSurfaceBody] = Options[ParallelIntegrateMixed];
 (* iPIM shares these options via OptionsPattern[ParallelIntegrateMixed]; an
    unpassed OptionValue now resolves its default against ParallelIntegrateMixed
    (the symbol named in OptionsPattern[...]), so a separate Options[iPIM]

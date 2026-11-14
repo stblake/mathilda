@@ -417,6 +417,50 @@ bool rt_verify_antideriv(Expr* result, Expr* f, Expr* x) {
  * C(x); an algebraic extension (C(x, Sqrt[x])) is out of scope.  An x-FREE
  * radical (Sqrt[2], an algebraic CONSTANT coefficient) is deliberately NOT
  * flagged — those are legitimate transcendental-integrand coefficients. */
+/* True iff `e` carries a TRANSCENDENTAL CONSTANT: an x-free subexpression with a
+ * transcendental head (Log[2], E^2, ArcTan[1/3], Sin[1], Gamma[1/3], ...) or the
+ * symbols Pi, E, EulerGamma, Catalan.  The field decision works over the
+ * constant field Q(i) (algebraic constants are handled); with such a constant
+ * the true constant field is larger, and a "no solution" over Q(i) is not a
+ * proof: Int D[ArcTan[u] Log[2 u]] needs the coefficient (I/2)(Log[2] + Log[u])
+ * and was certified NOT elementary (adversarial review, 2026-11-14).  Symbolic
+ * parameters (x-free symbols) are not flagged: rational arithmetic carries them
+ * exactly. */
+static bool rt_transcendental_head(const char* h) {
+    static const char* const heads[] = { "Log", "Exp", "Sin", "Cos", "Tan", "Cot", "Sec", "Csc",
+        "ArcSin", "ArcCos", "ArcTan", "ArcCot", "ArcSec", "ArcCsc", "Sinh", "Cosh", "Tanh", "Coth",
+        "Sech", "Csch", "ArcSinh", "ArcCosh", "ArcTanh", "ArcCoth", "ArcSech", "ArcCsch", "Gamma",
+        "Zeta", "PolyLog", "Erf", "ProductLog", "LogGamma", NULL };
+    for (int i = 0; heads[i]; i++) if (h == intern_symbol(heads[i])) return true;
+    return false;
+}
+bool rt_has_transcendental_constant(Expr* e, Expr* x) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) {
+        const char* n = e->data.symbol.name;
+        return n == intern_symbol("Pi") || n == intern_symbol("E") ||
+               n == intern_symbol("EulerGamma") || n == intern_symbol("Catalan");
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    const char* h = (e->data.function.head->type == EXPR_SYMBOL)
+        ? e->data.function.head->data.symbol.name : NULL;
+    if (h && rt_transcendental_head(h) && rt_free_of_x(e, x)) return true;
+    /* E^c with c free of x (E^x itself is a monomial, not a constant) */
+    if (h == intern_symbol("Power") && e->data.function.arg_count == 2 && rt_free_of_x(e, x)) {
+        Expr* b = e->data.function.args[0];
+        if (b->type == EXPR_SYMBOL && b->data.symbol.name == intern_symbol("E")) return true;
+    }
+    /* E as the base of a monomial E^(f(x)) is not a constant: skip that head */
+    if (h == intern_symbol("Power") && e->data.function.arg_count == 2) {
+        Expr* b = e->data.function.args[0];
+        if (b->type == EXPR_SYMBOL && b->data.symbol.name == intern_symbol("E"))
+            return rt_has_transcendental_constant(e->data.function.args[1], x);
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rt_has_transcendental_constant(e->data.function.args[i], x)) return true;
+    return false;
+}
+
 bool rt_has_algebraic_of_x(Expr* e, Expr* x) {
     if (!e || e->type != EXPR_FUNCTION) return false;
     const char* h = (e->data.function.head->type == EXPR_SYMBOL)

@@ -23,6 +23,7 @@
 #include "risch_trig_frontend.h"
 #include "risch_special.h"
 #include "cherry_driver.h"
+#include "message.h"           /* mth_message: Quiet / Check */
 
 #include "expr.h"
 #include "eval.h"
@@ -592,6 +593,12 @@ static RtDecision rt_decide_field(Expr* f, Expr* x) {
     if (rt_has_algebraic_of_x(f, x)) return RT_DEC_UNKNOWN;
     Expr* fc = rt_canon_log_args(f, x);       /* canonical log arguments: see the helper */
     RtDecision vc = rt_decide_field_canon(fc, x);
+    /* a transcendental constant (Log[2], also one rt_canon_log_args split off
+     * Log[2 u]) enlarges the constant field beyond Q(i): a "no" over Q(i) is
+     * not a proof (rt_has_transcendental_constant) */
+    if (vc == RT_DEC_NONELEMENTARY &&
+        (rt_has_transcendental_constant(f, x) || rt_has_transcendental_constant(fc, x)))
+        vc = RT_DEC_UNKNOWN;
     expr_free(fc);
     return vc;
 }
@@ -795,9 +802,9 @@ static Expr* builtin_elementaryintegralq(Expr* res) {
     {
         char* fs = expr_to_string(f);
         char* xs = expr_to_string(x);
-        fprintf(stderr,
-            "Risch`ElementaryIntegralQ::undec: Cannot decide elementary "
-            "integrability of %s with respect to %s.\n", fs ? fs : "?", xs ? xs : "?");
+        /* through the funnel: a raw fprintf ignored Quiet and Check */
+        mth_message("Risch`ElementaryIntegralQ", "undec",
+            "Cannot decide elementary integrability of %s with respect to %s.", fs ? fs : "?", xs ? xs : "?");
         free(fs); free(xs);
     }
     return NULL;

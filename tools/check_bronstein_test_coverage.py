@@ -43,7 +43,6 @@ C_NAMES = [
 
 # name -> reason (one line).  Keep this short.
 EXEMPT = {
-    "brRadicalPlaceholder": "an inert symbol (no code), used only inside brTower",
 }
 
 

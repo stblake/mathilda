@@ -85,7 +85,41 @@ bronsteinOpenGaps = {
   "followup" -> "tower builder: a logarithm of a power as a monomial, or the kappa split of E6a in C", "source" -> "Phase 3 part 1"|>,
 <|"id" -> "G-core-5", "area" -> "Core", "gap" -> "machine ArcSech at negative reals disagrees with its exact form (latent: no integrand reaches it)",
   "kind" -> "Expr", "f" -> Hold[Sign[Im[ArcSech[-3.7]]] == Sign[Im[N[ArcSech[-37/10]]]]], "current" -> "False", "budget" -> 60,
-  "followup" -> "fix the machine ArcSech branch for x < 0", "source" -> "review of E4.2"|>
+  "followup" -> "fix the machine ArcSech branch for x < 0", "source" -> "review of E4.2"|>,
+(* ---- found by the adversarial reviews of Bronstein, Trager and PMT (2026-11-14) *)
+<|"id" -> "G-adv-b2", "area" -> "Bronstein", "gap" -> "Internal brLogPartRemainderNotRational: an explicit I with residues in Q(i) over a Log tower",
+  "kind" -> "Integrate", "f" -> Hold[(I/2)/(x Sqrt[Log[x]]) + 1/(2 x Sqrt[Log[x]] (1 + Log[x]))], "current" -> "internal", "budget" -> 60,
+  "followup" -> "the log-part remainder over a residue field containing i (fieldSubI before the t-freeness check, LogPart.m)", "source" -> "adversarial review of Bronstein"|>,
+<|"id" -> "G-adv-b3", "area" -> "Bronstein", "gap" -> "Internal AntiderivativeCheckFailed: a reducible logarithm Log[x^2] beside Log[1 + x]",
+  "kind" -> "Integrate", "f" -> Hold[Log[x^2]/(1 + x) + 2 Log[1 + x]/x], "current" -> "internal", "budget" -> 60,
+  "followup" -> "debug brIntegrateKappaSplit on this case", "source" -> "adversarial review of Bronstein"|>,
+<|"id" -> "G-adv-b5", "area" -> "Bronstein", "gap" -> "an inverse trig times a logarithm times out (elementary: D[ArcSin[x] Log[x]])",
+  "kind" -> "Integrate", "f" -> Hold[Together[D[ArcSin[x] Log[x], x]]], "current" -> "timeout", "budget" -> 60,
+  "followup" -> "profile; the kappa split and the trig front end on reducible logs", "source" -> "adversarial review of Bronstein"|>,
+<|"id" -> "G-adv-c1", "area" -> "Risch (C)", "gap" -> "a transcendental constant (Log[2]) beside the tower: the C decider's no is now demoted to undecided, so this correct certificate is lost",
+  "kind" -> "Expr", "f" -> Hold[Head[Quiet[Risch`ElementaryIntegralQ[Log[2]/(1 + u^2) + Log[u]/(1 + u^2), u]]]], "current" -> "Risch`ElementaryIntegralQ", "budget" -> 60,
+  "followup" -> "treat transcendental constants as parameters of the constant field (Phase 4.4)", "source" -> "adversarial review of Bronstein"|>,
+<|"id" -> "G-adv-p1", "area" -> "ParallelMixedTower", "gap" -> "the tower builder does not prove its generators independent (Gaussian exponent combinations, an exponential beside a flattened radical, relations lost on rebuild); certificates now need independent confirmation, which drops PMT's unique ones",
+  "kind" -> "Expr", "f" -> Hold[Quiet[Integrate`ParallelMixedTower[(I E^(I x) + 2 E^(2 x) + I E^((2 + I) x))/(1 + E^(2 x)), x]][[1]]], "current" -> "\"failed\"", "budget" -> 120,
+  "followup" -> "structure-theorem independence in BuildTower over Q(i) and with flattened radicals; then certify without confirmation", "source" -> "adversarial review of PMT"|>,
+<|"id" -> "G-adv-p4", "area" -> "ParallelMixedTower", "gap" -> "an undocumented status (needs torsion realisation, milestone iii) for elementary inputs",
+  "kind" -> "Expr", "f" -> Hold[Quiet[Integrate`ParallelMixedTower[Together[D[ArcTan[Log[x]] + Sqrt[x^3 - x] (2 x - 3), x]], x]][[1]]], "current" -> "\"needs torsion realisation (milestone iii)\"", "budget" -> 120,
+  "followup" -> "map it to failed (or realise the torsion) and document the protocol", "source" -> "adversarial review of PMT"|>,
+<|"id" -> "G-core-6", "area" -> "Core", "gap" -> "Together does not combine fractions that carry Root objects (worked around in PMT by naming them)",
+  "kind" -> "Expr", "f" -> Hold[With[{r = Root[1 + #1 + #1^4 &, 1]}, Head[Together[D[(1 + t + 2 t r + 2 t r^2 + 4 r^3 + 4 t r^3 + 2 t r^5)/(1 + t + 4 r^3 + 4 t r^3), t]]]]], "current" -> "Plus", "budget" -> 60,
+  "followup" -> "Together over Q(Root): treat Root objects as algebraic generators", "source" -> "adversarial review of PMT"|>,
+<|"id" -> "G-adv-t2", "area" -> "Trager", "gap" -> "a hang over Q(i) with residue fields of degree >= 2: kDivRemNF is handed a rational (not polynomial) dividend in normalizeAtInfinity",
+  "kind" -> "Integrate", "f" -> Hold[1/((x^2 + I) Sqrt[x + 1])], "current" -> "timeout", "budget" -> 60,
+  "followup" -> "make the dividend polynomial (clear the denominator) before kDivRem over Q(i)", "source" -> "adversarial review of Trager"|>,
+<|"id" -> "G-adv-t3", "area" -> "Trager", "gap" -> "a Gaussian binomial times out (elementary by Chebyshev)",
+  "kind" -> "Integrate", "f" -> Hold[(1 + (1 + I) x^4)^(3/4)], "current" -> "timeout", "budget" -> 60,
+  "followup" -> "after G-adv-t2", "source" -> "adversarial review of Trager"|>,
+<|"id" -> "G-adv-t4", "area" -> "Trager", "gap" -> "a rational integrand over Q(i) is declined as not algebraic (the rational integrator is not reached)",
+  "kind" -> "Expr", "f" -> Hold[Trager`TragerIntegrate[1/(x^2 + I), x][[1]]], "current" -> "\"implementation incomplete\"", "budget" -> 60,
+  "followup" -> "route a radical-free Q(i) integrand to the rational integrator", "source" -> "adversarial review of Trager"|>,
+<|"id" -> "G-core-7", "area" -> "Core", "gap" -> "Gather with a test function is not implemented (the two-argument form stays unevaluated; PMT's generator count worked around it)",
+  "kind" -> "Expr", "f" -> Hold[Head[Gather[{1, 2, 3}, Mod[#1, 2] === Mod[#2, 2] &]]], "current" -> "Gather", "budget" -> 60,
+  "followup" -> "implement Gather[list, test]", "source" -> "adversarial review of PMT (fix)"|>
 };
 
 openGapsStructural = {
@@ -95,6 +129,7 @@ openGapsStructural = {
   {"E5", "several ramified places above one special point (Divisors:multi-ramified)", "Phase 3"},
   {"4.1", "Trager:residue-field-QI: the tower method of residueField over Q(i)", "Phase 4.1"},
   {"certificates", "certificates without an external cross-check (FriCAS times out or reports incomplete): Sqrt[Log[x] + I], 1/((x - I) Sqrt[x^3 + 1]), (1 + Log[x])/(x (1 + Log[x] + Log[x]^3)^(1/3))", "an independent checker (another CAS or a proof certificate)"},
+  {"Trager", "Method -> \"TragerKauers\" floods about 200 Thread::tdlen messages on Gaussian binomials (kauersPrincipal differentiates an unevaluated GroebnerBasis)", "KauersLogTerms"},
   {"tests", "integrate_cascade_trager_bronstein_tests:89 emits a message only under full parallel ctest load; repl_pty_test and image_tests hit their alarms under load", "test infrastructure"},
   {"design", "goodPrimes searches primes without a bound: data that no prime is good for (inconsistent input) would loop; characteristic-0 prechecks guard the known cases", "a proof-backed bound or an Internal error"}
 };

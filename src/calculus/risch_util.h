@@ -41,6 +41,7 @@ bool  rt_free_of_head(Expr* e, const char* head);    /* FreeQ[e, head] */
 bool  rt_is_poly(Expr* e, Expr* x);                  /* PolynomialQ[e, x] */
 bool  rt_is_zero(Expr* e);                           /* exact structural zero test */
 bool  rt_has_algebraic_of_x(Expr* e, Expr* x);       /* radical / Surd / Root of x anywhere */
+bool  rt_has_transcendental_constant(Expr* e, Expr* x); /* Log[2], E^2, Pi, ... free of x */
 
 /* Polynomial accessors. */
 long  rt_degree(Expr* e, Expr* x);                   /* deg_x, or -1 */

@@ -44,6 +44,7 @@ static void assert_eval(const char* input, const char* expected) {
     Expr* evaluated = evaluate(parsed);
     expr_free(parsed);
     char* str = expr_to_string(evaluated);
+    if (strcmp(str, expected) != 0) fprintf(stderr, "  input: %s\n", input);   /* name the failing case */
     ASSERT_STR_EQ(str, expected);
     free(str);
     expr_free(evaluated);

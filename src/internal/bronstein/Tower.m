@@ -411,7 +411,12 @@ brTower[f0_, x_Symbol] := Module[{f, fs, monos, vars, rad, shape, theta = None, 
   If[!FreeQ[fs, brKernelPattern[]] && brDependsQ[Cases[fs, brKernelPattern[], {0, Infinity}], vars],
     throwInternal["brTowerKernelLeft", <|"f" -> fs|>]];
   rad = brDetectRadical[{fs, Select[monos, TrueQ[#["algebraic"]] &] /. a_Association :> a["arg"]}, vars];
-  If[!brRationalInQ[fs /. Power[b_, r_Rational] /; brDependsQ[b, vars] :> brRadicalPlaceholder, Append[vars, brRadicalPlaceholder]],
+  (* every radical power by its OWN placeholder: one symbol for Sqrt[t] and
+     t^(3/2) collapsed -2 t Sqrt[t] + 2 t^(3/2) to 0 in a denominator
+     (Power::infy, a wrong "not algebraic" decline; review 2026-11-14) *)
+  If[!With[{rp = DeleteDuplicates[Cases[fs, Power[b_, r_Rational] /; brDependsQ[b, vars], {0, Infinity}]]},
+       With[{ph = Table[Unique["Bronstein`Private`brRadPh"], {Length[rp]}]},
+         brRationalInQ[fs /. Thread[rp -> ph], Join[vars, ph]]]],
     throwUnimplemented["Tower:not-algebraic", "integrand is not algebraic over the tower (irrational exponent or symbolic parameter)"]];
   shape = Which[
     rad === None && monos === {}, "Rational",
@@ -444,7 +449,6 @@ brTower[f0_, x_Symbol] := Module[{f, fs, monos, vars, rad, shape, theta = None, 
     "f" -> fs, "radical" -> rad, "shape" -> shape, "theta" -> theta, "kind" -> kind,
     "lower" -> lower|>];
 
-brRadicalPlaceholder::usage = "brRadicalPlaceholder is the inert symbol standing for the radical while brTower checks that the integrand is rational in the tower and the radical.";
 
 brFromSurface::usage = "brFromSurface[T, e] writes the surface expression e (in x and Log/Exp kernels, e.g. an answer of the C integrator) in the tower symbols of T: every kernel of T is replaced by its symbol and every other exponential reducible over the tower is rewritten (brExpRewrite). Kernels that are not in the tower (a new logarithm) are left in place.";
 brFromSurface[T_Association, e_] := Module[{r = e /. Exp[a_] :> E^a, monos = T["monos"], ks},

@@ -5338,3 +5338,13 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   a Galois-weight shortcut fired, and false certificates shipped in v0.6551 (caught by review). Use
   `NumericQ` (or freeness of the actual variables) for constancy; when a constant field grows,
   grep every "is constant" test.
+- **Adversarial review per implementation, at scale, finds what self-testing does not.** Three
+  agents (~2200 probes) found false certificates in ALL THREE integrators -- one introduced by this
+  session's own Q(i) work (a trace "down to Q" that was down to Q(i)). Rule: after every constant-field
+  or certificate-path change, run a review that generates elementary-by-construction integrands
+  (`Together[D[F, x]]`) in volume; a single hand-picked battery is not enough.
+- **A certificate guard must not change the inner computation.** Confirming PMT certificates inside
+  its own recursion turned a genuine inner certificate into a failure (the outer Check sees the
+  confirmers' messages, and a helper silently relied on `Gather[list, test]`, which is unimplemented).
+  Bisect a regression by file variant (wrapper only / fix only) -- it took one step.
+

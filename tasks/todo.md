@@ -1580,6 +1580,7 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
 - **Known open gaps: the machine-checked register `tests/bronstein_paper/open_gaps.m`** (Part D of
   docs/notes/bronstein_extensions.tex; nightly ctest bronstein_open_gaps_stress). Every newly found gap
   goes there with an example the same day; closing one moves it to examples.m.
+- [x] Adversarial reviews of Bronstein / Trager / PMT (2026-11-14): false certificates in all three fixed (v0.6555); open findings in open_gaps.m
 - [ ] Phase 4: constant fields (NF, Q(i)+trig, parameters)
   - [x] 4.1 Q(i) with a literal I: tragerFactorList, residue fields containing i (fieldSubI), mod-p refusal, Q(i) coefficient tests — v0.6551
   - [x] 4.1b I mod p (gfMod, goodPrime consistent root), Gaussian residue polynomials, Gaussian kappa — v0.6554
