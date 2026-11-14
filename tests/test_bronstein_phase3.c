@@ -15,6 +15,9 @@
  *  - E6d: radicals equal to one radical up to a locally constant sign
  *    (brRationalSquareRoot, brCompositumPlan[.., True], brIntegrateSignSplit,
  *    brSignPatternSeenQ);
+ *  - E6e (#12): weight-k coordinates of the log part vanish; a nonzero one is
+ *    an Internal invariant (brLogPartFinish), except at an exponential's
+ *    special places (LogPart:weights);
  *  - LogPart:special-genus (#9): residues at special places on a curve of
  *    positive genus -- torsion by specialization with the special places
  *    included (brSpecialSetup, brSpecialDivisorIdeal, brSpecialLocationsGoodQ,
@@ -201,6 +204,26 @@ static void test_sign_compositum(void) {
     BR_EQ("BronsteinIntegrate[Sqrt[x^2 (x^3 + 1)] - x Sqrt[x^3 + 1], x][[1]]", "\"not elementary\"");
     BR_EQ("BronsteinIntegrate[Sqrt[Log[x]^2 (Log[x] + 1)] + Sqrt[Log[x] + 1]/x, x][[1]]", "\"not elementary\"");
     BR_EQ("BronsteinScope[Sqrt[x^2 (x + 1)] + Sqrt[x + 1], x]", "\"InScope\"");
+    /* review finding (2026-11-14): Sqrt[x + 1] Sqrt[1/(x + 1)] is -1 only ON the
+       cut x < -1, never on an open set: a sample there must not count */
+    BR_FALSE("brSignPatternSeenQ[{Sqrt[1 + x] Sqrt[1/(1 + x)]}, {-1}, x]");
+    BR_TRUE("brSignPatternSeenQ[{Sqrt[1 + x] Sqrt[1/(1 + x)]}, {1}, x]");
+    BR_TRUE("With[{r = BronsteinIntegrate[(1 + E^(x^2))/2 + (1 - E^(x^2))/2 Sqrt[x + 1] Sqrt[1/(x + 1)], x]},"
+            " !MatchQ[r, {\"not elementary\", _}]]");
+    BR_TRUE("With[{r = BronsteinIntegrate[(1 + E^(x^2))/2 + (1 - E^(x^2))/2 Sqrt[x] Sqrt[1/x], x]},"
+            " !MatchQ[r, {\"not elementary\", _}]]");
+}
+
+static void test_weights(void) {
+    /* u = 1 + Y/d_1 on y^3 = theta^3 + theta + 1 has a weight-2 coordinate in u'/u:
+       not a residue-exact log part, so the invariant fires */
+    BR_THROWS("brLogPartFinish[T9, cv9, c9, fieldFn[{x}], cv9[\"B\"], {{1, {1, 1, 0}, None}}, False]",
+              "Internal", "LogPartWeightNonzero");
+    BR_THROWS("brLogPartFinish[T9, cv9, c9, fieldFn[{x}], cv9[\"B\"], {{1, {1, 1, 0}, None}}, True]",
+              "Unimplemented", "log part with special-place residues: components of other weights (m >= 3)");
+    /* the real log part of the same component passes: its weight-2 coordinate is 0 */
+    BR_TRUE("Module[{lp = brComponentLogPart[T9, cv9, c9]}, AssociationQ[lp]]");
+    BR_ANTIDERIV("1/(x (2 + Log[x]^3)^(1/3))", "Bronstein");                 /* m = 3, the Q-basis path */
 }
 
 int main(void) {
@@ -213,6 +236,7 @@ int main(void) {
     test_reducible_log();
     test_special_genus();
     test_sign_compositum();
+    test_weights();
     BR_DONE("bronstein_phase3_tests");
     return 0;
 }

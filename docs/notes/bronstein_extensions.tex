@@ -233,6 +233,8 @@ E6b & A cyclic radical compositum as one radical, pointwise &
   \code{Tower:cyclic-compositum} & v0.6547 \\
 E6d & One radical up to a locally constant sign &
   \code{Tower:cyclic-compositum} & v0.6549 \\
+E6e & The log part has no weight-$k$ coordinates, $k\ne1$ (gap \#12) &
+  \code{LogPart:weights} & v0.6550 \\
 E6c & Exponents with a rational log-linear part &
   \code{Tower:exp-of-log-radical} & v0.6547 \\
 \bottomrule
@@ -645,16 +647,115 @@ never occur are harmless for answers.
   $F=\sum_s\prod_j\tfrac12(1+s_j\varepsilon_j)\,F_s$ is an antiderivative on
   every region. The product is the indicator of the region where $\varepsilon=s$,
   and its derivative is~0.
-\item If some $f_s$ is not elementary and a sample point exhibits the pattern
-  $s$ (\code{brSignPatternSeenQ}; the values are exactly $\pm1$), then $f=f_s$
-  on that region and $f$ has no elementary antiderivative on the whole domain.
-  The certificate means what it means in E6a.
+\item If some $f_s$ is not elementary and the pattern $s$ is taken on an
+  \emph{open} region, then $f=f_s$ there, and $f$ has no elementary
+  antiderivative on the whole domain. The certificate means what it means in
+  E6a.
+
+  The sampler (\code{brSignPatternSeenQ}) accepts a point only if every
+  radicand of $\varepsilon$ is off its cut $(-\infty,0]$ there, and the same
+  values are taken at four perturbations of size $10^{-6}$. On a cut, a product
+  of principal radicals can take a value that no open set has:
+  $\sqrt{x+1}\sqrt{1/(x+1)}=-1$ exactly for real $x<-1$.
 \item An unseen pattern with a non-elementary $f_s$ stays
   \code{Tower:cyclic-compositum}.
 \end{itemize}
 
+\paragraph{Review (2026-11-14).} The first release (v0.6549) sampled real points
+on those cuts. That gave a false certificate for
+$\tfrac12(1+e^{x^2})+\tfrac12(1-e^{x^2})\sqrt{x+1}\sqrt{1/(x+1)}$, which equals~1.
+v0.6550 fixes the sampler, and the example is a regression test.
+
 \paragraph{Tests.} \code{test\_sign\_compositum} in
 \code{tests/test\_bronstein\_phase3.c}, and examples E6d-1 to E6d-4 in the gap log.
+
+\section*{E6e. The log part has no coordinates of weight $k\ne1$ (gap \#12)}
+\addcontentsline{toc}{section}{E6e. Weights of the log part}
+
+\paragraph{Setting.} A component $cY$ lies on $\mathcal C: Y^m=G$ over
+$k(\theta)$, $m\ge3$. Let $\sigma: Y\mapsto\zeta Y$, with $\zeta$ a primitive
+$m$-th root of unity, after the constants are extended by $\zeta$. On the basis
+$w_i=Y^i/d_i$, an element $v$ has coordinates $v_i$, and $\sigma$ acts on them
+by $\zeta^i$. The log part is $L=\sum_j(\beta_j/N_j)\log u_j$ with
+$N_j\delta_j=\operatorname{div}(u_j)$. The implementation keeps its weight-1
+projection through the norm formula
+$L_1=\sum(\beta_j/N_j)(\log u_j-\tfrac1m\log\operatorname{Norm}u_j)$. That
+formula is valid exactly when the coordinates $2,\dots,m-1$ of $L'$ vanish,
+which [B] and [T] state only for $m=2$. Since v0.6533 a nonzero coordinate was
+reported as \code{LogPart:weights}. It was never observed. A sweep of 120
+random components with $m\in\{3,4\}$ (logarithms and exponentials) and the 36
+integrands of E3 did not trigger it. The following explains why.
+
+\begin{theorem}\label{thm:E6e}
+Suppose the residue function $P\mapsto r(P)=\operatorname{res}_P(L')$ on the
+places of $\mathcal C$ is a sum $r=r_1+r_0$ of a $\sigma$-equivariant part of
+weight one, $r_1(\sigma^{-1}P)=\zeta\,r_1(P)$, and a $\sigma$-invariant part,
+$r_0(\sigma P)=r_0(P)$. Suppose also that the curve is reduced (the constants
+of $K$ algebraic over $k$ lie in $k$) and that $\sigma$ commutes with $D$. Then
+for every $k\not\equiv0,1\pmod m$ the weight-$k$ part
+$L_k=\tfrac1m\sum_{j=0}^{m-1}\zeta^{-kj}\sigma^j(L)$ has $L_k'=0$, so the
+coordinates $2,\dots,m-1$ of $L'$ vanish. ($L_0'$ lies in $k$ and need not be
+$0$: scaling a $u_j$ by $v\in k$ adds a multiple of $v'/v$.)
+\end{theorem}
+
+\begin{proof}
+Fix the convention $\operatorname{res}_P(\sigma^j g)=\operatorname{res}_{\sigma^{-j}P}(g)$
+($\sigma^j g$ is $g\circ\sigma^{-j}$ on places), which holds because $\sigma$
+commutes with $D$. Iterating the hypothesis gives
+$r_1(\sigma^{-j}P)=\zeta^jr_1(P)$. Hence
+\[ \operatorname{res}_P(L_k')=\tfrac1m\sum_j\zeta^{-kj}\bigl(\zeta^{j}r_1(P)+r_0(P)\bigr)
+   =r_1(P)\tfrac1m\sum_j\zeta^{(1-k)j}+r_0(P)\tfrac1m\sum_j\zeta^{-kj}, \]
+which is $0$ for $k\not\equiv0,1$. The residue of $cY$ is equivariant in exactly
+this way, since $\sigma(cY)=\zeta cY$. A place fixed by $\sigma$, or with a
+nontrivial stabiliser (partial ramification when $m=4$), gets residue~0 from
+the same identity. So $L_k'$ is a combination $\sum_ic_i\,u_i'/u_i$, with
+$c_i\in\Q(\zeta,\beta)$, that has zero residue at every place.
+
+Choose a $\Q$-basis $e_1,\dots,e_r$ of the span of the $c_i$, and write
+$\sum_ic_iu_i'/u_i=\sum_le_l\,v_l'/v_l$ with $v_l$ products of integer powers
+of the $u_i$. The residue at $P$ is $\sum_le_l\operatorname{ord}_P(v_l)=0$, with
+integer orders, so every $\operatorname{ord}_Pv_l=0$. Each $v_l$ therefore has
+divisor zero and lies in the algebraic closure of $k$ in $K$, which is $k$
+because the curve is reduced. So $v_l'/v_l\in k$ is fixed by $\sigma$, and has
+weight~0.
+
+For $k\not\equiv0$ a weight-0 element has no weight-$k$ part, so $L_k'=0$.
+\end{proof}
+
+\paragraph{Where the hypotheses hold.}
+\begin{itemize}
+\item \textbf{Finite places, special places of a logarithm.} The residue function
+  of the log terms is $r_1+r_0$. Here $r_1$ is the residue of $cY$, and $r_0$
+  is $\sigma$-invariant: it comes from the reference divisor
+  $\kappa(\theta-c)_0$ of the orbit construction, and from the places over
+  $\theta=0$ of an exponential, where $cY$ may have ordinary residues that the
+  log part does not. All of this holds by construction: $\sum_j\beta_j\delta_j=\sum_i\alpha_i\Delta(\alpha_i)$
+  (and the special taus). Generator normalisation multiplies $u_j$ by an
+  element of $k(\theta)$, which is $\sigma$-invariant and changes only
+  weight~0. A logarithm's special residues are ordinary residues of
+  $cY\,d\theta/\eta$.
+\item \textbf{Special places of an exponential.} Bronstein's residues there
+  ([B] Def.~2.21, with the reference value $c_{\bar p}$) are not ordinary
+  residues of a differential. The review suggests that
+  $\tau_p=\varepsilon r(c_p-c_{\bar p})$ also splits into a weight-1 part and an
+  invariant part. Until that is written out, this path keeps
+  \code{LogPart:weights}.
+\end{itemize}
+
+\paragraph{Implementation.} On every other path a nonzero coordinate is an
+Internal invariant violation, \code{LogPartWeightNonzero}: it can be a bug, but
+not a missing branch.
+
+\paragraph{Review (2026-11-14).} The independent review confirmed the result.
+It corrected three things in the first write-up, all fixed above:
+\begin{itemize}
+\item an inconsistent residue convention;
+\item the claim for weight~0;
+\item a hypothesis stronger than what holds at the places over $\theta=0$.
+\end{itemize}
+About 100 probes with $m\in\{3,4\}$ never raised \code{LogPartWeightNonzero}.
+
+\paragraph{Tests.} \code{test\_weights} in \code{tests/test\_bronstein\_phase3.c}.
 
 \section*{E6c. Exponents with a rational log-linear part (\code{brSplitLogExponent})}
 \addcontentsline{toc}{section}{E6c. Log-linear exponents}

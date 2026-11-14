@@ -1574,7 +1574,9 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [x] #9 genus >= 1 special places (E3: specialization + two primes with special places; goodQ hook) — v0.6548
   - [ ] perf: three-radical compositum D[x^2 Sqrt[x] (x+1)^(1/5) (x+2)^(1/3)] (Kummer Z/30) > 300 s; Sqrt[x](x+1)^(1/5)(x+2)^(1/3) > 120 s
   - [ ] perf: D[Log[y+u] + 2 Log[y^2+u y+u^2]] on y^3 = u^3+u+1 takes 225 s (profile the torsion/principal steps)
-  - [ ] brParamIntegrate -> LimitedIntegrate; #12 weights (RootSum over w^m = 1, derivative = coordinate 1); LogPart:171; Divisors multi-ramified (E5); Tower:logrel/exprel robustness
+  - [x] #12 weights: theorem E6e (they vanish), Internal invariant; exp special places keep the site — v0.6550
+  - [ ] perf: 13 of 120 random m = 3,4 components time out at 30 s
+  - [ ] brParamIntegrate -> LimitedIntegrate; LogPart:171; Divisors multi-ramified (E5); Tower:logrel/exprel robustness
 - [ ] Phase 4: constant fields (NF, Q(i)+trig, parameters)
 - [ ] Phase 5: radical anywhere (brDField, transcendental Risch over algebraic base, RDE on a curve over a tower)
 - [ ] Theory note docs/notes/bronstein_extensions.tex (E1–E6; LaTeX per user 2026-11-14), each adversarially reviewed — E6a–c written v0.6547, review pending

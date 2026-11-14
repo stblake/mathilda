@@ -1481,3 +1481,58 @@ and a numeric sanity check before its phase starts.
   fix adds its examples.
 - **Phase 3, part 3 (v0.6549).** E6d: one radical up to a locally constant sign
   (sign-region split with indicators `(1 +- eps)/2`).
+- **Phase 3, part 4 (v0.6550).** #12 via theorem E6e: weight-k coordinates of
+  the log part vanish, so a nonzero one is an Internal invariant. The site
+  stays only for an exponential's special places.
+
+### Phase 4 design (spike, 2026-11-14)
+
+**Spike.** The front-end declines for `Complex` were lifted, on a battery of
+Q(i) integrands (`Sqrt[x + I]/x`, `E^(I x) Sqrt[1 + E^(I x)]`,
+`Sqrt[Log[x] + I]`, ...).
+- The `Q`-only layers rejected `I` at about eight more points:
+  `brRationalInQ` (13 calls), the radicand test, the residue setup ("malformed
+  coefficient"), and Trager's `Validate`.
+- 2 of 12 came back verified. Patching call sites is not a sound route:
+  certificates rest on factorisations being over the right field.
+
+**Design: one constant field, threaded as a field record.** Trager's `Field.m`
+already has the abstraction this needs: `fieldFn[vars, {t, mu, theta}]` is
+`Q(theta)(vars)`, and its FLINT kernels take `Extension -> {t, mu}`.
+1. **The constant field.** A record `CF`: `Q`, or `Q(alpha)` with `alpha` a
+   primitive element, `mu` its minimal polynomial and `theta` a numeric root
+   (`ToNumberField` / `RootReduce` for the radical constants of the input;
+   `I -> alpha` with `mu = alpha^2 + 1`). The base field of every stage becomes
+   `fieldFn[vars, CF]` instead of `fieldFn[vars]`.
+2. **The front end.**
+   - `brCheckHeads` and `brDetectRadical` accept constants in `CF`, and
+     `brRationalInQ` becomes `brRationalInCF`.
+   - Kummer cyclicity ignores constants already. A constant that makes a
+     compositum cyclic only over `CF` (`Sqrt[2 x]`, `Sqrt[x]`) is decided by
+     E6b/E6d over `CF`.
+3. **Field-aware primitives.** Every `FactorList` / `PolynomialGCD` /
+   `Resultant` / `Together` of polynomials that carry `alpha` goes through the
+   `k*` operations of the record. That is 37 `FactorList` calls in Bronstein and
+   Trager.
+4. **Residue fields.** These are composita: `residueField` over `CF` returns a
+   primitive element of `CF(beta)`, with `alpha` expressed in it.
+5. **Torsion.** A good prime must also have a simple root of `mu` mod p, which
+   a positive density of primes have (Chebotarev). Specialisation is unchanged.
+6. **Trigonometric front end.** Once `Q(i)` works: `TrigToExp` turns trig into
+   exponentials, and the inverse trig functions become `Log` plus *the*
+   radical. The answer is presented in real form by Trager's
+   `realForm`/`presentable`, re-verified.
+7. **Symbolic parameters.** Parameters become transcendental constants: vars
+   with `D = 0`, and generic verdicts (E4).
+
+**Choice for Q(i) (probe, 2026-11-14).** Keep `I` literal. `FactorList`
+factors over Q(i) automatically when the coefficients carry `I`, and
+`Together`, `Resultant` and `PolynomialGCD` handle Gaussian rationals, so the
+zero tests reduce `I^2 = -1` for free. Residue fields over Q(i) are absolute
+number fields with `I` written in their primitive element. General number
+fields go through the `fieldFn[vars, {alpha, mu, theta}]` record: radical
+products such as `Sqrt[2] Sqrt[3]` do not stay canonical.
+
+**Order.** (1)+(2)+(3) on the `Q(i)` battery first, with every certificate
+cross-checked against FriCAS; then (4); then (6); then number fields beyond
+`Q(i)`; then (7). Each step gets examples in the gap log.

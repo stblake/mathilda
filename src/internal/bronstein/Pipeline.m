@@ -173,10 +173,16 @@ brIntegrateSignSplit[f_, x_Symbol, rw_Association] := Module[{syms = First /@ rw
   If[!antiderivativeQ[f, F, x], throwInternal["SignSplitCheckFailed", <|"f" -> f, "F" -> F|>]];
   F];
 
-brSignPatternSeenQ::usage = "brSignPatternSeenQ[eps, s, x] is True when at one of a few fixed sample points (real and complex, positive and negative real parts) the locally constant signs eps (expressions with values +-1) take the values s, numerically at 30 digits (their values are +-1 exactly, so a distance below 1/10 identifies them).";
-brSignPatternSeenQ[eps_List, s_List, x_Symbol] := Length[eps] === Length[s] &&
-  AnyTrue[{3, -3, -1/2, 1/3 + 2 I, -2 - 3 I, -7 + I/5, 5 - 11 I, -1/5 - I/9},
-    Function[x0, With[{v = Quiet[N[eps /. x -> x0, 30]]}, TrueQ[AllTrue[v, NumericQ] && Max[Abs[v - s]] < 1/10]]]];
+brSignPatternSeenQ::usage = "brSignPatternSeenQ[eps, s, x] is True when the locally constant signs eps (expressions with values +-1) take the values s on an OPEN region: at one of a few fixed complex sample points x0 every radicand of eps is off its branch cut (-Infinity, 0] and the same values s are taken at four perturbations x0 +- 10^-6, x0 +- 10^-6 I (so x0 is off every cut, the tower's kernels' included). A point ON a cut does not count: there a product of principal radicals can take a value that no open region has (Sqrt[x + 1] Sqrt[1/(x + 1)] = -1 only for x < -1). Values at 30 digits; they are +-1 exactly, so a distance below 1/10 identifies them.";
+brSignPatternSeenQ[eps_List, s_List, x_Symbol] := Module[{rads, at, offCut},
+  If[Length[eps] =!= Length[s], Return[False]];
+  rads = DeleteDuplicates[Cases[eps, Power[b_, _Rational] :> b, {0, Infinity}]];
+  at[x0_] := With[{v = Quiet[N[eps /. x -> x0, 30]]}, TrueQ[AllTrue[v, NumericQ] && Max[Abs[v - s]] < 1/10]];
+  offCut[x0_] := AllTrue[rads, Function[b, With[{bv = Quiet[N[b /. x -> x0, 30]]},
+    NumericQ[bv] && (Abs[Im[bv]] > 10^-12 || Re[bv] > 10^-12)]]];
+  AnyTrue[{1/3 + 2 I, -2 - 3 I, -7 + I/5, 5 - 11 I, -1/5 - I/9, 3 + I/2, -1/2 + 7 I, 2 - I/3},
+    Function[x0, offCut[x0] && at[x0] &&
+      AllTrue[{10^-6, -10^-6, 10^-6 I, -10^-6 I}, at[x0 + #] &]]]];
 
 brIntegrateBody::usage = "brIntegrateBody[f, x] is the body of BronsteinIntegrate: it throws instead of returning failure lists.";
 brIntegrateBody[f0_, x_Symbol] := Module[{f = f0 /. Exp[a_] :> E^a, T, F, r, fl, g0, rw, rl, u = Unique["Bronstein`Private`brUf"], verified = False},

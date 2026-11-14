@@ -5328,3 +5328,8 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   keep EVERY polynomial of the frame at its degree (not just the theta-model's), and assert the
   invariant the theorem needs (deg delta = 0) right before the step that turns it into a
   certificate, so a mismatch is Internal, never a verdict.
+- **A numeric witness for "this region exists" must sample an OPEN set.** E6d v0.6549 sampled
+  real points to find where a locally constant sign takes a value; Sqrt[x + 1] Sqrt[1/(x + 1)] is
+  -1 only ON the cut x < -1, so the witness certified a region that does not exist (false
+  certificate, caught by review). Rule: a sample point counts only if it is off every branch cut
+  of the expression (radicands off (-oo, 0]) and the value is stable under small perturbations.

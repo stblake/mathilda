@@ -82,6 +82,11 @@ bronsteinPaperExamples = {
   "kind" -> "Integrate", "f" -> Hold[Sqrt[Log[x]^2 (Log[x] + 1)] + Sqrt[Log[x] + 1]/x], "expect" -> "nonelementary",
   "before" -> "implementation incomplete", "note" -> "over the tower: Log[x] Sqrt[Log[x] + 1] on the region eps = 1"|>,
 
+<|"id" -> "E6d-5", "gap" -> "Tower:cyclic-compositum (sign)", "theory" -> "E6d", "version" -> "v0.6550",
+  "kind" -> "Integrate", "f" -> Hold[(1 + E^(x^2))/2 + (1 - E^(x^2))/2 Sqrt[x + 1] Sqrt[1/(x + 1)]], "expect" -> "incomplete",
+  "before" -> "not elementary (v0.6549: false, a sign seen only on a branch cut)",
+  "note" -> "equals 1 on every open set; the sign -1 occurs only on the cut x < -1 and must never certify"|>,
+
 (* ---- E6c: log-linear exponents (v0.6547) --------------------------------- *)
 <|"id" -> "E6c-1", "gap" -> "Tower:exp-of-log-radical", "theory" -> "E6c", "version" -> "v0.6547",
   "kind" -> "Integrate", "f" -> Hold[E^(x + Log[x]/2)/x], "expect" -> "nonelementary",

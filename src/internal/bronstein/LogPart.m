@@ -61,10 +61,7 @@ brComponentLogPart[T_Association, cv_Association, c_] := Module[
     u = brNormalizeGenerator[F, B, u, rs["vars"]];
     AppendTo[terms, {kc[F, rs["basis"][[j]]/Nj], u, afNorm[F, B, u]}],
     {j, Length[rs["basis"]]}];
-  Lp = brLogPartDerivative[T, cv, F, B, terms[[All, {1, 2}]]];
-  If[B["m"] > 2 && !AllTrue[Lp[[3 ;;]], rcZeroQ[F, #] &],
-    throwUnimplemented["LogPart:weights", "log part with components of other weights (m >= 3)"]];
-  brLogPartFinish[T, cv, c, F, B, terms]];
+  brLogPartFinish[T, cv, c, F, B, terms, False]];
 
 (* -------------------------------------------------------------------------- *)
 (* The log part one Galois orbit of residues at a time (Trager's per-orbit    *)
@@ -129,8 +126,9 @@ brOrbitLogPart[T_Association, cv_Association, c_, nr_Association] := Module[
     {q, facs}];
   Dall = Together /@ Total[#["D"] & /@ recs];
   Dext = Together /@ Total[Append[#["D"] & /@ Select[recs, #["ext"] &], Table[0, {m}]]];
+  (* weights 2..m-1 vanish by theorem E6e (exact residues, sigma-equivariance) *)
   If[m > 2 && !AllTrue[Dall[[3 ;;]], # === 0 &],
-    throwUnimplemented["LogPart:weights", "log part with components of other weights (m >= 3)"]];
+    throwInternal["LogPartWeightNonzero", <|"path" -> "orbit"|>]];
   <|"terms" -> ({#["coef"], #["u"], #["normU"]} & /@ Select[recs, !#["ext"] &]),
     "orbits" -> Select[recs, #["ext"] &], "orbitD" -> Dext,
     "remainder" -> Together[c - Dall[[2]]], "F" -> None, "B" -> cv["B"]|>];
@@ -143,11 +141,19 @@ brOrbitLogExpression[B_Association, rec_Association, Y_Symbol] := Module[
   With[{qf = rec["q"] /. rec["z"] -> Slot[1], bf = body /. t -> Slot[1]},
     {1, RootSum[Function[qf], Function[bf]], "RootSum"}]];
 
-brLogPartFinish::usage ="brLogPartFinish[T, cv, c, F, B, terms] checks the log terms {{coef, u, normU}, ...} (coordinates on the theta-basis B over F) of the component c Y and returns the brComponentLogPart Association: coordinates 2..m-1 of L' must vanish (else Decline), and the remainder c - [L']_1 must be free of the residue-field generator (else Internal).";
-brLogPartFinish[T_Association, cv_Association, c_, F_Association, B_Association, terms_List] := Module[{Lp, rem},
+brLogPartFinish::usage ="brLogPartFinish[T, cv, c, F, B, terms, special] checks the log terms {{coef, u, normU}, ...} (coordinates on the theta-basis B over F) of the component c Y and returns the brComponentLogPart Association: coordinates 2..m-1 of L' must vanish (Theorem E6e: an Internal error when they do not, unless special is True -- special-place residues -- where it stays LogPart:weights), and the remainder c - [L']_1 must be free of the residue-field generator (else Internal).";
+brLogPartFinish[T_Association, cv_Association, c_, F_Association, B_Association, terms_List, special_ : True] := Module[{Lp, rem},
   Lp = brLogPartDerivative[T, cv, F, B, terms[[All, {1, 2}]]];
+  (* Theorem E6e: when the log terms have exactly the residues of c Y at every
+     place, the weight-k coordinates (k = 0, 2..m-1) of L' vanish, so a nonzero
+     one is an invariant violation.  At special places of an exponential,
+     Bronstein's residues (Def 2.21) are not ordinary residues and the theorem
+     is not proved there yet: that path keeps the site (a logarithm's special
+     residues, at theta = infinity, are ordinary residues of c Y dtheta/eta). *)
   If[B["m"] > 2 && !AllTrue[Lp[[3 ;;]], rcZeroQ[F, #] &],
-    throwUnimplemented["LogPart:weights", "log part with components of other weights (m >= 3)"]];
+    If[special,
+      throwUnimplemented["LogPart:weights", "log part with special-place residues: components of other weights (m >= 3)"],
+      throwInternal["LogPartWeightNonzero", <|"path" -> "Q-basis"|>]]];
   rem = rc[F, c - Lp[[2]]];
   If[fieldExtQ[F] && !FreeQ[rem, F["t"]], throwInternal["brLogPartRemainderNotRational", <|"rem" -> rem|>]];
   <|"terms" -> terms, "remainder" -> Together[rem], "F" -> F, "B" -> B|>];
@@ -218,4 +224,4 @@ brComponentLogPartSpecial[T_Association, cv_Association, c_, nr_Association, spe
     gen = brNormalizeGenerator[F, Bth, afFromY[F, Bth, expr, Y], ss["vars"]];
     AppendTo[terms, {kc[F, ss["qb"]["basis"][[j]]/Nj], gen, afNorm[F, Bth, gen]}],
     {j, Length[ss["qb"]["basis"]]}];
-  brLogPartFinish[T, cv, c, F, Bth, terms]];
+  brLogPartFinish[T, cv, c, F, Bth, terms, T["kind"] === "Exp"]];
