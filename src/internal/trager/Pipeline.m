@@ -200,7 +200,9 @@ TragerIntegrateCurve[a_, x_Symbol, m_Integer, G_, method_String : "Trager"] := M
   r = catchTrager[integrateComponent[a, x, m, G, method]];
   If[tragerFailQ[r], failToList[r], r]];
 
-TragerIntegrate[f_, x_Symbol, method_String : "Trager"] := Module[{r},
+TragerIntegrate[f0_, x_Symbol, method_String : "Trager"] := Module[{r, f = tragerExtractRadicalContent[f0, x]},
+  (* radicals equal over a larger constant field (Sqrt[2 x] = Sqrt[2] Sqrt[x])
+     become one radical: tragerExtractRadicalContent, an identity (Phase 4.3b C7) *)
   (* constant field Q(i) for Gaussian-rational constants (keeps an outer
      setting: Bronstein calls in with the flag already on) *)
   r = Block[{tragerConstantI = TrueQ[tragerConstantI] || !FreeQ[f, _Complex],

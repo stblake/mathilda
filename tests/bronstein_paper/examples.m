@@ -228,5 +228,20 @@ bronsteinPaperExamples = {
   "before" -> "internal (brComponentIdentity)", "note" -> "the constants' representations travel with k(theta) (brFieldOver keeps \"consts\")"|>,
 <|"id" -> "E43b-7", "gap" -> "Trager:monic-NF", "theory" -> "E4.3b", "version" -> "v0.6563",
   "kind" -> "Integrate", "f" -> Hold[Together[D[Log[(1 + Sqrt[2]) x^2 + Sqrt[x^4 + 1]], x]]], "expect" -> "elementary",
-  "before" -> "(not separately recorded)", "note" -> "residue factors with radical leading coefficients, made monic and canonical over Q(Sqrt[2]) (tragerMonic)"|>
+  "before" -> "(not separately recorded)", "note" -> "residue factors with radical leading coefficients, made monic and canonical over Q(Sqrt[2]) (tragerMonic)"|>,
+<|"id" -> "E43b-8", "gap" -> "Bronstein:k-arithmetic-NF", "theory" -> "E4.3b", "version" -> "v0.6564",
+  "kind" -> "Integrate", "f" -> Hold[Together[D[Sqrt[2^(1/3) + Log[x]]/(-2^(2/3) + Log[x]), x]]], "expect" -> "elementary",
+  "before" -> "a FALSE certificate (demoted): the squarefree split over Q(2^(1/3)) returned {{}, {}}", "note" -> "Hermite in theta over k(K0): brSplitSquarefreeNF, exact quotient and congruence over fieldFn with an extension"|>,
+<|"id" -> "E43b-9", "gap" -> "Bronstein:k-arithmetic-NF", "theory" -> "E4.3b", "version" -> "v0.6564",
+  "kind" -> "Integrate", "f" -> Hold[Together[D[(Log[x] Sqrt[2^(1/3) + Log[x]])/(-2^(1/3) + Log[x]^2), x]]], "expect" -> "elementary",
+  "before" -> "a FALSE certificate (demoted)", "note" -> "a quadratic in theta whose roots need 2^(1/6)"|>,
+<|"id" -> "E43b-10", "gap" -> "Tower:not-algebraic", "theory" -> "E4.3b", "version" -> "v0.6564",
+  "kind" -> "Integrate", "f" -> Hold[Together[D[(Sqrt[2] + Log[x])^(1/3)/(-(Sqrt[2]/(1 + Sqrt[2])) + Log[x]), x]]], "expect" -> "elementary",
+  "before" -> "implementation incomplete (not algebraic over the tower: Together left the sum uncombined)", "note" -> "the algebraicity check combines over Q(constants)"|>,
+<|"id" -> "E43b-11", "gap" -> "Tower:cyclic-compositum", "theory" -> "E4.3b", "version" -> "v0.6564",
+  "kind" -> "Integrate", "f" -> Hold[Sqrt[2 x] + Sqrt[x]], "expect" -> "elementary",
+  "before" -> "implementation incomplete (open-gap register G-nf-2)", "note" -> "Sqrt[2 x] = Sqrt[2] Sqrt[x] on every branch: one radical over Q(Sqrt[2])"|>,
+<|"id" -> "E43b-12", "gap" -> "Tower:cyclic-compositum", "theory" -> "E4.3b", "version" -> "v0.6564",
+  "kind" -> "Integrate", "f" -> Hold[Sqrt[2 x + 2] Sqrt[x + 1] Log[x]], "expect" -> "elementary",
+  "before" -> "implementation incomplete", "note" -> "a positive rational content pulled out of the radicand: the product is rational"|>
 };

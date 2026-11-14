@@ -53,8 +53,8 @@ brGoodSpecializationQ[T_Association, cv_Association, rs_Association, sigma_List,
   If[MemberQ[{Gs, Ns, Es, Eps, Bps}, $Failed], Return[False]];
   If[Exponent[Gs, th] =!= Exponent[G, th] || brSquarefreeProfile[Gs, th] =!= brSquarefreeProfile[G, th], Return[False]];
   If[Exponent[Bps, th] =!= Exponent[rs["Bp"], th] || Exponent[Es, th] =!= Exponent[rs["E"], th], Return[False]];
-  If[Exponent[Bps, th] > 0 && (Exponent[PolynomialGCD[Bps, D[Bps, th]], th] > 0 ||
-       Exponent[PolynomialGCD[Bps, Gs], th] > 0 || Resultant[Bps, Eps, th] === 0), Return[False]];
+  If[Exponent[Bps, th] > 0 && (Exponent[tragerGCD[Bps, D[Bps, th]], th] > 0 ||
+       Exponent[tragerGCD[Bps, Gs], th] > 0 || Resultant[Bps, Eps, th] === 0), Return[False]];
   (* a reference point theta = refc (orbit divisors) stays ordinary: unramified
      and off every residue place *)
   If[refc =!= None && (Together[Gs /. th -> refc] === 0 || Together[Es /. th -> refc] === 0), Return[False]];

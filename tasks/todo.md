@@ -1598,8 +1598,8 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
         - [x] C4 monic normalisation over K0 — v0.6563 (tragerMonic; G-perf-4 recorded). Was: at every FactorList / PolynomialGCD (G-nf-8)
         - [x] C5 mod p at a degree-1 prime of K0 (G-nf-6) — v0.6559 (gfConstRoot/gfConstImage; certificate still demoted). Was: root r of mu mod p chosen once per p (gfConstRoot, like
               gfSqrtMinusOne); gfMod maps consts via reps; goodPrime adds disc(mu) / denominators; rho filter on the consts reps
-        - [ ] C6 Bronstein k arithmetic: brK0Field = fieldFn[syms, K0 ext]; brFieldOver keeps "consts"; Hermite/RDE over k (G-nf-5/9)
-        - [ ] C7 compositum over K0 (G-nf-2: Sqrt[2 x] = Sqrt[2] Sqrt[x])
+        - [x] C6 Bronstein k arithmetic over K0 — v0.6564 (brSplitSquarefreeNF, Hermite over fieldFn+ext, brCancelK, tragerTogether fallback; 2 false certificates fixed). Was: brK0Field = fieldFn[syms, K0 ext]; brFieldOver keeps "consts"; Hermite/RDE over k (G-nf-5/9)
+        - [x] C7 compositum over K0 (G-nf-2) — v0.6564 (tragerExtractRadicalContent; negative content G-nf-11 open)
         - [ ] C8 remove nfDemoteCertificate; adversarial review of number-field certificates; theory note E4.3b
   - [ ] D scope: G-trig-1, G-qi-1, G-red-1, G-adv-t4, G-sign-1, G-core-4
   - [ ] E performance: G-perf-1/2/3, G-adv-t2/t3, G-adv-b5

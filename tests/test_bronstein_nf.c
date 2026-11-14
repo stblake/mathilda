@@ -111,6 +111,67 @@ static void test_nf_monic(void) {
     BR_ANTIDERIV("x/((Sqrt[2] x^3 - 1) Sqrt[x^2 + 2])", "Bronstein");
 }
 
+/* Phase 4.3b C6: Bronstein's k arithmetic over Q(constants) */
+static void test_nf_k_arithmetic(void) {
+    BR_TRUE("T6 = brTower[Log[x] Sqrt[Log[x] + 1], x]; th6 = T6[\"theta\"]; True");
+    BR_TRUE("Block[{tragerAlgConstants = {2^(1/3)}}, brConstantCoefficientsQ[th6 - 2^(2/3)]]");
+    BR_FALSE("Block[{tragerAlgConstants = {}}, brConstantCoefficientsQ[th6 - 2^(2/3)]]");
+    BR_FALSE("Block[{tragerAlgConstants = {Sqrt[2]}}, brConstantCoefficientsQ[th6 - 2]]");
+    /* the C builtin lost the polynomial over Q(2^(1/3)) ({{}, {}}); over K0 it splits */
+    BR_EQ("Block[{tragerAlgConstants = {2^(1/3)}}, brSplitSquarefreeNF[T6, Expand[(th6 - 2^(2/3))^2 (th6 + 1)]]]",
+          "{{1 + brT1, 2^(2/3) - brT1}, {1, 1}}");
+    BR_EQ("Block[{tragerAlgConstants = {2^(1/3)}}, brSplitSquarefree[T6, Expand[(th6 - 2^(2/3))^2 (th6 + 1)]]]",
+          "{{1 + brT1, 2^(2/3) - brT1}, {1, 1}}");
+    /* an exponential theta is special */
+    BR_TRUE("T7 = brTower[E^x Sqrt[E^x + 1], x]; th7 = T7[\"theta\"]; "
+            "Block[{tragerAlgConstants = {Sqrt[2]}}, brSpecialPartNF[T7, th7] === th7 && brSpecialPartNF[T7, th7 - Sqrt[2]] === 1]");
+    BR_TRUE("Block[{tragerAlgConstants = {Sqrt[2]}}, brNormalQ[T7, th7 - Sqrt[2]] && !brNormalQ[T7, th7^2 - Sqrt[2] th7]]");
+    BR_TRUE("Block[{tragerAlgConstants = {Sqrt[2]}}, brSpecialQ[T7, Sqrt[2] th7] && !brSpecialQ[T7, th7 - Sqrt[2]]]");
+    /* the coefficient field of Hermite over K0, and the map back */
+    BR_TRUE("Block[{tragerAlgConstants = {2^(1/3)}}, With[{K = brHermiteK[T6]}, K[\"Type\"] === \"Fn\" && KeyExistsQ[K, \"consts\"] && K[\"theta\"] === 2^(1/3)]]");
+    BR_EQ("Block[{tragerAlgConstants = {2^(1/3)}}, With[{K = brHermiteK[T6]}, "
+          "brHermiteBack[K, kQuo[K, kc[K, Expand[(th6 - 2^(2/3))^2 (th6 + 1)]], kc[K, th6 - 2^(2/3)], th6]] - "
+          "Expand[(th6 - 2^(2/3)) (th6 + 1)]]]", "0");
+    /* former FALSE certificates (demoted) over Q(2^(1/3)): now verified answers */
+    BR_ANTIDERIV("Together[D[Sqrt[2^(1/3) + Log[x]]/(-2^(2/3) + Log[x]), x]]", "Bronstein");
+    BR_ANTIDERIV("Together[D[(Log[x] Sqrt[2^(1/3) + Log[x]])/(-2^(1/3) + Log[x]^2), x]]", "Bronstein");
+    /* a sum Together over the extension left uncombined: read as not algebraic */
+    BR_ANTIDERIV("Together[D[(Sqrt[2] + Log[x])^(1/3)/(-(Sqrt[2]/(1 + Sqrt[2])) + Log[x]), x]]", "Bronstein");
+    /* exact cancellation over k(K0): the factor divides only modulo mu */
+    BR_EQ("Block[{tragerAlgConstants = {2^(1/3)}}, brCancelK[T6, Expand[(th6 - 2^(2/3)) (th6 + 1)]/Expand[(th6 - 2^(2/3))^2]]]",
+          "(1 + brT1)/(-2^(2/3) + brT1)");
+    BR_EQ("Block[{tragerAlgConstants = {}}, brCancelK[T6, (th6^2 - 1)/(th6 - 1)]]", "1 + brT1");
+    BR_ANTIDERIV("Together[D[((3 - Sqrt[2] + Log[x])^(2/3) (Sqrt[2] + Log[x]))/(1 - Sqrt[2] + Log[x]), x]]", "Bronstein");
+    /* the combination helpers */
+    BR_TRUE("Block[{tragerAlgConstants = {Sqrt[2]}}, !tragerCombinedQ[(1/(x - y) + 2)/(x + 1)] && tragerCombinedQ[(x + 1)/(x - Sqrt[2])]]");
+    BR_EQ("Block[{tragerAlgConstants = {Sqrt[2]}}, tragerCombineConstNF[1/(x - Sqrt[2]) - 1/(x - Sqrt[2])]]", "0");
+}
+
+/* Phase 4.3b C7: radicals equal over a larger constant field */
+static void test_nf_radical_content(void) {
+    BR_EQ("tragerRadicalContent[2 x]", "2");
+    BR_EQ("tragerRadicalContent[-6 x/5]", "6/5");
+    BR_EQ("tragerRadicalContent[x + 1]", "1");
+    BR_EQ("tragerExtractRadicalContent[Sqrt[2 x] + Sqrt[x], x]", "Sqrt[x] + Sqrt[2] Sqrt[x]");
+    BR_EQ("tragerExtractRadicalContent[Sqrt[-2 x] + Sqrt[-x], x]", "Sqrt[-x] + Sqrt[2] Sqrt[-x]");
+    /* only when it merges radicands: a lone radical keeps its constant field Q */
+    BR_EQ("tragerExtractRadicalContent[Sqrt[-2 x], x]", "Sqrt[-2 x]");
+    BR_EQ("tragerExtractRadicalContent[(3 x)^(-4/5) (x + 1), x]", "(1 + x)/(3 x)^(4/5)");
+    BR_ANTIDERIV("(-3 x + 2)/(2 x - 2) (3 x)^(-4/5)", "Trager");
+    BR_EQ("tragerExtractRadicalContent[(8 x)^(1/3), x]", "2 x^(1/3)");
+    BR_EQ("tragerExtractRadicalContent[Sqrt[x + 1], x]", "Sqrt[1 + x]");
+    /* an identity on every branch: the value at a negative and a complex point */
+    BR_TRUE("With[{e = Sqrt[6 x/5] + (16 x^2 - 8)^(1/3)}, With[{d = tragerExtractRadicalContent[e, x] - e},"
+            " Abs[N[d /. x -> -7/3, 30]] < 10^-25 && Abs[N[d /. x -> 1/2 + 3 I, 30]] < 10^-25]]");
+    BR_ANTIDERIV("Sqrt[2 x] + Sqrt[x]", "Bronstein");
+    BR_ANTIDERIV("Sqrt[2 x]/(1 + Sqrt[x])", "Bronstein");
+    BR_ANTIDERIV("Sqrt[3 Log[x]] Sqrt[Log[x]]/x", "Bronstein");
+    BR_ANTIDERIV("Sqrt[2 x + 2] Sqrt[x + 1] Log[x]", "Bronstein");
+    BR_ANTIDERIV("Sqrt[2 x] + Sqrt[x]", "Trager");
+    /* genuinely two radicals: still Incomplete */
+    BR_EQ("First[BronsteinIntegrate[1/(Sqrt[2 x] Sqrt[x^3 + 1]) + Sqrt[x^3 + 1]/Sqrt[x], x]]", "\"implementation incomplete\"");
+}
+
 static void test_nf_integrals(void) {
     BR_ANTIDERIV("Sqrt[2] Sqrt[Log[x]]/x", "Bronstein");
     BR_ANTIDERIV("Sqrt[x + Sqrt[2]]/x", "Bronstein");
@@ -143,6 +204,8 @@ int main(void) {
     test_nf_base_field();
     test_nf_residue_fields();
     test_nf_monic();
+    test_nf_k_arithmetic();
+    test_nf_radical_content();
     test_nf_integrals();
     BR_DONE("bronstein_nf_tests");
     return 0;

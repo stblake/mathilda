@@ -432,7 +432,11 @@ brRadicalOverXQ[e_, x_Symbol] := AllTrue[
   Cases[e, Power[b_, _Rational] /; !FreeQ[b, x], {0, Infinity}], brRationalInQ[First[#], {x}] &];
 
 brRationalInQ::usage = "brRationalInQ[e, vars] is True when e is a rational function of the symbols vars with coefficients in the constant field (rational, or Gaussian rational for Q(i); no other symbol, no radical, no kernel).";
-brRationalInQ[e_, vars_List] := Module[{t = Together[e], num, den},
+brRationalInQ[e_, vars_List] := Module[
+  (* over Q(constants): plain Together leaves a sum whose combination needs
+     Sqrt[2]^2 = 2 uncombined (G-core-9), and the integrand read as not
+     algebraic (Phase 4.3b C6) *)
+  {t = tragerTogether[e], num, den},
   num = Expand[Numerator[t]]; den = Expand[Denominator[t]];
   PolynomialQ[num, vars] && PolynomialQ[den, vars] &&
     Complement[Variables[{num, den}], vars] === {} &&

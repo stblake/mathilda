@@ -43,7 +43,7 @@ brResidueData::usage = "brResidueData[T, cv, c] is the residue data of the norma
 brResidueData[T_Association, cv_Association, c_] := Module[{tc = Together[c], N, E, En, Bp},
   N = Expand[Numerator[tc]]; E = Expand[Denominator[tc]];
   En = Numerator[Together[First[brSplit[T, E]]]];
-  Bp = Numerator[Together[En/PolynomialGCD[En, cv["G"]]]];
+  Bp = Numerator[tragerTogether[En/tragerGCD[En, cv["G"]]]];
   <|"N" -> N, "E" -> E, "Ep" -> Together[brD[T, E]], "Bp" -> Expand[Bp], "B" -> cv["B"],
     "vars" -> Prepend[T["lower"], T["x"]]|>];
 

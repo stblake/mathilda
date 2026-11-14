@@ -5370,3 +5370,10 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   Passing a fresh symbol to the new fieldOfRoot made (1 + I) Sqrt[x]/(x^2 + I) "not elementary" over Q(i), and only the
   paper corpus (E41-4) caught it. Rule: when replacing a field constructor, keep the generator symbol the caller used,
   and run the paper corpus (certificate paths) before the unit suites.
+
+## 2026-11-14: a partial checkout plus an all-or-nothing `git apply`
+- To compare against HEAD I saved `git diff` to a patch, ran `git checkout src/internal` (part of the diff), then
+  `git apply patch`. `git apply` is atomic and refused the WHOLE patch, because the docs and tests in it had not been
+  reverted. The uncommitted `.m` work was briefly gone from the tree. Recovered with `git apply --include='src/internal/*'`.
+- Rule: to compare against HEAD, use a scratch worktree (`git worktree add`), or revert and restore the same path set
+  (`git apply --include=<the same paths>`). Check `git diff --stat` right after restoring.

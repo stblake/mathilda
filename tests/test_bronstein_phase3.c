@@ -77,7 +77,7 @@ static void test_compositum_integrate(void) {
     BR_EQ("BronsteinIntegrate[Sqrt[Log[x]] (Log[x] + 1)^(1/3)/x, x][[1]]", "\"not elementary\"");
     BR_EQ("BronsteinScope[Sqrt[x] (x + 1)^(1/3), x]", "\"InScope\"");
     /* a constant field extension stays in scope but unimplemented (Phase 4) */
-    BR_EQ("First[BronsteinScope[Sqrt[2 x] + Sqrt[x], x]]", "\"implementation incomplete\"");
+    BR_EQ("BronsteinScope[Sqrt[2 x] + Sqrt[x], x]", "\"InScope\"");   /* one radical over Q(Sqrt[2]) since 4.3b C7 */
 }
 
 static void test_exp_of_log(void) {

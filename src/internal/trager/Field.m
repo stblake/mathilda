@@ -91,13 +91,22 @@ gfSqrtMinusOne::usage = "gfSqrtMinusOne[p] is the least r in {1, ..., p - 1} wit
 gfSqrtMinusOne[p_Integer] := gfSqrtMinusOne[p] = SelectFirst[Range[1, p - 1], Mod[#^2 + 1, p] === 0 &];
 
 gfConstField::usage = "gfConstField[gens] is the constant field Q(gens) of the radical constants in use (and I under Q(i)), Phase 4.3b: <|\"g\" -> g, \"mu\" -> mu(g), \"theta\" -> gamma, \"reps\" -> {c -> P_c(g), ...}|> with gamma a primitive element (ToNumberField), mu its monic minimal polynomial and every generator c = P_c(gamma). Memoised on gens.";
-gfConstField[gens_List] := gfConstField[gens] = Module[{nf, gen, g = Unique["Trager`Private`gfG"]},
-  nf = ToNumberField[gens];
+gfConstField[gens_List] := gfConstField[gens] = Module[{nf, gen, g = Unique["Trager`Private`gfG"], own},
+  (* a generator that IS one of the constants when the others lie in its field
+     (2^(2/3) in Q(2^(1/3))): mapped back it is a radical, not a Root object
+     such as Root[-6 - 6 #1 + #1^3, 1] = 2^(1/3) + 2^(2/3), which flooded the
+     arithmetic with Root objects (Phase 4.3b C6) *)
+  own = SelectFirst[SortBy[gens, LeafCount],
+    Function[c, AllTrue[gens, Head[Quiet[ToNumberField[#, c]]] === AlgebraicNumber || rationalNumberQ[#] &]], None];
+  nf = If[own =!= None && own =!= I, Quiet[ToNumberField[#, own]] & /@ gens, ToNumberField[gens]];
   (* radicals of rationals always have a primitive element: a failure is a bug *)
   If[!ListQ[nf] || Length[nf] =!= Length[gens], throwInternal["ConstantFieldToNumberField", <|"gens" -> gens|>]];
   gen = SelectFirst[nf, Head[#] === AlgebraicNumber &, None];
   If[gen === None, throwInternal["ConstantFieldNoGenerator"]];
   gen = gen[[1]];
+  (* the generator written as the constant itself (ToNumberField returns
+     Root[-2 + #1^3 &, 1] for 2^(1/3)) once it is checked to be that number *)
+  If[own =!= None && own =!= I && RootReduce[gen - own] === 0, gen = own];
   <|"g" -> g, "mu" -> minimalPolynomialIn[gen, g], "theta" -> gen,
     "reps" -> MapThread[#1 -> algebraicToPoly[#2, gen, g] &, {gens, nf}]|>];
 

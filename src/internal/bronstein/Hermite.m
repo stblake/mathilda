@@ -20,21 +20,49 @@
 (* ========================================================================== *)
 
 brHermiteSolve::usage = "brHermiteSolve[T, A, C, V] solves B C == A (mod V) in k[theta] for B of degree < deg V, C a rational function whose denominator is prime to V and whose numerator is invertible modulo V. A non-invertible C is an internal error (it contradicts [B] Prop 2.2).";
-brHermiteSolve[T_Association, A_, C_, V_] := Module[{th = T["theta"], tc = Together[C], num, den, eg},
+brHermiteK::usage = "brHermiteK[T] is the coefficient field k = Q(x, lower)(K0) of the tower T over the constant field K0 = Q(constants) in use, as fieldFn[{x, lower...}, {g, mu, gamma}] with the constants' representations (constNF): the exact arithmetic for Hermite reduction in theta with radical constants (Phase 4.3b C6).";
+brHermiteK[T_Association] := Module[{cf = constNF[], K},
+  K = fieldFn[Join[{T["x"]}, T["lower"]], {cf["t"], cf["mu"], cf["theta"]}];
+  Join[K, KeyTake[cf, {"consts", "I"}]]];
+
+brHermiteBack::usage = "brHermiteBack[K, e] maps an element of brHermiteK[T] back to the radicals: the generator replaced by gamma, combined over Q(constants).";
+brHermiteBack[K_Association, e_] := tragerTogether[e /. K["t"] -> K["theta"]];
+
+brCancelK::usage = "brCancelK[T, e] is the rational function e in theta over k with common theta-factors of numerator and denominator cancelled EXACTLY over k(K0) (brHermiteK, kGCD) when radical constants are in use; tragerTogether[e] otherwise. The combination over Q[g] alone does not cancel a factor that divides only modulo mu, so Hermite's multiplicities never fell (brHermiteIterationBound, Phase 4.3b C6).";
+brCancelK[T_Association, e_] := Module[{th = T["theta"], t = tragerTogether[e], K, num, den, g},
+  If[!brConstantCoefficientsQ[t] || FreeQ[Denominator[t], th], Return[t]];
+  K = brHermiteK[T];
+  num = kc[K, Numerator[t]]; den = kc[K, Denominator[t]];
+  g = kGCD[K, num, den, th];
+  If[FreeQ[g, th], Return[t]];
+  brHermiteBack[K, kQuo[K, num, g, th]]/brHermiteBack[K, kQuo[K, den, g, th]]];
+
+brHermiteSolve[T_Association, A_, C_, V_] := Module[{th = T["theta"], tc = tragerTogether[C], num, den, eg, K, sol},
   num = Numerator[tc]; den = Denominator[tc];
-  If[Exponent[PolynomialGCD[den, V], th] > 0,
+  (* with radical constants: the extended gcd and the remainder over
+     k = Q(x, lower)(K0) exactly (brHermiteK) *)
+  If[brConstantCoefficientsQ[{A, C, V}],
+    K = brHermiteK[T];
+    If[Exponent[kGCD[K, kc[K, den], kc[K, V], th], th] > 0,
+      throwInternal["brHermiteDenominatorNotCoprime", <|"C" -> C, "V" -> V|>]];
+    eg = kExtGCD[K, kc[K, num], kc[K, V], th];
+    If[!FreeQ[eg[[1]], th] || eg[[1]] === 0,
+      throwInternal["brHermiteNonInvertibleCongruence", <|"C" -> C, "V" -> V|>]];
+    sol = kRem[K, kc[K, A den eg[[2]]], kc[K, V], th];
+    Return[brCollectTheta[T, brHermiteBack[K, sol]], Module]];
+  If[Exponent[tragerGCD[den, V], th] > 0,
     throwInternal["brHermiteDenominatorNotCoprime", <|"C" -> C, "V" -> V|>]];
   eg = PolynomialExtendedGCD[num, V, th];
   If[!FreeQ[eg[[1]], th] || eg[[1]] === 0,
     throwInternal["brHermiteNonInvertibleCongruence", <|"C" -> C, "V" -> V|>]];
-  brCollectTheta[T, PolynomialRemainder[Together[A den eg[[2, 1]]/eg[[1]]], V, th]]];
+  brCollectTheta[T, PolynomialRemainder[tragerTogether[A den eg[[2, 1]]/eg[[1]]], V, th]]];
 
 brCollectTheta::usage = "brCollectTheta[T, p] is the polynomial p in theta with each coefficient (an element of k) put through Together.";
-brCollectTheta[T_Association, p_] := Module[{th = T["theta"], t = Together[p], cl},
+brCollectTheta[T_Association, p_] := Module[{th = T["theta"], t = tragerTogether[p], cl},
   If[t === 0, Return[0]];
   If[!FreeQ[Denominator[t], th], throwInternal["brCollectThetaNotPolynomial", <|"p" -> p|>]];
   cl = CoefficientList[Expand[Numerator[t]], th];
-  Sum[Together[cl[[i + 1]]/Denominator[t]] th^i, {i, 0, Length[cl] - 1}]];
+  Sum[tragerTogether[cl[[i + 1]]/Denominator[t]] th^i, {i, 0, Length[cl] - 1}]];
 
 brNormalMultipleFactors::usage = "brNormalMultipleFactors[T, D0] is the list {{V, j}, ...} of the normal squarefree factors V (involving theta) of the polynomial D0 with multiplicity j >= 2 (from Risch`SplitSquarefreeFactor).";
 brNormalMultipleFactors[T_Association, D0_] := Module[{ns = First[brSplitSquarefree[T, D0]]},
@@ -42,7 +70,7 @@ brNormalMultipleFactors[T_Association, D0_] := Module[{ns = First[brSplitSquaref
 
 brHermiteReduce::usage = "brHermiteReduce[T, cv, c] Hermite-reduces the component c Y (cv the curve record brCurve: Y^m = G, D Y = s Y) at the normal places. It returns <|\"Algebraic\" -> b, \"Remainder\" -> r|> with c Y = D(b Y) + r Y, i.e. c = D b + s b + r, b in k(theta), and the normal part of the denominator of r squarefree.";
 brHermiteReduce[T_Association, cv_Association, c0_] := Module[
-  {th = T["theta"], s = cv["s"], c = Together[c0], b = 0, D0, mf, V, j, U, A, C, Bv, H, it = 0, maxit},
+  {th = T["theta"], s = cv["s"], c = brCancelK[T, c0], b = 0, D0, mf, V, j, U, A, C, Bv, H, it = 0, maxit},
   maxit = 1 + Total[(#[[2]] - 1) Exponent[#[[1]], th] & /@ brNormalMultipleFactors[T, Denominator[c]]];
   While[True,
     If[++it > maxit, throwInternal["brHermiteIterationBound"]];
@@ -50,14 +78,18 @@ brHermiteReduce[T_Association, cv_Association, c0_] := Module[
     mf = brNormalMultipleFactors[T, D0];
     If[mf === {}, Break[]];
     {V, j} = Last[SortBy[mf, Last]];
-    U = Together[D0/V^j];
+    (* the exact quotient over k(K0) when constants are in use: Together over
+       Q[g] cannot cancel V = theta - 2^(2/3), which divides D0 only modulo mu *)
+    U = If[brConstantCoefficientsQ[{D0, V}],
+      With[{K = brHermiteK[T]}, brHermiteBack[K, kQuo[K, kc[K, D0], kc[K, V^j], th]]],
+      tragerTogether[D0/V^j]];
     A = Expand[Numerator[c]];
-    C = Together[U (V s - (j - 1) brD[T, V])];
+    C = tragerTogether[U (V s - (j - 1) brD[T, V])];
     Bv = brHermiteSolve[T, A, C, V];
-    H = Together[Bv/V^(j - 1)];
-    b = Together[b + H];
-    c = Together[c - (brD[T, H] + s H)]];
+    H = tragerTogether[Bv/V^(j - 1)];
+    b = brCancelK[T, b + H];
+    c = brCancelK[T, c - (brD[T, H] + s H)]];
   <|"Algebraic" -> b, "Remainder" -> c|>];
 
 brNormalDenominatorSquarefreeQ::usage = "brNormalDenominatorSquarefreeQ[T, c] is True when the normal part of the denominator of c (in theta) is squarefree.";
-brNormalDenominatorSquarefreeQ[T_Association, c_] := brNormalMultipleFactors[T, Denominator[Together[c]]] === {};
+brNormalDenominatorSquarefreeQ[T_Association, c_] := brNormalMultipleFactors[T, Denominator[tragerTogether[c]]] === {};

@@ -37,7 +37,7 @@ brResultantR[T_Association, cv_Association, c_, z_Symbol] := Module[
   pn = Numerator[Together[First[brSplit[T, den]]]];
   Dn = If[FreeQ[pn, th], 1, pn];
   If[Dn === 1, Return[1]];
-  Bp = Together[Dn/PolynomialGCD[Dn, Expand[G]]];
+  Bp = tragerTogether[Dn/tragerGCD[Dn, Expand[G]]];
   Bp = Numerator[Bp];
   If[FreeQ[Bp, th], Return[1]];
   N = Together[t Dn];

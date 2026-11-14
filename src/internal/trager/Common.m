@@ -124,14 +124,53 @@ tragerFactorList::usage = "tragerFactorList[p] is FactorList[p] over the constan
 tragerFactorList[p_] := With[{ext = tragerExtension[]},
   If[ext === {}, FactorList[p], FactorList[p, Extension -> ext]]];
 
-tragerTogether::usage = "tragerTogether[e] is Together[e] over the constant field in use: with radical constants (tragerAlgConstants non-empty) Together[e, Extension -> Automatic], since a cancellation that needs Sqrt[2]^2 = 2 is otherwise missed and a combined zero reads as a non-zero sum (Phase 4.3b). The same as rc[fieldQ[], e].";
-tragerTogether[e_] := If[tragerAlgConstants === {}, Together[e], Together[e, Extension -> Automatic]];
+tragerTogether::usage = "tragerTogether[e] is Together[e] over the constant field in use: with radical constants (tragerAlgConstants non-empty) the exact normal form over Q(constants) in the primitive element of constNF[] (denominators rationalised), since a cancellation that needs Sqrt[2]^2 = 2 is otherwise missed and a combined zero reads as a non-zero sum (Phase 4.3b). The same as rc[fieldQ[], e].";
+tragerTogether[e_] := Which[
+  tragerAlgConstants === {}, Together[e],
+  FreeQ[e, Power[b_, _Rational] /; rationalNumberQ[b]], Together[e],
+  True, Module[{r = Together[e, Extension -> Automatic]},
+    (* over the extension Together combines AND cancels over Q(constants)
+       (Trager's Hermite divides D0 by V^j through it); on a multivariate sum
+       it can return the sum uncombined, and then the exact combination over
+       Q[g] is used (tragerCombineConstNF) *)
+    If[tragerCombinedQ[r], r, tragerCombineConstNF[e]]]];
+
+tragerCombinedQ::usage = "tragerCombinedQ[r] is True when r is a single fraction num/den with num and den free of reciprocals of non-numeric expressions (an uncombined sum hides one inside the numerator, whatever the head at the top).";
+tragerCombinedQ[r_] := FreeQ[{Numerator[r], Denominator[r]}, Power[b_, k_?Negative] /; !NumericQ[b]];
+
+tragerCombineConstNF::usage = "tragerCombineConstNF[e] combines e over Q(constants) exactly: the constants in the primitive element g of constNF[], Together over Q[g], numerator and denominator reduced mod mu(g), g mapped back (an exact zero is 0). It combines but does not cancel factors that divide only modulo mu.";
+tragerCombineConstNF[e_] := Module[{F = constNF[], t, mu, g, num, den},
+  g = F["t"]; mu = F["mu"];
+  t = Together[fieldSubI[F, e]];
+  num = Expand[PolynomialRemainder[Expand[Numerator[t]], mu, g]];
+  If[num === 0, Return[0, Module]];
+  den = Expand[PolynomialRemainder[Expand[Denominator[t]], mu, g]];
+  (num /. g -> F["theta"])/(den /. g -> F["theta"])];
+
 tragerGCD::usage = "tragerGCD[a, b] is PolynomialGCD[a, b] over the constant field in use (Extension -> Automatic with radical constants, Phase 4.3b).";
 tragerGCD[a_, b_] := If[tragerAlgConstants === {}, PolynomialGCD[a, b], PolynomialGCD[a, b, Extension -> Automatic]];
 
 tragerMonic::usage = "tragerMonic[p, Z] is the polynomial p(Z) divided by its leading coefficient, in canonical form over the constant field in use (Phase 4.3b C4): kc[fieldQ[], .] rationalises the coefficients over Q(constants) (kcConstQ), where Expand left 1/(2^(1/3) ...) coefficients and two equal factors could differ in shape. Over Q (or Q(i)) it is Expand[p/lc].";
 tragerMonic[p_, Z_Symbol] := With[{m = p/Coefficient[p, Z, Exponent[p, Z]]},
   If[tragerAlgConstants === {}, Expand[m], kc[fieldQ[], m]]];
+
+tragerRadicalContent::usage = "tragerRadicalContent[b] is the absolute value |c| of the rational content c of the radicand b (numerator content over denominator content): b = |c| u with u free of a rational content.";
+tragerRadicalContent[b_] := Module[{t = Together[b], cn, cd},
+  cn = First[FactorTermsList[Numerator[t]]]; cd = First[FactorTermsList[Denominator[t]]];
+  If[rationalNumberQ[cn/cd] && cn/cd =!= 0, Abs[cn/cd], 1]];
+
+tragerExtractRadicalContent::usage = "tragerExtractRadicalContent[f, x] writes every radical b^r of f (r a non-integer rational, b depending on x) with a positive rational content |c| != 1 as |c|^r (b/|c|)^r: an identity on EVERY branch, since multiplying by a positive real number does not change the argument (a negative content keeps its sign inside). Radicals equal over a larger constant field, Sqrt[2 x] and Sqrt[x], become one radical over Q(Sqrt[2]) (Phase 4.3b C7, G-nf-2). The constants |c|^r join the constant field of the integrand.";
+tragerExtractRadicalContent[f_, x_Symbol] := Module[{g, nb},
+  g = f /. Power[b_, r_Rational] /; !FreeQ[b, x] :>
+    With[{c = tragerRadicalContent[b]},
+      If[c === 1, Power[b, r], c^r Power[Expand[Together[b/c]], r]]];
+  (* only when it MERGES radicands: a lone (3 x)^(-4/5) is one radical over Q
+     already, and 3^(-4/5) x^(-4/5) would only enlarge the constant field
+     (a degree-5 extension; trager_integrate_tests) *)
+  nb[e_] := Length[DeleteDuplicates[Together[First[#]] & /@
+    Cases[e, Power[b_, _Rational] /; !FreeQ[b, x], {0, Infinity}],
+    Together[#1 - #2] === 0 || Together[#1 #2 - 1] === 0 &]];
+  If[nb[g] < nb[f], g, f]];
 
 tragerSquareFreeList::usage = "tragerSquareFreeList[p] is FactorSquareFreeList[p] over the constant field in use (Extension -> tragerExtension[] when it is not Q). Without the extension a polynomial with algebraic coefficients is not decomposed at all (FactorSquareFreeList[z^2 - Sqrt[2] z^3] is the polynomial itself, multiplicity 1), and Hermite reduction then saw no repeated factor: a false certificate for (x - 2^(1/3))^(-2/3) (Phase 4.3b, G-nf-8).";
 tragerSquareFreeList[p_] := With[{ext = tragerExtension[]},

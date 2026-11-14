@@ -59,8 +59,8 @@ detectRadical[f_, x_Symbol] := Module[{pows, bases, b0, exps, n},
 substituteRadical::usage = "substituteRadical[f, x, b, n, y] replaces every power b^r (and (1/b)^r) of the radicand in f by the corresponding power y^(r n) of the symbol y, so that the result is rational in x and y.";
 substituteRadical[f_, x_Symbol, b_, n_Integer, y_Symbol] :=
   f /. Power[c_, r_Rational] /; !FreeQ[c, x] :>
-    Which[Together[c - b] === 0, y^(r n),
-          Together[c b - 1] === 0, y^(-r n),
+    Which[tragerTogether[c - b] === 0, y^(r n),
+          tragerTogether[c b - 1] === 0, y^(-r n),
           True, Power[c, r]];
 
 reduceYDegree::usage = "reduceYDegree[p, y, n, g] rewrites the polynomial p in y modulo y^n - g, so that every power of y is below n.";
@@ -77,10 +77,10 @@ powerBasisCoords[p_, y_Symbol, n_Integer, g_] :=
 powerBasisInverse::usage = "powerBasisInverse[q, y, n, g, x] is the coordinate list of 1/q in the power basis 1, y, ..., y^(n-1) of Q(x)[y]/(y^n - g), q a nonzero polynomial in y with coefficients in Q(x). It solves the linear system c.M = e_0 with M the multiplication-by-q matrix. Throws an Unimplemented stop when q is a zero divisor (y^n - g reducible over Q(x)).";
 powerBasisInverse[q_, y_Symbol, n_Integer, g_, x_Symbol] := Module[{M, sol},
   M = Table[powerBasisCoords[y^k q, y, n, g], {k, 0, n - 1}];
-  If[Together[Det[M]] === 0,
+  If[tragerTogether[Det[M]] === 0,
     throwUnimplemented["Trager:reducible-radical", "the denominator is a zero divisor: the radical is reducible"]];
   sol = LinearSolve[Transpose[M], UnitVector[n, 1]];
-  Together /@ sol];
+  tragerTogether /@ sol];
 
 canonicalForm::usage = "canonicalForm[f, x] validates the integrand f and returns <|\"x\" -> x, \"b\" -> b, \"n\" -> n, \"q\" -> q, \"g\" -> g, \"y\" -> yh, \"coeffs\" -> {a_0, ..., a_(n-1)}|> with f = Sum a_i yh^i, yh = q b^(1/n) (q the denominator of b), yh^n = g = q^(n-1) Numerator[b] in Q[x], and yh a fresh symbol standing for q b^(1/n). For an integrand with no radical it returns n = 1 and coeffs = {f}. Throws a Decline outside the scope.";
 canonicalForm[f_, x_Symbol] := Module[{rad, b, n, p, q, g, y, yh, fy, t, num, den, numC, denInv, coeffs},
@@ -96,11 +96,11 @@ canonicalForm[f_, x_Symbol] := Module[{rad, b, n, p, q, g, y, yh, fy, t, num, de
   If[!rationalInXYQ[fy, x, y],
     throwUnimplemented["Trager:not-algebraic", "integrand is not a rational function of x and the radical over Q"]];
   (* y = yh/q *)
-  t = Together[fy /. y -> yh/q];
+  t = tragerTogether[fy /. y -> yh/q];
   num = Numerator[t]; den = Denominator[t];
   numC = powerBasisCoords[num, yh, n, g];
   denInv = powerBasisInverse[den, yh, n, g, x];
-  coeffs = Together /@ powerBasisCoords[(numC . (yh^Range[0, n - 1])) (denInv . (yh^Range[0, n - 1])), yh, n, g];
+  coeffs = tragerTogether /@ powerBasisCoords[(numC . (yh^Range[0, n - 1])) (denInv . (yh^Range[0, n - 1])), yh, n, g];
   <|"x" -> x, "b" -> b, "n" -> n, "q" -> q, "g" -> g, "y" -> yh, "coeffs" -> coeffs|>];
 
 radicalExpression::usage = "radicalExpression[cf] is the explicit expression for the symbol cf[\"y\"] of a canonical form: q b^(1/n).";

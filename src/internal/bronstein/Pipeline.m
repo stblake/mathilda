@@ -239,7 +239,7 @@ brPresentationTime::usage = "brPresentationTime[] is the time the real-form pres
 brPresentationTime[] := With[{left = Internal`TimeConstrainedRemaining[]},
   If[NumericQ[left], Min[brOption["PresentationTime"], Max[left/3, 0.01]], brOption["PresentationTime"]]];
 
-BronsteinScope[f_, x_Symbol] := With[{g = brTrigFrontEnd[f]},
+BronsteinScope[f_, x_Symbol] := With[{g = tragerExtractRadicalContent[brTrigFrontEnd[f], x]},
   Block[{tragerConstantI = brConstantField[g] === "QI", tragerAlgConstants = brAlgConstantsOf[g]}, brScopeBody[g, x]]];
 
 brTrigFrontEnd::usage = "brTrigFrontEnd[f] is f with its trigonometric and hyperbolic functions and their inverses rewritten by TrigToExp into exponentials and logarithms (ArcSin[x] -> -I Log[I x + Sqrt[1 - x^2]]: a logarithm plus the radical), an identity on every branch the CAS uses; f itself when it has none of them (Phase 4.2).";
@@ -286,7 +286,10 @@ brAlgebraicConstantQ[c_] := NumericQ[c] &&
   FreeQ[c, Power[b_, e_] /; ! (rationalNumberQ[e] && (rationalNumberQ[b] || NumericQ[b]))] &&
   With[{cr = Quiet[RootReduce[c]]}, cr === 0 || (NumericQ[cr] && cr =!= ComplexInfinity && FreeQ[cr, Indeterminate])];
 
-BronsteinIntegrate[f_, x_Symbol] := Module[{r, g = brTrigFrontEnd[f]},
+BronsteinIntegrate[f_, x_Symbol] := Module[{r, gt = brTrigFrontEnd[f], g},
+  (* radicals equal over a larger constant field (Sqrt[2 x] = Sqrt[2] Sqrt[x]):
+     positive rational contents pulled out, an identity (Phase 4.3b C7) *)
+  g = tragerExtractRadicalContent[gt, x];
   (* the trigonometric front end (Phase 4.2): TrigToExp is an identity, so a
      certificate for g is one for f; the constant field is that of g (Q(i)
      when TrigToExp brought in I, Phase 4.1) *)
@@ -296,5 +299,5 @@ BronsteinIntegrate[f_, x_Symbol] := Module[{r, g = brTrigFrontEnd[f]},
      identity; a second numeric check against the trigonometric form only adds
      noise (Int Sqrt[Tan[x]]: the Root-laden answer is numerically unstable at
      complex points).  The trigonometric presentation is checked on its own. *)
-  If[!brFailQ[r] && g =!= f, r = brTrigPresentation[f, r, x]];
+  If[!brFailQ[r] && gt =!= f, r = brTrigPresentation[f, r, x]];
   If[brFailQ[r], failToList[r], r]];

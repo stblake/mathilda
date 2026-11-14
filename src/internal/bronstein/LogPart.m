@@ -203,7 +203,7 @@ brSpecialSetup[T_Association, cv_Association, c_, nr_Association, spec_Associati
   tc = Together[c]; N = Expand[Numerator[tc]]; E = Expand[Denominator[tc]];
   Ep = Together[brD[T, E]];
   En = Numerator[Together[First[brSplit[T, E]]]];
-  Bp = If[FreeQ[En, th], 1, Expand[Numerator[Together[En/PolynomialGCD[En, G]]]]];
+  Bp = If[FreeQ[En, th], 1, Expand[Numerator[tragerTogether[En/tragerGCD[En, G]]]]];
   a = firstOrdinaryInteger[Join[{Expand[G], E}, If[T["kind"] === "Exp", {th}, {}]], th];
   If[a === 0, a = firstOrdinaryInteger[{Expand[G] , E, th}, th]];
   <|"genus" -> curveGenus[m, G, th], "locs" -> locs, "rhoLists" -> rhoLists, "finRoots" -> finRoots,

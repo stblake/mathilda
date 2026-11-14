@@ -80,7 +80,8 @@ static void test_scope(void) {
     BR_EQ("BronsteinScope[Root[#^5 - # - x &, 1], x]",
           "{\"implementation incomplete\", \"a general algebraic function (Root/RootSum) in the integrand\"}");
     BR_EQ("BronsteinScope[Sin[x] Sqrt[x], x]", "\"InScope\"");                     /* trig front end (v0.6554) */
-    BR_EQ("First[BronsteinScope[Sqrt[2 x] + Sqrt[x], x]]", "\"implementation incomplete\"");      /* a compositum over a number field (4.3b) */
+    BR_EQ("BronsteinScope[Sqrt[2 x] + Sqrt[x], x]", "\"InScope\"");      /* one radical over Q(Sqrt[2]) since 4.3b C7 */
+    BR_EQ("First[BronsteinScope[Sqrt[-2 x] + Sqrt[x], x]]", "\"implementation incomplete\"");      /* a negative content: G-nf-11 */
 }
 
 static void test_specialization_growth(void) {
