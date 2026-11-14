@@ -26,6 +26,9 @@
 bronsteinOpenGaps = {
 
 (* ---- performance --------------------------------------------------------- *)
+<|"id" -> "G-perf-4", "area" -> "Trager", "gap" -> "a residue field over Q(constants) of large degree: x/((2^(1/3) x^3 - 1) Sqrt[x^2 + 2]) (genus 0, elementary) times out, where x/((2 x^3 - 1) Sqrt[x^2 + 2]) takes 0.1 s and the linear 2^(1/3) x - 1 takes 2.6 s",
+  "kind" -> "Integrate", "f" -> Hold[x/((2^(1/3) x^3 - 1) Sqrt[x^2 + 2])], "current" -> "timeout", "budget" -> 60,
+  "followup" -> "the residue field of an orbit over K0 is relative of small degree; build it as a tower over K0 (or per orbit) instead of the absolute splitting field joined with the constants", "source" -> "Phase 4.3b C4 battery"|>,
 <|"id" -> "G-perf-1", "area" -> "Bronstein", "gap" -> "a three-radical compositum (Kummer group Z/30): Trager on the degree-30 curve is too slow",
   "kind" -> "Integrate", "f" -> Hold[Sqrt[x] (x + 1)^(1/5) (x + 2)^(1/3)], "current" -> "timeout", "budget" -> 60,
   "followup" -> "profile Trager on high-degree Kummer curves; smaller presentations of the compositum", "source" -> "gap log (E6b), 2026-11-14"|>,

@@ -95,6 +95,22 @@ static void test_nf_residue_fields(void) {
     BR_EQ("Block[{tragerAlgConstants = {Sqrt[2]}}, traceCertificate[<|\"Z\" -> z, \"R\" -> z^2 - 2|>]]", "Null");
 }
 
+/* Phase 4.3b C4: monic factors in canonical form over the constant field */
+static void test_nf_monic(void) {
+    BR_EQ("Block[{tragerAlgConstants = {}}, tragerMonic[2 z^2 + 4, z]]", "2 + z^2");
+    BR_TRUE("Block[{tragerAlgConstants = {Sqrt[2]}}, With[{m = tragerMonic[(1 + Sqrt[2]) z + 1, z]}, "
+            "Coefficient[m, z, 1] === 1 && FreeQ[m, Power[_Plus, -1]] && PossibleZeroQ[(m /. z -> 0) - 1/(1 + Sqrt[2])]]]");
+    /* two shapes of the same factor normalise to one canonical polynomial */
+    BR_TRUE("Block[{tragerAlgConstants = {2^(1/3)}}, tragerMonic[2^(1/3) z - 1, z] === tragerMonic[2 z - 2^(2/3), z]]");
+    BR_EQ("Block[{tragerAlgConstants = {Sqrt[2]}}, brNonzeroResiduePolynomial[z^2 (Sqrt[2] z - 1)^2, z]]",
+          "-1/Sqrt[2] + z");
+    BR_ANTIDERIV("Together[D[Log[Sqrt[2] x + Sqrt[x^2 + 1]], x]]", "Bronstein");
+    BR_ANTIDERIV("Together[D[Log[(1 + Sqrt[2]) x^2 + Sqrt[x^4 + 1]], x]]", "Bronstein");
+    BR_ANTIDERIV("Together[D[Log[2^(1/3) x + (x^3 + 1)^(1/3)], x]]", "Bronstein");
+    BR_ANTIDERIV("1/((Sqrt[2] x^2 + 1) Sqrt[x^2 + 1])", "Bronstein");
+    BR_ANTIDERIV("x/((Sqrt[2] x^3 - 1) Sqrt[x^2 + 2])", "Bronstein");
+}
+
 static void test_nf_integrals(void) {
     BR_ANTIDERIV("Sqrt[2] Sqrt[Log[x]]/x", "Bronstein");
     BR_ANTIDERIV("Sqrt[x + Sqrt[2]]/x", "Bronstein");
@@ -126,6 +142,7 @@ int main(void) {
     test_nf_primitives();
     test_nf_base_field();
     test_nf_residue_fields();
+    test_nf_monic();
     test_nf_integrals();
     BR_DONE("bronstein_nf_tests");
     return 0;

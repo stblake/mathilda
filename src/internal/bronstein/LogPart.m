@@ -121,7 +121,7 @@ brOrbitLogPart::usage = "brOrbitLogPart[T, cv, c, nr] is brComponentLogPart one 
 brOrbitLogPart[T_Association, cv_Association, c_, nr_Association] := Module[
   {rd = brResidueData[T, cv, c], th = T["theta"], m = cv["m"], z = nr["z"], refc, facs, recs = {}, r, Dall, Dext},
   refc = firstOrdinaryInteger[Join[{Expand[cv["G"]], rd["E"]}, If[T["kind"] === "Exp", {th}, {}]], th];
-  facs = (Expand[#/Coefficient[#, z, Exponent[#, z]]] &) /@ (First /@ Select[tragerFactorList[nr["P"]], !FreeQ[#[[1]], z] &]);
+  facs = (tragerMonic[#, z] &) /@ (First /@ Select[tragerFactorList[nr["P"]], !FreeQ[#[[1]], z] &]);
   Do[
     r = brOrbitTerm[T, cv, rd, nr, q, refc];
     If[r === $Failed, Return[$Failed, Module]];

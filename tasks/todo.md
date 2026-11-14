@@ -1595,7 +1595,7 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
         - [x] C3 residue/log fields relative to K0 — v0.6562 (fieldOfRoot, kcConstQ/constNF, brFieldOver consts, trace shortcut off). Was: traceCertificateAt / tragerOrbitLogTerms / kauersTraceNF / brOrbitTerm build
               ABSOLUTE fields (residueField-style ToNumberField over q's roots + constants), never fieldNF[Z, q] with radical
               coefficients; residueFieldTower carries "consts"; factorOverField over a field containing K0
-        - [ ] C4 monic normalisation over K0 at every FactorList / PolynomialGCD (G-nf-8)
+        - [x] C4 monic normalisation over K0 — v0.6563 (tragerMonic; G-perf-4 recorded). Was: at every FactorList / PolynomialGCD (G-nf-8)
         - [x] C5 mod p at a degree-1 prime of K0 (G-nf-6) — v0.6559 (gfConstRoot/gfConstImage; certificate still demoted). Was: root r of mu mod p chosen once per p (gfConstRoot, like
               gfSqrtMinusOne); gfMod maps consts via reps; goodPrime adds disc(mu) / denominators; rho filter on the consts reps
         - [ ] C6 Bronstein k arithmetic: brK0Field = fieldFn[syms, K0 ext]; brFieldOver keeps "consts"; Hermite/RDE over k (G-nf-5/9)

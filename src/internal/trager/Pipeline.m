@@ -103,7 +103,7 @@ traceCertificate[ctx_Association] := Module[{Z = ctx["Z"], qs},
      functional below divides traces by the RELATIVE degree, justified only
      over Q; no verdict here, the complete construction decides *)
   If[tragerAlgConstants =!= {}, Return[Null]];
-  qs = SortBy[Expand[#/Coefficient[#, Z, Exponent[#, Z]]] & /@ (First /@ Select[tragerFactorList[ctx["R"]], !FreeQ[#[[1]], Z] &]),
+  qs = SortBy[tragerMonic[#, Z] & /@ (First /@ Select[tragerFactorList[ctx["R"]], !FreeQ[#[[1]], Z] &]),
     Exponent[#, Z] &];
   Do[traceCertificateAt[ctx, q, qs], {q, qs}]];
 

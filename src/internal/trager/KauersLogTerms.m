@@ -77,7 +77,7 @@ kauersTraceRational[ctx_Association, q_, p_] := Module[{B = ctx["B"], Z = ctx["Z
 kauersTraceNF::usage = "kauersTraceNF[ctx, q, p] is kauersTrace for an irreducible factor q of degree >= 2, computed over K = Q[Z]/(q). p may be a rational function of x, Y and Z: Log of numerator minus Log of denominator.";
 kauersTraceNF[ctx_Association, q_, p_] := Module[
   {B = ctx["B"], Z = ctx["Z"], K, tp = Together[p], L, comp, d, tr},
-  K = fieldNF[Z, Expand[q/Coefficient[q, Z, Exponent[q, Z]]], None];
+  K = fieldNF[Z, tragerMonic[q, Z], None];
   L = afScale[K, Z, afMinus[K, logDerivativeNF[K, B, Numerator[tp], ctx["Ysym"]],
                                logDerivativeNF[K, B, Denominator[tp], ctx["Ysym"]]]];
   d = Exponent[K["mu"], Z];

@@ -75,8 +75,9 @@ brNonzeroResiduePolynomial[P_, z_Symbol] := Module[{q = Expand[P], sq},
   If[FreeQ[q, z], Return[1]];
   While[Expand[q /. z -> 0] === 0 && !FreeQ[q, z], q = Expand[Together[q/z]]];
   If[FreeQ[q, z], Return[1]];
-  sq = Together[q/PolynomialGCD[q, D[q, z]]];
-  Expand[Together[sq/Coefficient[sq, z, Exponent[sq, z]]]]];
+  (* squarefree part over the constant field in use (Phase 4.3b) *)
+  sq = tragerTogether[q/tragerGCD[q, D[q, z]]];
+  tragerMonic[sq, z]];
 
 brNormalResidues::usage = "brNormalResidues[T, cv, c] computes the residues of the normal component c Y at the normal places. It returns <|\"R\" -> R(z), \"P\" -> the nonzero-residue polynomial (monic, squarefree, rational coefficients), \"z\" -> z|>, or throws NonElementary when R fails the resultant criterion ([B] Prop 2.9) and Decline when the residues are not in Q-bar of a supported form.";
 brNormalResidues[T_Association, cv_Association, c_] := Module[{z = Unique["Bronstein`Private`brZ"], R, crit, P},

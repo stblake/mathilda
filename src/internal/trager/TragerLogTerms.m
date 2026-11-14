@@ -142,7 +142,7 @@ tragerOrbitLogTerms[ctx0_Association] := Module[
   facs = First /@ Select[tragerFactorList[ctx["R"]], !FreeQ[#[[1]], Z] &];
   Do[
     If[!failed,
-      Module[{qm = Expand[q/Coefficient[q, Z, Exponent[q, Z]]], K, gamma, octx, I0, kappa, spec, scale, Nq, r},
+      Module[{qm = tragerMonic[q, Z], K, gamma, octx, I0, kappa, spec, scale, Nq, r},
         If[Exponent[qm, Z] === 1,
           K = fieldQ[]; gamma = -Coefficient[qm, Z, 0],
           (* the generator is Z itself, as the orbit construction below assumes *)

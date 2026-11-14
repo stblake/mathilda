@@ -129,6 +129,10 @@ tragerTogether[e_] := If[tragerAlgConstants === {}, Together[e], Together[e, Ext
 tragerGCD::usage = "tragerGCD[a, b] is PolynomialGCD[a, b] over the constant field in use (Extension -> Automatic with radical constants, Phase 4.3b).";
 tragerGCD[a_, b_] := If[tragerAlgConstants === {}, PolynomialGCD[a, b], PolynomialGCD[a, b, Extension -> Automatic]];
 
+tragerMonic::usage = "tragerMonic[p, Z] is the polynomial p(Z) divided by its leading coefficient, in canonical form over the constant field in use (Phase 4.3b C4): kc[fieldQ[], .] rationalises the coefficients over Q(constants) (kcConstQ), where Expand left 1/(2^(1/3) ...) coefficients and two equal factors could differ in shape. Over Q (or Q(i)) it is Expand[p/lc].";
+tragerMonic[p_, Z_Symbol] := With[{m = p/Coefficient[p, Z, Exponent[p, Z]]},
+  If[tragerAlgConstants === {}, Expand[m], kc[fieldQ[], m]]];
+
 tragerSquareFreeList::usage = "tragerSquareFreeList[p] is FactorSquareFreeList[p] over the constant field in use (Extension -> tragerExtension[] when it is not Q). Without the extension a polynomial with algebraic coefficients is not decomposed at all (FactorSquareFreeList[z^2 - Sqrt[2] z^3] is the polynomial itself, multiplicity 1), and Hermite reduction then saw no repeated factor: a false certificate for (x - 2^(1/3))^(-2/3) (Phase 4.3b, G-nf-8).";
 tragerSquareFreeList[p_] := With[{ext = tragerExtension[]},
   If[ext === {}, FactorSquareFreeList[p], FactorSquareFreeList[p, Extension -> ext]]];

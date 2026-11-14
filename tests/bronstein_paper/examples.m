@@ -225,5 +225,8 @@ bronsteinPaperExamples = {
   "before" -> "internal (brPointPlaceNotOnCurve)", "note" -> "Shape A over Q(Sqrt[3]): the residue field of one root is absolute, constants recorded (fieldOfRoot)"|>,
 <|"id" -> "E43b-6", "gap" -> "LogPart:residue-field-NF", "theory" -> "E4.3b", "version" -> "v0.6562",
   "kind" -> "Integrate", "f" -> Hold[Together[D[Log[Sqrt[E^x + 2] + Sqrt[2]], x]]], "expect" -> "elementary",
-  "before" -> "internal (brComponentIdentity)", "note" -> "the constants' representations travel with k(theta) (brFieldOver keeps \"consts\")"|>
+  "before" -> "internal (brComponentIdentity)", "note" -> "the constants' representations travel with k(theta) (brFieldOver keeps \"consts\")"|>,
+<|"id" -> "E43b-7", "gap" -> "Trager:monic-NF", "theory" -> "E4.3b", "version" -> "v0.6563",
+  "kind" -> "Integrate", "f" -> Hold[Together[D[Log[(1 + Sqrt[2]) x^2 + Sqrt[x^4 + 1]], x]]], "expect" -> "elementary",
+  "before" -> "(not separately recorded)", "note" -> "residue factors with radical leading coefficients, made monic and canonical over Q(Sqrt[2]) (tragerMonic)"|>
 };
