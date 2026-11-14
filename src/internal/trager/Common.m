@@ -124,6 +124,15 @@ tragerFactorList::usage = "tragerFactorList[p] is FactorList[p] over the constan
 tragerFactorList[p_] := With[{ext = tragerExtension[]},
   If[ext === {}, FactorList[p], FactorList[p, Extension -> ext]]];
 
+tragerTogether::usage = "tragerTogether[e] is Together[e] over the constant field in use: with radical constants (tragerAlgConstants non-empty) Together[e, Extension -> Automatic], since a cancellation that needs Sqrt[2]^2 = 2 is otherwise missed and a combined zero reads as a non-zero sum (Phase 4.3b). The same as rc[fieldQ[], e].";
+tragerTogether[e_] := If[tragerAlgConstants === {}, Together[e], Together[e, Extension -> Automatic]];
+tragerGCD::usage = "tragerGCD[a, b] is PolynomialGCD[a, b] over the constant field in use (Extension -> Automatic with radical constants, Phase 4.3b).";
+tragerGCD[a_, b_] := If[tragerAlgConstants === {}, PolynomialGCD[a, b], PolynomialGCD[a, b, Extension -> Automatic]];
+
+tragerSquareFreeList::usage = "tragerSquareFreeList[p] is FactorSquareFreeList[p] over the constant field in use (Extension -> tragerExtension[] when it is not Q). Without the extension a polynomial with algebraic coefficients is not decomposed at all (FactorSquareFreeList[z^2 - Sqrt[2] z^3] is the polynomial itself, multiplicity 1), and Hermite reduction then saw no repeated factor: a false certificate for (x - 2^(1/3))^(-2/3) (Phase 4.3b, G-nf-8).";
+tragerSquareFreeList[p_] := With[{ext = tragerExtension[]},
+  If[ext === {}, FactorSquareFreeList[p], FactorSquareFreeList[p, Extension -> ext]]];
+
 tragerAlgConstants::usage = "tragerAlgConstants is the list of the algebraic constants of the integrand other than I -- radicals of rational numbers such as Sqrt[2], 2^(1/3) -- while it is integrated (constant field Q(i?, constants), Bronstein Phase 4.3): factorisations are over the field they generate (tragerFactorList), residue fields contain them, and reduction mod p refuses them (gfMod).";
 tragerAlgConstants = {};
 

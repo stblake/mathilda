@@ -1586,6 +1586,21 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [x] B internal errors: G-sign-2 (PZQ ambiguous-cut re-draw), G-adv-b2, G-adv-b3 (explicit log expansion in the kappa split), G-adv-p4 — v0.6558;
         G-nf-5 / G-nf-9 need field-aware arithmetic over Q(constants): moved to C (4.3b)
   - [ ] C Phase 4.3b: fieldNF constant field through Trager/Bronstein (G-nf-3/4/8), NF mod p (G-nf-6), compositum (G-nf-2)
+        Design (survey 2026-11-14): K0 = Q(gamma), gamma a primitive element of the constants, as F0 = fieldNF[g, mu, gamma]
+        with "consts" reps; the field layer (kc/rc/kGCD/kExtGCD/kDivRem/af*) is already exact mod mu -- thread F0 above it.
+        - [ ] C1 constantBaseField[] (Common/Residues): F0 from tragerAlgConstants (+ I); fieldConstRep into g; unit tests
+        - [x] C2 (part) base-field ops over K0 via Extension -> Automatic (tragerSquareFreeList/Together/GCD, rc[fieldQ]) — v0.6559
+        - [ ] C2 rest: integrateComponent F = F0; hermiteReduce[F, B, f] / hermiteSolve via kGCD/kExtGCD/kDivRem;
+              squarefree over K0 (Yun with kGCD); afInverse[F, B, a]; regularAtInfinityQ; rationalIntegral over K0
+        - [ ] C3 residue/log fields relative to K0: traceCertificateAt / tragerOrbitLogTerms / kauersTraceNF / brOrbitTerm build
+              ABSOLUTE fields (residueField-style ToNumberField over q's roots + constants), never fieldNF[Z, q] with radical
+              coefficients; residueFieldTower carries "consts"; factorOverField over a field containing K0
+        - [ ] C4 monic normalisation over K0 at every FactorList / PolynomialGCD (G-nf-8)
+        - [x] C5 mod p at a degree-1 prime of K0 (G-nf-6) — v0.6559 (gfConstRoot/gfConstImage; certificate still demoted). Was: root r of mu mod p chosen once per p (gfConstRoot, like
+              gfSqrtMinusOne); gfMod maps consts via reps; goodPrime adds disc(mu) / denominators; rho filter on the consts reps
+        - [ ] C6 Bronstein k arithmetic: brK0Field = fieldFn[syms, K0 ext]; brFieldOver keeps "consts"; Hermite/RDE over k (G-nf-5/9)
+        - [ ] C7 compositum over K0 (G-nf-2: Sqrt[2 x] = Sqrt[2] Sqrt[x])
+        - [ ] C8 remove nfDemoteCertificate; adversarial review of number-field certificates; theory note E4.3b
   - [ ] D scope: G-trig-1, G-qi-1, G-red-1, G-adv-t4, G-sign-1, G-core-4
   - [ ] E performance: G-perf-1/2/3, G-adv-t2/t3, G-adv-b5
   - later phases: G-param-1 + G-adv-c1 (4.4), G-mid-1 (5), G-adv-p1 (PMT tower independence)

@@ -160,6 +160,8 @@ static void test_pmt_status_protocol(void) {
 /* G-core-6: Together over Q(Root) (poly.c: Root content of a univariate gcd,
  * exact division by a Root-carrying divisor) */
 static void test_together_root(void) {
+    /* with the extension, the squarefree decomposition over Q(2^(1/3)) */
+    BR_EQ("FactorSquareFreeList[z^2 - 2^(1/3) z^3, Extension -> Automatic]", "{{1, 1}, {z, 2}, {1 - 2^(1/3) z, 1}}");
     BR_TRUE("With[{r = Root[1 + #1 + #1^4 &, 1]}, With[{e = 1/(1 + 2 t + t^2) + 1/(1 + t + 4 r^3 + 4 t r^3)},"
             " Head[Together[e]] =!= Plus && PossibleZeroQ[Together[e] - e]]]");
     BR_TRUE("With[{r = Root[1 + #1 + #1^4 &, 1]}, With[{e = D[(1 + t + 2 t r + 2 t r^2 + 4 r^3 + 4 t r^3 + 2 t r^5)/(1 + t + 4 r^3 + 4 t r^3), t]},"

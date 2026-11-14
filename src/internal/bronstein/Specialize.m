@@ -37,7 +37,7 @@ brSpecializationPoint[vars_List, try_Integer] := Module[{r = Quotient[try - 1, b
 
 brSquarefreeProfile::usage = "brSquarefreeProfile[p, th] is the sorted list {{deg_th, multiplicity}, ...} of the squarefree factors of p involving th.";
 brSquarefreeProfile[p_, th_Symbol] := Sort[{Exponent[#[[1]], th], #[[2]]} & /@
-  Select[FactorSquareFreeList[Expand[p]], !FreeQ[#[[1]], th] &]];
+  Select[tragerSquareFreeList[Expand[p]], !FreeQ[#[[1]], th] &]];
 
 brSpecializeValue::usage = "brSpecializeValue[e, sigma] is e with the rules sigma applied, or $Failed when a denominator vanishes.";
 brSpecializeValue[e_, sigma_List] := Module[{t = Together[e], d},
@@ -186,7 +186,7 @@ brSpecialTorsionOrder[T_Association, cv_Association, rs_Association, fr_Associat
   (* Trager's reduced class arithmetic needs a root of Gu of multiplicity
      prime to m; with none in characteristic 0, no prime ever has one and the
      prime search would not end *)
-  If[!AnyTrue[Select[FactorSquareFreeList[Gu0], !FreeQ[#[[1]], u] &], GCD[#[[2]], m] === 1 &],
+  If[!AnyTrue[Select[tragerSquareFreeList[Gu0], !FreeQ[#[[1]], u] &], GCD[#[[2]], m] === 1 &],
     throwUnimplemented["TorsionModP:frame-root", "no root of the frame curve of multiplicity prime to m"]];
   pts = If[#["where"] === "inf", 0, -1/fr["a"]] & /@ locsS;
   (* the goodQ conditions must hold in characteristic 0, else no prime meets

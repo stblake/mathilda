@@ -90,19 +90,60 @@ gfMod::usage = "gfMod[e, p] reduces the polynomial expression e (rational coeffi
 gfSqrtMinusOne::usage = "gfSqrtMinusOne[p] is the least r in {1, ..., p - 1} with r^2 = -1 mod p, for a prime p = 1 mod 4: the image of I under the reduction Z[i] -> GF(p) at the prime (p, I - r) of degree 1 (constant field Q(i), Phase 4.1b). Every reduction at p uses this r, so the reductions of all data agree (one ring homomorphism).";
 gfSqrtMinusOne[p_Integer] := gfSqrtMinusOne[p] = SelectFirst[Range[1, p - 1], Mod[#^2 + 1, p] === 0 &];
 
+gfConstField::usage = "gfConstField[gens] is the constant field Q(gens) of the radical constants in use (and I under Q(i)), Phase 4.3b: <|\"g\" -> g, \"mu\" -> mu(g), \"theta\" -> gamma, \"reps\" -> {c -> P_c(g), ...}|> with gamma a primitive element (ToNumberField), mu its monic minimal polynomial and every generator c = P_c(gamma). Memoised on gens.";
+gfConstField[gens_List] := gfConstField[gens] = Module[{nf, gen, g = Unique["Trager`Private`gfG"]},
+  nf = ToNumberField[gens];
+  (* radicals of rationals always have a primitive element: a failure is a bug *)
+  If[!ListQ[nf] || Length[nf] =!= Length[gens], throwInternal["ConstantFieldToNumberField", <|"gens" -> gens|>]];
+  gen = SelectFirst[nf, Head[#] === AlgebraicNumber &, None];
+  If[gen === None, throwInternal["ConstantFieldNoGenerator"]];
+  gen = gen[[1]];
+  <|"g" -> g, "mu" -> minimalPolynomialIn[gen, g], "theta" -> gen,
+    "reps" -> MapThread[#1 -> algebraicToPoly[#2, gen, g] &, {gens, nf}]|>];
+
+gfConstRoot::usage = "gfConstRoot[p] is the image r in GF(p) of the primitive element gamma of the constant field (gfConstField[tragerExtension[]]) under the reduction at a prime of degree 1 above p: the least simple root of mu mod p, or None when p is not usable (it divides a denominator of mu or of a representation, divides the discriminant of mu, or mu has no root mod p). Every reduction at p uses this r (gfMod), so all data are reduced by ONE ring homomorphism, as gfSqrtMinusOne does for Q(i).";
+gfConstRoot[p_Integer] := gfConstRoot[p, tragerExtension[]];
+gfConstRoot[p_Integer, gens_List] := gfConstRoot[p, gens] = Module[{cf = gfConstField[gens], mu, g, lin},
+  mu = cf["mu"]; g = cf["g"];
+  If[!denominatorsPrimeToQ[{mu, Last /@ cf["reps"]}, p], Return[None]];
+  If[gfModQ[Discriminant[mu, g], p] === 0, Return[None]];
+  lin = Select[FactorList[gfModQ[mu, p], Modulus -> p], Exponent[#[[1]], g] === 1 &];
+  If[lin === {}, Return[None]];
+  Min[gfModQ[-Coefficient[#[[1]], g, 0] PowerMod[Coefficient[#[[1]], g, 1], -1, p], p] & /@ lin]];
+
+gfConstImage::usage = "gfConstImage[c, p] is the image in GF(p) of the algebraic constant c (a generator of the constant field, a radical of a rational formed from them such as Sqrt[6] = Sqrt[2] Sqrt[3], or I) at the degree-1 prime chosen by gfConstRoot[p].";
+gfConstImage[c_, p_Integer] := Module[{gens = tragerExtension[], cf, r, rep, nf},
+  cf = gfConstField[gens]; r = gfConstRoot[p, gens];
+  If[r === None, throwUnimplemented["TorsionModP:algebraic-constant", "reduction mod a prime with no degree-1 prime of the constant field"]];
+  rep = c /. cf["reps"];
+  If[rep === c,
+    nf = Quiet[ToNumberField[c, cf["theta"]]];
+    If[Head[nf] =!= AlgebraicNumber, throwUnimplemented["Trager:constant-outside-field", "a radical constant outside the constant field"]];
+    rep = algebraicToPoly[nf, cf["theta"], cf["g"]]];
+  gfModQ[rep /. cf["g"] -> r, p]];
+
+gfImageI::usage = "gfImageI[p] is the image of I at p: gfSqrtMinusOne[p] over Q(i) alone, the image under the constant field's degree-1 prime (gfConstImage) when radical constants are in use too, so that I and the radicals are reduced by the same homomorphism.";
+gfImageI[p_Integer] := If[tragerAlgConstants =!= {} && TrueQ[tragerConstantI], gfConstImage[I, p], gfSqrtMinusOne[p]];
+
+gfModQ::usage = "gfModQ[e, p] is gfMod for an expression with rational coefficients only (no algebraic constants).";
+gfModQ[e_, p_Integer] := PolynomialMod[Expand[e /. r_Rational :> Mod[Numerator[r] PowerMod[Denominator[r], -1, p], p]], p];
+
 gfMod[e_, p_Integer] := Module[{e1 = e},
   (* every reduction mod p goes through here.  A Gaussian rational a + b I maps
      to a + b r, r = gfSqrtMinusOne[p], when p = 1 mod 4 (a homomorphism
      Z[i] -> GF(p)); for p = 2 or 3 mod 4 there is no such map and the data is
      refused (goodPrime skips those primes first) *)
-  (* radical constants (Phase 4.3) have no reduction map here yet *)
+  (* radical constants (Phase 4.3b): reduced at the degree-1 prime of the
+     constant field chosen by gfConstRoot[p] (one homomorphism for all data) *)
   If[!FreeQ[e1, Power[b_, q_Rational] /; rationalNumberQ[b]],
-    throwUnimplemented["TorsionModP:algebraic-constant", "reduction mod p of data with radical constants (a number-field constant field)"]];
+    If[tragerAlgConstants === {},
+      throwUnimplemented["TorsionModP:algebraic-constant", "reduction mod p of a radical constant outside the declared constant field"]];
+    e1 = e1 /. c : Power[b_, q_Rational] /; rationalNumberQ[b] :> gfConstImage[c, p]];
   If[!FreeQ[e1, _Complex],
     If[Mod[p, 4] =!= 1,
       throwUnimplemented["TorsionModP:complex", "reduction of complex constants modulo a prime p != 1 mod 4"]];
-    e1 = e1 /. Complex[a_, b_] :> a + b gfSqrtMinusOne[p]];
-  PolynomialMod[Expand[e1 /. r_Rational :> Mod[Numerator[r] PowerMod[Denominator[r], -1, p], p]], p]];
+    e1 = e1 /. Complex[a_, b_] :> a + b gfImageI[p]];
+  gfModQ[e1, p]];
 
 kc::usage = "kc[F, e] is the canonical form of the polynomial expression e over the field F: Expand over Q; the remainder modulo mu(t) over Q(theta); gfMod over GF(p). e may be a polynomial in x as well; only coefficients are reduced.";
 fieldSubI::usage = "fieldSubI[F, e] writes the Gaussian rationals of e in the generator of F when F is an absolute number field containing i (key \"I\" -> rep(t), set by residueField over Q(i)): a + b I -> a + b rep. Otherwise e.";
@@ -287,7 +328,11 @@ kNorm[F_Association, p_] := Which[
 
 rc::usage = "rc[F, e] is the normal form of the rational function e over F: numerator reduced over F, denominator a polynomial over the prime field (Q or GF(p)) -- a denominator involving t is replaced by its norm. Zero, and only zero, maps to 0, so zero tests (rcZeroQ) are exact. Over Q(theta) and GF(p) the form is unique; over Q it is Together's output, unique only up to the factored/expanded shape, so compare two values with rcZeroQ of their difference, never with ===.";
 rc[F_Association, e_] := Switch[F["Type"],
-  "Q", Together[e],
+  (* over Q with radical constants in use (Phase 4.3b) the base field is really
+     Q(constants): plain Together does not combine fractions whose cancellation
+     needs Sqrt[2]^2 = 2, and a "zero" left as an uncombined sum read as
+     non-zero (Hermite stopped early: a false pole at infinity, G-nf-4) *)
+  "Q", tragerTogether[e],
   "GF", Module[{t = Together[e, Modulus -> F["p"]], num, den},
     num = gfMod[Numerator[t], F["p"]]; den = gfMod[Denominator[t], F["p"]];
     If[num === 0, 0, rcGFMonic[num, den, F["p"]]]],

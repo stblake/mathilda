@@ -32,7 +32,7 @@ integrateComponent[c_, x_Symbol, m_Integer, G_, method_String] := Module[
   Y = Unique["Y"];
   genus = curveGenus[m, G, x];
   B0 = curveBasis[m, G, x];
-  f = PadRight[{0, Together[c]}, m];
+  f = PadRight[{0, tragerTogether[c]}, m];
   If[regularAtInfinityQ[F, B0, f],
     w = x; B = B0,
     z = Unique["z"];
@@ -45,7 +45,7 @@ integrateComponent[c_, x_Symbol, m_Integer, G_, method_String] := Module[
     throwInternal["ComponentLeftCoordinateOne"]];
   If[!regularAtInfinityQ[F, B, r],
     throwNonElementary["the Hermite remainder has a pole at infinity"]];
-  cr = Together[r[[2]]];
+  cr = tragerTogether[r[[2]]];
   logExprs = {};
   If[cr =!= 0,
     num = Numerator[cr]; den = Denominator[cr];

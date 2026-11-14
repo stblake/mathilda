@@ -21,12 +21,12 @@ curveBasis::usage = "curveBasis[m, G, x] is the basis descriptor of the curve Y^
 curveBasis[m_Integer, G_, x_Symbol] := Module[{pairs, d, s, M, delta, mult},
   pairs = Select[tragerFactorList[G], !FreeQ[#[[1]], x] &];
   d = Table[Expand[Times @@ (#[[1]]^Floor[i #[[2]]/m] & /@ pairs)], {i, 0, m - 1}];
-  s = Table[Together[i D[G, x]/(m G) - D[d[[i + 1]], x]/d[[i + 1]]], {i, 0, m - 1}];
+  s = Table[tragerTogether[i D[G, x]/(m G) - D[d[[i + 1]], x]/d[[i + 1]]], {i, 0, m - 1}];
   M = Exponent[G, x];
   delta = Table[Ceiling[i M/m] - Exponent[d[[i + 1]], x], {i, 0, m - 1}];
   mult = Table[
     With[{k = Mod[i + j, m], q = Quotient[i + j, m]},
-      {k, Together[G^q d[[k + 1]]/(d[[i + 1]] d[[j + 1]])]}],
+      {k, tragerTogether[G^q d[[k + 1]]/(d[[i + 1]] d[[j + 1]])]}],
     {i, 0, m - 1}, {j, 0, m - 1}];
   <|"m" -> m, "G" -> Expand[G], "x" -> x, "deg" -> M, "factors" -> pairs,
     "d" -> d, "s" -> s, "delta" -> delta, "mult" -> mult|>];

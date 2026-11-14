@@ -1094,6 +1094,57 @@ and that a 110-probe sweep on $\Q$ and $\Q(i)$ held.
 \paragraph{Tests.} \code{tests/test\_bronstein\_nf.c}, and gap-log entries
 E43-1 to E43-6.
 
+\section*{E4.3b. The constant field in the base arithmetic and at the primes (v0.6559)}
+\addcontentsline{toc}{section}{E4.3b. Constant field in base arithmetic and mod p}
+
+\paragraph{Base-field arithmetic.} With radical constants $c_1,\dots,c_r$ in the
+integrand, the constant field is $K_0=\Q(c_1,\dots,c_r)$. Trager's component
+pipeline (Hermite reduction, the branch-free denominator, the residue
+polynomial) was written over $\Q$ and treated each $c_i$ as an independent
+symbol. Two consequences turned elementary integrands into false verdicts,
+both hidden by the demotion of E4.3:
+\begin{enumerate}
+\item The squarefree decomposition of $z^2(1-\sqrt[3]2\,z)$ was not split at
+  all, so Hermite reduction stopped at once and the remainder of
+  $\int(x-\sqrt[3]2)^{-2/3}\,dx$ was declared a holomorphic differential.
+\item A combination of fractions whose common denominator needs
+  $\sqrt2^{\,2}=2$ stayed an uncombined sum. Hermite stopped early, and a
+  pole at infinity was reported for an elementary integrand on
+  $y^2=x^3+\sqrt2$.
+\end{enumerate}
+Every rational-function operation on the base field now goes through
+$K_0$-aware helpers: a squarefree list, \code{Together} and \code{PolynomialGCD}
+with \code{Extension} $\to$ \code{Automatic} (\code{tragerSquareFreeList},
+\code{tragerTogether}, \code{tragerGCD}), and the canonical form
+\code{rc[fieldQ[], e]}. Over $\Q$, or $\Q(i)$ alone, the helpers are the plain
+operations, so existing behaviour is unchanged.
+
+\paragraph{Reduction at a prime of degree 1.} The torsion test of [T] reduces
+the curve, the divisor and the residues modulo a prime. Over $K_0$ the
+reduction must be one ring homomorphism $\mathcal O_{K_0}\to\mathbb{F}_p$ for all the
+data. Let $\gamma$ be a primitive element of $K_0$ with monic minimal
+polynomial $\mu$, and write each constant as $c_i=P_i(\gamma)$, $P_i\in\Q[g]$.
+Let $p$ divide no denominator of $\mu$ or of any $P_i$ and not divide
+$\operatorname{disc}\mu$, and let $r$ be a simple root of $\mu$ mod $p$. Then
+$\gamma\mapsto r$ is the reduction at the prime $\mathfrak p=(p,\gamma-r)$ of
+degree 1, and $c_i\mapsto P_i(r)$. Taking the \emph{least} such $r$ for every
+$p$ makes all reductions at $p$ agree (\code{gfConstRoot},
+\code{gfConstImage}), as \code{gfSqrtMinusOne} does for $\Q(i)$. When $I$ is
+also in use it is included in $K_0$ and reduced the same way. A residue field
+$F\supseteq K_0$ is reduced at a root $\rho$ of its own minimal polynomial.
+\code{goodPrime} keeps only the $\rho$ under which the recorded representations
+of the constants in $F$ reduce to the same images, so the reduction of $F$ lies
+over $\mathfrak p$.
+
+The reduction is injective on the torsion of order prime to $p$ at a prime of
+good reduction of a curve over a number field [Silverman, VII.3.1]. This is
+the $\mathfrak p$-adic form of the argument already used over $\Q$, so two good
+primes with disagreeing orders still prove infinite order. With this,
+$\int dx/\bigl((x-\sqrt2)\sqrt{x^3+1}\bigr)$ is decided: its orders modulo 17
+and 71 disagree. Its certificate stays demoted until the residue and log
+fields above $K_0$ are exact as well (steps C3 and C6) and the whole path has
+had an adversarial review (C8).
+
 \part*{Part C. The gap log: what each extension closes}
 \addcontentsline{toc}{part}{Part C}
 

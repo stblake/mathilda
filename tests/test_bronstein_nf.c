@@ -32,9 +32,38 @@ static void test_nf_primitives(void) {
     BR_EQ("kc[rfN[\"F\"], fieldConstRep[rfN[\"F\"], Sqrt[2]]^2 - 2]", "0");
     BR_EQ("kc[rfN[\"F\"], fieldSubI[rfN[\"F\"], Sqrt[6]]^2 - 6]", "0");          /* a product the arithmetic formed */
     BR_EQ("Length[gaussianRootObjects[z^2 - Sqrt[2], z]]", "2");
+    /* outside a declared constant field a radical constant is refused */
     BR_THROWS("gfMod[x + Sqrt[2], 7]", "Unimplemented",
-              "reduction mod p of data with radical constants (a number-field constant field)");
+              "reduction mod p of a radical constant outside the declared constant field");
+    /* Phase 4.3b: a degree-1 prime of Q(Sqrt[2]) above 7 (2 = 3^2 mod 7), none above 5 */
+    BR_TRUE("Block[{tragerAlgConstants = {Sqrt[2]}}, With[{r = gfMod[Sqrt[2], 7]}, Mod[r^2 - 2, 7] === 0]]");
+    BR_EQ("Block[{tragerAlgConstants = {Sqrt[2]}}, gfConstRoot[5]]", "None");
+    /* one homomorphism: the images of Sqrt[2], Sqrt[3] and Sqrt[6] multiply */
+    BR_TRUE("Block[{tragerAlgConstants = {Sqrt[2], Sqrt[3]}}, Mod[gfMod[Sqrt[2], 23] gfMod[Sqrt[3], 23] - gfMod[Sqrt[6], 23], 23] === 0]");
+    BR_TRUE("Block[{tragerAlgConstants = {2^(1/3)}}, With[{r = gfMod[2^(1/3), 31]}, Mod[r^3 - 2, 31] === 0 && gfMod[2^(2/3), 31] === Mod[r^2, 31]]]");
+    /* I and a radical together, under the same map */
+    BR_TRUE("Block[{tragerAlgConstants = {Sqrt[2]}, tragerConstantI = True}, With[{i = gfImageI[17], s = gfMod[Sqrt[2], 17]}, Mod[i^2 + 1, 17] === 0 && Mod[s^2 - 2, 17] === 0]]");
+    BR_EQ("gfModQ[x/2 + 3, 7]", "3 + 4 x");
+    BR_EQ("Keys[gfConstField[{Sqrt[2]}]]", "{\"g\", \"mu\", \"theta\", \"reps\"}");
+    BR_TRUE("Block[{tragerAlgConstants = {Sqrt[2]}}, Mod[gfConstImage[Sqrt[2], 7]^2, 7] === 2]");
     BR_EQ("brAlgConstantsOf[Sqrt[E^x + Sqrt[3]]]", "{Sqrt[3]}");
+}
+
+/* Phase 4.3b: base-field arithmetic over Q(constants) */
+static void test_nf_base_field(void) {
+    BR_EQ("Block[{tragerAlgConstants = {2^(1/3)}}, tragerSquareFreeList[z^2 - 2^(1/3) z^3]]",
+          "{{1, 1}, {z, 2}, {1 - 2^(1/3) z, 1}}");
+    BR_EQ("Block[{tragerAlgConstants = {}}, tragerSquareFreeList[z^2 - 2 z^3]]", "{{-1, 1}, {z, 2}, {-1 + 2 z, 1}}");
+    BR_TRUE("Block[{tragerAlgConstants = {Sqrt[2]}}, With[{r = tragerTogether[3/(2 z^3 + 2 Sqrt[2] z^6) + "
+            "(-3 + 3 z + z^2 - 3 Sqrt[2] z^3 - 2 Sqrt[2] z^5)/(2 z^3 - 2 z^4 + 4 Sqrt[2] z^6 - 2 Sqrt[2] z^7 + 4 z^9)]}, "
+            "Head[r] =!= Plus && Exponent[Denominator[r], z, Min] === 1]]");
+    BR_EQ("Block[{tragerAlgConstants = {}}, tragerTogether[1/x + 1/(x + 1)]]", "(1 + 2 x)/(x (1 + x))");
+    BR_EQ("Block[{tragerAlgConstants = {Sqrt[2]}}, tragerGCD[x^2 - 2, x - Sqrt[2]]]", "-Sqrt[2] + x");
+    BR_EQ("Block[{tragerAlgConstants = {}}, tragerGCD[x^2 - 1, x - 1]]", "-1 + x");
+    /* former false verdicts (Hermite over Q missed a repeated factor / a cancellation) */
+    BR_ANTIDERIV("(x - 2^(1/3))^(-2/3)", "Bronstein");
+    BR_FALSE("MatchQ[Block[{nfDemoteCertificate = Function[r, r]}, BronsteinIntegrate[Together[D[Sqrt[x^3 + Sqrt[2]] + "
+             "Log[Sqrt[x^3 + Sqrt[2]] + x], x]], x]], {\"not elementary\", _}]");
 }
 
 static void test_nf_integrals(void) {
@@ -66,6 +95,7 @@ static void test_nf_integrals(void) {
 int main(void) {
     br_init();
     test_nf_primitives();
+    test_nf_base_field();
     test_nf_integrals();
     BR_DONE("bronstein_nf_tests");
     return 0;

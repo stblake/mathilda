@@ -55,6 +55,9 @@ goodPrime[ctx_Association, p_Integer] := Module[
   (* constant field Q(i) (Phase 4.1b): reduction needs a prime of Z[i] of
      degree 1, p = 1 mod 4; I maps to gfSqrtMinusOne[p] in gfMod *)
   If[TrueQ[tragerConstantI] && Mod[p, 4] =!= 1, Return[None]];
+  (* radical constants (Phase 4.3b): p needs a prime of degree 1 of the
+     constant field (gfConstRoot), through which gfMod reduces them *)
+  If[tragerAlgConstants =!= {} && gfConstRoot[p] === None, Return[None]];
   If[!denominatorsPrimeToQ[{G, ctx["N"], Ep, Bp, ctx["residues"], Lookup[ctx, "facs", {}],
         If[F["Type"] === "NF", F["mu"], 0]}, p], Return[None]];
   Gs = Together[G/PolynomialGCD[G, D[G, x]]];
@@ -72,7 +75,12 @@ goodPrime[ctx_Association, p_Integer] := Module[
        sends the literal I, rep(rho) = gfSqrtMinusOne[p], or the data would be
        reduced by two different homomorphisms (the conjugate prime) *)
     If[KeyExistsQ[F, "I"],
-      rhos = Select[rhos, gfMod[F["I"] /. F["t"] -> #, p] === gfSqrtMinusOne[p] &]];
+      rhos = Select[rhos, gfMod[F["I"] /. F["t"] -> #, p] === gfImageI[p] &]];
+    (* the same for the radical constants of a residue field that contains
+       them: rep_c(rho) must be the image gfMod gives the literal c *)
+    If[KeyExistsQ[F, "consts"],
+      rhos = Select[rhos, Function[r0, AllTrue[F["consts"],
+        gfMod[#[[2]] /. F["t"] -> r0, p] === gfConstImage[#[[1]], p] &]]]];
     If[rhos === {}, Return[None]];
     rho = First[rhos]];
   alphas = reduceResidue[F, #, p, rho] & /@ ctx["residues"];

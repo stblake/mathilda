@@ -23,8 +23,8 @@
 (* ========================================================================== *)
 
 branchFreeDenominator::usage = "branchFreeDenominator[E, G, x] is Bp = E / gcd(E, G): the part of the squarefree denominator E whose roots are not branch points of Y^m = G.";
-branchFreeDenominator[E_, G_, x_Symbol] := Module[{g = PolynomialGCD[E, G]},
-  Expand[Together[E/g]]];
+branchFreeDenominator[E_, G_, x_Symbol] := Module[{g = tragerGCD[E, G]},
+  Expand[tragerTogether[E/g]]];
 
 residuePolynomial::usage = "residuePolynomial[N, E, m, G, x, Z] is the monic squarefree polynomial over Q whose roots are the distinct NONZERO residues of the remainder (N/E) Y dx on Y^m = G (E squarefree): the squarefree part of S(Z^m) with S(W) = Res_x(W E'^m - N^m G, Bp), its zero roots removed. It is 1 when there are no nonzero residues.";
 residuePolynomial[N_, E_, m_Integer, G_, x_Symbol, Z_Symbol] := Module[{Bp, W, S, k, R, sf},
@@ -34,7 +34,7 @@ residuePolynomial[N_, E_, m_Integer, G_, x_Symbol, Z_Symbol] := Module[{Bp, W, S
   S = Expand[Resultant[W D[E, x]^m - N^m G, Bp, x]];
   If[S === 0, throwInternal["ResidueResultantZero"]];
   k = Exponent[S, W, Min];
-  S = Expand[Together[S/W^k]];
+  S = Expand[tragerTogether[S/W^k]];
   If[Exponent[S, W] <= 0, Return[1]];
   R = Expand[S /. W -> Z^m];
   sf = Times @@ (First /@ Select[tragerFactorList[R], !FreeQ[#[[1]], Z] &]);

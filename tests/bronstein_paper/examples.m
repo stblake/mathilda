@@ -207,5 +207,11 @@ bronsteinPaperExamples = {
   "before" -> "internal (brLogPartRemainderNotRational)", "note" -> "a literal I with residues in Q(i): I Sqrt[Log[x]] + an ArcTan as Q(i) logarithms"|>,
 <|"id" -> "E6d-4", "gap" -> "Tower:cyclic-compositum", "theory" -> "E6d", "version" -> "v0.6558",
   "kind" -> "Integrate", "f" -> Hold[Sqrt[Tan[x]] + Sqrt[Cot[x]]], "expect" -> "elementary",
-  "before" -> "internal (SignSplitCheckFailed: a PossibleZeroQ false negative at a point on a cut)", "note" -> "Sqrt[Cot[x]] = eps/Sqrt[Tan[x]] with eps = +-1 locally constant; the verifier now re-draws points on an unresolvable cut"|>
+  "before" -> "internal (SignSplitCheckFailed: a PossibleZeroQ false negative at a point on a cut)", "note" -> "Sqrt[Cot[x]] = eps/Sqrt[Tan[x]] with eps = +-1 locally constant; the verifier now re-draws points on an unresolvable cut"|>,
+<|"id" -> "E43b-1", "gap" -> "Trager:base-field-NF", "theory" -> "E4.3b", "version" -> "v0.6559",
+  "kind" -> "Integrate", "f" -> Hold[(x - 2^(1/3))^(-2/3)], "expect" -> "elementary",
+  "before" -> "a false verdict (demoted): FactorSquareFreeList over Q saw no repeated factor", "note" -> "squarefree decomposition over Q(2^(1/3)); answer 3 (x - 2^(1/3))^(1/3)"|>,
+<|"id" -> "E43b-2", "gap" -> "Trager:base-field-NF", "theory" -> "E4.3b", "version" -> "v0.6559",
+  "kind" -> "Integrate", "f" -> Hold[Together[D[Sqrt[x^3 + Sqrt[2]] + Log[Sqrt[x^3 + Sqrt[2]] + x], x]]], "expect" -> "elementary",
+  "before" -> "a false verdict (demoted): Together over Q left a cancellation needing Sqrt[2]^2 = 2", "note" -> "genus 1 over Q(Sqrt[2]): Hermite over Q(Sqrt[2]), torsion at degree-1 primes of Q(Sqrt[2])"|>
 };
