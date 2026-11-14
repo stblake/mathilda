@@ -9,7 +9,9 @@
 \documentclass[11pt]{article}
 \usepackage[margin=1in]{geometry}
 \usepackage{amsmath,amssymb,amsthm}
-\usepackage{booktabs,longtable}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{booktabs,longtable,array}
 \usepackage[hidelinks]{hyperref}
 
 \newtheorem{theorem}{Theorem}[section]
@@ -616,5 +618,34 @@ $\log\log x$ is unused once $E^{x+\log(\log x)/2}=\sqrt{\log x}\,e^x$.
 
 \paragraph{Tests.} \code{test\_exp\_of\_log} in
 \code{tests/test\_bronstein\_phase3.c}.
+
+\part*{Part C. The gap log: what each extension closes}
+\addcontentsline{toc}{part}{Part C}
+
+Every gap the campaign closes is logged with non-trivial examples in
+\code{tests/bronstein\_paper/examples.m}. Each example records:
+\begin{itemize}
+\item the ratchet site it removed (\code{tools/check\_bronstein\_completeness.py})
+  and the section above that justifies it;
+\item the release that closed it;
+\item the verdict, and what the system did before.
+\end{itemize}
+The ctest \code{bronstein\_paper\_examples} checks every one. An antiderivative
+must satisfy \code{PossibleZeroQ[D[F, x] - f]}, and a certificate must be
+returned as one. \code{tools/bronstein\_paper\_table.py} regenerates the table
+below, timings included (seconds, \code{Method -> "Bronstein"}, one core).
+
+\begingroup\small\sloppy
+\input{bronstein_examples_table.tex}
+\endgroup
+
+\paragraph{Open performance limits} (examples kept out of the table until they close):
+\begin{itemize}
+\item a three-radical compositum with Kummer group $\Z/30$,
+  $\frac{d}{dx}\bigl(x^2\sqrt x\,(x+1)^{1/5}(x+2)^{1/3}\bigr)$: more than 300~s
+  on the degree-30 curve;
+\item $\frac{d}{dx}\bigl(\log(y+L)+2\log(y^2+Ly+L^2)\bigr)$ with $y^3=L^3+L+1$,
+  $L=\log x$: 225~s.
+\end{itemize}
 
 \end{document}

@@ -6693,6 +6693,12 @@ if(PYTHON3_EXE)
     add_test(NAME bronstein_completeness
              COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/check_bronstein_completeness.py
              WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    # The gap log of the completion campaign (the JSC paper's corpus): every
+    # closed gap's examples must keep their verdict (tests/bronstein_paper/).
+    add_test(NAME bronstein_paper_examples
+             COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/bronstein_paper_table.py --check
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    set_tests_properties(bronstein_paper_examples PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 3600)
     add_test(NAME bronstein_stress
              COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/bronstein_stress/stress.py
                      --seeds 10-39 --count 20 --budget 30 --max-open 8
