@@ -45,7 +45,10 @@ residueField[R_, Z_Symbol, t_Symbol] := Module[{fac, lin, nonlin, rts, nf, gen, 
   fac = First /@ Select[tragerFactorList[R], !FreeQ[#[[1]], Z] &];
   lin = Select[fac, Exponent[#, Z] === 1 &];
   nonlin = Select[fac, Exponent[#, Z] > 1 &];
-  If[nonlin === {},
+  (* all residues rational -- over Q(i), Gaussian rationals are NOT one
+     dimension over Q: build the field Q(i) (with "I"), so the Q-basis sees
+     1 and i (review of E4.1b: residues {1, I} hit qBasis's integer guard) *)
+  If[nonlin === {} && !(TrueQ[tragerConstantI] && !FreeQ[lin, _Complex]),
     Return[<|"F" -> fieldQ[], "roots" -> (Z /. Solve[# == 0, Z][[1]] & /@ lin)|>]];
   (* Crude a-priori bound on the splitting field degree (product of the       *)
   (* factorials of the factor degrees) before asking ToNumberField.           *)
@@ -58,7 +61,7 @@ residueField[R_, Z_Symbol, t_Symbol] := Module[{fac, lin, nonlin, rts, nf, gen, 
     Return[residueFieldTower[R, Z, t]]];
   rts = Join[
     Z /. Solve[# == 0, Z][[1]] & /@ lin,
-    Flatten[rootObjects[#, Z] & /@ nonlin]];
+    Flatten[If[FreeQ[#, _Complex], rootObjects[#, Z], gaussianRootObjects[#, Z]] & /@ nonlin]];
   (* constant field Q(i): the residue field must contain i, and the literal I
      of the data is written in its generator ("I" -> rep, applied by kc/rc) *)
   If[TrueQ[tragerConstantI], rts = Append[rts, I]];
@@ -128,6 +131,14 @@ extendFieldByRoot[K_Association, h_, Z_Symbol] := Module[{t = K["t"], T = Unique
   Join[K2, <|"embed" -> th|>]];
 
 rootObjects::usage = "rootObjects[q, Z] is the list of the Root objects Root[q(#)&, k], k = 1..deg q, of the polynomial q in Z.";
+gaussianRootObjects::usage = "gaussianRootObjects[q, Z] is the list of the roots of q, a polynomial with Gaussian-rational coefficients irreducible over Q(i), as Root objects of RATIONAL polynomials (ToNumberField takes those): the roots of the norm q qbar (qbar the complex conjugate coefficients), factored over Q, that are roots of q, picked numerically at 60 digits (q qbar is squarefree when q is irreducible over Q(i) and not a rational multiple of a real polynomial, so the roots are separated).";
+gaussianRootObjects[q_, Z_Symbol] := Module[{qb = q /. Complex[a_, b_] :> Complex[a, -b], nq, cands},
+  nq = Expand[q qb];
+  cands = Flatten[rootObjects[#[[1]], Z] & /@ Select[FactorList[nq], !FreeQ[#[[1]], Z] &]];
+  cands = Select[cands, Abs[Quiet[N[q /. Z -> #, 60]]] < 10^-30 &];
+  If[Length[cands] =!= Exponent[q, Z], throwInternal["gaussianRootObjectsCount", <|"q" -> q|>]];
+  cands];
+
 rootObjects[q_, Z_Symbol] := With[{body = q /. Z -> Slot[1]},
   Function[{k}, Root[Function[body], k]] /@ Range[Exponent[q, Z]]];
 

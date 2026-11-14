@@ -39,16 +39,22 @@ weilBound[p_Integer, g_Integer] := (2 + Floor[Sqrt[p]])^(2 g);
 
 denominatorsPrimeToQ::usage = "denominatorsPrimeToQ[expr, p] is True when no rational number occurring in expr has a denominator divisible by p.";
 denominatorsPrimeToQ[expr_, p_Integer] :=
-  AllTrue[Cases[{expr}, r_Rational :> Denominator[r], {0, Infinity}], Mod[#, p] =!= 0 &];
+  AllTrue[Join[Cases[{expr}, r_Rational :> Denominator[r], {0, Infinity}],
+      (* a Gaussian rational is an atom: look inside it *)
+      Cases[{expr}, Complex[a_, b_] :> Denominator[{a, b}], {0, Infinity}] // Flatten],
+    Mod[#, p] =!= 0 &];
 
 nonzeroModQ::usage = "nonzeroModQ[c, p] is True when the rational number c is nonzero modulo p (p-integral by assumption).";
 nonzeroModQ[c_, p_Integer] := gfMod[c, p] =!= 0;
 
 goodPrime::usage = "goodPrime[ctx, p] tests the prime p for good reduction of the component data ctx (keys \"B\", \"genus\", \"F\", \"residues\", \"N\", \"Ep\", \"Bp\"; an optional \"goodQ\" -> Function[{p, rho}, ...] adds the caller's own conditions). It returns <|\"p\" -> p, \"rho\" -> rho, \"a\" -> a|> (rho the image of the residue-field generator, None over Q; a the centre of the reduced frame mod p: the image of ctx[\"alpha\"] when given, else a root of G mod p of multiplicity prime to m) or None.";
 goodPrime[ctx_Association, p_Integer] := Module[
-  {B = ctx["B"], x, m, G, Gs, Bp = ctx["Bp"], Ep = ctx["Ep"], F = ctx["F"], rho = None, lin, alphas, a},
+  {B = ctx["B"], x, m, G, Gs, Bp = ctx["Bp"], Ep = ctx["Ep"], F = ctx["F"], rho = None, lin, rhos, alphas, a},
   x = B["x"]; m = B["m"]; G = B["G"];
   If[Mod[m, p] === 0, Return[None]];
+  (* constant field Q(i) (Phase 4.1b): reduction needs a prime of Z[i] of
+     degree 1, p = 1 mod 4; I maps to gfSqrtMinusOne[p] in gfMod *)
+  If[TrueQ[tragerConstantI] && Mod[p, 4] =!= 1, Return[None]];
   If[!denominatorsPrimeToQ[{G, ctx["N"], Ep, Bp, ctx["residues"], Lookup[ctx, "facs", {}],
         If[F["Type"] === "NF", F["mu"], 0]}, p], Return[None]];
   Gs = Together[G/PolynomialGCD[G, D[G, x]]];
@@ -59,9 +65,16 @@ goodPrime[ctx_Association, p_Integer] := Module[
   If[curveGenus[m, G, x, p] =!= ctx["genus"], Return[None]];
   If[F["Type"] === "NF",
     If[!nonzeroModQ[Discriminant[F["mu"], F["t"]], p], Return[None]];
-    lin = Select[FactorList[F["mu"], Modulus -> p], Exponent[#[[1]], F["t"]] === 1 &];
+    lin = Select[FactorList[gfMod[F["mu"], p], Modulus -> p], Exponent[#[[1]], F["t"]] === 1 &];
     If[lin === {}, Return[None]];
-    rho = gfMod[-Coefficient[lin[[1, 1]], F["t"], 0] PowerMod[Coefficient[lin[[1, 1]], F["t"], 1], -1, p], p]];
+    rhos = gfMod[-Coefficient[#[[1]], F["t"], 0] PowerMod[Coefficient[#[[1]], F["t"], 1], -1, p], p] & /@ lin;
+    (* a field containing i ("I" -> rep(t)): t -> rho must send i where gfMod
+       sends the literal I, rep(rho) = gfSqrtMinusOne[p], or the data would be
+       reduced by two different homomorphisms (the conjugate prime) *)
+    If[KeyExistsQ[F, "I"],
+      rhos = Select[rhos, gfMod[F["I"] /. F["t"] -> #, p] === gfSqrtMinusOne[p] &]];
+    If[rhos === {}, Return[None]];
+    rho = First[rhos]];
   alphas = reduceResidue[F, #, p, rho] & /@ ctx["residues"];
   If[MemberQ[alphas, 0] || !DuplicateFreeQ[alphas], Return[None]];
   (* a caller's further good-reduction conditions (Bronstein's special places,
@@ -128,10 +141,7 @@ goodPrimes[ctx_Association, k_Integer] := Module[{found = {}, p = 2, gp},
      modulo p = 3 mod 4 and gfMod would reduce it meaninglessly -- a false
      "orders disagree" certificate.  Until I is mapped to a square root of -1
      mod p, such data is refused, never reduced. *)
-  If[TrueQ[tragerConstantI] &&
-     !FreeQ[{ctx["B"]["G"], Lookup[ctx, {"N", "Ep", "Bp", "E", "residues", "facs", "R", "alpha", "refc"}, 0],
-             If[ctx["F"]["Type"] === "NF", ctx["F"]["mu"], 0]}, _Complex],
-    throwUnimplemented["TorsionModP:complex", "torsion by reduction mod p with complex constants (constant field Q(i))"]];
+
   (* All but finitely many primes have good reduction except for the root   *)
   (* condition on the residue field, which a positive density of primes     *)
   (* meets (Chebotarev): the search ends, and needs no bound.               *)

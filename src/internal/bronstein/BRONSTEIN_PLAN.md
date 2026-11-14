@@ -1540,3 +1540,7 @@ cross-checked against FriCAS; then (4); then (6); then number fields beyond
   E4.1): factorisations over Q(i), residue fields that contain i, refusal of
   reduction mod p. The Q(i) battery went from 2/12 to 11/12. Next: I mod p, then
   the trig front end.
+- **Phase 4.1b + 4.2 (v0.6554).** `I` modulo p ≡ 1 (mod 4) with one consistent
+  homomorphism; Gaussian residue polynomials and `kappa`; the trig front end via
+  `TrigToExp` (`Sqrt[Tan[x]]`, `Tan[x]^(1/3)`, `Sqrt[Sin[x]]` certified, ...).
+  Next: number fields (4.3), then symbolic parameters (4.4).

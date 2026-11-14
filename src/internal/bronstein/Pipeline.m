@@ -101,7 +101,9 @@ brComponentIdentityQ[T_Association, cv_Association, c_, res_Association] := Modu
   If[ListQ[res["OrbitD"]], R = R + afToY[cv["B"], res["OrbitD"], Y]];
   num = Expand[Numerator[Together[R]]];
   num = Expand[PolynomialRemainder[num, Y^m - G, Y]];
-  If[F =!= None && fieldExtQ[F], num = Expand[PolynomialRemainder[num, F["mu"], F["t"]]]];
+  (* over a residue field containing i the literal I of c is written in its
+     generator first (fieldSubI), or a true identity would read as nonzero *)
+  If[F =!= None && fieldExtQ[F], num = Expand[PolynomialRemainder[Expand[fieldSubI[F, num]], F["mu"], F["t"]]]];
   Together[num] === 0];
 
 brShapeA::usage = "brShapeA[T, f, x] integrates the Shape A integrand f (tower record T): coordinate 0 by the transcendental Risch algorithm, every component by brIntegrateComponent; it returns the (unverified) antiderivative.";
@@ -237,7 +239,21 @@ brPresentationTime::usage = "brPresentationTime[] is the time the real-form pres
 brPresentationTime[] := With[{left = Internal`TimeConstrainedRemaining[]},
   If[NumericQ[left], Min[brOption["PresentationTime"], Max[left/3, 0.01]], brOption["PresentationTime"]]];
 
-BronsteinScope[f_, x_Symbol] := Block[{tragerConstantI = brConstantField[f] === "QI"}, brScopeBody[f, x]];
+BronsteinScope[f_, x_Symbol] := With[{g = brTrigFrontEnd[f]},
+  Block[{tragerConstantI = brConstantField[g] === "QI"}, brScopeBody[g, x]]];
+
+brTrigFrontEnd::usage = "brTrigFrontEnd[f] is f with its trigonometric and hyperbolic functions and their inverses rewritten by TrigToExp into exponentials and logarithms (ArcSin[x] -> -I Log[I x + Sqrt[1 - x^2]]: a logarithm plus the radical), an identity on every branch the CAS uses; f itself when it has none of them (Phase 4.2).";
+brTrigFrontEnd[f_] := If[FreeQ[f, brElementaryUnimplementedHeads[]], f, TrigToExp[f]];
+
+brTrigPresentation::usage = "brTrigPresentation[f, F, x] presents the antiderivative F of the trigonometric integrand f (found in exponential form) back in trigonometric form, ExpToTrig[F], when that form is still verified against f (antiderivativeQ, bounded in time); else F.";
+brTrigPresentation[f_, F_, x_Symbol] := Module[{G},
+  (* only for a circular integrand: ExpToTrig turns E^(-k x) into
+     Cosh[k x] - Sinh[k x], exact but catastrophically cancelling at machine
+     precision (review of E4.2: Int Sqrt[Tanh[x]] gave Indeterminate at x = 12) *)
+  If[FreeQ[f, Sin | Cos | Tan | Cot | Sec | Csc | ArcSin | ArcCos | ArcTan | ArcCot | ArcSec | ArcCsc], Return[F]];
+  G = Quiet[TimeConstrained[ExpToTrig[F], brPresentationTime[], F]];
+  If[G =!= F && FreeQ[G, Sinh | Cosh | Tanh | Coth | Sech | Csch] &&
+     TrueQ[Quiet[TimeConstrained[antiderivativeQ[f, G, x], brPresentationTime[], False]]], G, F]];
 brScopeBody::usage = "brScopeBody[f, x] is the body of BronsteinScope (run with the constant field of f in effect).";
 brScopeBody[f_, x_Symbol] := Module[{r},
   If[FreeQ[f, Power[b_, _Rational] /; !FreeQ[b, x]] && FreeQ[f, Root | RootSum], Return["NotApplicable"]];
@@ -248,7 +264,14 @@ brScopeBody[f_, x_Symbol] := Module[{r},
     MemberQ[{"Incomplete", "Unimplemented"}, First[brFailTag[r]]], failToList[r],
     True, "NotApplicable"]];
 
-BronsteinIntegrate[f_, x_Symbol] := Module[{r},
-  (* constant field Q(i) when the integrand has a Gaussian rational (Phase 4.1) *)
-  r = Block[{tragerConstantI = brConstantField[f] === "QI"}, brCatch[brIntegrateBody[f, x]]];
+BronsteinIntegrate[f_, x_Symbol] := Module[{r, g = brTrigFrontEnd[f]},
+  (* the trigonometric front end (Phase 4.2): TrigToExp is an identity, so a
+     certificate for g is one for f; the constant field is that of g (Q(i)
+     when TrigToExp brought in I, Phase 4.1) *)
+  r = Block[{tragerConstantI = brConstantField[g] === "QI"}, brCatch[brIntegrateBody[g, x]]];
+  (* r is verified against g inside the pipeline, and g = TrigToExp[f] is an
+     identity; a second numeric check against the trigonometric form only adds
+     noise (Int Sqrt[Tan[x]]: the Root-laden answer is numerically unstable at
+     complex points).  The trigonometric presentation is checked on its own. *)
+  If[!brFailQ[r] && g =!= f, r = brTrigPresentation[f, r, x]];
   If[brFailQ[r], failToList[r], r]];

@@ -4029,6 +4029,13 @@ verified against the user's own integrand. The proofs are in
 | `Integrate[E^(x + Log[x]/2)/x, x, Method -> "Bronstein"]` | `Integrate::nonelem` (`E^x/Sqrt[x]`) |
 | `Integrate[(Log[x^2] - 2 Log[x]) Sqrt[Log[x]], x, Method -> "Bronstein"]` | `Integrate::nonelem` |
 
+**Trigonometric integrands (v0.6554).** Trigonometric and hyperbolic functions
+and their inverses are rewritten by `TrigToExp` and integrated over Q(i); the
+answer is verified, and shown in trigonometric form when that form verifies too.
+For example, `Integrate[Sqrt[Tan[x]], x, Method -> "Bronstein"]` is an
+antiderivative, and `Integrate[Sqrt[Sin[x]], x, Method -> "Bronstein"]` prints
+`Integrate::nonelem`.
+
 **Complex constants (v0.6551).** Gaussian-rational constants are in scope: the
 constant field is Q(i). For example, `Integrate[Sqrt[x + I]/x, x, Method ->
 "Bronstein"]` and `Integrate[1/Sqrt[E^(2 I x) + 1], x, Method -> "Bronstein"]`

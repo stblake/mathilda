@@ -44,8 +44,18 @@ brResultantR[T_Association, cv_Association, c_, z_Symbol] := Module[
   E = Expand[Numerator[Together[N^m G - z^m brD[T, Dn]^m]]];
   cl = DeleteCases[CoefficientList[E, z], 0];
   cont = If[Length[cl] === 1, First[cl], PolynomialGCD @@ cl];
-  prim = Expand[Together[E/cont]];
-  R = Expand[Resultant[prim, Bp, th]];
+  prim = Together[E/cont];
+  (* the content must divide exactly; over Q(i) PolynomialGCD's unit
+     normalisation can leave a quotient that is not a polynomial (review of
+     E4.1b: R came out with a z-denominator).  Without the content, R gains
+     only the factor Res(cont, Bp), free of z, which the monic normalisation of
+     the criterion removes: correct, just larger. *)
+  prim = If[FreeQ[Denominator[prim], th | z] && PolynomialQ[Expand[Numerator[prim]], {th, z}],
+    Expand[prim], E];
+  (* Together first: with Gaussian coefficients Expand alone can leave the
+     resultant as a sum of uncancelled fractions in z (review of E4.1b) *)
+  R = Together[Resultant[prim, Bp, th]];
+  R = If[FreeQ[Denominator[R], z], Expand[Numerator[R]]/Denominator[R], Expand[R]];
   If[R === 0, throwInternal["brResultantRZero", <|"c" -> c|>]];
   R];
 
@@ -89,8 +99,12 @@ brGammaForm[lc_, m_Integer] := Module[{u = brMthPowerCofactor[lc, m], kappa},
      2026-11-14: Int Sqrt[E^x + I]).  Special residues over Q(i)(kappa^(1/m))
      are not implemented: a non-real Gaussian kappa is refused. *)
   If[!NumericQ[kappa], Return[None]];
-  If[!FreeQ[kappa, _Complex],
-    throwUnimplemented["Residues:gaussian-kappa", "special place with a non-real Gaussian constant kappa (kappa^(1/m) over Q(i))"]];
+  (* a Gaussian kappa is a constant of Q(i) (Phase 4.1b): the special places
+     have values kappa^(1/m) u, and their residue field Q(i)(roots of
+     z^m - kappa) is built with i (residueField, gaussianRootObjects).  Outside
+     the constant field Q(i) a complex kappa is refused. *)
+  If[!FreeQ[kappa, _Complex] && !(TrueQ[tragerConstantI] && constantFieldNumberQ[kappa]),
+    throwUnimplemented["Residues:gaussian-kappa", "special place with a complex constant kappa outside the constant field Q(i)"]];
   {kappa, u}];
 
 brCoefficientAtInf::usage = "brCoefficientAtInf[T, cv, c, j] is the coefficient w in k of theta^j in c theta^(g/m) Ghat^(1/m) (m | g): the expansion of c Y at a place p_zeta above infinity is zeta gamma Sum_j w_j theta^j.";

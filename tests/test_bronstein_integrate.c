@@ -63,12 +63,14 @@ static const char* const certificates[] = {
 static const char* const declines[] = {
     "Log[x] + Sqrt[Log[x] + Sqrt[Log[x]]]",                                          /* nested */
     "Sqrt[Log[x]] Sqrt[Log[x] + 1]",                                                 /* compositum */
-    "Tan[x] Sqrt[Log[x]]",
+    "Sqrt[2] Sqrt[Log[x]] Log[x + 1]",                                              /* number-field constant (Phase 4.3) */
     "Log[x] E^(x Sqrt[x^3 + 1])",                                                    /* Shape B, curve monomial over a tower */
     NULL
 };
 
 static void test_closes(void) {
+    /* Tan[x] Sqrt[Log[x]] was a decline until the trig front end (v0.6554) */
+    BR_EQ("First[BronsteinIntegrate[Tan[x] Sqrt[Log[x]], x]]", "\"not elementary\"");
     for (int i = 0; closes[i]; i++) BR_ANTIDERIV(closes[i], "Bronstein");
     BR_EQ("Integrate[(x + 1)/((x Log[x] + x^2) Sqrt[x + Log[x]]), x, Method -> \"Bronstein\"]", "-2/Sqrt[x + Log[x]]");
     BR_TRUE("PossibleZeroQ[Integrate[(3 (x + E^x)^(1/3) + (2 x^2 + 3 x) E^x + 5 x^2)/(x (x + E^x)^(1/3)), x,"
@@ -114,8 +116,7 @@ static void test_messages_and_glue(void) {
     BR_EQ("Check[Quiet[Integrate[Tan[x] Sqrt[Log[x]], x, Method -> \"Bronstein\"]]; \"ok\", \"msg\"]", "\"ok\"");
     BR_EQ("Check[Integrate[Erf[x] Sqrt[Log[x]], x, Method -> \"Bronstein\"]; \"ok\", \"msg\"]", "\"ok\"");
     BR_EQ("Integrate`Bronstein[1/(x Sqrt[Log[x]]), x]", "2 Sqrt[Log[x]]");
-    BR_EQ("Quiet[Integrate`Bronstein[Sin[x] Sqrt[Log[x]], x]]",
-          "{\"implementation incomplete\", \"trigonometric or hyperbolic function (TrigToExp front end over Q(i))\"}");
+    BR_EQ("Quiet[Integrate`Bronstein[Sin[x] Sqrt[Log[x]], x]][[1]]", "\"not elementary\"");   /* trig front end (v0.6554) */
     BR_EQ("Head[Integrate`Bronstein[x]]", "Integrate`Bronstein");
     BR_TRUE("MemberQ[Attributes[Integrate`Bronstein], Protected]");
     br_assertions++;

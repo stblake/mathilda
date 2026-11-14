@@ -87,13 +87,19 @@ nativeQ[F_Association] := F["Type"] =!= "Fn" && nativeQ[];
 (* -------------------------------------------------------------------------- *)
 
 gfMod::usage = "gfMod[e, p] reduces the polynomial expression e (rational coefficients allowed, denominators prime to p) to its canonical form over GF(p): every coefficient in {0, ..., p-1}.";
-gfMod[e_, p_Integer] := (
-  (* the single choke point of every reduction mod p: a literal I (constant
-     field Q(i)) has no image modulo p = 3 mod 4, and Mod would reduce it
-     meaninglessly -- refuse, never reduce (review of E4.1, 2026-11-14) *)
-  If[!FreeQ[e, _Complex],
-    throwUnimplemented["TorsionModP:complex", "reduction mod p of data with complex constants (constant field Q(i))"]];
-  PolynomialMod[Expand[e /. r_Rational :> Mod[Numerator[r] PowerMod[Denominator[r], -1, p], p]], p]);
+gfSqrtMinusOne::usage = "gfSqrtMinusOne[p] is the least r in {1, ..., p - 1} with r^2 = -1 mod p, for a prime p = 1 mod 4: the image of I under the reduction Z[i] -> GF(p) at the prime (p, I - r) of degree 1 (constant field Q(i), Phase 4.1b). Every reduction at p uses this r, so the reductions of all data agree (one ring homomorphism).";
+gfSqrtMinusOne[p_Integer] := gfSqrtMinusOne[p] = SelectFirst[Range[1, p - 1], Mod[#^2 + 1, p] === 0 &];
+
+gfMod[e_, p_Integer] := Module[{e1 = e},
+  (* every reduction mod p goes through here.  A Gaussian rational a + b I maps
+     to a + b r, r = gfSqrtMinusOne[p], when p = 1 mod 4 (a homomorphism
+     Z[i] -> GF(p)); for p = 2 or 3 mod 4 there is no such map and the data is
+     refused (goodPrime skips those primes first) *)
+  If[!FreeQ[e1, _Complex],
+    If[Mod[p, 4] =!= 1,
+      throwUnimplemented["TorsionModP:complex", "reduction of complex constants modulo a prime p != 1 mod 4"]];
+    e1 = e1 /. Complex[a_, b_] :> a + b gfSqrtMinusOne[p]];
+  PolynomialMod[Expand[e1 /. r_Rational :> Mod[Numerator[r] PowerMod[Denominator[r], -1, p], p]], p]];
 
 kc::usage = "kc[F, e] is the canonical form of the polynomial expression e over the field F: Expand over Q; the remainder modulo mu(t) over Q(theta); gfMod over GF(p). e may be a polynomial in x as well; only coefficients are reduced.";
 fieldSubI::usage = "fieldSubI[F, e] writes the Gaussian rationals of e in the generator of F when F is an absolute number field containing i (key \"I\" -> rep(t), set by residueField over Q(i)): a + b I -> a + b rep. Otherwise e.";

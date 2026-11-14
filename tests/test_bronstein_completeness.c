@@ -79,7 +79,8 @@ static void test_scope(void) {
           "{\"implementation incomplete\", \"several radicals generating a non-cyclic Kummer extension (not one simple radical)\"}");
     BR_EQ("BronsteinScope[Root[#^5 - # - x &, 1], x]",
           "{\"implementation incomplete\", \"a general algebraic function (Root/RootSum) in the integrand\"}");
-    BR_EQ("First[BronsteinScope[Sin[x] Sqrt[x], x]]", "\"implementation incomplete\"");
+    BR_EQ("BronsteinScope[Sin[x] Sqrt[x], x]", "\"InScope\"");                     /* trig front end (v0.6554) */
+    BR_EQ("First[BronsteinScope[Sqrt[2] Sqrt[x] Log[x], x]]", "\"implementation incomplete\"");   /* number-field constant (4.3) */
 }
 
 static void test_specialization_growth(void) {
@@ -95,7 +96,7 @@ static void test_incomplete_message(void) {
     /* Method -> "Bronstein": out of scope, and in scope but unimplemented */
     BR_EQ("Check[Integrate[Sqrt[Log[x] + Sqrt[Log[x]]], x, Method -> \"Bronstein\"]; \"ok\", \"msg\"]", "\"msg\"");
     BR_EQ("Check[Integrate[Sqrt[Log[x] + Sqrt[Log[x]]], x, Method -> \"Bronstein\"]; \"ok\", \"msg\", Integrate::incomplete]", "\"msg\"");
-    BR_EQ("Check[Integrate[Sin[x] Sqrt[Log[x]], x, Method -> \"Bronstein\"]; \"ok\", \"msg\", Integrate::incomplete]", "\"msg\"");
+    BR_EQ("Check[Integrate[Sqrt[2] Sqrt[Log[x]] Log[x + 1], x, Method -> \"Bronstein\"]; \"ok\", \"msg\", Integrate::incomplete]", "\"msg\"");
     BR_EQ("Check[Quiet[Integrate[Sqrt[Log[x] + Sqrt[Log[x]]], x, Method -> \"Bronstein\"]]; \"ok\", \"msg\"]", "\"ok\"");
     /* Method -> "Trager": nested radicals are outside its class too */
     BR_EQ("Check[Integrate[Sqrt[x + Sqrt[x + 1]]/(x^2 + 3), x, Method -> \"Trager\"]; \"ok\", \"msg\", Integrate::incomplete]", "\"msg\"");

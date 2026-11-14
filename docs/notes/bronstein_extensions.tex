@@ -225,6 +225,9 @@ E3 & Torsion by specialisation with the special places included: goodness
   conditions, injectivity in characteristic~0 & \code{LogPart:special-genus} & v0.6548 \\
 E4.1 & The constant field $\Q(i)$ with a literal $i$: every field built is a
   field over $\Q(i)$ & Phase 4.1 & v0.6551 \\
+E4.1b & $i$ modulo $p\equiv1\pmod4$; Gaussian residue polynomials and $\kappa$ &
+  Phase 4.1b & v0.6554 \\
+E4.2 & The trigonometric front end: \code{TrigToExp} over $\Q(i)$ & Phase 4.2 & v0.6554 \\
 E4 & Symbolic parameters: the verdicts are generic, and which zero tests may be
   generic & Phase 4 & open \\
 E5 & Ideals of the $d=\gcd(e,m)$ ramified places above one special point &
@@ -868,6 +871,112 @@ the torsion code; then the trigonometric front end (\code{TrigToExp}); then
 general number fields through \code{fieldFn[vars, \{alpha, mu, theta\}]}.
 
 \paragraph{Tests.} \code{tests/test\_bronstein\_phase4.c}.
+
+\section*{E4.1b. $i$ modulo $p$, Gaussian residues and $\kappa$}
+\addcontentsline{toc}{section}{E4.1b. i modulo p}
+
+\paragraph{Reduction.} Let $p\equiv1\pmod4$ and let $r$ be the least root of
+$z^2+1$ modulo $p$ (\code{gfSqrtMinusOne}). Then $\mathfrak p=(p,i-r)$ is a
+prime of $\Z[i]$ of degree one, with residue field $\mathrm{GF}(p)$, and
+$a+bi\mapsto a+br$ is the reduction map. Trager's torsion theory ([T]
+Ch.~6~\S2--3) holds for curves over a number field at a prime of good reduction
+of degree one, and so does its specialisation step in E3.
+
+Two conditions make the implementation that map:
+\begin{enumerate}
+\item every reduction goes through \code{gfMod}, which applies it;
+\item when a residue field contains $i$ as $\mathrm{rep}(t)$, the root $\rho$ of
+  $\mu$ modulo $p$ is chosen with $\mathrm{rep}(\rho)\equiv r$
+  (\code{goodPrime}). Otherwise a literal $i$ and $\mathrm{rep}(t)$ would reduce
+  through the two conjugate primes.
+\end{enumerate}
+Primes $p\not\equiv1\pmod4$ are skipped when the data carry~$i$; the good
+primes keep a positive density. A literal $i$ modulo such a prime is refused,
+never reduced.
+
+\paragraph{Gaussian residue polynomials.} An irreducible factor $q$ over $\Q(i)$
+with non-rational coefficients is handed to \code{ToNumberField} through the
+roots of its norm $q\bar q\in\Q[z]$, picked numerically
+(\code{gaussianRootObjects}). The field built contains those roots and $i$.
+
+\paragraph{Gaussian $\kappa$.} Under $\Q(i)$, a Gaussian $\kappa$ at the special
+places is a constant, and the special-place construction is unchanged. Its
+residue field $\Q(i)(\text{roots of }z^m-\kappa)$ is built as above. The
+false certificates of v0.6551 came from reading $\kappa=i$ as non-constant
+(E4.1), not from this path.
+
+\paragraph{Exact identity over a field containing $i$.} The component identity
+check reduces modulo $\mu$ only after writing the literal $i$ in the generator
+(\code{fieldSubI}). Before, a true identity read as nonzero, an Internal error
+and not a wrong answer.
+
+\section*{E4.2. The trigonometric front end (\code{brTrigFrontEnd})}
+\addcontentsline{toc}{section}{E4.2. Trigonometric front end}
+
+\code{TrigToExp} rewrites the circular and hyperbolic functions and their
+inverses into exponentials and logarithms over $\Q(i)$. For example,
+$\arcsin x=-i\log(ix+\sqrt{1-x^2})$ is a logarithm together with the radical.
+That rewrite is an identity of the functions the CAS evaluates, so:
+\begin{itemize}
+\item the integrand $g$ is integrated over $\Q(i)$ (E4.1);
+\item an antiderivative verified against $g$ is one of $f$;
+\item a certificate for $g$ is one for $f$.
+\end{itemize}
+
+A second numeric check against $f$ was dropped. For
+$\int\sqrt{\tan x}\,dx$ the answer carries Root objects of a quartic, and
+\code{PossibleZeroQ} at complex points was numerically unstable on it: at one
+sample it gave $D F-g=3i$ while $f-g=0$.
+
+The trigonometric presentation \code{ExpToTrig[F]} is returned only when it is
+itself verified against~$f$. A trigonometric integrand needs at most one radical
+in the exponential form, and the scope test runs on that form
+(\code{BronsteinScope}).
+
+\paragraph{Results.} On a 13-integral battery, 9 were answered and verified,
+including $\sqrt{\tan x}$, $\tan^{1/3}x$, $\sqrt{1+\sin x}$,
+$\arcsin x/\sqrt{1-x^2}$ and $x\arctan x/\sqrt{1+x^2}$. The other 4 were
+certified:
+\begin{itemize}
+\item $\sqrt{\sin x}$ and $\sqrt{\cos x}$, which are elliptic;
+\item $\sec^{1/3}x$;
+\item $\sqrt{\log x}\sin x$.
+\end{itemize}
+The answers for $\sqrt{\tan x}$ still carry Root objects of the residue field.
+Rewriting them in radicals and in a real form is presentation work for later.
+
+\paragraph{Review (2026-11-14).} The independent review ran about 150 probes and
+found no false certificate and no wrong antiderivative. It confirmed that one
+reduction map is used on every path (E4.1b), the soundness of a Gaussian
+$\kappa$, and \code{TrigToExp} at 14 points per head.
+
+Three of its findings were fixed in v0.6554:
+\begin{itemize}
+\item The hyperbolic presentation \code{ExpToTrig} wrote $e^{-kx}$ as
+  $\cosh kx-\sinh kx$, which cancels catastrophically at machine precision. It is
+  now only used for circular integrands, and never when it introduces a
+  hyperbolic head.
+\item Residues all in $\Q(i)$ took the $\Q$ shortcut of \code{residueField},
+  which treated $\Q(i)$ as one-dimensional. The field is now built with $i$.
+\item A Gaussian resultant was left by \code{Expand} as a sum of uncancelled
+  fractions. \code{Together} is now applied first.
+\end{itemize}
+
+Two remarks:
+\begin{itemize}
+\item \textbf{The integrand's own branch cut.} At real points where the radicand
+  of $f$ is negative, $f$ sits on its own branch cut. There the presented $F$
+  can reach the other side of the cut, so its machine values differ from those
+  of $f$, although $F'=f$ on every open set. This is why the antiderivative is
+  verified with complex sampling.
+\item \textbf{A latent issue with \code{ArcSech}.} Machine \code{ArcSech} at
+  negative reals disagrees with its exact form and with \code{TrigToExp}.
+  Integrands with \code{ArcSech} are declined today: the rewrite has two
+  radicals. If that changes, the identity claim must be rechecked.
+\end{itemize}
+
+\paragraph{Tests.} \code{tests/test\_bronstein\_trig.c}, and gap-log entries
+E41b-1 to E41b-3 and E42-1 to E42-5.
 
 \part*{Part C. The gap log: what each extension closes}
 \addcontentsline{toc}{part}{Part C}

@@ -1579,8 +1579,9 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [ ] brParamIntegrate -> LimitedIntegrate; LogPart:171; Divisors multi-ramified (E5); Tower:logrel/exprel robustness
 - [ ] Phase 4: constant fields (NF, Q(i)+trig, parameters)
   - [x] 4.1 Q(i) with a literal I: tragerFactorList, residue fields containing i (fieldSubI), mod-p refusal, Q(i) coefficient tests — v0.6551
-  - [ ] 4.1b map I to sqrt(-1) mod p = 1 (4) in TorsionModP (removes TorsionModP:complex); Trager:residue-field-QI (tower method over Q(i))
-  - [ ] 4.2 trig front end (TrigToExp; Sqrt[Tan[x]] first; compare hypertangent-monomial route)
+  - [x] 4.1b I mod p (gfMod, goodPrime consistent root), Gaussian residue polynomials, Gaussian kappa — v0.6554
+  - [x] 4.2 trig front end (TrigToExp) — v0.6554
+  - [ ] presentation: Root objects in Sqrt[Tan[x]]-type answers -> radicals / real form; Trager:residue-field-QI (tower method over Q(i))
   - [ ] 4.3 general number fields (fieldFn[vars, {alpha, mu, theta}]); 4.4 symbolic parameters (E4)
   - [ ] flaky under full parallel ctest load (seen 3x since v0.6548, never alone or in a fresh loaded process): integrate_cascade_trager_bronstein_tests:89, Check[Integrate[5/((x - 3) Sqrt[x^3 - 2]), x]; "ok", "msg"] gets "msg" in 1.9 s -- an order/state-dependent message in the same process, not a timeout; find the message name (wrap with a $MessageList print in the suite)
 - [ ] Phase 5: radical anywhere (brDField, transcendental Risch over algebraic base, RDE on a curve over a tower)
