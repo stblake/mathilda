@@ -240,7 +240,7 @@ brPresentationTime[] := With[{left = Internal`TimeConstrainedRemaining[]},
   If[NumericQ[left], Min[brOption["PresentationTime"], Max[left/3, 0.01]], brOption["PresentationTime"]]];
 
 BronsteinScope[f_, x_Symbol] := With[{g = brTrigFrontEnd[f]},
-  Block[{tragerConstantI = brConstantField[g] === "QI"}, brScopeBody[g, x]]];
+  Block[{tragerConstantI = brConstantField[g] === "QI", tragerAlgConstants = brAlgConstantsOf[g]}, brScopeBody[g, x]]];
 
 brTrigFrontEnd::usage = "brTrigFrontEnd[f] is f with its trigonometric and hyperbolic functions and their inverses rewritten by TrigToExp into exponentials and logarithms (ArcSin[x] -> -I Log[I x + Sqrt[1 - x^2]]: a logarithm plus the radical), an identity on every branch the CAS uses; f itself when it has none of them (Phase 4.2).";
 brTrigFrontEnd[f_] := If[FreeQ[f, brElementaryUnimplementedHeads[]], f, TrigToExp[f]];
@@ -264,11 +264,34 @@ brScopeBody[f_, x_Symbol] := Module[{r},
     MemberQ[{"Incomplete", "Unimplemented"}, First[brFailTag[r]]], failToList[r],
     True, "NotApplicable"]];
 
+BronsteinIntegrate[f_, x_Symbol] /; Head[f] === Times && AnyTrue[List @@ f, FreeQ[#, x] && ! NumberQ[#] &] &&
+    brAlgebraicConstantQ[Select[f, FreeQ[#, x] &]] :=
+  (* a constant factor by linearity: c Int g, so Sqrt[2] Sqrt[Log[x]] is decided
+     over Q (with a real certificate), not over Q(Sqrt[2]) (Phase 4.3).  Only
+     for an ALGEBRAIC c, decided exactly by RootReduce: an unsimplified zero
+     ((1 + Sqrt[2])^2 - 3 - 2 Sqrt[2]) made a certificate for g one for 0 Int g
+     (review of 4.3); its integral is 0.  A transcendental c (Log[4] - 2 Log[2])
+     takes the normal path. *)
+  Module[{c = Select[f, FreeQ[#, x] &], cr, r},
+    cr = RootReduce[c];
+    If[cr === 0, Return[0, Module]];
+    If[! NumericQ[cr] || cr === ComplexInfinity, Return[BronsteinIntegrate[Together[f], x] /; False, Module]];
+    r = BronsteinIntegrate[Together[f/c], x];
+    If[ListQ[r], r, c r]];
+
+brAlgebraicConstantQ::usage = "brAlgebraicConstantQ[c] is True when the constant c is an explicit algebraic number (rationals, I and radicals of rationals combined by arithmetic) whose value RootReduce decides: nonzero and finite, or exactly 0.";
+brAlgebraicConstantQ[c_] := NumericQ[c] &&
+  FreeQ[c, Pi | E | EulerGamma | Catalan | GoldenRatio | _Log | _Real | _Root | _AlgebraicNumber |
+    (Sin | Cos | Tan | Cot | Sec | Csc | Exp | ArcTan | ArcSin | ArcCos | Sinh | Cosh | Tanh)[___]] &&
+  FreeQ[c, Power[b_, e_] /; ! (rationalNumberQ[e] && (rationalNumberQ[b] || NumericQ[b]))] &&
+  With[{cr = Quiet[RootReduce[c]]}, cr === 0 || (NumericQ[cr] && cr =!= ComplexInfinity && FreeQ[cr, Indeterminate])];
+
 BronsteinIntegrate[f_, x_Symbol] := Module[{r, g = brTrigFrontEnd[f]},
   (* the trigonometric front end (Phase 4.2): TrigToExp is an identity, so a
      certificate for g is one for f; the constant field is that of g (Q(i)
      when TrigToExp brought in I, Phase 4.1) *)
-  r = Block[{tragerConstantI = brConstantField[g] === "QI"}, brCatch[brIntegrateBody[g, x]]];
+  r = Block[{tragerConstantI = brConstantField[g] === "QI", tragerAlgConstants = brAlgConstantsOf[g]},
+    nfDemoteCertificate[brCatch[brIntegrateBody[g, x]]]];
   (* r is verified against g inside the pipeline, and g = TrigToExp[f] is an
      identity; a second numeric check against the trigonometric form only adds
      noise (Int Sqrt[Tan[x]]: the Root-laden answer is numerically unstable at

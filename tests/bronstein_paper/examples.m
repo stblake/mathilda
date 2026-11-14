@@ -176,5 +176,24 @@ bronsteinPaperExamples = {
   "before" -> "implementation incomplete", "note" -> "a cube root of the secant"|>,
 <|"id" -> "E42-5", "gap" -> "Tower:trig", "theory" -> "E4.2", "version" -> "v0.6554",
   "kind" -> "Integrate", "f" -> Hold[x ArcTan[x]/Sqrt[1 + x^2]], "expect" -> "elementary",
-  "before" -> "implementation incomplete", "note" -> "inverse tangent as logarithms over Q(i), beside the radical"|>
+  "before" -> "implementation incomplete", "note" -> "inverse tangent as logarithms over Q(i), beside the radical"|>,
+(* ---- E4.3: number-field constants (v0.6556) --------------------------------- *)
+<|"id" -> "E43-1", "gap" -> "Tower:algebraic-constant, nested-radical misclassification", "theory" -> "E4.3", "version" -> "v0.6556",
+  "kind" -> "Integrate", "f" -> Hold[Sqrt[x + Sqrt[2]]/x], "expect" -> "elementary",
+  "before" -> "implementation incomplete (read as nested radicals)", "note" -> "a radical of a constant inside the radicand is a number-field constant; residues in Q(Sqrt[2], ...)"|>,
+<|"id" -> "E43-2", "gap" -> "Tower:algebraic-constant", "theory" -> "E4.3", "version" -> "v0.6556",
+  "kind" -> "Integrate", "f" -> Hold[Sqrt[x + 2^(1/3)]/x], "expect" -> "elementary",
+  "before" -> "implementation incomplete", "note" -> "the residue field Q(2^(1/3), roots) built with the constant adjoined"|>,
+<|"id" -> "E43-3", "gap" -> "Tower:algebraic-constant", "theory" -> "E4.3", "version" -> "v0.6556",
+  "kind" -> "Integrate", "f" -> Hold[Sqrt[Sqrt[2] + Log[x]]/x], "expect" -> "elementary",
+  "before" -> "implementation incomplete", "note" -> "Shape A over Q(Sqrt[2])(x)(Log[x])"|>,
+<|"id" -> "E43-4", "gap" -> "Tower:algebraic-constant", "theory" -> "E4.3", "version" -> "v0.6556",
+  "kind" -> "Integrate", "f" -> Hold[x/Sqrt[x^4 + Sqrt[5]]], "expect" -> "elementary",
+  "before" -> "implementation incomplete", "note" -> "Trager over Q(Sqrt[5]): a quartic radicand with an irrational constant"|>,
+<|"id" -> "E43-6", "gap" -> "Tower:algebraic-constant", "theory" -> "E4.3", "version" -> "v0.6556",
+  "kind" -> "Integrate", "f" -> Hold[Sqrt[2] Sqrt[Log[x]] Log[x + 1]], "expect" -> "nonelementary",
+  "before" -> "implementation incomplete (open-gap register G-nf-1)", "note" -> "closed by linearity: the constant factor leaves"|>,
+<|"id" -> "E43-5", "gap" -> "Tower:algebraic-constant", "theory" -> "E4.3", "version" -> "v0.6556",
+  "kind" -> "Integrate", "f" -> Hold[Sqrt[2] Sqrt[Log[x]]], "expect" -> "nonelementary",
+  "before" -> "implementation incomplete", "note" -> "a constant factor leaves by linearity: decided over Q with a real certificate"|>
 };

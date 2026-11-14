@@ -199,8 +199,9 @@ TragerIntegrateCurve[a_, x_Symbol, m_Integer, G_, method_String : "Trager"] := M
 TragerIntegrate[f_, x_Symbol, method_String : "Trager"] := Module[{r},
   (* constant field Q(i) for Gaussian-rational constants (keeps an outer
      setting: Bronstein calls in with the flag already on) *)
-  r = Block[{tragerConstantI = TrueQ[tragerConstantI] || !FreeQ[f, _Complex]},
-    catchTrager[tragerIntegrateBody[f, x, method]]];
+  r = Block[{tragerConstantI = TrueQ[tragerConstantI] || !FreeQ[f, _Complex],
+             tragerAlgConstants = If[tragerAlgConstants =!= {}, tragerAlgConstants, tragerConstantsOf[f]]},
+    nfDemoteCertificate[catchTrager[tragerIntegrateBody[f, x, method]]]];
   If[tragerFailQ[r], failToList[r], r]];
 
 xPowerReduce::usage = "xPowerReduce[f, x] is {k, g, u} when f = x^(k-1) g(x^k) syntactically for some k in 6..2 (f/x^(k-1) mentions x only through powers x^(j k)), so that Integrate[f, x] = G(x^k)/k with G' = g: an exact identity, valid for all complex x since u = x^k is entire. None otherwise.";

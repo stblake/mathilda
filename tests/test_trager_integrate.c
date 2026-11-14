@@ -204,7 +204,9 @@ static void test_checks(void) {
     TR_TRUE("Module[{f = 1/(x^4 + 1), r}, r = TragerIntegrate[f, x]; !ListQ[r] && antiderivativeQ[f, r, x]]");
     TR_TRUE("Module[{f = ((1 + Sqrt[3]) x^2 - 4 Sqrt[3] + 4)/((9 + 5 Sqrt[3]) x^4 + 24 x^2 - 80 Sqrt[3] + 144), r},"
             " r = TragerIntegrate[f, x]; !ListQ[r] && antiderivativeQ[f, r, x]]");
-    TR_TRUE("ListQ[TragerIntegrate[Sqrt[2] x/Sqrt[x^2 + 1], x]]");   /* radical + algebraic constant: still out of scope */
+    /* Phase 4.3: a radical with a number-field constant is in scope; the answer is verified */
+    TR_TRUE("With[{F = TragerIntegrate[Sqrt[2] x/Sqrt[x^2 + 1], x]}, !ListQ[F] && antiderivativeQ[Sqrt[2] x/Sqrt[x^2 + 1], F, x]]");
+    TR_TRUE("With[{F = TragerIntegrate[Sqrt[2] x^(1/2), x]}, !ListQ[F] && antiderivativeQ[Sqrt[2] x^(1/2), F, x]]");   /* was a decline */
     /* antiderivativeQ */
     TR_TRUE("antiderivativeQ[1/Sqrt[x^2 + 1], Log[x + Sqrt[x^2 + 1]], x]");
     TR_TRUE("antiderivativeQ[1/Sqrt[x^2 + 1], ArcSinh[x] + 7, x]");
@@ -360,7 +362,6 @@ static const char* const nonelem_trager_only[] = {
 static const char* const declines[] = {
     "Sqrt[x] + Sqrt[x + a]",          /* compositum over Q(a): the Kummer pieces decline */
     "Exp[x]/Sqrt[x]",
-    "Sqrt[2] x^(1/2)",                /* algebraic constant */
     "Sin[x] Sqrt[x]",
     "Sqrt[x^2 + a]",                  /* parameter */
     "x^Pi",

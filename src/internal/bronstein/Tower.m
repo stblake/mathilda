@@ -76,6 +76,9 @@ brGaussianRationalQ[c_] := MatchQ[c, Complex[(_Integer | _Rational), (_Integer |
 brConstantField::usage = "brConstantField[e] is the constant field the expression e needs: \"Q\", or \"QI\" when a Gaussian rational occurs (Phase 4.1; bronstein_extensions.tex E4.1).";
 brConstantField[e_] := If[FreeQ[e, _Complex], "Q", "QI"];
 
+brAlgConstantsOf::usage = "brAlgConstantsOf[e] is the list of radical constants of e (tragerConstantsOf): the generators of its number-field constant field besides I (Phase 4.3).";
+brAlgConstantsOf[e_] := tragerConstantsOf[e];
+
 brKernelPattern::usage = "brKernelPattern[] matches a Log or Exp kernel, Log[a] or Power[E, b].";
 brKernelPattern[] := Log[_] | Power[E, _];
 
@@ -251,8 +254,10 @@ brDetectRadical::usage = "brDetectRadical[fs, vars] finds the single radical of 
 brDetectRadical[fs_, vars_List] := Module[{pows, bases, b0, exps, cyc},
   pows = DeleteDuplicates[Cases[fs, Power[b_, r_Rational] /; brDependsQ[b, vars], {0, Infinity}]];
   If[pows === {}, Return[None]];
-  If[!FreeQ[First /@ pows, Power[_, _Rational]], throwIncomplete["nested radicals"]];
-  If[!FreeQ[fs, Power[c_, _Rational] /; !brDependsQ[c, vars]],
+  (* a radical of a constant inside a radicand is a number-field constant, not
+     nesting (Phase 4.3) *)
+  If[!FreeQ[First /@ pows, Power[b_, _Rational] /; brDependsQ[b, vars]], throwIncomplete["nested radicals"]];
+  If[!FreeQ[fs, Power[c_, _Rational] /; !brDependsQ[c, vars] && !(tragerAlgConstants =!= {} && rationalNumberQ[c])],
     throwUnimplemented["Tower:algebraic-constant", "algebraic constant in the integrand (a number-field constant field)"]];
   bases = Together[First[#]] & /@ pows;
   b0 = First[bases];
@@ -400,7 +405,8 @@ brRationalInQ[e_, vars_List] := Module[{t = Together[e], num, den},
   num = Expand[Numerator[t]]; den = Expand[Denominator[t]];
   PolynomialQ[num, vars] && PolynomialQ[den, vars] &&
     Complement[Variables[{num, den}], vars] === {} &&
-    FreeQ[{num, den}, Power[_, _Rational] | _Real] && FreeQ[{num, den}, c_Complex /; !brGaussianRationalQ[c]]];
+    FreeQ[{num, den}, Power[b_, _Rational] /; !(tragerAlgConstants =!= {} && rationalNumberQ[b])] &&
+    FreeQ[{num, den}, _Real] && FreeQ[{num, den}, c_Complex /; !brGaussianRationalQ[c]]];
 
 brTower::usage = "brTower[f, x] is the tower record of the integrand f (see the header of Tower.m): kernels replaced by monomials, the radical detected, the shape classified and, for Shape A, theta moved to the top. Throws a Decline outside the scope.";
 brTower[f0_, x_Symbol] := Module[{f, fs, monos, vars, rad, shape, theta = None, kind = None, lower, bsyms, pos, above},

@@ -75,9 +75,13 @@ rationalPolyQ::usage = "rationalPolyQ[p, x] is True when p is a polynomial in x 
 rationalPolyQ[p_, x_Symbol] :=
   PolynomialQ[p, x] && AllTrue[CoefficientList[Expand[p], x], constantFieldNumberQ];
 
-constantFieldNumberQ::usage = "constantFieldNumberQ[c] is True when c is in the constant field in use: a rational number, or a Gaussian rational while tragerConstantI is True (Q(i), Bronstein Phase 4.1).";
+constantFieldNumberQ::usage = "constantFieldNumberQ[c] is True when c is in the constant field in use: a rational number; a Gaussian rational while tragerConstantI is True (Q(i), Phase 4.1); an explicit algebraic number built from rationals and radicals of rationals while tragerAlgConstants is non-empty (Phase 4.3).";
 constantFieldNumberQ[c_] := rationalNumberQ[c] ||
-  (TrueQ[tragerConstantI] && MatchQ[c, Complex[(_Integer | _Rational), (_Integer | _Rational)]]);
+  (TrueQ[tragerConstantI] && MatchQ[c, Complex[(_Integer | _Rational), (_Integer | _Rational)]]) ||
+  (tragerAlgConstants =!= {} && NumericQ[c] &&
+    FreeQ[c, Pi | E | EulerGamma | Catalan | _Log | _Real | _Root | _AlgebraicNumber] &&
+    FreeQ[c, Power[b_, e_] /; ! (rationalNumberQ[b] && rationalNumberQ[e]) && ! (rationalNumberQ[e] && IntegerQ[e])] &&
+    (TrueQ[tragerConstantI] || FreeQ[c, _Complex]));
 
 rationalFunctionQ::usage = "rationalFunctionQ[e, x] is True when e is a rational function of x with coefficients in the constant field (constantFieldNumberQ).";
 rationalFunctionQ[e_, x_Symbol] := Module[{t = Together[e]},
@@ -117,4 +121,20 @@ tragerConstantI::usage = "tragerConstantI is True while an integrand with Gaussi
 tragerConstantI = False;
 
 tragerFactorList::usage = "tragerFactorList[p] is FactorList[p] over the constant field: over Q(i) (Extension -> I) when tragerConstantI is True, so an irreducible factor is irreducible over the constants actually in use (a factor irreducible over Q but split over Q(i), z^2 + 1, would make Q(i)[t]/(mu) a ring with zero divisors and its zero tests wrong). Over Q otherwise.";
-tragerFactorList[p_] := If[TrueQ[tragerConstantI], FactorList[p, Extension -> I], FactorList[p]];
+tragerFactorList[p_] := With[{ext = tragerExtension[]},
+  If[ext === {}, FactorList[p], FactorList[p, Extension -> ext]]];
+
+tragerAlgConstants::usage = "tragerAlgConstants is the list of the algebraic constants of the integrand other than I -- radicals of rational numbers such as Sqrt[2], 2^(1/3) -- while it is integrated (constant field Q(i?, constants), Bronstein Phase 4.3): factorisations are over the field they generate (tragerFactorList), residue fields contain them, and reduction mod p refuses them (gfMod).";
+tragerAlgConstants = {};
+
+tragerExtension::usage = "tragerExtension[] is the list of algebraic generators of the constant field in use, for FactorList's Extension option: I when tragerConstantI is True, then tragerAlgConstants.";
+tragerExtension[] := Join[If[TrueQ[tragerConstantI], {I}, {}], tragerAlgConstants];
+
+tragerConstantsOf::usage = "tragerConstantsOf[f] is the list of the radical constants of f: every Power[r, q] with r a rational number and q a non-integer rational (Sqrt[2], 2^(1/3), (-3)^(1/4)), DeleteDuplicates'd.";
+tragerConstantsOf[f_] := DeleteDuplicates[Cases[{f}, p : Power[r_, q_Rational] /; rationalNumberQ[r] :> p, Infinity]];
+
+nfDemoteCertificate::usage = "nfDemoteCertificate[r] is the failure r unchanged, except that a NonElementary certificate becomes Unimplemented (site NF:certificate) while radical constants are in use (tragerAlgConstants non-empty, Phase 4.3): the base-field arithmetic over Q is exact for Gaussian rationals but not for radicals (1/(1 + Sqrt[2]) is not rationalised), so a zero can read as nonzero and a verdict is not yet a proof. Answers are unaffected: they are verified.";
+nfDemoteCertificate[r_] := If[tragerAlgConstants =!= {} && tragerFailQ[r] && r[[1]] === "NonElementary",
+  tragerFail["Unimplemented", "non-elementarity over a number-field constant field is not yet certified (" <> r[[2]] <> ")",
+    <|"site" -> "NF:certificate"|>], r];
+

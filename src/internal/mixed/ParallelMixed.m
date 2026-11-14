@@ -3204,6 +3204,10 @@ pmtGeneratorCount[f_, x_Symbol] := Module[{logs, expo, trig, inv, groups},
 pmtConfirmCertificate::usage = "pmtConfirmCertificate[f, x, r] passes the result r of the surface integrator through unless it is a non-elementarity certificate; a certificate stands only when an independent decider confirms it -- Risch`ElementaryIntegralQ[f, x] === False for a radical-free f, a certificate of Integrate`Bronstein[f, x] otherwise -- and becomes {\"failed\", ...} otherwise. The tower builder does not prove its generators independent (adversarial review 2026-11-14: E^((2+I) x) beside E^(2 x) and E^(I x), E^x beside a flattened Sqrt[E^x + 1], and x^(x-1) beside x^x on a rebuilt tower each gave a false certificate); both deciders treat a dependent tower as undecided.";
 pmtConfirmCertificate[f_, x_Symbol, r_] := Module[{c, ks},
   If[! MatchQ[r, {"not elementary", ___}], Return[r]];
+  (* radical constants: the arithmetic over Q is not exact for them (Phase 4.3,
+     review: 1/(Sqrt[2] + x^2)^(3/2) was certified) -- no certificate *)
+  If[! FreeQ[f, Power[b_, q_Rational] /; NumberQ[b]],
+    Return[{"failed", "non-elementarity over a number-field constant field is not yet certified", Rest[r]}]];
   (* at most one Log/Exp kernel: the tower has one transcendental generator
      (a flattened radical replaces the kernel it is over), so there is no
      relation between generators to miss; every false certificate the review

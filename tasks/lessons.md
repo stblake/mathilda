@@ -5347,4 +5347,10 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   its own recursion turned a genuine inner certificate into a failure (the outer Check sees the
   confirmers' messages, and a helper silently relied on `Gather[list, test]`, which is unimplemented).
   Bisect a regression by file variant (wrapper only / fix only) -- it took one step.
+- **The nested-Return pitfall bit again (Phase 4.3).** `Return[...]` inside an inner `Module` (or
+  `With`) in a .m function only leaves that inner scope; the function then fell through to its
+  generic return and dropped the residue field's "I" key -- a false certificate on Sqrt[Tan[x]].
+  Rule: never `Return` from a nested scope; compute into outer locals and return at the end, or use
+  `Return[..., Module]` from the outermost Module only. A battery that re-runs the previous phase's
+  examples caught it before release.
 

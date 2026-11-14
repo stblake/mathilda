@@ -228,6 +228,8 @@ E4.1 & The constant field $\Q(i)$ with a literal $i$: every field built is a
 E4.1b & $i$ modulo $p\equiv1\pmod4$; Gaussian residue polynomials and $\kappa$ &
   Phase 4.1b & v0.6554 \\
 E4.2 & The trigonometric front end: \code{TrigToExp} over $\Q(i)$ & Phase 4.2 & v0.6554 \\
+E4.3 & Number-field constants (radicals of rationals): fields that contain them;
+  certificates deferred to 4.3b & Phase 4.3 & v0.6556 \\
 E4 & Symbolic parameters: the verdicts are generic, and which zero tests may be
   generic & Phase 4 & open \\
 E5 & Ideals of the $d=\gcd(e,m)$ ramified places above one special point &
@@ -977,6 +979,86 @@ Two remarks:
 
 \paragraph{Tests.} \code{tests/test\_bronstein\_trig.c}, and gap-log entries
 E41b-1 to E41b-3 and E42-1 to E42-5.
+
+\section*{E4.3. Number-field constants (\code{tragerAlgConstants})}
+\addcontentsline{toc}{section}{E4.3. Number-field constants}
+
+\paragraph{Scope.} The constants of the integrand are radicals of rationals,
+such as $\sqrt2$, $2^{1/3}$, $\sqrt5$, possibly together with~$i$. The constant
+field is $C=\Q(i?,\text{constants})$, and the constants stay literal, as $i$
+did in E4.1.
+
+\paragraph{What carries over from E4.1.}
+\begin{itemize}
+\item Factorisations are over $C$ (\code{tragerFactorList} with
+  \code{Extension}).
+\item An absolute residue field is built with every constant adjoined, and
+  records each constant's representation in its generator. The canonicalisers
+  rewrite \emph{every} radical of a rational in the generator before reducing
+  modulo~$\mu$ (\code{fieldSubI}, \code{fieldConstRep}). That includes the
+  products the arithmetic forms, such as $\sqrt2\sqrt3\to\sqrt6$.
+\item Residue polynomials with algebraic coefficients reach
+  \code{ToNumberField} through their norm. The norm is a resultant against each
+  constant's minimal polynomial, and the roots are picked numerically.
+\item A radical of a constant inside a radicand ($\sqrt{x+\sqrt2}$) is a
+  constant, not nesting.
+\end{itemize}
+
+\paragraph{What does not carry over: certificates.} Trager's component
+integrator works over \code{fieldQ[]}, whose canonical form is
+\code{Expand}. That is exact for Gaussian rationals, because the CAS
+rationalises their denominators. It is not exact for radicals:
+$1/(1+\sqrt2)$ is left as it is, so a zero coefficient can read as nonzero, and
+a ``no'' is not a proof.
+
+On a 14-integral battery this gave two false verdicts before the gate:
+\begin{itemize}
+\item the derivative of $\sqrt{x^3+\sqrt2}+\log(\sqrt{x^3+\sqrt2}+x)$;
+\item $(1+\sqrt3)\sqrt{\tan x}$.
+\end{itemize}
+So with radical constants, a non-elementarity verdict is reported as
+``implementation incomplete'' (\code{NF:certificate}). Answers are unaffected:
+they are verified.
+
+Linearity removes the constants where it can. A constant factor leaves the
+integrand, $\int c\,g=c\int g$, so $\sqrt2\sqrt{\log x}$ is decided, with a
+certificate, over~$\Q$. Phase~4.3b makes the constant field a proper field record,
+\code{fieldNF[t, mu, gamma]}, in the base-field arithmetic.
+
+\paragraph{Torsion.} Reduction modulo $p$ refuses radical constants
+(\code{TorsionModP:algebraic-constant}). Phase~4.3b reduces at a degree-one
+prime of $C$.
+
+\paragraph{A bug caught on the way.} The first version returned the residue
+field from inside a nested \code{Module}. In this CAS a \code{Return} there only
+leaves the inner scope. The generic field, without its $i$ key, was returned
+instead. That gave a false certificate on $\int\sqrt{\tan x}\,dx$, a
+\emph{regression} of E4.2, caught by the battery before release.
+
+\paragraph{Results.}
+\begin{itemize}
+\item 8 of 14 battery integrals are answered and verified, including
+  $\sqrt{x+\sqrt2}/x$, $\sqrt{x+2^{1/3}}/x$ and $x/\sqrt{x^4+\sqrt5}$.
+\item 2 are certified over $\Q$ by linearity.
+\item The rest are honest declines, recorded in the gap register.
+\end{itemize}
+
+\paragraph{Review (2026-11-14).} The independent review ran about 940 probes and
+found two false certificates, both fixed before release.
+\begin{itemize}
+\item \textbf{Linearity needs a provably nonzero factor.} The rule
+  $\int cg=c\int g$ certified $c\,g$ with $c=(1+\sqrt2)^2-3-2\sqrt2=0$. It now
+  applies only to an algebraic $c$, which \code{RootReduce} decides exactly; a
+  zero $c$ gives~$0$. A transcendental $c$ (for example $\log4-2\log2$) cannot be
+  decided this way, so it takes the normal path.
+\item \textbf{ParallelMixedTower has the same arithmetic gap.} With radical
+  constants its certificates are demoted too.
+\end{itemize}
+It also confirmed that every other verdict with radical constants was demoted,
+and that a 110-probe sweep on $\Q$ and $\Q(i)$ held.
+
+\paragraph{Tests.} \code{tests/test\_bronstein\_nf.c}, and gap-log entries
+E43-1 to E43-6.
 
 \part*{Part C. The gap log: what each extension closes}
 \addcontentsline{toc}{part}{Part C}

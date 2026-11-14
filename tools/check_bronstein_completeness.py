@@ -76,6 +76,8 @@ BASELINE_M = {
     "Trager:reducible-radical",      # y^n - g reducible -> Phase 3
     "TorsionModP:frame-root",        # no frame root mod p: try another prime -> Phase 3
     "TorsionModP:complex",           # Q(i) data mod p: map I to a square root of -1 mod p -> Phase 4.1
+    "TorsionModP:algebraic-constant",  # radical constants mod p (a degree-1 prime of the constant field) -> Phase 4.3b
+    "Trager:constant-outside-field",   # a radical constant formed outside the residue field -> Phase 4.3b
     "Trager:residue-field-QI",       # residue field over Q(i) past ToNumberField (tower method) -> Phase 4.1
 }
 

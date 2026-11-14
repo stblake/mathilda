@@ -95,6 +95,9 @@ gfMod[e_, p_Integer] := Module[{e1 = e},
      to a + b r, r = gfSqrtMinusOne[p], when p = 1 mod 4 (a homomorphism
      Z[i] -> GF(p)); for p = 2 or 3 mod 4 there is no such map and the data is
      refused (goodPrime skips those primes first) *)
+  (* radical constants (Phase 4.3) have no reduction map here yet *)
+  If[!FreeQ[e1, Power[b_, q_Rational] /; rationalNumberQ[b]],
+    throwUnimplemented["TorsionModP:algebraic-constant", "reduction mod p of data with radical constants (a number-field constant field)"]];
   If[!FreeQ[e1, _Complex],
     If[Mod[p, 4] =!= 1,
       throwUnimplemented["TorsionModP:complex", "reduction of complex constants modulo a prime p != 1 mod 4"]];
@@ -103,7 +106,22 @@ gfMod[e_, p_Integer] := Module[{e1 = e},
 
 kc::usage = "kc[F, e] is the canonical form of the polynomial expression e over the field F: Expand over Q; the remainder modulo mu(t) over Q(theta); gfMod over GF(p). e may be a polynomial in x as well; only coefficients are reduced.";
 fieldSubI::usage = "fieldSubI[F, e] writes the Gaussian rationals of e in the generator of F when F is an absolute number field containing i (key \"I\" -> rep(t), set by residueField over Q(i)): a + b I -> a + b rep. Otherwise e.";
-fieldSubI[F_Association, e_] := If[KeyExistsQ[F, "I"], e /. Complex[a_, b_] :> a + b F["I"], e];
+fieldSubI[F_Association, e_] := Module[{r = e},
+  If[KeyExistsQ[F, "I"], r = r /. Complex[a_, b_] :> a + b F["I"]];
+  (* radical constants (Phase 4.3): every radical of a rational, including the
+     products the arithmetic forms (Sqrt[2] Sqrt[3] -> Sqrt[6]), written in the
+     field's generator (fieldConstRep) *)
+  If[KeyExistsQ[F, "consts"],
+    r = r /. c : Power[b_, q_Rational] /; rationalNumberQ[b] :> fieldConstRep[F, c]];
+  r];
+
+fieldConstRep::usage = "fieldConstRep[F, c] is the radical constant c (a power of a rational with a rational exponent) as a polynomial in the generator t of the absolute number field F (\"consts\" key: rules recorded by residueField, else computed by ToNumberField against the field's theta). A constant not in F is an Unimplemented decline, never a wrong reduction.";
+fieldConstRep[F_Association, c_] := Module[{hit = c /. F["consts"], nf},
+  If[hit =!= c || FreeQ[hit, Power], Return[hit]];
+  nf = Quiet[ToNumberField[c, F["theta"]]];
+  If[Head[nf] =!= AlgebraicNumber,
+    throwUnimplemented["Trager:constant-outside-field", "a radical constant outside the residue field"]];
+  algebraicToPoly[nf, F["theta"], F["t"]]];
 
 kc[F_Association, e_] := Switch[F["Type"],
   "Q", Expand[e],

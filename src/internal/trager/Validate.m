@@ -35,9 +35,11 @@ detectRadical[f_, x_Symbol] := Module[{pows, bases, b0, exps, n},
      (algebraic constants are fine there -- canonicalForm routes it to the
      rational integrator) *)
   If[pows === {}, Return[None]];
-  If[!FreeQ[f, Power[c_, _Rational] /; FreeQ[c, x]],
+  If[!FreeQ[f, Power[c_, _Rational] /; FreeQ[c, x] && !(tragerAlgConstants =!= {} && rationalNumberQ[c])],
     throwUnimplemented["Trager:algebraic-constant", "algebraic constant in the integrand (a number-field constant field)"]];
-  If[!FreeQ[First /@ pows, Power[_, _Rational]],
+  (* a radical of a CONSTANT inside a radicand (Sqrt[x + Sqrt[2]]) is a
+     number-field constant, not nesting *)
+  If[!FreeQ[First /@ pows, Power[b_, _Rational] /; !FreeQ[b, x]],
     throwIncomplete["nested radicals"]];
   (* Normalise each base; a base that is the reciprocal of another base is    *)
   (* the same radicand with the exponent negated.                             *)
