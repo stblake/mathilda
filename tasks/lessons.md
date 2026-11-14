@@ -5377,3 +5377,8 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   reverted. The uncommitted `.m` work was briefly gone from the tree. Recovered with `git apply --include='src/internal/*'`.
 - Rule: to compare against HEAD, use a scratch worktree (`git worktree add`), or revert and restore the same path set
   (`git apply --include=<the same paths>`). Check `git diff --stat` right after restoring.
+
+## 2026-11-15 — batch E: comparing against HEAD with uncommitted work
+- I ran `git stash` to test HEAD behaviour mid-batch and stashed three uncommitted fixes (recovered at once with `git stash pop`).
+- Rule: to compare one change against HEAD, save `git diff <file>` to a patch, `git checkout <file>`, rebuild, test, `git apply` the patch, rebuild, and check timestamps. Never stash the whole tree mid-task.
+- .m pitfall hit twice this batch: a bare `Return[x]` inside `With`/`If` returns from the `With`, not the `Module`. Write `Return[x, Module]`.
