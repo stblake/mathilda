@@ -1360,8 +1360,47 @@ layer under them, over every field type `fieldQ`, `fieldGF`, `fieldNF` (with
 - their consumers: `principalGenerator`, `normalizeAtInfinity`;
 - field operations: `kNorm`, `kExtGCD`, `kDivRem`, `rc`, the trace.
 
-**Design (to be confirmed by a spike, recorded below before the code).**
-1. **Measure first.** A benchmark harness, `tests/bronstein_bench/ideal_ops.m`:
+**Where the code lives (user, 2026-11-15).** The arithmetic is a reusable
+**C library**, not `.m`. Trager and Bronstein are its first clients, not its
+owners. The C Risch integrator, Factor/Together over extensions, Solve and
+the number-field code can call the same API.
+- **A C module tree, `src/poly/ffield/`** (name to be fixed at the spike),
+  with a public header and no evaluator calls inside the kernels
+  ([native kernels: canonical build, no evaluate()]). Three layers:
+  - **fields** (`kf_*`): Q, GF(p), NF = Q(θ), a relative tower K0[Z]/(q)
+    over a number field K0 (constants, Q(i)), and a rational function field
+    K(t_1..t_r) with an optional algebraic extension (the `fieldFn` of
+    Trager). Built on FLINT (`fmpq_poly`, `nmod_poly`, `nf_elem`, `fq_nmod`,
+    `fmpz_mpoly_q`), with element add, mul, inv, norm, trace and the
+    canonical form;
+  - **polynomial matrices over K[x]** (`kpm_*`): Hermite normal form modulo
+    a determinant multiple, adjugate, kernel vector, the Popov/normalised
+    form at infinity;
+  - **fractional ideals of an integral basis** (`afid_*`): the basis with its
+    multiplication tables, ideals in Hermite and two-element form, with
+    product, power, inverse, reduction, equality, the ideal of a place or
+    residue divisor, the principal-generator search and normalisation at
+    infinity.
+- **The Expr bridge.** Protected builtins in a documented context (working
+  name `` FunctionField` ``), each with a docstring, attributes, a page in
+  `docs/spec/builtins/` and a changelog entry.
+  - The `.m` code (`Ideal.m`, `Field.m`, `Normalize.m`, `PrincipalGen.m`)
+    calls them in place of its own arithmetic.
+  - The `.m` implementations stay as the reference route during the
+    migration: a cross-check on the corpora, then retired.
+- **Without FLINT** (`USE_FLINT=0`, the Windows and no-MPFR CI legs), the entry
+  points exist and decline, as `flint_trager` does, and the `.m` route remains
+  the fallback. The no-FLINT build runs before every push.
+- **C tests.**
+  - A C unit suite per layer, `tests/test_ffield_*.c`: arithmetic laws, the
+    uniqueness of the Hermite normal form, and ideal identities such as
+    I·I⁻¹ = O and (IJ)K = I(JK). Each runs over every field type.
+  - valgrind and ASan clean.
+
+**Design of the kernels (to be confirmed by a spike, recorded below before
+the code).**
+1. **Measure first.** A benchmark harness, `tests/bronstein_bench/ideal_ops.m`
+   (plus a C micro-benchmark):
    - each operation on the frozen inputs of G-perf-2/3/4, the E3 tests and
      the Trager corpus, timed per field type;
    - a baseline table checked in;
@@ -1370,27 +1409,24 @@ layer under them, over every field type `fieldQ`, `fieldGF`, `fieldNF` (with
 2. **Two-element representation.**
    - Multiply ideals as `(a, α)·(b, β) = (ab, aβ, bα, αβ)`, then reduce, and
      power them by repeated two-element squaring.
-   - This replaces the n²-row Hermite form of the full product. `twoGenerators`
-     exists already; make it the primary form, with Hermite form only for
-     equality and principal-generator tests.
-3. **A native kernel for `Fn`, by evaluation and interpolation.**
-   - Specialise the parameters (and x where it is a coefficient variable) to
-     points, and run the native NF/GF Hermite form there.
-   - Reconstruct by dense, or sparse (Ben-Or–Tiwari / Zippel), rational
-     function interpolation with early termination.
-   - Certify the result in characteristic 0: the Hermite form is unique, so a
-     reconstructed basis is checked by membership of the generators and
-     equality of determinants, never trusted.
-   - The alternative, a C kernel on FLINT `fmpz_mpoly_q` (fraction-field)
-     coefficients, is decided by the spike.
-4. **Residue fields relative to K0** (G-perf-4):
-   - a residue field over Q(constants) as a tower K0[Z]/(q), with norms and
-     traces down to K0 by resultants over K0's generator, not over Q with
-     literal radicals;
-   - absolute fields (`primitiveFieldByNorm`) only where a single primitive
-     element is genuinely needed (the torsion reduction mod p).
-5. **Modular norms.** `kNorm` / `Resultant` over NF and Fn by CRT over primes
-   (or evaluation points) with a degree bound, instead of the symbolic
+   - This replaces the n²-row Hermite form of the full product. Make it the
+     primary form, with Hermite form only for equality and principal-generator
+     tests.
+3. **Rational-function coefficients.** Decided by the spike:
+   - a direct kernel on `fmpz_mpoly_q` coefficients;
+   - or evaluation and interpolation: specialise the parameters, run the
+     native NF/GF Hermite form, reconstruct by sparse (Ben-Or–Tiwari /
+     Zippel) rational interpolation with early termination, and certify in
+     characteristic 0.
+
+   A reconstructed Hermite basis is never trusted: it is checked by
+   membership of the generators and equality of determinants, since the form
+   is unique.
+4. **Residue fields relative to K0** (G-perf-4): the tower K0[Z]/(q), with
+   norms and traces down to K0. Absolute fields only where one primitive
+   element is genuinely needed (the torsion reduction mod p).
+5. **Modular norms and resultants.** Over NF and Fn by CRT over primes or
+   evaluation points, with a degree bound, instead of the symbolic
    subresultant over radical coefficients.
 
 **Theory (note section E7, before the code it justifies).**
@@ -1402,7 +1438,8 @@ layer under them, over every field type `fieldQ`, `fieldGF`, `fieldNF` (with
 - Each gets an adversarial review and a numeric check, as before.
 
 **Tests.**
-- Unit tests for every new routine, `.m` and C (the coverage gate).
+- Unit tests for every new routine, `.m` and C. The coverage gate is extended
+  to the new C entry points.
 - A property test: random ideals over each field type, with the product,
   power and inverse compared against the current generic route on small
   cases.

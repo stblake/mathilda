@@ -1614,7 +1614,8 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [ ] presentation: Root objects in Sqrt[Tan[x]]-type answers -> radicals / real form; Trager:residue-field-QI (tower method over Q(i))
   - [ ] 4.3 general number fields (fieldFn[vars, {alpha, mu, theta}]); 4.4 symbolic parameters (E4)
   - [ ] flaky: integrate_cascade_trager_bronstein_tests:89 -- also seen ALONE (2026-11-14, ~1 in 3); $MessageList is EMPTY when it fires and no anonymous mth_msg_note_fired runs (lldb), and it passes under lldb: a timing-dependent Check frame marked without a recorded message (suspect: a TimeConstrained unwind around a Quiet/Check frame)
-- [ ] Phase 4.5 (added 2026-11-15, user; before 4.4): efficient ideal and field arithmetic — plan in BRONSTEIN_PLAN.md "Phase 4.5"
+- [ ] Phase 4.5 (added 2026-11-15, user; before 4.4): efficient ideal and field arithmetic as a REUSABLE C LIBRARY (user: "in C so it can be reusable elsewhere") — plan in BRONSTEIN_PLAN.md "Phase 4.5"
+  - [ ] C module (fields kf_*, polynomial matrices kpm_*, ideals afid_*), public header, FunctionField` builtins + docs; .m clients switched; .m route kept as cross-check, then retired; no-FLINT entry points decline
   - [ ] benchmark harness + baseline (ideal ops per field type on G-perf-2/3/4, E3, Trager corpus); nightly ratchet
   - [ ] spike: Fn kernel by evaluation/interpolation + certification vs a C kernel on fmpz_mpoly_q; record the decision
   - [ ] two-element representation as the primary ideal form (product, power)
