@@ -5354,3 +5354,13 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   `Return[..., Module]` from the outermost Module only. A battery that re-runs the previous phase's
   examples caught it before release.
 
+
+## 2026-11-14: a version bump chained after a failing `git fetch --tags`
+- In this repo `git fetch --tags origin` exits 1 (remote v0.237 would clobber the local tag). Bump commands of the form
+  `git fetch --tags && sed ... version.h && ...; git add; git commit` skipped the sed and still committed, so v0.6558 and
+  v0.6559 carry 0.6557. A heredoc commit that failed was followed by `git tag && git push` on the next line, which put
+  v0.6560 on the old commit. Fixed forward as v0.6561; no tag moved.
+- Rule: check free tags with `git ls-remote --tags`; bump as its own step; read the header and `$VersionNumber` back;
+  tag only after `git log -1` shows the commit, in a separate call.
+- Related: a binary older than its source after `git checkout` (make missed the timestamp) let a reverted change keep
+  running for an hour. After any checkout of a C file, `touch` it and check `ls -l file.c file.o`.
