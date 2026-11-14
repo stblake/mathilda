@@ -6706,6 +6706,13 @@ if(PYTHON3_EXE)
              COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/bronstein_paper_table.py --check
              WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
     set_tests_properties(bronstein_paper_examples PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 3600)
+    # The register of KNOWN OPEN GAPS: each entry must still behave as recorded;
+    # a CHANGED one (a gap closed or moved) fails until the record is updated.
+    # Nightly: several entries are timeouts by design.
+    add_test(NAME bronstein_open_gaps_stress
+             COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/bronstein_paper_table.py --open-gaps --check
+             WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/..)
+    set_tests_properties(bronstein_open_gaps_stress PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 7200 LABELS nightly)
     add_test(NAME bronstein_stress
              COMMAND ${PYTHON3_EXE} ${CMAKE_CURRENT_SOURCE_DIR}/../tools/bronstein_stress/stress.py
                      --seeds 10-39 --count 20 --budget 30 --max-open 8

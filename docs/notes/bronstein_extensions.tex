@@ -1007,4 +1007,19 @@ below, timings included (seconds, \code{Method -> "Bronstein"}, one core).
   $L=\log x$: 225~s.
 \end{itemize}
 
+\part*{Part D. Known open gaps}
+\addcontentsline{toc}{part}{Part D}
+
+Every known gap, in the campaign and in the lower layers its reviews uncovered,
+is recorded in \code{tests/bronstein\_paper/open\_gaps.m}, with an example and its
+current behaviour. The nightly ctest \code{bronstein\_open\_gaps\_stress} checks
+that each entry still behaves as recorded. An entry that changes (a gap closed
+or moved) fails the check until it is moved into the gap log (Part~C) together
+with its fix. \code{tools/bronstein\_paper\_table.py --open-gaps} regenerates the
+table below.
+
+\begingroup\small\sloppy
+\input{bronstein_open_gaps_table.tex}
+\endgroup
+
 \end{document}

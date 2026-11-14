@@ -1577,6 +1577,9 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [x] #12 weights: theorem E6e (they vanish), Internal invariant; exp special places keep the site — v0.6550
   - [ ] perf: 13 of 120 random m = 3,4 components time out at 30 s
   - [ ] brParamIntegrate -> LimitedIntegrate; LogPart:171; Divisors multi-ramified (E5); Tower:logrel/exprel robustness
+- **Known open gaps: the machine-checked register `tests/bronstein_paper/open_gaps.m`** (Part D of
+  docs/notes/bronstein_extensions.tex; nightly ctest bronstein_open_gaps_stress). Every newly found gap
+  goes there with an example the same day; closing one moves it to examples.m.
 - [ ] Phase 4: constant fields (NF, Q(i)+trig, parameters)
   - [x] 4.1 Q(i) with a literal I: tragerFactorList, residue fields containing i (fieldSubI), mod-p refusal, Q(i) coefficient tests — v0.6551
   - [x] 4.1b I mod p (gfMod, goodPrime consistent root), Gaussian residue polynomials, Gaussian kappa — v0.6554
