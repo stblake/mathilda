@@ -60,7 +60,7 @@ rootMultiplicity[F_Association, G_, a_, x_Symbol] := Module[{g = kc[F, G], e = 0
 frameRoots::usage = "frameRoots[F, G, m, x] lists the roots a in F of the polynomial G (over Q: rational roots; over GF(p): roots mod p) whose multiplicity is prime to m: the points at which the reduced frame can be centred.";
 frameRoots[F_Association, G_, m_Integer, x_Symbol] := Module[{lin},
   lin = Select[
-    If[F["Type"] === "GF", FactorList[gfMod[G, F["p"]], Modulus -> F["p"]], FactorList[G]],
+    If[F["Type"] === "GF", FactorList[gfMod[G, F["p"]], Modulus -> F["p"]], tragerFactorList[G]],
     Exponent[#[[1]], x] === 1 && GCD[#[[2]], m] === 1 &];
   kc[F, -Coefficient[#[[1]], x, 0] kInv[F, Coefficient[#[[1]], x, 1]]] & /@ lin];
 

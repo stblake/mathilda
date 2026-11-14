@@ -75,7 +75,7 @@ brNormalResidues[T_Association, cv_Association, c_] := Module[{z = Unique["Brons
   If[First[crit] === "NonConstant",
     throwNonElementary["resultant criterion ([B] Prop 2.9): R(z) has non-constant coefficients", <|"R" -> R|>]];
   P = brNonzeroResiduePolynomial[crit[[2]], z];
-  If[!FreeQ[P, _Complex | _Real] || (!FreeQ[P, z] && !AllTrue[CoefficientList[P, z], rationalNumberQ]),
+  If[!FreeQ[P, _Real] || (!FreeQ[P, z] && !AllTrue[CoefficientList[P, z], constantFieldNumberQ]),
     throwUnimplemented["Residues:nonrational", "residue polynomial with non-rational coefficients"]];
   <|"R" -> R, "P" -> P, "z" -> z|>];
 

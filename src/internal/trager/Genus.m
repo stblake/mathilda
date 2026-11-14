@@ -14,7 +14,7 @@
 (* ========================================================================== *)
 
 curveGenus::usage = "curveGenus[m, G, x] is the genus of the curve Y^m = G(x) (G a non-constant polynomial over Q, Y^m - G absolutely irreducible), by Riemann-Hurwitz. curveGenus[m, G, x, p] computes it for the reduction modulo the prime p (p not dividing m), from the factorisation of G over GF(p).";
-curveGenus[m_Integer, G_, x_Symbol] := curveGenusFromFactors[m, Select[FactorList[G], !FreeQ[#[[1]], x] &], Exponent[G, x], x];
+curveGenus[m_Integer, G_, x_Symbol] := curveGenusFromFactors[m, Select[tragerFactorList[G], !FreeQ[#[[1]], x] &], Exponent[G, x], x];
 curveGenus[m_Integer, G_, x_Symbol, p_Integer] := Module[{Gp = gfMod[G, p]},
   curveGenusFromFactors[m, Select[FactorList[Gp, Modulus -> p], !FreeQ[#[[1]], x] &], Exponent[Gp, x], x]];
 

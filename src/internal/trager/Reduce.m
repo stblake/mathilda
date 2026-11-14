@@ -26,7 +26,7 @@
 componentCurve::usage = "componentCurve[n, g, i, x] describes the curve of the component yh^i, where yh^n = g in Q[x]. It returns <|\"m\" -> m, \"G\" -> G, \"s\" -> s, \"exact\" -> exact|>: the component is s Y (exact = True; Y = yh^i/s satisfies Y^m = G, m = n) or s rho Y (exact = False; Y = G^(1/m) is a new radical and rho = (yh^i/s)/G^(1/m) is locally constant). G is a polynomial over Q whose irreducible factors all have multiplicity < m, and Y^m - G is absolutely irreducible; m = 1 (G = 1) means the component is a rational function times rho.";
 componentCurve[n_Integer, g_, i_Integer, x_Symbol] := Module[
   {fl, c, pairs, s = 1, red = {}, d, H, G},
-  fl = FactorList[g];
+  fl = tragerFactorList[g];
   c = Times @@ (#[[1]]^#[[2]] & /@ Select[fl, FreeQ[#[[1]], x] &]);
   pairs = Select[fl, !FreeQ[#[[1]], x] &];
   Do[
@@ -44,5 +44,5 @@ componentCurve[n_Integer, g_, i_Integer, x_Symbol] := Module[
 reducedCurveQ::usage = "reducedCurveQ[m, G, x] is True when Y^m = G is in the form the per-component pipeline requires: m >= 2, G a non-constant polynomial over Q, every irreducible factor of multiplicity < m, and the gcd of m with the multiplicities equal to 1 (absolute irreducibility, [T] p.39).";
 reducedCurveQ[m_Integer, G_, x_Symbol] := Module[{pairs},
   If[m < 2 || !rationalPolyQ[G, x] || FreeQ[G, x], Return[False]];
-  pairs = Select[FactorList[G], !FreeQ[#[[1]], x] &];
+  pairs = Select[tragerFactorList[G], !FreeQ[#[[1]], x] &];
   AllTrue[pairs, #[[2]] < m &] && GCD @@ Join[{m}, Last /@ pairs] === 1];

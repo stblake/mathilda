@@ -4029,6 +4029,13 @@ verified against the user's own integrand. The proofs are in
 | `Integrate[E^(x + Log[x]/2)/x, x, Method -> "Bronstein"]` | `Integrate::nonelem` (`E^x/Sqrt[x]`) |
 | `Integrate[(Log[x^2] - 2 Log[x]) Sqrt[Log[x]], x, Method -> "Bronstein"]` | `Integrate::nonelem` |
 
+**Complex constants (v0.6551).** Gaussian-rational constants are in scope: the
+constant field is Q(i). For example, `Integrate[Sqrt[x + I]/x, x, Method ->
+"Bronstein"]` and `Integrate[1/Sqrt[E^(2 I x) + 1], x, Method -> "Bronstein"]`
+are antiderivatives. Torsion questions over Q(i) on curves of positive genus
+are not decided yet: they report `Integrate::incomplete`. Trigonometric
+functions (through `TrigToExp`) and other number fields are next.
+
 **Special places on curves of positive genus (v0.6548).** A log part with residues
 at `theta = infinity` (a logarithm) or `theta = 0, infinity` (an exponential), on a
 curve of genus at least 1, is decided:

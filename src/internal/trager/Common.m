@@ -71,11 +71,15 @@ failToList[tragerFail["Internal", reason_, _]] := {"failed", "internal: " <> rea
 rationalNumberQ::usage = "rationalNumberQ[c] is True for an explicit integer or rational number.";
 rationalNumberQ[c_] := IntegerQ[c] || Head[c] === Rational;
 
-rationalPolyQ::usage = "rationalPolyQ[p, x] is True when p is a polynomial in x with rational coefficients (after expansion).";
+rationalPolyQ::usage = "rationalPolyQ[p, x] is True when p is a polynomial in x with coefficients in the constant field (after expansion): rationals, and Gaussian rationals under tragerConstantI.";
 rationalPolyQ[p_, x_Symbol] :=
-  PolynomialQ[p, x] && AllTrue[CoefficientList[Expand[p], x], rationalNumberQ];
+  PolynomialQ[p, x] && AllTrue[CoefficientList[Expand[p], x], constantFieldNumberQ];
 
-rationalFunctionQ::usage = "rationalFunctionQ[e, x] is True when e is a rational function of x with rational coefficients.";
+constantFieldNumberQ::usage = "constantFieldNumberQ[c] is True when c is in the constant field in use: a rational number, or a Gaussian rational while tragerConstantI is True (Q(i), Bronstein Phase 4.1).";
+constantFieldNumberQ[c_] := rationalNumberQ[c] ||
+  (TrueQ[tragerConstantI] && MatchQ[c, Complex[(_Integer | _Rational), (_Integer | _Rational)]]);
+
+rationalFunctionQ::usage = "rationalFunctionQ[e, x] is True when e is a rational function of x with coefficients in the constant field (constantFieldNumberQ).";
 rationalFunctionQ[e_, x_Symbol] := Module[{t = Together[e]},
   rationalPolyQ[Numerator[t], x] && rationalPolyQ[Denominator[t], x]];
 
@@ -89,12 +93,12 @@ algebraicRationalFunctionQ[e_, x_Symbol] := Module[{t = Together[e], num, den},
   PolynomialQ[num, x] && PolynomialQ[den, x] &&
     AllTrue[Join[CoefficientList[num, x], CoefficientList[den, x]], algebraicNumberQ]];
 
-rationalInXYQ::usage = "rationalInXYQ[e, x, y] is True when e is a rational function of the two symbols x, y with rational coefficients.";
+rationalInXYQ::usage = "rationalInXYQ[e, x, y] is True when e is a rational function of the two symbols x, y with coefficients in the constant field (constantFieldNumberQ).";
 rationalInXYQ[e_, x_Symbol, y_Symbol] := Module[{t = Together[e], num, den},
   num = Expand[Numerator[t]]; den = Expand[Denominator[t]];
   PolynomialQ[num, {x, y}] && PolynomialQ[den, {x, y}] &&
     AllTrue[Flatten[{CoefficientList[num, {x, y}], CoefficientList[den, {x, y}]}],
-      rationalNumberQ]];
+      constantFieldNumberQ]];
 
 rdeg::usage = "rdeg[r, x] is the degree of the rational function r in x (degree of numerator minus degree of denominator); -Infinity for 0.";
 rdeg[r_, x_Symbol] := Module[{t = Together[r]},
@@ -108,3 +112,9 @@ tragerOption["RealFormTime"] = 5;
 tragerOption["DirectPowerMaxOrder"] = 12;
 tragerOption["NativeKernels"] = True;
 tragerOption["TorsionScreenPrimes"] = 3;
+
+tragerConstantI::usage = "tragerConstantI is True while an integrand with Gaussian-rational constants is integrated (constant field Q(i), Bronstein Phase 4.1). Factorisations are then over Q(i) (tragerFactorList), every number field built contains i or is relative over Q(i), and reduction mod p refuses the data (goodPrimes).";
+tragerConstantI = False;
+
+tragerFactorList::usage = "tragerFactorList[p] is FactorList[p] over the constant field: over Q(i) (Extension -> I) when tragerConstantI is True, so an irreducible factor is irreducible over the constants actually in use (a factor irreducible over Q but split over Q(i), z^2 + 1, would make Q(i)[t]/(mu) a ring with zero divisors and its zero tests wrong). Over Q otherwise.";
+tragerFactorList[p_] := If[TrueQ[tragerConstantI], FactorList[p, Extension -> I], FactorList[p]];

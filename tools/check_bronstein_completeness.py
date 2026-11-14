@@ -74,6 +74,8 @@ BASELINE_M = {
     "Trager:radicand-not-rational",  # symbolic parameters -> Phase 4
     "Trager:reducible-radical",      # y^n - g reducible -> Phase 3
     "TorsionModP:frame-root",        # no frame root mod p: try another prime -> Phase 3
+    "TorsionModP:complex",           # Q(i) data mod p: map I to a square root of -1 mod p -> Phase 4.1
+    "Trager:residue-field-QI",       # residue field over Q(i) past ToNumberField (tower method) -> Phase 4.1
 }
 
 # rde_cert_mark reasons that are mathematical gaps of the C Risch DE (Phase 2).

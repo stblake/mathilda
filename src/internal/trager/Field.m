@@ -52,6 +52,8 @@ fieldFn[vars_List] := <|"Type" -> "Fn", "vars" -> vars|>;
 fieldFn[vars_List, None] := fieldFn[vars];
 fieldFn[vars_List, {t_Symbol, mu_, theta_}] :=
   <|"Type" -> "Fn", "vars" -> vars, "t" -> t, "mu" -> Expand[mu], "theta" -> theta|>;
+fieldFn[vars_List, {t_Symbol, mu_, theta_, iRep_}] :=
+  <|"Type" -> "Fn", "vars" -> vars, "t" -> t, "mu" -> Expand[mu], "theta" -> theta, "I" -> iRep|>;
 
 fieldExtQ::usage = "fieldExtQ[F] is True when F carries an algebraic generator t modulo mu(t): Q(theta) (fieldNF) or Q(theta)(vars) (fieldFn with an extension).";
 fieldExtQ[F_Association] := KeyExistsQ[F, "t"];
@@ -89,9 +91,12 @@ gfMod[e_, p_Integer] :=
   PolynomialMod[Expand[e /. r_Rational :> Mod[Numerator[r] PowerMod[Denominator[r], -1, p], p]], p];
 
 kc::usage = "kc[F, e] is the canonical form of the polynomial expression e over the field F: Expand over Q; the remainder modulo mu(t) over Q(theta); gfMod over GF(p). e may be a polynomial in x as well; only coefficients are reduced.";
+fieldSubI::usage = "fieldSubI[F, e] writes the Gaussian rationals of e in the generator of F when F is an absolute number field containing i (key \"I\" -> rep(t), set by residueField over Q(i)): a + b I -> a + b rep. Otherwise e.";
+fieldSubI[F_Association, e_] := If[KeyExistsQ[F, "I"], e /. Complex[a_, b_] :> a + b F["I"], e];
+
 kc[F_Association, e_] := Switch[F["Type"],
   "Q", Expand[e],
-  "NF", Expand[PolynomialRemainder[Expand[e], F["mu"], F["t"]]],
+  "NF", Expand[PolynomialRemainder[Expand[fieldSubI[F, e]], F["mu"], F["t"]]],
   "GF", gfMod[e, F["p"]],
   "Fn", kcFn[F, e]];
 
@@ -114,7 +119,7 @@ fnCollect[F_Association, num0_, den_] := Module[{num = Expand[num0], pv, rules},
   Total[(Together[#[[2]]/den] Times @@ (pv^#[[1]])) & /@ rules]];
 
 kcFn::usage = "kcFn[F, e] is kc over a rational function field fieldFn: e must be a polynomial in the curve variable(s) with coefficients in F (a denominator involving a non-scalar symbol is an internal error).";
-kcFn[F_Association, e_] := Module[{tt = Together[e], num, den},
+kcFn[F_Association, e_] := Module[{tt = Together[fieldSubI[F, e]], num, den},
   {num, den} = {Numerator[tt], Denominator[tt]};
   If[fieldExtQ[F], {num, den} = fnInvertT[F, num, den]];
   If[!fieldScalarQ[F, den], throwInternal["kcFnNotPolynomial", <|"e" -> e|>]];
@@ -261,7 +266,7 @@ rc[F_Association, e_] := Switch[F["Type"],
   "Fn", rcFn[F, e]];
 
 rcFn::usage = "rcFn[F, e] is rc over a rational function field fieldFn: Together, a t-dependent denominator inverted modulo mu (fnInvertT), the numerator reduced modulo mu. The denominator is a polynomial over Q in the curve variable and the symbols of F; zero, and only zero, maps to 0.";
-rcFn[F_Association, e_] := Module[{tt = Together[e], num, den},
+rcFn[F_Association, e_] := Module[{tt = Together[fieldSubI[F, e]], num, den},
   {num, den} = {Numerator[tt], Denominator[tt]};
   If[fieldExtQ[F],
     {num, den} = fnInvertT[F, num, den];
@@ -276,7 +281,7 @@ rcGFMonic[num_, den_, p_Integer] := Module[{v = Variables[den], lc, inv},
   gfMod[num inv, p]/gfMod[den inv, p]];
 
 rcNF::usage = "rcNF[F, e] is rc over Q(theta): Together, rationalise a t-dependent denominator by its norm, reduce the numerator modulo mu.";
-rcNF[F_Association, e_] := Module[{tt = Together[e], num, den, t = F["t"], nrm, x, cof},
+rcNF[F_Association, e_] := Module[{tt = Together[fieldSubI[F, e]], num, den, t = F["t"], nrm, x, cof},
   num = Numerator[tt]; den = Denominator[tt];
   If[!FreeQ[den, t],
     nrm = Expand[Resultant[den, F["mu"], t]];

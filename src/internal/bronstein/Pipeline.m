@@ -39,7 +39,7 @@ brSplitLogs[F_, logs_List, Y_Symbol, vars_List] := Module[{out = {}, fl, t, merg
   Do[
     If[!FreeQ[lg[[2]], Y], AppendTo[out, lg]; Continue[]];
     t = Together[lg[[2]]];
-    fl = Join[FactorList[Numerator[t]], {#[[1]], -#[[2]]} & /@ FactorList[Denominator[t]]];
+    fl = Join[tragerFactorList[Numerator[t]], {#[[1]], -#[[2]]} & /@ tragerFactorList[Denominator[t]]];
     Do[If[brDependsQ[q[[1]], vars], AppendTo[out, {lg[[1]] q[[2]], q[[1]]}]], {q, fl}],
     {lg, logs}];
   merged = {#[[1, 2]], #} & /@ GatherBy[out, #[[2]] &];
@@ -237,7 +237,9 @@ brPresentationTime::usage = "brPresentationTime[] is the time the real-form pres
 brPresentationTime[] := With[{left = Internal`TimeConstrainedRemaining[]},
   If[NumericQ[left], Min[brOption["PresentationTime"], Max[left/3, 0.01]], brOption["PresentationTime"]]];
 
-BronsteinScope[f_, x_Symbol] := Module[{r},
+BronsteinScope[f_, x_Symbol] := Block[{tragerConstantI = brConstantField[f] === "QI"}, brScopeBody[f, x]];
+brScopeBody::usage = "brScopeBody[f, x] is the body of BronsteinScope (run with the constant field of f in effect).";
+brScopeBody[f_, x_Symbol] := Module[{r},
   If[FreeQ[f, Power[b_, _Rational] /; !FreeQ[b, x]] && FreeQ[f, Root | RootSum], Return["NotApplicable"]];
   r = brCatch[With[{rw = brCompositumRewrite[f /. Exp[a_] :> E^a, x]},
     If[rw === None, brTower[f, x], brTower[rw["g"] /. ((#[[1]] -> 1) & /@ rw["signs"]), x]]]];
@@ -247,5 +249,6 @@ BronsteinScope[f_, x_Symbol] := Module[{r},
     True, "NotApplicable"]];
 
 BronsteinIntegrate[f_, x_Symbol] := Module[{r},
-  r = brCatch[brIntegrateBody[f, x]];
+  (* constant field Q(i) when the integrand has a Gaussian rational (Phase 4.1) *)
+  r = Block[{tragerConstantI = brConstantField[f] === "QI"}, brCatch[brIntegrateBody[f, x]]];
   If[brFailQ[r], failToList[r], r]];

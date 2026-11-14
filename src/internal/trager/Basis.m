@@ -19,7 +19,7 @@
 
 curveBasis::usage = "curveBasis[m, G, x] is the basis descriptor of the curve Y^m = G: an Association with \"m\", \"G\", \"x\", \"deg\" (= deg G), \"factors\" ({{p_j, e_j}}), \"d\" ({d_0..d_(m-1)}), \"s\" ({s_0..s_(m-1)}, the logarithmic derivatives of the w_i), \"delta\" ({delta_i}, the exponents of the local integral basis at infinity) and \"mult\" (an m x m table of {k, factor} with w_i w_j = factor w_k).";
 curveBasis[m_Integer, G_, x_Symbol] := Module[{pairs, d, s, M, delta, mult},
-  pairs = Select[FactorList[G], !FreeQ[#[[1]], x] &];
+  pairs = Select[tragerFactorList[G], !FreeQ[#[[1]], x] &];
   d = Table[Expand[Times @@ (#[[1]]^Floor[i #[[2]]/m] & /@ pairs)], {i, 0, m - 1}];
   s = Table[Together[i D[G, x]/(m G) - D[d[[i + 1]], x]/d[[i + 1]]], {i, 0, m - 1}];
   M = Exponent[G, x];

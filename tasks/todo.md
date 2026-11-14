@@ -1578,6 +1578,11 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [ ] perf: 13 of 120 random m = 3,4 components time out at 30 s
   - [ ] brParamIntegrate -> LimitedIntegrate; LogPart:171; Divisors multi-ramified (E5); Tower:logrel/exprel robustness
 - [ ] Phase 4: constant fields (NF, Q(i)+trig, parameters)
+  - [x] 4.1 Q(i) with a literal I: tragerFactorList, residue fields containing i (fieldSubI), mod-p refusal, Q(i) coefficient tests — v0.6551
+  - [ ] 4.1b map I to sqrt(-1) mod p = 1 (4) in TorsionModP (removes TorsionModP:complex); Trager:residue-field-QI (tower method over Q(i))
+  - [ ] 4.2 trig front end (TrigToExp; Sqrt[Tan[x]] first; compare hypertangent-monomial route)
+  - [ ] 4.3 general number fields (fieldFn[vars, {alpha, mu, theta}]); 4.4 symbolic parameters (E4)
+  - [ ] flaky under full parallel ctest load (seen 3x since v0.6548, never alone or in a fresh loaded process): integrate_cascade_trager_bronstein_tests:89, Check[Integrate[5/((x - 3) Sqrt[x^3 - 2]), x]; "ok", "msg"] gets "msg" in 1.9 s -- an order/state-dependent message in the same process, not a timeout; find the message name (wrap with a $MessageList print in the suite)
 - [ ] Phase 5: radical anywhere (brDField, transcendental Risch over algebraic base, RDE on a curve over a tower)
 - [ ] Theory note docs/notes/bronstein_extensions.tex (E1–E6; LaTeX per user 2026-11-14), each adversarially reviewed — E6a–c written v0.6547, review pending
 - [ ] Close-out

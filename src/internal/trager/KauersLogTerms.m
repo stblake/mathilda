@@ -27,7 +27,7 @@ kauersLogTerms::usage = "kauersLogTerms[ctx] (ctx[\"Ysym\"] the symbol for the c
 kauersLogTerms[ctx_Association] := Module[{B = ctx["B"], x, Y = ctx["Ysym"], Z = ctx["Z"], m, curve, facs, out = {}},
   x = B["x"]; m = B["m"];
   curve = Y^m - B["G"];
-  facs = First /@ Select[FactorList[ctx["R"]], !FreeQ[#[[1]], Z] &];
+  facs = First /@ Select[tragerFactorList[ctx["R"]], !FreeQ[#[[1]], Z] &];
   Do[
     Module[{base, J, Jk, k = 1, p = None},
       base = {curve, q};

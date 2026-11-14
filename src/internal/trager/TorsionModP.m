@@ -123,6 +123,15 @@ orderModPWith[ctx_Association, mk_, gp_Association] := Module[
 
 goodPrimes::usage = "goodPrimes[ctx, k] is a list of k distinct good primes (as goodPrime records) for the component ctx, smallest first. The search is unbounded: a positive density of primes is good (Chebotarev).";
 goodPrimes[ctx_Association, k_Integer] := Module[{found = {}, p = 2, gp},
+  (* Reduction mod p is defined here for data over Q or a number field Q(t)/mu.
+     A literal I (the constant field Q(i), Bronstein Phase 4.1) has no image
+     modulo p = 3 mod 4 and gfMod would reduce it meaninglessly -- a false
+     "orders disagree" certificate.  Until I is mapped to a square root of -1
+     mod p, such data is refused, never reduced. *)
+  If[TrueQ[tragerConstantI] &&
+     !FreeQ[{ctx["B"]["G"], Lookup[ctx, {"N", "Ep", "Bp", "E", "residues", "facs", "R", "alpha", "refc"}, 0],
+             If[ctx["F"]["Type"] === "NF", ctx["F"]["mu"], 0]}, _Complex],
+    throwUnimplemented["TorsionModP:complex", "torsion by reduction mod p with complex constants (constant field Q(i))"]];
   (* All but finitely many primes have good reduction except for the root   *)
   (* condition on the residue field, which a positive density of primes     *)
   (* meets (Chebotarev): the search ends, and needs no bound.               *)

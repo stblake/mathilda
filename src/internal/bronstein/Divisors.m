@@ -19,12 +19,18 @@
 (* part Sum_j (beta_j/N_j) Log[u_j] (Prop 2.13).                              *)
 (* ========================================================================== *)
 
+brFieldOver::usage = "brFieldOver[vars, F0] is the residue field F0 (fieldQ or fieldNF) extended by the transcendentals vars: fieldFn[vars] or fieldFn[vars, {t, mu, theta}], carrying F0's representation of i when it has one (constant field Q(i)).";
+brFieldOver[vars_List, F0_Association] := Which[
+  F0["Type"] =!= "NF", fieldFn[vars],
+  KeyExistsQ[F0, "I"], fieldFn[vars, {F0["t"], F0["mu"], F0["theta"], F0["I"]}],
+  True, fieldFn[vars, {F0["t"], F0["mu"], F0["theta"]}]];
+
 brResidueSetup::usage = "brResidueSetup[T, cv, c, nr] gathers the data of the log part of the normal component c Y whose nonzero-residue polynomial is nr[\"P\"] (brNormalResidues): <|\"F0\" -> residue field over Q (fieldQ or fieldNF), \"Fk\" -> the same over k (fieldFn), \"roots\" -> residues (elements of F0), \"basis\" -> Q-basis beta_j, \"coeffs\" -> b, \"N\", \"E\", \"Ep\", \"Bp\" (residue data in theta), \"B\" -> the integral basis descriptor, \"vars\" -> {x, lower...}|>.";
 brResidueSetup[T_Association, cv_Association, c_, nr_Association] := Module[
   {rd = brResidueData[T, cv, c], t = Unique["Bronstein`Private`brTau"], rf, F0, Fk, qb},
   rf = residueField[nr["P"], nr["z"], t];
   F0 = rf["F"];
-  Fk = If[F0["Type"] === "NF", fieldFn[rd["vars"], {F0["t"], F0["mu"], F0["theta"]}], fieldFn[rd["vars"]]];
+  Fk = brFieldOver[rd["vars"], F0];
   qb = qBasis[F0, rf["roots"]];
   Join[rd, <|"F0" -> F0, "Fk" -> Fk, "roots" -> rf["roots"], "basis" -> qb["basis"], "coeffs" -> qb["coeffs"]|>]];
 

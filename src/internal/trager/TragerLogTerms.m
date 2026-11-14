@@ -139,7 +139,7 @@ tragerOrbitLogTerms::usage = "tragerOrbitLogTerms[ctx] is the logarithmic part o
 tragerOrbitLogTerms[ctx0_Association] := Module[
   {ctx = withFrameAlpha[ctx0], B = ctx0["B"], Z = ctx0["Z"], c, facs, out = {}, failed = False},
   c = referencePoint[ctx];
-  facs = First /@ Select[FactorList[ctx["R"]], !FreeQ[#[[1]], Z] &];
+  facs = First /@ Select[tragerFactorList[ctx["R"]], !FreeQ[#[[1]], Z] &];
   Do[
     If[!failed,
       Module[{qm = Expand[q/Coefficient[q, Z, Exponent[q, Z]]], K, gamma, octx, I0, kappa, spec, scale, Nq, r},

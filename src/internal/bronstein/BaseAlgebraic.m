@@ -114,7 +114,7 @@ brShapeBSplitRemainder[TB_Association, r0_] := Module[{th = TB["theta"], r = Tog
 brShapeBResidueRoots::usage = "brShapeBResidueRoots[P, z] is the list of the irreducible factors of the residue polynomial P(z) (constant coefficients, nonzero roots only) as {mu(z), degree}.";
 brShapeBResidueRoots[P_, z_Symbol] := Module[{p = brNonzeroResiduePolynomial[P, z]},
   If[FreeQ[p, z], Return[{}]];
-  {#[[1]], Exponent[#[[1]], z]} & /@ Select[FactorList[p], !FreeQ[#[[1]], z] &]];
+  {#[[1]], Exponent[#[[1]], z]} & /@ Select[tragerFactorList[p], !FreeQ[#[[1]], z] &]];
 
 brShapeBLogPart::usage = "brShapeBLogPart[TB, cv, a, d, Y] is the logarithmic part of (a/d) Y over k0 = k(Y) (Rothstein-Trager in theta over the field k0, K0.m): it returns <|\"Logs\" -> {{c, u}, ...}, \"Rem\" -> rem|> with rem = (a/d) Y - Sum c Du/u, computed exactly as an element of k0 (coordinate list on cv[\"B\"]) that is a Laurent polynomial in theta. Throws NonElementary when the residues are not constant ([B] Prop 2.9 over k0).";
 brShapeBLogPart[TB_Association, cv_Association, a_, d_, Y_Symbol] := Module[

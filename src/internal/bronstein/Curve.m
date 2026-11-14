@@ -54,7 +54,7 @@ brCanonicalForm[T_Association] := Module[{rad = T["radical"], vars, b, n, p, q, 
 brComponentCurve::usage = "brComponentCurve[T, n, g, i] is the curve of the component yh^i (yh^n = g, g in Q[x, lower][theta]): Trager's componentCurve with theta as the curve variable, <|\"m\", \"G\", \"s\", \"exact\", \"rho\"|> where the component is s rho Y with Y^m = G, Y = yh^i/s (exact, rho = 1) or Y = G^(1/m) and rho a rational constant times the locally constant (yh^i/s)/G^(1/m). Throws a Decline when the content forces a radical extension of the constant field k (see the header).";
 brComponentCurve[T_Association, n_Integer, g_, i_Integer] := Module[{th = T["theta"], cc, fl, c},
   cc = componentCurve[n, g, i, th];
-  fl = FactorList[g];
+  fl = tragerFactorList[g];
   c = Times @@ (#[[1]]^#[[2]] & /@ Select[fl, FreeQ[#[[1]], th] &]);
   If[!cc["exact"] && brDependsQ[c^i, Prepend[T["lower"], T["x"]]],
     throwUnimplemented["Curve:radical-content", "component over a radical extension of the constant field (non-constant content)"]];
@@ -73,5 +73,5 @@ brCurve[T_Association, m_Integer, G_] := Module[{th = T["theta"], dc},
 brReducedCurveQ::usage = "brReducedCurveQ[T, m, G] is True when Y^m = G is in the form the per-component pipeline requires: m >= 2, G a polynomial in theta over Q[x, lower] of positive degree, every theta-irreducible factor of multiplicity < m, and gcd of m with the multiplicities 1 (absolute irreducibility over the algebraic closure of k, [T] p.39).";
 brReducedCurveQ[T_Association, m_Integer, G_] := Module[{th = T["theta"], pairs},
   If[m < 2 || !PolynomialQ[Expand[G], Join[{T["x"]}, T["lower"], {th}]] || FreeQ[G, th], Return[False]];
-  pairs = Select[FactorList[G], !FreeQ[#[[1]], th] &];
+  pairs = Select[tragerFactorList[G], !FreeQ[#[[1]], th] &];
   AllTrue[pairs, #[[2]] < m &] && GCD @@ Join[{m}, Last /@ pairs] === 1];

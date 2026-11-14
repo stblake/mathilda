@@ -1536,3 +1536,7 @@ products such as `Sqrt[2] Sqrt[3]` do not stay canonical.
 **Order.** (1)+(2)+(3) on the `Q(i)` battery first, with every certificate
 cross-checked against FriCAS; then (4); then (6); then number fields beyond
 `Q(i)`; then (7). Each step gets examples in the gap log.
+- **Phase 4.1 (v0.6551).** The constant field Q(i) with a literal `I` (theory
+  E4.1): factorisations over Q(i), residue fields that contain i, refusal of
+  reduction mod p. The Q(i) battery went from 2/12 to 11/12. Next: I mod p, then
+  the trig front end.

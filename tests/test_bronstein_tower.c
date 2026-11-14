@@ -12,7 +12,11 @@ static void test_helpers(void) {
     BR_TRUE("brCheckHeads[Log[x] Sqrt[x], x]");
     BR_THROWS("brCheckHeads[Sin[x] Log[x], x]", "Unimplemented", "trigonometric or hyperbolic function (TrigToExp front end over Q(i))");
     BR_THROWS("brCheckHeads[1.5 Log[x], x]", "Decline", "approximate number in the integrand");
-    BR_THROWS("brCheckHeads[I Log[x], x]", "Unimplemented", "complex constant in the integrand (constant field Q(i))");
+    /* Phase 4.1: Gaussian-rational constants are in scope (constant field Q(i)) */
+    BR_TRUE("brCheckHeads[I Log[x], x]");
+    BR_TRUE("brGaussianRationalQ[1/2 + 3 I] && !brGaussianRationalQ[x + I] && !brGaussianRationalQ[2]");
+    BR_EQ("brConstantField[Sqrt[x + I]]", "\"QI\"");
+    BR_EQ("brConstantField[Sqrt[x]]", "\"Q\"");
     BR_THROWS("brCheckHeads[ArcTan[x], x]", "Unimplemented", "trigonometric or hyperbolic function (TrigToExp front end over Q(i))");
     BR_THROWS("brCheckHeads[Erf[x] Log[x], x]", "Decline", "non-elementary function in the integrand");
     BR_THROWS("brCheckHeads[Abs[x] Sqrt[x], x]", "Decline", "non-elementary function in the integrand");

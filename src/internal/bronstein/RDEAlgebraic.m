@@ -55,7 +55,7 @@ brAlgDegree[c_, x_Symbol] := With[{t = Together[c]},
 brAlgPoleFactors::usage = "brAlgPoleFactors[els, x] is the list of the irreducible factors (over Q) of the coordinate denominators of the elements els (coordinate lists): the only finite places where a solution of the Risch DE can have a pole (Lemma 3.6).";
 brAlgPoleFactors[els_List, x_Symbol] := Module[{dens},
   dens = Denominator[Together[#]] & /@ Flatten[els];
-  DeleteDuplicates[Flatten[First /@ Select[FactorList[#], !FreeQ[#[[1]], x] &] & /@ dens]]];
+  DeleteDuplicates[Flatten[First /@ Select[tragerFactorList[#], !FreeQ[#[[1]], x] &] & /@ dens]]];
 
 brAlgRamification::usage = "brAlgRamification[m, G, P, x] is the ramification index of the places of Y^m = G above the irreducible P: m/gcd(m, nu_P(G)).";
 brAlgRamification[m_Integer, G_, P_, x_Symbol] := m/GCD[m, brAlgNuP[G, P, x]];
@@ -76,7 +76,7 @@ brAlgTauCandidates[B_Association, f_List, P_, r_Integer] := Module[
   If[T === 0, Return[{"Unknown", "the place-value polynomial vanishes identically"}]];
   If[FreeQ[T, z], Return[{}]];
   roots = -Coefficient[#, z, 0]/Coefficient[#, z, 1] & /@
-    First /@ Select[FactorList[T], Exponent[#[[1]], z] === 1 &];
+    First /@ Select[tragerFactorList[T], Exponent[#[[1]], z] === 1 &];
   Select[roots, IntegerQ[#] && # > 0 &]];
 
 brAlgInfinityData::usage = "brAlgInfinityData[B] is <|\"r\" -> r, \"q\" -> d r/m, \"lc\" -> lc G|> for the places of Y^m = G above infinity (d = deg G): ramification r = m/gcd(m, d), and Y = v x^(d/m)(1 + ...)^(1/m), v^m = lc G, with x = s^-r and x^(d/m) = s^-q.";
@@ -97,7 +97,7 @@ brAlgInfinityCandidates[B_Association, f_List] := Module[
   R = Expand[Resultant[w - A, v^m - lc, v]];
   If[FreeQ[R, w], Return[{}]];
   Select[-Coefficient[#, w, 0]/Coefficient[#, w, 1] & /@
-    First /@ Select[FactorList[R], Exponent[#[[1]], w] === 1 &], Element[#, Rationals] === True &]];
+    First /@ Select[tragerFactorList[R], Exponent[#[[1]], w] === 1 &], Element[#, Rationals] === True &]];
 
 brAlgGammaInfinity::usage = "brAlgGammaInfinity[B, g] is a lower bound for the order of g (coordinate list on B) at every place above infinity: min_i nu(g_i w_i) = -r (deg g_i + i d/m - deg d_i); Infinity for g = 0.";
 brAlgGammaInfinity[B_Association, g_List] := Module[{inf = brAlgInfinityData[B], x = B["x"], ts},

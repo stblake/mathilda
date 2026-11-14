@@ -62,8 +62,19 @@ brCheckHeads[f_, x_Symbol] := (
   If[!FreeQ[f, brAlgebraicGeneralHeads[]], throwIncomplete["a general algebraic function (Root/RootSum) in the integrand"]];
   If[!FreeQ[f, brElementaryUnimplementedHeads[]],
     throwUnimplemented["Tower:trig", "trigonometric or hyperbolic function (TrigToExp front end over Q(i))"]];
-  If[!FreeQ[f, _Complex], throwUnimplemented["Tower:complex", "complex constant in the integrand (constant field Q(i))"]];
+  (* Gaussian-rational constants: the constant field is Q(i), carried with a
+     literal I (Gaussian arithmetic reduces I^2 = -1 everywhere; residue
+     fields express I in their primitive element). Anything else complex
+     (an inexact or symbolic part) stays unimplemented. *)
+  If[!FreeQ[f, c_Complex /; !brGaussianRationalQ[c]],
+    throwUnimplemented["Tower:complex", "complex constant that is not a Gaussian rational"]];
   True);
+
+brGaussianRationalQ::usage = "brGaussianRationalQ[c] is True when c is a Gaussian rational a + b I (a, b rational).";
+brGaussianRationalQ[c_] := MatchQ[c, Complex[(_Integer | _Rational), (_Integer | _Rational)]];
+
+brConstantField::usage = "brConstantField[e] is the constant field the expression e needs: \"Q\", or \"QI\" when a Gaussian rational occurs (Phase 4.1; bronstein_extensions.tex E4.1).";
+brConstantField[e_] := If[FreeQ[e, _Complex], "Q", "QI"];
 
 brKernelPattern::usage = "brKernelPattern[] matches a Log or Exp kernel, Log[a] or Power[E, b].";
 brKernelPattern[] := Log[_] | Power[E, _];
@@ -267,8 +278,8 @@ brDetectRadical[fs_, vars_List] := Module[{pows, bases, b0, exps, cyc},
 brKummerCyclicQ::usage = "brKummerCyclicQ[{{b1, r1}, ...}, vars] decides whether the radicals b_i^r_i (b_i rational in vars, r_i rational) generate a CYCLIC Kummer extension of the field of vars over its constants, i.e. one simple radical extension: with the b_i factored into irreducibles p_j of Q[vars], the exponent vectors r_i e_ij mod 1 generate a subgroup of (Q/Z)^J, cyclic iff its order equals its exponent. Returns True, False, or $Failed (a non-rational constant factor, or a group too large to enumerate). Constant factors are ignored here: they change the constant field (Unimplemented elsewhere), not the Kummer group over it.";
 brKummerVectors::usage = "brKummerVectors[{{b1, r1}, ...}, vars] is the Kummer data of the radicals b_i^r_i (b_i rational in vars, r_i rational): with the b_i factored into the irreducibles p_j of Q[vars] (associates identified, constant factors dropped), it returns {vecs, nn}: vecs[[i]] the exponent vector r_i e_ij reduced mod 1, an element of (Q/Z)^J, and nn the lcm of their denominators. Constant factors change the constant field, not the Kummer group over it.";
 brKummerVectors[rads_List, vars_List] := Module[{facs, ps, vecs},
-  facs = Map[Function[rb, Join[FactorList[Numerator[Together[rb[[1]]]]],
-       Map[Function[fe, {fe[[1]], -fe[[2]]}], FactorList[Denominator[Together[rb[[1]]]]]]]], rads];
+  facs = Map[Function[rb, Join[tragerFactorList[Numerator[Together[rb[[1]]]]],
+       Map[Function[fe, {fe[[1]], -fe[[2]]}], tragerFactorList[Denominator[Together[rb[[1]]]]]]]], rads];
   facs = Select[#, brDependsQ[First[#], vars] &] & /@ facs;
   ps = DeleteDuplicates[Flatten[Map[First, facs, {2}]]];
   (* identify associate factors (p and -p, or rational multiples) *)
@@ -335,7 +346,7 @@ brCompositumPlan[atoms_List, vars_List, halves_ : False] := Module[{ds = Last /@
 
 brRationalSquareRoot::usage = "brRationalSquareRoot[e, vars] is s with s^2 = e, s in Q(vars), when e (rational in vars) is the square of one up to nothing: every irreducible factor of its numerator and denominator has an even exponent and the constant is a positive rational square; otherwise None (a constant like 2 or -1 would need a constant field extension).";
 brRationalSquareRoot[e_, vars_List] := Module[{t = Together[e], fl, c = 1, s = 1, ok = True},
-  fl = Join[FactorList[Numerator[t]], {#[[1]], -#[[2]]} & /@ FactorList[Denominator[t]]];
+  fl = Join[tragerFactorList[Numerator[t]], {#[[1]], -#[[2]]} & /@ tragerFactorList[Denominator[t]]];
   Do[If[brDependsQ[q[[1]], vars],
       If[OddQ[q[[2]]], ok = False, s = s q[[1]]^(q[[2]]/2)],
       c = c q[[1]]^q[[2]]], {q, fl}];
@@ -384,12 +395,12 @@ brRadicalOverXQ::usage = "brRadicalOverXQ[e, x] is True when every radical b^r (
 brRadicalOverXQ[e_, x_Symbol] := AllTrue[
   Cases[e, Power[b_, _Rational] /; !FreeQ[b, x], {0, Infinity}], brRationalInQ[First[#], {x}] &];
 
-brRationalInQ::usage = "brRationalInQ[e, vars] is True when e is a rational function of the symbols vars with rational coefficients (no other symbol, no radical, no kernel).";
+brRationalInQ::usage = "brRationalInQ[e, vars] is True when e is a rational function of the symbols vars with coefficients in the constant field (rational, or Gaussian rational for Q(i); no other symbol, no radical, no kernel).";
 brRationalInQ[e_, vars_List] := Module[{t = Together[e], num, den},
   num = Expand[Numerator[t]]; den = Expand[Denominator[t]];
   PolynomialQ[num, vars] && PolynomialQ[den, vars] &&
     Complement[Variables[{num, den}], vars] === {} &&
-    FreeQ[{num, den}, Power[_, _Rational] | _Complex | _Real]];
+    FreeQ[{num, den}, Power[_, _Rational] | _Real] && FreeQ[{num, den}, c_Complex /; !brGaussianRationalQ[c]]];
 
 brTower::usage = "brTower[f, x] is the tower record of the integrand f (see the header of Tower.m): kernels replaced by monomials, the radical detected, the shape classified and, for Shape A, theta moved to the top. Throws a Decline outside the scope.";
 brTower[f0_, x_Symbol] := Module[{f, fs, monos, vars, rad, shape, theta = None, kind = None, lower, bsyms, pos, above},

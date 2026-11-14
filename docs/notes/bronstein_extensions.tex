@@ -223,6 +223,8 @@ E2 & Transcendental Risch over an algebraic base $k_j(y)(t_{j+1},\dots)$: the
   radical in the middle of the tower & Phase 5 & open \\
 E3 & Torsion by specialisation with the special places included: goodness
   conditions, injectivity in characteristic~0 & \code{LogPart:special-genus} & v0.6548 \\
+E4.1 & The constant field $\Q(i)$ with a literal $i$: every field built is a
+  field over $\Q(i)$ & Phase 4.1 & v0.6551 \\
 E4 & Symbolic parameters: the verdicts are generic, and which zero tests may be
   generic & Phase 4 & open \\
 E5 & Ideals of the $d=\gcd(e,m)$ ramified places above one special point &
@@ -777,6 +779,69 @@ $\log\log x$ is unused once $E^{x+\log(\log x)/2}=\sqrt{\log x}\,e^x$.
 
 \paragraph{Tests.} \code{test\_exp\_of\_log} in
 \code{tests/test\_bronstein\_phase3.c}.
+
+\section*{E4.1. The constant field $\Q(i)$ (\code{tragerConstantI})}
+\addcontentsline{toc}{section}{E4.1. Constant field Q(i)}
+
+\paragraph{Setting.} Integrands whose constants are Gaussian rationals, such as
+$\sqrt{x+i}/x$, $e^{ix}\sqrt{1+e^{ix}}$ and $\sqrt{\log x+i}$. The constant
+field is $C=\Q(i)$, and $i$ stays the literal \code{I} of the CAS, whose
+arithmetic reduces $i^2=-1$ in every \code{Together}, \code{Expand} and zero
+test.
+
+The algorithms of [B], [T] and [SI] hold over any constant field of
+characteristic~0, with three provisos:
+\begin{enumerate}
+\item factorisations, place degrees and residue fields are taken over the
+  constant field actually in use;
+\item every residue field is a field (no zero divisors in its zero tests);
+\item reduction modulo $p$ maps the constants consistently.
+\end{enumerate}
+The implementation meets each of these as follows.
+
+\begin{proposition}\label{prop:E41}
+With the flag \code{tragerConstantI} set, which it is exactly when the
+integrand has a Gaussian rational:
+\begin{enumerate}
+\item every factorisation of a characteristic-0 polynomial is over $\Q(i)$
+  (\code{tragerFactorList} adds \code{Extension -> I}). A relative extension
+  $\Q(i)[t]/(\mu)$ built from an irreducible factor $\mu$ is therefore a field;
+\item an absolute residue field $\Q[t]/(\mu)$ from \code{ToNumberField} is built
+  from the residues \emph{and} $i$. It contains~$i$, and every Gaussian
+  rational is written $a+b\,\mathrm{rep}(t)$ before reduction modulo~$\mu$
+  (\code{fieldSubI} in \code{kc} and \code{rc}). So no element mixes a literal
+  $i$ with $t$;
+\item reduction modulo $p$ (torsion) refuses data with a literal $i$
+  (\code{TorsionModP:complex}). Positive-genus torsion over $\Q(i)$ is therefore
+  undecided, never wrongly decided;
+\item every coefficient test accepts exactly the Gaussian rationals
+  (\code{constantFieldNumberQ}, \code{brRationalInQ}).
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}[Why (2) is needed]
+If $\mu\in\Q[t]$ is irreducible over $\Q$ but splits over $\Q(i)$ (as
+$t^2+1$ does), then $\Q(i)[t]/(\mu)$ has zero divisors. An element
+$a(t)+i\,b(t)$ could then be zero without $a=b=0$, so a zero test that treats
+$i$ and $t$ independently is wrong. Adjoining $i$ to the absolute field and
+substituting removes the independent $i$. Then $\Q[t]/(\mu)$ is a field
+($\mu$ irreducible over $\Q$) containing $\Q(i)$, and its zero tests are exact.
+\end{proof}
+
+\paragraph{Spike and result.} The front end with only the declines lifted
+answered 2 of 12 integrals in a $\Q(i)$ battery (\code{Q}-only tests rejected
+$i$ at about eight points). With the layer above, 10 are answered and verified,
+1 is certified, and 1 remains (a torsion question, refused mod $p$). The
+certificate $\int\sqrt{\log x+i}\,dx$ was checked by hand: FriCAS reports
+``implementation incomplete (constant residues)'' on it. With $u=\log x$ it is
+$\int e^u\sqrt{u+i}\,du$, and the Risch DE $b'+b(1+\tfrac1{2(u+i)})=1$ has no
+rational solution.
+
+\paragraph{Next.} Map $i$ to a square root of $-1$ modulo $p\equiv1\pmod4$ in
+the torsion code; then the trigonometric front end (\code{TrigToExp}); then
+general number fields through \code{fieldFn[vars, \{alpha, mu, theta\}]}.
+
+\paragraph{Tests.} \code{tests/test\_bronstein\_phase4.c}.
 
 \part*{Part C. The gap log: what each extension closes}
 \addcontentsline{toc}{part}{Part C}

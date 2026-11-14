@@ -47,7 +47,7 @@ brAlgebraicResidualZeroQ[T_Association, s_, c_, b_] := Together[brD[T, b] + s b 
 
 brMthPowerCofactor::usage = "brMthPowerCofactor[e, m] is u when the rational function e (over Q, in any variables) is a rational constant times u^m, u a rational function; None otherwise.";
 brMthPowerCofactor[e_, m_Integer] := Module[{t = Together[e], fl},
-  fl = Join[FactorList[Numerator[t]], {#[[1]], -#[[2]]} & /@ FactorList[Denominator[t]]];
+  fl = Join[tragerFactorList[Numerator[t]], {#[[1]], -#[[2]]} & /@ tragerFactorList[Denominator[t]]];
   fl = Select[fl, Variables[#[[1]]] =!= {} &];
   If[AllTrue[fl, Divisible[#[[2]], m] &], Times @@ (#[[1]]^(#[[2]]/m) & /@ fl), None]];
 

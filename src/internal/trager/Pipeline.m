@@ -66,7 +66,7 @@ integrateComponent[c_, x_Symbol, m_Integer, G_, method_String] := Module[
 
 tragerLogPart::usage = "tragerLogPart[ctx, r, Y] is the logarithmic part of the remainder r by Trager's construction, verified exactly, as log-term expressions in x and Y (Pipeline format). When the field of all residues is small (product of factorials of the factor degrees of R at most 8) the Q-basis construction runs first; otherwise, or when it declines, the per-orbit construction (TragerLogTerms.m); the Q-basis construction over the splitting field is the complete fallback when an orbit divisor is not torsion. A nonzero holomorphic difference proves non-elementarity ([T] p.71).";
 tragerLogPart[ctx_Association, r_List, Y_Symbol] := Module[{Z = ctx["Z"], degs, crude, basisFirst, attempt},
-  degs = Exponent[#[[1]], Z] & /@ Select[FactorList[ctx["R"]], !FreeQ[#[[1]], Z] &];
+  degs = Exponent[#[[1]], Z] & /@ Select[tragerFactorList[ctx["R"]], !FreeQ[#[[1]], Z] &];
   crude = Times @@ (Factorial /@ degs);
   (* Genus 0: every orbit divisor is principal, so one orbit at a time over  *)
   (* Q[Z]/(q) always succeeds -- use the Q-basis construction first only for *)
@@ -93,7 +93,7 @@ tragerLogPart[ctx_Association, r_List, Y_Symbol] := Module[{Z = ctx["Z"], degs, 
 
 traceCertificate::usage = "traceCertificate[ctx] looks for a proof of non-elementarity that needs only the field Q(gamma) of ONE residue gamma, not the field of all of them. If the integral is elementary, r = Sum c_j du_j/u_j, and for every Q-linear lambda on the span of the residues Sum_i lambda(alpha_i) Delta(alpha_i) = Sum_j lambda(c_j) div(u_j) is a torsion divisor. lambda_gamma(alpha) = Tr(alpha gamma) is Q-linear and constant on the roots of each irreducible factor f_k of R over Q(gamma), so its divisor Sum_k lambda_k Delta(f_k) is defined over Q(gamma), of degree deg q instead of that of the splitting field. A residue gamma is taken from each irreducible factor q of R in turn; when its divisor is shown of infinite order (orders modulo two primes disagree, or the only possible order N fails torsionScreen) a NonElementary certificate is thrown. Otherwise (all lambda_gamma torsion, or zero) it returns Null without a verdict and the full construction follows.";
 traceCertificate[ctx_Association] := Module[{Z = ctx["Z"], qs},
-  qs = SortBy[Expand[#/Coefficient[#, Z, Exponent[#, Z]]] & /@ (First /@ Select[FactorList[ctx["R"]], !FreeQ[#[[1]], Z] &]),
+  qs = SortBy[Expand[#/Coefficient[#, Z, Exponent[#, Z]]] & /@ (First /@ Select[tragerFactorList[ctx["R"]], !FreeQ[#[[1]], Z] &]),
     Exponent[#, Z] &];
   Do[traceCertificateAt[ctx, q, qs], {q, qs}]];
 
@@ -191,7 +191,10 @@ TragerIntegrateCurve[a_, x_Symbol, m_Integer, G_, method_String : "Trager"] := M
   If[tragerFailQ[r], failToList[r], r]];
 
 TragerIntegrate[f_, x_Symbol, method_String : "Trager"] := Module[{r},
-  r = catchTrager[tragerIntegrateBody[f, x, method]];
+  (* constant field Q(i) for Gaussian-rational constants (keeps an outer
+     setting: Bronstein calls in with the flag already on) *)
+  r = Block[{tragerConstantI = TrueQ[tragerConstantI] || !FreeQ[f, _Complex]},
+    catchTrager[tragerIntegrateBody[f, x, method]]];
   If[tragerFailQ[r], failToList[r], r]];
 
 xPowerReduce::usage = "xPowerReduce[f, x] is {k, g, u} when f = x^(k-1) g(x^k) syntactically for some k in 6..2 (f/x^(k-1) mentions x only through powers x^(j k)), so that Integrate[f, x] = G(x^k)/k with G' = g: an exact identity, valid for all complex x since u = x^k is entire. None otherwise.";

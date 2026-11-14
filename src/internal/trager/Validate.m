@@ -28,7 +28,7 @@ detectRadical[f_, x_Symbol] := Module[{pows, bases, b0, exps, n},
         ArcCos | Sinh | Cosh | Tanh | Erf | Gamma | Power[E, _])],
     throwIncomplete["transcendental function in the integrand (outside Trager's class; Method -> \"Bronstein\" takes Log/Exp towers)"]];
   If[!FreeQ[f, _Real], throwDecline["approximate number in the integrand"]];
-  If[!FreeQ[f, Complex],
+  If[!FreeQ[f, c_Complex /; !(TrueQ[tragerConstantI] && constantFieldNumberQ[c])],
     throwUnimplemented["Trager:constants", "complex coefficients (constant field Q(i))"]];
   pows = radicalPowers[f, x];
   (* no radical in x: a rational function, over Q or over a number field Q(theta)

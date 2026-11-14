@@ -76,7 +76,7 @@ brBCSurface[C_Association, e_] := e /. {C["Y"] -> C["Ysurf"], C["th"] -> C["kern
 brBCSplitDen::usage = "brBCSplitDen[C, e] is {N, d}: e = N/d with d the theta-dependent part of the denominator (a polynomial in x and theta over Q, free of Y) and N in normal form, polynomial in theta.";
 brBCSplitDen[C_Association, e_] := Module[{th = C["th"], t = Together[brBCNorm[C, e]], den, dth},
   den = Denominator[t];
-  dth = Times @@ (#[[1]]^#[[2]] & /@ Select[FactorList[den], !FreeQ[#[[1]], th] &]);
+  dth = Times @@ (#[[1]]^#[[2]] & /@ Select[tragerFactorList[den], !FreeQ[#[[1]], th] &]);
   {brBCNorm[C, e dth], Expand[dth]}];
 
 brBCInverseMod::usage = "brBCInverseMod[C, c, V] is the inverse of c (in k0[theta]) modulo the polynomial V (in k[theta], normal) in k0[theta], as an expression of theta-degree < deg V; an internal error when c is not invertible modulo V.";
@@ -95,7 +95,7 @@ brBCHermite[C_Association, e0_] := Module[{th = C["th"], e = brBCNorm[C, e0], H 
   While[True,
     If[++it > 200, throwInternal["brBCHermiteIterationBound"]];
     {N, d} = brBCSplitDen[C, e];
-    fl = Select[FactorList[d], !FreeQ[#[[1]], th] && #[[2]] >= 2 &&
+    fl = Select[tragerFactorList[d], !FreeQ[#[[1]], th] && #[[2]] >= 2 &&
                  !(C["kind"] === "Exp" && Together[#[[1]]/th] === 1) &];
     If[fl === {}, Break[]];
     j = Max[Last /@ fl];

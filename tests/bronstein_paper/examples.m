@@ -135,5 +135,21 @@ bronsteinPaperExamples = {
   "before" -> "implementation incomplete", "note" -> "the residue divisor has infinite order (orders mod 13 and 37 disagree)"|>,
 <|"id" -> "E3-6", "gap" -> "LogPart:special-genus", "theory" -> "E3", "version" -> "v0.6548",
   "kind" -> "Integrate", "f" -> Hold[D[x + Log[-E^x + (1 + E^(3 x))^(1/3)], x]], "expect" -> "elementary",
-  "before" -> "implementation incomplete", "note" -> "exponential tower, genus 1"|>
+  "before" -> "implementation incomplete", "note" -> "exponential tower, genus 1"|>,
+(* ---- E4.1: the constant field Q(i) (v0.6551) ------------------------------ *)
+<|"id" -> "E41-1", "gap" -> "Tower:complex, Trager:constants", "theory" -> "E4.1", "version" -> "v0.6551",
+  "kind" -> "Integrate", "f" -> Hold[Sqrt[x + I]/x], "expect" -> "elementary",
+  "before" -> "implementation incomplete", "note" -> "a curve over Q(i)(x); FriCAS agrees"|>,
+<|"id" -> "E41-2", "gap" -> "Tower:complex", "theory" -> "E4.1", "version" -> "v0.6551",
+  "kind" -> "Integrate", "f" -> Hold[D[Log[E^(I x) + Sqrt[1 + E^(2 I x)]], x]], "expect" -> "elementary",
+  "before" -> "implementation incomplete", "note" -> "Shape A over the exponential E^(I x): an inverse-hyperbolic of E^(I x)"|>,
+<|"id" -> "E41-3", "gap" -> "Tower:complex", "theory" -> "E4.1", "version" -> "v0.6551",
+  "kind" -> "Integrate", "f" -> Hold[1/Sqrt[E^(2 I x) + 1]], "expect" -> "elementary",
+  "before" -> "implementation incomplete", "note" -> "residues at the special places of E^(I x) over Q(i)"|>,
+<|"id" -> "E41-4", "gap" -> "Tower:complex", "theory" -> "E4.1", "version" -> "v0.6551",
+  "kind" -> "Integrate", "f" -> Hold[(1 + I) Sqrt[x]/(x^2 + I)], "expect" -> "elementary",
+  "before" -> "implementation incomplete", "note" -> "residue field Q(i)(zeta_8): i adjoined and written in the primitive element"|>,
+<|"id" -> "E41-5", "gap" -> "Tower:complex", "theory" -> "E4.1", "version" -> "v0.6551",
+  "kind" -> "Integrate", "f" -> Hold[Sqrt[Log[x] + I]], "expect" -> "nonelementary",
+  "before" -> "implementation incomplete", "note" -> "FriCAS: implementation incomplete (constant residues); Risch DE b' + b (1 + 1/(2 (u + I))) = 1 has no rational solution"|>
 };

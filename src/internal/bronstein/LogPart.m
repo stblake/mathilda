@@ -88,7 +88,7 @@ brComponentLogPart[T_Association, cv_Association, c_] := Module[
 
 brOrbitFirstQ::usage = "brOrbitFirstQ[nr] is True when the per-orbit construction should run before the Q-basis one: the residue polynomial nr[\"P\"] has an irreducible factor of degree >= 2 and the crude bound Prod deg(q)! on the degree of the field of all residues exceeds the largest orbit field Max deg(q).";
 brOrbitFirstQ[nr_Association] := Module[{degs},
-  degs = Exponent[#[[1]], nr["z"]] & /@ Select[FactorList[nr["P"]], !FreeQ[#[[1]], nr["z"]] &];
+  degs = Exponent[#[[1]], nr["z"]] & /@ Select[tragerFactorList[nr["P"]], !FreeQ[#[[1]], nr["z"]] &];
   degs =!= {} && Max[degs] >= 2 && Times @@ (Factorial /@ degs) > Max[degs]];
 
 brOrbitTerm::usage = "brOrbitTerm[T, cv, rd, nr, q, refc] is the log term of the orbit of the roots of the monic irreducible factor q(z) of the residue polynomial (residue data rd, brResidueData; reference point theta = refc): <|\"ext\" -> deg q > 1, \"Fk\" -> k(gamma), \"t\" -> the generator (gamma = t, or the rational root), \"coef\" -> gamma/(m N), \"u\" -> generator of N delta_gamma (coordinates over Fk), \"normU\", \"D\" -> the orbit's contribution to the derivative of the weight-1 log part (coordinate list over k(theta), coordinate 0 zero)|>, or $Failed when N delta_gamma is not principal (not a certificate).";
@@ -118,7 +118,7 @@ brOrbitLogPart::usage = "brOrbitLogPart[T, cv, c, nr] is brComponentLogPart one 
 brOrbitLogPart[T_Association, cv_Association, c_, nr_Association] := Module[
   {rd = brResidueData[T, cv, c], th = T["theta"], m = cv["m"], z = nr["z"], refc, facs, recs = {}, r, Dall, Dext},
   refc = firstOrdinaryInteger[Join[{Expand[cv["G"]], rd["E"]}, If[T["kind"] === "Exp", {th}, {}]], th];
-  facs = (Expand[#/Coefficient[#, z, Exponent[#, z]]] &) /@ (First /@ Select[FactorList[nr["P"]], !FreeQ[#[[1]], z] &]);
+  facs = (Expand[#/Coefficient[#, z, Exponent[#, z]]] &) /@ (First /@ Select[tragerFactorList[nr["P"]], !FreeQ[#[[1]], z] &]);
   Do[
     r = brOrbitTerm[T, cv, rd, nr, q, refc];
     If[r === $Failed, Return[$Failed, Module]];
@@ -176,11 +176,11 @@ brSpecialSetup[T_Association, cv_Association, c_, nr_Association, spec_Associati
   (* the field: finite residues and the m-th roots of every kappa *)
   polys = Join[If[nr["P"] === 1, {}, {nr["P"]}],
     (z^m - #["kappa"]) & /@ Select[locs, !#["ramified"] &]];
-  Pall = Expand[Times @@ (First /@ Select[FactorList[Times @@ polys], !FreeQ[#[[1]], z] &])];
+  Pall = Expand[Times @@ (First /@ Select[tragerFactorList[Times @@ polys], !FreeQ[#[[1]], z] &])];
   rf = residueField[Pall, z, t];
   F0 = rf["F"];
   vars = Prepend[T["lower"], T["x"]];
-  Fk = If[F0["Type"] === "NF", fieldFn[vars, {F0["t"], F0["mu"], F0["theta"]}], fieldFn[vars]];
+  Fk = brFieldOver[vars, F0];
   finRoots = If[nr["P"] === 1, {}, Select[rf["roots"], kc[F0, nr["P"] /. z -> #] === 0 &]];
   rhoLists = MapThread[If[#1["ramified"], {}, Select[rf["roots"], Function[r, kc[F0, r^m - #1["kappa"]] === 0]]] &,
     {locs, locs}];
