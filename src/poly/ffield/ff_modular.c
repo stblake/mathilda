@@ -142,7 +142,7 @@ static void ff_mm_reduced_clear(ff_mm_reduced* R) {
 /*  K in characteristic 0                                              */
 /* ------------------------------------------------------------------ */
 
-static void ff_k0_init(ff_k0* Z, const fmpq_poly_struct* mu) {
+void ff_k0_init(ff_k0* Z, const fmpq_poly_struct* mu) {
     Z->isnf = mu != NULL && fmpq_poly_degree(mu) >= 2;
     if (Z->isnf) {
         nf_init(Z->nf, mu);
@@ -153,7 +153,7 @@ static void ff_k0_init(ff_k0* Z, const fmpq_poly_struct* mu) {
     Z->sz = gr_ctx_sizeof_elem(Z->K);
 }
 
-static void ff_k0_clear(ff_k0* Z) {
+void ff_k0_clear(ff_k0* Z) {
     gr_ctx_clear(Z->K);
     if (Z->isnf) nf_clear(Z->nf);
 }
@@ -211,6 +211,9 @@ int ff_mm_solve(const ff_mm_problem* P, ff_mm_stats* stats) {
     slong* fprof = calloc((size_t)np, sizeof(slong));     /* this factor's        */
     slong npos = 0, nc = 0, nused = 0, mismatches = 0, next_try = 2;
     fmpz* acc = NULL;
+    ulong* primes = NULL;          /* the primes used, and their residues: */
+    ulong* rtab = NULL;            /* row k = residues mod primes[k]        */
+    slong cap_used = 0;
     fmpq* cand = NULL;
     ulong* res = NULL;
     int have_cand = 0, done = 0;
@@ -219,6 +222,23 @@ int ff_mm_solve(const ff_mm_problem* P, ff_mm_stats* stats) {
 
     ulong p = UWORD(1) << 62;
     slong max_primes = g_ff_mm_max_primes;
+    if (P->height_mult > 0) {
+        /* the largest numerator or denominator of the inputs, in bits */
+        slong hin = 0;
+        for (slong i = 0; i < P->nin; i++)
+            for (slong d = 0; d < P->in[i].len; d++) {
+                const fmpq_poly_struct* c = P->in[i].c + d;
+                slong hb = fmpz_bits(fmpq_poly_denref(c));
+                if (hb > hin) hin = hb;
+                for (slong j = 0; j < fmpq_poly_length(c); j++) {
+                    hb = fmpz_bits(fmpq_poly_numref(c) + j);
+                    if (hb > hin) hin = hb;
+                }
+            }
+        slong want = (2 * P->height_mult * (hin + 64)) / 60 + 50;
+        if (want > 100000) want = 100000;
+        if (want > max_primes) max_primes = want;
+    }
     for (slong tried = 0; tried < 2 * max_primes + 50 && !done && nused < max_primes; tried++) {
         p = n_nextprime(p, 1);
         if (stats) stats->primes_tried++;
@@ -272,6 +292,7 @@ int ff_mm_solve(const ff_mm_problem* P, ff_mm_stats* stats) {
                 res = malloc((size_t)(nc > 0 ? nc : 1) * sizeof(ulong));
                 for (slong i = 0; i < nc; i++) { fmpz_init(acc + i); fmpq_init(cand + i); }
                 nused = 0; have_cand = 0; mismatches = 0; next_try = 2;
+                free(primes); free(rtab); primes = NULL; rtab = NULL; cap_used = 0;
                 fmpz_one(M);
             }
         }
@@ -329,20 +350,40 @@ int ff_mm_solve(const ff_mm_problem* P, ff_mm_stats* stats) {
                 if (!done) have_cand = 0;
             }
             if (!done) {
-                if (nused == 0) {
-                    for (slong i = 0; i < nc; i++) fmpz_set_ui(acc + i, res[i]);
-                    fmpz_set_ui(M, p);
-                } else {
-                    for (slong i = 0; i < nc; i++) {
-                        fmpz_CRT_ui(tmp, acc + i, M, res[i], p, 0);
-                        fmpz_swap(acc + i, tmp);
-                    }
-                    fmpz_mul_ui(M, M, p);
+                /* Keep the residues; combine them only at a reconstruction
+                 * attempt, by one product-tree CRT per coefficient (fmpz_comb).
+                 * Updating every coefficient on every prime was quadratic in
+                 * the number of primes: 1.1 of 3.5 s on a 3600-prime xgcd. */
+                if (nused == cap_used) {
+                    cap_used = cap_used ? 2 * cap_used : 64;
+                    primes = realloc(primes, (size_t)cap_used * sizeof(ulong));
+                    rtab = realloc(rtab, (size_t)cap_used * (size_t)(nc > 0 ? nc : 1) * sizeof(ulong));
                 }
+                primes[nused] = p;
+                memcpy(rtab + (size_t)nused * (size_t)nc, res, (size_t)nc * sizeof(ulong));
+                if (nused == 0) fmpz_set_ui(M, p); else fmpz_mul_ui(M, M, p);
                 nused++;
                 if (!have_cand && nused >= next_try) {
                     int okr = 1;
-                    for (slong i = 0; i < nc && okr; i++) okr = fmpq_reconstruct_fmpz(cand + i, acc + i, M);
+                    if (nused == 1) {
+                        for (slong i = 0; i < nc && okr; i++) {
+                            fmpz_set_ui(acc + i, rtab[i]);
+                            okr = fmpq_reconstruct_fmpz(cand + i, acc + i, M);
+                        }
+                    } else {
+                        fmpz_comb_t comb; fmpz_comb_temp_t ct;
+                        fmpz_comb_init(comb, primes, nused);
+                        fmpz_comb_temp_init(ct, comb);
+                        ulong* col = malloc((size_t)nused * sizeof(ulong));
+                        for (slong i = 0; i < nc && okr; i++) {
+                            for (slong k = 0; k < nused; k++) col[k] = rtab[(size_t)k * (size_t)nc + (size_t)i];
+                            fmpz_multi_CRT_ui(acc + i, col, comb, ct, 0);
+                            okr = fmpq_reconstruct_fmpz(cand + i, acc + i, M);
+                        }
+                        free(col);
+                        fmpz_comb_temp_clear(ct);
+                        fmpz_comb_clear(comb);
+                    }
                     have_cand = okr;
                     next_try = nused + (nused / 2 > 1 ? nused / 2 : 1);
                 }
@@ -361,6 +402,7 @@ int ff_mm_solve(const ff_mm_problem* P, ff_mm_stats* stats) {
     }
     if (stats) stats->primes = nused;
     if (Z_ready) ff_k0_clear(&Z);
+    free(primes); free(rtab);
     if (acc) { for (slong i = 0; i < nc; i++) fmpz_clear(acc + i); free(acc); }
     if (cand) { for (slong i = 0; i < nc; i++) fmpq_clear(cand + i); free(cand); }
     free(res);

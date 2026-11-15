@@ -284,7 +284,13 @@ Hermite form.
   exhausted. Then FLINT's Euclidean xgcd runs. `"Modular" -> False` forces that
   path.
 - **Speed:** a degree-22 pair over Q(ω) with 6100-digit cofactors goes from
-  2.6 s to 0.36 s.
+  2.6 s to 0.165 s, and a degree-26 pair with 26,500-digit cofactors from 23 s
+  to 1.3 s (PARI/GP: 0.39 s and 3.45 s).
+- **Budget** (v0.6572): the prime budget follows a size estimate,
+  (deg a + deg b) × (input height + 64) bits, with at least 2000 primes, and early
+  termination still stops at the true size. The residues are combined by one
+  product-tree CRT per reconstruction attempt. The certificate's identity is
+  checked over Z[x, t] modulo μ with FLINT's integer multiplication.
 
 ```mathematica
 In[1]:= FLINT`PolynomialExtendedGCD[x^2 - 2, x - t, x, Extension -> {t, t^2 - 2}]
@@ -294,7 +300,15 @@ Out[1]= {-t + x, {0, 1}}
 ## FLINT`PolynomialFieldGCD
 
 `` FLINT`PolynomialFieldGCD[a, b, x, opts] `` gives the monic gcd over K[x], without
-cofactors. Over Q(θ) it uses the certified modular algorithm of the field-gcd engine.
+cofactors. Since v0.6572 it tries the certified multi-modular gcd (`ff_gcd_modular`,
+`src/poly/ffield/ff_xgcd.c`) first, over Q, Q(θ) and parameter-free Q(θ)(p):
+- **Images:** the monic gcd over each F_p[t]/(f), with the leading coefficients
+  preserved.
+- **Certificate:** g monic, with g | a and g | b by exact division over K. With
+  the subresultant argument (an image gcd has degree ≥ deg gcd(a, b)), this
+  proves g = gcd(a, b). A degree-0 image proves gcd = 1 on its own.
+- **Speed:** a degree-48 pair over Q(√2 + √3) takes 2.2 ms, down from 27 ms (PARI:
+  1.8 ms). Over Q(θ) it uses the certified modular algorithm of the field-gcd engine.
 θ is first scaled to an algebraic integer when μ is not integral. The Euclidean gcd
 over a number field is fraction-based, and its remainders' coefficients grow with
 the field degree. With this kernel, the splitting field of degree 36 built for a

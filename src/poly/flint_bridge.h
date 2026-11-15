@@ -277,6 +277,9 @@ Expr* flint_polynomial_gcd(const Expr* a, const Expr* b);
  * (1.94x the terms for 2.33x the time).
  */
 Expr* flint_field_gcd(const Expr* a, const Expr* b);
+/* flint_field_gcd also for univariate inputs with independent atoms (for a
+ * caller whose univariate engines have declined). */
+Expr* flint_field_gcd_any(const Expr* a, const Expr* b);
 
 /*
  * Plain multivariate polynomial operations over Q[x_1..x_n] (no algebraic

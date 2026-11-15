@@ -1625,6 +1625,11 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [x] lower layer: Together over Gaussian coefficients — v0.6571: two stages (free I, then one Q(I) reduction), 29.6 s -> 0.66 s; balanced-tree Plus in to_mpoly/to_mpoly_kernels; exposed + fixed Solve missing -q^2 squares (residue integral wrong answer). Open: unit normalisation of Gaussian Together
   - [ ] residue fields relative to K0 (relative norms/traces); modular norms (kNorm/Resultant by CRT)
   - [ ] theory note E7 (written v0.6570: Thms E7.1, E7.3, the identity check) + adversarial review; unit/property tests; exit: G-perf-2/3 < 20 s (MET v0.6570), G-perf-4 closed
+- [x] Field-arithmetic performance pass (2026-11-15, user: "significant performance improvements for the field arithmetic, then return to the Bronstein plan") — v0.6572
+  - tools/ffield_bench/bench.py (Mathilda vs PARI/GP vs reference CAS; developer tool)
+  - fixed: PolynomialGCD over Q(Sqrt[2]+Sqrt[3]) wrong (tower engine, dependent Sqrt[6]); PolynomialGCD hang over Q(I, Sqrt[3]) (each Complex an atom)
+  - xgcd adaptive budget + batched CRT + integer certificate (rec4 23 s -> 1.3 s, PARI 3.45 s); ff_gcd_modular (deg 48: 27 -> 2.2 ms, PARI 1.8); Factor over K via univariate kernels (411 -> 78 ms, PARI 4)
+  - [ ] open: Factor 1.5-20x PARI (degree-2n norm factorisation); Expand over radicals; small-call conversion overhead
 - [ ] Phase 5: radical anywhere (brDField, transcendental Risch over algebraic base, RDE on a curve over a tower)
 - [ ] Theory note docs/notes/bronstein_extensions.tex (E1–E6; LaTeX per user 2026-11-14), each adversarially reviewed — E6a–c written v0.6547, review pending
 - [ ] Close-out

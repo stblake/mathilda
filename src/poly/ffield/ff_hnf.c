@@ -259,7 +259,7 @@ int ff_hnf_modular(ff_qtpoly_struct* H, const ff_qtpoly_struct* rows, slong nr, 
     for (slong i = 0; i < nr * nc; i++) in[i] = rows[i];
     in[nr * nc] = *D;
     ff_hnf_ctx C = { nr, nc, in, H, malloc((size_t)(nc * nc) * sizeof(slong)) };
-    ff_mm_problem P = { &C, in, nin, mu, nc, ff_hnf_image, ff_hnf_npos, ff_hnf_extract,
+    ff_mm_problem P = { &C, in, nin, mu, nc, 0, ff_hnf_image, ff_hnf_npos, ff_hnf_extract,
                         ff_hnf_img_clear, ff_hnf_certify };
     int ok = ff_mm_solve(&P, stats);
     if (!ok)

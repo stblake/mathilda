@@ -295,6 +295,39 @@ static void test_xgcd_modular(void) {
             hm_mul(&a, &c, &a0, mu, isnf);
             hm_mul(&b, &c, &b0, mu, isnf);
             ff_mm_stats S;
+            /* the gcd alone: always certified for nonzero inputs, and equal
+             * to the monic gcd of gr_poly_gcd */
+            if (a.len > 0 && b.len > 0) {
+                ff_qtpoly_struct g1; ff_qtpoly_init(&g1);
+                FF_CHECK(ff_gcd_modular(&g1, &a, &b, isnf ? mu : NULL, &S));
+                gr_poly_t A1, B1, G1, h1;
+                gr_poly_init(A1, K); gr_poly_init(B1, K); gr_poly_init(G1, K); gr_poly_init(h1, K);
+                hm_to_gr(A1, &a, K, nf, isnf); hm_to_gr(B1, &b, K, nf, isnf);
+                FF_CHECK(gr_poly_gcd(G1, A1, B1, K) == GR_SUCCESS && gr_poly_make_monic(G1, G1, K) == GR_SUCCESS);
+                hm_to_gr(h1, &g1, K, nf, isnf);
+                FF_CHECK(gr_poly_equal(h1, G1, K) == T_TRUE);
+                gr_poly_clear(A1, K); gr_poly_clear(B1, K); gr_poly_clear(G1, K); gr_poly_clear(h1, K);
+                ff_qtpoly_clear(&g1);
+            }
+            /* exact division: a / c = a0 (c nonzero), and a / c not exact
+             * after adding 1 to a when deg c >= 1 */
+            if (a.len > 0) {
+                ff_qtpoly_struct q; ff_qtpoly_init(&q);
+                FF_CHECK(ff_divexact(&q, &a, &c, isnf ? mu : NULL));
+                gr_poly_t Q1, A0; gr_poly_init(Q1, K); gr_poly_init(A0, K);
+                hm_to_gr(Q1, &q, K, nf, isnf); hm_to_gr(A0, &a0, K, nf, isnf);
+                FF_CHECK(gr_poly_equal(Q1, A0, K) == T_TRUE);
+                gr_poly_clear(Q1, K); gr_poly_clear(A0, K);
+                if (c.len >= 2) {
+                    ff_qtpoly_struct a1; ff_qtpoly_init(&a1);
+                    ff_qtpoly_set_length(&a1, a.len);
+                    for (slong d = 0; d < a.len; d++) fmpq_poly_set(a1.c + d, a.c + d);
+                    fmpq_poly_add_si(a1.c + 0, a1.c + 0, 1);
+                    FF_CHECK(!ff_divexact(&q, &a1, &c, isnf ? mu : NULL));
+                    ff_qtpoly_clear(&a1);
+                }
+                ff_qtpoly_clear(&q);
+            }
             int ok = ff_xgcd_modular(&g, &s, &t, &a, &b, isnf ? mu : NULL, &S);
             if (a.len == 0 || b.len == 0) FF_CHECK(!ok);
             else {
@@ -358,6 +391,11 @@ static void test_hnf_modular_builtin(void) {
             " r2 = FLINT`PolynomialExtendedGCD[a, b, x, Extension -> {t, t^2 + t + 1}, \"Modular\" -> False];"
             " ListQ[r1] && r1 === r2 && Exponent[r1[[1]], x] === 2]");
     TR_TRUE("Head[FLINT`PolynomialExtendedGCD[x, x^2, x, \"DeterminantMultiple\" -> x]] === FLINT`PolynomialExtendedGCD");
+    /* the field gcd through ff_gcd_modular: a planted factor over Q(Sqrt[2] + Sqrt[3]), and coprime inputs */
+    TR_TRUE("Module[{mu = t^4 - 10 t^2 + 1, c, a, b, red}, red[e_] := Expand[PolynomialRemainder[Expand[e], mu, t]];"
+            " c = x^2 + 3 t x - 7 t^3; a = red[c (x^3 + t x + 5)]; b = red[c (x^2 - 11 t^2)];"
+            " FLINT`PolynomialFieldGCD[a, b, x, Extension -> {t, mu}] === red[c]]");
+    TR_TRUE("FLINT`PolynomialFieldGCD[x^3 + t, x^2 - 3, x, Extension -> {t, t^2 + t + 1}] === 1");
     /* a bad option value leaves the call unevaluated */
     TR_TRUE("Head[FLINT`PolynomialHermiteForm[{{x}}, x, \"DeterminantMultiple\" -> x^2, \"Modular\" -> 3]] === FLINT`PolynomialHermiteForm");
 }

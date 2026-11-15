@@ -1205,9 +1205,14 @@ static int pm_nf_modular_gcd(gr_poly_t G, const gr_poly_t A, const gr_poly_t B, 
                 fmpz_pow_ui(dp, d, (ulong)j);
                 fmpq_div_fmpz(w, c, dp);
                 ex[0] = (ulong)k; ex[1] = (ulong)j;
-                fmpq_mpoly_set_coeff_fmpq_ui(Q, w, ex, ctx2);
+                /* pushed, then sorted once: set_coeff re-canonicalised the
+                 * rational content on every term (quadratic; 30 of 45 ms on a
+                 * degree-26 pair with 3000-digit coefficients) */
+                fmpq_mpoly_push_term_fmpq_ui(Q, w, ex, ctx2);
             }
         }
+        fmpq_mpoly_sort_terms(Q, ctx2);
+        fmpq_mpoly_combine_like_terms(Q, ctx2);
         if (fmpq_mpoly_is_zero(Q, ctx2)) ok = 0;
     }
     ok = ok && fb_field_mpoly_gcd(Gm, Am, Bm, M, ctx2, mp, 1, 1, n);
@@ -1245,6 +1250,23 @@ static int pm_nf_modular_gcd(gr_poly_t G, const gr_poly_t A, const gr_poly_t B, 
     return ok;
 }
 
+/* The monic gcd by ff_gcd_modular; 1 with G set, 0 to decline. */
+static int pm_try_modular_gcd(gr_poly_t G, const gr_poly_t A, const gr_poly_t B, PmField* F) {
+    ff_qtpoly_struct a, b, g;
+    ff_qtpoly_init(&a); ff_qtpoly_init(&b); ff_qtpoly_init(&g);
+    const fmpq_poly_struct* mu = (F->kind == PM_NF || (F->kind == PM_FN && F->tname)) ? F->mu : NULL;
+    int ok = pm_poly_to_qt(&a, A, F) && pm_poly_to_qt(&b, B, F) && ff_gcd_modular(&g, &a, &b, mu, NULL);
+    if (ok) {
+        gr_ptr e = gr_heap_init(F->K);
+        ok = gr_poly_zero(G, F->K) == GR_SUCCESS;
+        for (slong d = 0; d < g.len && ok; d++)
+            ok = pm_elem_from_qt(e, g.c + d, F) && gr_poly_set_coeff_scalar(G, d, e, F->K) == GR_SUCCESS;
+        gr_heap_clear(e, F->K);
+    }
+    ff_qtpoly_clear(&a); ff_qtpoly_clear(&b); ff_qtpoly_clear(&g);
+    return ok;
+}
+
 /* FLINT`PolynomialFieldGCD[a, b, x, opts] -> the monic gcd over K[x] (0 when
  * a = b = 0).  Over Q(theta) the certified modular engine when both operands
  * have positive degree; the Euclidean gcd otherwise or on its decline. */
@@ -1258,7 +1280,14 @@ static Expr* builtin_flint_polynomialfieldgcd(Expr* res) {
     gr_poly_init(A, F.K); gr_poly_init(B, F.K); gr_poly_init(G, F.K);
     if (pm_from_expr(A, a[0], &F) && pm_from_expr(B, a[1], &F)) {
         int ok = 0;
-        if (F.kind == PM_NF && A->length > 1 && B->length > 1)
+        /* the certified multi-modular gcd of the ffield driver first (over Q,
+         * Q(theta), and parameter-free Q(theta)(p)): its certificate is two
+         * exact divisions, where the field engine's was an ideal division
+         * (fmpq_mpoly_divrem_ideal, 90% of a degree-48 gcd over Q(Sqrt[2] +
+         * Sqrt[3])) */
+        if (F.kind != PM_GF && A->length > 1 && B->length > 1)
+            ok = pm_try_modular_gcd(G, A, B, &F);
+        if (!ok && F.kind == PM_NF && A->length > 1 && B->length > 1)
             ok = pm_nf_modular_gcd(G, A, B, &F);
         if (!ok) {
             ok = gr_poly_gcd(G, A, B, F.K) == GR_SUCCESS;

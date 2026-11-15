@@ -69,6 +69,7 @@
 #include <flint/nf_elem.h>
 
 #include "flint_bridge_internal.h"
+#include "ffield/ff_xgcd.h"
 
 /* How many shifts to try before declining.  Generically the first or second
  * works; the cap only bounds the pathological case. */
@@ -304,6 +305,82 @@ static void tr_pick_shift(slong* s, slong ngens, int k) {
 
 /* Split the monic A (tau-lifted, reduced) into irreducible factors over K.
  * A is consumed (left as the unit 1).  1 on success, 0 to decline. */
+/* Univariate (one polynomial variable, gens = {x}, tau last): the elements of
+ * K[x] as t-polynomial arrays for the ffield kernels, and back. */
+static void tr_to_qt(ff_qtpoly_struct* a, const fmpq_mpoly_t A, TCtx* T) {
+    slong dx = fmpq_mpoly_is_zero(A, T->ctx) ? -1 : fmpq_mpoly_degree_si(A, 0, T->ctx);
+    ff_qtpoly_set_length(a, dx + 1);
+    for (slong d = 0; d <= dx; d++) fmpq_poly_zero(a->c + d);
+    fmpq_t c; fmpq_init(c);
+    ulong e[2];
+    for (slong i = 0; i < fmpq_mpoly_length(A, T->ctx); i++) {
+        fmpq_mpoly_get_term_exp_ui(e, A, i, T->ctx);
+        fmpq_mpoly_get_term_coeff_fmpq(c, A, i, T->ctx);
+        fmpq_poly_set_coeff_fmpq(a->c + e[0], (slong)e[1], c);
+    }
+    fmpq_clear(c);
+    ff_qtpoly_normalise(a);
+}
+
+static void tr_from_qt(fmpq_mpoly_t A, const ff_qtpoly_struct* a, TCtx* T) {
+    fmpq_mpoly_zero(A, T->ctx);
+    fmpq_t c; fmpq_init(c);
+    ulong e[2];
+    for (slong d = 0; d < a->len; d++)
+        for (slong j = 0; j < fmpq_poly_length(a->c + d); j++) {
+            fmpq_poly_get_coeff_fmpq(c, a->c + d, j);
+            if (fmpq_is_zero(c)) continue;
+            e[0] = (ulong)d; e[1] = (ulong)j;
+            fmpq_mpoly_push_term_fmpq_ui(A, c, e, T->ctx);
+        }
+    fmpq_mpoly_sort_terms(A, T->ctx);
+    fmpq_mpoly_combine_like_terms(A, T->ctx);
+    fmpq_clear(c);
+}
+
+/* theta's minimal polynomial M (in tau) as an fmpq_poly */
+static void tr_mu(fmpq_poly_t mu, TCtx* T) {
+    fmpq_poly_zero(mu);
+    fmpq_t c; fmpq_init(c);
+    ulong e[2];
+    for (slong i = 0; i < fmpq_mpoly_length(T->M, T->ctx); i++) {
+        fmpq_mpoly_get_term_exp_ui(e, T->M, i, T->ctx);
+        fmpq_mpoly_get_term_coeff_fmpq(c, T->M, i, T->ctx);
+        fmpq_poly_set_coeff_fmpq(mu, (slong)e[1], c);
+    }
+    fmpq_clear(c);
+}
+
+/* Univariate gcd and exact division over K by the ffield kernels (ff_gcd_modular,
+ * ff_divexact): the multivariate engines certify by an ideal division
+ * (fmpq_mpoly_divrem_ideal), most of the time of a degree-48 factorisation
+ * over Q(omega).  0 to decline (the caller keeps its multivariate route). */
+static int tr_uni_gcd(fmpq_mpoly_t H, const fmpq_mpoly_t A, const fmpq_mpoly_t B, TCtx* T) {
+    if (T->ngens != 1 || T->nvars != 2) return 0;
+    ff_qtpoly_struct a, b, g; ff_qtpoly_init(&a); ff_qtpoly_init(&b); ff_qtpoly_init(&g);
+    fmpq_poly_t mu; fmpq_poly_init(mu); tr_mu(mu, T);
+    tr_to_qt(&a, A, T); tr_to_qt(&b, B, T);
+    int ok = ff_gcd_modular(&g, &a, &b, mu, NULL);
+    if (ok) tr_from_qt(H, &g, T);
+    ff_qtpoly_clear(&a); ff_qtpoly_clear(&b); ff_qtpoly_clear(&g);
+    fmpq_poly_clear(mu);
+    return ok;
+}
+
+static int tr_uni_divides(fmpq_mpoly_t Q, const fmpq_mpoly_t A, const fmpq_mpoly_t H, TCtx* T, int* decided) {
+    *decided = 0;
+    if (T->ngens != 1 || T->nvars != 2) return 0;
+    ff_qtpoly_struct a, h, q; ff_qtpoly_init(&a); ff_qtpoly_init(&h); ff_qtpoly_init(&q);
+    fmpq_poly_t mu; fmpq_poly_init(mu); tr_mu(mu, T);
+    tr_to_qt(&a, A, T); tr_to_qt(&h, H, T);
+    int ok = ff_divexact(&q, &a, &h, mu);
+    if (ok) tr_from_qt(Q, &q, T);
+    *decided = 1;
+    ff_qtpoly_clear(&a); ff_qtpoly_clear(&h); ff_qtpoly_clear(&q);
+    fmpq_poly_clear(mu);
+    return ok;
+}
+
 static int tr_split(fmpq_mpoly_t A, TCtx* T, TFac* out) {
     slong* s = flint_calloc((size_t)(T->ngens ? T->ngens : 1), sizeof(slong));
     fmpq_mpoly_t As, N, H, Hs, Q;
@@ -332,13 +409,17 @@ static int tr_split(fmpq_mpoly_t A, TCtx* T, TFac* out) {
             fmpq_mpoly_struct* G = fac->poly + j;
             slong dG = tr_xdeg(G, T);
             if (dG <= 0) continue;
-            if (!fb_field_mpoly_gcd(Hs, As, G, T->M, T->ctx, T->mp, T->ngens, T->tau_idx, T->n))
+            if (!tr_uni_gcd(Hs, As, G, T) &&
+                !fb_field_mpoly_gcd(Hs, As, G, T->M, T->ctx, T->mp, T->ngens, T->tau_idx, T->n))
                 continue;
             if (T->n * tr_xdeg(Hs, T) != dG) continue;      /* not irreducible yet */
             if (!tr_shift(H, Hs, s, +1, T)) continue;
             slong E = fmpz_get_si(fac->exp + j);
             for (slong k = 0; k < E && ok; k++) {
-                if (!fb_field_mpoly_divides(Q, A, H, T->M, T->ctx)) ok = 0;
+                int dec = 0;
+                int dv = tr_uni_divides(Q, A, H, T, &dec);
+                if (!dec) dv = fb_field_mpoly_divides(Q, A, H, T->M, T->ctx);
+                if (!dv) ok = 0;
                 else fmpq_mpoly_swap(A, Q, T->ctx);
             }
             if (ok) tfac_push(out, H, E, T);

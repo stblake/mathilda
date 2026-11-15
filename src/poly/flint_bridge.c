@@ -3395,6 +3395,19 @@ static Expr* tower_coef(const fmpq_poly_t fp, const void* cdata) {
     return r;
 }
 
+/* minpoly (a rational polynomial) irreducible over Q? */
+static int tower_minpoly_irreducible(const fmpq_poly_t minpoly) {
+    if (fmpq_poly_degree(minpoly) < 1) return 0;
+    fmpz_poly_t z; fmpz_poly_init(z);
+    fmpq_poly_get_numerator(z, minpoly);
+    fmpz_poly_factor_t f; fmpz_poly_factor_init(f);
+    fmpz_poly_factor(f, z);
+    int irr = (f->num == 1 && f->exp[0] == 1 && fmpz_poly_degree(f->p + 0) == fmpz_poly_degree(z));
+    fmpz_poly_factor_clear(f);
+    fmpz_poly_clear(z);
+    return irr;
+}
+
 static Expr* tower_op(const Expr* a, const Expr* b, AbsOp op) {
     if (!a || !b) return NULL;
 
@@ -3415,7 +3428,14 @@ static Expr* tower_op(const Expr* a, const Expr* b, AbsOp op) {
     for (int i = 0; i < det.r; i++) fmpq_poly_init(&img[i]);
 
     Expr* out = NULL;
-    if (tower_build(&det, minpoly, P, img)) {
+    /* The tower is a FIELD of degree 2^r only when the r radicals are
+     * independent.  Dependent ones -- Sqrt[2], Sqrt[3], Sqrt[6], which Expand
+     * of (Sqrt[2] + Sqrt[3])^2 produces -- give a reducible "minimal
+     * polynomial", a ring with zero divisors, and a wrong gcd (1 where the
+     * inputs share a quadratic factor).  So the minimal polynomial must be
+     * irreducible; otherwise the tower declines and the certified field engine
+     * (flint_field_gcd, which relates dependent atoms) takes the input. */
+    if (tower_build(&det, minpoly, P, img) && tower_minpoly_irreducible(minpoly)) {
         TowerGen tg = { &det, img };
         GenSpec gs = { xname, tower_atom_image, &tg };
         TowerRD rd = { &det, P };
@@ -7659,6 +7679,12 @@ static void fg_atom_memo_put(const Expr* e, int verdict) {
 /* Collect the distinct non-rational algebraic CONSTANTS of `e` (Sqrt[2],
  * 2^(1/3), Root[..], Complex, ...).  Returns 0 for anything that is not a
  * polynomial over such constants. */
+/* An exact rational: Integer, BigInt or Rational[p, q]. */
+static int fg_is_rational_atom(const Expr* e) {
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return 1;
+    return e->type == EXPR_FUNCTION && fn_head_name(e) == SYM_Rational;
+}
+
 static int fg_collect_atoms(const Expr* e, Expr*** atoms, size_t* na, size_t* cap) {
     if (!e) return 0;
     switch (e->type) {
@@ -7679,6 +7705,28 @@ static int fg_collect_atoms(const Expr* e, Expr*** atoms, size_t* na, size_t* ca
         if (ex->type == EXPR_INTEGER && ex->data.integer >= 0)
             return fg_collect_atoms(e->data.function.args[0], atoms, na, cap);
         /* a rational power of an integer is an algebraic constant: fall through */
+    }
+    /* A Gaussian constant a + b I (a, b rational) is the one atom I, not an atom
+     * of its own: each distinct Complex[a, b] counted as a separate algebraic
+     * number made the common field of a Q(I, Sqrt[3]) pair a primitive-element
+     * search over 39 "generators", which gave up after 6.4 s (fg_subst_atoms
+     * writes a + b I accordingly). */
+    if (h == SYM_Complex && e->data.function.arg_count == 2 &&
+        fg_is_rational_atom(e->data.function.args[0]) && fg_is_rational_atom(e->data.function.args[1])) {
+        Expr* iu = expr_new_function(expr_new_symbol(SYM_Complex),
+                                     (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2);
+        int found = 0;
+        for (size_t i = 0; i < *na && !found; i++)
+            if (expr_eq((*atoms)[i], iu)) found = 1;
+        if (found) { expr_free(iu); return 1; }
+        if (*na == *cap) {
+            size_t nc = *cap ? *cap * 2 : 4;
+            Expr** np = realloc(*atoms, nc * sizeof(Expr*));
+            if (!np) { expr_free(iu); return 0; }
+            *atoms = np; *cap = nc;
+        }
+        (*atoms)[(*na)++] = iu;
+        return 1;
     }
     if (!fg_maybe_algebraic(e)) return 0;        /* not a shape qqbar can use */
     /* An algebraic constant iff qqbar accepts it and it is not already rational.
@@ -7814,6 +7862,19 @@ static Expr* fg_subst_atoms(const Expr* e, Expr* const* atoms, Expr* const* imgs
     if (!e) return NULL;
     for (size_t i = 0; i < na; i++)
         if (expr_eq((Expr*)e, atoms[i])) return expr_copy(imgs[i]);
+    /* a + b I with I an atom (fg_collect_atoms): a + b img(I) */
+    if (e->type == EXPR_FUNCTION && fn_head_name(e) == SYM_Complex && e->data.function.arg_count == 2) {
+        for (size_t i = 0; i < na; i++) {
+            const Expr* at = atoms[i];
+            if (at->type == EXPR_FUNCTION && fn_head_name(at) == SYM_Complex &&
+                at->data.function.args[0]->type == EXPR_INTEGER && at->data.function.args[0]->data.integer == 0 &&
+                at->data.function.args[1]->type == EXPR_INTEGER && at->data.function.args[1]->data.integer == 1)
+                return expr_new_function(expr_new_symbol(SYM_Plus),
+                    (Expr*[]){ expr_copy(e->data.function.args[0]),
+                               expr_new_function(expr_new_symbol(SYM_Times),
+                                   (Expr*[]){ expr_copy(e->data.function.args[1]), expr_copy(imgs[i]) }, 2) }, 2);
+        }
+    }
     if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
     size_t n = e->data.function.arg_count;
     Expr** args = malloc(sizeof(Expr*) * (n ? n : 1));
@@ -8115,7 +8176,18 @@ static int field_gcd_disabled(void) {
  * no algebraic content, more than one incompatible generator, a non-polynomial
  * operand, or a candidate that failed to certify.
  */
-Expr* flint_field_gcd(const Expr* a, const Expr* b) {
+static Expr* flint_field_gcd_impl(const Expr* a, const Expr* b, int allow_independent);
+
+Expr* flint_field_gcd(const Expr* a, const Expr* b) { return flint_field_gcd_impl(a, b, 0); }
+
+/* The same, also for a univariate input with INDEPENDENT atoms: for a caller
+ * that has already tried the univariate engines (flint_extension_gcd) and seen
+ * them decline -- PolynomialGCD over Q(I, Sqrt[3]) with omega spelled
+ * (-1 + I Sqrt[3])/2 otherwise fell to the classical Euclidean path, which
+ * did not finish in 40 s on a degree-22 pair (PARI: 1 ms). */
+Expr* flint_field_gcd_any(const Expr* a, const Expr* b) { return flint_field_gcd_impl(a, b, 1); }
+
+static Expr* flint_field_gcd_impl(const Expr* a, const Expr* b, int allow_independent) {
     if (!a || !b || field_gcd_disabled()) return NULL;
 
     /* 0. Two cheap gates before anything expensive, because this is called from
@@ -8178,11 +8250,11 @@ Expr* flint_field_gcd(const Expr* a, const Expr* b) {
             size_t cap = 0;
             if (!fg_collect_atoms(a, &atoms, &natoms, &cap) ||
                 !fg_collect_atoms(b, &atoms, &natoms, &cap) || natoms == 0) FG_BAIL();
-            if (univariate && natoms < 2) FG_BAIL();  /* one atom: nothing to relate */
+            if (univariate && natoms < 2 && !allow_independent) FG_BAIL();  /* one atom: nothing to relate */
             int dep = 1;
-            cimgs = fg_field_images_dep(atoms, natoms, univariate ? &dep : NULL);
+            cimgs = fg_field_images_dep(atoms, natoms, (univariate && !allow_independent) ? &dep : NULL);
             if (!cimgs) FG_BAIL();
-            if (univariate && !dep) FG_BAIL();       /* independent: existing route */
+            if (univariate && !dep && !allow_independent) FG_BAIL();   /* independent: existing route */
             na_ = fg_subst_atoms(a, atoms, cimgs->data.function.args, natoms);
             nb_ = fg_subst_atoms(b, atoms, cimgs->data.function.args, natoms);
             if (!na_ || !nb_) FG_BAIL();
@@ -9575,6 +9647,7 @@ Expr* flint_field_together(const Expr* e) { (void)e; return NULL; }
 Expr* flint_field_cancel(const Expr* e) { (void)e; return NULL; }
 Expr* flint_field_apart(const Expr* e, const Expr* var) { (void)e; (void)var; return NULL; }
 Expr* flint_field_gcd(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
+Expr* flint_field_gcd_any(const Expr* a, const Expr* b) { (void)a; (void)b; return NULL; }
 Expr* flint_tower_reduce(const Expr* frac, const char* const* alg_syms,
                          const Expr* const* relations, int n_alg,
                          const char* const* elim_vars, int n_elim) {

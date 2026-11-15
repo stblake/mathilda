@@ -33,5 +33,16 @@ int ff_xgcd_modular(ff_qtpoly_struct* g, ff_qtpoly_struct* s, ff_qtpoly_struct* 
                     const ff_qtpoly_struct* a, const ff_qtpoly_struct* b,
                     const fmpq_poly_struct* mu, ff_mm_stats* stats);
 
+/* The monic gcd alone, by the same driver.  Certificate: g monic, g | a and
+ * g | b exactly, and deg g equal to the degree of an image gcd (which is >=
+ * deg gcd(a, b) when the leading coefficients survive the reduction).  A
+ * degree-0 image proves gcd = 1 by itself.  1 with g, 0 to decline. */
+int ff_gcd_modular(ff_qtpoly_struct* g, const ff_qtpoly_struct* a, const ff_qtpoly_struct* b,
+                   const fmpq_poly_struct* mu, ff_mm_stats* stats);
+
+/* q = a / b over K[u] when b divides a exactly: 1, else 0. */
+int ff_divexact(ff_qtpoly_struct* q, const ff_qtpoly_struct* a, const ff_qtpoly_struct* b,
+                const fmpq_poly_struct* mu);
+
 #endif /* USE_FLINT */
 #endif /* FF_XGCD_H */

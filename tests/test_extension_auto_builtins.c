@@ -825,6 +825,41 @@ static void test_cyclotomic_mixed_generator_lift(void) {
         "True", 0);
 }
 
+/* Q(I, Sqrt[3]) with omega spelled (-1 + I Sqrt[3])/2: each distinct Gaussian
+ * constant used to count as an algebraic atom of its own (39 "generators"),
+ * the field engine gave up, and the classical Euclidean path did not finish
+ * (v0.6572).  A planted degree-2 factor over Q(omega). */
+/* Dependent radicals: Expand of (Sqrt[2] + Sqrt[3])^2 brings Sqrt[6], and
+ * the radical-tower engine took {Sqrt[2], Sqrt[3], Sqrt[6]} as independent
+ * (a degree-8 "field" with zero divisors) and returned gcd 1 -- a wrong
+ * answer (v0.6572: it now checks its minimal polynomial is irreducible). */
+static void test_dependent_radicals_gcd(void) {
+    assert_eval_eq("Module[{r = Sqrt[2] + Sqrt[3], c, a, b},"
+                   " c = x^2 + (3 - r) x + 2 r^2 - 1;"
+                   " a = Expand[c (x^3 + r x + 5)]; b = Expand[c (x^2 - 7 r)];"
+                   " {Exponent[PolynomialGCD[a, b], x], Exponent[PolynomialGCD[a, b, Extension -> Automatic], x]}]",
+                   "{2, 2}", 0);
+    /* and the exact quotient by the gcd, over the same field */
+    assert_eval_eq("Module[{r = Sqrt[2] + Sqrt[3], c, p, a, b, g},"
+                   " c = x^2 + (3 - r) x + 2 r^2 - 1; p = x^3 + r x + 5;"
+                   " a = Expand[c p]; b = Expand[c (x^2 - 7 r)]; g = PolynomialGCD[a, b];"
+                   " Simplify[Expand[PolynomialRemainder[a, g, x]]] === 0]", "True", 0);
+}
+
+static void test_gaussian_radical_gcd(void) {
+    assert_eval_eq("Module[{w = (-1 + I Sqrt[3])/2, c, a, b, g},"
+                   " c = x^2 + (3 + 5 w) x + 7 w - 2;"
+                   " a = Expand[c (x^3 + w x + 11)]; b = Expand[c (x^4 - 4 w x^2 + 5)];"
+                   " g = TimeConstrained[PolynomialGCD[a, b, Extension -> Automatic], 10, $Failed];"
+                   " g =!= $Failed && Exponent[g, x] == 2 && Simplify[Expand[PolynomialRemainder[a, g, x]]] === 0]",
+                   "True", 0);
+    assert_eval_eq("Module[{w = (-1 + I Sqrt[3])/2, c, a, b, g},"
+                   " c = x + w; a = Expand[c (x^2 + 3 I)]; b = Expand[c (x - Sqrt[3])];"
+                   " g = TimeConstrained[PolynomialGCD[a, b], 10, $Failed];"
+                   " g =!= $Failed && Exponent[g, x] == 1]",
+                   "True", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -917,6 +952,8 @@ int main(void) {
 
     /* Phase 3: cyclotomic mixed-generator lift into the qaupoly substrate. */
     TEST(test_cyclotomic_mixed_generator_lift);
+    TEST(test_gaussian_radical_gcd);
+    TEST(test_dependent_radicals_gcd);
 
     printf("All extension_auto_builtins tests passed!\n");
     return 0;

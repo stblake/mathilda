@@ -3672,8 +3672,10 @@ Expr* builtin_polynomialgcd(Expr* res) {
          * says so at qafactor.c:2798), which is right only while the cofactors
          * carry no algebraic constants and silently returns 1 when they do. */
         {
-            Expr* fgf = flint_field_gcd(res->data.function.args[0],
-                                        res->data.function.args[1]);
+            /* _any: flint_extension_gcd above has declined, so a univariate
+             * input with independent atoms (Q(I, Sqrt[3])) is ours too */
+            Expr* fgf = flint_field_gcd_any(res->data.function.args[0],
+                                            res->data.function.args[1]);
             if (fgf) {
                 if (alpha_auto) expr_free(alpha_auto);
                 if (auto_tower) qa_tower_free(auto_tower);

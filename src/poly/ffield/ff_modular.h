@@ -103,6 +103,9 @@ typedef struct {
 
 /* over Q (deg mu <= 1) only the constant term of tp is read: tp must already be
  * reduced mod mu, as every kernel input is */
+/* K for mu (monic irreducible, or NULL / degree 1: Q) */
+void ff_k0_init(ff_k0* Z, const fmpq_poly_struct* mu);
+void ff_k0_clear(ff_k0* Z);
 int ff_k0_set(gr_ptr c, const fmpq_poly_t tp, ff_k0* Z);
 int ff_k0_poly(gr_poly_t P, const ff_qtpoly_struct* a, ff_k0* Z);
 
@@ -114,6 +117,12 @@ typedef struct {
                                       every certificate: K must be a field; the
                                       caller checks it), or NULL (Q)           */
     slong nprof;                   /* profile length (>= 1)                   */
+    /* Size hint: the answer's height is expected to be at most about
+     * height_mult * (input height + 64) bits (e.g. deg a + deg b for an extended
+     * gcd, a resultant-type bound).  The prime budget is then raised to cover
+     * twice that (rational reconstruction); early termination still stops at
+     * the true size.  0: the fixed budget only. */
+    slong height_mult;
     /* The image over G: fills prof, returns a handle (NULL when this prime is
      * bad for the problem, e.g. a degree dropped). */
     void* (*image)(void* ctx, const ff_mm_reduced* R, ff_img_field* G, slong* prof);
