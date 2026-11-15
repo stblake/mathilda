@@ -7,6 +7,51 @@ The equation solver and its supporting machinery: `Solve`, `Reduce`, the quantif
 Attempts to solve an equation or system of equations for one or more variables.
 - `Solve[expr, vars]`: Solve `expr` for `vars` over the complex numbers (default).
 - `Solve[expr, vars, dom]`: Solve over the domain `dom`. Supported: `Complexes` (default), `Reals`, `Integers`.
+- **Exact exponential equations (v0.6577).** An equation in which the
+  variable appears only in exponents of numeric bases,
+  `c1 prod b_i^g_i(x) == c2 prod b_j^g_j(x)` or `... == K`, is solved
+  exactly and with the domain respected (`src/solve/solve_explog.c`):
+  - **Exact logarithms.** Every positive rational involved is written over a
+    multiplicative basis of pairwise-coprime, non-perfect-power integers. The
+    basis is computed by gcd refinement and `mpz_remove`, with no factoring.
+    The `Log`s of the basis are independent over Q, so a dependent log ratio
+    is a rational number:
+    - `Solve[4^100 + 4^100 == 8^x, x]` is
+      `67 + 2 I Pi C[1]/Log[8]`, not `Log[2^201]/Log[8] + ...`.
+    - `Solve[4^x == 8^(x + 1), x]` is `-3 + 2 I Pi C[1]/Log[2]`.
+    - `Solve[2^x == 3^x, x]` is `2 I Pi C[1]/Log[3/2]`.
+  - **Reals.** If every base is a positive real and every exponent is real
+    for real x (parameters count as real), the logarithm is a bijection. Only
+    the `C[1] = 0` branch remains, and no `Solve::ifun` is emitted:
+    - `Solve[2^201 == 8^x, x, Reals]` is `{{x -> 67}}`.
+    - `Solve[2^x == -8, x, Reals]` is `{}`.
+    - `Solve[2^x == a, x, Reals]` is `ConditionalExpression[Log[a]/Log[2], a > 0]`.
+    - `Solve[2^(a x) == 8, x, Reals]` is `3/a`.
+
+    Otherwise, a family `a + b C[1]` keeps its exactly real members, namely
+    the integers C with `Im[a] + Im[b] C == 0`. For `(-2)^x == 4` the real root
+    `x = 2` is at `C[1] = 1`, not at 0, and `Reduce[(-2)^x == 4, x, Reals]`
+    used to answer `False`. If reality cannot be decided, Solve declines.
+  - **Integers and Rationals.** A rational x satisfies `sum_k E_k(x) Log[p_k] == 0`
+    exactly when it is a common root of every row polynomial E_k, so
+    the rational solutions are the rational roots of their `PolynomialGCD`.
+    - `Solve[3^x == 81, x, Integers]` is `{{x -> 4}}`; it used to be `{}`.
+    - `Solve[4^x == 8, x, Integers]` is `{}`.
+    - `Solve[4^x == 8, x, Rationals]` is `{{x -> 3/2}}`.
+
+    When an opaque base (such as `Pi`) breaks independence, a certified
+    40-digit integer test is used for Integers. If neither decides, Solve
+    declines rather than return an unproven `{}`.
+  - **Sums over one generator** are polynomials in `u = B^(d x)`:
+    - `4^x - 3 2^x + 2 == 0` gives `x = 0, 1` over Reals.
+    - `9^x - 3^(x + 1) - 54 == 0` gives `x = 2`; the root `u = -6` has no
+      real logarithm.
+  - **Inequality constraints make the problem real.** For example,
+    `Solve[2^x == 8 && x > 0, x]` is `{{x -> 3}}`. The constrained solver
+    retries over the Reals when the complex answer is a periodic family, and
+    decides the sign of a transcendental value by a certified 40-digit test.
+  - **Inexact input.** The generated parameter stays exact under the
+    numericalisation tail: `C[1]`, not `C[1.0]`.
 - **Root forms, as the reference (v0.6137).** The roots of a cyclotomic
   polynomial are written as roots of unity: `Solve[z^2 + z + 1 == 0, z]` is
   `{{z -> -(-1)^(1/3)}, {z -> (-1)^(2/3)}}`, `z^4 + 1` gives `+-(-1)^(1/4)`,
@@ -2250,6 +2295,9 @@ input.
   `Csch`), their inverses (`ArcSin`, `ArcCos`, ..., `ArcCsch`), and
   `Power[g, n]` for integer `n >= 2`.  Also recognises `Power[E, g(x)]`
   as the canonical form of `Exp[g(x)]`.
+- Exponentials of numeric bases are handled first, exactly and by domain, by
+  the log-linear stage `solve_explog.c` (see Solve above). Constant bases
+  that are symbolic parameters (`a^x == 3`) keep the generic `Exp` peel.
 - Additive-shift isolation pre-pass: equations of the form
   `c * head[g(x)] + free_of_var == 0` are reduced to
   `head[g(x)] == new_rhs` before head dispatch.

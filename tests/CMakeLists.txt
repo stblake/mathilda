@@ -1190,6 +1190,7 @@ set(COMMON_SRC
     ../src/solve/solvenlsys.c
     ../src/solve/solverad.c
     ../src/solve/solveinv.c
+    ../src/solve/solve_explog.c
     ../src/solve/solvetrig.c
     ../src/solve/solvetrigpair.c
     ../src/solve/solvemod.c
@@ -2454,6 +2455,10 @@ target_include_directories(solvenlsys_tests PRIVATE ../src)
 add_executable(solve_integers_tests test_solve_integers.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(solve_integers_tests PRIVATE ../src)
 add_test(NAME solve_integers_tests COMMAND solve_integers_tests)
+
+add_executable(solve_exponential_tests test_solve_exponential.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(solve_exponential_tests PRIVATE ../src)
+add_test(NAME solve_exponential_tests COMMAND solve_exponential_tests)
 
 add_executable(numberfield_tests test_numberfield.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(numberfield_tests PRIVATE ../src ../src/numbertheory)

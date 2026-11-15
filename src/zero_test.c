@@ -985,6 +985,20 @@ static double magnitude_scale_l2(const Expr* e) {
                 return a * 1.4426950408889634;   /* log2 E */
         }
 
+        /* Log[a]: |Log[a]| <= |ln|a|| + Pi, so the result's magnitude is the
+         * LOGARITHM of the argument's, not the argument's own.  The generic rule
+         * below scored Log[43774] (|a| ~ 2^15.4, value ~ 2^3.4) twelve bits under
+         * its own "scale"; a constant that then never shrinks up the ladder was
+         * read as a cancellation zero, so PossibleZeroQ[Log[n]] was True for
+         * every integer n >= 43774 (and Log[10^6], Log[2^201]) -- and solvepoly,
+         * trimming hidden-zero leading coefficients, turned x Log[10^6] == 1
+         * into "no solution". */
+        if (head_name == SYM_Log && argc == 1) {
+            double s = magnitude_scale_l2(e->data.function.args[0]);
+            if (!isfinite(s)) s = 0.0;
+            return log2(fabs(s) * 0.6931471805599453 + 3.141592653589793);
+        }
+
         /* Plus: the L1 norm of the terms.  Generic function (Sin, Cos, Log,
          * Exp, user-defined, …): treat the result magnitude as approximately
          * the sum of operand magnitudes.  Adequate for the threshold

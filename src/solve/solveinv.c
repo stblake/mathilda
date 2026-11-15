@@ -39,6 +39,7 @@
 #include "message.h"   /* mth_msg_suppressed(): quiet internal probes */
 #include "poly/solvepoly.h"
 #include "simp/simp_log.h"   /* simp_log_fuse_all(): combine multi-log residuals */
+#include "solve_explog.h"     /* exact log-linear exponential equations */
 #include "solverad.h"
 #include "sym_intern.h"
 #include "sym_names.h"
@@ -1441,6 +1442,335 @@ static Expr* peel_lambert(Expr* residual, Expr* var, SolveInvCtx* ctx) {
     return out;
 }
 
+/* ------------------------------------------------------------------ *
+ *  Exact exponential equations (solve_explog.c).                      *
+ *                                                                     *
+ *  c1 prod b_i^g_i(x) == c2 prod b_j^g_j(x)  (or == K) with numeric   *
+ *  bases is linear in the logarithms of the bases.  solve_explog      *
+ *  writes it EXACTLY over a coprime multiplicative basis, so          *
+ *  8^x == 2^201 reads x - 67 == 2 Pi I C/Log[8] (never               *
+ *  Log[2^201]/Log[8]).  The glue below makes it domain-aware:          *
+ *    - Complexes: the periodic family, wrapped in Element[C, Integers]; *
+ *    - Reals (positive real bases, real exponents): the logarithm is a  *
+ *      bijection, so only lhs == 0 -- no C[k], no Solve::ifun -- and a   *
+ *      constant side <= 0 has no solution;                             *
+ *    - Integers / Rationals: the rational solutions are the rational    *
+ *      roots of an exact decision polynomial (independence of the      *
+ *      basis logarithms), else a certified numeric integer test, else   *
+ *      DECLINE -- never an unproven {}.                                 *
+ * ------------------------------------------------------------------ */
+
+static const char* ctx_dom_name(const SolveInvCtx* ctx) {
+    return (ctx->dom && ctx->dom->type == EXPR_SYMBOL) ? ctx->dom->data.symbol.name : NULL;
+}
+
+static Expr* empty_list(void) { return expr_new_function(mk_sym("List"), NULL, 0); }
+
+/* 1: v is an integer; 0: v is provably not an integer (exact non-integer
+ * rational, or a number certified at 40 digits to be non-real or at distance
+ * > 10^-20 from every integer); -1: undecided. */
+static int value_integer_status(const Expr* v) {
+    if (v->type == EXPR_INTEGER || v->type == EXPR_BIGINT) return 1;
+    if (head_is(v, SYM_Rational)) return 0;
+    Expr* nq = eval_and_free(mk_fn1("NumericQ", expr_copy((Expr*)v)));
+    bool numeric = nq->type == EXPR_SYMBOL && nq->data.symbol.name == SYM_True;
+    expr_free(nq);
+    if (!numeric) return -1;
+    Expr* nv = eval_and_free(mk_fn2("N", expr_copy((Expr*)v), mk_int(40)));
+    Expr* eps = mk_pow(mk_int(10), mk_int(-20));
+    Expr* im = eval_and_free(mk_fn2("Greater",
+        mk_fn1("Abs", mk_fn1("Im", expr_copy(nv))), expr_copy(eps)));
+    Expr* re = eval_and_free(mk_fn1("Re", expr_copy(nv)));
+    Expr* fr = eval_and_free(mk_fn2("Greater",
+        mk_fn1("Abs", mk_fn2("Plus", expr_copy(re), mk_neg(mk_fn1("Round", expr_copy(re))))),
+        eps));
+    int st = -1;
+    if ((im->type == EXPR_SYMBOL && im->data.symbol.name == SYM_True)
+        || (fr->type == EXPR_SYMBOL && fr->data.symbol.name == SYM_True)) st = 0;
+    expr_free(nv); expr_free(im); expr_free(re); expr_free(fr);
+    return st;
+}
+
+/* Keep the rows of `sols` (consumed) whose values are integers; NULL when
+ * some value is undecided. */
+static Expr* filter_integer_rows(Expr* sols) {
+    if (!head_is(sols, SYM_List)) { expr_free(sols); return NULL; }
+    size_t n = sols->data.function.arg_count;
+    Expr** kept = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    size_t nk = 0;
+    bool undecided = false;
+    for (size_t i = 0; i < n && !undecided; i++) {
+        Expr* row = sols->data.function.args[i];
+        int st = 1;
+        for (size_t j = 0; head_is(row, SYM_List) && j < row->data.function.arg_count; j++) {
+            Expr* r = row->data.function.args[j];
+            if (!head_is(r, SYM_Rule) || r->data.function.arg_count != 2) { st = -1; break; }
+            int s = value_integer_status(r->data.function.args[1]);
+            if (s < st) st = s;
+        }
+        if (st < 0) undecided = true;
+        else if (st == 1) kept[nk++] = expr_copy(row);
+    }
+    expr_free(sols);
+    if (undecided) {
+        for (size_t i = 0; i < nk; i++) expr_free(kept[i]);
+        free(kept);
+        return NULL;
+    }
+    Expr* out = expr_new_function(mk_sym("List"), kept, nk);
+    free(kept);
+    return out;
+}
+
+/* Solve lhs == 0 (owned equation built here) with ctx->dom temporarily `dom`. */
+static Expr* explog_solve_zero(const Expr* lhs, Expr* var, SolveInvCtx* ctx,
+                               Expr* dom /* borrowed, may be NULL */) {
+    Expr* eq = eval_and_free(mk_fn2("Equal", expr_copy((Expr*)lhs), mk_int(0)));
+    Expr* saved = ctx->dom;
+    ctx->dom = dom;
+    ctx->depth++;
+    Expr* sols = solve_inner_equation(eq, var, ctx);
+    ctx->depth--;
+    ctx->dom = saved;
+    expr_free(eq);
+    return sols;
+}
+
+static bool is_true_sym(const Expr* e) {
+    return e && e->type == EXPR_SYMBOL && e->data.symbol.name == SYM_True;
+}
+
+/* |N[e, 40]| > 10^-20, certified (True) for a nonzero number. */
+static bool certified_nonzero(const Expr* e) {
+    Expr* t = eval_and_free(mk_fn2("Greater",
+        mk_fn1("Abs", mk_fn2("N", expr_copy((Expr*)e), mk_int(40))),
+        mk_pow(mk_int(10), mk_int(-20))));
+    bool nz = is_true_sym(t);
+    expr_free(t);
+    return nz;
+}
+
+static bool pzq(Expr* e /* consumed */) {
+    Expr* t = eval_and_free(mk_fn1("PossibleZeroQ", e));
+    bool z = is_true_sym(t);
+    expr_free(t);
+    return z;
+}
+
+/* The real members of the families  var -> a + b C  (C in Integers) of
+ * `sols` (borrowed).  For integer C the value is real iff
+ *     Im[a] + Im[b] C == 0:
+ *   - Im[b] != 0: one candidate C = -Im[a]/Im[b]; kept (as a plain value)
+ *     when it is an integer, verified exactly by PossibleZeroQ[Im[value]]
+ *     -- (-2)^x == 4 has its real root x = 2 at C = 1, not at C = 0;
+ *   - Im[b] == 0: the whole family when Im[a] == 0, else nothing.
+ * Returns 1 with *out set, 0 when some value is not affine in C (the caller
+ * keeps the family), -1 when a reality question is undecided (decline). */
+static int explog_real_members(const Expr* sols, const Expr* Ck, Expr** out) {
+    *out = NULL;
+    if (!head_is(sols, SYM_List)) return 0;
+    size_t n = sols->data.function.arg_count;
+    Expr** rows = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    size_t nr = 0;
+    int rc = 1;
+    for (size_t i = 0; i < n && rc == 1; i++) {
+        const Expr* row = sols->data.function.args[i];
+        if (!head_is(row, SYM_List) || row->data.function.arg_count != 1
+            || !head_is(row->data.function.args[0], SYM_Rule)) { rc = 0; break; }
+        const Expr* rule = row->data.function.args[0];
+        Expr* ve = eval_and_free(mk_fn1("Expand", expr_copy(rule->data.function.args[1])));
+        Expr* a = eval_and_free(mk_fn2("ReplaceAll", expr_copy(ve),
+                                       mk_fn2("Rule", expr_copy((Expr*)Ck), mk_int(0))));
+        Expr* b = eval_and_free(mk_fn2("Coefficient", expr_copy(ve), expr_copy((Expr*)Ck)));
+        Expr* chk = eval_and_free(mk_fn1("Expand", mk_fn2("Plus", expr_copy(ve),
+            mk_neg(mk_fn2("Plus", expr_copy(a), mk_fn2("Times", expr_copy(b), expr_copy((Expr*)Ck)))))));
+        bool affine = chk->type == EXPR_INTEGER && chk->data.integer == 0
+                   && !contains_var(b, Ck->data.function.head) && !contains_var(a, Ck->data.function.head);
+        expr_free(chk);
+        Expr* ima = eval_and_free(mk_fn1("Im", expr_copy(a)));
+        Expr* imb = eval_and_free(mk_fn1("Im", expr_copy(b)));
+        if (!affine) rc = 0;
+        else if (certified_nonzero(imb)) {
+            Expr* c = eval_and_free(mk_fn2("N", mk_neg(mk_fn2("Times", expr_copy(ima),
+                                     mk_pow(expr_copy(imb), mk_int(-1)))), mk_int(40)));
+            Expr* k = eval_and_free(mk_fn1("Round", expr_copy(c)));
+            if (k->type != EXPR_INTEGER && k->type != EXPR_BIGINT) rc = -1;
+            else {
+                Expr* dist = eval_and_free(mk_fn2("Plus", expr_copy(c), mk_neg(expr_copy(k))));
+                bool off = certified_nonzero(dist);
+                expr_free(dist);
+                if (off) { expr_free(c); expr_free(k); goto next_row; } /* no integer C */
+
+                Expr* v = eval_and_free(mk_fn1("Simplify", mk_fn2("Plus", expr_copy(a),
+                                                 mk_fn2("Times", expr_copy(b), expr_copy(k)))));
+                if (pzq(mk_fn1("Im", expr_copy(v))))
+                    rows[nr++] = mk_fn1("List", mk_fn2("Rule",
+                                     expr_copy(rule->data.function.args[0]), v));
+                else { expr_free(v); rc = -1; }
+            }
+            expr_free(c); expr_free(k);
+        next_row: ;
+        } else if (pzq(expr_copy(imb))) {
+            if (certified_nonzero(ima)) { /* never real */ }
+            else if (pzq(expr_copy(ima)))                                  /* whole family */
+                rows[nr++] = mk_fn1("List", mk_fn2("Rule", expr_copy(rule->data.function.args[0]),
+                    eval_and_free(mk_fn2("ConditionalExpression", expr_copy(ve),
+                        mk_fn2("Element", expr_copy((Expr*)Ck), mk_sym("Integers"))))));
+            else rc = -1;
+        } else rc = -1;
+        expr_free(ima); expr_free(imb);
+        expr_free(ve); expr_free(a); expr_free(b);
+    }
+    if (rc != 1) {
+        for (size_t i = 0; i < nr; i++) expr_free(rows[i]);
+        free(rows);
+        return rc;
+    }
+    *out = expr_new_function(mk_sym("List"), rows, nr);
+    free(rows);
+    return 1;
+}
+
+static Expr* explog_solve_linear(const ExplogLinear* L, Expr* var,
+                                 SolveInvCtx* ctx, bool* handled) {
+    const char* dn = ctx_dom_name(ctx);
+    bool intlike = dn == SYM_Integers || dn == SYM_Rationals;
+    bool realish = intlike || dn == SYM_Reals;
+
+    if (L->kind == EXPLOG_NO_SOLUTION) { *handled = true; return empty_list(); }
+
+    if (realish && L->real_ok) {
+        *handled = true;
+        if (L->rhs_real == EXPLOG_RHS_NONE) return empty_list();
+        if (!intlike) {
+            Expr* sols = explog_solve_zero(L->lhs, var, ctx, ctx->dom);
+            if (sols && L->rhs_real == EXPLOG_RHS_COND)
+                sols = wrap_solutions_with_cond(sols, expr_copy(L->real_cond));
+            return sols;
+        }
+        if (L->rational_poly && L->rhs_real == EXPLOG_RHS_POSITIVE) {
+            /* Exact: the rational solutions are the rational roots of a
+             * rational polynomial, which solvepoly returns exactly. */
+            if (!contains_var(L->rational_poly, var)) {
+                bool zero = L->rational_poly->type == EXPR_INTEGER
+                         && L->rational_poly->data.integer == 0;
+                return zero ? NULL : empty_list();
+            }
+            SolvePolyOpts po = { false, false };
+            Expr* eq = mk_fn2("Equal", expr_copy(L->rational_poly), mk_int(0));
+            Expr* sols = solvepoly_solve_polynomial_equality(eq, var, ctx->dom, &po);
+            expr_free(eq);
+            return sols;
+        }
+        if (dn != SYM_Integers) return NULL;     /* irrationality undecidable */
+        Expr* reals = mk_sym("Reals");
+        Expr* sols = explog_solve_zero(L->lhs, var, ctx, reals);
+        expr_free(reals);
+        return sols ? filter_integer_rows(sols) : NULL;
+    }
+    if (intlike) { *handled = true; return NULL; }
+
+    /* Complexes (or Reals with a base / exponent that may be non-real: the
+     * family is collapsed to its real members by Solve's Reals funnel). */
+    Expr* Ck = mint_param(ctx);
+    Expr* inner = eval_and_free(mk_fn2("Equal", expr_copy(L->lhs),
+                                       mk_fn2("Times", expr_copy(L->period), expr_copy(Ck))));
+    Expr* saved = ctx->dom;
+    if (dn == SYM_Reals) ctx->dom = NULL;
+    ctx->depth++;
+    Expr* sols = solve_inner_equation(inner, var, ctx);
+    ctx->depth--;
+    ctx->dom = saved;
+    expr_free(inner);
+    if (!sols) { ctx->param_counter--; expr_free(Ck); return NULL; }
+    if (dn == SYM_Reals) {
+        /* A base or exponent that may be non-real: select the real members
+         * of each family exactly instead of returning a complex family. */
+        Expr* real_rows = NULL;
+        int rr = explog_real_members(sols, Ck, &real_rows);
+        if (rr != 0) {
+            expr_free(sols);
+            *handled = true;
+            if (rr < 0) { expr_free(Ck); return NULL; }
+            /* Rows that kept a whole family still carry C[k]. */
+            if (contains_var(real_rows, Ck->data.function.head)) {
+                emit_ifun(ctx);
+            } else {
+                ctx->param_counter--;
+            }
+            expr_free(Ck);
+            return real_rows;
+        }
+    }
+    sols = wrap_solutions_with_cond(sols,
+        eval_and_free(mk_fn2("Element", expr_copy(Ck), mk_sym("Integers"))));
+    expr_free(Ck);
+    emit_ifun(ctx);
+    *handled = true;
+    return sols;
+}
+
+/* Sum of exponentials over one generator: solve the polynomial in u, then
+ * u == B^(d x) for each root through the (domain-aware) driver.  Every row
+ * reuses the same family parameter, as the reference output does. */
+static Expr* explog_solve_kernel(const ExplogKernel* K, Expr* var,
+                                 SolveInvCtx* ctx, bool* handled) {
+    const char* dn = ctx_dom_name(ctx);
+    bool intlike = dn == SYM_Integers || dn == SYM_Rationals;
+    SolvePolyOpts po = { false, false };
+    Expr* eq = mk_fn2("Equal", expr_copy(K->poly), mk_int(0));
+    Expr* us = solvepoly_solve_polynomial_equality(eq, K->u, NULL, &po);
+    expr_free(eq);
+    if (!us || !head_is(us, SYM_List)) {
+        if (us) expr_free(us);
+        *handled = intlike;
+        return NULL;
+    }
+    int base_counter = ctx->param_counter, max_counter = base_counter;
+    Expr* agg = empty_list();
+    bool fail = false;
+    for (size_t i = 0; i < us->data.function.arg_count && !fail; i++) {
+        Expr* row = us->data.function.args[i];
+        if (!head_is(row, SYM_List) || row->data.function.arg_count != 1
+            || !head_is(row->data.function.args[0], SYM_Rule)) { fail = true; break; }
+        Expr* r = row->data.function.args[0]->data.function.args[1];
+        if (r->type == EXPR_INTEGER && r->data.integer == 0) continue;  /* u != 0 */
+        Expr* eq2 = eval_and_free(mk_fn2("Equal", expr_copy(K->kernel), expr_copy(r)));
+        ctx->param_counter = base_counter;
+        ctx->depth++;
+        Expr* s = solveinv_drive(eq2, var, ctx);
+        ctx->depth--;
+        if (ctx->param_counter > max_counter) max_counter = ctx->param_counter;
+        expr_free(eq2);
+        if (!s) { fail = true; break; }
+        agg = concat_lists(agg, s);
+    }
+    ctx->param_counter = max_counter;
+    expr_free(us);
+    if (fail) { expr_free(agg); *handled = intlike; return NULL; }
+    *handled = true;
+    return agg;
+}
+
+/* Entry: *handled is set when the residual was recognised and the answer
+ * (possibly NULL = decline the whole Solve) is final. */
+static Expr* peel_explog(Expr* residual, Expr* var, SolveInvCtx* ctx, bool* handled) {
+    *handled = false;
+    ExplogLinear L;
+    if (explog_linearize(residual, var, &L)) {
+        Expr* r = explog_solve_linear(&L, var, ctx, handled);
+        explog_linear_free(&L);
+        return r;
+    }
+    ExplogKernel K;
+    if (explog_kernel(residual, var, &K)) {
+        Expr* r = explog_solve_kernel(&K, var, ctx, handled);
+        explog_kernel_free(&K);
+        return r;
+    }
+    return NULL;
+}
+
 static Expr* solveinv_drive(Expr* equation, Expr* var,
                             SolveInvCtx* ctx) {
     if (!equation || !var || !ctx) return NULL;
@@ -1462,6 +1792,13 @@ static Expr* solveinv_drive(Expr* equation, Expr* var,
      * NULL (fewer than two fusable logs) leaves the residual unchanged. */
     Expr* fused = simp_log_fuse_all(residual, var);
     if (fused) { expr_free(residual); residual = fused; }
+
+    /* Exponentials with numeric bases: the exact, domain-aware path. */
+    {
+        bool handled = false;
+        Expr* el = peel_explog(residual, var, ctx, &handled);
+        if (handled || el) { expr_free(residual); return el; }
+    }
 
     Isolation iso = {0};
     if (!isolate_residual(residual, var, &iso)) {

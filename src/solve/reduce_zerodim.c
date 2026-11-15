@@ -92,12 +92,50 @@ static void branches_free(Branches* B) {
  *  Per-conjunct solver                                                *
  * ------------------------------------------------------------------ */
 
+/* Sign of a variable-free value with the algebraic (qqbar) test first and a
+ * certified numeric fallback for a transcendental one (Log[3]/Log[2]): a
+ * NumericQ value whose 40-digit approximation is real and of magnitude above
+ * 10^-20 has that sign.  -2 when undecided (zero or near-zero transcendentals,
+ * symbolic values). */
+static int zd_sign(const Expr* V) {
+    int s = rru_sign_of(V);
+    if (s != -2) return s;
+    Expr* nq = eval_and_free(expr_new_function(expr_new_symbol(SYM_NumericQ),
+        (Expr*[]){ expr_copy((Expr*)V) }, 1));
+    bool numeric = nq->type == EXPR_SYMBOL && nq->data.symbol.name == SYM_True;
+    expr_free(nq);
+    if (!numeric) return -2;
+    Expr* nv = eval_and_free(expr_new_function(expr_new_symbol(SYM_N),
+        (Expr*[]){ expr_copy((Expr*)V), expr_new_integer(40) }, 2));
+    bool real = nv->type == EXPR_REAL || nv->type == EXPR_INTEGER || nv->type == EXPR_BIGINT
+#ifdef USE_MPFR
+             || nv->type == EXPR_MPFR
+#endif
+             ;
+    int out = -2;
+    if (real) {
+        Expr* big = eval_and_free(expr_new_function(expr_new_symbol(SYM_Greater),
+            (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Abs), (Expr*[]){ expr_copy(nv) }, 1),
+                       expr_new_function(expr_new_symbol(SYM_Power),
+                           (Expr*[]){ expr_new_integer(10), expr_new_integer(-20) }, 2) }, 2));
+        if (big->type == EXPR_SYMBOL && big->data.symbol.name == SYM_True) {
+            Expr* pos = eval_and_free(expr_new_function(expr_new_symbol(SYM_Greater),
+                (Expr*[]){ expr_copy(nv), expr_new_integer(0) }, 2));
+            out = (pos->type == EXPR_SYMBOL && pos->data.symbol.name == SYM_True) ? 1 : -1;
+            expr_free(pos);
+        }
+        expr_free(big);
+    }
+    expr_free(nv);
+    return out;
+}
+
 /* Decide whether the side relation `a` (rel over its poly) holds at branch
  * value V = poly(branch).  Returns 1 (holds), 0 (fails), -1 (undecidable). */
 static int side_holds(RRel rel, const Expr* V) {
     switch (rel) {
-        case R_LT: { int s = rru_sign_of(V); return (s == -2) ? -1 : (s < 0); }
-        case R_LE: { int s = rru_sign_of(V); return (s == -2) ? -1 : (s <= 0); }
+        case R_LT: { int s = zd_sign(V); return (s == -2) ? -1 : (s < 0); }
+        case R_LE: { int s = zd_sign(V); return (s == -2) ? -1 : (s <= 0); }
         case R_NE: {
             Expr* zero = expr_new_integer(0);
             int e = flint_qqbar_equal(V, zero);   /* 1 eq, 0 ne, -1 undecided */
@@ -107,6 +145,15 @@ static int side_holds(RRel rel, const Expr* V) {
         }
         default: return -1;                       /* R_EQ/R_ELEM never here */
     }
+}
+
+/* Does `e` contain a subexpression with head `h` anywhere? */
+static bool has_head_deep(const Expr* e, const char* h) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (is_head(e, h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (has_head_deep(e->data.function.args[i], h)) return true;
+    return false;
 }
 
 /* Solve the zero-dimensional equational subsystem of `conj` over the complexes,
@@ -143,10 +190,31 @@ static int zerodim_conj(const RConj* conj, Expr** vars, int nv, bool reals,
     for (int i = 0; i < nv; i++) vcopy[i] = expr_copy(vars[i]);
     Expr* vlist = expr_new_function(expr_new_symbol(SYM_List), vcopy, (size_t)nv);
     free(vcopy);
+    /* Kept for a Reals retry (below) before ownership passes into the call. */
+    Expr* eq_keep = reals ? expr_copy(eqconj) : NULL;
+    Expr* vl_keep = reals ? expr_copy(vlist) : NULL;
     Expr* base[2] = { eqconj, vlist };            /* ownership passes on */
     neq = 0;                                       /* eqs[] now owned by eqconj */
     Expr* call = reduce_opts_build_solve(base, 2, opts);
     Expr* sols = eval_and_free(call);
+
+    /* Over the complexes a transcendental equation answers with periodic
+     * ConditionalExpression families (2^x == 8: x = 3 + 2 Pi I C[1]/Log[2]),
+     * which the filter below must reject as positive-dimensional.  The
+     * ordering constraints make the problem real, and over the Reals such an
+     * equation can be discrete (x = 3), so ask Solve again with that domain.
+     * A polynomial system never produces a family, so its answer -- and this
+     * engine's behaviour on it -- is unchanged. */
+    bool real_answers = false;   /* sols came from Solve over the Reals */
+    if (reals && has_head_deep(sols, SYM_ConditionalExpression)) {
+        Expr* rbase[3] = { eq_keep, vl_keep, expr_new_symbol(SYM_Reals) };
+        eq_keep = vl_keep = NULL;
+        Expr* rsols = eval_and_free(reduce_opts_build_solve(rbase, 3, opts));
+        if (is_head(rsols, SYM_List)) { expr_free(sols); sols = rsols; real_answers = true; }
+        else expr_free(rsols);
+    }
+    if (eq_keep) expr_free(eq_keep);
+    if (vl_keep) expr_free(vl_keep);
 
     if (!is_head(sols, SYM_List)) { expr_free(sols); rc = 0; goto cleanup; }
 
@@ -175,7 +243,7 @@ static int zerodim_conj(const RConj* conj, Expr** vars, int nv, bool reals,
 
         /* Filter: realness (Reals domain) then each side relation. */
         bool keep = true;
-        if (reals) {
+        if (reals && !real_answers) {
             for (int i = 0; i < nv && keep; i++) {
                 int r = flint_qqbar_is_real(val[i]);
                 if (r == -1) { rc = 0; break; }   /* undecidable -> decline */

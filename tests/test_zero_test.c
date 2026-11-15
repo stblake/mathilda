@@ -1296,6 +1296,22 @@ static void test_uninformative_points_are_redrawn(void) {
                "True");
 }
 
+/* Log[a] has magnitude ~ log|a|, not |a|.  Scored as |a|, Log[43774]
+ * (value 2^3.4, "scale" 2^15.4) sat 12 bits under its scale, never shrank up
+ * the ladder, and was read as a cancellation zero: PossibleZeroQ[Log[n]] was
+ * True for every integer n >= 43774, and Solve[x Log[10^6] == 1, x] was {}.
+ * True zeros built from such logarithms must stay zero. */
+static void test_log_of_large_integer_nonzero(void) {
+    assert_pzq("PossibleZeroQ[Log[43774]]", "False");
+    assert_pzq("PossibleZeroQ[Log[10^6]]", "False");
+    assert_pzq("PossibleZeroQ[Log[2^201]]", "False");
+    assert_pzq("PossibleZeroQ[Log[2^15 3]]", "False");
+    assert_pzq("PossibleZeroQ[2 Log[43774]]", "False");
+    assert_pzq("PossibleZeroQ[Log[10^6] - 6 Log[10]]", "True");
+    assert_pzq("PossibleZeroQ[Log[2^201] - 201 Log[2]]", "True");
+    assert_pzq("PossibleZeroQ[Log[43774] - Log[2] - Log[43] - Log[509]]", "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -1507,6 +1523,7 @@ int main(void) {
     TEST(test_nonholomorphic_genuine_identities);
     TEST(test_nonholomorphic_assumed_real_stays_real);
     TEST(test_uninformative_points_are_redrawn);
+    TEST(test_log_of_large_integer_nonzero);
 
     printf("\nAll PossibleZeroQ tests passed.\n");
     return 0;

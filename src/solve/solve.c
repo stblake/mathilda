@@ -983,6 +983,38 @@ static Expr* solve_element_domain(Expr* res, Expr* vars, Expr* dom, size_t pos_e
     return out;
 }
 
+/* Copy of `e` with every generated parameter head[k] (positive integer k)
+ * replaced by the placeholder symbol Solve`Private`param$k (`hide`), or the
+ * placeholders mapped back to head[k] (`!hide`). */
+static Expr* shield_params(const Expr* e, const char* head, bool hide) {
+    static const char prefix[] = "Solve`Private`param$";
+    if (!e) return NULL;
+    if (hide && e->type == EXPR_FUNCTION && e->data.function.arg_count == 1
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == head
+        && e->data.function.args[0]->type == EXPR_INTEGER
+        && e->data.function.args[0]->data.integer > 0) {
+        char name[64];
+        snprintf(name, sizeof name, "%s%lld", prefix,
+                 (long long)e->data.function.args[0]->data.integer);
+        return expr_new_symbol(name);
+    }
+    if (!hide && e->type == EXPR_SYMBOL
+        && strncmp(e->data.symbol.name, prefix, sizeof prefix - 1) == 0) {
+        long long k = atoll(e->data.symbol.name + sizeof prefix - 1);
+        return expr_new_function(expr_new_symbol(head),
+                                 (Expr*[]){ expr_new_integer((int64_t)k) }, 1);
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** args = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    for (size_t i = 0; i < n; i++) args[i] = shield_params(e->data.function.args[i], head, hide);
+    Expr* out = expr_new_function(shield_params(e->data.function.head, head, hide), args, n);
+    free(args);
+    return out;
+}
+
+
 Expr* builtin_solve(Expr* res) {
     if (!res || res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
@@ -1433,9 +1465,14 @@ solve_finish:
      * the original inputs were MPFR at > 53 bits, the result also
      * carries MPFR precision. */
     if (inexact.has_inexact && out) {
-        Expr* numeric = common_numericalize_result(out, inexact.min_bits);
+        /* The generated integer parameters C[k] are names, not numbers of the
+         * answer: shield them so N does not turn C[1] into C[1.0]. */
+        Expr* shielded = shield_params(out, opts.inv.param_head, true);
+        Expr* numeric = common_numericalize_result(shielded, inexact.min_bits);
+        expr_free(shielded);
         expr_free(out);
-        out = numeric;
+        out = shield_params(numeric, opts.inv.param_head, false);
+        expr_free(numeric);
     }
 
     return out;  /* evaluator frees res on non-NULL return */

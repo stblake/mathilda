@@ -263,6 +263,16 @@ key, so `PossibleZeroQ[f[2 (x + 1)] - f[2 x + 2]]` is `True`, while
 `f[x] - f[y]` and `f[a] - g[a]` stay `False` (v0.6499). The
 internal `zero_test_decide` used by the solvers is unchanged.
 
+**The magnitude of a logarithm is the logarithm of its argument's (v0.6577).**
+The numeric stages compare a residual against an operand *scale*. `Log[a]`
+used to be scored by the generic rule, as `|a|`, so `Log[43774]` (value about
+2^3.4) sat 12 bits under a scale of 2^15.4. As a constant it never shrank up
+the precision ladder, and it was read as a cancellation zero:
+`PossibleZeroQ[Log[n]]` was `True` for every integer `n >= 43774`, and for
+`Log[10^6]` and `Log[2^201]`. Solve's polynomial stage, which drops leading
+coefficients that are hidden zeros, then turned `x Log[10^6] == 1` into "no
+solution". The scale is now `log2(|ln|a|| + Pi)`, a bound on `|Log[a]|`.
+
 **Uninformative sample points are re-drawn.** A sample whose value is
 `Indeterminate` only through rounding (`Coth[63.9]` is exactly `1.0` in
 doubles, so `(-1 + Coth[x])^(3/2)` in a denominator is `1/0`) is retried at the

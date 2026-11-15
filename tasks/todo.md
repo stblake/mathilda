@@ -1642,3 +1642,18 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
 - [ ] Phase 5: radical anywhere (brDField, transcendental Risch over algebraic base, RDE on a curve over a tower)
 - [ ] Theory note docs/notes/bronstein_extensions.tex (E1–E6; LaTeX per user 2026-11-14), each adversarially reviewed — E6a–c written v0.6547, review pending
 - [ ] Close-out
+
+## Solve: exact exponential equations (v0.6577) — DONE
+
+- [x] Exact log-linear stage over a coprime multiplicative basis (`src/solve/solve_explog.{c,h}`)
+- [x] Domain-aware glue in `solveinv.c`: Reals real branch; Integers/Rationals by the decision polynomial; exact real members of affine families
+- [x] Polynomial-in-one-generator kernel (`4^x - 3 2^x + 2`)
+- [x] `reduce_zerodim.c`: Reals retry for families under ordering constraints; certified numeric side signs
+- [x] Lower layer: `PossibleZeroQ[Log[n]]` false zero (n >= 43774); `C[1.0]` on inexact input; duplicate Reduce conjunct
+- [x] `tests/test_solve_exponential.c` (~80 cases + back-substitution); `test_log_of_large_integer_nonzero`
+
+**Review.** All 44 planned examples are correct. ctest -LE nightly: 695/695. Reduce corpus: 0/174 non-PASS.
+Solve corpus: 120/130, identical on HEAD 7fd69ab (the 10 `T-log-*` residual failures are pre-existing, not from this change).
+Deviation from the plan: Step 5 (a Reals backstop in builtin_solve calling `reduce_collapse_reals_families`) was dropped.
+That helper assumes a family with a non-real period has its real member at C = 0, which is wrong for `(-2)^x == 4` (real root at C = 1).
+It is replaced by the exact `Im[a] + Im[b] C == 0` selection inside the exponential stage.

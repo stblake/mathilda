@@ -251,6 +251,10 @@ static Expr* rc_fn3(const char* h, Expr* a, Expr* b, Expr* c) {
 static Expr* rc_and(Expr* a, Expr* b) {
     if (!a) return b;
     if (!b) return a;
+    /* The value's own reality condition and the row's side condition are
+     * often the same relation (Log[a] over the Reals: Solve already returns
+     * ConditionalExpression[Log[a], a > 0]); conjoin it once. */
+    if (expr_eq(a, b)) { expr_free(b); return a; }
     return rc_fn2(SYM_And, a, b);
 }
 
