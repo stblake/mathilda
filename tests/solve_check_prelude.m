@@ -43,8 +43,52 @@ scZeroPlain[r_] := Module[{s},
   scNumZero[s]
 ];
 
+(* Generic-solution witness for a branch-conditioned answer.
+ *
+ * A principal-branch solution of a logarithmic equation, e.g.
+ *   Log[t] + Log[x - t] == C[1]  ->  t -> x/2 + Sqrt[x^2 - 4 E^C[1]]/2
+ * with condition -Pi < Im[C[1]] <= Pi, is a GENERIC solution: the
+ * residual is exactly zero on the open region of (x, C[1]) where every
+ * Log keeps its principal branch, and a nonzero multiple of 2 Pi I
+ * outside it (Log[a] + Log[b] == Log[a b] fails there).  Neither "zero
+ * everywhere" (PossibleZeroQ, which samples the whole complex space) nor
+ * "zero on the reals" is the right question; whether the region is
+ * nonempty is.
+ *
+ * The residual is analytic off its branch cuts, so a wrong answer (wrong
+ * algebra) vanishes only on a measure-zero set: one high-precision zero
+ * at a generic point is a sound witness that the residual vanishes on an
+ * open set.  The points are a fixed pseudo-random cloud of exact Gaussian
+ * rationals (deterministic, so the gate cannot flake), and only points at
+ * which the answer's own condition evaluates True count, so the stated
+ * condition must also overlap the region where the answer is right. *)
+$genSamples = 48;
+$genTol = 10^-20;
+
+(* Deterministic LCG -> exact Gaussian rational with |Re|, |Im| < 3. *)
+scGenPoint[k_] := Module[{a, b},
+  a = Mod[1103515245 k + 12345, 2147483648];
+  b = Mod[1103515245 a + 12345, 2147483648];
+  (Mod[a, 6001] - 3000)/1000 + I (Mod[b, 6001] - 3000)/1000
+];
+
+scGenericZero[r_, cond_] := Module[{free, k, j, sub, c, v, hit = False},
+  free = Union[Cases[r, s_Symbol /; !NumericQ[s], {0, Infinity}],
+               Cases[r, C[_], {0, Infinity}]];
+  If[free === {}, Return[False]];
+  k = 0;
+  While[!hit && k < $genSamples,
+    k++;
+    sub = Table[free[[j]] -> scGenPoint[k Length[free] + j], {j, Length[free]}];
+    c = cond /. sub;
+    If[TrueQ[c],
+       v = Quiet[N[r /. sub, 30]];
+       If[NumberQ[v] && Abs[v] < $genTol, hit = True]]];
+  hit
+];
+
 (* Residual-is-zero, shape-aware. *)
-scZero[r_] := Module[{params, stripped},
+scZero[r_] := Module[{params, stripped, conds},
   (* Root[] objects describe the unique root of an irreducible factor;
    * accept via numericization only, never back-substitute. *)
   If[!FreeQ[r, Root], Return[scNumZero[r]]];
@@ -55,7 +99,13 @@ scZero[r_] := Module[{params, stripped},
   If[!FreeQ[r, ConditionalExpression],
      params  = Union[Cases[r, Element[q_, Integers] :> q, Infinity]];
      stripped = r /. ConditionalExpression[v_, _] :> v;
-     If[params === {}, Return[scZero[stripped]]];
+     (* No integer family: the condition is a validity region (a branch
+      * condition).  Zero everywhere passes outright; otherwise ask
+      * whether the answer is right on a nonempty part of its region. *)
+     If[params === {},
+        conds = Cases[r, ConditionalExpression[_, c_] :> c, {0, Infinity}];
+        Return[TrueQ[scZero[stripped]] ||
+               scGenericZero[stripped, And @@ conds]]];
      (* NB: Mathilda's named Function does not close over its variable
       * inside a nested pure function, so build the sample substitution
       * with Thread (params -> m) rather than a nested Map. *)
