@@ -171,7 +171,7 @@ torsionOrder[ctx_Association, b_List] := torsionOrderSpec[ctx, <|"res" -> ctx["r
 torsionOrderWith::usage = "torsionOrderWith[ctx, mk] is torsionOrder for the divisor whose ideal the builder mk constructs (see orderModPWith).";
 torsionOrderWith[ctx_Association, mk_] := Module[{gps, p, q, op, oq, n0p, n0q},
   If[ctx["genus"] === 0, Return[1]];
-  If[tragerParams =!= {}, throwUnimplemented["Trager:parameter-torsion", "torsion of a divisor over Q(parameters), positive genus (Phase 4.4 step 3)"]];
+  If[tragerParams =!= {}, throwUnimplemented["Trager:parameter-torsion", "torsion over Q(parameters) of a divisor given by an ideal builder (Bronstein special places; Phase 4.4 step 5)"]];
   gps = goodPrimes[ctx, 2];
   {p, q} = #["p"] & /@ gps;
   op = orderModPWith[ctx, mk, gps[[1]]];
@@ -285,7 +285,8 @@ torsionOrderSpec::usage = "torsionOrderSpec[ctx, spec] is torsionOrder for a div
 torsionOrderSpec[ctx_Association, spec_Association] := Module[
   {gps, p, q, op, oq = None, n0p, n0q, fr, red, Fq, Jn, cq, weil, A, Bq, cprime},
   If[ctx["genus"] === 0, Return[1]];
-  If[tragerParams =!= {}, throwUnimplemented["Trager:parameter-torsion", "torsion of a divisor over Q(parameters), positive genus (Phase 4.4 step 3)"]];
+  (* over Q(parameters): the order at a good specialisation (E4.4d) *)
+  If[tragerParams =!= {}, Return[paramTorsionOrderSpec[ctx, spec], Module]];
   gps = goodPrimes[ctx, 2];
   {p, q} = #["p"] & /@ gps;
   op = orderModPSpec[ctx, spec, gps[[1]]];
@@ -327,7 +328,7 @@ torsionScreen::usage = "torsionScreen[ctx, spec, Nn] is False when Nn delta (del
 torsionScreen[ctx_Association, spec_Association, Nn_Integer] := Module[
   {found, want, fr, red, Fr, Jn, c},
   If[ctx["genus"] === 0, Return[True]];
-  If[tragerParams =!= {}, throwUnimplemented["Trager:parameter-torsion", "torsion of a divisor over Q(parameters), positive genus (Phase 4.4 step 3)"]];
+  If[tragerParams =!= {}, Return[paramTorsionScreen[ctx, spec, Nn], Module]];
   want = 2 + tragerOption["TorsionScreenPrimes"];
   (* the good primes in order, as goodPrimes picks them (the first two fixed Nn) *)
   found = goodPrimes[ctx, want];
@@ -340,3 +341,141 @@ torsionScreen[ctx_Association, spec_Association, Nn_Integer] := Module[
       If[!jacZeroQ[If[Nn === 1, c, jacMultiple[Fr, fr["B"], c, Nn]]], Throw[False, "torsionScreen"]],
       {g, Drop[found, Min[2, Length[found]]]}];
     True, "torsionScreen"]];
+
+(* -------------------------------------------------------------------------- *)
+(* Phase 4.4 step 3: torsion over C = Q(parameters) by specialising them       *)
+(* (docs/notes/bronstein_extensions.tex, E4.4d).                               *)
+(*                                                                            *)
+(* A good specialisation a -> a0 in Q^r keeps the curve (degree, squarefree   *)
+(* profile, genus), the branch-free denominator (degree, squarefree, coprime  *)
+(* to G, Res(Bp, Ep) != 0), the residue field (mu(a0, t) irreducible of the   *)
+(* same degree: a single primitive element, so this is the compositum         *)
+(* condition), the residues (distinct, nonzero; the residue polynomial stays  *)
+(* squarefree with no zero root) and the degree of every residue place.  The  *)
+(* specialisation of the smooth model is then injective on torsion (Lemma     *)
+(* E4.4), so                                                                  *)
+(*   - delta_0 of infinite order  =>  delta of infinite order (a certificate  *)
+(*     over C: torsionOrderSpec's own NonElementary at a0 is kept);           *)
+(*   - delta of order N           =>  delta_0 of order exactly N,             *)
+(* and N0 = ord delta_0 is the only possible order.  Principality of N0 delta *)
+(* is decided over C by the caller (generatorTerms: principalGenerator over   *)
+(* fieldFn), which is Theorem E4.4(2).  The screen is sound the same way: N   *)
+(* delta principal over C forces N delta_0 principal, so a refutation at a0   *)
+(* (at a good prime of the specialised curve) is a proof.                     *)
+(* -------------------------------------------------------------------------- *)
+
+tragerOption["SpecializationTries"] = 40;
+tragerOption["SpecializationRounds"] = 8;
+tragerOption["SpecializationHeight"] = 11;
+
+paramSpecializationPoint::usage = "paramSpecializationPoint[vars, try] is the deterministic try-th candidate specialisation of the parameters vars: rules v -> rational. Candidates of round r = Quotient[try - 1, tragerOption[\"SpecializationTries\"]] have numerators below tragerOption[\"SpecializationHeight\"] 2^r and denominators up to 7 2^r, so the search never cycles through a finite set (as brSpecializationPoint).";
+paramSpecializationPoint[vars_List, try_Integer] := Module[{r = Quotient[try - 1, tragerOption["SpecializationTries"]], h, d},
+  h = tragerOption["SpecializationHeight"] 2^r; d = 7 2^r;
+  MapIndexed[
+    #1 -> (Mod[7919 First[#2]^2 + 104729 try + 31 First[#2] try^2, h] + 2)/
+          (Mod[13 try + 5 First[#2], d] + 1) &, vars]];
+
+paramSpecializeValue::usage = "paramSpecializeValue[e, sigma] is e (an expression, or a list of them) with the parameter rules sigma applied and put over a common denominator, or $Failed when a denominator vanishes.";
+paramSpecializeValue[e_List, sigma_List] := With[{v = paramSpecializeValue[#, sigma] & /@ e},
+  If[MemberQ[v, $Failed], $Failed, v]];
+paramSpecializeValue[e_, sigma_List] := Module[{t = Together[e], d},
+  d = Together[Denominator[t] /. sigma];
+  If[d === 0, $Failed, Together[(Numerator[t] /. sigma)/d]]];
+
+paramSquarefreeProfile::usage = "paramSquarefreeProfile[p, x] is the sorted list {{deg_x, multiplicity}, ...} of the squarefree factors of p involving x.";
+paramSquarefreeProfile[p_, x_Symbol] := Sort[{Exponent[#[[1]], x], #[[2]]} & /@
+  Select[tragerSquareFreeList[Expand[p]], !FreeQ[#[[1]], x] &]];
+
+paramPlaceDegree::usage = "paramPlaceDegree[F, Bp, N, G, Ep, a, m, x] is the degree over F of the divisor of the residue places with residue a: deg gcd(Bp, N^m G - a^m Ep^m).";
+paramPlaceDegree[F_Association, Bp_, N_, G_, Ep_, a_, m_Integer, x_Symbol] :=
+  kDeg[F, kGCD[F, Bp, kc[F, N^m G - a^m Ep^m], x], x];
+
+paramSpecializedField::usage = "paramSpecializedField[F, sigma] is the residue field F (fieldFn over the parameters, with or without an extension) at the specialisation sigma: fieldQ[] without an extension, fieldNF[t, mu(a0), None] with one; $Failed when mu(a0) loses its degree, a denominator vanishes or mu(a0) is reducible over Q.";
+paramSpecializedField[F_Association, sigma_List] := Module[{t, mu, mus, fl},
+  If[!fieldExtQ[F], Return[fieldQ[]]];
+  t = F["t"]; mu = F["mu"];
+  mus = paramSpecializeValue[mu, sigma];
+  If[mus === $Failed, Return[$Failed]];
+  mus = Expand[mus];
+  If[Exponent[mus, t] =!= Exponent[mu, t] || !FreeQ[Denominator[Together[mus]], t], Return[$Failed]];
+  fl = Select[FactorList[mus], !FreeQ[#[[1]], t] &];
+  If[Length[fl] =!= 1 || fl[[1, 2]] =!= 1, Return[$Failed]];
+  fieldNF[t, mus, None]];
+
+paramGoodSpecialization::usage = "paramGoodSpecialization[ctx, spec, sigma] is {ctx0, spec0}, the component context ctx and divisor spec at the specialisation sigma of the parameters, when sigma is good for them (see the section header), else $Failed. The specialised context is over Q or a number field and has the same genus.";
+paramGoodSpecialization[ctx_Association, spec_Association, sigma_List] := Module[
+  {B = ctx["B"], x, m, G, F = ctx["F"], Fs, Gs, Ns, Es, Eps, Bps, res, ress, sres, sref, Rs, red, ctx0, spec0, al, rc0},
+  x = B["x"]; m = B["m"]; G = B["G"];
+  If[KeyExistsQ[ctx, "goodQ"], Return[$Failed]];          (* a caller's own conditions: not specialisable *)
+  Fs = paramSpecializedField[F, sigma];
+  If[Fs === $Failed, Return[$Failed]];
+  {Gs, Ns, Es, Eps, Bps} = paramSpecializeValue[#, sigma] & /@ {G, ctx["N"], ctx["E"], ctx["Ep"], ctx["Bp"]};
+  If[MemberQ[{Gs, Ns, Es, Eps, Bps}, $Failed], Return[$Failed]];
+  {Gs, Bps} = Expand /@ {Gs, Bps};
+  (* the curve: degree, squarefree profile, genus *)
+  If[Exponent[Gs, x] =!= Exponent[G, x] || paramSquarefreeProfile[Gs, x] =!= paramSquarefreeProfile[G, x], Return[$Failed]];
+  If[curveGenus[m, Gs, x] =!= ctx["genus"], Return[$Failed]];
+  (* the branch-free denominator and E *)
+  If[Exponent[Bps, x] =!= Exponent[ctx["Bp"], x] || Exponent[Numerator[Together[Es]], x] =!= Exponent[Numerator[Together[ctx["E"]]], x], Return[$Failed]];
+  If[Exponent[Bps, x] > 0 && (Exponent[PolynomialGCD[Bps, D[Bps, x]], x] > 0 ||
+       Exponent[PolynomialGCD[Bps, Gs], x] > 0 || Resultant[Bps, Numerator[Together[Eps]], x] === 0), Return[$Failed]];
+  (* the residues: specialised in F0, distinct and nonzero *)
+  red[a_] := Module[{v = paramSpecializeValue[a, sigma]}, If[v === $Failed, $Failed, kc[Fs, v]]];
+  res = ctx["residues"];
+  ress = red /@ res;
+  If[MemberQ[ress, $Failed] || MemberQ[ress, 0] || !DuplicateFreeQ[ress], Return[$Failed]];
+  sres = red /@ spec["res"];
+  If[MemberQ[sres, $Failed] || MemberQ[sres, 0] || !DuplicateFreeQ[sres], Return[$Failed]];
+  (* the residue polynomial (all residues of the component, every factor) *)
+  If[KeyExistsQ[ctx, "R"] && ctx["R"] =!= 1,
+    Rs = paramSpecializeValue[ctx["R"], sigma];
+    If[Rs === $Failed, Return[$Failed]];
+    Rs = Expand[Numerator[Together[Rs]]];
+    If[Exponent[Rs, ctx["Z"]] =!= Exponent[Numerator[Together[ctx["R"]]], ctx["Z"]] ||
+       Discriminant[Rs, ctx["Z"]] === 0 || (Rs /. ctx["Z"] -> 0) === 0, Return[$Failed]]];
+  (* every residue place keeps its degree *)
+  Do[
+    If[paramPlaceDegree[F, ctx["Bp"], ctx["N"], G, ctx["Ep"], spec["res"][[i]], m, x] =!=
+       paramPlaceDegree[Fs, Bps, Ns, Gs, Eps, sres[[i]], m, x], Return[$Failed, Module]],
+    {i, Length[sres]}];
+  (* the frame root and the ordinary reference points stay what they are *)
+  al = Lookup[ctx, "alpha", None];
+  If[al =!= None,
+    al = paramSpecializeValue[al, sigma];
+    If[al === $Failed || GCD[rootMultiplicity[fieldQ[], Gs, al, x], m] =!= 1, Return[$Failed]]];
+  rc0 = Lookup[ctx, "refc", None];
+  If[rc0 =!= None,
+    rc0 = paramSpecializeValue[rc0, sigma];
+    If[rc0 === $Failed || Together[Gs /. x -> rc0] === 0 || Together[Es /. x -> rc0] === 0 ||
+       Together[Bps /. x -> rc0] === 0, Return[$Failed]]];
+  sref = spec["ref"];
+  If[MatchQ[sref, {"R0", _, _}],
+    With[{c0 = paramSpecializeValue[sref[[2]], sigma]},
+      If[c0 === $Failed || Together[Gs /. x -> c0] === 0 || Together[Es /. x -> c0] === 0 ||
+         Together[Bps /. x -> c0] === 0, Return[$Failed]];
+      sref = {"R0", c0, sref[[3]]}]];
+  If[KeyExistsQ[spec, "facs"] || KeyExistsQ[ctx, "facs"], Return[$Failed]];   (* factor divisors: not used with parameters *)
+  ctx0 = Join[ctx, <|"B" -> curveBasis[m, Gs, x], "F" -> Fs, "residues" -> ress,
+    "N" -> Ns, "E" -> Es, "Ep" -> Eps, "Bp" -> Bps|>];
+  If[KeyExistsQ[ctx, "R"] && ctx["R"] =!= 1, ctx0["R"] = Rs];
+  If[KeyExistsQ[ctx, "alpha"], ctx0["alpha"] = al];
+  If[KeyExistsQ[ctx, "refc"], ctx0["refc"] = rc0];
+  spec0 = Join[spec, <|"res" -> sres, "ref" -> sref|>];
+  {ctx0, spec0}];
+
+paramSpecialization::usage = "paramSpecialization[ctx, spec] is {ctx0, spec0} at the first good specialisation (paramGoodSpecialization) of the parameters among the deterministic candidates of growing height (paramSpecializationPoint). Every goodness condition fails only on a thin set (Hilbert irreducibility for mu and the place degrees, a proper hypersurface for the rest), so the search succeeds; exhausting it is an Internal error, never a certificate.";
+paramSpecialization[ctx_Association, spec_Association] := Module[{s, r},
+  Do[
+    s = paramSpecializationPoint[tragerParams, try];
+    r = paramGoodSpecialization[ctx, spec, s];
+    If[r =!= $Failed, Return[r, Module]],
+    {try, 1, tragerOption["SpecializationTries"] tragerOption["SpecializationRounds"]}];
+  throwInternal["NoGoodParameterSpecialization", <|"params" -> tragerParams|>]];
+
+paramTorsionOrderSpec::usage = "paramTorsionOrderSpec[ctx, spec] is torsionOrderSpec over Q(parameters): the order N0 of the divisor at a good specialisation (paramSpecialization), computed over Q or a number field. It is the only possible order of the divisor over C (Lemma E4.4); a NonElementary thrown at the specialisation (orders modulo two primes disagree) is a certificate over C.";
+paramTorsionOrderSpec[ctx_Association, spec_Association] := Module[{cs = paramSpecialization[ctx, spec]},
+  Block[{tragerParams = {}}, torsionOrderSpec[cs[[1]], cs[[2]]]]];
+
+paramTorsionScreen::usage = "paramTorsionScreen[ctx, spec, Nn] is torsionScreen over Q(parameters), on a good specialisation: Nn delta principal over C forces Nn delta_0 principal, so False is a proof.";
+paramTorsionScreen[ctx_Association, spec_Association, Nn_Integer] := Module[{cs = paramSpecialization[ctx, spec]},
+  Block[{tragerParams = {}}, torsionScreen[cs[[1]], cs[[2]], Nn]]];

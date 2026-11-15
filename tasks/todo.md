@@ -1635,7 +1635,7 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [x] 1 soundness guards (gfMod, residualCanonicalQ, brBCLimited, brGammaForm, brAlgReduceY) -- residualCanonicalQ is a whitelist (v0.6574)
   - [x] 2 Trager constant field (tragerParams, baseField[], extField, fieldFn residue fields, qBasisParams, dropConstantContent) v0.6574; lower layer fixed on the way: N[Root] with machine coefficients at MPFR precision, RootSum numeric, Slot NHoldAll
   - [ ] 2b ff_fnx with mu over Q(p) (native kernels for parametric residue fields; today the package routines -- the M1 examples run in 0.1-0.3 s, not urgent)
-  - [ ] 3 torsion by specialisation of the parameters (shared helper; N0 then principality over C)
+  - [x] 3 torsion by specialisation of the parameters (N0 then principality over C) v0.6575 -- Trager-level paramSpecialization in TorsionModP.m; torsionOrderWith (ideal builder, Bronstein special places) still declines (step 5)
   - [ ] 4 Trager front end + pinned tests
   - [ ] 5 Bronstein (brParams, fieldFn vars, RDEAlgebraic, brLinearConstantSystemQ, C rde_rational_in, kappa/sign specialisation, E3)
   - [ ] 6 cascade A/B, docs (calculus.md, docstrings), corpus (G-param-1, examples), stress families, FriCAS with parameter values

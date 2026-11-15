@@ -3800,9 +3800,20 @@ Residue fields are `Q(a)[t]/(q)` (`fieldFn`), so a residue polynomial with param
 coefficients gives a `RootSum` over Q(a). For example,
 `(x + a)/((x^2 - a) Sqrt[x^2 + a])` gives a RootSum over a quartic in Q(a), and
 `1/Sqrt[x^3 + a]` is proved not elementary. The x-free content of each log argument
-is dropped. Not yet: the torsion decision in positive genus
-(`1/(x Sqrt[x^3 + a x + 1])` stays unevaluated); parameters together with Q(i) or
-radical constants; a radical of a parameter in the integrand.
+is dropped.
+
+Torsion in positive genus (v0.6575) is decided by specialising the parameters
+(E4.4d). At a good point a0 in Q^r, the curve, the residue field, the residues and
+the residue places keep their shape. The order N0 of the specialised divisor is the
+only possible order. Principality of N0 delta is then decided over Q(a) itself.
+- `1/(x Sqrt[x^3 + a])` is elementary: its divisor is 3-torsion for every a.
+- `1/(x Sqrt[x^3 + a x + 1])` is not elementary over Q(a): N0 delta is not
+  principal. It is elementary at a = 0, a point of the countable exceptional set.
+- `1/((x - 2) Sqrt[x^3 + a])` is not elementary: at a0 the orders modulo two
+  primes disagree.
+
+Not yet: parameters together with Q(i) or radical constants; a radical of a
+parameter in the integrand.
 
 The method follows B. M. Trager, *Integration of Algebraic Functions* (MIT thesis,
 1984), restricted to simple radical extensions. It is implemented in Mathilda's own

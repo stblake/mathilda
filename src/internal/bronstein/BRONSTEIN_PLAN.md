@@ -1554,8 +1554,14 @@ the code).**
     - `(x + a)/((x^2 - a) Sqrt[x^2 + a])`, a RootSum over Q(a);
     - `Sqrt[x] + Sqrt[x + a]` and `Sqrt[x^2 + a]`, formerly pinned as declines.
   - Certificate: `1/Sqrt[x^3 + a]` is not elementary over Q(a).
-  - Still open in step 2: native `ff_fnx` with μ over Q(p). Next is step 3 (torsion);
-    `1/(x Sqrt[x^3 + a x + 1])` declines.
+  - Still open in step 2: native `ff_fnx` with μ over Q(p).
+- **v0.6575:** step 3 is done: torsion in positive genus by specialising the
+  parameters (E4.4d).
+  - `1/(x Sqrt[x^3 + a])` is elementary (order 3).
+  - `1/(x Sqrt[x^3 + a x + 1])` is not elementary: N0 delta is not principal over
+    Q(a).
+  - `1/((x - 2) Sqrt[x^3 + a])` is not elementary: the orders disagree at a0.
+  - `torsionOrderWith` (Bronstein's special places) waits for step 5.
 
 **Decisions** (user):
 - **Semantics.** Verdicts are exact over C = Q(a...), as in FriCAS.

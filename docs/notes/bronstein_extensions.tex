@@ -1424,6 +1424,30 @@ points of growing height, as \code{brSpecializationPoint} does. Each condition o
 definition is checked, never assumed. A single good $a_0$ suffices, since the
 theorem's conclusions do not depend on which good point is used.
 
+\paragraph{Implementation (v0.6575).} In \code{trager/TorsionModP.m},
+\code{torsionOrderSpec} and \code{torsionScreen} hand a component over $\Q(a)$ to
+\code{paramTorsionOrderSpec} and \code{paramTorsionScreen}.
+\begin{itemize}
+\item \code{paramSpecialization} tries the points \code{paramSpecializationPoint}, of
+  growing height, and accepts the first good one (\code{paramGoodSpecialization}).
+\item The definition's conditions are checked on the data the order computation
+  reads: $G$ (degree, squarefree profile, genus); $B_p$ (degree, squarefree, coprime
+  to $G$, $\mathrm{Res}(B_p,E')\ne0$); the degree of $E$; the residue field
+  (\code{paramSpecializedField}: $\mu(a_0,t)$ irreducible of the same degree, which is
+  the compositum condition, since the field is given by one primitive element); the
+  residues (distinct and nonzero); the residue polynomial (squarefree, no zero root);
+  the degree of every residue place; and the frame root and reference points (they
+  stay roots, or stay ordinary).
+\item The order is then computed by the existing route over $\Q$ or a number field.
+  A disagreement of the orders modulo two primes there is a certificate over $C$
+  (part~1). Otherwise its $N_0$ goes to \code{generatorTerms}, which decides
+  principality of $N_0\delta$ over \code{fieldFn} (part~2).
+\item The screen at further primes is run on the specialised curve. It is sound
+  because $N\delta$ principal over $C$ forces $N\delta_0$ principal.
+\item Divisors given by an ideal builder (\code{torsionOrderWith}, Bronstein's special
+  places) are not yet specialised, and decline.
+\end{itemize}
+
 \subsection*{E4.4e. Zero tests}
 \begin{itemize}
 \item Over \code{fieldFn[params, \{t, $\mu$\}]} with $\mu$ monic irreducible over $C$,
