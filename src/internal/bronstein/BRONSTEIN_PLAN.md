@@ -1562,6 +1562,21 @@ the code).**
     Q(a).
   - `1/((x - 2) Sqrt[x^3 + a])` is not elementary: the orders disagree at a0.
   - `torsionOrderWith` (Bronstein's special places) waits for step 5.
+- **v0.6578:** step 5 is done: Bronstein over Q(a).
+  - Coefficient fields carry the parameters (`brFn`, `brWithParams`, `brFieldOver`
+    over a Q(a) residue field, roots in radicals by `brParamRoot`).
+  - The certified C Risch DE takes them as constants
+    (`Risch\`RischDECertified[f, g, x, kernels, params]`), and the constant systems
+    are solved over Q(a) (`brConstantEquations`).
+  - κ in Q(a) builds its special places; residues of degree ≥ 2 are taken per orbit.
+  - Special-place torsion specialises the parameters first
+    (`brSpecialTorsionOrderParams`), then x (E3).
+  - About 30 parametric integrands, elementary and not, agree with their
+    specialisations at a = 2, 3, −5/7. This includes the E3 examples with a parameter in the radicand.
+  - The numeric κ/sign region checks decline with a parameter (no certificate).
+  - The cascade's Bronstein stage is gated like Trager's until step 6.
+  - Open: parameters with Q(i)/radical constants; a radical of a parameter; log
+    terms over non-binomial extensions of degree ≥ 3 outside the per-orbit path.
 
 **Decisions** (user):
 - **Semantics.** Verdicts are exact over C = Q(a...), as in FriCAS.

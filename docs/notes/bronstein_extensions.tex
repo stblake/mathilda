@@ -1445,7 +1445,19 @@ theorem's conclusions do not depend on which good point is used.
 \item The screen at further primes is run on the specialised curve. It is sound
   because $N\delta$ principal over $C$ forces $N\delta_0$ principal.
 \item Divisors given by an ideal builder (\code{torsionOrderWith}, Bronstein's special
-  places) are not yet specialised, and decline.
+  places) are specialised by the caller (v0.6578): \code{brSpecialTorsionOrderParams}
+  first specialises the parameters at a good $a_0$
+  (\code{brParamSpecialSpecialization}). That is the place $a=a_0$ of
+  $k=\Q(a)(x,\text{lower})$, and the definition's conditions are read off the data
+  the order computation uses: the residue field; $G$ (degree in $\theta$, squarefree
+  profile, genus); $B_p$ and $E$; the frame point $\theta=a$ stays ordinary; the
+  residues and the roots $\rho$ stay nonzero with none merged; $\kappa\ne0$; the
+  residue-place degrees; the special locations; and the frame degrees. Then the
+  existing specialisation of $x$ and the lower monomials (E3) runs over $\Q$. Two
+  good specialisations compose to a good one, so the order computed is the only
+  possible order of the divisor over $C$. \code{torsionOrderWith} itself refuses
+  parameters (an Internal error), and the specialised frame is checked to be free of
+  every symbol but its variable.
 \end{itemize}
 
 \subsection*{E4.4e. Zero tests}

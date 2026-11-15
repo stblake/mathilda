@@ -47,7 +47,7 @@ brBCContext[T_Association] := Module[
   h = toY[mono["arg"]];
   sY = Together[D[cc["G"], x]/(n cc["G"])];
   C = <|"x" -> x, "Y" -> Y, "m" -> n, "G" -> Expand[cc["G"]], "B" -> curveBasis[n, Expand[cc["G"]], x],
-        "F" -> fieldFn[{th}], "th" -> th, "kind" -> mono["kind"], "sY" -> sY,
+        "F" -> brFn[{th}], "th" -> th, "kind" -> mono["kind"], "sY" -> sY,
         "Ysurf" -> Together[cf["yexpr"]/s], "kernel" -> mono["kernel"],
         "b" -> rad["b"], "phi" -> Together[s/q]|>;
   C = Append[C, "h" -> brBCNorm[C, h]];
@@ -164,7 +164,7 @@ brBCLogPart[C_Association, a_, d0_] := Module[
         sumDl = afPlus[F, sumDl, afScale[F, val,
           brK0Times[F, B, brBCList[C, brBCD[C, brBCExpr[C, v]]], brK0Inverse[F, B, v]]]]],
       t = Unique["Bronstein`Private`brTc"];
-      Ft = fieldFn[{th}, {t, mu /. z -> t, Root[Function[Evaluate[mu /. z -> #]], 1]}];
+      Ft = brFn[{th}, t, mu /. z -> t];
       v = brK0PolyGCD[Ft, B, dL, brBCList[C, a - t Dd, Ft], th];
       If[brK0Degree[v, th] > 0,
         w = afScale[Ft, t, brK0Times[Ft, B, brBCList[C, brBCD[C, afToY[B, v, Y]], Ft], brK0Inverse[Ft, B, v]]];

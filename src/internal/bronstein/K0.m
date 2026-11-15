@@ -24,8 +24,8 @@
 (* ========================================================================== *)
 
 brK0Field::usage = "brK0Field[T] is the coefficient field of k0 for the tower record T: fieldFn[T[\"syms\"]] (the tower symbols are scalars; x is the curve variable). brK0Field[T, {t, mu, alpha}] adjoins the algebraic number alpha = t mod mu(t) (a residue field).";
-brK0Field[T_Association] := fieldFn[T["syms"]];
-brK0Field[T_Association, ext_List] := fieldFn[T["syms"], ext];
+brK0Field[T_Association] := brFn[T["syms"]];
+brK0Field[T_Association, {t_Symbol, mu_, _}] := brFn[T["syms"], t, mu];
 
 brK0Scalar::usage = "brK0Scalar[B, e] is the element e w_0 = e of k0 (e in k) as a coordinate list on the basis B.";
 brK0Scalar[B_Association, e_] := PadRight[{e}, B["m"]];

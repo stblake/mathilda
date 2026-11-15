@@ -45,10 +45,10 @@ brAlgebraicPart[T_Association, cv_Association, c_] := Module[{s = cv["s"], r, b,
 brAlgebraicResidualZeroQ::usage = "brAlgebraicResidualZeroQ[T, s, c, b] is True when D b + s b - c is exactly zero in k(theta).";
 brAlgebraicResidualZeroQ[T_Association, s_, c_, b_] := Together[brD[T, b] + s b - c] === 0;
 
-brMthPowerCofactor::usage = "brMthPowerCofactor[e, m] is u when the rational function e (over Q, in any variables) is a rational constant times u^m, u a rational function; None otherwise.";
+brMthPowerCofactor::usage = "brMthPowerCofactor[e, m] is u when the rational function e (over Q, in any variables) is a constant times u^m, u a rational function; None otherwise. The constants are the rationals and (Phase 4.4) the rational functions of the symbolic parameters tragerParams: a factor in the parameters alone is part of the constant (Gauss's lemma: the factors over Q[params, vars] that involve vars are those over Q(params)[vars]).";
 brMthPowerCofactor[e_, m_Integer] := Module[{t = Together[e], fl},
   fl = Join[tragerFactorList[Numerator[t]], {#[[1]], -#[[2]]} & /@ tragerFactorList[Denominator[t]]];
-  fl = Select[fl, Variables[#[[1]]] =!= {} &];
+  fl = Select[fl, Complement[Variables[#[[1]]], tragerParams] =!= {} &];
   If[AllTrue[fl, Divisible[#[[2]], m] &], Times @@ (#[[1]]^(#[[2]]/m) & /@ fl), None]];
 
 brKSolveRDE::usage = "brKSolveRDE[TL, beta, rho] solves y' + beta y = rho for y in the field k of the lower tower TL (brRischDE over its kernels). Returns brRischDE's answer with the solution written in the symbols of TL.";
@@ -109,7 +109,7 @@ brPolyRDELog[T_Association, cv_Association, c_] := Module[
   (* the remaining equations (theta-degrees below g + du) fix the constants *)
   rest = Together[(cl[[# + 1]] /. known)] & /@ Range[0, g + du - 1];
   eqs = Join[cons, Flatten[brIdenticallyZero[#, vars] & /@ rest]];
-  eqs = DeleteCases[eqs, True];
+  eqs = DeleteCases[brConstantEquations[eqs, kappas], True];
   (* a "no" only from a well-formed linear system over the constants *)
   If[!brLinearConstantSystemQ[eqs, kappas], Return[{"Unknown", "constant system not well formed"}]];
   If[MemberQ[eqs, False], Return[{"NoSolution"}]];
@@ -127,11 +127,19 @@ brIdenticallyZero::usage = "brIdenticallyZero[e, vars] is the list of equations 
 brIdenticallyZero[e_, vars_List] := Module[{num = Expand[Numerator[Together[e]]]},
   If[num === 0, {}, (# == 0) & /@ (Last /@ CoefficientRules[num, vars])]];
 
-brLinearConstantSystemQ::usage = "brLinearConstantSystemQ[eqs, kappas] is True when every element of eqs is True, False or lhs == rhs with lhs - rhs a polynomial of degree <= 1 in the symbols kappas whose coefficients are explicit numbers (algebraic constants allowed): the only systems from which an inconsistency is read as a proof.";
+brLinearConstantSystemQ::usage = "brLinearConstantSystemQ[eqs, kappas] is True when every element of eqs is True, False or lhs == rhs with lhs - rhs a polynomial of degree <= 1 in the symbols kappas whose coefficients are explicit numbers (algebraic constants allowed) or, with symbolic parameters (Phase 4.4), rational functions of tragerParams: the only systems from which an inconsistency is read as a proof.";
 brLinearConstantSystemQ[eqs_List, kappas_List] := AllTrue[eqs,
   Function[e, e === True || e === False ||
     (Head[e] === Equal && Length[e] === 2 &&
       With[{d = Expand[e[[1]] - e[[2]]]},
         PolynomialQ[d, kappas] && (kappas === {} || Max[Exponent[d, #] & /@ kappas] <= 1) &&
-        Complement[Variables[d], kappas] === {} && FreeQ[d, Integrate | Risch`Derivation]])]];
+        Complement[Variables[d], kappas, tragerParams] === {} && FreeQ[d, Integrate | Risch`Derivation]])]];
+
+brConstantEquations::usage = "brConstantEquations[eqs, kappas] normalises a linear system in the constants kappas over the constant field: with symbolic parameters (Phase 4.4) each lhs == rhs becomes True when lhs - rhs is zero in Q(params)(kappas) (Together), False when it is a nonzero element of Q(params) (free of kappas), else Numerator[lhs - rhs] == 0; without parameters eqs is returned unchanged. An inconsistency read off the result is exact over Q(params).";
+brConstantEquations[eqs_List, kappas_List] := If[tragerParams === {}, eqs,
+  Map[Function[e, If[Head[e] =!= Equal || Length[e] =!= 2, e,
+    With[{d = Together[e[[1]] - e[[2]]]},
+      Which[d === 0, True,
+        FreeQ[d, Alternatives @@ kappas] && Complement[Variables[d], tragerParams] === {}, False,
+        True, Expand[Numerator[d]] == 0]]]], eqs]];
 

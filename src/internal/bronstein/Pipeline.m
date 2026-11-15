@@ -32,7 +32,11 @@ brIntegrateTranscendental[f_, x_Symbol] := Module[{F, q},
   F];
 
 brTermExpression::usage = "brTermExpression[F, e] is the expression e over the field F with the residue-field generator replaced by its algebraic number (Trager's fieldValue for a number field; the theta of a fieldFn extension).";
-brTermExpression[F_, e_] := If[F === None || !fieldExtQ[F], e, rc[F, e] /. F["t"] -> F["theta"]];
+brTermExpression[F_, e_] := Which[F === None || !fieldExtQ[F], e,
+  (* an extension of Q(params) has no numeric embedding (Phase 4.4): its
+     elements are presented over the orbit (brOrbitLogExpression) only *)
+  F["theta"] === None, throwUnimplemented["Pipeline:parameter-field-value", "log terms over an algebraic extension of Q(params) outside the per-orbit construction"],
+  True, rc[F, e] /. F["t"] -> F["theta"]];
 
 brSplitLogs::usage = "brSplitLogs[F, logs, Y, vars] rewrites the log terms {{c, u}, ...} of a component (u over the residue field F, its generator t a symbol) in fewer, smaller logarithms: an argument free of the curve generator Y (a norm term, an element of k(theta)(t)) is split into its irreducible factors over Q[vars, t], c Log[u] -> Sum e_i c Log[p_i], dropping the factors free of vars (x and the tower symbols: they change F only by a constant); then terms with the same argument are merged (coefficients added in F, zero sums dropped). Every step changes Sum c Log[u] by a constant at most, so its derivative -- what brComponentIdentityQ checks -- is unchanged.";
 brSplitLogs[F_, logs_List, Y_Symbol, vars_List] := Module[{out = {}, fl, t, merged},
@@ -328,7 +332,8 @@ brPresentationTime[] := With[{left = Internal`TimeConstrainedRemaining[]},
 BronsteinScope[f_, x_Symbol] := With[{g = With[{g0 = tragerExtractRadicalContent[brTrigFrontEnd[f], x]},
     With[{sm = brCatch[brSignMerge[g0, x]]},
       If[sm === None || brFailQ[sm], g0, sm["g"] /. ((#[[1]] -> 1) & /@ sm["signs"])]]]},
-  Block[{tragerConstantI = brConstantField[g] === "QI", tragerAlgConstants = brAlgConstantsOf[g]}, brScopeBody[g, x]]];
+  Block[{tragerConstantI = brConstantField[g] === "QI", tragerAlgConstants = brAlgConstantsOf[g],
+          tragerParams = tragerParamsOf[g, x]}, brScopeBody[g, x]]];
 
 brTrigFrontEnd::usage = "brTrigFrontEnd[f] is f with its trigonometric and hyperbolic functions and their inverses rewritten by TrigToExp into exponentials and logarithms (ArcSin[x] -> -I Log[I x + Sqrt[1 - x^2]]: a logarithm plus the radical), an identity on every branch the CAS uses; f itself when it has none of them (Phase 4.2).";
 brTrigFrontEnd[f_] := If[FreeQ[f, brElementaryUnimplementedHeads[]], f, TrigToExp[f]];
@@ -374,6 +379,10 @@ brAlgebraicConstantQ[c_] := NumericQ[c] &&
   FreeQ[c, Power[b_, e_] /; ! (rationalNumberQ[e] && (rationalNumberQ[b] || NumericQ[b]))] &&
   With[{cr = Quiet[RootReduce[c]]}, cr === 0 || (NumericQ[cr] && cr =!= ComplexInfinity && FreeQ[cr, Indeterminate])];
 
+brParamFieldCheck::usage = "brParamFieldCheck[] declines (Unimplemented) symbolic parameters together with Q(i) or radical constants: the constant field Q(i, constants)(params) is not yet supported (Phase 4.4, as in Trager).";
+brParamFieldCheck[] := If[tragerParams =!= {} && (TrueQ[tragerConstantI] || tragerAlgConstants =!= {}),
+  throwUnimplemented["Bronstein:parameters-with-constants", "symbolic parameters together with Q(i) or radical constants"]];
+
 BronsteinIntegrate[f_, x_Symbol] := Module[{r, gt = brTrigFrontEnd[f], g, sm},
   (* radicals equal over a larger constant field (Sqrt[2 x] = Sqrt[2] Sqrt[x]):
      positive rational contents pulled out, an identity (Phase 4.3b C7) *)
@@ -388,8 +397,11 @@ BronsteinIntegrate[f_, x_Symbol] := Module[{r, gt = brTrigFrontEnd[f], g, sm},
   sm = brCatch[brSignMerge[g, x]];
   If[brFailQ[sm], sm = None];
   r = With[{g1 = If[sm === None, g, sm["g"] /. ((#[[1]] -> 1) & /@ sm["signs"])]},
-    Block[{tragerConstantI = brConstantField[g1] === "QI", tragerAlgConstants = brAlgConstantsOf[g1]},
-      brCatch[If[sm === None, brIntegrateBody[g, x], brPresentable[g, brIntegrateSignSplit[g, x, sm], x]]]]];
+    (* Phase 4.4: the symbolic parameters of g1 are transcendental constants,
+       the constant field is Q(params) *)
+    Block[{tragerConstantI = brConstantField[g1] === "QI", tragerAlgConstants = brAlgConstantsOf[g1],
+           tragerParams = tragerParamsOf[g1, x]},
+      brCatch[brParamFieldCheck[];If[sm === None, brIntegrateBody[g, x], brPresentable[g, brIntegrateSignSplit[g, x, sm], x]]]]];
   (* r is verified against g inside the pipeline, and g = TrigToExp[f] is an
      identity; a second numeric check against the trigonometric form only adds
      noise (Int Sqrt[Tan[x]]: the Root-laden answer is numerically unstable at

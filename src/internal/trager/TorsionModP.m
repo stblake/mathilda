@@ -168,10 +168,13 @@ goodPrimes[ctx_Association, k_Integer] := Module[{found = {}, p = 2, gp},
 torsionOrder::usage = "torsionOrder[ctx, b] is the only possible order N of the divisor class delta = Sum_i b_i Delta(alpha_i) of the component ctx, from its orders modulo two good primes ([T] Ch 6 Sec 3). It throws a NonElementary certificate when the prime-to-pq parts of the two orders differ (delta has infinite order). The caller must still test N delta for principality over the residue field: if that fails, delta has infinite order too.";
 torsionOrder[ctx_Association, b_List] := torsionOrderSpec[ctx, <|"res" -> ctx["residues"], "b" -> b, "ref" -> None|>];
 
-torsionOrderWith::usage = "torsionOrderWith[ctx, mk] is torsionOrder for the divisor whose ideal the builder mk constructs (see orderModPWith).";
+torsionOrderWith::usage = "torsionOrderWith[ctx, mk] is torsionOrder for the divisor whose ideal the builder mk constructs (see orderModPWith). Over Q or a number field only: with symbolic parameters the caller specialises them first (an Internal error otherwise).";
 torsionOrderWith[ctx_Association, mk_] := Module[{gps, p, q, op, oq, n0p, n0q},
   If[ctx["genus"] === 0, Return[1]];
-  If[tragerParams =!= {}, throwUnimplemented["Trager:parameter-torsion", "torsion over Q(parameters) of a divisor given by an ideal builder (Bronstein special places; Phase 4.4 step 5)"]];
+  (* a caller-built divisor over Q(params) is specialised by the caller first
+     (brSpecialTorsionOrder, Phase 4.4): reduction mod p of a parameter would
+     read it as a variable *)
+  If[tragerParams =!= {}, throwInternal["parameterTorsionWith", <|"params" -> tragerParams|>]];
   gps = goodPrimes[ctx, 2];
   {p, q} = #["p"] & /@ gps;
   op = orderModPWith[ctx, mk, gps[[1]]];

@@ -17,9 +17,11 @@
 (* since y' = 1/x has no solution in Q(x) but has Log[x] in Q(x, Log[x]).     *)
 (* ========================================================================== *)
 
-brRischDE::usage = "brRischDE[f, g, x, kernels] solves D[y] + f y == g for y in Q(x)(kernels) (kernels: the list of Log/Exp kernels of the tower, in surface form, e.g. {Log[x], E^x}; {} for Q(x)). It returns {\"Solution\", y} (y verified by the exact identity), {\"NoSolution\"} (a proof that none exists in that field), or {\"Unknown\", reason} (undecided: an unimplemented sub-case or an input outside rational functions of x and the kernels).";
+brRischDE::usage = "brRischDE[f, g, x, kernels] solves D[y] + f y == g for y in K(x)(kernels), K = Q or Q(tragerParams) (kernels: the list of Log/Exp kernels of the tower, in surface form, e.g. {Log[x], E^x}; {} for Q(x)). It returns {\"Solution\", y} (y verified by the exact identity), {\"NoSolution\"} (a proof that none exists in that field), or {\"Unknown\", reason} (undecided: an unimplemented sub-case or an input outside rational functions of x and the kernels).";
 brRischDE[f_, g_, x_Symbol, kernels_List] := Module[{r, why},
-  r = If[kernels === {}, Risch`RischDECertified[f, g, x], Risch`RischDECertified[f, g, x, kernels]];
+  (* the symbolic parameters are constants of the field (Phase 4.4) *)
+  r = Which[tragerParams =!= {}, Risch`RischDECertified[f, g, x, kernels, tragerParams],
+    kernels === {}, Risch`RischDECertified[f, g, x], True, Risch`RischDECertified[f, g, x, kernels]];
   Which[
     r === "NoSolution", {"NoSolution"},
     r === $Failed,

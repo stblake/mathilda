@@ -164,9 +164,60 @@ brSpecialDivisorIdeal[F_Association, fr_Association, finRoots_List, locs_List, r
     {l, Length[ideals]}];
   I];
 
+brParamSpecialSpecialization::usage = "brParamSpecialSpecialization[T, cv, rs, fr, locs, rhoLists, sp] is the special-place torsion data (as for brSpecialTorsionOrder) at the specialisation sp of the symbolic parameters, as <|\"cv\", \"rs\", \"fr\", \"locs\", \"rhoLists\"|> over Q or a number field (x and the lower monomials still symbolic), when sp is good, else $Failed. Good (theory note E4.4, applied to the place a = a0 of k = Q(a)(x, lower)): the residue field keeps its degree (paramSpecializedField: mu(a0) irreducible), the curve its theta-degree, squarefree profile and genus, Bp and E their degrees, Bp stays squarefree and prime to G with Res(Bp, Ep) != 0, the frame point theta = a stays ordinary, the residues and the roots rho stay nonzero with no two of them merged, every residue place keeps its degree, and the special locations and the frame degrees are kept (brSpecialLocationsGoodQ, brFrameDegreesKeptQ). The specialisation map is then injective on the torsion of the Jacobian, so the order of the specialised divisor is the order of the divisor when that is finite.";
+brParamSpecialSpecialization[T_Association, cv_Association, rs_Association, fr_Association, locs_List, rhoLists_List, sp_List] := Module[
+  {th = T["theta"], m = cv["m"], G = cv["G"], F0s, Fks, sv, red, Gs, Ns, Es, Eps, Bps, rootsS, rhoS, gen, spc, rsS, uS, frS, locsS, cvS},
+  F0s = paramSpecializedField[rs["F0"], sp];
+  If[F0s === $Failed, Return[$Failed]];
+  sv[e_] := paramSpecializeValue[e, sp];
+  {Gs, Ns, Es, Eps, Bps} = sv /@ {G, rs["N"], rs["E"], rs["Ep"], rs["Bp"]};
+  If[MemberQ[{Gs, Ns, Es, Eps, Bps}, $Failed], Return[$Failed]];
+  {Gs, Es, Bps} = Expand /@ {Gs, Es, Bps};
+  (* the curve, Bp and E *)
+  If[Exponent[Gs, th] =!= Exponent[G, th] || brSquarefreeProfile[Gs, th] =!= brSquarefreeProfile[G, th] ||
+     curveGenus[m, Gs, th] =!= curveGenus[m, G, th], Return[$Failed]];
+  If[Exponent[Bps, th] =!= Exponent[rs["Bp"], th] || Exponent[Es, th] =!= Exponent[rs["E"], th], Return[$Failed]];
+  If[Exponent[Bps, th] > 0 && (Exponent[tragerGCD[Bps, D[Bps, th]], th] > 0 ||
+       Exponent[tragerGCD[Bps, Gs], th] > 0 || Resultant[Bps, Eps, th] === 0), Return[$Failed]];
+  If[Together[Gs /. th -> fr["a"]] === 0 || Together[Es /. th -> fr["a"]] === 0, Return[$Failed]];
+  (* the residues and the roots rho: nonzero, none merged *)
+  red[e_] := With[{v = sv[e]}, If[v === $Failed, $Failed, kc[F0s, v]]];
+  rootsS = red /@ rs["roots"];
+  rhoS = Map[red, rhoLists, {2}];
+  gen = Join[rs["roots"], Flatten[rhoLists]]; spc = Join[rootsS, Flatten[rhoS]];
+  If[MemberQ[spc, $Failed] || MemberQ[spc, 0] ||
+     Length[DeleteDuplicates[spc]] =!= Length[DeleteDuplicates[kc[rs["F0"], #] & /@ gen]], Return[$Failed]];
+  If[!AllTrue[locs, #["kappa"] === None || With[{k = sv[#["kappa"]]}, k =!= $Failed && k =!= 0] &], Return[$Failed]];
+  (* the special locations and the frame *)
+  If[!brSpecialLocationsGoodQ[T, cv, rs, locs, sp] || !brFrameDegreesKeptQ[fr, sp], Return[$Failed]];
+  (* every residue place keeps its degree *)
+  Fks = Block[{tragerParams = {}}, brFieldOver[rs["vars"], F0s]];
+  rsS = Join[rs, <|"F0" -> F0s, "Fk" -> Fks, "roots" -> rootsS, "N" -> Ns, "E" -> Es, "Ep" -> Eps, "Bp" -> Bps,
+    "B" -> curveBasis[m, Gs, th]|>];
+  If[!And @@ MapThread[brPlaceDegree[rs, #1] === Block[{tragerParams = {}}, brPlaceDegree[rsS, #2]] &, {rs["roots"], rootsS}],
+    Return[$Failed]];
+  uS = fr["u"];
+  frS = Join[fr, <|"Bu" -> curveBasis[m, Expand[sv[fr["Bu"]["G"]]], uS],
+    "Nh" -> Expand[sv[fr["Nh"]]], "Eh" -> Expand[sv[fr["Eh"]]], "Bph" -> Expand[sv[fr["Bph"]]]|>];
+  locsS = Join[#, <|"u" -> sv[#["u"]], "kappa" -> If[#["kappa"] === None, None, sv[#["kappa"]]]|>] & /@ locs;
+  cvS = Join[Map[sv, KeyDrop[cv, {"m", "theta", "B", "G"}]], <|"G" -> Gs, "B" -> curveBasis[m, Gs, th]|>];
+  If[MemberQ[Values[cvS], $Failed], Return[$Failed]];
+  <|"cv" -> Join[cv, cvS], "rs" -> rsS, "fr" -> frS, "locs" -> locsS, "rhoLists" -> rhoS|>];
+
+brSpecialTorsionOrderParams::usage = "brSpecialTorsionOrderParams[T, cv, rs, fr, locs, rhoLists, cj] is brSpecialTorsionOrder over Q(params) (Phase 4.4): the parameters are specialised at the first good point (brParamSpecialSpecialization, deterministic candidates of growing height, paramSpecializationPoint) and the specialised divisor's order is computed over Q; a certificate there (orders modulo two primes disagree) holds over Q(params) as well. Exhausting the search is an Internal error, never a certificate.";
+brSpecialTorsionOrderParams[T_Association, cv_Association, rs_Association, fr_Association, locs_List, rhoLists_List, cj_List] := Module[{s, r},
+  Do[
+    s = paramSpecializationPoint[tragerParams, try];
+    r = brParamSpecialSpecialization[T, cv, rs, fr, locs, rhoLists, s];
+    If[r =!= $Failed,
+      Return[Block[{tragerParams = {}}, brSpecialTorsionOrder[T, r["cv"], r["rs"], r["fr"], r["locs"], r["rhoLists"], cj]], Module]],
+    {try, 1, tragerOption["SpecializationTries"] tragerOption["SpecializationRounds"]}];
+  throwInternal["NoGoodParameterSpecialization", <|"params" -> tragerParams, "special" -> True|>]];
+
 brSpecialTorsionOrder::usage = "brSpecialTorsionOrder[T, cv, rs, fr, locs, rhoLists, cj] is the only possible order of the class of the divisor of brSpecialDivisorIdeal (finite residues rs[\"roots\"] over rs[\"F0\"], special places of locs, coefficients cj) on the positive-genus curve of the component: specialize x and the lower monomials (brGoodSpecializationQ and brSpecialLocationsGoodQ), then Trager's torsionOrderWith on the specialized frame, with the special places' good-reduction conditions (frame values p-adic units, distinct roots rho, the point off the branch-free denominator, the multiplicity of the frame curve at the point kept) as its goodQ. It throws NonElementary when the orders modulo two primes disagree: the specialized divisor, and so the divisor, has infinite order.";
 brSpecialTorsionOrder[T_Association, cv_Association, rs_Association, fr_Association, locs_List, rhoLists_List, cj_List] := Module[
   {sigma = None, s, m = cv["m"], u = fr["u"], F0 = rs["F0"], frs, locsS, g, pts, goodQ, ctx, mk, Gu0},
+  If[tragerParams =!= {}, Return[brSpecialTorsionOrderParams[T, cv, rs, fr, locs, rhoLists, cj], Module]];
   Do[
     s = brSpecializationPoint[rs["vars"], try];
     (* the frame theta = a + 1/u must keep every u-degree: a residue place
@@ -181,6 +232,11 @@ brSpecialTorsionOrder[T_Association, cv_Association, rs_Association, fr_Associat
     "Nh" -> Expand[brSpecializeValue[fr["Nh"], sigma]], "Eh" -> Expand[brSpecializeValue[fr["Eh"], sigma]],
     "Bph" -> Expand[brSpecializeValue[fr["Bph"], sigma]]|>;
   locsS = Join[#, <|"u" -> brSpecializeValue[#["u"], sigma]|>] & /@ locs;
+  (* the specialised frame is over Q (or the residue field) in u alone: any
+     other symbol (a parameter left over) would be read as a variable mod p,
+     and the prime search would never end *)
+  If[Complement[Variables[{Gu0, frs["Nh"], frs["Eh"], frs["Bph"]}], {u}] =!= {},
+    throwInternal["brSpecialFrameNotRational", <|"symbols" -> Complement[Variables[{Gu0, frs["Nh"], frs["Eh"], frs["Bph"]}], {u}]|>]];
   g = curveGenus[m, Gu0, u];
   If[g === 0, Return[1]];
   (* Trager's reduced class arithmetic needs a root of Gu of multiplicity

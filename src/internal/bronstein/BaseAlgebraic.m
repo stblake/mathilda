@@ -142,7 +142,7 @@ brShapeBLogPart[TB_Association, cv_Association, a_, d_, Y_Symbol] := Module[
         sumDl = afPlus[F, sumDl, afScale[F, val, brK0Times[F, B, brK0D[TB, F, B, v], brK0Inverse[F, B, v]]]]],
       (* an algebraic residue t, mu(t) = 0: the logand over k0(t), the sum over the conjugates as a RootSum *)
       t = Unique["Bronstein`Private`brTb"];
-      Ft = brK0Field[TB, {t, mu /. z -> t, Root[Function[Evaluate[mu /. z -> #]], 1]}];
+      Ft = brFn[TB["syms"], t, mu /. z -> t];
       v = brK0PolyGCD[Ft, B, dEl, afMinus[Ft, brK0YMultiple[B, a], afScale[Ft, t, Dd]], th];
       If[brK0Degree[v, th] > 0,
         w = afScale[Ft, t, brK0Times[Ft, B, brK0D[TB, Ft, B, v], brK0Inverse[Ft, B, v]]];

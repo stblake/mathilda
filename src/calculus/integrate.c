@@ -1699,12 +1699,21 @@ static bool cg_algebraic_only(const Expr* e, const Expr* x, bool* has_rad) {
  *                     base or not).
  * Shape B (the radical below the tower, v0.6527-28) is has_x_rad together with
  * a kernel: a radical of x and a Log/Exp of x, in either nesting. */
+/* A symbol the Bronstein gate admits: x, or a Constant symbol (Pi, E, ...).
+ * A symbolic parameter is kept out of the cascade until the Phase 4.4 A/B
+ * gate (Method -> "Bronstein" answers it over Q(a)). */
+static bool cg_symbol_ok(const Expr* e, const Expr* x) {
+    if (e->data.symbol.name == x->data.symbol.name) return true;
+    SymbolDef* def = symtab_lookup(e->data.symbol.name);
+    return def && (def->attributes & ATTR_CONSTANT);
+}
+
 static bool cg_mixed_only(const Expr* e, const Expr* x, bool* has_mixed_rad,
                           bool* has_x_rad, bool* has_kernel) {
     if (!e) return false;
     switch (e->type) {
         case EXPR_INTEGER: case EXPR_BIGINT: return true;
-        case EXPR_SYMBOL: return true;
+        case EXPR_SYMBOL: return cg_symbol_ok(e, x);
         case EXPR_FUNCTION: break;
         default: return false;
     }
@@ -4237,7 +4246,10 @@ void integrate_init(void) {
         "reason} -- a proof, also announced as Integrate::nonelem -- {\"implementation "
         "incomplete\", reason} -- outside one simple radical extension, or a branch not "
         "implemented yet, announced as Integrate::incomplete -- or {\"failed\", reason} "
-        "(a non-elementary input or a resource bound).");
+        "(a non-elementary input or a resource bound). A symbol other than x (not a System` "
+        "constant) is a symbolic parameter, a constant with derivative 0: verdicts are exact "
+        "over Q(parameters), so an antiderivative holds outside a Zariski-closed set of "
+        "parameter values and a non-elementarity certificate outside a countable one.");
     /* The Automatic-cascade gates of the Trager / Bronstein stages, and their budgets. */
     symtab_add_builtin("Integrate`CascadeGateQ", builtin_integrate_cascadegateq);
     symtab_get_def("Integrate`CascadeGateQ")->attributes |= ATTR_PROTECTED;

@@ -86,22 +86,28 @@ brComponentLogPart[T_Association, cv_Association, c_] := Module[
 (* term); its log terms are RootSums over q.                                  *)
 (* -------------------------------------------------------------------------- *)
 
-brOrbitFirstQ::usage = "brOrbitFirstQ[nr] is True when the per-orbit construction should run before the Q-basis one: the residue polynomial nr[\"P\"] has an irreducible factor of degree >= 2 and the crude bound Prod deg(q)! on the degree of the field of all residues exceeds the largest orbit field Max deg(q).";
+brOrbitFirstQ::usage = "brOrbitFirstQ[nr] is True when the per-orbit construction should run before the Q-basis one: the residue polynomial nr[\"P\"] has an irreducible factor of degree >= 2 and the crude bound Prod deg(q)! on the degree of the field of all residues exceeds the largest orbit field Max deg(q), or (Phase 4.4) symbolic parameters are present.";
 brOrbitFirstQ[nr_Association] := Module[{degs},
   degs = Exponent[#[[1]], nr["z"]] & /@ Select[tragerFactorList[nr["P"]], !FreeQ[#[[1]], nr["z"]] &];
-  degs =!= {} && Max[degs] >= 2 && Times @@ (Factorial /@ degs) > Max[degs]];
+  (* over Q(params) the field of all residues has no numeric embedding to
+     present its elements by: the orbits, as RootSums, first (Phase 4.4) *)
+  degs =!= {} && Max[degs] >= 2 && (tragerParams =!= {} || Times @@ (Factorial /@ degs) > Max[degs])];
 
 brOrbitTerm::usage = "brOrbitTerm[T, cv, rd, nr, q, refc] is the log term of the orbit of the roots of the monic irreducible factor q(z) of the residue polynomial (residue data rd, brResidueData; reference point theta = refc): <|\"ext\" -> deg q > 1, \"Fk\" -> k(gamma), \"t\" -> the generator (gamma = t, or the rational root), \"coef\" -> gamma/(m N), \"u\" -> generator of N delta_gamma (coordinates over Fk), \"normU\", \"D\" -> the orbit's contribution to the derivative of the weight-1 log part (coordinate list over k(theta), coordinate 0 zero)|>, or $Failed when N delta_gamma is not principal (not a certificate).";
 brOrbitTerm[T_Association, cv_Association, rd_Association, nr_Association, q_, refc_] := Module[
   {z = nr["z"], m = cv["m"], B = rd["B"], t = Unique["Bronstein`Private`brTo"], ext, F0, Fk, g, rs, kappa, spec, Nq, I, u, coef, Lp, D},
   ext = Exponent[q, z] > 1;
   If[ext,
-    If[tragerAlgConstants === {} || FreeQ[q, Power[b_, _Rational] /; rationalNumberQ[b]],
+    Which[
+      (* over Q(params) (Phase 4.4): Q(params)[t]/(q) *)
+      tragerParams =!= {}, F0 = extField[t, q /. z -> t]; Fk = brFieldOver[rd["vars"], F0]; g = t,
+      tragerAlgConstants === {} || FreeQ[q, Power[b_, _Rational] /; rationalNumberQ[b]],
       F0 = fieldNF[t, q /. z -> t, None];
       Fk = fieldFn[rd["vars"], {t, q /. z -> t, Root[Function[Evaluate[q /. z -> #]], 1]}]; g = t,
+      True,
       (* radical constants in q (Phase 4.3b): the absolute field of one root *)
       With[{fr = fieldOfRoot[q, z, t]}, F0 = fr["F"]; Fk = brFieldOver[rd["vars"], F0]; g = fr["gamma"]]],
-    F0 = fieldQ[]; Fk = fieldFn[rd["vars"]]; g = -Coefficient[q, z, 0]];
+    F0 = baseField[]; Fk = brFn[rd["vars"]]; g = -Coefficient[q, z, 0]];
   rs = Join[rd, <|"F0" -> F0, "Fk" -> Fk, "roots" -> {g}|>];
   kappa = brPlaceDegree[rs, g];
   spec = <|"res" -> {g}, "b" -> {m}, "ref" -> {"R0", refc, -kappa}|>;

@@ -4027,6 +4027,51 @@ the uncertain steps of the C Risch DE, against a ratchet that only moves down.
 | `Integrate[Sin[x] Sqrt[Log[x]], x, Method -> "Bronstein"]` | unevaluated, `Integrate::incomplete` (trigonometric kernel, not yet supported) |
 | `Integrate[Erf[x] Sqrt[Log[x]], x, Method -> "Bronstein"]` | unevaluated, no message |
 
+**Symbolic parameters (Phase 4.4 step 5, v0.6578).** `Method -> "Bronstein"` takes
+symbolic parameters with the same semantics as Trager (see `### Integrate\`Trager`):
+a symbol other than `x` that is not a `System\`` constant is a transcendental
+constant with derivative 0. The constant field is C = Q(a, b, ...), and every
+verdict is exact over C:
+- an antiderivative holds for every parameter value outside a proper
+  Zariski-closed set;
+- "not elementary" holds for every value outside a countable set.
+
+The parts that change:
+- every coefficient field is `Q(params)(x, lower monomials)`;
+- the certified Risch DE takes the parameters as constants
+  (`Risch\`RischDECertified[f, g, x, {kernels}, {params}]`);
+- the linear systems for the constants of the algebraic part and of limited
+  integration are solved over Q(a), with an exact zero test;
+- a constant κ in Q(a) at a special place builds its places over Q(a)(κ^(1/m));
+- residues of degree ≥ 2 over Q(a) are taken one Galois orbit at a time and
+  presented as `RootSum`s;
+- torsion at the normal and the special places is decided by specialising the
+  parameters too, at a good point, then specialising x and the lower monomials
+  (E4.4 composed with E3).
+
+The checks with a numeric sample (the κ branch differences and the sign patterns)
+give no certificate when a parameter is present. They decline instead.
+
+| Input | Result |
+|---|---|
+| `Integrate[Sqrt[a + Log[x]]/x, x, Method -> "Bronstein"]` | `1/3 (2 a Sqrt[a + Log[x]] + 2 Log[x] Sqrt[a + Log[x]])` |
+| `Integrate[E^x/Sqrt[E^(2 x) + a], x, Method -> "Bronstein"]` | `-Log[-E^x + Sqrt[a + E^(2 x)]]` |
+| `Integrate[1/Sqrt[E^(3 x) + a], x, Method -> "Bronstein"]` | an antiderivative (genus 1, special place at E^x = 0) |
+| `Integrate[Sqrt[a + Log[x]], x, Method -> "Bronstein"]` | `Integrate::nonelem` |
+| `Integrate[(x + a)/(x Sqrt[x + Log[x]]), x, Method -> "Bronstein"]` | `Integrate::nonelem` (elementary at a = 1 only: the exceptional set) |
+| `Integrate[1/Sqrt[1 + a E^x + E^(3 x)], x, Method -> "Bronstein"]` | `Integrate::nonelem` (special-place divisor of infinite order) |
+
+Not yet supported:
+- parameters together with Q(i) or radical constants
+  (`Bronstein:parameters-with-constants`);
+- a radical of a parameter (`Sqrt[Sqrt[a] + Log[x]]`);
+- a log term over an extension of Q(a) of degree ≥ 3 that is not binomial, outside
+  the per-orbit construction (`Pipeline:parameter-field-value`).
+
+The Automatic cascade's Bronstein stage still declines parametric integrands
+(`Integrate\`CascadeGateQ["Bronstein", ...]` admits only x and `Constant` symbols)
+until the step-6 A/B run.
+
 **Front-end rewrites (v0.6547).** Each is a pointwise identity, so the answer is
 verified against the user's own integrand. The proofs are in
 `docs/notes/bronstein_extensions.tex`, E6a–E6c.

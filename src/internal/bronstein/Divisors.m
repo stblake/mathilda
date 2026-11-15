@@ -19,10 +19,14 @@
 (* part Sum_j (beta_j/N_j) Log[u_j] (Prop 2.13).                              *)
 (* ========================================================================== *)
 
-brFieldOver::usage = "brFieldOver[vars, F0] is the residue field F0 (fieldQ or fieldNF) extended by the transcendentals vars: fieldFn[vars] or fieldFn[vars, {t, mu, theta}], carrying F0's representation of i when it has one (constant field Q(i)).";
+brFieldOver::usage = "brFieldOver[vars, F0] is the residue field F0 (fieldQ, fieldNF, or fieldFn over the parameters) extended by the transcendentals vars: fieldFn[vars] or fieldFn[vars, {t, mu, theta}], carrying F0's representation of i when it has one (constant field Q(i)).";
 brFieldOver[vars_List, F0_Association] := Module[{F},
   F = Which[
-    F0["Type"] =!= "NF", fieldFn[vars],
+    (* a residue field over Q(params) (Phase 4.4): its parameters and its
+       generator travel with it *)
+    F0["Type"] === "Fn", fieldFn[Join[vars, Complement[F0["vars"], vars]],
+      If[fieldExtQ[F0], {F0["t"], F0["mu"], If[F0["theta"] === None, brParamRoot[F0["mu"], F0["t"]], F0["theta"]]}, None]],
+    F0["Type"] =!= "NF", brFn[vars],
     KeyExistsQ[F0, "I"], fieldFn[vars, {F0["t"], F0["mu"], F0["theta"], F0["I"]}],
     True, fieldFn[vars, {F0["t"], F0["mu"], F0["theta"]}]];
   (* the radical constants' representations travel with the field (Phase

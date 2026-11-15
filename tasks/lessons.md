@@ -1,5 +1,23 @@
 # Lessons learned
 
+## Unit tests that put a private context on $ContextPath: bare names drift (2026-11-16)
+
+- The Bronstein harness appends `Bronstein`Private`` and `Trager`Private`` to
+  `$ContextPath`. Once package code has created `Bronstein`Private`a`, a bare `a` in
+  a later test string resolves to it, even though `Global`a` exists and `Global``
+  comes first on the path. `context_resolve_name` probes `"Global`a"`, but Global
+  symbols are stored under the bare key, so the probe misses (a kernel defect, open
+  in tasks/todo.md).
+- Symptom: data built in one statement (with `Global`a`) and a parameter list from a
+  later one (with `Bronstein`Private`a`) disagree. A specialisation then substituted
+  nothing, a parameter reached mod-p reduction as a variable, and the prime search
+  hung. Package pattern variables `a_` also capture `Bronstein`Private`a` used as a
+  parameter.
+- Rule: in harness strings, spell a parameter that is also a package local's name
+  with its context (`Global`a`), or bind it once (`pa = a`) and reuse it. Any stage
+  that reduces mod p must check that its input carries no stray symbol, so the
+  failure is an Internal error, not a hang.
+
 ## A local performance fix is a pattern: apply it system-wide (2026-11-02)
 
 - **Correction.** I replaced the `strcmp` fallback in the match environment

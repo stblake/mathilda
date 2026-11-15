@@ -37,9 +37,6 @@ bronsteinOpenGaps = {
 <|"id" -> "G-mid-1", "area" -> "Bronstein", "gap" -> "a radical in the middle of the tower",
   "kind" -> "Integrate", "f" -> Hold[Log[1 + Sqrt[Log[x]]]/x], "current" -> "incomplete", "budget" -> 60,
   "followup" -> "Phase 5 (E1, E2)", "source" -> "plan"|>,
-<|"id" -> "G-param-1", "area" -> "Bronstein", "gap" -> "symbolic parameters",
-  "kind" -> "Integrate", "f" -> Hold[Sqrt[a + Log[x]]/x], "current" -> "incomplete", "budget" -> 60,
-  "followup" -> "Phase 4.4 (E4: generic verdicts)", "source" -> "plan"|>,
 
 (* ---- presentation -------------------------------------------------------- *)
 <|"id" -> "G-pres-1", "area" -> "Presentation", "gap" -> "answers over Q(i) carry Root objects of the residue field (no radicals, no real form)",

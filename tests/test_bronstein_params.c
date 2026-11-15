@@ -11,6 +11,8 @@
  *    "no solution";
  *  - brGammaForm: a kappa in Q(a) does not take the radical-gamma branch;
  *  - brAlgReduceY: the variable is given, not read off G (which may hold a).
+ *
+ * Step 5 (Bronstein over Q(a)) is in test_bronstein_params_bronstein.c.
  */
 #include "bronstein_test_utils.h"
 
@@ -39,11 +41,13 @@ static void test_guards(void) {
     BR_TRUE("Block[{tragerParams = {a, b}}, brParamConstantQ[(a^2 + 1)/b]]");
     BR_FALSE("Block[{tragerParams = {a}}, brParamConstantQ[a x]]");
     BR_FALSE("Block[{tragerParams = {a}}, brParamConstantQ[a + Log[x]]]");
-    /* brGammaForm: a kappa in Q(a) is refused (step 5 builds its places) */
+    /* brGammaForm: a kappa in Q(a) is a constant (step 5: the special places
+       over Q(a) are built), never "no form" (the radical-gamma branch) */
     BR_EQ("brGammaForm[3 x^2, 2]", "{3, x}");
     BR_EQ("brGammaForm[a x^2, 2]", "None");
-    BR_THROWS("Block[{tragerParams = {a}}, brGammaForm[a x^2, 2]]", "Unimplemented",
-              "special place with a constant kappa depending on a symbolic parameter");
+    BR_EQ("Block[{tragerParams = {a}}, brGammaForm[a x^2, 2]]", "{a, x}");
+    BR_EQ("Block[{tragerParams = {a}}, brGammaForm[(a^2 + 1) x^2/(a - 1), 2]]", "{(1 + a^2)/(-1 + a), x}");
+    BR_EQ("Block[{tragerParams = {a}}, brGammaForm[(x + a) x^2, 2]]", "None");
     /* brAlgReduceY: x explicit; with G = x^3 + a the old First[Variables[G]] took a */
     BR_TRUE("Together[brAlgReduceY[1/(1 + Y), Y, 2, x^3 + a, x] - (Y - 1)/(x^3 + a - 1)] === 0");
     BR_TRUE("Together[brAlgReduceY[1/(1 + Y), Y, 2, x^3 + 1, x] - (Y - 1)/x^3] === 0");

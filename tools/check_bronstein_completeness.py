@@ -61,13 +61,13 @@ BASELINE_M = {
     "Tower:cyclic-compositum",       # one radical in disguise -> Phase 3
     "Tower:exprel",                  # undecided exponential relation -> Phase 3
     "Tower:logrel",                  # undecided logarithm relation -> Phase 3
-    "Tower:not-algebraic",           # irrational exponents, parameters -> Phase 4
+    "Tower:not-algebraic",           # irrational exponents (and radicals of parameters, Sqrt[a]) -> Phase 4
     "Tower:radical-in-kernel",       # radical inside a kernel above others -> Phase 5
     "Tower:radical-mid-tower",       # radical in the middle of the tower -> Phase 5
-    "Tower:radicand-not-rational",   # symbolic parameters -> Phase 4
-    "Residues:parameter-kappa",      # special places with a kappa in Q(a): Phase 4.4 step 5
-    "Trager:parameter-torsion",      # torsionOrderWith only (a caller-built ideal, Bronstein special places): Phase 4.4 step 5; torsionOrderSpec/torsionScreen specialise since v0.6575
+    "Tower:radicand-not-rational",   # a radicand with a radical of a parameter (Sqrt[Sqrt[a] + Log[x]]): Q(a)-bar constants -> Phase 4.4 later
     "Trager:parameters-with-constants",  # parameters with Q(i) / radical constants: Phase 4.4 later
+    "Bronstein:parameters-with-constants",  # the same constant field Q(i, constants)(params) in Bronstein -> Phase 4.4 later
+    "Pipeline:parameter-field-value",  # a log term over Q(params)[t]/(mu), mu of degree >= 3 not binomial, outside the per-orbit construction (no root in radicals to present it) -> Phase 4.4 later
     "Tower:reducible-log",           # reducible logarithm -> Phase 3 (#13)
     "Tower:trig",                    # TrigToExp front end over Q(i) -> Phase 4
     "Trager",                        # a Trager decline inside Bronstein -> Trager's own sites

@@ -844,22 +844,35 @@ static Expr* builtin_risch_rischde(Expr* res) {
  *     $Failed       undecided: an out-of-scope input or an unimplemented
  *                   sub-case (Risch`RischDECertifiedReason[] names the first).
  * Inputs must be rational in x and the tower kernels (numeric constants
- * allowed); anything else is $Failed. */
+ * allowed); anything else is $Failed.  The five-argument form
+ * [f, g, x, {kernels}, {params}] also admits the symbols params as
+ * transcendental constants (D = 0): the verdict is then over Q(params)
+ * (Bronstein Phase 4.4). */
 static const char* g_rde_cert_last_reason = NULL;
 
 static Expr* builtin_risch_rischde_certified(Expr* res) {
     size_t ac = (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0;
-    if (ac != 3 && ac != 4) return NULL;
+    if (ac < 3 || ac > 5) return NULL;
     Expr* f = res->data.function.args[0];
     Expr* g = res->data.function.args[1];
     Expr* x = res->data.function.args[2];
-    Expr* extra = (ac == 4) ? res->data.function.args[3] : NULL;
+    Expr* extra = (ac >= 4) ? res->data.function.args[3] : NULL;
+    Expr* params = (ac == 5) ? res->data.function.args[4] : NULL;
     if (x->type != EXPR_SYMBOL) return NULL;
     if (extra && !rt_head_is(extra, "List")) return NULL;
+    if (params) {
+        if (!rt_head_is(params, "List")) return NULL;
+        for (size_t i = 0; i < params->data.function.arg_count; i++) {
+            Expr* p = params->data.function.args[i];
+            if (p->type != EXPR_SYMBOL || p->data.symbol.name == x->data.symbol.name) return NULL;
+        }
+        if (params->data.function.arg_count == 0) params = NULL;
+    }
     bool has_kernel = rt_find_exp_of_x(f, x) || rt_find_log_of_x(f, x)
                    || rt_find_exp_of_x(g, x) || rt_find_log_of_x(g, x)
                    || (extra && (rt_find_exp_of_x(extra, x) || rt_find_log_of_x(extra, x)));
     RdeCertState saved = rde_cert_begin();
+    rde_cert_set_params(params);
     Expr* y = NULL;
     if (has_kernel) {
         y = rde_solve_tower_ext(f, g, x, (extra && extra->data.function.arg_count) ? extra : NULL);
@@ -869,6 +882,7 @@ static Expr* builtin_risch_rischde_certified(Expr* res) {
         else rde_cert_mark("base: coefficients not rational in x");
         expr_free(xl);
     }
+    rde_cert_set_params(NULL);
     bool unc = rde_cert_uncertain();
     g_rde_cert_last_reason = y ? NULL : (unc ? rde_cert_reason() : NULL);
     rde_cert_end(saved);
@@ -959,7 +973,9 @@ void integrate_risch_transcendental_init(void) {
         "Chapter 6), or $Failed when undecided (an unimplemented sub-case or input\n"
         "outside rational functions of x and the kernels).\n"
         "Risch`RischDECertified[f, g, x, {k1, ...}] adds the kernels k_i to the tower,\n"
-        "so the solution field is the caller's whole tower.");
+        "so the solution field is the caller's whole tower.\n"
+        "Risch`RischDECertified[f, g, x, {k1, ...}, {a1, ...}] treats the symbols a_i as\n"
+        "transcendental constants (D = 0): the verdict is over Q(a1, ...).");
     rt_install("Risch`RischDECertifiedReason", builtin_risch_rischde_certified_reason,
         "Risch`RischDECertifiedReason[] names the first undecided path of the last\n"
         "Risch`RischDECertified call that returned $Failed (a String), or None.");

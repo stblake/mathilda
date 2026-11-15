@@ -1903,9 +1903,18 @@ Expr* rde_solve_tower(Expr* f, Expr* g, Expr* x) {
     return rde_solve_tower_ext(f, g, x, NULL);
 }
 
+/* The symbolic parameters of the current certified call (a List, or NULL):
+ * transcendental constants with D = 0, so the constant field is K = Q(params)
+ * (Bronstein Phase 4.4).  Set only by Risch`RischDECertified's fifth argument,
+ * for the duration of that call. */
+static Expr* g_rde_cert_params = NULL;
+
+void rde_cert_set_params(Expr* params) { g_rde_cert_params = params; }
+
 /* Is e a rational function of the symbols in the List `vars` alone (numeric
- * constants allowed, no other symbol, no radical or kernel of a variable)?
- * Certification gate: the solvers' "no solution" theorems are about K(vars). */
+ * constants allowed, and the declared parameters of the certified call; no
+ * other symbol, no radical or kernel of a variable)?  Certification gate: the
+ * solvers' "no solution" theorems are about K(vars), K the constant field. */
 bool rde_rational_in(Expr* e, Expr* vars) {
     Expr* tog = rt_eval1("Together", expr_copy(e));
     Expr* num = rt_eval1("Numerator", expr_copy(tog));
@@ -1915,6 +1924,7 @@ bool rde_rational_in(Expr* e, Expr* vars) {
     Expr* vv = rt_eval1("Variables", expr_new_function(expr_new_symbol("List"),
         (Expr*[]){ num, den }, 2));
     Expr* extra = rt_eval2("Complement", vv, expr_copy(vars));
+    if (g_rde_cert_params) extra = rt_eval2("Complement", extra, expr_copy(g_rde_cert_params));
     bool ok = rt_head_is(extra, "List") && extra->data.function.arg_count == 0
         && pn->type == EXPR_SYMBOL && pn->data.symbol.name == intern_symbol("True")
         && pd->type == EXPR_SYMBOL && pd->data.symbol.name == intern_symbol("True");

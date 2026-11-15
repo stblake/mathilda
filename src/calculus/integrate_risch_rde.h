@@ -94,6 +94,9 @@ Expr* rde_solve_tower_ext(Expr* f, Expr* g, Expr* x, Expr* extra);
 /* Is e a rational function of the symbols in the List vars only (numeric
  * constants allowed)?  The certification gate on the solvers' inputs. */
 bool rde_rational_in(Expr* e, Expr* vars);
+/* Declare the symbolic parameters (a List of symbols, borrowed; NULL: none)
+ * that rde_rational_in admits as constants during one certified call. */
+void rde_cert_set_params(Expr* params);
 
 /* Small shared eval/predicate/poly helpers (rt_head_is, rt_eval1..3,
  * rt_is_poly, rt_degree, rt_coeff, rt_is_zero, ...) are declared in

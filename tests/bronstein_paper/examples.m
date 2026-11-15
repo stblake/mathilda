@@ -316,5 +316,18 @@ bronsteinPaperExamples = {
 <|"id" -> "E45-3", "gap" -> "G-perf-4", "theory" -> "E7", "version" -> "v0.6573",
   "kind" -> "Integrate", "f" -> Hold[x/((2^(1/3) x^3 - 1) Sqrt[x^2 + 2])], "expect" -> "elementary",
   "before" -> "timeout (the Kauers trace over Q[Z]/(q) with literal 2^(1/3) and Root[-16 + #^3 &, 1] coefficients: a 9 s norm, then an exact quotient that never finished)",
-  "note" -> "the trace through the absolute field of degree 18 (kauersTraceRel, relTrace) with number-field kernels; the K0 generator written as its radical; 7 s, a RootSum over the degree-6 residue polynomial"|>
+  "note" -> "the trace through the absolute field of degree 18 (kauersTraceRel, relTrace) with number-field kernels; the K0 generator written as its radical; 7 s, a RootSum over the degree-6 residue polynomial"|>,
+(* ---- E4.4: symbolic parameters, Bronstein over Q(a) (v0.6578) ------------ *)
+<|"id" -> "G-param-1", "gap" -> "symbolic parameters", "theory" -> "E4.4", "version" -> "v0.6578",
+  "kind" -> "Integrate", "f" -> Hold[Sqrt[a + Log[x]]/x], "expect" -> "elementary",
+  "before" -> "implementation incomplete", "note" -> "the constant field Q(a): 2/3 (a + Log[x])^(3/2)"|>,
+<|"id" -> "E44-1", "gap" -> "symbolic parameters", "theory" -> "E4.4", "version" -> "v0.6578",
+  "kind" -> "Integrate", "f" -> Hold[1/Sqrt[E^(3 x) + a]], "expect" -> "elementary",
+  "before" -> "implementation incomplete", "note" -> "genus 1 over Q(a), residues at the special place E^x = 0 with kappa = a"|>,
+<|"id" -> "E44-2", "gap" -> "symbolic parameters", "theory" -> "E4.4, E3", "version" -> "v0.6578",
+  "kind" -> "Integrate", "f" -> Hold[1/Sqrt[1 + a E^x + E^(3 x)]], "expect" -> "nonelementary",
+  "before" -> "implementation incomplete", "note" -> "special-place divisor of infinite order: the parameters, then x, specialised (brSpecialTorsionOrderParams)"|>,
+<|"id" -> "E44-3", "gap" -> "symbolic parameters", "theory" -> "E4.4b", "version" -> "v0.6578",
+  "kind" -> "Integrate", "f" -> Hold[(x + a)/(x Sqrt[x + Log[x]])], "expect" -> "nonelementary",
+  "before" -> "implementation incomplete", "note" -> "not elementary over Q(a); elementary at a = 1, a point of the exceptional set"|>
 };

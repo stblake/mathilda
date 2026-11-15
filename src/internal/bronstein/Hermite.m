@@ -22,7 +22,7 @@
 brHermiteSolve::usage = "brHermiteSolve[T, A, C, V] solves B C == A (mod V) in k[theta] for B of degree < deg V, C a rational function whose denominator is prime to V and whose numerator is invertible modulo V. A non-invertible C is an internal error (it contradicts [B] Prop 2.2).";
 brHermiteK::usage = "brHermiteK[T] is the coefficient field k = Q(x, lower)(K0) of the tower T over the constant field K0 = Q(constants) in use, as fieldFn[{x, lower...}, {g, mu, gamma}] with the constants' representations (constNF): the exact arithmetic for Hermite reduction in theta with radical constants (Phase 4.3b C6).";
 brHermiteK[T_Association] := Module[{cf = constNF[], K},
-  K = fieldFn[Join[{T["x"]}, T["lower"]], {cf["t"], cf["mu"], cf["theta"]}];
+  K = fieldFn[brWithParams[Join[{T["x"]}, T["lower"]]], {cf["t"], cf["mu"], cf["theta"]}];
   Join[K, KeyTake[cf, {"consts", "I"}]]];
 
 brHermiteBack::usage = "brHermiteBack[K, e] maps an element of brHermiteK[T] back to the radicals: the generator replaced by gamma, combined over Q(constants).";
