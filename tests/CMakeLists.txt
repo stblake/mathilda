@@ -935,6 +935,8 @@ set(COMMON_SRC
     ../src/poly/flint_bridge.c
     ../src/poly/flint_trager.c
     ../src/poly/flint_polymat.c
+    ../src/poly/ffield/ff_fnx.c
+    ../src/poly/ffield/ff_expr.c
     ../src/poly/flint_qqbar.c
     ../src/poly/algfield.c
     ../src/poly/algebraicnumber.c
@@ -6568,6 +6570,12 @@ add_test(NAME legendre_machine_tests COMMAND legendre_machine_tests)
 add_executable(flint_polymat_tests test_flint_polymat.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(flint_polymat_tests PRIVATE ../src)
 add_test(NAME flint_polymat_tests COMMAND flint_polymat_tests)
+
+# the ffield library (src/poly/ffield/, Phase 4.5): the ring Q(p)[t]/(mu) in C,
+# its Expr conversions, and the polynomial-matrix kernels over it.
+add_executable(ffield_tests test_ffield.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(ffield_tests PRIVATE ../src)
+add_test(NAME ffield_tests COMMAND ffield_tests)
 
 # Trager integration (src/internal/trager/): one suite per stage, all on the
 # push tier; the FriCAS comparison is the nightly trager_fricas_stress below.

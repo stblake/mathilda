@@ -116,6 +116,9 @@ tragerOption["RealFormMaxLeaves"] = 1500;
 tragerOption["RealFormTime"] = 5;
 tragerOption["DirectPowerMaxOrder"] = 12;
 tragerOption["NativeKernels"] = True;
+(* Phase 4.5 spike: rational function fields fieldFn through the native kernels
+   (src/poly/ffield/); off until the A/B on the corpora is clean *)
+tragerOption["NativeFn"] = False;
 tragerOption["TorsionScreenPrimes"] = 3;
 
 tragerConstantI::usage = "tragerConstantI is True while an integrand with Gaussian-rational constants is integrated (constant field Q(i), Bronstein Phase 4.1). Factorisations are then over Q(i) (tragerFactorList), every number field built contains i or is relative over Q(i), and reduction mod p refuses the data (goodPrimes).";

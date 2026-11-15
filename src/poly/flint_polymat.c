@@ -58,6 +58,8 @@
 #include <flint/gr_mat.h>
 
 #include "flint_bridge_internal.h"
+#include "ffield/ff_fnx.h"
+#include "ffield/ff_expr.h"
 
 /* gr_poly_xgcd arrived in FLINT 3.2 (see flint_bridge.c). */
 #if defined(__FLINT_RELEASE) && __FLINT_RELEASE >= 30200
@@ -70,7 +72,10 @@
 /*  The coefficient field                                              */
 /* ------------------------------------------------------------------ */
 
-enum { PM_Q, PM_GF, PM_NF };
+/* PM_FN: the rational function field Q(p_1..p_r), with an optional algebraic
+ * extension Q(theta)(p) = Q(p)[t]/(mu) -- Trager's fieldFn -- as the ffield
+ * ring of src/poly/ffield/ff_fnx.h (Phase 4.5, 2026-11-15). */
+enum { PM_Q, PM_GF, PM_NF, PM_FN };
 
 typedef struct {
     int kind;
@@ -85,6 +90,8 @@ typedef struct {
     VarSet vs;              /* {x} or {x, t}: the fmpq_mpoly generators      */
     const fmpq_mpoly_ctx_struct* mctx;
     slong sz;               /* sizeof an element of K                        */
+    const char** pnames;    /* PM_FN: the parameters                         */
+    ff_names fnames;        /* PM_FN: x, t, parameters for ff_expr           */
 } PmField;
 
 static const char* pm_head(const Expr* e) {
@@ -133,7 +140,8 @@ static int pm_irreducible(const fmpq_poly_t mu) {
 static void pm_field_clear(PmField* F) {
     if (F->K_ready) gr_ctx_clear(F->K);
     if (F->kind == PM_NF && F->K_ready) nf_clear(F->nf);
-    if (F->kind == PM_NF) fmpq_poly_clear(F->mu);
+    if (F->kind == PM_NF || (F->kind == PM_FN && F->tname)) fmpq_poly_clear(F->mu);
+    free(F->pnames);
     fb_varset_free(&F->vs);
 }
 
@@ -154,6 +162,7 @@ static int pm_field_init(PmField* F, const Expr* x, Expr* const* opts, size_t no
     if (!x || x->type != EXPR_SYMBOL) return 0;
     F->xname = x->data.symbol.name;
     const Expr* ext = NULL;
+    const Expr* params = NULL;
     if (xo) memset(xo, 0, sizeof *xo);
     for (size_t i = 0; i < nopts; i++) {
         const Expr* r = opts[i];
@@ -168,6 +177,9 @@ static int pm_field_init(PmField* F, const Expr* x, Expr* const* opts, size_t no
         } else if (k->type == EXPR_SYMBOL && k->data.symbol.name == SYM_Extension) {
             if (!pm_is_head(v, "List") || v->data.function.arg_count != 2) return 0;
             ext = v;
+        } else if (k->type == EXPR_STRING && strcmp(k->data.string, "Parameters") == 0) {
+            if (!pm_is_head(v, "List")) return 0;
+            params = v;
         } else if (k->type == EXPR_STRING && xo &&
                    strcmp(k->data.string, "DeterminantMultiple") == 0) {
             xo->D = v;
@@ -182,7 +194,56 @@ static int pm_field_init(PmField* F, const Expr* x, Expr* const* opts, size_t no
         }
     }
     if (ext && F->kind == PM_GF) return 0;
+    if (params && F->kind == PM_GF) return 0;
     if (!pm_varset_push(&F->vs, F->xname)) { fb_varset_free(&F->vs); return 0; }
+    if (params && params->data.function.arg_count > 0) {
+        /* Q(p)[t]/(mu): every entry is read by ff_expr over {x, t, p} */
+        slong np = (slong)params->data.function.arg_count;
+        F->pnames = malloc((size_t)np * sizeof(const char*));
+        for (slong i = 0; i < np; i++) {
+            const Expr* pi = params->data.function.args[i];
+            if (pi->type != EXPR_SYMBOL || strcmp(pi->data.symbol.name, F->xname) == 0) {
+                free(F->pnames); F->pnames = NULL; fb_varset_free(&F->vs); return 0;
+            }
+            F->pnames[i] = pi->data.symbol.name;
+        }
+        F->kind = PM_FN;
+        F->tname = NULL;
+        int have_mu = 0;
+        if (ext) {
+            const Expr* t = ext->data.function.args[0];
+            if (t->type != EXPR_SYMBOL || strcmp(t->data.symbol.name, F->xname) == 0) {
+                free(F->pnames); F->pnames = NULL; fb_varset_free(&F->vs); return 0;
+            }
+            F->tname = t->data.symbol.name;
+            fmpq_poly_init(F->mu);
+            const fmpq_mpoly_ctx_struct* c1 = fb_ctx_lex(1);
+            VarSet tv = {0};
+            int ok = pm_varset_push(&tv, F->tname);
+            fmpq_mpoly_t m; fmpq_mpoly_init(m, c1);
+            ok = ok && fb_to_mpoly(ext->data.function.args[1], m, c1, &tv);
+            if (ok) ok = fmpq_mpoly_get_fmpq_poly(F->mu, m, 0, c1);
+            fmpq_mpoly_clear(m, c1);
+            fb_varset_free(&tv);
+            if (ok && fmpq_poly_degree(F->mu) >= 1) {
+                fmpq_poly_make_monic(F->mu, F->mu);
+                ok = pm_irreducible(F->mu);
+            } else ok = 0;
+            if (!ok) { fmpq_poly_clear(F->mu); free(F->pnames); F->pnames = NULL; fb_varset_free(&F->vs); return 0; }
+            have_mu = 1;
+        }
+        if (ff_fnx_ctx_init(F->K, np, have_mu ? F->mu : NULL) != GR_SUCCESS) {
+            if (have_mu) fmpq_poly_clear(F->mu);
+            free(F->pnames); F->pnames = NULL; fb_varset_free(&F->vs); return 0;
+        }
+        F->n = have_mu ? fmpq_poly_degree(F->mu) : 1;
+        F->fnames.x = F->xname; F->fnames.t = F->tname;
+        F->fnames.p = F->pnames; F->fnames.np = np;
+        F->K_ready = 1;
+        F->mctx = fb_ctx_lex((slong)F->vs.count);
+        F->sz = gr_ctx_sizeof_elem(F->K);
+        return 1;
+    }
     if (ext) {
         const Expr* t = ext->data.function.args[0];
         if (t->type != EXPR_SYMBOL || strcmp(t->data.symbol.name, F->xname) == 0 ||
@@ -249,6 +310,7 @@ static int pm_set_elem(gr_ptr c, const fmpq_poly_t tp, PmField* F) {
 
 /* Expr polynomial in x (and t) -> gr_poly over K.  0 when out of scope. */
 static int pm_from_expr(gr_poly_t P, const Expr* e, PmField* F) {
+    if (F->kind == PM_FN) return ff_fnx_poly_from_expr(P, e, &F->fnames, F->K);
     fmpq_mpoly_t A; fmpq_mpoly_init(A, F->mctx);
     int ok = fb_to_mpoly(e, A, F->mctx, &F->vs);
     if (ok) ok = gr_poly_zero(P, F->K) == GR_SUCCESS;
@@ -341,6 +403,7 @@ static Expr* pm_eval_free(Expr* e) {
 
 /* gr_poly over K -> canonical expanded Expr. */
 static Expr* pm_to_expr(const gr_poly_t P, PmField* F) {
+    if (F->kind == PM_FN) return pm_eval_free(ff_fnx_poly_to_expr(P, &F->fnames, F->K));
     Expr** terms = NULL; size_t nt = 0, cap = 0;
     for (slong d = 0; d < P->length; d++) {
         gr_srcptr c = PM_ENTRY(P->coeffs, d, F);
@@ -611,9 +674,70 @@ static int pm_prime_poly(fmpq_poly_t out, const gr_poly_t P, PmField* F) {
  * Over Q and GF(p) a gcd over K; over Q(theta) a gcd over Q of den and every
  * t-coefficient of every entry (a prime-field factor q divides an entry
  * Sum e_j(x) t^j exactly when it divides every e_j). */
+/* PM_FN with an extension: den lies over the base field Q(p) (every
+ * coefficient free of t), as in the package (commonDenFactorFn). */
+static int pm_fn_base_poly(const gr_poly_t P, PmField* F) {
+    ff_fnx_data* D = FF_FNX_DATA(F->K);
+    for (slong d = 0; d < P->length; d++) {
+        gr_srcptr c = PM_ENTRY(P->coeffs, d, F);
+        for (slong j = 1; j < D->n; j++)
+            if (!fmpz_mpoly_q_is_zero(FF_FNX_COEFF((gr_ptr)c, j), D->mctx)) return 0;
+    }
+    return 1;
+}
+
+/* Over Q(theta)(p) (PM_FN with an extension) the common factor of den, a
+ * polynomial over the base field Q(p), and the entries is the gcd over Q(p)[x]
+ * of den and every t-coefficient of every entry -- the package's
+ * commonDenFactorFn.  A gcd over the whole field could contain t, and the
+ * package's denominators are free of t (found by the Phase 4.5 A/B). */
+static int pm_fn_common_factor(gr_poly_t g, const gr_poly_t den, const PmMat* M, slong rows, PmField* F) {
+    ff_fnx_data* D = FF_FNX_DATA(F->K);
+    gr_ctx_t K0;
+    if (ff_fnx_ctx_init(K0, D->nvars, NULL) != GR_SUCCESS) return 0;
+    ff_fnx_data* D0 = FF_FNX_DATA(K0);
+    slong sz0 = gr_ctx_sizeof_elem(K0);
+    int st = GR_SUCCESS;
+    gr_poly_t G, E; gr_poly_init(G, K0); gr_poly_init(E, K0);
+    /* den over the base */
+    gr_poly_fit_length(G, den->length, K0);
+    for (slong d = 0; d < den->length; d++)
+        fmpz_mpoly_q_set(FF_FNX_COEFF((char*)G->coeffs + d * sz0, 0),
+                         FF_FNX_COEFF(PM_ENTRY(den->coeffs, d, F), 0), D0->mctx);
+    _gr_poly_set_length(G, den->length, K0);
+    _gr_poly_normalise(G, K0);
+    for (slong i = 0; i < rows * M->c && G->length > 1 && st == GR_SUCCESS; i++) {
+        const gr_poly_struct* Ei = M->e + i;
+        if (Ei->length == 0) continue;
+        for (slong j = 0; j < D->n && G->length > 1; j++) {
+            gr_poly_fit_length(E, Ei->length, K0);
+            for (slong d = 0; d < Ei->length; d++)
+                fmpz_mpoly_q_set(FF_FNX_COEFF((char*)E->coeffs + d * sz0, 0),
+                                 FF_FNX_COEFF(PM_ENTRY(Ei->coeffs, d, F), j), D0->mctx);
+            _gr_poly_set_length(E, Ei->length, K0);
+            _gr_poly_normalise(E, K0);
+            if (E->length > 0) st |= gr_poly_gcd(G, G, E, K0);
+        }
+    }
+    if (G->length > 0) st |= gr_poly_make_monic(G, G, K0);
+    /* lift to K: component 0 */
+    st |= gr_poly_zero(g, F->K);
+    gr_ptr c = gr_heap_init(F->K);
+    for (slong d = 0; d < G->length && st == GR_SUCCESS; d++) {
+        st |= gr_zero(c, F->K);
+        fmpz_mpoly_q_set(FF_FNX_COEFF(c, 0), FF_FNX_COEFF((char*)G->coeffs + d * sz0, 0), D->mctx);
+        st |= gr_poly_set_coeff_scalar(g, d, c, F->K);
+    }
+    gr_heap_clear(c, F->K);
+    gr_poly_clear(G, K0); gr_poly_clear(E, K0);
+    gr_ctx_clear(K0);
+    return st == GR_SUCCESS;
+}
+
 static int pm_common_factor(gr_poly_t g, const gr_poly_t den, const PmMat* M, slong rows,
                             PmField* F) {
     int st = GR_SUCCESS;
+    if (F->kind == PM_FN && F->tname) return pm_fn_common_factor(g, den, M, rows, F);
     if (F->kind != PM_NF) {
         st |= gr_poly_set(g, den, F->K);
         for (slong i = 0; i < rows * M->c && g->length > 1; i++)
@@ -687,6 +811,7 @@ static Expr* builtin_flint_polynomialhermiteform(Expr* res) {
             ok = pm_prime_poly(chk, den, &F);
             fmpq_poly_clear(chk);
         }
+        if (ok && F.kind == PM_FN && F.tname) ok = pm_fn_base_poly(den, &F);   /* over Q(p) */
     }
     PmMat M;
     if (ok && pm_mat_from_expr(&M, a[0], 0, &F)) {

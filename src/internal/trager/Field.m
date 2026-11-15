@@ -75,12 +75,13 @@ nativeOpts::usage = "nativeOpts[F] is the option list naming the field F to the 
 nativeOpts[F_Association] := Switch[F["Type"],
   "Q", {},
   "GF", {Modulus -> F["p"]},
-  "NF", {Extension -> {F["t"], F["mu"]}}];
+  "NF", {Extension -> {F["t"], F["mu"]}},
+  "Fn", Join[{"Parameters" -> F["vars"]}, If[fieldExtQ[F], {Extension -> {F["t"], F["mu"]}}, {}]]];
 
 nativeQ::usage = "nativeQ[] is True when the FLINT` polynomial kernels are to be tried first (tragerOption[\"NativeKernels\"]).";
 nativeQ[] := TrueQ[tragerOption["NativeKernels"]];
 nativeQ::usage = nativeQ::usage <> " nativeQ[F] is nativeQ[] restricted to the fields the kernels support: always False for a rational function field fieldFn (its coefficients are not numbers).";
-nativeQ[F_Association] := F["Type"] =!= "Fn" && nativeQ[];
+nativeQ[F_Association] := (F["Type"] =!= "Fn" || TrueQ[tragerOption["NativeFn"]]) && nativeQ[];
 
 (* -------------------------------------------------------------------------- *)
 (* Scalars and polynomials: canonical forms.                                  *)

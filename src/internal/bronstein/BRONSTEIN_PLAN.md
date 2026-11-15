@@ -1453,6 +1453,47 @@ the code).**
 - Every new path certified, with no new uncertain site in the completeness
   ratchet.
 
+#### Phase 4.5 spike: results and decision (2026-11-15)
+
+- **What was built.**
+  - `src/poly/ffield/ff_fnx.c`: K = Q(p)[t]/(μ) as a FLINT generic ring (a
+    custom `gr_ctx`, about 300 lines). FLINT's gr_poly/gr_mat algorithms run
+    over it unchanged.
+  - `ff_expr.c`: conversions between expressions and K and K[x].
+  - The FLINT` polynomial-matrix kernels (`flint_polymat.c`) take
+    `"Parameters" -> {p...}`, so Trager's `fieldFn` can use the native route
+    (`tragerOption["NativeFn"]`).
+- **Benchmark.**
+  - `tests/bronstein_bench/capture.m` froze 119 real calls from
+    G-perf-2/3/4, E3 and Trager cases.
+  - `ideal_ops.m` times the package route against the native route, with
+    results compared by value. Every result agrees.
+- **Speed-ups over Q(θ)(p):**
+  - Hermite forms of moderate size: 30–48×;
+  - `idealPower`, `idealInverse`: 15–28× (4–8× on the `+I` captures);
+  - `idealReduce`: 15–80×;
+  - `hnfModDet` / `idealTimes` on the G-perf-3-type captures: 4–5×.
+- **The one regression.** The 57 s product of G-perf-2 is 0.7× (82 s). The
+  time there is coefficient growth in rational-function arithmetic inside the
+  modular Hermite elimination, not interpretation overhead.
+- **Oracle stress test** (`tools/ffield_stress/`, developer tool):
+  - 1200 random cases: divrem, xgcd, Hermite form, det/adjugate over Q,
+    GF(101), GF(10007), Q(√2), Q(θ³−θ−1), Q(a), Q(a,b), Q(i)(a), Q(2^(1/3))(a)
+    and Q(√3)(a,b);
+  - each verified by its defining properties by **PARI/GP** (specialisation of
+    the parameters at two rational points) and by the **reference CAS**
+    (exact symbolic reduction modulo μ);
+  - result: 1197 verified by both, 0 failures, 1 legitimate decline (a
+    rank-deficient module) and 2 xgcds over the 20 s budget.
+- **Decision.**
+  - Keep the custom gr ring: it is the reusable C field layer, and it already
+    wins everywhere except the large case.
+  - For large Hermite eliminations over Fn, add an
+    evaluation/interpolation kernel: specialise the parameters, use the native
+    NF/GF form, reconstruct with early termination, and certify exactly.
+  - `NativeFn` stays off by default until that case no longer regresses; it is
+    then switched on, with the corpora A/B as the gate.
+
 ### Phase 5: the radical anywhere (largest; theory first)
 
 - **A differential-field record** (`brDField`, a new `DField.m`) abstracts the base field. Its

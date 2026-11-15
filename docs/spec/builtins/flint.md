@@ -157,6 +157,17 @@ generic rings (`gr_poly`, `gr_mat`) with one implementation for three choices of
 | Q | none | rationals |
 | GF(p), p a word-size prime | `Modulus -> p` | integers in `[0, p)` (a rational input `a/b` is `a b^-1 mod p`) |
 | Q(θ) = Q[t]/(μ), μ irreducible over Q | `Extension -> {t, μ}` | polynomials in `t` of degree < deg μ, reduced on input |
+| Q(p₁, …, p_r) | `"Parameters" -> {p1, ...}` | rational functions in the parameters (v0.6569) |
+| Q(θ)(p₁, …, p_r) | `"Parameters" -> {...}` with `Extension -> {t, μ}` | polynomials in `t` (degree < deg μ) whose coefficients are rational functions in the parameters (v0.6569) |
+
+The parameter fields are the reusable C library `src/poly/ffield/`. `ff_fnx.c` is
+the field Q(p)[t]/(μ) as a FLINT generic ring; FLINT's polynomial and matrix
+algorithms run over it unchanged. `ff_expr.c` converts expressions to and from it.
+A denominator may involve only the parameters. Over Q(θ)(p) the `"Denominator"`
+of a Hermite form must lie over Q(p), and its common factors with the entries are
+taken over Q(p), as in Trager's `fieldFn`. Each coefficient of a power of `x` is
+returned as one fraction (`Together`). Such forms are equal by value: compare them
+by the difference, not with `===`.
 
 Results are expanded polynomials in canonical form. A call stays unevaluated when
 it is out of scope: an entry that is not a polynomial in `x` (and `t`), a ragged or
@@ -189,6 +200,9 @@ Out[2]= {{1, -1/2 t x}, {0, 2 + t + x^2}}
 
 In[3]:= FLINT`PolynomialHermiteForm[{{x (x - 1), 0}, {0, x (x + 1)}}, x, "Denominator" -> x^2]
 Out[3]= {{{-1 + x, 0}, {0, 1 + x}}, x}
+
+In[4]:= FLINT`PolynomialHermiteForm[{{x^2 - a, x + 1/a}, {x, a x}}, x, "Parameters" -> {a}]
+Out[4]= {{1, -1/a^2 - x/a + x^2}, {0, ((-1 - a^3) x)/a^2 - x^2/a + x^3}}
 ```
 
 ## FLINT`PolynomialDetAdjugate
