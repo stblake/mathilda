@@ -1662,7 +1662,12 @@ static bool cg_algebraic_only(const Expr* e, const Expr* x, bool* has_rad) {
     if (!e) return false;
     switch (e->type) {
         case EXPR_INTEGER: case EXPR_BIGINT: return true;
-        case EXPR_SYMBOL: return true;          /* x, or a parameter: Trager declines those */
+        /* only x: a symbolic parameter (or Pi, E, ...) keeps the integrand out
+         * of the cascade's Trager stage.  Method -> "Trager" answers over Q(a)
+         * since v0.6574 (Phase 4.4), but the Automatic cascade takes those
+         * answers only after the A/B gate of step 6 (BRONSTEIN_PLAN.md "Phase
+         * 4.4: plan"): no answer that is worse where another stage answered. */
+        case EXPR_SYMBOL: return e->data.symbol.name == x->data.symbol.name;
         case EXPR_FUNCTION: break;
         default: return false;                  /* Real, String, ... */
     }

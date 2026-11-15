@@ -21,7 +21,10 @@ static const char* const trager_accept[] = {
 static const char* const trager_reject[] = {
     "x^2 + 1", "1/(x^2 + 1)", "Log[x] Sqrt[x]", "Sin[x] Sqrt[x]", "Sqrt[2] x^(1/2)",
     "E^x Sqrt[x]", "Sqrt[x + Log[x]]", "1.5 Sqrt[x]", "x^Pi", "Sqrt[x]^Sqrt[2]",
-    "ArcTan[Sqrt[x]]", "Sqrt[2] + x", NULL };
+    "ArcTan[Sqrt[x]]", "Sqrt[2] + x",
+    /* symbolic parameters: Method -> "Trager" answers them (Phase 4.4), the
+       cascade only after the step-6 A/B gate */
+    "1/((x - a) Sqrt[x^2 + 1])", "1/Sqrt[x^3 + a]", "Pi Sqrt[x]", NULL };
 static const char* const bronstein_accept[] = {
     "Sqrt[x + Log[x]]", "(x + E^x)^(1/3)", "Log[1 + E^x]^(1/3)/(1 + Log[1 + E^x])",
     "1/(x Sqrt[Log[x]^2 + 1])", "E^x/Sqrt[E^(2 x) + 1]", "1/Sqrt[E^x + 1]",

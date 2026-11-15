@@ -3178,10 +3178,14 @@ RationalImageIntegrate[x_] := Function[h, With[{r = Quiet[Integrate[h, x, Method
 
 kummerIntegrators[x_, opts___] := {
   Function[h, If[TrueQ[LoadModule["trager/Trager.m"]],
+    (* symbolic parameters: Trager answers over Q(a) (Phase 4.4), but this
+       method takes those answers only after the A/B gate of step 6 *)
+    If[Trager`Private`tragerParamsOf[h, x] =!= {},
+      {"failed", "Trager: symbolic parameters (Phase 4.4: A/B gate pending)"},
     (* Trager's "implementation incomplete" proves nothing: inside this method's
        protocol it is a plain {"failed", ...} (callers test for "failed") *)
     Replace[Quiet[Trager`TragerIntegrate[h, x, "Trager"]],
-      {"implementation incomplete", why_String} :> {"failed", "Trager: implementation incomplete (" <> why <> ")"}],
+      {"implementation incomplete", why_String} :> {"failed", "Trager: implementation incomplete (" <> why <> ")"}]],
     {"failed", "Trager unavailable"}]],
   Function[h, ParallelIntegrateMixed[h, x, opts]]};
 

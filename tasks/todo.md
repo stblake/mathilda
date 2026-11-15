@@ -1638,7 +1638,7 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [x] 3 torsion by specialisation of the parameters (N0 then principality over C) v0.6575 -- Trager-level paramSpecialization in TorsionModP.m; torsionOrderWith (ideal builder, Bronstein special places) still declines (step 5)
   - [ ] 4 Trager front end + pinned tests
   - [ ] 5 Bronstein (brParams, fieldFn vars, RDEAlgebraic, brLinearConstantSystemQ, C rde_rational_in, kappa/sign specialisation, E3)
-  - [ ] 6 cascade A/B, docs (calculus.md, docstrings), corpus (G-param-1, examples), stress families, FriCAS with parameter values
+  - [ ] 6 cascade A/B (v0.6576: parametric integrands gated OUT of the cascade's Trager stage and PMT's kummerIntegrators until then -- lift both), docs (calculus.md, docstrings), corpus (G-param-1, examples), stress families, FriCAS with parameter values
 - [ ] Phase 5: radical anywhere (brDField, transcendental Risch over algebraic base, RDE on a curve over a tower)
 - [ ] Theory note docs/notes/bronstein_extensions.tex (E1–E6; LaTeX per user 2026-11-14), each adversarially reviewed — E6a–c written v0.6547, review pending
 - [ ] Close-out
