@@ -76,7 +76,13 @@ kauersTraceRational[ctx_Association, q_, p_] := Module[{B = ctx["B"], Z = ctx["Z
 
 kauersTraceNF::usage = "kauersTraceNF[ctx, q, p] is kauersTrace for an irreducible factor q of degree >= 2, computed over K = Q[Z]/(q). p may be a rational function of x, Y and Z: Log of numerator minus Log of denominator.";
 kauersTraceNF[ctx_Association, q_, p_] := Module[
-  {B = ctx["B"], Z = ctx["Z"], K, tp = Together[p], L, comp, d, tr},
+  {B = ctx["B"], Z = ctx["Z"], K, tp = Together[p], L, comp, d, tr, rt},
+  (* over a number field of constants (q with radical or Root coefficients):
+     the trace through the absolute field (kauersTraceRel), not the relative
+     presentation Q[Z]/(q) with literal algebraic constants, whose norms and
+     exact quotients ran as symbolic radical arithmetic (G-perf-4) *)
+  rt = kauersTraceRel[ctx, q, p];
+  If[rt =!= None, Return[rt, Module]];
   K = fieldNF[Z, tragerMonic[q, Z], None];
   L = afScale[K, Z, afMinus[K, logDerivativeNF[K, B, Numerator[tp], ctx["Ysym"]],
                                logDerivativeNF[K, B, Denominator[tp], ctx["Ysym"]]]];
@@ -105,6 +111,42 @@ logDerivativeNF[K_Association, B_Association, P_, Y_Symbol] := Module[
   cof = kExactQuo[K, nrm, dN, x];
   pinv = rc[K, # dD cof/nrm] & /@ adj1;
   afTimes[K, B, afD[K, B, pa], pinv]];
+
+kauersTraceRel::usage = "kauersTraceRel[ctx, q, p] is kauersTraceNF for a factor q whose coefficients carry algebraic constants (radicals, Root objects) while tragerAlgConstants is in use: Tr_{K/K0}(gamma p'/p) computed in the ABSOLUTE field K = K0(gamma) of fieldOfRoot (number-field kernels, a rational norm) and taken down to K0 = Q(constants) by relTrace. The log argument p, written relative to K0 (a polynomial in the root symbol Z, relToZ), is mapped to K by Z -> gamma and the constants' representations (fieldSubI). None when q has no algebraic constant, or the absolute field has no relative structure (the caller keeps the relative presentation).";
+kauersTraceRel[ctx_Association, q_, p_] := Module[
+  {B = ctx["B"], Z = ctx["Z"], qm, fr, F, gamma, tp, toF, L},
+  If[tragerAlgConstants === {} ||
+     FreeQ[q, (Power[b_, _Rational] /; rationalNumberQ[b]) | _Root], Return[None, Module]];
+  qm = tragerMonic[q, Z];
+  fr = kauersFieldOfRoot[qm, Z];
+  F = fr["F"]; gamma = fr["gamma"];
+  If[!KeyExistsQ[F, "rel"] || F["Type"] =!= "NF", Return[None, Module]];
+  tp = Together[p];
+  (* every algebraic constant in the generator: radicals by fieldSubI, and
+     Root objects (Root[-16 + #^3 &, 1] = 2 2^(1/3), as relToZ writes theta0's
+     powers) by fieldConstRep -- one left literal keeps the norm out of FLINT
+     (symbolic Root arithmetic again); one that F cannot represent: None *)
+  toF[e_] := Module[{r = Expand[e /. Z -> gamma], roots, reps},
+    roots = DeleteDuplicates[Cases[r, _Root, {0, Infinity}]];
+    reps = Catch[(# -> fieldConstRep[F, #]) & /@ roots, "TragerFail"];
+    If[!ListQ[reps] || !FreeQ[reps[[All, 2]], Root], Throw[None, "kauersTraceRel"]];
+    Expand[fieldSubI[F, r /. reps]]];
+  Catch[
+    L = afScale[F, gamma, afMinus[F, logDerivativeNF[F, B, toF[Numerator[tp]], ctx["Ysym"]],
+                                     logDerivativeNF[F, B, toF[Denominator[tp]], ctx["Ysym"]]]];
+    (* K0's generator comes back from relTrace as the Root it is in the field
+       (16^(1/3) as Root[-16 + #^3 &, 1]); written as the radical, so that the
+       residual against the integrand (spelled in radicals) is in one
+       spelling *)
+    tragerTogether[relTrace[F, #] /. r_Root :> With[{v = binomialRootRadical[r]}, If[v === None, r, v]]] & /@ L,
+    "kauersTraceRel"]];
+
+kauersFieldOfRoot::usage = "kauersFieldOfRoot[q, Z] is fieldOfRoot[q, Z, Z], memoised for the current constants (the orbit construction built the same field moments before).";
+kauersFieldOfRoot[q_, Z_Symbol] := Module[{key = {q, Z, tragerAlgConstants}},
+  If[KeyExistsQ[kauersFieldMemo, key], kauersFieldMemo[key],
+    If[Length[kauersFieldMemo] > 32, kauersFieldMemo = <||>];
+    kauersFieldMemo[key] = fieldOfRoot[q, Z, Z]]];
+kauersFieldMemo = <||>;
 
 companionMatrix::usage = "companionMatrix[mu, Z] is the companion matrix of the monic polynomial mu(Z); Tr of its j-th power is the j-th power sum of the roots.";
 companionMatrix[mu_, Z_Symbol] := Module[{d = Exponent[mu, Z], c = CoefficientList[mu, Z]},

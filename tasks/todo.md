@@ -1624,7 +1624,7 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [ ] parameters in the entries: evaluation/interpolation over the parameters (today the direct ff_fnx elimination)
   - [x] lower layer: Together over Gaussian coefficients — v0.6571: two stages (free I, then one Q(I) reduction), 29.6 s -> 0.66 s; balanced-tree Plus in to_mpoly/to_mpoly_kernels; exposed + fixed Solve missing -q^2 squares (residue integral wrong answer). Open: unit normalisation of Gaussian Together
   - [ ] residue fields relative to K0 (relative norms/traces); modular norms (kNorm/Resultant by CRT)
-  - [ ] theory note E7 (written v0.6570: Thms E7.1, E7.3, the identity check) + adversarial review; unit/property tests; exit: G-perf-2/3 < 20 s (MET v0.6570), G-perf-4 closed
+  - [x] theory note E7 (written v0.6570: Thms E7.1, E7.3, the identity check; addendum v0.6573) + adversarial review; unit/property tests; exit: G-perf-2/3 < 20 s (MET v0.6570), G-perf-4 closed (MET v0.6573: kauersTraceRel through the absolute field; false-certificate guard residualCanonicalQ)
 - [x] Field-arithmetic performance pass (2026-11-15, user: "significant performance improvements for the field arithmetic, then return to the Bronstein plan") — v0.6572
   - tools/ffield_bench/bench.py (Mathilda vs PARI/GP vs reference CAS; developer tool)
   - fixed: PolynomialGCD over Q(Sqrt[2]+Sqrt[3]) wrong (tower engine, dependent Sqrt[6]); PolynomialGCD hang over Q(I, Sqrt[3]) (each Complex an atom)

@@ -146,7 +146,7 @@ tragerOrbitLogTerms[ctx0_Association] := Module[
         If[Exponent[qm, Z] === 1,
           K = fieldQ[]; gamma = -Coefficient[qm, Z, 0],
           (* the generator is Z itself, as the orbit construction below assumes *)
-          With[{fr = fieldOfRoot[qm, Z, Z]}, K = fr["F"]; gamma = fr["gamma"]]];
+          With[{fr = kauersFieldOfRoot[qm, Z]}, K = fr["F"]; gamma = fr["gamma"]]];
         I0 = residueIdeal[K, B, gamma, ctx["N"], ctx["Ep"], ctx["Bp"]];
         kappa = idealDegree[K, B, I0];
         If[ctx["alpha"] =!= None,
@@ -166,6 +166,10 @@ tragerOrbitLogTerms[ctx0_Association] := Module[
                the log argument is written relative to K0, a polynomial in
                the root symbol Z of qm (relToZ), as the orbit sum requires *)
             out = Join[out, {qm, scale Nq/#[[1]],
-              With[{pe = Together[afToY[B, #[[2]], ctx["Ysym"]]]}, If[KeyExistsQ[K, "rel"], relToZ[K, pe], pe]]} & /@ r]]]],
+              With[{pe = Together[afToY[B, #[[2]], ctx["Ysym"]]]},
+                (* K0's generator as its radical (16^(1/3) for Root[-16 + #^3 &, 1]) *)
+                If[KeyExistsQ[K, "rel"],
+                  relToZ[K, pe] /. rt_Root :> With[{v = binomialRootRadical[rt]}, If[v === None, rt, v]],
+                  pe]]} & /@ r]]]],
     {q, facs}];
   If[failed, $Failed, out]];

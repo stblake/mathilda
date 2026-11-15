@@ -176,6 +176,18 @@ fieldSubI[F_Association, e_] := Module[{r = e},
     r = r /. c : Power[b_, q_Rational] /; rationalNumberQ[b] :> fieldConstRep[F, c]];
   r];
 
+binomialRootRadical::usage = "binomialRootRadical[c] is the real radical form +-a^(1/n) of a Root object c that is a real root of a binomial w^n - a with a > 0 rational (Root[-16 + #^3 &, 1] -> 2 2^(1/3)), checked numerically at 30 digits; None otherwise.";
+binomialRootRadical[c_Root] := Module[{w = Unique["Trager`Private`rw"], pol, n, a, v},
+  pol = Expand[c[[1]][w]]; n = Exponent[pol, w];
+  If[!IntegerQ[n] || n < 1, Return[None, Module]];
+  a = -Coefficient[pol, w, 0]/Coefficient[pol, w, n];
+  v = N[c, 30];
+  If[Expand[pol/Coefficient[pol, w, n]] === Expand[w^n - a] && rationalNumberQ[a] && a > 0 &&
+     Abs[Im[v]] < 10^-20,
+    With[{cand = Sign[Re[v]] a^(1/n)}, If[Abs[N[cand, 30] - v] < 10^-20, cand, None]],
+    None]];
+binomialRootRadical[_] := None;
+
 fieldConstRep::usage = "fieldConstRep[F, c] is the radical constant c (a power of a rational with a rational exponent) as a polynomial in the generator t of the absolute number field F (\"consts\" key: rules recorded by residueField, else computed by ToNumberField against the field's theta). A constant not in F is an Unimplemented decline, never a wrong reduction.";
 fieldConstRep[F_Association, c_] := Module[{hit = c /. F["consts"], nf},
   If[hit =!= c || FreeQ[hit, Power], Return[hit]];
@@ -190,14 +202,7 @@ fieldConstRep[F_Association, c_] := Module[{hit = c /. F["consts"], nf},
      its radicals written in the generator, when that form is all rational
      powers of rationals *)
   If[Head[c] === Root && KeyExistsQ[F, "constGen"],
-    With[{rad = Module[{w = Unique["Trager`Private`rw"], pol, n, a, v},
-        pol = Expand[c[[1]][w]]; n = Exponent[pol, w]; a = -Coefficient[pol, w, 0]/Coefficient[pol, w, n];
-        v = N[c, 30];
-        (* a real root of the binomial w^n - a, a > 0 rational: +-a^(1/n) *)
-        If[Expand[pol/Coefficient[pol, w, n]] === Expand[w^n - a] && rationalNumberQ[a] && a > 0 &&
-           Abs[Im[v]] < 10^-20,
-          With[{cand = Sign[Re[v]] a^(1/n)}, If[Abs[N[cand, 30] - v] < 10^-20, cand, Quiet[ToRadicals[c]]]],
-          Quiet[ToRadicals[c]]]]},
+    With[{rad = With[{b = binomialRootRadical[c]}, If[b === None, Quiet[ToRadicals[c]], b]]},
       If[FreeQ[rad, Root] && FreeQ[rad, Complex] &&
          FreeQ[rad /. Power[b_, _Rational] /; rationalNumberQ[b] :> 1, Power[_, _Rational]],
         Return[PolynomialRemainder[Expand[rad /. p : Power[b_, _Rational] /; rationalNumberQ[b] :> fieldConstRep[F, p]],

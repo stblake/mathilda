@@ -1689,6 +1689,26 @@ over $\Q$, $\Q(\sqrt2)$, $\Q(\omega)$ and an $S_3$ cubic, against the direct
 algorithms; declines) and \code{tests/test\_bronstein\_integrate.c} (the Gaussian
 identity check, true and false).
 
+\paragraph{E7 addendum: the Kauers trace over a number field of constants (v0.6573).}
+\code{kauersTraceNF} verifies the per-orbit log part by
+$\mathrm{Tr}_{K/K_0}(\gamma\,p'/p)$, for $K=K_0(\gamma)$ and $q(\gamma)=0$.
+
+When $K_0=\Q(2^{1/3})$, writing $K$ as $\Q[Z]/(q)$ with literal constants
+leaves every norm and quotient to symbolic algebraic arithmetic. So
+\code{kauersTraceRel} computes in the absolute field $\Q(\delta)=K$ of
+\code{fieldOfRoot}, mapping $Z\mapsto\gamma$ and each constant to its
+representation, and then takes \code{relTrace} down to $K_0$. This is the same
+element in a different basis, so the trace is unchanged.
+
+The residual against the integrand is then tested over $\Q(x)$ with $K_0$ written
+in radicals. That test is exact only when the constants are powers of one rational
+base $b$: then $1,b^{1/n},\dots,b^{(n-1)/n}$ are linearly independent over
+$\Q(x)$, and \code{rc}'s normal form decides zero. A spelling such as
+\code{Root[-16 + \#\^{}3 \&, 1]} next to $2^{1/3}$ breaks this, and it read a
+zero residual as nonzero. So a nonzero residual certifies non-elementarity only
+when \code{residualCanonicalQ} holds. Otherwise no certificate is given, and the
+Q-basis construction runs.
+
 \part*{Part C. The gap log: what each extension closes}
 \addcontentsline{toc}{part}{Part C}
 

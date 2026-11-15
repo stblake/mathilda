@@ -312,5 +312,9 @@ bronsteinPaperExamples = {
 <|"id" -> "E45-2", "gap" -> "G-perf-3", "theory" -> "E7", "version" -> "v0.6570",
   "kind" -> "Integrate", "f" -> Hold[Tan[x]^(1/4)], "expect" -> "elementary",
   "before" -> "154 s (brSpecialDivisorIdeal / idealTimes over a degree-8 residue field, then 36 s in brComponentIdentityQ: Together over Gaussian coefficients)",
-  "note" -> "the modular Hermite form, and the identity check with I written in the residue generator or as a symbol modulo ii^2 + 1; 15 s"|>
+  "note" -> "the modular Hermite form, and the identity check with I written in the residue generator or as a symbol modulo ii^2 + 1; 15 s"|>,
+<|"id" -> "E45-3", "gap" -> "G-perf-4", "theory" -> "E7", "version" -> "v0.6573",
+  "kind" -> "Integrate", "f" -> Hold[x/((2^(1/3) x^3 - 1) Sqrt[x^2 + 2])], "expect" -> "elementary",
+  "before" -> "timeout (the Kauers trace over Q[Z]/(q) with literal 2^(1/3) and Root[-16 + #^3 &, 1] coefficients: a 9 s norm, then an exact quotient that never finished)",
+  "note" -> "the trace through the absolute field of degree 18 (kauersTraceRel, relTrace) with number-field kernels; the K0 generator written as its radical; 7 s, a RootSum over the degree-6 residue polynomial"|>
 };

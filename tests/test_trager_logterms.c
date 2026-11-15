@@ -2,7 +2,8 @@
  *   TragerLogTerms.m  tragerLogTerms, logPartResidual            ([T] Ch 5-6)
  *   KauersLogTerms.m  kauersLogTerms, groebnerLex, leadingCoefficientLex,
  *                     kauersPrincipal, kauersResidual, kauersTrace,
- *                     kauersTraceRational, kauersTraceNF, companionMatrix,
+ *                     kauersTraceRational, kauersTraceNF, kauersTraceRel,
+ *                     kauersFieldOfRoot, binomialRootRadical, residualCanonicalQ, companionMatrix,
  *                     kauersLogExpressions                        ([K] 2008)
  *   LogToArcTan.m     tidyLog, dropNumericContent, expandRootSums,
  *                     complexSplit, realFormTerm, realForm
@@ -396,6 +397,31 @@ static void test_presentation_helpers(void) {
           "RootSum[#1^2 + 1 &, Log[(1 + x)^(2/3) - #1] #1 &]");
 }
 
+/* G-perf-4 (v0.6573): the trace through the absolute field over a number field
+ * of constants, Root constants written as radicals, and the certificate guard
+ * that refuses a nonzero residual it cannot test exactly. */
+static void test_relative_constants(void) {
+    TR_TRUE("binomialRootRadical[Root[-16 + #1^3 &, 1]] === 2 2^(1/3)");
+    TR_TRUE("binomialRootRadical[Root[-2 + #1^2 &, 1]] === -Sqrt[2]");
+    TR_TRUE("binomialRootRadical[Root[-1 - #1 + #1^3 &, 1]] === None");
+    TR_TRUE("binomialRootRadical[Root[2 + #1^2 &, 1]] === None");          /* not real */
+    TR_TRUE("binomialRootRadical[7] === None");
+    TR_TRUE("residualCanonicalQ[{x 2^(1/3) + 2^(2/3)/x, 0}]");
+    TR_TRUE("residualCanonicalQ[{1/(1 + x), x^2}]");
+    TR_FALSE("residualCanonicalQ[{2^(1/3) - Root[-16 + #1^3 &, 1]/2}]");   /* a zero that read as nonzero */
+    TR_FALSE("residualCanonicalQ[{Sqrt[2] + Sqrt[3]}]");                    /* two bases */
+    /* kauersTraceRel declines without algebraic constants, and without constants in use */
+    TR_TRUE("Block[{tragerAlgConstants = {2^(1/3)}}, kauersTraceRel[<|\"Z\" -> z|>, z^2 - 2, x] === None]");
+    TR_TRUE("Block[{tragerAlgConstants = {}}, kauersTraceRel[<|\"Z\" -> z|>, z^2 - 2^(1/3), x] === None]");
+    /* kauersFieldOfRoot is fieldOfRoot, memoised */
+    TR_TRUE("Block[{tragerAlgConstants = {}}, kauersFieldOfRoot[z^2 - 3, z] === fieldOfRoot[z^2 - 3, z, z] && "
+            "kauersFieldOfRoot[z^2 - 3, z] === kauersFieldOfRoot[z^2 - 3, z]]");
+    /* the integrand of G-perf-4, end to end: an antiderivative, Root-free, verified */
+    TR_TRUE("Module[{f = x/((2^(1/3) x^3 - 1) Sqrt[x^2 + 2]), F},"
+            " F = TimeConstrained[Integrate[f, x, Method -> \"Trager\"], 120, $Failed];"
+            " F =!= $Failed && FreeQ[F, Integrate] && FreeQ[F, Root[-16 + #1^3 &, 1]] && PossibleZeroQ[D[F, x] - f]]");
+}
+
 int main(void) {
     tr_init();
     define_helpers();
@@ -411,6 +437,7 @@ int main(void) {
     test_log_to_arctan();
     test_orbit_construction();
     test_presentation_helpers();
+    test_relative_constants();
     printf("trager_logterms: %d assertions passed\n", tr_assertions);
     return 0;
 }

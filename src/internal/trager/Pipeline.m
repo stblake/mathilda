@@ -148,11 +148,23 @@ tragerBasisLogPart[ctx_Association, r_List, Y_Symbol] := Module[{B = ctx["B"], f
   tragerLogExpressions[full["F"], B, logs, Y]];
 
 tragerOrbitLogPart::usage = "tragerOrbitLogPart[ctx, r, Y] is the per-orbit construction (tragerOrbitLogTerms), verified exactly, or $Failed when an orbit divisor is not torsion (not a certificate).";
-tragerOrbitLogPart[ctx_Association, r_List, Y_Symbol] := Module[{orb = tragerOrbitLogTerms[ctx]},
+tragerOrbitLogPart[ctx_Association, r_List, Y_Symbol] := Module[{orb = tragerOrbitLogTerms[ctx], res},
   If[orb === $Failed, Return[$Failed]];
-  If[!afZeroQ[fieldQ[], kauersResidual[ctx, r, orb]],
+  res = kauersResidual[ctx, r, orb];
+  If[!afZeroQ[fieldQ[], res],
+    (* a nonzero residual certifies only when its zero test is exact over K0:
+       every algebraic constant a power of ONE rational base (1, b^(1/n), ...
+       are then linearly independent over Q(x) and rc's normal form decides),
+       no Root object.  A Root next to the radical it equals (Root[-16 + #^3 &,
+       1] beside 2^(1/3)) read as nonzero and gave a FALSE "not elementary"
+       for G-perf-4; otherwise no certificate ($Failed: the Q-basis route) *)
+    If[!residualCanonicalQ[res], Return[$Failed, Module]];
     throwNonElementary["the remainder minus the logarithmic part is a nonzero holomorphic differential"]];
   kauersLogExpressions[ctx, orb, Y]];
+
+residualCanonicalQ::usage = "residualCanonicalQ[e] is True when the algebraic constants of e are all rational powers of one rational base, with no Root object and no other algebraic number -- the case in which rcZeroQ over fieldQ[] is an exact zero test (Gaussian rationals aside, which Together handles).";
+residualCanonicalQ[e_] := FreeQ[e, Root | AlgebraicNumber] &&
+  Length[DeleteDuplicates[Cases[e, Power[b_, _Rational] /; rationalNumberQ[b] :> b, {0, Infinity}]]] <= 1;
 
 kauersLogPart::usage = "kauersLogPart[ctx, r, Y] is the logarithmic part of the remainder r by Kauers' heuristic, verified exactly, as log-term expressions in x and Y; a Decline when the heuristic does not close.";
 kauersLogPart[ctx_Association, r_List, Y_Symbol] := Module[{logs = kauersLogTerms[ctx]},

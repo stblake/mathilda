@@ -1524,6 +1524,22 @@ the code).**
   - a lower-layer defect: Together over Gaussian coefficients (to fix where it
     lives).
 
+#### Phase 4.5 exit (v0.6573)
+
+- **G-perf-4 closed:** 7 s, where it timed out. The Kauers trace runs through the
+  absolute field (`kauersTraceRel`) instead of Q[Z]/(q) with literal algebraic
+  constants. A false "not elementary" this exposed is guarded: the residual
+  certifies only when its constants are canonical (`residualCanonicalQ`).
+- **The exit criteria are met:** G-perf-2 2.9 s, G-perf-3 15 s, G-perf-4 closed.
+  The field kernels are at PARI's level (v0.6572, `tools/ffield_bench/`).
+- **Moved to later work:**
+  - evaluation and interpolation in the parameters (Phase 4.4 needs it);
+  - the two-element ideal form;
+  - the `FunctionField`` builtins;
+  - the nightly ideal-benchmark ratchet;
+  - factorisation over K, which is still 1.5–20× behind PARI.
+- **Next:** Phase 4.4, symbolic parameters.
+
 ### Phase 5: the radical anywhere (largest; theory first)
 
 - **A differential-field record** (`brDField`, a new `DField.m`) abstracts the base field. Its

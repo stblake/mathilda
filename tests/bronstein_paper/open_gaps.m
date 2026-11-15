@@ -26,9 +26,6 @@
 bronsteinOpenGaps = {
 
 (* ---- performance --------------------------------------------------------- *)
-<|"id" -> "G-perf-4", "area" -> "Trager", "gap" -> "a residue field over Q(constants) of large degree: x/((2^(1/3) x^3 - 1) Sqrt[x^2 + 2]) (genus 0, elementary) times out, where x/((2 x^3 - 1) Sqrt[x^2 + 2]) takes 0.1 s and the linear 2^(1/3) x - 1 takes 2.6 s",
-  "kind" -> "Integrate", "f" -> Hold[x/((2^(1/3) x^3 - 1) Sqrt[x^2 + 2])], "current" -> "timeout", "budget" -> 60,
-  "followup" -> "batch E: the norm (one generator per base) and the field (primitiveFieldByNorm, Trager primitive element) are fast now; what remains is kNorm in logDerivativeNF, a resultant against a residue polynomial with radical coefficients (9 s per call): build the residue field relative to K0 and take norms over K0", "source" -> "Phase 4.3b C4 battery"|>,
 <|"id" -> "G-nf-10", "area" -> "Bronstein", "gap" -> "random elementary integrands over Q(constants) (seed 20261114, 40 cases): 17 verified, 15 time out, 6 internal (brResultantRZero, brComponentIdentity, brHermiteIterationBound before brCancelK), 2 undecided -- no wrong answer and no false certificate",
   "kind" -> "Expr", "f" -> Hold[Length[{}]], "current" -> "0", "budget" -> 10,
   "followup" -> "rerun the battery (scratch c6r.m pattern) after each 4.3b step; promote it to a nightly stress ctest", "source" -> "Phase 4.3b C6"|>,
@@ -77,5 +74,5 @@ openGapsStructural = {
   {"tests", "integrate_cascade_trager_bronstein_tests:89 (Check of 5/((x - 3) Sqrt[x^3 - 2])) intermittently sees a firing, also when the suite runs alone, with $MessageList empty and no anonymous mth_msg_note_fired (so not the Root memo): a timing-dependent Quiet/Check frame leak, suspected around a TimeConstrained unwind; repl_pty_test and image_tests hit their alarms under load", "test infrastructure"},
   {"design", "goodPrimes searches primes without a bound: data that no prime is good for (inconsistent input) would loop; characteristic-0 prechecks guard the known cases", "a proof-backed bound or an Internal error"},
   {"Core", "Together over Gaussian coefficients: fixed in v0.6571 (two stages: combine with I free, then one reduction over Q(I); 29.6 s -> 0.66 s, random sums 3x); what remains is the reduction over Q(I) itself, 10x the symbol route of brComponentIdentityQ (0.07 s), and a unit (-1, +-I) left where the input put it, so Together over Q(I) is canonical only up to a unit", "a unit normalisation for Gaussian Together (a convention: leading coefficient of the denominator positive real?)"},
-  {"Phase 4.5", "the multi-modular kernels (ff_modular.c) decline when an entry involves a parameter (the direct ff_fnx elimination runs): evaluation and interpolation in the parameters; kNorm / Resultant by CRT for G-perf-4", "Phase 4.5 remainder"}
+  {"Phase 4.5", "the multi-modular kernels (ff_modular.c) decline when an entry involves a parameter (the direct ff_fnx elimination runs): evaluation and interpolation in the parameters (G-perf-4 closed v0.6573 through the absolute field)", "Phase 4.5 remainder"}
 };
