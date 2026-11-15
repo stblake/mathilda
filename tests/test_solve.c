@@ -1433,12 +1433,28 @@ static void test_one_element_list_and_radical_kernel(void) {
                    "/. (# /. ConditionalExpression[v_, _] :> v /. C[_] -> 0), 30]] == 0 &]]", "True", 0);
 }
 
+/* A square under a unit or rational content over Q(params) is solved as a
+ * square (v0.6571): -q^2 went to the quartic formula while q^2 did not, and
+ * the residue method then summed at a wrong branch. */
+static void test_square_under_content(void) {
+    assert_eval_eq("Module[{s = Solve[Expand[-(1 + 2 a w + 3 w^2)^2] == 0, w]}, Length[s] == 4 && "
+                   "LeafCount[s] < 150 && AllTrue[w /. s, Expand[1 + 2 a # + 3 #^2] === 0 &]]", "True", 0);
+    assert_eval_eq("Length[Solve[Expand[-((b + I c) + 2 a w + (b - I c) w^2)^2/7] == 0, w]]", "4", 0);
+    assert_eval_eq("AllTrue[w /. Solve[Expand[-((b + I c) + 2 a w + (b - I c) w^2)^2] == 0, w],"
+                   " Expand[Simplify[(b + I c) + 2 a # + (b - I c) #^2]] === 0 &]", "True", 0);
+    /* the integral that exposed it */
+    assert_eval_eq("Chop[N[(Integrate[1/(a + b Cos[t] + c Sin[t])^2, {t, 0, 2 Pi}, "
+                   "Assumptions -> a > Sqrt[b^2 + c^2], Method -> \"Residue\"] - 2 Pi a/(a^2 - b^2 - c^2)^(3/2)) /. "
+                   "{a -> 3, b -> 1, c -> 1}]]", "0", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
 
     printf("Running solve tests...\n");
     TEST(test_linear);
+    TEST(test_square_under_content);
     TEST(test_one_element_list_and_radical_kernel);
     TEST(test_quadratic_real);
     TEST(test_quadratic_complex_and_reals);

@@ -2269,7 +2269,11 @@ static bool rat_i_inside_binder(const Expr* e) {
     return false;
 }
 
-static Expr* rat_gaussian_reduce(const Expr* arg, Expr* (*reduce)(const Expr*)) {
+/* arg with every Gaussian constant a + b I written a + b t, t the fresh symbol
+ * returned in *t_out (owned by the caller); NULL (nothing to free) when arg has
+ * no I, has one inside a binder, or keeps an I or an algebraic atom. */
+static Expr* rat_gaussian_forward(const Expr* arg, Expr** t_out) {
+    *t_out = NULL;
     if (!rat_contains_i(arg)) return NULL;
     if (rat_i_inside_binder(arg)) return NULL;
     Expr* t = expr_new_symbol("Rat$gaussI");
@@ -2298,6 +2302,14 @@ static Expr* rat_gaussian_reduce(const Expr* arg, Expr* (*reduce)(const Expr*)) 
         expr_free(t);
         return NULL;
     }
+    *t_out = t;
+    return e2;
+}
+
+static Expr* rat_gaussian_reduce(const Expr* arg, Expr* (*reduce)(const Expr*)) {
+    Expr* t;
+    Expr* e2 = rat_gaussian_forward(arg, &t);
+    if (!e2) return NULL;
     Expr* red = reduce(e2);
     expr_free(e2);
     if (!red) { expr_free(t); return NULL; }
@@ -2422,6 +2434,70 @@ static Expr* rat_gaussian_field(const Expr* arg, const char* head) {
     return out;
 }
 
+/* Together over Q(I) in two stages.  rat_gaussian_field runs the number-field
+ * Together over the whole input; on a sum of many fractions that is ~400x the
+ * cost of combining it with I as a free variable t (29.6 s against 0.07 s, the
+ * per-component identity check of Tan[x]^(1/4)).  So:
+ *   1. combine over Q[vars, t] (flint_rational_together on a + b I -> a + b t);
+ *   2. map t -> I (the evaluator reduces I^2 = -1) and reduce that ONE fraction
+ *      over Q(I) by rat_gaussian_field: one cancellation, canonical output.
+ * Step 1 is an identity of rational functions in t; at t = I it holds when the
+ * combined denominator does not vanish there, i.e. (t^2 + 1 irreducible) when
+ * t^2 + 1 does not divide it -- checked; otherwise (an input denominator that
+ * vanishes at I without evaluating to 0) the one-stage route runs, as before.
+ * The result is the same value, reduced (numerator and denominator coprime
+ * over Q(I)); like the one-stage route it is unique only up to a unit (a
+ * factor -1 or +-I may sit in the numerator or the denominator).  On 400
+ * random Gaussian sums every difference from the one-stage form was such a
+ * unit.  NULL to decline. */
+/* Infinity, ComplexInfinity or Indeterminate anywhere in e: not a rational
+ * function, so the two-stage route stays out (defensive; the one-stage route
+ * keeps its own handling of them). */
+static bool rat_has_nonfinite(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_SYMBOL) {
+        const char* s = e->data.symbol.name;
+        return s == SYM_Infinity || s == SYM_ComplexInfinity || s == SYM_Indeterminate;
+    }
+    if (e->type != EXPR_FUNCTION) return false;
+    if (rat_has_nonfinite(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rat_has_nonfinite(e->data.function.args[i])) return true;
+    return false;
+}
+
+static Expr* rat_gaussian_together_two_stage(const Expr* arg) {
+    if (rat_has_nonfinite(arg)) return NULL;
+    Expr* t;
+    Expr* e2 = rat_gaussian_forward(arg, &t);
+    if (!e2) return NULL;
+    Expr* red = flint_rational_together(e2);
+    expr_free(e2);
+    if (!red) { expr_free(t); return NULL; }
+    /* t^2 + 1 must not divide the denominator */
+    Expr* t2p1 = expr_new_function(expr_new_symbol(SYM_Plus),
+        (Expr*[]){ expr_new_integer(1),
+                   expr_new_function(expr_new_symbol(SYM_Power),
+                       (Expr*[]){ expr_copy(t), expr_new_integer(2) }, 2) }, 2);
+    Expr* chk = eval_and_free(expr_new_function(expr_new_symbol(SYM_Expand),
+        (Expr*[]){ expr_new_function(expr_new_symbol(SYM_PolynomialRemainder),
+            (Expr*[]){ expr_new_function(expr_new_symbol(SYM_Denominator), (Expr*[]){ expr_copy(red) }, 1),
+                       t2p1, expr_copy(t) }, 3) }, 1));
+    int vanishes = !chk || (chk->type == EXPR_INTEGER && chk->data.integer == 0);
+    if (chk) expr_free(chk);
+    if (vanishes) { expr_free(red); expr_free(t); return NULL; }
+    Expr* bwd = expr_new_function(expr_new_symbol(SYM_Rule),
+        (Expr*[]){ t, expr_new_symbol(SYM_I) }, 2);           /* adopts t */
+    Expr* pre = eval_and_free(expr_new_function(expr_new_symbol(SYM_ReplaceAll),
+        (Expr*[]){ red, bwd }, 2));                           /* adopts red */
+    if (!pre) return NULL;
+    /* every I cancelled: a fraction over Q, coprime over Q and so over Q(I) */
+    if (!rat_contains_i(pre)) return pre;
+    Expr* out = rat_gaussian_field(pre, SYM_Together);
+    expr_free(pre);
+    return out;
+}
+
 #endif
 
 static Expr* builtin_together_compute(Expr* res) {
@@ -2459,7 +2535,11 @@ static Expr* builtin_together_compute(Expr* res) {
         }
     }
     if (res->data.function.arg_count == 1 && !internal_args_contain_inexact(res)) {
-        Expr* gf = rat_gaussian_field(res->data.function.args[0], SYM_Together);
+        /* two stages first: combine with I free, then reduce the one
+         * fraction over Q(I) (rat_gaussian_together_two_stage) */
+        Expr* gf = rat_gaussian_together_two_stage(res->data.function.args[0]);
+        if (gf) return gf;
+        gf = rat_gaussian_field(res->data.function.args[0], SYM_Together);
         if (gf) return gf;
     }
     /* Phase 2: unified field-structure dispatch first (see builtin_cancel_compute). */

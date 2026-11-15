@@ -273,6 +273,23 @@ static int monomial_parse(const Expr* e, const VarSet* vs, fmpq_t c, ulong* exps
     return monomial_parse_into(e, vs, c, exps);
 }
 
+/* Sum p[0..k) into out by a balanced (pairwise) tree, then clear and free p.
+ * A running sum re-merges the growing total once per summand, O(N k) term
+ * moves for k summands of N terms in all; pairing equal-sized operands is
+ * O(N log k).  Shared by the Plus cases of to_mpoly and to_mpoly_kernels
+ * (a Gaussian Together spent 2 s merging 50k-leaf sums one term at a time). */
+static void mpoly_sum_tree(fmpq_mpoly_t out, fmpq_mpoly_struct* p, slong k,
+                           const fmpq_mpoly_ctx_t ctx) {
+    if (k == 0) fmpq_mpoly_zero(out, ctx);
+    else {
+        for (slong w = 1; w < k; w *= 2)
+            for (slong i = 0; i + w < k; i += 2 * w) fmpq_mpoly_add(p + i, p + i, p + i + w, ctx);
+        fmpq_mpoly_swap(out, p + 0, ctx);
+    }
+    for (slong i = 0; i < k; i++) fmpq_mpoly_clear(p + i, ctx);
+    free(p);
+}
+
 static int to_mpoly(const Expr* e, fmpq_mpoly_t out,
                     const fmpq_mpoly_ctx_t ctx, const VarSet* vs) {
     switch (e->type) {
@@ -318,12 +335,14 @@ static int to_mpoly(const Expr* e, fmpq_mpoly_t out,
                  * expanded 20k-term polynomial, against 2 ms this way).  The
                  * few non-monomial summands are added in the ordinary way. */
                 fmpq_mpoly_zero(out, ctx);
-                fmpq_mpoly_t t; fmpq_mpoly_init(t, ctx);
                 fmpq_mpoly_t rest; fmpq_mpoly_init(rest, ctx);
                 slong nv = (slong)vs->count;
                 ulong* exps = calloc((size_t)(nv > 0 ? nv : 1), sizeof(ulong));
+                /* the non-monomial summands, summed by a balanced tree */
+                fmpq_mpoly_struct* parts = malloc((n > 0 ? n : 1) * sizeof(fmpq_mpoly_struct));
+                slong np = 0;
                 fmpq_t c; fmpq_init(c);
-                int ok = exps != NULL, pushed = 0;
+                int ok = exps != NULL && parts != NULL, pushed = 0;
                 for (size_t i = 0; i < n && ok; i++) {
                     const Expr* a = e->data.function.args[i];
                     if (monomial_parse(a, vs, c, exps)) {
@@ -333,18 +352,19 @@ static int to_mpoly(const Expr* e, fmpq_mpoly_t out,
                         }
                         continue;
                     }
-                    ok = to_mpoly(a, t, ctx, vs);
-                    if (ok) fmpq_mpoly_add(rest, rest, t, ctx);
+                    fmpq_mpoly_init(parts + np, ctx);
+                    ok = to_mpoly(a, parts + np, ctx, vs);
+                    np++;
                 }
                 if (ok && pushed) {
                     fmpq_mpoly_sort_terms(out, ctx);
                     fmpq_mpoly_combine_like_terms(out, ctx);
                 }
+                if (parts) mpoly_sum_tree(rest, parts, np, ctx);
                 if (ok) fmpq_mpoly_add(out, out, rest, ctx);
                 fmpq_clear(c);
                 free(exps);
                 fmpq_mpoly_clear(rest, ctx);
-                fmpq_mpoly_clear(t, ctx);
                 return ok;
             }
             if (h == SYM_Times) {
@@ -1637,14 +1657,17 @@ static int to_mpoly_kernels(const Expr* e, fmpq_mpoly_t out,
                 return 1;
             }
             if (h == SYM_Plus) {
-                fmpq_mpoly_zero(out, ctx);
-                fmpq_mpoly_t t; fmpq_mpoly_init(t, ctx);
+                /* a balanced tree, not a running sum (see mpoly_sum_tree) */
+                fmpq_mpoly_struct* parts = malloc((n > 0 ? n : 1) * sizeof(fmpq_mpoly_struct));
+                if (!parts) return 0;
+                slong np = 0;
                 int ok = 1;
                 for (size_t i = 0; i < n && ok; i++) {
-                    ok = to_mpoly_kernels(e->data.function.args[i], t, ctx, gens, ngen);
-                    if (ok) fmpq_mpoly_add(out, out, t, ctx);
+                    fmpq_mpoly_init(parts + np, ctx);
+                    ok = to_mpoly_kernels(e->data.function.args[i], parts + np, ctx, gens, ngen);
+                    np++;
                 }
-                fmpq_mpoly_clear(t, ctx);
+                mpoly_sum_tree(out, parts, np, ctx);
                 return ok;
             }
             if (h == SYM_Times) {

@@ -1792,6 +1792,16 @@ Expr* solvepoly_solve_polynomial_equality(Expr* equation,
                     useful = true;                    /* symbolic content */
                 else if (expr_contains_var(fi, var) && get_degree_poly((Expr*)fi, var) < d)
                     useful = true;                    /* a proper factor  */
+                else if (fi->type == EXPR_FUNCTION
+                         && fi->data.function.head->type == EXPR_SYMBOL
+                         && fi->data.function.head->data.symbol.name == SYM_Power
+                         && expr_contains_var(fi->data.function.args[0], var))
+                    useful = true;                    /* a power under a unit or
+                                                         rational content: -q^2/4
+                                                         is a square as much as q^2
+                                                         (it went to the quartic
+                                                         formula, and the residue
+                                                         method to a wrong branch) */
             }
         } else if (fac->type == EXPR_FUNCTION
                    && fac->data.function.head->type == EXPR_SYMBOL

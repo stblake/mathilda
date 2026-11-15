@@ -99,9 +99,10 @@ brComponentIdentityQ[T_Association, cv_Association, c_, res_Association] := Modu
   (* per-orbit RootSum terms: their derivative, traced exactly from each
      orbit field (brOrbitLogPart), on the basis w_i = Y^i/d_i *)
   If[ListQ[res["OrbitD"]], R = R + afToY[cv["B"], res["OrbitD"], Y]];
-  (* No Gaussian coefficient reaches Together: over Q(i) it takes the slow
-     algebraic route (29.6 s against 0.07 s for the same check on Tan[x]^(1/4),
-     G-perf-3).  Over a residue field containing i the literal I is written in
+  (* No Gaussian coefficient reaches Together: on the check of Tan[x]^(1/4)
+     (G-perf-3) Together over Q(i) took 29.6 s (0.66 s since its two-stage
+     route, v0.6571) against 0.07 s with I as a symbol -- there is no gcd over
+     Q(i) to take here, only a zero test.  Over a residue field containing i the literal I is written in
      its generator (fieldSubI) -- a ring homomorphism, so the identity is
      unchanged -- in R and G alike; any I left is a fresh symbol ii, reduced
      modulo ii^2 + 1 at the end.  Y^m - G, ii^2 + 1 and mu(t) have pairwise

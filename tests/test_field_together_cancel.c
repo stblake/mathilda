@@ -224,6 +224,26 @@ static void test_nested_radical_guards(void) {
     run_test("Simplify[Sqrt[3/4 - 1/Sqrt[2]]]", "Plus[Rational[-1, 2], Power[2, Rational[-1, 2]]]");
 }
 
+/* Gaussian Together in two stages (v0.6571): combine with I free, then reduce
+ * the one fraction over Q(I).  Values are unchanged, cancellations over Q(I)
+ * still happen, and a denominator that vanishes at I (unexpanded) keeps the
+ * one-stage behaviour. */
+static void test_gaussian_two_stage(void) {
+    run_test("Together[(x^2 + 1)/(x - I)]", "Plus[Complex[0, 1], x]");
+    run_true("Module[{e = 1/(x - I) + 1/(x + I), r}, r = Together[e]; "
+             "Together[Numerator[r] (x^2 + 1) - 2 x Denominator[r]] === 0 && FreeQ[Denominator[r], I] || "
+             "PossibleZeroQ[r - 2 x/(x^2 + 1)]]");
+    run_true("Together[(x - I)/(x^2 + 1) + y] === (1 + I y + x y)/(I + x)");
+    /* imaginary parts that cancel: a fraction over Q */
+    run_true("FreeQ[Together[(1 + I)/(x - 1) + (1 - I)/(x - 1)], Complex]");
+    /* a value check on a sum of many Gaussian fractions */
+    run_true("Module[{e = Sum[(I k + t^k - 3 y)/(1 + t^2 + k y + I t y^2), {k, 1, 5}], r},"
+             " r = Together[e]; Head[r] =!= Together && Expand[(e - r) /. {t -> 2/3, y -> 5/7}] === 0]");
+    /* the reduced form: numerator and denominator coprime over Q(I) */
+    run_true("Module[{r = Together[(x - I) (x + 2)/((x - I) (x^2 + 3)) + I/(x^2 + 3)]},"
+             " Exponent[Denominator[r], x] === 2]");
+}
+
 int main(int argc, char** argv) {
     setbuf(stdout, NULL);
     printf("Starting field_together_cancel_tests\n");
@@ -240,6 +260,7 @@ int main(int argc, char** argv) {
     TEST(test_nested_radical_d2);
     TEST(test_nested_radical_variants);
     TEST(test_nested_radical_guards);
+    TEST(test_gaussian_two_stage);
 
     printf("All field Together / Cancel tests passed!\n");
     return 0;
