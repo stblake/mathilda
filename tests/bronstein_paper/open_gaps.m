@@ -32,12 +32,6 @@ bronsteinOpenGaps = {
 <|"id" -> "G-nf-10", "area" -> "Bronstein", "gap" -> "random elementary integrands over Q(constants) (seed 20261114, 40 cases): 17 verified, 15 time out, 6 internal (brResultantRZero, brComponentIdentity, brHermiteIterationBound before brCancelK), 2 undecided -- no wrong answer and no false certificate",
   "kind" -> "Expr", "f" -> Hold[Length[{}]], "current" -> "0", "budget" -> 10,
   "followup" -> "rerun the battery (scratch c6r.m pattern) after each 4.3b step; promote it to a nightly stress ctest", "source" -> "Phase 4.3b C6"|>,
-<|"id" -> "G-perf-2", "area" -> "Bronstein", "gap" -> "two log terms with special residues on a genus-1 cubic: 225 s",
-  "kind" -> "Integrate", "f" -> Hold[Together[D[Log[Log[x] + (1 + Log[x] + Log[x]^3)^(1/3)] + 2 Log[Log[x]^2 + Log[x] (1 + Log[x] + Log[x]^3)^(1/3) + (1 + Log[x] + Log[x]^3)^(2/3)], x]]],
-  "current" -> "timeout", "budget" -> 60, "followup" -> "profiled in batch E: idealTimes over the residue function field (Fn with an algebraic extension) takes 56 s for one product of the special divisor; needs native ideal arithmetic over Fn (the FLINT Hermite kernel does not take symbolic coefficients)", "source" -> "E3 tests, 2026-11-14"|>,
-<|"id" -> "G-perf-3", "area" -> "Bronstein", "gap" -> "the fourth root of the tangent times out (13 of 120 random m = 3, 4 components also time out at 30 s)",
-  "kind" -> "Integrate", "f" -> Hold[Tan[x]^(1/4)], "current" -> "timeout", "budget" -> 60,
-  "followup" -> "profiled in batch E: finishes in 154 s with a verified answer; the time is brSpecialDivisorIdeal / idealTimes over a degree-8 residue extension of the function field (as G-perf-2)", "source" -> "review of E4.2; E6e sweep"|>,
 
 (* ---- Bronstein scope ----------------------------------------------------- *)
 <|"id" -> "G-sign-1", "area" -> "Bronstein", "gap" -> "radicals equal up to a sign seen only on a branch cut: undecided (E6d)",
@@ -81,5 +75,7 @@ openGapsStructural = {
   {"certificates", "certificates without an external cross-check (FriCAS times out or reports incomplete): Sqrt[Log[x] + I], 1/((x - I) Sqrt[x^3 + 1]), (1 + Log[x])/(x (1 + Log[x] + Log[x]^3)^(1/3))", "an independent checker (another CAS or a proof certificate)"},
   {"Trager", "Method -> \"TragerKauers\" floods about 200 Thread::tdlen messages on Gaussian binomials (kauersPrincipal differentiates an unevaluated GroebnerBasis)", "KauersLogTerms"},
   {"tests", "integrate_cascade_trager_bronstein_tests:89 (Check of 5/((x - 3) Sqrt[x^3 - 2])) intermittently sees a firing, also when the suite runs alone, with $MessageList empty and no anonymous mth_msg_note_fired (so not the Root memo): a timing-dependent Quiet/Check frame leak, suspected around a TimeConstrained unwind; repl_pty_test and image_tests hit their alarms under load", "test infrastructure"},
-  {"design", "goodPrimes searches primes without a bound: data that no prime is good for (inconsistent input) would loop; characteristic-0 prechecks guard the known cases", "a proof-backed bound or an Internal error"}
+  {"design", "goodPrimes searches primes without a bound: data that no prime is good for (inconsistent input) would loop; characteristic-0 prechecks guard the known cases", "a proof-backed bound or an Internal error"},
+  {"Core", "Together over Gaussian coefficients takes an algebraic route about 100-400x slower than with I as a symbol: Together[Sum[(I k + t^k - 3 y)/(1 + t^2 + k y + I t y^2), {k, 5}]] 0.072 s against 0.0005 s with ii for I; 29.6 s against 0.07 s on the brComponentIdentityQ check of Tan[x]^(1/4) (routed around there in v0.6570)", "the Together engine: Gaussian rationals as Q[ii]/(ii^2 + 1) coefficients (src/poly/ratfun.c)"},
+  {"Phase 4.5", "the multi-modular kernels (ff_modular.c) decline when an entry involves a parameter (the direct ff_fnx elimination runs): evaluation and interpolation in the parameters; kNorm / Resultant by CRT for G-perf-4", "Phase 4.5 remainder"}
 };

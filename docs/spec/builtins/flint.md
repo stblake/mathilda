@@ -190,6 +190,28 @@ the module.
 | `"DeterminantMultiple" -> D` | `D` is a multiple of the determinant of the module, so the module contains `D K[x]^n`; the rows `D e_k` are adjoined and entries are reduced modulo `D` during the elimination, which bounds their degrees. A constant `D` is ignored. |
 | `"Products" -> {gens, table}` | the module spanned by the products `r g` (`r` a row of `m`, `g` in `gens`) in the K[x]-algebra with basis `w_0..w_(n-1)` and `w_i w_j = f w_k`, `table[[i+1, j+1]] = {k, f}`: an ideal product formed inside the kernel. |
 | `"Denominator" -> den` | the fractional module `m/den` in lowest terms: returns `{H, den'}` with every factor of `den` *over the prime field* that divides all entries removed, and `den'` monic. Over Q(θ) a factor of `den` that splits over Q(θ) is not removed piecemeal. |
+| `"Modular" -> True` (default) or `False` | with `"DeterminantMultiple"`, over Q, Q(θ), and Q(θ)(p) when no entry involves a parameter: the form is computed by the certified multi-modular kernel (below). `False` forces the direct elimination (tests). |
+
+**The multi-modular form (v0.6570).** Modulo `D` the direct elimination bounds the
+degrees of the entries but not the heights of their rational coefficients: the
+extended-gcd cofactors grow. A 9 × 3 matrix of degree 21 over Q(ω) took 27 s,
+although the form itself has coefficients below 10¹². The kernel
+(`src/poly/ffield/ff_hnf.c` on the driver `ff_modular.c`) works as follows.
+- It computes the form over the finite fields F_p[t]/(f), for 62-bit primes p and
+  each irreducible factor f of μ mod p.
+- It combines the images by the polynomial and integer CRT and lifts them by
+  rational reconstruction. The number of primes follows the height of the *result*.
+- It certifies the candidate exactly before returning it. With L′ = span(rows) +
+  D K[x]ⁿ, the checks are:
+  - the candidate H has Hermite shape;
+  - every row and every D e_k reduces to 0 by H, so L′ ⊆ L(H);
+  - the diagonal degrees of H equal those of an image of L′.
+
+  A rank only drops modulo (p, f), so deg det L′ ≤ deg det of the image, which
+  gives L(H) = L′. H is then the form by uniqueness.
+- Without a certified candidate within 2000 primes, the direct elimination runs.
+
+The 27 s call takes 7 ms. Forms are identical to the direct ones.
 
 ```mathematica
 In[1]:= FLINT`PolynomialHermiteForm[{{x^2 + 1, x}, {x, 1 + x}}, x]
@@ -248,7 +270,21 @@ Out[1]= {2 x, 0}
 ## FLINT`PolynomialExtendedGCD
 
 `` FLINT`PolynomialExtendedGCD[a, b, x, opts] `` gives `{g, {s, t}}` with `g` the
-monic gcd over K[x] and `s a + t b == g`.
+monic gcd over K[x] and `s a + t b == g`, where `Exponent[s, x] < Exponent[b, x] -
+Exponent[g, x]` and `Exponent[t, x] < Exponent[a, x] - Exponent[g, x]`.
+
+The cofactors are unique under these bounds. So over Q, Q(θ) and parameter-free
+inputs over Q(θ)(p), the answer is computed by the certified multi-modular kernel
+`ff_xgcd.c`: images over F_p[t]/(f), CRT and rational reconstruction, as for the
+Hermite form.
+- **Certificate:** g is monic, g divides a and b, and `s a + t b == g`, checked
+  exactly.
+- **When it declines:** when a or b is zero, when a and b are both constant
+  multiples of g (the cofactors are not unique), or when the prime budget is
+  exhausted. Then FLINT's Euclidean xgcd runs. `"Modular" -> False` forces that
+  path.
+- **Speed:** a degree-22 pair over Q(ω) with 6100-digit cofactors goes from
+  2.6 s to 0.36 s.
 
 ```mathematica
 In[1]:= FLINT`PolynomialExtendedGCD[x^2 - 2, x - t, x, Extension -> {t, t^2 - 2}]

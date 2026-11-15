@@ -34,9 +34,11 @@ static void test_records(void) {
     BR_EQ("fieldBase[fieldNF[t, t^2 - 2, Sqrt[2]]] === fieldQ[]", "True");
     BR_EQ("fieldBase[fieldGF[7]] === fieldGF[7]", "True");
     BR_EQ("{fieldDegree[F], fieldDegree[F2], fieldDegree[F3]}", "{1, 2, 3}");
-    /* the FLINT kernels never see a rational-function field */
-    BR_FALSE("Block[{}, nativeQ[F]]");
-    BR_FALSE("nativeQ[F2]");
+    /* a rational-function field reaches the FLINT kernels exactly when
+       tragerOption["NativeFn"] is set (the default since v0.6570) */
+    BR_TRUE("nativeQ[F]");
+    BR_TRUE("nativeQ[F2]");
+    BR_FALSE("Block[{r}, tragerOption[\"NativeFn\"] = False; r = nativeQ[F]; tragerOption[\"NativeFn\"] = True; r]");
     BR_EQ("nativeQ[fieldQ[]] === nativeQ[]", "True");
 }
 

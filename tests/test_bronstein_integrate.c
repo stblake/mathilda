@@ -165,6 +165,15 @@ static void test_pipeline_routines(void) {
     br_run("cvL1b = brCurve[TL1b, 2, brT1^2 + 1]; resL1b = brIntegrateComponent[TL1b, cvL1b, 1/((1 + brT1^2) x)]; True");
     BR_TRUE("brComponentIdentityQ[TL1b, cvL1b, 1/((1 + brT1^2) x), resL1b]");
     BR_FALSE("brComponentIdentityQ[TL1b, cvL1b, 2/((1 + brT1^2) x), resL1b]");
+    /* Gaussian coefficients: I is a symbol reduced modulo ii^2 + 1 (Together
+       never sees Complex, the G-perf-3 slow path); I times a true identity
+       holds, and a wrong multiple of I is still rejected */
+    br_run("resL1bI = Join[resL1b, <|\"Algebraic\" -> I resL1b[\"Algebraic\"], "
+           "\"RawLogs\" -> ({I #[[1]], #[[2]]} & /@ resL1b[\"RawLogs\"])|>]; True");
+    BR_TRUE("!ListQ[resL1b[\"OrbitD\"]]");
+    BR_TRUE("brComponentIdentityQ[TL1b, cvL1b, I/((1 + brT1^2) x), resL1bI]");
+    BR_FALSE("brComponentIdentityQ[TL1b, cvL1b, (2 I)/((1 + brT1^2) x), resL1bI]");
+    BR_FALSE("brComponentIdentityQ[TL1b, cvL1b, 1/((1 + brT1^2) x), resL1bI]");
     BR_THROWS("brIntegrateComponent[T134, cv134, 1/x]", "NonElementary",
               "no algebraic part: the Risch DE D b + s b = c has no solution ([B] Prop 2.15/2.18)");
     BR_THROWS("brIntegrateComponent[T134, <|\"m\" -> 2, \"G\" -> (brT1 + x)^2, \"s\" -> 0|>, 1]", "Internal", "brCurveNotReduced");

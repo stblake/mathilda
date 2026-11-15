@@ -60,6 +60,8 @@
 #include "flint_bridge_internal.h"
 #include "ffield/ff_fnx.h"
 #include "ffield/ff_expr.h"
+#include "ffield/ff_hnf.h"
+#include "ffield/ff_xgcd.h"
 
 /* gr_poly_xgcd arrived in FLINT 3.2 (see flint_bridge.c). */
 #if defined(__FLINT_RELEASE) && __FLINT_RELEASE >= 30200
@@ -150,6 +152,7 @@ typedef struct {
     const Expr* D;          /* "DeterminantMultiple" -> D                    */
     const Expr* den;        /* "Denominator" -> den                          */
     const Expr* products;   /* "Products" -> {gens, table}                   */
+    int modular;            /* "Modular" -> True/False (default True)        */
 } PmOpts;
 
 /* Read the options (Rule[...] arguments) and set up the field.  String-keyed
@@ -163,7 +166,7 @@ static int pm_field_init(PmField* F, const Expr* x, Expr* const* opts, size_t no
     F->xname = x->data.symbol.name;
     const Expr* ext = NULL;
     const Expr* params = NULL;
-    if (xo) memset(xo, 0, sizeof *xo);
+    if (xo) { memset(xo, 0, sizeof *xo); xo->modular = 1; }
     for (size_t i = 0; i < nopts; i++) {
         const Expr* r = opts[i];
         if (!pm_is_head(r, "Rule") || r->data.function.arg_count != 2) return 0;
@@ -189,6 +192,12 @@ static int pm_field_init(PmField* F, const Expr* x, Expr* const* opts, size_t no
         } else if (k->type == EXPR_STRING && xo &&
                    strcmp(k->data.string, "Products") == 0) {
             xo->products = v;
+        } else if (k->type == EXPR_STRING && xo &&
+                   strcmp(k->data.string, "Modular") == 0) {
+            if (v->type != EXPR_SYMBOL) return 0;
+            if (v->data.symbol.name == SYM_True) xo->modular = 1;
+            else if (v->data.symbol.name == SYM_False) xo->modular = 0;
+            else return 0;
         } else {
             return 0;
         }
@@ -497,90 +506,100 @@ static Expr* pm_mat_to_expr(const PmMat* M, slong rows, PmField* F) {
 /* ------------------------------------------------------------------ */
 
 /* The algorithm of the package's hnf / hnfModDet (src/internal/trager/
- * Normalize.m), column by column: the nonzero entry of least degree becomes the
- * pivot; every row below is combined with the pivot row by the extended gcd
- * (a unimodular 2x2 step); the pivot is made monic.  With a modulus D (monic,
- * deg >= 1) the rows D e_k have been appended and every entry right of the
- * current column is reduced mod D after each step.  Finally the entries above
- * each pivot are reduced.  Returns 1 with the form in the first c rows, 0 on
+ * Normalize.m): the generic elimination of the ffield library (ff_hnf_gr,
+ * src/poly/ffield/ff_hnf.c).  With a modulus D (monic, deg >= 1) the rows
+ * D e_k have been appended.  Returns 1 with the form in the first c rows, 0 on
  * rank deficiency or a FLINT failure. */
 static int pm_hnf(PmMat* M, const gr_poly_t D, PmField* F) {
-    gr_ctx_struct* K = F->K;
-    slong nr = M->r, nc = M->c;
-    int st = GR_SUCCESS;
-    int modD = D != NULL;
-    gr_poly_t g, s, t, a, b, q, r1, r2, tmp, tmp2;
-    gr_poly_init(g, K); gr_poly_init(s, K); gr_poly_init(t, K); gr_poly_init(a, K);
-    gr_poly_init(b, K); gr_poly_init(q, K); gr_poly_init(r1, K); gr_poly_init(r2, K);
-    gr_poly_init(tmp, K); gr_poly_init(tmp2, K);
-    gr_ptr lc = gr_heap_init(K);
+    return ff_hnf_gr(M->e, M->r, M->c, D, F->K);
+}
+
+/* K-element -> its t-polynomial over Q (Q, Q(theta), or Q(theta)(p) with an
+ * element free of the parameters).  0 when a parameter occurs. */
+static int pm_elem_to_qt(fmpq_poly_t tp, gr_srcptr c, PmField* F) {
+    fmpq_poly_zero(tp);
+    if (F->kind == PM_NF) { nf_elem_get_fmpq_poly(tp, (const nf_elem_struct*)c, F->nf); return 1; }
+    if (F->kind == PM_Q) { fmpq_poly_set_fmpq(tp, (const fmpq*)c); return 1; }
+    if (F->kind != PM_FN) return 0;
+    ff_fnx_data* Dd = FF_FNX_DATA(F->K);
+    fmpz_t a, b; fmpz_init(a); fmpz_init(b);
+    fmpq_t q; fmpq_init(q);
     int ok = 1;
-    for (slong j = 0; j < nc && ok; j++) {
-        /* pivot: least degree in column j among rows j.. */
-        slong piv = -1, best = 0;
-        for (slong i = j; i < nr; i++) {
-            slong len = PM_AT(M, i, j)->length;
-            if (len > 0 && (piv < 0 || len < best)) { piv = i; best = len; }
-        }
-        if (piv < 0) { ok = 0; break; }
-        if (piv != j)
-            for (slong k = 0; k < nc; k++) gr_poly_swap(PM_AT(M, j, k), PM_AT(M, piv, k), K);
-        for (slong i = j + 1; i < nr && ok; i++) {
-            if (PM_AT(M, i, j)->length == 0) continue;
-            st |= gr_poly_set(a, PM_AT(M, j, j), K);
-            st |= gr_poly_set(b, PM_AT(M, i, j), K);
-            st |= PM_GR_POLY_XGCD(g, s, t, a, b, K);      /* s a + t b = g */
-            st |= gr_poly_divexact(a, a, g, K);          /* a/g */
-            st |= gr_poly_divexact(b, b, g, K);          /* b/g */
-            for (slong k = j; k < nc; k++) {
-                gr_poly_struct* rj = PM_AT(M, j, k);
-                gr_poly_struct* ri = PM_AT(M, i, k);
-                st |= gr_poly_set(r1, rj, K);
-                st |= gr_poly_set(r2, ri, K);
-                st |= gr_poly_mul(tmp, s, r1, K);
-                st |= gr_poly_mul(tmp2, t, r2, K);
-                st |= gr_poly_add(rj, tmp, tmp2, K);
-                st |= gr_poly_mul(tmp, a, r2, K);
-                st |= gr_poly_mul(tmp2, b, r1, K);
-                st |= gr_poly_sub(ri, tmp, tmp2, K);
-                if (modD && k > j) {
-                    st |= gr_poly_rem(rj, rj, D, K);
-                    st |= gr_poly_rem(ri, ri, D, K);
-                }
-            }
-            if (st != GR_SUCCESS) ok = 0;
-        }
-        if (!ok) break;
-        /* monic pivot */
-        gr_poly_struct* pv = PM_AT(M, j, j);
-        if (pv->length == 0) { ok = 0; break; }
-        st |= gr_inv(lc, PM_ENTRY(pv->coeffs, pv->length - 1, F), K);
-        for (slong k = j; k < nc; k++)
-            st |= gr_poly_mul_scalar(PM_AT(M, j, k), PM_AT(M, j, k), lc, K);
-        if (st != GR_SUCCESS) ok = 0;
+    for (slong j = 0; j < Dd->n && ok; j++) {
+        const fmpz_mpoly_q_struct* x = FF_FNX_COEFF((gr_ptr)c, j);
+        if (!fmpz_mpoly_q_is_fmpq(x, Dd->mctx)) { ok = 0; break; }
+        fmpz_mpoly_get_fmpz(a, fmpz_mpoly_q_numref(x), Dd->mctx);
+        fmpz_mpoly_get_fmpz(b, fmpz_mpoly_q_denref(x), Dd->mctx);
+        if (fmpz_is_zero(a)) continue;
+        fmpq_set_fmpz_frac(q, a, b);
+        fmpq_poly_set_coeff_fmpq(tp, j, q);
     }
-    /* rows below the form must have vanished (always so modulo D) */
-    for (slong i = nc; i < nr && ok; i++)
-        for (slong k = 0; k < nc; k++)
-            if (PM_AT(M, i, k)->length != 0) { ok = 0; break; }
-    /* reduce above the pivots, column by column */
-    for (slong j = 0; j < nc && ok; j++) {
-        gr_poly_struct* pv = PM_AT(M, j, j);
-        for (slong i = 0; i < j; i++) {
-            gr_poly_struct* e = PM_AT(M, i, j);
-            if (e->length < pv->length) continue;
-            st |= gr_poly_divrem(q, tmp, e, pv, K);
-            for (slong k = j; k < nc; k++) {
-                st |= gr_poly_mul(tmp, q, PM_AT(M, j, k), K);
-                st |= gr_poly_sub(PM_AT(M, i, k), PM_AT(M, i, k), tmp, K);
+    fmpq_clear(q); fmpz_clear(a); fmpz_clear(b);
+    return ok;
+}
+
+static int pm_elem_from_qt(gr_ptr c, const fmpq_poly_t tp, PmField* F) {
+    if (F->kind != PM_FN) return pm_set_elem(c, tp, F);
+    ff_fnx_data* Dd = FF_FNX_DATA(F->K);
+    if (gr_zero(c, F->K) != GR_SUCCESS) return 0;
+    fmpq_t q; fmpq_init(q);
+    for (slong j = 0; j < Dd->n; j++) {
+        fmpq_poly_get_coeff_fmpq(q, tp, j);
+        if (!fmpq_is_zero(q)) fmpz_mpoly_q_set_fmpq(FF_FNX_COEFF(c, j), q, Dd->mctx);
+    }
+    fmpq_clear(q);
+    return 1;
+}
+
+static int pm_poly_to_qt(ff_qtpoly_struct* a, const gr_poly_struct* P, PmField* F) {
+    ff_qtpoly_set_length(a, P->length);
+    for (slong d = 0; d < P->length; d++)
+        if (!pm_elem_to_qt(a->c + d, PM_ENTRY(P->coeffs, d, F), F)) return 0;
+    return 1;
+}
+
+/* Hermite form modulo D by the certified multi-modular kernel (ff_hnf_modular)
+ * over Q, Q(theta), and Q(theta)(p) when no entry involves a parameter (the
+ * form over Q(theta) is then the form over Q(theta)(p)).  The rows of M are
+ * the given rows (reduced mod D) followed by the c rows D e_k.  Returns 1 with
+ * the form in the first c rows of M; 0 leaves M untouched (the caller runs the
+ * direct elimination).  "Modular" -> False switches it off (tests). */
+static int g_pm_modular = 1;
+static int pm_try_modular(PmMat* M, const gr_poly_t D, PmField* F) {
+    if (!g_pm_modular || F->kind == PM_GF) return 0;
+    slong c = M->c, nr = M->r - c;
+    if (nr < 1) return 0;
+    slong nent = nr * c;
+    ff_qtpoly_struct* rows = malloc((size_t)nent * sizeof(ff_qtpoly_struct));
+    ff_qtpoly_struct* H = malloc((size_t)(c * c) * sizeof(ff_qtpoly_struct));
+    ff_qtpoly_struct Dq;
+    for (slong i = 0; i < nent; i++) ff_qtpoly_init(rows + i);
+    for (slong i = 0; i < c * c; i++) ff_qtpoly_init(H + i);
+    ff_qtpoly_init(&Dq);
+    int ok = pm_poly_to_qt(&Dq, D, F);
+    for (slong i = 0; i < nent && ok; i++) ok = pm_poly_to_qt(rows + i, M->e + i, F);
+    const fmpq_poly_struct* mu = (F->kind == PM_NF || (F->kind == PM_FN && F->tname)) ? F->mu : NULL;
+    ok = ok && ff_hnf_modular(H, rows, nr, c, &Dq, mu, NULL);
+    if (ok) {
+        int st = GR_SUCCESS;
+        gr_ptr e = gr_heap_init(F->K);
+        for (slong i = 0; i < M->r * c; i++) st |= gr_poly_zero(M->e + i, F->K);
+        for (slong i = 0; i < c * c && st == GR_SUCCESS; i++) {
+            gr_poly_struct* P = M->e + i;
+            for (slong d = 0; d < H[i].len && ok; d++) {
+                ok = pm_elem_from_qt(e, H[i].c + d, F);
+                st |= gr_poly_set_coeff_scalar(P, d, e, F->K);
             }
         }
-        if (st != GR_SUCCESS) ok = 0;
+        gr_heap_clear(e, F->K);
+        /* M was overwritten: a failure here cannot fall back */
+        ok = ok && st == GR_SUCCESS;
+        if (!ok) ok = -1;
     }
-    gr_heap_clear(lc, K);
-    gr_poly_clear(g, K); gr_poly_clear(s, K); gr_poly_clear(t, K); gr_poly_clear(a, K);
-    gr_poly_clear(b, K); gr_poly_clear(q, K); gr_poly_clear(r1, K); gr_poly_clear(r2, K);
-    gr_poly_clear(tmp, K); gr_poly_clear(tmp2, K);
+    for (slong i = 0; i < nent; i++) ff_qtpoly_clear(rows + i);
+    for (slong i = 0; i < c * c; i++) ff_qtpoly_clear(H + i);
+    ff_qtpoly_clear(&Dq);
+    free(rows); free(H);
     return ok;
 }
 
@@ -830,7 +849,17 @@ static Expr* builtin_flint_polynomialhermiteform(Expr* res) {
             M = W;
             ok = st == GR_SUCCESS;
         }
-        ok = ok && M.r >= c && pm_hnf(&M, haveD ? D : NULL, &F);
+        if (ok && M.r >= c) {
+            /* modulo D over Q and Q(theta): the certified multi-modular form
+             * first (it declines with M untouched, or fails after writing M) */
+            int mm = 0;
+            if (haveD && xo.modular) {
+                g_pm_modular = 1;
+                mm = pm_try_modular(&M, D, &F);
+            }
+            if (mm < 0) ok = 0;
+            else if (mm == 0) ok = pm_hnf(&M, haveD ? D : NULL, &F);
+        } else ok = 0;
         if (ok && xo.den) {
             /* divide out the common factors (repeatedly: a square in den) */
             int st = GR_SUCCESS;
@@ -934,11 +963,38 @@ static Expr* builtin_flint_polynomialquotientremainder(Expr* res) {
 
 /* FLINT`PolynomialExtendedGCD[a, b, x, opts] -> {g, {s, t}}, g monic (0 when
  * a = b = 0), s a + t b = g. */
+/* The extended gcd by the certified multi-modular kernel (ff_xgcd_modular)
+ * over Q, Q(theta), and Q(theta)(p) when a and b are free of the parameters.
+ * 1 with G, S, T set (g monic); 0 to decline (the caller runs gr_poly_xgcd). */
+static int pm_try_modular_xgcd(gr_poly_t G, gr_poly_t S, gr_poly_t T, const gr_poly_t A,
+                               const gr_poly_t B, PmField* F) {
+    if (F->kind == PM_GF || A->length == 0 || B->length == 0) return 0;
+    ff_qtpoly_struct a, b, g, s, t;
+    ff_qtpoly_init(&a); ff_qtpoly_init(&b); ff_qtpoly_init(&g); ff_qtpoly_init(&s); ff_qtpoly_init(&t);
+    const fmpq_poly_struct* mu = (F->kind == PM_NF || (F->kind == PM_FN && F->tname)) ? F->mu : NULL;
+    int ok = pm_poly_to_qt(&a, A, F) && pm_poly_to_qt(&b, B, F) &&
+             ff_xgcd_modular(&g, &s, &t, &a, &b, mu, NULL);
+    gr_ptr e = gr_heap_init(F->K);
+    ff_qtpoly_struct* src[3] = { &g, &s, &t };
+    gr_poly_struct* dst[3] = { G, S, T };
+    for (int k = 0; k < 3 && ok; k++) {
+        ok = gr_poly_zero(dst[k], F->K) == GR_SUCCESS;
+        for (slong d = 0; d < src[k]->len && ok; d++)
+            ok = pm_elem_from_qt(e, src[k]->c + d, F) &&
+                 gr_poly_set_coeff_scalar(dst[k], d, e, F->K) == GR_SUCCESS;
+    }
+    gr_heap_clear(e, F->K);
+    ff_qtpoly_clear(&a); ff_qtpoly_clear(&b); ff_qtpoly_clear(&g); ff_qtpoly_clear(&s); ff_qtpoly_clear(&t);
+    return ok;
+}
+
 static Expr* builtin_flint_polynomialextendedgcd(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count < 3) return NULL;
     Expr** a = res->data.function.args;
     PmField F;
-    if (!pm_field_init(&F, a[2], a + 3, res->data.function.arg_count - 3, NULL)) return NULL;
+    PmOpts xo;
+    if (!pm_field_init(&F, a[2], a + 3, res->data.function.arg_count - 3, &xo)) return NULL;
+    if (xo.D || xo.den || xo.products) { pm_field_clear(&F); return NULL; }
     Expr* out = NULL;
     gr_poly_t A, B, G, S, T;
     gr_poly_init(A, F.K); gr_poly_init(B, F.K); gr_poly_init(G, F.K);
@@ -947,6 +1003,8 @@ static Expr* builtin_flint_polynomialextendedgcd(Expr* res) {
         int st = GR_SUCCESS;
         if (A->length == 0 && B->length == 0) {
             st |= gr_poly_zero(G, F.K); st |= gr_poly_zero(S, F.K); st |= gr_poly_zero(T, F.K);
+        } else if (xo.modular && pm_try_modular_xgcd(G, S, T, A, B, &F)) {
+            /* the certified multi-modular answer (normalised: g monic) */
         } else {
             st |= PM_GR_POLY_XGCD(G, S, T, A, B, F.K);
             /* normalise: g monic (FLINT already does; make it a contract) */

@@ -92,18 +92,29 @@ brAssembleComponent[T_Association, res_Association, Yexpr_, x_Symbol] := Module[
 
 brComponentIdentityQ::usage = "brComponentIdentityQ[T, cv, c, res] verifies EXACTLY that res integrates the component c Y on its curve Y^m = G (cv): with the tower derivation extended by D Y = s Y, s = DG/(mG), the numerator of D(b Y + Sum c_j Log[u_j]) - c Y reduces to 0 modulo Y^m - G and the residue field's minimal polynomial mu(t). This is an algebraic identity in k(theta)(Y); writing Y as yh^i/s (or G^(1/m)) and the symbols as surface kernels preserves derivatives (every kernel's derivative is its rule), so it is the statement PossibleZeroQ[D[F, x] - f] tests, decided exactly.";
 brComponentIdentityQ[T_Association, cv_Association, c_, res_Association] := Module[
-  {Y = res["Y"], m = cv["m"], G = cv["G"], rules, Fi, R, num, F = res["Field"]},
+  {Y = res["Y"], m = cv["m"], G = cv["G"], rules, Fi, R, num, F = res["Field"], ii, gauss = False},
   rules = Append[T["rules"], Y -> cv["s"] Y];
   Fi = res["Algebraic"] Y + Total[(#[[1]] Log[#[[2]]]) & /@ res["RawLogs"]];
   R = Risch`Derivation[Fi, rules] - c Y;
   (* per-orbit RootSum terms: their derivative, traced exactly from each
      orbit field (brOrbitLogPart), on the basis w_i = Y^i/d_i *)
   If[ListQ[res["OrbitD"]], R = R + afToY[cv["B"], res["OrbitD"], Y]];
+  (* No Gaussian coefficient reaches Together: over Q(i) it takes the slow
+     algebraic route (29.6 s against 0.07 s for the same check on Tan[x]^(1/4),
+     G-perf-3).  Over a residue field containing i the literal I is written in
+     its generator (fieldSubI) -- a ring homomorphism, so the identity is
+     unchanged -- in R and G alike; any I left is a fresh symbol ii, reduced
+     modulo ii^2 + 1 at the end.  Y^m - G, ii^2 + 1 and mu(t) have pairwise
+     coprime leading monomials (a Groebner basis), so the reduced numerator is
+     the normal form and its vanishing is the identity. *)
+  If[F =!= None && fieldExtQ[F], R = fieldSubI[F, R]; G = fieldSubI[F, G]];
+  If[!FreeQ[{R, G}, Complex],
+    gauss = True;
+    {R, G} = {R, G} /. Complex[a_, b_] :> a + b ii];
   num = Expand[Numerator[Together[R]]];
   num = Expand[PolynomialRemainder[num, Y^m - G, Y]];
-  (* over a residue field containing i the literal I of c is written in its
-     generator first (fieldSubI), or a true identity would read as nonzero *)
-  If[F =!= None && fieldExtQ[F], num = Expand[PolynomialRemainder[Expand[fieldSubI[F, num]], F["mu"], F["t"]]]];
+  If[gauss, num = Expand[PolynomialRemainder[num, ii^2 + 1, ii]]];
+  If[F =!= None && fieldExtQ[F], num = Expand[PolynomialRemainder[num, F["mu"], F["t"]]]];
   Together[num] === 0];
 
 brShapeA::usage = "brShapeA[T, f, x] integrates the Shape A integrand f (tower record T): coordinate 0 by the transcendental Risch algorithm, every component by brIntegrateComponent; it returns the (unverified) antiderivative.";

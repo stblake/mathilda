@@ -1620,9 +1620,11 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [x] spike — v0.6569: custom gr ring Q(p)[t]/(mu) (src/poly/ffield/), "Parameters" in the FLINT` kernels; 15-80x on most ops, 0.7x on the G-perf-2 product (coefficient growth) -> evaluation/interpolation kernel next; NativeFn off by default until then
   - [x] oracle stress test vs PARI/GP and the reference CAS (tools/ffield_stress/, 1200 cases, 0 failures) — v0.6569
   - [ ] two-element representation as the primary ideal form (product, power)
-  - [ ] native Fn ideal kernel (the spike's choice), certified in characteristic 0
+  - [x] native Fn ideal kernel (the spike's choice), certified in characteristic 0 — v0.6570: certified multi-modular driver (ff_modular.c) + Hermite form (ff_hnf.c) + xgcd (ff_xgcd.c); NativeFn on; G-perf-2 2.9 s, G-perf-3 15 s (closed)
+  - [ ] parameters in the entries: evaluation/interpolation over the parameters (today the direct ff_fnx elimination)
+  - [ ] lower layer: Together over Gaussian coefficients ~400x slower than with I as a symbol (29.6 s vs 0.07 s, brComponentIdentityQ on Tan[x]^(1/4)); routed around in brComponentIdentityQ, fix in the Together engine
   - [ ] residue fields relative to K0 (relative norms/traces); modular norms (kNorm/Resultant by CRT)
-  - [ ] theory note E7 + adversarial review; unit/property tests; exit: G-perf-2/3 < 20 s, G-perf-4 closed
+  - [ ] theory note E7 (written v0.6570: Thms E7.1, E7.3, the identity check) + adversarial review; unit/property tests; exit: G-perf-2/3 < 20 s (MET v0.6570), G-perf-4 closed
 - [ ] Phase 5: radical anywhere (brDField, transcendental Risch over algebraic base, RDE on a curve over a tower)
 - [ ] Theory note docs/notes/bronstein_extensions.tex (E1–E6; LaTeX per user 2026-11-14), each adversarially reviewed — E6a–c written v0.6547, review pending
 - [ ] Close-out

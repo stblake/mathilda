@@ -937,6 +937,9 @@ set(COMMON_SRC
     ../src/poly/flint_polymat.c
     ../src/poly/ffield/ff_fnx.c
     ../src/poly/ffield/ff_expr.c
+    ../src/poly/ffield/ff_hnf.c
+    ../src/poly/ffield/ff_modular.c
+    ../src/poly/ffield/ff_xgcd.c
     ../src/poly/flint_qqbar.c
     ../src/poly/algfield.c
     ../src/poly/algebraicnumber.c

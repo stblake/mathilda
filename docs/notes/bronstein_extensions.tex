@@ -1517,6 +1517,178 @@ residue field built relative to $K_0$.
 \paragraph{Tests.} \code{tests/test\_bronstein\_perf.c} (30 assertions), and
 examples EE-1 to EE-6 in the gap log.
 
+\section*{E7. Certified multi-modular arithmetic over $\Q$ and number fields (Phase 4.5, v0.6570)}
+\addcontentsline{toc}{section}{E7. Certified multi-modular arithmetic}
+
+\paragraph{Where the time went.} After the spike of Phase~4.5 (the field
+$K=\Q(\theta)(p)$ as a FLINT generic ring), one operation still regressed: the
+product of the special divisor in G-perf-2. It is a Hermite form modulo $D$ of a
+$9\times3$ matrix of degree~21. Its entries turned out to be free of the
+parameter, so the field is $\Q(\omega)$, and FLINT's own number-field arithmetic
+also took 27~s. Reducing modulo $D$ bounds the \emph{degrees} of the entries but
+not the \emph{heights} of their rational coefficients. The extended-gcd cofactors
+of the elimination grow, while the form itself has coefficients below $10^{12}$.
+The cure is the classical one: compute the answer from images over finite fields,
+lift it, and check it. Here the check is exact, so no probabilistic argument
+enters a certificate.
+
+\paragraph{Setting.} Let $K=\Q[t]/(\mu)$, with $\mu\in\Q[t]$ monic and irreducible
+of degree $n$ ($n=1$, $\mu=t$, is $K=\Q$). An element of $K$ is a polynomial of
+degree $<n$ in $t$. A prime $p$ is \emph{admissible} for a finite set $S$ of
+elements of $K[u]$ when:
+\begin{itemize}
+\item $p$ divides no denominator of a coefficient of $S$ or of $\mu$;
+\item $\mu \bmod p$ is squarefree.
+\end{itemize}
+Then $\mu\equiv f_1\cdots f_s$ with distinct monic irreducible $f_i$, and the ring
+\[
+  O_p=\Z_{(p)}[t]/(\mu)\subset K
+\]
+of $p$-integral elements maps onto
+\[
+  O_p/pO_p\cong\prod_i\mathbb F_p[t]/(f_i).
+\]
+Each map $\rho_{p,i}\colon O_p\to F_{p,i}=\mathbb F_p[t]/(f_i)$ is a ring
+homomorphism onto a finite field. Its inverse up to $p$ is the polynomial CRT over
+the $f_i$, then the integer CRT over the primes, then rational reconstruction.
+This is \code{ff\_mm\_solve} in \code{src/poly/ffield/ff\_modular.c}.
+
+\begin{lemma}[rank under reduction]\label{lem:E7rank}
+Let $A$ be a matrix over $O_p$ and $\rho\colon O_p\to F$ a ring homomorphism to a
+field. Then $\operatorname{rank}\rho(A)\le\operatorname{rank}_K A$.
+\end{lemma}
+\begin{proof}
+$O_p\subset K$ is a domain. Every $(r+1)$-minor of $A$, with $r=\operatorname{rank}_K A$,
+vanishes in $O_p$, so its image, the corresponding minor of $\rho(A)$, vanishes too.
+\end{proof}
+
+\begin{theorem}[certificate of a Hermite form modulo $D$]\label{thm:E7hnf}
+Let $r_1,\dots,r_N\in K[u]^c$ and let $D\in K[u]$ be monic of degree $\ge1$. Let
+\[
+  L'=\sum_j K[u]\,r_j+D\,K[u]^c .
+\]
+Let $H\in K[u]^{c\times c}$, and let $p$ be admissible for the $r_j$, $D$ and
+$\mu$, with $F=F_{p,i}$ one of its factor fields. Suppose:
+\begin{enumerate}
+\item[(a)] $H$ has Hermite shape: it is upper triangular, its pivots are monic of
+  degrees $d_1,\dots,d_c$, and every entry above the pivot of column $k$ has degree
+  $<d_k$;
+\item[(b)] every $r_j$ and every $D e_k$ reduces to~$0$ by $H$, by triangular division;
+\item[(c)] the Hermite form of $\rho(L')=\sum_j F[u]\,\rho(r_j)+\rho(D)\,F[u]^c$
+  has diagonal degrees summing to $d_1+\dots+d_c$.
+\end{enumerate}
+Then $H$ is the Hermite normal form of $L'$. ($\mu$ irreducible is a hypothesis:
+Lemma~\ref{lem:E7rank} needs $O_p$ to be a domain. The callers check it, and the
+kernel API states it.)
+\end{theorem}
+\begin{proof}
+By (b), $L'\subseteq L(H)$, the module spanned by the rows of $H$. Both modules
+have full rank, since $D K[u]^c\subseteq L'$. So
+\[
+  \dim_K K[u]^c/L' = \dim_K K[u]^c/L(H) + \dim_K L(H)/L',
+\]
+and $\deg\det L(H)=\sum d_k\le\deg\det L'$.
+
+For the reverse inequality, let $V=K[u]^c/DK[u]^c$, a $K$-space of dimension $c\deg D$.
+The image of $L'$ in $V$ is the $K$-span of the residues $u^m r_j \bmod D$
+($0\le m<\deg D$), since $u^{\deg D}$ reduces through $D$. Its dimension is
+$c\deg D-\deg\det L'$. Let $A$ be the matrix of those residues in the basis
+$u^m e_k$. Since $D$ is monic and $p$-integral, the reduction modulo $D$ commutes
+with $\rho$. So $\rho(A)$ is the corresponding matrix for $\rho(L')$, and its rank is
+$c\deg D-\deg\det\rho(L')$. Lemma~\ref{lem:E7rank} gives
+$\deg\det L'\le\deg\det\rho(L')$, which is $\sum d_k$ by~(c).
+
+Hence $\deg\det L'=\deg\det L(H)$, so $\dim_K L(H)/L'=0$ and $L(H)=L'$. A module has
+exactly one basis of Hermite shape~(a), so $H$ is its Hermite normal form.
+\end{proof}
+
+\begin{remark}
+In the kernel (\code{ff\_hnf\_modular}), condition~(c) holds by construction. The
+candidate is reconstructed only from images whose diagonal degrees all equal the
+accepted profile, and the certificate checks that $H$ has that profile. A
+reconstruction is first compared with one further image, a cheap filter, and then
+checked by (a) and~(b) in exact arithmetic over $K$ (FLINT's \code{nf} or
+\code{fmpq}). Nothing about the primes beyond admissibility is assumed. An
+\emph{unlucky} prime (one where $\rho(L')$ is strictly smaller than $\rho$ of the
+true form) only raises the total degree, by the proof above. So the driver keeps
+the images of least total, restarts when a smaller one appears, and can never
+certify a wrong form. An image of the same total but another profile cannot
+lead to acceptance either: an accepted $H$ is the unique Hermite form of $L'$, so
+its profile is the true one. The trusted base is the finite-field elimination
+\code{ff\_hnf\_gr} (the same algorithm as the direct route) and FLINT's arithmetic.
+If $L'$ is the module of a caller whose $D$ is a multiple of
+$\det L$, then $L'=L$, the contract of \code{hnfModDet}.
+\end{remark}
+
+\begin{remark}[parameters]
+When $K=\Q(\theta)(p_1,\dots,p_r)$ but the entries and $D$ are free of the $p_i$,
+the form over $\Q(\theta)$ is the form over $K$. It generates the extended module,
+and Hermite shape does not depend on the field. \code{pm\_try\_modular} uses the
+kernel exactly then. Entries that involve a parameter take the direct elimination
+over the \code{ff\_fnx} ring. Evaluation and interpolation in the parameters is the
+planned next step.
+\end{remark}
+
+\begin{theorem}[certificate of an extended gcd]\label{thm:E7xgcd}
+Let $a,b\in K[u]$ be nonzero, not both constant multiples of their gcd. Suppose
+$g,s,t\in K[u]$ satisfy:
+\begin{itemize}
+\item $g$ is monic;
+\item $g\mid a$ and $g\mid b$;
+\item $sa+tb=g$;
+\item $\deg s<\deg b-\deg g$ ($s=0$ if $\deg b=\deg g$) and $\deg t<\deg a-\deg g$.
+\end{itemize}
+Then $g=\gcd(a,b)$, and $(s,t)$ is the unique pair with these properties.
+\end{theorem}
+\begin{proof}
+A common divisor of $a$ and $b$ divides $sa+tb=g$, and $g$ divides both, so $g$ is
+the monic gcd. If $(s',t')$ is a second pair, then
+$(s-s')(a/g)=(t'-t)(b/g)$, with $a/g$ and $b/g$ coprime. So $b/g$ divides $s-s'$,
+which has smaller degree unless it is $0$. Hence $s=s'$ and then $t=t'$. When
+$\deg b=\deg g$ the bound forces $s=s'=0$. The excluded case
+$\deg a=\deg b=\deg g$ has the one-parameter family $s a+tb=g$ and is declined.
+\end{proof}
+
+\noindent \code{ff\_xgcd\_modular} reconstructs $(g,s,t)$ from FLINT's normalised
+extended gcd over each $F_{p,i}$. It accepts the result only after checking the
+four properties exactly over $K$. By uniqueness this is the answer of every exact
+extended gcd normalised the same way, FLINT's in particular, and the tests compare
+the two. That FLINT's normalised answer meets the degree bounds is checked by
+those tests (about 6700 random and edge cases in the adversarial review), not
+proved here; where it would not, the modular answer is the canonical one. An image whose degrees of $a$ or $b$ drop is skipped. Taking the least
+$\deg g$ over the images handles unlucky primes, as for the Hermite form.
+
+\paragraph{The per-component identity without Gaussian coefficients.}
+\code{brComponentIdentityQ} decides
+$D\bigl(bY+\sum c_j\log u_j\bigr)=cY$ exactly. It does this by the vanishing of the
+numerator of the difference modulo $Y^m-G$ and $\mu(t)$. Over Gaussian coefficients
+the expression-level \code{Together} takes an algebraic route that is about $400$
+times slower: $29.6$~s against $0.07$~s on the one check that dominated G-perf-3.
+So the literal $i$ is removed first:
+\begin{itemize}
+\item In a residue field containing $i$ (key \code{"I"}), $i\mapsto\mathrm{rep}(t)$.
+  This is a ring homomorphism, and it is applied to both the expression and $G$.
+\item Any remaining $i$ becomes a fresh symbol $\iota$.
+\end{itemize}
+Then $Y^m-G$, $\iota^2+1$ and $\mu(t)$ are monic in distinct variables, with
+pairwise coprime leading monomials $Y^m,\iota^2,t^n$. So they form a Gr\"obner
+basis of the ideal they generate. The successive remainders are its unique normal
+form, and their vanishing is ideal membership, the identity. As before, \code{Together} only multiplies original denominators, which are
+nonzero at $\iota=i$, so a vanishing numerator is the identity. (The order is
+an elimination order in $Y$; $G$ is free of $Y$. Any atom left with $t$ or
+$\iota$ inside, such as a radical, behaves as a free symbol, which can only miss
+a true identity, never accept a false one.)
+
+\paragraph{Effect.} Results agree by value on all 119 frozen calls of
+\code{tests/bronstein\_bench/}. Hermite forms modulo $D$ over $\Q(\theta)(p)$ are
+up to $5000$ times faster, and the extended gcd over $\Q(\omega)$ of degree~22 goes
+from $2.6$~s to $0.36$~s. G-perf-2 now takes $2.9$~s (it took $225$~s) and
+G-perf-3 ($\tan(x)^{1/4}$) $15$~s ($154$~s), both verified. \code{tragerOption["NativeFn"]}
+is now on. Tests: \code{tests/test\_ffield.c} (seeded random matrices and planted gcds
+over $\Q$, $\Q(\sqrt2)$, $\Q(\omega)$ and an $S_3$ cubic, against the direct
+algorithms; declines) and \code{tests/test\_bronstein\_integrate.c} (the Gaussian
+identity check, true and false).
+
 \part*{Part C. The gap log: what each extension closes}
 \addcontentsline{toc}{part}{Part C}
 
@@ -1537,11 +1709,8 @@ below, timings included (seconds, \code{Method -> "Bronstein"}, one core).
 \input{bronstein_examples_table.tex}
 \endgroup
 
-\paragraph{Open performance limits} (examples kept out of the table until they close):
-\begin{itemize}
-\item $\frac{d}{dx}\bigl(\log(y+L)+2\log(y^2+Ly+L^2)\bigr)$ with $y^3=L^3+L+1$,
-  $L=\log x$: 225~s.
-\end{itemize}
+\paragraph{Open performance limits.} The last example kept out of the table
+(G-perf-2, 225~s) closed in v0.6570 (E7) and is in it as E45-1.
 
 \part*{Part D. Known open gaps}
 \addcontentsline{toc}{part}{Part D}

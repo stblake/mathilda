@@ -303,5 +303,14 @@ bronsteinPaperExamples = {
 <|"id" -> "EE-6", "gap" -> "C false certificate", "theory" -> "[B] Thm 5.6.1", "version" -> "v0.6568",
   "kind" -> "EIQ", "f" -> Hold[Together[D[Log[(x - I)/(x + I)]^2, x]]], "expect" -> True,
   "before" -> "False (a false certificate: the ArcTan obstruction applied over a tower with a complex logarithm)",
-  "note" -> "the obstruction holds only over a real tower; over a complex one the ArcTan is folded into the tower by its derivative"|>
+  "note" -> "the obstruction holds only over a real tower; over a complex one the ArcTan is folded into the tower by its derivative"|>,
+(* ---- Phase 4.5: certified multi-modular arithmetic (v0.6570) ------------ *)
+<|"id" -> "E45-1", "gap" -> "G-perf-2", "theory" -> "E7 (Thm E7.1)", "version" -> "v0.6570",
+  "kind" -> "Integrate", "f" -> Hold[Together[D[Log[Log[x] + (1 + Log[x] + Log[x]^3)^(1/3)] + 2 Log[Log[x]^2 + Log[x] (1 + Log[x] + Log[x]^3)^(1/3) + (1 + Log[x] + Log[x]^3)^(2/3)], x]]], "expect" -> "elementary",
+  "before" -> "225 s (idealTimes of the E3 special divisor: 56 s per Hermite form modulo D, coefficient swell over Q(omega))",
+  "note" -> "the Hermite form modulo D from images over F_p[t]/(f), CRT and rational reconstruction, certified exactly (ff_hnf.c); NativeFn on; 2.9 s"|>,
+<|"id" -> "E45-2", "gap" -> "G-perf-3", "theory" -> "E7", "version" -> "v0.6570",
+  "kind" -> "Integrate", "f" -> Hold[Tan[x]^(1/4)], "expect" -> "elementary",
+  "before" -> "154 s (brSpecialDivisorIdeal / idealTimes over a degree-8 residue field, then 36 s in brComponentIdentityQ: Together over Gaussian coefficients)",
+  "note" -> "the modular Hermite form, and the identity check with I written in the residue generator or as a symbol modulo ii^2 + 1; 15 s"|>
 };

@@ -1494,6 +1494,36 @@ the code).**
   - `NativeFn` stays off by default until that case no longer regresses; it is
     then switched on, with the corpora A/B as the gate.
 
+#### Phase 4.5 step 2: certified multi-modular kernels (v0.6570)
+
+- **Diagnosis.** The regressing G-perf-2 product is a Hermite form modulo D over
+  Q(ω): its entries are free of the parameter. FLINT's number-field route also
+  took 27 s. The cause is the rational heights of the elimination (extended-gcd
+  cofactors), not the field layer.
+- **Built.**
+  - `src/poly/ffield/ff_modular.c`, a generic certified multi-modular driver:
+    images over F_p[t]/(f), CRT, rational reconstruction, unlucky-prime
+    profiles, an exact certificate supplied by each problem, and a decline
+    after 2000 primes.
+  - Clients `ff_hnf.c` (Theorem E7.1) and `ff_xgcd.c` (Theorem E7.3), used by
+    the FLINT` builtins over Q, Q(θ) and parameter-free Q(θ)(p) inputs.
+- **Results.**
+  - The 27 s form takes 7 ms, and the ideal A/B is clean by value.
+  - G-perf-2: 2.9 s (it took 225 s).
+  - G-perf-3: 15 s (it took 154 s), after `brComponentIdentityQ` stopped
+    passing Gaussian coefficients to Together, which was 29.6 s → 0.07 s on its
+    check.
+  - `NativeFn` is on.
+- **Still open in 4.5:**
+  - G-perf-4: `kNorm` by CRT (the next client of the driver);
+  - evaluation and interpolation in the parameters when entries involve them;
+  - the two-element ideal form;
+  - the `FunctionField`` builtins;
+  - the nightly ratchet;
+  - an adversarial review of E7;
+  - a lower-layer defect: Together over Gaussian coefficients (to fix where it
+    lives).
+
 ### Phase 5: the radical anywhere (largest; theory first)
 
 - **A differential-field record** (`brDField`, a new `DField.m`) abstracts the base field. Its

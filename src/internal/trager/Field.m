@@ -80,7 +80,7 @@ nativeOpts[F_Association] := Switch[F["Type"],
 
 nativeQ::usage = "nativeQ[] is True when the FLINT` polynomial kernels are to be tried first (tragerOption[\"NativeKernels\"]).";
 nativeQ[] := TrueQ[tragerOption["NativeKernels"]];
-nativeQ::usage = nativeQ::usage <> " nativeQ[F] is nativeQ[] restricted to the fields the kernels support: always False for a rational function field fieldFn (its coefficients are not numbers).";
+nativeQ::usage = nativeQ::usage <> " nativeQ[F] is nativeQ[] restricted to the fields the kernels support: a rational function field fieldFn only when tragerOption[\"NativeFn\"] is True (the ffield ring Q(p)[t]/(mu), src/poly/ffield/).";
 nativeQ[F_Association] := (F["Type"] =!= "Fn" || TrueQ[tragerOption["NativeFn"]]) && nativeQ[];
 
 (* -------------------------------------------------------------------------- *)
