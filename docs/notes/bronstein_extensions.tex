@@ -230,8 +230,9 @@ E4.1b & $i$ modulo $p\equiv1\pmod4$; Gaussian residue polynomials and $\kappa$ &
 E4.2 & The trigonometric front end: \code{TrigToExp} over $\Q(i)$ & Phase 4.2 & v0.6554 \\
 E4.3 & Number-field constants (radicals of rationals): fields that contain them;
   certificates deferred to 4.3b & Phase 4.3 & v0.6556 \\
-E4 & Symbolic parameters: the verdicts are generic, and which zero tests may be
-  generic & Phase 4 & open \\
+E4.4 & Symbolic parameters: verdicts exact over $C=\Q(a)$; antiderivatives valid outside a
+  Zariski-closed set, certificates outside a countable set; torsion by specialising $a$ &
+  Phase 4.4 & written \\
 E5 & Ideals of the $d=\gcd(e,m)$ ramified places above one special point &
   Phase 3 & open \\
 E6a & Reducible logarithms through a locally constant branch difference &
@@ -1193,6 +1194,258 @@ FriCAS, and, where FriCAS cannot decide, the group law together with the
 torsion bounds over quadratic and cubic fields (Kamienny--Kenku--Momose,
 Parent).
 
+
+\section*{E4.4. Symbolic parameters (Phase 4.4)}
+\addcontentsline{toc}{section}{E4.4. Symbolic parameters}
+
+\paragraph{The question.} An integrand such as $1/\sqrt{x^3+a}$ or $\sqrt{a+\log x}/x$
+contains a symbol $a$ other than the variable of integration. Phase~4.4 treats such a
+symbol as a \emph{transcendental constant}. This section fixes what a verdict then
+means, and proves the three facts the implementation relies on:
+\begin{itemize}
+\item what an antiderivative found generically says about special values of $a$;
+\item what a certificate says about them;
+\item how torsion is decided by specialising $a$.
+\end{itemize}
+
+\paragraph{Setting.} Let $k$ be $\Q$ or a number field, and let
+$C=k(a_1,\dots,a_r)$ with the $a_i$ algebraically independent over $k$. Only free
+symbols are parameters (\code{tragerParamsOf}): $\pi$, $e$ and $\log 2$ are constants
+whose algebraic independence from $k$ and from one another is not known, so they are
+never treated as parameters, and an integrand containing one is declined. Extend the
+derivation by $Da_i=0$, so that $C$ is a field of constants. The integrands are elements
+of $K=C(x)(t_1,\dots,t_n)(y)$ as in the rest of this note. The algorithms of Risch,
+Trager and Bronstein are stated over an arbitrary constant field of characteristic~0.
+Of $C$ they need:
+\begin{itemize}
+\item exact arithmetic with a zero test;
+\item factorisation of polynomials over $C$ and its finite extensions;
+\item for Trager, a decision whether a divisor defined over a finite extension of $C$ is
+  torsion in the Jacobian.
+\end{itemize}
+Factorisation over $C$ is factorisation in $k[a][Z]$ (Gauss's lemma). Rational functions
+over $C$ have a canonical form (\code{rc} over \code{fieldFn}, E4.4e). Torsion is
+E4.4d. Liouville's theorem holds over $C$, with new constants algebraic over $C$. So
+every verdict is \emph{exact over $C$}:
+\begin{itemize}
+\item an antiderivative is an identity $F'=f$ in $K$;
+\item ``not elementary'' means that no elementary extension of $K$ whose constants are
+  algebraic over $C$ contains an integral of $f$.
+\end{itemize}
+
+\subsection*{E4.4a. Specialising an antiderivative}
+
+\begin{proposition}\label{prop:E44spec}
+Let $F$ be an elementary function over $K$ with $F'=f$. Let $h\in k[a]$ be a nonzero
+polynomial divisible by:
+\begin{itemize}
+\item every denominator, in $a$, of the coefficients of $f$, of $F$, and of the
+  minimal polynomials and arguments that define the radicals, logarithms and
+  exponentials of $F$;
+\item the leading coefficient and discriminant of each such minimal polynomial;
+\item the leading coefficient in $x$ and the discriminant of each radicand (of $f$ and
+  of $F$), so that each radical keeps its squarefree profile;
+\item a nonzero coefficient (in $x$ and the monomials) of the numerator of the
+  \emph{norm} of each logarithm's argument, down to $C(x)$ (an argument may be
+  algebraic over $C(x)$);
+\item a nonzero coefficient of each monomial's defining data that would otherwise
+  degenerate: the argument of each $\log$ and $\exp$ of the tower, and the
+  denominators of the derivatives of the monomials.
+\end{itemize}
+Then for every $a_0\in\bar k^r$ with $h(a_0)\ne0$, the \emph{same expression} $F$, with
+$a$ replaced by $a_0$, is defined, and $(F|_{a=a_0})'=f|_{a=a_0}$.
+\end{proposition}
+\begin{proof}
+The map $a\mapsto a_0$ is a ring homomorphism $\varphi$ from $k[a][1/h]$ to $\bar k$,
+extended coefficientwise to the polynomial and rational expressions in $x$, the
+monomials and $y$ that are defined over $k[a][1/h]$. It commutes with $D$ because
+$Da=0=Da_0$, and $D$ acts on the remaining symbols by the same rational rules before
+and after $\varphi$. The identity $F'-f=0$ is a polynomial identity in these
+generators modulo their defining relations, all with coefficients in $k[a][1/h]$. Its
+image under $\varphi$ is therefore the same identity for $a_0$. The conditions on $h$
+keep each specialised radical defined by a squarefree polynomial and each specialised
+logarithm's argument nonzero, so the specialised expression is an elementary function
+built the same way.
+\end{proof}
+
+\noindent So an antiderivative is valid outside the proper Zariski-closed set
+$\{h=0\}$. The documentation calls this a \emph{generic} answer, which is the usual
+convention for integrals with parameters. The set is not computed or reported;
+Mathilda's indefinite \code{Integrate} attaches no conditions.
+
+\subsection*{E4.4b. Certificates: exact over $C$, generic only up to a countable set}
+
+\begin{proposition}\label{prop:E44cert}
+Suppose $f$ has no elementary integral over $C$. Then the set of $a_0\in\bar k^{\,r}$
+at which $f|_{a=a_0}$ has an elementary integral over $\bar k$ is contained in a
+countable union of proper Zariski-closed subsets.
+\end{proposition}
+\begin{proof}
+Let $Z_0$ be the degeneracy locus, where a denominator of $f$ vanishes, the curve
+changes type (as in Proposition~\ref{prop:E44spec}), or a monomial of the tower stops
+being transcendental over the specialised field below it. The first two conditions
+define a proper closed set over $k$. The third need not be closed: $e^{a\log x}$
+becomes algebraic at every rational $a_0$. But by the structure theorem it is the
+existence of a $\Z$-linear relation between the specialised logarithmic derivatives
+and arguments, and for relations of bounded height this is again the projection of an
+algebraic set defined over $k$, failing at the generic point. So $Z_0$ lies in a
+countable union of proper closed sets, by the argument below applied to these
+relations. Outside $Z_0$, by Liouville's theorem an elementary integral of $f_{a_0}$ has the form
+$v_0+\sum c_iv_i$, with $c_i\in\bar k$ and the $v_i$ in a finite algebraic extension.
+Bound the degrees of every datum (the number of logarithms, the degree of the algebraic
+extension, the degrees of the numerators and denominators) by $d$. The set $S_d$ of
+$a_0\notin Z_0$ at which an integral of type $d$ exists is the projection of an algebraic
+set defined over $k$: the coefficients of the data are the unknowns, and $F'=f$ is a
+system of polynomial equations in them and $a$. By Chevalley's theorem over $k$, $S_d$
+is constructible and defined over $k$.
+
+If $S_d$ were Zariski-dense, it would contain a dense open set $U$ defined over $k$.
+The generic point $a$, whose coordinates are algebraically independent over $k$, lies
+in every such $U$. So the system would have a solution over $\overline{C}$, that is,
+$f$ itself would have an integral of type $d$ over $\overline{C}$, against the
+hypothesis. Hence each $S_d$ lies in a proper closed set, and the exceptional set lies in
+$Z_0\cup\bigcup_d\overline{S_d}$, a countable union of proper closed sets. (In the
+example of the remark below, the exceptional points are degeneracy points: at
+$a_0\in\Z_{\ge0}$ the monomial $x^{a}$ becomes rational.)
+\end{proof}
+
+\begin{remark}[not Zariski-closed]
+The exceptional set need not lie in a proper Zariski-closed set, even for $r=1$. Take
+$f=x^ae^x$ in the tower $C(x)(\log x, e^{a\log x}, e^x)$. Over $C=\Q(a)$, $f$ has no
+elementary integral: the Risch differential equation $y'+y=x^a$ for $y=gx^a$, $g\in
+C(x)$, that is, $g'+(1+a/x)g=1$, has no rational solution when $a\notin\Z$. But at every
+$a_0\in\Z_{\ge0}$, $\int x^{a_0}e^x\,dx=e^x\sum_{j}(-1)^j a_0^{\underline{j}}x^{a_0-j}$
+is elementary. An infinite subset of the line is Zariski-dense. So a certificate is
+exact over $C$ and holds at every $a_0$ outside a countable set, but not outside a
+Zariski-closed one. The documentation says this.
+
+(An earlier draft used the point $(0,1)$ on $y^2=x^3+ax+1$. That example is wrong:
+torsion of the residue divisor is necessary for elementarity, not sufficient, because
+the holomorphic part of the differential must also vanish.)
+\end{remark}
+
+\subsection*{E4.4c. Residue fields over $C$}
+The residue polynomial $R(Z)$ has coefficients in $C$. It is factored in $k[a][Z]$.
+Each irreducible factor $q$ of positive degree is irreducible over $C$ by Gauss's lemma,
+and the factors that are pure content in $a$ are dropped. Its residue field is
+$C[t]/(q)$, the record \code{fieldFn[params, \{t, q, None\}]}, with \code{rc} and
+\code{kc} canonical (E4.4e).
+
+The $\Q$-span of the residues used by the Q-basis construction is a span over $\Q$, not
+over $C$. Each residue is therefore expanded over $\Q$. All of them are put over
+\emph{one} common denominator (the polynomial LCM of their denominators, as
+\code{qBasisParams} does). Each is then represented by the coefficient vector of its
+numerator on the monomials in $a$ (and the generator $t$). With one denominator, a
+$\Q$-linear relation among the residues is exactly a $\Q$-linear relation among these
+vectors; separate denominators would not give that. The rank over $C$ would identify
+$1$ and $a$.
+
+\subsection*{E4.4d. Torsion by specialising the parameters}
+
+\begin{definition}
+A specialisation $a\mapsto a_0\in\Q^r$ is \emph{good} for the data
+$(G,\mathcal P,\{q_j\})$ when all of the following hold:
+\begin{itemize}
+\item the curve $y^m=G$ keeps its degree, its genus and its squarefree profile: writing
+  $G=\prod_i G_i^{e_i}$ with the $G_i$ squarefree and pairwise coprime over $C$, each
+  $G_i(a_0,x)$ keeps its degree, stays squarefree, and the $G_i(a_0,x)$ stay pairwise
+  coprime, and the leading coefficient of $G$ does not vanish;
+\item every place in the support of the divisor keeps its degree and its multiplicity,
+  and distinct places stay distinct;
+\item each residue factor $q_j(a_0,Z)$ keeps its degree and stays irreducible over the
+  field generated over $k$ by the roots of the previously specialised factors
+  $q_1(a_0,Z),\dots,q_{j-1}(a_0,Z)$ (the residue field tower). Irreducibility over $k$
+  alone is not enough: $Z^2-a$ and $Z^2-(a+1)$ are both irreducible over $\Q$ at
+  $a_0=1/3$, but $\tfrac13\cdot\tfrac43=\tfrac49$ is a square, so the second splits over
+  the field of the first, and the compositum collapses;
+\item distinct residues stay distinct and nonzero;
+\item every denominator met is nonzero at $a_0$.
+\end{itemize}
+These are the conditions of \code{brGoodSpecializationQ}, extended by the residue
+factors.
+\end{definition}
+
+\begin{lemma}\label{lem:E44inj}
+Let $X/L$ be the curve over a finite extension $L$ of $C$, and $\mathcal D$ a divisor
+of degree~$0$ defined over $L$. Let $a_0$ be good, $L_0$ the corresponding number
+field, $X_0/L_0$ the specialised curve and $\mathcal D_0$ the specialised divisor. If
+$\mathcal D$ has finite order $N$ in $J(X)$, then $\mathcal D_0$ has order exactly $N$
+in $J(X_0)$.
+\end{lemma}
+\begin{proof}
+Let $\mathcal O$ be the local ring of the parameter space at $a_0$ (over the residue
+field extension that carries $L_0$). It is a regular local ring with residue field of
+characteristic~$0$. Let $\mathcal X\to\operatorname{Spec}\mathcal O$ be the
+normalisation of $\mathcal O[x,y]/(y^m-G)$ in the function field of $X$, completed at
+infinity. The squarefree-profile and genus conditions of goodness make $\mathcal X$
+smooth and proper over $\mathcal O$, with generic fibre $X$ and special fibre $X_0$. The
+conditions on the places make the support of $\mathcal D$ extend to a relative divisor
+$\widetilde{\mathcal D}$, flat over $\mathcal O$, whose special fibre is $\mathcal D_0$.
+
+So $J(X)$ extends to the abelian scheme $\mathcal J=\operatorname{Pic}^0_{\mathcal
+X/\mathcal O}$, and $[\widetilde{\mathcal D}]$ is a section of $\mathcal J$ extending
+$[\mathcal D]$. Its special fibre is $[\mathcal D_0]$. For every $n$, the $n$-torsion
+$\mathcal J[n]$ is a finite \'etale group scheme over $\mathcal O$, because $n$ is
+invertible in characteristic~$0$. A finite \'etale scheme over a normal local ring has
+no two sections that agree on the special fibre unless they are equal. So reduction is
+injective on $J(X)[n]$, for every $n$. The order of $\mathcal D_0$ divides $N$,
+because reduction is a homomorphism; by injectivity on $J(X)[N]$ it is exactly $N$.
+\end{proof}
+
+\begin{theorem}\label{thm:E44tors}
+With $a_0$ good, let $N_0\in\Z_{>0}\cup\{\infty\}$ be the order of $\mathcal D_0$,
+computed by the existing route over a number field (reduction at two good primes,
+\code{torsionOrderSpec}). Then:
+\begin{enumerate}
+\item if $N_0=\infty$, $\mathcal D$ has infinite order;
+\item if $N_0<\infty$, $\mathcal D$ has order $N_0$ when $N_0\mathcal D$ is principal
+  over $L$, and infinite order otherwise.
+\end{enumerate}
+Principality over $L$ is decided by \code{principalGenerator} over \code{fieldFn}.
+\end{theorem}
+\begin{proof}
+(1) is Lemma~\ref{lem:E44inj}. For (2), if $\mathcal D$ has finite order $N$, then
+$N=N_0$ by the lemma, so $N_0\mathcal D$ is principal. Conversely, if $N_0\mathcal D$ is
+principal, the order of $\mathcal D$ divides $N_0$, and it equals $N_0$ by the lemma.
+
+A divisor defined over $L$ that is principal over $\bar L$ is principal over $L$,
+assuming $X$ geometrically integral (true here: $y^m-G$ is absolutely irreducible
+after the front end's reduction). Let $\mathcal D=\operatorname{div}(g)$ with $g\in\bar
+L(X)^*$, and let $G=\operatorname{Gal}(\bar L/L)$. For $\sigma\in G$, $\sigma g/g$ has
+divisor~$0$, so it is a constant, in $\bar L^*$ (geometric integrality). The cocycle
+$\sigma\mapsto\sigma g/g$ is a class in $H^1(G,\bar L^*)$, which is trivial by
+Hilbert~90: $\sigma g/g=\sigma c/c$ for some $c\in\bar L^*$. Then $g/c$ is fixed by
+$G$, so it lies in $L(X)$, and $\mathcal D=\operatorname{div}(g/c)$ over $L$. So the
+search over $L$ decides.
+\end{proof}
+
+\noindent A good $a_0$ exists by Hilbert's irreducibility theorem; it is found by trying
+points of growing height, as \code{brSpecializationPoint} does. Each condition of the
+definition is checked, never assumed. A single good $a_0$ suffices, since the
+theorem's conclusions do not depend on which good point is used.
+
+\subsection*{E4.4e. Zero tests}
+\begin{itemize}
+\item Over \code{fieldFn[params, \{t, $\mu$\}]} with $\mu$ monic irreducible over $C$,
+  \code{rc} brings an element to the form $n/d$. Here $d\in k[a,x]$ comes from
+  \code{Together}, and the numerator is reduced modulo $\mu$. An element is zero iff
+  its reduced numerator is the zero polynomial, so \code{rcZeroQ} is exact.
+\item \code{kc} over \code{fieldQ[]} is \code{Expand}, which is not a normal form for
+  rational functions of $a$. Every computation with parameters therefore runs over the
+  base field \code{fieldFn[params]}, never \code{fieldQ[]}.
+\item The orbit residual's certificate (\code{residualCanonicalQ}, E7 addendum) is a
+  \emph{whitelist}. It accepts only the heads of field arithmetic (\code{Plus},
+  \code{Times}, \code{Power} with a rational exponent, \code{Rational}, \code{Complex}),
+  no \code{System`} symbol but $i$, and radicals $b^{j/n}$ of a single rational base
+  $b$. Any other atom blocks the certificate and the code returns none: a literal radical
+  of an expression in $a$ ($\sqrt{a^2+1}$), $\log a$, $e^a$, $|a|$, $\pi$, a
+  \code{Root} object. A blacklist would miss the next such atom. With one base, the
+  residual's zero test is exact. Write $b=\beta^{s}$ with $s$ maximal; then
+  $Z^n-\beta$ is irreducible over $\Q$, hence over $k(a)(x)$, since $\beta\in\Q$ is not
+  a power in $k(a)(x)$ when it is not one in $\Q$ (and $-4\beta$ not a fourth power when
+  $4\mid n$, Capelli). So $1,\beta^{1/n},\dots,\beta^{(n-1)/n}$ are linearly
+  independent over $k(a)(x)$, and the coefficientwise test decides.
+\end{itemize}
 
 \section*{Batch D. Scope extensions (v0.6567)}
 \addcontentsline{toc}{section}{Batch D. Scope extensions}

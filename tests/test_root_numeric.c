@@ -244,6 +244,32 @@ static void test_complex_coefficients_noise_and_edges(void) {
 /* main                                                                */
 /* ------------------------------------------------------------------ */
 
+/* ------------------------------------------------------------------ */
+/* Machine-real coefficients at an MPFR request (Phase 4.4): the body  */
+/* is taken at its exact dyadic value before expansion, so the root is */
+/* accurate to the requested precision -- not pinned at 53 bits by a  */
+/* machine-arithmetic Expand of (1 - 2 a + a^2)/(64 a^2).              */
+/* ------------------------------------------------------------------ */
+static void test_machine_coefficients_high_precision(void) {
+    /* reference: the same polynomial at the exact dyadic value of a */
+    check_true("With[{a = -1.72194, e = SetPrecision[-1.72194, Infinity]}, Abs[N[Root[(1 - 2 a + a^2)/(64 a^2) + ((-1 - a) #1^2)/(4 a) + #1^4 &, 1], 40]"
+               " - N[Root[Evaluate[(1 - 2 e + e^2)/(64 e^2) + ((-1 - e) #1^2)/(4 e) + #1^4] &, 1], 40]] < 10^-35]");
+    check_true("With[{e = SetPrecision[-1.72194, Infinity]}, Abs[N[Root[Function[(1 - 2 (-1.72194) + (-1.72194)^2)/(64 (-1.72194)^2) + ((-1 - (-1.72194)) #1^2)/(4 (-1.72194)) + #1^4], 2], 40]"
+               " - N[Root[Evaluate[(1 - 2 e + e^2)/(64 e^2) + ((-1 - e) #1^2)/(4 e) + #1^4] &, 2], 40]] < 10^-35]");
+    /* a machine request stays machine */
+    check_true("MachineNumberQ[Re[N[Root[#^2 - 2.5 &, 2]]]]");
+}
+
+/* RootSum with inexact coefficients evaluates numerically (rootsum_try_numeric) */
+static void test_rootsum_inexact(void) {
+    check_true("Abs[RootSum[#1^2 - 2. &, #1^2 &] - 4] < 10^-14");
+    check_true("Abs[RootSum[#1^3 - #1 - 1.5 &, Exp] - N[RootSum[#1^3 - #1 - 3/2 &, Exp]]] < 10^-13");
+    /* exact coefficients: untouched (no numeric evaluation) */
+    check_eq("RootSum[#1^3 - #1 - 1 &, Log[x - #1] &] // Head", "RootSum");
+    /* symbolic coefficient: stays */
+    check_eq("RootSum[#1^2 - a &, Log[x - #1] &] // Head", "RootSum");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -269,6 +295,9 @@ int main(void) {
     TEST(test_complex_coefficients_values);
     TEST(test_complex_coefficients_order);
     TEST(test_complex_coefficients_noise_and_edges);
+
+    TEST(test_machine_coefficients_high_precision);
+    TEST(test_rootsum_inexact);
 
     printf("All N[Root[..]] tests passed!\n");
     return 0;

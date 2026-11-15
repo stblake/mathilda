@@ -381,6 +381,108 @@ static Expr* rootsum_try_lagrange(Expr* poly_fn, Expr* body_fn) {
     return result;
 }
 
+/* Does e contain an inexact number (machine or MPFR real, or a Complex with
+ * an inexact part)? */
+static bool rootsum_has_inexact(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (e->type != EXPR_FUNCTION) return false;
+    if (rootsum_has_inexact(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rootsum_has_inexact(e->data.function.args[i])) return true;
+    return false;
+}
+
+static bool rootsum_is_number(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if ((h == SYM_Complex || h == SYM_Rational) && e->data.function.arg_count == 2)
+            return rootsum_is_number(e->data.function.args[0]) &&
+                   rootsum_is_number(e->data.function.args[1]);
+    }
+    return false;
+}
+
+/* RootSum[f, form] with inexact numeric coefficients in f: the sum of form
+ * over the roots of f (with multiplicity), computed numerically -- as the
+ * reference language does.  The roots come from NRoots at the inputs'
+ * precision; the form is applied to each and the results added.  NULL (stay
+ * unevaluated) unless the polynomial is numeric and every term evaluates to a
+ * number.  Without this a RootSum whose parameters a sampler had replaced by
+ * machine numbers stayed unevaluated, and PossibleZeroQ read a correct
+ * parametric antiderivative as nonzero (Phase 4.4). */
+static Expr* rootsum_try_numeric(Expr* poly_fn, Expr* body_fn) {
+    Expr* poly = rootsum_fn_body_slot(poly_fn);
+    if (!poly) return NULL;
+    if (!rootsum_has_inexact(poly)) { expr_free(poly); return NULL; }
+    Expr* v = expr_new_symbol("RootSum$nv");
+    Expr* pv = subst_slot1(poly, v);
+    expr_free(poly);
+    /* the coefficients must be numbers */
+    Expr* cl = eval_and_free(expr_new_function(expr_new_symbol(SYM_CoefficientList),
+        (Expr*[]){ expr_copy(pv), expr_copy(v) }, 2));
+    bool numeric = cl && cl->type == EXPR_FUNCTION && cl->data.function.arg_count >= 2;
+    for (size_t i = 0; numeric && i < cl->data.function.arg_count; i++)
+        numeric = rootsum_is_number(cl->data.function.args[i]);
+    if (cl) expr_free(cl);
+    if (!numeric) { expr_free(pv); expr_free(v); return NULL; }
+    /* the roots at the coefficients' own precision: NRoots defaults to machine
+     * precision, and the zero test's high-precision confirmation then saw a
+     * machine-accurate result (-6.7e-18 where it asked for 40 digits).  Asked
+     * through PrecisionGoal: NRoots lists WorkingPrecision but leaves a call
+     * with it unevaluated (a gap of NRoots, tasks/todo.md) */
+    Expr* prec = eval_and_free(expr_new_function(expr_new_symbol("Precision"),
+        (Expr*[]){ expr_copy(pv) }, 1));
+    bool arbitrary = prec && (prec->type == EXPR_REAL || prec->type == EXPR_INTEGER);
+    Expr* eq = expr_new_function(expr_new_symbol(SYM_Equal),
+        (Expr*[]){ pv, expr_new_integer(0) }, 2);
+    Expr* nr = arbitrary
+        ? eval_and_free(expr_new_function(expr_new_symbol("NRoots"),
+              (Expr*[]){ eq, expr_copy(v),
+                         expr_new_function(expr_new_symbol(SYM_Rule),
+                             (Expr*[]){ expr_new_symbol("PrecisionGoal"), expr_copy(prec) }, 2) }, 3))
+        : eval_and_free(expr_new_function(expr_new_symbol("NRoots"),
+              (Expr*[]){ eq, expr_copy(v) }, 2));
+    if (prec) expr_free(prec);
+    expr_free(v);
+    if (!nr) return NULL;
+    /* z == r1 || z == r2 || ... (a single root: z == r1) */
+    size_t nroots = 0;
+    const Expr* const* items = NULL;
+    const Expr* one = nr;
+    if (nr->type == EXPR_FUNCTION && nr->data.function.head->type == EXPR_SYMBOL &&
+        nr->data.function.head->data.symbol.name == SYM_Or) {
+        nroots = nr->data.function.arg_count;
+        items = (const Expr* const*)nr->data.function.args;
+    } else {
+        nroots = 1;
+        items = &one;
+    }
+    Expr* sum = expr_new_integer(0);
+    bool ok = true;
+    for (size_t i = 0; i < nroots && ok; i++) {
+        const Expr* q = items[i];
+        if (!(q->type == EXPR_FUNCTION && q->data.function.head->type == EXPR_SYMBOL &&
+              q->data.function.head->data.symbol.name == SYM_Equal && q->data.function.arg_count == 2 &&
+              rootsum_is_number(q->data.function.args[1]))) { ok = false; break; }
+        Expr* term = eval_and_free(expr_new_function(expr_copy(body_fn),
+            (Expr*[]){ expr_copy(q->data.function.args[1]) }, 1));
+        if (!term || !rootsum_is_number(term)) { if (term) expr_free(term); ok = false; break; }
+        sum = eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ sum, term }, 2));
+    }
+    expr_free(nr);
+    if (!ok) { expr_free(sum); return NULL; }
+    return sum;
+}
+
 static Expr* builtin_rootsum(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* fn1 = res->data.function.args[0];
@@ -391,6 +493,7 @@ static Expr* builtin_rootsum(Expr* res) {
     Expr* ev1 = (fn1->type == EXPR_SYMBOL) ? evaluate(fn1) : NULL;
     Expr* ev2 = (fn2->type == EXPR_SYMBOL) ? evaluate(fn2) : NULL;
     Expr* simplified = rootsum_try_lagrange(ev1 ? ev1 : fn1, ev2 ? ev2 : fn2);
+    if (!simplified) simplified = rootsum_try_numeric(ev1 ? ev1 : fn1, ev2 ? ev2 : fn2);
     if (ev1) expr_free(ev1);
     if (ev2) expr_free(ev2);
     if (simplified) return simplified;

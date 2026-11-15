@@ -59,7 +59,7 @@ kauersPrincipal[Jk_List, base_List, vars_List] := Module[{cands},
 kauersResidual::usage = "kauersResidual[ctx, r, logs] is r - Sum_q (1/k_q) Tr_{Q[Z]/(q)}(Z p_q'/p_q) as an element over Q: zero exactly when the Kauers candidate integrates the remainder r.";
 kauersResidual[ctx_Association, r_List, logs_List] := Module[{B = ctx["B"], acc = r},
   Do[
-    acc = afMinus[fieldQ[], acc, afScale[fieldQ[], 1/lg[[2]], kauersTrace[ctx, lg[[1]], lg[[3]]]]],
+    acc = afMinus[baseField[], acc, afScale[baseField[], 1/lg[[2]], kauersTrace[ctx, lg[[1]], lg[[3]]]]],
     {lg, logs}];
   acc];
 
@@ -71,8 +71,8 @@ kauersTrace[ctx_Association, q_, p_] := If[Exponent[q, ctx["Z"]] === 1,
 kauersTraceRational::usage = "kauersTraceRational[ctx, q, p] is kauersTrace for a linear factor q: the value gamma p'/p at its rational root gamma.";
 kauersTraceRational[ctx_Association, q_, p_] := Module[{B = ctx["B"], Z = ctx["Z"], g0, pp},
   g0 = Z /. Solve[q == 0, Z][[1]];
-  pp = afFromY[fieldQ[], B, p /. Z -> g0, ctx["Ysym"]];
-  afScale[fieldQ[], g0, afTimes[fieldQ[], B, afD[fieldQ[], B, pp], afInverse[B, pp]]]];
+  pp = afFromY[baseField[], B, p /. Z -> g0, ctx["Ysym"]];
+  afScale[baseField[], g0, afTimes[baseField[], B, afD[baseField[], B, pp], afInverse[B, pp]]]];
 
 kauersTraceNF::usage = "kauersTraceNF[ctx, q, p] is kauersTrace for an irreducible factor q of degree >= 2, computed over K = Q[Z]/(q). p may be a rational function of x, Y and Z: Log of numerator minus Log of denominator.";
 kauersTraceNF[ctx_Association, q_, p_] := Module[
@@ -83,7 +83,7 @@ kauersTraceNF[ctx_Association, q_, p_] := Module[
      exact quotients ran as symbolic radical arithmetic (G-perf-4) *)
   rt = kauersTraceRel[ctx, q, p];
   If[rt =!= None, Return[rt, Module]];
-  K = fieldNF[Z, tragerMonic[q, Z], None];
+  K = extField[Z, tragerMonic[q, Z]];
   L = afScale[K, Z, afMinus[K, logDerivativeNF[K, B, Numerator[tp], ctx["Ysym"]],
                                logDerivativeNF[K, B, Denominator[tp], ctx["Ysym"]]]];
   d = Exponent[K["mu"], Z];

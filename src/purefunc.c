@@ -60,8 +60,10 @@ uint32_t pure_function_attributes(Expr* func) {
 void purefunc_init(void) {
     symtab_add_builtin("Slot", builtin_slot);
     symtab_add_builtin("SlotSequence", builtin_slotsequence);
-    symtab_get_def("Slot")->attributes |= ATTR_PROTECTED;
-    symtab_get_def("SlotSequence")->attributes |= ATTR_PROTECTED;
+    /* NHoldAll (as the reference): N[(2 + #) &, 40] must not turn Slot[1]
+     * into Slot[1.`40], a slot index no call can fill. */
+    symtab_get_def("Slot")->attributes |= ATTR_PROTECTED | ATTR_NHOLDALL;
+    symtab_get_def("SlotSequence")->attributes |= ATTR_PROTECTED | ATTR_NHOLDALL;
 }
 
 Expr* builtin_slot(Expr* res) {

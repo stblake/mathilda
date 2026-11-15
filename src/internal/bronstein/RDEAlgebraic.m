@@ -172,15 +172,14 @@ brAlgTimesLinear[B_Association, a_List, b_List] := Module[{m = B["m"], out, kf},
 
 brRDEAlgebraic::usage = "brRDEAlgebraic[f, g, x, m, G, Y] solves z' + f z = g over Q(x)(Y), Y^m = G (reduced curve), with f, g expressions in x and the symbol Y (polynomial in Y, rational in x): {\"Solution\", z} (z an expression in x and Y), {\"NoSolution\"} (a proof) or {\"Unknown\", why}. The same interface as brRischDE.";
 brRDEAlgebraic[f_, g_, x_Symbol, m_Integer, G_, Y_Symbol] := Module[{B = curveBasis[m, Expand[G], x], F = fieldQ[], fe, ge, r},
-  fe = afFromY[F, B, brAlgReduceY[f, Y, m, G], Y];
-  ge = afFromY[F, B, brAlgReduceY[g, Y, m, G], Y];
+  fe = afFromY[F, B, brAlgReduceY[f, Y, m, G, x], Y];
+  ge = afFromY[F, B, brAlgReduceY[g, Y, m, G, x], Y];
   r = brAlgRDE[B, fe, ge];
   If[First[r] === "Solution", {"Solution", Together[afToY[B, r[[2]], Y]]}, r]];
 
-brAlgReduceY::usage = "brAlgReduceY[e, Y, m, G] is the expression e (rational in x and Y) written as a polynomial in Y of degree < m with coefficients rational in x: the denominator rationalised in Q(x)[Y]/(Y^m - G).";
-brAlgReduceY[e_, Y_Symbol, m_Integer, G_] := Module[{t = Together[e], num, den, x, inv},
+brAlgReduceY::usage = "brAlgReduceY[e, Y, m, G, x] is the expression e (rational in x and Y; x given explicitly, not read off G, which may carry symbolic parameters) written as a polynomial in Y of degree < m with coefficients rational in x: the denominator rationalised in Q(x)[Y]/(Y^m - G).";
+brAlgReduceY[e_, Y_Symbol, m_Integer, G_, x_Symbol] := Module[{t = Together[e], num, den, inv},
   num = Numerator[t]; den = Denominator[t];
   If[FreeQ[den, Y], Return[reduceYDegree[Expand[num], Y, m, G]/den]];
-  x = First[Select[Variables[G], True &]];
   inv = powerBasisInverse[reduceYDegree[Expand[den], Y, m, G], Y, m, G, x];
   reduceYDegree[Expand[num (inv . (Y^Range[0, m - 1]))], Y, m, G]];

@@ -82,7 +82,7 @@ afNorm::usage = "afNorm[F, B, a] is the norm of a from K(x)(Y) to K(x): the dete
 afNorm[F_Association, B_Association, a_List] := rc[F, Det[afMultMatrix[F, B, a]]];
 
 afInverse::usage = "afInverse[B, a] is 1/a over Q: the solution c of c.M = e_0 with M the multiplication matrix of a (the ring is a field since Y^m - G is irreducible).";
-afInverse[B_Association, a_List] := Module[{M = afMultMatrix[fieldQ[], B, a], L, P, det, adj1},
+afInverse[B_Association, a_List] := Module[{M = afMultMatrix[baseField[], B, a], L, P, det, adj1},
   (* c . M = e_0 means c is the first row of M^(-1).  Clear denominators   *)
   (* (M = P/L, P polynomial) and use the cofactors of P: the first row of  *)
   (* P^(-1) is (C_11, ..., C_m1)/det P.  This avoids LinearSolve over Q(x), *)

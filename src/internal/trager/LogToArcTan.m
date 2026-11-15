@@ -27,8 +27,23 @@ togetherAtoms[e_] := Module[{atoms, rules},
 tidyLog::usage = "tidyLog[u, x] simplifies a logand u: Together, then the numeric content of numerator and denominator is dropped (Log[c u] - Log[u] is a constant).";
 tidyLog[u_, x_Symbol] := Module[{t = togetherAtoms[u], num, den},
   num = Numerator[t]; den = Denominator[t];
-  num = dropNumericContent[num]; den = dropNumericContent[den];
+  If[tragerParams === {},
+    num = dropNumericContent[num]; den = dropNumericContent[den],
+    num = dropConstantContent[num, x]; den = dropConstantContent[den, x]];
   num/den];
+
+dropConstantContent::usage = "dropConstantContent[p, x] divides p by a content free of x (Phase 4.4, symbolic parameters; Log[c u] - Log[u] is a constant for any such c): every radical is made a fresh symbol, p is put over a common denominator, and the numerator is divided by the PolynomialGCD of its coefficients as a polynomial in x and the radicals of x (the denominator, when free of x, is dropped). p is returned unchanged when the denominator involves x.";
+dropConstantContent[p_, x_Symbol] := Module[{atoms, rules, xs, q, num, den, cr, g},
+  atoms = DeleteDuplicates[Cases[{p}, Power[_, _Rational], {0, Infinity}]];
+  rules = Thread[atoms -> Table[Unique["rx"], {Length[atoms]}]];
+  xs = Join[{x}, Last /@ Select[rules, !FreeQ[First[#], x] &]];
+  q = Together[p /. rules];
+  num = Expand[Numerator[q]]; den = Denominator[q];
+  If[!FreeQ[den, Alternatives @@ xs] || num === 0, Return[p, Module]];
+  cr = CoefficientRules[num, xs];
+  g = If[Length[cr] == 1, cr[[1, 2]], PolynomialGCD @@ (Last /@ cr)];
+  If[g === 0, Return[p, Module]];
+  Expand[Total[(Times @@ (xs^#[[1]])) Together[#[[2]]/g] & /@ cr]] /. (Reverse /@ rules)];
 
 dropNumericContent::usage = "dropNumericContent[p] divides the expression p by its numeric content (FactorTermsList), leaving a primitive expression; p is returned unchanged when the content is not a nonzero rational number.";
 dropNumericContent[p_] := Module[{ftl = Quiet[FactorTermsList[Expand[p]]], c},

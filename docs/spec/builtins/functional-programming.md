@@ -40,6 +40,7 @@ Out[5]= {{}, {c}, {b}, {b, c}, {a}, {a, c}, {a, b}, {a, b, c}}
 - `Function[Null, body, attrs]`: Slot form (`#`, `##`, etc.) with evaluation attributes.
 - `Slot` (`#`): Represents the first argument. `#n` represents the $n$-th argument.
 - `SlotSequence` (`##`): Represents all arguments sequence. `##n` represents all arguments starting from the $n$-th.
+- `Slot` and `SlotSequence` have the attributes `{NHoldAll, Protected}`: `N[(2 + #) &, 20]` numericalises the body to `2.0000000000000000000 + #1 &`, never the slot index (before v0.6574 it became `Slot[1.000...]`, which no call can fill).
 
 **Features**:
 - **Lexical parameter binding**: named parameters are substituted into the body before evaluation (not bound via the global symbol table). This means held references to a parameter (for example `Unevaluated[x]` inside the body) see the substituted expression rather than the raw symbol.

@@ -77,6 +77,10 @@ rationalPolyQ[p_, x_Symbol] :=
 
 constantFieldNumberQ::usage = "constantFieldNumberQ[c] is True when c is in the constant field in use: a rational number; a Gaussian rational while tragerConstantI is True (Q(i), Phase 4.1); an explicit algebraic number built from rationals and radicals of rationals while tragerAlgConstants is non-empty (Phase 4.3).";
 constantFieldNumberQ[c_] := rationalNumberQ[c] ||
+  (* Phase 4.4: with symbolic parameters the constant field is Q(params); a
+     coefficient of a numerator or denominator is a polynomial in them *)
+  (tragerParams =!= {} && !NumericQ[c] && PolynomialQ[c, tragerParams] &&
+    AllTrue[Flatten[{CoefficientList[Expand[c], tragerParams]}], rationalNumberQ]) ||
   (TrueQ[tragerConstantI] && MatchQ[c, Complex[(_Integer | _Rational), (_Integer | _Rational)]]) ||
   (tragerAlgConstants =!= {} && NumericQ[c] &&
     FreeQ[c, Pi | E | EulerGamma | Catalan | _Log | _Real | _Root | _AlgebraicNumber] &&
@@ -157,7 +161,7 @@ tragerGCD[a_, b_] := If[tragerAlgConstants === {}, PolynomialGCD[a, b], Polynomi
 
 tragerMonic::usage = "tragerMonic[p, Z] is the polynomial p(Z) divided by its leading coefficient, in canonical form over the constant field in use (Phase 4.3b C4): kc[fieldQ[], .] rationalises the coefficients over Q(constants) (kcConstQ), where Expand left 1/(2^(1/3) ...) coefficients and two equal factors could differ in shape. Over Q (or Q(i)) it is Expand[p/lc].";
 tragerMonic[p_, Z_Symbol] := With[{m = p/Coefficient[p, Z, Exponent[p, Z]]},
-  If[tragerAlgConstants === {}, Expand[m], kc[fieldQ[], m]]];
+  If[tragerAlgConstants === {} && tragerParams === {}, Expand[m], kc[baseField[], m]]];
 
 tragerRadicalContent::usage = "tragerRadicalContent[b] is the absolute value |c| of the rational content c of the radicand b (numerator content over denominator content): b = |c| u with u free of a rational content.";
 tragerRadicalContent[b_] := Module[{t = Together[b], cn, cd},
@@ -183,6 +187,19 @@ tragerSquareFreeList[p_] := With[{ext = tragerExtension[]},
 
 tragerAlgConstants::usage = "tragerAlgConstants is the list of the algebraic constants of the integrand other than I -- radicals of rational numbers such as Sqrt[2], 2^(1/3) -- while it is integrated (constant field Q(i?, constants), Bronstein Phase 4.3): factorisations are over the field they generate (tragerFactorList), residue fields contain them, and reduction mod p refuses them (gfMod).";
 tragerAlgConstants = {};
+tragerParams::usage = "tragerParams is the list of the symbolic parameters of the integrand (Phase 4.4: transcendental constants, D = 0), set for the duration of an integration; {} without parameters.";
+tragerParams = {};
+
+tragerParamsOf::usage = "tragerParamsOf[f, x] is the list of the symbolic parameters of f: every symbol of f other than x that is not a System` constant (Pi, E, I, ...) or a function head, sorted.";
+tragerParamsOf[f_, x_Symbol] := Sort[DeleteDuplicates[Cases[{f}, s_Symbol /; s =!= x && Context[s] =!= "System`" &&
+    !MemberQ[Attributes[s], Protected], {0, Infinity}, Heads -> False]]];
+
+baseField::usage = "baseField[] is the base constant field of the integration: fieldQ[] without symbolic parameters, fieldFn[tragerParams] = Q(params) with them (Phase 4.4).";
+baseField[] := If[tragerParams === {}, fieldQ[], fieldFn[tragerParams]];
+
+extField::usage = "extField[t, mu] is the simple extension of the base field by a root t of the monic irreducible polynomial mu(t): fieldNF[t, mu, None] over Q, fieldFn[tragerParams, {t, mu, None}] over Q(params) (Phase 4.4).";
+extField[t_Symbol, mu_] := If[tragerParams === {}, fieldNF[t, mu, None],
+  fieldFn[tragerParams, {t, Collect[Together[mu/Coefficient[mu, t, Exponent[mu, t]]], t, Together], None}]];
 
 tragerExtension::usage = "tragerExtension[] is the list of algebraic generators of the constant field in use, for FactorList's Extension option: I when tragerConstantI is True, then tragerAlgConstants.";
 tragerExtension[] := Join[If[TrueQ[tragerConstantI], {I}, {}], tragerAlgConstants];

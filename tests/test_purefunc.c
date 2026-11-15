@@ -123,6 +123,15 @@ void test_purefunc_closure() {
                    "{{11, 12}, {21, 22}}", 0);
 }
 
+/* Slot / SlotSequence are NHoldAll: N must not numericalise the slot index */
+static void test_purefunc_slot_nhold(void) {
+    assert_eval_eq("Attributes[Slot]", "{NHoldAll, Protected}", 0);
+    assert_eval_eq("Attributes[SlotSequence]", "{NHoldAll, Protected}", 0);
+    assert_eval_eq("FreeQ[N[(2 + #1) &, 40], Slot[_Real]]", "True", 0);
+    assert_eval_eq("N[(2 + #1) &, 20][1]", "3.0000000000000000000", 0);
+    assert_eval_eq("FreeQ[N[f[##] &, 20], SlotSequence[_Real]]", "True", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -131,6 +140,7 @@ int main() {
     TEST(test_purefunc_attributes);
     TEST(test_purefunc_shadowing);
     TEST(test_purefunc_closure);
+    TEST(test_purefunc_slot_nhold);
 
     return 0;
 }

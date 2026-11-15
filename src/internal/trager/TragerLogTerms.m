@@ -33,7 +33,7 @@ tragerLogTerms[ctx0_Association] := Module[
 
 withFrameAlpha::usage = "withFrameAlpha[ctx] adds ctx[\"alpha\"]: a rational root of G of multiplicity prime to m, the centre of the characteristic-0 reduced frame (Jacobian.m), or None when G has none.";
 withFrameAlpha[ctx_Association] := If[KeyExistsQ[ctx, "alpha"], ctx,
-  Join[ctx, <|"alpha" -> First[Join[frameRoots[fieldQ[], ctx["B"]["G"], ctx["B"]["m"], ctx["B"]["x"]], {None}]]|>]];
+  Join[ctx, <|"alpha" -> First[Join[frameRoots[baseField[], ctx["B"]["G"], ctx["B"]["m"], ctx["B"]["x"]], {None}]]|>]];
 
 generatorTerms::usage = "generatorTerms[ctx, spec, Nn] is a generator of Nn delta (delta the divisor spec, Nn >= 1) as a list {{e, u}, ...}, u elements of the working frame (coordinate lists), with div(Prod u^e) = Nn delta; $Failed when Nn delta is not principal (decided first by reduction at a few further good primes, torsionScreen, then over the residue field). For Nn up to tragerOption[\"DirectPowerMaxOrder\"], or without a characteristic-0 frame root, the ideal of Nn delta is formed and tested directly ([T] Ch 6 Sec 1); for larger Nn with a frame root (ctx[\"alpha\"]) Nn delta is formed by doubling and adding in reduced form (Jacobian.m) and the generator is the product of the principal factors met.";
 generatorTerms[ctx_Association, spec_Association, Nn_Integer] := Module[
@@ -144,7 +144,7 @@ tragerOrbitLogTerms[ctx0_Association] := Module[
     If[!failed,
       Module[{qm = tragerMonic[q, Z], K, gamma, octx, I0, kappa, spec, scale, Nq, r},
         If[Exponent[qm, Z] === 1,
-          K = fieldQ[]; gamma = -Coefficient[qm, Z, 0],
+          K = baseField[]; gamma = -Coefficient[qm, Z, 0],
           (* the generator is Z itself, as the orbit construction below assumes *)
           With[{fr = kauersFieldOfRoot[qm, Z]}, K = fr["F"]; gamma = fr["gamma"]]];
         I0 = residueIdeal[K, B, gamma, ctx["N"], ctx["Ep"], ctx["Bp"]];

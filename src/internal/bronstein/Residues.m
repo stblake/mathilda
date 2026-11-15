@@ -90,8 +90,20 @@ brNormalResidues[T_Association, cv_Association, c_] := Module[{z = Unique["Brons
     throwUnimplemented["Residues:nonrational", "residue polynomial with non-rational coefficients"]];
   <|"R" -> R, "P" -> P, "z" -> z|>];
 
+brParamConstantQ::usage = "brParamConstantQ[c] is True when c is a constant of the constant field: NumericQ, or (Phase 4.4) an expression whose symbols are all symbolic parameters (tragerParams), with no other variable.";
+brParamConstantQ[c_] := NumericQ[c] ||
+  (tragerParams =!= {} && Complement[Variables[c], tragerParams] === {} &&
+   FreeQ[c, s_Symbol /; !MemberQ[tragerParams, s] && Context[s] =!= "System`" && !NumericQ[s]]);
+
 brGammaForm::usage = "brGammaForm[lc, m] writes gamma = lc^(1/m) as kappa^(1/m) u with kappa a rational constant and u in k, returning {kappa, u}, when lc = kappa u^m; None otherwise.";
-brGammaForm[lc_, m_Integer] := Module[{u = brMthPowerCofactor[lc, m], kappa},
+brGammaForm[lc_, m_Integer] := Module[{u, kappa},
+  (* Phase 4.4 guard: with a parameter in lc, "None" (no constant kappa) would
+     send the special places down the radical-gamma branch, which reads their
+     residues as 0.  Until the special places over Q(a) are built (step 5),
+     such an lc is refused. *)
+  If[tragerParams =!= {} && !FreeQ[lc, Alternatives @@ tragerParams],
+    throwUnimplemented["Residues:parameter-kappa", "special place with a constant kappa depending on a symbolic parameter"]];
+  u = brMthPowerCofactor[lc, m];
   If[u === None, Return[None]];
   kappa = Together[lc/u^m];
   (* a constant is NumericQ: FreeQ[kappa, _Symbol] was wrong for kappa = I
@@ -99,6 +111,9 @@ brGammaForm[lc_, m_Integer] := Module[{u = brMthPowerCofactor[lc, m], kappa},
      gamma and its special residue as 0 -- false certificates (review of E4.1,
      2026-11-14: Int Sqrt[E^x + I]).  Special residues over Q(i)(kappa^(1/m))
      are not implemented: a non-real Gaussian kappa is refused. *)
+  (* a kappa that is a constant of Q(a) (Phase 4.4) is not "no form": the
+     radical-gamma branch would read its special residues as 0.  Until the
+     special places over Q(a) are built (Phase 4.4 step 5), it is refused. *)
   If[!NumericQ[kappa], Return[None]];
   (* a Gaussian kappa is a constant of Q(i) (Phase 4.1b): the special places
      have values kappa^(1/m) u, and their residue field Q(i)(roots of

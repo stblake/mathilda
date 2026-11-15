@@ -36,7 +36,7 @@ static void test_bounds(void) {
     BR_TRUE("brAlgBounds[B3, fe, {1, 1}] === <|\"D\" -> 1, \"Bdeg\" -> {2, 1}|>");
     BR_TRUE("brAlgDLinear[B3, {c1 x, c2}] === {c1, Together[3 c2 x^2/(2 (1 + x^3))]}");
     BR_TRUE("brAlgTimesLinear[B3, {0, 1}, {c1, c2}] === {c2 (1 + x^3), c1}");
-    BR_TRUE("Together[brAlgReduceY[1/(1 + Y), Y, 2, x^3 + 1] - (Y - 1)/x^3] === 0");
+    BR_TRUE("Together[brAlgReduceY[1/(1 + Y), Y, 2, x^3 + 1, x] - (Y - 1)/x^3] === 0");
 }
 
 static void test_solve(void) {
@@ -44,7 +44,7 @@ static void test_solve(void) {
     br_run("dY[e_, m_, G_] := D[e, x] + D[e, Y] D[G, x]/(m G) Y;"
            " rdeMatch[f_, z_, m_, G_] := Module[{g = Together[dY[z, m, G] + f z], r},"
            "   r = brRDEAlgebraic[f, g, x, m, G, Y];"
-           "   MatchQ[r, {\"Solution\", _}] && Together[brAlgReduceY[r[[2]] - z, Y, m, G]] === 0]; True");
+           "   MatchQ[r, {\"Solution\", _}] && Together[brAlgReduceY[r[[2]] - z, Y, m, G, x]] === 0]; True");
     /* the ISSAC'91 equation: z' + (5x^3 + 2)/(2 Sqrt[x^3 + 1]) z = .., z = (2/x)(1 + Sqrt[x^3 + 1]) */
     BR_TRUE("rdeMatch[(5 x^3 + 2)/(2 Y), (2/x)(1 + Y), 2, x^3 + 1]");
     BR_TRUE("rdeMatch[2 x, x Y, 2, x^3 + 1]");
@@ -63,7 +63,7 @@ static void test_solve(void) {
 static void test_bound_validity(void) {
     /* widening every bound never changes solvability (a brute-force check of the bounds) */
     br_run("widenAgree[f_, g_, m_, G_] := Module[{B = curveBasis[m, G, x], fe, ge, r0, r3},"
-           "   fe = afFromY[fieldQ[], B, brAlgReduceY[f, Y, m, G], Y]; ge = afFromY[fieldQ[], B, brAlgReduceY[g, Y, m, G], Y];"
+           "   fe = afFromY[fieldQ[], B, brAlgReduceY[f, Y, m, G, x], Y]; ge = afFromY[fieldQ[], B, brAlgReduceY[g, Y, m, G, x], Y];"
            "   r0 = brAlgRDE[B, fe, ge]; r3 = brAlgRDE[B, fe, ge, 3]; First[r0] === First[r3]]; True");
     BR_TRUE("widenAgree[(5 x^3 + 2)/(2 Y), Together[dY[(2/x)(1 + Y), 2, x^3 + 1] + (5 x^3 + 2)/(2 Y) (2/x)(1 + Y)], 2, x^3 + 1]");
     BR_TRUE("widenAgree[0, 1/Y, 2, x^3 + 1]");

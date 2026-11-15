@@ -37,6 +37,7 @@
 #include "poly/poly_eval_mpfr.h"
 #include "poly/poly.h"       /* is_polynomial / get_degree_poly / get_all_coeffs_expanded */
 #include "expand.h"          /* expr_expand */
+#include "rationalize.h"     /* internal_exact_value */
 
 #include "linalg/eigen.h"
 #include "linalg/lapack.h"   /* mat_lapack_dgeev_values — machine-precision QR */
@@ -847,10 +848,32 @@ static bool root_real_leaf_to_mpfr(const Expr* e, mpfr_t out) {
  * coefficient.  This is the inexact analogue of expr_to_zupoly used when the
  * coefficients are machine reals or rationals (e.g. Root objects produced by
  * Eigenvalues after numeric substitution). */
+/* Does the (held) Root body carry a machine real (EXPR_REAL) anywhere? */
+static bool root_body_has_machine_real(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (root_body_has_machine_real(e->data.function.args[i])) return true;
+    return false;
+}
+
 static bool root_body_to_real_coeffs(Expr* body, Expr* slot1, mpfr_prec_t wp,
                                      bool want_machine,
                                      mpfr_t** coeffs_out, int* deg_out) {
-    Expr* expanded = expr_expand(body);
+    /* An MPFR request with machine reals in the body: Expand evaluates, so it
+     * would do the coefficient arithmetic in doubles ((1 - 2 a + a^2)/(64 a^2)
+     * at a = -1.72194 comes out with 53 bits) and every root would be pinned at
+     * machine precision however high wp is -- the residual of a RootSum then
+     * never shrinks up a precision ladder (PossibleZeroQ read a correct
+     * parametric Trager antiderivative as nonzero at a sampled a).  A machine
+     * real IS an exact dyadic rational, so take the body's exact value first and
+     * let the expansion be exact; the coefficients are rounded once, at wp. */
+    Expr* exact_body = NULL;
+    if (!want_machine && root_body_has_machine_real(body))
+        exact_body = internal_exact_value(body);
+    Expr* expanded = expr_expand(exact_body ? exact_body : body);
+    if (exact_body) expr_free(exact_body);
     if (!expanded) return false;
     if (!is_polynomial(expanded, &slot1, 1)) { expr_free(expanded); return false; }
     int d = get_degree_poly(expanded, slot1);

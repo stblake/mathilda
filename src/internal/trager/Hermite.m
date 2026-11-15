@@ -19,7 +19,7 @@
 
 hermiteReduce::usage = "hermiteReduce[B, f] performs Hermite reduction over Q of the element f (coordinates on the basis B, rational functions of x). It returns <|\"Algebraic\" -> v, \"Remainder\" -> r|> with f = v' + r and r having a squarefree common denominator (both as coordinate lists).";
 hermiteReduce[B_Association, f0_List] := Module[
-  {F = fieldQ[], x = B["x"], m = B["m"], f = f0, v, D0, sq, V, j, U, k, Vp, Acoef, Bcoef, H, it = 0, maxit},
+  {F = baseField[], x = B["x"], m = B["m"], f = f0, v, D0, sq, V, j, U, k, Vp, Acoef, Bcoef, H, it = 0, maxit},
   v = afZero[B];
   (* every step lowers the multiplicity of one squarefree factor of the     *)
   (* initial denominator by one: Sum (e - 1) deg steps at most (an           *)
@@ -32,20 +32,20 @@ hermiteReduce[B_Association, f0_List] := Module[
     sq = Select[Rest[tragerSquareFreeList[D0]], !FreeQ[#[[1]], x] && #[[2]] >= 2 &];
     If[sq === {}, Break[]];
     {V, j} = Last[SortBy[sq, Last]];
-    U = rc[fieldQ[], D0/V^j];
+    U = rc[baseField[], D0/V^j];
     k = j - 1;
     Vp = D[V, x];
-    Acoef = Expand[rc[fieldQ[], # D0]] & /@ f;
+    Acoef = Expand[rc[baseField[], # D0]] & /@ f;
     Bcoef = Table[
-      hermiteSolve[Acoef[[i + 1]], rc[fieldQ[], U (V B["s"][[i + 1]] - k Vp)], V, x],
+      hermiteSolve[Acoef[[i + 1]], rc[baseField[], U (V B["s"][[i + 1]] - k Vp)], V, x],
       {i, 0, m - 1}];
-    H = rc[fieldQ[], #/V^k] & /@ Bcoef;
+    H = rc[baseField[], #/V^k] & /@ Bcoef;
     v = afPlus[F, v, H];
     f = afMinus[F, f, afD[F, B, H]]];
   <|"Algebraic" -> v, "Remainder" -> f|>];
 
 commonDenominator::usage = "commonDenominator[f, x] is the least common multiple of the denominators of the coordinates of f.";
-commonDenominator[f_List, x_Symbol] := Module[{dens = Denominator[rc[fieldQ[], #]] & /@ f},
+commonDenominator[f_List, x_Symbol] := Module[{dens = Denominator[rc[baseField[], #]] & /@ f},
   Expand[PolynomialLCM @@ Join[{1}, dens]]];
 
 hermiteSolve::usage = "hermiteSolve[A, C, V, x] solves B C == A (mod V) for the polynomial B of degree < deg V, where C is a rational function whose denominator is prime to V and whose numerator is invertible modulo V. A non-invertible C is an internal error (it contradicts [T] Ch 4 Sec 2).";

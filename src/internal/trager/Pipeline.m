@@ -27,7 +27,7 @@
 
 integrateComponent::usage = "integrateComponent[c, x, m, G, method] integrates c(x) Y dx on the curve Y^m = G(x) (reduced and absolutely irreducible; see reducedCurveQ). method is \"Trager\" or \"Kauers\". It returns <|\"Algebraic\" -> v, \"Logs\" -> {{coef, arg}, ..., {coef, rootsum, \"RootSum\"}, ...}, \"Y\" -> Y|>, the integral being v + Sum coef Log[arg] + Sum coef rootsum as expressions in x and the symbol Y (algebraic numbers explicit). Throws NonElementary / Decline / Internal failures.";
 integrateComponent[c_, x_Symbol, m_Integer, G_, method_String] := Module[
-  {F = fieldQ[], B0, f, sh = None, z, w, B, her, v, r, cr, num, den, genus, res, ctx, Y, vExpr, logExprs},
+  {F = baseField[], B0, f, sh = None, z, w, B, her, v, r, cr, num, den, genus, res, ctx, Y, vExpr, logExprs},
   If[!reducedCurveQ[m, G, x], throwInternal["CurveNotReduced", <|"m" -> m, "G" -> G|>]];
   Y = Unique["Y"];
   genus = curveGenus[m, G, x];
@@ -76,6 +76,10 @@ tragerLogPart[ctx_Association, r_List, Y_Symbol] := Module[{Z = ctx["Z"], degs, 
   (* complete Q-basis construction comes first unless the splitting field is *)
   (* hopeless; the orbit construction is then the fallback.                  *)
   basisFirst = If[ctx["genus"] === 0, Max[degs] <= 2 && crude <= 8, crude <= 5040];
+  (* over Q(parameters) the Q-basis construction is taken only when every
+     residue lies in Q(a) (its splitting field has no numeric theta to
+     present); otherwise the orbit construction, with RootSum terms *)
+  If[tragerParams =!= {} && Max[degs] > 1, basisFirst = False];
   (* A certificate first when the field of all residues may be larger than   *)
   (* that of one residue: trace functionals live over Q(gamma) (it throws a  *)
   (* NonElementary certificate, or returns without a verdict).               *)
@@ -103,6 +107,9 @@ traceCertificate[ctx_Association] := Module[{Z = ctx["Z"], qs},
      functional below divides traces by the RELATIVE degree, justified only
      over Q; no verdict here, the complete construction decides *)
   If[tragerAlgConstants =!= {}, Return[Null]];
+  (* over Q(parameters) the functional is Q(a)-valued, not Q-valued: no
+     verdict (Phase 4.4) *)
+  If[tragerParams =!= {}, Return[Null]];
   qs = SortBy[tragerMonic[#, Z] & /@ (First /@ Select[tragerFactorList[ctx["R"]], !FreeQ[#[[1]], Z] &]),
     Exponent[#, Z] &];
   Do[traceCertificateAt[ctx, q, qs], {q, qs}]];
@@ -151,7 +158,7 @@ tragerOrbitLogPart::usage = "tragerOrbitLogPart[ctx, r, Y] is the per-orbit cons
 tragerOrbitLogPart[ctx_Association, r_List, Y_Symbol] := Module[{orb = tragerOrbitLogTerms[ctx], res},
   If[orb === $Failed, Return[$Failed]];
   res = kauersResidual[ctx, r, orb];
-  If[!afZeroQ[fieldQ[], res],
+  If[!afZeroQ[baseField[], res],
     (* a nonzero residual certifies only when its zero test is exact over K0:
        every algebraic constant a power of ONE rational base (1, b^(1/n), ...
        are then linearly independent over Q(x) and rc's normal form decides),
@@ -162,13 +169,18 @@ tragerOrbitLogPart[ctx_Association, r_List, Y_Symbol] := Module[{orb = tragerOrb
     throwNonElementary["the remainder minus the logarithmic part is a nonzero holomorphic differential"]];
   kauersLogExpressions[ctx, orb, Y]];
 
-residualCanonicalQ::usage = "residualCanonicalQ[e] is True when the algebraic constants of e are all rational powers of one rational base, with no Root object and no other algebraic number -- the case in which rcZeroQ over fieldQ[] is an exact zero test (Gaussian rationals aside, which Together handles).";
-residualCanonicalQ[e_] := FreeQ[e, Root | AlgebraicNumber] &&
+residualCanonicalQ::usage = "residualCanonicalQ[e] is True when e is built only from field elements whose zero test by rc over the base field is exact -- a WHITELIST (theory note E4.4e): heads List, Plus, Times, Power, Rational, Complex; no System` symbol but I (so no Pi, E, Log, Abs, Root, AlgebraicNumber); every exponent rational; every radical (non-integer exponent) of a rational base, and of only ONE such base (1, b^(1/n), ... are then linearly independent over Q(params)(x)). Anything else -- Sqrt[a^2 + 1], Log[a], E^a, a Root beside the radical it equals -- blocks the certificate.";
+residualCanonicalQ[e_] :=
+  FreeQ[e, h_[___] /; !MemberQ[{List, Plus, Times, Power, Rational, Complex}, h]] &&
+  FreeQ[e, s_Symbol /; Context[s] === "System`" &&
+    !MemberQ[{List, Plus, Times, Power, Rational, Complex, I}, s]] &&
+  FreeQ[e, Power[_, p_] /; !(IntegerQ[p] || Head[p] === Rational)] &&
+  FreeQ[e, Power[b_, _Rational] /; !rationalNumberQ[b]] &&
   Length[DeleteDuplicates[Cases[e, Power[b_, _Rational] /; rationalNumberQ[b] :> b, {0, Infinity}]]] <= 1;
 
 kauersLogPart::usage = "kauersLogPart[ctx, r, Y] is the logarithmic part of the remainder r by Kauers' heuristic, verified exactly, as log-term expressions in x and Y; a Decline when the heuristic does not close.";
 kauersLogPart[ctx_Association, r_List, Y_Symbol] := Module[{logs = kauersLogTerms[ctx]},
-  If[!afZeroQ[fieldQ[], kauersResidual[ctx, r, logs]],
+  If[!afZeroQ[baseField[], kauersResidual[ctx, r, logs]],
     throwDecline["Kauers' heuristic: logarithmic part incomplete"]];
   kauersLogExpressions[ctx, logs, Y]];
 
@@ -226,8 +238,14 @@ TragerIntegrate[f0_, x_Symbol, method_String : "Trager"] := Module[{r, f = trage
   (* constant field Q(i) for Gaussian-rational constants (keeps an outer
      setting: Bronstein calls in with the flag already on) *)
   r = Block[{tragerConstantI = TrueQ[tragerConstantI] || !FreeQ[f, _Complex],
-             tragerAlgConstants = If[tragerAlgConstants =!= {}, tragerAlgConstants, tragerConstantsOf[f]]},
-    catchTrager[tragerIntegrateBody[f, x, method]]];
+             tragerAlgConstants = If[tragerAlgConstants =!= {}, tragerAlgConstants, tragerConstantsOf[f]],
+             tragerParams = If[tragerParams =!= {}, tragerParams, tragerParamsOf[f, x]]},
+    catchTrager[
+      (* Phase 4.4: parameters over Q; with Q(i) or radical constants as well,
+         not yet *)
+      If[tragerParams =!= {} && (TrueQ[tragerConstantI] || tragerAlgConstants =!= {}),
+        throwUnimplemented["Trager:parameters-with-constants", "symbolic parameters together with Q(i) or radical constants"]];
+      tragerIntegrateBody[f, x, method]]];
   If[tragerFailQ[r], failToList[r], r]];
 
 xPowerReduce::usage = "xPowerReduce[f, x] is {k, g, u} when f = x^(k-1) g(x^k) syntactically for some k in 6..2 (f/x^(k-1) mentions x only through powers x^(j k)), so that Integrate[f, x] = G(x^k)/k with G' = g: an exact identity, valid for all complex x since u = x^k is entire. None otherwise.";

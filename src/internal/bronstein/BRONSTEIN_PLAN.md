@@ -1326,9 +1326,13 @@ spec entry and a changelog note.
    Then a real form of the answer (Trager's `realForm`/`presentable`, re-verified). The
    `brUnsupportedHeads` list shrinks to genuinely non-elementary heads, which are Incomplete.
 3. **Symbolic parameters.** Parameters are transcendental constants: `fieldFn` variables with
-   D = 0. Answers and certificates are generic, valid outside a proper Zariski-closed set of
-   parameter values; the docs and docstring say so. Specialisation for torsion also specialises the
-   parameters. The Theory note (E4) proves this is sound.
+   D = 0. Every verdict is exact over the constant field Q(a...).
+   - An antiderivative is valid outside a proper Zariski-closed set of parameter values.
+   - A "not elementary" verdict holds outside a countable exceptional set, which is not Zariski-closed
+     in general. This wording was corrected 2026-11-15: a divisor of infinite order can be torsion at
+     infinitely many specialisations.
+   - The docs and docstrings say so. Specialisation for torsion also specialises the parameters. The
+     theory note (E4) proves this is sound. The detailed plan is "Phase 4.4: plan" below.
 
 ### Phase 4.5: efficient ideal and field arithmetic (added 2026-11-15, after batch E)
 
@@ -1539,6 +1543,62 @@ the code).**
   - the nightly ideal-benchmark ratchet;
   - factorisation over K, which is still 1.5–20× behind PARI.
 - **Next:** Phase 4.4, symbolic parameters.
+
+### Phase 4.4: plan (2026-11-15, approved)
+
+**Progress.**
+- **v0.6574:** steps 1 and 2 are done (Trager core over Q(a)).
+  - Verified examples:
+    - `1/((x - a) Sqrt[x^2 + 1])`, `x/Sqrt[x^4 + a]`, `Sqrt[x + a]/x` and
+      `1/((x + b) Sqrt[x^2 + a])`;
+    - `(x + a)/((x^2 - a) Sqrt[x^2 + a])`, a RootSum over Q(a);
+    - `Sqrt[x] + Sqrt[x + a]` and `Sqrt[x^2 + a]`, formerly pinned as declines.
+  - Certificate: `1/Sqrt[x^3 + a]` is not elementary over Q(a).
+  - Still open in step 2: native `ff_fnx` with μ over Q(p). Next is step 3 (torsion);
+    `1/(x Sqrt[x^3 + a x + 1])` declines.
+
+**Decisions** (user):
+- **Semantics.** Verdicts are exact over C = Q(a...), as in FriCAS.
+  - Antiderivatives hold outside a Zariski-closed set.
+  - Non-elementarity holds outside a countable set.
+  - Both are documented.
+- **Cascade.** Trager and Bronstein keep their position in Automatic, behind an A/B gate on the
+  shootouts and corpora.
+
+**Theory first: note section E4.** Each part is adversarially reviewed before the code it
+justifies.
+- E4.1 the setting;
+- E4.2 specialising antiderivatives;
+- E4.3 certificates, and why the exceptional set is countable, not closed;
+- E4.4 torsion by specialisation: a good a0 is injective on torsion, so the candidate is
+  N0 = ord D(a0), and N0·D principal over C is then decided;
+- E4.5 the zero tests.
+
+**Steps:**
+1. **Soundness guards:**
+   - `gfMod` must not see a parameter;
+   - `residualCanonicalQ` rejects radicals of a non-rational base;
+   - `brBCLimited` uses a "free of x, Y, θ" test, not `NumericQ`;
+   - `brGammaForm` must not send a parameter-dependent κ down the radical branch;
+   - `brAlgReduceY` chooses its variable explicitly.
+2. **The Trager constant field:**
+   - `tragerParams`, and a `baseField[]` accessor replacing the hard-coded `fieldQ[]`;
+   - residue fields `fieldFn[params, {t, q}]`;
+   - the Q-span `qBasis`;
+   - RootSum presentation;
+   - `ff_fnx` with μ over Q(p).
+3. **Torsion:** a shared specialisation helper that also specialises the parameters. N0 by the mod-p
+   route, then principality over C.
+4. **The Trager front end:** lift the parameter refusals (`Sqrt[a]` stays Incomplete) and update the
+   pinned tests.
+5. **Bronstein:**
+   - `brParams`, and parameters in every `fieldFn` vars list;
+   - `RDEAlgebraic` off `fieldQ`;
+   - `brLinearConstantSystemQ` and the C `rde_rational_in` accept parameters;
+   - the κ and sign checks specialise the parameters;
+   - E3 specialisation includes them.
+6. **The cascade A/B, docs and corpus:** `G-param-1`, new parametric examples, parametric stress
+   families, and FriCAS with parameter values.
 
 ### Phase 5: the radical anywhere (largest; theory first)
 

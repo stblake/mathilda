@@ -65,6 +65,9 @@ BASELINE_M = {
     "Tower:radical-in-kernel",       # radical inside a kernel above others -> Phase 5
     "Tower:radical-mid-tower",       # radical in the middle of the tower -> Phase 5
     "Tower:radicand-not-rational",   # symbolic parameters -> Phase 4
+    "Residues:parameter-kappa",      # special places with a kappa in Q(a): Phase 4.4 step 5
+    "Trager:parameter-torsion",      # torsion over Q(params), positive genus: Phase 4.4 step 3
+    "Trager:parameters-with-constants",  # parameters with Q(i) / radical constants: Phase 4.4 later
     "Tower:reducible-log",           # reducible logarithm -> Phase 3 (#13)
     "Tower:trig",                    # TrigToExp front end over Q(i) -> Phase 4
     "Trager",                        # a Trager decline inside Bronstein -> Trager's own sites

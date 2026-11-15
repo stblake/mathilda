@@ -3785,6 +3785,25 @@ all complex x, that lowers the radical's degree or merges what looked like sever
 radicals into one (ParallelMixedTower applies the same pre-pass). Every answer must satisfy
 `PossibleZeroQ[D[F, x] - f, Assumptions -> Element[x, Complexes]]` (v0.6093).
 
+**Symbolic parameters (Phase 4.4, v0.6574).** A symbol other than `x` (not a
+`System\`` constant: `Pi`, `E` and `Log[2]` are not parameters) is a transcendental
+constant with derivative 0, and the constant field is C = Q(a, b, ...). Every verdict
+is exact over C (theory note E4.4, `docs/notes/bronstein_extensions.tex`):
+- an antiderivative is an identity over C, so it is valid for every value of the
+  parameters outside a proper Zariski-closed set (where a denominator, leading
+  coefficient or discriminant met in the answer vanishes). That set is not reported;
+- "not elementary" holds over C, and for every parameter value outside a
+  **countable** set, which need not be Zariski-closed: `x^a E^x` is not elementary
+  over Q(a), but is elementary at every a in Z>=0.
+
+Residue fields are `Q(a)[t]/(q)` (`fieldFn`), so a residue polynomial with parameter
+coefficients gives a `RootSum` over Q(a). For example,
+`(x + a)/((x^2 - a) Sqrt[x^2 + a])` gives a RootSum over a quartic in Q(a), and
+`1/Sqrt[x^3 + a]` is proved not elementary. The x-free content of each log argument
+is dropped. Not yet: the torsion decision in positive genus
+(`1/(x Sqrt[x^3 + a x + 1])` stays unevaluated); parameters together with Q(i) or
+radical constants; a radical of a parameter in the integrand.
+
 The method follows B. M. Trager, *Integration of Algebraic Functions* (MIT thesis,
 1984), restricted to simple radical extensions. It is implemented in Mathilda's own
 language in `src/internal/trager/` (one file per stage, every function with a

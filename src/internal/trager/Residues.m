@@ -48,6 +48,11 @@ residueField[R_, Z_Symbol, t_Symbol] := Module[{fac, lin, nonlin, rts, nf, gen, 
   (* all residues rational -- over Q(i), Gaussian rationals are NOT one
      dimension over Q: build the field Q(i) (with "I"), so the Q-basis sees
      1 and i (review of E4.1b: residues {1, I} hit qBasis's integer guard) *)
+  (* Phase 4.4: over Q(parameters) the residue field is built algebraically
+     (no numeric roots): Q(a) itself for linear factors, else the tower *)
+  If[tragerParams =!= {},
+    If[nonlin === {}, Return[<|"F" -> baseField[], "roots" -> (Z /. Solve[# == 0, Z][[1]] & /@ lin)|>]];
+    Return[residueFieldTower[R, Z, t]]];
   If[nonlin === {} && !(TrueQ[tragerConstantI] && !FreeQ[lin, _Complex]) &&
      !(tragerAlgConstants =!= {} && !FreeQ[lin, Power[b_, _Rational] /; rationalNumberQ[b]]),
     Return[<|"F" -> fieldQ[], "roots" -> (Z /. Solve[# == 0, Z][[1]] & /@ lin)|>]];
@@ -98,12 +103,12 @@ residueField[R_, Z_Symbol, t_Symbol] := Module[{fac, lin, nonlin, rts, nf, gen, 
 residueFieldTower::usage = "residueFieldTower[R, Z, t] is residueField built algebraically: K = Q[t]/(q) for a nonlinear factor q of R, then while R has a nonlinear irreducible factor h over K, K is replaced by K(beta) (beta a root of h) with the primitive element beta + c theta (extendFieldByRoot). Factoring over K is Trager's norm method (factorOverField). The roots of R are read off the linear factors over the final field and each is checked to be a root.";
 residueFieldTower[R_, Z_Symbol, t_Symbol] := Module[
   {qfac, lin, nonlin, u = Unique["u"], F, K, facs, rts, h, ext, mu, theta, lin0},
-  qfac = Expand[#/Coefficient[#, Z, Exponent[#, Z]]] & /@ (First /@ Select[FactorList[R], !FreeQ[#[[1]], Z] &]);
+  qfac = tragerMonic[#, Z] & /@ (First /@ Select[FactorList[R], !FreeQ[#[[1]], Z] &]);
   lin0 = Select[qfac, Exponent[#, Z] === 1 &];
   nonlin = Select[qfac, Exponent[#, Z] > 1 &];
-  If[nonlin === {}, Return[<|"F" -> fieldQ[], "roots" -> (-Coefficient[#, Z, 0] & /@ lin0)|>]];
+  If[nonlin === {}, Return[<|"F" -> baseField[], "roots" -> (-Coefficient[#, Z, 0] & /@ lin0)|>]];
   (* the working generator is u; it is renamed to t at the end *)
-  K = fieldNF[u, nonlin[[1]] /. Z -> u, None];
+  K = extField[u, nonlin[[1]] /. Z -> u];
   While[True,
     facs = Join @@ (factorOverField[K, #, Z] & /@ nonlin);
     h = SelectFirst[facs, Exponent[#, Z] > 1 &, None];
@@ -113,6 +118,9 @@ residueFieldTower[R_, Z_Symbol, t_Symbol] := Module[
   If[!AllTrue[rts, kc[K, R /. Z -> #] === 0 &], throwInternal["ResidueFieldTowerRoot"]];
   If[Length[rts] =!= Exponent[R, Z], throwInternal["ResidueFieldTowerCount"]];
   mu = K["mu"] /. u -> t;
+  (* over Q(parameters) there is no numeric theta: the field is only used
+     through its generator (the orbit construction presents RootSums) *)
+  If[tragerParams =!= {}, Return[<|"F" -> extField[t, mu], "roots" -> (rts /. u -> t)|>, Module]];
   theta = First[rootObjects[mu, t]];
   <|"F" -> fieldNF[t, mu, theta], "roots" -> (rts /. u -> t)|>];
 
@@ -136,7 +144,7 @@ extendFieldByRoot[K_Association, h_, Z_Symbol] := Module[{t = K["t"], T = Unique
     If[Exponent[PolynomialGCD[N, D[N, Z]], Z] === 0, c = cc; Break[]],
     {cc, {1, -1, 2, -2, 3, -3, 4, -4, 5, -5}}];
   If[c === None, throwInternal["ExtendFieldNoPrimitiveElement"]];
-  K2 = fieldNF[t, Expand[(N /. Z -> t)/Coefficient[N, Z, Exponent[N, Z]]], None];
+  K2 = extField[t, N /. Z -> t];
   (* theta: the common root of mu(T) and h(psi - c T) (h's coefficients are   *)
   (* polynomials in theta, so theta -> T there too)                          *)
   g = kGCD[K2, K["mu"] /. t -> T, kc[K2, h /. {Z -> t - c T, t -> T}], T];
@@ -151,7 +159,7 @@ fieldOfRoot[q_, Z_Symbol, t_Symbol] := Module[{r1, gens, nf, gen, mu, F1, nc, ni
      radical in q (Sqrt[2] in a factor over Q(i)) stays a literal on both
      sides, the relative presentation the Q(i) corpus certifies *)
   If[tragerAlgConstants === {} || FreeQ[q, Power[b_, _Rational] /; rationalNumberQ[b]],
-    Return[<|"F" -> fieldNF[t, q /. Z -> t, None], "gamma" -> t|>]];
+    Return[<|"F" -> extField[t, q /. Z -> t], "gamma" -> t|>]];
   (* the absolute field's generator is never the root symbol Z itself: the
      relative presentation (relToZ) writes elements as polynomials in Z *)
   If[t === Z, Return[fieldOfRoot[q, Z, Unique["Trager`Private`tdelta"]]]];
@@ -301,8 +309,12 @@ algebraicToPoly[other_, gen_, t_Symbol] := throwInternal["AlgebraicToPolyUnexpec
 
 qBasis::usage = "qBasis[F, alphas] computes a Q-basis of the Q-span of the residues alphas (elements of F) with integer coordinates. It returns <|\"basis\" -> {beta_1, ..., beta_k}, \"coeffs\" -> b|> with alpha_i = Sum_j b[[i, j]] beta_j and every b[[i, j]] an integer; the beta_j are rational multiples of residues.";
 qBasis[F_Association, alphas_List] := Module[{dim = fieldDegree[F], vec, vecs, idx = {}, sel = {}, coords, L, beta, b},
+  (* coordinates over Q: with parameters (Phase 4.4) each coordinate in
+     Q(a) is expanded on the monomials in a of its numerator over a common
+     denominator -- the rank over Q(a) would identify 1 and a *)
   vec[a_] := If[F["Type"] === "NF",
     PadRight[CoefficientList[kc[F, a], F["t"]], dim], {a}];
+  If[tragerParams =!= {}, Return[qBasisParams[F, alphas], Module]];
   vecs = vec /@ alphas;
   Do[
     If[MatrixRank[Append[sel, vecs[[i]]]] > Length[sel],
@@ -310,6 +322,27 @@ qBasis[F_Association, alphas_List] := Module[{dim = fieldDegree[F], vec, vecs, i
     {i, Length[vecs]}];
   If[sel === {}, Return[<|"basis" -> {}, "coeffs" -> Table[{}, {Length[alphas]}]|>]];
   (* coordinates of every residue on the selected residues *)
+  coords = Table[LinearSolve[Transpose[sel], vecs[[i]]], {i, Length[vecs]}];
+  L = Table[LCM @@ (Denominator /@ coords[[All, j]]), {j, Length[idx]}];
+  beta = Table[kc[F, alphas[[idx[[j]]]]/L[[j]]], {j, Length[idx]}];
+  b = Table[coords[[i, j]] L[[j]], {i, Length[alphas]}, {j, Length[idx]}];
+  If[!AllTrue[Flatten[b], IntegerQ], throwInternal["QBasisNonInteger"]];
+  <|"basis" -> beta, "coeffs" -> b|>];
+
+qBasisParams::usage = "qBasisParams[F, alphas] is qBasis over Q(parameters) (Phase 4.4): the residues are expanded over Q as vectors of the coefficients of their numerators (over the common denominator of all of them) on the monomials in the parameters (and the generator t of an extension), and the Q-basis, integer coordinates and beta_j = alpha_j/L_j are computed from those.";
+qBasisParams[F_Association, alphas_List] := Module[{vars, ts, den, nums, mons, vecs, idx = {}, sel = {}, coords, L, beta, b},
+  vars = Join[tragerParams, If[KeyExistsQ[F, "t"], {F["t"]}, {}]];
+  ts = Together[kc[F, #]] & /@ alphas;
+  den = PolynomialLCM @@ (Denominator /@ ts);
+  nums = Expand[Together[# den]] & /@ ts;
+  If[!AllTrue[nums, PolynomialQ[#, vars] &], throwInternal["QBasisParamsNotPolynomial"]];
+  mons = DeleteDuplicates[Flatten[{CoefficientRules[#, vars] /. Rule[e_, _] :> e} & /@ nums, 2]];
+  vecs = Table[With[{cr = CoefficientRules[nums[[i]], vars]}, (Lookup[Association[cr], Key[#], 0] &) /@ mons], {i, Length[nums]}];
+  Do[
+    If[MatrixRank[Append[sel, vecs[[i]]]] > Length[sel],
+      AppendTo[idx, i]; AppendTo[sel, vecs[[i]]]],
+    {i, Length[vecs]}];
+  If[sel === {}, Return[<|"basis" -> {}, "coeffs" -> Table[{}, {Length[alphas]}]|>]];
   coords = Table[LinearSolve[Transpose[sel], vecs[[i]]], {i, Length[vecs]}];
   L = Table[LCM @@ (Denominator /@ coords[[All, j]]), {j, Length[idx]}];
   beta = Table[kc[F, alphas[[idx[[j]]]]/L[[j]]], {j, Length[idx]}];
@@ -326,7 +359,7 @@ componentResidues[N_, E_, m_Integer, G_, x_Symbol] := Module[{Z = Unique["Z"], t
   R = residuePolynomial[N, E, m, G, x, Z];
   Bp = branchFreeDenominator[E, G, x];
   If[R === 1,
-    Return[<|"R" -> 1, "Bp" -> Bp, "F" -> fieldQ[], "residues" -> {}, "basis" -> {}, "coeffs" -> {}, "Z" -> Z, "t" -> t|>]];
+    Return[<|"R" -> 1, "Bp" -> Bp, "F" -> baseField[], "residues" -> {}, "basis" -> {}, "coeffs" -> {}, "Z" -> Z, "t" -> t|>]];
   rf = residueField[R, Z, t];
   qb = qBasis[rf["F"], rf["roots"]];
   <|"R" -> R, "Bp" -> Bp, "F" -> rf["F"], "residues" -> rf["roots"],

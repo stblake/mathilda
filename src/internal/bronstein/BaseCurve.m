@@ -57,7 +57,7 @@ brBCContext[T_Association] := Module[
 
 brBCNorm::usage = "brBCNorm[C, e] is the expression e (rational in x, Y, theta and any parameter) in the normal form Sum c_i Y^i, i < m, c_i rational in the other symbols (denominator rationalised modulo Y^m - G).";
 brBCNorm[C_Association, e_] := Module[{Y = C["Y"], r},
-  r = brAlgReduceY[e, Y, C["m"], C["G"]];
+  r = brAlgReduceY[e, Y, C["m"], C["G"], C["x"]];
   Sum[Together[Coefficient[Expand[Numerator[Together[r]]], Y, i]/Denominator[Together[r]]] Y^i, {i, 0, C["m"] - 1}]];
 
 brBCList::usage = "brBCList[C, e] is the element e (in x, Y, theta) as a coordinate list on the basis C[\"B\"] over the field F (default C[\"F\"]).";
@@ -206,7 +206,10 @@ brBCLimited[C_Association, r_] := Module[{F0, v, L, c, eta = C["Dth"]},
   L = brBCNorm[C, r - brBCD[C, v]];
   If[L === 0, Return[{v, 0}]];
   c = Together[brBCNorm[C, L/eta]];
-  If[!FreeQ[c, C["x"] | C["Y"] | C["th"]] || !NumericQ[c],
+  (* c must be a CONSTANT: a number, or (Phase 4.4) a function of the
+     parameters only -- NumericQ alone read a parameter-valued constant as
+     "no solution", a false certificate *)
+  If[!FreeQ[c, C["x"] | C["Y"] | C["th"]] || !brParamConstantQ[c],
     throwNonElementary["no algebraic part: the limited integration problem has no solution over the algebraic base"]];
   {v, c}];
 

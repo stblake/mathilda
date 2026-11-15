@@ -171,6 +171,7 @@ torsionOrder[ctx_Association, b_List] := torsionOrderSpec[ctx, <|"res" -> ctx["r
 torsionOrderWith::usage = "torsionOrderWith[ctx, mk] is torsionOrder for the divisor whose ideal the builder mk constructs (see orderModPWith).";
 torsionOrderWith[ctx_Association, mk_] := Module[{gps, p, q, op, oq, n0p, n0q},
   If[ctx["genus"] === 0, Return[1]];
+  If[tragerParams =!= {}, throwUnimplemented["Trager:parameter-torsion", "torsion of a divisor over Q(parameters), positive genus (Phase 4.4 step 3)"]];
   gps = goodPrimes[ctx, 2];
   {p, q} = #["p"] & /@ gps;
   op = orderModPWith[ctx, mk, gps[[1]]];
@@ -284,6 +285,7 @@ torsionOrderSpec::usage = "torsionOrderSpec[ctx, spec] is torsionOrder for a div
 torsionOrderSpec[ctx_Association, spec_Association] := Module[
   {gps, p, q, op, oq = None, n0p, n0q, fr, red, Fq, Jn, cq, weil, A, Bq, cprime},
   If[ctx["genus"] === 0, Return[1]];
+  If[tragerParams =!= {}, throwUnimplemented["Trager:parameter-torsion", "torsion of a divisor over Q(parameters), positive genus (Phase 4.4 step 3)"]];
   gps = goodPrimes[ctx, 2];
   {p, q} = #["p"] & /@ gps;
   op = orderModPSpec[ctx, spec, gps[[1]]];
@@ -325,6 +327,7 @@ torsionScreen::usage = "torsionScreen[ctx, spec, Nn] is False when Nn delta (del
 torsionScreen[ctx_Association, spec_Association, Nn_Integer] := Module[
   {found, want, fr, red, Fr, Jn, c},
   If[ctx["genus"] === 0, Return[True]];
+  If[tragerParams =!= {}, throwUnimplemented["Trager:parameter-torsion", "torsion of a divisor over Q(parameters), positive genus (Phase 4.4 step 3)"]];
   want = 2 + tragerOption["TorsionScreenPrimes"];
   (* the good primes in order, as goodPrimes picks them (the first two fixed Nn) *)
   found = goodPrimes[ctx, want];

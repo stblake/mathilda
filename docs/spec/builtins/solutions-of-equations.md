@@ -1863,6 +1863,19 @@ Before v0.6512 these `Root` objects stayed unevaluated under `N`. So a
 `RootSum` over a Gaussian-coefficient denominator, which `Integrate` returns,
 could not be checked numerically.
 
+**Machine-real coefficients at a higher precision (v0.6574).** In
+`N[Root[f, k], prec]`, a machine real inside `f` is taken at its exact dyadic value
+before the coefficients are expanded. Previously `Expand` did the coefficient
+arithmetic in doubles: `(1 - 2 a + a^2)/(64 a^2)` at `a = -1.72194` had 53 bits, and
+every rung of a precision ladder saw the same root. The root is now accurate to
+`prec`. A machine request is unchanged. This is what let PossibleZeroQ confirm a
+`RootSum` antiderivative over Q(a) at a sampled point.
+
+**RootSum with inexact coefficients (v0.6574).** `RootSum[f, form]` whose
+polynomial has numeric, inexact coefficients evaluates to the numeric sum of `form`
+over the roots of `f` (NRoots at the coefficients' precision), as in the reference:
+`RootSum[#^2 - 2. &, #^2 &]` is `4.`. Exact or symbolic coefficients are untouched.
+
 **Attributes:** `NHoldAll`, `Protected`, as in the reference (it was
 `HoldAll` before v0.6512). The index evaluates, so `Table[Root[f, k], {k, 3}]`
 and `k = 2; Root[f, k]` work, while the `Function` holds its own body.

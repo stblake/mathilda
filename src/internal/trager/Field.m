@@ -149,6 +149,11 @@ gfModQ::usage = "gfModQ[e, p] is gfMod for an expression with rational coefficie
 gfModQ[e_, p_Integer] := PolynomialMod[Expand[e /. r_Rational :> Mod[Numerator[r] PowerMod[Denominator[r], -1, p], p]], p];
 
 gfMod[e_, p_Integer] := Module[{e1 = e},
+  (* a symbolic parameter must never reach GF(p): PolynomialMod would treat it
+     as one more variable and every reduction would silently be over GF(p)[a]
+     (Phase 4.4 specialises the parameters to integers first, E4.4d) *)
+  If[tragerParams =!= {} && !FreeQ[e1, Alternatives @@ tragerParams],
+    throwInternal["gfModParameter", <|"p" -> p, "params" -> tragerParams|>]];
   (* every reduction mod p goes through here.  A Gaussian rational a + b I maps
      to a + b r, r = gfSqrtMinusOne[p], when p = 1 mod 4 (a homomorphism
      Z[i] -> GF(p)); for p = 2 or 3 mod 4 there is no such map and the data is

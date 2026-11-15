@@ -1630,6 +1630,15 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - fixed: PolynomialGCD over Q(Sqrt[2]+Sqrt[3]) wrong (tower engine, dependent Sqrt[6]); PolynomialGCD hang over Q(I, Sqrt[3]) (each Complex an atom)
   - xgcd adaptive budget + batched CRT + integer certificate (rec4 23 s -> 1.3 s, PARI 3.45 s); ff_gcd_modular (deg 48: 27 -> 2.2 ms, PARI 1.8); Factor over K via univariate kernels (411 -> 78 ms, PARI 4)
   - [ ] open: Factor 1.5-20x PARI (degree-2n norm factorisation); Expand over radicals; small-call conversion overhead
+- [ ] Phase 4.4: symbolic parameters (plan approved 2026-11-15; BRONSTEIN_PLAN.md "Phase 4.4: plan")
+  - [x] theory note E4.4 (a-e) + adversarial review; corrections applied v0.6574 (x^a E^x counterexample, degeneracy locus countable, compositum goodness, normalisation lemma, Hilbert 90 via H^1(G, Lbar*), one common denominator, whitelist)
+  - [x] 1 soundness guards (gfMod, residualCanonicalQ, brBCLimited, brGammaForm, brAlgReduceY) -- residualCanonicalQ is a whitelist (v0.6574)
+  - [x] 2 Trager constant field (tragerParams, baseField[], extField, fieldFn residue fields, qBasisParams, dropConstantContent) v0.6574; lower layer fixed on the way: N[Root] with machine coefficients at MPFR precision, RootSum numeric, Slot NHoldAll
+  - [ ] 2b ff_fnx with mu over Q(p) (native kernels for parametric residue fields; today the package routines -- the M1 examples run in 0.1-0.3 s, not urgent)
+  - [ ] 3 torsion by specialisation of the parameters (shared helper; N0 then principality over C)
+  - [ ] 4 Trager front end + pinned tests
+  - [ ] 5 Bronstein (brParams, fieldFn vars, RDEAlgebraic, brLinearConstantSystemQ, C rde_rational_in, kappa/sign specialisation, E3)
+  - [ ] 6 cascade A/B, docs (calculus.md, docstrings), corpus (G-param-1, examples), stress families, FriCAS with parameter values
 - [ ] Phase 5: radical anywhere (brDField, transcendental Risch over algebraic base, RDE on a curve over a tower)
 - [ ] Theory note docs/notes/bronstein_extensions.tex (E1–E6; LaTeX per user 2026-11-14), each adversarially reviewed — E6a–c written v0.6547, review pending
 - [ ] Close-out

@@ -359,11 +359,16 @@ static const char* const nonelem_trager_only[] = {
 };
 
 /* Out of scope: declined silently (no certificate, no message). */
+/* Phase 4.4: symbolic parameters, answered over Q(a) (formerly declined) */
+static const char* const params_ok[] = {
+    "Sqrt[x] + Sqrt[x + a]",          /* compositum over Q(a): one Kummer piece each */
+    "Sqrt[x^2 + a]",
+    NULL
+};
+
 static const char* const declines[] = {
-    "Sqrt[x] + Sqrt[x + a]",          /* compositum over Q(a): the Kummer pieces decline */
     "Exp[x]/Sqrt[x]",
     "Sin[x] Sqrt[x]",
-    "Sqrt[x^2 + a]",                  /* parameter */
     "x^Pi",
     "Log[x] Sqrt[x]",
     NULL
@@ -382,6 +387,10 @@ static void test_end_to_end(void) {
     for (i = 0; trager_ok[i]; i++) TR_ANTIDERIV(trager_ok[i], "Trager");
     for (i = 0; trager_ok_numeric[i]; i++) TI_ANTIDERIV_NUM(trager_ok_numeric[i], "Trager");
     for (i = 0; kauers_ok[i]; i++) TR_ANTIDERIV(kauers_ok[i], "TragerKauers");
+    for (i = 0; params_ok[i]; i++) {
+        TR_ANTIDERIV(params_ok[i], "Trager");
+        TR_ANTIDERIV(params_ok[i], "TragerKauers");
+    }
     for (i = 0; nonelem[i]; i++) {
         TI_NONELEM(nonelem[i]);
         TI_NONELEM_K(nonelem[i]);
@@ -430,7 +439,8 @@ static void test_qualified_symbols(void) {
     TR_TRUE("Integrate`Trager[1/Sqrt[x^3 + 1], x] === {\"not elementary\", \"the Hermite remainder is a nonzero holomorphic differential (no residues)\"}");
     TR_TRUE("Integrate`TragerKauers[1/Sqrt[x^3 + 1], x] === {\"not elementary\", \"the Hermite remainder is a nonzero holomorphic differential (no residues)\"}");
     TR_TRUE("Integrate`TragerKauers[(x^4 + 1)^(-1/4), x] === {\"failed\", \"Kauers' heuristic: no principal power of the residue ideal\"}");
-    TR_TRUE("MatchQ[Quiet[Integrate`Trager[Sqrt[x] + Sqrt[x + a], x]], {\"failed\" | \"implementation incomplete\", _String}]");   /* the Kummer pieces lie over Q(a) */
+    /* the Kummer pieces lie over Q(a): answered since Phase 4.4 */
+    TR_TRUE("TrueQ[PossibleZeroQ[D[Integrate`Trager[Sqrt[x] + Sqrt[x + a], x], x] - Sqrt[x] - Sqrt[x + a]]]");
     TR_TRUE("Integrate`Trager[x^2, x] === x^3/3");   /* rational: integrated, not declined (v0.6094) */
     TR_TRUE("Integrate`Trager[1/(x^2 + 1), x] === ArcTan[x]");
     TR_TRUE("MatchQ[Integrate`Trager[5/((x - 3) Sqrt[x^3 - 2]), x], {\"not elementary\", s_String /; StringContainsQ[s, \"infinite order\"]}]");
