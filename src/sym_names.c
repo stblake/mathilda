@@ -741,6 +741,7 @@ const char* SYM_TrigFactor = NULL;
 const char* SYM_TrigReduce = NULL;
 const char* SYM_TrigRoundtrip = NULL;
 const char* SYM_TrigToExp = NULL;
+const char* SYM_ExpToTrig = NULL;
 const char* SYM_True = NULL;
 const char* SYM_TwoSided = NULL;
 const char* SYM_Undefined = NULL;
@@ -1907,6 +1908,7 @@ void sym_names_init(void) {
     SYM_TrigReduce                 = intern_symbol("TrigReduce");
     SYM_TrigRoundtrip              = intern_symbol("TrigRoundtrip");
     SYM_TrigToExp                  = intern_symbol("TrigToExp");
+    SYM_ExpToTrig                  = intern_symbol("ExpToTrig");
     SYM_True                       = intern_symbol("True");
     SYM_TwoSided                   = intern_symbol("TwoSided");
     SYM_Undefined                  = intern_symbol("Undefined");

@@ -22,6 +22,7 @@
 #include "sym_names.h"
 #include "flint_qqbar.h"   /* flint_qqbar_gen_minpoly_coeffs, for field Expand */
 #include "numeric.h"       /* expr_is_numeric_quantity: constant kernels stay out */
+#include "expsplit.h"      /* symbolic-exponent powers as generators (ga atoms) */
 
 #ifdef USE_FLINT
 
@@ -1823,9 +1824,11 @@ static bool is_kernel_node(const Expr* e) {
            h != SYM_Rational && h != SYM_Complex;
 }
 
-/* A copy of e with every kernel node replaced by its private symbol; NULL on
- * allocation failure. Kernels are found top-down, so a kernel is atomic. */
-static Expr* kernel_abstract(const Expr* e, KernelTab* t) {
+/* A copy of e with every kernel node replaced by its private symbol
+ * <prefix><i>; NULL on allocation failure. Kernels are found top-down, so a
+ * kernel is atomic. Distinct callers use distinct prefixes, so an abstraction
+ * run while another is open never reads the outer table's symbols as its own. */
+static Expr* kernel_abstract_p(const Expr* e, KernelTab* t, const char* prefix) {
     if (is_kernel_node(e)) {
         for (size_t i = 0; i < t->n; i++)
             if (expr_eq((Expr*)e, t->nodes[i])) return expr_copy(t->syms[i]);
@@ -1840,7 +1843,7 @@ static Expr* kernel_abstract(const Expr* e, KernelTab* t) {
             t->cap = cap;
         }
         char name[48];
-        snprintf(name, sizeof name, "FlintBridge`kernel%zu", t->n);
+        snprintf(name, sizeof name, "%s%zu", prefix, t->n);
         t->nodes[t->n] = expr_copy((Expr*)e);
         t->syms[t->n] = expr_new_symbol(name);
         t->n++;
@@ -1851,12 +1854,16 @@ static Expr* kernel_abstract(const Expr* e, KernelTab* t) {
     Expr** args = malloc((n ? n : 1) * sizeof(Expr*));
     if (!args) return NULL;
     for (size_t i = 0; i < n; i++) {
-        args[i] = kernel_abstract(e->data.function.args[i], t);
+        args[i] = kernel_abstract_p(e->data.function.args[i], t, prefix);
         if (!args[i]) { for (size_t j = 0; j < i; j++) expr_free(args[j]); free(args); return NULL; }
     }
     Expr* out = expr_new_function(expr_copy(e->data.function.head), args, n);
     free(args);
     return out;
+}
+
+static Expr* kernel_abstract(const Expr* e, KernelTab* t) {
+    return kernel_abstract_p(e, t, "FlintBridge`kernel");
 }
 
 /* e with the private symbols of t replaced by their nodes; consumes e. */
@@ -5838,6 +5845,12 @@ Expr* flint_apart_over_q(const Expr* R, const Expr* const* bases,
 /* ================================================================== */
 
 #define GENALG_MAXGEN 8
+/* Atom-mode budget (ga_prepare). The 300-case sweep tools/simplify_atoms/gen.m
+ * peaks at dim 8 with 4 parameters; integrate_gr132's contour-residue
+ * integrands reach dim 16 with 9 parameters at ~0.5 s per attempt, repeated
+ * through the Simplify search (3.7 s -> 28 s). */
+#define GA_ATOMS_MAXDIM   8    /* atom mode: algebraic dimension cap         */
+#define GA_ATOMS_MAXPARAM 6    /* atom mode: parameters (atoms + symbols) cap */
 
 typedef struct {
     int   is_rou;      /* root of unity (base == -1): reduce mod Phi_{2Q}    */
@@ -5893,6 +5906,13 @@ static int ga_is_reserved_symbol(const char* name) {
     return d && (d->attributes & (ATTR_CONSTANT | ATTR_PROTECTED));
 }
 
+static size_t ga_leaves(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 1;
+    size_t n = ga_leaves(e->data.function.head);
+    for (size_t i = 0; i < e->data.function.arg_count; i++) n += ga_leaves(e->data.function.args[i]);
+    return n;
+}
+
 /* Find an existing generator (root of unity: the single omega; algebraic: same
  * expanded radicand) and merge its index via lcm, or add a new one. Takes
  * ownership of base_exp (freed on merge/failure). Returns the generator index. */
@@ -5920,7 +5940,14 @@ static int ga_find_or_add(GADetect* st, int is_rou, long q, Expr* base_exp,
     st->gens[i].elim     = 0;
     st->gens[i].rad      = NULL;
     st->gens[i].scale    = NULL;
-    st->gens[i].base_orig = (st->prep && base) ? expr_copy((Expr*)base) : NULL;
+    /* Read back with the input spelling (so Times merges it with the input's
+     * own occurrences) unless the expanded radicand is strictly smaller: an
+     * unexpanded spelling can hide a short radicand entirely --
+     * (Cos[x] + I Sin[x]) (6 - I E^(I x) + ...)/2 is 3 + Sin[x]. */
+    st->gens[i].base_orig = NULL;
+    if (st->prep && base)
+        st->gens[i].base_orig = expr_copy((Expr*)
+            ((base_exp && ga_leaves(base_exp) < ga_leaves(base)) ? base_exp : base));
     snprintf(st->gens[i].name, sizeof st->gens[i].name, "$galg%d$", i);
     if (!is_rou && base_exp) {
         VarSet tmp; memset(&tmp, 0, sizeof tmp);
@@ -6145,9 +6172,21 @@ static void ga_refs(const Expr* e, const GADetect* st, unsigned* mask) {
  * generator to D*base^(1/Q), whose relation (D g)^Q = N D^(Q-1) is monic.
  * Returns 0 when the radicand is not rational in the field variables, or its
  * denominator involves an algebraic generator. */
+static Expr* ga_complex_as_root(const Expr* e);
+static int   ga_has_complex(const Expr* e);
+
 static int ga_build_rhs(GADetect* st, int i) {
     GAGen* g = &st->gens[i];
-    Expr* r = ga_subst_in(g->base_exp, st);
+    /* base_exp is Expand's (evaluated) output, where the atom layer's
+     * (-1)^(1/2) has folded back to I: re-spell it as the root of unity. */
+    Expr* r;
+    if (ga_has_complex(g->base_exp)) {
+        Expr* c = ga_complex_as_root(g->base_exp);
+        r = ga_subst_in(c, st);
+        expr_free(c);
+    } else {
+        r = ga_subst_in(g->base_exp, st);
+    }
     VarSet vs; memset(&vs, 0, sizeof vs);
     collect_all_symbols(r, &vs);
     fmpz_mpoly_ctx_t c;
@@ -6208,6 +6247,15 @@ typedef struct {
     fmpz_mpoly_ctx_t mctx;
     fmpz_mpoly_struct B[GENALG_MAXGEN];/* relation of slot s               */
     int    live;                       /* mctx and B initialised           */
+    /* Transcendental-atom layer (ga_prepare with `atoms`): the opaque kernels
+     * (Log[..], Sin[..], f[x]) and the symbolic-exponent powers (E^(3x) ->
+     * ExpSplit generator g^3, g = E^x) that the field treats as parameters.
+     * `abs` is the input rewritten over them; ga_atoms_restore reads a result
+     * back. Both tables empty when the layer is off or found nothing. */
+    int          atoms;
+    Expr*        abs;
+    KernelTab    ktab;
+    ExpSplitTab  xtab;
 } GAPrep;
 
 static void ga_release(GAPrep* P) {
@@ -6218,18 +6266,212 @@ static void ga_release(GAPrep* P) {
     varset_free(&P->fvars);
     varset_free(&P->params);
     if (P->ebar) expr_free(P->ebar);
+    if (P->abs) expr_free(P->abs);
+    ktab_free(&P->ktab);
+    expsplit_free(&P->xtab);
     ga_free(&P->st);
     memset(P, 0, sizeof *P);
 }
 
+/* Any inexact number anywhere in e (kernels included)? The field is exact. */
+static int ga_has_inexact(const Expr* e) {
+    if (!e) return 0;
+    if (e->type == EXPR_REAL) return 1;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return 1;
+#endif
+    if (e->type != EXPR_FUNCTION) return 0;
+    if (ga_has_inexact(e->data.function.head)) return 1;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ga_has_inexact(e->data.function.args[i])) return 1;
+    return 0;
+}
+
+/*
+ * The transcendental-atom layer: rewrite `e` over K = Q(params, T_1..T_k)(alg)
+ * where each T_i is an atom the algebra cannot see into --
+ *   - a kernel: any maximal call that is not Plus/Times/Power (Log[x], Sin[x],
+ *     f[x], BesselJ[0, x]); radicals inside it stay inside it;
+ *   - a power with a symbolic exponent, split by expsplit into integer powers
+ *     of a common generator (E^(3x) -> g^3, E^(6x) -> g^6 with g = E^x), so
+ *     commensurate exponentials keep their multiplicative relation.
+ * Soundness: every T_i becomes a free parameter, and an identity of rational
+ * functions in independent indeterminates survives substituting T_i = its value
+ * (generic specialization -- the contract the field already has for its
+ * symbols). Atoms that ARE related (Sin^2 + Cos^2 = 1) only lose simplifications.
+ * A kernel that is a numeric constant (Root[..], Sin[Pi/7]) is not generic -- a
+ * denominator nonzero in a free T can vanish at that one value -- so it declines.
+ * ga_prepare applies it only when a radicand holds an atom
+ * (ga_radicand_has_atom); otherwise the plain field runs unchanged.
+ * Returns 1 with P->abs set, 0 to decline.
+ */
+/* b^(q I m), q an integer other than 1, as (b^(I m))^q: expsplit keys a
+ * generator on the exponent's non-integer part, and would otherwise give
+ * E^(I x) and E^(-I x) two unrelated generators (TrigToExp output carries
+ * both). Built fresh; children first. */
+static Expr* ga_imag_exp_prepass(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = ga_imag_exp_prepass(e->data.function.args[i]);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    if (fn_head_name(r) != SYM_Power || n != 2) return r;
+    const Expr* p = r->data.function.args[1];
+    if (p->type != EXPR_FUNCTION || fn_head_name(p) != SYM_Times ||
+        p->data.function.arg_count < 2) return r;
+    const Expr* c = p->data.function.args[0];
+    if (c->type != EXPR_FUNCTION || fn_head_name(c) != SYM_Complex ||
+        c->data.function.arg_count != 2) return r;
+    const Expr* re = c->data.function.args[0];
+    const Expr* im = c->data.function.args[1];
+    if (!(re->type == EXPR_INTEGER && re->data.integer == 0) || !expr_is_integer_like(im) ||
+        (im->type == EXPR_INTEGER && im->data.integer == 1)) return r;
+    size_t k = p->data.function.arg_count;
+    Expr** ta = malloc(k * sizeof(Expr*));
+    ta[0] = expr_new_function(expr_new_symbol(SYM_Complex),
+                (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2);
+    for (size_t i = 1; i < k; i++) ta[i] = expr_copy(p->data.function.args[i]);
+    Expr* im_m = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), ta, k));
+    free(ta);
+    Expr* inner = expr_new_function(expr_new_symbol(SYM_Power),
+                      (Expr*[]){ expr_copy(r->data.function.args[0]), im_m }, 2);
+    Expr* out = expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ inner, expr_copy((Expr*)im) }, 2);
+    expr_free(r);
+    return out;
+}
+
+/* Complex[re, im] -> re + im (-1)^(1/2): the imaginary unit enters the field
+ * as the root of unity omega (relation Phi_4 = omega^2 + 1), which the plain
+ * polynomial conversion cannot read as a Complex atom. Structural, not
+ * evaluated (evaluation would fold it straight back to I). */
+static Expr* ga_complex_as_root(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    if (fn_head_name(e) == SYM_Complex && e->data.function.arg_count == 2) {
+        Expr* w = expr_new_function(expr_new_symbol(SYM_Power),
+                      (Expr*[]){ expr_new_integer(-1),
+                                 expr_new_function(expr_new_symbol(SYM_Rational),
+                                     (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2) }, 2);
+        Expr* t = expr_new_function(expr_new_symbol(SYM_Times),
+                      (Expr*[]){ expr_copy(e->data.function.args[1]), w }, 2);
+        return expr_new_function(expr_new_symbol(SYM_Plus),
+                   (Expr*[]){ expr_copy(e->data.function.args[0]), t }, 2);
+    }
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = ga_complex_as_root(e->data.function.args[i]);
+    Expr* r = expr_new_function(expr_copy(e->data.function.head), a, n);
+    free(a);
+    return r;
+}
+
+static int ga_has_complex(const Expr* e) {
+    if (e->type != EXPR_FUNCTION) return 0;
+    if (fn_head_name(e) == SYM_Complex) return 1;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ga_has_complex(e->data.function.args[i])) return 1;
+    return 0;
+}
+
+/* Does e hold a transcendental atom: a kernel call, or a power with a
+ * non-numeric exponent? A Complex number alone does not count: once the layer
+ * runs it reads I as omega, but plain complex radicands (the contour-residue
+ * poles Sqrt[-b^2 - I c]) stay with the general search, where the field solve
+ * over Q(params)(omega, radicals) would be repeated at every Simplify call
+ * (integrate_gr132 3.731.x: 4 s -> no answer in 300 s). */
+static int ga_contains_atom(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 0;
+    if (is_kernel_node(e)) return 1;
+    if (fn_head_name(e) == SYM_Power && e->data.function.arg_count == 2 &&
+        !expr_is_numeric_like(e->data.function.args[1])) return 1;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ga_contains_atom(e->data.function.args[i])) return 1;
+    return 0;
+}
+
+/* Is the atom layer NEEDED: does some radical outside the kernels have a
+ * radicand holding an atom (Sqrt[a + E^(3x)], Sqrt[a + Log[x]])? Only then is
+ * the field over the atoms a different field. An atom that merely sits beside
+ * radicals of plain radicands (U Erf[..]/(Sqrt[1/nu] Sqrt[nu])) leaves the
+ * field engine declining as before, so the general Simplify search -- which
+ * the canonical form would otherwise pre-empt -- keeps those inputs. */
+static int ga_radicand_has_atom(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION || is_kernel_node(e)) return 0;
+    if (fn_head_name(e) == SYM_Power && e->data.function.arg_count == 2) {
+        long p, q;
+        if (ps_as_ratio(e->data.function.args[1], &p, &q) && q >= 2 &&
+            ga_contains_atom(e->data.function.args[0])) return 1;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (ga_radicand_has_atom(e->data.function.args[i])) return 1;
+    return 0;
+}
+
+static int ga_atoms_abstract(const Expr* e, GAPrep* P) {
+    if (ga_has_inexact(e)) return 0;
+    Expr* k = kernel_abstract_p(e, &P->ktab, "FlintBridge`gaatom");
+    if (!k) return 0;
+    for (size_t i = 0; i < P->ktab.n; i++)
+        if (expr_is_numeric_quantity(P->ktab.nodes[i])) { expr_free(k); return 0; }
+    Expr* pre = ga_imag_exp_prepass(k);
+    expr_free(k); k = pre;
+    Expr* x = expsplit_abstract_all(k, &P->xtab);
+    if (x) { expr_free(k); k = x; }
+    if (ga_has_complex(k)) {
+        Expr* c = ga_complex_as_root(k);
+        expr_free(k); k = c;
+    }
+    P->abs = k;
+    return 1;
+}
+
+/* Read a result over the atoms back: generators first (their bases and terms
+ * may hold kernels), then kernels; built anew and evaluated. Consumes r. */
+static Expr* ga_atoms_restore_rec(const Expr* e, const KernelTab* t) {
+    if (e->type == EXPR_SYMBOL) {
+        for (size_t i = 0; i < t->n; i++)
+            if (e->data.symbol.name == t->syms[i]->data.symbol.name)
+                return expr_copy(t->nodes[i]);
+        return expr_copy((Expr*)e);
+    }
+    if (e->type != EXPR_FUNCTION) return expr_copy((Expr*)e);
+    size_t n = e->data.function.arg_count;
+    Expr** a = malloc((n ? n : 1) * sizeof(Expr*));
+    for (size_t j = 0; j < n; j++) a[j] = ga_atoms_restore_rec(e->data.function.args[j], t);
+    Expr* r = expr_new_function(ga_atoms_restore_rec(e->data.function.head, t), a, n);
+    free(a);
+    return r;
+}
+
+static Expr* ga_atoms_restore(Expr* r, const GAPrep* P) {
+    if (!r || !P->atoms) return r;
+    if (P->xtab.n) r = expsplit_restore(r, &P->xtab);
+    if (r && P->ktab.n) {
+        Expr* b = ga_atoms_restore_rec(r, &P->ktab);
+        expr_free(r);
+        r = eval_and_free(b);
+    }
+    return r;
+}
+
 /* Prepare `e` (see GAPrep). `maxdim` caps the algebraic dimension prod d_s;
  * `require_genuine` requires a radical with a free symbol in its radicand;
- * `eliminate` turns bare-symbol radicands into parameters.
+ * `eliminate` turns bare-symbol radicands into parameters; `atoms` first
+ * abstracts transcendental atoms into parameters (ga_atoms_abstract), so the
+ * field is Q(params, atoms)(alg) and E^(3x) under a radical is no obstacle.
  * Returns 1 on success; on 0 the caller still calls ga_release. */
 static int ga_prepare(const Expr* e, long maxdim, int require_genuine,
-                      int eliminate, GAPrep* P) {
+                      int eliminate, int atoms, GAPrep* P) {
     memset(P, 0, sizeof *P);
     if (!e || !ga_has_candidate(e)) return 0;
+    /* Not needed (no radicand holds an atom): the plain field, unchanged. */
+    if (atoms && ga_radicand_has_atom(e)) {
+        P->atoms = 1;
+        if (!ga_atoms_abstract(e, P)) return 0;
+        e = P->abs;
+        if (!ga_has_candidate(e)) return 0;   /* every radical sat inside an atom */
+    }
     GADetect* st = &P->st;
     st->eliminate = eliminate;
     st->prep = 1;
@@ -6258,6 +6500,13 @@ static int ga_prepare(const Expr* e, long maxdim, int require_genuine,
     }
     for (int i = 0; i < st->ngen; i++)
         if (st->gens[i].elim) done[i] = 1;
+    /* The root of unity omega is the INNERMOST generator: a radicand may hold
+     * it (Sqrt[a + I y] once I is omega), and the relation g^2 - a - omega y
+     * keeps its leading term g^2 only when omega ranks below g in LEX. With
+     * omega leading, the set is no Groebner basis and the "normal form" is a
+     * wrong answer. */
+    for (int i = 0; i < st->ngen; i++)
+        if (st->gens[i].is_rou && !done[i]) { done[i] = 1; order[no++] = i; }
     for (int progress = 1; progress; ) {
         progress = 0;
         for (int i = 0; i < st->ngen; i++) {
@@ -6299,6 +6548,13 @@ static int ga_prepare(const Expr* e, long maxdim, int require_genuine,
     if (P->params.count > 1)
         qsort(P->params.names, P->params.count, sizeof(char*), cmp_str);
     P->nparam = (int)P->params.count;
+    /* Atom-mode budget. The canonical form solves a total x total system over
+     * Q(params); with atoms as parameters a large input (contour-residue
+     * integrands full of Arg/Cos kernels: dim 64, 15 parameters) swells for
+     * minutes, where the general Simplify search answers in seconds. The
+     * inputs the layer exists for are small fields over few parameters
+     * (see GA_ATOMS_MAXDIM). */
+    if (P->atoms && (P->total > GA_ATOMS_MAXDIM || P->nparam > GA_ATOMS_MAXPARAM)) return 0;
     for (int i = 0; i < P->nparam; i++) varset_add(&P->fvars, P->params.names[i]);
     if (P->fvars.count == 0) return 0;
 
@@ -6356,7 +6612,7 @@ static void ga_reduce(fmpz_mpoly_t R, const fmpz_mpoly_t A, const GAPrep* P) {
  */
 Expr* flint_algebraic_field_normalize(const Expr* e) {
     GAPrep P;
-    if (!ga_prepare(e, LONG_MAX, 1, 1, &P)) { ga_release(&P); return NULL; }
+    if (!ga_prepare(e, LONG_MAX, 1, 1, 0, &P)) { ga_release(&P); return NULL; }
 
     Expr* out = NULL;
     fmpz_mpoly_q_t q; fmpz_mpoly_q_init(q, P.mctx);
@@ -6613,9 +6869,10 @@ static void ga_params_part(fmpz_mpoly_t out, const fmpz_mpoly_t A, const GAPrep*
  * dimension exceeds `maxdim`, or the multiplication map is singular (a reducible
  * minimal polynomial — outside the completeness guarantee). Never mutates `e`.
  */
-static Expr* ga_canonical(const Expr* e, long maxdim, int eliminate, int* den_elim) {
+static Expr* ga_canonical(const Expr* e, long maxdim, int eliminate, int atoms,
+                          int* den_elim) {
     GAPrep P;
-    if (!ga_prepare(e, maxdim, 0, eliminate, &P)) { ga_release(&P); return NULL; }
+    if (!ga_prepare(e, maxdim, 0, eliminate, atoms, &P)) { ga_release(&P); return NULL; }
     const int nalg = P.nalg, nparam = P.nparam;
     const long total = P.total;
 
@@ -6802,7 +7059,7 @@ static Expr* ga_canonical(const Expr* e, long maxdim, int eliminate, int* den_el
                                 : numer;
                 Expr* back = ga_subst_back_ex(frac, &P.st, 0);
                 expr_free(frac);
-                out = eval_and_free(back);
+                out = ga_atoms_restore(eval_and_free(back), &P);
             }
             for (long r = 0; r < total; r++) fmpz_mpoly_clear(&coords[r], pctx);
             free(coords);
@@ -6819,9 +7076,13 @@ static Expr* ga_canonical(const Expr* e, long maxdim, int eliminate, int* den_el
 }
 
 /* Simplify's entry: eliminated radicals may stay in the denominator when that
- * is the smaller form (1/(1 + x^(1/3)) is already canonical over Q(x^(1/3))). */
+ * is the smaller form (1/(1 + x^(1/3)) is already canonical over Q(x^(1/3))).
+ * Transcendental atoms are parameters here (ga_atoms_abstract), so
+ * D[Integrate[1/Sqrt[a + E^(3x)], x], x] reduces over Q(a, E^x)(Sqrt[a],
+ * Sqrt[a + E^(3x)]). RootReduce and the Together/Cancel zero test keep the
+ * plain field. */
 Expr* flint_algebraic_field_canonical_capped(const Expr* e, long maxdim) {
-    return ga_canonical(e, maxdim, 1, NULL);
+    return ga_canonical(e, maxdim, 1, 1, NULL);
 }
 
 /* RootReduce's entry: the denominator must come out radical-free. Elimination
@@ -6830,9 +7091,9 @@ Expr* flint_algebraic_field_canonical_capped(const Expr* e, long maxdim) {
  * generator over Q(s), which rationalises it. */
 Expr* flint_algebraic_field_canonical(const Expr* e) {
     int den_elim = 0;
-    Expr* r = ga_canonical(e, 256, 1, &den_elim);
+    Expr* r = ga_canonical(e, 256, 1, 0, &den_elim);
     if (r && den_elim) {
-        Expr* r2 = ga_canonical(e, 256, 0, NULL);
+        Expr* r2 = ga_canonical(e, 256, 0, 0, NULL);
         if (r2) { expr_free(r); r = r2; }
     }
     return r;

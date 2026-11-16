@@ -751,6 +751,7 @@ extern const char* SYM_TrigFactor;
 extern const char* SYM_TrigReduce;
 extern const char* SYM_TrigRoundtrip;
 extern const char* SYM_TrigToExp;
+extern const char* SYM_ExpToTrig;
 extern const char* SYM_True;
 extern const char* SYM_TwoSided;
 extern const char* SYM_Undefined;

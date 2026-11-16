@@ -639,13 +639,29 @@ static bool af_has_symbolic_radical(const Expr* e) {
     return false;
 }
 
-Expr* simp_algebraic_field(const Expr* input,
-                           const AssumeCtx* ctx,
-                           const Expr* complexity_func) {
-    if (!input || input->type != EXPR_FUNCTION) return NULL;
-    if (!af_has_symbolic_radical(input)) return NULL;
-    if (rr_leaves(input) > AF_MAX_LEAVES) return NULL;
+/* True when `e` holds a circular/hyperbolic head: their atoms are related
+ * (Sin^2 + Cos^2 = 1), which the field only sees over E^(I x). */
+static bool af_has_trig(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const char* h = e->data.function.head->type == EXPR_SYMBOL
+                        ? e->data.function.head->data.symbol.name : NULL;
+    if (h && (h == SYM_Sin || h == SYM_Cos || h == SYM_Tan || h == SYM_Cot ||
+              h == SYM_Sec || h == SYM_Csc || h == SYM_Sinh || h == SYM_Cosh ||
+              h == SYM_Tanh || h == SYM_Coth || h == SYM_Sech || h == SYM_Csch))
+        return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (af_has_trig(e->data.function.args[i])) return true;
+    return false;
+}
 
+static Expr* af_call1(const char* head, Expr* arg) {
+    return eval_and_free(expr_new_function(expr_new_symbol(head), (Expr*[]){ arg }, 1));
+}
+
+/* The canonical form over the field, or its dual 1/canonical(1/r) when that
+ * scores lower; NULL when the field engine declines. No gate against the
+ * input. */
+static Expr* af_canonical(const Expr* input, const Expr* complexity_func) {
     Expr* r = flint_algebraic_field_canonical_capped(input, AF_MAX_DIM);
     if (!r) return NULL;
     /* The dual presentation 1/canonical(1/r) writes the radicals into the
@@ -667,9 +683,43 @@ Expr* simp_algebraic_field(const Expr* input,
             }
         }
     }
+    return r;
+}
+
+Expr* simp_algebraic_field(const Expr* input,
+                           const AssumeCtx* ctx,
+                           const Expr* complexity_func) {
+    if (!input || input->type != EXPR_FUNCTION) return NULL;
+    if (!af_has_symbolic_radical(input)) return NULL;
+    if (rr_leaves(input) > AF_MAX_LEAVES) return NULL;
 
     size_t s_in = score_with_func((Expr*)input, complexity_func);
-    if (score_with_func(r, complexity_func) >= s_in) { expr_free(r); return NULL; }
+    Expr* r = af_canonical(input, complexity_func);
+    if (r && score_with_func(r, complexity_func) >= s_in) { expr_free(r); r = NULL; }
+
+    /* Trigonometric atoms are algebraically dependent (Sin^2 + Cos^2 = 1), so
+     * as independent parameters they can hide a radicand: Bronstein writes
+     * Sqrt[3 + Sin[x]] as Sqrt[(Cos[x] + I Sin[x]) (...)/2]. Over E^(I x)
+     * they are rational in ONE generator, and the field sees the relation;
+     * ExpToTrig reads the result back. The lower-scoring of the direct and
+     * the exponential form wins (direct on a tie), both gated by the input. */
+    if (af_has_trig(input)) {
+        Expr* te = af_call1(SYM_TrigToExp, expr_copy((Expr*)input));
+        Expr* re = (te && af_has_symbolic_radical(te) && rr_leaves(te) <= AF_MAX_LEAVES)
+                       ? af_canonical(te, complexity_func) : NULL;
+        if (te) expr_free(te);
+        Expr* rt = re ? af_call1(SYM_ExpToTrig, re) : NULL;
+        if (rt) {
+            size_t st = score_with_func(rt, complexity_func);
+            if (st < s_in && (!r || st < score_with_func(r, complexity_func))) {
+                if (r) expr_free(r);
+                r = rt;
+            } else {
+                expr_free(rt);
+            }
+        }
+    }
+    if (!r) return NULL;
 
     /* The canonical form is a reduced numerator over a generator-free
      * denominator; give the rest of the dispatcher one pass over it (Factor of

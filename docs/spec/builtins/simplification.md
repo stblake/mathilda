@@ -355,6 +355,38 @@ canonical forms that the generic pipeline alone does not:
   `Simplify[D[Integrate[x^(4/3)/(a Sqrt[x] + b)^(2/3), x], x]] ->
   x^(4/3)/(b + a Sqrt[x])^(2/3)` (5 ms; was unreduced). Algebraic dimension is
   capped at 64 and input size at 20000 leaves.
+  **Transcendental atoms** (v0.6585). Simplify's call builds the field over
+  `Q(params, T_1..T_k)(radicals)`. Each atom `T_i` the algebra cannot see into is
+  a free parameter:
+  - a kernel (`Log[x]`, `f[x]`, `BesselJ[0, x]`);
+  - a power with a symbolic exponent, split into integer powers of one generator.
+    `E^(3x)` and `E^(6x)` become `g^3` and `g^6` with `g = E^x`, and
+    `E^(-I x)` becomes `(E^(I x))^-1`.
+
+  The layer runs only when a radicand outside the kernels holds an atom
+  (`Sqrt[a + E^(3x)]`, `Sqrt[a + Log[x]]`). An atom next to radicals with plain
+  radicands (`U Erf[..]/(Sqrt[1/nu] Sqrt[nu])`) leaves the engine declining as
+  before, so the general search, which the fast path would otherwise pre-empt,
+  keeps those inputs. The layer has its own budget: dimension ≤ 8 and ≤ 6
+  parameters. Once it runs, the imaginary unit enters as the root of unity `omega`
+  (`omega^2 + 1 = 0`), ordered below every radical. This is sound: an identity in independent
+  indeterminates survives substituting each atom's value. A numeric-constant
+  kernel (`Root[..]`, `Sin[Pi/7]`) is not generic, so it declines. When the input
+  has circular or hyperbolic heads, Simplify also reduces `TrigToExp[input]`, reads
+  it back with `ExpToTrig`, and keeps the lower-scoring form. Trig atoms are
+  related (`Sin^2 + Cos^2 = 1`), and over `E^(I x)` the field sees that relation.
+  Examples:
+  - `Simplify[D[Integrate[1/Sqrt[E^(3x) + a], x, Method -> "Bronstein"], x]] ->
+    1/Sqrt[a + E^(3 x)]` (was `-1/Sqrt[a] - E^(3 x)/(a Sqrt[a + E^(3 x)] -
+    Sqrt[a] (a + E^(3 x)))`);
+  - `... Cos[x]/Sqrt[3 + Sin[x]] ... -> Cos[x]/Sqrt[3 + Sin[x]]`;
+  - `... 1/(x Log[x] Sqrt[a + Log[x]]) ...` round-trips.
+
+  RootReduce and the Together/Cancel zero test keep the plain field. The
+  out-of-sample sweep `tools/simplify_atoms/gen.m` covers 300 random integrands
+  in 15 families, 3 seeds and the Bronstein and Automatic methods. 285 are
+  decided, all recovered: 279 as the integrand itself, and 6 with the numeric
+  content of a radicand pulled out (`Sqrt[4 + y]/Sqrt[2]` for `Sqrt[2 + y/2]`).
 - **Multi-generator radical rational normal form** — a rational function of two
   or more distinct radical bases (e.g. `a^(1/3)` and `(a+b x)^(1/3)`) is reduced
   in the quotient ring `K[g_1, ..., g_n] / <g_k^{q_k} - base_k>`: each base is

@@ -295,6 +295,52 @@ static void test_radical_function_field_roundtrips(void) {
     check_eval_eq("Simplify[Sqrt[x^2] + (x^2 - 1)/(x - 1), x > 0]", "1 + 2 x");
 }
 
+/* The field over transcendental atoms: E^(k x), b^x, Log[x], Sin[x], ...
+ * enter Simplify's algebraic-function-field canonical form as parameters
+ * (exponentials as integer powers of one generator, trig over E^(I x), the
+ * imaginary unit as the root of unity omega). Out-of-sample sweep:
+ * tools/simplify_atoms/gen.m. */
+static void test_radical_function_field_transcendental_atoms(void) {
+    /* the reported case: Sqrt[a] and Sqrt[a + E^(3x)] over Q(a, E^x) */
+    check_eval_eq("Simplify[-1/Sqrt[a] - E^(3 x)/(a Sqrt[a + E^(3 x)] - Sqrt[a] (a + E^(3 x)))]",
+                  "1/Sqrt[a + E^(3 x)]");
+    check_eval_eq("Simplify[D[Integrate[1/Sqrt[E^(3 x) + a], x, Method -> \"Bronstein\"], x]]",
+                  "1/Sqrt[a + E^(3 x)]");
+    /* commensurate exponentials share one generator */
+    check_eval_eq("Simplify[D[Integrate[E^x/Sqrt[a + E^(2 x)], x, Method -> \"Bronstein\"], x]]",
+                  "E^x/Sqrt[a + E^(2 x)]");
+    check_eval_eq("Simplify[D[Integrate[E^(2 x)/Sqrt[b + E^x], x, Method -> \"Bronstein\"], x]]",
+                  "E^(2 x)/Sqrt[b + E^x]");
+    check_eval_eq("Simplify[D[Integrate[2^x/Sqrt[2 + 2^x], x], x]]", "2^x/Sqrt[2 + 2^x]");
+    /* kernels: Log[x] is an opaque parameter */
+    check_eval_eq("Simplify[-1/Sqrt[a] - Log[x]/(a Sqrt[a + Log[x]] - Sqrt[a] (a + Log[x]))]",
+                  "1/Sqrt[a + Log[x]]");
+    check_eval_eq("Simplify[D[Integrate[1/(x Log[x] Sqrt[a + Log[x]]), x, Method -> \"Bronstein\"], x]]",
+                  "1/(x Log[x] Sqrt[a + Log[x]])");
+    /* trig over E^(I x): Bronstein's radicand is 3 + Sin[x] in disguise */
+    check_eval_eq("Simplify[D[Integrate[Cos[x]/Sqrt[3 + Sin[x]], x, Method -> \"Bronstein\"], x]]",
+                  "Cos[x]/Sqrt[3 + Sin[x]]");
+    /* the imaginary unit as omega, ordered below the radical it sits in
+     * (with omega leading this was a wrong answer) */
+    check_eval_eq("Simplify[-1/Sqrt[a] - I E^x/(a Sqrt[a + I E^x] - Sqrt[a] (a + I E^x))]",
+                  "1/Sqrt[a + I E^x]");
+    /* no atom in any radicand: the layer stays off, the general search keeps it */
+    check_eval_eq("Simplify[-1/Sqrt[a] - I y/(a Sqrt[a + I y] - Sqrt[a] (a + I y))]",
+                  "-1/Sqrt[a] - (I y)/(a Sqrt[a + I y] - Sqrt[a] (a + I y))");
+    check_eval_eq("DSolve[{D[u[y,t],t] == nu D[u[y,t],{y,2}], u[y,0] == 0, u[0,t] == U}, u[y,t], {y,t}]",
+                  "{{u[y, t] -> U - U Erf[y/(2 Sqrt[nu] Sqrt[t])]}}");
+    check_eval_eq("Simplify[(Sqrt[1 + (-1)^(1/3) y] - 1) (Sqrt[1 + (-1)^(1/3) y] + 1)]",
+                  "(-1)^(1/3) y");
+    /* an atom beside an ordinary variable */
+    check_eval_eq("Simplify[(Sqrt[x + E^x] - x) (Sqrt[x + E^x] + x) - E^x]", "(1 - x) x");
+    /* no-ops and declines */
+    check_eval_eq("Simplify[Sqrt[Sin[x]]]", "Sqrt[Sin[x]]");
+    check_eval_eq("Simplify[1/(Sqrt[x] + I)]", "1/(I + Sqrt[x])");
+    /* RootReduce keeps the plain field (atoms off) */
+    check_eval_eq("RootReduce[(Sqrt[a + E^x] - Sqrt[a]) (Sqrt[a + E^x] + Sqrt[a])]",
+                  "(-Sqrt[a] + Sqrt[a + E^x]) (Sqrt[a] + Sqrt[a + E^x])");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -324,6 +370,7 @@ int main(void) {
 
     /* Algebraic function field. */
     TEST(test_radical_function_field_roundtrips);
+    TEST(test_radical_function_field_transcendental_atoms);
 
     if (g_failures > 0) {
         fprintf(stderr, "\n%d radical_simplify test(s) FAILED.\n", g_failures);
