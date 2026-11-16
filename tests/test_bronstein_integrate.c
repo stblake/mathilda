@@ -75,6 +75,12 @@ static void test_nf_certificate(void) {
 static void test_closes(void) {
     /* Tan[x] Sqrt[Log[x]] was a decline until the trig front end (v0.6554) */
     BR_EQ("First[BronsteinIntegrate[Tan[x] Sqrt[Log[x]], x]]", "\"not elementary\"");
+    /* a radical under ArcTan (x = u^2, then the real ArcTan form; v0.6588):
+       19 s and Integrate::incomplete before, a certificate in ~0.3 s now */
+    BR_EQ("First[TimeConstrained[BronsteinIntegrate[x^2 ArcTan[Sqrt[x]]^3, x], 10, {$Aborted}]]", "\"not elementary\"");
+    BR_EQ("First[TimeConstrained[BronsteinIntegrate[2 u^5 ArcTan[u]^3, u], 10, {$Aborted}]]", "\"not elementary\"");
+    BR_ANTIDERIV("x^2 ArcTan[Sqrt[x]]^2", "Bronstein");
+    BR_ANTIDERIV("ArcTan[Sqrt[x]]", "Bronstein");
     for (int i = 0; closes[i]; i++) BR_ANTIDERIV(closes[i], "Bronstein");
     BR_EQ("Integrate[(x + 1)/((x Log[x] + x^2) Sqrt[x + Log[x]]), x, Method -> \"Bronstein\"]", "-2/Sqrt[x + Log[x]]");
     BR_TRUE("PossibleZeroQ[Integrate[(3 (x + E^x)^(1/3) + (2 x^2 + 3 x) E^x + 5 x^2)/(x (x + E^x)^(1/3)), x,"
@@ -147,6 +153,33 @@ static void test_pipeline_routines(void) {
     BR_EQ("brIntegrateTranscendental[x E^x, x]", "E^x (-1 + x)");
     BR_EQ("brIntegrateTranscendental[0, x]", "0");
     BR_THROWS("brIntegrateTranscendental[E^x/x, x]", "NonElementary", "transcendental part has no elementary integral (Risch)");
+    /* the real ArcTan form of the trig front end's Log[1 +- I w] pairs */
+    BR_EQ("brArcTanForm[Log[x] E^x, x]", "None");
+    BR_EQ("brArcTanForm[Log[2 + I x], x]", "None");           /* w = x - I: not the TrigToExp shape */
+    BR_TRUE("brArcTanForm[Log[1 + 2 I x], x][\"ws\"] === {2 x}");   /* ArcTan[2 x] */
+    BR_TRUE("brArcTanForm[TrigToExp[ArcTan[x]], x][\"g\"] === ArcTan[x]");
+    BR_TRUE("Length[brArcTanForm[TrigToExp[ArcTan[x^2] + ArcTan[x]^2], x][\"ws\"]] == 2");
+    BR_TRUE("brArcTanForm[TrigToExp[2 u^5 ArcTan[u]^3], u][\"g\"] === 2 u^5 ArcTan[u]^3");
+    BR_TRUE("brArcTanForm[Log[1 + I Sqrt[x]], x][\"g\"] === Log[1 + x]/2 + I ArcTan[Sqrt[x]]");
+    BR_TRUE("brArcTanBack[ArcTan[x], {x}] === I/2 (Log[1 - I x] - Log[1 + I x])");
+    BR_TRUE("brArcTanBack[ArcTan[-x], {x}] === brArcTanBack[-ArcTan[x], {x}]");
+    BR_TRUE("brArcTanBack[x Log[1 + x^2], {x}] === x (Log[1 - I x] + Log[1 + I x])");
+    BR_TRUE("brArcTanBack[Log[x], {x}] === Log[x]");
+    /* property: the round trip is the identity on the real line (|Im w| < 1)
+       for random polynomial arguments w and random products of the pairs */
+    BR_TRUE("SeedRandom[4711]; And @@ Table[With[{w = RandomInteger[{-3, 3}] + RandomInteger[{1, 3}] x^RandomInteger[{1, 3}],"
+            " k = RandomInteger[{1, 3}], m = RandomInteger[{0, 2}]},"
+            " With[{f = Expand[x^m TrigToExp[ArcTan[w]]^k]}, With[{r = brArcTanForm[f, x]},"
+            " r =!= None && And @@ Table[Abs[N[(brArcTanBack[r[\"g\"], r[\"ws\"]] - f) /. x -> x0, 30]] < 10^-20, {x0, {-7/3, 1/5, 11/4}}]]]], {12}]");
+    /* x^2 ArcTan[Sqrt[x]]^3 after x = u^2: Risch on the two complex logs did
+       not decide in 19 s; ParallelMixedTower on ArcTan[u] proves it in 0.05 s
+       (Prop. 9.2(b)).  Through the package entry, since a Bronstein call holds
+       the heavy-method region in which the builtin declines */
+    BR_TRUE("StringContainsQ[brCatch[brIntegrateArcTanForm[TrigToExp[2 u^5 ArcTan[u]^3], u]][[2]], \"ParallelMixedTower, on the real ArcTan form\"]");
+    BR_TRUE("With[{f = TrigToExp[u ArcTan[u]^2]}, With[{F = brIntegrateArcTanForm[f, u]}, F =!= None && antiderivativeQ[f, F, u]]]");
+    BR_EQ("brIntegrateArcTanForm[x E^x, x]", "None");
+    BR_TRUE("With[{f = TrigToExp[ArcTan[x]]}, With[{F = brIntegrateTranscendental[f, x]}, antiderivativeQ[f, F, x]]]");
+    BR_TRUE("brCatch[brIntegrateTranscendental[TrigToExp[2 u^5 ArcTan[u]^3], u]][[1]] === \"NonElementary\"");
     BR_EQ("brTermExpression[None, x^2]", "x^2");
     BR_EQ("brTermExpression[fieldFn[{x}], x]", "x");
     BR_EQ("brTermExpression[fieldFn[{x}, {t, t^2 - 2, Sqrt[2]}], t x + t^3]", "2 Sqrt[2] + Sqrt[2] x");

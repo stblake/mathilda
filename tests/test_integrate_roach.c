@@ -247,6 +247,19 @@ static void test_adamchik_marichev(void) {
     assert_eval_eq("With[{F = Integrate[x^2 Erf[x], x, Method -> \"Roach\"]},"
                    " FreeQ[F, Integrate] && Abs[N[(D[F, x] - x^2 Erf[x]) /. x -> -7/4, 30]] < 10^-15]",
                    "True", 0);
+    /* verifyD samples the PARAMETERS on both sides, not only where genericPt
+       puts every variable positive: the eq. 26 form of x^2 Sqrt[c + 2 x^4]
+       pulls Sqrt[c] out of the radical, which is -f for c < 0 and
+       1 + 2 x^4/c < 0 (c = a - 1, a = 1/2, x = 1).  It used to pass at
+       a = 582/175 and reach the cascade (benchmark 258, 2026-11-16); now it
+       declines, and no Roach answer to it is wrong at a = 1/2 */
+    assert_eval_eq("Head[Integrate[x^2 Sqrt[-1 + a + 2 x^4], x, Method -> \"Roach\"]]",
+                   "Integrate", 0);
+    assert_eval_eq("With[{f = x^2 Sqrt[-1 + a + 2 x^4]}, With[{F = Quiet[Integrate[f, x]]},"
+                   " Head[F] === Integrate || Abs[N[(D[F, x] - f) /. {a -> 1/2, x -> 1}, 20]] < 10^-10]]",
+                   "True", 0);
+    /* a parameter answer valid for every value still passes the wider check */
+    assert_eval_eq("FreeQ[Integrate[x^a Exp[-x], x, Method -> \"Roach\"], Integrate]", "True", 0);
     /* dx/x: the G is undefined (a Gamma pole); the power rule gives Log */
     assert_eval_eq("Integrate[1/x, x, Method -> \"Roach\"]", "Log[x]", 0);
     /* squares and products of one argument (PBM 8.4.23): two G functions */

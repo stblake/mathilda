@@ -1578,6 +1578,12 @@ the code).**
     `{"Trager"}`. Trager on parametric inputs: 239 better, 3 worse (two larger
     answers, one 10 s slower), no new WRONG or false certificate. Bronstein on
     parametric inputs stays opt-in: about 110 answers 5–500× larger than later stages give.
+  - v0.6588: Bronstein integrates a transcendental part on its real ArcTan form
+    first (`brIntegrateArcTanForm`; ParallelMixedTower through its package entry).
+    `x^2 ArcTan[Sqrt[x]]^3`: 19 s Incomplete -> 0.3 s certificate (user report;
+    FriCAS 0.05 s).
+  - Step 4 (Trager front end) was lifted in v0.6574; the `Sqrt[a]`-constant
+    refusal is pinned as `Integrate::incomplete` (2026-11-16).
   - Open: parameters with Q(i)/radical constants; a radical of a parameter; log
     terms over non-binomial extensions of degree ≥ 3 outside the per-orbit path.
 
@@ -1623,6 +1629,49 @@ justifies.
    - E3 specialisation includes them.
 6. **The cascade A/B, docs and corpus:** `G-param-1`, new parametric examples, parametric stress
    families, and FriCAS with parameter values.
+
+### Phase 2b: C transcendental Risch completeness (follow-up, recorded 2026-11-16)
+
+The Bronstein method now routes non-elementary ArcTan polynomials around the C
+integrator (v0.6588, `brIntegrateArcTanForm`, through ParallelMixedTower). The C layer
+is still deficient for every other caller (reproducer and table:
+`tasks/risch_arctan_nonelem/`):
+- `Integrate`RischTranscendental` / `Risch`ElementaryIntegralQ` leave `ArcTan[u]^k`
+  (k >= 2, non-elementary) undecided; ParallelMixedTower certifies each in < 0.1 s.
+  The suspected cause is limited integration with a NEW logarithm in the primitive
+  polynomial case (§5.8 / §7.2), the cancellation case Phase 2 part 1 left open.
+- On the `TrigToExp` form (two logs over Q(i)) the same integrands are undecided and
+  slow (11.3 s for `u^5 ArcTan[u]^3`).
+- Scope: the adversarial review `docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md` (2026-11-16,
+  about 400 probes checked by differentiation, FriCAS and ParallelMixedTower). It found
+  no false certificate, crash or leak. This phase fixes each finding at its root in C,
+  in this order, and retires the routing in `Pipeline.m` wherever C then decides on its
+  own:
+  1. **F1, WRONG (confirmed by hand).** The single-extension ansatz lets `SolveAlways`
+     solve for the user's parameters (`a -> 0`), and `Integrate` returns the result
+     unchecked, because the stage is trusted as correct by construction.
+     `Integrate[(1 + a + a E^u + u)/((1 + E^u) (1 + u)), u]` and
+     `Integrate[(a E^u + a E^(2 u) + u)/((1 + E^u) u), u]` both give
+     `u - Log[1 + E^u]`, and `RischTranscendental[a/(1 + E^u), u]` gives `0`.
+     Sites: `risch_singleext.c:405-453`, `:787`, `:1039`; `integrate.c:974-990`.
+  2. **F2-F4, a false True from `Risch`ElementaryIntegralQ`.** It uses F1's answers,
+     the same parameter capture sits in the log fold (`risch_field_integrate.c:1433`),
+     and the field decision accepts unverified results
+     (`integrate_risch_transcendental.c:659-660`, `:690-699`). Examples:
+     `Log[u] Log[1+u]`, `Log[u]/(u+a)`.
+  3. **F5.** Limited integration with a new logarithm declines silently
+     (`risch_field_integrate.c:1531-1565`; the fold also rejects tower arguments at
+     `:1400`). This covers `ArcTan[u]^k`, `Log[u]^2/(1+u)`, `Log[1+u]/u`,
+     `ArcTan[u]/u` and `Log[Cos[u]]^2`.
+  4. **F6/F7, PERF.** `rt_log_tower_case` builds an uncapped `SolveAlways` (about
+     175 unknowns, run twice; 16-18 s). There is no RootSum fallback for irreducible
+     cubic residues (`intrat.c:2283`, 44-68 s).
+  5. **F8, F9, F12.** There is no Risch DE over a tangent lower field
+     (`E^Tan[u] Sec[u]^2`), `Risch`RationalSpan` fails with `Sqrt[2]`, plus F12 in the
+     review.
+  6. **F13.** The completeness gate counts only certificate-mark sites, so the silent
+     declines are invisible to it. Widen it first, so that the ratchet sees steps 3-5. Gates: no WRONG / FALSE_CERT, the completeness baseline
+  (13 uncertain Risch DE paths) ratcheted down, unit tests per routine.
 
 ### Phase 5: the radical anywhere (largest; theory first)
 

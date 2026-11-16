@@ -21,9 +21,50 @@
 
 BronsteinIntegrate::usage = "BronsteinIntegrate[f, x] integrates f, an elementary function of x built from rational operations, logarithms, exponentials and ONE radical (n-th root) whose radicand involves the top transcendental monomial (Bronstein 1990, the radical on top of a Log/Exp tower; a purely algebraic integrand goes to Trager's algorithm and a purely transcendental one to the transcendental Risch algorithm). It returns an antiderivative (verified), {\"not elementary\", reason} (a certificate), or {\"failed\", reason} (out of scope or undecided).";
 
-brIntegrateTranscendental::usage = "brIntegrateTranscendental[f, x] is the integral of the transcendental (radical-free) f by Integrate`RischTranscendental, verified; it throws NonElementary when Risch`ElementaryIntegralQ proves there is none and Decline when undecided.";
+brArcTanForm::usage = "brArcTanForm[f, x] undoes the trigonometric front end's ArcTan -> logarithms on f: every Log[1 + I w] with w free of complex constants (TrigToExp[ArcTan[w]] = I/2 (Log[1 - I w] - Log[1 + I w])) is rewritten as Log[1 + w^2]/2 + I ArcTan[w]. That is an identity where |Im w| < 1, an open set containing every real w, so an antiderivative or a non-elementarity certificate of the result is one of f. It returns <|\"g\" -> the rewritten, expanded f, \"ws\" -> the arguments w (one per +-w pair)|>, or None when f has no such logarithm.";
+brArcTanForm[f_, x_Symbol] := Module[{logs, ws = {}, rules = {}, w},
+  logs = DeleteDuplicates[Cases[{f}, Log[a_] /; !FreeQ[a, x], Infinity]];
+  Do[w = Expand[-I (lg[[1]] - 1)];
+    If[FreeQ[w, Complex] && !FreeQ[w, x],
+      AppendTo[rules, lg -> Log[Expand[1 + w^2]]/2 + I ArcTan[w]];
+      If[!MemberQ[ws, w | Expand[-w]], AppendTo[ws, w]]],
+    {lg, logs}];
+  If[rules === {}, None, <|"g" -> Expand[f /. rules], "ws" -> ws|>]];
+
+brArcTanBack::usage = "brArcTanBack[F, ws] writes an antiderivative found on brArcTanForm's real form back in the front end's logarithms: ArcTan[w] -> I/2 (Log[1 - I w] - Log[1 + I w]) and Log[1 + w^2] -> Log[1 - I w] + Log[1 + I w], for each w in ws (both identities on the same open set), so it is checked against f in f's own differential field.";
+brArcTanBack[F_, ws_List] := F /. Flatten[Function[w, With[{q = Expand[1 + w^2]},
+    {ArcTan[w] -> I/2 (Log[1 - I w] - Log[1 + I w]), ArcTan[Expand[-w]] -> -I/2 (Log[1 - I w] - Log[1 + I w]),
+     Log[e_] /; Together[e - q] === 0 :> Log[1 - I w] + Log[1 + I w]}]] /@ ws];
+
+brIntegrateArcTanForm::usage = "brIntegrateArcTanForm[f, x] integrates the transcendental f on its real ArcTan form (brArcTanForm): Integrate`RischTranscendental first, and when it does not decide, Integrate`ParallelMixedTower, whose ArcTan monomials decide towers the two complex logarithms leave open (x^2 ArcTan[Sqrt[x]]^3, after x = u^2: 19 s and undecided on Log[1 +- I u], 0.05 s on ArcTan[u]). It returns the antiderivative written back by brArcTanBack and verified against f, None (no such form, undecided, or the check failed), or throws NonElementary on a certificate of the real form (Risch`ElementaryIntegralQ False, or ParallelMixedTower's {\"not elementary\", ...}, a rigorous exit of its Algorithm 4). ParallelMixedTower runs for at most brOption[\"ArcTanFormTime\"] seconds.";
+brIntegrateArcTanForm[f_, x_Symbol] := Module[{r, g, F, P},
+  r = brArcTanForm[f, x];
+  If[r === None, Return[None]];
+  g = r["g"];
+  F = Quiet[Integrate`RischTranscendental[g, x]];
+  If[Head[F] === Integrate`RischTranscendental || !FreeQ[F, brNonElementaryHeads[]],
+    If[Quiet[Risch`ElementaryIntegralQ[g, x]] === False,
+      throwNonElementary["transcendental part has no elementary integral (Risch, on the real ArcTan form)"]];
+    (* the package entry, not the Integrate`ParallelMixedTower builtin: a
+       Method -> "Bronstein" call already holds the heavy-method region
+       (tc_async_region_active), in which the builtin declines as a re-entry.
+       PMT reaches Trager the same way (Trager`TragerIntegrate). Loaded on
+       first use only; LoadModule's memo is the one the C stage uses. *)
+    LoadModule["mixed/ParallelMixed.m"];
+    P = Quiet[TimeConstrained[ParallelMixed`ParallelIntegrateMixed[g, x], brOption["ArcTanFormTime"], $Failed]];
+    If[MatchQ[P, {"not elementary", ___}],
+      throwNonElementary["transcendental part has no elementary integral (ParallelMixedTower, on the real ArcTan form" <>
+        If[Length[P] > 1 && StringQ[P[[2]]], ": " <> P[[2]], ""] <> ")"]];
+    If[P === $Failed || ListQ[P] || !FreeQ[P, brNonElementaryHeads[] | Integrate`ParallelMixedTower], Return[None]];
+    F = P];
+  F = brArcTanBack[F, r["ws"]];
+  If[antiderivativeQ[f, F, x], F, None]];
+
+brIntegrateTranscendental::usage = "brIntegrateTranscendental[f, x] is the integral of the transcendental (radical-free) f, verified: first on its real ArcTan form when the trigonometric front end left Log[1 +- I w] pairs (brIntegrateArcTanForm), then by Integrate`RischTranscendental; it throws NonElementary when either route proves there is none (Risch`ElementaryIntegralQ, or ParallelMixedTower on the real form) and Decline when undecided.";
 brIntegrateTranscendental[f_, x_Symbol] := Module[{F, q},
   If[Together[f] === 0, Return[0]];
+  F = brIntegrateArcTanForm[f, x];
+  If[F =!= None, Return[F]];
   F = Quiet[Integrate`RischTranscendental[f, x]];
   If[Head[F] === Integrate`RischTranscendental || !FreeQ[F, brNonElementaryHeads[]],
     q = Quiet[Risch`ElementaryIntegralQ[f, x]];

@@ -194,11 +194,194 @@ static bool gp_split(Expr* f, Expr* x, Expr** pexp, Expr** acoef, long* m,
     return true;
 }
 
+/* ------------------------------------------------------------------------ *
+ * K x^p T(c x^q), T in {Exp, Sin, Cos, Sinh, Cosh}, q an exact nonzero      *
+ * rational, p exact rational or symbolic.  (v0.6588)                        *
+ *                                                                          *
+ * With w = -a x^q and s = (p+1)/q,                                          *
+ *                                                                          *
+ *     G(a) = -(1/q) x^(p+1) w^(-s) Gamma[s, w]                              *
+ *                                                                          *
+ * is an antiderivative of x^p E^(a x^q) on EVERY branch: the prefactor      *
+ * x^(p+1) w^(-s) has derivative (p+1) x^p w^(-s) - s q x^p w^(-s) = 0       *
+ * (w' = q w/x), and Gamma[s, w]' = -w^(s-1) E^(-w) w', so G' = x^p w^(-s)    *
+ * w^s E^(-w) = x^p E^(a x^q), the two powers of the same w cancelling       *
+ * whatever its branch.  Sin/Cos/Sinh/Cosh are the two exponentials          *
+ * E^(+-I c x^q) / E^(+-c x^q).  This is FriCAS's form for Sin[x^(3/2)]:     *
+ * before it the cascade reached it only through the Meijer G tail (3.6 s,  *
+ * a HypergeometricPFQ, within one second of that stage's 5 s budget).       *
+ *                                                                          *
+ * Gated to 2s NOT an integer: there the answer is elementary (s a positive *
+ * integer), an exponential integral (s <= 0) or an Erf/Fresnel form (s a   *
+ * half-integer), which the later stages give in the expected spelling.     *
+ * Accepted only after a diff-back (Simplify, then PossibleZeroQ).          *
+ * ------------------------------------------------------------------------ */
+
+enum { GPK_EXP, GPK_SIN, GPK_COS, GPK_SINH, GPK_COSH };
+
+static bool gp_head_is(const Expr* e, const char* name) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.head
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == intern_symbol(name);
+}
+
+/* An exact rational number: an Integer, a BigInt or Rational[n, d]. */
+static bool gp_exact_rational(const Expr* e) {
+    return e && (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT || gp_head_is(e, "Rational"));
+}
+
+/* x^r as a factor: x (r = 1) or Power[x, r] with r free of x.  *r is fresh. */
+static bool gp_xpow(Expr* t, Expr* x, Expr** r) {
+    if (expr_eq(t, x)) { *r = gp_int(1); return true; }
+    if (gp_head_is(t, "Power") && t->data.function.arg_count == 2
+        && expr_eq(t->data.function.args[0], x) && gp_free_of(t->data.function.args[1], x)) {
+        *r = expr_copy(t->data.function.args[1]);
+        return true;
+    }
+    return false;
+}
+
+/* arg = c x^q with c free of x and q an exact nonzero rational.  Fresh *c, *q. */
+static bool gp_monomial(Expr* arg, Expr* x, Expr** c, Expr** q) {
+    Expr* r = NULL;
+    if (gp_xpow(arg, x, &r)) {
+        if (!gp_exact_rational(r) || (r->type == EXPR_INTEGER && r->data.integer == 0)) { expr_free(r); return false; }
+        *c = gp_int(1); *q = r; return true;
+    }
+    if (!gp_head_is(arg, "Times")) return false;
+    size_t na = arg->data.function.arg_count;
+    Expr** cf = malloc(na * sizeof(Expr*));
+    size_t ncf = 0;
+    for (size_t j = 0; j < na; j++) {
+        Expr* u = arg->data.function.args[j];
+        Expr* ru = NULL;
+        if (!r && gp_xpow(u, x, &ru)) { r = ru; continue; }
+        if (!gp_free_of(u, x)) break;
+        cf[ncf++] = expr_copy(u);
+    }
+    bool ok = r && ncf + 1 == na && gp_exact_rational(r)
+           && !(r->type == EXPR_INTEGER && r->data.integer == 0);
+    if (!ok) {
+        for (size_t j = 0; j < ncf; j++) expr_free(cf[j]);
+        free(cf);
+        if (r) expr_free(r);
+        return false;
+    }
+    *c = (ncf == 1) ? cf[0] : gp_ev(expr_new_function(gp_sym("Times"), cf, ncf));
+    free(cf);
+    *q = r;
+    return true;
+}
+
+/* The kernel T(arg): Power[E, arg] or Sin/Cos/Sinh/Cosh[arg].  *argp borrowed. */
+static bool gp_kernel(Expr* t, int* kind, Expr** argp) {
+    if (gp_head_is(t, "Power") && t->data.function.arg_count == 2
+        && t->data.function.args[0]->type == EXPR_SYMBOL
+        && t->data.function.args[0]->data.symbol.name == intern_symbol("E")) {
+        *kind = GPK_EXP; *argp = t->data.function.args[1]; return true;
+    }
+    static const char* const heads[] = { "Sin", "Cos", "Sinh", "Cosh" };
+    static const int kinds[] = { GPK_SIN, GPK_COS, GPK_SINH, GPK_COSH };
+    for (int i = 0; i < 4; i++)
+        if (gp_head_is(t, heads[i]) && t->data.function.arg_count == 1) {
+            *kind = kinds[i]; *argp = t->data.function.args[0]; return true;
+        }
+    return false;
+}
+
+/* G(a) = -(1/q) x^(p+1) (-a x^q)^(-s) Gamma[s, -a x^q]; a consumed. */
+static Expr* gp_gform(Expr* a, Expr* p, Expr* q, Expr* s, Expr* x) {
+    Expr* w = gp_ev2("Times", gp_ev(gp_fn1("Minus", a)), gp_ev2("Power", expr_copy(x), expr_copy(q)));
+    Expr* pre = gp_ev2("Times", gp_ev2("Divide", gp_int(-1), expr_copy(q)),
+                       gp_ev2("Power", expr_copy(x), gp_ev2("Plus", expr_copy(p), gp_int(1))));
+    Expr* wp = gp_ev2("Power", expr_copy(w), gp_ev(gp_fn1("Minus", expr_copy(s))));
+    return gp_ev2("Times", gp_ev2("Times", pre, wp), gp_ev2("Gamma", expr_copy(s), w));
+}
+
+static bool gp_is_zero_int(const Expr* e) {
+    return e && e->type == EXPR_INTEGER && e->data.integer == 0;
+}
+
+static Expr* gp_trig_try(Expr* f, Expr* x) {
+    size_t nf = 1;
+    Expr* one[1] = { f };
+    Expr** fac = one;
+    if (gp_head_is(f, "Times")) { fac = f->data.function.args; nf = f->data.function.arg_count; }
+
+    Expr* p = gp_int(0);
+    Expr* karg = NULL; int kind = -1;
+    Expr** keep = malloc(nf * sizeof(Expr*));
+    size_t nkeep = 0;
+    bool ok = true;
+    for (size_t i = 0; i < nf && ok; i++) {
+        Expr* t = fac[i];
+        Expr* r = NULL; Expr* ka = NULL; int kk;
+        if (gp_xpow(t, x, &r)) { p = gp_ev2("Plus", p, r); continue; }
+        if (!karg && gp_kernel(t, &kk, &ka) && !gp_free_of(ka, x)) { karg = ka; kind = kk; continue; }
+        if (!gp_free_of(t, x)) { ok = false; break; }
+        keep[nkeep++] = expr_copy(t);
+    }
+    Expr* c = NULL; Expr* q = NULL;
+    if (ok) ok = karg && gp_monomial(karg, x, &c, &q);
+    /* p exact rational, or symbolic (a parameter, no approximate number) */
+    if (ok) ok = gp_exact_rational(p) || (gp_has_foreign_symbol(p, x) && !gp_is_number(p));
+    Expr* s = NULL;
+    if (ok) {
+        s = gp_ev2("Divide", gp_ev2("Plus", expr_copy(p), gp_int(1)), expr_copy(q));
+        if (gp_is_number(s)) {
+            Expr* s2 = gp_ev2("Times", gp_int(2), expr_copy(s));
+            ok = gp_exact_rational(s) && !(s2 && (s2->type == EXPR_INTEGER || s2->type == EXPR_BIGINT));
+            expr_free(s2);
+        }
+    }
+    if (!ok) {
+        for (size_t j = 0; j < nkeep; j++) expr_free(keep[j]);
+        free(keep);
+        expr_free(p); if (c) expr_free(c); if (q) expr_free(q); if (s) expr_free(s);
+        return NULL;
+    }
+    Expr* K = (nkeep == 0) ? gp_int(1) : (nkeep == 1) ? keep[0]
+            : gp_ev(expr_new_function(gp_sym("Times"), keep, nkeep));
+    free(keep);
+
+    Expr* body;
+    if (kind == GPK_EXP) {
+        body = gp_gform(expr_copy(c), p, q, s, x);
+    } else {
+        bool circ = (kind == GPK_SIN || kind == GPK_COS);
+        Expr* ap = circ ? gp_ev2("Times", gp_sym("I"), expr_copy(c)) : expr_copy(c);
+        Expr* am = gp_ev(gp_fn1("Minus", expr_copy(ap)));
+        Expr* gp = gp_gform(ap, p, q, s, x);
+        Expr* gm = gp_gform(am, p, q, s, x);
+        bool odd = (kind == GPK_SIN || kind == GPK_SINH);
+        Expr* comb = odd ? gp_ev2("Subtract", gp, gm) : gp_ev2("Plus", gp, gm);
+        /* Sin: /(2 I); Sinh: /2; Cos, Cosh: /2 */
+        Expr* den = (kind == GPK_SIN) ? gp_ev2("Times", gp_int(2), gp_sym("I")) : gp_int(2);
+        body = gp_ev2("Divide", comb, den);
+    }
+    body = gp_ev2("Times", K, body);
+    expr_free(p); expr_free(c); expr_free(q); expr_free(s);
+
+    /* Diff-back: the identity holds on every branch, so no PowerExpand pass. */
+    Expr* raw = gp_ev2("Subtract", gp_ev2("D", expr_copy(body), expr_copy(x)), expr_copy(f));
+    Expr* sim = gp_ev(gp_fn1("Simplify", expr_copy(raw)));
+    bool good = gp_is_zero_int(sim);
+    expr_free(sim);
+    if (!good) {
+        Expr* z = gp_ev(gp_fn1("PossibleZeroQ", expr_copy(raw)));
+        good = z && z->type == EXPR_SYMBOL && z->data.symbol.name == intern_symbol("True");
+        expr_free(z);
+    }
+    expr_free(raw);
+    if (!good) { expr_free(body); return NULL; }
+    return body;
+}
+
 Expr* integrate_gammapower_try(Expr* f, Expr* x) {
     if (!f || !x || x->type != EXPR_SYMBOL) return NULL;
 
     Expr* p = NULL; Expr* a = NULL; Expr* K = NULL; long m = 0;
-    if (!gp_split(f, x, &p, &a, &m, &K)) return NULL;
+    if (!gp_split(f, x, &p, &a, &m, &K)) return gp_trig_try(f, x);
 
     /* s = (p+1)/m,  z = -a x^m,  result = -K/m (-a)^(-s) Gamma[s, z]. */
     Expr* s = gp_ev2("Divide", gp_ev2("Plus", p, gp_int(1)), gp_int(m));

@@ -1026,7 +1026,35 @@ Roach`verifyD[f_, x_, F_, assum_] := Module[{d, vars, pt, pts, ok = True},
       If[NumericQ[s0] && TrueQ[Im[s0] == 0],
         With[{r = Quiet[N[d /. p0, 30]]},
           If[!NumericQ[r] || !(Abs[r] < 10^-12 (1 + Abs[s0])), ok = False]]]]]];
+  (* and across the PARAMETERS: genericPt gives every variable one sign
+     pattern, and x > 0 then rules out the negative one, so a parameter was only
+     ever sampled on one side.  An answer valid on part of the parameter range
+     (Sqrt[c + b x^4] -> Sqrt[c] Sqrt[1 + b x^4/c], right for c > 0 and -f for
+     c < 0 once 1 + b x^4/c < 0: x^2 Sqrt[-1 + a + 2 x^4] at a = 1/2) passed.
+     Each parameter candidate the assumptions allow is tried with x at the
+     generic value and three times it; a clear nonzero residual rejects, a
+     point where the answer has no value (a pole) is inconclusive. *)
+  If[ok && vars =!= {}, Module[{xv = x /. pt, pps},
+    pps = Roach`paramPts[vars, And[assum, x > 0] /. x -> xv];
+    Do[Do[With[{p0 = Append[pp, x -> xs]},
+          With[{r = Quiet[N[d /. p0, 30]], s0 = Quiet[N[f /. p0, 30]]},
+            If[NumericQ[r] && NumericQ[s0] && !(Abs[r] < 10^-12 (1 + Abs[s0])),
+              ok = False; Break[]]]],
+        {xs, {xv, 3 xv}}];
+      If[!ok, Break[]],
+      {pp, pps}]]];
   ok]
+
+(* the parameter assignments among genericPt's candidates (positive generic,
+   negative, in (0, 1)) that satisfy assum; x is already substituted *)
+Roach`paramPts[vars_, assum_] := Module[{gen, cands},
+  gen[i_, k_] := i + k + 1 + 2/7 + 1/(11 i + 3);
+  cands = Join[
+    Table[Thread[vars -> (gen[#, k] & /@ Range[Length[vars]])], {k, 0, 1}],
+    {Thread[vars -> (-gen[#, 0] & /@ Range[Length[vars]])],
+     Thread[vars -> ((3 + 2 #)/(11 + 3 #) & /@ Range[Length[vars]])],
+     Thread[vars -> ((-3 - 2 #)/(11 + 3 #) & /@ Range[Length[vars]])]}];
+  Select[cands, TrueQ[Quiet[Simplify[assum /. #]]] &]]
 
 (* Integrate[f, x, Method -> "Roach"]: an antiderivative by eq. 26, term by
    term over the expanded integrand, each term a power of x times at most one

@@ -486,6 +486,12 @@ static void test_messages(void) {
     TI_SILENT("Integrate[Sqrt[x] + Sqrt[x + 1], x, Method -> \"Trager\"]", "Integrate::");
     TI_PRINTS("Integrate[Exp[x]/Sqrt[x], x, Method -> \"Trager\"]", "Integrate::incomplete");
     TI_SILENT("Quiet[Integrate[Exp[x]/Sqrt[x], x, Method -> \"Trager\"]]", "Integrate::");
+    /* Phase 4.4 step 4: a radical OF a parameter (Sqrt[a]) stays out of scope --
+       the constant field would be Q(a)(Sqrt[a]), not Q(a) -- while a radical
+       over Q(a) in x is answered (params_ok) */
+    TI_PRINTS("Integrate[Sqrt[a]/Sqrt[1 + x^2], x, Method -> \"Trager\"]", "Integrate::incomplete");
+    TI_PRINTS("Integrate[1/(x Sqrt[x^2 + Sqrt[a]]), x, Method -> \"Trager\"]", "Integrate::incomplete");
+    TI_SILENT("Integrate[1/((x - a) Sqrt[x^2 + 1]), x, Method -> \"Trager\"]", "Integrate::");
     TI_SILENT("Integrate[(x^4 + 1)^(-1/4), x, Method -> \"TragerKauers\"]", "Integrate::");
     TI_SILENT("Integrate[5/((x - 3) Sqrt[x^3 - 2]), x, Method -> \"TragerKauers\"]", "Integrate::");
     TI_SILENT("Integrate[1/Sqrt[x^2 + 1], x, Method -> \"Trager\"]", "Integrate::");

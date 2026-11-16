@@ -59,8 +59,9 @@ static void test_fresnel_declines(void) {
     /* Sin[x] is elementary (-Cos[x]); Sin[x^3] has no elementary/Fresnel form. */
     ASSERT_MSG(eval_is("FreeQ[Integrate[Sin[x], x], FresnelS]", "True"),
         "Sin[x] must not produce Fresnel");
-    ASSERT_MSG(eval_is("Head[Integrate[Sin[x^3], x]] === Integrate", "True"),
-        "Sin[x^3] must stay unevaluated");
+    /* Sin[x^3] is the GammaPower stage's (v0.6588: incomplete Gamma), never Fresnel */
+    ASSERT_MSG(eval_is("With[{r = Integrate[Sin[x^3], x]}, FreeQ[r, FresnelS | FresnelC] && !FreeQ[r, Gamma]]", "True"),
+        "Sin[x^3] must not produce Fresnel");
 }
 
 int main(void) {

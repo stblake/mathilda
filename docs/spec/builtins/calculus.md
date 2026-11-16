@@ -1582,6 +1582,24 @@ monotonically down.
   first, then one under `PowerExpand`, which quotients out that convention and nothing
   else.
 
+  **A power times `Exp`/`Sin`/`Cos`/`Sinh`/`Cosh` of `c x^q` (v0.6588).** The same
+  stage now covers `K x^p T(c x^q)` for any exact nonzero rational `q` and `p` exact or
+  symbolic, through
+
+      Integrate[x^p E^(a x^q), x]  ==  -(1/q) x^(p+1) w^(-s) Gamma[s, w],  w = -a x^q,  s = (p+1)/q
+
+  with `Sin`, `Cos`, `Sinh` and `Cosh` written as the two exponentials `E^(±I c x^q)` or
+  `E^(±c x^q)`. This form holds on **every** branch, so no `PowerExpand` pass is
+  needed: the prefactor `x^(p+1) w^(-s)` has derivative zero (`w' = q w/x`), and the two
+  powers of the same `w` cancel. The diff-back is `Simplify`, then `PossibleZeroQ`. The
+  stage declines when `2s` is an integer, where the answer is elementary, an
+  exponential integral, or an `Erf`/`Fresnel` form that the later stages spell as
+  expected. `Integrate[Sin[x^(3/2)], x]` used to go through the Meijer G tail (3.6–4.4
+  s, a `HypergeometricPFQ`, close to that stage's 5 s budget). It is now
+  `-I/2 (-2 x Gamma[2/3, -I x^(3/2)]/(3 (-I x^(3/2))^(2/3)) + 2 x Gamma[2/3, I x^(3/2)]/(3 (I x^(3/2))^(2/3)))`
+  in 0.07 s, FriCAS's form. The same applies to `Sin[x^3]` (0.06 s, was 3.6 s),
+  `Cos[x^(5/2)]`, `E^(-2 x^(5/3))`, `Sin[x]/x^(1/3)` and `x^n Sin[x^3]`.
+
   **`Log` times a trig/hyperbolic kernel (as of v0.343).** A `LogByParts` stage sits
   after the cheap elementary stages (`DerivativeDivides` / `RischTranscendental` /
   `CRCTable`) and before the `ParallelMixedTower` / `ParallelMixedSpecial` tail:
@@ -2298,6 +2316,19 @@ monotonically down.
     exponential top), correct by the same certification-and-diff-back gate.  Only
     algebraic extensions (`Sqrt`, `RootSum`) remain unimplemented, so integrands needing
     them return unevaluated.
+    - **Known deficiency (recorded 2026-11-16; follow-up phase in
+      `src/internal/bronstein/BRONSTEIN_PLAN.md`, "Phase 2b").** It cannot certify a
+      non-elementary polynomial in `ArcTan[u]` of degree ≥ 2. `ArcTan[u]^2`,
+      `ArcTan[u]^3`, `u ArcTan[u]^3` and `u^5 ArcTan[u]^3` come back unevaluated, and
+      `Risch`ElementaryIntegralQ` gives `::undec`. ParallelMixedTower certifies each in
+      under 0.1 s. Elementary cases (`u ArcTan[u]^2`, `u^5 ArcTan[u]^2`) are answered.
+      The same integrands in `TrigToExp` form (`Log[1 ± I u]` over Q(i)) are
+      undecided too, and slow: 11.3 s for `u^5 ArcTan[u]^3`. The suspected cause is
+      limited integration with a new logarithm (`Log[1 + u^2]`) in the primitive
+      polynomial case, the one cancellation case Phase 2 left open; the review in
+      `docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md` will confirm it. The Bronstein method
+      routes around it through ParallelMixedTower (v0.6588). Reproducer:
+      `tasks/risch_arctan_nonelem/`.
   - `"CRCTable"` — `Integrate\`CRCTable[f, x]`.
   - `"GRTable"` (indefinite and definite, v0.6493) — the Gradshteyn & Ryzhik
     table alone (see [Integrate`GRTable](#integrategrtable)).  In both
@@ -2467,7 +2498,17 @@ monotonically down.
           answer does not give back the integrand. That check is
           PossibleZeroQ, or the residual at two generic points with x > 0
           and one with x < 0; the x < 0 point rejects an x > 0-only form
-          such as `Sqrt[x^2]`.
+          such as `Sqrt[x^2]`. Since v0.6588 the residual is also taken at
+          every parameter candidate the assumptions allow (positive, negative,
+          in (0, 1) and in (−1, 0)), with x at its generic value and three
+          times it. A clear nonzero residual there rejects; a point where
+          the answer has no value is inconclusive. The table's
+          `(b + t)^−a = b^−a (1 + t/b)^−a` holds only for b ∉ (−∞, 0], and
+          the antiderivative drops the condition the definite form keeps:
+          `x^2 Sqrt[-1 + a + 2 x^4]` came out as an elliptic answer that is
+          −f for a < 1 once `2 x^4 > 1 − a`. Indefinite `Integrate` does not
+          yet pass its `Assumptions` to this stage, so such an answer is
+          rejected even under `Assumptions -> a > 1`.
           - Examples: `x^a BesselJ[v, x]` gives
             `x^(1+a+v) 1F2(...)/(2^(1+v) ((1+a+v)/2) Γ(1+v))`.
             `ArcTan[x]/x` gives `I/2 (PolyLog[2, −I x] − PolyLog[2, I x])`.
@@ -4134,6 +4175,22 @@ answer is verified, and shown in trigonometric form when that form verifies too.
 For example, `Integrate[Sqrt[Tan[x]], x, Method -> "Bronstein"]` is an
 antiderivative, and `Integrate[Sqrt[Sin[x]], x, Method -> "Bronstein"]` prints
 `Integrate::nonelem`.
+
+**The real ArcTan form of a transcendental part (v0.6588).** `TrigToExp[ArcTan[w]]`
+is `I/2 (Log[1 - I w] - Log[1 + I w])`: two logarithms over Q(i), a tower the
+transcendental Risch integrator may not decide. A radical-free part (after any
+rational parametrisation of the radical) is first integrated on its real form:
+`Log[1 ± I w] -> Log[1 + w^2]/2 ± I ArcTan[w]` for every such logarithm with `w`
+free of complex constants. That identity holds for `|Im w| < 1`, an open set
+containing the real line, so an answer or a certificate of the real form is one
+of the integrand. The real form goes to `Integrate`RischTranscendental`, then to
+ParallelMixedTower (its package entry, for at most 20 s: a `Method -> "Bronstein"`
+call holds the heavy-method region, in which the `Integrate`ParallelMixedTower`
+builtin declines). An answer is written back in the logarithms and verified
+against the integrand; anything else falls through to the old route.
+`Integrate[x^2 ArcTan[Sqrt[x]]^3, x, Method -> "Bronstein"]` goes from
+`Integrate::incomplete` after 19 s to `Integrate::nonelem` in 0.3 s (x = u^2, then
+`2 u^5 ArcTan[u]^3`, Prop. 9.2(b) of ParallelMixedTower).
 
 **Complex constants (v0.6551).** Gaussian-rational constants are in scope: the
 constant field is Q(i). For example, `Integrate[Sqrt[x + I]/x, x, Method ->
