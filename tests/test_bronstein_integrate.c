@@ -175,7 +175,10 @@ static void test_pipeline_routines(void) {
        not decide in 19 s; ParallelMixedTower on ArcTan[u] proves it in 0.05 s
        (Prop. 9.2(b)).  Through the package entry, since a Bronstein call holds
        the heavy-method region in which the builtin declines */
-    BR_TRUE("StringContainsQ[brCatch[brIntegrateArcTanForm[TrigToExp[2 u^5 ArcTan[u]^3], u]][[2]], \"ParallelMixedTower, on the real ArcTan form\"]");
+    /* since v0.6590 the C Risch certifies the real form itself (F5, the new-log
+       certificate of limited integration); ParallelMixedTower remains the fallback */
+    BR_TRUE("With[{r = brCatch[brIntegrateArcTanForm[TrigToExp[2 u^5 ArcTan[u]^3], u]]}, r[[1]] === \"NonElementary\" && StringContainsQ[r[[2]], \"on the real ArcTan form\"]]");
+    BR_TRUE("StringContainsQ[brCatch[brIntegrateArcTanForm[TrigToExp[2 u^5 ArcTan[u]^3], u]][[2]], \"(Risch, on the real ArcTan form)\"]");
     BR_TRUE("With[{f = TrigToExp[u ArcTan[u]^2]}, With[{F = brIntegrateArcTanForm[f, u]}, F =!= None && antiderivativeQ[f, F, u]]]");
     BR_EQ("brIntegrateArcTanForm[x E^x, x]", "None");
     BR_TRUE("With[{f = TrigToExp[ArcTan[x]]}, With[{F = brIntegrateTranscendental[f, x]}, antiderivativeQ[f, F, x]]]");

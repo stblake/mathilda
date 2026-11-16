@@ -1660,7 +1660,7 @@ is still deficient for every other caller (reproducer and table:
      and the field decision accepts unverified results
      (`integrate_risch_transcendental.c:659-660`, `:690-699`). Examples:
      `Log[u] Log[1+u]`, `Log[u]/(u+a)`.
-  3. **F5.** Limited integration with a new logarithm declines silently
+  3. **[x] v0.6590, partly done:** the flat log tower over C(x) is certified (`rt_newlog_certificate`), and the rest is marked. Still open: logs whose arguments contain tower variables (`Log[1 + Log[u]]`, `ArcTan[E^u]^2`), non-constant log coefficients (`Log[u] Log[1 + u]`), parametric logs, exponential towers. **F5.** Limited integration with a new logarithm declines silently
      (`risch_field_integrate.c:1531-1565`; the fold also rejects tower arguments at
      `:1400`). This covers `ArcTan[u]^k`, `Log[u]^2/(1+u)`, `Log[1+u]/u`,
      `ArcTan[u]/u` and `Log[Cos[u]]^2`.
@@ -1674,7 +1674,7 @@ is still deficient for every other caller (reproducer and table:
      `Integrate[x/Log[x]^2, x]` as `-x^2/Log[x] + 2 LogIntegral[x^2]`, which is valid only
      where `Log[x^2] == 2 Log[x]`. `2 ExpIntegralEi[2 Log[x]]` holds everywhere. The
      cascade accepts it under the PowerExpand pass of `rt_answer_verified`.
-  6. **F13.** The completeness gate counts only certificate-mark sites, so the silent
+  6. **[x] v0.6590 for limited integration** (3 new marks in BASELINE_C); the F7 (intrat RootSum) and F8 (tangent lower field) sites still need marks. **F13.** The completeness gate counts only certificate-mark sites, so the silent
      declines are invisible to it. Widen it first, so that the ratchet sees steps 3-5. Gates: no WRONG / FALSE_CERT, the completeness baseline
   (13 uncertain Risch DE paths) ratcheted down, unit tests per routine.
 

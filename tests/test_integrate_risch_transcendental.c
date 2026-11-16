@@ -1321,6 +1321,38 @@ static void test_uncombined_log_argument(void) {
     assert_eval_eq(buf, "True", 0);
 }
 
+/* Review F5 (2026-11-16): limited integration with a NEW logarithm declined
+ * silently.  rt_newlog_certificate (risch_field_integrate.c) proves
+ * non-elementarity when the tower is a flat real-or-complex log tower over
+ * C(x), the coefficient's verified integral carries A = Sum d_j Log[v_j] with
+ * constant d_j, and the fold's system for A' = Sum c_k t_k' is inconsistent. */
+static void test_review_newlog_certificate(void) {
+    const char* nonelem[] = { "Log[1 + u]/u", "Log[u]^2/(1 + u)", "ArcTan[u]^2", "ArcTan[u]/u",
+                              "u ArcTan[u]^3", "Log[Cos[u]]^2", "2 u^5 ArcTan[u]^3" };
+    for (size_t i = 0; i < sizeof nonelem / sizeof nonelem[0]; i++) {
+        char buf[300];
+        snprintf(buf, sizeof buf, "TimeConstrained[Quiet[Risch`ElementaryIntegralQ[%s, u]], 30, $TO]", nonelem[i]);
+        assert_eval_eq(buf, "False", 0);
+    }
+    /* elementary derivatives stay True, the complex-log ArcTan ones included
+       (batch E once certified D[Log[(u - I)/(u + I)]^2] non-elementary) */
+    const char* elemF[] = { "Log[(u - I)/(u + I)]^2", "ArcTan[u]^2", "u ArcTan[u]^2", "ArcTan[u] Log[1 + u^2]",
+                            "Log[u] Log[1 + u]", "Log[1 + u] Log[2 + u]", "ArcTan[u] ArcTan[1 + u]",
+                            "Log[u/(1 + u)]^2", "Log[-I + u] Log[I + u]", "ArcTan[u]^2/(1 + u)" };
+    for (size_t i = 0; i < sizeof elemF / sizeof elemF[0]; i++) {
+        char buf[300];
+        snprintf(buf, sizeof buf, "TimeConstrained[Quiet[Risch`ElementaryIntegralQ[Expand[D[%s, u]], u]], 30, $TO] =!= False", elemF[i]);
+        assert_eval_eq(buf, "True", 0);
+    }
+    /* property: no random elementary log/ArcTan tower derivative is certified
+       non-elementary (seeded; 40 cases) */
+    assert_eval_eq("SeedRandom[1116]; ks = {Log[u], Log[1 + u], Log[u - 2], ArcTan[u], Log[1 + u^2], ArcTan[2 u], Log[u^2 + u + 1]};"
+                   " FreeQ[Table[With[{F = Sum[RandomInteger[{-2, 2}] u^RandomInteger[{0, 2}] RandomChoice[ks]^RandomInteger[{1, 2}] RandomChoice[ks], {3}]},"
+                   " TimeConstrained[Quiet[Risch`ElementaryIntegralQ[Expand[D[F, u]], u]], 30, $TO]], {40}], False]", "True", 0);
+    /* the Risch method itself: the certificate, no antiderivative */
+    assert_eval_eq("Head[Quiet[Integrate[ArcTan[u]^2, u, Method -> \"RischTranscendental\"]]]", "Integrate", 0);
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -1422,6 +1454,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_uncombined_log_argument);
     /* 2026-11-16 adversarial review: parameter capture, unverified verdicts. */
     TEST(test_review_parameter_capture);
+    TEST(test_review_newlog_certificate);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }

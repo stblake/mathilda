@@ -1466,11 +1466,163 @@ static Expr* rt_arctan_fold_coeff(Expr* Rs, RtTower* T, long L, Expr* x, Expr** 
     return res;
 }
 
+/* x-dependent and free of every tower variable t_0..t_{n-1}, and of any Log /
+ * Exp / ArcTan of x: an element of C(x) (with parameters). */
+static bool rt_in_base_field(Expr* e, RtTower* T, Expr* x) {
+    for (size_t j = 0; j < T->n; j++) if (!rt_free_of_x(e, T->t[j])) return false;
+    return rt_find_log_of_x(e, x) == NULL && rt_find_exp_of_x(e, x) == NULL
+        && !rt_has_arctan_of_x(e, x);
+}
+
+/* The new-logarithm certificate of IntegratePrimitivePolynomial (Bronstein §5.8,
+ * Phase 2b F5).  Called for a coefficient i >= 1 whose lower-field integral Rs
+ * (tower variables; R its form before the kernel rules) carries a logarithm of x
+ * that is not a tower variable and that the log fold did not absorb.  Returns
+ * true only when that proves r has no LimitedIntegrate solution r = s' + c t_L'
+ * (s in K_L, c constant), i.e. the integrand is not elementary.
+ *
+ * Proof, under the conditions checked here: every level k <= L is a logarithm
+ * t_k = Log[u_k] with u_k in C(x) (independent: !T->dependent), and
+ * Rs = S + A with A = Sum d_j Log[v_j], d_j constants, v_j in C(x).  If a
+ * solution existed, Int r = s + c t_L + const, so G = A - c t_L (minus a
+ * constant) lies in K_{L+1} with DG = A' - c t_L' in C(x).  A primitive monomial
+ * p with Dp in the base is c t + b (Bronstein Lemma 5.1.2, applied level by
+ * level), so A = Sum_k e_k t_k + h + const with h in C(x).  A' and every t_k'
+ * are logarithmic derivatives of rational functions, hence so is h', whose
+ * residues are therefore all zero -- and a sum of logarithmic derivatives with
+ * no residues is 0.  So A' = Sum_k e_k t_k' with constants e_k: the fold's
+ * system has a solution.  Contrapositive: SolveAlways proving that system
+ * INCONSISTENT ({}) certifies non-elementarity.
+ *
+ * Positive evidence only: Rs must be verified as an antiderivative of r, A must
+ * have exactly the stated shape, the system must be rational in x (parameters
+ * only in rational positions), and the answer must be {} -- anything else is
+ * "undecided" (false). */
+static bool rt_newlog_certificate(Expr* r, Expr* Rs, RtTower* T, long L, Expr* x) {
+    if (T->dependent || L < 0 || L >= (long)T->n) return false;
+    for (long k = 0; k <= L; k++)
+        if (T->kind[k] != RT_LOG || !rt_in_base_field(T->arg[k], T, x)) return false;
+    if (rt_find_exp_of_x(Rs, x) || rt_has_arctan_of_x(Rs, x)) return false;
+    /* A = the logarithmic part of Rs: every term d Log[v], d constant, v in C(x) */
+    Expr* S = rt_drop_arctan_terms(Rs, x);
+    if (!S) return false;
+    Expr* A = rt_eval_own(expr_new_function(expr_new_symbol("Plus"),
+        (Expr*[]){ rt_eval1("Expand", expr_copy(Rs)),
+                   expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), S }, 2) }, 2));
+    if (!A) return false;
+    A = rt_eval1("Expand", A);
+    bool ok = A && !rt_is_zero(A);
+    size_t nterm = 0;
+    Expr** tm = NULL;
+    if (ok) {
+        bool plus = rt_head_is(A, "Plus");
+        nterm = plus ? A->data.function.arg_count : 1;
+        tm = plus ? A->data.function.args : &A;
+    }
+    for (size_t i = 0; ok && i < nterm; i++) {
+        Expr* term = tm[i];
+        size_t nf = rt_head_is(term, "Times") ? term->data.function.arg_count : 1;
+        Expr** fs = rt_head_is(term, "Times") ? term->data.function.args : &term;
+        int nlog = 0;
+        for (size_t k = 0; ok && k < nf; k++) {
+            Expr* fk = fs[k];
+            if (rt_head_is(fk, "Log") && fk->data.function.arg_count == 1 && !rt_free_of_x(fk, x)) {
+                nlog++;
+                if (!rt_in_base_field(fk->data.function.args[0], T, x)) ok = false;
+            } else {
+                if (!rt_free_of_x(fk, x)) ok = false;
+                for (size_t j = 0; j < T->n && ok; j++) if (!rt_free_of_x(fk, T->t[j])) ok = false;
+            }
+        }
+        if (nlog != 1) ok = false;
+    }
+    /* the integral itself, on positive evidence: D[Rs] == r in kernel form */
+    if (ok) {
+        Expr** rs = malloc((T->n ? T->n : 1) * sizeof(Expr*));
+        for (size_t i = 0; i < T->n; i++)
+            rs[i] = expr_new_function(expr_new_symbol("Rule"),
+                (Expr*[]){ expr_copy(T->t[i]), expr_copy(T->kernel[i]) }, 2);
+        Expr* back = expr_new_function(expr_new_symbol("List"), rs, T->n);
+        free(rs);
+        Expr* Rk = rt_eval2("ReplaceAll", expr_copy(Rs), expr_copy(back));
+        Expr* rk = rt_eval2("ReplaceAll", expr_copy(r), back);
+        Expr* dR = Rk ? rt_eval2("D", Rk, expr_copy(x)) : NULL;
+        Expr* z = NULL;
+        if (dR && rk) {   /* rt_eval1 adopts the residual (dR, rk) */
+            z = rt_eval1("PossibleZeroQ", expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ dR, expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(-1), rk }, 2) }, 2));
+        } else {
+            if (dR) expr_free(dR);
+            if (rk) expr_free(rk);
+        }
+        ok = z && rt_is_true(z);
+        if (z) expr_free(z);
+    }
+    /* the fold's system A' = Sum_{k <= L} c_k t_k', over x alone */
+    Expr* sol = NULL;
+    Expr* dA = ok ? rt_eval2("D", expr_copy(A), expr_copy(x)) : NULL;
+    if (ok && !dA) ok = false;
+    if (ok) {
+        Expr** terms = malloc((size_t)(L + 2) * sizeof(Expr*));
+        size_t nt = 0;
+        terms[nt++] = dA;
+        Expr** dco = malloc((size_t)(L + 1) * sizeof(Expr*));
+        for (long k = 0; k <= L; k++) {
+            char nm[32]; snprintf(nm, sizeof nm, "rtnlc$%ld", k);
+            dco[k] = rt_subst_kernels(T->Dcoef[k], T);
+            terms[nt++] = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(-1), expr_new_symbol(nm), expr_copy(dco[k]) }, 3);
+        }
+        Expr* lhs = rt_eval1("Together", expr_new_function(expr_new_symbol("Plus"), terms, nt));
+        free(terms);
+        Expr* num = lhs ? rt_eval1("Numerator", lhs) : NULL;
+        /* rational in x, parameters only in rational positions */
+        Expr** src = malloc((size_t)(L + 2) * sizeof(Expr*));
+        src[0] = expr_copy(A);
+        for (long k = 0; k <= L; k++) src[k + 1] = dco[k];
+        free(dco);
+        Expr* srcl = expr_new_function(expr_new_symbol("List"), src, (size_t)L + 2);
+        free(src);
+        Expr* xl = expr_new_function(expr_new_symbol("List"), (Expr*[]){ expr_copy(x) }, 1);
+        const char** ps = NULL; size_t np = 0, pcap = 0; bool nonrat = false;
+        rt_collect_params(srcl, xl, true, &nonrat, &ps, &np, &pcap);
+        free(ps);
+        Expr* vars = expr_new_function(expr_new_symbol("List"), (Expr*[]){ expr_copy(x) }, 1);
+        bool rational = num && !nonrat;
+        if (rational) {
+            Expr* pq = rt_eval2("PolynomialQ", expr_copy(num), expr_copy(x));
+            rational = pq && rt_is_true(pq);
+            if (pq) expr_free(pq);
+        }
+        expr_free(xl);
+        if (rational) {
+            Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
+                (Expr*[]){ num, expr_new_integer(0) }, 2);
+            sol = rt_solve_always_params(eqn, vars, srcl);
+        } else {
+            if (num) expr_free(num);
+            expr_free(vars);
+        }
+        expr_free(srcl);
+        ok = rational && sol && rt_head_is(sol, "List") && sol->data.function.arg_count == 0;
+    }
+    if (sol) expr_free(sol);
+    if (A) expr_free(A);
+    return ok;
+}
+
 static int rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x, int is_bottom,
                                       Expr** s_out, Expr** c_out) {
     *s_out = NULL; *c_out = NULL;
     Expr* R = rt_field_integrate(r, T, L - 1, x, NULL);  /* lower field: no partial */
-    if (!R) return -1;
+    if (!R) {
+        /* a non-elementary lower integral is itself the certificate (the
+         * recursion raised the decision); otherwise this step is undecided */
+        if (!(g_rt_decide_mode && g_rt_decision == RT_DEC_NONELEMENTARY))
+            rde_cert_mark("LimitedIntegrate: lower integral undecided");
+        return -1;
+    }
     /* LimitedIntegrate (§7.2, m=1) recognition of the single new logarithm.
      * rt_field_integrate returns ∫r in TOWER-VARIABLE form, so a new logarithm it
      * introduces appears as Log[<u_L in t-vars>] — NOT the kernel-form Log[u_L] that
@@ -1561,6 +1713,14 @@ static int rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x, int 
          * leaves the step undecided. */
         if (!rt_tower_has_complex(T, L)) rt_dec_nonelem();
         else rde_cert_mark("ArcTan over a complex tower: not folded");
+    } else if (foreign) {
+        /* A new logarithm the fold did not absorb: Bronstein §5.8 (F5).  A
+         * proof when rt_newlog_certificate's conditions hold, otherwise an
+         * undecided step -- never a silent decline (F13). */
+        if (rt_newlog_certificate(r, Rs, T, L, x)) rt_dec_nonelem();
+        else rde_cert_mark("LimitedIntegrate: new logarithm undecided");
+    } else {
+        rde_cert_mark("LimitedIntegrate: coefficient integral outside K + C t");
     }
     expr_free(Rs);
     return rc;

@@ -109,6 +109,17 @@ BASELINE_C = {
     # only for real towers (batch E: it certified D[Log[(u - I)/(u + I)]^2] not
     # elementary); the general case needs the structure theorem over Q(i)
     "ArcTan over a complex tower: not folded",
+    # Phase 2b F13 (review 2026-11-16): limited integration used to decline
+    # SILENTLY here, invisible to this gate.  Now each undecided step is marked:
+    # - a new logarithm outside rt_newlog_certificate's proof (F5): a log whose
+    #   argument holds a tower variable (Log[1 + Log[u]]), an exponential tower,
+    #   a non-constant log coefficient (Log[u] Log[1 + u]), parameters in a
+    #   non-rational position;
+    "LimitedIntegrate: new logarithm undecided",
+    # - the lower-field integral itself undecided (no certificate raised);
+    "LimitedIntegrate: lower integral undecided",
+    # - an integral of the coefficient outside K + C t (degree >= 2 in t_L).
+    "LimitedIntegrate: coefficient integral outside K + C t",
 }
 
 # rde_cert_mark reasons that are permanent: a computation the CAS could not do,
