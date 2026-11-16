@@ -1987,9 +1987,14 @@ monotonically down.
     transcendental Risch algorithm (`src/calculus/integrate_risch_transcendental.c`).
     A decision procedure over a differential transcendental tower.  (The parallel-Risch
     heuristics `"RischNorman"` and `"RischNormanBlake"` were removed in v0.163 —
-    `"ParallelMixedTower"` subsumes both.)  Every case is correct
-    by construction — it fires only behind an exact structural certificate, so
-    the result is not checked by differentiation.  Cases:
+    `"ParallelMixedTower"` subsumes both.)  Every answer is checked by
+    differentiation (`PossibleZeroQ[D[F, x] - f]`) before the cascade accepts it, and
+    `Risch`ElementaryIntegralQ` says `True` only for a verified antiderivative (v0.6589).
+    It was believed correct by construction, but the 2026-11-16 review found the
+    single-extension ansatz solving for the user's parameters. The ansatz `SolveAlways`
+    calls now take the integrand's symbolic parameters as variables
+    (`rt_solve_always_params`), and a solution that binds anything but a fresh unknown
+    is rejected.  Cases:
       - rational: delegated to `Integrate\`BronsteinRational`;
       - logarithmic polynomial `P(x, Log[u])`: the recursive primitive-
         polynomial coefficient matching, with a limited-integration oracle that

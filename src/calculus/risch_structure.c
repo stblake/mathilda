@@ -18,6 +18,7 @@
 #include "sym_intern.h"
 #include "arithmetic.h"
 #include "risch_field.h"
+#include "risch_util.h"
 #include "context.h"
 
 #include <stdio.h>
@@ -64,71 +65,8 @@ static bool rs_is_list(const Expr* e) {
            e->data.function.head->data.symbol.name == intern_symbol("List");
 }
 
-/* ------------------------------------------------------------------ */
-/* Symbolic parameters of the span identity.                           */
-/* ------------------------------------------------------------------ */
-
-/* True iff symbol name `nm` is already one of the List `vars`. */
-static bool rs_in_vars(const char* nm, const Expr* vars) {
-    for (size_t i = 0; i < vars->data.function.arg_count; i++) {
-        const Expr* v = vars->data.function.args[i];
-        if (v->type == EXPR_SYMBOL && v->data.symbol.name == nm) return true;
-    }
-    return false;
-}
-
-static bool rs_head_is(const Expr* e, const char* name) {
-    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
-           e->data.function.head->data.symbol.name == intern_symbol(name);
-}
-
-/* Collect (deduplicated interned names) the symbolic PARAMETERS of e: leaf
- * symbols (function heads are not walked) that are not in `vars`, not
- * Constant-attributed (Pi, E, EulerGamma, ...) and not kernel symbols
- * (System`/Mathilda`, e.g. Infinity).  This is the Risch layer's own reading of
- * a free symbol -- a constant of the derivation (risch_field.c: an unlisted
- * symbol has derivative 0), such as the c in E^(c x).
- *
- * `rat` is true while e sits in a rational-function position (under Plus,
- * Times, an integer Power's base); a parameter met anywhere else (Sqrt[c],
- * Log[c], E^c, ...) sets *nonrat.  SolveAlways reads such an atom as one more
- * unknown and can then report a solution or a contradiction that is not one
- * for the identity in c (SolveAlways[Sqrt[c] - r c == 0, {c}] -> {{r -> 0}}). */
-static void rs_collect_params(const Expr* e, const Expr* vars, bool rat, bool* nonrat,
-                              const char*** out, size_t* n, size_t* cap) {
-    if (!e) return;
-    if (e->type == EXPR_SYMBOL) {
-        const char* nm = e->data.symbol.name;
-        if (rs_in_vars(nm, vars)) return;
-        bool seen = false;
-        for (size_t i = 0; i < *n; i++) if ((*out)[i] == nm) seen = true;
-        if (seen) { if (!rat) *nonrat = true; return; }
-        SymbolDef* def = symtab_lookup(nm);
-        if (def && (def->attributes & ATTR_CONSTANT)) return;
-        /* A kernel symbol is not a parameter.  `is_system` alone cannot tell:
-         * every name the kernel interns at start-up (a, b, c, x, ... among
-         * them) carries it, so ask for the symbol's home context instead --
-         * a bare user symbol lives in Global`. */
-        if (strchr(nm, '`') ? strncmp(nm, "System`", 7) == 0
-                            : strcmp(context_home(nm, def), "Global`") != 0)
-            return;
-        if (!rat) *nonrat = true;
-        if (*n == *cap) {
-            *cap = *cap ? 2 * *cap : 4;
-            *out = realloc(*out, *cap * sizeof(const char*));
-        }
-        (*out)[(*n)++] = nm;
-        return;
-    }
-    if (e->type != EXPR_FUNCTION) return;
-    bool sum_prod = rs_head_is(e, "Plus") || rs_head_is(e, "Times") || rs_head_is(e, "List");
-    bool int_pow = rs_head_is(e, "Power") && e->data.function.arg_count == 2 &&
-                   (e->data.function.args[1]->type == EXPR_INTEGER ||
-                    e->data.function.args[1]->type == EXPR_BIGINT);
-    for (size_t i = 0; i < e->data.function.arg_count; i++)
-        rs_collect_params(e->data.function.args[i], vars,
-                          rat && (sum_prod || (int_pow && i == 0)), nonrat, out, n, cap);
-}
+/* Symbolic parameters: rt_collect_params (risch_util.c), shared with the
+ * ansatz sites' rt_solve_always_params. */
 
 /* ------------------------------------------------------------------ */
 /* The rational Q-span decision.                                       */
@@ -183,9 +121,9 @@ Expr* risch_rational_span(const Expr* theta, Expr* const* gens, size_t m,
     bool nonrat = false;   /* a parameter outside a rational position */
     if (rs_is_list(vars)) {
         const char** ps = NULL; size_t np = 0, pcap = 0;
-        rs_collect_params(theta, vars, true, &nonrat, &ps, &np, &pcap);
+        rt_collect_params(theta, vars, true, &nonrat, &ps, &np, &pcap);
         for (size_t i = 0; i < m; i++)
-            rs_collect_params(gens[i], vars, true, &nonrat, &ps, &np, &pcap);
+            rt_collect_params(gens[i], vars, true, &nonrat, &ps, &np, &pcap);
         if (np) {
             size_t nv = vars->data.function.arg_count;
             Expr** vv = malloc((nv + np) * sizeof(Expr*));

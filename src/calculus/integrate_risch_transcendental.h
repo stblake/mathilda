@@ -69,4 +69,8 @@ bool rt_transcendental_set_debase(bool enabled);
  * Idempotent. */
 void integrate_risch_transcendental_init(void);
 
+/* The answer check of the Risch stage: PossibleZeroQ[D[r, x] - f], or of its
+ * PowerExpand (principal-branch convention only).  Borrows r, f, x. */
+bool rt_answer_verified(Expr* r, Expr* f, Expr* x);
+
 #endif /* MATHILDA_INTEGRATE_RISCH_TRANSCENDENTAL_H */

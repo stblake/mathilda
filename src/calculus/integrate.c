@@ -986,6 +986,15 @@ static Expr* try_rischtranscendental(Expr* f, Expr* x) {
         expr_free(result);
         return NULL;
     }
+    /* "Correct by construction" did not hold: the single-extension ansatz let
+     * SolveAlways solve for the user's parameters, and
+     * Integrate[(1 + a + a E^u + u)/((1 + E^u)(1 + u)), u] shipped the a = 0
+     * answer u - Log[1 + E^u] (review F1, 2026-11-16; fixed at the root in
+     * rt_solve_always_params).  The stage's answer is now checked like every
+     * other's: rt_answer_verified (PossibleZeroQ of the residual, or of its
+     * PowerExpand for an answer stated on the principal branch), else a decline. */
+    bool ok = rt_answer_verified(result, f, x);
+    if (!ok) { expr_free(result); return NULL; }
     return result;
 }
 

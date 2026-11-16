@@ -29,6 +29,14 @@ Expr* rt_eval1(const char* head, Expr* a);
 Expr* rt_eval2(const char* head, Expr* a, Expr* b);
 /* SolveAlways[eqn, vars] as a quiet probe (no print, invisible to Check); args consumed. */
 Expr* rt_solve_always_quiet(Expr* eqn, Expr* vars);
+/* The same, for the constant unknowns of an ansatz: the symbolic parameters of
+ * src (borrowed, may be NULL; the integrand in tower form) join vars, and a
+ * solution binding anything but a fresh unknown symbol is rejected (NULL). */
+Expr* rt_solve_always_params(Expr* eqn, Expr* vars, const Expr* src);
+/* The symbolic parameters of e (Global` leaf symbols not in vars, not
+ * Constant); *nonrat set when one sits outside a rational position. */
+void  rt_collect_params(const Expr* e, const Expr* vars, bool rat, bool* nonrat,
+                        const char*** out, size_t* n, size_t* cap);
 Expr* rt_eval3(const char* head, Expr* a, Expr* b, Expr* c);
 Expr* rt_template(const char* tmpl, const char** names, Expr** vals, size_t n);
 

@@ -406,7 +406,12 @@ static Expr* rt_frac_try(Expr* f, Expr* x, Expr* u, bool is_log) {
                 (Expr*[]){ expr_copy(tsym), expr_copy(x) }, 2);
             Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
                 (Expr*[]){ residual, expr_new_integer(0) }, 2);
-            Expr* sol = rt_solve_always_quiet(eqn, varlist);
+            /* the parameters of num/den join the variables (review F1:
+             * a/(1 + E^u) gave 0, the a -> 0 solution) */
+            Expr* psrc = expr_new_function(expr_new_symbol("List"),
+                (Expr*[]){ expr_copy(num), expr_copy(den) }, 2);
+            Expr* sol = rt_solve_always_params(eqn, varlist, psrc);
+            expr_free(psrc);
             if (sol && sol->type == EXPR_FUNCTION
                 && sol->data.function.head->type == EXPR_SYMBOL
                 && sol->data.function.head->data.symbol.name == intern_symbol("List")
@@ -788,7 +793,7 @@ static Expr* rt_hermite_try(Expr* f, Expr* x, bool is_log) {
                     (Expr*[]){ expr_copy(tsym), expr_copy(x) }, 2);
                 Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
                     (Expr*[]){ rnum, expr_new_integer(0) }, 2);
-                sol = rt_solve_always_quiet(eqn, varlist);
+                sol = rt_solve_always_params(eqn, varlist, F);   /* parameters of F join (F1) */
             }
             if (sol && sol->type == EXPR_FUNCTION
                 && sol->data.function.head->type == EXPR_SYMBOL
@@ -1040,7 +1045,7 @@ Expr* rt_hyperexp_case(Expr* f, Expr* x) {
                     (Expr*[]){ expr_copy(tsym), expr_copy(x) }, 2);
                 Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
                     (Expr*[]){ rnum, expr_new_integer(0) }, 2);
-                sol = rt_solve_always_quiet(eqn, varlist);
+                sol = rt_solve_always_params(eqn, varlist, F);   /* parameters of F join (F1) */
             }
             if (sol && sol->type == EXPR_FUNCTION
                 && sol->data.function.head->type == EXPR_SYMBOL

@@ -603,6 +603,43 @@ static RtDecision rt_decide_field(Expr* f, Expr* x) {
     return vc;
 }
 
+/* The answer check of the cascade gate and the elementarity verdict:
+ * PossibleZeroQ[D[r, x] - f], or failing that the same of its PowerExpand.
+ * The second pass forgives the principal-branch convention only
+ * (-x^2/Log[x] + 2 LogIntegral[x^2] for x/Log[x]^2 holds where
+ * Log[x^2] == 2 Log[x], the same convention DSolve's verifier and the
+ * GammaPower stage adopt); a wrong answer (review F1: residual -0.186 on the
+ * real line) fails both.  An antiderivative valid on an open set still proves
+ * elementarity.  rt_logcombine_verified stays strict: it guards a retry that
+ * is valid off the positive axis only. */
+bool rt_answer_verified(Expr* r, Expr* f, Expr* x) {
+    if (rt_logcombine_verified(r, f, x)) return true;
+    Expr* d = rt_eval2("D", expr_copy(r), expr_copy(x));
+    if (!d) return false;
+    Expr* diff = expr_new_function(expr_new_symbol("Plus"),
+        (Expr*[]){ d, expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(-1), expr_copy(f) }, 2) }, 2);
+    Expr* z = rt_eval1("PossibleZeroQ", rt_eval1("PowerExpand", diff));
+    bool ok = z && z->type == EXPR_SYMBOL && z->data.symbol.name == intern_symbol("True");
+    if (z) expr_free(z);
+    return ok;
+}
+
+/* Q (a field-integrator answer in the tower variables) written back in the
+ * kernels t_i -> kernel_i, then checked by PossibleZeroQ[D[Q, x] - f]. */
+static bool rt_tower_answer_verified(Expr* Q, RtTower* T, Expr* f, Expr* x) {
+    Expr** rs = malloc((T->n ? T->n : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < T->n; i++)
+        rs[i] = expr_new_function(expr_new_symbol("Rule"),
+            (Expr*[]){ expr_copy(T->t[i]), expr_copy(T->kernel[i]) }, 2);
+    Expr* rules = expr_new_function(expr_new_symbol("List"), rs, T->n);
+    free(rs);
+    Expr* back = rt_eval2("ReplaceAll", expr_copy(Q), rules);
+    bool ok = back && rt_answer_verified(back, f, x);
+    if (back) expr_free(back);
+    return ok;
+}
+
 static RtDecision rt_decide_field_canon(Expr* f, Expr* x) {
     /* Mirror the integrator's trig/hyperbolic front-end (rt_trig_frontend) so the
      * DECISION routes trig integrands through the SAME Gaussian exponential tower
@@ -657,7 +694,12 @@ static RtDecision rt_decide_field_canon(Expr* f, Expr* x) {
             Expr* rem = NULL;
             unsigned long prim0 = g_rt_prim_unevaluated;
             Expr* Q = rt_field_integrate(F, &T, (long)T.n - 1, x, &rem);
-            if (Q && !rem)                               verdict = RT_DEC_ELEMENTARY;
+            /* Elementary only on positive evidence: Q, written back in the
+             * kernels, must differentiate to the integrand.  An unverified Q
+             * made Log[u] Log[1 + u] and Log[u]/(u + a) "elementary" (review
+             * F2-F4, 2026-11-16). */
+            if (Q && !rem)
+                verdict = rt_tower_answer_verified(Q, &T, fx, x) ? RT_DEC_ELEMENTARY : RT_DEC_UNKNOWN;
             else if (Q && rem)                           verdict = RT_DEC_NONELEMENTARY;
             else if (g_rt_decision == RT_DEC_NONELEMENTARY) verdict = RT_DEC_NONELEMENTARY;
             else                                         verdict = RT_DEC_UNKNOWN;
@@ -690,7 +732,9 @@ static RtDecision rt_decide_field_canon(Expr* f, Expr* x) {
 static RtDecision rt_decide(Expr* f, Expr* x) {
     Expr* anti = rt_integrate(f, x);
     if (anti) {
-        bool elem = rt_expr_is_elementary(anti);
+        /* an exhibited antiderivative proves elementarity only once checked:
+         * an unverified wrong one (review F1/F2) is no evidence */
+        bool elem = rt_expr_is_elementary(anti) && rt_answer_verified(anti, f, x);
         expr_free(anti);
         if (elem) return RT_DEC_ELEMENTARY;   /* elementary closed form exhibited */
     }

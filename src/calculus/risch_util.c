@@ -14,6 +14,9 @@
 #include "sym_intern.h"
 #include "simp_trigexp_zero.h"
 #include "message.h"           /* rt_solve_always_quiet: a probe */
+#include "symtab.h"            /* rt_collect_params: symtab_lookup */
+#include "attr.h"              /* ATTR_CONSTANT */
+#include "context.h"           /* context_home */
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -161,6 +164,123 @@ Expr* rt_solve_always_quiet(Expr* eqn, Expr* vars) {
     mth_msg_suppress_pop();
     mth_msg_fired_restore(fired);
     return r;
+}
+
+/* ------------------------------------------------------------------ */
+/* Symbolic parameters of a SolveAlways identity (v0.6586 / v0.6588).  */
+/* ------------------------------------------------------------------ */
+
+static bool rt_name_in_list(const char* nm, const Expr* vars) {
+    if (!vars || vars->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < vars->data.function.arg_count; i++) {
+        const Expr* v = vars->data.function.args[i];
+        if (v->type == EXPR_SYMBOL && v->data.symbol.name == nm) return true;
+    }
+    return false;
+}
+
+/* Collect (deduplicated interned names) the symbolic PARAMETERS of e: leaf
+ * symbols (function heads are not walked) that are not in `vars`, not
+ * Constant-attributed (Pi, E, EulerGamma, ...) and not kernel symbols
+ * (System`/Mathilda`, e.g. Infinity).  This is the Risch layer's own reading of
+ * a free symbol -- a constant of the derivation (risch_field.c: an unlisted
+ * symbol has derivative 0), such as the c in E^(c x).
+ *
+ * `rat` is true while e sits in a rational-function position (under Plus,
+ * Times, List, an integer Power's base); a parameter met anywhere else
+ * (Sqrt[c], Log[c], E^c, ...) sets *nonrat.  SolveAlways reads such an atom as
+ * one more unknown and can then report a solution or a contradiction that is
+ * not one for the identity in c (SolveAlways[Sqrt[c] - r c == 0, {c}] ->
+ * {{r -> 0}}). */
+void rt_collect_params(const Expr* e, const Expr* vars, bool rat, bool* nonrat,
+                       const char*** out, size_t* n, size_t* cap) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        const char* nm = e->data.symbol.name;
+        if (rt_name_in_list(nm, vars)) return;
+        bool seen = false;
+        for (size_t i = 0; i < *n; i++) if ((*out)[i] == nm) seen = true;
+        if (seen) { if (!rat) *nonrat = true; return; }
+        SymbolDef* def = symtab_lookup(nm);
+        if (def && (def->attributes & ATTR_CONSTANT)) return;
+        /* A kernel symbol is not a parameter.  `is_system` alone cannot tell:
+         * every name the kernel interns at start-up (a, b, c, x, ... among
+         * them) carries it, so ask for the symbol's home context instead --
+         * a bare user symbol lives in Global`. */
+        if (strchr(nm, '`') ? strncmp(nm, "System`", 7) == 0
+                            : strcmp(context_home(nm, def), "Global`") != 0)
+            return;
+        if (!rat) *nonrat = true;
+        if (*n == *cap) {
+            *cap = *cap ? 2 * *cap : 4;
+            *out = realloc(*out, *cap * sizeof(const char*));
+        }
+        (*out)[(*n)++] = nm;
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    bool sum_prod = rt_head_is(e, "Plus") || rt_head_is(e, "Times") || rt_head_is(e, "List");
+    bool int_pow = rt_head_is(e, "Power") && e->data.function.arg_count == 2 &&
+                   (e->data.function.args[1]->type == EXPR_INTEGER ||
+                    e->data.function.args[1]->type == EXPR_BIGINT);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        rt_collect_params(e->data.function.args[i], vars,
+                          rat && (sum_prod || (int_pow && i == 0)), nonrat, out, n, cap);
+}
+
+/* SolveAlways for the CONSTANT unknowns of an ansatz, with the identity
+ * required for every value of the integrand's symbolic parameters.
+ *
+ * The ansatz sites (Rothstein-Trager residues, Hermite/log coefficients, the
+ * log fold) build `eqn` over fresh unknowns and pass the tower variables as
+ * `vars`.  Left out of `vars`, a parameter a of the integrand is solved for as
+ * one more unknown: Integrate[(1 + a + a E^u + u)/((1 + E^u)(1 + u)), u] gave
+ * u - Log[1 + E^u] (the solution of the a = 0 integrand), and
+ * RischTranscendental[a/(1 + E^u), u] gave 0 (review F1, 2026-11-16).  So the
+ * parameters of `src` (the integrand in tower form, free of the unknowns;
+ * borrowed, may be NULL) join `vars`.
+ *
+ * And a solution is accepted only on positive evidence: every rule must bind a
+ * SYMBOL that is not a variable or parameter -- one of the site's unknowns.
+ * SolveAlways also solves for non-variable atoms (SolveAlways[Log[c] - r c ==
+ * 0, {c}] gave {{r -> 0, Log[c] -> 0}}, a parameter in a non-rational
+ * position); such a result returns NULL (undecided), never {} (which a caller
+ * may read as a contradiction).  eqn and vars are consumed. */
+Expr* rt_solve_always_params(Expr* eqn, Expr* vars, const Expr* src) {
+    if (vars && vars->type == EXPR_FUNCTION && src) {
+        const char** ps = NULL; size_t np = 0, pcap = 0;
+        bool nonrat = false;
+        rt_collect_params(src, vars, true, &nonrat, &ps, &np, &pcap);
+        if (np) {
+            size_t nv = vars->data.function.arg_count;
+            Expr** vv = malloc((nv + np) * sizeof(Expr*));
+            for (size_t i = 0; i < nv; i++) vv[i] = expr_copy(vars->data.function.args[i]);
+            for (size_t i = 0; i < np; i++) vv[nv + i] = expr_new_symbol(ps[i]);
+            expr_free(vars);
+            vars = expr_new_function(expr_new_symbol("List"), vv, nv + np);
+            free(vv);
+        }
+        free(ps);
+    }
+    Expr* allvars = vars ? expr_copy(vars) : NULL;
+    Expr* sol = rt_solve_always_quiet(eqn, vars);
+    bool ok = true;
+    if (sol && rt_head_is(sol, "List")) {
+        for (size_t k = 0; k < sol->data.function.arg_count && ok; k++) {
+            const Expr* rl = sol->data.function.args[k];
+            if (!rt_head_is(rl, "List")) continue;
+            for (size_t j = 0; j < rl->data.function.arg_count && ok; j++) {
+                const Expr* r = rl->data.function.args[j];
+                if (!rt_head_is(r, "Rule") || r->data.function.arg_count != 2) { ok = false; break; }
+                const Expr* lhs = r->data.function.args[0];
+                if (lhs->type != EXPR_SYMBOL || rt_name_in_list(lhs->data.symbol.name, allvars))
+                    ok = false;
+            }
+        }
+    }
+    if (allvars) expr_free(allvars);
+    if (!ok) { expr_free(sol); return NULL; }
+    return sol;
 }
 
 /* Given a commensurability class of x-dependent exponents `ws[0..nw-1]` (every

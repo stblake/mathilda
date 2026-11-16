@@ -1644,9 +1644,9 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
     - [ ] cM-2-67 `E^x (E^x - 2)/(Sqrt[2 + a + E^x] (1 - E^x + 2 E^(2 x)))` 78 -> 179 (PMT Kummer piece, Trager log part over Q(a))
     - [ ] cA-1-263 0.04 -> 10 s (a Together in xPowerReduce hits its budget before falling back)
     - [ ] the C cascade sums stage pieces without a log combine (genus1-2-11 seen once; zero-sum Log coefficients survive)
-  - [ ] SolveAlways also solves for non-variable atoms (SolveAlways[Log[c] - r c == 0, {c}] -> {{r -> 0, Log[c] -> 0}}); risch_structure.c now certifies outside the solver (v0.6586), check risch_singleext.c / risch_field_integrate.c for the same exposure
+  - [x] (v0.6589: rt_solve_always_params rejects atom/parameter rules at the 6 Risch ansatz sites) SolveAlways also solves for non-variable atoms (SolveAlways[Log[c] - r c == 0, {c}] -> {{r -> 0, Log[c] -> 0}}); risch_structure.c now certifies outside the solver (v0.6586), check risch_singleext.c / risch_field_integrate.c for the same exposure
   - [ ] Integrate[E^(-c x)/(a E^(c x) + b)^(5/2), x] (Automatic): numerically right but PossibleZeroQ fails and ~18 Solve::nsdim messages print; Method -> "Bronstein" is clean since v0.6586
-- [ ] Phase 2b: C transcendental Risch completeness (BRONSTEIN_PLAN.md "Phase 2b"): ArcTan[u]^k non-elementary undecided + slow TrigToExp form (tasks/risch_arctan_nonelem/); triage docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md (F1 WRONG: SolveAlways captures parameters in risch_singleext.c, unchecked by Integrate -- first)
+- [ ] Phase 2b: C transcendental Risch completeness -- F1-F4 done v0.6589; next F13 (gate), F5 (new-log limited integration), F6/F7 (perf), F8/F9/F12. (BRONSTEIN_PLAN.md "Phase 2b"): ArcTan[u]^k non-elementary undecided + slow TrigToExp form (tasks/risch_arctan_nonelem/); triage docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md (F1 WRONG: SolveAlways captures parameters in risch_singleext.c, unchecked by Integrate -- first)
 - [ ] Phase 5: radical anywhere (brDField, transcendental Risch over algebraic base, RDE on a curve over a tower)
 - [ ] Theory note docs/notes/bronstein_extensions.tex (E1–E6; LaTeX per user 2026-11-14), each adversarially reviewed — E6a–c written v0.6547, review pending
 - [ ] Close-out

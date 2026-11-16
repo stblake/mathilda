@@ -264,7 +264,7 @@ Expr* rt_log_tower_case(Expr* f, Expr* x) {
                 free(vl);
                 Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
                     (Expr*[]){ rnum, expr_new_integer(0) }, 2);
-                sol = rt_solve_always_quiet(eqn, varlist);
+                sol = rt_solve_always_params(eqn, varlist, F);   /* parameters of F join (F1) */
             }
             if (sol && sol->type == EXPR_FUNCTION
                 && sol->data.function.head->type == EXPR_SYMBOL
@@ -379,7 +379,7 @@ static Expr* rt_tower_solve(Expr* Q, Expr** syms, size_t nsym,
         free(vl);
         Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
             (Expr*[]){ rnum, expr_new_integer(0) }, 2);
-        sol = rt_solve_always_quiet(eqn, varlist);
+        sol = rt_solve_always_params(eqn, varlist, F);   /* parameters of F join (F1) */
     }
     if (sol && sol->type == EXPR_FUNCTION
         && sol->data.function.head->type == EXPR_SYMBOL
@@ -1430,7 +1430,7 @@ static Expr* rt_arctan_fold_coeff(Expr* Rs, RtTower* T, long L, Expr* x, Expr** 
             Expr* vl = expr_new_function(expr_new_symbol("List"), vs, nv);
             free(vs);
             Expr* eq = expr_new_function(expr_new_symbol("Equal"), (Expr*[]){ num, expr_new_integer(0) }, 2);
-            Expr* sol = rt_solve_always_quiet(eq, vl);
+            Expr* sol = rt_solve_always_params(eq, vl, Rs);   /* parameters of Rs join (F3) */
             /* sol = {{c_j -> v_j, ...}} with every v_j a constant */
             if (sol && sol->type == EXPR_FUNCTION && rt_head_is(sol, "List") && sol->data.function.arg_count == 1) {
                 Expr* rules = sol->data.function.args[0];

@@ -1321,6 +1321,50 @@ static void test_uncombined_log_argument(void) {
     assert_eval_eq(buf, "True", 0);
 }
 
+/* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
+ * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
+ * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
+ * unverified antiderivative.  Each answer is now checked by differentiation;
+ * each verdict needs positive evidence. */
+static void test_review_parameter_capture(void) {
+    /* F1: the answers carry a; each is verified at a = 3/7 */
+    const char* elem[] = {
+        "(1 + a + a E^u + u)/((1 + E^u) (1 + u))",
+        "a/(1 + E^u)",
+        "a/Log[u] + 1/(u (1 + Log[u]))",
+        "Log[u]/(u + a)" };
+    for (size_t i = 0; i < sizeof elem / sizeof elem[0]; i++) {
+        char buf[600];
+        snprintf(buf, sizeof buf,
+            "With[{f = %s}, With[{F = Quiet[Integrate[f, u]]}, Head[F] === Integrate ||"
+            " Abs[N[(D[F, u] - f) /. {a -> 3/7, u -> 13/10}, 20]] < 10^-12]]", elem[i]);
+        assert_eval_eq(buf, "True", 0);
+    }
+    /* the a = 0 answer is gone; the a term is kept */
+    assert_eval_eq("FreeQ[Integrate[(1 + a + a E^u + u)/((1 + E^u) (1 + u)), u], a]", "False", 0);
+    assert_eval_eq("FreeQ[Integrate`RischTranscendental[a/(1 + E^u), u], a]", "False", 0);
+    /* (a E^u + a E^(2u) + u)/((1 + E^u) u) = a E^u/u + 1/(1 + E^u): never the
+       wrong u - Log[1 + E^u] */
+    assert_eval_eq("With[{f = (a E^u + a E^(2 u) + u)/((1 + E^u) u)}, With[{F = Quiet[Integrate[f, u]]},"
+                   " Head[F] === Integrate || Abs[N[(D[F, u] - f) /. {a -> 3/7, u -> 13/10}, 20]] < 10^-12]]", "True", 0);
+    /* F2: non-elementary (FriCAS agrees), never True */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[1/(1 + E^u) + a E^u/u, u]]", "False", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[a/Log[u] + 1/(u (1 + Log[u])), u]]", "False", 0);
+    /* F3/F4: not True (undecided until F5's limited integration) */
+    const char* notTrue[] = { "Log[u]/(u + a)", "Log[a + u]/u", "Log[u]^2/(u + a)",
+                              "Log[u] Log[1 + u]", "u^2 Log[u] Log[1 + u]", "Log[u] Log[1 - u]" };
+    for (size_t i = 0; i < sizeof notTrue / sizeof notTrue[0]; i++) {
+        char buf[300];
+        snprintf(buf, sizeof buf, "Quiet[Risch`ElementaryIntegralQ[%s, u]] =!= True", notTrue[i]);
+        assert_eval_eq(buf, "True", 0);
+    }
+    /* controls: genuine verdicts survive the checks */
+    assert_eval_eq("Risch`ElementaryIntegralQ[u E^u, u]", "True", 0);
+    assert_eval_eq("Risch`ElementaryIntegralQ[Log[a + u], u]", "True", 0);
+    assert_eval_eq("Risch`ElementaryIntegralQ[E^(a u)/(1 + E^(a u)), u]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^u/u, u]]", "False", 0);
+}
+
 void test_integrate_risch_transcendental(void) {
     symtab_init();
     core_init();
@@ -1376,6 +1420,8 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_circular_trig_integration);
     TEST(test_hyperbolic_integration);
     TEST(test_uncombined_log_argument);
+    /* 2026-11-16 adversarial review: parameter capture, unverified verdicts. */
+    TEST(test_review_parameter_capture);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }

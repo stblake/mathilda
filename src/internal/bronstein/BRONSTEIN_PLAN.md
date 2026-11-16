@@ -1647,14 +1647,15 @@ is still deficient for every other caller (reproducer and table:
   no false certificate, crash or leak. This phase fixes each finding at its root in C,
   in this order, and retires the routing in `Pipeline.m` wherever C then decides on its
   own:
-  1. **F1, WRONG (confirmed by hand).** The single-extension ansatz lets `SolveAlways`
+  1. **[x] v0.6589.** `rt_solve_always_params` at all six sites, plus verified answers and
+     True verdicts. **F1, WRONG (confirmed by hand).** The single-extension ansatz lets `SolveAlways`
      solve for the user's parameters (`a -> 0`), and `Integrate` returns the result
      unchecked, because the stage is trusted as correct by construction.
      `Integrate[(1 + a + a E^u + u)/((1 + E^u) (1 + u)), u]` and
      `Integrate[(a E^u + a E^(2 u) + u)/((1 + E^u) u), u]` both give
      `u - Log[1 + E^u]`, and `RischTranscendental[a/(1 + E^u), u]` gives `0`.
      Sites: `risch_singleext.c:405-453`, `:787`, `:1039`; `integrate.c:974-990`.
-  2. **F2-F4, a false True from `Risch`ElementaryIntegralQ`.** It uses F1's answers,
+  2. **[x] v0.6589: no false True remains; F3/F4 are undecided until step 3.** **F2-F4, a false True from `Risch`ElementaryIntegralQ`.** It uses F1's answers,
      the same parameter capture sits in the log fold (`risch_field_integrate.c:1433`),
      and the field decision accepts unverified results
      (`integrate_risch_transcendental.c:659-660`, `:690-699`). Examples:
@@ -1669,6 +1670,10 @@ is still deficient for every other caller (reproducer and table:
   5. **F8, F9, F12.** There is no Risch DE over a tangent lower field
      (`E^Tan[u] Sec[u]^2`), `Risch`RationalSpan` fails with `Sqrt[2]`, plus F12 in the
      review.
+  5b. **Branch form (found with F1).** The Ei -> LogIntegral presentation writes
+     `Integrate[x/Log[x]^2, x]` as `-x^2/Log[x] + 2 LogIntegral[x^2]`, which is valid only
+     where `Log[x^2] == 2 Log[x]`. `2 ExpIntegralEi[2 Log[x]]` holds everywhere. The
+     cascade accepts it under the PowerExpand pass of `rt_answer_verified`.
   6. **F13.** The completeness gate counts only certificate-mark sites, so the silent
      declines are invisible to it. Widen it first, so that the ratchet sees steps 3-5. Gates: no WRONG / FALSE_CERT, the completeness baseline
   (13 uncertain Risch DE paths) ratcheted down, unit tests per routine.
