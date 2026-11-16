@@ -228,58 +228,135 @@ void rt_collect_params(const Expr* e, const Expr* vars, bool rat, bool* nonrat,
                           rat && (sum_prod || (int_pow && i == 0)), nonrat, out, n, cap);
 }
 
-/* SolveAlways for the CONSTANT unknowns of an ansatz, with the identity
- * required for every value of the integrand's symbolic parameters.
+/* SolveAlways for the CONSTANT unknowns of an ansatz whose integrand carries
+ * symbolic parameters (review F1, 2026-11-16).
  *
- * The ansatz sites (Rothstein-Trager residues, Hermite/log coefficients, the
- * log fold) build `eqn` over fresh unknowns and pass the tower variables as
- * `vars`.  Left out of `vars`, a parameter a of the integrand is solved for as
- * one more unknown: Integrate[(1 + a + a E^u + u)/((1 + E^u)(1 + u)), u] gave
- * u - Log[1 + E^u] (the solution of the a = 0 integrand), and
- * RischTranscendental[a/(1 + E^u), u] gave 0 (review F1, 2026-11-16).  So the
- * parameters of `src` (the integrand in tower form, free of the unknowns;
- * borrowed, may be NULL) join `vars`.
+ * The unknowns (residues, log coefficients, the fold's c_k) are constants of
+ * the derivation, and so are the parameters: a solution may legitimately
+ * DEPEND on them (c = 1/a beside Log[1 + a u]).  Plain SolveAlways[eqn, {t, x}]
+ * solves for every other symbol, the parameters included, so it set a -> 0:
+ * Integrate[(1 + a + a E^u + u)/((1 + E^u)(1 + u)), u] gave u - Log[1 + E^u]
+ * and RischTranscendental[a/(1 + E^u), u] gave 0.  Putting the parameters
+ * among the VARIABLES instead is wrong the other way: it demands one solution
+ * independent of a, so {} no longer means "no solution" (a false certificate
+ * on D[a ArcTan[u] Log[1 + u]^2 + Log[1 + a u] Log[a + u^2]] during
+ * development).  The identity is linear in the unknowns over C = Q(params), so
+ * it is solved there:
  *
- * And a solution is accepted only on positive evidence: every rule must bind a
- * SYMBOL that is not a variable or parameter -- one of the site's unknowns.
- * SolveAlways also solves for non-variable atoms (SolveAlways[Log[c] - r c ==
- * 0, {c}] gave {{r -> 0, Log[c] -> 0}}, a parameter in a non-rational
- * position); such a result returns NULL (undecided), never {} (which a caller
- * may read as a contradiction).  eqn and vars are consumed. */
+ *     Solve[Thread[CoefficientList[lhs, vars] == 0], unknowns]
+ *
+ * with the parameters (those of src, borrowed, may be NULL: the integrand in
+ * tower form) left as parameters, and the unknowns = the remaining fresh
+ * symbols of lhs.  Solve's answers are generic in the parameters: a solution
+ * holds outside a Zariski-closed set, and {} means inconsistent for generic
+ * parameter values -- the Phase 4.4 (E4.4) semantics of every parametric
+ * verdict.  With no parameter this is plain SolveAlways, as before.
+ *
+ * Positive evidence: every rule must bind one of the unknowns (SolveAlways
+ * also solves for non-variable atoms, {{r -> 0, Log[c] -> 0}}); lhs must be a
+ * polynomial in vars.  Anything else returns NULL (undecided), never {}.
+ * eqn and vars are consumed. */
 Expr* rt_solve_always_params(Expr* eqn, Expr* vars, const Expr* src) {
-    if (vars && vars->type == EXPR_FUNCTION && src) {
-        const char** ps = NULL; size_t np = 0, pcap = 0;
-        bool nonrat = false;
+    const char** ps = NULL; size_t np = 0, pcap = 0;
+    bool nonrat = false;
+    if (vars && vars->type == EXPR_FUNCTION && src)
         rt_collect_params(src, vars, true, &nonrat, &ps, &np, &pcap);
-        if (np) {
-            size_t nv = vars->data.function.arg_count;
-            Expr** vv = malloc((nv + np) * sizeof(Expr*));
-            for (size_t i = 0; i < nv; i++) vv[i] = expr_copy(vars->data.function.args[i]);
-            for (size_t i = 0; i < np; i++) vv[nv + i] = expr_new_symbol(ps[i]);
-            expr_free(vars);
-            vars = expr_new_function(expr_new_symbol("List"), vv, nv + np);
-            free(vv);
-        }
+    if (np == 0) {
         free(ps);
-    }
-    Expr* allvars = vars ? expr_copy(vars) : NULL;
-    Expr* sol = rt_solve_always_quiet(eqn, vars);
-    bool ok = true;
-    if (sol && rt_head_is(sol, "List")) {
-        for (size_t k = 0; k < sol->data.function.arg_count && ok; k++) {
-            const Expr* rl = sol->data.function.args[k];
-            if (!rt_head_is(rl, "List")) continue;
-            for (size_t j = 0; j < rl->data.function.arg_count && ok; j++) {
-                const Expr* r = rl->data.function.args[j];
-                if (!rt_head_is(r, "Rule") || r->data.function.arg_count != 2) { ok = false; break; }
-                const Expr* lhs = r->data.function.args[0];
-                if (lhs->type != EXPR_SYMBOL || rt_name_in_list(lhs->data.symbol.name, allvars))
-                    ok = false;
+        Expr* allvars = vars ? expr_copy(vars) : NULL;
+        Expr* sol = rt_solve_always_quiet(eqn, vars);
+        bool ok = true;
+        if (sol && rt_head_is(sol, "List"))
+            for (size_t k = 0; k < sol->data.function.arg_count && ok; k++) {
+                const Expr* rl = sol->data.function.args[k];
+                if (!rt_head_is(rl, "List")) continue;
+                for (size_t j = 0; j < rl->data.function.arg_count && ok; j++) {
+                    const Expr* r = rl->data.function.args[j];
+                    if (!rt_head_is(r, "Rule") || r->data.function.arg_count != 2
+                        || r->data.function.args[0]->type != EXPR_SYMBOL
+                        || rt_name_in_list(r->data.function.args[0]->data.symbol.name, allvars))
+                        ok = false;
+                }
             }
-        }
+        if (allvars) expr_free(allvars);
+        if (!ok) { expr_free(sol); return NULL; }
+        return sol;
     }
-    if (allvars) expr_free(allvars);
-    if (!ok) { expr_free(sol); return NULL; }
+    /* vars + parameters: the symbols that are NOT unknowns */
+    size_t nv = vars->data.function.arg_count;
+    Expr** vv = malloc((nv + np) * sizeof(Expr*));
+    for (size_t i = 0; i < nv; i++) vv[i] = expr_copy(vars->data.function.args[i]);
+    for (size_t i = 0; i < np; i++) vv[nv + i] = expr_new_symbol(ps[i]);
+    Expr* known = expr_new_function(expr_new_symbol("List"), vv, nv + np);
+    free(vv);
+    free(ps);
+    Expr* lhs = (rt_head_is(eqn, "Equal") && eqn->data.function.arg_count == 2)
+        ? rt_eval2("Subtract", expr_copy(eqn->data.function.args[0]), expr_copy(eqn->data.function.args[1]))
+        : NULL;
+    expr_free(eqn);
+    Expr* sol = NULL;
+    bool poly = false;
+    if (lhs) {
+        Expr* pq = rt_eval2("PolynomialQ", expr_copy(lhs), expr_copy(vars));
+        poly = pq && rt_is_true(pq);
+        if (pq) expr_free(pq);
+    }
+    /* the unknowns: fresh symbols of lhs other than vars and parameters */
+    const char** us = NULL; size_t nu = 0, ucap = 0; bool unr = false;
+    if (poly) rt_collect_params(lhs, known, true, &unr, &us, &nu, &ucap);
+    if (poly) {
+        Expr* coeffs = rt_eval1("Flatten", rt_eval2("CoefficientList", expr_copy(lhs), expr_copy(vars)));
+        if (coeffs && rt_head_is(coeffs, "List")) {
+            if (nu == 0) {
+                /* no unknown: the identity holds ({{}}) or it does not ({}) */
+                bool allzero = true;
+                for (size_t i = 0; i < coeffs->data.function.arg_count && allzero; i++) {
+                    Expr* z = rt_eval1("Together", expr_copy(coeffs->data.function.args[i]));
+                    allzero = z && rt_is_zero(z);
+                    if (z) expr_free(z);
+                }
+                sol = allzero
+                    ? expr_new_function(expr_new_symbol("List"),
+                          (Expr*[]){ expr_new_function(expr_new_symbol("List"), NULL, 0) }, 1)
+                    : expr_new_function(expr_new_symbol("List"), NULL, 0);
+                expr_free(coeffs);
+            } else {
+                Expr** uu = malloc(nu * sizeof(Expr*));
+                for (size_t i = 0; i < nu; i++) uu[i] = expr_new_symbol(us[i]);
+                Expr* ul = expr_new_function(expr_new_symbol("List"), uu, nu);
+                free(uu);
+                /* Thread[coeffs == 0]; coeffs is adopted */
+                Expr* thr = rt_eval1("Thread", expr_new_function(expr_new_symbol("Equal"),
+                    (Expr*[]){ coeffs, expr_new_integer(0) }, 2));
+                unsigned long fired = mth_msg_fired_count();
+                mth_msg_suppress_push();
+                sol = thr ? rt_eval_call("Solve", (Expr*[]){ thr, expr_copy(ul) }, 2) : NULL;
+                mth_msg_suppress_pop();
+                mth_msg_fired_restore(fired);
+                /* every rule binds an unknown */
+                if (sol && rt_head_is(sol, "List")) {
+                    bool ok = true;
+                    for (size_t k = 0; k < sol->data.function.arg_count && ok; k++) {
+                        const Expr* rl = sol->data.function.args[k];
+                        if (!rt_head_is(rl, "List")) { ok = false; break; }
+                        for (size_t j = 0; j < rl->data.function.arg_count && ok; j++) {
+                            const Expr* r = rl->data.function.args[j];
+                            if (!rt_head_is(r, "Rule") || r->data.function.arg_count != 2
+                                || r->data.function.args[0]->type != EXPR_SYMBOL
+                                || !rt_name_in_list(r->data.function.args[0]->data.symbol.name, ul))
+                                ok = false;
+                        }
+                    }
+                    if (!ok) { expr_free(sol); sol = NULL; }
+                } else if (sol) { expr_free(sol); sol = NULL; }
+                expr_free(ul);
+            }
+        } else if (coeffs) expr_free(coeffs);
+    }
+    free(us);
+    if (lhs) expr_free(lhs);
+    expr_free(known);
+    expr_free(vars);
     return sol;
 }
 

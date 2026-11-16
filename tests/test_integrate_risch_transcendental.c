@@ -1349,6 +1349,26 @@ static void test_review_newlog_certificate(void) {
     assert_eval_eq("SeedRandom[1116]; ks = {Log[u], Log[1 + u], Log[u - 2], ArcTan[u], Log[1 + u^2], ArcTan[2 u], Log[u^2 + u + 1]};"
                    " FreeQ[Table[With[{F = Sum[RandomInteger[{-2, 2}] u^RandomInteger[{0, 2}] RandomChoice[ks]^RandomInteger[{1, 2}] RandomChoice[ks], {3}]},"
                    " TimeConstrained[Quiet[Risch`ElementaryIntegralQ[Expand[D[F, u]], u]], 30, $TO]], {40}], False]", "True", 0);
+    /* parameters: the fold's constants may depend on them (c = a beside
+       a Log[1 + u], c = 1/a beside Log[1 + a u]).  v0.6590 made the parameters
+       SolveAlways variables, so the first of these was certified NOT
+       elementary; v0.6591 solves the identity over Q(params) */
+    const char* elemP[] = {
+        "a ArcTan[u] Log[1 + u]^2 - 2 u Log[1 + u]^3 + Log[1 + a u] Log[a + u^2]",
+        "-(u Log[u]^3) + a u Log[u] Log[1 + u] + a Log[-b + u] Log[1 + a u]",
+        "a Log[u] Log[1 + u]", "a ArcTan[u]^2", "Log[u] Log[u + a]" };
+    for (size_t i = 0; i < sizeof elemP / sizeof elemP[0]; i++) {
+        char buf[400];
+        snprintf(buf, sizeof buf, "TimeConstrained[Quiet[Risch`ElementaryIntegralQ[Expand[D[%s, u]], u]], 30, $TO] =!= False", elemP[i]);
+        assert_eval_eq(buf, "True", 0);
+    }
+    /* generic certificates over Q(a) (E4.4 semantics) */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[Log[u]/(u + a), u]]", "False", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[Log[u]^2/(u + a), u]]", "False", 0);
+    /* property over parameters (seeded, 40 cases): no false certificate */
+    assert_eval_eq("SeedRandom[1117]; ks = {Log[u], Log[u + a], Log[1 + u], Log[u - b], Log[a u + 1], ArcTan[u], Log[u^2 + a]};"
+                   " FreeQ[Table[With[{F = Sum[RandomChoice[{-2, -1, 1, 2, a}] u^RandomInteger[{0, 2}] RandomChoice[ks]^RandomInteger[{1, 2}] RandomChoice[ks], {3}]},"
+                   " TimeConstrained[Quiet[Risch`ElementaryIntegralQ[Expand[D[F, u]], u]], 30, $TO]], {40}], False]", "True", 0);
     /* the Risch method itself: the certificate, no antiderivative */
     assert_eval_eq("Head[Quiet[Integrate[ArcTan[u]^2, u, Method -> \"RischTranscendental\"]]]", "Integrate", 0);
 }

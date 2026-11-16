@@ -1566,7 +1566,7 @@ static bool rt_newlog_certificate(Expr* r, Expr* Rs, RtTower* T, long L, Expr* x
     if (ok) {
         Expr** terms = malloc((size_t)(L + 2) * sizeof(Expr*));
         size_t nt = 0;
-        terms[nt++] = dA;
+        terms[nt++] = expr_copy(dA);   /* dA itself is kept for the parameter scan */
         Expr** dco = malloc((size_t)(L + 1) * sizeof(Expr*));
         for (long k = 0; k <= L; k++) {
             char nm[32]; snprintf(nm, sizeof nm, "rtnlc$%ld", k);
@@ -1578,8 +1578,11 @@ static bool rt_newlog_certificate(Expr* r, Expr* Rs, RtTower* T, long L, Expr* x
         free(terms);
         Expr* num = lhs ? rt_eval1("Numerator", lhs) : NULL;
         /* rational in x, parameters only in rational positions */
+        /* the parameters of the SYSTEM (A' and the t_k'), not of A: in
+           Log[u]/(u + a), a sits inside Log[a + u] but A' = 1/(a + u) is
+           rational in it */
         Expr** src = malloc((size_t)(L + 2) * sizeof(Expr*));
-        src[0] = expr_copy(A);
+        src[0] = dA; dA = NULL;   /* adopted */
         for (long k = 0; k <= L; k++) src[k + 1] = dco[k];
         free(dco);
         Expr* srcl = expr_new_function(expr_new_symbol("List"), src, (size_t)L + 2);
@@ -1608,6 +1611,7 @@ static bool rt_newlog_certificate(Expr* r, Expr* Rs, RtTower* T, long L, Expr* x
         ok = rational && sol && rt_head_is(sol, "List") && sol->data.function.arg_count == 0;
     }
     if (sol) expr_free(sol);
+    if (dA) expr_free(dA);
     if (A) expr_free(A);
     return ok;
 }
