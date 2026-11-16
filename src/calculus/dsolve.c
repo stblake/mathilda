@@ -191,6 +191,7 @@ extern Expr** dsolve_linearizable_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_lie_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_inverse_try(DSolveProblem* P, size_t* nbranch);
 extern Expr** dsolve_knownsol_try(DSolveProblem* P, size_t* nbranch);
+extern Expr** dsolve_tangentline_try(DSolveProblem* P, size_t* nbranch);
 extern void dsolve_knownsol_init(void);
 extern void dsolve_inverse_init(void);
 extern void dsolve_homog_g_init(void);
@@ -777,6 +778,12 @@ Expr* builtin_dsolve(Expr* res) {
              * MATHILDA_NO_KNOWNSOL disables it for A/B. */
             if (!result) result = dsolve_run(&P, dsolve_knownsol_try);
             if (!result) result = dsolve_run(&P, dsolve_nonhomog_vop_inert_try);
+            /* Last of all: a first-order IVP whose unique solution curve is the
+             * tangent line at the initial point (an equilibrium y == y0, or the
+             * invariant line y == x - 1 of y' == Sqrt[x - y], y(2) == 1).  The
+             * general-solution methods divide that curve out, so their family
+             * cannot reach the point and every one declines (dsolve_tangentline.c). */
+            if (!result) result = dsolve_run(&P, dsolve_tangentline_try);
             break;
         case DS_FACTORABLE:   result = dsolve_run(&P, dsolve_factorable_try);  break;
         case DS_NTHALGEBRAIC: result = dsolve_run(&P, dsolve_nth_algebraic_try); break;

@@ -3060,11 +3060,18 @@ Expr* dsolve_run(DSolveProblem* P, DSolveTryFn fn) {
         bool all_empty = true;
         for (size_t b = 0; b < nf; b++) if (fstate[b] != FIT_EMPTY) all_empty = false;
         Expr* eq = all_empty ? expr_copy(P->conds[0].value) : NULL;
-        if (eq && ds_free_of(eq, P->ind_names[0]) && ds_free_of(eq, intern_symbol("C"))
-               && dsolve_verify_body(P, eq)) {
+        if (eq && !(ds_free_of(eq, P->ind_names[0]) && ds_free_of(eq, intern_symbol("C"))
+                    && dsolve_verify_body(P, eq))) {
+            /* Not an equilibrium: the solution through the point may still be the
+             * invariant LINE the family divided out (y' == 1 + (y - x)^2, y(0) == 0:
+             * Riccati family x + 1/(-x - C[1]), answer y == x). */
+            expr_free(eq);
+            eq = dsolve_tangent_line_solution((DSolveProblem*)P);
+        }
+        if (eq) {
             for (size_t b = 0; b < nf; b++) expr_free(finals[b]);
             finals[0] = eq; fstate[0] = FIT_OK; nf = 1; n_ok = 1;
-        } else if (eq) expr_free(eq);
+        }
     }
     if (n_ok > 0) {                 /* a sibling fit: drop the unsatisfiable branches */
         size_t keep = 0;

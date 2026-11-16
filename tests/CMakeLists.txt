@@ -1069,6 +1069,7 @@ set(COMMON_SRC
     ../src/calculus/dsolve_solvefor.c
     ../src/calculus/dsolve_inverse.c
     ../src/calculus/dsolve_knownsol.c
+    ../src/calculus/dsolve_tangentline.c
     ../src/calculus/dsolve_ratsubst.c
     ../src/calculus/dsolve_homogeneous_g.c
     ../src/calculus/dsolve_paramquad.c
@@ -5007,12 +5008,13 @@ add_test(NAME dsolve_corpus_2_1_2_tests
                  ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 749)
 # Section 2.2.1 "Problems 1 to 100" (Table 2.19): 100 elementary ODEs, 63 IVPs.
 # The equation slot is the DSolve-native list {ode, ic...} for an IVP; the harness
-# verifies the ODE residual AND every initial condition (M21).  Baseline 2
-# (was 4; M31's shared prelude precision fix verified two more, see §2.2.11 block).
+# verifies the ODE residual AND every initial condition (M21).  Baseline 0
+# (was 2; v0.6582's DSolve`TangentLine solves 28/32/35, the equilibrium IVPs
+# whose v0.6143 "passes" were implicit relations fitted to -Infinity).
 add_test(NAME dsolve_corpus_2_2_1_tests
          COMMAND dsolve_corpus_tests
                  ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/DE_examples_221.m
-                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 2)
+                 ${CMAKE_CURRENT_SOURCE_DIR}/../DSolve_test_status/dsolve_corpus_prelude.m 0)
 # Section 2.2.2 "Problems 101 to 200" (Table 2.19): 100 elementary ODEs, 9 IVPs.
 # Continuation of §2.2.1; same IVP handling (equation slot {ode, ic...}).  M22.
 # Baseline is the checked-in non-PASS high-water mark; each wave lowers it.

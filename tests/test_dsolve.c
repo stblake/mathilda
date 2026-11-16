@@ -3427,6 +3427,36 @@ static void t_m61_separable_singular_ivp(void) {
                "{{y -> Function[{x}, 1]}}");
 }
 
+/* A first-order IVP whose unique solution is the TANGENT LINE at the initial point
+ * (dsolve_tangentline.c).  The line is an invariant curve the general-solution
+ * methods divide out, so their families cannot reach the point.  Before this stage
+ * the first three came back unevaluated (and earlier still as implicit relations
+ * "fitted" to -Infinity); the fourth shipped its Riccati family unfitted. */
+static void t_tangent_line_ivp(void) {
+    /* equilibria: Log[1] == 0, Log[1 + 0^2] == 0 */
+    check_form("DSolve[{y'[x] == x Log[y[x]], y[1] == 1}, y, x]", "{{y -> Function[{x}, 1]}}");
+    check_form("DSolve[{y'[x] == Log[1 + y[x]^2], y[0] == 0}, y, x]",
+               "{{y -> Function[{x}, 0]}}");
+    /* a non-constant invariant line: u = x - y has the equilibrium u == 1 */
+    check_form("DSolve[{y'[x] == Sqrt[x - y[x]], y[2] == 1}, y, x]",
+               "{{y -> Function[{x}, -1 + x]}}");
+    check_form("DSolve[{y'[x] == Sqrt[x - y[x]], y[a] == a - 1}, y, x]",
+               "{{y -> Function[{x}, -1 + x]}}");
+    /* the singular-IVP fallback: Riccati family x + 1/(-x - C[1]) cannot meet y(0) == 0 */
+    check_form("DSolve[{y'[x] == 1 + (y[x] - x)^2, y[0] == 0}, y, x]",
+               "{{y -> Function[{x}, x]}}");
+    /* the tangent line is NOT a solution here: no line is invented */
+    check_true("FreeQ[DSolve[{y'[x] == x Log[y[x]], y[1] == 2}, y, x], "
+               "y -> Function[{x}, _?(PolynomialQ[#, x] &)]]");
+    /* non-Lipschitz point: Sqrt[y] at y == 0 is not unique, the stage stays out and
+     * the existing answer is unchanged */
+    check_form("DSolve[{y'[x] == Sqrt[y[x]], y[0] == 0}, y, x]",
+               "{{y -> Function[{x}, 1/4 x^2]}}");
+    /* general solutions are untouched */
+    check_true("Module[{s = DSolve[y'[x] == x Log[y[x]], y, x]}, "
+               "Head[s] =!= List || !FreeQ[s, C[1]]]");
+}
+
 /* A Clairaut equation written NONLINEARLY in y.  `Clairaut` declined on the
  * nonlinearity and `SolvableForY` discards the family on purpose (for a Clairaut
  * equation its denominator p - dG/dx vanishes identically), so nobody owned it. */
@@ -4113,6 +4143,7 @@ int main(void) {
     TEST(t_m61_autonomous_ivp_constant_fit);
     TEST(t_m61_autonomous_implicit_definite_fit);
     TEST(t_m61_separable_singular_ivp);
+    TEST(t_tangent_line_ivp);
     TEST(t_m61_clairaut_quadratic_in_y);
     TEST(t_m61_bounded_latency);
 

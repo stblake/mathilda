@@ -263,6 +263,23 @@ static void test_gamma_incomplete_negative_real(void) {
     assert_eval_eq("Abs[Gamma[0.5, -2.0] - Sqrt[Pi] Erfc[Sqrt[-2.0]]] < 10^-13", "True", 0);
 }
 
+/* Re(a) < Re(z) - 1 with Re(z) <= 0 used to go to the continued fraction, which is
+ * valid only for Re(z) > 0: 200000 iterations (~3 s) per call and an unevaluated
+ * result.  The lower series owns that region now (with guard bits for its
+ * cancellation), checked against the series by hand and against the recurrence
+ * Gamma[a + 1, z] == a Gamma[a, z] + z^a E^-z across both regions. */
+static void test_gamma_incomplete_left_half_plane(void) {
+    assert_eval_eq("With[{a = -17/10, x = -1/2}, Abs[N[Gamma[a, x], 30] - N[Gamma[a] -"
+                   " x^a Sum[(-x)^k/(k! (a + k)), {k, 0, 120}], 30]] < 10^-25]", "True", 0);
+    assert_eval_eq("TimeConstrained[NumberQ[N[Gamma[-27/10 + I/3, -1/2 + 10^-6 I], 30]], 1, False]",
+                   "True", 0);
+    assert_eval_eq("TimeConstrained[NumberQ[N[Gamma[-17/10, -40], 30]], 1, False]", "True", 0);
+    assert_eval_eq("Module[{as = {-17/10, -27/10 + I/3, 13/10, 5/2 - 2 I, -1/3, 7/2},"
+                   " zs = {-1/2, -3/2 + I/5, -7, -25 + 3 I, 2/3, 4 - I, 12, -40}},"
+                   " Max[Flatten[Table[Abs[N[Gamma[a + 1, z] - a Gamma[a, z] - z^a E^-z, 40]],"
+                   " {a, as}, {z, zs}]]] < 10^-30]", "True", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -282,6 +299,7 @@ int main() {
     TEST(test_gamma_incomplete_numeric);
     TEST(test_gamma_incomplete_complex);
     TEST(test_gamma_incomplete_negative_real);
+    TEST(test_gamma_incomplete_left_half_plane);
     TEST(test_gamma_generalized);
     TEST(test_gamma_listable);
     TEST(test_gamma_attributes);

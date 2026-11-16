@@ -578,12 +578,20 @@ static bool gcx_upper_cf(gcx* out, const gcx* a, const gcx* z, mpfr_prec_t wp) {
 /* Gamma(a, z) for numeric complex a/z. Returns false on non-convergence
  * (caller then leaves the expression symbolic). */
 static bool gcx_inc_gamma(gcx* out, const gcx* a, const gcx* z, mpfr_prec_t wp) {
-    /* Region split: series where Re(z) < Re(a)+1 (and Re(z) small enough that
-     * the series is well-behaved), continued fraction otherwise. */
+    /* Region split.  The continued fraction is valid only for Re(z) > 0, and
+     * converges fast only when Re(z) >= Re(a) + 1; everywhere else use the
+     * lower series, which converges for every z (the caller adds guard bits
+     * for its cancellation when Re(z) < 0).  The split used to be Re(z) <
+     * Re(a) + 1 alone -- the rule for real positive a -- so a negative a with
+     * a small negative z (Gamma[-1.7, -0.5]) went to the continued fraction,
+     * which ran its full 200000 iterations at working precision (~3 s per
+     * call) and failed: the value stayed unevaluated, and PossibleZeroQ,
+     * which samples such points, stalled on any residual carrying Gamma[a, z]. */
     mpfr_t thresh;
     mpfr_init2(thresh, wp);
     mpfr_add_ui(thresh, a->re, 1, GRND);
-    bool use_series = (mpfr_cmp(z->re, thresh) < 0);
+    bool cf_ok = mpfr_sgn(z->re) > 0;
+    bool use_series = !cf_ok || (mpfr_cmp(z->re, thresh) < 0);
     mpfr_clear(thresh);
 
     if (use_series) {
@@ -602,7 +610,9 @@ static bool gcx_inc_gamma(gcx* out, const gcx* a, const gcx* z, mpfr_prec_t wp) 
         }
         gcx_clear(&lower); gcx_clear(&ga);
         if (ok) return true;
-        /* fall through to CF if the series route did not work */
+        /* fall through to CF if the series route did not work -- only where
+         * the CF is valid; otherwise decline (the call stays symbolic) */
+        if (!cf_ok) return false;
     }
     return gcx_upper_cf(out, a, z, wp);
 }
@@ -612,6 +622,20 @@ static bool gcx_inc_gamma(gcx* out, const gcx* a, const gcx* z, mpfr_prec_t wp) 
 static Expr* gamma_mpfr_inc_complex(Expr* ar, Expr* ai, Expr* zr, Expr* zi,
                                     mpfr_prec_t out_prec) {
     mpfr_prec_t wp = out_prec + 64;
+    /* Re(z) < 0: the lower series' terms reach ~e^|z| while the sum does not,
+     * so it cancels ~|z| log2(e) bits -- carry them as guard bits. */
+    {
+        double zre = 0.0, zim = 0.0;
+        mpfr_t tz; mpfr_init2(tz, 64);
+        if (gamma_set_mpfr(tz, zr)) zre = mpfr_get_d(tz, MPFR_RNDN);
+        if (gamma_set_mpfr(tz, zi)) zim = mpfr_get_d(tz, MPFR_RNDN);
+        mpfr_clear(tz);
+        if (zre < 0.0) {
+            double mag = hypot(zre, zim);
+            if (!(mag < 1.0e6)) return NULL;             /* far out on the cut side */
+            wp += (mpfr_prec_t)(1.4427 * mag) + 16;
+        }
+    }
     gcx a, z, g;
     gcx_init(&a, wp); gcx_init(&z, wp); gcx_init(&g, wp);
     bool ok = gamma_set_mpfr(a.re, ar) && gamma_set_mpfr(a.im, ai) &&

@@ -208,6 +208,12 @@ Expr** dsolve_extract_applied_bodies(Expr* r, const char* fname, size_t* n);
  * the top derivative (e.g. it enters nonlinearly).  Caller owns the result. */
 Expr* dsolve_solve_top_derivative(DSolveProblem* P, int n);
 
+/* The unique solution of a first-order scalar IVP y' == F(x, y), y(x0) == y0 when
+ * that solution is the tangent line y0 + F(x0, y0) (x - x0): the line is PROVED to
+ * satisfy the ODE and F_y(x0, y0) is finite (Picard-Lindelof).  NULL otherwise, or
+ * for any other problem shape.  Owned (dsolve_tangentline.c). */
+Expr* dsolve_tangent_line_solution(DSolveProblem* P);
+
 /* The single first-order ODE's residual with y[x] -> the plain symbol `Yname`
  * and y'[x] -> the plain symbol `Pname` (both interned).  Lets methods that need
  * the form NOT solved for y' (Exact, Clairaut) work algebraically.  Owned. */

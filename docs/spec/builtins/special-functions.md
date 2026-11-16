@@ -76,8 +76,11 @@ one.
   - Incomplete real (machine or MPFR) → `mpfr_gamma_inc`, e.g.
     `Gamma[1.5, 7.5] = 0.00160996`, `Gamma[1, 1.1, 2.2] = 0.222068`.
   - **Incomplete complex** `Gamma[a, z]` (machine or arbitrary precision) →
-    a lower-incomplete series (`Re(z) < Re(a)+1`) or a Lentz continued
-    fraction otherwise, e.g. `Gamma[2.0, 1 + I] = (2 + I) e^-(1+I)` and
+    a Lentz continued fraction where it is valid and fast (`Re(z) > 0` and
+    `Re(z) >= Re(a)+1`), and the lower-incomplete series everywhere else, with
+    `~1.44|z|` guard bits for its cancellation when `Re(z) < 0` (v0.6582: a
+    negative `a` with a small negative `z`, such as `Gamma[-1.7, -0.5]`, used to
+    reach the continued fraction, run 200000 iterations and stay unevaluated), e.g. `Gamma[2.0, 1 + I] = (2 + I) e^-(1+I)` and
     `N[Gamma[3/2, 2 + I], 30] = 0.160487401929263240… − 0.176588715957602346… I`.
 - Derivatives: `D[Gamma[a, z], z] = -z^(a-1) E^-z` (chain rule on both
   arguments; the `a`-derivative is the generic `Derivative[1,0][Gamma][a,z]`).
