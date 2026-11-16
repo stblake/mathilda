@@ -1638,7 +1638,14 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [x] 3 torsion by specialisation of the parameters (N0 then principality over C) v0.6575 -- Trager-level paramSpecialization in TorsionModP.m; torsionOrderWith (ideal builder, Bronstein special places) still declines (step 5)
   - [ ] 4 Trager front end + pinned tests
   - [x] 5 Bronstein over Q(a) v0.6578 (brFn/brWithParams fields, RischDECertified 5-arg params, brConstantEquations, kappa in Q(a), per-orbit residues, special-place torsion by specialising params; kappa/sign region checks decline with params) -- open: Q(i)/radical constants + params, Sqrt[a] radicands, non-binomial deg>=3 log terms outside orbits
-  - [ ] 6 cascade A/B (v0.6576: parametric integrands gated OUT of the cascade's Trager stage and PMT's kummerIntegrators until then -- lift both), docs (calculus.md, docstrings), corpus (G-param-1, examples), stress families, FriCAS with parameter values
+  - [ ] OPEN (found by the 258 A/B, both arms): `Integrate[x^2 Sqrt[-1 + a + 2 x^4], x]` is WRONG on part of the line -- the elliptic answer carries `Sqrt[-1 + a] (..) Sqrt[1 + 2 x^4/(-1 + a)]`, a `Sqrt[c] Sqrt[u] -> Sqrt[c u]` merge that fails once the radicand changes sign (D[F] = -f for x past the real root when a < 1). Pre-existing stage, not Trager/Bronstein; with a numeric constant the cascade returns an Inactive form instead
+  - [x] 6 cascade A/B v0.6587 (benchmarks/258-parametric-ab): $CascadeParameters = {"Trager"} default, Bronstein opt-in (~110 much larger answers); PMT Kummer pieces try PIM for 3 s first; Trager parametric presentation (log combine, monic logands, RootSum tidy). 239 better / 3 worse / 0 new WRONG. Open exceptions:
+    - [ ] trager-evensub-005 `x/(Sqrt[1 + a + x^4] (1 + x^2 + x^4))` 107 -> 280 leaves (RootSum presentation over Q(a))
+    - [ ] cM-2-67 `E^x (E^x - 2)/(Sqrt[2 + a + E^x] (1 - E^x + 2 E^(2 x)))` 78 -> 179 (PMT Kummer piece, Trager log part over Q(a))
+    - [ ] cA-1-263 0.04 -> 10 s (a Together in xPowerReduce hits its budget before falling back)
+    - [ ] the C cascade sums stage pieces without a log combine (genus1-2-11 seen once; zero-sum Log coefficients survive)
+  - [ ] SolveAlways also solves for non-variable atoms (SolveAlways[Log[c] - r c == 0, {c}] -> {{r -> 0, Log[c] -> 0}}); risch_structure.c now certifies outside the solver (v0.6586), check risch_singleext.c / risch_field_integrate.c for the same exposure
+  - [ ] Integrate[E^(-c x)/(a E^(c x) + b)^(5/2), x] (Automatic): numerically right but PossibleZeroQ fails and ~18 Solve::nsdim messages print; Method -> "Bronstein" is clean since v0.6586
 - [ ] Phase 5: radical anywhere (brDField, transcendental Risch over algebraic base, RDE on a curve over a tower)
 - [ ] Theory note docs/notes/bronstein_extensions.tex (E1–E6; LaTeX per user 2026-11-14), each adversarially reviewed — E6a–c written v0.6547, review pending
 - [ ] Close-out

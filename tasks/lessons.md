@@ -1,5 +1,25 @@
 # Lessons learned
 
+## A parametric A/B: a new stage reachable from inside another method shows up as that method's regression (2026-11-16)
+
+- Admitting parameters at the Trager stage also admitted them in the Trager call
+  that `ParallelMixedTower` makes on each one-radical (Kummer) piece. In the
+  benchmark-258 A/B, 8 of the 9 confirmed regressions came from that inner call,
+  not from the stage itself. Before, ParallelMixed fell through to its own
+  integrator and got a 114-leaf answer. Now Trager answered first with 257 leaves,
+  because a parameter radical renders as `(-(-54 - 27 a)^-1)^(1/3)`. Simply
+  putting the old integrator first would have undone 12 wins where it hangs for
+  30 s. Rule: when a flag opens a procedure, list every caller of that procedure,
+  not only the cascade stage. A per-call short budget ("old path first, for 3 s")
+  keeps the old answer where it was fast and the new one where it hung.
+- Run the `--rerun` of the flagged cases on a quiet machine before acting: 8 of
+  the 17 "worse" rows in the 4-job run were load noise.
+- Never put Module-local helper functions in rules whose output can stay held:
+  the tidy pass left a held `With`/local `xs$` inside RootSum bodies, and
+  antiderivativeQ passed while the local was still live (31 WRONG rows). Use
+  top-level helpers, and let a stop rule (`r_RootSum :> r`) keep rules out of
+  bodies they cannot rewrite soundly.
+
 ## Unit tests that put a private context on $ContextPath: bare names drift (2026-11-16)
 
 - The Bronstein harness appends `Bronstein`Private`` and `Trager`Private`` to

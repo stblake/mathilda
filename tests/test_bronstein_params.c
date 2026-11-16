@@ -87,6 +87,57 @@ static void test_presentation(void) {
     BR_EQ("dropConstantContent[x/(x + 1), x]", "x/(1 + x)");
     BR_TRUE("Block[{tragerParams = {a}}, tidyLog[(a + a x)/(3 a^2), x] === 1 + x]");
     BR_TRUE("tidyLog[(2 + 2 x)/3, x] === 1 + x");
+    /* step 6: the parametric tidy of presentable (verified by the caller) */
+    BR_TRUE("tragerQuadraticQ[#^2 + a &]");
+    BR_FALSE("tragerQuadraticQ[#^3 + a &]");
+    BR_TRUE("tragerParamRadSplit[(a - 2)^2 (a^2 - 4 a + 5), 1/2] === (a - 2) Sqrt[a^2 - 4 a + 5]");
+    BR_TRUE("tragerParamRadSplit[a^3/(1 + a)^2, 1/2] === a Sqrt[a]/(1 + a)");
+    BR_TRUE("tragerParamRadSplit[-8 a^3, 1/3] === a (-8)^(1/3)");
+    BR_TRUE("Expand[tragerParamMonic[Sqrt[1 + a] x^3 + (1 + a)^(3/2) - (1 + a) y, {x, y}] - (x^3 + 1 + a - Sqrt[1 + a] y)] === 0");
+    BR_TRUE("tragerParamMonic[5 Sqrt[a], {x}] === 1");
+    BR_TRUE("tragerRootSum2[#^2 - 4 a^2 b &, Log[x - #], True] === Log[x - 2 a Sqrt[b]] + Log[x + 2 a Sqrt[b]]");
+    BR_TRUE("FreeQ[tragerRootSum2[#^2 - 4 a^2 b &, Log[x - #], False], Sqrt[b]]");
+    BR_TRUE("Block[{tragerParams = {a}}, tragerParamTidy[Log[(Sqrt[1 + a] x + (1 + a)^(3/2))/Sqrt[1 + a]], x] === Log[1 + a + x]]");
+    BR_TRUE("Block[{tragerParams = {a}}, tragerParamTidy[RootSum[#^2 - 4 a^2 &, Function[Log[x - #]]], x] === Log[-2 a + x] + Log[2 a + x]]");
+    BR_TRUE("Block[{tragerParams = {a}}, With[{e = tragerParamTidy[(3 + 6 a + 3 a^2) x^2 + (6 + 6 a) x^2, x]}, Expand[e - 3 (1 + a) (3 + a) x^2] === 0 && LeafCount[e] < 20]]");
+    /* a degree >= 3 RootSum: no unevaluated With or a local symbol of the tidy
+       left inside its held body (the benchmark-258 WRONG rows); the x-only
+       denominator of its logand splits off (trace of # over #^3 - a is 0) */
+    BR_TRUE("Block[{tragerParams = {a}}, With[{r = tragerParamTidy[RootSum[#^3 - a &, Log[(x - #)/x] # &], x]},"
+            " Head[r] === RootSum && Expand[r[[1]][t] - (t^3 - a)] === 0 && Expand[r[[2]][t] - t Log[x - t]] === 0]]");
+    BR_TRUE("Block[{tragerParams = {a}}, FreeQ[tragerParamTidy[RootSum[#^3 - a &, Log[(x - #)/x] # &], x], s_Symbol /; StringContainsQ[Context[s], \"Private`\"]]]");
+    /* tragerRootSumTidy: the polynomial cleared of its parameter denominators
+       (same roots), the logand's x-only denominator split off with its trace */
+    /* (the held bodies are compared at a symbol t: their Times order is not canonical) */
+    BR_TRUE("With[{r = tragerRootSumTidy[#^3 - 1/(2 + a) &, Log[x - #] &, x]}, Head[r] === RootSum &&"
+            " Expand[r[[1]][t] - ((2 + a) t^3 - 1)] === 0 && r[[2]][t] === Log[x - t]]");
+    BR_TRUE("With[{r = tragerRootSumTidy[#^3 + # + a &, Log[(x - #)/(x + 1)] &, x]}, Head[r] === Plus &&"
+            " Cases[r, _RootSum][[1, 2]][t] === Log[x - t] && (r /. _RootSum -> 0) === -3 Log[1 + x]]");
+    BR_TRUE("With[{r = RootSum[#^2 - a &, Log[x - #] &]}, tragerRootSumTidy[#^2 - a &, Log[x - #] &, x] === r]");
+    /* tragerRootTrace: Newton power sums -- over z^3 - 2 z + a: s1 = 0,
+       s2 = 4, s3 = -3 a, so Tr(1 + z^2 + z^3) = 3 + 4 - 3 a */
+    BR_TRUE("tragerRootTrace[z^3 - 2 z + a, 1 + z^2 + z^3, z] === 7 - 3 a");
+    BR_TRUE("tragerRootTrace[2 z^2 - 6 z + 4, z^2, z] === 5");
+    /* tragerLogTerms: a constant multiple of a sum of logs is distributed */
+    BR_TRUE("Sort[tragerLogTerms[(Log[u] - Log[v])/2 + x, x]] === Sort[{Log[u]/2, -Log[v]/2, x}]");
+    BR_TRUE("tragerLogTerms[x (Log[u] + 1), x] === {x (1 + Log[u])}");
+    /* tragerLogCombine: coefficients of one argument added, a radical-free
+       denominator split off and cancelled, zero coefficients dropped */
+    BR_TRUE("tragerLogCombine[2 Log[u[x]]/9 + a Log[u[x]]/9, x] === (2 + a) Log[u[x]]/9");
+    BR_TRUE("tragerLogCombine[Log[(x + Sqrt[x + 1])/(x - 1)] - Log[(x - Sqrt[x + 1])/(x - 1)], x] === Log[x + Sqrt[1 + x]] - Log[x - Sqrt[1 + x]]");
+    BR_TRUE("tragerLogCombine[ArcTan[x] + a ArcTan[x] + x^2, x] === x^2 + (1 + a) ArcTan[x]");
+    BR_TRUE("tragerLogCombine[Log[x] - Log[x], x] === 0");
+    /* tragerParamAtoms / tragerParamMonicRatio */
+    BR_TRUE("tragerParamAtoms[x Sqrt[1 + x] + Sqrt[a], x] === {x, Sqrt[1 + x]}");
+    BR_TRUE("Expand[tragerParamMonicRatio[(2 a x + 2 a)/(a x^2), x] - (1 + x)/x^2] === 0");
+    /* tragerParamPresent: with no parameters the identity; with them a smaller
+       verified form, never an unverified one */
+    BR_TRUE("Block[{tragerParams = {}}, tragerParamPresent[1/x, Log[2 x], x] === Log[2 x]]");
+    BR_TRUE("Block[{tragerParams = {a}}, tragerParamPresent[(2 + a)/(9 x), 2 Log[x]/9 + a Log[x]/9, x] === (2 + a) Log[x]/9]");
+    BR_TRUE("Block[{tragerParams = {a}}, tragerParamPresent[1/x, 2 Log[x]/9 + a Log[x]/9, x] === 2 Log[x]/9 + a Log[x]/9]");
+    /* presentReal: the real form when it verifies; complex constants kept */
+    BR_TRUE("FreeQ[presentReal[1/(1 + x^2), I/2 Log[1 - I x] - I/2 Log[1 + I x], x], Complex]");
+    BR_TRUE("presentReal[I/x, I Log[x], x] === I Log[x]");
 }
 
 /* End to end over Q(a): verified antiderivatives, an exact certificate */
@@ -105,6 +156,18 @@ static void test_end_to_end(void) {
     }
     /* presentation: no parameter content left in a log argument */
     BR_TRUE("LeafCount[Trager`TragerIntegrate[1/((x - a) Sqrt[x^2 + 1]), x]] < 150");
+    /* the parametric tidy (benchmark 258 "larger" rows): verified and compact */
+    const char* tidy[][2] = {
+        { "x^3/((-2 + a + x^2) Sqrt[1 + x^4])", "200" },
+        { "x^5 (1 + a + x^2)^(1/6)", "100" },
+        { "1/(x Sqrt[1 + a + x^3])", "100" } };
+    for (size_t i = 0; i < sizeof tidy / sizeof tidy[0]; i++) {
+        char buf[512];
+        snprintf(buf, sizeof buf,
+                 "With[{f = %s}, With[{F = Trager`TragerIntegrate[f, x]}, !ListQ[F] && LeafCount[F] < %s && PossibleZeroQ[D[F, x] - f]]]",
+                 tidy[i][0], tidy[i][1]);
+        BR_TRUE(buf);
+    }
 }
 
 /* Step 3: torsion by specialising the parameters (E4.4d).  Hand-made

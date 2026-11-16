@@ -6,12 +6,17 @@ Generates seeded batches (gen.m), runs each batch in its own Mathilda process
 family and decline reason.  A FALSE_CERT, WRONG or CRASH anywhere exits 1;
 --max-open N also fails when more than N cases end DECLINE/TIMEOUT/UNEVAL (a
 coverage ratchet).  --family random generates the mostly non-elementary random
-family, and --fricas cross-checks every "not elementary" verdict and every
-decline against FriCAS (fricas_check.py): a DISAGREE exits 1.  Exits 77 (ctest
-SKIP) when ./Mathilda, or FriCAS for --fricas, is not installed.
+family (prandom: the same with a symbolic parameter a in the radicand), and
+--fricas cross-checks every "not elementary" verdict and every decline against
+FriCAS (fricas_check.py), which integrates over Q(a): a DISAGREE exits 1.
+--family param runs the parametric elementary families (paramFamilies in
+families.m).  Exits 77 (ctest SKIP) when ./Mathilda, or FriCAS for --fricas, is
+not installed.
 
     python3 tools/bronstein_stress/stress.py --seeds 1-10 --count 20 [--method Automatic]
     python3 tools/bronstein_stress/stress.py --family random --seeds 1-8 --fricas
+    python3 tools/bronstein_stress/stress.py --family param --seeds 1-4
+    python3 tools/bronstein_stress/stress.py --family prandom --seeds 1-4 --fricas
 """
 import argparse, collections, os, subprocess, sys, tempfile, json
 
@@ -79,7 +84,7 @@ def main():
     print("\nslowest:"); [print(f"  {r['secs']:7.2f}  {r['cls']:9s} {r['fam']:8s} {r['f'][:110]}") for r in slow]
     # on the random family (mostly NOT elementary) a certificate is a claim for
     # FriCAS to check, not a failure; on the known-elementary families it is wrong
-    hard = ("WRONG", "CRASH") if a.family == "random" else ("FALSE_CERT", "WRONG", "CRASH")
+    hard = ("WRONG", "CRASH") if a.family in ("random", "prandom") else ("FALSE_CERT", "WRONG", "CRASH")
     bad = [r for r in results if r["cls"] in hard]
     for r in bad: print(f"\n*** {r['cls']} {r['id']} {r['fam']}: {r['f']}\n    {r['detail'][:300]}")
     if a.json: json.dump(results, open(a.json, "w"), indent=1)

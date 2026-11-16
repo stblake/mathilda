@@ -3176,16 +3176,33 @@ ConicPowerSubstitution[f_, x_Symbol] := Module[{cands, b, k, X = Unique["X"], Q,
 RationalImageIntegrate[x_] := Function[h, With[{r = Quiet[Integrate[h, x, Method -> "BronsteinRational"]]},
   If[FreeQ[r, Integrate], r, {"failed", "rational integration declined"}]]];
 
+(* With symbolic parameters, this method is offered the piece first, for at most
+   pmtParamFirstBudget seconds, and Trager only after it: where this method
+   answers quickly its answer is the compact one (Trager's over Q(a) renders a
+   cube root of 2 + a as (-(-54 - 27 a)^-1)^(1/3) inside a RootSum: 114 -> 257
+   leaves on 2/(2 + a + E^(2 x))^(1/3)), and where it does not, it hangs (30 s
+   timeouts that Trager answers in 1-3 s).  Benchmark 258. *)
+pmtParamFirstBudget = 3;
+
+pmtParamLogCombine::usage = "pmtParamLogCombine[F, x] is, for an answer F with symbolic parameters, F with its logarithms and arctangents gathered by argument (Trager's tragerLogCombine) when that is smaller, else F. Presentation only; the caller verifies.";
+pmtParamLogCombine[F_, x_Symbol] := If[!TrueQ[LoadModule["trager/Trager.m"]] || Trager`Private`tragerParamsOf[F, x] === {}, F,
+  With[{c = Quiet[TimeConstrained[Trager`Private`tragerLogCombine[F, x], 5, F]]}, If[LeafCount[c] < LeafCount[F], c, F]]];
+
 kummerIntegrators[x_, opts___] := {
   Function[h, If[TrueQ[LoadModule["trager/Trager.m"]],
-    (* symbolic parameters: Trager answers over Q(a) (Phase 4.4), but this
-       method takes those answers only after the A/B gate of step 6 *)
-    If[Trager`Private`tragerParamsOf[h, x] =!= {},
-      {"failed", "Trager: symbolic parameters (Phase 4.4: A/B gate pending)"},
+    (* symbolic parameters: Trager answers over Q(a) (Phase 4.4); this method
+       takes them when the cascade admits parameters at the Trager stage
+       (Integrate`$CascadeParameters True or a list naming "Trager") *)
+    With[{params = Trager`Private`tragerParamsOf[h, x] =!= {}},
+    If[params &&
+       !With[{cp = Integrate`$CascadeParameters}, TrueQ[cp] || (ListQ[cp] && MemberQ[cp, "Trager"])],
+      {"failed", "Trager: symbolic parameters not admitted (Integrate`$CascadeParameters)"},
+    With[{quick = If[params, TimeConstrained[ParallelIntegrateMixed[h, x, opts], pmtParamFirstBudget, $Aborted], $Aborted]},
+    If[quick =!= $Aborted && ! MatchQ[quick, {"failed", ___}] && FreeQ[quick, ParallelIntegrateMixed], quick,
     (* Trager's "implementation incomplete" proves nothing: inside this method's
        protocol it is a plain {"failed", ...} (callers test for "failed") *)
     Replace[Quiet[Trager`TragerIntegrate[h, x, "Trager"]],
-      {"implementation incomplete", why_String} :> {"failed", "Trager: implementation incomplete (" <> why <> ")"}]],
+      {"implementation incomplete", why_String} :> {"failed", "Trager: implementation incomplete (" <> why <> ")"}]]]]],
     {"failed", "Trager unavailable"}]],
   Function[h, ParallelIntegrateMixed[h, x, opts]]};
 
@@ -3267,9 +3284,13 @@ pmtSurfaceBody[integrand0_, x_Symbol, opts : OptionsPattern[]] := TimeConstraine
           If[MatchQ[r, {"not elementary", ___}], Return[ks[[3]][r], Module]];   (* read in x *)
           If[MatchQ[r, {"failed", s_String /; StringStartsQ[s, "internal error"], ___}], Return[r, Module]];
           If[! ListQ[r] && FreeQ[r, ParallelIntegrateMixed],
-            With[{F = ks[[3]][r]},
+            (* over Q(params) the pieces' logarithms come back uncollected
+               (benchmark 258, genus1-2-11: three Log[1 + (2 + a) E^(3 x)]
+               whose coefficients add up to 0): the combined form first *)
+            Scan[Function[F,
               If[FreeQ[F, ks[[2]]] && TrueQ[Quiet[PossibleZeroQ[D[F, x] - integrand0, Assumptions -> Element[x, Complexes]]]],
-                Return[F, Module]]]]]]],
+                Return[F, Module]]],
+              DeleteDuplicates[{pmtParamLogCombine[ks[[3]][r], x], ks[[3]][r]}]]]]]],
       {sub, {KernelSubstitution, ConicPowerSubstitution, MonomialSubstitution}}]];
   (* a tower that cannot be built is an honest {"failed", ...}, never $Failed *)
   (* BuildTower::radicals is quiet: several flat radicands go to the Kummer split

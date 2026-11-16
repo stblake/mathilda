@@ -19,9 +19,10 @@ Do[Module[{parts = StringSplit[ln, "\t"], id, fam, f, t0, res, cls, det = ""},
      !FreeQ[res, Integrate], cls = "UNEVAL",
      (pz = Quiet[TimeConstrained[PossibleZeroQ[D[res, x] - f], 60, $Aborted]]) === True, cls = "OK",
      (* PossibleZeroQ out of time on a large answer: a 30-digit check at three
-        points separates a slow verification (SLOWCHECK) from a wrong answer *)
+        points separates a slow verification (SLOWCHECK) from a wrong answer;
+        a symbolic parameter a is given the value 1/7 there *)
      pz === $Aborted && AllTrue[{7/10, 13/10, 23/10},
-        Abs[Quiet[N[(D[res, x] - f) /. x -> #, 30]]] < 10^-20 &], cls = "SLOWCHECK",
+        Abs[Quiet[N[((D[res, x] - f) /. a -> 1/7) /. x -> #, 30]]] < 10^-20 &], cls = "SLOWCHECK",
      True, cls = "WRONG"; det = ToString[InputForm[res]]];
    Print["RESULT\t", id, "\t", fam, "\t", cls, "\t", Round[AbsoluteTime[] - t0, 0.01], "\t", det]],
   {ln, lines}];

@@ -93,6 +93,14 @@ tragerLogPart[ctx_Association, r_List, Y_Symbol] := Module[{Z = ctx["Z"], degs, 
     attempt = tragerOrbitLogPart[ctx, r, Y];
     If[attempt =!= $Failed, Return[attempt]]];
   If[basisFirst, throwUnimplemented["Trager:logpart", "logarithmic part: no construction applies"]];
+  (* over Q(parameters) the Q-basis construction over the splitting field was
+     not taken first (Max[degs] > 1); as the fallback after the orbits it is
+     taken only while that field is small (crude <= 24): beyond, a splitting
+     field of degree up to Prod deg! over Q(a) is out of any stage budget
+     (benchmark 258: 1/((1 + a + x^2) (1 + x^3)^(1/4)), degree 8, took the
+     whole Trager budget), so the stage declines *)
+  If[tragerParams =!= {} && Max[degs] > 1 && crude > 24,
+    throwUnimplemented["Trager:logpart", "logarithmic part over Q(parameters): an orbit divisor not shown torsion, and no Q-basis construction over the splitting field"]];
   tragerBasisLogPart[ctx, r, Y]];
 
 traceCertificate::usage = "traceCertificate[ctx] looks for a proof of non-elementarity that needs only the field Q(gamma) of ONE residue gamma, not the field of all of them. If the integral is elementary, r = Sum c_j du_j/u_j, and for every Q-linear lambda on the span of the residues Sum_i lambda(alpha_i) Delta(alpha_i) = Sum_j lambda(c_j) div(u_j) is a torsion divisor. lambda_gamma(alpha) = Tr(alpha gamma) is Q-linear and constant on the roots of each irreducible factor f_k of R over Q(gamma), so its divisor Sum_k lambda_k Delta(f_k) is defined over Q(gamma), of degree deg q instead of that of the splitting field. A residue gamma is taken from each irreducible factor q of R in turn; when its divisor is shown of infinite order (orders modulo two primes disagree, or the only possible order N fails torsionScreen) a NonElementary certificate is thrown. Otherwise (all lambda_gamma torsion, or zero) it returns Null without a verdict and the full construction follows.";
@@ -287,7 +295,7 @@ tragerIntegrateBody[f_, x_Symbol, method_String] := Module[
         Switch[kr,
           {"not elementary", __}, throwNonElementary["Kummer piece: " <> kr[[2]]],
           {"failed" | "implementation incomplete", __}, Null,
-          _, Return[kr, Module]]]]];
+          _, Return[tragerParamPresent[f, kr, x], Module]]]]];
   cf = canonicalForm[f, x];
   n = cf["n"]; coeffs = cf["coeffs"];
   (* no radical: a rational function over Q or a number field -- the rational
@@ -323,8 +331,22 @@ evaluateRootSumBodies[e_] := e /. RootSum[q_, Function[b_]] :> Module[{s = Uniqu
   b1 = b /. Slot[1] -> s;
   With[{b2 = b1 /. s -> Slot[1]}, RootSum[q, Function[b2]]]];
 
-presentable::usage = "presentable[f, F, x] is the real form of the verified antiderivative F (LogToArcTan.m) when that passes antiderivativeQ, else F itself. The real form is not attempted on answers above tragerOption[\"RealFormMaxLeaves\"] leaves and is given tragerOption[\"RealFormTime\"] seconds.";
-presentable[f_, Fx_, x_Symbol] := Module[{real},
+presentable::usage = "presentable[f, F, x] is the verified antiderivative F as presented: its real form (presentReal) between two parameter tidies (tragerParamPresent), each step kept only when it verifies again.";
+presentable[f_, Fx0_, x_Symbol] := tragerParamPresent[f, presentReal[f, tragerParamPresent[f, Fx0, x], x], x];
+
+tragerParamPresent::usage = "tragerParamPresent[f, F, x] is, over Q(params), the tidied answer tragerParamTidy[F, x] when it is smaller and verifies again, else F; with no parameters F itself.  presentable applies it before the real form (which then sees the explicit quadratic RootSums) and after it (which re-expands the coefficients of the logarithms and arctangents it writes).";
+tragerParamPresent[f_, Fx_, x_Symbol] := Module[{tidy},
+  (* over Q(a) the verified answer carries its constants uncollected; the
+     tidied form is presentation only and must verify again (Phase 4.4 step 6) *)
+  If[tragerParams === {} || LeafCount[Fx] > tragerOption["RealFormMaxLeaves"], Return[Fx]];
+  tidy = TimeConstrained[Quiet[tragerParamTidy[Fx, x]], tragerOption["RealFormTime"], Fx];
+  (* measured against what the user would see: a quadratic RootSum
+     evaluates to its two roots with the raw discriminant *)
+  If[tidy =!= Fx && LeafCount[tidy] < LeafCount[Fx /. RootSum[q_, Function[b_]] /; tragerQuadraticQ[q] :> tragerRootSum2[q, b, False]] &&
+     antiderivativeQ[f, tidy, x], tidy, Fx]];
+
+presentReal::usage = "presentReal[f, F, x] is the real form of the verified antiderivative F (LogToArcTan.m) when that passes antiderivativeQ, else F itself. The real form is not attempted on answers above tragerOption[\"RealFormMaxLeaves\"] leaves and is given tragerOption[\"RealFormTime\"] seconds.";
+presentReal[f_, Fx_, x_Symbol] := Module[{real},
   (* an integrand with complex constants (Q(i)) has a genuinely complex
      antiderivative: its "real form" is not the same function *)
   If[!FreeQ[f, _Complex], Return[Fx]];
@@ -339,6 +361,106 @@ presentable[f_, Fx_, x_Symbol] := Module[{real},
   If[LeafCount[Fx] > tragerOption["RealFormMaxLeaves"], Return[Fx]];
   real = TimeConstrained[Quiet[realForm[Fx, x]], tragerOption["RealFormTime"], Fx];
   If[real =!= Fx && antiderivativeQ[f, real, x], real, Fx]];
+
+tragerParamTidy::usage = "tragerParamTidy[F, x] is the answer F over Q(params) with its constants collected: every parameter radical b^(m/n) (b free of x) has the n-th-power factors of b over Q[params] taken out -- a change of generator of the residue field, the root of t^n = b being any root -- and every logand and the remaining terms are collected in x and its radicals with factored coefficients. Presentation only: presentable keeps it when it verifies and is smaller.";
+tragerParamTidy[F_, x_Symbol] := Module[{rads, e, terms, logT, rest},
+  (* a RootSum over a quadratic is the sum over its two roots, written with the
+     square-split discriminant (the explicit form it evaluates to anyway) *)
+  e = F /. RootSum[q_, Function[b_]] /; tragerQuadraticQ[q] :> tragerRootSum2[q, b, True];
+  rads = DeleteDuplicates[Cases[e, Power[b_, q_Rational] /; FreeQ[b, x] && !FreeQ[b, Alternatives @@ tragerParams], {0, Infinity}]];
+  e = e /. Dispatch[(# -> tragerParamRadSplit @@ #) & /@ rads];
+  (* a logand counts up to a constant factor (Log[c u] - Log[u] is constant):
+     numerator and denominator are each made monic in x and its radicals.  The
+     body of a RootSum left (degree >= 3) is a held Function in #1: it is kept
+     as it is -- the first rule stops the walk there *)
+  e = e /. {RootSum[q_Function, b_Function] :> tragerRootSumTidy[q, b, x], r_RootSum :> r,
+            Log[u_] :> Log[tragerParamMonicRatio[Together[u], x]]};
+  e = tragerLogCombine[e, x];
+  terms = If[Head[e] === Plus, List @@ e, {e}];
+  logT = Select[terms, !FreeQ[#, Log | ArcTan | RootSum] &];
+  rest = Plus @@ Complement[terms, logT];
+  Collect[rest, tragerParamAtoms[rest, x], Factor] + Total[logT]];
+
+tragerLogCombine::usage = "tragerLogCombine[e, x] gathers the terms c Log[u] and c ArcTan[z] of the sum e (c free of x) by their argument: a Log[n/d] whose denominator d is free of radicals is split into Log[n] minus the Log of each factor of d (equal up to a constant), the coefficients of equal arguments are added (Together), and arguments whose coefficient adds up to zero drop out.  The remaining terms of e are kept as they are.";
+tragerLogCombine[e_, x_Symbol] := Module[{terms, keys = {}, cs = {}, rest = 0, add, split},
+  add[k_, c_] := With[{p = Position[keys, k, {1}, 1, Heads -> False]},
+    If[p === {}, AppendTo[keys, k]; AppendTo[cs, c], cs[[p[[1, 1]]]] += c]];
+  split[t_] := Module[{fs = Select[List @@ t, MatchQ[#, _Log | _ArcTan] &]},
+    If[Head[t] === Times && Length[fs] === 1 && FreeQ[t/fs[[1]], x], {t/fs[[1]], fs[[1]]},
+      If[MatchQ[t, _Log | _ArcTan], {1, t}, None]]];
+  terms = tragerLogTerms[e, x];
+  Do[With[{cl = split[t]},
+      Which[cl === None, rest += t,
+        MatchQ[cl[[2]], Log[_]] && With[{u = Together[cl[[2, 1]]]},
+            !FreeQ[Denominator[u], x] && FreeQ[Denominator[u], Power[_, _Rational]]],
+          With[{u = Together[cl[[2, 1]]]},
+            add[Log[Numerator[u]], cl[[1]]];
+            Scan[If[!FreeQ[#[[1]], x], add[Log[#[[1]]], -#[[2]] cl[[1]]]] &, FactorList[Denominator[u]]]],
+        True, add[cl[[2]], cl[[1]]]]], {t, terms}];
+  rest + Total[MapThread[With[{c = Factor[Together[#2]]}, If[c === 0, 0, c #1]] &, {keys, cs}]]];
+
+tragerRootSumTidy::usage = "tragerRootSumTidy[q, b, x] is RootSum[q, b] (degree >= 3, over Q(params)) presented: the polynomial cleared of denominators and made primitive over Q[params] (the same roots), and a body c(z) Log[n/d] whose d is free of the root z split into RootSum[q, c(z) Log[n']] - Log[d] Tr(c), with n' made monic in x and its radicals (a factor free of x changes the sum by a constant) and Tr(c) the trace of the polynomial c(z) over the roots (tragerRootTrace). Anything else is left as it was.";
+tragerRootSumTidy[q_Function, b_Function, x_Symbol] := Module[{P, B, num, cl, c, u, extra = 0},
+  P = Together[q[tragerRootZ]];
+  P = Numerator[P];
+  If[!PolynomialQ[P, tragerRootZ] || Exponent[P, tragerRootZ] < 3, Return[RootSum[q, b]]];
+  P = Together[P/PolynomialGCD @@ DeleteCases[CoefficientList[P, tragerRootZ], 0]];
+  B = b[tragerRootZ];
+  cl = If[Head[B] === Times, Select[List @@ B, MatchQ[#, _Log] &], If[MatchQ[B, _Log], {B}, {}]];
+  If[Length[cl] === 1,
+    c = Together[B/cl[[1]]]; u = Together[cl[[1, 1]]];
+    If[FreeQ[c, x] && PolynomialQ[c, tragerRootZ] && FreeQ[Denominator[u], tragerRootZ],
+      extra = -Log[Denominator[u]] tragerRootTrace[P, c, tragerRootZ];
+      B = c Log[tragerParamMonicRatio[Numerator[u], x]]]];
+  (* RootSum holds its arguments: the bodies are injected, not built by Apply *)
+  With[{pp = P /. tragerRootZ -> Slot[1], bb = B /. tragerRootZ -> Slot[1]}, RootSum[Function[pp], Function[bb]]] + extra];
+
+tragerRootTrace::usage = "tragerRootTrace[P, c, z] is the sum of the polynomial c(z) over the roots of P(z) (with multiplicity): Sum c_k s_k with the power sums s_k from Newton's identities.";
+tragerRootTrace[P_, c_, z_Symbol] := Module[{n = Exponent[P, z], q, cs, s, m},
+  q = CoefficientList[P, z]/Coefficient[P, z, n];          (* q[[k + 1]] = q_k, monic *)
+  cs = CoefficientList[c, z];
+  s = Table[0, {Max[Length[cs], 1]}];
+  Do[s[[m + 1]] = If[m === 0, n,
+       Together[-(If[m <= n, m q[[n - m + 1]], 0] + Sum[q[[n - i + 1]] s[[m - i + 1]], {i, 1, Min[m - 1, n]}])]],
+     {m, 0, Length[cs] - 1}];
+  Together[cs . s]];
+
+tragerLogTerms::usage = "tragerLogTerms[e, x] is the list of the terms of the sum e, with a constant multiple c (s1 + s2 + ...) of a sum holding logarithms or arctangents (c free of x) distributed into c s1, c s2, ...";
+tragerLogTerms[e_, x_Symbol] := Which[
+  Head[e] === Plus, Join @@ (tragerLogTerms[#, x] &) /@ List @@ e,
+  Head[e] === Times, With[{p = Select[List @@ e, Head[#] === Plus && !FreeQ[#, Log | ArcTan] &]},
+    If[Length[p] === 1 && FreeQ[e/p[[1]], x], (e/p[[1]] #) & /@ tragerLogTerms[p[[1]], x], {e}]],
+  True, {e}];
+
+tragerParamAtoms::usage = "tragerParamAtoms[u, x] is {x} joined with the radicals of u that depend on x: the atoms a presented expression is collected in.";
+tragerParamAtoms[u_, x_Symbol] := Join[{x}, DeleteDuplicates[Cases[u, Power[b_, _Rational] /; !FreeQ[b, x], {0, Infinity}]]];
+
+tragerParamMonicRatio::usage = "tragerParamMonicRatio[t, x] is the rational expression t with numerator and denominator each made monic (tragerParamMonic) in x and its radicals: t up to a constant factor.";
+tragerParamMonicRatio[t_, x_Symbol] := With[{xs = tragerParamAtoms[t, x]},
+  tragerParamMonic[Numerator[t], xs]/tragerParamMonic[Denominator[t], xs]];
+
+tragerQuadraticQ::usage = "tragerQuadraticQ[q] is True when the pure function q (the polynomial of a RootSum) has degree 2.";
+tragerQuadraticQ[q_] := With[{s = Unique["s"]}, Exponent[q[s], s] === 2];
+
+tragerRootSum2::usage = "tragerRootSum2[q, body, split] is RootSum[q, Function[body]] for q of degree 2: body at the two roots (-b +- d)/(2 c) of q = c s^2 + b s + e, d the square root of the discriminant -- with its square factors taken out (tragerParamRadSplit) when split is True -- the same sum, the two roots in either order.";
+tragerRootSum2[q_, body_, split_] := Module[{s = Unique["s"], cl, d, disc},
+  cl = CoefficientList[q[s], s];     (* {e, b, c} *)
+  disc = Together[cl[[2]]^2 - 4 cl[[1]] cl[[3]]];
+  d = If[TrueQ[split], tragerParamRadSplit[disc, 1/2], Sqrt[disc]];
+  Total[(body /. Slot[1] -> #) & /@ {(-cl[[2]] + d)/(2 cl[[3]]), (-cl[[2]] - d)/(2 cl[[3]])}]];
+
+tragerParamMonic::usage = "tragerParamMonic[p, xs] is p, a polynomial in the atoms xs (x and its radicals) with coefficients in Q(params) and their radicals, divided by its leading coefficient and collected in xs with factored coefficients; a p free of xs is 1.";
+tragerParamMonic[p_, xs_List] := Module[{cr = CoefficientRules[Expand[p], xs], lc},
+  If[cr === {} || (Length[cr] === 1 && Max[cr[[1, 1]]] === 0), Return[1]];
+  lc = cr[[1, 2]];
+  Collect[Total[(Factor[Together[#[[2]]/lc]] Times @@ (xs^#[[1]])) & /@ cr], xs, Factor]];
+
+tragerParamRadSplit::usage = "tragerParamRadSplit[b, q] is b^q with the n-th-power factors (n the denominator of q) of the polynomial or rational function b over Q[params] taken out of the radical.";
+tragerParamRadSplit[b_, q_Rational] := Module[{n = Denominator[q], fl, out = 1, in = 1},
+  fl = Join[FactorList[Numerator[Together[b]]], {#[[1]], -#[[2]]} & /@ FactorList[Denominator[Together[b]]]];
+  Do[If[NumberQ[fe[[1]]], in = in fe[[1]]^fe[[2]],
+      out = out fe[[1]]^(Quotient[fe[[2]], n] Numerator[q]); in = in fe[[1]]^Mod[fe[[2]], n]], {fe, fl}];
+  out in^q];
 
 spotCheck::usage = "spotCheck[f, F, x] confirms that D[F, x] = f by PossibleZeroQ[D[F, x] - f] alone -- no numeric fallback: a correct answer PossibleZeroQ cannot confirm is a PossibleZeroQ bug, fixed there (v0.6091). The per-component results were already verified exactly in K(x)(Y), so this guards the reassembly into the user's radical; a failure is an internal error (decline), never an answer.";
 spotCheck[f_, Fx_, x_Symbol] := If[antiderivativeQ[f, Fx, x], True,

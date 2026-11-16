@@ -3816,6 +3816,14 @@ only possible order. Principality of N0 delta is then decided over Q(a) itself.
 Not yet: parameters together with Q(i) or radical constants; a radical of a
 parameter in the integrand.
 
+Since v0.6587 the Automatic cascade passes parametric integrands to this method
+by default (`Integrate\`$CascadeParameters = {"Trager"}`; see "Trager and Bronstein
+in the Automatic cascade"), so `Integrate[1/Sqrt[x^3 + a], x]` certifies
+`Integrate::nonelem` over Q(a). Inside the cascade, a log part over Q(a) that has
+orbits of degree > 1, no torsion proof, and a crude splitting-field degree above 24
+declines instead of building the splitting field. That construction can run for
+minutes (benchmark 258, torsion-006).
+
 The method follows B. M. Trager, *Integration of Algebraic Functions* (MIT thesis,
 1984), restricted to simple radical extensions. It is implemented in Mathilda's own
 language in `src/internal/trager/` (one file per stage, every function with a
@@ -4069,9 +4077,9 @@ Not yet supported:
 - a log term over an extension of Q(a) of degree ≥ 3 that is not binomial, outside
   the per-orbit construction (`Pipeline:parameter-field-value`).
 
-The Automatic cascade's Bronstein stage still declines parametric integrands
-(`Integrate\`CascadeGateQ["Bronstein", ...]` admits only x and `Constant` symbols)
-until the step-6 A/B run.
+In the Automatic cascade, parametric integrands reach the Trager stage by default
+and the Bronstein stage only on request (`Integrate\`$CascadeParameters`, see
+"Trager and Bronstein in the Automatic cascade" below).
 
 **Front-end rewrites (v0.6547).** Each is a pointwise identity, so the answer is
 verified against the user's own integrand. The proofs are in
@@ -4238,6 +4246,34 @@ expires, the stage declines and the cascade continues.
 
 The certificate's `Integrate::nonelem` is held. It is printed only if no later stage
 answers.
+
+**Parameters.** `Integrate\`$CascadeParameters` names the stages that accept an
+integrand with symbolic parameters (free symbols other than x):
+- `{"Trager"}` (the default): the Trager stage, and Trager on the one-radical
+  (Kummer) pieces inside `ParallelMixedTower`;
+- `True`: both stages; `{"Bronstein"}`: the Bronstein stage only;
+- `False`: neither, the behaviour before v0.6587.
+
+Answers and certificates are generic in the parameters. An antiderivative holds
+for every value outside a proper Zariski-closed set (the zeros of the denominators
+and leading coefficients met). `Integrate::nonelem` holds for every value outside
+a countable set, which need not be Zariski-closed: an elliptic curve point of
+infinite order over Q(a) can be torsion at infinitely many specialisations.
+
+The default was set by benchmark 258 (`benchmarks/258-parametric-ab`), 1661
+parametric cases with each arm run with the setting off and on. At the Trager
+stage, 239 cases improve: 187 new `Integrate::nonelem` certificates, 28 new
+antiderivatives, 2 wrong answers corrected, the rest smaller or faster. There
+are no new wrong answers or false certificates. Three are worse, after a quiet
+rerun of the flagged rows: two antiderivatives get larger
+(`x/(Sqrt[1 + a + x^4] (1 + x^2 + x^4))`, 107 to 280 leaves, and
+`E^x (E^x - 2)/(Sqrt[2 + a + E^x] (1 - E^x + 2 E^(2 x)))`, 78 to 179), and one
+takes 10 s instead of 0.05 s. At the Bronstein stage, about 450 improve, but about 110 answers come
+out 5 to 500 times larger than the ones later stages give, because the tower
+presentation over Q(a) is much bigger. So Bronstein stays opt-in.
+`ParallelMixedTower` offers a parametric Kummer piece to its own integrator for
+3 seconds before Trager. Where that integrator answers quickly its answer is the
+compact one, and where it does not, it usually hangs.
 
 | Input | Output |
 |---|---|

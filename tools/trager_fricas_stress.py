@@ -120,20 +120,21 @@ def find_mathilda():
 
 LINE_RE = re.compile(r'^\s*\{\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,\s*"([^"]+)"\s*,'
                      r'\s*"([^"]*)"\s*\}\s*,?\s*$')
-TOKEN_RE = re.compile(r"\s*(Sqrt\[|\d+|x|[-+*/^()\]])")
+TOKEN_RE = re.compile(r"\s*(Sqrt\[|\d+|x|a|[-+*/^()\]])")
 
 
 def check_syntax(f):
-    """The corpus syntax: integers, x, + - * / ^ ( ), Sqrt[ ].  Products are
-    always written with '*' (FriCAS reads juxtaposition as application)."""
+    """The corpus syntax: integers, x, + - * / ^ ( ), Sqrt[ ] (and the parameter
+    a of --param).  Products are always written with '*' (FriCAS reads
+    juxtaposition as application)."""
     pos, prev = 0, None
     depth = []
     for m in TOKEN_RE.finditer(f):
         if m.start() != pos:
             raise ValueError(f"bad character at {pos}: {f!r}")
         tok = m.group(1)
-        if tok in ("x", "(", "Sqrt[") or tok.isdigit():
-            if prev is not None and (prev in ("x", ")", "]") or prev.isdigit()):
+        if tok in ("x", "a", "(", "Sqrt[") or tok.isdigit():
+            if prev is not None and (prev in ("x", "a", ")", "]") or prev.isdigit()):
                 raise ValueError(f"implicit product before {tok!r}: {f!r}")
         if tok in ("(", "Sqrt["):
             depth.append(tok)
@@ -149,6 +150,34 @@ def check_syntax(f):
 def to_fricas(f):
     check_syntax(f)
     return f.replace("Sqrt[", "sqrt(").replace("]", ")").replace(" ", "")
+
+
+A0 = "1/7"      # the parameter value of the --param derivative checks
+
+
+def parametrize(f):
+    """--param: the corpus integrand with one integer coefficient k turned into
+    (k+a) -- the middle one that is not part of an exponent -- or None.  a is a
+    transcendental constant: both systems integrate over Q(a), and both
+    derivative checks take a = A0."""
+    toks = [(m.start(1), m.end(1), m.group(1)) for m in TOKEN_RE.finditer(f)]
+    elig, depth, exp_depth, prev = [], 0, None, None
+    for s, e, tok in toks:
+        if tok in ("(", "Sqrt["):
+            depth += 1
+            if tok == "(" and prev == "^" and exp_depth is None:
+                exp_depth = depth
+        elif tok in (")", "]"):
+            if exp_depth == depth:
+                exp_depth = None
+            depth -= 1
+        elif tok.isdigit() and prev != "^" and exp_depth is None:
+            elig.append((s, e, tok))
+        prev = tok
+    if not elig:
+        return None
+    s, e, tok = elig[(len(elig) - 1) // 2]
+    return f[:s] + "(" + tok + "+a)" + f[e:]
 
 
 def load_corpus(path):
@@ -378,7 +407,7 @@ def mathilda_points(mbin, cases, tmpdir):
     def batch(cs):
         body = pre + "".join(
             f'Print["@@PTS {c["id"]} ", InputForm[TimeConstrained['
-            f'Stress`Pts[{c["f"]}], 20, {{}}]]];\n' for c in cs)
+            f'Stress`Pts[({c["f"]}) /. a -> {A0}], 20, {{}}]]];\n' for c in cs)
         path = os.path.join(tmpdir, f"pts_{cs[0]['id']}.m")
         mathilda_script(path, body)
         out, _, rc, _, to = run_proc([mbin, "-file", path], 30 + 20 * len(cs))
@@ -412,8 +441,8 @@ If[status === "elem",
   d = Quiet[D[r, x] - f];
   Print["@@PZQ ", TimeConstrained[Quiet[PossibleZeroQ[d]], 30, $Aborted]];
   Do[
-    Module[{dv = TimeConstrained[Quiet[N[d /. x -> p, 40]], 10, $Aborted],
-            fv = Quiet[N[f /. x -> p, 40]], ok},
+    Module[{dv = TimeConstrained[Quiet[N[(d /. a -> A0) /. x -> p, 40]], 10, $Aborted],
+            fv = Quiet[N[(f /. a -> A0) /. x -> p, 40]], ok},
       ok = If[NumberQ[dv] && NumberQ[fv],
         If[Abs[dv] <= 10^-TOL Max[1, Abs[fv]], "ok", "bad"], "na"];
       Print["@@NUM ", InputForm[p], " ", ok, " ",
@@ -427,7 +456,8 @@ def run_mathilda(mbin, case, method, timeout, tmpdir):
     body = (RUN_TMPL.replace("INTEGRAND", case["f"])
             .replace("POINTS", "{" + ", ".join(case["points"]) + "}")
             .replace("WORKER", "Integrate`" + method)
-            .replace("TIMEOUT", str(timeout)).replace("TOL", str(TOL_EXP)))
+            .replace("TIMEOUT", str(timeout)).replace("TOL", str(TOL_EXP))
+            .replace("A0", A0))
     path = os.path.join(tmpdir, f"{case['id']}_{method}.m")
     mathilda_script(path, body)
     out, err, rc, wall, to = run_proc([mbin, "-file", path],
@@ -499,8 +529,8 @@ def fricas_script(case, outfile):
          ")set messages time off",
          'writeLine!(tf, concat("RES ", unparse(r::InputForm)))', "flush(tf)"]
     for p in case["points"]:
-        L.append(f"c := complexNumeric(eval(D(r, x) - f, x, {p}), 40)")
-        L.append(f"cf := complexNumeric(eval(f, x, {p}), 40)")
+        L.append(f"c := complexNumeric(eval(eval(D(r, x) - f, a, {A0}), x, {p}), 40)")
+        L.append(f"cf := complexNumeric(eval(eval(f, a, {A0}), x, {p}), 40)")
         L.append(f'writeLine!(tf, concat(["NUM {p} ", '
                  f'unparse(convert(sqrt(norm(c)))@InputForm), " ", '
                  f'unparse(convert(sqrt(norm(cf)))@InputForm)]))')
@@ -731,6 +761,10 @@ def main():
     ap.add_argument("--corpus", default=CORPUS)
     ap.add_argument("--report-md", default=None)
     ap.add_argument("--report-json", default=None)
+    ap.add_argument("--param", action="store_true",
+                    help="parametric run: one integer coefficient of each integrand becomes "
+                         "k+a (a symbolic parameter); the derivative checks take a = 1/7; "
+                         "reports go to trager_stress_param_report.*, no FRICAS-ONLY ratchet")
     ap.add_argument("--emit-random", action="store_true",
                     help="print the seeded corpus sections and exit")
     args = ap.parse_args()
@@ -753,16 +787,26 @@ def main():
         rx = re.compile(args.filter)
         cases = [c for c in cases if rx.search(c["id"]) or rx.search(c["family"])
                  or rx.search(c["f"])]
+    if args.param:
+        pc = []
+        for c in cases:
+            fp = parametrize(c["f"])
+            if fp is not None:
+                check_syntax(fp)
+                # the corpus' theorem-backed expect is about the unparametrised f
+                pc.append(dict(c, id=c["id"] + "-p", f=fp, expect=""))
+        cases = pc
     if args.limit:
         cases = cases[:args.limit]
     partial = bool(args.filter or args.limit)
+    stem = "trager_stress_param_report" if args.param else "trager_stress_report"
     # A partial run must not overwrite the checked-in full report.
     if args.report_md is None:
-        args.report_md = REPORT_MD if not partial else \
-            os.path.join(tempfile.gettempdir(), "trager_stress_report.md")
+        args.report_md = os.path.join(os.path.dirname(REPORT_MD), stem + ".md") if not partial else \
+            os.path.join(tempfile.gettempdir(), stem + ".md")
     if args.report_json is None:
-        args.report_json = REPORT_JSON if not partial else \
-            os.path.join(tempfile.gettempdir(), "trager_stress_report.json")
+        args.report_json = os.path.join(os.path.dirname(REPORT_JSON), stem + ".json") if not partial else \
+            os.path.join(tempfile.gettempdir(), stem + ".json")
 
     t0 = time.time()
     tmpdir = tempfile.mkdtemp(prefix="trager_stress_")
@@ -809,7 +853,9 @@ def main():
                 ids = [r["id"] for r in recs if r["class"][mt] == c]
                 print(f"FAIL [{mt}] {c}: {', '.join(ids)}")
         n = counts[mt]["FRICAS-ONLY"]
-        if not partial and n > BASELINE[mt]:
+        if args.param:
+            pass        # the parametric run reports its gaps; BASELINE is the plain corpus'
+        elif not partial and n > BASELINE[mt]:
             fail = True
             print(f"FAIL [{mt}] FRICAS-ONLY {n} > BASELINE {BASELINE[mt]}")
         elif not partial and n < BASELINE[mt]:

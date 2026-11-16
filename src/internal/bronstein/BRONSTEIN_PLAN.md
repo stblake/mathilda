@@ -1574,7 +1574,10 @@ the code).**
   - About 30 parametric integrands, elementary and not, agree with their
     specialisations at a = 2, 3, −5/7. This includes the E3 examples with a parameter in the radicand.
   - The numeric κ/sign region checks decline with a parameter (no certificate).
-  - The cascade's Bronstein stage is gated like Trager's until step 6.
+  - Step 6 (v0.6587, benchmark 258): `Integrate\`$CascadeParameters` defaults to
+    `{"Trager"}`. Trager on parametric inputs: 239 better, 3 worse (two larger
+    answers, one 10 s slower), no new WRONG or false certificate. Bronstein on
+    parametric inputs stays opt-in: about 110 answers 5–500× larger than later stages give.
   - Open: parameters with Q(i)/radical constants; a radical of a parameter; log
     terms over non-binomial extensions of degree ≥ 3 outside the per-orbit path.
 

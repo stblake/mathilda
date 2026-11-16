@@ -9,19 +9,23 @@ seed = ToExpression[Environment["SEED"]]; count = ToExpression[Environment["COUN
 If[!IntegerQ[seed], seed = 1]; If[!IntegerQ[count], count = 40];
 SeedRandom[seed];
 Get[FileNameJoin[{DirectoryName[$InputFileName], "..", "integration_shootout", "families.m"}]];
-families = mixedFamilies;
+(* FAMILY=param: the parametric families (paramFamilies, elementary over
+   Q(a)); FAMILY=prandom: the random/perturbed family with a symbolic parameter
+   a in the radicand -- FriCAS, which integrates over Q(a), is the oracle *)
+families = If[MemberQ[{"param", "prandom"}, Environment["FAMILY"]], paramFamilies, mixedFamilies];
+radicand = If[Environment["FAMILY"] === "prandom", plin, lin];
 (* FAMILY=random: random R(x, theta) Y^k, mostly NOT elementary -- the verdicts
    are cross-checked against FriCAS (fricas_check.py), not assumed *)
 (* Every other case is PERTURBED: D[F] of a known-elementary F plus a small
    component (x Y, Y/x, theta Y), so the integrand looks like an elementary one
    and the verdict is usually "not elementary" -- the near-miss class a sloppy
    certificate gets wrong. *)
-If[Environment["FAMILY"] === "random",
+If[MemberQ[{"random", "prandom"}, Environment["FAMILY"]],
   Do[Module[{th = theta[], n = RandomChoice[{2, 2, 3}], Y, f, fam},
-     Y = lin[th]^(1/n);
+     Y = radicand[th]^(1/n);
      If[OddQ[i],
        f = (r[-2, 2] + r[-1, 1] x + nz[-2, 2] th)/(r[1, 2] x + RandomChoice[{0, 1}] th^r[1, 2] + nz[1, 3]) Y^RandomChoice[{1, -1}],
-       fam = RandomChoice[Take[families, 6]];
+       fam = RandomChoice[Take[families, UpTo[6]]];
        With[{F = fam[[2]][th, n]},
          (* the perturbation on F's own radical (a second radical is out of scope) *)
          Y = First[Cases[F, Power[b_, q_Rational] :> b^(1/Denominator[q]), {0, Infinity}], Y];

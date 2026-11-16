@@ -1,0 +1,642 @@
+# 258 — parametric A/B of the Trager and Bronstein cascade stages
+
+1661 cases; A = shipped (`Integrate`$CascadeParameters = False`), B = `True`; timeout 30 s, check at a = 1/7.
+
+- hard failures in B: **31**
+- B worse than A: **124**
+- B better than A: **452**
+
+| A | B | cases |
+|---|---|---|
+| ELEM | ELEM | 767 |
+| UNEVAL | UNEVAL | 272 |
+| UNEVAL | CERT | 229 |
+| TIMEOUT | TIMEOUT | 191 |
+| TIMEOUT | ELEM | 71 |
+| UNEVAL | ELEM | 60 |
+| TIMEOUT | WRONG | 27 |
+| TIMEOUT | CERT | 18 |
+| UNEVAL | TIMEOUT | 11 |
+| SPECIAL | SPECIAL | 5 |
+| WRONG | ELEM | 3 |
+| ELEM | WRONG | 2 |
+| ELEM | TIMEOUT | 2 |
+| UNVERIFIED | UNVERIFIED | 1 |
+| WRONG | WRONG | 1 |
+| UNEVAL | WRONG | 1 |
+
+## Hard failures
+
+- `trager-cheb-002` (unknown): WRONG — `x^2*Sqrt[-1 + a + 2*x^4]`
+- `cM-1-98` (unknown): WRONG — `(E^x*(-1 + Log[1 + E^x])*(2 + a + Log[1 + E^x])^(3/2))/((1 + E^x)*(1 + Log[1 + E^x] + Log[1 + E^x]^2))`
+- `cB-7-107` (unknown): WRONG — `x*(-2 + (2 + a)*x)^(1/4)*Log[2 + 3*x]`
+- `cB-7-178` (unknown): WRONG — `x*(2 + (2 + a)*x)^(1/3)*Log[1 + 3*x]`
+- `cB-7-190` (unknown): WRONG — `(-1 + (2 + a)*x)^(2/3)*Log[-1 + 3*x]`
+- `cB-7-230` (unknown): WRONG — `x*(-2 + (3 + a)*x)^(2/3)*Log[1 + x]`
+- `cB-7-240` (unknown): WRONG — `(-1 + (2 + a)*x)^(2/3)*Log[-1 + x]`
+- `cB-7-269` (unknown): WRONG — `x*(-1 + (2 + a)*x)^(2/3)*Log[-2 + x]`
+- `cB-8-4` (unknown): WRONG — `(-2 + (2 + a)*x)^(1/3)*Log[3 + 2*x]`
+- `cB-8-24` (unknown): WRONG — `x*(-1 + (2 + a)*x)^(1/4)*Log[2 + 3*x]`
+- `cB-8-58` (unknown): WRONG — `x*(3 + (2 + a)*x)^(2/3)*Log[-1 + 3*x]`
+- `cB-8-65` (elem): WRONG — `(18*x^2*(-1 + a + x)^(1/6))/(-26 + 39*x) - (108*(-1 + x)^(1/6))/(-182 + 273*x) - (18*(-1 + x)^(1/6)*x)/(-182 + 273*x) + (7438 - 4392*(-1 + x) - 732*x - 10584*(-`
+- `cB-8-153` (elem): WRONG — `(18*x^2*(-1 + a + x)^(1/6))/(26 + 39*x) - (108*(-1 + x)^(1/6))/(182 + 273*x) - (18*(-1 + x)^(1/6)*x)/(182 + 273*x) + (3070 + 8712*(-1 + x) + 1452*x - 10584*(-1 `
+- `cB-8-156` (unknown): WRONG — `(-2 + (2 + a)*x)^(2/3)*Log[-1 + 3*x]`
+- `cB-8-159` (unknown): WRONG — `(-1 + (2 + a)*x)^(1/6)*Log[-1 + x]`
+- `cB-8-258` (unknown): WRONG — `x*(-1 + (3 + a)*x)^(1/4)*Log[1 + 2*x]`
+- `cB-8-261` (unknown): WRONG — `x*(-1 + (3 + a)*x)^(1/4)*Log[3 + 2*x]`
+- `cB-9-71` (unknown): WRONG — `x*(-1 + a + x)^(1/4)*Log[-3 + x]`
+- `cB-9-85` (elem): WRONG — `(672 + 372*x - 300*x^2 + 496*(3 + 3*x) - 800*x*(3 + 3*x))/(2025*(3 + 3*x)^(3/4)) + (-4*Log[2 + 2*x] + x*Log[2 + 2*x] + 5*x^2*Log[2 + 2*x])/(15*(3 + a + 3*x)^(3/`
+- `cB-9-102` (unknown): WRONG — `x*(-1 + (2 + a)*x)^(2/3)*Log[2 + 3*x]`
+- `cB-9-125` (unknown): WRONG — `x*(2 + (3 + a)*x)^(2/3)*Log[1 + 3*x]`
+- `cB-9-273` (unknown): WRONG — `(-2 + (3 + a)*x)^(2/3)*Log[-1 + x]`
+- `cB-9-294` (unknown): WRONG — `x*(-3 + (3 + a)*x)^(1/4)*Log[-3 + 2*x]`
+- `cB-10-2` (elem): WRONG — `(6*x^2*(1 + 3*x)^(1/3))/(7 + 14*x) - (1 + 3*x)^(1/3)/(14 + 28*x) + (x*(1 + 3*x + a*x)^(1/3))/(14 + 28*x) + (-79 + 93*x - 144*x^2 + 93*(1 + 3*x) - 288*x*(1 + 3*x`
+- `cB-10-40` (elem): WRONG — `(9*x^2*(-1 + a + x)^(1/3))/(-7 + 21*x) - (27*(-1 + x)^(1/3))/(-28 + 84*x) - (9*(-1 + x)^(1/3)*x)/(-28 + 84*x) + (857 + 45*(-1 + x) + 15*x - 864*(-1 + x)*x - 144`
+- `cB-10-198` (unknown): WRONG — `(3 + (3 + a)*x)^(2/3)*Log[-2 + 2*x]`
+- `cB-10-234` (elem): WRONG — `(3*x^2*(2 + a + x)^(2/3))/(-16 + 8*x) - (9*(2 + x)^(2/3))/(-20 + 10*x) + (3*x*(2 + x)^(2/3))/(-20 + 10*x) + (-1452 - 396*x - 75*x^2 - 594*(2 + x) - 225*x*(2 + x`
+- `cB-10-240` (unknown): WRONG — `x*(1 + (2 + a)*x)^(2/3)*Log[-2 + x]`
+- `cB-11-9` (elem): WRONG — `(9*x^2*(-1 + a + x)^(2/3))/(16 + 24*x) - (9*(-1 + x)^(2/3)*x)/(40 + 60*x) - (27*(-1 + x)^(2/3))/(80 + 120*x) + (-349 + 711*(-1 + x) + 474*x - 675*(-1 + x)*x - 2`
+- `cB-11-166` (unknown): WRONG — `(-3 + (3 + a)*x)^(2/3)*Log[3 + 3*x]`
+- `cB-11-172` (unknown): WRONG — `(-3 + (3 + a)*x)^(1/6)*Log[-2 + 3*x]`
+
+## Worse
+
+- `logxy-1-3` (elem): larger 78 -> 2397 — `(-2 - a + 6*E^x + 3*a*E^x + 6*(-1 + 3*E^x - x)^(2/3) + 3*a*(-1 + 3*E^x - x)^(2/3) + 12*(-1 + 3*E^x - x) + 6*(-1 + 3*E^x - x)^(4/3) - 4*x + 12*E^x*x - 2*(-1 + 3*`
+- `logxy-1-4` (elem): larger 38 -> 119 — `(2*Sqrt[3 + 2*E^x^2] + a*Sqrt[3 + 2*E^x^2] + 4*(3 + 2*E^x^2) + 2*(3 + 2*E^x^2)^(3/2) + 4*E^x^2*x + 2*a*E^x^2*x + 2*(3 + 2*E^x^2)*x + 8*E^x^2*x^2 + 4*E^x^2*Sqrt[`
+- `logxy-1-6` (elem): larger 28 -> 92 — `(2 + a + 2*x + 2*x^2 + 6*x*Sqrt[-1 + Log[x]] + 2*a*x*Sqrt[-1 + Log[x]] + 4*x*(-1 + Log[x]) + 4*x^2*(-1 + Log[x]) + 4*x*(-1 + Log[x])^(3/2))/(2*x*Sqrt[-1 + Log[x`
+- `logxy-1-8` (elem): larger 97 -> 177 — `Sqrt[-2 - 2*x + 3*Log[1 + E^x]] + (-2*x + E^x*x)/(2*Sqrt[-2 - 2*x + 3*Log[1 + E^x]] + 2*E^x*Sqrt[-2 - 2*x + 3*Log[1 + E^x]]) + (-2 + E^x + 2*Sqrt[-2 - 2*x + 3*L`
+- `logxy-1-10` (elem): larger 73 -> 2750 — `(-2 + E^x + 3*(3 + E^x - 2*x)^(2/3) + 3*(3 + E^x - 2*x) + 3*a*(3 + E^x - 2*x) + 3*(3 + E^x - 2*x)^(4/3) - 2*x - 2*a*x + E^x*x + a*E^x*x - 2*(3 + E^x - 2*x)^(1/3`
+- `genus1-1-10` (elem): larger 14 -> 42 — `(3*Log[x]^2)/(2*x*Sqrt[3 + Log[x]^3] + 2*a*x*Sqrt[3 + Log[x]^3] + 2*x*(3 + Log[x]^3))`
+- `ratb-1-3` (elem): larger 214 -> 554 — `(3*E^x^2*x)/(2*(-2 + E^x^2)^(1/4)) - (2*E^x^2*(-2 + a + E^x^2)^(1/4)*x)/(4 + 4*E^x^2 + E^(2*x^2)) + (E^x^2*x)/(4*(-2 + a + E^x^2)^(3/4) + 2*E^x^2*(-2 + a + E^x^`
+- `constk-1-3` (elem): larger 82 -> 2627 — `(-4 - 2*a + 2*E^(1 + x) + a*E^(1 + x) + 6*(1 + E^(1 + x) - 2*x)^(2/3) + 3*a*(1 + E^(1 + x) - 2*x)^(2/3) + 6*(1 + E^(1 + x) - 2*x) + 3*(1 + E^(1 + x) - 2*x)^(4/3`
+- `tower2-1-5` (elem): larger 15 -> 566 — `(1 + E^x*x + 3*x*(1 + a + E^x + Log[x])^(2/3))/(3*x^2*(1 + a + E^x + Log[x])^(2/3) + 3*x*(1 + a + E^x + Log[x]))`
+- `tower2-1-6` (elem): slower 1.3s -> 21.4s — `(2 + E^x*x)/(4*x*(E^x + 2*Log[x])^(3/4)) + (2 + E^x*x)/(4*x*(E^x + 2*Log[x])^(3/4) + 4*a*x*(E^x + 2*Log[x])^(3/4) + 4*x*(E^x + 2*Log[x]))`
+- `tower2-1-8` (elem): larger 15 -> 1990 — `(1 + E^x*x + 4*x*(-1 + a + E^x + Log[x])^(3/4))/(4*x^2*(-1 + a + E^x + Log[x])^(3/4) + 4*x*(-1 + a + E^x + Log[x]))`
+- `tower2-1-12` (elem): larger 17 -> 600 — `(2 + E^x*x + 3*x*(-1 + a + E^x + 2*Log[x])^(2/3))/(3*x^2*(-1 + a + E^x + 2*Log[x])^(2/3) + 3*x*(-1 + a + E^x + 2*Log[x]))`
+- `expcube-1-2` (elem): larger 17 -> 999 — `(-4*E^x^2*x)/(6*(3 + E^x^2)^(2/3) + 3*a*(3 + E^x^2)^(2/3) + 3*(3 + E^x^2))`
+- `expcube-1-5` (elem): larger 15 -> 990 — `(2*E^x^2*x)/(6*(1 + E^x^2)^(2/3) + 3*a*(1 + E^x^2)^(2/3) + 3*(1 + E^x^2))`
+- `expcube-1-7` (elem): larger 15 -> 871 — `(2*E^x)/(6*(3 + E^x)^(2/3) + 3*a*(3 + E^x)^(2/3) + 3*(3 + E^x))`
+- `expcube-1-8` (elem): larger 15 -> 466 — `(2*E^(2*x))/(-3*(3 + a + E^(2*x))^(2/3) + 3*(3 + a + E^(2*x)))`
+- `expcube-1-11` (elem): larger 27 -> 1003 — `(2*E^x^2*x)/(3*(2 + E^x^2)^(2/3)) + (2*E^x^2*x)/(-3*(2 + E^x^2)^(2/3) + 3*a*(2 + E^x^2)^(2/3) + 3*(2 + E^x^2))`
+- `trager-binom-029` (unknown): larger 125 -> 237 — `x^3/(2 + a + x^3)^(1/3)`
+- `trager-third-011` (unknown): larger 38 -> 91 — `1/(x*Sqrt[1 + a + x^3])`
+- `trager-third-017` (unknown): larger 38 -> 91 — `1/(x*Sqrt[1 + a + x^4])`
+- `trager-third-022` (unknown): larger 38 -> 91 — `1/(x*Sqrt[-1 + a + x^4])`
+- `trager-ratrad-019` (unknown): slower 2.7s -> 12.6s — `1/((2 + a + x^2)*(1 + x^3)^(1/4))`
+- `trager-evensub-002` (unknown): larger 109 -> 184 — `x^3/((-2 + a + x^2)*Sqrt[1 + x^4])`
+- `trager-evensub-005` (unknown): larger 107 -> 342 — `x/(Sqrt[1 + a + x^4]*(1 + x^2 + x^4))`
+- `trager-torsion-006` (unknown): slower 2.3s -> 12.2s — `1/((1 + a + x^2)*(1 + x^3)^(1/4))`
+- `trager-torsion-007` (unknown): slower 2.4s -> 12.6s — `1/((3 + a + x^2)*(1 + x^3)^(1/4))`
+- `trager-torsion-008` (unknown): slower 3.1s -> 13.4s — `x/((2 + a + x^2)*(1 + x^3)^(3/4))`
+- `trager-deriv-log-25` (unknown): slower 4.6s -> 15.1s — `(-3 + 120*x - 71*x^2 - 8*x^3 + 45*x^4 + (-16 + a)*x^5 + 5*x^6 - 24*x^8)/(2*Sqrt[3 - 3*x + x^2 + 2*x^3 - x^4 - x^5 + x^6]*(-26 - 9*x + 21*x^2 - 18*x^3 - 10*x^4 +`
+- `logxy-2-2` (elem): larger 65 -> 2842 — `(E^x + 2*(-3 + a + 2*E^x)^(3/4))/(2*(-3 + a + 2*E^x)^(3/4) + 2*(-3 + a + 2*E^x) + 2*(-3 + a + 2*E^x)^(3/4)*x)`
+- `logxy-2-6` (elem): larger 32 -> 5782, slower 1.2s -> 9.3s — `(6 + 3*a + 12*x + 6*x^2 + 6*x*(-3 + 3*Log[x])^(1/4) + 8*x*(-3 + 3*Log[x])^(3/4) + 4*a*x*(-3 + 3*Log[x])^(3/4) + 16*x*(-3 + 3*Log[x]) + 8*x^2*(-3 + 3*Log[x]) + 8`
+- `logxy-2-10` (elem): larger 77 -> 1782 — `(2 - 2*E^x - 3*(2 + a + 2*E^x - 2*x)^(2/3))/(3*(2 + a + 2*E^x - 2*x)^(2/3) + 3*(2 + a + 2*E^x - 2*x) + 3*(2 + a + 2*E^x - 2*x)^(2/3)*x)`
+- `ratb-2-6` (elem): larger 32 -> 726 — `4/(3*x*(3 + 2*Log[x])^(1/3)) - (3 + 2*Log[x] + a*Log[x])^(1/3)/(x + 2*x*Log[x] + x*Log[x]^2) + (2 + a)/(3*x*(3 + 2*Log[x] + a*Log[x])^(2/3) + 3*x*Log[x]*(3 + 2*`
+- `constk-2-3` (elem): slower 5.1s -> 15.5s — `(-2 + 2*E^x + x)^(1/4) + (x + 2*E^x*x)/(4*(-2 + 2*E^x + x)^(3/4)) + (1 + 2*E^x + 4*(-2 + 2*E^x + x)^(3/4))/(8*(-2 + 2*E^x + x)^(3/4) + 4*a*(-2 + 2*E^x + x)^(3/4`
+- `constk-2-4` (elem): larger 78 -> 2477 — `(-2 + a - 3*x + 2*a*x + 3*x^2 + 2*x^3 + x*(-3 + 2*x + Log[3*x])^(1/3) + 2*x^2*(-3 + 2*x + Log[3*x])^(1/3) - 6*x*(-3 + 2*x + Log[3*x])^(2/3) + 3*a*x*(-3 + 2*x + `
+- `constk-2-5` (elem): slower 0.6s -> 11.3s — `(2 - 2*a - 6*E^x + 6*a*E^x - 3*(2 + 6*E^x - 2*x)^(2/3) + 3*a*(2 + 6*E^x - 2*x)^(2/3) + 6*(2 + 6*E^x - 2*x) + 3*(2 + 6*E^x - 2*x)^(4/3) - 4*x + 12*E^x*x - 2*(2 +`
+- `constk-2-6` (elem): slower 1.9s -> 14.8s — `(-7 + 7*a + 17*x - 3*a*x + x^2 - 3*x^3 + 7*x*(2 - x + 3*Log[2 + 3*x])^(1/3) - 3*x^2*(2 - x + 3*Log[2 + 3*x])^(1/3) - 6*(2 - x + 3*Log[2 + 3*x])^(2/3) + 6*a*(2 -`
+- `constk-2-8` (elem): slower 3.4s -> 15.6s — `(10 + 5*a + 24*x + 2*a*x + 18*x^2 + 4*x^3 + 10*x*(-1 + 2*x + 3*Log[3 + 3*x])^(1/4) + 4*x^2*(-1 + 2*x + 3*Log[3 + 3*x])^(1/4) + 8*(-1 + 2*x + 3*Log[3 + 3*x])^(3/`
+- `tower2-2-1` (elem): larger 67 -> 1319 — `(1 + E^x*x)/(3*x*(1 + E^x + Log[x])^(2/3)) + (1 + E^x*x)/(3*x*(1 + E^x + Log[x])^(2/3) + 3*a*x*(1 + E^x + Log[x])^(2/3) + 3*x*(1 + E^x + Log[x]))`
+- `tower2-2-6` (elem): larger 17 -> 600 — `(2 + E^x*x + 3*x*(-1 + a + E^x + 2*Log[x])^(2/3))/(3*x^2*(-1 + a + E^x + 2*Log[x])^(2/3) + 3*x*(-1 + a + E^x + 2*Log[x]))`
+- `tower2-2-7` (elem): larger 17 -> 2052 — `(1 + 2*E^x*x + 4*x*(2 + a + 2*E^x + Log[x])^(3/4))/(4*x^2*(2 + a + 2*E^x + Log[x])^(3/4) + 4*x*(2 + a + 2*E^x + Log[x]))`
+- `lccontent-2-5` (elem): larger 14 -> 7434 — `(1 + Log[x])/(3*(2 + x*Log[x])^(2/3) + 3*a*(2 + x*Log[x])^(2/3) + 3*(2 + x*Log[x]))`
+- `lccontent-2-9` (elem): larger 22 -> 8763 — `(4*x*Log[1 + x^2] + 4*x^2*Log[1 + x^2] + Log[1 + x^2]^2 + x^2*Log[1 + x^2]^2)/(3*(1 + a + (1 + x)*Log[1 + x^2]^2)^(2/3) + 3*x^2*(1 + a + (1 + x)*Log[1 + x^2]^2)`
+- `expcube-2-2` (elem): larger 15 -> 992 — `(2*E^x^2*x)/(3*(2 + E^x^2)^(2/3) + 3*a*(2 + E^x^2)^(2/3) + 3*(2 + E^x^2))`
+- `expcube-2-3` (elem): larger 15 -> 511 — `(2*E^(2*x))/(6*(3 + a + E^(2*x))^(2/3) + 3*(3 + a + E^(2*x)))`
+- `expcube-2-5` (elem): larger 17 -> 999 — `(-4*E^(2*x))/(3*(3 + E^(2*x))^(2/3) + 3*a*(3 + E^(2*x))^(2/3) + 3*(3 + E^(2*x)))`
+- `expcube-2-7` (elem): larger 15 -> 864 — `-(E^x/(3*(2 + E^x)^(2/3) + 3*a*(2 + E^x)^(2/3) + 3*(2 + E^x)))`
+- `expcube-2-8` (elem): larger 15 -> 871 — `(2*E^x)/(3*(3 + E^x)^(2/3) + 3*a*(3 + E^x)^(2/3) + 3*(3 + E^x))`
+- `expcube-2-9` (elem): larger 17 -> 992 — `(-2*E^x^2*x)/(3*(2 + E^x^2)^(2/3) + 3*a*(2 + E^x^2)^(2/3) + 3*(2 + E^x^2))`
+- `expcube-2-10` (elem): larger 27 -> 1003 — `(2*E^(2*x))/(3*(3 + E^(2*x))^(2/3)) + (2*E^(2*x))/(6*(3 + E^(2*x))^(2/3) + 3*a*(3 + E^(2*x))^(2/3) + 3*(3 + E^(2*x)))`
+- `expcube-2-11` (elem): larger 17 -> 990 — `(-2*E^(2*x))/(6*(1 + E^(2*x))^(2/3) + 3*a*(1 + E^(2*x))^(2/3) + 3*(1 + E^(2*x)))`
+- `logxy-3-4` (elem): larger 79 -> 1916 — `(-4 - 4*E^x - 6*(-3 + a + 2*E^x + 2*x)^(2/3))/(6*(-3 + a + 2*E^x + 2*x)^(2/3) + 3*x*(-3 + a + 2*E^x + 2*x)^(2/3) + 3*(-3 + a + 2*E^x + 2*x))`
+- `logxy-3-5` (elem): larger 38 -> 2248 — `(4 + 2*a + 12*x + 2*a*x + 12*x^2 + 4*x^3 + 4*x*(1 + 2*x + 2*Log[x])^(1/3) + 4*x^2*(1 + 2*x + 2*Log[x])^(1/3) + 6*x*(1 + 2*x + 2*Log[x])^(2/3) + 3*a*x*(1 + 2*x +`
+- `logxy-3-6` (elem): larger 87 -> 1560 — `(-2 - 4*E^x^2*x - 3*(-2 + a + 2*E^x^2 + 2*x)^(2/3))/(6*(-2 + a + 2*E^x^2 + 2*x)^(2/3) + 3*x*(-2 + a + 2*E^x^2 + 2*x)^(2/3) + 3*(-2 + a + 2*E^x^2 + 2*x))`
+- `logxy-3-7` (elem): larger 76 -> 170 — `(9 + 11*x + 9*a*x + 11*x^2 + 2*a*x^2 + 2*x^3 + 6*Sqrt[-2 + x + 3*Log[3 + 2*x]] + 13*x*Sqrt[-2 + x + 3*Log[3 + 2*x]] + 2*x^2*Sqrt[-2 + x + 3*Log[3 + 2*x]] + 6*(-`
+- `logxy-3-9` (elem): larger 19 -> 1506 — `(1 + 6*E^x^2*x + 3*(3 + a + 3*E^x^2 + x)^(2/3))/(6*(3 + a + 3*E^x^2 + x)^(2/3) + 3*x*(3 + a + 3*E^x^2 + x)^(2/3) + 3*(3 + a + 3*E^x^2 + x))`
+- `genus1-3-3` (elem): larger 14 -> 42 — `(3*Log[x]^2)/(4*x*Sqrt[2 + Log[x]^3] + 2*a*x*Sqrt[2 + Log[x]^3] + 2*x*(2 + Log[x]^3))`
+- `genus1-3-6` (elem): larger 14 -> 42 — `(3*Log[x]^2)/(4*x*Sqrt[1 + Log[x]^3] + 2*a*x*Sqrt[1 + Log[x]^3] + 2*x*(1 + Log[x]^3))`
+- `constk-3-3` (elem): larger 37 -> 118 — `(-E^(1 + x) + a*E^(1 + x) - Sqrt[1 + 2*E^(1 + x)] + a*Sqrt[1 + 2*E^(1 + x)] + 2*(1 + 2*E^(1 + x)) + (1 + 2*E^(1 + x))^(3/2) + 2*E^(1 + x)*x + E^(1 + x)*Sqrt[1 +`
+- `constk-3-5` (elem): larger 98 -> 3105 — `(4 + 2*a + 8*x + 2*a*x + 10*x^2 + 2*a*x^2 + 6*x^3 + 2*x^4 + 2*x*(2 + 2*x + Log[2*(1 + x^2)])^(1/3) + 2*x^2*(2 + 2*x + Log[2*(1 + x^2)])^(1/3) + 2*x^3*(2 + 2*x +`
+- `constk-3-9` (elem): larger 86 -> 2544 — `(-4 + 2*a - 2*x + 2*a*x + 4*x^2 + 2*x^3 + 2*x*(-3 + 2*x + 2*Log[3*x])^(1/3) + 2*x^2*(-3 + 2*x + 2*Log[3*x])^(1/3) - 6*x*(-3 + 2*x + 2*Log[3*x])^(2/3) + 3*a*x*(-`
+- `tower2-3-2` (elem): slower 2.7s -> 23.0s — `(1 + E^x*x)/(2*x*(1 + 2*E^x + 2*Log[x])^(3/4)) + (1 + E^x*x)/(2*x + 4*E^x*x + 4*x*Log[x] + 2*x*(1 + 2*E^x + 2*Log[x])^(3/4) + 2*a*x*(1 + 2*E^x + 2*Log[x])^(3/4)`
+- `tower2-3-3` (elem): larger 15 -> 1990 — `(1 + E^x*x + 4*x*(-1 + a + E^x + Log[x])^(3/4))/(4*x^2*(-1 + a + E^x + Log[x])^(3/4) + 4*x*(-1 + a + E^x + Log[x]))`
+- `tower2-3-6` (elem): larger 87 -> 1441 — `(2 + 2*E^x*x)/(3*x*(1 + 2*E^x + 2*Log[x])^(2/3)) + (2 + 2*E^x*x)/(3*x*(1 + 2*E^x + 2*Log[x])^(2/3) + 3*a*x*(1 + 2*E^x + 2*Log[x])^(2/3) + 3*x*(1 + 2*E^x + 2*Log`
+- `tower2-3-7` (elem): larger 77 -> 1380 — `(1 + 2*E^x*x)/(3*x*(1 + 2*E^x + Log[x])^(2/3)) + (1 + 2*E^x*x)/(3*x*(1 + 2*E^x + Log[x])^(2/3) + 3*a*x*(1 + 2*E^x + Log[x])^(2/3) + 3*x*(1 + 2*E^x + Log[x]))`
+- `tower2-3-8` (elem): larger 67 -> 1210 — `(1 + E^x*x)/(3*x*(-1 + E^x + Log[x])^(2/3)) + (1 + E^x*x)/(3*x*(-1 + E^x + Log[x])^(2/3) + 3*a*x*(-1 + E^x + Log[x])^(2/3) + 3*x*(-1 + E^x + Log[x]))`
+- `lccontent-3-4` (elem): larger 18 -> 6047 — `(2*Log[x] + 2*x*Log[x] + x*Log[x]^2)/(3*x*(1 + a + (1 + x)*Log[x]^2)^(2/3) + 3*x*(1 + a + (1 + x)*Log[x]^2))`
+- `expcube-3-1` (elem): larger 13 -> 864 — `E^x/(6*(3 + E^x)^(2/3) + 3*a*(3 + E^x)^(2/3) + 3*(3 + E^x))`
+- `expcube-3-2` (elem): larger 15 -> 992 — `(2*E^x^2*x)/(-3*(2 + E^x^2)^(2/3) + 3*a*(2 + E^x^2)^(2/3) + 3*(2 + E^x^2))`
+- `expcube-3-5` (elem): larger 17 -> 992 — `(-2*E^(2*x))/(-3*(2 + E^(2*x))^(2/3) + 3*a*(2 + E^(2*x))^(2/3) + 3*(2 + E^(2*x)))`
+- `expcube-3-7` (elem): larger 15 -> 871 — `(2*E^x)/(6*(2 + E^x)^(2/3) + 3*a*(2 + E^x)^(2/3) + 3*(2 + E^x))`
+- `expcube-3-8` (elem): larger 17 -> 920 — `(-4*E^x^2*x)/(-3*(1 + E^x^2)^(2/3) + 3*a*(1 + E^x^2)^(2/3) + 3*(1 + E^x^2))`
+- `expcube-3-10` (elem): larger 15 -> 992 — `(2*E^x^2*x)/(-3*(3 + E^x^2)^(2/3) + 3*a*(3 + E^x^2)^(2/3) + 3*(3 + E^x^2))`
+- `expcube-3-11` (elem): larger 17 -> 999 — `(4*E^x^2*x)/(3*(3 + E^x^2)^(2/3) + 3*a*(3 + E^x^2)^(2/3) + 3*(3 + E^x^2))`
+- `cA-1-57` (elem): larger 270 -> 517 — `(x^2*(1 + x^4)^(3/4) - (1 + x^4)^(3/4)*Sqrt[1 + a + x^4] + x^2*(1 + a + x^4)^(3/4) + 2*x^6*(1 + a + x^4)^(3/4) + Sqrt[1 + x^4]*(1 + a + x^4)^(3/4) + 6*x^2*(1 + `
+- `cA-1-113` (elem): larger 90 -> 230 — `5/(2*Sqrt[1 + x^2]) + ((2*x)/(1 + x^2)^(3/2) + (2*x^2)/(1 + x^2)^(3/2) - 2/Sqrt[1 + x^2])/(1 - 1/(2*(1 + x^2)) - x/(1 + x^2) - x^2/(2*(1 + x^2))) + (4*x*Sqrt[1 `
+- `cA-1-132` (elem): larger 129 -> 272 — `4/Sqrt[1 + x^2] + ((2*x)/(1 + x^2)^(3/2) + (2*x^2)/(1 + x^2)^(3/2) - 2/Sqrt[1 + x^2])/(1 - 1/(2*(1 + x^2)) - x/(1 + x^2) - x^2/(2*(1 + x^2))) + (-9 + 9*x^2 + 9*`
+- `cA-1-263` (elem): slower 0.1s -> 10.1s — `(2*a*x^2 - 2*a*x^2*(1 + x^3)^(1/6) - 2*a*x^2*(1 + x^3)^(1/3) - a^2*x^2*(1 + x^3)^(1/3) + 4*a*x^2*Sqrt[1 + x^3] + a^2*x^2*Sqrt[1 + x^3] - 2*a*x^2*(1 + x^3)^(2/3)`
+- `cA-3-147` (elem): larger 90 -> 229 — `3/(2*Sqrt[1 + x^2]) + (x/(1 + x^2)^(3/2) + x^2/(1 + x^2)^(3/2) - 1/Sqrt[1 + x^2])/(1 - 1/(2*(1 + x^2)) - x/(1 + x^2) - x^2/(2*(1 + x^2))) + (4*x*Sqrt[1 + x^2] +`
+- `cM-1-98` (unknown): lost ELEM -> WRONG — `(E^x*(-1 + Log[1 + E^x])*(2 + a + Log[1 + E^x])^(3/2))/((1 + E^x)*(1 + Log[1 + E^x] + Log[1 + E^x]^2))`
+- `cM-1-108` (unknown): slower 0.1s -> 10.2s — `1/(1 + a + E^(6*x))^(1/4)`
+- `cM-1-111` (elem): larger 52 -> 273 — `(1 + a + Log[x])^(1/3)/(3*x - 2*x*(1 + a + Log[x]) + x*(1 + a + Log[x])^2)`
+- `cM-1-176` (unknown): slower 0.1s -> 10.3s — `2/(1 + a + E^(12*x))^(1/4)`
+- `cM-1-230` (unknown): larger 83 -> 367 — `(E^x*(1 + E^x)^(1/4))/(-2 + a + E^x)`
+- `cM-1-259` (unknown): larger 540 -> 2773 — `-((E^x*(2 + E^x))/((1 + E^x + E^(2*x))^(3/2)*(-1 + E^x + (-1 + a)*E^(2*x))))`
+- `cM-1-305` (elem): larger 1293 -> 2181 — `(1/(E^(6*x)*((1 + E^(6*x))/E^(6*x))^(5/6)) - 2/(E^(6*x)*((1 + E^(6*x))/E^(6*x))^(2/3)))/(12*(1 - ((1 + E^(6*x))/E^(6*x))^(1/6) + ((1 + E^(6*x))/E^(6*x))^(1/3)))`
+- `cM-1-327` (unknown): larger 72 -> 474 — `(2*x*Sqrt[3 + a + Log[1 + x^2]])/((1 + x^2)*(2 + Log[1 + x^2]^2))`
+- `cM-1-341` (unknown): larger 773 -> 2293 — `(-2*E^(2*x)*(1 + E^(2*x)))/((1 + (2 + a)*E^(2*x) - E^(4*x))*(3 + E^(4*x))^(3/2))`
+- `cM-1-362` (unknown): larger 38 -> 394 — `(2*x)/((1 + x^2)*(2 + Log[1 + x^2])^(1/4)*(-1 + a + Log[1 + x^2]))`
+- `cM-2-67` (unknown): larger 78 -> 689 — `-((E^x*(-2 + E^x))/(Sqrt[2 + a + E^x]*(-1 + E^x - 2*E^(2*x))))`
+- `cM-2-88` (elem): larger 1084 -> 1974 — `(-(E^(6*x)/(1 + E^(6*x))^(5/6)) + (2*E^(6*x))/(1 + E^(6*x))^(2/3))/(6*(1 - (1 + E^(6*x))^(1/6) + (1 + E^(6*x))^(1/3))) - (E^(6*x)/(1 + E^(6*x))^(5/6) + (2*E^(6*`
+- `cM-2-97` (unknown): slower 1.9s -> 11.7s — `((1 + E^(-x))^(1/4)*(1 + (-2 + a)*E^x))/(-2 - 2*E^x + E^(2*x))`
+- `cM-2-105` (unknown): larger 182 -> 1545 — `(2*E^(2*x)*(1 + E^(2*x))*(2 + a + E^(2*x))^(1/3))/(2 + E^(2*x) + E^(4*x))`
+- `cM-2-130` (unknown): larger 119 -> 327 — `1/(x*Log[x]*(3 + a + Log[x])^(1/4))`
+- `cM-2-155` (elem): slower 7.0s -> 27.2s — `(Log[x]^4 + Log[x]^2*(1 + Log[x]^6)^(1/3) - 2*(1 + Log[x]^6)^(2/3))/(6*x*Log[x]*(1 + Log[x]^6)^(2/3)) + (Log[x]^4 + Log[x]^2*(1 + Log[x]^6)^(1/3) + (1 + Log[x]^`
+- `cM-2-157` (unknown): larger 105 -> 619 — `(2*x*(3 + a + Log[1 + x^2])^(3/2))/((1 + x^2)*(2 + Log[1 + x^2]^2))`
+- `cM-2-194` (unknown): slower 0.2s -> 10.2s — `2/(1 + a + E^(6*x))^(1/4)`
+- `cM-2-197` (unknown): larger 114 -> 515 — `2/(2 + a + E^(2*x))^(1/3)`
+- `cM-2-286` (unknown): larger 120 -> 804 — `(E^x*(2 + E^(-x))^(3/2))/(-1 + a + E^x - E^(2*x))`
+- `cM-2-307` (unknown): slower 0.3s -> 21.2s — `((2 + Log[x])*(1 + Log[x] + Log[x]^2)^(3/2))/(x*(-1 + a + Log[x] + Log[x]^2))`
+- `cM-2-329` (unknown): larger 279 -> 442 — `(2*E^x^2*Sqrt[1 + a + E^x^2]*x)/(2 + E^(2*x^2))`
+- `cM-2-352` (unknown): larger 56 -> 374 — `(E^x*Sqrt[2 + Log[1 + E^x]])/((1 + E^x)*(1 + a - Log[1 + E^x] + 2*Log[1 + E^x]^2))`
+- `cM-3-10` (elem): larger 51 -> 428 — `E^x/(2*(2 + a + E^x)^(1/3) + a^2*(2 + a + E^x)^(1/3) + 2*a*E^x*(2 + a + E^x)^(1/3) + E^(2*x)*(2 + a + E^x)^(1/3))`
+- `cM-3-11` (unknown): slower 0.0s -> 10.0s — `-(1/(1 + a + E^(-2*x))^(1/4))`
+- `cM-3-21` (elem): larger 1082 -> 4517 — `E^x/(1 + E^x)^(5/6) - (-1/6*E^x/(1 + E^x)^(5/6) + E^x/(3*(1 + E^x)^(2/3)))/(4*(1 - (1 + E^x)^(1/6) + (1 + E^x)^(1/3))) + (E^x/(6*(1 + E^x)^(5/6)) + E^x/(3*(1 + `
+- `cM-3-158` (unknown): larger 64 -> 523 — `1/(x*Sqrt[1 + a + Log[x]]*(1 + Log[x]^2))`
+- `cM-3-163` (unknown): larger 157 -> 1608 — `(2*(-1 + Log[1 + 2*x]))/((1 + 2*x)*(2 + a + Log[1 + 2*x])^(3/2)*(2 + Log[1 + 2*x] + Log[1 + 2*x]^2))`
+- `cM-3-173` (unknown): larger 122 -> 517 — `2/(3 + a + E^(4*x))^(1/3)`
+- `cM-3-222` (unknown): larger 128 -> 529 — `(2*x)/(3 + a + E^(4*x^2))^(1/3)`
+- `cM-3-261` (unknown): larger 35 -> 187 — `E^x/((3 + E^x)^(1/3)*(2 + a + E^x))`
+- `cM-3-266` (unknown): lost ELEM -> TIMEOUT — `(-2*E^x^2*(2 + E^x^2)*Sqrt[2 + E^x^2 + E^(2*x^2)]*x)/(2 + (2 + a)*E^x^2 - E^(2*x^2))`
+- `cM-3-278` (unknown): larger 586 -> 935, slower 0.1s -> 20.5s — `((2 + E^x)*(1 + a + E^x)^(2/3))/(-2 + E^x)`
+- `cM-3-347` (unknown): larger 37 -> 214 — `(2*E^x^2*x)/((1 + E^x^2)^(1/3)*(-2 + a + E^x^2))`
+- `cM-3-369` (unknown): larger 47 -> 381 — `E^x/(Sqrt[1 + E^x]*(3 + a + E^(2*x)))`
+- `cM-4-68` (unknown): larger 122 -> 517 — `1/(3 + a + E^(4*x))^(1/3)`
+- `cM-4-114` (unknown): larger 80 -> 196 — `(3 + Log[x])^(1/3)/(x*(2 + a + Log[x]))`
+- `cM-4-167` (unknown): larger 86 -> 851 — `1/(x*(3 + a + Log[x]^2)*Sqrt[1 + Log[x] + Log[x]^2])`
+- `cM-4-181` (elem): larger 53 -> 870 — `E^x/(3*(2 + a + E^x)^(1/4) + a^2*(2 + a + E^x)^(1/4) + 2*a*E^x*(2 + a + E^x)^(1/4) + E^(2*x)*(2 + a + E^x)^(1/4))`
+- `cM-4-200` (unknown): larger 139 -> 1403, slower 0.1s -> 7.5s — `(2*E^(2*x))/((2 + a + E^(2*x))^(3/2)*(2 + E^(4*x)))`
+- `cB-7-14` (unknown): larger 304 -> 816 — `x*(-2 + (3 + a)*x)^(3/2)*Log[-1 + 3*x]`
+- `cB-9-85` (elem): lost ELEM -> WRONG — `(672 + 372*x - 300*x^2 + 496*(3 + 3*x) - 800*x*(3 + 3*x))/(2025*(3 + 3*x)^(3/4)) + (-4*Log[2 + 2*x] + x*Log[2 + 2*x] + 5*x^2*Log[2 + 2*x])/(15*(3 + a + 3*x)^(3/`
+- `cB-10-152` (elem): lost ELEM -> TIMEOUT — `-3/(2*(-3 + 3*x)^(1/3)) + (-3 + 3*x)^(2/3)/(-1 + 2*x) + (27 - 27*a - 54*x + 27*a*x + 27*x^2)/(-36*(-3 + a + 3*x)^(1/3) + 108*x*(-3 + a + 3*x)^(1/3) - 108*x^2*(-`
+- `cB-10-224` (unknown): larger 193 -> 408 — `(x*Log[1 + 3*x])/Sqrt[2 + (3 + a)*x]`
+- `cB-11-127` (unknown): larger 237 -> 438 — `x*Sqrt[2 + (3 + a)*x]*Log[2 + 2*x]`
+- `cB-11-170` (unknown): larger 237 -> 438 — `x*Sqrt[-1 + (3 + a)*x]*Log[2 + 2*x]`
+
+## Better
+
+- `agen-1-5` (elem): UNEVAL -> ELEM — `(-4 + 14*x - 2*a*x^2 - 15*x^3 + 4*a*x^3 + 27*x^4 + 9*a*x^4 + 6*Sqrt[-3 - 2*x + 2*x^2 + 3*x^3] + 2*a*Sqrt[-3 - 2*x + 2*x^2 + 3*x^3] - 4*x*Sqrt[-3 - 2*x + 2*x^2 +`
+- `agen-1-11` (elem): UNEVAL -> ELEM — `(2 + 8*x + 9*x^2 + 3*x^3 - 2*(-2 + a + 2*x + 3*x^2 + x^3))/(2*Sqrt[-2 + a + 2*x + 3*x^2 + x^3] + 4*x*Sqrt[-2 + a + 2*x + 3*x^2 + x^3] + 2*x^2*Sqrt[-2 + a + 2*x `
+- `bbottom-1-1` (elem): smaller 81 -> 14 — `(E^x + a*E^x + E^x*x + E^x*x^2)/Sqrt[1 + a + x^2]`
+- `bbottom-1-8` (elem): smaller 109 -> 13 — `(3 + a + x^2 + x^2*Log[x])/(x*Sqrt[3 + a + x^2])`
+- `bbottom-1-9` (elem): smaller 338 -> 13 — `(x + 2*Sqrt[1 + x]*Log[1 + a + Sqrt[1 + x]] + 2*a*Sqrt[1 + x]*Log[1 + a + Sqrt[1 + x]] + 2*(1 + x)*Log[1 + a + Sqrt[1 + x]])/(2*Sqrt[1 + x] + 2*a*Sqrt[1 + x] + `
+- `bbottomp-1-5` (unknown): UNEVAL -> CERT — `1/x^(2/3) + E^x/Sqrt[1 + a + x^2] + Log[x]/(3*x^(2/3))`
+- `alg-1-5` (elem): smaller 82 -> 28 — `(3 - 2*E^(2*x))/Sqrt[-2 + E^(2*x) + 2*x] + (-1 - a - a*E^(2*x) + E^(4*x) - 3*x - 3*E^(2*x)*x)/(-2 + E^(2*x) + 2*x)^(3/2)`
+- `genus1-1-6` (elem): TIMEOUT -> ELEM — `(3*Log[x]^2 + 6*Log[x]^3 + 3*a*Log[x]^3 + 3*Log[x]^3*Sqrt[2 + Log[x]^3] + 4*(2 + Log[x]^3) + 2*a*(2 + Log[x]^3) + 2*(2 + Log[x]^3)^(3/2))/(4*x*Sqrt[2 + Log[x]^3`
+- `ratb-1-2` (elem): smaller 83 -> 26 — `(6*x + 2*x*Log[1 + x^2] - 2*x*(-1 + a + 3*Log[1 + x^2]))/(9*(-1 + a + 3*Log[1 + x^2])^(2/3) + 9*x^2*(-1 + a + 3*Log[1 + x^2])^(2/3) + 6*Log[1 + x^2]*(-1 + a + 3`
+- `ratb-1-7` (elem): TIMEOUT -> ELEM — `-((E^x*Sqrt[3 - 2*x + Log[1 + E^x]])/(9 + 6*a + a^2 + 9*E^x + 6*a*E^x + a^2*E^x + 6*Log[1 + E^x] + 2*a*Log[1 + E^x] + 6*E^x*Log[1 + E^x] + 2*a*E^x*Log[1 + E^x] `
+- `ratb-1-8` (elem): TIMEOUT -> ELEM — `-((E^x*Sqrt[-2 + 2*x + 2*Log[1 + E^x]])/(9 + 6*a + a^2 + 9*E^x + 6*a*E^x + a^2*E^x + 6*Log[1 + E^x] + 2*a*Log[1 + E^x] + 6*E^x*Log[1 + E^x] + 2*a*E^x*Log[1 + E^`
+- `constk-1-1` (elem): TIMEOUT -> ELEM — `(-2*x + 2*a*x + 4*x^2 + 2*x^3 + 2*x^2*(-1 + 3*Log[2*(1 + x^2)])^(1/3) - (-1 + 3*Log[2*(1 + x^2)])^(2/3) + a*(-1 + 3*Log[2*(1 + x^2)])^(2/3) - x^2*(-1 + 3*Log[2*`
+- `tower2-1-7` (elem): TIMEOUT -> ELEM — `-((1 + a + E^x + 2*Log[x])^(1/4)/(9*x + 6*x*Log[x] + x*Log[x]^2)) + (2 + E^x*x)/(12*x*(1 + a + E^x + 2*Log[x])^(3/4) + 4*x*Log[x]*(1 + a + E^x + 2*Log[x])^(3/4)`
+- `expcube-1-1` (elem): smaller 1041 -> 679 — `(2*E^(2*x))/(3*(3 + E^(2*x))^(2/3)) + (-2*E^(2*x) + 2*a*E^(2*x))/(3*(3 + E^(2*x))^(2/3) + 3*(3 + E^(2*x)))`
+- `expcube-1-3` (elem): smaller 1188 -> 679 — `(2*E^(2*x))/(3*(3 + E^(2*x))^(2/3)) + (-2*E^(2*x) + 2*a*E^(2*x))/(6*(3 + E^(2*x))^(2/3) + 3*(3 + E^(2*x)))`
+- `expcube-1-4` (elem): smaller 1183 -> 683 — `(2*E^(2*x))/(3*(1 + E^(2*x))^(2/3)) + (-4*E^(2*x) + 2*a*E^(2*x))/(6*(1 + E^(2*x))^(2/3) + 3*(1 + E^(2*x)))`
+- `expcube-1-6` (elem): smaller 888 -> 544 — `E^x/(3*(2 + E^x)^(2/3)) + (-2*E^x + a*E^x)/(-3*(2 + E^x)^(2/3) + 3*(2 + E^x))`
+- `expcube-1-9` (elem): smaller 1040 -> 634 — `(2*E^(2*x))/(3*(2 + E^(2*x))^(2/3)) + (-2*E^(2*x) + 2*a*E^(2*x))/(-3*(2 + E^(2*x))^(2/3) + 3*(2 + E^(2*x)))`
+- `mrandom-1-1` (unknown): UNEVAL -> CERT — `((1 - 2*x + Log[1 + x^2])^(1/3)*(-2 + 2*Log[1 + x^2]))/(1 + a + x + Log[1 + x^2])`
+- `mrandom-1-2` (unknown): UNEVAL -> CERT — `((2 + 3*Log[x])^(1/3)*(-1 + (2 + a)*Log[x]))/(3 + x)`
+- `mrandom-1-3` (unknown): UNEVAL -> CERT — `((-3 + E^(2*x) + x)^(1/3)*(2 - 2*E^(2*x) + (-1 + a)*x))/(3 + E^(4*x) + x)`
+- `mrandom-1-4` (unknown): UNEVAL -> CERT — `(-2 + 2*E^x + x)/((3 + x)*(2 + 2*E^x + (-1 + a)*x)^(1/3))`
+- `mrandom-1-5` (unknown): UNEVAL -> CERT — `(-2 + (-2 + a)*Log[1 + x^2])/((2 + 2*x)*(2 - x + Log[1 + x^2])^(1/3))`
+- `mrandom-1-6` (unknown): UNEVAL -> CERT — `(1 - x + Log[3 + x])/(Sqrt[2 + (2 + a)*x + 3*Log[3 + x]]*(3 + x + Log[3 + x]^2))`
+- `mrandom-1-7` (unknown): UNEVAL -> CERT — `(1 + Log[2 + x])/(Sqrt[3 - 2*x + (3 + a)*Log[2 + x]]*(1 + 2*x + Log[2 + x]^2))`
+- `mrandom-1-8` (unknown): UNEVAL -> CERT — `(1 + a - E^x + x)/((-3 + 2*E^x - x)^(1/3)*(2 + E^x + 2*x))`
+- `mrandom-1-11` (unknown): UNEVAL -> CERT — `(Sqrt[-3 + x + Log[1 + x]]*(-1 + (-1 + a)*Log[1 + x]))/(1 + 2*x)`
+- `mperturb-1-2` (unknown): UNEVAL -> CERT — `(-3 + 5*x + 2*x^2 - 6*Log[x] + (-2 + a)*x*Log[x] - 2*(-3 + x + 3*Log[x]) + 4*x*(-3 + x + 3*Log[x]))/(2*x*Sqrt[-3 + x + 3*Log[x]])`
+- `mperturb-1-5` (unknown): UNEVAL -> CERT — `E^x^2*Sqrt[2 + E^(2*x^2)] + (2*E^(2*x^2)*x)/Sqrt[2 + E^(2*x^2)] + ((-2 + a)*E^x^2*(E^x^2 + Sqrt[2 + E^(2*x^2)])*x)/(2 + E^(2*x^2) + E^x^2*Sqrt[2 + E^(2*x^2)])`
+- `mperturb-1-10` (unknown): UNEVAL -> CERT — `(6 + (-4 + a)*x + 3*Log[x] - 2*x*Log[x] + 6*(2 - 2*x + 3*Log[x]) + 8*Log[x]*(2 - 2*x + 3*Log[x]) + 2*Log[x]^2*(2 - 2*x + 3*Log[x]))/(8*x*Sqrt[2 - 2*x + 3*Log[x]`
+- `mperturb-1-11` (unknown): UNEVAL -> CERT — `(-2 - 8*x - 6*x^2 - 2*Log[2 + 3*x] - 2*x*Log[2 + 3*x] + (9 + a)*(-1 + 2*Log[2 + 3*x]) + 18*x*(-1 + 2*Log[2 + 3*x]) + 9*x^2*(-1 + 2*Log[2 + 3*x]) + 2*(-1 + 2*Log`
+- `bgenus-1-1` (elem): UNEVAL -> ELEM — `(2*(2 + a + x^4)*Log[x] + 2*x^4*Log[x]^2)/(x*Sqrt[2 + a + x^4])`
+- `bgenus-1-2` (elem): UNEVAL -> ELEM — `(3 + a + x^3 + x^3*Log[x] + (3 + a + x^3)*Log[x])/(3 + a + x^3)^(2/3)`
+- `bgenus-1-3` (elem): UNEVAL -> ELEM — `(2*E^x + 2*a*E^x + 3*E^x*x^2 + 2*E^x*x^3)/(2*Sqrt[1 + a + x^3])`
+- `bgenus-1-5` (elem): UNEVAL -> ELEM — `(2*(1 + (-1 + a)*x + x^3) - Log[1 + x] + a*Log[1 + x] - x*Log[1 + x] + a*x*Log[1 + x] + 3*x^2*Log[1 + x] + 3*x^3*Log[1 + x])/(2*Sqrt[1 + (-1 + a)*x + x^3] + 2*x`
+- `bgenus-1-6` (elem): UNEVAL -> ELEM — `(3*x^3 + 2*Sqrt[1 + a + x^3])/(2*x*(1 + a + x^3) + 2*x*Sqrt[1 + a + x^3]*Log[x])`
+- `bgenus-1-8` (elem): UNEVAL -> ELEM — `(2*(2 + (-1 + a)*x + x^3) - Log[1 + x] + a*Log[1 + x] - x*Log[1 + x] + a*x*Log[1 + x] + 3*x^2*Log[1 + x] + 3*x^3*Log[1 + x])/(2*Sqrt[2 + (-1 + a)*x + x^3] + 2*x`
+- `bgenus-1-9` (elem): UNEVAL -> ELEM — `(2*(3 + (-1 + a)*x + x^3) - Log[1 + x] + a*Log[1 + x] - x*Log[1 + x] + a*x*Log[1 + x] + 3*x^2*Log[1 + x] + 3*x^3*Log[1 + x])/(2*Sqrt[3 + (-1 + a)*x + x^3] + 2*x`
+- `bgenus-1-10` (elem): UNEVAL -> ELEM — `(2*E^x + 2*a*E^x + 2*E^x*x^3 + 2*E^x*x*Log[x] + 2*a*E^x*x*Log[x] + 3*E^x*x^3*Log[x] + 2*E^x*x^4*Log[x])/(2*x*Sqrt[1 + a + x^3])`
+- `bcurve-1-1` (elem): UNEVAL -> ELEM — `(3*E^(x*Sqrt[1 + x^3])*x)/Sqrt[1 + x^3] + (-2*E^(x*Sqrt[1 + x^3]) - a*E^(x*Sqrt[1 + x^3]) - 2*E^(x*Sqrt[1 + x^3])*Sqrt[1 + x^3])/x^2 + (4*E^(x*Sqrt[1 + x^3]) + `
+- `bcurve-1-7` (elem): UNEVAL -> ELEM — `(3*x^3 + 2*x*Sqrt[1 + a + x^3] + 2*x*Sqrt[1 + a + x^3]*Log[x + Sqrt[1 + a + x^3]] + 2*(1 + a + x^3)*Log[x + Sqrt[1 + a + x^3]])/(2*x*Sqrt[1 + a + x^3] + 2*(1 + `
+- `bcurve-1-8` (elem): UNEVAL -> ELEM — `(4*E^(x*Sqrt[2 + a + x^3])*x + 2*a*E^(x*Sqrt[2 + a + x^3])*x + 5*E^(x*Sqrt[2 + a + x^3])*x^4 - 2*E^(x*Sqrt[2 + a + x^3])*Sqrt[2 + a + x^3])/(2*x^2*Sqrt[2 + a + `
+- `bcurve-1-10` (elem): UNEVAL -> ELEM — `(2*E^(x*Sqrt[1 + a + x^3])*x + 2*a*E^(x*Sqrt[1 + a + x^3])*x + 5*E^(x*Sqrt[1 + a + x^3])*x^4 - 2*E^(x*Sqrt[1 + a + x^3])*Sqrt[1 + a + x^3])/(2*x^2*Sqrt[1 + a + `
+- `bcurve-1-12` (elem): UNEVAL -> ELEM — `(3*x^3 + 2*x*Sqrt[2 + a + x^3] + 2*x*Sqrt[2 + a + x^3]*Log[x + Sqrt[2 + a + x^3]] + 2*(2 + a + x^3)*Log[x + Sqrt[2 + a + x^3]])/(2*x*Sqrt[2 + a + x^3] + 2*(2 + `
+- `bgenusp-1-1` (unknown): UNEVAL -> CERT — `E^x/Sqrt[1 + x^3] + (2 + a + x^3 + 2*Log[x] + 2*x^3*Log[x])/(2 + x^3)^(2/3)`
+- `bgenusp-1-8` (unknown): UNEVAL -> CERT — `(2*E^x + 2*E^x*x^3 + (2 + a)*E^x*x*Log[x] + 3*E^x*x^3*Log[x] + 2*E^x*x^4*Log[x] + 2*x*(1 + x^3)*Log[x])/(2*x*Sqrt[1 + x^3])`
+- `bgenusp-1-9` (unknown): UNEVAL -> CERT — `(-6*E^(2*x) + 12*E^(2*x)*x + (-1 + a)*E^(2*x)*x^2 + 6*E^(2*x)*x^3 + 3*x^2*(2 + x^2)^(2/3)*Sqrt[1 + x^3]*Log[x])/(3*x^2*(2 + x^2)^(2/3))`
+- `classic-11` (unknown): UNEVAL -> CERT — `Log[1 + E^x]^(1/3)/(1 + a + Log[1 + E^x])`
+- `trager-binom-003` (unknown): UNEVAL -> CERT — `x^3/Sqrt[2 + a + x^6]`
+- `trager-binom-005` (unknown): UNEVAL -> CERT — `x^2/(1 + a + x^4)^(1/3)`
+- `trager-binom-006` (unknown): WRONG -> ELEM — `x^3/(-1 + a + x^4)^(1/3)`
+- `trager-binom-007` (unknown): UNEVAL -> CERT — `x^3/(1 + a + x^6)^(1/3)`
+- `trager-binom-008` (unknown): UNEVAL -> CERT — `x^3/(-1 + a + x^3)^(1/4)`
+- `trager-binom-009` (unknown): UNEVAL -> CERT — `x/(-1 + a + x^4)^(1/3)`
+- `trager-binom-010` (unknown): UNEVAL -> CERT — `x^2/(2 + a + x^2)^(1/3)`
+- `trager-binom-015` (unknown): UNEVAL -> CERT — `x^3/(2 + a + x^6)^(1/3)`
+- `trager-binom-019` (unknown): UNEVAL -> CERT — `1/(-1 + a + x^2)^(1/3)`
+- `trager-binom-020` (unknown): UNEVAL -> CERT — `x^3/(-1 + a + x^6)^(1/4)`
+- `trager-binom-021` (unknown): UNEVAL -> CERT — `1/(1 + a + x^2)^(1/4)`
+- `trager-binom-023` (unknown): UNEVAL -> CERT — `x/(2 + a + x^3)^(1/3)`
+- `trager-binom-024` (unknown): UNEVAL -> CERT — `1/(-1 + a + x^6)^(1/3)`
+- `trager-binom-025` (unknown): UNEVAL -> CERT — `x^3/Sqrt[-3 + a + x^3]`
+- `trager-binom-026` (unknown): UNEVAL -> CERT — `1/Sqrt[-1 + a + x^6]`
+- `trager-binom-027` (unknown): UNEVAL -> CERT — `x/(-1 + a + x^4)^(1/4)`
+- `trager-binom-033` (unknown): UNEVAL -> CERT — `x^5/(2 + a + x^4)^(1/4)`
+- `trager-binom-035` (unknown): UNEVAL -> CERT — `1/(1 + a + x^6)^(1/4)`
+- `trager-binom-038` (unknown): UNEVAL -> CERT — `x/(-3 + a + x^4)^(1/4)`
+- `trager-binom-039` (unknown): UNEVAL -> CERT — `x^3/Sqrt[-3 + a + x^6]`
+- `trager-binom-040` (unknown): UNEVAL -> CERT — `1/(-3 + a + x^6)^(1/3)`
+- `trager-binom-041` (unknown): UNEVAL -> CERT — `x^2/(2 + a + x^2)^(1/4)`
+- `trager-binom-042` (unknown): WRONG -> ELEM — `x^2/Sqrt[-3 + a + x^6]`
+- `trager-binom-044` (unknown): UNEVAL -> CERT — `1/Sqrt[-3 + a + x^6]`
+- `trager-binom-045` (unknown): WRONG -> ELEM — `x^5/(-3 + a + x^6)^(1/4)`
+- `trager-third-012` (unknown): UNEVAL -> CERT — `1/((-1 + a + x)*Sqrt[1 + x^3])`
+- `trager-third-013` (unknown): TIMEOUT -> CERT — `1/((-2 + a + x)*Sqrt[1 + x^3])`
+- `trager-third-014` (unknown): TIMEOUT -> CERT — `1/((-3 + a + x)*Sqrt[1 + x^3])`
+- `trager-third-015` (unknown): TIMEOUT -> CERT — `1/((-2 + a + x)*Sqrt[-x + x^3])`
+- `trager-third-016` (unknown): UNEVAL -> CERT — `1/((-3 + a + x)*Sqrt[-x + x^3])`
+- `trager-third-018` (unknown): UNEVAL -> CERT — `1/((-1 + a + x)*Sqrt[1 + x^4])`
+- `trager-third-019` (unknown): UNEVAL -> CERT — `1/((1 + a + x)*Sqrt[1 + x^4])`
+- `trager-third-020` (unknown): UNEVAL -> CERT — `1/((-2 + a + x)*Sqrt[1 + x^4])`
+- `trager-third-021` (unknown): UNEVAL -> CERT — `1/((-3 + a + x)*Sqrt[1 + x^4])`
+- `trager-third-023` (unknown): UNEVAL -> CERT — `1/((-2 + a + x)*Sqrt[-1 + x^4])`
+- `trager-third-024` (unknown): UNEVAL -> CERT — `1/((-3 + a + x)*Sqrt[-1 + x^4])`
+- `trager-third-026` (unknown): UNEVAL -> CERT — `1/((-1 + a + x)*Sqrt[1 + x^2 + x^4])`
+- `trager-third-027` (unknown): UNEVAL -> CERT — `1/((1 + a + x)*Sqrt[1 + x^2 + x^4])`
+- `trager-third-028` (unknown): UNEVAL -> CERT — `1/((-2 + a + x)*Sqrt[1 + x^2 + x^4])`
+- `trager-third-029` (unknown): UNEVAL -> CERT — `1/((-3 + a + x)*Sqrt[1 + x^2 + x^4])`
+- `trager-third-030` (unknown): UNEVAL -> CERT — `1/(x*Sqrt[1 + a + x + x^3])`
+- `trager-ratrad-004` (unknown): UNEVAL -> CERT — `x^3/((-2 + a + x)*(3 + x^4)^(3/5))`
+- `trager-ratrad-005` (unknown): UNEVAL -> CERT — `(x^3*(1 + x^3)^(3/2))/(-2 + a + x)`
+- `trager-ratrad-006` (unknown): smaller 294 -> 63 — `(1 + a + x^3)^(2/3)/x`
+- `trager-ratrad-007` (unknown): UNEVAL -> CERT — `(-2*x + x^3)^(1/4)/(1 + a + x)`
+- `trager-ratrad-008` (unknown): TIMEOUT -> CERT — `(-1 + a + 2*x)/((1 + x)*(1 + x^2)^(2/3))`
+- `trager-ratrad-011` (unknown): UNEVAL -> CERT — `x^2*(1 + a - x + x^2)^(1/5)`
+- `trager-ratrad-012` (unknown): UNEVAL -> CERT — `x/((-2 + a + x)*(1 + x^3)^(2/3))`
+- `trager-ratrad-013` (unknown): TIMEOUT -> CERT — `(1 + a - x + x^2)^(3/4)/x`
+- `trager-ratrad-014` (unknown): UNEVAL -> CERT — `(x^3*Sqrt[-2*x + x^3])/(1 + a + x)`
+- `trager-ratrad-015` (unknown): UNEVAL -> CERT — `(1 + a + x^2)/((-2 + x)*(-2*x + x^3)^(3/5))`
+- `trager-ratrad-017` (unknown): smaller 155 -> 71 — `x*(3 + a + x^4)^(3/2)`
+- `trager-ratrad-018` (unknown): UNEVAL -> CERT — `((-2 + a)*x + x^3)^(3/2)/x`
+- `trager-ratrad-020` (unknown): TIMEOUT -> CERT — `x^3/((-2 + a + x)*Sqrt[-2*x + x^3])`
+- `trager-ratrad-021` (unknown): TIMEOUT -> CERT — `x^3/((-2 + x)*(1 + a - x + x^2)^(1/6))`
+- `trager-ratrad-023` (unknown): UNEVAL -> CERT — `(1 + a + x^2)^(6/5)`
+- `trager-ratrad-024` (unknown): UNEVAL -> CERT — `(-1 + (2 + a)*x)*(1 - x + x^2)^(1/5)`
+- `trager-ratrad-029` (unknown): TIMEOUT -> CERT — `(1 + a + x^2)^(7/4)/(2 + x^2)`
+- `trager-ratrad-034` (unknown): UNEVAL -> CERT — `x^2*(1 + a + x^2)^(5/6)`
+- `trager-ratrad-035` (unknown): UNEVAL -> CERT — `(3 + a + x^4)^(5/6)`
+- `trager-ratrad-036` (unknown): UNEVAL -> CERT — `((-1 + (2 + a)*x)*(3 + x^4)^(5/6))/(2 + x^2)`
+- `trager-ratrad-037` (unknown): UNEVAL -> CERT — `1/((1 + a + x)*(-2*x + x^3)^(1/4))`
+- `trager-ratrad-038` (unknown): UNEVAL -> CERT — `(1 + x^3)^(2/5)/(2 + a + x^2)`
+- `trager-ratrad-039` (unknown): UNEVAL -> CERT — `((-1 + (2 + a)*x)*(-2*x + x^3)^(1/6))/x`
+- `trager-ratrad-040` (unknown): UNEVAL -> CERT — `((-1 + a + 2*x)*(3 + x^4)^(2/5))/(1 + x)`
+- `trager-ratrad-042` (unknown): UNEVAL -> CERT — `(1 + a + x^2)/(3 + x^4)^(1/3)`
+- `trager-ratrad-045` (unknown): smaller 435 -> 71 — `1/(x*(1 + a + x^2)^(1/6))`
+- `trager-ratrad-050` (unknown): TIMEOUT -> CERT — `(x*(1 + a - x + x^2)^(1/3))/(1 + x)`
+- `trager-cheb-003` (unknown): UNEVAL -> CERT — `x^4/Sqrt[3 + a - x^3]`
+- `trager-cheb-004` (unknown): UNEVAL -> CERT — `x/(-1 + a + 2*x^3)^(3/4)`
+- `trager-cheb-005` (unknown): UNEVAL -> CERT — `(-1 + a + 2*x^4)^(1/4)`
+- `trager-cheb-006` (unknown): UNEVAL -> CERT — `(3 + a - x^4)^(1/6)`
+- `trager-cheb-007` (unknown): UNEVAL -> ELEM — `Sqrt[3 + a - x^3]/x`
+- `trager-cheb-008` (unknown): UNEVAL -> CERT — `x^4*(3 + a - x^4)^(2/3)`
+- `trager-cheb-012` (unknown): UNEVAL -> CERT — `(3 + a - x^2)^(1/4)`
+- `trager-cheb-014` (unknown): smaller 599 -> 156 — `x^3*(-1 + a + 2*x^3)^(2/3)`
+- `trager-cheb-018` (unknown): UNEVAL -> CERT — `(1 + a + x^3)^(2/5)/x^2`
+- `trager-cheb-019` (unknown): UNEVAL -> CERT — `1/(2 + a + 3*x^2)^(1/4)`
+- `trager-cheb-020` (unknown): UNEVAL -> ELEM — `(-1 + a + 2*x^4)^(2/3)/x`
+- `trager-cheb-021` (unknown): UNEVAL -> CERT — `x*(2 + a + 3*x^4)^(1/3)`
+- `trager-cheb-022` (unknown): UNEVAL -> CERT — `x*(-1 + a + 2*x^3)^(3/2)`
+- `trager-cheb-023` (unknown): UNEVAL -> CERT — `(2 + a + 3*x^4)^(1/6)`
+- `trager-cheb-024` (unknown): UNEVAL -> CERT — `x^4/(1 + a + x^3)^(3/4)`
+- `trager-cheb-026` (unknown): UNEVAL -> CERT — `(3 + a - x^3)^(3/2)/x^3`
+- `trager-cheb-027` (unknown): smaller 257 -> 64 — `1/(x*(3 + a - x^2)^(1/3))`
+- `trager-cheb-028` (unknown): UNEVAL -> CERT — `x/(3 + a - x^3)^(5/6)`
+- `trager-cheb-030` (unknown): TIMEOUT -> CERT — `x^4*(-1 + a + 2*x^2)^(1/4)`
+- `trager-cheb-035` (unknown): UNEVAL -> CERT — `(2 + a + 3*x^3)^(1/4)/x^3`
+- `trager-cheb-038` (unknown): smaller 405 -> 102 — `(3 + a - x^4)^(3/2)/x^3`
+- `trager-cheb-039` (unknown): UNEVAL -> CERT — `x^4*(2 + a + 3*x^4)^(2/5)`
+- `trager-cheb-040` (unknown): UNEVAL -> CERT — `x^4/(-1 + a + 2*x^4)^(1/3)`
+- `trager-goursat-001` (unknown): UNEVAL -> CERT — `(-1 + x^2)/((1 + a + x^2)*Sqrt[1 + x^4])`
+- `trager-goursat-002` (unknown): UNEVAL -> CERT — `(1 + a + x^2)/((-1 + x^2)*Sqrt[1 + x^4])`
+- `trager-goursat-005` (unknown): UNEVAL -> CERT — `(1 + (-1 + a)*x^2)/((1 + x^2)*Sqrt[1 + x^2 + x^4])`
+- `trager-goursat-007` (unknown): UNEVAL -> CERT — `x/((1 + x^3)^(1/3)*(-2 + a + x^3))`
+- `trager-goursat-008` (unknown): UNEVAL -> CERT — `x/((8 + x^3)*(1 + a + x^3)^(1/3))`
+- `trager-goursat-009` (unknown): UNEVAL -> CERT — `(-2 + x^3)/((4 + x^3)*(1 + a + x^3)^(2/3))`
+- `trager-goursat-013` (unknown): UNEVAL -> CERT — `(-1 + a + x^4)/(x^2*(1 + x^4)^(1/4))`
+- `trager-goursat-014` (unknown): UNEVAL -> CERT — `1/((1 + a + x^2)*(1 + x^4)^(1/4))`
+- `trager-goursat-017` (unknown): UNEVAL -> ELEM — `(1 + a + 3*x^2)/((-1 + x^2)*Sqrt[-x^2 + x^4])`
+- `trager-goursat-018` (unknown): UNEVAL -> CERT — `(2 + x^6)/((-1 + x^6)*Sqrt[1 + a + x^6])`
+- `trager-goursat-019` (unknown): UNEVAL -> CERT — `(1 + (5 + a)*x^4)/Sqrt[1 + x + x^5]`
+- `trager-goursat-020` (unknown): UNEVAL -> ELEM — `(2 + x^2)/((1 + a + x^2)*(x + x^3)^(1/3))`
+- `trager-goursat-021` (unknown): UNEVAL -> CERT — `1/((-2 + x^2)*(1 + a - 4*x^2 + x^4)^(1/4))`
+- `trager-goursat-022` (unknown): UNEVAL -> CERT — `(-1 + a + x)/((1 + x)*Sqrt[x + x^2 + x^3])`
+- `trager-goursat-023` (unknown): UNEVAL -> CERT — `(-2 + x^2)/((2 + a + x^2)*Sqrt[4 + x^4])`
+- `trager-recip-005` (unknown): smaller 1120 -> 129 — `(-1 + x^2)/((1 + (-1 + a)*x + x^2)*Sqrt[1 + 3*x^2 + x^4])`
+- `trager-recip-006` (unknown): UNEVAL -> CERT — `(-1 + x^2)/((1 + a + x^2)*Sqrt[1 + 5*x^2 + x^4])`
+- `trager-recip-010` (unknown): UNEVAL -> ELEM — `(1 + x^2)/((-1 + (3 + a)*x + x^2)*Sqrt[1 + 3*x^2 + x^4])`
+- `trager-recip-011` (unknown): UNEVAL -> ELEM — `(1 + x^2)/((-1 + (-1 + a)*x + x^2)*Sqrt[1 - x^2 + x^4])`
+- `trager-hyper-005` (unknown): UNEVAL -> CERT — `1/Sqrt[1 + a - x + x^3]`
+- `trager-hyper-006` (unknown): UNEVAL -> CERT — `x^2/Sqrt[1 + a - x + x^3]`
+- `trager-hyper-007` (unknown): UNEVAL -> CERT — `1/Sqrt[1 + a + x + x^4]`
+- `trager-hyper-008` (unknown): UNEVAL -> CERT — `x^2/Sqrt[1 + a + x + x^4]`
+- `trager-hyper-009` (unknown): UNEVAL -> CERT — `1/Sqrt[1 + a - x + x^5]`
+- `trager-hyper-010` (unknown): UNEVAL -> CERT — `x/Sqrt[1 + a - x + x^5]`
+- `trager-hyper-011` (unknown): UNEVAL -> CERT — `x^3/Sqrt[1 + a - x + x^5]`
+- `trager-hyper-012` (unknown): UNEVAL -> CERT — `1/Sqrt[1 + a + x^2 + x^6]`
+- `trager-hyper-013` (unknown): UNEVAL -> CERT — `x/Sqrt[1 + a + x^2 + x^6]`
+- `trager-hyper-014` (unknown): UNEVAL -> CERT — `x^3/Sqrt[1 + a + x^2 + x^6]`
+- `trager-hyper-015` (unknown): UNEVAL -> CERT — `1/Sqrt[1 + a + x + x^7]`
+- `trager-hyper-016` (unknown): UNEVAL -> CERT — `x^2/Sqrt[1 + a + x + x^7]`
+- `trager-hyper-017` (unknown): UNEVAL -> CERT — `x^4/Sqrt[1 + a + x + x^7]`
+- `trager-hyper-018` (unknown): UNEVAL -> CERT — `1/Sqrt[1 + a + x^3 + x^8]`
+- `trager-hyper-019` (unknown): UNEVAL -> CERT — `x^2/Sqrt[1 + a + x^3 + x^8]`
+- `trager-hyper-020` (unknown): UNEVAL -> CERT — `x^4/Sqrt[1 + a + x^3 + x^8]`
+- `trager-super-001` (unknown): UNEVAL -> CERT — `1/(1 + a + x^4)^(1/3)`
+- `trager-super-002` (unknown): UNEVAL -> CERT — `x/(1 + a + x^4)^(2/3)`
+- `trager-super-003` (unknown): UNEVAL -> CERT — `1/(2 + a + x^5)^(1/3)`
+- `trager-super-004` (unknown): UNEVAL -> CERT — `x/(2 + a + x^5)^(2/3)`
+- `trager-super-005` (unknown): UNEVAL -> CERT — `1/(1 + a + x + x^3)^(1/3)`
+- `trager-super-006` (unknown): UNEVAL -> CERT — `x/(1 + a + x + x^3)^(2/3)`
+- `trager-super-007` (unknown): UNEVAL -> CERT — `1/(1 + a + x + x^4)^(1/5)`
+- `trager-super-008` (unknown): UNEVAL -> CERT — `x/(1 + a + x + x^4)^(2/5)`
+- `trager-super-009` (unknown): UNEVAL -> CERT — `1/(1 + a + x^2)^(1/3)`
+- `trager-ratradicand-006` (unknown): UNEVAL -> CERT — `Sqrt[(1 + x^2)/(-1 + a + x^2)]`
+- `trager-ratradicand-010` (unknown): UNEVAL -> CERT — `Sqrt[(-1 + a + x)/(1 + x^2)]`
+- `trager-ratradicand-011` (unknown): UNEVAL -> CERT — `((1 + a + x^2)/x)^(1/3)`
+- `trager-ratradicand-012` (unknown): UNEVAL -> CERT — `Sqrt[(1 + a + x^3)/x]`
+- `trager-ratradicand-015` (unknown): UNEVAL -> CERT — `Sqrt[x/(1 + a + x + x^2)]`
+- `trager-ratradicand-017` (unknown): UNEVAL -> CERT — `(x/(1 + a + x^3))^(1/3)`
+- `trager-ratradicand-019` (unknown): TIMEOUT -> CERT — `((-1 + a + x^2)/(1 + x^2))^(1/4)`
+- `trager-ratradicand-020` (unknown): UNEVAL -> CERT — `Sqrt[(1 + a + x^2)/x]/x`
+- `trager-torsion-001` (unknown): UNEVAL -> CERT — `1/((-3 + a + x)*(1 + x^3)^(1/3))`
+- `trager-torsion-002` (unknown): UNEVAL -> CERT — `x/((-3 + a + x)*(1 + x^3)^(2/3))`
+- `trager-torsion-003` (unknown): UNEVAL -> CERT — `1/((2 + a + x)*(2 + x^3)^(1/3))`
+- `trager-torsion-004` (unknown): UNEVAL -> CERT — `1/((-1 + (2 + a)*x)*(-1 + x^3)^(1/3))`
+- `trager-torsion-005` (unknown): UNEVAL -> CERT — `x/((-2 + a + x)*(2 + x^3)^(2/3))`
+- `trager-torsion-011` (unknown): UNEVAL -> CERT — `1/((-3 + x^2)*(1 + a - 6*x^2 + x^4)^(1/4))`
+- `trager-torsion-012` (unknown): UNEVAL -> CERT — `1/((2 + a + x^2)*(4 + x^4)^(1/4))`
+- `trager-torsion-018` (unknown): UNEVAL -> CERT — `(-3*x + x^3)^(1/4)/(-1 + a + x)`
+- `trager-deriv-alg-02` (unknown): UNEVAL -> CERT — `(6 + a + 36*x + 27*x^2 - 32*x^3 - 10*x^4 - 4*x^5)/(3*(-2 + 3*x^2 + 2*x^3 - 2*x^4)^(5/3))`
+- `trager-deriv-alg-03` (unknown): UNEVAL -> CERT — `(-22 + a - 22*x + 10*x^2 + 10*x^3)/(4*(2 - x - 2*x^2 + x^3)^(7/4))`
+- `trager-deriv-alg-04` (unknown): UNEVAL -> CERT — `(12 + a + 16*x + 4*x^2)/(4*(-3 - 2*x + x^2)^(7/4))`
+- `trager-deriv-alg-05` (unknown): UNEVAL -> CERT — `(3 + (97 + a)*x - 33*x^2 - 57*x^3 + 67*x^4 + 97*x^5 + 46*x^6)/(4*(1 + 3*x - 3*x^2 + x^3 + x^4 + x^5)^(1/4))`
+- `trager-deriv-alg-06` (unknown): UNEVAL -> CERT — `(-4 + (24 + a)*x - 10*x^2 + 18*x^3 + 46*x^4 + 14*x^5)/(3*(2*x - x^2 + 2*x^3 + x^4)^(1/3))`
+- `trager-deriv-alg-07` (unknown): UNEVAL -> CERT — `(6 + a - 24*x + 42*x^4 - 48*x^5)/(6*(-1 + 3*x^4)^(11/6))`
+- `trager-deriv-alg-08` (unknown): UNEVAL -> CERT — `(-10 + 16*x - 10*x^2 + (-67 + a)*x^3 - 21*x^4)/(5*(2 - 2*x^2 + 3*x^3 + x^4)^(1/5))`
+- `trager-deriv-alg-09` (unknown): UNEVAL -> CERT — `((-4 + a)*x - 19*x^2 + 8*x^3 + 15*x^4 + 12*x^5)/(3*(-2*x + x^2 + 3*x^3 + 3*x^4)^(4/3))`
+- `trager-deriv-alg-10` (unknown): UNEVAL -> CERT — `(39 + a + 24*x - 21*x^2 + 6*x^3)/(6*(3 + 3*x - 3*x^2 + x^3)^(7/6))`
+- `trager-deriv-alg-11` (unknown): UNEVAL -> CERT — `(-39 + a - 66*x + 27*x^2 + 36*x^3 - 3*x^4)/(5*(3 - 2*x - 2*x^2 + x^3)^(8/5))`
+- `trager-deriv-alg-12` (unknown): UNEVAL -> CERT — `(-12 + a - 55*x + 2*x^2 + 78*x^3 + 42*x^4 + 13*x^5 + 48*x^6)/(3*(2 - x - 2*x^2 - 2*x^3 - x^5)^(1/3))`
+- `trager-deriv-alg-13` (unknown): UNEVAL -> CERT — `(4 + (-24 + a)*x - 24*x^2 + 20*x^3)/(4*(-2*x + x^2)^(3/4))`
+- `trager-deriv-alg-14` (unknown): UNEVAL -> CERT — `(17 + a + 36*x - 33*x^2 - 18*x^3)/(4*(-1 + 3*x + 3*x^2)^(7/4))`
+- `trager-deriv-alg-15` (unknown): UNEVAL -> CERT — `(-18 + (-65 + a)*x - 70*x^2 + 12*x^3 + 10*x^4 - 31*x^5 + 102*x^6)/(6*(-2 - 3*x + x^2 - 2*x^4 + 3*x^5)^(5/6))`
+- `trager-deriv-alg-18` (unknown): UNEVAL -> CERT — `(22 + a - 6*x - 32*x^2 - 30*x^3 - 10*x^4 - 12*x^5)/(4*(2 - 2*x - 2*x^2 - 2*x^3 - 3*x^4)^(5/4))`
+- `trager-deriv-alg-19` (unknown): UNEVAL -> CERT — `(6 - 36*x - 36*x^2 + (24 + a)*x^3)/(3*(2 + x - 3*x^2 - 2*x^3 + x^4)^(5/3))`
+- `trager-deriv-log-14` (unknown): UNEVAL -> ELEM — `(12 - 4*x - 2*x^3 - 12*x^4 + 6*x^5)/(2*Sqrt[3 - 2*x - 2*x^2 + x^3 + 3*x^4 - x^5]*(-12 + 8*x + (9 + a)*x^2 - 4*x^3 - 12*x^4 + 4*x^5))`
+- `trager-deriv-log-22` (unknown): UNEVAL -> ELEM — `(4*x + 9*x^2 + 7*x^3 - 2*x^4 + 6*x^5 + 6*x^6)/(2*Sqrt[-1 - x - 2*x^2 + 2*x^3 + x^4]*(1 + 7*x + 17*x^2 + 19*x^3 + (6 + a)*x^4 - 24*x^5 - 9*x^6))`
+- `trager-random-002` (unknown): UNEVAL -> CERT — `((3 + (3 + a)*x)*(2 + 3*x + x^2 + 3*x^3)^(2/3))/(-2 - x)`
+- `trager-random-003` (unknown): UNEVAL -> CERT — `(2 + (3 + a)*x)/((3 - 2*x)*(3 - x + 2*x^2 + x^4)^(3/4))`
+- `trager-random-005` (unknown): UNEVAL -> CERT — `((1 + a + x^2)*Sqrt[2 + x + 3*x^2 - 3*x^3 + x^4])/(2 + 2*x)`
+- `trager-random-006` (unknown): UNEVAL -> CERT — `(2*((-2 + a)*x + x^2)^(2/3))/3`
+- `trager-random-007` (unknown): UNEVAL -> CERT — `(-2 + a + 3*x + x^2)^(2/3)/2`
+- `trager-random-013` (unknown): UNEVAL -> CERT — `((3 + x + x^2)^(1/4)*(2 + (-3 + a)*x + x^2))/3`
+- `trager-random-014` (unknown): TIMEOUT -> CERT — `((3 + a + x + x^2)^(4/5)*(2 + 3*x + 3*x^2))/(1 - 2*x)`
+- `trager-random-015` (unknown): UNEVAL -> CERT — `((x - 2*x^2)*Sqrt[(-1 + a)*x - x^3 + x^4])/2`
+- `trager-random-019` (unknown): UNEVAL -> CERT — `(-2 + 3*x + (2 + a)*x^2)/(2*(1 + x - x^2 + x^3)^(1/6))`
+- `trager-random-023` (unknown): UNEVAL -> CERT — `((-1 + (-2 + a)*x + x^2)*(2*x + 2*x^2 + x^3)^(1/4))/3`
+- `trager-random-025` (unknown): UNEVAL -> CERT — `(-2 + (-1 + a)*x + 3*x^2)/((2 - x)*Sqrt[-3 + 2*x - 3*x^2 + x^3])`
+- `trager-random-026` (unknown): UNEVAL -> CERT — `(2 + x - 3*x^2)/(2*(2 + a - 3*x - x^2 + x^3)^(1/5))`
+- `trager-random-029` (unknown): UNEVAL -> CERT — `((3 - 2*x + 3*x^2)*(3 + a + 3*x + 2*x^2 + 2*x^3)^(2/5))/x`
+- `trager-random-035` (unknown): UNEVAL -> CERT — `(-3 + 3*x + (-1 + a)*x^2)/Sqrt[3 - x^2 + x^3 + x^4]`
+- `trager-random-041` (unknown): UNEVAL -> CERT — `(-3*(-3 - 2*x - 3*x^2 + x^3)^(3/4))/(-2*x + (3 + a)*x^2)`
+- `trager-random-042` (unknown): UNEVAL -> CERT — `(3 + a + 2*x + x^2)/((2 - 2*x)*Sqrt[-3 + x + x^3])`
+- `trager-random-043` (unknown): UNEVAL -> CERT — `(-2 - 3*x^2)/(2*(2 + a + 3*x + 2*x^2 + x^3)^(2/3))`
+- `trager-random-044` (unknown): UNEVAL -> CERT — `Sqrt[3 + (2 + a)*x - 2*x^2 + 3*x^3 + x^4]`
+- `trager-random-045` (unknown): UNEVAL -> CERT — `-(2 + (-1 + a)*x - x^2 - 2*x^3 - 3*x^4)^(3/5)`
+- `trager-random-046` (unknown): UNEVAL -> CERT — `1/Sqrt[2 + (2 + a)*x + x^2 - 3*x^4]`
+- `trager-random-050` (unknown): UNEVAL -> CERT — `((3 - 2*x)*(-2 + a - 3*x + 2*x^2)^(1/4))/2`
+- `trager-random-051` (unknown): UNEVAL -> CERT — `((-1 + 2*x)*(-2 + 3*x - 2*x^2 + x^3)^(2/3))/(-1 + (2 + a)*x - 3*x^2)`
+- `trager-random-052` (unknown): UNEVAL -> CERT — `(-2*(-3 + (-3 + a)*x + 3*x^2 + x^3)^(1/4))/3`
+- `trager-random-054` (unknown): UNEVAL -> CERT — `((-1 - 2*x + 3*x^2)*(-2 + a - 2*x - 3*x^2 - x^3 + x^4)^(1/6))/3`
+- `trager-random-055` (unknown): UNEVAL -> CERT — `((1 + x^2)*(-2 + 3*x + x^3)^(5/6))/(-1 - 2*x + (-3 + a)*x^2)`
+- `trager-random-056` (unknown): UNEVAL -> CERT — `(-3 - x)/(3*(3 + a + 2*x + x^2 + 2*x^3 + 2*x^4)^(2/3))`
+- `trager-random-057` (unknown): UNEVAL -> CERT — `((2 + 2*x)*(x + x^2 + x^3)^(2/3))/(-1 + (-3 + a)*x)`
+- `trager-random-058` (unknown): UNEVAL -> CERT — `(-3 - 3*x)/(2*Sqrt[2 + a - 3*x + 3*x^2 + x^3 + x^4])`
+- `trager-random-059` (unknown): UNEVAL -> CERT — `-3/((2 + (3 + a)*x)*Sqrt[-3 + 2*x + x^2 + x^3])`
+- `agen-2-5` (elem): UNEVAL -> ELEM — `(4 - 2*a + 10*x + a*x - 18*x^2 + 6*x^3 + 2*(-1 - 2*x + a*x - 3*x^2 + 2*x^3))/(2*Sqrt[-1 - 2*x + a*x - 3*x^2 + 2*x^3])`
+- `agen-2-10` (elem): UNEVAL -> ELEM — `(3*(-3 + x - 2*x^2 + 3*x^3)^(1/4) - 11*x*(-3 + x - 2*x^2 + 3*x^3)^(1/4) + 23*x^2*(-3 + x - 2*x^2 + 3*x^3)^(1/4) + 9*a*x^2*(-3 + x - 2*x^2 + 3*x^3)^(1/4) + 9*x^3`
+- `bbottom-2-1` (elem): smaller 109 -> 13 — `(3 + a + x^2 + x^2*Log[x])/(x*Sqrt[3 + a + x^2])`
+- `bbottom-2-3` (elem): smaller 356 -> 13 — `(x + 2*Sqrt[2 + x]*Log[1 + a + Sqrt[2 + x]] + 2*a*Sqrt[2 + x]*Log[1 + a + Sqrt[2 + x]] + 2*(2 + x)*Log[1 + a + Sqrt[2 + x]])/(2*Sqrt[2 + x] + 2*a*Sqrt[2 + x] + `
+- `bbottom-2-4` (elem): smaller 81 -> 14 — `(E^x + a*E^x + E^x*x + E^x*x^2)/Sqrt[1 + a + x^2]`
+- `bbottom-2-10` (elem): smaller 338 -> 13 — `(x + 2*Sqrt[1 + x]*Log[1 + a + Sqrt[1 + x]] + 2*a*Sqrt[1 + x]*Log[1 + a + Sqrt[1 + x]] + 2*(1 + x)*Log[1 + a + Sqrt[1 + x]])/(2*Sqrt[1 + x] + 2*a*Sqrt[1 + x] + `
+- `bbottom-2-12` (elem): smaller 109 -> 13 — `(2 + a + x^2 + x^2*Log[x])/(x*Sqrt[2 + a + x^2])`
+- `bbottomp-2-1` (unknown): UNEVAL -> CERT — `1/x^(2/3) + Log[x]/(3*x^(2/3)) + Log[x]/Sqrt[1 + a + x^2]`
+- `bbottomp-2-2` (unknown): UNEVAL -> CERT — `1/x^(2/3) + E^x/Sqrt[1 + a + x^2] + Log[x]/(3*x^(2/3))`
+- `logxy-2-1` (elem): TIMEOUT -> ELEM — `(-2 - 5*E^x - 2*Sqrt[1 + a + 2*x + 3*Log[1 + E^x]] - 2*E^x*Sqrt[1 + a + 2*x + 3*Log[1 + E^x]])/(1 + a + E^x + a*E^x + 2*x + 2*E^x*x + 3*Log[1 + E^x] + 3*E^x*Log`
+- `logxy-2-4` (elem): TIMEOUT -> ELEM — `(-1 + a + E^x + a*E^x + 3*(-1 - x + a*x + 2*Log[1 + E^x])^(2/3) + 3*E^x*(-1 - x + a*x + 2*Log[1 + E^x])^(2/3))/(6*(-1 - x + a*x + 2*Log[1 + E^x])^(2/3) + 6*E^x*`
+- `logxy-2-11` (elem): TIMEOUT -> ELEM — `Sqrt[(2 + E^(2*x) + E^(2*x)*x)/E^(2*x)] + (-4*x + E^(2*x)*x)/(2*E^(2*x)*Sqrt[(2 + E^(2*x) + E^(2*x)*x)/E^(2*x)]) + (-4 + E^(2*x) + 2*E^(2*x)*Sqrt[(2 + E^(2*x) +`
+- `asinh-2-9` (elem): smaller 64 -> 25 — `(2*E^x^2*(E^x^2 + Sqrt[2 + a + E^(2*x^2)])*x)/(2 + a + E^(2*x^2) + E^x^2*Sqrt[2 + a + E^(2*x^2)])`
+- `genus1-2-1` (elem): TIMEOUT -> ELEM — `(3*Log[x]^2 + 6*Log[x]^3 + 3*a*Log[x]^3 + 3*Log[x]^3*Sqrt[2 + Log[x]^3] + 4*(2 + Log[x]^3) + 2*a*(2 + Log[x]^3) + 2*(2 + Log[x]^3)^(3/2))/(4*x*Sqrt[2 + Log[x]^3`
+- `genus1-2-9` (elem): TIMEOUT -> ELEM — `(3*Log[x]^2 + 3*Log[x]^3 + 3*a*Log[x]^3 + 3*Log[x]^3*Sqrt[2 + Log[x]^3] + 2*(2 + Log[x]^3) + 2*a*(2 + Log[x]^3) + 2*(2 + Log[x]^3)^(3/2))/(2*x*Sqrt[2 + Log[x]^3`
+- `genus1-2-12` (elem): TIMEOUT -> ELEM — `(3*Log[x]^2 + 6*Log[x]^3 + 3*a*Log[x]^3 + 3*Log[x]^3*Sqrt[1 + Log[x]^3] + 4*(1 + Log[x]^3) + 2*a*(1 + Log[x]^3) + 2*(1 + Log[x]^3)^(3/2))/(4*x*Sqrt[1 + Log[x]^3`
+- `ratb-2-2` (elem): TIMEOUT -> ELEM — `-((E^x*Sqrt[-2 + x + 3*Log[1 + E^x]])/(9 + 6*a + a^2 + 9*E^x + 6*a*E^x + a^2*E^x + 6*Log[1 + E^x] + 2*a*Log[1 + E^x] + 6*E^x*Log[1 + E^x] + 2*a*E^x*Log[1 + E^x]`
+- `ratb-2-8` (elem): TIMEOUT -> ELEM — `(-2*E^x^2*(-1 + a + 2*E^x^2)^(1/3)*x)/(1 + 2*E^x^2 + E^(2*x^2)) + (4*E^x^2*x)/(3*(-1 + a + 2*E^x^2)^(2/3) + 3*E^x^2*(-1 + a + 2*E^x^2)^(2/3))`
+- `tower2-2-3` (elem): TIMEOUT -> ELEM — `(2 + a + 2*E^x + E^x*x + 4*Log[x] + 2*a*Log[x])/(2*Sqrt[E^x + 2*Log[x] + a*Log[x]])`
+- `tower2-2-9` (elem): TIMEOUT -> ELEM — `-(Sqrt[2 + a + E^x + 2*Log[x]]/(9*x + 6*x*Log[x] + x*Log[x]^2)) + (2 + E^x*x)/(6*x*Sqrt[2 + a + E^x + 2*Log[x]] + 2*x*Log[x]*Sqrt[2 + a + E^x + 2*Log[x]])`
+- `expcube-2-4` (elem): smaller 1041 -> 679 — `(2*E^(2*x))/(3*(2 + E^(2*x))^(2/3)) + (-2*E^(2*x) + 2*a*E^(2*x))/(3*(2 + E^(2*x))^(2/3) + 3*(2 + E^(2*x)))`
+- `expcube-2-6` (elem): smaller 1036 -> 642 — `(2*E^(2*x))/(3*(3 + E^(2*x))^(2/3)) + (4*E^(2*x) + 2*a*E^(2*x))/(-3*(3 + E^(2*x))^(2/3) + 3*(3 + E^(2*x)))`
+- `mrandom-2-1` (unknown): UNEVAL -> CERT — `(2 + a + E^(-x) + 2*x)^(1/3)/(E^x*(2 + x))`
+- `mrandom-2-2` (unknown): UNEVAL -> CERT — `((-2 + a)*E^x - x)/((3 + 2*E^x - 2*x)^(1/3)*(1 + E^x + 2*x))`
+- `mrandom-2-3` (unknown): UNEVAL -> CERT — `(-2 + E^(2*x) + x)/((3 + 2*x)*Sqrt[-3 + 2*E^(2*x) + (-2 + a)*x])`
+- `mrandom-2-4` (unknown): UNEVAL -> CERT — `(Sqrt[2 - x + 2*Log[1 + x]]*(-2 - x + (-2 + a)*Log[1 + x]))/(1 + 2*x)`
+- `mrandom-2-5` (unknown): UNEVAL -> CERT — `(-2 - x - Log[2 + x])/(Sqrt[3 + a - x + Log[2 + x]]*(1 + x + Log[2 + x]^2))`
+- `mrandom-2-6` (unknown): UNEVAL -> CERT — `(Sqrt[-2 + 2*E^x - 2*x]*(2 + a + 2*E^x + x))/(1 + E^(2*x) + 2*x)`
+- `mrandom-2-7` (unknown): UNEVAL -> CERT — `(2 + 2*E^x + x)/(Sqrt[3 + a + 2*E^x + x]*(2 + E^(2*x) + x))`
+- `mrandom-2-8` (unknown): UNEVAL -> CERT — `(-1 - x + 2*Log[1 + E^x])/((3 + 2*x + Log[1 + E^x])*(3 + (2 + a)*Log[1 + E^x])^(1/3))`
+- `mrandom-2-10` (unknown): UNEVAL -> CERT — `(1 + 2*Log[1 + x^2])/(Sqrt[-2 + (-1 + a)*x + 3*Log[1 + x^2]]*(2 + 2*x + Log[1 + x^2]^2))`
+- `mrandom-2-11` (unknown): UNEVAL -> CERT — `((1 + E^x - x)*Sqrt[-2 + 3*E^x + (-2 + a)*x])/(2 + E^x + x)`
+- `mrandom-2-12` (unknown): UNEVAL -> CERT — `((2 + x + 2*Log[x])*Sqrt[-3 + x + (2 + a)*Log[x]])/(3 + x)`
+- `mperturb-2-1` (unknown): UNEVAL -> CERT — `(x - 3*x^3 + 2*x^4 + x*Log[1 + x^2] - 2*x^2*Log[1 + x^2] + x^3*Log[1 + x^2] + 4*x^2*(3 - x + Log[1 + x^2]) + 4*x^3*(3 - x + Log[1 + x^2]) + 2*(3 - x + Log[1 + x`
+- `mperturb-2-4` (unknown): UNEVAL -> CERT — `(-4 + 10*E^x + (-12 + a)*E^(2*x) - x + 2*E^x*x + 2*x^2)/(2*Sqrt[-2 + 2*E^x + x])`
+- `mperturb-2-7` (unknown): UNEVAL -> CERT — `(-2 - 7*x - 3*x^2 - 4*Log[3 + x] - 2*x*Log[3 + x] + 6*x*(1 - x + Log[3 + x]) + 6*Log[3 + x]*(1 - x + Log[3 + x]) + 2*x*Log[3 + x]*(1 - x + Log[3 + x]) + 22*(1 +`
+- `mperturb-2-8` (unknown): UNEVAL -> CERT — `(9*x^2 + 3*x*Log[2 + x] + (4 + a)*(-1 + 3*Log[2 + x]) + 16*x*(-1 + 3*Log[2 + x]) + 6*x^2*(-1 + 3*Log[2 + x]))/(4*x*Sqrt[-1 + 3*Log[2 + x]] + 2*x^2*Sqrt[-1 + 3*L`
+- `mperturb-2-12` (unknown): UNEVAL -> CERT — `((-2 + a)*E^x + x*(1 + Log[1 + E^x]^2) + E^x*x*(1 + Log[1 + E^x]^2))/(Sqrt[1 + Log[1 + E^x]^2] + E^x*Sqrt[1 + Log[1 + E^x]^2])`
+- `bgenus-2-1` (elem): UNEVAL -> ELEM — `(2*E^x + 2*a*E^x + 3*E^x*x^2 + 2*E^x*x^3)/(2*Sqrt[1 + a + x^3])`
+- `bgenus-2-2` (elem): UNEVAL -> ELEM — `(2 + a + x^3 + x^3*Log[x] + (2 + a + x^3)*Log[x])/(2 + a + x^3)^(2/3)`
+- `bgenus-2-3` (elem): UNEVAL -> ELEM — `(3*x^3 + 2*Sqrt[2 + a + x^3])/(2*x*(2 + a + x^3) + 2*x*Sqrt[2 + a + x^3]*Log[x])`
+- `bgenus-2-4` (elem): UNEVAL -> ELEM — `(2*E^x + 2*a*E^x + 2*E^x*x^3 + 2*E^x*x*Log[x] + 2*a*E^x*x*Log[x] + 3*E^x*x^3*Log[x] + 2*E^x*x^4*Log[x])/(2*x*Sqrt[1 + a + x^3])`
+- `bgenus-2-5` (elem): UNEVAL -> ELEM — `(1 + a + x^3 + x^3*Log[x] + (1 + a + x^3)*Log[x])/(1 + a + x^3)^(2/3)`
+- `bgenus-2-7` (elem): UNEVAL -> ELEM — `(3 + a + x^3 + x^3*Log[x] + (3 + a + x^3)*Log[x])/(3 + a + x^3)^(2/3)`
+- `bgenus-2-12` (elem): UNEVAL -> ELEM — `(3*x^3 + 2*Sqrt[1 + a + x^3])/(2*x*(1 + a + x^3) + 2*x*Sqrt[1 + a + x^3]*Log[x])`
+- `bcurve-2-4` (elem): UNEVAL -> ELEM — `(3*x^3 + 2*x*Sqrt[3 + a + x^3] + 2*x*Sqrt[3 + a + x^3]*Log[x + Sqrt[3 + a + x^3]] + 2*(3 + a + x^3)*Log[x + Sqrt[3 + a + x^3]])/(2*x*Sqrt[3 + a + x^3] + 2*(3 + `
+- `bcurve-2-5` (elem): UNEVAL -> ELEM — `(3*E^(x*Sqrt[1 + x^3])*x)/Sqrt[1 + x^3] + (-2*E^(x*Sqrt[1 + x^3]) - a*E^(x*Sqrt[1 + x^3]) - 2*E^(x*Sqrt[1 + x^3])*Sqrt[1 + x^3])/x^2 + (4*E^(x*Sqrt[1 + x^3]) + `
+- `bcurve-2-6` (elem): UNEVAL -> ELEM — `(2*E^(x*Sqrt[1 + a + x^3])*x + 2*a*E^(x*Sqrt[1 + a + x^3])*x + 5*E^(x*Sqrt[1 + a + x^3])*x^4 - 2*E^(x*Sqrt[1 + a + x^3])*Sqrt[1 + a + x^3])/(2*x^2*Sqrt[1 + a + `
+- `bcurve-2-7` (elem): UNEVAL -> ELEM — `(4*E^(x*Sqrt[2 + a + x^3])*x + 2*a*E^(x*Sqrt[2 + a + x^3])*x + 5*E^(x*Sqrt[2 + a + x^3])*x^4 - 2*E^(x*Sqrt[2 + a + x^3])*Sqrt[2 + a + x^3])/(2*x^2*Sqrt[2 + a + `
+- `bgenusp-2-2` (unknown): UNEVAL -> CERT — `E^x/Sqrt[1 + x^3] + (3 + a + x^3 + 3*Log[x] + 2*x^3*Log[x])/(3 + x^3)^(2/3)`
+- `bgenusp-2-3` (unknown): UNEVAL -> CERT — `(3*x^3 + (2 + a)*Sqrt[1 + x^3] + 2*x*(1 + x^3)^(3/2)*Log[x] + 2*x*(1 + x^3)*Log[x]^2)/(2*x*(1 + x^3) + 2*x*Sqrt[1 + x^3]*Log[x])`
+- `agen-3-3` (elem): UNEVAL -> ELEM — `(-2 - a + 2*x - 6*x^2 - 2*Sqrt[(2 + a)*x - x^2 + 2*x^3])/((2 + a)*x - x^2 + 2*x^3 + Sqrt[(2 + a)*x - x^2 + 2*x^3] + x*Sqrt[(2 + a)*x - x^2 + 2*x^3])`
+- `agen-3-6` (elem): UNEVAL -> ELEM — `(3 + 9*x^2 + 6*x^4 + 4*x*(-2 + a + 3*x + 2*x^3))/Sqrt[-2 + a + 3*x + 2*x^3]`
+- `agen-3-8` (elem): TIMEOUT -> ELEM — `(6*(-1 + 3*x + 3*x^2)^(1/4) + 15*x*(-1 + 3*x + 3*x^2)^(1/4) + 4*a*x*(-1 + 3*x + 3*x^2)^(1/4) + 6*x^2*(-1 + 3*x + 3*x^2)^(1/4) + 2*a*x^2*(-1 + 3*x + 3*x^2)^(1/4)`
+- `agen-3-9` (elem): TIMEOUT -> ELEM — `(4*x + 4*x^2 - 3*(1 + a + 2*x^2))/(3*(1 + a + 2*x^2)^(2/3) + 6*x*(1 + a + 2*x^2)^(2/3) + 3*x^2*(1 + a + 2*x^2)^(2/3))`
+- `bbottom-3-1` (elem): smaller 217 -> 13 — `(3 + a + x^2 + x^2*Log[x])/(x*Sqrt[3 + a + x^2])`
+- `bbottom-3-2` (elem): smaller 338 -> 13 — `(x + 2*Sqrt[1 + x]*Log[1 + a + Sqrt[1 + x]] + 2*a*Sqrt[1 + x]*Log[1 + a + Sqrt[1 + x]] + 2*(1 + x)*Log[1 + a + Sqrt[1 + x]])/(2*Sqrt[1 + x] + 2*a*Sqrt[1 + x] + `
+- `bbottom-3-4` (elem): smaller 109 -> 13 — `(2 + a + x^2 + x^2*Log[x])/(x*Sqrt[2 + a + x^2])`
+- `bbottomp-3-2` (unknown): UNEVAL -> CERT — `(2*E^x + E^x*x + E^x*x^2)/Sqrt[1 + a + x^2]`
+- `bbottomp-3-5` (unknown): UNEVAL -> CERT — `1/x^(2/3) + Log[x]/(3*x^(2/3)) + Log[x]/Sqrt[1 + a + x^2]`
+- `bbottomp-3-10` (unknown): UNEVAL -> CERT — `1/x^(2/3) + E^x/Sqrt[1 + a + x^2] + Log[x]/(3*x^(2/3))`
+- `alg-3-3` (elem): smaller 55 -> 19 — `(1 - a - 2*x + 2*E^x^2*x - 2*a*E^x^2*x - 4*E^x^2*x^2 + 6*(1 + E^x^2 + x))/(3*(1 + E^x^2 + x)^(4/3))`
+- `alg-3-7` (elem): smaller 116 -> 58 — `(-1 + 2*x - 2*Log[2 + x] + a*Log[2 + x] + 4*(2 + Log[2 + x]) + 2*a*(2 + Log[2 + x]) + 4*x*(2 + Log[2 + x]))/(4*Sqrt[2 + Log[2 + x]] + 2*x*Sqrt[2 + Log[2 + x]])`
+- `asinh-3-8` (elem): smaller 58 -> 25 — `(-4*E^x^2*(E^x^2 + Sqrt[1 + a + E^(2*x^2)])*x)/(1 + a + E^(2*x^2) + E^x^2*Sqrt[1 + a + E^(2*x^2)])`
+- `genus1-3-5` (elem): TIMEOUT -> ELEM — `(3*Log[x]^2 + 3*Log[x]^3 + 3*a*Log[x]^3 + 3*Log[x]^3*Sqrt[1 + Log[x]^3] + 2*(1 + Log[x]^3) + 2*a*(1 + Log[x]^3) + 2*(1 + Log[x]^3)^(3/2))/(2*x*Sqrt[1 + Log[x]^3`
+- `genus1-3-9` (elem): TIMEOUT -> ELEM — `(3*Log[x]^2 + 6*Log[x]^3 + 3*a*Log[x]^3 + 3*Log[x]^3*Sqrt[3 + Log[x]^3] + 4*(3 + Log[x]^3) + 2*a*(3 + Log[x]^3) + 2*(3 + Log[x]^3)^(3/2))/(4*x*Sqrt[3 + Log[x]^3`
+- `constk-3-1` (elem): smaller 143 -> 64 — `Sqrt[-1 + 9*E^x + x] + (x + 9*E^x*x)/(2*Sqrt[-1 + 9*E^x + x]) + (2 + a + 18*E^x + 9*a*E^x + 4*Sqrt[-1 + 9*E^x + x] + 2*a*Sqrt[-1 + 9*E^x + x])/(2*Sqrt[-1 + 9*E^`
+- `tower2-3-4` (elem): TIMEOUT -> ELEM — `(2 - 8*E^x - 4*a*E^x + 2*E^x*x + a*E^x*x - 6*Log[x] + 2*E^x*x*Log[x] + a*E^x*x*Log[x])/(4*x*(2*E^x + a*E^x + 2*Log[x])^(3/4) + 8*x*Log[x]*(2*E^x + a*E^x + 2*Log`
+- `lccontent-3-1` (elem): TIMEOUT -> ELEM — `(2*E^x*Log[1 + E^x] + 2*E^x*x*Log[1 + E^x] + Log[1 + E^x]^2 + E^x*Log[1 + E^x]^2)/(3 + 3*a + 3*E^x + 3*a*E^x + 3*Log[1 + E^x]^2 + 3*E^x*Log[1 + E^x]^2 + 3*x*Log`
+- `expcube-3-4` (elem): smaller 1183 -> 683 — `(2*E^(2*x))/(3*(3 + E^(2*x))^(2/3)) + (4*E^(2*x) + 2*a*E^(2*x))/(6*(3 + E^(2*x))^(2/3) + 3*(3 + E^(2*x)))`
+- `expcube-3-6` (elem): smaller 1183 -> 683 — `(2*E^(2*x))/(3*(2 + E^(2*x))^(2/3)) + (-4*E^(2*x) + 2*a*E^(2*x))/(6*(2 + E^(2*x))^(2/3) + 3*(2 + E^(2*x)))`
+- `mrandom-3-1` (unknown): UNEVAL -> CERT — `(-1 + (2 + a)*Log[1 + E^x])/((1 + 2*x)*(-2 + x + 3*Log[1 + E^x])^(1/3))`
+- `mrandom-3-2` (unknown): UNEVAL -> CERT — `(-1 + E^x^2)/((-1 + a + E^x^2 - 2*x)^(1/3)*(3 + x))`
+- `mrandom-3-3` (unknown): UNEVAL -> CERT — `(x + (-1 + a)*Log[x])/((3 + 2*x)*(3 - x + 2*Log[x])^(1/3))`
+- `mrandom-3-6` (unknown): UNEVAL -> CERT — `(2 + E^x - x)/(Sqrt[-2 + a + 2*E^x + x]*(1 + E^x + 2*x))`
+- `mrandom-3-7` (unknown): UNEVAL -> CERT — `(-2 - x + Log[1 + E^x])/((2 + a + x + Log[1 + E^x])*(3 + 3*Log[1 + E^x])^(1/3))`
+- `mrandom-3-8` (unknown): UNEVAL -> CERT — `((2 - 2*E^x^2 + x)*Sqrt[-2 + a + E^x^2 + x])/(3 + E^(2*x^2) + x)`
+- `mrandom-3-9` (unknown): UNEVAL -> CERT — `(2 - Log[2 + x])/((3 + 2*x + Log[2 + x])*(2 + (-2 + a)*x + Log[2 + x])^(1/3))`
+- `mrandom-3-10` (unknown): UNEVAL -> CERT — `((2 + 3*E^x - 2*x)^(1/3)*(-2 + a - E^x - x))/(2 + 2*x)`
+- `mrandom-3-11` (unknown): UNEVAL -> CERT — `(Sqrt[3 - x + Log[2 + x]]*(1 + a + 2*Log[2 + x]))/(3 + x + Log[2 + x]^2)`
+- `mrandom-3-12` (unknown): UNEVAL -> CERT — `(2 - 2*Log[x])/((2 + 2*x + Log[x])*Sqrt[-1 + a + 2*x + Log[x]])`
+- `mperturb-3-1` (unknown): UNEVAL -> CERT — `(18 + 4*x + 9*Log[3 + 2*x] + 2*x*Log[3 + 2*x] + (-6 + a)*(-1 + x + 3*Log[3 + 2*x]) + 36*Log[3 + 2*x]*(-1 + x + 3*Log[3 + 2*x]) + 24*x*Log[3 + 2*x]*(-1 + x + 3*L`
+- `mperturb-3-3` (unknown): UNEVAL -> CERT — `E^x/Sqrt[2 + E^(2*x)] - Sqrt[2 + E^(2*x)]/E^x + ((-1 + E^x + Sqrt[2 + E^(2*x)])*((E^(2*x) + E^x*Sqrt[2 + E^(2*x)])/(2 + E^(2*x) - Sqrt[2 + E^(2*x)] + E^x*Sqrt[2`
+- `mperturb-3-10` (unknown): UNEVAL -> CERT — `(5 + 2*x + 5*Log[2 + x] + 2*x*Log[2 + x] + 10*(2 + 2*x + Log[2 + x])^(1/3) + 4*x*(2 + 2*x + Log[2 + x])^(1/3) + 20*Log[2 + x]*(2 + 2*x + Log[2 + x])^(1/3) + (8 `
+- `mperturb-3-12` (unknown): UNEVAL -> CERT — `(2 + a + Log[x] + x*Log[x]*(1 + Log[x]^2))/(x*Sqrt[1 + Log[x]^2])`
+- `bgenus-3-2` (elem): UNEVAL -> ELEM — `(3 + a + x^3 + x^3*Log[x] + (3 + a + x^3)*Log[x])/(3 + a + x^3)^(2/3)`
+- `bgenus-3-3` (elem): UNEVAL -> ELEM — `(2*E^x + 2*a*E^x + 3*E^x*x^2 + 2*E^x*x^3)/(2*Sqrt[1 + a + x^3])`
+- `bgenus-3-6` (elem): UNEVAL -> ELEM — `(2*(1 + a + x^4)*Log[x] + 2*x^4*Log[x]^2)/(x*Sqrt[1 + a + x^4])`
+- `bgenus-3-8` (elem): UNEVAL -> ELEM — `(2*(2 + a + x^4)*Log[x] + 2*x^4*Log[x]^2)/(x*Sqrt[2 + a + x^4])`
+- `bgenus-3-12` (elem): UNEVAL -> ELEM — `(2*E^x + 2*a*E^x + 2*E^x*x^3 + 2*E^x*x*Log[x] + 2*a*E^x*x*Log[x] + 3*E^x*x^3*Log[x] + 2*E^x*x^4*Log[x])/(2*x*Sqrt[1 + a + x^3])`
+- `bcurve-3-1` (elem): UNEVAL -> ELEM — `(6*E^(x*Sqrt[3 + a + x^3])*x + 2*a*E^(x*Sqrt[3 + a + x^3])*x + 5*E^(x*Sqrt[3 + a + x^3])*x^4 - 2*E^(x*Sqrt[3 + a + x^3])*Sqrt[3 + a + x^3])/(2*x^2*Sqrt[3 + a + `
+- `bcurve-3-2` (elem): UNEVAL -> ELEM — `(3*x^3 + 2*x*Sqrt[1 + a + x^3] + 2*x*Sqrt[1 + a + x^3]*Log[x + Sqrt[1 + a + x^3]] + 2*(1 + a + x^3)*Log[x + Sqrt[1 + a + x^3]])/(2*x*Sqrt[1 + a + x^3] + 2*(1 + `
+- `bcurve-3-4` (elem): UNEVAL -> ELEM — `(3*E^(x*Sqrt[1 + x^3])*x)/Sqrt[1 + x^3] + (-2*E^(x*Sqrt[1 + x^3]) - a*E^(x*Sqrt[1 + x^3]) - 2*E^(x*Sqrt[1 + x^3])*Sqrt[1 + x^3])/x^2 + (4*E^(x*Sqrt[1 + x^3]) + `
+- `bcurve-3-6` (elem): UNEVAL -> ELEM — `(3*x^3 + 2*x*Sqrt[3 + a + x^3] + 2*x*Sqrt[3 + a + x^3]*Log[x + Sqrt[3 + a + x^3]] + 2*(3 + a + x^3)*Log[x + Sqrt[3 + a + x^3]])/(2*x*Sqrt[3 + a + x^3] + 2*(3 + `
+- `bcurve-3-9` (elem): UNEVAL -> ELEM — `(2*E^(x*Sqrt[1 + a + x^3])*x + 2*a*E^(x*Sqrt[1 + a + x^3])*x + 5*E^(x*Sqrt[1 + a + x^3])*x^4 - 2*E^(x*Sqrt[1 + a + x^3])*Sqrt[1 + a + x^3])/(2*x^2*Sqrt[1 + a + `
+- `bgenusp-3-1` (unknown): UNEVAL -> CERT — `(2*E^x + 3*E^x*x^2 + (2 + a)*E^x*x^3 + 2*E^x*(1 + x^2)^(1/3)*Sqrt[1 + x^3])/(2*Sqrt[1 + x^3])`
+- `bgenusp-3-2` (unknown): UNEVAL -> CERT — `(2*E^x + 2*E^x*x^3 + (2 + a)*E^x*x*Log[x] + 3*E^x*x^3*Log[x] + 2*E^x*x^4*Log[x] + 2*x*(1 + x^3)*Log[x])/(2*x*Sqrt[1 + x^3])`
+- `bgenusp-3-4` (unknown): UNEVAL -> CERT — `E^x/Sqrt[1 + x^3] + (3 + a + x^3 + 3*Log[x] + 2*x^3*Log[x])/(3 + x^3)^(2/3)`
+- `bgenusp-3-9` (unknown): UNEVAL -> CERT — `(-3*E^(2*x) + 6*E^(2*x)*x + (3 + a)*E^x*x^2 - E^(2*x)*x^2 + 6*E^(2*x)*x^3 + 3*E^x*x^4)/(3*x^2*(1 + x^2)^(2/3))`
+- `bgenusp-3-10` (unknown): UNEVAL -> CERT — `(3 + x^3 + (3 + a)*Log[x] + 2*x^3*Log[x] + Sqrt[1 + x^3]*(3 + x^3)^(2/3)*Log[x])/(3 + x^3)^(2/3)`
+- `cA-1-290` (elem): smaller 514 -> 124 — `(-1 - a + a^2 - x + 2*a*x + x^2 + (1 + x)^(1/3)*(1 + a + x)^(2/3))/(-(1 + x)^(1/3) - a*(1 + x)^(1/3) + a^2*(1 + x)^(1/3) - x*(1 + x)^(1/3) + 2*a*x*(1 + x)^(1/3)`
+- `cA-1-298` (elem): smaller 396 -> 89 — `(-2*(3 + x)^(1/4) + a^2*(3 + x)^(1/4) + 2*a*x*(3 + x)^(1/4) + x^2*(3 + x)^(1/4) + 4*(3 + a + x)^(1/4))/(-2 + a^2 + 2*a*x + x^2)`
+- `cB-1-426` (unknown): TIMEOUT -> CERT — `(2*(1 + x + x^2)^(1/4))/(1 + a + 2*x)`
+- `cB-1-1188` (unknown): TIMEOUT -> CERT — `(2*(1 + x + x^2)^(2/3))/(1 + a + 2*x)`
+- `cA-2-6` (elem): smaller 326 -> 96 — `(32*Sqrt[1 + x + x^2] + 64*x*Sqrt[1 + x + x^2] - 21*Sqrt[1 + a + x + x^2] - 45*x*Sqrt[1 + a + x + x^2] + 27*x^2*Sqrt[1 + a + x + x^2] + 16*x^3*Sqrt[1 + a + x + `
+- `cA-2-30` (elem): smaller 456 -> 126 — `(-2560*Sqrt[1 + x + x^2] - 5120*x*Sqrt[1 + x + x^2] + 2501*Sqrt[1 + a + x + x^2] + 4829*x*Sqrt[1 + a + x + x^2] + 117*x^2*Sqrt[1 + a + x + x^2] + 688*x^3*Sqrt[1`
+- `cA-2-100` (elem): TIMEOUT -> ELEM — `(-2*(3 + x)^(1/6) + a^2*(3 + x)^(1/6) + 2*a*x*(3 + x)^(1/6) + x^2*(3 + x)^(1/6) + 4*(3 + a + x)^(1/6))/(-2 + a^2 + 2*a*x + x^2)`
+- `cA-2-112` (elem): smaller 258 -> 83 — `(-24*Sqrt[1 + x] - 18*x*Sqrt[1 + x] + 15*x^2*Sqrt[1 + x] + 20*Sqrt[1 + x]*(1 + a + x) - 10*x*Sqrt[1 + x]*(1 + a + x) + 4*(1 + a + x)^(5/2))/(-18*Sqrt[1 + x]*(1 `
+- `cA-2-114` (elem): smaller 396 -> 85 — `(-3*(3 + x)^(1/4) + a^2*(3 + x)^(1/4) + 2*a*x*(3 + x)^(1/4) + x^2*(3 + x)^(1/4) + (3 + a + x)^(1/4))/(-3 + a^2 + 2*a*x + x^2)`
+- `cA-2-115` (elem): smaller 360 -> 96 — `(-42*Sqrt[2 + x + x^2] - 84*x*Sqrt[2 + x + x^2] + 88*Sqrt[2 + a + x + x^2] + 123*x*Sqrt[2 + a + x + x^2] + 47*x^2*Sqrt[2 + a + x + x^2] + 16*x^3*Sqrt[2 + a + x `
+- `cA-2-118` (elem): smaller 408 -> 111 — `(340*Sqrt[2 + x + x^2] + 680*x*Sqrt[2 + x + x^2] - 442*Sqrt[2 + a + x + x^2] - 491*x*Sqrt[2 + a + x + x^2] + 181*x^2*Sqrt[2 + a + x + x^2] + 304*x^3*Sqrt[2 + a `
+- `cB-2-371` (unknown): TIMEOUT -> CERT — `2/((1 + a + 2*x)*(2 + x + x^2)^(1/4))`
+- `cB-2-461` (unknown): TIMEOUT -> CERT — `(2*(2 + x + x^2)^(2/3))/(1 + a + 2*x)`
+- `cA-3-116` (elem): UNEVAL -> ELEM — `(3*x^2*(3 + x^4)^(3/4) - 3*(3 + x^4)^(3/4)*Sqrt[3 + a + x^4] + 3*x^2*(3 + a + x^4)^(3/4) + 2*x^6*(3 + a + x^4)^(3/4) + 3*Sqrt[3 + x^4]*(3 + a + x^4)^(3/4) + 6*x`
+- `cB-3-193` (unknown): TIMEOUT -> CERT — `(2*(2 + x + x^2)^(1/4))/(1 + a + 2*x)`
+- `cA-3-209` (elem): UNEVAL -> ELEM — `(1 + x^4 + x^4*(1 + x^4) + x^4*(1 + x^4)^(3/2)*Sqrt[1 + a + x^4])/(x*(1 + x^4)^(3/2))`
+- `cA-3-258` (elem): smaller 548 -> 103 — `(2*Sqrt[2 + x] + a*Sqrt[2 + x] - x*Sqrt[2 + x] - a*x*Sqrt[2 + x] - x^2*Sqrt[2 + x] + 7*(2 + a + x)^(3/2) + 7*a*(2 + a + x)^(3/2) + 9*x*(2 + a + x)^(3/2) + 2*a*x`
+- `cA-3-284` (elem): smaller 410 -> 137 — `(-3*(1 + x)^(2/3) + a^2*(1 + x)^(2/3) + 2*a*x*(1 + x)^(2/3) + x^2*(1 + x)^(2/3) + (1 + a + x)^(2/3))/(-3 + a^2 + 2*a*x + x^2)`
+- `cA-4-94` (elem): TIMEOUT -> ELEM — `(-3*(3 + x)^(1/6) + a^2*(3 + x)^(1/6) + 2*a*x*(3 + x)^(1/6) + x^2*(3 + x)^(1/6) + 5*(3 + a + x)^(1/6))/(-3 + a^2 + 2*a*x + x^2)`
+- `cA-4-170` (unknown): UNEVAL -> CERT — `x/((-2 + (2 + a)*x^2)*(1 + x^6)^(1/3))`
+- `cA-4-244` (elem): smaller 558 -> 111 — `(-2*Sqrt[2 + x] - a*Sqrt[2 + x] + x*Sqrt[2 + x] + a*x*Sqrt[2 + x] + x^2*Sqrt[2 + x] - 7*(2 + a + x)^(3/2) - 7*a*(2 + a + x)^(3/2) - 9*x*(2 + a + x)^(3/2) - 2*a*`
+- `cM-1-36` (unknown): TIMEOUT -> CERT — `(2*E^(2*x))/((1 + a + E^(2*x))*(-1 + E^(6*x))^(1/3))`
+- `cM-1-71` (elem): smaller 1196 -> 616 — `(-1/3*E^(2*x)/(1 + E^(2*x))^(5/6) + (2*E^(2*x))/(3*(1 + E^(2*x))^(2/3)))/(4*(1 - (1 + E^(2*x))^(1/6) + (1 + E^(2*x))^(1/3))) - (E^(2*x)/(3*(1 + E^(2*x))^(5/6)) `
+- `cM-1-132` (elem): smaller 235 -> 97 — `(-8 + 28*Log[x] + 12*Log[x]^2 + a*Log[x]^2 + 16*Log[x]^3 + 2*a*Log[x]^3 + 4*(2 + Log[x] + Log[x]^2) + 32*Log[x]*(2 + Log[x] + Log[x]^2) + 4*a*Log[x]*(2 + Log[x]`
+- `cM-1-145` (unknown): smaller 115 -> 58 — `1/(x*Log[x]*(1 + a + Log[x]^6)^(2/3))`
+- `cM-1-155` (elem): smaller 3195 -> 120 — `(10*E^(4*x))/Sqrt[3 + E^(4*x)] + E^(6*x)/Sqrt[3 + E^(4*x)] + (2*E^(8*x))/(3*Sqrt[3 + E^(4*x)]) + E^(2*x)*Sqrt[3 + E^(4*x)] + (4*E^(4*x)*Sqrt[3 + E^(4*x)])/3 + (`
+- `cM-2-33` (unknown): smaller 2303 -> 673 — `(2*x*(-1 + Log[1 + x^2]))/((1 + x^2)*Sqrt[2 + a + Log[1 + x^2]]*(-1 - 2*Log[1 + x^2] + Log[1 + x^2]^2))`
+- `cM-2-79` (unknown): smaller 342 -> 109 — `1/(x*Log[x]*(1 + a + Log[x]^2)^(2/3))`
+- `cM-2-89` (unknown): smaller 18725 -> 861 — `(2*x*(-1 + Log[1 + x^2])*(3 + a + Log[1 + x^2])^(3/2))/((1 + x^2)*(-1 + 2*Log[1 + x^2] + Log[1 + x^2]^2))`
+- `cM-2-136` (elem): TIMEOUT -> ELEM — `(45*Log[1 + x]*Sqrt[3 + Log[1 + x]^4] + 15*a*Log[1 + x]*Sqrt[3 + Log[1 + x]^4] + 30*Log[1 + x]^5*Sqrt[3 + Log[1 + x]^4] + 27*Log[1 + x]*Sqrt[3 + a + Log[1 + x]^`
+- `cM-2-191` (elem): smaller 284 -> 60 — `2 - (2*E^(6*x))/(1 + E^(6*x) + Sqrt[1 + E^(6*x)]) + (-36*E^(6*x)*Sqrt[1 + E^(6*x)] - 12*a*E^(6*x)*Sqrt[1 + E^(6*x)])/(9 + 18*E^(6*x) + 6*a*E^(6*x) + 9*E^(12*x) `
+- `cM-2-222` (elem): TIMEOUT -> ELEM — `(5*Log[1 + x]^2*Sqrt[1 + Log[1 + x]^6] + 5*a*Log[1 + x]^2*Sqrt[1 + Log[1 + x]^6] + 10*Log[1 + x]^8*Sqrt[1 + Log[1 + x]^6] + 3*Log[1 + x]^2*Sqrt[1 + a + Log[1 + `
+- `cM-2-298` (elem): smaller 114 -> 46 — `(-15/(E^(4*x)*((1 + 3*E^x)/E^x)^(3/4)) + (-20 - a)/(4*E^(3*x)*((1 + 3*E^x)/E^x)^(3/4)) + 24/(E^(2*x)*((1 + 3*E^x)/E^x)^(3/4)) - 288/(E^x*((1 + 3*E^x)/E^x)^(3/4)`
+- `cM-2-332` (elem): smaller 284 -> 60 — `1 - E^(3*x)/(1 + E^(3*x) + Sqrt[1 + E^(3*x)]) + (-18*E^(3*x)*Sqrt[1 + E^(3*x)] - 6*a*E^(3*x)*Sqrt[1 + E^(3*x)])/(9 + 18*E^(3*x) + 6*a*E^(3*x) + 9*E^(6*x) + 6*a*`
+- `cM-3-104` (unknown): TIMEOUT -> ELEM — `(2*E^x^2*x)/(Sqrt[3 + a + E^x^2]*(3 + E^(2*x^2)))`
+- `cM-3-152` (unknown): smaller 1847 -> 298 — `((1 + a + E^x^2)*(1 + E^x^2 + E^(2*x^2))^(3/2)*x)/E^x^2`
+- `cM-3-155` (unknown): smaller 411 -> 213 — `-((2 + a + E^(-x))^(1/3)/(1 + E^x))`
+- `cM-3-240` (unknown): TIMEOUT -> ELEM — `(E^x^2*(2 + E^x^2)*x)/(Sqrt[3 + a + E^x^2]*(1 + E^(2*x^2)))`
+- `cM-3-247` (elem): smaller 95 -> 46 — `(-5/(E^(4*x)*Sqrt[(1 + 3*E^x)/E^x]) + (-48 - a)/(2*E^(3*x)*Sqrt[(1 + 3*E^x)/E^x]) - 9/(E^(2*x)*Sqrt[(1 + 3*E^x)/E^x]) + 54/(E^x*Sqrt[(1 + 3*E^x)/E^x]) - (30*Sqr`
+- `cM-3-322` (elem): TIMEOUT -> ELEM — `(1 + Log[x]^6 - Log[x]^12 - Log[x]^18 - Sqrt[1 + Log[x]^6] + a*Sqrt[1 + Log[x]^6] - 3*Log[x]^6*Sqrt[1 + Log[x]^6] + 2*a*Log[x]^6*Sqrt[1 + Log[x]^6] - 2*Log[x]^1`
+- `cM-3-362` (unknown): smaller 238 -> 132 — `1/(x*Log[x]*(3 + a + Log[x])^(1/3))`
+- `cM-4-49` (elem): smaller 102 -> 46 — `(-14/(E^(4*x)*((1 + E^x)/E^x)^(2/3)) + (-6 - a)/(3*E^(3*x)*((1 + E^x)/E^x)^(2/3)) + 3/(E^(2*x)*((1 + E^x)/E^x)^(2/3)) - 9/(E^x*((1 + E^x)/E^x)^(2/3)) - (126*((1`
+- `cM-4-82` (unknown): smaller 26174 -> 831 — `(2*x*(-2 + Log[1 + x^2])*(2 + a + Log[1 + x^2])^(3/2))/((1 + x^2)*(-1 + Log[1 + x^2] + Log[1 + x^2]^2))`
+- `cM-4-150` (elem): smaller 377 -> 180 — `2 - ((2*E^(6*x))/(1 + E^(6*x))^(2/3) + (4*E^(6*x))/(1 + E^(6*x))^(1/3))/(2*(1 + (1 + E^(6*x))^(1/3) + (1 + E^(6*x))^(2/3))) + (-6*E^((6 + a)*x) - a*E^((6 + a)*x`
+- `cM-4-292` (unknown): TIMEOUT -> ELEM — `2/(1 + a + E^(12*x))^(1/6)`
+- `cM-4-295` (unknown): smaller 337 -> 58 — `1/(x*Log[x]*(2 + a + Log[x]^3)^(2/3))`
+- `cB-1-211` (unknown): TIMEOUT -> ELEM — `Log[x]/(2 + a + x + x^2)^(3/2)`
+- `cB-1-629` (unknown): UNEVAL -> ELEM — `Log[1 + a + 2*x]/(1 + x)^(1/4)`
+- `cB-1-778` (unknown): TIMEOUT -> ELEM — `Log[x]/(1 + a + x + x^2)^(3/2)`
+- `cB-1-1318` (unknown): TIMEOUT -> ELEM — `Log[1 + x]/(3 + a + x^2)^(3/2)`
+- `cB-2-841` (unknown): UNEVAL -> ELEM — `Log[1 + x]/(3 + a + x)^(1/4)`
+- `cB-3-532` (elem): smaller 459 -> 89 — `(-8 - 2*x - 4*(1 + x))/(9*Sqrt[1 + x]) + (2*x - 4*Sqrt[1 + x] - 4*(1 + x))/(6*x*Sqrt[1 + x] + 3*x^2*Sqrt[1 + x] + 6*x*(1 + x)) + (Log[x] + x*Log[x])/(3*Sqrt[1 +`
+- `cB-3-716` (unknown): UNEVAL -> ELEM — `Log[1 + a + 2*x]/(3 + x)^(1/4)`
+- `cB-3-957` (unknown): TIMEOUT -> ELEM — `Log[1 + x]/(2 + a + x)^(1/3)`
+- `cB-3-962` (unknown): TIMEOUT -> ELEM — `(3 + a + x)^(2/3)*Log[1 + x]`
+- `cB-4-4` (unknown): TIMEOUT -> ELEM — `Log[1 + a + 2*x]/(2 + x + x^2)^(3/2)`
+- `cB-4-824` (unknown): TIMEOUT -> ELEM — `(2 + a + x)^(1/6)*Log[1 + x]`
+- `cB-4-1007` (unknown): TIMEOUT -> ELEM — `Log[1 + x^2]/(2 + a + x + x^2)^(3/2)`
+- `cB-4-1299` (unknown): TIMEOUT -> ELEM — `(1 + a + x)^(1/3)*Log[x]`
+- `cB-4-1322` (elem): TIMEOUT -> ELEM — `(273375 + 18225*a + 405*a^2 + 3*a^3 + 820125*x + 48600*a*x + 945*a^2*x + 6*a^3*x + 637875*x^2 + 26325*a*x^2 + 270*a^2*x^2 + 192375*x^3 + 4050*a*x^3 + 20250*x^4 `
+- `cB-5-1271` (unknown): UNEVAL -> ELEM — `Log[x]/(2 + a + x)^(1/4)`
+- `cB-6-243` (unknown): UNEVAL -> ELEM — `Log[1 + a + 2*x]/(2 + x)^(1/4)`
+- `cB-6-401` (unknown): TIMEOUT -> ELEM — `Log[1 + x]/(1 + a + x + x^2)^(3/2)`
+- `cB-6-486` (elem): UNEVAL -> ELEM — `(12*x - 372*a*x + 420*a^2*x - 60*a^3*x - 30*x^2 + 294*a*x^2 + 30*a^2*x^2 - 6*a^3*x^2 + 18*x^3 + 96*a*x^3 - 18*a^2*x^3 + 6*x^4 - 18*a*x^4 - 6*x^5 - 48*(2 + x) + `
+- `cB-6-814` (unknown): UNEVAL -> ELEM — `(1 + a + x)^(1/4)*Log[x]`
+- `cB-6-1139` (unknown): TIMEOUT -> ELEM — `(x + Log[1 + a + 2*x])/(2 + x^2)^(3/2)`
+- `cB-7-17` (unknown): TIMEOUT -> ELEM — `(x*Log[-3 + a + 2*x])/Sqrt[4 + x^2]`
+- `cB-7-26` (unknown): TIMEOUT -> ELEM — `Log[-3 + x]/(1 + (3 + a)*x)^(1/4)`
+- `cB-7-60` (unknown): TIMEOUT -> ELEM — `Log[-3 + 2*x]/(1 + (3 + a)*x)^(1/4)`
+- `cB-7-83` (elem): TIMEOUT -> ELEM — `(-6399 + 15777*x - 1422*a*x + 13338*x^2 + 1996*a*x^2 - 79*a^2*x^2 - 8148*x^3 + 7392*a*x^3 + 27*a^2*x^3 - 3573*x^4 - 1440*a*x^4 + 639*a^2*x^4 + 963*x^5 - 954*a*x`
+- `cB-7-171` (elem): smaller 405 -> 167 — `-(1/Sqrt[-1 + 2*x]) + (-2304*I - (2304*I)*x + 2304*Sqrt[3]*Sqrt[-1 + 2*x] + (2304*I)*(-1 + 2*x))/((-2304*I)*Sqrt[-1 + 2*x] - (1152*I)*x*Sqrt[-1 + 2*x] + (1152*I`
+- `cB-7-176` (unknown): TIMEOUT -> ELEM — `x*Sqrt[3 + a + x^2]*Log[-3 + x]`
+- `cB-7-203` (elem): smaller 1448 -> 257 — `(-1254 - 228*x - 54*x^2 - 152*(3 + 3*x) - 72*x*(3 + 3*x))/(225*Sqrt[3 + 3*x]) + (-144 + 72*x - 144*Sqrt[3 + 3*x] - 48*(3 + 3*x))/(-40*Sqrt[3 + 3*x] + 10*x*Sqrt[`
+- `cB-7-205` (unknown): TIMEOUT -> ELEM — `x*Sqrt[3 + x^2]*Log[-2 + a + 3*x]`
+- `cB-7-266` (unknown): UNEVAL -> ELEM — `(x*Log[2 + a + 2*x])/(-3 + x)^(1/4)`
+- `cB-8-35` (unknown): TIMEOUT -> ELEM — `x*Sqrt[-4 + x^2]*Log[2 + a + 2*x]`
+- `cB-8-125` (elem): TIMEOUT -> ELEM — `-(1/Sqrt[2 + 2*x]) + (-420 + 280*x + 280*Sqrt[5]*Sqrt[2 + 2*x] - 280*(2 + 2*x))/(-420*Sqrt[2 + 2*x] + 160*x*Sqrt[2 + 2*x] + 80*x^2*Sqrt[2 + 2*x] + 120*Sqrt[5]*(`
+- `cB-8-143` (unknown): TIMEOUT -> ELEM — `Log[-2 + x]/(-3 + (2 + a)*x)^(1/4)`
+- `cB-8-145` (unknown): TIMEOUT -> ELEM — `x*(3 + a + x^2)^(3/2)*Log[3 + x]`
+- `cB-8-146` (unknown): TIMEOUT -> ELEM — `x*Sqrt[-3 + x^2]*Log[3 + a + 2*x]`
+- `cB-9-26` (unknown): UNEVAL -> ELEM — `(x*Log[-1 + a + 2*x])/(-3 + x)^(1/4)`
+- `cB-9-28` (elem): TIMEOUT -> ELEM — `(-162 - 162*a - 54*a^2 - 6*a^3 - 1215*x - 729*a*x - 81*a^2*x + 9*a^3*x - 2187*x^2 + 243*a^2*x^2 + 2187*x^3 + 2187*a*x^3 + 6561*x^4 - 81*(1 + 3*x) - 81*a*(1 + 3*`
+- `cB-9-104` (unknown): TIMEOUT -> ELEM — `x*(4 + x^2)^(3/2)*Log[-2 + a + 3*x]`
+- `cB-9-147` (unknown): TIMEOUT -> ELEM — `x*Sqrt[1 + x^2]*Log[3 + a + 2*x]`
+- `cB-9-219` (elem): smaller 1033 -> 217 — `(-384 + 368*(-2 + x) + 184*x + 416*(-2 + x)*x + 104*x^2 - 300*(-2 + x)*x^2 - 50*x^3)/(1225*Sqrt[-2 + x]) + (16*Log[-2 + x] + 4*x*Log[-2 + x] - 16*x^2*Log[-2 + x`
+- `cB-10-30` (elem): smaller 217 -> 85 — `(297 + 450*x + 9*x^2 - 144*x^3 - 297*(1 + x) + 84*a*(1 + x) - 153*x*(1 + x) + 144*x^2*(1 + x) - 252*Log[3 + 3*x] + 28*a*Log[3 + 3*x] - 168*x*Log[3 + 3*x] + 28*a`
+- `cB-10-34` (unknown): TIMEOUT -> ELEM — `Log[x]/(-2 + a + x)^(1/3)`
+- `cB-10-38` (elem): TIMEOUT -> ELEM — `(6 + 54*x + 18*a*x + 180*x^2 + 126*a*x^2 + 18*a^2*x^2 + 264*x^3 + 288*a*x^3 + 90*a^2*x^3 + 6*a^3*x^3 + 144*x^4 + 216*a*x^4 + 108*a^2*x^4 + 18*a^3*x^4 - 9*(1 + 2`
+- `cB-10-104` (unknown): TIMEOUT -> ELEM — `Log[x]/(-1 + a + x)^(1/3)`
+- `cB-10-108` (elem): smaller 202 -> 117 — `(297 - 216*x - 486*x^2 + 324*x^3 + 189*x^4 - 108*x^5 - 81*(-3 + 3*x) + 207*x*(-3 + 3*x) - 45*a*x*(-3 + 3*x) - 135*x^2*(-3 + 3*x) + 135*a*x^2*(-3 + 3*x) - 27*x^3`
+- `cB-10-131` (elem): smaller 202 -> 117 — `(297 - 216*x - 486*x^2 + 324*x^3 + 189*x^4 - 108*x^5 - 81*(-3 + 3*x) + 207*x*(-3 + 3*x) - 45*a*x*(-3 + 3*x) - 135*x^2*(-3 + 3*x) + 135*a*x^2*(-3 + 3*x) - 27*x^3`
+- `cB-10-153` (unknown): TIMEOUT -> ELEM — `Log[-1 + 2*x]/(2 + (2 + a)*x)^(1/4)`
+- `cB-10-158` (elem): TIMEOUT -> ELEM — `(-10368 - 2592*a - 216*a^2 - 6*a^3 - 10368*x - 1296*a*x + 3*a^3*x + 648*a*x^2 + 54*a^2*x^2 + 2592*x^3 + 324*a*x^3 + 648*x^4 - 5184*(2 + x) - 1296*a*(2 + x) - 10`
+- `cB-10-221` (elem): smaller 2318 -> 428 — `(-192 + 192*x - 384*Sqrt[2 + 2*x] - 192*(2 + 2*x))/(-105*Sqrt[2 + 2*x] + 70*x*Sqrt[2 + 2*x] + 35*x^2*Sqrt[2 + 2*x] - 70*(2 + 2*x) + 70*x*(2 + 2*x)) + (-4288 - 1`
+- `cB-10-228` (elem): TIMEOUT -> ELEM — `(546750 + 36450*a + 810*a^2 + 6*a^3 - 546750*x - 12150*a*x + 270*a^2*x + 6*a^3*x - 364500*x^2 - 32400*a*x^2 - 540*a^2*x^2 + 567000*x^3 + 16200*a*x^3 - 162000*x^`
+- `cB-10-230` (unknown): TIMEOUT -> ELEM — `(-1 + x)^(2/3)*Log[-1 + a + 3*x]`
+- `cB-11-7` (unknown): TIMEOUT -> ELEM — `(-2 + x)^(1/3)*x*Log[2 + a + 3*x]`
+- `cB-11-54` (unknown): TIMEOUT -> ELEM — `Log[-1 + x]/(3 + (2 + a)*x)^(1/4)`
+- `cB-11-64` (unknown): TIMEOUT -> ELEM — `(-1 + x)^(2/3)*Log[3 + a + 3*x]`
+- `cB-11-66` (unknown): TIMEOUT -> ELEM — `Log[1 + x]/(2 + (3 + a)*x)^(1/3)`
+- `cB-11-118` (unknown): UNEVAL -> ELEM — `(-1 + x)^(1/4)*Log[-3 + a + 2*x]`
+- `cB-11-136` (unknown): TIMEOUT -> ELEM — `Log[-1 + 2*x]/(1 + (3 + a)*x)^(1/4)`
+- `cB-11-161` (elem): TIMEOUT -> ELEM — `(-2 - 6*x - 3*(1 + 3*x))/(25*(1 + 3*x)^(1/3)) + (-Log[-1 + 2*x] + 2*x*Log[-1 + 2*x])/(5*(1 + a + 3*x)^(1/3)) + ((1 + a + 3*x)^(2/3) + (1 + a + 3*x)^(2/3)*Log[-1`
+- `cB-11-261` (unknown): TIMEOUT -> ELEM — `Log[3 + x]/(-2 + (2 + a)*x)^(1/3)`
+- `cB-11-299` (unknown): TIMEOUT -> ELEM — `x*(2 + x)^(1/3)*Log[3 + a + 3*x]`
+- `cB-11-311` (unknown): TIMEOUT -> ELEM — `Log[-3 + x]/(-2 + (2 + a)*x)^(1/4)`

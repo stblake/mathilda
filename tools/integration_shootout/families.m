@@ -41,3 +41,20 @@ mixedFamilies = {
   "expcube" -> Function[{th, n}, With[{Y = (RandomChoice[{E^x, E^(2 x), E^(x^2)}] + nz[1, 3])^(1/3)},
     nz[-2, 2] Log[Y + RandomChoice[{-1, 1, 2}]] + r[0, 1] Y]]
 };
+
+(* paramFamilies (Phase 4.4 step 6): the Shape A families with a symbolic
+   parameter a, a transcendental constant (D[a, x] = 0).  F stays elementary
+   over Q(a), so every verdict but "elementary" is wrong for every a outside a
+   proper closed set.  A separate list, after mixedFamilies, so no seeded draw
+   of the existing families moves.  plin[th] is lin[th] with the constant term
+   shifted by a. *)
+plin[th_] := nz[1, 3] th + r[-2, 2] x + nz[-3, 3] + a;
+paramFamilies = {
+  "palg" -> Function[{th, n}, With[{Y = plin[th]^(1/n)}, (r[1, 3] x + a) Y^RandomChoice[{1, -1, n - 1}]]],
+  "plogxy" -> Function[{th, n}, With[{Y = plin[th]^(1/n)}, r[0, 2] x Y + nz[-2, 2] Log[x + a + Y]]],
+  "pasinh" -> Function[{th, n}, With[{Y = Sqrt[th^2 + a]}, nz[-2, 2] Log[th + Y] + r[0, 1] Y]],
+  "pgenus1" -> Function[{th, n}, With[{Y = Sqrt[th^3 + a]}, Log[r[1, 2] + Y] + r[0, 1] th Y]],
+  "pratb" -> Function[{th, n}, With[{Y = plin[th]^(1/n)}, Y/(th + a) + r[0, 1] Y^(n - 1)]],
+  "pexpcube" -> Function[{th, n}, With[{Y = (RandomChoice[{E^x, E^(2 x)}] + a)^(1/3)},
+    nz[-2, 2] Log[Y + RandomChoice[{-1, 1, 2}]] + r[0, 1] Y]]
+};

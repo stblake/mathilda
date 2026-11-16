@@ -17,14 +17,14 @@ static const char* const trager_accept[] = {
     "1/(x Sqrt[1 - x^3])", "(x^4 + 1)^(-1/4)", "Sqrt[x^3 + 1]/x", "1/Sqrt[x^2 + 1]",
     "x^(1/3)/(1 + x)", "(x + 1)^(2/3) x", "1/((x - 1) Sqrt[x^3 + 1])", "Sqrt[x] + x^(1/3)",
     "1/(x^2 Sqrt[x^4 - 1])", "(2 x^3 + 3)^(1/3)/(5 x^6 + 7)^(1/3)", "Sqrt[(x + 1)/(x - 1)]",
-    "x/(1 + x^2)^(3/2)", "1/(1 + Sqrt[x])", "(x^2 + x)^(1/4)/x", "1/Sqrt[x^3 - x]", NULL };
+    "x/(1 + x^2)^(3/2)", "1/(1 + Sqrt[x])", "(x^2 + x)^(1/4)/x", "1/Sqrt[x^3 - x]",
+    /* symbolic parameters: admitted at the Trager stage by default (Phase 4.4
+       step 6, Integrate`$CascadeParameters = {"Trager"}) */
+    "1/((x - a) Sqrt[x^2 + 1])", "1/Sqrt[x^3 + a]", NULL };
 static const char* const trager_reject[] = {
     "x^2 + 1", "1/(x^2 + 1)", "Log[x] Sqrt[x]", "Sin[x] Sqrt[x]", "Sqrt[2] x^(1/2)",
     "E^x Sqrt[x]", "Sqrt[x + Log[x]]", "1.5 Sqrt[x]", "x^Pi", "Sqrt[x]^Sqrt[2]",
-    "ArcTan[Sqrt[x]]", "Sqrt[2] + x",
-    /* symbolic parameters: Method -> "Trager" answers them (Phase 4.4), the
-       cascade only after the step-6 A/B gate */
-    "1/((x - a) Sqrt[x^2 + 1])", "1/Sqrt[x^3 + a]", "Pi Sqrt[x]", NULL };
+    "ArcTan[Sqrt[x]]", "Sqrt[2] + x", "Pi Sqrt[x]", NULL };
 static const char* const bronstein_accept[] = {
     "Sqrt[x + Log[x]]", "(x + E^x)^(1/3)", "Log[1 + E^x]^(1/3)/(1 + Log[1 + E^x])",
     "1/(x Sqrt[Log[x]^2 + 1])", "E^x/Sqrt[E^(2 x) + 1]", "1/Sqrt[E^x + 1]",
@@ -67,6 +67,31 @@ static void test_gates(void) {
         exit(1);
     }
     BR_EQ("{$TragerCascadeBudget, $BronsteinCascadeBudget}", "{10, 10}");
+    /* symbolic parameters: admitted at the stages Integrate`$CascadeParameters
+       names (Phase 4.4 step 6: default {"Trager"}); Pi stays out of Trager's
+       gate, a Constant is in Bronstein's */
+    BR_EQ("Integrate`$CascadeParameters", "{\"Trager\"}");
+    BR_TRUE("Integrate`CascadeGateQ[\"Trager\", 1/Sqrt[x^3 + a], x]");
+    BR_FALSE("Integrate`CascadeGateQ[\"Bronstein\", Sqrt[a + Log[x]]/x, x]");
+    BR_FALSE("Block[{Integrate`$CascadeParameters = False}, Integrate`CascadeGateQ[\"Trager\", 1/Sqrt[x^3 + a], x]]");
+    BR_TRUE("Block[{Integrate`$CascadeParameters = True}, Integrate`CascadeGateQ[\"Trager\", 1/Sqrt[x^3 + a], x]]");
+    BR_TRUE("Block[{Integrate`$CascadeParameters = True}, Integrate`CascadeGateQ[\"Trager\", 1/((x - a) Sqrt[x^2 + b]), x]]");
+    BR_FALSE("Block[{Integrate`$CascadeParameters = True}, Integrate`CascadeGateQ[\"Trager\", Pi Sqrt[x], x]]");
+    BR_FALSE("Block[{Integrate`$CascadeParameters = True}, Integrate`CascadeGateQ[\"Trager\", Sin Sqrt[x], x]]");
+    BR_TRUE("Block[{Integrate`$CascadeParameters = True}, Integrate`CascadeGateQ[\"Bronstein\", Sqrt[a + Log[x]]/x, x]]");
+    BR_FALSE("Block[{Integrate`$CascadeParameters = True}, Integrate`CascadeGateQ[\"Bronstein\", Sqrt[a + Log[x]] + Sin[x], x]]");
+    BR_TRUE("Integrate`CascadeGateQ[\"Bronstein\", Pi Sqrt[x + Log[x]], x]");
+    /* a list of stage names admits the parameters at those stages only */
+    BR_TRUE("Block[{Integrate`$CascadeParameters = {\"Trager\"}}, Integrate`CascadeGateQ[\"Trager\", 1/Sqrt[x^3 + a], x]]");
+    BR_FALSE("Block[{Integrate`$CascadeParameters = {\"Trager\"}}, Integrate`CascadeGateQ[\"Bronstein\", Sqrt[a + Log[x]]/x, x]]");
+    BR_TRUE("Block[{Integrate`$CascadeParameters = {\"Bronstein\"}}, Integrate`CascadeGateQ[\"Bronstein\", Sqrt[a + Log[x]]/x, x]]");
+    BR_FALSE("Block[{Integrate`$CascadeParameters = {\"Bronstein\"}}, Integrate`CascadeGateQ[\"Trager\", 1/Sqrt[x^3 + a], x]]");
+    BR_FALSE("Block[{Integrate`$CascadeParameters = {}}, Integrate`CascadeGateQ[\"Trager\", 1/Sqrt[x^3 + a], x]]");
+    br_assertions++;
+    if (!symtab_get_docstring("Integrate`$CascadeParameters")) {
+        fprintf(stderr, "FAIL: Integrate`$CascadeParameters has no docstring\n");
+        exit(1);
+    }
 }
 
 /* Plain Integrate now closes the Trager-only and Bronstein integrands. */
@@ -96,6 +121,31 @@ static void test_cascade_certificates(void) {
     BR_TRUE("Quiet[FreeQ[Integrate[Sqrt[Log[x]], x], Integrate]]");
 }
 
+/* With the parameters admitted the Automatic cascade closes a parametric
+ * Bronstein integrand; by default (Trager only) the Trager one. */
+static void test_cascade_parameters(void) {
+    BR_TRUE("With[{F = Integrate[1/((x - a) Sqrt[x^2 + 1]), x]},"
+            " FreeQ[F, Integrate] && PossibleZeroQ[D[F, x] - 1/((x - a) Sqrt[x^2 + 1])]]");
+    /* not elementary over Q(a): certified by the default cascade */
+    /* (1/Sqrt[x^3 + a] is certified too, but the special-function stage then
+     * answers with a verified HypergeometricPFQ form and the held message
+     * drops; this one has no such form) */
+    BR_EQ("Check[Integrate[1/((x - 2) Sqrt[x^3 + a]), x]; \"ok\", \"msg\", {Integrate::nonelem}]", "\"msg\"");
+    /* a parametric Kummer piece inside ParallelMixedTower: its own integrator
+     * first (3 s), so the compact three-log answer of the parameter-free run
+     * comes back, not Trager's 257-leaf RootSum rendering (benchmark 258, cM-2-197) */
+    BR_TRUE("With[{F = Integrate[2/(2 + a + E^(2 x))^(1/3), x]}, FreeQ[F, Integrate] && LeafCount[F] <= 130 &&"
+            " PossibleZeroQ[D[F, x] - 2/(2 + a + E^(2 x))^(1/3)]]");
+    /* ParallelMixed's log combine over Q(params): gathered by argument when
+     * smaller; without parameters the identity */
+    BR_TRUE("ParallelMixed`Private`pmtParamLogCombine[a Log[1 + x]/(2 + a) + 2 Log[1 + x]/(2 + a) + Log[x], x] === Log[x] + Log[1 + x]");
+    BR_TRUE("ParallelMixed`Private`pmtParamLogCombine[Log[1 + x] + Log[1 + x], x] === 2 Log[1 + x]");
+    BR_TRUE("Block[{Integrate`$CascadeParameters = True}, With[{F = Integrate[Sqrt[a + Log[x]]/x, x]},"
+            " FreeQ[F, Integrate] && PossibleZeroQ[D[F, x] - Sqrt[a + Log[x]]/x]]]");
+    BR_TRUE("Block[{Integrate`$CascadeParameters = True}, With[{F = Integrate[1/((x - a) Sqrt[x^2 + 1]), x]},"
+            " FreeQ[F, Integrate] && PossibleZeroQ[D[F, x] - 1/((x - a) Sqrt[x^2 + 1])]]]");
+}
+
 /* A budget expiry declines: the cascade continues to the later stages. */
 static void test_budgets(void) {
     /* a timeout inside a NESTED Integrate (the DerivativeDivides candidate bound)
@@ -116,6 +166,7 @@ int main(void) {
     test_gates();
     test_cascade_closes();
     test_cascade_certificates();
+    test_cascade_parameters();
     test_budgets();
     BR_DONE("integrate_cascade_trager_bronstein_tests");
     return 0;

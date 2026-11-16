@@ -33,6 +33,10 @@ TEST_GLOBS = [
 TRAGER_NAMES = [
     "fieldFn", "kcFn", "rcFn", "fnInvertT", "fnCollect", "fieldExtQ",
     "fieldScalarSymbols", "fieldScalarQ", "fieldBase",
+    # Phase 4.4 step 6: the parametric presentation (Pipeline.m)
+    "tragerParamTidy", "tragerParamRadSplit", "tragerParamMonic", "tragerRootSum2", "tragerQuadraticQ",
+    "tragerParamPresent", "presentReal", "tragerLogCombine", "tragerLogTerms", "tragerParamAtoms",
+    "tragerParamMonicRatio", "tragerRootSumTidy", "tragerRootTrace",
 ]
 
 # C builtins and public symbols added by the campaign

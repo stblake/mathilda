@@ -72,6 +72,7 @@
 #include "parse.h"
 #include "symtab.h"
 #include "attr.h"
+#include "context.h"   /* context_home: symbolic parameters in the cascade gates */
 #include "internal.h"
 #include "loadmodule.h"
 #include "sym_intern.h"
@@ -1654,6 +1655,46 @@ static Expr* try_bronstein(Expr* f, Expr* x) {
 #define TRAGER_CASCADE_BUDGET_DEFAULT 10
 #define BRONSTEIN_CASCADE_BUDGET_DEFAULT 10
 
+/* Symbolic parameters in the Trager / Bronstein stages (Phase 4.4 step 6).
+ * Both methods decide over Q(a) since v0.6574/v0.6578; the cascade lets a
+ * parametric integrand reach a stage named by Integrate`$CascadeParameters
+ * (True = both, or a list of stage names).  The default {"Trager"} is the
+ * outcome of the step-6 A/B run (benchmarks/258-parametric-ab): over the 1661
+ * parametric cases Trager's stage gives 225 better and no wrong answer, while
+ * Bronstein's gives ~100 answers far larger than the later stage's (its
+ * tower presentation) and stays opt-in.  The flag is read once per gate call
+ * (cg_params_begin) and consulted by cg_param_symbol. */
+static bool g_cg_params = false;
+
+/* True for the stage when Integrate`$CascadeParameters is True, or a List
+ * holding the stage's name ("Trager" / "Bronstein"). */
+static void cg_params_begin(const char* stage) {
+    Expr* v = evaluate(expr_new_symbol("Integrate`$CascadeParameters"));
+    g_cg_params = false;
+    if (v && v->type == EXPR_SYMBOL) {
+        g_cg_params = v->data.symbol.name == intern_symbol("True");
+    } else if (v && v->type == EXPR_FUNCTION && v->data.function.head->type == EXPR_SYMBOL &&
+               v->data.function.head->data.symbol.name == SYM_List) {
+        for (size_t i = 0; i < v->data.function.arg_count; i++) {
+            const Expr* a = v->data.function.args[i];
+            if (a->type == EXPR_STRING && strcmp(a->data.string, stage) == 0) g_cg_params = true;
+        }
+    }
+    if (v) expr_free(v);
+}
+
+/* A symbolic parameter: a symbol other than x that is not a Constant (Pi, E,
+ * ...) and not a System` or Mathilda` symbol -- what the packages'
+ * tragerParamsOf reads as a transcendental constant. */
+static bool cg_param_symbol(const Expr* e, const Expr* x) {
+    if (!g_cg_params || e->type != EXPR_SYMBOL || e->data.symbol.name == x->data.symbol.name) return false;
+    const char* name = e->data.symbol.name;
+    SymbolDef* def = symtab_lookup(name);
+    if (def && (def->attributes & ATTR_CONSTANT)) return false;
+    if (strchr(name, '`')) return strncmp(name, "System`", 7) != 0;
+    return strcmp(context_home(name, def), "Global`") == 0;
+}
+
 /* Is e built from x, numbers, Plus/Times and Power with an integer or rational
  * exponent only (base algebraic in x), with no numeric radical (an algebraic
  * constant)?  Sets *has_rad when some Power[b, r] (r a non-integer rational)
@@ -1667,7 +1708,7 @@ static bool cg_algebraic_only(const Expr* e, const Expr* x, bool* has_rad) {
          * since v0.6574 (Phase 4.4), but the Automatic cascade takes those
          * answers only after the A/B gate of step 6 (BRONSTEIN_PLAN.md "Phase
          * 4.4: plan"): no answer that is worse where another stage answered. */
-        case EXPR_SYMBOL: return e->data.symbol.name == x->data.symbol.name;
+        case EXPR_SYMBOL: return e->data.symbol.name == x->data.symbol.name || cg_param_symbol(e, x);
         case EXPR_FUNCTION: break;
         default: return false;                  /* Real, String, ... */
     }
@@ -1703,7 +1744,7 @@ static bool cg_algebraic_only(const Expr* e, const Expr* x, bool* has_rad) {
  * A symbolic parameter is kept out of the cascade until the Phase 4.4 A/B
  * gate (Method -> "Bronstein" answers it over Q(a)). */
 static bool cg_symbol_ok(const Expr* e, const Expr* x) {
-    if (e->data.symbol.name == x->data.symbol.name) return true;
+    if (e->data.symbol.name == x->data.symbol.name || cg_param_symbol(e, x)) return true;
     SymbolDef* def = symtab_lookup(e->data.symbol.name);
     return def && (def->attributes & ATTR_CONSTANT);
 }
@@ -1750,11 +1791,13 @@ static bool cg_mixed_only(const Expr* e, const Expr* x, bool* has_mixed_rad,
 
 static bool cascade_gate_trager(const Expr* f, const Expr* x) {
     bool has_rad = false;
+    cg_params_begin("Trager");
     return cg_algebraic_only(f, x, &has_rad) && has_rad;
 }
 
 static bool cascade_gate_bronstein(const Expr* f, const Expr* x) {
     bool has_mixed = false, has_x_rad = false, has_kernel = false;
+    cg_params_begin("Bronstein");
     if (!cg_mixed_only(f, x, &has_mixed, &has_x_rad, &has_kernel)) return false;
     return has_mixed || (has_x_rad && has_kernel);     /* Shape A, or Shape B */
 }
@@ -4267,7 +4310,19 @@ void integrate_init(void) {
         rhs = expr_new_integer(BRONSTEIN_CASCADE_BUDGET_DEFAULT);
         symtab_add_own_value("$BronsteinCascadeBudget", sym, rhs);
         expr_free(sym); expr_free(rhs);
+        sym = expr_new_symbol("Integrate`$CascadeParameters");
+        rhs = expr_new_function(expr_new_symbol("List"), (Expr*[]){ expr_new_string("Trager") }, 1);
+        symtab_add_own_value("Integrate`$CascadeParameters", sym, rhs);
+        expr_free(sym); expr_free(rhs);
     }
+    symtab_set_docstring("Integrate`$CascadeParameters",
+        "Integrate`$CascadeParameters (default {\"Trager\"}) names the stages of the Automatic "
+        "Integrate cascade that an integrand with symbolic parameters may reach: a list of stage "
+        "names ({\"Trager\"}, {\"Bronstein\"}, both, or {}), True for both, False for none. "
+        "\"Trager\" also covers Trager inside ParallelMixedTower's Kummer pieces. A parameter is "
+        "a transcendental constant: an antiderivative holds for all values outside a proper "
+        "Zariski-closed set, a non-elementary verdict outside a countable set. "
+        "Method -> \"Trager\" | \"Bronstein\" answers parametric integrands regardless.");
     symtab_set_docstring("$TragerCascadeBudget",
         "$TragerCascadeBudget is the wall-clock budget in seconds (default 10) of the Trager "
         "stage of the Automatic Integrate cascade; past it the stage declines and the cascade "
