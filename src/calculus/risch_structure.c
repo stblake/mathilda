@@ -18,6 +18,7 @@
 #include "sym_intern.h"
 #include "arithmetic.h"
 #include "risch_field.h"
+#include "context.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -64,6 +65,72 @@ static bool rs_is_list(const Expr* e) {
 }
 
 /* ------------------------------------------------------------------ */
+/* Symbolic parameters of the span identity.                           */
+/* ------------------------------------------------------------------ */
+
+/* True iff symbol name `nm` is already one of the List `vars`. */
+static bool rs_in_vars(const char* nm, const Expr* vars) {
+    for (size_t i = 0; i < vars->data.function.arg_count; i++) {
+        const Expr* v = vars->data.function.args[i];
+        if (v->type == EXPR_SYMBOL && v->data.symbol.name == nm) return true;
+    }
+    return false;
+}
+
+static bool rs_head_is(const Expr* e, const char* name) {
+    return e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+           e->data.function.head->data.symbol.name == intern_symbol(name);
+}
+
+/* Collect (deduplicated interned names) the symbolic PARAMETERS of e: leaf
+ * symbols (function heads are not walked) that are not in `vars`, not
+ * Constant-attributed (Pi, E, EulerGamma, ...) and not kernel symbols
+ * (System`/Mathilda`, e.g. Infinity).  This is the Risch layer's own reading of
+ * a free symbol -- a constant of the derivation (risch_field.c: an unlisted
+ * symbol has derivative 0), such as the c in E^(c x).
+ *
+ * `rat` is true while e sits in a rational-function position (under Plus,
+ * Times, an integer Power's base); a parameter met anywhere else (Sqrt[c],
+ * Log[c], E^c, ...) sets *nonrat.  SolveAlways reads such an atom as one more
+ * unknown and can then report a solution or a contradiction that is not one
+ * for the identity in c (SolveAlways[Sqrt[c] - r c == 0, {c}] -> {{r -> 0}}). */
+static void rs_collect_params(const Expr* e, const Expr* vars, bool rat, bool* nonrat,
+                              const char*** out, size_t* n, size_t* cap) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        const char* nm = e->data.symbol.name;
+        if (rs_in_vars(nm, vars)) return;
+        bool seen = false;
+        for (size_t i = 0; i < *n; i++) if ((*out)[i] == nm) seen = true;
+        if (seen) { if (!rat) *nonrat = true; return; }
+        SymbolDef* def = symtab_lookup(nm);
+        if (def && (def->attributes & ATTR_CONSTANT)) return;
+        /* A kernel symbol is not a parameter.  `is_system` alone cannot tell:
+         * every name the kernel interns at start-up (a, b, c, x, ... among
+         * them) carries it, so ask for the symbol's home context instead --
+         * a bare user symbol lives in Global`. */
+        if (strchr(nm, '`') ? strncmp(nm, "System`", 7) == 0
+                            : strcmp(context_home(nm, def), "Global`") != 0)
+            return;
+        if (!rat) *nonrat = true;
+        if (*n == *cap) {
+            *cap = *cap ? 2 * *cap : 4;
+            *out = realloc(*out, *cap * sizeof(const char*));
+        }
+        (*out)[(*n)++] = nm;
+        return;
+    }
+    if (e->type != EXPR_FUNCTION) return;
+    bool sum_prod = rs_head_is(e, "Plus") || rs_head_is(e, "Times") || rs_head_is(e, "List");
+    bool int_pow = rs_head_is(e, "Power") && e->data.function.arg_count == 2 &&
+                   (e->data.function.args[1]->type == EXPR_INTEGER ||
+                    e->data.function.args[1]->type == EXPR_BIGINT);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        rs_collect_params(e->data.function.args[i], vars,
+                          rat && (sum_prod || (int_pow && i == 0)), nonrat, out, n, cap);
+}
+
+/* ------------------------------------------------------------------ */
 /* The rational Q-span decision.                                       */
 /* ------------------------------------------------------------------ */
 
@@ -105,8 +172,33 @@ Expr* risch_rational_span(const Expr* theta, Expr* const* gens, size_t m,
         (Expr*[]){ num, expr_new_integer(0) }, 2);   /* num == 0 */
     /* Dependent generators make the system underdetermined by design; mute the
      * Solve::svars informational message during this internal probe. */
+    /* The identity must hold for ALL values of the symbolic parameters too, so
+     * they join the SolveAlways variables.  The structure-theorem multipliers
+     * r_i are rational NUMBERS (Bronstein Thm 9.3.x), never functions of the
+     * parameters: left out of `vars`, a parameter c is solved for as one more
+     * unknown beside the c_i, so E^(-c x) over E^(c x) gave the underdetermined
+     * -c - r c == 0 (Solve::nsdim, "not decided") instead of r = -1, and x over
+     * E^(c x) could equally have produced the bogus r = 1/c. */
+    Expr* allvars = rs_cp(vars);
+    bool nonrat = false;   /* a parameter outside a rational position */
+    if (rs_is_list(vars)) {
+        const char** ps = NULL; size_t np = 0, pcap = 0;
+        rs_collect_params(theta, vars, true, &nonrat, &ps, &np, &pcap);
+        for (size_t i = 0; i < m; i++)
+            rs_collect_params(gens[i], vars, true, &nonrat, &ps, &np, &pcap);
+        if (np) {
+            size_t nv = vars->data.function.arg_count;
+            Expr** vv = malloc((nv + np) * sizeof(Expr*));
+            for (size_t i = 0; i < nv; i++) vv[i] = rs_cp(vars->data.function.args[i]);
+            for (size_t i = 0; i < np; i++) vv[nv + i] = expr_new_symbol(ps[i]);
+            expr_free(allvars);
+            allvars = expr_new_function(expr_new_symbol("List"), vv, nv + np);
+            free(vv);
+        }
+        free(ps);
+    }
     arith_warnings_mute_push();
-    Expr* sol = rs_call2("SolveAlways", eqn, rs_cp(vars));
+    Expr* sol = rs_call2("SolveAlways", eqn, allvars);
     arith_warnings_mute_pop();
 
     /* sol is a List of solution-rule-lists; {} means no solution (theta != 0 so
@@ -115,6 +207,9 @@ Expr* risch_rational_span(const Expr* theta, Expr* const* gens, size_t m,
      * unevaluated or gave up) is an undecided answer. */
     Expr* result = NULL;
     if (!rs_is_list(sol)) *failed = true;
+    /* ...unless a parameter sits outside a rational position, where SolveAlways
+     * treats Sqrt[c] / Log[c] as extra unknowns: then {} is not a proof. */
+    if (rs_is_list(sol) && sol->data.function.arg_count == 0 && nonrat) *failed = true;
     if (rs_is_list(sol) && sol->data.function.arg_count >= 1) {
         Expr* first = sol->data.function.args[0];   /* List of Rule[c_i, val] */
         Expr** res = malloc(m * sizeof(Expr*));
@@ -154,12 +249,28 @@ Expr* risch_rational_span(const Expr* theta, Expr* const* gens, size_t m,
         }
         expr_free(srlist);
         if (ok) {
+            /* Certify the relation outside the solver: theta - Sum r_i g_i must
+             * cancel to the exact 0.  SolveAlways solves for every non-variable
+             * atom too (Log[c] -> 0, Sin[x] -> 0) and the rules for those are
+             * dropped above, so its r_i alone are not evidence. */
+            Expr** ts = malloc((m + 1) * sizeof(Expr*));
+            ts[0] = rs_cp(theta);
+            for (size_t i = 0; i < m; i++)
+                ts[i + 1] = rs_times(expr_new_integer(-1), rs_times(rs_cp(res[i]), rs_cp(gens[i])));
+            Expr* chk = rs_call1("Together",
+                expr_new_function(expr_new_symbol("Plus"), ts, m + 1));
+            free(ts);
+            ok = rs_is_zero(chk);
+            expr_free(chk);
+        }
+        if (ok) {
             result = expr_new_function(expr_new_symbol("List"), res, m);
         } else {
             /* A non-rational particular solution: over a rational coefficient
              * field the affine solution space is defined over Q and its pinned
              * point is rational, so this happens only with algebraic or
              * symbolic constants, where a rational point may still exist.
+             * Likewise a solution that fails the certificate above.
              * Undecided, not a proof. */
             for (size_t i = 0; i < m; i++) expr_free(res[i]);
             *failed = true;

@@ -162,6 +162,46 @@ static void test_structure_tristate(void) {
     run_test("Risch`ExpReducible[x^2, x, {{t1, \"Exp\", t1}}]", "False");
 }
 
+/* ---- Symbolic parameters: the r_i are rational NUMBERS ----------------
+ * A free parameter c is a constant of the derivation, and the relation must
+ * hold identically in it.  Until the parameters joined the SolveAlways
+ * variables, c was solved for beside the unknown r: E^(-c x) over E^(c x) gave
+ * the underdetermined -c - r c == 0 ($Failed, Solve::nsdim), so the Bronstein
+ * package reported "exponential relation not decided". */
+static void test_structure_parameters(void) {
+#define EC "{{t1, \"Exp\", c t1}}"
+    run_test("Risch`ExpReducible[-c x, x, " EC "]", "List[-1]");
+    run_test("Risch`ExpReducible[2 c x, x, " EC "]", "List[2]");
+    run_test("Risch`ExpReducible[c x/2, x, " EC "]", "List[Rational[1, 2]]");
+    /* x over E^(c x): new -- never the bogus r = 1/c */
+    run_test("Risch`ExpReducible[x, x, " EC "]", "False");
+    run_test("Risch`ExpReducible[c x, x, {{t1, \"Exp\", t1}}]", "False");
+    /* two parameters, and a parameter beside a Constant symbol */
+    run_test("Risch`ExpReducible[(c + d) x, x, {{t1, \"Exp\", c t1}, {t2, \"Exp\", d t2}}]", "List[1, 1]");
+    run_test("Risch`ExpReducible[c x + Pi x, x, {{t1, \"Exp\", c t1}, {t2, \"Exp\", Pi t2}}]", "List[1, 1]");
+    /* a parameter outside a rational position: SolveAlways reads Sqrt[c] and
+     * Log[c] as extra unknowns ({{r -> 0}}), so neither its solution nor its
+     * contradiction is evidence -- undecided, never a relation or "new"
+     * (even where the relation is true: 2 Sqrt[c] x over E^(Sqrt[c] x)) */
+    run_test("Risch`ExpReducible[2 Sqrt[c] x, x, {{t1, \"Exp\", Sqrt[c] t1}}]", "$Failed");
+    run_test("Risch`ExpReducible[Sqrt[c] x, x, " EC "]", "$Failed");
+    run_test("Risch`ExpReducible[Log[c] x, x, " EC "]", "$Failed");
+#undef EC
+    /* logarithms: Log[x^c] is new over Log[x] (c transcendental); a parameter
+     * inside the argument is a constant of the tower */
+    run_test("Risch`LogReducible[x^c, x, {{t1, \"Log\", 1/x}}]", "False");
+    run_test("Risch`LogReducible[c x^2, x, {{t1, \"Log\", 1/x}}]", "List[2]");
+    run_test("Risch`LogReducible[(x + c)^3, x, {{t1, \"Log\", 1/(x + c)}}]", "List[3]");
+    run_test("Risch`LogReducible[x + c, x, {{t1, \"Log\", 1/x}}]", "False");
+    run_test("Risch`LogReducible[(x^2 + c)^3/x, x, {{t1, \"Log\", 2 x/(x^2 + c)}, {t2, \"Log\", 1/x}}]",
+             "List[3, -1]");
+    /* the span decision and the radical test share the routine */
+    run_test("Risch`RationalSpan[c/x, {1/x}, {x}]", "False");
+    run_test("Risch`RationalSpan[c/x, {c/x, 1/x}, {x}]", "List[1, 0]");
+    run_test("Risch`LogarithmicDerivativeOfRadical[c/x, x, {{t1, \"Log\", 1/x}}]", "False");
+    run_test("Risch`LogarithmicDerivativeOfRadical[c/2, x, {{t1, \"Exp\", c t1}}]", "List[2, t1]");
+}
+
 int main(void) {
     core_init();
 
@@ -173,6 +213,7 @@ int main(void) {
     TEST(test_deep_tower);
     TEST(test_structure_robustness);
     TEST(test_structure_tristate);
+    TEST(test_structure_parameters);
 
     printf("All risch_structure tests passed.\n");
     return 0;

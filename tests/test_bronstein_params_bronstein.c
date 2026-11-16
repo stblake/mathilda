@@ -132,6 +132,12 @@ static void test_bronstein_end_to_end(void) {
         BR_TRUE(buf);
     }
     BR_EQ("Integrate[Sqrt[Global`a + Log[x]]/x, x, Method -> \"Bronstein\"]", "1/3 (2 a Sqrt[a + Log[x]] + 2 Log[x] Sqrt[a + Log[x]])");
+    /* a parameter in the exponent: E^(-c x) is (E^(c x))^-1, decided by the
+     * structure theorem over Q(c) (it was "exponential relation not decided"
+     * while the parameter was solved for as an unknown multiplier) */
+    BR_ANTIDERIV("E^(-Global`c x)/(Global`a E^(Global`c x) + Global`b)^(5/2)", "Bronstein");
+    BR_ANTIDERIV("E^(2 Global`c x)/Sqrt[1 + E^(Global`c x)]", "Bronstein");
+    BR_ANTIDERIV("E^(Global`c x) + E^x", "Bronstein");
     const char* nonelem[] = {
         "Sqrt[Global`a + Log[x]]", "Sqrt[Log[x] + Global`a x]", "Log[x]/Sqrt[x^2 + Global`a]", "1/(x Sqrt[Log[x]^3 + Global`a])",
         /* elementary at a = 1 only: the exceptional set */
