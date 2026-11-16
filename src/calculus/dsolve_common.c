@@ -3183,6 +3183,31 @@ static Expr* ds_definite_inert(const Expr* G, const char* yname, const char* xva
     return out;
 }
 
+/* An ACTIVE Integrate[f(y[x]), y[x]] that stayed unevaluated (the y-side quadrature
+ * of a separable/autonomous first integral did not close: Integrate[1/Log[1 + y^2], y])
+ * is the same value as its inert twin, but ds_definite_inert only rewrites the inert
+ * head -- so the point-condition fit substituted y[x] -> y0 into the integration
+ * variable slot and shipped `Integrate[c, 1]`.  Turn each such node into
+ * Inactive[Integrate][f, y[x]] so the definite-form fit below applies.  `e` consumed;
+ * *changed set when anything was rewritten.  No evaluation (it would re-run the
+ * integral). */
+static Expr* ds_inactivate_y_integrals(Expr* e, const Expr* yofx, bool* changed) {
+    if (!e || e->type != EXPR_FUNCTION) return e;
+    if (head_is(e, SYM_Integrate) && e->data.function.arg_count == 2
+        && expr_eq(e->data.function.args[1], (Expr*)yofx)) {
+        Expr* inact = expr_new_function(expr_new_symbol(SYM_Inactive),
+                          (Expr*[]){ expr_new_symbol(SYM_Integrate) }, 1);
+        expr_free(e->data.function.head);
+        e->data.function.head = inact;
+        *changed = true;
+        return e;
+    }
+    e->data.function.head = ds_inactivate_y_integrals(e->data.function.head, yofx, changed);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        e->data.function.args[i] = ds_inactivate_y_integrals(e->data.function.args[i], yofx, changed);
+    return e;
+}
+
 /* Inactive[Integrate][f, {t, a, a}] -> 0: the zero-width integral the point-condition
  * fit leaves behind once the relation is in definite form.  `e` consumed. */
 static Expr* ds_collapse_zero_width_inert_rec(Expr* e) {
@@ -3427,6 +3452,12 @@ Expr* dsolve_run_implicit(DSolveProblem* P, DSolveTryFn fn) {
          * relation is re-verified (the Leibniz rule in deriv.c makes that a real check),
          * and a branch that fails is dropped rather than shipped — so this can only
          * remove a wrong answer, never add one. */
+        if (P->ncond > 0) {
+            Expr* yofx = ds_make_funcapp(P->fun_names[0], 0, P->ind_names[0]);
+            bool ch = false;
+            gs[b] = ds_inactivate_y_integrals(gs[b], yofx, &ch);
+            expr_free(yofx);
+        }
         if (P->ncond > 0 && ds_has_inactive_integrate(gs[b])) {
             const DSolveCond* c0 = NULL;
             for (size_t i = 0; i < P->ncond; i++)

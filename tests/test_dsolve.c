@@ -3457,6 +3457,22 @@ static void t_tangent_line_ivp(void) {
                "Head[s] =!= List || !FreeQ[s, C[1]]]");
 }
 
+/* Separable first integral with a y-integral that does not close.  The split read
+ * g = F(x, 2) = Log[5] for the autonomous y' == Log[1 + y^2] (the structural split
+ * required factors on BOTH sides), and the IVP fit substituted y[x] -> 1 into the
+ * ACTIVE unevaluated Integrate's variable slot, shipping `Integrate[c, 1]`. */
+static void t_implicit_ivp_active_integral(void) {
+    check_form("DSolve[y'[x] == Log[1 + y[x]^2], y, x]",
+               "{{-x + Integrate[1/Log[1 + y[x]^2], y[x]] == C[1]}}");
+    check_true("Module[{s = DSolve[{y'[x] == Log[1 + y[x]^2], y[0] == 1}, y, x]}, "
+               "Head[s] === List && FreeQ[s, Integrate[_, _?NumericQ]] && "
+               "!FreeQ[s, Inactive[Integrate][_, {_, 1, y[x]}]] && FreeQ[s, C[_]]]");
+    /* the fitted relation still differentiates back to the ODE (Leibniz rule) */
+    check_true("Module[{s = DSolve[{y'[x] == Log[1 + y[x]^2], y[0] == 1}, y, x], r}, "
+               "r = D[s[[1, 1, 1]] - s[[1, 1, 2]], x] /. Derivative[1][y][x] -> Log[1 + y[x]^2]; "
+               "PossibleZeroQ[Activate[r]]]");
+}
+
 /* A Clairaut equation written NONLINEARLY in y.  `Clairaut` declined on the
  * nonlinearity and `SolvableForY` discards the family on purpose (for a Clairaut
  * equation its denominator p - dG/dx vanishes identically), so nobody owned it. */
@@ -4144,6 +4160,7 @@ int main(void) {
     TEST(t_m61_autonomous_implicit_definite_fit);
     TEST(t_m61_separable_singular_ivp);
     TEST(t_tangent_line_ivp);
+    TEST(t_implicit_ivp_active_integral);
     TEST(t_m61_clairaut_quadratic_in_y);
     TEST(t_m61_bounded_latency);
 

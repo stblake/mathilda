@@ -1014,6 +1014,19 @@ static void genfd_cache_reset(void) {
     g_genfd_count = 0;
 }
 
+/* Release every qqbar-side memo (see flint_qqbar.h).  Called once at exit by
+ * flint_bridge's exit handler, BEFORE flint_cleanup_master tears down FLINT's
+ * thread-local pools: the cached qqbar/fmpz_poly values hold fmpz bigints, and
+ * `leaks`/valgrind cannot follow FLINT's tagged fmpz pointers, so a reachable
+ * cache entry was reported as an orphaned mpz page plus its limbs (155 "leaks"
+ * after one DSolve whose Simplify calls filled the cache). */
+void flint_qqbar_release_caches(void) {
+    flint_qqbar_cache_reset();
+    q2e_cache_reset();
+    wlroots_reset();
+    genfd_cache_reset();
+}
+
 /* On success set *Mout (a reference into the cache, valid until the next reset),
  * *nout (degree) and *canon (1 iff gen is the canonical integer generator); return
  * 1.  Return 0 iff gen is not a constant algebraic number. */

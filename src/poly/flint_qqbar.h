@@ -164,4 +164,8 @@ Expr* flint_qqbar_gen_minpoly_coeffs(const Expr* gen);
  * non-field entry, or no FLINT).  Does not take ownership of flat[]. */
 Expr* flint_qqbar_nf_mat_rref(Expr** flat, int r, int c);
 
+/* Free the module's static memos (qqbar values, Root-object forms, sorted
+ * roots, generator minpolys).  Exit-time only; FLINT builds only. */
+void flint_qqbar_release_caches(void);
+
 #endif /* FLINT_QQBAR_H */

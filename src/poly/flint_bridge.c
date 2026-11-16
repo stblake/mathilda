@@ -8760,12 +8760,20 @@ int flint_linear_system_terms(const Expr* equation,
     return ok;
 }
 
+/* Exit: first the static memos that HOLD FLINT values, then FLINT's own pools.
+ * The order matters -- clearing an fmpz after flint_cleanup_master would hand
+ * its mpz back to a pool that no longer exists. */
+static void flint_bridge_exit(void) {
+    flint_qqbar_release_caches();
+    flint_cleanup_master();
+}
+
 void flint_bridge_init(void) {
     /* FLINT keeps thread-local memory pools (fmpz temporaries, prime caches)
      * that it reuses across calls and only releases at thread/program teardown.
      * Without this, valgrind reports them as "possibly lost" pool noise. Release
      * them at normal exit; safe because no FLINT call outlives main(). */
-    atexit(flint_cleanup_master);
+    atexit(flint_bridge_exit);
 
     symtab_add_builtin(SYM_FLINT_PolynomialGCD, builtin_flint_polynomialgcd);
     symtab_get_def(SYM_FLINT_PolynomialGCD)->attributes |= ATTR_PROTECTED;

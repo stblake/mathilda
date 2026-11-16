@@ -142,9 +142,14 @@ static bool sep_find_split(DSolveProblem* P, Expr** g_out, Expr** h_out,
             else if (!ds_contains(fi, xvar)) hy[nhy++] = expr_copy(fi);
             else ok = false;
         }
-        if (ok && ngx > 0 && nhy > 0) {
-            g = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), gx, ngx));
-            h = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), hy, nhy));
+        /* An empty side is the constant 1: an autonomous F(Y) is g = 1, h = F, not a
+         * sampled g = F(x, 2) (y' == Log[1 + y^2] split as g = Log[5] and carried a
+         * spurious Log[5] content through both integrals). */
+        if (ok && (ngx > 0 || nhy > 0)) {
+            g = ngx ? eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), gx, ngx))
+                    : expr_new_integer(1);
+            h = nhy ? eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), hy, nhy))
+                    : expr_new_integer(1);
         } else {
             for (size_t i = 0; i < ngx; i++) expr_free(gx[i]);
             for (size_t i = 0; i < nhy; i++) expr_free(hy[i]);
