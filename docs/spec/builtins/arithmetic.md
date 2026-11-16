@@ -1805,6 +1805,17 @@ Complex number functions.
   `MPFR`, or `Rational`). For nonzero numeric complex `z`, returns
   `z / Abs[z]`. `Complex[MPFR, MPFR]` goes through a direct
   `mpfr_div`-on-components path at MPFR precision. `Listable`.
+- **`Abs` / `Sign` of an exact real constant (v0.6584).** The algebraic
+  (FLINT) certificate can decline, for example on `Zeta[3]`. The sign is then
+  taken as the comparison heads decide `e` against 0
+  (`comparisons_real_constant_sign`): `Sign[-1 + Zeta[3]]` is `1` and
+  `Abs[-5/4 + Zeta[3]]` is `5/4 - Zeta[3]`, which were left unevaluated before.
+  Only a *nonzero* sign is used. A hidden zero such as
+  `Sqrt[2] + Sqrt[3] - Sqrt[5 + 2 Sqrt[6]]` keeps `Abs[...]` and `Sign[...]`
+  unevaluated, as in the reference.
+  Fixed in the same release: `Abs` of a negative exact sum no longer moves the
+  terms out of its argument in place. After `d = Pi - 22/7; Abs[d]`, `d`'s
+  OwnValue had been left as `Plus[Null, Null]`, and `Abs[d] == -d` segfaulted.
 - `Conjugate[z]`: Complex conjugate.  Folds `Conjugate[Conjugate[z]] -> z`
   (involution) and `Conjugate[f[..]] -> f[..]` when `f` is one of `Re`,
   `Im`, `Abs`, `Arg` (all real-valued by construction).

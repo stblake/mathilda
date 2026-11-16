@@ -373,10 +373,8 @@ static bool fold_op(unsigned op, Slot a, Slot b, Slot imm, Slot* out) {
         case OP_LE_I: r.i = a.i <= b.i; break;
         case OP_GT_I: r.i = a.i >  b.i; break;
         case OP_GE_I: r.i = a.i >= b.i; break;
-        case OP_LT_R: r.i = a.r <  b.r; break;
-        case OP_LE_R: r.i = a.r <= b.r; break;
-        case OP_GT_R: r.i = a.r >  b.r; break;
-        case OP_GE_R: r.i = a.r >= b.r; break;
+        /* Real comparisons are NOT folded: the VM applies Internal`$EqualTolerance
+         * read at call time (equal_tol.h), which compile time cannot know. */
         case OP_NOT:  r.i = !a.i;       break;
         case OP_AND:  r.i = a.i && b.i; break;
         case OP_OR:   r.i = a.i || b.i; break;
@@ -397,10 +395,6 @@ static bool fold_op(unsigned op, Slot a, Slot b, Slot imm, Slot* out) {
         case OP_SUB_IK: FOLD_I(ci_sub(a.i, imm.i, &r.i)); break;
         case OP_SUB_KI: FOLD_I(ci_sub(imm.i, a.i, &r.i)); break;
         case OP_MUL_IK: FOLD_I(ci_mul(a.i, imm.i, &r.i)); break;
-        case OP_LT_RK: r.i = a.r <  imm.r; break;
-        case OP_LE_RK: r.i = a.r <= imm.r; break;
-        case OP_GT_RK: r.i = a.r >  imm.r; break;
-        case OP_GE_RK: r.i = a.r >= imm.r; break;
         case OP_LT_IK: r.i = a.i <  imm.i; break;
         case OP_LE_IK: r.i = a.i <= imm.i; break;
         case OP_GT_IK: r.i = a.i >  imm.i; break;

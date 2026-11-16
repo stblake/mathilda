@@ -439,6 +439,7 @@ set(COMMON_SRC
     ../src/real.c
     ../src/numberform.c
     ../src/comparisons.c
+    ../src/equal_tol.c
     ../src/sparse/sparse_core.c
     ../src/sparse/sparse_build.c
     ../src/sparse/sparse_thread.c

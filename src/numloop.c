@@ -6,6 +6,7 @@
  * no per-iteration Expr allocation. Gated hard on the correctness contract in
  * numloop.h: only machine-real, inexact-result computations take this path.
  */
+#include "equal_tol.h"
 #include "numloop.h"
 #include "eval.h"
 #include "symtab.h"
@@ -3120,18 +3121,13 @@ void numloop_pred_free(NumPred* p) {
     free(p);
 }
 
-/* compare_numeric's inexact branch, reproduced exactly -- see the header note.
- * The constant is 2^-46; `diff == 0.0` is kept so that two infinities of the
- * same sign compare equal rather than through a NaN difference. */
+/* compare_numeric's inexact branch -- the SAME helper it calls
+ * (mth_machine_tolerant_cmp, equal_tol.h), so the predicate fast path and the
+ * interpreter cannot disagree, Internal`$EqualTolerance included.  Two
+ * infinities of one sign compare equal (identical values), not through a NaN
+ * difference. */
 static bool pred_cmp(double a, double b, int op) {
-    double diff = a - b;
-    if (diff < 0) diff = -diff;
-    double ma = a < 0 ? -a : a;
-    double mb = b < 0 ? -b : b;
-    double max_val = ma > mb ? ma : mb;
-    int c;
-    if (diff <= max_val * 1.4210854715202004e-14 || diff == 0.0) c = 0;
-    else c = (a < b) ? -1 : 1;
+    int c = mth_machine_tolerant_cmp(a, b, mth_machine_equal_rel());
     return cmp_eval((double)c, 0.0, op);
 }
 

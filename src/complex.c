@@ -1,3 +1,4 @@
+#include "comparisons.h"   /* comparisons_real_constant_sign */
 #include "complex.h"
 #include "symtab.h"
 #include "eval.h"
@@ -274,14 +275,19 @@ static bool exact_constant_parts(Expr* arg, Expr** re_out, Expr** im_out,
 
 /* -x, evaluated, with the sign distributed over a sum (Pi - 4 -> 4 - Pi, as
  * Mathematica prints Abs[Pi - 4]); Mathilda's Times does not distribute a
- * numeric factor over Plus itself.  Consumes x. */
+ * numeric factor over Plus itself.  Consumes x.
+ *
+ * x is usually a refcount-shared copy of the caller's argument (an
+ * exact_constant_parts real part is expr_copy(arg)), so its terms are taken
+ * by reference, never moved out: stealing them in place emptied the shared
+ * node, and after d = Pi - 22/7; Abs[d] the OwnValue of d read
+ * Plus[Null, Null] (and Abs[d] == -d segfaulted). */
 static Expr* cx_negate(Expr* x) {
     if (head_is(x, SYM_Plus)) {
         size_t n = x->data.function.arg_count;
-        Expr** terms = malloc(sizeof(Expr*) * n);
+        Expr** terms = malloc(sizeof(Expr*) * (n ? n : 1));
         for (size_t k = 0; k < n; k++) {
-            Expr* a[2] = { expr_new_integer(-1), x->data.function.args[k] };
-            x->data.function.args[k] = NULL;
+            Expr* a[2] = { expr_new_integer(-1), expr_copy(x->data.function.args[k]) };
             terms[k] = expr_new_function(expr_new_symbol(SYM_Times), a, 2);
         }
         expr_free(x);
@@ -632,7 +638,18 @@ Expr* builtin_abs(Expr* res) {
         mpz_clear(num); mpz_clear(den);
         return r;
     }
-    return exact_constant_head(arg, CX_ABS);
+    Expr* r = exact_constant_head(arg, CX_ABS);
+    if (r) return r;
+    /* The algebraic certificate declines (Zeta[3] - 5/4): the sign as the
+     * comparison heads decide it. */
+    int sg;
+    /* Only a NONZERO sign: a hidden zero (Sqrt[2] + Sqrt[3] - Sqrt[5 + 2
+     * Sqrt[6]]) stays Abs[...], as in the reference. */
+    if (comparisons_real_constant_sign(arg, &sg) && sg != 0) {
+        if (sg > 0) { res->data.function.args[0] = NULL; return arg; }
+        return cx_negate(expr_copy(arg));
+    }
+    return NULL;
 }
 
 /* Sign[x] returns -1, 0, or 1 for a real numeric x and z/Abs[z] for a
@@ -735,7 +752,12 @@ Expr* builtin_sign(Expr* res) {
         return eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), times_args, 2));
     }
 
-    return exact_constant_head(arg, CX_SIGN);
+    Expr* r = exact_constant_head(arg, CX_SIGN);
+    if (r) return r;
+    /* As in Abs: Sign[-1 + Zeta[3]] is 1; a hidden zero stays Sign[...]. */
+    int sg;
+    if (comparisons_real_constant_sign(arg, &sg) && sg != 0) return expr_new_integer(sg);
+    return NULL;
 }
 
 Expr* builtin_conjugate(Expr* res) {

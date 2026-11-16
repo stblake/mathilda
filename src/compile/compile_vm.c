@@ -13,6 +13,7 @@
  * compile_internal.h — it never sees the Ctx builder or compile_emit.h — plus a
  * handful of leaf helpers the emit modules also use (the assoc value coercions
  * and the managed-constant materialisers), declared in compile_internal.h. */
+#include "../equal_tol.h"
 #include "compile.h"
 #include "compile_internal.h"    /* Slot / Instr / CompiledProgram / opcodes / VM_TLS */
 #include "../arithmetic.h"       /* expr_new_* / expr_free / expr_bigint_normalize */
@@ -1033,6 +1034,10 @@ static bool vm_par_run(const ParLoop* pl, Slot* R) {
 }
 
 static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
+    /* Equal / Less / ... on reals ignore the last Internal`$EqualTolerance
+     * digits, as the interpreter does (equal_tol.h); read once per run, at
+     * call time, so Block[{Internal`$EqualTolerance = 0}, cf[...]] applies. */
+    const double eqrel = mth_machine_equal_rel();
     *failed = false;
     if (n == 0) return;
     size_t pc = 0;
@@ -1135,10 +1140,10 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(SUB_IK): IOP(ci_sub(RA.i, c->imm.i, &RD.i));
             OP(SUB_KI): IOP(ci_sub(c->imm.i, RA.i, &RD.i));
             OP(MUL_IK): IOP(ci_mul(RA.i, c->imm.i, &RD.i));
-            OP(LT_RK): RD.i = RA.r <  c->imm.r; NEXT();
-            OP(LE_RK): RD.i = RA.r <= c->imm.r; NEXT();
-            OP(GT_RK): RD.i = RA.r >  c->imm.r; NEXT();
-            OP(GE_RK): RD.i = RA.r >= c->imm.r; NEXT();
+            OP(LT_RK): RD.i = mth_tol_lt(RA.r, c->imm.r, eqrel); NEXT();
+            OP(LE_RK): RD.i = mth_tol_le(RA.r, c->imm.r, eqrel); NEXT();
+            OP(GT_RK): RD.i = mth_tol_gt(RA.r, c->imm.r, eqrel); NEXT();
+            OP(GE_RK): RD.i = mth_tol_ge(RA.r, c->imm.r, eqrel); NEXT();
             OP(LT_IK): RD.i = RA.i <  c->imm.i; NEXT();
             OP(LE_IK): RD.i = RA.i <= c->imm.i; NEXT();
             OP(GT_IK): RD.i = RA.i >  c->imm.i; NEXT();
@@ -1291,14 +1296,14 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(KERN2_RR): { double orr, oi; RD.r = ((kfn_c2)c->imm.p)(RA.r, 0.0, RB.r, 0.0, &orr, &oi) ? orr : NAN; } NEXT();
             OP(KERN2_RC): { double orr, oi; if (((kfn_c2)c->imm.p)(RA.r, 0.0, RB.r, 0.0, &orr, &oi)) RD.z = orr + oi * I; else RD.z = NAN + NAN * I; } NEXT();
             OP(KERN2_CC): { double orr, oi; if (((kfn_c2)c->imm.p)(creal(RA.z), cimag(RA.z), creal(RB.z), cimag(RB.z), &orr, &oi)) RD.z = orr + oi * I; else RD.z = NAN + NAN * I; } NEXT();
-            OP(LT_I): RD.i = RA.i < RB.i; NEXT();  OP(LT_R): RD.i = RA.r < RB.r; NEXT();
-            OP(LE_I): RD.i = RA.i <= RB.i; NEXT(); OP(LE_R): RD.i = RA.r <= RB.r; NEXT();
-            OP(GT_I): RD.i = RA.i > RB.i; NEXT();  OP(GT_R): RD.i = RA.r > RB.r; NEXT();
-            OP(GE_I): RD.i = RA.i >= RB.i; NEXT(); OP(GE_R): RD.i = RA.r >= RB.r; NEXT();
-            OP(EQ_I): RD.i = RA.i == RB.i; NEXT(); OP(EQ_R): RD.i = RA.r == RB.r; NEXT();
-            OP(EQ_C): RD.i = RA.z == RB.z; NEXT();
-            OP(NE_I): RD.i = RA.i != RB.i; NEXT(); OP(NE_R): RD.i = RA.r != RB.r; NEXT();
-            OP(NE_C): RD.i = RA.z != RB.z; NEXT();
+            OP(LT_I): RD.i = RA.i < RB.i; NEXT();  OP(LT_R): RD.i = mth_tol_lt(RA.r, RB.r, eqrel); NEXT();
+            OP(LE_I): RD.i = RA.i <= RB.i; NEXT(); OP(LE_R): RD.i = mth_tol_le(RA.r, RB.r, eqrel); NEXT();
+            OP(GT_I): RD.i = RA.i > RB.i; NEXT();  OP(GT_R): RD.i = mth_tol_gt(RA.r, RB.r, eqrel); NEXT();
+            OP(GE_I): RD.i = RA.i >= RB.i; NEXT(); OP(GE_R): RD.i = mth_tol_ge(RA.r, RB.r, eqrel); NEXT();
+            OP(EQ_I): RD.i = RA.i == RB.i; NEXT(); OP(EQ_R): RD.i = mth_tol_eq(RA.r, RB.r, eqrel); NEXT();
+            OP(EQ_C): RD.i = mth_tol_eq(creal(RA.z), creal(RB.z), eqrel) && mth_tol_eq(cimag(RA.z), cimag(RB.z), eqrel); NEXT();
+            OP(NE_I): RD.i = RA.i != RB.i; NEXT(); OP(NE_R): RD.i = mth_tol_ne(RA.r, RB.r, eqrel); NEXT();
+            OP(NE_C): RD.i = !(mth_tol_eq(creal(RA.z), creal(RB.z), eqrel) && mth_tol_eq(cimag(RA.z), cimag(RB.z), eqrel)); NEXT();
             /* SameQ on machine numbers, matching expr_eq (src/expr.c:622):
              * two NaNs ARE the same, which is what lets an iteration whose
              * orbit reaches NaN terminate instead of spinning.  Complex is

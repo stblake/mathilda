@@ -370,8 +370,8 @@ Result: HoldForm[(1 + x)^20 == 1 + 199999999999999999999999999/10000000000000000
 Theorem: HoldForm[ForAll[{x}, (1 + x)^20 == -1/10000000000000000000000000*x + (1 + x)^20]]
 Tier: "Heuristic"
 TrustedSteps: {"Mathilda's PossibleZeroQ / Simplify (a heuristic check, not a proof)"}
-Verified: Missing["Heuristic", True]
-Summary: ProofObject[«Identity» Verified: Missing[Heuristic, True] | Mathilda Heuristic | T s]
+Verified: Missing["Heuristic", False]
+Summary: ProofObject[«Identity» Verified: Missing[Heuristic, False] | Mathilda Heuristic | T s]
 === 18 HoldForm[Certify[(1 + x)^20 == Expand[(1 + x)^20] - x/10^25, Verify -> False]]
 Messages: {}
 Head: ProofObject

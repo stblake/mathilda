@@ -1083,6 +1083,14 @@ check-differentialforms: Mathilda
 check-corpus-indvar:
 	python3 tools/check_corpus_indvar.py
 
+# `make check-equality` — do the comparison heads agree with the true order of
+# two exact quantities? Rational approximations (continued-fraction
+# convergents) of 22 constants and 10^-k shifts up to k = 400, checked against
+# ==, !=, <, <=, >, >=, PossibleZeroQ, Max, Sign and complex Equal, plus the
+# Equal-xor-Unequal and Less-xor-GreaterEqual invariants. 22/7 == Pi was True.
+check-equality: $(TARGET)
+	./$(TARGET) -file tools/check_equality_soundness.m
+
 # `make check-array-exactness` — does any routine hand back a TWO-HEADED array
 # from a machine input? A routine given a packed array must answer with a scalar
 # or an array of one element head; an exact 0 invented inside a machine-real
@@ -1276,7 +1284,7 @@ print-flags:
 print-libs:
 	@echo "$(PC_LIBS_PRIVATE)"
 
-.PHONY: bench-osp-famous all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-bronstein-coverage check-bronstein-completeness bench-integrate bench-integrate-compact check-feyncalc check-differentialforms check-interval check-packed-aware \
+.PHONY: bench-osp-famous all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-equality check-bronstein-coverage check-bronstein-completeness bench-integrate bench-integrate-compact check-feyncalc check-differentialforms check-interval check-packed-aware \
         check-messages check-corpus-indvar \
         check-array-exactness check-nd-surfaces check-compile-coverage \
         check-refine-stress \

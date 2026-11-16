@@ -263,6 +263,31 @@ key, so `PossibleZeroQ[f[2 (x + 1)] - f[2 x + 2]]` is `True`, while
 `f[x] - f[y]` and `f[a] - g[a]` stay `False` (v0.6499). The
 internal `zero_test_decide` used by the solvers is unchanged.
 
+**A residual that holds steady at a precision-honouring rung is a value
+(v0.6584).** A residual below the machine "obviously non-zero" gate climbs the
+precision ladder (200, 500 and 1000 bits). Until v0.6584, one that never
+shrank was read as a cancellation zero unless the expression was algebraic,
+which made `PossibleZeroQ[22/7 - Pi]` `True` (and with it `22/7 == Pi`).
+
+The rule now distinguishes the two cases:
+- **The rung honoured its precision**, meaning no machine real and no MPFR
+  leaf far short of the rung. Then a plateau means either a genuine value or a
+  cancellation deeper than that rung, so the ladder keeps climbing, and the
+  top rung's noise floor decides. A plateau that only *lower* rungs agree on
+  is no evidence: at |x| ~ 60, `1 - Tanh[x/2]^2` needs about 400 bits.
+- **The rung was pinned**, meaning a head ignored the requested precision.
+  Only this case keeps the old lenient verdict.
+
+Two further fixes:
+- **The deep-zero early exit** now requires the residual to sit below the
+  floor of the rung that saw it shrink, not a fixed 2^-96 of scale. The machine
+  residual of a constant within 2^-53 of zero is rounding noise, so
+  `E^Pi - 239432496618343/10346816338556` (8.6 10^-29) had "shrunk" to its
+  true value and was declared zero.
+- **Constants with a tiny exact term.** A constant holding an exact term too
+  small for the top rung to see against its scale (`I (Pi + 10^-400) - I Pi`)
+  is read once at the precision that keeps every exact term.
+
 **The magnitude of a logarithm is the logarithm of its argument's (v0.6577).**
 The numeric stages compare a residual against an operand *scale*. `Log[a]`
 used to be scored by the generic rule, as `|a|`, so `Log[43774]` (value about

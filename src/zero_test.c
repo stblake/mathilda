@@ -174,15 +174,21 @@ static const int ZT_OVERFLOW_SHELL_BITS[] = { ZT_NUMERATOR_BITS, 4, 2, 1, 0 };
 #define ZT_AMBIGUITY_GUARD_BITS 4
 
 /* Deep-zero early-exit for the precision ladder. Once a residual has been
- * OBSERVED to shrink geometrically AND has fallen below scale * 2^(-N), it is a
- * genuine zero to overwhelming confidence: a real non-zero cannot shrink below
- * its own magnitude, and no algebraic/transcendental identity this system
- * produces cancels past ~N bits. Climbing the remaining (500/1000-bit) rungs
- * on a large tree is then pure cost — the dominant expense on big parametric
- * antiderivative round-trips (a 60k-leaf D[r,x]-f numericalised at 1000 bits
- * costs ~0.8 s per sample). N is set far above machine precision (52) and any
- * realistic cancellation depth, yet far below the first MPFR rung (200 bits)
- * so a true zero triggers it at that rung. */
+ * OBSERVED to shrink AND has fallen below scale * 2^(-N), it is a genuine zero
+ * and the remaining (500/1000-bit) rungs are pure cost -- the dominant expense
+ * on big parametric antiderivative round-trips (a 60k-leaf D[r,x]-f
+ * numericalised at 1000 bits costs ~0.8 s per sample).
+ *
+ * N is NOT a fixed depth: it is the floor of the rung that observed the shrink,
+ * ZT_DEEP_ZERO_BITS or (bits - ZT_NONZERO_HEADROOM), whichever is deeper.  A
+ * shrink from the machine rung is no evidence of a zero by itself: the machine
+ * residual of a constant within 2^-53 of zero is rounding noise, not its
+ * magnitude, so the value it "shrinks" to at 200 bits can be the genuine one.
+ * With a fixed N = 96, E^Pi - 239432496618343/10346816338556 (8.6*10^-29,
+ * 2^-98 of scale) read 0 at machine precision, 2^-98 at 200 bits, and was
+ * declared zero -- so that E^Pi == r was True.  A true zero at a 200-bit rung
+ * sits ~2^-200 of scale, below its 170-bit floor, so it still exits there.
+ * (zt_resolve_machine_nonzero keeps the plain 96-bit depth; see there.) */
 #define ZT_DEEP_ZERO_BITS 96
 
 /* A symbol-free constant at a huge operand scale whose residual is still
@@ -1029,6 +1035,13 @@ static double nonzero_threshold(double scale, long p_bits) {
     return scale - (double)shift;
 }
 
+/* The deep-zero early-exit floor at a rung of `bits` (see ZT_DEEP_ZERO_BITS). */
+static double zt_deep_zero_floor(double scale, long bits) {
+    long n = bits - ZT_NONZERO_HEADROOM;
+    if (n < ZT_DEEP_ZERO_BITS) n = ZT_DEEP_ZERO_BITS;
+    return scale - (double)n;
+}
+
 /* Rung-0 (machine) obvious-non-zero gate. A residual exceeding scale * 2^-N is
  * too large to be rounding noise (machine eps ~ 2^-52) or plausible deeper
  * cancellation, so it settles FALSE without climbing the ladder (the fast path
@@ -1203,16 +1216,25 @@ static double magnitude_scale_at(const Expr* e, NumericSpec spec) {
     return magnitude_scale(e);
 }
 
-/* True iff a numeric value carries a machine real anywhere (Complex parts
- * included).  At an MPFR rung that is the mark of a head that ignored the
- * requested precision: machine reals contaminate every sum or product they
- * enter. */
-static bool zt_has_machine_real(const Expr* z) {
+/* True iff a value read at an MPFR rung of `bits` did NOT honour that
+ * precision: it carries a machine real anywhere (Complex parts included), or an
+ * MPFR leaf whose precision falls well short of the rung -- a head that
+ * evaluated at a lower precision than asked and wrapped the result.  Such a
+ * value is no more accurate than the lower precision it really carries, so a
+ * residual that holds steady across rungs proves nothing about it.  (A
+ * machine real at an MPFR rung contaminates every sum or product it enters.) */
+#define ZT_PREC_SHORTFALL_BITS 64
+static bool zt_precision_not_honoured(const Expr* z, long bits) {
     if (!z) return false;
     if (z->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (z->type == EXPR_MPFR)
+        return numeric_width_precision_bits((long)mpfr_get_prec(z->data.mpfr))
+               < bits - ZT_PREC_SHORTFALL_BITS;
+#endif
     if (z->type != EXPR_FUNCTION) return false;
     for (size_t i = 0; i < z->data.function.arg_count; ++i)
-        if (zt_has_machine_real(z->data.function.args[i])) return true;
+        if (zt_precision_not_honoured(z->data.function.args[i], bits)) return true;
     return false;
 }
 
@@ -1302,7 +1324,7 @@ static ZeroTestResult evaluate_rung_core(const Expr* e, long bits,
     }
     double mag = 0.0;
     bool ok = expr_log2_abs(z, &mag);
-    if (out_pinned && bits > 53) *out_pinned = zt_has_machine_real(z);
+    if (out_pinned && bits > 53) *out_pinned = zt_precision_not_honoured(z, bits);
     expr_free(z);
     if (ok && mag == INFINITY) {
         /* Numeric but OUT OF RANGE: a symbol-dependent exponent drove E/Gamma/…
@@ -1530,6 +1552,11 @@ static ZeroTestResult zt_resolve_machine_nonzero(const Expr* e, double mag, doub
         /* an MPFR-rung pole is a genuine pole (evaluate_rung_core already defers
          * a machine-precision 0.0 denominator up the ladder): non-zero */
         if (m == INFINITY) { got = -1; break; }
+        /* (The fixed 96-bit depth, not the rung floor decide_numeric uses:
+         * this path is entered on a machine residual ABOVE the obvious gate --
+         * a deep cancellation, whose top-level numeric scale under-reads the
+         * structural one, so the rung floor would miss genuine zeros in the
+         * tails, e.g. at x ~ -55 in Bronstein's torsion antiderivatives.) */
         if (isfinite(scale) && m < scale - ZT_DEEP_ZERO_BITS) {
             verdict = ZERO_TEST_TRUE;
             got = -1;                     /* decided: skip the trend tests */
@@ -1571,6 +1598,27 @@ static ZeroTestResult zt_resolve_machine_nonzero(const Expr* e, double mag, doub
     return verdict;
 }
 
+/* log2 of the smallest non-zero EXACT rational leaf of `e` (Integer, BigInt,
+ * Rational of either size), +INFINITY when it has none.  For a constant this
+ * bounds the precision at which every exact term is still visible: below
+ * scale - leaf bits, the term 10^-400 in I (Pi + 10^-400) - I Pi rounds away
+ * at every ladder rung and the residual reads an exact 0. */
+static double zt_min_exact_leaf_l2(const Expr* e) {
+    if (!e) return INFINITY;
+    if (expr_is_integer_like((Expr*)e) || is_rational_like(e)) {
+        double m = 0.0;
+        if (expr_log2_abs(e, &m) && isfinite(m)) return m;
+        return INFINITY;
+    }
+    if (e->type != EXPR_FUNCTION) return INFINITY;
+    double best = INFINITY;
+    for (size_t i = 0; i < e->data.function.arg_count; ++i) {
+        double m = zt_min_exact_leaf_l2(e->data.function.args[i]);
+        if (m < best) best = m;
+    }
+    return best;
+}
+
 static ZeroTestResult decide_numeric(const Expr* e, bool* out_overflow) {
     double mag = -INFINITY, scale = 0.0;
     bool ovf = false;
@@ -1594,6 +1642,24 @@ static ZeroTestResult decide_numeric(const Expr* e, bool* out_overflow) {
         return ZERO_TEST_UNKNOWN;
     }
 
+    /* A CONSTANT (no sample point to re-draw) holding an exact term smaller
+     * than the top rung can see relative to its scale: read it once at the
+     * precision that keeps every exact term (zt_min_exact_leaf_l2).  A genuine
+     * non-zero then shows above that rung's floor and is settled FALSE; a
+     * zero, or a value that still reads at the floor, goes on as before.  Not
+     * reached for ordinary constants, whose leaves are all within the ladder. */
+    if (!out_overflow) {
+        double leaf = zt_min_exact_leaf_l2(e);
+        double need = scale - leaf + 64.0 + ZT_NONZERO_HEADROOM;
+        if (isfinite(leaf) && need > (double)PRECISION_LADDER[PRECISION_LADDER_LEN - 1] &&
+            need <= (double)ZT_CONST_MAX_BITS) {
+            double m = 0.0;
+            bool pinned = false;
+            ZeroTestResult rr = evaluate_rung(e, (long)ceil(need), &m, NULL, scale, NULL, &pinned);
+            if (rr == ZERO_TEST_FALSE && !pinned) return ZERO_TEST_FALSE;
+        }
+    }
+
     /* Huge-scale deep-cancellation guard (#5): at an astronomically large
      * operand scale, a machine residual above the obvious gate may be a
      * catastrophic-cancellation artifact rather than a genuine value, so the
@@ -1606,6 +1672,9 @@ static ZeroTestResult decide_numeric(const Expr* e, bool* out_overflow) {
 
     double prev_mag = mag;
     bool honored = false;
+    /* The verdict of the latest rung whose value honoured its precision yet
+     * did not shrink (see the never-shrank branch); UNKNOWN while none. */
+    ZeroTestResult plateau_rr = ZERO_TEST_UNKNOWN;
     for (int i = 1; i < PRECISION_LADDER_LEN; ++i) {
         double m = -INFINITY;
         bool pinned = false;
@@ -1638,6 +1707,7 @@ static ZeroTestResult decide_numeric(const Expr* e, bool* out_overflow) {
             /* Residual shrank: precision honoured, still consistent with zero. */
             honored = true;
             prev_mag = m;
+            plateau_rr = ZERO_TEST_UNKNOWN;
             /* Deep-zero early exit: the residual has shrunk geometrically AND is
              * now far below any plausible cancellation floor, so it is a genuine
              * zero.  Stop before the costly 500/1000-bit rungs (see
@@ -1646,7 +1716,7 @@ static ZeroTestResult decide_numeric(const Expr* e, bool* out_overflow) {
              * FAILURES.md case B2): it does not change any verdict — a genuine
              * non-zero cannot shrink below its own magnitude — only the number of
              * rungs climbed for a confirmed zero. */
-            if (m < scale - ZT_DEEP_ZERO_BITS)
+            if (m < zt_deep_zero_floor(scale, PRECISION_LADDER[i]))
                 return ZERO_TEST_TRUE;
             continue;
         }
@@ -1658,18 +1728,33 @@ static ZeroTestResult decide_numeric(const Expr* e, bool* out_overflow) {
              * TRUE if still within it). */
             return rr;
         }
-        /* Never shrank. For a precision-honoured ALGEBRAIC expression (MPFR is
-         * exact for radicals/arithmetic), a residual that stays well ABOVE the
-         * machine-noise floor is a genuine non-zero whose operand scale is merely
-         * inflated by cancellation (e.g. Sqrt[10^12+1] - 10^6 + z, or a canonic
-         * cyclotomic eigenprojection) — settle it FALSE rather than mistaking it
-         * for a cancellation-hidden zero.  Otherwise (transcendental heads whose
-         * MPFR path may silently stay at machine precision, or a residual down at
-         * the noise floor) keep the lenient machine verdict (zero). */
+        /* Never shrank: the residual reads the same at machine precision and
+         * at this MPFR rung.  When this rung honoured its precision (no machine
+         * real, no MPFR leaf short of the rung -- `pinned` false), that is
+         * either a genuine value or a cancellation deeper than this rung (at
+         * |x| ~ 60, 1 - Tanh[x/2]^2 needs ~400 bits, so the 200-bit rung still
+         * shows the UNcancelled value).  Keep climbing: a cancellation zero
+         * falls once a rung outruns it, a genuine value still holds at the top
+         * rung, whose noise-floor verdict then decides (plateau_rr, below).
+         * Before this, every non-algebraic plateau took the lenient "zero"
+         * below, so PossibleZeroQ[22/7 - Pi] was True (its machine residual
+         * sits 2^-12.25 of scale, just under the obvious-non-zero gate) and with
+         * it 22/7 == Pi, Max[Pi, 80143857/25510582], Reduce[x == Pi && x ==
+         * 22/7], ...; as was Sqrt[2] - 54608393/38613965, algebraic but under
+         * the algebraic floor.  Only a pinned rung (a head that ignored the
+         * requested precision) keeps the lenient machine verdict. */
+        if (!pinned) {
+            plateau_rr = rr;
+            prev_mag = m;
+            continue;
+        }
         if (is_algebraic_expr(e) && m > scale - ZT_ALG_NONZERO_BITS)
             return ZERO_TEST_FALSE;
         return ZERO_TEST_TRUE;
     }
+    /* Still holding steady at the top rung, precision honoured throughout:
+     * the value is genuine, and the top rung's floor decides. */
+    if (plateau_rr != ZERO_TEST_UNKNOWN) return plateau_rr;
     return ZERO_TEST_TRUE;
 }
 

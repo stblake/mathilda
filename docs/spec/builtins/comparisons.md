@@ -57,7 +57,7 @@ Tests whether two (or more) expressions are mathematically equal.
   digits). With precision `p` bits (53 for a machine real; an approximate zero
   has none) and accuracy `a = p - log2|x|` bits (a zero: its own bit
   precision), the operand of least accuracy governs and `x == y` holds iff
-  `|x - y| <= 2^(k - a)`, `k = 7 min(p, 53)/53`. An exact operand (`1`, `Pi`,
+  `|x - y| <= 2^(k - a)`, `k = K min(p, 53)/53`, ``K = Internal`$EqualTolerance log2 10`` (7 by default). An exact operand (`1`, `Pi`,
   `Sqrt[2]`) has unlimited accuracy, so it compares at the approximate side's
   precision. Two machine reals keep the relative `2^-46` rule. Complex numbers
   compare part by part.
@@ -134,6 +134,41 @@ Out[3]= False
 
 **v0.6034.** A visible `NDArray[...]` operand compares through its nested List, as a packed list does: `NDArray[{3., 2.}] == {3., 2.}` is `True`, and arrays that differ in an element are `False`. `Unequal` likewise.
 
+**Exact quantities (v0.6584).** Two exact numeric quantities (`22/7`, `Pi`,
+`Zeta[3] - 1`, `Pi + 10^-400`) are never compared through a tolerance. Their
+order comes from one of three sources:
+1. **The exact difference.** `a - b` is evaluated first. A rational, or an
+   exact constant with no `Plus` in it (so it cannot cancel), decides at once:
+   `Pi + 10^-400 == Pi` and `Pi + Exp[-Exp[10]] == Pi` are `False`.
+2. **Doubles.** Used only when neither side is a sum, because a sum's machine
+   value carries no relative accuracy.
+3. **MPFR, at 128 and then 1024 bits.** A difference counts as resolved only
+   against the operands' *structural* magnitude, the sum of the absolute values
+   of a sum's terms.
+
+A pair still closer than that has no numeric order, and the exact zero test
+decides it. An order read off doubles is confirmed by that test before
+"unequal" is final, which keeps `Sqrt[5 + 2 Sqrt[6]] == Sqrt[2] + Sqrt[3]`
+`True`.
+
+Before v0.6584, `22/7 == Pi` was `True`, and so was `22/7 != Pi`. About half
+the rational approximations of common constants compared equal to them.
+`make check-equality` (`tools/check_equality_soundness.m`, 814 probes) now
+guards all of this.
+
+**Equal and Unequal share one pair verdict** (`equal_pair_decide` in
+`src/comparisons.c`), so a pair one of them decides is decided identically by
+the other.
+
+**The tolerance is ``Internal`$EqualTolerance``** (v0.6584). It is the number of
+trailing decimal digits ignored, default `Log10[2^7]` = 2.10721 (7 bits).
+- It can be set or `Block`ed: ``Block[{Internal`$EqualTolerance = 0}, 1. == 1. + 2^-50]`` is `False`, and a value of 16 digits or more ignores every bit, so
+  `1. == 2.` becomes `True`.
+- The same rule, read at call time, governs the ordering heads, compiled
+  `Equal`/`Unequal`/`Less`/… on reals (`Compile[{x, y}, x == y][1., 1. +
+  2^-50]` is `True`), the numloop predicate fast path and sparse `Equal`. It is
+  written in one place, `src/equal_tol.h`.
+
 ## Unequal
 Tests whether expressions are unequal.
 - `Unequal[x, y]` (written `x != y`): `True` if `x` and `y` are provably
@@ -191,6 +226,21 @@ Tests structural identity.
   types, so `2 === 2.0` is `False`.
 - Also unlike `Equal`, `SameQ` compares structure rather than value, so
   `Indeterminate === Indeterminate` is `True`.
+- **Approximate numbers (v0.6584)** are the same when they differ in at most
+  their last ``Internal`$SameQTolerance`` digits (default `Log10[2]`, one bit).
+  - The comparison is made at the lower of the two precisions: `1. === 1. +
+    2^-52`, ``1`30 === 1`20`` and ``1. === 1`30`` are `True`, and `1. === 1. +
+    2^-51` is `False`.
+  - It applies at every leaf, so `{1.} === {1. + 2^-52}` and `f[1.] === f[1. +
+    2^-52]` are `True`.
+  - A subnormal's last bit is one ulp absolute, so `0. === 1.*^-320` is
+    `False`.
+  - Pattern matching (`MemberQ`, `Count`, `Cases`), `Union` and `Gather` stay
+    exact, as in the reference.
+  - Known gap: the reference's `DeleteDuplicates` and `Tally` default tests
+    also carry the tolerance (`DeleteDuplicates[{1., 1. + 2^-52}]` is `{1.}`).
+    Mathilda's hash-based dedup is still exact.
+    `DeleteDuplicates[list, SameQ]` applies it.
 
 ## UnsameQ
 Tests structural non-identity.
@@ -223,3 +273,15 @@ The canonical internal form for chained comparisons.
   to `True`, `False`, or a reduced `Inequality` over the undecided operands.
 - An `Indeterminate` operand makes its adjacent pairs `False`, so the whole
   chain is `False`.
+
+## Internal\`$EqualTolerance
+The number of trailing decimal digits `Equal`, `Unequal`, the ordering heads and
+compiled comparisons ignore when they compare approximate numbers of at least
+machine precision. The default is `Log10[2^7]` = 2.10721 (7 bits). It is
+user-settable and `Block`-able, and is read at every comparison. Values are
+clamped to [0, 53] bits. See [Equal](#equal).
+
+## Internal\`$SameQTolerance
+The number of trailing decimal digits `SameQ` and `UnsameQ` ignore on
+approximate numbers. The default is `Log10[2]` = 0.30103 (1 bit). It is
+user-settable and `Block`-able. See [SameQ](#sameq).

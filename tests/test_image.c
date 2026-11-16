@@ -2470,14 +2470,17 @@ static void test_colorconvert_equal_channels_is_value_dependent(void) {
      * the input for some values and one ulp below for others.
      *
      * 0.75 is exact and 0.7 is not. Asserting BOTH is what documents the behaviour in the suite: if
-     * someone "corrects" the weights to sum to 1.0 in double, this fails and points at why. */
+     * someone "corrects" the weights to sum to 1.0 in double, this fails and points at why.  The
+     * one-ulp difference is read with SameQ's last-bit tolerance switched off: since v0.6584 plain
+     * SameQ ignores the last bit (Internal`$SameQTolerance), so b === 0.7 is True. */
     assert_eval_eq("Module[{f, a, b},"
                    " f[v_] := First[Union[Flatten[ImageData[ColorConvert["
                    "   Image3D[Table[v, {z, 1, 3}, {y, 1, 3}, {x, 1, 3}, {ch, 1, 3}]],"
                    "   \"Grayscale\"]]]]];"
                    " a = f[0.75]; b = f[0.7];"
-                   " {a === 0.75, b === 0.7, Abs[b - 0.7] < 1.*^-15}]",
-                   "{True, False, True}", 0);
+                   " {a === 0.75, Block[{Internal`$SameQTolerance = 0}, b === 0.7], b === 0.7,"
+                   "  Abs[b - 0.7] < 1.*^-15}]",
+                   "{True, False, True, True}", 0);
     /* And the printed form cannot be trusted to reveal this: Mathilda prints that weight sum as 1.0
      * even through InputForm, so a test written from the printed value would assert the wrong thing
      * and pass for the wrong reason. The difference only shows by subtraction. */

@@ -737,6 +737,79 @@ static void test_compare_exact_quantities_precision_and_range(void) {
                    "List[True, True, True, False]", 1);
 }
 
+/* Rational approximations of constants are NOT equal to them.  22/7 == Pi was
+ * True (and 22/7 != Pi True as well): PossibleZeroQ read a residual that held
+ * steady up the precision ladder as a zero, and Equal let that override a
+ * clear numeric inequality while Unequal did not.  The convergents of a
+ * continued fraction approach the constant ever closer, from alternating
+ * sides, so each pair has a known sign (read at 300 digits) and every head
+ * must agree with it.  The reference values are the obvious ones. */
+static void test_rational_approximations_of_constants(void) {
+    assert_eval_eq("{22/7 == Pi, 22/7 != Pi, 22/7 > Pi, 22/7 < Pi, 355/113 == Pi, "
+                   "E == 2718/1000, GoldenRatio == 1618/1000, Catalan == 916/1000, Pi^2 == 987/100}",
+                   "List[False, True, True, False, False, False, False, False, False]", 1);
+    assert_eval_eq("{PossibleZeroQ[22/7 - Pi], PossibleZeroQ[Sqrt[2] - 54608393/38613965], "
+                   "PossibleZeroQ[E^Pi - 239432496618343/10346816338556]}",
+                   "List[False, False, False]", 1);
+    assert_eval_eq("Union[Flatten[Table[With[{cf = ContinuedFraction[N[c, 400], 22]}, "
+                   "Table[With[{r = FromContinuedFraction[Take[cf, k]], s = Sign[N[c - FromContinuedFraction[Take[cf, k]], 300]]}, "
+                   "{c == r, c != r, c < r, c > r, c <= r, c >= r, PossibleZeroQ[c - r]} === "
+                   "{False, True, s < 0, s > 0, s < 0, s > 0, False}], {k, 2, Length[cf]}]], "
+                   "{c, {Pi, E, Sqrt[2], Log[2], EulerGamma, Zeta[3], E^Pi, GoldenRatio}}]]]",
+                   "List[True]", 1);
+    /* everything downstream of the comparison */
+    assert_eval_eq("{If[Pi == 22/7, 1, 2], TrueQ[Pi == 22/7], Max[Pi, 80143857/25510582] === Pi, "
+                   "Simplify[Pi == 22/7], Reduce[x == Pi && x == 22/7, x], I Pi == 22 I/7, "
+                   "Pi == 22/7 == 22/7, Unequal[Pi, 22/7, 3]}",
+                   "List[2, False, True, False, False, False, False, True]", 1);
+    assert_eval_eq("{Pi < 80143857/25510582, Pi > 80143857/25510582, "
+                   "Pi <= 80143857/25510582, Pi >= 80143857/25510582}",
+                   "List[False, True, False, True]", 1);
+    /* closer than any precision rung: the exact difference decides */
+    assert_eval_eq("{Pi + 10^-400 == Pi, Pi + 10^-400 > Pi, Sqrt[2] + 10^-400 == Sqrt[2], "
+                   "Pi + Exp[-Exp[10]] == Pi, Pi + Exp[-Exp[10]] > Pi, Pi + Exp[-Exp[10]] != Pi}",
+                   "List[False, True, False, False, True, True]", 1);
+    /* Equal and Unequal decide every pair the same way */
+    assert_eval_eq("{Sqrt[5 + 2 Sqrt[6]] == Sqrt[2] + Sqrt[3], Unequal[Sqrt[5 + 2 Sqrt[6]], Sqrt[2] + Sqrt[3]], "
+                   "Sqrt[5 + 2 Sqrt[6]] - Sqrt[2] - Sqrt[3] > 0, Sqrt[5 + 2 Sqrt[6]] - Sqrt[2] - Sqrt[3] >= 0}",
+                   "List[True, False, False, True]", 1);
+}
+
+/* Abs / Sign of an exact negative sum must not touch the caller's value: the
+ * negation moved the terms out of a refcount-shared Plus, so after
+ * d = Pi - 22/7; Abs[d] the OwnValue of d was Plus[Null, Null] and
+ * Abs[d] == -d segfaulted. */
+static void test_abs_does_not_mutate_shared_argument(void) {
+    assert_eval_eq("dAbs = Pi - 22/7; rAbs = Abs[dAbs]; {dAbs === Pi - 22/7, rAbs === 22/7 - Pi, "
+                   "Abs[dAbs] == -dAbs, Sign[dAbs], dAbs === Pi - 22/7}",
+                   "List[True, True, True, -1, True]", 1);
+}
+
+/* Internal`$EqualTolerance / Internal`$SameQTolerance: the digits Equal and
+ * SameQ ignore, Block-able, honoured by compiled code.  Reference values. */
+static void test_equal_sameq_tolerance_variables(void) {
+    assert_eval_eq("{Internal`$EqualTolerance == Log10[2^7], Internal`$SameQTolerance == Log10[2]}",
+                   "List[True, True]", 1);
+    assert_eval_eq("{1. == 1. + 2^-46, 1. == 1. + 2^-45, Block[{Internal`$EqualTolerance = 0}, 1. == 1. + 2^-50], "
+                   "Block[{Internal`$EqualTolerance = 0}, 1`30 == 1`30 + 10^-29], "
+                   "Block[{Internal`$EqualTolerance = 4}, {1. == 1. + 2^-41, 1. == 1. + 2^-38, 1. < 1. + 2^-41}], "
+                   "Block[{Internal`$EqualTolerance = 20}, 1. == 2.]}",
+                   "List[True, False, False, False, List[True, False, False], True]", 1);
+    assert_eval_eq("{Compile[{x, y}, x == y][1., 1. + 2^-50], Compile[{x, y}, x == y][1., 1. + 2^-40], "
+                   "Compile[{x, y}, x < y][1., 1. + 2^-50], Compile[{x, y}, x != y][1., 1. + 2^-50], "
+                   "Block[{Internal`$EqualTolerance = 0}, Compile[{x, y}, x == y][1., 1. + 2^-50]]}",
+                   "List[True, False, False, False, False]", 1);
+    /* SameQ: the last bit, leaf-wise, at the lower precision */
+    assert_eval_eq("e52 = 1. + 2^-52; {1. === e52, 1. === 1. + 2^-51, {1.} === {e52}, f[1.] === f[e52], "
+                   "1. === 1`30, 1`30 === 1`20, 1 === 1., UnsameQ[1., e52], 0. === 1.*^-320, "
+                   "1.*^-310 === 1.0000000000000002*^-310, SameQ[1`20, 1`20 + 10^-20], SameQ[1`20, 1`20 + 10^-19]}",
+                   "List[True, False, True, True, True, True, False, False, False, True, True, False]", 1);
+    assert_eval_eq("{Block[{Internal`$SameQTolerance = 0}, 1. === 1. + 2^-52], "
+                   "Block[{Internal`$SameQTolerance = 3}, {1. === 1. + 2^-46, 1. === 1. + 2^-44}], "
+                   "MemberQ[{1. + 2^-52}, 1.], DeleteDuplicates[{1., 1. + 2^-52}, SameQ] === {1.}}",
+                   "List[False, List[True, True], False, True]", 1);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -776,6 +849,9 @@ int main() {
     TEST(test_variadic_comparison_chains);
     TEST(test_equal_lists_tolerance);
     TEST(test_equal_approximate_tolerance);
+    TEST(test_rational_approximations_of_constants);
+    TEST(test_abs_does_not_mutate_shared_argument);
+    TEST(test_equal_sameq_tolerance_variables);
     TEST(test_not_basic);
     TEST(test_and_basic);
     TEST(test_or_basic);

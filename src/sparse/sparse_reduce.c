@@ -37,6 +37,7 @@
  * declined.
  */
 
+#include "equal_tol.h"
 #include "sparse_internal.h"
 #include "ndarray_internal.h"
 #include "sym_names.h"
@@ -1763,14 +1764,13 @@ done:
 enum { EQ_FALSE = 0, EQ_TRUE = 1, EQ_UNKNOWN = 2 };
 
 /* Equal on two machine numbers, as the scalar Equal decides it: exact on two
- * Integers, otherwise within 2^-46 of the larger magnitude. */
+ * Integers, otherwise within Internal`$EqualTolerance (equal_tol.h). */
 static inline int eq_num(bool am, int64_t ai, double ad, bool bm, int64_t bi, double bd) {
     if (!am && !bm) return ai == bi ? EQ_TRUE : EQ_FALSE;
     double x = am ? ad : (double)ai, y = bm ? bd : (double)bi;
     if (x != x || y != y) return EQ_FALSE;
     if (x == y) return EQ_TRUE;
-    double diff = fabs(x - y), mx = fmax(fabs(x), fabs(y));
-    return diff <= mx * 1.4210854715202004e-14 ? EQ_TRUE : EQ_FALSE;
+    return mth_machine_tolerant_cmp(x, y, mth_machine_equal_rel()) == 0 ? EQ_TRUE : EQ_FALSE;
 }
 
 /* Equal on two arbitrary scalars, by the Equal builtin. */

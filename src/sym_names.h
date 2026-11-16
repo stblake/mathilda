@@ -923,6 +923,8 @@ extern const char* SYM_DialogProlog;
 extern const char* SYM_Monitor;
 extern const char* SYM_SlashCommand;
 extern const char* SYM_DollarMaxExtraPrecision;
+extern const char* SYM_InternalEqualTolerance;   /* Internal`$EqualTolerance */
+extern const char* SYM_InternalSameQTolerance;   /* Internal`$SameQTolerance */
 extern const char* SYM_DollarModuleNumber;
 extern const char* SYM_DollarRecursionLimit;
 extern const char* SYM_DollarAutoCompilation;

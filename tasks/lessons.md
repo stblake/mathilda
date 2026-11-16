@@ -5414,3 +5414,10 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
 - I ran `git stash` to test HEAD behaviour mid-batch and stashed three uncommitted fixes (recovered at once with `git stash pop`).
 - Rule: to compare one change against HEAD, save `git diff <file>` to a patch, `git checkout <file>`, rebuild, test, `git apply` the patch, rebuild, and check timestamps. Never stash the whole tree mid-task.
 - .m pitfall hit twice this batch: a bare `Return[x]` inside `With`/`If` returns from the `With`, not the `Module`. Write `Return[x, Module]`.
+
+## 2026-11-16: 22/7 == Pi was True (equality soundness review, v0.6584)
+- A numeric zero test must not read "the residual never shrank" as "zero". At a rung whose value honours its precision, a steady residual is either a genuine value or a cancellation deeper than that rung. Keep climbing and let the TOP rung decide. A plateau that only lower rungs agree on is no evidence (the |x| ~ 60 Tanh identities need about 400 bits).
+- A shrink measured from the MACHINE residual is no evidence of a zero either: a constant within 2^-53 of zero reads rounding noise at machine precision, then "shrinks" to its true value. Gate early exits on the floor of the rung that observed the shrink.
+- Two heads that must be complements (Equal/Unequal) must read ONE pair verdict. Two copies drifted: only Equal ran the zero-test override, so both 22/7 == Pi and 22/7 != Pi were True.
+- A double of a SUM has no relative accuracy, and against an exact 0 any nonzero double looks "clearly" separated. Measure resolution against the operands' structural (L1) magnitude, never |value|.
+- When a defensive tightening breaks a suite (the zt_resolve rung-floor change broke Bronstein torsion verification), bisect the edits with debug logging on each changed branch. Don't revert the whole change. A scratch-worktree baseline of HEAD plus the foreign uncommitted edits separated my regressions from pre-existing failures.

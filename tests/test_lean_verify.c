@@ -64,10 +64,11 @@ static void test_negative(void) {
     check_true("Length[leanN[\"Logs\"]] > 0");
     check_true("MemberQ[leanN[\"Axioms\"], \"sorryAx\"]");
     assert_eval_eq("Check[Certify[(x+1)^2 == x^2 + 1], \"rejected\"]", "\"rejected\"", 0);
-    /* Lean catches the CAS: PossibleZeroQ calls this claim true; it is false
-     * (the two sides differ by x/10^25). */
+    /* The claim is false (the two sides differ by x/10^25).  Lean rejects it,
+     * and since v0.6584 so does the heuristic engine (PossibleZeroQ used to
+     * call it true -- the plateau false zero behind 22/7 == Pi). */
     check_true("Certify[(1+x)^20 == Expand[(1+x)^20] - 10^-25 x, Engine -> \"Mathilda\"]"
-               "[\"Verified\"] === Missing[\"Heuristic\", True]");
+               "[\"Verified\"] === Missing[\"Heuristic\", False]");
     check_true("Certify[(1+x)^20 == Expand[(1+x)^20] - 10^-25 x, Engine -> \"Lean\"]"
                "[\"Verified\"] === False");
 }

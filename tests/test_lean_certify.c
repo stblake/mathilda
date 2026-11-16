@@ -269,14 +269,15 @@ static void test_batch(void) {
 }
 
 static void test_heuristic_engine(void) {
-    /* The PossibleZeroQ false positive: the heuristic engine says True. The
-     * claim is false (the difference is x/10^25); test_lean_verify.c checks
-     * that Lean says False. */
+    /* The claim is false: the difference is x/10^25.  Until v0.6584 the
+     * heuristic engine (PossibleZeroQ) called it True -- the plateau false
+     * zero behind 22/7 == Pi -- and this test pinned that false positive;
+     * test_lean_verify.c still checks that Lean says False. */
     assert_eval_eq("leanH = Certify[(1+x)^20 == Expand[(1+x)^20] - 10^-25 x, "
                    "Engine -> \"Mathilda\"]; Null", "Null", 0);
     /* "Verified" is never True without Lean: the heuristic answer is carried
      * as Missing["Heuristic", True | False]. */
-    check_true("leanH[\"Verified\"] === Missing[\"Heuristic\", True] && "
+    check_true("leanH[\"Verified\"] === Missing[\"Heuristic\", False] && "
                "leanH[\"Tier\"] === \"Heuristic\" && leanH[\"Engine\"] === \"Mathilda\"");
     check_true("leanH[\"Domain\"] === Rationals");
     check_true("Certify[(x+1)^2 == x^2 + 1, Engine -> \"Mathilda\"][\"Verified\"] === "
