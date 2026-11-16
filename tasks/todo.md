@@ -1638,7 +1638,6 @@ Plan: `src/internal/bronstein/BRONSTEIN_PLAN.md` § "2026-11-14 — Completion c
   - [x] 3 torsion by specialisation of the parameters (N0 then principality over C) v0.6575 -- Trager-level paramSpecialization in TorsionModP.m; torsionOrderWith (ideal builder, Bronstein special places) still declines (step 5)
   - [ ] 4 Trager front end + pinned tests
   - [x] 5 Bronstein over Q(a) v0.6578 (brFn/brWithParams fields, RischDECertified 5-arg params, brConstantEquations, kappa in Q(a), per-orbit residues, special-place torsion by specialising params; kappa/sign region checks decline with params) -- open: Q(i)/radical constants + params, Sqrt[a] radicands, non-binomial deg>=3 log terms outside orbits
-  - [ ] kernel bug found: bare-name resolution misses an existing Global` symbol (stored bare) when a later $ContextPath context has the same name (context_resolve_name); repro: zz = 1; $ContextPath = Join[$ContextPath, {"Foo`Private`"}]; Foo`Private`zz = 2; Context[zz] -> Foo`Private`
   - [ ] 6 cascade A/B (v0.6576: parametric integrands gated OUT of the cascade's Trager stage and PMT's kummerIntegrators until then -- lift both), docs (calculus.md, docstrings), corpus (G-param-1, examples), stress families, FriCAS with parameter values
 - [ ] Phase 5: radical anywhere (brDField, transcendental Risch over algebraic base, RDE on a curve over a tower)
 - [ ] Theory note docs/notes/bronstein_extensions.tex (E1–E6; LaTeX per user 2026-11-14), each adversarially reviewed — E6a–c written v0.6547, review pending

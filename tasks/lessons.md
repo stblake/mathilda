@@ -3,20 +3,34 @@
 ## Unit tests that put a private context on $ContextPath: bare names drift (2026-11-16)
 
 - The Bronstein harness appends `Bronstein`Private`` and `Trager`Private`` to
-  `$ContextPath`. Once package code has created `Bronstein`Private`a`, a bare `a` in
-  a later test string resolves to it, even though `Global`a` exists and `Global``
-  comes first on the path. `context_resolve_name` probes `"Global`a"`, but Global
-  symbols are stored under the bare key, so the probe misses (a kernel defect, open
-  in tasks/todo.md).
-- Symptom: data built in one statement (with `Global`a`) and a parameter list from a
-  later one (with `Bronstein`Private`a`) disagree. A specialisation then substituted
-  nothing, a parameter reached mod-p reduction as a variable, and the prime search
-  hung. Package pattern variables `a_` also capture `Bronstein`Private`a` used as a
-  parameter.
-- Rule: in harness strings, spell a parameter that is also a package local's name
-  with its context (`Global`a`), or bind it once (`pa = a`) and reuse it. Any stage
-  that reduces mod p must check that its input carries no stray symbol, so the
-  failure is an Internal error, not a hang.
+  `$ContextPath`. Once package code had created `Bronstein`Private`a`, a bare `a` in
+  a later test string resolved to it, even though `Global`a` existed and `Global``
+  comes first on the path. `context_resolve_name` probed `"Global`a"`, but Global
+  symbols are stored under the bare key, so the probe always missed. FIXED: the
+  resolver now tests the bare key (SymbolDef with home `Global``) at `Global``'s
+  position in the search order.
+- Ground truth (checked on the reference kernel): $ContextPath is searched IN
+  ORDER and $Context only after it. After `tt = 1` and a package exporting `tt`,
+  bare `tt` is the PACKAGE symbol (EndPackage puts it ahead of Global`), with a
+  `tt::shdw` warning. A first fix that probed Global` first when it was
+  `$Context` broke 56 DifferentialForms cases (the driver's top-level
+  `With[{t = ...}]` had created Global`t before the package exported `t`). Rule:
+  check a context-resolution "rule" against the kernel before coding it, and run
+  the package harnesses, not just the context unit tests.
+- What still holds after the fix (this is the reference rule, not a defect): a
+  bare name resolves to the path context's symbol when NO `Global`` symbol of
+  that name exists yet. Harness strings go through `parse_expression`, which does
+  not materialise symbols, so a parameter never assigned or read through the REPL
+  reader may still not exist in `Global``.
+- Symptom of the drift: data built in one statement (with `Global`a`) and a
+  parameter list from a later one (with `Bronstein`Private`a`) disagree. A
+  specialisation then substituted nothing, a parameter reached mod-p reduction as
+  a variable, and the prime search hung. Package pattern variables `a_` also
+  capture `Bronstein`Private`a` used as a parameter.
+- Rule: in harness strings, a parameter that is also a package local's name is
+  safest spelled with its context (`Global`a`), or bound once (`pa = a`) and
+  reused. Any stage that reduces mod p must check that its input carries no stray
+  symbol, so the failure is an Internal error, not a hang.
 
 ## A local performance fix is a pattern: apply it system-wide (2026-11-02)
 

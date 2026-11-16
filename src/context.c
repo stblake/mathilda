@@ -318,6 +318,13 @@ static bool is_developer_alias(const char* name) {
     return false;
 }
 
+/* True when the bare name denotes an existing Global` symbol: it has a
+ * SymbolDef under its bare key and that symbol's home context is Global`
+ * (not a System` / Mathilda` symbol, which share the bare key space). */
+static bool global_exists(const char* raw) {
+    SymbolDef* def = symtab_lookup(raw);
+    return def && strcmp(context_home(raw, def), "Global`") == 0;
+}
 
 char* context_resolve_name(const char* raw) {
     if (!raw || *raw == '\0') return ctx_strdup(raw ? raw : "");
@@ -364,17 +371,47 @@ char* context_resolve_name(const char* raw) {
         return out;
     }
 
-    /* Bare name. Search {current} U path for an existing qualified match. */
+    /* Bare name. The reference rule searches $ContextPath IN ORDER and
+     * consults $Context only after it: with $ContextPath = {"Pkg`", ...,
+     * "Global`"} (after EndPackage) a bare name that exists in both is the
+     * Pkg` symbol, and a Global` symbol beats a same-named symbol in a
+     * context listed after Global`.
+     *
+     * Global` symbols are stored under BARE keys (not "Global`x"), so the
+     * Global` position is tested on the bare key (global_exists): before
+     * that, the probe ctx_concat("Global`", raw) always missed, and after
+     * `zz = 1` a later path entry Foo`Private` holding its own zz won.  When
+     * Global` is current but not on the path, the bare fall-back below finds
+     * it after the path, as before.
+     *
+     * A NON-Global current context is still probed first (legacy, and what
+     * Begin["Pkg`Private`"] code relies on: its own private symbol wins over
+     * an exported one of the same name).  The reference rule would probe it
+     * after the path; that difference is untouched here.
+     *
+     * System` / Mathilda` are deliberately NOT honoured at their path
+     * position: they keep the bare fall-back after the loop.  Their "exists"
+     * test is the kernel-init System flag, which covers thousands of names,
+     * and honouring it positionally would change which symbol every package
+     * that appends a private context after System` sees.  Inside
+     * BeginPackage the path is {Pkg`, System`}, so Global` is never probed
+     * there and nothing changes. */
     const char* cur = context_current();
-    char* probe = ctx_concat(cur, raw);
-    if (symtab_lookup(probe)) return probe;
-    free(probe);
+    if (strcmp(cur, "Global`") != 0) {
+        char* probe = ctx_concat(cur, raw);
+        if (symtab_lookup(probe)) return probe;
+        free(probe);
+    }
 
     size_t np = context_path_count();
     for (size_t i = 0; i < np; i++) {
         const char* prefix = context_path_at(i);
         if (strcmp(prefix, "System`") == 0) continue; /* System is checked via bare */
-        probe = ctx_concat(prefix, raw);
+        if (strcmp(prefix, "Global`") == 0) {
+            if (global_exists(raw)) return ctx_strdup(raw);
+            continue;
+        }
+        char* probe = ctx_concat(prefix, raw);
         if (symtab_lookup(probe)) return probe;
         free(probe);
     }

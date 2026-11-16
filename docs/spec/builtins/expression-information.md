@@ -1684,6 +1684,17 @@ Gives the current context, or the context of a symbol.
 - `Context["name"]` resolves a bare name the way the parser does, through
   `$Context` and then `$ContextPath`: after `EndPackage[]`, `Context["f"]`
   reports the package context of an existing ``P`f``.
+- **Search order for a bare name.** The contexts on `$ContextPath` are
+  searched in order, and the first that already has the symbol wins; then
+  `$Context`; otherwise the symbol is created in `$Context`. `Global`` takes
+  part at its own position even though its symbols are stored under bare
+  names: after `zz = 1`, appending `"Foo`Private`"` to the path and defining
+  ``Foo`Private`zz`` leaves `zz` meaning `Global`zz`, while a context put
+  *before* `Global`` (as `EndPackage` does) wins over it. So a symbol typed
+  before a package loads does not hide the package's export of that name.
+  Two deviations remain: a non-`Global`` `$Context` (inside `Begin`) is
+  searched before the path, and `System``/`Mathilda`` names are found after
+  the explicit path contexts. No `General::shdw` warning is emitted.
 - `Context["name"]` for a name that does not exist emits `Context::notfound`
   and stays unevaluated.
 

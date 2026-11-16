@@ -13,10 +13,12 @@
  *    (brParamSpecialSpecialization, brSpecialTorsionOrderParams);
  *  - end to end, every verdict agrees with the specialisations a = 2, -5/7.
  *
- * The parameter is spelled Global`a: with Bronstein`Private` on the harness's
- * $ContextPath, a bare `a` resolves to the package symbol of that name once
- * one exists (a kernel resolution defect, tasks/lessons.md), whose pattern
- * variables a_ would then capture it.
+ * The parameter is spelled Global`a, a defensive spelling only.  A bare `a`
+ * used to resolve to the Bronstein`Private`a on the harness's $ContextPath,
+ * ahead of the existing Global`a (a kernel resolution defect, since fixed in
+ * context_resolve_name; tasks/lessons.md), and package pattern variables a_
+ * would then capture it.  The bare spelling now passes too, but it still
+ * depends on Global`a already existing when the string is parsed.
  */
 #include "bronstein_test_utils.h"
 

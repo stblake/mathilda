@@ -354,6 +354,56 @@ static void test_global_qualified_is_bare(void) {
     assert_eval_eq("Global`Sin === Sin", "False", 0);
 }
 
+/* Bare-name resolution follows {$Context} U $ContextPath in order: an
+ * existing Global` symbol (stored under its bare key) is found at Global`'s
+ * position, ahead of a same-named symbol in a later path context.  Before
+ * the fix the bare-key Global` probe always missed, so a later path entry
+ * such as Foo`Private` won. */
+static void test_bare_name_path_order(void) {
+    /* The repro: Global` (current, and first on the path) beats Foo`Private`. */
+    assert_eval_eq("zzr = 1; $ContextPath = Join[$ContextPath, {\"RsA`Private`\"}]; "
+                   "RsA`Private`zzr = 2;", "Null", 0);
+    assert_eval_eq("{Context[zzr], zzr}", "{\"Global`\", 1}", 0);
+    /* Reverse: no Global` symbol of that name -- the path context wins. */
+    assert_eval_eq("RsA`Private`yyr = 3;", "Null", 0);
+    assert_eval_eq("{Context[yyr], yyr}", "{\"RsA`Private`\", 3}", 0);
+    /* Between two non-Global contexts, the earlier path entry wins. */
+    assert_eval_eq("RsB`wwr = 1; RsC`wwr = 2; "
+                   "$ContextPath = Join[$ContextPath, {\"RsC`\", \"RsB`\"}];", "Null", 0);
+    assert_eval_eq("{Context[wwr], wwr}", "{\"RsC`\", 2}", 0);
+    /* A context listed BEFORE Global` beats an existing Global` symbol, and
+     * with Global` current but off the path the path context wins too: the
+     * path is searched in order, $Context after it. */
+    assert_eval_eq("RsB`zzr = 4; $ContextPath = Prepend[$ContextPath, \"RsB`\"];", "Null", 0);
+    assert_eval_eq("{Context[zzr], zzr}", "{\"RsB`\", 4}", 0);
+    assert_eval_eq("Block[{$ContextPath = {\"System`\", \"RsA`Private`\"}}, "
+                   "ToExpression[\"Context[zzr]\"]]", "\"RsA`Private`\"", 0);
+    assert_eval_eq("$ContextPath = DeleteCases[$ContextPath, \"RsA`Private`\" | \"RsB`\" | \"RsC`\"];",
+                   "Null", 0);
+    assert_eval_eq("{Context[zzr], zzr}", "{\"Global`\", 1}", 0);
+    /* A symbol typed before a package is loaded does not hide the package's
+     * export of that name: EndPackage puts the package ahead of Global`. */
+    assert_eval_eq("pkx = 0;", "Null", 0);
+    assert_eval_eq("BeginPackage[\"RsX`\"];", "Null", 0);
+    assert_eval_eq("pkx::usage = \"pkx\";", "Null", 0);
+    assert_eval_eq("Begin[\"`Private`\"];", "Null", 0);
+    assert_eval_eq("pkx[n_] := 2 n;", "Null", 0);
+    assert_eval_eq("End[];", "Null", 0);
+    assert_eval_eq("EndPackage[];", "Null", 0);
+    assert_eval_eq("{Context[pkx], pkx[3], Global`pkx}", "{\"RsX`\", 6, 0}", 0);
+    /* A package still makes private symbols, even for a name Global` has. */
+    assert_eval_eq("pkr = 7;", "Null", 0);
+    /* One statement per call: a call's string is parsed whole before it runs. */
+    assert_eval_eq("BeginPackage[\"RsP`\"];", "Null", 0);
+    assert_eval_eq("rsPub::usage = \"pub\";", "Null", 0);
+    assert_eval_eq("Begin[\"`Private`\"];", "Null", 0);
+    assert_eval_eq("rsPub[] := pkr; pkr = 8; rsCtx = Context[pkr];", "Null", 0);
+    assert_eval_eq("End[];", "Null", 0);
+    assert_eval_eq("EndPackage[];", "Null", 0);
+    assert_eval_eq("{RsP`Private`rsCtx, rsPub[], pkr, Context[rsPub]}",
+                   "{\"RsP`Private`\", 8, 7, \"RsP`\"}", 0);
+}
+
 /* Developer`ToPackedArray / FromPackedArray / PackedArrayQ are the bare
  * builtins: the Developer` spelling reaches the same symbol. */
 static void test_developer_packing_aliases(void) {
@@ -400,6 +450,7 @@ int main(void) {
     TEST(test_global_qualified_is_bare);
     TEST(test_contextpath_assignment);
     TEST(test_developer_packing_aliases);
+    TEST(test_bare_name_path_order);
     TEST(test_context_assignment);
 
     printf("All context tests passed!\n");
