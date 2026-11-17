@@ -519,8 +519,8 @@ static Expr* product_try_compiled(Expr* f, const IterSpec* s,
                                   bool is_real, Expr** first_out) {
     if (!autocompile_enabled() || s->var->type != EXPR_SYMBOL) return NULL;
 
-    bool nonempty = (di_val > 0) ? (min_val <= max_val + 1e-14)
-                                 : (min_val >= max_val - 1e-14);
+    bool nonempty = (di_val > 0) ? (min_val <= max_val + iter_real_slack(max_val, di_val))
+                                 : (min_val >= max_val - iter_real_slack(max_val, di_val));
     if (!nonempty) return NULL;
 
     double nterms = (max_val - min_val) / di_val + 1.0;

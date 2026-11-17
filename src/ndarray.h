@@ -207,8 +207,14 @@ Expr* ndarray_dot2(const Expr* a, const Expr* b, bool* shape_error);
  * shape, or NULL if any operand isn't EXPR_NDARRAY or the shapes disagree
  * (caller falls back to the generic symbolic path, which treats mismatched
  * NDArray operands as opaque non-numeric terms). Broadcasting (numpy-style
- * shape compatibility) is intentionally not yet handled here. */
-Expr* ndarray_elementwise(Expr** args, size_t n, bool is_plus);
+ * shape compatibility) is intentionally not yet handled here.
+ *
+ * `degenerate` (nullable) is set when the decline is because a value lies
+ * outside the machine range -- a result lane that overflowed or underflowed,
+ * or a scalar a double cannot hold (10^400). The caller then delists
+ * (ndarray_delist_and_reeval): the element path keeps such a value at machine
+ * precision in MPFR (docs/design/numeric_tower_review.md, C3). */
+Expr* ndarray_elementwise(Expr** args, size_t n, bool is_plus, bool* degenerate);
 
 /* Fast C-level elementwise Power over two same-shape NDArray operands (a^b,
  * element by element). Promotes the result dtype to complex when either operand

@@ -886,7 +886,7 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
             Expr* ops[2];
             ops[0] = boxa ? boxa : a->arr;
             ops[1] = boxb ? boxb : b->arr;
-            if (ops[0] && ops[1]) r = ndarray_elementwise(ops, 2, c->imm.i != 0);
+            if (ops[0] && ops[1]) r = ndarray_elementwise(ops, 2, c->imm.i != 0, NULL);   /* NULL: bail to the interpreter */
             expr_free(boxa); expr_free(boxb);
             break;
         }

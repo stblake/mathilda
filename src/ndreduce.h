@@ -30,6 +30,11 @@
 
 /* True when `res` is a function call whose first argument is an NDArray — the
  * signal for a builtin to hand off to the matching ndred_* entry point. */
+/* True when a machine result -- a Real, a Complex of Reals, or a float
+ * buffer -- holds a value that is not a machine number under the boundary
+ * policy (non-finite, or nonzero below DBL_MIN): the fast path that made it
+ * should decline to an exact / element path (docs/design/numeric_tower_review.md). */
+bool ndred_result_degenerate(const Expr* r);
 bool ndred_call_has_ndarray(const Expr* res);
 
 Expr* ndred_total(Expr* res);       /* Total[a] / Total[a,n] / Total[a,Infinity] */

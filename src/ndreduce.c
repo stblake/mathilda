@@ -20,6 +20,8 @@
 #include <stdio.h>           /* Commonest::dstlms — the same message the List path prints */
 #include <inttypes.h>        /* PRId64, for that message's argument */
 #include <math.h>
+#include <float.h>
+#include "numeric.h"   /* numeric_machine_subnormal */
 
 /* Below this many summands a strided range is summed by a plain loop; above it
  * the range is split in two and each half summed recursively (pairwise). */
@@ -45,6 +47,57 @@ static Expr* nd_scalar(double re, double im, bool cplx) {
         return expr_new_function(expr_new_symbol(SYM_Complex), a, 2);
     }
     return expr_new_real(re);
+}
+
+/* True when a machine reduction's result is not a machine number under the
+ * boundary policy (docs/design/numeric_tower_review.md): a non-finite value,
+ * or a nonzero one below DBL_MIN, in a Real / Complex scalar or anywhere in a
+ * float buffer. The caller then declines to the List path, whose Plus keeps
+ * such a value at machine precision in MPFR: Total[{1.*^308, 1.*^308}] packed
+ * was Overflow[]. Integer buffers never qualify (exact, checked arithmetic). */
+static bool nd_leaf_degenerate(double v) {
+    return !isfinite(v) || numeric_machine_subnormal(v);
+}
+bool ndred_result_degenerate(const Expr* r) {
+    if (!r) return false;
+    if (r->type == EXPR_REAL) return nd_leaf_degenerate(r->data.real);
+    if (r->type == EXPR_FUNCTION && r->data.function.arg_count == 2
+        && r->data.function.head->type == EXPR_SYMBOL
+        && r->data.function.head->data.symbol.name == SYM_Complex) {
+        for (int i = 0; i < 2; i++) {
+            const Expr* p = r->data.function.args[i];
+            if (p->type == EXPR_REAL && nd_leaf_degenerate(p->data.real)) return true;
+        }
+        return false;
+    }
+    if (r->type == EXPR_NDARRAY) {
+        NDType dt = r->data.ndarray.dtype;
+        if (dt == NDT_INT64 || dt == NDT_BOOL) return false;
+        size_t sz = ndarray_size(r);
+        int bad = 0;
+        if (dt == NDT_FLOAT64) {
+            const double* d = (const double*)r->data.ndarray.data;
+            for (size_t k = 0; k < sz; k++) {
+                double m = fabs(d[k]);
+                bad |= (int)!(m <= DBL_MAX) | ((m < DBL_MIN) & (d[k] != 0.0));
+            }
+        } else {
+            for (size_t k = 0; k < sz && !bad; k++) {
+                double re, im;
+                ndt_get(r->data.ndarray.data, k, dt, &re, &im);
+                bad |= nd_leaf_degenerate(re) | nd_leaf_degenerate(im);
+            }
+        }
+        return bad != 0;
+    }
+    return false;
+}
+
+/* Hand back `r`, or -- when it is degenerate -- free it and take the List
+ * path for `res` instead. */
+static Expr* nd_or_delist(Expr* r, Expr* res) {
+    if (r && ndred_result_degenerate(r)) { expr_free(r); r = NULL; }
+    return r ? r : ndarray_delist_and_reeval(res);
 }
 
 /* The real-dtype counterpart of `dt`, preserving component width (a complex
@@ -1116,7 +1169,7 @@ Expr* ndred_commonest(Expr* res) {
     return expr_new_ndarray_like(a, 1, dims, buf, dt);
 }
 
-Expr* ndred_moving_average(Expr* res) {
+static Expr* ndred_moving_average_raw(Expr* res) {
     Expr* a; size_t r;
     if (!nd_moving_window(res, &a, &r)) return ndarray_delist_and_reeval(res);
     NDType dt = a->data.ndarray.dtype;
@@ -1156,7 +1209,7 @@ Expr* ndred_moving_median(Expr* res) {
 /* ExponentialMovingAverage[a, alpha]: r[0] = x[0], r[i] = alpha*x[i] +
  * (1-alpha)*r[i-1]. Same length/dtype. Real rank-1 with a real numeric alpha;
  * a complex array or symbolic/complex alpha degrades. */
-Expr* ndred_ema(Expr* res) {
+static Expr* ndred_ema_raw(Expr* res) {
     if (res->data.function.arg_count != 2) return ndarray_delist_and_reeval(res);
     Expr* a = res->data.function.args[0];
     Expr* alpha = res->data.function.args[1];
@@ -1343,7 +1396,7 @@ Expr* ndred_total(Expr* res) {
             if (n1 < 1 || n2 < n1 || n2 > rank) return ndarray_delist_and_reeval(res);
             Expr* r = (n1 == 1) ? nd_total_leading(a, (int)n2)
                                 : nd_total_axes(a, (int)n1 - 1, (int)n2);
-            return r ? r : ndarray_delist_and_reeval(res);
+            return nd_or_delist(r, res);
         } else {
             return ndarray_delist_and_reeval(res);
         }
@@ -1352,7 +1405,7 @@ Expr* ndred_total(Expr* res) {
     }
 
     Expr* r = nd_total_leading(a, m);
-    return r ? r : ndarray_delist_and_reeval(res);
+    return nd_or_delist(r, res);
 }
 
 Expr* ndred_total_all(const Expr* a) {
@@ -1362,7 +1415,7 @@ Expr* ndred_total_all(const Expr* a) {
 
 /* -------------------------------------------------------------------- Mean */
 
-Expr* ndred_mean(Expr* res) {
+static Expr* ndred_mean_raw(Expr* res) {
     if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
     Expr* a = res->data.function.args[0];
     int rank = a->data.ndarray.rank;
@@ -1474,7 +1527,7 @@ static Expr* nd_moment_leading(Expr* res, int mode) {
     return expr_new_ndarray_like(a, rank - 1, dims + 1, out, odt);
 }
 
-Expr* ndred_variance(Expr* res) {
+static Expr* ndred_variance_raw(Expr* res) {
     if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
     return nd_moment_leading(res, 0);
 }
@@ -1488,11 +1541,11 @@ double ndred_variance_f64(const double* x, size_t n) {
     double ss = nd_full_sumsq(x, NDT_FLOAT64, n, sr / (double)n, 0.0);
     return ss / (double)(n - 1);
 }
-Expr* ndred_std(Expr* res) {
+static Expr* ndred_std_raw(Expr* res) {
     if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
     return nd_moment_leading(res, 1);
 }
-Expr* ndred_rms(Expr* res) {
+static Expr* ndred_rms_raw(Expr* res) {
     if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
     return nd_moment_leading(res, 2);
 }
@@ -1607,7 +1660,7 @@ static Expr* nd_central_moment_leading(Expr* res) {
     return expr_new_ndarray_like(a, rank - 1, dims + 1, out, odt);
 }
 
-Expr* ndred_central_moment(Expr* res) {
+static Expr* ndred_central_moment_raw(Expr* res) {
     return nd_central_moment_leading(res);
 }
 
@@ -1669,7 +1722,7 @@ static Expr* nd_moment_r_leading(Expr* res) {
     return expr_new_ndarray_like(a, rank - 1, dims + 1, out, odt);
 }
 
-Expr* ndred_moment(Expr* res) {
+static Expr* ndred_moment_raw(Expr* res) {
     return nd_moment_r_leading(res);
 }
 
@@ -1735,8 +1788,8 @@ static Expr* nd_stdmoment_leading(Expr* res, int p) {
     return expr_new_ndarray_like(a, rank - 1, dims + 1, out, odt);
 }
 
-Expr* ndred_skewness(Expr* res) { return nd_stdmoment_leading(res, 3); }
-Expr* ndred_kurtosis(Expr* res) { return nd_stdmoment_leading(res, 4); }
+static Expr* ndred_skewness_raw(Expr* res) { return nd_stdmoment_leading(res, 3); }
+static Expr* ndred_kurtosis_raw(Expr* res) { return nd_stdmoment_leading(res, 4); }
 
 /* --------------------------------------------------------------- Max / Min */
 
@@ -1952,7 +2005,7 @@ Expr* ndred_scan(const Expr* a, NDScanOp op, const Expr* seed, bool as_list) {
     return expr_new_ndarray_like(a, 1, dims, nb, dt);
 }
 
-Expr* ndred_accumulate(Expr* res) {
+static Expr* ndred_accumulate_raw(Expr* res) {
     if (res->data.function.arg_count != 1) return ndarray_delist_and_reeval(res);
     Expr* a = res->data.function.args[0];
     int rank = a->data.ndarray.rank;
@@ -2019,3 +2072,27 @@ Expr* ndred_accumulate(Expr* res) {
     }
     return expr_new_ndarray_like(a, rank, dims, out, dt);
 }
+
+/* Public float reductions, guarded by the machine-boundary policy: a result
+ * that overflowed or underflowed (ndred_result_degenerate) is recomputed on the
+ * List path, whose arithmetic keeps it at machine precision in MPFR --
+ * Mean / Variance / Accumulate of {1.*^308, 1.*^308} packed were Overflow[]
+ * or inf.0 (numeric-tower review C3). A NULL (declined) result is unchanged. */
+static Expr* nd_guard(Expr* r, Expr* res) {
+    if (r && ndred_result_degenerate(r)) {
+        expr_free(r);
+        return ndarray_delist_and_reeval(res);
+    }
+    return r;
+}
+Expr* ndred_mean(Expr* res) { return nd_guard(ndred_mean_raw(res), res); }
+Expr* ndred_variance(Expr* res) { return nd_guard(ndred_variance_raw(res), res); }
+Expr* ndred_std(Expr* res) { return nd_guard(ndred_std_raw(res), res); }
+Expr* ndred_rms(Expr* res) { return nd_guard(ndred_rms_raw(res), res); }
+Expr* ndred_central_moment(Expr* res) { return nd_guard(ndred_central_moment_raw(res), res); }
+Expr* ndred_moment(Expr* res) { return nd_guard(ndred_moment_raw(res), res); }
+Expr* ndred_skewness(Expr* res) { return nd_guard(ndred_skewness_raw(res), res); }
+Expr* ndred_kurtosis(Expr* res) { return nd_guard(ndred_kurtosis_raw(res), res); }
+Expr* ndred_accumulate(Expr* res) { return nd_guard(ndred_accumulate_raw(res), res); }
+Expr* ndred_moving_average(Expr* res) { return nd_guard(ndred_moving_average_raw(res), res); }
+Expr* ndred_ema(Expr* res) { return nd_guard(ndred_ema_raw(res), res); }

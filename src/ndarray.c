@@ -1,6 +1,8 @@
 /* NDArray — see ndarray.h for the design rationale. */
 
 #include "ndarray.h"
+#include <float.h>
+#include "numeric.h"
 #include "message.h"
 #include "checked_int.h"   /* ci_*_i64 — exact int64 arithmetic, bail on overflow */
 #include "ndarray_internal.h"
@@ -906,14 +908,25 @@ static bool same_shape(const Expr* a, const Expr* b) {
  * instead of leaving them symbolic. Note leaf_real (used for List->buffer
  * packing) deliberately stays Integer/Real-only. */
 static bool real_scalar_value(const Expr* e, double* re) {
-    int64_t rn, rd;
     if (leaf_real(e, re)) return true;
-    if (e->type == EXPR_BIGINT) { *re = mpz_get_d(e->data.bigint); return true; }
+    /* A BigInt, a Rational of any width, or an MPFR, read correctly rounded
+     * (numeric_machine_value; mpz_get_d truncated). A value a double cannot
+     * hold -- past DBL_MAX, or a nonzero value below DBL_MIN -- declines: the
+     * buffer kernels would turn it into inf / a flushed zero, where the
+     * element path keeps it at machine precision in MPFR ({1., 2.} 10^400
+     * was {inf.0, inf.0}). */
+    double v;
+    bool ok = numeric_machine_value(e, &v);
 #ifdef USE_MPFR
-    if (e->type == EXPR_MPFR)   { *re = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true; }
+    if (!ok && e->type == EXPR_MPFR && mpfr_number_p(e->data.mpfr)) {
+        v = mpfr_get_d(e->data.mpfr, MPFR_RNDN);
+        ok = !(v == 0.0 && !mpfr_zero_p(e->data.mpfr));
+    }
 #endif
-    if (is_rational(e, &rn, &rd)) { *re = (double)rn / (double)rd; return true; }
-    return false;
+    if (!ok || !isfinite(v) || numeric_machine_subnormal(v)) return false;
+    if (v == 0.0 && expr_numeric_sign((Expr*)e) != 0) return false;   /* underflowed */
+    *re = v;
+    return true;
 }
 
 static bool scalar_value(const Expr* e, double* re, double* im, bool* is_cplx) {
@@ -949,21 +962,37 @@ typedef struct {
     bool is_plus, all_f64; void* out; NDType dtc;
 } nd_ew_ctx;
 
+/* True when a machine result is not a machine number under the boundary
+ * policy (docs/design/numeric_tower_review.md): non-finite, a nonzero value
+ * below DBL_MIN, or -- for a product -- a zero from nonzero factors (an
+ * underflow). The element path keeps such a value at machine precision in
+ * MPFR; the buffer cannot, so the kernel declines. Branch-free, so the f64
+ * loop still vectorises. */
+static inline int nd_ew_degenerate(double r, int nonzero_factors) {
+    double m = fabs(r);
+    return (int)!(m <= DBL_MAX) | ((m < DBL_MIN) & ((r != 0.0) | nonzero_factors));
+}
+
 static bool nd_ew_chunk(void* c, size_t lo, size_t hi) {
     const nd_ew_ctx* x = (const nd_ew_ctx*)c;
+    int bad = 0;
     if (x->all_f64) {
         double* od = (double*)x->out;
         for (size_t k = lo; k < hi; k++) {
             double acc = x->sc_re;
+            int nz = (acc != 0.0);
             for (size_t j = 0; j < x->mnd; j++) {
                 double v = ((const double*)x->ndops[j]->data.ndarray.data)[k];
                 acc = x->is_plus ? acc + v : acc * v;
+                nz &= (v != 0.0);
             }
             od[k] = acc;
+            bad |= nd_ew_degenerate(acc, !x->is_plus & nz);
         }
     } else {
         for (size_t k = lo; k < hi; k++) {
             double are = x->sc_re, aim = x->sc_im;
+            int nz = (are != 0.0) | (aim != 0.0);
             for (size_t j = 0; j < x->mnd; j++) {
                 double vre, vim;
                 ndt_get(x->ndops[j]->data.ndarray.data, k,
@@ -974,11 +1003,17 @@ static bool nd_ew_chunk(void* c, size_t lo, size_t hi) {
                     double nim = are * vim + aim * vre;
                     are = nre; aim = nim;
                 }
+                nz &= (vre != 0.0) | (vim != 0.0);
             }
             ndt_set(x->out, k, x->dtc, are, aim);
+            /* A complex product's parts can cancel to an exact zero, so only
+             * the non-finite and nonzero-subnormal parts are degenerate here;
+             * a whole product flushed to zero is caught by |z| below. */
+            bad |= nd_ew_degenerate(are, 0) | nd_ew_degenerate(aim, 0);
+            if (!x->is_plus && nz) bad |= (are == 0.0) & (aim == 0.0);
         }
     }
-    return true;
+    return !bad;
 }
 
 /* Repeat each element of `small` across the trailing axes to fill `dims`.
@@ -1011,7 +1046,8 @@ static Expr* nd_broadcast_to(const Expr* small, const int64_t* dims, int rank) {
     return expr_new_ndarray_like(small, rank, dims, out, dt);
 }
 
-Expr* ndarray_elementwise(Expr** args, size_t n, bool is_plus) {
+Expr* ndarray_elementwise(Expr** args, size_t n, bool is_plus, bool* degenerate) {
+    if (degenerate) *degenerate = false;
     if (n == 0) return NULL;
 
     /* A bool array is not a numeric operand: {True, False} + {True, True} threads
@@ -1051,7 +1087,7 @@ Expr* ndarray_elementwise(Expr** args, size_t n, bool is_plus) {
             }
             /* `changed` also guards the recursion: without it a List that cannot
              * pack (symbolic elements) would re-enter here forever. */
-            Expr* r = changed ? ndarray_elementwise(packed, n, is_plus) : NULL;
+            Expr* r = changed ? ndarray_elementwise(packed, n, is_plus, degenerate) : NULL;
             for (size_t i = 0; i < n; i++) expr_free(packed[i]);
             free(packed);
             if (changed) return r;      /* NULL here means genuinely not ours */
@@ -1112,7 +1148,7 @@ Expr* ndarray_elementwise(Expr** args, size_t n, bool is_plus) {
                     wide[i] = expr_copy(args[i]);
                 }
             }
-            Expr* r = ok ? ndarray_elementwise(wide, n, is_plus) : NULL;
+            Expr* r = ok ? ndarray_elementwise(wide, n, is_plus, degenerate) : NULL;
             for (size_t i = 0; i < n; i++) expr_free(wide[i]);
             free(wide);
             return r;
@@ -1161,7 +1197,13 @@ Expr* ndarray_elementwise(Expr** args, size_t n, bool is_plus) {
                 sc_all_exact_int = false;
                 if (args[i]->type != EXPR_REAL) sc_all_machine = false;
             }
-            if (!scalar_value(args[i], &re, &im, &isc)) { free(ndops); return NULL; }
+            if (!scalar_value(args[i], &re, &im, &isc)) {
+                /* A number a double cannot hold (10^400, N[10^400, 30]) is a
+                 * degenerate scalar, not a symbolic one: the caller delists. */
+                if (degenerate && expr_is_numeric_like(args[i])) *degenerate = true;
+                free(ndops);
+                return NULL;
+            }
             if (isc) scalar_complex = true;
             if (is_plus) { sc_re += re; sc_im += im; }
             else {
@@ -1208,8 +1250,16 @@ Expr* ndarray_elementwise(Expr** args, size_t n, bool is_plus) {
     void* out = malloc(ndt_elem_size(dtc) * sz);
     nd_ew_ctx ctx = { ndops, mnd, sc_re, sc_im, is_plus,
                       (all_nd_f64 && dtc == NDT_FLOAT64), out, dtc };
-    nd_parallel_for(sz, nd_ew_chunk, &ctx);
+    bool lanes_ok = nd_parallel_for(sz, nd_ew_chunk, &ctx);
     free(ndops);
+    if (!lanes_ok) {
+        /* A lane overflowed or underflowed: decline with *degenerate set, and
+         * the caller's delisted element path answers it at machine precision
+         * in MPFR (C3: {1.*^308} 10 was {inf.0}, a flushed underflow 0.). */
+        free(out);
+        if (degenerate) *degenerate = true;
+        return NULL;
+    }
     /* takes ownership of out */
     return expr_new_ndarray_like(present_src, first_nd->data.ndarray.rank,
                             first_nd->data.ndarray.dims, out, dtc);

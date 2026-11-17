@@ -2,6 +2,8 @@
  * Split from stats.c; see stats.h and stats_common.h for the subsystem layout. */
 
 #include "stats_common.h"
+#include <float.h>
+#include <math.h>
 #include "arithmetic.h"   /* is_rational, make_rational */
 #include "complex.h"      /* is_complex */
 #include "eval.h"         /* evaluate, eval_and_free */
@@ -285,4 +287,8 @@ Expr* stats_quantile_point(Expr** sorted_args, size_t n, Expr* q,
 
     Expr* weight_diff = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){g_weight, diff}, 2));
     return eval_and_free(expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){expr_copy(sorted_args[j_idx-1]), weight_diff}, 2));
+}
+
+bool stats_machine_ok(double v) {
+    return isfinite(v) && !(v != 0.0 && fabs(v) < DBL_MIN);
 }

@@ -58,6 +58,10 @@ Gives the mean estimate of the elements in data.
 **Features**:
 - `Protected`.
 - Supports numerical and symbolic data.
+- **Machine overflow / underflow** (v0.6595). The machine-double fast path
+  declines a result outside the machine range to the symbolic path, which keeps
+  it at machine precision in MPFR: `Mean[{1.*^308, 1.*^308}]` is `1.*^308` (it
+  was `Overflow[]`); the packed / NDArray reduction does the same.
 - For vectors, computes $(1/n) \sum x_i$.
 - For matrices, computes means of elements in each column.
 
@@ -76,6 +80,11 @@ Gives the root mean square of values in `list`.
 **Features**:
 - `Protected`.
 - Gives the square root of the second sample moment.
+- **Machine overflow / underflow** (v0.6595). The machine-double fast path
+  declines a result outside the machine range to the symbolic path, which keeps
+  it at machine precision in MPFR: `RootMeanSquare[{1.*^308, 1.*^308}]` is `1.*^308`
+  (it was `Overflow[]`), and squares that underflow to 0 from nonzero data
+  (`RootMeanSquare[{1.*^-200, 1.*^-200}]`, which was `0.`) decline too; the packed / NDArray reduction does the same.
 - For a list `{x1, x2, ...}`, it computes `Sqrt[1/n Total[{x1^2, x2^2, ...}]]`.
 - Handles both numerical and symbolic data.
 - Works column-wise on matrices.
@@ -104,6 +113,8 @@ Gives the unbiased variance estimate of the elements in data.
 **Features**:
 - `Protected`.
 - For vectors, computes $(1/(n-1)) \sum (x_i - \hat{\mu}) \overline{(x_i - \hat{\mu})}$.
+- Machine overflow in the squares declines to the symbolic path (v0.6595), as
+  for `Mean`; `Moment`, `CentralMoment` and `Covariance` follow the same rule.
 - For matrices, computes variances of elements in each column.
 
 ```mathematica

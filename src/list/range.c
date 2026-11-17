@@ -1,5 +1,6 @@
 #include "list_common.h"
 #include "range.h"
+#include "iter.h"   /* iter_real_slack */
 #include "../pack.h"
 #include "../checked_int.h"
 #include "../ndarray.h"   /* ndarray_warn_once */
@@ -62,8 +63,8 @@ static void range_too_large(double count) {
  * 0.30000000000000004 for the third element either way, but not for every
  * step count). */
 #define RANGE_MORE(val, max_val, di_val) \
-    (((di_val) > 0 && (val) <= (max_val) + 1e-14) || \
-     ((di_val) < 0 && (val) >= (max_val) - 1e-14))
+    (((di_val) > 0 && (val) <= (max_val) + iter_real_slack((max_val), (di_val))) || \
+     ((di_val) < 0 && (val) >= (max_val) - iter_real_slack((max_val), (di_val))))
 
 /* Range over exact integers where some bound is a BigInt. NULL (after
  * reporting) when the count exceeds the ceiling or the step is zero. */

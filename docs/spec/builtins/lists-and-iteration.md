@@ -288,6 +288,13 @@ The element count is decided before anything is built, and an all-`Integer`
 elements. (It previously ran to a 10^6-element safety cap: the loop was driven
 by the `double` shadow of its bounds, and one ulp at 10^18 is 128.)
 
+A real iterator's bound test allows a rounding slack **relative** to the
+range, `1e-14 (|imax| + |di|)` (v0.6595; shared by `Range`, `Table`, `Do`,
+`Sum`, `Product`). The old absolute `1e-14` swamped a tiny range:
+`Range[1.*^-200, 2.*^-200, 1.*^-200]` counted ~10^14 elements (refused as
+too big) and `Table` over it never finished. Ranges of order 1 count as
+before.
+
 A result larger than **2 GiB** — about 268 million `int64` elements — is
 refused: `Range::toobig` is reported and the call is left unevaluated, so
 `Head[Range[10^12]]` is `Range`. Until 2026-08-02 the limit was 10^6 elements

@@ -206,6 +206,62 @@ static void test_c8_no_subnormal_machine_numbers(void) {
     chk("MachineNumberQ[2.^-1022]", "True");            /* DBL_MIN is a machine number */
 }
 
+/* ---- Phase 4 (v0.6595): the remaining wrong answers ---------------------- */
+
+static void test_c3_e5_buffer_paths_promote(void) {
+    /* Packed / NDArray Plus, Times and the reductions decline a lane or a
+     * scalar outside the machine range to the element path, which promotes. */
+    chk_true("Developer`ToPackedArray[{1.*^308, 2.}] * 10 == {10^309, 20}");
+    chk_true("Developer`ToPackedArray[{1.*^-200, 2.}] * 1.*^-200 == {10^-400, 2 10^-200}");
+    chk_true("NDArray[{1.*^308, 2.}] + NDArray[{1.*^308, 2.}] == {2 10^308, 4}");
+    chk_true("Developer`ToPackedArray[{1., 2.}] * 10^400 == {10^400, 2 10^400}");
+    chk_true("Total[Developer`ToPackedArray[{1.*^308, 1.*^308}]] == 2 10^308");
+    chk_true("Accumulate[Developer`ToPackedArray[{1.*^308, 1.*^308}]] == {10^308, 2 10^308}");
+    chk_true("Mean[Developer`ToPackedArray[{1.*^308, 1.*^308}]] == 10^308");
+    chk_true("Mean[{1.*^308, 1.*^308}] == 10^308");
+    chk_true("RootMeanSquare[{1.*^308, 1.*^308}] == 10^308");
+    chk_true("RootMeanSquare[{1.*^-200, 1.*^-200}] == 10^-200");
+    chk_true("{1.*^308, 1.*^308} . {1.*^308, 1.*^308} == 2 10^616");
+    chk_true("{1.*^-200, 1.*^-200} . {1.*^-200, 1.*^-200} == 2 10^-400");
+    chk("{1., -1.} . {1., 1.}", "0.0");                      /* cancellation stays */
+    chk("Developer`PackedArrayQ[Developer`ToPackedArray[{1., 2.}] * 10.]", "True");
+}
+
+static void test_e9_compile_underflow(void) {
+    chk_true("Compile[{{x, _Real}}, x x][1.*^-200] == 10^-400");
+    chk_true("Compile[{{v, _Real, 1}}, v v][{1.*^-200, 2.}] == {10^-400, 4}");
+    chk_true("Compile[{{x, _Complex}}, x x][1.*^-200 I] == -10^-400");
+    chk_true("Table[x x, {x, {1.*^-200, 2.}}] == {10^-400, 4}");
+    chk("Compile[{{x, _Real}}, x x][3.]", "9.0");
+}
+
+static void test_d9_negative_literal_power(void) {
+    /* -a^b is -(a^b) for every literal spelling of a. */
+    chk("-2.`30^2 < 0", "True");
+    chk("-2`10^2 < 0", "True");
+    chk_true("-2.5*^3^2 == -6.25 10^6");
+    chk("-2.^2", "-4.0");
+    chk("FullForm[Hold[-2.`30^2]]", "Hold[Times[-1, Power[2.`30., 2]]]");
+}
+
+static void test_e4_quotient_mpfr(void) {
+    chk("Quotient[N[10^30, 40] + 1/2, 1] - 10^30", "0");
+    chk("Quotient[-N[7, 30], 2]", "-4");
+    chk("Quotient[N[10, 30], 3, 1/2]", "3");
+}
+
+static void test_e2_machine_zero_times_mpfr(void) {
+    chk("Exp[1000.] * 0.", "0.0");
+    chk("MachineNumberQ[Exp[1000.] * 0.]", "True");
+}
+
+static void test_e10_tiny_iterator_step(void) {
+    chk_true("Range[1.*^-200, 2.*^-200, 1.*^-200] == {10^-200, 2 10^-200}");
+    chk("Length[Table[x, {x, 1.*^-200, 5.*^-200, 1.*^-200}]]", "5");
+    chk("Length[Range[0., 1., 0.1]]", "11");                  /* unchanged */
+    chk("Length[Table[x, {x, 0., 10., 0.01}]]", "1001");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -226,6 +282,12 @@ int main(void) {
     TEST(test_c6_machine_contagion);
     TEST(test_c7_compare_out_of_double_range);
     TEST(test_c8_no_subnormal_machine_numbers);
+    TEST(test_c3_e5_buffer_paths_promote);
+    TEST(test_e9_compile_underflow);
+    TEST(test_d9_negative_literal_power);
+    TEST(test_e4_quotient_mpfr);
+    TEST(test_e2_machine_zero_times_mpfr);
+    TEST(test_e10_tiny_iterator_step);
 
     if (g_fail) {
         printf("%d numeric-tower review check(s) FAILED\n", g_fail);

@@ -1935,6 +1935,25 @@ static bool number_followed_by_power(const char* p) {
         if (isdigit((unsigned char)*p)) { while (isdigit((unsigned char)*p)) p++; }
         else p = save;
     }
+    /* A precision or accuracy mark (`30, `30., ``20, a bare `) and a *^
+     * exponent are part of the literal too: without skipping them -2.`30^2
+     * folded the sign into the literal and gave 4, not -(2.`30^2) = -4 (and
+     * likewise -2`10^2 and -2.5*^3^2). */
+    if (*p == '`') {
+        p++;
+        if (*p == '`') p++;
+        if (*p == '+' || *p == '-') p++;
+        while (isdigit((unsigned char)*p)) p++;
+        if (*p == '.' && p[1] != '.') { p++; while (isdigit((unsigned char)*p)) p++; }
+    }
+    if (p[0] == '*' && p[1] == '^') {
+        const char* q = p + 2;
+        if (*q == '+' || *q == '-') q++;
+        if (isdigit((unsigned char)*q)) {
+            while (isdigit((unsigned char)*q)) q++;
+            p = q;
+        }
+    }
     while (*p == ' ' || *p == '\t') p++;
     return *p == '^';
 }

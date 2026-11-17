@@ -21,6 +21,7 @@
 
 #include "stats.h"
 #include "stats_common.h"
+#include <math.h>
 #include "eval.h"
 #include "arithmetic.h"   /* make_rational */
 #include "sym_names.h"
@@ -93,7 +94,9 @@ static Expr* g_cov_vectors(Expr* v, Expr* w) {
             stats_is_numeric(w->data.function.args[i], &xw, NULL);
             s += (xv - mv) * (xw - mw);
         }
-        return expr_new_real(s / (double)(n - 1));
+        double c = s / (double)(n - 1);
+        if (stats_machine_ok(c) && isfinite(mv) && isfinite(mw))
+            return expr_new_real(c);   /* else decline to the exact path (C3) */
     }
 
     /* Exact / complex / symbolic: (1/(n-1)) Sum (v_i - mu_v) Conjugate[w_i - mu_w]. */

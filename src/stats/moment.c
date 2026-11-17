@@ -131,7 +131,8 @@ Expr* builtin_moment(Expr* res) {
                 stats_is_numeric(data->data.function.args[i], &v, NULL);
                 acc += mom_ipow(v, r);
             }
-            return expr_new_real(acc / (double)n);
+            double m = acc / (double)n;
+            if (stats_machine_ok(m)) return expr_new_real(m);   /* else decline (C3) */
         }
     }
 

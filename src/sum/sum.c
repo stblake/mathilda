@@ -521,8 +521,8 @@ static Expr* sum_try_compiled(Expr* f, const IterSpec* s,
 
     /* Empty range: let expand_range fold the exact identity 0 (a compiled loop
      * would answer 0. — a spurious inexactness). */
-    bool nonempty = (di_val > 0) ? (min_val <= max_val + 1e-14)
-                                 : (min_val >= max_val - 1e-14);
+    bool nonempty = (di_val > 0) ? (min_val <= max_val + iter_real_slack(max_val, di_val))
+                                 : (min_val >= max_val - iter_real_slack(max_val, di_val));
     if (!nonempty) return NULL;
 
     /* Runaway guard only — well above SUM_MAX_FINITE_TERMS (see the macro). */

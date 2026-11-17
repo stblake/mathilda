@@ -9,20 +9,28 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
 - [x] Phase 1. Crashes and UB: A1 A2 A4 A5 A6, the Times SIGFPE (A3 withdrawn)
 - [x] Phase 2. Exact layer: B1–B7
 - [x] Phase 3. Machine/MPFR boundary policy: C1 C2 C4 C6 C7 C8 (C5 withdrawn)
-- [ ] Phase 3 land: the full unit tier green (batched run in progress), then commit and tag v0.6594
-- [ ] Phase 4. Remaining wrong answers (v0.6594, one commit)
-  - [ ] C3 + E5: `nd_ew_chunk` gets a branch-free degenerate-lane flag (non-finite, or nonzero
-        below DBL_MIN, or a Times zero from nonzero operands); a flagged lane makes the kernel
-        decline, and the scalar path promotes each element. Decode scalars with
-        `numeric_machine_value`. Also `Total`/`Accumulate` (ndreduce.c). Verify with
-        scalar == List == packed == NDArray, and `check-nd-surfaces`.
-  - [ ] E9: `Compile` scalar and rank-1 `Times`/`Plus` underflow fall back like overflow.
-        Verify with `CompileDiagnostics` and `check-compile-coverage`.
-  - [ ] D9: `number_followed_by_power` skips a precision mark (`` `p ``, ``` ``a ```) and
-        `*^[+-]digits`. Cases: `-2.`30^2`, `-2`10^2`, `-2.5*^3^2`, and `-2.^2` stays right.
-  - [ ] E4: the `Quotient` real fallback works on MPFR operands exactly (`mpfr_floor` /
-        `mpfr_get_z`), not through a double.
-  - [ ] E2: an MPFR value times a machine `0.` is a machine `0.` (contagion in `multiply_numbers`).
+- [x] Phase 3 landed: full unit tier green (8 failures triaged: 5 intended expectation changes, a too-broad Complex rule narrowed, 1 load flake); v0.6594 (bff52dd61)
+- [x] Phase 4. Remaining wrong answers: v0.6595
+  - [x] C3 + E5: `nd_ew_chunk` degenerate flag -> decline -> `ndarray_delist_and_reeval`
+        (`ndarray_elementwise(..., &degenerate)`); `real_scalar_value` correctly rounded and
+        declines an unrepresentable scalar; reductions wrapped by `nd_guard` (Total, Accumulate,
+        Mean, Variance, Std, RMS, moments, MovingAverage, EMA)
+  - [x] E11 (new): the plain-list machine fast paths of Mean / Variance / RMS / Moment /
+        CentralMoment / Covariance (`stats_machine_ok`) and `Dot` (`dot_decline_degenerate`)
+  - [x] E9: `compile_underflow.h`. The IEEE flag (cleared only when set: per-call cost
+        stays at parity) or a subnormal result makes a CompiledFunction call / Table element
+        fall back. Table checks once per buffer. NIntegrate/Plot/FindMinimum/NDSolve are
+        deliberately not covered.
+  - [x] D9: `number_followed_by_power` skips the precision mark and `*^`
+  - [x] E4: `Quotient` of MPFR operands is `Floor[(m - d)/n]`
+  - [x] E2: a machine `0.` times a finite MPFR is the machine `0.`
+  - [x] E10 (new, found by the E9 probe): the iterator bound slack is relative (`iter_real_slack`
+        in Range / Table / Do / Sum / Product)
+  - [x] corpus, spec, design note; gates: c99, messages, packed-aware, array-exactness,
+        nd-surfaces; perf at parity (compiled call, packed Table, 10^7 elementwise / Total /
+        Mean / Dot)
+  - [x] full unit tier green. The one failure, integrate_gr132_1 (4.397.11 hangs), is
+        pre-existing from v0.6593 b30890324 (Risch): it reproduces on a v0.6593-only build
 - [ ] Phase 5. Fixed-precision correctness (v0.6595)
   - [ ] D3: `expr_log10_abs` uses `mpz_get_d_2exp` / `mpfr_get_d_2exp`, and handles a BigInt
         rational and INT64_MIN (`-v` is UB today).

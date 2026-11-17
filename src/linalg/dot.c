@@ -14,6 +14,10 @@
 #include "ndlinalg.h"   /* linalg_pack_machine_operand: contagion packing */
 #include "dot_mpfr.h"
 #include "flint_mat_bridge.h"   /* flint_mat_mul: exact rational products */
+#include "ndreduce.h"   /* ndred_result_degenerate: machine-boundary decline */
+#include "numeric.h"    /* numeric_machine_value */
+#include <float.h>
+#include <math.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -223,10 +227,43 @@ static Expr* dot_small_real(const Expr* a, const Expr* b) {
 #endif
 }
 
+/* A machine Dot result that is not a machine number -- an entry that
+ * overflowed, or a nonzero one below DBL_MIN (ndred_result_degenerate) -- or
+ * a real inner product of 0 / a subnormal to which some nonzero term
+ * underflowed. The generic Times/Plus path below keeps such a value at
+ * machine precision in MPFR ({1.*^308, 1.*^308} . {1.*^308, 1.*^308} was
+ * Overflow[], {1.*^-200} . {1.*^-200} was 0.). Frees `r` and returns true when
+ * the caller must decline to it. A zero from cancellation ({1, -1} . {1, 1})
+ * stays: only an underflowed TERM counts. */
+static bool dot_decline_degenerate(Expr* r, const Expr* a, const Expr* b) {
+    if (!r) return false;
+    bool bad = ndred_result_degenerate(r);
+    if (!bad && r->type == EXPR_REAL && fabs(r->data.real) < DBL_MIN) {
+        Expr* la = (a->type == EXPR_NDARRAY) ? ndarray_to_nested_list(a) : NULL;
+        Expr* lb = (b->type == EXPR_NDARRAY) ? ndarray_to_nested_list(b) : NULL;
+        const Expr* va = la ? la : a;
+        const Expr* vb = lb ? lb : b;
+        if (va->type == EXPR_FUNCTION && vb->type == EXPR_FUNCTION
+            && va->data.function.arg_count == vb->data.function.arg_count) {
+            for (size_t k = 0; k < va->data.function.arg_count && !bad; k++) {
+                double x, y;
+                if (!numeric_machine_value(va->data.function.args[k], &x)
+                    || !numeric_machine_value(vb->data.function.args[k], &y)) continue;
+                double t = x * y;
+                bad = x != 0.0 && y != 0.0 && fabs(t) < DBL_MIN;
+            }
+        }
+        expr_free(la);
+        expr_free(lb);
+    }
+    if (bad) expr_free(r);
+    return bad;
+}
+
 Expr* dot2(Expr* a, Expr* b, bool* error_printed) {
     {
         Expr* small = dot_small_real(a, b);
-        if (small) return small;
+        if (small && !dot_decline_degenerate(small, a, b)) return small;
     }
     /* One operand packed and the other an ordinary List: pack the plain one and
      * let the pair take the buffer path.
@@ -283,10 +320,12 @@ Expr* dot2(Expr* a, Expr* b, bool* error_printed) {
     if (fa->type == EXPR_NDARRAY && fb->type == EXPR_NDARRAY) {
 #ifdef USE_LAPACK
         Expr* bl = nd_blas_matmul(fa, fb);   /* rank-2 f64 matmul -> BLAS dgemm */
+        if (bl && dot_decline_degenerate(bl, fa, fb)) goto generic;
         if (bl) { expr_free(tmp_a); expr_free(tmp_b); return bl; }
 #endif
         bool shape_error = false;
         Expr* fast = ndarray_dot2(fa, fb, &shape_error);
+        if (fast && dot_decline_degenerate(fast, fa, fb)) goto generic;
         if (fast) { expr_free(tmp_a); expr_free(tmp_b); return fast; }
         if (shape_error) {
             if (!*error_printed) {
@@ -304,6 +343,7 @@ Expr* dot2(Expr* a, Expr* b, bool* error_printed) {
     }
     /* Fell through: the generic path below reads the ORIGINAL operands, so the
      * packed temporaries are dead here. */
+generic:
     expr_free(tmp_a);
     expr_free(tmp_b);
 

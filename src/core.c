@@ -4237,6 +4237,24 @@ Expr* builtin_quotient(Expr* res) {
         return out;
     }
 
+    /* An arbitrary-precision operand: the double fallback below read it
+     * through mpfr_get_d, so Quotient[N[10^30, 40] + 1/2, 1] was off by
+     * 2*10^13. Floor of an MPFR value is exact, so hand the evaluator
+     * Floor[(m - d)/n], the definition, at the operands' own precision. */
+    if ((numeric_expr_is_mpfr(m_expr) || numeric_expr_is_mpfr(n_expr)
+         || (d_expr && numeric_expr_is_mpfr(d_expr)))
+        && expr_numeric_sign(n_expr) != 0) {     /* a zero divisor declines below */
+        Expr* num = d_expr
+            ? expr_new_function(expr_new_symbol(SYM_Plus), (Expr*[]){ expr_copy(m_expr),
+                  expr_new_function(expr_new_symbol(SYM_Times),
+                      (Expr*[]){ expr_new_integer(-1), expr_copy(d_expr) }, 2) }, 2)
+            : expr_copy(m_expr);
+        Expr* quo = expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){ num,
+                expr_new_function(expr_new_symbol(SYM_Power),
+                    (Expr*[]){ expr_copy(n_expr), expr_new_integer(-1) }, 2) }, 2);
+        return expr_new_function(expr_new_symbol(SYM_Floor), (Expr*[]){ quo }, 1);
+    }
+
     /* Fallback for any input that contains a Real / Rational / etc. The
      * previous double-only path is retained here. */
     double m_val, n_val, d_val = 0.0;

@@ -83,7 +83,7 @@ not wrong. They are left as they are.
 |---|---|---|---|
 | C1 | `1.*^400`, `1.*^-400`, `1.*^-320` | `inf.0`, `0.`, a 4-digit subnormal | fixed (policy) |
 | C2 | `1.*^308 + 1.*^308`, `1.*^-200 * 1.*^-200` | `Overflow[]`, `0.` | fixed (policy) |
-| C3 | packed `{1.*^308} * 10` | `{inf.0}` | open: see section E |
+| C3 | packed `{1.*^308} * 10` | `{inf.0}` | fixed v0.6595 (see section E) |
 | C4 | `Sqrt[-1.]` (all surfaces) | `6.1*^-17 + 1. I` | fixed: `mth_sincospi`, shared by scalar and ND |
 | C5 | `Log[0.]` | `Indeterminate` | withdrawn: no ground truth available. `Indeterminate` is defensible for an approximate zero |
 | C6 | `N[Pi,30]^1.5`, `Complex[1.5`30, 2.]` | 30 digits kept | fixed: contagion in `Power`; `Complex[]` is one kind |
@@ -103,18 +103,20 @@ not wrong. They are left as they are.
 | D6 | `N[Exp[10^9], 20]` | `Overflow[]` | decided 2026-11-17: keep the library default; no change |
 | D7 | `N[1/3, -1]`, `SetPrecision[1.5, 0]`, `$MinPrecision` | unevaluated, no message | open |
 | D8 | `` 1.5`+nan ``; ``` 0``-5 ``` | `2.` (accepted silently); accuracy clamped to 1 | open: parser `strtod` in the precision mark |
-| D9 | `-2.`30^2`, `-2`10^2`, `-2.5*^3^2` | `4.`, `4.`, `6.25*10^6` (should be negative) | open: **wrong answer**. `number_followed_by_power` does not skip a precision mark or `*^` |
+| D9 | `-2.`30^2`, `-2`10^2`, `-2.5*^3^2` | `4.`, `4.`, `6.25*10^6` (should be negative) | fixed v0.6595 |
 | D9 note | `Exp[-10.`30^10]` | `Overflow[]` | the same parser bug: it read as `Exp[(-10.`30)^10]`. It was recorded as an underflow finding at first |
 
 ### E. Found while fixing (2026-11-17)
 | # | Repro | Got | Status |
 |---|---|---|---|
-| C3 | packed / NDArray `{1.*^308, 2.} * 10`, `+`, `{1.*^-200} * 1.*^-200`, `Total` | `{inf.0, 20.}`, `{0., ...}`, `Overflow[]` | open: **wrong answer**. `nd_ew_chunk` has no degenerate-lane decline; the scalar path is fixed |
-| E5 | packed `{1., 2.} * 10^400`, `+ N[10^400, 30]` | `{inf.0, inf.0}` | open: `real_scalar_value` (ndarray.c) decodes with `mpz_get_d`/`mpfr_get_d` |
-| E9 | `Compile[{{x, _Real}}, x x][1.*^-200]` | `0.` (the interpreter gives `1.*10^-400`) | open: Compile scalar/rank-1 underflow; overflow already falls back |
-| E4 | `Quotient[N[10^30, 40] + 1/2, 1] - 10^30` | `19884624838656` (should be 0) | open: **wrong answer**. The `Quotient` real fallback reads MPFR through a double |
-| E2 | `Exp[1000.] * 0.` | `0.e-15` (an MPFR zero) | open: an MPFR value times a machine `0.` should be a machine `0.` |
+| C3 | packed / NDArray `{1.*^308, 2.} * 10`, `+`, `{1.*^-200} * 1.*^-200`, `Total` | `{inf.0, 20.}`, `{0., ...}`, `Overflow[]` | fixed v0.6595: degenerate-lane decline + delist (elementwise), `nd_guard` (reductions), stats fast paths, `Dot` |
+| E5 | packed `{1., 2.} * 10^400`, `+ N[10^400, 30]` | `{inf.0, inf.0}` | fixed v0.6595: correctly rounded decode; an unrepresentable scalar declines |
+| E9 | `Compile[{{x, _Real}}, x x][1.*^-200]` | `0.` (the interpreter gives `1.*10^-400`) | fixed v0.6595: underflow flag / subnormal result falls back (CompiledFunction, Table) |
+| E4 | `Quotient[N[10^30, 40] + 1/2, 1] - 10^30` | `19884624838656` (should be 0) | fixed v0.6595: `Floor[(m - d)/n]` at the operands' precision |
+| E2 | `Exp[1000.] * 0.` | `0.e-15` (an MPFR zero) | fixed v0.6595 |
 | E1 | `(1.*^308 * 10.)/1.*^10` | 53-bit MPFR, `MachineNumberQ` False | open (decided 2026-11-17: demote once in range) |
+| E10 | `Range[1.*^-200, 2.*^-200, 1.*^-200]`; `Table` over it | `Range::toobig` (~10^14 elements); `Table` hung | fixed v0.6595: the iterator's bound slack is relative (`iter_real_slack`) |
+| E11 | `Mean`/`Variance`/`RootMeanSquare`/`Dot` of `{1.*^308, 1.*^308}` (plain lists too) | `Overflow[]`; underflow gave `0.` | fixed v0.6595: each machine fast path declines a degenerate result |
 | E3 | `(2/3)^(-2^63)` | `1/(2/3)^9223372036854775808` | open, cosmetic: should be `(3/2)^(2^63)` |
 | C9 | `1.*^15`, `$MachineEpsilon` | `1e+15`, `2.22045e-16`; `Precision[2.^-1074]` is `15.9546` | open (decided 2026-11-17: always print a decimal point; a promoted value reports `MachinePrecision`) |
 

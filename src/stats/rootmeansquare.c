@@ -67,7 +67,17 @@ Expr* builtin_rootmeansquare(Expr* res) {
             stats_is_numeric(data->data.function.args[i], &v, NULL);
             sum_sq += v * v;
         }
-        return expr_new_real(sqrt(sum_sq / (double)n));
+        double r = sqrt(sum_sq / (double)n);
+        /* Squares that overflowed, or underflowed to 0 from nonzero data
+         * (RootMeanSquare[{1.*^-200, 1.*^-200}] was 0.), decline to the
+         * symbolic path below (numeric-tower review C3). */
+        bool any_nonzero = false;
+        for (size_t i = 0; i < n && !any_nonzero; i++) {
+            double v = 0.0;
+            stats_is_numeric(data->data.function.args[i], &v, NULL);
+            any_nonzero = v != 0.0;
+        }
+        if (stats_machine_ok(r) && (r != 0.0 || !any_nonzero)) return expr_new_real(r);
     }
 
     // Fallback to symbolic (also used for exact rationals/integers to ensure correct square root distribution)

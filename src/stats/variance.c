@@ -75,7 +75,8 @@ Expr* builtin_variance(Expr* res) {
             }
             double v = ndred_variance_f64(xs, n);
             free(xs);
-            return expr_new_real(v);
+            /* Overflowed squares decline to the symbolic path (C3). */
+            if (stats_machine_ok(v)) return expr_new_real(v);
         } else {
             /* Exact calculation for Variance, WITH OVERFLOW DETECTION.
              * Var = (Sum[x^2] - n*Mean[x]^2) / (n-1)

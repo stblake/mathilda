@@ -227,6 +227,15 @@ static Expr* multiply_numbers(Expr* a, Expr* b) {
              || (b->type == EXPR_INTEGER && b->data.integer == 0 && a->type == EXPR_MPFR
                  && mpfr_number_p(a->data.mpfr))))
             return expr_new_integer(0);
+        /* Likewise a machine 0. times a finite MPFR -- in practice a value
+         * the machine/MPFR boundary policy keeps outside the double range,
+         * since contagion lowers every in-range MPFR first -- is the machine
+         * 0.: Exp[1000.] 0. was an MPFR zero, 0.e-15. */
+        if ((a->type == EXPR_REAL && a->data.real == 0.0 && b->type == EXPR_MPFR
+             && mpfr_number_p(b->data.mpfr))
+            || (b->type == EXPR_REAL && b->data.real == 0.0 && a->type == EXPR_MPFR
+                && mpfr_number_p(a->data.mpfr)))
+            return expr_new_real(0.0);
         Expr* r = numeric_mpfr_mul(a, b, 0);
         if (r) return r;
     }
@@ -1361,8 +1370,15 @@ Expr* builtin_times(Expr* res) {
         for (size_t i = 0; i < n; i++)
             if (is_ndarray(res->data.function.args[i])) { any_nd = true; break; }
         if (any_nd) {
-            Expr* fast = ndarray_elementwise(res->data.function.args, n, false);
+            bool degenerate = false;
+            Expr* fast = ndarray_elementwise(res->data.function.args, n, false, &degenerate);
             if (fast) return fast;
+            /* A lane or scalar outside the machine range: the element path
+             * keeps it at machine precision in MPFR (numeric-tower review C3). */
+            if (degenerate) {
+                Expr* r = ndarray_delist_and_reeval(res);
+                if (r) return r;
+            }
             Expr* retry = ndarray_int64_delist_retry(res);
             if (retry) return retry;
             if (ndarray_warn_shape_mismatch(res->data.function.args, n, "multiplied"))

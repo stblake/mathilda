@@ -9,6 +9,7 @@
 #include "sym_names.h"
 #include "assoc.h"
 #include "ndreduce.h"
+#include "numeric.h"   /* numeric_machine_subnormal */
 
 Expr* builtin_mean(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
@@ -71,7 +72,13 @@ Expr* builtin_mean(Expr* res) {
                 stats_is_numeric(data->data.function.args[i], &v, NULL);
                 sum_val += v;
             }
-            return expr_new_real(sum_val / (double)n);
+            /* A sum that overflowed (Mean[{1.*^308, 1.*^308}] was Overflow[])
+             * or a mean below DBL_MIN cannot be answered here: decline to the
+             * symbolic Plus path below, which keeps the value at machine
+             * precision in MPFR (numeric-tower review C3). */
+            double mean_val = sum_val / (double)n;
+            if (stats_machine_ok(mean_val))
+                return expr_new_real(mean_val);
         } else {
             /* Exact rational arithmetic in int64, WITH OVERFLOW DETECTION.
              *

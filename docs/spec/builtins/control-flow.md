@@ -698,6 +698,15 @@ expression would.
 - **Attributes:** `HoldAll`, `Protected`. The body is compiled in its raw
   (unevaluated) form; the argument symbols stay local, so a global value for one
   of them does not leak in.
+- **Underflow falls back** (v0.6595). A call whose machine result underflowed
+  (the IEEE underflow flag was raised during the run, or the result is
+  subnormal) is answered by the interpreter, which keeps the value at machine
+  precision in MPFR: `Compile[{{x, _Real}}, x x][1.*^-200]` is `1.*10^-400`
+  (it was `0.`). Overflow already fell back. The same holds for `Table`'s
+  auto-compiled elements. Inside `NIntegrate` / `Plot` / `FindMinimum` /
+  `NDSolve` an underflowed sample is kept: it only feeds a sum or a sample
+  point. A buffer split across worker threads raises the flag there, so for
+  such an array result only a subnormal entry is detected.
 - **The object** (v0.6060). `Head` gives `CompiledFunction`, so does part 0,
   and `_CompiledFunction` matches it. The `CompiledFunction` symbol is
   `HoldAll`, `NHoldAll` and `Protected`, as in the reference less

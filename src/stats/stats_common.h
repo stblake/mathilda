@@ -14,6 +14,13 @@
  * complex, because <complex.h> makes `complex` a reserved macro.) */
 bool stats_is_numeric(Expr* e, double* val, bool* out_complex);
 
+/* True when a machine-double statistic is a machine number under the
+ * boundary policy (docs/design/numeric_tower_review.md): finite and not a
+ * nonzero value below DBL_MIN. A fast path whose result fails this declines
+ * to its symbolic path, which keeps the value at machine precision in MPFR:
+ * Mean[{1.*^308, 1.*^308}] was Overflow[] where the answer is 1.*^308. */
+bool stats_machine_ok(double v);
+
 /* Apply the builtin named func_name column-wise to a matrix, i.e.
  * Map[func_name, Transpose[matrix]]. Returns NULL if the transpose is not a
  * function. */

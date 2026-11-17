@@ -655,8 +655,15 @@ Expr* builtin_plus(Expr* res) {
         for (size_t i = 0; i < n; i++)
             if (is_ndarray(res->data.function.args[i])) { any_nd = true; break; }
         if (any_nd) {
-            Expr* fast = ndarray_elementwise(res->data.function.args, n, true);
+            bool degenerate = false;
+            Expr* fast = ndarray_elementwise(res->data.function.args, n, true, &degenerate);
             if (fast) return fast;
+            /* A lane or scalar outside the machine range: the element path
+             * keeps it at machine precision in MPFR (numeric-tower review C3). */
+            if (degenerate) {
+                Expr* r = ndarray_delist_and_reeval(res);
+                if (r) return r;
+            }
             Expr* retry = ndarray_int64_delist_retry(res);
             if (retry) return retry;
             if (ndarray_warn_shape_mismatch(res->data.function.args, n, "added"))

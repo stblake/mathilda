@@ -23,6 +23,9 @@ the user typed.
   (machine precision, MPFR's exponent range) -- what `Exp[1000.]` returns. It
   used to be a raw `inf.0` that survived `Hold`, a `0.`, or a subnormal with a
   few good digits.
+- **`-a^b` is `-(a^b)`** for every spelling of the literal `a` (v0.6595):
+  `-2.`30^2`, `-2`10^2` and `-2.5*^3^2` are negative. A precision mark or a
+  `*^` exponent used to let the sign fold into the literal (`4.`).
 - **Integer literals** of more than 19 digits that still fit `int64` (leading
   zeros: `000000000000000000001`) are an `Integer`, as is every integer-valued
   BigInt (`expr_hash` hashes an int64-sized BigInt as its Integer, so `Union`,
@@ -359,6 +362,9 @@ Symbolic sum.
   MPFR's exponent range) -- the policy `Power`/`Exp` already followed
   (`Exp[1000.]`). An exact zero (`1. - 1.`) stays a machine zero. `Overflow[]`
   is reserved for values past the MPFR range, or an `Overflow[]` argument.
+  The packed / NDArray buffer path declines such a lane, or a scalar a double
+  cannot hold (`{1., 2.} 10^400`), to the element path, so every surface gives
+  this answer (v0.6595; it leaked `inf.0`).
 - Operands of the machine path are read correctly rounded: a BigInt or a
   `Rational` with BigInt parts no longer truncates (or reads as `0`).
 - A finite term plus a real `±Infinity` absorbs the finite part (`Infinity + 3 → Infinity`),
@@ -689,6 +695,8 @@ Symbolic product.
   underflowing product of nonzero operands (`1.*^-200 * 1.*^-200`, which was
   `0.`) is `1.*10^-400` at machine precision. `Overflow[]` only past the MPFR
   range or for an `Overflow[]` argument.
+- A machine `0.` times a finite MPFR number is the machine `0.` (v0.6595):
+  `Exp[1000.] 0.` was an MPFR zero, `0.e-15`.
 - **Sign distribution.** A product of exactly two factors, a coefficient `-1`
   or `-1/n` and a sum, distributes the sign over the sum, as in the reference:
   `-(-1 + x)` is `1 - x`, `-(x + y) z` is `(-x - y) z` (the parser reads it as
@@ -965,7 +973,9 @@ seconds (`Sqrt[3141592653589793238]` took 24 s while
   rounded, so `Quotient[-5.5, 3.]` is `-2`. The three-argument form
   `Quotient[n, m, d]` is `Floor[(n - d)/m]`. A real quotient outside the
   `int64` range is the exact integer (`Quotient[1.*^300, 1] === Floor[1.*^300]`;
-  it was `-2^63`, an undefined cast, before v0.6594). For **complex** `n` or `m` it is
+  it was `-2^63`, an undefined cast, before v0.6594). An arbitrary-precision
+  operand is `Floor[(n - d)/m]` at its own precision: `Quotient[N[10^30, 40] +
+  1/2, 1]` is `10^30` (it was read through a double, off by `2*10^13`; v0.6595). For **complex** `n` or `m` it is
   Gaussian-integer division: the ratio's real and imaginary parts are each
   **rounded to the nearest integer** (ties to even, like `Round[]`), giving the
   quotient of least remainder norm. So `Quotient[10 + 2 I, 3 + I]` is `3`,

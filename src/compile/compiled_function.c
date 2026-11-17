@@ -2,6 +2,9 @@
  * compiled_function.h and docs/design/compile.md (milestone M1b). */
 
 #include "compiled_function.h"
+#include "compile_underflow.h"   /* E9: underflow -> interpreter */
+#include "ndreduce.h"          /* ndred_result_degenerate */
+#include "ndarray.h"
 #include "compile.h"
 
 #include <stdlib.h>
@@ -734,14 +737,43 @@ Expr* compiled_function_apply(const CompiledFunction* cf, Expr* const* args, siz
                 double av[CF_APPLY_STACK_ARGS], o;
                 if (nargs <= CF_APPLY_STACK_ARGS) {
                     for (size_t i = 0; i < nargs; i++) av[i] = cv[i].v.r;
-                    bool ok = compiled_eval_real(cf->prog, av, &o);
+                    cvm_underflow_clear();
+                    bool ok = compiled_eval_real(cf->prog, av, &o)
+                              && !cvm_underflowed() && !cvm_subnormal(o);   /* C3/E9 */
                     CF_RELEASE_PACKED();
                     free(heap);
                     return ok ? expr_new_real(o) : cf_fallback(cf, args, nargs);
                 }
             }
             CompileValue out;
-            if (compiled_eval(cf->prog, cv, &out)) {
+            cvm_underflow_clear();
+            bool cv_ok = compiled_eval(cf->prog, cv, &out);
+            /* A scalar machine result that underflowed is the interpreter's
+             * to answer (numeric-tower review E9): Compile[{{x, _Real}}, x x]
+             * at 1.*^-200 was 0. where the interpreter gives 1.*10^-400.
+             * Array results are covered by the buffer kernels' own decline. */
+            if (cv_ok && (out.type == CT_REAL || out.type == CT_COMPLEX)) {
+                bool under = cvm_underflowed()
+                    || (out.type == CT_REAL && cvm_subnormal(out.v.r))
+                    || (out.type == CT_COMPLEX && (cvm_subnormal(creal(out.v.z))
+                                                   || cvm_subnormal(cimag(out.v.z))));
+                if (under) cv_ok = false;
+            } else if (cv_ok && CT_IS_ARRAY(out.type) && out.v.a
+                       && out.v.a->type == EXPR_NDARRAY
+                       && !ndt_is_complex(out.v.a->data.ndarray.dtype)
+                       && out.v.a->data.ndarray.dtype != NDT_INT64
+                       && out.v.a->data.ndarray.dtype != NDT_BOOL) {
+                /* A machine array result: the flag (raised on this thread --
+                 * a buffer large enough to be split across worker threads
+                 * raises it there, so only the subnormal-entry scan sees it)
+                 * or a degenerate entry hands the call to the interpreter:
+                 * Compile[{{v, _Real, 1}}, v v][{1.*^-200, 2.}] was {0., 4.}. */
+                if (cvm_underflowed() || ndred_result_degenerate(out.v.a)) {
+                    expr_free(out.v.a);
+                    cv_ok = false;
+                }
+            }
+            if (cv_ok) {
                 Expr* r = cf_unbox(&out);
                 /* The result's PRESENTATION must be the one the interpreter
                  * would give for the same input, or the compiled path answers

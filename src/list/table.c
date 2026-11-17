@@ -9,6 +9,27 @@
 #include <gmp.h>
 #include <complex.h>   /* csin & co.: the builtins' machine formula */
 #include <float.h>     /* DBL_MIN */
+#include "compile/compile_underflow.h"   /* E9 */
+
+/* Table's elements are user-visible, so a compiled element that underflowed
+ * (the IEEE flag, or a subnormal value) is left to the interpreter, which
+ * keeps it at machine precision in MPFR: Table[x x, {x, {1.*^-200}}] was
+ * {0.} (numeric-tower review E9). A false / NULL here takes the existing
+ * per-element fallback. */
+/* The packed loop's per-element step: the flag is read once per BUFFER by
+ * the caller (table_ac_loop_underflowed), not per element. */
+static bool table_ac_real(const AutoCompiled* ac, const double* xs, double* out) {
+    return autocompiled_eval_real(ac, xs, out) && !cvm_subnormal(*out);
+}
+static Expr* table_ac_boxed(const AutoCompiled* ac, const double* xs) {
+    cvm_underflow_clear();
+    Expr* e = autocompiled_eval_boxed(ac, xs);
+    if (e && (cvm_underflowed() || (e->type == EXPR_REAL && cvm_subnormal(e->data.real)))) {
+        expr_free(e);
+        return NULL;
+    }
+    return e;
+}
 
 
 /* Element backstop for a finite Table range, matching Sum's SUM_MAX_FINITE_TERMS
@@ -1066,9 +1087,16 @@ Expr* builtin_table(Expr* res) {
             Expr* packed = overflow ? NULL : ndbuild_open_f64((int64_t)total, &buf);
             if (packed) {
                 size_t i = 0;
-                while (i < total && autocompiled_eval_real(ac, &val, &buf[i])) {
+                cvm_underflow_clear();
+                while (i < total && table_ac_real(ac, &val, &buf[i])) {
                     i++;
                     val += di_val;
+                }
+                /* An underflow anywhere in the buffer: abandon all of it and
+                 * let the per-element path below redo the range (rare). */
+                if (i == total && cvm_underflowed()) {
+                    i = 0;
+                    val = min_val;
                 }
                 if (i == total) {
                     autocompiled_free(ac);
@@ -1095,7 +1123,7 @@ Expr* builtin_table(Expr* res) {
             if ((int64_t)results_count >= TABLE_MAX_FINITE_ELEMENTS) { overflow = true; break; }
             /* Boxed (not _eval_real) so an integer-valued body stays an Integer
              * — the element type is user-visible in the returned list. */
-            Expr* eval_expr = ac ? autocompiled_eval_boxed(ac, &val) : NULL;
+            Expr* eval_expr = ac ? table_ac_boxed(ac, &val) : NULL;
 #ifdef USE_MPFR
             if (acp && curr_e->type == EXPR_MPFR
                 && (long)mpfr_get_prec(curr_e->data.mpfr) == rbits) {

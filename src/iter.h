@@ -2,6 +2,7 @@
 #define ITER_H
 
 #include <stdbool.h>
+#include <math.h>     /* fabs: iter_real_slack */
 #include "expr.h"
 #include "symtab.h"   /* Rule, SymbolDef for the localization helpers */
 
@@ -171,11 +172,21 @@ Expr* iter_step_add(const Expr* curr, const Expr* step);
  * Only reached at the 2^63 boundary, so it stays off the hot loop. */
 bool iter_range_continue_bigint(const Expr* curr_e, const Expr* imax_e, double di_val);
 
+/* The rounding slack a real iterator's bound test allows, RELATIVE to the
+ * iteration's scale: 1e-14 (|max| + |di|). It absorbs the drift of the
+ * accumulated `val += di`. The historical absolute 1e-14 swamped a tiny range:
+ * Range[1.*^-200, 2.*^-200, 1.*^-200] counted ~10^14 elements and Table over
+ * it never finished (numeric-tower review E10). For a range of order 1 it is
+ * the same slack as before. */
+static inline double iter_real_slack(double max_val, double di_val) {
+    return 1e-14 * (fabs(max_val) + fabs(di_val));
+}
+
 /* Loop-continuation test for an arithmetic-progression iterator, shared by
  * Table / Do / Sum / Product. Returns true while the loop should keep running.
  *
  * Real iteration compares the double running value `val` against `max_val` (with
- * the historical 1e-14 slack). EXACT integer iteration compares the exact
+ * a relative slack, iter_real_slack). EXACT integer iteration compares the exact
  * running value `curr_e` against the exact bound `imax_e` — an int64 compare, or
  * GMP when a BigInt is involved — because int64 values near 2^63 collapse to the
  * same double and the double test can no longer terminate the loop (issue #52).
@@ -196,8 +207,9 @@ static inline bool iter_range_continue(bool is_real, bool is_inf,
         if (expr_is_integer_like(curr_e) && expr_is_integer_like(imax_e))
             return iter_range_continue_bigint(curr_e, imax_e, di_val);
     }
-    return (di_val > 0 && val <= max_val + 1e-14)
-        || (di_val < 0 && val >= max_val - 1e-14);
+    double slack = iter_real_slack(max_val, di_val);
+    return (di_val > 0 && val <= max_val + slack)
+        || (di_val < 0 && val >= max_val - slack);
 }
 
 #endif
