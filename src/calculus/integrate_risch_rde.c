@@ -40,12 +40,41 @@
 /* term.                                                                  */
 /* ==================================================================== */
 
+/* ---- Algebraic-constant mode (C completeness campaign, step 7) ----------
+ * Over Q(alpha) (numeric radicals or Root objects in the coefficients), Together
+ * and PolynomialRemainder leave a zero coefficient unreduced (Sqrt[2] Sqrt[3] -
+ * Sqrt[6], (3 + 3 Sqrt[2])/(1 + Sqrt[2]) - 3), so degrees, divisibility and the
+ * non-cancellation loop's leading terms were wrong, and the base solver could
+ * only mark its "no" uncertain.  While g_rde_alg is set (rde_base switches it on
+ * when every coefficient is a number), every polynomial in the base variable is
+ * kept with RootReduced coefficients -- canonical in Q(alpha) -- and division,
+ * gcd and the extended gcd are exact Euclidean loops over them. */
+static int   g_rde_alg   = 0;      /* tc_register_unwind_counter (integrate_risch_transcendental_init) */
+static Expr* g_rde_alg_x = NULL;   /* borrowed: the base variable while the mode is on */
+int* rde_alg_mode_ptr(void) { return &g_rde_alg; }
+static Expr* rde_algc(Expr* e);                          /* consumes e */
+static bool  rde_alg_frac(Expr* e, Expr** n, Expr** d);   /* e borrowed */
+static Expr* rde_alg_divmod(Expr* a, Expr* b, Expr** rem);
+static Expr* rde_alg_gcd(Expr* a, Expr* b);
+static Expr* rde_alg_xgcd_s(Expr* b, Expr* a);
+static bool  rde_has_alg_const(const Expr* e);
+
 /* Numerator / Denominator of Together[e] (e not consumed). */
 static Expr* rde_num(Expr* e) {
-    return rt_eval1("Numerator", rt_eval1("Together", expr_copy(e)));
+    if (g_rde_alg) {
+        Expr *n, *d;
+        if (rde_alg_frac(e, &n, &d)) { expr_free(d); return n; }
+    }
+    Expr* r = rt_eval1("Numerator", rt_eval1("Together", expr_copy(e)));
+    return g_rde_alg ? rde_algc(r) : r;
 }
 static Expr* rde_den(Expr* e) {
-    return rt_eval1("Denominator", rt_eval1("Together", expr_copy(e)));
+    if (g_rde_alg) {
+        Expr *n, *d;
+        if (rde_alg_frac(e, &n, &d)) { expr_free(n); return d; }
+    }
+    Expr* r = rt_eval1("Denominator", rt_eval1("Together", expr_copy(e)));
+    return g_rde_alg ? rde_algc(r) : r;
 }
 /* Univariate polynomial primitives in x (args not consumed). */
 static Expr* rde_gcd(Expr* a, Expr* b, Expr* x) {
@@ -60,27 +89,43 @@ static Expr* rde_gcd(Expr* a, Expr* b, Expr* x) {
      * case explicitly so the base RDE stack stays authoritative. */
     if (rt_is_zero(a)) return expr_copy(b);
     if (rt_is_zero(b)) return expr_copy(a);
+    if (g_rde_alg) return rde_alg_gcd(a, b);
     return rt_eval2("PolynomialGCD", expr_copy(a), expr_copy(b));
 }
 static Expr* rde_quot(Expr* a, Expr* b, Expr* x) {
+    if (g_rde_alg && expr_eq(x, g_rde_alg_x)) {
+        Expr* r = NULL;
+        Expr* q = rde_alg_divmod(a, b, &r);
+        if (r) expr_free(r);
+        if (q) return q;
+    }
     return rt_eval3("PolynomialQuotient", expr_copy(a), expr_copy(b), expr_copy(x));
 }
 static Expr* rde_rem(Expr* a, Expr* b, Expr* x) {
+    if (g_rde_alg && expr_eq(x, g_rde_alg_x)) {
+        Expr* r = NULL;
+        Expr* q = rde_alg_divmod(a, b, &r);
+        if (q) expr_free(q);
+        if (r) return r;
+    }
     return rt_eval3("PolynomialRemainder", expr_copy(a), expr_copy(b), expr_copy(x));
 }
 /* Expanded / cancelled arithmetic (args not consumed). */
 static Expr* rde_mul(Expr* a, Expr* b) {
-    return rt_eval1("Expand", expr_new_function(expr_new_symbol("Times"),
+    Expr* r = rt_eval1("Expand", expr_new_function(expr_new_symbol("Times"),
         (Expr*[]){ expr_copy(a), expr_copy(b) }, 2));
+    return g_rde_alg ? rde_algc(r) : r;
 }
 static Expr* rde_add(Expr* a, Expr* b) {
-    return rt_eval1("Expand", expr_new_function(expr_new_symbol("Plus"),
+    Expr* r = rt_eval1("Expand", expr_new_function(expr_new_symbol("Plus"),
         (Expr*[]){ expr_copy(a), expr_copy(b) }, 2));
+    return g_rde_alg ? rde_algc(r) : r;
 }
 static Expr* rde_sub(Expr* a, Expr* b) {
-    return rt_eval1("Expand", expr_new_function(expr_new_symbol("Plus"),
+    Expr* r = rt_eval1("Expand", expr_new_function(expr_new_symbol("Plus"),
         (Expr*[]){ expr_copy(a), expr_new_function(expr_new_symbol("Times"),
             (Expr*[]){ expr_new_integer(-1), expr_copy(b) }, 2) }, 2));
+    return g_rde_alg ? rde_algc(r) : r;
 }
 /* Field quotient a/b, FULLY reduced (args not consumed).  Uses Together, not
  * Cancel: `Cancel` does not reduce a ratio whose operands are themselves nested
@@ -90,9 +135,10 @@ static Expr* rde_sub(Expr* a, Expr* b) {
  * terms fail to cancel in the SPDE / PolyRischDE loops, losing genuine solutions
  * (RISCH_AUDIT_A4.md — the nested-exponential Laurent case). */
 static Expr* rde_divq(Expr* a, Expr* b) {
-    return rt_eval1("Together", expr_new_function(expr_new_symbol("Times"),
+    Expr* r = rt_eval1("Together", expr_new_function(expr_new_symbol("Times"),
         (Expr*[]){ expr_copy(a), expr_new_function(expr_new_symbol("Power"),
             (Expr*[]){ expr_copy(b), expr_new_integer(-1) }, 2) }, 2));
+    return g_rde_alg ? rde_algc(r) : r;
 }
 /* Canonical form of a tower field element (arg not consumed):
  * Expand[Cancel[Together[e]]] — Together first combines nested rationals into a
@@ -106,7 +152,8 @@ static Expr* rde_divq(Expr* a, Expr* b) {
  * (RISCH_AUDIT_A4.md — the rational-coefficient and nested-exponential Laurent
  * regressions traced to exactly these two gaps). */
 static Expr* rde_canon(Expr* e) {
-    return rt_eval1("Expand", rt_eval1("Cancel", rt_eval1("Together", expr_copy(e))));
+    Expr* r = rt_eval1("Expand", rt_eval1("Cancel", rt_eval1("Together", expr_copy(e))));
+    return g_rde_alg ? rde_algc(r) : r;
 }
 /* Leading coefficient of poly p in x (0 if p == 0). */
 static Expr* rde_lc(Expr* p, Expr* x) {
@@ -190,12 +237,17 @@ static int rde_spde(Expr* a, Expr* b, Expr* c, Expr* x, long n, RdeSpde* out) {
     }
     /* (r, z) with b1 r + a1 z = c1, deg(r) < deg(a1); gcd(a1,b1)=1 so the
      * ExtendedEuclidean cofactor s of b1 gives r = (s c1) mod a1. */
-    Expr* eg = rt_eval3("PolynomialExtendedGCD", expr_copy(b1), expr_copy(a1), expr_copy(x));
+    Expr* eg = NULL;
     Expr* s = NULL;
-    if (eg && eg->type == EXPR_FUNCTION && eg->data.function.arg_count == 2) {
-        Expr* cof = eg->data.function.args[1];
-        if (cof && cof->type == EXPR_FUNCTION && cof->data.function.arg_count == 2)
-            s = cof->data.function.args[0];
+    Expr* s_alg = NULL;                              /* owned, algebraic mode */
+    if (g_rde_alg && expr_eq(x, g_rde_alg_x)) s = s_alg = rde_alg_xgcd_s(b1, a1);
+    else {
+        eg = rt_eval3("PolynomialExtendedGCD", expr_copy(b1), expr_copy(a1), expr_copy(x));
+        if (eg && eg->type == EXPR_FUNCTION && eg->data.function.arg_count == 2) {
+            Expr* cof = eg->data.function.args[1];
+            if (cof && cof->type == EXPR_FUNCTION && cof->data.function.arg_count == 2)
+                s = cof->data.function.args[0];
+        }
     }
     if (!s) {
         rde_cert_mark("SPDE: extended gcd unavailable");
@@ -207,6 +259,7 @@ static int rde_spde(Expr* a, Expr* b, Expr* c, Expr* x, long n, RdeSpde* out) {
     Expr* r = rde_rem(sc, a1, x);
     expr_free(sc);
     if (eg) expr_free(eg);
+    if (s_alg) expr_free(s_alg);
     /* z = (c1 - b1 r) / a1 (exact). */
     Expr* b1r = rde_mul(b1, r);
     Expr* c1_b1r = rde_sub(c1, b1r);
@@ -279,6 +332,244 @@ static Expr* rde_alg_reduce(Expr* e) {
     if (!r) return e;
     expr_free(e);
     return r;
+}
+
+/* ---- the algebraic mode's exact arithmetic (see g_rde_alg above) ---- */
+/* p, a polynomial in the base variable with numeric coefficients: each
+ * coefficient RootReduced.  Consumes p. */
+static Expr* rde_alg_poly(Expr* p) {
+    Expr* X = g_rde_alg_x;
+    Expr* cl = rt_eval2("CoefficientList", p, expr_copy(X));   /* adopts p */
+    if (!cl || !rt_head_is(cl, "List")) return cl;
+    size_t n = cl->data.function.arg_count;
+    Expr** terms = malloc((n ? n : 1) * sizeof(Expr*));
+    size_t nt = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* c = rde_alg_reduce(rt_eval1("Together", expr_copy(cl->data.function.args[i])));
+        if (!c) continue;
+        if (rt_is_zero(c)) { expr_free(c); continue; }
+        terms[nt++] = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ c,
+            expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_copy(X), expr_new_integer((long)i) }, 2) }, 2);
+    }
+    expr_free(cl);
+    Expr* sum = nt == 0 ? expr_new_integer(0) : expr_new_function(expr_new_symbol("Plus"), terms, nt);
+    free(terms);
+    return rt_eval_own(sum);
+}
+/* e as a reduced fraction n/d over Q(alpha)[x], both canonical (owned), for e
+ * a rational function of x with numeric algebraic coefficients.  Together bails
+ * on an algebraic constant in a denominator (it returns the sum uncombined --
+ * the open core bug of exact_poly_div, see the Together memory note), so the
+ * fractions are combined here: each term's Numerator/Denominator, summed over
+ * the product denominator, the common factor cancelled by the exact gcd. */
+static bool rde_alg_frac(Expr* e, Expr** n, Expr** d) {
+    *n = *d = NULL;
+    Expr* X = g_rde_alg_x;
+    if (rt_head_is(e, "Plus")) {
+        Expr* N = expr_new_integer(0);
+        Expr* D = expr_new_integer(1);
+        for (size_t i = 0; i < e->data.function.arg_count; i++) {
+            Expr *ni, *di;
+            if (!rde_alg_frac(e->data.function.args[i], &ni, &di)) { expr_free(N); expr_free(D); return false; }
+            Expr* N2 = rde_alg_poly(rt_eval1("Expand", expr_new_function(expr_new_symbol("Plus"), (Expr*[]){
+                expr_new_function(expr_new_symbol("Times"), (Expr*[]){ N, expr_copy(di) }, 2),
+                expr_new_function(expr_new_symbol("Times"), (Expr*[]){ ni, expr_copy(D) }, 2) }, 2)));
+            Expr* D2 = rde_alg_poly(rt_eval1("Expand", expr_new_function(expr_new_symbol("Times"), (Expr*[]){ D, di }, 2)));
+            N = N2; D = D2;
+            if (!N || !D) { if (N) expr_free(N); if (D) expr_free(D); return false; }
+        }
+        *n = N; *d = D;
+    } else {
+        Expr* nn = rt_eval1("Numerator", expr_copy(e));
+        Expr* dd = rt_eval1("Denominator", expr_copy(e));
+        if (!nn || !dd || !rt_is_poly(nn, X) || !rt_is_poly(dd, X)) {
+            if (nn) expr_free(nn);
+            if (dd) expr_free(dd);
+            return false;
+        }
+        *n = rde_alg_poly(rt_eval1("Expand", nn));
+        *d = rde_alg_poly(rt_eval1("Expand", dd));
+        if (!*n || !*d) { if (*n) expr_free(*n); if (*d) expr_free(*d); *n = *d = NULL; return false; }
+    }
+    /* cancel the common factor; a constant denominator moves into n */
+    if (!rt_is_zero(*n) && rt_degree(*d, X) >= 1) {
+        Expr* G = rde_alg_gcd(*n, *d);
+        if (G && rt_degree(G, X) >= 1) {
+            Expr* r1 = NULL; Expr* r2 = NULL;
+            Expr* nq = rde_alg_divmod(*n, G, &r1);
+            Expr* dq = rde_alg_divmod(*d, G, &r2);
+            if (nq && dq && r1 && r2 && rt_is_zero(r1) && rt_is_zero(r2)) {
+                expr_free(*n); expr_free(*d); *n = nq; *d = dq;
+            } else { if (nq) expr_free(nq); if (dq) expr_free(dq); }
+            if (r1) expr_free(r1);
+            if (r2) expr_free(r2);
+        }
+        if (G) expr_free(G);
+    }
+    long dd = rt_degree(*d, X);
+    Expr* lc = dd >= 0 ? rt_coeff(*d, X, dd) : NULL;
+    if (lc && !rt_is_zero(lc)) {                      /* monic denominator */
+        Expr* inv = rde_alg_reduce(rt_eval1("Together", expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ lc, expr_new_integer(-1) }, 2)));
+        *n = rde_alg_poly(rt_eval1("Expand", expr_new_function(expr_new_symbol("Times"), (Expr*[]){ *n, expr_copy(inv) }, 2)));
+        *d = rde_alg_poly(rt_eval1("Expand", expr_new_function(expr_new_symbol("Times"), (Expr*[]){ *d, inv }, 2)));
+    } else if (lc) expr_free(lc);
+    return *n && *d;
+}
+/* Canonical form over Q(alpha)(x): a polynomial coefficient-wise; a rational
+ * function as its reduced canonical fraction.  Consumes e. */
+static Expr* rde_algc(Expr* e) {
+    if (!e || !g_rde_alg || !rde_has_alg_const(e)) return e;
+    if (rt_is_poly(e, g_rde_alg_x)) return rde_alg_poly(e);
+    Expr *n, *d;
+    if (!rde_alg_frac(e, &n, &d)) return e;           /* not rational in x: leave it */
+    expr_free(e);
+    if (rt_degree(d, g_rde_alg_x) == 0 && expr_eq(d, expr_new_integer(1))) { expr_free(d); return n; }
+    return rt_eval_own(expr_new_function(expr_new_symbol("Times"), (Expr*[]){ n,
+        expr_new_function(expr_new_symbol("Power"), (Expr*[]){ d, expr_new_integer(-1) }, 2) }, 2));
+}
+/* Exact division of polynomials over Q(alpha): quotient (owned), *rem owned. */
+static Expr* rde_alg_divmod(Expr* a, Expr* b, Expr** rem) {
+    *rem = NULL;
+    Expr* X = g_rde_alg_x;
+    Expr* A = rde_alg_poly(rt_eval1("Expand", expr_copy(a)));
+    Expr* B = rde_alg_poly(rt_eval1("Expand", expr_copy(b)));
+    long db = B ? rt_degree(B, X) : -1;
+    if (!A || db < 0 || rt_is_zero(B)) { if (A) expr_free(A); if (B) expr_free(B); return NULL; }
+    Expr* lcb = rt_coeff(B, X, db);
+    Expr* Q = expr_new_integer(0);
+    long guard = rt_degree(A, X) + 2;
+    while (!rt_is_zero(A) && guard-- > 0) {
+        long da = rt_degree(A, X);
+        if (da < db) break;
+        Expr* lca = rt_coeff(A, X, da);
+        Expr* c = rde_alg_reduce(rt_eval1("Together", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ lca, expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(lcb), expr_new_integer(-1) }, 2) }, 2)));
+        Expr* term = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ c,
+            expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_copy(X), expr_new_integer(da - db) }, 2) }, 2);
+        Expr* Qn = rde_alg_poly(rt_eval1("Expand", expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ Q, expr_copy(term) }, 2)));
+        Expr* An = rde_alg_poly(rt_eval1("Expand", expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ A,
+            expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), term, expr_copy(B) }, 3) }, 2)));
+        Q = Qn; A = An;
+        if (!Q || !A) break;
+    }
+    expr_free(lcb); expr_free(B);
+    if (!Q || !A) { if (Q) expr_free(Q); if (A) expr_free(A); return NULL; }
+    *rem = A;
+    return Q;
+}
+/* Monic gcd over Q(alpha) by the Euclidean algorithm on canonical operands. */
+static Expr* rde_alg_gcd(Expr* a, Expr* b) {
+    Expr* X = g_rde_alg_x;
+    Expr* u = rde_alg_poly(rt_eval1("Expand", expr_copy(a)));
+    Expr* v = rde_alg_poly(rt_eval1("Expand", expr_copy(b)));
+    while (u && v && !rt_is_zero(v)) {
+        Expr* r = NULL;
+        Expr* q = rde_alg_divmod(u, v, &r);
+        if (q) expr_free(q);
+        if (!r) { expr_free(u); expr_free(v); return NULL; }
+        expr_free(u); u = v; v = r;
+    }
+    if (v) expr_free(v);
+    if (!u) return NULL;
+    long d = rt_degree(u, X);
+    if (d >= 0) {
+        Expr* lc = rt_coeff(u, X, d);
+        if (!rt_is_zero(lc)) {
+            Expr* inv = rde_alg_reduce(rt_eval1("Together", expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ lc, expr_new_integer(-1) }, 2)));
+            u = rde_alg_poly(rt_eval1("Expand", expr_new_function(expr_new_symbol("Times"), (Expr*[]){ u, inv }, 2)));
+        } else expr_free(lc);
+    }
+    return u;
+}
+/* s with s b == 1 (mod a) over Q(alpha), for coprime a, b (the SPDE cofactor);
+ * NULL when gcd(a, b) is not a constant. */
+static Expr* rde_alg_xgcd_s(Expr* b, Expr* a) {
+    Expr* X = g_rde_alg_x;
+    Expr* r0 = rde_alg_poly(rt_eval1("Expand", expr_copy(b)));
+    Expr* r1 = rde_alg_poly(rt_eval1("Expand", expr_copy(a)));
+    Expr* s0 = expr_new_integer(1);
+    Expr* s1 = expr_new_integer(0);
+    while (r0 && r1 && !rt_is_zero(r1)) {
+        Expr* r2 = NULL;
+        Expr* q = rde_alg_divmod(r0, r1, &r2);
+        if (!q || !r2) { if (q) expr_free(q); if (r2) expr_free(r2); expr_free(r0); expr_free(r1); expr_free(s0); expr_free(s1); return NULL; }
+        Expr* s2 = rde_alg_poly(rt_eval1("Expand", expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ s0,
+            expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), q, expr_copy(s1) }, 3) }, 2)));
+        expr_free(r0); r0 = r1; r1 = r2; s0 = s1; s1 = s2;
+        if (!s1) break;
+    }
+    Expr* res = NULL;
+    if (r0 && rt_degree(r0, X) == 0 && !rt_is_zero(r0) && s0) {
+        Expr* inv = rde_alg_reduce(rt_eval1("Together", expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(r0), expr_new_integer(-1) }, 2)));
+        res = rde_alg_poly(rt_eval1("Expand", expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_copy(s0), inv }, 2)));
+    }
+    if (r0) expr_free(r0);
+    if (r1) expr_free(r1);
+    if (s0) expr_free(s0);
+    if (s1) expr_free(s1);
+    return res;
+}
+/* An upper bound on [Q(alpha):Q] for the algebraic atoms of e: the product of
+ * the radical indices q (b^(p/q)) and the Root degrees, over distinct atoms.
+ * RootReduce works in the compositum, and its cost grows fast with the degree
+ * (Sqrt[2], Sqrt[3], 2^(1/3) is degree 12: thousands of qqbar factorizations
+ * per solve); above the cap the mode stays off and the marks stand. */
+static void rc_collect_alg_atoms(Expr* e, Expr*** out, size_t* na, size_t* cap);
+static long rde_alg_degree_bound(Expr* f, Expr* g) {
+    Expr** atoms = NULL; size_t na = 0, cap = 0;
+    rc_collect_alg_atoms(f, &atoms, &na, &cap);
+    rc_collect_alg_atoms(g, &atoms, &na, &cap);
+    /* powers of one base b^(p/q) generate Q(b^(1/lcm q)): group radicals by base */
+    long deg = 1;
+    bool* used = calloc(na ? na : 1, sizeof(bool));
+    for (size_t i = 0; i < na && deg <= 1000; i++) {
+        if (used[i]) continue;
+        Expr* a = atoms[i];
+        long d = 1;
+        if (rt_head_is(a, "Root")) {
+            Expr* p = rt_eval_own(expr_new_function(expr_copy(a->data.function.args[0]),
+                (Expr*[]){ expr_new_symbol("Risch`Private`rdeDegZ") }, 1));
+            Expr* z = expr_new_symbol("Risch`Private`rdeDegZ");
+            d = p ? rt_degree(p, z) : 1000;
+            if (p) expr_free(p);
+            expr_free(z);
+        } else {
+            Expr* base = a->data.function.args[0];
+            long l = 1;
+            for (size_t j = i; j < na; j++) {
+                Expr* b = atoms[j];
+                if (used[j] || rt_head_is(b, "Root") || !expr_eq(b->data.function.args[0], base)) continue;
+                used[j] = true;
+                Expr* q = b->data.function.args[1]->data.function.args[1];
+                long qi = q->type == EXPR_INTEGER ? (long)q->data.integer : 1000;
+                long g = l, h = qi;
+                while (h) { long t = g % h; g = h; h = t; }
+                l = l / (g ? g : 1) * qi;
+                if (l > 1000) { l = 1000; break; }
+            }
+            d = l;
+        }
+        if (d < 1) d = 1;
+        deg *= d;
+    }
+    free(used);
+    free(atoms);
+    return deg;
+}
+
+/* Are the only symbols of e the variable x (numeric algebraic coefficients)? */
+static bool rde_only_var(Expr* e, Expr* x) {
+    Expr* v = rt_eval1("Variables", rt_eval1("Together", expr_copy(e)));
+    bool ok = v && rt_head_is(v, "List");
+    for (size_t i = 0; ok && i < v->data.function.arg_count; i++)
+        if (!expr_eq(v->data.function.args[i], x)) ok = false;
+    if (v) expr_free(v);
+    return ok;
 }
 
 static Expr* rde_polyrischde_nocancel1(Expr* b, Expr* c, Expr* x, long n) {
@@ -358,6 +649,21 @@ static Expr* rde_weak_normalizer(Expr* f, Expr* x);
  * y = q / (h * w). */
 Expr* rde_base(Expr* f, Expr* g, Expr* x) {
     if (rt_is_zero(g)) return expr_new_integer(0);
+    /* algebraic constants and nothing but x: the exact algebraic mode */
+    if (!g_rde_alg && x->type == EXPR_SYMBOL && (rde_has_alg_const(f) || rde_has_alg_const(g))
+        && rde_only_var(f, x) && rde_only_var(g, x) && rde_alg_degree_bound(f, g) <= 8) {
+        g_rde_alg = 1; g_rde_alg_x = x;
+        Expr* y = rde_base(f, g, x);
+        g_rde_alg = 0; g_rde_alg_x = NULL;
+        /* the mode keeps denominators monic (u^2/(Sqrt[2] (1/Sqrt[2] + u)));
+         * Cancel restores the natural form (u^2/(1 + Sqrt[2] u)) */
+        if (y && !rt_free_of_head(y, "Root")) {        /* RootReduce's Root forms back to radicals */
+            Expr* rr = rt_eval1("ToRadicals", expr_copy(y));
+            if (rr && rt_free_of_head(rr, "Root")) { expr_free(y); y = rr; } else if (rr) expr_free(rr);
+        }
+        if (y) { Expr* c = rt_eval1("Cancel", expr_copy(y)); if (c) { expr_free(y); y = c; } }
+        return y;
+    }
 
 #ifdef USE_FLINT
     /* Native fast path: for the exponential tower the coefficient f is a
@@ -369,7 +675,11 @@ Expr* rde_base(Expr* f, Expr* g, Expr* x) {
      * verdict is authoritative: 1 -> y, 0 -> genuinely no solution (decline),
      * -1 -> out of scope (f rational / not univariate over Q) -> fall through
      * to the Expr path below. */
-    if (x->type == EXPR_SYMBOL) {
+    /* (over Q only: with an algebraic constant the conversion does not see the
+     * constant field, and its "no" was a false certificate --
+     * Risch`RischDECertified[2/(u - Sqrt[2]), g, u] for y = Sqrt[3] u^2 said
+     * "NoSolution" up to v0.6605; campaign step 7) */
+    if (x->type == EXPR_SYMBOL && !rde_has_alg_const(f) && !rde_has_alg_const(g)) {
         Expr* y = NULL;
         int nr = flint_rde_base_solve_fg(f, g, x->data.symbol.name, &y);
         if (nr >= 0) return y;              /* y is NULL on nr == 0 (decline) */
@@ -388,10 +698,12 @@ Expr* rde_base(Expr* f, Expr* g, Expr* x) {
         fbar = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Plus"),
             (Expr*[]){ expr_copy(f), expr_new_function(expr_new_symbol("Times"),
                 (Expr*[]){ expr_new_integer(-1), dww }, 2) }, 2));   /* adopts dww */
+        if (g_rde_alg) fbar = rde_algc(fbar);
         expr_free(dw);
     }
     Expr* gbar = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
         (Expr*[]){ expr_copy(w), expr_copy(g) }, 2));
+    if (g_rde_alg) gbar = rde_algc(gbar);
 
     /* 2. RdeNormalDenominator(fbar, gbar): base field, ds = es = 1. */
     Expr* dn = rde_den(fbar);
@@ -463,8 +775,6 @@ Expr* rde_base(Expr* f, Expr* g, Expr* x) {
                  * are only as good as the normalisation (rde_alg_reduce): a
                  * failure there is not a theorem.  Rational coefficients (with
                  * parameters) keep the authoritative "no". */
-                if (!H && (rde_has_alg_const(f) || rde_has_alg_const(g)))
-                    rde_cert_mark("base: polynomial solve over algebraic constants");
                 if (H) {
                     Expr* aH = rde_mul(sp.alpha, H);
                     Expr* q = rde_add(aH, sp.beta);
@@ -475,8 +785,6 @@ Expr* rde_base(Expr* f, Expr* g, Expr* x) {
                     expr_free(hw); expr_free(q);
                 }
                 rde_spde_free(&sp);
-            } else if (rde_has_alg_const(f) || rde_has_alg_const(g)) {
-                rde_cert_mark("base: SPDE over algebraic constants");
             }
         }
         expr_free(aa); expr_free(bb); expr_free(cc);
@@ -500,11 +808,19 @@ Expr* rde_base(Expr* f, Expr* g, Expr* x) {
         Expr* tog = rt_eval1("Together", resid);
         Expr* num = tog ? rt_eval1("Numerator", tog) : NULL;
         Expr* exn = num ? rt_eval1("Expand", num) : NULL;
+        if (exn && g_rde_alg) exn = rde_algc(exn);    /* canonical zero over Q(alpha) */
         bool good = exn && rt_is_zero(exn);
         expr_free(dy); expr_free(fy); expr_free(s1);
         if (exn) expr_free(exn);
         if (!good) { rde_cert_mark("base: identity gate"); expr_free(result); result = NULL; }
     }
+    /* Outside the exact algebraic mode (a parameter beside the constants, or a
+     * compositum above the degree cap), no zero test of this path is canonical
+     * over Q(alpha): a "no" from any of its exits -- the normal-denominator
+     * guard, SPDE, the polynomial solve -- is not a theorem (the guard said "no"
+     * for y = 1 + Sqrt[3]/(u - 2^(1/3)), f = 1/(u - Sqrt[2])). */
+    if (!result && !g_rde_alg && (rde_has_alg_const(f) || rde_has_alg_const(g)))
+        rde_cert_mark("base: algebraic constants outside the exact mode");
     return result;
 }
 
@@ -1771,8 +2087,96 @@ static Expr* rde_polyrischde_cancel(Expr* b, Expr* c, RdeCtx* C, long n) {
  * exact; no Solve).  Fills roots[0..*n-1] (distinct, >= 1) and returns 1, or 0
  * when undecided (R not a rational function, a factorisation that did not
  * evaluate, a root beyond the long range, more than `cap` roots). */
+static int rc_pos_int_roots(Expr* R, Expr* z, long* roots, size_t cap, size_t* n);
+/* Collect the distinct numeric radicals Power[number, Rational] and Root objects
+ * of e (borrowed pointers). */
+static void rc_collect_alg_atoms(Expr* e, Expr*** out, size_t* na, size_t* cap) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    bool atom = false;
+    if (rt_head_is(e, "Root")) atom = true;
+    else if (rt_head_is(e, "Power") && e->data.function.arg_count == 2 && rde_has_alg_const(e)) {
+        Expr* b = e->data.function.args[0];
+        atom = (b->type == EXPR_INTEGER || b->type == EXPR_BIGINT || rt_head_is(b, "Rational"))
+               && rt_head_is(e->data.function.args[1], "Rational");
+    }
+    if (atom) {
+        for (size_t i = 0; i < *na; i++) if (expr_eq((*out)[i], e)) return;
+        if (*na == *cap) { *cap = *cap ? 2 * *cap : 4; *out = realloc(*out, *cap * sizeof(Expr*)); }
+        (*out)[(*na)++] = e;
+        return;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        rc_collect_alg_atoms(e->data.function.args[i], out, na, cap);
+}
+/* Positive integer roots of R over Q(alpha), exactly (campaign step 7): every
+ * algebraic atom becomes a symbol s_i with its defining relation (s^q - b^p for
+ * b^(p/q), f(s) for Root[f, k]); eliminating them by resultants leaves N in
+ * Q[z] whose roots include every root of R (the true values are a common
+ * root).  The integer roots of N are the candidates; each is kept only when
+ * RootReduce[R(n)] == 0. */
+static int rc_pos_int_roots_alg(Expr* R, Expr* z, long* roots, size_t cap, size_t* n) {
+    *n = 0;
+    Expr* t = rt_eval1("Together", expr_copy(R));
+    Expr* num = t ? rt_eval1("Expand", rt_eval1("Numerator", t)) : NULL;
+    if (!num) return 0;
+    Expr** atoms = NULL; size_t na = 0, acap = 0;
+    rc_collect_alg_atoms(num, &atoms, &na, &acap);
+    Expr** rels = malloc((na ? na : 1) * sizeof(Expr*));
+    Expr** syms = malloc((na ? na : 1) * sizeof(Expr*));
+    Expr** rules = malloc((na ? na : 1) * sizeof(Expr*));
+    bool ok = true;
+    size_t nd = 0;                                    /* entries initialised */
+    for (size_t i = 0; i < na && ok; i++, nd++) {
+        char nm[48]; snprintf(nm, sizeof nm, "Risch`Private`rcAlg%zu", i);
+        syms[i] = expr_new_symbol(nm);
+        Expr* a = atoms[i];
+        if (rt_head_is(a, "Root")) {
+            rels[i] = rt_eval_own(expr_new_function(expr_copy(a->data.function.args[0]),
+                (Expr*[]){ expr_copy(syms[i]) }, 1));    /* f[s] */
+        } else {
+            Expr* ex = a->data.function.args[1];          /* Rational[p, q] */
+            Expr* p = ex->data.function.args[0], *q = ex->data.function.args[1];
+            rels[i] = rt_eval_own(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){
+                expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_copy(syms[i]), expr_copy(q) }, 2),
+                expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1),
+                    expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_copy(a->data.function.args[0]), expr_copy(p) }, 2) }, 2) }, 2));
+        }
+        if (!rels[i]) ok = false;
+        rules[i] = expr_new_function(expr_new_symbol("Rule"), (Expr*[]){ expr_copy(a), expr_copy(syms[i]) }, 2);
+    }
+    Expr* N = NULL;
+    if (ok) {
+        Expr* rl = expr_new_function(expr_new_symbol("List"), rules, na);   /* adopts rules[] */
+        N = rt_eval2("ReplaceAll", expr_copy(num), rl);
+        for (size_t i = 0; N && i < na; i++)
+            N = rt_eval3("Resultant", N, expr_copy(rels[i]), expr_copy(syms[i]));
+        if (N) N = rt_eval1("Expand", N);
+    } else for (size_t i = 0; i < nd; i++) expr_free(rules[i]);
+    for (size_t i = 0; i < nd; i++) { if (rels[i]) expr_free(rels[i]); expr_free(syms[i]); }
+    free(rels); free(syms); free(rules); free(atoms);
+    int res = 0;
+    if (N && !rt_is_zero(N) && !rde_has_alg_const(N)) {
+        long cand[64]; size_t nc = 0;
+        if (rc_pos_int_roots(N, z, cand, 64, &nc)) {
+            res = 1;
+            for (size_t i = 0; i < nc; i++) {
+                Expr* v = rt_eval2("ReplaceAll", expr_copy(num), expr_new_function(expr_new_symbol("Rule"),
+                    (Expr*[]){ expr_copy(z), expr_new_integer(cand[i]) }, 2));
+                Expr* vr = v ? rt_eval1("RootReduce", v) : NULL;
+                bool zero = vr && rt_is_zero(vr);
+                if (vr) expr_free(vr);
+                if (!vr) { res = 0; break; }
+                if (zero) { if (*n >= cap) { res = 0; break; } roots[(*n)++] = cand[i]; }
+            }
+        }
+    }
+    if (N) expr_free(N);
+    expr_free(num);
+    return res;
+}
 static int rc_pos_int_roots(Expr* R, Expr* z, long* roots, size_t cap, size_t* n) {
     *n = 0;
+    if (rde_has_alg_const(R)) return rc_pos_int_roots_alg(R, z, roots, cap, n);
     Expr* tog = rt_eval1("Together", expr_copy(R));
     Expr* num = tog ? rt_eval1("Numerator", tog) : NULL;
     num = num ? rt_eval1("Expand", num) : NULL;
@@ -2075,6 +2479,16 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
         rde_cert_mark("tower: hyperbolic-tangent or Liouvillian top");
         return NULL;
     }
+    /* Over algebraic constants the tower stack's arithmetic (Together, Cancel,
+     * PolynomialRemainder over k(x)[tau]) is not canonical: Together returns an
+     * uncombined sum when an algebraic constant sits in a denominator, and a zero
+     * coefficient can stay unreduced.  Only the base field has the exact mode
+     * (rde_base's algebraic mode, step 7); here a solution is still found and
+     * certified by the identity gate, but a "no" proves nothing.  Hidden until
+     * v0.6606 by the base RDE's own marks: D[(1 + Sqrt[3]) E^((1 + Sqrt[2]) u)
+     * u^(2 Sqrt[2])/(1 + Sqrt[2] u)] was then certified non-elementary. */
+    if (rde_has_alg_const(f) || rde_has_alg_const(g))
+        rde_cert_mark("tower: algebraic constants (no exact tower arithmetic)");
     /* The hypertangent boxes assume sqrt(-1) is not in k, so that t^2 + 1 is
      * irreducible (Bronstein 5.10, 6.2).  Over k(i) it splits into t - i and
      * t + i, two special factors with independent orders, and a one-sided pole

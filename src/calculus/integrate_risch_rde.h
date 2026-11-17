@@ -58,6 +58,10 @@ Expr* rt_solve_rde(Expr* p, long i, Expr* u, Expr* x);
  * identity.  NULL == no solution / out of the current increment's scope. */
 Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C);
 
+/* The base RDE's algebraic-constant mode flag, for the TimeConstrained unwind
+ * registry (integrate_risch_transcendental_init). */
+int* rde_alg_mode_ptr(void);
+
 /* New logarithms of an antiderivative in K_L(new logs), decided by the
  * structure theorem (risch_field_integrate.c): folds the reducible ones into
  * the tower; *status 1 all folded, 0 leftovers proved independent (not in

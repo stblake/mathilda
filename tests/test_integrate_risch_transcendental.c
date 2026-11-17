@@ -1492,7 +1492,12 @@ static void test_review_f6_f9(void) {
     /* F9: certificates (FriCAS: Ei) */
     assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^(Sqrt[2] u) + E^(2 u)/u, u]]", "False", 0);
     assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^(Sqrt[2] u) (2 + u) + E^(2 u)/(u - a), u]]", "False", 0);
-    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^u u^Sqrt[2]/(1 + u), u]]", "False", 0);
+    /* u^Sqrt[2] = E^(Sqrt[2] Log[u]): a tower Risch DE over Q(Sqrt[2]) (coefficient
+       1 + Sqrt[2]/u).  Certified False up to v0.6605; since v0.6606 the tower RDE
+       over algebraic constants proves nothing (its k(x)[t] arithmetic is not
+       canonical over Q(alpha) -- a false certificate was found the same way), so
+       it is undecided until the tower gains the exact mode.  Never True. */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^u u^Sqrt[2]/(1 + u), u]] =!= True", "True", 0);
     assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^(Sqrt[2] u)/u, u]]", "False", 0);
     /* the RDE over Q(Sqrt[2]) */
     assert_eval_eq("With[{q = Sqrt[2] u^2/(1 + u)}, Risch`RischDE[2 + Sqrt[2], Together[D[q, u] + (2 + Sqrt[2]) q], u] - q // Together]", "0", 0);
@@ -1646,6 +1651,33 @@ static void test_campaign_step1_towerlogs(void) {
     assert_eval_eq("FreeQ[Integrate`RischTranscendental[3 E^u ArcTan[E^u]^2/(1 + E^(2 u)), u], Sinh]", "True", 0);
 }
 
+/* Campaign step 7 (v0.6606): the base Risch DE over numeric algebraic constants
+ * in an exact mode (RootReduced coefficients; exact division, gcd, extended gcd,
+ * fraction combination and integer roots).  Two released false "NoSolution":
+ * the FLINT fast path over Q(Sqrt[2]), and a missed cancellation of
+ * (u - Sqrt[2])^2 against Sqrt[2] - u in the normal-denominator guard. */
+static void test_campaign_step7_algconst(void) {
+    const char* sol[][2] = {
+        { "Sqrt[2] u^2/(1 + Sqrt[2] u)", "Sqrt[3]" },
+        { "Sqrt[3] u^2", "2/(u - Sqrt[2])" },
+        { "1 + 2^(1/3) u/(u - 2^(1/3))", "1" },
+        { "(u - Sqrt[2])^2 (u + 1)", "1 - 2/(u - Sqrt[2])" },
+        { "Sqrt[2] u + Sqrt[3] u/(1 + u)^2", "Sqrt[6]" } };
+    for (size_t i = 0; i < sizeof sol / sizeof sol[0]; i++) {
+        char buf[600];
+        snprintf(buf, sizeof buf, "With[{y = %s, f = %s}, With[{g = Together[D[y, u] + f y]},"
+                 " With[{r = Risch`RischDECertified[f, g, u]}, !StringQ[r] && r =!= $Failed && FreeQ[r, Root]"
+                 " && PossibleZeroQ[D[r, u] + f r - g]]]]", sol[i][0], sol[i][1]);
+        assert_eval_eq(buf, "True", 0);
+    }
+    /* decided "no": y' + Sqrt[3] y = 1/(1 + Sqrt[2] u) needs Ei */
+    assert_eval_eq("Risch`RischDECertified[Sqrt[3], 1/(1 + Sqrt[2] u), u]", "\"NoSolution\"", 0);
+    /* above the degree cap (Sqrt[2], Sqrt[3], 2^(1/3): degree 12) the "no" is marked */
+    assert_eval_eq("With[{y = 1 + Sqrt[3]/(u - 2^(1/3)), f = 1/(u - Sqrt[2])}, Risch`RischDECertified[f, Together[D[y, u] + f y], u]] =!= \"NoSolution\"", "True", 0);
+    /* a tower RDE over algebraic constants proves nothing (no exact tower arithmetic) */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[Expand[D[(1 + Sqrt[3]) E^((1 + Sqrt[2]) u) u^(2 Sqrt[2])/(1 + Sqrt[2] u), u]], u]] =!= False", "True", 0);
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -1755,6 +1787,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_review_f8_tan);
     TEST(test_campaign_step0_primitive);
     TEST(test_campaign_step1_towerlogs);
+    TEST(test_campaign_step7_algconst);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }

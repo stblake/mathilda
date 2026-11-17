@@ -5489,3 +5489,29 @@ into extended-range values, so only complex extended values at a sample point ar
   that was never broken, and its own test suite has already tuned that behaviour.
 - Rule: run the subsystem's unit suite (`zero_test_tests` here) after each variant, before the
   full tier.
+
+## 2026-11-18 — Campaign steps 0-1: measure what blocks, and accept every form an engine can return
+
+- **What happened.**
+  1. **The frequency table misled.** The first mark-frequency table counted every
+     uncertainty mark raised during a hunt. The dominant one, "LimitedIntegrate: lower
+     integral undecided" (2,400 hits), mostly fired during the integration pass that runs
+     *before* the decision, in cases the decision then settled. Counting only marks of
+     cases that ended undecided changed the priorities completely. It also exposed the
+     real blocker: logs written in tower variables that no check could see.
+  2. **An engine answered in more than one form.** After a TimeConstrained abort, the
+     lower integrator answered with the same conjugate log pair as `16 ArcTanh[1 - 2 I x]`
+     instead of `-16 I ArcTan[I + 2 x]`. My new ArcTan-to-log conversion handled only
+     ArcTan, so a proof that held in a fresh kernel failed inside the test binary.
+  3. **A script truncated a source file.** A Python one-liner,
+     `open(P,'w').write(open(P).read())`, emptied `integrate_risch_rde.c`, because the
+     write-mode open truncates before the read. It was restored from HEAD and the edits
+     re-applied.
+- **Rule.**
+  1. Prioritise uncertainty by the marks of cases that *end* undecided
+     (`blk_*.m` + `blocking.py`), not by raw counts.
+  2. When a proof consumes another engine's output, normalise every form that engine can
+     emit (ArcTan *and* ArcTanh, Log of a monic *and* a scaled argument), and test it after
+     a TimeConstrained abort too, since state changes which route answers.
+  3. In edit scripts, read the file once into a variable, assert its length, and write
+     with `with open(P, 'w')` only at the end.

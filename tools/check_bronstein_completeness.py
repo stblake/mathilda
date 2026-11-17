@@ -122,8 +122,15 @@ BASELINE_C = {
     # Phase 2b F9 (v0.6599): over algebraic constants the base RDE's polynomial
     # solve / SPDE zero tests are only as good as the normaliser; a failure there
     # is not a proof (a released false certificate: q' + (2 + Sqrt[2]) q = p).
-    "base: polynomial solve over algebraic constants",
-    "base: SPDE over algebraic constants",
+    # Step 7 (v0.6606): the base RDE over numeric algebraic constants runs in an
+    # exact mode (RootReduced coefficients, exact division/gcd, exact integer
+    # roots).  Outside it -- a parameter beside the constants (Q(a)(Sqrt[2]), the
+    # parameters-with-constants scope), or a compositum above degree 8 (RootReduce
+    # cost; an AlgebraicNumber representation would lift the cap) -- a "no" is
+    # not a theorem.
+    "base: algebraic constants outside the exact mode",
+    # ... and the tower stack (k(x)[tau] arithmetic) has no exact mode over Q(alpha)
+    "tower: algebraic constants (no exact tower arithmetic)",
     # Phase 2b F8 (v0.6601): the hypertangent top.  a(i) = 0 cannot occur after
     # the normal denominator (a is special-free) and a residual not divisible by
     # t^2 + 1 is a normaliser failure; both are defensive.  CancelTan's q(i) must

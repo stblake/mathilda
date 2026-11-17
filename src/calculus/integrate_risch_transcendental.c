@@ -1121,6 +1121,7 @@ void integrate_risch_transcendental_init(void) {
     tc_register_unwind_counter(&g_rt_elementary_only);
     tc_register_unwind_counter(&rt_in_flat_gate);
     tc_register_unwind_counter(&rt_in_logcombine);
+    tc_register_unwind_counter(rde_alg_mode_ptr());   /* the base RDE's algebraic mode */
     rt_install("Integrate`RischTranscendental", builtin_rischtranscendental,
         "Integrate`RischTranscendental[f, x] integrates f with respect to x using the\n"
         "recursive transcendental Risch algorithm: a decision\n"

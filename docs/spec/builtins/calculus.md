@@ -5356,6 +5356,29 @@ closing a false `"NoSolution"`:
 - a lower tangent's special factor `t_j^2 + 1` has the pole-free logarithmic
   derivative `2 u_j' t_j`, so it can divide `z` without showing in a denominator.
 
+**Algebraic constants (v0.6606).** Over numeric algebraic constants (`Sqrt[2]`,
+`2^(1/3)`, `Root` objects), the base-field Risch DE runs in an exact mode:
+- coefficients in RootReduce's canonical form;
+- exact division, gcd and extended gcd over `Q(α)`;
+- its own fraction combination, because `Together` returns a sum uncombined when an
+  algebraic constant sits in a denominator;
+- the weak normalizer's integer residues found by resultant elimination of the
+  constants, with each candidate checked exactly.
+
+`Risch`RischDECertified[Sqrt[3], 1/(1 + Sqrt[2] u), u]` is `"NoSolution"`, and
+`y' + Sqrt[3] y = g` with `y = Sqrt[2] u^2/(1 + Sqrt[2] u)` is solved.
+
+The mode needs every coefficient to be a number, and a compositum of degree at most
+8. Outside it (a parameter beside the constants, or `Sqrt[2], Sqrt[3], 2^(1/3)`,
+degree 12), a "no" is marked uncertain. A tower Risch DE over algebraic constants
+also proves nothing yet, because the `k(x)[t]` arithmetic has no exact mode; its
+solutions are still found and checked.
+
+Fixed: two false `"NoSolution"`, present up to v0.6605:
+- the FLINT fast path answered over `Q` for `Sqrt[2]` coefficients;
+- a missed cancellation of `(u - Sqrt[2])^2` against `Sqrt[2] - u` failed the
+  normal-denominator guard (`y = Sqrt[3] u^2`, `f = 2/(u - Sqrt[2])`).
+
 **Integrals in the field, decided three ways (v0.6605).** The Risch DE's
 side integrals return one of three outcomes:
 - an antiderivative in K;
