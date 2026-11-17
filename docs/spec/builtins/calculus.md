@@ -1428,8 +1428,14 @@ remaining child crashes from earlier runs are eliminated, while
     so `1/(x^2 + I a)` keeps a closed form.
   - **Examples.** `Integrate[1/(x^2 + I), x]` is
     `-(2 ArcTanh[(2 x)/Sqrt[-4*I]])/Sqrt[-4*I]`.
-  - **Unchanged.** The transcendental callers, which use `t = E^(I x)` for trig
-    integrands, keep `LogToReal`: there `I` is part of the real reconstruction.
+  - **The transcendental callers** (v0.6593). They kept `LogToReal` on complex pairs
+    until v0.6593, and it had the same defect there:
+    `Integrate`TranscendentalLogPart[1, I + t^2, t, z, 2 t, {u}]` was `0`.
+    `LogToReal` now declines on any non-real coefficient, and the log part is then
+    the RootSum, written out for residue factors of degree 1 or 2. Trig integrands
+    still come back real: the trig front end maps the complex logs back, e.g.
+    `Integrate`RischTranscendental[1/(2 + Cos[x]), x]` is
+    `(ArcTan[2 + Sqrt[3] + Cos[x], -Sin[x]] - ArcTan[2 - Sqrt[3] + Cos[x], -Sin[x]])/Sqrt[3]`.
 - **Algebraic constants in normal form** (v0.6506, `intsimp_reduce_algebraic_constants`).
   The log part computes with algebraic constants (`Sqrt[2]`, `2^(1/4)`, nested
   radicals) and nothing rationalises them, so the answers used to carry
@@ -2001,7 +2007,10 @@ monotonically down.
     unknown is rejected. In decide mode a lower integral's new logarithm that equals a
     higher monomial is treated as foreign to the lower field (v0.6592), so
     `Log[u] Log[1 + u]`, `Log[a + u]/u` and `Log[a + u] Log[b + u]` are certified not
-    elementary.  Cases:
+    elementary. A log part with algebraic residues of degree ≥ 3 is a RootSum,
+    verified by `PossibleZeroQ` (v0.6593): `1/(u (1 + Log[u] + Log[u]^3))` takes
+    0.01 s (it was a 27–68 s decline). `Risch`ElementaryIntegralQ` skips the Cherry
+    special-function stage, whose answers are never elementary evidence.  Cases:
       - rational: delegated to `Integrate\`BronsteinRational`;
       - logarithmic polynomial `P(x, Log[u])`: the recursive primitive-
         polynomial coefficient matching, with a limited-integration oracle that
@@ -5022,8 +5031,12 @@ algebraic residues.
   `t_0, …, t_{L-1}` — i.e. constants of the whole tower derivation).
   Returns the antiderivative as a function of `tau` (the caller substitutes
   `tau -> kernel`), or unevaluated when the integral is not elementary in
-  this form (a residue depending on a gate variable) / a factor exceeds
-  `LogToReal`'s bounded scope.
+  this form (a residue depending on a gate variable).  When `LogToReal`
+  declines (a residue factor of degree ≥ 3, or any non-real coefficient), the
+  log part is `Sum_i RootSum[Q_i(z), z Log[S_i(z, tau)]]` (Bronstein §5.6: the
+  residues may be algebraic), with each factor of degree 1 or 2 written out by
+  its roots (v0.6593): `Integrate`TranscendentalLogPart[1, 1 + t + t^3, t, z,
+  1 + 3 t^2, {u}]` is a RootSum, `[1, I + t, t, z, 1, {u}]` is `Log[I + t]`.
 - **Partial log part (Bronstein Thm 5.6.1, the κ_D split).** When the
   residue resultant mixes constant- and non-constant-residue factors
   (`r = r_s · r_n`), the elementary constant-residue logs from `r_s` are

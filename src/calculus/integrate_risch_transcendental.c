@@ -336,11 +336,19 @@ static Expr* rt_debase_exponentials(Expr* f, Expr* x, Expr** backsub_out) {
  * only decline, never emit a wrong closed form.  NB: this must NOT fall
  * back on the parallel-Risch (pmint) engine Integrate`RischNorman —
  * that is a different algorithm; RischTranscendental is the recursive Risch. */
+/* Set by rt_decide around its rt_integrate: the elementarity verdict needs an
+ * ELEMENTARY antiderivative, and the Cherry stage only ever produces special-
+ * function (Ei / li / Erf / dilog) forms, which rt_expr_is_elementary rejects.
+ * On a non-elementary integrand Cherry is also where a decline spends its time
+ * (Risch`ElementaryIntegralQ[1/(1 + Log[u] + Log[u]^3), u]: 85 s, review F6). */
+static bool g_rt_elementary_only = false;
+
 static Expr* rt_integrate_core(Expr* f, Expr* x) {
     Expr* r = rt_rational_case(f, x);
     if (r) return r;
     r = rt_transcendental_case(f, x);
     if (r) return r;
+    if (g_rt_elementary_only) return NULL;
     r = extended_liouville_solve(f, x, RT_SF_TOP_ANY);   /* Cherry dispatch (C0 seam) */
     if (r) return r;
     return NULL;
@@ -734,7 +742,10 @@ static RtDecision rt_decide_field_canon(Expr* f, Expr* x) {
  * certificate.  Otherwise UNKNOWN.  Checking True first makes an exhibited
  * antiderivative dominate any certificate, so the verdict is robust. */
 static RtDecision rt_decide(Expr* f, Expr* x) {
+    bool save_eo = g_rt_elementary_only;
+    g_rt_elementary_only = true;
     Expr* anti = rt_integrate(f, x);
+    g_rt_elementary_only = save_eo;
     if (anti) {
         /* an exhibited antiderivative proves elementarity only once checked:
          * an unverified wrong one (review F1/F2) is no evidence */

@@ -2242,6 +2242,94 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
  * log part which hands its {Q_i, S_i} pairs straight to Rioboo's LogToReal. */
 static Expr* intrat_log_to_real_pairs(Expr* pair_list, Expr* x, Expr* t);
 
+/* Sum_{Q(r) = 0} r Log[S(r)] written out when Q has degree 1 or 2 in z;
+ * NULL otherwise (or on a malformed coefficient list).  All borrowed. */
+static Expr* intrat_expand_small_root_sum(Expr* Q, Expr* S, Expr* z) {
+    Expr* cl = eval_and_free(internal_coefficientlist(
+        (Expr*[]){expr_expand(Q), expr_copy(z)}, 2));
+    if (!cl || cl->type != EXPR_FUNCTION
+        || cl->data.function.head->type != EXPR_SYMBOL
+        || cl->data.function.head->data.symbol.name != SYM_List
+        || cl->data.function.arg_count < 2 || cl->data.function.arg_count > 3) {
+        if (cl) expr_free(cl);
+        return NULL;
+    }
+    Expr** c = cl->data.function.args;
+    Expr* roots[2]; size_t nr = 0;
+    if (cl->data.function.arg_count == 2) {
+        /* c0 + c1 z: r = -c0/c1 */
+        roots[nr++] = eval_and_free(internal_times((Expr*[]){expr_new_integer(-1),
+            internal_divide((Expr*[]){expr_copy(c[0]), expr_copy(c[1])}, 2)}, 2));
+    } else {
+        /* c0 + c1 z + c2 z^2: r = (-c1 +- Sqrt[c1^2 - 4 c0 c2])/(2 c2) */
+        Expr* disc = internal_plus((Expr*[]){
+            internal_power((Expr*[]){expr_copy(c[1]), expr_new_integer(2)}, 2),
+            internal_times((Expr*[]){expr_new_integer(-4), expr_copy(c[0]), expr_copy(c[2])}, 3)}, 2);
+        Expr* sq = eval_and_free(expr_new_function(expr_new_symbol("Sqrt"), (Expr*[]){disc}, 1));
+        for (int sg = 1; sg >= -1; sg -= 2)
+            roots[nr++] = eval_and_free(internal_divide((Expr*[]){
+                internal_plus((Expr*[]){
+                    internal_times((Expr*[]){expr_new_integer(-1), expr_copy(c[1])}, 2),
+                    internal_times((Expr*[]){expr_new_integer(sg), expr_copy(sq)}, 2)}, 2),
+                internal_times((Expr*[]){expr_new_integer(2), expr_copy(c[2])}, 2)}, 2));
+        expr_free(sq);
+    }
+    expr_free(cl);
+    Expr* terms[2];
+    for (size_t i = 0; i < nr; i++) {
+        Expr* rule = expr_new_function(expr_new_symbol("Rule"), (Expr*[]){expr_copy(z), expr_copy(roots[i])}, 2);
+        Expr* Sr = eval_and_free(expr_new_function(expr_new_symbol("ReplaceAll"),
+            (Expr*[]){expr_copy(S), rule}, 2));
+        terms[i] = internal_times((Expr*[]){roots[i],
+            expr_new_function(expr_new_symbol(SYM_Log), (Expr*[]){Sr}, 1)}, 2);
+    }
+    if (nr == 1) return eval_and_free(terms[0]);
+    return eval_and_free(internal_plus(terms, nr));
+}
+
+/* {{Q_1, S_1}, ...} (the RootSum -> False pair list of intrat_log_part_core,
+ * Q_i in the residue variable z, S_i in z and the monomial) as
+ *     Sum_i RootSum[Function[z, Q_i], Function[z, z Log[S_i]]]
+ * -- the log part with its residues left algebraic.  NULL on a malformed
+ * or empty list.  `pairs` and `z` are borrowed. */
+static Expr* intrat_root_sum_pairs(Expr* pairs, Expr* z) {
+    if (!pairs || pairs->type != EXPR_FUNCTION) return NULL;
+    size_t n = pairs->data.function.arg_count;
+    Expr** terms = (Expr**)malloc(sizeof(Expr*) * (n ? n : 1));
+    size_t nt = 0;
+    for (size_t i = 0; i < n; i++) {
+        Expr* pr = pairs->data.function.args[i];
+        if (pr->type != EXPR_FUNCTION || pr->data.function.arg_count != 2) {
+            for (size_t k = 0; k < nt; k++) expr_free(terms[k]);
+            free(terms);
+            return NULL;
+        }
+        Expr* Qi = eval_and_free(expr_copy(pr->data.function.args[0]));
+        /* Degree 1 or 2 in z: the roots are explicit, so write the sum out,
+         * Sum_{Q(r) = 0} r Log[S(r)] (the quadratic formula; Sqrt of a
+         * complex discriminant is fine -- the log part is an identity in the
+         * roots, whatever they are).  Degree >= 3 stays a RootSum. */
+        Expr* expl = intrat_expand_small_root_sum(Qi, pr->data.function.args[1], z);
+        if (expl) { expr_free(Qi); terms[nt++] = expl; continue; }
+        Expr* func1 = expr_new_function(expr_new_symbol(SYM_Function),
+            (Expr*[]){expr_copy(z), Qi}, 2);
+        Expr* logS = expr_new_function(expr_new_symbol(SYM_Log),
+            (Expr*[]){expr_copy(pr->data.function.args[1])}, 1);
+        Expr* zlog = eval_and_free(internal_times((Expr*[]){expr_copy(z), logS}, 2));
+        Expr* func2 = expr_new_function(expr_new_symbol(SYM_Function),
+            (Expr*[]){expr_copy(z), zlog}, 2);
+        terms[nt++] = expr_new_function(expr_new_symbol(SYM_RootSum),
+            (Expr*[]){func1, func2}, 2);
+    }
+    /* No pair: the core dropped every factor (S_i undetermined, e.g. a
+     * residue factor over Q(i)) -- a failure, never a zero log part. */
+    if (nt == 0) { free(terms); return NULL; }
+    Expr* result;
+    if (nt == 1) { result = terms[0]; free(terms); }
+    else { result = internal_plus(terms, nt); free(terms); result = eval_and_free(result); }
+    return result;
+}
+
 /* Transcendental (recursive-Risch) Lazard-Rioboo-Trager log part.
  *
  * Integrates the PROPER, SQUAREFREE-denominator fraction  a(tau)/d(tau)  of a
@@ -2279,8 +2367,17 @@ static Expr* intrat_transcendental_log_part(Expr* a, Expr* d, Expr* tau,
         return pairs;
     }
     Expr* real = intrat_log_to_real_pairs(pairs, tau, z);
+    if (!real) {
+        /* LogToReal declined (a residue factor of degree >= 3, or a quadratic
+         * over Q(i)): the residues are algebraic, and Bronstein §5.6 allows
+         * them in the algebraic closure, so the log part is the RootSum
+         *     Sum_i RootSum[Q_i(z), z Log[S_i(z, tau)]]
+         * (review F7: 1/(u (1 + Log[u] + Log[u]^3)) was a 27-68 s decline;
+         * the rational integrator already answers such cases this way). */
+        real = intrat_root_sum_pairs(pairs, z);
+    }
     expr_free(pairs);
-    if (!real) { if (rem) expr_free(rem); return NULL; }  /* LogToReal declined */
+    if (!real) { if (rem) expr_free(rem); return NULL; }
     if (remainder_out) *remainder_out = rem;
     else if (rem) expr_free(rem);   /* caller refuses partial: shouldn't happen */
     return real;
@@ -3537,6 +3634,17 @@ static Expr* intrat_linear_q_closer(Expr* pair_list, Expr* x, Expr* t) {
  * on success, or NULL if any pair's Q_i has an irreducible factor of
  * degree >= 5 (intrat_log_to_real's failure mode) or any list entry
  * is malformed.  Caller retains ownership of `pair_list`. */
+/* True when e contains an exact or inexact non-real number (Complex[_, _]). */
+static bool intrat_has_complex(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Complex) return true;
+    if (intrat_has_complex(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (intrat_has_complex(e->data.function.args[i])) return true;
+    return false;
+}
+
 static Expr* intrat_log_to_real_pairs(Expr* pair_list, Expr* x, Expr* t) {
     if (!pair_list || pair_list->type != EXPR_FUNCTION
         || pair_list->data.function.head->type != EXPR_SYMBOL
@@ -3552,6 +3660,12 @@ static Expr* intrat_log_to_real_pairs(Expr* pair_list, Expr* x, Expr* t) {
      * silent wrong-answer.  Return NULL so try_lrt_close falls
      * through to NaiveLogPart's universal RootSum form. */
     if (npairs == 0) return NULL;
+    /* Rioboo's LogToReal is a conversion over a REAL coefficient field: the
+     * conjugate-pair argument behind each ArcTan needs Q_i and S_i real.  On a
+     * non-real coefficient (a residue factor 1 + 4 I z^2 of a Q(i) integrand,
+     * 1/(u (I + Log[u]^2))) it returned 0 -- a wrong log part, caught only by
+     * the caller's answer check.  Decline; the callers fall back to RootSum. */
+    if (intrat_has_complex(pair_list)) return NULL;
     Expr** lr_terms = (Expr**)malloc(sizeof(Expr*) * npairs);
     size_t lr_count = 0;
 

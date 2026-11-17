@@ -119,6 +119,17 @@ Expr* rt_cherry_li(Expr* f, Expr* x) {
         if (rs) expr_free(rs);
     }
     if (denF) expr_free(denF);
+    /* A shift that is a Root object (an irreducible theta-factor of degree >= 3,
+     * 1 + theta + theta^3) puts the ansatz identity over a cubic number field
+     * that the rational normalisation below handles only by brute force:
+     * Integrate[1/(u^2 (1 + Log[u] + Log[u]^3)), u] spent 39 s here and found
+     * nothing (review F6/F7, 2026-11-17).  Decline -- a soft NULL, as every
+     * Cherry decline is. */
+    for (size_t i = 0; i < ns; i++)
+        if (!rt_free_of_head(shifts[i], "Root")) {
+            for (size_t j = 0; j < ns; j++) expr_free(shifts[j]);
+            expr_free(F); expr_free(t); return NULL;
+        }
     if (m < 1) {
         for (size_t i = 0; i < ns; i++) expr_free(shifts[i]);
         expr_free(F); expr_free(t); return NULL;                 /* no 1/theta -> no li */

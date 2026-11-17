@@ -1664,9 +1664,14 @@ is still deficient for every other caller (reproducer and table:
      (`risch_field_integrate.c:1531-1565`; the fold also rejects tower arguments at
      `:1400`). This covers `ArcTan[u]^k`, `Log[u]^2/(1+u)`, `Log[1+u]/u`,
      `ArcTan[u]/u` and `Log[Cos[u]]^2`.
-  4. **F6/F7, PERF.** `rt_log_tower_case` builds an uncapped `SolveAlways` (about
-     175 unknowns, run twice; 16-18 s). There is no RootSum fallback for irreducible
-     cubic residues (`intrat.c:2283`, 44-68 s).
+  4. **[x] F7 v0.6593, F6 partly.** F7 is closed: the tower log part falls back to a
+     RootSum when LogToReal declines (`1/(u (1 + Log[u] + Log[u]^3))`, 27-68 s → 0.01 s),
+     LogToReal declines on complex pairs (it returned a wrong 0), RootSum answers are
+     verified by PossibleZeroQ, the decision skips the Cherry stage (85 s → 0.0 s on the
+     non-elementary neighbours), and `Cherry`Li` declines on `Root` shifts (Integrate
+     67 s → 0.3 s). F6: named unknowns (v0.6592) brought `TrigToExp[u^5 ArcTan[u]^3]` to
+     about 6 s and certified. Still open: the flat ansatz itself is the cost; skip it
+     when the recursion proved non-elementarity.
   5. **F8, F9, F12.** There is no Risch DE over a tangent lower field
      (`E^Tan[u] Sec[u]^2`), `Risch`RationalSpan` fails with `Sqrt[2]`, plus F12 in the
      review.

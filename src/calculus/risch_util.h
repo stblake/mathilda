@@ -50,6 +50,7 @@ bool  rt_free_of_x(Expr* e, Expr* x);                /* FreeQ[e, x] */
 bool  rt_free_of_head(Expr* e, const char* head);    /* FreeQ[e, head] */
 bool  rt_is_poly(Expr* e, Expr* x);                  /* PolynomialQ[e, x] */
 bool  rt_is_zero(Expr* e);                           /* exact structural zero test */
+bool  rt_residual_zero(Expr* diff, const Expr* answer, bool expand); /* Together, or PZQ for a RootSum answer; consumes diff */
 bool  rt_has_algebraic_of_x(Expr* e, Expr* x);       /* radical / Surd / Root of x anywhere */
 bool  rt_has_transcendental_constant(Expr* e, Expr* x); /* Log[2], E^2, Pi, ... free of x */
 

@@ -1421,6 +1421,54 @@ static void test_review_kernel_params(void) {
                    " TimeConstrained[Quiet[Risch`ElementaryIntegralQ[Expand[D[F, u]], u]], 20, $TO]], {40}], False]", "True", 0);
 }
 
+/* Review F7 (2026-11-17): a tower log part whose residue polynomial is an
+ * irreducible cubic, or a quadratic over Q(i).  LogToReal declined and there
+ * was no RootSum fallback, so 1/(u (1 + Log[u] + Log[u]^3)) took 27-68 s and
+ * came back unevaluated (the Cherry stage spent the time).  Worse, LogToReal
+ * on a COMPLEX pair returned 0: Integrate`TranscendentalLogPart[1, I + t^2, ...]
+ * was 0.  Now LogToReal declines on non-real coefficients, the log part is
+ * Sum RootSum[Q_i, z Log[S_i]] (written out for degree 1 and 2), and the
+ * single-extension verifier accepts a RootSum answer by PossibleZeroQ. */
+static void test_review_f7_rootsum(void) {
+    /* the wrong 0 */
+    assert_eval_eq("With[{L = Integrate`TranscendentalLogPart[1, I + t^2, t, z, 2 t, {u}]},"
+                   " L =!= 0 && PossibleZeroQ[D[L /. t -> Log[u], u] - 1/(u (I + Log[u]^2))]]", "True", 0);
+    assert_eval_eq("Integrate`TranscendentalLogPart[1, I + t, t, z, 1, {u}]", "Log[I + t]", 0);
+    /* RootSum log parts, verified, each in well under a second */
+    const char* fs[] = {
+        "1/(u (1 + Log[u] + Log[u]^3))", "(1 + Log[u]^2)/(u (1 - 3 Log[u] + Log[u]^3))",
+        "Log[u]/(u (1 + Log[u] + Log[u]^3))", "1/(u (I + Log[u]^2))", "1/(u (I + Log[u]))" };
+    for (size_t i = 0; i < sizeof fs / sizeof fs[0]; i++) {
+        char buf[400];
+        snprintf(buf, sizeof buf,
+            "With[{t = AbsoluteTiming[Integrate`RischTranscendental[%s, u]]},"
+            " t[[1]] < 3 && Head[t[[2]]] =!= Integrate`RischTranscendental &&"
+            " PossibleZeroQ[D[t[[2]], u] - (%s)]]", fs[i], fs[i]);
+        assert_eval_eq(buf, "True", 0);
+    }
+    /* the cubic stays a RootSum; the quadratic over Q(i) is written out */
+    assert_eval_eq("Head[Integrate`RischTranscendental[1/(u (1 + Log[u] + Log[u]^3)), u]]", "RootSum", 0);
+    assert_eval_eq("FreeQ[Integrate`RischTranscendental[1/(u (I + Log[u]^2)), u], RootSum]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[1/(u (I + Log[u]^2)), u]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[1/(u (1 + Log[u] + Log[u]^3)), u]]", "True", 0);
+    /* the non-elementary neighbours: decided, and fast.  Before, the decision
+       paid for the Cherry stage (special-function forms, never elementary
+       evidence: 42-85 s), and Cherry`Li built its ansatz over the Root
+       shifts of 1 + t + t^3 (Integrate: 67 s, nothing found) */
+    const char* ne[] = { "1/(1 + Log[u] + Log[u]^3)", "Log[u]/(1 + Log[u] + Log[u]^3)",
+                         "1/(u^2 (1 + Log[u] + Log[u]^3))" };
+    for (size_t i = 0; i < sizeof ne / sizeof ne[0]; i++) {
+        char buf[400];
+        snprintf(buf, sizeof buf, "With[{t = AbsoluteTiming[Quiet[Risch`ElementaryIntegralQ[%s, u]]]},"
+                                  " t[[1]] < 3 && t[[2]] === False]", ne[i]);
+        assert_eval_eq(buf, "True", 0);
+        snprintf(buf, sizeof buf, "AbsoluteTiming[Quiet[Integrate[%s, u]]][[1]] < 10", ne[i]);
+        assert_eval_eq(buf, "True", 0);
+    }
+    /* Cherry`Li keeps its rational-shift li terms (Cherry d2/d4) */
+    assert_eval_eq("FreeQ[Integrate`Cherry`Li[1/(Log[x] + 3), x], LogIntegral | ExpIntegralEi]", "False", 0);
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -1524,6 +1572,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_review_parameter_capture);
     TEST(test_review_newlog_certificate);
     TEST(test_review_kernel_params);
+    TEST(test_review_f7_rootsum);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }

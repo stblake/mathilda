@@ -594,12 +594,18 @@ static Expr* rt_frac_lrt(Expr* f, Expr* x, Expr* u, bool is_log) {
                 Expr* logpart = rt_eval_call("Integrate`TranscendentalLogPart",
                     (Expr*[]){ expr_copy(num), expr_copy(den), expr_copy(tsym),
                               expr_new_symbol("rmZ"), Dd, expr_copy(x) }, 6);
-                /* Unevaluated (declined) iff the head is unchanged. */
+                /* Unevaluated (declined) iff the head is unchanged.  A RootSum
+                 * log part (residues of degree >= 3, review F7) is declined here
+                 * too: the later cases give it a better form -- the kernelized
+                 * rational integral for an exponential (1/(1 + E^(2x) + E^(3x)):
+                 * a Log[E^x - r] RootSum Simplify can verify), the tower
+                 * recursion for a logarithm (which accepts the RootSum). */
                 bool declined = !logpart
                     || (logpart->type == EXPR_FUNCTION
                         && logpart->data.function.head->type == EXPR_SYMBOL
                         && logpart->data.function.head->data.symbol.name
-                             == intern_symbol("Integrate`TranscendentalLogPart"));
+                             == intern_symbol("Integrate`TranscendentalLogPart"))
+                    || !rt_free_of_head(logpart, "RootSum");
                 /* Partial log part (Bronstein Thm 5.6.1): the residue resultant
                  * mixed constant and non-constant residues.  Surface the
                  * elementary constant-residue logs plus an unevaluated

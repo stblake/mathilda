@@ -539,6 +539,26 @@ Expr* rt_find_exp_of_x(Expr* e, Expr* x) {
  * Simplify[D[result,x] - f] identically 0?  Fast exact path first
  * (Together[TrigToExp[...]] and the rational-trig point-grid), Simplify last.
  * Correct-by-construction cases skip this; search-based ones gate on it. */
+/* Is the residual `diff` (consumed) of a candidate `answer` (borrowed) zero?
+ * Exactly by Together (Expand first when `expand`); when the answer carries a
+ * RootSum log part (algebraic residues, review F7), which no rational
+ * normalisation can zero, by PossibleZeroQ -- the verifier of record. */
+bool rt_residual_zero(Expr* diff, const Expr* answer, bool expand) {
+    if (!diff) return false;
+    bool rs = answer && !rt_free_of_head((Expr*)answer, "RootSum");
+    Expr* keep = rs ? expr_copy(diff) : NULL;
+    Expr* chk = expand ? rt_eval1("Together", rt_eval1("Expand", diff))
+                       : rt_eval1("Together", diff);
+    bool ok = chk && rt_is_zero(chk);
+    if (chk) expr_free(chk);
+    if (!ok && keep) {
+        Expr* pz = rt_eval1("PossibleZeroQ", keep);   /* adopts keep */
+        ok = pz && rt_is_true(pz);
+        if (pz) expr_free(pz);
+    } else if (keep) expr_free(keep);
+    return ok;
+}
+
 bool rt_verify_antideriv(Expr* result, Expr* f, Expr* x) {
     Expr* d = rt_eval2("D", expr_copy(result), expr_copy(x));
     if (!d) return false;
@@ -581,6 +601,15 @@ bool rt_verify_antideriv(Expr* result, Expr* f, Expr* x) {
     bool zce = ce && rt_is_zero(ce);
     if (ce) expr_free(ce);
     if (zce) { expr_free(diff); return true; }
+    /* A RootSum answer (algebraic residues, review F7): no rational
+     * normalisation sees D[RootSum[Q, z Log[S]]] - f as zero, and Simplify does
+     * not either.  PossibleZeroQ is the verifier of record (rt_answer_verified). */
+    if (!rt_free_of_head(result, "RootSum")) {
+        Expr* pz = rt_eval1("PossibleZeroQ", diff);   /* adopts diff */
+        bool zz = pz && rt_is_true(pz);
+        if (pz) expr_free(pz);
+        return zz;
+    }
     /* Residual (real algebraic / log) forms fall back to Simplify (original gate). */
     Expr* s = rt_eval1("Simplify", diff);
     bool z = s && s->type == EXPR_INTEGER && s->data.integer == 0;

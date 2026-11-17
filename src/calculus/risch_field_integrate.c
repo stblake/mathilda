@@ -958,9 +958,7 @@ static Expr* rt_field_ratint_hermite(Expr* num, Expr* den, RtTower* T, long L, E
     if (rem_tower)   /* D[result] − num/den + rem_tower == 0 */
         diff = expr_new_function(expr_new_symbol("Plus"),
             (Expr*[]){ diff, expr_copy(rem_tower) }, 2);
-    Expr* chk = rt_eval1("Together", diff);
-    bool good = chk && rt_is_zero(chk);
-    if (chk) expr_free(chk);
+    bool good = rt_residual_zero(diff, result, false);   /* consumes diff; RootSum: F7 */
     if (!good) { expr_free(result); if (rem_tower) expr_free(rem_tower); return NULL; }
     if (rem_out) *rem_out = rem_tower;
     else if (rem_tower) expr_free(rem_tower);
@@ -2058,10 +2056,13 @@ static Expr* rt_recursive_tower_case_min(Expr* f, Expr* x, int min_n) {
                  * residual would read as nonzero and a correct antiderivative would
                  * be spuriously rejected.  Expand distributes the products; Together
                  * then clears any lower-field fractions so rt_is_zero is exact. */
-                Expr* chk = diff ? rt_eval1("Together", rt_eval1("Expand", diff)) : NULL;
-                bool tower_ok = chk && rt_is_zero(chk);
+                /* A RootSum log part (algebraic residues, review F7): no
+                 * rational normalisation zeroes D[RootSum[Q, z Log[S]]] - F, so
+                 * the residual is decided by PossibleZeroQ in the tower
+                 * variables (each t_i an independent symbol: a stronger
+                 * identity than the one in the kernels). */
+                bool tower_ok = rt_residual_zero(diff, Q, true);   /* consumes diff */
                 if (DQ) expr_free(DQ);
-                if (chk) expr_free(chk);
                 if (tower_ok) {
                     Expr** back = malloc(T.n * sizeof(Expr*));
                     for (size_t i = 0; i < T.n; i++)
@@ -2076,7 +2077,9 @@ static Expr* rt_recursive_tower_case_min(Expr* f, Expr* x, int min_n) {
                      * come back as an uncombined sum over a spurious common
                      * denominator (-2/(-2 + x) - 2 E^x/(-2 + x) + ... = 1 + E^x).
                      * Together each argument (an identity). */
-                    if (result) {
+                    /* (not inside a RootSum: Function holds its body, so the
+                     * rule would leave an unevaluated Together there) */
+                    if (result && rt_free_of_head(result, "RootSum")) {
                         Expr* lt = parse_expression("{Log[a_] :> Log[Together[a]]}");
                         if (lt) result = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
                             (Expr*[]){ result, lt }, 2));          /* adopts result, lt */
