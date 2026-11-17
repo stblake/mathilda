@@ -1694,11 +1694,14 @@ static bool rt_tower_has_complex(RtTower* T, long L);
  * ArcTan[q] = (I/2) (Log[1 - I q] - Log[1 + I q]) + const (the lower integrator's
  * LogToReal writes conjugate log pairs back as ArcTan[t0], which then hides the
  * tower's own Log[1 -+ I E^u] levels).  Collected like the logarithms. */
+static Expr* g_rt_tvat_x = NULL;   /* borrowed: x while rt_collect_tv_arctans runs */
 static void rt_collect_tv_arctans(Expr* e, RtTower* T, Expr*** out, size_t* n, size_t* cap) {
     if (!e || e->type != EXPR_FUNCTION) return;
     if (rt_head_is(e, "ArcTan") && e->data.function.arg_count == 1) {
         Expr* q = e->data.function.args[0];
-        bool tv = false;
+        /* an ArcTan of x is a pair of the complex tower's logarithms too
+         * (campaign step 2: ArcTan[u] beside Log[u + I] over Q(i)) */
+        bool tv = g_rt_tvat_x && !rt_free_of_x(q, g_rt_tvat_x);
         for (size_t j = 0; j < T->n && !tv; j++) if (!rt_free_of_x(q, T->t[j])) tv = true;
         if (tv) {
             for (size_t i = 0; i < *n; i++) if (expr_eq((*out)[i], e)) return;
@@ -1731,7 +1734,12 @@ static Expr* rt_reduce_new_logs(Expr* Rs, RtTower* T, long L, Expr* x, int* stat
     bool undecided = false;
     {
         Expr** ats = NULL; size_t na = 0, acap = 0;
+        /* over a complex tower ArcTans of x are rewritten too; over a real one
+         * only tower-variable ArcTans are collected (an x-ArcTan there is the
+         * dilogarithm obstruction's business, decided by the caller) */
+        g_rt_tvat_x = rt_tower_has_complex(T, L) ? x : NULL;
         rt_collect_tv_arctans(Rs, T, &ats, &na, &acap);
+        g_rt_tvat_x = NULL;
         if (na && !rt_tower_has_complex(T, L)) undecided = true;   /* a genuinely new ArcTan */
         else if (na) {
             Expr** ar = malloc(na * sizeof(Expr*));

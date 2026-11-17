@@ -1678,6 +1678,17 @@ static void test_campaign_step7_algconst(void) {
     assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[Expand[D[(1 + Sqrt[3]) E^((1 + Sqrt[2]) u) u^(2 Sqrt[2])/(1 + Sqrt[2] u), u]], u]] =!= False", "True", 0);
 }
 
+/* Campaign step 2a (v0.6607): over a complex tower an ArcTan of x in the lower
+ * integral is a pair of the tower's own logarithms, ArcTan[u] = (I/2) (Log[1 - I u]
+ * - Log[1 + I u]); the structure-theorem fold now absorbs it ("ArcTan over a
+ * complex tower: not folded" no longer blocks these hunt cases). */
+static void test_campaign_step2_complex_arctan(void) {
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[ArcTan[u]/u + Log[u]/(I + u) + Log[u]/(1 + u^2) + Log[I + u]/u"
+                   " + 2 I ArcTan[u] Log[I + u]/(I + u) + I Log[I + u]^2/(1 + u^2), u]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[-ArcTan[u]/(1 + u) + 2 u^2 Log[u]/(I + u) + 2 u Log[I + u]"
+                   " + 4 u Log[u] Log[I + u] - Log[1 + u]/(1 + u^2), u]]", "True", 0);
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -1788,6 +1799,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_campaign_step0_primitive);
     TEST(test_campaign_step1_towerlogs);
     TEST(test_campaign_step7_algconst);
+    TEST(test_campaign_step2_complex_arctan);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }
