@@ -239,6 +239,47 @@ static int rde_spde(Expr* a, Expr* b, Expr* c, Expr* x, long n, RdeSpde* out) {
  * leading terms of Dq and bq never cancel, so the solution is built top-down,
  * one monomial per pass, the degree bound strictly decreasing.  Returns q
  * (owned) or NULL for "no solution". */
+/* True when e carries an irrational ALGEBRAIC constant: a numeric radical
+ * (Power[number, Rational]) or a Root object, free of every symbol. */
+static bool rde_has_alg_const(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == intern_symbol("Root")) return true;
+        if (h == intern_symbol("Power") && e->data.function.arg_count == 2) {
+            const Expr* b = e->data.function.args[0];
+            const Expr* x = e->data.function.args[1];
+            bool numb = b->type == EXPR_INTEGER || b->type == EXPR_BIGINT
+                || (b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL
+                    && b->data.function.head->data.symbol.name == intern_symbol("Rational"));
+            bool ratx = x->type == EXPR_FUNCTION && x->data.function.head->type == EXPR_SYMBOL
+                && x->data.function.head->data.symbol.name == intern_symbol("Rational");
+            if (numb && ratx) return true;
+        }
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rde_has_alg_const(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* A numeric algebraic quotient brought to RootReduce's canonical form (owned
+ * in, owned out); anything else is returned unchanged.  Together does not
+ * rationalise a numeric denominator: (2 + 2 Sqrt[2])/(2 + Sqrt[2]) stays put,
+ * the no-cancellation loop's leading terms then fail to cancel, and it
+ * reported "no solution" for q' + (2 + Sqrt[2]) q = p with q = Sqrt[2] u^2/(1+u)
+ * (found by the F9 false-certificate hunt, 2026-11-17). */
+static Expr* rde_alg_reduce(Expr* e) {
+    if (!e || !rde_has_alg_const(e)) return e;
+    Expr* nq = rt_eval1("NumericQ", expr_copy(e));
+    bool num = nq && rt_is_true(nq);
+    if (nq) expr_free(nq);
+    if (!num) return e;
+    Expr* r = rt_eval1("RootReduce", expr_copy(e));
+    if (!r) return e;
+    expr_free(e);
+    return r;
+}
+
 static Expr* rde_polyrischde_nocancel1(Expr* b, Expr* c, Expr* x, long n) {
     long db = rt_degree(b, x);
     Expr* lcb = rde_lc(b, x);
@@ -250,7 +291,7 @@ static Expr* rde_polyrischde_nocancel1(Expr* b, Expr* c, Expr* x, long n) {
         long m = dc - db;
         if (n < 0 || m < 0 || m > n) { fail = true; break; }
         Expr* lcc = rde_lc(cc, x);
-        Expr* coeff = rde_divq(lcc, lcb);           /* lc(c)/lc(b) */
+        Expr* coeff = rde_alg_reduce(rde_divq(lcc, lcb));   /* lc(c)/lc(b) */
         expr_free(lcc);
         Expr* p = rt_eval1("Expand", expr_new_function(expr_new_symbol("Times"),
             (Expr*[]){ coeff, expr_new_function(expr_new_symbol("Power"),
@@ -417,6 +458,12 @@ Expr* rde_base(Expr* f, Expr* g, Expr* x) {
                     H = rde_polyrischde_integrate(sp.c, x, sp.m);
                 else
                     H = rde_polyrischde_nocancel1(sp.b, sp.c, x, sp.m);
+                /* Over algebraic constants the polynomial solve's zero tests
+                 * are only as good as the normalisation (rde_alg_reduce): a
+                 * failure there is not a theorem.  Rational coefficients (with
+                 * parameters) keep the authoritative "no". */
+                if (!H && (rde_has_alg_const(f) || rde_has_alg_const(g)))
+                    rde_cert_mark("base: polynomial solve over algebraic constants");
                 if (H) {
                     Expr* aH = rde_mul(sp.alpha, H);
                     Expr* q = rde_add(aH, sp.beta);
@@ -427,6 +474,8 @@ Expr* rde_base(Expr* f, Expr* g, Expr* x) {
                     expr_free(hw); expr_free(q);
                 }
                 rde_spde_free(&sp);
+            } else if (rde_has_alg_const(f) || rde_has_alg_const(g)) {
+                rde_cert_mark("base: SPDE over algebraic constants");
             }
         }
         expr_free(aa); expr_free(bb); expr_free(cc);

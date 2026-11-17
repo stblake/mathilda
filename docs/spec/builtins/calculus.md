@@ -1431,11 +1431,14 @@ remaining child crashes from earlier runs are eliminated, while
   - **The transcendental callers** (v0.6593). They kept `LogToReal` on complex pairs
     until v0.6593, and it had the same defect there:
     `Integrate`TranscendentalLogPart[1, I + t^2, t, z, 2 t, {u}]` was `0`.
-    `LogToReal` now declines on any non-real coefficient, and the log part is then
-    the RootSum, written out for residue factors of degree 1 or 2. Trig integrands
-    still come back real: the trig front end maps the complex logs back, e.g.
-    `Integrate`RischTranscendental[1/(2 + Cos[x]), x]` is
-    `(ArcTan[2 + Sqrt[3] + Cos[x], -Sin[x]] - ArcTan[2 - Sqrt[3] + Cos[x], -Sin[x]])/Sqrt[3]`.
+    LogToReal's precondition is that the residue factors are closed under complex
+    conjugation. The trig callers (`t = E^(I x)`) satisfy it and keep LogToReal's
+    real reconstruction. A factor with a non-real coefficient and no conjugate among
+    the factors (`1 + 4 I z^2`) does not, and then the log part is the RootSum,
+    written out for factors of degree 1 or 2 (v0.6599). v0.6593 declined on every
+    non-real coefficient instead, which made
+    `Integrate[Log[61/36 - 5/3 Cos[2 x]] Sin[x] Sin[9 x], {x, 0, Pi}]` run past 100 s
+    (5 s before and after).
 - **Algebraic constants in normal form** (v0.6506, `intsimp_reduce_algebraic_constants`).
   The log part computes with algebraic constants (`Sqrt[2]`, `2^(1/4)`, nested
   radicals) and nothing rationalises them, so the answers used to carry
@@ -2010,7 +2013,12 @@ monotonically down.
     elementary. A log part with algebraic residues of degree ≥ 3 is a RootSum,
     verified by `PossibleZeroQ` (v0.6593): `1/(u (1 + Log[u] + Log[u]^3))` takes
     0.01 s (it was a 27–68 s decline). `Risch`ElementaryIntegralQ` skips the Cherry
-    special-function stage, whose answers are never elementary evidence.  Cases:
+    special-function stage, whose answers are never elementary evidence. The flat
+    ansatz fallbacks are skipped when the field decision proves the integrand not
+    elementary (v0.6599): `TrigToExp[u^5 ArcTan[u]^3]` takes 0.1 s (it was 16–18 s).
+    `Risch`RationalSpan` decides Q-linear relations over algebraic constants: a
+    unique non-rational solution, `RootReduce`d, is a proof (v0.6599), so
+    `E^(Sqrt[2] u) + E^(2 u)/u` and `E^u u^Sqrt[2]/(1 + u)` are certified.  Cases:
       - rational: delegated to `Integrate\`BronsteinRational`;
       - logarithmic polynomial `P(x, Log[u])`: the recursive primitive-
         polynomial coefficient matching, with a limited-integration oracle that
@@ -5032,7 +5040,8 @@ algebraic residues.
   Returns the antiderivative as a function of `tau` (the caller substitutes
   `tau -> kernel`), or unevaluated when the integral is not elementary in
   this form (a residue depending on a gate variable).  When `LogToReal`
-  declines (a residue factor of degree ≥ 3, or any non-real coefficient), the
+  declines (a residue factor of degree ≥ 3), or its precondition fails (a factor
+  with a non-real coefficient whose conjugate is not among the factors), the
   log part is `Sum_i RootSum[Q_i(z), z Log[S_i(z, tau)]]` (Bronstein §5.6: the
   residues may be algebraic), with each factor of degree 1 or 2 written out by
   its roots (v0.6593): `Integrate`TranscendentalLogPart[1, 1 + t + t^3, t, z,
@@ -5241,7 +5250,12 @@ for a rational `y`, either in the base field `C(x)` or in the transcendental **t
 Chapter-6 stack: normal-denominator reduction → SPDE → polynomial non-cancellation
 solve, with the derivation lifted to the tower). Returns `y` (`0` when `g == 0`), or
 stays **unevaluated** when no rational solution exists. Coefficients may be Gaussian
-(`C(i)(x)`).
+(`C(i)(x)`), or carry algebraic constants (`Sqrt[2]`, `Root` objects). A
+numeric algebraic quotient in the polynomial solve is brought to `RootReduce` form
+(v0.6599): `Risch`RischDE[2 + Sqrt[2], g, u]`, with `y = Sqrt[2] u^2/(1 + u)` as its
+solution, used to stay unevaluated. Over algebraic constants, a failed polynomial
+solve is an uncertain step for `Risch`RischDECertified` and for the Risch decision,
+not a proof.
 
 ```
 In[1]:= Risch`RischDE[1, x, x]                                   (* y' + y == x *)
@@ -5293,8 +5307,11 @@ Decided since v0.6546 (completion campaign, Phase 2; derivations in
 Still undecided, and so `$Failed`:
 - inputs that are not rational in `x` and the kernels;
 - a tangent top;
-- a tower whose `Log`/`Exp` monomials are algebraically dependent
-  (`E^(x + x^2)` beside `E^x` and `E^(x^2)`: "tower: dependent monomials");
+- a tower whose `Log`/`Exp` monomials are algebraically dependent in a way
+  the tower cannot rewrite ("tower: dependent monomials"). Since v0.6599 a
+  composite exponential such as `E^(x + x^2)` beside `E^x` and `E^(x^2)` is
+  rewritten as `t1 t2` and decided: the RDE `y' + E^x y = E^(x^2) +
+  x E^(x + x^2) + 2 x^2 E^(x^2)` gives `y = x E^(x^2)`;
 - limited integration against one primitive (`RdeBoundDegreePrim` with
   `deg b = deg a − 1`) when the field integrator's answer has a new logarithm;
 - the antidifferentiation branch when the field integrator gives no answer.

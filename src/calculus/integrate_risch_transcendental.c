@@ -29,6 +29,7 @@
 #include "eval.h"
 #include "parse.h"
 #include "print.h"
+#include "core.h"   /* tc_register_unwind_counter */
 #include "symtab.h"
 #include "attr.h"
 #include "sym_intern.h"
@@ -55,6 +56,13 @@
  * trig/hyperbolic (TrigToExp) front-end.  The general Hermite reduction for
  * repeated poles lands in a subsequent increment. */
 static bool rt_logcombine_verified(Expr* r, Expr* f, Expr* x);
+static RtDecision rt_decide_field(Expr* f, Expr* x);
+/* Re-entry guard of the F6 flat-ansatz gate (rt_transcendental_case); an int
+ * registered with the TimeConstrained unwind registry, like every flag that
+ * brackets a sub-solve: a timeout that longjmps out mid-decision would
+ * otherwise leave it, and g_rt_decide_mode, set for the rest of the session. */
+static int rt_in_flat_gate = 0;
+static int rt_in_logcombine = 0;   /* the log-combine retry's guard (same registry) */
 static Expr* rt_transcendental_case(Expr* f, Expr* x) {
     Expr* r = rt_log_poly_case(f, x);
     if (r) return r;
@@ -95,10 +103,24 @@ static Expr* rt_transcendental_case(Expr* f, Expr* x) {
      * P5 substrate). */
     r = rt_recursive_tower_case(f, x);   /* one-extension recursion (mixed / rational coeff) */
     if (r) return r;
-    r = rt_log_tower_case(f, x);   /* flat ansatz fallback (nested log tower) */
-    if (r) return r;
-    r = rt_exp_tower_case(f, x);    /* flat ansatz fallback (nested exp tower) */
-    if (r) return r;
+    /* The flat ansätze only find ELEMENTARY antiderivatives, and their size is
+     * uncapped (175 unknowns for TrigToExp[u^5 ArcTan[u]^3]; review F6).  When the
+     * field decision proves the integrand non-elementary they cannot succeed, so
+     * a decline there no longer costs the maximum.  The certificate is the one
+     * Risch`ElementaryIntegralQ reports (sound, hunted); the decision runs once,
+     * not re-entrantly. */
+    bool proved_nonelem = false;
+    if (!rt_in_flat_gate) {
+        rt_in_flat_gate = 1;
+        proved_nonelem = rt_decide_field(f, x) == RT_DEC_NONELEMENTARY;
+        rt_in_flat_gate = 0;
+    }
+    if (!proved_nonelem) {
+        r = rt_log_tower_case(f, x);   /* flat ansatz fallback (nested log tower) */
+        if (r) return r;
+        r = rt_exp_tower_case(f, x);    /* flat ansatz fallback (nested exp tower) */
+        if (r) return r;
+    }
     /* Real tangent monomial (Bronstein §5.10): integrate rational functions of a
      * single Tan[u] directly and real, retiring the TrigToExp route below for
      * real-tangent integrands (which it strands at an I-laden complex-log form). */
@@ -124,7 +146,6 @@ static Expr* rt_transcendental_case(Expr* f, Expr* x) {
      * is NOT an identity off the positive axis (Log[x^2] != 2 Log[x] for x < 0,
      * so Int Log[x^2]/x came back as Log[x]^2), so the retry's answer is
      * checked against the ORIGINAL integrand and dropped when it fails. */
-    static int rt_in_logcombine = 0;
     if (!rt_in_logcombine) {
         Expr* fn = rt_eval_own(rt_expand_logs(f));
         if (fn && !expr_eq(fn, f)) {
@@ -341,7 +362,7 @@ static Expr* rt_debase_exponentials(Expr* f, Expr* x, Expr** backsub_out) {
  * function (Ei / li / Erf / dilog) forms, which rt_expr_is_elementary rejects.
  * On a non-elementary integrand Cherry is also where a decline spends its time
  * (Risch`ElementaryIntegralQ[1/(1 + Log[u] + Log[u]^3), u]: 85 s, review F6). */
-static bool g_rt_elementary_only = false;
+static int g_rt_elementary_only = 0;   /* tc_register_unwind_counter */
 
 static Expr* rt_integrate_core(Expr* f, Expr* x) {
     Expr* r = rt_rational_case(f, x);
@@ -695,9 +716,9 @@ static RtDecision rt_decide_field_canon(Expr* f, Expr* x) {
         if (num) expr_free(num);
         if (den) expr_free(den);
         if (gate) {
-            bool       save_mode = g_rt_decide_mode;
+            int        save_mode = g_rt_decide_mode;
             RtDecision save_dec  = g_rt_decision;
-            g_rt_decide_mode = true;
+            g_rt_decide_mode = 1;
             g_rt_decision    = RT_DEC_UNKNOWN;
             Expr* rem = NULL;
             unsigned long prim0 = g_rt_prim_unevaluated;
@@ -742,8 +763,8 @@ static RtDecision rt_decide_field_canon(Expr* f, Expr* x) {
  * certificate.  Otherwise UNKNOWN.  Checking True first makes an exhibited
  * antiderivative dominate any certificate, so the verdict is robust. */
 static RtDecision rt_decide(Expr* f, Expr* x) {
-    bool save_eo = g_rt_elementary_only;
-    g_rt_elementary_only = true;
+    int save_eo = g_rt_elementary_only;
+    g_rt_elementary_only = 1;
     Expr* anti = rt_integrate(f, x);
     g_rt_elementary_only = save_eo;
     if (anti) {
@@ -1008,6 +1029,13 @@ static void rt_install(const char* name, Expr* (*fn)(Expr*), const char* doc) {
 }
 
 void integrate_risch_transcendental_init(void) {
+    /* flags that bracket a sub-solve: restored when a TimeConstrained timeout
+     * unwinds out of it (otherwise a stuck decide mode degrades every later
+     * integral of the session) */
+    tc_register_unwind_counter(&g_rt_decide_mode);
+    tc_register_unwind_counter(&g_rt_elementary_only);
+    tc_register_unwind_counter(&rt_in_flat_gate);
+    tc_register_unwind_counter(&rt_in_logcombine);
     rt_install("Integrate`RischTranscendental", builtin_rischtranscendental,
         "Integrate`RischTranscendental[f, x] integrates f with respect to x using the\n"
         "recursive transcendental Risch algorithm: a decision\n"

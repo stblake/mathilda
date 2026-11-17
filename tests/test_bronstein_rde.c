@@ -58,9 +58,13 @@ static void test_undecided(void) {
      * removed by the tower WeakNormalizer (q = Log[x]) */
     BR_TRUE("With[{y = Risch`RischDECertified[1/(x Log[x]), x, x]}, PossibleZeroQ[D[y, x] + y/(x Log[x]) - x]]");
     BR_EQ("Risch`RischDECertifiedReason[]", "None");
-    /* a dependent tower (E^(x + x^2) beside E^x and E^(x^2)) certifies nothing */
-    BR_EQ("Risch`RischDECertified[E^x, E^x^2 + E^(x + x^2) x + 2 E^x^2 x^2, x]", "$Failed");
-    BR_EQ("Risch`RischDECertifiedReason[]", "\"tower: dependent monomials\"");
+    /* a dependent tower (E^(x + x^2) beside E^x and E^(x^2)): since v0.6599
+     * (review F12) the composite class is eliminated, E^(x + x^2) = t1 t2, and
+     * the RDE is decided -- y = x E^(x^2) ... */
+    BR_TRUE("With[{y = Risch`RischDECertified[E^x, E^x^2 + E^(x + x^2) x + 2 E^x^2 x^2, x]}, PossibleZeroQ[D[y, x] + E^x y - (E^x^2 + E^(x + x^2) x + 2 E^x^2 x^2)]]");
+    BR_EQ("Risch`RischDECertifiedReason[]", "None");
+    /* ... and adding 1/x leaves no solution (the t1-graded RDE forces y = 0) */
+    BR_EQ("Risch`RischDECertified[E^x, E^x^2 + E^(x + x^2) x + 2 E^x^2 x^2 + 1/x, x]", "\"NoSolution\"");
     BR_EQ("Risch`RischDECertified[1, Sin[x], x]", "$Failed");
     /* malformed calls stay unevaluated */
     BR_EQ("Head[Risch`RischDECertified[1, x]]", "Risch`RischDECertified");

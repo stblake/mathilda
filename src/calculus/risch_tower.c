@@ -312,6 +312,14 @@ Expr* rt_expand_logs(Expr* e) {
     free(args);
     return r;
 }
+/* Leaf count (orders the composite-class elimination, largest first). */
+static size_t rt_leaves(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return 1;
+    size_t n = rt_leaves(e->data.function.head);
+    for (size_t i = 0; i < e->data.function.arg_count; i++) n += rt_leaves(e->data.function.args[i]);
+    return n;
+}
+
 void rt_tower_free(RtTower* T) {
     for (size_t i = 0; i < T->n; i++) {
         if (T->kernel && T->kernel[i]) expr_free(T->kernel[i]);
@@ -320,8 +328,11 @@ void rt_tower_free(RtTower* T) {
         if (T->Dcoef && T->Dcoef[i]) expr_free(T->Dcoef[i]);
     }
     if (T->subrules) expr_free(T->subrules);
-    for (size_t i = 0; i < T->nm; i++)
+    for (size_t i = 0; i < T->nm; i++) {
         if (T->marg && T->marg[i]) expr_free(T->marg[i]);
+        if (T->mval && T->mval[i]) expr_free(T->mval[i]);
+    }
+    free(T->mval); T->mval = NULL;
     free(T->kind); free(T->kernel); free(T->arg); free(T->t); free(T->Dcoef);
     free(T->tsg); free(T->marg); free(T->mprim); free(T->mmult);
     T->kind = NULL; T->kernel = NULL; T->arg = NULL; T->t = NULL; T->Dcoef = NULL;
@@ -373,7 +384,7 @@ void rt_collect_tangents(Expr* e, Expr* x, Expr*** args, long** sigs,
  * rt_tower_free). */
 bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     T->kind = NULL; T->kernel = NULL; T->arg = NULL; T->t = NULL; T->Dcoef = NULL;
-    T->tsg = NULL; T->marg = NULL; T->mprim = NULL; T->mmult = NULL;
+    T->tsg = NULL; T->marg = NULL; T->mprim = NULL; T->mmult = NULL; T->mval = NULL;
     T->subrules = NULL; T->n = 0; T->nm = 0; T->dependent = false;
 
     /* Knowles Liouvillian primitives (Erf/Erfi/Erfc/ExpIntegralEi/LogIntegral).
@@ -461,12 +472,67 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
         }
         free(cls); free(idxs); free(kk);
     }
+    /* Composite classes (review F12).  The commensurability classes catch
+     * rational multiples of ONE exponent; a primitive that is an integer
+     * combination of several others (2u + u^2 beside 2u and u^2 -- the
+     * evaluator re-merges E^(2u) E^(u^2) into E^(2u + u^2)) made the tower
+     * dependent, and every certificate over it was demoted.  Such a class gets
+     * no level: its members become the monomials Prod t_s^(m k_s) of the
+     * surviving primitives.  Largest exponent first; a primitive another
+     * combination uses is never eliminated. */
+    bool* elim = calloc((ne ? ne : 1), sizeof(bool));
+    bool* used = calloc((ne ? ne : 1), sizeof(bool));
+    long** ccoef = calloc((ne ? ne : 1), sizeof(long*));   /* per eliminated rep: k over reps */
+    if (okc) {
+        size_t* order = malloc((ne ? ne : 1) * sizeof(size_t));
+        size_t no = 0;
+        for (size_t rep = 0; rep < ne; rep++) if (clsrep[rep] == (long)rep) order[no++] = rep;
+        for (size_t a = 1; a < no; a++)                  /* by descending size */
+            for (size_t b = a; b > 0 && rt_leaves(clsprim[order[b]]) > rt_leaves(clsprim[order[b - 1]]); b--) {
+                size_t tmp = order[b]; order[b] = order[b - 1]; order[b - 1] = tmp;
+            }
+        Expr* xl = expr_new_function(expr_new_symbol("List"), (Expr*[]){ expr_copy(x) }, 1);
+        for (size_t a = 0; a < no; a++) {
+            size_t r = order[a];
+            if (used[r]) continue;
+            Expr** gens = malloc((no ? no : 1) * sizeof(Expr*));
+            size_t* greps = malloc((no ? no : 1) * sizeof(size_t));
+            size_t ng = 0;
+            for (size_t b = 0; b < no; b++)
+                if (order[b] != r && !elim[order[b]]) { gens[ng] = clsprim[order[b]]; greps[ng] = order[b]; ng++; }
+            if (ng >= 2) {
+                bool failed = false;
+                Expr* co = risch_rational_span(clsprim[r], gens, ng, xl, &failed);
+                bool integral = co && co->type == EXPR_FUNCTION && co->data.function.arg_count == ng;
+                for (size_t g = 0; g < ng && integral; g++)
+                    if (co->data.function.args[g]->type != EXPR_INTEGER) integral = false;
+                size_t nz = 0;
+                for (size_t g = 0; g < ng && integral; g++)
+                    if (co->data.function.args[g]->data.integer != 0) nz++;
+                if (integral && nz >= 2) {      /* nz == 1 is a commensurate multiple (handled) */
+                    elim[r] = true;
+                    ccoef[r] = calloc(ne, sizeof(long));
+                    for (size_t g = 0; g < ng; g++) {
+                        long k = (long)co->data.function.args[g]->data.integer;
+                        ccoef[r][greps[g]] = k;
+                        if (k) used[greps[g]] = true;
+                    }
+                }
+                if (co) expr_free(co);
+            }
+            free(gens); free(greps);
+        }
+        expr_free(xl);
+        free(order);
+    }
     size_t np = 0;
-    for (size_t rep = 0; rep < ne; rep++) if (clsrep[rep] == (long)rep) np++;
+    for (size_t rep = 0; rep < ne; rep++) if (clsrep[rep] == (long)rep && !elim[rep]) np++;
     size_t n = nl + np + nt + npr;
     if (!okc || n < min_n) {                         /* no upper depth cap */
         for (size_t rep = 0; rep < ne; rep++) if (clsprim[rep]) expr_free(clsprim[rep]);
         free(clsprim); free(clsrep); free(multof); free(mprim_pexp);
+        for (size_t rep = 0; rep < ne; rep++) free(ccoef[rep]);
+        free(ccoef); free(elim); free(used);
         for (size_t i = 0; i < nl; i++) expr_free(logs[i]);
         for (size_t i = 0; i < ne; i++) expr_free(exps[i]);
         for (size_t i = 0; i < nt; i++) expr_free(tans[i]);
@@ -484,6 +550,8 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     T->marg   = calloc(ne ? ne : 1, sizeof(Expr*));
     T->mprim  = calloc(ne ? ne : 1, sizeof(long));
     T->mmult  = calloc(ne ? ne : 1, sizeof(long));
+    T->mval   = calloc(ne ? ne : 1, sizeof(Expr*));
+    long* mrep = calloc(ne ? ne : 1, sizeof(long));   /* per member: its class rep */
 
     size_t idx = 0;
     for (size_t i = 0; i < nl; i++) {
@@ -495,7 +563,7 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     free(logs);
     /* One EXP tower kernel per synthesized class primitive. */
     for (size_t rep = 0; rep < ne; rep++) {
-        if (clsrep[rep] != (long)rep) continue;
+        if (clsrep[rep] != (long)rep || elim[rep]) continue;
         T->kind[idx] = RT_EXP;
         T->arg[idx] = expr_copy(clsprim[rep]);                     /* primitive exponent */
         T->kernel[idx] = expr_new_function(expr_new_symbol("Power"),
@@ -526,10 +594,12 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     /* Every exp member that is not itself the class primitive is an alias
      * E^w -> t[prim]^k; store its primitive exponent for the post-reorder remap. */
     for (size_t i = 0; i < ne; i++) {
-        if (expr_eq(exps[i], clsprim[clsrep[i]])) continue;   /* realized by the primitive kernel */
+        if (!elim[clsrep[i]] && expr_eq(exps[i], clsprim[clsrep[i]]))
+            continue;                                         /* realized by the primitive kernel */
         T->marg[T->nm] = expr_copy(exps[i]);                  /* member exponent w */
         T->mmult[T->nm] = multof[i];                          /* w = k * clsprim[rep]  */
         mprim_pexp[T->nm] = clsprim[clsrep[i]];               /* borrowed; remapped below */
+        mrep[T->nm] = clsrep[i];
         T->nm++;
     }
     T->n = n;
@@ -618,13 +688,34 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
         }
     }
     for (size_t m = 0; m < T->nm; m++) {
-        Expr* pw = mprim_pexp[m];                  /* class primitive exponent value */
-        long ti = -1;
-        for (size_t i = 0; i < n; i++)
-            if (T->kind[i] == RT_EXP && expr_eq(T->arg[i], pw)) { ti = (long)i; break; }
-        T->mprim[m] = ti;                          /* now a tower index (>= 0) */
-        Expr* tk = expr_new_function(expr_new_symbol("Power"),
-            (Expr*[]){ expr_copy(T->t[ti]), expr_new_integer(T->mmult[m]) }, 2);
+        Expr* tk;
+        if (!elim[mrep[m]]) {
+            Expr* pw = mprim_pexp[m];              /* class primitive exponent value */
+            long ti = -1;
+            for (size_t i = 0; i < n; i++)
+                if (T->kind[i] == RT_EXP && expr_eq(T->arg[i], pw)) { ti = (long)i; break; }
+            T->mprim[m] = ti;                      /* now a tower index (>= 0) */
+            tk = expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(T->t[ti]), expr_new_integer(T->mmult[m]) }, 2);
+        } else {
+            /* composite: w = multof * Sum_s k_s prim_s  ->  Prod t_s^(multof k_s) */
+            long* kc = ccoef[mrep[m]];
+            Expr** fs = malloc((ne ? ne : 1) * sizeof(Expr*));
+            size_t nf = 0;
+            T->mprim[m] = -1;
+            for (size_t srep = 0; srep < ne; srep++) {
+                if (!kc[srep]) continue;
+                long ti = -1;
+                for (size_t i = 0; i < n; i++)
+                    if (T->kind[i] == RT_EXP && expr_eq(T->arg[i], clsprim[srep])) { ti = (long)i; break; }
+                if (T->mprim[m] < 0) T->mprim[m] = ti;
+                fs[nf++] = expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(T->t[ti]), expr_new_integer(T->mmult[m] * kc[srep]) }, 2);
+            }
+            tk = expr_new_function(expr_new_symbol("Times"), fs, nf);
+            free(fs);
+        }
+        T->mval[m] = expr_copy(tk);
         rules[nr++] = expr_new_function(expr_new_symbol("Rule"),
             (Expr*[]){ expr_new_function(expr_new_symbol("Exp"),
                 (Expr*[]){ expr_copy(T->marg[m]) }, 1), expr_copy(tk) }, 2);
@@ -636,6 +727,8 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
     free(rules);
     for (size_t rep = 0; rep < ne; rep++) if (clsprim[rep]) expr_free(clsprim[rep]);
     free(clsprim); free(clsrep); free(multof); free(mprim_pexp);
+    for (size_t rep = 0; rep < ne; rep++) free(ccoef[rep]);
+    free(ccoef); free(elim); free(used); free(mrep);
     for (size_t i = 0; i < ne; i++) expr_free(exps[i]);
     free(exps);
 
@@ -934,9 +1027,7 @@ Expr* rt_subst_kernels(Expr* e, RtTower* T) {
                      && e->data.function.args[0]->data.symbol.name == intern_symbol("E"))
                 w = e->data.function.args[1];
             if (w && expr_eq(w, T->marg[m]))
-                return expr_new_function(expr_new_symbol("Power"),
-                    (Expr*[]){ expr_copy(T->t[T->mprim[m]]),
-                               expr_new_integer(T->mmult[m]) }, 2);
+                return expr_copy(T->mval[m]);
         }
     }
     if (e->type != EXPR_FUNCTION) return expr_copy(e);

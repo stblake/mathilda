@@ -48,6 +48,35 @@ static Expr* rs_pow(Expr* a, long n) {
 }
 
 /* True iff e is a rational-number constant (Integer, BigInt, or Rational[p,q]). */
+/* An explicit algebraic number: integers, rationals, Complex of those, and
+ * Plus / Times / Power with a rational exponent / Root[poly &, k] over them. */
+static bool rs_is_algebraic_number(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
+    if (e->type != EXPR_FUNCTION || e->data.function.head->type != EXPR_SYMBOL) return false;
+    const char* h = e->data.function.head->data.symbol.name;
+    size_t n = e->data.function.arg_count;
+    if (h == intern_symbol("Rational") || h == intern_symbol("Complex")) {
+        for (size_t i = 0; i < n; i++)
+            if (!rs_is_algebraic_number(e->data.function.args[i])) return false;
+        return true;
+    }
+    if (h == intern_symbol("Root")) return true;   /* Root[f &, k]: algebraic by construction */
+    if (h == intern_symbol("Power") && n == 2) {
+        const Expr* ex = e->data.function.args[1];
+        bool ratexp = ex->type == EXPR_INTEGER || ex->type == EXPR_BIGINT
+            || (ex->type == EXPR_FUNCTION && ex->data.function.head->type == EXPR_SYMBOL
+                && ex->data.function.head->data.symbol.name == intern_symbol("Rational"));
+        return ratexp && rs_is_algebraic_number(e->data.function.args[0]);
+    }
+    if (h == intern_symbol("Plus") || h == intern_symbol("Times")) {
+        for (size_t i = 0; i < n; i++)
+            if (!rs_is_algebraic_number(e->data.function.args[i])) return false;
+        return true;
+    }
+    return false;
+}
+
 static bool rs_is_rational(const Expr* e) {
     if (!e) return false;
     if (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT) return true;
@@ -152,9 +181,16 @@ Expr* risch_rational_span(const Expr* theta, Expr* const* gens, size_t m,
         Expr* first = sol->data.function.args[0];   /* List of Rule[c_i, val] */
         Expr** res = malloc(m * sizeof(Expr*));
         for (size_t i = 0; i < m; i++) res[i] = NULL;
+        /* `unique`: one solution, every rule binds some c_i, every c_i is
+         * bound to a numeric constant free of the c's -- the solution point is
+         * then the only one (the system in the c's has full rank), so a
+         * non-rational value at it PROVES there is no rational relation
+         * (review F9: 2 over {Sqrt[2]}, E^(Sqrt[2] u) beside E^(2 u)). */
+        bool unique = sol->data.function.arg_count == 1 && rs_is_list(first) && !nonrat;
         if (rs_is_list(first)) {
             for (size_t k = 0; k < first->data.function.arg_count; k++) {
                 Expr* rule = first->data.function.args[k];
+                bool bound = false;
                 if (rule->type == EXPR_FUNCTION &&
                     rule->data.function.head->type == EXPR_SYMBOL &&
                     rule->data.function.head->data.symbol.name == intern_symbol("Rule") &&
@@ -164,8 +200,27 @@ Expr* risch_rational_span(const Expr* theta, Expr* const* gens, size_t m,
                         if (lhs->type == EXPR_SYMBOL && cs[i]->type == EXPR_SYMBOL &&
                             lhs->data.symbol.name == cs[i]->data.symbol.name) {
                             res[i] = rs_cp(rule->data.function.args[1]);
+                            bound = true;
                         }
                 }
+                if (!bound) unique = false;
+            }
+        }
+        /* Each value must be an explicit ALGEBRAIC number (only numbers, +, x,
+         * rational powers, Root): its rationality is then decidable, by
+         * RootReduce to the canonical form.  A transcendental value (Pi,
+         * Log[2]/Log[4] unsimplified) leaves the question open.  The
+         * reduction is also applied to every algebraic value before the
+         * rationality test below: (3 + 3 Sqrt[2])/(1 + Sqrt[2]) is 3, and the
+         * syntactic test alone read it as irrational -- a false certificate
+         * found by the hunt during development. */
+        for (size_t i = 0; i < m; i++) {
+            if (!res[i]) { unique = false; continue; }
+            if (!rs_is_algebraic_number(res[i])) { unique = false; continue; }
+            if (!rs_is_rational(res[i])) {
+                Expr* rr = rs_call1("RootReduce", rs_cp(res[i]));
+                if (rr && rs_is_algebraic_number(rr)) { expr_free(res[i]); res[i] = rr; }
+                else { if (rr) expr_free(rr); unique = false; }
             }
         }
         /* Free parameters (unconstrained c_i) get pinned to 0; also substitute
@@ -201,8 +256,25 @@ Expr* risch_rational_span(const Expr* theta, Expr* const* gens, size_t m,
             ok = rs_is_zero(chk);
             expr_free(chk);
         }
+        bool nonrat_proof = false;
+        if (!ok && unique) {
+            /* Certify the exact (non-rational) point before reading it as a
+             * proof: theta - Sum v_i g_i must cancel to 0. */
+            Expr** ts = malloc((m + 1) * sizeof(Expr*));
+            ts[0] = rs_cp(theta);
+            for (size_t i = 0; i < m; i++)
+                ts[i + 1] = rs_times(expr_new_integer(-1), rs_times(rs_cp(res[i]), rs_cp(gens[i])));
+            Expr* chk = rs_call1("Together", rs_call1("Expand",
+                expr_new_function(expr_new_symbol("Plus"), ts, m + 1)));
+            free(ts);
+            nonrat_proof = rs_is_zero(chk);
+            expr_free(chk);
+        }
         if (ok) {
             result = expr_new_function(expr_new_symbol("List"), res, m);
+        } else if (nonrat_proof) {
+            /* the unique relation has a non-rational coefficient: False */
+            for (size_t i = 0; i < m; i++) expr_free(res[i]);
         } else {
             /* A non-rational particular solution: over a rational coefficient
              * field the affine solution space is defined over Q and its pinned

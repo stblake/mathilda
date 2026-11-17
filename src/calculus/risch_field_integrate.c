@@ -708,14 +708,16 @@ Expr* rt_exp_tower_case(Expr* f, Expr* x) {
  * write-once/sticky within a run; the driver (rt_decide) resets it, then reads
  * ELEMENTARY iff a full antiderivative with no unintegrated remainder is produced
  * (an elementary result always wins over a stray flag from an abandoned path). */
-bool       g_rt_decide_mode = false;
+int        g_rt_decide_mode = 0;   /* registered with tc_register_unwind_counter */
 RtDecision g_rt_decision     = RT_DEC_UNKNOWN;
 
 /* Raise the decision to NONELEMENTARY at an authoritative decline (no-op unless a
  * decision is being requested). */
-static void rt_dec_nonelem(void) {
+static void rt_dec_nonelem_at(int line) {
+    if (g_rt_decide_mode && getenv("MATHILDA_RDE_CERT_DEBUG")) fprintf(stderr, "[rt-nonelem] line %d\n", line);
     if (g_rt_decide_mode) g_rt_decision = RT_DEC_NONELEMENTARY;
 }
+#define rt_dec_nonelem() rt_dec_nonelem_at(__LINE__)
 
 
 
@@ -1943,7 +1945,10 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
      * ElementaryIntegralQ `undec` rather than a false `False`.  Previously an
      * unconditional rt_dec_nonelem() here declared elementary integrands such as
      * Sec[x]^2 E^Tan[x] (antiderivative E^Tan[x]) "provably non-elementary".
-     * See RISCH_AUDIT_A4.md Finding 2. */
+     * See RISCH_AUDIT_A4.md Finding 2.  Marked, so the completeness gate counts
+     * it (review F8/F13: the missing piece is Bronstein §6.2's special
+     * denominator for a hypertangent t, and the §6.3 bound for delta(t) = 2). */
+    rde_cert_mark("RDE: lower field outside the recursive RDE (hypertangent)");
     return NULL;
 }
 

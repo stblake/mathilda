@@ -56,6 +56,11 @@ typedef struct {
     Expr** marg;     /* the member exponent w                    (owned) */
     long*  mprim;    /* tower index of the class primitive              */
     long*  mmult;    /* integer multiplier k (w = k * arg[mprim])       */
+    /* The member's value in tower variables (owned): t[mprim]^mmult, or, for a
+     * member of a class whose primitive is an INTEGER combination of other
+     * primitives (E^(2u + u^2) beside E^(2u) and E^(u^2): review F12), the
+     * monomial Prod t_s^(k_s).  rt_subst_kernels returns it. */
+    Expr** mval;
     /* True when the Log/Exp monomials are NOT algebraically independent (the
      * structure theorem finds Dcoef_i in the Q-span of the earlier ones, e.g.
      * E^(x + x^2) beside E^x and E^(x^2)), or when that could not be decided.

@@ -29,7 +29,7 @@
  * path, and reads the verdict back. */
 typedef enum { RT_DEC_UNKNOWN = 0, RT_DEC_ELEMENTARY, RT_DEC_NONELEMENTARY } RtDecision;
 
-extern bool       g_rt_decide_mode;
+extern int        g_rt_decide_mode;   /* int: restored by the TimeConstrained unwind registry */
 extern RtDecision g_rt_decision;
 
 /* ---- Integration entry points --------------------------------------------- */

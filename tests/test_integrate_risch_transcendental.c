@@ -1469,6 +1469,70 @@ static void test_review_f7_rootsum(void) {
     assert_eval_eq("FreeQ[Integrate`Cherry`Li[1/(Log[x] + 3), x], LogIntegral | ExpIntegralEi]", "False", 0);
 }
 
+/* Review F6 (rest) and F9 (2026-11-17).
+ * F6: the flat ansatz (175 unknowns for TrigToExp[u^5 ArcTan[u]^3]) ran after
+ * the recursion declined; it is skipped when the field decision proves the
+ * integrand non-elementary.  F9: RationalSpan over algebraic constants -- a
+ * unique non-rational solution (2 over {Sqrt[2]}) proves False; the value is
+ * RootReduce'd first ((3 + 3 Sqrt[2])/(1 + Sqrt[2]) is 3: a false False found
+ * by the hunt).  Exposed by F9: the base RDE's no-cancellation loop did not
+ * rationalise (2 + 2 Sqrt[2])/(2 + Sqrt[2]) and reported no solution; the
+ * quotient is reduced, and a polynomial-solve failure over algebraic constants
+ * is now an uncertain step, not a theorem. */
+static void test_review_f6_f9(void) {
+    assert_eval_eq("With[{t = AbsoluteTiming[Quiet[Risch`ElementaryIntegralQ[TrigToExp[u^5 ArcTan[u]^3], u]]]},"
+                   " t[[1]] < 3 && t[[2]] === False]", "True", 0);
+    assert_eval_eq("AbsoluteTiming[Quiet[Integrate`RischTranscendental[TrigToExp[u^5 ArcTan[u]^3], u]]][[1]] < 3", "True", 0);
+    /* F9: spans */
+    assert_eval_eq("Risch`RationalSpan[2, {Sqrt[2]}, {u}]", "False", 0);
+    assert_eval_eq("Risch`RationalSpan[Sqrt[2], {2}, {u}]", "False", 0);
+    assert_eval_eq("Risch`RationalSpan[3 u + 3 Sqrt[2] u, {(1 + Sqrt[2]) u}, {u}]", "{3}", 0);
+    assert_eval_eq("Risch`RationalSpan[2 Sqrt[2], {Sqrt[2]}, {u}]", "{2}", 0);
+    assert_eval_eq("Risch`RationalSpan[Pi, {1}, {u}]", "$Failed", 0);   /* transcendental: open */
+    /* F9: certificates (FriCAS: Ei) */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^(Sqrt[2] u) + E^(2 u)/u, u]]", "False", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^(Sqrt[2] u) (2 + u) + E^(2 u)/(u - a), u]]", "False", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^u u^Sqrt[2]/(1 + u), u]]", "False", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^(Sqrt[2] u)/u, u]]", "False", 0);
+    /* the RDE over Q(Sqrt[2]) */
+    assert_eval_eq("With[{q = Sqrt[2] u^2/(1 + u)}, Risch`RischDE[2 + Sqrt[2], Together[D[q, u] + (2 + Sqrt[2]) q], u] - q // Together]", "0", 0);
+    assert_eval_eq("With[{q = Sqrt[2] u^2/(1 + u)}, Risch`RischDE[1 + Sqrt[3], Together[D[q, u] + (1 + Sqrt[3]) q], u] - q // Together]", "0", 0);
+    /* the hunt's reproducers: elementary */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[Expand[D[(Sqrt[2] E^(2 u + Sqrt[2] u) u^2)/(1 + u), u]], u]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[Expand[D[(Sqrt[2] E^(Sqrt[2] u + Sqrt[3] u) u^2)/(1 + u), u]], u]] =!= False", "True", 0);
+    /* a TimeConstrained abort inside the decision must not leave decide mode
+       set: the flags are restored by the unwind registry.  Case 34 integrates
+       only outside decide mode (the integrator's whole-tower mapping). */
+    assert_eval_eq("Do[TimeConstrained[Quiet[Risch`ElementaryIntegralQ[TrigToExp[u^5 ArcTan[u]^3] + Log[u] Log[1 + u], u]], k/1000], {k, 1, 60, 3}];"
+                   " With[{f = Expand[D[2 E^u u Log[u] + ArcTan[E^u] Log[u], u]]},"
+                   " PossibleZeroQ[D[Integrate`RischTranscendental[f, u], u] - f]]", "True", 0);
+    /* property: no false certificate over algebraic constants (seeded, 40) */
+    assert_eval_eq("SeedRandom[1119]; ks = {E^(Sqrt[2] u), E^(2 u), E^u, u^Sqrt[2], Log[u], E^((1 + Sqrt[2]) u), E^(Sqrt[3] u)};"
+                   " FreeQ[Table[With[{F = Sum[RandomChoice[{-1, 1, 2, Sqrt[2], a}] u^RandomInteger[{0, 2}] RandomChoice[ks] RandomChoice[ks]/RandomChoice[{1, 1 + u, u}], {RandomInteger[{1, 3}]}]},"
+                   " TimeConstrained[Quiet[Risch`ElementaryIntegralQ[Expand[D[F, u]], u]], 20, $TO]], {40}], False]", "True", 0);
+}
+
+/* Review F12 (2026-11-17): the evaluator re-merges E^(2u) E^(u^2) into a third
+ * kernel E^(2u + u^2); with all three as tower levels the monomials were
+ * dependent, and every verdict over the tower was demoted (Together of
+ * D[3 E^(2u) + Log[1 + E^(-u^2)]] was not integrated).  A class primitive that
+ * is an INTEGER combination of the other primitives now gets no level: its
+ * members are the monomials Prod t_s^(k_s). */
+static void test_review_f12_composite(void) {
+    assert_eval_eq("With[{f = Together[D[3 E^(2 u) + Log[1 + E^(-u^2)], u]]},"
+                   " PossibleZeroQ[D[Integrate`RischTranscendental[f, u], u] - f]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[Together[D[3 E^(2 u) + Log[1 + E^(-u^2)], u]], u]]", "True", 0);
+    /* non-elementary over the composite tower (Erfi / Ei pieces) */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^u + E^(u + u^2)/u, u]]", "False", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^u/u + E^(u + u^2) (1 + 2 u), u]]", "False", 0);
+    /* property: no false certificate over sum-of-exponent kernels (seeded, 40);
+       v0.6593 left most of these undecided */
+    assert_eval_eq("SeedRandom[1203]; ks = {E^u, E^(u^2), E^(u + u^2), E^(2 u + u^2), E^(u - u^2), E^(a u + u^2), Log[u]};"
+                   " With[{r = Table[With[{F = Sum[RandomChoice[{-1, 1, 2, a}] u^RandomInteger[{0, 2}] RandomChoice[ks] RandomChoice[ks]/RandomChoice[{1, 1 + u, 1 + E^u}], {RandomInteger[{1, 3}]}]},"
+                   " TimeConstrained[Quiet[Risch`ElementaryIntegralQ[Expand[D[F, u]], u]], 20, $TO]], {40}]},"
+                   " FreeQ[r, False] && Count[r, True] >= 30]", "True", 0);
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -1573,6 +1637,8 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_review_newlog_certificate);
     TEST(test_review_kernel_params);
     TEST(test_review_f7_rootsum);
+    TEST(test_review_f6_f9);
+    TEST(test_review_f12_composite);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }

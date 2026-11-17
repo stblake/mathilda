@@ -20,6 +20,7 @@
  */
 
 #include "intrat.h"
+#include "parse.h"
 #include "intrat_internal.h"
 #include "intsimp.h"
 #include "common.h"
@@ -2242,6 +2243,60 @@ static Expr* intrat_int_rational_log_part(Expr* f, Expr* x, Expr* t,
  * log part which hands its {Q_i, S_i} pairs straight to Rioboo's LogToReal. */
 static Expr* intrat_log_to_real_pairs(Expr* pair_list, Expr* x, Expr* t);
 
+/* True when e contains a non-real number (Complex[_, _]). */
+static bool intrat_has_complex(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Complex) return true;
+    if (intrat_has_complex(e->data.function.head)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (intrat_has_complex(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* Is the residue-factor set {Q_i} of a pair list {{Q_i, S_i}, ...} closed
+ * under complex conjugation?  Every Q_i with a non-real coefficient must have
+ * a Q_j with Q_j / conj(Q_i) free of the residue variable (equal up to a
+ * constant); conj maps Complex[a, b] to Complex[a, -b] (the parameters and
+ * the residue variable are real symbols here).  Real factors pass. */
+static bool intrat_pairs_conjugate_closed(Expr* pairs) {
+    if (!pairs || pairs->type != EXPR_FUNCTION) return false;
+    size_t n = pairs->data.function.arg_count;
+    for (size_t i = 0; i < n; i++) {
+        Expr* pi = pairs->data.function.args[i];
+        if (pi->type != EXPR_FUNCTION || pi->data.function.arg_count != 2) return false;
+        Expr* Qi = pi->data.function.args[0];
+        if (!intrat_has_complex(Qi)) continue;
+        Expr* rule = parse_expression("Complex[intratCa_, intratCb_] :> Complex[intratCa, -intratCb]");
+        Expr* cq = eval_and_free(expr_new_function(expr_new_symbol("ReplaceAll"),
+            (Expr*[]){expr_copy(Qi), rule}, 2));
+        bool found = false;
+        for (size_t j = 0; j < n && !found; j++) {
+            Expr* pj = pairs->data.function.args[j];
+            if (pj->type != EXPR_FUNCTION || pj->data.function.arg_count != 2) continue;
+            Expr* ratio = eval_and_free(internal_together((Expr*[]){
+                internal_divide((Expr*[]){expr_copy(pj->data.function.args[0]), expr_copy(cq)}, 2)}, 1));
+            /* constant: no variable of Q_i (the residue variable) survives */
+            Expr* vars = eval_and_free(expr_new_function(expr_new_symbol("Variables"),
+                (Expr*[]){expr_copy(Qi)}, 1));
+            bool free = true;
+            if (vars && vars->type == EXPR_FUNCTION)
+                for (size_t k = 0; k < vars->data.function.arg_count && free; k++) {
+                    Expr* fq = eval_and_free(expr_new_function(expr_new_symbol("FreeQ"),
+                        (Expr*[]){expr_copy(ratio), expr_copy(vars->data.function.args[k])}, 2));
+                    free = fq && fq->type == EXPR_SYMBOL && fq->data.symbol.name == SYM_True;
+                    if (fq) expr_free(fq);
+                }
+            if (vars) expr_free(vars);
+            if (ratio) expr_free(ratio);
+            found = free;
+        }
+        expr_free(cq);
+        if (!found) return false;
+    }
+    return true;
+}
+
 /* Sum_{Q(r) = 0} r Log[S(r)] written out when Q has degree 1 or 2 in z;
  * NULL otherwise (or on a malformed coefficient list).  All borrowed. */
 static Expr* intrat_expand_small_root_sum(Expr* Q, Expr* S, Expr* z) {
@@ -2367,9 +2422,21 @@ static Expr* intrat_transcendental_log_part(Expr* a, Expr* d, Expr* tau,
         return pairs;
     }
     Expr* real = intrat_log_to_real_pairs(pairs, tau, z);
+    /* Rioboo's LogToReal needs the residues closed under complex conjugation:
+     * every residue factor Q_i with a non-real coefficient must meet its
+     * conjugate among the factors.  The trig callers (tau = E^(I x)) satisfy
+     * it, and need the real reconstruction.  A factor without its conjugate
+     * (1 + 4 I z^2, of 1/(u (I + Log[u]^2))) does not, and LogToReal returned
+     * a wrong 0 there; v0.6593 declined every complex pair instead, which sent
+     * Integrate[Log[61/36 - 5/3 Cos[2 x]] Sin[x] Sin[9 x], {x, 0, Pi}] from 5 s
+     * past 100 s (fixed v0.6599).  Not closed: the RootSum below. */
+    if (real && !intrat_pairs_conjugate_closed(pairs)) {
+        expr_free(real);
+        real = NULL;
+    }
     if (!real) {
-        /* LogToReal declined (a residue factor of degree >= 3, or a quadratic
-         * over Q(i)): the residues are algebraic, and Bronstein §5.6 allows
+        /* LogToReal declined (a residue factor of degree >= 3), or its
+         * precondition failed (above): the residues are algebraic, and Bronstein §5.6 allows
          * them in the algebraic closure, so the log part is the RootSum
          *     Sum_i RootSum[Q_i(z), z Log[S_i(z, tau)]]
          * (review F7: 1/(u (1 + Log[u] + Log[u]^3)) was a 27-68 s decline;
@@ -3634,17 +3701,6 @@ static Expr* intrat_linear_q_closer(Expr* pair_list, Expr* x, Expr* t) {
  * on success, or NULL if any pair's Q_i has an irreducible factor of
  * degree >= 5 (intrat_log_to_real's failure mode) or any list entry
  * is malformed.  Caller retains ownership of `pair_list`. */
-/* True when e contains an exact or inexact non-real number (Complex[_, _]). */
-static bool intrat_has_complex(const Expr* e) {
-    if (!e || e->type != EXPR_FUNCTION) return false;
-    if (e->data.function.head->type == EXPR_SYMBOL
-        && e->data.function.head->data.symbol.name == SYM_Complex) return true;
-    if (intrat_has_complex(e->data.function.head)) return true;
-    for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (intrat_has_complex(e->data.function.args[i])) return true;
-    return false;
-}
-
 static Expr* intrat_log_to_real_pairs(Expr* pair_list, Expr* x, Expr* t) {
     if (!pair_list || pair_list->type != EXPR_FUNCTION
         || pair_list->data.function.head->type != EXPR_SYMBOL
@@ -3660,12 +3716,6 @@ static Expr* intrat_log_to_real_pairs(Expr* pair_list, Expr* x, Expr* t) {
      * silent wrong-answer.  Return NULL so try_lrt_close falls
      * through to NaiveLogPart's universal RootSum form. */
     if (npairs == 0) return NULL;
-    /* Rioboo's LogToReal is a conversion over a REAL coefficient field: the
-     * conjugate-pair argument behind each ArcTan needs Q_i and S_i real.  On a
-     * non-real coefficient (a residue factor 1 + 4 I z^2 of a Q(i) integrand,
-     * 1/(u (I + Log[u]^2))) it returned 0 -- a wrong log part, caught only by
-     * the caller's answer check.  Decline; the callers fall back to RootSum. */
-    if (intrat_has_complex(pair_list)) return NULL;
     Expr** lr_terms = (Expr**)malloc(sizeof(Expr*) * npairs);
     size_t lr_count = 0;
 

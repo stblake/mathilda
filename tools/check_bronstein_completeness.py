@@ -120,6 +120,15 @@ BASELINE_C = {
     "LimitedIntegrate: lower integral undecided",
     # - an integral of the coefficient outside K + C t (degree >= 2 in t_L).
     "LimitedIntegrate: coefficient integral outside K + C t",
+    # Phase 2b F8/F13 (v0.6599): the field Risch DE over a hypertangent lower
+    # field (E^Tan[u] Sec[u]^2) was a silent scope decline; needs Bronstein
+    # 6.2's special denominator for t^2 + 1 and the 6.3 bound for delta = 2.
+    "RDE: lower field outside the recursive RDE (hypertangent)",
+    # Phase 2b F9 (v0.6599): over algebraic constants the base RDE's polynomial
+    # solve / SPDE zero tests are only as good as the normaliser; a failure there
+    # is not a proof (a released false certificate: q' + (2 + Sqrt[2]) q = p).
+    "base: polynomial solve over algebraic constants",
+    "base: SPDE over algebraic constants",
 }
 
 # rde_cert_mark reasons that are permanent: a computation the CAS could not do,

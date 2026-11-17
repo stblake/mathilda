@@ -222,7 +222,6 @@ user flagged: it is correct **only** on x>0. Lessons:
   only P9/A35 re-form (both improvements). See memory
   `project_parallelmixedtower_branch_fidelity_genus0_fuse`.
 
-
 ## A cascade method that recurses `DSolve` can leak/hang through the shared engine, and can hijack callers (2026-09-02)
 
 Landing DSolve M9 (the 8 SymPy parity methods) surfaced three traps worth keeping:
@@ -5063,7 +5062,6 @@ generation-stagnation variant made Rastrigin-10D worse by interrupting a product
   canonical sign.** This applies to BesselK, ChebyshevT/U and LegendreP alike.
   Flipping on "the order reads negative" splits one family into two.
 
-
 ## 2026-10-23 — issue #108 (ToExpression line statements): test scope, again
 
 - **Run only the suites the change touches, never the whole tree.** For a
@@ -5406,7 +5404,6 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
   `Return[..., Module]` from the outermost Module only. A battery that re-runs the previous phase's
   examples caught it before release.
 
-
 ## 2026-11-14: a version bump chained after a failing `git fetch --tags`
 - In this repo `git fetch --tags origin` exits 1 (remote v0.237 would clobber the local tag). Bump commands of the form
   `git fetch --tags && sed ... version.h && ...; git add; git commit` skipped the sed and still committed, so v0.6558 and
@@ -5466,3 +5463,10 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
 - **What happened.** The numeric review flagged the absence of significance arithmetic (as the reference uses) (no error propagation; `(1+10^-30) - 1.0`40` keeps Precision 40) as defect D1 and planned an architectural phase to add it. The user corrected: Mathilda does not use significance arithmetic — a deliberate design choice.
 - **Rule.** Before classifying a divergence from the reference as a bug, check whether it follows from a documented or stated design choice (fixed MPFR-width precision is one). "Faithful recreation" covers the architecture and core functions, not every numeric model. Cancellation/condition-number precision loss is expected behaviour under fixed precision; only bugs *within* the fixed-precision model (mis-computed Accuracy, wrong Overflow/Underflow, parser accepting nan) are defects.
 
+## 2026-11-17 — Removing a "dependent, undecided" guard exposes the code behind it; hunt with the guard gone (F9)
+
+- **What happened.** F9 made `RationalSpan` decide independence over `Q(Sqrt[2])`. That removed the `T->dependent` demotion that had kept two-exponential towers like `{E^u, E^(Sqrt[2] u)}` undecided, and the false-certificate hunt immediately found false certificates there. One came from the new span code itself (an unreduced rational read as irrational). The other came from the base RDE, whose no-cancellation loop could not rationalise `2 + Sqrt[2]` and called the failure a theorem. That one was already live at v0.6593 on the merged-exponent spelling.
+- **Rule.** A fix that turns UNKNOWN into a decision upstream must be followed by a hunt over exactly the inputs that the old UNKNOWN shielded. A "no" computed by arithmetic whose zero test is only as good as its normaliser (algebraic constants, Together) is not authoritative. Mark it uncertain unless the normaliser is canonical for that field.
+
+- **Same session, a third lesson.** Moving a decide-mode computation *into* the integrator's hot path (the F6 gate) multiplied the exposure of a pre-existing bug: flags bracketing a sub-solve (`g_rt_decide_mode`, re-entry guards) stay set after a `TimeConstrained` longjmp. It showed only as an order-dependent drop in True counts, with the family run alone unchanged. Register every such flag with `tc_register_unwind_counter`, and when a hunt's counts differ between a batched run and a per-family run, suspect leaked global state before suspecting the algorithm.
+- **And a fourth, about my own checks.** v0.6593 shipped a regression (`integrate_gr132_1_tests` SIGALRM, 5 s → 100+ s on a trig definite integral) because my failure grep was `\*\*\*Failed|Timeout`, and ctest prints a signal death as `SIGALRM***Exception`. Read ctest's own `The following tests FAILED:` block, or `tests passed, N failed`, never a hand-rolled grep. And a guard justified by one wrong output must state the algorithm's real precondition (for Rioboo's LogToReal, conjugation-closed residues), not a syntactic proxy (any `Complex`).

@@ -152,9 +152,12 @@ static void test_structure_tristate(void) {
     run_test("Risch`TanReducible[x, x, {{t1, \"Foo\", 1}}]", "$Failed");
     run_test("Risch`ArcTanReducible[x, x, {{t1, \"Foo\", 1}}]", "$Failed");
     run_test("Risch`LogarithmicDerivativeOfRadical[1/x, x, {{t1, \"Bar\", 1}}]", "$Failed");
-    /* a non-rational particular solution: undecided over Q (a number-field
-     * coefficient field is the constant-field work of the completion campaign) */
-    run_test("Risch`RationalSpan[Sqrt[2]/x, {1/x}, {x}]", "$Failed");
+    /* a non-rational UNIQUE solution (c = Sqrt[2]) proves there is no rational
+     * relation (review F9, v0.6599; it was $Failed); an underdetermined or
+     * transcendental one stays undecided */
+    run_test("Risch`RationalSpan[Sqrt[2]/x, {1/x}, {x}]", "False");
+    run_test("Risch`RationalSpan[(1 + Sqrt[2])/x, {(2 + 2 Sqrt[2])/x}, {x}]", "List[Rational[1, 2]]");
+    run_test("Risch`RationalSpan[Pi/x, {1/x}, {x}]", "$Failed");
     /* proofs stay False */
     run_test("Risch`LogReducible[x + 1, x, {{t1, \"Log\", 1/x}}]", "False");
     run_test("Risch`RationalSpan[1/(x + 1), {1/x}, {x}]", "False");

@@ -1670,11 +1670,14 @@ is still deficient for every other caller (reproducer and table:
      verified by PossibleZeroQ, the decision skips the Cherry stage (85 s → 0.0 s on the
      non-elementary neighbours), and `Cherry`Li` declines on `Root` shifts (Integrate
      67 s → 0.3 s). F6: named unknowns (v0.6592) brought `TrigToExp[u^5 ArcTan[u]^3]` to
-     about 6 s and certified. Still open: the flat ansatz itself is the cost; skip it
-     when the recursion proved non-elementarity.
-  5. **F8, F9, F12.** There is no Risch DE over a tangent lower field
-     (`E^Tan[u] Sec[u]^2`), `Risch`RationalSpan` fails with `Sqrt[2]`, plus F12 in the
-     review.
+     about 6 s and certified. v0.6599: the flat ansatz is skipped when the field
+     decision proves non-elementarity (0.1 s).
+  5. **F8, [x] F9 (v0.6599), F12.** There is no Risch DE over a tangent lower field
+     (`E^Tan[u] Sec[u]^2`), plus F12 in the review. F9 done: `RationalSpan` over
+     algebraic constants, and the base RDE's polynomial solve over them (a released
+     false certificate). F8's silent decline is marked (F13, v0.6599). [x] F12
+     (v0.6599): a class primitive that is an integer combination of the other
+     primitives gets no level; its members are monomials of the survivors.
   5b. **Branch form (found with F1).** The Ei -> LogIntegral presentation writes
      `Integrate[x/Log[x]^2, x]` as `-x^2/Log[x] + 2 LogIntegral[x^2]`, which is valid only
      where `Log[x^2] == 2 Log[x]`. `2 ExpIntegralEi[2 Log[x]]` holds everywhere. The
