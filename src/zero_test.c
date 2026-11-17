@@ -254,7 +254,7 @@ static bool is_known_constant(const char* sym_name) {
            sym_name == SYM_I           || sym_name == SYM_EulerGamma ||
            sym_name == SYM_Catalan     || sym_name == SYM_GoldenRatio||
            sym_name == SYM_Glaisher    || sym_name == SYM_Khinchin   ||
-           sym_name == SYM_GoldenAngle ||
+           sym_name == SYM_GoldenAngle || sym_name == SYM_MachinePrecision ||
            sym_name == SYM_Degree      || sym_name == SYM_Infinity   ||
            sym_name == SYM_ComplexInfinity || sym_name == SYM_Indeterminate ||
            sym_name == SYM_True        || sym_name == SYM_False;
@@ -1257,6 +1257,16 @@ static bool zt_precision_not_honoured(const Expr* z, long bits) {
  * redundant full second numericalization pass at each MPFR rung, the dominant
  * cost on large (tens-of-thousands-of-leaves) antiderivative round-trips.
  * Pass NaN to compute the scale at this rung's precision. */
+/* Does e carry a machine real (a sample coordinate)? */
+static bool zt_point_has_real(const Expr* e) {
+    if (!e) return false;
+    if (e->type == EXPR_REAL) return true;
+    if (e->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < e->data.function.arg_count; ++i)
+        if (zt_point_has_real(e->data.function.args[i])) return true;
+    return false;
+}
+
 static ZeroTestResult evaluate_rung_core(const Expr* e, long bits,
                                          double* out_mag, double* out_scale,
                                          double in_scale, bool* out_overflow,
@@ -1265,8 +1275,29 @@ static ZeroTestResult evaluate_rung_core(const Expr* e, long bits,
     if (out_scale) *out_scale = 0.0;
     if (out_overflow) *out_overflow = false;
     if (out_pinned) *out_pinned = false;
+    const uint64_t ext0 = numeric_extended_count();
     Expr* z = numericalize_at(e, bits);
     if (!z) return ZERO_TEST_UNKNOWN;
+    if (bits <= 53 && numeric_extended_count() != ext0) {
+        /* The machine rung made an extended-range COMPLEX value: kept at
+         * machine precision with MPFR's exponent (the boundary policy, S3;
+         * E^(2 x^2) at a complex x of modulus ~ 15). That keeps 16 digits of
+         * a 10^347, which a cancellation against its neighbours turns into
+         * noise the size of the answer -- and read as decisive, that noise
+         * rejected the correct antiderivative of an asinh-type integrand
+         * (shootout asinh-1-2, v0.6598).
+         * Before v0.6598 such a complex result overflowed to Overflow[] and the
+         * point was re-drawn (residue_is_numeric_decline); a sample point is
+         * re-drawn again. An exact input (no machine coordinate) has no point
+         * to re-draw and takes the ordinary path below, as a real
+         * extended-range value always has (x Pi/3^700, 10^500 (Pi + 10^-30) -
+         * 10^500 Pi, Exp[-10^4] - Exp[-10^4 - 10^-20] are decided there). */
+        if (zt_point_has_real(e)) {
+            expr_free(z);
+            if (out_overflow) *out_overflow = true;
+            return ZERO_TEST_UNKNOWN;
+        }
+    }
     if (expr_is_infinity(z)) {
         /* A pole: definitively non-zero. Report an infinite residual so every
          * caller's "obvious non-zero" gate settles it FALSE.  (A symbolic

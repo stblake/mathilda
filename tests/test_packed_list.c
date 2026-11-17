@@ -2091,9 +2091,9 @@ void test_flags_are_independent(void) {
                    "NDArrayQ[Range[1., 300.]]", "False", 0);
     /* Both off, then both on: the answers never move. */
     assert_eval_eq("$AutoCompilation = False; $AutoArrayPacking = False; "
-                   "Total[Table[i^2, {i, 1., 300.}]]", "9.04505e+06", 0);
+                   "Total[Table[i^2, {i, 1., 300.}]]", "9.04505*^6", 0);
     assert_eval_eq("$AutoCompilation = True; $AutoArrayPacking = True; "
-                   "Total[Table[i^2, {i, 1., 300.}]]", "9.04505e+06", 0);
+                   "Total[Table[i^2, {i, 1., 300.}]]", "9.04505*^6", 0);
     assert_eval_eq("{$AutoCompilation, $AutoArrayPacking}", "{True, True}", 0);
 }
 

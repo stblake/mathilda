@@ -678,14 +678,30 @@ In[1]:= $MachinePrecision
 Out[1]= 15.9546
 
 In[2]:= $MachineEpsilon
-Out[2]= 2.22045*10^-16
+Out[2]= 2.22045*^-16
 
 In[3]:= {$MinMachineNumber, $MaxMachineNumber}
-Out[3]= {2.22507*10^-308, 1.79769*10^308}
+Out[3]= {2.22507*^-308, 1.79769*^308}
 
 In[4]:= MachineNumberQ[$MaxNumber]   (* MPFR, not machine *)
 Out[4]= False
 ```
+
+**Machine numbers past the double range** (v0.6604; `docs/design/numeric_tower_review.md`).
+A machine result that overflows or underflows a double is kept at machine precision
+with MPFR's exponent range: a 53-bit MPFR. Such a value:
+- reports `Precision` `MachinePrecision`, and prints like a machine real
+  (`Exp[1000.]` is `1.97007*^434`; InputForm `1.970071114017047*^434` re-reads to the same
+  value);
+- is a machine Real again as soon as a numeric operation brings it back inside
+  `[$MinMachineNumber, $MaxMachineNumber]`, so `MachineNumberQ[(1.*^308 10.)/1.*^10]` is `True`;
+- past `$MaxNumber` is `Overflow[]` (`General::ovfl`), and below `$MinNumber` is
+  `Underflow[]` (`General::unfl`; `-Underflow[]` for a negative value). `Underflow[]` is
+  not 0: arithmetic on it stays symbolic.
+
+Machine reals always print with a decimal point and the input syntax `*^`: `1.0*^15`,
+`2.22045*^-16`, `100000.0`. Arbitrary-precision numbers print their exponent as `*^`
+too (`N[10^50, 20]` is `1.0000000000000000000*^50`).
 
 ## $MinPrecision, $MaxPrecision
 

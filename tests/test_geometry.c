@@ -266,7 +266,7 @@ static void test_scale_and_scratch_reuse(void) {
     geo_check("Area[Polygon[{{0,0},{1000000,0},{1000000,1000000},{0,1000000}}]]",
               "1000000000000");
     geo_check("Area[Polygon[{{0.,0.},{1000000.,0.},{1000000.,1000000.},{0.,1000000.}}]]",
-              "1e+12");
+              "1.0*^12");
 
     /* 5. Narrow evaluation after a wide one inside a SINGLE call: the small
      *    triangle's vertices are visited after the 10^18 vertex, on temporaries

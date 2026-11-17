@@ -44,12 +44,12 @@ static void test_chop_above_default_tolerance(void) {
     assert_eval_eq("Chop[1.5]", "1.5", 0);
     assert_eval_eq("Chop[-3.5]", "-3.5", 0);
     /* 10^-9 is just above the 10^-10 default tolerance. */
-    assert_eval_eq("Chop[1.0e-9]", "1e-09", 0);
+    assert_eval_eq("Chop[1.0e-9]", "1.0*^-9", 0);
 }
 
 static void test_chop_at_boundary(void) {
     /* fabs(x) < delta is strict: x == delta does NOT chop. */
-    assert_eval_eq("Chop[1.0e-10]", "1e-10", 0);
+    assert_eval_eq("Chop[1.0e-10]", "1.0*^-10", 0);
 }
 
 static void test_chop_zero(void) {

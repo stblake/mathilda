@@ -183,9 +183,10 @@ void test_ei_large_magnitude() {
                    "N[ExpIntegralEi[-10^60 I] + I Pi, 20] must be finite numeric");
         expr_free(r);
     }
-    /* Real large-negative argument: Ei(-10^60) ~ 0 (e^x underflow), no crash. */
-    /* (an MPFR zero; the printer writes a zero without its sign) */
-    assert_eval_startswith("N[ExpIntegralEi[-10^60], 20]", "0.");
+    /* Real large-negative argument: Ei(-10^60) ~ -e^(-10^60)/10^60 lies below
+     * MPFR's exponent range, so it is -Underflow[] (General::unfl; numeric-tower
+     * review D5), not a zero that looks exact -- and no crash. */
+    assert_eval_startswith("Quiet[N[ExpIntegralEi[-10^60], 20]]", "-Underflow[]");
 }
 
 /* ---- derivatives ---------------------------------------------------- */

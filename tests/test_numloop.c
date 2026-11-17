@@ -512,10 +512,10 @@ static void test_list_nonfinite_falls_back(void) {
      * (10^400 - 3.08*10^383), which shows the 15 digits above that precision,
      * rounded up to 1.00000000000000. */
     expect_full("NestList[#^2&, 10.^200, 2]",
-                "List[1e+200, 1.00000000000000e+400, 1.00000000000000e+800]");
-    expect_full("Accumulate[{1.*^308, 1.*^308}]", "List[1e+308, 2.000000000000000e+308]");
+                "List[1.0*^200, 1.0*^400, 1.0*^800]");
+    expect_full("Accumulate[{1.*^308, 1.*^308}]", "List[1.0*^308, 2.0*^308]");
     expect_full("FoldList[#1 + #2&, 0., {1.*^308, 1.*^308}]",
-                "List[0.0, 1e+308, 2.000000000000000e+308]");
+                "List[0.0, 1.0*^308, 2.0*^308]");
 }
 
 /* The int64 exact-loop fast path (src/numloop.c): a counter loop with an integer

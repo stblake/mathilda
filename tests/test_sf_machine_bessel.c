@@ -219,10 +219,10 @@ void test_declines(void) {
     ASSERT(!sf_bessel_nd(SF_BESSEL_J, 0.5, 0.0, -2.0, 0.0, &rr, &ri));  /* real in, complex out */
     ASSERT(!sf_bessel_scalar(SF_BESSEL_K, 0.0, 0.0, 0.0, &rr, &ri, &r)); /* pole */
     /* the builtins fall through to MPFR with an extended exponent */
-    assert_eval_startswith("BesselK[0, 800.]", "1.62503083544");
-    assert_eval_startswith("AiryBi[120.]", "6.7340932779644");
-    assert_eval_startswith("BesselI[0, 800.]", "3.84608161541921");
-    assert_eval_startswith("AiryAi[120.]", "2.15749809103");    /* was flushed to 0. */
+    assert_eval_startswith("InputForm[BesselK[0, 800.]]", "1.62503083544");
+    assert_eval_startswith("InputForm[AiryBi[120.]]", "6.7340932779644");
+    assert_eval_startswith("InputForm[BesselI[0, 800.]]", "3.84608161541921");
+    assert_eval_startswith("InputForm[AiryAi[120.]]", "2.15749809103");    /* was flushed to 0. */
     assert_eval_eq("BesselK[0, 0]", "Infinity", 0);
 }
 

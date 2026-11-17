@@ -52,21 +52,21 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
       and K2 (complex `Sqrt` via exp(log/2), now `csqrt`): v0.6600. Fixed on every surface
       (scalar, List, packed, NDArray, Compile, complex); corpus 321 cases, 0 XFAIL.
       S2 (complex `Equal` compares parts) accepted as is by the user.
-- [ ] Phase 6. Policy items, decided by the user 2026-11-17 (v0.6597)
-  - [ ] D5 (decided: Underflow): an MPFR result below the exponent range is `Underflow[]` with
+- [x] Phase 6. Policy items, decided by the user 2026-11-17 (v0.6597); landed v0.6604
+  - [x] D5 (decided: Underflow): an MPFR result below the exponent range is `Underflow[]` with
         `General::unfl` through `mth_message`, mirroring `Overflow[]`; sign kept (`-Underflow[]`).
         Detect it in `mpfr_binop` and the function paths (zero from nonzero operands, or
         `mpfr_underflow_p`), and add an Underflow arm to `numeric_sanitize_nonfinite`.
   - [x] D6 (decided: keep the default): the MPFR exponent range stays the library default.
         Document `$MaxNumber`/`$MinNumber` as that range. No code change.
-  - [ ] E1 (decided: demote): a 53-bit MPFR produced by the boundary policy goes back to a machine
+  - [x] E1 (decided: demote): a 53-bit MPFR produced by the boundary policy goes back to a machine
         double once its value is in `[DBL_MIN, DBL_MAX]`. Apply it at the same Plus / Times /
         Power choke points (`demote_to_machine_if_fits` / `numeric_lower_mpfr_to_machine`).
         Check: `MachineNumberQ[(1.*^308 * 10.)/1.*^10]` is True.
-  - [ ] C9a (decided: decimal point): machine reals always print with a decimal point in
+  - [x] C9a (decided: decimal point): machine reals always print with a decimal point in
         OutputForm/StandardForm (`1.*^15`, not `1e+15`). Rebaseline the affected test
         expectations, checking each with `ToExpression[old] == ToExpression[new]`.
-  - [ ] C9b (decided: MachinePrecision): `Precision` of a 53-bit MPFR (the machine-precision
+  - [x] C9b (decided: MachinePrecision): `Precision` of a 53-bit MPFR (the machine-precision
         extended-range value) reads `MachinePrecision`, and `Accuracy` follows.
   - [x] D7b, v0.6597 (decided 2026-11-17: SUPPORT both, with docstrings, enforced consistently
         everywhere). Design:
@@ -88,6 +88,18 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
           min must be a real >= 0, max a positive real or Infinity, and min <= max, else
           `::precset` and roll back.
         - Docstrings for both, the expression-information spec, corpus incl. Block.
+- [ ] Pre-existing (found 2026-11-17 while triaging the nightly tier; present at v0.6597 too):
+  - [ ] DSolve Chini branch returns a wrong implicit solution for
+        `y' == x^2 y^3 - (1/x) y + 1/x` (dsolve_stress t_stress_chini): the back-substituted
+        residual is exactly `-1/(6x)`, so `PossibleZeroQ` False is correct.
+  - [ ] `PossibleZeroQ[SeriesData[x, 0, {}, 5, 5, 1]]` (an empty `O[x]^5` residual) is False,
+        which fails dsolve_m5's PowerSeries back-substitution checks (`y'' + y == 0`).
+- [ ] Phase 9 (user request 2026-11-17, after this campaign): adapt Kahan's PARANOIA
+      (C version, people.math.sc.edu/Burkardt/c_src/paranoia/paranoia.html) to Mathilda, in
+      three modes: machine floating point, MPFR at several precisions, and mixed
+      machine/MPFR (contagion across the boundary). Port its milestones (radix, precision,
+      guard digits, rounding, sqrt, under/overflow, Y^X) as a .m program plus a ctest
+      driver, reporting PARANOIA's own defect classes (FAILURE / SERIOUS / DEFECT / FLAW).
 - [ ] Phase 7. Hygiene sweeps (v0.6596+)
   - [ ] F1: audit `mpz_get_d` sites whose result users see; use `numeric_machine_value`
   - [ ] F2: audit `mpz_fits_slong_p` sites for LLP64; use `expr_mpz_get_int64` where a

@@ -108,7 +108,7 @@ void test_shi_machine_real() {
 void test_shi_overflow() {
     /* A machine real whose result overflows a C double (~1.5e434288) must come
      * back as a finite (MPFR) real, not Infinity. */
-    assert_eval_startswith("SinhIntegral[10.^6]", "1.5166092150117");
+    assert_eval_startswith("InputForm[SinhIntegral[10.^6]]", "1.5166092150117");
 }
 
 /* ---- arbitrary precision (MPFR) ------------------------------------- */
@@ -121,7 +121,7 @@ void test_shi_arbitrary_precision() {
         "1.057250875375728514571842354895877959024");
     /* Large argument at high precision (asymptotic path). */
     assert_eval_startswith("N[SinhIntegral[20], 30]",
-        "1.28078263320282944594181868553e+07");
+        "1.28078263320282944594181868553*^7");
     /* The precision of the output tracks the precision of the input. */
     assert_eval_startswith("SinhIntegral[2.0000000000000000000000]",
                            "2.501567433354975641473");
@@ -153,7 +153,7 @@ void test_shi_arbitrary_complex() {
      * (Shi is purely imaginary on the imaginary axis); N[.., 20] does not
      * lower a zero's accuracy, so it prints 0.e-120. */
     assert_eval_startswith("N[SinhIntegral[I*10^60`120] - I Pi/2, 20]",
-        "0.e-120 + 5.5718294824856670897e-61*I");
+        "0.*^-120 + 5.5718294824856670897*^-61*I");
 }
 
 /* ---- derivatives ---------------------------------------------------- */

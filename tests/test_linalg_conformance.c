@@ -133,7 +133,7 @@ static void test_luc(void) {
     chk_msg("MatrixPower[{{1., 0.}, {0., 2.3*^-14}}, -1]", "Inverse::luc");
     chk_msg("MatrixPower[{{1., 0.}, {0., 2.22*^-14}}, -1]", "MatrixPower::sing");
     chk("Quiet[MatrixPower[{{1., 0.}, {0., 2.22*^-14}}, -1]]",
-        "MatrixPower[{{1.0, 0.0}, {0.0, 2.22e-14}}, -1]");
+        "MatrixPower[{{1.0, 0.0}, {0.0, 2.22*^-14}}, -1]");
     chk_msg("MatrixPower[{{1, 2}, {2, 4}}, -1]", "MatrixPower::sing");
     chk_msg("MatrixPower[{{1., 2}, {2, 4}}, -2]", "MatrixPower::sing");
     chk_nomsg("MatrixPower[{{1., 0.}, {0., 1*^-9}}, -1]");

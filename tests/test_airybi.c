@@ -171,7 +171,7 @@ void test_airybi_overflow_promotion() {
     char* s = expr_to_string(r);
     ASSERT_MSG(strstr(s, "inf") == NULL && strstr(s, "Inf") == NULL,
                "AiryBi[1000.0] overflowed to %s", s);
-    ASSERT_MSG(strstr(s, "e+9154") != NULL,
+    ASSERT_MSG(strstr(s, "*^9154") != NULL,
                "AiryBi[1000.0] expected ~5e9154 magnitude, got %s", s);
     free(s);
     expr_free(r);
@@ -304,7 +304,7 @@ void test_airybiprime_overflow_promotion() {
     char* s = expr_to_string(r);
     ASSERT_MSG(strstr(s, "inf") == NULL && strstr(s, "Inf") == NULL,
                "AiryBiPrime[1000.0] overflowed to %s", s);
-    ASSERT_MSG(strstr(s, "e+9156") != NULL,
+    ASSERT_MSG(strstr(s, "*^9156") != NULL,
                "AiryBiPrime[1000.0] expected ~1.7e9156 magnitude, got %s", s);
     free(s);
     expr_free(r);

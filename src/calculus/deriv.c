@@ -215,7 +215,7 @@ static bool is_dt_constant_symbol(const Expr* e) {
            s == SYM_EulerGamma || s == SYM_Catalan ||
            s == SYM_GoldenRatio || s == SYM_Degree ||
            s == SYM_GoldenAngle || s == SYM_Glaisher ||
-           s == SYM_Khinchin ||
+           s == SYM_Khinchin || s == SYM_MachinePrecision ||
            s == SYM_True || s == SYM_False ||
            /* A user symbol given the Constant attribute
             * (SetAttributes[R, Constant]) is a constant for Dt: Dt[R] = 0,

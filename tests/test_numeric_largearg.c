@@ -336,8 +336,8 @@ static void test_fast_path_unchanged(void) {
      * stay bit-identical. */
     assert_prints("N[Sin[10^20]]", "-0.645251");
     assert_prints("N[Tan[10^20]]", "-0.844602");
-    assert_prints("N[10^20]",      "1e+20");
-    assert_prints("N[2^53]",       "9.0072e+15");
+    assert_prints("N[10^20]",      "1.0*^20");
+    assert_prints("N[2^53]",       "9.0072*^15");
 
     /* Bare N[expr] targets machine precision even for an already-approximate
      * argument: N[N[Pi, 100]] collapses to a machine number, and Sin of a
@@ -345,7 +345,7 @@ static void test_fast_path_unchanged(void) {
      * stored x, the 349-bit (333 + 16 guard) rounding of Pi, whose exact
      * difference is 1.6575855913e-105 (it was -8.2855161544e-101 at 333). */
     assert_prints("N[N[Pi, 100]]", "3.14159");
-    assert_prints_prefix("N[Sin[N[Pi, 100]]]", "1.65759e-105");
+    assert_prints_prefix("N[Sin[N[Pi, 100]]]", "1.65759*^-105");
     assert_prints("Precision[N[Pi]]", "MachinePrecision");
 
     /* An inexact machine Real *is* its own exact binary value, so Sin of it
@@ -394,8 +394,8 @@ static void test_overflow_keeps_a_machine_number(void) {
     /* Same 53-bit mantissa as the machine number N[1001!] has always
      * produced — this is machine precision with a wider exponent, not a
      * silent upgrade to arbitrary precision. */
-    assert_prints("Precision[N[Exp[1000]]]", "15.9546");
-    assert_prints("Precision[N[1001!]]",     "15.9546");
+    assert_prints("Precision[N[Exp[1000]]]", "MachinePrecision");   /* C9b */
+    assert_prints("Precision[N[1001!]]",     "MachinePrecision");
 
     /* Beyond MPFR's own exponent range (~10^323228458) there is nothing left
      * to recover. A raw IEEE `inf.0` is a libm artifact, never a Mathilda value,

@@ -268,7 +268,7 @@ static void test_d3_accuracy_any_magnitude(void) {
     /* accuracy = precision - log10|x|, with log10 from the exponent (any range) */
     chk("Accuracy[N[10^-400, 20]]", "420.0");
     chk("Accuracy[N[10^500, 20]]", "-480.0");
-    chk_true("Abs[Accuracy[1.*^400] - (Precision[1.*^400] - 400)] < 10^-6");
+    chk_true("Abs[Accuracy[1.*^400] - ($MachinePrecision - 400)] < 10^-6");
     chk("Accuracy[1.5]", "15.7785");                         /* unchanged */
 }
 
@@ -276,7 +276,7 @@ static void test_d4_setaccuracy_magnitude(void) {
     chk_true("Precision[SetAccuracy[Pi 10^50, 10]] > 60");
     chk_true("Accuracy[SetAccuracy[Pi, 10]] >= 10");          /* never less than asked */
     chk_true("Accuracy[SetAccuracy[Pi 10^50, 10]] >= 10");
-    chk("SetAccuracy[Pi/10^50, 10]", "0.e-10");               /* no digit left: 0``10 */
+    chk("SetAccuracy[Pi/10^50, 10]", "0.*^-10");               /* no digit left: 0``10 */
     chk("Accuracy[SetAccuracy[Pi/10^50, 10]]", "10.0");
 }
 
@@ -319,6 +319,53 @@ static void test_d7b_min_max_precision(void) {
     chk("Block[{$MaxPrecision = 30}, First[AbsoluteTiming[N[Sin[10^60], 20]]] < 5]", "True");
 }
 
+/* ---- Phase 6: the policy items decided 2026-11-17 ------------------------ */
+
+/* D5: below MPFR's exponent range the answer is Underflow[] with General::unfl,
+ * never a zero that looks exact. A true zero stays a zero. */
+static void test_d5_underflow(void) {
+    chk("Quiet[Exp[-10.`30^10]]", "Underflow[]");
+    chk("Quiet[Exp[-10^10 1.]]", "Underflow[]");                 /* machine path */
+    chk("Quiet[1.`20*^-300000000 1.`20*^-300000000]", "Underflow[]");
+    chk("Quiet[-1.`20*^-300000000 1.`20*^-300000000]", "-Underflow[]");
+    chk("Check[Exp[-10.`30^10], \"msg\"]", "\"msg\"");               /* the message fires */
+    chk_true("Quiet[Check[0. Exp[-10.], \"msg\"]] === 0.");      /* a true zero */
+    chk_true("Quiet[Check[1.`30 - 1.`30, \"msg\"]] == 0");
+    chk_true("Quiet[Check[Exp[-1000.], \"msg\"]] != 0");         /* in MPFR's range */
+}
+
+/* E1: a machine-precision value back inside the double range is a double. */
+static void test_e1_demote(void) {
+    chk_true("MachineNumberQ[(1.*^308 10.)/1.*^10]");
+    chk_true("MachineNumberQ[(1.*^-300 1.*^-300) 1.*^300]");
+    chk_true("MachineNumberQ[(1.*^308 10.) - 9.*^308]");
+    chk_true("MachineNumberQ[Sqrt[1.*^400 1.]]");
+    chk_true("MachineNumberQ[Exp[1000.] Exp[-999.]]");
+    chk_true("MachineNumberQ[Re[Complex[Exp[1000.], Exp[1000.]] Exp[-999.]]] && Head[Complex[Exp[1000.], Exp[1000.]] Exp[-999.]] === Complex");
+    chk_true("!MachineNumberQ[Im[Complex[Exp[1000.], 1.] Exp[-999.]]]");   /* 1.4*^-434 stays MPFR */
+    chk_true("!MachineNumberQ[1.*^308 10.] && !MachineNumberQ[N[2, 30] 10^300]");
+}
+
+/* C9a / C9b: a machine real always shows a decimal point and *^ (it re-reads
+ * as a Real); a 53-bit MPFR is machine precision and prints like one. */
+static void test_c9_printing(void) {
+    chk("1.*^15", "1.0*^15");
+    chk("2.^-52", "2.22045*^-16");
+    chk("123456789.", "1.23457*^8");
+    chk("100000.", "100000.0");
+    chk("-3.*^20", "-3.0*^20");
+    chk("Exp[1000.]", "1.97007*^434");
+    chk("InputForm[Exp[1000.]]", "1.970071114017047*^434");
+    chk_true("ToExpression[ToString[InputForm[Exp[1000.]]]] === Exp[1000.]");
+    chk_true("Head[ToExpression[ToString[1.*^15]]] === Real");
+    chk("Precision[Exp[1000.]]", "MachinePrecision");
+    chk("Precision[1.*^400]", "MachinePrecision");
+    chk("Precision[Complex[Exp[1000.], 1.]]", "MachinePrecision");
+    chk("Precision[1.`30*^400]", "30.0");
+    chk("N[10^50, 20]", "1.0000000000000000000*^50");
+    chk("TeXForm[1.*^15]", "1.\\times 10^{15}");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -350,6 +397,9 @@ int main(void) {
     TEST(test_d8_precision_mark_is_decimal);
     TEST(test_d7_nonpositive_precision);
     TEST(test_d7b_min_max_precision);
+    TEST(test_d5_underflow);
+    TEST(test_e1_demote);
+    TEST(test_c9_printing);
 
     if (g_fail) {
         printf("%d numeric-tower review check(s) FAILED\n", g_fail);

@@ -39,7 +39,7 @@ static void test_n_exact_array_packs(void) {
     assert_eval_eq("Developer`PackedArrayQ[N[Range[1000]/7]]", "True", 0);
     assert_eval_eq("N[Join[Range[300]/7, {x}]][[-1]]", "x", 0);
     assert_eval_eq("Developer`PackedArrayQ[N[Join[Range[300]/7, {x}]]]", "False", 0);
-    assert_eval_eq("N[Table[{i/2, 2^70}, {i, 300}]][[1]]", "{0.5, 1.18059e+21}", 0);
+    assert_eval_eq("N[Table[{i/2, 2^70}, {i, 300}]][[1]]", "{0.5, 1.18059*^21}", 0);
     assert_eval_eq("N[{{1/2, 1/4}, {1}}]", "{{0.5, 0.25}, {1.0}}", 0);
     assert_eval_eq("N[{1/3, 2/3}]", "{0.333333, 0.666667}", 0);
 }
@@ -86,16 +86,16 @@ static void test_n_rational_leaf(void) {
  * a BigInt must still numericalize to a single real leaf, not a frozen
  * Rational[Real, Real] (e.g. the old bug N[1/10^30] -> 1.0/1.0e+30). */
 static void test_n_big_rational_leaf(void) {
-    assert_eval_eq("N[1/10^30]", "1e-30", 0);
-    assert_eval_eq("N[(-3)/10^30]", "-3e-30", 0);
+    assert_eval_eq("N[1/10^30]", "1.0*^-30", 0);
+    assert_eval_eq("N[(-3)/10^30]", "-3.0*^-30", 0);
     assert_eval_eq("Head[N[1/10^30]]", "Real", 0);
     /* Out-of-range machine quotient: carried as a machine-precision MPFR
      * real (arbitrary exponent, ~16 sig figs) so it stays finite and
      * nonzero, not Rational[Real, Real]. */
-    assert_eval_startswith("N[10^400/3]", "3.33333333333333");
-    assert_eval_startswith("N[1/10^400]", "1.00000000000000e-400");
+    assert_eval_startswith("InputForm[N[10^400/3]]", "3.33333333333333");
+    assert_eval_startswith("InputForm[N[1/10^400]]", "1.0*^-400");
     /* In-range BigInt-component quotient: ordinary IEEE double (~6 sig figs). */
-    assert_eval_startswith("N[(7*10^350)/(3*10^300)]", "2.33333e+50");
+    assert_eval_startswith("N[(7*10^350)/(3*10^300)]", "2.33333*^50");
     /* Two-argument N computes the quotient at the requested precision. */
     assert_eval_startswith("N[(7*10^350)/(3*10^300), 30]",
                            "2.33333333333333333333333333333");
@@ -326,15 +326,15 @@ static void test_n_bigint_machine_overflow(void) {
      * (~1.8e308) used to overflow the double conversion and print "inf.0".
      * It must instead fall back to a machine-precision MPFR real with an
      * arbitrary exponent. (Pinned against Mathematica's N[1001!].) */
-    assert_eval_startswith("N[1001!]", "4.027896473371");
-    assert_eval_startswith("N[1000!]", "4.023872600770");
-    assert_eval_startswith("N[2^2000]", "1.148130695274");
+    assert_eval_startswith("InputForm[N[1001!]]", "4.027896473371");
+    assert_eval_startswith("InputForm[N[1000!]]", "4.023872600770");
+    assert_eval_startswith("InputForm[N[2^2000]]", "1.148130695274");
     /* In-range integers must still produce ordinary machine doubles. */
     assert_eval_eq("N[12345]", "12345.0", 0);
     /* The arg here is already an out-of-range MPFR (Plus promotes 1.5 + 1001!
      * past DBL_MAX); N's MPFR->machine down-conversion must not re-overflow. */
-    assert_eval_startswith("N[1.5 + 1001!]", "4.027896473371");
-    assert_eval_startswith("N[1.5 * 1001!]", "6.041844710057");
+    assert_eval_startswith("InputForm[N[1.5 + 1001!]]", "4.027896473371");
+    assert_eval_startswith("InputForm[N[1.5 * 1001!]]", "6.041844710057");
 }
 
 static void test_n_bare_targets_machine_precision(void) {
@@ -517,7 +517,7 @@ static void test_n_prec_complex_pow(void) {
     assert_eval_startswith("N[E^(I Pi/4), 32]",
                            "0.70710678118654752440084436210485");
     assert_eval_eq("N[E^(I Pi/4) - (-1)^(1/4), 32]",
-                   "0.e-32 + 0.e-32*I", 0);
+                   "0.*^-32 + 0.*^-32*I", 0);
     /* Negative real base with complex exponent: i^i = exp(-pi/2). */
     assert_eval_startswith("N[I^I, 32]",
                            "0.20787957635076190854695561983");
@@ -539,16 +539,16 @@ static void test_barnesg_arbitrary_precision(void) {
 static void test_n_adaptive_precision(void) {
     /* a genuine cancellation keeps its digits */
     /* -5*10^-41 + 4.2*10^-82: 20 digits round to -5.0000000000000000000e-41 */
-    assert_eval_startswith("N[Cos[10^-20] - 1, 20]", "-5.0000000000000000000e-41");
+    assert_eval_startswith("N[Cos[10^-20] - 1, 20]", "-5.0000000000000000000*^-41");
     assert_eval_eq("Abs[N[Cos[10^-20] - 1, 32]/(-5*10^-41) - 1] < 10^-30", "True", 0);
     /* an exact zero comes out as zero at every precision */
-    assert_eval_eq("N[E^(I Pi/4) - (-1)^(1/4), 50]", "0.e-50 + 0.e-50*I", 0);
+    assert_eval_eq("N[E^(I Pi/4) - (-1)^(1/4), 50]", "0.*^-50 + 0.*^-50*I", 0);
     assert_eval_eq("N[Sin[Pi/7]^2 + Cos[Pi/7]^2 - 1, 40] == 0", "True", 0);
     /* genuine small values and plain cases are untouched */
-    assert_eval_startswith("N[Exp[-200], 32]", "1.3838965267367375306486814569791e-87");
-    assert_eval_startswith("N[Pi - 314159265358979323846/10^20, 30]", "2.64338327950288419716939937511e-21");
+    assert_eval_startswith("N[Exp[-200], 32]", "1.3838965267367375306486814569791*^-87");
+    assert_eval_startswith("N[Pi - 314159265358979323846/10^20, 30]", "2.64338327950288419716939937511*^-21");
     /* machine inputs gain no digits under N[_, p], so their noise stays */
-    assert_eval_startswith("N[0.1 + 0.2 - 0.3, 32]", "5.55112e-17");
+    assert_eval_startswith("N[0.1 + 0.2 - 0.3, 32]", "5.55112*^-17");
 }
 
 /* The adaptive climb certifies a result only when it agrees with one at

@@ -164,5 +164,19 @@ static void set_timeout() {
     setvbuf(stdout, NULL, _IOLBF, 0);
     alarm(120);
 }
+/* The double a printed machine real stands for. Mathilda prints exponents in
+ * the input syntax, 2.22045*^-16 (numeric-tower review C9a), which strtod
+ * stops reading at the '*'; this reads it as 2.22045e-16. */
+static inline double test_parse_printed_real(const char* s) {
+    char buf[128];
+    size_t k = 0;
+    for (const char* p = s; *p && k + 1 < sizeof buf; p++) {
+        if (p[0] == '*' && p[1] == '^') { buf[k++] = 'e'; p++; continue; }
+        buf[k++] = *p;
+    }
+    buf[k] = '\0';
+    return strtod(buf, NULL);
+}
+
 #endif
 

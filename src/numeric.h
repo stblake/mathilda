@@ -432,6 +432,26 @@ Expr* numeric_machine_binop_promote(const Expr* a, const Expr* b, bool mul);
  * Without MPFR it returns `r`. */
 Expr* numeric_lower_mpfr_to_machine(Expr* r);
 
+/* E1: a machine-precision value (53-bit MPFR, or a Complex with 53-bit MPFR
+ * parts) that fits a normal double becomes the machine number. Consumes r. */
+Expr* numeric_demote_machine_precision(Expr* r);
+
+/* D5: with MPFR's underflow flag raised by the call, a zero result is
+ * Underflow[] (or -Underflow[]) with General::unfl. Consumes r. */
+Expr* numeric_underflow_if_zero(Expr* r);
+/* True while a boundary probe evaluates; the evaluator then leaves MPFR's
+ * underflow flag raised for the probe instead of converting the zero, and
+ * does not demote the probe's 53-bit intermediates (E1). */
+bool numeric_unfl_deferred(void);
+
+/* Extended-range machine complex numbers (a Complex with a 53-bit MPFR part
+ * outside the double range) made so far; numeric_note_extended counts r if it
+ * is one, and returns it. PossibleZeroQ compares the count around a machine
+ * sample to re-draw a point that left the range, as it did when such a
+ * complex result was Overflow[]. */
+uint64_t numeric_extended_count(void);
+Expr* numeric_note_extended(Expr* r);
+
 /* N's route to the value of a call whose arguments N leaves exact: a head
  * with NHoldFirst whose only argument is an index (ZetaZero[n],
  * AiryAiZero[n], ...) has nothing for N to numericalize, so N asks the head

@@ -104,6 +104,11 @@ static Expr* precision_of(const Expr* e) {
             return make_machineprecision();
 #ifdef USE_MPFR
         case EXPR_MPFR: {
+            /* C9b (numeric-tower review): a 53-bit value is machine precision
+             * -- the boundary policy's extended-range machine number
+             * (Exp[1000.], 1.*^400) -- and reports MachinePrecision, as a
+             * machine Real does. */
+            if (mpfr_get_prec(e->data.mpfr) == 53) return make_machineprecision();
             /* the precision, not the mantissa width (numeric.h: guard bits) */
             double digits = numeric_bits_to_digits((long)mpfr_get_prec(e->data.mpfr));
             return expr_new_real(digits);
@@ -208,7 +213,10 @@ static double value_log10_abs(const Expr* value) {
         return za ? b : zb ? a : (a > b ? a : b);
     }
     if (value->type == EXPR_INTEGER || value->type == EXPR_BIGINT
-        || value->type == EXPR_REAL || value->type == EXPR_MPFR
+        || value->type == EXPR_REAL
+#ifdef USE_MPFR
+        || value->type == EXPR_MPFR
+#endif
         || is_rational_like(value))
         return expr_log10_abs(value);
     /* Anything else -- a numeric constant (Pi), an exact expression -- by
@@ -217,7 +225,11 @@ static double value_log10_abs(const Expr* value) {
     Expr* approx = numericalize(value, numeric_machine_spec());
     if (!approx) return 0.0;
     double r = 0.0;
-    if (approx->type == EXPR_REAL || approx->type == EXPR_MPFR) r = expr_log10_abs(approx);
+    if (approx->type == EXPR_REAL
+#ifdef USE_MPFR
+        || approx->type == EXPR_MPFR
+#endif
+        ) r = expr_log10_abs(approx);
     else if (is_complex(approx, &re, &im)) r = value_log10_abs(approx);
     expr_free(approx);
     return r;

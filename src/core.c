@@ -329,6 +329,19 @@ static void system_constants_init(void) {
         "\tthis precision; machine numbers are not affected. N[x, p] or\n"
         "\tSetPrecision[x, p] with p above it uses $MaxPrecision (::preclg).\n"
         "\tMust be a positive real number or Infinity, and >= $MinPrecision.");
+    symtab_set_docstring("Overflow",
+        "Overflow[]\n"
+        "\trepresents a number too large to represent: past the exponent range of\n"
+        "\tarbitrary-precision numbers (a machine result that only overflows a double\n"
+        "\tis kept at machine precision with a wider exponent instead). Emitted with\n"
+        "\tGeneral::ovfl; -Overflow[] for a negative one.");
+    symtab_set_docstring("Underflow",
+        "Underflow[]\n"
+        "\trepresents a nonzero number too small to represent: below the exponent\n"
+        "\trange of arbitrary-precision numbers (Exp[-10.^10]; a machine result that\n"
+        "\tonly underflows a double is kept at machine precision with a wider\n"
+        "\texponent instead). Emitted with General::unfl; -Underflow[] for a\n"
+        "\tnegative one. It is not 0: arithmetic on it stays symbolic.");
     register_system_constant("$MachineEpsilon",   expr_new_real(DBL_EPSILON));
     register_system_constant("$MinMachineNumber", expr_new_real(DBL_MIN));
     register_system_constant("$MaxMachineNumber", expr_new_real(DBL_MAX));
@@ -3102,7 +3115,7 @@ static bool is_numeric_quantity(Expr* e) {
             name == SYM_EulerGamma || name == SYM_GoldenRatio ||
             name == SYM_Catalan || name == SYM_Degree ||
             name == SYM_GoldenAngle || name == SYM_Glaisher ||
-            name == SYM_Khinchin) {
+            name == SYM_Khinchin || name == SYM_MachinePrecision) {
             return true;
         }
         return false;
@@ -4273,6 +4286,7 @@ Expr* builtin_quotient(Expr* res) {
         return out;
     }
 
+#ifdef USE_MPFR
     /* An arbitrary-precision operand: the double fallback below read it
      * through mpfr_get_d, so Quotient[N[10^30, 40] + 1/2, 1] was off by
      * 2*10^13. Floor of an MPFR value is exact, so hand the evaluator
@@ -4290,6 +4304,7 @@ Expr* builtin_quotient(Expr* res) {
                     (Expr*[]){ expr_copy(n_expr), expr_new_integer(-1) }, 2) }, 2);
         return expr_new_function(expr_new_symbol(SYM_Floor), (Expr*[]){ quo }, 1);
     }
+#endif
 
     /* Fallback for any input that contains a Real / Rational / etc. The
      * previous double-only path is retained here. */

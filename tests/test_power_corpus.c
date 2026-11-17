@@ -48,11 +48,14 @@
 #endif
 
 /* Bug 3: pure-imaginary times positive base, rational exponent. */
-/* A machine complex power that overflows a double is Overflow[], not the
- * Indeterminate an inf*0 inside binary powering would give (NIntegrate of a
- * 10^1426-sized contour integrand relies on it). */
+/* A machine complex power that overflows a double is a number, never the
+ * Indeterminate an inf*0 inside binary powering would give. Since v0.6598 it is
+ * the value at machine precision with MPFR's exponent range (the boundary
+ * policy, docs/design/numeric_tower_review.md S3): |1 + 0.9 I|^20000 ~ 10^2577.
+ * Before that it was Overflow[]. */
 static void test_complex_power_overflow(void) {
-    assert_eval_eq("(1. + 0.9 I)^20000", "Overflow[]", 0);
+    assert_eval_eq("With[{a = (1. + 0.9 I)^20000, b = N[(1 + 9/10 I)^20000, 30]}, "
+                   "Abs[a - b]/Abs[b] < 10^-11]", "True", 0);
     assert_eval_eq("Head[(1. + 0.9 I)^20]", "Complex", 0);
 }
 

@@ -2768,7 +2768,7 @@ static void test_series_machine_product(void) {
     assert_eval_eq("Head[Series[Exp[0.3 z], {z, 0, 6}]^3]", "SeriesData", 0);
     assert_eval_eq("Series[1.5 + 0.5 z, {z, 0, 2}]^2", "2.25 + 1.5 z + 0.25 z^2 + O[z]^3", 0);
     /* 10^400 overflows a double: kept at machine precision in MPFR (C2). */
-    assert_eval_eq("Series[1.*^200 + z, {z, 0, 2}]^2", "1.00000000000000e+400 + 2e+200 z + 1.0 z^2 + O[z]^3", 0);
+    assert_eval_eq("Series[1.*^200 + z, {z, 0, 2}]^2", "1.0*^400 + 2.0*^200 z + 1.0 z^2 + O[z]^3", 0);
 }
 
 /* An inexact analytic input is expanded numerically (series_numeric.c) on the

@@ -134,7 +134,7 @@ static bool is_numeric_quantity(const Expr* e) {
             || name == SYM_EulerGamma || name == SYM_GoldenRatio
             || name == SYM_Catalan || name == SYM_Degree
             || name == SYM_GoldenAngle || name == SYM_Glaisher
-            || name == SYM_Khinchin;
+            || name == SYM_Khinchin || name == SYM_MachinePrecision;
     }
     if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL) {
         const char* head_name = e->data.function.head->data.symbol.name;

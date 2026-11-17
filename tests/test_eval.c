@@ -1063,8 +1063,8 @@ void test_listable_machine_binary(void) {
     assert_eval_eq("FullForm[{0, 2} {1.5, 0.5}]", "List[0.0, 1.0]", 0);
     /* An overflowing element is declined to the builtin, which recomputes it
      * at machine precision in MPFR (2026-11 numeric-tower review, C2). */
-    assert_eval_eq("{1.*^308, 1.} + {1.*^308, 1}", "{2.000000000000000e+308, 2.0}", 0);
-    assert_eval_eq("{1.*^-200, 1.} {1.*^-200, 2}", "{1.00000000000000e-400, 2.0}", 0);
+    assert_eval_eq("{1.*^308, 1.} + {1.*^308, 1}", "{2.0*^308, 2.0}", 0);
+    assert_eval_eq("{1.*^-200, 1.} {1.*^-200, 2}", "{1.0*^-400, 2.0}", 0);
     assert_eval_eq("{1, 2} + {3, 4}", "{4, 6}", 0);
     assert_eval_eq("{1.5, lmbX} + {2, 3}", "{3.5, 3 + lmbX}", 0);
     assert_eval_eq("{1.5, 2.5} + {1, 2} + {0.25, 0.5}", "{2.75, 5.0}", 0);

@@ -140,10 +140,10 @@ void test_airyai_overflow_promotion() {
     Expr* r = evaluate(e);
     expr_free(e);
     char* s = expr_to_string(r);
-    /* Must be a finite Complex (contains 'e+374' magnitude, not 'inf'). */
+    /* Must be a finite Complex (a *^374 magnitude, not 'inf'). */
     ASSERT_MSG(strstr(s, "inf") == NULL && strstr(s, "Inf") == NULL,
                "AiryAi[150.0 I] overflowed to %s", s);
-    ASSERT_MSG(strstr(s, "e+374") != NULL,
+    ASSERT_MSG(strstr(s, "*^374") != NULL,
                "AiryAi[150.0 I] expected ~1e374 magnitude, got %s", s);
     free(s);
     expr_free(r);
@@ -295,7 +295,7 @@ void test_airyaiprime_overflow_promotion() {
     char* s = expr_to_string(r);
     ASSERT_MSG(strstr(s, "inf") == NULL && strstr(s, "Inf") == NULL,
                "AiryAiPrime[150.0 I] overflowed to %s", s);
-    ASSERT_MSG(strstr(s, "e+376") != NULL,
+    ASSERT_MSG(strstr(s, "*^376") != NULL,
                "AiryAiPrime[150.0 I] expected ~1e376 magnitude, got %s", s);
     free(s);
     expr_free(r);

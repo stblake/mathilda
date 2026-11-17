@@ -195,11 +195,11 @@ void test_quantile_interpolation_no_overflow(void) {
      * after sorting -- not of the list, so the list has to be exactly this: a
      * four-element list with small values in the middle never overflows and
      * would pin nothing. Middle entry was inf.0 before. */
-    assert_eval_eq("Quartiles[{-1.0*10^308, 1.0*10^308}]", "{-1e+308, 0.0, 1e+308}", 0);
+    assert_eval_eq("Quartiles[{-1.0*10^308, 1.0*10^308}]", "{-1.0*^308, 0.0, 1.0*^308}", 0);
     /* The NDArray kernel (ndreduce.c) carries its own copy of the same formula
      * and must not disagree with the boxed path on the same data. */
     assert_eval_eq("Quartiles[NDArray[{-1.0*10^308, 1.0*10^308}, DataType->\"float64\"]]",
-                   "NDArray[{-1e+308, 0.0, 1e+308}]", 0);
+                   "NDArray[{-1.0*^308, 0.0, 1.0*^308}]", 0);
     assert_eval_eq("Quartiles[NDArray[{1., 2., 3., 4.}, DataType->\"float64\"]]",
                    "NDArray[{1.5, 2.5, 3.5}]", 0);
 }
@@ -211,8 +211,8 @@ void test_quantile_extrapolating_weight_no_nan(void) {
      * inf + -inf is NaN -- on input the difference form gets exactly right,
      * because equal neighbours make the difference zero. Both of these returned
      * nan.0 while the convex form was used unconditionally. */
-    assert_eval_eq("Quantile[{1.0*10^308, 1.0*10^308}, 1/2, {{1/2, 0}, {0, 100}}]", "1e+308", 0);
-    assert_eval_eq("Quantile[{1.0*10^308, 1.0*10^308}, 1/2, {{1/2, 0}, {-100, 0}}]", "1e+308", 0);
+    assert_eval_eq("Quantile[{1.0*10^308, 1.0*10^308}, 1/2, {{1/2, 0}, {0, 100}}]", "1.0*^308", 0);
+    assert_eval_eq("Quantile[{1.0*10^308, 1.0*10^308}, 1/2, {{1/2, 0}, {-100, 0}}]", "1.0*^308", 0);
     /* An ordinary extrapolating weight on ordinary data still extrapolates. */
     assert_eval_eq("Quantile[{1, 2, 3, 4}, 1/2, {{1/2, 0}, {0, 4}}]", "4", 0);
 }

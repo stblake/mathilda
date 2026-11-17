@@ -115,7 +115,7 @@ void test_chi_negative_real() {
 void test_chi_overflow() {
     /* A machine real whose result overflows a C double (~1.5e434288) must come
      * back as a finite (MPFR) real, not Infinity. */
-    assert_eval_startswith("CoshIntegral[10.^6]", "1.5166092150117");
+    assert_eval_startswith("InputForm[CoshIntegral[10.^6]]", "1.5166092150117");
 }
 
 /* ---- arbitrary precision (MPFR) ------------------------------------- */

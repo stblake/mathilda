@@ -127,6 +127,7 @@ static void fill_mpfr_eulergamma(mpfr_t out, mpfr_prec_t bits);
 static void fill_mpfr_catalan(mpfr_t out, mpfr_prec_t bits);
 static void fill_mpfr_goldenratio(mpfr_t out, mpfr_prec_t bits);
 static void fill_mpfr_degree(mpfr_t out, mpfr_prec_t bits);
+static void fill_mpfr_machineprecision(mpfr_t out, mpfr_prec_t bits);
 static void fill_mpfr_goldenangle(mpfr_t out, mpfr_prec_t bits);
 static void fill_mpfr_glaisher(mpfr_t out, mpfr_prec_t bits);
 static void fill_mpfr_khinchin(mpfr_t out, mpfr_prec_t bits);
@@ -145,6 +146,10 @@ static const NumericConstant kConstants[] = {
     { "GoldenAngle", 2.3999632297286533222315555066336138531249, MPFR_FILL(fill_mpfr_goldenangle) },
     { "Glaisher",    1.2824271291006226368753425688697917277676, MPFR_FILL(fill_mpfr_glaisher)    },
     { "Khinchin",    2.6854520010653064453097148354817956938203, MPFR_FILL(fill_mpfr_khinchin)    },
+    /* the digits of a machine number, 53 Log10[2]: a numeric constant, so
+     * MachinePrecision < 17 and N[MachinePrecision] evaluate (Precision of a
+     * machine-precision value is the symbol, numeric-tower review C9b) */
+    { "MachinePrecision", 15.954589770191003346328161420398130612,  MPFR_FILL(fill_mpfr_machineprecision) },
 };
 static const size_t kConstantCount = sizeof(kConstants) / sizeof(kConstants[0]);
 
@@ -916,7 +921,34 @@ static bool is_hold_head(const Expr* head) {
  *  Shared by the EXPR_MPFR down-convert, the bigint / rational leaf escapes
  *  and the working-precision round-back so all four agree by construction.
  * ---------------------------------------------------------------------- */
-static Expr* mpfr_to_machine(const mpfr_t v) {
+/* Extended-range machine COMPLEX numbers produced so far (a Complex with a
+ * 53-bit MPFR part outside the double range: the boundary policy's promotion of
+ * a complex result, S3). Before S3 such a result was Overflow[]; PossibleZeroQ's
+ * machine rung, which re-draws a sample point that overflowed, reads the count
+ * before and after (numeric_extended_count) to keep doing so. A real
+ * extended-range value predates S3 and is not counted: the zero test decides
+ * those on its ordinary path. */
+static uint64_t g_numeric_extended = 0;
+uint64_t numeric_extended_count(void) { return g_numeric_extended; }
+
+static bool is_extended_leaf(const Expr* p) {
+    return p && p->type == EXPR_MPFR && mpfr_get_prec(p->data.mpfr) == 53 &&
+           mpfr_number_p(p->data.mpfr) && !mpfr_zero_p(p->data.mpfr);
+}
+
+/* Count r if it is a Complex with an extended-range machine part. Returns r. */
+Expr* numeric_note_extended(Expr* r) {
+    if (!r) return r;
+    Expr *re, *im;
+    if (r->type == EXPR_FUNCTION && is_complex(r, &re, &im) &&
+        (is_extended_leaf(re) || is_extended_leaf(im)))
+        g_numeric_extended++;
+    return r;
+}
+
+static Expr* mpfr_to_machine_impl(const mpfr_t v);
+static Expr* mpfr_to_machine(const mpfr_t v) { return numeric_note_extended(mpfr_to_machine_impl(v)); }
+static Expr* mpfr_to_machine_impl(const mpfr_t v) {
     double d = mpfr_get_d(v, MPFR_RNDN);
     /* ... and likewise below DBL_MIN: a subnormal double has fewer than 53
      * bits (1.*^-320 kept 4 digits), so it is not a machine number either --
@@ -2630,7 +2662,69 @@ Expr* numeric_lower_mpfr_to_machine(Expr* r) {
     return make_complex(expr_new_real(d[0]), expr_new_real(d[1]));
 }
 
-Expr* numeric_promote_machine_call(const Expr* call) {
+/* E1 (numeric-tower review, decided 2026-11-17): a value at machine precision
+ * -- a 53-bit MPFR, or a Complex whose MPFR parts are all 53-bit -- is a
+ * machine number whenever it fits one. The boundary policy promotes an
+ * out-of-range machine result to such a value (1.*^308 10. is 1.*10^309); once
+ * the computation brings it back into [DBL_MIN, DBL_MAX] it is a double again,
+ * so MachineNumberQ[(1.*^308 10.)/1.*^10] is True. Consumes r. */
+/* > 0 while a boundary probe (numeric_promote_machine_call) evaluates: the
+ * evaluator then leaves an underflow to the probe (numeric_unfl_deferred). */
+int g_numeric_unfl_defer = 0;
+bool numeric_unfl_deferred(void) { return g_numeric_unfl_defer > 0; }
+
+static bool mpfr_part_is_machine_width(const Expr* p) {
+    return p->type == EXPR_REAL || (p->type == EXPR_INTEGER && p->data.integer == 0) ||
+           (p->type == EXPR_MPFR && mpfr_get_prec(p->data.mpfr) == 53);
+}
+
+Expr* numeric_demote_machine_precision(Expr* r) {
+    if (!r) return r;
+    if (r->type == EXPR_MPFR) {
+        if (mpfr_get_prec(r->data.mpfr) != 53) return r;
+        return numeric_lower_mpfr_to_machine(r);
+    }
+    Expr *re, *im;
+    if (r->type != EXPR_FUNCTION || !is_complex(r, &re, &im)) return r;
+    if (re->type != EXPR_MPFR && im->type != EXPR_MPFR) return r;
+    if (!mpfr_part_is_machine_width(re) || !mpfr_part_is_machine_width(im)) return r;
+    return numeric_lower_mpfr_to_machine(r);
+}
+
+/* D5 (numeric-tower review, decided 2026-11-17): a result that is zero only
+ * because MPFR's exponent range ran out underneath it is Underflow[] (signed
+ * like the zero: -Underflow[]), with General::unfl, mirroring Overflow[] past
+ * the top of the range. The caller has seen MPFR's underflow flag raised by
+ * this call; a zero is a machine 0., an MPFR zero, or a Complex of zeros.
+ * Anything else is returned unchanged. Consumes r. */
+static bool leaf_is_zero_value(const Expr* e, int* neg) {
+    if (e->type == EXPR_REAL) { *neg = signbit(e->data.real) != 0; return e->data.real == 0.0; }
+    if (e->type == EXPR_MPFR) { *neg = mpfr_signbit(e->data.mpfr) != 0; return mpfr_zero_p(e->data.mpfr) != 0; }
+    if (e->type == EXPR_INTEGER) { *neg = 0; return e->data.integer == 0; }
+    return false;
+}
+
+Expr* numeric_underflow_if_zero(Expr* r) {
+    if (!r) return r;
+    int neg = 0, n2 = 0;
+    bool zero = false;
+    Expr *re, *im;
+    if (r->type == EXPR_REAL || r->type == EXPR_MPFR) zero = leaf_is_zero_value(r, &neg) && r->type != EXPR_INTEGER;
+    else if (r->type == EXPR_FUNCTION && is_complex(r, &re, &im) &&
+             (re->type != EXPR_INTEGER || im->type != EXPR_INTEGER)) {
+        zero = leaf_is_zero_value(re, &neg) && leaf_is_zero_value(im, &n2);
+        neg = 0;                                   /* a complex zero has no sign */
+    }
+    if (!zero) return r;
+    expr_free(r);
+    mth_message("General", "unfl", "Underflow occurred in computation.");
+    Expr* u = expr_new_function(expr_new_symbol(SYM_Underflow), NULL, 0);
+    if (!neg) return u;
+    Expr* a[2] = { expr_new_integer(-1), u };
+    return expr_new_function(expr_new_symbol(SYM_Times), a, 2);
+}
+
+static Expr* promote_machine_call_impl(const Expr* call) {
     if (!call || call->type != EXPR_FUNCTION) return NULL;
     size_t n = call->data.function.arg_count;
     if (n == 0) return NULL;
@@ -2654,7 +2748,15 @@ Expr* numeric_promote_machine_call(const Expr* call) {
         }
         Expr* promoted = expr_new_function(expr_copy(call->data.function.head), args, n);
         free(args);
+        /* D5: this probe decides an underflow itself (one message, from the
+         * final pass): the nested call leaves MPFR's flag raised for it. */
+        const bool unfl_outer = mpfr_underflow_p() != 0;
+        if (unfl_outer) mpfr_clear_underflow();
+        g_numeric_unfl_defer++;
         Expr* r = eval_and_free(promoted);
+        g_numeric_unfl_defer--;
+        const bool unfl = mpfr_underflow_p() != 0;
+        if (unfl_outer) mpfr_set_underflow(); else if (unfl) mpfr_clear_underflow();
 
         bool is_zero = false;
         bool finite = numeric_leaf_is_finite(r, &is_zero);
@@ -2671,7 +2773,10 @@ Expr* numeric_promote_machine_call(const Expr* call) {
         if (p == 0) { expr_free(r); continue; }
 
         /* Second pass still degenerate: this is the real shape of the value. */
-        if (finite && is_zero) { expr_free(r); return NULL; }  /* true zero: keep machine 0 */
+        if (finite && is_zero) {
+            if (unfl) return numeric_underflow_if_zero(r);    /* below MPFR's range */
+            expr_free(r); return NULL;                          /* true zero: keep machine 0 */
+        }
         if (r && (r->type == EXPR_REAL || r->type == EXPR_MPFR)) {
             /* Non-finite even in MPFR: past the exponent range -> Overflow[] etc. */
             return numeric_sanitize_nonfinite(r);
@@ -2681,9 +2786,17 @@ Expr* numeric_promote_machine_call(const Expr* call) {
     }
     return NULL;
 }
+Expr* numeric_promote_machine_call(const Expr* call) {
+    return numeric_note_extended(promote_machine_call_impl(call));
+}
 #else  /* !USE_MPFR: no arbitrary-precision path to promote into */
 Expr* numeric_promote_machine_call(const Expr* call) { (void)call; return NULL; }
+Expr* numeric_note_extended(Expr* r) { return r; }
+uint64_t numeric_extended_count(void) { return 0; }
 Expr* numeric_lower_mpfr_to_machine(Expr* r) { return r; }
+Expr* numeric_demote_machine_precision(Expr* r) { return r; }
+Expr* numeric_underflow_if_zero(Expr* r) { return r; }
+bool numeric_unfl_deferred(void) { return false; }
 #endif /* USE_MPFR */
 
 /* Wrap the pure-real machine result `v` of a unary numeric `call` (head[x]),
@@ -2807,7 +2920,7 @@ Expr* numeric_machine_binop_promote(const Expr* a, const Expr* b, bool mul) {
                   : numeric_mpfr_add(a, b, DBL_MANT_DIG);
     if (r && r->type == EXPR_MPFR && !mpfr_number_p(r->data.mpfr))
         return numeric_sanitize_nonfinite(r);   /* past the MPFR range too */
-    return r;
+    return numeric_note_extended(r);
 #else
     (void)a; (void)b; (void)mul;
     return NULL;
@@ -3886,6 +3999,16 @@ static void fill_mpfr_goldenratio(mpfr_t out, mpfr_prec_t bits) {
     mpfr_set(out, tmp, MPFR_RNDN);
     mpfr_clear(tmp);
 }
+static void fill_mpfr_machineprecision(mpfr_t out, mpfr_prec_t bits) {
+    mpfr_t t;
+    mpfr_init2(t, bits + 16);
+    mpfr_set_ui(t, 2, MPFR_RNDN);
+    mpfr_log10(t, t, MPFR_RNDN);
+    mpfr_mul_ui(t, t, (unsigned long)DBL_MANT_DIG, MPFR_RNDN);
+    mpfr_set(out, t, MPFR_RNDN);
+    mpfr_clear(t);
+}
+
 static void fill_mpfr_degree(mpfr_t out, mpfr_prec_t bits) {
     mpfr_prec_t guard = bits + 10;
     mpfr_t pi; mpfr_init2(pi, guard);

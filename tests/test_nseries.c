@@ -45,7 +45,7 @@ static double coef_err(const char* part, const char* ns, int n, int e,
     snprintf(buf, sizeof buf, "Abs[%s[Part[%s,3,%d]] - (%s)]",
              part, ns, e + n + 1, expected);
     char* s = eval_str(buf);
-    double v = strtod(s, NULL);
+    double v = test_parse_printed_real(s);
     free(s);
     return v;
 }

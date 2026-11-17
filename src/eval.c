@@ -4119,6 +4119,12 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                         }
                     }
 #ifdef USE_MPFR
+                    /* D5: MPFR's underflow flag, scoped to this numeric call.
+                     * An enclosing call's raised flag is saved and restored
+                     * (ORed back), so a nested call cannot hide it. */
+                    const bool nf_unfl = (attrs & ATTR_NUMERICFUNCTION) != 0;
+                    const bool unfl_outer = nf_unfl && mpfr_underflow_p();
+                    if (unfl_outer) mpfr_clear_underflow();
                     /* a repeated numeric call inside one sum (NfMemoEntry) */
                     uint64_t nf_h = 0;
                     const bool nf_memo = (attrs & ATTR_NUMERICFUNCTION) && !(attrs & ATTR_FLAT) &&
@@ -4133,7 +4139,8 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                          * the call it is given and may take it apart */
                         Expr* key = nfmemo_key(res);
                         ret = hdef->builtin_func(res);
-                        if (key && ret && mth_msg_fired_count() == msg_before)
+                        if (key && ret && mth_msg_fired_count() == msg_before &&
+                            !mpfr_underflow_p())    /* D5 runs after: never memo its 0 */
                             nfmemo_put(key, nf_h, ret);
                         else if (key) expr_free(key);
                     } else if (!ret) {
@@ -4162,6 +4169,13 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                     g_builtin_depth -= opaque;
                     g_dispatch_head = outer_head;
                     g_trace_suppress--;
+#ifdef USE_MPFR
+                    bool unfl_here = false;     /* read after the net's promotion */
+                    if (!ret && nf_unfl) {      /* declined: restore the outer flag */
+                        if (unfl_outer) mpfr_set_underflow();
+                        else if (mpfr_underflow_p()) mpfr_clear_underflow();
+                    }
+#endif
                     if (ret) {
                         /* No inf/nan may leak: a machine fast path that
                          * overflowed a double past even MPFR's exponent range
@@ -4191,6 +4205,34 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                         if (numeric_result_has_nonfinite(ret)) {
                             ret = numeric_sanitize_nonfinite(ret);
                         }
+#ifdef USE_MPFR
+                        if (attrs & ATTR_NUMERICFUNCTION) {
+                            const bool defer = numeric_unfl_deferred();
+                            /* E1: a machine-precision value back inside the
+                             * double range is a machine number again. Every
+                             * numeric head, Plus and Times included: the test
+                             * is a type check. Not inside a boundary probe,
+                             * which evaluates the call in 53-bit MPFR on
+                             * purpose: demoting its in-range intermediates sent
+                             * a later degenerate step back into the probe,
+                             * recursing to $RecursionLimit (DSolve's
+                             * SpecialFunctionForm); the probe demotes its own
+                             * result. */
+                            if (!defer && (ret->type == EXPR_MPFR ||
+                                (ret->type == EXPR_FUNCTION && ret->data.function.arg_count == 2 &&
+                                 ret->data.function.head->type == EXPR_SYMBOL &&
+                                 ret->data.function.head->data.symbol.name == SYM_Complex)))
+                                ret = numeric_note_extended(numeric_demote_machine_precision(ret));
+                            /* D5: a zero that is only an MPFR underflow */
+                            unfl_here = mpfr_underflow_p() != 0;
+                            if (unfl_here && !defer) ret = numeric_underflow_if_zero(ret);
+                            /* consumed here (the enclosing call sees only its
+                             * own underflows, and any it had before) -- unless
+                             * a boundary probe is deciding, which needs it */
+                            if (unfl_outer) mpfr_set_underflow();
+                            else if (unfl_here && !defer) mpfr_clear_underflow();
+                        }
+#endif
                         expr_free(res);
                         *changed = true; /* Built-in produced a rewrite */
                         return ret;

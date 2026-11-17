@@ -89,7 +89,7 @@ not wrong. They are left as they are.
 | C6 | `N[Pi,30]^1.5`, `Complex[1.5`30, 2.]` | 30 digits kept | fixed: contagion in `Power`; `Complex[]` is one kind |
 | C7 | `1.5 < 10^400`; `Sort[{N[10^500], N[10^400]}]` | unevaluated; wrong order | fixed: exact mixed-kind order |
 | C8 | `N[10^-320]`, `2.^-1074` | subnormal machine doubles | fixed (policy) |
-| C9 | `1.*^15` prints `1e+15` | OutputForm has no decimal point | open: see section E |
+| C9 | `1.*^15` prints `1e+15` | OutputForm has no decimal point | **fixed v0.6604**: see section E (C9) |
 | C10 | int64 overflow in packed / `Compile` | — | verified sound (`checked_int.h`) |
 
 ### D. Arbitrary precision (fixed-precision model)
@@ -99,7 +99,7 @@ not wrong. They are left as they are.
 | D2 | `Precision[0``20]` | `20.` | withdrawn: under the fixed model a zero's precision is its MPFR width |
 | D3 | `Accuracy[N[10^-400, 20]]`; `Accuracy[N[10^500, 20]]` | `20.` (should be 420); `Overflow[]` | fixed v0.6596: `*_get_d_2exp` |
 | D4 | `Precision[SetAccuracy[Pi 10^50, 10]]` | `10.` (should be ~60) | fixed v0.6596: machine-value magnitude; digits rounded up; `0``a` when no digit is left |
-| D5 | `Exp[-N[10^10, 30]]` (below MPFR's range) | `0.e-30`, no message | open (decided 2026-11-17: `Underflow[]` + `General::unfl`) |
+| D5 | `Exp[-N[10^10, 30]]` (below MPFR's range) | `0.e-30`, no message | **fixed v0.6604**: `Underflow[]` (`-Underflow[]` for a negative zero) with `General::unfl`. The evaluator scopes MPFR's underflow flag to each `NumericFunction` call (saved, cleared, restored) and converts a zero result raised under it (`numeric_underflow_if_zero`); the machine path's MPFR recompute decides for itself (`numeric_unfl_deferred`), so the message fires once. A true zero stays a zero |
 | D6 | `N[Exp[10^9], 20]` | `Overflow[]` | decided 2026-11-17: keep the library default; no change |
 | D7 | `N[1/3, -1]`, `SetPrecision[1.5, 0]`, `$MinPrecision` | unevaluated, no message | fixed v0.6596: `N::precbd` / `SetPrecision::precbd`; `$MaxExtraPrecision` Infinity / Rational honoured. `$MinPrecision`/`$MaxPrecision`: D7b, implemented v0.6597 (constructor clamp, bounded requests, validated assignment) |
 | D8 | `` 1.5`+nan ``; ``` 0``-5 ``` | `2.` (accepted silently); accuracy clamped to 1 | `nan`: fixed v0.6596 (strict decimal scan). ``` 0``-5 ```: withdrawn -- a zero's accuracy is its MPFR width (>= 1 bit), so a negative accuracy has no representation in the fixed model |
@@ -114,11 +114,11 @@ not wrong. They are left as they are.
 | E9 | `Compile[{{x, _Real}}, x x][1.*^-200]` | `0.` (the interpreter gives `1.*10^-400`) | fixed v0.6595: underflow flag / subnormal result falls back (CompiledFunction, Table) |
 | E4 | `Quotient[N[10^30, 40] + 1/2, 1] - 10^30` | `19884624838656` (should be 0) | fixed v0.6595: `Floor[(m - d)/n]` at the operands' precision |
 | E2 | `Exp[1000.] * 0.` | `0.e-15` (an MPFR zero) | fixed v0.6595 |
-| E1 | `(1.*^308 * 10.)/1.*^10` | 53-bit MPFR, `MachineNumberQ` False | open (decided 2026-11-17: demote once in range) |
+| E1 | `(1.*^308 * 10.)/1.*^10` | 53-bit MPFR, `MachineNumberQ` False | **fixed v0.6604**: every `NumericFunction` result (Plus and Times included) that is a 53-bit MPFR, or a Complex of 53-bit parts, and fits a normal double is the double (`numeric_demote_machine_precision`, in the evaluator net) |
 | E10 | `Range[1.*^-200, 2.*^-200, 1.*^-200]`; `Table` over it | `Range::toobig` (~10^14 elements); `Table` hung | fixed v0.6595: the iterator's bound slack is relative (`iter_real_slack`) |
 | E11 | `Mean`/`Variance`/`RootMeanSquare`/`Dot` of `{1.*^308, 1.*^308}` (plain lists too) | `Overflow[]`; underflow gave `0.` | fixed v0.6595: each machine fast path declines a degenerate result |
 | E3 | `(2/3)^(-2^63)` | `1/(2/3)^9223372036854775808` | open, cosmetic: should be `(3/2)^(2^63)` |
-| C9 | `1.*^15`, `$MachineEpsilon` | `1e+15`, `2.22045e-16`; `Precision[2.^-1074]` is `15.9546` | open (decided 2026-11-17: always print a decimal point; a promoted value reports `MachinePrecision`) |
+| C9 | `1.*^15`, `$MachineEpsilon` | `1e+15`, `2.22045e-16`; `Precision[2.^-1074]` is `15.9546` | **fixed v0.6604**: OutputForm `1.0*^15`, `2.22045*^-16` (six digits, always a decimal point, the input syntax `*^`; arbitrary-precision display uses `*^` too; TeX `\times 10^{e}`). A 53-bit MPFR reports `MachinePrecision` and prints as a machine real: six digits for display, shortest round-trip digits and no precision mark in InputForm, which re-reads to the same value |
 
 ### S. Found by the stress corpus (2026-11-17, `tests/test_numeric_tower_stress.c`)
 318 boolean cases whose truth follows from exact mathematics; 309 pass. The 9
@@ -145,6 +145,7 @@ statistics. 300 pass; 7 XFAIL are these two bugs:
 |---|---|---|---|
 | K1 | `-0.3/0.1`; `x/x` at `x = 1.*^-300` | `-3.0` (0.625 ulp; `Divide[-0.3, 0.1]` is the correctly rounded `-2.9999999999999996`); not exactly `1.` | **fixed v0.6600**: Times evaluates the base of `Power[b, -1]` first and fuses a machine divisor with a machine numerator on its left into `Divide` (eval.c `k1_*`); `Divide` gained a complex branch (`mth_cdiv_machine`) and a buffer kernel (`ndarray_divide`); Compile emits DIV / the buffer quotient for `x/y`. Was: `a/b` parses to `Times[a, Power[b, -1]]` and the reciprocal is rounded first, so a machine quotient is rounded TWICE. IEEE division (and x/x = 1) requires one rounding |
 | K2 | `Sqrt[1.*^-200 (1 + I)]`, `Sqrt[1.*^200 - 3.*^200 I]` | relative error 5*10^-14 (about 220 ulps) | **fixed v0.6600**: `z^(1/2)` for a machine complex `z` is libm `csqrt` (`mth_csqrt_machine`) on the scalar path, in `cpow_pair` and in Compile's SQRT_C, so the surfaces bit-match. Was: exp(log(z)/2) (`cpow`), whose error grows with \|log\|z\|\| |
+| K3 | shootout asinh-1-2 (`Method -> "ParallelMixedTower"`) stopped integrating at v0.6598 | `PossibleZeroQ[D[F] - f, Assumptions -> Element[x, Complexes]]` False for a correct F | **fixed v0.6604**: the cause is S3: a complex result outside the double range used to be `Overflow[]`, and the zero test re-drew such a sample. Now it is a 53-bit value whose cancellation noise read as decisive. When the machine rung makes an extended-range COMPLEX value (counted by `numeric_note_extended` at every promotion and in the evaluator net), a sample point is re-drawn again. Real extended-range values (since v0.6594) and exact inputs keep the ordinary path, which decides them (`x Pi/3^700`, `10^500 (Pi + 10^-30) - 10^500 Pi`). Broader rules tried first (re-draw on any extended value; climb one rung; climb the whole ladder) each broke one of these |
 
 Test data found wrong on the way: `tests/test_elliptic_theta.c` expects
 `EllipticTheta[1, 0.4, 0.999]` = -1.32*10^-504. Jacobi's imaginary transformation

@@ -43,7 +43,7 @@ static double eval_real(const char* input) {
     char buf[1024];
     snprintf(buf, sizeof buf, "Re[%s]", input);
     char* s = eval_str(buf);
-    double v = strtod(s, NULL);
+    double v = test_parse_printed_real(s);
     free(s);
     return v;
 }
@@ -53,7 +53,7 @@ static double eval_imag(const char* input) {
     char buf[1024];
     snprintf(buf, sizeof buf, "Im[%s]", input);
     char* s = eval_str(buf);
-    double v = strtod(s, NULL);
+    double v = test_parse_printed_real(s);
     free(s);
     return v;
 }

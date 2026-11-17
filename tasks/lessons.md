@@ -5476,3 +5476,16 @@ definition, so a non-Expr* static helper is charged to the builtin above it.
 - **What happened.** F8's new hypertangent RDE boxes were reached and every one declined. The coefficient `b` printed as `1 + Tan[u_]^2`. In `risch_tower.c` the tower rewrote `D[Tan[u]] = Sec[u]^2` with `Sec[rmTA_]^2 -> 1 + Tan[rmTA_]^2`. The right-hand side contains the pattern `rmTA_` = `Pattern[rmTA, Blank[]]`, and the binding substitutes the symbol inside it, giving `Tan[Pattern[u, Blank[]]]`. That is a foreign kernel no tower variable matches, so every exponential of a tangent argument had carried it in its Dcoef, silently, since the rule was written.
 - **Rule.** In a string-built rule, the right-hand side names the variable (`x`), never the pattern (`x_`). Use `:>` and a private-context name, as the string-built-rules memory says. When a tower coefficient prints a kernel form (`Tan[...]`) where a tower variable is expected, dump `FullForm` (via `ToString[FullForm[...]]`; an unevaluated `FullForm` prints as its argument) before reasoning about the algorithm.
 - **Same session.** (1) My test script called `Integrate\`ElementaryIntegralQ`, a symbol that does not exist (the builtin is `Risch\`ElementaryIntegralQ`), and I read "unevaluated" as "undecided". Check a known-True case first, so that a wrong name shows as a wrong True. (2) `git stash pop` conflicted and kept the stash. My following `git stash drop stash@{0}` then dropped the F8 work-in-progress, not the stale stash I meant. Nothing was lost, because the pop had applied every file but one and left that one in conflict markers. After a pop, run `git stash list` before any drop. (3) The Gaussian fix: the parametric log-derivative factored over Q even when f carried I. A released false `"NoSolution"` (`Risch\`RischDECertified[2 I/(1 + x^2), ...]`) had survived every hunt because the hunts never put I into a cancellation coefficient. A candidate-generator argument ("z is built from the factors of the denominators") is only as complete as the field the factorisation runs over.
+
+## 2026-11-17: restore a regressed behaviour narrowly, at the exact edge the regressing commit moved
+
+Fixing PossibleZeroQ after v0.6598 (asinh-1-2), I tried three broad rules in a row: re-draw on any
+extended-range value, climb one rung, climb the whole ladder. Each broke a tested constant
+(`x Pi/3^700`, `10^500 (Pi + 10^-30) - 10^500 Pi`, `Exp[-10^4] - Exp[-10^4 - 10^-20]`). The fix
+that held reproduces exactly what the regressing commit changed: S3 turned complex `Overflow[]`
+into extended-range values, so only complex extended values at a sample point are re-drawn.
+- Rule: before writing a fix for a regression, name the precise input class whose behaviour the
+  bisected commit changed, and restore only that class. A broader principle touches behaviour
+  that was never broken, and its own test suite has already tuned that behaviour.
+- Rule: run the subsystem's unit suite (`zero_test_tests` here) after each variant, before the
+  full tier.

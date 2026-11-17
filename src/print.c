@@ -506,7 +506,7 @@ static void mpfr_put_mantissa(const char* D) {
     fputs(D + 1, MTH_POUT);
 }
 
-/* Exponent suffix of the display form: e+50 / e-05 as a machine real
+/* Exponent suffix of the display form: *^50 / *^-5, as a machine real
  * prints, or the TeX \times 10^{e}. */
 static void mpfr_put_display_exponent(long e, bool tex) {
     if (tex) {
@@ -515,12 +515,60 @@ static void mpfr_put_display_exponent(long e, bool tex) {
         if (strlen(t) == 1) printf("\\times 10^%s", t);
         else printf("\\times 10^{%s}", t);
     } else {
-        printf("e%c%02ld", e < 0 ? '-' : '+', e < 0 ? -e : e);
+        /* *^e, the input syntax, so the displayed number re-reads
+         * (numeric-tower review C9a); it was e+50 / e-05 */
+        printf("*^%ld", e);
     }
+}
+
+/* A 53-bit MPFR is a machine-precision number with MPFR's exponent range
+ * (the boundary policy's Exp[1000.], 1.*^400), and prints as a machine real
+ * does (C9b): six digits for display, the shortest round-trip digits and no
+ * precision mark for input -- parse.c reads such a literal back as the same
+ * 53-bit value, since it lies outside the double range. %g's layout: an
+ * exponent below -4 or at least the digit count is scientific. */
+static void print_mpfr_machine(const mpfr_t x, bool input, bool tex) {
+    long e = 0;
+    char* D = NULL;
+    if (input) {
+        for (long n = 15; n <= 17; n++) {
+            free(D);
+            D = mpfr_sig_digits(x, n, MPFR_RNDN, &e);
+            if (!D) break;
+            /* does this digit string name x at 53 bits? */
+            char t[64];
+            snprintf(t, sizeof t, "%s%c.%se%ld", mpfr_sgn(x) < 0 ? "-" : "", D[0], D + 1, e);
+            mpfr_t y; mpfr_init2(y, 53);
+            mpfr_set_str(y, t, 10, MPFR_RNDN);
+            bool same = mpfr_equal_p(x, y) != 0;
+            mpfr_clear(y);
+            if (same) break;
+        }
+    } else {
+        D = mpfr_sig_digits(x, 6, MPFR_RNDN, &e);
+    }
+    if (!D) { printf("<mpfr print error>"); return; }
+    long nd = (long)strlen(D);
+    while (nd > 1 && D[nd - 1] == '0') D[--nd] = '\0';
+    if (mpfr_sgn(x) < 0) putchar('-');
+    long P = input ? 17 : 6;
+    if (e < -4 || e >= P) {
+        putchar(D[0]); putchar('.');
+        fputs(nd > 1 ? D + 1 : "0", MTH_POUT);
+        if (input) printf("*^%ld", e); else mpfr_put_display_exponent(e, tex);
+    } else {
+        mpfr_put_positional(D, nd, e);
+        if (e >= nd - 1) putchar('0');          /* 100000. -> 100000.0 */
+    }
+    free(D);
 }
 
 /* Display form of an MPFR real (see the block comment above). */
 static void print_mpfr_display(const mpfr_t x, bool tex) {
+    if (mpfr_get_prec(x) == 53 && mpfr_number_p(x) && !mpfr_zero_p(x)) {
+        print_mpfr_machine(x, false, tex);
+        return;
+    }
     if (!mpfr_number_p(x)) {            /* NaN / infinity: no digits to show */
         char* buf = NULL;
         if (mpfr_asprintf(&buf, "%Rg", x) >= 0 && buf) { fputs(buf, MTH_POUT); mpfr_free_str(buf); }
@@ -583,6 +631,7 @@ static void mpfr_put_precision_mark(mpfr_prec_t bits) {
 static void print_mpfr_input(const mpfr_t x) {
     mpfr_prec_t bits = mpfr_get_prec(x);
     if (!mpfr_number_p(x)) { print_mpfr_display(x, false); return; }
+    if (bits == 53 && !mpfr_zero_p(x)) { print_mpfr_machine(x, true, false); return; }
     if (mpfr_zero_p(x)) {
         printf("0``");
         mpfr_put_precision_mark(bits);
@@ -636,6 +685,29 @@ static void print_real_roundtrip(double d) {
     printf("%s%s", mant, expo);
 }
 
+/* Display (OutputForm) text of a machine real: six significant digits, as
+ * %g picks them, ALWAYS with a decimal point and with the input syntax *^ for
+ * an exponent, so the text re-reads as a Real (numeric-tower review C9a:
+ * 1e+15 read back as the Integer-looking 1e+15 symbol product, 2.22045e-16 as
+ * 2.22045 e - 16). 1.*^15 prints 1.0*^15, 100000. prints 100000.0. A negative
+ * zero prints as 0.0 (it is SameQ to 0.0). */
+static void print_real_display(double d) {
+    char buf[64];
+    snprintf(buf, sizeof(buf), "%g", d == 0.0 ? 0.0 : d);
+    char* ep = strpbrk(buf, "eE");
+    if (!isfinite(d)) { fputs(buf, MTH_POUT); return; }
+    if (ep) {
+        int ev = atoi(ep + 1);
+        *ep = '\0';
+        fputs(buf, MTH_POUT);
+        if (!strchr(buf, '.')) fputs(".0", MTH_POUT);
+        printf("*^%d", ev);
+    } else {
+        fputs(buf, MTH_POUT);
+        if (!strchr(buf, '.')) fputs(".0", MTH_POUT);
+    }
+}
+
 void expr_print_fullform(Expr* e) {
     if (!e) { printf("Null"); return; }
     switch (e->type) {
@@ -645,12 +717,9 @@ void expr_print_fullform(Expr* e) {
                 print_real_roundtrip(e->data.real);
                 break;
             }
-            char buf[64];
             /* -0.0 prints as 0.0: it is SameQ to 0.0, and printing the sign
              * made exact-zero products like 0 (-1.2) look negative */
-            snprintf(buf, sizeof(buf), "%g", e->data.real == 0.0 ? 0.0 : e->data.real);
-            if (strchr(buf, '.') == NULL && strchr(buf, 'e') == NULL && strchr(buf, 'E') == NULL) printf("%s.0", buf);
-            else printf("%s", buf);
+            print_real_display(e->data.real);
             break;
         }
         case EXPR_SYMBOL: printf("%s", context_display_name(e->data.symbol.name)); break;
@@ -2548,10 +2617,15 @@ static void print_tex_number(Expr* e) {
     switch (e->type) {
         case EXPR_INTEGER: printf("%" PRId64, e->data.integer); break;
         case EXPR_REAL: {
+            /* %g's digits; an exponent is \times 10^{e} (1e+15 is not TeX) */
             char buf[64];
             snprintf(buf, sizeof(buf), "%g", e->data.real == 0.0 ? 0.0 : e->data.real);
-            if (strchr(buf, '.') == NULL && strchr(buf, 'e') == NULL && strchr(buf, 'E') == NULL) printf("%s.", buf);
-            else printf("%s", buf);
+            char* ep = isfinite(e->data.real) ? strpbrk(buf, "eE") : NULL;
+            int ev = 0;
+            if (ep) { ev = atoi(ep + 1); *ep = '\0'; }
+            printf("%s", buf);
+            if (!strchr(buf, '.') && isfinite(e->data.real)) putchar('.');
+            if (ep) printf(ev >= 0 && ev < 10 ? "\\times 10^%d" : "\\times 10^{%d}", ev);
             break;
         }
         case EXPR_BIGINT: {
