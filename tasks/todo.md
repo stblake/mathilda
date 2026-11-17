@@ -39,6 +39,13 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
         (a zero's accuracy is its MPFR width)
   - [x] D7: `N::precbd`, `SetPrecision::precbd`; `$MaxExtraPrecision` Infinity / Rational
   - [x] full unit tier green (only the v0.6593 integrate_gr132_1 regression)
+- [x] Stress corpus: `tests/test_numeric_tower_stress.c`, 318 exact-truth cases over ten areas,
+      generated from `stress_cases.py`. 309 pass; 9 XFAIL = S1-S7 (design note, section S).
+      2 cases were wrong and are corrected: the 53-bit `1.*^400` is below 10^400, and
+      fixed-precision cancellation.
+- [ ] Phase 4b. Stress-corpus bugs: S3 (complex boundary policy), S4/S5 (ND Power / unary
+      degenerate lanes), S6 (Product underflow), S1 (`I^BigInt`), S7 (`b^^digits` literals).
+      S2 needs a decision (complex `Equal` tolerance).
 - [ ] Phase 6. Policy items, decided by the user 2026-11-17 (v0.6597)
   - [ ] D5 (decided: Underflow): an MPFR result below the exponent range is `Underflow[]` with
         `General::unfl` through `mth_message`, mirroring `Overflow[]`; sign kept (`-Underflow[]`).
@@ -55,7 +62,7 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
         expectations, checking each with `ToExpression[old] == ToExpression[new]`.
   - [ ] C9b (decided: MachinePrecision): `Precision` of a 53-bit MPFR (the machine-precision
         extended-range value) reads `MachinePrecision`, and `Accuracy` follows.
-  - [ ] D7b (decided 2026-11-17: SUPPORT both, with docstrings, enforced consistently
+  - [x] D7b, v0.6597 (decided 2026-11-17: SUPPORT both, with docstrings, enforced consistently
         everywhere). Design:
         - Read the LIVE OwnValues at each check through cached `SymbolDef*` pointers.
           A C mirror would go stale under Block / Clear, which restore OwnValues without

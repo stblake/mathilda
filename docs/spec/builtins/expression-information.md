@@ -687,6 +687,52 @@ In[4]:= MachineNumberQ[$MaxNumber]   (* MPFR, not machine *)
 Out[4]= False
 ```
 
+## $MinPrecision, $MaxPrecision
+
+Bounds, in decimal digits, on the precision of every arbitrary-precision
+number (v0.6597). Defaults: `$MinPrecision = 0` (no minimum), `$MaxPrecision =
+Infinity` (no maximum). Both are user-settable, and work with `Block`.
+
+**Features**:
+- **One rule, everywhere.** Mathilda's arbitrary-precision numbers are fixed
+  precision (the MPFR width is the precision), so the bounds bound that width.
+  They are applied where every MPFR number is made (the constructors), so
+  literals, arithmetic, functions, `N`, contagion, `SetPrecision` /
+  `SetAccuracy` and `Compile`'s outputs all obey them.
+- **Not machine numbers.** A machine double is not an arbitrary-precision
+  number: `Block[{$MinPrecision = 30}, Precision[1.5 2.]]` is
+  `MachinePrecision`. A 53-bit MPFR made by the machine-boundary policy (an
+  overflowed machine result) is arbitrary precision and does obey them.
+- **Requests are bounded** with a message: `N[x, p]` and `SetPrecision[x, p]`
+  with `p > $MaxPrecision` use `$MaxPrecision` (`N::preclg`), with
+  `p < $MinPrecision` use `$MinPrecision` (`N::precsm`).
+- **Fixed-precision arithmetic.** `Block[{$MinPrecision = p, $MaxPrecision = p},
+  ...]` makes every arbitrary-precision number exactly `p` digits.
+- **N's extra precision** is bounded too: the adaptive re-evaluation never goes
+  past `$MaxPrecision`.
+- **Validation.** `$MinPrecision` must be a real `>= 0` and `<= $MaxPrecision`;
+  `$MaxPrecision` a positive real or `Infinity` and `>= $MinPrecision`.
+  Otherwise `::precset` is emitted and the old value kept. (`Block` sets the
+  value without validation; an invalid value then acts as the default.)
+- **When the bound applies.** A number is bounded when it is MADE. A literal is
+  made when the input is parsed, so `Block[{$MaxPrecision = 20},
+  Precision[1.5`40]]` is `40.` (the literal predates the Block), while
+  `Block[{$MaxPrecision = 20}, Precision[1.5`40 + 0]]` is `20.`.
+- An MPFR zero's width encodes its accuracy, so the bounds also bound a zero's
+  accuracy.
+
+```mathematica
+In[1]:= Block[{$MaxPrecision = 20}, Precision[Sqrt[2.`30]]]
+Out[1]= 20.
+
+In[2]:= Block[{$MaxPrecision = 20}, N[Pi, 50]]
+N::preclg: Requested precision 50 is larger than $MaxPrecision. Using current $MaxPrecision of 20 instead.
+Out[2]= 3.1415926535897932385
+
+In[3]:= $MaxPrecision = -3
+$MaxPrecision::precset: Cannot set $MaxPrecision to -3; it must be a positive real number or Infinity, and >= $MinPrecision.
+```
+
 ## $Version, $VersionNumber
 Release identity of the running Mathilda. Both are read-only `Protected`
 symbols holding an `OwnValue`; redefining them emits `Set::wrsym`.

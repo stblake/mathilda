@@ -908,6 +908,8 @@ const char* SYM_DialogProlog = NULL;
 const char* SYM_Monitor = NULL;
 const char* SYM_SlashCommand = NULL;
 const char* SYM_DollarMaxExtraPrecision = NULL;
+const char* SYM_DollarMinPrecision = NULL;
+const char* SYM_DollarMaxPrecision = NULL;
 const char* SYM_InternalEqualTolerance = NULL;
 const char* SYM_InternalSameQTolerance = NULL;
 const char* SYM_DollarModuleNumber = NULL;
@@ -2075,6 +2077,8 @@ void sym_names_init(void) {
     SYM_Monitor                    = intern_symbol("Monitor");
     SYM_SlashCommand               = intern_symbol("SlashCommand");
     SYM_DollarMaxExtraPrecision    = intern_symbol("$MaxExtraPrecision");
+    SYM_DollarMinPrecision         = intern_symbol("$MinPrecision");
+    SYM_DollarMaxPrecision         = intern_symbol("$MaxPrecision");
     SYM_InternalEqualTolerance     = intern_symbol("Internal`$EqualTolerance");
     SYM_InternalSameQTolerance     = intern_symbol("Internal`$SameQTolerance");
     SYM_DollarModuleNumber         = intern_symbol("$ModuleNumber");

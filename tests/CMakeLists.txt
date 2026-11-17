@@ -2290,6 +2290,12 @@ add_executable(numeric_tower_review_tests test_numeric_tower_review.c $<TARGET_O
 target_include_directories(numeric_tower_review_tests PRIVATE ../src)
 add_test(NAME numeric_tower_review_tests COMMAND numeric_tower_review_tests)
 
+# Numeric-tower STRESS corpus: 318 exact-truth cases, XFAIL-ratcheted by id
+# (docs/design/numeric_tower_review.md, section S).
+add_executable(numeric_tower_stress_tests test_numeric_tower_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(numeric_tower_stress_tests PRIVATE ../src)
+add_test(NAME numeric_tower_stress_tests COMMAND numeric_tower_stress_tests)
+
 add_executable(ranked_tests test_ranked.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(ranked_tests PRIVATE ../src)
 

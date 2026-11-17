@@ -2926,6 +2926,85 @@ static bool expr_has_plus(const Expr* e) {
     return false;
 }
 
+/* ---- $MinPrecision / $MaxPrecision ------------------------------------------
+ *
+ * Bounds, in decimal digits, on the precision of every arbitrary-precision
+ * number: $MinPrecision (default 0, no lower bound) and $MaxPrecision (default
+ * Infinity). Mathilda's numbers are fixed precision (the MPFR width IS the
+ * precision), so the bounds bound that width; the clamp is applied by the MPFR
+ * constructors (expr_set_mpfr_prec_clamp), which every MPFR Expr goes through.
+ *
+ * The LIVE OwnValues are read at each check, through SymbolDef pointers cached
+ * per symtab generation, so Block / Clear / Unset -- which restore an OwnValue
+ * without passing the assignment hook -- are seen at once. A value that is not
+ * a valid bound (Block bypasses validation) reads as the default. */
+static double precision_bound_digits(const char* name, SymbolDef** cache,
+                                     unsigned* gen, bool upper) {
+    if (*gen != symtab_generation() || !*cache) {
+        *cache = symtab_get_def(name);
+        *gen = symtab_generation();
+    }
+    const Rule* r = *cache ? (*cache)->own_values : NULL;
+    const Expr* v = (r && r->replacement) ? r->replacement : NULL;
+    if (!v) return upper ? INFINITY : 0.0;
+    if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Infinity) return INFINITY;
+    double d;
+    if (numeric_machine_value(v, &d) && isfinite(d) && (upper ? d > 0.0 : d >= 0.0)) return d;
+#ifdef USE_MPFR
+    if (v->type == EXPR_MPFR && mpfr_number_p(v->data.mpfr)) {
+        d = mpfr_get_d(v->data.mpfr, MPFR_RNDN);
+        if (isfinite(d) && (upper ? d > 0.0 : d >= 0.0)) return d;
+    }
+#endif
+    return upper ? INFINITY : 0.0;
+}
+
+double numeric_min_precision(void) {
+    static SymbolDef* def = NULL; static unsigned gen = 0;
+    return precision_bound_digits("$MinPrecision", &def, &gen, false);
+}
+double numeric_max_precision(void) {
+    static SymbolDef* def = NULL; static unsigned gen = 0;
+    return precision_bound_digits("$MaxPrecision", &def, &gen, true);
+}
+
+#ifdef USE_MPFR
+/* The constructor clamp: `bits` bounded to the widths of $MinPrecision and
+ * $MaxPrecision digits (numeric_digits_to_bits, as N[x, p] sizes p digits).
+ * The defaults cost two OwnValue reads and leave `bits` unchanged. */
+static mpfr_prec_t numeric_mpfr_prec_clamp(mpfr_prec_t bits) {
+    double lo = numeric_min_precision(), hi = numeric_max_precision();
+    if (lo > 0.0) {
+        long b = numeric_digits_to_bits(lo);
+        if ((long)bits < b) bits = (mpfr_prec_t)b;
+    }
+    if (isfinite(hi)) {
+        long b = numeric_digits_to_bits(hi);
+        if ((long)bits > b) bits = (mpfr_prec_t)b;
+    }
+    if (bits < MPFR_PREC_MIN) bits = MPFR_PREC_MIN;
+    return bits;
+}
+#endif
+
+/* See numeric.h. */
+double numeric_bound_requested_precision(const char* head, double digits) {
+    double lo = numeric_min_precision(), hi = numeric_max_precision();
+    if (digits > hi) {
+        mth_message(head, "preclg",
+                    "Requested precision %g is larger than $MaxPrecision. Using current $MaxPrecision of %g instead.",
+                    digits, hi);
+        return hi;
+    }
+    if (digits < lo) {
+        mth_message(head, "precsm",
+                    "Requested precision %g is smaller than $MinPrecision. Using current $MinPrecision of %g instead.",
+                    digits, lo);
+        return lo;
+    }
+    return digits;
+}
+
 static long numeric_max_extra_bits(double* digits_out) {
     Rule* r = symtab_get_own_values("$MaxExtraPrecision");
     double digits = 50.0;
@@ -3047,7 +3126,17 @@ static Expr* numericalize_top(const Expr* e, NumericSpec spec) {
     if (adaptive) {
         const long p = spec.bits;
         double mep_digits = 50.0;
-        const long Wmax = p + numeric_max_extra_bits(&mep_digits) + NUMERIC_GUARD_BITS;
+        long Wmax = p + numeric_max_extra_bits(&mep_digits) + NUMERIC_GUARD_BITS;
+        /* $MaxPrecision bounds the working precision too: the constructors
+         * clamp every pass to it, so passes above it would all be the same. */
+        {
+            double hi = numeric_max_precision();
+            if (isfinite(hi)) {
+                long hb = numeric_digits_to_bits(hi);
+                if (hb < p) hb = p;
+                if (Wmax > hb) Wmax = hb;
+            }
+        }
         /* The two most recent results, newest first, with their precisions
          * and pass cancellations; `first` is the shrink reference at the cap. */
         Expr* prev = r_raw;  long Wp = raised ? work.bits : p;  long Lp = cancelled;
@@ -3518,6 +3607,7 @@ static bool parse_precision_arg(const Expr* prec, NumericSpec* out_spec) {
                     "Requested precision %g is not a positive real number.", digits);
         return false;
     }
+    digits = numeric_bound_requested_precision("N", digits);   /* $Min/$MaxPrecision */
 
 #ifdef USE_MPFR
     /* N[expr, p] caps inexact leaves at their existing precision — it never
@@ -3984,6 +4074,9 @@ Expr* builtin_machinenumberq(Expr* res) {
  * ---------------------------------------------------------------------- */
 void numeric_init(void) {
     tc_register_unwind_counter(&g_nmemo_depth);   /* see NMemo */
+#ifdef USE_MPFR
+    expr_set_mpfr_prec_clamp(numeric_mpfr_prec_clamp);   /* $Min/$MaxPrecision */
+#endif
     symtab_add_builtin("N", builtin_n);
     /* Not Listable (the reference's N is only Protected): numericalize
      * descends into lists itself, and N[x, {p, a}] is a precision/accuracy

@@ -1150,6 +1150,28 @@ void eval_init(void) {
  * the C-level limit. Otherwise emit a $RecursionLimit::limset message and
  * leave the C state untouched. Bigints are clamped to INT_MAX.
  */
+/* A candidate value for $MinPrecision (a real >= 0, and <= the current
+ * $MaxPrecision) or $MaxPrecision (a positive real or Infinity, and >= the
+ * current $MinPrecision). Exact and machine reals and MPFR numbers count. */
+static bool precision_bound_valid(const char* name, const Expr* v) {
+    bool is_max = (name == SYM_DollarMaxPrecision);
+    double d;
+    if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Infinity) {
+        if (!is_max) return false;
+        d = INFINITY;
+    } else if (numeric_machine_value(v, &d) && isfinite(d)) {
+        /* d read */
+#ifdef USE_MPFR
+    } else if (v->type == EXPR_MPFR && mpfr_number_p(v->data.mpfr)) {
+        d = mpfr_get_d(v->data.mpfr, MPFR_RNDN);
+#endif
+    } else {
+        return false;
+    }
+    if (is_max) return d > 0.0 && d >= numeric_min_precision();
+    return d >= 0.0 && d <= numeric_max_precision();
+}
+
 static void sync_recursion_limit_from_value(Expr* value) {
     long n = -1;
     if (value->type == EXPR_INTEGER) {
@@ -2121,6 +2143,30 @@ static bool apply_assignment(Expr* lhs, Expr* rhs, bool is_delayed) {
          * ::cxset / ::cxlist and keeps the old one; Set still returns rhs. */
         Expr* probe = is_delayed ? evaluate(rhs) : expr_copy(rhs);
         context_assign(lhs->data.symbol.name, probe);
+        expr_free(probe);
+        return true;
+    }
+
+    if (lhs->type == EXPR_SYMBOL &&
+        (lhs->data.symbol.name == SYM_DollarMinPrecision ||
+         lhs->data.symbol.name == SYM_DollarMaxPrecision)) {
+        /* Validated BEFORE the write (there is no C-side copy to roll back to):
+         * an invalid value emits ::precset and the old one stays. A valid one
+         * is stored evaluated, so the live reader (numeric_min_precision /
+         * numeric_max_precision) always sees a plain number. */
+        Expr* probe = is_delayed ? evaluate(rhs) : expr_copy(rhs);
+        if (!precision_bound_valid(lhs->data.symbol.name, probe)) {
+            char* vs = expr_to_string(probe);
+            mth_message(lhs->data.symbol.name, "precset",
+                        "Cannot set %s to %s; it must be %s.", lhs->data.symbol.name,
+                        vs ? vs : "?",
+                        lhs->data.symbol.name == SYM_DollarMinPrecision
+                            ? "a real number >= 0 and <= $MaxPrecision"
+                            : "a positive real number or Infinity, and >= $MinPrecision");
+            free(vs);
+        } else {
+            symtab_add_own_value_as(lhs->data.symbol.name, lhs, probe, false);
+        }
         expr_free(probe);
         return true;
     }

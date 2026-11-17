@@ -294,6 +294,31 @@ static void test_d7_nonpositive_precision(void) {
     chk("Block[{$MaxExtraPrecision = Infinity}, Precision[N[Sin[10^60], 20]]]", "20.0");
 }
 
+/* ---- D7b (v0.6597): $MinPrecision / $MaxPrecision ----------------------- */
+
+static void test_d7b_min_max_precision(void) {
+    chk("{$MinPrecision, $MaxPrecision}", "{0, Infinity}");
+    /* requests are bounded (with a message) */
+    chk("Quiet[Block[{$MaxPrecision = 20}, Precision[N[Pi, 50]]]]", "20.0");
+    chk("Quiet[Block[{$MinPrecision = 30}, Precision[N[Pi, 10]]]]", "30.0");
+    chk("Check[Block[{$MaxPrecision = 20}, N[Pi, 50]], \"msg\"]", "\"msg\"");
+    chk("Quiet[Block[{$MaxPrecision = 20}, Precision[SetPrecision[1.5, 40]]]]", "20.0");
+    /* every computed arbitrary-precision number obeys them */
+    chk("Block[{$MaxPrecision = 20}, Precision[Sqrt[2.`30]]]", "20.0");
+    chk("Block[{$MaxPrecision = 20}, Precision[1.5`40 + 0]]", "20.0");
+    chk("Quiet[Block[{$MinPrecision = 25, $MaxPrecision = 25}, Precision[1.5`10 * 2.5`40]]]", "25.0");
+    /* machine numbers are not arbitrary-precision numbers */
+    chk("Block[{$MinPrecision = 30}, Precision[1.5 2.]]", "MachinePrecision");
+    /* Block restores; assignment is validated */
+    chk("Quiet[Block[{$MaxPrecision = 20}, N[Pi, 50]]]; Precision[N[Pi, 50]]", "50.0");
+    chk("Quiet[$MaxPrecision = -3]; $MaxPrecision", "Infinity");
+    chk("Quiet[$MaxPrecision = 30; $MinPrecision = 40]; {$MinPrecision, $MaxPrecision}", "{0, 30}");   /* min > max refused */
+    chk("Quiet[$MinPrecision = 20; $MaxPrecision = 10]; {$MinPrecision, $MaxPrecision}", "{20, 30}");  /* max < min refused */
+    chk("$MaxPrecision = Infinity; $MinPrecision = 0; {$MinPrecision, $MaxPrecision}", "{0, Infinity}");
+    /* N's adaptive precision stops at the bound instead of spinning */
+    chk("Block[{$MaxPrecision = 30}, First[AbsoluteTiming[N[Sin[10^60], 20]]] < 5]", "True");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -324,6 +349,7 @@ int main(void) {
     TEST(test_d4_setaccuracy_magnitude);
     TEST(test_d8_precision_mark_is_decimal);
     TEST(test_d7_nonpositive_precision);
+    TEST(test_d7b_min_max_precision);
 
     if (g_fail) {
         printf("%d numeric-tower review check(s) FAILED\n", g_fail);

@@ -400,6 +400,16 @@ Expr* numeric_promote_result_if_degenerate(Expr* r, const Expr* call);
  * Rational[BigInt, BigInt] as 0. */
 bool numeric_machine_value(const Expr* e, double* out);
 
+/* $MinPrecision / $MaxPrecision, in digits, read live (Block-aware). The
+ * defaults are 0 and Infinity; an invalid value reads as the default. */
+double numeric_min_precision(void);
+double numeric_max_precision(void);
+
+/* A precision REQUEST (N[x, p], SetPrecision[x, p]) bounded to
+ * [$MinPrecision, $MaxPrecision], with Head::preclg / Head::precsm when it
+ * had to be moved. */
+double numeric_bound_requested_precision(const char* head, double digits);
+
 /* True for a nonzero double below DBL_MIN in magnitude. Such a value carries
  * fewer than 53 bits, so it is not a machine number: every machine-result
  * choke point (N's round-back, the degenerate-result promoters, Plus, Times,

@@ -461,7 +461,15 @@ Expr* expr_new_sparse(struct SparseArray* sa) {
 /* MPFR constructors. All allocate an Expr and initialize the payload
  * `mpfr_t` at the requested precision; the caller owns the result and
  * should free it with `expr_free`, which calls `mpfr_clear`. */
+/* $MinPrecision / $MaxPrecision (numeric.c installs the clamp: numeric_init).
+ * EVERY arbitrary-precision Expr is made by the two constructors below, so the
+ * bounds hold for literals, arithmetic, functions, N, contagion and compiled
+ * outputs alike. NULL (no clamp) until numeric_init runs. */
+static mpfr_prec_t (*g_mpfr_prec_clamp)(mpfr_prec_t) = NULL;
+void expr_set_mpfr_prec_clamp(mpfr_prec_t (*clamp)(mpfr_prec_t)) { g_mpfr_prec_clamp = clamp; }
+
 Expr* expr_new_mpfr_bits(mpfr_prec_t bits) {
+    if (g_mpfr_prec_clamp) bits = g_mpfr_prec_clamp(bits);
     Expr* e = expr_alloc_node();
     if (!e) return NULL;
     e->type = EXPR_MPFR;
@@ -506,6 +514,12 @@ Expr* expr_new_mpfr_move(mpfr_t src) {
      * the header — MPFR's documentation (mpfr_swap, GMP's mpz semantics)
      * sanctions this as long as the source is then treated as uninit. */
     memcpy(e->data.mpfr, src, sizeof(e->data.mpfr));
+    if (g_mpfr_prec_clamp) {
+        /* An adopted value outside [$MinPrecision, $MaxPrecision] is rounded
+         * to the bound (raising the width is exact). */
+        mpfr_prec_t want = g_mpfr_prec_clamp(mpfr_get_prec(e->data.mpfr));
+        if (want != mpfr_get_prec(e->data.mpfr)) mpfr_prec_round(e->data.mpfr, want, MPFR_RNDN);
+    }
     return e;
 }
 Expr* expr_new_mpfr_copy(const mpfr_t src) {

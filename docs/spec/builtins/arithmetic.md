@@ -143,7 +143,10 @@ The limit is `p + $MaxExtraPrecision` digits (default 50, settable:
 `Block[{$MaxExtraPrecision = 1000}, N[expr, 30]]`; `Infinity` means the
 100000-digit cap and a Rational is read by value -- both silently meant 50
 before v0.6596). A non-positive `p` (`N[x, 0]`, `N[x, -1]`) emits `N::precbd`
-and stays unevaluated (v0.6596; it was silent). At the limit a part that
+and stays unevaluated (v0.6596; it was silent). A `p` outside
+[`$MinPrecision`, `$MaxPrecision`] uses the bound (`N::preclg` / `N::precsm`),
+and the extra precision never exceeds `$MaxPrecision` (v0.6597; see
+[`$MinPrecision, $MaxPrecision`](expression-information.md)). At the limit a part that
 is certified is kept; a part that is zero, or keeps shrinking as the precision
 rises, is `0.` -- a value of size `2^(T - W)` at every `W` cannot be told
 from an exact zero times `2^T` by evaluation -- and any other unsettled part is

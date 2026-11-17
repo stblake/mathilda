@@ -987,7 +987,7 @@ static bool nd_ew_chunk(void* c, size_t lo, size_t hi) {
                 nz &= (v != 0.0);
             }
             od[k] = acc;
-            bad |= nd_ew_degenerate(acc, !x->is_plus & nz);
+            bad |= nd_ew_degenerate(acc, (!x->is_plus) & nz);
         }
     } else {
         for (size_t k = lo; k < hi; k++) {

@@ -101,7 +101,7 @@ not wrong. They are left as they are.
 | D4 | `Precision[SetAccuracy[Pi 10^50, 10]]` | `10.` (should be ~60) | fixed v0.6596: machine-value magnitude; digits rounded up; `0``a` when no digit is left |
 | D5 | `Exp[-N[10^10, 30]]` (below MPFR's range) | `0.e-30`, no message | open (decided 2026-11-17: `Underflow[]` + `General::unfl`) |
 | D6 | `N[Exp[10^9], 20]` | `Overflow[]` | decided 2026-11-17: keep the library default; no change |
-| D7 | `N[1/3, -1]`, `SetPrecision[1.5, 0]`, `$MinPrecision` | unevaluated, no message | fixed v0.6596: `N::precbd` / `SetPrecision::precbd`; `$MaxExtraPrecision` Infinity / Rational honoured. `$MinPrecision`/`$MaxPrecision`: D7b, pending a decision |
+| D7 | `N[1/3, -1]`, `SetPrecision[1.5, 0]`, `$MinPrecision` | unevaluated, no message | fixed v0.6596: `N::precbd` / `SetPrecision::precbd`; `$MaxExtraPrecision` Infinity / Rational honoured. `$MinPrecision`/`$MaxPrecision`: D7b, implemented v0.6597 (constructor clamp, bounded requests, validated assignment) |
 | D8 | `` 1.5`+nan ``; ``` 0``-5 ``` | `2.` (accepted silently); accuracy clamped to 1 | `nan`: fixed v0.6596 (strict decimal scan). ``` 0``-5 ```: withdrawn -- a zero's accuracy is its MPFR width (>= 1 bit), so a negative accuracy has no representation in the fixed model |
 | D9 | `-2.`30^2`, `-2`10^2`, `-2.5*^3^2` | `4.`, `4.`, `6.25*10^6` (should be negative) | fixed v0.6595 |
 | D9 note | `Exp[-10.`30^10]` | `Overflow[]` | the same parser bug: it read as `Exp[(-10.`30)^10]`. It was recorded as an underflow finding at first |
@@ -119,6 +119,20 @@ not wrong. They are left as they are.
 | E11 | `Mean`/`Variance`/`RootMeanSquare`/`Dot` of `{1.*^308, 1.*^308}` (plain lists too) | `Overflow[]`; underflow gave `0.` | fixed v0.6595: each machine fast path declines a degenerate result |
 | E3 | `(2/3)^(-2^63)` | `1/(2/3)^9223372036854775808` | open, cosmetic: should be `(3/2)^(2^63)` |
 | C9 | `1.*^15`, `$MachineEpsilon` | `1e+15`, `2.22045e-16`; `Precision[2.^-1074]` is `15.9546` | open (decided 2026-11-17: always print a decimal point; a promoted value reports `MachinePrecision`) |
+
+### S. Found by the stress corpus (2026-11-17, `tests/test_numeric_tower_stress.c`)
+318 boolean cases whose truth follows from exact mathematics; 309 pass. The 9
+failures are these open bugs, marked XFAIL in the suite by id:
+
+| # | Repro | Got | Status |
+|---|---|---|---|
+| S1 | `I^(2^64 + 1)` | unevaluated | open: no BigInt exponent arm for a Gaussian unit (period 4) |
+| S2 | `Exp[I Pi 1.] == -1` | `False` (an imaginary part of 1.2*^-16 against an exact 0) | open, **decision**: complex `Equal` compares parts separately, not \|a - b\| relative to \|a\| |
+| S3 | `(1.*^200 + 1.*^200 I)^2`, `Exp[1000. + 0.5 I]` | `Overflow[]` | open: the boundary policy never reached complex machine results |
+| S4 | packed `{1.*^-200}^2` | `{0.}` | open: the scalar-exponent Power kernel (`ndarray_scalar_power`) has no degenerate-lane decline |
+| S5 | `Exp[packed {-800., 0.}]` | `{0., 1.}` | open: the unary ND kernels accept a flushed zero (they decline only on non-finite) |
+| S6 | `Product[1.*^-100, {i, 5}]` | `0.` | open: Product's machine accumulator promotes overflow, not underflow |
+| S7 | `16^^FF`, `2^^1010` | syntax error | open: base-notation literals (`b^^digits`) are not parsed |
 
 ### F. Hygiene (no repro: from the code read)
 | # | What | Status |

@@ -342,6 +342,7 @@ static bool parse_prec_arg(const Expr* n, NumericSpec* out_spec) {
                     "Requested precision %g is not a positive real number.", digits);
         return false;
     }
+    digits = numeric_bound_requested_precision("SetPrecision", digits);   /* $Min/$MaxPrecision */
 
 #ifdef USE_MPFR
     out_spec->mode = NUMERIC_MODE_MPFR;

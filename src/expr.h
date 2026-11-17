@@ -335,6 +335,9 @@ Expr* expr_new_mpfr_from_str(const char* str, mpfr_prec_t bits);
 /* Build an Expr taking ownership of `src`. The mpfr_t is moved, not copied;
  * afterwards the caller must not touch `src`. Precision is inherited. */
 Expr* expr_new_mpfr_move(mpfr_t src);
+/* Install the $MinPrecision / $MaxPrecision width clamp applied by every
+ * arbitrary-precision constructor (numeric.c, numeric_mpfr_prec_clamp). */
+void  expr_set_mpfr_prec_clamp(mpfr_prec_t (*clamp)(mpfr_prec_t));
 /* Copy constructor: new Expr with an independent mpfr_t at the same
  * precision as `src`. */
 Expr* expr_new_mpfr_copy(const mpfr_t src);

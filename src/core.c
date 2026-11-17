@@ -293,6 +293,42 @@ static void system_constants_init(void) {
         expr_free(sym);
         expr_free(val);
     }
+    symtab_set_docstring("$MaxExtraPrecision",
+        "$MaxExtraPrecision\n"
+        "\tgives the maximum number of extra digits of precision N[expr, p] may use\n"
+        "\tbeyond p when the evaluation cancels (default 50). Infinity means no limit\n"
+        "\tbeyond an internal cap of 100000 digits. N::meprec reports reaching it.");
+    /* $MinPrecision / $MaxPrecision bound the precision of every arbitrary-
+     * precision number (numeric.c: the MPFR constructors clamp to them), and
+     * are user-settable (assignments validated in apply_assignment). */
+    {
+        Expr* sym = expr_new_symbol(SYM_DollarMinPrecision);
+        Expr* val = expr_new_integer(0);
+        symtab_add_own_value("$MinPrecision", sym, val);
+        expr_free(sym); expr_free(val);
+        sym = expr_new_symbol(SYM_DollarMaxPrecision);
+        val = expr_new_symbol(SYM_Infinity);
+        symtab_add_own_value("$MaxPrecision", sym, val);
+        expr_free(sym); expr_free(val);
+    }
+    symtab_set_docstring("$MinPrecision",
+        "$MinPrecision\n"
+        "\tgives the minimum number of digits of precision allowed in an\n"
+        "\tarbitrary-precision number (default 0, no minimum). Every arbitrary-\n"
+        "\tprecision number -- a literal, the result of arithmetic, a function or N\n"
+        "\t-- carries at least this precision; machine numbers are not affected.\n"
+        "\tN[x, p] or SetPrecision[x, p] with p below it uses $MinPrecision (::precsm).\n"
+        "\tMust be a real number >= 0 and <= $MaxPrecision. Block[{$MinPrecision =\n"
+        "\t$MaxPrecision = p}, ...] makes every arbitrary-precision number p digits.");
+    symtab_set_docstring("$MaxPrecision",
+        "$MaxPrecision\n"
+        "\tgives the maximum number of digits of precision allowed in an\n"
+        "\tarbitrary-precision number (default Infinity, no maximum). Every\n"
+        "\tarbitrary-precision number -- a literal, the result of arithmetic, a\n"
+        "\tfunction or N, including N's internal extra precision -- carries at most\n"
+        "\tthis precision; machine numbers are not affected. N[x, p] or\n"
+        "\tSetPrecision[x, p] with p above it uses $MaxPrecision (::preclg).\n"
+        "\tMust be a positive real number or Infinity, and >= $MinPrecision.");
     register_system_constant("$MachineEpsilon",   expr_new_real(DBL_EPSILON));
     register_system_constant("$MinMachineNumber", expr_new_real(DBL_MIN));
     register_system_constant("$MaxMachineNumber", expr_new_real(DBL_MAX));
