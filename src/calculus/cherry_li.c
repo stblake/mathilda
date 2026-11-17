@@ -259,9 +259,11 @@ Expr* rt_cherry_li(Expr* f, Expr* x) {
         for (size_t i = 0; i < nlau; i++) ans[i] = expr_copy(vterms[i]);
         for (long kk = 0; kk < Klen; kk++) {
             Expr* fn;
-            if (kvals[kk] < 0) {
-                /* li(w^k) = ExpIntegralEi[k Log[w]] for k < 0 — the Wolfram form,
-                 * and avoids LogIntegral of an argument < 1 (branch-fragile). */
+            if (kvals[kk] != 1) {
+                /* li(w^k) needs Log[w^k] = k Log[w], false where Arg[w] is large
+                 * (LogIntegral[x^2] for x < 0); ExpIntegralEi[k Log[w]] has the
+                 * same derivative w^(k-1) w'/Log[w] everywhere (review F1/5b,
+                 * v0.6601; for k < 0 it was already the form used). */
                 Expr* klogw = mk_times2(mk_int(kvals[kk]),
                     expr_new_function(mk_sym("Log"), (Expr*[]){ expr_copy(w) }, 1));
                 fn = expr_new_function(mk_sym("ExpIntegralEi"), (Expr*[]){ klogw }, 1);
@@ -271,12 +273,16 @@ Expr* rt_cherry_li(Expr* f, Expr* x) {
             }
             ans[nlau + (size_t)kk] = mk_times2(expr_copy(dsyms[kk]), fn);
         }
-        /* rescaled-li answer: k_i e^rho_i LogIntegral[e^(-rho_i) w] */
+        /* shifted-li answer: k_i e^rho_i ExpIntegralEi[Log[w] - rho_i], whose
+         * derivative is w'/(Log[w] - rho_i) everywhere.  The former
+         * e^rho_i LogIntegral[e^(-rho_i) w] needed Log[e^(-rho) w] = Log[w] - rho
+         * (review 5b, v0.6601). */
         for (size_t i = 0; i < ns; i++) {
             Expr* erho  = mk_pow(mk_sym("E"), expr_copy(shifts[i]));
-            Expr* liarg = mk_times2(mk_pow(mk_sym("E"), mk_neg(expr_copy(shifts[i]))),
-                                    expr_copy(w));
-            Expr* li = expr_new_function(mk_sym("LogIntegral"), (Expr*[]){ liarg }, 1);
+            Expr* eiarg = expr_new_function(mk_sym("Plus"), (Expr*[]){
+                expr_new_function(mk_sym("Log"), (Expr*[]){ expr_copy(w) }, 1),
+                mk_neg(expr_copy(shifts[i])) }, 2);
+            Expr* li = expr_new_function(mk_sym("ExpIntegralEi"), (Expr*[]){ eiarg }, 1);
             ans[nlau + (size_t)Klen + i] = mk_times2(expr_copy(ssyms[i]),
                                                   mk_times2(erho, li));
         }

@@ -634,10 +634,11 @@ static RtDecision rt_decide_field(Expr* f, Expr* x) {
 
 /* The answer check of the cascade gate and the elementarity verdict:
  * PossibleZeroQ[D[r, x] - f], or failing that the same of its PowerExpand.
- * The second pass forgives the principal-branch convention only
- * (-x^2/Log[x] + 2 LogIntegral[x^2] for x/Log[x]^2 holds where
- * Log[x^2] == 2 Log[x], the same convention DSolve's verifier and the
- * GammaPower stage adopt); a wrong answer (review F1: residual -0.186 on the
+ * The second pass forgives the principal-branch convention only (an answer
+ * that holds where Log[u^k] == k Log[u], the same convention DSolve's verifier
+ * and the GammaPower stage adopt; the li producers no longer need it since
+ * v0.6601, which writes x/Log[x]^2 as 2 ExpIntegralEi[2 Log[x]] - x^2/Log[x],
+ * valid everywhere, not 2 LogIntegral[x^2] - x^2/Log[x]); a wrong answer (review F1: residual -0.186 on the
  * real line) fails both.  An antiderivative valid on an open set still proves
  * elementarity.  rt_logcombine_verified stays strict: it guards a retry that
  * is valid off the positive axis only. */
@@ -669,34 +670,27 @@ static bool rt_tower_answer_verified(Expr* Q, RtTower* T, Expr* f, Expr* x) {
     return ok;
 }
 
-static RtDecision rt_decide_field_canon(Expr* f, Expr* x) {
-    /* Mirror the integrator's trig/hyperbolic front-end (rt_trig_frontend) so the
-     * DECISION routes trig integrands through the SAME Gaussian exponential tower
-     * the True side uses.  Without this the tower builder cannot form a Risch tower
-     * from a bare Sin/Cos/Tan kernel and the field decision falls to UNKNOWN — so
-     * genuinely non-elementary trig integrands (Sin[x]/x -> SinIntegral, Sin[x^2] ->
-     * FresnelS, Cos[x Log x], Cos[E^x]) returned `undec` instead of the authoritative
-     * `False`.  TrigToExp exponentializes the trig kernels; rt_powers_to_exp then
-     * re-exposes the E^(c Log b) kernels that TrigToExp leaves collapsed as general
-     * powers b^e (Cos[x Log x] -> x^(±I x)).  Both rewrites are exact, so the tower —
-     * and hence the residue / Risch-DE certificate read off it — is authoritative. */
-    Expr* fe = rt_eval1("TrigToExp", expr_copy(f));
-    Expr* src;
-    if (fe && !expr_eq(fe, f)) {
-        src = fe;                       /* trig/hyperbolic present: use exp form */
-    } else {
-        if (fe) expr_free(fe);
-        src = expr_copy(f);             /* no trig: decide f directly */
-    }
-    Expr* pw = rt_powers_to_exp(src, x);   /* re-expose b^e exponential kernels */
-    expr_free(src);
-    Expr* fx = rt_expand_exp_sums(pw);
-    expr_free(pw);
+/* The field decision over the differential tower of fx (borrowed): build it,
+ * gate on a rational function of the tower, integrate in decide mode and read
+ * the verdict.  tan_route asks for the REAL tangent tower (Bronstein §5.10,
+ * the RDE over a hypertangent field, review F8): it is decided only when the
+ * tower has exactly one hypertangent level and no Liouvillian primitive, so
+ * that tan u is a monomial -- two tangents can be dependent (Tan[2 x] is
+ * rational in Tan[x]) and an ArcTan-type primitive can make Tan algebraic. */
+static RtDecision rt_decide_tower(Expr* fx, Expr* x, bool tan_route) {
     RtTower T;
     /* min_n = 1: the decision routes SINGLE-kernel integrands (E^x/x, E^(x^2),
      * 1/Log[x]) through the same authoritative field integrator too — the flat-tower
      * integrate cases that normally serve n=1 do not carry the decision certificates. */
-    if (!rt_tower_build_min(fx, x, &T, 1)) { rt_tower_free(&T); expr_free(fx); return RT_DEC_UNKNOWN; }
+    if (!rt_tower_build_min(fx, x, &T, 1)) { rt_tower_free(&T); return RT_DEC_UNKNOWN; }
+    if (tan_route) {
+        size_t ntan = 0; bool scope = true;
+        for (size_t i = 0; i < T.n; i++) {
+            if (T.kind[i] == RT_TAN) { ntan++; if (T.tsg[i] != 1) scope = false; }
+            if (T.kind[i] == RT_PRIM) scope = false;
+        }
+        if (ntan != 1 || !scope) { rt_tower_free(&T); return RT_DEC_UNKNOWN; }
+    }
     Expr* F = rt_eval1("Together", rt_subst_kernels(fx, &T));
     RtDecision verdict = RT_DEC_UNKNOWN;
     if (F && rt_find_exp_of_x(F, x) == NULL && rt_find_log_of_x(F, x) == NULL) {
@@ -753,6 +747,46 @@ static RtDecision rt_decide_field_canon(Expr* f, Expr* x) {
     }
     if (F) expr_free(F);
     rt_tower_free(&T);
+    return verdict;
+}
+
+static RtDecision rt_decide_field_canon(Expr* f, Expr* x) {
+    /* Mirror the integrator's trig/hyperbolic front-end (rt_trig_frontend) so the
+     * DECISION routes trig integrands through the SAME Gaussian exponential tower
+     * the True side uses.  Without this the tower builder cannot form a Risch tower
+     * from a bare Sin/Cos/Tan kernel and the field decision falls to UNKNOWN — so
+     * genuinely non-elementary trig integrands (Sin[x]/x -> SinIntegral, Sin[x^2] ->
+     * FresnelS, Cos[x Log x], Cos[E^x]) returned `undec` instead of the authoritative
+     * `False`.  TrigToExp exponentializes the trig kernels; rt_powers_to_exp then
+     * re-exposes the E^(c Log b) kernels that TrigToExp leaves collapsed as general
+     * powers b^e (Cos[x Log x] -> x^(±I x)).  Both rewrites are exact, so the tower —
+     * and hence the residue / Risch-DE certificate read off it — is authoritative. */
+    /* Real tangent route first (review F8): a real integrand rational in one
+     * Tan[u] and the exp/log kernels is decided over the hypertangent tower
+     * itself, where the Risch DE runs Bronstein's delta = 2 boxes; TrigToExp
+     * would turn E^Tan[u] into an exponential of a rational function of
+     * E^(I u), outside any tower.  Undecided there: the exponential route. */
+    if (rt_free_of_head(f, "Complex")) {
+        Expr* pt = rt_powers_to_exp(f, x);
+        Expr* ft = pt ? rt_expand_exp_sums(pt) : NULL;
+        if (pt) expr_free(pt);
+        RtDecision vt = ft ? rt_decide_tower(ft, x, true) : RT_DEC_UNKNOWN;
+        if (ft) expr_free(ft);
+        if (vt != RT_DEC_UNKNOWN) return vt;
+    }
+    Expr* fe = rt_eval1("TrigToExp", expr_copy(f));
+    Expr* src;
+    if (fe && !expr_eq(fe, f)) {
+        src = fe;                       /* trig/hyperbolic present: use exp form */
+    } else {
+        if (fe) expr_free(fe);
+        src = expr_copy(f);             /* no trig: decide f directly */
+    }
+    Expr* pw = rt_powers_to_exp(src, x);   /* re-expose b^e exponential kernels */
+    expr_free(src);
+    Expr* fx = rt_expand_exp_sums(pw);
+    expr_free(pw);
+    RtDecision verdict = rt_decide_tower(fx, x, false);
     expr_free(fx);
     return verdict;
 }
@@ -930,6 +964,21 @@ static Expr* builtin_risch_rischde(Expr* res) {
  * (Bronstein Phase 4.4). */
 static const char* g_rde_cert_last_reason = NULL;
 
+/* Does e contain a circular trig function (Tan, Cot, Sec, Csc, Sin, Cos) of an
+ * x-dependent argument?  Such a term is rational in the tangent tower variable
+ * (Sec[x]^2 = 1 + Tan[x]^2), which rt_subst_kernels rationalises. */
+static bool rt_has_tan_of_x(const Expr* e, Expr* x) {
+    if (e->type != EXPR_FUNCTION) return false;
+    static const char* heads[] = { "Tan", "Cot", "Sec", "Csc", "Sin", "Cos" };
+    for (size_t h = 0; h < sizeof heads / sizeof heads[0]; h++)
+        if (rt_head_is(e, heads[h]) && e->data.function.arg_count == 1
+            && !rt_free_of_x(e->data.function.args[0], x)) return true;
+    if (rt_has_tan_of_x(e->data.function.head, x)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rt_has_tan_of_x(e->data.function.args[i], x)) return true;
+    return false;
+}
+
 static Expr* builtin_risch_rischde_certified(Expr* res) {
     size_t ac = (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0;
     if (ac < 3 || ac > 5) return NULL;
@@ -950,7 +999,10 @@ static Expr* builtin_risch_rischde_certified(Expr* res) {
     }
     bool has_kernel = rt_find_exp_of_x(f, x) || rt_find_log_of_x(f, x)
                    || rt_find_exp_of_x(g, x) || rt_find_log_of_x(g, x)
-                   || (extra && (rt_find_exp_of_x(extra, x) || rt_find_log_of_x(extra, x)));
+                   || (extra && (rt_find_exp_of_x(extra, x) || rt_find_log_of_x(extra, x)))
+                   /* a tangent kernel: the hypertangent tower (review F8) */
+                   || rt_has_tan_of_x(f, x) || rt_has_tan_of_x(g, x)
+                   || (extra && rt_has_tan_of_x(extra, x));
     RdeCertState saved = rde_cert_begin();
     rde_cert_set_params(params);
     Expr* y = NULL;

@@ -1672,13 +1672,20 @@ is still deficient for every other caller (reproducer and table:
      67 s → 0.3 s). F6: named unknowns (v0.6592) brought `TrigToExp[u^5 ArcTan[u]^3]` to
      about 6 s and certified. v0.6599: the flat ansatz is skipped when the field
      decision proves non-elementarity (0.1 s).
-  5. **F8, [x] F9 (v0.6599), F12.** There is no Risch DE over a tangent lower field
-     (`E^Tan[u] Sec[u]^2`), plus F12 in the review. F9 done: `RationalSpan` over
+  5. **[x] F8 (v0.6601), [x] F9 (v0.6599), F12.** F8 done: the Risch DE over a hypertangent
+     lower field (`E^Tan[u] Sec[u]^2` = `E^Tan[u]`), the delta = 2 boxes of Bronstein
+     6.2-6.6 (RdeSpecialDenomTan with the k(i) resonance, RdeBoundDegreeNonLinear,
+     NoCancel1/2/3, CancelTan by the k(i) route), a real-tangent decision route
+     (`∫E^Tan[u]` False), the tower's `Tan[u_]` Dcoef corruption, and the parametric
+     log-derivative over Q(i) and with lower-tangent special factors (a released
+     false `"NoSolution"`). Left: the Tanh top (t^2 - 1 splits), towers of several
+     tangents (tangent structure theorem), CancelTan with a homogeneous solution over
+     k(i) (CoupledDECancelTan). F9 done: `RationalSpan` over
      algebraic constants, and the base RDE's polynomial solve over them (a released
      false certificate). F8's silent decline is marked (F13, v0.6599). [x] F12
      (v0.6599): a class primitive that is an integer combination of the other
      primitives gets no level; its members are monomials of the survivors.
-  5b. **Branch form (found with F1).** The Ei -> LogIntegral presentation writes
+  5b. **[x] Branch form (found with F1; v0.6601: the li producers write ExpIntegralEi[k Log[w]] and E^rho ExpIntegralEi[Log[w] - rho], valid everywhere).** The Ei -> LogIntegral presentation writes
      `Integrate[x/Log[x]^2, x]` as `-x^2/Log[x] + 2 LogIntegral[x^2]`, which is valid only
      where `Log[x^2] == 2 Log[x]`. `2 ExpIntegralEi[2 Log[x]]` holds everywhere. The
      cascade accepts it under the PowerExpand pass of `rt_answer_verified`.

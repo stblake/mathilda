@@ -769,9 +769,17 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
          * catches them (D[Tan[a]] = Sec[a]^2 would otherwise strand a foreign
          * kernel): Sec[a]^2 -> 1+Tan[a]^2, Csc -> 1+Cot^2, Sech -> 1-Tanh^2,
          * Csch -> Coth^2-1. */
+        /* The right-hand sides name the pattern variable, NOT the pattern: with
+         * `Tan[rmTA_]` on the right the binding substituted into Pattern[rmTA, _],
+         * so D[Tan[u]] gave 1 + Tan[u_]^2, a foreign kernel that no tower variable
+         * matches, and every exponential of a tangent argument (E^Tan[u] Sec[u]^2)
+         * carried it in its Dcoef (review F8, v0.6601).  Private context, so a
+         * user symbol of the same name is not captured. */
         Expr* trig = parse_expression(
-            "{Sec[rmTA_]^2 -> 1 + Tan[rmTA_]^2, Csc[rmTA_]^2 -> 1 + Cot[rmTA_]^2, "
-            "Sech[rmTA_]^2 -> 1 - Tanh[rmTA_]^2, Csch[rmTA_]^2 -> Coth[rmTA_]^2 - 1}");
+            "{Sec[Risch`Private`rmTA_]^2 :> 1 + Tan[Risch`Private`rmTA]^2, "
+            "Csc[Risch`Private`rmTA_]^2 :> 1 + Cot[Risch`Private`rmTA]^2, "
+            "Sech[Risch`Private`rmTA_]^2 :> 1 - Tanh[Risch`Private`rmTA]^2, "
+            "Csch[Risch`Private`rmTA_]^2 :> Coth[Risch`Private`rmTA]^2 - 1}");
         if (trig) d = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceRepeated"),
             (Expr*[]){ d, trig }, 2));                             /* adopts d, trig */
         if (!d) { ok = false; break; }

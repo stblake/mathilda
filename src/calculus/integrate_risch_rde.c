@@ -666,6 +666,22 @@ static Expr* rc_tau_pow(long k, RdeCtx* C) {
  * an exponential monomial the only special irreducible is tau, so strip tau^v; for
  * a primitive (RT_LOG) / base monomial every squarefree factor is normal. */
 static Expr* rc_normal_part(Expr* den, RdeCtx* C) {
+    if (C->m >= 0 && C->T->kind[C->m] == RT_TAN && C->T->tsg[C->m] == 1) {
+        /* hypertangent: the special irreducible is tau^2 + 1 (strip its power) */
+        Expr* p = expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ rc_tau_pow(2, C), expr_new_integer(1) }, 2);
+        Expr* d = expr_copy(den);
+        while (d && rc_deg(d, C) >= 2) {
+            Expr* r = rc_rem(d, p, C);
+            bool div = r && rt_is_zero(r);
+            if (r) expr_free(r);
+            if (!div) break;
+            Expr* q = rc_quot(d, p, C);
+            expr_free(d); d = q;
+        }
+        expr_free(p);
+        return d;
+    }
     if (C->m < 0 || C->T->kind[C->m] != RT_EXP) return expr_copy(den);
     long v = rc_ord_tau(den, C);
     if (v <= 0) return expr_copy(den);
@@ -847,6 +863,354 @@ static void rde_special_denom_exp(Expr* a, Expr* b, Expr* c, RdeCtx* C,
     *c_out = rde_canon(ct); expr_free(ct);
     *hs_out = rc_tau_pow(-n, C);                     /* tau^{-n}, -n >= 0 */
     expr_free(tauN);
+}
+
+/* ---- Hypertangent top (Bronstein §6.2-§6.6, delta(t) = 2), review F8 ----
+ * tau = t_m with D tau = eta (tau^2 + 1), eta = T->Dcoef[m] in k (sigma = +1;
+ * the hyperbolic sigma = -1 top, whose special part t^2 - 1 splits, is still a
+ * marked decline).  The special irreducible is p = tau^2 + 1, Dp/p = 2 eta tau;
+ * its root sqrt(-1) is adjoined as the constant I: evaluation at tau = I
+ * commutes with D because Dtau vanishes there, so a condition "mod p" becomes
+ * an equation over k(i). */
+
+static bool rc_is_tan_top(RdeCtx* C) {
+    return C->m >= 0 && C->T->kind[C->m] == RT_TAN && C->T->tsg[C->m] == 1;
+}
+/* p = tau^2 + 1 */
+static Expr* rc_tan_p(RdeCtx* C) {
+    return expr_new_function(expr_new_symbol("Plus"),
+        (Expr*[]){ rc_tau_pow(2, C), expr_new_integer(1) }, 2);
+}
+/* multiplicity of p in the polynomial e (0 when e == 0) */
+static long rc_ord_p(Expr* e, Expr* p, RdeCtx* C) {
+    if (rt_is_zero(e)) return 0;
+    Expr* u = expr_copy(e);
+    long k = 0;
+    while (rc_deg(u, C) >= 2) {
+        Expr* r = rc_rem(u, p, C);
+        bool div = r && rt_is_zero(r);
+        if (r) expr_free(r);
+        if (!div) break;
+        Expr* q = rc_quot(u, p, C);
+        expr_free(u); u = q; k++;
+        if (!u) break;
+    }
+    if (u) expr_free(u);
+    return k;
+}
+/* p-adic valuation of a field element of k(tau) */
+static long rc_val_p(Expr* e, Expr* p, RdeCtx* C) {
+    Expr* num = rde_num(e);
+    Expr* den = rde_den(e);
+    long v = rc_ord_p(num, p, C) - rc_ord_p(den, p, C);
+    expr_free(num); expr_free(den);
+    return v;
+}
+/* e at tau = I, canonical */
+static Expr* rc_at_i(Expr* e, RdeCtx* C) {
+    Expr* r = rt_eval2("ReplaceAll", expr_copy(e), expr_new_function(
+        expr_new_symbol("Rule"), (Expr*[]){ expr_copy(C->tau), expr_new_symbol("I") }, 2));
+    if (!r) return NULL;
+    Expr* c = rde_canon(r); expr_free(r);
+    return c;
+}
+/* Complex conjugate of an element of k(i) (every tower variable is real):
+ * Complex[a, b] -> Complex[a, -b], canonical.  Owned. */
+static Expr* rc_conj(Expr* e) {
+    Expr* pa = expr_new_symbol("Risch`Private`rdeCja");
+    Expr* pb = expr_new_symbol("Risch`Private`rdeCjb");
+    Expr* lhs = expr_new_function(expr_new_symbol("Complex"), (Expr*[]){
+        expr_new_function(expr_new_symbol("Pattern"),
+            (Expr*[]){ expr_copy(pa), expr_new_function(expr_new_symbol("Blank"), NULL, 0) }, 2),
+        expr_new_function(expr_new_symbol("Pattern"),
+            (Expr*[]){ expr_copy(pb), expr_new_function(expr_new_symbol("Blank"), NULL, 0) }, 2) }, 2);
+    Expr* rhs = expr_new_function(expr_new_symbol("Complex"), (Expr*[]){ pa,
+        expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), pb }, 2) }, 2);
+    Expr* rule = expr_new_function(expr_new_symbol("RuleDelayed"), (Expr*[]){ lhs, rhs }, 2);
+    Expr* r = rt_eval2("ReplaceAll", expr_copy(e), rule);
+    if (!r) return NULL;
+    Expr* c = rde_canon(r); expr_free(r);
+    return c;
+}
+/* Real and imaginary parts of s in k(i): 1 with both owned and free of I, 0
+ * otherwise. */
+static int rc_re_im(Expr* s, Expr** re, Expr** im) {
+    *re = *im = NULL;
+    Expr* sb = rc_conj(s);
+    if (!sb) return 0;
+    Expr* sum = rde_add(s, sb);
+    Expr* dif = rde_sub(s, sb);
+    expr_free(sb);
+    Expr* half = expr_new_function(expr_new_symbol("Rational"),
+        (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2);
+    Expr* r = rt_eval1("Together", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ sum, expr_copy(half) }, 2));                        /* adopts sum */
+    Expr* i2 = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ half,
+        expr_new_function(expr_new_symbol("Complex"),
+            (Expr*[]){ expr_new_integer(0), expr_new_integer(-1) }, 2) }, 2);  /* -I/2 */
+    Expr* m = rt_eval1("Together", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ dif, i2 }, 2));                                     /* (s - sb)/(2I) */
+    bool ok = r && m && rt_free_of_head(r, "Complex") && rt_free_of_head(m, "Complex");
+    if (!ok) { if (r) expr_free(r); if (m) expr_free(m); return 0; }
+    *re = rde_canon(r); *im = rde_canon(m);
+    expr_free(r); expr_free(m);
+    return 1;
+}
+
+/* RdeSpecialDenomTan (Bronstein §6.2, p.192): as rde_special_denom_exp, for
+ * the special irreducible p = tau^2 + 1.  With q = p^n r, a Dq + b q =
+ * p^n (a Dr + (b + 2 n eta tau a) r), so r solves the returned equation
+ * (a p^N, (b + 2 n eta tau a) p^N, c p^(N - n)) and h_s = p^(-n).  The bound
+ * n = min(0, nu_p(c) - min(0, nu_p(b))) is refined when b is a p-unit: a pole
+ * of order -m can then come from cancellation, exactly when
+ * -b(i)/a(i) = m (2 eta i) + Dv/v for some v in k(i)* (evaluate the order-m
+ * term at tau = i, where Dtau = 0), decided by rc_param_log_deriv over k(i). */
+static void rde_special_denom_tan(Expr* a, Expr* b, Expr* c, RdeCtx* C,
+                                  Expr** a_out, Expr** b_out, Expr** c_out,
+                                  Expr** hs_out) {
+    Expr* eta = C->T->Dcoef[C->m];
+    Expr* p = rc_tan_p(C);
+    long nb = rc_val_p(b, p, C);
+    long nc = rc_val_p(c, p, C);
+    long minb = nb < 0 ? nb : 0;
+    long n = nc - minb; if (n > 0) n = 0;
+    if (nb == 0) {
+        Expr* ai = rc_at_i(a, C);
+        Expr* bi = rc_at_i(b, C);
+        if (ai && bi && !rt_is_zero(ai)) {
+            Expr* f = rt_eval1("Together", expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(-1), expr_copy(bi),
+                    expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ expr_copy(ai), expr_new_integer(-1) }, 2) }, 3));
+            Expr* e2 = rt_eval1("Together", expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(2), expr_new_symbol("I"), expr_copy(eta) }, 3));
+            long mm = 0; Expr* z = NULL;
+            int pl = (f && e2) ? rc_param_log_deriv(f, e2, C, &mm, &z) : -1;
+            if (pl == 1 && mm < n) n = mm;
+            if (pl < 0) rde_cert_mark("RdeSpecialDenomTan: parametric log-derivative undecided");
+            if (z) expr_free(z);
+            if (f) expr_free(f);
+            if (e2) expr_free(e2);
+        } else rde_cert_mark("RdeSpecialDenomTan: a(i) = 0");
+        if (ai) expr_free(ai);
+        if (bi) expr_free(bi);
+    }
+    long N = 0;
+    if (-nb > N) N = -nb;
+    if (n - nc > N) N = n - nc;
+    Expr* pN = expr_new_function(expr_new_symbol("Power"),
+        (Expr*[]){ expr_copy(p), expr_new_integer(N) }, 2);
+    *a_out = rde_mul(a, pN);
+    Expr* nterm = expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+        expr_new_integer(2 * n), expr_copy(eta), expr_copy(C->tau), expr_copy(a) }, 4);
+    Expr* bt = expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+        expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(b), nterm }, 2),
+        expr_copy(pN) }, 2);
+    *b_out = rde_canon(bt); expr_free(bt);
+    Expr* ct = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_copy(c),
+        expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(p), expr_new_integer(N - n) }, 2) }, 2);
+    *c_out = rde_canon(ct); expr_free(ct);
+    *hs_out = rt_eval1("Expand", expr_new_function(expr_new_symbol("Power"),
+        (Expr*[]){ expr_copy(p), expr_new_integer(-n) }, 2));
+    expr_free(pN); expr_free(p);
+}
+
+/* RdeBoundDegreeNonLinear (Bronstein §6.3, p.200) for delta(tau) = 2,
+ * lambda = lc(Dtau) = eta: a nonzero q of degree n gives a Dq of degree
+ * da + n + 1 with leading coefficient n eta lc(a) lc(q), so deg(a Dq + b q) =
+ * max(db, da + 1) + n unless db = da + 1 and n = -lc(b)/(eta lc(a)). */
+static long rde_bound_degree_tan(Expr* a, Expr* b, Expr* c, RdeCtx* C) {
+    long da = rc_deg(a, C), db = rc_deg(b, C), dc = rc_deg(c, C);
+    long mx = db > da + 1 ? db : da + 1;
+    long n = dc - mx; if (n < 0) n = 0;
+    if (db == da + 1) {
+        Expr* lca = rc_lc(a, C);
+        Expr* lcb = rc_lc(b, C);
+        Expr* den = rde_mul(lca, C->T->Dcoef[C->m]);
+        Expr* q = rde_divq(lcb, den);
+        Expr* m = q ? rt_eval1("Together", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(-1), q }, 2)) : NULL;
+        if (m && m->type == EXPR_INTEGER && (long)m->data.integer > n) n = (long)m->data.integer;
+        if (m && m->type == EXPR_BIGINT) rde_cert_mark("RdeBoundDegreeTan: bound out of range");
+        if (m) expr_free(m);
+        expr_free(lca); expr_free(lcb); expr_free(den);
+    }
+    return n;
+}
+
+/* c - D p - b p, canonical */
+static Expr* rc_rde_residual(Expr* c, Expr* p, Expr* b, RdeCtx* C) {
+    Expr* dp = rc_D(p, C);
+    Expr* bp = rde_mul(b, p);
+    Expr* t1 = rde_sub(c, dp);
+    Expr* t2 = rde_sub(t1, bp);
+    Expr* r = rde_canon(t2);
+    expr_free(dp); expr_free(bp); expr_free(t1); expr_free(t2);
+    return r;
+}
+/* lc-term coef * tau^m */
+static Expr* rc_term(Expr* coef, long m, RdeCtx* C) {
+    return rt_eval1("Expand", expr_new_function(expr_new_symbol("Times"),
+        (Expr*[]){ coef, rc_tau_pow(m, C) }, 2));        /* adopts coef */
+}
+static Expr* rde_cancel_tan(Expr* b0, Expr* c, RdeCtx* C, long n);
+
+/* PolyRischDENoCancel2 (Bronstein §6.5, p.208), delta = 2, b in k*: a q of
+ * degree d >= 1 gives D q + b q of degree d + 1 with leading coefficient
+ * d eta lc(q), so every coefficient down to degree 1 is forced; the degree-0
+ * remainder is the Risch DE D z + b z = c over k (recursion).  Each step is
+ * forced, so a failure is a proof (the lower-field recursion marks its own
+ * uncertainty). */
+static Expr* rde_nocancel2_tan(Expr* b, Expr* c, RdeCtx* C, long n) {
+    Expr* eta = C->T->Dcoef[C->m];
+    Expr* q = expr_new_integer(0);
+    Expr* cc = expr_copy(c);
+    bool fail = false;
+    while (!rt_is_zero(cc)) {
+        long dc = rc_deg(cc, C);
+        if (dc == 1 || n < 0) { fail = true; break; }
+        if (dc == 0) {
+            RdeCtx Clo = { C->T, C->m - 1, C->x, (C->m - 1 >= 0) ? C->T->t[C->m - 1] : C->x };
+            Expr* z = rde_tower(b, cc, &Clo);
+            if (!z) { fail = true; break; }
+            Expr* nq = rde_add(q, z); expr_free(q); expr_free(z); q = nq;
+            break;
+        }
+        long m = dc - 1;
+        if (m > n) { fail = true; break; }
+        Expr* lcc = rc_lc(cc, C);
+        Expr* me = rt_eval1("Together", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(m), expr_copy(eta) }, 2));
+        Expr* co = rde_divq(lcc, me);
+        expr_free(lcc); expr_free(me);
+        Expr* p = rc_term(co, m, C);
+        Expr* nq = rde_add(q, p); expr_free(q); q = nq;
+        Expr* r = rc_rde_residual(cc, p, b, C);
+        expr_free(cc); expr_free(p); cc = r;
+        n = m - 1;
+    }
+    expr_free(cc);
+    if (fail) { expr_free(q); return NULL; }
+    return q;
+}
+
+/* PolyRischDENoCancel3 (Bronstein §6.5, p.209), delta = 2, deg b = 1: the
+ * degree-(m+1) coefficient of D q + b q for q of degree m is
+ * (m eta + lc(b)) lc(q), forced unless u = m eta + lc(b) = 0, i.e. at the one
+ * resonant degree M = -lc(b)/eta; there the remainder is the cancellation
+ * equation D h + (b0 - M eta tau) h = c, deg h <= M (PolyRischDECancelTan). */
+static Expr* rde_nocancel3_tan(Expr* b, Expr* c, RdeCtx* C, long n) {
+    Expr* eta = C->T->Dcoef[C->m];
+    Expr* b1 = rc_coeff(b, 1, C);
+    long M = -1;
+    {
+        Expr* r = rde_divq(b1, eta);
+        Expr* mr = r ? rt_eval1("Together", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(-1), r }, 2)) : NULL;
+        if (mr && mr->type == EXPR_INTEGER && mr->data.integer >= 0) M = (long)mr->data.integer;
+        if (mr && mr->type == EXPR_BIGINT) rde_cert_mark("PolyRischDENoCancel3: resonance out of range");
+        if (mr) expr_free(mr);
+    }
+    Expr* q = expr_new_integer(0);
+    Expr* cc = expr_copy(c);
+    bool fail = false;
+    while (!rt_is_zero(cc)) {
+        /* a resonance above the bound cannot occur; below the top of c every
+         * degree above M is forced to vanish, so the solution starts at M */
+        long m = rc_deg(cc, C) - 1;
+        if (M >= 0 && M <= n && M > m) m = M;
+        if (n < 0 || m < 0 || m > n) { fail = true; break; }
+        if (m == M) {
+            Expr* b0 = rc_coeff(b, 0, C);
+            Expr* h = rde_cancel_tan(b0, cc, C, m);
+            expr_free(b0);
+            if (!h) { fail = true; break; }
+            Expr* nq = rde_add(q, h); expr_free(q); expr_free(h); q = nq;
+            expr_free(cc); cc = expr_new_integer(0);
+            break;
+        }
+        Expr* u = rt_eval1("Together", expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(m), expr_copy(eta) }, 2), expr_copy(b1) }, 2));
+        Expr* cm = rc_coeff(cc, m + 1, C);
+        Expr* co = rde_divq(cm, u);
+        expr_free(cm); expr_free(u);
+        Expr* p = rc_term(co, m, C);
+        Expr* nq = rde_add(q, p); expr_free(q); q = nq;
+        Expr* r = rc_rde_residual(cc, p, b, C);
+        expr_free(cc); expr_free(p); cc = r;
+        n = m - 1;
+    }
+    expr_free(cc); expr_free(b1);
+    if (fail) { expr_free(q); return NULL; }
+    return q;
+}
+
+/* PolyRischDECancelTan (Bronstein §6.6, p.215): D q + (b0 - n eta tau) q = c,
+ * deg q <= n, b0 in k.  At tau = i the equation is the Risch DE
+ * D s + (b0 - n eta i) s = c(i) over k(i) for s = q(i) (Bronstein's
+ * CoupledDESystem, by the trivial route of risch_coupled.h); then
+ * q0 = Im(s) tau + Re(s) agrees with q mod p, p divides c - D q0 - b q0, and
+ * q = q0 + p h with D h + (b0 - (n - 2) eta tau) h = (c - D q0 - b q0)/p. */
+static Expr* rde_cancel_tan(Expr* b0, Expr* c, RdeCtx* C, long n) {
+    if (rt_is_zero(c)) return expr_new_integer(0);
+    if (n < 0) return NULL;
+    RdeCtx Clo = { C->T, C->m - 1, C->x, (C->m - 1 >= 0) ? C->T->t[C->m - 1] : C->x };
+    if (n == 0) {
+        if (rc_deg(c, C) > 0) return NULL;
+        return rde_tower(b0, c, &Clo);
+    }
+    Expr* eta = C->T->Dcoef[C->m];
+    Expr* bi = rt_eval1("Together", expr_new_function(expr_new_symbol("Plus"),
+        (Expr*[]){ expr_copy(b0), expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(-n), expr_copy(eta), expr_new_symbol("I") }, 3) }, 2));
+    Expr* ci = rc_at_i(c, C);
+    Expr* s = (bi && ci) ? rde_tower(bi, ci, &Clo) : NULL;
+    /* s is unique unless the homogeneous equation has a solution in k(i)* */
+    int hom = -1;
+    if (bi) {
+        Expr* mb = rt_eval1("Together", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(-1), expr_copy(bi) }, 2));
+        long mm = 0; Expr* z = NULL;
+        hom = mb ? rc_param_log_deriv(mb, NULL, C, &mm, &z) : -1;
+        if (z) expr_free(z);
+        if (mb) expr_free(mb);
+    }
+    if (bi) expr_free(bi);
+    if (ci) expr_free(ci);
+    Expr* q = NULL;
+    if (s) {
+        Expr *re, *im;
+        if (rc_re_im(s, &re, &im)) {
+            Expr* imt = rde_mul(im, C->tau);
+            Expr* q0 = rde_add(imt, re);                /* Im(s) tau + Re(s) */
+            expr_free(imt); expr_free(re); expr_free(im);
+            Expr* bt = rt_eval1("Expand", expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ expr_copy(b0), expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(-n), expr_copy(eta), expr_copy(C->tau) }, 3) }, 2));
+            Expr* r = rc_rde_residual(c, q0, bt, C);
+            expr_free(bt);
+            Expr* p = rc_tan_p(C);
+            Expr* rr = rc_rem(r, p, C);
+            if (rr && rt_is_zero(rr)) {
+                Expr* r2 = rc_quot(r, p, C);
+                Expr* h = r2 ? rde_cancel_tan(b0, r2, C, n - 2) : NULL;
+                if (h) {
+                    Expr* ph = rde_mul(p, h);
+                    q = rde_add(q0, ph);
+                    expr_free(ph); expr_free(h);
+                }
+                if (r2) expr_free(r2);
+            } else rde_cert_mark("PolyRischDECancelTan: residual not divisible by tau^2 + 1");
+            if (rr) expr_free(rr);
+            expr_free(p); expr_free(r); expr_free(q0);
+        } else rde_cert_mark("PolyRischDECancelTan: q(i) not split into real parts");
+        expr_free(s);
+    }
+    if (!q && hom != 0)
+        rde_cert_mark("PolyRischDECancelTan: homogeneous solution over k(i) not excluded");
+    return q;
 }
 
 /* RdeBoundDegreeExp (Bronstein §6.3, p.200): upper bound on deg_tau(q) for
@@ -1368,9 +1732,16 @@ static int rc_param_log_deriv(Expr* f, Expr* eta, RdeCtx* C, long* m_out, Expr**
     Expr* df = rde_den(f);
     Expr* de = eta ? rde_den(eta) : expr_new_integer(1);
     Expr* prod = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ df, de }, 2);
-    Expr* fl = rt_eval1("FactorList", prod);
+    /* Over k(i) (f or eta carries I) the irreducibles are those of Q(i)[vars]:
+     * -2 I/(x^2 + 1) = D log((x + I)/(x - I)) is a logarithmic derivative whose
+     * Q-factors x^2 + 1 alone do not span it (review F8). */
+    bool gauss = !rt_free_of_head(f, "Complex") || (eta && !rt_free_of_head(eta, "Complex"));
+    Expr* fl = gauss
+        ? rt_eval2("FactorList", prod, expr_new_function(expr_new_symbol("Rule"),
+              (Expr*[]){ expr_new_symbol("Extension"), expr_new_symbol("I") }, 2))
+        : rt_eval1("FactorList", prod);
     if (!fl || !rt_head_is(fl, "List")) { if (fl) expr_free(fl); expr_free(vars); return -1; }
-    size_t cap = fl->data.function.arg_count + (size_t)(lo + 2) + 1;
+    size_t cap = fl->data.function.arg_count + 3 * (size_t)(lo + 2) + 1;
     Expr** gens = malloc(cap * sizeof(Expr*));
     Expr** base = malloc(cap * sizeof(Expr*));       /* the element whose log-derivative gens[i] is */
     int*   kind = malloc(cap * sizeof(int));          /* 0 eta, 1 factor p, 2 exp monomial */
@@ -1389,6 +1760,25 @@ static int rc_param_log_deriv(Expr* f, Expr* eta, RdeCtx* C, long* m_out, Expr**
         for (long j = 0; j <= lo && !expmono; j++)
             if (C->T->kind[j] == RT_EXP && expr_eq(p, C->T->t[j])) expmono = true;
         if (expmono) continue;                        /* covered by Deta_j below */
+        /* a special factor of a lower tangent monomial (a divisor of t_j^2 + sigma
+         * in t_j alone) has a pole-free log-derivative: covered below */
+        bool tanspecial = false;
+        for (long j = 0; j <= lo && !tanspecial; j++) {
+            if (C->T->kind[j] != RT_TAN) continue;
+            bool only = true;
+            for (size_t k = 0; k < nv && only; k++)
+                if (!expr_eq(vars->data.function.args[k], C->T->t[j])
+                    && !rt_free_of_x(p, vars->data.function.args[k])) only = false;
+            if (!only) continue;
+            Expr* sp = expr_new_function(expr_new_symbol("Plus"), (Expr*[]){
+                expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(C->T->t[j]), expr_new_integer(2) }, 2),
+                expr_new_integer(C->T->tsg[j]) }, 2);
+            Expr* r = rt_eval3("PolynomialRemainder", sp, expr_copy(p), expr_copy(C->T->t[j]));
+            if (r && rt_is_zero(r)) tanspecial = true;
+            if (r) expr_free(r);
+        }
+        if (tanspecial) continue;
         RdeCtx Ck = { C->T, lo, C->x, lo >= 0 ? C->T->t[lo] : C->x };
         Expr* Dp = rc_D(p, &Ck);
         if (!Dp) { rc = -1; break; }
@@ -1401,6 +1791,39 @@ static int rc_param_log_deriv(Expr* f, Expr* eta, RdeCtx* C, long* m_out, Expr**
         if (C->T->kind[j] != RT_EXP) continue;
         gens[ng] = expr_copy(C->T->Dcoef[j]);          /* Dt_j / t_j */
         base[ng] = expr_copy(C->T->t[j]); kind[ng] = 2; ng++;
+    }
+    /* Lower tangent monomials, D t_j = eta_j (t_j^2 + sigma): their special
+     * factors are pole-free in Dz/z, so they enter z without showing in any
+     * denominator.  Over Q (sigma = +1) the factor t_j^2 + 1, D log = 2 eta_j t_j;
+     * over Q(i), or for sigma = -1, the linear t_j - r (r^2 = -sigma),
+     * D log = eta_j (t_j + r). */
+    for (long j = 0; j <= lo && rc == 1; j++) {
+        if (C->T->kind[j] != RT_TAN) continue;
+        Expr* tj = C->T->t[j];
+        Expr* ej = C->T->Dcoef[j];
+        if (C->T->tsg[j] == 1 && !gauss) {
+            gens[ng] = rt_eval1("Expand", expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(2), expr_copy(ej), expr_copy(tj) }, 3));
+            base[ng] = expr_new_function(expr_new_symbol("Plus"), (Expr*[]){
+                expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(tj), expr_new_integer(2) }, 2),
+                expr_new_integer(1) }, 2);
+            kind[ng] = 1; ng++;
+            continue;
+        }
+        for (int sgn = -1; sgn <= 1; sgn += 2) {
+            Expr* r = C->T->tsg[j] == 1
+                ? expr_new_function(expr_new_symbol("Complex"),
+                      (Expr*[]){ expr_new_integer(0), expr_new_integer(sgn) }, 2)
+                : expr_new_integer(sgn);
+            gens[ng] = rt_eval1("Expand", expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_copy(ej), expr_new_function(expr_new_symbol("Plus"),
+                    (Expr*[]){ expr_copy(tj), expr_copy(r) }, 2) }, 2));
+            base[ng] = rt_eval1("Expand", expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ expr_copy(tj), expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(-1), r }, 2) }, 2));      /* adopts r */
+            kind[ng] = 1; ng++;
+        }
     }
     if (rc == 1) {
         bool failed = false;
@@ -1518,12 +1941,14 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
     if (rt_is_zero(g)) return expr_new_integer(0);
     if (C->m < 0) return rde_base(f, g, C->x);
     RtKind kind = C->T->kind[C->m];
-    /* Tangent top: pre-empted — every reachable hypertangent RDE obligation is
-     * discharged by the §5.10 driver's OWN coupled DE system (risch_coupled_desystem,
-     * reachable over towers and verified), so this branch is never the deciding path
-     * for a constructible elementary integrand.  See RISCH_BRONSTEIN_GAPS.md / the
-     * RT_TAN piece-(c) determination.  Kept as an authoritative decline (Gap 3). */
-    if (kind != RT_LOG && kind != RT_EXP) { rde_cert_mark("tower: tangent top"); return NULL; }
+    /* A hypertangent top (D tau = eta (tau^2 + 1)) runs the same stack with the
+     * delta = 2 boxes (review F8).  The hyperbolic sigma = -1 top, whose special
+     * part tau^2 - 1 splits, and a Liouvillian primitive are not yet covered. */
+    bool tan = rc_is_tan_top(C);
+    if (kind != RT_LOG && kind != RT_EXP && !tan) {
+        rde_cert_mark("tower: hyperbolic-tangent or Liouvillian top");
+        return NULL;
+    }
     /* Weak normalization (Bronstein §6.1): RdeNormalDenominator's bound, and so
      * every "no solution" below, assumes f weakly normalized in tau.  With
      * q = WeakNormalizer(f), y solves D y + f y = g iff z = q y solves
@@ -1554,9 +1979,10 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
     /* Special part of the denominator: primitive (RT_LOG) tops have none
      * (h_s = 1); an exponential top clears the tau-power poles (§6.2). */
     Expr* h_s = expr_new_integer(1);
-    if (kind == RT_EXP) {
+    if (kind == RT_EXP || tan) {
         Expr *na, *nb, *nc, *nhs;
-        rde_special_denom_exp(a, b, c, C, &na, &nb, &nc, &nhs);
+        if (tan) rde_special_denom_tan(a, b, c, C, &na, &nb, &nc, &nhs);
+        else rde_special_denom_exp(a, b, c, C, &na, &nb, &nc, &nhs);
         expr_free(a); expr_free(b); expr_free(c); expr_free(h_s);
         a = na; b = nb; c = nc; h_s = nhs;
     }
@@ -1564,7 +1990,8 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
     if (!(rc_ispoly(a, C) && rc_ispoly(b, C) && rc_ispoly(c, C)))
         rde_cert_mark("tower: reduced equation not polynomial");
     if (rc_ispoly(a, C) && rc_ispoly(b, C) && rc_ispoly(c, C)) {
-        long n = (kind == RT_EXP) ? rde_bound_degree_exp(a, b, c, C)
+        long n = tan ? rde_bound_degree_tan(a, b, c, C)
+               : (kind == RT_EXP) ? rde_bound_degree_exp(a, b, c, C)
                                   : rde_bound_degree_prim(a, b, c, C);
         RdeSpde sp;
         if (rde_spde_field(a, b, c, C, n, &sp)) {
@@ -1587,6 +2014,14 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
                     else if (Hc) expr_free(Hc);
                     if (!H) rde_cert_mark("tower: antidifferentiation D H = c");
                 }
+            } else if (tan) {
+                /* delta = 2 (Bronstein §6.5): deg b >= 2 never cancels; deg b = 0
+                 * is NoCancel2, deg b = 1 NoCancel3 (with PolyRischDECancelTan at
+                 * the resonant degree). */
+                long dbt = rc_deg(sp.b, C);
+                H = dbt >= 2 ? rde_polyrischde_nocancel_field(sp.b, sp.c, C, sp.m)
+                  : dbt == 0 ? rde_nocancel2_tan(sp.b, sp.c, C, sp.m)
+                             : rde_nocancel3_tan(sp.b, sp.c, C, sp.m);
             } else if (rc_deg(sp.b, C) >= 1) {
                 /* Non-cancellation (deg_tau(b) >= 1): the leading terms of D[q] and
                  * b q never cancel, for a primitive OR exponential top (delta<=1). */

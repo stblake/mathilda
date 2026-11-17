@@ -2207,21 +2207,29 @@ monotonically down.
         refused and left to the algebraic routes, and the non-elementary
         decision half never runs on the admitted path. `x`-rational
         elementary-part coefficients remain a later increment;
-      - `c w^(p-1) w'/Log[w]` → `c LogIntegral[w^p]` (single-li fast path) —
-        subsumes `K/Log[x] → K LogIntegral[x]`, a scaled/affine argument
-        (`1/Log[2x] → LogIntegral[2x]/2`) and a monomial numerator (`x/Log[x] →
-        LogIntegral[x^2]`);
+      - `c w^(p-1) w'/Log[w]` → `c ExpIntegralEi[p Log[w]]` (single-li fast path;
+        `c LogIntegral[w]` at `p = 1`) — subsumes `K/Log[x] → K LogIntegral[x]`, a
+        scaled/affine argument (`1/Log[2x] → LogIntegral[2x]/2`) and a monomial
+        numerator (`x/Log[x] → ExpIntegralEi[2 Log[x]]`);
       - general single-log tower `gamma` over `C(x, Log[w])` (w a polynomial) →
-        `v(x,Log[w]) + Sum_k d_k LogIntegral[w^k]` (Cherry 1986, MULTI-li via the
+        `v(x,Log[w]) + Sum_k d_k li(w^k)` (Cherry 1986, MULTI-li via the
         degree-1 Sigma-decomposition over the generator `w`, matched in the tower):
-        `Integrate[x^2/Log[x+1],x] = LogIntegral[(1+x)^3] - 2 LogIntegral[(1+x)^2]
-        + LogIntegral[1+x]`, `Integrate[x/Log[x]^2,x] = 2 LogIntegral[x^2] -
+        `Integrate[x^2/Log[x+1],x] = ExpIntegralEi[3 Log[1+x]] - 2 ExpIntegralEi[2 Log[1+x]]
+        + LogIntegral[1+x]`, `Integrate[x/Log[x]^2,x] = 2 ExpIntegralEi[2 Log[x]] -
         x^2/Log[x]`, `Integrate[x^3/Log[x^2-1],x] = LogIntegral[x^2-1]/2 +
-        LogIntegral[(x^2-1)^2]/2`. Includes the **transcendental-constant
+        ExpIntegralEi[2 Log[x^2-1]]/2`. Includes the **transcendental-constant
         rescaling** (a constant root `rho` of the `Log`-denominator →
-        `e^rho LogIntegral[e^(-rho) w]`): `Integrate[1/(Log[x]+3),x] =
-        LogIntegral[E^3 x]/E^3`, `Integrate[(Log[x]^2+3)/(Log[x]^2+3Log[x]+2),x] =
-        x + 4 LogIntegral[E x]/E - 7 LogIntegral[E^2 x]/E^2`. Multi-log towers
+        `e^rho ExpIntegralEi[Log[w] - rho]`): `Integrate[1/(Log[x]+3),x] =
+        ExpIntegralEi[3 + Log[x]]/E^3`, `Integrate[(Log[x]^2+3)/(Log[x]^2+3Log[x]+2),x] =
+        x + 4 ExpIntegralEi[1 + Log[x]]/E - 7 ExpIntegralEi[2 + Log[x]]/E^2`.
+        **Branch form (v0.6601, review 5b):** `li(w^k)` is written `LogIntegral` only
+        when the argument of `Ei` is literally `Log[w]` (`k = 1`, no shift). The former
+        `LogIntegral[w^k]` and `LogIntegral[E^-rho w]` needed `Log[w^k] = k Log[w]`,
+        which fails off the positive axis: `2 LogIntegral[x^2] - x^2/Log[x]` does not
+        differentiate to `x/Log[x]^2` at `x = -7/5`. The `ExpIntegralEi` form has the
+        same derivative everywhere. A kernel argument `g = Exp[D]`
+        (`E^x (1 + x)/(x + Log[x])`) gives `ExpIntegralEi[x + Log[x]]`, not
+        `LogIntegral[x E^x]`. Multi-log towers
         (reducible `w` needing a product decomposition) decline. The tower
         Sigma-decomposition is **Laurent**: a negative-degree (Laurent-polynomial)
         numerator over `Log[w]` admits negative li powers `w^k`, emitted as
@@ -5101,6 +5109,17 @@ the decision exponentializes with `TrigToExp` (and re-exposes any collapsed
 So the classic trig special-function integrals now decide `False`: `∫Sin(x)/x`
 (SinIntegral), `∫Sin(x²)` (FresnelS), `∫Cos(eˣ)` (CosIntegral), `∫Cos(x·Log x)`.
 
+**The real tangent route (v0.6601, review F8).** A real integrand rational in one
+`Tan[u]` and the exp/log kernels (`Sec`, `Cos`, … of `u` through
+`Sec[u]^2 = 1 + Tan[u]^2`) is decided first over the hypertangent tower itself,
+where the Risch DE runs Bronstein's `δ = 2` boxes (see `Risch`RischDECertified`).
+`TrigToExp` would turn `E^Tan[u]` into the exponential of a rational function of
+`E^(I u)`, which no tower holds. The route needs exactly one hypertangent level
+and no Liouvillian primitive, because two tangents can be dependent; otherwise,
+or when it is undecided, the exponential route runs. `∫E^Tan[u]`, `∫E^Tan[u] Tan[u]`
+and `∫E^Tan[u]/u` decide `False`. `∫E^Tan[u] Sec[u]^2 = E^Tan[u]` and
+`∫D[Cos[u]^2 E^Tan[u]] = E^Tan[u]/(1 + Tan[u]^2)` decide `True`.
+
 **Scope guard — algebraic functions of x.** An integrand carrying a radical of
 `x` (a non-integer rational power of an x-dependent base — `Cos[√x]`, `E^√x`,
 `Sin[x^(1/3)]`, `√(Sin x)`), or a `Surd`/`Root` of `x`, is **out of scope** for
@@ -5282,7 +5301,7 @@ apart:
 
 - `y` is a solution, the same one `Risch`RischDE` finds.
 - `"NoSolution"` means no solution exists in `C(x)`, or in the tower of the
-  `Log`/`Exp` kernels of `f` and `g`. It is returned only when every decision on
+  `Log`/`Exp`/`Tan` kernels of `f` and `g`. It is returned only when every decision on
   the path was a theorem of Bronstein, *Symbolic Integration I*, Ch. 6.
 - `$Failed` means undecided. `Risch`RischDECertifiedReason[]` names the first
   undecided path.
@@ -5304,9 +5323,39 @@ Decided since v0.6546 (completion campaign, Phase 2; derivations in
 - the **log-derivative branch of `PolyRischDECancel`**: `q = w ∫ c/w` with
   `w = z θ^m`; when that branch is ruled out, a failed top-down pass is a proof.
 
+Decided since v0.6601 (review F8): **a hypertangent top** `t = Tan[u]`,
+`Dt = u' (t^2 + 1)`, with Bronstein's `δ = 2` boxes:
+- the special part `t^2 + 1` is stripped from the normal denominator, and
+  `RdeSpecialDenomTan` (§6.2) bounds its order. When `b` is a unit at
+  `t^2 + 1`, the resonance `-b(i)/a(i) = m (2 u' i) + Dv/v` is decided by the
+  parametric logarithmic derivative over `k(i)`, since `Dt` vanishes at `t = i`;
+- `RdeBoundDegreeNonLinear` (§6.3): `deg q <= max(0, deg c - max(deg b, deg a + 1))`,
+  raised to `-lc(b)/(u' lc(a))` when that is an integer and `deg b = deg a + 1`;
+- `PolyRischDENoCancel1/2/3` (§6.5) for `deg b >= 2`, `= 0` and `= 1`. At the one
+  resonant degree of NoCancel3 the cancellation equation `PolyRischDECancelTan`
+  (§6.6) is solved through `k(i)`: `s = q(i)` solves a Risch DE over `k(i)`, and
+  `q = Im(s) t + Re(s) + (t^2 + 1) h`, with `h` given by the same equation two
+  degrees lower.
+
+`Risch`RischDECertified[1 + Tan[x]^2, 1 + Tan[x]^2, x]` is `1`, and
+`Risch`ElementaryIntegralQ[E^Tan[x], x]` is `False`.
+
+The parametric logarithmic derivative also gained two generator families, each
+closing a false `"NoSolution"`:
+- over `k(i)`, the irreducibles are factored over `Q(i)`. `-2 I/(1 + x^2)` is
+  `D log((x + I)/(x - I))`, which the `Q`-factor `x^2 + 1` does not span. Up to
+  v0.6599, `Risch`RischDECertified[2 I/(1 + x^2), g, x]` answered
+  `"NoSolution"` for `g = D[y] + 2 I y/(1 + x^2)`, `y = (x - I)/(x + I) Log[x]^2 + Log[x]`;
+- a lower tangent's special factor `t_j^2 + 1` has the pole-free logarithmic
+  derivative `2 u_j' t_j`, so it can divide `z` without showing in a denominator.
+
 Still undecided, and so `$Failed`:
 - inputs that are not rational in `x` and the kernels;
-- a tangent top;
+- a hyperbolic-tangent top (`Tanh`, special part `t^2 - 1`), and a tower of more
+  than one tangent (two tangents can be dependent: `Tan[2 x]` is rational in
+  `Tan[x]`);
+- the `PolyRischDECancelTan` case where the homogeneous equation over `k(i)` has
+  a solution;
 - a tower whose `Log`/`Exp` monomials are algebraically dependent in a way
   the tower cannot rewrite ("tower: dependent monomials"). Since v0.6599 a
   composite exponential such as `E^(x + x^2)` beside `E^x` and `E^(x^2)` is

@@ -113,7 +113,7 @@ static void test_direct_surface(void) {
         "With[{r = Integrate`Cherry`Ei[E^(1/x), x]}, !FreeQ[r, ExpIntegralEi]]", "True"),
         "Integrate`Cherry`Ei direct surface should fire");
     ASSERT_MSG(eval_is(
-        "With[{r = Integrate`Cherry`Li[x/Log[x]^2, x]}, !FreeQ[r, LogIntegral]]", "True"),
+        "With[{r = Integrate`Cherry`Li[x/Log[x]^2, x]}, !FreeQ[r, ExpIntegralEi[2 Log[x]]]]", "True"),
         "Integrate`Cherry`Li direct surface should fire");
 }
 

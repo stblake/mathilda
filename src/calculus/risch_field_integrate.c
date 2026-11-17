@@ -1915,7 +1915,8 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
      * rde_tower, so on success it is authoritative; on NULL we fall through to the
      * ansatz (non-regressing) for the residual cases rde_tower does not yet cover
      * (the b=Dz/z limited-integration branch, tangent tops). */
-    if (L >= 1 && (T->kind[L - 1] == RT_LOG || T->kind[L - 1] == RT_EXP)) {
+    if (L >= 1 && (T->kind[L - 1] == RT_LOG || T->kind[L - 1] == RT_EXP
+                   || (T->kind[L - 1] == RT_TAN && T->tsg[L - 1] == 1))) {
         Expr* fco = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
             (Expr*[]){ expr_new_integer(i), expr_copy(T->Dcoef[L]) }, 2));
         RdeCtx C = { T, L - 1, x, T->t[L - 1] };
@@ -1938,8 +1939,10 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
         return NULL;
     }
 
-    /* The lower field's top monomial is a hypertangent (RT_TAN) or otherwise
-     * outside the recursive RDE's current scope (Gap 3): the field Risch DE was
+    /* The lower field's top monomial is a hyperbolic tangent (RT_TAN with
+     * sigma = -1) or a Liouvillian primitive, outside the recursive RDE's current
+     * scope (Gap 3; the hypertangent sigma = +1 top runs rde_tower since review
+     * F8, v0.6601): the field Risch DE was
      * NOT solved here at all.  This is a SCOPE decline, NOT a theorem — so return
      * NULL WITHOUT raising the non-elementary certificate, leaving
      * ElementaryIntegralQ `undec` rather than a false `False`.  Previously an
@@ -1948,7 +1951,7 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
      * See RISCH_AUDIT_A4.md Finding 2.  Marked, so the completeness gate counts
      * it (review F8/F13: the missing piece is Bronstein §6.2's special
      * denominator for a hypertangent t, and the §6.3 bound for delta(t) = 2). */
-    rde_cert_mark("RDE: lower field outside the recursive RDE (hypertangent)");
+    rde_cert_mark("RDE: lower field outside the recursive RDE (hyperbolic tangent)");
     return NULL;
 }
 
@@ -2188,6 +2191,12 @@ Expr* rde_solve_tower_ext(Expr* f, Expr* g, Expr* x, Expr* extra) {
         rt_tower_free(&T); expr_free(fgx); return NULL;
     }
     if (T.dependent) rde_cert_mark("tower: dependent monomials");
+    {   /* two tangent monomials can be dependent (Tan[2 x] is rational in Tan[x]),
+         * which the tower does not detect: no certificate over such a tower */
+        size_t ntan = 0;
+        for (size_t i = 0; i < T.n; i++) if (T.kind[i] == RT_TAN) ntan++;
+        if (ntan > 1) rde_cert_mark("tower: more than one tangent");
+    }
     expr_free(fgx);
     Expr* fx = rt_expand_exp_sums(f);
     Expr* gx = rt_expand_exp_sums(g);

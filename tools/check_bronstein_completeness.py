@@ -102,7 +102,7 @@ BASELINE_C = {
     "tower: antidifferentiation D H = c",
     "tower: identity gate",
     "tower: reduced equation not polynomial",
-    "tower: tangent top",
+    "tower: hyperbolic-tangent or Liouvillian top",
     # a theta^(>=1) coefficient whose integral carries an ArcTan over a tower
     # with a complex logarithm, and the derivative fold (ArcTan' = sum c_j t_j')
     # did not absorb it: the dilogarithm obstruction (Thm 5.6.1(ii)) is proved
@@ -120,15 +120,28 @@ BASELINE_C = {
     "LimitedIntegrate: lower integral undecided",
     # - an integral of the coefficient outside K + C t (degree >= 2 in t_L).
     "LimitedIntegrate: coefficient integral outside K + C t",
-    # Phase 2b F8/F13 (v0.6599): the field Risch DE over a hypertangent lower
-    # field (E^Tan[u] Sec[u]^2) was a silent scope decline; needs Bronstein
-    # 6.2's special denominator for t^2 + 1 and the 6.3 bound for delta = 2.
-    "RDE: lower field outside the recursive RDE (hypertangent)",
+    # Phase 2b F8/F13 (v0.6599): the field Risch DE over a lower field whose top
+    # is a hyperbolic tangent (sigma = -1, special part t^2 - 1 splits) is a
+    # scope decline; the hypertangent top runs rde_tower since v0.6601.
+    "RDE: lower field outside the recursive RDE (hyperbolic tangent)",
     # Phase 2b F9 (v0.6599): over algebraic constants the base RDE's polynomial
     # solve / SPDE zero tests are only as good as the normaliser; a failure there
     # is not a proof (a released false certificate: q' + (2 + Sqrt[2]) q = p).
     "base: polynomial solve over algebraic constants",
     "base: SPDE over algebraic constants",
+    # Phase 2b F8 (v0.6601): the hypertangent top.  a(i) = 0 cannot occur after
+    # the normal denominator (a is special-free) and a residual not divisible by
+    # t^2 + 1 is a normaliser failure; both are defensive.  CancelTan's q(i) must
+    # split into real parts in k, and its k(i) Risch DE is unique only when the
+    # homogeneous equation has no solution there (Bronstein 6.6: the full
+    # CoupledDECancelTan recursion would decide that case).
+    "RdeSpecialDenomTan: a(i) = 0",
+    "PolyRischDECancelTan: residual not divisible by tau^2 + 1",
+    "PolyRischDECancelTan: q(i) not split into real parts",
+    "PolyRischDECancelTan: homogeneous solution over k(i) not excluded",
+    # a tower of several tangents needs the tangent structure theorem to prove
+    # the monomials independent (Tan[2 x] = 2 Tan[x]/(1 - Tan[x]^2))
+    "tower: more than one tangent",
 }
 
 # rde_cert_mark reasons that are permanent: a computation the CAS could not do,
@@ -143,6 +156,9 @@ CAS_FAILURE_MARKS = {
     "RdeBoundDegreePrim: log-derivative undecided",
     "RdeBoundDegreePrim: limited integration out of range",
     "PolyRischDECancel: log-derivative test undecided",
+    "RdeSpecialDenomTan: parametric log-derivative undecided",
+    "RdeBoundDegreeTan: bound out of range",
+    "PolyRischDENoCancel3: resonance out of range",
     "SPDE: extended gcd unavailable",
     "SPDE(field): extended gcd unavailable",
     "tower: could not be built",

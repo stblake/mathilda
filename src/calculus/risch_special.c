@@ -213,10 +213,15 @@ static Expr* rt_try_li(Expr* f, Expr* x) {
                     (Expr*[]){ denom, expr_new_integer(-1) }, 2) }, 3);
         Expr* cand = rt_eval1("Together", frac);
         if (cand && rt_free_of_x(cand, x) && !rt_is_zero(cand)) {
-            Expr* wp = expr_new_function(expr_new_symbol("Power"),
-                (Expr*[]){ expr_copy(w), expr_new_integer(p) }, 2);
-            Expr* li = expr_new_function(expr_new_symbol("LogIntegral"),
-                (Expr*[]){ wp }, 1);
+            /* p = 1: LogIntegral[w] = ExpIntegralEi[Log[w]].  p >= 2:
+             * ExpIntegralEi[p Log[w]], NOT LogIntegral[w^p], which needs
+             * Log[w^p] = p Log[w] and is wrong for x < 0 when w = x (review 5b,
+             * v0.6601: x/Log[x]^2 -> 2 LogIntegral[x^2] - x^2/Log[x]). */
+            Expr* li = p == 1
+                ? expr_new_function(expr_new_symbol("LogIntegral"), (Expr*[]){ expr_copy(w) }, 1)
+                : expr_new_function(expr_new_symbol("ExpIntegralEi"), (Expr*[]){
+                      expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(p),
+                          expr_new_function(expr_new_symbol("Log"), (Expr*[]){ expr_copy(w) }, 1) }, 2) }, 1);
             result = rt_eval_own(expr_new_function(expr_new_symbol("Times"),
                 (Expr*[]){ expr_copy(cand), li }, 2));
         }
@@ -288,8 +293,13 @@ static Expr* rt_try_li_kernel(Expr* f, Expr* x) {
                     (Expr*[]){ expr_copy(gp), expr_new_integer(-1) }, 2) }, 3);
         Expr* cand = rt_eval1("Together", frac);
         if (cand && rt_free_of_x(cand, x) && !rt_is_zero(cand)) {
-            Expr* li = expr_new_function(expr_new_symbol("LogIntegral"),
-                (Expr*[]){ expr_copy(g) }, 1);
+            /* LogIntegral[g] only when D is literally Log[g]; otherwise
+             * ExpIntegralEi[D], exact everywhere (Log[x E^x] is not x + Log[x]
+             * off the positive axis; review 5b, v0.6601) */
+            bool literal = rt_head_is(D, "Log") && D->data.function.arg_count == 1;
+            Expr* li = literal
+                ? expr_new_function(expr_new_symbol("LogIntegral"), (Expr*[]){ expr_copy(g) }, 1)
+                : expr_new_function(expr_new_symbol("ExpIntegralEi"), (Expr*[]){ expr_copy(D) }, 1);
             Expr* Q = rt_eval_own(expr_new_function(expr_new_symbol("Times"),
                 (Expr*[]){ expr_copy(cand), li }, 2));
             /* PowerExpand diff-back: Log[g] = D convention (branch-cut safety). */

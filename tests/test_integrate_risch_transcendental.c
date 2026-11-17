@@ -798,9 +798,9 @@ static void test_special_functions(void) {
     assert_rm_num("Exp[-x]/(x + 1)");
     assert_rm_num("1/Log[x]");
     assert_rm_num("3/Log[x]");
-    /* Widened li recognizer (c w^(p-1) w'/Log[w] -> c LogIntegral[w^p]): a
+    /* Widened li recognizer (c w^(p-1) w'/Log[w] -> c ExpIntegralEi[p Log[w]], LogIntegral[w] at p = 1): a
      * scaled/affine log argument (1/Log[2x] -> LogIntegral[2x]/2, p=1) and a
-     * monomial numerator (x/Log[x] -> LogIntegral[x^2], p=2). */
+     * monomial numerator (x/Log[x] -> ExpIntegralEi[2 Log[x]], p=2). */
     assert_rm_num("1/Log[2 x]");
     assert_rm_num("1/Log[3 x + 1]");
     assert_rm_num("x/Log[x]");
@@ -1533,6 +1533,65 @@ static void test_review_f12_composite(void) {
                    " FreeQ[r, False] && Count[r, True] >= 30]", "True", 0);
 }
 
+/* Review F8: the Risch DE over a hypertangent field (Bronstein §6.2-§6.6,
+ * delta = 2).  E^Tan[u] Sec[u]^2 reached the Gap-3 decline; the tower's Dcoef of
+ * E^Tan[u] also carried a pattern Tan[u_] (a Rule right-hand side naming the
+ * pattern, not its variable).  The decision now runs the real tangent tower. */
+static void test_review_f8_tan(void) {
+    /* the review's example, and antiderivatives that need each box: the
+       special denominator (Cos^2 = 1/(1 + t^2)), NoCancel1 (deg b = 2), a lower
+       primitive (Log[u]), an exponent u Tan[u] */
+    const char* elem[] = {
+        "E^Tan[u] Sec[u]^2",
+        "D[u E^Tan[u], u]",
+        "D[Tan[u] E^Tan[u], u]",
+        "D[E^Tan[u]/(1 + Tan[u]), u]",
+        "D[E^Tan[u]/Tan[u], u]",
+        "D[Cos[u]^2 E^Tan[u], u]",
+        "D[Sin[u] Cos[u] E^Tan[u], u]",
+        "D[E^(u Tan[u]), u]",
+        "D[Log[u] E^Tan[u], u]",
+        "D[E^(Tan[u]^2) Tan[u], u]",
+        "D[Cos[u]^4 E^Tan[u] u, u]" };
+    for (size_t i = 0; i < sizeof elem / sizeof elem[0]; i++) {
+        char buf[400];
+        snprintf(buf, sizeof buf, "With[{f = %s}, {PossibleZeroQ[D[Integrate`RischTranscendental[f, u], u] - f],"
+                 " Quiet[Risch`ElementaryIntegralQ[f, u]]}]", elem[i]);
+        assert_eval_eq(buf, "{True, True}", 0);
+    }
+    /* non-elementary: the RDE Dq + (1 + t^2) q = c has no solution in Q(u)(t) */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^Tan[u], u]]", "False", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^Tan[u] Tan[u], u]]", "False", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^Tan[u]/u, u]]", "False", 0);
+    /* the tower Dcoef is rational in the tower variables (no Tan[u_]) */
+    assert_eval_eq("FreeQ[Quiet[Integrate`RischTranscendental[E^Tan[u] Sec[u]^2, u]], Pattern]", "True", 0);
+    /* two tangents may be dependent (Tan[2 u] is rational in Tan[u]): never
+       certified through the tangent route */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^Tan[u] Sec[u]^2 + Tan[2 u] - 2 Tan[u]/(1 - Tan[u]^2), u]] =!= False", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^Tan[u] Tan[2 u] (1 - Tan[u]^2) - 2 E^Tan[u] Tan[u], u]] =!= False", "True", 0);
+    /* the certified RDE over the tangent tower, and its scope */
+    assert_eval_eq("Risch`RischDECertified[1 + Tan[x]^2, 1 + Tan[x]^2, x]", "1", 0);
+    assert_eval_eq("Risch`RischDECertified[1 + Tan[x]^2, 1, x]", "\"NoSolution\"", 0);
+    assert_eval_eq("Risch`RischDECertified[1 + Tan[x]^2, Cos[x]^2, x]", "\"NoSolution\"", 0);
+    assert_eval_eq("Risch`RischDECertified[1, Tan[x] + Tan[2 x], x]", "$Failed", 0);
+    assert_eval_eq("Risch`RischDECertifiedReason[]", "\"tower: more than one tangent\"", 0);
+    /* property: no false certificate over tangent towers (seeded, 20; the
+       session hunt ran 300 at 0 false certificates) */
+    assert_eval_eq("SeedRandom[804]; tk = {Tan[u], Tan[u^2], Tan[u + 1]};"
+                   " r = Table[Module[{T = RandomChoice[tk], ks}, ks = {E^T, E^(u T), Log[1 + T^2], Log[u], 1, T, 1/(1 + T)};"
+                   " With[{F = RandomChoice[{-1, 1, 2}] u^RandomInteger[{0, 1}] RandomChoice[ks] RandomChoice[ks]/RandomChoice[{1, u, 1 + T, 1 + T^2}]},"
+                   " TimeConstrained[Quiet[Risch`ElementaryIntegralQ[D[F, u], u]], 30, $TO]]], {20}];"
+                   " FreeQ[r, False] && Count[r, True] >= 16", "True", 0);
+    /* Gaussian log-derivatives (rc_param_log_deriv over k(i)): over Q(x)(Log[x]),
+       b = 2 I/(1 + x^2) = -D log((x - I)/(x + I)); the solution needs that
+       generator, which the Q-factor x^2 + 1 does not span */
+    assert_eval_eq("With[{b = 2 I/(1 + x^2), y = (x - I)/(x + I) Log[x]^2 + Log[x]},"
+                   " With[{r = Risch`RischDECertified[b, Together[D[y, x] + b y], x]},"
+                   " PossibleZeroQ[D[r, x] + b r - (D[y, x] + b y)]]]", "True", 0);
+    assert_eval_eq("With[{b = 2 I/(1 + x^2)}, Risch`RischDECertified[b, Together[2 (x - I)/(x + I) Log[x]/x], x]]"
+                   " =!= \"NoSolution\"", "True", 0);
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -1639,6 +1698,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_review_f7_rootsum);
     TEST(test_review_f6_f9);
     TEST(test_review_f12_composite);
+    TEST(test_review_f8_tan);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }

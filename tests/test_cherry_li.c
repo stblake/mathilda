@@ -43,8 +43,9 @@ static void assert_li(const char* f) {
     char buf[1500];
     snprintf(buf, sizeof(buf),
         "With[{r = Integrate[%s, x, Method -> \"RischTranscendental\"]},"
-        " Head[r] =!= Integrate && !FreeQ[r, LogIntegral]]", f);
-    ASSERT_MSG(eval_is(buf, "True"), "%s: expected a closed LogIntegral form", f);
+        " Head[r] =!= Integrate && !FreeQ[r, LogIntegral | ExpIntegralEi]]", f);
+    /* li(w^k) is written ExpIntegralEi[k Log[w]] for k != 1 (review 5b) */
+    ASSERT_MSG(eval_is(buf, "True"), "%s: expected a closed LogIntegral/ExpIntegralEi form", f);
     snprintf(buf, sizeof(buf),
         "Simplify[PowerExpand[D[Integrate[%s, x, Method -> \"RischTranscendental\"], x]"
         " - (%s)]]", f, f);
@@ -83,15 +84,37 @@ static void assert_declines(const char* f) {
 
 /* Cherry 1986 paper pins. */
 static void test_cherry_1986_li(void) {
-    /* Ex 1.1 / d1: INT x/Log[x]^2 dx = 2 li(x^2) - x^2/Log[x]. */
+    /* Ex 1.1 / d1: INT x/Log[x]^2 dx = 2 li(x^2) - x^2/Log[x] on x > 0, written
+     * 2 ExpIntegralEi[2 Log[x]] - x^2/Log[x], which holds everywhere
+     * (LogIntegral[x^2] needs Log[x^2] = 2 Log[x]; review 5b, v0.6601). */
     assert_li("x/Log[x]^2");
     ASSERT_MSG(eval_is(
-        "Simplify[PowerExpand[Integrate[x/Log[x]^2, x, Method -> \"RischTranscendental\"]"
-        " - (2 LogIntegral[x^2] - x^2/Log[x])]]", "0"), "d1 exact form");
+        "Integrate[x/Log[x]^2, x, Method -> \"RischTranscendental\"]"
+        " - (2 ExpIntegralEi[2 Log[x]] - x^2/Log[x])", "0"), "d1 exact form");
     /* d3: INT x^2/Log[x+1] dx = li((x+1)^3) - 2 li((x+1)^2) + li(x+1). */
     assert_li("x^2/Log[x+1]");
     /* Ex 5.1: INT x^3/Log[x^2-1] dx = (1/2) li(x^2-1) + (1/2) li((x^2-1)^2). */
     assert_li("x^3/Log[x^2-1]");
+}
+
+/* Review 5b: every li answer holds off the positive axis too.  The derivative
+ * is compared with the integrand at x = -7/5 and x = -1/2 + 2 I, where
+ * Log[x^k] != k Log[x] and Log[c x] != Log[c] + Log[x] can fail. */
+static void test_cherry_li_branch(void) {
+    const char* fs[] = { "x/Log[x]^2", "x/Log[x]", "x^2/Log[x]", "1/(Log[x]+3)",
+        "(Log[x]^2+3)/(Log[x]^2+3 Log[x]+2)", "x^3/Log[x^2]", "1/(Log[x]-1)",
+        "x^2/Log[x+1]", "E^x (1 + x)/(x + Log[x])" };
+    for (size_t i = 0; i < sizeof fs / sizeof fs[0]; i++) {
+        char buf[600];
+        snprintf(buf, sizeof buf,
+            "With[{f = %s}, With[{F = Integrate[f, x]}, Head[F] =!= Integrate &&"
+            " And @@ Table[PossibleZeroQ[(D[F, x] - f) /. x -> p], {p, {-7/5, -1/2 + 2 I}}]]]", fs[i]);
+        ASSERT_MSG(eval_is(buf, "True"), "%s: valid off the positive axis", fs[i]);
+        snprintf(buf, sizeof buf,
+            "With[{f = %s}, With[{F = Integrate[f, x, Method -> \"RischTranscendental\"]},"
+            " Head[F] === Integrate || And @@ Table[PossibleZeroQ[(D[F, x] - f) /. x -> p], {p, {-7/5, -1/2 + 2 I}}]]]", fs[i]);
+        ASSERT_MSG(eval_is(buf, "True"), "%s: RischTranscendental valid off the positive axis", fs[i]);
+    }
 }
 
 /* Broader single-log multi-li coverage. */
@@ -112,11 +135,12 @@ static void test_cherry_li_stress(void) {
 /* Transcendental-constant rescaling: a constant root rho of the theta-denominator
  * gives a rescaled li(e^(-rho) w) term (Log[w] - rho = Log[e^(-rho) w]). */
 static void test_cherry_li_rescale(void) {
-    /* d2: INT 1/(Log[x]+3) dx = e^-3 li(e^3 x). */
+    /* d2: INT 1/(Log[x]+3) dx = e^-3 li(e^3 x) on x > 0, written
+     * e^-3 ExpIntegralEi[Log[x] + 3], which holds everywhere (review 5b). */
     assert_li("1/(Log[x]+3)");
     ASSERT_MSG(eval_is(
-        "Simplify[PowerExpand[Integrate[1/(Log[x]+3), x, Method -> \"RischTranscendental\"]"
-        " - LogIntegral[E^3 x]/E^3]]", "0"), "d2 exact form");
+        "Simplify[Integrate[1/(Log[x]+3), x, Method -> \"RischTranscendental\"]"
+        " - ExpIntegralEi[3 + Log[x]]/E^3]", "0"), "d2 exact form");
     /* d4: INT (Log[x]^2+3)/(Log[x]^2+3 Log[x]+2) dx
      *       = x + 4 e^-1 li(e x) - 7 e^-2 li(e^2 x). */
     assert_li("(Log[x]^2+3)/(Log[x]^2+3 Log[x]+2)");
@@ -163,6 +187,7 @@ int main(void) {
     TEST(test_cherry_1986_li);
     TEST(test_cherry_li_stress);
     TEST(test_cherry_li_rescale);
+    TEST(test_cherry_li_branch);
     TEST(test_cherry_li_laurent);
     TEST(test_cherry_li_declines);
     TEST(test_cherry_li_kernel);
