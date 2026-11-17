@@ -23,6 +23,10 @@ the user typed.
   (machine precision, MPFR's exponent range) -- what `Exp[1000.]` returns. It
   used to be a raw `inf.0` that survived `Hold`, a `0.`, or a subnormal with a
   few good digits.
+- **Base notation** `b^^digits` (v0.6598): base 2..36, digits `0-9` and letters
+  of either case, an optional `.fraction`. `16^^FF` is `255`, `2^^1010` is
+  `10`, `16^^FFFFFFFFFFFFFFFF` is `2^64 - 1` (exact, any size), and `16^^1.8` is
+  the correctly rounded machine real `1.5`. `-16^^FF` is `-(16^^FF)`.
 - **A precision or accuracy mark is a plain decimal** (v0.6596): `` `p `` and
   ``` ``a ``` take `[+-]digits[.digits]` only. `` 1.5`+nan `` used to parse
   (strtod accepts nan, inf and hex floats) to `2.`; it is now `` 1.5` + nan ``.
@@ -383,6 +387,13 @@ Symbolic sum.
   The packed / NDArray buffer path declines such a lane, or a scalar a double
   cannot hold (`{1., 2.} 10^400`), to the element path, so every surface gives
   this answer (v0.6595; it leaked `inf.0`).
+- **Every numeric head** follows the policy (v0.6598): the evaluator recomputes
+  in MPFR any machine result of a `NumericFunction` head (other than the Flat
+  `Plus`/`Times`, which apply it themselves) that is subnormal, non-finite, or
+  zero from a nonzero machine argument. If the true value is 0 it stays a
+  machine `0.`. A head's machine fast path used to return first, so
+  `Erfc[30.]` was `0.` and `Erfc[27.]` a subnormal. Complex results follow
+  too: `Exp[-800. + I]` was `0.`, `(1.*^200 + 1.*^200 I)^2` was `Overflow[]`.
 - Operands of the machine path are read correctly rounded: a BigInt or a
   `Rational` with BigInt parts no longer truncates (or reads as `0`).
 - A finite term plus a real `±Infinity` absorbs the finite part (`Infinity + 3 → Infinity`),
@@ -845,6 +856,9 @@ Exponentiation.
 - A BigInt exponent: `(-1)^(2^70)` is `1`, `(-1)^(2^70 + 1)` is `-1`, `1^e` is
   `1`, `0^e` is `0` for `e > 0`, and `|b| >= 2` to a positive BigInt exponent is
   `Overflow[]`.
+- `(+-I)^e` for a BigInt `e` uses period 4: `I^(2^64 + 1)` is `I` (v0.6598).
+- An arbitrary-precision complex base to an integer exponent is computed by
+  binary powering (exact zero parts stay zero), not `exp(n log z)`.
 - `(-2^63)^(p/q)` is `(-1)^(p/q) 2^(63 p/q)`: `Sqrt[-2^63]` is
   `2147483648 I Sqrt[2]` (it negated INT64_MIN and crashed).
 - A negative machine base to a non-integer machine exponent is

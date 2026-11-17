@@ -2296,6 +2296,13 @@ add_executable(numeric_tower_stress_tests test_numeric_tower_stress.c $<TARGET_O
 target_include_directories(numeric_tower_stress_tests PRIVATE ../src)
 add_test(NAME numeric_tower_stress_tests COMMAND numeric_tower_stress_tests)
 
+# Kahan-style numerics corpus: 307 exact-truth cases (Paranoia-style properties,
+# correct rounding, libm accuracy, conversions, cancellation classics, branch
+# cuts), XFAIL-ratcheted by id (docs/design/numeric_tower_review.md, section K).
+add_executable(numeric_kahan_tests test_numeric_kahan.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(numeric_kahan_tests PRIVATE ../src)
+add_test(NAME numeric_kahan_tests COMMAND numeric_kahan_tests)
+
 add_executable(ranked_tests test_ranked.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(ranked_tests PRIVATE ../src)
 

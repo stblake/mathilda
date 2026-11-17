@@ -1068,6 +1068,7 @@ Expr* builtin_power(Expr* res) {
         if (is_ndarray(exp)) {
             Expr* fast = ndarray_elementwise_power(base, exp);
             if (fast) return fast;
+            if (ndarray_take_degenerate()) return ndarray_delist_and_reeval(res);   /* S4 */
             Expr* pair[2] = { base, exp };
             if (ndarray_warn_shape_mismatch(pair, 2, "raised to a power"))
                 return NULL;
@@ -1076,6 +1077,7 @@ Expr* builtin_power(Expr* res) {
             if (power_scalar_components(exp, &er, &ei)) {
                 Expr* fast = ndarray_scalar_power(base, er, ei);
                 if (fast) return fast;
+                if (ndarray_take_degenerate()) return ndarray_delist_and_reeval(res);   /* S4 */
             }
         }
     } else if (is_ndarray(exp)) {
@@ -1083,6 +1085,7 @@ Expr* builtin_power(Expr* res) {
         if (power_scalar_components(base, &br, &bi)) {
             Expr* fast = ndarray_base_scalar_power(br, bi, exp);
             if (fast) return fast;
+            if (ndarray_take_degenerate()) return ndarray_delist_and_reeval(res);   /* S4 */
         }
     }
     /* An integer buffer whose exact power is a Rational or a radical: the List
@@ -1550,6 +1553,27 @@ Expr* builtin_power(Expr* res) {
      * for e > 0, and |b| >= 2 to a positive e is past every representable
      * integer -- the same General::ovfl / Overflow[] as bigint_pow's bound.
      * A negative huge exponent of |b| >= 2 (or 0) is left to the other rules. */
+    /* (+-I)^e for a BigInt e: period 4, so the power is (+-I)^(e mod 4)
+     * (numeric-tower review S1: I^(2^64 + 1) stayed unevaluated). An
+     * int64-sized BigInt is an ordinary exponent and takes the paths below. */
+    {
+        Expr *ure, *uim;
+        int64_t ev;
+        if (exp->type == EXPR_BIGINT && !expr_mpz_get_int64(exp->data.bigint, &ev)
+            && is_complex(base, &ure, &uim)
+            && ure->type == EXPR_INTEGER && ure->data.integer == 0
+            && uim->type == EXPR_INTEGER && (uim->data.integer == 1 || uim->data.integer == -1)) {
+            unsigned long k = mpz_fdiv_ui(exp->data.bigint, 4);    /* e mod 4, in [0, 4) */
+            if (uim->data.integer == -1) k = (4 - k) % 4;          /* (-I)^e = I^(-e) */
+            switch (k) {
+                case 0:  return expr_new_integer(1);
+                case 2:  return expr_new_integer(-1);
+                case 1:  return make_complex(expr_new_integer(0), expr_new_integer(1));
+                default: return make_complex(expr_new_integer(0), expr_new_integer(-1));
+            }
+        }
+    }
+
     if (expr_is_integer_like(base) && exp->type == EXPR_BIGINT) {
         int64_t ev;
         if (expr_mpz_get_int64(exp->data.bigint, &ev)) {

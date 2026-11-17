@@ -1265,6 +1265,27 @@ Expr* ndarray_elementwise(Expr** args, size_t n, bool is_plus, bool* degenerate)
                             first_nd->data.ndarray.dims, out, dtc);
 }
 
+/* The machine-boundary lane test (docs/design/numeric_tower_review.md, S4/S5),
+ * fused into the kernel loops so it costs a couple of compares on a value
+ * already in a register: a non-finite result, a nonzero one below DBL_MIN, or
+ * -- `zr`, for a head whose scalar path promotes an underflow, and always for
+ * Power -- a 0 from a nonzero input. Such a lane is not a machine number; the
+ * kernel declines and the element path keeps it at machine precision in MPFR. */
+static inline int nd_lane_bad(double y, double x, int zr) {
+    double m = fabs(y);
+    return (int)!(m <= DBL_MAX) | ((m < DBL_MIN) & (y != 0.0)) | (zr & (y == 0.0) & (x != 0.0));
+}
+
+/* Set when a buffer kernel declined because of such a lane (any thread may set
+ * it; all write 1). Power reads it to delist rather than leave a visible
+ * NDArray unevaluated: ndarray_take_degenerate(). */
+static volatile int g_nd_degenerate = 0;
+bool ndarray_take_degenerate(void) {
+    bool d = g_nd_degenerate != 0;
+    g_nd_degenerate = 0;
+    return d;
+}
+
 /* --------------------------- elementwise Power --------------------------- */
 
 /* Complex power (br+bi i) = (ar+ai i)^(er+ei i) via polar form, avoiding
@@ -1341,7 +1362,16 @@ static bool nd_sqrt_chunk(void* c, size_t lo, size_t hi) {
 typedef struct { const double* in; double* out; int64_t n; } nd_powi_ctx;
 static bool nd_powi_chunk(void* c, size_t lo, size_t hi) {
     const nd_powi_ctx* x = (const nd_powi_ctx*)c;
-    mth_powi_machine_array(x->in + lo, x->out + lo, hi - lo, x->n);
+    /* Blocked so the boundary check reads each block while it is still in L1
+     * (the vectorised power loop cannot take the check inline). */
+    enum { BLK = 2048 };
+    int bad = 0;
+    for (size_t b = lo; b < hi; b += BLK) {
+        size_t e = (b + BLK < hi) ? b + BLK : hi;
+        mth_powi_machine_array(x->in + b, x->out + b, e - b, x->n);
+        for (size_t k = b; k < e; k++) bad |= nd_lane_bad(x->out[k], x->in[k], 1);
+        if (bad) { g_nd_degenerate = 1; return false; }
+    }
     return true;
 }
 
@@ -1364,6 +1394,12 @@ static bool nd_pow_chunk(void* c, size_t lo, size_t hi) {
         if (ar == 0.0 && ai == 0.0 && er == 0.0 && ei == 0.0) return false;
         cpow_pair(ar, ai, er, ei, &rr, &ri);
         ndt_set(x->out, k, x->dtc, rr, ri);
+        /* zero-from-nonzero-base is always an underflow for Power */
+        if (nd_lane_bad(rr, 1.0, 0) | nd_lane_bad(ri, 1.0, 0)
+            | ((rr == 0.0) & (ri == 0.0) & ((ar != 0.0) | (ai != 0.0)))) {
+            g_nd_degenerate = 1;
+            return false;
+        }
     }
     return true;
 }
@@ -1484,7 +1520,10 @@ Expr* ndarray_scalar_power(const Expr* a, double er, double ei) {
         if (er == 0.0)                           /* 0^0: see nd_pow_chunk */
             for (size_t k = 0; k < sz; k++) if (p[k] == 0.0) { free(out); return NULL; }
         if (er == 0.5) { nd_sqrt_ctx sc = { p, o }; nd_parallel_for(sz, nd_sqrt_chunk, &sc); }
-        else { nd_powi_ctx pc = { p, o, (int64_t)er }; nd_parallel_for(sz, nd_powi_chunk, &pc); }
+        else {
+            nd_powi_ctx pc = { p, o, (int64_t)er };
+            if (!nd_parallel_for(sz, nd_powi_chunk, &pc)) { free(out); return NULL; }
+        }
         return expr_new_ndarray_like(a, a->data.ndarray.rank, a->data.ndarray.dims, out, dtc);
     }
     nd_pow_ctx c = { a->data.ndarray.data, dta, 0, 0,
@@ -1620,8 +1659,23 @@ int nd_parallel_reduce(size_t n, nd_reduce_chunk_fn fn, void* ctx,
 typedef struct { const double* id; double* od; const NDUnaryKernel* k; } ndu_hot_ctx;
 static bool ndu_hot_chunk(void* c, size_t lo, size_t hi) {
     const ndu_hot_ctx* x = (const ndu_hot_ctx*)c;
-    for (size_t j = lo; j < hi; j++)
+    /* Only a decaying head (ndk_promotes_underflow) can turn a machine-number
+     * input into a flushed or subnormal output -- a buffer holds no
+     * subnormals, and Sin/Tanh/... of a normal number is normal or exactly 0
+     * -- so every other head keeps the unchecked loop (the check cost ~20%
+     * on Sin over 10^7 elements). */
+    if (!ndk_promotes_underflow(x->k)) {
+        for (size_t j = lo; j < hi; j++)
+            if (!x->k->real(x->id[j], &x->od[j])) return false;
+        return true;
+    }
+    for (size_t j = lo; j < hi; j++) {
         if (!x->k->real(x->id[j], &x->od[j])) return false;
+        /* One well-predicted compare per element: the kernel already declined a
+         * non-finite lane, so only |y| < DBL_MIN needs a closer look. */
+        double y = x->od[j];
+        if (fabs(y) < DBL_MIN && (y != 0.0 || x->id[j] != 0.0)) return false;
+    }
     return true;
 }
 
@@ -1633,6 +1687,10 @@ static bool ndu_cplx_chunk(void* c, size_t lo, size_t hi) {
         ndt_get(x->in, j, x->dt, &re, &im);
         if (!x->k->cplx(re, im, &orr, &oii)) return false;
         ndt_set(x->out, j, x->dt, orr, oii);
+        if (ndk_promotes_underflow(x->k)
+            && (nd_lane_bad(orr, 1.0, 0) | nd_lane_bad(oii, 1.0, 0)
+                | ((orr == 0.0) & (oii == 0.0) & ((re != 0.0) | (im != 0.0)))))
+            return false;
     }
     return true;
 }
@@ -1644,6 +1702,7 @@ static bool ndu_realgen_chunk(void* c, size_t lo, size_t hi) {
         if (x->k->real) { if (!x->k->real(re, &orr)) return false; }
         else if (!x->k->cplx || !x->k->cplx(re, 0.0, &orr, &oii)) return false;
         ndt_set(x->out, j, x->dt, orr, oii);
+        if (ndk_promotes_underflow(x->k) && nd_lane_bad(orr, re, 1)) return false;
     }
     return true;
 }
@@ -1753,6 +1812,8 @@ static bool ndu_esc_chunk(void* c, size_t lo, size_t hi) {
         if (!x->k->cplx(re, 0.0, &orr, &oii)) return false;
         if (oii != 0.0) ai = 1;
         ndt_set(x->tmp, j, x->dtc, orr, oii);
+        if (ndk_promotes_underflow(x->k) && (nd_lane_bad(orr, 1.0, 0) | nd_lane_bad(oii, 1.0, 0)))
+            return false;
     }
     if (ai) *x->any_imag = 1;
     return true;
@@ -1927,6 +1988,7 @@ Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
     free(tmp);
     return expr_new_ndarray_like(a, rank, dims, out, dta);
 }
+
 
 Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k) {
     /* A kernel with no `cplx` is not necessarily a sentinel any more: GCD, LCM

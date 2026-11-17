@@ -3973,6 +3973,20 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                          * untouched. (Representable overflows are promoted to an
                          * extended-exponent MPFR real inside each head, upstream
                          * of here.) */
+                        /* The machine/MPFR boundary policy, as one net for
+                         * every numeric head (numeric-tower review S5/S6): a
+                         * machine result that is subnormal, non-finite, or 0
+                         * from a nonzero machine argument is recomputed in MPFR
+                         * (numeric_promote_result_if_degenerate) -- the value
+                         * at machine precision with MPFR's exponent range, or
+                         * the machine 0 again when that is the true value. A
+                         * head's own machine fast path (the shared kernel
+                         * helper, sf_*_r) returns before its promotion, so
+                         * Erfc[30.] was 0. and Erfc[27.] a subnormal. Flat
+                         * heads (Plus, Times) apply the policy themselves. */
+                        if ((attrs & ATTR_NUMERICFUNCTION) && !(attrs & ATTR_FLAT)
+                            && (ret->type == EXPR_REAL || ret->type == EXPR_FUNCTION))
+                            ret = numeric_promote_result_if_degenerate(ret, res);
                         if (numeric_result_has_nonfinite(ret)) {
                             ret = numeric_sanitize_nonfinite(ret);
                         }

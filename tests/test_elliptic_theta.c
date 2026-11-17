@@ -26,6 +26,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef USE_MPFR
+#include <mpfr.h>
+#endif
 
 /* {a, prime, Re u, Im u, Re q, Im q, Re value, Im value} */
 static const double TH_REF[][8] = {
@@ -107,6 +110,12 @@ static Expr* eval_str(const char* input) {
 static void eval_num(const char* input, double* re, double* im) {
     Expr* r = eval_str(input);
     if (r->type == EXPR_REAL) { *re = r->data.real; *im = 0.0; expr_free(r); return; }
+#ifdef USE_MPFR
+    /* A value outside the double range (|q| = 0.999 gives ~10^-594) is kept at
+     * machine precision as a 53-bit MPFR since the numeric-tower review (S5);
+     * read it as the double it rounds to, as the old flushed 0. was. */
+    if (r->type == EXPR_MPFR) { *re = mpfr_get_d(r->data.mpfr, MPFR_RNDN); *im = 0.0; expr_free(r); return; }
+#endif
     ASSERT_MSG(r->type == EXPR_FUNCTION && r->data.function.arg_count == 2 &&
                r->data.function.head->type == EXPR_SYMBOL &&
                strcmp(r->data.function.head->data.symbol.name, "Complex") == 0 &&

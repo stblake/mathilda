@@ -43,9 +43,13 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
       generated from `stress_cases.py`. 309 pass; 9 XFAIL = S1-S7 (design note, section S).
       2 cases were wrong and are corrected: the 53-bit `1.*^400` is below 10^400, and
       fixed-precision cancellation.
-- [ ] Phase 4b. Stress-corpus bugs: S3 (complex boundary policy), S4/S5 (ND Power / unary
-      degenerate lanes), S6 (Product underflow), S1 (`I^BigInt`), S7 (`b^^digits` literals).
-      S2 needs a decision (complex `Equal` tolerance).
+- [x] Phase 4b. Stress-corpus bugs S1, S3-S7: v0.6598. S2 still needs a decision (complex
+      `Equal` tolerance). Also found: the evaluator boundary net (45 sf_* machine fast paths
+      returned before their promotion), and wrong `EllipticTheta` q = 0.999 reference data.
+- [x] Kahan-style corpus: `tests/test_numeric_kahan.c` (generator `tools/numeric_kahan_cases.py`,
+      with an exact-ulp prelude), 307 cases; 300 pass; 7 XFAIL = K1, K2
+- [ ] Phase 4c. Kahan findings: K1 (`a/b` double-rounds via `Times[a, Power[b, -1]]`; x/x is not 1)
+      and K2 (complex `Sqrt` via exp(log/2); use `csqrt`)
 - [ ] Phase 6. Policy items, decided by the user 2026-11-17 (v0.6597)
   - [ ] D5 (decided: Underflow): an MPFR result below the exponent range is `Underflow[]` with
         `General::unfl` through `mth_message`, mirroring `Overflow[]`; sign kept (`-Underflow[]`).

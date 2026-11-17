@@ -668,6 +668,62 @@ static Expr* parse_number(ParserState* s) {
     const char* p = s->pos;
     if (*p == '-' || *p == '+') p++;
     while (isdigit(*p)) p++;
+
+    /* Base notation b^^digits (numeric-tower review S7): base 2..36 in
+     * decimal, digits 0-9 and letters of either case, an optional .fraction.
+     * The integer form is the exact Integer (16^^FF is 255, any size via GMP);
+     * a fraction gives the correctly rounded machine real of the exact value
+     * (16^^1.8 is 1.5). A leading minus is the prefix operator, as for any
+     * literal followed by ^ (number_followed_by_power). With no valid digit
+     * after ^^ this is not base notation and parses as before. */
+    if (p > s->pos && isdigit((unsigned char)*s->pos) && p - s->pos <= 2 && p[0] == '^' && p[1] == '^') {
+        int base = atoi(s->pos);
+        const char* q = p + 2;
+        const char* ds = q;
+        if (base >= 2 && base <= 36) {
+            #define BASE_DIGIT_OK(c) (isalnum((unsigned char)(c)) && \
+                (isdigit((unsigned char)(c)) ? (c) - '0' : tolower((unsigned char)(c)) - 'a' + 10) < base)
+            while (BASE_DIGIT_OK(*q)) q++;
+            size_t nint = (size_t)(q - ds);
+            const char* fs = NULL; size_t nfrac = 0;
+            if (*q == '.' && q[1] != '.' && BASE_DIGIT_OK(q[1])) {
+                fs = q + 1;
+                q = fs;
+                while (BASE_DIGIT_OK(*q)) q++;
+                nfrac = (size_t)(q - fs);
+            }
+            #undef BASE_DIGIT_OK
+            if (nint + nfrac > 0) {
+                char* buf = malloc(nint + nfrac + 2);
+                memcpy(buf, ds, nint);
+                if (nfrac) memcpy(buf + nint, fs, nfrac);
+                buf[nint + nfrac] = '\0';
+                mpz_t z;
+                mpz_init(z);
+                mpz_set_str(z, buf, base);
+                free(buf);
+                Expr* out;
+                if (!fs) {
+                    out = expr_bigint_normalize(expr_new_bigint_from_mpz(z));
+                } else {
+                    mpq_t qv;
+                    mpq_init(qv);
+                    mpq_set_z(qv, z);
+                    mpz_t d;
+                    mpz_init(d);
+                    mpz_ui_pow_ui(d, (unsigned long)base, (unsigned long)nfrac);
+                    mpq_set_den(qv, d);
+                    mpq_canonicalize(qv);
+                    out = expr_new_real(numeric_mpq_to_double(qv));
+                    mpz_clear(d);
+                    mpq_clear(qv);
+                }
+                mpz_clear(z);
+                s->pos = q;
+                return out;
+            }
+        }
+    }
     /* `..` / `...` are single tokens (Repeated / RepeatedNull) and win by
      * longest munch, as in the Wolfram Language: `0..` is Repeated[0] and
      * `0...` is RepeatedNull[0], so a '.' that is itself followed by '.' is

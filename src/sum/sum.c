@@ -27,6 +27,7 @@
  */
 
 #include "sum.h"
+#include "compile/compile_underflow.h"   /* S6: underflow -> interpreter */
 #include "term/term_progress.h"   /* the REPL spinner's loop progress */
 #include "checked_int.h"   /* ci_add_i64: integer index step */
 #include "sum_internal.h"   /* sum_body_has_opaque_index — shared with sum_gosper.c */
@@ -560,14 +561,29 @@ static Expr* sum_try_compiled(Expr* f, const IterSpec* s,
         Expr* spec = expr_new_function(expr_new_symbol(SYM_List), spec_args, nspec);
         Expr* whole_args[2] = { expr_copy(f), spec };
         Expr* whole = expr_new_function(expr_new_symbol(SYM_Sum), whole_args, 2);
+        cvm_underflow_clear();
         Expr* total = autocompile_eval_closed(whole);   /* NULL unless CT_REAL/CT_COMPLEX */
         expr_free(whole);
+        /* An underflowed term matters only when the sum itself is that small
+         * (S6; see the accumulating loop below for the bound). The term count
+         * is not known here, so the bound uses 2^64 DBL_MIN, past any count a
+         * compiled loop runs. */
+        if (total && cvm_underflowed()) {
+            double tr = 0.0, ti = 0.0;
+            Expr *re, *im;
+            if (total->type == EXPR_REAL) tr = total->data.real;
+            else if (is_complex(total, &re, &im) && re->type == EXPR_REAL && im->type == EXPR_REAL) {
+                tr = re->data.real; ti = im->data.real;
+            }
+            if (hypot(tr, ti) < 0x1p64 * DBL_MIN) { expr_free(total); return NULL; }
+        }
         return total;
     }
 
     /* Strategy B: compile the body as f(i), accumulate the machine terms in C. */
     AutoCompiled* ac = autocompile_new(f, (const Expr* const*)&s->var, 1);
     if (!ac) return NULL;   /* body outside the compilable subset → enumerate */
+    cvm_underflow_clear();
     double _Complex acc = 0.0;
     double val = min_val;
     int64_t count = 0;
@@ -585,6 +601,15 @@ static Expr* sum_try_compiled(Expr* f, const IterSpec* s,
     if (!ok) return NULL;   /* non-finite point → fall back to the interpreter */
     double re = creal(acc), im = cimag(acc);
     if (!isfinite(re) || !isfinite(im)) return NULL;
+    /* An underflowed term (the IEEE flag) is harmless unless it could reach
+     * the result's last bit: each flushed term is below DBL_MIN, so `count`
+     * of them are negligible once |acc| >= 2^53 count DBL_MIN. Below that --
+     * Sum[x^2, {x, {1.*^-200}}] was 0. -- the interpreter answers, keeping
+     * the terms at machine precision in MPFR (numeric-tower review S6). A
+     * tail of underflowing terms under a normal sum (Sum[Exp[-k], ...]) stays
+     * on the compiled path. */
+    if (cvm_underflowed()
+        && hypot(re, im) < 0x1p53 * (double)(count ? count : 1) * DBL_MIN) return NULL;
     return im == 0.0 ? expr_new_real(re)
                      : make_complex(expr_new_real(re), expr_new_real(im));
 }

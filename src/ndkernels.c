@@ -1281,6 +1281,17 @@ static const NDBinaryKernel NDKB_Zeta        = { ndk_Zeta2_c, true, NULL, NULL, 
  * an explicit "known, and deliberately has no fast path" reads differently from
  * an absent registry entry, and the coverage audit distinguishes them. */
 
+/* Heads whose SCALAR machine path recomputes a flushed-to-zero result from a
+ * nonzero argument in MPFR (numeric_machine_real_or_promote / _if_degenerate):
+ * the buffer map must decline the same lanes (ndarray_map_unary), or packed and
+ * scalar disagree -- Exp[packed {-800.}] was {0.}. Only decaying heads: a head
+ * that merely overflows is declined by its own non-finite check. */
+bool ndk_promotes_underflow(const NDUnaryKernel* k) {
+    return k == &NDKU_Exp || k == &NDKU_Sech || k == &NDKU_Csch
+        || k == &NDKU_Erfc || k == &NDKU_Gamma || k == &NDKU_Factorial
+        || k == &NDKU_ExpIntegralEi || k == &NDKU_AiryAi || k == &NDKU_AiryAiPrime;
+}
+
 #define REG_U(NAME) symtab_set_ndarray_unary_kernel(#NAME, &NDKU_##NAME)
 #define REG_B(NAME, DESC) symtab_set_ndarray_binary_kernel(#NAME, &DESC)
 

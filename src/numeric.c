@@ -640,6 +640,63 @@ static Expr* mpfr_axial_pow(const Expr* base, const Expr* exp, long bits) {
     return make_complex(expr_new_integer(0), val);
 }
 
+/* (a + b I)^n for an integer n (|n| <= 2^30): binary powering by complex
+ * multiplication, as the machine path (mth_powi_machine_c) does, with the
+ * reciprocal for n < 0. The polar form exp(n log z) left cos-size noise in a
+ * part that is exactly zero: (1.*^200 + 1.*^200 I)^2, promoted past the double
+ * range, had a real part 1.2*10^384 where (a + a I)^2 = 2 a^2 I (numeric-tower
+ * review S3). Computed with 16 guard bits, rounded once to `bits`. NULL for a
+ * non-integer exponent. */
+static Expr* mpfr_complex_powi(const Expr* base, const Expr* exp, long bits) {
+    int64_t n;
+    double ed;
+    if (exp->type == EXPR_INTEGER) n = exp->data.integer;
+    else if (exp->type == EXPR_REAL && (ed = exp->data.real) == floor(ed) && fabs(ed) <= 0x1p30) n = (int64_t)ed;
+    else if (exp->type == EXPR_MPFR && mpfr_integer_p(exp->data.mpfr)
+             && mpfr_cmpabs_ui(exp->data.mpfr, 1UL << 30) <= 0) n = (int64_t)mpfr_get_si(exp->data.mpfr, MPFR_RNDN);
+    else return NULL;
+    if (n == 0 || n > (INT64_C(1) << 30) || n < -(INT64_C(1) << 30)) return NULL;
+    long wb = bits + 16;
+    mpfr_t br, bi, rr, ri, t1, t2;
+    mpfr_inits2(wb, br, bi, rr, ri, t1, t2, (mpfr_ptr)0);
+    if (!get_approx_mpfr(base, br, bi, NULL)) {
+        mpfr_clears(br, bi, rr, ri, t1, t2, (mpfr_ptr)0);
+        return NULL;
+    }
+    uint64_t m = n < 0 ? (uint64_t)(-n) : (uint64_t)n;
+    mpfr_set_ui(rr, 1, MPFR_RNDN);
+    mpfr_set_ui(ri, 0, MPFR_RNDN);
+    while (m) {
+        if (m & 1) {                              /* r *= b */
+            mpfr_mul(t1, rr, br, MPFR_RNDN); mpfr_mul(t2, ri, bi, MPFR_RNDN);
+            mpfr_sub(t1, t1, t2, MPFR_RNDN);      /* re */
+            mpfr_mul(t2, rr, bi, MPFR_RNDN); mpfr_fma(ri, ri, br, t2, MPFR_RNDN);
+            mpfr_set(rr, t1, MPFR_RNDN);
+        }
+        m >>= 1;
+        if (m) {                                  /* b *= b */
+            mpfr_mul(t1, br, br, MPFR_RNDN); mpfr_mul(t2, bi, bi, MPFR_RNDN);
+            mpfr_sub(t1, t1, t2, MPFR_RNDN);
+            mpfr_mul(bi, br, bi, MPFR_RNDN); mpfr_mul_2ui(bi, bi, 1, MPFR_RNDN);
+            mpfr_set(br, t1, MPFR_RNDN);
+        }
+    }
+    if (n < 0) {                                  /* 1/r = conj(r)/|r|^2 */
+        mpfr_mul(t1, rr, rr, MPFR_RNDN); mpfr_fma(t1, ri, ri, t1, MPFR_RNDN);
+        mpfr_div(rr, rr, t1, MPFR_RNDN);
+        mpfr_div(ri, ri, t1, MPFR_RNDN); mpfr_neg(ri, ri, MPFR_RNDN);
+    }
+    bool fin = mpfr_number_p(rr) && mpfr_number_p(ri);
+    Expr* re_e = fin ? expr_new_mpfr_bits(bits) : NULL;
+    Expr* im_e = fin ? expr_new_mpfr_bits(bits) : NULL;
+    if (re_e) mpfr_set(re_e->data.mpfr, rr, MPFR_RNDN);
+    if (im_e) mpfr_set(im_e->data.mpfr, ri, MPFR_RNDN);
+    mpfr_clears(br, bi, rr, ri, t1, t2, (mpfr_ptr)0);
+    if (!fin) { expr_free(re_e); expr_free(im_e); return NULL; }
+    if (mpfr_zero_p(im_e->data.mpfr)) { expr_free(im_e); return re_e; }
+    return make_complex(re_e, im_e);
+}
+
 Expr* numeric_mpfr_imag_axis(const Expr* arg, const char* partner) {
     Expr *re, *im;
     if (!arg || !is_complex((Expr*)arg, &re, &im) || !is_exact_zero(re)
@@ -658,6 +715,10 @@ Expr* numeric_mpfr_complex_pow(const Expr* base, const Expr* exp,
     {
         Expr* ax = mpfr_axial_pow(base, exp, bits);
         if (ax) return ax;
+    }
+    {
+        Expr* ip = mpfr_complex_powi(base, exp, bits);
+        if (ip) return ip;
     }
 
     mpfr_t a, b, c, d;
@@ -2681,8 +2742,17 @@ Expr* numeric_promote_result_if_degenerate(Expr* r, const Expr* call) {
              || (v == 0.0 && call_has_nonzero_real_arg(call));
     } else {
         Expr *re, *im;
-        if (is_complex(r, &re, &im))
+        if (is_complex(r, &re, &im)) {
             degen = leaf_is_nonfinite(re) || leaf_is_nonfinite(im);
+            /* ... or, as for a real result, a subnormal part, or both parts
+             * flushed to 0 from a nonzero argument: Exp[-800. + I] was
+             * Complex[0., 0.], i.e. 0. (numeric-tower review S3). */
+            if (!degen && re->type == EXPR_REAL && im->type == EXPR_REAL) {
+                double a = re->data.real, b = im->data.real;
+                degen = numeric_machine_subnormal(a) || numeric_machine_subnormal(b)
+                     || (a == 0.0 && b == 0.0 && call_has_nonzero_real_arg(call));
+            }
+        }
     }
     if (degen) {
         Expr* p = numeric_promote_machine_call(call);

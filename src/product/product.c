@@ -29,6 +29,7 @@
  */
 
 #include "product.h"
+#include "compile/compile_underflow.h"   /* S6: underflow -> interpreter */
 #include "term/term_progress.h"   /* the REPL spinner's loop progress */
 #include "product_internal.h"   /* g_product_verify_convergence */
 #include "symtab.h"
@@ -560,13 +561,17 @@ static Expr* product_try_compiled(Expr* f, const IterSpec* s,
         Expr* spec = expr_new_function(expr_new_symbol(SYM_List), spec_args, nspec);
         Expr* whole_args[2] = { expr_copy(f), spec };
         Expr* whole = expr_new_function(expr_new_symbol(SYM_Product), whole_args, 2);
+        cvm_underflow_clear();
         Expr* total = autocompile_eval_closed(whole);
         expr_free(whole);
+        /* Any underflow in the compiled product: the interpreter answers (S6). */
+        if (total && cvm_underflowed()) { expr_free(total); return NULL; }
         return total;
     }
 
     AutoCompiled* ac = autocompile_new(f, (const Expr* const*)&s->var, 1);
     if (!ac) return NULL;
+    cvm_underflow_clear();
     double _Complex acc = 1.0;
     double val = min_val;
     int64_t count = 0;
@@ -582,6 +587,11 @@ static Expr* product_try_compiled(Expr* f, const IterSpec* s,
     }
     autocompiled_free(ac);
     if (!ok) return NULL;
+    /* Any underflow -- of a factor or of the running product -- costs the
+     * product its relative accuracy (Product[1.*^-100, {i, 5}] was 0.): the
+     * interpreter keeps such values at machine precision in MPFR instead
+     * (numeric-tower review S6). */
+    if (cvm_underflowed()) return NULL;
     double re = creal(acc), im = cimag(acc);
     if (!isfinite(re) || !isfinite(im)) return NULL;
     return im == 0.0 ? expr_new_real(re)

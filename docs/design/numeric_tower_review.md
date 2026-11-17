@@ -126,13 +126,37 @@ failures are these open bugs, marked XFAIL in the suite by id:
 
 | # | Repro | Got | Status |
 |---|---|---|---|
-| S1 | `I^(2^64 + 1)` | unevaluated | open: no BigInt exponent arm for a Gaussian unit (period 4) |
+| S1 | `I^(2^64 + 1)` | unevaluated | fixed v0.6598: period-4 arm |
 | S2 | `Exp[I Pi 1.] == -1` | `False` (an imaginary part of 1.2*^-16 against an exact 0) | open, **decision**: complex `Equal` compares parts separately, not \|a - b\| relative to \|a\| |
-| S3 | `(1.*^200 + 1.*^200 I)^2`, `Exp[1000. + 0.5 I]` | `Overflow[]` | open: the boundary policy never reached complex machine results |
-| S4 | packed `{1.*^-200}^2` | `{0.}` | open: the scalar-exponent Power kernel (`ndarray_scalar_power`) has no degenerate-lane decline |
-| S5 | `Exp[packed {-800., 0.}]` | `{0., 1.}` | open: the unary ND kernels accept a flushed zero (they decline only on non-finite) |
-| S6 | `Product[1.*^-100, {i, 5}]` | `0.` | open: Product's machine accumulator promotes overflow, not underflow |
-| S7 | `16^^FF`, `2^^1010` | syntax error | open: base-notation literals (`b^^digits`) are not parsed |
+| S3 | `(1.*^200 + 1.*^200 I)^2`, `Exp[1000. + 0.5 I]` | `Overflow[]` | fixed v0.6598: the evaluator net + complex degeneracy in the promoter; integer powers by binary powering in MPFR |
+| S4 | packed `{1.*^-200}^2` | `{0.}` | fixed v0.6598: fused lane check in the power kernels; ndarray_take_degenerate -> delist |
+| S5 | `Exp[packed {-800., 0.}]` | `{0., 1.}` | fixed v0.6598: fused check for decaying heads (ndk_promotes_underflow); the evaluator net for every scalar fast path |
+| S6 | `Product[1.*^-100, {i, 5}]` | `0.` | fixed v0.6598: compiled Sum/Product read the IEEE underflow flag |
+| S7 | `16^^FF`, `2^^1010` | syntax error | fixed v0.6598: b^^digits[.digits] in parse_number |
+
+### K. Found by the Kahan-style corpus (2026-11-17, `tests/test_numeric_kahan.c`)
+307 cases: Paranoia-style machine properties, correctly rounded + - * / sqrt
+against the exact result, elementary functions at hard arguments (within the
+platform libm's 2-ulp bound), decimal<->binary conversion, the cancellation
+classics through N, branch cuts and robust complex arithmetic, stable
+statistics. 300 pass; 7 XFAIL are these two bugs:
+
+| # | Repro | Got | Status |
+|---|---|---|---|
+| K1 | `-0.3/0.1`; `x/x` at `x = 1.*^-300` | `-3.0` (0.625 ulp; `Divide[-0.3, 0.1]` is the correctly rounded `-2.9999999999999996`); not exactly `1.` | open: `a/b` parses to `Times[a, Power[b, -1]]` and the reciprocal is rounded first, so a machine quotient is rounded TWICE. IEEE division (and x/x = 1) requires one rounding |
+| K2 | `Sqrt[1.*^-200 (1 + I)]`, `Sqrt[1.*^200 - 3.*^200 I]` | relative error 5*10^-14 (about 220 ulps) | open: machine complex `Sqrt` goes through exp(log(z)/2) (`cpow`), whose error grows with \|log\|z\||; `csqrt` is accurate everywhere |
+
+Test data found wrong on the way: `tests/test_elliptic_theta.c` expects
+`EllipticTheta[1, 0.4, 0.999]` = -1.32*10^-504. Jacobi's imaginary transformation
+gives |theta_1| ~ 10^-593.5, and Mathilda's arbitrary-precision value is
+5.38*10^-594, stable from 30 to 120 digits. The old flushed `0.` passed the
+absolute tolerance against both. The other |q| = 0.999 rows of that table are
+suspect too and should be re-derived.
+
+Not bugs (verified, the cases were adjusted): `Tan[1.*^300]` is 1.34 ulp off,
+which is the platform libm's `tan`, not Mathilda; the corpus therefore uses
+the libm bound of 2 ulps. `Exp[Log[z]]` at \|z\| ~ 10^+-200 and
+`Tan[ArcTan[100.]]` are limited by their conditioning.
 
 ### F. Hygiene (no repro: from the code read)
 | # | What | Status |

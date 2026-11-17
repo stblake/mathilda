@@ -302,6 +302,14 @@ typedef struct {
     bool (*whole_i)(const int64_t* in, size_t sz, int64_t* out);
 } NDUnaryKernel;
 
+/* True for a kernel whose head's scalar path promotes an underflow to zero
+ * (ndkernels.c); ndarray_map_unary then declines such lanes. */
+bool ndk_promotes_underflow(const NDUnaryKernel* k);
+
+/* True (and reset) when the last buffer Power declined because a lane left the
+ * machine range; the caller then delists (numeric-tower review S4). */
+bool ndarray_take_degenerate(void);
+
 /* Binary scalar-index kernel: f[scalar, array] or f[array, scalar] — one
  * operand is an NDArray, the other a broadcast numeric scalar (BesselJ[n, arr],
  * Log[b, arr], ArcTan[arr, y], ...). `real_closed` as above. */

@@ -205,7 +205,9 @@ void test_expint_special() {
     assert_eval_eq("LogIntegral[0.]", "0.0", 0);           /* li(0) = 0 */
     assert_true("ExpIntegralEi[800.] > 10^344");
     assert_true("ExpIntegralEi[-800.] < 0 && ExpIntegralEi[-800.] > -1.*^-300");
-    assert_eval_eq("ExpIntegralE[2, 800.]", "0.0", 0);       /* IEEE underflow, as before */
+    /* below DBL_MIN: kept at machine precision in MPFR (numeric-tower review
+     * S5), E_2(800) ~ e^-800/800, where it used to underflow to 0. */
+    assert_true("ExpIntegralE[2, 800.] == N[ExpIntegralE[2, 800], 20] && !MachineNumberQ[ExpIntegralE[2, 800.]]");
     /* an exact order with a machine argument is a machine computation (exact
      * and inexact arguments numericalize together): E_{5/2}(1) =
      * Int_1^Infinity E^-t t^(-5/2) dt = 0.126487819593254 (NIntegrate agrees) */
