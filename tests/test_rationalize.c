@@ -456,8 +456,15 @@ static void test_n_rounds_once(void) {
      * (the 53-bit MPFR intermediate rounded it up to the midpoint, and then
      * ties-to-even took 2^-1073) */
     assert_true("N[Rationalize[5.*^-324, 0]] == 5.*^-324");
-    assert_true("N[3/2 2^-1074] == 2^-1073 // N");          /* tie: to even */
-    assert_true("N[5/2 2^-1074] == N[2 2^-1074]");          /* tie: to even */
+    /* Below DBL_MIN there are no machine (subnormal) doubles: N keeps the
+     * value at machine precision -- 53 bits, MPFR's exponent range -- rounded
+     * once (2026-11 numeric-tower review, C8). The subnormal grid's ties-to-
+     * even (3/2 2^-1074 -> 2^-1073) therefore no longer applies; the value is
+     * exact at 53 bits. The IEEE subnormal rounding of numeric_mpq_to_double
+     * itself is still pinned by test_mpq_to_double_matches_ieee. */
+    assert_true("N[3/2 2^-1074] == N[3/2 2^-1074, 30]");
+    assert_true("N[5/2 2^-1074] == N[5/2 2^-1074, 30]");
+    assert_true("Precision[N[3/2 2^-1074]] == Precision[N[Exp[-800]]]");
     /* Rationalize[x, 0] round-trips at every magnitude, subnormals included */
     assert_true("And @@ Table[With[{v = RandomReal[] 2.^RandomInteger[{-1074, 1023}]}, "
                 "N[Rationalize[v, 0]] == v], {500}]");
@@ -476,7 +483,11 @@ static void test_setprecision_infinity_exact(void) {
                 "{1/2, Pi, 1/4 + x, 1/3, 2 + I/2}");
     assert_eval_eq("SetAccuracy[0.25, Infinity]", "1/4", 0);
     assert_true("With[{r = SetPrecision[1.*^300, Infinity]}, IntegerQ[r] && N[r] === 1.*^300]");
-    assert_true("SetPrecision[5.*^-324, Infinity] === 2^-1074");
+    /* No subnormal machine numbers (numeric-tower review, C8): 2.^-1074 is
+     * the exact 53-bit number 2^-1074; the literal 5.*^-324 is that decimal
+     * rounded once to 53 bits, not snapped to the subnormal grid. */
+    assert_true("SetPrecision[2.^-1074, Infinity] === 2^-1074");
+    assert_true("Abs[SetPrecision[5.*^-324, Infinity]/(5/10^324) - 1] < 2^-53");
     /* MPFR: the exact value of the binary number, which N gives back */
     assert_true("With[{r = SetPrecision[N[1/3, 30], Infinity]}, "
                 "Head[r] === Rational && r != 1/3 && N[r, 30] == N[1/3, 30]]");

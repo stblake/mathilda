@@ -25,7 +25,9 @@
 Expr* single_arg_abs_or_copy(Expr* arg) {
     int64_t n, d;
     if (is_rational(arg, &n, &d)) {
-        return make_rational(llabs(n), llabs(d));
+        /* d > 0 for a canonical rational; only n can be INT64_MIN, where
+         * llabs overflows (GCD[-2^63] was -2^63). */
+        return n < 0 ? make_rational_neg(n, d) : make_rational(n, d);
     }
     if (arg->type == EXPR_BIGINT) {
         mpz_t a;

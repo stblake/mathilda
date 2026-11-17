@@ -279,4 +279,38 @@ static inline void mth_powi_machine_c(double ar, double ai, int64_t n,
     *outr = rr; *outi = ri;
 }
 
+/* sin(pi y) and cos(pi y), reduced EXACTLY before the libm call: r =
+ * remainder(y, 2) lies in [-1, 1] and is exact; q = round(2 r) counts quarter
+ * turns, and f = r - q/2 lies in [-1/4, 1/4] (exact by Sterbenz). Only pi f
+ * is rounded, so a multiple of pi/2 gives exact 0 / +-1 -- never the
+ * cos(y * M_PI) residue 6.1e-17 at y = 1/2. No -0. results. */
+static inline void mth_sincospi(double y, double* s_out, double* c_out) {
+    double r = remainder(y, 2.0);
+    double q = nearbyint(2.0 * r);
+    double f = r - 0.5 * q;
+    double sf = sin(3.14159265358979323846 * f);
+    double cf = cos(3.14159265358979323846 * f);
+    double s, c;
+    switch ((int)q & 3) {            /* q in {-2..2}: -1 -> 3, -2 -> 2 */
+        case 0:  s = sf;  c = cf;  break;
+        case 1:  s = cf;  c = -sf; break;
+        case 2:  s = -sf; c = -cf; break;
+        default: s = -cf; c = sf;  break;
+    }
+    *s_out = (s == 0.0) ? 0.0 : s;
+    *c_out = (c == 0.0) ? 0.0 : c;
+}
+
+/* x^y for a machine x < 0 and non-integer y, on the principal branch:
+ * |x|^y (cos(pi y) + I sin(pi y)). The one formula the scalar Power builtin
+ * and the packed / NDArray power kernel share, so they agree bit for bit. */
+static inline void mth_neg_base_pow_machine(double x, double y,
+                                            double* re, double* im) {
+    double m = pow(-x, y);
+    double sp, cp;
+    mth_sincospi(y, &sp, &cp);
+    *re = m * cp;
+    *im = m * sp;
+}
+
 #endif /* MTH_MACHINE_POW_H */

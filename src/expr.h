@@ -367,6 +367,8 @@ bool  expr_is_integer_like(const Expr* e);
 /* True if `e` represents any concrete number: Integer, BigInt, Real,
  * Rational[n,d], Complex with numeric parts, or (with USE_MPFR) MPFR. */
 bool  expr_is_numeric_like(const Expr* e);
+/* True and *out = z when z fits int64 (portable: not via `long`). */
+bool  expr_mpz_get_int64(const mpz_t z, int64_t* out);
 Expr* expr_bigint_normalize(Expr* e);
 
 #endif // EXPR_H

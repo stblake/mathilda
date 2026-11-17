@@ -621,6 +621,30 @@ static Expr* apply_pow10_scale(Expr* val, long exp) {
 // Parses numbers (integers, reals, scientific notation), plus optional
 // Mathematica-style precision/accuracy suffix (`n, ``n) and optional
 // `*^exponent` scaled-scientific-notation suffix.
+/* A machine-precision real literal from its decimal text (strtod syntax).
+ * strtod overflows to +-inf (1.*^400 parsed to a raw inf.0 that survived
+ * Hold), flushes to 0 (1.*^-400 -> 0.), or keeps a subnormal with fewer than
+ * 53 bits (1.*^-320). None of those is a machine number: with MPFR the same
+ * decimal is read once, correctly rounded, at machine precision (53 bits)
+ * with MPFR's exponent range -- what Exp[1000.] already returns. */
+static Expr* machine_real_from_decimal(const char* text) {
+    double d = strtod(text, NULL);
+#ifdef USE_MPFR
+    bool degenerate = !isfinite(d) || (d != 0.0 && fabs(d) < DBL_MIN);
+    if (!degenerate && d == 0.0) {
+        /* zero only matters when the mantissa had a nonzero digit */
+        for (const char* c = text; *c && *c != 'e' && *c != 'E'; c++)
+            if (*c >= '1' && *c <= '9') { degenerate = true; break; }
+    }
+    if (degenerate) {
+        Expr* m = expr_new_mpfr_from_str(text, DBL_MANT_DIG);
+        if (m && mpfr_number_p(m->data.mpfr)) return m;
+        if (m) expr_free(m);
+    }
+#endif
+    return expr_new_real(d);
+}
+
 static Expr* parse_number(ParserState* s) {
     char* end;
 
@@ -757,14 +781,14 @@ static Expr* parse_number(ParserState* s) {
                 /* mpfr_set_str rejected the text — should not happen for a
                  * well-formed decimal literal. Fall back to a machine
                  * double so the parse still succeeds. */
-                result = expr_new_real(strtod(fstr, NULL));
+                result = machine_real_from_decimal(fstr);
             }
         } else {
-            result = expr_new_real(strtod(fstr, NULL));
+            result = machine_real_from_decimal(fstr);
         }
 #else
         (void)mpfr_bits;
-        result = expr_new_real(strtod(fstr, NULL));
+        result = machine_real_from_decimal(fstr);
 #endif
         if (fheap) free(fheap);
         (void)end;
@@ -803,8 +827,10 @@ static Expr* parse_number(ParserState* s) {
         s->pos = current;
 
         if (digit_len > 19) {
-            // More digits than INT64_MAX (19 digits) — skip strtoll, go straight to bigint
-            result = expr_new_bigint_from_str(num_str);
+            // More digits than INT64_MAX (19 digits) — skip strtoll, go straight
+            // to bigint. Leading zeros (000000000000000000001) can still fit
+            // int64: normalise, so the literal is an Integer like any other.
+            result = expr_bigint_normalize(expr_new_bigint_from_str(num_str));
         } else {
             errno = 0;
             char* endptr;
@@ -910,9 +936,8 @@ static Expr* parse_number(ParserState* s) {
             && (mantissa_start[mlen] == '`' || mantissa_start + mlen == save)) {
             char tbuf[128];
             snprintf(tbuf, sizeof tbuf, "%.*se%ld", (int)mlen, mantissa_start, exp_val);
-            double d = strtod(tbuf, NULL);
             expr_free(result);
-            result = expr_new_real(d);
+            result = machine_real_from_decimal(tbuf);
 #ifdef USE_MPFR
         } else if (result && result->type == EXPR_MPFR && mlen > 0 && mlen < 96
                    && (mantissa_start[mlen] == '`' || mantissa_start + mlen == save)) {

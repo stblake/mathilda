@@ -17,6 +17,16 @@ the user typed.
   `Precision[9.9999999999999999]` are `MachinePrecision` (v0.6136; the cut
   used to be an implied precision of 15.95 digits, so 17-digit literals
   were arbitrary precision).
+- **Outside the normal double range** (v0.6594) — a machine-precision literal
+  whose value overflows (`1.*^400`), underflows to zero (`1.*^-400`) or would
+  be subnormal (`1.*^-320`) is read once, correctly rounded, as a 53-bit MPFR
+  (machine precision, MPFR's exponent range) -- what `Exp[1000.]` returns. It
+  used to be a raw `inf.0` that survived `Hold`, a `0.`, or a subnormal with a
+  few good digits.
+- **Integer literals** of more than 19 digits that still fit `int64` (leading
+  zeros: `000000000000000000001`) are an `Integer`, as is every integer-valued
+  BigInt (`expr_hash` hashes an int64-sized BigInt as its Integer, so `Union`,
+  `Association` lookup and `Hash` agree with `SameQ`).
 - **`EXPR_MPFR`** (arbitrary precision) — real literals of 18 or more
   significant digits (`1.00000000000000001`). The MPFR bit count is
   `ceil(implied_precision × log2(10))` and the literal text is fed
@@ -182,8 +192,11 @@ its accuracy. Machine `N` is unchanged (`N[0]` is `0.`, `N[Erf[I]]` is
   buffer (an integer array is exact: `Infinity`); a `SparseArray` takes the
   minimum over its background and stored values. (Through v0.6225 both were
   `Listable`, so a matrix answered a matrix of precisions.)
-- **Machine rounding is IEEE round-to-nearest, ties to even, with gradual
-  underflow** (v0.6179). An exact rational becomes the double a correctly
+- **Machine rounding is IEEE round-to-nearest, ties to even** (v0.6179); since
+  v0.6594 **there are no subnormal machine numbers**: a value below
+  `$MinMachineNumber` (DBL_MIN) is kept at machine precision as a 53-bit MPFR,
+  exactly as one above `$MaxMachineNumber` is, so `N[10^-320] == 10^-320` and
+  `N[3/2 2^-1074]` is that value, not the subnormal grid's `2^-1073`. An exact rational becomes the double a correctly
   rounded decimal literal of it would give, through exactly one rounding
   (`numeric_mpq_to_double`, in GMP integers). The earlier path rounded twice
   (to a 53-bit MPFR, then to the double), which could be off by one ulp below
@@ -195,7 +208,7 @@ its accuracy. Machine `N` is unchanged (`N[0]` is `0.`, `N[Erf[I]]` is
 - `SetPrecision[x, Infinity]` (and `SetAccuracy[x, Infinity]`) replaces each
   approximate number by its **exact** value. A machine or MPFR number is a
   dyadic rational, so nothing rounds: `SetPrecision[0.1, Infinity]` is
-  `3602879701896397/36028797018963968`, `SetPrecision[5.*^-324, Infinity]` is
+  `3602879701896397/36028797018963968`, `SetPrecision[2.^-1074, Infinity]` is
   `2^-1074`. Exact numbers, symbolic constants and symbols are unchanged
   (`SetPrecision[{0.5, Pi, x + 0.25}, Infinity]` is `{1/2, Pi, 1/4 + x}`), and
   held forms are not entered. (Until v0.6179 it acted as `MachinePrecision`,
@@ -340,7 +353,14 @@ Symbolic sum.
   machine-sized Rational partner converts it directly to the correctly
   rounded double.
 - Returns `0` if no arguments are provided.
-- Returns `Overflow[]` if integer addition overflows or if any argument is `Overflow[]`.
+- **Machine overflow / underflow** (v0.6594). A machine sum that overflows
+  (`1.*^308 + 1.*^308`), has an exact operand past `DBL_MAX` (`1.5 + 10^400`),
+  or lands below `DBL_MIN` is recomputed at machine precision in MPFR (53 bits,
+  MPFR's exponent range) -- the policy `Power`/`Exp` already followed
+  (`Exp[1000.]`). An exact zero (`1. - 1.`) stays a machine zero. `Overflow[]`
+  is reserved for values past the MPFR range, or an `Overflow[]` argument.
+- Operands of the machine path are read correctly rounded: a BigInt or a
+  `Rational` with BigInt parts no longer truncates (or reads as `0`).
 - A finite term plus a real `±Infinity` absorbs the finite part (`Infinity + 3 → Infinity`),
   but a finite term plus a **directed (complex) infinity** keeps its direction rather
   than collapsing to a real `Infinity`: `1/2 - I Infinity` stays
@@ -664,7 +684,11 @@ Symbolic product.
     (`$RecursionLimit::reclim`).
 - Handles `I` as `Complex[0, 1]`.
 - Returns `1` if no arguments are provided.
-- Returns `Overflow[]` if integer multiplication overflows or if any argument is `Overflow[]`.
+- **Machine overflow / underflow** (v0.6594), as for `Plus`: `10.^308 * 10`
+  and `Exp[709.] Exp[709.]` are machine-precision MPFR values, and an
+  underflowing product of nonzero operands (`1.*^-200 * 1.*^-200`, which was
+  `0.`) is `1.*10^-400` at machine precision. `Overflow[]` only past the MPFR
+  range or for an `Overflow[]` argument.
 - **Sign distribution.** A product of exactly two factors, a coefficient `-1`
   or `-1/n` and a sum, distributes the sign over the sum, as in the reference:
   `-(-1 + x)` is `1 - x`, `-(x + y) z` is `(-x - y) z` (the parser reads it as
@@ -787,7 +811,24 @@ Exponentiation.
 - `Listable`.
 - Simplifies integer powers of integers.
 - `E^(I q Pi)` with q an integer or half-integer evaluates to ±1 or ±I (`E^(I Pi) = -1`, `E^(-I Pi/2) = -I`), as `Exp[I q Pi]` already did and the reference does. Other rational q stay symbolic (`E^(I Pi/4)`) (v0.458).
-- Returns `Overflow[]` if the result exceeds 64-bit integer limits.
+- An exact integer power is exact at any size GMP can represent; past that
+  (at most `INT_MAX` limbs, an `unsigned long` exponent) it is `General::ovfl`
+  and `Overflow[]` (`3^(2^62)`, `(2^1000/3)^(10^9)`), where `mpz_pow_ui` used to
+  abort the process (v0.6594). The reciprocal of a negative base is canonical:
+  `(-3)^-41` is `Rational[-1, 3^41]`, not `Rational[1, -3^41]`.
+- A BigInt exponent: `(-1)^(2^70)` is `1`, `(-1)^(2^70 + 1)` is `-1`, `1^e` is
+  `1`, `0^e` is `0` for `e > 0`, and `|b| >= 2` to a positive BigInt exponent is
+  `Overflow[]`.
+- `(-2^63)^(p/q)` is `(-1)^(p/q) 2^(63 p/q)`: `Sqrt[-2^63]` is
+  `2147483648 I Sqrt[2]` (it negated INT64_MIN and crashed).
+- A negative machine base to a non-integer machine exponent is
+  `|x|^y (cos(pi y) + I sin(pi y))` with `pi y` reduced exactly
+  (`mth_sincospi`, shared by the scalar builtin and the packed / NDArray
+  kernel): `Sqrt[-1.]` is `0. + 1. I`, not `6.1*10^-17 + 1. I`.
+- Machine contagion: an MPFR operand meeting a machine real is lowered to
+  machine precision first, as in `Plus`/`Times` -- `Precision[N[Pi, 30]^1.5]`
+  is `MachinePrecision` (it was 30); an exact exponent keeps the MPFR
+  precision (`N[Pi, 30]^2`).
 - Arbitrary-precision (MPFR) real powers: an integer exponent is `mpfr_pow_si`,
   a half-integer one `k/2` a square root (`mpfr_sqrt` / `mpfr_rec_sqrt`,
   correctly rounded for `k = ±1`; for `|k| > 1` the root with `8 + bits(k)`
@@ -922,7 +963,9 @@ seconds (`Sqrt[3141592653589793238]` took 24 s while
   - Packed `Mod[buffer, k]` with a constant `k >= 2` uses a reciprocal-multiply arm (`NDBinaryKernel.whole_i`) with an exact integer correction, so the loop has no hardware division. On a pre-built `Range[10^7]` it went from 0.116 s to 0.037 s (the reference 0.047 s), and the results are bit-identical to the `%` path.
 - `Quotient[n, m]`: for **real** `n, m`, `Floor[n/m]` — floored, not truncated or
   rounded, so `Quotient[-5.5, 3.]` is `-2`. The three-argument form
-  `Quotient[n, m, d]` is `Floor[(n - d)/m]`. For **complex** `n` or `m` it is
+  `Quotient[n, m, d]` is `Floor[(n - d)/m]`. A real quotient outside the
+  `int64` range is the exact integer (`Quotient[1.*^300, 1] === Floor[1.*^300]`;
+  it was `-2^63`, an undefined cast, before v0.6594). For **complex** `n` or `m` it is
   Gaussian-integer division: the ratio's real and imaginary parts are each
   **rounded to the nearest integer** (ties to even, like `Round[]`), giving the
   quotient of least remainder norm. So `Quotient[10 + 2 I, 3 + I]` is `3`,
@@ -1782,11 +1825,34 @@ Represents a rational number.
 - Automatically simplifies to lowest terms (e.g. `Rational[15, 5]` evaluates to `3`, `Rational[2, 4]` evaluates to `Rational[1, 2]`).
 - Returns `Indeterminate` when `n` and `d` are both `0` (e.g. `Rational[0, 0]`).
 - Returns `ComplexInfinity` when `n` is non-zero and `d` is `0` (e.g. `Rational[1, 0]`).
+- BigInt parts are canonicalised too (v0.6594): `Rational[2^70, 2^70]` is `1`,
+  `Rational[6, -2^70]` is `Rational[-3, 2^69]` (positive denominator), and an
+  unnormalised int64-sized BigInt part is demoted.
 
 ```mathematica
 In[1]:= Rational[15, 5]
 Out[1]= 3
 ```
+
+## Complex
+
+Represents a complex number.
+- `Complex[re, im]`
+
+**Features**:
+- An exact zero imaginary part gives `re` (`Complex[3, 0]` is `3`).
+- **One number, one kind** (v0.6594). A machine Real or an exact number
+  meeting a part of another kind takes the contagion `Plus`/`Times` use:
+  `Complex[1.0, 2]` is `Complex[1.0, 2.0]` (it was not `SameQ` to it),
+  `Complex[1.5`30, 2.]` is machine precision (it printed 30 digits while
+  reporting `MachinePrecision`), and `Complex[1/2, 1.5`30]` is 30 digits.
+  With a machine `0.` imaginary part, an exact real part becomes its machine
+  value: `Complex[2^70, 0.]` is `1.1805916207174113*^21` (it was the exact
+  BigInt), `Complex[1/3, 0.]` is `0.333333`.
+- Left as they are: an exact-zero part (`Complex[0, 1.5]`; `N[I, 30]` is
+  `Complex[0, 1.`30.]`), an MPFR zero part (it carries accuracy, not
+  precision), two MPFR parts of different widths, and `Complex[x_MPFR, 0.]`
+  (special-function kernels build these with deliberate guard widths).
 
 ## Re, Im, ReIm, Abs, Sign, Conjugate, Arg
 

@@ -1,3 +1,68 @@
+# Numeric-tower review (started 2026-11-17)
+
+Worktree `../Mathilda-numtower`, branch `numeric-tower-review`. Bug list with ids and
+repros: `docs/design/numeric_tower_review.md`. Corpus: `tests/test_numeric_tower_review.c`
+(each new fix adds its id's cases there first). Fixed precision is the design: no
+significance arithmetic (see memory `feedback_no_significance_arithmetic`).
+
+- [x] Phase 0. Review: 3 mapping passes and about 190 probes; findings A–D
+- [x] Phase 1. Crashes and UB: A1 A2 A4 A5 A6, the Times SIGFPE (A3 withdrawn)
+- [x] Phase 2. Exact layer: B1–B7
+- [x] Phase 3. Machine/MPFR boundary policy: C1 C2 C4 C6 C7 C8 (C5 withdrawn)
+- [ ] Phase 3 land: the full unit tier green (batched run in progress), then commit and tag v0.6594
+- [ ] Phase 4. Remaining wrong answers (v0.6594, one commit)
+  - [ ] C3 + E5: `nd_ew_chunk` gets a branch-free degenerate-lane flag (non-finite, or nonzero
+        below DBL_MIN, or a Times zero from nonzero operands); a flagged lane makes the kernel
+        decline, and the scalar path promotes each element. Decode scalars with
+        `numeric_machine_value`. Also `Total`/`Accumulate` (ndreduce.c). Verify with
+        scalar == List == packed == NDArray, and `check-nd-surfaces`.
+  - [ ] E9: `Compile` scalar and rank-1 `Times`/`Plus` underflow fall back like overflow.
+        Verify with `CompileDiagnostics` and `check-compile-coverage`.
+  - [ ] D9: `number_followed_by_power` skips a precision mark (`` `p ``, ``` ``a ```) and
+        `*^[+-]digits`. Cases: `-2.`30^2`, `-2`10^2`, `-2.5*^3^2`, and `-2.^2` stays right.
+  - [ ] E4: the `Quotient` real fallback works on MPFR operands exactly (`mpfr_floor` /
+        `mpfr_get_z`), not through a double.
+  - [ ] E2: an MPFR value times a machine `0.` is a machine `0.` (contagion in `multiply_numbers`).
+- [ ] Phase 5. Fixed-precision correctness (v0.6595)
+  - [ ] D3: `expr_log10_abs` uses `mpz_get_d_2exp` / `mpfr_get_d_2exp`, and handles a BigInt
+        rational and INT64_MIN (`-v` is UB today).
+  - [ ] D4: `SetAccuracy` takes a symbolic value's magnitude from a machine numericalisation.
+  - [ ] D8: the precision-mark parser rejects `nan`/`inf` (a syntax error) and allows a negative
+        accuracy on a zero (``` 0``-5 ```).
+  - [ ] D7: `N[x, p <= 0]` gets a message (`N::precbd`-style) through `mth_message`;
+        `SetPrecision[x, 0]` is defined; `$MaxExtraPrecision = Infinity` is honoured.
+- [ ] Phase 6. Policy items, decided by the user 2026-11-17 (v0.6597)
+  - [ ] D5 (decided: Underflow): an MPFR result below the exponent range is `Underflow[]` with
+        `General::unfl` through `mth_message`, mirroring `Overflow[]`; sign kept (`-Underflow[]`).
+        Detect it in `mpfr_binop` and the function paths (zero from nonzero operands, or
+        `mpfr_underflow_p`), and add an Underflow arm to `numeric_sanitize_nonfinite`.
+  - [x] D6 (decided: keep the default): the MPFR exponent range stays the library default.
+        Document `$MaxNumber`/`$MinNumber` as that range. No code change.
+  - [ ] E1 (decided: demote): a 53-bit MPFR produced by the boundary policy goes back to a machine
+        double once its value is in `[DBL_MIN, DBL_MAX]`. Apply it at the same Plus / Times /
+        Power choke points (`demote_to_machine_if_fits` / `numeric_lower_mpfr_to_machine`).
+        Check: `MachineNumberQ[(1.*^308 * 10.)/1.*^10]` is True.
+  - [ ] C9a (decided: decimal point): machine reals always print with a decimal point in
+        OutputForm/StandardForm (`1.*^15`, not `1e+15`). Rebaseline the affected test
+        expectations, checking each with `ToExpression[old] == ToExpression[new]`.
+  - [ ] C9b (decided: MachinePrecision): `Precision` of a 53-bit MPFR (the machine-precision
+        extended-range value) reads `MachinePrecision`, and `Accuracy` follows.
+  - [ ] D7b: implement `$MinPrecision`/`$MaxPrecision` or document them as unsupported. Ask
+        the user when Phase 5 lands.
+- [ ] Phase 7. Hygiene sweeps (v0.6596+)
+  - [ ] F1: audit `mpz_get_d` sites whose result users see; use `numeric_machine_value`
+  - [ ] F2: audit `mpz_fits_slong_p` sites for LLP64; use `expr_mpz_get_int64` where a
+        conservative miss changes an answer
+  - [ ] E3: `(2/3)^(-2^63)` prints as `(3/2)^(2^63)` (cosmetic)
+  - [ ] F4: write `tests/test_compile_overflow.c`, or drop the reference in `checked_int.h`
+- [ ] Phase 8. Prevention: a `make check-machine-boundary` gate. Probe every numeric head with
+      an NDArray kernel or a Compile lowering at the boundary inputs (+-1.*^308 * 10,
+      1.*^-200 * 1.*^-200, 2.^-1074, -0., huge exact scalars) over scalar / List / packed /
+      NDArray / Compile, and require agreement. C3, E5 and E9 would each have failed it.
+      Ratchet with a checked-in BASELINE, like `check-nd-surfaces`.
+- [ ] Close-out: valgrind the corpus, a no-FLINT build, `make check-c99`, the gates, merge to
+      main, the review section below
+
 # Bronstein integration campaign (started 2026-11-12)
 
 Living plan: src/internal/bronstein/BRONSTEIN_PLAN.md (phases, design, progress log).

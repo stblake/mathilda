@@ -1234,6 +1234,13 @@ static void cpow_pair(double ar, double ai, double er, double ei,
         mth_powi_machine_c(ar, ai, (int64_t)er, outr, outi);
         return;
     }
+    /* Negative real base, real non-integer exponent: the scalar builtin's
+     * formula (mth_machine_pow.h), so a buffer element matches it bit for
+     * bit -- polar form below left Sqrt[-1.] at 6.1e-17 + 1. I. */
+    if (ai == 0.0 && ei == 0.0 && ar < 0.0) {
+        mth_neg_base_pow_machine(ar, er, outr, outi);
+        return;
+    }
     if (ar == 0.0 && ai == 0.0) { *outr = 0.0; *outi = 0.0; return; }
     double logr = 0.5 * log(ar * ar + ai * ai);   /* log|a|            */
     double th = atan2(ai, ar);                     /* arg(a)            */

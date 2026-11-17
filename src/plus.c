@@ -16,6 +16,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <math.h>    /* isfinite, fabs */
+#include <float.h>   /* DBL_MIN */
 #include <stdint.h>
 #include <stdbool.h>
 #include <gmp.h>
@@ -189,19 +191,24 @@ static Expr* add_numbers(Expr* a, Expr* b) {
     }
 
     if (a->type == EXPR_REAL || b->type == EXPR_REAL) {
-        double va = 0.0, vb = 0.0;
-        int64_t n, d;
-        if (a->type == EXPR_REAL) va = a->data.real;
-        else if (a->type == EXPR_INTEGER) va = (double)a->data.integer;
-        else if (a->type == EXPR_BIGINT) va = mpz_get_d(a->data.bigint);
-        else if (is_rational(a, &n, &d)) va = (double)n / d;
-
-        if (b->type == EXPR_REAL) vb = b->data.real;
-        else if (b->type == EXPR_INTEGER) vb = (double)b->data.integer;
-        else if (b->type == EXPR_BIGINT) vb = mpz_get_d(b->data.bigint);
-        else if (is_rational(b, &n, &d)) vb = (double)n / d;
-        
-        return expr_new_real(va + vb);
+        /* Correctly rounded operand values: an exact BigInt or Rational of
+         * any width (mpz_get_d truncated, and a Rational[BigInt, BigInt]
+         * read as 0). Anything else is not this branch's to fold. */
+        double va, vb;
+        if (!numeric_machine_value(a, &va) || !numeric_machine_value(b, &vb))
+            return NULL;
+        /* Overflow (1.*^308 + 1.*^308), or an exact operand past DBL_MAX
+         * (1.5 + 10^400): recompute at machine precision in MPFR, whose
+         * exponent range is far wider -- the policy Power/Exp already follow
+         * (Exp[1000.]). A subnormal sum (exact in IEEE, but below
+         * $MinMachineNumber) is re-represented the same way; an exact zero
+         * (1. - 1.) stays a machine zero. */
+        double r = va + vb;
+        if (!isfinite(r) || numeric_machine_subnormal(r)) {
+            Expr* p = numeric_machine_binop_promote(a, b, false);
+            if (p) return p;
+        }
+        return expr_new_real(r);
     }
 
     /* Mixed BigInt fast path: both sides must be plain integer-like

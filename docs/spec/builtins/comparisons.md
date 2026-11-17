@@ -197,6 +197,12 @@ Tests strict ascending order.
   `0 < Infinity`, `-Infinity < Pi` and `Infinity <= Infinity` are `True`, and
   `Infinity < Infinity` is `False`. A symbolic or complex other side, or
   `ComplexInfinity`, stays unevaluated.
+- A machine number against an exact number outside the double range decides
+  (v0.6594): `1.5 < 10^400`, `1.*^308 < 10^309` and `1.*^-300 > 1/10^400` are
+  `True` (they stayed unevaluated). The exact side is read correctly rounded;
+  past `DBL_MAX` that is `+-inf`, and an exact value that underflows keeps its
+  sign below every normal machine number, so `0. == 10^-400` is `False`, as
+  `0. == 10^-300` is.
 
 ## LessEqual
 Tests non-strict ascending order.

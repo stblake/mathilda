@@ -31,6 +31,10 @@ PICOMATH-80.
 - [`docs/spec/`](docs/spec/) — per-category built-in docs and changelog.
 - [`docs/extending.md`](docs/extending.md) — how to add builtins, modules,
   patterns, internal rules, and operators.
+- [`docs/design/numeric_tower_review.md`](docs/design/numeric_tower_review.md) —
+  the int64/BigInt and machine/MPFR boundaries: the policy (a machine number has
+  a 53-bit mantissa and a normal exponent; anything else is a 53-bit MPFR),
+  every finding of the 2026-11 review, and its status.
 - [`docs/design/performance.md`](docs/design/performance.md) — Mathilda against
   Mathematica 14.0 and NumPy on 70+ HPC kernels, with the method and the gaps.
 - [`COMPILE_MISSING.md`](COMPILE_MISSING.md) — the heads that have a numeric

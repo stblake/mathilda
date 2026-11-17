@@ -4252,8 +4252,21 @@ Expr* builtin_quotient(Expr* res) {
 
     if (n_val == 0.0) return NULL;
 
-    int64_t result = (int64_t)floor((m_val - d_val) / n_val);
-    return expr_new_integer(result);
+    /* floor() of a double is an integer-valued double; outside the int64
+     * range the old (int64_t) cast was undefined behaviour (Quotient[1.*^300, 1]
+     * gave -2^63). Convert exactly through GMP instead -- the double is an
+     * integer, so mpz_set_d is exact. A non-finite quotient (tiny divisor)
+     * stays unevaluated. */
+    double q = floor((m_val - d_val) / n_val);
+    if (!isfinite(q)) return NULL;
+    if (q >= -9223372036854775808.0 && q < 9223372036854775808.0)
+        return expr_new_integer((int64_t)q);
+    mpz_t qz;
+    mpz_init(qz);
+    mpz_set_d(qz, q);
+    Expr* out = expr_bigint_normalize(expr_new_bigint_from_mpz(qz));
+    mpz_clear(qz);
+    return out;
 }
 
 /* Depth of e. An atomic association counts only its values and is never

@@ -2284,6 +2284,12 @@ add_executable(bignum_rational_numeric_tests test_bignum_rational_numeric.c $<TA
 target_include_directories(bignum_rational_numeric_tests PRIVATE ../src)
 add_test(NAME bignum_rational_numeric_tests COMMAND bignum_rational_numeric_tests)
 
+# 2026-11 numeric-tower review corpus (docs/design/numeric_tower_review.md):
+# int64/BigInt and machine/MPFR boundary edge cases.
+add_executable(numeric_tower_review_tests test_numeric_tower_review.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(numeric_tower_review_tests PRIVATE ../src)
+add_test(NAME numeric_tower_review_tests COMMAND numeric_tower_review_tests)
+
 add_executable(ranked_tests test_ranked.c $<TARGET_OBJECTS:mathilda_common>)
 target_include_directories(ranked_tests PRIVATE ../src)
 

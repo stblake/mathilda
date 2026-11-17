@@ -19,6 +19,8 @@ Expr* make_rational(int64_t n, int64_t d);
 // it reduces) from GMP numerator/denominator. Reduces by gcd, forces d > 0.
 // Returns NULL only for a zero denominator.
 Expr* make_rational_mpz(const mpz_t n, const mpz_t d);
+/* -n/d, exact even for n == INT64_MIN (where -n overflows). */
+Expr* make_rational_neg(int64_t n, int64_t d);
 
 // Check if expression is a Rational[...]
 bool is_rational(const Expr* e, int64_t* n, int64_t* d);

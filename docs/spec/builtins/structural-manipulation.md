@@ -501,6 +501,11 @@ Sorts elements of an expression into canonical order.
       then by the size of its imaginary part, negative first:
       `-1 < -1 - I < 0 < -I < I < 1 < 1 - I < 1 + I < 1 - 2 I`. Equal values
       put Integer before Real before Rational (`1 < 1.`, `0.5 < 1/2`).
+      Values of different kinds compare **exactly** (v0.6594): a double, an
+      MPFR number and an exact number are all compared as the rationals they
+      are, so `2.^53` sorts between `2^53` and `2^53 + 1`, and MPFR values past
+      the double range order by value (`N[10^400] < N[10^500]`; they tied at
+      `inf` and kept their input order).
     - **Products** compare their non-numeric factors from the *last* one
       backwards (any other expression counts as one factor), the shorter list
       winning a tie, and then their numeric coefficients:

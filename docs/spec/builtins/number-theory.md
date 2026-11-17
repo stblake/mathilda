@@ -9,6 +9,9 @@ Integer and number-theoretic functions: greatest common divisor and least common
 
 Both fold through GMP when any argument is a bigint, so results that exceed `int64` (e.g. `LCM[20!, 10^100 + 3]`) are computed exactly rather than left symbolic.
 
+- **`-2^63`** (`INT64_MIN`, whose magnitude has no `int64` form) folds through
+  GMP: `GCD[-2^63]`, `GCD[-2^63, 0]` and `LCM[-2^63]` are `2^63` (they were
+  `-2^63`), `LCM[-2^63, 3]` is `3 2^63` (v0.6594).
 - **Rationals**: `gcd(p1/q1, p2/q2) = gcd(p1, p2)/lcm(q1, q2)` and `lcm(p1/q1, p2/q2) = lcm(p1, p2)/gcd(q1, q2)`.
 - **Gaussian integers and rationals**: any non-real exact complex argument switches to `Z[i]`. Each argument is written `w/d` (`w` in `Z[i]`, `d` a positive integer). The gcd is `gcd(w_i)/lcm(d_i)` and the lcm is `lcm(w_i)/gcd(d_i)`, normalised to the first-quadrant associate (`Re > 0`, `Im >= 0`). This matches the reference on 400 of 400 random pairs: `GCD[3 + I, 2]` → `1 + I`, `GCD[1/2 + I/3, 2]` → `1/6`, `LCM[3 + I, 2]` → `2 + 4 I`, `GCD[-1 - I]` → `1 + I`.
 - **Attributes**: `Flat`, `Listable`, `OneIdentity`, `Orderless`, `Protected`, as in the reference. `NumericFunction` was dropped in v0.471.

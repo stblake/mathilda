@@ -12,6 +12,7 @@
 #include "series.h"
 #include "ndarray.h"
 #include "flint_qqbar.h"
+#include "message.h"           /* mth_message: General::ovfl */
 #include "mth_machine_pow.h"   /* mth_pow_machine / mth_powi_machine_c: the one machine Power */
 #include <math.h>
 #include <complex.h>
@@ -20,6 +21,7 @@
 #include <stdlib.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <limits.h>
 #include <gmp.h>
 
 /* Strict-positive constant predicate. Returns true for positive integer/
@@ -485,14 +487,92 @@ static bool find_min_perfect_base(const mpz_t n_in, mpz_t b_out, int64_t* k_out)
     return found;
 }
 
+/* True when |b|^e is representable as an mpz: GMP holds at most INT_MAX limbs
+ * and takes the exponent as an unsigned long (32 bits on LLP64 Windows); past
+ * either bound mpz_pow_ui aborts the process ("gmp: overflow in mpz type").
+ * |b| <= 1 is always representable (0, +-1 to any power). Same bound as
+ * BitShiftLeft's bitshift_count_representable. */
+static bool int_power_representable(const mpz_t b, uint64_t e) {
+    if (mpz_cmpabs_ui(b, 1) <= 0) return true;
+    if (e > (uint64_t)ULONG_MAX) return false;
+    uint64_t bits = (uint64_t)mpz_sizeinbase(b, 2);
+    uint64_t cap = (uint64_t)INT_MAX * GMP_NUMB_BITS;
+    return e <= cap / bits;
+}
+
+/* General::ovfl and Overflow[]: an exact integer power past GMP's range. */
+static Expr* int_power_overflow(void) {
+    mth_message("General", "ovfl", "Overflow occurred in computation.");
+    return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
+}
+
+/* |base|^|exp| with base's sign carried when exp is odd, as a normalised
+ * Integer/BigInt -- or, for exp < 0, the canonical reciprocal (denominator
+ * positive: (-3)^-41 is -1/3^41, never Rational[1, -3^41]). Overflow[] past
+ * the representable range. */
+/* A real number leaf (Integer, BigInt, Rational of any width, Real, MPFR) as
+ * a correctly rounded double for the machine-complex Power fallback; 0 for
+ * anything else (the old reading's default). */
+static double power_machine_part(const Expr* e) {
+    double v;
+    if (numeric_machine_value(e, &v)) return v;
+#ifdef USE_MPFR
+    if (e && e->type == EXPR_MPFR) return mpfr_get_d(e->data.mpfr, MPFR_RNDN);
+#endif
+    return 0.0;
+}
+
+/* A machine Real, or a Complex with a machine Real part: the operand that
+ * makes a Power machine precision under contagion. */
+static bool power_has_machine_real(const Expr* e) {
+    if (e->type == EXPR_REAL) return true;
+    Expr *re, *im;
+    return is_complex((Expr*)e, &re, &im)
+        && (re->type == EXPR_REAL || im->type == EXPR_REAL);
+}
+
+#ifdef USE_MPFR
+/* Contagion of one Power operand (consumed) to machine precision: a machine
+ * Real when the value fits a normal double, else -- a real MPFR outside the
+ * double range -- the same value rounded to 53 bits. Sets *changed when it
+ * altered anything. Non-MPFR operands pass through. */
+static Expr* power_operand_to_machine(Expr* e, bool* changed) {
+    if (!numeric_expr_is_mpfr(e)) return e;
+    e = numeric_lower_mpfr_to_machine(e);
+    if (!numeric_expr_is_mpfr(e)) { *changed = true; return e; }
+    if (e->type == EXPR_MPFR && mpfr_get_prec(e->data.mpfr) > DBL_MANT_DIG) {
+        Expr* m = expr_new_mpfr_bits(DBL_MANT_DIG);
+        if (m) {
+            mpfr_set(m->data.mpfr, e->data.mpfr, MPFR_RNDN);
+            expr_free(e);
+            *changed = true;
+            return m;
+        }
+    }
+    return e;
+}
+#endif
+
 static Expr* bigint_pow(const Expr* base, int64_t exp) {
-    if (exp < 0) return NULL;
     mpz_t b, r;
     expr_to_mpz(base, b);
+    uint64_t mag = exp < 0 ? (uint64_t)0 - (uint64_t)exp : (uint64_t)exp;
+    if (!int_power_representable(b, mag)) {
+        mpz_clear(b);
+        return int_power_overflow();
+    }
     mpz_init(r);
-    mpz_pow_ui(r, b, (unsigned long)exp);
+    mpz_pow_ui(r, b, (unsigned long)mag);
     mpz_clear(b);
-    Expr* result = expr_bigint_normalize(expr_new_bigint_from_mpz(r));
+    Expr* result;
+    if (exp < 0) {
+        mpz_t one;
+        mpz_init_set_ui(one, 1);
+        result = make_rational_mpz(one, r);   /* NULL only for 0^-n */
+        mpz_clear(one);
+    } else {
+        result = expr_bigint_normalize(expr_new_bigint_from_mpz(r));
+    }
     mpz_clear(r);
     return result;
 }
@@ -846,12 +926,7 @@ static Expr* power_int_int(const Expr* base, int64_t e) {
     if (e < 0) {
         bool overflow = false;
         int64_t res_val = ipow(b, -e, &overflow);
-        if (overflow) {
-            Expr* denom = bigint_pow(base, -e);
-            if (!denom) return NULL;
-            Expr* r_args[2] = { expr_new_integer(1), denom };
-            return expr_new_function(expr_new_symbol(SYM_Rational), r_args, 2);
-        }
+        if (overflow) return bigint_pow(base, e);   /* canonical reciprocal */
         return make_rational(1, res_val);
     }
     return NULL;
@@ -1286,6 +1361,24 @@ Expr* builtin_power(Expr* res) {
 
         if (base_num && exp_num) {
 #ifdef USE_MPFR
+            /* Machine contagion, as in Plus / Times: an MPFR operand meeting a
+             * machine real is lowered to machine precision first --
+             * N[Pi, 30]^1.5 and 1.5^N[Pi, 30] kept 30 digits. Only the MPFR
+             * operands are touched (an exact exponent stays exact); one whose
+             * value lies outside the double range becomes a 53-bit MPFR. The
+             * rewrite happens only when it changes something, so it cannot
+             * loop: the second pass finds machine precision already. */
+            if ((numeric_expr_is_mpfr(base) || numeric_expr_is_mpfr(exp))
+                && (power_has_machine_real(base) || power_has_machine_real(exp))) {
+                bool lowered = false;
+                Expr* nb = power_operand_to_machine(expr_copy(base), &lowered);
+                Expr* ne = power_operand_to_machine(expr_copy(exp), &lowered);
+                if (lowered)
+                    return expr_new_function(expr_new_symbol(SYM_Power),
+                                             (Expr*[]){ nb, ne }, 2);
+                expr_free(nb);
+                expr_free(ne);
+            }
             /* MPFR real-valued power: fast path when both sides are real
              * and at least one carries MPFR precision. */
             if (!base_comp && !exp_comp && numeric_any_mpfr(base, exp)) {
@@ -1325,37 +1418,35 @@ Expr* builtin_power(Expr* res) {
             }
 #endif
             if (has_real) {
+                /* Correctly rounded parts (power_machine_part): the old
+                 * inline mpz_get_d truncated, and a Rational[BigInt, BigInt]
+                 * part read as 0. */
                 double vbase_re = 0, vbase_im = 0, vexp_re = 0, vexp_im = 0;
-                int64_t n, d;
-                
                 if (base_comp) {
-                    vbase_re = (re_b->type == EXPR_REAL) ? re_b->data.real : (re_b->type == EXPR_INTEGER) ? (double)re_b->data.integer : (re_b->type == EXPR_BIGINT) ? mpz_get_d(re_b->data.bigint) : 0;
-                    vbase_im = (im_b->type == EXPR_REAL) ? im_b->data.real : (im_b->type == EXPR_INTEGER) ? (double)im_b->data.integer : (im_b->type == EXPR_BIGINT) ? mpz_get_d(im_b->data.bigint) : 0;
-                    if (is_rational(re_b, &n, &d)) vbase_re = (double)n / d;
-                    if (is_rational(im_b, &n, &d)) vbase_im = (double)n / d;
+                    vbase_re = power_machine_part(re_b);
+                    vbase_im = power_machine_part(im_b);
                 } else {
-                    vbase_re = (base->type == EXPR_REAL) ? base->data.real : (base->type == EXPR_INTEGER) ? (double)base->data.integer : (base->type == EXPR_BIGINT) ? mpz_get_d(base->data.bigint) : 0;
-                    if (is_rational(base, &n, &d)) vbase_re = (double)n / d;
+                    vbase_re = power_machine_part(base);
                 }
-                
                 if (exp_comp) {
-                    vexp_re = (re_e->type == EXPR_REAL) ? re_e->data.real : (re_e->type == EXPR_INTEGER) ? (double)re_e->data.integer : (re_e->type == EXPR_BIGINT) ? mpz_get_d(re_e->data.bigint) : 0;
-                    vexp_im = (im_e->type == EXPR_REAL) ? im_e->data.real : (im_e->type == EXPR_INTEGER) ? (double)im_e->data.integer : (im_e->type == EXPR_BIGINT) ? mpz_get_d(im_e->data.bigint) : 0;
-                    if (is_rational(re_e, &n, &d)) vexp_re = (double)n / d;
-                    if (is_rational(im_e, &n, &d)) vexp_im = (double)n / d;
+                    vexp_re = power_machine_part(re_e);
+                    vexp_im = power_machine_part(im_e);
                 } else {
-                    vexp_re = (exp->type == EXPR_REAL) ? exp->data.real : (exp->type == EXPR_INTEGER) ? (double)exp->data.integer : (exp->type == EXPR_BIGINT) ? mpz_get_d(exp->data.bigint) : 0;
-                    if (is_rational(exp, &n, &d)) vexp_re = (double)n / d;
+                    vexp_re = power_machine_part(exp);
                 }
 
                 double complex z = vbase_re + vbase_im * I;
                 double complex w = vexp_re + vexp_im * I;
                 
                 if (vbase_re < 0.0 && vbase_im == 0.0 && vexp_im == 0.0 && floor(vexp_re) != vexp_re) {
-                    double r = pow(-vbase_re, vexp_re);
-                    double theta = vexp_re * 3.14159265358979323846;
-                    Expr* c_re = expr_new_real(r * cos(theta));
-                    Expr* c_im = expr_new_real(r * sin(theta));
+                    /* (-x)^y on the principal branch, via the shared machine
+                     * helper so the packed / NDArray kernel (cpow_pair) gives
+                     * the same bits. cos(y * pi) left Sqrt[-1.] at
+                     * 6.1*^-17 + 1. I; mth_sincospi reduces y exactly. */
+                    double p_re, p_im;
+                    mth_neg_base_pow_machine(vbase_re, vexp_re, &p_re, &p_im);
+                    Expr* c_re = expr_new_real(p_re);
+                    Expr* c_im = expr_new_real(p_im);
                     Expr* comp = make_complex(c_re, c_im);
                     return comp;
                 }
@@ -1453,17 +1544,39 @@ Expr* builtin_power(Expr* res) {
         }
     }
 
+    /* Exact integer base to a BigInt exponent. An int64-sized (unnormalised)
+     * BigInt exponent is an ordinary integer power. Otherwise |e| >= 2^63:
+     * (+-1)^e is decided by parity ((-1)^(2^70) stayed unevaluated), 0^e is 0
+     * for e > 0, and |b| >= 2 to a positive e is past every representable
+     * integer -- the same General::ovfl / Overflow[] as bigint_pow's bound.
+     * A negative huge exponent of |b| >= 2 (or 0) is left to the other rules. */
+    if (expr_is_integer_like(base) && exp->type == EXPR_BIGINT) {
+        int64_t ev;
+        if (expr_mpz_get_int64(exp->data.bigint, &ev)) {
+            if (ev == 0) return NULL;   /* 0^0 / x^0 handling lives elsewhere */
+            return base->type == EXPR_INTEGER ? power_int_int(base, ev)
+                                              : bigint_pow(base, ev);
+        }
+        int esgn = mpz_sgn(exp->data.bigint);
+        mpz_t b;
+        expr_to_mpz(base, b);
+        Expr* out = NULL;
+        if (mpz_cmp_si(b, 1) == 0) {
+            out = expr_new_integer(1);
+        } else if (mpz_cmp_si(b, -1) == 0) {
+            out = expr_new_integer(mpz_odd_p(exp->data.bigint) ? -1 : 1);
+        } else if (mpz_sgn(b) == 0) {
+            out = esgn > 0 ? expr_new_integer(0) : NULL;
+        } else if (esgn > 0) {
+            out = int_power_overflow();
+        }
+        mpz_clear(b);
+        if (out) return out;
+    }
+
     if (base->type == EXPR_BIGINT && exp->type == EXPR_INTEGER) {
         int64_t e = exp->data.integer;
-        if (e > 0) {
-            return bigint_pow(base, e);
-        }
-        if (e < 0) {
-            Expr* denom = bigint_pow(base, -e);
-            if (!denom) return NULL;
-            Expr* r_args[2] = { expr_new_integer(1), denom };
-            return expr_new_function(expr_new_symbol(SYM_Rational), r_args, 2);
-        }
+        if (e != 0) return bigint_pow(base, e);   /* e < 0: canonical reciprocal */
     }
 
     if (base->type == EXPR_INTEGER && exp->type == EXPR_INTEGER) {
@@ -1505,12 +1618,17 @@ Expr* builtin_power(Expr* res) {
             int64_t ev = exp->data.integer;
             if (ev == 0) return expr_new_integer(1);
             e_neg = ev < 0;
-            int64_t magnitude = e_neg ? -ev : ev;
+            /* Magnitude as uint64: -INT64_MIN overflows int64 and slipped
+             * under the cap below as a negative number. */
+            uint64_t magnitude = e_neg ? (uint64_t)0 - (uint64_t)ev : (uint64_t)ev;
             if (magnitude > 1000000000) goto rational_bigint_giveup;
             e_abs = (long)magnitude;
         } else { /* EXPR_BIGINT */
             if (mpz_sgn(exp->data.bigint) == 0) return expr_new_integer(1);
-            if (!mpz_fits_slong_p(exp->data.bigint)) goto rational_bigint_giveup;
+            /* Same 1e9 cap as the machine-integer arm (an unnormalised small
+             * BigInt may land here; a genuine one is past 2^63). Previously
+             * any slong-fitting exponent went to an unbounded mpz_pow_ui. */
+            if (mpz_cmpabs_ui(exp->data.bigint, 1000000000UL) > 0) goto rational_bigint_giveup;
             long ev = mpz_get_si(exp->data.bigint);
             e_neg = ev < 0;
             e_abs = e_neg ? -ev : ev;
@@ -1531,6 +1649,13 @@ Expr* builtin_power(Expr* res) {
             mpz_gcd(g0, bnum, bden);
             base_coprime = mpz_cmp_ui(g0, 1) == 0;
             mpz_clear(g0);
+        }
+        if (!int_power_representable(bnum, (uint64_t)e_abs)
+            || !int_power_representable(bden, (uint64_t)e_abs)) {
+            /* The 1e9 exponent cap does not bound the RESULT: (2^1000/3)^(10^9)
+             * needs 10^12 bits, and mpz_pow_ui would abort the process. */
+            mpz_clear(bnum); mpz_clear(bden); mpz_clear(rnum); mpz_clear(rden);
+            return int_power_overflow();
         }
         mpz_pow_ui(rnum, bnum, (unsigned long)e_abs);
         mpz_pow_ui(rden, bden, (unsigned long)e_abs);
@@ -1625,7 +1750,7 @@ Expr* builtin_power(Expr* res) {
             if (trigger) {
                 Expr* num_pow = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ expr_new_integer(bn), expr_copy(exp) }, 2);
-                Expr* neg_exp = make_rational(-pp_rb, qq_rb);
+                Expr* neg_exp = make_rational_neg(pp_rb, qq_rb);
                 Expr* den_pow = expr_new_function(expr_new_symbol(SYM_Power),
                     (Expr*[]){ expr_new_integer(bd), neg_exp }, 2);
                 Expr* result = expr_new_function(expr_new_symbol(SYM_Times),
@@ -2124,6 +2249,21 @@ rat_imag_fallthrough: ;
 
     if (base->type == EXPR_INTEGER && is_rational(exp, &p, &q) && q > 1) {
         int64_t n = base->data.integer;
+        /* INT64_MIN = -2^63 has no int64 magnitude: every "-n" below would
+         * overflow (Sqrt[-2^63] recursed on itself and crashed). On the
+         * principal branch (-a)^r = (-1)^r a^r for real a > 0, so split off
+         * the sign and let the evaluator finish both powers exactly:
+         * (-2^63)^(p/q) = (-1)^(p/q) * 2^(63 p/q). */
+        if (n == INT64_MIN) {
+            Expr* e63 = expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ expr_new_integer(63), expr_copy(exp) }, 2);
+            Expr* sgn = expr_new_function(expr_new_symbol(SYM_Power),
+                (Expr*[]){ expr_new_integer(-1), expr_copy(exp) }, 2);
+            Expr* mag = expr_new_function(expr_new_symbol(SYM_Power),
+                (Expr*[]){ expr_new_integer(2), e63 }, 2);
+            return expr_new_function(expr_new_symbol(SYM_Times),
+                (Expr*[]){ sgn, mag }, 2);
+        }
         bool n_negative = (n < 0);
         if (n_negative) {
             /* q==2: (-n)^(p/2) = I^p * |n|^(p/2) on the principal branch.

@@ -857,8 +857,12 @@ static bool is_hold_head(const Expr* head) {
  * ---------------------------------------------------------------------- */
 static Expr* mpfr_to_machine(const mpfr_t v) {
     double d = mpfr_get_d(v, MPFR_RNDN);
+    /* ... and likewise below DBL_MIN: a subnormal double has fewer than 53
+     * bits (1.*^-320 kept 4 digits), so it is not a machine number either --
+     * machine numbers stop at $MinMachineNumber. */
     if (mpfr_number_p(v)
-        && ((isinf(d) && !mpfr_inf_p(v)) || (d == 0.0 && !mpfr_zero_p(v)))) {
+        && ((isinf(d) && !mpfr_inf_p(v)) || (d == 0.0 && !mpfr_zero_p(v))
+            || numeric_machine_subnormal(d))) {
         Expr* r = expr_new_mpfr_bits(DBL_MANT_DIG);
         if (r) {
             mpfr_set(r->data.mpfr, v, MPFR_RNDN);
@@ -1554,7 +1558,8 @@ static Expr* numericalize_function_uncached(const Expr* e, NumericSpec spec) {
          * nonzero for any in-range rational. In-range values keep the IEEE
          * double so ordinary machine arithmetic is unaffected. */
         double dq = mpq_to_double_rn(q);
-        if (!isfinite(dq) || (dq == 0.0 && mpq_sgn(q) != 0)) {
+        if (!isfinite(dq) || (dq == 0.0 && mpq_sgn(q) != 0)
+            || numeric_machine_subnormal(dq)) {     /* N[10^-320]: < 53 bits */
             mpfr_t r;
             mpfr_init2(r, DBL_MANT_DIG);
             mpfr_set_q(r, q, MPFR_RNDN);
@@ -2525,7 +2530,10 @@ static void round_leaf_to_machine(Expr* e) {
 static Expr* demote_to_machine_if_fits(Expr* r) {
     if (r && r->type == EXPR_MPFR && !mpfr_zero_p(r->data.mpfr)) {
         double d = mpfr_get_d(r->data.mpfr, MPFR_RNDN);
-        if (isfinite(d) && d != 0.0) {   /* normal double: exact for a 53-bit source */
+        /* normal double only (exact for a 53-bit source): the comment above
+         * promised a sub-DBL_MIN value stays MPFR, but a subnormal passed the
+         * old `d != 0.0` test and was demoted with its bits truncated. */
+        if (isfinite(d) && d != 0.0 && !numeric_machine_subnormal(d)) {
             expr_free(r);
             return expr_new_real(d);
         }
@@ -2626,7 +2634,7 @@ Expr* numeric_lower_mpfr_to_machine(Expr* r) { return r; }
  * still stops any Inf/NaN from escaping). */
 Expr* numeric_machine_real_or_promote(double v, double xin, const Expr* call) {
 #ifdef USE_MPFR
-    if (!isfinite(v) || (v == 0.0 && xin != 0.0)) {
+    if (!isfinite(v) || numeric_machine_subnormal(v) || (v == 0.0 && xin != 0.0)) {
         Expr* p = numeric_promote_machine_call(call);
         if (p) return p;
     }
@@ -2669,7 +2677,8 @@ Expr* numeric_promote_result_if_degenerate(Expr* r, const Expr* call) {
     bool degen = false;
     if (r->type == EXPR_REAL) {
         double v = r->data.real;
-        degen = !isfinite(v) || (v == 0.0 && call_has_nonzero_real_arg(call));
+        degen = !isfinite(v) || numeric_machine_subnormal(v)
+             || (v == 0.0 && call_has_nonzero_real_arg(call));
     } else {
         Expr *re, *im;
         if (is_complex(r, &re, &im))
@@ -2683,6 +2692,56 @@ Expr* numeric_promote_result_if_degenerate(Expr* r, const Expr* call) {
     (void)call;
 #endif
     return r;
+}
+
+/* See numeric.h. */
+bool numeric_machine_value(const Expr* e, double* out) {
+    if (!e) return false;
+    switch (e->type) {
+        case EXPR_REAL:    *out = e->data.real; return true;
+        case EXPR_INTEGER: *out = (double)e->data.integer; return true;   /* rounds to nearest */
+        case EXPR_BIGINT: {
+            mpq_t q;
+            mpq_init(q);
+            mpq_set_z(q, e->data.bigint);
+            *out = numeric_mpq_to_double(q);
+            mpq_clear(q);
+            return true;
+        }
+        default: break;
+    }
+    if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Rational
+        && expr_is_integer_like(e->data.function.args[0])
+        && expr_is_integer_like(e->data.function.args[1])) {
+        mpz_t n, d;
+        expr_to_mpz(e->data.function.args[0], n);   /* initialises n */
+        expr_to_mpz(e->data.function.args[1], d);
+        mpq_t q;
+        mpq_init(q);
+        mpq_set_num(q, n);
+        mpq_set_den(q, d);
+        mpq_canonicalize(q);
+        *out = numeric_mpq_to_double(q);
+        mpq_clear(q); mpz_clear(n); mpz_clear(d);
+        return true;
+    }
+    return false;
+}
+
+/* See numeric.h. */
+Expr* numeric_machine_binop_promote(const Expr* a, const Expr* b, bool mul) {
+#ifdef USE_MPFR
+    Expr* r = mul ? numeric_mpfr_mul(a, b, DBL_MANT_DIG)
+                  : numeric_mpfr_add(a, b, DBL_MANT_DIG);
+    if (r && r->type == EXPR_MPFR && !mpfr_number_p(r->data.mpfr))
+        return numeric_sanitize_nonfinite(r);   /* past the MPFR range too */
+    return r;
+#else
+    (void)a; (void)b; (void)mul;
+    return NULL;
+#endif
 }
 
 /* ------------------------------------------------------------------------

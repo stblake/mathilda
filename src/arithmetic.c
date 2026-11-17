@@ -4,7 +4,10 @@
 #include "sym_names.h"
 #include "internal.h"
 #include "print.h"
+#include "checked_int.h"
+#include "numeric.h"       /* numeric_contagion_args: one-kind Complex */   /* ci_mul_i64 / ci_abs_i64 */
 #include <stdio.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
@@ -51,11 +54,19 @@ int64_t gcd(int64_t a, int64_t b) {
     return (int64_t)(x << sh);
 }
 
+/* lcm(|a|, |b|), or 0 when either is 0. SATURATES at INT64_MAX when the lcm
+ * does not fit in int64 (including an INT64_MIN operand, whose magnitude has
+ * no int64 form): the old (a/g)*b silently wrapped to a wrong, possibly
+ * negative, value. Saturation is stable under chaining -- lcm(INT64_MAX, q)
+ * is again >= INT64_MAX -- so a fold like solverad's stays saturated, and its
+ * degree guard rejects it. A caller that needs the exact value treats
+ * INT64_MAX as "use the GMP LCM" (rat.c). */
 int64_t lcm(int64_t a, int64_t b) {
     if (a == 0 || b == 0) return 0;
-    a = llabs(a);
-    b = llabs(b);
-    return (a / gcd(a, b)) * b;
+    int64_t aa, bb, r;
+    if (ci_abs_i64(a, &aa) || ci_abs_i64(b, &bb)) return INT64_MAX;
+    if (ci_mul_i64(aa / gcd(aa, bb), bb, &r)) return INT64_MAX;
+    return r;
 }
 
 Expr* make_rational(int64_t n, int64_t d) {
@@ -92,6 +103,23 @@ Expr* make_rational(int64_t n, int64_t d) {
     args[0] = expr_new_integer(n);
     args[1] = expr_new_integer(d);
     return expr_new_function(expr_new_symbol(SYM_Rational), args, 2);
+}
+
+/* make_rational(-n, d) without the int64 negation: -INT64_MIN wraps back to
+ * INT64_MIN, so the printer's "flip a negative exponent" step re-produced the
+ * same negative exponent forever (x^(-2^63/3) printed 1/(1/(1/(...)))). */
+Expr* make_rational_neg(int64_t n, int64_t d) {
+    if (n != INT64_MIN) return make_rational(-n, d);
+    mpz_t zn, zd;
+    mpz_init(zn); mpz_init(zd);
+    mpz_set_ui(zn, 1);
+    mpz_mul_2exp(zn, zn, 63);   /* -INT64_MIN = 2^63 */
+    mpz_import(zd, 1, 1, sizeof(uint64_t), 0, 0,
+               &(uint64_t){ d < 0 ? (uint64_t)0 - (uint64_t)d : (uint64_t)d });
+    if (d < 0) mpz_neg(zd, zd);
+    Expr* r = make_rational_mpz(zn, zd);
+    mpz_clear(zn); mpz_clear(zd);
+    return r;
 }
 
 /* Bignum analogue of make_rational: build a canonical Rational (or Integer /
@@ -155,6 +183,38 @@ Expr* builtin_rational(Expr* res) {
                 expr_free(r);
                 return NULL;
             }
+        }
+        return r;
+    }
+
+    /* A BigInt part (e.g. Rational[2^70, 2^70], Rational[6, -2^70], or an
+     * unnormalised BigInt that fits int64): canonicalise through GMP -- gcd
+     * reduction, positive denominator, demotion. Decline only when the input
+     * is already exactly the canonical tree (same values AND representation),
+     * so an unnormalised part is still rewritten. */
+    if (expr_is_integer_like(n_expr) && expr_is_integer_like(d_expr)) {
+        mpz_t zn, zd;
+        expr_to_mpz(n_expr, zn);
+        expr_to_mpz(d_expr, zd);
+        if (mpz_sgn(zd) == 0) {
+            bool zero_num = mpz_sgn(zn) == 0;
+            mpz_clear(zn); mpz_clear(zd);
+            arith_warn("Power::infy: Infinite expression 1/0 encountered.\n");
+            if (zero_num) {
+                arith_warn("Infinity::indet: Indeterminate expression 0 ComplexInfinity encountered.\n");
+                return expr_new_symbol(SYM_Indeterminate);
+            }
+            return expr_new_symbol(SYM_ComplexInfinity);
+        }
+        Expr* r = make_rational_mpz(zn, zd);
+        mpz_clear(zn); mpz_clear(zd);
+        if (r && r->type == EXPR_FUNCTION && r->data.function.arg_count == 2
+            && r->data.function.args[0]->type == n_expr->type
+            && r->data.function.args[1]->type == d_expr->type
+            && expr_eq(r->data.function.args[0], n_expr)
+            && expr_eq(r->data.function.args[1], d_expr)) {
+            expr_free(r);
+            return NULL;
         }
         return r;
     }
@@ -240,6 +300,17 @@ Expr* builtin_subtract(Expr* res) {
     return expr_new_function(expr_new_symbol(SYM_Plus), p_args, 2);
 }
 
+/* The numeric kind of a Complex part, for builtin_complex's one-kind rule. */
+enum { CPK_EXACT, CPK_MACHINE, CPK_MPFR, CPK_MPFR_ZERO, CPK_OTHER };
+static int complex_part_kind(const Expr* e) {
+    if (e->type == EXPR_REAL) return CPK_MACHINE;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return mpfr_zero_p(e->data.mpfr) ? CPK_MPFR_ZERO : CPK_MPFR;
+#endif
+    if (is_rational_like(e)) return CPK_EXACT;
+    return CPK_OTHER;
+}
+
 Expr* builtin_complex(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
 
@@ -249,11 +320,37 @@ Expr* builtin_complex(Expr* res) {
     if (im->type == EXPR_INTEGER && im->data.integer == 0) {
         return expr_copy(re);
     }
+
+    /* One number, one kind: a machine Real or an exact number meeting a part
+     * of another kind takes the contagion Plus / Times use
+     * (numeric_contagion_args). Complex[1.0, 2] is Complex[1.0, 2.0] (it was
+     * not SameQ to it), Complex[1.5`30, 2.] is machine (it printed 30 digits
+     * but reported MachinePrecision), Complex[1/2, 1.5`30] is 30 digits. With
+     * a machine 0. imaginary part an exact real part becomes its machine value
+     * (Complex[2^70, 0.] was an exact bignum where Complex[2, 0.] was a Real).
+     * Left alone:
+     *  - an exact-zero part: canonical as it stands (Complex[0, 1.5], N[I, 30]);
+     *  - an MPFR zero part: it carries ACCURACY, not precision, and lowering
+     *    its width would change it (0``120 became 0.e-20);
+     *  - two MPFR parts of different widths, and Complex[x_MPFR, 0.]: the
+     *    special-function kernels build these deliberately (guard widths),
+     *    and they were never mixed-kind. */
+    int kre = complex_part_kind(re), kim = complex_part_kind(im);
+    bool re_zero = re->type == EXPR_INTEGER && re->data.integer == 0;
     if (im->type == EXPR_REAL && im->data.real == 0.0) {
-        if (re->type == EXPR_INTEGER) {
-            return expr_new_real((double)re->data.integer);
+        if (kre == CPK_EXACT) {
+            double v;
+            if (numeric_machine_value(re, &v) && isfinite(v)) return expr_new_real(v);
         }
         return expr_copy(re);
+    }
+    if (!re_zero && kre != CPK_OTHER && kim != CPK_OTHER && kre != kim
+        && kre != CPK_MPFR_ZERO && kim != CPK_MPFR_ZERO
+        && (kre == CPK_MACHINE || kim == CPK_MACHINE || kre == CPK_EXACT || kim == CPK_EXACT)) {
+        Expr* parts[2] = { re, im };
+        Expr* out[2];
+        if (numeric_contagion_args(parts, 2, out))
+            return expr_new_function(expr_new_symbol(SYM_Complex), out, 2);
     }
 
     return NULL;
@@ -313,8 +410,14 @@ Expr* builtin_divide(Expr* res) {
             }
             return expr_new_symbol(SYM_ComplexInfinity);
         }
-        Expr* r = make_rational(n1 * d2, d1 * n2);
-        if (r) return r;
+        /* Cross products overflow int64 for wide operands (Divide[1/3^39, 3^39]
+         * gave -1/7710839681495117703); on overflow take the exact
+         * Times/Power rewrite below, which promotes to GMP. */
+        int64_t rn, rd;
+        if (!ci_mul_i64(n1, d2, &rn) && !ci_mul_i64(d1, n2, &rd)) {
+            Expr* r = make_rational(rn, rd);
+            if (r) return r;
+        }
     }
 
 rewrite:

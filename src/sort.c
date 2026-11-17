@@ -82,26 +82,68 @@ static bool is_complex_number(const Expr* e) {
            is_atomic_numeric(e->data.function.args[1]);
 }
 
+/* A real number atom as a double: correctly rounded for exact values of any
+ * width (numeric_machine_value -- mpz_get_d(num)/mpz_get_d(den) was inf/inf =
+ * NaN for a rational with huge parts), +-inf past the double range (sign
+ * kept). Used only where a double is enough: the sign of a value, and the
+ * machine key of a Complex part. Ordering of two real values is exact
+ * (real_value_cmp). */
 static double get_numeric_value(const Expr* e) {
-    if (e->type == EXPR_INTEGER) return (double)e->data.integer;
-    if (e->type == EXPR_BIGINT) return mpz_get_d(e->data.bigint);
-    if (e->type == EXPR_REAL) return e->data.real;
+    double v;
+    if (numeric_machine_value(e, &v)) return v;
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR) return mpfr_get_d(e->data.mpfr, MPFR_RNDN);
 #endif
-    int64_t n, d;
-    if (is_rational((Expr*)e, &n, &d)) return (double)n / d;
-    /* Bignum-component Rational: is_rational rejected it and this used to
-     * return 0, collapsing every such value to a false tie. */
-    if (is_rational_like(e) && e->type == EXPR_FUNCTION) {
-        mpz_t num, den;
-        rat_to_mpz_parts(e, num, den);
-        double v = mpz_get_d(num) / mpz_get_d(den);
-        mpz_clear(num); mpz_clear(den);
-        return v;
-    }
     return 0;
 }
+
+#ifdef USE_MPFR
+/* The value s*e of a real number atom other than a non-dyadic rational, set
+ * EXACTLY into a freshly initialised `out`: every double, int64, BigInt and
+ * MPFR is a dyadic rational that an MPFR of its own width holds exactly. */
+static bool real_atom_exact_mpfr(const Expr* e, int s, mpfr_t out) {
+    switch (e->type) {
+        case EXPR_REAL:
+            mpfr_init2(out, DBL_MANT_DIG);
+            mpfr_set_d(out, e->data.real, MPFR_RNDN);
+            break;
+        case EXPR_INTEGER: {
+            mpz_t z;
+            expr_to_mpz(e, z);
+            mpfr_init2(out, 64);
+            mpfr_set_z(out, z, MPFR_RNDN);
+            mpz_clear(z);
+            break;
+        }
+        case EXPR_BIGINT: {
+            size_t bits = mpz_sizeinbase(e->data.bigint, 2);
+            mpfr_init2(out, (mpfr_prec_t)(bits < 2 ? 2 : bits));
+            mpfr_set_z(out, e->data.bigint, MPFR_RNDN);
+            break;
+        }
+        case EXPR_MPFR:
+            mpfr_init2(out, mpfr_get_prec(e->data.mpfr));
+            mpfr_set(out, e->data.mpfr, MPFR_RNDN);
+            break;
+        default:
+            return false;
+    }
+    if (s < 0) mpfr_neg(out, out, MPFR_RNDN);
+    return true;
+}
+
+/* s*e for a rational-like atom, as an mpq (initialised here). */
+static void real_atom_mpq(const Expr* e, int s, mpq_t out) {
+    mpz_t n, d;
+    rat_to_mpz_parts(e, n, d);
+    mpq_init(out);
+    mpq_set_num(out, n);
+    mpq_set_den(out, d);
+    mpq_canonicalize(out);
+    if (s < 0) mpq_neg(out, out);
+    mpz_clear(n); mpz_clear(d);
+}
+#endif
 
 /* ------------------------------------------------------------------ */
 /* Canonical string order (WL collation)                              */
@@ -294,9 +336,44 @@ static int real_value_cmp(const Expr* a, int sa, const Expr* b, int sb) {
         mpz_clear(an); mpz_clear(ad); mpz_clear(bn); mpz_clear(bd);
         return (c > 0) - (c < 0);
     }
-    double va = sa * get_numeric_value(a);
-    double vb = sb * get_numeric_value(b);
-    return (va > vb) - (va < vb);
+#ifdef USE_MPFR
+    /* Mixed kinds (a double, an MPFR, an exact number) compare EXACTLY by
+     * value, as "numbers first by value" requires: through doubles,
+     * 2^53 + 1 tied 2.^53 (and sorted after it), and every MPFR past the
+     * double range tied at inf, so Sort[{N[10^500], N[10^400]}] was out of
+     * order. At most one side is a non-dyadic rational (two rationals were
+     * compared above), and it is compared with mpfr_cmp_q. */
+    {
+        mpfr_t xa, xb;
+        bool ea = real_atom_exact_mpfr(a, sa, xa);
+        bool eb = real_atom_exact_mpfr(b, sb, xb);
+        int c = 0;
+        if (ea && eb) {
+            c = mpfr_cmp(xa, xb);
+        } else if (ea && is_rational_like(b)) {
+            mpq_t q; real_atom_mpq(b, sb, q);
+            c = mpfr_cmp_q(xa, q);
+            mpq_clear(q);
+        } else if (eb && is_rational_like(a)) {
+            mpq_t q; real_atom_mpq(a, sa, q);
+            c = -mpfr_cmp_q(xb, q);
+            mpq_clear(q);
+        } else {
+            if (ea) mpfr_clear(xa);
+            if (eb) mpfr_clear(xb);
+            goto via_double;
+        }
+        if (ea) mpfr_clear(xa);
+        if (eb) mpfr_clear(xb);
+        return (c > 0) - (c < 0);
+    }
+via_double:
+#endif
+    {
+        double va = sa * get_numeric_value(a);
+        double vb = sb * get_numeric_value(b);
+        return (va > vb) - (va < vb);
+    }
 }
 
 static int real_sign(const Expr* e) {
@@ -1237,9 +1314,14 @@ Expr* builtin_reverse_sort_by(Expr* res) {
  * settled by position, as for any other tie. */
 static int take_key_cmp(const Expr* a, const Expr* b) {
     int c = expr_compare(a, b);
-    if (c && a->type != b->type && is_atomic_numeric(a) && is_atomic_numeric(b) &&
-        get_numeric_value(a) == get_numeric_value(b))
-        return 0;
+    if (c && a->type != b->type && is_atomic_numeric(a) && is_atomic_numeric(b)) {
+        /* Equal values of different kinds tie (1 and 1.). Two real atoms are
+         * compared exactly; a Complex keeps the machine reading. */
+        bool cx = is_complex((Expr*)a, NULL, NULL) || is_complex((Expr*)b, NULL, NULL);
+        if (cx ? get_numeric_value(a) == get_numeric_value(b)
+               : real_value_cmp(a, 1, b, 1) == 0)
+            return 0;
+    }
     return c;
 }
 

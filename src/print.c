@@ -66,7 +66,7 @@ static Expr* print_neg_symbolic_exp(const Expr* x) {
         mpz_t z; mpz_init(z); mpz_neg(z, c->data.bigint);
         nc = expr_new_bigint_from_mpz(z); mpz_clear(z);
     }
-    else if (is_rational((Expr*)c, &n, &d) && n < 0) nc = make_rational(-n, d);
+    else if (is_rational((Expr*)c, &n, &d) && n < 0) nc = make_rational_neg(n, d);
     else if (c->type == EXPR_REAL && c->data.real < 0.0) nc = expr_new_real(-c->data.real);
     if (!nc) return NULL;
     size_t k = x->data.function.arg_count;
@@ -929,7 +929,7 @@ static void print_times_inputform(Expr* e) {
             }
             if (is_rational(x, &xn, &xd) && xn < 0) {
                 den[nd++] = expr_new_function(expr_new_symbol(SYM_Power),
-                    (Expr*[]){ expr_copy(a->data.function.args[0]), make_rational(-xn, xd) }, 2);
+                    (Expr*[]){ expr_copy(a->data.function.args[0]), make_rational_neg(xn, xd) }, 2);
                 den_int_power = false;
                 continue;
             }
@@ -1268,7 +1268,7 @@ static void print_standard(Expr* e, int parent_prec) {
 #endif
                 } else if (is_rational(im, &rn, &rd) && rn < 0) {
                     im_neg = true;
-                    im_abs = make_rational(-rn, rd);
+                    im_abs = make_rational_neg(rn, rd);
                 }
             }
 
@@ -1292,7 +1292,7 @@ static void print_standard(Expr* e, int parent_prec) {
                 pos_exp = print_neg_int(exp->data.integer);
             } else if (is_rational(exp, &n, &d) && n < 0) {
                 is_negative = true;
-                pos_exp = make_rational(-n, d);
+                pos_exp = make_rational_neg(n, d);
             } else if (exp->type == EXPR_REAL && exp->data.real < 0.0) {
                 is_negative = true;
                 pos_exp = expr_new_real(-exp->data.real);
@@ -1434,7 +1434,7 @@ static void print_standard(Expr* e, int parent_prec) {
                         pos_exp = print_neg_int(exp->data.integer);
                     } else if (is_rational(exp, &n, &d) && n < 0) {
                         is_neg = true;
-                        pos_exp = make_rational(-n, d);
+                        pos_exp = make_rational_neg(n, d);
                     } else if (exp->type == EXPR_REAL && exp->data.real < 0.0) {
                         is_neg = true;
                         pos_exp = expr_new_real(-exp->data.real);
@@ -2216,7 +2216,7 @@ static bool series_extract_negative(Expr* x0, Expr** abs_out) {
         *abs_out = expr_new_real(-x0->data.real); return true;
     }
     if (is_rational(x0, &rn, &rd) && rn < 0) {
-        *abs_out = make_rational(-rn, rd); return true;
+        *abs_out = make_rational_neg(rn, rd); return true;
     }
     if (x0->type == EXPR_FUNCTION &&
         x0->data.function.head->type == EXPR_SYMBOL &&
@@ -2231,7 +2231,7 @@ static bool series_extract_negative(Expr* x0, Expr** abs_out) {
         else if (f->type == EXPR_REAL && f->data.real < 0.0)
             negf = expr_new_real(-f->data.real);
         else if (is_rational(f, &rn, &rd) && rn < 0)
-            negf = make_rational(-rn, rd);
+            negf = make_rational_neg(rn, rd);
         if (!negf) return false;
 
         size_t n = x0->data.function.arg_count;
@@ -2655,7 +2655,7 @@ static bool tex_extract_negative(Expr* im, Expr** abs_out) {
         return true;
     }
     if (is_rational(im, &rn, &rd) && rn < 0) {
-        *abs_out = make_rational(-rn, rd);
+        *abs_out = make_rational_neg(rn, rd);
         return true;
     }
     return false;
@@ -2806,7 +2806,7 @@ static void print_tex(Expr* e, int parent_prec) {
             if (exp->type == EXPR_INTEGER && exp->data.integer < 0) {
                 exp_neg = true; pos_exp = print_neg_int(exp->data.integer);
             } else if (is_rational(exp, &n, &d) && n < 0) {
-                exp_neg = true; pos_exp = make_rational(-n, d);
+                exp_neg = true; pos_exp = make_rational_neg(n, d);
             } else if (exp->type == EXPR_REAL && exp->data.real < 0.0) {
                 exp_neg = true; pos_exp = expr_new_real(-exp->data.real);
             }
@@ -2870,7 +2870,7 @@ static void print_tex(Expr* e, int parent_prec) {
                     int64_t rn, rd;
                     if (is_rational(a0, &rn, &rd) && rn < 0) {
                         flipped_sign = true;
-                        flipped_head = make_rational(-rn, rd);
+                        flipped_head = make_rational_neg(rn, rd);
                     }
                 }
             }
@@ -2894,7 +2894,7 @@ static void print_tex(Expr* e, int parent_prec) {
                     if (exp->type == EXPR_INTEGER && exp->data.integer < 0) {
                         neg = true; pos_exp = print_neg_int(exp->data.integer);
                     } else if (is_rational(exp, &n, &d) && n < 0) {
-                        neg = true; pos_exp = make_rational(-n, d);
+                        neg = true; pos_exp = make_rational_neg(n, d);
                     } else if (exp->type == EXPR_REAL && exp->data.real < 0.0) {
                         neg = true; pos_exp = expr_new_real(-exp->data.real);
                     } else if ((pos_exp = print_neg_symbolic_exp(exp)) != NULL) {
@@ -3014,7 +3014,7 @@ static void print_tex(Expr* e, int parent_prec) {
                         if (is_rational(f0, &rn, &rd) && rn < 0) {
                             is_neg = true;
                             owned = expr_unshare(expr_copy(arg));
-                            Expr* new_rat = make_rational(-rn, rd);
+                            Expr* new_rat = make_rational_neg(rn, rd);
                             expr_free(owned->data.function.args[0]);
                             owned->data.function.args[0] = new_rat;
                             to_print = owned;
@@ -3023,7 +3023,7 @@ static void print_tex(Expr* e, int parent_prec) {
                 } else {
                     int64_t rn, rd;
                     if (is_rational(arg, &rn, &rd) && rn < 0) {
-                        is_neg = true; owned = make_rational(-rn, rd); to_print = owned;
+                        is_neg = true; owned = make_rational_neg(rn, rd); to_print = owned;
                     }
                 }
 

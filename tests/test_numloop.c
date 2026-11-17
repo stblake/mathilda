@@ -504,7 +504,8 @@ static void test_list_nonfinite_falls_back(void) {
      * which is the whole content of the bail contract. A libm inf.0 never
      * escapes a Mathilda result: a numeric head promotes an overflow to an
      * extended-exponent real (#^2 via Power: 10.^200 -> 10^400 -> 10^800), and
-     * Plus/Times past the double range yield Overflow[] (never inf.0). Both
+     * since the numeric-tower review (C2) Plus/Times past the double range do
+     * the same, at machine precision (never inf.0, no longer Overflow[]). Both
      * paths still land on the same answer -- the compiled run bails, the
      * interpreter answers. The extended-exponent reals keep 53 bits
      * (precision 15.95...): squaring rounds them just below 10^400 and 10^800
@@ -512,9 +513,9 @@ static void test_list_nonfinite_falls_back(void) {
      * rounded up to 1.00000000000000. */
     expect_full("NestList[#^2&, 10.^200, 2]",
                 "List[1e+200, 1.00000000000000e+400, 1.00000000000000e+800]");
-    expect_full("Accumulate[{1.*^308, 1.*^308}]", "List[1e+308, Overflow[]]");
+    expect_full("Accumulate[{1.*^308, 1.*^308}]", "List[1e+308, 2.000000000000000e+308]");
     expect_full("FoldList[#1 + #2&, 0., {1.*^308, 1.*^308}]",
-                "List[0.0, 1e+308, Overflow[]]");
+                "List[0.0, 1e+308, 2.000000000000000e+308]");
 }
 
 /* The int64 exact-loop fast path (src/numloop.c): a counter loop with an integer

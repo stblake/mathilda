@@ -567,10 +567,30 @@ bool expr_is_numeric_like(const Expr* e) {
     }
 }
 
+/* Portable "does z fit int64, and what is it": mpz_fits_slong_p/mpz_get_si
+ * test a `long`, which is only 32 bits on LLP64 Windows, so normalisation and
+ * hashing silently disagreed there for 2^31 <= |z| < 2^63. */
+bool expr_mpz_get_int64(const mpz_t z, int64_t* out) {
+    int sgn = mpz_sgn(z);
+    if (sgn == 0) { *out = 0; return true; }
+    if (mpz_sizeinbase(z, 2) > 64) return false;
+    uint64_t mag = 0;
+    size_t count = 0;
+    mpz_export(&mag, &count, -1, sizeof(uint64_t), 0, 0, z);
+    if (sgn > 0) {
+        if (mag > (uint64_t)INT64_MAX) return false;
+        *out = (int64_t)mag;
+        return true;
+    }
+    if (mag > (uint64_t)INT64_MAX + 1u) return false;
+    *out = (mag == (uint64_t)INT64_MAX + 1u) ? INT64_MIN : -(int64_t)mag;
+    return true;
+}
+
 Expr* expr_bigint_normalize(Expr* e) {
-    if (e->type == EXPR_BIGINT && mpz_fits_slong_p(e->data.bigint)) {
-        long val = mpz_get_si(e->data.bigint);
-        Expr* result = expr_new_integer((int64_t)val);
+    int64_t val;
+    if (e->type == EXPR_BIGINT && expr_mpz_get_int64(e->data.bigint, &val)) {
+        Expr* result = expr_new_integer(val);
         /* Refcount-safe: dec-ref the BigInt; if shared, the original
          * stays alive for other holders (each will normalize on their
          * own); if unique (refcount==1, the common case), expr_free
@@ -1093,6 +1113,21 @@ uint64_t expr_hash(const Expr* e) {
             break;
         }
         case EXPR_BIGINT: {
+            /* An int64-sized BigInt (unnormalised: a 20-digit literal like
+             * 000000000000000000001, or a producer that skipped
+             * expr_bigint_normalize) is expr_eq to the Integer of the same
+             * value, so it must hash identically -- otherwise Union,
+             * DeleteDuplicates, Association lookup and Hash disagree with
+             * SameQ. Restart the hash exactly as the EXPR_INTEGER arm does. */
+            int64_t iv;
+            if (expr_mpz_get_int64(e->data.bigint, &iv)) {
+                uint64_t v;
+                memcpy(&v, &iv, 8);
+                h = 14695981039346656037ULL;
+                h ^= (uint64_t)EXPR_INTEGER; h *= prime;
+                h ^= v; h *= prime;
+                break;
+            }
             h ^= (uint64_t)(mpz_sgn(e->data.bigint) + 2);
             h *= prime;
             size_t nlimbs = mpz_size(e->data.bigint);

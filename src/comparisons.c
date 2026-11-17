@@ -26,6 +26,9 @@
 #include <stdbool.h>
 #include <string.h>
 
+/* The smallest positive double (2^-1074); DBL_TRUE_MIN is C11. */
+#define DBL_TRUE_MIN_OR_DENORM 4.9406564584124654e-324
+
 static bool get_numeric_value(Expr* e, double* val, int64_t* num, int64_t* den, bool* is_exact) {
     if (e->type == EXPR_INTEGER) {
         *val = (double)e->data.integer;
@@ -41,6 +44,31 @@ static bool get_numeric_value(Expr* e, double* val, int64_t* num, int64_t* den, 
         *val = (double)(*num) / (*den);
         *is_exact = true;
         return true;
+    }
+
+    /* A BigInt or a Rational with a BigInt part, met by a machine number (two
+     * exact operands are compared exactly before this is reached). Read it
+     * correctly rounded: past DBL_MAX that is +-inf, which orders right
+     * against every finite double and is never tolerantly Equal to one; an
+     * exact value that underflows keeps its sign and a magnitude below
+     * DBL_MIN, so it orders below every normal machine number (and 0. ==
+     * 10^-400 stays False, as 0. == 10^-300 is). 1.5 < 10^400 and
+     * 1.*^308 < 10^309 were left unevaluated: N of these gives an extended-
+     * range MPFR, which the fallback below declines. *num/*den are not set:
+     * the value is used only on the inexact (tolerant) path. */
+    {
+        double d;
+        if ((e->type == EXPR_BIGINT || is_rational_like(e)) && numeric_machine_value(e, &d)) {
+            if (d == 0.0 || numeric_machine_subnormal(d)) {
+                int sg = expr_numeric_sign(e);
+                if (sg != 0 && d == 0.0) d = sg > 0 ? DBL_TRUE_MIN_OR_DENORM : -DBL_TRUE_MIN_OR_DENORM;
+            }
+            *val = d;
+            *num = 0;
+            *den = 1;
+            *is_exact = false;
+            return true;
+        }
     }
 
     /* Fallback: drive the expression through N[] (machine precision).

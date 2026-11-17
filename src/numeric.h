@@ -35,6 +35,7 @@
 
 #include "expr.h"
 #include <float.h>
+#include <math.h>     /* fabs: numeric_machine_subnormal */
 #include <stdbool.h>
 
 /* Evaluation backends. MACHINE uses IEEE 754 doubles; MPFR uses
@@ -391,6 +392,29 @@ Expr* numeric_machine_real_or_promote(double v, double xin, const Expr* call);
  * `r`); else return `r`. For heads whose numeric core only sees the argument
  * (Erfc/Erfi/ExpIntegralEi/...). Always compiled; a no-op without MPFR. */
 Expr* numeric_promote_result_if_degenerate(Expr* r, const Expr* call);
+
+/* An exact Integer / BigInt / Rational of any width, or a machine Real, as a
+ * correctly rounded double in *out (may be +-inf past DBL_MAX, or a subnormal
+ * / 0 below DBL_MIN). False for anything else (MPFR, Complex, symbols).
+ * Replaces the (double)n/d and mpz_get_d readings, which truncated and read a
+ * Rational[BigInt, BigInt] as 0. */
+bool numeric_machine_value(const Expr* e, double* out);
+
+/* True for a nonzero double below DBL_MIN in magnitude. Such a value carries
+ * fewer than 53 bits, so it is not a machine number: every machine-result
+ * choke point (N's round-back, the degenerate-result promoters, Plus, Times,
+ * the parser) re-represents it as a 53-bit MPFR instead -- machine numbers
+ * stop at $MinMachineNumber = DBL_MIN. */
+static inline bool numeric_machine_subnormal(double v) {
+    return v != 0.0 && fabs(v) < DBL_MIN;
+}
+
+/* A machine a + b (mul = false) or a * b (mul = true) that overflowed, or a
+ * product that underflowed, recomputed at machine precision (53 bits) in
+ * MPFR: the arbitrary-precision number with the same precision, whose
+ * exponent range is MPFR's. Overflow[] / Underflow[] only past that range.
+ * NULL without MPFR, or if the operands are not real numbers. */
+Expr* numeric_machine_binop_promote(const Expr* a, const Expr* b, bool mul);
 
 /* Lower a (consumed) 53-bit MPFR / Complex[MPFR, MPFR] value to machine Reals
  * when every part fits a normal double; otherwise return it unchanged (the

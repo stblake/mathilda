@@ -136,6 +136,9 @@ Expr* builtin_lcm(Expr* res) {
         if (!is_rational(res->data.function.args[i], &n, &d)) {
             return NULL;
         }
+        /* INT64_MIN has no int64 magnitude (llabs leaves it negative, and
+         * gcd(-2^63, 0) = 2^63 does not fit): GCD[-2^63] was -2^63. */
+        if (n == INT64_MIN || d == INT64_MIN) return lcm_rational_mpz_fold(res, count);
         if (i == 0) {
             running_n = llabs(n);
             running_d = llabs(d);

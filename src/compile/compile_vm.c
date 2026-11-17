@@ -817,7 +817,11 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
             else if (isinf(pc))           pe = expr_new_symbol(SYM_Infinity);
             else if (pc > 0.0) {
                 double ip = floor(pc);
-                pe = (ip == pc) ? expr_new_integer((int64_t)ip) : expr_new_real(pc);
+                /* Integral and int64-representable -> Integer; a huge
+                 * integral double (1.*^300) stays a Real: the cast would be
+                 * undefined behaviour, and a p-norm only cares about value. */
+                pe = (ip == pc && ip < 9223372036854775808.0)
+                     ? expr_new_integer((int64_t)ip) : expr_new_real(pc);
             }
             Expr* args[2]; size_t nargs = 1;
             args[0] = expr_copy(a->arr);

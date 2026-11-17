@@ -859,15 +859,18 @@ static void test_mpfr_complex_corner_cases(void) {
      * binary fraction whose trailing zeros the printer trims (%.*Rg), so
      * the printed form would be "0.5" and the prefix check vacuous. The
      * low-order digits carry the expected Exp/Log bit-level rounding, hence
-     * a startswith check over the stable leading digits. */
+     * a startswith check over the stable leading digits. Both parts are
+     * 50-digit: N[0.25, 50] is the machine 0.25 (N does not raise an inexact
+     * number), and Complex[50-digit, machine] is machine precision under the
+     * one-kind rule (numeric-tower review, C6). */
     assert_eval_startswith(
-        "Re[Log[Exp[Complex[N[1/3, 50], N[0.25, 50]]]]]",
+        "Re[Log[Exp[Complex[N[1/3, 50], N[1/4, 50]]]]]",
         "0.33333333333333333333333333333333333333333");
     assert_eval_startswith(
-        "Im[Log[Exp[Complex[N[1/3, 50], N[0.25, 50]]]]]",
+        "Im[Log[Exp[Complex[N[1/3, 50], N[1/4, 50]]]]]",
         "0.25000000000000000000000000000000000000000");
     assert_eval_startswith(
-        "Precision[Log[Exp[Complex[N[1/3, 50], N[0.25, 50]]]]]", "50.");
+        "Precision[Log[Exp[Complex[N[1/3, 50], N[1/4, 50]]]]]", "50.");
 }
 
 /* Guard bits: N[x, d] stores its value with NUMERIC_PREC_GUARD_BITS more

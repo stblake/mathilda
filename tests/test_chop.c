@@ -127,18 +127,18 @@ static void test_chop_both_parts_above(void) {
 }
 
 static void test_chop_complex_with_exact_real_part(void) {
-    /* Complex[1, 1.e-12]: integer real part, tiny real imaginary part.
-     * Not "machine complex" (re is Integer), so general recursion kicks
-     * in: chop(1)=1, chop(1.e-12)=0 (exact integer), and builtin_complex
-     * collapses Complex[1, 0] -> 1. */
-    assert_eval_eq("Chop[Complex[1, 1.0e-12]]", "1", 0);
+    /* Complex[1, 1.e-12] is one kind since the numeric-tower review (C6):
+     * the exact real part meets a machine one, so the number is
+     * Complex[1.0, 1.0e-12] -- machine complex -- and Chop gives 1.0
+     * (an MPFR partner likewise makes the exact part MPFR). */
+    assert_eval_eq("Chop[Complex[1, 1.0e-12]]", "1.0", 0);
 }
 
 static void test_chop_complex_with_exact_imag_part(void) {
-    /* Complex[1.e-12, 1]: tiny real real-part, integer imaginary part.
-     * Not machine complex (im is Integer). chop(1.e-12)=0, chop(1)=1,
-     * leaving Complex[0, 1] which is the canonical I. */
-    assert_eval_eq("Chop[Complex[1.0e-12, 1]]", "I", 0);
+    /* Complex[1.e-12, 1] is one kind since the numeric-tower review (C6):
+     * Complex[1.0e-12, 1.0], machine complex, so it chops like
+     * 1.0e-12 + 2.0 I above (test_chop_keeps_machine_zero_real_part). */
+    assert_eval_eq("Chop[Complex[1.0e-12, 1]]", "0.0 + 1.0*I", 0);
 }
 
 static void test_chop_exact_complex_passthrough(void) {

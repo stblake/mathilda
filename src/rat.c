@@ -103,8 +103,11 @@ void extract_num_den(Expr* expr, Expr** num_out, Expr** den_out) {
         if (im->type == EXPR_INTEGER) { in = im->data.integer; id = 1; }
 
         int64_t common_den = lcm(rd, id);
-        
-        Expr* d_expr = expr_new_integer(common_den);
+        /* lcm saturates at INT64_MAX when the exact lcm needs a bignum. */
+        Expr* d_expr = (common_den == INT64_MAX)
+            ? eval_and_free(expr_new_function(expr_new_symbol(SYM_LCM),
+                  (Expr*[]){ expr_new_integer(rd), expr_new_integer(id) }, 2))
+            : expr_new_integer(common_den);
         *den_out = d_expr;
         *num_out = eval_and_free(expr_new_function(expr_new_symbol(SYM_Times), (Expr*[]){expr_copy(expr), expr_copy(d_expr)}, 2));
         return;
