@@ -142,6 +142,9 @@ BASELINE_C = {
     # a tower of several tangents needs the tangent structure theorem to prove
     # the monomials independent (Tan[2 x] = 2 Tan[x]/(1 - Tan[x]^2))
     "tower: more than one tangent",
+    # over k(i) t^2 + 1 splits (t - i, t + i): the hypertangent boxes assume it
+    # irreducible; the split case is the exponential-like two-factor special part
+    "tower: hypertangent top over a field containing I",
 }
 
 # rde_cert_mark reasons that are permanent: a computation the CAS could not do,

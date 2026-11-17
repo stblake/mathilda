@@ -5351,6 +5351,11 @@ closing a false `"NoSolution"`:
 
 Still undecided, and so `$Failed`:
 - inputs that are not rational in `x` and the kernels;
+- a hypertangent top over a coefficient field containing `I`. Bronstein's boxes
+  need `t^2 + 1` irreducible, and over `k(i)` it splits into `t - I` and `t + I`,
+  whose pole orders are independent (`1/(Tan[x] - I)`). Solutions are still found
+  and certified by the identity gate, but `"NoSolution"` is never returned
+  (v0.6602);
 - a hyperbolic-tangent top (`Tanh`, special part `t^2 - 1`), and a tower of more
   than one tangent (two tangents can be dependent: `Tan[2 x]` is rational in
   `Tan[x]`);

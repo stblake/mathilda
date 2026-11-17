@@ -1575,6 +1575,12 @@ static void test_review_f8_tan(void) {
     assert_eval_eq("Risch`RischDECertified[1 + Tan[x]^2, Cos[x]^2, x]", "\"NoSolution\"", 0);
     assert_eval_eq("Risch`RischDECertified[1, Tan[x] + Tan[2 x], x]", "$Failed", 0);
     assert_eval_eq("Risch`RischDECertifiedReason[]", "\"tower: more than one tangent\"", 0);
+    /* over k(i) t^2 + 1 splits: a one-sided pole 1/(Tan[x] - I) is still found
+       (the identity gate certifies it), but no "NoSolution" is ever proved */
+    assert_eval_eq("With[{y = 1/(Tan[x] - I)}, Risch`RischDECertified[1, Together[D[y, x] + y], x] - y] // Together", "0", 0);
+    assert_eval_eq("With[{y = x/((Tan[x] - I)^2 (Tan[x] + 1))}, Risch`RischDECertified[I, Together[D[y, x] + I y], x]] =!= \"NoSolution\"", "True", 0);
+    assert_eval_eq("Risch`RischDECertified[I, Tan[x], x]; Risch`RischDECertifiedReason[]",
+                   "\"tower: hypertangent top over a field containing I\"", 0);
     /* property: no false certificate over tangent towers (seeded, 20; the
        session hunt ran 300 at 0 false certificates) */
     assert_eval_eq("SeedRandom[804]; tk = {Tan[u], Tan[u^2], Tan[u + 1]};"

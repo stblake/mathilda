@@ -1949,6 +1949,13 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
         rde_cert_mark("tower: hyperbolic-tangent or Liouvillian top");
         return NULL;
     }
+    /* The hypertangent boxes assume sqrt(-1) is not in k, so that t^2 + 1 is
+     * irreducible (Bronstein 5.10, 6.2).  Over k(i) it splits into t - i and
+     * t + i, two special factors with independent orders, and a one-sided pole
+     * (1/(Tan[x] - I)) is invisible to the combined t^2 + 1 valuation.  Solve
+     * anyway (the identity gate certifies any solution) but prove nothing. */
+    if (tan && (!rt_free_of_head(f, "Complex") || !rt_free_of_head(g, "Complex")))
+        rde_cert_mark("tower: hypertangent top over a field containing I");
     /* Weak normalization (Bronstein §6.1): RdeNormalDenominator's bound, and so
      * every "no solution" below, assumes f weakly normalized in tau.  With
      * q = WeakNormalizer(f), y solves D y + f y = g iff z = q y solves
