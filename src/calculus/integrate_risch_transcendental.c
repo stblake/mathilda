@@ -873,6 +873,31 @@ Expr* builtin_rischtranscendental(Expr* res) {
     Expr* fcanon = rt_canon_log_args(f, x);
     f = fcanon;
     Expr* result = rt_integrate(f, x);
+    /* A real exponential the trig route's ExpToTrig wrote Cosh[a] + Sinh[a]
+     * (D[ArcTan[E^u]^3] came out ArcTan[E^u]^2 ArcTan[Cosh[u] + Sinh[u]]): put it
+     * back when the integrand has no hyperbolic function.  Exact identities. */
+    if (result && rt_free_of_head(f, "Cosh") && rt_free_of_head(f, "Sinh")
+        && !rt_free_of_head(result, "Sinh")) {
+        Expr* pa = expr_new_symbol("Risch`Private`rtChSh");
+        Expr* rl = expr_new_function(expr_new_symbol("List"), (Expr*[]){
+            expr_new_function(expr_new_symbol("RuleDelayed"), (Expr*[]){
+                expr_new_function(expr_new_symbol("Plus"), (Expr*[]){
+                    expr_new_function(expr_new_symbol("Cosh"), (Expr*[]){ expr_new_function(expr_new_symbol("Pattern"),
+                        (Expr*[]){ expr_copy(pa), expr_new_function(expr_new_symbol("Blank"), NULL, 0) }, 2) }, 1),
+                    expr_new_function(expr_new_symbol("Sinh"), (Expr*[]){ expr_new_function(expr_new_symbol("Pattern"), (Expr*[]){ expr_copy(pa), expr_new_function(expr_new_symbol("Blank"), NULL, 0) }, 2) }, 1) }, 2),
+                expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_new_symbol("E"), expr_copy(pa) }, 2) }, 2),
+            expr_new_function(expr_new_symbol("RuleDelayed"), (Expr*[]){
+                expr_new_function(expr_new_symbol("Plus"), (Expr*[]){
+                    expr_new_function(expr_new_symbol("Cosh"), (Expr*[]){ expr_new_function(expr_new_symbol("Pattern"),
+                        (Expr*[]){ expr_copy(pa), expr_new_function(expr_new_symbol("Blank"), NULL, 0) }, 2) }, 1),
+                    expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1),
+                        expr_new_function(expr_new_symbol("Sinh"), (Expr*[]){ expr_new_function(expr_new_symbol("Pattern"), (Expr*[]){ expr_copy(pa), expr_new_function(expr_new_symbol("Blank"), NULL, 0) }, 2) }, 1) }, 2) }, 2),
+                expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_new_symbol("E"),
+                    expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), expr_copy(pa) }, 2) }, 2) }, 2) }, 2);
+        expr_free(pa);
+        Expr* clean = rt_eval2("ReplaceRepeated", expr_copy(result), rl);
+        if (clean) { expr_free(result); result = clean; }
+    }
     /* Decision half (P3): when the recursive algorithm produced no elementary
      * antiderivative, consult the authoritative field decision.  If it PROVES the
      * integrand has no elementary integral (a non-constant residue, a Risch DE with

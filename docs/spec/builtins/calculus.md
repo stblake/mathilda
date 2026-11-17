@@ -5356,6 +5356,24 @@ closing a false `"NoSolution"`:
 - a lower tangent's special factor `t_j^2 + 1` has the pole-free logarithmic
   derivative `2 u_j' t_j`, so it can divide `z` without showing in a denominator.
 
+**Integrals in the field, decided three ways (v0.6605).** The Risch DE's
+side integrals return one of three outcomes:
+- an antiderivative in K;
+- a proof that there is none;
+- undecided.
+
+The side integrals are the limited integration of the degree bound, the
+log-derivative branch `q = w ∫ c/w`, and `D H = c`. "None" is proved two ways: the
+integrand is certified non-elementary, or its exact antiderivative carries new
+logarithms that the structure theorem proves independent of the tower
+(Kolchin–Ostrowski then puts it outside `K + C`). With `w = (x - I)/(x + I)`,
+`Risch`RischDECertified[2 I/(1 + x^2), 2 w Log[x]/x, x]` is `"NoSolution"`: the
+solution would need `Log[x + I]`.
+
+Logarithms the lower-field integrator returns in tower variables (`Log[I + t0]`,
+`ArcTan[t0]`), which are the tower's own levels in another form, are folded by the same
+test. This decided `D[ArcTan[E^u]^3]` and its relatives.
+
 Still undecided, and so `$Failed`:
 - inputs that are not rational in `x` and the kernels;
 - a hypertangent top over a coefficient field containing `I`. Bronstein's boxes

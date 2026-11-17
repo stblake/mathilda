@@ -46,8 +46,11 @@ static void test_certificates(void) {
 static void test_undecided(void) {
     BR_EQ("Risch`RischDECertified[1, Sqrt[x], x]", "$Failed");
     BR_EQ("Risch`RischDECertifiedReason[]", "\"base: coefficients not rational in x\"");
-    BR_EQ("Risch`RischDECertified[1, E^x/x, x]", "$Failed");
-    BR_EQ("Risch`RischDECertifiedReason[]", "\"tower: antidifferentiation D H = c\"");
+    /* decided since v0.6605 (C completeness campaign, step 1): y = h E^x needs
+     * h' + 2 h = 1/x, which has no rational solution (Ei) -- the D H = c branch
+     * now proves "no antiderivative in K" */
+    BR_EQ("Risch`RischDECertified[1, E^x/x, x]", "\"NoSolution\"");
+    BR_EQ("Risch`RischDECertifiedReason[]", "None");
     /* decided since v0.6546 (completion campaign Phase 2): the primitive
      * cancellation case (deg b = deg a, -lc(b)/lc(a) = -(1 + 1/x) is not Dz/z:
      * a certified bound; the theta^0 coefficient needs Int -(x - 1) E^x / x,

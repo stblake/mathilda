@@ -769,26 +769,134 @@ static Expr* rc_aux_integrate(Expr* F, RdeCtx* C, Expr** rem, bool* f_nonelem) {
     return R;
 }
 
-/* Integrate F (an element of K = k(tau), C's field) inside K: 1 with *Q owned
- * when the integrator returns an antiderivative rational in x, t_0..t_m (no new
- * logarithm, no remainder); -1 otherwise (not a proof: a new logarithm may
- * still combine into K, and the integrator may decline).  The call runs in its
- * own certification scope; an uncertain step inside it is propagated. */
+/* Is R (tower-variable form, possibly with Log[...] terms) an exact
+ * antiderivative of F: D_tower[R] - F == 0? */
+static bool rc_is_antiderivative(Expr* R, Expr* F, RdeCtx* C) {
+    Expr* dR = rt_tower_deriv(R, C->T, C->x);
+    if (!dR) return false;
+    Expr* d = expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ dR,
+        expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), expr_copy(F) }, 2) }, 2);
+    Expr* t = rt_eval1("Together", d);
+    Expr* nm = t ? rt_eval1("Numerator", t) : NULL;
+    Expr* ex = nm ? rt_eval1("Expand", nm) : NULL;
+    bool z = ex && rt_is_zero(ex);
+    if (ex) expr_free(ex);
+    return z;
+}
+
+/* Every ArcTan[q] (q depending on x or the tower) as logarithms,
+ * ArcTan[q] = (I/2) (Log[1 - I q] - Log[1 + I q]) + const -- an identity of
+ * differential algebra over C(i).  For the integrate-in-K question only: the
+ * logarithms are then decided by the structure theorem like any other. */
+static Expr* rc_arctan_to_logs(Expr* R) {
+    if (rt_free_of_head(R, "ArcTan") && rt_free_of_head(R, "ArcTanh")) return R;
+    Expr* pq = expr_new_symbol("Risch`Private`rcAtq");
+    Expr* lhs = expr_new_function(expr_new_symbol("ArcTan"), (Expr*[]){
+        expr_new_function(expr_new_symbol("Pattern"), (Expr*[]){ expr_copy(pq),
+            expr_new_function(expr_new_symbol("Blank"), NULL, 0) }, 2) }, 1);
+    Expr* iq = expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+        expr_new_function(expr_new_symbol("Complex"), (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2),
+        expr_copy(pq) }, 2);
+    Expr* rhs = expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+        expr_new_function(expr_new_symbol("Complex"), (Expr*[]){
+            expr_new_integer(0), expr_new_function(expr_new_symbol("Rational"),
+                (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2) }, 2),
+        expr_new_function(expr_new_symbol("Plus"), (Expr*[]){
+            expr_new_function(expr_new_symbol("Log"), (Expr*[]){
+                expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_new_integer(1),
+                    expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), expr_copy(iq) }, 2) }, 2) }, 1),
+            expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1),
+                expr_new_function(expr_new_symbol("Log"), (Expr*[]){
+                    expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_new_integer(1), iq }, 2) }, 1) }, 2) }, 2) }, 2);
+    Expr* rule = expr_new_function(expr_new_symbol("RuleDelayed"), (Expr*[]){ lhs, rhs }, 2);
+    /* ArcTanh[q] = (1/2) (Log[1 + q] - Log[1 - q]): the lower integrator writes the
+     * same conjugate log pair either way, depending on which route answered
+     * (16 ArcTanh[1 - 2 I x] = -16 I ArcTan[I + 2 x] + const) */
+    Expr* lhs2 = expr_new_function(expr_new_symbol("ArcTanh"), (Expr*[]){
+        expr_new_function(expr_new_symbol("Pattern"), (Expr*[]){ expr_copy(pq),
+            expr_new_function(expr_new_symbol("Blank"), NULL, 0) }, 2) }, 1);
+    Expr* rhs2 = expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+        expr_new_function(expr_new_symbol("Rational"), (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2),
+        expr_new_function(expr_new_symbol("Plus"), (Expr*[]){
+            expr_new_function(expr_new_symbol("Log"), (Expr*[]){
+                expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_new_integer(1), expr_copy(pq) }, 2) }, 1),
+            expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1),
+                expr_new_function(expr_new_symbol("Log"), (Expr*[]){
+                    expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_new_integer(1),
+                        expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), expr_copy(pq) }, 2) }, 2) }, 1) }, 2) }, 2) }, 2);
+    expr_free(pq);
+    Expr* rule2 = expr_new_function(expr_new_symbol("RuleDelayed"), (Expr*[]){ lhs2, rhs2 }, 2);
+    Expr* rl = expr_new_function(expr_new_symbol("List"), (Expr*[]){ rule, rule2 }, 2);
+    Expr* out = rt_eval2("ReplaceAll", R, rl);   /* adopts R */
+    return out ? rt_eval1("Expand", out) : NULL;
+}
+
+/* Integrate F (an element of K = K_m, C's field) inside K, three ways (campaign
+ * step 1, v0.6605):
+ *   1  *Q owned, an antiderivative rational in x, t_0..t_m;
+ *   0  PROVED: F has no antiderivative in K (decide mode certified F
+ *      non-elementary, or its antiderivative carries new logarithms the
+ *      structure theorem proves independent of the tower -- Kolchin-Ostrowski
+ *      then puts it outside K + C);
+ *  -1  undecided.
+ * Pass 1 runs the integrator as it integrates (it finds the most answers; a
+ * new logarithm that reduces into the tower is folded).  Pass 2, only when
+ * pass 1 found nothing, runs it in decide mode for the proof.  Each pass runs
+ * in its own certification scope; an undecided answer propagates the reason. */
 static int rc_integrate_in_K(Expr* F, RdeCtx* C, Expr** Q) {
     *Q = NULL;
     if (rt_is_zero(F)) { *Q = expr_new_integer(0); return 1; }
     RdeCertState saved = rde_cert_begin();
     Expr* rem = NULL;
     Expr* R = rc_aux_integrate(F, C, &rem, NULL);
-    bool unc = rde_cert_uncertain();
-    const char* why = rde_cert_reason();
+    bool unc1 = rde_cert_uncertain();
+    const char* why1 = rde_cert_reason();
     rde_cert_end(saved);
-    if (unc) rde_cert_mark(why);
-    bool ok = R && (!rem || rt_is_zero(rem)) && rc_is_tower_rational(R, C);
+    bool norem = !rem || rt_is_zero(rem);
     if (rem) expr_free(rem);
-    if (!ok) { if (R) expr_free(R); return -1; }
-    *Q = R;
-    return 1;
+    if (R && norem) {
+        if (rc_is_tower_rational(R, C)) { *Q = R; return 1; }
+        /* an EXACT antiderivative whose leftover new logarithms are independent
+         * of the tower proves "none in K" whichever mode produced it */
+        bool exact = rc_is_antiderivative(R, F, C);
+        int st = -1;
+        R = rc_arctan_to_logs(R);
+        Expr* Rk = R ? rt_reduce_new_logs_ext(R, C->T, C->m, C->x, &st) : NULL;   /* consumes R */
+        if (Rk && st == 1 && rc_is_tower_rational(Rk, C)) { *Q = Rk; return 1; }
+        if (Rk) expr_free(Rk);
+        if (exact && st == 0 && !C->T->dependent) return 0;
+    } else if (R) expr_free(R);
+    /* pass 2: the decision */
+    int save_mode = g_rt_decide_mode;
+    g_rt_decide_mode = 1;
+    saved = rde_cert_begin();
+    rem = NULL;
+    bool ne = false;
+    Expr* R2 = rc_aux_integrate(F, C, &rem, &ne);
+    bool unc2 = rde_cert_uncertain();
+    const char* why2 = rde_cert_reason();
+    rde_cert_end(saved);
+    g_rt_decide_mode = save_mode;
+    int verdict = -1;
+    bool hasrem = rem && !rt_is_zero(rem);
+    if (rem) expr_free(rem);
+    if (!unc2) {
+        if (!R2 && ne) verdict = 0;                   /* F not elementary at all */
+        else if (R2 && hasrem) verdict = 0;           /* a certified remainder */
+        else if (R2 && rc_is_antiderivative(R2, F, C)) {
+            if (rc_is_tower_rational(R2, C)) { *Q = R2; return 1; }
+            int st = -1;
+            R2 = rc_arctan_to_logs(R2);
+            Expr* Rk = R2 ? rt_reduce_new_logs_ext(R2, C->T, C->m, C->x, &st) : NULL;   /* consumes R2 */
+            R2 = NULL;
+            if (Rk && st == 1 && rc_is_tower_rational(Rk, C)) { *Q = Rk; return 1; }
+            if (st == 0) verdict = 0;                 /* independent new logarithms */
+            if (Rk) expr_free(Rk);
+        }
+    }
+    if (R2) expr_free(R2);
+    if (verdict < 0 && (unc2 || unc1)) rde_cert_mark(unc2 ? why2 : why1);
+    return verdict;
 }
 
 /* LimitedIntegrate against the one primitive tau (Bronstein §7.2, the case the
@@ -801,7 +909,8 @@ static int rc_integrate_in_K(Expr* F, RdeCtx* C, Expr** Q) {
 static int rc_limited_integrate_prim(Expr* alpha, RdeCtx* C, Expr** s_out) {
     *s_out = NULL;
     Expr* Q = NULL;
-    if (rc_integrate_in_K(alpha, C, &Q) != 1) return -1;
+    int ik = rc_integrate_in_K(alpha, C, &Q);
+    if (ik != 1) return ik;                          /* 0: proved no solution */
     if (rc_deg(Q, C) > 1) { expr_free(Q); return -1; }   /* cannot happen; be safe */
     Expr* sv = rc_deg(Q, C) == 1 ? rc_coeff(Q, 1, C) : expr_new_integer(0);
     expr_free(Q);
@@ -1318,7 +1427,7 @@ static long rde_bound_degree_prim(Expr* a, Expr* b, Expr* c, RdeCtx* C) {
         if (li == 1) {
             if (sv->type == EXPR_INTEGER && (long)sv->data.integer > n) n = (long)sv->data.integer;
             if (sv->type == EXPR_BIGINT) rde_cert_mark("RdeBoundDegreePrim: limited integration out of range");
-        } else rde_cert_mark("RdeBoundDegreePrim: limited integration undecided");
+        } else if (li < 0) rde_cert_mark("RdeBoundDegreePrim: limited integration undecided");
         if (sv) expr_free(sv);
         if (alpha) expr_free(alpha);
     } else if (db == da) {
@@ -1346,7 +1455,7 @@ static long rde_bound_degree_prim(Expr* a, Expr* b, Expr* c, RdeCtx* C) {
             if (li == 1) {
                 if (sv->type == EXPR_INTEGER && (long)sv->data.integer > n) n = (long)sv->data.integer;
                 if (sv->type == EXPR_BIGINT) rde_cert_mark("RdeBoundDegreePrim: limited integration out of range");
-            } else rde_cert_mark("RdeBoundDegreePrim: limited integration undecided");
+            } else if (li < 0) rde_cert_mark("RdeBoundDegreePrim: limited integration undecided");
             if (sv) expr_free(sv);
             if (mbeta) expr_free(mbeta);
             expr_free(Dz); expr_free(t1); expr_free(t2); expr_free(sum);
@@ -1527,7 +1636,7 @@ static int rde_cancel_logderiv(Expr* c, Expr* z, long mm, RdeCtx* C, long n, Exp
     Expr* Q = NULL;
     int ok = rc_integrate_in_K(F, C, &Q);
     expr_free(F);
-    if (ok != 1) { expr_free(w); return -1; }
+    if (ok != 1) { expr_free(w); return ok; }      /* 0: proved, no antiderivative in K */
     Expr* q = rde_mul(w, Q);
     expr_free(Q);
     {   Expr* qc = rde_canon(q); expr_free(q); q = qc; }
@@ -2030,13 +2139,13 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
                  * solution -> decline. */
                 if (rt_is_zero(sp.c)) H = expr_new_integer(0);
                 else {
-                    Expr* rem = NULL;
-                    Expr* Hc = rc_aux_integrate(sp.c, C, &rem, NULL);
-                    bool ok = Hc && (!rem || rt_is_zero(rem)) && rc_is_tower_rational(Hc, C);
-                    if (rem) expr_free(rem);
-                    if (ok) H = Hc;
-                    else if (Hc) expr_free(Hc);
-                    if (!H) rde_cert_mark("tower: antidifferentiation D H = c");
+                    /* D H = c, deg H <= m: the log-derivative branch with w = 1
+                     * (three-way integral in K, the constant of integration
+                     * fixed by the degree; campaign step 1) */
+                    Expr* one = expr_new_integer(1);
+                    int r = rde_cancel_logderiv(sp.c, one, 0, C, sp.m, &H);
+                    expr_free(one);
+                    if (r < 0) rde_cert_mark("tower: antidifferentiation D H = c");
                 }
             } else if (tan) {
                 /* delta = 2 (Bronstein §6.5): deg b >= 2 never cancels; deg b = 0

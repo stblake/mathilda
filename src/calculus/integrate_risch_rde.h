@@ -58,6 +58,12 @@ Expr* rt_solve_rde(Expr* p, long i, Expr* u, Expr* x);
  * identity.  NULL == no solution / out of the current increment's scope. */
 Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C);
 
+/* New logarithms of an antiderivative in K_L(new logs), decided by the
+ * structure theorem (risch_field_integrate.c): folds the reducible ones into
+ * the tower; *status 1 all folded, 0 leftovers proved independent (not in
+ * K_L + C), -1 undecided.  Consumes R; returns the folded expression. */
+Expr* rt_reduce_new_logs_ext(Expr* R, RtTower* T, long L, Expr* x, int* status);
+
 /* Bronstein SPDE box (§6.4) over k(x)[tau]: 1 + *out on success, 0 for no
  * solution of degree <= n. */
 int rde_spde_field(Expr* a, Expr* b, Expr* c, RdeCtx* C, long n, RdeSpde* out);

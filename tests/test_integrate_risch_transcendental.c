@@ -1594,8 +1594,12 @@ static void test_review_f8_tan(void) {
     assert_eval_eq("With[{b = 2 I/(1 + x^2), y = (x - I)/(x + I) Log[x]^2 + Log[x]},"
                    " With[{r = Risch`RischDECertified[b, Together[D[y, x] + b y], x]},"
                    " PossibleZeroQ[D[r, x] + b r - (D[y, x] + b y)]]]", "True", 0);
-    assert_eval_eq("With[{b = 2 I/(1 + x^2)}, Risch`RischDECertified[b, Together[2 (x - I)/(x + I) Log[x]/x], x]]"
-                   " =!= \"NoSolution\"", "True", 0);
+    /* ... and with g = 2 w Log[x]/x, w = (x - I)/(x + I), there is no solution in
+       Q(i)(x, Log[x]): y = z (Int c/z + k) with z = 1/w, and Int 2 w^2 Log[x]/x =
+       Log[x]^2 + 8 I Log[x]/(x + I) + 8 (Log[x + I] - Log[x]) carries Log[x + I],
+       independent of the tower (campaign step 1 proves it, v0.6605) */
+    assert_eval_eq("With[{b = 2 I/(1 + x^2)}, Risch`RischDECertified[b, Together[2 (x - I)/(x + I) Log[x]/x], x]]",
+                   "\"NoSolution\"", 0);
 }
 
 /* C completeness campaign, step 0 (v0.6603): no certificate over a tower with a
@@ -1616,6 +1620,30 @@ static void test_campaign_step0_primitive(void) {
     /* the certified RDE says why */
     assert_eval_eq("Risch`RischDECertified[1, E^x Erf[x], x]; Risch`RischDECertifiedReason[]",
                    "\"tower: Liouvillian primitive level\"", 0);
+}
+
+/* Campaign step 1 (v0.6605): logarithms written in tower variables.  The lower
+ * integrator returns its answer in tower form, so Log[I + t0] or ArcTan[t0] --
+ * the tower's own Log[1 -+ I E^u] levels in another form -- went unrecognised,
+ * passed down as part of the next integrand, and the lower integration
+ * declined without a mark.  The structure theorem folds them; an independent
+ * new logarithm proves "no antiderivative in K". */
+static void test_campaign_step1_towerlogs(void) {
+    assert_eval_eq("Integrate`RischTranscendental[3 E^u ArcTan[E^u]^2/(1 + E^(2 u)), u] === ArcTan[E^u]^3", "True", 0);
+    assert_eval_eq("Integrate`RischTranscendental[E^u ArcTan[E^u]/(1 + E^(2 u)), u] === ArcTan[E^u]^2/2", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[3 E^u ArcTan[E^u]^2/(1 + E^(2 u)), u]]", "True", 0);
+    const char* elem[] = {
+        "D[ArcTan[E^u]^2/(a + u), u]",
+        "D[E^u ArcTan[E^u] Log[1 + E^u], u]",
+        "D[ArcTan[E^u] Log[u] + E^(2 u), u]",
+        "D[a ArcTan[E^u]^2 Log[1 + u], u]" };
+    for (size_t i = 0; i < sizeof elem / sizeof elem[0]; i++) {
+        char buf[300];
+        snprintf(buf, sizeof buf, "Quiet[Risch`ElementaryIntegralQ[Together[%s], u]]", elem[i]);
+        assert_eval_eq(buf, "True", 0);
+    }
+    /* no Cosh[u] + Sinh[u] for a real E^u in an answer */
+    assert_eval_eq("FreeQ[Integrate`RischTranscendental[3 E^u ArcTan[E^u]^2/(1 + E^(2 u)), u], Sinh]", "True", 0);
 }
 
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
@@ -1726,6 +1754,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_review_f12_composite);
     TEST(test_review_f8_tan);
     TEST(test_campaign_step0_primitive);
+    TEST(test_campaign_step1_towerlogs);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }

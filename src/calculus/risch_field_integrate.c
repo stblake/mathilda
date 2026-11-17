@@ -17,6 +17,7 @@
 #include "eval.h"
 #include "parse.h"
 #include "print.h"
+#include "risch_structure.h"   /* risch_rational_span: the tower-log fold */
 #include "symtab.h"
 #include "attr.h"
 #include "sym_intern.h"
@@ -1653,6 +1654,207 @@ static bool rt_newlog_certificate(Expr* r, Expr* Rs, RtTower* T, long L, Expr* x
     return ok;
 }
 
+/* Logarithms written in TOWER VARIABLES (Log[I + rmR0]) inside an
+ * antiderivative of the lower field.  The integrator returns ∫r in tower form,
+ * so a new logarithm whose argument is a monic or scaled form of a tower log's
+ * argument (Log[t0 + I] for t1 = Log[1 - I E^u]) is not the literal kernel the
+ * subrules map, and rt_find_log_of_x cannot see it (no x).  Left alone it
+ * passed down as part of the next level's integrand, which is then not rational
+ * in the tower, and the lower integrator declined silently: D[ArcTan[E^u]^3]
+ * was undecided (campaign step 1, v0.6605).
+ *
+ * The structure theorem decides it: Log[q] equals Sum_j r_j t_j (log levels)
+ * + Sum_j s_j w_j (exponential levels, w_j the exponent) + const exactly when
+ * Dq/q = Sum_j r_j Dt_j + Sum_j s_j Dw_j with rational r_j, s_j
+ * (risch_rational_span over the generators of levels <= L).  The constant is
+ * free: the integrator's answer has Liouville's form v + Sum c_k Log[v_k] with
+ * constant c_k, so a Log[q] whose coefficient is constant may be shifted by a
+ * constant.  Folds every such Log[q] in place (owned result); *leftover is set
+ * when a tower-variable logarithm remains (a new logarithm outside the span,
+ * or one with a non-constant coefficient). */
+static void rt_collect_new_logs(Expr* e, RtTower* T, Expr* x, Expr*** out, size_t* n, size_t* cap) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (rt_head_is(e, "Log") && e->data.function.arg_count == 1) {
+        Expr* q = e->data.function.args[0];
+        bool tv = !rt_free_of_x(q, x);
+        for (size_t j = 0; j < T->n && !tv; j++) if (!rt_free_of_x(q, T->t[j])) tv = true;
+        if (tv) {
+            for (size_t i = 0; i < *n; i++) if (expr_eq((*out)[i], e)) return;
+            if (*n == *cap) { *cap = *cap ? 2 * *cap : 4; *out = realloc(*out, *cap * sizeof(Expr*)); }
+            (*out)[(*n)++] = e;
+            return;
+        }
+    }
+    rt_collect_new_logs(e->data.function.head, T, x, out, n, cap);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        rt_collect_new_logs(e->data.function.args[i], T, x, out, n, cap);
+}
+static bool rt_tower_has_complex(RtTower* T, long L);
+/* ArcTan of tower variables, for the fold below: over a complex tower,
+ * ArcTan[q] = (I/2) (Log[1 - I q] - Log[1 + I q]) + const (the lower integrator's
+ * LogToReal writes conjugate log pairs back as ArcTan[t0], which then hides the
+ * tower's own Log[1 -+ I E^u] levels).  Collected like the logarithms. */
+static void rt_collect_tv_arctans(Expr* e, RtTower* T, Expr*** out, size_t* n, size_t* cap) {
+    if (!e || e->type != EXPR_FUNCTION) return;
+    if (rt_head_is(e, "ArcTan") && e->data.function.arg_count == 1) {
+        Expr* q = e->data.function.args[0];
+        bool tv = false;
+        for (size_t j = 0; j < T->n && !tv; j++) if (!rt_free_of_x(q, T->t[j])) tv = true;
+        if (tv) {
+            for (size_t i = 0; i < *n; i++) if (expr_eq((*out)[i], e)) return;
+            if (*n == *cap) { *cap = *cap ? 2 * *cap : 4; *out = realloc(*out, *cap * sizeof(Expr*)); }
+            (*out)[(*n)++] = e;
+            return;
+        }
+    }
+    rt_collect_tv_arctans(e->data.function.head, T, out, n, cap);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        rt_collect_tv_arctans(e->data.function.args[i], T, out, n, cap);
+}
+/* New logarithms of an antiderivative R in K_L(new logs), the structure-theorem
+ * way (campaign step 1, v0.6605).  Every Log[q] whose argument depends on x or
+ * on the tower variables, with a CONSTANT coefficient (Liouville's form
+ * v + Sum c_k Log[v_k]), is tested against the generators of levels <= L:
+ *   - Dq/q in the Q-span of {Dt_j (log levels), Dw_j (exponential levels)}:
+ *     Log[q] = Sum r_j t_j + Sum s_j w_j + const, folded in place (the constant
+ *     shifts R by a constant, which an antiderivative may absorb);
+ *   - otherwise it is a new logarithm.  The leftover ones are tested for a
+ *     Q-relation among themselves modulo the tower; with none, Kolchin-Ostrowski
+ *     makes them algebraically independent over K_L, so R is not in K_L + C.
+ * *status: 1 every new log folded (the result lies in K_L, as far as logs go);
+ * 0 leftover logs proved independent (R not in K_L + C); -1 undecided (a
+ * non-constant log coefficient, a relation among leftovers, an ArcTan of a
+ * real tower, a dependent tower, a span that could not be decided).  Returns
+ * the folded expression (owned; Rs is consumed), or NULL on failure. */
+static Expr* rt_reduce_new_logs(Expr* Rs, RtTower* T, long L, Expr* x, int* status) {
+    *status = 1;
+    bool undecided = false;
+    {
+        Expr** ats = NULL; size_t na = 0, acap = 0;
+        rt_collect_tv_arctans(Rs, T, &ats, &na, &acap);
+        if (na && !rt_tower_has_complex(T, L)) undecided = true;   /* a genuinely new ArcTan */
+        else if (na) {
+            Expr** ar = malloc(na * sizeof(Expr*));
+            for (size_t i = 0; i < na; i++) {
+                Expr* q = ats[i]->data.function.args[0];
+                Expr* mI = expr_new_function(expr_new_symbol("Complex"),
+                    (Expr*[]){ expr_new_integer(0), expr_new_integer(-1) }, 2);
+                Expr* pI = expr_new_function(expr_new_symbol("Complex"),
+                    (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2);
+                Expr* l1 = expr_new_function(expr_new_symbol("Log"), (Expr*[]){
+                    expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_new_integer(1),
+                        expr_new_function(expr_new_symbol("Times"), (Expr*[]){ mI, expr_copy(q) }, 2) }, 2) }, 1);
+                Expr* l2 = expr_new_function(expr_new_symbol("Log"), (Expr*[]){
+                    expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_new_integer(1),
+                        expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_copy(pI), expr_copy(q) }, 2) }, 2) }, 1);
+                Expr* half = expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+                    expr_new_function(expr_new_symbol("Rational"), (Expr*[]){ expr_new_integer(1), expr_new_integer(2) }, 2),
+                    pI }, 2);
+                Expr* rhs = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ half,
+                    expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ l1,
+                        expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), l2 }, 2) }, 2) }, 2);
+                ar[i] = expr_new_function(expr_new_symbol("Rule"), (Expr*[]){ expr_copy(ats[i]), rhs }, 2);
+            }
+            Expr* arl = expr_new_function(expr_new_symbol("List"), ar, na);
+            free(ar);
+            Rs = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"), (Expr*[]){ Rs, arl }, 2));
+            if (Rs) Rs = rt_eval1("Expand", Rs);
+            if (!Rs) { free(ats); return NULL; }
+        }
+        free(ats);
+    }
+    Expr** logs = NULL; size_t nl = 0, cap = 0;
+    rt_collect_new_logs(Rs, T, x, &logs, &nl, &cap);
+    if (nl == 0) { free(logs); if (undecided) *status = -1; return Rs; }
+    size_t ng = 0;
+    Expr** gens = malloc(((size_t)L + 2 + nl) * sizeof(Expr*));
+    long*  gidx = malloc(((size_t)L + 2) * sizeof(long));
+    for (long j = 0; j <= L && j < (long)T->n; j++)
+        if (T->kind[j] == RT_LOG || T->kind[j] == RT_EXP) { gens[ng] = T->Dcoef[j]; gidx[ng] = j; ng++; }
+    Expr** vv = malloc(((size_t)L + 2) * sizeof(Expr*));
+    size_t nv = 0;
+    vv[nv++] = expr_copy(x);
+    for (long j = 0; j <= L && j < (long)T->n; j++) vv[nv++] = expr_copy(T->t[j]);
+    Expr* vars = expr_new_function(expr_new_symbol("List"), vv, nv);
+    free(vv);
+    Expr** rules = malloc(nl * sizeof(Expr*));
+    Expr** left = malloc(nl * sizeof(Expr*));     /* log-derivatives of leftovers (owned) */
+    size_t nr = 0, nleft = 0;
+    for (size_t i = 0; i < nl; i++) {
+        Expr* q = logs[i]->data.function.args[0];
+        Expr* z = expr_new_symbol("Risch`Private`rtTvLogZ");
+        Expr* sub = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"), (Expr*[]){
+            expr_copy(Rs), expr_new_function(expr_new_symbol("Rule"),
+                (Expr*[]){ expr_copy(logs[i]), expr_copy(z) }, 2) }, 2));
+        bool linconst = sub && rt_is_poly(sub, z) && rt_degree(sub, z) == 1;
+        if (linconst) {
+            Expr* cz = rt_coeff(sub, z, 1);
+            Expr* czt = cz ? rt_eval1("Together", cz) : NULL;
+            linconst = czt && !rt_is_zero(czt) && rt_free_of_x(czt, x);
+            for (size_t j = 0; linconst && j < T->n; j++) if (!rt_free_of_x(czt, T->t[j])) linconst = false;
+            if (czt) expr_free(czt);
+        }
+        if (sub) expr_free(sub);
+        expr_free(z);
+        if (!linconst) { undecided = true; continue; }
+        Expr* dq = rt_tower_deriv(q, T, x);
+        Expr* g = dq ? rt_eval1("Together", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ dq, expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(q), expr_new_integer(-1) }, 2) }, 2)) : NULL;
+        if (!g) { undecided = true; continue; }
+        bool failed = false;
+        Expr* co = risch_rational_span(g, gens, ng, vars, &failed);
+        if (!co) {
+            if (failed) { undecided = true; expr_free(g); }
+            else left[nleft++] = g;                   /* a new logarithm */
+            continue;
+        }
+        expr_free(g);
+        Expr** terms = malloc((ng + 1) * sizeof(Expr*));
+        size_t nt = 0;
+        bool bad = false;
+        for (size_t k = 0; k < ng; k++) {
+            Expr* ck = co->data.function.args[k];
+            if (rt_is_zero(ck)) continue;
+            long j = gidx[k];
+            Expr* val = T->kind[j] == RT_LOG ? expr_copy(T->t[j]) : rt_subst_kernels(T->arg[j], T);
+            if (!val) { bad = true; break; }
+            terms[nt++] = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_copy(ck), val }, 2);
+        }
+        expr_free(co);
+        if (bad) { for (size_t k = 0; k < nt; k++) expr_free(terms[k]); free(terms); undecided = true; continue; }
+        Expr* rhs = nt == 0 ? expr_new_integer(0) : expr_new_function(expr_new_symbol("Plus"), terms, nt);
+        free(terms);
+        rules[nr++] = expr_new_function(expr_new_symbol("Rule"), (Expr*[]){ expr_copy(logs[i]), rhs }, 2);
+    }
+    /* leftover new logarithms: independent of one another modulo the tower? */
+    if (nleft && !undecided) {
+        if (T->dependent) undecided = true;
+        for (size_t k = 0; k < nleft && !undecided; k++) {
+            size_t m = ng;
+            for (size_t j = 0; j < nleft; j++) if (j != k) gens[m++] = left[j];
+            bool failed = false;
+            Expr* co = risch_rational_span(left[k], gens, m, vars, &failed);
+            if (co || failed) undecided = true;       /* a relation, or undecided */
+            if (co) expr_free(co);
+        }
+    }
+    for (size_t k = 0; k < nleft; k++) expr_free(left[k]);
+    free(left);
+    free(logs); free(gens); free(gidx); expr_free(vars);
+    *status = undecided ? -1 : (nleft ? 0 : 1);
+    if (nr == 0) { free(rules); return Rs; }
+    Expr* rl = expr_new_function(expr_new_symbol("List"), rules, nr);
+    free(rules);
+    Expr* out = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"), (Expr*[]){ Rs, rl }, 2));
+    return out ? rt_eval1("Expand", out) : NULL;
+}
+
+/* Exported for the Risch DE's integrate-in-K (integrate_risch_rde.c). */
+Expr* rt_reduce_new_logs_ext(Expr* R, RtTower* T, long L, Expr* x, int* status) {
+    return rt_reduce_new_logs(R, T, L, x, status);
+}
+
 static int rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x, int is_bottom,
                                       Expr** s_out, Expr** c_out) {
     *s_out = NULL; *c_out = NULL;
@@ -1711,6 +1913,11 @@ static int rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x, int 
         }
         free(br);
     }
+    /* tower-variable logarithms: fold by the structure theorem (see above) */
+    int lstat = 1;
+    Rs = rt_reduce_new_logs(Rs, T, L, x, &lstat);
+    if (!Rs) return -1;
+    bool tvleft = lstat != 1;
     Expr* tL = T->t[L];
     int rc = -1;
     if (is_bottom) {
@@ -1721,7 +1928,7 @@ static int rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x, int 
         return rc;
     }
     bool foreign = rt_find_exp_of_x(Rs, x) != NULL || rt_find_log_of_x(Rs, x) != NULL
-                   || rt_has_arctan_of_x(Rs, x);
+                   || rt_has_arctan_of_x(Rs, x) || tvleft;
     /* The log fold first: a new logarithm or ArcTan of x whose derivative is a
      * constant combination of the tower's log derivatives is the tower in
      * another form (Int D[Log[u/(1 + u)]] = Log[u] - Log[1 + u], Int 4 I/(1 + u^2)
