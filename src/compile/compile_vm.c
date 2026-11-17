@@ -1403,7 +1403,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
                 NEXT();
             OP(MG_ZCONST): mpz_set((mpz_ptr)RD.p, (mpz_srcptr)c->imm.p); NEXT();
             OP(MG_ZMOV):   mpz_set((mpz_ptr)RD.p, (mpz_srcptr)RA.p); NEXT();
-            OP(MG_ZFROM_I): mpz_set_si((mpz_ptr)RD.p, (long)RA.i); NEXT();
+            OP(MG_ZFROM_I): mth_mpz_set_i64((mpz_ptr)RD.p, (int64_t)RA.i); NEXT();
             OP(MG_ZADD): mpz_add((mpz_ptr)RD.p, (mpz_srcptr)RA.p, (mpz_srcptr)RB.p); NEXT();
             OP(MG_ZSUB): mpz_sub((mpz_ptr)RD.p, (mpz_srcptr)RA.p, (mpz_srcptr)RB.p); NEXT();
             OP(MG_ZMUL): mpz_mul((mpz_ptr)RD.p, (mpz_srcptr)RA.p, (mpz_srcptr)RB.p); NEXT();

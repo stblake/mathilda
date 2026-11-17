@@ -1495,11 +1495,11 @@ static Expr* builtin_thue_solve_form(Expr* res) {
     for (int i = 0; i <= n; i++) {
         Expr* ci = coeffs->data.function.args[i];
         mpz_init(form[i]);
-        if (ci->type == EXPR_INTEGER) mpz_set_si(form[i], (long)ci->data.integer);
+        if (ci->type == EXPR_INTEGER) mth_mpz_set_i64(form[i], ci->data.integer);
         else if (ci->type == EXPR_BIGINT) mpz_set(form[i], ci->data.bigint);
         else { for (int k = 0; k <= i; k++) mpz_clear(form[k]); free(form); return NULL; }
     }
-    mpz_t m; mpz_init_set_si(m, (long)mE->data.integer);
+    mpz_t m; mth_mpz_init_set_i64(m, mE->data.integer);
     int bound = (int)bE->data.integer;
 
     ThueSol* sols = NULL;

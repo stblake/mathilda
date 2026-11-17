@@ -122,7 +122,7 @@ static bool weight_at_int(const int64_t* sigma, const mpq_t t,
     bool ok = true;
     for (int v = 0; v < n_vars; v++) {
         mpz_set(acc, qmp);                 /* (q - p) * tau_v, tau_v = 1 */
-        mpz_set_si(term, (long)sigma[v]);
+        mth_mpz_set_i64(term, sigma[v]);
         mpz_mul(term, term, p);            /* p * sigma_v */
         mpz_add(acc, acc, term);
         if (!mpz_fits_slong_p(acc)) { ok = false; break; }

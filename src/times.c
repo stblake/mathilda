@@ -275,9 +275,9 @@ static Expr* multiply_numbers(Expr* a, Expr* b) {
          * Rational operand's int64 numerator goes through scratch). */
         mpz_t as, bs, r;
         mpz_srcptr av, bv;
-        if (a_is_rat) { mpz_init_set_si(as, n1); av = as; }
+        if (a_is_rat) { mth_mpz_init_set_i64(as, n1); av = as; }
         else av = expr_mpz_borrow(a, as);
-        if (b_is_rat) { mpz_init_set_si(bs, n2); bv = bs; }
+        if (b_is_rat) { mth_mpz_init_set_i64(bs, n2); bv = bs; }
         else bv = expr_mpz_borrow(b, bs);
 
         mpz_init(r);
@@ -293,13 +293,14 @@ static Expr* multiply_numbers(Expr* a, Expr* b) {
         // Compute GCD of r and den
         mpz_t m_den, m_gcd;
         mpz_inits(m_den, m_gcd, NULL);
-        mpz_set_si(m_den, den);
+        mth_mpz_set_i64(m_den, den);
         mpz_gcd(m_gcd, r, m_den);
         
         mpz_divexact(r, r, m_gcd);
         mpz_divexact(m_den, m_den, m_gcd);
         
-        int64_t final_den = mpz_get_si(m_den);
+        int64_t final_den = 0;
+        (void)expr_mpz_get_int64(m_den, &final_den);   /* divides den: fits */
         mpz_clears(m_den, m_gcd, NULL);
         
         if (final_den == 1) {
@@ -345,8 +346,8 @@ static Expr* multiply_numbers(Expr* a, Expr* b) {
             /* Promote to BigInt rational to keep symbolic computations
              * exact when intermediates exceed 64 bits. */
             mpz_t mn1, md1, mn2, md2, mnum, mden, g;
-            mpz_init_set_si(mn1, n1); mpz_init_set_si(md1, d1);
-            mpz_init_set_si(mn2, n2); mpz_init_set_si(md2, d2);
+            mth_mpz_init_set_i64(mn1, n1); mth_mpz_init_set_i64(md1, d1);
+            mth_mpz_init_set_i64(mn2, n2); mth_mpz_init_set_i64(md2, d2);
             mpz_inits(mnum, mden, g, NULL);
             mpz_mul(mnum, mn1, mn2);
             mpz_mul(mden, md1, md2);
@@ -1791,7 +1792,7 @@ Expr* builtin_times(Expr* res) {
 
                     int64_t b = gb->data.integer;
                     mpz_t b_z;
-                    mpz_init_set_si(b_z, b);
+                    mth_mpz_init_set_i64(b_z, b);
 
                     /* Pull factors of b from den into the exponent, but
                      * stop when the resulting exponent magnitude would
@@ -2234,7 +2235,7 @@ Expr* builtin_times(Expr* res) {
             mpz_t rn, rd;
             bool base_ok = false;
             if (gb->type == EXPR_INTEGER && gb->data.integer >= 2) {
-                mpz_init_set_si(rn, gb->data.integer);
+                mth_mpz_init_set_i64(rn, gb->data.integer);
                 mpz_init_set_ui(rd, 1);
                 base_ok = true;
             } else if (gb->type == EXPR_BIGINT &&
@@ -2270,8 +2271,8 @@ Expr* builtin_times(Expr* res) {
                     int64_t cn_i, cd_i;
                     is_rational(num_prod, &cn_i, &cd_i);
                     sign = (cn_i < 0) ? -1 : 1;
-                    mpz_init_set_si(cn, cn_i < 0 ? -cn_i : cn_i);
-                    mpz_init_set_si(cd, cd_i);
+                    mth_mpz_init_set_i64(cn, cn_i < 0 ? -cn_i : cn_i);
+                    mth_mpz_init_set_i64(cd, cd_i);
                 }
                 if (sign != 0) {
                     /* Canonicalise |c| * r^eps into (p_sq/q_sq) * Sqrt[p/q]

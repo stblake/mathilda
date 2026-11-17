@@ -89,10 +89,10 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
           `::precset` and roll back.
         - Docstrings for both, the expression-information spec, corpus incl. Block.
 - [ ] Pre-existing (found 2026-11-17 while triaging the nightly tier; present at v0.6597 too):
-  - [ ] DSolve Chini branch returns a wrong implicit solution for
+  - [ ] (issue #137) DSolve Chini branch returns a wrong implicit solution for
         `y' == x^2 y^3 - (1/x) y + 1/x` (dsolve_stress t_stress_chini): the back-substituted
         residual is exactly `-1/(6x)`, so `PossibleZeroQ` False is correct.
-  - [ ] `PossibleZeroQ[SeriesData[x, 0, {}, 5, 5, 1]]` (an empty `O[x]^5` residual) is False,
+  - [ ] (issue #138) `PossibleZeroQ[SeriesData[x, 0, {}, 5, 5, 1]]` (an empty `O[x]^5` residual) is False,
         which fails dsolve_m5's PowerSeries back-substitution checks (`y'' + y == 0`).
 - [ ] Phase 9 (user request 2026-11-17, after this campaign): adapt Kahan's PARANOIA
       (C version, people.math.sc.edu/Burkardt/c_src/paranoia/paranoia.html) to Mathilda, in
@@ -100,12 +100,16 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
       machine/MPFR (contagion across the boundary). Port its milestones (radix, precision,
       guard digits, rounding, sqrt, under/overflow, Y^X) as a .m program plus a ctest
       driver, reporting PARANOIA's own defect classes (FAILURE / SERIOUS / DEFECT / FLAW).
-- [ ] Phase 7. Hygiene sweeps (v0.6596+)
-  - [ ] F1: audit `mpz_get_d` sites whose result users see; use `numeric_machine_value`
-  - [ ] F2: audit `mpz_fits_slong_p` sites for LLP64; use `expr_mpz_get_int64` where a
+- [x] Phase 7. Hygiene sweeps: v0.6608
+  - [x] F1: audit `mpz_get_d` sites whose result users see; use `numeric_machine_value`
+  - [x] F2: audit `mpz_fits_slong_p` sites for LLP64; use `expr_mpz_get_int64` where a
         conservative miss changes an answer
-  - [ ] E3: `(2/3)^(-2^63)` prints as `(3/2)^(2^63)` (cosmetic)
-  - [ ] F4: write `tests/test_compile_overflow.c`, or drop the reference in `checked_int.h`
+  - [x] E3: `(2/3)^(-2^63)` prints as `(3/2)^(2^63)` (cosmetic)
+  - [x] F4: write `tests/test_compile_overflow.c`, or drop the reference in `checked_int.h`
+  - [x] F6 (found here): real Binomial Indeterminate at Gamma overflow and integer poles
+  - [ ] F2 follow-up: Integers Solve `si_verify` `_si` arithmetic to 64-bit, then widen the solver guards;
+        classify the ~250 arithmetic `_si`/`_ui` calls with int64 operands; `mpq_set_si` (~24)
+  - [ ] Known slow, out of scope: `N[Binomial[10^8, 1/2], 30]` builds the exact Pi-rational first
 - [ ] Phase 8. Prevention: a `make check-machine-boundary` gate. Probe every numeric head with
       an NDArray kernel or a Compile lowering at the boundary inputs (+-1.*^308 * 10,
       1.*^-200 * 1.*^-200, 2.^-1074, -0., huge exact scalars) over scalar / List / packed /

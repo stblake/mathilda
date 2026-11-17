@@ -18,6 +18,7 @@
 #include "graph.h"
 #include "expr.h"
 #include "sym_names.h"
+#include "numeric.h"
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
@@ -675,7 +676,7 @@ double graph_weight_to_double(const Expr* w) {
     switch (w->type) {
         case EXPR_INTEGER: return (double)w->data.integer;
         case EXPR_REAL:    return w->data.real;
-        case EXPR_BIGINT:  return mpz_get_d(w->data.bigint);
+        case EXPR_BIGINT:  return numeric_mpz_to_double(w->data.bigint);
 #ifdef USE_MPFR
         case EXPR_MPFR:    return mpfr_get_d(w->data.mpfr, MPFR_RNDN);
 #endif

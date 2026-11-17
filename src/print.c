@@ -40,14 +40,33 @@
 
 /* -v as an Integer: v = INT64_MIN has no int64 negation, so it goes through
  * GMP (it printed as --9223372036854775808). */
+/* A negative integer exponent (machine or BigInt), negated (owned), or NULL.
+ * Power printing treats x^(-n) the same way whatever the width of n: the
+ * InputForm parentheses and the OutputForm denominator. */
+static Expr* print_neg_int_exp(const Expr* exp);
+
 static Expr* print_neg_int(int64_t v) {
     if (v != INT64_MIN) return expr_new_integer(-v);
     mpz_t z;
-    mpz_init_set_si(z, v);
+    mth_mpz_init_set_i64(z, v);
     mpz_neg(z, z);
     Expr* e = expr_new_bigint_from_mpz(z);
     mpz_clear(z);
     return e;
+}
+
+static Expr* print_neg_int_exp(const Expr* exp) {
+    if (exp->type == EXPR_INTEGER && exp->data.integer < 0)
+        return print_neg_int(exp->data.integer);
+    if (exp->type == EXPR_BIGINT && mpz_sgn(exp->data.bigint) < 0) {
+        mpz_t z;
+        mpz_init(z);
+        mpz_neg(z, exp->data.bigint);
+        Expr* e = expr_new_bigint_from_mpz(z);
+        mpz_clear(z);
+        return e;
+    }
+    return NULL;
 }
 
 /* An exponent Times[c, rest...] with c a negative number, negated (owned):
@@ -209,7 +228,8 @@ static int get_expr_prec(Expr* e) {
         if (e->data.function.arg_count == 2) {
             Expr* exp = e->data.function.args[1];
             /* InputForm writes x^(-k), a power (x^(-1) as the reference) */
-            if (exp->type == EXPR_INTEGER && exp->data.integer < 0)
+            if ((exp->type == EXPR_INTEGER && exp->data.integer < 0)
+                || (exp->type == EXPR_BIGINT && mpz_sgn(exp->data.bigint) < 0))
                 return g_inputform_depth > 0 ? 6500 : 5000;
             int64_t n, d;
             if (is_rational(exp, &n, &d) && n < 0) return 5000;
@@ -976,9 +996,9 @@ static void print_times_inputform(Expr* e) {
     for (size_t i = 0; i < count; i++) {
         Expr* a = e->data.function.args[i];
         int64_t rn, rd;
-        if (i == 0 && a->type == EXPR_INTEGER) { mpz_set_si(pn, a->data.integer); continue; }
+        if (i == 0 && a->type == EXPR_INTEGER) { mth_mpz_set_i64(pn, a->data.integer); continue; }
         if (i == 0 && a->type == EXPR_BIGINT) { mpz_set(pn, a->data.bigint); continue; }
-        if (i == 0 && is_rational(a, &rn, &rd)) { mpz_set_si(pn, rn); mpz_set_si(pd, rd); continue; }
+        if (i == 0 && is_rational(a, &rn, &rd)) { mth_mpz_set_i64(pn, rn); mth_mpz_set_i64(pd, rd); continue; }
         if (i == 0 && (a->type == EXPR_REAL
                        || (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL
                            && a->data.function.head->data.symbol.name == SYM_Complex))) {
@@ -1356,9 +1376,8 @@ static void print_standard(Expr* e, int parent_prec) {
             int64_t n, d;
             bool is_negative = false;
             Expr* pos_exp = NULL;
-            if (exp->type == EXPR_INTEGER && exp->data.integer < 0) {
+            if ((pos_exp = print_neg_int_exp(exp)) != NULL) {
                 is_negative = true;
-                pos_exp = print_neg_int(exp->data.integer);
             } else if (is_rational(exp, &n, &d) && n < 0) {
                 is_negative = true;
                 pos_exp = make_rational_neg(n, d);
@@ -1367,7 +1386,8 @@ static void print_standard(Expr* e, int parent_prec) {
                 pos_exp = expr_new_real(-exp->data.real);
             }
 
-            if (is_negative && g_inputform_depth > 0 && exp->type == EXPR_INTEGER) {
+            if (is_negative && g_inputform_depth > 0
+                && (exp->type == EXPR_INTEGER || exp->type == EXPR_BIGINT)) {
                 /* InputForm: x^(-1), x^(-2), as the reference writes them */
                 print_standard(e->data.function.args[0], 6501);
                 printf("^(");
@@ -1498,9 +1518,8 @@ static void print_standard(Expr* e, int parent_prec) {
                     bool is_neg = false;
                     int64_t n, d;
                     Expr* pos_exp = NULL;
-                    if (exp->type == EXPR_INTEGER && exp->data.integer < 0) {
+                    if ((pos_exp = print_neg_int_exp(exp)) != NULL) {
                         is_neg = true;
-                        pos_exp = print_neg_int(exp->data.integer);
                     } else if (is_rational(exp, &n, &d) && n < 0) {
                         is_neg = true;
                         pos_exp = make_rational_neg(n, d);
@@ -2877,8 +2896,8 @@ static void print_tex(Expr* e, int parent_prec) {
             /* Negative exponent -> 1/base^|exp| with \frac */
             bool exp_neg = false;
             Expr* pos_exp = NULL;
-            if (exp->type == EXPR_INTEGER && exp->data.integer < 0) {
-                exp_neg = true; pos_exp = print_neg_int(exp->data.integer);
+            if ((pos_exp = print_neg_int_exp(exp)) != NULL) {
+                exp_neg = true;
             } else if (is_rational(exp, &n, &d) && n < 0) {
                 exp_neg = true; pos_exp = make_rational_neg(n, d);
             } else if (exp->type == EXPR_REAL && exp->data.real < 0.0) {
@@ -2965,8 +2984,8 @@ static void print_tex(Expr* e, int parent_prec) {
                     int64_t n, d;
                     Expr* pos_exp = NULL;
                     bool neg = false;
-                    if (exp->type == EXPR_INTEGER && exp->data.integer < 0) {
-                        neg = true; pos_exp = print_neg_int(exp->data.integer);
+                    if ((pos_exp = print_neg_int_exp(exp)) != NULL) {
+                        neg = true;
                     } else if (is_rational(exp, &n, &d) && n < 0) {
                         neg = true; pos_exp = make_rational_neg(n, d);
                     } else if (exp->type == EXPR_REAL && exp->data.real < 0.0) {

@@ -2258,7 +2258,7 @@ static bool clip_to_double_value(Expr* e, double* out) {
     if (!e) return false;
     if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer; return true; }
     if (e->type == EXPR_REAL)    { *out = e->data.real;            return true; }
-    if (e->type == EXPR_BIGINT)  { *out = mpz_get_d(e->data.bigint); return true; }
+    if (e->type == EXPR_BIGINT)  { *out = numeric_mpz_to_double(e->data.bigint); return true; }
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR) {
         *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN);
@@ -2279,7 +2279,7 @@ static bool clip_to_double_value(Expr* e, double* out) {
     } else if (approx->type == EXPR_REAL) {
         *out = approx->data.real; ok = !isnan(*out) && !isinf(*out);
     } else if (approx->type == EXPR_BIGINT) {
-        *out = mpz_get_d(approx->data.bigint); ok = true;
+        *out = numeric_mpz_to_double(approx->data.bigint); ok = true;
 #ifdef USE_MPFR
     } else if (approx->type == EXPR_MPFR) {
         *out = mpfr_get_d(approx->data.mpfr, MPFR_RNDN);
@@ -3783,7 +3783,7 @@ static bool mod_operand_to_double(const Expr* e, double* out) {
     switch (e->type) {
         case EXPR_INTEGER: *out = (double)e->data.integer;   return true;
         case EXPR_REAL:    *out = e->data.real;              return true;
-        case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint); return true;
+        case EXPR_BIGINT:  *out = numeric_mpz_to_double(e->data.bigint); return true;
 #ifdef USE_MPFR
         case EXPR_MPFR:    *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true;
 #endif
@@ -4132,7 +4132,7 @@ static bool get_numeric_as_complex(Expr* e, Cplx* out) {
         return true;
     }
     if (e->type == EXPR_BIGINT) {
-        *out = (Cplx){ .re = mpz_get_d(e->data.bigint), .im = 0.0 };
+        *out = (Cplx){ .re = numeric_mpz_to_double(e->data.bigint), .im = 0.0 };
         return true;
     }
     if (e->type == EXPR_REAL) {

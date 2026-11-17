@@ -255,8 +255,8 @@ static Expr* add_numbers(Expr* a, Expr* b) {
              * exact when intermediate numerators or denominators exceed
              * 64 bits. */
             mpz_t mn1, md1, mn2, md2, t1, t2, mnum, mden, g;
-            mpz_init_set_si(mn1, n1); mpz_init_set_si(md1, d1);
-            mpz_init_set_si(mn2, n2); mpz_init_set_si(md2, d2);
+            mth_mpz_init_set_i64(mn1, n1); mth_mpz_init_set_i64(md1, d1);
+            mth_mpz_init_set_i64(mn2, n2); mth_mpz_init_set_i64(md2, d2);
             mpz_inits(t1, t2, mnum, mden, g, NULL);
             mpz_mul(t1, mn1, md2);
             mpz_mul(t2, mn2, md1);
@@ -499,7 +499,7 @@ static Expr* algnum_plus_combine(Expr** args, size_t n) {
 #define PLUS_RATIONAL_TREE_MIN 64
 
 static void plus_set_mpz(const Expr* e, mpz_ptr out) {
-    if (e->type == EXPR_INTEGER) { mpz_set_si(out, e->data.integer); return; }
+    if (e->type == EXPR_INTEGER) { mth_mpz_set_i64(out, e->data.integer); return; }
     mpz_set(out, e->data.bigint);
 }
 

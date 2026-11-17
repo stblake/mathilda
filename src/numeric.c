@@ -656,7 +656,7 @@ static Expr* mpfr_complex_powi(const Expr* base, const Expr* exp, long bits) {
     int64_t n;
     double ed;
     if (exp->type == EXPR_INTEGER) n = exp->data.integer;
-    else if (exp->type == EXPR_REAL && (ed = exp->data.real) == floor(ed) && fabs(ed) <= 0x1p30) n = (int64_t)ed;
+    else if (exp->type == EXPR_REAL && (ed = exp->data.real, ed == floor(ed)) && fabs(ed) <= 0x1p30) n = (int64_t)ed;
     else if (exp->type == EXPR_MPFR && mpfr_integer_p(exp->data.mpfr)
              && mpfr_cmpabs_ui(exp->data.mpfr, 1UL << 30) <= 0) n = (int64_t)mpfr_get_si(exp->data.mpfr, MPFR_RNDN);
     else return NULL;
@@ -974,24 +974,49 @@ static Expr* mpfr_to_machine_impl(const mpfr_t v) {
  *  spec.mode == NUMERIC_MODE_MPFR.
  * ---------------------------------------------------------------------- */
 
-/* GMP's mpz_get_d / mpq_get_d truncate toward zero; IEEE conversion — and
- * therefore the decimal literal the user could have typed instead — rounds
- * to nearest. Left alone, N[10^25, MachinePrecision] and 1.0*^25 name two
- * different doubles, 2^31 apart. Route the inexact cases through MPFR,
- * which rounds; values that fit exactly need no help. Without MPFR there is
- * no rounding conversion available and GMP's truncation stands. */
-static double mpz_to_double_rn(const mpz_t v) {
-#ifdef USE_MPFR
-    if (mpz_sizeinbase(v, 2) > (size_t)DBL_MANT_DIG) {
-        mpfr_t t;
-        mpfr_init2(t, DBL_MANT_DIG);
-        mpfr_set_z(t, v, MPFR_RNDN);
-        double d = mpfr_get_d(t, MPFR_RNDN);
-        mpfr_clear(t);
-        return d;
+/* See numeric.h.  GMP's mpz_get_d truncates toward zero; IEEE conversion
+ * -- and therefore the decimal literal the user could have typed instead --
+ * rounds to nearest.  Left alone, N[10^25, MachinePrecision] and 1.0*^25
+ * name two different doubles, 2^31 apart.  Values that fit exactly need no
+ * help; otherwise the top 53 bits are taken and rounded half to even from
+ * the discarded bits, in GMP integers alone, so the result is the same with
+ * and without MPFR.  m 2^s is exact in a double (m <= 2^53), so ldexp does
+ * not round; past DBL_MAX it gives HUGE_VAL (mpz_get_d's value there is
+ * system-dependent). */
+double numeric_mpz_to_double(const mpz_t v) {
+    size_t bits = mpz_sizeinbase(v, 2);
+    if (mpz_sgn(v) == 0 || bits <= (size_t)DBL_MANT_DIG) return mpz_get_d(v);
+    if (bits > (size_t)DBL_MAX_EXP + 1)
+        return mpz_sgn(v) < 0 ? -HUGE_VAL : HUGE_VAL;
+    mp_bitcnt_t s = (mp_bitcnt_t)(bits - DBL_MANT_DIG);
+    mpz_t a, m;
+    mpz_init(a);
+    mpz_init(m);
+    mpz_abs(a, v);
+    mpz_tdiv_q_2exp(m, a, s);
+    /* round bit = bit s-1; sticky = any lower bit set */
+    if (mpz_tstbit(a, s - 1)) {
+        bool sticky = mpz_scan1(a, 0) < s - 1;
+        if (sticky || mpz_odd_p(m)) mpz_add_ui(m, m, 1);
     }
-#endif
-    return mpz_get_d(v);
+    double out = ldexp(mpz_get_d(m), (int)s);      /* exact, or inf */
+    mpz_clear(a);
+    mpz_clear(m);
+    return mpz_sgn(v) < 0 ? -out : out;
+}
+
+static double mpz_to_double_rn(const mpz_t v) { return numeric_mpz_to_double(v); }
+
+/* See numeric.h. */
+double numeric_mpz_ratio_to_double(const mpz_t n, const mpz_t d) {
+    mpq_t q;
+    mpq_init(q);
+    mpz_set(mpq_numref(q), n);
+    mpz_set(mpq_denref(q), d);
+    mpq_canonicalize(q);
+    double out = numeric_mpq_to_double(q);
+    mpq_clear(q);
+    return out;
 }
 
 /* See numeric.h.  |q| = n/d is scaled by 2^-s so that the integer quotient

@@ -123,7 +123,7 @@ static bool ns_to_double_real(Expr* e, double* out) {
     switch (e->type) {
         case EXPR_INTEGER: *out = (double)e->data.integer;   return true;
         case EXPR_REAL:    *out = e->data.real;              return true;
-        case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint); return true;
+        case EXPR_BIGINT:  *out = numeric_mpz_to_double(e->data.bigint); return true;
 #ifdef USE_MPFR
         case EXPR_MPFR:    *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true;
 #endif
@@ -2431,8 +2431,9 @@ typedef struct { NsCtx ctx; } NsIntSeq;
 
 static bool ns_intseq_term(void* ud, const mpz_t n, mpfr_t out) {
     NsIntSeq* s = (NsIntSeq*)ud;
-    Expr* v = mpz_fits_slong_p(n) ? expr_new_integer((int64_t)mpz_get_si(n))
-                                  : expr_new_bigint_from_mpz(n);
+    int64_t nv;
+    Expr* v = expr_mpz_get_int64(n, &nv) ? expr_new_integer(nv)
+                                         : expr_new_bigint_from_mpz(n);
     Expr* num = ns_eval_expr_at(&s->ctx, s->ctx.body, v);
     if (!num) return false;
     mpfr_t im;
@@ -2473,7 +2474,7 @@ static Expr* ns_integer_only(NsCtx* c, const NsOpts* o) {
         s.ctx.spec.mode = NUMERIC_MODE_MPFR;
         s.ctx.spec.bits = prm.work_bits;
         mpz_t n0;
-        mpz_init_set_si(n0, (long)c->imin->data.integer);
+        mth_mpz_init_set_i64(n0, c->imin->data.integer);
         mpfr_t v, zero;
         mpfr_init2(v, (mpfr_prec_t)prm.work_bits);
         mpfr_init2(zero, (mpfr_prec_t)prm.work_bits);

@@ -146,6 +146,9 @@ static eidx_kind euler_index(const Expr* e, unsigned long* idx, long* prec) {
     if (!e) return EIDX_NONE;
     if (e->type == EXPR_INTEGER) {
         if (e->data.integer < 0) return EIDX_NONE;
+        /* round trip: `unsigned long` is 32 bits on LLP64 */
+        if ((uint64_t)(unsigned long)e->data.integer != (uint64_t)e->data.integer)
+            return EIDX_NONE;
         *idx = (unsigned long)e->data.integer;
         return EIDX_EXACT;
     }
@@ -207,7 +210,7 @@ static Expr* euler_one_arg(Expr* arg) {
     if (k == EIDX_EXACT) {
         out = euler_expr_from_mpz(z);
     } else if (k == EIDX_REAL) {
-        out = expr_new_real(mpz_get_d(z));
+        out = expr_new_real(numeric_mpz_to_double(z));
     } else { /* EIDX_MPFR */
 #ifdef USE_MPFR
         out = expr_new_mpfr_bits((mpfr_prec_t)prec);

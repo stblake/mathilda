@@ -330,17 +330,19 @@ int64_t random_internal_int_range(int64_t lo, int64_t hi) {
     static mpz_t span, draw;
     static int ready = 0;
     if (!ready) { mpz_init(span); mpz_init(draw); ready = 1; }
-    mpz_set_si(span, (long)hi);
+    mth_mpz_set_i64(span, hi);
     mpz_sub_ui(span, span, (unsigned long)0);
     {   /* span = hi - lo + 1, computed in mpz so hi-lo cannot overflow */
-        mpz_t lo_z; mpz_init_set_si(lo_z, (long)lo);
+        mpz_t lo_z; mth_mpz_init_set_i64(lo_z, lo);
         mpz_sub(span, span, lo_z);
         mpz_add_ui(span, span, 1);
         mpz_urandomm(draw, g_rand_state, span);
         mpz_add(draw, draw, lo_z);
         mpz_clear(lo_z);
     }
-    return (int64_t)mpz_get_si(draw);
+    int64_t out = 0;
+    (void)expr_mpz_get_int64(draw, &out);   /* lo <= draw <= hi: always fits */
+    return out;
 }
 
 /*
@@ -403,7 +405,7 @@ static Expr* random_integer_range(const mpz_t imin, const mpz_t imax) {
 static bool parse_range(Expr* arg, mpz_t imin, mpz_t imax) {
     if (arg->type == EXPR_INTEGER) {
         mpz_set_si(imin, 0);
-        mpz_set_si(imax, arg->data.integer);
+        mth_mpz_set_i64(imax, arg->data.integer);
         return true;
     }
     if (arg->type == EXPR_BIGINT) {
@@ -634,7 +636,7 @@ static bool literal_to_real(Expr* e, double* out) {
         return true;
     }
     if (e->type == EXPR_BIGINT) {
-        *out = mpz_get_d(e->data.bigint);
+        *out = numeric_mpz_to_double(e->data.bigint);
         return true;
     }
 #ifdef USE_MPFR

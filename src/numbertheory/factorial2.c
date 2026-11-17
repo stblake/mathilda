@@ -104,7 +104,7 @@ Expr* builtin_factorial2(Expr* res) {
         mpz_init_set_ui(r, 1);
         mpz_init(k);
         for (int64_t i = n; i >= 1; i -= 2) {
-            mpz_set_si(k, (long)i);
+            mth_mpz_set_i64(k, i);
             mpz_mul(r, r, k);
         }
         Expr* out = expr_new_bigint_from_mpz(r);

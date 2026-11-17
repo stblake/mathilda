@@ -175,7 +175,7 @@ Expr* builtin_factorialpower(Expr* res) {
     if (n_arg->type == EXPR_INTEGER || n_arg->type == EXPR_BIGINT) {
         mpz_t n_z, term, product;
         mpz_init(n_z);
-        if (n_arg->type == EXPR_INTEGER) mpz_set_si(n_z, n_arg->data.integer);
+        if (n_arg->type == EXPR_INTEGER) mth_mpz_set_i64(n_z, n_arg->data.integer);
         else                              mpz_set(n_z, n_arg->data.bigint);
         mpz_init_set_ui(product, 1);
         mpz_init(term);

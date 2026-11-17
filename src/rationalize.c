@@ -81,7 +81,7 @@ static bool extract_double(const Expr* e, double* out) {
     int64_t n, d;
     switch (e->type) {
         case EXPR_INTEGER: *out = (double)e->data.integer;       return true;
-        case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint);     return true;
+        case EXPR_BIGINT:  *out = numeric_mpz_to_double(e->data.bigint);     return true;
         case EXPR_REAL:    *out = e->data.real;                  return true;
 #ifdef USE_MPFR
         case EXPR_MPFR:    *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true;
@@ -163,12 +163,9 @@ static bool is_numeric_quantity(const Expr* e) {
  *  so the denominator is positive.
  * ---------------------------------------------------------------------- */
 static Expr* expr_from_mpz_int(const mpz_t z) {
-    if (mpz_fits_slong_p(z)) {
-        long v = mpz_get_si(z);
-        /* On 64-bit Unix, long == int64_t; on Windows it's 32. The fits
-         * check above guarantees v is representable, so the cast is safe. */
-        return expr_new_integer((int64_t)v);
-    }
+    int64_t v;
+    /* Not mpz_fits_slong_p: `long` is 32 bits on LLP64 Windows. */
+    if (expr_mpz_get_int64(z, &v)) return expr_new_integer(v);
     return expr_new_bigint_from_mpz(z);
 }
 

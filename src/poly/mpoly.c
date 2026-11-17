@@ -74,7 +74,7 @@ MPoly* mpoly_from_int(int n_vars, int64_t c) {
     if (n_vars > 0) {
         memset(mpoly_exp_at(p, 0), 0, sizeof(int) * (size_t)n_vars);
     }
-    mpz_set_si(p->coefs[0], (long)c);
+    mth_mpz_set_i64(p->coefs[0], c);
     p->n_terms = 1;
     return p;
 }
@@ -98,7 +98,7 @@ MPoly* mpoly_monomial(int n_vars, int var_idx, int k, int64_t c) {
     int* row = mpoly_exp_at(p, 0);
     memset(row, 0, sizeof(int) * (size_t)n_vars);
     row[var_idx] = k;
-    mpz_set_si(p->coefs[0], (long)c);
+    mth_mpz_set_i64(p->coefs[0], c);
     p->n_terms = 1;
     return p;
 }
@@ -148,7 +148,7 @@ void mpoly_push_term_si(MPoly* p, const int* exps, int64_t coef) {
         memcpy(mpoly_exp_at(p, p->n_terms), exps,
                sizeof(int) * (size_t)p->n_vars);
     }
-    mpz_set_si(p->coefs[p->n_terms], (long)coef);
+    mth_mpz_set_i64(p->coefs[p->n_terms], coef);
     p->n_terms++;
 }
 
@@ -510,7 +510,7 @@ MPoly* mpoly_subst_var_mpz(const MPoly* p, int var_idx, const mpz_t alpha) {
 }
 
 MPoly* mpoly_subst_var_int(const MPoly* p, int var_idx, int64_t alpha) {
-    mpz_t a; mpz_init_set_si(a, (long)alpha);
+    mpz_t a; mth_mpz_init_set_i64(a, alpha);
     MPoly* r = mpoly_subst_var_mpz(p, var_idx, a);
     mpz_clear(a);
     return r;
@@ -534,7 +534,7 @@ MPoly* mpoly_shift_var_int(const MPoly* p, int var_idx, int64_t alpha) {
      *                                  * x_{var_idx}^k. */
     mpz_t bin; mpz_init(bin);
     mpz_t pow_alpha; mpz_init(pow_alpha);
-    mpz_t alpha_z; mpz_init_set_si(alpha_z, (long)alpha);
+    mpz_t alpha_z; mth_mpz_init_set_i64(alpha_z, alpha);
     mpz_t term; mpz_init(term);
 
     /* Pre-expansion size estimate: each term expands into (e_v + 1)
@@ -614,7 +614,7 @@ static int find_var_index(struct Expr* e, struct Expr** vars, int n_vars) {
  * literal integer.  Sets `out` (already initialised) on success. */
 static bool expr_int_to_mpz(struct Expr* e, mpz_t out) {
     if (e->type == EXPR_INTEGER) {
-        mpz_set_si(out, (long)e->data.integer);
+        mth_mpz_set_i64(out, e->data.integer);
         return true;
     }
     if (e->type == EXPR_BIGINT) {
@@ -756,8 +756,9 @@ struct Expr* mpoly_to_expr(const MPoly* p, struct Expr** vars) {
             factors[fi++] = expr_new_integer(-1);
         } else if (!coef_is_one || nfac == 0) {
             /* Emit the literal coefficient. */
-            if (mpz_fits_slong_p(p->coefs[i])) {
-                factors[fi++] = expr_new_integer((int64_t)mpz_get_si(p->coefs[i]));
+            int64_t cv;
+            if (expr_mpz_get_int64(p->coefs[i], &cv)) {
+                factors[fi++] = expr_new_integer(cv);
             } else {
                 factors[fi++] = expr_new_bigint_from_mpz(p->coefs[i]);
             }

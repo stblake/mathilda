@@ -1692,6 +1692,15 @@ $\Gamma(n+1)/(\Gamma(m+1)\,\Gamma(n-m+1))$.
   bigint, rational, MPFR) — so `Binomial[2.5, 1/5] → 1.34885`. If an
   operand is symbolic the branch declines and the form stays symbolic
   (`Binomial[2.5, x]`) rather than reading the sibling as `0`.
+  Integer-valued real operands follow the exact branch's conventions,
+  where the Gamma quotient only has a ratio of poles: `Binomial[-5., 3.] =
+  -35.` (reflection), `Binomial[5., 7.] = 0.`, `Binomial[-5., -7.] = 15.`
+  (symmetry), matching `Binomial[-5, 3]`, `Binomial[5, 7]` and
+  `Binomial[-5, -7]`. The same holds at arbitrary precision.
+- When a Gamma factor overflows (the double range, then MPFR's), the
+  quotient is taken in logarithms (`mpfr_lgamma`, with `log2|L|` extra bits
+  so the exponential keeps its precision): `Binomial[1.*^8, 2.] =
+  4.99999995*^15`, where both `tgamma` and `mpfr_gamma` overflow.
 - Symmetric identity: when `n - m` simplifies to a non-negative
   integer `k ≤ 32` (`k ≤ 5` when `n` is not an explicit number, as in the
   reference: `Binomial[a + 5, a]` expands, `Binomial[a + 6, a]` stays), reduces to `Binomial[n, k]` and expands as a

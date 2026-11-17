@@ -67,7 +67,7 @@ static bool leaf_to_cdouble(const Expr* e, double* re, double* im) {
     switch (e->type) {
         case EXPR_INTEGER: *re = (double)e->data.integer; *im = 0.0; return true;
         case EXPR_REAL:    *re = e->data.real;            *im = 0.0; return true;
-        case EXPR_BIGINT:  *re = mpz_get_d(e->data.bigint); *im = 0.0; return true;
+        case EXPR_BIGINT:  *re = numeric_mpz_to_double(e->data.bigint); *im = 0.0; return true;
 #ifdef USE_MPFR
         case EXPR_MPFR:    *re = mpfr_get_d(e->data.mpfr, MPFR_RNDN); *im = 0.0; return true;
 #endif
@@ -99,7 +99,10 @@ static bool expr_to_double_num(const Expr* e, double* out) {
 /* An exact-integer leaf as a long (for the FourierParameters `b`). */
 static bool expr_to_long_int(const Expr* e, long* out) {
     if (!e) return false;
-    if (e->type == EXPR_INTEGER) { *out = (long)e->data.integer; return true; }
+    if (e->type == EXPR_INTEGER) {   /* round trip: `long` is 32 bits on LLP64 */
+        if ((int64_t)(long)e->data.integer != e->data.integer) return false;
+        *out = (long)e->data.integer; return true;
+    }
     if (e->type == EXPR_BIGINT && mpz_fits_slong_p(e->data.bigint)) {
         *out = mpz_get_si(e->data.bigint);
         return true;

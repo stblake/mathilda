@@ -422,8 +422,8 @@ Expr* builtin_divide(Expr* res) {
     bool num_mreal = (num->type == EXPR_REAL || num->type == EXPR_INTEGER || num->type == EXPR_BIGINT);
     bool den_mreal = (den->type == EXPR_REAL || den->type == EXPR_INTEGER || den->type == EXPR_BIGINT);
     if ((num->type == EXPR_REAL || den->type == EXPR_REAL) && num_mreal && den_mreal) {
-        double vnum = (num->type == EXPR_REAL) ? num->data.real : (num->type == EXPR_INTEGER) ? (double)num->data.integer : mpz_get_d(num->data.bigint);
-        double vden = (den->type == EXPR_REAL) ? den->data.real : (den->type == EXPR_INTEGER) ? (double)den->data.integer : mpz_get_d(den->data.bigint);
+        double vnum = (num->type == EXPR_REAL) ? num->data.real : (num->type == EXPR_INTEGER) ? (double)num->data.integer : numeric_mpz_to_double(num->data.bigint);
+        double vden = (den->type == EXPR_REAL) ? den->data.real : (den->type == EXPR_INTEGER) ? (double)den->data.integer : numeric_mpz_to_double(den->data.bigint);
         if (vden == 0.0) {
             arith_warn("Power::infy: Infinite expression 1/0 encountered.\n");
             return expr_new_symbol(SYM_ComplexInfinity);

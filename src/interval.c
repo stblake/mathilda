@@ -88,7 +88,7 @@ static bool iv_to_double(Expr* e, double* out) {
     if (r) {
         if (r->type == EXPR_INTEGER) { *out = (double)r->data.integer; ok = true; }
         else if (r->type == EXPR_REAL) { *out = r->data.real; ok = true; }
-        else if (r->type == EXPR_BIGINT) { *out = mpz_get_d(r->data.bigint); ok = true; }
+        else if (r->type == EXPR_BIGINT) { *out = numeric_mpz_to_double(r->data.bigint); ok = true; }
 #ifdef USE_MPFR
         else if (r->type == EXPR_MPFR) { *out = mpfr_get_d(r->data.mpfr, MPFR_RNDN); ok = true; }
 #endif

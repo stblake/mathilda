@@ -96,7 +96,10 @@ static bool pg_is_inexact(const Expr* e) {
  * argument (0 -> 0.0), and PolyGamma[0., z] must still mean the digamma. */
 static bool pg_small_int(const Expr* e, long* out) {
     if (!e) return false;
-    if (e->type == EXPR_INTEGER) { *out = (long)e->data.integer; return true; }
+    if (e->type == EXPR_INTEGER) {   /* round trip: `long` is 32 bits on LLP64 */
+        if ((int64_t)(long)e->data.integer != e->data.integer) return false;
+        *out = (long)e->data.integer; return true;
+    }
     if (e->type == EXPR_BIGINT && mpz_fits_slong_p(e->data.bigint)) {
         *out = mpz_get_si(e->data.bigint);
         return true;
@@ -125,6 +128,8 @@ static bool pg_nonpos_int(const Expr* e) {
 /* True (and sets *m) if `e` is a positive exact integer fitting a long. */
 static bool pg_pos_int(const Expr* e, long* m) {
     if (e->type == EXPR_INTEGER && e->data.integer > 0) {
+        /* round trip: `long` is 32 bits on LLP64 */
+        if ((int64_t)(long)e->data.integer != e->data.integer) return false;
         *m = (long)e->data.integer;
         return true;
     }

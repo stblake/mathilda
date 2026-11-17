@@ -90,7 +90,7 @@ static bool leaf_to_cdouble(const Expr* e, double* re, double* im) {
     switch (e->type) {
         case EXPR_INTEGER: *re = (double)e->data.integer; *im = 0.0; return true;
         case EXPR_REAL:    *re = e->data.real;            *im = 0.0; return true;
-        case EXPR_BIGINT:  *re = mpz_get_d(e->data.bigint); *im = 0.0; return true;
+        case EXPR_BIGINT:  *re = numeric_mpz_to_double(e->data.bigint); *im = 0.0; return true;
 #ifdef USE_MPFR
         case EXPR_MPFR:    *re = mpfr_get_d(e->data.mpfr, MPFR_RNDN); *im = 0.0; return true;
 #endif
@@ -1057,9 +1057,7 @@ static NumClass classify_leaves(Expr** a, int64_t na, Expr** b, int64_t nb,
 static bool get_int(const Expr* e, int64_t* out) {
     if (!e) return false;
     if (e->type == EXPR_INTEGER) { *out = e->data.integer; return true; }
-    if (e->type == EXPR_BIGINT && mpz_fits_slong_p(e->data.bigint)) {
-        *out = mpz_get_si(e->data.bigint); return true;
-    }
+    if (e->type == EXPR_BIGINT) return expr_mpz_get_int64(e->data.bigint, out);
     return false;
 }
 

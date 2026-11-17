@@ -105,7 +105,7 @@ static bool expr_to_double(const Expr* e, double* out) {
     switch (e->type) {
         case EXPR_INTEGER: *out = (double)e->data.integer; return true;
         case EXPR_REAL:    *out = e->data.real;            return true;
-        case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint); return true;
+        case EXPR_BIGINT:  *out = numeric_mpz_to_double(e->data.bigint); return true;
 #ifdef USE_MPFR
         case EXPR_MPFR:    *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true;
 #endif
@@ -674,7 +674,7 @@ static bool to_cdouble(const Expr* e, double* re, double* im) {
     switch (e->type) {
         case EXPR_INTEGER: *re = (double)e->data.integer; return true;
         case EXPR_REAL:    *re = e->data.real;            return true;
-        case EXPR_BIGINT:  *re = mpz_get_d(e->data.bigint); return true;
+        case EXPR_BIGINT:  *re = numeric_mpz_to_double(e->data.bigint); return true;
 #ifdef USE_MPFR
         case EXPR_MPFR:    *re = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true;
 #endif

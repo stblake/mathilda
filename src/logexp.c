@@ -268,7 +268,7 @@ Expr* builtin_log(Expr* res) {
             if (z->type == EXPR_INTEGER) {
                 if (z->data.integer == INT64_MIN) {
                     mpz_t tmp;
-                    mpz_init_set_si(tmp, z->data.integer);
+                    mth_mpz_init_set_i64(tmp, z->data.integer);
                     mpz_neg(tmp, tmp);
                     neg_z = expr_new_bigint_from_mpz(tmp);
                     mpz_clear(tmp);

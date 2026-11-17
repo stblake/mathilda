@@ -90,9 +90,9 @@ static int cmp_matrix_row_mpz(const int* a, const int* b,
     mpz_t wa, wb, t;
     mpz_init_set_ui(wa, 0); mpz_init_set_ui(wb, 0); mpz_init(t);
     for (int v = 0; v < n_vars; v++) {
-        mpz_set_si(t, (long)row[v]); mpz_mul_si(t, t, (long)a[v]);
+        mth_mpz_set_i64(t, row[v]); mpz_mul_si(t, t, (long)a[v]);
         mpz_add(wa, wa, t);
-        mpz_set_si(t, (long)row[v]); mpz_mul_si(t, t, (long)b[v]);
+        mth_mpz_set_i64(t, row[v]); mpz_mul_si(t, t, (long)b[v]);
         mpz_add(wb, wb, t);
     }
     int c = mpz_cmp(wa, wb);
@@ -351,8 +351,8 @@ void gb_poly_push_term_si(GBPoly* p, const int* exps, int64_t num, int64_t den) 
         memcpy(gb_exp_at(p, p->n_terms), exps,
                sizeof(int) * (size_t)p->n_vars);
     }
-    mpz_set_si(mpq_numref(p->coefs[p->n_terms]), (long)num);
-    mpz_set_si(mpq_denref(p->coefs[p->n_terms]), (long)den);
+    mth_mpz_set_i64(mpq_numref(p->coefs[p->n_terms]), num);
+    mth_mpz_set_i64(mpq_denref(p->coefs[p->n_terms]), den);
     mpq_canonicalize(p->coefs[p->n_terms]);
     p->n_terms++;
 }
@@ -717,7 +717,7 @@ GBPoly* gb_initial_form(const GBPoly* g, const int64_t* w, int n_vars) {
         const int* e = gb_exp_at(g, t);
         mpz_set_ui(cur, 0);
         for (int v = 0; v < n_vars; v++) {
-            mpz_set_si(prod, (long)w[v]);
+            mth_mpz_set_i64(prod, w[v]);
             mpz_mul_si(prod, prod, (long)e[v]);
             mpz_add(cur, cur, prod);
         }
@@ -731,7 +731,7 @@ GBPoly* gb_initial_form(const GBPoly* g, const int64_t* w, int n_vars) {
         const int* e = gb_exp_at(g, t);
         mpz_set_ui(cur, 0);
         for (int v = 0; v < n_vars; v++) {
-            mpz_set_si(prod, (long)w[v]);
+            mth_mpz_set_i64(prod, w[v]);
             mpz_mul_si(prod, prod, (long)e[v]);
             mpz_add(cur, cur, prod);
         }
@@ -2067,18 +2067,20 @@ GBPoly* gb_from_expr(struct Expr* e, struct Expr** vars, int n_vars,
 /* Emit a single coefficient as an Expr: Integer / BigInt / Rational. */
 static struct Expr* mpq_to_expr(const mpq_t q) {
     /* If denominator is 1, return Integer or BigInt directly. */
+    int64_t v;
     if (mpz_cmp_ui(mpq_denref(q), 1) == 0) {
-        if (mpz_fits_slong_p(mpq_numref(q))) {
-            return expr_new_integer((int64_t)mpz_get_si(mpq_numref(q)));
+        if (expr_mpz_get_int64(mpq_numref(q), &v)) {
+            return expr_new_integer(v);
         }
         return expr_new_bigint_from_mpz(mpq_numref(q));
     }
     /* Rational[num, den]. */
-    struct Expr* num = mpz_fits_slong_p(mpq_numref(q))
-        ? expr_new_integer((int64_t)mpz_get_si(mpq_numref(q)))
+    int64_t dv;
+    struct Expr* num = expr_mpz_get_int64(mpq_numref(q), &v)
+        ? expr_new_integer(v)
         : expr_new_bigint_from_mpz(mpq_numref(q));
-    struct Expr* den = mpz_fits_slong_p(mpq_denref(q))
-        ? expr_new_integer((int64_t)mpz_get_si(mpq_denref(q)))
+    struct Expr* den = expr_mpz_get_int64(mpq_denref(q), &dv)
+        ? expr_new_integer(dv)
         : expr_new_bigint_from_mpz(mpq_denref(q));
     struct Expr** args = (struct Expr**)malloc(sizeof(struct Expr*) * 2);
     args[0] = num; args[1] = den;

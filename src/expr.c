@@ -6,6 +6,7 @@
 #include "assoc_index.h" /* assoc_index_free — the cached Association key index */
 #include "symtab.h"      /* SymbolDef: Module-local node counting */
 #include <stdbool.h>
+#include <limits.h>
 #include <math.h>
 #include <ctype.h>
 #include <limits.h>
@@ -391,7 +392,7 @@ Expr* expr_new_bigint_from_int64(int64_t val) {
     e->type = EXPR_BIGINT;
     e->refcount = 1;
     e->last_evaluated_at = 0;
-    mpz_init_set_si(e->data.bigint, val);
+    mth_mpz_init_set_i64(e->data.bigint, val);
     return e;
 }
 
@@ -531,7 +532,7 @@ Expr* expr_new_mpfr_copy(const mpfr_t src) {
 
 void expr_to_mpz(const Expr* e, mpz_t out) {
     if (e->type == EXPR_INTEGER) {
-        mpz_init_set_si(out, e->data.integer);
+        mth_mpz_init_set_i64(out, e->data.integer);
     } else { // EXPR_BIGINT
         mpz_init_set(out, e->data.bigint);
     }
@@ -539,7 +540,7 @@ void expr_to_mpz(const Expr* e, mpz_t out) {
 
 mpz_srcptr expr_mpz_borrow(const Expr* e, mpz_t scratch) {
     if (e->type == EXPR_BIGINT) return e->data.bigint;
-    mpz_init_set_si(scratch, e->data.integer);
+    mth_mpz_init_set_i64(scratch, e->data.integer);
     return scratch;
 }
 
@@ -599,6 +600,27 @@ bool expr_mpz_get_int64(const mpz_t z, int64_t* out) {
     if (mag > (uint64_t)INT64_MAX + 1u) return false;
     *out = (mag == (uint64_t)INT64_MAX + 1u) ? INT64_MIN : -(int64_t)mag;
     return true;
+}
+
+void mth_mpz_set_i64(mpz_t z, int64_t v) {
+#if LONG_MAX >= INT64_MAX
+    mpz_set_si(z, (long)v);
+#else
+    /* LLP64: import the magnitude as a uint64 word, then apply the sign.
+     * The magnitude is computed in uint64 so INT64_MIN does not overflow. */
+    uint64_t mag = v < 0 ? (uint64_t)0 - (uint64_t)v : (uint64_t)v;
+    mpz_import(z, 1, -1, sizeof(uint64_t), 0, 0, &mag);
+    if (v < 0) mpz_neg(z, z);
+#endif
+}
+
+void mth_mpz_init_set_i64(mpz_t z, int64_t v) {
+#if LONG_MAX >= INT64_MAX
+    mpz_init_set_si(z, (long)v);
+#else
+    mpz_init(z);
+    mth_mpz_set_i64(z, v);
+#endif
 }
 
 Expr* expr_bigint_normalize(Expr* e) {

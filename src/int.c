@@ -97,8 +97,9 @@ void int_init(void) {
 
 /* Build an Expr from an mpz_t digit, demoting to EXPR_INTEGER if it fits. */
 static Expr* expr_from_mpz_digit(const mpz_t d) {
-    if (mpz_fits_slong_p(d)) {
-        return expr_new_integer((int64_t)mpz_get_si(d));
+    int64_t v;
+    if (expr_mpz_get_int64(d, &v)) {
+        return expr_new_integer(v);
     }
     return expr_new_bigint_from_mpz(d);
 }
@@ -869,8 +870,9 @@ Expr* builtin_digitcount(Expr* res) {
         mpz_clear(base);
 
         Expr* result;
-        if (mpz_fits_slong_p(count)) {
-            result = expr_new_integer((int64_t)mpz_get_si(count));
+        int64_t cv;
+        if (expr_mpz_get_int64(count, &cv)) {
+            result = expr_new_integer(cv);
         } else {
             result = expr_new_bigint_from_mpz(count);
         }
@@ -1098,8 +1100,9 @@ static Expr* fd_compute_integer_string(const char* s, const mpz_t base,
     mpz_clear(tmp);
 
     Expr* out;
-    if (mpz_fits_slong_p(acc)) {
-        out = expr_new_integer((int64_t)mpz_get_si(acc));
+    int64_t av;
+    if (expr_mpz_get_int64(acc, &av)) {
+        out = expr_new_integer(av);
     } else {
         out = expr_new_bigint_from_mpz(acc);
     }
@@ -1728,8 +1731,9 @@ Expr* builtin_digitsum(Expr* res) {
     mpz_clear(base);
 
     Expr* result;
-    if (mpz_fits_slong_p(sum)) {
-        result = expr_new_integer((int64_t)mpz_get_si(sum));
+    int64_t sv;
+    if (expr_mpz_get_int64(sum, &sv)) {
+        result = expr_new_integer(sv);
     } else {
         result = expr_new_bigint_from_mpz(sum);
     }

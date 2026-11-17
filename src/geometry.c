@@ -167,9 +167,9 @@ static int geom_read_points(const Expr* pts, GeomPoints* out) {
             size_t rows = (size_t)nd->dims[0];
             if (!geom_alloc(out, rows, 1)) return 0;
             for (size_t i = 0; i < rows; i++) {
-                mpz_set_si(mpq_numref(out->qx[i]), (long)ndt_get_i(nd->data, 2 * i, nd->dtype));
+                mth_mpz_set_i64(mpq_numref(out->qx[i]), ndt_get_i(nd->data, 2 * i, nd->dtype));
                 mpz_set_ui(mpq_denref(out->qx[i]), 1);
-                mpz_set_si(mpq_numref(out->qy[i]), (long)ndt_get_i(nd->data, 2 * i + 1, nd->dtype));
+                mth_mpz_set_i64(mpq_numref(out->qy[i]), ndt_get_i(nd->data, 2 * i + 1, nd->dtype));
                 mpz_set_ui(mpq_denref(out->qy[i]), 1);
                 out->dx[i] = mpq_get_d(out->qx[i]);
                 out->dy[i] = mpq_get_d(out->qy[i]);

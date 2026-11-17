@@ -37,6 +37,7 @@
 #include <gmp.h>
 
 #include "context.h"
+#include "numeric.h"
 #include "print.h"
 #include "sym_names.h"
 
@@ -358,7 +359,7 @@ static char* fmt_int(const Expr* e) {
 
 static double int_to_double(const Expr* e) {
     if (e->type == EXPR_INTEGER) return (double)e->data.integer;
-    return mpz_get_d(e->data.bigint);
+    return numeric_mpz_to_double(e->data.bigint);
 }
 
 static double rational_to_double(const Expr* e) {

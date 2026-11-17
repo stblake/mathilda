@@ -57,7 +57,7 @@ static bool sinc_to_double(const Expr* e, double* out) {
     if (!e) return false;
     if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer; return true; }
     if (e->type == EXPR_REAL)    { *out = e->data.real;            return true; }
-    if (e->type == EXPR_BIGINT)  { *out = mpz_get_d(e->data.bigint); return true; }
+    if (e->type == EXPR_BIGINT)  { *out = numeric_mpz_to_double(e->data.bigint); return true; }
     int64_t n, d;
     if (is_rational(e, &n, &d)) { *out = (double)n / (double)d; return true; }
     return false;

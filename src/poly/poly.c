@@ -2850,8 +2850,9 @@ static Expr* gcd_strip_integer_content(Expr* P) {
     if (mpz_cmp_ui(g, 1) <= 0) {
         r = expr_copy(P);
     } else {
-        Expr* ge = mpz_fits_slong_p(g) ? expr_new_integer((int64_t)mpz_get_si(g))
-                                       : expr_new_bigint_from_mpz(g);
+        int64_t gv;
+        Expr* ge = expr_mpz_get_int64(g, &gv) ? expr_new_integer(gv)
+                                              : expr_new_bigint_from_mpz(g);
         Expr* inv = internal_power((Expr*[]){ge, expr_new_integer(-1)}, 2);
         Expr* t = internal_times((Expr*[]){inv, expr_copy(P)}, 2);
         r = expr_expand(t);

@@ -134,8 +134,7 @@ Expr* builtin_primepi(Expr* res) {
         mpz_init(z);
         expr_to_mpz(x_expr, z);
         if (mpz_sgn(z) <= 0) { mpz_clear(z); return expr_new_integer(0); }
-        if (!mpz_fits_slong_p(z)) { mpz_clear(z); return NULL; }
-        x_val = (int64_t)mpz_get_si(z);
+        if (!expr_mpz_get_int64(z, &x_val)) { mpz_clear(z); return NULL; }
         mpz_clear(z);
     } else if (x_expr->type == EXPR_REAL) {
         x_val = (int64_t)floor(x_expr->data.real);
@@ -253,8 +252,8 @@ Expr* builtin_prime(Expr* res) {
         mpz_init(z);
         expr_to_mpz(arg, z);
         if (mpz_sgn(z) <= 0) { mpz_clear(z); return prime_emit_intpp(res); }
-        int fits = mpz_fits_slong_p(z);
-        n = fits ? (int64_t)mpz_get_si(z) : 0;
+        int fits = expr_mpz_get_int64(z, &n);
+        if (!fits) n = 0;
         mpz_clear(z);
         if (!fits) return NULL;   /* valid but far beyond computable range */
     } else if (expr_is_numeric_like(arg)) {

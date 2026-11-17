@@ -98,7 +98,10 @@ static bool ctx_add_mgd_const(Ctx* c, int kind, void* ptr) {
 
 /* An integer-valued exponent that fits a machine long (Power fast path). */
 static bool mgd_small_int(const Expr* e, long* n) {
-    if (e->type == EXPR_INTEGER) { *n = (long)e->data.integer; return true; }
+    if (e->type == EXPR_INTEGER) {   /* round trip: `long` is 32 bits on LLP64 */
+        if ((int64_t)(long)e->data.integer != e->data.integer) return false;
+        *n = (long)e->data.integer; return true;
+    }
     if (e->type == EXPR_BIGINT && mpz_fits_slong_p(e->data.bigint)) {
         *n = mpz_get_si(e->data.bigint); return true;
     }

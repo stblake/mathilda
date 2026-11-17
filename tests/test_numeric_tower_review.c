@@ -366,6 +366,40 @@ static void test_c9_printing(void) {
     chk("TeXForm[1.*^15]", "1.\\times 10^{15}");
 }
 
+/* E3: past the exponent cap a Rational power stays symbolic; a negative
+ * exponent moves to the reciprocal base, and a negative BigInt exponent prints
+ * like a machine one (InputForm parentheses, OutputForm/TeX denominator). */
+static void test_e3_rational_power_past_cap(void) {
+    chk("InputForm[(2/3)^(-2^63)]", "(3/2)^9223372036854775808");
+    chk("InputForm[(-2/3)^(-2^64 - 1)]", "(-3/2)^18446744073709551617");
+    chk("InputForm[(2/3)^(2^64)]", "(2/3)^18446744073709551616");
+    chk_true("(2/3)^(-2^63) === (3/2)^(2^63)");
+    chk("InputForm[x^(-2^64)]", "x^(-18446744073709551616)");
+    chk("ToString[x^(-2^64)]", "\"1/x^18446744073709551616\"");
+    chk("ToString[TeXForm[x^(-2^64)]]", "\"\\\\frac{1}{x^{18446744073709551616}}\"");
+    chk("InputForm[a x^(-2^64)]", "a*x^(-18446744073709551616)");
+    chk_true("ToExpression[ToString[InputForm[x^(-2^64)]]] === x^(-2^64)");
+}
+
+/* F6 (found in phase 7): real Binomial through the Gamma quotient. A Gamma
+ * factor past MPFR's range (Gamma[10^8 + 1]) gave Indeterminate for a small
+ * binomial; integer-valued poles gave Indeterminate where the exact path has a
+ * value. Expected values: the exact Binomial at the same integers. */
+static void test_f6_binomial_real(void) {
+    chk("InputForm[Binomial[1.*^8, 2.]]", "4.99999995*^15");
+    chk("InputForm[Binomial[1.*^15, 2.]]", "4.999999999999995*^29");
+    chk_true("Binomial[10^20, 2.] == N[Binomial[10^20, 2]]");
+    chk("InputForm[Binomial[-5., 3.]]", "-35.0");
+    chk("InputForm[Binomial[-1.*^3, 3.]]", "-167167000.0");
+    chk("InputForm[Binomial[5, 7.]]", "0.0");
+    chk("InputForm[Binomial[-5., -7.]]", "15.0");
+    chk("InputForm[Binomial[-2., -5.]]", "-4.0");
+    chk("InputForm[Binomial[-5., -2.]]", "0.0");
+    chk("InputForm[Binomial[-5.5, 3.]]", "-44.6875");
+    chk_true("Binomial[N[-5, 30], N[3, 30]] == -35");
+    chk_true("Binomial[N[-5, 30], N[-7, 30]] == 15");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -400,6 +434,8 @@ int main(void) {
     TEST(test_d5_underflow);
     TEST(test_e1_demote);
     TEST(test_c9_printing);
+    TEST(test_e3_rational_power_past_cap);
+    TEST(test_f6_binomial_real);
 
     if (g_fail) {
         printf("%d numeric-tower review check(s) FAILED\n", g_fail);

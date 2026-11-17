@@ -207,8 +207,8 @@ static bool sqfree_integer_mpz(const mpz_t n) {
 
 static bool sqfree_rational(int64_t n, int64_t d) {
     mpz_t mn, md;
-    mpz_init_set_si(mn, n);
-    mpz_init_set_si(md, d);
+    mth_mpz_init_set_i64(mn, n);
+    mth_mpz_init_set_i64(md, d);
     bool r = sqfree_rational_mpz(mn, md);
     mpz_clear(mn);
     mpz_clear(md);

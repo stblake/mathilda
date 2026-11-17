@@ -66,7 +66,7 @@ static bool gamma_to_double(const Expr* e, double* out) {
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR)    { return false; } /* handled by the MPFR path */
 #endif
-    if (e->type == EXPR_BIGINT)  { *out = mpz_get_d(e->data.bigint); return true; }
+    if (e->type == EXPR_BIGINT)  { *out = numeric_mpz_to_double(e->data.bigint); return true; }
     int64_t n, d;
     if (is_rational(e, &n, &d)) { *out = (double)n / (double)d; return true; }
     return false;

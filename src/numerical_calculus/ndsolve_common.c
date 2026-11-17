@@ -14,6 +14,7 @@
 #ifdef USE_LAPACK
 #include "../linalg/lapack.h"   /* dgbtrf_/dgbtrs_/dgetrf_/dgetrs_ */
 #endif
+#include "numeric.h"
 
 /* ------------------------------------------------------------------ *
  *  Block-style variable binding                                       *
@@ -63,7 +64,7 @@ bool nd_to_double(const Expr* e, double* out) {
     switch (e->type) {
         case EXPR_INTEGER: *out = (double)e->data.integer;   return true;
         case EXPR_REAL:    *out = e->data.real;              return true;
-        case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint); return true;
+        case EXPR_BIGINT:  *out = numeric_mpz_to_double(e->data.bigint); return true;
 #ifdef USE_MPFR
         case EXPR_MPFR:    *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true;
 #endif
@@ -79,9 +80,8 @@ bool nd_to_double(const Expr* e, double* out) {
         && expr_is_integer_like(e->data.function.args[1])) {
         mpz_t num, den; expr_to_mpz(e->data.function.args[0], num);
         expr_to_mpz(e->data.function.args[1], den);
-        double dd = mpz_get_d(den);
-        if (dd == 0.0) { mpz_clears(num, den, NULL); return false; }
-        *out = mpz_get_d(num) / dd;
+        if (mpz_sgn(den) == 0) { mpz_clears(num, den, NULL); return false; }
+        *out = numeric_mpz_ratio_to_double(num, den);
         mpz_clears(num, den, NULL);
         return true;
     }

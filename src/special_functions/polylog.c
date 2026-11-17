@@ -101,7 +101,10 @@ static bool pl_inexact_anywhere(Expr* e) {
 /* Extract a strictly-exact machine integer (Integer or BigInt fitting a long). */
 static bool pl_exact_int(const Expr* e, long* out) {
     if (!e) return false;
-    if (e->type == EXPR_INTEGER) { *out = (long)e->data.integer; return true; }
+    if (e->type == EXPR_INTEGER) {   /* round trip: `long` is 32 bits on LLP64 */
+        if ((int64_t)(long)e->data.integer != e->data.integer) return false;
+        *out = (long)e->data.integer; return true;
+    }
     if (e->type == EXPR_BIGINT && mpz_fits_slong_p(e->data.bigint)) {
         *out = mpz_get_si(e->data.bigint); return true;
     }
@@ -117,7 +120,7 @@ static bool pl_to_double(const Expr* e, double* out) {
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR)    { *out = mpfr_get_d(e->data.mpfr, PRND); return true; }
 #endif
-    if (e->type == EXPR_BIGINT)  { *out = mpz_get_d(e->data.bigint); return true; }
+    if (e->type == EXPR_BIGINT)  { *out = numeric_mpz_to_double(e->data.bigint); return true; }
     int64_t n, d;
     if (is_rational(e, &n, &d)) { *out = (double)n / (double)d; return true; }
     return false;

@@ -81,7 +81,7 @@ ZUPoly* zupoly_zero(void) { return zupoly_new(1); }
 ZUPoly* zupoly_from_int(int64_t n) {
     ZUPoly* p = zupoly_new(1);
     if (n != 0) {
-        mpz_set_si(p->c[0], (long)n);
+        mth_mpz_set_i64(p->c[0], n);
         p->deg = 0;
     }
     return p;
@@ -122,7 +122,7 @@ void zupoly_setcoef(ZUPoly* p, int i, const mpz_t v) {
 }
 
 void zupoly_setcoef_si(ZUPoly* p, int i, int64_t v) {
-    mpz_t tmp; mpz_init(tmp); mpz_set_si(tmp, (long)v);
+    mpz_t tmp; mpz_init(tmp); mth_mpz_set_i64(tmp, v);
     zupoly_setcoef(p, i, tmp);
     mpz_clear(tmp);
 }
@@ -221,7 +221,7 @@ ZUPoly* zupoly_scale(const ZUPoly* a, const mpz_t s) {
 }
 
 ZUPoly* zupoly_scale_si(const ZUPoly* a, int64_t s) {
-    mpz_t tmp; mpz_init_set_si(tmp, (long)s);
+    mpz_t tmp; mth_mpz_init_set_i64(tmp, s);
     ZUPoly* r = zupoly_scale(a, tmp);
     mpz_clear(tmp);
     return r;
@@ -464,7 +464,7 @@ void zupoly_eval(const ZUPoly* p, const mpz_t alpha, mpz_t out) {
 }
 
 void zupoly_eval_si(const ZUPoly* p, int64_t alpha, mpz_t out) {
-    mpz_t a; mpz_init_set_si(a, (long)alpha);
+    mpz_t a; mth_mpz_init_set_i64(a, alpha);
     zupoly_eval(p, a, out);
     mpz_clear(a);
 }
@@ -488,7 +488,7 @@ ZUPoly* zupoly_shift_si(const ZUPoly* p, int64_t alpha) {
     ZUPoly* q = zupoly_new(p->deg + 1);
     mpz_set(q->c[0], p->c[p->deg]);
     q->deg = 0;
-    mpz_t a; mpz_init_set_si(a, (long)alpha);
+    mpz_t a; mth_mpz_init_set_i64(a, alpha);
     mpz_t tmp; mpz_init(tmp);
     for (int k = p->deg - 1; k >= 0; k--) {
         zupoly_reserve(q, q->deg + 2);
@@ -527,7 +527,7 @@ ZUPoly* expr_to_zupoly(const struct Expr* e, const struct Expr* var) {
     for (int i = 0; i <= deg; i++) {
         Expr* c = get_coeff(expanded, (Expr*)var, i);
         if (c->type == EXPR_INTEGER) {
-            mpz_set_si(p->c[i], (long)c->data.integer);
+            mth_mpz_set_i64(p->c[i], c->data.integer);
         } else if (c->type == EXPR_BIGINT) {
             mpz_set(p->c[i], c->data.bigint);
         } else if (is_zero_poly(c)) {
@@ -558,8 +558,9 @@ struct Expr* zupoly_to_expr(const ZUPoly* p, const struct Expr* var) {
     for (int i = 0; i <= p->deg; i++) {
         if (mpz_sgn(p->c[i]) == 0) continue;
         Expr* coef_expr;
-        if (mpz_fits_slong_p(p->c[i])) {
-            coef_expr = expr_new_integer((int64_t)mpz_get_si(p->c[i]));
+        int64_t cv;
+        if (expr_mpz_get_int64(p->c[i], &cv)) {
+            coef_expr = expr_new_integer(cv);
         } else {
             coef_expr = expr_new_bigint_from_mpz(p->c[i]);
         }

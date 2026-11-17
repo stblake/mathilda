@@ -63,6 +63,7 @@
 #ifdef USE_LAPACK
 #include "lapack.h"
 #endif
+#include "numeric.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -232,7 +233,7 @@ static bool jd_num_key(Expr* lambda, double* out) {
     bool ok = true; double d = 0;
     if (nn->type == EXPR_REAL) d = nn->data.real;
     else if (nn->type == EXPR_INTEGER) d = (double)nn->data.integer;
-    else if (nn->type == EXPR_BIGINT) d = mpz_get_d(nn->data.bigint);
+    else if (nn->type == EXPR_BIGINT) d = numeric_mpz_to_double(nn->data.bigint);
 #ifdef USE_MPFR
     else if (nn->type == EXPR_MPFR) d = mpfr_get_d(nn->data.mpfr, MPFR_RNDN);
 #endif
@@ -455,7 +456,7 @@ static bool jd_real_double(const Expr* e, double* out) {
     switch (e->type) {
         case EXPR_REAL:    *out = e->data.real;              return true;
         case EXPR_INTEGER: *out = (double)e->data.integer;   return true;
-        case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint); return true;
+        case EXPR_BIGINT:  *out = numeric_mpz_to_double(e->data.bigint); return true;
 #ifdef USE_MPFR
         case EXPR_MPFR:    *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true;
 #endif

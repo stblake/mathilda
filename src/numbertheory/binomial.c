@@ -88,12 +88,36 @@ static Expr* binomial_polynomial(Expr* n, int64_t k) {
  * MPFR real) to a double.  Returns false for symbolic or complex operands, so
  * the machine Binomial path can decline rather than silently reading a
  * non-convertible operand (e.g. an exact Rational) as 0. */
+/* Integer-valued n, m (|n|, |m| < 2^53), the conventions of the exact path
+ * (1), which the Gamma quotient reaches only as a ratio of poles:
+ *   m < 0:            n < 0 and m <= n -> Binomial[n, n - m] (symmetry), else 0;
+ *   n >= 0, m > n:    0;
+ *   n < 0, m >= 0:    (-1)^m Binomial[m - n - 1, m] (reflection).
+ * Rewrites *n, *m (and *sgn) into the pole-free region 0 <= m <= n, or returns
+ * false for a zero result. Off the lattice it changes nothing. */
+static bool binomial_lattice_d(double* n, double* m, double* sgn) {
+    double nv = *n, mv = *m;
+    if (nv != floor(nv) || mv != floor(mv) || fabs(nv) >= 0x1p53 || fabs(mv) >= 0x1p53)
+        return true;
+    if (mv < 0) {
+        if (!(nv < 0 && mv <= nv)) return false;
+        mv = nv - mv;                                  /* >= 0 */
+    }
+    if (nv >= 0 && mv > nv) return false;
+    if (nv < 0) {
+        nv = mv - nv - 1.0;
+        if (fmod(mv, 2.0) != 0.0) *sgn = -*sgn;
+    }
+    *n = nv; *m = mv;
+    return true;
+}
+
 static bool binomial_to_double(const Expr* e, double* out) {
     int64_t n, d;
     switch (e->type) {
         case EXPR_INTEGER: *out = (double)e->data.integer;    return true;
         case EXPR_REAL:    *out = e->data.real;               return true;
-        case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint);  return true;
+        case EXPR_BIGINT:  *out = numeric_mpz_to_double(e->data.bigint);  return true;
 #ifdef USE_MPFR
         case EXPR_MPFR:    *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true;
 #endif
@@ -148,6 +172,22 @@ static Expr* binomial_mpfr(const Expr* arg_n, const Expr* arg_m) {
         mpfr_clears(nv, mv, g1, g2, g3, den, (mpfr_ptr)0);
         return NULL;
     }
+    /* The integer lattice, as in the machine path (binomial_lattice_d):
+     * decided on doubles, which are exact there, then applied exactly. */
+    bool reflect_neg = false;
+    if (mpfr_integer_p(nv) && mpfr_integer_p(mv)
+        && mpfr_cmpabs_ui(nv, 1UL << 30) < 0 && mpfr_cmpabs_ui(mv, 1UL << 30) < 0) {
+        double dn = mpfr_get_d(nv, MPFR_RNDN), dm = mpfr_get_d(mv, MPFR_RNDN), sg = 1.0;
+        if (!binomial_lattice_d(&dn, &dm, &sg)) {
+            mpfr_clears(nv, mv, g1, g2, g3, den, (mpfr_ptr)0);
+            Expr* z = expr_new_mpfr_bits(out_prec);
+            mpfr_set_zero(z->data.mpfr, 1);
+            return z;
+        }
+        mpfr_set_d(nv, dn, MPFR_RNDN);
+        mpfr_set_d(mv, dm, MPFR_RNDN);
+        reflect_neg = sg < 0;
+    }
     mpfr_add_ui(g1, nv, 1, MPFR_RNDN);  mpfr_gamma(g1, g1, MPFR_RNDN);   /* Gamma[n+1]   */
     mpfr_add_ui(g2, mv, 1, MPFR_RNDN);  mpfr_gamma(g2, g2, MPFR_RNDN);   /* Gamma[m+1]   */
     mpfr_sub(g3, nv, mv, MPFR_RNDN);
@@ -155,8 +195,46 @@ static Expr* binomial_mpfr(const Expr* arg_n, const Expr* arg_m) {
     mpfr_mul(den, g2, g3, MPFR_RNDN);
 
     Expr* out = expr_new_mpfr_bits(out_prec);
-    mpfr_div(out->data.mpfr, g1, den, MPFR_RNDN);
+    if (mpfr_inf_p(g1) || mpfr_inf_p(den)) {
+        /* A Gamma factor left MPFR's range (Gamma[10^8 + 1] has ~7.6*10^8
+         * digits) although the quotient may be small: Binomial[10.^8, 2.] is
+         * 5.*10^15. Away from the poles, take the quotient in logarithms. The
+         * log is ~|L| in size, so its absolute error is |L| 2^-wp: carry
+         * log2|L| more bits so the exponential keeps out_prec. */
+        mpfr_t a1, a2, a3, l1, l2, l3;
+        mpfr_inits2(wp, a1, a2, a3, (mpfr_ptr)0);
+        mpfr_add_ui(a1, nv, 1, MPFR_RNDN);
+        mpfr_add_ui(a2, mv, 1, MPFR_RNDN);
+        mpfr_sub(a3, nv, mv, MPFR_RNDN);
+        mpfr_add_ui(a3, a3, 1, MPFR_RNDN);
+        bool pole = false;
+        mpfr_srcptr as[3] = { a1, a2, a3 };
+        for (int i = 0; i < 3; i++)
+            if (mpfr_integer_p(as[i]) && mpfr_sgn(as[i]) <= 0) pole = true;
+        if (!pole) {
+            mpfr_exp_t ex = mpfr_get_exp(a1);               /* |L| ~ a log a */
+            if (mpfr_get_exp(a3) > ex) ex = mpfr_get_exp(a3);
+            if (mpfr_get_exp(a2) > ex) ex = mpfr_get_exp(a2);
+            mpfr_prec_t wp2 = wp + (ex > 0 ? (mpfr_prec_t)ex + 8 : 8);
+            mpfr_inits2(wp2, l1, l2, l3, (mpfr_ptr)0);
+            int s1, s2, s3;
+            mpfr_lgamma(l1, &s1, a1, MPFR_RNDN);
+            mpfr_lgamma(l2, &s2, a2, MPFR_RNDN);
+            mpfr_lgamma(l3, &s3, a3, MPFR_RNDN);
+            mpfr_sub(l1, l1, l2, MPFR_RNDN);
+            mpfr_sub(l1, l1, l3, MPFR_RNDN);
+            mpfr_exp(out->data.mpfr, l1, MPFR_RNDN);
+            if (s1 * s2 * s3 < 0) mpfr_neg(out->data.mpfr, out->data.mpfr, MPFR_RNDN);
+            mpfr_clears(l1, l2, l3, (mpfr_ptr)0);
+        } else {
+            mpfr_set_nan(out->data.mpfr);                   /* declined below */
+        }
+        mpfr_clears(a1, a2, a3, (mpfr_ptr)0);
+    } else {
+        mpfr_div(out->data.mpfr, g1, den, MPFR_RNDN);
+    }
     mpfr_clears(nv, mv, g1, g2, g3, den, (mpfr_ptr)0);
+    if (reflect_neg) mpfr_neg(out->data.mpfr, out->data.mpfr, MPFR_RNDN);
 
     if (mpfr_nan_p(out->data.mpfr) || mpfr_inf_p(out->data.mpfr)) {
         expr_free(out);
@@ -455,11 +533,15 @@ Expr* builtin_binomial(Expr* res) {
     if (arg_n->type == EXPR_REAL || arg_m->type == EXPR_REAL) {
         double nv, mv;
         if (binomial_to_double(arg_n, &nv) && binomial_to_double(arg_m, &mv)) {
+            /* On the integer lattice the Gamma quotient has poles whose ratio
+             * is finite; follow the exact path's conventions instead. */
+            double sgn = 1.0;
+            if (!binomial_lattice_d(&nv, &mv, &sgn)) return expr_new_real(0.0);
             /* The tgamma ratio overflows to Inf (or Inf/Inf -> NaN) well before
              * the binomial coefficient itself leaves the double range, so
              * promote a degenerate result to MPFR. */
             return numeric_promote_result_if_degenerate(
-                expr_new_real(tgamma(nv + 1.0) / (tgamma(mv + 1.0) * tgamma(nv - mv + 1.0))), res);
+                expr_new_real(sgn * (tgamma(nv + 1.0) / (tgamma(mv + 1.0) * tgamma(nv - mv + 1.0)))), res);
         }
     }
 

@@ -60,7 +60,7 @@ static bool extract_pos_rational(const Expr* e, mpz_t num, mpz_t den) {
     if (!e) return false;
     if (e->type == EXPR_INTEGER) {
         if (e->data.integer <= 0) return false;
-        mpz_init_set_si(num, e->data.integer);
+        mth_mpz_init_set_i64(num, e->data.integer);
         mpz_init_set_ui(den, 1);
         return true;
     }

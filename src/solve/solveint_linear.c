@@ -505,7 +505,7 @@ bool si_solve_linear_bounded(SICtx* c, SearchState* st) {
                         mpz_set(Bz[j][i], basis[j][i]);      /* fallback: unreduced */
                         if (row->type == EXPR_FUNCTION && (int)row->data.function.arg_count == n) {
                             int64_t vv;
-                            if (expr_as_i64(row->data.function.args[i], &vv)) mpz_set_si(Bz[j][i], vv);
+                            if (expr_as_i64(row->data.function.args[i], &vv)) mth_mpz_set_i64(Bz[j][i], vv);
                         }
                         Bd[j][i] = mpz_get_d(Bz[j][i]);
                     }

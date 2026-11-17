@@ -4,6 +4,7 @@
 #include "ndarray.h"
 #include "ndreduce.h"
 #include "../numloop.h"
+#include "numeric.h"
 
 /* Accumulate[list] returns the running cumulative totals of list, with the
  * same head and the same length as the input. The intermediate sums are
@@ -32,7 +33,7 @@ static bool accumulate_is_compensated_method(Expr* opt) {
 static bool accumulate_to_double(Expr* e, double* out) {
     if (e->type == EXPR_REAL)    { *out = e->data.real;             return true; }
     if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer;  return true; }
-    if (e->type == EXPR_BIGINT)  { *out = mpz_get_d(e->data.bigint); return true; }
+    if (e->type == EXPR_BIGINT)  { *out = numeric_mpz_to_double(e->data.bigint); return true; }
     return false;
 }
 

@@ -372,6 +372,11 @@ bool  expr_is_integer_like(const Expr* e);
 bool  expr_is_numeric_like(const Expr* e);
 /* True and *out = z when z fits int64 (portable: not via `long`). */
 bool  expr_mpz_get_int64(const mpz_t z, int64_t* out);
+/* z = v for any int64 v.  mpz_set_si/mpz_init_set_si take a `long`, which is
+ * only 32 bits on LLP64 Windows, so an int64 above 2^31 would be truncated;
+ * these are exact on every data model. */
+void  mth_mpz_set_i64(mpz_t z, int64_t v);
+void  mth_mpz_init_set_i64(mpz_t z, int64_t v);
 Expr* expr_bigint_normalize(Expr* e);
 
 #endif // EXPR_H

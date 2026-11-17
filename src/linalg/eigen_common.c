@@ -354,7 +354,7 @@ Expr** eigen_extract_values(Expr* solutions, size_t* count_out) {
 static double eigen_part_to_double(Expr* e) {
     if (e->type == EXPR_REAL) return e->data.real;
     if (e->type == EXPR_INTEGER) return (double)e->data.integer;
-    if (e->type == EXPR_BIGINT) return mpz_get_d(e->data.bigint);
+    if (e->type == EXPR_BIGINT) return numeric_mpz_to_double(e->data.bigint);
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR) return mpfr_get_d(e->data.mpfr, MPFR_RNDN);
 #endif
@@ -410,7 +410,7 @@ static bool eigen_abs_to_double(Expr* val, double* out) {
     double d = 0;
     if (n_abs->type == EXPR_REAL) d = n_abs->data.real;
     else if (n_abs->type == EXPR_INTEGER) d = (double)n_abs->data.integer;
-    else if (n_abs->type == EXPR_BIGINT) d = mpz_get_d(n_abs->data.bigint);
+    else if (n_abs->type == EXPR_BIGINT) d = numeric_mpz_to_double(n_abs->data.bigint);
 #ifdef USE_MPFR
     else if (n_abs->type == EXPR_MPFR)
         d = mpfr_get_d(n_abs->data.mpfr, MPFR_RNDN);
@@ -433,7 +433,7 @@ static double eigen_im_to_double(Expr* val) {
     double d = 0;
     if (n_im->type == EXPR_REAL) d = n_im->data.real;
     else if (n_im->type == EXPR_INTEGER) d = (double)n_im->data.integer;
-    else if (n_im->type == EXPR_BIGINT) d = mpz_get_d(n_im->data.bigint);
+    else if (n_im->type == EXPR_BIGINT) d = numeric_mpz_to_double(n_im->data.bigint);
 #ifdef USE_MPFR
     else if (n_im->type == EXPR_MPFR)
         d = mpfr_get_d(n_im->data.mpfr, MPFR_RNDN);
@@ -922,7 +922,7 @@ static bool eigen_leaf_to_double(Expr* e, double* out_re, double* out_im) {
     if (!e) return false;
     if (e->type == EXPR_REAL)    { *out_re = e->data.real;                return true; }
     if (e->type == EXPR_INTEGER) { *out_re = (double)e->data.integer;     return true; }
-    if (e->type == EXPR_BIGINT)  { *out_re = mpz_get_d(e->data.bigint);   return true; }
+    if (e->type == EXPR_BIGINT)  { *out_re = numeric_mpz_to_double(e->data.bigint);   return true; }
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR)    { *out_re = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true; }
 #endif

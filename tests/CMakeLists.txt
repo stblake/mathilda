@@ -2284,6 +2284,16 @@ add_executable(bignum_rational_numeric_tests test_bignum_rational_numeric.c $<TA
 target_include_directories(bignum_rational_numeric_tests PRIVATE ../src)
 add_test(NAME bignum_rational_numeric_tests COMMAND bignum_rational_numeric_tests)
 
+# src/checked_int.h against exact GMP arithmetic, once per implementation:
+# the compiler builtins and the strict-C99 fallback (-DCOMPILE_NO_OVERFLOW_BUILTIN).
+add_executable(compile_overflow_tests test_compile_overflow.c)
+target_include_directories(compile_overflow_tests PRIVATE ../src)
+add_test(NAME compile_overflow_tests COMMAND compile_overflow_tests)
+add_executable(compile_overflow_fallback_tests test_compile_overflow.c)
+target_include_directories(compile_overflow_fallback_tests PRIVATE ../src)
+target_compile_definitions(compile_overflow_fallback_tests PRIVATE COMPILE_NO_OVERFLOW_BUILTIN)
+add_test(NAME compile_overflow_fallback_tests COMMAND compile_overflow_fallback_tests)
+
 # 2026-11 numeric-tower review corpus (docs/design/numeric_tower_review.md):
 # int64/BigInt and machine/MPFR boundary edge cases.
 add_executable(numeric_tower_review_tests test_numeric_tower_review.c $<TARGET_OBJECTS:mathilda_common>)

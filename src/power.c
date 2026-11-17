@@ -311,7 +311,7 @@ static Expr* power_split_residue(int64_t r, int64_t b_rem, int64_t q) {
     mpz_init_set_ui(coeff_z, 1);
     for (int i = 0; i < npr; i++) {
         if (int_part[i] > 0) {
-            mpz_t t; mpz_init_set_si(t, primes[i]);
+            mpz_t t; mth_mpz_init_set_i64(t, primes[i]);
             mpz_pow_ui(t, t, (unsigned long)int_part[i]);
             mpz_mul(coeff_z, coeff_z, t);
             mpz_clear(t);
@@ -331,7 +331,7 @@ static Expr* power_split_residue(int64_t r, int64_t b_rem, int64_t q) {
         used[i] = true;
         if (eff_num[i] == 0) continue;
         mpz_t base_z;
-        mpz_init_set_si(base_z, primes[i]);
+        mth_mpz_init_set_i64(base_z, primes[i]);
         for (int j = i + 1; j < npr; j++) {
             if (!used[j] && eff_num[j] == eff_num[i] && eff_den[j] == eff_den[i]) {
                 mpz_mul_si(base_z, base_z, primes[j]);
@@ -679,7 +679,7 @@ bool power_scalar_components(const Expr* e, double* re, double* im) {
     *im = 0.0;
     if (e->type == EXPR_INTEGER) { *re = (double)e->data.integer; return true; }
     if (e->type == EXPR_REAL)    { *re = e->data.real; return true; }
-    if (e->type == EXPR_BIGINT)  { *re = mpz_get_d(e->data.bigint); return true; }
+    if (e->type == EXPR_BIGINT)  { *re = numeric_mpz_to_double(e->data.bigint); return true; }
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR)    { *re = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true; }
 #endif
@@ -843,7 +843,7 @@ static Expr* power_rational_base_symbolic_exp(Expr* base, Expr* exp) {
         mpz_inits(rn, rd, kn, kd, NULL);
         if (mpz_root(rn, num, (unsigned long)cq) && mpz_root(rd, den, (unsigned long)cq)) {
             bool flip = mpz_cmp(rn, rd) < 0;
-            mpz_set_si(kn, flip ? -cp : cp);
+            mth_mpz_set_i64(kn, flip ? -cp : cp);
             mpz_set_ui(kd, 1);
             Expr* rb = flip ? make_rational_mpz(rd, rn) : make_rational_mpz(rn, rd);
             out = expr_new_function(expr_new_symbol(SYM_Power),
@@ -881,8 +881,8 @@ static Expr* power_rational_base_symbolic_exp(Expr* base, Expr* exp) {
             mpz_set_ui(rd, 1);
             for (int i = 0; i < np; i++) mpz_mul_si(ex[i] > 0 ? rn : rd, ex[i] > 0 ? rn : rd, pr[i]);
             bool flip = mpz_cmp(rn, rd) < 0;
-            mpz_set_si(kn, flip ? -K * cp : K * cp);
-            mpz_set_si(kd, cq);
+            mth_mpz_set_i64(kn, flip ? -K * cp : K * cp);
+            mth_mpz_set_i64(kd, cq);
             Expr* rb = flip ? make_rational_mpz(rd, rn) : make_rational_mpz(rn, rd);
             out = expr_new_function(expr_new_symbol(SYM_Power),
                                     (Expr*[]){ rb, power_scaled_exponent(kn, kd, rest) }, 2);
@@ -890,13 +890,13 @@ static Expr* power_rational_base_symbolic_exp(Expr* base, Expr* exp) {
             Expr** fs = malloc(sizeof(Expr*) * (size_t)np);
             for (int i = 0; i < np; i++) {
                 /* m = k c = k p / q */
-                mpz_set_si(kn, ex[i]);
+                mth_mpz_set_i64(kn, ex[i]);
                 mpz_mul_si(kn, kn, cp);
-                mpz_set_si(kd, cq);
+                mth_mpz_set_i64(kd, cq);
                 mpz_gcd(pz, kn, kd);
                 mpz_divexact(kn, kn, pz);
                 mpz_divexact(kd, kd, pz);
-                mpz_set_si(pz, pr[i]);
+                mth_mpz_set_i64(pz, pr[i]);
                 if (mpz_cmp_ui(kd, 1) == 0 && mpz_cmpabs_ui(kn, 64) <= 0) {
                     /* (p^|m|)^(sign(m) r); a larger |m| keeps p^(m r) */
                     int s = mpz_sgn(kn);
@@ -1739,6 +1739,24 @@ Expr* builtin_power(Expr* res) {
         return expr_new_function(expr_new_symbol(SYM_Rational), r_args, 2);
 
         rational_bigint_giveup:;
+        /* Past the cap the power stays symbolic. A negative exponent moves to
+         * the reciprocal base, (2/3)^(-N) -> (3/2)^N, the same normal form a
+         * small exponent reaches by evaluation; the positive power then stays
+         * put (it gives up here again), so there is no loop. */
+        if ((exp->type == EXPR_INTEGER && exp->data.integer < 0)
+            || (exp->type == EXPR_BIGINT && mpz_sgn(exp->data.bigint) < 0)) {
+            mpz_t zn, zd, ze;
+            expr_to_mpz(num_expr, zn);
+            expr_to_mpz(den_expr, zd);
+            expr_to_mpz(exp, ze);
+            mpz_neg(ze, ze);
+            Expr* inv = make_rational_mpz(zd, zn);   /* num != 0: a Rational */
+            Expr* pos = expr_bigint_normalize(expr_new_bigint_from_mpz(ze));
+            mpz_clear(zn); mpz_clear(zd); mpz_clear(ze);
+            if (inv) return expr_new_function(expr_new_symbol(SYM_Power),
+                                              (Expr*[]){ inv, pos }, 2);
+            expr_free(pos);
+        }
     }
 
     /* Rational-base, rational-exponent canonicalisation.
@@ -1880,8 +1898,8 @@ Expr* builtin_power(Expr* res) {
                     else        { imag_count -= 1; kn = -kn; }
                     /* accumulate |k| into coefficient */
                     mpz_t tn, td;
-                    mpz_init_set_si(tn, kn);
-                    mpz_init_set_si(td, kd > 0 ? kd : -kd);
+                    mth_mpz_init_set_i64(tn, kn);
+                    mth_mpz_init_set_i64(td, kd > 0 ? kd : -kd);
                     mpz_mul(coef_num, coef_num, tn);
                     mpz_mul(coef_den, coef_den, td);
                     mpz_clear(tn); mpz_clear(td);
@@ -2389,14 +2407,14 @@ rat_imag_fallthrough: ;
             mpz_init_set_ui(num_z, 1);
             mpz_init_set_ui(den_z, 1);
             if (a_int != 0) {
-                mpz_t t; mpz_init_set_si(t, abs_n);
+                mpz_t t; mth_mpz_init_set_i64(t, abs_n);
                 mpz_pow_ui(t, t, (unsigned long)(a_int > 0 ? a_int : -a_int));
                 if (a_int > 0) mpz_mul(num_z, num_z, t);
                 else            mpz_mul(den_z, den_z, t);
                 mpz_clear(t);
             }
             if (b_rem != 0 && m > 1) {
-                mpz_t t; mpz_init_set_si(t, m);
+                mpz_t t; mth_mpz_init_set_i64(t, m);
                 mpz_pow_ui(t, t, (unsigned long)(b_rem > 0 ? b_rem : -b_rem));
                 if (b_rem > 0) mpz_mul(num_z, num_z, t);
                 else            mpz_mul(den_z, den_z, t);

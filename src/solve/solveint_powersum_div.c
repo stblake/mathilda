@@ -92,7 +92,7 @@ void si_two_power_solve(SICtx* c, SearchState* st, int ip, int jp,
             int64_t sval = sgn * dv;
             if (sval < smin || sval > smax) continue;      /* s = x+y out of range */
             if (++st->visits > st->max_visits) { st->overflow = true; break; }
-            mpz_set_si(sz, sval);
+            mth_mpz_set_i64(sz, sval);
             /* Build p_e(s, p) via the recurrence (polynomials in p). */
             for (int k = 0; k <= deg; k++) { mpz_set_ui(pm2[k], 0); mpz_set_ui(pm1[k], 0); }
             mpz_set_ui(pm2[0], 2);                          /* p_0 = 2 */
@@ -114,7 +114,7 @@ void si_two_power_solve(SICtx* c, SearchState* st, int ip, int jp,
             for (int pi = 0; pi < npr; pi++) {
                 /* x, y from t^2 - s t + p = 0: disc = s^2 - 4p. */
                 mpz_mul(sq, sz, sz);
-                mpz_set_si(tmp, proots[pi]); mpz_mul_ui(tmp, tmp, 4); mpz_sub(sq, sq, tmp);
+                mth_mpz_set_i64(tmp, proots[pi]); mpz_mul_ui(tmp, tmp, 4); mpz_sub(sq, sq, tmp);
                 if (mpz_sgn(sq) < 0 || !mpz_perfect_square_p(sq)) continue;
                 mpz_sqrt(r, sq);
                 for (int rs = 1; rs >= -1; rs -= 2) {

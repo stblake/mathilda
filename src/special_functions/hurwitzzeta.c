@@ -101,7 +101,10 @@ static bool hz_has_inexact(const Expr* e) {
  * signed long). Inexact reals do NOT count. */
 static bool hz_exact_int(const Expr* e, long* out) {
     if (!e) return false;
-    if (e->type == EXPR_INTEGER) { *out = (long)e->data.integer; return true; }
+    if (e->type == EXPR_INTEGER) {   /* round trip: `long` is 32 bits on LLP64 */
+        if ((int64_t)(long)e->data.integer != e->data.integer) return false;
+        *out = (long)e->data.integer; return true;
+    }
     if (e->type == EXPR_BIGINT && mpz_fits_slong_p(e->data.bigint)) {
         *out = mpz_get_si(e->data.bigint); return true;
     }

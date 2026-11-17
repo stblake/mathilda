@@ -411,7 +411,7 @@ bool si_solve_three_cubes_booker(SICtx* c, SearchState* st) {
         int64_t hi = cc->hi[r] <  T ? cc->hi[r] :  T;
         mpz_t m, v3; mpz_init(m); mpz_init(v3);
         for (int64_t v = lo; v <= hi && !st->overflow; v++) {
-            mpz_set_si(v3, v); mpz_mul_si(v3, v3, v); mpz_mul_si(v3, v3, v);
+            mth_mpz_set_i64(v3, v); mpz_mul_si(v3, v3, v); mpz_mul_si(v3, v3, v);
             mpz_sub(m, K, v3);                         /* m = k - v^3 */
             for (int q = 0; q < 3; q++) vals[q] = 0;
             vals[r] = v;

@@ -123,7 +123,7 @@ static bool minkowski_lll_basis(NumberField* K, int64_t* Bred) {
     for (int i = 0; i < deg; i++) mpz_init(brow[i]);
     bool ok = true;
     for (int i = 0; i < deg && ok; i++) {
-        for (int j = 0; j < deg; j++) mpz_set_si(brow[j], Bred[i*deg + j]);
+        for (int j = 0; j < deg; j++) mth_mpz_set_i64(brow[j], Bred[i*deg + j]);
         int col = 0;
         for (int k = 0; k < r1 + r2 && ok; k++) {          /* Minkowski coords */
             nf_embed_int(K, (const mpz_t*)brow, k, z);
@@ -178,7 +178,7 @@ static bool minkowski_lll_basis(NumberField* K, int64_t* Bred) {
 static double* log_embed_v(NumberField* K, const int64_t* v, double logD) {
     int deg = nf_degree(K), r1 = nf_r1(K), m = r1 + nf_r2(K);
     mpz_t* mc = malloc(sizeof(mpz_t) * (size_t)deg);
-    for (int i = 0; i < deg; i++) mpz_init_set_si(mc[i], (long)v[i]);
+    for (int i = 0; i < deg; i++) mth_mpz_init_set_i64(mc[i], v[i]);
     arb_ptr lv = _arb_vec_init(m);
     nf_log_embedding_int(K, (const mpz_t*)mc, lv);
     double* out = malloc(sizeof(double) * (size_t)m);
@@ -193,7 +193,7 @@ static double* log_embed_v(NumberField* K, const int64_t* v, double logD) {
 static bool is_unit_v(NumberField* K, const int64_t* v, const mpz_t Dn) {
     int deg = nf_degree(K);
     mpz_t* mc = malloc(sizeof(mpz_t) * (size_t)deg);
-    for (int i = 0; i < deg; i++) mpz_init_set_si(mc[i], (long)v[i]);
+    for (int i = 0; i < deg; i++) mth_mpz_init_set_i64(mc[i], v[i]);
     mpz_t nrm; mpz_init(nrm);
     bool ok = nf_norm_int(K, (const mpz_t*)mc, nrm);
     bool unit = ok && (mpz_cmpabs(nrm, Dn) == 0);
@@ -486,7 +486,7 @@ NFUnits* nf_fundamental_units(NumberField* K) {
 
         /* certify by p-saturation (Friedman R0 = 0.2 bounds the prime list) */
         R = regulator_det(sellog, r);
-        for (int j = 0; j < r; j++) for (int i = 0; i < deg; i++) mpz_set_si(selz[j][i], (long)sel[j][i]);
+        for (int j = 0; j < r; j++) for (int i = 0; i < deg; i++) mth_mpz_set_i64(selz[j][i], sel[j][i]);
         if (cert_saturate(K, selz, r, R, Dden)) ok = true;    /* certified fundamental -> stop */
     }
     free(c); free(vv); free(Bred);
@@ -539,7 +539,7 @@ NFUnits* nf_fundamental_units(NumberField* K) {
             int kb = -1;
             for (int k = 0; k < ncand; k++) if (cand[k].nrm2 > 1e-9) { kb = k; break; }
             if (kb >= 0) {
-                for (int i = 0; i < deg; i++) mpz_set_si(selz[1][i], (long)cand[kb].c[i]);
+                for (int i = 0; i < deg; i++) mth_mpz_set_i64(selz[1][i], cand[kb].c[i]);
                 np = 2;
             }
         }

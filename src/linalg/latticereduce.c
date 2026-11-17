@@ -587,7 +587,7 @@ static bool finv_num_to_double(const Expr* e, double* out) {
     if (!e) return false;
     if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer; return true; }
     if (e->type == EXPR_REAL)    { *out = e->data.real;            return true; }
-    if (e->type == EXPR_BIGINT)  { *out = mpz_get_d(e->data.bigint); return true; }
+    if (e->type == EXPR_BIGINT)  { *out = numeric_mpz_to_double(e->data.bigint); return true; }
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR)    { *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true; }
 #endif

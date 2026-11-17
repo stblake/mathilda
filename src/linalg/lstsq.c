@@ -98,6 +98,7 @@
 #include "sym_names.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "common.h"    /* common_scan_inexact */
+#include "numeric.h"
 #ifdef USE_MPFR
 #include <mpfr.h>
 #endif
@@ -335,7 +336,7 @@ static bool expr_as_double(Expr* e, double* out) {
     if (!e) return false;
     if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer; return true; }
     if (e->type == EXPR_REAL)    { *out = e->data.real;            return true; }
-    if (e->type == EXPR_BIGINT)  { *out = mpz_get_d(e->data.bigint); return true; }
+    if (e->type == EXPR_BIGINT)  { *out = numeric_mpz_to_double(e->data.bigint); return true; }
     if (e->type == EXPR_FUNCTION
         && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_Rational

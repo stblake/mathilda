@@ -51,6 +51,7 @@
 #include "sym_names.h"
 #include "common.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "numeric.h"
 
 #include <gmp.h>
 #ifdef USE_MPFR
@@ -87,7 +88,7 @@ static bool lu_mach_leaf_to_double(Expr* e, double* out_re, double* out_im)
     switch (e->type) {
         case EXPR_REAL:    *out_re = e->data.real;                    return true;
         case EXPR_INTEGER: *out_re = (double)e->data.integer;         return true;
-        case EXPR_BIGINT:  *out_re = mpz_get_d(e->data.bigint);       return true;
+        case EXPR_BIGINT:  *out_re = numeric_mpz_to_double(e->data.bigint);       return true;
 #ifdef USE_MPFR
         case EXPR_MPFR:
             *out_re = mpfr_get_d(e->data.mpfr, MPFR_RNDN);

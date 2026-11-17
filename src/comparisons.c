@@ -54,7 +54,7 @@ static bool get_numeric_value(Expr* e, double* val, int64_t* num, int64_t* den, 
      * DBL_MIN, so it orders below every normal machine number (and 0. ==
      * 10^-400 stays False, as 0. == 10^-300 is). 1.5 < 10^400 and
      * 1.*^308 < 10^309 were left unevaluated: N of these gives an extended-
-     * range MPFR, which the fallback below declines. *num/*den are not set:
+     * range MPFR, which the fallback below declines. *num and *den are not set:
      * the value is used only on the inexact (tolerant) path. */
     {
         double d;

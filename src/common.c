@@ -174,7 +174,7 @@ bool common_machine_real_value(const Expr* e, double* out) {
     switch (e->type) {
         case EXPR_REAL:    *out = e->data.real;              return true;
         case EXPR_INTEGER: *out = (double)e->data.integer;   return true;
-        case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint); return true;
+        case EXPR_BIGINT:  *out = numeric_mpz_to_double(e->data.bigint); return true;
         case EXPR_FUNCTION: {
             /* Rational[p, q]. Deliberately NOT a general numeric reader: MPFR
              * and Complex are excluded because the contagion rule this serves

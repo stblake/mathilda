@@ -322,7 +322,7 @@ bool si_solve_elliptic_bqf(SICtx* c, SearchState* st) {
             mpz_inits(a1, a0, disc, root, num, twoA, yz, s2, NULL);
             mpz_mul_ui(twoA, A, 2);
             for (int64_t yy = ylo; yy <= yhi && !st->overflow; yy++) {
-                mpz_set_si(yz, yy);
+                mth_mpz_set_i64(yz, yy);
                 /* a1 = B y + D,  a0 = C y^2 + E y + F. */
                 mpz_mul(a1, B, yz); mpz_add(a1, a1, D);
                 mpz_mul(a0, C, yz); mpz_add(a0, a0, E); mpz_mul(a0, a0, yz); mpz_add(a0, a0, F);

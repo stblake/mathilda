@@ -250,10 +250,10 @@ static bool poly_lower_bound_nonneg(const MPoly* p, const SICtx* c, int skip, mp
             /* coef > 0 -> minimise the monomial -> use lo^e;
              * coef < 0 -> maximise the monomial -> use hi^e (needs finite hi). */
             if (sign > 0) {
-                mpz_set_si(pw, c->lo[v]);
+                mth_mpz_set_i64(pw, c->lo[v]);
             } else {
                 if (!c->has_hi[v]) { finite = false; break; }
-                mpz_set_si(pw, c->hi[v]);
+                mth_mpz_set_i64(pw, c->hi[v]);
             }
             for (int k = 0; k < e; k++) mpz_mul(term, term, pw);   /* term *= pw^e */
         }
@@ -338,9 +338,9 @@ static bool poly_upper_bound_nonneg(const MPoly* p, const SICtx* c, int skip, mp
             /* coef > 0 -> maximise -> hi^e (needs finite hi); coef < 0 -> lo^e. */
             if (sign > 0) {
                 if (!c->has_hi[v]) { finite = false; break; }
-                mpz_set_si(pw, c->hi[v]);
+                mth_mpz_set_i64(pw, c->hi[v]);
             } else {
-                mpz_set_si(pw, c->lo[v]);
+                mth_mpz_set_i64(pw, c->lo[v]);
             }
             for (int k = 0; k < e; k++) mpz_mul(term, term, pw);
         }

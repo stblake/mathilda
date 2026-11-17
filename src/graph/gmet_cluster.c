@@ -393,9 +393,9 @@ Expr* builtin_mean_clustering_coefficient(Expr* res) {
         int64_t d = dn[i].den;
         int64_t s = 0;
         while (i < k && dn[i].den == d) s += dn[i++].num;
-        mpz_set_si(z, (long)s);
+        mth_mpz_set_i64(z, s);
         mpq_set_z(term, z);
-        mpz_set_si(z, (long)d);
+        mth_mpz_set_i64(z, d);
         mpq_set_den(term, z);
         mpq_canonicalize(term);
         mpq_add(acc, acc, term);

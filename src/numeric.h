@@ -133,6 +133,14 @@ long numeric_precision_bits_width(long prec_bits);
  * pass an mpq_t (it decays to mpq_ptr). */
 double numeric_mpq_to_double(const void* q);
 
+/* The double nearest the integer v (ties to even); +-HUGE_VAL past
+ * DBL_MAX.  Use instead of GMP's mpz_get_d, which truncates. */
+double numeric_mpz_to_double(const mpz_t v);
+
+/* The double nearest n/d (d != 0), one rounding, as numeric_mpq_to_double;
+ * never the double-rounded / inf/inf = NaN mpz_get_d(n)/mpz_get_d(d). */
+double numeric_mpz_ratio_to_double(const mpz_t n, const mpz_t d);
+
 /* Make a default-machine spec. */
 static inline NumericSpec numeric_machine_spec(void) {
     NumericSpec s;

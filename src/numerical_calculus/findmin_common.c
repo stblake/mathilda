@@ -7,6 +7,7 @@
 #include <stdint.h>
 #include "message.h"   /* mth_msg_suppressed(): quiet internal probes */
 #include "compile/autocompile.h"  /* MPFR programs for the WorkingPrecision path */
+#include "numeric.h"
 
 
 /* ------------------------------------------------------------------ *
@@ -78,7 +79,7 @@ bool fm_expr_to_double_real(Expr* e, double* out) {
     switch (e->type) {
         case EXPR_INTEGER: *out = (double)e->data.integer;    return true;
         case EXPR_REAL:    *out = e->data.real;               return true;
-        case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint);  return true;
+        case EXPR_BIGINT:  *out = numeric_mpz_to_double(e->data.bigint);  return true;
 #ifdef USE_MPFR
         case EXPR_MPFR:    *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true;
 #endif

@@ -180,7 +180,8 @@ static size_t rd_available_digits(const Expr* x, unsigned long b_ulong) {
 
 /* Build an Expr from an mpz that is known to hold a base-b digit. */
 static Expr* rd_digit_expr_from_mpz(const mpz_t d) {
-    if (mpz_fits_slong_p(d)) return expr_new_integer((int64_t)mpz_get_si(d));
+    int64_t v;
+    if (expr_mpz_get_int64(d, &v)) return expr_new_integer(v);
     return expr_new_bigint_from_mpz(d);
 }
 
@@ -1208,20 +1209,21 @@ static Expr* me_make_pair(Expr* m_expr, long e_val) {
  * denominator is 1, otherwise a `Rational[n, d]` function node with
  * appropriately-typed integer leaves. */
 static Expr* me_mpq_to_expr(const mpq_t q) {
+    int64_t v;
     if (mpz_cmp_ui(mpq_denref(q), 1) == 0) {
-        if (mpz_fits_slong_p(mpq_numref(q))) {
-            return expr_new_integer((int64_t)mpz_get_si(mpq_numref(q)));
+        if (expr_mpz_get_int64(mpq_numref(q), &v)) {
+            return expr_new_integer(v);
         }
         return expr_new_bigint_from_mpz(mpq_numref(q));
     }
     Expr** args = malloc(sizeof(Expr*) * 2);
-    if (mpz_fits_slong_p(mpq_numref(q))) {
-        args[0] = expr_new_integer((int64_t)mpz_get_si(mpq_numref(q)));
+    if (expr_mpz_get_int64(mpq_numref(q), &v)) {
+        args[0] = expr_new_integer(v);
     } else {
         args[0] = expr_new_bigint_from_mpz(mpq_numref(q));
     }
-    if (mpz_fits_slong_p(mpq_denref(q))) {
-        args[1] = expr_new_integer((int64_t)mpz_get_si(mpq_denref(q)));
+    if (expr_mpz_get_int64(mpq_denref(q), &v)) {
+        args[1] = expr_new_integer(v);
     } else {
         args[1] = expr_new_bigint_from_mpz(mpq_denref(q));
     }

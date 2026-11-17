@@ -533,7 +533,7 @@ static bool ell_double(const Expr* e, double* out) {
     switch (e->type) {
         case EXPR_REAL:    *out = e->data.real;        return true;
         case EXPR_INTEGER: *out = (double)e->data.integer; return true;
-        case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint);
+        case EXPR_BIGINT:  *out = numeric_mpz_to_double(e->data.bigint);
                            return isfinite(*out);
         default:
             if (is_rational(e, &n, &d) && d != 0) {

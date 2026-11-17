@@ -212,7 +212,7 @@ static bool tg_witness_search(const mpz_t Ca1, const mpz_t Ca2, const mpz_t Csi,
     for (int64_t x1 = 0; x1 <= b1 && !found; x1++)
         for (int64_t x2 = 0; x2 <= b2 && !found; x2++) {
             if (x1 == 0 && x2 == 0) continue;
-            mpz_set_si(x, x1); mpz_set_si(y, x2);
+            mth_mpz_set_i64(x, x1); mth_mpz_set_i64(y, x2);
             mpz_mul(val, Ca1, x); mpz_mul(val, val, x);
             mpz_mul(root, Ca2, y); mpz_mul(root, root, y);
             mpz_add(val, val, root); mpz_neg(val, val);       /* -(Ca1 x1^2 + Ca2 x2^2) */
@@ -220,7 +220,7 @@ static bool tg_witness_search(const mpz_t Ca1, const mpz_t Ca2, const mpz_t Csi,
             mpz_divexact(val, val, Csi);                      /* u_si^2 */
             if (mpz_sgn(val) < 0 || !mpz_perfect_square_p(val)) continue;
             mpz_sqrt(root, val);
-            mpz_set_si(o_a1, x1); mpz_set_si(o_a2, x2); mpz_set(o_si, root);
+            mth_mpz_set_i64(o_a1, x1); mth_mpz_set_i64(o_a2, x2); mpz_set(o_si, root);
             found = true;
         }
     mpz_clears(val, root, x, y, NULL);

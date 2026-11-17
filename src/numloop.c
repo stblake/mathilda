@@ -198,7 +198,7 @@ static bool to_machine_double(const Expr* v, double* out) {
     switch (v->type) {
         case EXPR_INTEGER: *out = (double)v->data.integer; return true;
         case EXPR_REAL:    *out = v->data.real;            return true;
-        case EXPR_BIGINT:  *out = mpz_get_d(v->data.bigint); return true;
+        case EXPR_BIGINT:  *out = numeric_mpz_to_double(v->data.bigint); return true;
         default: break;
     }
     int64_t n, d;
@@ -2464,7 +2464,7 @@ static Expr* numloop_fold_exact(const Expr* f, const Expr* x0, const Expr* list,
             for (size_t i = 0; i < nc; i++) mpq_swap(qregs[i], qnxt[i]);
         } else {
             for (int64_t j = 0; j < Ew; j++)
-                mpz_set_si(regs[Aw + j], (long)el[step * (size_t)Ew + (size_t)j]);
+                mth_mpz_set_i64(regs[Aw + j], el[step * (size_t)Ew + (size_t)j]);
             for (size_t i = 0; i < nc; i++) mpz_set(nxt[i], fx_eval(prog[i], regs));
             for (size_t i = 0; i < nc; i++) mpz_swap(regs[i], nxt[i]);
         }

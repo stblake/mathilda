@@ -117,7 +117,7 @@ not wrong. They are left as they are.
 | E1 | `(1.*^308 * 10.)/1.*^10` | 53-bit MPFR, `MachineNumberQ` False | **fixed v0.6604**: every `NumericFunction` result (Plus and Times included) that is a 53-bit MPFR, or a Complex of 53-bit parts, and fits a normal double is the double (`numeric_demote_machine_precision`, in the evaluator net) |
 | E10 | `Range[1.*^-200, 2.*^-200, 1.*^-200]`; `Table` over it | `Range::toobig` (~10^14 elements); `Table` hung | fixed v0.6595: the iterator's bound slack is relative (`iter_real_slack`) |
 | E11 | `Mean`/`Variance`/`RootMeanSquare`/`Dot` of `{1.*^308, 1.*^308}` (plain lists too) | `Overflow[]`; underflow gave `0.` | fixed v0.6595: each machine fast path declines a degenerate result |
-| E3 | `(2/3)^(-2^63)` | `1/(2/3)^9223372036854775808` | open, cosmetic: should be `(3/2)^(2^63)` |
+| E3 | `(2/3)^(-2^63)` | `1/(2/3)^9223372036854775808`; `x^(-2^64)` printed `x^-18446744073709551616` in InputForm and was not put in a denominator | fixed (phase 7): past the exponent cap, a negative power of a Rational moves to the reciprocal base (`(3/2)^9223372036854775808`); a negative BigInt exponent prints the way a machine-integer one does (InputForm `x^(-n)`, OutputForm `1/x^n`, TeX `\frac`) |
 | C9 | `1.*^15`, `$MachineEpsilon` | `1e+15`, `2.22045e-16`; `Precision[2.^-1074]` is `15.9546` | **fixed v0.6604**: OutputForm `1.0*^15`, `2.22045*^-16` (six digits, always a decimal point, the input syntax `*^`; arbitrary-precision display uses `*^` too; TeX `\times 10^{e}`). A 53-bit MPFR reports `MachinePrecision` and prints as a machine real: six digits for display, shortest round-trip digits and no precision mark in InputForm, which re-reads to the same value |
 
 ### S. Found by the stress corpus (2026-11-17, `tests/test_numeric_tower_stress.c`)
@@ -162,11 +162,12 @@ the libm bound of 2 ulps. `Exp[Log[z]]` at \|z\| ~ 10^+-200 and
 ### F. Hygiene (no repro: from the code read)
 | # | What | Status |
 |---|---|---|
-| F1 | about 149 `mpz_get_d` calls truncate instead of rounding to nearest (`numeric_machine_value` rounds correctly) | open: audit the sites that reach values users see |
-| F2 | about 87 `mpz_fits_slong_p` / `mpz_get_si` sites test a 32-bit `long` on LLP64 Windows | open: audit; `expr_mpz_get_int64` is the portable form |
+| F1 | about 149 `mpz_get_d` calls truncate instead of rounding to nearest (`numeric_machine_value` rounds correctly) | fixed (phase 7): 82 calls that reach a user-visible value or decide an answer now round once to nearest (`numeric_mpz_to_double`, round-half-even in GMP integers so a no-MPFR build agrees; `numeric_mpz_ratio_to_double` for n/d pairs, which read inf/inf = NaN for a huge Rational). The 43 left are size and bound estimates. `Compile[{{x, _Real}}, x + 1][(10^400 + 1)/(3*10^399)]` was left unevaluated; it is `4.333333333333334` |
+| F2 | about 87 `mpz_fits_slong_p` / `mpz_get_si` sites test a 32-bit `long` on LLP64 Windows | fixed (phase 7): demotions to Integer and int64 readers use `expr_mpz_get_int64`; helpers returning `long` decline a value the cast would truncate (`Zeta[2^32 + 2]` read as `Zeta[2]`). The opposite direction was worse: `expr_to_mpz`, `expr_mpz_borrow` and `expr_new_bigint_from_int64` used `mpz_init_set_si`, so every Integer above 2^31 converted wrong on Windows; they and 96 other int64 sites now use `mth_mpz_set_i64`. Open: the Integers `Solve` guards stay 32-bit until the solver's own `_si` checking arithmetic (`si_verify`) is 64-bit, or widening them would certify false solutions; about 250 arithmetic `_si`/`_ui` calls are unclassified |
 | F3 | `cpow` cleanup drops an imaginary part below 1e-14 (`(1. + 1.*^-15 I)^0.5`) | kept: within the machine error |
-| F4 | `checked_int.h` cites `tests/test_compile_overflow.c`, which does not exist | open: write it or drop the reference |
+| F4 | `checked_int.h` cites `tests/test_compile_overflow.c`, which does not exist | fixed (phase 7): the test exists and is built twice (`compile_overflow_tests` with the builtins, `compile_overflow_fallback_tests` with `-DCOMPILE_NO_OVERFLOW_BUILTIN`); each checks the overflow flag and the wrapped value of every helper, in both families, against GMP over the int32/int64 boundary set |
 | F5 | no automated check guards the machine boundary across surfaces | open: an `ND`/Compile boundary sweep (see Phase 8 in `tasks/todo.md`) |
+| F6 | real `Binomial`: `Binomial[1.*^8, 2.]`, `Binomial[-5., 3.]`, `Binomial[5., 7.]` were `Indeterminate` (a Gamma factor past MPFR's range; Gamma poles whose ratio is finite) | fixed (phase 7): a log-Gamma quotient on overflow; integer-valued operands use the exact path's reflection/symmetry/zero conventions, at machine and arbitrary precision |
 
 ## Known, not changed
 - A promoted value does not demote back when a later result fits again:

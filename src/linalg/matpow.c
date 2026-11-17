@@ -93,9 +93,7 @@ Expr* builtin_matrixpower(Expr* res) {
         exp_val = exp_arg->data.integer;
     } else {
         /* EXPR_BIGINT: check if it fits in int64_t range */
-        if (mpz_fits_slong_p(exp_arg->data.bigint)) {
-            exp_val = mpz_get_si(exp_arg->data.bigint);
-        } else {
+        if (!expr_mpz_get_int64(exp_arg->data.bigint, &exp_val)) {
             /* Exponent too large to compute */
             return NULL;
         }

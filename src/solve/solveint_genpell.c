@@ -126,7 +126,7 @@ static bool si_genpell_bases(const mpz_t D, const mpz_t N, mpz_t t, mpz_t u,
     mpz_t val, root, x, y, s1, s2, px, py;
     mpz_inits(val, root, x, y, s1, s2, px, py, NULL);
     for (int64_t yy = 0; yy <= ymax && *nb < cap; yy++) {
-        mpz_set_si(y, yy); mpz_mul(val, y, y); mpz_mul(val, val, D);
+        mth_mpz_set_i64(y, yy); mpz_mul(val, y, y); mpz_mul(val, val, D);
         mpz_add(val, val, N);                                /* N + D y^2 */
         if (mpz_sgn(val) <= 0) continue;
         if (!mpz_perfect_square_p(val)) continue;
@@ -136,7 +136,7 @@ static bool si_genpell_bases(const mpz_t D, const mpz_t N, mpz_t t, mpz_t u,
         for (int sx = 1; sx >= -1; sx -= 2)
             for (int sy = 1; sy >= -1; sy -= 2) {
                 mpz_set(x, root); if (sx < 0) mpz_neg(x, x);
-                mpz_set_si(s1, sy * yy); mpz_set(y, s1);
+                mth_mpz_set_i64(s1, sy * yy); mpz_set(y, s1);
                 int guard = 0;
                 while (!(mpz_sgn(x) > 0 && mpz_sgn(y) > 0) && guard < 1000) {
                     si_pell_step(x, y, t, u, D, s1, s2); guard++;

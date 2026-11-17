@@ -156,9 +156,7 @@ static bool hn_nonneg_int(const Expr* e, int64_t* out) {
     }
     if (e->type == EXPR_BIGINT) {
         if (mpz_sgn(e->data.bigint) < 0) return false;
-        if (!mpz_fits_slong_p(e->data.bigint)) return false;
-        *out = (int64_t)mpz_get_si(e->data.bigint);
-        return true;
+        return expr_mpz_get_int64(e->data.bigint, out);
     }
     return false;
 }
@@ -168,9 +166,7 @@ static bool hn_nonneg_int(const Expr* e, int64_t* out) {
 static bool hn_exact_int(const Expr* e, int64_t* out) {
     if (e->type == EXPR_INTEGER) { *out = e->data.integer; return true; }
     if (e->type == EXPR_BIGINT) {
-        if (!mpz_fits_slong_p(e->data.bigint)) return false;
-        *out = (int64_t)mpz_get_si(e->data.bigint);
-        return true;
+        return expr_mpz_get_int64(e->data.bigint, out);
     }
     return false;
 }

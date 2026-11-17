@@ -986,13 +986,14 @@ static Expr* sqrt_if_clean_square(const Expr* D, const AssumeCtx* ctx) {
         if (d < 0) return NULL;
         if (d == 0) return expr_new_integer(0);
         mpz_t z, r;
-        mpz_init_set_si(z, d);
+        mth_mpz_init_set_i64(z, d);
         if (!mpz_perfect_square_p(z)) { mpz_clear(z); return NULL; }
         mpz_init(r);
         mpz_sqrt(r, z);
         Expr* out;
-        if (mpz_fits_slong_p(r)) {
-            out = expr_new_integer((int64_t)mpz_get_si(r));
+        int64_t rv;
+        if (expr_mpz_get_int64(r, &rv)) {
+            out = expr_new_integer(rv);
         } else {
             out = expr_new_bigint_from_mpz(r);
         }
@@ -1006,8 +1007,9 @@ static Expr* sqrt_if_clean_square(const Expr* D, const AssumeCtx* ctx) {
         mpz_t r; mpz_init(r);
         mpz_sqrt(r, D->data.bigint);
         Expr* out;
-        if (mpz_fits_slong_p(r)) {
-            out = expr_new_integer((int64_t)mpz_get_si(r));
+        int64_t rv;
+        if (expr_mpz_get_int64(r, &rv)) {
+            out = expr_new_integer(rv);
         } else {
             out = expr_new_bigint_from_mpz(r);
         }

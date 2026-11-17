@@ -14,6 +14,7 @@
 #include "ndarray.h"
 #include "pack.h"     /* pack_g_any_created: arm the gate for packed-list results */
 #include "../sym_names.h"
+#include "numeric.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -32,7 +33,7 @@ bool na_read_scalar(const Expr* e, double* re, double* im)
     switch (e->type) {
         case EXPR_REAL:    *re = e->data.real;             return true;
         case EXPR_INTEGER: *re = (double)e->data.integer;  return true;
-        case EXPR_BIGINT:  *re = mpz_get_d(e->data.bigint); return true;
+        case EXPR_BIGINT:  *re = numeric_mpz_to_double(e->data.bigint); return true;
 #ifdef USE_MPFR
         case EXPR_MPFR:    *re = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true;
 #endif

@@ -57,6 +57,7 @@
 #include "sym_names.h"
 #include "flint_mat_bridge.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "numeric.h"
 
 #include <float.h>
 #include <gmp.h>
@@ -216,7 +217,7 @@ static bool entry_to_cplx(Expr* e, cplx_t* out) {
     if (!e) return false;
     if (e->type == EXPR_INTEGER) { *out = c_make((double)e->data.integer, 0); return true; }
     if (e->type == EXPR_REAL)    { *out = c_make(e->data.real, 0);            return true; }
-    if (e->type == EXPR_BIGINT)  { *out = c_make(mpz_get_d(e->data.bigint), 0); return true; }
+    if (e->type == EXPR_BIGINT)  { *out = c_make(numeric_mpz_to_double(e->data.bigint), 0); return true; }
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR)    { *out = c_make(mpfr_get_d(e->data.mpfr, MPFR_RNDN), 0); return true; }
 #endif

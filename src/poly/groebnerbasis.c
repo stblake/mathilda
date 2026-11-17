@@ -443,10 +443,7 @@ static void push_var_list(Expr* lst_or_sym, ExprSet* dst) {
  * false for any other shape or a BigInt too large for int64. */
 static bool expr_to_i64(const Expr* e, int64_t* out) {
     if (e->type == EXPR_INTEGER) { *out = e->data.integer; return true; }
-    if (e->type == EXPR_BIGINT && mpz_fits_slong_p(e->data.bigint)) {
-        *out = (int64_t)mpz_get_si(e->data.bigint);
-        return true;
-    }
+    if (e->type == EXPR_BIGINT) return expr_mpz_get_int64(e->data.bigint, out);
     return false;
 }
 

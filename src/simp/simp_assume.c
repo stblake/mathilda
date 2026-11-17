@@ -856,7 +856,7 @@ static bool assume_num_value(const Expr* e, double* out) {
     if (!e) return false;
     if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer; return true; }
     if (e->type == EXPR_REAL)    { *out = e->data.real;            return true; }
-    if (e->type == EXPR_BIGINT)  { *out = mpz_get_d(e->data.bigint); return true; }
+    if (e->type == EXPR_BIGINT)  { *out = numeric_mpz_to_double(e->data.bigint); return true; }
     if (head_is((Expr*)e, SYM_Rational) && e->data.function.arg_count == 2) {
         double n, d;
         if (assume_num_value(e->data.function.args[0], &n) &&

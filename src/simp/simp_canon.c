@@ -108,16 +108,18 @@ static bool lift_expr_to_mpq(const Expr* e, mpq_t out) {
  * the denominator is 1, otherwise a Rational[n, d]. */
 static Expr* lift_mpq_to_expr(const mpq_t v) {
     if (mpz_cmp_ui(mpq_denref(v), 1) == 0) {
-        if (mpz_fits_slong_p(mpq_numref(v))) {
-            return expr_new_integer((int64_t)mpz_get_si(mpq_numref(v)));
+        int64_t iv;
+        if (expr_mpz_get_int64(mpq_numref(v), &iv)) {
+            return expr_new_integer(iv);
         }
         return expr_new_bigint_from_mpz(mpq_numref(v));
     }
-    Expr* num = mpz_fits_slong_p(mpq_numref(v))
-                  ? expr_new_integer((int64_t)mpz_get_si(mpq_numref(v)))
+    int64_t nv, dv;
+    Expr* num = expr_mpz_get_int64(mpq_numref(v), &nv)
+                  ? expr_new_integer(nv)
                   : expr_new_bigint_from_mpz(mpq_numref(v));
-    Expr* den = mpz_fits_slong_p(mpq_denref(v))
-                  ? expr_new_integer((int64_t)mpz_get_si(mpq_denref(v)))
+    Expr* den = expr_mpz_get_int64(mpq_denref(v), &dv)
+                  ? expr_new_integer(dv)
                   : expr_new_bigint_from_mpz(mpq_denref(v));
     Expr* args[2] = { num, den };
     return expr_new_function(expr_new_symbol(SYM_Rational), args, 2);

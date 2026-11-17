@@ -130,7 +130,7 @@ static void clear_int_denominators(Expr** v, int n) {
         if (d->type == EXPR_INTEGER) {
             mpz_t di;
             mpz_init(di);
-            mpz_set_si(di, d->data.integer);
+            mth_mpz_set_i64(di, d->data.integer);
             mpz_lcm(lcm, lcm, di);
             mpz_clear(di);
         } else if (d->type == EXPR_BIGINT) {

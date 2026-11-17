@@ -42,6 +42,7 @@
 
 #include "graphics_json.h"
 #include "sym_names.h"
+#include "numeric.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -115,7 +116,7 @@ static int expr_to_double(const Expr* e, double* out) {
     if (!e) return 0;
     if (e->type == EXPR_REAL)    { *out = e->data.real;               return 1; }
     if (e->type == EXPR_INTEGER) { *out = (double)e->data.integer;    return 1; }
-    if (e->type == EXPR_BIGINT)  { *out = mpz_get_d(e->data.bigint);  return 1; }
+    if (e->type == EXPR_BIGINT)  { *out = numeric_mpz_to_double(e->data.bigint);  return 1; }
     return 0;
 }
 

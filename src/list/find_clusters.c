@@ -69,6 +69,7 @@
 #include "distance.h"
 #include "../ndarray.h"   /* is_ndarray, ndarray_to_nested_list */
 #include "../sym_names.h"
+#include "numeric.h"
 
 #include <math.h>       /* isnan, fabs, exp, sqrt, log -- all C99 */
 
@@ -327,7 +328,7 @@ static void fc_data_free(FcData* d) {
 static double fc_to_double(Expr* e) {
     if (e->type == EXPR_INTEGER) return (double)e->data.integer;
     if (e->type == EXPR_REAL)    return e->data.real;
-    if (e->type == EXPR_BIGINT)  return mpz_get_d(e->data.bigint);
+    if (e->type == EXPR_BIGINT)  return numeric_mpz_to_double(e->data.bigint);
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR)    return mpfr_get_d(e->data.mpfr, MPFR_RNDN);
 #endif

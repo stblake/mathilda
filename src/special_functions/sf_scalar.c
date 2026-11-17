@@ -4,6 +4,7 @@
 
 #include <gmp.h>
 #include "sym_names.h"
+#include "numeric.h"
 
 bool sf_machine_leaf(const Expr* e, double* out, bool* inexact) {
     switch (e->type) {
@@ -16,7 +17,7 @@ bool sf_machine_leaf(const Expr* e, double* out, bool* inexact) {
             *inexact = false;
             return true;
         case EXPR_BIGINT:
-            *out = mpz_get_d(e->data.bigint);
+            *out = numeric_mpz_to_double(e->data.bigint);
             *inexact = false;
             return true;
         case EXPR_FUNCTION: {
@@ -27,14 +28,10 @@ bool sf_machine_leaf(const Expr* e, double* out, bool* inexact) {
                 return false;
             const Expr* p = e->data.function.args[0];
             const Expr* q = e->data.function.args[1];
-            double pv, qv;
-            if (p->type == EXPR_INTEGER) pv = (double)p->data.integer;
-            else if (p->type == EXPR_BIGINT) pv = mpz_get_d(p->data.bigint);
-            else return false;
-            if (q->type == EXPR_INTEGER) qv = (double)q->data.integer;
-            else if (q->type == EXPR_BIGINT) qv = mpz_get_d(q->data.bigint);
-            else return false;
-            *out = pv / qv;
+            /* one rounding of p/q (numeric_machine_value), not the
+             * double-rounded -- or inf/inf = NaN -- quotient of two doubles */
+            if (!expr_is_integer_like(p) || !expr_is_integer_like(q)) return false;
+            if (!numeric_machine_value(e, out)) return false;
             *inexact = false;
             return true;
         }

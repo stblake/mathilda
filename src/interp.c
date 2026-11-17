@@ -86,7 +86,7 @@ static bool node_to_double(const Expr* e, double* out) {
     switch (e->type) {
         case EXPR_INTEGER: *out = (double)e->data.integer; return true;
         case EXPR_REAL:    *out = e->data.real;            return true;
-        case EXPR_BIGINT:  *out = mpz_get_d(e->data.bigint); return true;
+        case EXPR_BIGINT:  *out = numeric_mpz_to_double(e->data.bigint); return true;
 #ifdef USE_MPFR
         case EXPR_MPFR:    *out = mpfr_get_d(e->data.mpfr, MPFR_RNDN); return true;
 #endif
@@ -107,9 +107,8 @@ static bool node_to_double(const Expr* e, double* out) {
         mpz_t num, den;
         expr_to_mpz(e->data.function.args[0], num);
         expr_to_mpz(e->data.function.args[1], den);
-        double dd = mpz_get_d(den);
-        if (dd == 0.0) { mpz_clears(num, den, NULL); return false; }
-        *out = mpz_get_d(num) / dd;
+        if (mpz_sgn(den) == 0) { mpz_clears(num, den, NULL); return false; }
+        *out = numeric_mpz_ratio_to_double(num, den);
         mpz_clears(num, den, NULL);
         return true;
     }
@@ -3610,7 +3609,7 @@ static Expr* ip_impl(Expr* res) {
             && a->data.function.args[0]->type == EXPR_SYMBOL
             && a->data.function.args[0]->data.symbol.name == SYM_Modulus) {
             Expr* rhs = a->data.function.args[1];
-            if (rhs->type == EXPR_INTEGER) mpz_set_si(modulus, rhs->data.integer);
+            if (rhs->type == EXPR_INTEGER) mth_mpz_set_i64(modulus, rhs->data.integer);
             else if (rhs->type == EXPR_BIGINT) mpz_set(modulus, rhs->data.bigint);
             else { mpz_clear(modulus); return NULL; }
             continue;
@@ -3668,18 +3667,19 @@ static Expr* builtin_interpolatingpolynomial(Expr* res) {
 
 /* mpz residue in [0,n) -> Expr integer (or bigint). */
 static Expr* ip_mpz_to_expr(const mpz_t z) {
-    if (mpz_fits_slong_p(z)) return expr_new_integer((int64_t)mpz_get_si(z));
+    int64_t v;
+    if (expr_mpz_get_int64(z, &v)) return expr_new_integer(v);
     return expr_new_bigint_from_mpz(z);
 }
 
 /* Reduce an exact value (Integer/BigInt/int64-Rational) mod n. Returns 1 on
  * success, 0 for an inexact/symbolic value or a non-invertible denominator. */
 static int ip_mod_value(const Expr* v, const mpz_t n, mpz_t out) {
-    if (v->type == EXPR_INTEGER) { mpz_set_si(out, (long)v->data.integer); mpz_mod(out, out, n); return 1; }
+    if (v->type == EXPR_INTEGER) { mth_mpz_set_i64(out, v->data.integer); mpz_mod(out, out, n); return 1; }
     if (v->type == EXPR_BIGINT)  { mpz_mod(out, v->data.bigint, n); return 1; }
     int64_t pn, pd;
     if (is_rational(v, &pn, &pd)) {
-        mpz_t p, q, qi; mpz_init_set_si(p, (long)pn); mpz_init_set_si(q, (long)pd); mpz_init(qi);
+        mpz_t p, q, qi; mth_mpz_init_set_i64(p, pn); mth_mpz_init_set_i64(q, pd); mpz_init(qi);
         mpz_mod(q, q, n);
         int ok = mpz_invert(qi, q, n);
         if (ok) { mpz_mul(out, p, qi); mpz_mod(out, out, n); }
@@ -3731,7 +3731,7 @@ static Expr* ip_solve_modular(IPData* D, Expr** vars, const mpz_t n) {
                 for (size_t k = 0; k < m; k++) { coeff *= ip_falling_i(E[j * m + k], D->alpha[i * m + k]); if (coeff == 0) break; }
                 mpz_t* aij = &A[i * L + j];
                 if (coeff == 0) { mpz_set_ui(*aij, 0); continue; }
-                mpz_set_si(*aij, (long)coeff); mpz_mod(*aij, *aij, n);
+                mth_mpz_set_i64(*aij, coeff); mpz_mod(*aij, *aij, n);
                 for (size_t k = 0; k < m; k++) {
                     int e = E[j * m + k] - D->alpha[i * m + k];
                     if (e > 0) { mpz_powm_ui(tpow, pres[i * m + k], (unsigned long)e, n); mpz_mul(*aij, *aij, tpow); mpz_mod(*aij, *aij, n); }

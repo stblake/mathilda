@@ -129,7 +129,7 @@ static bool sr_num(const Expr* e, double* v) {
     if (!e) return false;
     if (e->type == EXPR_INTEGER) { *v = (double)e->data.integer; return true; }
     if (e->type == EXPR_REAL)    { *v = e->data.real; return true; }
-    if (e->type == EXPR_BIGINT)  { *v = mpz_get_d(e->data.bigint); return true; }
+    if (e->type == EXPR_BIGINT)  { *v = numeric_mpz_to_double(e->data.bigint); return true; }
     if (sr_head(e, "Rational") && e->data.function.arg_count == 2) {
         const Expr* p = e->data.function.args[0];
         const Expr* q = e->data.function.args[1];

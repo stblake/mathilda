@@ -140,6 +140,9 @@ static bidx_kind bern_index(const Expr* e, unsigned long* idx, long* prec) {
     if (!e) return BIDX_NONE;
     if (e->type == EXPR_INTEGER) {
         if (e->data.integer < 0) return BIDX_NONE;
+        /* round trip: `unsigned long` is 32 bits on LLP64 */
+        if ((uint64_t)(unsigned long)e->data.integer != (uint64_t)e->data.integer)
+            return BIDX_NONE;
         *idx = (unsigned long)e->data.integer;
         return BIDX_EXACT;
     }

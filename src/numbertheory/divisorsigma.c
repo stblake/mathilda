@@ -14,6 +14,7 @@
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "ndinteger.h" /* ndint_divisor_sigma_i64: the shared machine helper */
 #include "checked_int.h"
+#include "numeric.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -225,7 +226,7 @@ static Expr* ds_real_k(double k, const Expr* n) {
     } else {
         double total = 1.0;
         for (size_t i = 0; i < np; i++) {
-            double q = pow(mpz_get_d(primes[i]), k), term = 1.0;
+            double q = pow(numeric_mpz_to_double(primes[i]), k), term = 1.0;
             for (unsigned long j = 0; j < exps[i]; j++) term = term * q + 1.0;
             total *= term;
         }
