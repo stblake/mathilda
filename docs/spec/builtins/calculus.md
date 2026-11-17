@@ -5127,6 +5127,29 @@ level is not yet checked for independence: `Erfc = 1 - Erf` and
 `E^u (Erf[u] + Erfc[u])`, which is `E^u`, was certified non-elementary up to v0.6602.
 These integrands are now undecided.
 
+**Dependent logarithms (v0.6609, C completeness campaign step 8).** Two log
+kernels can be dependent: `Log[1 + I x] = Log[x - I] + I Pi/2`,
+`Log[-x] = Log[x] + I Pi`, `Log[2 + 2 x] = Log[1 + x] + Log[2]`. The structure
+theorem then finds `v'/v` in the rational span of the lower levels. Such a log is
+no longer a tower level: it is the exact combination `Σ rⱼ tⱼ + c`, and the tower
+is rebuilt without it, so its monomials are independent again and the verdict
+stands (before, every verdict over such a tower was demoted to undecided).
+- **The constant.** `v^d / Π uⱼ^(d rⱼ) = κ` is a constant, so
+  `c = (Log[κ] + 2 Pi I m)/d`. The branch multiple `m` is read off sample points
+  and must agree on all of them.
+- **Where it holds.** The decision samples the positive reals, so a certificate is
+  about the integrand on that open set, which is what a proof needs. The
+  integrator also samples negative reals and both half-planes. It eliminates only
+  a constant that holds on the whole line (`I Pi/2` above), never a region
+  constant (`I Pi` for `Log[-x]`), whose answers would fail the differentiation
+  check elsewhere.
+- **Constants.** At most one transcendental number (`Pi` or one `Log[2]`) may
+  enter the constant field this way, so the constants stay algebraically
+  independent. Otherwise the tower stays dependent and the verdict undecided.
+- **Examples.** `(Log[1 + I x] - Log[x - I]) Log[x]/(1 + x)` decides `False` (it is
+  `(I Pi/2) Log[x]/(1 + x)`); `(Log[-x] - Log[x])/(1 + x)` and
+  `(Log[2 + 2 x] - Log[1 + x])/x` decide `True`.
+
 **Scope guard — algebraic functions of x.** An integrand carrying a radical of
 `x` (a non-integer rational power of an x-dependent base — `Cos[√x]`, `E^√x`,
 `Sin[x^(1/3)]`, `√(Sin x)`), or a `Surd`/`Root` of `x`, is **out of scope** for

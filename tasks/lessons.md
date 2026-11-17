@@ -5515,3 +5515,15 @@ into extended-range values, so only complex extended values at a sample point ar
      a TimeConstrained abort too, since state changes which route answers.
   3. In edit scripts, read the file once into a variable, assert its length, and write
      with `with open(P, 'w')` only at the end.
+
+## 2026-11-18: measure a campaign step against the released tag, and prove its new branch fires
+
+Step 2b (Risch: fold a reducible log with a non-constant coefficient by a named constant)
+was credited with Qa 118 -> 120 and Exp 119 -> 120. Both baselines were from an earlier
+development build; the v0.6607 tag already scored 120. An instrumented run then showed
+the new branch reached 24 times and solving 0 times -- dead code, reverted.
+
+- The "before" number of a step comes from the previous TAG's binary (scratch worktree),
+  never from a number remembered from mid-development.
+- A new decision branch gets a one-off env-guarded trace (hit / succeeded counts) over the
+  hunts before release; a branch with zero successes is not a feature.

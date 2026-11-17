@@ -682,7 +682,7 @@ static RtDecision rt_decide_tower(Expr* fx, Expr* x, bool tan_route) {
     /* min_n = 1: the decision routes SINGLE-kernel integrands (E^x/x, E^(x^2),
      * 1/Log[x]) through the same authoritative field integrator too — the flat-tower
      * integrate cases that normally serve n=1 do not carry the decision certificates. */
-    if (!rt_tower_build_min(fx, x, &T, 1)) { rt_tower_free(&T); return RT_DEC_UNKNOWN; }
+    if (!rt_tower_build_decide(fx, x, &T, 1)) { rt_tower_free(&T); return RT_DEC_UNKNOWN; }
     if (tan_route) {
         size_t ntan = 0; bool scope = true;
         for (size_t i = 0; i < T.n; i++) {
@@ -721,8 +721,21 @@ static RtDecision rt_decide_tower(Expr* fx, Expr* x, bool tan_route) {
              * kernels, must differentiate to the integrand.  An unverified Q
              * made Log[u] Log[1 + u] and Log[u]/(u + a) "elementary" (review
              * F2-F4, 2026-11-16). */
-            if (Q && !rem)
-                verdict = rt_tower_answer_verified(Q, &T, fx, x) ? RT_DEC_ELEMENTARY : RT_DEC_UNKNOWN;
+            if (Q && !rem) {
+                bool okq = rt_tower_answer_verified(Q, &T, fx, x);
+                /* over an eliminated dependent logarithm (Log[-1 - u] = Log[1 + u]
+                 * + I Pi, a constant of the positive reals; campaign step 8) the
+                 * kernel form of Q fails off that region; D_tower[Q] = F, exact in
+                 * the tower, is then the evidence -- F is the integrand on that
+                 * open set, and an antiderivative there proves elementarity */
+                if (!okq && T.nlm > 0) {
+                    Expr* dq = rt_tower_deriv(Q, &T, x);
+                    okq = dq && rt_residual_zero(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ dq,
+                        expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), expr_copy(F) }, 2) }, 2),
+                        Q, false);
+                }
+                verdict = okq ? RT_DEC_ELEMENTARY : RT_DEC_UNKNOWN;
+            }
             else if (Q && rem)                           verdict = RT_DEC_NONELEMENTARY;
             else if (g_rt_decision == RT_DEC_NONELEMENTARY) verdict = RT_DEC_NONELEMENTARY;
             else                                         verdict = RT_DEC_UNKNOWN;

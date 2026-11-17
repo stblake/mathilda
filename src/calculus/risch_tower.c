@@ -333,6 +333,8 @@ void rt_tower_free(RtTower* T) {
         if (T->mval && T->mval[i]) expr_free(T->mval[i]);
     }
     free(T->mval); T->mval = NULL;
+    for (size_t i = 0; i < T->nlm; i++) { expr_free(T->lmk[i]); expr_free(T->lmv[i]); }
+    free(T->lmk); free(T->lmv); T->lmk = NULL; T->lmv = NULL; T->nlm = 0;
     free(T->kind); free(T->kernel); free(T->arg); free(T->t); free(T->Dcoef);
     free(T->tsg); free(T->marg); free(T->mprim); free(T->mmult);
     T->kind = NULL; T->kernel = NULL; T->arg = NULL; T->t = NULL; T->Dcoef = NULL;
@@ -382,10 +384,12 @@ void rt_collect_tangents(Expr* e, Expr* x, Expr*** args, long** sigs,
  * true with T populated (n >= min_n; no upper depth cap — the arrays are
  * heap-allocated to the actual kernel count); false otherwise (caller still calls
  * rt_tower_free). */
-bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
+static bool rt_tower_build_core(Expr* f, Expr* x, RtTower* T, size_t min_n,
+                                Expr** xk, Expr** xr, size_t nx) {
     T->kind = NULL; T->kernel = NULL; T->arg = NULL; T->t = NULL; T->Dcoef = NULL;
     T->tsg = NULL; T->marg = NULL; T->mprim = NULL; T->mmult = NULL; T->mval = NULL;
     T->subrules = NULL; T->n = 0; T->nm = 0; T->dependent = false;
+    T->nlm = 0; T->lmk = NULL; T->lmv = NULL;
 
     /* Knowles Liouvillian primitives (Erf/Erfi/Erfc/ExpIntegralEi/LogIntegral).
      * Collect them FIRST: when present, a merged prim-bearing exponential must be
@@ -422,6 +426,16 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
         }
     }
 
+    /* the dependent logarithms (members, not levels: see rt_tower_build_min) */
+    if (nx) {
+        size_t k = 0;
+        for (size_t i = 0; i < nl; i++) {
+            bool ex = false;
+            for (size_t j = 0; j < nx && !ex; j++) if (expr_eq(logs[i], xk[j])) ex = true;
+            if (ex) expr_free(logs[i]); else logs[k++] = logs[i];
+        }
+        nl = k;
+    }
     Expr** mprim_pexp = malloc((ne ? ne : 1) * sizeof(Expr*)); /* per-member class primitive (borrowed) */
 
     /* --- Multiplicatively commensurate reduction of the exponential kernels. ---
@@ -642,7 +656,7 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
      * kernel E^(marg) contributes a rule E^(marg) -> t[prim]^mmult (both the
      * Exp[] and Power[E,] spellings); mprim is remapped from an exps[] index to
      * the primitive's post-ordering tower index by matching its exponent. */
-    Expr** rules = malloc((6 * n + 2 * T->nm) * sizeof(Expr*)); size_t nr = 0;
+    Expr** rules = malloc((6 * n + 2 * T->nm + nx + 1) * sizeof(Expr*)); size_t nr = 0;
     for (size_t i = 0; i < n; i++) {
         char nm[32]; snprintf(nm, sizeof(nm), "rmR%zu", i);
         T->t[i] = expr_new_symbol(nm);
@@ -722,6 +736,17 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
         rules[nr++] = expr_new_function(expr_new_symbol("Rule"),
             (Expr*[]){ expr_new_function(expr_new_symbol("Power"),
                 (Expr*[]){ expr_new_symbol("E"), expr_copy(T->marg[m]) }, 2), tk }, 2);
+    }
+    if (nx) {                                      /* dependent Log members */
+        T->lmk = calloc(nx, sizeof(Expr*));
+        T->lmv = calloc(nx, sizeof(Expr*));
+        for (size_t j = 0; j < nx; j++) {
+            T->lmk[j] = expr_copy(xk[j]);
+            T->lmv[j] = rt_subst_kernels(xr[j], T);   /* sees members 0..j-1 */
+            T->nlm = j + 1;
+            rules[nr++] = expr_new_function(expr_new_symbol("Rule"),
+                (Expr*[]){ expr_copy(T->lmk[j]), expr_copy(T->lmv[j]) }, 2);
+        }
     }
     T->subrules = expr_new_function(expr_new_symbol("List"), rules, nr);
     free(rules);
@@ -835,6 +860,221 @@ bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
         expr_free(vars);
     }
     return ok;
+}
+
+/* ---- Dependent logarithms (C completeness campaign, step 8) ---------------- */
+
+/* Transcendental number atoms of e (Pi, E, EulerGamma, Log[<number>]), collected
+ * distinct into a[] (borrowed); x-dependent E^w contributes its exponent only. */
+static void rt_tconst_atoms(Expr* e, Expr* x, Expr** a, size_t* n, size_t cap) {
+    if (!e) return;
+    if (e->type == EXPR_SYMBOL) {
+        const char* h = e->data.symbol.name;
+        if (h != intern_symbol("Pi") && h != intern_symbol("E") && h != intern_symbol("EulerGamma")
+            && h != intern_symbol("Catalan")) return;
+    } else if (e->type != EXPR_FUNCTION) return;
+    else if (rt_head_is(e, "Power") && e->data.function.arg_count == 2
+             && e->data.function.args[0]->type == EXPR_SYMBOL
+             && e->data.function.args[0]->data.symbol.name == intern_symbol("E")) {
+        rt_tconst_atoms(e->data.function.args[1], x, a, n, cap);
+        if (!rt_free_of_x(e->data.function.args[1], x)) return;
+        e = e->data.function.args[0];
+    } else if (!(rt_head_is(e, "Log") && e->data.function.arg_count == 1
+                 && rt_free_of_x(e->data.function.args[0], x))) {
+        for (size_t i = 0; i < e->data.function.arg_count; i++)
+            rt_tconst_atoms(e->data.function.args[i], x, a, n, cap);
+        return;
+    }
+    for (size_t i = 0; i < *n; i++) if (expr_eq(a[i], e)) return;
+    if (*n < cap) a[(*n)++] = e;
+    else (*n)++;                                   /* over capacity: still counted */
+}
+
+/* For the first Log level of T that the structure theorem finds DEPENDENT,
+ * Log[v] = Sum r_k K_k + c over the lower Log/Exp levels (K_k = Log[u_k], or
+ * the exponent w_k of E^w_k), set *kern = Log[v] and *val = that value in
+ * kernel form, with c exact: v^d / (Prod u_k^(d r_k) E^(d Sum s_k w_k)) = kappa
+ * is a constant (d the lcm of the denominators), so
+ *     Log[v] - Sum r_k K_k = (Log[kappa] + 2 Pi I m) / d
+ * on each region where the principal branches do not jump; m is read off
+ * three real sample points and must agree on all of them (else no rule:
+ * the integrand is genuinely piecewise there).  The certificate is then
+ * about the germ at those points, which is what a non-elementarity proof
+ * needs.  False when no such rule is found. */
+static bool rt_dependent_log_rule(RtTower* T, Expr* x, bool wide, Expr** kern, Expr** val) {
+    *kern = NULL; *val = NULL;
+    size_t n = T->n;
+    if (n < 2) return false;
+    Expr** vv = malloc((n + 1) * sizeof(Expr*));
+    vv[0] = expr_copy(x);
+    for (size_t j = 0; j < n; j++) vv[j + 1] = expr_copy(T->t[j]);
+    Expr* vars = expr_new_function(expr_new_symbol("List"), vv, n + 1);
+    free(vv);
+    Expr** gens = malloc(n * sizeof(Expr*));
+    size_t* gi = malloc(n * sizeof(size_t));
+    size_t ng = 0;
+    bool found = false;
+    for (size_t i2 = 0; i2 < n && !found; i2++) {
+        if (T->kind[i2] != RT_LOG && T->kind[i2] != RT_EXP) continue;
+        if (ng > 0 && T->kind[i2] == RT_LOG) {
+            bool failed = false;
+            Expr* co = risch_rational_span(T->Dcoef[i2], gens, ng, vars, &failed);
+            if (co && !failed && co->type == EXPR_FUNCTION && co->data.function.arg_count == ng) {
+                bool okr = true;
+                long d = 1;
+                for (size_t k = 0; k < ng && okr; k++) {
+                    Expr* c = co->data.function.args[k];
+                    if (c->type == EXPR_INTEGER) continue;
+                    if (rt_head_is(c, "Rational") && c->data.function.args[1]->type == EXPR_INTEGER) {
+                        long q = (long)c->data.function.args[1]->data.integer, a = d, b = q;
+                        while (b) { long t = a % b; a = b; b = t; }
+                        if (q > 64 || d / a * q > 4096) okr = false; else d = d / a * q;
+                    } else okr = false;
+                }
+                /* Sum r_k K_k (kernel form) and the ratio kappa */
+                Expr** sm = okr ? malloc((ng + 1) * sizeof(Expr*)) : NULL;
+                Expr** pf = okr ? malloc((ng + 2) * sizeof(Expr*)) : NULL;
+                size_t ns = 0, np = 0;
+                Expr* v = T->arg[i2];
+                if (okr) pf[np++] = expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(v), expr_new_integer(d) }, 2);
+                for (size_t k = 0; okr && k < ng; k++) {
+                    Expr* c = co->data.function.args[k];
+                    if (rt_is_zero(c)) continue;
+                    size_t j = gi[k];
+                    Expr* K = T->kind[j] == RT_LOG ? expr_copy(T->kernel[j]) : expr_copy(T->arg[j]);
+                    sm[ns++] = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_copy(c), K }, 2);
+                    /* 1/u^(d r) or E^(-d s w) */
+                    Expr* ex = rt_eval_own(expr_new_function(expr_new_symbol("Times"),
+                        (Expr*[]){ expr_new_integer(-d), expr_copy(c) }, 2));
+                    pf[np++] = T->kind[j] == RT_LOG
+                        ? expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_copy(T->arg[j]), ex }, 2)
+                        : expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_new_symbol("E"),
+                              expr_new_function(expr_new_symbol("Times"), (Expr*[]){ ex, expr_copy(T->arg[j]) }, 2) }, 2);
+                }
+                Expr* kap = okr ? rt_eval1("Together", rt_eval_own(expr_new_function(expr_new_symbol("Times"), pf, np))) : NULL;
+                if (pf) free(pf);
+                Expr* S = okr ? (ns ? rt_eval_own(expr_new_function(expr_new_symbol("Plus"), sm, ns)) : expr_new_integer(0)) : NULL;
+                if (sm) free(sm);
+                if (kap && S && rt_free_of_x(kap, x) && !rt_is_zero(kap)) {
+                    /* m from (d (Log[v] - S) - Log[kappa]) / (2 Pi I) at three points */
+                    Expr* lk = rt_eval1("Log", expr_copy(kap));
+                    Expr* del = expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+                        expr_new_function(expr_new_symbol("Plus"), (Expr*[]){
+                            expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(d),
+                                expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(T->kernel[i2]),
+                                    expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), expr_copy(S) }, 2) }, 2) }, 2),
+                            expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), expr_copy(lk) }, 2) }, 2),
+                        expr_new_function(expr_new_symbol("Power"), (Expr*[]){
+                            expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(2), expr_new_symbol("Pi"),
+                                expr_new_function(expr_new_symbol("Complex"), (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2) }, 3),
+                            expr_new_integer(-1) }, 2) }, 2);
+                    /* {re num, re den, im num, im den}: three positive reals;
+                     * `wide` adds negative reals and both half-planes */
+                    static const long pts[8][4] = { { 7, 19, 0, 1 }, { 13, 8, 0, 1 }, { 29, 11, 0, 1 },
+                        { -7, 19, 0, 1 }, { -13, 8, 0, 1 }, { 1, 3, 1, 2 }, { -2, 3, -3, 5 }, { 5, 4, -7, 9 } };
+                    bool agree = true; long m = 0;
+                    for (int p = 0; p < (wide ? 8 : 3) && agree; p++) {
+                        Expr* x0 = rt_eval_own(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){
+                            expr_new_function(expr_new_symbol("Rational"),
+                                (Expr*[]){ expr_new_integer(pts[p][0]), expr_new_integer(pts[p][1]) }, 2),
+                            expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+                                expr_new_function(expr_new_symbol("Rational"),
+                                    (Expr*[]){ expr_new_integer(pts[p][2]), expr_new_integer(pts[p][3]) }, 2),
+                                expr_new_function(expr_new_symbol("Complex"),
+                                    (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2) }, 2) }, 2));
+                        Expr* dn = rt_eval1("N", rt_eval2("ReplaceAll", expr_copy(del),
+                            expr_new_function(expr_new_symbol("Rule"), (Expr*[]){ expr_copy(x), x0 }, 2)));
+                        Expr* rd = dn ? rt_eval1("Round", rt_eval1("Re", expr_copy(dn))) : NULL;
+                        Expr* off = (dn && rd) ? rt_eval1("Abs", rt_eval_own(expr_new_function(expr_new_symbol("Plus"),
+                            (Expr*[]){ expr_copy(dn), expr_new_function(expr_new_symbol("Times"),
+                                (Expr*[]){ expr_new_integer(-1), expr_copy(rd) }, 2) }, 2))) : NULL;
+                        Expr* small = off ? rt_eval2("Less", off, expr_new_real(1e-8)) : NULL;
+                        if (!(small && rt_is_true(small) && rd->type == EXPR_INTEGER)) agree = false;
+                        else if (p == 0) m = (long)rd->data.integer;
+                        else if ((long)rd->data.integer != m) agree = false;
+                        if (small) expr_free(small);
+                        if (rd) expr_free(rd);
+                        if (dn) expr_free(dn);
+                    }
+                    expr_free(del);
+                    if (agree) {
+                        /* c = (Log[kappa] + 2 Pi I m) / d */
+                        Expr* c = rt_eval1("Expand", rt_eval_own(expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+                            expr_new_function(expr_new_symbol("Rational"), (Expr*[]){ expr_new_integer(1), expr_new_integer(d) }, 2),
+                            expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(lk),
+                                expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(2 * m), expr_new_symbol("Pi"),
+                                    expr_new_function(expr_new_symbol("Complex"), (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2) }, 3) }, 2) }, 2)));
+                        if (c) {
+                            *kern = expr_copy(T->kernel[i2]);
+                            *val = rt_eval_own(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(S), c }, 2));
+                            found = *val != NULL;
+                            if (!found) { expr_free(*kern); *kern = NULL; }
+                        }
+                    }
+                    expr_free(lk);
+                }
+                if (kap) expr_free(kap);
+                if (S) expr_free(S);
+            }
+            if (co) expr_free(co);
+        }
+        gi[ng] = i2;
+        gens[ng++] = T->Dcoef[i2];                     /* borrowed */
+    }
+    free(gens); free(gi);
+    expr_free(vars);
+    return found;
+}
+
+/* Build the tower; a dependent logarithm (Log[1 + I x] beside Log[x - I]) is
+ * then eliminated -- it becomes a member Log[v] = Sum r_j t_j + c with the
+ * exact constant c (rt_dependent_log_rule), not a level -- and the tower is
+ * rebuilt without it, so the structure theorem's independence, and every
+ * certificate it carries, holds again (campaign step 8; before, T->dependent
+ * demoted every verdict).  At most one transcendental number may enter the
+ * constant field this way (Pi from Log[I], or one Log[2]), so the constants
+ * stay algebraically independent; otherwise the dependent tower is kept. */
+static bool rt_tower_build_elim(Expr* f, Expr* x, RtTower* T, size_t min_n, bool wide);
+/* The integrator's tower: a dependent logarithm is eliminated only when its
+ * constant holds on the wide sample set (Log[1 + I x] = Log[x - I] + I Pi/2
+ * on the whole line).  A constant of one region only (Log[-x] = Log[x] + I Pi
+ * for x > 0) is left dependent: an answer built on it fails the
+ * differentiation check elsewhere (dependent-log hunt: True 78 -> 67, 58). */
+bool rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n) {
+    return rt_tower_build_elim(f, x, T, min_n, true);
+}
+/* The decision's tower (rt_decide_tower): also eliminates a region constant;
+ * the certificate is then about the germ on the positive sample points. */
+bool rt_tower_build_decide(Expr* f, Expr* x, RtTower* T, size_t min_n) {
+    return rt_tower_build_elim(f, x, T, min_n, false);
+}
+static bool rt_tower_build_elim(Expr* f, Expr* x, RtTower* T, size_t min_n, bool wide) {
+    bool ok = rt_tower_build_core(f, x, T, min_n, NULL, NULL, 0);
+    if (!ok || !T->dependent) return ok;
+    Expr* tc[8]; size_t ntc = 0;
+    rt_tconst_atoms(f, x, tc, &ntc, 8);
+    Expr** xk = NULL; Expr** xr = NULL; size_t nx = 0;
+    for (int round = 0; round < 8; round++) {
+        Expr* k = NULL; Expr* v = NULL;
+        if (!rt_dependent_log_rule(T, x, wide, &k, &v)) break;
+        size_t nt2 = ntc;
+        rt_tconst_atoms(v, x, tc, &nt2, 8);
+        if (nt2 > 1) { expr_free(k); expr_free(v); break; }
+        xk = realloc(xk, (nx + 1) * sizeof(Expr*));
+        xr = realloc(xr, (nx + 1) * sizeof(Expr*));
+        xk[nx] = k; xr[nx] = v; nx++;
+        RtTower T2;
+        bool ok2 = rt_tower_build_core(f, x, &T2, min_n, xk, xr, nx);
+        if (!ok2) { rt_tower_free(&T2); nx--; expr_free(xk[nx]); expr_free(xr[nx]); break; }
+        ntc = nt2;
+        rt_tower_free(T);
+        *T = T2;
+        if (!T->dependent) break;
+    }
+    for (size_t i = 0; i < nx; i++) { expr_free(xk[i]); expr_free(xr[i]); }
+    free(xk); free(xr);
+    return true;
 }
 /* Dt_i: the derivation of the tower variable t_i — Dcoef (log), Dcoef*t (exp),
  * or Dcoef*(t^2 + sigma) (tan, sigma = +-1).  Owned. */
@@ -975,6 +1215,8 @@ Expr* rt_expand_exp_sums(Expr* e) {
  * freshly-owned tree (caller frees). */
 Expr* rt_subst_kernels(Expr* e, RtTower* T) {
     if (!e) return NULL;
+    for (size_t m = 0; m < T->nlm; m++)               /* dependent Log member */
+        if (expr_eq(e, T->lmk[m])) return expr_copy(T->lmv[m]);
     for (size_t i = 0; i < T->n; i++) {
         if (expr_eq(e, T->kernel[i])) return expr_copy(T->t[i]);
         if (T->kind[i] == RT_EXP

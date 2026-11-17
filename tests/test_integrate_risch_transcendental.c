@@ -1689,6 +1689,35 @@ static void test_campaign_step2_complex_arctan(void) {
                    " + 4 u Log[u] Log[I + u] - Log[1 + u]/(1 + u^2), u]]", "True", 0);
 }
 
+/* C completeness campaign, step 8: a dependent logarithm (Log[1 + I u] beside
+ * Log[u - I], Log[-u] beside Log[u], Log[2 + 2 u] beside Log[1 + u]) is
+ * eliminated from the tower as Log[v] = Sum r_j t_j + c with c exact, so the
+ * structure theorem's independence holds and the decision certifies again;
+ * before, every verdict over such a tower was demoted to undecided. */
+static void test_campaign_step8_dependent_logs(void) {
+    const char* cases[][2] = {
+        /* (I Pi/2) Log[u]/(1 + u): a dilogarithm */
+        { "(Log[1 + I u] - Log[u - I]) Log[u]/(1 + u)", "False" },
+        /* identically 0 on the real line */
+        { "Expand[(Log[1 + I u] - Log[u - I] - I Pi/2) Log[u]/(1 + u)]", "True" },
+        { "(Log[-u] - Log[u])/(1 + u)", "True" },
+        { "(Log[2 + 2 u] - Log[1 + u])/u", "True" },
+        { "Log[2 + 2 u] Log[1 + u]/u", "False" },
+        { "Log[u^2 - 1]/u + Log[u - 1] Log[u + 1]", "False" },
+        /* hunt cases (QI and a constant of the positive reals only) */
+        { "Expand[D[u Log[1 + I u] Log[u] + Log[u - I] Log[u + I] - I ArcTan[u] Log[I + u]^2, u]]", "True" },
+        { "Expand[D[2 ArcTan[u] Log[1 + I u] + 2 Log[u - I] Log[1 + u], u]]", "True" },
+        { "Expand[D[2 Log[-1 - u] Log[-u] + u Log[-1 - u]^2 Log[1 + u] + 2 Log[1 + u]^2, u]]", "True" } };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        char buf[400];
+        snprintf(buf, sizeof buf, "Quiet[Risch`ElementaryIntegralQ[%s, u]]", cases[i][0]);
+        assert_eval_eq(buf, cases[i][1], 0);
+    }
+    /* the integrator keeps a region constant out of its answers */
+    assert_eval_eq("With[{f = (Log[-u] - Log[u])/(1 + u)}, With[{F = Quiet[Integrate[f, u]]},"
+                   " Head[F] === Integrate || PossibleZeroQ[D[F, u] - f]]]", "True", 0);
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -1800,6 +1829,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_campaign_step1_towerlogs);
     TEST(test_campaign_step7_algconst);
     TEST(test_campaign_step2_complex_arctan);
+    TEST(test_campaign_step8_dependent_logs);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }

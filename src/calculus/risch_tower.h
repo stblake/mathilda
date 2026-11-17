@@ -61,6 +61,14 @@ typedef struct {
      * primitives (E^(2u + u^2) beside E^(2u) and E^(u^2): review F12), the
      * monomial Prod t_s^(k_s).  rt_subst_kernels returns it. */
     Expr** mval;
+    /* Dependent logarithm members (campaign step 8): a collected Log[v] whose
+     * u'/u is in the Q-span of the lower Log/Exp levels is NOT a level.  It is
+     * Log[v] = Sum r_j t_j + Sum s_j w_j + c exactly, c an exact constant
+     * (Log of the constant ratio, with the branch multiple of 2 Pi I read off
+     * sample points), and rt_subst_kernels returns that value. */
+    size_t nlm;
+    Expr** lmk;      /* the member kernel Log[v]                (owned) */
+    Expr** lmv;      /* its value in tower variables            (owned) */
     /* True when the Log/Exp monomials are NOT algebraically independent (the
      * structure theorem finds Dcoef_i in the Q-span of the earlier ones, e.g.
      * E^(x + x^2) beside E^x and E^(x^2)), or when that could not be decided.
@@ -78,6 +86,12 @@ typedef struct {
  * Returns true with T populated (n >= min_n), false otherwise; the caller must
  * still call rt_tower_free either way. */
 bool  rt_tower_build_min(Expr* f, Expr* x, RtTower* T, size_t min_n);
+/* Both eliminate a dependent logarithm -- it becomes a member
+ * Log[v] = Sum r_j t_j + c with c exact, not a level -- and rebuild, clearing
+ * T->dependent where they can.  rt_tower_build_min only when c holds on a wide
+ * sample set (both half-planes, negative reals); rt_tower_build_decide also
+ * for a constant of the positive reals (the decision's germ). */
+bool  rt_tower_build_decide(Expr* f, Expr* x, RtTower* T, size_t min_n);
 void  rt_tower_free(RtTower* T);
 
 /* Monomial derivation of the tower: D_tower[e] = D[e,x] + sum_i Dt_i D[e,t_i]. */
