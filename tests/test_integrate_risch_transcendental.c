@@ -1598,6 +1598,26 @@ static void test_review_f8_tan(void) {
                    " =!= \"NoSolution\"", "True", 0);
 }
 
+/* C completeness campaign, step 0 (v0.6603): no certificate over a tower with a
+ * Liouvillian primitive level.  Its independence is not checked (Erfc = 1 - Erf,
+ * LogIntegral[u] = Ei[Log[u]]), so E^u (Erf[u] + Erfc[u]) = E^u and
+ * 1/u + E^u (Ei[Log[u]] - LogIntegral[u]) = 1/u were certified non-elementary. */
+static void test_campaign_step0_primitive(void) {
+    const char* elem[] = {
+        "E^u (Erf[u] + Erfc[u])",
+        "1/u + E^u (ExpIntegralEi[Log[u]] - LogIntegral[u])",
+        "u (Erf[u] + Erfc[u])",
+        "E^(2 u) (Erfi[u] + I Erf[I u]) + E^u" };
+    for (size_t i = 0; i < sizeof elem / sizeof elem[0]; i++) {
+        char buf[300];
+        snprintf(buf, sizeof buf, "Quiet[Risch`ElementaryIntegralQ[%s, u]] =!= False", elem[i]);
+        assert_eval_eq(buf, "True", 0);
+    }
+    /* the certified RDE says why */
+    assert_eval_eq("Risch`RischDECertified[1, E^x Erf[x], x]; Risch`RischDECertifiedReason[]",
+                   "\"tower: Liouvillian primitive level\"", 0);
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -1705,6 +1725,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_review_f6_f9);
     TEST(test_review_f12_composite);
     TEST(test_review_f8_tan);
+    TEST(test_campaign_step0_primitive);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }

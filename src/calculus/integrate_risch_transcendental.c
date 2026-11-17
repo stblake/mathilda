@@ -739,6 +739,14 @@ static RtDecision rt_decide_tower(Expr* fx, Expr* x, bool tan_route) {
             /* a certificate presupposes algebraically independent monomials */
             if (verdict == RT_DEC_NONELEMENTARY && T.dependent)
                 verdict = RT_DEC_UNKNOWN;
+            /* ... and a Liouvillian primitive level (Erf, Ei, li) is never checked
+             * for independence (Erfc = 1 - Erf, LogIntegral[u] = Ei[Log[u]]), and the
+             * field integrator models it as an exponential: E^u (Erf[u] + Erfc[u])
+             * and 1/u + E^u (Ei[Log[u]] - LogIntegral[u]) were certified
+             * non-elementary (review step 0.2, v0.6603).  No certificate over such
+             * a tower until the primitive top is implemented. */
+            for (size_t i = 0; verdict == RT_DEC_NONELEMENTARY && i < T.n; i++)
+                if (T.kind[i] == RT_PRIM) verdict = RT_DEC_UNKNOWN;
             if (Q) expr_free(Q);
             if (rem) expr_free(rem);
             g_rt_decide_mode = save_mode;

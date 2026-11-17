@@ -94,14 +94,9 @@ BASELINE_C = {
     # Log/Exp monomials that are algebraically dependent (E^(x + x^2) beside E^x,
     # E^(x^2)): the tower builder must rewrite them into an independent tower
     "tower: dependent monomials",
-    "RdeBoundDegreeExp: lc(a) = 0",
-    "RdeSpecialDenomExp: a(0) = 0",
-    "WeakNormalizer: zero",
     "base: identity gate",
     "base: reduced equation not polynomial",
     "tower: antidifferentiation D H = c",
-    "tower: identity gate",
-    "tower: reduced equation not polynomial",
     "tower: hyperbolic-tangent or Liouvillian top",
     # a theta^(>=1) coefficient whose integral carries an ArcTan over a tower
     # with a complex logarithm, and the derivative fold (ArcTan' = sum c_j t_j')
@@ -135,8 +130,6 @@ BASELINE_C = {
     # split into real parts in k, and its k(i) Risch DE is unique only when the
     # homogeneous equation has no solution there (Bronstein 6.6: the full
     # CoupledDECancelTan recursion would decide that case).
-    "RdeSpecialDenomTan: a(i) = 0",
-    "PolyRischDECancelTan: residual not divisible by tau^2 + 1",
     "PolyRischDECancelTan: q(i) not split into real parts",
     "PolyRischDECancelTan: homogeneous solution over k(i) not excluded",
     # a tower of several tangents needs the tangent structure theorem to prove
@@ -145,11 +138,31 @@ BASELINE_C = {
     # over k(i) t^2 + 1 splits (t - i, t + i): the hypertangent boxes assume it
     # irreducible; the split case is the exponential-like two-factor special part
     "tower: hypertangent top over a field containing I",
+    # a Liouvillian primitive (Erf, Ei, li) level is not checked for independence
+    # (Erfc = 1 - Erf, LogIntegral[u] = Ei[Log[u]]) and the field integrator has no
+    # primitive branch: no certificate over such a tower (step 0.2; step 3 closes it)
+    "tower: Liouvillian primitive level",
 }
 
 # rde_cert_mark reasons that are permanent: a computation the CAS could not do,
 # or an input outside the solver's scope, not a missing branch of the algorithm.
 CAS_FAILURE_MARKS = {
+    # Step 0.3 of the C completeness campaign (v0.6603): defensive marks a hunt
+    # over every constant field never reached; each is a state the mathematics rules out.
+    # deg a = deg b >= 0 makes lc(a) nonzero; a zero reading is an uncanonical coefficient
+    "RdeBoundDegreeExp: lc(a) = 0",
+    # a = dn h is built special-free (rc_normal_part strips tau^v), so tau does not divide a
+    "RdeSpecialDenomExp: a(0) = 0",
+    # q starts at 1 and multiplies gcds of a nonzero d1, never 0
+    "WeakNormalizer: zero",
+    # a returned y failing the exact identity is a reduction or normaliser slip, not a branch
+    "tower: identity gate",
+    # a, b, c are polynomials by construction after the normal/special denominators over a real k
+    "tower: reduced equation not polynomial",
+    # a is special-free and t^2 + 1 is irreducible over a real k (the k(i) case is marked separately)
+    "RdeSpecialDenomTan: a(i) = 0",
+    # r(i) = 0 by construction and r is real, so t^2 + 1 divides r
+    "PolyRischDECancelTan: residual not divisible by tau^2 + 1",
     # the decision is complete; only a factorisation / linear solve that did not
     # evaluate, or a residue beyond the machine range, leaves it undecided
     "WeakNormalizer: residues not decided",

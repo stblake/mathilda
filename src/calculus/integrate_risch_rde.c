@@ -16,6 +16,7 @@
 #include "sym_intern.h"
 #include "flint_bridge.h"
 #include "risch_structure.h"
+#include "risch_field_integrate.h"   /* g_rt_decision: the auxiliary-integral scope */
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -752,6 +753,22 @@ static int rde_normal_denominator_field(Expr* f, Expr* g, RdeCtx* C,
 static int rc_param_log_deriv(Expr* f, Expr* eta, RdeCtx* C, long* m_out, Expr** z_out);
 static bool rc_is_tower_rational(Expr* e, RdeCtx* C);
 
+/* The field integrator on an AUXILIARY integrand F (an alpha of LimitedIntegrate,
+ * a c/w of the log-derivative branch, the c of D H = c), in its own decision
+ * scope.  g_rt_decision is write-once and read by the outer decision: a
+ * certificate the integrator raises about F is a fact about F, not about the
+ * outer integrand, and must not reach the outer verdict (review step 0.1: the
+ * outer RDE could then give up uncertain and still read NONELEMENTARY).  F's own
+ * verdict is returned in *f_nonelem for the caller's three-way answer. */
+static Expr* rc_aux_integrate(Expr* F, RdeCtx* C, Expr** rem, bool* f_nonelem) {
+    RtDecision saved = g_rt_decision;
+    g_rt_decision = RT_DEC_UNKNOWN;
+    Expr* R = rt_field_integrate(F, C->T, C->m, C->x, rem);
+    if (f_nonelem) *f_nonelem = (g_rt_decision == RT_DEC_NONELEMENTARY);
+    g_rt_decision = saved;
+    return R;
+}
+
 /* Integrate F (an element of K = k(tau), C's field) inside K: 1 with *Q owned
  * when the integrator returns an antiderivative rational in x, t_0..t_m (no new
  * logarithm, no remainder); -1 otherwise (not a proof: a new logarithm may
@@ -762,7 +779,7 @@ static int rc_integrate_in_K(Expr* F, RdeCtx* C, Expr** Q) {
     if (rt_is_zero(F)) { *Q = expr_new_integer(0); return 1; }
     RdeCertState saved = rde_cert_begin();
     Expr* rem = NULL;
-    Expr* R = rt_field_integrate(F, C->T, C->m, C->x, &rem);
+    Expr* R = rc_aux_integrate(F, C, &rem, NULL);
     bool unc = rde_cert_uncertain();
     const char* why = rde_cert_reason();
     rde_cert_end(saved);
@@ -2014,7 +2031,7 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
                 if (rt_is_zero(sp.c)) H = expr_new_integer(0);
                 else {
                     Expr* rem = NULL;
-                    Expr* Hc = rt_field_integrate(sp.c, C->T, C->m, C->x, &rem);
+                    Expr* Hc = rc_aux_integrate(sp.c, C, &rem, NULL);
                     bool ok = Hc && (!rem || rt_is_zero(rem)) && rc_is_tower_rational(Hc, C);
                     if (rem) expr_free(rem);
                     if (ok) H = Hc;

@@ -2196,6 +2196,9 @@ Expr* rde_solve_tower_ext(Expr* f, Expr* g, Expr* x, Expr* extra) {
         size_t ntan = 0;
         for (size_t i = 0; i < T.n; i++) if (T.kind[i] == RT_TAN) ntan++;
         if (ntan > 1) rde_cert_mark("tower: more than one tangent");
+        /* a Liouvillian primitive level: independence unchecked (Erfc = 1 - Erf) */
+        for (size_t i = 0; i < T.n; i++)
+            if (T.kind[i] == RT_PRIM) { rde_cert_mark("tower: Liouvillian primitive level"); break; }
     }
     expr_free(fgx);
     Expr* fx = rt_expand_exp_sums(f);

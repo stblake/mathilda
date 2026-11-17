@@ -5120,6 +5120,13 @@ or when it is undecided, the exponential route runs. `∫E^Tan[u]`, `∫E^Tan[u]
 and `∫E^Tan[u]/u` decide `False`. `∫E^Tan[u] Sec[u]^2 = E^Tan[u]` and
 `∫D[Cos[u]^2 E^Tan[u]] = E^Tan[u]/(1 + Tan[u]^2)` decide `True`.
 
+**Scope guard — Liouvillian primitives (v0.6603).** No certificate is issued over a
+tower that contains a `Erf`/`Erfi`/`Erfc`/`ExpIntegralEi`/`LogIntegral` level. Such a
+level is not yet checked for independence: `Erfc = 1 - Erf` and
+`LogIntegral[u] = ExpIntegralEi[Log[u]]` went undetected, and
+`E^u (Erf[u] + Erfc[u])`, which is `E^u`, was certified non-elementary up to v0.6602.
+These integrands are now undecided.
+
 **Scope guard — algebraic functions of x.** An integrand carrying a radical of
 `x` (a non-integer rational power of an x-dependent base — `Cos[√x]`, `E^√x`,
 `Sin[x^(1/3)]`, `√(Sin x)`), or a `Surd`/`Root` of `x`, is **out of scope** for
