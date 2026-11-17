@@ -313,4 +313,29 @@ static inline void mth_neg_base_pow_machine(double x, double y,
     *im = m * sp;
 }
 
+/* Machine complex division (a_r + a_i i) / (b_r + b_i i), ONE operation as
+ * C99's double _Complex `/` does it (Annex G scaling: no spurious overflow at
+ * |b| ~ 10^300, no loss at |b| ~ 10^-300). The interpreter's Divide, its fused
+ * Times[z, Power[w, -1]] (numeric-tower review K1), the buffer quotient and
+ * Compile's DIV_C (`RA.z / RB.z`) all use this one operation, so a complex
+ * quotient bit-matches on every surface. The two-double layout of a complex
+ * is guaranteed by C99 6.2.5p13. */
+static inline void mth_cdiv_machine(double ar, double ai, double br, double bi,
+                                    double* qr, double* qi) {
+    double _Complex a, b, q;
+    ((double*)&a)[0] = ar; ((double*)&a)[1] = ai;
+    ((double*)&b)[0] = br; ((double*)&b)[1] = bi;
+    q = a / b;
+    *qr = ((const double*)&q)[0];
+    *qi = ((const double*)&q)[1];
+}
+
+/* Machine complex square root on the principal branch: libm csqrt, the
+ * operation Compile's SQRT_C runs, so Sqrt[z] bit-matches on the scalar,
+ * buffer and compiled surfaces (numeric-tower review K2: z^(1/2) through
+ * cpow = exp(log(z)/2) lost |log z| ulps -- 220 at |z| ~ 10^+-200). Defined in
+ * src/power.c, which includes <complex.h> (whose `I` macro this header must
+ * not leak). */
+void mth_csqrt_machine(double x, double y, double* re, double* im);
+
 #endif /* MTH_MACHINE_POW_H */

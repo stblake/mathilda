@@ -788,7 +788,7 @@ static void render_meaning(DBuf* b, const CompiledProgram* p, size_t i, ProgList
                     return;
                 }
                 case OP_V_EW:      db_catf(b, "%s = %s %s %s", rd, ra,
-                                           c->imm.i ? "+" : "*", rb); return;
+                                           c->imm.i == 2 ? "/" : c->imm.i ? "+" : "*", rb); return;
                 case OP_V_POW:     db_catf(b, "%s = %s^%s", rd, ra, rb); return;
                 case OP_V_KERN: case OP_V_KERN2: {
                     const char* fn = kernel_name(c->imm.p);

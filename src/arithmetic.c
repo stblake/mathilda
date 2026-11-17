@@ -5,7 +5,9 @@
 #include "internal.h"
 #include "print.h"
 #include "checked_int.h"
-#include "numeric.h"       /* numeric_contagion_args: one-kind Complex */   /* ci_mul_i64 / ci_abs_i64 */
+#include "numeric.h"       /* numeric_contagion_args: one-kind Complex */
+#include "ndarray.h"       /* ndarray_divide: one-rounding buffer quotient (K1) */
+#include "mth_machine_pow.h" /* mth_cdiv_machine: the one machine complex quotient */
 #include <stdio.h>
 #include <math.h>
 #include <stdlib.h>
@@ -356,6 +358,28 @@ Expr* builtin_complex(Expr* res) {
     return NULL;
 }
 
+/* A Divide operand as a machine complex value: a Real, an Integer a double
+ * holds exactly, or a Complex of machine Reals (*cplx). */
+static bool divide_machine_complex_operand(const Expr* e, double* re, double* im, bool* cplx) {
+    *im = 0.0; *cplx = false;
+    if (e->type == EXPR_REAL) { *re = e->data.real; return isfinite(*re); }
+    if (e->type == EXPR_INTEGER && e->data.integer >= -(INT64_C(1) << 53) &&
+        e->data.integer <= (INT64_C(1) << 53)) {
+        *re = (double)e->data.integer; return true;
+    }
+    if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2 &&
+        e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Complex &&
+        e->data.function.args[0]->type == EXPR_REAL &&
+        e->data.function.args[1]->type == EXPR_REAL) {
+        *re = e->data.function.args[0]->data.real;
+        *im = e->data.function.args[1]->data.real;
+        *cplx = true;
+        return isfinite(*re) && isfinite(*im);
+    }
+    return false;
+}
+
 Expr* builtin_divide(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     
@@ -375,8 +399,18 @@ Expr* builtin_divide(Expr* res) {
      * well -- both of those heads have buffer paths -- so the fix is to reach
      * it, which is also what makes marking the head aware worth anything.
      * Found by the packed-vs-plain differential in tests/test_packed_list.c. */
-    if (num->type == EXPR_NDARRAY || den->type == EXPR_NDARRAY)
+    if (num->type == EXPR_NDARRAY || den->type == EXPR_NDARRAY) {
+        /* Real machine operands: one rounding per element, as the scalar
+         * branch below (K1: the rewrite rounds 1/den, then the product). */
+        bool degenerate = false;
+        Expr* q = ndarray_divide(num, den, &degenerate);
+        if (q) return q;
+        if (degenerate) {
+            Expr* r = ndarray_delist_and_reeval(res);
+            if (r) return r;
+        }
         goto rewrite;
+    }
 
     /* The machine-Real fast path may only claim operands it can actually read
      * as a machine real (Real / Integer / BigInt).  A Rational, MPFR, or Complex
@@ -395,6 +429,26 @@ Expr* builtin_divide(Expr* res) {
             return expr_new_symbol(SYM_ComplexInfinity);
         }
         return expr_new_real(vnum / vden);
+    }
+
+    /* A machine complex quotient: one division (mth_cdiv_machine, the
+     * operation Compile's DIV_C and the buffer quotient use), not the
+     * rewrite's rounded reciprocal times the numerator (K1). An exact operand
+     * meets the machine one only where the contagion conversion is exact. */
+    {
+        double ar, ai, br, bi;
+        bool ac, bc;
+        if (divide_machine_complex_operand(num, &ar, &ai, &ac) &&
+            divide_machine_complex_operand(den, &br, &bi, &bc) && (ac || bc)) {
+            if (br == 0.0 && bi == 0.0) {
+                arith_warn("Power::infy: Infinite expression 1/0 encountered.\n");
+                return expr_new_symbol(SYM_ComplexInfinity);
+            }
+            double qr, qi;
+            mth_cdiv_machine(ar, ai, br, bi, &qr, &qi);
+            Expr* parts[2] = { expr_new_real(qr), expr_new_real(qi) };
+            return expr_new_function(expr_new_symbol(SYM_Complex), parts, 2);
+        }
     }
 
     int64_t n1, d1, n2, d2;
@@ -425,8 +479,13 @@ rewrite:
         Expr* minus_one = expr_new_integer(-1);
         Expr* p_args[2] = { expr_copy(den), minus_one };
         Expr* power = expr_new_function(expr_new_symbol(SYM_Power), p_args, 2);
+        /* Evaluated here, so the Times below carries no Power[den, -1] for the
+         * evaluator's one-rounding fusion (K1) to send back to Divide: a
+         * buffer pair ndarray_divide declined (shape, dtype) would loop. */
+        Expr* rec = evaluate(power);
+        expr_free(power);
 
-        Expr* t_args[2] = { expr_copy(num), power };
+        Expr* t_args[2] = { expr_copy(num), rec };
         return expr_new_function(expr_new_symbol(SYM_Times), t_args, 2);
     }
 }

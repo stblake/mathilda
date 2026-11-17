@@ -48,8 +48,10 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
       returned before their promotion), and wrong `EllipticTheta` q = 0.999 reference data.
 - [x] Kahan-style corpus: `tests/test_numeric_kahan.c` (generator `tools/numeric_kahan_cases.py`,
       with an exact-ulp prelude), 307 cases; 300 pass; 7 XFAIL = K1, K2
-- [ ] Phase 4c. Kahan findings: K1 (`a/b` double-rounds via `Times[a, Power[b, -1]]`; x/x is not 1)
-      and K2 (complex `Sqrt` via exp(log/2); use `csqrt`)
+- [x] Phase 4c. Kahan findings K1 (`a/b` rounded twice via `Times[a, Power[b, -1]]`; x/x was not 1)
+      and K2 (complex `Sqrt` via exp(log/2), now `csqrt`): v0.6600. Fixed on every surface
+      (scalar, List, packed, NDArray, Compile, complex); corpus 321 cases, 0 XFAIL.
+      S2 (complex `Equal` compares parts) accepted as is by the user.
 - [ ] Phase 6. Policy items, decided by the user 2026-11-17 (v0.6597)
   - [ ] D5 (decided: Underflow): an MPFR result below the exponent range is `Underflow[]` with
         `General::unfl` through `mth_message`, mirroring `Overflow[]`; sign kept (`-Underflow[]`).

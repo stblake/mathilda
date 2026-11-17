@@ -216,6 +216,12 @@ Expr* ndarray_dot2(const Expr* a, const Expr* b, bool* shape_error);
  * precision in MPFR (docs/design/numeric_tower_review.md, C3). */
 Expr* ndarray_elementwise(Expr** args, size_t n, bool is_plus, bool* degenerate);
 
+/* Elementwise machine division num / den with ONE rounding per element (a
+ * float64/int64 buffer or a machine-real scalar on each side, at least one
+ * buffer). NULL: not this case, or (*degenerate set) a lane that is not a
+ * machine number -- the caller delists. See ndarray.c. */
+Expr* ndarray_divide(const Expr* num, const Expr* den, bool* degenerate);
+
 /* Fast C-level elementwise Power over two same-shape NDArray operands (a^b,
  * element by element). Promotes the result dtype to complex when either operand
  * is complex or a real base with a non-integer exponent leaves the real axis

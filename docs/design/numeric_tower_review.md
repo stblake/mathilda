@@ -127,7 +127,7 @@ failures are these open bugs, marked XFAIL in the suite by id:
 | # | Repro | Got | Status |
 |---|---|---|---|
 | S1 | `I^(2^64 + 1)` | unevaluated | fixed v0.6598: period-4 arm |
-| S2 | `Exp[I Pi 1.] == -1` | `False` (an imaginary part of 1.2*^-16 against an exact 0) | open, **decision**: complex `Equal` compares parts separately, not \|a - b\| relative to \|a\| |
+| S2 | `Exp[I Pi 1.] == -1` | `False` (an imaginary part of 1.2*^-16 against an exact 0) | **accepted as is** (user, 2026-11-17): complex `Equal` compares parts separately, not \|a - b\| relative to \|a\| |
 | S3 | `(1.*^200 + 1.*^200 I)^2`, `Exp[1000. + 0.5 I]` | `Overflow[]` | fixed v0.6598: the evaluator net + complex degeneracy in the promoter; integer powers by binary powering in MPFR |
 | S4 | packed `{1.*^-200}^2` | `{0.}` | fixed v0.6598: fused lane check in the power kernels; ndarray_take_degenerate -> delist |
 | S5 | `Exp[packed {-800., 0.}]` | `{0., 1.}` | fixed v0.6598: fused check for decaying heads (ndk_promotes_underflow); the evaluator net for every scalar fast path |
@@ -143,8 +143,8 @@ statistics. 300 pass; 7 XFAIL are these two bugs:
 
 | # | Repro | Got | Status |
 |---|---|---|---|
-| K1 | `-0.3/0.1`; `x/x` at `x = 1.*^-300` | `-3.0` (0.625 ulp; `Divide[-0.3, 0.1]` is the correctly rounded `-2.9999999999999996`); not exactly `1.` | open: `a/b` parses to `Times[a, Power[b, -1]]` and the reciprocal is rounded first, so a machine quotient is rounded TWICE. IEEE division (and x/x = 1) requires one rounding |
-| K2 | `Sqrt[1.*^-200 (1 + I)]`, `Sqrt[1.*^200 - 3.*^200 I]` | relative error 5*10^-14 (about 220 ulps) | open: machine complex `Sqrt` goes through exp(log(z)/2) (`cpow`), whose error grows with \|log\|z\||; `csqrt` is accurate everywhere |
+| K1 | `-0.3/0.1`; `x/x` at `x = 1.*^-300` | `-3.0` (0.625 ulp; `Divide[-0.3, 0.1]` is the correctly rounded `-2.9999999999999996`); not exactly `1.` | **fixed v0.6600**: Times evaluates the base of `Power[b, -1]` first and fuses a machine divisor with a machine numerator on its left into `Divide` (eval.c `k1_*`); `Divide` gained a complex branch (`mth_cdiv_machine`) and a buffer kernel (`ndarray_divide`); Compile emits DIV / the buffer quotient for `x/y`. Was: `a/b` parses to `Times[a, Power[b, -1]]` and the reciprocal is rounded first, so a machine quotient is rounded TWICE. IEEE division (and x/x = 1) requires one rounding |
+| K2 | `Sqrt[1.*^-200 (1 + I)]`, `Sqrt[1.*^200 - 3.*^200 I]` | relative error 5*10^-14 (about 220 ulps) | **fixed v0.6600**: `z^(1/2)` for a machine complex `z` is libm `csqrt` (`mth_csqrt_machine`) on the scalar path, in `cpow_pair` and in Compile's SQRT_C, so the surfaces bit-match. Was: exp(log(z)/2) (`cpow`), whose error grows with \|log\|z\|\| |
 
 Test data found wrong on the way: `tests/test_elliptic_theta.c` expects
 `EllipticTheta[1, 0.4, 0.999]` = -1.32*10^-504. Jacobi's imaginary transformation

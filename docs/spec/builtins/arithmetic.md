@@ -754,6 +754,41 @@ Out[3]= 7 Sqrt[2/5]
 
 **v0.6035.** A symbolic factor does not rescue `0 * Infinity`: `0 c ComplexInfinity` is `Indeterminate`, with `Infinity::indet`, as `0 ComplexInfinity` is.
 
+**v0.6600: a machine quotient is rounded once.** `a/b` parses to
+`Times[a, Power[b, -1]]`. Evaluating that argument by argument rounds the
+reciprocal and then the product, so `-0.3/0.1` was `-3.0` (the correctly rounded
+quotient is `-2.9999999999999996`) and `x/x` was not `1.` at `x = 1.*^-300`. Times
+now evaluates the base of a `Power[b, -1]` argument first. When `b` is a machine
+divisor (a Real, a machine Complex, a float64/complex64 buffer, or a List of
+these) and a machine numerator stands to its left (a Real, an Integer, a machine
+Complex, a buffer or a List), the pair is evaluated as `Divide[a, b]`: one IEEE
+division per element. Several divisors are multiplied first, `a/b/c` is
+`Divide[a, b c]`: the same two roundings as a left fold, but independent of the
+divisors' order (Times is Orderless, so `a b^-1 c^-1` and `a c^-1 b^-1` must be one
+number; `Correlation`'s `c/(s_i s_j)` stays exactly symmetric). A divisor with no such
+numerator, or one written first (`(1/b) a`), is the reciprocal as before. Symbolic
+quotients are untouched.
+
+## Divide (/)
+
+`Divide[a, b]` is `a/b`. Attributes: `Listable`, `NumericFunction`, `Protected`.
+The parsed operator `a/b` is `Times[a, Power[b, -1]]`. Times fuses a machine pair
+back into `Divide` (see Times, v0.6600), so both spellings give the same machine
+answer.
+- **Machine operands** (Real, or an Integer a double holds exactly): one IEEE
+  division, correctly rounded. `Divide[-0.3, 0.1]` is `-2.9999999999999996`.
+- **Machine complex**: one complex division (C99 `double _Complex` `/`, with
+  Annex G scaling), the same operation `Compile` uses. `(1. + 2. I)/(3. + 4. I)` is
+  `0.44 + 0.08 I`, each part correctly rounded.
+- **Buffers** (float64 / int64 / complex64, against a buffer of the same shape or
+  a machine scalar): `ndarray_divide`, one division per element, chunked in
+  parallel. A lane that is not a machine number (a division by zero, `0/0`, an
+  overflow, an underflow) delists the call, so the element path answers it
+  (`ComplexInfinity` with `Power::infy`, or the value at machine precision in
+  MPFR).
+- **Anything else** (exact, arbitrary precision, symbolic):
+  `Times[a, Power[b, -1]]` with the reciprocal evaluated.
+
 ## NonCommutativeMultiply (**)
 
 A general associative, but non-commutative, form of multiplication. Use it as a
@@ -978,6 +1013,11 @@ Out[8]= 6^(1/3)
 
 Square root.
 - `Sqrt[z]`: Internally represented as `Power[z, 1/2]`.
+
+**Machine complex `z`** (v0.6600) uses libm `csqrt`, the same function as
+`Compile`'s `Sqrt`, so the scalar, packed, NDArray and compiled answers agree bit
+for bit. Before this, `z^(1/2)` went through `cpow`, i.e. `exp(log(z)/2)`, whose
+error grows with `|log |z||`: about 220 ulps at `Sqrt[1.*^-200 (1 + I)]`.
 
 **Integer radicands** — `Power[n, p/q]` for exact integer `n` splits `n` into a
 rational coefficient and a `q`-th-power-free residue (`Sqrt[72]` → `6 Sqrt[2]`,

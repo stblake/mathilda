@@ -1265,6 +1265,149 @@ Expr* ndarray_elementwise(Expr** args, size_t n, bool is_plus, bool* degenerate)
                             first_nd->data.ndarray.dims, out, dtc);
 }
 
+static inline int nd_lane_bad(double y, double x, int zr);   /* below */
+
+/* One operand of ndarray_divide: a float64 / int64 / complex64 buffer, or a
+ * machine Real, an Integer a double holds exactly (|n| <= 2^53: the contagion
+ * conversion, no rounding) or a Complex of machine Reals. `inexact` says
+ * whether the operand is machine (int64 / int64 is an exact Rational). */
+typedef struct { const Expr* nd; NDType dt; double re, im; bool inexact, cplx; } NdDivOp;
+
+static bool nd_div_operand(const Expr* e, NdDivOp* o) {
+    o->nd = NULL; o->re = o->im = 0.0; o->cplx = false;
+    if (e->type == EXPR_NDARRAY) {
+        NDType d = e->data.ndarray.dtype;
+        if (d != NDT_FLOAT64 && d != NDT_INT64 && d != NDT_COMPLEX64) return false;
+        o->nd = e; o->dt = d;
+        o->inexact = d != NDT_INT64; o->cplx = d == NDT_COMPLEX64;
+        return true;
+    }
+    if (e->type == EXPR_REAL) { o->re = e->data.real; o->inexact = true; return isfinite(o->re); }
+    if (e->type == EXPR_INTEGER && e->data.integer >= -(INT64_C(1) << 53) &&
+        e->data.integer <= (INT64_C(1) << 53)) {
+        o->re = (double)e->data.integer; o->inexact = false; return true;
+    }
+    if (head_is(e, SYM_Complex) && e->data.function.arg_count == 2 &&
+        e->data.function.args[0]->type == EXPR_REAL &&
+        e->data.function.args[1]->type == EXPR_REAL) {
+        o->re = e->data.function.args[0]->data.real;
+        o->im = e->data.function.args[1]->data.real;
+        o->inexact = o->cplx = true;
+        return isfinite(o->re) && isfinite(o->im);
+    }
+    return false;
+}
+
+static inline void nd_div_at(const NdDivOp* o, size_t k, double* re, double* im) {
+    if (!o->nd) { *re = o->re; *im = o->im; return; }
+    ndt_get(o->nd->data.ndarray.data, k, o->dt, re, im);
+}
+
+/* Chunk context for ndarray_divide: real f64 lanes read from a buffer (stride
+ * 1) or a broadcast scalar (stride 0), so one branch-free loop serves
+ * buffer/buffer, buffer/scalar and scalar/buffer and vectorises; anything
+ * else (int64 or complex lanes) takes the general ndt_get loop. */
+typedef struct {
+    const NdDivOp *n, *d;
+    const double *nb, *db; size_t ns, ds;   /* f64 fast loop: base + stride */
+    bool fast, cplx; double* out;
+} nd_div_ctx;
+
+static bool nd_div_chunk(void* c, size_t lo, size_t hi) {
+    const nd_div_ctx* x = (const nd_div_ctx*)c;
+    int bad = 0;
+    if (x->fast) {
+        const double *nb = x->nb, *db = x->db;
+        double* out = x->out;
+        /* one loop per stride pattern, so each is a plain vectorisable loop */
+        if (x->ns && x->ds) {
+            for (size_t k = lo; k < hi; k++) {
+                double q = nb[k] / db[k];
+                out[k] = q;
+                bad |= nd_lane_bad(q, nb[k], 1);
+            }
+        } else if (x->ns) {
+            const double b = db[0];
+            for (size_t k = lo; k < hi; k++) {
+                double q = nb[k] / b;
+                out[k] = q;
+                bad |= nd_lane_bad(q, nb[k], 1);
+            }
+        } else {
+            const double a = nb[0];
+            for (size_t k = lo; k < hi; k++) {
+                double q = a / db[k];
+                out[k] = q;
+                bad |= nd_lane_bad(q, a, 1);
+            }
+        }
+    } else if (!x->cplx) {
+        for (size_t k = lo; k < hi; k++) {
+            double xr, xi, yr, yi;
+            nd_div_at(x->n, k, &xr, &xi);
+            nd_div_at(x->d, k, &yr, &yi);
+            double q = xr / yr;
+            x->out[k] = q;
+            bad |= nd_lane_bad(q, xr, 1);
+        }
+    } else {
+        for (size_t k = lo; k < hi && !bad; k++) {
+            double xr, xi, yr, yi, qr, qi;
+            nd_div_at(x->n, k, &xr, &xi);
+            nd_div_at(x->d, k, &yr, &yi);
+            mth_cdiv_machine(xr, xi, yr, yi, &qr, &qi);
+            x->out[2 * k] = qr; x->out[2 * k + 1] = qi;
+            /* parts may cancel to an exact zero; a whole quotient of zero
+             * from a nonzero numerator is an underflow */
+            bad |= nd_lane_bad(qr, 0.0, 0) | nd_lane_bad(qi, 0.0, 0) |
+                   ((qr == 0.0) & (qi == 0.0) & ((xr != 0.0) | (xi != 0.0)));
+        }
+    }
+    return !bad;
+}
+
+/* Elementwise machine division num / den, ONE rounding per element (numeric-
+ * tower review K1: a * (1/b) rounds twice, so -0.3/0.1 was -3.0 and x/x was not
+ * 1). Operands: a float64 / int64 / complex64 buffer, or a machine scalar (Real,
+ * exact-in-double Integer, Complex of Reals); at least one is a buffer, at
+ * least one is inexact (int64 / int64 is an exact Rational), and two buffers
+ * share a shape. A complex lane divides by mth_cdiv_machine, the scalar
+ * Divide's and Compile's operation. NULL otherwise -- a float32 buffer, a
+ * broadcast, an exact pair -- and the caller takes the Times/Power path. A lane
+ * that is not a machine number (division by zero, 0/0, overflow, a subnormal or
+ * a zero from a nonzero numerator) declines with *degenerate set: the delisted
+ * element path answers it (ComplexInfinity with its message, or the value at
+ * machine precision in MPFR). Chunked over nd_parallel_for like Plus/Times. */
+Expr* ndarray_divide(const Expr* num, const Expr* den, bool* degenerate) {
+    if (degenerate) *degenerate = false;
+    NdDivOp n, d;
+    if (!nd_div_operand(num, &n) || !nd_div_operand(den, &d)) return NULL;
+    if (!n.nd && !d.nd) return NULL;             /* no buffer: the scalar path */
+    if (!n.inexact && !d.inexact) return NULL;   /* exact / exact: Rationals */
+    if (n.nd && d.nd && !same_shape(num, den)) return NULL;
+    const Expr* shape = n.nd ? num : den;
+    const Expr* present = (n.nd && d.nd) ? nd_present_src2(num, den) : shape;
+    size_t sz = ndarray_size(shape);
+    nd_div_ctx ctx;
+    ctx.n = &n; ctx.d = &d;
+    ctx.cplx = n.cplx || d.cplx;
+    /* f64 lanes on both sides: a float64 buffer, or a real scalar (stride 0;
+     * an Integer scalar is already its exact double) */
+    ctx.fast = !ctx.cplx && (!n.nd || n.dt == NDT_FLOAT64) && (!d.nd || d.dt == NDT_FLOAT64);
+    ctx.nb = n.nd ? (const double*)num->data.ndarray.data : &n.re; ctx.ns = n.nd ? 1 : 0;
+    ctx.db = d.nd ? (const double*)den->data.ndarray.data : &d.re; ctx.ds = d.nd ? 1 : 0;
+    ctx.out = malloc(sizeof(double) * (ctx.cplx ? 2 : 1) * (sz ? sz : 1));
+    if (!ctx.out) return NULL;
+    if (!nd_parallel_for(sz, nd_div_chunk, &ctx)) {
+        free(ctx.out);
+        if (degenerate) *degenerate = true;
+        return NULL;
+    }
+    return expr_new_ndarray_like(present, shape->data.ndarray.rank,
+                                 shape->data.ndarray.dims, ctx.out,
+                                 ctx.cplx ? NDT_COMPLEX64 : NDT_FLOAT64);
+}
+
 /* The machine-boundary lane test (docs/design/numeric_tower_review.md, S4/S5),
  * fused into the kernel loops so it costs a couple of compares on a value
  * already in a register: a non-finite result, a nonzero one below DBL_MIN, or
@@ -1303,6 +1446,11 @@ static void cpow_pair(double ar, double ai, double er, double ei,
      * for Gaussian-integer powers (I^2 == -1 + 0 I) without polar round-off. */
     if (ei == 0.0 && er == floor(er) && fabs(er) <= 0x1p62) {
         mth_powi_machine_c(ar, ai, (int64_t)er, outr, outi);
+        return;
+    }
+    /* z^(1/2): the shared csqrt, as the scalar builtin and Compile (K2). */
+    if (ei == 0.0 && er == 0.5 && ai != 0.0) {
+        mth_csqrt_machine(ar, ai, outr, outi);
         return;
     }
     /* Negative real base, real non-integer exponent: the scalar builtin's

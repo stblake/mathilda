@@ -11,11 +11,83 @@
 #include <string.h>
 #include <stdlib.h>
 
+/* Times[x, Power[y, -1]] -- the parse of x/y. */
+static bool is_reciprocal(const Expr* x) {
+    return x->type == EXPR_FUNCTION && x->data.function.arg_count == 2 &&
+           x->data.function.head->type == EXPR_SYMBOL &&
+           x->data.function.head->data.symbol.name == SYM_Power &&
+           x->data.function.args[1]->type == EXPR_INTEGER &&
+           x->data.function.args[1]->data.integer == -1;
+}
+
+/* a / b with ONE rounding (numeric-tower review K1), as the interpreter's
+ * Divide and its fused Times[a, Power[b, -1]]: a scalar DIV, or for a real
+ * real or complex array the elementwise buffer quotient (OP_V_EW mode 2 ->
+ * ndarray_divide). An integer-by-integer array keeps a * b^-1, the shape it
+ * had (the interpreter's answer there is an exact Rational). */
+static int emit_quotient(Ctx* c, Val a, Val b, Val* out) {
+    CompileType t = num_common(a.type, b.type); if ((int)t < 0) { c->ok = false; return -1; }
+    if (CT_IS_ARRAY(t)) {
+        CompileType et = CT_ELEM(t);
+        if (et == CT_REAL || et == CT_COMPLEX) {
+            arr_prep(c, &a, et); arr_prep(c, &b, et);
+            Slot m; m.i = 2;
+            *out = arr_op(c, OP_V_EW, a, b, t, m); return c->ok ? 1 : -1;
+        }
+        if (CT_IS_ARRAY(b.type)) {
+            Val em = arr_real_const(c, -1.0);
+            Slot z = { 0 };
+            b = arr_op(c, OP_V_POW, b, em, b.type, z);
+        } else {
+            arr_prep(c, &b, et);
+            b = unop(c, b.type == CT_COMPLEX ? OP_INV_C : OP_INV_R, b, b.type);
+        }
+        if (!c->ok) return -1;
+        *out = arr_ew(c, a, b, t, false); return c->ok ? 1 : -1;
+    }
+    if (t < CT_REAL) t = CT_REAL;
+    coerce(c, &a, t); coerce(c, &b, t);
+    *out = binop(c, t == CT_COMPLEX ? OP_DIV_C : OP_DIV_R, a, b, t);
+    return c->ok ? 1 : -1;
+}
+
 int emit_arith(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* out) {
     (void)e; Slot imm;
     if (strcmp(h, "Plus") == 0 || strcmp(h, "Times") == 0) {
         bool mul = h[0] == 'T';
         if (na == 0) { imm.i = mul ? 1 : 0; *out = emit_const(c, imm, CT_INT); return c->ok ? 1 : -1; }
+        /* x/y is Times[x, Power[y, -1]]: the factors fold first and each
+         * reciprocal then DIVIDES (one rounding, K1), as the interpreter does. */
+        size_t nrec = 0;
+        if (mul) for (size_t i = 0; i < na; i++) nrec += is_reciprocal(A[i]);
+        if (nrec > 0 && nrec < na) {
+            Val acc; bool have = false;
+            for (size_t i = 0; i < na; i++) {
+                if (is_reciprocal(A[i])) continue;
+                Val b; if (!emit(c, A[i], &b)) return -1;
+                if (!have) { acc = b; have = true; continue; }
+                CompileType t = num_common(acc.type, b.type);
+                if ((int)t < 0) { c->ok = false; return -1; }
+                if (CT_IS_ARRAY(t)) { acc = arr_ew(c, acc, b, t, false); if (!c->ok) return -1; continue; }
+                coerce(c, &acc, t); coerce(c, &b, t);
+                acc = binop(c, t == CT_INT ? OP_MUL_I : t == CT_REAL ? OP_MUL_R : OP_MUL_C, acc, b, t);
+            }
+            /* several reciprocals: ONE division by their product, as the
+             * interpreter (a/(b c): order-independent under Orderless) */
+            Val den; bool hd = false;
+            for (size_t i = 0; i < na; i++) {
+                if (!is_reciprocal(A[i])) continue;
+                Val d; if (!emit(c, A[i]->data.function.args[0], &d)) return -1;
+                if (!hd) { den = d; hd = true; continue; }
+                CompileType t = num_common(den.type, d.type);
+                if ((int)t < 0) { c->ok = false; return -1; }
+                if (CT_IS_ARRAY(t)) { den = arr_ew(c, den, d, t, false); if (!c->ok) return -1; continue; }
+                coerce(c, &den, t); coerce(c, &d, t);
+                den = binop(c, t == CT_INT ? OP_MUL_I : t == CT_REAL ? OP_MUL_R : OP_MUL_C, den, d, t);
+            }
+            if (emit_quotient(c, acc, den, &acc) < 0) return -1;
+            *out = acc; return c->ok ? 1 : -1;
+        }
         Val acc; if (!emit(c, A[0], &acc)) return -1;
         for (size_t i = 1; i < na; i++) {
             Val b; if (!emit(c, A[i], &b)) return -1;
@@ -59,26 +131,7 @@ int emit_arith(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* o
     }
     if (strcmp(h, "Divide") == 0 && na == 2) {
         Val a, b; if (!emit(c, A[0], &a) || !emit(c, A[1], &b)) return -1;
-        CompileType t = num_common(a.type, b.type); if ((int)t < 0) { c->ok = false; return -1; }
-        if (CT_IS_ARRAY(t)) {
-            /* a / b = a * b^-1: the ND layer has elementwise power and times,
-             * but no divide. */
-            CompileType et = CT_ELEM(t);
-            if (CT_IS_ARRAY(b.type)) {
-                Val em = arr_real_const(c, -1.0);
-                Slot z = { 0 };
-                b = arr_op(c, OP_V_POW, b, em, b.type, z);
-            } else {
-                arr_prep(c, &b, et);
-                b = unop(c, b.type == CT_COMPLEX ? OP_INV_C : OP_INV_R, b, b.type);
-            }
-            if (!c->ok) return -1;
-            *out = arr_ew(c, a, b, t, false); return c->ok ? 1 : -1;
-        }
-        if (t < CT_REAL) t = CT_REAL;
-        coerce(c, &a, t); coerce(c, &b, t);
-        *out = binop(c, t == CT_COMPLEX ? OP_DIV_C : OP_DIV_R, a, b, t);
-        return c->ok ? 1 : -1;
+        return emit_quotient(c, a, b, out);
     }
     if ((strcmp(h, "Mod") == 0 || strcmp(h, "Quotient") == 0) && na == 2) {
         CompileType mt, nt;

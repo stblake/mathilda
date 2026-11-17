@@ -33,8 +33,9 @@ void info_init(void) {
         "x - y or Subtract[x, y] represents x - y; rewritten by the evaluator\n"
         "to Plus[x, Times[-1, y]] so it inherits Plus's flattening and ordering.");
     symtab_set_docstring("Divide",
-        "x / y or Divide[x, y] represents x / y; rewritten by the evaluator to\n"
-        "Times[x, Power[y, -1]] so it inherits Times's flattening and ordering.");
+        "x / y or Divide[x, y] represents x / y. Machine operands (and machine\n"
+        "arrays, elementwise) are divided with ONE rounding, which x / y also gets;\n"
+        "anything else is rewritten to Times[x, Power[y, -1]].");
     symtab_set_docstring("Sqrt",
         "Sqrt[z]\n"
         "\trepresents the principal square root of z.\n"

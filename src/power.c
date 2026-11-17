@@ -24,6 +24,15 @@
 #include <limits.h>
 #include <gmp.h>
 
+/* See src/mth_machine_pow.h: libm csqrt, the one machine complex square root
+ * (Compile's SQRT_C calls it too). */
+void mth_csqrt_machine(double x, double y, double* re, double* im) {
+    double complex z = x + y * I;
+    double complex r = csqrt(z);
+    *re = creal(r);
+    *im = cimag(r);
+}
+
 /* Strict-positive constant predicate. Returns true for positive integer/
  * rational/real, Pi, E, and Power[B, integer] where B is one of those
  * (covers Sqrt[2], Pi^2, etc. as factors). Used by the rational-exponent
@@ -1485,6 +1494,15 @@ Expr* builtin_power(Expr* res) {
                         if (r_im == 0.0) return expr_new_real(r_re);
                         return make_complex(expr_new_real(r_re), expr_new_real(r_im));
                     }
+                }
+
+                /* z^(1/2): csqrt, accurate at every magnitude (K2); cpow is
+                 * exp(log(z)/2), whose error grows with |log |z||. No cleanup
+                 * threshold: csqrt has no round-off residue to clean. */
+                if (vexp_im == 0.0 && vexp_re == 0.5 && vbase_im != 0.0) {
+                    double r_re, r_im;
+                    mth_csqrt_machine(vbase_re, vbase_im, &r_re, &r_im);
+                    return make_complex(expr_new_real(r_re), expr_new_real(r_im));
                 }
 
                 double complex result = cpow(z, w);

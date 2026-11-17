@@ -63,7 +63,7 @@ for x, y in [("1.7", "1.1"), ("0.75", "0.5"), ("1.*^300", "0.6*^300"), ("3.", "2
 for x in ["0.1", "1./3.", "1.*^-300", "1.*^300", "-7.25"]:
     # x/x = 1 exactly is an IEEE guarantee; a/b as a * (1/b) breaks it (K1)
     t(f"With[{{x = {x}}}, keq[x/x, 1.] && keq[x - x, 0.] && keq[x 1., x] && keq[x + 0., x]]",
-      xfail="K1" if x == "1.*^-300" else None)
+      )
 for x in ["0.1", "1./7.", "1.*^307"]:
     t(f"SetPrecision[2. {x}, Infinity] === 2 SetPrecision[{x}, Infinity]")
 t("keq[(2.^53 - 1.) + 1., 2.^53] && keq[(2.^53 + 2.) - 2., 2.^53]")
@@ -80,14 +80,26 @@ PAIRS = [("0.1", "0.2"), ("0.1", "0.3"), ("1./3.", "2./3."), ("1./7.", "1./3."),
          ("1.0000000000000002", "0.9999999999999999"), ("2.^52 + 1.", "0.5"), ("3.141592653589793", "2.718281828459045"),
          ("1.*^-10", "7."), ("1.*^200", "1.*^200"), ("1.*^-200", "3.*^-200"), ("6.02214076*^23", "1.602176634*^-19"),
          ("-0.3", "0.1")]
-K1_DIV = {("1.*^16 + 1.", "3."), ("1.*^-10", "7."), ("-0.3", "0.1")}   # found by this corpus
+K1_DIV = set()   # K1 (a/b rounded twice) fixed in v0.6600; the cases stay as regressions
 for a, b in PAIRS:
     for op, xop in OPS:
         xf = "K1" if (op == "/" and (a, b) in K1_DIV) else None
         t(f"With[{{a = {a}, b = {b}}}, kcr[a {op} b, SetPrecision[a, Infinity] {xop} SetPrecision[b, Infinity]]]", xfail=xf)
 for a, b in PAIRS:   # Divide is one correctly rounded division
     t(f"With[{{a = {a}, b = {b}}}, kcr[Divide[a, b], SetPrecision[a, Infinity]/SetPrecision[b, Infinity]]]")
-t("keq[-0.3/0.1, Divide[-0.3, 0.1]] && keq[(1.*^16 + 1.)/3., Divide[1.*^16 + 1., 3.]]", xfail="K1")
+t("keq[-0.3/0.1, Divide[-0.3, 0.1]] && keq[(1.*^16 + 1.)/3., Divide[1.*^16 + 1., 3.]]")
+# K1 on every surface: one rounding for List, packed, NDArray, Compile, complex
+t("{-0.3, 0.6}/0.1 === {Divide[-0.3, 0.1], Divide[0.6, 0.1]}")
+t("ToPackedArray[{-0.3, 1.*^-300}]/ToPackedArray[{0.1, 1.*^-300}] === {Divide[-0.3, 0.1], 1.}")
+t("NDArray[{-0.3, 0.6}]/0.1 === NDArray[{Divide[-0.3, 0.1], Divide[0.6, 0.1]}]")
+t("With[{x = 0.3, y = 0.1}, x/y/y === Divide[x, y y] && 2 x/y === Divide[2 x, y] && 1./x/y === 1./y/x]")
+t("Compile[{{a, _Real}, {b, _Real}}, a/b][-0.3, 0.1] === Divide[-0.3, 0.1]")
+t("Compile[{{v, _Real, 1}, {b, _Real}}, v/b][{-0.3, 0.6}, 0.1] === {-0.3, 0.6}/0.1")
+t("Compile[{{v, _Real, 1}, {w, _Real, 1}}, v/w][{-0.3, 1.}, {0.1, 3.}] === {-0.3, 1.}/{0.1, 3.}")
+t("With[{z = (1. + 2. I)/(3. + 4. I)}, keq[Re[z], 0.44] && keq[Im[z], 0.08]]")   # (11 + 2 I)/25, each part correctly rounded
+t("With[{z = 1. + 2. I, w = 3. + 4. I}, z/w === Compile[{{a, _Complex}, {b, _Complex}}, a/b][z, w] && ToPackedArray[{z, z}]/w === {z/w, z/w}]")
+t("Quiet[1./0.] === ComplexInfinity && Quiet[0./0.] === Indeterminate && 0/0.1 === 0.")
+t("With[{x = 1.*^-300}, With[{q = x/1.*^300}, q != 0 && Abs[q/10^-600 - 1] < 10^-15]]")   # an underflowed quotient is kept, not 0.
 
 # ---------------------------------------------------------------- Q. correctly rounded sqrt
 sec("Q. correctly rounded Sqrt")
@@ -170,9 +182,12 @@ t("Abs[Log[-1. - 1.*^-300 I] + Pi I] < 10^-14")
 t("Abs[Arg[-1. - 1.*^-300 I] + Pi] < 10^-14 && Abs[Arg[-1. + 1.*^-300 I] - Pi] < 10^-14")
 for z in ["2. + 3. I", "-4. + 0.5 I", "-4. - 0.5 I", "1.*^-200 + 1.*^-200 I", "1.*^200 - 3.*^200 I", "-1. + 1.*^-300 I"]:
     # |Log[z]| ~ 460 at |z| ~ 10^+-200 amplifies its rounding: 10^-12, not 10^-14
-    # complex Sqrt as exp(log(z)/2) loses |log z| ulps at extreme |z| (K2)
+    # complex Sqrt as exp(log(z)/2) lost |log z| ulps at extreme |z| (K2, fixed: csqrt)
     t(f"With[{{z = {z}}}, Abs[Exp[Log[z]] - z] < 10^-12 Abs[z] && Abs[Sqrt[z]^2 - z] < 10^-14 Abs[z] && Re[Sqrt[z]] >= 0]",
-      xfail="K2" if z in ("1.*^-200 + 1.*^-200 I", "1.*^200 - 3.*^200 I") else None)
+      )
+# K2 on every surface: the one csqrt
+for z in ["1.*^-200 + 1.*^-200 I", "1.*^200 - 3.*^200 I", "-4. - 0.5 I"]:
+    t(f"With[{{z = {z}}}, Sqrt[z] === Compile[{{{{w, _Complex}}}}, Sqrt[w]][z] && Sqrt[ToPackedArray[{{z, z}}]] === {{Sqrt[z], Sqrt[z]}} && Sqrt[NDArray[{{z}}]] === NDArray[{{Sqrt[z]}}] && z^0.5 === Sqrt[z]]")
 t("Abs[(1.*^300 + 1.*^300 I)/(1.*^300 + 1.*^300 I) - 1] < 10^-15")    # Smith-style robust division
 t("Abs[(1.*^-300 + 1.*^-300 I)/(1.*^-300 + 1.*^-300 I) - 1] < 10^-15")
 t("Abs[(1.*^300 + 1. I)/(1.*^300 + 1. I) - 1] < 10^-15")

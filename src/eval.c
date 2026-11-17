@@ -1385,6 +1385,192 @@ static Expr* eval_sparse_rule_arg(const Expr* rule) {
     return e;
 }
 
+/* ---- One rounding for a machine quotient (numeric-tower review K1) --------
+ *
+ * a/b parses to Times[a, Power[b, -1]]. Evaluated argument by argument, the
+ * reciprocal is rounded first and the product rounded again, so a machine
+ * quotient was rounded TWICE: -0.3/0.1 was -3.0 (Divide[-0.3, 0.1] is the
+ * correctly rounded -2.9999999999999996) and x/x was not 1 at x = 1.*^-300.
+ * IEEE division, and every proof built on it (x/x == 1, Sterbenz, the
+ * correctly rounded quotient), needs ONE rounding.
+ *
+ * So Times evaluates the base of a Power[b, -1] argument first. A machine
+ * divisor (a Real, a machine Complex, a float64/complex64 buffer, a List of
+ * them) is held back; once every argument is in, it is fused with a machine
+ * numerator argument (a Real, an Integer, a machine Complex, a buffer, a List)
+ * into Divide[num, b], which is one division per element on every surface
+ * (builtin_divide, ndarray_divide, Compile's DIV). Several divisors
+ * are one division by their product (k1_fuse_quotients). A divisor with no numerator to meet is
+ * evaluated as the Power it was. Re-evaluating the evaluated base inside that
+ * Power costs nothing: it carries the live fixed-point stamp. */
+static inline bool k1_is_reciprocal(const Expr* x) {
+    return x->type == EXPR_FUNCTION && x->data.function.arg_count == 2 &&
+           x->data.function.head->type == EXPR_SYMBOL &&
+           x->data.function.head->data.symbol.name == SYM_Power &&
+           x->data.function.args[1]->type == EXPR_INTEGER &&
+           x->data.function.args[1]->data.integer == -1;
+}
+
+static bool k1_is_list(const Expr* x) {
+    return x->type == EXPR_FUNCTION && x->data.function.head->type == EXPR_SYMBOL &&
+           x->data.function.head->data.symbol.name == SYM_List;
+}
+
+
+/* Complex[re, im] with finite machine Real parts (nonzero when `nonzero`). */
+static bool k1_machine_complex(const Expr* v, bool nonzero) {
+    if (v->type != EXPR_FUNCTION || v->data.function.arg_count != 2 ||
+        v->data.function.head->type != EXPR_SYMBOL ||
+        v->data.function.head->data.symbol.name != SYM_Complex) return false;
+    const Expr* re = v->data.function.args[0];
+    const Expr* im = v->data.function.args[1];
+    if (re->type != EXPR_REAL || im->type != EXPR_REAL ||
+        !isfinite(re->data.real) || !isfinite(im->data.real)) return false;
+    return !nonzero || re->data.real != 0.0 || im->data.real != 0.0;
+}
+
+/* A nonempty (nested) List whose leaves are all machine Reals / Complexes. */
+static bool k1_machine_list(const Expr* x, int depth) {
+    if (!k1_is_list(x) || x->data.function.arg_count == 0 || depth > 8) return false;
+    for (size_t i = 0; i < x->data.function.arg_count; i++) {
+        const Expr* a = x->data.function.args[i];
+        if (a->type == EXPR_REAL || k1_machine_complex(a, false)) continue;
+        if (!k1_machine_list(a, depth + 1)) return false;
+    }
+    return true;
+}
+
+static bool k1_divisor(const Expr* v) {
+    if (v->type == EXPR_REAL) return isfinite(v->data.real) && v->data.real != 0.0;
+    if (v->type == EXPR_NDARRAY)
+        return (v->data.ndarray.dtype == NDT_FLOAT64 ||
+                v->data.ndarray.dtype == NDT_COMPLEX64) && ndarray_size(v) > 0;
+    return k1_machine_complex(v, true) || k1_machine_list(v, 0);
+}
+
+static bool k1_numerator(const Expr* v) {
+    if (v->type == EXPR_REAL) return isfinite(v->data.real);
+    if (v->type == EXPR_INTEGER) return true;
+    if (v->type == EXPR_NDARRAY)
+        return v->data.ndarray.dtype == NDT_FLOAT64 || v->data.ndarray.dtype == NDT_INT64 ||
+               v->data.ndarray.dtype == NDT_COMPLEX64;
+    return k1_machine_complex(v, false) || k1_is_list(v);
+}
+
+/* Evaluate one Power[b, -1] argument of Times. A machine divisor comes back as
+ * the unevaluated Power[bv, -1] and bumps *pending; anything else is the
+ * evaluated Power -- orig itself (same pointer) when nothing changed, so a
+ * fixed point stays one. */
+static Expr* k1_eval_reciprocal(Expr* orig, size_t* pending) {
+    Expr* b = orig->data.function.args[0];
+    Expr* bv = evaluate(b);
+    if (eval_is_inflight_unwind(bv) || eval_is_inflight_goto(bv)) return bv;
+    if (k1_divisor(bv)) {
+        (*pending)++;
+        if (bv == b) { expr_free(bv); return expr_copy(orig); }
+        Expr* args[2] = { bv, expr_new_integer(-1) };
+        return expr_new_function(expr_new_symbol(SYM_Power), args, 2);
+    }
+    if (bv == b) { expr_free(bv); return evaluate(orig); }
+    Expr* args[2] = { bv, expr_new_integer(-1) };
+    Expr* p = expr_new_function(expr_new_symbol(SYM_Power), args, 2);
+    Expr* r = evaluate(p);
+    expr_free(p);
+    return r;
+}
+
+/* Can num / den thread? A scalar meets anything; two arrays or Lists must have
+ * the same length (and two buffers the same shape) -- otherwise the plain
+ * product reports the mismatch once, as it always did. */
+static bool k1_shapes_meet(const Expr* num, const Expr* den) {
+    int64_t ln = num->type == EXPR_NDARRAY ? (num->data.ndarray.rank ? num->data.ndarray.dims[0] : -1)
+               : k1_is_list(num) ? (int64_t)num->data.function.arg_count : -1;
+    int64_t ld = den->type == EXPR_NDARRAY ? (den->data.ndarray.rank ? den->data.ndarray.dims[0] : -1)
+               : k1_is_list(den) ? (int64_t)den->data.function.arg_count : -1;
+    if (ln < 0 || ld < 0) return true;
+    if (ln != ld) return false;
+    if (num->type == EXPR_NDARRAY && den->type == EXPR_NDARRAY) {
+        if (num->data.ndarray.rank != den->data.ndarray.rank) return false;
+        for (int k = 0; k < num->data.ndarray.rank; k++)
+            if (num->data.ndarray.dims[k] != den->data.ndarray.dims[k]) return false;
+    }
+    return true;
+}
+
+static inline bool k1_held(const Expr* x) {
+    return k1_is_reciprocal(x) && k1_divisor(x->data.function.args[0]);
+}
+
+/* Fuse the held divisors of a Times call with a machine numerator: one
+ * division by the PRODUCT of the divisors, a/(b c) -- the same two roundings
+ * as a/b/c, but independent of the divisors' order. Times is Orderless, so
+ * a * b^-1 * c^-1 and a * c^-1 * b^-1 are one expression and must be one
+ * number: Correlation's c_ij/(s_i s_j) stayed symmetric only this way. The
+ * product is an ordinary Times, so its factors meet in canonical order. If it
+ * is not a machine divisor (it overflowed to MPFR), or no numerator stands to
+ * the left, or the shapes cannot thread, each divisor is the plain reciprocal
+ * it was. */
+static void k1_fuse_quotients(Expr** args, size_t argc) {
+    size_t num = argc, ndiv = 0, first = argc;
+    for (size_t i = 0; i < argc; i++) {
+        if (k1_held(args[i])) { if (!ndiv++) first = i; continue; }
+        if (!k1_numerator(args[i])) continue;
+        if (num == argc || (args[num]->type != EXPR_REAL && args[i]->type == EXPR_REAL))
+            num = i;                                     /* a Real scalar first */
+    }
+    Expr* den = NULL;                                    /* owned */
+    if (num < argc && ndiv > 0) {
+        if (ndiv == 1) {
+            den = expr_copy(args[first]->data.function.args[0]);
+        } else {
+            Expr** f = malloc(sizeof(Expr*) * ndiv);
+            size_t k = 0;
+            for (size_t i = 0; i < argc; i++)
+                if (k1_held(args[i])) f[k++] = expr_copy(args[i]->data.function.args[0]);
+            Expr* t = expr_new_function(expr_new_symbol(SYM_Times), f, ndiv);
+            free(f);
+            den = evaluate(t);
+            expr_free(t);
+        }
+        if (!k1_divisor(den) || !k1_shapes_meet(args[num], den)) {
+            expr_free(den);
+            den = NULL;
+        }
+    }
+    const bool fused = den != NULL;
+    if (fused) {
+        Expr* q = NULL;
+        const Expr* av = args[num];
+        if (den->type == EXPR_REAL && (av->type == EXPR_REAL ||
+            (av->type == EXPR_INTEGER && av->data.integer >= -(INT64_C(1) << 53) &&
+             av->data.integer <= (INT64_C(1) << 53)))) {
+            /* the scalar case inline: builtin_divide's real branch */
+            double x = av->type == EXPR_REAL ? av->data.real : (double)av->data.integer;
+            double r = x / den->data.real;
+            double m = fabs(r);
+            if (m <= DBL_MAX && (m >= DBL_MIN || (r == 0.0 && x == 0.0))) {
+                q = expr_new_real(r);
+                expr_free(den);
+            }
+        }
+        if (!q) {
+            Expr* dargs[2] = { expr_copy(args[num]), den };      /* den consumed */
+            Expr* d = expr_new_function(expr_new_symbol(SYM_Divide), dargs, 2);
+            q = evaluate(d);
+            expr_free(d);
+        }
+        expr_free(args[num]);
+        args[num] = q;
+    }
+    for (size_t i = 0; i < argc; i++) {
+        if (!k1_held(args[i])) continue;
+        Expr* p = args[i];
+        /* fused: the divisor is in the quotient; else the plain reciprocal */
+        args[i] = fused ? expr_new_integer(1) : evaluate(p);
+        expr_free(p);
+    }
+}
+
 /* A Listable call with SparseArray arguments. Alongside a List (or a packed
  * list) the sparse arrays densify -- a sparse array plus a dense one is a
  * dense array -- and the rewritten call threads as Lists on the next step.
@@ -3128,6 +3314,12 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                 argc >= 2 && (attrs & ATTR_NUMERICFUNCTION) && (attrs & ATTR_FLAT) &&
                 !hold_all_complete && nfmemo_open();
 #endif
+            /* K1: Times holds a machine divisor back for one rounding. */
+            const bool times_k1 = argc >= 2 && !hold_all_complete &&
+                                  head->type == EXPR_SYMBOL &&
+                                  head->data.symbol.name == SYM_Times;
+            size_t k1_pending = 0;
+            bool k1_numerator_seen = false;   /* a machine numerator to its left */
             for (size_t i = 0; i < e->data.function.arg_count; i++) {
                 bool hold = hold_all_complete;
                 if (i == 0 && (attrs & ATTR_HOLDFIRST)) hold = true;
@@ -3201,6 +3393,7 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                         case EXPR_MPFR:
 #endif
                             new_args[i] = expr_copy(orig_arg);
+                            if (times_k1 && k1_numerator(orig_arg)) k1_numerator_seen = true;
                             continue;   /* atoms are never Throw/Goto sentinels */
                         case EXPR_SYMBOL: {
                             /* valueless symbol: itself, never a sentinel */
@@ -3216,10 +3409,14 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                         orig_arg->data.function.head->type == EXPR_SYMBOL &&
                         orig_arg->data.function.head->data.symbol.name == SYM_Rule)
                         new_args[i] = eval_sparse_rule_arg(orig_arg);
+                    else if (times_k1 && k1_numerator_seen && k1_is_reciprocal(orig_arg))
+                        new_args[i] = k1_eval_reciprocal(orig_arg, &k1_pending);
                     else
                         new_args[i] = evaluate(orig_arg);
                     arg_evaluated = true;
                     if (new_args[i] != orig_arg) *changed = true;
+                    if (times_k1 && !k1_numerator_seen && k1_numerator(new_args[i]))
+                        k1_numerator_seen = true;
                 }
 
                 /* Catch/Throw and Goto/Label: an evaluated argument that is an
@@ -3248,6 +3445,10 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                 }
             }
             
+            if (k1_pending) {
+                k1_fuse_quotients(new_args, argc);
+                *changed = true;
+            }
 #ifdef USE_MPFR
             if (nfmemo_scope) nfmemo_close();
 #endif

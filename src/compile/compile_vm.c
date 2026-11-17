@@ -886,7 +886,11 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
             Expr* ops[2];
             ops[0] = boxa ? boxa : a->arr;
             ops[1] = boxb ? boxb : b->arr;
-            if (ops[0] && ops[1]) r = ndarray_elementwise(ops, 2, c->imm.i != 0, NULL);   /* NULL: bail to the interpreter */
+            /* mode 0 Times, 1 Plus, 2 the one-rounding quotient (K1). NULL:
+             * bail to the interpreter (a degenerate lane, which it promotes). */
+            if (ops[0] && ops[1])
+                r = c->imm.i == 2 ? ndarray_divide(ops[0], ops[1], NULL)
+                                  : ndarray_elementwise(ops, 2, c->imm.i != 0, NULL);
             expr_free(boxa); expr_free(boxb);
             break;
         }
