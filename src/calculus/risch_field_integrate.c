@@ -264,7 +264,22 @@ Expr* rt_log_tower_case(Expr* f, Expr* x) {
                 free(vl);
                 Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
                     (Expr*[]){ rnum, expr_new_integer(0) }, 2);
-                sol = rt_solve_always_params(eqn, varlist, F);   /* parameters of F join (F1) */
+                /* the unknowns, named: every other symbol is a constant (F1) */
+                Expr** us = malloc(nq * sizeof(Expr*));
+                size_t nu = 0;
+                for (long k = 0; k <= Ntop; k++)
+                    for (long m = 0; m < nmono; m++) {
+                        char nm[64]; snprintf(nm, sizeof(nm), "rmLp%ld_%ld", k, m);
+                        us[nu++] = expr_new_symbol(nm);
+                    }
+                for (size_t j = 0; j < ng; j++) {
+                    char nm[32]; snprintf(nm, sizeof(nm), "rmLc%zu", j);
+                    us[nu++] = expr_new_symbol(nm);
+                }
+                Expr* ulist = expr_new_function(expr_new_symbol("List"), us, nu);
+                free(us);
+                sol = rt_solve_ansatz(eqn, varlist, ulist);
+                expr_free(ulist);
             }
             if (sol && sol->type == EXPR_FUNCTION
                 && sol->data.function.head->type == EXPR_SYMBOL
@@ -379,7 +394,12 @@ static Expr* rt_tower_solve(Expr* Q, Expr** syms, size_t nsym,
         free(vl);
         Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
             (Expr*[]){ rnum, expr_new_integer(0) }, 2);
-        sol = rt_solve_always_params(eqn, varlist, F);   /* parameters of F join (F1) */
+        Expr** us = malloc((nsym ? nsym : 1) * sizeof(Expr*));
+        for (size_t k = 0; k < nsym; k++) us[k] = expr_copy(syms[k]);
+        Expr* ulist = expr_new_function(expr_new_symbol("List"), us, nsym);
+        free(us);
+        sol = rt_solve_ansatz(eqn, varlist, ulist);   /* the unknowns, named (F1) */
+        expr_free(ulist);
     }
     if (sol && sol->type == EXPR_FUNCTION
         && sol->data.function.head->type == EXPR_SYMBOL
@@ -1430,7 +1450,15 @@ static Expr* rt_arctan_fold_coeff(Expr* Rs, RtTower* T, long L, Expr* x, Expr** 
             Expr* vl = expr_new_function(expr_new_symbol("List"), vs, nv);
             free(vs);
             Expr* eq = expr_new_function(expr_new_symbol("Equal"), (Expr*[]){ num, expr_new_integer(0) }, 2);
-            Expr* sol = rt_solve_always_params(eq, vl, Rs);   /* parameters of Rs join (F3) */
+            Expr** us = malloc((size_t)nc * sizeof(Expr*));
+            size_t nu = 0;
+            for (long j = 0; j < nL; j++) if (cs[j]) us[nu++] = expr_copy(cs[j]);
+            Expr* ulist = expr_new_function(expr_new_symbol("List"), us, nu);
+            free(us);
+            /* the c_j, named: a parameter of a tower kernel (Log[a + u]) is a
+             * constant even where Rs does not show it */
+            Expr* sol = rt_solve_ansatz(eq, vl, ulist);
+            expr_free(ulist);
             /* sol = {{c_j -> v_j, ...}} with every v_j a constant */
             if (sol && sol->type == EXPR_FUNCTION && rt_head_is(sol, "List") && sol->data.function.arg_count == 1) {
                 Expr* rules = sol->data.function.args[0];
@@ -1577,7 +1605,8 @@ static bool rt_newlog_certificate(Expr* r, Expr* Rs, RtTower* T, long L, Expr* x
         Expr* lhs = rt_eval1("Together", expr_new_function(expr_new_symbol("Plus"), terms, nt));
         free(terms);
         Expr* num = lhs ? rt_eval1("Numerator", lhs) : NULL;
-        /* rational in x, parameters only in rational positions */
+        /* rational in x, parameters only in rational positions (a radical
+           of a parameter, Sqrt[a], is outside Q(params)) */
         /* the parameters of the SYSTEM (A' and the t_k'), not of A: in
            Log[u]/(u + a), a sits inside Log[a + u] but A' = 1/(a + u) is
            rational in it */
@@ -1602,7 +1631,15 @@ static bool rt_newlog_certificate(Expr* r, Expr* Rs, RtTower* T, long L, Expr* x
         if (rational) {
             Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
                 (Expr*[]){ num, expr_new_integer(0) }, 2);
-            sol = rt_solve_always_params(eqn, vars, srcl);
+            Expr** us = malloc((size_t)(L + 1) * sizeof(Expr*));
+            for (long k = 0; k <= L; k++) {
+                char nm[32]; snprintf(nm, sizeof nm, "rtnlc$%ld", k);
+                us[k] = expr_new_symbol(nm);
+            }
+            Expr* ulist = expr_new_function(expr_new_symbol("List"), us, (size_t)L + 1);
+            free(us);
+            sol = rt_solve_ansatz(eqn, vars, ulist);
+            expr_free(ulist);
         } else {
             if (num) expr_free(num);
             expr_free(vars);
@@ -1646,6 +1683,34 @@ static int rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x, int 
     Expr* Rs = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
         (Expr*[]){ R, expr_copy(T->subrules) }, 2));               /* adopts R */
     if (!Rs) return -1;
+    /* T->subrules spans the WHOLE tower: a new logarithm of the lower integral
+     * that happens to be a higher monomial t_j (j > L) is not an element of
+     * K_{L+1} = K_L(t_L).  Mapped to t_j it passes for a lower-field element
+     * whose derivative this level never accounts for, so Int Log[u] Log[1 + u]
+     * lost its -Int Log[u]/(1 + u) (a wrong Q; the verdict was undecided).
+     * In DECIDE mode it is written back as its kernel -- the foreign new
+     * logarithm it is -- so the fold / certificate below see it: a "no"
+     * needs the strict field discipline.  The integrator keeps the old
+     * mapping: a candidate assembled that way is no proof of anything, but
+     * every answer is checked by differentiation (rt_answer_verified), and it
+     * does find answers -- D[2 E^u u Log[u] + ArcTan[E^u] Log[u]], whose
+     * ArcTan coefficient leaves a Log[u]/u residual at a lower level, is
+     * integrated only so.  rt_decide asks the integrator first. */
+    {
+        Expr** br = malloc((T->n ? T->n : 1) * sizeof(Expr*));
+        size_t nb = 0;
+        for (size_t j = (size_t)L + 1; g_rt_decide_mode && j < T->n; j++)
+            if (!rt_free_of_x(Rs, T->t[j]))
+                br[nb++] = expr_new_function(expr_new_symbol("Rule"),
+                    (Expr*[]){ expr_copy(T->t[j]), expr_copy(T->kernel[j]) }, 2);
+        if (nb) {
+            Expr* bl = expr_new_function(expr_new_symbol("List"), br, nb);
+            Rs = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"),
+                (Expr*[]){ Rs, bl }, 2));                          /* adopts Rs, bl */
+            if (!Rs) { free(br); return -1; }
+        }
+        free(br);
+    }
     Expr* tL = T->t[L];
     int rc = -1;
     if (is_bottom) {

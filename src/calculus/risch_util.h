@@ -29,10 +29,12 @@ Expr* rt_eval1(const char* head, Expr* a);
 Expr* rt_eval2(const char* head, Expr* a, Expr* b);
 /* SolveAlways[eqn, vars] as a quiet probe (no print, invisible to Check); args consumed. */
 Expr* rt_solve_always_quiet(Expr* eqn, Expr* vars);
-/* The same, for the constant unknowns of an ansatz: the symbolic parameters of
- * src (borrowed, may be NULL; the integrand in tower form) join vars, and a
- * solution binding anything but a fresh unknown symbol is rejected (NULL). */
-Expr* rt_solve_always_params(Expr* eqn, Expr* vars, const Expr* src);
+/* Solve the polynomial identity eqn (in vars) of an ansatz for its constant
+ * `unknowns` (borrowed List of symbols) over Q(every other symbol): Solve on
+ * the coefficient list.  NULL when lhs is not polynomial in vars or a rule
+ * binds a non-unknown; {} = inconsistent (generic in the parameters).  eqn and
+ * vars are consumed. */
+Expr* rt_solve_ansatz(Expr* eqn, Expr* vars, const Expr* unknowns);
 /* The symbolic parameters of e (Global` leaf symbols not in vars, not
  * Constant); *nonrat set when one sits outside a rational position. */
 void  rt_collect_params(const Expr* e, const Expr* vars, bool rat, bool* nonrat,

@@ -66,7 +66,7 @@ static bool rs_is_list(const Expr* e) {
 }
 
 /* Symbolic parameters: rt_collect_params (risch_util.c), shared with the
- * ansatz sites' rt_solve_always_params. */
+ * ansatz sites' rt_solve_ansatz. */
 
 /* ------------------------------------------------------------------ */
 /* The rational Q-span decision.                                       */

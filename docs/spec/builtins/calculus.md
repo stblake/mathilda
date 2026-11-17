@@ -1993,10 +1993,15 @@ monotonically down.
     It was believed correct by construction, but the 2026-11-16 review found the
     single-extension ansatz solving for the user's parameters. With parameters present,
     the ansatz identities are now solved as linear systems over Q(params)
-    (`rt_solve_always_params`, v0.6591): the coefficients in the tower variables, then
-    `Solve` for the unknowns only. The unknowns may therefore depend on the parameters,
-    a `{}` means inconsistent for generic parameter values, and a solution that binds
-    anything but an unknown is rejected.  Cases:
+    (`rt_solve_ansatz`, v0.6591/v0.6592): the coefficients in the tower variables, then
+    `Solve` for the unknowns only. Each site names its unknowns, and every other symbol
+    is a constant, including a parameter that appears only inside a tower kernel, such
+    as `Log[a + u]`. The unknowns may therefore depend on the parameters, a `{}` means
+    inconsistent for generic parameter values, and a solution that binds anything but an
+    unknown is rejected. In decide mode a lower integral's new logarithm that equals a
+    higher monomial is treated as foreign to the lower field (v0.6592), so
+    `Log[u] Log[1 + u]`, `Log[a + u]/u` and `Log[a + u] Log[b + u]` are certified not
+    elementary.  Cases:
       - rational: delegated to `Integrate\`BronsteinRational`;
       - logarithmic polynomial `P(x, Log[u])`: the recursive primitive-
         polynomial coefficient matching, with a limited-integration oracle that

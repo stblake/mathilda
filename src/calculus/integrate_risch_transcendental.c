@@ -707,6 +707,10 @@ static RtDecision rt_decide_field_canon(Expr* f, Expr* x) {
              * (PolynomialGCD over a coefficient ring no engine covered) proves
              * nothing: the algorithm computed with an unevaluated head as if it
              * were a polynomial.  Demote it to UNKNOWN (see risch_util.c). */
+            if (getenv("MATHILDA_RDE_CERT_DEBUG"))   /* the verdict path, for tracing */
+                fprintf(stderr, "[rt-decide] Q=%d rem=%d dec=%d verdict=%d prim=%lu dep=%d\n",
+                        Q != NULL, rem != NULL, (int)g_rt_decision, (int)verdict,
+                        g_rt_prim_unevaluated - prim0, (int)T.dependent);
             if (verdict == RT_DEC_NONELEMENTARY && g_rt_prim_unevaluated != prim0)
                 verdict = RT_DEC_UNKNOWN;
             /* a certificate presupposes algebraically independent monomials */

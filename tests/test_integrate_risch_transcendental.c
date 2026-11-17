@@ -1373,6 +1373,54 @@ static void test_review_newlog_certificate(void) {
     assert_eval_eq("Head[Quiet[Integrate[ArcTan[u]^2, u, Method -> \"RischTranscendental\"]]]", "Integrate", 0);
 }
 
+/* Review F5, the remaining cases (2026-11-17).  Two defects of the field
+ * recursion, both seen as an UNVERIFIED Q (so undecided, never wrong):
+ *  - a parameter living only in a tower kernel (Log[a + u]: rmR0/u in tower
+ *    form, t' = 1/(a + u)) was invisible to the parameter scan of the ansatz
+ *    solver, which solved a -> 0 and folded Int Log[u] into t.  The unknowns
+ *    are now NAMED (rt_solve_ansatz); every other symbol is a constant.  The
+ *    same defect gave FALSE certificates at v0.6591 (seeded hunt, below);
+ *  - a lower integral's new logarithm equal to a HIGHER monomial (Log[1 + u]
+ *    at level 0 of {Log[u], Log[1 + u]}) passed for a lower-field element.  In
+ *    decide mode it is now the foreign logarithm it is.
+ * Every False below is confirmed by FriCAS (unevaluated, or dilog). */
+static void test_review_kernel_params(void) {
+    const char* nonelem[] = {
+        "Log[a + u]/u", "(u Log[a + u])/(b + u)", "Log[u] Log[1 + u]", "Log[u]^2 Log[1 + u]",
+        "Log[1 + u] Log[2 + u]", "Log[a + u] Log[b + u]", "Log[u] Log[a + u]/u",
+        "Log[1 + a u]/u", "Log[u] Log[1 + u]/u", "E^u Log[u] Log[1 + u]" };
+    for (size_t i = 0; i < sizeof nonelem / sizeof nonelem[0]; i++) {
+        char buf[300];
+        snprintf(buf, sizeof buf, "Quiet[Risch`ElementaryIntegralQ[%s, u]]", nonelem[i]);
+        assert_eval_eq(buf, "False", 0);
+    }
+    /* elementary controls */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[Log[a + u]/(a + u), u]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[Expand[D[Log[u] Log[a + u], u]], u]]", "True", 0);
+    /* the integrator keeps its whole-tower mapping (answers are verified):
+       the ArcTan coefficient leaves a Log[u]/u residual at a lower level */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[Expand[D[2 E^u u Log[u] + ArcTan[E^u] Log[u], u]], u]]", "True", 0);
+    assert_eval_eq("With[{f = Expand[D[2 E^u u Log[u] + ArcTan[E^u] Log[u], u]]},"
+                   " PossibleZeroQ[D[Integrate`RischTranscendental[f, u], u] - f]]", "True", 0);
+    /* the v0.6591 false certificates (seeded hunt, 2026-11-17): elementary,
+       never certified not elementary */
+    const char* was_false[] = {
+        "-(E^u u^2 ArcTan[E^u]) + u Log[1 + u] Log[a + u] - ArcTan[E^u] Log[a + u]^2",
+        "a E^u ArcTan[E^u] + a u Log[u] Log[1 + u] + a ArcTan[E^u] Log[a + u]^2",
+        "a ArcTan[E^u] Log[u]^2 - Log[1 + E^u]^2 Log[1 + u]",
+        "2 ArcTan[E^u] Log[u]^2 + a Log[1 + u] Log[a + u]",
+        "a E^u u Log[1 + E^u] + 2 E^u Log[1 + E^u]^2 + ArcTan[E^u] Log[a + u]^2" };
+    for (size_t i = 0; i < sizeof was_false / sizeof was_false[0]; i++) {
+        char buf[400];
+        snprintf(buf, sizeof buf, "TimeConstrained[Quiet[Risch`ElementaryIntegralQ[Expand[D[%s, u]], u]], 30, $TO] =!= False", was_false[i]);
+        assert_eval_eq(buf, "True", 0);
+    }
+    /* property over exponential towers with parameters (seeded, 40 cases) */
+    assert_eval_eq("SeedRandom[1118]; ks = {Log[u], Log[1 + u], E^u, Log[1 + E^u], Log[u + a], ArcTan[E^u]};"
+                   " FreeQ[Table[With[{F = Sum[RandomChoice[{-1, 1, 2, a}] u^RandomInteger[{0, 2}] RandomChoice[ks]^RandomInteger[{1, 2}] RandomChoice[ks], {RandomInteger[{1, 3}]}]},"
+                   " TimeConstrained[Quiet[Risch`ElementaryIntegralQ[Expand[D[F, u]], u]], 20, $TO]], {40}], False]", "True", 0);
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -1475,6 +1523,7 @@ void test_integrate_risch_transcendental(void) {
     /* 2026-11-16 adversarial review: parameter capture, unverified verdicts. */
     TEST(test_review_parameter_capture);
     TEST(test_review_newlog_certificate);
+    TEST(test_review_kernel_params);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }

@@ -30,6 +30,18 @@
 
 /* Integrate g in K = C(x) allowing genuine logarithms in the result (the
  * i = 0 term of the exponential case is an ordinary base-field integral). */
+
+/* Append the fresh symbol `nm` to a growing unknowns array (rt_solve_ansatz). */
+static void rs_unk_push(Expr*** a, size_t* n, size_t* cap, const char* nm) {
+    if (*n == *cap) { *cap = *cap ? 2 * *cap : 16; *a = realloc(*a, *cap * sizeof(Expr*)); }
+    (*a)[(*n)++] = expr_new_symbol(nm);
+}
+static Expr* rs_unk_list(Expr** a, size_t n) {
+    Expr* l = expr_new_function(expr_new_symbol("List"), a, n);
+    free(a);
+    return l;
+}
+
 static Expr* rt_integrate_in_K_with_logs(Expr* g, Expr* x) {
     Expr* r = rt_eval_call("Integrate`BronsteinRational",
         (Expr*[]){ expr_copy(g), expr_copy(x) }, 2);
@@ -406,12 +418,16 @@ static Expr* rt_frac_try(Expr* f, Expr* x, Expr* u, bool is_log) {
                 (Expr*[]){ expr_copy(tsym), expr_copy(x) }, 2);
             Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
                 (Expr*[]){ residual, expr_new_integer(0) }, 2);
-            /* the parameters of num/den join the variables (review F1:
-             * a/(1 + E^u) gave 0, the a -> 0 solution) */
-            Expr* psrc = expr_new_function(expr_new_symbol("List"),
-                (Expr*[]){ expr_copy(num), expr_copy(den) }, 2);
-            Expr* sol = rt_solve_always_params(eqn, varlist, psrc);
-            expr_free(psrc);
+            /* the unknowns rmK_i, named: every other symbol is a constant
+             * (review F1: a/(1 + E^u) gave 0, the a -> 0 solution) */
+            Expr** ua = NULL; size_t un = 0, ucap = 0;
+            for (size_t i = 0; i < ng; i++) {
+                char nm[24]; snprintf(nm, sizeof(nm), "rmK%zu", i);
+                rs_unk_push(&ua, &un, &ucap, nm);
+            }
+            Expr* ulist = rs_unk_list(ua, un);
+            Expr* sol = rt_solve_ansatz(eqn, varlist, ulist);
+            expr_free(ulist);
             if (sol && sol->type == EXPR_FUNCTION
                 && sol->data.function.head->type == EXPR_SYMBOL
                 && sol->data.function.head->data.symbol.name == intern_symbol("List")
@@ -793,7 +809,20 @@ static Expr* rt_hermite_try(Expr* f, Expr* x, bool is_log) {
                     (Expr*[]){ expr_copy(tsym), expr_copy(x) }, 2);
                 Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
                     (Expr*[]){ rnum, expr_new_integer(0) }, 2);
-                sol = rt_solve_always_params(eqn, varlist, F);   /* parameters of F join (F1) */
+                /* the unknowns, named: every other symbol is a constant (F1) */
+                Expr** ua = NULL; size_t un = 0, ucap = 0;
+                for (long p = 0; p < dH; p++)
+                    for (long k = 0; k <= Nx; k++) {
+                        char nm[64]; snprintf(nm, sizeof(nm), "rmHh%ldv%ld", p, k);
+                        rs_unk_push(&ua, &un, &ucap, nm);
+                    }
+                for (size_t j = 0; j < ng; j++) {
+                    char nm[32]; snprintf(nm, sizeof(nm), "rmHc%zu", j);
+                    rs_unk_push(&ua, &un, &ucap, nm);
+                }
+                Expr* ulist = rs_unk_list(ua, un);
+                sol = rt_solve_ansatz(eqn, varlist, ulist);
+                expr_free(ulist);
             }
             if (sol && sol->type == EXPR_FUNCTION
                 && sol->data.function.head->type == EXPR_SYMBOL
@@ -1045,7 +1074,25 @@ Expr* rt_hyperexp_case(Expr* f, Expr* x) {
                     (Expr*[]){ expr_copy(tsym), expr_copy(x) }, 2);
                 Expr* eqn = expr_new_function(expr_new_symbol("Equal"),
                     (Expr*[]){ rnum, expr_new_integer(0) }, 2);
-                sol = rt_solve_always_params(eqn, varlist, F);   /* parameters of F join (F1) */
+                /* the unknowns, named: every other symbol is a constant (F1) */
+                Expr** ua = NULL; size_t un = 0, ucap = 0;
+                for (long i = ilo; i <= ihi; i++)
+                    for (long k = 0; k <= Nx; k++) {
+                        char nm[32]; snprintf(nm, sizeof(nm), "rmW%ldv%ld", i - ilo, k);
+                        rs_unk_push(&ua, &un, &ucap, nm);
+                    }
+                for (long p = 0; p < dH; p++)
+                    for (long k = 0; k <= Nx; k++) {
+                        char nm[64]; snprintf(nm, sizeof(nm), "rmHh%ldv%ld", p, k);
+                        rs_unk_push(&ua, &un, &ucap, nm);
+                    }
+                for (size_t j = 0; j < ng; j++) {
+                    char nm[32]; snprintf(nm, sizeof(nm), "rmHc%zu", j);
+                    rs_unk_push(&ua, &un, &ucap, nm);
+                }
+                Expr* ulist = rs_unk_list(ua, un);
+                sol = rt_solve_ansatz(eqn, varlist, ulist);
+                expr_free(ulist);
             }
             if (sol && sol->type == EXPR_FUNCTION
                 && sol->data.function.head->type == EXPR_SYMBOL
