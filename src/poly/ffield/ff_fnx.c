@@ -12,6 +12,19 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* gr_stream_write / gr_stream_write_si return a status int from FLINT 3.3.0
+ * (and are WARN_UNUSED_RESULT there); through 3.2.x they return void, so using
+ * the result is a hard error ("void value not ignored") on distributions that
+ * ship an older FLINT (Ubuntu 24.04: 3.0.1).  FNX_SW / FNX_SW_SI yield a status
+ * on both: the call's own result from 3.3.0, GR_SUCCESS before it. */
+#if defined(__FLINT_RELEASE) && __FLINT_RELEASE >= 30300
+#define FNX_SW(out, s)    gr_stream_write((out), (s))
+#define FNX_SW_SI(out, x) gr_stream_write_si((out), (x))
+#else
+#define FNX_SW(out, s)    (gr_stream_write((out), (s)), GR_SUCCESS)
+#define FNX_SW_SI(out, x) (gr_stream_write_si((out), (x)), GR_SUCCESS)
+#endif
+
 /* ------------------------------------------------------------------ */
 /*  element storage                                                    */
 /* ------------------------------------------------------------------ */
@@ -251,23 +264,39 @@ static int fnx_div(gr_ptr x, gr_srcptr y, gr_srcptr z, gr_ctx_t ctx) {
 
 static int fnx_write(gr_stream_t out, gr_srcptr x, gr_ctx_t ctx) {
     ff_fnx_data* D = FF_FNX_DATA(ctx);
-    int st = gr_stream_write(out, "[");
+    int st = FNX_SW(out, "[");
     for (slong j = 0; j < D->n; j++) {
-        char* s = fmpz_mpoly_q_get_str_pretty(FF_FNX_COEFF((gr_ptr)x, j), NULL, D->mctx);
-        st |= gr_stream_write(out, s);
+        const fmpz_mpoly_q_struct* c = FF_FNX_COEFF((gr_ptr)x, j);
+#if defined(__FLINT_RELEASE) && __FLINT_RELEASE >= 30100
+        char* s = fmpz_mpoly_q_get_str_pretty(c, NULL, D->mctx);
+        st |= FNX_SW(out, s);
         flint_free(s);
-        if (j + 1 < D->n) st |= gr_stream_write(out, ", ");
+#else
+        /* fmpz_mpoly_q_get_str_pretty is new in FLINT 3.1.0: print num/den. */
+        char* s = fmpz_mpoly_get_str_pretty(fmpz_mpoly_q_numref(c), NULL, D->mctx);
+        st |= FNX_SW(out, "(");
+        st |= FNX_SW(out, s);
+        flint_free(s);
+        if (!fmpz_mpoly_is_one(fmpz_mpoly_q_denref(c), D->mctx)) {
+            s = fmpz_mpoly_get_str_pretty(fmpz_mpoly_q_denref(c), NULL, D->mctx);
+            st |= FNX_SW(out, ")/(");
+            st |= FNX_SW(out, s);
+            flint_free(s);
+        }
+        st |= FNX_SW(out, ")");
+#endif
+        if (j + 1 < D->n) st |= FNX_SW(out, ", ");
     }
-    st |= gr_stream_write(out, "]");
+    st |= FNX_SW(out, "]");
     return st;
 }
 
 static int fnx_ctx_write(gr_stream_t out, gr_ctx_t ctx) {
     ff_fnx_data* D = FF_FNX_DATA(ctx);
-    int st = gr_stream_write(out, "Q(v_1..v_");
-    st |= gr_stream_write_si(out, D->nvars);
-    st |= gr_stream_write(out, ")[t]/(mu), deg mu = ");
-    st |= gr_stream_write_si(out, D->n);
+    int st = FNX_SW(out, "Q(v_1..v_");
+    st |= FNX_SW_SI(out, D->nvars);
+    st |= FNX_SW(out, ")[t]/(mu), deg mu = ");
+    st |= FNX_SW_SI(out, D->n);
     return st;
 }
 
