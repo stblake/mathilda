@@ -97,12 +97,12 @@ not wrong. They are left as they are.
 |---|---|---|---|
 | D1 | no significance arithmetic | — | withdrawn: design choice |
 | D2 | `Precision[0``20]` | `20.` | withdrawn: under the fixed model a zero's precision is its MPFR width |
-| D3 | `Accuracy[N[10^-400, 20]]`; `Accuracy[N[10^500, 20]]` | `20.` (should be 420); `Overflow[]` | open: `expr_log10_abs` uses `mpfr_get_d`/`mpz_get_d` |
-| D4 | `Precision[SetAccuracy[Pi 10^50, 10]]` | `10.` (should be ~60) | open: a symbolic value has magnitude 0 |
+| D3 | `Accuracy[N[10^-400, 20]]`; `Accuracy[N[10^500, 20]]` | `20.` (should be 420); `Overflow[]` | fixed v0.6596: `*_get_d_2exp` |
+| D4 | `Precision[SetAccuracy[Pi 10^50, 10]]` | `10.` (should be ~60) | fixed v0.6596: machine-value magnitude; digits rounded up; `0``a` when no digit is left |
 | D5 | `Exp[-N[10^10, 30]]` (below MPFR's range) | `0.e-30`, no message | open (decided 2026-11-17: `Underflow[]` + `General::unfl`) |
 | D6 | `N[Exp[10^9], 20]` | `Overflow[]` | decided 2026-11-17: keep the library default; no change |
-| D7 | `N[1/3, -1]`, `SetPrecision[1.5, 0]`, `$MinPrecision` | unevaluated, no message | open |
-| D8 | `` 1.5`+nan ``; ``` 0``-5 ``` | `2.` (accepted silently); accuracy clamped to 1 | open: parser `strtod` in the precision mark |
+| D7 | `N[1/3, -1]`, `SetPrecision[1.5, 0]`, `$MinPrecision` | unevaluated, no message | fixed v0.6596: `N::precbd` / `SetPrecision::precbd`; `$MaxExtraPrecision` Infinity / Rational honoured. `$MinPrecision`/`$MaxPrecision`: D7b, pending a decision |
+| D8 | `` 1.5`+nan ``; ``` 0``-5 ``` | `2.` (accepted silently); accuracy clamped to 1 | `nan`: fixed v0.6596 (strict decimal scan). ``` 0``-5 ```: withdrawn -- a zero's accuracy is its MPFR width (>= 1 bit), so a negative accuracy has no representation in the fixed model |
 | D9 | `-2.`30^2`, `-2`10^2`, `-2.5*^3^2` | `4.`, `4.`, `6.25*10^6` (should be negative) | fixed v0.6595 |
 | D9 note | `Exp[-10.`30^10]` | `Overflow[]` | the same parser bug: it read as `Exp[(-10.`30)^10]`. It was recorded as an underflow finding at first |
 

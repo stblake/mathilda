@@ -262,6 +262,38 @@ static void test_e10_tiny_iterator_step(void) {
     chk("Length[Table[x, {x, 0., 10., 0.01}]]", "1001");
 }
 
+/* ---- Phase 5 (v0.6596): fixed-precision correctness ---------------------- */
+
+static void test_d3_accuracy_any_magnitude(void) {
+    /* accuracy = precision - log10|x|, with log10 from the exponent (any range) */
+    chk("Accuracy[N[10^-400, 20]]", "420.0");
+    chk("Accuracy[N[10^500, 20]]", "-480.0");
+    chk_true("Abs[Accuracy[1.*^400] - (Precision[1.*^400] - 400)] < 10^-6");
+    chk("Accuracy[1.5]", "15.7785");                         /* unchanged */
+}
+
+static void test_d4_setaccuracy_magnitude(void) {
+    chk_true("Precision[SetAccuracy[Pi 10^50, 10]] > 60");
+    chk_true("Accuracy[SetAccuracy[Pi, 10]] >= 10");          /* never less than asked */
+    chk_true("Accuracy[SetAccuracy[Pi 10^50, 10]] >= 10");
+    chk("SetAccuracy[Pi/10^50, 10]", "0.e-10");               /* no digit left: 0``10 */
+    chk("Accuracy[SetAccuracy[Pi/10^50, 10]]", "10.0");
+}
+
+static void test_d8_precision_mark_is_decimal(void) {
+    chk("FullForm[Hold[1.5`+nan]]", "Hold[Plus[1.5, nan]]");
+    chk("Precision[1.5`30]", "30.0");
+    chk("FullForm[Hold[2.5`10..]]", "Hold[Repeated[2.5`10.]]");
+}
+
+static void test_d7_nonpositive_precision(void) {
+    chk("Quiet[N[1/3, -1]]", "N[1/3, -1]");
+    chk("Check[N[1/3, 0], \"msg\"]", "\"msg\"");               /* the message fires */
+    chk("Check[SetPrecision[1.5, 0], \"msg\"]", "\"msg\"");
+    chk("N[1/3, 5]", "0.33333");
+    chk("Block[{$MaxExtraPrecision = Infinity}, Precision[N[Sin[10^60], 20]]]", "20.0");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -288,6 +320,10 @@ int main(void) {
     TEST(test_e4_quotient_mpfr);
     TEST(test_e2_machine_zero_times_mpfr);
     TEST(test_e10_tiny_iterator_step);
+    TEST(test_d3_accuracy_any_magnitude);
+    TEST(test_d4_setaccuracy_magnitude);
+    TEST(test_d8_precision_mark_is_decimal);
+    TEST(test_d7_nonpositive_precision);
 
     if (g_fail) {
         printf("%d numeric-tower review check(s) FAILED\n", g_fail);

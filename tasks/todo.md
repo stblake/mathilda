@@ -31,14 +31,14 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
         Mean / Dot)
   - [x] full unit tier green. The one failure, integrate_gr132_1 (4.397.11 hangs), is
         pre-existing from v0.6593 b30890324 (Risch): it reproduces on a v0.6593-only build
-- [ ] Phase 5. Fixed-precision correctness (v0.6595)
-  - [ ] D3: `expr_log10_abs` uses `mpz_get_d_2exp` / `mpfr_get_d_2exp`, and handles a BigInt
-        rational and INT64_MIN (`-v` is UB today).
-  - [ ] D4: `SetAccuracy` takes a symbolic value's magnitude from a machine numericalisation.
-  - [ ] D8: the precision-mark parser rejects `nan`/`inf` (a syntax error) and allows a negative
-        accuracy on a zero (``` 0``-5 ```).
-  - [ ] D7: `N[x, p <= 0]` gets a message (`N::precbd`-style) through `mth_message`;
-        `SetPrecision[x, 0]` is defined; `$MaxExtraPrecision = Infinity` is honoured.
+- [x] Phase 5. Fixed-precision correctness: v0.6596
+  - [x] D3: `expr_log10_abs` on `*_get_d_2exp`; wide rationals; INT64_MIN `-v` removed
+  - [x] D4: `value_log10_abs` (a symbolic value by its machine value); digits rounded up
+        (accuracy never below the request); `0``a` when no digit is left
+  - [x] D8: the precision mark is a strict decimal. ``` 0``-5 ``` withdrawn: not representable
+        (a zero's accuracy is its MPFR width)
+  - [x] D7: `N::precbd`, `SetPrecision::precbd`; `$MaxExtraPrecision` Infinity / Rational
+  - [x] full unit tier green (only the v0.6593 integrate_gr132_1 regression)
 - [ ] Phase 6. Policy items, decided by the user 2026-11-17 (v0.6597)
   - [ ] D5 (decided: Underflow): an MPFR result below the exponent range is `Underflow[]` with
         `General::unfl` through `mth_message`, mirroring `Overflow[]`; sign kept (`-Underflow[]`).
@@ -55,8 +55,26 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
         expectations, checking each with `ToExpression[old] == ToExpression[new]`.
   - [ ] C9b (decided: MachinePrecision): `Precision` of a 53-bit MPFR (the machine-precision
         extended-range value) reads `MachinePrecision`, and `Accuracy` follows.
-  - [ ] D7b: implement `$MinPrecision`/`$MaxPrecision` or document them as unsupported. Ask
-        the user when Phase 5 lands.
+  - [ ] D7b (decided 2026-11-17: SUPPORT both, with docstrings, enforced consistently
+        everywhere). Design:
+        - Read the LIVE OwnValues at each check through cached `SymbolDef*` pointers.
+          A C mirror would go stale under Block / Clear, which restore OwnValues without
+          the assignment hook. Cost: a few pointer loads per check.
+        - Bounds are in digits: `$MinPrecision` (default 0), `$MaxPrecision` (default
+          Infinity). An invalid live value reads as the default.
+        - Single enforcement point: every MPFR `Expr` constructor clamps its width to
+          [min, max] bits, through a hook that `numeric.c` installs in `expr.c` (layering).
+          So literals, arithmetic, functions, N, contagion, Compile's boxed outputs and
+          the boundary policy's 53-bit values all obey the bounds. Machine doubles are
+          not arbitrary-precision numbers and are unaffected.
+        - Requests: `N[x, p]` / `SetPrecision[x, p]` outside the bounds use the bound,
+          with `::preclg` (above max) / `::precsm` (below min) through `mth_message`.
+        - N's adaptive loop caps its working precision at `$MaxPrecision`, so it does not
+          spin through passes the clamp makes identical.
+        - Assignment validation in `apply_assignment` (the `$RecursionLimit` pattern):
+          min must be a real >= 0, max a positive real or Infinity, and min <= max, else
+          `::precset` and roll back.
+        - Docstrings for both, the expression-information spec, corpus incl. Block.
 - [ ] Phase 7. Hygiene sweeps (v0.6596+)
   - [ ] F1: audit `mpz_get_d` sites whose result users see; use `numeric_machine_value`
   - [ ] F2: audit `mpz_fits_slong_p` sites for LLP64; use `expr_mpz_get_int64` where a

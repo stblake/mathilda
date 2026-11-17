@@ -23,6 +23,9 @@ the user typed.
   (machine precision, MPFR's exponent range) -- what `Exp[1000.]` returns. It
   used to be a raw `inf.0` that survived `Hold`, a `0.`, or a subnormal with a
   few good digits.
+- **A precision or accuracy mark is a plain decimal** (v0.6596): `` `p `` and
+  ``` ``a ``` take `[+-]digits[.digits]` only. `` 1.5`+nan `` used to parse
+  (strtod accepts nan, inf and hex floats) to `2.`; it is now `` 1.5` + nan ``.
 - **`-a^b` is `-(a^b)`** for every spelling of the literal `a` (v0.6595):
   `-2.`30^2`, `-2`10^2` and `-2.5*^3^2` are negative. A precision mark or a
   `*^` exponent used to let the sign fold into the literal (`4.`).
@@ -137,7 +140,10 @@ answered `0.0`; (a)'s gap is what keeps a short last step to the cap from
 agreeing on rounding noise.
 
 The limit is `p + $MaxExtraPrecision` digits (default 50, settable:
-`Block[{$MaxExtraPrecision = 1000}, N[expr, 30]]`). At the limit a part that
+`Block[{$MaxExtraPrecision = 1000}, N[expr, 30]]`; `Infinity` means the
+100000-digit cap and a Rational is read by value -- both silently meant 50
+before v0.6596). A non-positive `p` (`N[x, 0]`, `N[x, -1]`) emits `N::precbd`
+and stays unevaluated (v0.6596; it was silent). At the limit a part that
 is certified is kept; a part that is zero, or keeps shrinking as the precision
 rises, is `0.` -- a value of size `2^(T - W)` at every `W` cannot be told
 from an exact zero times `2^T` by evaluation -- and any other unsettled part is
@@ -208,6 +214,15 @@ its accuracy. Machine `N` is unchanged (`N[0]` is `0.`, `N[Erf[I]]` is
   numerator or denominator past `2^53` also no longer rounds before the
   division: `N[(2^62 + 1)/3]` is the nearest double. `Rationalize[x, 0]` and
   `SetPrecision[x, Infinity]` therefore round-trip through `N` exactly.
+- **`Accuracy` at any magnitude** (v0.6596): `log10|x|` comes from the
+  number's exponent, not a double, so `Accuracy[N[10^-400, 20]]` is `420.`
+  (it was `20.`) and `Accuracy[N[10^500, 20]]` is `-480.` (it was `Overflow[]`).
+- **`SetAccuracy[x, a]`** (v0.6596) sizes the result from `x`'s magnitude also
+  for a symbolic numeric `x` (`Precision[SetAccuracy[Pi 10^50, 10]]` is ~61;
+  it was 10), rounds the digit count up so the accuracy is never less than
+  requested, and gives `0``a` when no significant digit is left
+  (`SetAccuracy[Pi/10^50, 10]` is `0.*10^-10`). `SetPrecision[x, p]` with
+  `p <= 0` emits `SetPrecision::precbd` and stays unevaluated.
 - `SetPrecision[x, Infinity]` (and `SetAccuracy[x, Infinity]`) replaces each
   approximate number by its **exact** value. A machine or MPFR number is a
   dyadic rational, so nothing rounds: `SetPrecision[0.1, Infinity]` is

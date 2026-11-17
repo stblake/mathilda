@@ -148,38 +148,79 @@ static Expr* precision_of(const Expr* e) {
  *  accuracy = precision − log10(|x|), computed pointwise. Compound
  *  structures take the min over components.
  * ---------------------------------------------------------------------- */
+/* log10|x| of a real number atom, valid at any magnitude: a BigInt or an
+ * MPFR is split as m 2^e (*_get_d_2exp, |m| in [0.5, 1)), so log10|x| =
+ * log10|m| + e log10(2). mpfr_get_d / mpz_get_d overflowed to inf or
+ * underflowed to 0 outside the double range, so Accuracy[N[10^-400, 20]] was
+ * 20 (it is 420) and Accuracy[N[10^500, 20]] was Overflow[] (numeric-tower
+ * review D3). A rational of any width is log10|n| - log10|d|. 0 for a zero
+ * (callers treat zeros separately) and for anything else. */
+static double mpz_log10_abs(const mpz_t z) {
+    if (mpz_sgn(z) == 0) return 0.0;
+    signed long ex;
+    double m = mpz_get_d_2exp(&ex, z);
+    return log10(fabs(m)) + (double)ex * 0.30102999566398119521;
+}
+
 static double expr_log10_abs(const Expr* e) {
     if (!e) return 0.0;
     if (e->type == EXPR_INTEGER) {
         int64_t v = e->data.integer;
         if (v == 0) return 0.0;
-        return log10((double)(v < 0 ? -v : v));
+        return log10(fabs((double)v));     /* no -v: INT64_MIN has no negation */
     }
     if (e->type == EXPR_REAL) {
         double v = fabs(e->data.real);
         if (v == 0.0) return 0.0;
         return log10(v);
     }
-    if (e->type == EXPR_BIGINT) {
-        double v = fabs(mpz_get_d(e->data.bigint));
-        if (v == 0.0) return 0.0;
-        return log10(v);
-    }
+    if (e->type == EXPR_BIGINT) return mpz_log10_abs(e->data.bigint);
 #ifdef USE_MPFR
     if (e->type == EXPR_MPFR) {
-        double v = fabs(mpfr_get_d(e->data.mpfr, MPFR_RNDN));
-        if (v == 0.0) return 0.0;
-        return log10(v);
+        if (!mpfr_regular_p(e->data.mpfr)) return 0.0;
+        long ex;
+        double m = mpfr_get_d_2exp(&ex, e->data.mpfr, MPFR_RNDN);
+        return log10(fabs(m)) + (double)ex * 0.30102999566398119521;
     }
 #endif
-    int64_t n, d;
-    if (is_rational((Expr*)e, &n, &d)) {
-        double v = (double)n / (double)d;
-        v = fabs(v);
-        if (v == 0.0) return 0.0;
-        return log10(v);
+    if (is_rational_like(e) && e->type == EXPR_FUNCTION) {
+        mpz_t n, d;
+        expr_to_mpz(e->data.function.args[0], n);   /* initialises n, d */
+        expr_to_mpz(e->data.function.args[1], d);
+        double r = (mpz_sgn(n) == 0) ? 0.0 : mpz_log10_abs(n) - mpz_log10_abs(d);
+        mpz_clear(n); mpz_clear(d);
+        return r;
     }
     return 0.0;
+}
+
+/* log10 of the magnitude of a numeric VALUE for SetAccuracy: a number atom
+ * directly; a Complex by its larger part (|z| within a factor sqrt 2); a
+ * symbolic numeric quantity (Pi 10^50) from its machine-precision value --
+ * expr_log10_abs gave such a value 0, so SetAccuracy[Pi 10^50, 10] carried
+ * 10 digits instead of ~60 (numeric-tower review D4). The machine value is
+ * enough: it fixes the working precision, not the result's digits. */
+static double value_log10_abs(const Expr* value) {
+    Expr *re, *im;
+    if (is_complex((Expr*)value, &re, &im)) {
+        double a = expr_log10_abs(re), b = expr_log10_abs(im);
+        bool za = expr_numeric_sign(re) == 0, zb = expr_numeric_sign(im) == 0;
+        return za ? b : zb ? a : (a > b ? a : b);
+    }
+    if (value->type == EXPR_INTEGER || value->type == EXPR_BIGINT
+        || value->type == EXPR_REAL || value->type == EXPR_MPFR
+        || is_rational_like(value))
+        return expr_log10_abs(value);
+    /* Anything else -- a numeric constant (Pi), an exact expression -- by
+     * its machine value. */
+    if (!expr_is_numeric_quantity(value)) return 0.0;
+    Expr* approx = numericalize(value, numeric_machine_spec());
+    if (!approx) return 0.0;
+    double r = 0.0;
+    if (approx->type == EXPR_REAL || approx->type == EXPR_MPFR) r = expr_log10_abs(approx);
+    else if (is_complex(approx, &re, &im)) r = value_log10_abs(approx);
+    expr_free(approx);
+    return r;
 }
 
 /* Accuracy of an inexact zero. Mathematica treats approximate zeros as
@@ -293,7 +334,14 @@ static bool parse_prec_arg(const Expr* n, NumericSpec* out_spec) {
     else if (n->type == EXPR_REAL) digits = n->data.real;
     else if (is_rational((Expr*)n, &rn, &rd)) digits = (double)rn / (double)rd;
     else return false;
-    if (digits <= 0.0) return false;
+    if (!(digits > 0.0)) {
+        /* A non-positive precision was left unevaluated in silence
+         * (numeric-tower review D7); say why. Through the funnel, so Quiet
+         * and Check see it. The call stays unevaluated. */
+        mth_message("SetPrecision", "precbd",
+                    "Requested precision %g is not a positive real number.", digits);
+        return false;
+    }
 
 #ifdef USE_MPFR
     out_spec->mode = NUMERIC_MODE_MPFR;
@@ -351,8 +399,23 @@ Expr* builtin_set_accuracy(Expr* res) {
 
     if (target_acc <= 0.0) return NULL;
 
-    double log10_abs = expr_log10_abs(value);
+    double log10_abs = value_log10_abs(value);
     double digits = target_acc + log10_abs;
+#ifdef USE_MPFR
+    /* Accuracy a on a value below 10^-a leaves no significant digit: the
+     * value IS 0 to that accuracy -- 0``a (an MPFR zero whose width encodes
+     * the accuracy). It used to be clamped to one digit, i.e. accuracy
+     * 1 - log10|x| (SetAccuracy[Pi/10^50, 10] had accuracy 51). */
+    if (digits <= 0.0 && expr_is_numeric_quantity(value)
+        && !is_complex((Expr*)value, NULL, NULL)) {
+        Expr* z = expr_new_mpfr_bits(numeric_digits_to_bits(target_acc));
+        if (z) { mpfr_set_zero(z->data.mpfr, 1); return z; }
+    }
+#endif
+    /* Round the digit count UP: precision is held in whole bits and reported
+     * snapped to whole digits, so 10.497 digits came back as 10 and
+     * Accuracy[SetAccuracy[Pi, 10]] read 9.50 -- less than requested. */
+    digits = ceil(digits);
     if (digits < 1.0) digits = 1.0;
 
     NumericSpec spec;

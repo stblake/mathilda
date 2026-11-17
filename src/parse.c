@@ -462,16 +462,31 @@ static int parse_precision_suffix(ParserState* s, double* out_digits, bool* has_
     s->pos += bt_count;
 
     if (looks_like_number) {
-        char* end;
-        double v = strtod(s->pos, &end);
-        /* strtod would swallow the first dot of a following `..`/`...`
-         * (`2.5`10..` is Repeated[2.5`10]); give it back, as parse_number
-         * does for the mantissa. */
-        if (end > s->pos && end[-1] == '.' && *end == '.') end--;
-        if (end != s->pos) {
-            s->pos = end;
-            *out_digits = v;
-            *has_digits = true;
+        /* A plain decimal only: [+-]? digits [. digits]. strtod also accepts
+         * nan, inf, hex floats and an exponent, so 1.5`+nan parsed (to 2.)
+         * and 1.5`0x10 read a precision of 16 (numeric-tower review D8).
+         * With no digit after the sign there is no precision value, and the
+         * sign is left for the expression parser (1.5`+nan is 1.5` + nan). */
+        const char* p = s->pos;
+        if (*p == '+' || *p == '-') p++;
+        const char* digits_start = p;
+        while (isdigit((unsigned char)*p)) p++;
+        /* A '.' starting `..`/`...` is not a decimal point: 2.5`10.. is
+         * Repeated[2.5`10]. */
+        if (*p == '.' && p[1] != '.') { p++; while (isdigit((unsigned char)*p)) p++; }
+        bool any_digit = false;
+        for (const char* q = digits_start; q < p; q++)
+            if (isdigit((unsigned char)*q)) { any_digit = true; break; }
+        if (any_digit) {
+            char buf[64];
+            size_t len = (size_t)(p - s->pos);
+            if (len < sizeof buf) {
+                memcpy(buf, s->pos, len);
+                buf[len] = '\0';
+                *out_digits = strtod(buf, NULL);
+                *has_digits = true;
+                s->pos = p;
+            }
         }
     }
     return bt_count;

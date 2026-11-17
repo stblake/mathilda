@@ -2930,8 +2930,13 @@ static long numeric_max_extra_bits(double* digits_out) {
     Rule* r = symtab_get_own_values("$MaxExtraPrecision");
     double digits = 50.0;
     if (r && r->replacement) {
-        if (r->replacement->type == EXPR_REAL) digits = r->replacement->data.real;
-        else if (r->replacement->type == EXPR_INTEGER) digits = (double)r->replacement->data.integer;
+        const Expr* v = r->replacement;
+        double d;
+        /* Infinity means "no limit": the 100000-digit cap below. A Rational
+         * (or any exact / machine number) reads by value. Both used to fall
+         * back silently to 50 (numeric-tower review D7). */
+        if (v->type == EXPR_SYMBOL && v->data.symbol.name == SYM_Infinity) digits = 100000.0;
+        else if (numeric_machine_value(v, &d) && isfinite(d)) digits = d;
     }
     if (!(digits >= 0.0)) digits = 0.0;
     if (digits > 100000.0) digits = 100000.0;
@@ -3505,7 +3510,14 @@ static bool parse_precision_arg(const Expr* prec, NumericSpec* out_spec) {
         return false;  /* symbolic / unknown — keep unevaluated */
     }
 
-    if (digits <= 0.0) return false;
+    if (!(digits > 0.0)) {
+        /* A non-positive precision was left unevaluated in silence
+         * (numeric-tower review D7); say why. Through the funnel, so Quiet
+         * and Check see it. The call stays unevaluated. */
+        mth_message("N", "precbd",
+                    "Requested precision %g is not a positive real number.", digits);
+        return false;
+    }
 
 #ifdef USE_MPFR
     /* N[expr, p] caps inexact leaves at their existing precision — it never
