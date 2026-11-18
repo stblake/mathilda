@@ -115,6 +115,12 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
       1.*^-200 * 1.*^-200, 2.^-1074, -0., huge exact scalars) over scalar / List / packed /
       NDArray / Compile, and require agreement. C3, E5 and E9 would each have failed it.
       Ratchet with a checked-in BASELINE, like `check-nd-surfaces`.
+  - [x] E12 (first gate finding): a `_Real` Compile argument with no machine representation
+        (10^400 -> inf., 1/10^400 -> 0.) declines to the interpreter (`cf_to_double`): v0.6610
+  - [x] driver memory cap (a first full run reached 47 GB on Power[3037000500, 3037000500]):
+        RSS watchdog per child (MB_MEM_CAP_MB, 2 GB), INT_GROWTH heads skip the int64 edges, -j <= 4
+  - [ ] triage the full run; Compile lanes on `_Integer` probes: machine-real result vs exact
+        (Divide) is typing, not a finding; makefile target; BASELINE
 - [ ] Close-out: valgrind the corpus, a no-FLINT build, `make check-c99`, the gates, merge to
       main, the review section below
 

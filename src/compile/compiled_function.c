@@ -47,9 +47,12 @@ struct CompiledFunction {
  *  Numeric boxing / unboxing                                          *
  * ------------------------------------------------------------------ */
 
-/* Concrete real value of a numeric atom (Integer/BigInt/Real/MPFR/Rational).
- * Exposed via compile_internal.h so the Association opcodes coerce identically. */
-bool cf_to_double(const Expr* e, double* out) {
+/* Concrete real value of a numeric atom (Integer/BigInt/Real/MPFR/Rational),
+ * correctly rounded, with NO range check: +-inf past DBL_MAX, a subnormal or 0
+ * below DBL_MIN.  Only for validating an arbitrary-precision (CT_BIGREAL)
+ * parameter, where 10^400 is a legitimate value; every machine slot goes
+ * through cf_to_double. */
+static bool cf_real_value_unchecked(const Expr* e, double* out) {
     if (!e) return false;
     switch (e->type) {
         case EXPR_INTEGER: *out = (double)e->data.integer;          return true;
@@ -73,6 +76,38 @@ bool cf_to_double(const Expr* e, double* out) {
         return ok;
     }
     return false;
+}
+
+/* True when the numeric atom e is exactly zero (0, 0., an MPFR zero). A
+ * canonical Rational and a BigInt are never zero. */
+static bool cf_atom_is_zero(const Expr* e) {
+    switch (e->type) {
+        case EXPR_INTEGER: return e->data.integer == 0;
+        case EXPR_REAL:    return e->data.real == 0.0;
+#ifdef USE_MPFR
+        case EXPR_MPFR:    return mpfr_zero_p(e->data.mpfr) != 0;
+#endif
+        default:           return false;
+    }
+}
+
+/* The value of a numeric atom for a MACHINE real slot, or false when it has
+ * no machine representation. Under the machine/MPFR boundary policy
+ * (docs/design/numeric_tower_review.md) a machine number is finite, and zero
+ * or normal: 10^400 or 1.*^400 is not inf., and 1/10^400 is not 0. Reading
+ * them that way let the VM compute on the wrong value -- Compile[{{x, _Real},
+ * {y, _Real}}, x^y][0.5, 10^400] was 0. (C99 pow(0.5, inf) is an exact +0
+ * that raises no underflow flag, so the E9 guard could not see it) where the
+ * interpreter gives Underflow[]. Declining sends the call to the interpreter,
+ * which keeps the exact value. Exposed via compile_internal.h so the VM's
+ * global reads and the Association opcodes coerce identically. */
+bool cf_to_double(const Expr* e, double* out) {
+    double d;
+    if (!cf_real_value_unchecked(e, &d)) return false;
+    if (!isfinite(d)) return false;
+    if (d == 0.0 ? !cf_atom_is_zero(e) : fabs(d) < DBL_MIN) return false;
+    *out = d;
+    return true;
 }
 
 bool cf_to_ll(const Expr* e, long long* out) {
@@ -211,7 +246,7 @@ static bool cf_box(const Expr* e, CompileType t, CompileValue* out,
          * numeric atom of the right kind so a symbolic arg falls back instead. */
         double a, b;
         bool ok = (t == CT_BIGINT)  ? (e->type == EXPR_INTEGER || e->type == EXPR_BIGINT)
-                : (t == CT_BIGREAL) ? cf_to_double(e, &a)
+                : (t == CT_BIGREAL) ? cf_real_value_unchecked(e, &a)
                 :                     cf_to_complex(e, &a, &b);
         if (!ok) return false;
         out->v.a = (Expr*)e;

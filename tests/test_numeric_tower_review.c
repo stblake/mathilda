@@ -235,6 +235,20 @@ static void test_e9_compile_underflow(void) {
     chk("Compile[{{x, _Real}}, x x][3.]", "9.0");
 }
 
+/* E12: a _Real argument with no machine representation declines the compiled
+ * run instead of entering the VM as inf. / 0. (found by check-machine-boundary). */
+static void test_e12_compile_unrepresentable_arg(void) {
+    chk("Quiet[Compile[{{x, _Real}, {y, _Real}}, x^y][0.5, 10^400]]", "Underflow[]");
+    chk("Quiet[Compile[{{x, _Real}, {y, _Real}}, x^y][0.5, 1.*^400]]", "Underflow[]");
+    chk("Quiet[Compile[{{x, _Real, 1}, {y, _Real}}, x^y][{1., 0.5}, 10^400]]",
+        "{1.0, Underflow[]}");
+    chk_true("Compile[{{x, _Real}}, 2. x][1/10^400] == 2 10^-400");
+    chk_true("Compile[{{v, _Real, 1}}, 2. v][{10^400, 1.}] == {2 10^400, 2}");
+    chk("Compile[{{x, _Real}}, 2. x][0]", "0.0");            /* exact zero compiles */
+    chk_true("Compile[{{x, _Real}}, 2. x][1/3] == 2./3");
+    chk_true("Compile[{{x, _Real}}, x^2, WorkingPrecision -> 30][10^400] == 10^800");
+}
+
 static void test_d9_negative_literal_power(void) {
     /* -a^b is -(a^b) for every literal spelling of a. */
     chk("-2.`30^2 < 0", "True");
@@ -422,6 +436,7 @@ int main(void) {
     TEST(test_c8_no_subnormal_machine_numbers);
     TEST(test_c3_e5_buffer_paths_promote);
     TEST(test_e9_compile_underflow);
+    TEST(test_e12_compile_unrepresentable_arg);
     TEST(test_d9_negative_literal_power);
     TEST(test_e4_quotient_mpfr);
     TEST(test_e2_machine_zero_times_mpfr);
