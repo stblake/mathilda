@@ -1442,6 +1442,12 @@ static bool k1_machine_list(const Expr* x, int depth) {
 
 static bool k1_divisor(const Expr* v) {
     if (v->type == EXPR_REAL) return isfinite(v->data.real) && v->data.real != 0.0;
+#ifdef USE_MPFR
+    /* a real MPFR divisor: Divide's MPFR arm is one mpfr_div (found by
+     * PARANOIA: the reciprocal rounded twice and overflowed at the bottom of
+     * MPFR's range) */
+    if (v->type == EXPR_MPFR) return mpfr_regular_p(v->data.mpfr) != 0;
+#endif
     if (v->type == EXPR_NDARRAY)
         return (v->data.ndarray.dtype == NDT_FLOAT64 ||
                 v->data.ndarray.dtype == NDT_COMPLEX64) && ndarray_size(v) > 0;
@@ -1451,6 +1457,9 @@ static bool k1_divisor(const Expr* v) {
 static bool k1_numerator(const Expr* v) {
     if (v->type == EXPR_REAL) return isfinite(v->data.real);
     if (v->type == EXPR_INTEGER) return true;
+#ifdef USE_MPFR
+    if (v->type == EXPR_MPFR) return mpfr_number_p(v->data.mpfr) != 0;
+#endif
     if (v->type == EXPR_NDARRAY)
         return v->data.ndarray.dtype == NDT_FLOAT64 || v->data.ndarray.dtype == NDT_INT64 ||
                v->data.ndarray.dtype == NDT_COMPLEX64;

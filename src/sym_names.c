@@ -543,6 +543,7 @@ const char* SYM_Ordering = NULL;
 const char* SYM_Orderless = NULL;
 const char* SYM_Overflow = NULL;
 const char* SYM_Underflow = NULL;
+const char* SYM_General = NULL;
 const char* SYM_Parameter = NULL;
 const char* SYM_ParameterVariables = NULL;
 const char* SYM_Part = NULL;
@@ -1712,6 +1713,11 @@ void sym_names_init(void) {
     SYM_Orderless                  = intern_symbol("Orderless");
     SYM_Overflow                   = intern_symbol("Overflow");
     SYM_Underflow                  = intern_symbol("Underflow");
+    /* General is a System` symbol: the head of General::ovfl, General::unfl
+     * and every other shared message. Uninterned, its first mention decided
+     * its context, so inside Begin["Foo`"] it was Foo`General and
+     * Check[..., {General::unfl}] could not match (found by PARANOIA). */
+    SYM_General                    = intern_symbol("General");
     SYM_Parameter                  = intern_symbol("Parameter");
     SYM_ParameterVariables         = intern_symbol("ParameterVariables");
     SYM_Part                       = intern_symbol("Part");

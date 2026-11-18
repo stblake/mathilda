@@ -401,6 +401,14 @@ Expr* numeric_machine_real_or_promote(double v, double xin, const Expr* call);
  * (Erfc/Erfi/ExpIntegralEi/...). Always compiled; a no-op without MPFR. */
 Expr* numeric_promote_result_if_degenerate(Expr* r, const Expr* call);
 
+/* Underflow[] arithmetic (numeric.c, "Underflow[] in arithmetic"): each returns
+ * the reduced expression, or NULL when the rule does not apply / the input is
+ * already reduced. The Times and Plus hooks take the builtin's call. */
+bool  numeric_is_underflow_expr(const Expr* e);
+Expr* numeric_underflow_times(const Expr* res);
+Expr* numeric_underflow_plus(const Expr* res);
+Expr* numeric_underflow_power(const Expr* base, const Expr* exponent);
+
 /* An exact Integer / BigInt / Rational of any width, or a machine Real, as a
  * correctly rounded double in *out (may be +-inf past DBL_MAX, or a subnormal
  * / 0 below DBL_MIN). False for anything else (MPFR, Complex, symbols).

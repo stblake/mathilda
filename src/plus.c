@@ -614,6 +614,13 @@ Expr* builtin_plus(Expr* res) {
         if (combined) return combined;
     }
 
+    /* Underflow[] terms (numeric.c): 1. + Underflow[] = 1.; they collapse among
+     * themselves. NULL unless one is here. */
+    {
+        Expr* u = numeric_underflow_plus(res);
+        if (u) return u;
+    }
+
     /* Fused special-case guard. Each of the five pre-scans below (NDArray,
      * neg-Plus distribution, SeriesData, inexact contagion, Infinity/
      * Indeterminate) traverses the whole arg list, and for an ordinary symbolic

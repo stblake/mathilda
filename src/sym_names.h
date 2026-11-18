@@ -548,6 +548,7 @@ extern const char* SYM_Ordering;
 extern const char* SYM_Orderless;
 extern const char* SYM_Overflow;
 extern const char* SYM_Underflow;
+extern const char* SYM_General;
 extern const char* SYM_Parameter;
 extern const char* SYM_ParameterVariables;
 extern const char* SYM_Part;

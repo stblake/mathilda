@@ -1332,6 +1332,13 @@ Expr* builtin_times(Expr* res) {
         if (combined) return combined;
     }
 
+    /* Underflow[] factors (numeric.c): 3. Underflow[] = 0., Underflow[]^k
+     * collapses, with Overflow[] it is Indeterminate. NULL unless one is here. */
+    {
+        Expr* u = numeric_underflow_times(res);
+        if (u) return u;
+    }
+
     /* Fused special-case guard (mirrors builtin_plus). The NDArray, SeriesData,
      * inexact-contagion and Infinity/Indeterminate pre-scans below each traverse
      * the whole factor list, and for an ordinary symbolic or rational product --

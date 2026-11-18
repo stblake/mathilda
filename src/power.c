@@ -985,6 +985,13 @@ Expr* builtin_power(Expr* res) {
     Expr* base = res->data.function.args[0];
     Expr* exp = res->data.function.args[1];
 
+    /* Underflow[]^k / Overflow[]^-k (numeric.c): one pointer test unless the
+     * base is a zero-argument call. */
+    if (base->type == EXPR_FUNCTION && base->data.function.arg_count == 0) {
+        Expr* u = numeric_underflow_power(base, exp);
+        if (u) return u;
+    }
+
     /* Exact number to a machine-integer power, ahead of the ~40 shape tests
      * below, none of which can act on it: an integer or machine Rational base
      * (neither 0 nor 1) to an integer exponent other than 0 and 1 is computed

@@ -382,6 +382,48 @@ static void test_g10_huge_order(void) {
     chk_true("Abs[HermiteH[2.5, 3.] - (2 3. HermiteH[1.5, 3.] - 2 1.5 HermiteH[0.5, 3.])] < 1*^-12");
 }
 
+/* D5 follow-up: Underflow[] has the reference's arithmetic. */
+static void test_d5_underflow_arithmetic(void) {
+    chk("3. Underflow[]", "0.0");
+    chk("Underflow[] (-3.)", "0.0");
+    chk("1. + Underflow[]", "1.0");
+    chk("1 + Underflow[]", "1 + Underflow[]");             /* exact: stays */
+    chk("Underflow[] Underflow[]", "Underflow[]");
+    chk("Underflow[] + Underflow[]", "Underflow[]");
+    chk("Underflow[] - Underflow[]", "Underflow[]");
+    chk("Underflow[] Overflow[]", "Indeterminate");
+    chk("3 Underflow[]", "Underflow[]");
+    chk("-3 Underflow[]", "-Underflow[]");                 /* sign kept (D5) */
+    chk("Underflow[] 0", "0");
+    chk_true("Underflow[] x === Times[x, Underflow[]]");
+    chk("1/Underflow[]", "Overflow[]");
+    chk("Underflow[]^2", "Underflow[]");
+    chk("Underflow[]^0.5", "0.0");
+    chk("1/Overflow[]", "Underflow[]");
+    chk("Overflow[]^2", "Overflow[]");
+    chk("N[Underflow[]]", "0.0");
+    chk_true("Quiet[Exp[-10^10.] 3.] === 0.");
+}
+
+/* P: found by PARANOIA (tests/paranoia). */
+static void test_p_paranoia_findings(void) {
+    /* P1: a quotient by a number in MPFR's bottom binades, through 1/y */
+    chk_true("With[{z = Power[2., -2^30]}, Quiet[{z/z, (z + z)/z, Divide[z, z]}] === {1., 2., 1.}]");
+    /* P2: MPFR division rounds once */
+    chk_true("SameQ[N[9, 50]/N[27, 50], N[1/3, 50]]");
+    chk_true("With[{a = N[3/2, 30], b = N[1, 30] + N[2, 30]^-115}, "
+             "SetPrecision[a/b, Infinity] == SetPrecision[N[SetPrecision[a, Infinity]/SetPrecision[b, Infinity], 30], Infinity]]");
+    chk("N[1, 30]/N[3, 30] == 1/N[3, 30]", "True");
+    /* P3: MPFR overflow announces itself, so Check sees it */
+    chk("Check[Power[2., 2^30 - 2]*4., \"fired\"]", "\"fired\"");
+    /* P4: General is a System` symbol, so Check's message list matches in a context */
+    chk("Context[General]", "\"System`\"");
+    chk("Block[{$Context = \"Foo`\"}, Quiet[Check[Power[2., -2^32], \"caught\", {General::unfl}]]]", "\"caught\"");
+    /* P5: MantissaExponent at the top of MPFR's range */
+    chk_true("MantissaExponent[Power[N[2, 30], 2^30 - 2], 2] == {1/2, 1073741823}");
+    chk_true("MantissaExponent[Power[N[2, 30], 2^30 - 2]][[2]] == 323228497");
+}
+
 static void test_d9_negative_literal_power(void) {
     /* -a^b is -(a^b) for every literal spelling of a. */
     chk("-2.`30^2 < 0", "True");
@@ -577,6 +619,8 @@ int main(void) {
     TEST(test_g4_one_helper);
     TEST(test_g789_decisions);
     TEST(test_g10_huge_order);
+    TEST(test_d5_underflow_arithmetic);
+    TEST(test_p_paranoia_findings);
     TEST(test_d9_negative_literal_power);
     TEST(test_e4_quotient_mpfr);
     TEST(test_e2_machine_zero_times_mpfr);

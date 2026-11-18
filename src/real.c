@@ -1446,34 +1446,58 @@ Expr* builtin_mantissa_exponent(Expr* res) {
         mpfr_clear(lx);
         mpfr_clear(lb);
 
-        /* mantissa = x * b^(-e_val), kept at the input precision. */
-        mpfr_t m, bp;
-        mpfr_init2(m, prec);
-        mpfr_init2(bp, prec + 32);
-        mpfr_set_ui(bp, b_ulong, MPFR_RNDN);
-        mpfr_pow_si(bp, bp, e_val, MPFR_RNDN);
-        mpfr_div(m, xv, bp, MPFR_RNDN);
-        mpfr_clear(bp);
-
-        /* Off-by-one correction: |m| should be in [1/b, 1). */
-        mpfr_t am;
-        mpfr_init2(am, prec);
-        mpfr_abs(am, m, MPFR_RNDN);
-        if (mpfr_cmp_ui(am, 1) >= 0) {
-            mpfr_div_ui(m, m, b_ulong, MPFR_RNDN);
-            e_val++;
+        /* mantissa = x * b^(-e_val). b^e_val itself leaves MPFR's exponent
+         * range at the top (and bottom) of it -- MantissaExponent[2.`30^(2^30 -
+         * 2), 2] was {0``30., ...} because 2^1073741823 overflowed to inf (found
+         * by PARANOIA) -- so base 2 just moves the exponent (exact), and any
+         * other base divides by b^(e/2) and b^(e - e/2), each in range.
+         *
+         * The [1/b, 1) normalisation is decided at the GUARD precision and only
+         * then rounded to the input's: compared after rounding, a mantissa just
+         * below 1/b could round onto it and escape the correction --
+         * MantissaExponent[N[10^-500, 20]] was {0.0999...995, -499} for a value
+         * just below 10^-500, where the answer is {0.999...9, -500}. A guard
+         * mantissa that then rounds up to 1 is renormalised to 1/b. */
+        mpfr_t w;
+        mpfr_init2(w, work);
+        if (b_ulong == 2) {
+            mpfr_mul_2si(w, xv, -e_val, MPFR_RNDN);          /* exact */
         } else {
-            mpfr_t one_over_b;
-            mpfr_init2(one_over_b, work);
-            mpfr_set_ui(one_over_b, b_ulong, MPFR_RNDN);
-            mpfr_ui_div(one_over_b, 1, one_over_b, MPFR_RNDN);
-            if (mpfr_cmp(am, one_over_b) < 0) {
-                mpfr_mul_ui(m, m, b_ulong, MPFR_RNDN);
+            long h = e_val / 2;
+            mpfr_t bp;
+            mpfr_init2(bp, work);
+            mpfr_set_ui(bp, b_ulong, MPFR_RNDN);
+            mpfr_pow_si(bp, bp, h, MPFR_RNDN);
+            mpfr_div(w, xv, bp, MPFR_RNDN);
+            mpfr_set_ui(bp, b_ulong, MPFR_RNDN);
+            mpfr_pow_si(bp, bp, e_val - h, MPFR_RNDN);
+            mpfr_div(w, w, bp, MPFR_RNDN);
+            mpfr_clear(bp);
+        }
+        {
+            mpfr_t aw, inv_b;
+            mpfr_init2(aw, work);
+            mpfr_init2(inv_b, work);
+            mpfr_abs(aw, w, MPFR_RNDN);
+            mpfr_set_ui(inv_b, b_ulong, MPFR_RNDN);
+            mpfr_ui_div(inv_b, 1, inv_b, MPFR_RNDN);
+            if (mpfr_cmp_ui(aw, 1) >= 0) {
+                mpfr_div_ui(w, w, b_ulong, MPFR_RNDN);
+                e_val++;
+            } else if (mpfr_cmp(aw, inv_b) < 0) {
+                mpfr_mul_ui(w, w, b_ulong, MPFR_RNDN);
                 e_val--;
             }
-            mpfr_clear(one_over_b);
+            mpfr_clear(aw); mpfr_clear(inv_b);
         }
-        mpfr_clear(am);
+        mpfr_t m;
+        mpfr_init2(m, prec);
+        mpfr_set(m, w, MPFR_RNDN);                           /* the one rounding */
+        mpfr_clear(w);
+        if (mpfr_cmpabs_ui(m, 1) >= 0) {                     /* rounded up to 1 */
+            mpfr_div_ui(m, m, b_ulong, MPFR_RNDN);
+            e_val++;
+        }
 
         Expr* m_expr = expr_new_mpfr_copy(m);
         mpfr_clear(m);

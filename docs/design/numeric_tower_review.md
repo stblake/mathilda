@@ -178,6 +178,29 @@ ORDINARY data: the second lane of every probe holds `0.5`.
 | G9 | `Log[1.*^308, 1.*^308]` | exact `1` for machine arguments; every other surface `1.` | **fixed v0.6613** (decided: 1.): the `Log[b, b] -> 1` rule is for an exact or symbolic `b` only |
 | G10 | `StruveH[{-1.*^308, 0.5}, 10.]`, Compile; `HermiteH[-1.*^308, 10.]` | over 10 s (the scalar gives up unevaluated in 7.6 s); HermiteH takes 13.5 s and returns exact `0` | **fixed v0.6613**: undefined behaviour -- seven out-of-range double -> int conversions in the machine kernels (`struve_series` ran ~2^31 terms: 7.6 s -> 1 ms; also Anger-Weber, MeijerG, the Bessel table, BesselK, Mathieu) and the four Bessel MPFR series caps `(unsigned long)(4 rhd)` (BesselK[1.*^308, 1.*^308] 18 s -> 0.46 s, NaN = decline); `hgpfq_mpfr_sum` decides an unreachable 10^6-term cap up front. And a wrong answer under it: HermiteH's 1F1 difference cancelled ~2 Sqrt(abs(n) x^2) log2(e) bits (`HermiteH[-100., 10.]` six digits, `[-1000., 10.]` `-1.0*^-1358` for `2.57*^-1608`, `[-1.*^10, 10.]` an exact 0); real x > 0 now uses `2^n U(-n/2, 1/2, x^2)`, checked against the integral representation |
 
+### P. Found by PARANOIA (2026-11-19, `tests/paranoia/`, ctest `paranoia_tests`)
+Kahan's PARANOIA, ported from the Sumner/Gay C translation. Milestones 0-100
+(radix, precision, guard digits, rounding, sticky bit, sqrt, Z^i) are ported
+line by line. Milestones 110-220 (the under/overflow thresholds, Z^q, the
+traps) are adapted: the thresholds are found by exponent bisection instead of
+radix steps, because under the policy the machine range continues as 53-bit
+MPFR and Underflow[]/Overflow[] sit about 2^30 steps away; nothing traps. It
+runs in five modes: machine, MPFR at 30/50/100 digits, and mixed (machine and
+MPFR operands, contagion to machine). Comparisons are exact (sign, exponent,
+mantissa); the language's tolerant `==` is reported separately, for
+information. After the fixes below, every mode reports 0 FAILURE / SERIOUS /
+DEFECT / FLAW: radix 2; precision 53 bits (machine, mixed) or the MPFR width
+(digits·log2 10 + 16 guard bits: 116 / 183 / 349); multiplication, division,
+subtraction and sqrt correctly rounded; sticky bit present.
+| # | Repro | Got | Status |
+|---|---|---|---|
+| P1 | `z = 2.^-2^30; z/z`, `(z + z)/z` | `Overflow[]` (every mode) | **fixed v0.6615**: `a/b` with MPFR operands is one `mpfr_div` (Divide's MPFR arm; the K1 fusion now holds MPFR divisors) -- the reciprocal `1/z` was past MPFR's largest value |
+| P2 | `N[9, 50]/N[27, 50] - N[3, 50]/N[9, 50]` | `-4.08*^-56` (one ulp; division classed "other") | **fixed v0.6615**, same change: MPFR division rounded twice (reciprocal, then product) |
+| P3 | `Check[Power[2., 2^30 - 2] 4., "fired"]` | `Overflow[]`, no message | **fixed v0.6615**: `General::ovfl` through the funnel when a non-finite leaf becomes Overflow[], as `General::unfl` for Underflow[] |
+| P4 | `Begin["Foo`"]; Check[Power[2., -2^32], "c", {General::unfl}]` | `Underflow[]` | **fixed v0.6615**: `General` is interned as a System` symbol (`SYM_General`); before, its first mention decided its context |
+| P5 | `MantissaExponent[2.`30^(2^30 - 2), 2]` | `{0``30., 1073741822}` | **fixed v0.6615**: `b^e` overflowed at the top of the range; base 2 moves the exponent, other bases divide by two in-range halves; the [1/b, 1) normalisation is decided at guard precision |
+| D5+ | `3. Underflow[]`, `Underflow[] Underflow[]`, `Underflow[] Overflow[]` | `3. Underflow[]`, `Underflow[]^2`, `Overflow[]` | **fixed v0.6615**: Underflow[] has the reference's arithmetic (machine factor gives 0., inexact term absorbs it, it collapses, `1/Underflow[] = Overflow[]`, with Overflow[] Indeterminate, `N[Underflow[]] = 0.`) |
+
 ### F. Hygiene (no repro: from the code read)
 | # | What | Status |
 |---|---|---|

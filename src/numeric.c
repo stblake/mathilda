@@ -1897,6 +1897,9 @@ static Expr* numericalize_sparse(const Expr* e, NumericSpec spec) {
 
 static Expr* numericalize_rec(const Expr* e, NumericSpec spec) {
     if (!e) return NULL;
+    /* N[Underflow[]] is a zero of the requested kind (the reference's 0.): a
+     * value below every number's exponent range has no digits to report. */
+    if (numeric_is_underflow_expr(e)) return leaf_from_integer(0, spec);
     switch (e->type) {
         case EXPR_SPARSE: return numericalize_sparse(e, spec);
         case EXPR_INTEGER: return leaf_from_integer(e->data.integer, spec);
@@ -2533,6 +2536,13 @@ static bool leaf_is_neg_inf(const Expr* e) {
 /* Build the construct a non-finite leaf collapses to. `nan` wins over sign. */
 static Expr* nonfinite_construct(bool nan, bool neg) {
     if (nan) return expr_new_symbol(SYM_Indeterminate);
+    /* Overflow[] is announced like Underflow[] (General::unfl), through the
+     * funnel, so Check[] sees it: an MPFR overflow returned a silent Overflow[]
+     * and Check[..., "fired"] could not tell (found by PARANOIA). */
+    /* gated: an internal numeric probe (NIntegrate's sampling, the zero
+     * tester) runs with the arithmetic warnings muted, and its overflow must
+     * stay invisible to Check[] as well as silent (CLAUDE.md, message funnel) */
+    mth_message_gated(g_arith_warnings_muted, "General", "ovfl", "Overflow occurred in computation.");
     if (neg) {
         Expr* a[2] = { expr_new_integer(-1), make_overflow_expr() };
         return expr_new_function(expr_new_symbol(SYM_Times), a, 2);   /* -Overflow[] */
@@ -2747,6 +2757,166 @@ Expr* numeric_underflow_if_zero(Expr* r) {
     if (!neg) return u;
     Expr* a[2] = { expr_new_integer(-1), u };
     return expr_new_function(expr_new_symbol(SYM_Times), a, 2);
+}
+
+/* ---- Underflow[] in arithmetic (numeric-tower review, D5 follow-up) -------
+ *
+ * Underflow[] stands for a nonzero magnitude below MPFR's exponent range. D5
+ * (v0.6604) made MPFR underflow produce it, mirroring Overflow[], but gave it no
+ * arithmetic, so it lingered as a symbol: Exp[-10^10.] 3. was 3. Underflow[],
+ * Underflow[] Underflow[] was Underflow[]^2, Underflow[] Overflow[] was
+ * Overflow[]. The rules are the reference's (checked against it, 2026-11-19):
+ *   Times  a machine (real / complex) factor makes the product that machine
+ *          zero (3. Underflow[] = 0.); an exact or arbitrary-precision real
+ *          factor leaves it Underflow[] (MPFR has the range to hold it), its
+ *          sign kept as D5 decided (-3 Underflow[] = -Underflow[]); an exact 0
+ *          gives 0; Underflow[]^k collapses to Underflow[]; with Overflow[] it
+ *          is Indeterminate.
+ *   Plus   an inexact numeric term absorbs it (1. + Underflow[] = 1.); with
+ *          exact terms it stays (1 + Underflow[]); Underflow[] terms collapse.
+ *   Power  Underflow[]^(exact > 0) = Underflow[], ^(exact < 0) = Overflow[],
+ *          Overflow[]^(exact > 0) = Overflow[], ^(exact < 0) = Underflow[]; a machine exponent > 0 gives
+ *          0. (Underflow[]^0.5), < 0 gives Overflow[].
+ *   N      N[Underflow[]] is 0. (numericalize_rec).
+ * Each hook returns NULL when the rule does not apply or the expression is
+ * already in its reduced form, so the evaluator never cycles. */
+static bool uf_head0(const Expr* e, const char* sym) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.arg_count == 0
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == sym;
+}
+bool numeric_is_underflow_expr(const Expr* e) { return uf_head0(e, SYM_Underflow); }
+static bool uf_is_neg_underflow(const Expr* e) {
+    return e && e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Times
+        && e->data.function.args[0]->type == EXPR_INTEGER
+        && e->data.function.args[0]->data.integer == -1
+        && uf_head0(e->data.function.args[1], SYM_Underflow);
+}
+static Expr* uf_new(void) { return expr_new_function(expr_new_symbol(SYM_Underflow), NULL, 0); }
+static Expr* uf_signed(bool neg) {
+    Expr* u = uf_new();
+    if (!neg) return u;
+    Expr* a[2] = { expr_new_integer(-1), u };
+    return expr_new_function(expr_new_symbol(SYM_Times), a, 2);
+}
+/* A machine number: a Real, or a Complex with a Real part. */
+static bool uf_machine_number(const Expr* e) {
+    if (e->type == EXPR_REAL) return true;
+    Expr *re, *im;
+    return is_complex((Expr*)e, &re, &im) && (re->type == EXPR_REAL || im->type == EXPR_REAL);
+}
+/* An inexact number of any kind (machine, MPFR, or a Complex of either). */
+static bool uf_inexact_number(const Expr* e) {
+    if (e->type == EXPR_REAL) return true;
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR) return true;
+#endif
+    Expr *re, *im;
+    if (!is_complex((Expr*)e, &re, &im)) return false;
+    return re->type == EXPR_REAL || im->type == EXPR_REAL
+#ifdef USE_MPFR
+        || re->type == EXPR_MPFR || im->type == EXPR_MPFR
+#endif
+        ;
+}
+/* An exact or MPFR REAL number; *sign = -1, 0, +1. */
+static bool uf_real_number_sign(const Expr* e, int* sign) {
+    if (expr_is_integer_like((Expr*)e) || is_rational_like(e)) {
+        *sign = expr_numeric_sign((Expr*)e); return true;
+    }
+#ifdef USE_MPFR
+    if (e->type == EXPR_MPFR && mpfr_number_p(e->data.mpfr)) {
+        *sign = mpfr_sgn(e->data.mpfr); return true;
+    }
+#endif
+    return false;
+}
+
+Expr* numeric_underflow_times(const Expr* res) {
+    size_t n = res->data.function.arg_count;
+    size_t nu = 0;
+    for (size_t i = 0; i < n; i++) if (uf_head0(res->data.function.args[i], SYM_Underflow)) nu++;
+    if (nu == 0) return NULL;
+    bool has_o = false, has_machine = false, exact_zero = false, neg = false;
+    size_t nnum = 0; bool num_is_m1 = false;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* a = res->data.function.args[i];
+        int sg;
+        if (uf_head0(a, SYM_Overflow)) has_o = true;
+        else if (uf_machine_number(a)) has_machine = true;
+        else if (uf_real_number_sign(a, &sg)) {
+            if (sg == 0) exact_zero = true;
+            if (sg < 0) neg = !neg;
+            nnum++;
+            num_is_m1 = a->type == EXPR_INTEGER && a->data.integer == -1;
+        }
+    }
+    if (has_o) return expr_new_symbol(SYM_Indeterminate);
+    if (exact_zero) return expr_new_integer(0);
+    Expr** out = malloc(sizeof(Expr*) * (n + 1));
+    size_t k = 0;
+    if (has_machine) {
+        /* the product is that machine zero: 0. times the remaining factors */
+        for (size_t i = 0; i < n; i++)
+            if (!uf_head0(res->data.function.args[i], SYM_Underflow))
+                out[k++] = expr_copy(res->data.function.args[i]);
+        out[k++] = expr_new_real(0.0);
+    } else {
+        /* reduced form: one Underflow[], at most a single exact -1 */
+        if (nu == 1 && (nnum == 0 || (nnum == 1 && num_is_m1))) { free(out); return NULL; }
+        int sg;
+        if (neg) out[k++] = expr_new_integer(-1);
+        for (size_t i = 0; i < n; i++) {
+            const Expr* a = res->data.function.args[i];
+            if (uf_head0(a, SYM_Underflow) || uf_real_number_sign(a, &sg)) continue;
+            out[k++] = expr_copy((Expr*)a);
+        }
+        out[k++] = uf_new();
+    }
+    Expr* r = (k == 1) ? out[0] : expr_new_function(expr_new_symbol(SYM_Times), out, k);
+    free(out);
+    return r;
+}
+
+Expr* numeric_underflow_plus(const Expr* res) {
+    size_t n = res->data.function.arg_count;
+    size_t nu = 0; bool any_pos = false, inexact = false;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* a = res->data.function.args[i];
+        if (uf_head0(a, SYM_Underflow)) { nu++; any_pos = true; }
+        else if (uf_is_neg_underflow(a)) nu++;
+        else if (uf_inexact_number(a)) inexact = true;
+    }
+    if (nu == 0 || (nu == 1 && !inexact)) return NULL;
+    Expr** out = malloc(sizeof(Expr*) * (n + 1));
+    size_t k = 0;
+    for (size_t i = 0; i < n; i++) {
+        const Expr* a = res->data.function.args[i];
+        if (uf_head0(a, SYM_Underflow) || uf_is_neg_underflow(a)) continue;
+        out[k++] = expr_copy((Expr*)a);
+    }
+    if (!inexact) out[k++] = uf_signed(!any_pos);   /* the collapsed term */
+    Expr* r = (k == 1) ? out[0] : expr_new_function(expr_new_symbol(SYM_Plus), out, k);
+    free(out);
+    return r;
+}
+
+Expr* numeric_underflow_power(const Expr* b, const Expr* e) {
+    bool bu = uf_head0(b, SYM_Underflow), bo = uf_head0(b, SYM_Overflow);
+    if (!bu && !bo) return NULL;
+    int sg;
+    if (uf_real_number_sign(e, &sg)) {
+        if (sg == 0) return NULL;                 /* x^0: the ordinary rules */
+        if (sg > 0) return bu ? uf_new() : make_overflow_expr();
+        return bu ? make_overflow_expr() : uf_new();
+    }
+    if (e->type == EXPR_REAL && e->data.real != 0.0) {
+        if (bu) return e->data.real > 0.0 ? expr_new_real(0.0) : make_overflow_expr();
+        return e->data.real < 0.0 ? expr_new_real(0.0) : NULL;
+    }
+    return NULL;
 }
 
 static Expr* promote_machine_call_impl(const Expr* call) {

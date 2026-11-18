@@ -451,6 +451,49 @@ Expr* builtin_divide(Expr* res) {
         }
     }
 
+#ifdef USE_MPFR
+    /* A real arbitrary-precision quotient: ONE mpfr_div at the operands'
+     * combined precision (K1, extended to MPFR: numeric-tower review, found by
+     * PARANOIA). The rewrite below rounds 1/den and then the product -- twice,
+     * so N[3,50]/N[9,50] missed N[1/3,50] by an ulp -- and its reciprocal
+     * overflows when den is in MPFR's bottom binades: z/z was Overflow[] at
+     * z = 2.^-2^30, where the quotient is 1. An MPFR operand with an exact
+     * integer meets it at that precision; a machine operand goes by contagion
+     * (machine), and a Rational / Complex keeps the rewrite. */
+    if ((num->type == EXPR_MPFR || den->type == EXPR_MPFR) &&
+        (num->type == EXPR_MPFR || num->type == EXPR_INTEGER || num->type == EXPR_BIGINT) &&
+        (den->type == EXPR_MPFR || den->type == EXPR_INTEGER || den->type == EXPR_BIGINT) &&
+        !(den->type == EXPR_MPFR ? mpfr_zero_p(den->data.mpfr) || !mpfr_number_p(den->data.mpfr)
+                                 : expr_numeric_sign(den) == 0) &&
+        !(num->type == EXPR_MPFR && !mpfr_number_p(num->data.mpfr))) {
+        /* The MPFR operand's precision is the result's (contagion); an EXACT
+         * integer operand is converted exactly -- at its own bit length --
+         * so the division is the only rounding (converting 10^400 at 53 bits
+         * first made Divide[1.`53, 10^400] an ulp off). */
+        mpfr_prec_t prec = num->type == EXPR_MPFR ? mpfr_get_prec(num->data.mpfr)
+                                                  : mpfr_get_prec(den->data.mpfr);
+        if (num->type == EXPR_MPFR && den->type == EXPR_MPFR &&
+            mpfr_get_prec(den->data.mpfr) < prec) prec = mpfr_get_prec(den->data.mpfr);
+        mpfr_t a, b, out;
+        bool own_a = num->type != EXPR_MPFR, own_b = den->type != EXPR_MPFR;
+        if (own_a || own_b) {
+            const Expr* ex = own_a ? num : den;
+            mpz_t z;
+            expr_to_mpz((Expr*)ex, z);
+            size_t zb = mpz_sizeinbase(z, 2);
+            mpfr_prec_t ep = (mpfr_prec_t)(zb < (size_t)MPFR_PREC_MIN ? MPFR_PREC_MIN : zb);
+            if (own_a) { mpfr_init2(a, ep); mpfr_set_z(a, z, MPFR_RNDN); }
+            else       { mpfr_init2(b, ep); mpfr_set_z(b, z, MPFR_RNDN); }
+            mpz_clear(z);
+        }
+        mpfr_init2(out, prec);
+        mpfr_div(out, own_a ? a : num->data.mpfr, own_b ? b : den->data.mpfr, MPFR_RNDN);
+        if (own_a) mpfr_clear(a);
+        if (own_b) mpfr_clear(b);
+        return expr_new_mpfr_move(out);
+    }
+#endif
+
     int64_t n1, d1, n2, d2;
     if (is_rational(num, &n1, &d1) && is_rational(den, &n2, &d2)) {
         if (n2 == 0) {

@@ -2300,6 +2300,14 @@ add_executable(numeric_tower_review_tests test_numeric_tower_review.c $<TARGET_O
 target_include_directories(numeric_tower_review_tests PRIVATE ../src)
 add_test(NAME numeric_tower_review_tests COMMAND numeric_tower_review_tests)
 
+# Kahan's PARANOIA, ported (numeric-tower review phase 9): every number mode
+# (machine, MPFR 30/50/100 digits, mixed contagion); fails on a FAILURE or
+# SERIOUS DEFECT not on the ratcheted known list in paranoia/paranoia.m.
+add_executable(paranoia_tests test_paranoia.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(paranoia_tests PRIVATE ../src)
+add_test(NAME paranoia_tests
+         COMMAND paranoia_tests ${CMAKE_CURRENT_SOURCE_DIR}/paranoia/paranoia.m)
+
 # Numeric-tower STRESS corpus: 318 exact-truth cases, XFAIL-ratcheted by id
 # (docs/design/numeric_tower_review.md, section S).
 add_executable(numeric_tower_stress_tests test_numeric_tower_stress.c $<TARGET_OBJECTS:mathilda_common>)

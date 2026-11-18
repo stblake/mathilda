@@ -94,7 +94,7 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
         residual is exactly `-1/(6x)`, so `PossibleZeroQ` False is correct.
   - [ ] (issue #138) `PossibleZeroQ[SeriesData[x, 0, {}, 5, 5, 1]]` (an empty `O[x]^5` residual) is False,
         which fails dsolve_m5's PowerSeries back-substitution checks (`y'' + y == 0`).
-- [ ] Phase 9 (user request 2026-11-17, after this campaign): adapt Kahan's PARANOIA
+- [x] Phase 9 (user request 2026-11-17, after this campaign): adapt Kahan's PARANOIA
       (C version, people.math.sc.edu/Burkardt/c_src/paranoia/paranoia.html) to Mathilda, in
       three modes: machine floating point, MPFR at several precisions, and mixed
       machine/MPFR (contagion across the boundary). Port its milestones (radix, precision,
