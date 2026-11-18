@@ -1998,6 +1998,413 @@ zero residual as nonzero. So a nonzero residual certifies non-elementarity only
 when \code{residualCanonicalQ} holds. Otherwise no certificate is given, and the
 Q-basis construction runs.
 
+\part*{Part T. The transcendental decision procedure in a tower}
+\addcontentsline{toc}{part}{Part T}
+
+Parts~A and~B concern the Risch differential equation and one simple radical. This
+part covers the purely transcendental side: \code{Risch`ElementaryIntegralQ}, the
+field integrator \code{rt\_field\_integrate} and the tower Risch~DE \code{rde\_tower}
+(\code{src/calculus/}). It records what each release from v0.6586 to v0.6609 added
+beyond a transcription of [B] and [SI], and why each step is sound. The order is
+logical, not chronological; each section names its release, its routines and its
+test (all in \code{tests/test\_integrate\_risch\_transcendental.c} unless stated).
+
+\paragraph{Setting.} $C$ is a field of constants: $\Q$, $\Q(i)$, a number field
+$\Q(\alpha)$, or one of these with symbolic parameters adjoined (E4.4). The integrand
+lives in a tower
+\[ K=K_n,\qquad K_0=C(x),\qquad K_i=K_{i-1}(t_i), \]
+where each $t_i$ is a monomial over $K_{i-1}$ of one of four kinds:
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+kind & kernel & derivation \\
+\midrule
+logarithmic & $\log u_i$ & $Dt_i=Du_i/u_i\in K_{i-1}$\\
+exponential & $e^{w_i}$ & $Dt_i/t_i=Dw_i\in K_{i-1}$\\
+hypertangent & $\tan u_i$ ($\sigma=1$), $\tanh u_i$ ($\sigma=-1$) & $Dt_i=\sigma\,Du_i\,(t_i^2+\sigma)$\\
+Liouvillian primitive & $\operatorname{erf}u$, $\operatorname{Ei}u$, $\operatorname{li}u$ & $Dt_i=\eta_i\in K_{i-1}$\\
+\bottomrule
+\end{tabular}
+\end{center}
+\code{RtTower} holds the kinds, kernels and derivations; \code{rt\_tower\_build\_min}
+and \code{rt\_tower\_build\_decide} (\code{risch\_tower.c}) build it from an expression.
+
+\paragraph{What a verdict means.} The input is an expression $f(x)$, not a field
+element. The tower builder replaces each kernel by its tower variable, giving
+$F\in K$. The two are linked by the following observation, which is used
+throughout (and decisively in \S\ref{sec:T10}).
+
+\begin{proposition}\label{prop:T0}
+Let $U\subset\C$ be a connected open set and $\mathcal M(U)$ the field of meromorphic
+functions on $U$, with $D=d/dx$. Suppose $\iota:K\to\mathcal M(U)$ is an injective
+differential homomorphism with $\iota(F)=f|_U$. Then $\int F$ is elementary over $K$
+if and only if $f|_U$ has an elementary antiderivative over $\iota(K)$. In particular
+the answer does not depend on~$U$.
+\end{proposition}
+
+\begin{proof}
+$\iota$ is an isomorphism of differential fields $K\cong\iota(K)$, and elementarity of
+an integral over a differential field is a property of that field up to isomorphism:
+Liouville's theorem in Rosenlicht's form [R] characterises it by the existence of
+$v\in K$, constants $c_j$ and $u_j\in K^*$ (after a finite extension of the constants)
+with $F=Dv+\sum c_jDu_j/u_j$, a statement preserved by isomorphisms.
+\end{proof}
+
+So a \emph{certificate} (\code{False}) is a theorem about $F\in K$. It transfers to the
+function $f$ on any connected open set on which the kernels are analytic and satisfy
+the relations the tower assumes. A \emph{proof of elementarity} (\code{True}) is an
+exhibited antiderivative. It is accepted only after a check: \code{rt\_tower\_answer\_verified}
+writes it back into the kernels and tests $D Q-f$ with \code{PossibleZeroQ}, or
+(\S\ref{sec:T10}) checks the exact identity $D_K Q=F$ in $K$. Both are positive
+evidence; an unevaluated or undecided sub-step is never read as a proof (v0.6589).
+
+\section*{T1. Parameters are constants, never unknowns (v0.6586, v0.6589, v0.6591, v0.6592)}
+\addcontentsline{toc}{section}{T1. Parameters}
+
+Two kinds of linear system occur.
+\begin{enumerate}
+\item \emph{Structure-theorem spans} (\code{risch\_rational\_span}, \code{risch\_structure.c}):
+  is $g=\sum r_jg_j$ with $r_j\in\Q$? The multipliers are rational numbers.
+\item \emph{Ansatz identities}: Rothstein--Trager residues, the Hermite and logarithmic
+  coefficients, the log fold. Their unknowns are constants of $K$.
+\end{enumerate}
+
+\begin{proposition}\label{prop:T1}
+Let the integrand depend on parameters $a=(a_1,\dots,a_p)$, so $C=C_0(a)$.
+\begin{enumerate}
+\item A span relation with rational $r_j$ holds in $K$ if and only if it holds
+  identically in $a$. So the parameters may be treated as further variables of the
+  identity.
+\item An ansatz unknown $c$ is a constant of $K$, hence an element of $C_0(a)$. The
+  identity must be solved for the named unknowns over $C_0(a)$, with $a$ \emph{not}
+  solved for. An empty solution set then means the system is inconsistent over
+  $C_0(a)$, that is, for all $a$ outside a proper Zariski-closed set.
+\end{enumerate}
+\end{proposition}
+
+\begin{proof}
+(1) The identity $g-\sum r_jg_j=0$ is an equation in $C_0(a)(x,t)$, and $r_j\in\Q$
+does not involve~$a$. (2) A constant of $K$ is an element of $C=C_0(a)$. A linear system
+over $C_0(a)$ is inconsistent if and only if its rank over $C_0(a)$ rises when the
+right-hand side is appended. That is a nonvanishing minor, a nonzero element of
+$C_0(a)$, so it persists under every specialisation outside its zero set.
+\end{proof}
+
+Both directions went wrong in practice. Solving the ansatz with \code{SolveAlways[eqn,\{t,x\}]}
+treated $a$ as one more unknown. $\int\bigl(1+a+ae^u+u\bigr)/\bigl((1+e^u)(1+u)\bigr)$
+was then answered at $a=0$ (v0.6589). Treating $a$ as a variable of an ansatz made
+$\{\}$ mean only ``no solution independent of~$a$''. That gave a false certificate
+for $D\bigl[a\arctan u\log^2(1+u)-2u\log^3(1+u)+\log(1+au)\log(a+u^2)\bigr]$ (v0.6591).
+
+The fix names every unknown at its call site (\code{rt\_solve\_ansatz(eqn, vars, unknowns)})
+and makes every other symbol a constant. Inferring the parameters from an expression is
+not enough, because a parameter can occur only inside a kernel: $\log(a+u)/u$ is
+$t_0/u$ with $Dt_0=1/(a+u)$. Inferring them produced five false certificates in a
+1200-case hunt (v0.6592). The semantics of a parametric verdict are those of E4.4:
+exact over $C_0(a)$, generic in the parameters.
+
+A related leak. \code{T->subrules} maps the whole tower, so a lower integral computed at
+level $L$ could come back containing $t_j$ with $j>L$: an ``element'' of $K_L$ whose
+derivative level~$L$ does not account for. In decide mode such a $t_j$ is written back
+as its kernel, a foreign logarithm that the certificates of \S\ref{sec:T2} and
+\S\ref{sec:T8} then see. Tests: \code{test\_review\_parameter\_capture},
+\code{test\_review\_kernel\_params}.
+
+\section*{T2. The new-logarithm certificate of IntegratePrimitivePolynomial (v0.6590)}
+\addcontentsline{toc}{section}{T2. New-logarithm certificate}
+\label{sec:T2}
+
+Bronstein's IntegratePrimitivePolynomial ([SI] \S5.8) integrates
+$p=\sum_i p_i t_L^i\in K_{L-1}[t_L]$, $t_L$ primitive. It needs, for each $i\ge1$, a
+limited-integration solution $p_i=Ds+c\,Dt_L$ with $s\in K_{L-1}$ and $c$ constant.
+When the lower integral of $p_i$ carries a logarithm that is not a tower level, [SI]
+leaves the question to LimitedIntegrate. A flat logarithmic tower over $C(x)$ admits a
+direct certificate.
+
+\begin{proposition}\label{prop:T2}
+Let every level $k\le L$ be logarithmic, $t_k=\log u_k$ with $u_k\in C(x)$, and let the
+levels be independent. Let $r\in K_{L-1}$ have a verified antiderivative $R=S+A$ with
+$S\in K_{L-1}$ and $A=\sum_jd_j\log v_j$, where the $d_j$ are constants and $v_j\in C(x)$.
+If the linear system $DA=\sum_{k\le L}e_k\,Dt_k$ in constants $e_k$ is inconsistent,
+then $r$ has no solution $r=Ds+c\,Dt_L$, $s\in K_{L-1}$, and the integrand is not
+elementary.
+\end{proposition}
+
+\begin{proof}
+Suppose $r=Ds+c\,Dt_L$. Since $D(S+A)=r$, the difference $A-c\,t_L-(s-S)$ is a
+constant~$\gamma$, so $A=c\,t_L+(s-S)+\gamma$ lies in $K_L$. Its derivative
+$DA=\sum_jd_jDv_j/v_j$ lies in $C(x)$. By [SI] Lemma~5.1.2, applied level by level, an
+element of $K_L$ whose derivative lies in $C(x)$ is $\sum_ke_kt_k+h$ with constants
+$e_k$ and $h\in C(x)$. So $Dh=DA-\sum_ke_kDt_k$ is a $\overline C$-linear combination
+of logarithmic derivatives of rational functions. Such a combination has only simple
+poles and vanishes at infinity. The derivative of a rational function has no simple
+poles: a pole of order $n\ge1$ of $h$ is a pole of order $n+1$ of $Dh$. So $Dh$ has no
+poles and vanishes at infinity, hence $Dh=0$. Then $DA=\sum_ke_kDt_k$, so the system is
+consistent, a contradiction.
+\end{proof}
+
+The certificate applies only under the stated shape. That means a verified $R$, constant
+coefficients $d_j$, every $v_j\in C(x)$, parameters only in rational positions, and the
+solver returning $\{\}$ exactly. Every other case is marked
+``LimitedIntegrate: new logarithm undecided''. Examples now certified: $\arctan^2u$,
+$\arctan u/u$, $\log(1+u)/u$, $\log^2u/(1+u)$, $\log^2\cos u$.
+Test: \code{test\_review\_newlog\_certificate}. Step~2 of the campaign generalises the
+proposition to exponential levels, tower-variable arguments and non-constant
+coefficients. \S\ref{sec:T8} already covers the case of a \emph{proof that no
+antiderivative lies in $K$}.
+
+\section*{T3. Algebraic constants (v0.6599, v0.6606)}
+\addcontentsline{toc}{section}{T3. Algebraic constants}
+
+Degree bounds, divisibility tests and leading-term cancellation in the Risch~DE are
+statements about exact normal forms. Over $\Q(\alpha)$ the general-purpose normalisers
+(\code{Together}, \code{PolynomialRemainder}) are not canonical: a numeric denominator
+$2+\sqrt2$ is not rationalised, and $(u-\sqrt2)^2$ does not cancel against
+$\sqrt2-u$. A ``no'' computed on such forms is not a theorem. It produced three
+released false \code{"NoSolution"} answers and a false certificate for
+$D\bigl[\sqrt2\,e^{(2+\sqrt2)u}u^2/(1+u)\bigr]$.
+
+\paragraph{Exact base arithmetic (\code{rde\_alg\_reduce}, v0.6606).} While every
+coefficient is a number and the compositum of the constants has degree at most~8, the
+base Risch~DE keeps coefficients in \code{RootReduce}'s canonical form. Division, gcd,
+the extended gcd of SPDE and fraction combination are exact Euclidean loops over
+$\Q(\alpha)$. The weak normaliser's integer residues come from eliminating the
+constants by resultants, and each candidate is checked. Outside the exact mode (a
+parameter beside the constants, or a compositum of degree above~8) every ``no'' of the
+base solver is marked. The tower Risch~DE over $\Q(\alpha)$ still marks its ``no'',
+because its $k(x)[t]$ arithmetic is not yet canonical. That is recorded as open.
+
+\begin{proposition}[rational spans over a number field, \code{Risch`RationalSpan}]\label{prop:T3}
+Let $g,g_1,\dots,g_m\in\Q(\alpha)(x,t)$. Suppose the linear system for
+$g=\sum_jr_jg_j$ (its coefficients taken in $x$ and~$t$) has the unique solution
+$(\rho_1,\dots,\rho_m)\in\Qbar^m$, and some $\rho_j\notin\Q$. Then no rational relation
+exists.
+\end{proposition}
+
+\begin{proof}
+A rational solution is in particular a solution over $\Qbar$. By uniqueness it equals
+$(\rho_j)$, which is not rational.
+\end{proof}
+
+The proposition needs canonical $\rho_j$: $(3+3\sqrt2)/(1+\sqrt2)=3$ is rational, and a
+development build that skipped \code{RootReduce} certified a false ``no relation''
+from it. Transcendental values ($\pi$, $\log2$) are left undecided, since rationality
+is not decidable for them. New certificates, confirmed independently:
+$e^{\sqrt2u}+e^{2u}/u$ and $e^uu^{\sqrt2}/(1+u)$. Tests: \code{test\_review\_f6\_f9},
+\code{test\_campaign\_step7\_algconst}.
+
+\section*{T4. Composite exponential classes (v0.6599)}
+\addcontentsline{toc}{section}{T4. Composite exponential classes}
+
+The evaluator merges $e^{2u}e^{u^2}$ into one kernel $e^{2u+u^2}$. A tower with all
+three as levels is dependent, and every verdict over it would be demoted. The builder
+groups exponential kernels into classes of $\Q$-dependent exponents (by
+\code{risch\_rational\_span} on the $Dw$), and keeps a level only for a basis of
+\emph{class primitives}.
+
+\begin{proposition}
+If $w=\sum_jn_jw_j+c$ with $n_j\in\Z$ and $c$ constant, then $e^w=e^c\prod_jt_j^{n_j}\in K$.
+If the $n_j$ are rational with common denominator~$q$, then the levels
+$e^{w_j/q}$ realise every member as a monomial in them.
+\end{proposition}
+
+Members become monomials in the tower variables, where the evaluator cannot re-merge
+them. $D\bigl[3e^{2u}+\log(1+e^{-u^2})\bigr]$ in its \code{Together} form integrates to
+$3e^{2u}-u^2+\log(1+e^{u^2})$. On a sum-of-exponents hunt, \code{True} rose from 42 and 47
+to 119 and 118 of 120. Test: \code{test\_review\_f12\_composite}.
+
+\section*{T5. The hypertangent Risch DE and its precondition $\sqrt{-1}\notin k$ (v0.6601, v0.6602)}
+\addcontentsline{toc}{section}{T5. Hypertangent Risch DE}
+
+\code{rde\_tower} accepts a hypertangent top $t=\tan u$, $Dt=Du\,(t^2+1)$, with
+Bronstein's $\delta=2$ steps ([B] \S6.2--6.6): the special part $t^2+1$ is stripped
+from the normal denominator; then RdeSpecialDenomTan, RdeBoundDegreeNonLinear,
+PolyRischDENoCancel1--3, and PolyRischDECancelTan, solved through a Risch~DE over
+$k(i)$. Those steps assume that $t^2+1$ is irreducible over $k$.
+
+\begin{proposition}\label{prop:T5}
+If $i\in k$, then $t\mp i$ are two distinct special irreducibles of $k[t]$, with
+\[ D(t\mp i)=Du\,(t\pm i)\,(t\mp i). \]
+Their valuations in a solution are independent, so a bound computed for the product
+$t^2+1$ does not bound each factor.
+\end{proposition}
+
+\begin{proof}
+$D(t-i)=Dt=Du\,(t-i)(t+i)$, so $t-i\mid D(t-i)$, and likewise for $t+i$. The two are
+coprime, and the order of a pole at one is not constrained by the other.
+\end{proof}
+
+In $1/(\tan x-i)$ the factor $t-i$ passed for a normal factor. Over a field containing
+$i$ the hypertangent top is now marked: it still solves, and every solution is checked,
+but it never proves \code{"NoSolution"}. Step~4 of the campaign replaces the mark by the
+split treatment (two linear special factors, a resonance at each root).
+
+A related released false certificate (fixed in v0.6601) was in the parametric
+logarithmic derivative of \S\ref{sec:A1}: $z$ was built from factors over $\Q$ when $f$
+carried~$i$. $-2i/(1+x^2)=D\log\bigl((x+i)/(x-i)\bigr)$ is not in the span of
+$D\log(x^2+1)$. The factors are now taken over $\Q(i)$. A lower tangent's special
+factor $t^2+1$, whose logarithmic derivative $2Du\,t$ has no pole, is a generator.
+Test: \code{test\_review\_f8\_tan}.
+
+\section*{T6. Liouvillian primitive levels (v0.6603)}
+\addcontentsline{toc}{section}{T6. Liouvillian primitive levels}
+
+A level $\theta=\operatorname{erf}u$ (or $\operatorname{Ei}$, $\operatorname{li}$,
+$\operatorname{erfc}$, $\operatorname{erfi}$) has $D\theta=\eta\in K_{i-1}$. It is a
+monomial over $K_{i-1}$ if and only if $\eta$ has no antiderivative in $K_{i-1}$
+([SI] Theorem~5.1.1). The builder never checked this, and the field integrator modelled
+the level as an exponential. Two released false certificates resulted:
+\[ e^u\bigl(\operatorname{erf}u+\operatorname{erfc}u\bigr)=e^u,\qquad
+   \tfrac1u+e^u\bigl(\operatorname{Ei}(\log u)-\operatorname{li}u\bigr)=\tfrac1u. \]
+Here $\operatorname{erfc}=1-\operatorname{erf}$ and $\operatorname{li}u=\operatorname{Ei}(\log u)$
+make the levels dependent. Until the primitive top is implemented (campaign step~3), no
+certificate is issued over a tower with such a level. Test: \code{test\_campaign\_step0\_primitive}.
+
+\section*{T7. Auxiliary verdicts are scoped (v0.6603)}
+\addcontentsline{toc}{section}{T7. Scoped auxiliary verdicts}
+
+The Risch~DE integrates on the side: the $\alpha$ of limited integration, the $c/w$ of
+the logarithmic-derivative branch, the $c$ of $DH=c$. A certificate that \emph{such} an
+integrand is not elementary says nothing by itself about the outer integrand. The
+decision flag is write-once, so it could carry an auxiliary certificate out as the
+outer verdict after the outer equation gave up uncertain. Every auxiliary integration
+now runs in its own scope. Its verdict reaches the caller only as the three-way answer
+of \S\ref{sec:T8}, which the caller then uses in its own proof.
+
+\section*{T8. Integration in $K$, three ways (v0.6605)}
+\addcontentsline{toc}{section}{T8. Integration in K}
+\label{sec:T8}
+
+\code{rc\_integrate\_in\_K} (\code{integrate\_risch\_rde.c}) answers, for $c\in K$, one of:
+an antiderivative $Q\in K$; a \emph{proof} that none exists; or undecided. The proof
+rests on the following.
+
+\begin{proposition}\label{prop:T8}
+Let $K$ be a tower of logarithmic and exponential monomials over $C(x)$. Let $c\in K$
+have a verified antiderivative
+\[ R=A+\sum_{j=1}^md_j\log v_j,\qquad A\in K,\ v_j\in K^*,\ d_j\in\overline C\setminus\{0\}. \]
+Suppose that no $Dv_j/v_j$ lies in the $\Q$-span of $\{Dt_k: t_k\ \text{logarithmic}\}\cup\{Dw_k: t_k=e^{w_k}\}$,
+and that the $\theta_j=\log v_j$ satisfy no $\Q$-linear relation modulo $K$. Then
+$c$ has no antiderivative in $K$.
+\end{proposition}
+
+\begin{proof}
+Adjoin $\theta_1,\dots,\theta_m$ one at a time. By the hypotheses and the Risch
+structure theorem ([SI] Ch.~9), applied over $\overline C$ to the tower extended so far,
+each $\theta_j$ is a primitive monomial: $K'=K(\theta_1,\dots,\theta_m)$ is again a tower
+of monomials, and $\theta_1,\dots,\theta_m$ are algebraically independent over $K$. A
+primitive monomial adds no new constants, so $\operatorname{Const}(K')=\operatorname{Const}(K)$.
+Suppose $y\in K$ with $Dy=c$. Then $y,R\in K'$ and $D(R-y)=0$, so $R-y=\gamma$ is a
+constant of $K$. Hence $\sum_jd_j\theta_j=y-A+\gamma\in K$: a nontrivial linear relation
+over $K$ among algebraically independent elements. That is a contradiction.
+\end{proof}
+
+A logarithm whose derivative \emph{does} lie in the span is rewritten into the tower:
+$\log q=\sum r_jt_j+\sum s_jw_j+\text{const}$, the constant absorbed by the
+antiderivative (\code{rt\_reduce\_new\_logs}). This also folds the lower integrator's
+logarithms of tower variables, such as $\log(i+t_0)$ and $\arctan t_0$ for the levels
+$\log(1\mp ie^u)$. $D[\arctan^3e^u]$ had been undecided. The undecided answer covers
+a non-constant logarithmic coefficient, a relation among the leftovers, and a span that
+could not be decided. The three side integrals of the Risch~DE (limited integration,
+$w\int c/w$, and $DH=c$) all go through this routine. So their ``none'' is now
+authoritative, and the naive degree bound stands. Example:
+$\code{Risch`RischDECertified}[2i/(1+x^2),\,2w\log x/x,\,x]$ with
+$w=(x-i)/(x+i)$ is \code{"NoSolution"}, because the solution would need
+$\log(x+i)$. Test: \code{test\_campaign\_step1\_towerlogs}.
+
+\section*{T9. An arctangent over a complex tower (v0.6607)}
+\addcontentsline{toc}{section}{T9. Arctangent over a complex tower}
+
+Over a tower with complex logarithms, an $\arctan$ in a lower integral is a pair of
+logarithms:
+\[ \arctan q=\tfrac i2\bigl(\log(1-iq)-\log(1+iq)\bigr)+\text{const}. \]
+Both logarithms are then tested by \S\ref{sec:T8}, and folded if they reduce. Over a
+real tower an $\arctan$ of $x$ is left to the arctangent obstruction
+(Prop.~\ref{prop:E1arctan}), because rewriting it would bring $i$ into a real field.
+Test: \code{test\_campaign\_step2\_complex\_arctan}.
+
+\section*{T10. Dependent logarithms, eliminated with an exact constant (v0.6609)}
+\addcontentsline{toc}{section}{T10. Dependent logarithms}
+\label{sec:T10}
+
+The structure theorem may find a logarithmic kernel dependent on lower levels. Examples
+are $\log(1+iu)$ beside $\log(u-i)$, $\log(-u)$ beside $\log u$, and $\log(2+2u)$
+beside $\log(1+u)$. Until v0.6609 the tower was flagged dependent and every verdict over
+it demoted. The kernel is now eliminated.
+
+\begin{proposition}\label{prop:T10}
+Let $t=\log v$ be a logarithmic kernel with
+\[ \frac{Dv}{v}=\sum_jr_j\frac{Du_j}{u_j}+\sum_ks_kDw_k,\qquad r_j,s_k\in\Q, \]
+over lower levels $\log u_j$ and $e^{w_k}$. Let $d$ be the least common denominator of
+the $r_j,s_k$. Then
+\[ \kappa=\frac{v^d}{\prod_ju_j^{dr_j}}\,e^{-d\sum_ks_kw_k} \]
+is a nonzero constant. On every connected open set $U$ on which the principal branches
+of $\log v$ and $\log u_j$ are analytic, there is an integer $m$ with
+\[ \log v=\sum_jr_j\log u_j+\sum_ks_kw_k+\frac{\operatorname{Log}\kappa+2\pi i\,m}{d}\quad\text{on }U. \]
+\end{proposition}
+
+\begin{proof}
+$D\kappa/\kappa=d\,Dv/v-\sum dr_j\,Du_j/u_j-d\sum s_kDw_k=0$, so $\kappa$ is a constant,
+and it is nonzero because $v,u_j\ne0$. On $U$ the function
+$\phi=d\log v-\sum dr_j\log u_j-d\sum s_kw_k$ has $D\phi=0$, so it is constant on the
+connected set~$U$. Also $e^\phi=\kappa$, so $\phi=\operatorname{Log}\kappa+2\pi im$
+for some integer~$m$.
+\end{proof}
+
+The integer $m$ is the only quantity not determined algebraically, and it depends on
+$U$: $\log(-u)=\log u+i\pi$ for $u>0$, but $\log u-i\pi$ for $u<0$ off the cut. The
+implementation (\code{rt\_dependent\_log\_rule}, \code{risch\_tower.c}) evaluates
+$\delta=(d(\log v-S)-\operatorname{Log}\kappa)/(2\pi i)$ at sample points, where $S$
+is the span part. It requires $\delta$ to be within $10^{-8}$ of one integer at every
+point. Because $\delta$ is an integer at each point where the branches are analytic,
+the numerical evaluation only has to separate integers.
+
+\paragraph{Two uses, two regions.}
+\begin{itemize}
+\item \emph{The decision} samples $x\in\{7/19,\,13/8,\,29/11\}$. By Prop.~\ref{prop:T0}
+  a verdict over $K$ holds for the function on any connected open set on which the tower
+  relations hold, in particular on a neighbourhood of a sample point. So a
+  \emph{region} constant suffices for a certificate. An antiderivative over an eliminated
+  kernel is valid as a kernel expression only on that region, so it is checked by the
+  exact tower identity $D_KQ=F$ in $K$. By Prop.~\ref{prop:T0} that identity proves
+  elementarity.
+\item \emph{The integrator} returns a global expression, so it eliminates only with a
+  constant that is the same on both sides of the real axis and in both half-planes. It
+  adds the samples $-7/19,\,-13/8,\,1/3+i/2,\,-2/3-3i/5,\,5/4-7i/9$. Its answers are
+  verified as usual. Using region constants there failed that verification:
+  $\log(-u)$ written as $\log u+i\pi$ is wrong for $u<0$. The dependent-log hunt
+  measured it, at 67 and 58 \code{True} instead of 80.
+\end{itemize}
+
+\paragraph{Constants.} The elimination introduces $\pi$ and $\operatorname{Log}\kappa$
+with $\kappa$ algebraic. Both are transcendental (Lindemann; Lindemann--Weierstrass for
+$\kappa\ne0,1$). With \emph{one} transcendental constant $\tau$ in the integrand and the
+constants together, $C=\Q(\alpha)(\tau)$ behaves exactly as $\Q(\alpha)(a)$ with a
+parameter~$a$. Each verdict is generic in $a$ (Prop.~\ref{prop:T1}), and a transcendental
+$\tau$ avoids the exceptional set, which is contained in $\Qbar$. With two, say $\pi$ and
+$\log2$, exactness would need their algebraic independence, which is open. So the
+elimination declines when more than one transcendental atom ($\pi$, $e$,
+$\operatorname{Log}$ of a number, \code{EulerGamma}, \code{Catalan}) would appear across
+the integrand and the constants.
+
+The QI family of the main hunt went from 112 to 120 \code{True} of 120, with 0
+undecided. A dependent-log hunt (four families of 80) is at 80 in every family, against
+70, 78, 78 and 80 before. No hunt has a false certificate.
+Test: \code{test\_campaign\_step8\_dependent\_logs}.
+
+\section*{T11. Status of the transcendental decision}
+\addcontentsline{toc}{section}{T11. Status}
+
+The completeness ratchet (\code{tools/check\_bronstein\_completeness.py}) lists every
+path of the transcendental Risch~DE that can give up without a proof, 19 at v0.6609.
+Each campaign step that removes one adds its section here. Still open: the generalised
+new-logarithm certificate (step~2); a Liouvillian primitive top (step~3, which extends
+\S\ref{sec:T2} and \S\ref{sec:T8} to $D\theta=\eta$ by treating $c\,\eta$ as a
+parameter); the split special part for $\tanh$ and for $\tan$ over $k(i)$ (step~4,
+replacing the mark of Prop.~\ref{prop:T5}); CancelTan with a homogeneous solution
+(step~5); towers of several tangents (step~6); and the exact tower arithmetic over
+$\Q(\alpha)$ of \S T3.
+
 \part*{Part C. The gap log: what each extension closes}
 \addcontentsline{toc}{part}{Part C}
 
