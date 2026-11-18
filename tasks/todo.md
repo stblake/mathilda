@@ -111,7 +111,7 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
         classify the ~250 arithmetic `_si`/`_ui` calls with int64 operands; `mpq_set_si` (~24)
         (src/expr_gmp64.c helpers; 157 at-risk sites fixed, 133 classified safe; tests/test_gmp64_llp64.c)
   - [ ] Known slow, out of scope: `N[Binomial[10^8, 1/2], 30]` builds the exact Pi-rational first
-- [ ] Phase 8. Prevention: a `make check-machine-boundary` gate. Probe every numeric head with
+- [x] Phase 8. Prevention: a `make check-machine-boundary` gate. Probe every numeric head with
       an NDArray kernel or a Compile lowering at the boundary inputs (+-1.*^308 * 10,
       1.*^-200 * 1.*^-200, 2.^-1074, -0., huge exact scalars) over scalar / List / packed /
       NDArray / Compile, and require agreement. C3, E5 and E9 would each have failed it.
@@ -138,8 +138,30 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
         - G9: Log[x, x] is 1. for machine x; the -> 1 rule only for exact/symbolic x
         - Quotient: exact floor of the exact quotient on every surface, so that
           m == n Quotient[m, n] + Mod[m, n]
-- [ ] Close-out: valgrind the corpus, a no-FLINT build, `make check-c99`, the gates, merge to
-      main, the review section below
+- [x] Close-out: leaks (`leaks --atExit`: 0 on the three corpora and on 20x every changed path;
+      valgrind runs on this macOS but too slowly), USE_FLINT=0 and USE_FLINT=0 USE_MPFR=0 builds
+      (both broken, both fixed: v0.6614, v0.6616), `make check-c99`, every gate, merged to main
+      continuously (v0.6610-v0.6616), the review section below
+
+## Review: numeric-tower campaign (2026-11-17 - 2026-11-19, v0.6594 - v0.6616)
+
+- **Gates added, all assert-empty:** `make check-machine-boundary` (161 heads x scalar / List /
+  packed / NDArray / Compile at the range edges and on ordinary values, ~2 min) and ctest
+  `paranoia_tests` (Kahan's PARANOIA, five number modes, 0/0/0/0) and `gmp64_llp64_tests`.
+- **Wrong answers fixed after Phase 7:** E12, G1-G10, P1-P5, the D5 Underflow[] arithmetic,
+  ExpIntegralE / InverseJacobiDN dropped imaginary parts, machine Mod / Quotient, HermiteH at
+  negative order, LLP64 truncation (Thue dropped solutions on Windows), and two USE_MPFR=0
+  link breaks.
+- **Design kept:** fixed precision; the machine/MPFR boundary policy; IEEE signed zero on every
+  surface (user decision); one machine helper per head on every surface.
+- **Follow-ups seen, outside the phases:**
+  - HypergeometricU[5.*^9, 0.5, 100.] is Underflow[], though ~10^(-10^10) is inside MPFR's range.
+  - Overflow[] absorbs symbolic factors and an exact 0 (`Overflow[] x`, `Overflow[] 0`); the
+    reference keeps `Overflow[] x` and gives `0`.
+  - `N[Gamma[5000000000/3], 20]` is ComplexInfinity (pre-existing; ~10^(1.4*^10) is in range).
+  - `HermiteH[-100., 10.]` is 0. in a USE_MPFR=0 build (no extended precision there).
+  - Large `mpz_pow_ui` exponents need a result-size guard, not a 64-bit helper (power.c,
+    solveint_exp.c); issues #137 / #138 (DSolve) stand as filed.
 
 # Bronstein integration campaign (started 2026-11-12)
 
