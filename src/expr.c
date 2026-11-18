@@ -602,27 +602,6 @@ bool expr_mpz_get_int64(const mpz_t z, int64_t* out) {
     return true;
 }
 
-void mth_mpz_set_i64(mpz_t z, int64_t v) {
-#if LONG_MAX >= INT64_MAX
-    mpz_set_si(z, (long)v);
-#else
-    /* LLP64: import the magnitude as a uint64 word, then apply the sign.
-     * The magnitude is computed in uint64 so INT64_MIN does not overflow. */
-    uint64_t mag = v < 0 ? (uint64_t)0 - (uint64_t)v : (uint64_t)v;
-    mpz_import(z, 1, -1, sizeof(uint64_t), 0, 0, &mag);
-    if (v < 0) mpz_neg(z, z);
-#endif
-}
-
-void mth_mpz_init_set_i64(mpz_t z, int64_t v) {
-#if LONG_MAX >= INT64_MAX
-    mpz_init_set_si(z, (long)v);
-#else
-    mpz_init(z);
-    mth_mpz_set_i64(z, v);
-#endif
-}
-
 Expr* expr_bigint_normalize(Expr* e) {
     int64_t val;
     if (e->type == EXPR_BIGINT && expr_mpz_get_int64(e->data.bigint, &val)) {

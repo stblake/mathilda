@@ -35,6 +35,7 @@
  * on it is the truncation-divisibility hit record of [RBD] Section 6.
  */
 #include "fi_rbd.h"
+#include "expr.h"   /* mth_mpz_add_u64: mpz_add_ui is 32-bit on LLP64 */
 
 #include <limits.h>
 #include <math.h>
@@ -201,7 +202,7 @@ void fi_rbd_ceiling(mpz_t T, const mpz_t N, mpz_srcptr mult, const mpz_t cmax, u
     mpz_mul(T, N, cmax);
     if (mult) mpz_mul(T, T, mult);
     mpz_sqrt(T, T);
-    mpz_add_ui(T, T, (unsigned long)(slack < ULONG_MAX ? slack : ULONG_MAX));
+    mth_mpz_add_u64(T, T, slack);   /* not clamped to a 32-bit `long` (LLP64) */
 }
 
 /* ------------------------------------------------------------------ */

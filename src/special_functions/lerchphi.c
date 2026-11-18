@@ -415,7 +415,7 @@ static void lcx_pow(lcx* out, const lcx* base, const lcx* expo, mpfr_prec_t p) {
 static bool lp_set_mpfr(mpfr_t out, const Expr* e) {
     if (!e) return false;
     switch (e->type) {
-        case EXPR_INTEGER: mpfr_set_si(out, (long)e->data.integer, LRND); return true;
+        case EXPR_INTEGER: mth_mpfr_set_i64(out, e->data.integer, LRND); return true;
         case EXPR_REAL:    mpfr_set_d (out, e->data.real,          LRND); return true;
         case EXPR_BIGINT:  mpfr_set_z (out, e->data.bigint,        LRND); return true;
         case EXPR_MPFR:    mpfr_set   (out, e->data.mpfr,          LRND); return true;
@@ -423,8 +423,8 @@ static bool lp_set_mpfr(mpfr_t out, const Expr* e) {
     }
     int64_t n, d;
     if (is_rational(e, &n, &d)) {
-        mpfr_set_si(out, (long)n, LRND);
-        mpfr_div_si(out, out, (long)d, LRND);
+        mth_mpfr_set_i64(out, n, LRND);
+        mth_mpfr_div_i64(out, out, d, LRND);
         return true;
     }
     return false;

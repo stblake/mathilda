@@ -809,7 +809,7 @@ static void eval_dim_m(const MCtx* ctx, size_t k, size_t base, mpfr_t* V, mpfr_t
         if (per) {
             int64_t nd = (int64_t)ndist, rr = ((j % nd) + nd) % nd, q = (j - rr) / nd;
             r = (size_t)rr;
-            mpfr_mul_si(xs[t], f->period[k], q, RND);   /* q * P */
+            mth_mpfr_mul_i64(xs[t], f->period[k], q, RND);   /* q * P */
             mpfr_add(xs[t], xs[t], f->grid[k][r], RND);
         } else { r = (size_t)j; mpfr_set(xs[t], f->grid[k][r], RND); }
         size_t off = base + r * f->stride[k];

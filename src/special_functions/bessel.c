@@ -150,7 +150,7 @@ static bool bj_order_is_long(const Expr* e, long* out) {
 static bool bj_set_real(mpfr_t out, const Expr* e) {
     if (!e) return false;
     switch (e->type) {
-        case EXPR_INTEGER: mpfr_set_si(out, (long)e->data.integer, BRND); return true;
+        case EXPR_INTEGER: mth_mpfr_set_i64(out, e->data.integer, BRND); return true;
         case EXPR_REAL:    mpfr_set_d (out, e->data.real,          BRND); return true;
         case EXPR_BIGINT:  mpfr_set_z (out, e->data.bigint,        BRND); return true;
         case EXPR_MPFR:    mpfr_set   (out, e->data.mpfr,          BRND); return true;
@@ -158,8 +158,8 @@ static bool bj_set_real(mpfr_t out, const Expr* e) {
     }
     int64_t n, d;
     if (is_rational(e, &n, &d)) {
-        mpfr_set_si(out, (long)n, BRND);
-        mpfr_div_si(out, out, (long)d, BRND);
+        mth_mpfr_set_i64(out, n, BRND);
+        mth_mpfr_div_i64(out, out, d, BRND);
         return true;
     }
     return false;

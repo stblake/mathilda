@@ -119,8 +119,8 @@ static bool si_genpell_bases(const mpz_t D, const mpz_t N, mpz_t t, mpz_t u,
 
     mpz_t Ymax; mpz_init(Ymax); bool okb = true;
     si_genpell_ybound(N, t, u, Ymax, &okb);
-    if (!okb || !mpz_fits_slong_p(Ymax)) { mpz_clear(Ymax); return false; }
-    int64_t ymax = mpz_get_si(Ymax);
+    int64_t ymax;
+    if (!okb || !expr_mpz_get_int64(Ymax, &ymax)) { mpz_clear(Ymax); return false; }
     mpz_clear(Ymax);
 
     mpz_t val, root, x, y, s1, s2, px, py;

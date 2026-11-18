@@ -389,7 +389,7 @@ static void pcx_pow(pcx* out, const pcx* base, const pcx* expo, mpfr_prec_t p) {
 static bool pl_set_mpfr(mpfr_t out, const Expr* e) {
     if (!e) return false;
     switch (e->type) {
-        case EXPR_INTEGER: mpfr_set_si(out, (long)e->data.integer, PRND); return true;
+        case EXPR_INTEGER: mth_mpfr_set_i64(out, e->data.integer, PRND); return true;
         case EXPR_REAL:    mpfr_set_d (out, e->data.real,          PRND); return true;
         case EXPR_BIGINT:  mpfr_set_z (out, e->data.bigint,        PRND); return true;
         case EXPR_MPFR:    mpfr_set   (out, e->data.mpfr,          PRND); return true;
@@ -397,8 +397,8 @@ static bool pl_set_mpfr(mpfr_t out, const Expr* e) {
     }
     int64_t n, d;
     if (is_rational(e, &n, &d)) {
-        mpfr_set_si(out, (long)n, PRND);
-        mpfr_div_si(out, out, (long)d, PRND);
+        mth_mpfr_set_i64(out, n, PRND);
+        mth_mpfr_div_i64(out, out, d, PRND);
         return true;
     }
     return false;

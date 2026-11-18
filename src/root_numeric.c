@@ -822,15 +822,15 @@ static bool root_real_leaf_to_mpfr(const Expr* e, mpfr_t out) {
     if (!e) return false;
     int64_t nn, dd;
     switch (e->type) {
-        case EXPR_INTEGER: mpfr_set_si(out, e->data.integer, MPFR_RNDN); return true;
+        case EXPR_INTEGER: mth_mpfr_set_i64(out, e->data.integer, MPFR_RNDN); return true;
         case EXPR_REAL:    mpfr_set_d (out, e->data.real,    MPFR_RNDN); return true;
         case EXPR_BIGINT:  mpfr_set_z (out, e->data.bigint,  MPFR_RNDN); return true;
         case EXPR_MPFR:    mpfr_set   (out, e->data.mpfr,    MPFR_RNDN); return true;
         case EXPR_FUNCTION:
             if (is_rational((Expr*)e, &nn, &dd) && dd != 0) {
-                mpfr_set_si(out, nn, MPFR_RNDN);
+                mth_mpfr_set_i64(out, nn, MPFR_RNDN);
                 mpfr_t den; mpfr_init2(den, mpfr_get_prec(out));
-                mpfr_set_si(den, dd, MPFR_RNDN);
+                mth_mpfr_set_i64(den, dd, MPFR_RNDN);
                 mpfr_div(out, out, den, MPFR_RNDN);
                 mpfr_clear(den);
                 return true;

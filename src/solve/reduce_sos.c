@@ -248,19 +248,22 @@ static void double_to_mpq(double x, mpq_t out) {
     if (!isfinite(x)) { mpq_set_ui(out, 0, 1); return; }
     int neg = (x < 0); double ax = neg ? -x : x;
     /* continued fraction expansion with denominator cap */
-    long p0 = 0, q0 = 1, p1 = 1, q1 = 0;
+    /* int64_t, not long: a partial quotient past 2^31 (any |x| >= 2^31) wraps
+     * a 32-bit `long` on LLP64. */
+    if (!(ax < 9.0e18)) { mpq_set_d(out, x); return; }    /* keep the casts defined */
+    int64_t p0 = 0, q0 = 1, p1 = 1, q1 = 0;
     double v = ax;
     for (int it = 0; it < 40; it++) {
-        long a = (long)floor(v);
-        long p2 = a * p1 + p0, q2 = a * q1 + q0;
-        if (q2 > 1000000L) break;
+        int64_t a = (int64_t)floor(v);
+        int64_t p2 = a * p1 + p0, q2 = a * q1 + q0;
+        if (q2 > 1000000) break;
         p0 = p1; q0 = q1; p1 = p2; q1 = q2;
         double frac = v - (double)a;
         if (frac < 1e-12) break;
         v = 1.0 / frac;
     }
-    if (q1 == 0) { mpq_set_si(out, neg ? -(long)llround(ax) : (long)llround(ax), 1); return; }
-    mpq_set_si(out, neg ? -p1 : p1, (unsigned long)q1);
+    if (q1 == 0) { mth_mpq_set_i64(out, neg ? -(int64_t)llround(ax) : (int64_t)llround(ax), 1); return; }
+    mth_mpq_set_i64(out, neg ? -p1 : p1, (uint64_t)q1);
     mpq_canonicalize(out);
 }
 

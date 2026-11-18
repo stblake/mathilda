@@ -1387,7 +1387,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
                 NEXT();
             OP(MG_RFROM_I):
 #ifdef USE_MPFR
-                mpfr_set_si((mpfr_ptr)RD.p, (long)RA.i, MPFR_RNDN);
+                mth_mpfr_set_i64((mpfr_ptr)RD.p, RA.i, MPFR_RNDN);
 #else
                 goto vm_fail;
 #endif
@@ -1417,7 +1417,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
                 NEXT();
             OP(MG_RPOWI):
 #ifdef USE_MPFR
-                mpfr_pow_si((mpfr_ptr)RD.p, (mpfr_srcptr)RA.p, (long)c->imm.i, MPFR_RNDN);
+                mth_mpfr_pow_i64((mpfr_ptr)RD.p, (mpfr_srcptr)RA.p, c->imm.i, MPFR_RNDN);
 #else
                 goto vm_fail;
 #endif

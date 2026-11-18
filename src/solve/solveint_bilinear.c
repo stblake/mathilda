@@ -66,11 +66,12 @@ static bool si_bilinear_divisor_solve(const MPoly* P, int u, int w, SICtx* c,
                     mpz_sub(uu, P1, cc); mpz_sub(ww, Q1, b);          /* u=(P1-c)/a, w=(Q1-b)/a */
                     if (!mpz_divisible_p(uu, a) || !mpz_divisible_p(ww, a)) continue;
                     mpz_divexact(uu, uu, a); mpz_divexact(ww, ww, a);
-                    if (!mpz_fits_slong_p(uu) || !mpz_fits_slong_p(ww)) continue;
+                    int64_t ui, wi;
+                    if (!expr_mpz_get_int64(uu, &ui) || !expr_mpz_get_int64(ww, &wi)) continue;
                     int64_t vals[SI_MAX_VARS];
                     for (int k = 0; k < c->n; k++) vals[k] = 0;
-                    vals[u] = mpz_get_si(uu);
-                    vals[w] = mpz_get_si(ww);
+                    vals[u] = ui;
+                    vals[w] = wi;
                     /* Reconstruct eliminated variables in reverse order: a
                      * later-eliminated variable's formula never references an
                      * earlier-eliminated one, so all references are resolved. */
@@ -79,8 +80,7 @@ static bool si_bilinear_divisor_solve(const MPoly* P, int u, int w, SICtx* c,
                     for (int e = n_elim - 1; e >= 0 && okrec; e--) {
                         int v = elim_order[e];
                         si_eval_mpoly(formula_mp[v], vals, rv);
-                        if (!mpz_fits_slong_p(rv)) okrec = false;
-                        else vals[v] = mpz_get_si(rv);
+                        if (!expr_mpz_get_int64(rv, &vals[v])) okrec = false;
                     }
                     mpz_clear(rv);
                     if (okrec && si_verify(c, vals)) emit_full(st, vals);

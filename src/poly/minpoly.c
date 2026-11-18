@@ -257,24 +257,24 @@ static bool mp_root_of_unity_order(const Expr* exp, long* q_out) {
         if (f->type == EXPR_SYMBOL && f->data.symbol.name == SYM_Pi) {
             pi++;
         } else if (f->type == EXPR_INTEGER) {
-            mpq_set_si(t, f->data.integer, 1); mpq_mul(rat, rat, t);
+            mth_mpq_set_i64(t, f->data.integer, 1); mpq_mul(rat, rat, t);
         } else if (head_is(f, "Rational") &&
                    f->data.function.args[0]->type == EXPR_INTEGER &&
                    f->data.function.args[1]->type == EXPR_INTEGER) {
-            mpq_set_si(t, f->data.function.args[0]->data.integer,
-                          (unsigned long)f->data.function.args[1]->data.integer);
+            mth_mpq_set_i64(t, f->data.function.args[0]->data.integer,
+                          (uint64_t)f->data.function.args[1]->data.integer);
             mpq_canonicalize(t); mpq_mul(rat, rat, t);
         } else if (head_is(f, "Complex") &&
                    f->data.function.args[0]->type == EXPR_INTEGER &&
                    f->data.function.args[0]->data.integer == 0) {
             const Expr* iv = f->data.function.args[1];
             if (iv->type == EXPR_INTEGER) {
-                mpq_set_si(t, iv->data.integer, 1); mpq_mul(rat, rat, t);
+                mth_mpq_set_i64(t, iv->data.integer, 1); mpq_mul(rat, rat, t);
             } else if (head_is(iv, "Rational") &&
                        iv->data.function.args[0]->type == EXPR_INTEGER &&
                        iv->data.function.args[1]->type == EXPR_INTEGER) {
-                mpq_set_si(t, iv->data.function.args[0]->data.integer,
-                              (unsigned long)iv->data.function.args[1]->data.integer);
+                mth_mpq_set_i64(t, iv->data.function.args[0]->data.integer,
+                              (uint64_t)iv->data.function.args[1]->data.integer);
                 mpq_canonicalize(t); mpq_mul(rat, rat, t);
             } else ok = false;
             im++;

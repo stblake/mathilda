@@ -167,7 +167,7 @@ bool gb_wmat_validate(const int64_t* w, int n_rows, int n_vars) {
     mpq_t* M = (mpq_t*)malloc(sizeof(mpq_t) * (size_t)n_rows * n_vars);
     for (int i = 0; i < n_rows * n_vars; i++) {
         mpq_init(M[i]);
-        mpq_set_si(M[i], (long)w[i], 1);
+        mth_mpq_set_i64(M[i], w[i], 1);
     }
     int rank = 0;
     mpq_t factor, tmp; mpq_init(factor); mpq_init(tmp);
@@ -1924,7 +1924,7 @@ static int find_var_index(struct Expr* e, struct Expr** vars, int n_vars) {
  * Returns true and sets `out` on success.  `out` must already be init'd. */
 static bool expr_to_mpq(struct Expr* e, mpq_t out) {
     if (e->type == EXPR_INTEGER) {
-        mpq_set_si(out, (long)e->data.integer, 1);
+        mth_mpq_set_i64(out, e->data.integer, 1);
         mpq_canonicalize(out);
         return true;
     }

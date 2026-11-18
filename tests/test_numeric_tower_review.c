@@ -589,6 +589,48 @@ static void test_f6_binomial_real(void) {
     chk_true("Binomial[N[-5, 30], N[-7, 30]] == 15");
 }
 
+/* F2 follow-up: Solve[..., Integers] with solutions and coefficients past
+ * 2^31.  The solver's checking arithmetic (si_verify / si_eval_mpoly) used
+ * mpz_mul_si with an int64 operand, and its guards read candidates through
+ * mpz_fits_slong_p / mpz_get_si -- 32 bits on LLP64 Windows, so these were
+ * declined (or, for the arithmetic, mis-checked) there.  They are now int64
+ * on every data model; on LP64 the answers are unchanged.  Each is checked by
+ * substituting the solution back, plus the expected closed form where it is
+ * a single value.  tests/test_gmp64_llp64.c exercises the LLP64 branch of the
+ * helpers themselves. */
+static void test_f2_solve_integers_past_2_31(void) {
+    /* univariate leaf: a perfect square / cube past 2^32 */
+    chk("Solve[x^2 == (2^33 + 1)^2, x, Integers]",
+        "{{x -> -8589934593}, {x -> 8589934593}}");
+    chk("Solve[x^3 == -(2^40 + 3)^3, x, Integers]", "{{x -> -1099511627779}}");
+    chk("Solve[x^2 - 3 x == 2^35 (2^35 - 3) && x > 0, x, Integers]",
+        "{{x -> 34359738368}}");
+    chk("Solve[x^2 + x == 2^34 (2^34 + 1) && x > 0, x, Integers]",
+        "{{x -> 17179869184}}");
+    /* linear: a bounded box past 2^32 */
+    chk("Solve[3 x + 5 y == 30000000001 && 0 <= x <= 10^10 && y == 2, {x, y}, Integers]",
+        "{{x -> 9999999997, y -> 2}}");
+    chk("Solve[x - y == 2^40 && x + y == 2^41, {x, y}, Integers]",
+        "{{x -> 1649267441664, y -> 549755813888}}");
+    /* divisor enumeration: 2^40 + 2 = 2 * 3^2 * 2731 * 22366891 has 24
+     * divisors, one positive pair each; every pair checks back. */
+    chk("FactorInteger[2^40 + 2]", "{{2, 1}, {3, 2}, {2731, 1}, {22366891, 1}}");
+    chk_true("With[{s = Solve[x y == 2^40 + 2 && x > 0 && y > 0, {x, y}, Integers]},"
+             " Length[s] == 24 && And @@ ((x y == 2^40 + 2) /. s)]");
+    /* Pell: the largest solution below 10^12 is past 2^39 */
+    chk_true("With[{s = Solve[x^2 - 2 y^2 == 1 && 0 < x < 10^12 && 0 < y, {x, y}, Integers]},"
+             " Last[s] === {x -> 886731088897, y -> 627013566048}"
+             " && And @@ ((x^2 - 2 y^2 == 1) /. s)]");
+    /* Mordell-type leaf with a coordinate past 2^32 */
+    chk("Solve[x^2 == y^3 + 8589934592^3 && x == 0, {x, y}, Integers]",
+        "{{x -> 0, y -> -8589934592}}");
+    /* FactorInteger on 64-bit words (uint64 trial / word splitters) */
+    chk_true("Times @@ (Power @@@ FactorInteger[(2^40 + 15) (2^41 + 21)])"
+             " == (2^40 + 15) (2^41 + 21)");
+    chk("FactorInteger[(2^31 - 1) (2^32 + 15)]", "{{2147483647, 1}, {4294967311, 1}}");
+    chk("FactorInteger[18446744073709551557]", "{{18446744073709551557, 1}}");
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -635,6 +677,7 @@ int main(void) {
     TEST(test_c9_printing);
     TEST(test_e3_rational_power_past_cap);
     TEST(test_f6_binomial_real);
+    TEST(test_f2_solve_integers_past_2_31);
 
     if (g_fail) {
         printf("%d numeric-tower review check(s) FAILED\n", g_fail);

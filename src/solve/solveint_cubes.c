@@ -204,7 +204,7 @@ static int si_all_cube_roots_mod(int64_t* out, int cap, const mpz_t k, int64_t d
                                  const int32_t* spf) {
     if (d == 1) { if (cap < 1) return -1; out[0] = 0; return 1; }
     if (cap > SI_BK_ROOTCAP) cap = SI_BK_ROOTCAP;
-    int64_t kd = mpz_fdiv_ui(k, (unsigned long)d);   /* k mod d, in [0,d) */
+    int64_t kd = (int64_t)mth_mpz_fdiv_u64(k, (uint64_t)d);   /* k mod d, in [0,d) */
     int64_t primes[16]; unsigned exps[16]; int np;
     if (spf) si_factor_spf(d, spf, primes, exps, &np);
     else     si_factor_i64(d, primes, exps, &np);
@@ -411,7 +411,7 @@ bool si_solve_three_cubes_booker(SICtx* c, SearchState* st) {
         int64_t hi = cc->hi[r] <  T ? cc->hi[r] :  T;
         mpz_t m, v3; mpz_init(m); mpz_init(v3);
         for (int64_t v = lo; v <= hi && !st->overflow; v++) {
-            mth_mpz_set_i64(v3, v); mpz_mul_si(v3, v3, v); mpz_mul_si(v3, v3, v);
+            mth_mpz_set_i64(v3, v); mth_mpz_mul_i64(v3, v3, v); mth_mpz_mul_i64(v3, v3, v);
             mpz_sub(m, K, v3);                         /* m = k - v^3 */
             for (int q = 0; q < 3; q++) vals[q] = 0;
             vals[r] = v;

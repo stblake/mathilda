@@ -61,7 +61,7 @@ static bool kf_head(const Expr* e, const char* h) {
 }
 
 static bool kf_rational(const Expr* e, mpq_t out) {
-    if (e->type == EXPR_INTEGER) { mpq_set_si(out, (long)e->data.integer, 1); return true; }
+    if (e->type == EXPR_INTEGER) { mth_mpq_set_i64(out, e->data.integer, 1); return true; }
     if (e->type == EXPR_BIGINT)  { mpq_set_z(out, e->data.bigint); return true; }
     if (kf_head(e, SYM_Rational) && e->data.function.arg_count == 2) {
         mpq_t a, b; mpq_init(a); mpq_init(b);

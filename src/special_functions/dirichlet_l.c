@@ -200,10 +200,10 @@ static Expr* cyc_render(Cyc* z) {
 
 /* An exact Integer / BigInt / Rational Expr -> mpq. */
 static bool expr_to_mpq(const Expr* e, mpq_t out) {
-    if (e->type == EXPR_INTEGER) { mpq_set_si(out, e->data.integer, 1); return true; }
+    if (e->type == EXPR_INTEGER) { mth_mpq_set_i64(out, e->data.integer, 1); return true; }
     if (e->type == EXPR_BIGINT) { mpq_set_z(out, e->data.bigint); return true; }
     int64_t n, d;
-    if (is_rational((Expr*)e, &n, &d)) { mpq_set_si(out, n, (unsigned long)d); mpq_canonicalize(out); return true; }
+    if (is_rational((Expr*)e, &n, &d)) { mth_mpq_set_i64(out, n, (uint64_t)d); mpq_canonicalize(out); return true; }
     if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
         && e->data.function.head->type == EXPR_SYMBOL
         && e->data.function.head->data.symbol.name == SYM_Rational) {

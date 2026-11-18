@@ -2458,7 +2458,7 @@ static Expr* numloop_fold_exact(const Expr* f, const Expr* x0, const Expr* list,
         if ((step & 1023) == 1023 && tc_deadline_passed()) { bail = true; break; }
         if (q) {
             for (int64_t j = 0; j < Ew; j++)
-                mpq_set_si(qregs[Aw + j], (long)el[step * (size_t)Ew + (size_t)j], 1);
+                mth_mpq_set_i64(qregs[Aw + j], el[step * (size_t)Ew + (size_t)j], 1);
             for (size_t i = 0; i < nc; i++) mpq_set(qnxt[i], fxq_eval(prog[i], qregs, &zero_div));
             if (zero_div) { bail = true; break; }
             for (size_t i = 0; i < nc; i++) mpq_swap(qregs[i], qnxt[i]);

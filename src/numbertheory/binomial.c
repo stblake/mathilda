@@ -134,15 +134,15 @@ static bool binomial_to_double(const Expr* e, double* out) {
 static bool binomial_set_mpfr(mpfr_t out, const Expr* e) {
     int64_t n, d;
     switch (e->type) {
-        case EXPR_INTEGER: mpfr_set_si(out, (long)e->data.integer, MPFR_RNDN); return true;
+        case EXPR_INTEGER: mth_mpfr_set_i64(out, e->data.integer, MPFR_RNDN); return true;
         case EXPR_BIGINT:  mpfr_set_z (out, e->data.bigint,        MPFR_RNDN); return true;
         case EXPR_REAL:    mpfr_set_d (out, e->data.real,          MPFR_RNDN); return true;
         case EXPR_MPFR:    mpfr_set   (out, e->data.mpfr,          MPFR_RNDN); return true;
         default: break;
     }
     if (is_rational(e, &n, &d)) {
-        mpfr_set_si(out, (long)n, MPFR_RNDN);
-        mpfr_div_si(out, out, (long)d, MPFR_RNDN);
+        mth_mpfr_set_i64(out, n, MPFR_RNDN);
+        mth_mpfr_div_i64(out, out, d, MPFR_RNDN);
         return true;
     }
     return false;

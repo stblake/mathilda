@@ -44,8 +44,8 @@ const uint32_t* fi_small_primes(size_t* count) {
 /* Divide p out of n completely; returns the exponent. */
 static int64_t strip_prime(mpz_t n, uint64_t p) {
     int64_t e = 0;
-    while (mpz_divisible_ui_p(n, (unsigned long)p)) {
-        mpz_divexact_ui(n, n, (unsigned long)p);
+    while (mth_mpz_divisible_u64_p(n, (uint64_t)p)) {
+        mth_mpz_divexact_u64(n, n, (uint64_t)p);
         e++;
     }
     return e;
@@ -55,7 +55,7 @@ static int64_t strip_prime(mpz_t n, uint64_t p) {
  * the scan can stop (n == 1 or the cofactor is known prime). */
 static int batch(mpz_t n, const uint64_t* ps, int k, uint64_t M,
                  int64_t mult, FiFactors* out, size_t* found) {
-    uint64_t r = mpz_fdiv_ui(n, (unsigned long)M);
+    uint64_t r = mth_mpz_fdiv_u64(n, (uint64_t)M);
     for (int i = 0; i < k; i++) {
         if (r % ps[i] == 0) {
             int64_t e = strip_prime(n, ps[i]);
@@ -66,7 +66,7 @@ static int batch(mpz_t n, const uint64_t* ps, int k, uint64_t M,
     /* Cofactor below (largest prime tried)^2 has no factor left: prime. */
     uint64_t pl = ps[k - 1];
     if (mpz_sizeinbase(n, 2) <= 64) {
-        uint64_t v = mpz_get_ui(n);
+        uint64_t v = mth_mpz_get_u64(n);
         uint64_t h, l;
         fi_mul64(pl, pl, &h, &l);
         if (!h && v < l) {

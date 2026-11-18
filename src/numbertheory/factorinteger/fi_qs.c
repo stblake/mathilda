@@ -260,7 +260,7 @@ static int choose_A(QS* Q, FiCtx* c, uint64_t* used, size_t* nused) {
         Q->s = s;
         mpz_set_ui(Q->A, 1);
         for (int l = 0; l < s; l++) mpz_mul_ui(Q->A, Q->A, Q->fb[Q->qidx[l]]);
-        uint64_t key = mpz_get_ui(Q->A) ^ ((uint64_t)mpz_sizeinbase(Q->A, 2) << 56);
+        uint64_t key = mth_mpz_get_u64(Q->A) ^ ((uint64_t)mpz_sizeinbase(Q->A, 2) << 56);
         int dup = 0;
         for (size_t u = 0; u < *nused; u++) if (used[u] == key) { dup = 1; break; }
         if (dup) continue;
@@ -484,7 +484,7 @@ static void check_candidate(QS* Q, uint32_t blk, uint32_t off,
     uint64_t L1 = 1, L2 = 1;
     if (mpz_cmp_ui(Q->g, 1) != 0) {
         if (mpz_sizeinbase(Q->g, 2) > 64) return;
-        uint64_t c = mpz_get_ui(Q->g);
+        uint64_t c = mth_mpz_get_u64(Q->g);
         if (c <= Q->lp_max) {
             L2 = c;                              /* < pmax^2: prime */
         } else {
@@ -719,11 +719,11 @@ cleanup_fb:
 
 int fi_split_qs(mpz_t d, const mpz_t n, FiCtx* c) {
     if (mpz_sizeinbase(n, 2) <= 64) {
-        uint64_t w = mpz_get_ui(n), r = 0;
+        uint64_t w = mth_mpz_get_u64(n), r = 0;
         uint64_t seed = w | 1;
         r = fi_u64_ecm(w, &seed, 256);
         if (!r) r = fi_u64_squfof(w, 0);
-        if (r > 1 && r < w) { mpz_set_ui(d, (unsigned long)r); return 1; }
+        if (r > 1 && r < w) { mth_mpz_set_u64(d, (uint64_t)r); return 1; }
         return 0;
     }
     return qs_run(d, n, c);

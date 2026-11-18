@@ -59,9 +59,9 @@ void fi_factors_add(FiFactors* f, const mpz_t p, int64_t e) {
 
 void fi_factors_add_ui(FiFactors* f, uint64_t p, int64_t e) {
     for (size_t i = 0; i < f->n; i++)
-        if (mpz_cmp_ui(f->v[i].p, (unsigned long)p) == 0) { f->v[i].e += e; return; }
+        if (mth_mpz_cmp_u64(f->v[i].p, (uint64_t)p) == 0) { f->v[i].e += e; return; }
     FiEntry* x = grow(f);
-    mpz_init_set_ui(x->p, (unsigned long)p);
+    mth_mpz_init_set_u64(x->p, (uint64_t)p);
     x->e = e;
 }
 
@@ -110,7 +110,7 @@ uint64_t fi_rand(FiCtx* c) {
 }
 
 int fi_is_prime(const mpz_t n) {
-    if (mpz_sizeinbase(n, 2) <= 64) return fi_u64_is_prime(mpz_get_ui(n));
+    if (mpz_sizeinbase(n, 2) <= 64) return fi_u64_is_prime(mth_mpz_get_u64(n));
     return mpz_probab_prime_p(n, 25) != 0;
 }
 
@@ -172,7 +172,7 @@ static int64_t primitive_root(mpz_t b, const mpz_t m) {
 
 static int split_named(mpz_t d, const mpz_t m, FiCtx* c) {
     int word = mpz_sizeinbase(m, 2) <= 64;
-    uint64_t w = word ? mpz_get_ui(m) : 0, r = 0;
+    uint64_t w = word ? mth_mpz_get_u64(m) : 0, r = 0;
     switch (c->method) {
     case FI_RHO:
         if (word) {
@@ -199,7 +199,7 @@ static int split_named(mpz_t d, const mpz_t m, FiCtx* c) {
     case FI_RBD:    return fi_split_rbd(d, m, c);
     default:        return 0;
     }
-    if (r > 1 && r < w) { mpz_set_ui(d, (unsigned long)r); return 1; }
+    if (r > 1 && r < w) { mth_mpz_set_u64(d, (uint64_t)r); return 1; }
     return 0;
 }
 
@@ -233,11 +233,11 @@ static uint64_t word_split(uint64_t n, FiCtx* c) {
         } else {
             /* Past the word variant's range: the budgeted bignum version. */
             mpz_t m, f;
-            mpz_init_set_ui(m, (unsigned long)n);
+            mth_mpz_init_set_u64(m, (uint64_t)n);
             mpz_init(f);
             int ok = c->method == FI_FERMAT ? fi_split_fermat(f, m, c, c->iterations)
                                             : fi_split_lehman(f, m, c, c->iterations);
-            if (ok) d = mpz_get_ui(f);
+            if (ok) d = mth_mpz_get_u64(f);
             mpz_clears(m, f, NULL);
         }
         break;
@@ -247,9 +247,9 @@ static uint64_t word_split(uint64_t n, FiCtx* c) {
         if (!d) {
             /* kN overflows a word for the larger multipliers: two-word forms. */
             mpz_t m, f;
-            mpz_init_set_ui(m, (unsigned long)n);
+            mth_mpz_init_set_u64(m, (uint64_t)n);
             mpz_init(f);
-            if (fi_split_squfof(f, m, c, c->iterations)) d = mpz_get_ui(f);
+            if (fi_split_squfof(f, m, c, c->iterations)) d = mth_mpz_get_u64(f);
             mpz_clears(m, f, NULL);
         }
         break;
@@ -324,7 +324,7 @@ static void word_factor_method_w(uint64_t n, int64_t mult, WordOut* out, FiCtx* 
     uint64_t d = word_split(n, c);
     if (!d) {
         mpz_t m;
-        mpz_init_set_ui(m, (unsigned long)n);
+        mth_mpz_init_set_u64(m, (uint64_t)n);
         c->incomplete = 1;
         fi_warn_incomplete(c, m);
         mpz_clear(m);
@@ -378,7 +378,7 @@ static void word_factor_method(uint64_t n, int64_t mult, FiFactors* out, FiCtx* 
     uint64_t d = word_split(n, c);
     if (!d) {
         mpz_t m;
-        mpz_init_set_ui(m, (unsigned long)n);
+        mth_mpz_init_set_u64(m, (uint64_t)n);
         fi_factors_add(out, m, mult);
         c->incomplete = 1;
         fi_warn_incomplete(c, m);
@@ -550,7 +550,7 @@ void fi_factor(const mpz_t n_in, FiFactors* out, FiCtx* c) {
         if (z) { mpz_tdiv_q_2exp(n, n, z); fi_factors_add_ui(out, 2, (int64_t)z); }
         if (c->k_limit == 0 && has_word_splitter(c->method) && mpz_sizeinbase(n, 2) <= 64) {
             int gave_up = 0;
-            word_factor_method(mpz_get_ui(n), 1, out, c, &gave_up);
+            word_factor_method(mth_mpz_get_u64(n), 1, out, c, &gave_up);
             mpz_clear(n);
             return;
         }
@@ -584,7 +584,7 @@ void fi_factor(const mpz_t n_in, FiFactors* out, FiCtx* c) {
         }
 
         if (c->method == FI_AUTOMATIC && mpz_sizeinbase(w.m, 2) <= 64) {
-            fi_u64_factor(mpz_get_ui(w.m), w.mult, out);
+            fi_u64_factor(mth_mpz_get_u64(w.m), w.mult, out);
             mpz_clear(w.m);
             continue;
         }

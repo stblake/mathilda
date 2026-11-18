@@ -494,7 +494,7 @@ static Expr* mc_builtin(Expr* res, int odd) {
     if (qn && qn->type == EXPR_MPFR && (r_int || (rn && rn->type == EXPR_MPFR))) {
         mpfr_t rz;
         mpfr_init2(rz, 64);
-        mpfr_set_si(rz, (long)rint, MPFR_RNDN);
+        mth_mpfr_set_i64(rz, rint, MPFR_RNDN);
         out = mc_char_mpfr(odd, r_int, rint, r_int ? rz : rn->data.mpfr, qn->data.mpfr, bits);
         mpfr_clear(rz);
     }

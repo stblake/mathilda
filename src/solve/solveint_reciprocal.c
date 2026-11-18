@@ -74,8 +74,8 @@ static void si_recip_rec(SICtx* c, SearchState* st, const int* order, int k,
     if (m == 1) {                                /* 1/v == p/q -> v = q/p */
         if (mpz_divisible_p(q, p)) {
             mpz_t vv; mpz_init(vv); mpz_divexact(vv, q, p);
-            if (mpz_fits_slong_p(vv)) {
-                int64_t v = mpz_get_si(vv);
+            int64_t v;
+            if (expr_mpz_get_int64(vv, &v)) {
                 if (v >= prev) {
                     full[vi] = v;
                     if (emit_perms) si_recip_emit_perms(c, st, order, k, full);
@@ -91,16 +91,17 @@ static void si_recip_rec(SICtx* c, SearchState* st, const int* order, int k,
     mpz_t lo_m, hi_m, tmp; mpz_init(lo_m); mpz_init(hi_m); mpz_init(tmp);
     mpz_fdiv_q(lo_m, q, p); mpz_add_ui(lo_m, lo_m, 1);
     mpz_mul_ui(tmp, q, (unsigned long)m); mpz_fdiv_q(hi_m, tmp, p);
-    int64_t lo = mpz_fits_slong_p(lo_m) ? mpz_get_si(lo_m) : INT64_MAX;
-    int64_t hi = mpz_fits_slong_p(hi_m) ? mpz_get_si(hi_m) : INT64_MAX;
+    int64_t lo, hi;
+    if (!expr_mpz_get_int64(lo_m, &lo)) lo = INT64_MAX;
+    if (!expr_mpz_get_int64(hi_m, &hi)) hi = INT64_MAX;
     mpz_clear(lo_m); mpz_clear(hi_m); mpz_clear(tmp);
     if (prev > lo) lo = prev;
 
     for (int64_t v = lo; v <= hi && !st->overflow; v++) {
         if (++st->visits > st->max_visits) { st->overflow = true; return; }
         mpz_t np, nq, g; mpz_init(np); mpz_init(nq); mpz_init(g);
-        mpz_mul_si(np, p, (long)v); mpz_sub(np, np, q);   /* p*v - q */
-        mpz_mul_si(nq, q, (long)v);                        /* q*v */
+        mth_mpz_mul_i64(np, p, v); mpz_sub(np, np, q);   /* p*v - q */
+        mth_mpz_mul_i64(nq, q, v);                         /* q*v */
         if (mpz_sgn(np) > 0) {
             mpz_gcd(g, np, nq); mpz_divexact(np, np, g); mpz_divexact(nq, nq, g);
             full[vi] = v;

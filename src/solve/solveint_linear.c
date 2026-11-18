@@ -550,9 +550,9 @@ bool si_solve_linear_bounded(SICtx* c, SearchState* st) {
                         int64_t vals[SI_MAX_VARS]; bool inbox = true;
                         for (int i = 0; i < n && inbox; i++) {
                             mpz_set(xi, x0[i]);
-                            for (int j = 0; j < m; j++) { mpz_mul_si(term, Bz[j][i], (long)cc[j]); mpz_add(xi, xi, term); }
-                            if (!mpz_fits_slong_p(xi)) { inbox = false; break; }
-                            int64_t xv = mpz_get_si(xi);
+                            for (int j = 0; j < m; j++) { mth_mpz_mul_i64(term, Bz[j][i], cc[j]); mpz_add(xi, xi, term); }
+                            int64_t xv;
+                            if (!expr_mpz_get_int64(xi, &xv)) { inbox = false; break; }
                             if (xv < c->lo[i] || xv > c->hi[i]) inbox = false;
                             vals[i] = xv;
                         }

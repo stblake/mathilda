@@ -66,7 +66,7 @@ static int eval_leaf_coeffs(SearchState* st, const MPoly* eq, int leaf, mpz_t* a
         for (int u = 0; u < n; u++) {
             if (u == leaf) continue;
             int e = ex[u];
-            for (int k = 0; k < e; k++) mpz_mul_si(term, term, (long)st->val[u]);
+            for (int k = 0; k < e; k++) mth_mpz_mul_i64(term, term, st->val[u]);
         }
         mpz_add(a[el], a[el], term);
     }
@@ -76,7 +76,7 @@ static int eval_leaf_coeffs(SearchState* st, const MPoly* eq, int leaf, mpz_t* a
 
 
 /* Build the per-equation int64 coefficient cache so the hot leaf loop never
- * calls mpz_get_si / mpz_fits_slong_p per node.  Idempotent. */
+ * converts an mpz per node.  Idempotent. */
 void si_build_leaf_cache(SearchState* st) {
     if (st->eqc_built) return;
     SICtx* c = st->ctx;
@@ -85,8 +85,7 @@ void si_build_leaf_cache(SearchState* st) {
         st->eqc[q] = (int64_t*)malloc(sizeof(int64_t) * (eq->n_terms ? eq->n_terms : 1));
         bool ok = true;
         for (size_t t = 0; t < eq->n_terms; t++) {
-            if (mpz_fits_slong_p(eq->coefs[t])) st->eqc[q][t] = mpz_get_si(eq->coefs[t]);
-            else { ok = false; break; }
+            if (!expr_mpz_get_int64(eq->coefs[t], &st->eqc[q][t])) { ok = false; break; }
         }
         st->eqc_ok[q] = ok;
     }

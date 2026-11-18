@@ -266,7 +266,7 @@ Expr* si_solve_exponential(Expr* expr, Expr** var, int n) {
                     int64_t ee = (t[k].evar >= 0) ? val[t[k].evar] : t[k].econst;
                     if (ee < 0) { mpz_set_ui(be, 0); }     /* negative exponent -> skip term as 0 (nonintegral) */
                     else { mth_mpz_set_i64(be, bb); mpz_pow_ui(be, be, (unsigned long)ee); }
-                    mpz_mul_si(term, be, t[k].coef); mpz_add(acc, acc, term);
+                    mth_mpz_mul_i64(term, be, t[k].coef); mpz_add(acc, acc, term);
                 }
                 if (mpz_cmp(acc, K) == 0) {
                     if (nsol == cap) { cap = cap ? cap * 2 : 8; sols = realloc(sols, sizeof(Expr*) * (size_t)cap); }

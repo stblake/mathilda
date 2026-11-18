@@ -63,8 +63,8 @@ static int dixon_visit(void* user, const FiLogRec* r, const uint32_t* col, const
     DixonState* D = (DixonState*)user;
     uint64_t L = r->L1;
     D->stop = (size_t)r->tag;
-    if (L > 1 && mpz_divisible_ui_p(D->n, (unsigned long)L) && mpz_cmp_ui(D->n, (unsigned long)L) > 0) {
-        mpz_set_ui(D->d, (unsigned long)L);     /* a prime of n as the large prime */
+    if (L > 1 && mth_mpz_divisible_u64_p(D->n, (uint64_t)L) && mth_mpz_cmp_u64(D->n, (uint64_t)L) > 0) {
+        mth_mpz_set_u64(D->d, (uint64_t)L);     /* a prime of n as the large prime */
         return 1;
     }
     mpz_mod(D->x, r->X, D->n);

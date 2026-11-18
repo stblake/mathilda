@@ -39,14 +39,17 @@
 #include "poly/mpoly.h"
 #include "solveint_internal.h"
 
+/* |v| for an int64 (labs takes a `long`, 32 bits on LLP64). */
+#define SI_ABS64(v) ((v) < 0 ? -(v) : (v))
 
-static long rn_gcd(long a, long b) { if (a < 0) a = -a; if (b < 0) b = -b;
-    while (b) { long t = a % b; a = b; b = t; } return a; }
 
-/* Squarefree test for a positive long. */
-static bool rn_squarefree(long m) {
+static int64_t rn_gcd(int64_t a, int64_t b) { if (a < 0) a = -a; if (b < 0) b = -b;
+    while (b) { int64_t t = a % b; a = b; b = t; } return a; }
+
+/* Squarefree test for a positive int64. */
+static bool rn_squarefree(int64_t m) {
     if (m <= 0) return false;
-    for (long p = 2; p * p <= m; p++)
+    for (int64_t p = 2; p * p <= m; p++)
         if (m % p == 0) { m /= p; if (m % p == 0) return false; }
     return true;
 }
@@ -57,17 +60,17 @@ static bool rn_squarefree(long m) {
  * with B^2 - 4AC = D: reduced iff |B| <= A <= C, and B >= 0 on the boundary
  * (|B| == A or A == C).  Mirrors si_class_number_neg4c in solveint_mordell.c
  * but for the odd fundamental discriminant. */
-static long rn_class_number_disc(long D) {          /* D < 0 */
-    long h = 0;
-    long Amax = (long)floor(sqrt((double)(-D) / 3.0)) + 1;
-    for (long A = 1; A <= Amax; A++)
-        for (long B = -A + 1; B <= A; B++) {
-            long num = B * B - D;                   /* = 4AC */
+static int64_t rn_class_number_disc(int64_t D) {          /* D < 0 */
+    int64_t h = 0;
+    int64_t Amax = (int64_t)floor(sqrt((double)(-D) / 3.0)) + 1;
+    for (int64_t A = 1; A <= Amax; A++)
+        for (int64_t B = -A + 1; B <= A; B++) {
+            int64_t num = B * B - D;                   /* = 4AC */
             if (num % (4 * A) != 0) continue;
-            long C = num / (4 * A);
+            int64_t C = num / (4 * A);
             if (C < A) continue;
             if (rn_gcd(rn_gcd(A, B), C) != 1) continue;
-            if ((labs(B) == A || A == C) && B < 0) continue;
+            if ((SI_ABS64(B) == A || A == C) && B < 0) continue;
             h++;
         }
     return h;
@@ -115,8 +118,8 @@ Expr* si_solve_ramanujan_nagell(Expr* expr, Expr** var, int n) {
     mpz_clear(K);
 
     /* --- Route A gate --- */
-    if (b != 2 || mpz_sgn(D) <= 0 || !mpz_fits_slong_p(D)) { mpz_clear(D); return NULL; }
-    long Dl = mpz_get_si(D);
+    int64_t Dl;
+    if (b != 2 || mpz_sgn(D) <= 0 || !expr_mpz_get_int64(D, &Dl)) { mpz_clear(D); return NULL; }
     mpz_clear(D);
     if (!rn_squarefree(Dl)) return NULL;
     if (((Dl % 8) + 8) % 8 != 7) return NULL;         /* 2 splits, half-integer ring */
@@ -129,12 +132,12 @@ Expr* si_solve_ramanujan_nagell(Expr* expr, Expr** var, int n) {
     mpz_t T, rt; mpz_init(T); mpz_init(rt);
     for (int nn = 0; nn <= N_MAX; nn++) {
         mpz_ui_pow_ui(T, 2, (unsigned)nn);
-        mpz_sub_ui(T, T, (unsigned long)Dl);          /* 2^nn - D */
+        mth_mpz_sub_u64(T, T, (uint64_t)Dl);          /* 2^nn - D */
         if (mpz_sgn(T) <= 0) continue;
         if (!mpz_perfect_square_p(T)) continue;
         mpz_sqrt(rt, T);
-        if (!mpz_fits_slong_p(rt)) continue;          /* unreachable for nn <= 40 */
-        int64_t xval = mpz_get_si(rt);
+        int64_t xval;
+        if (!expr_mpz_get_int64(rt, &xval)) continue; /* unreachable for nn <= 40 */
         scan_ns[n_scan++] = nn;
         for (int sgn = 1; sgn >= -1; sgn -= 2) {      /* +x and -x (x^2 is even) */
             int64_t vals[SI_MAX_VARS];
@@ -157,12 +160,12 @@ Expr* si_solve_ramanujan_nagell(Expr* expr, Expr** var, int n) {
     {
         mpz_t Um2, Um1, Um, tmp; mpz_init_set_ui(Um2, 0); mpz_init_set_ui(Um1, 1);
         mpz_init(Um); mpz_init(tmp);
-        long Q = (Dl + 1) / 4;                        /* integer since D == 3 (mod 4) */
+        int64_t Q = (Dl + 1) / 4;                        /* integer since D == 3 (mod 4) */
         int lucas_ns[64]; int nl = 0;
         /* m = 1 -> U_1 = 1 -> n = 3 */
         if (mpz_cmpabs_ui(Um1, 1) == 0) lucas_ns[nl++] = 1 + 2;
         for (int m = 2; m <= N_MAX - 2; m++) {
-            mpz_mul_si(tmp, Um2, Q);                  /* Q U_{m-2} */
+            mth_mpz_mul_i64(tmp, Um2, Q);                  /* Q U_{m-2} */
             mpz_sub(Um, Um1, tmp);                    /* U_m = U_{m-1} - Q U_{m-2} */
             if (mpz_cmpabs_ui(Um, 1) == 0 && nl < 64) lucas_ns[nl++] = m + 2;
             mpz_set(Um2, Um1); mpz_set(Um1, Um);

@@ -357,7 +357,7 @@ static bool rz_number2(const Expr* e, mpq_t x, long* prec, long* ulp_e, long* ul
     *ulp_e = 0;
     *ulp_lo_e = 0;
     switch (e->type) {
-        case EXPR_INTEGER: mpq_set_si(x, (long)e->data.integer, 1UL); return true;
+        case EXPR_INTEGER: mth_mpq_set_i64(x, e->data.integer, 1UL); return true;
         case EXPR_BIGINT:  mpq_set_z(x, e->data.bigint);              return true;
         case EXPR_REAL: {
             double v = e->data.real;

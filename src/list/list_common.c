@@ -122,7 +122,7 @@ int list_numeric_sign(Expr* e, bool* ok) {
  * has no Real case. */
 static bool lc_to_mpq(const Expr* e, mpq_t out) {
     mpq_init(out);
-    if (e->type == EXPR_INTEGER) { mpq_set_si(out, (long)e->data.integer, 1UL); return true; }
+    if (e->type == EXPR_INTEGER) { mth_mpq_set_i64(out, e->data.integer, 1UL); return true; }
     if (e->type == EXPR_BIGINT)  { mpq_set_z(out, e->data.bigint); return true; }
     if (e->type == EXPR_REAL) {
         if (isnan(e->data.real) || isinf(e->data.real)) { mpq_clear(out); return false; }

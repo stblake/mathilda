@@ -28,14 +28,17 @@
 #include "solvethue.h"
 #include "solveint_internal.h"
 
-static long si_lgcd(long a, long b) { a = labs(a); b = labs(b); while (b) { long t = a % b; a = b; b = t; } return a; }
+/* |v| for an int64 (labs takes a `long`, 32 bits on LLP64). */
+#define SI_ABS64(v) ((v) < 0 ? -(v) : (v))
+
+static int64_t si_lgcd(int64_t a, int64_t b) { a = SI_ABS64(a); b = SI_ABS64(b); while (b) { int64_t t = a % b; a = b; b = t; } return a; }
 
 
 /* Is m (|m|) squarefree? */
-static bool si_is_squarefree_l(long m) {
-    m = labs(m);
+static bool si_is_squarefree_l(int64_t m) {
+    m = SI_ABS64(m);
     if (m == 0) return false;
-    for (long p = 2; p * p <= m; p++)
+    for (int64_t p = 2; p * p <= m; p++)
         if (m % p == 0) { m /= p; if (m % p == 0) return false; }
     return true;
 }
@@ -45,17 +48,17 @@ static bool si_is_squarefree_l(long m) {
  * D = -4c (c >= 1 squarefree, c = 1,2 mod 4), by counting primitive reduced
  * positive-definite binary quadratic forms (A,B,C) with B^2 - 4AC = D:
  * reduced iff |B| <= A <= C and B >= 0 when |B| == A or A == C. */
-static long si_class_number_neg4c(long c) {
-    long D = -4 * c, h = 0;
-    long Amax = (long)floor(sqrt((double)(4 * c) / 3.0)) + 1;
-    for (long A = 1; A <= Amax; A++)
-        for (long B = -A + 1; B <= A; B++) {
-            long num = B * B - D;                     /* = 4AC */
+static int64_t si_class_number_neg4c(int64_t c) {
+    int64_t D = -4 * c, h = 0;
+    int64_t Amax = (int64_t)floor(sqrt((double)(4 * c) / 3.0)) + 1;
+    for (int64_t A = 1; A <= Amax; A++)
+        for (int64_t B = -A + 1; B <= A; B++) {
+            int64_t num = B * B - D;                     /* = 4AC */
             if (num % (4 * A) != 0) continue;
-            long C = num / (4 * A);
+            int64_t C = num / (4 * A);
             if (C < A) continue;
             if (si_lgcd(si_lgcd(A, B), C) != 1) continue;    /* primitive */
-            if ((labs(B) == A || A == C) && B < 0) continue; /* boundary: B >= 0 */
+            if ((SI_ABS64(B) == A || A == C) && B < 0) continue; /* boundary: B >= 0 */
             h++;
         }
     return h;
@@ -73,7 +76,7 @@ static long si_class_number_neg4c(long c) {
  *     is itself principal, and every point comes from y + sqrt k = (a+b sqrt k)^3).
  * Outside this set (k = 1 mod 4 -> half-integer ring; 3 | h; k > 0 -> real field
  * with infinite units) the descent is declined, never guessed. */
-static bool si_mordell_descent_sound(long k) {
+static bool si_mordell_descent_sound(int64_t k) {
     if (k >= 0 || !si_is_squarefree_l(k)) return false;
     int r = (int)(((k % 4) + 4) % 4);
     if (r != 2 && r != 3) return false;
@@ -117,10 +120,11 @@ Expr* si_solve_mordell(SICtx* c) {
         }
         bool ok = shape && (mpz_cmpabs_ui(cY, 1) == 0) && (mpz_cmpabs_ui(cX, 1) == 0)
                && (mpz_sgn(cY) == -mpz_sgn(cX));
-        long k = 0;
+        int64_t k = 0;
         if (ok) {
             if (mpz_sgn(cY) < 0) { mpz_neg(cY, cY); mpz_neg(cX, cX); mpz_neg(c0, c0); }
-            if (mpz_fits_slong_p(c0)) k = -mpz_get_si(c0);      /* y^2 = x^3 + k */
+            int64_t c0v;
+            if (expr_mpz_get_int64(c0, &c0v) && c0v != INT64_MIN) k = -c0v;  /* y^2 = x^3 + k */
             else ok = false;
         }
         /* Engage on the sound descent set (any imaginary k with k = 2,3 mod 4,
@@ -131,16 +135,16 @@ Expr* si_solve_mordell(SICtx* c) {
             Expr** sols = NULL; int nsol = 0, cap = 0;
             for (int b = 1; b >= -1; b -= 2) {
                 /* b (3 a^2 + k b^2) = 1  ->  3 a^2 = (1/b) - k b^2 = b - k b^2. */
-                long rhs = b - k * b * b;                /* = 3 a^2 */
+                int64_t rhs = b - k * b * b;                /* = 3 a^2 */
                 if (rhs < 0 || rhs % 3 != 0) continue;
-                long a2 = rhs / 3;
-                long a0 = (long)llround(sqrt((double)a2));
-                for (long a = a0 - 1; a <= a0 + 1; a++) {  /* pin the exact root */
+                int64_t a2 = rhs / 3;
+                int64_t a0 = (int64_t)llround(sqrt((double)a2));
+                for (int64_t a = a0 - 1; a <= a0 + 1; a++) {  /* pin the exact root */
                     if (a < 0 || a * a != a2) continue;
                     for (int as = (a == 0 ? 1 : 1); as >= (a == 0 ? 1 : -1); as -= 2) {
-                        long av = as * a;
-                        long xv = av * av - k * b * b;             /* norm */
-                        long yv = av * av * av + 3 * av * k * b * b;
+                        int64_t av = as * a;
+                        int64_t xv = av * av - k * b * b;             /* norm */
+                        int64_t yv = av * av * av + 3 * av * k * b * b;
                         for (int ys = 1; ys >= -1; ys -= 2) {      /* unit +/-1 -> +/- y */
                             int64_t vals[SI_MAX_VARS];
                             for (int i = 0; i < n; i++) vals[i] = 0;

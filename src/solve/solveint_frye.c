@@ -66,8 +66,9 @@ static int mitm128_cmp(const void* pa, const void* pb) {
 }
 
 
-/* mpz -> __int128 (LP64: mpz_get_ui yields a 64-bit limb).  Declines any value
- * wider than `bits` so a group's partial sums cannot overflow int128. */
+/* mpz -> __int128 (each 64-bit half via mpz_export, portable to LLP64).
+ * Declines any value wider than `bits` so a group's partial sums cannot
+ * overflow int128. */
 static bool si_mpz_to_i128(const mpz_t z, unsigned bits, __int128* out) {
     if (mpz_sizeinbase(z, 2) > bits) return false;
     mpz_t t, lo, hi; mpz_init_set(t, z);
@@ -75,8 +76,11 @@ static bool si_mpz_to_i128(const mpz_t z, unsigned bits, __int128* out) {
     mpz_init(lo); mpz_init(hi);
     mpz_tdiv_r_2exp(lo, t, 64);
     mpz_tdiv_q_2exp(hi, t, 64);
-    unsigned long lo64 = mpz_get_ui(lo);
-    unsigned long hi64 = mpz_get_ui(hi);
+    /* Not mpz_get_ui: `unsigned long` is 32 bits on LLP64.  Both halves are
+     * < 2^64 here, so each exports to at most one uint64 word. */
+    uint64_t lo64 = 0, hi64 = 0; size_t nw = 0;
+    mpz_export(&lo64, &nw, -1, sizeof(uint64_t), 0, 0, lo);
+    mpz_export(&hi64, &nw, -1, sizeof(uint64_t), 0, 0, hi);
     unsigned __int128 u = ((unsigned __int128)hi64 << 64) | (unsigned __int128)lo64;
     __int128 r = (__int128)u;
     if (neg) r = -r;
@@ -604,10 +608,10 @@ bool si_solve_separable_mitm(SICtx* c, SearchState* st) {
                 for (int u = 0; u < n; u++) if (u != i && ex[u] > 0) { only_i = false; break; }
                 if (!only_i) continue;
                 mpz_set(pw, eq->coefs[t]);
-                for (int k = 0; k < ex[i]; k++) mpz_mul_si(pw, pw, (long)v);
+                for (int k = 0; k < ex[i]; k++) mth_mpz_mul_i64(pw, pw, v);
                 mpz_add(gv, gv, pw);
             }
-            if (!mpz_fits_slong_p(gv)) exceeds_i64 = true;
+            { int64_t gi; if (!expr_mpz_get_int64(gv, &gi)) exceeds_i64 = true; }
             __int128 g; if (!si_mpz_to_i128(gv, 115, &g)) { ok = false; break; }
             gtab[i][d] = g;
         }

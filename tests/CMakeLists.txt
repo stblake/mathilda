@@ -417,6 +417,7 @@ endif()
 
 set(COMMON_SRC
     ../src/expr.c
+    ../src/expr_gmp64.c
     ../src/parse.c
     ../src/linear_boxes.c
     ../src/eval.c
@@ -2293,6 +2294,13 @@ add_executable(compile_overflow_fallback_tests test_compile_overflow.c)
 target_include_directories(compile_overflow_fallback_tests PRIVATE ../src)
 target_compile_definitions(compile_overflow_fallback_tests PRIVATE COMPILE_NO_OVERFLOW_BUILTIN)
 add_test(NAME compile_overflow_fallback_tests COMMAND compile_overflow_fallback_tests)
+
+# src/expr_gmp64.c (the int64/uint64 siblings of GMP/MPFR `_si`/`_ui` calls) on
+# its LLP64 branch -- forced on this LP64 host by MTH_TEST_LLP64_PATH -- against
+# exact GMP.  Standalone: the helper source is #included, no kernel objects.
+add_executable(gmp64_llp64_tests test_gmp64_llp64.c)
+target_include_directories(gmp64_llp64_tests PRIVATE ../src)
+add_test(NAME gmp64_llp64_tests COMMAND gmp64_llp64_tests)
 
 # 2026-11 numeric-tower review corpus (docs/design/numeric_tower_review.md):
 # int64/BigInt and machine/MPFR boundary edge cases.

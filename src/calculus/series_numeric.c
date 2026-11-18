@@ -118,7 +118,7 @@ static bool ts_head_is(const Expr* e, const char* sym) {
  * Exact integers and rationals convert directly; anything else goes through
  * N at wp bits and must come back a real number. */
 static bool ts_numeric_value(TsCtx* C, const Expr* e, mpfr_t out) {
-    if (e->type == EXPR_INTEGER) { mpfr_set_si(out, (long)e->data.integer, MPFR_RNDN); return true; }
+    if (e->type == EXPR_INTEGER) { mth_mpfr_set_i64(out, e->data.integer, MPFR_RNDN); return true; }
     if (e->type == EXPR_BIGINT)  { mpfr_set_z(out, e->data.bigint, MPFR_RNDN); return true; }
     if (ts_head_is(e, SYM_Rational) && e->data.function.arg_count == 2) {
         const Expr* pe = e->data.function.args[0];
@@ -144,7 +144,7 @@ static bool ts_numeric_value(TsCtx* C, const Expr* e, mpfr_t out) {
     if (v) {
         if (v->type == EXPR_MPFR)        { mpfr_set(out, v->data.mpfr, MPFR_RNDN); ok = true; }
         else if (v->type == EXPR_REAL)   { mpfr_set_d(out, v->data.real, MPFR_RNDN); ok = true; }
-        else if (v->type == EXPR_INTEGER){ mpfr_set_si(out, (long)v->data.integer, MPFR_RNDN); ok = true; }
+        else if (v->type == EXPR_INTEGER){ mth_mpfr_set_i64(out, v->data.integer, MPFR_RNDN); ok = true; }
         else if (v->type == EXPR_BIGINT) { mpfr_set_z(out, v->data.bigint, MPFR_RNDN); ok = true; }
         expr_free(v);
     }

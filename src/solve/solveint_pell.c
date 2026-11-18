@@ -104,8 +104,8 @@ bool si_pell_cf(const mpz_t D, const mpz_t N, mpz_t u, mpz_t v,
 /* Emit (+/-X, +/-Y) at (xside, yside), each sign combo verified. */
 static void si_pell_emit(SICtx* c, SearchState* st, int xs, int ys,
                          const mpz_t X, const mpz_t Y) {
-    if (!mpz_fits_slong_p(X) || !mpz_fits_slong_p(Y)) return;
-    int64_t xa = mpz_get_si(X), ya = mpz_get_si(Y);
+    int64_t xa, ya;
+    if (!expr_mpz_get_int64(X, &xa) || !expr_mpz_get_int64(Y, &ya)) return;
     for (int sx = 1; sx >= -1; sx -= 2)
         for (int sy = 1; sy >= -1; sy -= 2) {
             int64_t vals[SI_MAX_VARS];
@@ -141,8 +141,8 @@ bool si_solve_pell(SICtx* c, SearchState* st) {
     }
 
     for (int guard = 0; go && guard < 100000 && !st->overflow; guard++) {
-        bool past = (c->has_hi[xs] && mpz_cmp_si(cx, c->hi[xs]) > 0)
-                 || (c->has_hi[ys] && mpz_cmp_si(cy, c->hi[ys]) > 0);
+        bool past = (c->has_hi[xs] && mth_mpz_cmp_i64(cx, c->hi[xs]) > 0)
+                 || (c->has_hi[ys] && mth_mpz_cmp_i64(cy, c->hi[ys]) > 0);
         if (past) break;
         si_pell_emit(c, st, xs, ys, cx, cy);
         /* compose with U: (x,y) -> (x u + D y v, x v + y u) */

@@ -717,7 +717,7 @@ static bool rr_leaf_mpfr(const Expr* e, mpfr_t out, mpfr_prec_t prec) {
     mpfr_init2(out, prec);
     if (e->type == EXPR_MPFR) { mpfr_set(out, e->data.mpfr, MPFR_RNDN); return true; }
     if (e->type == EXPR_REAL) { mpfr_set_d(out, e->data.real, MPFR_RNDN); return true; }
-    if (e->type == EXPR_INTEGER) { mpfr_set_si(out, (long)e->data.integer, MPFR_RNDN); return true; }
+    if (e->type == EXPR_INTEGER) { mth_mpfr_set_i64(out, e->data.integer, MPFR_RNDN); return true; }
     if (e->type == EXPR_BIGINT) { mpfr_set_z(out, e->data.bigint, MPFR_RNDN); return true; }
     NumericSpec spec;
     spec.mode = NUMERIC_MODE_MPFR;

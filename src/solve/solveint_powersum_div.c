@@ -121,8 +121,8 @@ void si_two_power_solve(SICtx* c, SearchState* st, int ip, int jp,
                     mpz_set(num, sz); if (rs < 0) mpz_sub(num, num, r); else mpz_add(num, num, r);
                     if (!mpz_divisible_ui_p(num, 2)) continue;
                     mpz_divexact_ui(num, num, 2);           /* x = (s +/- r)/2 */
-                    if (!mpz_fits_slong_p(num)) continue;
-                    int64_t xv = mpz_get_si(num);
+                    int64_t xv;
+                    if (!expr_mpz_get_int64(num, &xv)) continue;
                     int64_t yv = sval - xv;
                     if (xv < loi || xv > hii || yv < loj || yv > hij) continue;
                     vals[ip] = xv; vals[jp] = yv;

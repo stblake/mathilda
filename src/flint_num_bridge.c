@@ -1043,10 +1043,10 @@ static int nb_dirichlet_char(dirichlet_group_t G, dirichlet_char_t x, uint64_t q
         if (!fn(ctx, (uint64_t)G->generators[i], &num)) return 0;
         ulong phi = G->P[i].phi.n;
         /* log = num * phi / den, an integer for a genuine character. */
-        mpz_t t; mpz_init_set_ui(t, (unsigned long)num);
-        mpz_mul_ui(t, t, (unsigned long)phi);
-        int ok = mpz_divisible_ui_p(t, (unsigned long)den);
-        if (ok) { mpz_divexact_ui(t, t, (unsigned long)den); x->log[i] = (ulong)mpz_get_ui(t) % phi; }
+        mpz_t t; mth_mpz_init_set_u64(t, (uint64_t)num);
+        mth_mpz_mul_u64(t, t, (uint64_t)phi);
+        int ok = mth_mpz_divisible_u64_p(t, (uint64_t)den);
+        if (ok) { mth_mpz_divexact_u64(t, t, (uint64_t)den); x->log[i] = (ulong)mth_mpz_fdiv_u64(t, (uint64_t)phi); }
         mpz_clear(t);
         if (!ok) return 0;
     }

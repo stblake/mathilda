@@ -46,6 +46,7 @@
 #include <gmp.h>
 #include <stddef.h>
 #include <stdint.h>
+#include "expr.h"   /* mth_mpz_*_u64: GMP _ui calls are 32-bit on LLP64 */
 
 /* ------------------------------------------------------------------ */
 /* Methods                                                             */

@@ -550,7 +550,7 @@ static bool zeta_hurwitz_cx(zcx* out, const zcx* s, const zcx* a, mpfr_prec_t wp
 static bool zeta_set_mpfr(mpfr_t out, const Expr* e) {
     if (!e) return false;
     switch (e->type) {
-        case EXPR_INTEGER: mpfr_set_si(out, (long)e->data.integer, ZRND); return true;
+        case EXPR_INTEGER: mth_mpfr_set_i64(out, e->data.integer, ZRND); return true;
         case EXPR_REAL:    mpfr_set_d (out, e->data.real,          ZRND); return true;
         case EXPR_BIGINT:  mpfr_set_z (out, e->data.bigint,        ZRND); return true;
         case EXPR_MPFR:    mpfr_set   (out, e->data.mpfr,          ZRND); return true;
@@ -558,8 +558,8 @@ static bool zeta_set_mpfr(mpfr_t out, const Expr* e) {
     }
     int64_t n, d;
     if (is_rational(e, &n, &d)) {
-        mpfr_set_si(out, (long)n, ZRND);
-        mpfr_div_si(out, out, (long)d, ZRND);
+        mth_mpfr_set_i64(out, n, ZRND);
+        mth_mpfr_div_i64(out, out, d, ZRND);
         return true;
     }
     return false;

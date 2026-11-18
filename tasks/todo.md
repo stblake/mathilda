@@ -107,8 +107,9 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
   - [x] E3: `(2/3)^(-2^63)` prints as `(3/2)^(2^63)` (cosmetic)
   - [x] F4: write `tests/test_compile_overflow.c`, or drop the reference in `checked_int.h`
   - [x] F6 (found here): real Binomial Indeterminate at Gamma overflow and integer poles
-  - [ ] F2 follow-up: Integers Solve `si_verify` `_si` arithmetic to 64-bit, then widen the solver guards;
+  - [x] F2 follow-up: Integers Solve `si_verify` `_si` arithmetic to 64-bit, then widen the solver guards;
         classify the ~250 arithmetic `_si`/`_ui` calls with int64 operands; `mpq_set_si` (~24)
+        (src/expr_gmp64.c helpers; 157 at-risk sites fixed, 133 classified safe; tests/test_gmp64_llp64.c)
   - [ ] Known slow, out of scope: `N[Binomial[10^8, 1/2], 30]` builds the exact Pi-rational first
 - [ ] Phase 8. Prevention: a `make check-machine-boundary` gate. Probe every numeric head with
       an NDArray kernel or a Compile lowering at the boundary inputs (+-1.*^308 * 10,

@@ -152,7 +152,7 @@ bool mgd_mpfr_from_expr(mpfr_ptr m, const Expr* e) {
     switch (e->type) {
         case EXPR_INTEGER:
             if (e->data.integer >= LONG_MIN && e->data.integer <= LONG_MAX) {
-                mpfr_set_si(m, (long)e->data.integer, MPFR_RNDN);
+                mth_mpfr_set_i64(m, e->data.integer, MPFR_RNDN);
             } else {               /* `long` is 32 bits on LLP64 Windows */
                 mpz_t z;
                 mpz_init(z);

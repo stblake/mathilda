@@ -634,7 +634,7 @@ static Expr* mpfr_axial_pow(const Expr* base, const Expr* exp, long bits) {
     mpfr_t m, ex, v;
     mpfr_init2(m, bits); mpfr_init2(ex, 64); mpfr_init2(v, bits);
     mpfr_abs(m, mag->data.mpfr, MPFR_RNDN);
-    mpfr_set_si(ex, (long)n2, MPFR_RNDN);
+    mth_mpfr_set_i64(ex, n2, MPFR_RNDN);
     mpfr_div_2ui(ex, ex, 1, MPFR_RNDN);              /* n2 / 2, exact */
     mpfr_pow(v, m, ex, MPFR_RNDN);
     mpfr_clear(m); mpfr_clear(ex);
@@ -811,7 +811,7 @@ bool get_approx_mpfr(const Expr* e, mpfr_t re, mpfr_t im, bool* is_inexact) {
 
     switch (e->type) {
         case EXPR_INTEGER:
-            mpfr_set_si(re, (long)e->data.integer, MPFR_RNDN);
+            mth_mpfr_set_i64(re, e->data.integer, MPFR_RNDN);
             mpfr_set_zero(im, +1);
             return true;
         case EXPR_BIGINT:
@@ -831,8 +831,8 @@ bool get_approx_mpfr(const Expr* e, mpfr_t re, mpfr_t im, bool* is_inexact) {
         case EXPR_FUNCTION: {
             int64_t n, d;
             if (is_rational((Expr*)e, &n, &d)) {
-                mpfr_set_si(re, (long)n, MPFR_RNDN);
-                mpfr_div_si(re, re, (long)d, MPFR_RNDN);
+                mth_mpfr_set_i64(re, n, MPFR_RNDN);
+                mth_mpfr_div_i64(re, re, d, MPFR_RNDN);
                 mpfr_set_zero(im, +1);
                 return true;
             }
@@ -1609,8 +1609,9 @@ static Expr* numericalize_function_uncached(const Expr* e, NumericSpec spec) {
     if (is_rational((Expr*)e, &rn, &rd)) {
 #ifdef USE_MPFR
         if (numeric_spec_is_mpfr(spec)) {
-            Expr* r = expr_new_mpfr_from_si((long)rn, spec.bits);
-            if (r) mpfr_div_si(r->data.mpfr, r->data.mpfr, (long)rd, MPFR_RNDN);
+            Expr* r = expr_new_mpfr_bits(spec.bits);
+            if (r) mth_mpfr_set_i64(r->data.mpfr, rn, MPFR_RNDN);
+            if (r) mth_mpfr_div_i64(r->data.mpfr, r->data.mpfr, rd, MPFR_RNDN);
             return r;
         }
 #endif
@@ -2759,6 +2760,8 @@ Expr* numeric_underflow_if_zero(Expr* r) {
     return expr_new_function(expr_new_symbol(SYM_Times), a, 2);
 }
 
+#endif /* USE_MPFR -- the Underflow[] rules below are built in every build */
+
 /* ---- Underflow[] in arithmetic (numeric-tower review, D5 follow-up) -------
  *
  * Underflow[] stands for a nonzero magnitude below MPFR's exponent range. D5
@@ -2919,6 +2922,7 @@ Expr* numeric_underflow_power(const Expr* b, const Expr* e) {
     return NULL;
 }
 
+#ifdef USE_MPFR   /* reopened: the MPFR promotion of a machine call */
 static Expr* promote_machine_call_impl(const Expr* call) {
     if (!call || call->type != EXPR_FUNCTION) return NULL;
     size_t n = call->data.function.arg_count;

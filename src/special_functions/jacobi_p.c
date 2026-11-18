@@ -136,7 +136,7 @@ static bool jp_is_number(const Expr* e) {
 /* Exact rational value of an Integer / BigInt / Rational into `out`. */
 static bool jp_mpq_from_expr(const Expr* e, mpq_t out) {
     if (!e) return false;
-    if (e->type == EXPR_INTEGER) { mpq_set_si(out, (long)e->data.integer, 1); return true; }
+    if (e->type == EXPR_INTEGER) { mth_mpq_set_i64(out, e->data.integer, 1); return true; }
     if (e->type == EXPR_BIGINT)  { mpq_set_z(out, e->data.bigint); return true; }
     if (e->type == EXPR_FUNCTION && e->data.function.head &&
         e->data.function.head->type == EXPR_SYMBOL &&

@@ -40,7 +40,7 @@ void si_eval_mpoly(const MPoly* p, const int64_t* vals, mpz_t out) {
         const int* ex = p->exps + t * (size_t)p->n_vars;
         mpz_set(term, p->coefs[t]);
         for (int v = 0; v < p->n_vars; v++)
-            for (int e = 0; e < ex[v]; e++) mpz_mul_si(term, term, (long)vals[v]);
+            for (int e = 0; e < ex[v]; e++) mth_mpz_mul_i64(term, term, vals[v]);
         mpz_add(out, out, term);
     }
     mpz_clear(term);
@@ -291,7 +291,7 @@ static bool try_bound_up(SICtx* c, const MPoly* G) {
             for (int u = 0; u < G->n_vars && ok; u++) {
                 if (u == v || ex[u] == 0) continue;
                 if (c->lo[u] < 1) { ok = false; break; }
-                for (int k = 0; k < ex[u]; k++) mpz_mul_si(denom, denom, c->lo[u]);
+                for (int k = 0; k < ex[u]; k++) mth_mpz_mul_i64(denom, denom, c->lo[u]);
             }
             if (!ok) continue;
             mpz_mul(denom, denom, G->coefs[t]);                  /* coef * prod lo^e */
@@ -307,8 +307,8 @@ static bool try_bound_up(SICtx* c, const MPoly* G) {
             mpz_fdiv_q(q, urest, denom);                         /* v^ev <= q */
             if (mpz_sgn(q) < 0) continue;
             mpz_root(root, q, (unsigned long)ev);                /* floor(q^(1/ev)) */
-            if (mpz_fits_slong_p(root)) {
-                int64_t bnd = mpz_get_si(root);
+            int64_t bnd;
+            if (expr_mpz_get_int64(root, &bnd)) {
                 if (!c->has_hi[v] || bnd < c->hi[v]) { c->hi[v] = bnd; c->has_hi[v] = true; changed = true; }
             }
         }
@@ -384,7 +384,7 @@ static bool try_bound_lo(SICtx* c, const MPoly* G) {
             for (int u = 0; u < G->n_vars && ok; u++) {
                 if (u == v || ex[u] == 0) continue;
                 if (!c->has_hi[u]) { ok = false; break; }
-                for (int k = 0; k < ex[u]; k++) mpz_mul_si(denom, denom, c->hi[u]);
+                for (int k = 0; k < ex[u]; k++) mth_mpz_mul_i64(denom, denom, c->hi[u]);
             }
             if (!ok) continue;
             mpz_mul(denom, denom, G->coefs[t]);             /* coef * prod hi^e */
@@ -403,8 +403,8 @@ static bool try_bound_lo(SICtx* c, const MPoly* G) {
             mpz_pow_ui(chk, root, (unsigned long)ev);
             if (mpz_cmp(chk, q) < 0) mpz_add_ui(root, root, 1);
             mpz_clear(chk);
-            if (mpz_fits_slong_p(root)) {
-                int64_t bnd = mpz_get_si(root);
+            int64_t bnd;
+            if (expr_mpz_get_int64(root, &bnd)) {
                 if (!c->has_lo[v] || bnd > c->lo[v]) { c->lo[v] = bnd; c->has_lo[v] = true; changed = true; }
             }
         }
@@ -538,7 +538,7 @@ void derive_even_only_bounds(SICtx* c) {
 static void horner_eval(const mpz_t* a, int d, int64_t r, mpz_t out) {
     mpz_set(out, a[d]);
     for (int k = d - 1; k >= 0; k--) {
-        mpz_mul_si(out, out, r);
+        mth_mpz_mul_i64(out, out, r);
         mpz_add(out, out, a[k]);
     }
 }
@@ -555,8 +555,8 @@ int univariate_roots(const mpz_t* a, int d, int64_t lo, int64_t hi,
     if (d == 1) {                                    /* a1 v + a0 = 0 */
         if (mpz_sgn(a[1]) != 0 && mpz_divisible_p(a[0], a[1])) {
             mpz_neg(tmp, a[0]); mpz_divexact(tmp, tmp, a[1]);
-            if (mpz_fits_slong_p(tmp)) {
-                int64_t r = mpz_get_si(tmp);
+            int64_t r;
+            if (expr_mpz_get_int64(tmp, &r)) {
                 if (r >= lo && r <= hi) roots[nr++] = r;
             }
         }
@@ -575,8 +575,8 @@ int univariate_roots(const mpz_t* a, int d, int64_t lo, int64_t hi,
             mpz_mul_ui(tmp, a[2], 2);
             if (mpz_sgn(tmp) != 0 && mpz_divisible_p(num, tmp)) {
                 mpz_divexact(num, num, tmp);
-                if (mpz_fits_slong_p(num)) {
-                    int64_t r = mpz_get_si(num);
+                int64_t r;
+                if (expr_mpz_get_int64(num, &r)) {
                     if (r >= lo && r <= hi) {
                         bool dup = false;
                         for (int i = 0; i < nr; i++) if (roots[i] == r) dup = true;
@@ -597,14 +597,14 @@ int univariate_roots(const mpz_t* a, int d, int64_t lo, int64_t hi,
                 mpz_neg(tmp, a[0]); mpz_divexact(tmp, tmp, a[d]);   /* tmp = v^d */
                 if (d % 2 == 1) {                                   /* one real root */
                     mpz_abs(num, tmp);
-                    if (mpz_root(s, num, (unsigned long)d) && mpz_fits_slong_p(s)) {
-                        int64_t r = mpz_get_si(s);
+                    int64_t r;
+                    if (mpz_root(s, num, (unsigned long)d) && expr_mpz_get_int64(s, &r)) {
                         if (mpz_sgn(tmp) < 0) r = -r;
                         if (r >= lo && r <= hi) roots[nr++] = r;
                     }
                 } else if (mpz_sgn(tmp) >= 0) {                     /* +/- root */
-                    if (mpz_root(s, tmp, (unsigned long)d) && mpz_fits_slong_p(s)) {
-                        int64_t r = mpz_get_si(s);
+                    int64_t r;
+                    if (mpz_root(s, tmp, (unsigned long)d) && expr_mpz_get_int64(s, &r)) {
                         if (r >= lo && r <= hi) roots[nr++] = r;
                         if (r != 0 && -r >= lo && -r <= hi) roots[nr++] = -r;
                     }

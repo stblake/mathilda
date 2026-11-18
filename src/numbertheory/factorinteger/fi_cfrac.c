@@ -50,7 +50,7 @@ int fi_fb_factor(mpz_t v, const uint32_t* fb, size_t nfb, uint32_t* col, uint32_
             M = l;
             c++;
         }
-        uint64_t r = mpz_fdiv_ui(v, (unsigned long)M);
+        uint64_t r = mth_mpz_fdiv_u64(v, (uint64_t)M);
         for (size_t j = c0; j < c; j++) {
             if (r % fb[j]) continue;
             uint32_t e = 0;
@@ -63,7 +63,7 @@ int fi_fb_factor(mpz_t v, const uint32_t* fb, size_t nfb, uint32_t* col, uint32_
     *cnt = k;
     if (mpz_cmp_ui(v, 1) == 0) { *L = 1; return 1; }
     if (mpz_sizeinbase(v, 2) <= 64) {
-        uint64_t rem = mpz_get_ui(v);
+        uint64_t rem = mth_mpz_get_u64(v);
         if (rem <= lp_max) { *L = rem; return 1; }   /* < pmax^2: prime */
     }
     return 0;
@@ -279,8 +279,8 @@ static int cf_visit(void* user, const FiLogRec* r, const uint32_t* col, const ui
     uint64_t L = r->L1;
     /* On a small n the large-prime bound can exceed a prime of n: such an L
      * is itself the answer. */
-    if (L > 1 && mpz_divisible_ui_p(C->n, (unsigned long)L) && mpz_cmp_ui(C->n, (unsigned long)L) > 0) {
-        mpz_set_ui(C->d, (unsigned long)L);
+    if (L > 1 && mth_mpz_divisible_u64_p(C->n, (uint64_t)L) && mth_mpz_cmp_u64(C->n, (uint64_t)L) > 0) {
+        mth_mpz_set_u64(C->d, (uint64_t)L);
         return 1;
     }
     fi_rels_add(C->R, C->cur->A[r->tag], col, exps, r->cnt, L, C->n);

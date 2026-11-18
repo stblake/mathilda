@@ -91,9 +91,9 @@ static inline U2 to_mont2(uint64_t a, const Mont2* M) {
 }
 
 static void u2_to_mpz(mpz_t z, U2 a) {
-    mpz_set_ui(z, (unsigned long)a.hi);
+    mth_mpz_set_u64(z, (uint64_t)a.hi);
     mpz_mul_2exp(z, z, 64);
-    mpz_add_ui(z, z, (unsigned long)a.lo);
+    mth_mpz_add_u64(z, z, (uint64_t)a.lo);
 }
 
 int fi_u128_rho(mpz_t d, const mpz_t n, uint64_t c, uint64_t max_iters) {
@@ -209,8 +209,8 @@ static int t2_curve(mpz_t g, const mpz_t n, uint64_t sigma, uint32_t B1, uint32_
      * GMP (a failed inverse is itself a factor). */
     mpz_t u, v, x, z, num, den;
     mpz_inits(u, v, x, z, num, den, NULL);
-    mpz_set_ui(u, (unsigned long)sigma); mpz_mul(u, u, u); mpz_sub_ui(u, u, 5); mpz_mod(u, u, n);
-    mpz_set_ui(v, (unsigned long)sigma); mpz_mul_ui(v, v, 4); mpz_mod(v, v, n);
+    mth_mpz_set_u64(u, (uint64_t)sigma); mpz_mul(u, u, u); mth_mpz_sub_u64(u, u, 5); mpz_mod(u, u, n);
+    mth_mpz_set_u64(v, (uint64_t)sigma); mth_mpz_mul_u64(v, v, 4); mpz_mod(v, v, n);
     mpz_powm_ui(x, u, 3, n);
     mpz_powm_ui(z, v, 3, n);
     mpz_sub(num, v, u); mpz_powm_ui(num, num, 3, n);

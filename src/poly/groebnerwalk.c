@@ -168,7 +168,7 @@ static int next_wall(GBPoly* const* G, size_t nG, const int64_t* sigma,
             int64_t den = A - B;                 /* A - B */
             if (den <= 0) continue;              /* not a forward wall */
             /* t* = A / den, den > 0. */
-            mpq_set_si(cand, (long)A, (unsigned long)den);
+            mth_mpq_set_i64(cand, A, (uint64_t)den);
             mpq_canonicalize(cand);
             if (mpq_cmp(cand, t_cur) > 0 && mpq_cmp_ui(cand, 1, 1) <= 0) {
                 if (!found || mpq_cmp(cand, t_next) < 0) {

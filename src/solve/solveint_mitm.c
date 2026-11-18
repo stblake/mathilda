@@ -74,8 +74,8 @@ bool mitm_solve(SearchState* st) {
 
     /* TARGET = -c0 as int64. */
     mpz_neg(c0, c0);
-    if (!mpz_fits_slong_p(c0)) { mpz_clear(c0); return false; }
-    int64_t target = mpz_get_si(c0);
+    int64_t target;
+    if (!expr_mpz_get_int64(c0, &target)) { mpz_clear(c0); return false; }
     mpz_clear(c0);
 
     /* Per-variable value tables g_i(v). */
@@ -101,11 +101,10 @@ bool mitm_solve(SearchState* st) {
                 for (int u = 0; u < n; u++) if (u != i && ex[u] > 0) { only_i = false; break; }
                 if (!only_i) continue;
                 mpz_set(pw, eq->coefs[t]);
-                for (int k = 0; k < ex[i]; k++) mpz_mul_si(pw, pw, (long)v);
+                for (int k = 0; k < ex[i]; k++) mth_mpz_mul_i64(pw, pw, v);
                 mpz_add(gv, gv, pw);
             }
-            if (!mpz_fits_slong_p(gv)) { ok = false; break; }
-            gtab[i][d] = mpz_get_si(gv);
+            if (!expr_mpz_get_int64(gv, &gtab[i][d])) { ok = false; break; }
         }
     }
     mpz_clear(gv); mpz_clear(pw);

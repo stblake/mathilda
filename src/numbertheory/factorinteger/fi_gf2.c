@@ -184,7 +184,7 @@ int fi_rels_add2(FiRels* R, const mpz_t X, const uint32_t* col, const uint32_t* 
     if (L2 <= 1 || L1 == L2) {
         /* Smooth, or the cofactor was a square L^2: a full relation. */
         mpz_t E;
-        mpz_init_set_ui(E, (unsigned long)(L2 <= 1 ? 1 : L2));
+        mth_mpz_init_set_u64(E, (uint64_t)(L2 <= 1 ? 1 : L2));
         add_full(R, X, E, col, exps, cnt);
         mpz_clear(E);
         return 1;
@@ -350,17 +350,17 @@ static void materialise_cycles(FiRels* R, const mpz_t n) {
                 const Edge* t = &R->edge[pe[a]];
                 ACCUM(t);
                 mpz_mul(X, X, t->X); mpz_mod(X, X, n);
-                mpz_mul_ui(Ev, Ev, (unsigned long)R->vprime[a]); mpz_mod(Ev, Ev, n);
+                mth_mpz_mul_u64(Ev, Ev, (uint64_t)R->vprime[a]); mpz_mod(Ev, Ev, n);
                 a = par[a];
             } else {
                 const Edge* t = &R->edge[pe[b]];
                 ACCUM(t);
                 mpz_mul(X, X, t->X); mpz_mod(X, X, n);
-                mpz_mul_ui(Ev, Ev, (unsigned long)R->vprime[b]); mpz_mod(Ev, Ev, n);
+                mth_mpz_mul_u64(Ev, Ev, (uint64_t)R->vprime[b]); mpz_mod(Ev, Ev, n);
                 b = par[b];
             }
         }
-        mpz_mul_ui(Ev, Ev, (unsigned long)R->vprime[a]); mpz_mod(Ev, Ev, n);   /* the apex */
+        mth_mpz_mul_u64(Ev, Ev, (uint64_t)R->vprime[a]); mpz_mod(Ev, Ev, n);   /* the apex */
 #undef ACCUM
         /* Collect the summed exponents in column order. */
         size_t m = 0;

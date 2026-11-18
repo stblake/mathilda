@@ -88,7 +88,7 @@ static void lift_tl_push(LiftTokList* t, Expr* e) {
 static bool lift_expr_to_mpq(const Expr* e, mpq_t out) {
     if (!e) return false;
     if (e->type == EXPR_INTEGER) {
-        mpq_set_si(out, (long)e->data.integer, 1);
+        mth_mpq_set_i64(out, e->data.integer, 1);
         return true;
     }
     if (e->type == EXPR_BIGINT) {
@@ -97,7 +97,7 @@ static bool lift_expr_to_mpq(const Expr* e, mpq_t out) {
     }
     int64_t n, d;
     if (is_rational(e, &n, &d)) {
-        mpq_set_si(out, (long)n, (unsigned long)d);
+        mth_mpq_set_i64(out, n, (uint64_t)d);
         mpq_canonicalize(out);
         return true;
     }

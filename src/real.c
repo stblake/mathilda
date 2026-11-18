@@ -191,7 +191,7 @@ static void rd_to_mpq(const Expr* x, mpq_t out) {
     if (x->type == EXPR_INTEGER) {
         int64_t v = x->data.integer;
         if (v < 0) v = -v;
-        mpq_set_ui(out, (unsigned long)v, 1);
+        mth_mpq_set_u64(out, (uint64_t)v, 1);
         return;
     }
     if (x->type == EXPR_BIGINT) {
@@ -1241,7 +1241,7 @@ static void me_to_signed_mpq(const Expr* x, mpq_t out_q, int* sign_out) {
         if (v == 0)      { *sign_out = 0;  mpq_set_ui(out_q, 0, 1); return; }
         if (v < 0)       { *sign_out = -1; v = -v; }
         else             { *sign_out = +1; }
-        mpq_set_ui(out_q, (unsigned long)v, 1);
+        mth_mpq_set_u64(out_q, (uint64_t)v, 1);
         return;
     }
     if (x->type == EXPR_BIGINT) {

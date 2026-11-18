@@ -293,7 +293,7 @@ static bool ecx_erf_series(ecx* out, const ecx* z, mpfr_prec_t wp, double z2abs)
 static bool erfc_set_mpfr(mpfr_t out, const Expr* e) {
     if (!e) return false;
     switch (e->type) {
-        case EXPR_INTEGER: mpfr_set_si(out, (long)e->data.integer, ERND); return true;
+        case EXPR_INTEGER: mth_mpfr_set_i64(out, e->data.integer, ERND); return true;
         case EXPR_REAL:    mpfr_set_d (out, e->data.real,          ERND); return true;
         case EXPR_BIGINT:  mpfr_set_z (out, e->data.bigint,        ERND); return true;
         case EXPR_MPFR:    mpfr_set   (out, e->data.mpfr,          ERND); return true;
@@ -301,8 +301,8 @@ static bool erfc_set_mpfr(mpfr_t out, const Expr* e) {
     }
     int64_t n, d;
     if (is_rational(e, &n, &d)) {
-        mpfr_set_si(out, (long)n, ERND);
-        mpfr_div_si(out, out, (long)d, ERND);
+        mth_mpfr_set_i64(out, n, ERND);
+        mth_mpfr_div_i64(out, out, d, ERND);
         return true;
     }
     return false;

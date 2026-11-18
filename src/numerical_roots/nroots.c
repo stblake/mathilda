@@ -133,15 +133,15 @@ static bool nr_real_to_mpfr(Expr* e, mpfr_t out) {
     if (!e) return false;
     int64_t n, d;
     switch (e->type) {
-        case EXPR_INTEGER: mpfr_set_si(out, e->data.integer, MPFR_RNDN); return true;
+        case EXPR_INTEGER: mth_mpfr_set_i64(out, e->data.integer, MPFR_RNDN); return true;
         case EXPR_REAL:    mpfr_set_d (out, e->data.real,    MPFR_RNDN); return true;
         case EXPR_BIGINT:  mpfr_set_z (out, e->data.bigint,  MPFR_RNDN); return true;
         case EXPR_MPFR:    mpfr_set   (out, e->data.mpfr,    MPFR_RNDN); return true;
         case EXPR_FUNCTION:
             if (is_rational(e, &n, &d) && d != 0) {
-                mpfr_set_si(out, n, MPFR_RNDN);
+                mth_mpfr_set_i64(out, n, MPFR_RNDN);
                 mpfr_t dd; mpfr_init2(dd, mpfr_get_prec(out));
-                mpfr_set_si(dd, d, MPFR_RNDN);
+                mth_mpfr_set_i64(dd, d, MPFR_RNDN);
                 mpfr_div(out, out, dd, MPFR_RNDN);
                 mpfr_clear(dd);
                 return true;

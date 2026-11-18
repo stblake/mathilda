@@ -38,8 +38,8 @@ static int squfof_k(mpz_t d, const mpz_t n, unsigned long k, uint64_t budget) {
         ok = mpz_cmp_ui(d, 1) > 0 && mpz_cmp(d, n) < 0;
         goto done;
     }
-    uint64_t s = mpz_get_ui(t);
-    uint64_t P = s, Qp = 1, Q = mpz_get_ui(d);  /* Q = kN - s^2 */
+    uint64_t s = mth_mpz_get_u64(t);
+    uint64_t P = s, Qp = 1, Q = mth_mpz_get_u64(d);  /* Q = kN - s^2 */
     if (!budget) budget = 4 * (uint64_t)sqrt(2.0 * sqrt(mpz_get_d(kn))) + 64;
     uint64_t r = 0, i;
     for (i = 1; i < budget; i++) {
@@ -56,11 +56,11 @@ static int squfof_k(mpz_t d, const mpz_t n, unsigned long k, uint64_t budget) {
         uint64_t b = (s - P) / r;
         P = b * r + P;
         Qp = r;
-        mpz_set_ui(t, (unsigned long)P);
+        mth_mpz_set_u64(t, (uint64_t)P);
         mpz_mul(t, t, t);
         mpz_sub(t, kn, t);
-        mpz_divexact_ui(t, t, (unsigned long)r);
-        Q = mpz_get_ui(t);
+        mth_mpz_divexact_u64(t, t, (uint64_t)r);
+        Q = mth_mpz_get_u64(t);
         for (uint64_t j = 0; j < budget; j++) {
             uint64_t bb = (s + P) / Q;
             uint64_t Pn = bb * Q - P;
@@ -68,7 +68,7 @@ static int squfof_k(mpz_t d, const mpz_t n, unsigned long k, uint64_t budget) {
             int64_t dq = (int64_t)Qp + (int64_t)bb * ((int64_t)P - (int64_t)Pn);
             Qp = Q; Q = (uint64_t)dq; P = Pn;
         }
-        mpz_set_ui(t, (unsigned long)P);
+        mth_mpz_set_u64(t, (uint64_t)P);
         mpz_gcd(d, n, t);
         ok = mpz_cmp_ui(d, 1) > 0 && mpz_cmp(d, n) < 0;
     }

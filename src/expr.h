@@ -377,6 +377,34 @@ bool  expr_mpz_get_int64(const mpz_t z, int64_t* out);
  * these are exact on every data model. */
 void  mth_mpz_set_i64(mpz_t z, int64_t v);
 void  mth_mpz_init_set_i64(mpz_t z, int64_t v);
+/* The rest of the int64/uint64 siblings of GMP's `_si`/`_ui` calls, for the
+ * same reason: on LLP64 a `long` operand is 32 bits.  Each is the plain
+ * `_si`/`_ui` call where `long` is 64 bits (and, on LLP64, whenever the value
+ * fits a `long`), otherwise exact through an mpz.  mth_mpq_set_i64 does not
+ * canonicalise, exactly like mpq_set_si. */
+bool  mth_u64_fits_ulong(uint64_t v);      /* v fits an `unsigned long` */
+void  mth_mpz_set_u64(mpz_t z, uint64_t v);
+void  mth_mpz_init_set_u64(mpz_t z, uint64_t v);
+void  mth_mpz_mul_i64(mpz_t r, const mpz_t a, int64_t v);
+void  mth_mpz_mul_u64(mpz_t r, const mpz_t a, uint64_t v);
+void  mth_mpz_add_u64(mpz_t r, const mpz_t a, uint64_t v);
+void  mth_mpz_sub_u64(mpz_t r, const mpz_t a, uint64_t v);
+int   mth_mpz_cmp_i64(const mpz_t a, int64_t v);
+int   mth_mpz_cmp_u64(const mpz_t a, uint64_t v);
+int   mth_mpz_divisible_u64_p(const mpz_t a, uint64_t d);
+void  mth_mpz_divexact_u64(mpz_t r, const mpz_t a, uint64_t d);
+uint64_t mth_mpz_fdiv_u64(const mpz_t a, uint64_t d);   /* a mod d in [0, d) */
+uint64_t mth_mpz_get_u64(const mpz_t z);   /* low 64 bits of |z|, as mpz_get_ui */
+void  mth_mpq_set_i64(mpq_t q, int64_t num, uint64_t den);
+void  mth_mpq_set_u64(mpq_t q, uint64_t num, uint64_t den);
+#ifdef USE_MPFR
+int   mth_mpfr_set_i64(mpfr_t x, int64_t v, mpfr_rnd_t rnd);
+int   mth_mpfr_set_u64(mpfr_t x, uint64_t v, mpfr_rnd_t rnd);
+int   mth_mpfr_mul_i64(mpfr_t r, const mpfr_t a, int64_t v, mpfr_rnd_t rnd);
+int   mth_mpfr_div_i64(mpfr_t r, const mpfr_t a, int64_t v, mpfr_rnd_t rnd);
+int   mth_mpfr_add_i64(mpfr_t r, const mpfr_t a, int64_t v, mpfr_rnd_t rnd);
+int   mth_mpfr_pow_i64(mpfr_t r, const mpfr_t a, int64_t v, mpfr_rnd_t rnd);
+#endif
 Expr* expr_bigint_normalize(Expr* e);
 
 #endif // EXPR_H

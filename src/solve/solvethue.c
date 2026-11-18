@@ -416,7 +416,7 @@ static int thue_solve_reducible_form(const mpz_t* form, int n, const mpz_t m, Th
  *  docs/references/thue/ALGORITHM_NOTES.md).                          *
  * ================================================================== */
 
-typedef struct { bool ok; long B; long Y2p; long Xmax; } ThueBound;
+typedef struct { bool ok; int64_t B; int64_t Y2p; int64_t Xmax; } ThueBound;
 
 /* Evaluate the algebraic integer with integer coords c[0..deg-1] at the
  * complex root z (acb Horner). */
@@ -717,6 +717,9 @@ static int thue_norm_reps_cubic11(NumberField* K, NFUnits* U, const mpz_t m,
     for (int i = 0; i < 3 && feasible; i++) {
         double s = 0;
         for (int j = 0; j < 3; j++) { acb_abs(ab, acb_mat_entry(Vi, i, j), prec); s += arb_ubound_d(ab, prec) * bnd[j]; }
+        /* boxprod > 5e6 declines any Ci past 2.5e6; test before the cast so a
+         * huge s cannot wrap a 32-bit `long` (LLP64) into a negative box. */
+        if (!(s >= 0.0 && s < 5e6)) { feasible = false; break; }
         long Ci = (long)ceil(s * 1.05) + 2;    /* +5% + 2: over-cover (safe) */
         C[i] = Ci; boxprod *= (2.0 * Ci + 1);
         if (boxprod > 5e6) feasible = false;   /* too large -> decline */
@@ -1073,7 +1076,8 @@ static ThueBound thue_exponent_bound(NumberField* K, NFUnits* U,
             }
             if (Ared < 0) { curbound = 1e18; }                  /* subform still degenerate */
             else {
-                long AR = (long)ceil(Ared); if (AR < 0) AR = 0;
+                /* combos <= 2e6 declines AR past 1e6: clamp before the cast. */
+                long AR = Ared < 1e6 ? (long)ceil(Ared) : 1000000L; if (AR < 0) AR = 0;
                 double combos = 1; for (int i = 0; i < p; i++) combos *= (2.0*AR + 1);
                 double L = 1e300; bool okL = (combos <= 2e6);
                 if (okL) {
@@ -1117,12 +1121,20 @@ static ThueBound thue_exponent_bound(NumberField* K, NFUnits* U,
       for (int i = 0; i < n; i++) { acb_abs(ab, rt + i, prec); double v = arb_ubound_d(ab, prec); if (v > maxrootabs) maxrootabs = v; }
       arb_clear(ab); }
 
+    /* The casts below must stay defined: a bound past 1e15 is far beyond any
+     * enumeration cap (the caller declines a box above 2e8), so decline it
+     * here.  Xmax only selects the narrow x-scan (<= 127) and is otherwise
+     * unused, so a huge one is clamped rather than declined.  (`long` was 32
+     * bits on LLP64: a Y2p or Xmax past 2^31 became negative, which passed the
+     * box cap and skipped the small-|Y| scan -- missing solutions.) */
+    if (!(Y2p >= 0.0 && Y2p < 1e15)) return R;
     R.ok = true;
-    R.B = (long)ceil(Bmax);
-    R.Y2p = (long)ceil(Y2p);
+    R.B = (int64_t)ceil(Bmax);
+    R.Y2p = (int64_t)ceil(Y2p);
     /* For |Y|<=Y2p, min_i|beta^(i)| <= |m|^(1/n) = 1, so some |X-Re(xi^(i))Y|<=1,
      * giving |X| <= max|root|*|Y| + 1. */
-    R.Xmax = (long)ceil(maxrootabs * (double)R.Y2p) + 2;
+    double xm = ceil(maxrootabs * (double)R.Y2p) + 2;
+    R.Xmax = (xm >= 0.0 && xm < 1e15) ? (int64_t)xm : INT64_C(1000000000000000);
     return R;
 }
 
@@ -1287,7 +1299,7 @@ static int thue_enumerate(const mpz_t* form_in, int n, const mpz_t m_in,
 
     /* effective enumeration bound: rigorous (Baker/de-Weger) when the caller
      * passes the sentinel, else the explicit test bound. */
-    long Y2p = -1, Xmax = -1;
+    int64_t Y2p = -1, Xmax = -1;
     int B;
     if (bound == THUE_BOUND_RIGOROUS) {
         ThueBound tb = thue_exponent_bound(K, U, (const mpz_t*)form, n, m,
@@ -1306,8 +1318,8 @@ static int thue_enumerate(const mpz_t* form_in, int n, const mpz_t m_in,
         double ybox = narrowX ? (2.0 * Y2p + 1.0) * (2.0 * Xmax + 1.0)   /* scan area */
                               : (2.0 * Y2p + 1.0);                        /* one factor / row */
         double ybox_cap = narrowX ? 2e8 : 4e6;
-        if (ebox > 2e8 || ybox > ybox_cap) { if (edbg) fprintf(stderr, "[thue] DECLINE: enumeration box too large (ebox=%.3g ybox=%.3g narrowX=%d B=%d Y2p=%ld Xmax=%ld)\n", ebox, ybox, (int)narrowX, B, Y2p, Xmax); thue_free_reps(Mreps, nM); nf_units_free(U); nf_field_free(K); goto done; }
-        if (edbg) { fprintf(stderr, "[thue-prof] exponent_bound (B=%d Y2p=%ld): %.1fms\n", B, Y2p, (clock()-tprof)*1000.0/CLOCKS_PER_SEC); tprof = clock(); }
+        if (ebox > 2e8 || ybox > ybox_cap) { if (edbg) fprintf(stderr, "[thue] DECLINE: enumeration box too large (ebox=%.3g ybox=%.3g narrowX=%d B=%d Y2p=%.0f Xmax=%.0f)\n", ebox, ybox, (int)narrowX, B, (double)Y2p, (double)Xmax); thue_free_reps(Mreps, nM); nf_units_free(U); nf_field_free(K); goto done; }
+        if (edbg) { fprintf(stderr, "[thue-prof] exponent_bound (B=%d Y2p=%.0f): %.1fms\n", B, (double)Y2p, (clock()-tprof)*1000.0/CLOCKS_PER_SEC); tprof = clock(); }
     } else {
         B = bound;
     }
@@ -1392,10 +1404,10 @@ static int thue_enumerate(const mpz_t* form_in, int n, const mpz_t m_in,
         bool narrowX = (2.0 * Xmax + 1.0) <= 256.0;
         mpz_t X, Y; mpz_init(X); mpz_init(Y);
         if (narrowX) {
-            for (long yy = -Y2p; yy <= Y2p; yy++) {
-                mpz_set_si(Y, yy);
-                for (long xx = -Xmax; xx <= Xmax; xx++) {
-                    mpz_set_si(X, xx);
+            for (int64_t yy = -Y2p; yy <= Y2p; yy++) {
+                mth_mpz_set_i64(Y, yy);
+                for (int64_t xx = -Xmax; xx <= Xmax; xx++) {
+                    mth_mpz_set_i64(X, xx);
                     eval_form(form, n, X, Y, fval);
                     if (mpz_cmp(fval, m) == 0) solbuf_push(&sb, X, Y);
                 }
@@ -1403,8 +1415,8 @@ static int thue_enumerate(const mpz_t* form_in, int n, const mpz_t m_in,
         } else {
             fmpz_poly_t Px; fmpz_poly_init(Px);
             mpz_t* xroots = NULL; int nxr = 0, xcap = 0;
-            for (long yy = -Y2p; yy <= Y2p; yy++) {
-                mpz_set_si(Y, yy);
+            for (int64_t yy = -Y2p; yy <= Y2p; yy++) {
+                mth_mpz_set_i64(Y, yy);
                 thue_form_xpoly(form, n, Y, m, Px);
                 nxr = 0;
                 fmpz_poly_int_roots(Px, &xroots, &nxr, &xcap);

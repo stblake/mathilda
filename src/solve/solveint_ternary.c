@@ -200,8 +200,8 @@ Expr* si_solve_ternary_quadratic(SICtx* c) {
     if (po == vs[0]) mpz_abs(k, a);
     else if (po == vs[1]) mpz_abs(k, b);
     else mpz_abs(k, cc);
-    if (!mpz_fits_slong_p(k)) { mpz_clear(k); declined = true; goto done; }
-    int64_t kk = mpz_get_si(k);
+    int64_t kk;
+    if (!expr_mpz_get_int64(k, &kk)) { mpz_clear(k); declined = true; goto done; }
 
     /* Legendre solvability. */
     if (!ternary_solvable(k)) { mpz_clear(k); result = ternary_trivial(c, vs); goto done; }

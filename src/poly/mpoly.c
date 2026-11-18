@@ -448,7 +448,7 @@ MPoly* mpoly_scale_si(const MPoly* a, int64_t k) {
     if (k == 1) return mpoly_copy(a);
     MPoly* c = mpoly_copy(a);
     for (size_t i = 0; i < c->n_terms; i++)
-        mpz_mul_si(c->coefs[i], c->coefs[i], (long)k);
+        mth_mpz_mul_i64(c->coefs[i], c->coefs[i], k);
     return c;
 }
 

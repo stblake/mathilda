@@ -334,7 +334,7 @@ static Expr* power_split_residue(int64_t r, int64_t b_rem, int64_t q) {
         mth_mpz_init_set_i64(base_z, primes[i]);
         for (int j = i + 1; j < npr; j++) {
             if (!used[j] && eff_num[j] == eff_num[i] && eff_den[j] == eff_den[i]) {
-                mpz_mul_si(base_z, base_z, primes[j]);
+                mth_mpz_mul_i64(base_z, base_z, primes[j]);
                 used[j] = true;
             }
         }
@@ -843,7 +843,11 @@ static Expr* power_rational_base_symbolic_exp(Expr* base, Expr* exp) {
         /* Exact q-th root R of num/den. */
         mpz_t rn, rd, kn, kd;
         mpz_inits(rn, rd, kn, kd, NULL);
-        if (mpz_root(rn, num, (unsigned long)cq) && mpz_root(rd, den, (unsigned long)cq)) {
+        /* mpz_root takes an `unsigned long` (32 bits on LLP64).  An index past
+         * it has no exact root of num/den != 1 (that needs num or den >= 2^cq),
+         * so such a cq is simply "not exact" rather than truncated. */
+        if (mth_u64_fits_ulong((uint64_t)cq)
+            && mpz_root(rn, num, (unsigned long)cq) && mpz_root(rd, den, (unsigned long)cq)) {
             bool flip = mpz_cmp(rn, rd) < 0;
             mth_mpz_set_i64(kn, flip ? -cp : cp);
             mpz_set_ui(kd, 1);
@@ -881,7 +885,7 @@ static Expr* power_rational_base_symbolic_exp(Expr* base, Expr* exp) {
             /* num/den = R^K, R = prod p^(sign k). */
             mpz_set_ui(rn, 1);
             mpz_set_ui(rd, 1);
-            for (int i = 0; i < np; i++) mpz_mul_si(ex[i] > 0 ? rn : rd, ex[i] > 0 ? rn : rd, pr[i]);
+            for (int i = 0; i < np; i++) mth_mpz_mul_i64(ex[i] > 0 ? rn : rd, ex[i] > 0 ? rn : rd, pr[i]);
             bool flip = mpz_cmp(rn, rd) < 0;
             mth_mpz_set_i64(kn, flip ? -K * cp : K * cp);
             mth_mpz_set_i64(kd, cq);
@@ -893,7 +897,7 @@ static Expr* power_rational_base_symbolic_exp(Expr* base, Expr* exp) {
             for (int i = 0; i < np; i++) {
                 /* m = k c = k p / q */
                 mth_mpz_set_i64(kn, ex[i]);
-                mpz_mul_si(kn, kn, cp);
+                mth_mpz_mul_i64(kn, kn, cp);
                 mth_mpz_set_i64(kd, cq);
                 mpz_gcd(pz, kn, kd);
                 mpz_divexact(kn, kn, pz);

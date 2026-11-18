@@ -232,7 +232,7 @@ static int tn_int_power(NdTaylorTape* T, int a, int64_t n) {
         return r;
     }
     if (n > 64) {   /* large power: the a^c recurrence (needs a_0 != 0) */
-        mpfr_t al; mpfr_init2(al, T->bits); mpfr_set_si(al, (long)n, RND);
+        mpfr_t al; mpfr_init2(al, T->bits); mth_mpfr_set_i64(al, n, RND);
         int r = tn_pow(T, a, al);
         mpfr_clear(al);
         return r;

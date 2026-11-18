@@ -101,10 +101,11 @@ bool si_solve_conic(SICtx* c, SearchState* st) {
                             mpz_sub(num, d2, d1); mpz_sub(num, num, twoB);  /* X = (d2-d1-2B)/(4A) */
                             if (!mpz_divisible_p(num, fourA)) continue;
                             mpz_divexact(X, num, fourA);
-                            if (!mpz_fits_slong_p(Y) || !mpz_fits_slong_p(X)) continue;
+                            int64_t yi, xi;
+                            if (!expr_mpz_get_int64(Y, &yi) || !expr_mpz_get_int64(X, &xi)) continue;
                             int64_t vals[SI_MAX_VARS];
                             for (int k = 0; k < n; k++) vals[k] = 0;
-                            vals[Yv] = mpz_get_si(Y); vals[Xv] = mpz_get_si(X);
+                            vals[Yv] = yi; vals[Xv] = xi;
                             if (si_verify(c, vals)) emit_full(st, vals);
                         }
                         mpz_clear(g);
@@ -228,10 +229,11 @@ bool si_solve_factorable_conic(SICtx* c, SearchState* st) {
                     mpz_mul_ui(tmp, A, 2);
                     if (!mpz_divisible_p(num, tmp)) continue;
                     mpz_divexact(x, num, tmp);
-                    if (!mpz_fits_slong_p(x) || !mpz_fits_slong_p(y)) continue;
+                    int64_t xi, yi;
+                    if (!expr_mpz_get_int64(x, &xi) || !expr_mpz_get_int64(y, &yi)) continue;
                     int64_t vals[SI_MAX_VARS];
                     for (int kk = 0; kk < n; kk++) vals[kk] = 0;
-                    vals[Xv] = mpz_get_si(x); vals[Yv] = mpz_get_si(y);
+                    vals[Xv] = xi; vals[Yv] = yi;
                     if (si_verify(c, vals)) emit_full(st, vals);
                 }
                 mpz_clear(g);
@@ -335,10 +337,11 @@ bool si_solve_elliptic_bqf(SICtx* c, SearchState* st) {
                     mpz_sub(num, num, a1);                  /* -a1 +/- sqrt(disc) */
                     if (!mpz_divisible_p(num, twoA)) continue;
                     mpz_divexact(num, num, twoA);           /* x */
-                    if (!mpz_fits_slong_p(num)) continue;
+                    int64_t xi;
+                    if (!expr_mpz_get_int64(num, &xi)) continue;
                     int64_t vals[SI_MAX_VARS];
                     for (int i = 0; i < n; i++) vals[i] = 0;
-                    vals[Xv] = mpz_get_si(num); vals[Yv] = yy;
+                    vals[Xv] = xi; vals[Yv] = yy;
                     if (si_verify(c, vals)) emit_full(st, vals);
                     if (mpz_sgn(root) == 0) break;          /* double root: one x */
                 }

@@ -448,10 +448,10 @@ out:
 
 /* Words: the u64 walk, which backtracks prime by prime on overshoot. */
 static int word_smooth(mpz_t d, const mpz_t n, double B1, int plus, FiCtx* c) {
-    uint64_t w = mpz_get_ui(n), g = 0;
+    uint64_t w = mth_mpz_get_u64(n), g = 0;
     if (plus) { for (int s = 0; s < 3 && !g; s++) g = fi_u64_pp1(w, (uint64_t)B1, fi_rand(c)); }
     else g = fi_u64_pm1(w, (uint64_t)B1);
-    if (g > 1 && g < w) { mpz_set_ui(d, (unsigned long)g); return 1; }
+    if (g > 1 && g < w) { mth_mpz_set_u64(d, (uint64_t)g); return 1; }
     return 0;
 }
 

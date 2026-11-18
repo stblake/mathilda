@@ -168,7 +168,7 @@ static bool lag_is_number(const Expr* e) {
 static bool lag_mpq_from_expr(const Expr* e, mpq_t out) {
     if (!e) return false;
     if (e->type == EXPR_INTEGER) {
-        mpq_set_si(out, (long)e->data.integer, 1);
+        mth_mpq_set_i64(out, e->data.integer, 1);
         return true;
     }
     if (e->type == EXPR_BIGINT) {

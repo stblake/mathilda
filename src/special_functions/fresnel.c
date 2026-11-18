@@ -195,7 +195,7 @@ static bool fresnel_machine_B(double complex z, double complex* out) {
 static bool fresnel_set_mpfr(mpfr_t out, const Expr* e) {
     if (!e) return false;
     switch (e->type) {
-        case EXPR_INTEGER: mpfr_set_si(out, (long)e->data.integer, FRND); return true;
+        case EXPR_INTEGER: mth_mpfr_set_i64(out, e->data.integer, FRND); return true;
         case EXPR_REAL:    mpfr_set_d (out, e->data.real,          FRND); return true;
         case EXPR_BIGINT:  mpfr_set_z (out, e->data.bigint,        FRND); return true;
         case EXPR_MPFR:    mpfr_set   (out, e->data.mpfr,          FRND); return true;
@@ -203,8 +203,8 @@ static bool fresnel_set_mpfr(mpfr_t out, const Expr* e) {
     }
     int64_t n, d;
     if (is_rational(e, &n, &d)) {
-        mpfr_set_si(out, (long)n, FRND);
-        mpfr_div_si(out, out, (long)d, FRND);
+        mth_mpfr_set_i64(out, n, FRND);
+        mth_mpfr_div_i64(out, out, d, FRND);
         return true;
     }
     return false;
