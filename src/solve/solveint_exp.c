@@ -253,7 +253,25 @@ Expr* si_solve_exponential(Expr* expr, Expr** var, int n) {
         }
         long double space = 1.0L;
         for (int q = 0; q < nu; q++) space *= (long double)(c.hi[uvar[q]] - c.lo[uvar[q]] + 1);
-        if (bounded && space <= 5.0e7L) {
+        /* The size of the largest power b^e over the box, in bits: a huge
+         * exponent made mpz_pow_ui abort the process (GMP's limb count) or
+         * allocate gigabytes, so the enumeration declines -- the problem stays
+         * unsolved rather than wrong -- when one power passes 2^26 bits or the
+         * whole box would cost more than ~1e11 bit operations. */
+        long double maxbits = 0.0L;
+        for (int k = 0; bounded && k < nt; k++) {
+            long double bmax = (t[k].bvar >= 0)
+                ? fmaxl(fabsl((long double)c.lo[t[k].bvar]), fabsl((long double)c.hi[t[k].bvar]))
+                : fabsl((long double)t[k].bconst);
+            long double emax = (t[k].evar >= 0) ? (long double)c.hi[t[k].evar]
+                                                : (long double)t[k].econst;
+            if (bmax >= 2.0L && emax > 0.0L) {
+                long double bits = (log2l(bmax) + 1.0L) * emax;
+                if (bits > maxbits) maxbits = bits;
+            }
+        }
+        if (bounded && space <= 5.0e7L && maxbits <= 67108864.0L
+            && space * (maxbits + 64.0L) <= 1.0e11L) {
             Expr** sols = NULL; int nsol = 0, cap = 0;
             int64_t val[SI_MAX_VARS];
             for (int i = 0; i < n; i++) val[i] = 0;

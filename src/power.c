@@ -515,6 +515,18 @@ static Expr* int_power_overflow(void) {
     return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
 }
 
+/* General::unfl and Underflow[] (-Underflow[] when `neg`): the reciprocal of
+ * such a power, a nonzero magnitude below every representable one. It was
+ * Overflow[] -- 2^(-2^40) the same as 2^(2^40) -- or left unevaluated for a
+ * BigInt exponent. Signed as the D5 decision signs Underflow[]. */
+static Expr* int_power_underflow(bool neg) {
+    mth_message("General", "unfl", "Underflow occurred in computation.");
+    Expr* u = expr_new_function(expr_new_symbol(SYM_Underflow), NULL, 0);
+    if (!neg) return u;
+    Expr* a[2] = { expr_new_integer(-1), u };
+    return expr_new_function(expr_new_symbol(SYM_Times), a, 2);
+}
+
 /* |base|^|exp| with base's sign carried when exp is odd, as a normalised
  * Integer/BigInt -- or, for exp < 0, the canonical reciprocal (denominator
  * positive: (-3)^-41 is -1/3^41, never Rational[1, -3^41]). Overflow[] past
@@ -569,8 +581,9 @@ static Expr* bigint_pow(const Expr* base, int64_t exp) {
     expr_to_mpz(base, b);
     uint64_t mag = exp < 0 ? (uint64_t)0 - (uint64_t)exp : (uint64_t)exp;
     if (!int_power_representable(b, mag)) {
+        bool neg = mpz_sgn(b) < 0 && (mag & 1u);
         mpz_clear(b);
-        return int_power_overflow();
+        return exp < 0 ? int_power_underflow(neg) : int_power_overflow();
     }
     mpz_init(r);
     mpz_pow_ui(r, b, (unsigned long)mag);
@@ -1624,6 +1637,8 @@ Expr* builtin_power(Expr* res) {
             out = esgn > 0 ? expr_new_integer(0) : NULL;
         } else if (esgn > 0) {
             out = int_power_overflow();
+        } else {
+            out = int_power_underflow(mpz_sgn(b) < 0 && mpz_odd_p(exp->data.bigint));
         }
         mpz_clear(b);
         if (out) return out;
@@ -1708,9 +1723,13 @@ Expr* builtin_power(Expr* res) {
         if (!int_power_representable(bnum, (uint64_t)e_abs)
             || !int_power_representable(bden, (uint64_t)e_abs)) {
             /* The 1e9 exponent cap does not bound the RESULT: (2^1000/3)^(10^9)
-             * needs 10^12 bits, and mpz_pow_ui would abort the process. */
+             * needs 10^12 bits, and mpz_pow_ui would abort the process. Past
+             * the range the magnitude is huge when |n/d| > 1 and e > 0 (or
+             * both reversed), else tiny. */
+            bool big = (mpz_cmpabs(bnum, bden) > 0) != e_neg;
+            bool neg = mpz_sgn(bnum) < 0 && (e_abs & 1);
             mpz_clear(bnum); mpz_clear(bden); mpz_clear(rnum); mpz_clear(rden);
-            return int_power_overflow();
+            return big ? int_power_overflow() : int_power_underflow(neg);
         }
         mpz_pow_ui(rnum, bnum, (unsigned long)e_abs);
         mpz_pow_ui(rden, bden, (unsigned long)e_abs);
@@ -2416,6 +2435,25 @@ rat_imag_fallthrough: ;
              * a_int and b_rem may be negative; the GCD reduction below
              * normalises into a canonical Rational[num, den] (or plain
              * integer when den==1). */
+            /* Both powers have the exponent of the input (2^(2^40 + 1/2) has
+             * a_int = 2^40): past GMP's range mpz_pow_ui aborted the process,
+             * so they get bigint_pow's bound -- General::ovfl, Overflow[]. */
+            {
+                mpz_t chk; mth_mpz_init_set_i64(chk, abs_n);
+                uint64_t ea = a_int > 0 ? (uint64_t)a_int : (uint64_t)0 - (uint64_t)a_int;
+                uint64_t eb = b_rem > 0 ? (uint64_t)b_rem : (uint64_t)0 - (uint64_t)b_rem;
+                bool ok = int_power_representable(chk, ea);
+                if (ok && b_rem != 0 && m > 1) {
+                    mth_mpz_set_i64(chk, m);
+                    ok = int_power_representable(chk, eb);
+                }
+                mpz_clear(chk);
+                /* a_int carries the exponent's sign (b_rem when a_int is 0);
+                 * the sign or phase of a negative base is left out, as it
+                 * is from Overflow[] */
+                if (!ok) return (a_int != 0 ? a_int : b_rem) > 0 ? int_power_overflow()
+                                                                 : int_power_underflow(false);
+            }
             mpz_t num_z, den_z;
             mpz_init_set_ui(num_z, 1);
             mpz_init_set_ui(den_z, 1);

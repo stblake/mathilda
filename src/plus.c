@@ -84,9 +84,19 @@ static bool is_overflow(Expr* e) {
    Always returns an OWNED coefficient. Base is NOT owned by default, unless *allocated_base is set to true. */
 static void get_coeff_base(Expr* e, Expr** coeff, Expr** base, bool* allocated_base) {
     *allocated_base = false;
+    /* Overflow[] (and a product led by it, Overflow[] x) is an ordinary
+     * symbolic term: numeric_overflow_plus has already absorbed every numeric
+     * term, so a coefficient of Overflow[] would only swallow the base. */
     if (is_overflow(e)) {
-        *coeff = expr_copy(e);
-        *base = NULL;
+        *coeff = expr_new_integer(1);
+        *base = e;
+        return;
+    }
+    if (e->type == EXPR_FUNCTION && e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Times &&
+        e->data.function.arg_count >= 1 && is_overflow(e->data.function.args[0])) {
+        *coeff = expr_new_integer(1);
+        *base = e;
         return;
     }
 
@@ -619,6 +629,11 @@ Expr* builtin_plus(Expr* res) {
     {
         Expr* u = numeric_underflow_plus(res);
         if (u) return u;
+        /* Overflow[] terms: numeric ones absorbed, symbolic ones kept
+         * (Overflow[] + x). NULL once reduced; Overflow[] is then an
+         * ordinary term below (get_coeff_base). */
+        Expr* o = numeric_overflow_plus(res);
+        if (o) return o;
     }
 
     /* Fused special-case guard. Each of the five pre-scans below (NDArray,
@@ -881,20 +896,6 @@ Expr* builtin_plus(Expr* res) {
         bool is_temp_base = false;
         get_coeff_base(arg, &c, &b, &is_temp_base);
         
-        if (is_overflow(c)) {
-            expr_free(num_sum);
-            for (size_t j = 0; j < group_count; j++) {
-                expr_free(groups[j].coeff);
-                if (groups[j].temp_base) expr_free(groups[j].base);
-            }
-            if (heap_bufs) free(groups);
-            if (heap_bufs) free(slot_group);
-            if (heap_bufs) free(slot_hash);
-            expr_free(c);
-            if (is_temp_base && b != arg) expr_free(b);
-            return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
-        }
-
         if (b == NULL) {
             Expr* next_sum = add_numbers(num_sum, c);
             if (next_sum == NULL) {
@@ -914,16 +915,8 @@ Expr* builtin_plus(Expr* res) {
             num_sum = next_sum;
             expr_free(c);
             if (is_temp_base && b != arg) expr_free(b);
-            if (is_overflow(num_sum)) {
-                for (size_t j = 0; j < group_count; j++) {
-                    expr_free(groups[j].coeff);
-                    if (groups[j].temp_base) expr_free(groups[j].base);
-                }
-                if (heap_bufs) free(groups);
-                if (heap_bufs) free(slot_group);
-                if (heap_bufs) free(slot_hash);
-                return num_sum;
-            }
+            /* A numeric sum past MPFR's range is the term Overflow[] (add_numbers
+             * keeps it so); the symbolic terms survive beside it. */
         } else {
             uint64_t hb = 0;
             size_t slot = 0;
@@ -962,17 +955,8 @@ Expr* builtin_plus(Expr* res) {
                 groups[found].orig = NULL;          /* merged: rebuild */
                 expr_free(c);
                 if (is_temp_base) expr_free(b);
-                if (is_overflow(groups[found].coeff)) {
-                    expr_free(num_sum);
-                    for (size_t j = 0; j < group_count; j++) {
-                        expr_free(groups[j].coeff);
-                        if (groups[j].temp_base) expr_free(groups[j].base);
-                    }
-                    if (heap_bufs) free(groups);
-                    if (heap_bufs) free(slot_group);
-                    if (heap_bufs) free(slot_hash);
-                    return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
-                }
+                /* A coefficient past MPFR's range stays as Overflow[] base:
+                 * the rebuilt Times[Overflow[], base] keeps the base. */
             } else {
                 /* `slot` is the empty slot the probe stopped on. */
                 if (orderless) {

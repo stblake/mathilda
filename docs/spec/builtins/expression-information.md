@@ -696,8 +696,24 @@ with MPFR's exponent range: a 53-bit MPFR. Such a value:
 - is a machine Real again as soon as a numeric operation brings it back inside
   `[$MinMachineNumber, $MaxMachineNumber]`, so `MachineNumberQ[(1.*^308 10.)/1.*^10]` is `True`;
 - past `$MaxNumber` is `Overflow[]` (`General::ovfl`), and below `$MinNumber` is
-  `Underflow[]` (`General::unfl`; `-Underflow[]` for a negative value). `Underflow[]` is
-  not 0: arithmetic on it stays symbolic.
+  `Underflow[]` (`General::unfl`; `-Underflow[]` for a negative value). An exact power
+  past those bounds is the same (`2^(2^40 + 1/2)` is `Overflow[]`, `2^(-2^40)` is
+  `Underflow[]`), as is `Gamma` past them (`N[Gamma[5000000000/3], 20]` is `Overflow[]`;
+  only an integer <= 0 is a pole).
+
+**Arithmetic on the surrogates** (the reference's rules, v0.6615 / v0.6617):
+- `Underflow[]`: a machine factor makes the product that machine zero
+  (`3. Underflow[]` is `0.`); an exact or arbitrary-precision factor leaves it, signed
+  (`-3 Underflow[]` is `-Underflow[]`); an exact `0` gives `0`; an inexact term absorbs it
+  (`1. + Underflow[]` is `1.`), an exact one does not; with `Overflow[]` the product is
+  `Indeterminate`; `N[Underflow[]]` is `0.`.
+- `Overflow[]` (no sign): a numeric factor or term is absorbed (`2 Pi Overflow[]`,
+  `Overflow[] + 1.` are `Overflow[]`), a symbolic one stays (`x Overflow[]`,
+  `x + Overflow[]`); an exact `0` factor gives `0`; `Infinity`, `ComplexInfinity` and
+  `Indeterminate` win (`Overflow[] - Infinity` is `-Infinity`).
+- Powers: `Underflow[]^k` is `Underflow[]` and `Overflow[]^k` is `Overflow[]` for k > 0,
+  each the other for k < 0; a machine exponent gives the machine `0.` where the value is
+  below the range (`Underflow[]^0.5`, `Overflow[]^-0.5`).
 
 Machine reals always print with a decimal point and the input syntax `*^`: `1.0*^15`,
 `2.22045*^-16`, `100000.0`. Arbitrary-precision numbers print their exponent as `*^`

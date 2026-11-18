@@ -41,6 +41,9 @@ one.
 - Exact reductions for `Gamma[z]`:
   - Positive integers: `Gamma[n] = (n-1)!` (exact, with GMP BigInt for large `n`).
   - Non-positive integers are poles: `Gamma[0]`, `Gamma[-n]` → `ComplexInfinity`.
+  - Only they are: a value past MPFR's range is `Overflow[]` (`General::ovfl`;
+    `N[Gamma[5000000000/3], 20]`, which was `ComplexInfinity`), and one below it is
+    `Underflow[]` (`Gamma[N[-3000000001/2, 20]]` is `-Underflow[]`).
   - Half-integers reduce to rational multiples of `Sqrt[Pi]`, e.g.
     `Gamma[1/2] = Sqrt[Pi]`, `Gamma[5/2] = 3/4 Sqrt[Pi]`,
     `Gamma[-1/2] = -2 Sqrt[Pi]` (via the Factorial functional equation).
@@ -3301,7 +3304,12 @@ orthogonal on `(-∞, ∞)` with weight `e^(-x²)` and satisfy `y'' - 2x y' + 2n
   x > 0** evaluates through `H_n(x) = 2^n HypergeometricU[-n/2, 1/2, x²]`, which
   has no cancellation (the `1F1` difference below loses about
   `2 Sqrt(|n| x²) log2(e)` bits at a large negative order: `HermiteH[-1000., 10.]`
-  was `-1.0*^-1358` where the value is `2.572488*^-1608`). Any other argument
+  was `-1.0*^-1358` where the value is `2.572488*^-1608`). In a build without
+  MPFR, where `HypergeometricU` has no numerics, a real negative order with a
+  real machine argument of either sign uses the Laplace-type integral
+  `H_{-m}(x) = Integral[E^(-t² - 2 x t) t^(m-1), {t, 0, Infinity}]/Gamma[m]`
+  instead, summed by the trapezoid rule about its peak (`HermiteH[-100., 10.]` is
+  `1.31258*^-138` there, not `0.`). Any other argument
   evaluates through the entire confluent-hypergeometric form `H_n(z) = 2^n Sqrt[Pi]
   (Hypergeometric1F1[-n/2, 1/2, z²]/Gamma[(1-n)/2] - 2z
   Hypergeometric1F1[(1-n)/2, 3/2, z²]/Gamma[-n/2])`, evaluated with a

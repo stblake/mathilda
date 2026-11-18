@@ -1337,6 +1337,11 @@ Expr* builtin_times(Expr* res) {
     {
         Expr* u = numeric_underflow_times(res);
         if (u) return u;
+        /* Overflow[] factors: numeric ones absorbed, symbolic ones kept
+         * (Overflow[] x), an exact 0 gives 0. NULL once reduced, after
+         * which Overflow[] is an ordinary factor below. */
+        Expr* o = numeric_overflow_times(res);
+        if (o) return o;
     }
 
     /* Fused special-case guard (mirrors builtin_plus). The NDArray, SeriesData,
@@ -1555,14 +1560,6 @@ Expr* builtin_times(Expr* res) {
 
     for (size_t i = 0; i < n; i++) {
         Expr* arg = res->data.function.args[i];
-        if (is_overflow(arg)) {
-            expr_free(num_prod); if (complex_val) expr_free(complex_val);
-            if (interval_val) expr_free(interval_val);
-            for(size_t j=0; j<group_count; j++) { expr_free(groups[j].base); expr_free(groups[j].exponent); }
-            if (heap_bufs) { free(groups); free(slot_group); free(slot_hash); }
-            return expr_new_function(expr_new_symbol(SYM_Overflow), NULL, 0);
-        }
-
         if (expr_is_numeric_like(arg) && !is_complex(arg, NULL, NULL) && !is_interval(arg)) {
             Expr* next = multiply_numbers(num_prod, arg);
             if (next == NULL) {

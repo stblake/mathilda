@@ -405,6 +405,51 @@ static void test_d5_underflow_arithmetic(void) {
     chk_true("Quiet[Exp[-10^10.] 3.] === 0.");
 }
 
+/* Follow-ups to the campaign close-out (v0.6617). */
+static void test_followups_overflow_gamma_power(void) {
+    /* Overflow[] keeps symbolic operands; exact 0 and infinities decide */
+    chk_true("Overflow[] x === Times[x, Overflow[]]");
+    chk_true("Overflow[] 2 Pi x === Times[x, Overflow[]]");
+    chk_true("Overflow[] Sin[x] === Times[Overflow[], Sin[x]]");
+    chk("Overflow[] 0", "0");
+    chk("Overflow[] 0 x", "0");
+    chk("Overflow[] 0.", "Overflow[]");
+    chk("Overflow[] Sin[2]", "Overflow[]");
+    chk_true("Overflow[] + x === Plus[x, Overflow[]]");
+    chk_true("Overflow[] + 2 + x === Plus[x, Overflow[]]");
+    chk_true("Overflow[] x + 1. === Plus[1., Times[x, Overflow[]]]");
+    chk_true("Overflow[] x - Overflow[] x === Times[x, Overflow[]]");
+    chk("Overflow[] + Underflow[]", "Overflow[]");
+    chk("Overflow[] Infinity", "Infinity");
+    chk("Overflow[] + Infinity", "Infinity");
+    chk("Overflow[] - Infinity", "-Infinity");
+    chk("Overflow[] ComplexInfinity", "ComplexInfinity");
+    chk("Overflow[] Indeterminate", "Indeterminate");
+    chk("Overflow[]^0.5", "Overflow[]");
+    chk("Overflow[]^-0.5", "0.0");
+    chk_true("Overflow[] Overflow[] x === Times[x, Overflow[]]");
+    /* one General::ovfl per overflow, not one per MPFR-promotion pass */
+    chk("Module[{n0 = Length[$MessageList]}, Exp[10.^10]; Length[$MessageList] - n0]", "1");
+    /* Gamma past MPFR's range: Overflow[] / Underflow[]; a pole only at integers <= 0 */
+    chk("Quiet[N[Gamma[5000000000/3], 20]]", "Overflow[]");
+    chk("Check[N[Gamma[5000000000/3], 20], \"msg\"]", "\"msg\"");
+    chk("Quiet[Gamma[N[-3000000001/2, 20]]]", "-Underflow[]");
+    chk("Gamma[0`20]", "ComplexInfinity");
+    chk("Gamma[-3`20]", "ComplexInfinity");
+    chk_true("Abs[N[Gamma[1/3], 20] - 2.6789385347077476337`20] < 10^-18");
+    /* exact powers past GMP's range: no process abort; tiny ones Underflow[] */
+    chk("Quiet[2^(2^40 + 1/2)]", "Overflow[]");
+    chk("Quiet[12^(2^40 + 1/2)]", "Overflow[]");
+    chk("Quiet[Sqrt[2]^(2^41 + 1)]", "Overflow[]");
+    chk("Quiet[2^(-2^40)]", "Underflow[]");
+    chk("Quiet[(-2)^(-2^40 - 1)]", "-Underflow[]");
+    chk("Quiet[2^(-10^30)]", "Underflow[]");
+    chk("Quiet[2^(-2^40 - 1/2)]", "Underflow[]");
+    chk("{2^(7/2), 12^(5/2), 18^(-5/2)}", "{8 Sqrt[2], 288 Sqrt[3], 1/(972 Sqrt[2])}");
+    chk("Solve[2^x + 3^y == 5 && 0 <= x <= 10 && 0 <= y <= 10, {x, y}, Integers]",
+        "{{x -> 2, y -> 0}, {x -> 1, y -> 1}}");
+}
+
 /* P: found by PARANOIA (tests/paranoia). */
 static void test_p_paranoia_findings(void) {
     /* P1: a quotient by a number in MPFR's bottom binades, through 1/y */
@@ -663,6 +708,7 @@ int main(void) {
     TEST(test_g10_huge_order);
     TEST(test_d5_underflow_arithmetic);
     TEST(test_p_paranoia_findings);
+    TEST(test_followups_overflow_gamma_power);
     TEST(test_d9_negative_literal_power);
     TEST(test_e4_quotient_mpfr);
     TEST(test_e2_machine_zero_times_mpfr);

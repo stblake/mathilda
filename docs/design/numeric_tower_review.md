@@ -201,6 +201,24 @@ subtraction and sqrt correctly rounded; sticky bit present.
 | P5 | `MantissaExponent[2.`30^(2^30 - 2), 2]` | `{0``30., 1073741822}` | **fixed v0.6615**: `b^e` overflowed at the top of the range; base 2 moves the exponent, other bases divide by two in-range halves; the [1/b, 1) normalisation is decided at guard precision |
 | D5+ | `3. Underflow[]`, `Underflow[] Underflow[]`, `Underflow[] Overflow[]` | `3. Underflow[]`, `Underflow[]^2`, `Overflow[]` | **fixed v0.6615**: Underflow[] has the reference's arithmetic (machine factor gives 0., inexact term absorbs it, it collapses, `1/Underflow[] = Overflow[]`, with Overflow[] Indeterminate, `N[Underflow[]] = 0.`) |
 
+### R. Follow-ups to the close-out (2026-11-19, v0.6617)
+The close-out review listed five follow-ups. Two of them were misdiagnosed:
+`$MaxNumber` is about 10^(3.2*10^8), so neither value named was "in range".
+| # | Repro | Got | Status |
+|---|---|---|---|
+| R1 | `HypergeometricU[5.*^9, 0.5, 100.]` | `Underflow[]` | **correct, not changed**: U carries 1/Gamma(a), about 10^(-4.6*10^10), far below MPFR's floor 10^(-3.2*10^8); an in-range order (`a = 10^7`, 10^(-6.6*10^7)) agrees with the 30-digit value |
+| R2 | `Overflow[] x`, `Overflow[] + x`, `Overflow[] 0`, `Overflow[] Infinity` | `Overflow[]` (every factor and term absorbed) | **fixed v0.6617**: the reference's rules (`numeric_overflow_times` / `_plus`): numeric operands are absorbed, symbolic ones stay (`Overflow[] x`, `Overflow[] + x`), an exact 0 gives 0, an infinity or `Indeterminate` wins; `Overflow[]^0.5` is `Overflow[]`. A numeric sum or coefficient past the range no longer drops the other terms |
+| R3 | `N[Gamma[5000000000/3], 20]` | `ComplexInfinity` (a pole) | **fixed v0.6617**: the value, about 10^(1.46*10^10), is past the range, so `Overflow[]` with `General::ovfl`; the MPFR arms call a result a pole only at an integer <= 0, and a zero is `Underflow[]` (`Gamma[N[-3000000001/2, 20]]` is `-Underflow[]`) |
+| R4 | `HermiteH[-100., 10.]`, USE_MPFR=0 | `0.` (value 1.31*^-138) | **fixed v0.6617**: a machine path for real order < 0 and real x through the Laplace-type integral, summed by the trapezoid rule about its peak (no cancellation; ~1e-14, the problem's conditioning in the order). MPFR builds are unchanged |
+| R5 | `2^(2^40 + 1/2)`, `12^(2^40 + 1/2)`, `Sqrt[2]^(2^41 + 1)` | process abort (GMP, exit 136) | **fixed v0.6617**: the integer part of a rational exponent gets `bigint_pow`'s representability bound (`Overflow[]`); a power whose magnitude is below every representable one is `Underflow[]` (signed as D5), not `Overflow[]` (`2^(-2^40)`, `2^(-10^30)`, which was unevaluated); `Solve[..., Integers]`'s exponential enumeration declines a box whose powers pass 2^26 bits |
+| R6 | `Exp[10.^10]` | `General::ovfl` printed 5 times | **fixed v0.6617**: introduced with P3. The MPFR-promotion probe re-evaluates at two precisions; an overflow seen inside it is now announced once, as underflow already was |
+
+Not changed, seen on the way: `NumericQ[Overflow[]]` is `True` in the reference and
+the two surrogates sort among the numbers there (`Overflow[] + x` prints with
+`Overflow[]` first); `b^Overflow[]`, `Exp[Overflow[]]`, `Abs[Overflow[]]` stay
+unevaluated (the reference's `0.5^Overflow[]` is `Overflow[]`). `N[LogGamma[10^6]]` takes
+19 s (an exact LogGamma of an integer).
+
 ### F. Hygiene (no repro: from the code read)
 | # | What | Status |
 |---|---|---|

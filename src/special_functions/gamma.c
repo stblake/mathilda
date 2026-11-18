@@ -442,7 +442,12 @@ static Expr* gamma_mpfr_complex(Expr* re, Expr* im) {
         gcx_gamma(&g, &z, wp);
         if (mpfr_inf_p(g.re) || mpfr_inf_p(g.im) ||
             mpfr_nan_p(g.re) || mpfr_nan_p(g.im)) {
-            out = expr_new_symbol(SYM_ComplexInfinity);
+            /* A pole only on the real axis at an integer <= 0; elsewhere the
+             * magnitude is past MPFR's range: Overflow[], as for a real. */
+            if (mpfr_zero_p(z.im) && mpfr_integer_p(z.re) && mpfr_sgn(z.re) <= 0)
+                out = expr_new_symbol(SYM_ComplexInfinity);
+            else
+                out = numeric_sanitize_nonfinite(expr_new_real(HUGE_VAL));
         } else {
             out = gamma_complex_result(g.re, g.im, out_prec);
         }
@@ -721,9 +726,20 @@ static Expr* gamma_one_arg(Expr* arg) {
     if (arg->type == EXPR_MPFR) {
         mpfr_prec_t prec = mpfr_get_prec(arg->data.mpfr);
         Expr* out = expr_new_mpfr_bits(prec);
+        const bool unfl_prior = mpfr_underflow_p() != 0;   /* keep a caller's flag */
+        mpfr_clear_underflow();
         mpfr_gamma(out->data.mpfr, arg->data.mpfr, MPFR_RNDN);
-        if (mpfr_inf_p(out->data.mpfr)) { expr_free(out); return expr_new_symbol(SYM_ComplexInfinity); }
-        if (mpfr_nan_p(out->data.mpfr)) { expr_free(out); return expr_new_symbol(SYM_ComplexInfinity); }
+        const bool unfl = mpfr_underflow_p() != 0;
+        if (unfl_prior) mpfr_set_underflow();
+        /* A pole is an integer <= 0 and nothing else. Any other non-finite
+         * value is past MPFR's exponent range: Overflow[] with General::ovfl
+         * (N[Gamma[5000000000/3], 20] was ComplexInfinity), and a zero --
+         * Gamma has none -- is Underflow[] (Gamma[-1.5*^9 + 0.5`20]). */
+        if (mpfr_integer_p(arg->data.mpfr) && mpfr_sgn(arg->data.mpfr) <= 0) {
+            expr_free(out); return expr_new_symbol(SYM_ComplexInfinity);
+        }
+        if (!mpfr_number_p(out->data.mpfr)) return numeric_sanitize_nonfinite(out);
+        if (mpfr_zero_p(out->data.mpfr) || unfl) return numeric_underflow_if_zero(out);
         return out;
     }
 #endif

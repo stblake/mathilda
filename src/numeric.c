@@ -2543,7 +2543,18 @@ static Expr* nonfinite_construct(bool nan, bool neg) {
     /* gated: an internal numeric probe (NIntegrate's sampling, the zero
      * tester) runs with the arithmetic warnings muted, and its overflow must
      * stay invisible to Check[] as well as silent (CLAUDE.md, message funnel) */
-    mth_message_gated(g_arith_warnings_muted, "General", "ovfl", "Overflow occurred in computation.");
+    /* An MPFR-promotion probe (promote_machine_call_impl) re-evaluates the
+     * call at two precisions and decides the outcome itself: an overflow seen
+     * inside it is announced once, by the result the probe hands back (one
+     * Exp[10.^10] printed General::ovfl five times). Underflow defers the
+     * same way. */
+#ifdef USE_MPFR
+    const bool deferred = numeric_unfl_deferred();
+#else
+    const bool deferred = false;
+#endif
+    mth_message_gated(g_arith_warnings_muted || deferred, "General", "ovfl",
+                      "Overflow occurred in computation.");
     if (neg) {
         Expr* a[2] = { expr_new_integer(-1), make_overflow_expr() };
         return expr_new_function(expr_new_symbol(SYM_Times), a, 2);   /* -Overflow[] */
@@ -2915,11 +2926,92 @@ Expr* numeric_underflow_power(const Expr* b, const Expr* e) {
         if (sg > 0) return bu ? uf_new() : make_overflow_expr();
         return bu ? make_overflow_expr() : uf_new();
     }
+    /* A machine exponent: Underflow[]^0.5 is the machine 0., Underflow[]^-0.5
+     * is Overflow[]; Overflow[]^0.5 is Overflow[] and Overflow[]^-0.5 the
+     * machine 0. (the reciprocal of a magnitude past the range, at machine
+     * precision; the reference's Overflow[] there is not the reciprocal). */
     if (e->type == EXPR_REAL && e->data.real != 0.0) {
         if (bu) return e->data.real > 0.0 ? expr_new_real(0.0) : make_overflow_expr();
-        return e->data.real < 0.0 ? expr_new_real(0.0) : NULL;
+        return e->data.real < 0.0 ? expr_new_real(0.0) : make_overflow_expr();
     }
     return NULL;
+}
+
+/* ---- Overflow[] in Times and Plus ---------------------------------------
+ *
+ * Overflow[] stands for a nonzero magnitude past MPFR's exponent range, with
+ * no sign. Until this rule it absorbed EVERY factor and term, symbols
+ * included: Overflow[] x was Overflow[], Overflow[] + x was Overflow[], and
+ * Overflow[] 0 was Overflow[] where the product is the exact 0. The rules are
+ * the reference's (checked against it, 2026-11-19):
+ *   Times  a numeric factor (NumericQ: a number, Pi, Sin[2], I) is absorbed;
+ *          a non-numeric one stays (Overflow[] x, Overflow[] Sin[x]); an exact
+ *          0 gives 0; a machine 0. is absorbed like any number; Overflow[]^k
+ *          collapses; an infinity or Indeterminate wins (Overflow[] Infinity
+ *          is Infinity); with Underflow[] it is Indeterminate (the Underflow[]
+ *          rule above, which runs first).
+ *   Plus   a numeric term (or Underflow[]) is absorbed; a non-numeric one
+ *          stays (Overflow[] + x); an infinity wins (Overflow[] + Infinity is
+ *          Infinity); Overflow[] terms collapse (Overflow[] - Overflow[] is
+ *          Overflow[], since -Overflow[] is Overflow[]).
+ * Each hook returns NULL when the expression is already reduced (one
+ * Overflow[] among non-numeric operands only), so the evaluator never
+ * cycles; Times and Plus then treat Overflow[] as an ordinary operand. */
+enum { OF_OVER, OF_UNDER, OF_INF, OF_ZERO, OF_NUM, OF_OTHER };
+static int of_class(const Expr* a) {
+    if (uf_head0(a, SYM_Overflow)) return OF_OVER;
+    if (uf_head0(a, SYM_Underflow) || uf_is_neg_underflow(a)) return OF_UNDER;
+    if (a->type == EXPR_SYMBOL &&
+        (a->data.symbol.name == SYM_Indeterminate || a->data.symbol.name == SYM_ComplexInfinity
+         || a->data.symbol.name == SYM_Infinity))
+        return OF_INF;
+    if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+        a->data.function.head->data.symbol.name == SYM_DirectedInfinity)
+        return OF_INF;
+    if (a->type == EXPR_FUNCTION && a->data.function.head->type == EXPR_SYMBOL &&
+        a->data.function.head->data.symbol.name == SYM_Times)   /* -Infinity */
+        for (size_t i = 0; i < a->data.function.arg_count; i++)
+            if (of_class(a->data.function.args[i]) == OF_INF) return OF_INF;
+    if (a->type == EXPR_INTEGER && a->data.integer == 0) return OF_ZERO;
+    if (uf_inexact_number(a) || expr_is_numeric_quantity(a)) return OF_NUM;
+    return OF_OTHER;
+}
+
+/* res's arguments of the classes in `keep` (a bit mask over 1 << OF_*), then
+ * one Overflow[] when `with_o`, under `head`; a single survivor unwrapped. */
+static Expr* of_rebuild(const Expr* res, unsigned keep, bool with_o, const char* head) {
+    size_t n = res->data.function.arg_count, k = 0;
+    Expr** out = malloc(sizeof(Expr*) * (n + 1));
+    for (size_t i = 0; i < n; i++) {
+        const Expr* a = res->data.function.args[i];
+        if (keep & (1u << of_class(a))) out[k++] = expr_copy((Expr*)a);
+    }
+    if (with_o) out[k++] = make_overflow_expr();
+    Expr* r = (k == 1) ? out[0] : expr_new_function(expr_new_symbol(head), out, k);
+    free(out);
+    return r;
+}
+
+Expr* numeric_overflow_times(const Expr* res) {
+    size_t n = res->data.function.arg_count, cnt[OF_OTHER + 1] = {0};
+    for (size_t i = 0; i < n; i++) cnt[of_class(res->data.function.args[i])]++;
+    if (cnt[OF_OVER] == 0 || cnt[OF_UNDER] > 0) return NULL;   /* Underflow[]: its rule */
+    if (cnt[OF_INF] > 0)                       /* the infinity decides */
+        return of_rebuild(res, ~(1u << OF_OVER), false, SYM_Times);
+    if (cnt[OF_ZERO] > 0) return expr_new_integer(0);
+    if (cnt[OF_OVER] == 1 && cnt[OF_NUM] == 0) return NULL;    /* reduced */
+    return of_rebuild(res, 1u << OF_OTHER, true, SYM_Times);
+}
+
+Expr* numeric_overflow_plus(const Expr* res) {
+    size_t n = res->data.function.arg_count, cnt[OF_OTHER + 1] = {0};
+    for (size_t i = 0; i < n; i++) cnt[of_class(res->data.function.args[i])]++;
+    if (cnt[OF_OVER] == 0) return NULL;
+    if (cnt[OF_INF] > 0)
+        return of_rebuild(res, ~((1u << OF_OVER) | (1u << OF_UNDER)), false, SYM_Plus);
+    if (cnt[OF_OVER] == 1 && cnt[OF_NUM] == 0 && cnt[OF_ZERO] == 0 && cnt[OF_UNDER] == 0)
+        return NULL;                                           /* reduced */
+    return of_rebuild(res, 1u << OF_OTHER, true, SYM_Plus);
 }
 
 #ifdef USE_MPFR   /* reopened: the MPFR promotion of a machine call */

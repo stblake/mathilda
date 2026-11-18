@@ -154,14 +154,17 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
   link breaks.
 - **Design kept:** fixed precision; the machine/MPFR boundary policy; IEEE signed zero on every
   surface (user decision); one machine helper per head on every surface.
-- **Follow-ups seen, outside the phases:**
-  - HypergeometricU[5.*^9, 0.5, 100.] is Underflow[], though ~10^(-10^10) is inside MPFR's range.
-  - Overflow[] absorbs symbolic factors and an exact 0 (`Overflow[] x`, `Overflow[] 0`); the
-    reference keeps `Overflow[] x` and gives `0`.
-  - `N[Gamma[5000000000/3], 20]` is ComplexInfinity (pre-existing; ~10^(1.4*^10) is in range).
-  - `HermiteH[-100., 10.]` is 0. in a USE_MPFR=0 build (no extended precision there).
-  - Large `mpz_pow_ui` exponents need a result-size guard, not a 64-bit helper (power.c,
-    solveint_exp.c); issues #137 / #138 (DSolve) stand as filed.
+- **Follow-ups seen, outside the phases** -- all closed v0.6617 (design note section R):
+  - [x] HypergeometricU[5.*^9, 0.5, 100.] is Underflow[]: CORRECT (~10^(-4.6*10^10), below
+        MPFR's floor 10^(-3.2*10^8); the note misread the range)
+  - [x] Overflow[] absorbed symbolic factors and an exact 0: the reference's rules now
+  - [x] `N[Gamma[5000000000/3], 20]` was ComplexInfinity: Overflow[] (past the range, not a pole)
+  - [x] `HermiteH[-100., 10.]` 0. with USE_MPFR=0: machine Laplace-integral path
+  - [x] huge `mpz_pow_ui` exponents: three Power sites aborted the process; guarded (Overflow[] /
+        Underflow[]); solveint_exp's enumeration declines powers past 2^26 bits
+  - [x] found on the way: `Exp[10.^10]` printed General::ovfl 5x (P3's message, per probe pass)
+  - [ ] still open, seen on the way: NumericQ[Overflow[]] / ordering of the surrogates;
+        `N[LogGamma[10^6]]` 19 s; issues #137 / #138 (DSolve) stand as filed
 
 # Bronstein integration campaign (started 2026-11-12)
 

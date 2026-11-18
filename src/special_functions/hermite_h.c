@@ -280,7 +280,74 @@ static Expr* hermite_u_form(const Expr* n_e, const Expr* x_e) {
 
 static Expr* hermite_numeric_hyp_form(const Expr* n_e, const Expr* x_e, bool use_u);
 
+#ifndef USE_MPFR
+/* H_{-m}(x) for a real order -m < 0 and a real x, in a build without MPFR:
+ * there HypergeometricU has no numerics, so the U form above cannot apply and
+ * the 1F1 difference cancels to nothing (HermiteH[-100., 10.] was 0. where the
+ * value is 1.31*^-138). The Laplace-type integral representation, valid for
+ * Re nu < 0 and every x,
+ *     H_{-m}(x) = 1/Gamma(m) Integral_0^Inf e^(-t^2 - 2 x t) t^(m-1) dt
+ * (checked against the MPFR build's U form, x of either sign, m from 1e-3 to
+ * 1e6), has a positive integrand, so nothing cancels. With t = t0 e^y about its peak
+ * t0 = (-x + Sqrt[x^2 + 2m])/2 the integrand is entire in y and decays on both
+ * sides, so the trapezoid rule on the whole line converges geometrically: the
+ * step min(sigma/2, 1/16) (sigma the peak width) keeps the discretisation error
+ * below 1e-17. Far left, where t^2 + 2|x| t is below an ulp, the terms are
+ * exactly geometric and their tail is summed in closed form (expm1, not
+ * 1 - exp, or a tiny m loses everything). The value is assembled in logs; its
+ * accuracy is that of the problem's conditioning in m (~1e-14 at m = 100).
+ * False (decline) outside the domain or on a non-finite result. */
+static bool hermite_neg_order_machine(double m, double x, double* out) {
+    if (!(m > 0.0) || !isfinite(m) || !isfinite(x)) return false;
+    double t0 = (x >= 0.0) ? m / (x + sqrt(x * x + 2.0 * m))     /* no cancellation */
+                           : 0.5 * (-x + sqrt(x * x + 2.0 * m));
+    double sigma = 1.0 / sqrt(2.0 * t0 * t0 + m);
+    double h = fmin(sigma / 2.0, 0.0625);
+    double s = 1.0, c = 0.0;                                    /* y = 0 term */
+    long steps = 0;
+    for (int dir = -1; dir <= 1; dir += 2) {
+        for (long k = 1; ; k++) {
+            if (++steps > 4000000L) return false;
+            double y = (double)dir * (double)k * h, ey = exp(y), t = t0 * ey;
+            double g = -t0 * t0 * (ey * ey - 1.0) - 2.0 * x * t0 * (ey - 1.0) + m * y;
+            double term = exp(g);
+            double s2 = s + term, bb = s2 - s;                  /* compensated */
+            c += (s - (s2 - bb)) + (term - bb); s = s2;
+            if (g < -50.0 && term < 1e-20 * s) break;
+            if (dir < 0 && t * t + 2.0 * fabs(x) * t < 1e-18) {  /* geometric from here */
+                double tail = term * exp(-m * h) / -expm1(-m * h);
+                s2 = s + tail; bb = s2 - s; c += (s - (s2 - bb)) + (tail - bb); s = s2;
+                break;
+            }
+        }
+    }
+    s += c;
+    double v = exp(m * log(t0) - t0 * t0 - 2.0 * x * t0 + log(s * h) - lgamma(m));
+    if (!isfinite(v)) return false;
+    *out = v;
+    return true;
+}
+
+/* A real machine order < 0 (machine Real, or an exact negative number). */
+static bool hermite_neg_order_value(const Expr* n_e, double* m) {
+    int64_t p, q;
+    if (n_e->type == EXPR_REAL) *m = -n_e->data.real;
+    else if (n_e->type == EXPR_INTEGER) *m = -(double)n_e->data.integer;
+    else if (is_rational((Expr*)n_e, &p, &q)) *m = -(double)p / (double)q;
+    else return false;
+    return *m > 0.0;
+}
+#endif
+
 static Expr* hermite_numeric_hyp(const Expr* n_e, const Expr* x_e) {
+#ifndef USE_MPFR
+    {
+        double m, xr, xi, v; bool real;
+        if (hermite_neg_order_value(n_e, &m) && cheb_machine_xy(x_e, &xr, &xi, &real) && real
+            && hermite_neg_order_machine(m, xr, &v))
+            return expr_new_real(v);
+    }
+#endif
     /* The U form where it applies; the 1F1 form when it does not collapse to
      * a number (a build whose HypergeometricU numerics are absent: without
      * FLINT, HermiteH[-100., 10.] stayed unevaluated). */

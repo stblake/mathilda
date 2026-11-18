@@ -408,6 +408,10 @@ bool  numeric_is_underflow_expr(const Expr* e);
 Expr* numeric_underflow_times(const Expr* res);
 Expr* numeric_underflow_plus(const Expr* res);
 Expr* numeric_underflow_power(const Expr* base, const Expr* exponent);
+/* Overflow[] in Times / Plus (numeric.c): numeric operands absorbed,
+ * symbolic ones kept, exact 0 and infinities decide. NULL when reduced. */
+Expr* numeric_overflow_times(const Expr* res);
+Expr* numeric_overflow_plus(const Expr* res);
 
 /* An exact Integer / BigInt / Rational of any width, or a machine Real, as a
  * correctly rounded double in *out (may be +-inf past DBL_MAX, or a subnormal
