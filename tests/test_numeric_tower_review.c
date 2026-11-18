@@ -283,6 +283,42 @@ static void test_g3_machine_mod(void) {
     chk("Mod[-2., 1.]", "0.0");
 }
 
+/* G5 + G6: every buffer / compiled kernel lane is checked by default (lane
+ * modes, ndarray.h); a lane the scalar net would recompute declines. */
+static void test_g56_lane_checks(void) {
+    const char* pk = "Developer`ToPackedArray";
+    char buf[512];
+    /* G6: underflow flushed to 0. on the buffer surfaces */
+    snprintf(buf, sizeof buf, "FresnelS[%s[{-1.*^-200, 0.5}]] === {FresnelS[-1.*^-200], FresnelS[0.5]}", pk);
+    chk_true(buf);
+    chk_true("Normal[FresnelS[NDArray[{-1.*^-200, 0.5}]]] === {FresnelS[-1.*^-200], FresnelS[0.5]}");
+    snprintf(buf, sizeof buf, "Quiet[Zeta[%s[{1.*^308, 2.}], 1.*^308]] === Quiet[{Zeta[1.*^308, 1.*^308], Zeta[2., 1.*^308]}]", pk);
+    chk_true(buf);
+    chk_true("Quiet[SphericalBesselJ[NDArray[{1.*^308, 1.}], 10.]] === Quiet[{SphericalBesselJ[1.*^308, 10.], SphericalBesselJ[1., 10.]}]");
+    /* G6: Compile -- a kernel lane (Csch), an overflowed intermediate, erfc */
+    chk_true("Quiet[Compile[{{x, _Real}}, Csch[x]][-1.*^308] === Csch[-1.*^308]]");
+    chk_true("Quiet[Compile[{{x, _Real}}, Sech[x]][1.*^308] === Sech[1.*^308]]");
+    chk_true("Quiet[Compile[{{x, _Real}}, 1/Sinh[x]][800.] === 1/Sinh[800.]]");
+    chk_true("Quiet[Compile[{{x, _Real}}, Erfc[x]][1.*^308] === Erfc[1.*^308]]");
+    chk_true("Quiet[Compile[{{v, _Real, 1}}, Erfc[v]][{1.*^308, 1.}] === {Erfc[1.*^308], Erfc[1.]}]");
+    /* G5: no subnormal machine number out of a buffer */
+    snprintf(buf, sizeof buf, "ArcTanh[%s[{1.*^308, 0.5}]] === {ArcTanh[1.*^308], ArcTanh[0.5]}", pk);
+    chk_true(buf);
+    snprintf(buf, sizeof buf, "ArcCot[%s[{1.*^308, 0.5}]][[1]] === ArcCot[1.*^308]", pk);
+    chk_true(buf);
+    chk_true("MachineNumberQ[ArcCot[NDArray[{1.*^308, 0.5}]][[1]]] == False");
+    /* exact zeros stay values and buffers stay packed (lane modes RANGE / NONE) */
+    snprintf(buf, sizeof buf, "Developer`PackedArrayQ[Mod[%s[{2., 3., 4.}], 2.]]", pk);
+    chk(buf, "True");
+    snprintf(buf, sizeof buf, "Developer`PackedArrayQ[Log[2., %s[{1., 2., 4.}]]]", pk);
+    chk(buf, "True");
+    snprintf(buf, sizeof buf, "Developer`PackedArrayQ[BesselJ[1, %s[{0., 1., 2.}]]]", pk);
+    chk(buf, "True");
+    snprintf(buf, sizeof buf, "Developer`PackedArrayQ[LogGamma[%s[{1., 2., 3.}]]]", pk);
+    chk(buf, "True");
+    chk("Compile[{{x, _Real}}, Mod[x, 2.]][4.]", "0.0");
+}
+
 static void test_d9_negative_literal_power(void) {
     /* -a^b is -(a^b) for every literal spelling of a. */
     chk("-2.`30^2 < 0", "True");
@@ -474,6 +510,7 @@ int main(void) {
     TEST(test_g1_compile_integer_subtract);
     TEST(test_g2_inverse_jacobi_dn_packed);
     TEST(test_g3_machine_mod);
+    TEST(test_g56_lane_checks);
     TEST(test_d9_negative_literal_power);
     TEST(test_e4_quotient_mpfr);
     TEST(test_e2_machine_zero_times_mpfr);

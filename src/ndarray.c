@@ -1807,27 +1807,30 @@ int nd_parallel_reduce(size_t n, nd_reduce_chunk_fn fn, void* ctx,
 typedef struct { const double* id; double* od; const NDUnaryKernel* k; } ndu_hot_ctx;
 static bool ndu_hot_chunk(void* c, size_t lo, size_t hi) {
     const ndu_hot_ctx* x = (const ndu_hot_ctx*)c;
-    /* Only a decaying head (ndk_promotes_underflow) can turn a machine-number
-     * input into a flushed or subnormal output -- a buffer holds no
-     * subnormals, and Sin/Tanh/... of a normal number is normal or exactly 0
-     * -- so every other head keeps the unchecked loop (the check cost ~20%
-     * on Sin over 10^7 elements). */
-    if (!ndk_promotes_underflow(x->k)) {
+    /* A head proven unable to leave the machine range (ND_LANE_NONE: Sin, Log,
+     * ...) keeps the unchecked loop -- the check cost ~20% on Sin over 10^7
+     * elements. Every other head declines a lane the scalar net would have
+     * recomputed (ndarray.h, "Lane checks"). */
+    int mode = ndk_unary_lane_mode(x->k);
+    if (mode == ND_LANE_NONE) {
         for (size_t j = lo; j < hi; j++)
             if (!x->k->real(x->id[j], &x->od[j])) return false;
         return true;
     }
     for (size_t j = lo; j < hi; j++) {
         if (!x->k->real(x->id[j], &x->od[j])) return false;
-        /* One well-predicted compare per element: the kernel already declined a
-         * non-finite lane, so only |y| < DBL_MIN needs a closer look. */
-        double y = x->od[j];
-        if (fabs(y) < DBL_MIN && (y != 0.0 || x->id[j] != 0.0)) return false;
+        /* One well-predicted compare per element filters the normal lanes. */
+        double y = x->od[j], m = fabs(y);
+        if (!(m >= DBL_MIN && m <= DBL_MAX)
+            && nd_lane_degenerate1(mode, x->id[j], 0.0, y, 0.0)) return false;
     }
     return true;
 }
 
-typedef struct { const void* in; void* out; NDType dt; const NDUnaryKernel* k; } ndu_map_ctx;
+/* `mode` is the lane check (ndarray.h): ndk_unary_lane_mode, raised to at least
+ * ND_LANE_RANGE for complex input -- a complex part can underflow even for a
+ * head whose real values cannot (the imaginary part of Sin[x + 1.*^-300 I]). */
+typedef struct { const void* in; void* out; NDType dt; const NDUnaryKernel* k; int mode; } ndu_map_ctx;
 static bool ndu_cplx_chunk(void* c, size_t lo, size_t hi) {
     const ndu_map_ctx* x = (const ndu_map_ctx*)c;
     for (size_t j = lo; j < hi; j++) {
@@ -1835,10 +1838,7 @@ static bool ndu_cplx_chunk(void* c, size_t lo, size_t hi) {
         ndt_get(x->in, j, x->dt, &re, &im);
         if (!x->k->cplx(re, im, &orr, &oii)) return false;
         ndt_set(x->out, j, x->dt, orr, oii);
-        if (ndk_promotes_underflow(x->k)
-            && (nd_lane_bad(orr, 1.0, 0) | nd_lane_bad(oii, 1.0, 0)
-                | ((orr == 0.0) & (oii == 0.0) & ((re != 0.0) | (im != 0.0)))))
-            return false;
+        if (nd_lane_degenerate1(x->mode, re, im, orr, oii)) return false;
     }
     return true;
 }
@@ -1850,7 +1850,7 @@ static bool ndu_realgen_chunk(void* c, size_t lo, size_t hi) {
         if (x->k->real) { if (!x->k->real(re, &orr)) return false; }
         else if (!x->k->cplx || !x->k->cplx(re, 0.0, &orr, &oii)) return false;
         ndt_set(x->out, j, x->dt, orr, oii);
-        if (ndk_promotes_underflow(x->k) && nd_lane_bad(orr, re, 1)) return false;
+        if (nd_lane_degenerate1(x->mode, re, 0.0, orr, oii)) return false;
     }
     return true;
 }
@@ -1870,6 +1870,7 @@ static bool ndu_proj_chunk(void* c, size_t lo, size_t hi) {
 typedef struct {
     const void* in; void* out; NDType dti, dto; const NDBinaryKernel* k;
     double sre, sim; bool arr_first;
+    int mode;                                   /* lane check (ndarray.h) */
 } ndb_ctx;
 static bool ndb_map_chunk(void* c, size_t lo, size_t hi) {
     const ndb_ctx* x = (const ndb_ctx*)c;
@@ -1887,6 +1888,9 @@ static bool ndb_map_chunk(void* c, size_t lo, size_t hi) {
                                    : x->k->cplx(s, 0.0, in[j], 0.0, &orr, &oii);
             if (!ok) return false;
             o[j] = orr;
+            double m = fabs(orr);
+            if (!(m >= DBL_MIN && m <= DBL_MAX)
+                && nd_lane_degenerate2(x->mode, in[j], 0.0, s, 0.0, orr, 0.0)) return false;
         }
         return true;
     }
@@ -1897,6 +1901,7 @@ static bool ndb_map_chunk(void* c, size_t lo, size_t hi) {
                                : x->k->cplx(x->sre, x->sim, re, im, &orr, &oii);
         if (!ok) return false;
         ndt_set(x->out, j, x->dto, orr, oii);
+        if (nd_lane_degenerate2(x->mode, re, im, x->sre, x->sim, orr, oii)) return false;
     }
     return true;
 }
@@ -1906,6 +1911,7 @@ static bool ndb_map_chunk(void* c, size_t lo, size_t hi) {
 typedef struct {
     const void* in0; const void* in1; void* out;
     NDType dt0, dt1, dto; const NDBinaryKernel* k;
+    int mode;                                   /* lane check (ndarray.h) */
 } ndb2_ctx;
 static bool ndb2_map_chunk(void* c, size_t lo, size_t hi) {
     const ndb2_ctx* x = (const ndb2_ctx*)c;
@@ -1929,6 +1935,9 @@ static bool ndb2_map_chunk(void* c, size_t lo, size_t hi) {
             double orr, oii;
             if (!x->k->cplx(a[j], 0.0, b[j], 0.0, &orr, &oii)) return false;
             o[j] = orr;
+            double m = fabs(orr);
+            if (!(m >= DBL_MIN && m <= DBL_MAX)
+                && nd_lane_degenerate2(x->mode, a[j], 0.0, b[j], 0.0, orr, 0.0)) return false;
         }
         return true;
     }
@@ -1938,6 +1947,7 @@ static bool ndb2_map_chunk(void* c, size_t lo, size_t hi) {
         ndt_get(x->in1, j, x->dt1, &bre, &bim);
         if (!x->k->cplx(are, aim, bre, bim, &orr, &oii)) return false;
         ndt_set(x->out, j, x->dto, orr, oii);
+        if (nd_lane_degenerate2(x->mode, are, aim, bre, bim, orr, oii)) return false;
     }
     return true;
 }
@@ -1950,6 +1960,7 @@ static bool ndb2_map_chunk(void* c, size_t lo, size_t hi) {
  * concurrent same-value writes are benign and only read after all chunks join. */
 typedef struct {
     const void* in; NDType dti; void* tmp; NDType dtc; const NDUnaryKernel* k; int* any_imag;
+    int mode;                                   /* lane check (ndarray.h) */
 } ndu_esc_ctx;
 static bool ndu_esc_chunk(void* c, size_t lo, size_t hi) {
     const ndu_esc_ctx* x = (const ndu_esc_ctx*)c;
@@ -1960,8 +1971,7 @@ static bool ndu_esc_chunk(void* c, size_t lo, size_t hi) {
         if (!x->k->cplx(re, 0.0, &orr, &oii)) return false;
         if (oii != 0.0) ai = 1;
         ndt_set(x->tmp, j, x->dtc, orr, oii);
-        if (ndk_promotes_underflow(x->k) && (nd_lane_bad(orr, 1.0, 0) | nd_lane_bad(oii, 1.0, 0)))
-            return false;
+        if (nd_lane_degenerate1(x->mode, re, 0.0, orr, oii)) return false;
     }
     if (ai) *x->any_imag = 1;
     return true;
@@ -2091,7 +2101,7 @@ Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
     if (ndt_is_complex(dta)) {
         if (!k->cplx) return NULL;
         void* out = malloc(ndt_elem_size(dta) * sz);
-        ndu_map_ctx ctx = { in, out, dta, k };
+        ndu_map_ctx ctx = { in, out, dta, k, ndk_unary_lane_mode(k) > ND_LANE_RANGE ? ND_LANE_FULL : ND_LANE_RANGE };
         if (!nd_parallel_for(sz, ndu_cplx_chunk, &ctx)) { free(out); return NULL; }
         return expr_new_ndarray_like(a, rank, dims, out, dta);
     }
@@ -2104,7 +2114,7 @@ Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
             ndu_hot_ctx ctx = { (const double*)in, (double*)out, k };
             if (!nd_parallel_for(sz, ndu_hot_chunk, &ctx)) { free(out); return NULL; }
         } else {
-            ndu_map_ctx ctx = { in, out, dta, k };
+            ndu_map_ctx ctx = { in, out, dta, k, ndk_unary_lane_mode(k) };
             if (!nd_parallel_for(sz, ndu_realgen_chunk, &ctx)) { free(out); return NULL; }
         }
         return expr_new_ndarray_like(a, rank, dims, out, dta);
@@ -2126,7 +2136,7 @@ Expr* ndarray_map_unary(const Expr* a, const NDUnaryKernel* k) {
     NDType dtcplx = ndt_as_complex(dta);
     void* tmp = malloc(ndt_elem_size(dtcplx) * sz);
     int any_imag = 0;
-    ndu_esc_ctx ectx = { in, dta, tmp, dtcplx, k, &any_imag };
+    ndu_esc_ctx ectx = { in, dta, tmp, dtcplx, k, &any_imag, ndk_unary_lane_mode(k) };
     if (!nd_parallel_for(sz, ndu_esc_chunk, &ectx)) { free(tmp); return NULL; }
     if (any_imag) return expr_new_ndarray_like(a, rank, dims, tmp, dtcplx);
     /* Narrow back to the original real dtype. */
@@ -2226,7 +2236,8 @@ Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k
     if (ndt_is_complex(dta) || s_cplx) {
         NDType dtc = ndt_as_complex(dta);
         void* out = malloc(ndt_elem_size(dtc) * sz);
-        ndb_ctx ctx = { in, out, dta, dtc, k, sre, sim, arr_first };
+        ndb_ctx ctx = { in, out, dta, dtc, k, sre, sim, arr_first,
+                         ndk_binary_lane_mode(k) > ND_LANE_RANGE ? ND_LANE_FULL : ND_LANE_RANGE };
         if (!nd_parallel_for(sz, ndb_map_chunk, &ctx)) { free(out); return NULL; }
         return expr_new_ndarray_like(arr, rank, dims, out, dtc);
     }
@@ -2234,7 +2245,7 @@ Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k
     /* Real inputs, real-closed function: real output. */
     if (k->real_closed) {
         void* out = malloc(ndt_elem_size(dta) * sz);
-        ndb_ctx ctx = { in, out, dta, dta, k, sre, 0.0, arr_first };
+        ndb_ctx ctx = { in, out, dta, dta, k, sre, 0.0, arr_first, ndk_binary_lane_mode(k) };
         if (!nd_parallel_for(sz, ndb_map_chunk, &ctx)) { free(out); return NULL; }
         return expr_new_ndarray_like(arr, rank, dims, out, dta);
     }
@@ -2248,7 +2259,7 @@ Expr* ndarray_map_binary(const Expr* a0, const Expr* a1, const NDBinaryKernel* k
      * scan for an imaginary part: an expensive kernel (HankelH1 over 10^6 reals)
      * otherwise ran on one core here */
     {
-        ndb_ctx ctx = { in, tmp, dta, dtcplx, k, sre, 0.0, arr_first };
+        ndb_ctx ctx = { in, tmp, dta, dtcplx, k, sre, 0.0, arr_first, ndk_binary_lane_mode(k) };
         if (!nd_parallel_for(sz, ndb_map_chunk, &ctx)) { free(tmp); return NULL; }
     }
     bool any_imag = false;
@@ -2335,7 +2346,7 @@ Expr* ndarray_map_binary2(const Expr* a0, const Expr* a1, const NDBinaryKernel* 
     if (ndt_is_complex(dtp)) {
         void* out = malloc(ndt_elem_size(dtp) * (sz ? sz : 1));
         if (!out) return NULL;
-        ndb2_ctx ctx = { in0, in1, out, dt0, dt1, dtp, k };
+        ndb2_ctx ctx = { in0, in1, out, dt0, dt1, dtp, k, ndk_binary_lane_mode(k) > ND_LANE_RANGE ? ND_LANE_FULL : ND_LANE_RANGE };
         if (!nd_parallel_for(sz, ndb2_map_chunk, &ctx)) { free(out); return NULL; }
         return expr_new_ndarray_like(psrc, rank, dims, out, dtp);
     }
@@ -2344,7 +2355,7 @@ Expr* ndarray_map_binary2(const Expr* a0, const Expr* a1, const NDBinaryKernel* 
     if (k->real_closed) {
         void* out = malloc(ndt_elem_size(dtp) * (sz ? sz : 1));
         if (!out) return NULL;
-        ndb2_ctx ctx = { in0, in1, out, dt0, dt1, dtp, k };
+        ndb2_ctx ctx = { in0, in1, out, dt0, dt1, dtp, k, ndk_binary_lane_mode(k) };
         if (!nd_parallel_for(sz, ndb2_map_chunk, &ctx)) { free(out); return NULL; }
         return expr_new_ndarray_like(psrc, rank, dims, out, dtp);
     }

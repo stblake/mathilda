@@ -28,15 +28,26 @@
  * state this is one cheap status read, and the (slow, on x86 a full
  * environment rewrite) feclearexcept runs only after an underflow somewhere.
  * Clearing unconditionally per call cost 60 ns, +45% on a compiled call. */
+/* FE_OVERFLOW too (numeric-tower review G6): an intermediate that overflowed
+ * can still give a finite result the interpreter would not -- Compile'd
+ * 1/Sinh[x] at 1.*^308 is 1/inf = 0. with no underflow, where the interpreter
+ * carries the 53-bit MPFR Sinh and answers -Underflow[]. A run that overflowed
+ * anywhere is therefore the interpreter's to answer, as one that underflowed. */
+#if defined(FE_UNDERFLOW) && defined(FE_OVERFLOW)
+#define CVM_RANGE_FLAGS (FE_UNDERFLOW | FE_OVERFLOW)
+#elif defined(FE_UNDERFLOW)
+#define CVM_RANGE_FLAGS FE_UNDERFLOW
+#endif
+
 static inline void cvm_underflow_clear(void) {
-#ifdef FE_UNDERFLOW
-    if (fetestexcept(FE_UNDERFLOW)) feclearexcept(FE_UNDERFLOW);
+#ifdef CVM_RANGE_FLAGS
+    if (fetestexcept(CVM_RANGE_FLAGS)) feclearexcept(CVM_RANGE_FLAGS);
 #endif
 }
 
 static inline bool cvm_underflowed(void) {
-#ifdef FE_UNDERFLOW
-    return fetestexcept(FE_UNDERFLOW) != 0;
+#ifdef CVM_RANGE_FLAGS
+    return fetestexcept(CVM_RANGE_FLAGS) != 0;
 #else
     return false;
 #endif

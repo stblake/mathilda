@@ -492,6 +492,20 @@ Val kern_binop(Ctx* c, uint16_t op, Val a, Val b, CompileType rt, const void* fn
     return r;
 }
 
+/* Stamp the lane-check mode (ndarray.h, "Lane checks") of the kernel just
+ * emitted by kern_unop / kern_binop onto its instruction -- scalar or tile, it
+ * is the last one emitted. The VM's kernel opcodes read it and raise
+ * FE_UNDERFLOW on a lane the scalar net would have recomputed, so a
+ * CompiledFunction call falls back to the interpreter (numeric-tower review
+ * G6: compiled Csch[-1.*^308] was 0., the interpreter -Underflow[]). The value
+ * itself is left alone: inside NIntegrate / NDSolve an underflowed sample is
+ * used as it is (compile_underflow.h). */
+static void kern_stamp_lane(Ctx* c, int mode) {
+    if (!c->ok || c->n == 0 || mode == ND_LANE_NONE) return;
+    int kind = compile_op_kind[c->code[c->n - 1].op];
+    if (kind == K_KERN1 || kind == K_KERN2) c->code[c->n - 1].flags = (uint16_t)mode;
+}
+
 /* ------------------------------------------------------------------ *
  *  Array emission helpers (M3a)                                       *
  * ------------------------------------------------------------------ */
@@ -1255,6 +1269,8 @@ bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
             if (!k->cplx) return false;           /* real-only kernel: can't do complex */
             *out = k->to_real ? kern_unop(c, OP_KERN_CR, a, CT_REAL, (const void*)k->cplx)
                               : kern_unop(c, OP_KERN_CC, a, CT_COMPLEX, (const void*)k->cplx);
+            /* complex input: at least RANGE, as the buffer map (ndarray.c) */
+            kern_stamp_lane(c, ndk_unary_lane_mode(k) > ND_LANE_RANGE ? ND_LANE_FULL : ND_LANE_RANGE);
             return true;
         }
         coerce(c, &a, CT_REAL);
@@ -1264,6 +1280,7 @@ bool try_kernel(Ctx* c, const char* h, Expr** A, size_t na, Val* out) {
         else if (k->real)                   *out = kern_unop(c, OP_KERN_RR, a, CT_REAL, (const void*)k->real);
         else if (k->cplx)                   *out = kern_unop(c, OP_KERN_RC, a, CT_COMPLEX, (const void*)k->cplx);
         else return false;
+        kern_stamp_lane(c, ndk_unary_lane_mode(k));
         return true;
     }
     if (na >= 3) {
@@ -1411,6 +1428,8 @@ static bool kernel2_vals(Ctx* c, const NDBinaryKernel* k, Val a, Val b, Val* out
     if (t <= CT_REAL && k->real_closed) { coerce(c, &a, CT_REAL); coerce(c, &b, CT_REAL); *out = kern_binop(c, OP_KERN2_RR, a, b, CT_REAL, (const void*)k->cplx); }
     else if (t <= CT_REAL)              { coerce(c, &a, CT_REAL); coerce(c, &b, CT_REAL); *out = kern_binop(c, OP_KERN2_RC, a, b, CT_COMPLEX, (const void*)k->cplx); }
     else                                { coerce(c, &a, CT_COMPLEX); coerce(c, &b, CT_COMPLEX); *out = kern_binop(c, OP_KERN2_CC, a, b, CT_COMPLEX, (const void*)k->cplx); }
+    kern_stamp_lane(c, t <= CT_REAL ? ndk_binary_lane_mode(k)
+                     : ndk_binary_lane_mode(k) > ND_LANE_RANGE ? ND_LANE_FULL : ND_LANE_RANGE);
     return true;
 }
 

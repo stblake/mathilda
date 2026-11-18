@@ -308,9 +308,6 @@ typedef struct {
     bool (*whole_i)(const int64_t* in, size_t sz, int64_t* out);
 } NDUnaryKernel;
 
-/* True for a kernel whose head's scalar path promotes an underflow to zero
- * (ndkernels.c); ndarray_map_unary then declines such lanes. */
-bool ndk_promotes_underflow(const NDUnaryKernel* k);
 
 /* True (and reset) when the last buffer Power declined because a lane left the
  * machine range; the caller then delists (numeric-tower review S4). */
@@ -388,6 +385,55 @@ typedef struct {
      * arm". */
     bool (*whole_ii)(const int64_t* a, const int64_t* b, size_t sz, int64_t* out);
 } NDBinaryKernel;
+
+/* ---- Lane checks: the buffer twin of the evaluator's degenerate-result net --
+ *
+ * The machine/MPFR boundary policy (docs/design/numeric_tower_review.md): a
+ * machine number is finite and zero or normal. The scalar path enforces it
+ * after the fact (numeric_promote_result_if_degenerate recomputes a
+ * non-finite, subnormal, or zero-from-a-nonzero-argument result in MPFR), so a
+ * buffer lane the scalar would have recomputed must DECLINE, sending the
+ * buffer to the List path -- or packed and scalar disagree. Compile's kernel
+ * opcodes read the same mode from the instruction and raise FE_UNDERFLOW, so a
+ * CompiledFunction call falls back (compile_underflow.h).
+ *
+ * The check used to be opt-in (a list of "decaying" heads), so every head
+ * nobody listed flushed silently: FresnelS[{-1.*^-200}] was {0.}, packed
+ * ArcTanh[{1.*^308}] leaked a subnormal real part, and no binary kernel was
+ * checked at all (numeric-tower review G5, G6). It is now the DEFAULT; a head
+ * opts out only where the opt-out is a proof (ND_LANE_NONE) or an exact zero is
+ * a genuine value (ND_LANE_RANGE). A wrong opt-out is a wrong answer; a
+ * missing one only costs speed.
+ *
+ *   ND_LANE_NONE   no check: a machine-number input provably gives a normal or
+ *                  an exactly-zero-at-a-special-point output (Sin, Log, Abs).
+ *   ND_LANE_RANGE  non-finite or subnormal output parts are degenerate; an
+ *                  exact zero is a value (Mod, Log[b, 1.], LogGamma[1.]).
+ *   ND_LANE_FULL   also a zero result (both parts) from inputs that are all
+ *                  nonzero -- the underflow the scalar net recomputes. */
+enum { ND_LANE_NONE = 0, ND_LANE_RANGE = 1, ND_LANE_FULL = 2 };
+int ndk_unary_lane_mode(const NDUnaryKernel* k);     /* ndkernels.c */
+int ndk_binary_lane_mode(const NDBinaryKernel* k);
+
+static inline bool nd_part_bad(double v) {
+    double m = v < 0.0 ? -v : v;
+    return !(m <= 1.7976931348623157e308) || (m < 2.2250738585072014e-308 && v != 0.0);
+}
+/* Unary lane x -> y (parts). True when the lane must decline. */
+static inline bool nd_lane_degenerate1(int mode, double xr, double xi, double yr, double yi) {
+    if (mode == ND_LANE_NONE) return false;
+    if (nd_part_bad(yr) || nd_part_bad(yi)) return true;
+    return mode == ND_LANE_FULL && yr == 0.0 && yi == 0.0 && (xr != 0.0 || xi != 0.0);
+}
+/* Binary lane (a, b) -> y. A zero from a zero operand is a value
+ * (BesselJ[1, 0.], HermiteH[3, 0.]), so FULL needs BOTH operands nonzero. */
+static inline bool nd_lane_degenerate2(int mode, double ar, double ai, double br, double bi,
+                                       double yr, double yi) {
+    if (mode == ND_LANE_NONE) return false;
+    if (nd_part_bad(yr) || nd_part_bad(yi)) return true;
+    return mode == ND_LANE_FULL && yr == 0.0 && yi == 0.0
+        && (ar != 0.0 || ai != 0.0) && (br != 0.0 || bi != 0.0);
+}
 
 /* N-ary scalar kernel: f[a1, ..., an] for n >= 3 (LerchPhi, Hypergeometric1F1,
  * Hypergeometric2F1, PolyLog[n, p, z], ...).  The unary/binary descriptors

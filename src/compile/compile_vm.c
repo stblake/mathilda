@@ -44,7 +44,43 @@
  * every surface; these adapt them to the expression form VUN expects. The
  * kernels never decline a non-NaN real, and pass NaN through as NaN. */
 static inline double vm_erf_r(double x)  { double v = x; (void)sf_erf_r(x, &v);  return v; }
-static inline double vm_erfc_r(double x) { double v = x; (void)sf_erfc_r(x, &v); return v; }
+/* Lane checks (ndarray.h): a kernel opcode whose instruction carries a lane
+ * mode raises FE_UNDERFLOW on a lane the scalar net would have recomputed, so
+ * a CompiledFunction call / Table falls back to the interpreter
+ * (compile_underflow.h). The value is left as computed: NIntegrate & co use an
+ * underflowed sample as it is. Only reached off the normal range. */
+#include <fenv.h>
+#include <float.h>
+static inline void vm_lane_raise(void) {
+#ifdef FE_UNDERFLOW
+    feraiseexcept(FE_UNDERFLOW);
+#endif
+}
+static inline double vm_lane1_r(unsigned mode, double x, double y) {
+    double m = fabs(y);
+    if (mode && !(m >= DBL_MIN && m <= DBL_MAX) && nd_lane_degenerate1((int)mode, x, 0.0, y, 0.0))
+        vm_lane_raise();
+    return y;
+}
+static inline void vm_lane1_z(unsigned mode, double xr, double xi, double yr, double yi) {
+    if (mode && nd_lane_degenerate1((int)mode, xr, xi, yr, yi)) vm_lane_raise();
+}
+static inline double vm_lane2_r(unsigned mode, double a, double b, double y) {
+    double m = fabs(y);
+    if (mode && !(m >= DBL_MIN && m <= DBL_MAX) && nd_lane_degenerate2((int)mode, a, 0.0, b, 0.0, y, 0.0))
+        vm_lane_raise();
+    return y;
+}
+static inline void vm_lane2_z(unsigned mode, double ar, double ai, double br, double bi,
+                              double yr, double yi) {
+    if (mode && nd_lane_degenerate2((int)mode, ar, ai, br, bi, yr, yi)) vm_lane_raise();
+}
+/* sf_erfc_r flushes erfc(x) for large x to 0 without the IEEE flag, so the
+ * Erfc opcodes check their own lane (ND_LANE_FULL: erfc has no zeros). */
+static inline double vm_erfc_r(double x) {
+    double v = x; (void)sf_erfc_r(x, &v);
+    return vm_lane1_r(ND_LANE_FULL, x, v);
+}
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -1295,15 +1331,16 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(MIN_I): RD.i = RA.i < RB.i ? RA.i : RB.i; NEXT();
             OP(MIN_R): RD.r = RA.r < RB.r ? RA.r : RB.r; NEXT();
             OP(ERF_R): (void)sf_erf_r(RA.r, &RD.r); NEXT();     /* the shared kernel, */
-            OP(ERFC_R): (void)sf_erfc_r(RA.r, &RD.r); NEXT();   /* not libm erf/erfc  */
-            OP(KERN_RR): { double o; RD.r = ((kfn_r)c->imm.p)(RA.r, &o) ? o : NAN; } NEXT();
-            OP(KERN_R2R): { double orr, oi; RD.r = ((kfn_c)c->imm.p)(RA.r, 0.0, &orr, &oi) ? orr : NAN; } NEXT();
-            OP(KERN_RC): { double orr, oi; if (((kfn_c)c->imm.p)(RA.r, 0.0, &orr, &oi)) RD.z = orr + oi * I; else RD.z = NAN + NAN * I; } NEXT();
-            OP(KERN_CC): { double orr, oi; if (((kfn_c)c->imm.p)(creal(RA.z), cimag(RA.z), &orr, &oi)) RD.z = orr + oi * I; else RD.z = NAN + NAN * I; } NEXT();
-            OP(KERN_CR): { double orr, oi; RD.r = ((kfn_c)c->imm.p)(creal(RA.z), cimag(RA.z), &orr, &oi) ? orr : NAN; } NEXT();
-            OP(KERN2_RR): { double orr, oi; RD.r = ((kfn_c2)c->imm.p)(RA.r, 0.0, RB.r, 0.0, &orr, &oi) ? orr : NAN; } NEXT();
-            OP(KERN2_RC): { double orr, oi; if (((kfn_c2)c->imm.p)(RA.r, 0.0, RB.r, 0.0, &orr, &oi)) RD.z = orr + oi * I; else RD.z = NAN + NAN * I; } NEXT();
-            OP(KERN2_CC): { double orr, oi; if (((kfn_c2)c->imm.p)(creal(RA.z), cimag(RA.z), creal(RB.z), cimag(RB.z), &orr, &oi)) RD.z = orr + oi * I; else RD.z = NAN + NAN * I; } NEXT();
+            OP(ERFC_R): RD.r = vm_erfc_r(RA.r); NEXT();   /* not libm erf/erfc; lane-checked */
+            /* c->flags is the kernel's lane mode (kern_stamp_lane), 0 = none. */
+            OP(KERN_RR): { double o; RD.r = ((kfn_r)c->imm.p)(RA.r, &o) ? vm_lane1_r(c->flags, RA.r, o) : NAN; } NEXT();
+            OP(KERN_R2R): { double orr, oi; RD.r = ((kfn_c)c->imm.p)(RA.r, 0.0, &orr, &oi) ? vm_lane1_r(c->flags, RA.r, orr) : NAN; } NEXT();
+            OP(KERN_RC): { double orr, oi; if (((kfn_c)c->imm.p)(RA.r, 0.0, &orr, &oi)) { vm_lane1_z(c->flags, RA.r, 0.0, orr, oi); RD.z = orr + oi * I; } else RD.z = NAN + NAN * I; } NEXT();
+            OP(KERN_CC): { double orr, oi, xr = creal(RA.z), xi = cimag(RA.z); if (((kfn_c)c->imm.p)(xr, xi, &orr, &oi)) { vm_lane1_z(c->flags, xr, xi, orr, oi); RD.z = orr + oi * I; } else RD.z = NAN + NAN * I; } NEXT();
+            OP(KERN_CR): { double orr, oi, xr = creal(RA.z), xi = cimag(RA.z); RD.r = ((kfn_c)c->imm.p)(xr, xi, &orr, &oi) ? (vm_lane1_z(c->flags, xr, xi, orr, 0.0), orr) : NAN; } NEXT();
+            OP(KERN2_RR): { double orr, oi; RD.r = ((kfn_c2)c->imm.p)(RA.r, 0.0, RB.r, 0.0, &orr, &oi) ? vm_lane2_r(c->flags, RA.r, RB.r, orr) : NAN; } NEXT();
+            OP(KERN2_RC): { double orr, oi; if (((kfn_c2)c->imm.p)(RA.r, 0.0, RB.r, 0.0, &orr, &oi)) { vm_lane2_z(c->flags, RA.r, 0.0, RB.r, 0.0, orr, oi); RD.z = orr + oi * I; } else RD.z = NAN + NAN * I; } NEXT();
+            OP(KERN2_CC): { double orr, oi, ar = creal(RA.z), ai = cimag(RA.z), br = creal(RB.z), bi = cimag(RB.z); if (((kfn_c2)c->imm.p)(ar, ai, br, bi, &orr, &oi)) { vm_lane2_z(c->flags, ar, ai, br, bi, orr, oi); RD.z = orr + oi * I; } else RD.z = NAN + NAN * I; } NEXT();
             OP(LT_I): RD.i = RA.i < RB.i; NEXT();  OP(LT_R): RD.i = mth_tol_lt(RA.r, RB.r, eqrel); NEXT();
             OP(LE_I): RD.i = RA.i <= RB.i; NEXT(); OP(LE_R): RD.i = mth_tol_le(RA.r, RB.r, eqrel); NEXT();
             OP(GT_I): RD.i = RA.i > RB.i; NEXT();  OP(GT_R): RD.i = mth_tol_gt(RA.r, RB.r, eqrel); NEXT();
@@ -1883,32 +1920,40 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
              * the win here is purely the amortised dispatch. */
             OP(VKERN_RR): { double* d_ = TD_R; const double* a_ = TA_R; double o_;
                 for (int k_ = 0; k_ < VBLOCK; k_++)
-                    d_[k_] = ((kfn_r)c->imm.p)(a_[k_], &o_) ? o_ : NAN; } NEXT();
+                    d_[k_] = ((kfn_r)c->imm.p)(a_[k_], &o_) ? vm_lane1_r(c->flags, a_[k_], o_) : NAN; } NEXT();
             OP(VKERN_R2R): { double* d_ = TD_R; const double* a_ = TA_R; double or_, oi_;
                 for (int k_ = 0; k_ < VBLOCK; k_++)
-                    d_[k_] = ((kfn_c)c->imm.p)(a_[k_], 0.0, &or_, &oi_) ? or_ : NAN; } NEXT();
+                    d_[k_] = ((kfn_c)c->imm.p)(a_[k_], 0.0, &or_, &oi_) ? vm_lane1_r(c->flags, a_[k_], or_) : NAN; } NEXT();
             OP(VKERN_RC): { double _Complex* d_ = TD_C; const double* a_ = TA_R; double or_, oi_;
                 for (int k_ = 0; k_ < VBLOCK; k_++)
-                    d_[k_] = ((kfn_c)c->imm.p)(a_[k_], 0.0, &or_, &oi_) ? or_ + oi_ * I : NAN + NAN * I; } NEXT();
+                    d_[k_] = ((kfn_c)c->imm.p)(a_[k_], 0.0, &or_, &oi_)
+                             ? (vm_lane1_z(c->flags, a_[k_], 0.0, or_, oi_), or_ + oi_ * I) : NAN + NAN * I; } NEXT();
             OP(VKERN_CC): { double _Complex* d_ = TD_C; const double _Complex* a_ = TA_C; double or_, oi_;
                 for (int k_ = 0; k_ < VBLOCK; k_++)
                     d_[k_] = ((kfn_c)c->imm.p)(creal(a_[k_]), cimag(a_[k_]), &or_, &oi_)
-                             ? or_ + oi_ * I : NAN + NAN * I; } NEXT();
+                             ? (vm_lane1_z(c->flags, creal(a_[k_]), cimag(a_[k_]), or_, oi_), or_ + oi_ * I)
+                             : NAN + NAN * I; } NEXT();
             OP(VKERN_CR): { double* d_ = TD_R; const double _Complex* a_ = TA_C; double or_, oi_;
                 for (int k_ = 0; k_ < VBLOCK; k_++)
-                    d_[k_] = ((kfn_c)c->imm.p)(creal(a_[k_]), cimag(a_[k_]), &or_, &oi_) ? or_ : NAN; } NEXT();
+                    d_[k_] = ((kfn_c)c->imm.p)(creal(a_[k_]), cimag(a_[k_]), &or_, &oi_)
+                             ? (vm_lane1_z(c->flags, creal(a_[k_]), cimag(a_[k_]), or_, 0.0), or_) : NAN; } NEXT();
             OP(VKERN2_RR): { double* d_ = TD_R; const double* a_ = TA_R; const double* b_ = TB_R; double or_, oi_;
                 for (int k_ = 0; k_ < VBLOCK; k_++)
-                    d_[k_] = ((kfn_c2)c->imm.p)(a_[k_], 0.0, b_[k_], 0.0, &or_, &oi_) ? or_ : NAN; } NEXT();
+                    d_[k_] = ((kfn_c2)c->imm.p)(a_[k_], 0.0, b_[k_], 0.0, &or_, &oi_)
+                             ? vm_lane2_r(c->flags, a_[k_], b_[k_], or_) : NAN; } NEXT();
             OP(VKERN2_RC): { double _Complex* d_ = TD_C; const double* a_ = TA_R; const double* b_ = TB_R; double or_, oi_;
                 for (int k_ = 0; k_ < VBLOCK; k_++)
                     d_[k_] = ((kfn_c2)c->imm.p)(a_[k_], 0.0, b_[k_], 0.0, &or_, &oi_)
-                             ? or_ + oi_ * I : NAN + NAN * I; } NEXT();
+                             ? (vm_lane2_z(c->flags, a_[k_], 0.0, b_[k_], 0.0, or_, oi_), or_ + oi_ * I)
+                             : NAN + NAN * I; } NEXT();
             OP(VKERN2_CC): { double _Complex* d_ = TD_C; const double _Complex* a_ = TA_C;
                              const double _Complex* b_ = TB_C; double or_, oi_;
                 for (int k_ = 0; k_ < VBLOCK; k_++)
                     d_[k_] = ((kfn_c2)c->imm.p)(creal(a_[k_]), cimag(a_[k_]), creal(b_[k_]), cimag(b_[k_]),
-                                                &or_, &oi_) ? or_ + oi_ * I : NAN + NAN * I; } NEXT();
+                                                &or_, &oi_)
+                             ? (vm_lane2_z(c->flags, creal(a_[k_]), cimag(a_[k_]), creal(b_[k_]), cimag(b_[k_]),
+                                           or_, oi_), or_ + oi_ * I)
+                             : NAN + NAN * I; } NEXT();
             /* N-ary kernel tiles: NARYV_NS(flags) broadcast scalars from `a`,
              * the operand in slot ns - NARYV_POS_END(flags) per element from the
              * tile in `b` (0 from the end = the last operand). Only the live elements

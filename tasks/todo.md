@@ -124,8 +124,16 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
         `make check-machine-boundary`; BASELINE of 185 = G1-G10 (design note section G)
   - [x] G1 Compile integer Subtract, G2 packed InverseJacobiDN, G3 machine Mod
         (`mth_mod_machine`): v0.6611
-  - [ ] G6 underflow, G5 subnormal, G4 ulp, G7-G9 decisions, G10 perf; Quotient of a rounded
-        quotient (G3 note)
+  - [x] G5 subnormal + G6 underflow: default-on lane modes (buffer + Compile): v0.6612
+  - [ ] G4 ulp (scalar on catan/casin, kernels/VM on atan/asin: one helper per head; gate now
+        probes ordinary values too), G10 perf
+  - [ ] Decisions (user, 2026-11-18):
+        - G7: IEEE signed zero on EVERY surface (the scalar respects -0.: Arg[-0.] = Pi,
+          ArcCot[-0.] = -Pi/2), not -0. read as 0
+        - G8: Binomial[2., -1.*^308] is 0. (integer lower index < 0); fix the scalar's arm
+        - G9: Log[x, x] is 1. for machine x; the -> 1 rule only for exact/symbolic x
+        - Quotient: exact floor of the exact quotient on every surface, so that
+          m == n Quotient[m, n] + Mod[m, n]
 - [ ] Close-out: valgrind the corpus, a no-FLINT build, `make check-c99`, the gates, merge to
       main, the review section below
 

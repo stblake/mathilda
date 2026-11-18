@@ -1293,15 +1293,58 @@ static const NDBinaryKernel NDKB_Zeta        = { ndk_Zeta2_c, true, NULL, NULL, 
  * an explicit "known, and deliberately has no fast path" reads differently from
  * an absent registry entry, and the coverage audit distinguishes them. */
 
-/* Heads whose SCALAR machine path recomputes a flushed-to-zero result from a
- * nonzero argument in MPFR (numeric_machine_real_or_promote / _if_degenerate):
- * the buffer map must decline the same lanes (ndarray_map_unary), or packed and
- * scalar disagree -- Exp[packed {-800.}] was {0.}. Only decaying heads: a head
- * that merely overflows is declined by its own non-finite check. */
-bool ndk_promotes_underflow(const NDUnaryKernel* k) {
-    return k == &NDKU_Exp || k == &NDKU_Sech || k == &NDKU_Csch
-        || k == &NDKU_Erfc || k == &NDKU_Gamma || k == &NDKU_Factorial
-        || k == &NDKU_ExpIntegralEi || k == &NDKU_AiryAi || k == &NDKU_AiryAiPrime;
+/* Lane-check modes (ndarray.h, "Lane checks"). The DEFAULT is ND_LANE_FULL;
+ * these tables are the opt-outs, each a claim about the function:
+ *
+ * NONE -- a machine-number input (a buffer holds no subnormals) gives a
+ * normal output or an exact zero at a special point, so no lane can need the
+ * scalar net. sin/tan/sinh/tanh/arcsin/arctan/arcsinh of a normal x is about x
+ * (normal); cos, sec, csc, cosh, cot, coth are bounded away from 0 in double
+ * (|cos x| >= ~6e-17); log/arccos/arcsec/arccosh are exactly 0 only at +-1 and
+ * otherwise at least ~1e-16; projections and rounding return parts or
+ * integers; cbrt of a normal is normal. Their escaping complex values
+ * (Log[-x], ArcSin[2.]) have normal parts. These are the cheap elementary
+ * heads, where a per-element check cost ~20% on Sin over 10^7 elements.
+ *
+ * NOT here, although elementary: ArcCot, ArcCsc, ArcTanh, ArcCoth, ArcCsch,
+ * which decay like 1/x (ArcCot[1.*^308] is 1.*^-308, below DBL_MIN), and
+ * Sech, Csch, Exp, which underflow.
+ *
+ * RANGE -- an exact zero from a nonzero argument is a genuine value:
+ * ArcSech[1.], LogGamma[1.], InverseErfc[1.], Zeta at the trivial zeros;
+ * Mod / Quotient / Unitize, Log[b, 1.], Binomial[2., 3.], Pochhammer[-2., 3.],
+ * QPochhammer[1., q]. Their subnormal and non-finite lanes are still checked. */
+static const NDUnaryKernel* const ND_LANE_NONE_U[] = {
+    &NDKU_Sin, &NDKU_Cos, &NDKU_Tan, &NDKU_Cot, &NDKU_Sec, &NDKU_Csc,
+    &NDKU_Sinh, &NDKU_Cosh, &NDKU_Tanh, &NDKU_Coth,
+    &NDKU_Log, &NDKU_Log10, &NDKU_Log2,
+    &NDKU_ArcSin, &NDKU_ArcCos, &NDKU_ArcTan, &NDKU_ArcSec, &NDKU_ArcSinh, &NDKU_ArcCosh,
+    &NDKU_AbsInt, &NDKU_Re, &NDKU_ImInt, &NDKU_Arg, &NDKU_Conjugate,
+    &NDKU_Sign, &NDKU_UnitStep, &NDKU_UnitBox, &NDKU_Ramp, &NDKU_Unitize,
+    &NDKU_Floor, &NDKU_Ceiling, &NDKU_Round, &NDKU_IntegerPart, &NDKU_FractionalPart,
+    &NDKU_CubeRoot,
+};
+static const NDUnaryKernel* const ND_LANE_RANGE_U[] = {
+    &NDKU_ArcSech, &NDKU_LogGamma, &NDKU_InverseErfc, &NDKU_Zeta,
+};
+static const NDBinaryKernel* const ND_LANE_RANGE_B[] = {
+    &NDKB_Mod, &NDKB_Quotient, &NDKB_Unitize, &NDKB_Log, &NDKB_Binomial,
+    &NDKB_Pochhammer, &NDKB_QPochhammer,
+};
+#define ND_COUNT(a) (sizeof(a) / sizeof((a)[0]))
+
+int ndk_unary_lane_mode(const NDUnaryKernel* k) {
+    for (size_t i = 0; i < ND_COUNT(ND_LANE_NONE_U); i++)
+        if (k == ND_LANE_NONE_U[i]) return ND_LANE_NONE;
+    for (size_t i = 0; i < ND_COUNT(ND_LANE_RANGE_U); i++)
+        if (k == ND_LANE_RANGE_U[i]) return ND_LANE_RANGE;
+    return ND_LANE_FULL;
+}
+
+int ndk_binary_lane_mode(const NDBinaryKernel* k) {
+    for (size_t i = 0; i < ND_COUNT(ND_LANE_RANGE_B); i++)
+        if (k == ND_LANE_RANGE_B[i]) return ND_LANE_RANGE;
+    return ND_LANE_FULL;
 }
 
 #define REG_U(NAME) symtab_set_ndarray_unary_kernel(#NAME, &NDKU_##NAME)
