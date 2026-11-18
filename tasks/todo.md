@@ -164,7 +164,7 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
         Underflow[]); solveint_exp's enumeration declines powers past 2^26 bits
   - [x] found on the way: `Exp[10.^10]` printed General::ovfl 5x (P3's message, per probe pass)
   - [ ] still open, seen on the way: NumericQ[Overflow[]] / ordering of the surrogates;
-        `N[LogGamma[10^6]]` 19 s; issues #137 / #138 (DSolve) stand as filed
+        `N[LogGamma[10^6]]` 19 s (issue #139); issues #137 / #138 (DSolve) stand as filed
 
 # Bronstein integration campaign (started 2026-11-12)
 
