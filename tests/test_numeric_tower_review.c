@@ -249,6 +249,40 @@ static void test_e12_compile_unrepresentable_arg(void) {
     chk_true("Compile[{{x, _Real}}, x^2, WorkingPrecision -> 30][10^400] == 10^800");
 }
 
+/* G1-G3: wrong answers on ordinary data, found by check-machine-boundary. */
+static void test_g1_compile_integer_subtract(void) {
+    chk("Compile[{{x, _Integer, 1}, {y, _Integer}}, Subtract[x, y]][{10, 3}, 2]", "{8, 1}");
+    chk("Compile[{{v, _Integer, 1}, {w, _Integer, 1}}, Subtract[v, w]][{2^53 + 1, 3}, {0, 1}]",
+        "{9007199254740993, 2}");                            /* stays an integer array */
+    chk("Compile[{{y, _Integer}, {v, _Integer, 1}}, Subtract[y, v]][0, {2^53 + 1, 3}]",
+        "{-9007199254740993, -3}");
+    chk("Compile[{{x, _Integer, 1}, {y, _Integer}}, Subtract[x, y]][{3}, -2^63]",
+        "{9223372036854775811}");                            /* overflow -> exact */
+    chk("Compile[{{v, _Real, 1}, {y, _Real}}, Subtract[v, y]][{1., 3.}, 2.]", "{-1.0, 1.0}");
+}
+
+static void test_g2_inverse_jacobi_dn_packed(void) {
+    chk_true("With[{v = {0.3, 0.5, 0.99, -0.2}}, InverseJacobiDN[Developer`ToPackedArray[v], 0.5]"
+             " === (InverseJacobiDN[#, 0.5] & /@ v)]");
+    chk_true("With[{v = {0.3, 0.5}}, Normal[InverseJacobiDN[NDArray[v], 0.5]]"
+             " === (InverseJacobiDN[#, 0.5] & /@ v)]");
+    chk_true("Im[InverseJacobiDN[Developer`ToPackedArray[{0.3}], 1.*^-10][[1]]] > 12");
+    chk("Developer`PackedArrayQ[InverseJacobiDN[Developer`ToPackedArray[{0.99, 0.95}], 0.5]]",
+        "True");                                             /* all-real stays packed */
+}
+
+static void test_g3_machine_mod(void) {
+    /* the exact remainder, on every surface: m - n Floor[m/n] collapsed to 0.
+     * when m/n rounded up to an integer */
+    chk_true("Mod[Developer`ToPackedArray[{0.3, 0.5}], 1.*^-10] === {Mod[0.3, 1.*^-10], Mod[0.5, 1.*^-10]}");
+    chk_true("Mod[0.5, 1.*^-10] == SetPrecision[Mod[SetPrecision[0.5, Infinity], SetPrecision[1.*^-10, Infinity]], MachinePrecision]");
+    chk_true("Compile[{{a, _Real, 1}, {b, _Real}}, Mod[a, b]][{0.5}, 1.*^-10] === {Mod[0.5, 1.*^-10]}");
+    chk("Mod[-7., 3.]", "2.0");
+    chk("Mod[7., -3.]", "-2.0");
+    chk("Mod[Developer`ToPackedArray[{-7., 7.}], -3.]", "{-1.0, -2.0}");
+    chk("Mod[-2., 1.]", "0.0");
+}
+
 static void test_d9_negative_literal_power(void) {
     /* -a^b is -(a^b) for every literal spelling of a. */
     chk("-2.`30^2 < 0", "True");
@@ -437,6 +471,9 @@ int main(void) {
     TEST(test_c3_e5_buffer_paths_promote);
     TEST(test_e9_compile_underflow);
     TEST(test_e12_compile_unrepresentable_arg);
+    TEST(test_g1_compile_integer_subtract);
+    TEST(test_g2_inverse_jacobi_dn_packed);
+    TEST(test_g3_machine_mod);
     TEST(test_d9_negative_literal_power);
     TEST(test_e4_quotient_mpfr);
     TEST(test_e2_machine_zero_times_mpfr);

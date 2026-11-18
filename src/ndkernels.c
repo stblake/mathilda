@@ -34,6 +34,7 @@
 #include "elliptic.h"
 #include "symtab.h"
 #include "mth_machine_log.h"                /* the one machine Log (scalar/ND/VM) */
+#include "mth_machine_mod.h"                /* the one machine Mod (scalar/ND/VM) */
 #include "piecewise.h"                         /* Unitize machine helpers */
 #include "special_functions/sf_machine.h"
 #include "special_functions/sf_machine_gamma.h"
@@ -436,15 +437,17 @@ static bool ndk_ArcTan2_c(double xre, double xim, double yre, double yim,
 }
 static const NDBinaryKernel NDKB_ArcTan = { ndk_ArcTan2_c, true, NULL, NULL, false, NULL, NULL };
 
-/* Mod[m, n] = m - n floor(m/n) and Quotient[m, n] = floor(m/n) over real
- * arrays (floored division, result carrying the divisor's sign — matches
- * builtin_mod / builtin_quotient in core.c). Kernel receives (m, n); declines
- * any complex operand or a zero divisor -> List path. real_closed. */
+/* Mod[m, n] (the floored remainder, carrying the divisor's sign) and
+ * Quotient[m, n] = floor(m/n) over real arrays. Mod is mth_mod_machine -- the
+ * scalar builtin's helper, so the surfaces agree bit for bit; the old
+ * m - n floor(m/n) collapsed to 0. when m/n rounded up to an integer
+ * (numeric-tower review G3). Kernel receives (m, n); declines any complex
+ * operand or a zero divisor -> List path. real_closed. */
 static bool ndk_Mod_c(double mre, double mim, double nre, double nim,
                       double* rr, double* ri) {
-    if (mim != 0.0 || nim != 0.0 || nre == 0.0) return false;
-    double v = mre - nre * floor(mre / nre);
-    *rr = v; *ri = 0.0; return isfinite(v);
+    if (mim != 0.0 || nim != 0.0) return false;
+    if (!mth_mod_machine(mre, nre, rr)) return false;
+    *ri = 0.0; return true;
 }
 static bool ndk_Quotient_c(double mre, double mim, double nre, double nim,
                            double* rr, double* ri) {
@@ -963,20 +966,29 @@ static const NDBinaryKernel NDKB_GegenbauerC = { ndk_GegenbauerC_c, false, NULL,
 /* The Jacobi elliptic family (JacobiSN ... JacobiSD, JacobiAmplitude,
  * InverseJacobiSN / CN / DN): (u, m) with real or complex parts, through
  * sf_machine_jacobi -- the scalar builtins' helper, so the surfaces agree bit
- * for bit. Real u and m give a real value (the inverses decline where theirs is
- * complex, and the List path answers). */
-#define NDK_JAC(NAME, CODE)                                                       \
+ * for bit. Real u and m give a real value (InverseJacobiSN / CN decline where
+ * theirs is complex, and the List path answers).
+ *
+ * InverseJacobiDN is the exception, so it is registered escaping (not
+ * real-closed): for real 0 <= v < Sqrt[1 - m], 0 < m < 1, the helper returns
+ * the complex branch K + i y. A real-closed registration wrote that into a
+ * real buffer and dropped y (numeric-tower review G2: packed
+ * InverseJacobiDN[{0.3, 0.5}, 1.*^-10] was {1.5708, 1.5708}, the scalar
+ * 1.5708 + 12.35 I). The escaping map computes complex and narrows to real
+ * only when every element is real. */
+#define NDK_JAC_KERNEL(NAME, CODE, REAL_CLOSED)                                   \
     static bool ndk_##NAME##_c(double are, double aim, double bre, double bim,    \
                                double* ore, double* oim) {                        \
         return sf_machine_jacobi(CODE, are, aim, bre, bim, ore, oim);              \
     }                                                                             \
-    static const NDBinaryKernel NDKB_##NAME = { ndk_##NAME##_c, true, NULL, NULL, false, NULL, NULL };
+    static const NDBinaryKernel NDKB_##NAME = { ndk_##NAME##_c, REAL_CLOSED, NULL, NULL, false, NULL, NULL };
+#define NDK_JAC(NAME, CODE) NDK_JAC_KERNEL(NAME, CODE, true)
 NDK_JAC(JacobiSN, JAC_SN) NDK_JAC(JacobiCN, JAC_CN) NDK_JAC(JacobiDN, JAC_DN)
 NDK_JAC(JacobiCD, JAC_CD) NDK_JAC(JacobiCS, JAC_CS) NDK_JAC(JacobiDC, JAC_DC)
 NDK_JAC(JacobiDS, JAC_DS) NDK_JAC(JacobiNC, JAC_NC) NDK_JAC(JacobiND, JAC_ND)
 NDK_JAC(JacobiNS, JAC_NS) NDK_JAC(JacobiSC, JAC_SC) NDK_JAC(JacobiSD, JAC_SD)
 NDK_JAC(JacobiAmplitude, JAC_AM) NDK_JAC(InverseJacobiSN, JAC_ISN)
-NDK_JAC(InverseJacobiCN, JAC_ICN) NDK_JAC(InverseJacobiDN, JAC_IDN)
+NDK_JAC(InverseJacobiCN, JAC_ICN) NDK_JAC_KERNEL(InverseJacobiDN, JAC_IDN, false)
 
 /* HankelH1/H2 and the spherical Bessel family, (order, z) with real or complex
  * parts, through sf_machine_hankel_sph -- the scalar builtins' helper. The

@@ -1032,7 +1032,7 @@ seconds (`Sqrt[3141592653589793238]` took 24 s while
 ## Mod, Quotient, QuotientRemainder
 
 - `Mod[n, m]`: Remainder of `n/m`.
-  - Real operands use the floored quotient: `n - m Floor[n/m]`. `Mod[n, m, d]` uses `n - m Floor[(n - d)/m]`.
+  - Real operands give the floored remainder `n - m Floor[n/m]` with `Floor` of the EXACT quotient: two machine reals use the exact `fmod`, moved to the divisor's sign (`mth_mod_machine`, shared by the scalar, packed/NDArray and `Compile[]` surfaces), so `Mod[0.5, 1.*^-10]` is `9.99999818*^-11`, not the `0.` a rounded quotient gives. `Mod[n, m, d]` uses `n - m Floor[(n - d)/m]`.
   - Since v0.471 Mod also follows the reference beyond integers, rationals and reals:
     - **Complex or Gaussian operands** use the nearest quotient, `n - m Round[(n - d)/m]`, with ties to even: `Mod[3 + 4 I, 2]` → `-1`, `Mod[7, 3 + I, 1/2]` → `I`. Gaussian integers take a direct `Z[i]` route (`nt_gaussian_mod`), in int64 when the modulus components are below 2¹⁶.
       - **Printing difference:** an inexact complex result whose imaginary part rounds to `0.` prints as a Real. Mathilda's arithmetic drops `0.` imaginary parts everywhere; the reference keeps `-0.5 + 0.*I`.

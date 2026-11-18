@@ -122,8 +122,10 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
   - [x] triage: harness fixes (Max/Min are not element-wise; Compile machine-typed vs exact
         integer agrees; a timed-out boundary lane voids its list; more INT_GROWTH heads);
         `make check-machine-boundary`; BASELINE of 185 = G1-G10 (design note section G)
-  - [ ] fix G1-G10, serious first: G1 Compile Subtract, G2 InverseJacobiDN, G3 Mod (ordinary
-        data); then G6 underflow, G5 subnormal, G4 ulp, G7-G9 decisions, G10 perf
+  - [x] G1 Compile integer Subtract, G2 packed InverseJacobiDN, G3 machine Mod
+        (`mth_mod_machine`): v0.6611
+  - [ ] G6 underflow, G5 subnormal, G4 ulp, G7-G9 decisions, G10 perf; Quotient of a rounded
+        quotient (G3 note)
 - [ ] Close-out: valgrind the corpus, a no-FLINT build, `make check-c99`, the gates, merge to
       main, the review section below
 

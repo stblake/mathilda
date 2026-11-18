@@ -192,6 +192,7 @@
 #include "limit.h"
 #include "context.h"
 #include "numeric.h"
+#include "mth_machine_mod.h"   /* the one machine Mod (scalar/ND/VM) */
 #include "precision.h"
 #include "rationalize.h"
 #include "numeric.h"
@@ -4053,7 +4054,10 @@ static Expr* mod_fast(Expr* res) {
             if (!mod_operand_to_double(m_expr, &m_val) || !mod_operand_to_double(n_expr, &n_val))
                 return NULL;
             if (n_val == 0.0) return NULL;
-            double result = m_val - n_val * floor(m_val / n_val);
+            /* the one machine Mod, shared with the buffer kernel and Compile
+             * (numeric-tower review G3: m - n floor(m/n) collapsed to 0.) */
+            double result;
+            if (!mth_mod_machine(m_val, n_val, &result)) return NULL;
             return expr_new_real(result);
         }
     } else {

@@ -105,6 +105,23 @@ int emit_arith(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* o
         Val a, b; if (!emit(c, A[0], &a) || !emit(c, A[1], &b)) return -1;
         CompileType t = num_common(a.type, b.type); if ((int)t < 0) { c->ok = false; return -1; }
         if (CT_IS_ARRAY(t)) {                       /* a - b = a + (-1) b */
+            if (CT_ELEM(t) == CT_INT) {
+                /* Integer elements negate with an INTEGER -1, exactly as the
+                 * a - b spelling (Plus[a, Times[-1, b]]) does. The real path
+                 * below was wrong for them (numeric-tower review G1): OP_NEG_R
+                 * on an int64 register flips its sign bit, so {10, 3} - 2 was
+                 * {10 + 2 - 2^63, ...}, and a real -1 turned an array
+                 * subtrahend's result into a real array, losing 2^53 + 1. */
+                if (CT_IS_ARRAY(b.type)) {
+                    Slot m; m.i = -1;
+                    Val m1 = emit_const(c, m, CT_INT);
+                    b = arr_ew(c, b, m1, b.type, false);
+                } else {
+                    b = unop(c, OP_NEG_I, b, CT_INT);
+                }
+                if (!c->ok) return -1;
+                *out = arr_ew(c, a, b, t, true); return c->ok ? 1 : -1;
+            }
             if (CT_IS_ARRAY(b.type)) {
                 Val m1 = arr_real_const(c, -1.0);
                 b = arr_ew(c, b, m1, b.type, false);
