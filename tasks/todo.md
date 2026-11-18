@@ -129,7 +129,7 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
   - [x] G4 (one helper per head: mth_machine_elem.h; Log2/10; Binomial), G7-G9 + Quotient
         decisions, G10 (UB casts, Bessel series caps, pFq cap, HermiteH U form),
         ExpIntegralE escaping: v0.6613. BASELINE empty (assert-empty gate)
-  - [ ] Follow-ups seen, not in scope: HypergeometricU[5.*^9, 0.5, 100.] is Underflow[] though
+  - [x] (resolved v0.6617, design note R) Follow-ups seen, not in scope: HypergeometricU[5.*^9, 0.5, 100.] is Underflow[] though
         ~10^(-10^10) is inside MPFR's range; Underflow[] Underflow[] stays Underflow[]^2
   - [x] Decisions (user, 2026-11-18), all landed v0.6613:
         - G7: IEEE signed zero on EVERY surface (the scalar respects -0.: Arg[-0.] = Pi,
