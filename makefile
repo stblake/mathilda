@@ -1150,6 +1150,23 @@ check-pipe-protocol:
 check-nd-surfaces:
 	python3 tools/nd_surface_audit.py --survival
 
+# `make check-machine-boundary` — do all five numeric surfaces agree at the
+# edges of the machine range?
+#
+# The numeric-tower review fixed the machine/MPFR boundary policy at a handful
+# of choke points, and three of its findings were the SAME bug on another
+# surface: packed {1.*^308} * 10 gave {inf.0} (C3), packed {1., 2.} * 10^400
+# gave {inf.0, inf.0} (E5), compiled x x at 1.*^-200 gave 0. (E9). The other
+# audits run ordinary data; this one probes every element-wise kernel head at
+# +-1.*^308, 800., 1.*^-200, DBL_MIN, -0., the int64 edges and a huge exact
+# operand, over scalar / List / packed / NDArray / Compile (scalar and rank 1),
+# and requires each lane to equal the scalar answer. It ratchets against the
+# BASELINE in the tool. Each child is held to MB_MEM_CAP_MB (default 2048) by an
+# RSS watchdog: a time budget cannot stop one huge GMP call. ~15 min; needs
+# ./Mathilda built.
+check-machine-boundary:
+	python3 tools/check_machine_boundary.py
+
 # `make check-compile-coverage` — does every head with a numeric fast path also
 # COMPILE?
 #
@@ -1286,7 +1303,7 @@ print-libs:
 
 .PHONY: bench-osp-famous all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-equality check-bronstein-coverage check-bronstein-completeness bench-integrate bench-integrate-compact check-feyncalc check-differentialforms check-interval check-packed-aware \
         check-messages check-corpus-indvar \
-        check-array-exactness check-nd-surfaces check-compile-coverage \
+        check-array-exactness check-nd-surfaces check-compile-coverage check-machine-boundary \
         check-refine-stress \
         check-fastpath-sweep check-menu-ids check-pipe-protocol bench-gap check-diophantine-heldout print-cc print-flags print-libs
 

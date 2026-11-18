@@ -160,6 +160,24 @@ which is the platform libm's `tan`, not Mathilda; the corpus therefore uses
 the libm bound of 2 ulps. `Exp[Log[z]]` at \|z\| ~ 10^+-200 and
 `Tan[ArcTan[100.]]` are limited by their conditioning.
 
+### G. Found by `check-machine-boundary` (2026-11-18, `tools/check_machine_boundary.py`)
+The gate probes 161 element-wise heads at the machine-range edges over scalar /
+List / packed / NDArray / Compile, and requires each lane to equal the scalar.
+It found E12 (fixed v0.6610) and these, all in its BASELINE. Several are on
+ORDINARY data: the second lane of every probe holds `0.5`.
+| # | Repro | Got | Status |
+|---|---|---|---|
+| G1 | `Compile[{{x, _Integer, 1}, {y, _Integer}}, Subtract[x, y]][{10, 3}, 2]` | `{-9223372036854775796, ...}` (`x - y` is right: `{8, 1}`) | open: wrong answer, ordinary data |
+| G2 | `InverseJacobiDN[ToPackedArray[{0.3, 0.5}], 1.*^-10]` | real values; the scalar is `1.5708 + 12.35 I` (NDArray too) | open: wrong answer, ordinary data |
+| G3 | `Mod[ToPackedArray[{0.3, 0.5}], 1.*^-10]` (NDArray, Compile rank 1) | `{0., 0.}`; the scalar is the exact fmod `9.9999978*^-11` | open: wrong answer |
+| G4 | `ArcTan[ToPackedArray[{0.3, 0.5}]]`; ArcCot, Log2/Log10 (imaginary part), InverseErf; Compile rank-1 ArcSin/ArcCos | `0.46364760900080615` for `ArcTan[0.5]` = `0.46364760900080611621...` (scalar correctly rounded) | open: 1 ulp, breaks scalar == buffer bit-match |
+| G5 | packed `ArcTanh[{1.*^308, 0.5}]`; packed `JacobiAmplitude[2.2250738585072014*^-308, {0.5, ...}]` | real part `1.0*^-308` (subnormal); `2.2250738585072004*^-308` (subnormal) | open: subnormal leaks (policy) |
+| G6 | Compile `Csch[-1.*^308]`, `Sech`, `Erfc[1.*^308]`; packed `FresnelS[{-1.*^-200, 0.5}]`, `Zeta`/`HurwitzZeta[{1.*^308, ..}, 1.*^308]`; `SphericalBesselJ[1.*^308, 10.]` on every array surface | `0.` (scalar `Underflow[]`; FresnelS `-5.24*^-601`) | open: underflow flushed (C3/E9 class: no flag, exact 0 from a reciprocal of inf) |
+| G7 | `Arg[-0.]`, `ArcCot[-0.]` | scalar `0`, `Pi/2`; kernels `Pi`, Compile `-Pi/2` | open: needs a signed-zero decision |
+| G8 | `Binomial[2., -1.*^308]` | scalar `Indeterminate` (F6), kernels `0.` | open: decide which is right (an integer-valued real lower index: 0) |
+| G9 | `Log[1.*^308, 1.*^308]` | exact `1` for machine arguments; every other surface `1.` | open: exactness |
+| G10 | `StruveH[{-1.*^308, 0.5}, 10.]`, Compile; `HermiteH[-1.*^308, 10.]` | over 10 s (the scalar gives up unevaluated in 7.6 s); HermiteH takes 13.5 s and returns exact `0` | open: performance at the edge |
+
 ### F. Hygiene (no repro: from the code read)
 | # | What | Status |
 |---|---|---|

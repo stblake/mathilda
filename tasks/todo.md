@@ -119,8 +119,11 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
         (10^400 -> inf., 1/10^400 -> 0.) declines to the interpreter (`cf_to_double`): v0.6610
   - [x] driver memory cap (a first full run reached 47 GB on Power[3037000500, 3037000500]):
         RSS watchdog per child (MB_MEM_CAP_MB, 2 GB), INT_GROWTH heads skip the int64 edges, -j <= 4
-  - [ ] triage the full run; Compile lanes on `_Integer` probes: machine-real result vs exact
-        (Divide) is typing, not a finding; makefile target; BASELINE
+  - [x] triage: harness fixes (Max/Min are not element-wise; Compile machine-typed vs exact
+        integer agrees; a timed-out boundary lane voids its list; more INT_GROWTH heads);
+        `make check-machine-boundary`; BASELINE of 185 = G1-G10 (design note section G)
+  - [ ] fix G1-G10, serious first: G1 Compile Subtract, G2 InverseJacobiDN, G3 Mod (ordinary
+        data); then G6 underflow, G5 subnormal, G4 ulp, G7-G9 decisions, G10 perf
 - [ ] Close-out: valgrind the corpus, a no-FLINT build, `make check-c99`, the gates, merge to
       main, the review section below
 
