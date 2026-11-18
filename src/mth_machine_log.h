@@ -36,6 +36,23 @@ static inline double complex mth_log_machine_z(double complex z) {
     return clog(z);
 }
 
+/* Log2 / Log10 (and any fixed base b with ln b = LNB): a positive real goes
+ * through libm's log2 / log10, so exact powers of the base are exact
+ * (Log10[1000.] is 3.); anything else is clog(z) / ln b. The ONE form for the
+ * scalar builtins (fixed_base_log, src/logexp.c), the packed / NDArray kernels
+ * and the Compile[] real arm: the scalar took a negative argument through
+ * Log[2, z] = Log[z] / Log[2], which rounded differently in the last bit of the
+ * imaginary part (numeric-tower review G4). */
+#define MTH_LN10 2.302585092994045684017991454684364208
+#define MTH_LN2  0.693147180559945309417232121458176568
+static inline double complex mth_logb_fixed_machine_z(double re, double im,
+                                                      double (*rfn)(double), double lnb) {
+    if (im == 0.0 && re > 0.0) return rfn(re);
+    union { double complex z; double p[2]; } u;   /* keep signed zeros */
+    u.p[0] = re; u.p[1] = im;
+    return clog(u.z) / lnb;
+}
+
 /* Split re/im form of mth_log_machine_z, for the ND kernel signatures. */
 static inline void mth_log_machine(double ar, double ai, double* rr, double* ri) {
     double complex w = mth_log_machine_z(ar + ai * I);

@@ -1055,7 +1055,26 @@ static Expr* hgpfq_mpfr_sum(const Expr* z, Expr* a, Expr* b,
     bool failed = false;
     int settled = 0;
     long k = 0;
-    for (; k < HGPFQ_MPFR_MAX_TERMS; k++) {
+    /* A cap the series cannot reach is decided up front: if the term ratio
+     * |z|/(K+1) prod|a_i + K| / prod|b_j + K| is still >= 1 at K = the cap,
+     * the terms are still growing there and the sum cannot settle, so the
+     * 10^6 MPFR iterations would only end in the same NULL (HermiteH[-1.*^308,
+     * 10.] spent 13 s here: numeric-tower review G10). A terminating series (an
+     * upper parameter a non-positive integer above -K) is exempt. */
+    {
+        double K = (double)HGPFQ_MPFR_MAX_TERMS, r;
+        bool terminating = false;
+        r = hypot(mpfr_get_d(zc.re, MPFR_RNDN), mpfr_get_d(zc.im, MPFR_RNDN)) / (K + 1.0);
+        for (size_t i = 0; i < p; i++) {
+            double ar = mpfr_get_d(ac[i].re, MPFR_RNDN), ai = mpfr_get_d(ac[i].im, MPFR_RNDN);
+            if (ai == 0.0 && ar <= 0.0 && ar == floor(ar) && -ar < K) terminating = true;
+            r *= hypot(ar + K, ai);
+        }
+        for (size_t j = 0; j < q; j++)
+            r /= hypot(mpfr_get_d(bc[j].re, MPFR_RNDN) + K, mpfr_get_d(bc[j].im, MPFR_RNDN));
+        if (!terminating && !(r < 1.0)) failed = true;
+    }
+    for (; k < HGPFQ_MPFR_MAX_TERMS && !failed; k++) {
         /* fac = z / (k+1) * prod(a_i + k) / prod(b_j + k) */
         cpx_set(&fac, &zc);
         mpfr_div_ui(fac.re, fac.re, (unsigned long)(k + 1), MPFR_RNDN);

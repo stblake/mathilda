@@ -4,6 +4,7 @@
 #include <string.h>
 #include <complex.h>
 #include "logexp.h"
+#include "mth_machine_elem.h"   /* the one machine elementary function (scalar/ND/VM) */
 #include "symtab.h"
 #include "eval.h"
 #include "arithmetic.h"
@@ -37,7 +38,7 @@ void logexp_init(void) {
 static bool get_approx(Expr* e, double complex* out, bool* is_inexact) {
     if (is_inexact) *is_inexact = true;
     if (e->type == EXPR_REAL) {
-        *out = e->data.real + 0.0 * I;
+        *out = mth_cmplx(e->data.real, 0.0);   /* keeps -0. (G7) */
         return true;
     }
     
@@ -61,7 +62,7 @@ static bool get_approx(Expr* e, double complex* out, bool* is_inexact) {
         else return false;
         
         if (has_real) {
-            *out = r + i * I;
+            *out = mth_cmplx(r, i);
             return true;
         }
     }
@@ -430,8 +431,11 @@ Expr* builtin_log(Expr* res) {
             /* else fall through to the default rewrite */
         }
 
-        // Log[b, b] = 1
-        if (expr_eq(b, z)) {
+        // Log[b, b] = 1 -- for an exact or symbolic b only. An inexact number
+        // is computed like any other argument pair (log(b)/log(b) is 1.), so
+        // Log[1.*^308, 1.*^308] is the machine 1. every buffer and Compile[]
+        // surface gives, not the exact 1 (numeric-tower review G9).
+        if (expr_eq(b, z) && !arg_is_inexact(z)) {
             Expr* ret = expr_new_integer(1);
             return ret;
         }
@@ -580,7 +584,7 @@ Expr* builtin_exp(Expr* res) {
     double complex c;
     bool inexact = false;
     if (get_approx(z, &c, &inexact) && inexact) {
-        double complex s = cexp(c);
+        double complex s = mth_exp_machine_z(c);   /* exp for real c (G4) */
         // Return real result if output is purely real, otherwise return complex.
         // A pure-real Exp[x] that over/underflows the double range (Exp[800.],
         // Exp[-800.]) promotes to an extended-exponent MPFR real.
@@ -645,6 +649,25 @@ static Expr* fixed_base_log(Expr* res, const char* name, int64_t base,
     Expr* z = res->data.function.args[0];
     if (z->type == EXPR_REAL && z->data.real > 0.0 && isfinite(z->data.real))
         return expr_new_real(machine(z->data.real));
+    /* A negative machine real, or a machine complex: the kernel's own form,
+     * clog(z) / ln b (mth_logb_fixed_machine_z), so the surfaces agree bit for
+     * bit (numeric-tower review G4). Zero and non-finite parts are left to
+     * the exact rules below. */
+    {
+        double zr = 0.0, zi = 0.0;
+        bool mach = false;
+        Expr *cre, *cim;
+        if (z->type == EXPR_REAL && z->data.real < 0.0) { zr = z->data.real; mach = true; }
+        else if (is_complex(z, &cre, &cim) && cre->type == EXPR_REAL && cim->type == EXPR_REAL) {
+            zr = cre->data.real; zi = cim->data.real; mach = true;
+        }
+        if (mach && isfinite(zr) && isfinite(zi)) {
+            double complex w = mth_logb_fixed_machine_z(zr, zi, machine,
+                                                        base == 2 ? MTH_LN2 : MTH_LN10);
+            if (isfinite(creal(w)) && isfinite(cimag(w)))
+                return make_complex(expr_new_real(creal(w)), expr_new_real(cimag(w)));
+        }
+    }
     if (z->type == EXPR_SYMBOL) {
         const char* nm = z->data.symbol.name;
         if (nm == SYM_Infinity || nm == SYM_ComplexInfinity) return expr_new_symbol(SYM_Infinity);

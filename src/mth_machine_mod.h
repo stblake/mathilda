@@ -42,4 +42,33 @@ static inline bool mth_mod_machine(double m, double n, double* out) {
     return true;
 }
 
+/* Quotient[m, n] = Floor[m/n] for machine reals, as an integer-valued double:
+ * the EXACT floor of the exact quotient wherever |q| < 2^52, so that
+ * m == n Quotient[m, n] + Mod[m, n] holds with mth_mod_machine's remainder
+ * (numeric-tower review, the G3 note: Floor of the ROUNDED quotient made
+ * Quotient[0.5, 1.*^-10] 5000000000 where the floor is 4999999999).
+ *
+ * floor(m/n) is within one of the answer. fma(-q, n, m) is m - q n computed
+ * exactly and rounded once, so its sign is exact: k = Floor[m/n] is the q with
+ * m - q n >= 0 > m - (q+1) n for n > 0, and the reverse inequalities for n < 0.
+ * Past 2^52, q +- 1 is not representable and the rounded floor stands. False
+ * (decline) for n == 0 or a non-finite operand or quotient. */
+static inline bool mth_quotient_machine(double m, double n, double* out) {
+    if (n == 0.0 || !isfinite(m) || !isfinite(n)) return false;
+    double q = floor(m / n);
+    if (!isfinite(q)) return false;
+    if (fabs(q) < 4503599627370496.0) {                 /* 2^52 */
+        double lo = fma(-q, n, m);                      /* m - q n, exact sign */
+        if (n > 0.0 ? lo < 0.0 : lo > 0.0) {
+            q -= 1.0;
+        } else {
+            double hi = fma(-(q + 1.0), n, m);          /* m - (q + 1) n */
+            if (n > 0.0 ? hi >= 0.0 : hi <= 0.0) q += 1.0;
+        }
+    }
+    if (q == 0.0) q = 0.0;                              /* -0. -> +0. */
+    *out = q;
+    return true;
+}
+
 #endif /* MTH_MACHINE_MOD_H */

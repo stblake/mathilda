@@ -319,6 +319,69 @@ static void test_g56_lane_checks(void) {
     chk("Compile[{{x, _Real}}, Mod[x, 2.]][4.]", "0.0");
 }
 
+/* G4: one machine helper per elementary head -- a real argument takes the real
+ * libm function on every surface (mth_machine_elem.h, mth_machine_log.h). */
+static void test_g4_one_helper(void) {
+    const char* tpl =
+        "With[{v = {0.3, -0.7, 2.5, -3.1, 0.5, 17.25, -0.5}}, "
+        "With[{s = %s /@ v}, {%s[Developer`ToPackedArray[v]] === s, Normal[%s[NDArray[v]]] === s, "
+        "Compile[{{x, _Real, 1}}, %s[x]][v] === s, (Compile[{{x, _Real}}, %s[x]] /@ v) === s}]]";
+    const char* heads[] = { "Sin", "Cos", "Tan", "Cot", "Sec", "Csc", "Sinh", "Cosh", "Tanh",
+                            "Coth", "Sech", "Csch", "Exp", "ArcTan", "ArcCot", "ArcSinh",
+                            "ArcCsch", "Log", "Log2", "Log10" };
+    char buf[1024];
+    for (size_t i = 0; i < sizeof heads / sizeof heads[0]; i++) {
+        const char* h = heads[i];
+        snprintf(buf, sizeof buf, tpl, h, h, h, h, h);
+        chk(buf, "{True, True, True, True}");
+    }
+    chk("With[{w = {0.3, -0.7, 0.5, -0.5, 0.99, 1., -1.}}, With[{s = ArcSin /@ w}, "
+        "{ArcSin[Developer`ToPackedArray[w]] === s, Compile[{{x, _Real, 1}}, ArcSin[x]][w] === s}]]",
+        "{True, True}");
+    chk_true("ArcTan[0.5] === Compile[{{x, _Real}}, ArcTan[x]][0.5]");
+    chk_true("Binomial[5.5, 2.] == 12.375");
+    chk_true("With[{v = {5.5, 7.25, 10.}}, Binomial[Developer`ToPackedArray[v], 2.] === (Binomial[#, 2.] & /@ v)]");
+    chk_true("ExpIntegralE[7., Developer`ToPackedArray[{-1.5, 1.}]] === {ExpIntegralE[7., -1.5], ExpIntegralE[7., 1.]}");
+    chk_true("Im[Compile[{{x, _Real}}, ExpIntegralE[7., x]][-1.5]] < 0");
+}
+
+/* G7 (IEEE signed zero on every surface), G8, G9, Quotient (exact floor). */
+static void test_g789_decisions(void) {
+    chk("ArcCot[-0.]", "-1.5708");
+    chk("ArcCot[0.]", "1.5708");
+    chk_true("ArcCot[Developer`ToPackedArray[{-0., 1.}]][[1]] === ArcCot[-0.]");
+    chk_true("Compile[{{x, _Real}}, ArcCot[x]][-0.] === ArcCot[-0.]");
+    chk("Arg[-0.]", "3.14159");
+    chk("Arg[0.]", "0.0");
+    chk("Arg[0]", "0");
+    chk("Binomial[2., -1.*^308]", "0.0");                       /* G8 */
+    chk("Log[1.*^308, 1.*^308]", "1.0");                         /* G9 */
+    chk("Log[2, 2]", "1");
+    chk("Log[x, x]", "1");
+    chk("Quotient[0.5, 1.*^-10]", "4999999999");                 /* exact floor */
+    chk_true("Quotient[Developer`ToPackedArray[{0.5, 7., -7.}], 1.*^-10] === Quotient[{0.5, 7., -7.}, 1.*^-10]");
+    chk_true("Quotient[{0.5, 7., -7.}, 1.*^-10] === {4999999999, 69999999999, -70000000000}");
+    chk_true("Compile[{{x, _Real}}, Quotient[x, 1.*^-10]][0.5] === 4999999999");
+    chk_true("With[{m = 0.5, n = 1.*^-10}, SetPrecision[m, Infinity] == "
+             "SetPrecision[n, Infinity] Quotient[m, n] + SetPrecision[Mod[m, n], Infinity]]");
+    chk("{Quotient[7., 2.], Quotient[-7., 2.], Quotient[7., -2.]}", "{3, -4, -4}");
+}
+
+/* G10: undefined double -> int conversions and unreachable series caps. */
+static void test_g10_huge_order(void) {
+    chk_true("First[AbsoluteTiming[Quiet[StruveH[-1.*^308, 10.]]]] < 1");
+    chk_true("First[AbsoluteTiming[Quiet[Compile[{{x, _Real}, {y, _Real}}, StruveH[x, y]][-1.*^308, 10.]]]] < 1");
+    chk_true("First[AbsoluteTiming[Quiet[BesselK[1.*^308, 1.*^308]]]] < 5");
+    chk_true("First[AbsoluteTiming[Quiet[HermiteH[-1.*^308, 10.]]]] < 1");
+    chk_true("Quiet[HermiteH[-1.*^10, 10.]] =!= 0");             /* was an exact 0 */
+    /* HermiteH for x > 0 by 2^n U(-n/2, 1/2, x^2): the 1F1 difference
+     * cancelled (references: the integral representation for n < 0) */
+    chk_true("Abs[HermiteH[-100., 10.]/1.312579565568286*^-138 - 1] < 1*^-13");
+    chk_true("Abs[HermiteH[-1000., 10.]/2.572488113145133*^-1608 - 1] < 1*^-13");
+    chk_true("Abs[HermiteH[-7/2 // N, 10.]/0.00002689700578763475 - 1] < 1*^-14");
+    chk_true("Abs[HermiteH[2.5, 3.] - (2 3. HermiteH[1.5, 3.] - 2 1.5 HermiteH[0.5, 3.])] < 1*^-12");
+}
+
 static void test_d9_negative_literal_power(void) {
     /* -a^b is -(a^b) for every literal spelling of a. */
     chk("-2.`30^2 < 0", "True");
@@ -511,6 +574,9 @@ int main(void) {
     TEST(test_g2_inverse_jacobi_dn_packed);
     TEST(test_g3_machine_mod);
     TEST(test_g56_lane_checks);
+    TEST(test_g4_one_helper);
+    TEST(test_g789_decisions);
+    TEST(test_g10_huge_order);
     TEST(test_d9_negative_literal_power);
     TEST(test_e4_quotient_mpfr);
     TEST(test_e2_machine_zero_times_mpfr);

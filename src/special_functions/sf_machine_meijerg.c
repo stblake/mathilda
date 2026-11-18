@@ -255,6 +255,8 @@ static bool build_series(SfMgSeries* S,
             for (size_t l = 0; l < nl; l++)
                 if (is_nonpos_int(S->lr[h][l], S->li[h][l])) { hit = l; break; }
             if (hit == (size_t)-1) break;
+            /* bound before converting: out-of-range -> long is UB (G10) */
+            if (!(-S->lr[h][hit] <= 1.0e6)) return false;
             long N = (long)(-S->lr[h][hit]);
             for (size_t k = 0; k < p; k++) {
                 for (long t = 0; t <= N; t++) prod_mul(&C, S->ur[h][k] + (double)t, S->ui[h][k]);

@@ -447,8 +447,11 @@ static bool hankel_ik(double nu, cx z, bool want_i, cx* I, cx* K) {
 
 static bool ktab_eval(const double* tab, double h, int n, double mu, cx z,
                       cx* kmu, cx* kmu1) {
-    int i = (int)floor(z.re / h + 0.5), j = (int)floor(z.im / h + 0.5);
-    if (i < 0 || j < 0 || i >= n || j >= n) return false;
+    /* range-check the doubles BEFORE converting: an out-of-range double -> int
+     * conversion is undefined behaviour (numeric-tower review G10) */
+    double di = floor(z.re / h + 0.5), dj = floor(z.im / h + 0.5);
+    if (!(di >= 0.0 && dj >= 0.0 && di < (double)n && dj < (double)n)) return false;
+    int i = (int)di, j = (int)dj;
     const double* p = tab + 4 * ((size_t)i * (size_t)n + (size_t)j);
     if (p[0] == 0.0 && p[1] == 0.0) return false;          /* node not served */
     cx z0 = cxm(h * (double)i, h * (double)j);

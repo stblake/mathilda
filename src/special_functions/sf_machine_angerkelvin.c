@@ -59,8 +59,13 @@ static void aw_sincospi(double r, double* s, double* c) {
 static bool aw_sum(double p, double q, double w, double hump,
                    double* sum, double* maxabs) {
     int k0 = 0;
-    if (p <= 0.0 && p == floor(p)) k0 = (int)(1.0 - p);
-    if (q <= 0.0 && q == floor(q) && (int)(1.0 - q) > k0) k0 = (int)(1.0 - q);
+    /* Bound the doubles BEFORE converting: an out-of-range double -> int
+     * conversion is undefined behaviour (numeric-tower review G10). */
+    if (p <= 0.0 && p == floor(p)) { if (!(1.0 - p <= 400.0)) return false; k0 = (int)(1.0 - p); }
+    if (q <= 0.0 && q == floor(q)) {
+        if (!(1.0 - q <= 400.0)) return false;
+        if ((int)(1.0 - q) > k0) k0 = (int)(1.0 - q);
+    }
     if (k0 > 400) return false;
     double gp = tgamma(k0 + p), gq = tgamma(k0 + q);
     if (!isfinite(gp) || !isfinite(gq) || gp == 0.0 || gq == 0.0) return false;

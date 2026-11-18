@@ -4,6 +4,7 @@
 #include <complex.h>
 #include <stdint.h>
 #include "hyperbolic.h"
+#include "mth_machine_elem.h"   /* the one machine elementary function (scalar/ND/VM) */
 #include "symtab.h"
 #include "eval.h"
 #include "arithmetic.h"
@@ -67,7 +68,7 @@ void hyperbolic_init(void) {
 static bool get_approx(Expr* e, double complex* out, bool* is_inexact) {
     if (is_inexact) *is_inexact = true;
     if (e->type == EXPR_REAL) {
-        *out = e->data.real + 0.0 * I;
+        *out = mth_cmplx(e->data.real, 0.0);   /* keeps -0. (G7) */
         return true;
     }
     Expr* re; Expr* im;
@@ -86,7 +87,7 @@ static bool get_approx(Expr* e, double complex* out, bool* is_inexact) {
         else return false;
         
         if (has_real) {
-            *out = r + i * I;
+            *out = mth_cmplx(r, i);
             return true;
         }
     }
@@ -368,7 +369,7 @@ Expr* builtin_sinh(Expr* res) {
     double complex c;
     bool inexact = false;
     if (get_approx(arg, &c, &inexact) && inexact) {
-        double complex s = csinh(c);
+        double complex s = mth_sinh_machine_z(c);
         if (cimag(c) == 0.0) return numeric_machine_real_or_promote(creal(s), creal(c), res);
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
@@ -408,7 +409,7 @@ Expr* builtin_cosh(Expr* res) {
     }
 #endif
     if (get_approx(arg, &c, &inexact) && inexact) {
-        double complex s = ccosh(c);
+        double complex s = mth_cosh_machine_z(c);
         if (cimag(c) == 0.0) return numeric_machine_real_or_promote(creal(s), creal(c), res);
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
@@ -454,7 +455,7 @@ Expr* builtin_tanh(Expr* res) {
     }
 #endif
     if (get_approx(arg, &c, &inexact) && inexact) {
-        double complex s = ctanh(c);
+        double complex s = mth_tanh_machine_z(c);
         if (cimag(c) == 0.0) return expr_new_real(creal(s));
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
@@ -495,7 +496,7 @@ Expr* builtin_coth(Expr* res) {
     }
 #endif
     if (get_approx(arg, &c, &inexact) && inexact) {
-        double complex s = 1.0 / ctanh(c);
+        double complex s = mth_coth_machine_z(c);
         if (cimag(c) == 0.0) return expr_new_real(creal(s));
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
@@ -532,7 +533,7 @@ Expr* builtin_sech(Expr* res) {
     }
 #endif
     if (get_approx(arg, &c, &inexact) && inexact) {
-        double complex s = 1.0 / ccosh(c);
+        double complex s = mth_sech_machine_z(c);
         if (cimag(c) == 0.0) return numeric_machine_real_or_promote(creal(s), creal(c), res);
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
@@ -569,7 +570,7 @@ Expr* builtin_csch(Expr* res) {
     }
 #endif
     if (get_approx(arg, &c, &inexact) && inexact) {
-        double complex s = 1.0 / csinh(c);
+        double complex s = mth_csch_machine_z(c);
         if (cimag(c) == 0.0) return numeric_machine_real_or_promote(creal(s), creal(c), res);
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
@@ -608,7 +609,7 @@ Expr* builtin_arcsinh(Expr* res) {
     }
 #endif
     if (get_approx(arg, &c, &inexact) && inexact) {
-        double complex s = casinh(c);
+        double complex s = mth_asinh_machine_z(c);   /* asinh for real c (G4) */
         if (cimag(c) == 0.0) return expr_new_real(creal(s));
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
@@ -810,7 +811,9 @@ Expr* builtin_arccsch(Expr* res) {
     }
 #endif
     if (get_approx(arg, &c, &inexact) && inexact) {
-        double complex s = casinh(1.0 / c);
+        /* asinh(1/x) for real x != 0, as the kernel (mth_machine_elem.h) */
+        double complex s = (cimag(c) == 0.0 && creal(c) != 0.0) ? mth_acsch_machine_z(c)
+                                                                : casinh(1.0 / c);
         if (cimag(c) == 0.0 && creal(c) != 0.0) return expr_new_real(creal(s));
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }

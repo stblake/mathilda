@@ -34,6 +34,7 @@
 #endif
 #include "../mth_machine_log.h"    /* mth_log_machine_z: the one machine Log */
 #include "../mth_machine_pow.h"    /* mth_powi_machine & co: the one machine Power */
+#include "../mth_machine_elem.h"   /* the one machine elementary function */
 #include <math.h>
 #include <complex.h>
 #include <string.h>
@@ -1226,18 +1227,18 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             OP(SQRT_R): RD.r = sqrt(RA.r); NEXT();
             OP(SQRT_C): RD.z = csqrt(RA.z); NEXT();
             OP(EXP_R): RD.r = exp(RA.r); NEXT();
-            OP(EXP_C): RD.z = cexp(RA.z); NEXT();
+            OP(EXP_C): RD.z = mth_exp_machine_z(RA.z); NEXT();
             OP(LOG_R): RD.r = log(RA.r); NEXT();
             OP(LOG_C): RD.z = mth_log_machine_z(RA.z); NEXT();
-            OP(SIN_R): RD.r = sin(RA.r); NEXT();   OP(SIN_C): RD.z = csin(RA.z); NEXT();
-            OP(COS_R): RD.r = cos(RA.r); NEXT();   OP(COS_C): RD.z = ccos(RA.z); NEXT();
-            OP(TAN_R): RD.r = tan(RA.r); NEXT();   OP(TAN_C): RD.z = ctan(RA.z); NEXT();
-            OP(SINH_R): RD.r = sinh(RA.r); NEXT(); OP(SINH_C): RD.z = csinh(RA.z); NEXT();
-            OP(COSH_R): RD.r = cosh(RA.r); NEXT(); OP(COSH_C): RD.z = ccosh(RA.z); NEXT();
-            OP(TANH_R): RD.r = tanh(RA.r); NEXT(); OP(TANH_C): RD.z = ctanh(RA.z); NEXT();
-            OP(ASIN_R): RD.r = asin(RA.r); NEXT(); OP(ASIN_C): RD.z = casin(RA.z); NEXT();
-            OP(ACOS_R): RD.r = acos(RA.r); NEXT(); OP(ACOS_C): RD.z = cacos(RA.z); NEXT();
-            OP(ATAN_R): RD.r = atan(RA.r); NEXT(); OP(ATAN_C): RD.z = catan(RA.z); NEXT();
+            OP(SIN_R): RD.r = sin(RA.r); NEXT();   OP(SIN_C): RD.z = mth_sin_machine_z(RA.z); NEXT();
+            OP(COS_R): RD.r = cos(RA.r); NEXT();   OP(COS_C): RD.z = mth_cos_machine_z(RA.z); NEXT();
+            OP(TAN_R): RD.r = tan(RA.r); NEXT();   OP(TAN_C): RD.z = mth_tan_machine_z(RA.z); NEXT();
+            OP(SINH_R): RD.r = sinh(RA.r); NEXT(); OP(SINH_C): RD.z = mth_sinh_machine_z(RA.z); NEXT();
+            OP(COSH_R): RD.r = cosh(RA.r); NEXT(); OP(COSH_C): RD.z = mth_cosh_machine_z(RA.z); NEXT();
+            OP(TANH_R): RD.r = tanh(RA.r); NEXT(); OP(TANH_C): RD.z = mth_tanh_machine_z(RA.z); NEXT();
+            OP(ASIN_R): RD.r = asin(RA.r); NEXT(); OP(ASIN_C): RD.z = mth_asin_machine_z(RA.z); NEXT();
+            OP(ACOS_R): RD.r = acos(RA.r); NEXT(); OP(ACOS_C): RD.z = mth_acos_machine_z(RA.z); NEXT();
+            OP(ATAN_R): RD.r = atan(RA.r); NEXT(); OP(ATAN_C): RD.z = mth_atan_machine_z(RA.z); NEXT();
             OP(ABS_I): IOP(ci_abs(RA.i, &RD.i));
             OP(ABS_R): RD.r = fabs(RA.r); NEXT();
             OP(ABS_C): RD.r = cabs(RA.z); NEXT();
@@ -1889,17 +1890,17 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
             VBIN(VPOW_C, C, double _Complex, vm_cpow(a_[k_], b_[k_]));
             VBIN(VATAN2_R, R, double, atan2(b_[k_], a_[k_]));
             VUN(VSQRT_R, R, double, sqrt(a_[k_]));   VUN(VSQRT_C, C, double _Complex, csqrt(a_[k_]));
-            VUN(VEXP_R, R, double, exp(a_[k_]));    VUN(VEXP_C, C, double _Complex, cexp(a_[k_]));
+            VUN(VEXP_R, R, double, exp(a_[k_]));    VUN(VEXP_C, C, double _Complex, mth_exp_machine_z(a_[k_]));
             VUN(VLOG_R, R, double, log(a_[k_]));    VUN(VLOG_C, C, double _Complex, mth_log_machine_z(a_[k_]));
-            VUN(VSIN_R, R, double, sin(a_[k_]));    VUN(VSIN_C, C, double _Complex, csin(a_[k_]));
-            VUN(VCOS_R, R, double, cos(a_[k_]));    VUN(VCOS_C, C, double _Complex, ccos(a_[k_]));
-            VUN(VTAN_R, R, double, tan(a_[k_]));    VUN(VTAN_C, C, double _Complex, ctan(a_[k_]));
-            VUN(VSINH_R, R, double, sinh(a_[k_]));   VUN(VSINH_C, C, double _Complex, csinh(a_[k_]));
-            VUN(VCOSH_R, R, double, cosh(a_[k_]));   VUN(VCOSH_C, C, double _Complex, ccosh(a_[k_]));
-            VUN(VTANH_R, R, double, tanh(a_[k_]));   VUN(VTANH_C, C, double _Complex, ctanh(a_[k_]));
-            VUN(VASIN_R, R, double, asin(a_[k_]));   VUN(VASIN_C, C, double _Complex, casin(a_[k_]));
-            VUN(VACOS_R, R, double, acos(a_[k_]));   VUN(VACOS_C, C, double _Complex, cacos(a_[k_]));
-            VUN(VATAN_R, R, double, atan(a_[k_]));   VUN(VATAN_C, C, double _Complex, catan(a_[k_]));
+            VUN(VSIN_R, R, double, sin(a_[k_]));    VUN(VSIN_C, C, double _Complex, mth_sin_machine_z(a_[k_]));
+            VUN(VCOS_R, R, double, cos(a_[k_]));    VUN(VCOS_C, C, double _Complex, mth_cos_machine_z(a_[k_]));
+            VUN(VTAN_R, R, double, tan(a_[k_]));    VUN(VTAN_C, C, double _Complex, mth_tan_machine_z(a_[k_]));
+            VUN(VSINH_R, R, double, sinh(a_[k_]));   VUN(VSINH_C, C, double _Complex, mth_sinh_machine_z(a_[k_]));
+            VUN(VCOSH_R, R, double, cosh(a_[k_]));   VUN(VCOSH_C, C, double _Complex, mth_cosh_machine_z(a_[k_]));
+            VUN(VTANH_R, R, double, tanh(a_[k_]));   VUN(VTANH_C, C, double _Complex, mth_tanh_machine_z(a_[k_]));
+            VUN(VASIN_R, R, double, asin(a_[k_]));   VUN(VASIN_C, C, double _Complex, mth_asin_machine_z(a_[k_]));
+            VUN(VACOS_R, R, double, acos(a_[k_]));   VUN(VACOS_C, C, double _Complex, mth_acos_machine_z(a_[k_]));
+            VUN(VATAN_R, R, double, atan(a_[k_]));   VUN(VATAN_C, C, double _Complex, mth_atan_machine_z(a_[k_]));
             VUN(VABS_R, R, double, fabs(a_[k_]));
             VUN(VSIGN_R, R, double, (double)((a_[k_] > 0) - (a_[k_] < 0)));
             VUN(VERF_R, R, double, vm_erf_r(a_[k_]));

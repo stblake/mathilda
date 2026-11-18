@@ -3297,8 +3297,12 @@ orthogonal on `(-∞, ∞)` with weight `e^(-x²)` and satisfy `y'' - 2x y' + 2n
   from the *stable* recurrence, not from substituting into the explicit
   polynomial — so `HermiteH[100, N[5, 16]] = 8.19319371305915×10⁹⁸` rather than
   the catastrophically-cancelled `0.×10¹⁰⁴` the expanded polynomial gives. A
-  non-integer, complex, or negative order with an inexact argument evaluates
-  through the entire confluent-hypergeometric form `H_n(z) = 2^n Sqrt[Pi]
+  non-integer, complex, or negative order with an inexact **real argument
+  x > 0** evaluates through `H_n(x) = 2^n HypergeometricU[-n/2, 1/2, x²]`, which
+  has no cancellation (the `1F1` difference below loses about
+  `2 Sqrt(|n| x²) log2(e)` bits at a large negative order: `HermiteH[-1000., 10.]`
+  was `-1.0*^-1358` where the value is `2.572488*^-1608`). Any other argument
+  evaluates through the entire confluent-hypergeometric form `H_n(z) = 2^n Sqrt[Pi]
   (Hypergeometric1F1[-n/2, 1/2, z²]/Gamma[(1-n)/2] - 2z
   Hypergeometric1F1[(1-n)/2, 3/2, z²]/Gamma[-n/2])`, evaluated with a
   cancellation guard scaled to `Re(z²)` so a large real argument keeps its

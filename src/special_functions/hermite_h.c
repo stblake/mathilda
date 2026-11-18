@@ -245,13 +245,43 @@ static long hermite_hyp_guard_bits(const Expr* x_e) {
  * rounded back to the precision the arguments imply, so a large real argument
  * does not silently lose digits. Returns NULL if it did not collapse to a
  * number. */
+/* True when x is a real number > 0 (machine, MPFR or exact). */
+static bool hermite_real_positive(const Expr* x_e) {
+#ifdef USE_MPFR
+    mpfr_t re, im;
+    mpfr_init2(re, 64); mpfr_init2(im, 64);
+    bool inexact = false, ok = get_approx_mpfr(x_e, re, im, &inexact)
+                              && mpfr_zero_p(im) && mpfr_sgn(re) > 0;
+    mpfr_clear(re); mpfr_clear(im);
+    return ok;
+#else
+    (void)x_e; return false;
+#endif
+}
+
+/* H_n(x) = 2^n U(-n/2, 1/2, x^2) for Re x > 0 (DLMF 12.7.14 with 13.2.42-type
+ * relation; Tricomi U). Unlike the 1F1 difference it has no cancellation: the
+ * difference loses ~2 Sqrt(|n| x^2) log2(e) bits for a large negative order,
+ * which the Re(x^2)-scaled guard does not cover -- HermiteH[-100., 10.] had
+ * six correct digits, HermiteH[-1000., 10.] came out -1.0*^-1358 where the
+ * value is +2.57*^-1608, and HermiteH[-1.*^10, 10.] an exact 0 (numeric-tower
+ * review G10, checked against the integral representation). */
+static Expr* hermite_u_form(const Expr* n_e, const Expr* x_e) {
+    Expr* a = mk_fn2("Times", make_rational(-1, 2), expr_copy((Expr*)n_e));   /* -n/2 */
+    Expr* z2 = mk_fn2("Power", expr_copy((Expr*)x_e), expr_new_integer(2));   /* x^2 */
+    Expr* u = mk_fn3("HypergeometricU", a, make_rational(1, 2), z2);
+    return mk_fn2("Times", mk_fn2("Power", expr_new_integer(2), expr_copy((Expr*)n_e)), u);
+}
+
 static Expr* hermite_numeric_hyp(const Expr* n_e, const Expr* x_e) {
-    Expr* cf = hermite_hyp_form(n_e, x_e);
+    bool use_u = hermite_real_positive(x_e);
+    Expr* cf = use_u ? hermite_u_form(n_e, x_e) : hermite_hyp_form(n_e, x_e);
 #ifdef USE_MPFR
     long op = cheb_out_prec(n_e, x_e);            /* target output precision, >=53 */
     NumericSpec hi;
     hi.mode = NUMERIC_MODE_MPFR;
-    hi.bits = op + hermite_hyp_guard_bits(x_e);
+    /* the U form needs no cancellation guard, only the usual few bits */
+    hi.bits = op + (use_u ? 32 : hermite_hyp_guard_bits(x_e));
     Expr* hiout = numericalize(cf, hi);           /* evaluate with guard digits */
     expr_free(cf);
     if (!hiout || !cheb_is_number_leaf(hiout)) { expr_free(hiout); return NULL; }

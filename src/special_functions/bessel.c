@@ -226,7 +226,16 @@ static void bj_series(ncpx* J, const ncpx* nu, const ncpx* z, mpfr_prec_t wp) {
     mpfr_set_ui(eps, 1, BRND);
     mpfr_div_2ui(eps, eps, (unsigned long)(wp > 8 ? wp - 4 : 1), BRND);
 
-    unsigned long cap = (unsigned long)(4.0 * rhd) + (unsigned long)wp + 1000;
+    /* The series needs about |z|/2 terms before they fall. Past 10^7 it is
+     * not a computation (BesselK[1.*^308, 1.*^308] ground for 18 s), and
+     * (unsigned long)(4.0 * rhd) was then an out-of-range conversion --
+     * undefined behaviour (numeric-tower review G10). Skip the loop and
+     * leave the sum NaN, which the result carries and the builtin
+     * declines, as it declined the unconverged sum before. */
+    bool bs_infeasible = !(rhd <= 1.0e7);
+    unsigned long cap = bs_infeasible ? 0
+                      : (unsigned long)(4.0 * rhd) + (unsigned long)wp + 1000;
+    if (bs_infeasible) { mpfr_set_nan(J->re); mpfr_set_nan(J->im); }
 
     for (unsigned long k = 1; k <= cap; k++) {
         /* m_k = mult / (k (nu+k)). */
@@ -613,7 +622,16 @@ static void bk_iseries(ncpx* I, const ncpx* mu, const ncpx* z, mpfr_prec_t wp) {
     mpfr_set_ui(eps, 1, BRND);
     mpfr_div_2ui(eps, eps, (unsigned long)(wp > 8 ? wp - 4 : 1), BRND);
 
-    unsigned long cap = (unsigned long)(4.0 * rhd) + (unsigned long)wp + 1000;
+    /* The series needs about |z|/2 terms before they fall. Past 10^7 it is
+     * not a computation (BesselK[1.*^308, 1.*^308] ground for 18 s), and
+     * (unsigned long)(4.0 * rhd) was then an out-of-range conversion --
+     * undefined behaviour (numeric-tower review G10). Skip the loop and
+     * leave the sum NaN, which the result carries and the builtin
+     * declines, as it declined the unconverged sum before. */
+    bool bs_infeasible = !(rhd <= 1.0e7);
+    unsigned long cap = bs_infeasible ? 0
+                      : (unsigned long)(4.0 * rhd) + (unsigned long)wp + 1000;
+    if (bs_infeasible) { mpfr_set_nan(I->re); mpfr_set_nan(I->im); }
 
     for (unsigned long k = 1; k <= cap; k++) {
         /* t *= (z/2)^2 / (k (mu+k)). */
@@ -789,7 +807,16 @@ static void bk_logseries(long n, const ncpx* z, ncpx* K, mpfr_prec_t wp) {
     double rhd = mpfr_get_d(rh, BRND);
     mpfr_clear(rh);
 
-    unsigned long cap = (unsigned long)(4.0 * rhd) + (unsigned long)wp + 1000;
+    /* The series needs about |z|/2 terms before they fall. Past 10^7 it is
+     * not a computation (BesselK[1.*^308, 1.*^308] ground for 18 s), and
+     * (unsigned long)(4.0 * rhd) was then an out-of-range conversion --
+     * undefined behaviour (numeric-tower review G10). Skip the loop and
+     * leave the sum NaN, which the result carries and the builtin
+     * declines, as it declined the unconverged sum before. */
+    bool bs_infeasible = !(rhd <= 1.0e7);
+    unsigned long cap = bs_infeasible ? 0
+                      : (unsigned long)(4.0 * rhd) + (unsigned long)wp + 1000;
+    if (bs_infeasible) { mpfr_set_nan((&acc)->re); mpfr_set_nan((&acc)->im); }
     for (unsigned long k = 1; k <= cap; k++) {
         /* base *= (z^2/4) / (k (n+k)). */
         ncpx_mul(&t, &t, &zh2, wp);
@@ -1390,7 +1417,16 @@ static void by_logseries(long n, const ncpx* z, ncpx* Y, mpfr_prec_t wp) {
     double rhd = mpfr_get_d(rh, BRND);
     mpfr_clear(rh);
 
-    unsigned long cap = (unsigned long)(4.0 * rhd) + (unsigned long)wp + 1000;
+    /* The series needs about |z|/2 terms before they fall. Past 10^7 it is
+     * not a computation (BesselK[1.*^308, 1.*^308] ground for 18 s), and
+     * (unsigned long)(4.0 * rhd) was then an out-of-range conversion --
+     * undefined behaviour (numeric-tower review G10). Skip the loop and
+     * leave the sum NaN, which the result carries and the builtin
+     * declines, as it declined the unconverged sum before. */
+    bool bs_infeasible = !(rhd <= 1.0e7);
+    unsigned long cap = bs_infeasible ? 0
+                      : (unsigned long)(4.0 * rhd) + (unsigned long)wp + 1000;
+    if (bs_infeasible) { mpfr_set_nan((&acc)->re); mpfr_set_nan((&acc)->im); }
     for (unsigned long k = 1; k <= cap; k++) {
         /* base *= (-z^2/4) / (k (n+k)). */
         ncpx_mul(&t, &t, &zh2, wp);

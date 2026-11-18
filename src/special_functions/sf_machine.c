@@ -228,7 +228,44 @@ bool sf_machine_binomial(double n, double k, double* out) {
         return true;
     }
     if (n < 0.0 && n == floor(n)) return false;
+    /* A small integer lower index s = k (or its complement n - k: the Gamma
+     * quotient is symmetric under k <-> n - k for every n) is the product
+     * prod_{i=1..s} (n - s + i)/i -- a polynomial in n, a few ulps from exact,
+     * where the Gamma forms overflow: Binomial[1.*^8, 2.] is 4.99999995*^15. */
+    {
+        double sd = -1.0;
+        if (k == floor(k) && k >= 0.0 && k <= 64.0) sd = k;
+        else if (m == floor(m) && m >= 0.0 && m <= 64.0) sd = m;
+        if (sd >= 0.0) {
+            int S = (int)sd;
+            double v = 1.0;
+            for (int i = 1; i <= S; i++) v = v * (n - sd + (double)i) / (double)i;
+            if (!isfinite(v)) return false;
+            *out = v;
+            return true;
+        }
+    }
+    /* The Gamma quotient directly while every factor is a finite double: it
+     * is the more accurate form (Binomial[5.5, 2.] is 12.375; exp of the
+     * lgamma sum gave 12.37499999999999), and it is what the scalar builtin
+     * computed before it was moved onto this shared helper (numeric-tower
+     * review G4: one helper per head, on every surface). */
+    {
+        double g0 = tgamma(n + 1.0), g1 = tgamma(k + 1.0), g2 = tgamma(m + 1.0);
+        double d = g1 * g2;
+        if (isfinite(g0) && isfinite(d) && d != 0.0 && g0 != 0.0) {
+            double v = g0 / d;
+            if (isfinite(v) && v != 0.0) { *out = v; return true; }
+        }
+    }
     double l0 = lgamma(n + 1.0), l1 = lgamma(k + 1.0), l2 = lgamma(m + 1.0);
+    /* exp(l0 - l1 - l2) inherits the lgammas' ABSOLUTE error as a relative
+     * one: about (|l0| + |l1| + |l2|) eps. Past 1e-13 that is not a machine
+     * answer (Binomial[1.*^8, 2.5] would keep ~7 digits), so decline: the
+     * scalar then recomputes in MPFR, and a buffer lane goes to the List path.
+     * (This helper is shared by every surface since numeric-tower review G4,
+     * so its accuracy is the scalar's.) */
+    if ((fabs(l0) + fabs(l1) + fabs(l2)) * DBL_EPSILON > 1.0e-13) return false;
     double v = gamma_sign(n + 1.0) * gamma_sign(k + 1.0) * gamma_sign(m + 1.0)
              * exp(l0 - l1 - l2);
     *out = v;
@@ -855,6 +892,9 @@ bool sf_machine_bessel_k(double nu, double x, double* out) {
     if (x > 2.0) {
         /* Continued fraction at the fractional order, then UPWARD recurrence in
          * nu, which is the stable direction for K. */
+        /* Bound the double BEFORE converting: an out-of-range double -> int
+         * conversion is undefined behaviour (numeric-tower review G10). */
+        if (!(nu <= 1.0e6)) return false;
         int nl = (int)(nu + 0.5);
         double xmu = nu - (double)nl;
         double kmu, kmu1;
@@ -1262,8 +1302,13 @@ static bool struve_series(double nu, double z, int sgn, double* val, double* rel
          * k0 = n with Gamma(1) = 1:  t_n = (-w)^n / Gamma(n+3/2), built as a
          * product (no overflowing w^n or Gamma). The resulting sum is
          * H_{-(n+1/2)} = (-1)^n J_{n+1/2} (DLMF 11.4.4). */
+        /* Bound the double BEFORE converting: at nu = -1.*^308, nu + 1.5 rounds
+         * back onto this integer branch, and the out-of-range conversion is
+         * undefined behaviour -- in practice a huge negative k0 that ran the
+         * term loop ~2^31 times (StruveH[-1.*^308, 10.] took 7.6 s;
+         * numeric-tower review G10). */
+        if (!(-(nu + 0.5) + 0.5 <= 4000.0)) return false;
         k0 = (int)(-(nu + 0.5) + 0.5);
-        if (k0 > 4000) return false;
         t = 2.0 / sqrt(M_PI);                           /* 1/Gamma(3/2)           */
         for (int j = 1; j <= k0; j++) t *= ws / (j + 0.5);
     } else {

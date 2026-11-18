@@ -6,6 +6,7 @@
 #include "numbertheory_internal.h"
 #include "arithmetic.h"
 #include "numeric.h"   /* numeric_promote_result_if_degenerate */
+#include "special_functions/sf_machine.h"   /* sf_machine_binomial: the kernel helper */
 #include "eval.h"
 #include "sym_names.h"
 #include "internal.h"
@@ -537,9 +538,20 @@ Expr* builtin_binomial(Expr* res) {
              * is finite; follow the exact path's conventions instead. */
             double sgn = 1.0;
             if (!binomial_lattice_d(&nv, &mv, &sgn)) return expr_new_real(0.0);
-            /* The tgamma ratio overflows to Inf (or Inf/Inf -> NaN) well before
-             * the binomial coefficient itself leaves the double range, so
-             * promote a degenerate result to MPFR. */
+            /* sf_machine_binomial is the packed / NDArray / Compile kernel's
+             * own helper, so the surfaces agree bit for bit (it was a tgamma
+             * ratio here, lgamma sums there). It also answers 0. for an
+             * integer-valued negative lower index of any size, where the
+             * lattice step above stops at 2^53 and tgamma(-1.*^308 + 1) hit
+             * its pole: Binomial[2., -1.*^308] was Indeterminate
+             * (numeric-tower review G8). It declines only for a negative
+             * integer n off the lattice, where the Gamma quotient below
+             * keeps the old answer. Either way a degenerate value (the
+             * quotient overflows well before the coefficient does) is
+             * promoted to MPFR. */
+            double v;
+            if (sf_machine_binomial(nv, mv, &v))
+                return numeric_promote_result_if_degenerate(expr_new_real(sgn * v), res);
             return numeric_promote_result_if_degenerate(
                 expr_new_real(sgn * (tgamma(nv + 1.0) / (tgamma(mv + 1.0) * tgamma(nv - mv + 1.0)))), res);
         }

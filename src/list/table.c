@@ -1,5 +1,6 @@
 #include "list_common.h"
 #include "table.h"
+#include "../mth_machine_elem.h"   /* the builtins' machine elementary functions */
 #include "../term/term_progress.h"   /* the REPL spinner's loop progress */
 #include "compile/autocompile.h"
 #include "iter.h"
@@ -80,7 +81,8 @@ static Expr* table_ac_boxed(const AutoCompiled* ac, const double* xs) {
  * non-normal result hands that ELEMENT to the interpreter: there the exact
  * evaluator's term merging or a different numericalisation could change the
  * rounding.  The machine value of f[k] is the builtin's own formula,
- * creal(f(k + 0 I)) (csin, ccos, ctan, csinh, ccosh), and f[0] is the exact
+ * mth_<f>_machine_z (src/mth_machine_elem.h: the real libm function for a
+ * real k), and f[0] is the exact
  * 0 or 1 the builtin returns. Compiled once per Table call (a nested Table recompiles
  * its inner body per outer value, which is what folds the outer iterator in
  * as a constant).
@@ -585,11 +587,14 @@ static bool tx_run_machine(const TxProg* p, int64_t x, TxM* st, const TxScratch*
                 double complex z = (double)a.r.n;
                 double complex w;
                 switch ((TxFn)in->a) {
-                    case TXF_SIN:  w = csin(z);  break;
-                    case TXF_COS:  w = ccos(z);  break;
-                    case TXF_TAN:  w = ctan(z);  break;
-                    case TXF_SINH: w = csinh(z); break;
-                    default:       w = ccosh(z); break;
+                    /* the builtins' own helpers (mth_machine_elem.h): the real
+                     * libm function for a real k, as every surface since
+                     * numeric-tower review G4 */
+                    case TXF_SIN:  w = mth_sin_machine_z(z);  break;
+                    case TXF_COS:  w = mth_cos_machine_z(z);  break;
+                    case TXF_TAN:  w = mth_tan_machine_z(z);  break;
+                    case TXF_SINH: w = mth_sinh_machine_z(z); break;
+                    default:       w = mth_cosh_machine_z(z); break;
                 }
                 double v = creal(w);
                 if (!txm_normal(v) || v == 0.0) return false;

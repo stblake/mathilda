@@ -14,6 +14,16 @@ MPFR's exponent range (`Exp[10^25]`) returns `Overflow[]` (`Indeterminate` for a
 [`special-functions.md`](special-functions.md) and the 2026-09-21 changelog.
 
 ## Trig Functions
+
+**One machine evaluation per head.** Every surface (scalar, packed, NDArray,
+`Compile[]`) evaluates `Exp`, the circular and hyperbolic functions and their
+inverses through one helper per head (`src/mth_machine_elem.h`): a real
+argument inside the real domain takes the real libm function, anything else the
+C99 complex one, with Mathilda's branch-cut side. The two families round
+differently (`creal(catan(0.5))` and `atan(0.5)` differ by one ulp), so before
+this the scalar and buffer answers could differ in the last bit. Signed zero is
+IEEE throughout: `ArcCot[-0.]` is `-Pi/2`, `Arg[-0.]` is `Pi`, `Arg[0.]` is
+`0.` (an exact `0` still gives `Arg[0] = 0`).
 `Sin`, `Cos`, `Tan`, `Cot`, `Sec`, `Csc` and their inverses `ArcSin`, etc.
 
 **Features**:
@@ -70,6 +80,10 @@ Out[4]= 1/4*Pi
   `src/numeric_complex.c`.
 
 ## Exponential and Logarithmic Functions
+
+`Log[b, b]` is the exact `1` for an exact or symbolic `b` only. An inexact
+number is computed like any other pair, so `Log[1.*^308, 1.*^308]` is the
+machine `1.` every surface gives (numeric-tower review G9).
 - `Exp[z]`: Natural exponential. Canonicalizes `Exp[I*q*Pi]` (rational `q`) to `(-1)^q`, matching the reference — e.g. `Exp[I Pi/5] -> (-1)^(1/5)`, `Exp[I Pi] -> -1`, `Exp[I Pi/2] -> I`. `Power[-1, q]` reduces the half/integer cases itself and leaves irreducible roots intact instead of over-eagerly expanding into trig radicals.
 - `Log[z]`: Natural logarithm. For a negative integer `n` (including `BigInt`), rewrites `Log[n]` as `I Pi + Log[-n]` (principal branch). For an exact pure-imaginary argument `Complex[0, b]` with `b` a real numeric, rewrites `Log[b I]` as `Log[Abs[b]] + Sign[b] (I Pi)/2` on the principal branch (e.g. `Log[I] = (I Pi)/2`, `Log[-3 I] = -((I Pi)/2) + Log[3]`); inexact imaginaries fall through to the numeric path. For a negative MPFR real or any `Complex[MPFR, MPFR]`, evaluates `log(hypot) + i atan2` at MPFR precision.
 - `Log[b, z]`: Logarithm to base `b`. When `b` and `z` are exact positive
@@ -173,6 +187,9 @@ Out[8]= 1/3
   Zero, the negative axis, complex and arbitrary-precision arguments follow
   `Log[b, z]` (`Log10[0] = -Infinity`, `Log10[0.] = Indeterminate`,
   `Log10[-1.] = 0. + 1.36438 I`).
+- A negative or complex machine argument is `clog(z)/Log[b]` in one rounding,
+  the form the packed/NDArray kernels and `Compile[]` use, so the surfaces
+  agree bit for bit (`mth_logb_fixed_machine_z`, `src/mth_machine_log.h`).
 - A positive machine real is evaluated with libm `log10` / `log2` rather than
   `log(z)/log(b)`, so an exact power stays exact: `Log10[1000.]` is `3.`, not
   `2.9999999999999996`.

@@ -1,5 +1,6 @@
 #include <complex.h>
 #include "trig.h"
+#include "mth_machine_elem.h"   /* the one machine elementary function (scalar/ND/VM) */
 #include "arithmetic.h"
 #include "interval.h"
 #include "plus.h"
@@ -336,7 +337,7 @@ static bool get_approx(Expr* e, double complex* out, bool* is_inexact) {
         return true;
     }
     if (e->type == EXPR_REAL) {
-        *out = e->data.real + 0.0 * I;
+        *out = mth_cmplx(e->data.real, 0.0);   /* keeps -0. (G7) */
         if (is_inexact) *is_inexact = true;
         return true;
     }
@@ -351,7 +352,7 @@ static bool get_approx(Expr* e, double complex* out, bool* is_inexact) {
         double complex r, i;
         bool rex = false, imx = false;
         if (get_approx(re, &r, &rex) && get_approx(im, &i, &imx)) {
-            *out = creal(r) + creal(i) * I;
+            *out = mth_cmplx(creal(r), creal(i));
             if (is_inexact) *is_inexact = (rex || imx);
             return true;
         }
@@ -720,7 +721,7 @@ Expr* builtin_sin(Expr* res) {
     double complex c;
     bool inexact = false;
     if (get_approx(arg, &c, &inexact) && inexact) {
-        double complex s = csin(c);
+        double complex s = mth_sin_machine_z(c);
         if (cimag(c) == 0.0) return expr_new_real(creal(s));
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
@@ -774,7 +775,7 @@ Expr* builtin_cos(Expr* res) {
     }
 #endif
     if (get_approx(arg, &c, &inexact) && inexact) {
-        double complex s = ccos(c);
+        double complex s = mth_cos_machine_z(c);
         if (cimag(c) == 0.0) return expr_new_real(creal(s));
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
@@ -833,7 +834,7 @@ Expr* builtin_tan(Expr* res) {
     }
 #endif
     if (get_approx(arg, &cplx, &inexact) && inexact) {
-        double complex s = ctan(cplx);
+        double complex s = mth_tan_machine_z(cplx);
         if (cimag(cplx) == 0.0) return expr_new_real(creal(s));
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
@@ -887,7 +888,7 @@ Expr* builtin_cot(Expr* res) {
     }
 #endif
     if (get_approx(arg, &cplx, &inexact) && inexact) {
-        double complex s = 1.0 / ctan(cplx);
+        double complex s = mth_cot_machine_z(cplx);
         if (cimag(cplx) == 0.0) return expr_new_real(creal(s));
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
@@ -939,7 +940,7 @@ Expr* builtin_sec(Expr* res) {
     }
 #endif
     if (get_approx(arg, &cplx, &inexact) && inexact) {
-        double complex s = 1.0 / ccos(cplx);
+        double complex s = mth_sec_machine_z(cplx);
         if (cimag(cplx) == 0.0) return expr_new_real(creal(s));
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
@@ -991,7 +992,7 @@ Expr* builtin_csc(Expr* res) {
     }
 #endif
     if (get_approx(arg, &cplx, &inexact) && inexact) {
-        double complex s = 1.0 / csin(cplx);
+        double complex s = mth_csc_machine_z(cplx);
         if (cimag(cplx) == 0.0) return expr_new_real(creal(s));
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
@@ -1204,14 +1205,11 @@ Expr* builtin_arcsin(Expr* res) {
     double complex c;
     bool inexact = false;
     if (get_approx(arg, &c, &inexact) && inexact) {
-        double complex s = casin(c);
+        /* the one machine ArcSin (mth_machine_elem.h): asin on [-1, 1], the
+         * lower side of the (1, inf) cut, shared with the kernel and the VM */
+        double complex s = mth_asin_machine_z(c);
         if (cimag(c) == 0.0 && creal(c) >= -1.0 && creal(c) <= 1.0) return expr_new_real(creal(s));
-        double im = cimag(s);
-        /* On the (1,inf) branch cut, C99 casin(x+0i) lands on the upper side
-         * while Mathematica uses the lower side; flip imag for real x>1.
-         * The (-inf,-1) cut already agrees between the two conventions. */
-        if (cimag(c) == 0.0 && creal(c) > 1.0) im = -im;
-        return make_complex(expr_new_real(creal(s)), expr_new_real(im));
+        return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
     return NULL;
 }
@@ -1263,13 +1261,11 @@ Expr* builtin_arccos(Expr* res) {
     double complex c;
     bool inexact = false;
     if (get_approx(arg, &c, &inexact) && inexact) {
-        double complex s = cacos(c);
+        /* the one machine ArcCos (mth_machine_elem.h): acos on [-1, 1],
+         * +i acosh(x) for real x > 1, shared with the kernel and the VM */
+        double complex s = mth_acos_machine_z(c);
         if (cimag(c) == 0.0 && creal(c) >= -1.0 && creal(c) <= 1.0) return expr_new_real(creal(s));
-        double im = cimag(s);
-        /* C99 cacos(x+0i) for x>1 returns -i*acosh(x); Mathematica returns
-         * +i*acosh(x). The x<-1 cut already agrees. */
-        if (cimag(c) == 0.0 && creal(c) > 1.0) im = -im;
-        return make_complex(expr_new_real(creal(s)), expr_new_real(im));
+        return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }
     return NULL;
 }
@@ -1368,7 +1364,7 @@ Expr* builtin_arctan(Expr* res) {
         double complex c;
         bool inexact = false;
     if (get_approx(arg, &c, &inexact) && inexact) {
-            double complex s = catan(c);
+            double complex s = mth_atan_machine_z(c);   /* atan for real c (G4) */
             if (cimag(c) == 0.0) return expr_new_real(creal(s));
             return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
         }
@@ -1472,8 +1468,10 @@ Expr* builtin_arccot(Expr* res) {
     double complex c;
     bool inexact = false;
     if (get_approx(arg, &c, &inexact) && inexact) {
-        if (c == 0.0) return expr_new_real(M_PI / 2.0); // ArcCot[0] = Pi/2
-        double complex s = catan(1.0 / c);
+        /* the one machine ArcCot (mth_machine_elem.h): atan(1/x) for real x,
+         * so ArcCot[0.] is Pi/2 and ArcCot[-0.] is -Pi/2 (IEEE signed zero on
+         * every surface, numeric-tower review G7) */
+        double complex s = mth_acot_machine_z(c);
         if (cimag(c) == 0.0) return expr_new_real(creal(s));
         return make_complex(expr_new_real(creal(s)), expr_new_real(cimag(s)));
     }

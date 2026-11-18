@@ -4330,7 +4330,15 @@ Expr* builtin_quotient(Expr* res) {
      * gave -2^63). Convert exactly through GMP instead -- the double is an
      * integer, so mpz_set_d is exact. A non-finite quotient (tiny divisor)
      * stays unevaluated. */
-    double q = floor((m_val - d_val) / n_val);
+    /* Two arguments: the exact floor of the exact quotient, the helper the
+     * buffer kernel and Compile[] share (mth_quotient_machine). Three: the
+     * offset is applied first, as before. */
+    double q;
+    if (!d_expr) {
+        if (!mth_quotient_machine(m_val, n_val, &q)) return NULL;
+    } else {
+        q = floor((m_val - d_val) / n_val);
+    }
     if (!isfinite(q)) return NULL;
     if (q >= -9223372036854775808.0 && q < 9223372036854775808.0)
         return expr_new_integer((int64_t)q);

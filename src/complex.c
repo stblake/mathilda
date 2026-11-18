@@ -1000,7 +1000,11 @@ Expr* builtin_arg(Expr* res) {
         else return NULL;
     }
     
-    if (re_val == 0.0 && im_val == 0.0) {
+    /* An EXACT zero has Arg 0. An inexact one keeps its IEEE sign and goes to
+     * atan2 below, as the packed / NDArray kernel (carg) and Compile[] do:
+     * Arg[0.] is 0., Arg[-0.] is Pi (numeric-tower review G7: signed zero is
+     * IEEE on every surface; this returned the exact 0 for -0.). */
+    if (re_val == 0.0 && im_val == 0.0 && !inexact) {
         return expr_new_integer(0);
     }
     

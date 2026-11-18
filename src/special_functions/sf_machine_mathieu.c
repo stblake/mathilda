@@ -557,6 +557,8 @@ static bool build_plan(MathieuPlan* p, mcx a, mcx q) {
      * weights c_k by e^{2|k||Im z|}, so the real-z cutoff (1e-20) is not enough
      * there; the evaluator trims per point (see eval_plan). */
     double aa = mc_abs(a), aq = mc_abs(q);
+    /* bound before converting: out-of-range double -> int is UB (G10) */
+    if (!(sqrt(aa + 2.0 * aq) / 2.0 <= 1.0e6)) return false;
     int W = (int)(sqrt(aa + 2.0 * aq) / 2.0) + 2;
     double r = 1.0; int Kx = 0;
     while (r > 1e-300 && Kx < MATHIEU_MAXN) {
@@ -566,6 +568,7 @@ static bool build_plan(MathieuPlan* p, mcx a, mcx q) {
         Kx++;
     }
     Kx += 2;
+    if (!(fabs(nu.re) <= 1.0e6)) return false;          /* as for W above */
     int kc = (int)floor(-nu.re / 2.0 + 0.5);
     int half = W + Kx;
     if (2 * half + 1 > MATHIEU_MAXN) return false;
@@ -615,6 +618,7 @@ static bool build_plan(MathieuPlan* p, mcx a, mcx q) {
         mcx nn = mc_abs(mc_sub(cand1, nu2)) <= mc_abs(mc_sub(cand2, nu2)) ? cand1 : cand2;
         if (mc_abs(mc_sub(nn, nu)) > 1e-9) {
             nu = nn;
+            if (!(fabs(nu.re) <= 1.0e6)) return false;  /* as for W above */
             p->lo = (int)floor(-nu.re / 2.0 + 0.5) - half;
             m = dominant_index(p, nu);
             if (m == INT32_MIN) return false;

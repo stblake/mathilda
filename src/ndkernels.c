@@ -35,6 +35,7 @@
 #include "symtab.h"
 #include "mth_machine_log.h"                /* the one machine Log (scalar/ND/VM) */
 #include "mth_machine_mod.h"                /* the one machine Mod (scalar/ND/VM) */
+#include "mth_machine_elem.h"               /* the one machine elementary function (scalar/ND/VM) */
 #include "piecewise.h"                         /* Unitize machine helpers */
 #include "special_functions/sf_machine.h"
 #include "special_functions/sf_machine_gamma.h"
@@ -75,7 +76,7 @@
     static bool ndk_##NAME##_r(double x, double* o) {                          \
         double v = (REXPR); *o = v; return isfinite(v); }                      \
     static bool ndk_##NAME##_c(double ar, double ai, double* rr, double* ri) { \
-        double complex z = ar + ai * I; double complex w = (CEXPR);            \
+        double complex z = mth_cmplx(ar, ai); double complex w = (CEXPR);            \
         *rr = creal(w); *ri = cimag(w);                                        \
         return isfinite(*rr) && isfinite(*ri); }                               \
     static const NDUnaryKernel NDKU_##NAME =                                   \
@@ -85,7 +86,7 @@
  * kernel only; the engine promotes the result dtype iff any element is complex. */
 #define UK_ESC(NAME, CEXPR)                                                    \
     static bool ndk_##NAME##_c(double ar, double ai, double* rr, double* ri) { \
-        double complex z = ar + ai * I; double complex w = (CEXPR);            \
+        double complex z = mth_cmplx(ar, ai); double complex w = (CEXPR);            \
         *rr = creal(w); *ri = cimag(w);                                        \
         return isfinite(*rr) && isfinite(*ri); }                               \
     static const NDUnaryKernel NDKU_##NAME =                                   \
@@ -98,7 +99,7 @@
  * 1130; hyperbolic.c:609). */
 #define UK_ESC_FLIP(NAME, CEXPR)                                               \
     static bool ndk_##NAME##_c(double ar, double ai, double* rr, double* ri) { \
-        double complex z = ar + ai * I; double complex w = (CEXPR);            \
+        double complex z = mth_cmplx(ar, ai); double complex w = (CEXPR);            \
         *rr = creal(w); *ri = cimag(w);                                        \
         if (ai == 0.0 && ar > 1.0) *ri = -*ri;                                 \
         return isfinite(*rr) && isfinite(*ri); }                               \
@@ -113,7 +114,7 @@
  * folds rather than through this branch. */
 #define UK_ESC_RECIP_FLIP(NAME, CEXPR)                                         \
     static bool ndk_##NAME##_c(double ar, double ai, double* rr, double* ri) { \
-        double complex z = ar + ai * I; double complex w = (CEXPR);            \
+        double complex z = mth_cmplx(ar, ai); double complex w = (CEXPR);            \
         *rr = creal(w); *ri = cimag(w);                                        \
         if (ai == 0.0 && ar != 0.0 && fabs(ar) < 1.0) *ri = -*ri;              \
         return isfinite(*rr) && isfinite(*ri); }                               \
@@ -130,23 +131,23 @@
         { ndk_##NAME##_c, NULL, false, true, NULL, NULL, false, NULL }
 
 /* ---- trigonometric (real-closed) ---------------------------------------- */
-UK_CLOSED(Sin, sin(x),        csin(z));
-UK_CLOSED(Cos, cos(x),        ccos(z));
-UK_CLOSED(Tan, tan(x),        ctan(z));
-UK_CLOSED(Cot, 1.0 / tan(x),  1.0 / ctan(z));
-UK_CLOSED(Sec, 1.0 / cos(x),  1.0 / ccos(z));
-UK_CLOSED(Csc, 1.0 / sin(x),  1.0 / csin(z));
+UK_CLOSED(Sin, sin(x),        mth_sin_machine_z(z));   /* mth_machine_elem.h: G4 */
+UK_CLOSED(Cos, cos(x),        mth_cos_machine_z(z));
+UK_CLOSED(Tan, tan(x),        mth_tan_machine_z(z));
+UK_CLOSED(Cot, 1.0 / tan(x),  mth_cot_machine_z(z));
+UK_CLOSED(Sec, 1.0 / cos(x),  mth_sec_machine_z(z));
+UK_CLOSED(Csc, 1.0 / sin(x),  mth_csc_machine_z(z));
 
 /* ---- hyperbolic (real-closed) ------------------------------------------- */
-UK_CLOSED(Sinh, sinh(x),       csinh(z));
-UK_CLOSED(Cosh, cosh(x),       ccosh(z));
-UK_CLOSED(Tanh, tanh(x),       ctanh(z));
-UK_CLOSED(Coth, 1.0 / tanh(x), 1.0 / ctanh(z));
-UK_CLOSED(Sech, 1.0 / cosh(x), 1.0 / ccosh(z));
-UK_CLOSED(Csch, 1.0 / sinh(x), 1.0 / csinh(z));
+UK_CLOSED(Sinh, sinh(x),       mth_sinh_machine_z(z));
+UK_CLOSED(Cosh, cosh(x),       mth_cosh_machine_z(z));
+UK_CLOSED(Tanh, tanh(x),       mth_tanh_machine_z(z));
+UK_CLOSED(Coth, 1.0 / tanh(x), mth_coth_machine_z(z));
+UK_CLOSED(Sech, 1.0 / cosh(x), mth_sech_machine_z(z));
+UK_CLOSED(Csch, 1.0 / sinh(x), mth_csch_machine_z(z));
 
 /* ---- exp / log ---------------------------------------------------------- */
-UK_CLOSED(Exp, exp(x), cexp(z));
+UK_CLOSED(Exp, exp(x), mth_exp_machine_z(z));
 UK_ESC(Log, mth_log_machine_z(z));   /* positive real -> libm log, as the VM */
 
 /* Log10 / Log2: escaping like Log (a negative real lands off the real axis),
@@ -156,13 +157,11 @@ UK_ESC(Log, mth_log_machine_z(z));   /* positive real -> libm log, as the VM */
  * with builtin_log10 / builtin_log2, which take the same libm path. The real
  * arm is the Compile[] scalar path; it declines off the positive axis so the
  * VM bails to the interpreter instead of inventing a real answer. */
-#define ND_LN10 2.302585092994045684017991454684364208
-#define ND_LN2  0.693147180559945309417232121458176568
+#define ND_LN10 MTH_LN10
+#define ND_LN2  MTH_LN2
 #define UK_FIXED_LOG(NAME, RFN, LNB)                                            \
     static bool ndk_##NAME##_c(double ar, double ai, double* rr, double* ri) { \
-        if (ai == 0.0 && ar > 0.0) {                                           \
-            *rr = RFN(ar); *ri = 0.0; return isfinite(*rr); }                  \
-        double complex w = clog(ar + ai * I) / (LNB);                          \
+        double complex w = mth_logb_fixed_machine_z(ar, ai, RFN, (LNB));       \
         *rr = creal(w); *ri = cimag(w);                                        \
         return isfinite(*rr) && isfinite(*ri); }                               \
     static bool ndk_##NAME##_r(double x, double* o) {                          \
@@ -174,16 +173,16 @@ UK_FIXED_LOG(Log10, log10, ND_LN10);
 UK_FIXED_LOG(Log2,  log2,  ND_LN2);
 
 /* ---- inverse trig ------------------------------------------------------- */
-UK_CLOSED(ArcTan, atan(x),       catan(z));
-UK_CLOSED(ArcCot, atan(1.0 / x), catan(1.0 / z));
-UK_ESC_FLIP(ArcSin, casin(z));
-UK_ESC_FLIP(ArcCos, cacos(z));
+UK_CLOSED(ArcTan, atan(x),       mth_atan_machine_z(z));   /* one helper: G4 */
+UK_CLOSED(ArcCot, atan(1.0 / x), mth_acot_machine_z(z));
+UK_ESC(ArcSin, mth_asin_machine_z(z));   /* the helper takes the cut side */
+UK_ESC(ArcCos, mth_acos_machine_z(z));
 UK_ESC_RECIP_FLIP(ArcSec, cacos(1.0 / z));
 UK_ESC_RECIP_FLIP(ArcCsc, casin(1.0 / z));
 
 /* ---- inverse hyperbolic ------------------------------------------------- */
-UK_CLOSED(ArcSinh, asinh(x),        casinh(z));
-UK_CLOSED(ArcCsch, asinh(1.0 / x),  casinh(1.0 / z));
+UK_CLOSED(ArcSinh, asinh(x),        mth_asinh_machine_z(z));
+UK_CLOSED(ArcCsch, asinh(1.0 / x),  mth_acsch_machine_z(z));
 UK_ESC(ArcCosh, cacosh(z));
 UK_ESC_FLIP(ArcTanh, catanh(z));
 UK_ESC_RECIP_FLIP(ArcCoth, catanh(1.0 / z));
@@ -451,9 +450,9 @@ static bool ndk_Mod_c(double mre, double mim, double nre, double nim,
 }
 static bool ndk_Quotient_c(double mre, double mim, double nre, double nim,
                            double* rr, double* ri) {
-    if (mim != 0.0 || nim != 0.0 || nre == 0.0) return false;
-    double v = floor(mre / nre);
-    *rr = v; *ri = 0.0; return isfinite(v);
+    if (mim != 0.0 || nim != 0.0) return false;
+    if (!mth_quotient_machine(mre, nre, rr)) return false;  /* the exact floor */
+    *ri = 0.0; return true;
 }
 /* ---- Mod / Quotient: the EXACT integer arms ------------------------------ *
  *
@@ -541,8 +540,9 @@ static bool ndk_Quotient_ii(int64_t m, int64_t n, int64_t* o) {
  * no such arm on purpose -- its result takes the argument's exactness, and
  * `real_closed` already says that. */
 static bool ndk_Quotient_ri(double m, double n, int64_t* o) {
-    if (n == 0.0) return false;
-    return ndk_narrow_ok(floor(m / n), o);
+    double q;
+    if (!mth_quotient_machine(m, n, &q)) return false;   /* the exact floor */
+    return ndk_narrow_ok(q, o);
 }
 
 static const NDBinaryKernel NDKB_Mod =
@@ -817,7 +817,12 @@ static bool ndk_ExpIntegralE_c(double nre, double nim, double xre, double xim,
     }
     return sf_machine_expn_c(nre, xre, xim, rr, ri);
 }
-static const NDBinaryKernel NDKB_ExpIntegralE = { ndk_ExpIntegralE_c, true, NULL, NULL, false, NULL, NULL };
+/* Escaping, not real-closed: for a real x < 0 the value is complex (the
+ * principal branch of E_n on the negative axis, ExpIntegralE[7., -1.5] =
+ * 1.1236 - 0.0497 I), and a real-closed registration dropped that imaginary
+ * part on the packed / NDArray / Compile surfaces (numeric-tower review, the G2
+ * class, found by check-machine-boundary's ordinary probes). */
+static const NDBinaryKernel NDKB_ExpIntegralE = { ndk_ExpIntegralE_c, false, NULL, NULL, false, NULL, NULL };
 
 /* Anger-Weber and Kelvin: (nu, z) shims over the shared machine helpers of
  * special_functions/sf_machine_angerkelvin.c, which the scalar builtins call

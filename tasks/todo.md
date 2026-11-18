@@ -125,9 +125,12 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
   - [x] G1 Compile integer Subtract, G2 packed InverseJacobiDN, G3 machine Mod
         (`mth_mod_machine`): v0.6611
   - [x] G5 subnormal + G6 underflow: default-on lane modes (buffer + Compile): v0.6612
-  - [ ] G4 ulp (scalar on catan/casin, kernels/VM on atan/asin: one helper per head; gate now
-        probes ordinary values too), G10 perf
-  - [ ] Decisions (user, 2026-11-18):
+  - [x] G4 (one helper per head: mth_machine_elem.h; Log2/10; Binomial), G7-G9 + Quotient
+        decisions, G10 (UB casts, Bessel series caps, pFq cap, HermiteH U form),
+        ExpIntegralE escaping: v0.6613. BASELINE empty (assert-empty gate)
+  - [ ] Follow-ups seen, not in scope: HypergeometricU[5.*^9, 0.5, 100.] is Underflow[] though
+        ~10^(-10^10) is inside MPFR's range; Underflow[] Underflow[] stays Underflow[]^2
+  - [x] Decisions (user, 2026-11-18), all landed v0.6613:
         - G7: IEEE signed zero on EVERY surface (the scalar respects -0.: Arg[-0.] = Pi,
           ArcCot[-0.] = -Pi/2), not -0. read as 0
         - G8: Binomial[2., -1.*^308] is 0. (integer lower index < 0); fix the scalar's arm

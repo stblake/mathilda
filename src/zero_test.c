@@ -1065,6 +1065,9 @@ static double zt_deep_zero_floor(double scale, long bits) {
  * while ordinary-scale computations (< 2^40 ~ 1e12) keep the byte-for-byte
  * unchanged machine fast path. */
 #define ZT_HUGE_SCALE_BITS 40
+/* At a huge scale, a machine residual within this many bits of the scale is
+ * rounding noise (53 mantissa bits + margin): the full ladder decides it. */
+#define ZT_HUGE_NOISE_BITS 64
 
 /* Numericalize at the given precision, returning a freshly allocated
  * Expr*. spec.bits == 53 means machine; anything else uses MPFR (if
@@ -1504,7 +1507,15 @@ static ZeroTestResult decide_numeric_huge_scale(const Expr* e, double mag0,
         rr = evaluate_rung(e, PRECISION_LADDER[i], &m, NULL,
                            isfinite(scale) ? scale : NAN, NULL, NULL);
         if (rr == ZERO_TEST_UNKNOWN) { rr = ZERO_TEST_TRUE; plateaued = true; break; }  /* MPFR gone: lenient */
-        if (m >= prev - 1.0) { plateaued = true; break; }  /* value resolved, trust rung */
+        /* Value resolved: trust the rung. But at rung 1 the baseline `prev` is
+         * the MACHINE residual, an arbitrary cancellation artifact, so a
+         * "plateau" against it is evidence only of a value (FALSE), never of a
+         * zero: a TRUE there keeps climbing. Trusting it read
+         * Cosh[14]^30 - (1 - Tanh[14]^2)^-15 + 1 (= 1) as zero once the machine
+         * artifact moved from 2^567 to 2^563 -- the same expression, the same
+         * MPFR rungs, a different libm path for Tanh (numeric-tower review G4).
+         * Certificates come from positive evidence. */
+        if (m >= prev - 1.0 && (i > 1 || rr == ZERO_TEST_FALSE)) { plateaued = true; break; }
         prev = m;
     }
     /* A CONSTANT whose residual is still falling at the top rung has not been
@@ -1695,7 +1706,14 @@ static ZeroTestResult decide_numeric(const Expr* e, bool* out_overflow) {
      * operand scale, a machine residual above the obvious gate may be a
      * catastrophic-cancellation artifact rather than a genuine value, so the
      * fast reject below is NOT sound here — climb the full ladder instead. */
-    if (scale >= ZT_HUGE_SCALE_BITS && mag > scale - ZT_OBVIOUS_NONZERO_BITS)
+    /* The gate is the machine NOISE level, not the obvious-non-zero one: at a
+     * huge scale every residual down to ~scale - 53 is rounding noise of the
+     * terms, and which side of scale - 12 the noise lands on is an accident of
+     * the libm path -- Cosh[14]^30 - (1 - Tanh[14]^2)^-15 + 1 (= 1) left 2^567
+     * through ctanh and 2^563 through tanh, and the second went to the
+     * deep-cancellation exit below and read as zero (numeric-tower review G4).
+     * ZT_HUGE_NOISE_BITS = 53 mantissa bits + the 11-bit margin. */
+    if (scale >= ZT_HUGE_SCALE_BITS && mag > scale - ZT_HUGE_NOISE_BITS)
         return decide_numeric_huge_scale(e, mag, scale, out_overflow == NULL);
 
     if (mag > scale - ZT_OBVIOUS_NONZERO_BITS)

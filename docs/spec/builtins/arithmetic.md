@@ -1042,7 +1042,10 @@ seconds (`Sqrt[3141592653589793238]` took 24 s while
     - **Arity**: one argument draws `Mod::argtu`, other counts `Mod::argt`.
   - Packed `Mod[buffer, k]` with a constant `k >= 2` uses a reciprocal-multiply arm (`NDBinaryKernel.whole_i`) with an exact integer correction, so the loop has no hardware division. On a pre-built `Range[10^7]` it went from 0.116 s to 0.037 s (the reference 0.047 s), and the results are bit-identical to the `%` path.
 - `Quotient[n, m]`: for **real** `n, m`, `Floor[n/m]` — floored, not truncated or
-  rounded, so `Quotient[-5.5, 3.]` is `-2`. The three-argument form
+  rounded, so `Quotient[-5.5, 3.]` is `-2`. For two machine reals it is the
+  floor of the EXACT quotient, not of the rounded one (`mth_quotient_machine`,
+  shared by the scalar, packed/NDArray and `Compile[]` surfaces): `Quotient[0.5,
+  1.*^-10]` is `4999999999`, so `n == m Quotient[n, m] + Mod[n, m]` holds. The three-argument form
   `Quotient[n, m, d]` is `Floor[(n - d)/m]`. A real quotient outside the
   `int64` range is the exact integer (`Quotient[1.*^300, 1] === Floor[1.*^300]`;
   it was `-2^63`, an undefined cast, before v0.6594). An arbitrary-precision
@@ -1687,7 +1690,13 @@ $\Gamma(n+1)/(\Gamma(m+1)\,\Gamma(n-m+1))$.
   `Binomial[-1, -1] = 1` and `Binomial[-2, -5] = -4`; `m > n` gives `0`.
   The smaller of `m` and `n - m` is used, so `Binomial[2^70 + 1, 2^70]`
   evaluates.
-- Machine-precision real branch via `tgamma`. Fires when either operand
+- Machine-precision real branch through `sf_machine_binomial`, the helper the
+  packed/NDArray kernel and `Compile[]` share (bit-identical surfaces): a
+  product `prod (n - s + i)/i` for a small integer lower index or complement
+  `s <= 64` (`Binomial[1.*^8, 2.] = 4.99999995*^15`), else the `tgamma`
+  quotient while it is finite, else the `lgamma` form only while its error
+  bound is below `1e-13` (otherwise MPFR answers). An integer-valued negative
+  lower index of any size is `0.` (`Binomial[2., -1.*^308]`). Fires when either operand
   is a machine real; the other may be any real-numeric leaf (integer,
   bigint, rational, MPFR) — so `Binomial[2.5, 1/5] → 1.34885`. If an
   operand is symbolic the branch declines and the form stays symbolic

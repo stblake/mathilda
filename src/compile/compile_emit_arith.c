@@ -171,11 +171,12 @@ int emit_arith(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* o
                 if (try_kernel(c, h, A, na, &kv)) { *out = kv; return c->ok ? 1 : -1; }
                 c->ok = false; return -1;
             }
-            /* Quotient[a,b] == Floor[a/b], and an INTEGER like the interpreter's. */
-            Val a, b; if (!emit(c, A[0], &a) || !emit(c, A[1], &b)) return -1;
-            coerce(c, &a, CT_REAL); coerce(c, &b, CT_REAL);
-            Val q = binop(c, OP_DIV_R, a, b, CT_REAL);
-            *out = unop(c, OP_FLOOR_R, q, CT_INT);
+            /* Quotient[a,b]: the registered kernel (mth_quotient_machine, the
+             * exact floor -- not Floor of the rounded a/b), then an INTEGER
+             * like the interpreter's (floor of an integer-valued double). */
+            Val kv;
+            if (!try_kernel(c, h, A, na, &kv)) { c->ok = false; return -1; }
+            *out = unop(c, OP_FLOOR_R, kv, CT_INT);
             return c->ok ? 1 : -1;
         }
         c->ok = false; return -1;
