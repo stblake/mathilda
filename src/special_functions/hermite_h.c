@@ -255,7 +255,12 @@ static bool hermite_real_positive(const Expr* x_e) {
     mpfr_clear(re); mpfr_clear(im);
     return ok;
 #else
-    (void)x_e; return false;
+    /* no MPFR: a machine real or an exact positive integer / rational */
+    int64_t n, d;
+    if (x_e->type == EXPR_REAL) return x_e->data.real > 0.0;
+    if (x_e->type == EXPR_INTEGER) return x_e->data.integer > 0;
+    if (is_rational((Expr*)x_e, &n, &d)) return n > 0;
+    return false;
 #endif
 }
 
@@ -273,8 +278,20 @@ static Expr* hermite_u_form(const Expr* n_e, const Expr* x_e) {
     return mk_fn2("Times", mk_fn2("Power", expr_new_integer(2), expr_copy((Expr*)n_e)), u);
 }
 
+static Expr* hermite_numeric_hyp_form(const Expr* n_e, const Expr* x_e, bool use_u);
+
 static Expr* hermite_numeric_hyp(const Expr* n_e, const Expr* x_e) {
-    bool use_u = hermite_real_positive(x_e);
+    /* The U form where it applies; the 1F1 form when it does not collapse to
+     * a number (a build whose HypergeometricU numerics are absent: without
+     * FLINT, HermiteH[-100., 10.] stayed unevaluated). */
+    if (hermite_real_positive(x_e)) {
+        Expr* r = hermite_numeric_hyp_form(n_e, x_e, true);
+        if (r) return r;
+    }
+    return hermite_numeric_hyp_form(n_e, x_e, false);
+}
+
+static Expr* hermite_numeric_hyp_form(const Expr* n_e, const Expr* x_e, bool use_u) {
     Expr* cf = use_u ? hermite_u_form(n_e, x_e) : hermite_hyp_form(n_e, x_e);
 #ifdef USE_MPFR
     long op = cheb_out_prec(n_e, x_e);            /* target output precision, >=53 */

@@ -3134,6 +3134,10 @@ static bool expr_has_plus(const Expr* e) {
     return false;
 }
 
+#endif /* USE_MPFR -- the precision bounds below are read in every build (eval.c,
+        * N, SetPrecision); only their MPFR arms are guarded. A USE_MPFR=0 build
+        * failed to link without them. */
+
 /* ---- $MinPrecision / $MaxPrecision ------------------------------------------
  *
  * Bounds, in decimal digits, on the precision of every arbitrary-precision
@@ -3213,6 +3217,7 @@ double numeric_bound_requested_precision(const char* head, double digits) {
     return digits;
 }
 
+#ifdef USE_MPFR   /* reopened: the adaptive-precision N continues */
 static long numeric_max_extra_bits(double* digits_out) {
     Rule* r = symtab_get_own_values("$MaxExtraPrecision");
     double digits = 50.0;
@@ -3551,6 +3556,9 @@ bool numeric_contagion_args(Expr* const* args, size_t n, Expr** out) {
      * minimum MPFR precision so e.g. 1.0`50 + 1.0`20 lands at 20 digits
      * rather than preserving the 50-digit operand. */
     NumericSpec spec = numeric_machine_spec();   /* numericalize_contagion below */
+#ifndef USE_MPFR
+    (void)any_machine;                           /* read only by the MPFR arm */
+#endif
 #ifdef USE_MPFR
     if (!any_machine && min_mpfr_prec > 0) {
         spec.mode = NUMERIC_MODE_MPFR;

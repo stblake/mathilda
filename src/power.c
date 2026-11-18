@@ -531,6 +531,7 @@ static double power_machine_part(const Expr* e) {
     return 0.0;
 }
 
+#ifdef USE_MPFR   /* its one caller is MPFR-only; unused otherwise (-Werror) */
 /* A machine Real, or a Complex with a machine Real part: the operand that
  * makes a Power machine precision under contagion. */
 static bool power_has_machine_real(const Expr* e) {
@@ -539,6 +540,7 @@ static bool power_has_machine_real(const Expr* e) {
     return is_complex((Expr*)e, &re, &im)
         && (re->type == EXPR_REAL || im->type == EXPR_REAL);
 }
+#endif
 
 #ifdef USE_MPFR
 /* Contagion of one Power operand (consumed) to machine precision: a machine
