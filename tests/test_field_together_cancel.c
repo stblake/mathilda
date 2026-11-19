@@ -244,6 +244,50 @@ static void test_gaussian_two_stage(void) {
              " Exponent[Denominator[r], x] === 2]");
 }
 
+/* A numeric radical in a DENOMINATOR, with symbolic numerator parameters.
+ * exact_poly_div refused a numeric algebraic divisor (Sqrt[2], 1 + Sqrt[2]) in
+ * its coefficient-ring base case, so the strict divide-back in
+ * together_recursive failed whenever two denominators differ by such a unit
+ * (Sqrt[2] + 2 u = Sqrt[2] (1 + Sqrt[2] u)) and Together returned the sum
+ * uncombined.  Each case: one fraction (no Plus at the top, no reciprocal of a
+ * sum left in the numerator) and equal to the input (PossibleZeroQ). */
+#define TOGETHER_ONE_FRACTION(E) \
+    "Module[{e = " E ", r}, r = Together[e]; !MatchQ[r, _Plus] && " \
+    "FreeQ[Numerator[r], Power[_Plus, _?Negative]] && PossibleZeroQ[r - e]]"
+static void test_numeric_radical_denominator(void) {
+    /* w0..w3, not r0..r3: an earlier test binds r1 globally */
+    run_true(TOGETHER_ONE_FRACTION("b/(Sqrt[2] + 2 u) + a/(1 + Sqrt[2] u)"));
+    run_true(TOGETHER_ONE_FRACTION("1/(Sqrt[2] + 2 u) + 1/(1 + Sqrt[2] u)"));
+    run_true(TOGETHER_ONE_FRACTION("x (1/(1 + Sqrt[2] t) + 1/(1 - t))"));
+    run_true(TOGETHER_ONE_FRACTION("a/(1 + (1 + Sqrt[2]) u) + b/((1 + Sqrt[2]) + (3 + 2 Sqrt[2]) u)"));
+    run_true(TOGETHER_ONE_FRACTION("a/(1 + 2^(1/3) u) + b/(2^(2/3) + 2 u)"));
+    /* the Risch tower-form integrand (F9 hunt) that failed the decision's gate */
+    run_true(TOGETHER_ONE_FRACTION(
+        "(Sqrt[2] w0 w3)/(1 + u) + (4 w1 w2 u)/(1 + Sqrt[2] u) + (Sqrt[2] w0 u)/(1 + 2 u + u^2) "
+        "- (2 Sqrt[2] w1 w2^2 u^2)/(1 + 2 Sqrt[2] u + 2 u^2) + (2 a w1 w2^2 u^2)/(1 + Sqrt[2] u)"));
+    /* ... and its denominator is the least one, (1 + u)^2 (1 + Sqrt[2] u)^2,
+     * with no spurious radical unit (3 + 2 Sqrt[2]) carried in front */
+    run_true("PossibleZeroQ[Denominator[Together[(Sqrt[2] w0 w3)/(1 + u) + (4 w1 w2 u)/(1 + Sqrt[2] u) "
+             "+ (Sqrt[2] w0 u)/(1 + 2 u + u^2) - (2 Sqrt[2] w1 w2^2 u^2)/(1 + 2 Sqrt[2] u + 2 u^2) "
+             "+ (2 a w1 w2^2 u^2)/(1 + Sqrt[2] u)]] - (1 + u)^2 (1 + Sqrt[2] u)^2]");
+    run_test("Together[b/(Sqrt[2] + 2 u) + a/(1 + Sqrt[2] u)]",
+             "Times[Plus[Times[Power[2, Rational[1, 2]], a], b], "
+             "Power[Plus[Power[2, Rational[1, 2]], Times[2, u]], -1]]");
+    /* PolynomialLCM is least: the shared factor up to a unit is found */
+    run_true("PolynomialLCM[1 + u, 1 + Sqrt[2] u, 1 + 2 u + u^2, 1 + 2 Sqrt[2] u + 2 u^2] "
+             "=== (1 + Sqrt[2] u)^2 (1 + 2 u + u^2)");
+    /* a multivariate exact quotient over Q(Sqrt[2]) */
+    run_test("Cancel[(x^2 - 2 y^2)/(x - Sqrt[2] y)]",
+             "Plus[x, Times[Power[2, Rational[1, 2]], y]]");
+    /* a SYMBOLIC radical is not a unit: Sqrt[c] has a free symbol, so the
+     * radical inverse declines and the result is the one it always was */
+    run_true("Together[a/(1 + Sqrt[c] u) + b/(Sqrt[c] + c u)] === (b + a Sqrt[c])/(Sqrt[c] + c u)");
+    run_true("Cancel[(Sqrt[c] + c u)/(1 + Sqrt[c] u)] === Sqrt[c]");
+    /* the multi-radical sum the strict divide-back guards (no hang) */
+    run_true("PossibleZeroQ[Together[1/(Sqrt[2] a + Sqrt[3] + Sqrt[5] + Sqrt[7]) + 1/(a + Sqrt[2])] "
+             "- (1/(Sqrt[2] a + Sqrt[3] + Sqrt[5] + Sqrt[7]) + 1/(a + Sqrt[2]))]");
+}
+
 int main(int argc, char** argv) {
     setbuf(stdout, NULL);
     printf("Starting field_together_cancel_tests\n");
@@ -261,6 +305,7 @@ int main(int argc, char** argv) {
     TEST(test_nested_radical_variants);
     TEST(test_nested_radical_guards);
     TEST(test_gaussian_two_stage);
+    TEST(test_numeric_radical_denominator);
 
     printf("All field Together / Cancel tests passed!\n");
     return 0;

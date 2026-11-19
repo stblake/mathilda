@@ -60,6 +60,7 @@
 #include "qaupoly.h"
 #include "qafactor.h"
 #include "flint_bridge.h"
+#include "flint_qqbar.h"   /* exact_radical_inverse: minimal polynomial of a constant */
 #include "ratfun.h"
 #include "zupoly.h"
 #include <gmp.h>
@@ -1983,6 +1984,127 @@ static Expr* root_exact_div(Expr* A, Expr* B) {
 }
 #endif
 
+/* Every radical in `e` is a rational power of a RATIONAL base (Sqrt[2],
+ * 3^(2/3), (1/2)^(1/2)): no nested radical such as Sqrt[3/4 - 1/Sqrt[2]].  The
+ * evaluator's product rules respell a nested radical (q^3 -> Sqrt[(..)/Sqrt[2]]
+ * forms), so an inverse built from its powers would bring new atoms into the
+ * basis the caller is working in; only flat radicals are handled. */
+static bool radicals_unnested(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return true;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        e->data.function.head->data.symbol.name == SYM_Power &&
+        e->data.function.arg_count == 2 &&
+        e->data.function.args[1]->type != EXPR_INTEGER &&
+        e->data.function.args[1]->type != EXPR_BIGINT)
+        return is_rational_like(e->data.function.args[0]);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (!radicals_unnested(e->data.function.args[i])) return false;
+    return true;
+}
+
+#ifdef USE_FLINT
+/* Does `e` mention a Root or AlgebraicNumber atom anywhere?  Those have their
+ * own exact divisors (root_exact_div; the AlgebraicNumber unit test), and their
+ * powers do not reduce structurally, so the radical inverse below would only
+ * fail its certificate on them. */
+static bool expr_has_root_or_algnum(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL &&
+        (e->data.function.head->data.symbol.name == SYM_Root ||
+         e->data.function.head->data.symbol.name == SYM_AlgebraicNumber))
+        return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (expr_has_root_or_algnum(e->data.function.args[i])) return true;
+    return false;
+}
+
+/* The exact inverse of a NUMERIC algebraic constant B written in radicals
+ * (Sqrt[2], 2^(1/3), 1 + Sqrt[2], I Sqrt[3] - 1, ...), as an expanded radical
+ * expression -- or NULL to decline.
+ *
+ * With m(x) = c0 + c1 x + ... + cn x^n the minimal polynomial of B (c0 != 0,
+ * since B != 0 and m is irreducible),
+ *     1/B = -(c1 + c2 B + ... + cn B^(n-1)) / c0,
+ * evaluated by Horner and expanded, so the radical arithmetic folds it into the
+ * same canonical radical basis the polynomial code already works in
+ * (1/(1 + Sqrt[2]) -> -1 + Sqrt[2]).  The candidate is CERTIFIED before it is
+ * returned: B * Binv must expand to exactly 1.  Anything the radical arithmetic
+ * does not fold structurally (a basis it cannot canonicalise) fails that check
+ * and declines, so the caller never receives an asserted-but-unperformed
+ * quotient -- the hazard that keeps a symbolic radical out of the unit test.
+ *
+ * Gated on a constant algebraic B (no free symbol: flint_qqbar_is_constant_
+ * algebraic), carrying a numeric radical (expr_has_field_constant), with no
+ * Root/AlgebraicNumber atom and no nested radical (radicals_unnested, on B
+ * and on the inverse), and a minimal polynomial of degree <= 16. */
+#define EPD_RADICAL_INV_MAX_DEG 16
+static Expr* exact_radical_inverse(const Expr* B) {
+    if (!expr_has_field_constant(B) || expr_has_root_or_algnum(B)) return NULL;
+    if (!radicals_unnested(B)) return NULL;
+    if (!flint_qqbar_is_constant_algebraic(B)) return NULL;
+    Expr* mp = flint_qqbar_gen_minpoly_coeffs(B);
+    if (!mp) return NULL;
+    size_t len = mp->data.function.arg_count;           /* n + 1 coefficients */
+    Expr* binv = NULL;
+    if (len >= 2 && len - 1 <= EPD_RADICAL_INV_MAX_DEG &&
+        !is_zero_poly(mp->data.function.args[0])) {
+        Expr** c = mp->data.function.args;
+        /* Horner: P = cn; P = P*B + ck for k = n-1 .. 1. */
+        Expr* P = expr_copy(c[len - 1]);
+        for (size_t k = len - 2; k >= 1; k--) {
+            Expr* t = internal_times((Expr*[]){P, expr_copy((Expr*)B)}, 2);
+            Expr* s = internal_plus((Expr*[]){t, expr_copy(c[k])}, 2);
+            P = eval_and_free(expr_expand(s));
+            expr_free(s);
+        }
+        Expr* scale = internal_times((Expr*[]){expr_new_integer(-1),
+                          internal_power((Expr*[]){expr_copy(c[0]), expr_new_integer(-1)}, 2)}, 2);
+        Expr* raw = internal_times((Expr*[]){scale, P}, 2);
+        binv = eval_and_free(expr_expand(raw));
+        expr_free(raw);
+        /* Certificate: B * binv == 1 structurally, after expansion. */
+        Expr* prod = internal_times((Expr*[]){expr_copy((Expr*)B), expr_copy(binv)}, 2);
+        Expr* one = eval_and_free(expr_expand(prod));
+        expr_free(prod);
+        bool ok = one->type == EXPR_INTEGER && one->data.integer == 1 &&
+                  radicals_unnested(binv);
+        expr_free(one);
+        if (!ok) { expr_free(binv); binv = NULL; }
+    }
+    expr_free(mp);
+    return binv;
+}
+#endif
+
+/* > 0 while the numeric-radical unit is off: inside the division of a
+ * polynomial that carries a nested radical, a Together/Cancel of one, or the
+ * linear-algebra divider (each below).
+ * The base case of exact_poly_div and gcd_strip_radical_unit then keep their
+ * old behaviour.  Registered with the TimeConstrained
+ * unwind (poly_init). */
+static int g_epd_radical_unit_off = 0;
+
+/* The same gate for a whole Together / Cancel: their recursion multiplies
+ * denominators back together through the evaluator, which respells a nested
+ * radical in the product (4 Sqrt[2] (x - Sqrt[3/4 - 1/Sqrt[2]]) comes back in
+ * Sqrt[(-4 + 3 Sqrt[2])/Sqrt[2]]), so while the expression being combined
+ * carries one, the numeric-radical unit stays off and they keep their old
+ * behaviour.  Returns the bump to hand back to exact_poly_div_nested_release. */
+int exact_poly_div_nested_enter(const Expr* e) {
+    int bump = radicals_unnested(e) ? 0 : 1;
+    g_epd_radical_unit_off += bump;
+    return bump;
+}
+void exact_poly_div_nested_release(int bump) { g_epd_radical_unit_off -= bump; }
+
+/* The exact linear-algebra divider (src/linalg/util.c) keeps the old base case:
+ * its entries are field elements already, a constant quotient is written
+ * num/den there, and the rationalised inverse 1/(a + b Sqrt[d]) =
+ * (a - b Sqrt[d])/(a^2 - d b^2) cancels catastrophically under machine N
+ * whenever a + b Sqrt[d] is large (an exact SVD's vectors lost 3 digits). */
+void exact_poly_div_radical_units_suspend(void) { g_epd_radical_unit_off++; }
+void exact_poly_div_radical_units_resume(void)  { g_epd_radical_unit_off--; }
+
 /* Returns Q such that A = B * Q exactly (in K[vars]); otherwise NULL. */
 /* Used by `poly_gcd_internal` to extract primitive parts and to stage */
 /* GCD candidate division. The base case (var_count == 0) reduces to   */
@@ -2064,6 +2186,34 @@ Expr* exact_poly_div(Expr* A, Expr* B, Expr** vars, size_t var_count) {
             return internal_times((Expr*[]){expr_copy(A), internal_power((Expr*[]){expr_copy(B), expr_new_integer(-1)}, 2)}, 2);
         }
 #ifdef USE_FLINT
+        /* A NUMERIC radical divisor (Sqrt[2], 1 + Sqrt[2], 2^(1/3)) is a unit
+         * of the number field it generates, exactly like the AlgebraicNumber
+         * above -- what kept it out of the unit test is only that
+         * Times[A, 1/B] would ASSERT the division with 1/(1 + Sqrt[2]) left
+         * opaque.  exact_radical_inverse instead COMPUTES 1/B in the radical
+         * basis (from B's minimal polynomial) and certifies B * (1/B) == 1, so
+         * the quotient is a performed one.  A symbolic radical (Sqrt[a]) has a
+         * free symbol and is not constant algebraic: it still declines.
+         *
+         * Refusing it left Together uncombined whenever two denominators share
+         * a factor up to such a unit -- Sqrt[2] + 2 u = Sqrt[2] (1 + Sqrt[2] u):
+         *     Together[b/(Sqrt[2] + 2 u) + a/(1 + Sqrt[2] u)]
+         * PolynomialLCM is Sqrt[2] + 2 u, and the strict quotient
+         * (Sqrt[2] + 2 u)/(1 + Sqrt[2] u) divides leading coefficients 2/Sqrt[2]:
+         * this base case with B = Sqrt[2]. */
+        /* Not inside the division of a polynomial carrying a nested radical
+         * (g_epd_radical_unit_off): the radical products of the steps that follow
+         * respell it (Sqrt[2] Sqrt[3/4 - 1/Sqrt[2]] -> Sqrt[(..)/Sqrt[2]]), so
+         * the quotient would leave the caller's basis -- see radicals_unnested. */
+        if (g_epd_radical_unit_off == 0 && radicals_unnested(A)) {
+            Expr* binv = exact_radical_inverse(B);
+            if (binv) {
+                Expr* q = internal_times((Expr*[]){expr_copy(A), binv}, 2);
+                Expr* qe = eval_and_free(expr_expand(q));
+                expr_free(q);
+                return qe;
+            }
+        }
         /* A Root-carrying divisor: divide exactly in Q[roots], computed and
          * certified (see root_exact_div). */
         return root_exact_div(A, B);
@@ -2081,6 +2231,8 @@ Expr* exact_poly_div(Expr* A, Expr* B, Expr** vars, size_t var_count) {
     if (degA < degB || is_zero_poly(expandedB)) {
         expr_free(expandedA); expr_free(expandedB); return NULL;
     }
+    int nested_bump = (!radicals_unnested(expandedA) || !radicals_unnested(expandedB)) ? 1 : 0;
+    g_epd_radical_unit_off += nested_bump;
     
     Expr* Q = expr_new_integer(0);
     Expr* R = expandedA;
@@ -2146,6 +2298,7 @@ Expr* exact_poly_div(Expr* A, Expr* B, Expr** vars, size_t var_count) {
     }
     expr_free(lcB);
     expr_free(expandedB);
+    g_epd_radical_unit_off -= nested_bump;
     
     if (!is_zero_poly(R)) {
         expr_free(R); expr_free(Q); return NULL;
@@ -2950,6 +3103,64 @@ static Expr* gcd_root_content_fix(Expr* U, Expr* A, Expr* B, Expr* x) {
 }
 #endif
 
+#ifdef USE_FLINT
+/* U (a PRS gcd, expanded, polynomial in x) with a spurious radical unit
+ * removed.  Over K = Q(Sqrt[2], ...) the PRS determines the gcd only up to a
+ * unit of K that integer content stripping cannot see, so a gcd that is really
+ * in Q[vars] can come back as (1 - Sqrt[2]) (1 + u).  Harmless while the
+ * coefficient-ring division refused numeric radicals (the divide-back just
+ * failed); once exact_poly_div performs it, that unit would be carried into
+ * every LCM and Together denominator built from the gcd.  If dividing U by its
+ * leading or its trailing x-coefficient -- a numeric algebraic constant,
+ * inverted exactly by exact_radical_inverse -- leaves no algebraic constant
+ * at all, the rescaled polynomial is returned; if both ends are non-rational
+ * constants, U is rescaled to trailing coefficient 1.  Either way the result is
+ * an associate of U over K, so nothing changes for a consumer working over K.
+ * Otherwise (an end is rational, or not a constant) U is kept as is.  Always a
+ * fresh expression. */
+static Expr* gcd_strip_radical_unit(Expr* U, Expr* x) {
+    int deg = get_degree_poly(U, x);
+    if (deg < 0) return expr_copy(U);
+    int lo = 0;
+    for (; lo < deg; lo++) {
+        Expr* c = get_coeff(U, x, lo);
+        bool z = is_zero_poly(c);
+        expr_free(c);
+        if (!z) break;
+    }
+    /* binv[0] = 1/lc, binv[1] = 1/tc, each NULL unless that coefficient is a
+     * non-rational numeric algebraic constant. */
+    Expr* binv[2] = { NULL, NULL };
+    int degs[2] = { deg, lo };
+    for (int k = 0; k < 2; k++) {
+        Expr* c = get_coeff(U, x, degs[k]);
+        binv[k] = exact_radical_inverse(c);
+        expr_free(c);
+    }
+    Expr* out = NULL;
+    for (int k = 0; k < 2 && !out; k++) {
+        if (!binv[k]) continue;
+        Expr* t = internal_times((Expr*[]){ expr_copy(U), expr_copy(binv[k]) }, 2);
+        Expr* V = eval_and_free(expr_expand(t));
+        expr_free(t);
+        if (!expr_has_field_constant(V)) out = V;
+        else expr_free(V);
+    }
+    /* Neither end rational: the unit is certainly not the input's, so pin the
+     * associate with constant (lowest) coefficient 1 -- the "1 + Sqrt[2] u"
+     * spelling the denominators are written in -- rather than carry
+     * (3 - 2 Sqrt[2]) (1 + Sqrt[2] u). */
+    if (!out && binv[0] && binv[1]) {
+        Expr* t = internal_times((Expr*[]){ expr_copy(U), expr_copy(binv[1]) }, 2);
+        out = eval_and_free(expr_expand(t));
+        expr_free(t);
+    }
+    if (binv[0]) expr_free(binv[0]);
+    if (binv[1]) expr_free(binv[1]);
+    return out ? out : expr_copy(U);
+}
+#endif
+
 /* Recursive multivariate gcd(A, B). `vars[k-1]` is the main variable; */
 /* coefficient gcds in K[vars[0..k-2]] are obtained by recursive       */
 /* descent. Outline:                                                   */
@@ -3141,6 +3352,16 @@ Expr* poly_gcd_internal(Expr* A, Expr* B, Expr** vars, size_t var_count) {
         Expr* Uf = gcd_root_content_fix(U, A, B, x);
         expr_free(U);
         U = Uf;
+    }
+#endif
+
+#ifdef USE_FLINT
+    /* A gcd that lies in Q[vars] but came out of the PRS scaled by a radical
+     * unit ((1 - Sqrt[2]) (1 + u)): rescale it back (see gcd_strip_radical_unit). */
+    if (g_epd_radical_unit_off == 0 && expr_has_field_constant(U) && radicals_unnested(U)) {
+        Expr* Ur = gcd_strip_radical_unit(U, x);
+        expr_free(U);
+        U = Ur;
     }
 #endif
 
@@ -6856,6 +7077,7 @@ Expr* builtin_polynomialextendedgcd(Expr* res) {
 
 void poly_init(void) {
     tc_register_unwind_counter(&g_pg_gen_depth);   /* pg_gcd_generalized re-entry */
+    tc_register_unwind_counter(&g_epd_radical_unit_off); /* exact_poly_div nested-radical gate */
     symtab_add_builtin("PolynomialQ", builtin_polynomialq);
     symtab_get_def("PolynomialQ")->attributes |= ATTR_PROTECTED;
     symtab_add_builtin("Internal`RationalFunctionQ", builtin_rationalfunctionq);

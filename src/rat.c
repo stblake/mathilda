@@ -2903,7 +2903,19 @@ static Expr* rat_prefer_smaller(Expr* plain, Expr* gen) {
 #define RAT_TOGETHER_CANCEL_MAX_DEPTH 400
 static int rat_together_cancel_depth = 0;
 
+static Expr* builtin_cancel_body(Expr* res);
+/* Bracketed by exact_poly_div's nested-radical scope (poly.h): with a nested
+ * radical in the argument, the exponent-generator and cancel passes multiply
+ * it back through the evaluator, which respells it, so the numeric-radical
+ * unit of the coefficient division stays off and the old behaviour holds. */
 Expr* builtin_cancel(Expr* res) {
+    int bump = exact_poly_div_nested_enter(res);
+    Expr* r = builtin_cancel_body(res);
+    exact_poly_div_nested_release(bump);
+    return r;
+}
+
+static Expr* builtin_cancel_body(Expr* res) {
     if (rat_together_cancel_depth >= RAT_TOGETHER_CANCEL_MAX_DEPTH)
         return expr_copy(res);
     /* A Rule, relation or logical connective threads, as in the reference
@@ -2983,7 +2995,19 @@ static bool together_has_offset_power(const Expr* e) {
     return false;
 }
 
+static Expr* builtin_together_body(Expr* res);
+/* Bracketed by exact_poly_div's nested-radical scope (poly.h): with a nested
+ * radical in the argument, the exponent-generator and cancel passes multiply
+ * it back through the evaluator, which respells it, so the numeric-radical
+ * unit of the coefficient division stays off and the old behaviour holds. */
 Expr* builtin_together(Expr* res) {
+    int bump = exact_poly_div_nested_enter(res);
+    Expr* r = builtin_together_body(res);
+    exact_poly_div_nested_release(bump);
+    return r;
+}
+
+static Expr* builtin_together_body(Expr* res) {
     if (rat_together_cancel_depth >= RAT_TOGETHER_CANCEL_MAX_DEPTH)
         return expr_copy(res);
     if (res->type == EXPR_FUNCTION && res->data.function.arg_count >= 1 &&

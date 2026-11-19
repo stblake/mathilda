@@ -173,9 +173,13 @@ Expr* exact_div_wrapper(Expr* num, Expr* den) {
      * 1./1. came back as the exact 1 -- RowReduce[{{1., 2., 1.}, {2., 4., 2.}}]
      * answered {{1.0, 2.0, 1}, ...}, a result of two heads from an input of
      * one. Falls through to the Times/Power branch below. */
+    /* The numeric-radical unit of exact_poly_div's base case is suspended
+     * here: see exact_poly_div_radical_units_suspend (poly.c). */
+    exact_poly_div_radical_units_suspend();
     Expr* res = (v_count == 0 && (matsol_is_inexact(num) || matsol_is_inexact(den)))
                     ? NULL
                     : exact_poly_div(exp_num, exp_den, vars, v_count);
+    exact_poly_div_radical_units_resume();
 
     for (size_t i = 0; i < v_count; i++) expr_free(vars[i]);
     free(vars);

@@ -63,6 +63,16 @@ Expr* poly_divide_by_scalar(Expr* poly, Expr* denom, Expr* var);
 /* True if e contains an algebraic number Power[base, p/q] with q > 1.   */
 bool subres_has_algebraic(Expr* e);
 Expr* exact_poly_div(Expr* A, Expr* B, Expr** vars, size_t var_count);
+/* exact_poly_div divides by a numeric radical constant (Sqrt[2], 1 + Sqrt[2])
+ * in its coefficient base case, except inside a computation whose input carries
+ * a nested radical.  enter(e) opens such a scope when e carries one and returns
+ * the bump to pass to release(); Together and Cancel bracket their recursion. */
+int  exact_poly_div_nested_enter(const Expr* e);
+void exact_poly_div_nested_release(int bump);
+/* Turn the numeric-radical unit off (and back on) around a caller that wants
+ * the classical division: the exact linear-algebra divider. */
+void exact_poly_div_radical_units_suspend(void);
+void exact_poly_div_radical_units_resume(void);
 Expr* poly_gcd_internal(Expr* A, Expr* B, Expr** vars, size_t var_count);
 Expr* poly_content(Expr* A, Expr** vars, size_t var_count);
 void  collect_variables(Expr* e, Expr*** vars_ptr, size_t* count, size_t* capacity);
