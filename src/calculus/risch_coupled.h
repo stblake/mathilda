@@ -53,4 +53,8 @@ bool risch_integrate_hypertangent_reduced(const Expr* p, const Expr* t,
 /* Register the coupled-system / hypertangent-reduced builtins. */
 void integrate_risch_coupled_init(void);
 
+/* How many base Risch DEs the coupled-system layer found undecided (a monotone
+ * counter; a "no" read off this layer is a theorem only if it did not move). */
+unsigned long risch_coupled_undecided_count(void);
+
 #endif /* MATHILDA_RISCH_COUPLED_H */

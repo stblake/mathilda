@@ -2563,8 +2563,39 @@ $\theta$. Before, none was decided. Under the oracle (a \code{False} is wrong on
 every Liouvillian kernel of $F$ occurs in $D[F]$) there is no false certificate. Tests:
 \code{test\_campaign\_step3b\_prim\_top}, \code{test\_campaign\_step3c\_monomial}.
 
-\section*{T13. Status of the transcendental decision}
-\addcontentsline{toc}{section}{T13. Status}
+\section*{T13. Silent declines (v0.6622)}
+\addcontentsline{toc}{section}{T13. Silent declines}
+\label{sec:T13}
+
+The completeness ratchet counts \code{rde\_cert\_mark} sites. The decision's own
+\code{UNKNOWN} exits (\code{rt\_decide\_field}, \code{rt\_decide\_tower}) had none, so 32
+undecided hunt cases were invisible to it. Each exit now names itself, and two of them
+were bugs.
+\begin{itemize}
+\item \emph{Tower order.} The level ordering compared adjacent kernels only. Containment
+  is a partial order, so a kernel separated by an unrelated level from one it contains
+  stayed below it: $e^{u\tan(1+u)}$ below $\tan(1+u)$ across an $e^u$. Its derivative
+  then named a higher level, and the tower was refused. A topological pass now runs
+  first. The tie-break swaps exchange adjacent independent levels only, so they preserve
+  it.
+\item \emph{The hypertangent ``no''.} \code{IntegrateHypertangent} returns
+  $\{g,\mathrm{False}\}$ when $f-Dg$ has no elementary integral over $k(t)$. Over
+  $k=C(x)$, with $t=\tan$ and real coefficients, each source of that is a theorem: the
+  residue criterion (Thm~5.6.1), the reduced case's coupled system (complete over
+  $C(i)(x)$ once its base Risch~DEs are the certified ones), and $Dc\neq0$ in the
+  polynomial case (\S5.10). It is now a certificate there, gated on no undecided base
+  Risch~DE in the coupled layer. Over a taller tower that layer still solves over
+  $C(x)$ only, and for $\tanh$ and over $k(i)$ the special polynomial splits (step~4),
+  so a ``no'' is marked instead.
+\end{itemize}
+The other silent cases are now named. The 27 F9 cases are a lower-layer gap:
+\code{Together} does not combine a rational function whose denominators carry
+algebraic constants under symbolic numerators, so the gate cannot read the integrand as
+rational in the tower. The fix is the exact tower arithmetic over $\Q(\alpha)$, a step-7
+follow-up.
+
+\section*{T14. Status of the transcendental decision}
+\addcontentsline{toc}{section}{T14. Status}
 
 The completeness ratchet (\code{tools/check\_bronstein\_completeness.py}) lists every
 path of the transcendental Risch~DE that can give up without a proof: 19 at v0.6609, and

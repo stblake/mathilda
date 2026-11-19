@@ -27,6 +27,7 @@
 #include "risch_field.h"
 #include "risch_hermite.h"
 #include "risch_canonical.h"
+#include "risch_coupled.h"     /* risch_coupled_undecided_count */
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -1152,8 +1153,10 @@ static Expr* rt_int_hypertangent_field(Expr* Fg, RtTower* T, long L, Expr* x) {
 
     const char* driver = (T->tsg[L] > 0) ? "Risch`IntegrateHypertangent"
                                          : "Risch`IntegrateHypertanh";
+    unsigned long und0 = risch_coupled_undecided_count();
     Expr* res = rt_eval_call(driver,
         (Expr*[]){ expr_copy(Fg), expr_copy(T->t[L]), expr_copy(deriv) }, 3);
+    bool und = risch_coupled_undecided_count() != und0;   /* a coupled-system RDE undecided */
     Expr* result = NULL;
     if (res && rt_head_is(res, "List") && res->data.function.arg_count == 2
         && rt_is_true(res->data.function.args[1])) {
@@ -1173,8 +1176,21 @@ static Expr* rt_int_hypertangent_field(Expr* Fg, RtTower* T, long L, Expr* x) {
                 result = rt_eval_own(expr_new_function(expr_new_symbol("Plus"),
                     (Expr*[]){ expr_copy(g), ib }, 2));
         }
+        if (base && !rt_free_of_x(base, T->t[L]))
+            rde_cert_mark("hypertangent top: the driver's remainder is not in k");
         if (base) expr_free(base);
-    }
+    } else if (res && rt_head_is(res, "List") && res->data.function.arg_count == 2) {
+        /* beta False: "f - D[g] has no elementary integral over k(t)".  Every
+         * source of it is a theorem when k = C(x): the residue criterion, the
+         * reduced case's coupled system (solved by the complete base-field RDE
+         * over C(i)(x)), the polynomial case's D c != 0.  Over a taller tower
+         * the coupled system is still solved over C(x) only, so a "no" there
+         * is not a proof; nor is one for Tanh, or over k(i), where the special
+         * polynomial splits (campaign step 4).  It used to be dropped silently
+         * (a silent decline of the decision, f8 hunt 2026-11-19). */
+        if (L == 0 && T->tsg[L] > 0 && rt_free_of_head(Fg, "Complex") && !und) rt_dec_nonelem();
+        else rde_cert_mark("hypertangent top: IntegrateHypertangent's no over a tower, Tanh, or k(i)");
+    } else rde_cert_mark("hypertangent top: the driver did not evaluate");
     if (res) expr_free(res);
     expr_free(deriv);
     return result;

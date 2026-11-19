@@ -32,7 +32,10 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 M_GLOBS = ["src/internal/bronstein/*.m", "src/internal/trager/*.m"]
-C_FILES = ["src/calculus/integrate_risch_rde.c", "src/calculus/risch_field_integrate.c"]
+C_FILES = ["src/calculus/integrate_risch_rde.c", "src/calculus/risch_field_integrate.c",
+           # the decision's own UNKNOWN exits (marked since 2026-11-19, so a
+           # silent decline of Risch`ElementaryIntegralQ is counted here too)
+           "src/calculus/integrate_risch_transcendental.c"]
 
 # In-scope branches not implemented yet (site ids of throwUnimplemented).
 BASELINE_M = {
@@ -159,6 +162,30 @@ BASELINE_C = {
     # (NoCancel2/3 and CancelTan's re/im split, where rc_conj takes every symbol,
     # the unknowns too, as real); step 4/5 splits the unknowns into re/im parts
     "parametric: hypertangent top",
+    # The decision's UNKNOWN exits (rt_decide_field / rt_decide_tower), silent
+    # until 2026-11-19 (32 of the hunts' undecided cases carried no mark at all):
+    # Together does not combine a rational function over algebraic constants
+    # with symbolic numerators (b/(Sqrt[2] + 2 u) + a/(1 + Sqrt[2] u) stays a
+    # sum), so the gate cannot read F as rational in the tower; the fix is the
+    # exact tower arithmetic over Q(alpha) (step-7 follow-up)
+    "decide: integrand not rational in the tower",
+    # kernel shapes the tower builder does not form
+    "decide: tower could not be built",
+    # no antiderivative and no proof; when it is the only mark, a decline inside
+    # the field integrator without its own mark (to be traced case by case)
+    "decide: field integrator gave no verdict",
+    # the builder's dependence flag (composite exponential classes it does not
+    # rewrite); the decision then gives no certificate, as for the RDE
+    "decide: dependent monomials",
+    # step 3c: Int eta elementary or undecided below a primitive level
+    "decide: Liouvillian level not proved a monomial",
+    # a constant field beyond Q(i)(params, Pi): Log[2], E, EulerGamma, ... with a
+    # tower log that can interact with it (T3, T12)
+    "decide: transcendental constant",
+    # a hypertangent "no" is a theorem only over k = C(x), real, Tan: over a taller
+    # tower the driver solves its coupled system over C(x) only; Tanh and k(i) are
+    # the split special part (steps 4, 5)
+    "hypertangent top: IntegrateHypertangent's no over a tower, Tanh, or k(i)",
 }
 
 # rde_cert_mark reasons that are permanent: a computation the CAS could not do,
@@ -201,6 +228,19 @@ CAS_FAILURE_MARKS = {
     "tower: kernels left after substitution",
     # the canonical split of a well-formed tower element does not fail
     "LimitedIntegrate(prim): Laurent coefficient not extracted",
+    # outside the transcendental decision's scope: an algebraic function of x is
+    # the algebraic integrator's (Trager / Bronstein package), not this one's
+    "decide: algebraic function of x",
+    # Risch`RischDECertified / ParametricRischDE input gate: f, g outside C(x) with
+    # no tower kernel (an input outside the solver's scope)
+    "base: coefficients not rational in x",
+    # a rewrite, zero test or polynomial primitive that did not evaluate
+    "decide: kernels left after substitution",
+    "decide: antiderivative not verified",
+    "decide: a polynomial primitive did not evaluate",
+    # the hypertangent driver is total on a well-formed k(t) element; defensive
+    "hypertangent top: the driver did not evaluate",
+    "hypertangent top: the driver's remainder is not in k",
 }
 
 

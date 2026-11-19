@@ -104,12 +104,23 @@ static Expr* rc_divexact_gaussian_t(const Expr* a, const Expr* b, const Expr* t)
 /* Solve D[y] + f y = g over C(x) (possibly Gaussian) via the Risch`RischDE
  * builtin.  Returns owned y, or NULL when there is no rational solution (the
  * builtin bubbles back unevaluated). */
+/* Undecided base Risch DEs met by the coupled system (monotone counter): a
+ * "no" of IntegrateHypertangent is a theorem only when none was met
+ * (rt_int_hypertangent_field reads it around the driver call). */
+static unsigned long g_rc_rischde_undecided = 0;
+unsigned long risch_coupled_undecided_count(void) { return g_rc_rischde_undecided; }
+
 static Expr* rc_rischde(const Expr* f, const Expr* g, const Expr* x) {
-    Expr* y = rc_call3("Risch`RischDE", rc_cp(f), rc_cp(g), rc_cp(x));
-    if (y && y->type == EXPR_FUNCTION && y->data.function.head->type == EXPR_SYMBOL
-        && y->data.function.head->data.symbol.name == intern_symbol("Risch`RischDE")) {
-        expr_free(y);
-        return NULL;                               /* unevaluated => no solution */
+    /* the certified solver: Risch`RischDE stays unevaluated both for "no
+     * solution" and for an undecided sub-case, so its NULL was no proof */
+    Expr* y = rc_call3("Risch`RischDECertified", rc_cp(f), rc_cp(g), rc_cp(x));
+    if (!y || (y->type == EXPR_STRING) || (y->type == EXPR_SYMBOL)
+        || (y->type == EXPR_FUNCTION && y->data.function.head->type == EXPR_SYMBOL
+            && y->data.function.head->data.symbol.name == intern_symbol("Risch`RischDECertified"))) {
+        bool proved = y && y->type == EXPR_STRING;  /* "NoSolution" */
+        if (!proved) g_rc_rischde_undecided++;     /* $Failed or unevaluated */
+        if (y) expr_free(y);
+        return NULL;
     }
     return y;
 }

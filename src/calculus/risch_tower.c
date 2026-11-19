@@ -543,6 +543,8 @@ static bool rt_tower_build_core(Expr* f, Expr* x, RtTower* T, size_t min_n,
     for (size_t rep = 0; rep < ne; rep++) if (clsrep[rep] == (long)rep && !elim[rep]) np++;
     size_t n = nl + np + nt + npr;
     if (!okc || n < min_n) {                         /* no upper depth cap */
+        if (getenv("MATHILDA_RDE_CERT_DEBUG"))
+            fprintf(stderr, "[rt-tower] not built: %s (n=%zu)\n", okc ? "fewer kernels than min_n" : "kernel collection failed", n);
         for (size_t rep = 0; rep < ne; rep++) if (clsprim[rep]) expr_free(clsprim[rep]);
         free(clsprim); free(clsrep); free(multof); free(mprim_pexp);
         for (size_t rep = 0; rep < ne; rep++) free(ccoef[rep]);
@@ -626,6 +628,30 @@ static bool rt_tower_build_core(Expr* f, Expr* x, RtTower* T, size_t min_n,
      * tangent kernel's own coefficient lies in C(x) (free of logs), so it can
      * always be pushed deeper.  When the LOG is genuinely nested inside the
      * EXP/TAN argument the rt_contains test above keeps the correct order. */
+    /* Containment first, as a topological order: every kernel above every
+     * kernel it contains.  The bubble below compares ADJACENT pairs only, and
+     * containment is not a total order, so a kernel separated from one it
+     * contains by an unrelated level never moved past it: E^(u Tan[1 + u])
+     * stayed below Tan[1 + u] across an E^u, its Dcoef then named a higher
+     * level, and the tower was refused (a silent decline of the decision,
+     * found by the f8 hunt, 2026-11-19).  From a topological order, the
+     * bubble's swaps of adjacent INDEPENDENT pairs keep it topological. */
+    for (bool moved = true; moved; ) {
+        moved = false;
+        for (size_t i = 0; i < n && !moved; i++)
+            for (size_t j = i + 1; j < n && !moved; j++) {
+                if (!rt_contains(T->kernel[i], T->kernel[j])) continue;
+                /* rotate level j down to position i */
+                RtKind kk = T->kind[j]; long sg = T->tsg[j];
+                Expr* kj = T->kernel[j]; Expr* aj = T->arg[j];
+                for (size_t m = j; m > i; m--) {
+                    T->kind[m] = T->kind[m - 1]; T->tsg[m] = T->tsg[m - 1];
+                    T->kernel[m] = T->kernel[m - 1]; T->arg[m] = T->arg[m - 1];
+                }
+                T->kind[i] = kk; T->tsg[i] = sg; T->kernel[i] = kj; T->arg[i] = aj;
+                moved = true;
+            }
+    }
     for (size_t pass = 0; pass < n; pass++)
         for (size_t i = 0; i + 1 < n; i++) {
             bool swap = false;
@@ -829,6 +855,11 @@ static bool rt_tower_build_core(Expr* f, Expr* x, RtTower* T, size_t min_n,
         if (rt_find_exp_of_x(ds, x) != NULL || rt_find_log_of_x(ds, x) != NULL) ok = false;
         for (size_t j = i; j < n && ok; j++)
             if (!rt_free_of_x(ds, T->t[j])) ok = false;
+        if (!ok && getenv("MATHILDA_RDE_CERT_DEBUG")) {
+            char* a = expr_to_string(T->kernel[i]); char* b = expr_to_string(ds);
+            fprintf(stderr, "[rt-tower] not built: level %zu %s has Dcoef %.300s outside the levels below\n", i, a, b);
+            free(a); free(b);
+        }
     }
     /* Algebraic independence of the Log/Exp monomials (Risch structure
      * theorem, Bronstein Thm 9.3.x): E^w_i or Log[u_i] is a new monomial over

@@ -1804,6 +1804,29 @@ static void test_campaign_step3c_monomial(void) {
     assert_eval_eq("Risch`RischDECertified[0, Erf[x]/x, x]; Risch`RischDECertifiedReason[]", "None", 0);
 }
 
+/* Silent declines (2026-11-19): every UNKNOWN exit of the decision is marked
+ * now, and two of them were bugs.  (1) Tower order: the ordering bubble
+ * compared adjacent levels only, so E^(u Tan[1 + u]) stayed below Tan[1 + u]
+ * across an unrelated level and the tower was refused.  (2) The hypertangent
+ * driver's "no" over k = C(x) is a theorem and was dropped. */
+static void test_campaign_silent_declines(void) {
+    const char* cases[][2] = {
+        /* f8 hunt (seeds 801-803), D[F] for F in a tower with E^(u Tan[v])
+         * above Tan[v] across an unrelated level */
+        { "-E^(u + u*Tan[u^2]) + E^(2*u)*Cot[u^2] + 2*E^(2*u)*u*Cot[u^2] - 2*E^(2*u)*u^2*Csc[u^2]^2 - E^(u + u*Tan[u^2])*u*(1 + 2*u^2*Sec[u^2]^2 + Tan[u^2])", "True" },
+        { "-((E^(u*Tan[1 + u])*Sec[1 + u]^2)/(1 + Tan[1 + u])^2) + (E^(u*Tan[1 + u])*(u*Sec[1 + u]^2 + Tan[1 + u]))/(1 + Tan[1 + u]) - (E^u*Sec[1 + u]^2*Tan[1 + u])/((1 + u)*(1 + Tan[1 + u]^2)^2) - E^u/(2*(1 + u)^2*(1 + Tan[1 + u]^2)) + E^u/(2*(1 + u)*(1 + Tan[1 + u]^2))", "True" },
+        /* the residue 4 u/(u^2 + 2) at Tan[u] = -u is not constant */
+        { "(1 + Tan[u]^2/u^2)^2/(1 + Tan[u]/u)", "False" } };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        char buf[1200];
+        snprintf(buf, sizeof buf, "Quiet[Risch`ElementaryIntegralQ[%s, u]]", cases[i][0]);
+        assert_eval_eq(buf, cases[i][1], 0);
+    }
+    /* the integrator uses the same tower */
+    assert_eval_eq("With[{f = -E^(u + u*Tan[u^2]) + E^(2*u)*Cot[u^2] + 2*E^(2*u)*u*Cot[u^2] - 2*E^(2*u)*u^2*Csc[u^2]^2 - E^(u + u*Tan[u^2])*u*(1 + 2*u^2*Sec[u^2]^2 + Tan[u^2])}, With[{F = Integrate[f, u]},"
+                   " FreeQ[F, Integrate] && PossibleZeroQ[D[F, u] - f]]]", "True", 0);
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -1919,6 +1942,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_campaign_step3a_param_rde);
     TEST(test_campaign_step3b_prim_top);
     TEST(test_campaign_step3c_monomial);
+    TEST(test_campaign_silent_declines);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }

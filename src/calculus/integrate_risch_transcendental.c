@@ -652,7 +652,7 @@ static RtDecision rt_decide_field(Expr* f, Expr* x) {
      * decision procedure over — decline to UNKNOWN rather than emit an unsound
      * certificate.  Checked on the ORIGINAL f (Sqrt[x] survives inside Cos[Sqrt[x]]
      * and E^Sqrt[x] alike), before exponentialization. */
-    if (rt_has_algebraic_of_x(f, x)) return RT_DEC_UNKNOWN;
+    if (rt_has_algebraic_of_x(f, x)) { rde_cert_mark("decide: algebraic function of x"); return RT_DEC_UNKNOWN; }
     Expr* fc = rt_canon_log_args(f, x);       /* canonical log arguments: see the helper */
     RtDecision vc = rt_decide_field_canon(fc, x);
     /* a transcendental constant (Log[2], also one rt_canon_log_args split off
@@ -660,8 +660,10 @@ static RtDecision rt_decide_field(Expr* f, Expr* x) {
      * not a proof (rt_has_transcendental_constant) */
     if (vc == RT_DEC_NONELEMENTARY &&
         (rt_has_transcendental_constant(f, x) || rt_has_transcendental_constant(fc, x))
-        && !rt_pi_is_a_parameter(f, x))
+        && !rt_pi_is_a_parameter(f, x)) {
         vc = RT_DEC_UNKNOWN;
+        rde_cert_mark("decide: transcendental constant");
+    }
     expr_free(fc);
     return vc;
 }
@@ -716,7 +718,13 @@ static RtDecision rt_decide_tower(Expr* fx, Expr* x, bool tan_route) {
     /* min_n = 1: the decision routes SINGLE-kernel integrands (E^x/x, E^(x^2),
      * 1/Log[x]) through the same authoritative field integrator too — the flat-tower
      * integrate cases that normally serve n=1 do not carry the decision certificates. */
-    if (!rt_tower_build_decide(fx, x, &T, 1)) { rt_tower_free(&T); return RT_DEC_UNKNOWN; }
+    /* every UNKNOWN exit below is marked (the real-tangent attempt excepted: it
+     * falls back to the exponential route), so a silent decline is visible to
+     * tools/check_bronstein_completeness.py and to the hunts' mark sets */
+    if (!rt_tower_build_decide(fx, x, &T, 1)) {
+        if (!tan_route) rde_cert_mark("decide: tower could not be built");
+        rt_tower_free(&T); return RT_DEC_UNKNOWN;
+    }
     if (tan_route) {
         size_t ntan = 0; bool scope = true;
         for (size_t i = 0; i < T.n; i++) {
@@ -743,6 +751,14 @@ static RtDecision rt_decide_tower(Expr* fx, Expr* x, bool tan_route) {
         expr_free(vlist);
         if (num) expr_free(num);
         if (den) expr_free(den);
+        if (!gate && !tan_route) {
+            if (getenv("MATHILDA_RDE_CERT_DEBUG")) {
+                char* a1 = expr_to_string(F);
+                fprintf(stderr, "[rt-decide-gate] F=%.600s\n", a1);
+                free(a1);
+            }
+            rde_cert_mark("decide: integrand not rational in the tower");
+        }
         if (gate) {
             int        save_mode = g_rt_decide_mode;
             RtDecision save_dec  = g_rt_decision;
@@ -769,10 +785,14 @@ static RtDecision rt_decide_tower(Expr* fx, Expr* x, bool tan_route) {
                         Q, false);
                 }
                 verdict = okq ? RT_DEC_ELEMENTARY : RT_DEC_UNKNOWN;
+                if (!okq) rde_cert_mark("decide: antiderivative not verified");
             }
             else if (Q && rem)                           verdict = RT_DEC_NONELEMENTARY;
             else if (g_rt_decision == RT_DEC_NONELEMENTARY) verdict = RT_DEC_NONELEMENTARY;
-            else                                         verdict = RT_DEC_UNKNOWN;
+            else {
+                verdict = RT_DEC_UNKNOWN;
+                rde_cert_mark("decide: field integrator gave no verdict");
+            }
             /* A certificate reached through an unevaluated polynomial primitive
              * (PolynomialGCD over a coefficient ring no engine covered) proves
              * nothing: the algorithm computed with an unevaluated head as if it
@@ -781,11 +801,15 @@ static RtDecision rt_decide_tower(Expr* fx, Expr* x, bool tan_route) {
                 fprintf(stderr, "[rt-decide] Q=%d rem=%d dec=%d verdict=%d prim=%lu dep=%d\n",
                         Q != NULL, rem != NULL, (int)g_rt_decision, (int)verdict,
                         g_rt_prim_unevaluated - prim0, (int)T.dependent);
-            if (verdict == RT_DEC_NONELEMENTARY && g_rt_prim_unevaluated != prim0)
+            if (verdict == RT_DEC_NONELEMENTARY && g_rt_prim_unevaluated != prim0) {
                 verdict = RT_DEC_UNKNOWN;
+                rde_cert_mark("decide: a polynomial primitive did not evaluate");
+            }
             /* a certificate presupposes algebraically independent monomials */
-            if (verdict == RT_DEC_NONELEMENTARY && T.dependent)
+            if (verdict == RT_DEC_NONELEMENTARY && T.dependent) {
                 verdict = RT_DEC_UNKNOWN;
+                rde_cert_mark("decide: dependent monomials");
+            }
             /* ... and a Liouvillian primitive level (Erf, Ei, li) is never checked
              * for independence (Erfc = 1 - Erf, LogIntegral[u] = Ei[Log[u]]), and the
              * field integrator models it as an exponential: E^u (Erf[u] + Erfc[u])
@@ -798,7 +822,10 @@ static RtDecision rt_decide_tower(Expr* fx, Expr* x, bool tan_route) {
             if (verdict == RT_DEC_NONELEMENTARY) {
                 bool anyprim = false;
                 for (size_t i = 0; i < T.n; i++) if (T.kind[i] == RT_PRIM) anyprim = true;
-                if (anyprim && rt_tower_prims_certified(&T, x) != 1) verdict = RT_DEC_UNKNOWN;
+                if (anyprim && rt_tower_prims_certified(&T, x) != 1) {
+                    verdict = RT_DEC_UNKNOWN;
+                    rde_cert_mark("decide: Liouvillian level not proved a monomial");
+                }
             }
             if (Q) expr_free(Q);
             if (rem) expr_free(rem);
@@ -806,6 +833,7 @@ static RtDecision rt_decide_tower(Expr* fx, Expr* x, bool tan_route) {
             g_rt_decision    = save_dec;
         }
     }
+    else if (!tan_route) rde_cert_mark("decide: kernels left after substitution");
     if (F) expr_free(F);
     rt_tower_free(&T);
     return verdict;
