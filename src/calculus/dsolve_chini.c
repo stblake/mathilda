@@ -55,6 +55,34 @@ static Expr* chini_root(const Expr* f, const Expr* nm1) {
     return r0;
 }
 
+/* The reduced equation u' = u^n + B u + C is autonomous when B and C are free
+ * of x in the ds_free_of sense: D[., x] == 0, which admits a coefficient that
+ * is only LOCALLY constant, e.g. C = x/Sqrt[x^2] (a sign, constant on each
+ * half-line).  Integrating 1/(u^n + B u + C) in u with such a C in place is
+ * unsound for the first integral: the antiderivative is determined only up to
+ * a u-free term, and the integrator is free to choose one that is a genuine
+ * function of x -- Integrate[1/(u^3 + x/Sqrt[x^2]), u] returns
+ * -Log[x + u^2 x - u Sqrt[x^2]]/6, i.e. Log[x (1 - c u + u^2)], whose extra
+ * Log[x] is constant in u but not in x, so Xi(u) - x is no first integral
+ * (issue #137: residual -1/(6x)).  So a coefficient that mentions x
+ * syntactically is abstracted into the fresh constant symbol `sym` for the
+ * quadrature and restored afterwards; every u-free term the integrator then
+ * adds is a function of the constants alone, hence locally constant in x.
+ * Returns the expression to put in the integrand (coef itself, or the symbol)
+ * and sets *restore to coef (to substitute back) or NULL.  coef consumed. */
+static Expr* chini_abstract_coef(Expr* coef, const char* sym, const char* xvar,
+                                 Expr** restore) {
+    if (!ds_contains(coef, xvar)) { *restore = NULL; return coef; }
+    *restore = coef;
+    return expr_new_symbol(intern_symbol(sym));
+}
+
+/* Undo chini_abstract_coef on Xi: Xi /. sym -> coef.  Xi, coef consumed. */
+static Expr* chini_restore_coef(Expr* Xi, const char* sym, Expr* coef) {
+    if (!coef) return Xi;
+    return ds_subst(Xi, expr_new_symbol(intern_symbol(sym)), coef);
+}
+
 /* Reduction (a) — reduce to autonomous.  The scaling y = f^(-1/(n-1)) u makes
  * the y^n coefficient 1, giving u' = u^n + B u + C with B = g + f'/((n-1) f),
  * C = h f^(1/(n-1)); when B, C are free of x this is autonomous (separable) and
@@ -79,6 +107,11 @@ static Expr* chini_reduce_autonomous(const Expr* f, const Expr* g, const Expr* h
     expr_free(fpow);
     if (!ds_free_of(Cc, xvar)) { expr_free(Cc); expr_free(Bc); expr_free(u_expr); return NULL; }
 
+    /* Abstract an x-carrying (locally constant) B or C for the quadrature. */
+    Expr *Brest, *Crest;
+    Bc = chini_abstract_coef(Bc, "DSolve`chiB", xvar, &Brest);
+    Cc = chini_abstract_coef(Cc, "DSolve`chiC", xvar, &Crest);
+
     /* denom = u^n + B u + C  (in dummy symbol u) */
     const char* uSym = intern_symbol("DSolve`chiU");
     Expr* denom = eval_and_free(ds_call2(SYM_Plus,
@@ -91,7 +124,14 @@ static Expr* chini_reduce_autonomous(const Expr* f, const Expr* g, const Expr* h
     g_integrate_quiet++;
     Expr* Xi = ds_integrate(powneg1(denom), expr_new_symbol(uSym));
     g_integrate_quiet--;
-    if (ds_has_head(Xi, SYM_Integrate)) { expr_free(Xi); expr_free(u_expr); return NULL; }
+    if (ds_has_head(Xi, SYM_Integrate)) {
+        expr_free(Xi); expr_free(u_expr);
+        if (Brest) expr_free(Brest);
+        if (Crest) expr_free(Crest);
+        return NULL;
+    }
+    Xi = chini_restore_coef(Xi, "DSolve`chiB", Brest);
+    Xi = chini_restore_coef(Xi, "DSolve`chiC", Crest);
 
     /* G = (Xi /. u -> u_expr) - x.  NOT ds_simplify'd: Simplify chokes (hangs) on
      * a composed Log/ArcTan with radical arguments (e.g. Sqrt[x] (y+1)), and the
@@ -132,7 +172,9 @@ static Expr* chini_reduce_linremoval(const Expr* f, const Expr* g, const Expr* h
     Expr* w_expr = eval_and_free(ds_call2(SYM_Times, expr_copy((Expr*)yvar_expr), expr_copy(muinv)));
     expr_free(mu); expr_free(muinv);
 
-    /* Xi = Integrate[1/(u^n + c), u] */
+    /* Xi = Integrate[1/(u^n + c), u]  (an x-carrying c abstracted, as in (a)) */
+    Expr* crest;
+    c = chini_abstract_coef(c, "DSolve`chiC", xvar, &crest);
     const char* uSym = intern_symbol("DSolve`chiU");
     Expr* denom = eval_and_free(ds_call2(SYM_Plus,
         eval_and_free(ds_call2(SYM_Power, expr_new_symbol(uSym), expr_copy((Expr*)nexp))),
@@ -140,7 +182,12 @@ static Expr* chini_reduce_linremoval(const Expr* f, const Expr* g, const Expr* h
     g_integrate_quiet++;
     Expr* Xi = ds_integrate(powneg1(denom), expr_new_symbol(uSym));
     g_integrate_quiet--;
-    if (ds_has_head(Xi, SYM_Integrate)) { expr_free(Xi); expr_free(w_expr); expr_free(Pc); return NULL; }
+    if (ds_has_head(Xi, SYM_Integrate)) {
+        expr_free(Xi); expr_free(w_expr); expr_free(Pc);
+        if (crest) expr_free(crest);
+        return NULL;
+    }
+    Xi = chini_restore_coef(Xi, "DSolve`chiC", crest);
 
     /* Rhs = Integrate[P, x] */
     g_integrate_quiet++;

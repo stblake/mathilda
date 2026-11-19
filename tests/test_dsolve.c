@@ -2203,6 +2203,17 @@ static void t_method_chini(void) {
     check_implicit("x^2 y[x]^3 - y[x]/x + 1/x");
     check_true("Head[DSolve`Chini[y'[x] == x^2 y[x]^3 - y[x]/x + 1/x, y, x][[1,1]]] === Equal");
 }
+/* Issue #137: a LOCALLY constant reduced coefficient.  With h = 1/Sqrt[x^2] the
+ * reduction gives C = x/Sqrt[x^2] (a sign); integrating 1/(u^3 + C) in u with
+ * that C in place let the integrator fold a factor x into the Log (constant in
+ * u, not in x), leaving a residual of -1/(6x).  Both reductions, auto + pinned. */
+static void t_chini_locally_constant_coef(void) {
+    check_implicit("x^2 y[x]^3 - y[x]/x + 1/Sqrt[x^2]");
+    check_implicit("x^2 y[x]^3 - y[x]/x - 1/Sqrt[x^2]");
+    check_pinned_implicit("DSolve`Chini", "x^2 y[x]^3 - y[x]/x + 1/Sqrt[x^2]");
+    /* reduction (b): c = R/P = -x/Sqrt[x^2] */
+    check_pinned_implicit("DSolve`Chini", "x E^(2 x) y[x]^3 - y[x] - Sqrt[x^2] E^-x");
+}
 static void t_chini_more(void) {
     /* n=4: f=x^3 -> f^(1/3)=x, u'=u^4+1 */
     check_implicit("x^3 y[x]^4 - y[x]/x + 1/x");
@@ -4036,6 +4047,7 @@ int main(void) {
     TEST(t_ivp_riccati);
     TEST(t_method_chini);
     TEST(t_chini_more);
+    TEST(t_chini_locally_constant_coef);
     TEST(t_chini_linremoval);
     TEST(t_method_abel);
     TEST(t_method_lie);

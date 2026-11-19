@@ -88,11 +88,11 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
           min must be a real >= 0, max a positive real or Infinity, and min <= max, else
           `::precset` and roll back.
         - Docstrings for both, the expression-information spec, corpus incl. Block.
-- [ ] Pre-existing (found 2026-11-17 while triaging the nightly tier; present at v0.6597 too):
-  - [ ] (issue #137) DSolve Chini branch returns a wrong implicit solution for
+- [x] Pre-existing (found 2026-11-17 while triaging the nightly tier; present at v0.6597 too):
+  - [x] (issue #137, fixed v0.6619: a locally constant reduced coefficient is abstracted for the u-quadrature) DSolve Chini branch returns a wrong implicit solution for
         `y' == x^2 y^3 - (1/x) y + 1/x` (dsolve_stress t_stress_chini): the back-substituted
         residual is exactly `-1/(6x)`, so `PossibleZeroQ` False is correct.
-  - [ ] (issue #138) `PossibleZeroQ[SeriesData[x, 0, {}, 5, 5, 1]]` (an empty `O[x]^5` residual) is False,
+  - [x] (issue #138, the test was wrong: PossibleZeroQ[O[x]^5] is False in the reference too; the check now tests Normal of the residual) `PossibleZeroQ[SeriesData[x, 0, {}, 5, 5, 1]]` (an empty `O[x]^5` residual) is False,
         which fails dsolve_m5's PowerSeries back-substitution checks (`y'' + y == 0`).
 - [x] Phase 9 (user request 2026-11-17, after this campaign): adapt Kahan's PARANOIA
       (C version, people.math.sc.edu/Burkardt/c_src/paranoia/paranoia.html) to Mathilda, in
@@ -110,7 +110,8 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
   - [x] F2 follow-up: Integers Solve `si_verify` `_si` arithmetic to 64-bit, then widen the solver guards;
         classify the ~250 arithmetic `_si`/`_ui` calls with int64 operands; `mpq_set_si` (~24)
         (src/expr_gmp64.c helpers; 157 at-risk sites fixed, 133 classified safe; tests/test_gmp64_llp64.c)
-  - [ ] Known slow, out of scope: `N[Binomial[10^8, 1/2], 30]` builds the exact Pi-rational first
+  - [x] Known slow: `N[Binomial[10^8, 1/2], 30]` builds the exact Pi-rational first (as the reference does;
+        the quadratic half-integer factorial under it fixed v0.6618: 10^6 96 s -> 0.4 s, 10^7 7.7 s)
 - [x] Phase 8. Prevention: a `make check-machine-boundary` gate. Probe every numeric head with
       an NDArray kernel or a Compile lowering at the boundary inputs (+-1.*^308 * 10,
       1.*^-200 * 1.*^-200, 2.^-1074, -0., huge exact scalars) over scalar / List / packed /
@@ -163,8 +164,12 @@ significance arithmetic (see memory `feedback_no_significance_arithmetic`).
   - [x] huge `mpz_pow_ui` exponents: three Power sites aborted the process; guarded (Overflow[] /
         Underflow[]); solveint_exp's enumeration declines powers past 2^26 bits
   - [x] found on the way: `Exp[10.^10]` printed General::ovfl 5x (P3's message, per probe pass)
-  - [ ] still open, seen on the way: NumericQ[Overflow[]] / ordering of the surrogates;
-        `N[LogGamma[10^6]]` 19 s (issue #139); issues #137 / #138 (DSolve) stand as filed
+  - [x] seen on the way, all fixed (design note R7-R10): NumericQ[Overflow[]] / ordering of the
+        surrogates and their comparisons (v0.6618); `N[LogGamma[10^6]]` 19 s (issue #139) and
+        `N[Binomial[10^6, 1/2], 30]` 96 s (v0.6618); issues #137 (v0.6619) / #138 (test fix)
+  - [ ] new, pre-existing (found fixing #137): dsolve_stress `t_stress_linsys_varcoeff`, the system
+        `y' == z/x, z' == -y/x` returns a solution in `Log[Sqrt[x^2]]` / `E^Arg[x]` that fails its own
+        check; same output at v0.6617
 
 # Bronstein integration campaign (started 2026-11-12)
 
