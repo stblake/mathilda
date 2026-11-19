@@ -549,6 +549,76 @@ static int cmp_exact_order(const Expr* a, const Expr* b, int* out) {
  *                      nearly-equal or unequal verdict with the exact zero test. */
 enum { CMP_CERT_EXACT = 0, CMP_CERT_TOLERANT = 1, CMP_CERT_MACHINE = 2 };
 
+/* ---- Overflow[] and Underflow[] against numbers ---------------------------
+ * Both are NumericQ (as in the reference), so without this the generic paths
+ * numericalised Underflow[] to 0. and decided Underflow[] == 0 True and
+ * Underflow[] > 0 False. Underflow[] is a nonzero magnitude below the least
+ * positive MPFR number, with a sign (D5); Overflow[] is a magnitude past the
+ * largest, with NO sign. So:
+ *   +-Underflow[] against a real number x whose magnitude is in range: the
+ *     order of +-0 against x, with 0 itself strictly between -Underflow[] and
+ *     Underflow[]; never equal;
+ *   Overflow[] against any finite number: unequal, and unordered (no sign);
+ *   two surrogates of the same kind: undecided (two unknown values).
+ * An exact x too small to represent (1/10^(10^10)) is undecided. */
+
+/* 2 Overflow[], 1 Underflow[], -1 -Underflow[], 0 neither. */
+static int cmp_surrogate(const Expr* e) {
+    if (numeric_is_range_surrogate(e))
+        return e->data.function.head->data.symbol.name == SYM_Overflow ? 2 : 1;
+    if (e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Times
+        && e->data.function.args[0]->type == EXPR_INTEGER
+        && e->data.function.args[0]->data.integer == -1
+        && numeric_is_underflow_expr(e->data.function.args[1]))
+        return -1;
+    return 0;
+}
+
+/* x a real numeric quantity whose magnitude is 0 or inside MPFR's range:
+ * *sgn its sign. False when x is complex, symbolic, a surrogate, or an exact
+ * value past the range (its numericalisation is itself a surrogate). */
+static bool cmp_ranged_real(const Expr* x, int* sgn) {
+    if (cmp_surrogate(x) || !expr_is_numeric_quantity(x)) return false;
+    Expr* v = numericalize(x, numeric_machine_spec());
+    bool ok = false;
+    if (v && v->type == EXPR_REAL && isfinite(v->data.real)) {
+        *sgn = (v->data.real > 0) - (v->data.real < 0); ok = true;
+    }
+#ifdef USE_MPFR
+    else if (v && v->type == EXPR_MPFR && mpfr_number_p(v->data.mpfr)) {
+        *sgn = mpfr_sgn(v->data.mpfr); ok = true;
+    }
+#endif
+    if (v) expr_free(v);
+    return ok;
+}
+
+/* The order of a against b when either is a surrogate: true with *out set
+ * when decided, false (undecided) otherwise; *handled says a surrogate was
+ * involved at all. */
+static bool cmp_surrogate_order(const Expr* a, const Expr* b, bool* handled, int* out) {
+    int sa = cmp_surrogate(a), sb = cmp_surrogate(b);
+    *handled = sa || sb;
+    if (!*handled || sa == 2 || sb == 2) return false;
+    if (sa && sb) {
+        if (sa == sb) return false;
+        *out = sa > sb ? 1 : -1;
+        return true;
+    }
+    int s, su = sa ? sa : sb;
+    if (!cmp_ranged_real(sa ? b : a, &s)) return false;
+    int c = s == 0 ? su : (s > 0 ? -1 : 1);       /* the surrogate against x */
+    *out = sa ? c : -c;
+    return true;
+}
+
+/* Equal for a pair with a surrogate: ASSOC_EQ_FALSE when provably unequal,
+ * ASSOC_EQ_UNKNOWN when undecided, ASSOC_EQ_NA when no surrogate. Defined
+ * below equal_pair_decide's verdict codes. */
+static int cmp_surrogate_equal(const Expr* a, const Expr* b);
+
 static int compare_numeric_ex(Expr* a, Expr* b, bool* can_compare, int* cert);
 
 static int compare_numeric(Expr* a, Expr* b, bool* can_compare) {
@@ -584,6 +654,12 @@ static int compare_numeric_ex(Expr* a, Expr* b, bool* can_compare, int* cert) {
             *can_compare = true;
             return ia ? ia : -ib;
         }
+    }
+
+    {
+        bool handled; int c;
+        if (cmp_surrogate_order(a, b, &handled, &c)) { *can_compare = true; return c; }
+        if (handled) return 0;
     }
 
     /* Interval vs scalar: decide only when the interval lies entirely on one
@@ -1111,10 +1187,24 @@ static bool chain_has_unequal_inexact_pair(Expr* const* v, size_t n, size_t stri
  *     quantities closer than MPFR resolves): two raw data are unequal; two
  *     closed-form numeric quantities are decided by the exact zero test,
  *     UNKNOWN when it cannot. */
+static int cmp_surrogate_equal(const Expr* a, const Expr* b) {
+    int sa = cmp_surrogate(a), sb = cmp_surrogate(b);
+    if (!sa && !sb) return ASSOC_EQ_NA;
+    if (sa && sb) return sa == sb ? ASSOC_EQ_UNKNOWN : ASSOC_EQ_FALSE;
+    const Expr* x = sa ? b : a;
+    int s;
+    if (cmp_ranged_real(x, &s)) return ASSOC_EQ_FALSE;
+    /* Overflow[] is no finite complex number either */
+    Expr *re, *im;
+    if ((sa == 2 || sb == 2) && is_complex((Expr*)x, &re, &im)) return ASSOC_EQ_FALSE;
+    return ASSOC_EQ_UNKNOWN;
+}
+
 static int equal_pair_decide(Expr* a, Expr* b) {
     if (is_nan_operand(a) || is_nan_operand(b)) return ASSOC_EQ_FALSE;
     if (expr_eq(a, b)) return ASSOC_EQ_TRUE;
     int av;
+    if ((av = cmp_surrogate_equal(a, b)) != ASSOC_EQ_NA) return av;
     if ((av = assoc_equal_verdict(a, b)) != ASSOC_EQ_NA) return av;
     if ((av = list_equal_verdict(a, b)) != ASSOC_EQ_NA) return av;
     bool unequal = false;

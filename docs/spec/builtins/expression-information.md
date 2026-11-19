@@ -714,6 +714,18 @@ with MPFR's exponent range: a 53-bit MPFR. Such a value:
 - Powers: `Underflow[]^k` is `Underflow[]` and `Overflow[]^k` is `Overflow[]` for k > 0,
   each the other for k < 0; a machine exponent gives the machine `0.` where the value is
   below the range (`Underflow[]^0.5`, `Overflow[]^-0.5`).
+- They are numbers (v0.6618): `NumericQ`, `NumberQ` and `InexactNumberQ` are `True`,
+  and they sort by value among the numbers: `-Underflow[]` just below `0`,
+  `Underflow[]` just above, and `Overflow[]` after every finite number (`x + Overflow[]`
+  is `Overflow[] + x`).
+- Comparisons: `+-Underflow[]` is nonzero and signed. `Underflow[] == 0` is `False`,
+  `Underflow[] > 0` and `Positive[Underflow[]]` are `True`, and `Sign[-Underflow[]]` is `-1`.
+  `Overflow[]` is unequal to every finite number but has no sign, so `Overflow[] > 1`
+  and `Sign[Overflow[]]` stay unevaluated.
+- `Abs[Overflow[]]` is `Overflow[]`, and `Chop[Underflow[]]` is `0`.
+- `b^(+-Underflow[])` is `1 +- Underflow[]` by the sign of `Log[b]`, for an exact
+  positive `b` (`E^Underflow[]` is `1 + Underflow[]`), and `1.` for a positive machine
+  `b`. `b^Overflow[]` stays unevaluated.
 
 Machine reals always print with a decimal point and the input syntax `*^`: `1.0*^15`,
 `2.22045*^-16`, `100000.0`. Arbitrary-precision numbers print their exponent as `*^`

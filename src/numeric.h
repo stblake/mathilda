@@ -405,6 +405,15 @@ Expr* numeric_promote_result_if_degenerate(Expr* r, const Expr* call);
  * the reduced expression, or NULL when the rule does not apply / the input is
  * already reduced. The Times and Plus hooks take the builtin's call. */
 bool  numeric_is_underflow_expr(const Expr* e);
+/* Overflow[] or Underflow[]: a number past MPFR's exponent range. Like the
+ * reference (where each is a Real), both are NumericQ, NumberQ and
+ * InexactNumberQ, and they order among the numbers by value -- Underflow[]
+ * as a positive number below every positive one, Overflow[] after every
+ * finite number. Neither is a machine number. */
+bool  numeric_is_range_surrogate(const Expr* e);
+/* b^(+-Underflow[]) for an exact positive b != 1 (or E): 1 +- Underflow[];
+ * a positive machine b: 1.; NULL otherwise (numeric.c). */
+Expr* numeric_power_underflow_exponent(const Expr* b, const Expr* e);
 Expr* numeric_underflow_times(const Expr* res);
 Expr* numeric_underflow_plus(const Expr* res);
 Expr* numeric_underflow_power(const Expr* base, const Expr* exponent);

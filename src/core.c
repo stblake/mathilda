@@ -2052,6 +2052,10 @@ static double chop_to_double(const Expr* e) {
 static Expr* chop_recursive(Expr* e, double delta) {
     if (!e) return NULL;
 
+    /* Underflow[] is a magnitude below every representable number, so below
+     * any positive tolerance; -Underflow[] chops through its Times. */
+    if (delta > 0.0 && numeric_is_underflow_expr(e)) return expr_new_integer(0);
+
     if (chop_is_machine_real(e)) {
         if (fabs(chop_to_double(e)) < delta) {
             return expr_new_integer(0);
@@ -3069,6 +3073,8 @@ Expr* builtin_numberq(Expr* res) {
                 return expr_new_symbol(SYM_True);
             }
         }
+        /* Overflow[] / Underflow[] are numbers (inexact ones) past the range */
+        if (numeric_is_range_surrogate(arg)) return expr_new_symbol(SYM_True);
     }
 
     return expr_new_symbol(SYM_False);
@@ -3125,6 +3131,8 @@ static bool is_numeric_quantity(Expr* e) {
         if (e->data.function.head->type == EXPR_SYMBOL) {
             const char* head_name = e->data.function.head->data.symbol.name;
             if (head_name == SYM_Complex || head_name == SYM_Rational) return true;
+            /* Overflow[] / Underflow[]: numbers past the exponent range. */
+            if (numeric_is_range_surrogate(e)) return true;
 
             /* AlgebraicNumber[gen, {rationals}] is a numeric quantity, but its
              * coefficient List is not itself a NumericFunction argument, so the
@@ -3241,6 +3249,21 @@ Expr* builtin_numericq(Expr* res) {
  * numeric quantity via is_numeric_quantity(). */
 static int numeric_real_sign(Expr* arg, int* sign) {
     int64_t n, d;
+    /* +-Underflow[] carry a sign; Overflow[] has none (it cannot be read). */
+    if (numeric_is_range_surrogate(arg)) {
+        if (!numeric_is_underflow_expr(arg)) return -1;
+        *sign = 1;
+        return 1;
+    }
+    if (arg->type == EXPR_FUNCTION && arg->data.function.arg_count == 2
+        && arg->data.function.head->type == EXPR_SYMBOL
+        && arg->data.function.head->data.symbol.name == SYM_Times
+        && arg->data.function.args[0]->type == EXPR_INTEGER
+        && arg->data.function.args[0]->data.integer == -1
+        && numeric_is_underflow_expr(arg->data.function.args[1])) {
+        *sign = -1;
+        return 1;
+    }
     if (arg->type == EXPR_INTEGER || arg->type == EXPR_REAL ||
         arg->type == EXPR_BIGINT || is_rational(arg, &n, &d)) {
         *sign = expr_numeric_sign(arg);
@@ -3535,7 +3558,8 @@ Expr* builtin_exactnumberq(Expr* res) {
 Expr* builtin_inexactnumberq(Expr* res) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 1) return NULL;
     return expr_new_symbol(
-        core_is_inexact_number(res->data.function.args[0]) ? SYM_True : SYM_False);
+        core_is_inexact_number(res->data.function.args[0])
+            || numeric_is_range_surrogate(res->data.function.args[0]) ? SYM_True : SYM_False);
 }
 
 /* ValueQ[expr] — True if a value has been defined for expr, False otherwise.

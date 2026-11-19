@@ -2068,6 +2068,7 @@ typedef struct {
     bool has_call;         /* a real function application, not just a number */
     bool has_infinity;     /* Infinity / ComplexInfinity / DirectedInfinity */
     bool has_zero;         /* an exact or inexact zero leaf */
+    int sum_depth;         /* Plus calls enclosing the leaf being scanned */
 } ExactScan;
 
 /* Mantissa bits an int64 needs to be an exact double, or 0 when it already
@@ -2230,6 +2231,32 @@ static void scan_exact_leaves(const Expr* e, ExactScan* s) {
                         scan_exact_leaves(e->data.function.args[i], s);
                     return;
                 }
+                /* Log of an exact integer n, |n| >= 2, is well conditioned: a
+                 * relative error d in n moves Log[n] by d absolutely, and
+                 * |Log[n]| >= Log[2], so n rounded to the working width costs
+                 * at most 1.5 ulp of the answer. Asking for n's full mantissa
+                 * instead made N[Log[999999!]] (LogGamma[10^6]) take its log
+                 * at 18.5 million bits, 19 s for a machine number (issue
+                 * #139). A rational is not exempt: Log[x] near x = 1 has
+                 * condition 1/|Log[x]|, which its amplify bits must cover.
+                 * Nor is a Log inside a sum: the sum may cancel, and
+                 * Log[10^1000 + 1] - 1000 Log[10] (~10^-1000) needs the +1,
+                 * i.e. the integer's full width, beyond what N's cancellation
+                 * retry reaches. Times, Power and function calls around the
+                 * Log keep its absolute error, so only Plus disqualifies. */
+                if (h == SYM_Log && s->sum_depth == 0
+                    && (e->data.function.arg_count == 1
+                        || e->data.function.arg_count == 2)) {
+                    for (size_t i = 0; i < e->data.function.arg_count; ++i) {
+                        const Expr* a = e->data.function.args[i];
+                        bool big_int = a->type == EXPR_BIGINT
+                            || (a->type == EXPR_INTEGER && a->data.integer != 0
+                                && a->data.integer != 1 && a->data.integer != -1);
+                        if (!big_int) scan_exact_leaves(a, s);
+                    }
+                    s->has_call = true;
+                    return;
+                }
                 /* b^n with an exact exponent multiplies the relative error of
                  * b by |n|: (1 + 10^-40)^(10^40) at 98 working bits, where
                  * the base is rounded at 2^-98 and the exponent is 2^133,
@@ -2262,8 +2289,12 @@ static void scan_exact_leaves(const Expr* e, ExactScan* s) {
             }
             s->has_call = true;
             scan_exact_leaves(head, s);
+            bool is_sum = head && head->type == EXPR_SYMBOL
+                       && head->data.symbol.name == SYM_Plus;
+            if (is_sum) s->sum_depth++;
             for (size_t i = 0; i < e->data.function.arg_count; ++i)
                 scan_exact_leaves(e->data.function.args[i], s);
+            if (is_sum) s->sum_depth--;
             break;
         }
         default:
@@ -2800,6 +2831,9 @@ static bool uf_head0(const Expr* e, const char* sym) {
         && e->data.function.head->data.symbol.name == sym;
 }
 bool numeric_is_underflow_expr(const Expr* e) { return uf_head0(e, SYM_Underflow); }
+bool numeric_is_range_surrogate(const Expr* e) {
+    return uf_head0(e, SYM_Underflow) || uf_head0(e, SYM_Overflow);
+}
 static bool uf_is_neg_underflow(const Expr* e) {
     return e && e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
         && e->data.function.head->type == EXPR_SYMBOL
@@ -2935,6 +2969,45 @@ Expr* numeric_underflow_power(const Expr* b, const Expr* e) {
         return e->data.real < 0.0 ? expr_new_real(0.0) : make_overflow_expr();
     }
     return NULL;
+}
+
+/* b^(+-Underflow[]) for an exact positive real b != 1 (E included):
+ * 1 + Underflow[] when Log[b] > 0, 1 - Underflow[] when Log[b] < 0, the sign
+ * flipped for -Underflow[]. The exponent's magnitude is below the least
+ * positive number, so b^u - 1 ~ u Log[b] is too: E^Underflow[] is
+ * 1 + Underflow[], as in the reference. A machine b gives the machine 1.
+ * b^Overflow[] stays: Overflow[] has no sign, so it is past the range or
+ * below it. NULL when the rule does not apply. */
+Expr* numeric_power_underflow_exponent(const Expr* b, const Expr* e) {
+    int es;
+    if (uf_head0(e, SYM_Underflow)) es = 1;
+    else if (uf_is_neg_underflow(e)) es = -1;
+    else return NULL;
+    if (b->type == EXPR_REAL) {
+        if (!(b->data.real > 0.0) || !isfinite(b->data.real)) return NULL;
+        return expr_new_real(1.0);
+    }
+    int bs;
+    if (b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_E) bs = 1;
+    else if (expr_is_integer_like((Expr*)b) || is_rational_like(b)) {
+        if (expr_numeric_sign((Expr*)b) <= 0) return NULL;
+        mpq_t q; mpq_init(q);
+        if (expr_is_integer_like((Expr*)b)) {
+            mpz_t z; expr_to_mpz((Expr*)b, z); mpq_set_z(q, z); mpz_clear(z);
+        } else {
+            mpz_t n, d;
+            expr_to_mpz(b->data.function.args[0], n);
+            expr_to_mpz(b->data.function.args[1], d);
+            mpq_set_num(q, n); mpq_set_den(q, d); mpq_canonicalize(q);
+            mpz_clears(n, d, NULL);
+        }
+        int c = mpq_cmp_ui(q, 1, 1);
+        mpq_clear(q);
+        if (c == 0) return NULL;                     /* 1^u: the ordinary 1 */
+        bs = c > 0 ? 1 : -1;
+    } else return NULL;
+    Expr* a[2] = { expr_new_integer(1), uf_signed(bs * es < 0) };
+    return expr_new_function(expr_new_symbol(SYM_Plus), a, 2);
 }
 
 /* ---- Overflow[] in Times and Plus ---------------------------------------

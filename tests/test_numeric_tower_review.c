@@ -387,7 +387,7 @@ static void test_d5_underflow_arithmetic(void) {
     chk("3. Underflow[]", "0.0");
     chk("Underflow[] (-3.)", "0.0");
     chk("1. + Underflow[]", "1.0");
-    chk("1 + Underflow[]", "1 + Underflow[]");             /* exact: stays */
+    chk("1 + Underflow[]", "Underflow[] + 1");             /* exact: stays */
     chk("Underflow[] Underflow[]", "Underflow[]");
     chk("Underflow[] + Underflow[]", "Underflow[]");
     chk("Underflow[] - Underflow[]", "Underflow[]");
@@ -448,6 +448,44 @@ static void test_followups_overflow_gamma_power(void) {
     chk("{2^(7/2), 12^(5/2), 18^(-5/2)}", "{8 Sqrt[2], 288 Sqrt[3], 1/(972 Sqrt[2])}");
     chk("Solve[2^x + 3^y == 5 && 0 <= x <= 10 && 0 <= y <= 10, {x, y}, Integers]",
         "{{x -> 2, y -> 0}, {x -> 1, y -> 1}}");
+}
+
+/* The open items after v0.6617: issue #139 (Log of a huge exact integer took
+ * its log at the integer's full width), the quadratic half-integer factorial
+ * behind Binomial[n, 1/2], and the surrogates as numbers (NumericQ, ordering,
+ * comparisons, Abs/Sign/Positive/Chop, b^Underflow[]). */
+static void test_open_items_logbig_binomial_surrogates(void) {
+    /* #139: well conditioned, so the working width is the target's */
+    chk_true("TimeConstrained[N[LogGamma[10^6]], 10] === 1.2815504569147611*^7");
+    chk_true("TimeConstrained[Abs[N[Log[3^(10^6) + 1], 30] - 1098612.28866810969139524523692252570464749055782274945173469433364`40] < 10^-23, 10]");
+    chk_true("Abs[N[Log[2^200 + 1] - Log[2^200], 30] - 6.2230152778611417071440640537801242`30*^-61] < 10^-88");
+    chk("N[Log[10, 10^400 + 1], 30] == 400", "True");
+    /* half-integer factorial through GMP's double factorial */
+    chk_true("Table[Gamma[k/2], {k, -7, 7, 2}] === "
+             "{16/105 Sqrt[Pi], -8/15 Sqrt[Pi], 4/3 Sqrt[Pi], -2 Sqrt[Pi], Sqrt[Pi], Sqrt[Pi]/2, 3/4 Sqrt[Pi], 15/8 Sqrt[Pi]}");
+    chk_true("Table[Binomial[k, 1/2], {k, 0, 3}] === {2/Pi, 4/Pi, 16/(3 Pi), 32/(5 Pi)}");
+    chk_true("TimeConstrained[Abs[N[Binomial[10^6, 1/2], 30] - 1128.37930814291727629196390920841639`30] < 10^-25, 20]");
+    /* the surrogates are numbers: predicates and canonical order */
+    chk("{NumericQ[Overflow[]], NumericQ[Underflow[]], NumberQ[Overflow[]], InexactNumberQ[Underflow[]], MachineNumberQ[Overflow[]], ExactNumberQ[Underflow[]]}",
+        "{True, True, True, True, False, False}");
+    chk("Sort[{x, Overflow[], 2, Underflow[], a, -Underflow[], 0, -1}]",
+        "{-1, -Underflow[], 0, Underflow[], 2, Overflow[], a, x}");
+    chk_true("FullForm[x + Overflow[]] === FullForm[Plus[Overflow[], x]] && First[x + Overflow[]] === Overflow[]");
+    chk("{Order[Overflow[], 5], Order[Underflow[], 5], Order[Underflow[], -5], Order[Overflow[], x]}", "{-1, 1, -1, 1}");
+    /* comparisons: Underflow[] is signed and nonzero, Overflow[] unsigned */
+    chk("{Underflow[] == 0, Underflow[] == 0., Underflow[] != 0, Underflow[] > 0, -Underflow[] < 0, Underflow[] < 1/10^400, -Underflow[] > -1, Underflow[] > -Underflow[]}",
+        "{False, False, True, True, True, True, True, True}");
+    chk("{Overflow[] == 1, Overflow[] == 2. + I, Overflow[] != 3}", "{False, False, True}");
+    chk_true("Head[Overflow[] > 1] === Greater && Head[Quiet[Underflow[] == E^(-10^10)]] === Equal");
+    chk("{Positive[Underflow[]], Negative[-Underflow[]], NonNegative[Underflow[]], Sign[-Underflow[]]}",
+        "{True, True, True, -1}");
+    chk_true("Head[Positive[Overflow[]]] === Positive && Head[Sign[Overflow[]]] === Sign");
+    chk("{Abs[Overflow[]], Abs[-Underflow[]], Chop[Underflow[]], Chop[-Underflow[]], Chop[x + Underflow[]]}",
+        "{Overflow[], Underflow[], 0, 0, x}");
+    /* b^(+-Underflow[]): 1 +- Underflow[] by the sign of Log[b]; b^Overflow[] stays */
+    chk_true("{Exp[Underflow[]], Exp[-Underflow[]], 2^Underflow[], (1/2)^Underflow[]} === {1 + Underflow[], 1 - Underflow[], 1 + Underflow[], 1 - Underflow[]}");
+    chk_true("{1^Underflow[], 2.^Underflow[]} === {1, 1.}");
+    chk_true("Head[E^Overflow[]] === Power && Head[(-2)^Underflow[]] === Power");
 }
 
 /* P: found by PARANOIA (tests/paranoia). */
@@ -709,6 +747,7 @@ int main(void) {
     TEST(test_d5_underflow_arithmetic);
     TEST(test_p_paranoia_findings);
     TEST(test_followups_overflow_gamma_power);
+    TEST(test_open_items_logbig_binomial_surrogates);
     TEST(test_d9_negative_literal_power);
     TEST(test_e4_quotient_mpfr);
     TEST(test_e2_machine_zero_times_mpfr);

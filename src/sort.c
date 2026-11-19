@@ -400,7 +400,42 @@ static int real_cmp(const Expr* a, const Expr* b) {
  * then by the magnitude of the imaginary part (a real number has none), then
  * negative imaginary part first:
  *   -1 < -1 - I < 0 < -I < I < 1 < 1 - I < 1 + I < 1 - 2 I < 1. */
+/* 0 for a number, 1 for Underflow[], -1 for -Underflow[] (Times[-1,
+ * Underflow[]]), 2 for Overflow[]. */
+static int surrogate_kind(const Expr* e) {
+    if (numeric_is_range_surrogate(e))
+        return e->data.function.head->data.symbol.name == SYM_Overflow ? 2 : 1;
+    if (e && e->type == EXPR_FUNCTION && e->data.function.arg_count == 2
+        && e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == SYM_Times
+        && e->data.function.args[0]->type == EXPR_INTEGER
+        && e->data.function.args[0]->data.integer == -1
+        && numeric_is_underflow_expr(e->data.function.args[1]))
+        return -1;
+    return 0;
+}
+
+/* Overflow[] and +-Underflow[] in the number tier, as the reference orders
+ * them: Underflow[] is a positive number smaller than every positive number
+ * (after 0 and the negatives), -Underflow[] the negative one just below 0,
+ * Overflow[] follows every finite number. A Complex is placed by its real
+ * part. */
+static int surrogate_cmp(const Expr* a, const Expr* b, int ka, int kb) {
+    if (ka && kb) return (ka > kb) - (ka < kb);
+    if (ka == 2) return 1;
+    if (kb == 2) return -1;
+    int k = ka ? ka : kb;
+    const Expr* x = ka ? b : a;
+    const Expr* rx = is_complex_number(x) ? x->data.function.args[0] : x;
+    int sx = real_sign(rx);
+    /* +Underflow[] is above x unless x > 0; -Underflow[] below x unless x < 0 */
+    int c = k > 0 ? (sx > 0 ? -1 : 1) : (sx < 0 ? 1 : -1);
+    return ka ? c : -c;
+}
+
 static int number_cmp(const Expr* a, const Expr* b) {
+    int ka = surrogate_kind(a), kb = surrogate_kind(b);
+    if (ka || kb) return surrogate_cmp(a, b, ka, kb);
     const Expr* ra = is_complex_number(a) ? a->data.function.args[0] : a;
     const Expr* rb = is_complex_number(b) ? b->data.function.args[0] : b;
     const Expr* ia = is_complex_number(a) ? a->data.function.args[1] : NULL;
@@ -417,7 +452,7 @@ static int number_cmp(const Expr* a, const Expr* b) {
 }
 
 static bool is_number(const Expr* e) {
-    return is_atomic_numeric(e) || is_complex_number(e);
+    return is_atomic_numeric(e) || is_complex_number(e) || surrogate_kind(e) != 0;
 }
 
 /* ------------------------------------------------------------------ */
@@ -557,11 +592,13 @@ int expr_compare(const Expr* a, const Expr* b) {
              * once for the calls and once more for their heads. */
             bool plain_h = h != SYM_Times && h != SYM_Plus && h != SYM_Power &&
                            h != SYM_Complex && h != SYM_Rational &&
-                           h != SYM_Infinity && h != SYM_ComplexInfinity;
+                           h != SYM_Infinity && h != SYM_ComplexInfinity &&
+                           h != SYM_Overflow && h != SYM_Underflow;
             bool plain_g = g == h ? plain_h
                          : g != SYM_Times && g != SYM_Plus && g != SYM_Power &&
                            g != SYM_Complex && g != SYM_Rational &&
-                           g != SYM_Infinity && g != SYM_ComplexInfinity;
+                           g != SYM_Infinity && g != SYM_ComplexInfinity &&
+                           g != SYM_Overflow && g != SYM_Underflow;
             if (plain_h && plain_g && h != g) {
                 int c = symbol_cmp(ha, hb);
                 if (c) return c;

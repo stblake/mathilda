@@ -213,11 +213,14 @@ The close-out review listed five follow-ups. Two of them were misdiagnosed:
 | R5 | `2^(2^40 + 1/2)`, `12^(2^40 + 1/2)`, `Sqrt[2]^(2^41 + 1)` | process abort (GMP, exit 136) | **fixed v0.6617**: the integer part of a rational exponent gets `bigint_pow`'s representability bound (`Overflow[]`); a power whose magnitude is below every representable one is `Underflow[]` (signed as D5), not `Overflow[]` (`2^(-2^40)`, `2^(-10^30)`, which was unevaluated); `Solve[..., Integers]`'s exponential enumeration declines a box whose powers pass 2^26 bits |
 | R6 | `Exp[10.^10]` | `General::ovfl` printed 5 times | **fixed v0.6617**: introduced with P3. The MPFR-promotion probe re-evaluates at two precisions; an overflow seen inside it is now announced once, as underflow already was |
 
-Not changed, seen on the way: `NumericQ[Overflow[]]` is `True` in the reference and
-the two surrogates sort among the numbers there (`Overflow[] + x` prints with
-`Overflow[]` first); `b^Overflow[]`, `Exp[Overflow[]]`, `Abs[Overflow[]]` stay
-unevaluated (the reference's `0.5^Overflow[]` is `Overflow[]`). `N[LogGamma[10^6]]` takes
-19 s (an exact LogGamma of an integer).
+Seen on the way, then fixed:
+
+| # | Repro | Got | Status |
+|---|---|---|---|
+| R7 | `N[LogGamma[10^6]]` (issue #139) | 19 s | **fixed v0.6618**: the exact form is `Log[999999!]` (as in the reference). `N`'s working-precision scan asked for that integer's full 18.5 million bits; `Log` of an integer with \|n\| >= 2 is well conditioned, so it now asks for the target precision only (0.2 s). A rational stays scanned: `Log` near 1 has condition 1/\|Log[x]\| |
+| R8 | `N[Binomial[10^6, 1/2], 30]` | 96 s | **fixed v0.6618**: the half-integer factorial behind `Gamma[n + 1/2]` built the odd double factorial with n single-limb multiplications; now `mpz_2fac_ui` (0.4 s), with the factorial's memory cap |
+| R9 | `NumericQ[Overflow[]]`, `x + Overflow[]` | `False`; `x + Overflow[]` | **fixed v0.6618**: both surrogates are `NumericQ` / `NumberQ` / `InexactNumberQ` and order among the numbers by value (`-Underflow[]` just below 0, `Underflow[]` just above, `Overflow[]` after every finite number), as in the reference |
+| R10 | `Underflow[] == 0`, `Positive[Underflow[]]`, `Abs[Overflow[]]`, `E^Underflow[]`, `Chop[Underflow[]]` | (after R9) `True`, `False`; unevaluated | **fixed v0.6618**: comparisons know the surrogates: \|Underflow[]\| is nonzero and signed, `Overflow[]` is unequal to every finite number but has no sign, so its order stays unevaluated. Also `Abs[Overflow[]]` is `Overflow[]`, `Chop[Underflow[]]` is `0`, and `b^(+-Underflow[])` is `1 +- Underflow[]` by the sign of `Log[b]`. `b^Overflow[]` stays: the reference's `Exp[Overflow[]] = Overflow[]` is wrong for `Overflow[]` standing for `-Exp[10.^10]` |
 
 ### F. Hygiene (no repro: from the code read)
 | # | What | Status |

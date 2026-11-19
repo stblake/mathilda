@@ -508,6 +508,11 @@ Expr* builtin_abs(Expr* res) {
 
     if (is_interval(arg)) { Expr* r = interval_apply_function("Abs", arg); if (r) return r; }
 
+    /* |Overflow[]| is a magnitude past the range: Overflow[] (it has no sign
+     * to drop). Abs[+-Underflow[]] is handled by the sign rules below. */
+    if (numeric_is_range_surrogate(arg) && !numeric_is_underflow_expr(arg))
+        return expr_copy(arg);
+
     /* Abs of a real AlgebraicNumber / Root object: the value itself when >= 0,
      * else its negation — kept as an exact algebraic object. */
     if (is_real_algebraic_object(arg)) {

@@ -1008,6 +1008,11 @@ Expr* builtin_power(Expr* res) {
         Expr* u = numeric_underflow_power(base, exp);
         if (u) return u;
     }
+    /* b^(+-Underflow[]) (numeric.c): only when the exponent is a surrogate. */
+    if (exp->type == EXPR_FUNCTION && exp->data.function.arg_count <= 2) {
+        Expr* u = numeric_power_underflow_exponent(base, exp);
+        if (u) return u;
+    }
 
     /* Exact number to a machine-integer power, ahead of the ~40 shape tests
      * below, none of which can act on it: an integer or machine Rational base

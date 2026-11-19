@@ -13,6 +13,7 @@
 #include "symtab.h"
 #include "attr.h"
 #include <math.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -95,21 +96,31 @@ Expr* builtin_factorial(Expr* res) {
              * coefficient is built in GMP -- the odd double factorial and the
              * 2^k denominator both blow past int64 well before the argument is
              * large (e.g. Gamma[201/2] needs 199!! / 2^100 ~ 10^157). */
+            /* The double factorials come from GMP's mpz_2fac_ui: the loop
+             * of n single-limb multiplications it replaces was quadratic,
+             * 96 s for Binomial[10^6, 1/2] = Gamma[10^6 + 1] / (Gamma[3/2]
+             * Gamma[10^6 + 1/2]). A result past the factorial's memory cap
+             * stays symbolic, as an integer factorial does. n is odd, so
+             * never INT64_MIN. */
+            int64_t an = n < 0 ? -n : n;
+            if (!factorial_fits_memory(an / 2 + 1) || (uint64_t)an > (uint64_t)ULONG_MAX)
+                return NULL;
             mpz_t num, den;
             mpz_init_set_ui(num, 1);
             mpz_init_set_ui(den, 1);
 
             if (n > 0) {
-                for (int64_t i = n; i >= 1; i -= 2) mpz_mul_si(num, num, (long)i);
-                mpz_mul_2exp(den, den, (unsigned long)((n + 1) / 2)); /* 2^((n+1)/2) */
+                /* (n/2)! = n!! Sqrt[Pi] / 2^((n+1)/2) */
+                mpz_2fac_ui(num, (unsigned long)n);
+                mpz_mul_2exp(den, den, (unsigned long)((n + 1) / 2));
             } else {
-                for (int64_t i = n + 2; i <= -1; i += 2) {
-                    mpz_mul_ui(num, num, 2);
-                    mpz_mul_si(den, den, (long)i);
-                }
+                /* (n/2)! = Gamma[n/2 + 1] = 2^k Sqrt[Pi] / prod_{i = n+2, step 2}^{-1} i,
+                 * k = (|n| - 1)/2 factors whose magnitudes are (|n| - 2)!! */
+                int64_t k = (an - 1) / 2;
+                mpz_mul_2exp(num, num, (unsigned long)k);
+                if (an >= 3) mpz_2fac_ui(den, (unsigned long)(an - 2));
+                if (k & 1) mpz_neg(num, num);   /* the sign of k negative factors */
             }
-            /* Keep the denominator positive (negative half-integers can flip it). */
-            if (mpz_sgn(den) < 0) { mpz_neg(num, num); mpz_neg(den, den); }
 
             Expr* coeff = mpz_pair_to_rational_expr(num, den);
             mpz_clears(num, den, NULL);
