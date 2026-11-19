@@ -407,6 +407,20 @@ void ll_set(LinkedList* ll, int64_t i, Expr* e) {
     ll_mutated();
 }
 
+bool ll_set_i64(LinkedList* ll, int64_t i, int64_t v) {
+    if (ll->kind != LL_I64) return false;
+    memcpy(ll_slot(ll, i), &v, sizeof v);
+    ll_mutated();
+    return true;
+}
+
+bool ll_set_real(LinkedList* ll, int64_t i, double v) {
+    if (ll->kind != LL_REAL) return false;
+    memcpy(ll_slot(ll, i), &v, sizeof v);
+    ll_mutated();
+    return true;
+}
+
 /* ------------------------------------------------------------------------
  *  Growth
  * ---------------------------------------------------------------------- */
@@ -752,6 +766,13 @@ bool ll_would_cycle(const LinkedList* target, const Expr* e) {
 }
 
 /* Emit Head::llcyc for storing `e`, and return NULL (call left unevaluated). */
+void ll_cycle_message(const char* head, Expr* e) {
+    char* s = expr_to_string(e);
+    mth_message(head, "llcyc", "Storing %s would make the linked list contain itself.",
+                s ? s : "");
+    free(s);
+}
+
 static Expr* ll_cycle_error(const char* head, Expr* e) {
     char* s = expr_to_string(e);
     mth_message(head, "llcyc", "Storing %s would make the linked list contain itself.",

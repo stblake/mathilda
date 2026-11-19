@@ -100,6 +100,7 @@ bool part_span_resolve(const Expr* span, int64_t len, int64_t* start, int64_t* s
 }
 
 static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs);
+static bool ll_part_assign(Expr* llx, Expr** indices, size_t nindices, Expr* rhs);
 
 /* The piece of `rhs` that the k-th of `nsel` positions selected at one level
  * receives. Returns a new reference.
@@ -299,6 +300,14 @@ static Expr* nd_part_assign_or_list(Expr* arr, Expr** indices, size_t nindices, 
 
 static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs) {
     if (nindices == 0) return expr_copy(rhs);
+
+    /* A LinkedList reached below the top ({ll}[[1, 2]] = v): written in
+     * place, as everywhere -- the enclosing immutable value is rebuilt around
+     * the same object. A failed write leaves it unchanged (after its message). */
+    if (expr->type == EXPR_LINKEDLIST) {
+        ll_part_assign(expr, indices, nindices, rhs);
+        return expr_copy(expr);
+    }
 
     if (expr->type == EXPR_NDARRAY)
         return nd_part_assign_or_list(expr, indices, nindices, rhs);
@@ -560,10 +569,25 @@ Expr* expr_part_assign(Expr* lhs, Expr* rhs) {
         expr_free(flat);
         return r;
     }
+    /* The target is the LinkedList object itself -- what a function body
+     * sees after its parameter is substituted (setFirst[l_, v_] :=
+     * (l[[1]] = v)): reference semantics make that write the caller's list. */
+    if (sym->type == EXPR_LINKEDLIST)
+        return ll_part_assign(sym, lhs->data.function.args + 1, lhs->data.function.arg_count - 1, rhs)
+               ? expr_copy(sym) : NULL;
     if (sym->type != EXPR_SYMBOL) return NULL;
 
     Expr* current_val = symtab_get_own_values(sym->data.symbol.name) ? evaluate(sym) : NULL;
     if (!current_val) return NULL;
+
+    /* A variable holding a LinkedList: write the shared object in place; the
+     * OwnValue already points at it and is not rebound. */
+    if (current_val->type == EXPR_LINKEDLIST) {
+        bool ok = ll_part_assign(current_val, lhs->data.function.args + 1,
+                                 lhs->data.function.arg_count - 1, rhs);
+        if (!ok) { expr_free(current_val); return NULL; }
+        return current_val;
+    }
 
     Expr* new_val = expr_part_assign_rec(current_val, lhs->data.function.args + 1,
                                          lhs->data.function.arg_count - 1, rhs);
@@ -653,10 +677,10 @@ static Expr* assoc_part(Expr* assoc, Expr* idx, Expr** rest, size_t nrest);
  * declines exactly as the element's own Part does.
  * ---------------------------------------------------------------------- */
 
-static void ll_part_msg_partw(Expr* ll, Expr* spec) {
+static void ll_part_msg_partw(const char* head, Expr* ll, Expr* spec) {
     char* s = expr_to_string(spec);
     char* l = expr_to_string(ll);
-    mth_message("Part", "partw", "Part %s of %s does not exist.", s ? s : "", l ? l : "");
+    mth_message(head, "partw", "Part %s of %s does not exist.", s ? s : "", l ? l : "");
     free(s); free(l);
 }
 
@@ -682,7 +706,7 @@ static Expr* ll_elem_part(Expr* e, Expr** rest, size_t nrest) {
 
 /* The 0-based positions a selecting subscript names, or NULL (with a message
  * when the spec is well formed but out of range). *out_n receives the count. */
-static int64_t* ll_part_positions(Expr* llx, Expr* idx, int64_t len,
+static int64_t* ll_part_positions(const char* head, Expr* llx, Expr* idx, int64_t len,
                                   int64_t* out_n) {
     int64_t* pos = NULL;
     if (idx->type == EXPR_SYMBOL && idx->data.symbol.name == SYM_All) {
@@ -715,7 +739,7 @@ static int64_t* ll_part_positions(Expr* llx, Expr* idx, int64_t len,
         }
         if (!ok) {
             char* l = expr_to_string(llx);
-            mth_message("Part", "take", "Cannot take positions %lld through %lld in %s.",
+            mth_message(head, "take", "Cannot take positions %lld through %lld in %s.",
                         (long long)s, (long long)e, l ? l : "");
             free(l);
             return NULL;
@@ -733,7 +757,7 @@ static int64_t* ll_part_positions(Expr* llx, Expr* idx, int64_t len,
             if (q->type != EXPR_INTEGER) { free(pos); return NULL; }
             int64_t k = q->data.integer;
             if (k < 0) k = len + k + 1;
-            if (k < 1 || k > len) { ll_part_msg_partw(llx, q); free(pos); return NULL; }
+            if (k < 1 || k > len) { ll_part_msg_partw(head, llx, q); free(pos); return NULL; }
             pos[i] = k - 1;
         }
         *out_n = (int64_t)n;
@@ -752,12 +776,12 @@ static Expr* ll_part(Expr* llx, Expr** indices, size_t nindices) {
     if (idx->type == EXPR_INTEGER) {
         int64_t k = idx->data.integer;
         if (k < 0) k = len + k + 1;
-        if (k < 1 || k > len) { ll_part_msg_partw(llx, idx); return NULL; }
+        if (k < 1 || k > len) { ll_part_msg_partw("Part", llx, idx); return NULL; }
         return ll_elem_part(ll_get(ll, k - 1), rest, nrest);
     }
 
     int64_t n = 0;
-    int64_t* pos = ll_part_positions(llx, idx, len, &n);
+    int64_t* pos = ll_part_positions("Part", llx, idx, len, &n);
     if (!pos) return NULL;
     LinkedList* out = ll_new();
     for (int64_t i = 0; i < n; i++) {
@@ -771,6 +795,104 @@ static Expr* ll_part(Expr* llx, Expr** indices, size_t nindices) {
     }
     free(pos);
     return expr_new_linkedlist(out);
+}
+
+/* ------------------------------------------------------------------------
+ * LinkedList Part assignment, IN PLACE (LINKED_LIST_DESIGN.md §3.3)
+ *
+ * ll[[spec...]] = v writes the selected slots of the list itself -- the one
+ * mutable object in the system, shared by every variable that holds it -- in
+ * O(1) per written slot. The first subscript takes the full spec: an integer
+ * (negative from the end), All, a Span or a List of integers; a List or
+ * LinkedList right-hand side whose length equals the number of selected
+ * positions is distributed over them, anything else is broadcast, exactly as
+ * for a List (part_rhs_piece). Further subscripts rewrite the element at each
+ * position as a List assignment would (copy-on-write for an immutable
+ * element; a LinkedList element is itself written in place).
+ *
+ * All-or-nothing: every new value is computed and cycle-checked before any
+ * slot changes, so Set::partw / Set::take / Set::llcyc leave the list as it
+ * was and the Set unevaluated.
+ * ---------------------------------------------------------------------- */
+
+static Expr* expr_part_assign_rec(Expr* expr, Expr** indices, size_t nindices, Expr* rhs);
+
+/* The piece of `rhs` the k-th of nsel positions receives: as part_rhs_piece,
+ * plus a LinkedList right-hand side of matching length. */
+static Expr* ll_rhs_piece(Expr* rhs, size_t k, size_t nsel) {
+    if (nsel > 0 && rhs->type == EXPR_LINKEDLIST && ll_length(rhs->data.llist) == (int64_t)nsel)
+        return ll_get(rhs->data.llist, (int64_t)k);
+    return part_rhs_piece(rhs, k, nsel);
+}
+
+/* Raw buffer-to-slot write of a packed rank-1 right-hand side into a typed
+ * list of the same kind (ll[[a ;; b]] = packedvec): no Expr per element. */
+static bool ll_assign_packed(LinkedList* ll, const int64_t* pos, int64_t n, Expr* rhs) {
+    if (!is_packed_list(rhs) || rhs->data.ndarray.rank != 1 || rhs->data.ndarray.dims[0] != n)
+        return false;
+    NDType dt = rhs->data.ndarray.dtype;
+    if (dt == NDT_INT64 && ll_kind(ll) == LL_I64) {
+        const int64_t* d = (const int64_t*)rhs->data.ndarray.data;
+        for (int64_t j = 0; j < n; j++) ll_set_i64(ll, pos[j], d[j]);
+        return true;
+    }
+    if (dt == NDT_FLOAT64 && ll_kind(ll) == LL_REAL) {
+        const double* d = (const double*)rhs->data.ndarray.data;
+        for (int64_t j = 0; j < n; j++) ll_set_real(ll, pos[j], d[j]);
+        return true;
+    }
+    return false;
+}
+
+static bool ll_part_assign(Expr* llx, Expr** indices, size_t nindices, Expr* rhs) {
+    LinkedList* ll = llx->data.llist;
+    int64_t len = ll_length(ll);
+    Expr* idx = indices[0];
+    Expr** rest = indices + 1;
+    size_t nrest = nindices - 1;
+
+    int64_t one, n, *pos;
+    size_t nsel;
+    if (idx->type == EXPR_INTEGER) {
+        int64_t k = idx->data.integer;
+        if (k < 0) k = len + k + 1;
+        if (k < 1 || k > len) { ll_part_msg_partw("Set", llx, idx); return false; }
+        one = k - 1;
+        pos = &one;
+        n = 1;
+        nsel = 0;                         /* a single position takes rhs whole */
+    } else {
+        pos = ll_part_positions("Set", llx, idx, len, &n);
+        if (!pos) return false;
+        nsel = (size_t)n;
+        if (nrest == 0 && ll_assign_packed(ll, pos, n, rhs)) { free(pos); return true; }
+    }
+
+    Expr** vals = malloc(sizeof(Expr*) * (size_t)(n ? n : 1));
+    for (int64_t j = 0; j < n; j++) {
+        Expr* piece = ll_rhs_piece(rhs, (size_t)j, nsel);
+        if (nrest == 0) {
+            vals[j] = piece;
+        } else {
+            Expr* cur = ll_get(ll, pos[j]);
+            vals[j] = expr_part_assign_rec(cur, rest, nrest, piece);
+            expr_free(cur);
+            expr_free(piece);
+        }
+    }
+    for (int64_t j = 0; j < n; j++) {
+        if (ll_would_cycle(ll, vals[j])) {
+            ll_cycle_message("Set", vals[j]);
+            for (int64_t t = 0; t < n; t++) expr_free(vals[t]);
+            free(vals);
+            if (pos != &one) free(pos);
+            return false;
+        }
+    }
+    for (int64_t j = 0; j < n; j++) ll_set(ll, pos[j], vals[j]);   /* consumes */
+    free(vals);
+    if (pos != &one) free(pos);
+    return true;
 }
 
 Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {

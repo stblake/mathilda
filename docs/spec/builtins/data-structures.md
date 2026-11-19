@@ -1839,9 +1839,27 @@ running off the end: `3 ;; 2` is `{}`, `3 ;; 1` is an error), naming the list as
 `LinkedList[<n>]`; the call stays unevaluated. `First::nofirst` /
 `Last::nolast` for an empty list with no default.
 
-The mutating and copying heads (`AppendTo`, `PrependTo`, Part assignment,
-`Take`, `Drop`, `Delete`, `Join`, `Map`, ...) come in later phases of the
-design; until then they see an opaque atom.
+**Mutating heads.** Only these change a LinkedList, and they change it **in
+place**: the list is the one shared object, so every variable holding it, and
+every function it was passed to, sees the write.
+
+| Head | Effect | Cost |
+|---|---|---|
+| `AppendTo[ll, e]`, `PrependTo[ll, e]`, `Push[ll, e]` | grow at the back / front; return `ll` | `O(1)` |
+| `Pop[ll]`, `PopFirst[ll]` | remove and return the last / first element | `O(1)` |
+| `ll[[i]] = v`, `ll[[-i]] = v` | overwrite one element | `O(1)` |
+| `ll[[All]] = v`, `ll[[m ;; n ;; s]] = v`, `ll[[{i1, ...}]] = v` | a List or LinkedList `v` of matching length is distributed over the positions, anything else broadcast (as for a List); a packed `v` is copied buffer to slot | `O(k)` |
+| `ll[[i, j, ...]] = v` | rewrites element `i` at `j, ...` (copy-on-write for an immutable element; a LinkedList element is written in place) | `O(1)` + the element's own Part assignment |
+
+The target may be a variable or the list object itself, so
+`setFirst[l_, v_] := (l[[1]] = v)` and `add[l_, x_] := AppendTo[l, x]` mutate
+the caller's list. A write is all-or-nothing: `Set::partw` (index out of range),
+`Set::take` (span out of range) and `Set::llcyc` / `AppendTo::llcyc` /
+`PrependTo::llcyc` (the value would make the list contain itself, directly or
+through other lists) leave the list unchanged and the call unevaluated.
+
+The copying heads (`Take`, `Drop`, `Delete`, `Join`, `Map`, ...) come in a later
+phase of the design; until then they see an opaque atom.
 
 Messages: `LinkedList::list` (argument not a list), `LinkedList::argt` (more
 than one argument).

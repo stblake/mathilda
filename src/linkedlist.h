@@ -85,6 +85,9 @@ bool ll_get_i64 (const LinkedList* ll, int64_t i, int64_t* out);
 bool ll_get_real(const LinkedList* ll, int64_t i, double* out);
 bool ll_get_cplx(const LinkedList* ll, int64_t i, double* re, double* im);
 void ll_set(LinkedList* ll, int64_t i, Expr* e);        /* consumes e      */
+/* Raw typed writes: false (nothing written) unless the list is that kind. */
+bool ll_set_i64 (LinkedList* ll, int64_t i, int64_t v);
+bool ll_set_real(LinkedList* ll, int64_t i, double v);
 
 /* ---- growth and removal ---------------------------------------------- */
 void  ll_push_back (LinkedList* ll, Expr* e);           /* consumes e      */
@@ -115,6 +118,9 @@ Expr* ll_to_list(const LinkedList* ll);
 /* Would storing `e` (borrowed) into `target` make `target` reachable from
  * itself -- a reference cycle no refcount could free? Mutators reject it. */
 bool  ll_would_cycle(const LinkedList* target, const Expr* e);
+
+/* Head::llcyc: storing `e` would make a list contain itself. */
+void  ll_cycle_message(const char* head, Expr* e);
 
 /* Bytes held by `ll` and, recursively, by its elements -- iterative through
  * nested LinkedLists; `elem` measures every other boxed element. */

@@ -486,6 +486,69 @@ void test_reading_heads() {
                    "{True}", 0);
 }
 
+
+/* ------------------------------------------- phase 3: in-place mutators */
+
+void test_append_prepend_to() {
+    assert_eval_eq("a = LinkedList[]; AppendTo[a, 1]; PrependTo[a, 0]; AppendTo[a, 2]; "
+                   "{Normal[a], AppendTo[a, 3] === a, PrependTo[a, -1] === a}",
+                   "{{0, 1, 2}, True, True}", 0);
+    /* Through an alias and through a function parameter: the same object. */
+    assert_eval_eq("a2 = a; AppendTo[a2, 4]; add[l_, x_] := AppendTo[l, x]; add[a, 5]; Normal[a]",
+                   "{-1, 0, 1, 2, 3, 4, 5}", 0);
+    assert_eval_eq("Quiet[Check[AppendTo[a, a], failed]]", "failed", 0);
+    assert_eval_eq("Quiet[Check[PrependTo[a, {f[a]}], failed]]", "failed", 0);
+    assert_eval_eq("Length[a]", "7", 0);
+    /* Typed storage survives in-place growth at both ends. */
+    assert_eval_eq("b = LinkedList[]; Do[AppendTo[b, i]; PrependTo[b, -i], {i, 1000}]; "
+                   "{Length[b], b[[1]], b[[-1]], Total[b], Normal[b] === Join[Range[-1000, -1], Range[1000]]}",
+                   "{2000, -1000, 1000, 0, True}", 0);
+    /* Reads after each mutation see it (no stale memo). */
+    assert_eval_eq("t = LinkedList[{1, 2, 3}]; Table[AppendTo[t, i]; {Length[t], Last[t]}, {i, 3}]",
+                   "{{4, 1}, {5, 2}, {6, 3}}", 0);
+}
+
+void test_part_assignment() {
+    assert_eval_eq("ll = LinkedList[Range[10]]; ll2 = ll; ll[[3]] = 30; ll[[-1]] = 100; Normal[ll2]",
+                   "{1, 2, 30, 4, 5, 6, 7, 8, 9, 100}", 0);
+    assert_eval_eq("ll[[1 ;; 4]] = {pa, pb, pc, pd}; ll[[{5, 7}]] = 0; ll[[2 ;; 10 ;; 4]] = pz; Normal[ll]",
+                   "{pa, pz, pc, pd, 0, pz, 0, 8, 9, pz}", 0);
+    assert_eval_eq("(ll[[2]] = pw) === pw", "True", 0);
+    /* Errors leave the list unchanged and the Set unevaluated. */
+    assert_eval_eq("{Quiet[Check[ll[[11]] = 1, failed]], Quiet[Check[ll[[9 ;; 12]] = 1, failed]], "
+                   "Quiet[Check[ll[[{1, 20}]] = 1, failed]], Normal[ll][[1]]}",
+                   "{failed, failed, failed, pa}", 0);
+    /* Typed lists: scalar broadcast and a packed buffer written slot to slot. */
+    assert_eval_eq("r = LinkedList[N[Range[5]]]; r[[All]] = 0.5; r[[2 ;; 4]] = {1., 2., 3.}; Normal[r]",
+                   "{0.5, 1.0, 2.0, 3.0, 0.5}", 0);
+    assert_eval_eq("q = LinkedList[Range[400]]; q[[1 ;; 300]] = Range[300, 1, -1]; Normal[q[[{1, 300, 301}]]]",
+                   "{300, 1, 301}", 0);
+    assert_eval_eq("q[[1]] = 2.5; {q[[1]], q[[2]], Head[q[[2]]]}", "{2.5, 299, Integer}", 0);
+    /* A LinkedList right-hand side is distributed like a List. */
+    assert_eval_eq("q[[1 ;; 3]] = LinkedList[{px, py, pz}]; Normal[q[[1 ;; 4]]]", "{px, py, pz, 297}", 0);
+    /* Deeper subscripts: copy-on-write for an immutable element ... */
+    assert_eval_eq("pm = LinkedList[{{1, 2}, {3, 4}}]; row = pm[[2]]; pm[[2, 1]] = px; pm[[All, 2]] = {pp, ps}; "
+                   "{Normal[pm], row}", "{{{1, pp}, {px, ps}}, {3, 4}}", 0);
+    /* ... and in place for a LinkedList element, at any depth. */
+    assert_eval_eq("pn = LinkedList[{LinkedList[{1, 2}]}]; inner = pn[[1]]; pn[[1, 2]] = 99; "
+                   "outer = {pn}; outer[[1, 1, 1]] = 7; Normal[inner]", "{7, 99}", 0);
+    /* Cycles are refused, directly or through a value that contains the list. */
+    assert_eval_eq("pcy = LinkedList[{1}]; {Quiet[Check[pcy[[1]] = pcy, failed]], "
+                   "Quiet[Check[pcy[[1]] = {pcy}, failed]], Quiet[Check[pn[[1, 1]] = pn, failed]], Normal[pcy]}",
+                   "{failed, failed, failed, {1}}", 0);
+    /* The object itself as target: a function parameter writes the caller's list. */
+    assert_eval_eq("setFirst[l_, v_] := (l[[1]] = v); setFirst[pcy, \"s\"]; Normal[pcy]", "{\"s\"}", 0);
+}
+
+void test_mutators_linear_time() {
+    /* 10^6 appends and prepends and 10^5 Part writes in well under a second
+     * each: a regression to O(n) per call would take minutes. */
+    assert_eval_eq("b = LinkedList[]; Do[AppendTo[b, i], {i, 10^6}]; "
+                   "p = LinkedList[]; Do[PrependTo[p, N[i]], {i, 10^6}]; "
+                   "Do[b[[i]] = -i, {i, 10^5}]; {Length[b], b[[5]], b[[-1]], p[[1]], Length[p]}",
+                   "{1000000, -5, 1000000, 1.0*^6, 1000000}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -513,6 +576,9 @@ int main() {
     TEST(test_part_reads);
     TEST(test_part_messages);
     TEST(test_reading_heads);
+    TEST(test_append_prepend_to);
+    TEST(test_part_assignment);
+    TEST(test_mutators_linear_time);
 
     printf("All LinkedList tests passed!\n");
     symtab_clear();

@@ -2689,12 +2689,30 @@ static Expr* inplace_assign_back(Expr* sym, Expr* new_val) {
  * Append, that case returned NULL: AppendTo on any packed variable was left
  * unevaluated and the variable silently unchanged. The buffer path
  * (ndstruct_append) also keeps a packed variable packed. */
+/* AppendTo / PrependTo on a LinkedList: O(1) at either end, in place.
+ * Consumes `llx` (the list's own atom) and returns it; NULL after
+ * Head::llcyc when `elem` would make the list contain itself. */
+static Expr* ll_append_to(const char* head, Expr* llx, Expr* elem, bool prepend) {
+    LinkedList* ll = llx->data.llist;
+    if (ll_would_cycle(ll, elem)) {
+        ll_cycle_message(head, elem);
+        expr_free(llx);
+        return NULL;
+    }
+    if (prepend) ll_push_front(ll, expr_copy(elem));
+    else ll_push_back(ll, expr_copy(elem));
+    return llx;
+}
+
 static Expr* append_to_impl(Expr* res, bool prepend) {
     if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
     Expr* sym = res->data.function.args[0];
     Expr* elem = res->data.function.args[1];
-    if (sym->type != EXPR_SYMBOL && sym->type != EXPR_FUNCTION) return NULL;
     const char* name = prepend ? "PrependTo" : "AppendTo";
+    /* The LinkedList object itself (a function parameter substituted into
+     * the body): grow it in place, as through a variable. */
+    if (sym->type == EXPR_LINKEDLIST) return ll_append_to(name, expr_copy(sym), elem, prepend);
+    if (sym->type != EXPR_SYMBOL && sym->type != EXPR_FUNCTION) return NULL;
 
     if (sym->type == EXPR_SYMBOL && !symtab_get_own_values(sym->data.symbol.name)) {
         mth_message(name, "rvalue",
@@ -2705,6 +2723,8 @@ static Expr* append_to_impl(Expr* res, bool prepend) {
 
     Expr* current_val = evaluate(sym);
     if (!current_val) return NULL;
+    /* A LinkedList grows in place in O(1); the variable keeps pointing at it. */
+    if (current_val->type == EXPR_LINKEDLIST) return ll_append_to(name, current_val, elem, prepend);
     /* A SparseArray appends through Append's native sparse kernel (a dense
      * answer for an element that is not a row of the array). */
     if (current_val->type == EXPR_SPARSE) {

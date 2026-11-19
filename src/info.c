@@ -1609,7 +1609,9 @@ void info_init(void) {
         "\tgives the span of parts m through n (with optional step s); ;; alone or All means all parts.\n\n"
         "Part is treated as atomic on Integer, Real, String, Symbol, Rational[n, d], and Complex[re, im]; "
         "Part[atom, i] for i != 0 stays unevaluated.\n"
-        "Indices are 1-based and may be negative; out-of-range indices leave the expression unevaluated.");
+        "Indices are 1-based and may be negative; out-of-range indices leave the expression unevaluated.\n"
+        "On a LinkedList, ll[[i]] is O(1); All, a span or a list of indices gives a new LinkedList; "
+        "ll[[spec]] = v writes the list in place.");
     symtab_set_docstring("Extract",
         "Extract[expr, pos]\n"
         "\textracts the part of expr at the position specified by pos.\n"
@@ -2669,6 +2671,17 @@ void info_init(void) {
     symtab_set_docstring("Most", "Most[expr] gives all but the last element of expr.");
     symtab_set_docstring("Rest", "Rest[expr] gives all but the first element of expr.");
     symtab_set_docstring("Append", "Append[expr, elem] adds elem to the end of expr.");
+    symtab_set_docstring("AppendTo",
+        "AppendTo[x, elem]\n"
+        "\tappends elem to the value of x and resets x to the result (x = Append[x, elem]).\n\n"
+        "On a LinkedList the list itself grows in place in O(1) and is returned; every "
+        "variable holding it sees the change. A machine-number List result is packed. "
+        "AppendTo::llcyc refuses an element that would make a LinkedList contain itself.");
+    symtab_set_docstring("PrependTo",
+        "PrependTo[x, elem]\n"
+        "\tprepends elem to the value of x and resets x to the result (x = Prepend[x, elem]).\n\n"
+        "On a LinkedList the list itself grows at the front in place in O(1) and is returned. "
+        "PrependTo::llcyc refuses an element that would make a LinkedList contain itself.");
     symtab_set_docstring("Prepend", "Prepend[expr, elem] adds elem to the beginning of expr.");
     symtab_set_docstring("Insert", "Insert[expr, elem, n] inserts elem at position n in expr.");
     symtab_set_docstring("Delete", "Delete[expr, n] deletes the element at position n in expr.");
