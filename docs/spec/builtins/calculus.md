@@ -5127,6 +5127,35 @@ level is not yet checked for independence: `Erfc = 1 - Erf` and
 `E^u (Erf[u] + Erfc[u])`, which is `E^u`, was certified non-elementary up to v0.6602.
 These integrands are now undecided.
 
+**Liouvillian primitive tops (v0.6621, C completeness campaign steps 3b and 3c).** A
+level `θ = Erf[u]`, `Erfi`, `Erfc`, `ExpIntegralEi` or `LogIntegral` (`Dθ = η` in the
+field below) is now integrated as a primitive monomial: the canonical split, Hermite
+reduction and the residue criterion, as for `Log`. LimitedIntegrate `r = Ds + c η`
+cannot read `c` off the lower integral here, because for `c ≠ 0` that integral does not
+exist:
+- for the `θ^i` coefficients with `i ≥ 1` it is the parametric Risch DE
+  (`Risch`ParametricRischDE`'s core) over the field below;
+- at `θ^0`, for `η = g τ^k` with `τ` the exponential directly below (Erf, Erfi, Erfc,
+  Ei), the `τ^k` term is solved by the parametric Risch DE and the rest is integrated
+  separately.
+
+A certificate needs every such level proved a monomial: `∫η` decided non-elementary over
+the levels below it, which catches `Erfc` beside `Erf`. `π` (from `D[Erf] =
+2 E^(-u^2)/Sqrt[Pi]`) counts as a parameter when the integrand has no logarithm or
+trigonometric kernel.
+
+| Integrand | `Risch`ElementaryIntegralQ` |
+|---|---|
+| `Erf[x]`, `x Erf[x]`, `ExpIntegralEi[x]` | `True` |
+| `E^(-x^2) Erf[x]` (`∫ = Sqrt[Pi] Erf[x]^2/4`) | `True` |
+| `Erf[x]/x`, `ExpIntegralEi[x]/x` | `False` |
+| `E^x ExpIntegralEi[x]`, `Erf[x]^2` (the integral needs `Ei[2 x]`, `Erf[Sqrt[2] x]`) | `False` |
+| `E^(-x^2)/Sqrt[Pi]` | `False` (undecided before v0.6621) |
+| `Erf[u] Erfc[u]/u` | undecided (`Erfc` is not a monomial over `Erf`) |
+
+Still undecided: `LogIntegral` at `θ^0`, and an exponential with another level between
+it and `θ` (`Log[x] Erf[1 + x]`).
+
 **Dependent logarithms (v0.6609, C completeness campaign step 8).** Two log
 kernels can be dependent: `Log[1 + I x] = Log[x - I] + I Pi/2`,
 `Log[-x] = Log[x] + I Pi`, `Log[2 + 2 x] = Log[1 + x] + Log[2]`. The structure

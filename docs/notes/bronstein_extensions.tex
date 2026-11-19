@@ -2484,16 +2484,97 @@ $y$, $c$) solves 100 of 100, every answer verified. It has no false
 \code{"NoSolution"}, and four non-elementary right-hand sides are proved to have none.
 Test: \code{test\_campaign\_step3a\_param\_rde}.
 
-\section*{T12. Status of the transcendental decision}
-\addcontentsline{toc}{section}{T12. Status}
+\section*{T12. A Liouvillian primitive top (v0.6621)}
+\addcontentsline{toc}{section}{T12. A Liouvillian primitive top}
+\label{sec:T12}
+
+A level $\theta=\operatorname{erf}u$, $\operatorname{erfi}u$, $\operatorname{erfc}u$,
+$\operatorname{Ei}u$ or $\operatorname{li}u$ has $D\theta=\eta\in K_{L-1}$. For
+example $\eta=\tfrac2{\sqrt\pi}e^{-u^2}u'$ for erf, and $e^uu'/u$ for Ei. Until
+v0.6621 the field integrator treated such a top as an exponential, and every verdict over
+it was demoted (\S T6).
+
+\paragraph{Monomials (step 3c).} \code{rt\_tower\_prims\_certified} decides, bottom-up,
+whether $\int\eta_i$ is elementary over $K_{i-1}$. It uses the decision itself over the
+tower, not over the field of $\eta_i$ alone, because $\operatorname{erfc}$ beside
+$\operatorname{erf}$ has $\int\eta=-\operatorname{erf}\in K_{i-1}$.
+
+\begin{proposition}\label{prop:T12a}
+If $\int\eta$ is not elementary over $K_{i-1}$, then $\theta$ is a monomial over
+$K_{i-1}$ with no new constant, and a logarithm $\log v$, $v\in K_{i-1}(\theta)$, lies in
+an elementary extension of $K_{i-1}(\theta)$ exactly as over a primitive monomial.
+\end{proposition}
+\begin{proof}
+If $\theta$ were algebraic over $K_{i-1}$, or a new constant appeared, then
+$\theta\in K_{i-1}$ up to a constant (Bronstein Thm~5.1.1 and Lemma~5.1.2 for a
+primitive), so $\int\eta\in K_{i-1}$, which is elementary. A primitive monomial has no
+special polynomials, so the canonical split, Hermite reduction and the residue criterion
+(Thm~5.6.1) hold as for $\log$. The only property of $\log$ the integrator uses beyond
+that is that $D\theta$ is a logarithmic derivative, and that property is used only in
+LimitedIntegrate, which is replaced below.
+\end{proof}
+A certificate over a tower with such a level needs every level proved. If $\int\eta$ is
+elementary or undecided, the level is marked. Eliminating it, as \S\ref{sec:T10} does for
+a logarithm, is a follow-up.
+
+\paragraph{LimitedIntegrate (step 3b).} IntegratePrimitivePolynomial ([SI] \S5.8)
+needs, for each coefficient, $r=Ds+c\,\eta$ with $c$ constant. For a logarithm, $c$ is
+read off the lower integral as the coefficient of the new logarithm $\theta$. Here that
+integral does not exist when $c\ne0$.
+\begin{itemize}
+\item $i\ge1$, $s\in K_{L-1}$: this is the parametric Risch~DE $Ds=r-c\eta$ over
+  $K_{L-1}$ of \S\ref{sec:T11}, decided three ways. Its ``no'' proves non-elementarity
+  ([SI] \S5.8).
+\item $i=0$, where new logarithms may appear in $s$. If $\eta=g\tau^k$ with $\tau$ the
+  exponential level just below $\theta$, $k\ne0$ and $g\in K_{L-2}$ (erf, erfi, erfc,
+  Ei), write $r=a\tau^k+\rho$, where $a\tau^k$ is the $\tau^k$ Laurent term of $r$.
+\end{itemize}
+
+\begin{proposition}\label{prop:T12b}
+Under these hypotheses, $r-c\eta$ has an elementary integral over $K_{L-1}$ if and only
+if $\rho$ does, and $D(s\tau^k)=(a-cg)\tau^k$ has a solution $s\in K_{L-2}$.
+\end{proposition}
+\begin{proof}
+In IntegrateHyperexponential ([SI] \S5.9) the Hermite part of an integral over
+$K_{L-2}(\tau)$ is proper in $\tau$. The derivative of a logarithm of a normal
+polynomial $p$ is $Dp/p=\deg_\tau(p)\,D\tau/\tau+(\text{proper})$, which adds to the
+$\tau^0$ term only. So the $\tau^k$ term of the integrand, $k\ne0$, must be the
+derivative of the $\tau^k$ term $s\tau^k$ of the antiderivative, and
+$D(s\tau^k)=(Ds+kD\tau/\tau\,s)\tau^k$. Everything else is $\rho$, which is free of $c$.
+\end{proof}
+The second condition is a parametric Risch~DE over $K_{L-2}$ in the single unknown $c$.
+For li ($\eta=u'/\log u$, a normal pole) or an exponential not directly below $\theta$,
+the step tries $c=0$ with new logarithms, in its own decision scope, and is otherwise
+marked.
+
+\paragraph{The constant $\sqrt\pi$.} $D\operatorname{erf}u$ carries $1/\sqrt\pi$. The
+decision demotes every ``no'' over a transcendental constant, because a constant such as
+$\log2$ interacts with the tower's logarithms (\S T3). Since $\sqrt\pi$ is
+transcendental, $\Q(\sqrt\pi)\cong\Q(a)$, and Prop.~\ref{prop:T1} accepts a symbolic
+$a$. What sets $\pi$ apart from a parameter is $\log(-1)=i\pi$, which only a logarithm,
+or a trigonometric kernel through the complex exponentials, can produce. So the demotion
+is lifted when $\pi$ is the only transcendental constant and the integrand has no
+logarithm, li, or trigonometric, hyperbolic or inverse kernel.
+
+A seeded hunt (\code{primhunt.m}: erf, erfi, erfc and Ei with rational, square,
+exponential, logarithmic and product forms, 24 draws each, 117 kept) gives 109
+\code{True}, 5 \code{False} and 3 undecided. The 3 have a logarithm between $\tau$ and
+$\theta$. Before, none was decided. Under the oracle (a \code{False} is wrong only when
+every Liouvillian kernel of $F$ occurs in $D[F]$) there is no false certificate. Tests:
+\code{test\_campaign\_step3b\_prim\_top}, \code{test\_campaign\_step3c\_monomial}.
+
+\section*{T13. Status of the transcendental decision}
+\addcontentsline{toc}{section}{T13. Status}
 
 The completeness ratchet (\code{tools/check\_bronstein\_completeness.py}) lists every
 path of the transcendental Risch~DE that can give up without a proof: 19 at v0.6609, and
-20 at v0.6620, where step~3a adds its two out-of-scope parametric marks.
+20 at v0.6620, where step~3a adds its two out-of-scope parametric marks, and 21 at
+v0.6621: step~3 retires the Liouvillian-level and Liouvillian-top marks, and adds the
+unproved-monomial and li/bottom marks.
 Each campaign step that removes one adds its section here. Still open: the generalised
-new-logarithm certificate (step~2, re-based on \S\ref{sec:T11}); a Liouvillian
-primitive top (steps~3b and~3c: LimitedIntegrate over $K_{L-1}$ by \S\ref{sec:T11}, and
-the monomial check $\int\eta\notin K_{L-1}$); the split special part for $\tanh$ and for $\tan$ over $k(i)$ (step~4,
+new-logarithm certificate (step~2, re-based on \S\ref{sec:T11}); li levels, an exponential
+not directly below a primitive, and the elimination of a dependent primitive
+(\S\ref{sec:T12} follow-ups); the split special part for $\tanh$ and for $\tan$ over $k(i)$ (step~4,
 replacing the mark of Prop.~\ref{prop:T5}); CancelTan with a homogeneous solution
 (step~5); towers of several tangents (step~6); and the exact tower arithmetic over
 $\Q(\alpha)$ of \S T3.

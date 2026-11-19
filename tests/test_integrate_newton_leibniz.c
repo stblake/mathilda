@@ -266,10 +266,12 @@ static void test_nl_exponential_denominator(void) {
      * tested as a zero. */
     check_quiet("PossibleZeroQ[(E^(-x) + x ExpIntegralEi[-x]) - (E^-x - x Gamma[0, x]) /. x -> 7/3]",
                 "True");
-    /* DiffUnderInt pinned: declines, silently and quickly (no idiv from its
-     * probes, no base outside x > 0). */
+    /* DiffUnderInt pinned: silent (no idiv from its probes, no base outside
+     * x > 0).  Since v0.6621 the Risch integrator decides the Ei tower its
+     * parameter integral produces (campaign step 3b), so it answers, with the
+     * same closed form; before, it declined. */
     check_quiet("Integrate`DiffUnderInt[Exp[-x t]/t^2, {t, 1, Infinity}, Assumptions -> x > 0]",
-                "Integrate`DiffUnderInt[1/(E^(t x) t^2), {t, 1, Infinity}, Assumptions -> x > 0]");
+                "E^(-x) + x ExpIntegralEi[-x]");
 }
 
 /* The antiderivative of Log[t]/(1 + t^2)^n carries ArcTanh[1 +/- 2 I t]; its

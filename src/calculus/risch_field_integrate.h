@@ -20,6 +20,7 @@
 
 #include <stdbool.h>
 #include "expr.h"
+#include "risch_tower.h"   /* RtTower (rt_tower_prims_certified) */
 
 /* ---- Elementary-integrability decision state (shared with the driver) ------ */
 /* The field integrator is a genuine decision procedure; in decision mode it
@@ -48,5 +49,14 @@ Expr* rt_exp_tower_case(Expr* f, Expr* x);
 
 /* Risch-DE builtin glue: solve D y + f y = g by driving the field integrator. */
 Expr* rde_solve_tower(Expr* f, Expr* g, Expr* x);
+
+/* Campaign step 3c: is every Liouvillian primitive level theta_i of T (Erf,
+ * Erfi, Erfc, Ei, li; D theta_i = eta_i in K_{i-1}) a monomial whose integral
+ * is not elementary over K_{i-1}?  Decided bottom-up by the field integrator
+ * in decide mode over the tower itself.  1: every level proved; 0: some eta_i
+ * has an elementary integral over K_{i-1} (theta_i is dependent: Erfc beside
+ * Erf); -1: undecided (or no RT_PRIM level is undecided-free).  Certificates
+ * over a tower with RT_PRIM levels need 1. */
+int rt_tower_prims_certified(RtTower* T, Expr* x);
 
 #endif /* MATHILDA_RISCH_FIELD_INTEGRATE_H */

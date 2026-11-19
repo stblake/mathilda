@@ -1199,8 +1199,12 @@ Expr* rt_field_integrate(Expr* F, RtTower* T, long L, Expr* x, Expr** rem_out) {
     Expr* den = rt_eval1("Denominator", expr_copy(Fg));
     Expr* result = NULL;
     if (num && den) {
-        if (T->kind[L] == RT_LOG) {
-            /* Bronstein canonical representation (§3.5): F = f_p + f_s + f_n over
+        if (T->kind[L] == RT_LOG || T->kind[L] == RT_PRIM) {
+            /* A Liouvillian primitive top (Erf, Erfi, Erfc, Ei, li: D theta = eta
+             * in K_{L-1}, campaign step 3b) is a primitive monomial like a
+             * logarithm: no special part, the same split, Hermite and residue
+             * criterion; only LimitedIntegrate differs (rt_limited_prim).
+             * Bronstein canonical representation (§3.5): F = f_p + f_s + f_n over
              * the primitive (log) monomial t_L.  A primitive monomial has no
              * non-trivial special polynomial (Dt ∈ k ⇒ every special factor is a
              * unit), so f_s ≡ 0; integrate the polynomial part f_p by the
@@ -1262,6 +1266,43 @@ Expr* rt_field_integrate(Expr* F, RtTower* T, long L, Expr* x, Expr** rem_out) {
      * part; if the overall integration failed, drop it. */
     if (!result && rem_out && *rem_out) { expr_free(*rem_out); *rem_out = NULL; }
     return result;
+}
+
+int rt_tower_prims_certified(RtTower* T, Expr* x) {
+    if (T->dependent) return -1;
+    for (size_t i = 0; i < T->n; i++) {
+        if (T->kind[i] != RT_PRIM) continue;
+        /* theta_i is a monomial with no new constant iff Int eta_i is not in
+         * K_{i-1}; non-elementary over K_{i-1} is the stronger fact the
+         * structure theorem needs, and it is what the decision proves */
+        int        save_mode = g_rt_decide_mode;
+        RtDecision save_dec  = g_rt_decision;
+        g_rt_decide_mode = 1;
+        g_rt_decision    = RT_DEC_UNKNOWN;
+        unsigned long prim0 = g_rt_prim_unevaluated;
+        RdeCertState sv = rde_cert_begin();          /* its marks are about eta_i */
+        Expr* rem = NULL;
+        Expr* Q = rt_field_integrate(T->Dcoef[i], T, (long)i - 1, x, &rem);
+        bool nonelem = (!Q && g_rt_decision == RT_DEC_NONELEMENTARY) || (Q && rem);
+        bool elem = Q && !rem;
+        if (elem) {   /* positive evidence only: D_tower Q == eta_i exactly */
+            Expr* dq = rt_tower_deriv(Q, T, x);
+            Expr* d = dq ? rt_eval1("Together", expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ dq,
+                expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), expr_copy(T->Dcoef[i]) }, 2) }, 2)) : NULL;
+            elem = d && rt_is_zero(d);
+            if (d) expr_free(d);
+        }
+        rde_cert_end(sv);
+        if (Q) expr_free(Q);
+        if (rem) expr_free(rem);
+        g_rt_decide_mode = save_mode;
+        g_rt_decision    = save_dec;
+        if (g_rt_prim_unevaluated != prim0) nonelem = false;
+        if (getenv("MATHILDA_RDE_CERT_DEBUG"))
+            fprintf(stderr, "[rt-prim-check] level %zu nonelem=%d elem=%d\n", i, (int)nonelem, (int)elem);
+        if (!nonelem) return elem ? 0 : -1;
+    }
+    return 1;
 }
 
 /* Primitive (logarithmic top) polynomial part.  num/den is a polynomial in
@@ -1863,8 +1904,162 @@ Expr* rt_reduce_new_logs_ext(Expr* R, RtTower* T, long L, Expr* x, int* status) 
     return rt_reduce_new_logs(R, T, L, x, status);
 }
 
+static int rt_limited_field_integrate_std(Expr* r, RtTower* T, long L, Expr* x, int is_bottom,
+                                          Expr** s_out, Expr** c_out);
+static int rt_limited_prim(Expr* r, RtTower* T, long L, Expr* x, int is_bottom,
+                           Expr** s_out, Expr** c_out);
 static int rt_limited_field_integrate(Expr* r, RtTower* T, long L, Expr* x, int is_bottom,
                                       Expr** s_out, Expr** c_out) {
+    if (T->kind[L] == RT_PRIM) return rt_limited_prim(r, T, L, x, is_bottom, s_out, c_out);
+    return rt_limited_field_integrate_std(r, T, L, x, is_bottom, s_out, c_out);
+}
+
+/* LimitedIntegrate over a Liouvillian primitive top (campaign step 3b): find
+ * s and a constant c with  r = D s + c eta,  eta = D theta_L in K_{L-1}.
+ * Unlike a logarithm, Int eta is not elementary over K_{L-1} (it is theta
+ * itself; rt_tower_prims_certified), so c can never be read off the lower
+ * integral: for c != 0 that integral does not exist.
+ *   i >= 1 (s in K_{L-1}, no new logarithm): exactly the parametric Risch DE
+ *     D s = r - c eta over K_{L-1} (rde_tower_param), decided three ways; its
+ *     "no" proves Int F non-elementary ([SI] §5.8 IntegratePrimitivePolynomial).
+ *   i = 0 (new logarithms allowed in s): when eta = g tau^k with tau = t_{L-1}
+ *     exponential and k != 0 (Erf, Erfi, Erfc, Ei), the tau^k Laurent term of an
+ *     integrand over K_{L-1} integrates on its own -- the Hermite part is
+ *     proper, a logarithm's derivative adds to tau^0 only ([SI] §5.9) -- so
+ *     r - c eta is elementary iff (a) r minus its tau^k term is, with no c, and
+ *     (b) D(s tau^k) = (a - c g) tau^k, a parametric Risch DE over K_{L-2} in c.
+ *     Otherwise (li, an exponential not directly below): c = 0 then the
+ *     parametric equation, and undecided when both fail.
+ * Returns 0 with *s_out (tower-variable form) and *c_out (NULL for 0), or -1
+ * (non-elementary raised, or marked). */
+static Expr* rt_prim_laurent_coeff(Expr* F, RtTower* T, long j, Expr* x, long k) {
+    Expr *fp = NULL, *fs = NULL, *fn = NULL;
+    if (!rt_canonical_split(F, T, j, x, &fp, &fs, &fn)) return NULL;
+    Expr* a = NULL;
+    Expr* tau = T->t[j];
+    if (k > 0) a = rt_coeff(fp, tau, k);
+    else {
+        Expr* sg = expr_new_symbol("rmLIs");
+        Expr* inv = rt_eval1("Together", rt_eval2("ReplaceAll", expr_copy(fs),
+            expr_new_function(expr_new_symbol("Rule"), (Expr*[]){ expr_copy(tau),
+                expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_copy(sg), expr_new_integer(-1) }, 2) }, 2)));
+        a = inv ? rt_coeff(inv, sg, -k) : NULL;
+        if (inv) expr_free(inv);
+        expr_free(sg);
+    }
+    expr_free(fp); expr_free(fs); expr_free(fn);
+    if (!a) return NULL;
+    Expr* ac = rt_eval1("Together", a);
+    return ac;
+}
+
+static int rt_limited_prim(Expr* r, RtTower* T, long L, Expr* x, int is_bottom,
+                           Expr** s_out, Expr** c_out) {
+    *s_out = NULL; *c_out = NULL;
+    Expr* eta = T->Dcoef[L];
+    RdeCtx Clo = { T, L - 1, x, L - 1 >= 0 ? T->t[L - 1] : x };
+    Expr* cs = expr_new_symbol("rmLIc");
+    Expr* unk = expr_new_function(expr_new_symbol("List"), (Expr*[]){ expr_copy(cs) }, 1);
+    int rc = -1;
+    /* the shape eta = g tau^k, tau = t_{L-1} exponential, k != 0 */
+    long k = 0; Expr* geta = NULL;
+    if (is_bottom && L >= 1 && T->kind[L - 1] == RT_EXP) {
+        Expr* tau = T->t[L - 1];
+        Expr* et = rt_eval1("Together", expr_copy(eta));
+        Expr* en = et ? rt_eval1("Numerator", expr_copy(et)) : NULL;
+        Expr* ed = et ? rt_eval1("Denominator", expr_copy(et)) : NULL;
+        if (en && ed) {
+            long kk = rt_degree(en, tau) - rt_degree(ed, tau);
+            Expr* g = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_copy(et), expr_new_function(expr_new_symbol("Power"),
+                    (Expr*[]){ expr_copy(tau), expr_new_integer(-kk) }, 2) }, 2));
+            if (kk != 0 && g && rt_free_of_x(g, tau)) { k = kk; geta = g; g = NULL; }
+            if (g) expr_free(g);
+        }
+        if (et) expr_free(et);
+        if (en) expr_free(en);
+        if (ed) expr_free(ed);
+    }
+    if (geta) {
+        /* (b): the tau^k term, D(s tau^k) = (a - c g) tau^k over K_{L-2} */
+        Expr* a = rt_prim_laurent_coeff(r, T, L - 1, x, k);
+        Expr *s = NULL, *sol = NULL;
+        int st = -1;
+        if (a) {
+            Expr* f = rt_eval1("Together", expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(k), expr_copy(T->Dcoef[L - 1]) }, 2));
+            Expr* g = rt_eval1("Expand", expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(a),
+                expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(-1), expr_copy(cs), expr_copy(geta) }, 3) }, 2));
+            RdeCtx C2 = { T, L - 2, x, L - 2 >= 0 ? T->t[L - 2] : x };
+            st = rde_tower_param(f, g, &C2, unk, &s, &sol);
+            expr_free(f); expr_free(g);
+        } else rde_cert_mark("LimitedIntegrate(prim): Laurent coefficient not extracted");
+        if (st == 0) rt_dec_nonelem();               /* (b) fails for every c */
+        Expr *s0 = NULL, *c0 = NULL;
+        int r0 = -1;
+        if (st == 1) {
+            /* (a): the rest, with no c (new logarithms allowed) */
+            Expr* rest = rt_eval1("Together", expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(r),
+                expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), expr_copy(a),
+                    expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ expr_copy(T->t[L - 1]), expr_new_integer(k) }, 2) }, 3) }, 2));
+            r0 = rest ? rt_limited_field_integrate_std(rest, T, L, x, 1, &s0, &c0) : -1;
+            if (rest) expr_free(rest);
+        }
+        if (st == 1 && r0 == 0) {
+            Expr* stk = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ s,
+                expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_copy(T->t[L - 1]), expr_new_integer(k) }, 2) }, 2);
+            s = NULL;
+            *s_out = rt_eval_own(expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ s0 ? s0 : expr_new_integer(0), stk }, 2));
+            s0 = NULL;
+            Expr* cv = expr_copy(sol->data.function.args[0]);
+            if (rt_is_zero(cv)) expr_free(cv); else *c_out = cv;
+            rc = 0;
+        }
+        if (s) expr_free(s);
+        if (sol) expr_free(sol);
+        if (s0) expr_free(s0);
+        if (c0) expr_free(c0);
+        if (a) expr_free(a);
+        expr_free(geta);
+        expr_free(cs); expr_free(unk);
+        return rc;
+    }
+    /* the parametric Risch DE D s = r - c eta over K_{L-1} (no new logarithm) */
+    Expr *s = NULL, *sol = NULL;
+    Expr* g = rt_eval1("Expand", expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(r),
+        expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(-1), expr_copy(cs), expr_copy(eta) }, 3) }, 2));
+    Expr* zero = expr_new_integer(0);
+    int st = g ? rde_tower_param(zero, g, &Clo, unk, &s, &sol) : -1;
+    expr_free(zero);
+    if (g) expr_free(g);
+    if (st == 1) {
+        *s_out = s; s = NULL;
+        Expr* cv = expr_copy(sol->data.function.args[0]);
+        if (rt_is_zero(cv)) expr_free(cv); else *c_out = cv;
+        rc = 0;
+    } else if (!is_bottom) {
+        if (st == 0) rt_dec_nonelem();               /* [SI] §5.8: no s in K_{L-1}, no c */
+    } else {
+        /* bottom, outside the decoupled shape: c = 0 with new logarithms, in
+         * its own decision scope (a "no" for c = 0 says nothing about c != 0) */
+        RtDecision save = g_rt_decision;
+        Expr *s0 = NULL, *c0 = NULL;
+        int r0 = rt_limited_field_integrate_std(r, T, L, x, 1, &s0, &c0);
+        g_rt_decision = save;
+        if (r0 == 0) { *s_out = s0; *c_out = c0; rc = 0; }
+        else rde_cert_mark("LimitedIntegrate(prim): bottom coefficient undecided (li, or an exponential not directly below)");
+    }
+    if (s) expr_free(s);
+    if (sol) expr_free(sol);
+    expr_free(cs); expr_free(unk);
+    return rc;
+}
+
+static int rt_limited_field_integrate_std(Expr* r, RtTower* T, long L, Expr* x, int is_bottom,
+                                          Expr** s_out, Expr** c_out) {
     *s_out = NULL; *c_out = NULL;
     Expr* R = rt_field_integrate(r, T, L - 1, x, NULL);  /* lower field: no partial */
     if (!R) {
@@ -2432,9 +2627,12 @@ static Expr* rde_solve_tower_core(Expr* f, Expr* g, Expr* x, Expr* extra,
         size_t ntan = 0;
         for (size_t i = 0; i < T.n; i++) if (T.kind[i] == RT_TAN) ntan++;
         if (ntan > 1) rde_cert_mark("tower: more than one tangent");
-        /* a Liouvillian primitive level: independence unchecked (Erfc = 1 - Erf) */
-        for (size_t i = 0; i < T.n; i++)
-            if (T.kind[i] == RT_PRIM) { rde_cert_mark("tower: Liouvillian primitive level"); break; }
+        /* a Liouvillian primitive level: a certificate needs it proved a
+         * monomial, Int eta not elementary below (Erfc = 1 - Erf; step 3c) */
+        bool anyprim = false;
+        for (size_t i = 0; i < T.n; i++) if (T.kind[i] == RT_PRIM) anyprim = true;
+        if (anyprim && (!rde_cert_active() || rt_tower_prims_certified(&T, x) != 1))
+            rde_cert_mark("tower: Liouvillian primitive level not proved a monomial");
     }
     expr_free(fgx);
     Expr* fx = rt_expand_exp_sums(f);

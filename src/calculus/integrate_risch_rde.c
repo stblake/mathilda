@@ -2672,8 +2672,13 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
      * delta = 2 boxes (review F8).  The hyperbolic sigma = -1 top, whose special
      * part tau^2 - 1 splits, and a Liouvillian primitive are not yet covered. */
     bool tan = rc_is_tan_top(C);
-    if (kind != RT_LOG && kind != RT_EXP && !tan) {
-        rde_cert_mark("tower: hyperbolic-tangent or Liouvillian top");
+    /* a Liouvillian primitive top (Erf, Ei, li; D tau = eta in k) runs the
+     * primitive stack: no special part, RdeBoundDegreePrim, PolyRischDECancel
+     * with eta absent -- every box reads Dcoef, not the kernel (campaign step
+     * 3b).  Its LimitedIntegrate goes through the field integrator's RT_PRIM
+     * branch. */
+    if (kind != RT_LOG && kind != RT_EXP && kind != RT_PRIM && !tan) {
+        rde_cert_mark("tower: hyperbolic-tangent top");
         return NULL;
     }
     /* Over algebraic constants the tower stack's arithmetic (Together, Cancel,

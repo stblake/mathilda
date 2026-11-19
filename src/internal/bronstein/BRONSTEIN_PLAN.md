@@ -1696,9 +1696,11 @@ is still deficient for every other caller (reproducer and table:
      v0.6603-09 (tasks/todo.md). **[x] Step 3a, v0.6620:** the C parametric Risch DE
      (`rde_tower_param`, `Risch`ParametricRischDE`) by linear constraints. It is the
      ParamRDE and LimitedIntegrate core of the C stack (theory:
-     docs/notes/bronstein_extensions.tex §T11). Next: steps 3b and 3c together (a
-     Liouvillian primitive top: an RT_PRIM branch of rt_field_integrate, LimitedIntegrate
-     through rde_tower_param, the monomial check), then 2, 4, 5, 6 and 9.
+     docs/notes/bronstein_extensions.tex §T11). **[x] Steps 3b + 3c, v0.6621:** a
+     Liouvillian primitive top (Erf, Erfi, Erfc, Ei) integrated as a primitive monomial,
+     LimitedIntegrate through rde_tower_param, and the monomial check replacing the step-0
+     demotion (§T12). Follow-ups: li at theta^0, an exponential not directly below theta,
+     eliminating a dependent primitive. Next: steps 2, 4, 5, 6 and 9.
 
 ### Phase 5: the radical anywhere (largest; theory first)
 

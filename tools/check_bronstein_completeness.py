@@ -97,7 +97,7 @@ BASELINE_C = {
     "base: identity gate",
     "base: reduced equation not polynomial",
     "tower: antidifferentiation D H = c",
-    "tower: hyperbolic-tangent or Liouvillian top",
+    "tower: hyperbolic-tangent top",
     # a theta^(>=1) coefficient whose integral carries an ArcTan over a tower
     # with a complex logarithm, and the derivative fold (ArcTan' = sum c_j t_j')
     # did not absorb it: the dilogarithm obstruction (Thm 5.6.1(ii)) is proved
@@ -145,10 +145,16 @@ BASELINE_C = {
     # over k(i) t^2 + 1 splits (t - i, t + i): the hypertangent boxes assume it
     # irreducible; the split case is the exponential-like two-factor special part
     "tower: hypertangent top over a field containing I",
-    # a Liouvillian primitive (Erf, Ei, li) level is not checked for independence
-    # (Erfc = 1 - Erf, LogIntegral[u] = Ei[Log[u]]) and the field integrator has no
-    # primitive branch: no certificate over such a tower (step 0.2; step 3 closes it)
-    "tower: Liouvillian primitive level",
+    # step 3c: a Liouvillian primitive level whose Int eta is elementary below it
+    # (Erfc beside Erf, li[u] beside Ei[Log[u]]) is dependent, and one whose Int eta
+    # is undecided is unproved; eliminating a dependent primitive from the tower
+    # (the step-8 analogue for logarithms) is the follow-up
+    "tower: Liouvillian primitive level not proved a monomial",
+    # step 3b: LimitedIntegrate at the bottom coefficient (new logarithms allowed)
+    # is decided when eta = g tau^k with tau the exponential directly below theta;
+    # li (eta = u'/Log u, a normal pole) and an exponential with other levels
+    # between it and theta (Log[x] Erf[1 + x]) are the follow-up
+    "LimitedIntegrate(prim): bottom coefficient undecided (li, or an exponential not directly below)",
     # step 3a: the parametric Risch DE does not convert the tangent boxes
     # (NoCancel2/3 and CancelTan's re/im split, where rc_conj takes every symbol,
     # the unknowns too, as real); step 4/5 splits the unknowns into re/im parts
@@ -193,6 +199,8 @@ CAS_FAILURE_MARKS = {
     "tower: could not be built",
     "tower: coefficients not rational in the tower",
     "tower: kernels left after substitution",
+    # the canonical split of a well-formed tower element does not fail
+    "LimitedIntegrate(prim): Laurent coefficient not extracted",
 }
 
 

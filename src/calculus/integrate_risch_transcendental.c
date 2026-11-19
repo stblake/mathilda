@@ -613,6 +613,39 @@ static Expr* rt_canon_log_args(const Expr* e, const Expr* x) {
 }
 
 static RtDecision rt_decide_field_canon(Expr* f, Expr* x);
+/* Pi as an ordinary transcendental parameter (campaign step 3b): every Erf-type
+ * integrand carries 1/Sqrt[Pi] from D[Erf].  Q(Sqrt[Pi]) is isomorphic to
+ * Q(a), a symbol, and a verdict over Q(a) is accepted already (Prop. T1); a
+ * transcendental Sqrt[Pi] avoids the exceptional set.  What makes Pi unlike a
+ * parameter is Log[-1] = I Pi: a logarithm (or a trigonometric kernel, through
+ * the complex exponentials) can produce it inside the tower.  So: Pi is the
+ * only transcendental constant, and f has no Log, LogIntegral, or trigonometric
+ * / hyperbolic / inverse kernel of x. */
+static bool rt_has_logtrig_of_x(const Expr* e, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL) {
+        static const char* const heads[] = { "Log", "LogIntegral", "Sin", "Cos", "Tan", "Cot", "Sec",
+            "Csc", "ArcSin", "ArcCos", "ArcTan", "ArcCot", "ArcSec", "ArcCsc", "Sinh", "Cosh", "Tanh",
+            "Coth", "Sech", "Csch", "ArcSinh", "ArcCosh", "ArcTanh", "ArcCoth", "ArcSech", "ArcCsch", NULL };
+        const char* h = e->data.function.head->data.symbol.name;
+        for (int i = 0; heads[i]; i++)
+            if (h == intern_symbol(heads[i]) && !rt_free_of_x((Expr*)e, x)) return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rt_has_logtrig_of_x(e->data.function.args[i], x)) return true;
+    return false;
+}
+static bool rt_pi_is_a_parameter(Expr* f, Expr* x) {
+    if (rt_has_logtrig_of_x(f, x)) return false;
+    Expr* a = expr_new_symbol("rmPiParam");
+    Expr* fa = rt_eval2("ReplaceAll", expr_copy(f), expr_new_function(expr_new_symbol("Rule"),
+        (Expr*[]){ expr_new_symbol("Pi"), expr_copy(a) }, 2));
+    bool only = fa && !rt_has_transcendental_constant(fa, x);
+    if (fa) expr_free(fa);
+    expr_free(a);
+    return only;
+}
+
 static RtDecision rt_decide_field(Expr* f, Expr* x) {
     /* Scope guard: an algebraic function of x (radical / Surd / Root) puts the
      * integrand outside the purely-transcendental tower the field decision is a
@@ -626,7 +659,8 @@ static RtDecision rt_decide_field(Expr* f, Expr* x) {
      * Log[2 u]) enlarges the constant field beyond Q(i): a "no" over Q(i) is
      * not a proof (rt_has_transcendental_constant) */
     if (vc == RT_DEC_NONELEMENTARY &&
-        (rt_has_transcendental_constant(f, x) || rt_has_transcendental_constant(fc, x)))
+        (rt_has_transcendental_constant(f, x) || rt_has_transcendental_constant(fc, x))
+        && !rt_pi_is_a_parameter(f, x))
         vc = RT_DEC_UNKNOWN;
     expr_free(fc);
     return vc;
@@ -758,8 +792,14 @@ static RtDecision rt_decide_tower(Expr* fx, Expr* x, bool tan_route) {
              * and 1/u + E^u (Ei[Log[u]] - LogIntegral[u]) were certified
              * non-elementary (review step 0.2, v0.6603).  No certificate over such
              * a tower until the primitive top is implemented. */
-            for (size_t i = 0; verdict == RT_DEC_NONELEMENTARY && i < T.n; i++)
-                if (T.kind[i] == RT_PRIM) verdict = RT_DEC_UNKNOWN;
+            /* Since step 3b/3c (v0.6621) the field integrator has the primitive
+             * branch, and a certificate needs every such level proved a
+             * monomial with a non-elementary Int eta below it. */
+            if (verdict == RT_DEC_NONELEMENTARY) {
+                bool anyprim = false;
+                for (size_t i = 0; i < T.n; i++) if (T.kind[i] == RT_PRIM) anyprim = true;
+                if (anyprim && rt_tower_prims_certified(&T, x) != 1) verdict = RT_DEC_UNKNOWN;
+            }
             if (Q) expr_free(Q);
             if (rem) expr_free(rem);
             g_rt_decide_mode = save_mode;
@@ -1025,6 +1065,16 @@ static bool rt_has_tan_of_x(const Expr* e, Expr* x) {
     return false;
 }
 
+/* Does e contain a Liouvillian primitive kernel (Erf, Erfi, Erfc, Ei, li) of an
+ * x-dependent argument? */
+static bool rt_has_prim_of_x(Expr* e, Expr* x) {
+    Expr** pr = NULL; size_t np = 0, cap = 0;
+    rt_collect_primitives(e, x, &pr, &np, &cap);
+    for (size_t i = 0; i < np; i++) expr_free(pr[i]);
+    free(pr);
+    return np > 0;
+}
+
 static Expr* builtin_risch_rischde_certified(Expr* res) {
     size_t ac = (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0;
     if (ac < 3 || ac > 5) return NULL;
@@ -1048,7 +1098,10 @@ static Expr* builtin_risch_rischde_certified(Expr* res) {
                    || (extra && (rt_find_exp_of_x(extra, x) || rt_find_log_of_x(extra, x)))
                    /* a tangent kernel: the hypertangent tower (review F8) */
                    || rt_has_tan_of_x(f, x) || rt_has_tan_of_x(g, x)
-                   || (extra && rt_has_tan_of_x(extra, x));
+                   || (extra && rt_has_tan_of_x(extra, x))
+                   /* a Liouvillian primitive kernel (Erf, Ei, li; step 3b) */
+                   || rt_has_prim_of_x(f, x) || rt_has_prim_of_x(g, x)
+                   || (extra && rt_has_prim_of_x(extra, x));
     RdeCertState saved = rde_cert_begin();
     rde_cert_set_params(params);
     Expr* y = NULL;
@@ -1134,10 +1187,13 @@ static Expr* builtin_risch_parametric_rischde(Expr* res) {
     bool has_kernel = false;
     for (size_t i = 0; i < gl->data.function.arg_count && !has_kernel; i++) {
         Expr* gi = gl->data.function.args[i];
-        has_kernel = rt_find_exp_of_x(gi, x) || rt_find_log_of_x(gi, x) || rt_has_tan_of_x(gi, x);
+        has_kernel = rt_find_exp_of_x(gi, x) || rt_find_log_of_x(gi, x) || rt_has_tan_of_x(gi, x)
+                  || rt_has_prim_of_x(gi, x);
     }
     has_kernel = has_kernel || rt_find_exp_of_x(f, x) || rt_find_log_of_x(f, x) || rt_has_tan_of_x(f, x)
-        || (extra && (rt_find_exp_of_x(extra, x) || rt_find_log_of_x(extra, x) || rt_has_tan_of_x(extra, x)));
+        || rt_has_prim_of_x(f, x)
+        || (extra && (rt_find_exp_of_x(extra, x) || rt_find_log_of_x(extra, x) || rt_has_tan_of_x(extra, x)
+                      || rt_has_prim_of_x(extra, x)));
     RdeCertState saved = rde_cert_begin();
     rde_cert_set_params(allp);
     Expr *y = NULL, *sol = NULL;

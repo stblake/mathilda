@@ -1622,9 +1622,12 @@ static void test_campaign_step0_primitive(void) {
         snprintf(buf, sizeof buf, "Quiet[Risch`ElementaryIntegralQ[%s, u]] =!= False", elem[i]);
         assert_eval_eq(buf, "True", 0);
     }
-    /* the certified RDE says why */
-    assert_eval_eq("Risch`RischDECertified[1, E^x Erf[x], x]; Risch`RischDECertifiedReason[]",
-                   "\"tower: Liouvillian primitive level\"", 0);
+    /* since step 3c (v0.6621) a proved monomial certifies: y' + y = E^x Erf[x]
+     * needs Int E^(2 x - x^2), an Erf[x - 1] outside the tower */
+    assert_eval_eq("Risch`RischDECertified[1, E^x Erf[x], x]", "\"NoSolution\"", 0);
+    /* and a dependent level still does not (Erfc beside Erf) */
+    assert_eval_eq("Risch`RischDECertified[1, E^x (Erf[x] + Erfc[x]) + Erf[x]/x, x]; Risch`RischDECertifiedReason[]",
+                   "\"tower: Liouvillian primitive level not proved a monomial\"", 0);
 }
 
 /* Campaign step 1 (v0.6605): logarithms written in tower variables.  The lower
@@ -1753,6 +1756,54 @@ static void test_campaign_step3a_param_rde(void) {
     assert_eval_eq("Head[Risch`ParametricRischDE[0, {rmPc1, 1}, x]]", "Risch`ParametricRischDE", 0);
 }
 
+/* C completeness campaign, steps 3b and 3c: a Liouvillian primitive top
+ * (Erf, Erfi, Erfc, Ei).  3b: the field integrator's primitive branch, with
+ * LimitedIntegrate r = Ds + c eta through the parametric Risch DE (i >= 1) and
+ * the decoupled tau^k term at the bottom; rde_tower accepts the top.  3c: a
+ * certificate needs every such level proved a monomial, Int eta not
+ * elementary over the levels below it (Erfc beside Erf is dependent). */
+static void test_campaign_step3b_prim_top(void) {
+    const char* cases[][2] = {
+        { "Erf[x]", "True" },                        /* x Erf + E^-x^2/Sqrt[Pi] */
+        { "x Erf[x]", "True" },
+        { "E^(-x^2) Erf[x]", "True" },               /* Sqrt[Pi]/4 Erf^2 */
+        { "ExpIntegralEi[x]", "True" },              /* x Ei - E^x */
+        { "Erf[x]/x", "False" },
+        { "ExpIntegralEi[x]/x", "False" },
+        /* needs Ei[2 x] / Erf[Sqrt[2] x], not in the tower: False is right */
+        { "E^x ExpIntegralEi[x]", "False" },
+        { "Erf[x]^2", "False" },
+        /* Pi as a parameter in a tower with no logarithm (D[Erf] = 2 E^-x^2/Sqrt[Pi]) */
+        { "E^(-x^2)/Sqrt[Pi]", "False" },
+        { "1 + E^(-x^2)/Sqrt[Pi]", "False" },
+        /* hunt cases (scratch primhunt.m, seed 3) */
+        { "Together[D[(x + 1) Erfi[x]^2/2 + x Erfi[x], x]]", "True" },
+        { "Together[D[(x^2 - 1) E^(2 x) Erf[2 x] + E^x, x]]", "True" } };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        char buf[400];
+        snprintf(buf, sizeof buf, "Quiet[Risch`ElementaryIntegralQ[%s, x]]", cases[i][0]);
+        assert_eval_eq(buf, cases[i][1], 0);
+    }
+    /* the Risch DE over a primitive top, and its parametric form */
+    assert_eval_eq("PossibleZeroQ[Risch`RischDECertified[0, Erf[x], x] - (x Erf[x] + E^(-x^2)/Sqrt[Pi])]", "True", 0);
+    assert_eval_eq("Risch`RischDECertified[0, Erf[x]/x, x]", "\"NoSolution\"", 0);
+    assert_eval_eq("With[{y = x^2 Erf[x]}, Together[Risch`RischDECertified[1, Together[D[y, x] + y], x] - y]]", "0", 0);
+    assert_eval_eq("Risch`ParametricRischDE[0, {E^(-x^2), 0}, x, {Erf[x]}] // Head", "List", 0);
+    /* answers are checked by differentiation */
+    assert_eval_eq("With[{f = E^(-x^2) Erf[x] + Erf[x]}, With[{F = Integrate[f, x]}, FreeQ[F, Integrate] && PossibleZeroQ[D[F, x] - f]]]", "True", 0);
+}
+
+static void test_campaign_step3c_monomial(void) {
+    /* Erfc beside Erf: Int D[Erfc] = -Erf is in the tower, so Erfc is not a
+     * monomial over it; no certificate (E^u (Erf + Erfc) = E^u was the step-0
+     * false certificate) */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^u (Erf[u] + Erfc[u]), u]]", "True", 0);
+    assert_eval_eq("Head[Quiet[Risch`ElementaryIntegralQ[Erf[u] Erfc[u]/u, u]]] =!= False", "True", 0);
+    assert_eval_eq("Head[Quiet[Risch`ElementaryIntegralQ[1/u + E^u (ExpIntegralEi[Log[u]] - LogIntegral[u]), u]]] =!= False", "True", 0);
+    /* a single Erf over E^(-x^2): proved a monomial */
+    assert_eval_eq("Risch`RischDECertified[0, Erf[x]/x, x]; Risch`RischDECertifiedReason[]", "None", 0);
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -1866,6 +1917,8 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_campaign_step2_complex_arctan);
     TEST(test_campaign_step8_dependent_logs);
     TEST(test_campaign_step3a_param_rde);
+    TEST(test_campaign_step3b_prim_top);
+    TEST(test_campaign_step3c_monomial);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }
