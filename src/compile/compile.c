@@ -2334,7 +2334,7 @@ static bool cse_head_is_pure(const char* h) {
         "Set", "SetDelayed", "AddTo", "SubtractFrom", "TimesBy", "DivideBy",
         "Increment", "Decrement", "CompoundExpression", "Do", "While", "For",
         "Sum", "Product", "Nest", "If", "With", "Module", "Block", "Function",
-        "Which", "Switch", "Piecewise", "Total", "Length"
+        "Which", "Switch", "Piecewise", "Total", "Length", "MemoryConstrained"
     };
     /* Symbol names are interned, so the table is compared by pointer once
      * resolved: a strcmp against each of the 25 names at every node of the
@@ -2618,6 +2618,17 @@ CompiledProgram* compile_expr_ex(const Expr* body, const char* const* arg_names,
     return compile_expr_prec(body, arg_names, arg_types, nargs, flags, 0);
 }
 
+/* Does `e` contain a call with head `sym` (an interned name) anywhere? */
+static bool body_has_head(const Expr* e, const char* sym) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* hd = e->data.function.head;
+    if (hd->type == EXPR_SYMBOL && hd->data.symbol.name == sym) return true;
+    if (body_has_head(hd, sym)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (body_has_head(e->data.function.args[i], sym)) return true;
+    return false;
+}
+
 CompiledProgram* compile_expr_prec(const Expr* body, const char* const* arg_names,
                                    const CompileType* arg_types, size_t nargs,
                                    unsigned flags, long prec_bits) {
@@ -2629,6 +2640,11 @@ CompiledProgram* compile_expr_prec(const Expr* body, const char* const* arg_name
      * optimiser never sees a managed register and the machine path is unchanged. */
     bool managed = (prec_bits > 0) || (flags & COMPILE_BIGINT);
     if (managed) flags |= COMPILE_NO_OPT | COMPILE_NO_CSE | COMPILE_NO_FUSE | COMPILE_NO_PAR;
+    /* MemoryConstrained's handler is reached from anywhere in its body (an
+     * allocation refused at vm_fail), an edge no pass models: keep such a
+     * program exactly as emitted. */
+    if (body_has_head(body, SYM_MemoryConstrained))
+        flags |= COMPILE_NO_OPT | COMPILE_NO_CSE | COMPILE_NO_FUSE | COMPILE_NO_PAR;
     c.prec_bits = prec_bits;
     c.allow_bigint = (flags & COMPILE_BIGINT) != 0;
     for (size_t k = 0; k < nargs; k++)

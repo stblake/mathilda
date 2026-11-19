@@ -19,6 +19,7 @@
 #include "mtime.h"   /* mth_mono_seconds / mth_wall_seconds / mth_sleep_seconds */
 #include "term/term_interrupt.h"   /* Pause: an interrupt ends the sleep */
 #include "core.h"    /* tc_deadline_remaining / tc_check_deadline (Pause under TimeConstrained) */
+#include "memacct.h" /* cf_abort_actionable: a protected Pause runs in full */
 #include <time.h>
 #include <errno.h>
 #include <stdlib.h>
@@ -952,7 +953,7 @@ static int pause_seconds(const Expr* e, double* out) {
  * the "at least n seconds" contract.
  *
  * Inside TimeConstrained, whose budget is elapsed time, Pause sleeps no
- * further than the deadline and then takes the timeout (tc_check_deadline):
+ * further than the deadline and then records the timeout (tc_check_deadline):
  * TimeConstrained[Pause[10], 1] gives $Aborted after 1 s, not 10 s.  The sleep
  * uses no CPU, so the CPU-time wake-up timer could never interrupt it.
  */
@@ -984,11 +985,10 @@ Expr* builtin_pause(Expr* res) {
         double left = tc_deadline_remaining();
         if (left >= 0.0 && left < seconds) {
             pause_sleep(left);
-            tc_check_deadline();            /* deadline reached: unwinds */
-            /* Not reached unless the clock disagrees; finish the wait. */
-            left = tc_deadline_remaining();
-            if (left > 0.0) pause_sleep(left);
-            tc_check_deadline();
+            tc_check_deadline();            /* deadline reached: records the timeout */
+            /* Inside an AbortProtect the timeout waits, so the full pause runs;
+             * otherwise the evaluator's next poll raises the abort. */
+            if (!cf_abort_actionable()) pause_sleep(seconds - left);
         } else {
             pause_sleep(seconds);
         }

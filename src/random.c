@@ -38,6 +38,7 @@
  */
 
 #include "random.h"
+#include "memacct.h"   /* MemoryConstrained: refuse before allocating */
 #include "dist.h"   /* ml_dist_reset_cache -- SeedRandom must clear the Gaussian cache */
 #include "checked_int.h"   /* ci_add_i64 */
 #include "arithmetic.h"
@@ -487,6 +488,9 @@ static Expr* random_array(const mpz_t imin, const mpz_t imax,
 Expr* builtin_randominteger(Expr* res) {
     if (res->type != EXPR_FUNCTION) return NULL;
     size_t argc = res->data.function.arg_count;
+    /* MemoryConstrained: refuse an over-budget array before building either form */
+    if (argc == 2 && !mth_mem_request_shape(res->data.function.args[1], sizeof(int64_t)))
+        return NULL;
 
     /* RandomInteger[] -> 0 or 1 */
     if (argc == 0) {
@@ -1119,6 +1123,9 @@ Expr* builtin_randomreal(Expr* res) {
             argc--; /* Peel off the option from the positional count. */
         }
     }
+    /* MemoryConstrained: refuse an over-budget array before building either form */
+    if (argc == 2 && !mth_mem_request_shape(res->data.function.args[1], sizeof(double)))
+        return NULL;
 
 #ifdef USE_MPFR
     if (!is_machine) return randomreal_mpfr(res, argc, bits);
@@ -1592,6 +1599,8 @@ Expr* builtin_randomcomplex(Expr* res) {
             argc--;
         }
     }
+    if (argc == 2 && !mth_mem_request_shape(res->data.function.args[1], 2 * sizeof(double)))
+        return NULL;   /* MemoryConstrained */
 
 #ifdef USE_MPFR
     if (!is_machine) return randomcomplex_mpfr(res, argc, bits);

@@ -78,6 +78,29 @@ Evaluates `expr`, generating an interrupt to abort the evaluation if it has not 
 - Returns `$Aborted` if the budget is exhausted and no `failexpr` is provided.
 - Returns the (then-evaluated) value of `failexpr` if the budget is exhausted and the three-argument form is used. `failexpr` is **not** evaluated when the body completes in time.
 - `TimeConstrained[expr, Infinity]` imposes no time constraint.
+- **The timeout is the ordinary `Abort[]`** (v0.6623). It does not jump. When the deadline passes, the
+  TimeConstrained's frame on the constraint stack (`src/memacct.h`, shared with `MemoryConstrained`) is
+  *tripped*. The evaluator's poll then turns the trip into the `Abort[]` sentinel, every frame between it and
+  the TimeConstrained leaves through its own cleanup, and the TimeConstrained consumes the abort and returns
+  `failexpr`. This matches the reference:
+  - nested budgets: the outermost expired one answers;
+  - an `AbortProtect` *inside* the body runs to completion first, while one enclosing the TimeConstrained
+    does not stop it;
+  - `CheckAbort` runs its `failexpr`, then (under the default `PropagateAborts -> Automatic`) the timeout
+    goes on. With `PropagateAborts -> False` it is absorbed, and that frame never fires again;
+  - `Catch` and `Check` do not stop it;
+  - a timeout during a lazily loaded package's `Get` puts `$Context` / `$ContextPath` back.
+- **What changed.** Before, the cooperative check `siglongjmp`'d out of the evaluation, skipping every C
+  frame in between. That leaked whatever those frames held, and it bypassed `CheckAbort` and `AbortProtect`.
+  Now:
+  - `TimeConstrained[While[True], 0.3]` leaks nothing under valgrind.
+  - The jump is only the backstop. It is taken when a computation that reaches no evaluator step (a pure C
+    loop), or that ignores the `Abort[]` it gets back, still runs `TC_ASYNC_GRACE_US` (50 ms CPU) after the
+    deadline, and never while an `AbortProtect` inside the body runs. That path alone can still leak.
+  - A kernel that declines on the deadline must not fall back to a slower path: the MPFR `Det` /
+    `LUDecomposition` / `LinearSolve` callers now stop there.
+  - Messages from a computation that is being aborted are dropped by the funnel, as they already were for
+    Ctrl-C, so a C loop that took the `Abort[]` as data cannot make an enclosing `Check` fire.
 - **A FLINT exception aborts like a timeout** (v0.6090).
   - **What happens.** FLINT reports an internal error (for example `qqbar_pow_fmpq: division by zero`) through
     `flint_throw`, whose default is `abort()`. Mathilda installs a handler (`tc_flint_throw`, `src/core.c`) that

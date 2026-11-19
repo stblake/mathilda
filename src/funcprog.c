@@ -1,6 +1,7 @@
 #include "print.h"
 
 #include "funcprog.h"
+#include "memacct.h"   /* MemoryConstrained: trips deferred by AbortProtect */
 #include "sparse/sparse.h"   /* Thread over a SparseArray */
 #include "core.h"        /* tc_register_unwind_counter */
 #include "term/term_progress.h"   /* the REPL spinner's loop progress */
@@ -1259,17 +1260,75 @@ Expr* builtin_abort(Expr* res) {
     return NULL;   /* stays Abort[]: the sentinel */
 }
 
+/* Whether an abort deferred by AbortProtect (or by CheckAbort's protected
+ * failexpr) must take effect now that the protected evaluation has ended: an
+ * Abort[] or an interactive interrupt recorded inside it, once the outermost
+ * protection is gone; a MemoryConstrained trip as soon as no protection opened
+ * inside its frame remains (memacct.h). Consumes the recorded Abort[]. */
+static bool abort_deferred_due(void) {
+    if (g_abort_protect_depth == 0 && (g_abort_pending || mth_interrupt_pending())) {
+        g_abort_pending = false;
+        return true;
+    }
+    return MTH_CF_POLL_DUE() && cf_poll();
+}
+
 /* CheckAbort[expr, failexpr] -- the value of expr, or, if an abort is raised
  * while evaluating it, the value of failexpr (evaluated after expr's scoping
- * constructs have been unwound).  Throws pass through; HoldAll. */
+ * constructs have been unwound).  Throws pass through; HoldAll.
+ *
+ * failexpr runs abort-protected, as in the reference: an abort raised inside it
+ * (Abort[], an interrupt, a constraint's abort) waits until it ends, then
+ * propagates.  PropagateAborts -> True passes the caught abort on after
+ * failexpr, False absorbs it, and the default Automatic passes on the abort of
+ * a TimeConstrained / MemoryConstrained (to the constraint that owns it) while
+ * absorbing Abort[] and an interrupt -- all as in the reference.  A constraint
+ * abort counts as caught even when expr ended before any poll turned it into
+ * the sentinel (a declined allocation, a timed-out Pause). */
 Expr* builtin_checkabort(Expr* res) {
-    if (res->type != EXPR_FUNCTION || res->data.function.arg_count != 2) return NULL;
+    if (res->type != EXPR_FUNCTION) return NULL;
+    size_t argc = res->data.function.arg_count;
+    if (argc != 2 && argc != 3) return NULL;
+    /* PropagateAborts: 1 True, 0 False, -1 Automatic (the default). */
+    int propagate_opt = -1;
+    if (argc == 3) {
+        const Expr* opt = res->data.function.args[2];
+        if (!(head_is(opt, SYM_Rule) || head_is(opt, SYM_RuleDelayed)) ||
+            opt->data.function.arg_count != 2 ||
+            opt->data.function.args[0]->type != EXPR_SYMBOL ||
+            opt->data.function.args[0]->data.symbol.name != SYM_PropagateAborts)
+            return NULL;
+        Expr* v = evaluate(opt->data.function.args[1]);
+        const char* nm = v->type == EXPR_SYMBOL ? v->data.symbol.name : NULL;
+        expr_free(v);
+        if      (nm == SYM_True)      propagate_opt = 1;
+        else if (nm == SYM_False)     propagate_opt = 0;
+        else if (nm == SYM_Automatic) propagate_opt = -1;
+        else return NULL;
+    }
     Expr* r = evaluate(res->data.function.args[0]);
-    if (!eval_is_inflight_abort(r)) return r;
-    eval_unwind_consumed();
+    bool sentinel = eval_is_inflight_abort(r);
+    if (!sentinel && !(MTH_CF_POLL_DUE() && cf_poll())) return r;
+    if (sentinel) eval_unwind_consumed();
     mth_interrupt_clear();   /* an interactive interrupt is consumed here too */
+    int caught_trip = g_cf_tripped;
+    cf_clear_trip();         /* ... and a TimeConstrained / MemoryConstrained trip */
     expr_free(r);
-    return evaluate(res->data.function.args[1]);
+    g_abort_protect_depth++;
+    Expr* f = evaluate(res->data.function.args[1]);
+    g_abort_protect_depth--;
+    if (eval_is_inflight_abort(f)) return f;   /* failexpr aborted on its own */
+    /* Automatic: a constraint's abort (TimeConstrained, MemoryConstrained)
+     * goes on to its owner after failexpr; Abort[] and an interrupt stop here.
+     * Absorbing a timeout spends its frame: it never fires again. */
+    bool propagate = propagate_opt == 1 || (propagate_opt == -1 && caught_trip >= 0);
+    if (propagate) cf_restore_trip(caught_trip);   /* the same abort goes on */
+    else if (cf_is_time(caught_trip)) tc_frame_spent(caught_trip);
+    if (abort_deferred_due() || propagate) {
+        expr_free(f);
+        return expr_new_function(expr_new_symbol(SYM_Abort), NULL, 0);
+    }
+    return f;
 }
 
 /* AbortProtect[expr] -- evaluate expr to completion even if Abort[] is called
@@ -1282,8 +1341,7 @@ Expr* builtin_abortprotect(Expr* res) {
     g_abort_protect_depth--;
     /* An interactive interrupt raised inside is deferred the same way; its flag
      * stays set until the top level or a CheckAbort consumes the abort. */
-    if (g_abort_protect_depth == 0 && (g_abort_pending || mth_interrupt_pending())) {
-        g_abort_pending = false;
+    if (abort_deferred_due()) {
         expr_free(r);
         return expr_new_function(expr_new_symbol(SYM_Abort), NULL, 0);
     }
@@ -1292,6 +1350,9 @@ Expr* builtin_abortprotect(Expr* res) {
 
 void abort_init(void) {
     tc_register_unwind_counter(&g_abort_protect_depth);
+    Expr* rule_args[2] = { expr_new_symbol(SYM_PropagateAborts), expr_new_symbol(SYM_Automatic) };
+    Expr* rule = expr_new_function(expr_new_symbol(SYM_Rule), rule_args, 2);
+    symtab_set_options("CheckAbort", expr_new_function(expr_new_symbol(SYM_List), &rule, 1));
 }
 
 Expr* builtin_catch(Expr* res) {

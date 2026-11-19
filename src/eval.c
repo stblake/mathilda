@@ -39,6 +39,7 @@
 #include <math.h>    /* isfinite, fabs */
 #include "message.h"   /* mth_message: Quiet/Check funnel */
 #include "term/term_interrupt.h" /* interactive interrupt (Ctrl-C) poll */
+#include "memacct.h"   /* MemoryConstrained poll */
 #include "term/term_progress.h"  /* g_mth_monitor_due, mth_monitor_tick (Monitor) */
 #include "sparse/sparse.h" /* EXPR_SPARSE (SparseArray raw objects) */
 #include "linalg/linsolvefn.h" /* LinearSolveFunction[...][b] */
@@ -4896,7 +4897,11 @@ static Expr* evaluate_core(Expr* e) {
          * enclosing frame unwinds through its normal cleanup. The flag stays set until
          * the abort is consumed (top level, CheckAbort), so a speculative probe that
          * drops the sentinel is re-aborted at its next step. AbortProtect defers it. */
-        if (MTH_INTERRUPT_PENDING() && mth_interrupt_should_stop()) {
+        /* MemoryConstrained (src/memacct.h): an over-budget frame becomes the
+         * same Abort[] sentinel; the frame's own MemoryConstrained consumes it.
+         * MTH_CF_POLL_DUE is one compare while no constraint is broken. */
+        if ((MTH_INTERRUPT_PENDING() && mth_interrupt_should_stop()) ||
+            (MTH_CF_POLL_DUE() && cf_poll())) {
             expr_free(current);
             current = expr_new_function(expr_new_symbol(SYM_Abort), NULL, 0);
             eval_recursion_depth--;

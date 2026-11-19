@@ -14,6 +14,7 @@
 #include "flint_mat_bridge.h"
 #include "ludecomp_internal.h"
 #include "message.h"   /* mth_message: Quiet/Check funnel */
+#include "core.h"      /* tc_deadline_passed */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
@@ -179,7 +180,10 @@ Expr* builtin_det(Expr* res) {
      * overflows.  Declines (NULL) for exact or symbolic input, which keep their
      * existing FLINT / Laplace paths. */
     Expr* mdet = mpfr_det_dispatch(arg, n);
-    if (mdet) {
+    if (mdet || tc_deadline_passed()) {
+        /* A constraint (TimeConstrained, MemoryConstrained, an interrupt) that stopped
+         * the factorisation must not hand the call to a slower path that ignores
+         * it: decline, and the evaluator's poll raises the abort. */
         for (size_t i = 0; i < idx; i++) expr_free(flat[i]);
         free(flat);
         return mdet;

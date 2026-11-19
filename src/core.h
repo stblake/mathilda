@@ -84,10 +84,14 @@ Expr* builtin_time_constrained(Expr* res);
 /* Cooperative wall-clock deadline check used by TimeConstrained.
  *
  * Called by evaluate()'s fixed-point loop once per rewrite iteration.
- * No-op outside any TimeConstrained call. When the innermost
- * TimeConstrained's wall-clock deadline has passed, sets the timeout
- * flag and siglongjmp's back to the matching sigsetjmp -- identical to
- * the SIGPROF path. The budget is elapsed time; the SIGPROF/ITIMER_PROF
+ * No-op outside any TimeConstrained call. When the effective wall-clock
+ * deadline has passed, it RECORDS the timeout -- trips the outermost expired
+ * TIME frame (memacct.h) -- and returns.  (It jumps only as the backstop, once a
+ * recorded timeout has been ignored for a grace period.)  The evaluator's poll
+ * then turns the trip into the ordinary Abort[] sentinel, which every frame
+ * leaves through its own cleanup, and the TimeConstrained that owns the frame
+ * consumes it.  A caller outside the evaluator (Pause, a declining C kernel)
+ * just returns afterwards.  The budget is elapsed time; the SIGPROF/ITIMER_PROF
  * layer is only a CPU-time wake-up that re-checks this same deadline. This
  * check catches a budget spent idle (no CPU accrues, so no SIGPROF) and is
  * the backstop for hosts whose ITIMER_PROF is unreliable (notably WSL 1,
@@ -95,9 +99,16 @@ Expr* builtin_time_constrained(Expr* res);
  *
  * Granularity: limited to between rewrite steps -- a single long-running
  * C builtin (e.g. FactorInteger on a large composite) cannot be aborted
- * cooperatively. On those hosts, SIGPROF is the only mechanism, with
- * its usual portability caveats. */
+ * cooperatively.  For that, SIGPROF is the backstop: TC_ASYNC_GRACE_US of CPU
+ * after the deadline with the timeout still in force (and no AbortProtect
+ * inside the body running), it siglongjmp's -- the one path that skips, and
+ * so may leak, the C frames between it and the TimeConstrained. */
 void tc_check_deadline(void);
+
+/* CheckAbort absorbed a timeout (PropagateAborts -> False): the TIME frame is
+ * spent -- it never fires again -- and the deadline is re-derived from the
+ * remaining frames. */
+void tc_frame_spent(int frame);
 
 /* Register a subsystem's nesting counter (a recursion depth or a re-entry guard,
  * incremented on entry and decremented on exit) so a TimeConstrained timeout
@@ -117,7 +128,7 @@ bool tc_deadline_passed(void);
 /* Seconds left before the innermost active TimeConstrained deadline (0 once
  * it has passed); negative when no TimeConstrained is active.  The budget is
  * elapsed (wall-clock) time, so a blocking builtin such as Pause waits no
- * longer than this and then calls tc_check_deadline. */
+ * longer than this and then calls tc_check_deadline (which records it). */
 double tc_deadline_remaining(void);
 /* Async-jump defer for a heavy, malloc-bound method run inside TimeConstrained:
  * bracket the work with push/pop so a timeout is taken at a safe point, not

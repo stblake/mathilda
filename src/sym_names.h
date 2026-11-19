@@ -736,6 +736,8 @@ extern const char* SYM_Label;
 extern const char* SYM_Sow;
 extern const char* SYM_Reap;
 extern const char* SYM_TimeConstrained;
+extern const char* SYM_MemoryConstrained;
+extern const char* SYM_PropagateAborts;
 extern const char* SYM_Times;
 extern const char* SYM_ToeplitzMatrix;
 extern const char* SYM_Tolerance;

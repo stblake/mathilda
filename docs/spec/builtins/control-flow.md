@@ -623,6 +623,20 @@ numeric loop never reaches.
 - `CheckAbort[expr, failexpr]` gives `expr`'s value, or `failexpr` if an abort
   occurs inside it. Scoping inside `expr` is unwound before `failexpr` runs. A
   `Throw` passes through unchanged. `HoldAll`.
+  - `failexpr` is abort-protected, as in the reference: an abort raised while it
+    runs (an `Abort[]`, Ctrl-C, a timeout or a memory overrun) waits until it
+    ends and then propagates.
+    `CheckAbort[CheckAbort[Abort[], Abort[]; Print["after"]], "o"]` prints
+    `after` and gives `"o"`.
+  - Option `PropagateAborts` (`Options[CheckAbort]` is
+    `{PropagateAborts -> Automatic}`). `True` passes the caught abort on after
+    `failexpr` has run, and `False` absorbs it. `Automatic` passes on the abort
+    of a `TimeConstrained` or `MemoryConstrained` (to the constraint that owns
+    it) but absorbs `Abort[]` and Ctrl-C. All three behave as in the reference.
+  - It sees those constraint aborts: `failexpr` runs, and under the default the
+    constraint then fires. With `PropagateAborts -> False` the body around it
+    carries on. An absorbed timeout never fires again, so that
+    `TimeConstrained` frame runs unconstrained.
 - `AbortProtect[expr]` runs `expr` to completion even if `Abort[]` is called
   inside it. The abort then takes effect when the outermost `AbortProtect`
   returns. `HoldAll`.
@@ -640,6 +654,85 @@ Out[1]= "aborted"
 
 In[2]:= ap = 0; CheckAbort[AbortProtect[Abort[]; ap = 1]; ap = 2, {"ab", ap}]
 Out[2]= {"ab", 1}
+```
+
+## MemoryConstrained
+- `MemoryConstrained[expr, b]` evaluates `expr`, stopping if more than `b`
+  bytes of additional memory are requested. `MemoryConstrained[expr, b,
+  failexpr]` gives `failexpr` instead of `$Aborted`. `failexpr` is evaluated
+  only if the constraint fires, after the constraint is gone (so under any
+  enclosing one). `MemoryConstrained[expr, Infinity]` imposes no constraint.
+  Attributes `HoldAll`, `Protected`; only `b` is evaluated up front.
+- `b` must be a positive machine integer or `Infinity`. Otherwise
+  `MemoryConstrained::ipnfm` is issued and the call stays unevaluated. Arity
+  errors give `::argt` / `::argtu`.
+- **Net accounting.** The kernel keeps one count of the bytes it holds
+  (`src/memacct.{c,h}`). It covers expression nodes, string bytes, array
+  buffers (packed and `NDArray`), and GMP/MPFR limbs. A budget is measured
+  from the count at entry. Memory freed again inside `expr` is not charged:
+  `MemoryConstrained[Do[Range[10^4], {1000}], 10^6]` is `Null`, as in the
+  reference.
+  - A variable-size block counts as soon as it is requested, even if it is
+    freed before the next evaluation step.
+  - Large producers ask before they allocate (`Range`, `RandomReal`,
+    `RandomInteger`, `RandomComplex`, `ConstantArray`, every packed builder,
+    and the `Compile` VM's arrays). An over-budget request is refused, so
+    `MemoryConstrained[RandomReal[1, 10^10], 10^3]` never touches 80 GB.
+  - Not counted: FLINT's own allocations, worker-thread allocations, and
+    malloc's bookkeeping. Byte counts per object differ from the reference,
+    so a budget near an object's size can decide differently: `Range[10]`
+    fits in 200 bytes here but not in the reference.
+- **The abort.** An overrun becomes the ordinary `Abort[]` sentinel, so every
+  enclosing construct unwinds through its normal cleanup and `CheckAbort`
+  catches it. The `MemoryConstrained` whose budget broke consumes it. With
+  nested constraints, that is the outermost frame that is over budget, and
+  its `failexpr` is the one that is returned.
+  - A plain `Abort[]`, Ctrl-C, or `Throw` inside the body is not caught; it
+    passes through.
+  - An `AbortProtect` *inside* `expr` defers the abort until it ends. One
+    *enclosing* the `MemoryConstrained` does not: the constraint still fires,
+    and the protected code around it then continues.
+  - `CheckAbort`'s second argument is not constrained: it runs to completion,
+    and then the constraint takes effect.
+  - The two constraints share one frame stack (`src/memacct.h`) and nest in
+    either order; the frame whose limit broke answers.
+- **Compile.** `MemoryConstrained[body, b, fail]` lowers natively, with no
+  call back into the interpreter: `CompileDiagnostics` reports
+  `Compiled -> True`.
+  - `OP_MC_ENTER` pushes the frame and a handler. An allocation the VM's
+    array opcodes are refused resumes at that handler. `OP_MC_LEAVE` pops the
+    frame, or jumps to the handler if it tripped. Growth through `A_PUSH` is
+    charged as it happens.
+  - The two-argument form fails the call to the interpreter on an overrun,
+    and the interpreter answers `$Aborted`.
+  - With a third argument, the branches join like `If`'s, so array-valued
+    branches are refused. A program containing `MemoryConstrained` is
+    compiled without the optimiser.
+  - Auto-compiled `Table`/`Sum` bodies are covered through the packed
+    builders' requests.
+
+```mathematica
+In[1]:= MemoryConstrained[Range[10^6], 10000]
+Out[1]= $Aborted
+
+In[2]:= MemoryConstrained[Range[10], 10, "too much memory"]
+Out[2]= "too much memory"
+
+In[3]:= MemoryConstrained[CheckAbort[Range[10^6]; Echo["first"], Echo["second"],
+          PropagateAborts -> False]; Echo["finished CheckAbort"], 10^4]
+>> second
+>> finished CheckAbort
+Out[3]= "finished CheckAbort"
+
+In[4]:= AbortProtect[MemoryConstrained[RandomReal[1, 10^5]; Echo["eval"], 10^4,
+          Echo["constraint"]]; Echo["past MemoryConstrained"]]
+>> constraint
+>> past MemoryConstrained
+Out[4]= "past MemoryConstrained"
+
+In[5]:= f = Compile[{{n, _Integer}}, MemoryConstrained[Total[Range[n]], 10^4, -1]];
+        {f[10], f[10^6]}
+Out[5]= {55, -1}
 ```
 
 ## Goto / Label

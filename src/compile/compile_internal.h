@@ -274,6 +274,14 @@ enum {
      * behaviour is identical — the compiled path merely burns the iterations  \
      * first.  Impure and never removed. */                                   \
     X(FAIL, K_ASTORE)                                                       \
+    /* MemoryConstrained[body, b, fail] (src/memacct.h).  MC_ENTER pushes a     \
+     * memory frame with budget R[a] and a handler (pc b) on the run's own      \
+     * handler stack; MC_LEAVE pops it, or jumps to b when the frame tripped.   \
+     * A trip found at an allocation refusal arrives at vm_fail, which resumes  \
+     * at the innermost matching handler.  Kind K_JZ so b is relocated as a     \
+     * TARGET; a program using them is compiled with COMPILE_NO_OPT, so no pass \
+     * reasons about the implicit body -> handler edges. */                     \
+    X(MC_ENTER, K_JZ) X(MC_LEAVE, K_JZ)                                     \
     X(AND, K_BIN)     X(OR, K_BIN)     X(XOR, K_BIN)    X(NOT, K_UN)       \
     X(ARR_FREE, K_ARR) X(V_EW, K_ARR)  X(V_POW, K_ARR)                     \
     X(V_KERN, K_ARR)  X(V_KERN2, K_ARR) X(V_TOTAL, K_ARR) X(V_LEN, K_ARR)  \

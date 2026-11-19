@@ -779,6 +779,7 @@ set(COMMON_SRC
     ../src/fit.c
     ../src/info.c
     ../src/meminfo.c
+    ../src/memacct.c
     ../src/parallel.c
     ../src/image.c
     ../src/imagefilter.c
@@ -6397,6 +6398,16 @@ else()
     target_link_libraries(abort_tests gmp m)
 endif()
 add_test(NAME abort_tests COMMAND abort_tests)
+
+add_executable(memory_constrained_tests test_memory_constrained.c $<TARGET_OBJECTS:mathilda_common>)
+target_include_directories(memory_constrained_tests PRIVATE ../src)
+if(USE_ECM)
+    target_link_libraries(memory_constrained_tests gmp m ${ECM_LIB})
+    add_dependencies(memory_constrained_tests build_ecm)
+else()
+    target_link_libraries(memory_constrained_tests gmp m)
+endif()
+add_test(NAME memory_constrained_tests COMMAND memory_constrained_tests)
 
 # A TimeConstrained timeout must put back the variable of an interrupted
 # Table / Do / Sum / NIntegrate / FindRoot / ... (binding frames, modular.c).

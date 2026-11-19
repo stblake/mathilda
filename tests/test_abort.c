@@ -84,6 +84,25 @@ static void test_abortprotect(void) {
     assert_eval_eq("AbortProtect[Abort[]]", "$Aborted", 0);
 }
 
+/* CheckAbort's failexpr is abort-protected (the reference: an abort raised in it
+ * waits until it ends, then propagates), and PropagateAborts -> True passes the
+ * caught abort on after failexpr. */
+static void test_checkabort_failexpr(void) {
+    assert_eval_eq("cf = {}; r = CheckAbort[CheckAbort[Abort[], Abort[]; AppendTo[cf, \"after\"]], \"o\"]; {r, cf}",
+                   "{\"o\", {\"after\"}}", 0);
+    assert_eval_eq("CheckAbort[CheckAbort[Abort[], \"in\", PropagateAborts -> True], \"out\"]", "\"out\"", 0);
+    assert_eval_eq("CheckAbort[CheckAbort[Abort[], \"in\", PropagateAborts -> False], \"out\"]", "\"in\"", 0);
+    assert_eval_eq("CheckAbort[CheckAbort[Abort[], \"in\", PropagateAborts -> Automatic], \"out\"]", "\"in\"", 0);
+    assert_eval_eq("cf = {}; CheckAbort[CheckAbort[Abort[], AppendTo[cf, 1], PropagateAborts -> True]; "
+                   "AppendTo[cf, 2], cf]", "{1}", 0);
+    /* No abort: PropagateAborts changes nothing. */
+    assert_eval_eq("CheckAbort[5, 6, PropagateAborts -> True]", "5", 0);
+    assert_eval_eq("Options[CheckAbort]", "{PropagateAborts -> Automatic}", 0);
+    /* A malformed third argument leaves the call alone. */
+    assert_eval_eq("CheckAbort[5, 6, 7]", "CheckAbort[5, 6, 7]", 0);
+    assert_eval_eq("CheckAbort[5, 6, PropagateAborts -> 3]", "CheckAbort[5, 6, PropagateAborts -> 3]", 0);
+}
+
 static void test_get_and_files(void) {
     char path[128], src[512];
     snprintf(path, sizeof path, "/tmp/Mathilda_abort_%d.m", (int)getpid());
@@ -160,6 +179,52 @@ static void test_unwind_through_callbacks(void) {
     assert_eval_eq("Catch[Sum[If[i == 5, Throw[i], i], {i, 10}]]", "5", 0);
 }
 
+/* TimeConstrained's timeout is the ordinary Abort[] (cooperative: it unwinds
+ * through every frame's cleanup) owned by its TimeConstrained.  Each expected
+ * value is the reference kernel's. */
+static void test_timeconstrained_abort(void) {
+    /* CheckAbort runs failexpr, and (Automatic) the timeout then goes on. */
+    assert_eval_eq("TimeConstrained[CheckAbort[While[True], \"ca\"], 0.2, \"tc\"]", "\"tc\"", 0);
+    assert_eval_eq("TimeConstrained[CheckAbort[While[True], \"ca\"]; \"after\", 0.2, \"tc\"]", "\"tc\"", 0);
+    assert_eval_eq("tl = {}; {TimeConstrained[CheckAbort[While[True], AppendTo[tl, \"f\"]; \"f\", "
+                   "PropagateAborts -> True], 0.2, \"tc\"], tl}", "{\"tc\", {\"f\"}}", 0);
+    /* PropagateAborts -> False absorbs it, and the frame never fires again. */
+    assert_eval_eq("tl = {}; {TimeConstrained[CheckAbort[While[True], AppendTo[tl, \"f\"], "
+                   "PropagateAborts -> False]; AppendTo[tl, \"after\"]; \"body\", 0.2, \"tc\"], tl}",
+                   "{\"body\", {\"f\", \"after\"}}", 0);
+    assert_eval_eq("{TimeConstrained[CheckAbort[While[True], 0, PropagateAborts -> False]; "
+                   "t0 = AbsoluteTime[]; While[AbsoluteTime[] - t0 < 0.5]; \"spun\", 0.2, \"tc\"]}",
+                   "{\"spun\"}", 0);
+    /* failexpr of a CheckAbort inside runs to completion. */
+    assert_eval_eq("tl = {}; {TimeConstrained[CheckAbort[While[True], t0 = AbsoluteTime[]; "
+                   "While[AbsoluteTime[] - t0 < 0.4]; AppendTo[tl, \"f\"]], 0.2, \"tc\"], tl}",
+                   "{\"tc\", {\"f\"}}", 0);
+    /* AbortProtect inside the body runs to completion; an enclosing one does not
+     * stop the timeout, and the code around it continues. */
+    assert_eval_eq("tl = {}; {TimeConstrained[AbortProtect[t0 = AbsoluteTime[]; While[AbsoluteTime[] - t0 < 0.4]; "
+                   "AppendTo[tl, 1]]; AppendTo[tl, 2], 0.2, \"tc\"], tl}", "{\"tc\", {1}}", 0);
+    assert_eval_eq("tl = {}; {AbortProtect[TimeConstrained[While[True], 0.2, AppendTo[tl, \"tc\"]; \"tc\"]; "
+                   "AppendTo[tl, \"past\"]], tl}", "{{\"tc\", \"past\"}, {\"tc\", \"past\"}}", 0);
+    assert_eval_eq("TimeConstrained[AbortProtect[Pause[0.4]; \"p\"], 0.2, \"tc\"]", "\"tc\"", 0);
+    /* Not caught outside, by Catch or by Check; a plain Abort[] is not consumed. */
+    assert_eval_eq("CheckAbort[TimeConstrained[While[True], 0.2], \"outer\"]", "$Aborted", 0);
+    assert_eval_eq("TimeConstrained[Catch[While[True]], 0.2, \"tc\"]", "\"tc\"", 0);
+    assert_eval_eq("TimeConstrained[Check[While[True], \"chk\"], 0.2, \"tc\"]", "\"tc\"", 0);
+    assert_eval_eq("CheckAbort[TimeConstrained[Abort[], 5, \"tc\"], \"ca\"]", "\"ca\"", 0);
+    /* Nesting: the expired budget answers. */
+    assert_eval_eq("TimeConstrained[TimeConstrained[While[True], 10, \"inner\"], 0.2, \"outer\"]", "\"outer\"", 0);
+    assert_eval_eq("TimeConstrained[TimeConstrained[While[True], 0.2, \"inner\"], 10, \"outer\"]", "\"inner\"", 0);
+    assert_eval_eq("Table[TimeConstrained[While[True], 0.05, k], {k, 3}]", "{1, 2, 3}", 0);
+    /* Blocking and scoped bodies. */
+    assert_eval_eq("TimeConstrained[Pause[5], 0.2, \"tc\"]", "\"tc\"", 0);
+    assert_eval_eq("x = 1; {TimeConstrained[Block[{x = 2}, While[True]], 0.2, \"tc\"], x}", "{\"tc\", 1}", 0);
+    assert_eval_eq("TimeConstrained[Module[{s = 0}, While[True, s++]], 0.2, \"tc\"]", "\"tc\"", 0);
+    /* Afterwards nothing is left armed. */
+    assert_eval_eq("TimeConstrained[While[True], 0.1, 0]; t0 = AbsoluteTime[]; Pause[0.3]; "
+                   "AbsoluteTime[] - t0 >= 0.29", "True", 0);
+    assert_eval_eq("CheckAbort[Abort[], \"ab\"]", "\"ab\"", 0);
+}
+
 int main(void) {
     symtab_init();
     core_init();
@@ -168,6 +233,8 @@ int main(void) {
     TEST(test_not_caught_by_others);
     TEST(test_nesting);
     TEST(test_abortprotect);
+    TEST(test_checkabort_failexpr);
+    TEST(test_timeconstrained_abort);
     TEST(test_get_and_files);
     TEST(test_unwind_through_callbacks);
     printf("All abort tests passed.\n");

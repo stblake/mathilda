@@ -44,6 +44,7 @@
 #include "linalg.h"
 #include "ndlinalg.h"
 #include "linsolve.h"
+#include "core.h"   /* tc_deadline_passed */
 #include "eval.h"
 #include "symtab.h"
 #include "attr.h"
@@ -468,6 +469,10 @@ Expr* lu_dispatch(Expr* m, int rows, int cols)
         } else {
             Expr* fast = lu_mpfr_dispatch(m, rows, cols);
             if (fast) return fast;
+            /* A constraint (TimeConstrained, MemoryConstrained, an interrupt) that stopped
+     * the factorisation must not hand the call to a slower path that ignores it:
+     * decline, and the evaluator's poll raises the abort. */
+            if (tc_deadline_passed()) return NULL;
         }
     }
     return lu_symbolic_dispatch(m, rows, cols);

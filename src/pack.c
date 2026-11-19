@@ -6,6 +6,7 @@
 #include "symtab.h"
 #include "sym_names.h"
 #include "attr.h"
+#include "memacct.h"   /* MemoryConstrained: refuse before allocating */
 #include "eval.h"
 #include "common.h"   /* head_is */
 #include <stdio.h>
@@ -436,6 +437,9 @@ static Expr* ndbuild_open_impl(int rank, const int64_t* dims, NDType dtype, void
         n *= (size_t)dims[i];
     }
     if (n < pack_min_elements()) return NULL;
+    /* MemoryConstrained: a refused buffer declines like a failed malloc; the
+     * caller's boxed fallback then trips the evaluator's poll at once. */
+    if (!mth_mem_request(ndt_elem_size(dtype) * n)) return NULL;
     void* buf = zeroed ? calloc(n, ndt_elem_size(dtype)) : malloc(ndt_elem_size(dtype) * n);
     if (!buf) return NULL;
     Expr* e = expr_new_ndarray_raw(rank, dims, buf, dtype);
@@ -463,6 +467,9 @@ Expr* ndbuild_open_like(const Expr* src, int rank, const int64_t* dims,
         if (dims[i] < 1) return NULL;
         n *= (size_t)dims[i];
     }
+    /* MemoryConstrained: a refused buffer declines like a failed malloc; the
+     * caller's boxed fallback then trips the evaluator's poll at once. */
+    if (!mth_mem_request(ndt_elem_size(dtype) * n)) return NULL;
     void* buf = malloc(ndt_elem_size(dtype) * n);
     if (!buf) return NULL;
     Expr* e = expr_new_ndarray_like(src, rank, dims, buf, dtype);

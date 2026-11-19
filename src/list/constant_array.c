@@ -1,4 +1,5 @@
 #include "list_common.h"
+#include "../memacct.h"   /* MemoryConstrained */
 #include "constant_array.h"
 #include "../ndarray.h"
 #include "../pack.h"
@@ -48,6 +49,8 @@ Expr* builtin_constant_array(Expr* res) {
 
     Expr* c = res->data.function.args[0];
     Expr* dims = res->data.function.args[1];
+    /* MemoryConstrained: refuse an over-budget array before building it */
+    if (!mth_mem_request_shape(dims, sizeof(Expr*))) return NULL;
 
     /* A dimension spec is either a single integer or a List of integers. */
     size_t dim_count = 1;

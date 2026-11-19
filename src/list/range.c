@@ -2,6 +2,7 @@
 #include "range.h"
 #include "iter.h"   /* iter_real_slack */
 #include "../pack.h"
+#include "../memacct.h"   /* MemoryConstrained: refuse before allocating */
 #include "../checked_int.h"
 #include "../ndarray.h"   /* ndarray_warn_once */
 #include "../iter.h"      /* iter_normalize_bounds, iter_real_value */
@@ -85,7 +86,8 @@ static Expr* range_bigint(const Expr* imin_e, const Expr* imax_e, const Expr* di
                 range_too_large(mpz_get_d(span) + 1.0);
             } else {
                 size_t count = (size_t)mpz_get_si(span) + 1;
-                Expr** items = malloc(sizeof(Expr*) * count);
+                Expr** items = mth_mem_request(count * (sizeof(Expr) + sizeof(Expr*)))
+                             ? malloc(sizeof(Expr*) * count) : NULL;
                 if (items) {
                     for (size_t i = 0; i < count; i++) {
                         /* expr_new_bigint_from_mpz copies its operand */
@@ -94,7 +96,7 @@ static Expr* range_bigint(const Expr* imin_e, const Expr* imax_e, const Expr* di
                     }
                     out = expr_new_function(expr_new_symbol(SYM_List), items, count);
                     free(items);
-                } else {
+                } else if (!cf_abort_actionable()) {
                     range_too_large((double)count);
                 }
             }
@@ -187,6 +189,10 @@ Expr* builtin_range(Expr* res) {
                 goto L_fail_range;          /* unevaluated, not truncated */
             }
 
+            /* MemoryConstrained: refused up front, before either representation
+             * is built (the boxed fallback below would allocate even more). */
+            if (!mth_mem_request((size_t)count * sizeof(int64_t))) goto L_fail_range;
+
             expr_free(imin_e); expr_free(imax_e); expr_free(di_e);
             imin_e = imax_e = di_e = NULL;
 
@@ -250,6 +256,8 @@ Expr* builtin_range(Expr* res) {
             }
         }
     }
+
+    if (!mth_mem_request(count * sizeof(double))) goto L_fail_range;   /* MemoryConstrained */
 
     if (is_real) {
         double* buf = NULL;

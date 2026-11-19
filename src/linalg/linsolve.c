@@ -33,6 +33,7 @@
 
 #include "rref_numeric.h"   /* inexact RowReduce / LinearSolve */
 #include "linsolve.h"
+#include "core.h"   /* tc_deadline_passed */
 #include "pack.h"
 #include "linalg.h"
 #include "ndlinalg.h"
@@ -1373,6 +1374,10 @@ Expr* builtin_linearsolve(Expr* res) {
                 Expr* x = (f && !sing) ? mpfr_lu_solve(f, res->data.function.args[1]) : NULL;
                 mpfr_lu_free(f);
                 if (x) return x;
+                /* A constraint (TimeConstrained, MemoryConstrained, an interrupt) that stopped
+     * the factorisation must not hand the call to a slower path that ignores it:
+     * decline, and the evaluator's poll raises the abort. */
+                if (tc_deadline_passed()) return NULL;
             }
         }
         if (nbits) {

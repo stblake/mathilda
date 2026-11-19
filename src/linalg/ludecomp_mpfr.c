@@ -392,8 +392,8 @@ static bool lum_factor_crout(mpfr_t* A, int rows, int cols, mpfr_prec_t bits,
  * threads (mp_parallel_for), inside a tc_async_defer region where the
  * SIGPROF timeout may not unwind; without this poll a 10000 x 10000 factor
  * at 60 digits ran > 12 min past a 60 s cap.  The step loop polls the
- * deadline (non-jumping) on the main thread; callers free their arrays and
- * then take the timeout jump with tc_check_deadline(). */
+ * deadline (non-jumping) on the main thread; callers free their arrays,
+ * record the timeout with tc_check_deadline() and decline. */
 static bool lum_factor(mpfr_t* A_re, mpfr_t* A_im, int rows, int cols,
                         mpfr_prec_t bits, bool is_complex,
                         int* perm, bool* out_singular)

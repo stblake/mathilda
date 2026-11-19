@@ -652,6 +652,14 @@ static void render_meaning(DBuf* b, const CompiledProgram* p, size_t i, ProgList
         return;
     }
     if (c->op == OP_ASSOC_LOOKUP_DYN) { db_catf(b, "%s = Lookup[%s, %s]", rd, ra, rb); return; }
+    if (c->op == OP_MC_ENTER) {
+        db_catf(b, "MemoryConstrained budget %s; on overrun goto %u", ra, c->b);
+        return;
+    }
+    if (c->op == OP_MC_LEAVE) {
+        db_catf(b, "end MemoryConstrained; goto %u if it tripped", c->b);
+        return;
+    }
     if (c->op == OP_ASSOC_KEYSEL) {
         db_catf(b, "%s = %s[%s, ", rd, (c->flags & 1u) ? "KeyTake" : "KeyDrop", ra);
         render_imm(b, p, i, L);

@@ -18,6 +18,7 @@
 #include "symtab.h"
 #include "eval.h"
 #include "message.h"
+#include "core.h"   /* tc_deadline_passed */
 #include "print.h"
 #include "attr.h"
 #include <stdint.h>
@@ -253,6 +254,7 @@ Expr* linsolvefn_make(const Expr* call) {
          * matrix at 500 digits, condition number 1.8e389, was "singular".) */
         bool sing = false;
         MpfrLU* mp = mp_factor_of(m, r, opts, nopts, &sing);
+        if (!mp && tc_deadline_passed()) return NULL;   /* stopped: no slower path */
         if (mp && !sing) {
             int64_t key = g_next_key++;
             cache_put(key, NULL, mp);

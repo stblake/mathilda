@@ -19,6 +19,7 @@
 #define _GNU_SOURCE
 #endif
 
+#include "context.h"   /* restore $Context after an aborted read */
 #include "loadmodule.h"
 #include "sym_names.h"
 #include "sym_intern.h"
@@ -137,6 +138,14 @@ Expr* mathilda_run_file(const char* path, int* opened) {
 
     Expr* last_eval = expr_new_symbol(SYM_Null);
     Expr* prev_input = mth_input_file_enter(path);
+    /* The context state at entry, put back if an abort stops the read: the
+     * file's End[] / EndPackage[] never run, and the session would be left in
+     * the package's private context (every later bare symbol a fresh
+     * Private` one).  A lazily loaded package (Integrate's) is read inside the
+     * caller's TimeConstrained, whose timeout is such an abort. */
+    size_t ctx_depth = context_stack_depth();
+    Expr* saved_ctx; Expr* saved_path;
+    context_capture(&saved_ctx, &saved_path);
     const char* ptr = buffer;
     while (*ptr != '\0') {
         const char* stmt_start = ptr;
@@ -169,6 +178,12 @@ Expr* mathilda_run_file(const char* path, int* opened) {
         if (mth_quit_requested()) break;
     }
     mth_input_file_leave(prev_input);
+    if (eval_is_inflight_abort(last_eval)) {
+        context_unwind_to(ctx_depth);
+        context_restore(saved_ctx, saved_path);
+    } else {
+        context_release(saved_ctx, saved_path);   /* a file may leave a Begin open */
+    }
 
     free(buffer);
     return last_eval;

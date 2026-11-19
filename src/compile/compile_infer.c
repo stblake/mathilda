@@ -169,6 +169,31 @@ bool all_args_int(Ctx* c, Expr* const* A, size_t na) {
     return true;
 }
 
+bool compile_mc_infinite(const Expr* b) {
+    if (b->type == EXPR_SYMBOL) return b->data.symbol.name == SYM_Infinity;
+    return b->type == EXPR_FUNCTION && b->data.function.head->type == EXPR_SYMBOL &&
+           b->data.function.head->data.symbol.name == SYM_DirectedInfinity &&
+           b->data.function.arg_count == 1 &&
+           b->data.function.args[0]->type == EXPR_INTEGER &&
+           b->data.function.args[0]->data.integer == 1;
+}
+
+/* MemoryConstrained[body, b] has the body's type (an overrun fails the call to
+ * the interpreter, which answers $Aborted); with a failexpr the two branches
+ * join like If's, so array values are refused there.  The budget must be a
+ * machine integer (a non-positive one fails the call at run time, and the
+ * interpreter issues MemoryConstrained::ipnfm); Infinity is no constraint. */
+bool compile_mc_type(Ctx* c, Expr** A, size_t na, CompileType* out) {
+    CompileType tb, t0, tf;
+    if (!infer_type(c, A[0], &t0)) return false;
+    if (compile_mc_infinite(A[1])) { *out = t0; return true; }
+    if (!infer_type(c, A[1], &tb) || tb != CT_INT) return false;
+    if (na == 2) { *out = t0; return true; }
+    if (!infer_type(c, A[2], &tf) || CT_IS_ARRAY(t0) || CT_IS_ARRAY(tf)) return false;
+    *out = (t0 == tf) ? t0 : num_common(t0, tf);
+    return (int)*out >= 0;
+}
+
 bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
     if (!e) return false;
     Slot imm; CompileType lt;
@@ -611,6 +636,7 @@ bool infer_type(Ctx* c, const Expr* e, CompileType* out) {
      * boolean and array args fall back to the interpreter. */
     if (na == 2 && h == SYM_Order) { IT(0, ta); IT(1, tb); ta = num_common(ta, tb); if ((int)ta < 0 || ta == CT_COMPLEX || CT_IS_ARRAY(ta)) return false; *out = CT_INT; return true; }
     if (h == SYM_And || h == SYM_Or || h == SYM_Xor || h == SYM_Not) { *out = CT_BOOL; return true; }
+    if (h == SYM_MemoryConstrained && (na == 2 || na == 3)) return compile_mc_type(c, A, na, out);
     if (h == SYM_If && na == 3) {
         CompileType tt, te; if (!infer_type(c, A[1], &tt) || !infer_type(c, A[2], &te)) return false;
         if (tt == te) { *out = tt; return true; }

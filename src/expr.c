@@ -5,6 +5,7 @@
 #include "ndarray.h"   /* ndt_elem_size for dtype-aware copy/eq/hash */
 #include "assoc_index.h" /* assoc_index_free — the cached Association key index */
 #include "symtab.h"      /* SymbolDef: Module-local node counting */
+#include "memacct.h"     /* MTH_MEM_CHARGE / RELEASE: MemoryConstrained accounting */
 #include <stdbool.h>
 #include <limits.h>
 #include <math.h>
@@ -110,6 +111,7 @@ static Expr* expr_alloc_node(void) {
         g_expr_pool = e->data.function.head;   /* pop */
         g_expr_pool_size--;
         e->hash_cache = 0;   /* recycled node: drop any stale memoized hash */
+        MTH_MEM_CHARGE(sizeof(Expr));
         return e;
     }
     if (!g_expr_pool_atexit_registered) {
@@ -117,13 +119,14 @@ static Expr* expr_alloc_node(void) {
         atexit(expr_pool_free_all);
     }
     e = (Expr*)malloc(sizeof(Expr));
-    if (e) e->hash_cache = 0;   /* fresh node: "not yet hashed" */
+    if (e) { e->hash_cache = 0; MTH_MEM_CHARGE(sizeof(Expr)); }   /* fresh node: "not yet hashed" */
     return e;
 }
 
 /* Return a physically-dead node to the pool, or to the OS once the pool is at
  * capacity. Caller must have already released any owned payload. */
 static void expr_release_node(Expr* e) {
+    MTH_MEM_RELEASE(sizeof(Expr));
     if (g_expr_pool_size >= EXPR_POOL_CAP) {
         free(e);
         return;
@@ -301,9 +304,10 @@ Expr* expr_new_string(const char* str) {
     e->last_evaluated_at = 0;
     e->data.string = mathilda_strdup(str);
     if (!e->data.string) {
-        free(e);
+        expr_release_node(e);
         return NULL;
     }
+    MTH_MEM_CHARGE_BLOCK(strlen(e->data.string) + 1);
     return e;
 }
 
@@ -318,6 +322,7 @@ Expr* expr_new_string_adopt(char* buf) {
     e->refcount = 1;
     e->last_evaluated_at = 0;
     e->data.string = buf;
+    MTH_MEM_CHARGE_BLOCK(strlen(buf) + 1);
     return e;
 }
 
@@ -404,10 +409,21 @@ Expr* expr_new_bigint_from_str(const char* str) {
     e->last_evaluated_at = 0;
     if (mpz_init_set_str(e->data.bigint, str, 10) == -1) {
         mpz_clear(e->data.bigint);
-        free(e);
+        expr_release_node(e);
         return NULL;
     }
     return e;
+}
+
+/* The bytes an NDArray node accounts for: its buffer and its dims vector.
+ * MemoryConstrained charges this at construction and releases it at the free,
+ * so a site that changes a live node's dims in place (the Compile VM's A_PUSH)
+ * charges the difference itself. */
+int64_t expr_ndarray_payload_bytes(const Expr* e) {
+    int64_t n = 1;
+    for (int i = 0; i < e->data.ndarray.rank; i++) n *= e->data.ndarray.dims[i];
+    return n * (int64_t)ndt_elem_size(e->data.ndarray.dtype) +
+           (int64_t)e->data.ndarray.rank * (int64_t)sizeof(int64_t);
 }
 
 Expr* expr_new_ndarray_raw(int rank, const int64_t* dims, void* data, NDType dtype) {
@@ -418,11 +434,12 @@ Expr* expr_new_ndarray_raw(int rank, const int64_t* dims, void* data, NDType dty
     e->last_evaluated_at = 0;
     e->data.ndarray.rank = rank;
     e->data.ndarray.dims = malloc(sizeof(int64_t) * (size_t)rank);
-    if (!e->data.ndarray.dims) { free(e); return NULL; }
+    if (!e->data.ndarray.dims) { expr_release_node(e); return NULL; }
     memcpy(e->data.ndarray.dims, dims, sizeof(int64_t) * (size_t)rank);
     e->data.ndarray.data = data;
     e->data.ndarray.dtype = dtype;
     e->data.ndarray.present_as = NDA_HEAD_NDARRAY;
+    MTH_MEM_CHARGE_BLOCK(expr_ndarray_payload_bytes(e));
     return e;
 }
 
@@ -500,7 +517,7 @@ Expr* expr_new_mpfr_from_str(const char* str, mpfr_prec_t bits) {
     if (!e) return NULL;
     if (mpfr_set_str(e->data.mpfr, str, 10, MPFR_RNDN) != 0) {
         mpfr_clear(e->data.mpfr);
-        free(e);
+        expr_release_node(e);
         return NULL;
     }
     return e;
@@ -654,6 +671,7 @@ Expr* expr_unshare(Expr* e) {
             break;
         case EXPR_STRING:
             fresh->data.string = e->data.string ? mathilda_strdup(e->data.string) : NULL;
+            if (fresh->data.string) MTH_MEM_CHARGE_BLOCK(strlen(fresh->data.string) + 1);
             break;
         case EXPR_BIGINT:
             mpz_init(fresh->data.bigint);
@@ -675,6 +693,7 @@ Expr* expr_unshare(Expr* e) {
             memcpy(fresh->data.ndarray.dims, e->data.ndarray.dims, sizeof(int64_t) * (size_t)rank);
             fresh->data.ndarray.data = malloc(bytes);
             memcpy(fresh->data.ndarray.data, e->data.ndarray.data, bytes);
+            MTH_MEM_CHARGE_BLOCK(expr_ndarray_payload_bytes(fresh));
             break;
         }
         case EXPR_COMPILED:
@@ -771,7 +790,10 @@ void expr_free(Expr* e) {
             }
             break;
         case EXPR_STRING:
-            if (e->data.string) free(e->data.string);
+            if (e->data.string) {
+                MTH_MEM_RELEASE(strlen(e->data.string) + 1);
+                free(e->data.string);
+            }
             break;
         case EXPR_FUNCTION:
             /* Free the cached Association index (NULL for every non-association
@@ -790,6 +812,9 @@ void expr_free(Expr* e) {
             mpz_clear(e->data.bigint);
             break;
         case EXPR_NDARRAY:
+            /* Released by shape whether or not the buffer is owned: a borrowed
+             * view (data NULLed before the free) was charged the same way. */
+            MTH_MEM_RELEASE(expr_ndarray_payload_bytes(e));
             free(e->data.ndarray.dims);
             free(e->data.ndarray.data);
             break;

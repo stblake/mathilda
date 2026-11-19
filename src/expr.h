@@ -303,6 +303,8 @@ Expr* expr_new_bigint_take(mpz_t val);
  * packed List back into a visible NDArray at the first operation applied to it,
  * which is a user-visible wrong answer with no crash to find it by. The name
  * carries `_raw` so the choice has to be made deliberately at every site. */
+/* Bytes a NDArray node accounts for under MemoryConstrained (buffer + dims). */
+int64_t expr_ndarray_payload_bytes(const Expr* e);
 Expr* expr_new_ndarray_raw(int rank, const int64_t* dims, void* data, NDType dtype);
 
 /* Derive a new NDArray FROM `src`, inheriting its presentation (visible

@@ -2,6 +2,7 @@
  * message.c -- global message-suppression depth and the Quiet / Check /
  * Message builtins.  See message.h for rationale.
  */
+#include "memacct.h"   /* a constraint abort in flight silences */
 #include "message.h"
 #include "term/term_interrupt.h"
 #include "expr.h"
@@ -292,6 +293,12 @@ void mth_message_v(int extra_mute, const char* head, const char* tag,
      * whatever a declining kernel or a cleanup path says now is noise, so it is
      * neither printed nor noted. Inside AbortProtect messages still print. */
     if (mth_interrupt_should_stop()) return;
+    /* Likewise a TimeConstrained / MemoryConstrained abort in flight
+     * (memacct.h): the computation is being unwound, and C code that received
+     * the Abort[] as a value (an N loop raising precision on it) must not speak
+     * for it -- Check would otherwise take the message as the doomed
+     * computation's.  A deferred one (inside AbortProtect) does not silence. */
+    if (g_cf_tripped >= 0 && cf_abort_actionable()) return;
     /* Off[head::tag]: the message does not exist for this session -- neither
      * printed nor seen by Check. */
     if (mth_msg_is_off(head, tag)) return;

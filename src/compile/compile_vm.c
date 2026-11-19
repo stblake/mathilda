@@ -14,6 +14,7 @@
  * handful of leaf helpers the emit modules also use (the assoc value coercions
  * and the managed-constant materialisers), declared in compile_internal.h. */
 #include "../equal_tol.h"
+#include "../memacct.h"   /* MemoryConstrained: charges, refusals, frames */
 #include "compile.h"
 #include "compile_internal.h"    /* Slot / Instr / CompiledProgram / opcodes / VM_TLS */
 #include "../arithmetic.h"       /* expr_new_* / expr_free / expr_bigint_normalize */
@@ -458,6 +459,10 @@ static NDType ct_elem_ndt(unsigned relem) {
                                          : NDT_FLOAT64;
 }
 
+/* Deepest MemoryConstrained nesting one compiled run handles itself; deeper
+ * nesting fails the call to the interpreter. */
+#define VM_MC_MAX_NEST 16
+
 static Expr* nd_own_copy(const Expr* x, unsigned relem) {
     if (!x || x->type != EXPR_NDARRAY) return NULL;
     NDType dt = ct_elem_ndt(relem);
@@ -469,6 +474,7 @@ static Expr* nd_own_copy(const Expr* x, unsigned relem) {
     if ((dt == NDT_INT64) != (sdt == NDT_INT64)) return NULL;
     if ((dt == NDT_BOOL)  != (sdt == NDT_BOOL))  return NULL;
     size_t n = ndarray_size(x), esz = ndt_elem_size(dt);
+    if (!mth_mem_request(esz * n)) return NULL;   /* MemoryConstrained */
     void* buf = malloc(esz * (n ? n : 1));
     if (!buf) return NULL;
     if (sdt == dt) memcpy(buf, x->data.ndarray.data, esz * n);
@@ -630,6 +636,7 @@ static bool vm_range_array_op(const Instr* c, Slot* R) {
                 n *= (size_t)d;
             }
             NDType dt = ct_elem_ndt((unsigned)c->imm.i);
+            if (!mth_mem_request(n * ndt_elem_size(dt))) return false;   /* MemoryConstrained */
             void* buf = calloc(n ? n : 1, ndt_elem_size(dt));
             if (!buf) return false;
             Expr* nw = expr_new_ndarray_raw(rank, dims, buf, dt);
@@ -759,6 +766,7 @@ static bool vm_array_op(const Instr* c, Slot* d, Slot* a, Slot* b) {
             NDType dt = ct_elem_ndt(AF_R(f));
             size_t nelem = ndarray_size(x);
             size_t esz = ndt_elem_size(dt);
+            if (!mth_mem_request(nelem * esz)) return false;   /* MemoryConstrained */
             void* buf = calloc(nelem ? nelem : 1, esz);
             if (!buf) return false;
             Expr* nw = expr_new_ndarray_like(x, x->data.ndarray.rank, x->data.ndarray.dims, buf, dt);
@@ -1087,6 +1095,9 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
     if (n == 0) return;
     size_t pc = 0;
     const Instr* c = &code[pc];
+    /* MemoryConstrained handlers of this run (OP_MC_ENTER .. OP_MC_LEAVE). */
+    int mc_hsp = 0;
+    struct { int frame; uint32_t handler; } mc_hs[VM_MC_MAX_NEST];
     /* Live elements of the current tile, set by VSETLEN.  Only the load, store
      * and reduction read it — every arithmetic tile op covers the full VBLOCK —
      * and all three are pinned inside the strip loop because they read the loop
@@ -1111,6 +1122,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
     #define OP(name) case OP_##name
     #define NEXT() break
     #define JUMP() continue
+vm_loop:
     while (pc < n) {
         c = &code[pc];
         switch (c->op) {
@@ -1142,6 +1154,23 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
     #define IOP(chk) do { if ((chk) && !(c->flags & IF_NOCHK)) goto vm_fail; } while (0); NEXT()
 #endif
             OP(JMP): pc = c->b; JUMP();
+            /* MemoryConstrained: see the OPLIST entry. */
+            OP(MC_ENTER): {
+                if (RA.i <= 0 || mc_hsp >= VM_MC_MAX_NEST) goto vm_fail;
+                int f_ = mc_frame_push((int64_t)RA.i);
+                if (f_ < 0) goto vm_fail;
+                mc_hs[mc_hsp].frame = f_; mc_hs[mc_hsp].handler = c->b; mc_hsp++;
+            } NEXT();
+            OP(MC_LEAVE): {
+                if (mc_hsp <= 0) goto vm_fail;
+                int f_ = mc_hs[mc_hsp - 1].frame;
+                if (g_mth_mem_live > g_mth_mem_limit) mc_note_exceeded();
+                int t_ = g_cf_tripped;
+                if (t_ >= 0 && t_ < f_) goto vm_fail;   /* an enclosing budget broke */
+                mc_hsp--;
+                cf_unwind_to(f_);                       /* forgets our own trip */
+                if (t_ == f_) { pc = c->b; JUMP(); }    /* ours: the fail branch */
+            } NEXT();
             OP(JZ):  pc = RA.i ? pc + 1 : c->b; JUMP();   /* branch if false */
             /* Checked: this is Increment/Decrement's opcode as well as a loop
              * step (compile.c's Increment lowering), and `x = 2^63-1; x++` is a
@@ -1650,8 +1679,13 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
                     if (cap_ <= k_) cap_ = k_ + 1;
                     if (cap_ > (int64_t)VM_ITER_SAFETY_CAP + 1) goto vm_fail;
                     size_t es_ = ndt_elem_size(nd_->dtype);
+                    /* MemoryConstrained: the growth is charged here, since the
+                     * node is resized in place (expr_free releases by dims). */
+                    size_t grow_ = (size_t)(cap_ - nd_->dims[0]) * es_;
+                    if (!mth_mem_request(grow_)) goto vm_fail;
                     void* nb_ = realloc(nd_->data, (size_t)cap_ * es_);
                     if (!nb_) goto vm_fail;
+                    MTH_MEM_CHARGE(grow_);
                     nd_->data = nb_;
                     nd_->dims[0] = cap_;
                 }
@@ -1672,6 +1706,7 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
                 size_t es_ = ndt_elem_size(nd_->dtype);
                 void* nb_ = realloc(nd_->data, (size_t)(n_ ? n_ : 1) * es_);
                 if (nb_) nd_->data = nb_;
+                MTH_MEM_RELEASE((nd_->dims[0] - (int64_t)n_) * (int64_t)es_);
                 nd_->dims[0] = n_;
             } NEXT();
             OP(A_SIZE):     ARROP();
@@ -2039,6 +2074,25 @@ static void vm_run(const Instr* code, size_t n, Slot* R, bool* failed) {
     return;
 #endif
 vm_fail:
+    /* A MemoryConstrained of THIS run whose frame tripped resumes at its
+     * handler (an allocation was refused inside its body); any other failure
+     * unwinds this run's frames and hands the call to the interpreter. */
+    if (mc_hsp > 0) {
+        int t_ = g_cf_tripped;
+        for (int h_ = mc_hsp - 1; h_ >= 0 && t_ >= 0; h_--) {
+            if (mc_hs[h_].frame != t_) continue;
+            cf_unwind_to(t_);
+            mc_hsp = h_;
+            pc = mc_hs[h_].handler;
+#if VM_THREADED
+            c = &code[pc]; goto *tbl[c->op];
+#else
+            goto vm_loop;
+#endif
+        }
+        cf_unwind_to(mc_hs[0].frame);
+        mc_hsp = 0;
+    }
     *failed = true;   /* abort: the caller releases live array temporaries */
     return;
     #undef OP

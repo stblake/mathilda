@@ -217,6 +217,52 @@ int emit_ctrl(Ctx* c, const char* h, const Expr* e, Expr** A, size_t na, Val* ou
         return c->ok ? 1 : -1;
     }
 
+    /* MemoryConstrained[body, b] / [body, b, fail]:
+     *         MC_ENTER  b, H          push the frame and the handler H
+     *         <body> -> rr
+     *         MC_LEAVE  H             pop; jump to H if the frame tripped
+     *         JMP end
+     *     H:  <fail> -> rr            (2-arg form: FAIL -> the interpreter)
+     *   end:
+     * An allocation refused inside the body reaches vm_fail, which resumes at
+     * H; the body's array temporaries are reclaimed by the usual register
+     * overwrite / arr_sweep discipline. */
+    if (strcmp(h, "MemoryConstrained") == 0 && (na == 2 || na == 3)) {
+        if (compile_mc_infinite(A[1])) return emit(c, A[0], out) ? 1 : -1;
+        CompileType rt;
+        if (!compile_mc_type(c, A, na, &rt)) { c->ok = false; return -1; }
+        Slot z = { 0 };
+        Val bud; if (!emit(c, A[1], &bud)) return -1;
+        if (bud.type != CT_INT) { c->ok = false; return -1; }
+        size_t enter = c->n; ins(c, OP_MC_ENTER, 0, (uint32_t)bud.reg, 0, z);
+        free_if_tmp(c, bud);
+        Val bv; if (!emit(c, A[0], &bv)) return -1;
+        int rr = -1;
+        if (na == 3) {
+            if (CT_IS_ARRAY(bv.type)) { c->ok = false; return -1; }
+            coerce(c, &bv, rt);
+            rr = alloc_temp(c);
+            ins(c, OP_MOVE, (uint32_t)rr, (uint32_t)bv.reg, 0, z);
+            free_if_tmp(c, bv);
+        }
+        size_t leave = c->n; ins(c, OP_MC_LEAVE, 0, 0, 0, z);
+        size_t jmp = c->n; ins(c, OP_JMP, 0, 0, 0, z);
+        if (c->ok) c->code[enter].b = c->code[leave].b = (uint32_t)c->n;   /* H */
+        if (na == 3) {
+            Val fv; if (!emit(c, A[2], &fv)) return -1;
+            if (CT_IS_ARRAY(fv.type)) { c->ok = false; return -1; }
+            coerce(c, &fv, rt);
+            ins(c, OP_MOVE, (uint32_t)rr, (uint32_t)fv.reg, 0, z);
+            free_if_tmp(c, fv);
+            out->reg = rr; out->tmp = true; out->type = rt;
+        } else {
+            ins(c, OP_FAIL, 0, 0, 0, z);
+            *out = bv;
+        }
+        if (c->ok) c->code[jmp].b = (uint32_t)c->n;   /* end */
+        return c->ok ? 1 : -1;
+    }
+
     /* If[cond, then, else]: branch control flow.  Result lands in one register
      * that whichever branch runs writes; the other branch is jumped over. */
     if (strcmp(h, "If") == 0 && na == 3) {

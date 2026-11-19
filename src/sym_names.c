@@ -726,6 +726,8 @@ const char* SYM_Label = NULL;
 const char* SYM_Sow = NULL;
 const char* SYM_Reap = NULL;
 const char* SYM_TimeConstrained = NULL;
+const char* SYM_MemoryConstrained = NULL;
+const char* SYM_PropagateAborts = NULL;
 const char* SYM_Times = NULL;
 const char* SYM_ToeplitzMatrix = NULL;
 const char* SYM_Tolerance = NULL;
@@ -1900,6 +1902,8 @@ void sym_names_init(void) {
     SYM_Sow                        = intern_symbol("Sow");
     SYM_Reap                       = intern_symbol("Reap");
     SYM_TimeConstrained            = intern_symbol("TimeConstrained");
+    SYM_MemoryConstrained          = intern_symbol("MemoryConstrained");
+    SYM_PropagateAborts            = intern_symbol("PropagateAborts");
     SYM_Times                      = intern_symbol("Times");
     SYM_ToeplitzMatrix             = intern_symbol("ToeplitzMatrix");
     SYM_Tolerance                  = intern_symbol("Tolerance");

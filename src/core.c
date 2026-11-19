@@ -17,6 +17,7 @@
 #include "assoc_struct.h" /* association atomicity: AtomQ/Depth/LeafCount/Level */
 #include "symtab.h"
 #include "eval.h"
+#include "memacct.h"   /* MemoryConstrained: accounting, frames, the builtin */
 #include <stdarg.h>    /* tc_flint_throw: the FLINT exception hook */
 #include "message.h"    /* message_init(): Quiet / Check / Message */
 #include "dialog.h"     /* dialog_init(): Dialog */
@@ -517,6 +518,7 @@ void core_init(void) {
     symtab_get_def("SubtractFrom")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
     symtab_get_def("TimesBy")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
     symtab_get_def("DivideBy")->attributes |= ATTR_HOLDFIRST | ATTR_PROTECTED;
+    memacct_init();   /* MemoryConstrained */
     symtab_add_builtin("TimeConstrained", builtin_time_constrained);
     symtab_get_def("TimeConstrained")->attributes |= ATTR_HOLDALL | ATTR_PROTECTED;
     symtab_add_builtin("Internal`TimeConstrainedRemaining", builtin_timeconstrained_remaining);
@@ -5286,7 +5288,20 @@ typedef sigjmp_buf tc_jmp_t;
 #define TC_SETJMP_NOMASK(env) sigsetjmp((env), 0)
 #endif
 static tc_jmp_t    tc_jmp_env;
+/* tc_timed_out: the deadline of an active TimeConstrained has passed (set by
+ * the SIGPROF handler or the evaluator's check).  It does NOT unwind anything:
+ * the evaluator's poll turns the timeout into the ordinary Abort[] sentinel
+ * (memacct.h's TIME frame), which every frame leaves through its own cleanup.
+ * tc_force_unwind: the backstop -- the computation reached no evaluator step
+ * for TC_ASYNC_GRACE_US of CPU after the deadline (a pure C loop), so it is
+ * unwound by siglongjmp, at a safe point or asynchronously.  Only that path can
+ * leak the C frames it skips. */
 static volatile sig_atomic_t tc_timed_out = 0;
+static volatile sig_atomic_t tc_force_unwind = 0;
+/* AbortProtect depth at entry of the outermost unspent TIME frame, read by the
+ * handler: code protected inside a TimeConstrained body is never force-unwound
+ * (the reference lets it run to completion). */
+static volatile int tc_force_base = 0;
 
 /* Async-signal-safety guard for the timeout siglongjmp.
  *
@@ -5328,6 +5343,8 @@ static volatile sig_atomic_t tc_async_deferred = 0;
  * between TC_SETJMP installs, so no sig_atomic_t / memory-barrier dance
  * is required. */
 static volatile double tc_deadline_sec = 0.0;  /* read by the SIGPROF handler */
+/* A deadline less than this far away counts as reached (both layers). */
+#define TC_DEADLINE_SLACK_ALL 1e-4
 static int    tc_deadline_active = 0;
 
 /* Nonzero exactly while a TimeConstrained body is inside evaluate() under
@@ -5386,10 +5403,22 @@ static void tc_sigprof_handler(int sig, siginfo_t* info, void* uctx) {
         tc_arm_prof_us(TC_ASYNC_GRACE_US);
         return;
     }
+    /* Still running a grace period later.  Inside an AbortProtect opened in
+     * the body the abort is deferred, not overdue: keep waiting. */
+    if (abort_protect_depth() > tc_force_base) {
+        tc_arm_prof_us(TC_ASYNC_GRACE_US);
+        return;
+    }
+    tc_force_unwind = 1;
     /* If the signal landed inside a GMP allocation, do NOT unwind here: that
      * would abandon libmalloc's held zone lock.  Let tc_alloc_safepoint()
      * take the jump the instant the allocator returns. */
-    if (tc_gmp_alloc_busy || tc_async_deferred) return;
+    if (tc_gmp_alloc_busy || tc_async_deferred) {
+        /* A safe point takes it (tc_alloc_safepoint, tc_check_deadline); keep
+         * waking in case the computation reaches neither. */
+        tc_arm_prof_us(TC_REARM_MIN_US);
+        return;
+    }
     /* Any other allocation, a stdio call, a pthread mutex: when a frame of
      * the interrupted stack is inside the C library, a jump would abandon
      * its lock just the same.  Try again in a millisecond. */
@@ -5424,7 +5453,7 @@ static int tc_on_main_thread(void) {
 #endif
 
 static void tc_alloc_safepoint(void) {
-    if (tc_timed_out && tc_on_main_thread()) TC_LONGJMP(tc_jmp_env);
+    if (tc_force_unwind && tc_on_main_thread()) TC_LONGJMP(tc_jmp_env);
 }
 
 /* tc_alloc_safepoint_after_malloc_only: the deferred jump is taken after a
@@ -5451,22 +5480,24 @@ static void* tc_gmp_allocate(size_t size) {
     void* p = malloc(size);
     tc_gmp_alloc_busy = 0;
     if (!p) { fputs("Mathilda: GMP memory exhausted\n", stderr); abort(); }
+    if (g_mth_mem_active && tc_on_main_thread()) MTH_MEM_CHARGE_BLOCK(size);   /* MemoryConstrained */
     tc_alloc_safepoint();   /* deferred timeout jump, if any (leaks p -- bounded) */
     return p;
 }
 
 static void* tc_gmp_reallocate(void* ptr, size_t old_size, size_t new_size) {
-    (void)old_size;
     tc_gmp_alloc_busy = 1;
     void* p = realloc(ptr, new_size);
     tc_gmp_alloc_busy = 0;
     if (!p && new_size) { fputs("Mathilda: GMP memory exhausted\n", stderr); abort(); }
+    if (g_mth_mem_active && tc_on_main_thread())
+        MTH_MEM_CHARGE_BLOCK((int64_t)new_size - (int64_t)old_size);
     /* no safe point: see tc_alloc_safepoint_after_malloc_only */
     return p;
 }
 
 static void tc_gmp_deallocate(void* ptr, size_t size) {
-    (void)size;
+    if (g_mth_mem_active && tc_on_main_thread()) MTH_MEM_RELEASE(size);
     tc_gmp_alloc_busy = 1;
     free(ptr);
     tc_gmp_alloc_busy = 0;
@@ -5558,10 +5589,43 @@ void tc_check_deadline(void) {
      * monotonic clock is unavailable), so no spurious-abort guard is needed.
      * On Windows this is the ONLY thing that enforces a TimeConstrained budget
      * -- there is no async SIGPROF layer -- so it is reached here from the
-     * evaluator's per-step poll (throttled, see eval.c). */
-    if (mth_mono_seconds() < tc_deadline_sec) return;
+     * evaluator's per-step poll (throttled, see eval.c).  It only RECORDS the
+     * timeout (trips the TIME frame); the evaluator's poll then raises the
+     * Abort[] sentinel, so nothing is unwound from here. */
+    /* The backstop, at the safest point there is: a timeout the computation
+     * has ignored for a grace period (C code that keeps calling evaluate and
+     * discards the Abort[] it gets back) is unwound from an evaluator step. */
+    if (tc_force_unwind && tc_on_main_thread()) TC_LONGJMP(tc_jmp_env);
+    double now = mth_mono_seconds();
+    if (!tc_timed_out && now < tc_deadline_sec) return;
     tc_timed_out = 1;
-    TC_LONGJMP(tc_jmp_env);
+    cf_time_note(now + TC_DEADLINE_SLACK_ALL);
+}
+
+/* Re-derive the effective deadline from the open TIME frames and re-arm the
+ * wake-up timer for it (or leave it disarmed when none is left). */
+static void tc_rearm_from_frames(void) {
+    double d = 0.0;
+    tc_deadline_active = cf_time_deadline(&d) ? 1 : 0;
+    if (tc_deadline_active) tc_deadline_sec = d;
+    tc_force_base = cf_time_protect_base();
+#ifndef _WIN32
+    if (tc_deadline_active) {
+        double left = d - mth_mono_seconds();
+        tc_arm_prof_us(left > 0.0 ? (long long)(left * 1e6) : 1);
+    } else {
+        struct itimerval disarm;
+        memset(&disarm, 0, sizeof(disarm));
+        setitimer(ITIMER_PROF, &disarm, NULL);
+    }
+#endif
+}
+
+void tc_frame_spent(int frame) {
+    cf_time_spend(frame);
+    tc_timed_out = 0;
+    tc_force_unwind = 0;
+    tc_rearm_from_frames();
 }
 
 #include "term/term_interrupt.h"   /* mth_interrupt_should_stop (kept beside its one use) */
@@ -5579,6 +5643,10 @@ bool tc_deadline_passed(void) {
     /* A declining kernel's value is discarded: the enclosing evaluate loop
      * polls the same flag and turns it into Abort[] before the value is used. */
     if (mth_interrupt_should_stop()) return true;
+    /* MemoryConstrained: only the main thread may note a trip; a worker
+     * thread (FactorInteger's parallel driver) just reads it. */
+    if (MTH_CF_POLL_DUE() && (tc_on_main_thread() ? cf_poll() : cf_abort_actionable()))
+        return true;
     if (!tc_deadline_active) return false;
     return mth_mono_seconds() >= tc_deadline_sec;
 }
@@ -5707,6 +5775,9 @@ static TC_NOINLINE Expr* tc_run_guarded_mode(Expr* body, int savemask) {
      * Restored on the unwound path only: a body may legitimately leave a
      * Begin open. */
     volatile size_t       saved_ctxdep = context_stack_depth();
+    /* MemoryConstrained frames opened inside the body (their builtin never
+     * returned to pop them, and their limits would stay in force). */
+    volatile int          saved_cfdep = cf_depth();
     Expr* saved_ctx0; Expr* saved_path0;                /* + the values themselves */
     context_capture(&saved_ctx0, &saved_path0);
     Expr* volatile        saved_ctx = saved_ctx0;
@@ -5729,6 +5800,7 @@ static TC_NOINLINE Expr* tc_run_guarded_mode(Expr* body, int savemask) {
         for (int i = 0; i < n_ctr; i++) *tc_unwind_counters[i] = saved_ctr[i]; \
         match_set_rule_head(saved_rule_head); \
         context_unwind_to(saved_ctxdep); \
+        cf_unwind_to(saved_cfdep); \
         context_restore(saved_ctx, saved_path); saved_ctx = NULL; saved_path = NULL; \
         flint_cert_binding_clear(); \
         TC_MPFR_STATE_RESET(); } while (0)
@@ -5820,7 +5892,7 @@ Expr* tc_evaluate_fault_guarded(Expr* body, bool* faulted) {
         *faulted = true;
         return NULL;
     }
-    if (tc_timed_out && saved_body_live && tc_on_main_thread()) {
+    if (tc_force_unwind && saved_body_live && tc_on_main_thread()) {
         eval_reset_recursion_depth(saved_depth);
         TC_LONGJMP(tc_jmp_env);           /* continue the enclosing timeout's unwind */
     }
@@ -5922,32 +5994,35 @@ Expr* builtin_time_constrained(Expr* res) {
      * inside time_t / suseconds_t / double range on every platform. */
     if (seconds > 2147483.0) seconds = 2147483.0;
 
+    /* A TIME frame on the constraint stack (memacct.h): it owns the timeout
+     * and decides whose it is when frames nest. */
+    double now = mth_mono_seconds();
+    int me = cf_time_push(now + seconds);
+    if (me < 0) return eval_and_free(expr_copy(expr_arg));   /* stack full */
+
     tc_jmp_t saved_jmp_env;
     memcpy(&saved_jmp_env, &tc_jmp_env, sizeof(saved_jmp_env));
     int saved_depth = eval_get_recursion_depth();
     volatile sig_atomic_t saved_timed_out = tc_timed_out;
+    volatile sig_atomic_t saved_force     = tc_force_unwind;
     volatile sig_atomic_t saved_body_live = tc_body_live;
     tc_timed_out = 0;
+    tc_force_unwind = 0;
 
-    /* The deadline: one monotonic instant, shared by both enforcement layers
-     * (see the function header).  Never outlive the enclosing budget: an
-     * inner deadline later than the outer's would leave the outer unenforced
-     * while we run.  Nested calls save/restore so the outer resumes. */
-    double saved_deadline_sec    = tc_deadline_sec;
-    int    saved_deadline_active = tc_deadline_active;
-    double now = mth_mono_seconds();
+    /* The deadline: the earliest of the open TIME frames' (never later than an
+     * enclosing budget's), shared by both enforcement layers. */
     double deadline = now + seconds;
-    if (saved_deadline_active && deadline > saved_deadline_sec)
-        deadline = saved_deadline_sec;
+    (void)cf_time_deadline(&deadline);
     tc_deadline_sec    = deadline;
     tc_deadline_active = 1;
+    tc_force_base      = cf_time_protect_base();
 
 #ifndef _WIN32
-    /* ---- POSIX async preemption: SIGPROF + ITIMER_PROF ----
-     * Forcibly interrupts a long-running C builtin that never returns to the
-     * evaluator loop.  Absent on native Windows (MinGW has no
-     * setitimer/sigaction/SIGPROF): there the cooperative deadline armed above
-     * is the sole enforcement -- see the function header and docs/building.md.
+    /* ---- POSIX wake-up: SIGPROF + ITIMER_PROF ----
+     * The backstop for a long-running C builtin that never returns to the
+     * evaluator (see tc_sigprof_handler).  Absent on native Windows (MinGW has
+     * no setitimer/sigaction/SIGPROF): there the cooperative deadline is the
+     * sole enforcement -- see the function header and docs/building.md.
      *
      * Save the previous SIGPROF handler and ITIMER_PROF state so nested
      * TimeConstrained calls compose and any external profiler is left as we
@@ -5978,68 +6053,81 @@ Expr* builtin_time_constrained(Expr* res) {
     }
 #endif /* !_WIN32 */
 
-    /* Restore the outer-call jmp_buf so a parent TimeConstrained can
-     * still receive its own timeout unwind correctly, then the outer's
-     * deadline and live flag. */
     memcpy(&tc_jmp_env, &saved_jmp_env, sizeof(saved_jmp_env));
-    tc_deadline_sec    = saved_deadline_sec;
-    tc_deadline_active = saved_deadline_active;
-    tc_body_live       = saved_body_live;
+    tc_body_live = saved_body_live;
 
+    /* result == NULL: the body was unwound by the jump (the backstop, or a
+     * FLINT exception).  A timeout the evaluator did not get to record is
+     * recorded now; then whose it is decides the answer. */
+    bool jumped = (result == NULL);
+    bool faulted = false;
+    if (tc_fault_pending && jumped) {   /* a FLINT exception, not a timeout */
+        tc_fault_pending = 0;
+        tc_fault_report();
+        faulted = true;
+    }
+    if (tc_timed_out || jumped) cf_time_note(mth_mono_seconds() + TC_DEADLINE_SLACK_ALL);
+    int tripped = g_cf_tripped;
+    cf_unwind_to(me);
+
+    tc_timed_out    = saved_timed_out;
+    tc_force_unwind = saved_force;
 #ifndef _WIN32
     /* Reinstall the prior handler, then the prior timer.  An enclosing
      * TimeConstrained is re-armed for ITS deadline measured from now -- the
-     * time we consumed is thereby charged to it, never refunded; one already
-     * past comes back at 1 us, so the caller aborts at once.  A non-TC timer
+     * time we consumed is charged to it, never refunded; one already past
+     * comes back at 1 us, so it records its timeout at once.  A non-TC timer
      * (an external profiler) is put back as it was. */
     sigaction(SIGPROF, &old_sa, NULL);
-    if (saved_deadline_active) {
-        double left = saved_deadline_sec - mth_mono_seconds();
-        tc_arm_prof_us(left > 0.0 ? (long long)(left * 1e6) : 1);
-    } else {
-        setitimer(ITIMER_PROF, &old_it, NULL);
+    {
+        double d = 0.0;
+        if (cf_time_deadline(&d)) {
+            tc_deadline_sec = d; tc_deadline_active = 1;
+            double left = d - mth_mono_seconds();
+            tc_arm_prof_us(left > 0.0 ? (long long)(left * 1e6) : 1);
+        } else {
+            tc_deadline_active = 0;
+            setitimer(ITIMER_PROF, &old_it, NULL);
+        }
+    }
+#else
+    {
+        double d = 0.0;
+        tc_deadline_active = cf_time_deadline(&d) ? 1 : 0;
+        if (tc_deadline_active) tc_deadline_sec = d;
     }
 #endif /* !_WIN32 */
-
-    bool aborted_here = (tc_timed_out != 0);
-    if (tc_fault_pending && !result) {   /* a FLINT exception, not a timeout */
-        tc_fault_pending = 0;
-        tc_fault_report();
-        aborted_here = true;
-    }
-    tc_timed_out = saved_timed_out;
+    tc_force_base = cf_time_protect_base();
 
     /* If we longjmp'd out of evaluate(), the matching depth decrements
      * never ran -- restore the counter so the rest of the session is
      * not falsely "$RecursionLimit exceeded". */
-    if (aborted_here) {
-        eval_reset_recursion_depth(saved_depth);
-    }
+    if (jumped) eval_reset_recursion_depth(saved_depth);
 
-    if (aborted_here) {
-        if (result) expr_free(result);   /* defensive; should be NULL */
-        if (fail_arg) {
-            /* failexpr is evaluated AFTER the timeout context is torn
-             * down, under the enclosing budget (if any).  Mathematica's semantics
-             * say "TimeConstrained evaluates failexpr only if the
-             * evaluation is aborted." */
-            return eval_and_free(expr_copy(fail_arg));
+    if (tripped == me || faulted || (jumped && tripped < 0)) {
+        /* Our timeout (or a fault inside the body): consume the abort and
+         * answer failexpr, evaluated after the frame is gone -- under the
+         * enclosing budget, if any.  "TimeConstrained evaluates failexpr only
+         * if the evaluation is aborted." */
+        if (!jumped) {
+            if (eval_is_inflight_abort(result)) eval_unwind_consumed();
+            expr_free(result);
+            expr_free(body);
         }
+        if (fail_arg) return eval_and_free(expr_copy(fail_arg));
         return expr_new_symbol(SYM_DollarAborted);
     }
-
-    /* Success path: evaluate() BORROWS its argument (returns a fresh tree and
-     * never frees the input), so the `body` copy we handed tc_run_guarded is
-     * still ours to release.  Free it now — the timer is disarmed and tc_jmp_env
-     * restored above, so no in-flight SIGPROF can longjmp through this free.
-     * (On the abort path handled just above we deliberately do NOT free `body`:
-     * evaluate() unwound via siglongjmp mid-rewrite, leaving it abandoned in an
-     * indeterminate state; that bounded, rare leak is documented on tc_run_guarded.)
-     *
-     * `res` is owned by the caller (evaluate_step) and will be freed after we
-     * return.  Returning `result` does not double-free anything because it is a
-     * fresh tree, distinct from `body`. */
+    if (jumped) {
+        /* An enclosing constraint's abort unwound us: pass it outwards.  The
+         * jump abandoned `body` mid-rewrite (indeterminate state): that bounded
+         * leak is the backstop's documented cost, see tc_run_guarded. */
+        return expr_new_function(expr_new_symbol(SYM_Abort), NULL, 0);
+    }
     expr_free(body);
-    return result;
+    if (tripped >= 0 && tripped < me && !eval_is_inflight_abort(result)) {
+        expr_free(result);   /* an enclosing frame's trip: hand the abort out */
+        return expr_new_function(expr_new_symbol(SYM_Abort), NULL, 0);
+    }
+    return result;   /* a plain Abort[] / interrupt / Throw passes through */
 }
 

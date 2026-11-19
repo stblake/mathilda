@@ -231,6 +231,10 @@ void coerce(Ctx* c, Val* v, CompileType target);
 Val  emit_const(Ctx* c, Slot imm, CompileType type);
 bool emit(Ctx* c, const Expr* e, Val* out);
 bool infer_type(Ctx* c, const Expr* e, CompileType* out);
+/* MemoryConstrained's budget is the literal Infinity (no constraint). */
+bool compile_mc_infinite(const Expr* b);
+/* MemoryConstrained[body, b(, fail)]: the result type both passes use. */
+bool compile_mc_type(Ctx* c, Expr** A, size_t na, CompileType* out);
 struct CompiledProgram* compile_value_callee(Ctx* c, const Expr* fn, CompileType in);
 bool global_const(const Ctx* c, const char* nm, Slot* imm, CompileType* type);
 const struct CompiledFunction* compiled_callee(const Ctx* c, const char* nm);

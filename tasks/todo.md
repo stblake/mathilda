@@ -1,3 +1,19 @@
+# MemoryConstrained (started 2026-11-19)
+
+Plan: ~/.claude/plans/pasted-content-id-30f2-we-should-kind-sphinx.md
+
+- [x] memacct.{c,h}: live-bytes counter, frames, request, builtin
+- [x] charge sites: expr.c nodes/strings/ndarray, GMP hooks
+- [x] eval poll, tc_deadline_passed, TC unwind
+- [x] AbortProtect re-raise; CheckAbort failexpr protected + PropagateAborts
+- [x] producers: Range, RandomReal/Integer, ConstantArray, ndbuild_open, ndarray_from_nested_list
+- [x] Compile lowering (infer, emit, VM opcodes, disasm, CSE impure)
+- [x] registration: sym_names, attr.c, core.c, info.c docstring
+- [x] tests/test_memory_constrained.c + abort regression
+- [x] docs + changelog + version bump/tag
+- [x] verification: build, gates, targeted ctest (32 suites), valgrind, perf (full unit tier not run, at request)
+- [x] TimeConstrained cooperative abort (no jump on the common path), shared constraint frames
+
 # Numeric-tower review (started 2026-11-17)
 
 Worktree `../Mathilda-numtower`, branch `numeric-tower-review`. Bug list with ids and

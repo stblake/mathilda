@@ -179,6 +179,7 @@ static SymbolAttr builtin_attrs[] = {
     {"Echo", ATTR_PROTECTED},
     {"RepeatedTiming", ATTR_HOLDFIRST | ATTR_PROTECTED | ATTR_SEQUENCEHOLD},
     {"TimeConstrained", ATTR_HOLDALL | ATTR_PROTECTED},
+    {"MemoryConstrained", ATTR_HOLDALL | ATTR_PROTECTED},
     {"Dot", ATTR_FLAT | ATTR_ONEIDENTITY | ATTR_PROTECTED},
     {"NonCommutativeMultiply", ATTR_FLAT | ATTR_ONEIDENTITY | ATTR_PROTECTED},
     {"Det", ATTR_PROTECTED},
