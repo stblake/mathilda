@@ -1827,6 +1827,31 @@ static void test_campaign_silent_declines(void) {
                    " FreeQ[F, Integrate] && PossibleZeroQ[D[F, u] - f]]]", "True", 0);
 }
 
+/* Campaign step 4 groundwork (Tanh and tan over Q(i), 2026-11-20).  The
+ * decision reaches a Tanh through TrigToExp, i.e. as the exponential E^(2 v)
+ * ([SI] p.166); what blocked it were tower and cascade defects:
+ *  - a level ordered by literal containment missed an alias (E^(2 u) of the
+ *    E^u level), and an E^(4 u) first seen in a derivative was not mapped to
+ *    t^4: towers were refused;
+ *  - the hypertanh polynomial reduction looped on a one-sided 1/(1 + Tanh)
+ *    pole (half of the split t^2 - 1);
+ *  - single-kernel stages spent ~33 s declining multi-kernel integrands;
+ *  - the verifier missed a zero whose logarithms were spelled two ways. */
+static void test_campaign_step4_tanh_groundwork(void) {
+    const char* cases[][2] = {
+        { "Together[D[E^Tanh[u], u]]", "True" },
+        { "Together[D[u E^Tanh[1 + u], u]]", "True" },
+        /* the one-sided pole: 0.25 s (it spun past every budget) */
+        { "(2*u*Sech[u^2]^2*Tanh[u^2]^3)/(1 + Tanh[u^2])^2 - (6*u*Sech[u^2]^2*Tanh[u^2]^2)/(1 + Tanh[u^2])", "True" },
+        /* a correct antiderivative verified in 0.02 s (Simplify gave up after 58 s) */
+        { "(Log[u + Tanh[u]]*Log[1 - Tanh[u]^2])/2 - (E^u*u*Sech[u]^2)/Tanh[u]^2 + E^u/Tanh[u] + (E^u*u)/Tanh[u] + (u*Log[1 - Tanh[u]^2]*(1 + Sech[u]^2))/(2*(u + Tanh[u])) - (u*Log[u + Tanh[u]]*Sech[u]^2*Tanh[u])/(1 - Tanh[u]^2)", "True" } };
+    for (size_t i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+        char buf[1600];
+        snprintf(buf, sizeof buf, "TimeConstrained[Quiet[Risch`ElementaryIntegralQ[%s, u]], 60, $Aborted]", cases[i][0]);
+        assert_eval_eq(buf, cases[i][1], 0);
+    }
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -1943,6 +1968,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_campaign_step3b_prim_top);
     TEST(test_campaign_step3c_monomial);
     TEST(test_campaign_silent_declines);
+    TEST(test_campaign_step4_tanh_groundwork);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }

@@ -229,6 +229,35 @@ bool rt_contains(Expr* big, Expr* small) {
     return false;
 }
 
+/* Does an exponential E^w with w a nonzero rational multiple of `a` occur in
+ * e?  (An exponential level is stored as its class primitive E^a, its members
+ * E^(m a) as aliases t^m, so a kernel that needs the level may spell it E^(2 a).) */
+static bool rt_has_exp_multiple(const Expr* e, Expr* a) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL
+        && e->data.function.head->data.symbol.name == intern_symbol("Power")
+        && e->data.function.arg_count == 2
+        && e->data.function.args[0]->type == EXPR_SYMBOL
+        && e->data.function.args[0]->data.symbol.name == intern_symbol("E")) {
+        Expr* q = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(e->data.function.args[1]), expr_new_function(expr_new_symbol("Power"),
+                (Expr*[]){ expr_copy(a), expr_new_integer(-1) }, 2) }, 2));
+        bool mult = q && (q->type == EXPR_INTEGER || rt_head_is(q, "Rational")) && !rt_is_zero(q);
+        if (q) expr_free(q);
+        if (mult) return true;
+    }
+    if (rt_has_exp_multiple(e->data.function.head, a)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rt_has_exp_multiple(e->data.function.args[i], a)) return true;
+    return false;
+}
+/* Does kernel K need level j below it: it contains that level's kernel, or
+ * (an exponential level) an alias E^(m a) of it? */
+static bool rt_kernel_needs(Expr* K, RtTower* T, size_t j) {
+    if (rt_contains(K, T->kernel[j])) return true;
+    return T->kind[j] == RT_EXP && T->arg[j] && rt_has_exp_multiple(K, T->arg[j]);
+}
+
 /* Build the monomial  prod_j lv[j]^e[j]  (a Times of Powers; owned). */
 Expr* rt_build_monomial(Expr** lv, const long* e, size_t nlv) {
     Expr** fs = malloc((nlv ? nlv : 1) * sizeof(Expr*));
@@ -640,7 +669,7 @@ static bool rt_tower_build_core(Expr* f, Expr* x, RtTower* T, size_t min_n,
         moved = false;
         for (size_t i = 0; i < n && !moved; i++)
             for (size_t j = i + 1; j < n && !moved; j++) {
-                if (!rt_contains(T->kernel[i], T->kernel[j])) continue;
+                if (!rt_kernel_needs(T->kernel[i], T, j)) continue;
                 /* rotate level j down to position i */
                 RtKind kk = T->kind[j]; long sg = T->tsg[j];
                 Expr* kj = T->kernel[j]; Expr* aj = T->arg[j];
@@ -1257,6 +1286,33 @@ Expr* rt_subst_kernels(Expr* e, RtTower* T) {
             && e->data.function.arg_count == 1
             && expr_eq(e->data.function.args[0], T->arg[i]))
             return expr_copy(T->t[i]);
+        /* E^(q a) = t^q for any INTEGER q, a the level's exponent: the build
+         * records only the member exponents it collected, so an E^(4 u) that
+         * first appears in a derivative after expansion ((1 + E^(2 u))^2) was a
+         * foreign kernel and the tower was refused (the Tanh hunt, through
+         * TrigToExp, 2026-11-19) */
+        if (T->kind[i] == RT_EXP && T->arg[i] && e->type == EXPR_FUNCTION
+            && e->data.function.head->type == EXPR_SYMBOL
+            && ((e->data.function.head->data.symbol.name == intern_symbol("Power")
+                 && e->data.function.arg_count == 2
+                 && e->data.function.args[0]->type == EXPR_SYMBOL
+                 && e->data.function.args[0]->data.symbol.name == intern_symbol("E"))
+                || (e->data.function.head->data.symbol.name == intern_symbol("Exp")
+                    && e->data.function.arg_count == 1))) {
+            Expr* w = e->data.function.arg_count == 2 ? e->data.function.args[1] : e->data.function.args[0];
+            if (!rt_free_of_x(w, T->arg[i]) || T->arg[i]->type != EXPR_SYMBOL) {
+                Expr* q = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_copy(w), expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ expr_copy(T->arg[i]), expr_new_integer(-1) }, 2) }, 2));
+                bool integer = q && q->type == EXPR_INTEGER && q->data.integer != 0;
+                if (integer) {
+                    Expr* r = expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ expr_copy(T->t[i]), q }, 2);
+                    return r;
+                }
+                if (q) expr_free(q);
+            }
+        }
         /* RT_TAN: rationalise the OTHER circular/hyperbolic trig of the tangent
          * argument to the tower variable (the fresh symbol keeps the evaluator from
          * canonicalising the result back to Csc/Sec).  Tan/Tanh already matched the

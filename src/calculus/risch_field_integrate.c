@@ -2341,7 +2341,10 @@ static Expr* rt_field_rde(Expr* p, long i, RtTower* T, long L, Expr* x) {
      * rde_tower, so on success it is authoritative; on NULL we fall through to the
      * ansatz (non-regressing) for the residual cases rde_tower does not yet cover
      * (the b=Dz/z limited-integration branch, tangent tops). */
+    /* (a Liouvillian primitive top since campaign step 3b: rde_tower runs the
+     * primitive stack on it; this dispatch was missed then) */
     if (L >= 1 && (T->kind[L - 1] == RT_LOG || T->kind[L - 1] == RT_EXP
+                   || T->kind[L - 1] == RT_PRIM
                    || (T->kind[L - 1] == RT_TAN && T->tsg[L - 1] == 1))) {
         Expr* fco = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
             (Expr*[]){ expr_new_integer(i), expr_copy(T->Dcoef[L]) }, 2));

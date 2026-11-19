@@ -180,6 +180,13 @@ Expr* rt_exp_poly_case(Expr* f, Expr* x) {
     if (!F) return NULL;
 
     Expr* tsym = expr_new_symbol("rmT");
+    /* The structural conditions of the acceptance test below first: they are
+     * cheap scans, and the Together is not (a whole TrigToExp'd integrand with
+     * a Log[u] left in it spent the decision's 30 s budget here; Tanh hunt,
+     * 2026-11-19).  Same verdict either way. */
+    if (rt_free_of_x(F, tsym) || rt_find_exp_of_x(F, x) != NULL || rt_find_log_of_x(F, x) != NULL) {
+        expr_free(tsym); expr_free(F); expr_free(uexp); return NULL;
+    }
     /* F must be a Laurent polynomial in t: num/den with den a pure power of t.
      * Split into num and the offset M (den = c t^M). */
     Expr* G = rt_eval1("Together", expr_copy(F));
@@ -888,21 +895,68 @@ static Expr* rt_hermite_try(Expr* f, Expr* x, bool is_log) {
     return result;
 }
 
+/* The single-extension stages work over C(x)(theta) for ONE kernel theta.
+ * Is f rational in x and its log kernel (want_log) / its exponential class,
+ * with no other exp or log of x left?  A cheap structural test, run before
+ * their Together / ansatz: a TrigToExp'd Tanh integrand with a Log[u] beside
+ * the exponentials spent 33 s declining in rt_frac_case, rt_hermite_case and
+ * rt_hyperexp_case (Tanh hunt, 2026-11-19); they decline it either way. */
+/* Does e carry a Log of x outside every exponent of E?  (Structural, no
+ * evaluation: E^(c Log[x]) = x^c is an exponential kernel, not a log one.) */
+static bool rt_log_outside_exp(const Expr* e, Expr* x) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    if (e->data.function.head->type == EXPR_SYMBOL) {
+        const char* h = e->data.function.head->data.symbol.name;
+        if (h == intern_symbol("Power") && e->data.function.arg_count == 2
+            && e->data.function.args[0]->type == EXPR_SYMBOL
+            && e->data.function.args[0]->data.symbol.name == intern_symbol("E"))
+            return false;
+        if (h == intern_symbol("Exp")) return false;
+        if (h == intern_symbol("Log") && !rt_free_of_x((Expr*)e, x)) return true;
+    }
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (rt_log_outside_exp(e->data.function.args[i], x)) return true;
+    return false;
+}
+
+static bool rt_one_kernel(Expr* f, Expr* x, bool want_log) {
+    /* structural refusals first, no evaluation */
+    if (want_log && rt_find_exp_of_x(f, x) != NULL) return false;
+    if (!want_log && rt_log_outside_exp(f, x)) return false;
+    Expr* F = NULL;
+    if (want_log) {
+        Expr* ul = rt_find_log_of_x(f, x);          /* borrowed */
+        if (!ul) return false;
+        Expr* sym = expr_new_symbol("rmT1K");
+        F = rt_eval_own(expr_new_function(expr_new_symbol("ReplaceAll"), (Expr*[]){ expr_copy(f),
+            expr_new_function(expr_new_symbol("Rule"), (Expr*[]){ expr_copy(ul), sym }, 2) }, 2));
+    } else {
+        Expr* u = NULL;
+        F = rt_exp_kernelize(f, x, &u);
+        if (u) expr_free(u);
+    }
+    bool ok = F && rt_find_exp_of_x(F, x) == NULL && rt_find_log_of_x(F, x) == NULL;
+    if (F) expr_free(F);
+    return ok;
+}
+
 /* Hermite reduction dispatch: logarithmic then exponential kernel. */
 Expr* rt_hermite_case(Expr* f, Expr* x) {
-    Expr* r = rt_hermite_try(f, x, true);
+    Expr* r = rt_one_kernel(f, x, true) ? rt_hermite_try(f, x, true) : NULL;
     if (r) return r;
-    r = rt_hermite_try(f, x, false);
+    r = rt_one_kernel(f, x, false) ? rt_hermite_try(f, x, false) : NULL;
     return r;
 }
 
 /* Try the fractional log-part for a logarithmic then an exponential kernel. */
 Expr* rt_frac_case(Expr* f, Expr* x) {
-    Expr* ul = rt_find_log_of_x(f, x);
+    bool lone = rt_one_kernel(f, x, true), eone = rt_one_kernel(f, x, false);
+    if (!lone && !eone) return NULL;
+    Expr* ul = lone ? rt_find_log_of_x(f, x) : NULL;
     if (ul && rt_kernel_simple(ul, x)) {
         Expr* r = rt_frac_try(f, x, ul, true); if (r) return r;
     }
-    Expr* ue = rt_find_exp_of_x(f, x);
+    Expr* ue = eone ? rt_find_exp_of_x(f, x) : NULL;
     if (ue && rt_kernel_simple(ue, x)) {
         Expr* r = rt_frac_try(f, x, ue, false); if (r) return r;
     }
@@ -932,6 +986,10 @@ Expr* rt_hyperexp_case(Expr* f, Expr* x) {
     Expr* uexp = NULL;
     Expr* F = rt_exp_kernelize(f, x, &uexp);
     if (!F) return NULL;
+    /* the acceptance test's structural part first (see rt_one_kernel) */
+    if (rt_find_exp_of_x(F, x) != NULL || rt_find_log_of_x(F, x) != NULL) {
+        expr_free(F); if (uexp) expr_free(uexp); return NULL;
+    }
     Expr* tsym = expr_new_symbol("rmT");
     Expr* result = NULL;
 

@@ -72,4 +72,10 @@ bool  rt_kernel_simple(Expr* u, Expr* x);
 /* Diff-back verifier: is Simplify[D[result,x] - f] identically 0? */
 bool  rt_verify_antideriv(Expr* result, Expr* f, Expr* x);
 
+/* Cascade-stage profiler: RT_STAGE(fn, f, x) calls fn(f, x), timing it on
+ * stderr when MATHILDA_RT_PROFILE is set (stages slower than 50 ms). */
+int   rt_profile_on(void);
+Expr* rt_stage_timed(const char* name, Expr* (*fn)(Expr*, Expr*), Expr* f, Expr* x);
+#define RT_STAGE(fn, f, x) (rt_profile_on() ? rt_stage_timed(#fn, fn, f, x) : fn(f, x))
+
 #endif /* MATHILDA_RISCH_UTIL_H */

@@ -64,11 +64,11 @@ static RtDecision rt_decide_field(Expr* f, Expr* x);
 static int rt_in_flat_gate = 0;
 static int rt_in_logcombine = 0;   /* the log-combine retry's guard (same registry) */
 static Expr* rt_transcendental_case(Expr* f, Expr* x) {
-    Expr* r = rt_log_poly_case(f, x);
+    Expr* r = RT_STAGE(rt_log_poly_case, f, x);
     if (r) return r;
-    r = rt_exp_poly_case(f, x);
+    r = RT_STAGE(rt_exp_poly_case, f, x);
     if (r) return r;
-    r = rt_frac_case(f, x);
+    r = RT_STAGE(rt_frac_case, f, x);
     if (r) return r;
     /* Fast rational-of-a-single-exp path (kernelize -> pure rational integral in
      * t, which the FLINT-accelerated rational integrator closes) BEFORE the
@@ -79,13 +79,13 @@ static Expr* rt_transcendental_case(Expr* f, Expr* x) {
      * exactly when the genuine coupled/tower cases below are needed, so their
      * cleaner forms still win; rt_frac_case above keeps precedence for the
      * squarefree ArcTan/Log parts.  Correctness rests on the same diff-back gate. */
-    r = rt_exp_ratreduce_case(f, x);
+    r = RT_STAGE(rt_exp_ratreduce_case, f, x);
     if (r) return r;
-    r = rt_hermite_case(f, x);
+    r = RT_STAGE(rt_hermite_case, f, x);
     if (r) return r;
-    r = rt_hyperexp_case(f, x);
+    r = RT_STAGE(rt_hyperexp_case, f, x);
     if (r) return r;
-    r = rt_expsum_case(f, x);   /* direct multi-kernel exponential sums */
+    r = RT_STAGE(rt_expsum_case, f, x);   /* direct multi-kernel exponential sums */
     if (r) return r;
     /* The flat-tower cases run before the recursive one because they close a
      * PRIMITIVE-POLYNOMIAL class the recursive path still declines — e.g.
@@ -101,7 +101,7 @@ static Expr* rt_transcendental_case(Expr* f, Expr* x) {
      * (rt_log_tower_case / rt_exp_tower_case) remain only as a FALLBACK for anything
      * the deterministic recursion declines (they also carry the rt_tower_solve Cherry
      * P5 substrate). */
-    r = rt_recursive_tower_case(f, x);   /* one-extension recursion (mixed / rational coeff) */
+    r = RT_STAGE(rt_recursive_tower_case, f, x);   /* one-extension recursion (mixed / rational coeff) */
     if (r) return r;
     /* The flat ansätze only find ELEMENTARY antiderivatives, and their size is
      * uncapped (175 unknowns for TrigToExp[u^5 ArcTan[u]^3]; review F6).  When the
@@ -116,22 +116,22 @@ static Expr* rt_transcendental_case(Expr* f, Expr* x) {
         rt_in_flat_gate = 0;
     }
     if (!proved_nonelem) {
-        r = rt_log_tower_case(f, x);   /* flat ansatz fallback (nested log tower) */
+        r = RT_STAGE(rt_log_tower_case, f, x);   /* flat ansatz fallback (nested log tower) */
         if (r) return r;
-        r = rt_exp_tower_case(f, x);    /* flat ansatz fallback (nested exp tower) */
+        r = RT_STAGE(rt_exp_tower_case, f, x);    /* flat ansatz fallback (nested exp tower) */
         if (r) return r;
     }
     /* Real tangent monomial (Bronstein §5.10): integrate rational functions of a
      * single Tan[u] directly and real, retiring the TrigToExp route below for
      * real-tangent integrands (which it strands at an I-laden complex-log form). */
-    r = rt_hypertangent_case(f, x);
+    r = RT_STAGE(rt_hypertangent_case, f, x);
     if (r) return r;
-    r = rt_trig_frontend(f, x);
+    r = RT_STAGE(rt_trig_frontend, f, x);
     if (r) return r;
     /* Single-kernel field recursion: a proper part in t plus a k-part whose
      * integral is a new logarithm over k (1/(1 + x) + 1/(x (1 + Log[x]))), which
      * no flat single-kernel case above covers; exactly verified. */
-    r = rt_recursive_tower_case_single(f, x);
+    r = RT_STAGE(rt_recursive_tower_case_single, f, x);
     if (r) return r;
     /* Dependent-logarithm fallback.  When every case above declined, the
      * integrand may carry Q-linearly DEPENDENT logarithmic generators that no

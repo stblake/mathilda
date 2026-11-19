@@ -10,6 +10,7 @@
 #include "integrate_risch_rde.h"
 #include "risch_tower.h"
 #include "risch_util.h"
+#include "mtime.h"
 #include "risch_singleext.h"
 #include "risch_field_integrate.h"
 
@@ -328,19 +329,20 @@ Expr* rt_trig_frontend(Expr* f, Expr* x) {
      * -Log[Cos[x]].  The result is nonetheless returned (correct by
      * construction); teaching Simplify the log-of-product / half-angle
      * collapse would render it in real closed form. */
-    Expr* r = rt_exp_poly_case(fe, x);
-    if (!r) r = rt_frac_case(fe, x);
+    const char* rstage = NULL;
+    Expr* r = RT_STAGE(rt_exp_poly_case, fe, x); if (r && !rstage) rstage = "rt_exp_poly_case";
+    if (!r) r = RT_STAGE(rt_frac_case, fe, x); if (r && !rstage) rstage = "rt_frac_case";
     /* Rational-function-of-a-single-exponential closer (kernelize E^(I x) -> pure
      * rational integral).  Closes the Laurent forms with E^(-I x) in the
      * denominator that the frac case leaves — Sec[x], Csc[x], 1/(2+Cos[x]),
      * Sec[x]^3 — which are exactly the rational trigonometric integrands.  Runs
      * after rt_frac_case so its cleaner squarefree ArcTan/Log parts win first. */
-    if (!r) r = rt_exp_ratreduce_case(fe, x);
-    if (!r) r = rt_hyperexp_case(fe, x);
+    if (!r) r = RT_STAGE(rt_exp_ratreduce_case, fe, x); if (r && !rstage) rstage = "rt_exp_ratreduce_case";
+    if (!r) r = RT_STAGE(rt_hyperexp_case, fe, x); if (r && !rstage) rstage = "rt_hyperexp_case";
     /* Multi-kernel decoupling (Phase B): e.g. Sin/Cos times a real exponential
      * exponentialize to a sum of two non-commensurate exponentials E^((a +/- b I) x)
      * that the single-primitive cases cannot kernelize. */
-    if (!r) r = rt_expsum_case(fe, x);
+    if (!r) r = RT_STAGE(rt_expsum_case, fe, x); if (r && !rstage) rstage = "rt_expsum_case";
     /* Nested / mixed exponential towers exposed by TrigToExp: a trig kernel whose
      * argument itself carries a nested exponential (e.g. Cos[x E^(E^x)] ->
      * E^(±I x E^(E^x))) exponentializes to a genuine multi-kernel tower that the
@@ -349,8 +351,8 @@ Expr* rt_trig_frontend(Expr* f, Expr* x) {
      * {E^x, E^(E^x), E^(±I x E^(E^x))} tower and integrates it; the I-laden result
      * is realified below (diff-back gated).  Closes e.g.
      * Integrate[E^E^x (1 + x E^x) Cos[x E^E^x], x] = Sin[x E^E^x]. */
-    if (!r) r = rt_recursive_tower_case(fe, x);
-    if (!r) r = rt_exp_tower_case(fe, x);
+    if (!r) r = RT_STAGE(rt_recursive_tower_case, fe, x); if (r && !rstage) rstage = "rt_recursive_tower_case";
+    if (!r) r = RT_STAGE(rt_exp_tower_case, fe, x); if (r && !rstage) rstage = "rt_exp_tower_case";
     expr_free(fe);
     if (!r) return NULL;
     /* Soundness guard, verified on the EXPONENTIAL form `r` (not its ExpToTrig
@@ -363,7 +365,15 @@ Expr* rt_trig_frontend(Expr* f, Expr* x) {
      * the multiple-angle ExpToTrig image does NOT rational-reduce and would strand
      * the check in Simplify (the Sec[x]^3 hang).  ExpToTrig is an exact rewrite, so
      * ExpToTrig[r] is a correct antiderivative iff r is. */
-    if (!rt_verify_antideriv(r, f, x)) { expr_free(r); return NULL; }
+    if (rt_profile_on()) fprintf(stderr, "[rt-stage] trig frontend: candidate from %s, verifying\n", rstage ? rstage : "?");
+    if (rt_profile_on() && getenv("MATHILDA_RT_DUMP")) {   /* the candidate, for offline checks */
+        FILE* fp = fopen(getenv("MATHILDA_RT_DUMP"), "w");
+        if (fp) { char* rs = expr_to_string(r); fprintf(fp, "rr = %s;\n", rs); free(rs); fclose(fp); }
+    }
+    double tv0 = rt_profile_on() ? mth_mono_seconds() : 0;
+    bool verified = rt_verify_antideriv(r, f, x);
+    if (rt_profile_on()) fprintf(stderr, "[rt-stage] trig frontend verify %.3f s -> %d\n", mth_mono_seconds() - tv0, (int)verified);
+    if (!verified) { expr_free(r); return NULL; }
     /* Reconstruct a REAL closed form from the trig image ExpToTrig[r] (nice-to-have,
      * exact-diff-back gated and time-bounded).  On success return the clean real
      * form; on failure return the COMPACT exponential form `r` itself — already

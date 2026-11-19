@@ -359,9 +359,29 @@ bool risch_field_polynomial_reduce(const Expr* p, const Expr* t, const RischDeri
 
     Expr* q = expr_new_integer(0);
     Expr* r = rf_normfrac(rf_cp(p));
+    {   /* contract: p in k[t].  A caller can pass a pole that is half of a split
+         * special polynomial (1/(1 + t) for t = Tanh, where t^2 - 1 =
+         * (t - 1)(t + 1) and the reduced case peels only joint powers): the
+         * loop below then read the numerator's degree, never lowered it, and
+         * spun for minutes (the Tanh hunt, 2026-11-19).  Decline instead. */
+        Expr* rn = NULL; Expr* rd = NULL;
+        risch_field_num_den_t(r, t, &rn, &rd);
+        bool poly = rd && risch_field_degree_t(rd, t) == 0;
+        if (rn) expr_free(rn);
+        if (rd) expr_free(rd);
+        if (!poly) { expr_free(q); expr_free(r); expr_free(lambda); return false; }
+    }
+    long prev = -1;
     for (;;) {
         long dr = risch_field_degree_t(r, t);
         if (dr < delta) break;
+        if (prev >= 0 && dr >= prev) {
+            /* the leading term did not cancel (a non-canonical zero): decline
+             * rather than loop */
+            expr_free(q); expr_free(r); expr_free(lambda);
+            return false;
+        }
+        prev = dr;
         long m = dr - delta + 1;
         /* q0 = (lc_t(r) / (m lambda)) t^m ; D[q0] cancels the leading term of r. */
         Expr* lcr = rf_coeff(r, t, dr);

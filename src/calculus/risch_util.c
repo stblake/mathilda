@@ -7,6 +7,7 @@
  */
 
 #include "risch_util.h"
+#include "mtime.h"          /* mth_mono_seconds (RT_STAGE) */
 
 #include "expr.h"
 #include "eval.h"
@@ -559,6 +560,24 @@ bool rt_residual_zero(Expr* diff, const Expr* answer, bool expand) {
     return ok;
 }
 
+/* Log[a] -> Log[Together[a]] throughout e (owned in, owned out).  A rational
+ * zero test treats each Log as an atom, so the same logarithm spelled two ways
+ * -- Log[u + (E^u - E^-u)/(E^u + E^-u)] in TrigToExp[f] and
+ * Log[(-1 + E^(2 u) + u + E^(2 u) u)/(1 + E^(2 u))] in an antiderivative --
+ * never cancels.  Together is a normal form for the rational argument, so this
+ * is an exact rewrite (Tanh hunt, 2026-11-19: a correct antiderivative failed
+ * verification after 58 s in Simplify). */
+static Expr* rt_together_log_args(Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return e;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        e->data.function.args[i] = rt_together_log_args(e->data.function.args[i]);
+    if (rt_head_is(e, "Log") && e->data.function.arg_count == 1) {
+        Expr* a = rt_eval1("Together", expr_copy(e->data.function.args[0]));
+        if (a) { expr_free(e->data.function.args[0]); e->data.function.args[0] = a; }
+    }
+    return e;
+}
+
 bool rt_verify_antideriv(Expr* result, Expr* f, Expr* x) {
     Expr* d = rt_eval2("D", expr_copy(result), expr_copy(x));
     if (!d) return false;
@@ -577,6 +596,15 @@ bool rt_verify_antideriv(Expr* result, Expr* f, Expr* x) {
     Expr* t2 = rt_eval1("Together", rt_eval1("TrigToExp", expr_copy(diff)));
     if (t2 && rt_is_zero(t2)) { expr_free(t2); expr_free(diff); return true; }
     if (t2) expr_free(t2);
+    /* the same with every logarithm's argument in Together normal form (see
+     * rt_together_log_args), when a Log survived the plain test */
+    if (!rt_free_of_head(diff, "Log")) {
+        Expr* te = rt_eval1("TrigToExp", expr_copy(diff));
+        Expr* t3 = te ? rt_eval1("Together", rt_eval_own(rt_together_log_args(te))) : NULL;
+        bool z3 = t3 && rt_is_zero(t3);
+        if (t3) expr_free(t3);
+        if (z3) { expr_free(diff); return true; }
+    }
     /* Exact single-kernel rational-trig decision (Together over the raw Laurent
      * TrigToExp form above leaves E^(-i x) poles uncombined for a Log/ArcTan-of-Tan
      * diff-back — e.g. the §5.10 hypertangent answer for a rational function of
@@ -707,4 +735,20 @@ bool rt_has_algebraic_of_x(Expr* e, Expr* x) {
 bool rt_kernel_simple(Expr* u, Expr* x) {
     return rt_find_exp_of_x(u, x) == NULL && rt_find_log_of_x(u, x) == NULL
         && !rt_has_algebraic_of_x(u, x);
+}
+
+/* MATHILDA_RT_PROFILE=1: per-stage wall time of the integrator cascades on
+ * stderr (a stage that declines slowly is otherwise invisible).  Used through
+ * RT_STAGE (risch_util.h). */
+int rt_profile_on(void) {
+    static int on = -1;
+    if (on < 0) on = getenv("MATHILDA_RT_PROFILE") != NULL;
+    return on;
+}
+Expr* rt_stage_timed(const char* name, Expr* (*fn)(Expr*, Expr*), Expr* f, Expr* x) {
+    double t0 = mth_mono_seconds();
+    Expr* r = fn(f, x);
+    double dt = mth_mono_seconds() - t0;
+    if (dt > 0.05) fprintf(stderr, "[rt-stage] %-32s %8.3f s  %s\n", name, dt, r ? "answer" : "declined");
+    return r;
 }
