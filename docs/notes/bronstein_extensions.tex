@@ -2392,15 +2392,108 @@ undecided. A dependent-log hunt (four families of 80) is at 80 in every family, 
 70, 78, 78 and 80 before. No hunt has a false certificate.
 Test: \code{test\_campaign\_step8\_dependent\_logs}.
 
-\section*{T11. Status of the transcendental decision}
-\addcontentsline{toc}{section}{T11. Status}
+\section*{T11. The parametric Risch DE by linear constraints (v0.6620)}
+\addcontentsline{toc}{section}{T11. The parametric Risch DE}
+\label{sec:T11}
+
+For a Liouvillian primitive top, IntegratePrimitivePolynomial needs
+LimitedIntegrate: $r=Ds+c\,\eta$ with $s\in K_{L-1}$ and $c$ constant. When
+$\int\eta\notin K_{L-1}$ (it is $\theta$ itself) this is a \emph{parametric} Risch DE,
+\[ Dy+fy=g_0+\sum_{i=1}^m c_ig_i,\qquad y\in K,\ c_i\in C, \tag{PRDE}\]
+[SI] ch.~7. \code{rde\_tower\_param} (\code{integrate\_risch\_rde.c}) solves it by
+running the ordinary solver with the $c_i$ as named constant symbols in the right-hand
+side $g(c)$. The operator side $f$ (and $a,b$ after each reduction) is free of them.
+
+\paragraph{The run.} Every branch on $f$, $a$ or $b$ is unchanged. Every quantity
+computed from the right-hand side is $C$-linear in the $c_i$, because no step divides
+by a right-hand-side quantity. Every divisor comes from $f$, $a$, $b$, $\eta$, the
+homogeneous solution $z$, or $\tau^2+1$. Each decision on the right-hand side becomes
+one of two things:
+\begin{itemize}
+\item \emph{a bound}: the degree of $g(c)$ in $\tau$ for indeterminate $c$ is the
+  maximum over its components, and its valuation the minimum. Its \code{Together}
+  denominator is the lcm of theirs, so $h$ of the normal denominator is free of the $c_i$
+  (as in ParamRdeNormalDenominator);
+\item \emph{a dropped part}: where the ordinary solver stops ("$c\neq0$ with $n<0$",
+  a remainder that must vanish, a top coefficient above the bound, a non-polynomial
+  reduced equation), the offending part is dropped and the solve continues.
+\end{itemize}
+The identity gate then records the residual numerator $\rho(c)$ of
+$Dy(c)+fy(c)-g(c)$, linear in the $c_i$, as a constraint, and the constraints are solved
+by \code{rt\_solve\_ansatz} over $C$ (Prop.~\ref{prop:T1}).
+
+\paragraph{The cancellation case} is the one nonlinear site: ordinary mode integrates
+$c/w$ in $K$, and resultants, Hermite reduction and log folding are not linear. In
+parametric mode it runs a linear top-down pass instead (\code{rde\_polyrischde\_cancel\_par}),
+solving $Ds_m+(b+m\eta)s_m=\operatorname{coeff}_m$ by a recursive parametric Risch DE
+over $K_{L-1}$ for $m=n,\dots,0$:
+\begin{itemize}
+\item an exponential top has $D(s\tau^m)=(Ds+m\eta s)\tau^m$, so the degrees
+  decouple. The pass is complete and a homogeneous solution at a resonant $m$ is
+  irrelevant;
+\item a primitive top couples degree $m$ to $m-1$ through $m\eta s$. When
+  $-b=Dz/z$ (decided by \S\ref{sec:A1}; $b=0$ gives $z=1$), $s_m$ is determined only up
+  to $\lambda_mz$, and $\lambda_m$ moves the next coefficient. The pass adds
+  $\lambda_mz$ with $\lambda_m$ a \emph{fresh} unknown, solved with the $c_i$. This is
+  [SI] \S5.8's LimitedIntegrate, carried down the degrees.
+\end{itemize}
+
+\begin{lemma}[uniform bounds]\label{lem:T11}
+Let $c^*\in C^m$. Every bound computed from $g(c)$ for indeterminate $c$ (degree,
+valuation, the normal-denominator $h$) is a valid bound for the equation at $g(c^*)$.
+\end{lemma}
+\begin{proof}
+$\deg g(c^*)\le\deg g(c)$ and $\nu(g(c^*))\ge\nu(g(c))$, since specialisation can only
+cancel terms. The denominator of $g(c^*)$ divides the lcm $e$ of the components'
+denominators, so the $h$ built from $e$ is a multiple of the one built from $g(c^*)$
+(Bronstein Cor.~6.1.1 needs only a multiple of the true denominator). Each RDE box is
+correct for any upper bound, so a larger bound only widens the search.
+\end{proof}
+
+\begin{proposition}\label{prop:T11}
+Let $(y(c),\rho(c))$ be the output of the parametric run.
+\begin{enumerate}
+\item \emph{Soundness.} If $\rho(c^*)=0$ then $y(c^*)$ solves (PRDE) at $c^*$.
+\item \emph{Completeness.} If (PRDE) has a solution $(y^*,c^*)$, then
+  $\rho(c^*,\lambda^*)=0$ for some values $\lambda^*$ of the fresh unknowns, provided
+  the run raised no mark. So an inconsistent system, or a run that fails at a
+  $c$-free exit without a mark, proves that no constants work.
+\end{enumerate}
+\end{proposition}
+\begin{proof}
+(1) $\rho$ is the numerator of the residual of the original equation, so $\rho(c^*)=0$
+is the identity. (2) Specialise the run at $c^*$. Every operation on the right-hand side
+is linear with $c$-free divisors, so it commutes with $c\mapsto c^*$. By
+Lemma~\ref{lem:T11} the bounds stay valid at $c^*$. The ordinary solver on $g(c^*)$ is
+complete (Ch.~6), so each part it requires to vanish does vanish at $c^*$. Hence each
+dropped part is $0$ at $c^*$, and the specialised run is a run of the ordinary solver,
+with some all-zero steps. In the cancellation pass a solution has the form
+$\sum(s_m^p+\lambda_mz)\tau^m$ for suitable $\lambda_m$, because $s_m$ is unique up to
+the homogeneous solution. So the specialised run reaches a solution and its residual
+vanishes. A $c$-free exit is a failure of the ordinary solver at every $c^*$.
+\end{proof}
+
+A solution is substituted (a free unknown is $0$) and checked again by the exact tower
+identity outside parametric mode. Not converted, and marked: the hypertangent boxes
+(CancelTan's re/im split treats every symbol, the unknowns too, as real; step~4/5), and
+an undecided log-derivative test on the cancellation pass. The builtin
+\code{Risch`ParametricRischDE[f, \{g0, g1, \dots\}, x]} returns
+$\{y,\{c_1,\dots\}\}$, \code{"NoSolution"} or \code{\$Failed}. A seeded hunt (base,
+exponential, logarithmic and mixed towers, 25 each, $g_0=Dy+fy-\sum c_ig_i$ for random
+$y$, $c$) solves 100 of 100, every answer verified. It has no false
+\code{"NoSolution"}, and four non-elementary right-hand sides are proved to have none.
+Test: \code{test\_campaign\_step3a\_param\_rde}.
+
+\section*{T12. Status of the transcendental decision}
+\addcontentsline{toc}{section}{T12. Status}
 
 The completeness ratchet (\code{tools/check\_bronstein\_completeness.py}) lists every
-path of the transcendental Risch~DE that can give up without a proof, 19 at v0.6609.
+path of the transcendental Risch~DE that can give up without a proof: 19 at v0.6609, and
+20 at v0.6620, where step~3a adds its two out-of-scope parametric marks.
 Each campaign step that removes one adds its section here. Still open: the generalised
-new-logarithm certificate (step~2); a Liouvillian primitive top (step~3, which extends
-\S\ref{sec:T2} and \S\ref{sec:T8} to $D\theta=\eta$ by treating $c\,\eta$ as a
-parameter); the split special part for $\tanh$ and for $\tan$ over $k(i)$ (step~4,
+new-logarithm certificate (step~2, re-based on \S\ref{sec:T11}); a Liouvillian
+primitive top (steps~3b and~3c: LimitedIntegrate over $K_{L-1}$ by \S\ref{sec:T11}, and
+the monomial check $\int\eta\notin K_{L-1}$); the split special part for $\tanh$ and for $\tan$ over $k(i)$ (step~4,
 replacing the mark of Prop.~\ref{prop:T5}); CancelTan with a homogeneous solution
 (step~5); towers of several tangents (step~6); and the exact tower arithmetic over
 $\Q(\alpha)$ of \S T3.

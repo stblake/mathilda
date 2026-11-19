@@ -62,6 +62,17 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C);
  * registry (integrate_risch_transcendental_init). */
 int* rde_alg_mode_ptr(void);
 
+/* The parametric Risch DE (Bronstein [SI] ch. 7, ParamRischDE; campaign step
+ * 3a): g is linear in the unknown constant symbols `unknowns` (a List, borrowed;
+ * D = 0, absent from f).  Solves D y + f y = g for y in K_m and the unknowns
+ * together.  Returns 1 with *y (owned) and *sol (owned List of the unknowns'
+ * values, a free one taken as 0; the identity holds exactly), 0 when no values
+ * of the unknowns admit a solution (proved), -1 undecided (marked). */
+int rde_tower_param(Expr* f, Expr* g, RdeCtx* C, Expr* unknowns,
+                    Expr** y_out, Expr** sol_out);
+/* Its mode flag, for the TimeConstrained unwind registry. */
+int* rde_par_mode_ptr(void);
+
 /* New logarithms of an antiderivative in K_L(new logs), decided by the
  * structure theorem (risch_field_integrate.c): folds the reducible ones into
  * the tower; *status 1 all folded, 0 leftovers proved independent (not in
@@ -100,6 +111,10 @@ void rde_cert_mark(const char* why);          /* record a non-authoritative path
  * joined to those of f and g, so the solution field is the caller's tower even
  * when f and g mention only part of it. */
 Expr* rde_solve_tower_ext(Expr* f, Expr* g, Expr* x, Expr* extra);
+/* rde_tower_param over that tower (needs at least one kernel): 1 with *y (kernel
+ * form) and *sol, 0 proved none, -1 undecided. */
+int rde_solve_param_ext(Expr* f, Expr* g, Expr* x, Expr* extra, Expr* unknowns,
+                        Expr** y, Expr** sol);
 
 /* Is e a rational function of the symbols in the List vars only (numeric
  * constants allowed)?  The certification gate on the solvers' inputs. */

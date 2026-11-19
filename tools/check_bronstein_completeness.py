@@ -149,6 +149,10 @@ BASELINE_C = {
     # (Erfc = 1 - Erf, LogIntegral[u] = Ei[Log[u]]) and the field integrator has no
     # primitive branch: no certificate over such a tower (step 0.2; step 3 closes it)
     "tower: Liouvillian primitive level",
+    # step 3a: the parametric Risch DE does not convert the tangent boxes
+    # (NoCancel2/3 and CancelTan's re/im split, where rc_conj takes every symbol,
+    # the unknowns too, as real); step 4/5 splits the unknowns into re/im parts
+    "parametric: hypertangent top",
 }
 
 # rde_cert_mark reasons that are permanent: a computation the CAS could not do,
@@ -179,6 +183,8 @@ CAS_FAILURE_MARKS = {
     "RdeBoundDegreePrim: log-derivative undecided",
     "RdeBoundDegreePrim: limited integration out of range",
     "PolyRischDECancel: log-derivative test undecided",
+    # the same decision on the parametric pass (step 3a)
+    "parametric: PolyRischDECancel log-derivative test undecided",
     "RdeSpecialDenomTan: parametric log-derivative undecided",
     "RdeBoundDegreeTan: bound out of range",
     "PolyRischDENoCancel3: resonance out of range",

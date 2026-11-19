@@ -2392,7 +2392,28 @@ bool rde_rational_in(Expr* e, Expr* vars) {
  * tower, which matters for a certified "no solution" -- y' = 1/x has none in
  * C(x) but Log[x] in C(x, Log[x]).  Every out-of-scope NULL is recorded with
  * rde_cert_mark. */
+static Expr* rde_solve_tower_core(Expr* f, Expr* g, Expr* x, Expr* extra,
+                                  Expr* unknowns, int* pstatus, Expr** psol);
 Expr* rde_solve_tower_ext(Expr* f, Expr* g, Expr* x, Expr* extra) {
+    return rde_solve_tower_core(f, g, x, extra, NULL, NULL, NULL);
+}
+
+/* The parametric Risch DE over the tower of f, g and `extra` (campaign step
+ * 3a): g is linear in the List `unknowns` of constant symbols.  Returns the
+ * status of rde_tower_param (1 / 0 / -1); on 1, *y is the solution in kernel
+ * form and *sol the List of the unknowns' values.  With no kernel the base
+ * field C(x) is used. */
+int rde_solve_param_ext(Expr* f, Expr* g, Expr* x, Expr* extra, Expr* unknowns,
+                        Expr** y, Expr** sol) {
+    int st = -1;
+    *sol = NULL;
+    *y = rde_solve_tower_core(f, g, x, extra, unknowns, &st, sol);
+    if (!*y && st == 1) st = -1;
+    return st;
+}
+
+static Expr* rde_solve_tower_core(Expr* f, Expr* g, Expr* x, Expr* extra,
+                                  Expr* unknowns, int* pstatus, Expr** psol) {
     Expr* fg = extra
         ? expr_new_function(expr_new_symbol("List"),
               (Expr*[]){ expr_copy(f), expr_copy(g), expr_copy(extra) }, 3)
@@ -2436,7 +2457,8 @@ Expr* rde_solve_tower_ext(Expr* f, Expr* g, Expr* x, Expr* extra) {
                 rde_cert_mark("tower: coefficients not rational in the tower");
             expr_free(vl);
         }
-        q = rde_tower(fs, gs, &C);
+        if (unknowns) *pstatus = rde_tower_param(fs, gs, &C, unknowns, &q, psol);
+        else q = rde_tower(fs, gs, &C);
     } else rde_cert_mark("tower: kernels left after substitution");
     if (fs) expr_free(fs);
     if (gs) expr_free(gs);

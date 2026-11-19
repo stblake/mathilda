@@ -1718,6 +1718,41 @@ static void test_campaign_step8_dependent_logs(void) {
                    " Head[F] === Integrate || PossibleZeroQ[D[F, u] - f]]]", "True", 0);
 }
 
+/* C completeness campaign, step 3a: the parametric Risch DE
+ * D y + f y = g0 + Sum c_i g_i, solved for y and the constants together
+ * (Risch`ParametricRischDE).  Right-hand-side exits drop their term and the
+ * residual becomes a linear constraint on the c_i; the cancellation case runs
+ * a linear pass with a fresh unknown per homogeneous solution. */
+static void test_campaign_step3a_param_rde(void) {
+    /* base field */
+    assert_eval_eq("Risch`ParametricRischDE[0, {1/x^2, 1/x}, x]", "{-1/x, {0}}", 0);
+    assert_eval_eq("Risch`ParametricRischDE[0, {1/x, 2/x}, x]", "{0, {-1/2}}", 0);
+    assert_eval_eq("Risch`ParametricRischDE[0, {1/x, 1/(x + 1)}, x]", "\"NoSolution\"", 0);
+    assert_eval_eq("Risch`ParametricRischDE[1/x, {x^2 + 1/x, 1/x, x}, x]", "{1/4 (4 + x^3), {0, 0}}", 0);
+    /* exponential tower: the decoupled cancellation pass (LimitedIntegrate-shaped) */
+    assert_eval_eq("Risch`ParametricRischDE[0, {E^x/x, E^x/x^2}, x]", "{E^x/x, {-1}}", 0);
+    assert_eval_eq("Risch`ParametricRischDE[1, {(2 x + 1) E^x + E^x/x, E^x/x}, x]", "{E^x x, {-1}}", 0);
+    assert_eval_eq("Risch`ParametricRischDE[0, {E^(x^2), x E^(x^2)}, x]", "\"NoSolution\"", 0);
+    assert_eval_eq("Risch`ParametricRischDE[0, {E^x/x + E^x, E^x}, x]", "\"NoSolution\"", 0);
+    /* logarithmic tower: lambda z carried down the coupled pass */
+    assert_eval_eq("Risch`ParametricRischDE[0, {Log[x]/x + 1/(x Log[x]), 1/(x Log[x])}, x]",
+                   "{1/2 Log[x]^2, {-1}}", 0);
+    assert_eval_eq("Risch`ParametricRischDE[0, {1/(x Log[x]), 1/x}, x]", "\"NoSolution\"", 0);
+    assert_eval_eq("Risch`ParametricRischDE[0, {1/Log[x], 1/x}, x]", "\"NoSolution\"", 0);
+    assert_eval_eq("Risch`ParametricRischDE[0, {E^x Log[x], E^x/x}, x]", "{E^x Log[x], {1}}", 0);
+    assert_eval_eq("Risch`ParametricRischDE[0, {Log[x]^2/(x + 1), 1/(x + 1)}, x]", "\"NoSolution\"", 0);
+    /* a solution is checked: D[y] + f y == g0 + c.g exactly */
+    assert_eval_eq("With[{f = 1, gs = {E^x/x, E^x, E^x/x^2}, y = (x + 1) E^x/x, c = {2, -1, 3}},"
+                   " With[{r = Risch`ParametricRischDE[f, Prepend[gs, Together[D[y, x] + f y - c . gs]], x]},"
+                   " PossibleZeroQ[Together[D[r[[1]], x] + f r[[1]] - (D[y, x] + f y - c . gs) - r[[2]] . gs]]]]",
+                   "True", 0);
+    /* out of the converted scope: undecided, never "NoSolution" */
+    assert_eval_eq("Risch`ParametricRischDE[1 + Tan[x]^2, {Tan[x], 1}, x]", "$Failed", 0);
+    assert_eval_eq("Risch`RischDECertifiedReason[]", "\"parametric: hypertangent top\"", 0);
+    /* an input naming an internal unknown stays unevaluated */
+    assert_eval_eq("Head[Risch`ParametricRischDE[0, {rmPc1, 1}, x]]", "Risch`ParametricRischDE", 0);
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -1830,6 +1865,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_campaign_step7_algconst);
     TEST(test_campaign_step2_complex_arctan);
     TEST(test_campaign_step8_dependent_logs);
+    TEST(test_campaign_step3a_param_rde);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }

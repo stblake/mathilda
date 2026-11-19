@@ -5471,6 +5471,41 @@ divided by it, and RdeNormalDenominator reported a **false certified
 is `1/x`. Through `Integrate\`Bronstein` this was a false "not elementary" on
 `((x + 1) Log[1 + x^2]^2 + 1)^(1/3)/x`.
 
+## Risch`ParametricRischDE — the parametric Risch DE (v0.6620)
+
+`Risch`ParametricRischDE[f, {g0, g1, ..., gm}, x]` finds `y` and constants
+`c1, ..., cm` with
+
+    D[y] + f y == g0 + c1 g1 + ... + cm gm
+
+(Bronstein, *Symbolic Integration I*, ch. 7). It is the core that LimitedIntegrate
+over a Liouvillian primitive top needs (`r = Ds + c η` with `∫η` not in the field),
+C completeness campaign step 3a. The field is that of `Risch`RischDECertified`:
+`C(x)`, or the tower of the `Log`/`Exp`/`Tan` kernels of `f` and the `g_i`. Optional
+4th and 5th arguments add tower kernels `{k1, ...}` and symbolic constants
+`{a1, ...}`.
+
+- `{y, {c1, ..., cm}}`: a solution, checked exactly; an undetermined constant is 0.
+- `"NoSolution"`: no constants admit a solution (a proof).
+- `$Failed`: undecided; `Risch`RischDECertifiedReason[]` names why.
+
+| Input | Result |
+|---|---|
+| `Risch`ParametricRischDE[0, {1/x, 2/x}, x]` | `{0, {-1/2}}` |
+| `Risch`ParametricRischDE[0, {E^x/x, E^x/x^2}, x]` | `{E^x/x, {-1}}` |
+| `Risch`ParametricRischDE[0, {E^x Log[x], E^x/x}, x]` | `{E^x Log[x], {1}}` |
+| `Risch`ParametricRischDE[0, {Log[x]/x + 1/(x Log[x]), 1/(x Log[x])}, x]` | `{1/2 Log[x]^2, {-1}}` |
+| `Risch`ParametricRischDE[0, {1/Log[x], 1/x}, x]` | `"NoSolution"` |
+| `Risch`ParametricRischDE[1 + Tan[x]^2, {Tan[x], 1}, x]` | `$Failed` |
+
+How it works: the ordinary solver runs with the `c_i` as named constants in the
+right-hand side. Bounds are taken over all components. A right-hand-side exit drops
+its part instead of failing, and the residual of the identity becomes a linear
+constraint on the `c_i`, solved at the end. The cancellation case runs a linear
+top-down pass. Over a primitive top it adds a fresh unknown for each homogeneous
+solution. Not covered yet (undecided): a hypertangent top. Derivation:
+`docs/notes/bronstein_extensions.tex`, §T11.
+
 ## PolynomialQuotientRemainder
 
 Single-pass companion to `PolynomialQuotient` / `PolynomialRemainder`.

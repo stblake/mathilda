@@ -20,6 +20,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -58,6 +59,66 @@ static Expr* rde_alg_divmod(Expr* a, Expr* b, Expr** rem);
 static Expr* rde_alg_gcd(Expr* a, Expr* b);
 static Expr* rde_alg_xgcd_s(Expr* b, Expr* a);
 static bool  rde_has_alg_const(const Expr* e);
+
+/* ---- Parametric mode (C completeness campaign, step 3a) -----------------
+ * The parametric Risch DE  D y + f y = g0 + Sum c_i g_i  asks for y AND
+ * constants c_i ([SI] ch. 7, ParamRischDE).  rde_tower_param runs the ordinary
+ * solver with the c_i as named symbols (g_rde_par_unk) in the right-hand side.
+ * The operator side f never contains them, so every decision on f is unchanged;
+ * generic degrees and valuations of a c-linear right-hand side are already the
+ * max / min over its components, and its Together denominator is their lcm.
+ * What changes is every EXIT on the right-hand side ("c != 0 with n < 0", a
+ * remainder that must vanish, a coefficient above the degree bound, a
+ * non-polynomial reduced equation): while the tested quantity contains an
+ * unknown, the offending part is dropped and the solve continues.  The
+ * identity gate then records the residual D y + f y - g, linear in the c_i, as
+ * a constraint instead of testing it, and rde_tower_param solves the
+ * constraints.
+ *   Completeness: if (y*, c*) solves the equation, every dropped part vanishes
+ *   at c*, so the run computes what the ordinary solver computes on g(c*),
+ *   and y(c*) is a solution: the constraints are consistent.
+ *   Soundness: a solution of the constraints makes y(c) a solution (it is the
+ *   residual), and an inconsistent system proves no c works.
+ * The one nonlinear site, the integration in K behind the log-derivative
+ * branch (rde_cancel_logderiv, and D H = c), is bypassed: the cancellation case
+ * runs the linear top-down pass of rde_polyrischde_cancel_par, which adds each
+ * homogeneous term lambda z with lambda a FRESH unknown (rde_par_fresh), solved
+ * with the others.  A site that cannot be converted (the tangent top, an
+ * undecided log-derivative test) marks the scope instead. */
+static int     g_rde_par     = 0;      /* tc_register_unwind_counter (integrate_risch_transcendental_init) */
+static Expr*   g_rde_par_unk = NULL;   /* owned List: the caller's unknowns, then the fresh lambdas */
+static Expr**  g_rde_par_cons = NULL;  /* owned constraints (each must vanish) */
+static size_t  g_rde_par_ncons = 0, g_rde_par_cap = 0, g_rde_par_nfresh = 0;
+int* rde_par_mode_ptr(void) { return &g_rde_par; }
+
+/* Does e contain one of the unknowns of the running parametric solve? */
+static bool rde_par_in(const Expr* e) {
+    if (!g_rde_par || !g_rde_par_unk || !e) return false;
+    for (size_t i = 0; i < g_rde_par_unk->data.function.arg_count; i++)
+        if (!rt_free_of_x((Expr*)e, g_rde_par_unk->data.function.args[i])) return true;
+    return false;
+}
+static void rde_par_require(Expr* e) {              /* consumes e */
+    if (g_rde_par_ncons == g_rde_par_cap) {
+        g_rde_par_cap = g_rde_par_cap ? 2 * g_rde_par_cap : 8;
+        g_rde_par_cons = realloc(g_rde_par_cons, g_rde_par_cap * sizeof(Expr*));
+    }
+    g_rde_par_cons[g_rde_par_ncons++] = e;
+}
+/* A fresh unknown constant (a homogeneous coefficient), appended to the
+ * unknowns of the running solve.  Returns a new reference to the symbol. */
+static Expr* rde_par_fresh(void) {
+    char nm[32]; snprintf(nm, sizeof(nm), "rmPl%zu", g_rde_par_nfresh++);
+    size_t n = g_rde_par_unk->data.function.arg_count;
+    Expr** a = malloc((n + 1) * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) a[i] = expr_copy(g_rde_par_unk->data.function.args[i]);
+    a[n] = expr_new_symbol(nm);
+    Expr* nl = expr_new_function(expr_new_symbol("List"), a, n + 1);
+    free(a);
+    expr_free(g_rde_par_unk);
+    g_rde_par_unk = nl;
+    return expr_new_symbol(nm);
+}
 
 /* Numerator / Denominator of Together[e] (e not consumed). */
 static Expr* rde_num(Expr* e) {
@@ -160,6 +221,31 @@ static Expr* rde_lc(Expr* p, Expr* x) {
     long d = rt_degree(p, x);
     return d < 0 ? expr_new_integer(0) : rt_coeff(p, x, d);
 }
+/* Parametric mode: cc minus its top term in v (the term a bound says must
+ * vanish; its vanishing is implied by the final residual constraint).  cc is
+ * consumed. */
+static Expr* rde_par_strip_top(Expr* cc, Expr* v) {
+    long d = rt_degree(cc, v);
+    if (d < 0) return cc;
+    Expr* top = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1),
+        rt_coeff(cc, v, d), expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(v), expr_new_integer(d) }, 2) }, 3);
+    Expr* sum = expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ cc, top }, 2);
+    Expr* r = rde_canon(sum);
+    expr_free(sum);
+    return r;
+}
+/* Parametric mode: the polynomial part in v of e (a reduced equation's
+ * right-hand side whose non-polynomial part must vanish).  e borrowed. */
+static Expr* rde_par_polypart(Expr* e, Expr* v) {
+    Expr* tog = rt_eval1("Together", expr_copy(e));
+    Expr* num = rt_eval1("Numerator", expr_copy(tog));
+    Expr* den = rt_eval1("Denominator", tog);
+    Expr* q = rt_eval3("PolynomialQuotient", num, den, expr_copy(v));
+    Expr* r = q ? rde_canon(q) : NULL;
+    if (q) expr_free(q);
+    return r;
+}
 /* d/dx (e not consumed). */
 static Expr* rde_dx(Expr* e, Expr* x) {
     return rt_eval2("D", expr_copy(e), expr_copy(x));
@@ -209,7 +295,8 @@ void rde_cert_mark(const char* why) {
 static int rde_spde(Expr* a, Expr* b, Expr* c, Expr* x, long n, RdeSpde* out) {
     out->b = out->c = out->alpha = out->beta = NULL; out->m = 0;
     if (n < 0) {
-        if (rt_is_zero(c)) {
+        /* parametric: q = 0 is the only candidate; its residual is the constraint */
+        if (rt_is_zero(c) || rde_par_in(c)) {
             out->b = expr_new_integer(0); out->c = expr_new_integer(0);
             out->m = 0; out->alpha = expr_new_integer(0); out->beta = expr_new_integer(0);
             return 1;
@@ -218,7 +305,7 @@ static int rde_spde(Expr* a, Expr* b, Expr* c, Expr* x, long n, RdeSpde* out) {
     }
     Expr* g = rde_gcd(a, b, x);
     Expr* rem = rde_rem(c, g, x);
-    bool gdivc = rt_is_zero(rem);
+    bool gdivc = rt_is_zero(rem) || rde_par_in(rem);   /* parametric: dropped (quotient below) */
     expr_free(rem);
     if (!gdivc) { expr_free(g); return 0; }         /* g does not divide c */
     Expr* a1 = rde_quot(a, g, x);
@@ -581,7 +668,11 @@ static Expr* rde_polyrischde_nocancel1(Expr* b, Expr* c, Expr* x, long n) {
     while (!rt_is_zero(cc)) {
         long dc = rt_degree(cc, x);
         long m = dc - db;
-        if (n < 0 || m < 0 || m > n) { fail = true; break; }
+        if (n < 0 || m < 0 || m > n) {
+            /* parametric: the top term must vanish; drop it (rde_par_strip_top) */
+            if (rde_par_in(cc)) { cc = rde_par_strip_top(cc, x); continue; }
+            fail = true; break;
+        }
         Expr* lcc = rde_lc(cc, x);
         Expr* coeff = rde_alg_reduce(rde_divq(lcc, lcb));   /* lc(c)/lc(b) */
         expr_free(lcc);
@@ -616,7 +707,10 @@ static Expr* rde_polyrischde_integrate(Expr* c, Expr* x, long n) {
     while (!rt_is_zero(cc)) {
         long dc = rt_degree(cc, x);
         long m = dc + 1;                            /* deg(c) - delta + 1 */
-        if (n < 0 || m < 0 || m > n) { fail = true; break; }
+        if (n < 0 || m < 0 || m > n) {
+            if (rde_par_in(cc)) { cc = rde_par_strip_top(cc, x); continue; }
+            fail = true; break;
+        }
         Expr* lcc = rde_lc(cc, x);
         Expr* coeff = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
             (Expr*[]){ lcc, expr_new_function(expr_new_symbol("Power"),
@@ -679,7 +773,8 @@ Expr* rde_base(Expr* f, Expr* g, Expr* x) {
      * constant field, and its "no" was a false certificate --
      * Risch`RischDECertified[2/(u - Sqrt[2]), g, u] for y = Sqrt[3] u^2 said
      * "NoSolution" up to v0.6605; campaign step 7) */
-    if (x->type == EXPR_SYMBOL && !rde_has_alg_const(f) && !rde_has_alg_const(g)) {
+    if (x->type == EXPR_SYMBOL && !rde_has_alg_const(f) && !rde_has_alg_const(g)
+        && !rde_par_in(g)) {                         /* parametric: the Expr path converts its exits */
         Expr* y = NULL;
         int nr = flint_rde_base_solve_fg(f, g, x->data.symbol.name, &y);
         if (nr >= 0) return y;              /* y is NULL on nr == 0 (decline) */
@@ -721,6 +816,12 @@ Expr* rde_base(Expr* f, Expr* g, Expr* x) {
     Expr* dnh2 = rde_mul(dn, h2);
     Expr* rem = rde_rem(dnh2, en, x);
     bool ok = rt_is_zero(rem);
+    /* parametric: en is the lcm of the components' denominators, so h bounds
+     * the denominator of y for every value of the c_i (a smaller en at c* gives
+     * a divisor of h); a pole of g that h does not clear must vanish, and the
+     * reduced right-hand side below keeps only its polynomial part */
+    bool par_guard = !ok && rde_par_in(gbar);
+    if (par_guard) ok = true;
     expr_free(rem); expr_free(h2);
     Expr* result = NULL;
     if (ok) {
@@ -740,6 +841,13 @@ Expr* rde_base(Expr* f, Expr* g, Expr* x) {
         Expr* cc = rde_mul(dnh2_en, num_g);         /* (dn h^2 / en) num_g */
         expr_free(num_f); expr_free(num_g); expr_free(dh); expr_free(dndh);
         expr_free(hnf); expr_free(dnh2_en);
+        if (rde_par_in(gbar) && (par_guard || !rt_is_poly(cc, x))) {
+            Expr* full = expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_copy(dnh2), expr_copy(gbar) }, 2);
+            Expr* pp = rde_par_polypart(full, x);
+            expr_free(full);
+            if (pp) { expr_free(cc); cc = pp; }
+        }
         if (!(rt_is_poly(aa, x) && rt_is_poly(bb, x) && rt_is_poly(cc, x)))
             rde_cert_mark("base: reduced equation not polynomial");
         if (rt_is_poly(aa, x) && rt_is_poly(bb, x) && rt_is_poly(cc, x)) {
@@ -810,6 +918,10 @@ Expr* rde_base(Expr* f, Expr* g, Expr* x) {
         Expr* exn = num ? rt_eval1("Expand", num) : NULL;
         if (exn && g_rde_alg) exn = rde_algc(exn);    /* canonical zero over Q(alpha) */
         bool good = exn && rt_is_zero(exn);
+        /* parametric: the residual, linear in the c_i, is the constraint (a
+         * residual the unknowns cancelled out of is one too: dropped parts that
+         * no c removes, so the system is then inconsistent) */
+        if (!good && exn && (rde_par_in(exn) || rde_par_in(g))) { rde_par_require(expr_copy(exn)); good = true; }
         expr_free(dy); expr_free(fy); expr_free(s1);
         if (exn) expr_free(exn);
         if (!good) { rde_cert_mark("base: identity gate"); expr_free(result); result = NULL; }
@@ -1034,7 +1146,7 @@ static int rde_normal_denominator_field(Expr* f, Expr* g, RdeCtx* C,
     Expr* h2 = rde_mul(h, h);
     Expr* dnh2 = rde_mul(dn, h2);
     Expr* rem = rc_rem(dnh2, en, C);
-    bool ok = rt_is_zero(rem);
+    bool ok = rt_is_zero(rem) || rde_par_in(g);     /* parametric: see rde_base's guard */
     expr_free(rem); expr_free(h2); expr_free(dnh2);
     if (!ok) { expr_free(dn); expr_free(en); expr_free(h); return 0; }
     /* a = dn h ; b = dn h f - dn Dh ; c = dn h^2 g.  Normalize b, c with Together
@@ -1790,7 +1902,7 @@ static long rde_bound_degree_prim(Expr* a, Expr* b, Expr* c, RdeCtx* C) {
 int rde_spde_field(Expr* a, Expr* b, Expr* c, RdeCtx* C, long n, RdeSpde* out) {
     out->b = out->c = out->alpha = out->beta = NULL; out->m = 0;
     if (n < 0) {
-        if (rt_is_zero(c)) {
+        if (rt_is_zero(c) || rde_par_in(c)) {       /* parametric: q = 0, see rde_spde */
             out->b = expr_new_integer(0); out->c = expr_new_integer(0);
             out->m = 0; out->alpha = expr_new_integer(0); out->beta = expr_new_integer(0);
             return 1;
@@ -1799,7 +1911,7 @@ int rde_spde_field(Expr* a, Expr* b, Expr* c, RdeCtx* C, long n, RdeSpde* out) {
     }
     Expr* g = rc_gcd(a, b, C);
     Expr* rem = rc_rem(c, g, C);
-    bool gdivc = rt_is_zero(rem);
+    bool gdivc = rt_is_zero(rem) || rde_par_in(rem);
     expr_free(rem);
     if (!gdivc) { expr_free(g); return 0; }
     Expr* a1 = rc_quot(a, g, C);
@@ -1873,7 +1985,10 @@ Expr* rde_polyrischde_nocancel_field(Expr* b, Expr* c, RdeCtx* C, long n) {
     while (!rt_is_zero(cc)) {
         long dc = rc_deg(cc, C);
         long m = dc - db;
-        if (n < 0 || m < 0 || m > n) { fail = true; break; }
+        if (n < 0 || m < 0 || m > n) {
+            if (rde_par_in(cc)) { cc = rde_par_strip_top(cc, C->tau); continue; }
+            fail = true; break;
+        }
         Expr* lcc = rc_lc(cc, C);
         Expr* coeff = rde_divq(lcc, lcb);           /* lc(c)/lc(b) in k(x) */
         expr_free(lcc);
@@ -1995,10 +2110,87 @@ static int rde_cancel_logderiv(Expr* c, Expr* z, long mm, RdeCtx* C, long n, Exp
     return 1;
 }
 
+/* PolyRischDECancel in parametric mode (campaign step 3a): c is linear in the
+ * unknowns, b in k.  The pass runs every degree m = n .. 0 and solves the
+ * coefficient equation  D s + (b + m eta) s = coeff_m(cc)  by a recursive
+ * (parametric) rde_tower over K_{m-1}; nothing on it is nonlinear.
+ *   Exponential top: D(s tau^m) = (Ds + m eta s) tau^m, so the coefficient
+ *   equations decouple and a homogeneous solution at a resonant m never
+ *   matters (take it 0): the pass is complete and its failures are proofs.
+ *   Primitive top: D(s tau^m) = Ds tau^m + m eta s tau^(m-1) couples the
+ *   degrees.  When -b = Dz/z (rc_param_log_deriv; b = 0 gives z = 1) each s is
+ *   only determined up to lambda z, and lambda moves the next coefficient
+ *   ([SI] §5.8's LimitedIntegrate), so lambda_m z is added with lambda_m a fresh
+ *   unknown and carried down.  -b proved not a log-derivative: s is unique.
+ *   Undecided: marked.
+ * A part of cc at degree m that s cannot remove is left for the residual
+ * constraint.  Returns q (owned) or NULL. */
+static Expr* rde_polyrischde_cancel_par(Expr* b, Expr* c, RdeCtx* C, long n) {
+    RtKind kind = C->T->kind[C->m];
+    Expr* eta = (kind == RT_EXP) ? C->T->Dcoef[C->m] : NULL;
+    Expr* z = NULL;                                  /* homogeneous solution (primitive top) */
+    if (kind != RT_EXP) {
+        Expr* mb = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_new_integer(-1), expr_copy(b) }, 2));
+        long mm = 0;
+        int br = mb ? rc_param_log_deriv(mb, NULL, C, &mm, &z) : -1;
+        if (mb) expr_free(mb);
+        if (br < 0 || (br == 1 && mm != 0)) {
+            if (z) expr_free(z);
+            rde_cert_mark("parametric: PolyRischDECancel log-derivative test undecided");
+            return NULL;
+        }
+        if (br == 0 && z) { expr_free(z); z = NULL; }
+    }
+    long dc = rc_deg(c, C);
+    if (dc > n) n = dc;          /* a too-small bound only drops terms to the residual */
+    Expr* q = expr_new_integer(0);
+    Expr* cc = expr_copy(c);
+    bool fail = false;
+    RdeCtx Clo = { C->T, C->m - 1, C->x, (C->m - 1 >= 0) ? C->T->t[C->m - 1] : C->x };
+    for (long m = n; m >= 0; m--) {
+        Expr* cm = (rc_deg(cc, C) >= m) ? rc_coeff(cc, m, C) : expr_new_integer(0);
+        Expr* coef = (kind == RT_EXP)
+            ? rt_eval1("Cancel", expr_new_function(expr_new_symbol("Plus"),
+                (Expr*[]){ expr_copy(b), expr_new_function(expr_new_symbol("Times"),
+                    (Expr*[]){ expr_new_integer(m), expr_copy(eta) }, 2) }, 2))
+            : expr_copy(b);
+        Expr* s = rt_is_zero(cm) ? expr_new_integer(0) : rde_tower(coef, cm, &Clo);
+        expr_free(coef); expr_free(cm);
+        if (!s) { fail = true; break; }
+        if (z) {                                     /* + lambda_m z */
+            Expr* sz = expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ s,
+                expr_new_function(expr_new_symbol("Times"), (Expr*[]){ rde_par_fresh(), expr_copy(z) }, 2) }, 2);
+            s = rde_canon(sz); expr_free(sz);
+        }
+        if (rt_is_zero(s)) { expr_free(s); continue; }
+        Expr* stm = m == 0 ? expr_copy(s)
+            : rt_eval1("Cancel", expr_new_function(expr_new_symbol("Times"),
+                  (Expr*[]){ expr_copy(s), rc_tau_pow(m, C) }, 2));
+        expr_free(s);
+        q = rt_eval1("Cancel", expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ q, expr_copy(stm) }, 2));
+        Expr* Dstm = rc_D(stm, C);
+        Expr* bstm = rde_mul(b, stm);
+        Expr* sum = expr_new_function(expr_new_symbol("Plus"),
+            (Expr*[]){ cc, expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(-1), bstm }, 2),
+              expr_new_function(expr_new_symbol("Times"),
+                (Expr*[]){ expr_new_integer(-1), Dstm }, 2) }, 3);
+        cc = rde_canon(sum);
+        expr_free(sum); expr_free(stm);
+    }
+    expr_free(cc);
+    if (z) expr_free(z);
+    if (fail) { expr_free(q); return NULL; }
+    return q;
+}
+
 static Expr* rde_polyrischde_cancel(Expr* b, Expr* c, RdeCtx* C, long n) {
     RtKind kind = C->T->kind[C->m];
     Expr* eta = (kind == RT_EXP) ? C->T->Dcoef[C->m] : NULL;
     if (rt_is_zero(c)) return expr_new_integer(0);
+    if (rde_par_in(c)) return rde_polyrischde_cancel_par(b, c, C, n);
     /* Is the homogeneous equation solvable in K, -b = Dw/w, w = z tau^mm?
      * Yes: the log-derivative branch.  Proved no: every coefficient equation
      * of the top-down pass below has at most one solution, so a failed pass is
@@ -2021,16 +2213,21 @@ static Expr* rde_polyrischde_cancel(Expr* b, Expr* c, RdeCtx* C, long n) {
         }
         if (z) expr_free(z);
     }
-    if (n < rc_deg(c, C)) {
+    Expr* cc = expr_copy(c);
+    while (n < rc_deg(cc, C) && rde_par_in(cc)) cc = rde_par_strip_top(cc, C->tau);   /* parametric */
+    if (n < rc_deg(cc, C)) {
+        expr_free(cc);
         if (branch < 0) rde_cert_mark("PolyRischDECancel: log-derivative test undecided");
         return NULL;
     }
     Expr* q = expr_new_integer(0);
-    Expr* cc = expr_copy(c);
     bool fail = false;
     while (!rt_is_zero(cc)) {
         long m = rc_deg(cc, C);
-        if (n < m) { fail = true; break; }
+        if (n < m) {
+            if (rde_par_in(cc)) { cc = rde_par_strip_top(cc, C->tau); continue; }
+            fail = true; break;
+        }
         Expr* lcc = rc_lc(cc, C);                    /* leading coeff, in k */
         Expr* coef;                                  /* b + m*eta (exp) or b (prim) */
         if (kind == RT_EXP)
@@ -2496,6 +2693,9 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
      * anyway (the identity gate certifies any solution) but prove nothing. */
     if (tan && (!rt_free_of_head(f, "Complex") || !rt_free_of_head(g, "Complex")))
         rde_cert_mark("tower: hypertangent top over a field containing I");
+    /* the parametric conversion covers the log and exponential stacks; the
+     * tangent boxes (NoCancel2/3, CancelTan's re/im split) are not converted */
+    if (tan && rde_par_in(g)) { rde_cert_mark("parametric: hypertangent top"); return NULL; }
     /* Weak normalization (Bronstein §6.1): RdeNormalDenominator's bound, and so
      * every "no solution" below, assumes f weakly normalized in tau.  With
      * q = WeakNormalizer(f), y solves D y + f y = g iff z = q y solves
@@ -2534,6 +2734,10 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
         a = na; b = nb; c = nc; h_s = nhs;
     }
     Expr* result = NULL;
+    if (rc_ispoly(a, C) && rc_ispoly(b, C) && !rc_ispoly(c, C) && rde_par_in(c)) {
+        Expr* pp = rde_par_polypart(c, C->tau);      /* parametric: the rest must vanish */
+        if (pp) { expr_free(c); c = pp; }
+    }
     if (!(rc_ispoly(a, C) && rc_ispoly(b, C) && rc_ispoly(c, C)))
         rde_cert_mark("tower: reduced equation not polynomial");
     if (rc_ispoly(a, C) && rc_ispoly(b, C) && rc_ispoly(c, C)) {
@@ -2552,7 +2756,12 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
                  * result carrying a NEW logarithm means the Risch DE has no rational
                  * solution -> decline. */
                 if (rt_is_zero(sp.c)) H = expr_new_integer(0);
-                else {
+                else if (rde_par_in(sp.c)) {
+                    /* parametric: the linear cancellation pass (b = 0) */
+                    Expr* zero = expr_new_integer(0);
+                    H = rde_polyrischde_cancel(zero, sp.c, C, sp.m);
+                    expr_free(zero);
+                } else {
                     /* D H = c, deg H <= m: the log-derivative branch with w = 1
                      * (three-way integral in K, the constant of integration
                      * fixed by the degree; campaign step 1) */
@@ -2607,8 +2816,138 @@ Expr* rde_tower(Expr* f, Expr* g, RdeCtx* C) {
          * 0 after Expand. */
         Expr* rexp = rnum ? rt_eval1("Expand", rnum) : NULL;
         bool good = rexp && rt_is_zero(rexp);
+        /* parametric: the residual, linear in the c_i, is the constraint (a
+         * residual the unknowns cancelled out of is one too: dropped parts that
+         * no c removes, so the system is then inconsistent) */
+        if (!good && rexp && (rde_par_in(rexp) || rde_par_in(g))) { rde_par_require(expr_copy(rexp)); good = true; }
         if (rexp) expr_free(rexp);
         if (!good) { rde_cert_mark("tower: identity gate"); expr_free(result); result = NULL; }
     }
     return result;
+}
+
+/* ---- The parametric Risch DE (campaign step 3a) ---------------------------
+ * Does D y + f y - g vanish exactly in K_m (the tower identity, outside
+ * parametric mode)?  y, f, g borrowed. */
+static bool rde_identity_holds(Expr* y, Expr* f, Expr* g, RdeCtx* C) {
+    Expr* Dy = rc_D(y, C);
+    if (!Dy) return false;
+    Expr* fy = rde_mul(f, y);
+    Expr* resid = expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ Dy, fy,
+        expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), expr_copy(g) }, 2) }, 3);
+    Expr* tog = rt_eval1("Together", resid);
+    Expr* num = tog ? rt_eval1("Numerator", tog) : NULL;
+    Expr* ex = num ? rt_eval1("Expand", num) : NULL;
+    bool ok = ex && rt_is_zero(ex);
+    if (ex) expr_free(ex);
+    return ok;
+}
+
+/* e /. rules /. (every unknown of `unk` -> 0); e borrowed, result owned. */
+static Expr* rde_par_subst(Expr* e, Expr* rules, Expr* unk) {
+    Expr* r = rules ? rt_eval2("ReplaceAll", expr_copy(e), expr_copy(rules)) : expr_copy(e);
+    size_t nu = unk->data.function.arg_count;
+    Expr** zr = malloc((nu ? nu : 1) * sizeof(Expr*));
+    for (size_t j = 0; j < nu; j++)
+        zr[j] = expr_new_function(expr_new_symbol("Rule"),
+            (Expr*[]){ expr_copy(unk->data.function.args[j]), expr_new_integer(0) }, 2);
+    Expr* zl = expr_new_function(expr_new_symbol("List"), zr, nu);
+    free(zr);
+    Expr* out = rt_eval1("Together", rt_eval2("ReplaceAll", r, zl));
+    return out;
+}
+
+int rde_tower_param(Expr* f, Expr* g, RdeCtx* C, Expr* unknowns,
+                    Expr** y_out, Expr** sol_out) {
+    *y_out = NULL; *sol_out = NULL;
+    /* a stale state left by a TimeConstrained unwind (the counter was reset,
+     * the arrays were not) */
+    if (!g_rde_par && (g_rde_par_cons || g_rde_par_unk)) {
+        for (size_t i = 0; i < g_rde_par_ncons; i++) expr_free(g_rde_par_cons[i]);
+        free(g_rde_par_cons);
+        if (g_rde_par_unk) expr_free(g_rde_par_unk);
+        g_rde_par_cons = NULL; g_rde_par_unk = NULL;
+        g_rde_par_ncons = g_rde_par_cap = 0;
+    }
+    /* nesting: save the outer solve's state */
+    int    s_par = g_rde_par;
+    Expr*  s_unk = g_rde_par_unk;
+    Expr** s_cons = g_rde_par_cons;
+    size_t s_n = g_rde_par_ncons, s_cap = g_rde_par_cap;
+    g_rde_par = 1;
+    g_rde_par_unk = expr_copy(unknowns);
+    g_rde_par_cons = NULL; g_rde_par_ncons = g_rde_par_cap = 0;
+
+    RdeCertState saved = rde_cert_begin();
+    Expr* y = rde_tower(f, g, C);
+    bool unc = rde_cert_uncertain();
+    const char* why = rde_cert_reason();
+    rde_cert_end(saved);
+
+    Expr*  unk = g_rde_par_unk;                      /* the caller's + fresh unknowns */
+    Expr** cons = g_rde_par_cons;
+    size_t ncons = g_rde_par_ncons;
+    g_rde_par = s_par; g_rde_par_unk = s_unk;
+    g_rde_par_cons = s_cons; g_rde_par_ncons = s_n; g_rde_par_cap = s_cap;
+
+    int status = -1;
+    Expr* rules = NULL;                              /* List of Rule, or NULL: none */
+    if (y) {
+        if (ncons == 0) {
+            rules = expr_new_function(expr_new_symbol("List"), NULL, 0);
+        } else {
+            /* the constraints are polynomials in x and the tower variables,
+             * linear in the unknowns; one equation sum_k cons_k w^k = 0 in an
+             * auxiliary variable w keeps them apart in CoefficientList */
+            Expr* w = expr_new_symbol("rmPw");
+            Expr** tm = malloc(ncons * sizeof(Expr*));
+            for (size_t k = 0; k < ncons; k++)
+                tm[k] = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_copy(cons[k]),
+                    expr_new_function(expr_new_symbol("Power"),
+                        (Expr*[]){ expr_copy(w), expr_new_integer((int64_t)k) }, 2) }, 2);
+            Expr* lhs = rt_eval1("Expand", expr_new_function(expr_new_symbol("Plus"), tm, ncons));
+            free(tm);
+            size_t nv = (C->T ? C->T->n : 0) + 2;
+            Expr** vv = malloc(nv * sizeof(Expr*));
+            vv[0] = expr_copy(C->x);
+            for (size_t i = 0; C->T && i < C->T->n; i++) vv[i + 1] = expr_copy(C->T->t[i]);
+            vv[nv - 1] = w;
+            Expr* vars = expr_new_function(expr_new_symbol("List"), vv, nv);
+            free(vv);
+            Expr* sol = rt_solve_ansatz(expr_new_function(expr_new_symbol("Equal"),
+                (Expr*[]){ lhs, expr_new_integer(0) }, 2), vars, unk);
+            if (sol && rt_head_is(sol, "List")) {
+                if (sol->data.function.arg_count == 0) status = 0;       /* inconsistent */
+                else {
+                    rules = expr_copy(sol->data.function.args[0]);
+                }
+            }
+            if (sol) expr_free(sol);
+        }
+        if (rules) {
+            Expr* y0 = rde_par_subst(y, rules, unk);
+            Expr* g0 = rde_par_subst(g, rules, unk);
+            if (y0 && g0 && rde_identity_holds(y0, f, g0, C)) {
+                /* the caller's unknowns, solved (a free one is 0) */
+                size_t m = unknowns->data.function.arg_count;
+                Expr** cv = malloc((m ? m : 1) * sizeof(Expr*));
+                for (size_t j = 0; j < m; j++)
+                    cv[j] = rde_par_subst(unknowns->data.function.args[j], rules, unk);
+                *sol_out = expr_new_function(expr_new_symbol("List"), cv, m);
+                free(cv);
+                *y_out = y0; y0 = NULL;
+                status = 1;
+            } else if (!why) why = "parametric: solution failed the identity gate";
+            if (y0) expr_free(y0);
+            if (g0) expr_free(g0);
+            expr_free(rules);
+        } else if (status < 0 && !why) why = "parametric: constraint system undecided";
+        expr_free(y);
+    } else status = 0;                               /* a c-free exit: no c works */
+    for (size_t i = 0; i < ncons; i++) expr_free(cons[i]);
+    free(cons);
+    expr_free(unk);
+    if (status == 0 && unc) status = -1;             /* a "no" behind a mark proves nothing */
+    if (status < 0) rde_cert_mark(why ? why : "parametric: undecided");
+    return status;
 }

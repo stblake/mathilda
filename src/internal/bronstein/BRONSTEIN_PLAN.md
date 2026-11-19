@@ -1692,6 +1692,13 @@ is still deficient for every other caller (reproducer and table:
   6. **[x] v0.6590 for limited integration** (3 new marks in BASELINE_C); the F7 (intrat RootSum) and F8 (tangent lower field) sites still need marks. **F13.** The completeness gate counts only certificate-mark sites, so the silent
      declines are invisible to it. Widen it first, so that the ratchet sees steps 3-5. Gates: no WRONG / FALSE_CERT, the completeness baseline
   (13 uncertain Risch DE paths) ratcheted down, unit tests per routine.
+  7. **C completeness campaign (2026-11-17 on).** Steps 0, 1, 7, 2a and 8 shipped in
+     v0.6603-09 (tasks/todo.md). **[x] Step 3a, v0.6620:** the C parametric Risch DE
+     (`rde_tower_param`, `Risch`ParametricRischDE`) by linear constraints. It is the
+     ParamRDE and LimitedIntegrate core of the C stack (theory:
+     docs/notes/bronstein_extensions.tex §T11). Next: steps 3b and 3c together (a
+     Liouvillian primitive top: an RT_PRIM branch of rt_field_integrate, LimitedIntegrate
+     through rde_tower_param, the monomial check), then 2, 4, 5, 6 and 9.
 
 ### Phase 5: the radical anywhere (largest; theory first)
 

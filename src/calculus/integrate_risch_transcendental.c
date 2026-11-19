@@ -1068,6 +1068,102 @@ static Expr* builtin_risch_rischde_certified(Expr* res) {
     return unc ? expr_new_symbol("$Failed") : expr_new_string("NoSolution");
 }
 
+/* Risch`ParametricRischDE[f, {g0, g1, ..., gm}, x] / [..., {kernels}] /
+ * [..., {kernels}, {params}] — the parametric Risch DE ([SI] ch. 7, campaign
+ * step 3a): find y in the field and constants c1..cm with
+ *     D[y] + f y == g0 + c1 g1 + ... + cm gm.
+ * Returns {y, {c1, ..., cm}} (a free constant is 0; the identity is checked
+ * exactly), "NoSolution" when no constants admit a solution (proved), or $Failed
+ * when undecided (Risch`RischDECertifiedReason[] names why).  The field is that
+ * of Risch`RischDECertified: C(x), or the tower of the Log/Exp/Tan kernels of f,
+ * the g_i and the optional kernel list, over Q(params). */
+static Expr* builtin_risch_parametric_rischde(Expr* res) {
+    size_t ac = (res->type == EXPR_FUNCTION) ? res->data.function.arg_count : 0;
+    if (ac < 3 || ac > 5) return NULL;
+    Expr* f = res->data.function.args[0];
+    Expr* gl = res->data.function.args[1];
+    Expr* x = res->data.function.args[2];
+    Expr* extra = (ac >= 4) ? res->data.function.args[3] : NULL;
+    Expr* params = (ac == 5) ? res->data.function.args[4] : NULL;
+    if (x->type != EXPR_SYMBOL || !rt_head_is(gl, "List") || gl->data.function.arg_count < 1)
+        return NULL;
+    if (extra && !rt_head_is(extra, "List")) return NULL;
+    if (params) {
+        if (!rt_head_is(params, "List")) return NULL;
+        for (size_t i = 0; i < params->data.function.arg_count; i++) {
+            Expr* p = params->data.function.args[i];
+            if (p->type != EXPR_SYMBOL || p->data.symbol.name == x->data.symbol.name) return NULL;
+        }
+    }
+    size_t m = gl->data.function.arg_count - 1;
+    /* the unknown constants rmPc1..rmPcm, which the input must not mention */
+    Expr** us = malloc((m ? m : 1) * sizeof(Expr*));
+    for (size_t i = 0; i < m; i++) {
+        char nm[32]; snprintf(nm, sizeof(nm), "rmPc%zu", i + 1);
+        us[i] = expr_new_symbol(nm);
+    }
+    Expr* unk = expr_new_function(expr_new_symbol("List"), us, m);
+    free(us);
+    {   /* argument by argument: FreeQ of the call itself would re-enter it */
+        Expr* w = expr_new_symbol("rmPw");
+        bool clash = false;
+        for (size_t a = 0; a < ac && !clash; a++) {
+            Expr* arg = res->data.function.args[a];
+            if (!rt_free_of_x(arg, w)) clash = true;
+            for (size_t i = 0; i < m && !clash; i++)
+                if (!rt_free_of_x(arg, unk->data.function.args[i])) clash = true;
+        }
+        expr_free(w);
+        if (clash) { expr_free(unk); return NULL; }
+    }
+    /* g = g0 + Sum c_i g_i */
+    Expr** tm = malloc((m + 1) * sizeof(Expr*));
+    tm[0] = expr_copy(gl->data.function.args[0]);
+    for (size_t i = 0; i < m; i++)
+        tm[i + 1] = expr_new_function(expr_new_symbol("Times"),
+            (Expr*[]){ expr_copy(unk->data.function.args[i]), expr_copy(gl->data.function.args[i + 1]) }, 2);
+    Expr* g = rt_eval1("Expand", expr_new_function(expr_new_symbol("Plus"), tm, m + 1));
+    free(tm);
+    /* the unknowns are constants of the field, like the declared params */
+    size_t np = params ? params->data.function.arg_count : 0;
+    Expr** pa = malloc((np + m + 1) * sizeof(Expr*));
+    for (size_t i = 0; i < np; i++) pa[i] = expr_copy(params->data.function.args[i]);
+    for (size_t i = 0; i < m; i++) pa[np + i] = expr_copy(unk->data.function.args[i]);
+    Expr* allp = expr_new_function(expr_new_symbol("List"), pa, np + m);
+    free(pa);
+    bool has_kernel = false;
+    for (size_t i = 0; i < gl->data.function.arg_count && !has_kernel; i++) {
+        Expr* gi = gl->data.function.args[i];
+        has_kernel = rt_find_exp_of_x(gi, x) || rt_find_log_of_x(gi, x) || rt_has_tan_of_x(gi, x);
+    }
+    has_kernel = has_kernel || rt_find_exp_of_x(f, x) || rt_find_log_of_x(f, x) || rt_has_tan_of_x(f, x)
+        || (extra && (rt_find_exp_of_x(extra, x) || rt_find_log_of_x(extra, x) || rt_has_tan_of_x(extra, x)));
+    RdeCertState saved = rde_cert_begin();
+    rde_cert_set_params(allp);
+    Expr *y = NULL, *sol = NULL;
+    int st;
+    if (has_kernel) {
+        st = rde_solve_param_ext(f, g, x, (extra && extra->data.function.arg_count) ? extra : NULL,
+                                 unk, &y, &sol);
+    } else {
+        Expr* xl = expr_new_function(expr_new_symbol("List"), (Expr*[]){ expr_copy(x) }, 1);
+        if (rde_rational_in(f, xl) && rde_rational_in(g, xl)) {
+            RdeCtx C = { NULL, -1, x, x };
+            st = rde_tower_param(f, g, &C, unk, &y, &sol);
+        } else { rde_cert_mark("base: coefficients not rational in x"); st = -1; }
+        expr_free(xl);
+    }
+    rde_cert_set_params(NULL);
+    g_rde_cert_last_reason = st == 1 ? NULL : (st < 0 ? rde_cert_reason() : NULL);
+    rde_cert_end(saved);
+    expr_free(g); expr_free(allp); expr_free(unk);
+    if (st == 1 && y && sol)
+        return expr_new_function(expr_new_symbol("List"), (Expr*[]){ y, sol }, 2);
+    if (y) expr_free(y);
+    if (sol) expr_free(sol);
+    return st == 0 ? expr_new_string("NoSolution") : expr_new_symbol("$Failed");
+}
+
 /* Risch`RischDECertifiedReason[] — the first uncertain path of the last
  * Risch`RischDECertified call that returned $Failed (a String), or None. */
 static Expr* builtin_risch_rischde_certified_reason(Expr* res) {
@@ -1135,6 +1231,7 @@ void integrate_risch_transcendental_init(void) {
     tc_register_unwind_counter(&rt_in_flat_gate);
     tc_register_unwind_counter(&rt_in_logcombine);
     tc_register_unwind_counter(rde_alg_mode_ptr());   /* the base RDE's algebraic mode */
+    tc_register_unwind_counter(rde_par_mode_ptr());   /* the parametric RDE (step 3a) */
     rt_install("Integrate`RischTranscendental", builtin_rischtranscendental,
         "Integrate`RischTranscendental[f, x] integrates f with respect to x using the\n"
         "recursive transcendental Risch algorithm: a decision\n"
@@ -1162,6 +1259,16 @@ void integrate_risch_transcendental_init(void) {
         "so the solution field is the caller's whole tower.\n"
         "Risch`RischDECertified[f, g, x, {k1, ...}, {a1, ...}] treats the symbols a_i as\n"
         "transcendental constants (D = 0): the verdict is over Q(a1, ...).");
+    rt_install("Risch`ParametricRischDE", builtin_risch_parametric_rischde,
+        "Risch`ParametricRischDE[f, {g0, g1, ..., gm}, x] solves the parametric Risch\n"
+        "differential equation D[y] + f y == g0 + c1 g1 + ... + cm gm for y and\n"
+        "constants c_i together (Bronstein, Symbolic Integration I, ch. 7), in C(x)\n"
+        "or the tower of the Log/Exp/Tan kernels of the inputs.  Returns\n"
+        "{y, {c1, ..., cm}} (a free constant is 0), \"NoSolution\" when no constants\n"
+        "admit a solution, or $Failed when undecided (see\n"
+        "Risch`RischDECertifiedReason).  Optional 4th and 5th arguments: extra tower\n"
+        "kernels {k1, ...} and symbolic constants {a1, ...}, as for\n"
+        "Risch`RischDECertified.");
     rt_install("Risch`RischDECertifiedReason", builtin_risch_rischde_certified_reason,
         "Risch`RischDECertifiedReason[] names the first undecided path of the last\n"
         "Risch`RischDECertified call that returned $Failed (a String), or None.");
