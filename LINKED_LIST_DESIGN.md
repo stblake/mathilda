@@ -252,6 +252,52 @@ All messages go through `mth_message` (`src/message.h`), so `Quiet` and `Check` 
 
 Every error leaves the call unevaluated.
 
+## 9a. Symbol registration and docstrings
+
+Each new head, `LinkedList`, `Push`, `Pop` and `PopFirst`, is registered as a full builtin.
+
+1. **Interned name.** Declare `SYM_LinkedList`, `SYM_Push`, `SYM_Pop` and `SYM_PopFirst` in `src/sym_names.h`. Define them in `src/sym_names.c`, assigned in `sym_names_init()` with `intern_symbol(...)`.
+2. **Mathilda-only table.** Add all four names to the table in `sym_mark_mathilda_context()` (`src/sym_names.c`), so a package that defines its own `Push` gets its own symbol instead of writing to the protected builtin.
+3. **Builtin, attributes, docstring.** `linkedlist_init()` (called from `core_init` in `src/core.c`) registers each one with `symtab_add_builtin`, sets its attributes, and sets its `?Name` text with `symtab_set_docstring`:
+
+| Symbol | Attributes |
+|---|---|
+| `LinkedList` | `Protected` |
+| `Push` | `HoldFirst`, `Protected` |
+| `Pop` | `HoldFirst`, `Protected` |
+| `PopFirst` | `HoldFirst`, `Protected` |
+
+4. **REPL.** Once registered, the heads are available in the REPL: Tab completion, `?LinkedList`, and `Names["Pop*"]`.
+
+Draft docstrings, in the usual `Name[args]\n\t…` form:
+
+```
+LinkedList[]
+	Creates an empty mutable linked list. LinkedList[list] creates one holding
+	the elements of list (a List, packed array or NDArray). The object is shared
+	by reference: AppendTo, PrependTo, Push, Pop, PopFirst and Part assignment
+	change it in place, while Part, Take, Drop, Append, Delete, Map, ... return a
+	new LinkedList. Normal[ll] gives the elements as a List.
+
+Push[ll, e]
+	Appends e to the end of the linked list ll in place, in O(1), and returns ll.
+	Push[s, e] for a symbol s holding a List appends e and resets s.
+
+Pop[ll]
+	Removes the last element of the linked list ll in place, in O(1), and
+	returns it. Pop[s] for a symbol s holding a List removes its last element.
+	An empty list gives Pop::empty and stays unevaluated.
+
+PopFirst[ll]
+	Removes the first element of the linked list ll in place, in O(1), and
+	returns it. Push with PopFirst gives a first-in, first-out queue.
+	An empty list gives PopFirst::empty and stays unevaluated.
+```
+
+**Overloaded heads.** These keep their existing registration. Each one's docstring gains a single line noting that it accepts a LinkedList, and what it returns for one. The heads are `Part`, `Length`, `First`, `Last`, `Normal`, `AppendTo`, `PrependTo`, `Append`, `Prepend`, `Insert`, `Delete`, `ReplacePart`, `Take`, `Drop`, `Most`, `Rest`, `Reverse`, `Join`, `Map`, `Select`, `MemberQ`, `Count` and `Total`.
+
+**Documentation.** Each head gets an entry in `docs/spec/builtins/data-structures.md`, and each phase adds a changelog note.
+
 ## 10. Implementation map
 
 | File | Role |
