@@ -166,15 +166,19 @@ static void t_kov_stress_euler(void) {
 
 /* ---- Frobenius / PowerSeries: ordinary-point polynomial-coefficient families ---- */
 
-/* Pinned power series about 0; the truncated residual must be O[x]^k. */
+/* Pinned power series about 0; the truncated residual must be O[x]^k: every
+ * known coefficient zero, so its Normal is 0. Not PossibleZeroQ of the series
+ * itself: O[x]^k is an unknown remainder, and PossibleZeroQ of it is False, as
+ * in the reference (issue #138). */
 static void frob_ordinary_ok(const char* pcoef, const char* qcoef) {
     char eqn[320], buf[640];
     snprintf(eqn, sizeof(eqn), "y''[x] + (%s) y'[x] + (%s) y[x] == 0", pcoef, qcoef);
     snprintf(buf, sizeof(buf), "Head[DSolve`PowerSeries[%s, y, x]] === List", eqn);
     ASSERT_TRUE(buf);
     snprintf(buf, sizeof(buf),
-             "PossibleZeroQ[Module[{b = y[x] /. DSolve`PowerSeries[%s, y, x][[1]]}, "
-             "D[b,{x,2}] + (%s) D[b,x] + (%s) b]]", eqn, pcoef, qcoef);
+             "Module[{b = y[x] /. DSolve`PowerSeries[%s, y, x][[1]], r}, "
+             "r = D[b,{x,2}] + (%s) D[b,x] + (%s) b; "
+             "Head[r] === SeriesData && PossibleZeroQ[Normal[r]]]", eqn, pcoef, qcoef);
     ASSERT_TRUE(buf);
 }
 
