@@ -5527,3 +5527,17 @@ the new branch reached 24 times and solving 0 times -- dead code, reverted.
   never from a number remembered from mid-development.
 - A new decision branch gets a one-off env-guarded trace (hit / succeeded counts) over the
   hunts before release; a branch with zero successes is not a feature.
+
+## 2026-11-19: the user's name and API shape for a new head are authoritative
+
+Asked to implement a Bag-style accumulator "as LinkedList", I planned a Bag
+companion-function vocabulary (Bag / StuffBag / BagPart / BagLength). The user wanted a
+public `LinkedList` head, and then, as the design developed, one that *overloads the
+existing list heads* (Part, Length, AppendTo, Delete, ...) with List-closure (a head that
+returns a List for a List returns a LinkedList for a LinkedList).
+
+- A feature cited as inspiration in a request is a *description of the behaviour*,
+  not a mandate for its names. Confirm the public name and the API style (companion
+  functions vs overloads vs method calls) before planning around either.
+- Ask the API-shape question first; storage and compilation questions only make sense
+  once the surface is fixed.
