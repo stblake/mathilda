@@ -1,4 +1,5 @@
 #include "sort.h"
+#include "linkedlist.h"
 #include "eval.h"
 #include "symtab.h"
 #include "sym_names.h"
@@ -689,7 +690,9 @@ int expr_compare(const Expr* a, const Expr* b) {
 
     /* NDArray and CompiledFunction objects sort after everything. */
     if (a->type == EXPR_NDARRAY || a->type == EXPR_COMPILED ||
-        b->type == EXPR_NDARRAY || b->type == EXPR_COMPILED)
+        a->type == EXPR_LINKEDLIST ||
+        b->type == EXPR_NDARRAY || b->type == EXPR_COMPILED ||
+        b->type == EXPR_LINKEDLIST)
         return opaque_cmp(a, b);
 
     /* 1. Numbers first, by value. */
@@ -775,6 +778,16 @@ static int opaque_cmp(const Expr* a, const Expr* b) {
     }
     if (a->type == EXPR_COMPILED) return 1;
     if (b->type == EXPR_COMPILED) return -1;
+
+    /* 7. LinkedList objects, last: order by the payload's stable id (creation
+     * order), never by contents, which may change under a sort. */
+    if (a->type == EXPR_LINKEDLIST && b->type == EXPR_LINKEDLIST) {
+        uint64_t ia = ll_id(a->data.llist), ib = ll_id(b->data.llist);
+        if (ia != ib) return (ia < ib) ? -1 : 1;
+        return 0;
+    }
+    if (a->type == EXPR_LINKEDLIST) return 1;
+    if (b->type == EXPR_LINKEDLIST) return -1;
 
     return 0;
 }

@@ -152,6 +152,10 @@ void eval_init(void);
  * never accidentally hit the cache on first evaluation. */
 uint64_t eval_clock_get(void);
 void     eval_clock_bump(void);
+/* Advance ONLY the exact-clock (no INERT / GROUND epoch): a mutable object's
+ * contents changed (LinkedList), so a fixed point stamped before must not be
+ * reused, but nothing INERT or GROUND can hold such an object. */
+void     eval_clock_tick(void);
 /* Bump the eval clock for an OwnValue binding of `def`: INERT fixed points
  * (eval.c) stay valid unless one of them relied on `def` being unbound. */
 struct SymbolDef;

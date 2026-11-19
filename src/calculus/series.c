@@ -24,6 +24,7 @@
  */
 
 #include "series.h"
+#include "linkedlist.h"
 #include "series_ratpoly.h" /* FLINT truncated-series arithmetic over Q */
 #include "series_numeric.h" /* numeric Taylor expansion of inexact input */
 #include "../poly/flint_bridge.h" /* packed expansion of the recurrence coefficients */
@@ -958,7 +959,7 @@ static bool so_is_purely_numeric(Expr* e) {
 #endif
             return true;
         case EXPR_SYMBOL: case EXPR_STRING: case EXPR_NDARRAY: case EXPR_COMPILED:
-        case EXPR_SPARSE: return false;
+        case EXPR_SPARSE: case EXPR_LINKEDLIST: return false;
         case EXPR_FUNCTION: {
             Expr* h = e->data.function.head;
             if (h->type != EXPR_SYMBOL) return false;
@@ -4450,6 +4451,10 @@ Expr* builtin_normal(Expr* res) {
 
     /* Normal[SparseArray[...]] is the dense array it represents. */
     if (arg->type == EXPR_SPARSE) return sp_normal(arg->data.sparse);
+
+    /* Normal[LinkedList[...]] is its elements as a List (packed when the
+     * storage is typed). */
+    if (arg->type == EXPR_LINKEDLIST) return ll_to_list(arg->data.llist);
 
     /* Normal[ndarray] converts an NDArray back to its equivalent nested List. */
     if (arg->type == EXPR_NDARRAY) {

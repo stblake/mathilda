@@ -8,6 +8,7 @@
 // Print
 
 #include "print.h"
+#include "linkedlist.h"
 #include "print_fortran.h"
 #include "print_lean.h"
 #include "expr.h"
@@ -773,6 +774,11 @@ void expr_print_fullform(Expr* e) {
             expr_free(canon);
             break;
         }
+        case EXPR_LINKEDLIST:
+            /* A mutable object has no literal that reads back: every form
+             * prints the summary. */
+            printf("LinkedList[<%" PRId64 ">]", ll_length(e->data.llist));
+            break;
         case EXPR_COMPILED: {
             const CompiledFunction* cf = e->data.compiled;
             size_t n = compiled_function_num_args(cf);
@@ -2790,6 +2796,11 @@ static void print_tex(Expr* e, int parent_prec) {
         Expr* dense = sp_normal(e->data.sparse);
         if (dense) { print_tex(dense, parent_prec); expr_free(dense); }
         else printf("\\text{SparseArray}");
+        return;
+    }
+    if (e->type == EXPR_LINKEDLIST) {
+        printf("\\text{LinkedList}\\left[\\langle %" PRId64 "\\rangle \\right]",
+               ll_length(e->data.llist));
         return;
     }
     if (e->type == EXPR_COMPILED) {

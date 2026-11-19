@@ -1791,3 +1791,80 @@ Attributes: `{Protected}`. Reads packed arrays from their shape.
 
 Attributes: `{Protected}`.
 
+
+## LinkedList
+
+`LinkedList` is Mathilda's **mutable** sequence: a list object that can be grown
+and shrunk in place in `O(1)` at either end, indexed in `O(1)`, and held in a
+variable or passed to a function while it is built. Design:
+[`LINKED_LIST_DESIGN.md`](../../../LINKED_LIST_DESIGN.md).
+
+- `LinkedList[]` creates an empty list; `LinkedList[list]` one holding the
+  elements of `list` (a List, packed array or `NDArray`; a packed argument is
+  copied buffer-to-buffer, never unpacked).
+- `LinkedList[ll]` returns an independent **shallow** copy of the linked list
+  `ll` (`O(n)`; elements are shared, a LinkedList stored inside is still the
+  same object).
+- The object is an atom: `AtomQ[ll]` is `True`, `Head[ll]` is `LinkedList`,
+  `MatchQ[ll, _LinkedList]` is `True`, and it prints as `LinkedList[<n>]` in
+  every form (a mutable object has no literal that reads back).
+- **Reference semantics.** `ll2 = ll` and passing `ll` to a function share the
+  one list; it is the only mutable, shared value in the system (see the design
+  document, §3.4, for why). Equality is identity: `ll === ll2` is `True` for the
+  same object, and two distinct lists are never `SameQ` even with equal
+  elements; compare contents with `Normal[a] === Normal[b]`.
+- `Normal[ll]` gives the elements as a List, packed when the elements are all
+  machine integers, all machine reals or all machine complex numbers.
+- `Length[ll]` is `O(1)`.
+
+Further list heads (`Part`, `AppendTo`, `PrependTo`, `Take`, `Drop`, `Delete`,
+`Join`, `Map`, ...) accept a LinkedList in later phases of the design; until
+then they see an opaque atom.
+
+Messages: `LinkedList::list` (argument not a list), `LinkedList::argt` (more
+than one argument).
+
+Attributes: `{Protected}`.
+
+## Push
+
+- `Push[ll, e]` appends `e` to the end of the linked list `ll` in place, in
+  `O(1)`, and returns `ll` (the same object).
+- `Push[s, e]` for a variable `s` holding a plain List appends `e` and resets
+  `s`, exactly as `AppendTo` (`O(n)`), so stack code runs on either
+  representation.
+- The first argument is held: a symbol (which must have a value) or any
+  expression that evaluates to a LinkedList, so a helper
+  `enqueue[q_, x_] := Push[q, x]` mutates its caller's list.
+- With `Pop`, a last-in first-out stack; with `PopFirst`, a first-in first-out
+  queue.
+
+```
+st = LinkedList[]; Push[st, a]; Push[st, b];
+{Pop[st], Normal[st]}            (* {b, {a}} *)
+```
+
+Messages: `Push::rvalue` (a symbol with no value), `Push::normal` (the value is
+not a list), `Push::llcyc` (storing the list into itself, directly or through
+other lists, would make a reference cycle; the list is left unchanged).
+
+Attributes: `{HoldFirst, Protected}`.
+
+## Pop, PopFirst
+
+- `Pop[ll]` removes the **last** element of the linked list `ll` in place and
+  returns it; `PopFirst[ll]` removes the **first**. Both are `O(1)`; the
+  storage reclaims a queue's consumed prefix, so a long-running queue holds
+  `O(live)` memory.
+- `Pop[s]` / `PopFirst[s]` for a variable `s` holding a plain List return its
+  last / first element and reset `s` to `Most[s]` / `Rest[s]` (`O(n)`).
+
+```
+q = LinkedList[{1, 2}]; Push[q, 3];
+{PopFirst[q], PopFirst[q], Normal[q]}   (* {1, 2, {3}} *)
+```
+
+Messages: `Pop::empty` / `PopFirst::empty` (the list is empty; the call stays
+unevaluated), `::rvalue`, `::normal`, as for `Push`.
+
+Attributes: `{HoldFirst, Protected}`.

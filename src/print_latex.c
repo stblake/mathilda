@@ -30,6 +30,7 @@
  */
 
 #include "print_latex.h"
+#include "linkedlist.h"
 #include "print.h"          /* expr_to_string, for fallback */
 #include "sym_names.h"
 #include "expr.h"
@@ -584,6 +585,15 @@ static void to_latex_node(LBuf* b, const Expr* e, int ctx_prec) {
         lb_cat(b, "\\text{\xe2\x80\x9c");
         lb_cat(b, e->data.string);
         lb_cat(b, "\xe2\x80\x9d}");
+        return;
+    }
+
+    /* ---- A LinkedList: its summary, LinkedList[<n>] ---- */
+    if (e->type == EXPR_LINKEDLIST) {
+        char buf[96];
+        snprintf(buf, sizeof buf, "\\text{LinkedList}\\left[\\langle %" PRId64 "\\rangle \\right]",
+                 ll_length(e->data.llist));
+        lb_cat(b, buf);
         return;
     }
 

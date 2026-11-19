@@ -25,7 +25,8 @@ typedef enum {
     EXPR_BIGINT,
     EXPR_NDARRAY,              /* dense machine-precision ndarray, see ndarray.h */
     EXPR_COMPILED,             /* compiled numeric function, see compile/compiled_function.h */
-    EXPR_SPARSE                /* SparseArray raw object, see sparse/sparse.h */
+    EXPR_SPARSE,               /* SparseArray raw object, see sparse/sparse.h */
+    EXPR_LINKEDLIST            /* mutable LinkedList object, see linkedlist.h */
 #ifdef USE_MPFR
     , EXPR_MPFR                /* arbitrary-precision real (MPFR) */
 #endif
@@ -221,6 +222,12 @@ typedef struct Expr {
         /* EXPR_SPARSE: opaque, reference-counted, immutable SparseArray
          * payload (sparse/sparse.h); a bare pointer never grows the union. */
         struct SparseArray* sparse;
+        /* EXPR_LINKEDLIST: the ONE mutable payload. Reference-counted and
+         * shared by every node that refers to it (expr_unshare shares it too):
+         * mutators write through it, so all aliases see the change. Identity
+         * is the payload (expr_eq/hash/compare use its stable id), which is
+         * why a mutation never invalidates a cached hash. linkedlist.h. */
+        struct LinkedList* llist;
 #ifdef USE_MPFR
         mpfr_t mpfr;          /* carries its own precision in bits */
 #endif
@@ -324,6 +331,10 @@ uint64_t compiled_function_identity(const struct CompiledFunction* cf);
 /* EXPR_SPARSE constructor. Takes ownership of one reference to `sa` (expr_free
  * releases it). See sparse/sparse.h. */
 Expr* expr_new_sparse(struct SparseArray* sa);
+
+/* EXPR_LINKEDLIST constructor. Takes ownership of one reference to `ll`
+ * (expr_free releases it). See linkedlist.h. */
+Expr* expr_new_linkedlist(struct LinkedList* ll);
 
 #ifdef USE_MPFR
 /* MPFR constructors. Each allocates an Expr whose payload `mpfr_t` is

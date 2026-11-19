@@ -1870,3 +1870,21 @@ Solve corpus: 120/130, identical on HEAD 7fd69ab (the 10 `T-log-*` residual fail
 Deviation from the plan: Step 5 (a Reals backstop in builtin_solve calling `reduce_collapse_reals_families`) was dropped.
 That helper assumes a family with a non-real period has its real member at C = 0, which is wrong for `(-2)^x == 4` (real root at C = 1).
 It is replaced by the exact `Im[a] + Im[b] C == 0` selection inside the exponential stage.
+
+## Open: possible heap overrun in Compile's OP_A_PUSH on a Bool accumulator (found 2026-11-19, unverified)
+
+While surveying `src/compile/` for the LinkedList lowering: `OP_A_PUSH`
+(`compile_vm.c`, ~:1667) writes 8 bytes per element (`((double*)data)[k] = ...`)
+into an `NDT_BOOL` buffer, which `ct_elem_ndt` sizes at 1 byte per element.
+NestWhileList/FixedPointList over a Bool accumulator passes `ct_is_elem` and could
+reach it. Not yet reproduced; check under ASan with e.g.
+`Compile[{{x, True|False}}, NestWhileList[Not, x, # &, 1, 100]]`.
+
+## Open: AppendTo on a plain List is far worse than O(n^2) (measured 2026-11-19)
+
+`l = {}; Do[AppendTo[l, i], {i, 10^5}]` took 224.7 s (v0.6625, macOS) -- ~2 ms per
+call at average length 5x10^4, i.e. roughly 40 ns per element copied, several times
+a plain O(n) copy, and the 10^4 case should be checked for the scaling exponent.
+LinkedList/Push is the O(1) alternative (10^5 pushes: 0.025 s), but AppendTo itself
+should be profiled (`sample` the process): suspect a re-canonicalisation or
+re-evaluation of the whole list per step on top of the copy.

@@ -29,6 +29,11 @@ void                sp_release(struct SparseArray* sa);
 bool                sp_eq(const struct SparseArray* a, const struct SparseArray* b);
 uint64_t            sp_hash(const struct SparseArray* sa);
 
+/* EXPR_LINKEDLIST payload lifecycle and identity -- linkedlist.c. */
+struct LinkedList* ll_retain(struct LinkedList* ll);
+void               ll_release(struct LinkedList* ll);
+uint64_t           ll_id(const struct LinkedList* ll);
+
 /* Portable strdup (strdup is POSIX, not C99). See expr.h. */
 char* mathilda_strdup(const char* s) {
     if (!s) return NULL;
@@ -475,6 +480,18 @@ Expr* expr_new_sparse(struct SparseArray* sa) {
     return e;
 }
 
+/* EXPR_LINKEDLIST. The payload is reference-counted in linkedlist.c and,
+ * unlike every other payload, MUTABLE: the node adopts the one reference. */
+Expr* expr_new_linkedlist(struct LinkedList* ll) {
+    Expr* e = expr_alloc_node();
+    if (!e) return NULL;
+    e->type = EXPR_LINKEDLIST;
+    e->refcount = 1;
+    e->last_evaluated_at = 0;
+    e->data.llist = ll;
+    return e;
+}
+
 #ifdef USE_MPFR
 /* MPFR constructors. All allocate an Expr and initialize the payload
  * `mpfr_t` at the requested precision; the caller owns the result and
@@ -704,6 +721,11 @@ Expr* expr_unshare(Expr* e) {
             /* Immutable payload: share it. */
             fresh->data.sparse = sp_retain(e->data.sparse);
             break;
+        case EXPR_LINKEDLIST:
+            /* NOT a value copy: a LinkedList has reference semantics, so a
+             * physical copy of the node still names the same list. */
+            fresh->data.llist = ll_retain(e->data.llist);
+            break;
 #ifdef USE_MPFR
         case EXPR_MPFR:
             mpfr_init2(fresh->data.mpfr, mpfr_get_prec(e->data.mpfr));
@@ -823,6 +845,9 @@ void expr_free(Expr* e) {
             break;
         case EXPR_SPARSE:
             sp_release(e->data.sparse);
+            break;
+        case EXPR_LINKEDLIST:
+            ll_release(e->data.llist);
             break;
 #ifdef USE_MPFR
         case EXPR_MPFR:
@@ -1027,6 +1052,10 @@ bool expr_eq(const Expr* a, const Expr* b) {
             /* Value identity: the representation is canonical (sparse.h), so
              * equal arrays have equal dims, background, pattern and values. */
             return sp_eq(a->data.sparse, b->data.sparse);
+        case EXPR_LINKEDLIST:
+            /* Identity: SameQ iff the same list object (the contents of a
+             * mutable list are not part of its identity). */
+            return a->data.llist == b->data.llist;
 #ifdef USE_MPFR
         case EXPR_MPFR:
             /* Equal iff same precision AND same value (matches SameQ
@@ -1214,6 +1243,10 @@ uint64_t expr_hash(const Expr* e) {
             break;
         case EXPR_SPARSE:
             h ^= sp_hash(e->data.sparse); h *= prime;
+            break;
+        case EXPR_LINKEDLIST:
+            /* Identity hash, stable across mutation (see expr_eq). */
+            h ^= ll_id(e->data.llist) * UINT64_C(0x9E3779B97F4A7C15); h *= prime;
             break;
 #ifdef USE_MPFR
         case EXPR_MPFR: {

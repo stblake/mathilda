@@ -447,6 +447,10 @@ const char* SYM_Log1p = NULL;
 const char* SYM_Log10 = NULL;
 const char* SYM_Log2 = NULL;
 const char* SYM_SparseArray = NULL;
+const char* SYM_LinkedList = NULL;
+const char* SYM_Push = NULL;
+const char* SYM_Pop = NULL;
+const char* SYM_PopFirst = NULL;
 const char* SYM_CompiledFunction = NULL;
 const char* SYM_Band = NULL;
 const char* SYM_ArrayRules = NULL;
@@ -1617,6 +1621,10 @@ void sym_names_init(void) {
     SYM_Log10                      = intern_symbol("Log10");
     SYM_Log2                       = intern_symbol("Log2");
     SYM_SparseArray                = intern_symbol("SparseArray");
+    SYM_LinkedList                 = intern_symbol("LinkedList");
+    SYM_Push                       = intern_symbol("Push");
+    SYM_Pop                        = intern_symbol("Pop");
+    SYM_PopFirst                   = intern_symbol("PopFirst");
     SYM_CompiledFunction           = intern_symbol("CompiledFunction");
     SYM_Band                       = intern_symbol("Band");
     SYM_ArrayRules                 = intern_symbol("ArrayRules");
@@ -2458,9 +2466,9 @@ void sym_mark_mathilda_context(void) {
         "HypergraphConnectedComponents", "HypergraphCorank", "HypergraphDistance", "HypergraphDual", "HypergraphEdgeAdd",
         "HypergraphEdgeDelete", "HypergraphLineGraph", "HypergraphPlot", "HypergraphQ", "HypergraphRank",
         "HypergraphRestriction", "HypergraphStarExpansion", "HypergraphToGraph", "HypergraphVertexAdd", "HypergraphVertexDelete",
-        "Image3DQ", "ListGradient", "LoadModule", "MachineIntegerQ", "ND",
+        "Image3DQ", "LinkedList", "ListGradient", "LoadModule", "MachineIntegerQ", "ND",
         "NDArray", "NDArrayQ", "NLimit", "NResidue", "NSeries",
-        "PackedArrayQ", "PDEClassify", "PolynomialSqrt", "RandomHypergraph", "RatCanonCancel",
+        "PackedArrayQ", "PDEClassify", "PolynomialSqrt", "Pop", "PopFirst", "Push", "RandomHypergraph", "RatCanonCancel",
         "RatCanonNormalize", "RatCanonPrototype", "RationalQ", "SimplifyCount", "SlashCommand",
         "StronglyConnectedComponents",
         "Subhypergraph", "ToNDArray", "ToPackedArray", "TransversalHypergraph", "UniformHypergraphQ"

@@ -148,6 +148,7 @@ uint64_t g_epoch_counts[8];
  * Block inside the frame scoped, seen by a frame nested in that Block. */
 uint64_t g_dep_taint_why[4];
 void     eval_clock_bump(void) { g_eval_clock++; g_inert_epoch = g_eval_clock; g_epoch_counts[0]++; }
+void     eval_clock_tick(void) { g_eval_clock++; }
 static inline bool ground_head_name(const char* n);
 static inline bool inert_builtin_head(const char* n);
 /* A binding or a DownValue for `def`: an INERT node can depend on it only if
@@ -294,6 +295,17 @@ static inline bool eval_inert_valid(const Expr* e) {
 static inline bool eval_fixed_point_reusable(const Expr* e) {
     return eval_stamp_of(e) == g_eval_clock || eval_ground_valid(e) ||
            eval_inert_valid(e);
+}
+
+/* True when a call has a LinkedList argument: the one mutable atom, whose
+ * contents a pure builtin may read without any recorded dependency. O(arity). */
+static inline bool eval_call_has_mutable_arg(const Expr* call) {
+    if (call->type != EXPR_FUNCTION) return false;
+    for (size_t i = 0; i < call->data.function.arg_count; i++) {
+        const Expr* a = call->data.function.args[i];
+        if (a && a->type == EXPR_LINKEDLIST) return true;
+    }
+    return false;
 }
 
 /* Public, mask-aware accessors for tests (the raw field now carries the flag). */
@@ -3233,6 +3245,7 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
         case EXPR_NDARRAY:        /* dense ndarray: an atomic value */
         case EXPR_COMPILED:       /* compiled function object: an atomic value */
         case EXPR_SPARSE:         /* SparseArray raw object: never re-evaluated */
+        case EXPR_LINKEDLIST:     /* LinkedList object: a (mutable) atom      */
 #ifdef USE_MPFR
         case EXPR_MPFR:
 #endif
@@ -3398,7 +3411,7 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                     switch (orig_arg->type) {
                         case EXPR_INTEGER: case EXPR_REAL: case EXPR_STRING:
                         case EXPR_BIGINT: case EXPR_NDARRAY: case EXPR_COMPILED:
-                        case EXPR_SPARSE:
+                        case EXPR_SPARSE: case EXPR_LINKEDLIST:
 #ifdef USE_MPFR
                         case EXPR_MPFR:
 #endif
@@ -4110,7 +4123,12 @@ static Expr* evaluate_step_core(Expr* e, bool* changed) {
                     g_dispatch_head = (res->type == EXPR_FUNCTION &&
                                        res->data.function.head->type == EXPR_SYMBOL)
                                     ? res->data.function.head->data.symbol.name : NULL;
-                    if (g_eval_dep_depth && !hdef->eval_pure) {
+                    /* A pure builtin handed a LinkedList reads MUTABLE state:
+                     * its answer (Length, Part, ...) can change with no binding
+                     * or definition changing, so it taints the frame exactly as
+                     * an impure builtin does. */
+                    if (g_eval_dep_depth &&
+                        (!hdef->eval_pure || eval_call_has_mutable_arg(res))) {
                         /* x = v or x := v on a symbol a Block in an open frame
                          * scoped: only the frames inside that Block see it. */
                         int32_t scoped = 0;

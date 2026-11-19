@@ -756,6 +756,7 @@ set(COMMON_SRC
     ../src/modular.c
     ../src/sort.c
     ../src/sowreap.c
+    ../src/linkedlist.c
     ../src/stats/stats.c
     ../src/stats/stats_common.c
     ../src/stats/mean.c
@@ -1783,6 +1784,11 @@ add_executable(goto_label_tests test_goto_label.c $<TARGET_OBJECTS:mathilda_comm
 target_link_libraries(goto_label_tests m)
 target_include_directories(goto_label_tests PRIVATE ../src)
 add_test(NAME goto_label_tests COMMAND goto_label_tests)
+
+add_executable(linkedlist_tests test_linkedlist.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(linkedlist_tests m)
+target_include_directories(linkedlist_tests PRIVATE ../src)
+add_test(NAME linkedlist_tests COMMAND linkedlist_tests)
 
 add_executable(sow_reap_tests test_sow_reap.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(sow_reap_tests m)

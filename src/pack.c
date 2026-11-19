@@ -777,6 +777,13 @@ static void pack_mark_aware_heads(void) {
         "Length", "Dimensions", "Depth", "Part", "Head", "ByteCount",
         "NDArrayQ", "PackedArrayQ", "DataType", "Normal", "ToNDArray", "FromNDArray",
         "ToPackedArray", "FromPackedArray",
+        /* LinkedList[packed] copies the buffer into typed chunks with memcpy
+         * (ll_append_elements, src/linkedlist.c); materialising first would
+         * box every element only for the list to unbox it again. Push stores
+         * its element unchanged (a packed row stays a packed row); Pop and
+         * PopFirst on a packed variable go through First/Last/Most/Rest, which
+         * are buffer-aware themselves. */
+        "LinkedList", "Push", "Pop", "PopFirst",
         /* SameQ / UnsameQ are expr_eq, which compares a buffer against a boxed
          * List (or another buffer) element by element without materialising.
          * Through the gate they compared the MATERIALISED Complex[1., 0.]
@@ -1121,6 +1128,9 @@ static void pack_mark_aware_heads(void) {
          * Integer from an int64 buffer, so no element's head changes. */
         "Part", "Extract", "Normal", "ToNDArray", "FromNDArray",
         "ToPackedArray", "FromPackedArray",
+        /* An int64 buffer becomes LL_I64 storage: the same exact Integers;
+         * the stack heads move values without reading an element. */
+        "LinkedList", "Push", "Pop", "PopFirst",
         /* SparseArray keeps an int64 buffer's values as exact Integers (an
          * SPV_INT64 value buffer read through the exact accessor), and the
          * array predicates read no element except through

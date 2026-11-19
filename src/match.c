@@ -753,6 +753,7 @@ static bool blank_head_matches(Expr* expr, Expr* b_head) {
         case EXPR_STRING:  return hn == SYM_String;
         case EXPR_SPARSE:  return hn == SYM_SparseArray;
         case EXPR_COMPILED: return hn == SYM_CompiledFunction;
+        case EXPR_LINKEDLIST: return hn == SYM_LinkedList;
         default:           return false;
     }
 }
@@ -1375,6 +1376,10 @@ static bool match_internal_impl(Expr* expr, Expr* pattern, MatchEnv* env, Parent
             case EXPR_SPARSE:
                 /* A SparseArray is a raw object: a literal one matches only a
                  * SameQ array, never by destructuring. */
+                if (expr_eq(expr, pattern)) return call_parent(env, parent);
+                return false;
+            case EXPR_LINKEDLIST:
+                /* A LinkedList matches only itself (identity). */
                 if (expr_eq(expr, pattern)) return call_parent(env, parent);
                 return false;
             case EXPR_FUNCTION: {
