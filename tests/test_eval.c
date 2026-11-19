@@ -1,4 +1,5 @@
 #include "eval.h"
+#include "pack.h"
 #include "parse.h"
 #include "expr.h"
 #include "symtab.h"
@@ -297,6 +298,10 @@ void test_append_prepend_to() {
     // PrependTo[xlist, 0]
     Expr* e4 = parse_expression("PrependTo[xlist, 0]");
     Expr* res4 = evaluate(e4);
+    /* Four machine integers reach the packing threshold: AppendTo/PrependTo
+     * offer their result to the packer like any List producer, so this is a
+     * packed list. The value is what is under test, not the representation. */
+    if (res4 && is_packed_list(res4)) { Expr* u = pack_unpack(res4); expr_free(res4); res4 = u; }
     ASSERT(res4 && res4->type == EXPR_FUNCTION && res4->data.function.arg_count == 4);
     ASSERT(res4->data.function.args[0]->data.integer == 0);
     expr_free(e4); expr_free(res4);

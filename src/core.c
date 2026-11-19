@@ -2745,6 +2745,20 @@ static Expr* append_to_impl(Expr* res, bool prepend) {
     Expr* new_val = prepend ? builtin_prepend(call) : builtin_append(call);
     expr_free(call);
     if (!new_val) return NULL;
+    /* Offer the grown List to the packer, as the List producers do. An
+     * accumulator loop `Do[AppendTo[l, x], ...]` over machine numbers then
+     * packs once it crosses the threshold, and every later call takes
+     * ndstruct_append's two memcpys instead of copying n Expr pointers, bumping
+     * n refcounts and freeing the old n-node list (~15-45 ns/element, 90% of
+     * the cost; 10^5 appends went from 225 s to a few seconds). Still O(n) per
+     * call -- the value is immutable -- but bandwidth-bound, not miss-bound.
+     * Gated on the appended element being something a buffer can hold, so a
+     * symbolic accumulator never pays the packer's probe walk. */
+    if (new_val->type == EXPR_FUNCTION && new_val->data.function.head->type == EXPR_SYMBOL
+        && new_val->data.function.head->data.symbol.name == SYM_List
+        && (elem->type == EXPR_INTEGER || elem->type == EXPR_REAL
+            || expr_is_number_atom(elem) || elem->type == EXPR_FUNCTION || is_ndarray(elem)))
+        new_val = pack_offer(new_val);
     return inplace_assign_back(sym, new_val);
 }
 

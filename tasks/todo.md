@@ -1883,7 +1883,7 @@ NestWhileList/FixedPointList over a Bool accumulator passes `ct_is_elem` and cou
 reach it. Not yet reproduced; check under ASan with e.g.
 `Compile[{{x, True|False}}, NestWhileList[Not, x, # &, 1, 100]]`.
 
-## Open: AppendTo on a plain List -- O(n) per call with a memory-bound constant (diagnosed 2026-11-19)
+## AppendTo on a plain List -- O(n) per call with a memory-bound constant (diagnosed 2026-11-19; option 1 DONE v0.6628: 225 s -> 1.57 s, option 2 not pursued)
 
 `l = {}; Do[AppendTo[l, i], {i, 10^5}]` takes 225 s. Diagnosis (sample + decomposition at
 n = 3x10^4, v0.6625):

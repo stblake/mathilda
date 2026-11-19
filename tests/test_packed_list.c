@@ -1771,6 +1771,21 @@ void test_producers_pack(void) {
     assert_eval_eq("NDArrayQ[Select[Range[1., 300.], # > 0. &]]", "True", 0);
     assert_eval_eq("NDArrayQ[NestList[# + 1. &, 0., 300]]", "True", 0);
     assert_eval_eq("NDArrayQ[FoldList[Plus, 0., Range[1., 300.]]]", "True", 0);
+    /* AppendTo / PrependTo offer the grown List: an accumulator loop packs once
+     * it crosses the threshold and stays packed (each later call memcpys). */
+    assert_eval_eq("pkA = {}; Do[AppendTo[pkA, i], {i, 400}]; "
+                   "{NDArrayQ[pkA], DataType[pkA], pkA[[{1, -1}]]}",
+                   "{True, \"int64\", {1, 400}}", 0);
+    assert_eval_eq("pkA = {}; Do[PrependTo[pkA, N[i]], {i, 400}]; "
+                   "{NDArrayQ[pkA], pkA[[{1, -1}]]}", "{True, {400.0, 1.0}}", 0);
+    assert_eval_eq("pkA = {}; Do[AppendTo[pkA, {i, -i}], {i, 400}]; "
+                   "{NDArrayQ[pkA], Dimensions[pkA]}", "{True, {400, 2}}", 0);
+    /* Lossless: an exact/inexact mix or a symbol never packs, and keeps heads. */
+    assert_eval_eq("pkA = {}; Do[AppendTo[pkA, i], {i, 400}]; AppendTo[pkA, 1.5]; "
+                   "AppendTo[pkA, 2]; {NDArrayQ[pkA], Head /@ pkA[[-3 ;;]]}",
+                   "{False, {Integer, Real, Integer}}", 0);
+    assert_eval_eq("pkA = {}; Do[AppendTo[pkA, i], {i, 400}]; AppendTo[pkA, x]; "
+                   "{NDArrayQ[pkA], pkA[[-1]], Length[pkA]}", "{False, x, 401}", 0);
     /* A body whose result is an Integer must NOT take the float64 direct path:
      * Table[1, {i, 1., 300.}] is a list of Integers, and the compiled result
      * type is what gates it. */
