@@ -35,6 +35,15 @@
  * policy (non-finite, or nonzero below DBL_MIN): the fast path that made it
  * should decline to an exact / element path (docs/design/numeric_tower_review.md). */
 bool ndred_result_degenerate(const Expr* r);
+
+/* The pairwise summation tree every machine float sum uses: ranges of at most
+ * ND_PAIRWISE_BLOCK elements are summed by nd_sum_block_f64 (float64) or
+ * sequentially (complex re/im); longer ranges split in half and recurse. A
+ * container that is not one contiguous buffer (LinkedList) reproduces the
+ * same tree over its logical indices, so its Total bit-matches the packed
+ * Total of the same values. */
+#define ND_PAIRWISE_BLOCK ((size_t)128)
+double nd_sum_block_f64(const double* p, size_t count);
 bool ndred_call_has_ndarray(const Expr* res);
 
 Expr* ndred_total(Expr* res);       /* Total[a] / Total[a,n] / Total[a,Infinity] */

@@ -1904,3 +1904,15 @@ n = 3x10^4, v0.6625):
      invalidate hash_cache, keep/recompute the GROUND stamp, tick the eval clock.
      Needs an audit of borrowed (non-refcounted) holders of OwnValue nodes.
   LinkedList + Push is the O(1) alternative available now (10^5 pushes: 0.025 s).
+
+## Open (pre-existing, found 2026-11-20 during LinkedList phase 2): List Part is silent and wrong on spans
+
+On a plain List, Mathilda emits no `Part::partw` / `Part::partd` / `Part::take`.
+`{1,2}[[5]]` stays unevaluated with no message, so `Check` returns the wrong branch.
+`{1,2}[[1;;5]]` gives `{}`, where the correct answer is `Part::take` and the call
+left unevaluated. `First[{}]` emits no `First::nofirst`. The LinkedList Part
+(part.c `ll_part`) already does all of this correctly, and its span validity rule
+can be reused here: `3;;2` is `{}`, `3;;1` is an error. The fix belongs in
+`expr_part` and `span_resolve`. Callers that rely on a silent NULL from `expr_part`
+must keep it, so the messages have to be emitted at `builtin_part`, not in the
+recursion.

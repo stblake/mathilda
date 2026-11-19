@@ -12,6 +12,7 @@
 #include "message.h"
 #include "print.h"     /* expr_to_string -- Set::ndarray */
 #include "common.h"
+#include "linkedlist.h"
 
 static bool is_atomic(Expr* e);
 
@@ -634,6 +635,144 @@ Expr* builtin_head(Expr* res) {
 /* Part of an association at one index level; defined below. */
 static Expr* assoc_part(Expr* assoc, Expr* idx, Expr** rest, size_t nrest);
 
+/* ------------------------------------------------------------------------
+ * LinkedList Part (LINKED_LIST_DESIGN.md §3.2)
+ *
+ * The first subscript addresses the list's elements in O(1) each:
+ *   - an integer (negative counts from the end) gives that element, and the
+ *     remaining subscripts are its own Part;
+ *   - All, a Span or a List of integers gives a NEW LinkedList of the
+ *     selected elements, each with the remaining subscripts applied -- the
+ *     closure rule: what is a List for a List is a LinkedList here.
+ * [[0]] (the head) never reaches this; expr_part's integer branch answers
+ * LinkedList through expr_head.
+ *
+ * Errors are Part::partw (an integer out of range) and Part::take (a span
+ * running off the end), naming the list as LinkedList[<n>], and the Part
+ * stays unevaluated. A deeper subscript that does not exist in an element
+ * declines exactly as the element's own Part does.
+ * ---------------------------------------------------------------------- */
+
+static void ll_part_msg_partw(Expr* ll, Expr* spec) {
+    char* s = expr_to_string(spec);
+    char* l = expr_to_string(ll);
+    mth_message("Part", "partw", "Part %s of %s does not exist.", s ? s : "", l ? l : "");
+    free(s); free(l);
+}
+
+/* Part of one element at the remaining subscripts. The element may itself be
+ * a packed array (a pushed row), which expr_part treats as atomic. */
+static Expr* ll_elem_part(Expr* e, Expr** rest, size_t nrest) {
+    if (nrest == 0) return e;                                  /* adopt */
+    Expr* r;
+    if (is_ndarray(e) && !(rest[0]->type == EXPR_INTEGER && rest[0]->data.integer == 0)) {
+        bool degrade = false;
+        r = ndarray_part(e, rest, nrest, &degrade);
+        if (!r && degrade) {
+            Expr* plain = pack_unpack(e);
+            r = plain ? expr_part(plain, rest, nrest) : NULL;
+            expr_free(plain);
+        }
+    } else {
+        r = expr_part(e, rest, nrest);
+    }
+    expr_free(e);
+    return r;
+}
+
+/* The 0-based positions a selecting subscript names, or NULL (with a message
+ * when the spec is well formed but out of range). *out_n receives the count. */
+static int64_t* ll_part_positions(Expr* llx, Expr* idx, int64_t len,
+                                  int64_t* out_n) {
+    int64_t* pos = NULL;
+    if (idx->type == EXPR_SYMBOL && idx->data.symbol.name == SYM_All) {
+        pos = malloc(sizeof(int64_t) * (size_t)(len ? len : 1));
+        for (int64_t i = 0; i < len; i++) pos[i] = i;
+        *out_n = len;
+        return pos;
+    }
+    if (idx->type != EXPR_FUNCTION || idx->data.function.head->type != EXPR_SYMBOL)
+        return NULL;
+    const char* h = idx->data.function.head->data.symbol.name;
+    if (h == SYM_Span) {
+        size_t argc = idx->data.function.arg_count;
+        if (argc < 1 || argc > 3) return NULL;
+        int64_t s = 1, e = len, st = 1;
+        if (!span_slot(idx->data.function.args[0], len, 0, &s)) return NULL;
+        if (argc >= 2 && !span_slot(idx->data.function.args[1], len, 1, &e)) return NULL;
+        if (argc == 3 && (!span_slot(idx->data.function.args[2], len, 2, &st) || st == 0))
+            return NULL;
+        /* Valid: both ends inside the list, or the empty span one short of
+         * the start in the step's direction (3;;2 is {}, 3;;1 is an error). */
+        bool ok;
+        int64_t n = 0;
+        if (st > 0) {
+            ok = s >= 1 && s <= len + 1 && e >= 0 && e <= len && e >= s - 1;
+            if (ok && e >= s) n = (e - s) / st + 1;
+        } else {
+            ok = s >= 0 && s <= len && e >= 1 && e <= len + 1 && e <= s + 1;
+            if (ok && e <= s) n = (s - e) / (-st) + 1;
+        }
+        if (!ok) {
+            char* l = expr_to_string(llx);
+            mth_message("Part", "take", "Cannot take positions %lld through %lld in %s.",
+                        (long long)s, (long long)e, l ? l : "");
+            free(l);
+            return NULL;
+        }
+        pos = malloc(sizeof(int64_t) * (size_t)(n ? n : 1));
+        for (int64_t i = 0, k = s; i < n; i++, k += st) pos[i] = k - 1;
+        *out_n = n;
+        return pos;
+    }
+    if (h == SYM_List) {
+        size_t n = idx->data.function.arg_count;
+        pos = malloc(sizeof(int64_t) * (n ? n : 1));
+        for (size_t i = 0; i < n; i++) {
+            Expr* q = idx->data.function.args[i];
+            if (q->type != EXPR_INTEGER) { free(pos); return NULL; }
+            int64_t k = q->data.integer;
+            if (k < 0) k = len + k + 1;
+            if (k < 1 || k > len) { ll_part_msg_partw(llx, q); free(pos); return NULL; }
+            pos[i] = k - 1;
+        }
+        *out_n = (int64_t)n;
+        return pos;
+    }
+    return NULL;
+}
+
+static Expr* ll_part(Expr* llx, Expr** indices, size_t nindices) {
+    LinkedList* ll = llx->data.llist;
+    int64_t len = ll_length(ll);
+    Expr* idx = indices[0];
+    Expr** rest = indices + 1;
+    size_t nrest = nindices - 1;
+
+    if (idx->type == EXPR_INTEGER) {
+        int64_t k = idx->data.integer;
+        if (k < 0) k = len + k + 1;
+        if (k < 1 || k > len) { ll_part_msg_partw(llx, idx); return NULL; }
+        return ll_elem_part(ll_get(ll, k - 1), rest, nrest);
+    }
+
+    int64_t n = 0;
+    int64_t* pos = ll_part_positions(llx, idx, len, &n);
+    if (!pos) return NULL;
+    LinkedList* out = ll_new();
+    for (int64_t i = 0; i < n; i++) {
+        if (nrest == 0) {                         /* typed slots copy unboxed */
+            ll_push_back_from(out, ll, pos[i]);
+            continue;
+        }
+        Expr* r = ll_elem_part(ll_get(ll, pos[i]), rest, nrest);
+        if (!r) { ll_release(out); free(pos); return NULL; }
+        ll_push_back(out, r);
+    }
+    free(pos);
+    return expr_new_linkedlist(out);
+}
+
 Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
     if (!expr) return NULL;
     if (nindices == 0) return expr_copy(expr);   /* the empty path: expr itself */
@@ -657,6 +796,11 @@ Expr* expr_part(Expr* expr, Expr** indices, size_t nindices) {
         bool err = false;
         return sp_part(expr, indices, nindices, &err);
     }
+
+    /* A LinkedList, at the top level or below it ({ll}[[1, 3]]). */
+    if (expr->type == EXPR_LINKEDLIST &&
+        !(idx->type == EXPR_INTEGER && idx->data.integer == 0))
+        return ll_part(expr, indices, nindices);
 
     // Handle integer index
     if (idx->type == EXPR_INTEGER) {
@@ -1013,7 +1157,10 @@ Expr* builtin_part(Expr* res) {
         return NULL;  /* out-of-range / too many subscripts: leave unevaluated */
     }
 
-    // Mathematica allows [[0]] even for atoms
+    /* LinkedList: O(1) element access; selections are new LinkedLists. */
+    if (expr->type == EXPR_LINKEDLIST) return expr_part(expr, indices, nindices);
+
+    // [[0]] is allowed even for atoms
     if (nindices > 0 && indices[0]->type == EXPR_INTEGER && indices[0]->data.integer == 0) {
         // Allowed
     } else {
@@ -1137,6 +1284,20 @@ static Expr* first_last_element(Expr* container, Expr* entry) {
     return entry;
 }
 
+/* First / Last of a LinkedList: O(1). An empty list gives the default when
+ * there is one, else First::nofirst / Last::nolast and stays unevaluated. */
+static Expr* ll_first_last(Expr* arg, Expr* deflt, bool last) {
+    LinkedList* ll = arg->data.llist;
+    int64_t n = ll_length(ll);
+    if (n > 0) return ll_get(ll, last ? n - 1 : 0);
+    if (deflt) return expr_copy(deflt);
+    char* s = expr_to_string(arg);
+    if (last) mth_message("Last", "nolast", "%s has zero length and no last element.", s ? s : "");
+    else mth_message("First", "nofirst", "%s has zero length and no first element.", s ? s : "");
+    free(s);
+    return NULL;
+}
+
 Expr* builtin_first(Expr* res) {
     if (res->type != EXPR_FUNCTION ||
         res->data.function.arg_count < 1 || res->data.function.arg_count > 2) return NULL;
@@ -1146,6 +1307,7 @@ Expr* builtin_first(Expr* res) {
      * back UNEVALUATED, while the identical List call works.  First is a
      * leading-axis slice of the buffer, so take it directly; delist_repack (which
      * materialises every element) remains the fallback for what it declines. */
+    if (arg->type == EXPR_LINKEDLIST) return ll_first_last(arg, deflt, false);
     if (is_ndarray(arg)) {
         Expr* fast = ndstruct_head_tail(res, ND_FIRST);
         if (fast) return fast;
@@ -1167,6 +1329,7 @@ Expr* builtin_last(Expr* res) {
      * back UNEVALUATED, while the identical List call works.  Last is a
      * leading-axis slice of the buffer, so take it directly; delist_repack (which
      * materialises every element) remains the fallback for what it declines. */
+    if (arg->type == EXPR_LINKEDLIST) return ll_first_last(arg, deflt, true);
     if (is_ndarray(arg)) {
         Expr* fast = ndstruct_head_tail(res, ND_LAST);
         if (fast) return fast;

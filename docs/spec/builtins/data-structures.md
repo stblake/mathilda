@@ -1817,9 +1817,31 @@ variable or passed to a function while it is built. Design:
   machine integers, all machine reals or all machine complex numbers.
 - `Length[ll]` is `O(1)`.
 
-Further list heads (`Part`, `AppendTo`, `PrependTo`, `Take`, `Drop`, `Delete`,
-`Join`, `Map`, ...) accept a LinkedList in later phases of the design; until
-then they see an opaque atom.
+**Reading heads.** These work on the chunk storage itself: no List is built and
+no element is copied out, and the answers are the same as for `Normal[ll]`.
+
+| Head | On a LinkedList | Cost |
+|---|---|---|
+| `ll[[i]]`, `ll[[-i]]` | element `i` (negative counts from the end); further subscripts are that element's own Part: `ll[[i, j]]` | `O(1)` |
+| `ll[[All]]`, `ll[[m ;; n ;; s]]`, `ll[[{i1, i2, ...}]]` | a **new LinkedList** of the selected elements, each with the further subscripts applied (`ll[[All, 2]]`) | `O(k)` for `k` selected; typed slots copy unboxed |
+| `ll[[0]]` | `LinkedList` | `O(1)` |
+| `First[ll]`, `Last[ll]`, `First[ll, def]` | the end element, or `def` | `O(1)` |
+| `Total[ll]`, `Total[ll, spec]` | integers: exact int64, promoted to a bignum on overflow; reals and complexes: bit-for-bit the packed `Total` of `Normal[ll]` (same pairwise tree, threaded); anything else: one `Plus` of the elements | `O(n)`, no allocation per element |
+| `MemberQ[ll, p, ...]`, `Count[ll, p, ...]` | every level spec, negative levels and `Heads`, as for a List | `O(n)`; literal integers and `_`, `_Integer`, `_Real`, `_Complex` scan raw slots |
+| `Extract[ll, {i, ...}]` | as `Part` | |
+
+A LinkedList nested inside a List or another LinkedList is walked like a List
+by `Part`, `MemberQ`, `Count` and `Total` at every depth:
+`Count[LinkedList[{LinkedList[{1, 2}], LinkedList[{3, x}]}], _Integer, 2]` is `3`.
+
+`Part` messages: `Part::partw` (an index out of range) and `Part::take` (a span
+running off the end: `3 ;; 2` is `{}`, `3 ;; 1` is an error), naming the list as
+`LinkedList[<n>]`; the call stays unevaluated. `First::nofirst` /
+`Last::nolast` for an empty list with no default.
+
+The mutating and copying heads (`AppendTo`, `PrependTo`, Part assignment,
+`Take`, `Drop`, `Delete`, `Join`, `Map`, ...) come in later phases of the
+design; until then they see an opaque atom.
 
 Messages: `LinkedList::list` (argument not a list), `LinkedList::argt` (more
 than one argument).

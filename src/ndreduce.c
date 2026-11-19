@@ -23,9 +23,9 @@
 #include <float.h>
 #include "numeric.h"   /* numeric_machine_subnormal */
 
-/* Below this many summands a strided range is summed by a plain loop; above it
- * the range is split in two and each half summed recursively (pairwise). */
-#define ND_PAIRWISE_BLOCK ((size_t)128)
+/* ND_PAIRWISE_BLOCK (ndreduce.h): below this many summands a strided range is
+ * summed by a plain loop; above it the range is split in two and each half
+ * summed recursively (pairwise). */
 
 /* Below this, an introsort's lower constant factor wins; above it an 8-pass LSD
  * radix sort (memory-bound, no comparisons) is far faster. Used by both the
@@ -238,6 +238,23 @@ static int64_t nd_extreme_i64(const int64_t* p, size_t n, bool want_max) {
     return b;
 }
 
+/* The pairwise sum's contiguous float64 leaf (count <= ND_PAIRWISE_BLOCK).
+ * 8 independent accumulators break the loop-carried add dependency so the
+ * compiler can vectorize/pipeline the reduction without -ffast-math (FP add
+ * isn't associative, so a single accumulator would stay scalar). Exported so
+ * every float64 sum in the system -- packed, NDArray, LinkedList -- runs this
+ * exact tree and agrees to the bit. */
+double nd_sum_block_f64(const double* p, size_t count) {
+    double a0=0,a1=0,a2=0,a3=0,a4=0,a5=0,a6=0,a7=0;
+    size_t i = 0;
+    for (; i + 8 <= count; i += 8) {
+        a0+=p[i];   a1+=p[i+1]; a2+=p[i+2]; a3+=p[i+3];
+        a4+=p[i+4]; a5+=p[i+5]; a6+=p[i+6]; a7+=p[i+7];
+    }
+    for (; i < count; i++) a0 += p[i];
+    return ((a0+a1)+(a2+a3)) + ((a4+a5)+(a6+a7));
+}
+
 /* Pairwise sum of the `count` elements buf[base], buf[base+stride], ... into
  * (*re, *im). Strided so the same routine sums a contiguous run (stride == 1,
  * full/flatten reductions) or one column of a leading-axis reduction
@@ -249,19 +266,7 @@ static void nd_sum_strided(const void* buf, NDType dt, size_t base,
         if (dt == NDT_FLOAT64) {
             const double* d = (const double*)buf;
             if (stride == 1) {
-                /* Contiguous: 8 independent accumulators break the loop-carried
-                 * add dependency so the compiler can vectorize/pipeline the
-                 * reduction without needing -ffast-math (FP add isn't
-                 * associative, so a single accumulator would stay scalar). */
-                const double* p = d + base;
-                double a0=0,a1=0,a2=0,a3=0,a4=0,a5=0,a6=0,a7=0;
-                size_t i = 0;
-                for (; i + 8 <= count; i += 8) {
-                    a0+=p[i];   a1+=p[i+1]; a2+=p[i+2]; a3+=p[i+3];
-                    a4+=p[i+4]; a5+=p[i+5]; a6+=p[i+6]; a7+=p[i+7];
-                }
-                for (; i < count; i++) a0 += p[i];
-                sr = ((a0+a1)+(a2+a3)) + ((a4+a5)+(a6+a7));
+                sr = nd_sum_block_f64(d + base, count);
             } else {
                 for (size_t i = 0; i < count; i++) sr += d[base + i * stride];
             }

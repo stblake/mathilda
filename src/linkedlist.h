@@ -70,6 +70,14 @@ LLKind  ll_classify(const Expr* e);
 
 /* ---- element access (0-based, i in [0, length)) ----------------------- */
 Expr* ll_get(const LinkedList* ll, int64_t i);          /* new reference   */
+/* The storage cursor every LinkedList algorithm walks: elements [i, i+k) of
+ * the logical order occupy k consecutive slots of one chunk. Returns k >= 1
+ * (i must be in range); *p is element i's slot and *dir is +1 when the next
+ * logical element is at the next higher address, -1 when lower (the front
+ * run, which grows downward). Slots are kind-sized: int64_t, double, a
+ * (re, im) double pair, or Expr*. A full scan is O(n) with O(log n) cursor
+ * calls -- chunk capacities double. */
+int64_t ll_span_at(const LinkedList* ll, int64_t i, const void** p, int* dir);
 /* Borrowed pointer to a boxed element (LL_BOXED only), else NULL. */
 const Expr* ll_peek_boxed(const LinkedList* ll, int64_t i);
 /* Typed reads for the compiled path; false when the list is not that kind. */
@@ -87,6 +95,8 @@ void  ll_push_back_cplx(LinkedList* ll, double re, double im);
 void  ll_push_front_i64 (LinkedList* ll, int64_t v);
 void  ll_push_front_real(LinkedList* ll, double v);
 void  ll_push_front_cplx(LinkedList* ll, double re, double im);
+/* Append element i of src to dst; typed slots copy without boxing. */
+void  ll_push_back_from(LinkedList* dst, const LinkedList* src, int64_t i);
 /* Remove and return the last / first element. NULL when empty. */
 Expr* ll_pop_back (LinkedList* ll);
 Expr* ll_pop_front(LinkedList* ll);
@@ -113,6 +123,12 @@ int64_t ll_byte_count(const LinkedList* ll, int64_t (*elem)(Expr*));
 /* ---- Expr-level helpers ----------------------------------------------- */
 /* The payload of an EXPR_LINKEDLIST node, or NULL for anything else. */
 LinkedList* expr_linkedlist(const Expr* e);
+
+/* Total of the elements of a typed list, in place (linkedlist_ops.c): exact
+ * int64 promoting to GMP on overflow, or the packed Total's pairwise float
+ * tree to the bit. NULL for a boxed or empty list, or a float sum that left
+ * the machine range (the caller's Plus then answers). */
+Expr* ll_sum_machine(const LinkedList* ll);
 
 /* Registers LinkedList, Push, Pop and PopFirst. */
 void linkedlist_init(void);

@@ -1,4 +1,5 @@
 #include "patterns.h"
+#include "linkedlist.h"
 #include "symtab.h"
 #include "eval.h"
 #include "match.h"
@@ -67,6 +68,19 @@ static Expr* patterns_delist_visible(Expr* res) {
 }
 
 static int64_t get_expr_depth_patterns(Expr* e, bool heads) {
+    if (e->type == EXPR_LINKEDLIST) {
+        /* Nests like the List it stands for. Typed elements are atoms. */
+        LinkedList* ll = e->data.llist;
+        int64_t n = ll_length(ll);
+        if (n == 0) return 1;
+        if (ll_kind(ll) != LL_BOXED) return 2;
+        int64_t max_d = 0;
+        for (int64_t i = 0; i < n; i++) {
+            int64_t d = get_expr_depth_patterns((Expr*)ll_peek_boxed(ll, i), heads);
+            if (d > max_d) max_d = d;
+        }
+        return max_d + 1;
+    }
     if (e->type != EXPR_FUNCTION) return 1;
     if (e->data.function.head->type == EXPR_SYMBOL) {
         const char* h = e->data.function.head->data.symbol.name;
@@ -101,6 +115,49 @@ static bool in_level_spec(Expr* e, int64_t level, int64_t min_l, int64_t max_l,
     if (max_l < 0 && d < -max_l) return false;
     return true;
 }
+
+/* The level spec (3rd argument, default {1}) and Heads option shared by
+ * Cases, DeleteCases, Position, Count and MemberQ. */
+static void pat_level_args(Expr* res, int64_t* min_out, int64_t* max_out, bool* heads_out) {
+    size_t argc = res->data.function.arg_count;
+    int64_t min_l = 1, max_l = 1;
+    bool heads = false;
+
+    if (argc >= 3) {
+        Expr* ls = res->data.function.args[2];
+        if (ls->type == EXPR_INTEGER) {
+            if (ls->data.integer < 0) {
+                min_l = ls->data.integer; max_l = ls->data.integer;
+            } else {
+                min_l = 1; max_l = ls->data.integer;
+            }
+        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_All) {
+            min_l = 1; max_l = 1000000;
+        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_Infinity) {
+            min_l = 1; max_l = 1000000;
+        } else if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol.name == SYM_List) {
+            if (ls->data.function.arg_count == 1 && ls->data.function.args[0]->type == EXPR_INTEGER) {
+                min_l = max_l = ls->data.function.args[0]->data.integer;
+            } else if (ls->data.function.arg_count == 2) {
+                if (ls->data.function.args[0]->type == EXPR_INTEGER) min_l = ls->data.function.args[0]->data.integer;
+                if (ls->data.function.args[1]->type == EXPR_INTEGER) max_l = ls->data.function.args[1]->data.integer;
+                else if (ls->data.function.args[1]->type == EXPR_SYMBOL && ls->data.function.args[1]->data.symbol.name == SYM_Infinity) max_l = 1000000;
+            }
+        }
+    }
+
+    for (size_t i = 2; i < argc; i++) {
+        Expr* opt = res->data.function.args[i];
+        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol.name == SYM_Rule && opt->data.function.arg_count == 2) {
+            if (opt->data.function.args[0]->type == EXPR_SYMBOL && opt->data.function.args[0]->data.symbol.name == SYM_Heads) {
+                if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol.name == SYM_True) heads = true;
+                else if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol.name == SYM_False) heads = false;
+            }
+        }
+    }
+    *min_out = min_l; *max_out = max_l; *heads_out = heads;
+}
+
 
 /* A Rational or Complex number is an atom to Cases / Count / Position: its
  * parts (the 2 of 1/2) and its head are never visited, as in the reference --
@@ -348,41 +405,9 @@ Expr* builtin_cases(Expr* res) {
     Expr* expr = res->data.function.args[0];
     Expr* patt_arg = res->data.function.args[1];
 
-    int64_t min_l = 1, max_l = 1;
-    bool heads = false;
-
-    if (argc >= 3) {
-        Expr* ls = res->data.function.args[2];
-        if (ls->type == EXPR_INTEGER) {
-            if (ls->data.integer < 0) {
-                min_l = ls->data.integer; max_l = ls->data.integer;
-            } else {
-                min_l = 1; max_l = ls->data.integer;
-            }
-        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_All) {
-            min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_Infinity) {
-            min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol.name == SYM_List) {
-            if (ls->data.function.arg_count == 1 && ls->data.function.args[0]->type == EXPR_INTEGER) {
-                min_l = max_l = ls->data.function.args[0]->data.integer;
-            } else if (ls->data.function.arg_count == 2) {
-                if (ls->data.function.args[0]->type == EXPR_INTEGER) min_l = ls->data.function.args[0]->data.integer;
-                if (ls->data.function.args[1]->type == EXPR_INTEGER) max_l = ls->data.function.args[1]->data.integer;
-                else if (ls->data.function.args[1]->type == EXPR_SYMBOL && ls->data.function.args[1]->data.symbol.name == SYM_Infinity) max_l = 1000000;
-            }
-        }
-    }
-
-    for (size_t i = 2; i < argc; i++) {
-        Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol.name == SYM_Rule && opt->data.function.arg_count == 2) {
-            if (opt->data.function.args[0]->type == EXPR_SYMBOL && opt->data.function.args[0]->data.symbol.name == SYM_Heads) {
-                if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol.name == SYM_True) heads = true;
-                else if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol.name == SYM_False) heads = false;
-            }
-        }
-    }
+    int64_t min_l, max_l;
+    bool heads;
+    pat_level_args(res, &min_l, &max_l, &heads);
 
     int64_t max_results = -1;
     if (argc >= 4) {
@@ -766,7 +791,12 @@ Expr* builtin_position(Expr* res) {
     return list;
 }
 
+static int64_t ll_descend(Expr* llx, int64_t level, int64_t min_l, int64_t max_l,
+                          bool heads, Expr* pattern, bool first_only);
+
 static void do_count_at_level(Expr* e, int64_t current_level, int64_t min_l, int64_t max_l, bool heads, Expr* pattern, size_t* count) {
+    if (e->type == EXPR_LINKEDLIST)
+        *count += (size_t)ll_descend(e, current_level + 1, min_l, max_l, heads, pattern, false);
     if (e->type == EXPR_FUNCTION && !pat_number_atom(e)) {
         if (heads) {
             do_count_at_level(e->data.function.head, current_level + 1, min_l, max_l, heads, pattern, count);
@@ -788,6 +818,107 @@ static void do_count_at_level(Expr* e, int64_t current_level, int64_t min_l, int
         }
         env_free(env);
     }
+}
+
+/* ------------------------------------------------------------------------
+ * MemberQ / Count over a LinkedList, natively (LINKED_LIST_DESIGN.md §3.2).
+ *
+ * The list is level 0 -- an atom, with no head part to visit -- and each
+ * element is level 1, below which the List path's own walk runs unchanged
+ * (do_member_at_level / do_count_at_level), so every level spec, negative
+ * levels and Heads -> True mean what they mean for the List.
+ *
+ * Elements are read in place. A boxed slot is lent to the matcher as a
+ * borrowed pointer: no Expr is created and no List is built. A typed list
+ * (machine Integers, Reals or Complexes only, all atoms at level 1) first
+ * asks whether the pattern decides every element at once from the storage
+ * kind -- _, _Integer, _Real, _Complex, a literal Integer -- and answers by
+ * scanning raw int64 slots, or without reading them at all.
+ * ---------------------------------------------------------------------- */
+
+static bool do_member_at_level(Expr* e, int64_t current_level, int64_t min_l, int64_t max_l, bool heads, Expr* pattern);
+
+/* Verdict of `pattern` on every element of a typed list of `kind`:
+ * 1 all match, 0 none match, -1 undecided. *literal is set when the answer
+ * is "the int64 slots equal *lit". */
+static int ll_typed_verdict(LLKind kind, const Expr* pattern, bool* literal, int64_t* lit) {
+    *literal = false;
+    if (pattern->type == EXPR_INTEGER) {
+        if (kind != LL_I64) return 0;           /* 5 never matches 5. or 5. + 0. I */
+        *literal = true;
+        *lit = pattern->data.integer;
+        return -1;
+    }
+    if (pattern->type == EXPR_FUNCTION && pattern->data.function.head->type == EXPR_SYMBOL &&
+        pattern->data.function.head->data.symbol.name == SYM_Blank) {
+        if (pattern->data.function.arg_count == 0) return 1;
+        const Expr* h = pattern->data.function.args[0];
+        if (pattern->data.function.arg_count != 1 || h->type != EXPR_SYMBOL) return -1;
+        const char* want = kind == LL_I64 ? SYM_Integer : kind == LL_REAL ? SYM_Real : SYM_Complex;
+        return h->data.symbol.name == want ? 1 : 0;
+    }
+    return -1;
+}
+
+static void do_count_at_level(Expr* e, int64_t current_level, int64_t min_l, int64_t max_l, bool heads, Expr* pattern, size_t* count);
+
+/* Matches among the elements of a LinkedList whose elements sit at
+ * `level`; stops at the first when `first_only` (MemberQ). The level walkers
+ * call this where a List would recurse into its arguments, so a LinkedList
+ * at any depth -- the target itself or one nested inside a List or another
+ * LinkedList -- is walked like a List. */
+static int64_t ll_descend(Expr* llx, int64_t level, int64_t min_l, int64_t max_l,
+                          bool heads, Expr* pattern, bool first_only) {
+    LinkedList* ll = llx->data.llist;
+    int64_t n = ll_length(ll), hits = 0;
+    if (n == 0 || (min_l >= 0 && max_l >= 0 && level > max_l)) return 0;
+
+    LLKind kind = ll_kind(ll);
+    if (kind != LL_BOXED && !(heads && kind == LL_CPLX)) {
+        /* Typed elements are atoms of depth 1 with nothing below them, so one
+         * probe settles whether the spec includes their level at all. */
+        Expr* probe = ll_get(ll, 0);
+        bool in = in_level_spec(probe, level, min_l, max_l, heads);
+        expr_free(probe);
+        if (!in) return 0;
+        bool literal;
+        int64_t lit = 0;
+        int v = ll_typed_verdict(kind, pattern, &literal, &lit);
+        if (v == 1) return first_only ? 1 : n;
+        if (v == 0) return 0;
+        if (literal) {
+            for (int64_t i = 0; i < n; ) {
+                const void* p;
+                int dir;
+                int64_t k = ll_span_at(ll, i, &p, &dir);
+                const int64_t* d = (const int64_t*)p;
+                for (int64_t t = 0; t < k; t++) {
+                    if (d[dir > 0 ? t : -t] == lit) {
+                        hits++;
+                        if (first_only) return hits;
+                    }
+                }
+                i += k;
+            }
+            return hits;
+        }
+    }
+
+    for (int64_t i = 0; i < n; i++) {
+        /* Boxed: lend the slot itself. Typed: one machine-number node. */
+        Expr* owned = kind == LL_BOXED ? NULL : ll_get(ll, i);
+        Expr* e = owned ? owned : (Expr*)ll_peek_boxed(ll, i);
+        if (first_only) {
+            if (do_member_at_level(e, level, min_l, max_l, heads, pattern)) hits = 1;
+        } else {
+            size_t c = 0;
+            do_count_at_level(e, level, min_l, max_l, heads, pattern, &c);
+            hits += (int64_t)c;
+        }
+        if (owned) expr_free(owned);
+        if (hits && first_only) return hits;
+    }
+    return hits;
 }
 
 Expr* builtin_count(Expr* res) {
@@ -816,41 +947,9 @@ Expr* builtin_count(Expr* res) {
     Expr* expr = res->data.function.args[0];
     Expr* pattern = res->data.function.args[1];
 
-    int64_t min_l = 1, max_l = 1;
-    bool heads = false;
-
-    if (argc >= 3) {
-        Expr* ls = res->data.function.args[2];
-        if (ls->type == EXPR_INTEGER) {
-            if (ls->data.integer < 0) {
-                min_l = ls->data.integer; max_l = ls->data.integer;
-            } else {
-                min_l = 1; max_l = ls->data.integer;
-            }
-        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_All) {
-            min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_Infinity) {
-            min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol.name == SYM_List) {
-            if (ls->data.function.arg_count == 1 && ls->data.function.args[0]->type == EXPR_INTEGER) {
-                min_l = max_l = ls->data.function.args[0]->data.integer;
-            } else if (ls->data.function.arg_count == 2) {
-                if (ls->data.function.args[0]->type == EXPR_INTEGER) min_l = ls->data.function.args[0]->data.integer;
-                if (ls->data.function.args[1]->type == EXPR_INTEGER) max_l = ls->data.function.args[1]->data.integer;
-                else if (ls->data.function.args[1]->type == EXPR_SYMBOL && ls->data.function.args[1]->data.symbol.name == SYM_Infinity) max_l = 1000000;
-            }
-        }
-    }
-
-    for (size_t i = 2; i < argc; i++) {
-        Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol.name == SYM_Rule && opt->data.function.arg_count == 2) {
-            if (opt->data.function.args[0]->type == EXPR_SYMBOL && opt->data.function.args[0]->data.symbol.name == SYM_Heads) {
-                if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol.name == SYM_True) heads = true;
-                else if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol.name == SYM_False) heads = false;
-            }
-        }
-    }
+    int64_t min_l, max_l;
+    bool heads;
+    pat_level_args(res, &min_l, &max_l, &heads);
 
     size_t count = 0;
     do_count_at_level(expr, 0, min_l, max_l, heads, pattern, &count);
@@ -882,6 +981,8 @@ static bool do_member_at_level(Expr* e, int64_t current_level, int64_t min_l, in
         }
     }
 
+    if (e->type == EXPR_LINKEDLIST)
+        return ll_descend(e, current_level + 1, min_l, max_l, heads, pattern, true) > 0;
     if (e->type == EXPR_FUNCTION && !pat_number_atom(e)) {
         if (heads) {
             if (do_member_at_level(e->data.function.head, current_level + 1, min_l, max_l, heads, pattern)) return true;
@@ -920,41 +1021,9 @@ Expr* builtin_memberq(Expr* res) {
     Expr* expr = res->data.function.args[0];
     Expr* pattern = res->data.function.args[1];
 
-    int64_t min_l = 1, max_l = 1;
-    bool heads = false;
-
-    if (argc >= 3) {
-        Expr* ls = res->data.function.args[2];
-        if (ls->type == EXPR_INTEGER) {
-            if (ls->data.integer < 0) {
-                min_l = ls->data.integer; max_l = ls->data.integer;
-            } else {
-                min_l = 1; max_l = ls->data.integer;
-            }
-        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_All) {
-            min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_SYMBOL && ls->data.symbol.name == SYM_Infinity) {
-            min_l = 1; max_l = 1000000;
-        } else if (ls->type == EXPR_FUNCTION && ls->data.function.head->data.symbol.name == SYM_List) {
-            if (ls->data.function.arg_count == 1 && ls->data.function.args[0]->type == EXPR_INTEGER) {
-                min_l = max_l = ls->data.function.args[0]->data.integer;
-            } else if (ls->data.function.arg_count == 2) {
-                if (ls->data.function.args[0]->type == EXPR_INTEGER) min_l = ls->data.function.args[0]->data.integer;
-                if (ls->data.function.args[1]->type == EXPR_INTEGER) max_l = ls->data.function.args[1]->data.integer;
-                else if (ls->data.function.args[1]->type == EXPR_SYMBOL && ls->data.function.args[1]->data.symbol.name == SYM_Infinity) max_l = 1000000;
-            }
-        }
-    }
-
-    for (size_t i = 2; i < argc; i++) {
-        Expr* opt = res->data.function.args[i];
-        if (opt->type == EXPR_FUNCTION && opt->data.function.head->data.symbol.name == SYM_Rule && opt->data.function.arg_count == 2) {
-            if (opt->data.function.args[0]->type == EXPR_SYMBOL && opt->data.function.args[0]->data.symbol.name == SYM_Heads) {
-                if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol.name == SYM_True) heads = true;
-                else if (opt->data.function.args[1]->type == EXPR_SYMBOL && opt->data.function.args[1]->data.symbol.name == SYM_False) heads = false;
-            }
-        }
-    }
+    int64_t min_l, max_l;
+    bool heads;
+    pat_level_args(res, &min_l, &max_l, &heads);
 
     if (do_member_at_level(expr, 0, min_l, max_l, heads, pattern)) {
         return expr_new_symbol(SYM_True);

@@ -345,6 +345,147 @@ void test_identity_keys_and_sharing() {
                    "{{1, 2}, {1, 2}}", 0);
 }
 
+
+/* ------------------------------------------- phase 2: reads, Part, cursor */
+
+/* The span cursor visits every element exactly once, in logical order, across
+ * both runs and every chunk boundary. */
+void test_span_cursor_covers_both_runs() {
+    LinkedList* ll = ll_new();
+    for (int64_t i = 0; i < 1000; i++) ll_push_back_i64(ll, i);
+    for (int64_t i = 1; i <= 777; i++) ll_push_front_i64(ll, -i);
+    int64_t n = ll_length(ll), i = 0, calls = 0;
+    while (i < n) {
+        const void* p;
+        int dir;
+        int64_t k = ll_span_at(ll, i, &p, &dir);
+        expect_true(k >= 1 && i + k <= n, "span length in range");
+        const int64_t* d = (const int64_t*)p;
+        for (int64_t t = 0; t < k; t++) {
+            int64_t want;
+            ll_get_i64(ll, i + t, &want);
+            expect_true(d[dir > 0 ? t : -t] == want, "span slot = logical element");
+        }
+        i += k;
+        calls++;
+    }
+    expect_true(calls < 40, "O(log n) cursor calls");
+    ll_release(ll);
+}
+
+/* A machine float Total over a list grown at BOTH ends -- leaves that
+ * straddle chunks and the downward-growing front run -- bit-matches the
+ * packed Total of Normal[ll], serial and threaded sizes alike. */
+static void check_sum_parity(LinkedList* ll, const char* what) {
+    Expr* fast = ll_sum_machine(ll);
+    Expr* lst = ll_to_list(ll);
+    Expr* a[1] = { lst };
+    Expr* call = expr_new_function(expr_new_symbol(intern_symbol("Total")), a, 1);
+    Expr* ref = evaluate(call);
+    expr_free(call);
+    if (!fast || !expr_eq(fast, ref)) {
+        char* x = fast ? expr_to_string(fast) : NULL;
+        char* y = expr_to_string(ref);
+        fprintf(stderr, "FAIL: %s: ll %s, packed %s\n", what, x ? x : "NULL", y);
+        abort();
+    }
+    expr_free(fast);
+    expr_free(ref);
+}
+
+void test_total_bit_parity() {
+    int64_t sizes[] = { 1, 7, 128, 129, 1000, 70001, 300000 };
+    uint64_t g = 12345;
+    for (size_t s = 0; s < sizeof sizes / sizeof sizes[0]; s++) {
+        LinkedList* r = ll_new();
+        LinkedList* c = ll_new();
+        for (int64_t i = 0; i < sizes[s]; i++) {
+            g = g * UINT64_C(6364136223846793005) + 1;
+            double v = (double)(g >> 11) / 9007199254740992.0 - 0.3;
+            if (g & 1) ll_push_front_real(r, v); else ll_push_back_real(r, v);
+            if (g & 2) ll_push_front_cplx(c, v, 1.0 - v); else ll_push_back_cplx(c, v * 3, v);
+        }
+        check_sum_parity(r, "real Total parity");
+        check_sum_parity(c, "complex Total parity");
+        ll_release(r);
+        ll_release(c);
+    }
+    /* int64 overflow promotes to an exact bignum. */
+    LinkedList* b = ll_new();
+    for (int i = 0; i < 9; i++) ll_push_front_i64(b, INT64_MAX - i);
+    ll_push_back_i64(b, -3);
+    check_sum_parity(b, "int64 overflow -> bignum");
+    ll_release(b);
+}
+
+void test_part_reads() {
+    assert_eval_eq("ll = LinkedList[Range[10^5]]; {ll[[1234]], ll[[-1]], ll[[0]]}",
+                   "{1234, 100000, LinkedList}", 0);
+    assert_eval_eq("Head[ll[[{1, -1, 7}]]]", "LinkedList", 0);
+    assert_eval_eq("Normal[ll[[{1, -1, 7}]]]", "{1, 100000, 7}", 0);
+    assert_eval_eq("Normal[ll[[3 ;; 12 ;; 3]]]", "{3, 6, 9, 12}", 0);
+    assert_eval_eq("Normal[ll[[-1 ;; -5 ;; -2]]]", "{100000, 99998, 99996}", 0);
+    assert_eval_eq("Normal[ll[[5 ;; 4]]]", "{}", 0);
+    assert_eval_eq("Length[ll[[All]]]", "100000", 0);
+    assert_eval_eq("ll[[All]] === ll", "False", 0);                 /* a new list */
+    /* Deeper subscripts apply to the selected elements. */
+    assert_eval_eq("m = LinkedList[{{1, 2, 3}, {4, 5, 6}, {7, 8, 9}}]; "
+                   "{m[[2, 3]], Normal[m[[All, 2]]], Normal[m[[{1, 3}, 2 ;; 3]]], m[[2]]}",
+                   "{6, {2, 5, 8}, {{2, 3}, {8, 9}}, {4, 5, 6}}", 0);
+    /* Packed rows and nested LinkedLists as elements. */
+    assert_eval_eq("p = LinkedList[]; Push[p, Range[400]]; Push[p, Range[401, 800]]; "
+                   "{p[[2, -1]], Normal[p[[All, 1]]]}", "{800, {1, 401}}", 0);
+    assert_eval_eq("n = LinkedList[{LinkedList[{a, b}], LinkedList[{c, d}]}]; "
+                   "{n[[2, 1]], {n}[[1, 1, 2]], Normal[n[[All, -1]]]}", "{c, b, {b, d}}", 0);
+    /* Typed selections stay typed (and exact heads survive). */
+    assert_eval_eq("r = LinkedList[N[Range[10]]]; {Normal[r[[2 ;; 4]]], Head[r[[2]]]}",
+                   "{{2.0, 3.0, 4.0}, Real}", 0);
+    assert_eval_eq("Extract[m, {2, 1}]", "4", 0);
+    /* Reads see mutations (no stale memo). */
+    assert_eval_eq("q = LinkedList[{1}]; Table[Push[q, i]; {q[[-1]], Last[q]}, {i, 3}]",
+                   "{{1, 1}, {2, 2}, {3, 3}}", 0);
+}
+
+void test_part_messages() {
+    assert_eval_eq("Check[LinkedList[{1, 2}][[5]], err]", "err", 0);
+    assert_eval_eq("Check[LinkedList[{1, 2}][[{1, -3}]], err]", "err", 0);
+    assert_eval_eq("Check[LinkedList[{1, 2}][[1 ;; 3]], err]", "err", 0);
+    assert_eval_eq("Check[LinkedList[{1, 2, 3}][[3 ;; 1]], err]", "err", 0);
+    assert_eval_eq("Quiet[LinkedList[{1, 2}][[5]]]", "Part[LinkedList[<2>], 5]", 0);
+    assert_eval_eq("Check[First[LinkedList[]], err]", "err", 0);
+    assert_eval_eq("Check[Last[LinkedList[]], err]", "err", 0);
+    assert_eval_eq("{First[LinkedList[], d], Last[LinkedList[], d]}", "{d, d}", 0);
+}
+
+void test_reading_heads() {
+    assert_eval_eq("ll = LinkedList[Range[10^6]]; {First[ll], Last[ll], Total[ll]}",
+                   "{1, 1000000, 500000500000}", 0);
+    assert_eval_eq("{MemberQ[ll, 500], MemberQ[ll, -1], MemberQ[ll, 5.], Count[ll, 7], "
+                   "Count[ll, _Integer], Count[ll, _Real], Count[ll, _?EvenQ], "
+                   "MemberQ[ll, _LinkedList, {0}], MemberQ[ll, _LinkedList]}",
+                   "{True, False, False, 1, 1000000, 0, 500000, True, False}", 0);
+    assert_eval_eq("Total[LinkedList[{2^62, 2^62, 2^62, -5}]]", "13835058055282163707", 0);
+    assert_eval_eq("m = LinkedList[{{1, 2, 3}, {4, 5, 6}}]; "
+                   "{Total[m], Total[m, 2], Normal[Total[m, {2}]], Total[m, Infinity], Total[m, -1]}",
+                   "{{5, 7, 9}, 21, {6, 15}, 21, 21}", 0);
+    assert_eval_eq("s = LinkedList[{x, y, x, f[x]}]; "
+                   "{Total[s], Count[s, x], Count[s, x, Infinity], MemberQ[s, f[_]], Count[s, _, {2}]}",
+                   "{2 x + y + f[x], 2, 3, True, 1}", 0);
+    assert_eval_eq("{Total[LinkedList[]], Total[LinkedList[{1.*^308, 1.*^308}]]}",
+                   "{0, 2.0*^308}", 0);
+    /* Nested LinkedLists are walked like nested Lists, at every level spec. */
+    assert_eval_eq("n = LinkedList[{LinkedList[{1, 2}], LinkedList[{3, x}]}]; "
+                   "{Count[n, _Integer, 2], Count[n, _Integer, {-1}], MemberQ[n, x, Infinity], "
+                   "MemberQ[{n}, 3, 3], Count[n, _LinkedList], Count[{1, LinkedList[{1, 1}]}, 1, Infinity], "
+                   "Normal[Total[n, {2}]]}",
+                   "{3, 3, True, True, 2, 3, {3, 3 + x}}", 0);
+    /* The same answers as the List, element for element. */
+    assert_eval_eq("v = {3, x, 2.5, {1, 2}, f[3], 3}; w = LinkedList[v]; "
+                   "Table[{Count[w, pt, lv], MemberQ[w, pt, lv]} === {Count[v, pt, lv], MemberQ[v, pt, lv]}, "
+                   "{pt, {3, _Integer, _Real, _List, _, f[_]}}, {lv, {1, 2, {2}, Infinity, {-1}}}] // Flatten // Union",
+                   "{True}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -367,6 +508,11 @@ int main() {
     TEST(test_deep_nesting_no_recursion);
     TEST(test_abort_and_memory_limits_leave_list_consistent);
     TEST(test_identity_keys_and_sharing);
+    TEST(test_span_cursor_covers_both_runs);
+    TEST(test_total_bit_parity);
+    TEST(test_part_reads);
+    TEST(test_part_messages);
+    TEST(test_reading_heads);
 
     printf("All LinkedList tests passed!\n");
     symtab_clear();

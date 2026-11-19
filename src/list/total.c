@@ -1,3 +1,4 @@
+#include "linkedlist.h"
 #include "list_common.h"
 #include "total.h"
 #include "assoc.h"
@@ -10,6 +11,21 @@
  * 3 + z) and Total[{{a + 1, 2}}, {-1}] totals the rows. */
 static int64_t get_depth_for_total(Expr* e) {
     if (e->type == EXPR_NDARRAY) return 1 + e->data.ndarray.rank;
+    if (e->type == EXPR_LINKEDLIST) {
+        /* A LinkedList nests like the List it stands for. A typed list holds
+         * machine numbers only, so its depth is 2 without a scan; a boxed one
+         * reads each element through a borrowed pointer. */
+        LinkedList* ll = e->data.llist;
+        int64_t n = ll_length(ll);
+        if (n == 0) return 1;
+        if (ll_kind(ll) != LL_BOXED) return 2;
+        int64_t max_d = 0;
+        for (int64_t i = 0; i < n; i++) {
+            int64_t d = get_depth_for_total((Expr*)ll_peek_boxed(ll, i));
+            if (d > max_d) max_d = d;
+        }
+        return 1 + max_d;
+    }
     if (e->type != EXPR_FUNCTION) return 1;
     if (e->data.function.head->type != EXPR_SYMBOL ||
         e->data.function.head->data.symbol.name != SYM_List) return 1;
@@ -21,17 +37,12 @@ static int64_t get_depth_for_total(Expr* e) {
     return 1 + max_d;
 }
 
-static Expr* total_at_exactly_level_k(Expr* e, int64_t k) {
-    if (k <= 0) return expr_copy(e);
-    if (e->type != EXPR_FUNCTION) return expr_copy(e);
-
-    if (k == 1) {
-        size_t count = e->data.function.arg_count;
-        if (count == 0) return expr_new_integer(0);
-        Expr** plus_args = malloc(sizeof(Expr*) * count);
-        for (size_t i = 0; i < count; i++) plus_args[i] = expr_copy(e->data.function.args[i]);
+/* Plus of `count` owned summands (the array is the caller's; its entries are
+ * adopted), collected the way Total's level 1 always has. */
+static Expr* total_plus_of(Expr** plus_args, size_t count) {
+    if (count == 0) return expr_new_integer(0);
+    {
         Expr* plus_expr = expr_new_function(expr_new_symbol(SYM_Plus), plus_args, count);
-        free(plus_args);
         /* The list elements are already evaluated (Total is not HoldAll), so
          * collect like terms directly via builtin_plus — skipping the O(n)
          * re-evaluation of every already-normal term and the redundant
@@ -45,6 +56,55 @@ static Expr* total_at_exactly_level_k(Expr* e, int64_t k) {
             return eval_and_free(collected);
         }
         return eval_and_free(plus_expr);  /* builtin declined: evaluate as usual */
+    }
+}
+
+static Expr* total_at_exactly_level_k(Expr* e, int64_t k);
+
+/* Total of a LinkedList at exactly level k, natively.
+ *   k == 1: the sum of the elements. A typed list sums its slots in place
+ *           (ll_sum_machine: exact int64 promoting to GMP, or the pairwise
+ *           float tree of the packed Total, bit for bit); a boxed list -- or
+ *           a machine sum that left the machine range -- collects one Plus
+ *           straight from the slots, exactly as a List's level 1 does.
+ *   k >= 2: a new LinkedList of each element totalled at level k - 1, the
+ *           closure rule (a List gives a List).
+ * No List is ever built. */
+static Expr* total_ll_level_k(Expr* e, int64_t k) {
+    LinkedList* ll = e->data.llist;
+    int64_t n = ll_length(ll);
+    if (k == 1) {
+        if (n == 0) return expr_new_integer(0);
+        Expr* fast = ll_sum_machine(ll);
+        if (fast) return fast;
+        Expr** a = malloc(sizeof(Expr*) * (size_t)n);
+        for (int64_t i = 0; i < n; i++) a[i] = ll_get(ll, i);
+        Expr* r = total_plus_of(a, (size_t)n);
+        free(a);
+        return r;
+    }
+    LinkedList* out = ll_new();
+    for (int64_t i = 0; i < n; i++) {
+        Expr* el = ll_get(ll, i);
+        ll_push_back(out, total_at_exactly_level_k(el, k - 1));
+        expr_free(el);
+    }
+    return expr_new_linkedlist(out);
+}
+
+static Expr* total_at_exactly_level_k(Expr* e, int64_t k) {
+    if (k <= 0) return expr_copy(e);
+    if (e->type == EXPR_LINKEDLIST) return total_ll_level_k(e, k);
+    if (e->type != EXPR_FUNCTION) return expr_copy(e);
+
+    if (k == 1) {
+        size_t count = e->data.function.arg_count;
+        if (count == 0) return expr_new_integer(0);
+        Expr** plus_args = malloc(sizeof(Expr*) * count);
+        for (size_t i = 0; i < count; i++) plus_args[i] = expr_copy(e->data.function.args[i]);
+        Expr* r = total_plus_of(plus_args, count);
+        free(plus_args);
+        return r;
     } else {
         size_t count = e->data.function.arg_count;
         Expr** new_args = malloc(sizeof(Expr*) * count);
@@ -81,6 +141,10 @@ Expr* builtin_total(Expr* res) {
      * empty result by accident. */
     if (is_listq(list) && list->data.function.arg_count == 0)
         return expr_new_integer(0);
+    /* A LinkedList takes the same level walk below; total_at_exactly_level_k
+     * dispatches it to the native kernels (total_ll_level_k). */
+    bool is_ll = list->type == EXPR_LINKEDLIST;
+    if (is_ll && ll_length(list->data.llist) == 0) return expr_new_integer(0);
 
     int64_t n1 = 1, n2 = 1;
     int64_t depth = get_depth_for_total(list);

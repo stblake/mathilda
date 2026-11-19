@@ -344,6 +344,26 @@ static inline unsigned char* ll_slot(const LinkedList* ll, int64_t i) {
     return slot_ptr(&ll->back, ll->back.start + (i - F), esz);
 }
 
+int64_t ll_span_at(const LinkedList* ll, int64_t i, const void** p, int* dir) {
+    int64_t F = run_len(&ll->front);
+    size_t esz = kind_size(ll->kind);
+    if (i < F) {                    /* front run: logical order descends slots */
+        int64_t j = ll->front.end - 1 - i;
+        int k = chunk_of(j);
+        int64_t lo = chunk_base(k) > ll->front.start ? chunk_base(k) : ll->front.start;
+        *p = slot_ptr(&ll->front, j, esz);
+        *dir = -1;
+        return j - lo + 1;
+    }
+    int64_t j = ll->back.start + (i - F);
+    int k = chunk_of(j);
+    int64_t hi = chunk_base(k) + chunk_cap(k);
+    if (hi > ll->back.end) hi = ll->back.end;
+    *p = slot_ptr(&ll->back, j, esz);
+    *dir = 1;
+    return hi - j;
+}
+
 Expr* ll_get(const LinkedList* ll, int64_t i) {
     return slot_read(ll_slot(ll, i), ll->kind);
 }
@@ -433,6 +453,16 @@ LL_TYPED_PUSH(ll_push_back_i64,   back,  LL_I64,  int64_t, expr_new_integer(v))
 LL_TYPED_PUSH(ll_push_back_real,  back,  LL_REAL, double,  expr_new_real(v))
 LL_TYPED_PUSH(ll_push_front_i64,  front, LL_I64,  int64_t, expr_new_integer(v))
 LL_TYPED_PUSH(ll_push_front_real, front, LL_REAL, double,  expr_new_real(v))
+
+void ll_push_back_from(LinkedList* dst, const LinkedList* src, int64_t i) {
+    if (src->kind != LL_BOXED && (dst->kind == src->kind || ll_length(dst) == 0)) {
+        ll_admit(dst, src->kind);
+        run_push_raw(dst, &dst->back, ll_slot(src, i));
+        ll_mutated();
+    } else {
+        ll_push_back(dst, ll_get(src, i));
+    }
+}
 
 static Expr* make_machine_complex(double re, double im) {
     Expr* a[2] = { expr_new_real(re), expr_new_real(im) };
