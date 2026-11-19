@@ -63,6 +63,7 @@ struct LinkedList {
     LLKind   kind;
     LLRun    front, back;
     int64_t  chunk_bytes;               /* bytes in allocated chunks        */
+    uint64_t visit;                     /* cycle-check epoch (ll_would_cycle) */
 };
 
 static uint64_t g_ll_next_id = 1;
@@ -199,11 +200,35 @@ static void ll_free_storage(LinkedList* ll) {
     ll->back.start = ll->back.end = 0;
 }
 
+/* Release without recursion through nesting. Freeing a boxed list frees its
+ * elements, and an element may be the last reference to another LinkedList:
+ * recursing there costs C stack per level of nesting, and a 10^5-deep chain
+ * of lists overflowed it. Instead, a payload that dies while another is being
+ * torn down is queued, and the outermost release drains the queue -- constant
+ * stack for any depth. (A plain List's own nesting is expr_free's business.) */
+static LinkedList** g_ll_dying;
+static size_t       g_ll_dying_n, g_ll_dying_cap;
+static int          g_ll_releasing;
+
 void ll_release(LinkedList* ll) {
     if (!ll || --ll->refcount > 0) return;
-    ll_free_storage(ll);
-    MTH_MEM_RELEASE(sizeof *ll);
-    free(ll);
+    if (g_ll_dying_n == g_ll_dying_cap) {
+        size_t nc = g_ll_dying_cap ? 2 * g_ll_dying_cap : 16;
+        LinkedList** nv = realloc(g_ll_dying, nc * sizeof *nv);
+        if (!nv) { fprintf(stderr, "LinkedList: out of memory\n"); abort(); }
+        g_ll_dying = nv;
+        g_ll_dying_cap = nc;
+    }
+    g_ll_dying[g_ll_dying_n++] = ll;
+    if (g_ll_releasing) return;          /* the outer drain will free it */
+    g_ll_releasing = 1;
+    while (g_ll_dying_n > 0) {
+        LinkedList* x = g_ll_dying[--g_ll_dying_n];
+        ll_free_storage(x);              /* may queue more */
+        MTH_MEM_RELEASE(sizeof *x);
+        free(x);
+    }
+    g_ll_releasing = 0;
 }
 
 uint64_t ll_id(const LinkedList* ll)          { return ll ? ll->id : 0; }
@@ -507,8 +532,8 @@ static void ll_push_back_buffer(LinkedList* ll, const unsigned char* src, int64_
 LinkedList* ll_copy(const LinkedList* ll) {
     LinkedList* c = ll_new();
     int64_t n = ll_length(ll);
+    c->kind = ll->kind;            /* same shape, even when empty */
     if (n == 0) return c;
-    c->kind = ll->kind;
     size_t esz = kind_size(ll->kind);
     /* Front run, reversed into logical order. */
     for (int64_t j = ll->front.end - 1; j >= ll->front.start; j--) {
@@ -646,48 +671,54 @@ static Expr* builtin_linkedlist(Expr* res) {
  * ---------------------------------------------------------------------- */
 
 /* Does storing `e` into `target` create a reference cycle -- is `target`
- * reachable from a LinkedList inside `e`? Lists are visited once each
- * (`seen`), so the walk is O(|e| + the boxed lists reachable from it). Typed
- * lists hold only numbers and are not entered. */
-typedef struct { const LinkedList** v; size_t n, cap; } LLSeen;
+ * reachable from a LinkedList inside `e`? Each list is visited once per check
+ * (its `visit` stamp is set to the check's epoch, O(1) per test), so the walk
+ * is O(|e| + the boxed lists reachable from it). Typed lists hold only
+ * numbers and are not entered. */
+static uint64_t g_ll_visit_epoch = 0;
 
-static bool seen_add(LLSeen* s, const LinkedList* l) {
-    for (size_t i = 0; i < s->n; i++) if (s->v[i] == l) return false;
-    if (s->n == s->cap) {
-        size_t nc = s->cap ? 2 * s->cap : 8;
-        const LinkedList** nv = realloc(s->v, nc * sizeof *nv);
+/* Iterative (an explicit worklist): a deep chain of nested lists must not
+ * cost C stack -- a 10^6-deep chain overflowed the recursive form. */
+typedef struct { const Expr** v; size_t n, cap; } LLWork;
+
+static void work_push(LLWork* w, const Expr* e) {
+    if (!e) return;
+    if (w->n == w->cap) {
+        size_t nc = w->cap ? 2 * w->cap : 64;
+        const Expr** nv = realloc(w->v, nc * sizeof *nv);
         if (!nv) { fprintf(stderr, "LinkedList: out of memory\n"); abort(); }
-        s->v = nv;
-        s->cap = nc;
+        w->v = nv;
+        w->cap = nc;
     }
-    s->v[s->n++] = l;
-    return true;
+    w->v[w->n++] = e;
 }
 
-static bool reaches(const Expr* e, const LinkedList* target, LLSeen* seen) {
-    if (!e) return false;
-    if (e->type == EXPR_LINKEDLIST) {
-        const LinkedList* l = e->data.llist;
-        if (l == target) return true;
-        if (l->kind != LL_BOXED || !seen_add(seen, l)) return false;
-        int64_t n = ll_length(l);
-        for (int64_t i = 0; i < n; i++)
-            if (reaches(ll_peek_boxed(l, i), target, seen)) return true;
-        return false;
+static bool reaches(const Expr* root, const LinkedList* target, uint64_t epoch) {
+    LLWork w = { NULL, 0, 0 };
+    bool found = false;
+    work_push(&w, root);
+    while (w.n > 0 && !found) {
+        const Expr* e = w.v[--w.n];
+        if (e->type == EXPR_LINKEDLIST) {
+            LinkedList* l = e->data.llist;
+            if (l == target) { found = true; break; }
+            if (l->kind != LL_BOXED || l->visit == epoch) continue;
+            l->visit = epoch;
+            int64_t n = ll_length(l);
+            for (int64_t i = 0; i < n; i++) work_push(&w, ll_peek_boxed(l, i));
+        } else if (e->type == EXPR_FUNCTION) {
+            work_push(&w, e->data.function.head);
+            for (size_t i = 0; i < e->data.function.arg_count; i++)
+                work_push(&w, e->data.function.args[i]);
+        }
     }
-    if (e->type != EXPR_FUNCTION) return false;
-    if (reaches(e->data.function.head, target, seen)) return true;
-    for (size_t i = 0; i < e->data.function.arg_count; i++)
-        if (reaches(e->data.function.args[i], target, seen)) return true;
-    return false;
+    free(w.v);
+    return found;
 }
 
 bool ll_would_cycle(const LinkedList* target, const Expr* e) {
     if (ll_classify(e) != LL_BOXED) return false;      /* a machine number */
-    LLSeen seen = { NULL, 0, 0 };
-    bool r = reaches(e, target, &seen);
-    free(seen.v);
-    return r;
+    return reaches(e, target, ++g_ll_visit_epoch);
 }
 
 /* Emit Head::llcyc for storing `e`, and return NULL (call left unevaluated). */
@@ -697,6 +728,33 @@ static Expr* ll_cycle_error(const char* head, Expr* e) {
                 s ? s : "");
     free(s);
     return NULL;
+}
+
+/* ByteCount of a list and every LinkedList nested in it, iteratively: nested
+ * lists go on a worklist instead of the C stack (a 10^6-deep chain overflowed
+ * the recursive count). Every other boxed element is measured by `elem`. */
+int64_t ll_byte_count(const LinkedList* root, int64_t (*elem)(Expr*)) {
+    LLWork w = { NULL, 0, 0 };
+    int64_t total = ll_payload_bytes(root);
+    const LinkedList* l = root;
+    for (;;) {
+        if (l->kind == LL_BOXED) {
+            int64_t n = ll_length(l);
+            for (int64_t i = 0; i < n; i++) {
+                const Expr* e = ll_peek_boxed(l, i);
+                if (e->type == EXPR_LINKEDLIST) {
+                    total += (int64_t)sizeof(Expr) + ll_payload_bytes(e->data.llist);
+                    work_push(&w, e);
+                } else {
+                    total += elem((Expr*)e);
+                }
+            }
+        }
+        if (w.n == 0) break;
+        l = w.v[--w.n]->data.llist;
+    }
+    free(w.v);
+    return total;
 }
 
 /* ------------------------------------------------------------------------

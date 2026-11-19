@@ -314,6 +314,37 @@ void test_stack_messages() {
     assert_eval_eq("Quiet[Check[Push[cy, cy], failed]]", "failed", 0);
 }
 
+/* ------------------------------------------------- stress regressions */
+
+void test_deep_nesting_no_recursion() {
+    /* A 10^5-deep chain of lists: freeing it, the cycle check and ByteCount
+     * all overflowed the C stack when they recursed per level. */
+    assert_eval_eq("dc = LinkedList[]; dcur = dc; "
+                   "Do[dn = LinkedList[]; Push[dcur, dn]; dcur = dn, {100000}]; "
+                   "{Quiet[Check[Push[dcur, dc], rejected]], ByteCount[dc] > 10^6}",
+                   "{rejected, True}", 0);
+    assert_eval_eq("Clear[dc, dcur, dn]; done", "done", 0);
+}
+
+void test_abort_and_memory_limits_leave_list_consistent() {
+    assert_eval_eq("ta = LinkedList[]; "
+                   "{TimeConstrained[Do[Push[ta, i], {i, 10^9}], 0.1, aborted], "
+                   "Normal[ta] === Range[Length[ta]], Length[ta] > 0}",
+                   "{aborted, True, True}", 0);
+    assert_eval_eq("tm = LinkedList[]; "
+                   "{MemoryConstrained[Do[Push[tm, N[i]], {i, 10^8}], 10^7, overmem], "
+                   "Normal[tm] === N[Range[Length[tm]]], Length[tm] > 0}",
+                   "{overmem, True, True}", 0);
+}
+
+void test_identity_keys_and_sharing() {
+    assert_eval_eq("ik1 = LinkedList[]; ik2 = LinkedList[]; ias = <|ik1 -> 1, ik2 -> 2|>; "
+                   "Do[Push[ik1, i], {i, 100}]; {ias[ik1], ias[ik2]}", "{1, 2}", 0);
+    assert_eval_eq("sin = LinkedList[{1}]; sout = LinkedList[{sin, {sin}}]; Push[sin, 2]; "
+                   "{Normal[Normal[sout][[1]]], Normal[Normal[sout][[2, 1]]]}",
+                   "{{1, 2}, {1, 2}}", 0);
+}
+
 int main() {
     symtab_init();
     core_init();
@@ -333,6 +364,9 @@ int main() {
     TEST(test_stack_and_queue);
     TEST(test_mutation_invalidates_caches);
     TEST(test_stack_messages);
+    TEST(test_deep_nesting_no_recursion);
+    TEST(test_abort_and_memory_limits_leave_list_consistent);
+    TEST(test_identity_keys_and_sharing);
 
     printf("All LinkedList tests passed!\n");
     symtab_clear();

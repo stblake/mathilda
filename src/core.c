@@ -4503,18 +4503,12 @@ static int64_t byte_count_internal(Expr* e) {
             total += (int64_t)((size_t)e->data.ndarray.rank * sizeof(int64_t));
             total += (int64_t)(ndarray_size(e) * ndt_elem_size(e->data.ndarray.dtype));
             break;
-        case EXPR_LINKEDLIST: {
-            /* Header and chunk buffers, plus each boxed element's own bytes.
-             * (A list never contains itself: mutators reject cycles.) */
-            const LinkedList* ll = e->data.llist;
-            total += ll_payload_bytes(ll);
-            if (ll_kind(ll) == LL_BOXED) {
-                int64_t n = ll_length(ll);
-                for (int64_t i = 0; i < n; i++)
-                    total += byte_count_internal((Expr*)ll_peek_boxed(ll, i));
-            }
+        case EXPR_LINKEDLIST:
+            /* Header and chunk buffers plus every element's bytes, walking
+             * nested lists without recursion. (A list never contains itself:
+             * mutators reject cycles.) */
+            total += ll_byte_count(e->data.llist, byte_count_internal);
             break;
-        }
 #ifdef USE_MPFR
         case EXPR_MPFR:
             /* Significand storage scales with the value's precision in bits. */

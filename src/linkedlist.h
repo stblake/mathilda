@@ -106,6 +106,10 @@ Expr* ll_to_list(const LinkedList* ll);
  * itself -- a reference cycle no refcount could free? Mutators reject it. */
 bool  ll_would_cycle(const LinkedList* target, const Expr* e);
 
+/* Bytes held by `ll` and, recursively, by its elements -- iterative through
+ * nested LinkedLists; `elem` measures every other boxed element. */
+int64_t ll_byte_count(const LinkedList* ll, int64_t (*elem)(Expr*));
+
 /* ---- Expr-level helpers ----------------------------------------------- */
 /* The payload of an EXPR_LINKEDLIST node, or NULL for anything else. */
 LinkedList* expr_linkedlist(const Expr* e);

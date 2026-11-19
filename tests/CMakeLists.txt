@@ -1789,6 +1789,10 @@ add_executable(linkedlist_tests test_linkedlist.c $<TARGET_OBJECTS:mathilda_comm
 target_link_libraries(linkedlist_tests m)
 target_include_directories(linkedlist_tests PRIVATE ../src)
 add_test(NAME linkedlist_tests COMMAND linkedlist_tests)
+# Randomised differential stress of the storage core (nightly, by name).
+add_executable(linkedlist_stress_tests test_linkedlist_stress.c $<TARGET_OBJECTS:mathilda_common>)
+target_link_libraries(linkedlist_stress_tests m)
+target_include_directories(linkedlist_stress_tests PRIVATE ../src)
 
 add_executable(sow_reap_tests test_sow_reap.c $<TARGET_OBJECTS:mathilda_common>)
 target_link_libraries(sow_reap_tests m)

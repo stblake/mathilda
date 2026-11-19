@@ -1880,11 +1880,24 @@ NestWhileList/FixedPointList over a Bool accumulator passes `ct_is_elem` and cou
 reach it. Not yet reproduced; check under ASan with e.g.
 `Compile[{{x, True|False}}, NestWhileList[Not, x, # &, 1, 100]]`.
 
-## Open: AppendTo on a plain List is far worse than O(n^2) (measured 2026-11-19)
+## Open: AppendTo on a plain List -- O(n) per call with a memory-bound constant (diagnosed 2026-11-19)
 
-`l = {}; Do[AppendTo[l, i], {i, 10^5}]` took 224.7 s (v0.6625, macOS) -- ~2 ms per
-call at average length 5x10^4, i.e. roughly 40 ns per element copied, several times
-a plain O(n) copy, and the 10^4 case should be checked for the scaling exponent.
-LinkedList/Push is the O(1) alternative (10^5 pushes: 0.025 s), but AppendTo itself
-should be profiled (`sample` the process): suspect a re-canonicalisation or
-re-evaluation of the whole list per step on top of the copy.
+`l = {}; Do[AppendTo[l, i], {i, 10^5}]` takes 225 s. Diagnosis (sample + decomposition at
+n = 3x10^4, v0.6625):
+- It is genuinely O(n^2) -- every AppendTo is `l = Append[l, e]` on an immutable List --
+  not a hidden super-quadratic algorithm. Doubling ratios 3.7, 4.2, 5.1 come from the
+  constant rising as the list leaves cache: ~15 ns/element at n = 8x10^3, ~45 ns at 10^5.
+- Where the time goes per call: Append's copy (n pointer copies + n refcount bumps,
+  each a cache miss on a scattered element node) and the free of the old list (n
+  decrements) are ~90%; re-reading the rebound value (OwnValue Return-scan, re-walk)
+  is ~3 ns/element (~10%).
+- Fix options, cheapest first:
+  1. AppendTo/PrependTo offer their result to the packer (pack_offer), as producers
+     do: an all-machine-number list packs once it crosses the threshold and every later
+     Append is ndstruct_append's memcpy (~0.1 ns/element). Still O(n) per call.
+  2. Amortised O(1) in place: when the OwnValue node is a List with refcount 1 (only
+     the symbol table holds it), grow its args array geometrically (a capacity field in
+     the function struct's union slack, like the Association index) instead of copying;
+     invalidate hash_cache, keep/recompute the GROUND stamp, tick the eval clock.
+     Needs an audit of borrowed (non-refcounted) holders of OwnValue nodes.
+  LinkedList + Push is the O(1) alternative available now (10^5 pushes: 0.025 s).
