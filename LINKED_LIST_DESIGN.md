@@ -38,9 +38,10 @@ ll                                (* prints LinkedList[<3>] *)
 ```
 
 - **Atom.** `AtomQ[ll]` is True, `Head[ll]` is `LinkedList`, and `MatchQ[ll, _LinkedList]` is True. It prints as `LinkedList[<n>]` in StandardForm, InputForm and FullForm, because a mutable object has no readable literal form.
-- **Reference semantics.** `ll2 = ll` aliases the same list: a change through either name is visible through both. A copy is any copying head (`Take[ll, All]`, `LinkedList[Normal[ll]]`, …).
+- **Reference semantics.** `ll2 = ll` aliases the same list: a change through either name is visible through both. Passing `ll` to a function passes the same list, so a helper such as `enqueue[q_, x_] := Push[q, x]` changes its caller's list. A LinkedList is the one shared, mutable value in the system; §3.4 records why.
+- **Copy constructor.** `LinkedList[ll]` returns an independent **shallow** copy in O(n), copied chunk by chunk with memcpy, with the same storage kind. Boxed elements are shared by reference count, and a LinkedList stored inside `ll` is still the same object in the copy. There is no deep copy. Any copying head (`ll[[All]]`, `Take[ll, All]`, …) also returns a copy.
 - **Equality is identity.** `ll === ll2` is True exactly when they are the same object, and a list compares only with itself. Two different lists with equal elements are not `SameQ`. Compare their contents with `Normal[a] === Normal[b]`.
-- **Bad constructor arguments.** `LinkedList[x]`, where `x` is not a list, raises `LinkedList::list` and stays unevaluated. More than one argument raises `LinkedList::argt`.
+- **Bad constructor arguments.** `LinkedList[x]`, where `x` is neither a list nor a LinkedList, raises `LinkedList::list` and stays unevaluated. More than one argument raises `LinkedList::argt`.
 
 ### 3.2 Overloaded heads
 
@@ -91,6 +92,21 @@ Pop[s]                        (* b *)
 PopFirst[s]                   (* a *)
 Pop[s]                        (* Pop::empty, stays Pop[s] *)
 ```
+
+### 3.4 Decision: assignment shares, copying is explicit
+
+Three models were considered.
+
+1. **Pointer (chosen).** Assignment, argument passing, `With`, rule replacement and return values all share the one list.
+   - Assignment is O(1), and costs are predictable with no hidden copies.
+   - Helpers can change their caller's list, which stack, queue and graph-search code relies on.
+   - Compile arguments and auto-compiled globals work without write-back.
+   - The cost is that aliasing is visible, so it is documented here, in the docstring and in the user docs, and `LinkedList[ll]` is the obvious way to copy.
+2. **`Set` copies, nothing else does (rejected).** Values reach other places without `Set`: function arguments, `With`, `{ll, ll}`, Part taken from a container, return values. So `b = ll; Push[b, 1]` would leave `ll` alone while `f[ll]` changed it. That inconsistency is worse than either clean model, and `cur = ll` inside a loop would become O(n).
+3. **Value semantics with copy-on-write (rejected).** Mutate in place only when nothing else refers to the list; otherwise copy and rebind.
+   - Functions could no longer mutate a list (`q = enqueue[q, x]` everywhere).
+   - "Nothing else refers to it" is fragile: `Out[n]`, memo tables and evaluator temporaries hold references, which turns an apparent O(1) append into a silent O(n) copy.
+   - If value semantics is ever wanted, it belongs in plain Lists (spare capacity, so `AppendTo` on a List nobody else refers to is amortised O(1)), not in a new type.
 
 ## 4. Storage
 
@@ -274,8 +290,9 @@ Draft docstrings, in the usual `Name[args]\n\t…` form:
 ```
 LinkedList[]
 	Creates an empty mutable linked list. LinkedList[list] creates one holding
-	the elements of list (a List, packed array or NDArray). The object is shared
-	by reference: AppendTo, PrependTo, Push, Pop, PopFirst and Part assignment
+	the elements of list (a List, packed array or NDArray); LinkedList[ll]
+	returns an independent shallow copy of the linked list ll. Assignment and
+	argument passing share the same list rather than copying it: AppendTo, PrependTo, Push, Pop, PopFirst and Part assignment
 	change it in place, while Part, Take, Drop, Append, Delete, Map, ... return a
 	new LinkedList. Normal[ll] gives the elements as a List.
 
