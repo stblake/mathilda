@@ -4069,6 +4069,11 @@ answer is verified and its certificate is one for `f`:
   elementary (linearity; §E9). Two or more non-elementary groups: `Integrate::incomplete`
   (*several non-elementary support groups*). A group the methods cannot decide leaves
   f's own reason unchanged.
+- *A free square root* (v0.6648). A square root `Sqrt[b]` that occurs only outside
+  every `Log`, exponential and other radical, and is independent of the other radicals,
+  splits f into `(f + σf)/2` and `(f - σf)/2` (`σ: Sqrt[b] -> -Sqrt[b]`). f is elementary
+  iff both are (§E8 over the field of everything else; §E9). Tried when the support groups
+  leave two non-elementary groups or a group undecided.
 
 `E^x/Sqrt[1 + x^2] + (x Log[x] + Sqrt[2 + x^2] Log[x + Sqrt[2 + x^2]])/(x Sqrt[2 + x^2])`
 has a radical inside a logarithm and a second radical, so no single tower holds it; the
@@ -4129,7 +4134,7 @@ the uncertain steps of the C Risch DE, against a ratchet that only moves down.
 |---|---|
 | `Integrate[Sqrt[Log[x] + Sqrt[Log[x]]], x]` | unevaluated, `Integrate::incomplete` (nested radicals) |
 | `Integrate[Sqrt[x] + Sqrt[x + 1], x, Method -> "Bronstein"]` | `(2 x^(3/2) + 2 Sqrt[1 + x] + 2 x Sqrt[1 + x])/3` (Galois components, v0.6645) |
-| `Integrate[E^x/Sqrt[1 + x^2] + Log[x + Sqrt[2 + x^2]]/x, x, Method -> "Bronstein"]` | unevaluated, `Integrate::incomplete` (several non-elementary support groups) |
+| `Integrate[E^Sqrt[1 + x^3] + Log[x + Sqrt[2 + x^2]]/x, x, Method -> "Bronstein"]` | unevaluated, `Integrate::incomplete` (several non-elementary support groups) |
 | `Integrate[Sin[x] Sqrt[Log[x]], x, Method -> "Bronstein"]` | unevaluated, `Integrate::incomplete` (trigonometric kernel, not yet supported) |
 | `Integrate[Erf[x] Sqrt[Log[x]], x, Method -> "Bronstein"]` | unevaluated, no message |
 

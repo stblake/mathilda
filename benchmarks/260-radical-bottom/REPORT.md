@@ -1,13 +1,13 @@
 # Integration shootout: 260-radical-bottom (2026-11-21)
 
-420 cases, timeout 30 s per run, wall 11.8 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check.
+420 cases, timeout 30 s per run, wall 8.5 min. Every answer was verified by its own system (derivative at three points, 10^-20). `elem`/`special`: verified elementary / special-function answer; `cert`: Mathilda proved non-elementary; `wrong`: an answer failing its own check.
 
 ## Closed (elementary + special) by class
 
 | run | B radical at the bottom (420) | all |
 |---|---|---|
 | Mathilda:Automatic | 49% (204) | 49% (204) |
-| Mathilda:ParallelMixedTower | 35% (149) | 35% (149) |
+| Mathilda:ParallelMixedTower | 35% (148) | 35% (148) |
 | Mathilda:Bronstein | 37% (155) | 37% (155) |
 | FriCAS | 52% (217) | 52% (217) |
 
@@ -15,9 +15,9 @@
 
 | run | elem | special | cert | uneval | timeout | error | unverified | wrong | median s (closed) |
 |---|---|---|---|---|---|---|---|---|---|
-| Mathilda:Automatic | 173 | 31 | 134 | 81 | 0 | 0 | 1 | 0 | 0.04 |
-| Mathilda:ParallelMixedTower | 149 | 0 | 48 | 185 | 38 | 0 | 0 | 0 | 0.21 |
-| Mathilda:Bronstein | 155 | 0 | 159 | 106 | 0 | 0 | 0 | 0 | 0.04 |
+| Mathilda:Automatic | 173 | 31 | 171 | 45 | 0 | 0 | 0 | 0 | 0.07 |
+| Mathilda:ParallelMixedTower | 148 | 0 | 48 | 185 | 39 | 0 | 0 | 0 | 0.20 |
+| Mathilda:Bronstein | 155 | 0 | 200 | 65 | 0 | 0 | 0 | 0 | 0.04 |
 | FriCAS | 180 | 37 | 0 | 180 | 7 | 14 | 0 | 2 | 0.13 |
 
 ## Closed by family (Mathilda = best of its methods)

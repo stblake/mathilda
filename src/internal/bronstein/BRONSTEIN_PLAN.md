@@ -1786,6 +1786,10 @@ undecided by every Mathilda method (Bronstein, RischTranscendental, PMT, Automat
 - Found on the way: a held `Integrate::nonelem` raised under an inner `Quiet` printed
   after it (fixed, `mth_msg_quieted`).
 
+**Status (v0.6648).** D2: the free-square-root split (E8 over the field of everything
+else) took 260 from 81% to 90%, and all 60 `pert-nonelem` cases are certified. The open
+part of D2 is the separation lemma (two non-elementary groups with no free square root).
+
 **D0. Benchmark 260, radical at the bottom.** A generator like 259's
 (`tools/integration_shootout/gen_campaign.m`):
 - *elementary by construction:* `f = D[F]` with `F` random in `Q(x)(y)(t1..tk)`, `y` a

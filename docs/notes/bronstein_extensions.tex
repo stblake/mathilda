@@ -2123,8 +2123,30 @@ says nothing: $\int e^x/x$ and $\int -e^x/x$ are each non-elementary, and their 
 $0$. Over independent radicals the expected statement is a separation lemma. Let
 $g_i\in E_i$, where $E_1,E_2$ are towers over a common $T$, free over $T$ and with
 independent radicals. If $g_1+g_2$ is elementary, then $g_1-h$ and $g_2+h$ are elementary
-for some $h\in T$. It is not proved here, so the code answers \emph{several non-elementary
-support groups} (incomplete) in that case.
+for some $h\in T$. It is not proved here in that generality.
+
+\emph{The free square root (D2, \code{brFreeRadicalSplitIntegrate}).} One case needs no
+new lemma. Suppose a square root $y=\sqrt b$ occurs in $f$ only outside every logarithm,
+exponential and other radical. Let $E$ be the field generated over $\C(x)$ by everything
+else in $f$: the other radicals and the kernels. Then $E$ is a differential field, since
+no kernel's argument or derivative involves $y$. Suppose further that $b$ is not a
+square in $E$. Then $y\mapsto-y$ is a differential automorphism of $E(y)$ over $E$, and
+Proposition~\ref{prop:E8} with $K=E$ and $m=1$ applies: its proof uses only that $K$ is
+a differential field with algebraically closed constants. So $f$ has an elementary
+integral if and only if $f_0=(f+\sigma f)/2\in E$ and $f_1=(f-\sigma f)/2\in Ey$ both do.
+
+The code checks the hypotheses conservatively.
+\begin{itemize}
+\item $b$ must be independent of the other radicals (a Kummer group of full order).
+\item Every $x$-dependent exponent must sit on $e$, and no exponent may carry a
+  logarithm. Then every kernel is an exponential of an element without logarithms, or a
+  logarithm. Both are transcendental over the algebraic functions unless constant, so
+  the algebraic closure of $\C(x)(\text{radicals})$ in $E$ is that field itself, and $b$
+  is not a square in $E$.
+\end{itemize}
+Each component has one radical fewer, and the pipeline (including the support split)
+decides it. Two or more non-elementary support groups with no free square root remain
+\emph{several non-elementary support groups} (incomplete).
 
 \section*{T1. Parameters are constants, never unknowns (v0.6586, v0.6589, v0.6591, v0.6592)}
 \addcontentsline{toc}{section}{T1. Parameters}

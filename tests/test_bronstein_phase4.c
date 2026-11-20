@@ -94,7 +94,7 @@ static void test_support_split(void) {
     BR_TRUE("With[{f = D[Log[x] Log[x + Sqrt[2 + x^2]] + E^x Sqrt[1 + x^3], x]}, With[{F = BronsteinIntegrate[f, x]}, "
             "!ListQ[F] && Abs[N[(D[F, x] - f) /. x -> 13/10, 20]] < 10^-10]]");
     /* two non-elementary groups: undecided (D2), never a certificate */
-    BR_EQ("BronsteinIntegrate[E^x/Sqrt[1 + x^2] + Log[x + Sqrt[2 + x^2]]/x, x]",
+    BR_EQ("BronsteinIntegrate[E^Sqrt[1 + x^3] + Log[x + Sqrt[2 + x^2]]/x, x]",
           "{\"implementation incomplete\", \"several non-elementary support groups\"}");
     /* the groups: shared radicals join, at any depth; radical-free terms one group */
     BR_EQ("Length[brSupportGroups[{E^x Sqrt[x], Log[x + Sqrt[x]], Sqrt[1 + x], x, Log[x]}, x]]", "3");
@@ -102,6 +102,17 @@ static void test_support_split(void) {
     BR_EQ("Length[brSupportGroups[{E^x, Log[x]}, x]]", "1");
     BR_TRUE("brSupportSplitIntegrate[E^x/Sqrt[1 + x^2], x] === None");
     BR_TRUE("brSupportSplitBy[E^x Sqrt[x], {E^x Sqrt[x]}, x, False] === None");
+    /* D2: a square root outside every kernel, independent of the others, splits f
+     * into its two Galois components (E8 over the field of everything else) */
+    BR_EQ("BronsteinIntegrate[E^x/Sqrt[1 + x^2] + Log[x + Sqrt[2 + x^2]]/x, x][[1]]", "\"not elementary\"");
+    BR_EQ("brFreeRadicalSplitIntegrate[E^x/Sqrt[x] + Log[x + Sqrt[2 + x^2]]/x, x][[1]]", "\"not elementary\"");
+    BR_TRUE("brFreeRadicalSplitIntegrate[E^x/Sqrt[1 + x^2] + Log[x + Sqrt[1 + x^2]]/x, x] === None");   /* inside a kernel */
+    BR_TRUE("brFreeRadicalSplitIntegrate[E^x/Sqrt[x] + Sqrt[4 x] Log[x + Sqrt[2 + x^2]], x] === None"); /* dependent */
+    BR_TRUE("brFreeRadicalSplitIntegrate[Sqrt[x] (1 + x)^x + Log[x + Sqrt[2 + x^2]], x] === None");     /* a hidden kernel */
+    BR_TRUE("brFreeRadicalSplitIntegrate[E^x Sqrt[x], x] === None");                                     /* one radical */
+    BR_TRUE("With[{f = D[Sqrt[x] E^x + Log[x] Log[x + Sqrt[2 + x^2]], x]}, With[{F = brFreeRadicalSplitOne[f, x, x]}, "
+            "F =!= None && !ListQ[F] && Abs[N[(D[F, x] - f) /. x -> 13/10, 20]] < 10^-10]]");
+    BR_TRUE("brFreeRadicalSplitOne[Sqrt[x] E^x Log[x + Sqrt[2 + x^2]], x, x] === None");                 /* one component */
     /* two non-elementary groups that add up to an elementary one are merged:
      * E^Sqrt[1 + x^3] + D[x Log[x + Sqrt[3 + x^3]]] (256 bcurvep-1-9), whose
      * partition by kernels separates the algebraic term from Log[x + Sqrt[3 + x^3]] */
@@ -110,9 +121,9 @@ static void test_support_split(void) {
      * variable) must not leave a held Integrate::nonelem past its Quiet: here f
      * is undecided (two non-elementary groups), so Integrate::nonelem must not
      * fire at all; only Integrate::incomplete does */
-    BR_EQ("Check[Integrate[E^x/Sqrt[1 + x^2] + Log[x + Sqrt[2 + x^2]]/x, x, Method -> \"Bronstein\"]; \"none\", "
+    BR_EQ("Check[Integrate[E^Sqrt[1 + x^3] + Log[x + Sqrt[2 + x^2]]/x, x, Method -> \"Bronstein\"]; \"none\", "
           "\"nonelem\", {Integrate::nonelem}]", "\"none\"");
-    BR_EQ("Quiet[Check[Integrate[E^x/Sqrt[1 + x^2] + Log[x + Sqrt[2 + x^2]]/x, x, Method -> \"Bronstein\"]; \"none\", "
+    BR_EQ("Quiet[Check[Integrate[E^Sqrt[1 + x^3] + Log[x + Sqrt[2 + x^2]]/x, x, Method -> \"Bronstein\"]; \"none\", "
           "\"incomplete\", {Integrate::incomplete}]]", "\"incomplete\"");
     /* and a certified integrand still names the user's integrand, once */
     BR_EQ("Check[Integrate[Log[x + Sqrt[2 + x^2]]/x, x, Method -> \"Bronstein\"]; \"none\", \"nonelem\", {Integrate::nonelem}]",

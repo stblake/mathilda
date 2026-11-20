@@ -5,7 +5,7 @@ ctest -LE nightly -E dsolve, and make bench-integrate-vs-fricas.
 
 - [x] D0 benchmark 260 (generator, corpus, README, make bench-integrate-bottom) (radical at the bottom: elementary-by-construction, non-elementary-by-construction, random)
 - [x] D1 support groups (radicals, then kernels, pairwise merges): 45 of the 47 undecided class B decided
-- [ ] D2 theory note E9 + several non-elementary groups over independent radicals
+- [x] D2 free square root split (E8 over any base, E9 note): 260 81% -> 90% (separation lemma still open)
 - [ ] D3 Phase 5: E2, E1 notes; brDField; tower over Q(x)(y); Hermite/RT over k0; curve RDE over a tower; 19 cases
 - [ ] D4 Erf/Erfi/Ei/li as primitive monomials (C2.3); the 5 prim-rand cases with no answer and no certificate
 - [ ] D5 the 8 remaining 259 cases + gausshunt 8 (C2.4, C2.5)
