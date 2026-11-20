@@ -1705,8 +1705,9 @@ is still deficient for every other caller (reproducer and table:
      exponential normal form in the zero test (§T15). Tanh 151/160 True, tan over Q(i)
      157/160. v0.6633: a dependent exponential becomes a tower member (§T16): E^Tanh[u]
      decided. v0.6638: Gaussian offsets over k(i) (a symbol for E^I). v0.6639: the RDE over a split
-     tangent level by the Moebius change (§T17). Left: IntegrateHypertangent's "no" over Tanh / k(i), a hypertangent top over a field with I,
-     LimitedIntegrate below the top. Next: steps 2, 4 (remaining), 5, 6 and 9.
+     tangent level by the Moebius change (§T17). v0.6640: the integrator's "no" over a split
+     tangent level, and real Tan over a tower via k(i), by the same change. Left:
+     LimitedIntegrate below the top (Log[u] Tanh[u]). Next: steps 2, 4 (remaining), 5, 6 and 9.
 
 ### Phase 5: the radical anywhere (largest; theory first)
 

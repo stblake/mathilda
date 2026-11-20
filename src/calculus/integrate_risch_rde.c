@@ -2677,74 +2677,24 @@ static Expr* rde_weak_normalizer(Expr* f, Expr* x) {
  * solution" is one here.  The tower is copied with level m replaced (levels
  * 0..m only; the lower ones are shared, borrowed).  f, g borrowed; y owned. */
 static Expr* rde_tower_mobius(Expr* f, Expr* g, RdeCtx* C, Expr* alpha) {
-    RtTower* T = C->T;
-    long m = C->m;
-    Expr* t = T->t[m];
-    Expr* a2 = expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_copy(alpha), expr_new_integer(2) }, 2);
-    Expr* t2 = expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_copy(t), expr_new_integer(2) }, 2);
-    Expr* den = expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ a2,
-        expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), t2 }, 2) }, 2);
-    Expr* a = rt_eval1("Together", rt_eval_own(expr_new_function(expr_new_symbol("Times"), (Expr*[]){
-        expr_new_integer(2), expr_copy(alpha), rt_dt_i(T, (size_t)m),
-        expr_new_function(expr_new_symbol("Power"), (Expr*[]){ den, expr_new_integer(-1) }, 2) }, 4)));
-    if (!a || !rt_free_of_x(a, t)) {
-        if (a) expr_free(a);
+    RtTower T2;
+    Expr* to = NULL; Expr* from = NULL;
+    if (!rt_tower_mobius(C->T, (size_t)C->m, alpha, &T2, &to, &from)) {
         rde_cert_mark("tower: split tangent top, Dtheta/theta not in k");
         return NULL;
     }
-    /* the copy: levels 0..m, level m the exponential theta */
-    size_t n = (size_t)m + 1;
-    RtTower T2 = *T;
-    T2.n = n;
-    T2.kind = malloc(n * sizeof(RtKind));
-    T2.t = malloc(n * sizeof(Expr*));
-    T2.Dcoef = malloc(n * sizeof(Expr*));
-    T2.tsg = malloc(n * sizeof(long));
-    T2.kernel = malloc(n * sizeof(Expr*));
-    T2.arg = malloc(n * sizeof(Expr*));
-    for (size_t i = 0; i < n; i++) {
-        T2.kind[i] = T->kind[i]; T2.t[i] = T->t[i]; T2.Dcoef[i] = T->Dcoef[i];
-        T2.tsg[i] = T->tsg[i]; T2.kernel[i] = T->kernel[i]; T2.arg[i] = T->arg[i];
-    }
-    char nm[48];
-    snprintf(nm, sizeof nm, "Risch`Private`rmMob%ld", m);
-    Expr* th = expr_new_symbol(nm);
-    /* theta's exponent, 2 v / alpha: 2 v for Tanh[v], -2 I v for Tan[v]
-     * (D of it is a; recorded for completeness, the RDE reads only Dcoef) */
-    Expr* argm = rt_eval_own(expr_new_function(expr_new_symbol("Times"), (Expr*[]){
-        expr_new_integer(2), expr_new_function(expr_new_symbol("Power"),
-            (Expr*[]){ expr_copy(alpha), expr_new_integer(-1) }, 2), expr_copy(T->arg[m]) }, 3));
-    T2.kind[m] = RT_EXP; T2.tsg[m] = 0; T2.t[m] = th; T2.Dcoef[m] = a; T2.arg[m] = argm;
-    T2.kernel[m] = expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_new_symbol("E"), expr_copy(argm) }, 2);
-    /* t = alpha (theta - 1)/(theta + 1) */
-    Expr* tin = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_copy(alpha),
-        expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(th), expr_new_integer(-1) }, 2),
-        expr_new_function(expr_new_symbol("Power"), (Expr*[]){
-            expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(th), expr_new_integer(1) }, 2),
-            expr_new_integer(-1) }, 2) }, 3);
-    Expr* r1 = expr_new_function(expr_new_symbol("Rule"), (Expr*[]){ expr_copy(t), tin }, 2);
-    Expr* f2 = rt_eval1("Together", rt_eval2("ReplaceAll", expr_copy(f), expr_copy(r1)));
-    Expr* g2 = rt_eval1("Together", rt_eval2("ReplaceAll", expr_copy(g), r1));
+    Expr* f2 = rt_eval1("Together", rt_eval2("ReplaceAll", expr_copy(f), expr_copy(to)));
+    Expr* g2 = rt_eval1("Together", rt_eval2("ReplaceAll", expr_copy(g), expr_copy(to)));
     Expr* y = NULL;
     if (f2 && g2) {
-        RdeCtx C2 = { &T2, m, C->x, th };
+        RdeCtx C2 = { &T2, C->m, C->x, T2.t[C->m] };
         Expr* y2 = rde_tower(f2, g2, &C2);
-        if (y2) {
-            /* theta = (alpha + t)/(alpha - t) */
-            Expr* tout = expr_new_function(expr_new_symbol("Times"), (Expr*[]){
-                expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(alpha), expr_copy(t) }, 2),
-                expr_new_function(expr_new_symbol("Power"), (Expr*[]){
-                    expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(alpha),
-                        expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), expr_copy(t) }, 2) }, 2),
-                    expr_new_integer(-1) }, 2) }, 2);
-            y = rt_eval1("Together", rt_eval2("ReplaceAll", y2,
-                expr_new_function(expr_new_symbol("Rule"), (Expr*[]){ expr_copy(th), tout }, 2)));
-        }
+        if (y2) y = rt_eval1("Together", rt_eval2("ReplaceAll", y2, expr_copy(from)));
     }
     if (f2) expr_free(f2);
     if (g2) expr_free(g2);
-    expr_free(T2.kernel[m]); expr_free(argm); expr_free(a); expr_free(th);
-    free(T2.kind); free(T2.t); free(T2.Dcoef); free(T2.tsg); free(T2.kernel); free(T2.arg);
+    expr_free(to); expr_free(from);
+    rt_tower_mobius_free(&T2);
     return y;
 }
 

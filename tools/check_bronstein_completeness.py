@@ -174,10 +174,8 @@ BASELINE_C = {
     # a constant field beyond Q(i)(params, Pi): Log[2], E, EulerGamma, ... with a
     # tower log that can interact with it (T3, T12)
     "decide: transcendental constant",
-    # a hypertangent "no" is a theorem only over k = C(x), real, Tan: over a taller
-    # tower the driver solves its coupled system over C(x) only; Tanh and k(i) are
-    # the split special part (steps 4, 5)
-    "hypertangent top: IntegrateHypertangent's no over a tower, Tanh, or k(i)",
+    # two tangent levels can be dependent (Tan[2 u] = 2 t/(1 - t^2)): campaign step 6
+    "hypertangent top: another tangent level below",
 }
 
 # rde_cert_mark reasons that are permanent: a computation the CAS could not do,
@@ -237,9 +235,8 @@ CAS_FAILURE_MARKS = {
     "decide: kernels left after substitution",
     "decide: antiderivative not verified",
     "decide: a polynomial primitive did not evaluate",
-    # the hypertangent driver is total on a well-formed k(t) element; defensive
-    "hypertangent top: the driver did not evaluate",
-    "hypertangent top: the driver's remainder is not in k",
+    # Prop. T17 on the integration side (rt_field_mobius): as for the RDE
+    "hypertangent top: split tangent, Dtheta/theta not in k",
 }
 
 

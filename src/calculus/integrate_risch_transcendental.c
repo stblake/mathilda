@@ -741,6 +741,23 @@ static bool rt_tower_answer_verified(Expr* Q, RtTower* T, Expr* f, Expr* x) {
  * tower has exactly one hypertangent level and no Liouvillian primitive, so
  * that tan u is a monomial -- two tangents can be dependent (Tan[2 x] is
  * rational in Tan[x]) and an ArcTan-type primitive can make Tan algebraic. */
+/* fx (borrowed) a rational function of x over the constants: Together, then
+ * numerator and denominator polynomials in x. */
+static bool rt_rational_in_x(Expr* fx, Expr* x) {
+    if (rt_find_exp_of_x(fx, x) || rt_find_log_of_x(fx, x)) return false;
+    Expr* tg = rt_eval1("Together", expr_copy(fx));
+    if (!tg) return false;
+    bool ok = true;
+    for (int i = 0; i < 2 && ok; i++) {
+        Expr* p = rt_eval1(i ? "Denominator" : "Numerator", expr_copy(tg));
+        Expr* q = p ? rt_eval2("PolynomialQ", p, expr_copy(x)) : NULL;
+        ok = q && rt_is_true(q);
+        if (q) expr_free(q);
+    }
+    expr_free(tg);
+    return ok;
+}
+
 static RtDecision rt_decide_tower(Expr* fx, Expr* x, bool tan_route) {
     RtTower T;
     /* min_n = 1: the decision routes SINGLE-kernel integrands (E^x/x, E^(x^2),
@@ -750,8 +767,13 @@ static RtDecision rt_decide_tower(Expr* fx, Expr* x, bool tan_route) {
      * falls back to the exponential route), so a silent decline is visible to
      * tools/check_bronstein_completeness.py and to the hunts' mark sets */
     if (!rt_tower_build_decide(fx, x, &T, 1)) {
+        rt_tower_free(&T);
+        /* no kernel left: the rewrite made a rational function of x
+         * (TrigToExp[Tanh[Log[x]]] = (x^2 - 1)/(x^2 + 1)), whose integral is
+         * elementary */
+        if (rt_rational_in_x(fx, x)) return RT_DEC_ELEMENTARY;
         if (!tan_route) rde_cert_mark("decide: tower could not be built");
-        rt_tower_free(&T); return RT_DEC_UNKNOWN;
+        return RT_DEC_UNKNOWN;
     }
     if (tan_route) {
         size_t ntan = 0; bool scope = true;

@@ -1333,6 +1333,77 @@ Expr* rt_dt_i(RtTower* T, size_t i) {
     return expr_new_function(expr_new_symbol("Times"),   /* RT_EXP: Dcoef * t */
         (Expr*[]){ expr_copy(T->Dcoef[i]), expr_copy(T->t[i]) }, 2);
 }
+bool rt_tower_mobius(RtTower* T, size_t m, Expr* alpha, RtTower* T2,
+                     Expr** to_theta, Expr** from_theta) {
+    Expr* t = T->t[m];
+    Expr* den = expr_new_function(expr_new_symbol("Plus"), (Expr*[]){
+        expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_copy(alpha), expr_new_integer(2) }, 2),
+        expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1),
+            expr_new_function(expr_new_symbol("Power"), (Expr*[]){ expr_copy(t), expr_new_integer(2) }, 2) }, 2) }, 2);
+    Expr* a = rt_eval1("Together", rt_eval_own(expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+        expr_new_integer(2), expr_copy(alpha), rt_dt_i(T, m),
+        expr_new_function(expr_new_symbol("Power"), (Expr*[]){ den, expr_new_integer(-1) }, 2) }, 4)));
+    if (!a || !rt_free_of_x(a, t)) { if (a) expr_free(a); return false; }
+    size_t n = m + 1;
+    *T2 = *T;
+    T2->n = n;
+    T2->kind = malloc(n * sizeof(RtKind));
+    T2->t = malloc(n * sizeof(Expr*));
+    T2->Dcoef = malloc(n * sizeof(Expr*));
+    T2->tsg = malloc(n * sizeof(long));
+    T2->kernel = malloc(n * sizeof(Expr*));
+    T2->arg = malloc(n * sizeof(Expr*));
+    for (size_t i = 0; i < n; i++) {
+        T2->kind[i] = T->kind[i]; T2->t[i] = T->t[i]; T2->Dcoef[i] = T->Dcoef[i];
+        T2->tsg[i] = T->tsg[i]; T2->kernel[i] = T->kernel[i]; T2->arg[i] = T->arg[i];
+    }
+    char nm[48];
+    snprintf(nm, sizeof nm, "Risch`Private`rmMob%zu", m);
+    Expr* th = expr_new_symbol(nm);
+    /* theta's exponent 2 v/alpha: 2 v for Tanh[v], -2 I v for Tan[v] */
+    Expr* argm = rt_eval_own(expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+        expr_new_integer(2), expr_new_function(expr_new_symbol("Power"),
+            (Expr*[]){ expr_copy(alpha), expr_new_integer(-1) }, 2), expr_copy(T->arg[m]) }, 3));
+    T2->kind[m] = RT_EXP; T2->tsg[m] = 0; T2->t[m] = th; T2->Dcoef[m] = a; T2->arg[m] = argm;
+    T2->kernel[m] = expr_new_function(expr_new_symbol("Power"),
+        (Expr*[]){ expr_new_symbol("E"), expr_copy(argm) }, 2);
+    Expr* tin = expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_copy(alpha),
+        expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(th), expr_new_integer(-1) }, 2),
+        expr_new_function(expr_new_symbol("Power"), (Expr*[]){
+            expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(th), expr_new_integer(1) }, 2),
+            expr_new_integer(-1) }, 2) }, 3);
+    /* subrules: the tangent kernel now reads as a rational function of theta */
+    Expr* sr = expr_copy(T->subrules);
+    if (sr && sr->type == EXPR_FUNCTION) {
+        for (size_t i = 0; i < sr->data.function.arg_count; i++) {
+            Expr* r = sr->data.function.args[i];
+            if (r && r->type == EXPR_FUNCTION && r->data.function.arg_count == 2
+                && expr_eq(r->data.function.args[1], t)) {
+                Expr* nr = expr_new_function(expr_new_symbol("Rule"),
+                    (Expr*[]){ expr_copy(r->data.function.args[0]), expr_copy(tin) }, 2);
+                expr_free(r);
+                sr->data.function.args[i] = nr;
+            }
+        }
+    }
+    T2->subrules = sr;
+    *to_theta = expr_new_function(expr_new_symbol("Rule"), (Expr*[]){ expr_copy(t), tin }, 2);
+    *from_theta = expr_new_function(expr_new_symbol("Rule"), (Expr*[]){ expr_copy(th),
+        expr_new_function(expr_new_symbol("Times"), (Expr*[]){
+            expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(alpha), expr_copy(t) }, 2),
+            expr_new_function(expr_new_symbol("Power"), (Expr*[]){
+                expr_new_function(expr_new_symbol("Plus"), (Expr*[]){ expr_copy(alpha),
+                    expr_new_function(expr_new_symbol("Times"), (Expr*[]){ expr_new_integer(-1), expr_copy(t) }, 2) }, 2),
+                expr_new_integer(-1) }, 2) }, 2) }, 2);
+    return true;
+}
+void rt_tower_mobius_free(RtTower* T2) {
+    size_t m = T2->n - 1;
+    expr_free(T2->kernel[m]); expr_free(T2->arg[m]); expr_free(T2->Dcoef[m]); expr_free(T2->t[m]);
+    if (T2->subrules) expr_free(T2->subrules);
+    free(T2->kind); free(T2->t); free(T2->Dcoef); free(T2->tsg); free(T2->kernel); free(T2->arg);
+    T2->n = 0; T2->subrules = NULL;
+}
 /* Tower derivation D_tower[e] = D[e,x] + sum_i Dt_i D[e,t_i], with Dt_i from
  * rt_dt_i (log / exp / tan).  Owned result. */
 Expr* rt_tower_deriv(Expr* e, RtTower* T, Expr* x) {

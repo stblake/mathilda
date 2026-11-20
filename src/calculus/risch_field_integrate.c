@@ -1140,6 +1140,38 @@ static Expr* rt_field_hyperexp_coupled(Expr* num, Expr* den, RtTower* T, long L,
  * field is a deeper tower a wrong g may result, but the caller's exact
  * D_tower[Q] == F verification (rt_recursive_tower_case) rejects it — so this path
  * is SOUND (declines) even where it is not yet complete. */
+/* A split tangent top (Tanh, alpha = 1; Tan with alpha = I) integrated as the
+ * exponential theta = (alpha + t)/(alpha - t) (rt_tower_mobius; Bronstein,
+ * Symbolic Integration I, p. 166).  k(t) = k(theta) is an isomorphism of
+ * differential fields over k, so the exponential pipeline's answer maps back
+ * exactly and its authoritative "no" (rt_dec_nonelem) is one for k(t).  For
+ * Tan over a field without I the integration is over k(i)(t): an integrand of
+ * k(t) has an elementary integral over k(t) iff it has one over k(i)(t)
+ * (Liouville's theorem allows algebraic constants), so the "no" still holds.
+ * Its uncertain steps mark the certification scope themselves.  Fg borrowed;
+ * the antiderivative (tower-variable form, in t) owned, or NULL. */
+static Expr* rt_field_mobius(Expr* Fg, RtTower* T, long L, Expr* x, Expr* alpha) {
+    RtTower T2;
+    Expr* to = NULL; Expr* from = NULL;
+    if (!rt_tower_mobius(T, (size_t)L, alpha, &T2, &to, &from)) {
+        rde_cert_mark("hypertangent top: split tangent, Dtheta/theta not in k");
+        return NULL;
+    }
+    Expr* F2 = rt_eval1("Together", rt_eval2("ReplaceAll", expr_copy(Fg), expr_copy(to)));
+    Expr* res = NULL;
+    if (F2) {
+        Expr* rem = NULL;
+        Expr* q = rt_field_integrate(F2, &T2, L, x, &rem);
+        if (q && rem && !rt_is_zero(rem)) { expr_free(q); q = NULL; }  /* partial: no answer */
+        if (rem) expr_free(rem);
+        if (q) res = rt_eval1("Together", rt_eval2("ReplaceAll", q, expr_copy(from)));
+        expr_free(F2);
+    }
+    expr_free(to); expr_free(from);
+    rt_tower_mobius_free(&T2);
+    return res;
+}
+
 static Expr* rt_int_hypertangent_field(Expr* Fg, RtTower* T, long L, Expr* x) {
     /* deriv = {x -> 1, t_0 -> Dt_0, ..., t_L -> Dt_L}, all in tower-variable form. */
     Expr** rules = malloc((size_t)(L + 2) * sizeof(Expr*));
@@ -1158,6 +1190,7 @@ static Expr* rt_int_hypertangent_field(Expr* Fg, RtTower* T, long L, Expr* x) {
         (Expr*[]){ expr_copy(Fg), expr_copy(T->t[L]), expr_copy(deriv) }, 3);
     bool und = risch_coupled_undecided_count() != und0;   /* a coupled-system RDE undecided */
     Expr* result = NULL;
+    bool certified = false;   /* the driver's "no" is a theorem (k = C(x), real Tan) */
     if (res && rt_head_is(res, "List") && res->data.function.arg_count == 2
         && rt_is_true(res->data.function.args[1])) {
         Expr* g = res->data.function.args[0];    /* borrowed, tower-var form */
@@ -1176,8 +1209,8 @@ static Expr* rt_int_hypertangent_field(Expr* Fg, RtTower* T, long L, Expr* x) {
                 result = rt_eval_own(expr_new_function(expr_new_symbol("Plus"),
                     (Expr*[]){ expr_copy(g), ib }, 2));
         }
-        if (base && !rt_free_of_x(base, T->t[L]))
-            rde_cert_mark("hypertangent top: the driver's remainder is not in k");
+        /* a remainder not in k: the driver's g is no answer; the Moebius
+         * route below decides instead */
         if (base) expr_free(base);
     } else if (res && rt_head_is(res, "List") && res->data.function.arg_count == 2) {
         /* beta False: "f - D[g] has no elementary integral over k(t)".  Every
@@ -1188,11 +1221,33 @@ static Expr* rt_int_hypertangent_field(Expr* Fg, RtTower* T, long L, Expr* x) {
          * is not a proof; nor is one for Tanh, or over k(i), where the special
          * polynomial splits (campaign step 4).  It used to be dropped silently
          * (a silent decline of the decision, f8 hunt 2026-11-19). */
-        if (L == 0 && T->tsg[L] > 0 && rt_free_of_head(Fg, "Complex") && !und) rt_dec_nonelem();
-        else rde_cert_mark("hypertangent top: IntegrateHypertangent's no over a tower, Tanh, or k(i)");
-    } else rde_cert_mark("hypertangent top: the driver did not evaluate");
+        if (L == 0 && T->tsg[L] > 0 && rt_free_of_head(Fg, "Complex") && !und) {
+            rt_dec_nonelem();
+            certified = true;
+        }
+    }
     if (res) expr_free(res);
     expr_free(deriv);
+    /* Every other failure -- a "no" over a tower, for Tanh, or over k(i), where
+     * the special polynomial splits or the coupled system is solved over C(x)
+     * only, or a driver that did not finish -- is decided by the Moebius change
+     * to an exponential (campaign step 4; note T17).  Its own steps raise the
+     * certificate or mark the scope. */
+    /* Only over a tower with this one tangent: two tangents can be dependent
+     * (Tan[2 u] is rational in Tan[u]), so no certificate is read off such a
+     * tower, and the substituted integrand there grows past what Together
+     * finishes (Tan[u/2] beside Tan[u]: over 120 s, the multitangent hunt). */
+    size_t ntan = 0;
+    for (long i = 0; i <= L; i++) if (T->kind[i] == RT_TAN) ntan++;
+    if (!result && !certified && ntan > 1)
+        rde_cert_mark("hypertangent top: another tangent level below");
+    if (!result && !certified && ntan == 1) {
+        Expr* alpha = T->tsg[L] < 0 ? expr_new_integer(1)
+            : expr_new_function(expr_new_symbol("Complex"),
+                  (Expr*[]){ expr_new_integer(0), expr_new_integer(1) }, 2);
+        result = rt_field_mobius(Fg, T, L, x, alpha);
+        expr_free(alpha);
+    }
     return result;
 }
 

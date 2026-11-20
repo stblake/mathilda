@@ -108,6 +108,20 @@ Expr* rt_tower_deriv(Expr* e, RtTower* T, Expr* x);
 Expr* rt_dt_i(RtTower* T, size_t i);              /* Dt_i (log/exp/tan), owned */
 Expr* rt_build_deriv_rules(RtTower* T, Expr* x);  /* List[Rule[var, Dvar], ...] */
 
+/* The Moebius change at a split tangent level m (Tanh, alpha = 1; Tan over
+ * k(i), alpha = I; Bronstein, Symbolic Integration I, p. 166):
+ * theta = (alpha + t)/(alpha - t) has D theta/theta = 2 alpha Dt/(alpha^2 - t^2)
+ * = a in K_{m-1}, so k(t) = k(theta) with theta an exponential monomial.
+ * Fills T2 with levels 0..m of T, level m replaced by theta (the lower levels
+ * and the member tables borrowed from T; subrules rewritten so the tangent
+ * kernel maps to alpha (theta - 1)/(theta + 1)).  *to_theta is the Rule
+ * t -> alpha (theta - 1)/(theta + 1), *from_theta theta -> (alpha + t)/(alpha - t)
+ * (both owned).  False (T2 untouched) when a is not free of t.  Release T2
+ * with rt_tower_mobius_free, never rt_tower_free. */
+bool  rt_tower_mobius(RtTower* T, size_t m, Expr* alpha, RtTower* T2,
+                      Expr** to_theta, Expr** from_theta);
+void  rt_tower_mobius_free(RtTower* T2);
+
 /* Structural (non-evaluating) substitution of tower kernels -> tower variables. */
 Expr* rt_subst_kernels(Expr* e, RtTower* T);
 

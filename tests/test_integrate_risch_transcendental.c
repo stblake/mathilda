@@ -1916,6 +1916,31 @@ static void test_campaign_step4_dependent_exp(void) {
                    "Risch`ElementaryIntegralQ", 0);
 }
 
+/* Campaign step 4, the integration side (note T17): a "no" of the
+ * hypertangent driver over a tower, for Tanh, or over k(i) is decided by the
+ * Moebius change theta = (alpha + t)/(alpha - t) to an exponential. */
+static void test_campaign_step4_hypertangent_mobius(void) {
+    /* real Tan over the tower C(u, E^u): integrated over k(i)(t) with
+       alpha = I; Int E^u Tan[u] is hypergeometric, not elementary */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[E^u Tan[u], u]]", "False", 0);
+    /* elementary ones over the same towers stay True */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[E^u Tan[u]^2, u], u]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[Log[u] Tanh[u], u], u]]", "True", 0);
+    /* from the Tanh hunt (seeds 1401, 1402), undecided before: elementary
+       by construction */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[(Log[u] Tanh[u]^2)/(2 (1 + Tanh[u]))"
+                   " + Log[u + Tanh[u]]^2/(2 (2 + Tanh[u]^2)), u], u]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[D[(E^u Coth[1 + u] Log[1 + Tanh[1 + u]])/2"
+                   " + 1/(2 (1 + Tanh[1 + u]) (1 - Tanh[1 + u]^2)), u], u]]", "True", 0);
+    /* rational once rewritten in exponentials: (u^2 - 1)/(u^2 + 1) */
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[Tanh[Log[u]], u]]", "True", 0);
+    assert_eval_eq("Quiet[Risch`ElementaryIntegralQ[Tanh[Log[u]]/u^2, u]]", "True", 0);
+    /* two tangent levels (Tan[u/2] below Tan[u]): no Moebius change, no
+       certificate, and the answer is still found (was over 120 s) */
+    assert_eval_eq("TimeConstrained[Quiet[Risch`ElementaryIntegralQ[D[u/((1 + u) (1 + Tan[u/2]) (1 + Tan[u]^2)), u], u]], 60, $TO]",
+                   "True", 0);
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -2035,6 +2060,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_campaign_step4_tanh_groundwork);
     TEST(test_campaign_step4_verify_cost);
     TEST(test_campaign_step4_dependent_exp);
+    TEST(test_campaign_step4_hypertangent_mobius);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }
