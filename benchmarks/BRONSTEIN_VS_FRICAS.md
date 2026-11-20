@@ -56,7 +56,7 @@ fixed (C0, v0.6642).
   exponentials differing by a constant over `Q(i)`. The minimal case is
   `integrate(exp(1+2*%i*x)/(1+exp(%i*x)), x)`, whose integral is
   `-%i*%e*(exp(%i*x) - log(1+exp(%i*x)))`. A draft report for FriCAS is in
-  `benchmarks/FRICAS_UPSTREAM_DRAFT.md` (not submitted).
+  `benchmarks/FRICAS_UPSTREAM_REPORT.md`, submitted as https://github.com/fricas/fricas/issues/249.
 - **FriCAS: 40 answers fail their derivative check** at the real points. Rechecked in FriCAS,
   18 of them are formally correct (`normalize(D(r, x) - f) = 0`, a branch choice); for the
   other 22, `normalize` does not reach 0 on the nested radicals, so they are unresolved.

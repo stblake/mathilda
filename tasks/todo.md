@@ -12,7 +12,7 @@ ctest -LE nightly -E dsolve, and make bench-integrate-vs-fricas.
 - [x] D5 (v0.6649): 6 of 7 259 cases; f12-elem-7 open (exponent lattice HNF)
 - [ ] D6 speed: 43 cases over 1 s; evaluator scoping change (user decision: a/b/c)
 - [x] D7 (v0.6650): 10 of the 18 special-function cases
-- [ ] D8 submit the FriCAS report (user approval)
+- [x] D8 FriCAS report submitted: https://github.com/fricas/fricas/issues/249
 
 # MemoryConstrained (started 2026-11-19)
 

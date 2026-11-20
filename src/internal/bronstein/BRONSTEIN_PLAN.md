@@ -1776,7 +1776,7 @@ undecided by every Mathilda method (Bronstein, RischTranscendental, PMT, Automat
 | D5 | The remaining 259 elementary cases (C2.4, C2.5) | 8: `tan-elem-26`, `gauss-elem-19/23/27`, `f12-elem-7`, `gauss-rand-31`, `lim-rand-34`, plus the hunts' `gausshunt` 8 | medium | none undecided where FriCAS decides; gausshunt 0 |
 | D6 | Speed (C4) | 43 cases over 1 s (256: `lccontent` 10, `expcube` 7, Trager 8; 257: `cM` 7, `cA` 3; 259: 7) | medium, plus one design decision | the C4 criterion: no shared case over 5 s, p90 within 2x of FriCAS |
 | D7 | Special-function answers (C5) | 18 cases FriCAS closes and Mathilda only certifies | medium | those 18 closed and verified |
-| D8 | FriCAS upstream report | draft in `benchmarks/FRICAS_UPSTREAM_DRAFT.md` | trivial | submitted (needs the user's approval) |
+| D8 | FriCAS upstream report | `benchmarks/FRICAS_UPSTREAM_REPORT.md` | trivial | done: fricas/fricas#249 (2026-11-21), with Mathilda's verified answers |
 
 **Status (v0.6647).** D0 and D1 landed.
 - D1 grew three steps beyond the prototype: a second partition by kernels, pairwise merges
@@ -1887,7 +1887,7 @@ li), after D4: when the decision says "not elementary", try the Liouvillian exte
 the field by one `Ei`, `Erf`, `li` or `PolyLog[2, .]` with D4's machinery (the existing
 Cherry Ei engine for the `Ei`/`Erf` shapes), and return a verified closed form.
 
-**D8. FriCAS report.** Submit `benchmarks/FRICAS_UPSTREAM_DRAFT.md` once the user approves.
+**D8. FriCAS report.** Submitted 2026-11-21 as https://github.com/fricas/fricas/issues/249 (`benchmarks/FRICAS_UPSTREAM_REPORT.md`): the minimal case and three more, each with Mathilda's antiderivative verified in FriCAS.
 
 **Order.** D0 and D1 together, then D5 (small, independent), then D4, then the D2 and D3
 theory notes, then D3's code, with D6's profiling done alongside each. D7 after D4. Each item
@@ -1913,7 +1913,7 @@ Open:
 - C3.1 (Phase 5);
 - C4's evaluator change (substitute_scoping dominates the Bronstein `.m` tail; needs a
   per-node symbol summary in Expr);
-- C5: special-function answers, and submitting `benchmarks/FRICAS_UPSTREAM_DRAFT.md`
+- C5: special-function answers, and submitting the FriCAS report (done: fricas/fricas#249)
   (14 FriCAS false "no", minimal case verified).
 
 `benchmarks/BRONSTEIN_VS_FRICAS.md` (`make bench-integrate-vs-fricas`) compares, at

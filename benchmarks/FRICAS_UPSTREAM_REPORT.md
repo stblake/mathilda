@@ -1,7 +1,15 @@
-# Draft upstream report for FriCAS: an elementary integral left unevaluated (false "not elementary")
+# FriCAS upstream report (submitted)
 
-*Draft, not submitted. Found by the Mathilda–FriCAS comparison (`benchmarks/BRONSTEIN_VS_FRICAS.md`,
-benchmark 259, the `gauss` family). Reproduced with FriCAS 1.3.6 (2022-11-13 build).*
+Submitted 2026-11-21 as https://github.com/fricas/fricas/issues/249. Every antiderivative in it
+is Mathilda's, verified in FriCAS 1.3.6 by `normalize` / `complexNormalize` of `D(r, x) - f`.
+The earlier draft listed `integrate(D(x*exp(1+2*%i*x)/(1+exp(%i*x)), x), x)` as left
+unevaluated; FriCAS in fact integrates that one, so it was dropped.
+
+The text as submitted:
+
+---
+
+FriCAS 1.3.6 (2022-11-13 build) returns these integrals unevaluated, which normally means the Risch algorithm proved that no elementary antiderivative exists. Each one does have an elementary antiderivative. The answers below were computed by the Mathilda CAS, and each was verified in FriCAS itself: `normalize` or `complexNormalize` of `D(r, x) - f` gives `0`.
 
 ## Minimal example
 
@@ -9,7 +17,7 @@ benchmark 259, the `gauss` family). Reproduced with FriCAS 1.3.6 (2022-11-13 bui
 integrate(exp(1+2*%i*x)/(1+exp(%i*x)), x)
 ```
 
-FriCAS returns the integral unevaluated:
+FriCAS returns:
 
 ```
    x   2 %i %A + 1
@@ -19,37 +27,34 @@ FriCAS returns the integral unevaluated:
       %e      + 1
 ```
 
-An unevaluated `integrate` from FriCAS means the Risch algorithm has proved that there is no
-elementary antiderivative. This integral is elementary. With `t = exp(%i*x)` and
-`dt = %i*t*dx`:
+An elementary antiderivative, from Mathilda:
 
 ```
-exp(1+2*%i*x)/(1+exp(%i*x)) dx = %e*t^2/(1+t) * dt/(%i*t) = -%i*%e * t/(1+t) dt
-integral = -%i*%e*(exp(%i*x) - log(1 + exp(%i*x)))
+r := -%i*exp(1+%i*x) + %i*%e*log(1+exp(%i*x))
+normalize(D(r, x) - exp(1+2*%i*x)/(1+exp(%i*x)))      -- 0
 ```
 
-which `D(-%i*%e*(exp(%i*x) - log(1+exp(%i*x))), x) - exp(1+2*%i*x)/(1+exp(%i*x))`
-normalizes to 0.
+By hand: with `t = exp(%i*x)`, the integrand times `dx` is `-%i*%e*t/(1+t) dt`.
 
-## Related cases
+The real-exponent analogue is integrated correctly: `integrate(exp(1+2*x)/(1+exp(x)), x)` gives `-%e log(%e^x + 1) + %e %e^x`.
 
-- The real-exponent analogue is integrated correctly:
-  `integrate(exp(1+2*x)/(1+exp(x)), x)` gives `-%e log(%e^x + 1) + %e %e^x`.
-- The difference is the offset: `exp(1+2*%i*x)` and `exp(%i*x)` are not recognised as
-  algebraically dependent when the exponents differ by a non-zero constant over `Q(i)`. The
-  same holds for `exp(%i*(2+x))` beside `exp(2*%i*x)`, and for `exp(1+3*%i*x)`.
-- The comparison found 14 integrands of this kind. 11 are elementary by construction
-  (`f = D[F]`), and 3 more have an elementary antiderivative that verifies. All have an
-  unevaluated `integral` from FriCAS. Examples:
-  - `integrate(D(x*exp(1+2*%i*x)/(1+exp(%i*x)), x), x)` (FriCAS returns the derivative
-    unevaluated as an integral);
-  - `exp(1 + 2*%i*x)*tan(x)`, `exp(2*%i*(2 + x))*tan(x)`, `exp(%i - %i*(1 + x))*tan(2 + x)`.
+## More examples, same pattern
 
-## Suggested cause
+Each is left unevaluated by FriCAS 1.3.6. The antiderivatives are Mathilda's, verified with `complexNormalize(D(r, x) - f) = 0` in FriCAS:
 
-The structure-theorem check that decides whether a new exponential `exp(w)` is algebraic
-over the field built so far looks for `w = sum k_j w_j + c` with integer `k_j`. The constant
-`c` (here `1`, or a multiple of `%i`) then has to be handled as an element of the constant
-field. Over `Q(i)`, with both `%e` and `exp(%i)` in play, this case appears to make the
-dependency go undetected, so `exp(1+2*%i*x)` becomes an independent monomial. The integrand
-is then non-elementary over that (wrong) tower.
+```
+f := exp(1+2*%i*x)*tan(x)
+r := -exp(1+2*%i*x)/2 + %e*log(%e^2 + exp(2+2*%i*x))
+
+f := exp(2*%i*(2+x))*tan(x)
+r := -exp(2*%i*(2+x))/2 + exp(4*%i)*log(exp(8*%i) + exp(8*%i+2*%i*x))
+
+f := exp(%i-%i*(1+x))*tan(2+x)
+r := -exp(2*%i-%i*(2+x)) + 2*exp(2*%i)*atan(exp(-%i*(2+x)))
+```
+
+In a comparison over 640 generated transcendental integrands, 14 had this shape. 11 were elementary by construction (`f = D(F)`), and 3 more had an elementary antiderivative that verifies. FriCAS left all 14 unevaluated.
+
+## Possible cause
+
+In every case two exponentials have exponents that differ by a nonzero constant over Q(i): `exp(1+2*%i*x)` beside `exp(%i*x)`, and `exp(%i*(2+x))` beside `exp(2*%i*x)`. The structure-theorem test decides whether a new `exp(w)` is algebraic over the tower built so far, by looking for `w = sum k_j w_j + c` with integer `k_j` and a constant `c`. Over Q(i) it seems to miss this dependency, so `exp(1+2*%i*x)` is taken as a new independent monomial. Over that wrong tower the integrand is then (correctly) non-elementary. We have only tested 1.3.6 and do not know whether a later release fixes this.
