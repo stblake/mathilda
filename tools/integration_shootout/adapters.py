@@ -254,7 +254,10 @@ def run_fricas_one(c, timeout, tmpdir):
          ")set messages time on",
          "r := integrate(f, x)",
          ")set messages time off",
-         'writeLine!(tf, concat("RES ", unparse(r::InputForm)))', "flush(tf)"]
+         'writeLine!(tf, concat("RES ", unparse(r::InputForm)))', "flush(tf)",
+         # exact check, used when a point cannot be evaluated numerically
+         # (complexNumeric has no Ei, li, erf, erfi: benchmark 259)
+         'writeLine!(tf, concat("ZERO ", unparse((normalize(D(r, x) - f))::InputForm)))', "flush(tf)"]
     for p in c["points_list"]:
         L.append(f"c := complexNumeric(eval(D(r, x) - f, x, {p}), 40)")
         L.append(f"cf := complexNumeric(eval(f, x, {p}), 40)")
@@ -296,6 +299,9 @@ def run_fricas_one(c, timeout, tmpdir):
                 rec["nums"].append("ok" if dv <= Fraction(1, 10 ** TOL_EXP) * max(1, fv) else "bad")
     while len(rec["nums"]) < len(c["points_list"]):
         rec["nums"].append("na")
+    if "ok" not in rec["nums"] and "bad" not in rec["nums"] and "ZERO 0" in lines:
+        rec["nums"] = ["ok"] * len(c["points_list"])
+        rec["detail"] = "verified exactly (normalize)"
     return rec
 
 
@@ -351,7 +357,14 @@ def run_maxima_one(c, timeout, tmpdir):
 
 
 def run_per_case(fn, cases, timeout, tmpdir):
-    return {c["id"]: fn(c, timeout, tmpdir) for c in cases}
+    out = {}
+    for c in cases:
+        try:
+            out[c["id"]] = fn(c, timeout, tmpdir)
+        except T.Untranslatable as e:   # one case outside the translator, not the whole run
+            out[c["id"]] = {"id": c["id"], "status": "ERROR", "time": None, "nums": [], "cert": False,
+                            "text": "", "detail": f"untranslatable: {e}"}
+    return out
 
 
 def run_system(system, cases, timeout, tmpdir, method=None):

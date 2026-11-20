@@ -86,6 +86,12 @@ FUNCS = {
     "Sinh": ("sinh", "sinh", "sinh", "Sinh"), "Cosh": ("cosh", "cosh", "cosh", "Cosh"),
     "Tanh": ("tanh", "tanh", "tanh", "Tanh"), "ArcSinh": ("asinh", "asinh", "asinh", "ArcSinh"),
     "ArcTanh": ("atanh", "atanh", "atanh", "ArcTanh"),
+    "Coth": ("coth", "coth", "coth", "Coth"), "Sech": ("sech", "sech", "sech", "Sech"),
+    "Csch": ("csch", "csch", "csch", "Csch"),
+    # the Liouvillian kernels of benchmark 259 (an integrand that contains one)
+    "Erf": ("erf", "erf", "erf", "Erf"), "Erfi": ("erfi", "erfi", "erfi", "Erfi"),
+    "ExpIntegralEi": ("Ei", "expintegral_ei", "Ei", "ExpIntegralEi"),
+    "LogIntegral": ("li", "expintegral_li", "li", "LogIntegral"),
 }
 SYSTEMS = ("sympy", "maxima", "fricas", "wolfram")
 SYMS = {  # symbol -> per-system spelling

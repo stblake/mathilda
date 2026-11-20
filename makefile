@@ -1049,6 +1049,20 @@ bench-integrate:
 bench-integrate-compact:
 	python3 tools/integration_shootout/shootout.py --bench benchmarks/257-compact-integrals
 
+# `make bench-integrate-decision` -- benchmark 259, the transcendental decision
+# corpus: the C completeness campaign's hunt families (Tanh, tan over Q(i),
+# Gaussian offsets, LimitedIntegrate, Liouvillian primitives, dependent logs and
+# exponentials) against FriCAS (tools/integration_shootout/gen_campaign.m).
+# `make bench-integrate-vs-fricas` then writes the decision-completeness and speed
+# comparison benchmarks/BRONSTEIN_VS_FRICAS.md from the saved runs of 256,
+# 257 and 259.
+bench-integrate-decision:
+	python3 tools/integration_shootout/shootout.py --bench benchmarks/259-transcendental-decision \
+	    --systems mathilda,fricas --methods Automatic,RischTranscendental
+
+bench-integrate-vs-fricas:
+	python3 tools/integration_shootout/compare_fricas.py
+
 # `make check-feyncalc` — FeynCalc's ~14k upstream unit tests, run UNMODIFIED
 # under a minimal MUnit`Test (tools/feyncalc/run_fc_tests.m), one process per
 # .test file, ratcheted against the local pass baseline: a test that passed must
@@ -1301,7 +1315,7 @@ print-flags:
 print-libs:
 	@echo "$(PC_LIBS_PRIVATE)"
 
-.PHONY: bench-osp-famous all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-equality check-bronstein-coverage check-bronstein-completeness bench-integrate bench-integrate-compact check-feyncalc check-differentialforms check-interval check-packed-aware \
+.PHONY: bench-osp-famous all lib clean install uninstall check-install docs docs-build docs-serve check-docs-examples check-c99 check-equality check-bronstein-coverage check-bronstein-completeness bench-integrate bench-integrate-compact bench-integrate-decision bench-integrate-vs-fricas check-feyncalc check-differentialforms check-interval check-packed-aware \
         check-messages check-corpus-indvar \
         check-array-exactness check-nd-surfaces check-compile-coverage check-machine-boundary \
         check-refine-stress \

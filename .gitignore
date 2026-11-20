@@ -94,4 +94,5 @@ AGENTS.md
 benchmarks/256-integration-shootout/results/cache.jsonl
 benchmarks/256-integration-shootout/REPORT-partial.md
 benchmarks/257-compact-integrals/results/cache.jsonl
+benchmarks/259-transcendental-decision/results/cache.jsonl
 benchmarks/257-compact-integrals/REPORT-partial.md
