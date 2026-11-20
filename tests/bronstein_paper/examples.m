@@ -329,5 +329,14 @@ bronsteinPaperExamples = {
   "before" -> "implementation incomplete", "note" -> "special-place divisor of infinite order: the parameters, then x, specialised (brSpecialTorsionOrderParams)"|>,
 <|"id" -> "E44-3", "gap" -> "symbolic parameters", "theory" -> "E4.4b", "version" -> "v0.6578",
   "kind" -> "Integrate", "f" -> Hold[(x + a)/(x Sqrt[x + Log[x]])], "expect" -> "nonelementary",
-  "before" -> "implementation incomplete", "note" -> "not elementary over Q(a); elementary at a = 1, a point of the exceptional set"|>
+  "before" -> "implementation incomplete", "note" -> "not elementary over Q(a); elementary at a = 1, a point of the exceptional set"|>,
+(* lower-layer gaps of Phase 4.3b, closed by v0.6624 (a numeric radical divisor is a
+   unit in exact_poly_div / the PRS gcd) and found closed by the open-gaps check on
+   2026-11-21 *)
+<|"id" -> "G-core-8", "gap" -> "squarefree factorisation over algebraic coefficients", "theory" -> "-", "version" -> "v0.6624",
+  "kind" -> "Expr", "f" -> Hold[Length[FactorSquareFreeList[z^2 - 2^(1/3) z^3]]], "expect" -> 3,
+  "before" -> "2 (reported squarefree)", "note" -> "z^2 - 2^(1/3) z^3 splits as -z^2 (-1 + 2^(1/3) z) without Extension"|>,
+<|"id" -> "G-core-9", "gap" -> "Together over Q(constants)", "theory" -> "-", "version" -> "v0.6624",
+  "kind" -> "Expr", "f" -> Hold[Head[Together[3/(2 z^3 + 2 Sqrt[2] z^6) + (-3 + 3 z + z^2 - 3 Sqrt[2] z^3 - 2 Sqrt[2] z^5)/(2 z^3 - 2 z^4 + 4 Sqrt[2] z^6 - 2 Sqrt[2] z^7 + 4 z^9)]]], "expect" -> Times,
+  "before" -> "Plus (left uncombined)", "note" -> "the common denominator needs Sqrt[2]^2 = 2; combined without Extension"|>
 };

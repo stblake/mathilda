@@ -282,6 +282,7 @@ static Expr* call_stage(const char* head_name, Expr* f, Expr* x) {
 }
 
 static void   integrate_arm_budget(double seconds);
+static double cascade_budget(const char* name, double dflt);
 
 /* NOTE -- a stage-boundary `TimeConstrained[Integrate`DerivativeDivides[f,x], t]`
  * wrapper was built here and REMOVED. It did make TimeConstraint a hard bound
@@ -768,6 +769,14 @@ static Expr* try_linearity(Expr* f, Expr* x) {
     Expr** parts = malloc(n * sizeof(Expr*));
     size_t got = 0;
     bool ok = true;
+    /* A sum this stage BUILT (the TrigReduce or the product-distribution
+     * rewrite) is speculative: its pieces run with the heavy tail stages
+     * suppressed, as LogByParts' do, so a piece that does not close cheaply
+     * declines at once.  Without it each non-elementary piece paid the whole
+     * special-function tail: x Log[Tan[x]] Tan[x] (1 + Tan[x]^2) spent 55 s
+     * here before the Risch stage certified it (FriCAS comparison C1.2).  The
+     * user's own sum keeps the full cascade per term. */
+    if (owned) g_integrate_no_special++;
     for (size_t i = 0; i < n; i++) {
         Expr* gi = call_stage("Integrate", target->data.function.args[i], x);
         if (!gi || result_contains_head(gi, "Integrate")) {
@@ -777,6 +786,7 @@ static Expr* try_linearity(Expr* f, Expr* x) {
         }
         parts[got++] = gi;
     }
+    if (owned) g_integrate_no_special--;
     if (!ok) {
         for (size_t i = 0; i < got; i++) expr_free(parts[i]);
         free(parts);
@@ -996,6 +1006,75 @@ static Expr* try_rischtranscendental(Expr* f, Expr* x) {
     bool ok = rt_answer_verified(result, f, x);
     if (!ok) { expr_free(result); return NULL; }
     return result;
+}
+
+/* An early, budgeted Risch probe for a LARGE transcendental integrand
+ * (FriCAS comparison, C1.2).  On a tower integrand of a hundred-odd nodes the
+ * cheap stages ahead of Risch grind before declining -- Linearity integrates
+ * each term of the sum through the whole cascade, DerivativeDivides searches
+ * substitutions: 4 s + 11.6 s unloaded, past 30 s under load, on integrands
+ * that RischTranscendental closes in under a second (benchmark 259: 34
+ * Automatic timeouts).  For such an integrand -- at least
+ * RISCH_EARLY_MIN_NODES nodes, an Exp/Log/trig/hyperbolic kernel of x, no
+ * radical of x -- the Risch stage runs first under a short budget
+ * (Integrate`$RischEarlyBudget, default RISCH_EARLY_BUDGET_DEFAULT seconds).
+ * It takes an answer only (verified as at stage 13); a decline, a certificate
+ * or a timeout leaves the cascade exactly as before, except that a COMPLETED
+ * probe (no timeout) spares stage 13 the same work.  Small integrands keep the
+ * old order, where the cheap stages give the simpler forms. */
+#define RISCH_EARLY_MIN_NODES 60
+#define RISCH_EARLY_BUDGET_DEFAULT 4.0
+
+/* An x-dependent Power with a non-integer exponent (a radical of x), or an
+ * Exp/Log/trig/hyperbolic kernel of x: *rad and *kern record which. */
+static void risch_early_scan(const Expr* e, const Expr* x, bool* rad, bool* kern) {
+    if (!e || e->type != EXPR_FUNCTION || *rad) return;
+    const Expr* h = e->data.function.head;
+    if (h->type == EXPR_SYMBOL && depends_on_var(e, x)) {
+        const char* n = h->data.symbol.name;
+        if (n == SYM_Power && e->data.function.arg_count == 2) {
+            const Expr* b = e->data.function.args[0];
+            const Expr* p = e->data.function.args[1];
+            bool base_e = b->type == EXPR_SYMBOL && b->data.symbol.name == SYM_E;
+            if (base_e) *kern = true;
+            else if (depends_on_var(b, x) && !(p->type == EXPR_INTEGER || p->type == EXPR_BIGINT)) {
+                if (depends_on_var(p, x)) *kern = true; else *rad = true;
+            }
+        } else if (n == SYM_Log || n == SYM_Exp || n == SYM_Sin || n == SYM_Cos || n == SYM_Tan ||
+                   n == SYM_Cot || n == SYM_Sec || n == SYM_Csc ||
+                   strcmp(n, "Sinh") == 0 || strcmp(n, "Cosh") == 0 || strcmp(n, "Tanh") == 0 ||
+                   strcmp(n, "Coth") == 0 || strcmp(n, "Sech") == 0 || strcmp(n, "Csch") == 0)
+            *kern = true;
+    }
+    risch_early_scan(h, x, rad, kern);
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        risch_early_scan(e->data.function.args[i], x, rad, kern);
+}
+
+/* *completed: the probe ran to its end (an answer, a decline or a certificate),
+ * as opposed to hitting its budget or being out of scope. */
+static Expr* try_rischtranscendental_early(Expr* f, Expr* x, bool* completed) {
+    *completed = false;
+    if (node_count_capped(f, RISCH_EARLY_MIN_NODES) < RISCH_EARLY_MIN_NODES) return NULL;
+    bool rad = false, kern = false;
+    risch_early_scan(f, x, &rad, &kern);
+    if (rad || !kern) return NULL;
+    double budget = cascade_budget("Integrate`$RischEarlyBudget", RISCH_EARLY_BUDGET_DEFAULT);
+    Expr* call = expr_new_function(expr_new_symbol("Integrate`RischTranscendental"),
+        (Expr*[]){ expr_copy(f), expr_copy(x) }, 2);
+    if (budget > 0)
+        call = expr_new_function(expr_new_symbol("TimeConstrained"), (Expr*[]){
+            call, expr_new_real(budget), expr_new_symbol(SYM_DollarAborted) }, 3);
+    Expr* r = evaluate(call);
+    expr_free(call);
+    if (!r) return NULL;
+    if (r->type == EXPR_SYMBOL && r->data.symbol.name == SYM_DollarAborted) { expr_free(r); return NULL; }
+    *completed = true;
+    if (result_is_unresolved(r, "Integrate`RischTranscendental") || !rt_answer_verified(r, f, x)) {
+        expr_free(r);
+        return NULL;
+    }
+    return r;
 }
 
 /* Stage 3: CRC integral table.  Loaded from disk on first invocation
@@ -2054,6 +2133,21 @@ static Expr* builtin_integrate_pms(Expr* res) {
  * 1/Sqrt[x^3 - x] is pseudo-elliptic by that test and closes as
  * -Sqrt[2] EllipticF[ArcSin[Sqrt[2]/Sqrt[1 + x]], 1/2].  The rational-structure
  * skip is kept: a pure rational function is BronsteinRational's. */
+/* True iff e contains Inactive[Integrate][...]: an integral left unevaluated
+ * (the head of the node is the compound Inactive[Integrate]). */
+static bool contains_inactive_integrate(const Expr* e) {
+    if (!e || e->type != EXPR_FUNCTION) return false;
+    const Expr* h = e->data.function.head;
+    if (h && h->type == EXPR_FUNCTION && h->data.function.head->type == EXPR_SYMBOL &&
+        strcmp(h->data.function.head->data.symbol.name, "Inactive") == 0 &&
+        h->data.function.arg_count == 1 && h->data.function.args[0]->type == EXPR_SYMBOL &&
+        strcmp(h->data.function.args[0]->data.symbol.name, "Integrate") == 0) return true;
+    if (contains_inactive_integrate(h)) return true;
+    for (size_t i = 0; i < e->data.function.arg_count; i++)
+        if (contains_inactive_integrate(e->data.function.args[i])) return true;
+    return false;
+}
+
 static Expr* try_parallelmixedspecial(Expr* f, Expr* x, bool cascade) {
     if (pmt_is_rational_structure(f)) return NULL;
     pms_in_cascade = cascade ? 1 : 0;   /* budget scope; see PMS_CASCADE_BUDGET_SECONDS */
@@ -2077,7 +2171,12 @@ static Expr* try_parallelmixedspecial(Expr* f, Expr* x, bool cascade) {
         pmt_leaks_symbol(result, f, x) ||
         /* the worker's own call left unevaluated (its package definitions are
          * missing) is not an antiderivative */
-        result_contains_head(result, "ParallelMixed`Private`IntegrateSurfaceSpecial");
+        result_contains_head(result, "ParallelMixed`Private`IntegrateSurfaceSpecial") ||
+        /* the cascade takes complete answers only: an integral left inactive,
+         * up to the whole integrand (Inactive[Integrate][x^3/Sqrt[2 + x^6], x]),
+         * is no antiderivative, and it hid Trager's certificate from Automatic
+         * on 35 algebraic integrands (FriCAS comparison, C1.1) */
+        (cascade && contains_inactive_integrate(result));
     if (decline) {
         expr_free(result);
         return NULL;
@@ -3049,7 +3148,7 @@ typedef enum {
     IP_CHEBYCHEV, IP_FRESNEL, IP_GAMMAPOWER, IP_LINEARITY, IP_LINARG,
     IP_WEIERSTRASS, IP_DERIVDIVIDES, IP_RISCHTRANS, IP_CRCTABLE, IP_GRTABLE, IP_POLYLOG,
     IP_HOLONOMIC, IP_BESSELHYPER, IP_LOGBYPARTS, IP_TRAGER, IP_BRONSTEIN, IP_PMT,
-    IP_GOURSAT, IP_PMS, IP_ROACH, IP_NSTAGES
+    IP_GOURSAT, IP_PMS, IP_ROACH, IP_RISCHEARLY, IP_NSTAGES
 } IntegrateProfStage;
 
 static const char* const ip_stage_name[IP_NSTAGES] = {
@@ -3059,7 +3158,7 @@ static const char* const ip_stage_name[IP_NSTAGES] = {
     "11 Weierstrass", "12 DerivativeDivides", "13 RischTranscendental",
     "14 CRCTable", "20 GRTable", "14b PolyLogLadder", "14c Holonomic", "14d BesselHypergeometric", "15 LogByParts",
     "08b Trager", "08c Bronstein", "16 ParallelMixedTower", "17 GoursatAlgebraic", "18 ParallelMixedSpecial",
-    "19 RoachMeijerG"
+    "19 RoachMeijerG", "08d RischEarly"
 };
 static long   g_ip_entries = 0;   /* cascade passes over one integrand */
 static double g_ip_secs[IP_NSTAGES];
@@ -3958,6 +4057,13 @@ static Expr* builtin_integrate_body(Expr* res) {
              * polynomials (Sin[2x]+Sin[3x], constant-coeff forcing sums) get the
              * clean additive antiderivative instead of a divergent/looping
              * tan-half-angle form.  Declines unless every term closes. */
+            /* the early Risch probe for a large tower integrand (C1.2) */
+            bool risch_early_done = false;
+            {
+                int ann0 = g_integrate_nonelem_announced;
+                IP_STAGE(IP_RISCHEARLY, try_rischtranscendental_early(effective_f, x, &risch_early_done));
+                if (!result && g_integrate_nonelem_announced != ann0) cascade_nonelem = true;
+            }
             IP_STAGE(IP_LINEARITY,    try_linearity(effective_f, x));
             /* Linear-argument substitution before Weierstrass: pull a shared
              * non-trivial linear argument a*x+b out of a rational trig integrand
@@ -3974,7 +4080,15 @@ static Expr* builtin_integrate_body(Expr* res) {
              * Log[1+ax]/x -> PolyLog).  The former RischNorman / RischNormanBlake
              * pmint heuristics that ran here were removed in v0.163 -- the
              * ParallelMixedTower stage below subsumes both. */
-            IP_STAGE(IP_RISCHTRANS,   try_rischtranscendental(effective_f, x));
+            /* A certificate here (the integrand has no elementary integral)
+             * skips the elementary-only ParallelMixedTower and Goursat stages,
+             * as Trager's and Bronstein's do: they could only grind (benchmark
+             * 259: x Log[Tan[x]] Tan[x] (1 + Tan[x]^2) timed out there). */
+            if (!risch_early_done) {
+                int ann0 = g_integrate_nonelem_announced;
+                IP_STAGE(IP_RISCHTRANS,   try_rischtranscendental(effective_f, x));
+                if (!result && g_integrate_nonelem_announced != ann0) cascade_nonelem = true;
+            }
             IP_STAGE(IP_CRCTABLE,     try_crctable(effective_f, x));
             /* Log[g] times a trig/hyperbolic kernel -> one integration by parts.
              * After the cheap elementary stages (the `if (!result)` short-circuit

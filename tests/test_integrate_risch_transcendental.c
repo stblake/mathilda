@@ -1970,6 +1970,19 @@ static void test_campaign_step4_limited_newlog(void) {
                    " + (u Log[1 + E^u/(1 + E^(2 u))] Log[u])/(2 (1 + u)), u], u]]", "True", 0);
 }
 
+/* FriCAS comparison C1.3: the decision's verified antiderivative is the
+ * integrator's answer when the integrator's own pipeline found none
+ * (Risch`ElementaryIntegralQ said True, Integrate stayed unevaluated). */
+static void test_fricas_c13_decision_answer(void) {
+    const char* fs[] = { "E^u Tanh[1 + u] (1 - Tanh[1 + u]^2)" };
+    for (size_t i = 0; i < sizeof fs / sizeof fs[0]; i++) {
+        char buf[600];
+        snprintf(buf, sizeof buf, "With[{f = %s}, With[{F = Integrate[f, u, Method -> \"RischTranscendental\"]}, "
+                 "FreeQ[F, Integrate] && Abs[N[(D[F, u] - f) /. u -> 13/10, 20]] < 10^-10]]", fs[i]);
+        assert_eval_eq(buf, "True", 0);
+    }
+}
+
 /* Review F1-F4 (docs/notes/RISCH_TRANSCENDENTAL_REVIEW.md, 2026-11-16).
  * F1: the ansatz's SolveAlways solved for the user's parameter a (a -> 0), and
  * Integrate shipped it unchecked.  F2-F4: ElementaryIntegralQ said True on an
@@ -2091,6 +2104,7 @@ void test_integrate_risch_transcendental(void) {
     TEST(test_campaign_step4_dependent_exp);
     TEST(test_campaign_step4_hypertangent_mobius);
     TEST(test_campaign_step4_limited_newlog);
+    TEST(test_fricas_c13_decision_answer);
 
     printf("All Integrate RischTranscendental tests passed!\n");
 }

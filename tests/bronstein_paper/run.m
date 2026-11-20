@@ -8,7 +8,8 @@ bpCheck[r_Association] := Module[{f = ReleaseHold[r["f"]], res, ok, det = ""},
       "Integrate", Bronstein`BronsteinIntegrate[f, x],
       "EIQ", Risch`ElementaryIntegralQ[f, x],
       "RDE", Risch`RischDECertified[f[[1]], f[[2]], x],
-      "Scope", Bronstein`BronsteinScope[f, x]], 300, "TIMEOUT"];
+      "Scope", Bronstein`BronsteinScope[f, x],
+      "Expr", f], 300, "TIMEOUT"];
   ok = Switch[r["kind"],
     "Integrate", Switch[r["expect"],
        "elementary", !ListQ[res] && res =!= "TIMEOUT" && TrueQ[PossibleZeroQ[D[res, x] - f]],
@@ -16,7 +17,9 @@ bpCheck[r_Association] := Module[{f = ReleaseHold[r["f"]], res, ok, det = ""},
        "incomplete", MatchQ[res, {"implementation incomplete", _}]],
     "EIQ", res === r["expect"],
     "RDE", If[r["expect"] === "NoSolution", res === "NoSolution", TrueQ[PossibleZeroQ[res - ReleaseHold[r["expect"]]]]],
-    "Scope", If[r["expect"] === "incomplete", MatchQ[res, {"implementation incomplete", _}], res === r["expect"]]];
+    "Scope", If[r["expect"] === "incomplete", MatchQ[res, {"implementation incomplete", _}], res === r["expect"]],
+    (* a lower-layer gap closed: the expression's value, compared exactly *)
+    "Expr", res === r["expect"]];
   If[!ok, det = StringTake[ToString[res, InputForm], UpTo[160]]];
   {ok, det}];
 bpPass = 0; bpFail = 0;

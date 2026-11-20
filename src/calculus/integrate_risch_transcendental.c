@@ -364,6 +364,16 @@ static Expr* rt_debase_exponentials(Expr* f, Expr* x, Expr** backsub_out) {
  * On a non-elementary integrand Cherry is also where a decline spends its time
  * (Risch`ElementaryIntegralQ[1/(1 + Log[u] + Log[u]^3), u]: 85 s, review F6). */
 static int g_rt_elementary_only = 0;   /* tc_register_unwind_counter */
+/* The decision's verified antiderivative, for the integrator (C1.3): while
+ * g_rt_capture_answer is raised, rt_decide_tower keeps the kernel form of a Q
+ * it verified (owned; taken by the integrator).  The decision can close a case
+ * the integrator's own pipeline does not -- it builds the decide tower
+ * (dependent logarithms eliminated, the k(i) and Gaussian rewrites) -- and its
+ * answer was being dropped: Risch`ElementaryIntegralQ said True and
+ * Integrate[..., Method -> "RischTranscendental"] stayed unevaluated
+ * (benchmark 259: tanh-rand-27, tani-elem-30, gauss-elem-25, -33). */
+static int   g_rt_capture_answer = 0;  /* tc_register_unwind_counter */
+static Expr* g_rt_captured_answer = NULL;
 
 bool rt_decision_only(void) { return g_rt_elementary_only != 0; }
 
@@ -836,6 +846,10 @@ static RtDecision rt_decide_tower(Expr* fx, Expr* x, bool tan_route) {
                 }
                 verdict = okq ? RT_DEC_ELEMENTARY : RT_DEC_UNKNOWN;
                 if (!okq) rde_cert_mark("decide: antiderivative not verified");
+                /* (over eliminated dependent logs the kernel form may hold on
+                 * part of the line only: the integrator re-verifies it on f) */
+                if (okq && g_rt_capture_answer && !g_rt_captured_answer)
+                    g_rt_captured_answer = rt_eval2("ReplaceAll", expr_copy(Q), rt_tower_back_rules(&T));
             }
             else if (Q && rem && g_rt_decision != RT_DEC_TAINTED) verdict = RT_DEC_NONELEMENTARY;
             else if (g_rt_decision == RT_DEC_NONELEMENTARY) verdict = RT_DEC_NONELEMENTARY;
@@ -1050,8 +1064,20 @@ Expr* builtin_rischtranscendental(Expr* res) {
      * at depth >= 2 — is not the user's integrand: naming its gensym variable
      * (Integrate`DerivativeDivides`u$N) in a message would be meaningless, so we
      * stay silent there and let the outermost frame speak. */
-    if (!result && g_integrate_depth <= 1 && g_integrate_quiet == 0
-        && rt_decide_field(f, x) == RT_DEC_NONELEMENTARY) {
+    RtDecision fdec = RT_DEC_UNKNOWN;
+    if (!result && g_integrate_depth <= 1 && g_integrate_quiet == 0) {
+        if (g_rt_captured_answer) { expr_free(g_rt_captured_answer); g_rt_captured_answer = NULL; }  /* an aborted call's */
+        g_rt_capture_answer++;
+        fdec = rt_decide_field(f, x);
+        g_rt_capture_answer--;
+        Expr* cap = g_rt_captured_answer;
+        g_rt_captured_answer = NULL;
+        /* the decision verified it against its own rewrite of f (TrigToExp,
+         * powers as exponentials): check it against f itself before answering */
+        if (cap && fdec == RT_DEC_ELEMENTARY && rt_answer_verified(cap, f, x)) result = cap;
+        else if (cap) expr_free(cap);
+    }
+    if (!result && fdec == RT_DEC_NONELEMENTARY) {
         /* Shared with ParallelMixedTower's certificate path so the two methods
          * stay byte-identical and cannot double-print in the Automatic cascade.
          * The cheap depth/quiet gate above stays here to avoid the expensive
@@ -1371,6 +1397,7 @@ void integrate_risch_transcendental_init(void) {
      * integral of the session) */
     tc_register_unwind_counter(&g_rt_decide_mode);
     tc_register_unwind_counter(&g_rt_elementary_only);
+    tc_register_unwind_counter(&g_rt_capture_answer);
     tc_register_unwind_counter(&rt_in_flat_gate);
     tc_register_unwind_counter(&rt_in_logcombine);
     tc_register_unwind_counter(rde_alg_mode_ptr());   /* the base RDE's algebraic mode */

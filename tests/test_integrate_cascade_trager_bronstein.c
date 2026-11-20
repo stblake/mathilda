@@ -121,6 +121,27 @@ static void test_cascade_certificates(void) {
     BR_TRUE("Quiet[FreeQ[Integrate[Sqrt[Log[x]], x], Integrate]]");
 }
 
+/* FriCAS comparison C1: the cascade loses what its methods find.
+ * C1.1 -- ParallelMixedSpecial returned Inactive[Integrate][f, x] (no progress
+ *         at all) as a "complete" answer and hid Trager's certificate (35
+ *         algebraic integrands of benchmark 256).
+ * C1.2 -- a large tower integrand reaches the Risch stage before Linearity and
+ *         DerivativeDivides grind (early probe), and a speculative Linearity
+ *         split runs its pieces without the special-function tail; a Risch
+ *         certificate skips the elementary-only PMT/Goursat stages. */
+static void test_cascade_keeps_method_results(void) {
+    BR_EQ("Check[Integrate[x^3/Sqrt[2 + x^6], x], \"msg\", {Integrate::nonelem}]", "\"msg\"");
+    BR_EQ("Quiet[Head[Integrate[1/Sqrt[-1 + x^6], x]]]", "Integrate");
+    BR_TRUE("Quiet[FreeQ[Integrate[x^3/Sqrt[2 + x^6], x], Inactive]]");
+    /* 55 s in Linearity before (elementary; Risch closes it in 10 ms) */
+    BR_TRUE("TimeConstrained[With[{f = (-2 (1 + E^x) Log[E^x + x] Log[1 + Tanh[x]^2])/(E^x + x) - "
+            "(2 Log[E^x + x]^2 Sech[x]^2 Tanh[x])/(1 + Tanh[x]^2)}, With[{F = Integrate[f, x]}, "
+            "FreeQ[F, Integrate] && Abs[N[(D[F, x] - f) /. x -> 13/10, 20]] < 10^-10]], 20, False]");
+    /* 55 s in a speculative Linearity split before (non-elementary) */
+    BR_EQ("TimeConstrained[Check[Integrate[x Log[Tan[x]] Tan[x] (1 + Tan[x]^2), x]; \"none\", \"msg\", "
+          "{Integrate::nonelem}], 20, \"timeout\"]", "\"msg\"");
+}
+
 /* With the parameters admitted the Automatic cascade closes a parametric
  * Bronstein integrand; by default (Trager only) the Trager one. */
 static void test_cascade_parameters(void) {
@@ -166,6 +187,7 @@ int main(void) {
     test_gates();
     test_cascade_closes();
     test_cascade_certificates();
+    test_cascade_keeps_method_results();
     test_cascade_parameters();
     test_budgets();
     BR_DONE("integrate_cascade_trager_bronstein_tests");

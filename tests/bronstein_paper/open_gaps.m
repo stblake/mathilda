@@ -44,12 +44,6 @@ bronsteinOpenGaps = {
   "followup" -> "ToRadicals on residue-field generators; a verified real form for Q(i) answers of real integrands", "source" -> "Phase 4.2"|>,
 
 (* ---- lower layers (found by the campaign's reviews) --------------------- *)
-<|"id" -> "G-core-8", "area" -> "Core", "gap" -> "FactorSquareFreeList without Extension does not split a polynomial with algebraic coefficients at all (z^2 - 2^(1/3) z^3 is reported squarefree); Trager passes Extension -> Automatic (tragerSquareFreeList)",
-  "kind" -> "Expr", "f" -> Hold[Length[FactorSquareFreeList[z^2 - 2^(1/3) z^3]]], "current" -> "2", "budget" -> 60,
-  "followup" -> "the default path should treat algebraic numbers as independent generators (split z^2); lifting them as indeterminates in poly.c (as for Root) rewrote opaque nested radicals, so it was withdrawn", "source" -> "Phase 4.3b"|>,
-<|"id" -> "G-core-9", "area" -> "Core", "gap" -> "Together without Extension leaves a sum of fractions uncombined when their common denominator needs Sqrt[2]^2 = 2 (Trager now passes Extension -> Automatic)",
-  "kind" -> "Expr", "f" -> Hold[Head[Together[3/(2 z^3 + 2 Sqrt[2] z^6) + (-3 + 3 z + z^2 - 3 Sqrt[2] z^3 - 2 Sqrt[2] z^5)/(2 z^3 - 2 z^4 + 4 Sqrt[2] z^6 - 2 Sqrt[2] z^7 + 4 z^9)]]], "current" -> "Plus", "budget" -> 60,
-  "followup" -> "combine over Q(constants) when the divide-back over Q[constants] fails", "source" -> "Phase 4.3b"|>,
 (* ---- found by the adversarial reviews of Bronstein, Trager and PMT (2026-11-14) *)
 <|"id" -> "G-adv-c1", "area" -> "Risch (C)", "gap" -> "a transcendental constant (Log[2]) beside the tower: the C decider's no is now demoted to undecided, so this correct certificate is lost",
   "kind" -> "Expr", "f" -> Hold[Head[Quiet[Risch`ElementaryIntegralQ[Log[2]/(1 + u^2) + Log[u]/(1 + u^2), u]]]], "current" -> "Risch`ElementaryIntegralQ", "budget" -> 60,
