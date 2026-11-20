@@ -1678,9 +1678,10 @@ is still deficient for every other caller (reproducer and table:
      NoCancel1/2/3, CancelTan by the k(i) route), a real-tangent decision route
      (`∫E^Tan[u]` False), the tower's `Tan[u_]` Dcoef corruption, and the parametric
      log-derivative over Q(i) and with lower-tangent special factors (a released
-     false `"NoSolution"`). Left: the Tanh top (t^2 - 1 splits), towers of several
-     tangents (tangent structure theorem), CancelTan with a homogeneous solution over
-     k(i) (CoupledDECancelTan). F9 done: `RationalSpan` over
+     false `"NoSolution"`). Left: towers of several tangents (tangent structure
+     theorem, campaign step 6), CancelTan with a homogeneous solution over k(i)
+     (CoupledDECancelTan, step 5). The Tanh top (t^2 - 1 splits) closed in step 4
+     (v0.6639-41). F9 done: `RationalSpan` over
      algebraic constants, and the base RDE's polynomial solve over them (a released
      false certificate). F8's silent decline is marked (F13, v0.6599). [x] F12
      (v0.6599): a class primitive that is an integer combination of the other
@@ -1692,24 +1693,73 @@ is still deficient for every other caller (reproducer and table:
   6. **[x] v0.6590 for limited integration** (3 new marks in BASELINE_C); the F7 (intrat RootSum) and F8 (tangent lower field) sites still need marks. **F13.** The completeness gate counts only certificate-mark sites, so the silent
      declines are invisible to it. Widen it first, so that the ratchet sees steps 3-5. Gates: no WRONG / FALSE_CERT, the completeness baseline
   (13 uncertain Risch DE paths) ratcheted down, unit tests per routine.
-  7. **C completeness campaign (2026-11-17 on).** Steps 0, 1, 7, 2a and 8 shipped in
-     v0.6603-09 (tasks/todo.md). **[x] Step 3a, v0.6620:** the C parametric Risch DE
-     (`rde_tower_param`, `Risch`ParametricRischDE`) by linear constraints. It is the
-     ParamRDE and LimitedIntegrate core of the C stack (theory:
-     docs/notes/bronstein_extensions.tex §T11). **[x] Steps 3b + 3c, v0.6621:** a
-     Liouvillian primitive top (Erf, Erfi, Erfc, Ei) integrated as a primitive monomial,
-     LimitedIntegrate through rde_tower_param, and the monomial check replacing the step-0
-     demotion (§T12). Follow-ups: li at theta^0, an exponential not directly below theta,
-     eliminating a dependent primitive. **[~] Step 4:** v0.6627 groundwork (tower aliases,
-     hypertanh loop, cascade cost); v0.6631 the cost of checking an answer, with an exact
-     exponential normal form in the zero test (§T15). Tanh 151/160 True, tan over Q(i)
-     157/160. v0.6633: a dependent exponential becomes a tower member (§T16): E^Tanh[u]
-     decided. v0.6638: Gaussian offsets over k(i) (a symbol for E^I). v0.6639: the RDE over a split
-     tangent level by the Moebius change (§T17). v0.6640: the integrator's "no" over a split
-     tangent level, and real Tan over a tower via k(i), by the same change. v0.6641:
-     LimitedIntegrate below a logarithm, a new independent logarithm is a "no" (§T18):
-     Log[u] Tanh[u] decided. Left: slow single-kernel stages on multi-kernel Tanh
-     integrands. Next: steps 2, 5, 6 and 9.
+  7. **C completeness campaign (2026-11-17 on).** Close the uncertain Risch DE paths
+     (`BASELINE_C` in `tools/check_bronstein_completeness.py`) and the Phase 2 `.m` sites.
+     Every step is gated by the hunts in `tools/bronstein_hunts/` (`run.sh`: no false
+     certificate, no contradiction) and has its theory in
+     `docs/notes/bronstein_extensions.tex`. Day-to-day detail is in `tasks/todo.md`.
+     Ratchet at v0.6641: 47 unimplemented sites, 25 uncertain paths.
+     - **[x] Step 0 (v0.6603), soundness.** No certificate over a Liouvillian primitive
+       tower (a released false certificate: `E^u (Erf + Erfc)`); auxiliary integrals in
+       their own decision scope; 7 defensive marks moved to `CAS_FAILURE_MARKS`.
+     - **[x] Step 1 (v0.6605).** Tower-variable logarithms folded by the structure
+       theorem; integration in K is three-way (independent new logs prove none).
+     - **[~] Step 2a (v0.6607).** An ArcTan of x over a complex tower is folded. Step 2b
+       (the exact-constant fold of a reducible log) was built and reverted: no hunt
+       reached it. The rest of step 2 is open (below).
+     - **[x] Step 3a (v0.6620), §T11.** The parametric Risch DE by linear constraints
+       (`rde_tower_param`, `Risch`ParametricRischDE`): the ParamRDE and LimitedIntegrate
+       core of the C stack.
+     - **[x] Steps 3b + 3c (v0.6621), §T12.** A Liouvillian primitive top (Erf, Erfi,
+       Erfc, Ei) as a primitive monomial, its LimitedIntegrate through `rde_tower_param`,
+       and the monomial check that replaced the step-0 demotion.
+     - **[x] Step 4, the split special part (v0.6627 to v0.6641).** Tanh, and Tan over
+       k(i), where the special polynomial splits.
+       - v0.6627: groundwork (tower aliases, the hypertanh loop, cascade cost) and the
+         Tanh, Tan-over-Q(i) and several-tangent hunts.
+       - v0.6631, §T15: the cost of checking an answer (an exact exponential normal form
+         in the zero test). Tanh timeouts 34 -> 5, Tan over Q(i) 15 -> 3.
+       - v0.6633, §T16: a dependent exponential becomes a tower member; `E^Tanh[u]`
+         decided.
+       - v0.6638: Gaussian offsets over k(i), with a symbol for `E^I`
+         (Lindemann-Weierstrass).
+       - v0.6639, §T17: the Risch DE over a split tangent level by the Moebius change
+         `theta = (alpha + t)/(alpha - t)`, an exponential (rdetanhunt 121 -> 240/240).
+       - v0.6640, §T17: the integrator's "no" over a split level by the same change,
+         and real Tan over a tower through k(i); one tangent level only.
+       - v0.6641, §T18: LimitedIntegrate below a logarithm. A new logarithm proved
+         independent of the tower at a `t^i`, `i >= 1`, coefficient is a "no"
+         (`Log[u] Tanh[u]`); a fold of an undecided one taints the run
+         (`RT_DEC_TAINTED`), so no later certificate counts.
+       - Result: the Tanh, Tan-over-Q(i) and f8 hunts have no undecided case left
+         (timeouts aside); limhunt (new) has 7 undecided of 240, the Gaussian hunt 18.
+         No hunt has a false certificate. Left, performance: the single-kernel stages
+         (`rt_exp_poly_case` 24 s, `rt_frac_case` 10-12 s) are slow to decline
+         multi-kernel Tanh integrands, and the Gaussian hunt's timeouts (13 -> 20 at
+         v0.6638) are not profiled.
+     - **[x] Step 7 (v0.6606).** The exact base Risch DE over numeric algebraic
+       constants (two released false `"NoSolution"`).
+     - **[x] Step 8 (v0.6609).** Dependent logarithms eliminated: a member
+       `Log[v] = Sum r_j t_j + c` with `c` exact.
+     - **Open follow-ups from the shipped steps.**
+       - Step 3: li at `theta^0`; an exponential with a level between it and `theta`
+         (`Log[x] Erf[1 + x]`); a dependent primitive (`Erfc` beside `Erf`).
+       - Step 4: an undecided leftover logarithm (`rt_reduce_new_logs` status -1) still
+         folds; it is needed for True answers, and it taints the decision.
+       - Two tangent levels give no certificate (`hypertangent top: another tangent
+         level below`); that is step 6.
+       - A pre-existing segfault: a coefficient explosion into GMP on
+         `D[E^(Tan[1 + u]^2)/Tan[1 + u]^2 + E^u u Cot[1 + u]/(1 + Tan[1 + u]^2)]`
+         (`tasks/todo.md`).
+     - **Next, in order:**
+       - **Step 2, the rest:** the generalised new-log certificate, re-based on the
+         step-3a core.
+       - **Step 5:** CancelTan with a homogeneous solution (CoupledDECancelTan over
+         k(i)); its lambda becomes a step-3a unknown.
+       - **Step 6:** several tangents. The tangent structure theorem, to tell
+         dependent tangents (`Tan[2 u]` is rational in `Tan[u]`) from independent
+         ones, and so certify over them.
+       - **Step 9:** the `.m` sites, through the C LimitedIntegrate.
 
 ### Phase 5: the radical anywhere (largest; theory first)
 
