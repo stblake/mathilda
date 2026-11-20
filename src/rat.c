@@ -3086,6 +3086,8 @@ void rat_init(void) {
      * at RAT_TOGETHER_CANCEL_MAX_DEPTH every later Together/Cancel silently
      * returns its input; a stuck re-entry guard disables the Gaussian pass. */
     tc_register_unwind_counter(&rat_together_cancel_depth);
-    tc_register_unwind_counter(&rat_gaussian_field_active);
+#ifdef USE_FLINT
+    tc_register_unwind_counter(&rat_gaussian_field_active);   /* FLINT-only pass */
+#endif
     tc_register_unwind_counter(&cancel_recursive_inside_gcd);
 }
